@@ -1,0 +1,54 @@
+# Quy ước code
+
+Quy tắc nào máy kiểm tra được thì đã cấu hình trong lint/depcruise/CI (cột **Ép bằng**). Phần còn lại review bằng mắt theo `.github/pull_request_template.md`.
+
+## 1. Nghiệp vụ – không được vi phạm
+
+| # | Quy tắc | Lý do | Ép bằng |
+|---|---|---|---|
+| B1 | Mọi truy vấn/ghi dữ liệu nghiệp vụ phải có `orgId`. Repo nhận `orgId` là tham số bắt buộc | Lộ dữ liệu giữa doanh nghiệp là lỗi nghiêm trọng nhất | Kiểu `OrgScoped<T>` + RLS Postgres + test cô lập org |
+| B2 | Mã định danh (MST, MAWB, HAWB, số invoice, số C/O, số container, mã HS) luôn là `string` | Mất số 0 đầu, mất ký tự, tràn số | Zod schema trong `@kb/contracts` |
+| B3 | Tiền và trị giá tính toán bằng `Decimal` (decimal.js), lưu Postgres `numeric`. Không cộng/nhân tiền bằng `number` | Sai số float khi tính thuế | Lint cấm `parseFloat` trong `declaration`, review |
+| B4 | Ngày nghiệp vụ là chuỗi ISO `YYYY-MM-DD`; thời điểm là `timestamptz` UTC; chỉ format khi hiển thị | Lệch múi giờ, nhầm dd/MM và MM/dd | Zod + `lib/format` |
+| B5 | AI chỉ được dùng trong module `extraction` (và gợi ý HS) qua port `AiProvider`. Đối chiếu, ánh xạ tờ khai, tính thuế, chặn truyền là code thuần | Phải deterministic, giải trình được với hải quan | depcruise cấm import SDK AI ngoài `extraction/infrastructure` |
+| B6 | Giá trị người dùng sửa ghi vào `field_audit` (append-only), không ghi đè mất dấu vết | Truy vết + dữ liệu đo độ chính xác | Use case duy nhất `updateField` |
+| B7 | Không truyền tờ khai khi còn validation `BLOCKER` = FAIL hoặc HS 8 số chưa xác nhận | Khai sai bị phạt | Guard trong `declaration.submit` + test |
+| B8 | Mọi lần gọi AI ghi `usage_events` (org, model, input/output token, chi phí) | Tính gói, kiểm soát giá vốn | Wrapper `AiProvider` |
+| B9 | Job queue phải idempotent: chạy lại cùng job không tạo dữ liệu trùng | Retry là bình thường | Khóa idempotency `(dossierId, documentHash, pipelineVersion)` |
+| B10 | Prompt, schema trích xuất, model là có phiên bản; đổi phải chạy eval | Đổi 1 câu prompt có thể làm hỏng trường khác | Skill `changing-extraction-prompt-or-model` + CI eval offline |
+
+## 2. Code TypeScript
+
+- `strict: true`, cấm `any` (dùng `unknown` + Zod parse). Cấm `@ts-ignore`; nếu bắt buộc dùng `@ts-expect-error` kèm lý do.
+- Dữ liệu từ ngoài (HTTP, form, AI, file, queue) **luôn** parse bằng Zod ở biên trước khi dùng.
+- Lỗi nghiệp vụ dự kiến trả `Result<T, DomainError>` (không throw). Chỉ throw cho lỗi lập trình/hạ tầng. `DomainError` có `code` cố định để UI dịch sang tiếng Việt.
+- Không import sâu: `import { x } from "@kb/core/modules/dossier"` (đúng), không `.../dossier/infrastructure/repo` (sai).
+- Đặt tên: file `kebab-case.ts`, kiểu/Component `PascalCase`, hàm/biến `camelCase`, hằng `SCREAMING_SNAKE`. Use case đặt bằng động từ: `uploadDocuments`, `runValidation`.
+- Thuật ngữ nghiệp vụ trong code dùng tiếng Anh thống nhất (xem bảng dưới); UI hiển thị tiếng Việt.
+
+| Tiếng Việt | Trong code |
+|---|---|
+| Hồ sơ khai báo | `Dossier` |
+| Chứng từ | `Document` |
+| Lô hàng (dữ liệu gộp) | `Shipment` |
+| Tờ khai | `Declaration` |
+| Chỉ tiêu tờ khai | `DeclarationField` |
+| Luật đối chiếu | `ValidationRule` |
+| Doanh nghiệp | `Organization` (`orgId`) |
+| Vận đơn house/master | `houseBillNo` / `masterBillNo` |
+
+## 3. Frontend
+
+- Component chỉ hiển thị; gọi dữ liệu qua `queries.ts` / `actions.ts` / hook của feature. Không `fetch` trực tiếp trong component.
+- Mỗi màn bất đồng bộ có đủ: loading (skeleton), empty, error (thông báo tiếng Việt + nút thử lại).
+- Số, tiền, ngày chỉ format qua `lib/format`. Không tự `toLocaleString` rải rác.
+- Không nhân bản schema: form dùng schema Zod từ `@kb/contracts`.
+- Chỉ dùng component `@kb/ui` + utility token (docs/DESIGN-SYSTEM.md). Thiếu thì thêm vào `@kb/ui`. Máy chặn bằng `pnpm lint` (`scripts/check-design-tokens.mjs` + depcruise).
+- Test theo `docs/TESTING.md`.
+- Truy cập bằng bàn phím được trên màn ocr-review và declaration-review.
+
+## 4. Git & PR
+
+- Nhánh: `feat/…`, `fix/…`, `chore/…`. Commit theo Conventional Commits.
+- PR nhỏ (< ~400 dòng thay đổi thực). Điền checklist trong PR template.
+- Không merge khi CI đỏ. Không tắt rule lint để cho qua; nếu rule sai, sửa rule trong PR riêng có lý do.

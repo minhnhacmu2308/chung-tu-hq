@@ -1,0 +1,319 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "KhaiBáo AI – Kiến trúc hệ thống",
+    "output": "../architecture.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1140,
+      640
+    ],
+    "views": [
+      {
+        "id": "extract-path",
+        "label": "Đọc chứng từ",
+        "focus": [
+          "users",
+          "web",
+          "storage",
+          "queue",
+          "worker",
+          "ai",
+          "db"
+        ],
+        "note": "Upload → hàng đợi → worker đọc chứng từ bằng AI → lưu kết quả theo org."
+      },
+      {
+        "id": "customs-path",
+        "label": "Khai báo Hải quan",
+        "focus": [
+          "web",
+          "queue",
+          "worker",
+          "hs",
+          "hub"
+        ],
+        "note": "Gợi ý HS qua hscodepro; truyền IDA/EDA, HYS, IEX qua Customs Hub bằng job nền."
+      },
+      {
+        "id": "tenant",
+        "label": "Tách dữ liệu doanh nghiệp",
+        "focus": [
+          "auth",
+          "web",
+          "db",
+          "worker"
+        ],
+        "note": "Session + vai trò; mọi truy vấn có org_id, Postgres RLS là lớp chặn thứ hai."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "Nhân viên DN",
+      "sublabel": "Trình duyệt",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Better Auth",
+      "sublabel": "session · vai trò",
+      "pos": [
+        270,
+        120
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "tag": "1 MST = 1 org"
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Next.js Web",
+      "sublabel": "UI + Server Actions",
+      "pos": [
+        270,
+        300
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "storage",
+      "type": "cloud",
+      "label": "Cloudflare R2",
+      "sublabel": "prod · dev dùng MinIO",
+      "pos": [
+        520,
+        24
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "Redis · BullMQ",
+      "sublabel": "hàng đợi job",
+      "pos": [
+        520,
+        300
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "org_id + RLS",
+      "pos": [
+        520,
+        480
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Worker",
+      "sublabel": "extraction · tích hợp",
+      "pos": [
+        770,
+        300
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "ai",
+      "type": "external",
+      "label": "AI Provider",
+      "sublabel": "Claude (mặc định)",
+      "pos": [
+        990,
+        300
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "hs",
+      "type": "external",
+      "label": "hscodepro API",
+      "sublabel": "gợi ý mã HS",
+      "pos": [
+        990,
+        120
+      ],
+      "size": [
+        130,
+        64
+      ]
+    },
+    {
+      "id": "hub",
+      "type": "external",
+      "label": "Customs Hub",
+      "sublabel": "VNACCS",
+      "pos": [
+        990,
+        480
+      ],
+      "size": [
+        130,
+        64
+      ],
+      "tag": "IDA/EDA·HYS·IEX"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "VPS · Docker Compose",
+      "wraps": [
+        "auth",
+        "web",
+        "queue",
+        "db",
+        "worker"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "users-web",
+      "from": "users",
+      "to": "web",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "auth-web",
+      "from": "auth",
+      "to": "web",
+      "label": "session",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "web-storage",
+      "from": "web",
+      "to": "storage",
+      "label": "upload",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "web-queue",
+      "from": "web",
+      "to": "queue",
+      "label": "enqueue",
+      "variant": "emphasis"
+    },
+    {
+      "id": "web-db",
+      "from": "web",
+      "to": "db",
+      "label": "SQL"
+    },
+    {
+      "id": "queue-worker",
+      "from": "queue",
+      "to": "worker",
+      "variant": "emphasis"
+    },
+    {
+      "id": "worker-ai",
+      "from": "worker",
+      "to": "ai",
+      "label": "đọc PDF",
+      "variant": "emphasis"
+    },
+    {
+      "id": "worker-storage",
+      "from": "worker",
+      "to": "storage",
+      "label": "đọc trang"
+    },
+    {
+      "id": "worker-db",
+      "from": "worker",
+      "to": "db",
+      "label": "kết quả"
+    },
+    {
+      "id": "worker-hs",
+      "from": "worker",
+      "to": "hs",
+      "label": "classify",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "worker-hub",
+      "from": "worker",
+      "to": "hub",
+      "label": "truyền TK",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Một ngôn ngữ, một khối",
+      "items": [
+        "TypeScript: Next.js + BullMQ worker",
+        "Nghiệp vụ trong packages/core, chia 8 module",
+        "Ranh giới module ép bằng dependency-cruiser"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "AI chỉ đọc",
+      "items": [
+        "AI đọc chứng từ → JSON đúng schema",
+        "Đối chiếu, ánh xạ tờ khai, thuế: code thuần",
+        "Mọi lần gọi AI ghi usage theo org"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Tích hợp bên thứ 3",
+      "items": [
+        "Gọi qua port + adapter, chạy bằng job nền",
+        "Lưu nhật ký từng thông điệp hải quan",
+        "Không truyền khi còn lỗi BLOCKER"
+      ]
+    }
+  ]
+}

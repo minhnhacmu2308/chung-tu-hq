@@ -1,0 +1,69 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { expectNoA11yViolations } from "../../test/a11y.js";
+import { Alert, Badge, EmptyState, Skeleton, STATUS_META, StatusBadge, type Status } from "./feedback.js";
+import { Card, CardContent, CardHeader, CardTitle, Grid, PageHeader, Stack } from "./layout.js";
+
+describe("Grid / Stack", () => {
+  it("Grid tạo class cột tĩnh cho từng breakpoint", () => {
+    const { container } = render(<Grid cols={{ base: 1, md: 2, lg: 4 }} gap="lg" />);
+    expect(container.firstChild).toHaveClass("grid", "grid-cols-1", "md:grid-cols-2", "lg:grid-cols-4", "gap-6");
+  });
+
+  it("Stack hướng ngang, căn giữa, giãn hai đầu", () => {
+    const { container } = render(<Stack direction="row" align="center" justify="between" gap="sm" />);
+    expect(container.firstChild).toHaveClass("flex", "flex-row", "items-center", "justify-between", "gap-2");
+  });
+});
+
+describe("Card / PageHeader", () => {
+  it("Card có tiêu đề dạng heading", () => {
+    render(<Card><CardHeader><CardTitle>Hóa đơn</CardTitle></CardHeader><CardContent>…</CardContent></Card>);
+    expect(screen.getByRole("heading", { name: "Hóa đơn", level: 2 })).toBeInTheDocument();
+  });
+
+  it("PageHeader đánh dấu mô tả để ẩn được theo tùy chọn người dùng", () => {
+    render(<PageHeader title="Hồ sơ" description="Danh sách hồ sơ" />);
+    expect(screen.getByRole("heading", { level: 1, name: "Hồ sơ" })).toBeInTheDocument();
+    expect(screen.getByText("Danh sách hồ sơ")).toHaveAttribute("data-slot", "page-description");
+  });
+});
+
+describe("Badge / StatusBadge", () => {
+  it("Badge dùng màu theo tone", () => {
+    render(<Badge tone="danger">Lỗi</Badge>);
+    expect(screen.getByText("Lỗi")).toHaveClass("bg-danger-subtle", "text-danger-subtle-fg");
+  });
+
+  it.each(Object.keys(STATUS_META) as Status[])("StatusBadge %s luôn có chữ (không chỉ dựa vào màu)", (status) => {
+    render(<StatusBadge status={status} />);
+    const el = document.querySelector(`[data-status="${status}"]`);
+    expect(el).toHaveTextContent(STATUS_META[status].label);
+  });
+});
+
+describe("Alert / EmptyState / Skeleton", () => {
+  it("Alert lỗi dùng role=alert, thông tin dùng role=status", () => {
+    render(<><Alert tone="danger" title="Thiếu cước" /><Alert tone="info" title="Đang xử lý" /></>);
+    expect(screen.getByRole("alert")).toHaveTextContent("Thiếu cước");
+    expect(screen.getByRole("status")).toHaveTextContent("Đang xử lý");
+  });
+
+  it("Skeleton ẩn với trình đọc màn hình", () => {
+    const { container } = render(<Skeleton className="h-4" />);
+    expect(container.firstChild).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("không vi phạm a11y", async () => {
+    const { container } = render(
+      <main>
+        <PageHeader title="Tổng quan" description="Mô tả" />
+        <Card><CardHeader><CardTitle>Thẻ</CardTitle></CardHeader></Card>
+        <StatusBadge status="CONFLICT" />
+        <Alert tone="warning" title="Lưu ý">Còn 3 trường nghi ngờ</Alert>
+        <EmptyState title="Chưa có hồ sơ" description="Tạo hồ sơ đầu tiên" />
+      </main>,
+    );
+    await expectNoA11yViolations(container);
+  });
+});

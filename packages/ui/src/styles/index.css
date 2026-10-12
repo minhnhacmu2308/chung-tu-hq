@@ -1,0 +1,92 @@
+/*
+ * Điểm vào CSS của @kb/ui. App import: `import "@kb/ui/styles.css"`.
+ * Nối token (--kb-*) vào Tailwind v4 thành utility: bg-surface, text-fg-muted, bg-primary, rounded-md...
+ */
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* Quét class trong component của @kb/ui */
+@source "../";
+
+/*
+ * KHÔNG dùng biến thể `dark:` trong component: token đã tự đổi theo chế độ bằng light-dark().
+ * TẮT toàn bộ bảng màu, bo góc, bóng, font mặc định của Tailwind: chỉ dùng được token bên dưới.
+ * Giữ nguyên thang spacing của Tailwind (p-4, gap-2...) vì nó nhân với --spacing (mật độ).
+ */
+@theme {
+  --color-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --font-*: initial;
+}
+
+@theme inline {
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-bg: var(--kb-color-bg);
+  --color-surface: var(--kb-color-surface);
+  --color-surface-muted: var(--kb-color-surface-muted);
+  --color-border: var(--kb-color-border);
+  --color-border-strong: var(--kb-color-border-strong);
+  --color-fg: var(--kb-color-fg);
+  --color-fg-muted: var(--kb-color-fg-muted);
+  --color-fg-subtle: var(--kb-color-fg-subtle);
+  --color-overlay: var(--kb-color-overlay);
+
+  --color-primary: var(--kb-color-primary);
+  --color-primary-hover: var(--kb-color-primary-hover);
+  --color-primary-active: var(--kb-color-primary-active);
+  --color-primary-fg: var(--kb-color-primary-fg);
+  --color-primary-subtle: var(--kb-color-primary-subtle);
+  --color-primary-subtle-fg: var(--kb-color-primary-subtle-fg);
+  --color-focus: var(--kb-color-focus);
+
+  --color-success: var(--kb-color-success);
+  --color-success-fg: var(--kb-color-success-fg);
+  --color-success-subtle: var(--kb-color-success-subtle);
+  --color-success-subtle-fg: var(--kb-color-success-subtle-fg);
+  --color-warning: var(--kb-color-warning);
+  --color-warning-fg: var(--kb-color-warning-fg);
+  --color-warning-subtle: var(--kb-color-warning-subtle);
+  --color-warning-subtle-fg: var(--kb-color-warning-subtle-fg);
+  --color-danger: var(--kb-color-danger);
+  --color-danger-fg: var(--kb-color-danger-fg);
+  --color-danger-subtle: var(--kb-color-danger-subtle);
+  --color-danger-subtle-fg: var(--kb-color-danger-subtle-fg);
+  --color-info: var(--kb-color-info);
+  --color-info-fg: var(--kb-color-info-fg);
+  --color-info-subtle: var(--kb-color-info-subtle);
+  --color-info-subtle-fg: var(--kb-color-info-subtle-fg);
+  --color-neutral: var(--kb-color-neutral);
+  --color-neutral-fg: var(--kb-color-neutral-fg);
+  --color-neutral-subtle: var(--kb-color-neutral-subtle);
+  --color-neutral-subtle-fg: var(--kb-color-neutral-subtle-fg);
+
+  --radius-sm: var(--kb-radius-sm);
+  --radius-md: var(--kb-radius-md);
+  --radius-lg: var(--kb-radius-lg);
+  --radius-full: 9999px;
+
+  --shadow-sm: var(--kb-shadow-sm);
+  --shadow-md: var(--kb-shadow-md);
+  --shadow-lg: var(--kb-shadow-lg);
+
+  --font-sans: var(--kb-font-sans);
+  --font-mono: var(--kb-font-mono);
+}
+
+@layer base {
+  html {
+    font-family: var(--kb-font-sans);
+    background: var(--kb-color-bg);
+    color: var(--kb-color-fg);
+  }
+}
+
+/* Nền lưới chấm cho canvas sơ đồ (màu lấy từ token) */
+@utility bg-dots {
+  background-color: var(--kb-color-bg);
+  background-image: radial-gradient(var(--kb-color-border-strong) 1px, transparent 1px);
+  background-size: 16px 16px;
+}

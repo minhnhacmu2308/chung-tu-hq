@@ -1,0 +1,3 @@
+/* Toàn bộ giao diện lấy từ @kb/ui (token + utility). App KHÔNG định nghĩa màu ở đây. */
+@import "@kb/ui/styles.css";
+@source "../";

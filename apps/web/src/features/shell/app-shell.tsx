@@ -1,0 +1,184 @@
+"use client";
+// Khung chung mọi màn sau đăng nhập: menu trái, trợ lý AI, cấu hình giao diện, thông báo.
+import {
+  AppearancePanel, AssistantLauncher, AssistantPanel, Badge, BrandDot, Dialog, DialogContent, DropdownMenu,
+  DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Sidebar, SidebarFooterButton,
+  SidebarMobileTrigger, SidebarUser, toast, type AssistantMode, type NavItem,
+} from "@kb/ui";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bell, FolderOpen, LayoutDashboard, LogOut, RotateCcw, Send, Settings2, Sparkles, SunMoon, UserRound, Wrench } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { dossierKeys, listDossiers } from "@/api/dossiers";
+import { getSession, listNotifications, resetMockData, sessionKeys } from "@/api/session";
+import { useAppearance } from "@/features/appearance/use-appearance";
+import { useAssistantChat } from "@/features/assistant/use-assistant-chat";
+import { NotificationsPanel } from "./notifications-panel";
+import { ROLE_LABELS } from "@/mocks/types";
+
+const COLLAPSE_KEY = "kb-sidebar-collapsed";
+
+function useNav(): { items: NavItem[]; activeId: string | undefined } {
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const { data: dossiers } = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
+  const needsReview = (dir: "NK" | "XK") => dossiers?.filter((d) => d.direction === dir && d.status === "NEEDS_REVIEW").length ?? 0;
+  const badge = (n: number) => (n > 0 ? <Badge tone="warning">{n}</Badge> : undefined);
+  const nk = badge(needsReview("NK"));
+  const xk = badge(needsReview("XK"));
+
+  const items: NavItem[] = [
+    { id: "overview", label: "Tổng quan", icon: <LayoutDashboard />, href: "/" },
+    {
+      id: "dossiers",
+      label: "Hồ sơ khai báo",
+      icon: <FolderOpen />,
+      children: [
+        { id: "dossiers-NK", label: "Nhập khẩu", href: "/dossiers?direction=NK", ...(nk ? { badge: nk } : {}) },
+        { id: "dossiers-XK", label: "Xuất khẩu", href: "/dossiers?direction=XK", ...(xk ? { badge: xk } : {}) },
+        { id: "dossiers-all", label: "Tất cả", href: "/dossiers" },
+      ],
+    },
+    { id: "customs", label: "Khai báo Hải quan", icon: <Send />, href: "/customs" },
+    { id: "skills", label: "Cấu hình Skill AI", icon: <Sparkles />, href: "/skills" },
+    { id: "settings", label: "Tài khoản & tích hợp", icon: <Settings2 />, href: "/settings" },
+  ];
+
+  let activeId: string | undefined;
+  if (pathname === "/") activeId = "overview";
+  else if (pathname.startsWith("/dossiers")) {
+    // Trang chi tiết: lấy chiều NK/XK từ chính hồ sơ để menu sáng đúng mục.
+    const detailId = pathname.split("/")[2];
+    const dir = params.get("direction") ?? dossiers?.find((d) => d.id === detailId)?.direction;
+    activeId = dir === "NK" || dir === "XK" ? `dossiers-${dir}` : "dossiers-all";
+  } else activeId = items.find((i) => i.href && i.href !== "/" && pathname.startsWith(i.href))?.id;
+  return { items, activeId };
+}
+
+function ShellInner({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { appearance, setAppearance, adjustments } = useAppearance();
+  const { items, activeId } = useNav();
+  const { data: session } = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
+  const { data: notifications } = useQuery({ queryKey: sessionKeys.notifications, queryFn: listNotifications });
+  const unread = notifications?.filter((n) => !n.read).length ?? 0;
+
+  const [collapsed, setCollapsedState] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsedState(localStorage.getItem(COLLAPSE_KEY) === "1");
+    } catch {
+      /* bỏ qua */
+    }
+  }, []);
+  const setCollapsed = (c: boolean) => {
+    setCollapsedState(c);
+    try {
+      localStorage.setItem(COLLAPSE_KEY, c ? "1" : "0");
+    } catch {
+      /* bỏ qua */
+    }
+  };
+  const [mobileNav, setMobileNav] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiMode, setAiMode] = useState<AssistantMode>("docked");
+
+  const pathname = usePathname();
+  useEffect(() => setMobileNav(false), [pathname]);
+  const chat = useAssistantChat();
+
+  const reset = async () => {
+    await resetMockData();
+    await qc.invalidateQueries();
+    toast({ tone: "success", title: "Đã khôi phục dữ liệu mẫu" });
+  };
+
+  return (
+    <div className="flex min-h-dvh">
+      <Sidebar
+        className="sticky top-0"
+        brand={{ logo: <Wrench className="h-4 w-4" />, name: "KhaiBáo AI", href: "/" }}
+        items={items}
+        activeId={activeId}
+        collapsed={collapsed}
+        onCollapsedChange={setCollapsed}
+        linkAs={Link}
+        mobileOpen={mobileNav}
+        onMobileOpenChange={setMobileNav}
+        footer={
+          <>
+            <SidebarFooterButton
+              icon={<Bell />}
+              label="Thông báo"
+              {...(unread > 0 ? { trailing: <Badge tone="danger" variant="solid">{unread}</Badge> } : {})}
+              onClick={() => setNotifOpen(true)}
+            />
+            <SidebarFooterButton icon={<SunMoon />} label="Giao diện" trailing={<BrandDot />} onClick={() => setAppearanceOpen(true)} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarUser name={session?.user.name ?? "…"} role={session ? ROLE_LABELS[session.user.role] : ""} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="end">
+                <DropdownMenuItem icon={<UserRound className="h-4 w-4" />} onSelect={() => router.push("/settings")}>
+                  Tài khoản & tích hợp
+                </DropdownMenuItem>
+                <DropdownMenuItem icon={<RotateCcw className="h-4 w-4" />} onSelect={reset}>
+                  Khôi phục dữ liệu mẫu
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem icon={<LogOut className="h-4 w-4" />} tone="danger" onSelect={() => router.push("/login")}>
+                  Đăng xuất
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
+
+      <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="panel">
+        <DialogContent title="Cấu hình giao diện" size="sm">
+          <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={notifOpen} onOpenChange={setNotifOpen} defaultPresentation="panel">
+        <DialogContent title="Thông báo" size="sm" icon={<Bell className="h-4 w-4" />}>
+          <NotificationsPanel onNavigate={() => setNotifOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+        <div className="mb-2 md:hidden">
+          <SidebarMobileTrigger onClick={() => setMobileNav(true)} expanded={mobileNav} />
+        </div>
+        {children}
+      </main>
+
+      <AssistantPanel
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        mode={aiMode}
+        onModeChange={setAiMode}
+        name="Trợ lý KhaiBáo"
+        tag="AI"
+        composer={chat.composer}
+      >
+        {chat.content}
+      </AssistantPanel>
+      {!aiOpen && <AssistantLauncher onClick={() => setAiOpen(true)} />}
+    </div>
+  );
+}
+
+export function AppShell({ children }: { children: ReactNode }) {
+  // useSearchParams cần Suspense khi build tĩnh.
+  return (
+    <Suspense>
+      <ShellInner>{children}</ShellInner>
+    </Suspense>
+  );
+}

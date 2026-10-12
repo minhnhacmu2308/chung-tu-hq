@@ -1,0 +1,27 @@
+## Thay đổi gì, vì sao
+
+<!-- 1-3 câu -->
+
+## Checklist
+
+- [ ] `pnpm typecheck && pnpm lint && pnpm test` xanh
+- [ ] Truy vấn/ghi dữ liệu mới đều lọc theo `orgId`; có test org khác bị từ chối
+- [ ] Mã định danh là `string`; tiền dùng `Decimal`; ngày ISO
+- [ ] Dữ liệu từ ngoài được parse bằng Zod ở biên
+- [ ] Không có nghiệp vụ trong `apps/*` (chỉ gọi use case)
+- [ ] Màn hình mới có loading / empty / error; chỉ dùng `@kb/ui` + token (`pnpm lint` xanh); đã xem ở sáng + tối
+- [ ] Test theo `docs/TESTING.md` (component có test a11y)
+- [ ] Bảng DB mới: `org_id`, index, RLS, migration
+
+### Nếu đụng tới trích xuất (prompt / schema / model / skill)
+- [ ] Đã chạy eval trước/sau – dán bảng so sánh:
+
+| Trường | Trước | Sau |
+|---|---|---|
+| | | |
+
+- [ ] Không trường BLOCKER nào giảm độ chính xác
+- [ ] Chi phí trung bình / lô: trước … → sau …
+
+### Nếu đụng tới tờ khai / trị giá
+- [ ] Người có nghiệp vụ hải quan đã review

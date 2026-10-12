@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint          # eslint + depcruise ranh giới module
+      - run: pnpm test          # vitest (unit + integration với Testcontainers)
+      - run: pnpm eval          # golden set offline (fixtures), không gọi AI, không tốn tiền
+      - run: pnpm build
+      # So sánh ảnh giao diện – chỉ chạy khi đã có bộ ảnh chuẩn cho Linux (sinh một lần bằng test:visual:update trên Linux)
+      - if: hashFiles('packages/ui/visual/__screenshots__/linux/**') != ''
+        run: npx playwright install --with-deps chromium && pnpm --filter @kb/ui test:visual

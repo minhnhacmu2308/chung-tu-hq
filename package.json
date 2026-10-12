@@ -1,0 +1,19 @@
+{
+  "name": "khaibao-ai",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "dev:web": "pnpm --filter @kb/web dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test && node --test scripts/*.test.mjs",
+    "lint": "pnpm lint:tokens && pnpm lint:deps",
+    "lint:tokens": "node scripts/check-design-tokens.mjs",
+    "lint:deps": "depcruise --config .dependency-cruiser.cjs apps packages",
+    "ui:playground": "pnpm --filter @kb/ui playground"
+  },
+  "devDependencies": {
+    "dependency-cruiser": "^16.10.0",
+    "typescript": "^5.9.0"
+  }
+}

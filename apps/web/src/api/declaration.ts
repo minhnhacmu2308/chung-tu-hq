@@ -1,0 +1,234 @@
+// Bước 4–5: AI Agent (tra HS, ánh xạ, dựng tờ khai, số hóa) và tờ khai nháp (mock).
+// Tiến trình agent mô phỏng theo thời gian: lưu startedAt, tính tiến độ mỗi lần đọc.
+import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
+import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
+import type { MockDb } from "@/mocks/db";
+import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
+
+export const declarationKeys = {
+  agentRun: (id: string) => ["declaration", "agent-run", id] as const,
+  items: (id: string) => ["declaration", "items", id] as const,
+  view: (id: string) => ["declaration", "view", id] as const,
+  hsCatalog: ["declaration", "hs-catalog"] as const,
+};
+
+export type AgentMode = AgentRun["mode"];
+
+/** Thời lượng mô phỏng mỗi việc (giây). */
+const DURATION: Record<AgentTaskId, number> = { HS_LOOKUP: 7, MAPPING: 3, BUILD_DECLARATION: 3, DIGITIZE: 4 };
+const ORDER: AgentTaskId[] = ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION", "DIGITIZE"];
+const TASKS_BY_MODE: Record<AgentMode, AgentTaskId[]> = {
+  DECLARATION: ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION"],
+  DIGITIZE: ["DIGITIZE"],
+  BOTH: ORDER,
+};
+
+export type AgentLogLine = { at: string; text: string; tone: "info" | "success" | "warning" };
+export type AgentRunView = {
+  run: AgentRun;
+  logs: AgentLogLine[];
+  finished: boolean;
+  /** Việc đang chạy (để hiện ở tiêu đề). */
+  current?: AgentTaskId;
+};
+
+function scheduleOf(mode: AgentMode) {
+  let t = 0;
+  const out: Partial<Record<AgentTaskId, { start: number; end: number }>> = {};
+  for (const id of TASKS_BY_MODE[mode]) {
+    out[id] = { start: t, end: t + DURATION[id] };
+    t += DURATION[id];
+  }
+  return out;
+}
+
+function computeRun(db: MockDb, run: AgentRun, now: number): AgentRunView {
+  // Lần chạy trong dữ liệu mẫu đã hoàn tất sẵn.
+  if (run.tasks.every((t) => t.status === "DONE" || t.status === "SKIPPED")) {
+    return { run, logs: [{ at: run.startedAt, text: "Lần chạy trước đã hoàn tất.", tone: "success" }], finished: true };
+  }
+  const start = new Date(run.startedAt).getTime();
+  const elapsed = (now - start) / 1000;
+  const sched = scheduleOf(run.mode);
+  const items = db.lineItems.filter((i) => i.dossierId === run.dossierId);
+  const at = (sec: number) => new Date(start + sec * 1000).toISOString();
+  const logs: AgentLogLine[] = [];
+  let current: AgentTaskId | undefined;
+
+  const tasks = ORDER.map((id) => {
+    const s = sched[id];
+    if (!s) return { id, status: "SKIPPED" as AgentTaskStatus, progress: 0, message: "Không chọn" };
+    const p = Math.max(0, Math.min(1, (elapsed - s.start) / (s.end - s.start)));
+    const status: AgentTaskStatus = p >= 1 ? "DONE" : elapsed >= s.start ? "RUNNING" : "PENDING";
+    if (status === "RUNNING") current = id;
+    let message = "Đang chờ";
+    if (id === "HS_LOOKUP") {
+      const n = Math.floor(p * items.length);
+      message = status === "DONE" ? `Đã tra ${items.length}/${items.length} dòng hàng` : status === "RUNNING" ? `Đang tra dòng ${Math.min(n + 1, items.length)}/${items.length}` : message;
+      if (elapsed >= s.start) logs.push({ at: at(s.start), text: `hscodepro /v1/classify – bắt đầu tra ${items.length} dòng hàng`, tone: "info" });
+      items.forEach((it, i) => {
+        const tt = s.start + ((i + 1) / items.length) * (s.end - s.start);
+        if (elapsed >= tt) {
+          const conf = Math.round((it.hsConfidence ?? 0) * 100);
+          logs.push({ at: at(tt), text: `Dòng ${it.lineNo}: ${it.hsSuggested} (tin cậy ${conf}%)${conf < 70 ? " – cần người xác nhận kỹ" : ""}`, tone: conf < 70 ? "warning" : "info" });
+        }
+      });
+    } else if (id === "MAPPING") {
+      message = status === "DONE" ? "Đã ánh xạ 32 chỉ tiêu" : status === "RUNNING" ? "Đang áp SK-MAP vào chỉ tiêu tờ khai" : message;
+      if (elapsed >= s.start) logs.push({ at: at(s.start), text: "Áp skill ánh xạ SK-MAP-IDA v3 (quy tắc cấu hình, không dùng AI)", tone: "info" });
+      if (status === "DONE") logs.push({ at: at(s.end), text: "Người nhập khẩu lấy theo MST doanh nghiệp, không theo tên tiếng Anh trên invoice", tone: "info" });
+    } else if (id === "BUILD_DECLARATION") {
+      message = status === "DONE" ? "Đã dựng tờ khai nháp" : status === "RUNNING" ? "Đang tính trị giá tính thuế" : message;
+      if (elapsed >= s.start) logs.push({ at: at(s.start), text: "Tính trị giá tính thuế, cộng khoản điều chỉnh theo Incoterm", tone: "info" });
+      if (status === "DONE") logs.push({ at: at(s.end), text: "Tờ khai nháp đã sẵn sàng – chờ xác nhận mã HS và phê duyệt", tone: "success" });
+    } else {
+      const docs = db.documents.filter((d) => d.dossierId === run.dossierId).length;
+      message = status === "DONE" ? `Đã số hóa ${docs} chứng từ` : status === "RUNNING" ? "Đang tạo dữ liệu số (JSON/XML)" : message;
+      if (elapsed >= s.start) logs.push({ at: at(s.start), text: `Số hóa ${docs} chứng từ để đính kèm HYS`, tone: "info" });
+      if (status === "DONE") logs.push({ at: at(s.end), text: "Dữ liệu số hóa đã lưu", tone: "success" });
+    }
+    return { id, status, progress: Math.round(p * 100), message };
+  });
+
+  const finished = tasks.every((t) => t.status === "DONE" || t.status === "SKIPPED");
+  logs.sort((a, b) => a.at.localeCompare(b.at));
+  return { run: { ...run, tasks }, logs, finished, ...(current ? { current } : {}) };
+}
+
+function hsLookupDone(db: MockDb, dossierId: string, now = Date.now()) {
+  const run = db.agentRuns.find((r) => r.dossierId === dossierId);
+  if (!run) return false;
+  return computeRun(db, run, now).run.tasks.find((t) => t.id === "HS_LOOKUP")?.status === "DONE";
+}
+
+/** Đọc tiến trình. Khi bước dựng tờ khai xong → tạo tờ khai nháp (một lần). */
+export const getAgentRun = (dossierId: string) =>
+  mutate((db): AgentRunView | null => {
+    const run = db.agentRuns.find((r) => r.dossierId === dossierId);
+    if (!run) return null;
+    const view = computeRun(db, run, Date.now());
+    const built = view.run.tasks.find((t) => t.id === "BUILD_DECLARATION")?.status === "DONE";
+    if (built && !db.declarations.some((d) => d.dossierId === dossierId)) {
+      const dossier = db.dossiers.find((d) => d.id === dossierId)!;
+      db.declarations.push(buildDeclaration(dossier, db.lineItems.filter((i) => i.dossierId === dossierId), db.org));
+    }
+    if (view.finished) {
+      Object.assign(run, { tasks: view.run.tasks });
+      const dossier = db.dossiers.find((d) => d.id === dossierId);
+      if (dossier?.status === "PROCESSING" && dossier.step === "agent") Object.assign(dossier, { status: "NEEDS_REVIEW", updatedAt: nowIso() });
+    }
+    return view;
+  });
+
+export const startAgentRun = (dossierId: string, mode: AgentMode) =>
+  mutate((db) => {
+    const dossier = db.dossiers.find((d) => d.id === dossierId);
+    if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
+    if (!db.lineItems.some((i) => i.dossierId === dossierId)) throw new ApiError("NO_ITEMS", "Chưa có dòng hàng – hoàn tất bước OCR & kiểm tra trước");
+    db.agentRuns = db.agentRuns.filter((r) => r.dossierId !== dossierId);
+    db.declarations = db.declarations.filter((d) => d.dossierId !== dossierId);
+    db.agentRuns.push({
+      dossierId,
+      mode,
+      startedAt: nowIso(),
+      tasks: TASKS_BY_MODE[mode].map((id) => ({ id, status: "PENDING", progress: 0, message: "Đang chờ" })),
+    });
+    Object.assign(dossier, { step: "agent", status: "PROCESSING", updatedAt: nowIso() });
+  });
+
+/** Dòng hàng. Gợi ý hscodepro chỉ hiện khi bước tra HS đã xong. */
+export const listLineItems = (dossierId: string) =>
+  query((db) => {
+    const show = hsLookupDone(db, dossierId);
+    return db.lineItems
+      .filter((i) => i.dossierId === dossierId)
+      .map((i): LineItem => {
+        if (show || i.hsConfirmed) return i;
+        const { hsSuggested: _s, hsConfidence: _c, ...rest } = i;
+        return rest;
+      });
+  });
+
+export const listHsCatalog = () => query(() => HS_CATALOG);
+export type { HsEntry };
+
+function refreshDeclaration(db: MockDb, dossierId: string) {
+  const idx = db.declarations.findIndex((d) => d.dossierId === dossierId);
+  if (idx < 0) return;
+  const old = db.declarations[idx]!;
+  if (old.status !== "DRAFT") return;
+  const dossier = db.dossiers.find((d) => d.id === dossierId)!;
+  const fresh = buildDeclaration(dossier, db.lineItems.filter((i) => i.dossierId === dossierId), db.org);
+  db.declarations[idx] = { ...fresh, status: old.status };
+}
+
+/** Người dùng xác nhận mã HS (giữ gợi ý hoặc chọn mã khác). */
+export const confirmHs = (itemId: string, code: string) =>
+  mutate((db) => {
+    const item = db.lineItems.find((i) => i.id === itemId);
+    if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
+    if (!findHs(code)) throw new ApiError("INVALID_HS", "Mã HS không có trong biểu thuế");
+    const dossier = db.dossiers.find((d) => d.id === item.dossierId)!;
+    const r = ratesFor(dossier, code);
+    item.hsConfirmed = code;
+    item.importDutyRate = r.importDutyRate;
+    item.vatRate = r.vatRate;
+    if (r.policyNote) item.policyNote = r.policyNote;
+    else delete item.policyNote;
+    refreshDeclaration(db, item.dossierId);
+    return item;
+  });
+
+/** Bỏ xác nhận để chọn lại. */
+export const unconfirmHs = (itemId: string) =>
+  mutate((db) => {
+    const item = db.lineItems.find((i) => i.id === itemId);
+    if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
+    delete item.hsConfirmed;
+    delete item.importDutyRate;
+    delete item.vatRate;
+    delete item.policyNote;
+    return item;
+  });
+
+export type DeclarationItemView = LineItem & Omit<ItemTax, "itemId">;
+export type DeclarationView = { declaration: Declaration | null; items: DeclarationItemView[]; unconfirmedHs: number };
+
+export const getDeclarationView = (dossierId: string) =>
+  query((db): DeclarationView => {
+    const declaration = db.declarations.find((d) => d.dossierId === dossierId) ?? null;
+    const dossier = db.dossiers.find((d) => d.id === dossierId);
+    const items = db.lineItems.filter((i) => i.dossierId === dossierId);
+    const taxes = dossier && declaration ? computeTaxes(dossier, items, declaration.valueAdjustments).perItem : [];
+    return {
+      declaration,
+      unconfirmedHs: items.filter((i) => !i.hsConfirmed).length,
+      items: items.map((i) => {
+        const t = taxes.find((x) => x.itemId === i.id);
+        return { ...i, customsValueVnd: t?.customsValueVnd ?? "0", importDutyVnd: t?.importDutyVnd ?? "0", vatVnd: t?.vatVnd ?? "0" };
+      }),
+    };
+  });
+
+/** Phê duyệt tờ khai (vai trò Người duyệt). Chặn khi còn HS chưa xác nhận. */
+export const approveDeclaration = (dossierId: string) =>
+  mutate((db) => {
+    const decl = db.declarations.find((d) => d.dossierId === dossierId);
+    if (!decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
+    if (db.lineItems.some((i) => i.dossierId === dossierId && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
+    const me = db.members.find((m) => m.id === db.currentUserId);
+    Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
+    const dossier = db.dossiers.find((d) => d.id === dossierId)!;
+    Object.assign(dossier, { status: "APPROVED", step: "submit", suspectFields: 0, updatedAt: nowIso() });
+    return decl;
+  });
+
+/** Chuyển hồ sơ sang bước Review sau khi xác nhận đủ HS. */
+export const moveToReview = (dossierId: string) =>
+  mutate((db) => {
+    if (db.lineItems.some((i) => i.dossierId === dossierId && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
+    if (!db.declarations.some((d) => d.dossierId === dossierId)) throw new ApiError("NO_DECLARATION", "Chưa dựng tờ khai – chạy agent với lựa chọn có “Tạo tờ khai”");
+    const dossier = db.dossiers.find((d) => d.id === dossierId)!;
+    const suspect = db.declarations.find((d) => d.dossierId === dossierId)!.fields.filter((f) => f.suspect).length;
+    Object.assign(dossier, { step: "review", status: "NEEDS_REVIEW", suspectFields: suspect, updatedAt: nowIso() });
+  });

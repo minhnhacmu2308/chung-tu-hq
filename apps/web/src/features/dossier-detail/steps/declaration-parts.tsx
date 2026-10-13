@@ -1,6 +1,8 @@
 "use client";
 // Mảnh giao diện dùng chung cho bước 4–6 (agent, review tờ khai, truyền Hải quan).
-import { Alert, Badge, Button, Card, CardContent, Skeleton, Stack, cn } from "@kb/ui";
+import {
+  Alert, Badge, Button, Card, CardContent, Skeleton, Stack, cn, SkeletonCard,
+} from "@kb/ui";
 import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
 import { VALUE_SOURCE_LABELS, type ValueSource } from "@/mocks/types";
@@ -33,8 +35,8 @@ export function StickyActionBar({ children, className }: { children: ReactNode; 
 export function StepLoading() {
   return (
     <Stack gap="md" aria-busy="true" aria-label="Đang tải">
-      <Skeleton className="h-24" />
-      <Skeleton className="h-64" />
+      <SkeletonCard lines={2} />
+      <SkeletonCard lines={8} />
     </Stack>
   );
 }

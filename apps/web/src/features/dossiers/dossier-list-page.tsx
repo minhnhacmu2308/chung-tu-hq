@@ -1,11 +1,9 @@
 "use client";
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent,
-  DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-  PageHeader, SegmentedControl, Stack, toast, type DataTableColumnVisibility,
+  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, PageHeader, SegmentedControl, Stack, toast, type DataTableColumnVisibility, RowActions,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FolderOpen, MoreHorizontal, Plus, XCircle } from "lucide-react";
+import { Download, FolderOpen, Plus, XCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
@@ -172,27 +170,20 @@ function ListInner() {
               emptyDescription="Tạo hồ sơ cho lô hàng đầu tiên, sau đó upload bộ chứng từ để AI đọc."
               emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">Tạo hồ sơ</Link></Button>}
               rowActions={(r) => (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="icon" variant="ghost" aria-label={`Thao tác cho ${r.code}`}>
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem icon={<FolderOpen className="h-4 w-4" />} onSelect={() => router.push(`/dossiers/${r.id}`)}>
-                      Mở hồ sơ
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      icon={<XCircle className="h-4 w-4" />}
-                      tone="danger"
-                      disabled={r.status === "CANCELLED" || r.status === "CLEARED" || r.status === "SUBMITTED"}
-                      onSelect={() => setToCancel(r)}
-                    >
-                      Hủy hồ sơ
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <RowActions
+                  rowLabel={r.code}
+                  actions={[
+                    { id: "open", label: "Mở hồ sơ", icon: <FolderOpen />, onSelect: () => router.push(`/dossiers/${r.id}`) },
+                    {
+                      id: "cancel",
+                      label: "Hủy hồ sơ",
+                      icon: <XCircle />,
+                      tone: "danger",
+                      disabled: r.status === "CANCELLED" || r.status === "CLEARED" || r.status === "SUBMITTED",
+                      onSelect: () => setToCancel(r),
+                    },
+                  ]}
+                />
               )}
             />
       </Stack>

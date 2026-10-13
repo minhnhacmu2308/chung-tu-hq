@@ -1,5 +1,7 @@
 "use client";
-import { Button, EmptyState, Skeleton, Stack, cn } from "@kb/ui";
+import {
+  Button, EmptyState, Skeleton, Stack, cn, SkeletonList,
+} from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { listNotifications, markAllNotificationsRead, sessionKeys } from "@/api/session";
@@ -15,7 +17,7 @@ export function NotificationsPanel({ onNavigate }: { onNavigate: () => void }) {
     onError: toastMutationError("Không đánh dấu được đã đọc"),
   });
 
-  if (isLoading) return <Stack gap="sm"><Skeleton className="h-14" /><Skeleton className="h-14" /></Stack>;
+  if (isLoading) return <SkeletonList rows={3} />;
   if (!data?.length) return <EmptyState title="Không có thông báo" description="Thông báo về hồ sơ và kết quả Hải quan sẽ hiện ở đây." />;
 
   return (

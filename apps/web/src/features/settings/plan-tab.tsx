@@ -1,5 +1,7 @@
 "use client";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, Progress, Skeleton, Stack, toast } from "@kb/ui";
+import {
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, Progress, Skeleton, Stack, toast, SkeletonCard,
+} from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { getOrganization, settingsKeys } from "@/api/settings";
@@ -50,7 +52,7 @@ function Meter({ label, used, total, unit }: { label: string; used: number; tota
 export function PlanTab() {
   const { data: org, isLoading, isError, refetch } = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
   if (isError) return <LoadError onRetry={() => void refetch()} />;
-  if (isLoading || !org) return <Skeleton className="h-96" />;
+  if (isLoading || !org) return <SkeletonCard lines={6} />;
   const { plan, usage } = org;
   const avgCost = usage.dossiersThisMonth ? Math.round(Number(usage.aiCostVnd) / usage.dossiersThisMonth) : 0;
 

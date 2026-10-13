@@ -1,7 +1,7 @@
 // Thanh các bước (Stepper) + sơ đồ cây quy trình (WorkflowDiagram).
 import { graphlib, layout } from "@dagrejs/dagre";
 import { Check, CircleAlert, GitBranch, Minus, Plus, Scan } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
@@ -188,6 +188,9 @@ export function layoutWorkflow(nodes: readonly FlowNode[], edges: readonly FlowE
   return { nodes: [...placed.values()], edges: routed, width: graph.width ?? 0, height: graph.height ?? 0 };
 }
 
+/** Dưới mức này chữ trong nút quá nhỏ: thà cuộn dọc còn hơn thu tiếp. */
+const MIN_READABLE_SCALE = 0.6;
+
 export function WorkflowDiagram({ nodes, edges, label, onNodeClick, className, labels }: WorkflowDiagramProps) {
   const l = useMessages(DIAGRAM_MESSAGES, labels);
   const graph = useMemo(() => layoutWorkflow(nodes, edges), [nodes, edges]);
@@ -196,11 +199,24 @@ export function WorkflowDiagram({ nodes, edges, label, onNodeClick, className, l
 
   const fit = () => {
     const w = viewport.current?.clientWidth ?? 0;
-    // Khớp theo chiều ngang, tối đa 100% – sơ đồ dài thì cuộn dọc như canvas.
+    const h = viewport.current?.clientHeight ?? 0;
     if (!w || !graph.width) return setScale(1);
-    setScale(Math.max(0.4, Math.min(1, (w - 16) / graph.width)));
+    // Khớp theo chiều ngang, tối đa 100%.
+    let s = Math.min(1, (w - 16) / graph.width);
+    // Nếu thu nhỏ thêm một chút (không dưới 60% – còn đọc được chữ) là thấy trọn sơ đồ thì thu, khỏi phải cuộn dọc.
+    const byHeight = h && graph.height ? (h - 16) / graph.height : s;
+    if (byHeight < s && byHeight >= MIN_READABLE_SCALE) s = byHeight;
+    setScale(Math.max(0.4, s));
   };
   useLayoutEffect(fit, [graph]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Khung đổi kích thước (đổi cửa sổ ↔ panel, đổi cỡ cửa sổ trình duyệt) → khớp lại.
+  useEffect(() => {
+    const el = viewport.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => fit());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [graph]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={cn("relative flex min-h-80 flex-col overflow-hidden rounded-lg border border-border bg-dots", className)}>

@@ -173,7 +173,11 @@ export function DialogContent({
             <CloseIcon />
           </DialogPrimitive.Close>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">{children}</div>
+        {/*
+          Nội dung thường bọc trong <form>: cho form cũng là cột giãn hết chiều cao để DialogFooter (mt-auto) nằm sát đáy.
+          Thiếu dòng này thì ở dạng panel bên phải nhóm nút lơ lửng giữa panel, bên dưới thừa một khoảng trắng.
+        */}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 [&>form]:flex [&>form]:flex-1 [&>form]:flex-col [&>form]:gap-4">{children}</div>
         </div>
         </FocusScope>
       </DialogPrimitive.Content>

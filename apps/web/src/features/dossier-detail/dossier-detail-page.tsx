@@ -1,8 +1,7 @@
 "use client";
 // Chi tiết hồ sơ: đầu trang + thanh 6 bước + màn của bước đang xem (?step=…, mặc định bước đang dở).
 import {
-  Breadcrumb, Button, Card, CardContent, Dialog, DialogContent, DialogFooter, DialogTrigger, DropdownMenu, DropdownMenuContent,
-  DropdownMenuItem, DropdownMenuTrigger, EmptyState, PageHeader, Skeleton, Stack, Stepper, toast, WorkflowDiagram,
+  Breadcrumb, Button, Card, CardContent, Dialog, DialogContent, DialogFooter, DialogTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, EmptyState, PageHeader, Skeleton, Stack, Stepper, toast, WorkflowDiagram, PageLoading,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, GitBranch, MoreHorizontal, XCircle } from "lucide-react";
@@ -130,12 +129,7 @@ function DetailInner({ id }: { id: string }) {
 
   if (isLoading) {
     return (
-      <Stack gap="lg">
-        <Skeleton className="h-4 w-64" />
-        <Skeleton className="h-9 w-80" />
-        <Skeleton className="h-12" />
-        <Skeleton className="h-96" />
-      </Stack>
+      <PageLoading variant="detail" label="Đang tải hồ sơ" />
     );
   }
   if (isError || !dossier) {
@@ -180,7 +174,7 @@ function DetailInner({ id }: { id: string }) {
             label={`Quy trình hồ sơ ${dossier.code}`}
             nodes={flow.nodes}
             edges={flow.edges}
-            className="h-160 max-h-dvh"
+            className="dialog-fill"
             onNodeClick={(nodeId) => {
               const step = flow.stepOf[nodeId];
               if (step && STEP_ORDER.indexOf(step) <= progressIndex) goTo(step);

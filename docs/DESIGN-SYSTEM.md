@@ -88,6 +88,15 @@ export default async function RootLayout({ children }) {
 | `StatCard` (`label`, `value`, `hint`, `hintTone`, `icon`, `tone`, `loading`) | Thẻ chỉ số (KPI) dùng thống nhất ở mọi màn tổng quan. `value` là `number` → chạy đếm; chuỗi đã định dạng → hiển thị nguyên văn. Không tự dựng KPI bằng `Card` |
 | `FormSection` (`title`, `description`) | Một nhóm trường của form dài: màn rộng tiêu đề/mô tả bên trái, ô nhập bên phải; tự kẻ đường ngăn giữa các nhóm. Form từ ~5 trường trở lên nên chia nhóm |
 | `Skeleton`, `Spinner`, `EmptyState` | Trạng thái tải / trống |
+| **Loading – chọn theo tình huống** | |
+| `Spinner` (`sm/md/lg`) | Chỗ nhỏ: trong nút, cạnh một dòng chữ |
+| `Loader` (`sm/md/lg`) | Biểu tượng tải mang thương hiệu (logo + vòng xoay): tải cả khối / cả màn |
+| `LoadingDots` | Ba chấm nhún: AI đang soạn câu trả lời / đang xử lý |
+| `LoadingState` (`title`, `description`) | CHƯA biết dáng nội dung sắp hiện (chờ AI, chờ Hải quan). Luôn nói rõ đang làm gì |
+| `LoadingOverlay` (`loading`, `label`) | Tải lại / đang lưu trên nội dung ĐÃ có: giữ nguyên bố cục, làm mờ, chặn thao tác (`inert`) |
+| `SkeletonText` / `SkeletonStats` / `SkeletonCard` / `SkeletonTable` / `SkeletonForm` / `SkeletonList` | ĐÃ biết dáng nội dung: khung tải đúng dáng để trang không nhảy. Không tự ghép `Skeleton className="h-80"` |
+| `PageLoading` (`variant`: dashboard/table/form/detail) | Cả trang: `loading.tsx` của route và lúc tải dữ liệu chính của màn |
+| `RowActions` (`rowLabel`, `actions`: id/label/icon/onSelect/tone/disabled/quick) | Thao tác trên một dòng: icon hiện khi rê chuột hoặc Tab vào dòng (cha phải có class `group` – dòng `DataTable` có sẵn), kèm nút "…" LUÔN chứa đủ mọi thao tác cho cảm ứng. Không tự dựng menu "…" trong app |
 | `Grid` / `Stack` prop `stagger` | Phần tử con lần lượt trồi lên khi khối xuất hiện (thẻ KPI, danh sách). Không lạm dụng: một màn chỉ nên có 1–2 khối |
 | `CountUp` (`value`, `duration`) | Số ĐẾM nguyên chạy từ 0 lên (KPI). **Không dùng cho tiền/trị giá** (Decimal hiển thị nguyên văn). Trình đọc màn hình nhận giá trị cuối |
 | `AiBackdrop`, `AiScanCard` (`title`, `fields`) | Trang trí "AI" cho màn đăng nhập/giới thiệu: nền mạng tín hiệu + minh họa tia quét đọc chứng từ. `aria-hidden`, màu theo token, tắt khi giảm chuyển động |

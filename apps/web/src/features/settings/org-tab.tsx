@@ -1,5 +1,7 @@
 "use client";
-import { Alert, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Field, FormSection, Grid, Input, Skeleton, Stack, toast } from "@kb/ui";
+import {
+  Alert, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Field, FormSection, Grid, Input, Skeleton, Stack, toast, SkeletonForm,
+} from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,7 +25,7 @@ export function OrgTab() {
     },
   });
 
-  if (isLoading || !org) return <Skeleton className="h-80" />;
+  if (isLoading || !org) return <Card className="max-w-4xl p-5"><SkeletonForm fields={4} /></Card>;
   const dirty = draft.name !== org.name || draft.address !== org.address || draft.phone !== org.phone;
 
   return (

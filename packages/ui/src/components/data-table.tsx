@@ -128,8 +128,11 @@ export type DataTableColumnMeta = {
   filterOptions?: readonly { value: string; label: string }[];
   /** `false` = không cho ẩn cột này trong menu "Cột". */
   hideable?: boolean;
-  /** Cột định danh (mã hồ sơ…) đứng yên bên trái khi bảng cuộn ngang. Chỉ nên bật cho MỘT cột. */
-  sticky?: boolean;
+  /**
+   * Cột đứng yên khi bảng cuộn ngang: `true`/"start" = dính mép trái (cột định danh như mã hồ sơ),
+   * "end" = dính mép phải (cột thao tác – luôn nhìn thấy dù bảng rộng). Mỗi phía chỉ nên có MỘT cột.
+   */
+  sticky?: boolean | "start" | "end";
   /** `false` = không cho kéo đổi độ rộng cột này (khi bảng bật `resizable`). Độ rộng: `size`/`minSize`/`maxSize` của cột. */
   resizable?: boolean;
 };
@@ -244,6 +247,12 @@ export type DataTableProps<TData extends RowData> = {
 };
 
 const ALIGN = { start: "text-left", center: "text-center", end: "text-right" } as const;
+/** Class cho ô/tiêu đề của cột dính trái hoặc phải. */
+function stickyCell(sticky: boolean | "start" | "end" | undefined, z: string) {
+  if (!sticky) return undefined;
+  return sticky === "end" ? cn("sticky-col-edge-end sticky right-0", z) : cn("sticky-col-edge sticky left-0", z);
+}
+
 const INTERACTIVE = "button, a, input, select, textarea, label, [role='menuitem'], [role='button'], [role='separator']";
 const RESIZE_STEP = 10;
 
@@ -448,11 +457,13 @@ export function DataTable<TData extends RowData>({
           id: "__actions",
           enableSorting: false,
           enableHiding: false,
-          size: 96,
+          // Đủ chỗ cho 2–3 icon thao tác nhanh + nút "…" (bảng table-fixed không tự giãn theo nội dung).
+          size: 148,
           minSize: 48,
           header: () => <span className="sr-only">{t.actions}</span>,
           cell: ({ row }) => <div className="flex justify-end gap-1">{rowActions(row.original)}</div>,
-          meta: { align: "end", cellClassName: "w-px whitespace-nowrap" },
+          // Cột thao tác dính mép phải: icon hiện khi rê chuột phải nằm trong tầm mắt dù bảng đang cuộn ngang.
+          meta: { align: "end", cellClassName: "w-px whitespace-nowrap", sticky: "end" },
         }),
       );
     }
@@ -631,7 +642,7 @@ export function DataTable<TData extends RowData>({
                         "whitespace-nowrap border-b border-border bg-surface-muted px-3 py-2.5 text-xs font-semibold text-fg-muted",
                         ALIGN[meta?.align ?? "start"],
                         stickyHeader ? "sticky top-0 z-10" : resizable && "relative",
-                        meta?.sticky && "sticky-col-edge sticky left-0 z-20",
+                        stickyCell(meta?.sticky, "z-20"),
                         resizable && "overflow-hidden text-ellipsis",
                         meta?.headerClassName,
                       )}
@@ -680,7 +691,7 @@ export function DataTable<TData extends RowData>({
                   const label = fill(t.filterBy, { label: columnLabel(column) });
                   const value: unknown = column.getFilterValue();
                   return (
-                    <td key={column.id} className={cn("border-b border-border bg-surface px-2 py-2", column.columnDef.meta?.sticky && "sticky-col-edge sticky left-0 z-[1]")}>
+                    <td key={column.id} className={cn("border-b border-border bg-surface px-2 py-2", stickyCell(column.columnDef.meta?.sticky, "z-[1]"))}>
                       {kind === "select" ? (
                         <Select
                           aria-label={label}
@@ -763,7 +774,7 @@ export function DataTable<TData extends RowData>({
                           ALIGN[meta?.align ?? "start"],
                           meta?.align === "end" && "tabular-nums",
                           // Ô dính cần nền đặc (để nội dung cuộn chui xuống dưới) và phải theo màu hover/chọn của dòng.
-                          meta?.sticky && "sticky-col-edge sticky left-0 z-[1] bg-surface group-hover:bg-surface-muted group-data-[selected]:bg-primary-subtle",
+                          meta?.sticky && cn(stickyCell(meta.sticky, "z-[1]"), "bg-surface group-hover:bg-surface-muted group-data-[selected]:bg-primary-subtle"),
                           meta?.cellClassName,
                         )}
                       >

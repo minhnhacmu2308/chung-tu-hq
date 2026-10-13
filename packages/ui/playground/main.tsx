@@ -13,6 +13,7 @@ import {
   Breadcrumb, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   SidebarMobileTrigger, Toaster, toast, UiLocaleProvider,
   BrandMark, AiBackdrop, AiScanCard, CountUp, FormSection, StatCard, toastPromise,
+  RowActions, Loader, LoadingDots, LoadingOverlay, LoadingState, SkeletonCard, SkeletonForm, SkeletonList, SkeletonStats, SkeletonTable,
 } from "../src/index.js";
 import { Showcase } from "./showcase.js";
 
@@ -202,7 +203,7 @@ function Demo() {
                   <Button variant="secondary" size="sm" leftIcon={<GitBranch className="h-4 w-4" />}>Xem cây quy trình</Button>
                 </DialogTrigger>
                 <DialogContent title="Quy trình hồ sơ HS-NK-2609-021" icon={<GitBranch className="h-4 w-4" />} size="lg">
-                  <WorkflowDiagram label="Quy trình hồ sơ HS-NK-2609-021" nodes={FLOW_NODES} edges={FLOW_EDGES} className="h-[70dvh]" onNodeClick={() => {}} />
+                  <WorkflowDiagram label="Quy trình hồ sơ HS-NK-2609-021" nodes={FLOW_NODES} edges={FLOW_EDGES} className="dialog-fill" onNodeClick={() => {}} />
                 </DialogContent>
               </Dialog>
             }
@@ -350,6 +351,37 @@ function Demo() {
                   </Button>
                   <span className="text-sm text-fg-muted">Số đếm chạy: <CountUp value={1284} /></span>
                 </div>
+                <p className="text-sm font-medium">Thao tác trên dòng – rê chuột vào dòng để hiện icon; nút … luôn có đủ thao tác</p>
+                <ul className="divide-y divide-border rounded-md border border-border">
+                  {["HS-NK-2610-021", "HS-XK-2610-025"].map((code) => (
+                    <li key={code} className="group flex items-center justify-between gap-3 px-3 py-2 hover:bg-surface-muted">
+                      <span className="font-mono text-sm">{code}</span>
+                      <RowActions
+                        rowLabel={code}
+                        actions={[
+                          { id: "open", label: "Mở hồ sơ", icon: <FolderOpen />, onSelect: () => toast({ title: `Mở ${code}` }) },
+                          { id: "send", label: "Truyền Hải quan", icon: <Send />, onSelect: () => toast({ title: `Truyền ${code}` }) },
+                          { id: "cancel", label: "Hủy hồ sơ", icon: <LogOut />, tone: "danger", onSelect: () => toast({ tone: "warning", title: `Hủy ${code}` }) },
+                        ]}
+                      />
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-sm font-medium">Loading – biểu tượng tải, ba chấm, khối đang tải, lớp phủ, khung tải dựng sẵn</p>
+                <div className="flex flex-wrap items-center gap-6">
+                  <Loader size="sm" /><Loader /><Loader size="lg" />
+                  <Spinner size="sm" /><Spinner /><LoadingDots />
+                </div>
+                <Grid cols={{ base: 1, lg: 2 }}>
+                  <Card><LoadingState title="Đang đọc chứng từ…" description="AI đang đọc 2/3 chứng từ. Bạn có thể rời màn hình." /></Card>
+                  <LoadingOverlay loading label="Đang lưu…">
+                    <Card className="p-5"><SkeletonForm fields={3} /></Card>
+                  </LoadingOverlay>
+                  <SkeletonCard />
+                  <Card className="p-5"><SkeletonList rows={3} /></Card>
+                </Grid>
+                <SkeletonStats />
+                <SkeletonTable rows={4} />
                 <div className="relative overflow-hidden rounded-lg bg-primary p-6 text-primary-fg">
                   <AiBackdrop />
                   <AiScanCard className="relative" title="COMMERCIAL INVOICE" fields={[{ label: "Số invoice", value: "HP-2610-078" }, { label: "Trị giá", value: "20.850,00 USD" }, { label: "Mã HS", value: "8482.10.00" }]} />

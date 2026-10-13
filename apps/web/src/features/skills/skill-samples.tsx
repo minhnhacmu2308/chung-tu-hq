@@ -1,6 +1,8 @@
 "use client";
 // Mẫu chứng từ đã gắn nhãn: làm ví dụ cho AI và làm bộ đo khi "Đánh giá lại".
-import { Alert, Badge, Button, Card, CardContent, EmptyState, FileDropzone, Skeleton, Stack, toast } from "@kb/ui";
+import {
+  Alert, Badge, Button, Card, CardContent, EmptyState, FileDropzone, Skeleton, Stack, toast, SkeletonList,
+} from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, RefreshCw, Tags } from "lucide-react";
 import { confirmPendingSamples, listSamples, MIN_SAMPLES_FOR_ACCURACY, skillKeys, uploadSamples } from "@/api/skills";
@@ -57,7 +59,7 @@ export function SkillSamples({ skill }: { skill: Skill }) {
       {isError ? (
         <Alert tone="danger" title="Không tải được danh sách mẫu" action={<Button size="sm" variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => refetch()}>Thử lại</Button>} />
       ) : isLoading || !data ? (
-        <Stack gap="sm">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14" />)}</Stack>
+        <SkeletonList rows={3} />
       ) : data.length === 0 ? (
         <EmptyState icon={<FileText className="h-6 w-6" />} title="Chưa có mẫu nào" description="Kéo thả chứng từ thật của doanh nghiệp vào ô phía trên để bắt đầu." />
       ) : (

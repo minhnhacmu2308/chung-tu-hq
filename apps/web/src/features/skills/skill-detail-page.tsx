@@ -1,7 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Breadcrumb, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader,
-  Skeleton, Stack, StatCard, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast,
+  Alert, Badge, Breadcrumb, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader, Skeleton, Stack, StatCard, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast, SkeletonStats, SkeletonTable,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, GitCommitHorizontal, Hash, RefreshCw, SearchX, Target } from "lucide-react";
@@ -139,8 +138,8 @@ function SkillDetailInner({ id }: { id: string }) {
       <Stack gap="lg">
         <Skeleton className="h-5 w-48" />
         <Skeleton className="h-10 w-96 max-w-full" />
-        <Grid cols={{ base: 2, xl: 4 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</Grid>
-        <Skeleton className="h-96" />
+        <SkeletonStats />
+        <SkeletonTable rows={8} cols={6} />
       </Stack>
     );
   }

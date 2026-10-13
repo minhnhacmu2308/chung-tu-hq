@@ -1,7 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, Card, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, Grid, PageHeader,
-  Skeleton, Stack, StatCard, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast,
+  Alert, Badge, Button, Card, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, Grid, PageHeader, Skeleton, Stack, StatCard, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast, SkeletonStats,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FilePlus2, RefreshCw, Sparkles, Tags, Target } from "lucide-react";
@@ -122,9 +121,7 @@ function SkillListInner() {
           Kiểm tra kết nối rồi thử lại.
         </Alert>
       ) : isLoading || !data ? (
-        <Grid cols={{ base: 2, xl: 4 }}>
-          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-28" />)}
-        </Grid>
+        <SkeletonStats />
       ) : (
         <Kpis skills={data} />
       )}

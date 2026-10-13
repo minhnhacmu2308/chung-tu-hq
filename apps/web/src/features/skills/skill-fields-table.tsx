@@ -1,11 +1,10 @@
 "use client";
 // Bảng trường của skill: khách tự chọn trường nào AI trích xuất, trường nào hiện trên màn kiểm tra.
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, Stack, Switch, toast,
+  Alert, Badge, Button, createDataTableColumnHelper, DataTable, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Stack, Switch, toast, RowActions,
 } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { removeSkillField, skillKeys, updateSkillField, type SkillFieldPatch } from "@/api/skills";
 import type { Skill, SkillField } from "@/mocks/types";
@@ -59,25 +58,22 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
     const actions = col.display({
       id: "actions",
       header: () => <span className="sr-only">Thao tác</span>,
+      meta: { align: "end", sticky: "end" },
       cell: (c) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="ghost" aria-label={`Thao tác cho ${c.row.original.key}`}>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem icon={<Pencil className="h-4 w-4" />} onSelect={() => openDialog(c.row.original)}>Sửa</DropdownMenuItem>
-            <DropdownMenuItem
-              icon={<Trash2 className="h-4 w-4" />}
-              tone="danger"
-              disabled={c.row.original.required}
-              onSelect={() => remove.mutate(c.row.original.key)}
-            >
-              {c.row.original.required ? "Trường bắt buộc – không xóa được" : "Xóa"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowActions
+          rowLabel={c.row.original.key}
+          actions={[
+            { id: "edit", label: "Sửa", icon: <Pencil />, onSelect: () => openDialog(c.row.original) },
+            {
+              id: "remove",
+              label: c.row.original.required ? "Trường bắt buộc – không xóa được" : "Xóa",
+              icon: <Trash2 />,
+              tone: "danger",
+              disabled: c.row.original.required,
+              onSelect: () => remove.mutate(c.row.original.key),
+            },
+          ]}
+        />
       ),
     });
     const code = col.accessor("key", {

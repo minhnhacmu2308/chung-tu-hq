@@ -1,7 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader,
-  Progress, Skeleton, Stack, StatCard,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader, Progress, Skeleton, Stack, StatCard, SkeletonStats, SkeletonList,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CalendarClock, FileSearch, FolderOpen, Plus, Send } from "lucide-react";
@@ -99,9 +98,7 @@ export function DashboardPage() {
       )}
 
       {dossiers.isLoading ? (
-        <Grid cols={{ base: 2, xl: 4 }}>
-          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-32" />)}
-        </Grid>
+        <SkeletonStats />
       ) : (
         <Grid cols={{ base: 2, xl: 4 }} stagger>
           <StatCard
@@ -128,7 +125,7 @@ export function DashboardPage() {
           <SectionHeader title="Cần xử lý" description="Sắp theo hạn khai, gần nhất lên đầu." href="/dossiers" linkLabel="Xem tất cả" />
           <CardContent>
             {dossiers.isLoading ? (
-              <Stack gap="sm">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}</Stack>
+              <SkeletonList rows={4} />
             ) : todo.length === 0 ? (
               <EmptyState
                 title="Không còn việc tồn đọng"
@@ -188,7 +185,7 @@ export function DashboardPage() {
         <SectionHeader title="Kết quả khai báo gần đây" description="Phân luồng và trạng thái từ Hải quan." href="/customs" linkLabel="Khai báo Hải quan" />
         <CardContent>
           {dossiers.isLoading ? (
-            <Stack gap="sm">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12" />)}</Stack>
+            <SkeletonList rows={3} />
           ) : recent.length === 0 ? (
             <EmptyState title="Chưa có tờ khai nào được truyền" description="Tờ khai đã truyền qua Customs Hub sẽ hiện ở đây kèm kết quả phân luồng." />
           ) : (

@@ -20,8 +20,9 @@ export {
 } from "./components/dialog.js";
 export {
   AssistantPanel, AssistantLauncher, AssistantWelcome, SuggestionChips, ChatMessage, ChatComposer,
-  type AssistantPanelProps, type AssistantMode, type ChatMessageProps, type ChatComposerProps,
+  type AssistantPanelProps, type AssistantLauncherProps, type AssistantMode, type ChatMessageProps, type ChatComposerProps,
 } from "./components/assistant.js";
+export { RobotAvatar, type RobotAvatarProps, type RobotAvatarState } from "./components/robot-avatar.js";
 export {
   SegmentedControl, ColorSwatchPicker,
   type SegmentOption, type SegmentedControlProps, type Swatch, type ColorSwatchPickerProps,

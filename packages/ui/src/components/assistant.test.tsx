@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
-import { AssistantPanel, AssistantWelcome, ChatComposer, ChatMessage, SuggestionChips, type AssistantMode } from "./assistant.js";
+import { AssistantLauncher, AssistantPanel, AssistantWelcome, ChatComposer, ChatMessage, SuggestionChips, type AssistantMode } from "./assistant.js";
+
+// jsdom không vẽ canvas → thay robot-heads bằng canvas giả ghi lại trạng thái.
+vi.mock("robot-heads", () => ({ RobotHead: (p: Record<string, unknown>) => <canvas data-state={p.state} /> }));
 
 function Harness({ onSend = vi.fn(), onClose = vi.fn() }) {
   const [mode, setMode] = useState<AssistantMode>("docked");
@@ -84,5 +87,22 @@ describe("ChatComposer", () => {
   it("toàn bộ panel không vi phạm a11y", async () => {
     const { container } = render(<Harness />);
     await expectNoA11yViolations(container);
+  });
+});
+
+describe("AssistantLauncher", () => {
+  it("là nút có tên, chứa robot theo trạng thái, bấm thì gọi onClick", async () => {
+    const onClick = vi.fn();
+    const { container } = render(<AssistantLauncher onClick={onClick} state="thinking" />);
+    const button = screen.getByRole("button", { name: "Mở trợ lý AI" });
+    expect(container.querySelector("canvas")).toHaveAttribute("data-state", "thinking");
+    await userEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await expectNoA11yViolations(container);
+  });
+
+  it("mặc định robot ở trạng thái idle", () => {
+    const { container } = render(<AssistantLauncher />);
+    expect(container.querySelector("canvas")).toHaveAttribute("data-state", "idle");
   });
 });

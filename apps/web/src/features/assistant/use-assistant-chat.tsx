@@ -54,5 +54,5 @@ export function useAssistantChat() {
     );
 
   const composer = <ChatComposer onSend={send} busy={busy} accept=".pdf,.zip,.jpg,.png" />;
-  return { content, composer };
+  return { content, composer, busy };
 }

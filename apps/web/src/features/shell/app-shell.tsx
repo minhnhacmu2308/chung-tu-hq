@@ -169,7 +169,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       >
         {chat.content}
       </AssistantPanel>
-      {!aiOpen && <AssistantLauncher onClick={() => setAiOpen(true)} />}
+      {!aiOpen && <AssistantLauncher onClick={() => setAiOpen(true)} state={chat.busy ? "thinking" : "idle"} />}
     </div>
   );
 }

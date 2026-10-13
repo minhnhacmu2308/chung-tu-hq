@@ -2,6 +2,7 @@
 import { useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
+import { RobotAvatar, type RobotAvatarState } from "./robot-avatar.js";
 
 const PANEL_MESSAGES = {
   vi: { floating: "Khung nổi", docked: "Ghim bên cạnh", fullscreen: "Toàn màn hình", close: "Đóng trợ lý", history: "Lịch sử hội thoại", modes: "Chế độ hiển thị", assistant: "Trợ lý AI" },
@@ -129,20 +130,27 @@ export function AssistantPanel({
 
 /* ---------------- AssistantLauncher ---------------- */
 
-export function AssistantLauncher({ className, label, ...props }: ComponentProps<"button"> & { label?: string }) {
+export interface AssistantLauncherProps extends ComponentProps<"button"> {
+  label?: string;
+  /** Trạng thái robot: "thinking" khi trợ lý đang trả lời, mặc định "idle". */
+  state?: RobotAvatarState;
+}
+
+/** Nút mở trợ lý: linh vật robot nổi ở góc dưới phải, quay đầu theo con trỏ. */
+export function AssistantLauncher({ className, label, state = "idle", ...props }: AssistantLauncherProps) {
   const t = useMessages(LAUNCHER_MESSAGES);
   return (
     <button
       type="button"
       aria-label={label ?? t.open}
       className={cn(
-        "fixed bottom-6 right-6 z-30 inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-fg shadow-lg",
-        "hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+        "fixed bottom-4 right-4 z-30 inline-flex items-center justify-center rounded-md p-1 transition-transform hover:-translate-y-0.5",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
         className,
       )}
       {...props}
     >
-      {Icons.sparkle}
+      <RobotAvatar state={state} size={72} />
     </button>
   );
 }

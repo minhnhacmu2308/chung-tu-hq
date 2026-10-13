@@ -4,7 +4,7 @@ import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../src/styles/index.css";
 import {
-  Alert, AppearancePanel, AssistantLauncher, AssistantPanel, AssistantWelcome, Badge, Button, Card, CardContent,
+  Alert, AppearancePanel, AssistantLauncher, RobotAvatar, AssistantPanel, AssistantWelcome, Badge, Button, Card, CardContent,
   CardDescription, CardFooter, CardHeader, CardTitle, ChatComposer, ChatMessage, Checkbox, Dialog, DialogContent,
   DialogFooter, DialogTrigger, EmptyState, Field, Grid, Input, PageHeader, Select, Skeleton, Spinner, Stack,
   StatusBadge, SuggestionChips, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, type AssistantMode,
@@ -297,6 +297,21 @@ function Demo() {
 
           <Showcase />
         </Stack>
+        <Card>
+          <CardContent>
+            <Stack gap="sm">
+              <p className="text-sm font-medium">RobotAvatar – linh vật trợ lý AI theo trạng thái (quay đầu theo con trỏ, click để nhảy)</p>
+              <div className="flex flex-wrap gap-6">
+                {(["idle", "thinking", "searching", "listening", "speaking", "working", "happy", "error", "sleeping"] as const).map((s) => (
+                  <div key={s} className="flex flex-col items-center gap-1 text-xs text-fg-muted">
+                    <RobotAvatar state={s} size={72} />
+                    <span>{s}</span>
+                  </div>
+                ))}
+              </div>
+            </Stack>
+          </CardContent>
+        </Card>
       </main>
 
       <AssistantPanel

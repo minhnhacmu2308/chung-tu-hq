@@ -2,3 +2,5 @@
 next-env.d.ts
 *.tsbuildinfo
 .next-build
+.vercel
+.env*

@@ -120,6 +120,9 @@ importers:
       react-day-picker:
         specifier: ^10.0.2
         version: 10.0.2(@types/react@19.3.0)(react@19.3.0)
+      robot-heads:
+        specifier: ^0.3.0
+        version: 0.3.0(react@19.3.0)
       tailwind-merge:
         specifier: ^3.3.0
         version: 3.7.0
@@ -2024,6 +2027,11 @@ packages:
     resolution: {integrity: sha512-Dj/cW9zBV2aRj6XzCxuGIs3ESZKv02jixne3q6jFZYZ3/Tg09gHHviSMDL4kObh9pqSahdRHEnDoaP2gn8YLhA==}
     engines: {node: '>= 0.4'}
     hasBin: true
+
+  robot-heads@0.3.0:
+    resolution: {integrity: sha512-JXGMp7Xl8jBl10T8JhBEaUrhtGpv/oqCs7CJEKCFDjhpv4DXplN/opMQslgQVcAi6I1s/0S3aAt5cJ/s7GfyaQ==}
+    peerDependencies:
+      react: '>=18.0.0'
 
   rollup@4.64.5:
     resolution: {integrity: sha512-EAP5ZHcz2ijbgCWwPkpI7zh6bfsri2Ez5FtCy2dCp1k62duXzfG7DLGGh7RU2QQXWwavT+u4qpvDF/TWOiiGTw==}
@@ -3967,6 +3975,10 @@ snapshots:
       is-core-module: 2.17.0
       path-parse: 1.0.7
       supports-preserve-symlinks-flag: 1.0.0
+
+  robot-heads@0.3.0(react@19.3.0):
+    dependencies:
+      react: 19.3.0
 
   rollup@4.64.5:
     dependencies:

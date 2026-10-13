@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Be_Vietnam_Pro, Inter, JetBrains_Mono, Roboto } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -8,9 +9,17 @@ export const metadata: Metadata = {
   description: "Từ bộ chứng từ đến tờ khai hải quan trong một luồng.",
 };
 
+// next/font bắt buộc tham số là hằng viết trực tiếp (không dùng biến chung).
+// Webfont cho tùy chọn "Font chữ" của @kb/ui: biến --kb-webfont-* được tokens.css đọc. Chỉ font mặc định được preload.
+const beVietnamPro = Be_Vietnam_Pro({ subsets: ["latin", "vietnamese"], weight: ["400", "500", "600", "700"], variable: "--kb-webfont-be-vietnam-pro", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin", "vietnamese"], variable: "--kb-webfont-mono", display: "swap", preload: false });
+const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--kb-webfont-inter", display: "swap", preload: false });
+const roboto = Roboto({ subsets: ["latin", "vietnamese"], weight: ["400", "500", "700"], variable: "--kb-webfont-roboto", display: "swap", preload: false });
+const FONT_VARIABLES = [beVietnamPro, mono, inter, roboto].map((f) => f.variable).join(" ");
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="vi" suppressHydrationWarning>
+    <html lang="vi" className={FONT_VARIABLES} suppressHydrationWarning>
       <body>
         <Providers>{children}</Providers>
       </body>

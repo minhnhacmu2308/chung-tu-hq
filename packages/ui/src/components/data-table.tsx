@@ -626,7 +626,7 @@ export function DataTable<TData extends RowData>({
                       aria-sort={canSort ? (sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none") : undefined}
                       style={resizable ? { width: header.getSize() } : undefined}
                       className={cn(
-                        "whitespace-nowrap border-b border-border bg-surface-muted px-3 py-2 font-medium text-fg-muted",
+                        "whitespace-nowrap border-b border-border bg-surface-muted px-3 py-2.5 font-medium text-fg-muted",
                         ALIGN[meta?.align ?? "start"],
                         stickyHeader ? "sticky top-0 z-10" : resizable && "relative",
                         resizable && "overflow-hidden text-ellipsis",

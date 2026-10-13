@@ -6,9 +6,9 @@ import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
-const surface = "z-50 min-w-48 rounded-md border border-border bg-surface p-1 text-fg shadow-md";
+const surface = "z-50 min-w-48 rounded-lg border border-border bg-surface p-1.5 text-fg shadow-lg motion-safe:animate-pop-in";
 const itemCls = cn(
-  "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none",
+  "relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none",
   "data-[highlighted]:bg-surface-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
 );
 
@@ -71,7 +71,7 @@ export function DropdownMenuLabel({ className, ...props }: ComponentProps<typeof
 }
 
 export function DropdownMenuSeparator({ className, ...props }: ComponentProps<typeof MenuPrimitive.Separator>) {
-  return <MenuPrimitive.Separator className={cn("-mx-1 my-1 h-px bg-border", className)} {...props} />;
+  return <MenuPrimitive.Separator className={cn("-mx-1.5 my-1.5 h-px bg-border", className)} {...props} />;
 }
 
 export function DropdownMenuSubTrigger({ className, children, icon, ...props }: ComponentProps<typeof MenuPrimitive.SubTrigger> & { icon?: ReactNode }) {
@@ -114,7 +114,7 @@ export function PopoverContent({ className, sideOffset = 6, showClose = false, s
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         sideOffset={sideOffset}
-        className={cn("z-50 w-72 rounded-lg border border-border bg-surface p-4 text-fg shadow-md focus-visible:outline-none", showClose && "pr-10", className)}
+        className={cn("z-50 w-72 rounded-lg border border-border bg-surface p-4 text-fg shadow-lg focus-visible:outline-none motion-safe:animate-pop-in", showClose && "pr-10", className)}
         {...props}
       >
         {children}

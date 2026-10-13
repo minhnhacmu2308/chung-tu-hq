@@ -40,12 +40,14 @@ export type GridProps = ComponentProps<"div"> & {
   /** Số cột; dùng object cho responsive: { base: 1, md: 2, lg: 4 }. */
   cols?: Cols | Partial<Record<keyof typeof COLS, Cols>>;
   gap?: Gap;
+  /** Các ô lần lượt trồi lên khi lưới xuất hiện (tắt khi người dùng bật giảm chuyển động). */
+  stagger?: boolean;
 };
 
-export function Grid({ cols = 1, gap = "md", className, ...props }: GridProps) {
+export function Grid({ cols = 1, gap = "md", stagger = false, className, ...props }: GridProps) {
   const map = typeof cols === "number" ? { base: cols } : cols;
   const colClasses = (Object.entries(map) as [keyof typeof COLS, Cols][]).map(([bp, n]) => COLS[bp][n]);
-  return <div className={cn("grid", colClasses, GAP[gap], className)} {...props} />;
+  return <div className={cn("grid", colClasses, GAP[gap], stagger && "stagger-children", className)} {...props} />;
 }
 
 /* ---------------- Stack ---------------- */
@@ -59,9 +61,11 @@ export type StackProps = ComponentProps<"div"> & {
   align?: keyof typeof ALIGN;
   justify?: keyof typeof JUSTIFY;
   wrap?: boolean;
+  /** Các phần tử con lần lượt trồi lên khi khối xuất hiện (tắt khi người dùng bật giảm chuyển động). */
+  stagger?: boolean;
 };
 
-export function Stack({ direction = "col", gap = "md", align, justify, wrap = false, className, ...props }: StackProps) {
+export function Stack({ direction = "col", gap = "md", align, justify, wrap = false, stagger = false, className, ...props }: StackProps) {
   return (
     <div
       className={cn(
@@ -71,6 +75,7 @@ export function Stack({ direction = "col", gap = "md", align, justify, wrap = fa
         align && ALIGN[align],
         justify && JUSTIFY[justify],
         wrap && "flex-wrap",
+        stagger && "stagger-children",
         className,
       )}
       {...props}
@@ -91,15 +96,16 @@ export type PageHeaderProps = {
 export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
     <header className={cn("flex flex-wrap items-start justify-between gap-4", className)}>
-      <div className="flex min-w-0 flex-col gap-1">
-        <h1 className="text-xl font-semibold text-fg">{title}</h1>
+      {/* flex-1 + basis: mô tả dài tự xuống dòng thay vì đẩy nhóm nút xuống hàng dưới. */}
+      <div className="flex min-w-0 flex-1 basis-80 flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">{title}</h1>
         {description && (
-          <p data-slot="page-description" className="text-sm text-fg-muted">
+          <p data-slot="page-description" className="max-w-3xl text-sm leading-relaxed text-fg-muted">
             {description}
           </p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

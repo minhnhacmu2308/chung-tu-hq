@@ -88,7 +88,7 @@ export function Toaster({ labels }: ToasterProps) {
             onAnimationEnd={() => (!item.open ? removeToast(item.id) : undefined)}
             className={cn(
               "pointer-events-auto flex w-full items-start gap-3 rounded-lg border border-l-4 bg-surface p-4 text-fg shadow-lg",
-              "data-[state=closed]:animate-out data-[swipe=end]:translate-x-full",
+              "motion-safe:data-[state=open]:animate-slide-up data-[swipe=end]:translate-x-full",
               TONE[tone].cls,
             )}
           >

@@ -1,12 +1,12 @@
 "use client";
 // Khung chung mọi màn sau đăng nhập: menu trái, trợ lý AI, cấu hình giao diện, thông báo.
 import {
-  AppearancePanel, AssistantLauncher, AssistantPanel, Badge, BrandDot, Dialog, DialogContent, DropdownMenu,
+  AppearancePanel, AssistantLauncher, AssistantPanel, Badge, BrandDot, BrandMark, Dialog, DialogContent, DropdownMenu,
   DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Sidebar, SidebarFooterButton,
   SidebarMobileTrigger, SidebarUser, toast, type AssistantMode, type NavItem,
 } from "@kb/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, FolderOpen, LayoutDashboard, LogOut, RotateCcw, Send, Settings2, Sparkles, SunMoon, UserRound, Wrench } from "lucide-react";
+import { Bell, FolderOpen, LayoutDashboard, LogOut, RotateCcw, Send, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
@@ -101,7 +101,7 @@ function ShellInner({ children }: { children: ReactNode }) {
     <div className="flex min-h-dvh">
       <Sidebar
         className="sticky top-0"
-        brand={{ logo: <Wrench className="h-4 w-4" />, name: "KhaiBáo AI", href: "/" }}
+        brand={{ logo: <BrandMark small decorative className="h-6 w-6" />, name: "KhaiBáo AI", href: "/" }}
         items={items}
         activeId={activeId}
         collapsed={collapsed}
@@ -155,7 +155,10 @@ function ShellInner({ children }: { children: ReactNode }) {
         <div className="mb-2 md:hidden">
           <SidebarMobileTrigger onClick={() => setMobileNav(true)} expanded={mobileNav} />
         </div>
-        {children}
+        {/* Mỗi lần đổi trang, nội dung trồi nhẹ lên (key theo đường dẫn; đổi ?step= không chạy lại). */}
+        <div key={pathname} className="motion-safe:animate-slide-up">
+          {children}
+        </div>
       </main>
 
       <AssistantPanel

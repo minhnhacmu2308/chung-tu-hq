@@ -15,6 +15,7 @@ export function LoginPage() {
   const [email, setEmail] = useState("chau.le@anphat-demo.vn");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [typing, setTyping] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () => login(email, password),
@@ -33,14 +34,17 @@ export function LoginPage() {
     if (Object.keys(next).length === 0) mutation.mutate();
   };
 
+  // Linh vật phản ứng theo form: đang gửi → suy nghĩ, sai → báo lỗi, đang gõ → lắng nghe.
+  const robot = mutation.isPending ? "thinking" : mutation.isSuccess ? "happy" : mutation.isError ? "error" : typing ? "listening" : "idle";
+
   return (
-    <AuthFrame>
+    <AuthFrame robot={robot}>
       <Stack gap="xs">
         <h1 className="text-2xl font-semibold text-fg">Đăng nhập</h1>
         <p className="text-sm text-fg-muted">Dùng email công việc mà doanh nghiệp đã mời bạn.</p>
       </Stack>
 
-      <form onSubmit={submit} noValidate>
+      <form onSubmit={submit} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} noValidate>
         <Stack gap="md">
           {mutation.isError && <Alert tone="danger" title="Không đăng nhập được">Sai email hoặc mật khẩu.</Alert>}
           <Field label="Email" required {...(errors.email ? { error: errors.email } : {})}>

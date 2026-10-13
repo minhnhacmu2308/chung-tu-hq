@@ -1,6 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CountUp, EmptyState, Grid, PageHeader,
   Progress, Skeleton, Stack,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -25,7 +25,7 @@ function Kpi({ icon, label, value, hint, alert = false }: { icon: ReactNode; lab
           <CardDescription>{label}</CardDescription>
           <span className={alert ? "text-danger" : "text-fg-subtle"} aria-hidden="true">{icon}</span>
         </div>
-        <CardTitle as="h3" className="text-3xl tabular-nums">{value}</CardTitle>
+        <CardTitle as="h3" className="text-3xl tabular-nums">{typeof value === "number" ? <CountUp value={value} /> : value}</CardTitle>
         <p className={alert ? "text-xs text-danger-subtle-fg" : "text-xs text-fg-subtle"}>{hint}</p>
       </CardHeader>
     </Card>
@@ -118,7 +118,7 @@ export function DashboardPage() {
           {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-32" />)}
         </Grid>
       ) : (
-        <Grid cols={{ base: 2, xl: 4 }}>
+        <Grid cols={{ base: 2, xl: 4 }} stagger>
           <Kpi
             icon={<FolderOpen className="h-5 w-5" />}
             label="Hồ sơ đang mở"
@@ -137,7 +137,7 @@ export function DashboardPage() {
         </Grid>
       )}
 
-      <Grid cols={{ base: 1, lg: 3 }} gap="lg">
+      <Grid cols={{ base: 1, lg: 3 }} gap="lg" stagger>
         <Card className="lg:col-span-2">
           <SectionHeader title="Cần xử lý" description="Sắp theo hạn khai, gần nhất lên đầu." href="/dossiers" linkLabel="Xem tất cả" />
           <CardContent>

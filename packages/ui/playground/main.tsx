@@ -1,5 +1,5 @@
 // Playground: xem toàn bộ component @kb/ui và thử cấu hình giao diện. Chạy: pnpm ui:playground
-import { FileCheck2, FolderOpen, GitBranch, LayoutDashboard, LogOut, Send, Settings2, Sparkles, SunMoon, UserRound, Wrench } from "lucide-react";
+import { FileCheck2, FolderOpen, GitBranch, LayoutDashboard, LogOut, Send, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
 import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../src/styles/index.css";
@@ -12,6 +12,7 @@ import {
   Stepper, WorkflowDiagram, type FlowEdge, type FlowNode,
   Breadcrumb, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   SidebarMobileTrigger, Toaster, toast, UiLocaleProvider,
+  BrandMark,
 } from "../src/index.js";
 import { Showcase } from "./showcase.js";
 
@@ -125,7 +126,7 @@ function Demo() {
         mobileOpen={mobileNav}
         onMobileOpenChange={setMobileNav}
         className="sticky top-0"
-        brand={{ logo: <Wrench className="h-4 w-4" />, name: "KhaiBáo AI" }}
+        brand={{ logo: <BrandMark small decorative className="h-6 w-6" />, name: "KhaiBáo AI" }}
         items={NAV}
         activeId={activeId}
         collapsed={collapsed}

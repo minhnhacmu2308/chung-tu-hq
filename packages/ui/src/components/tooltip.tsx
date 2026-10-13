@@ -26,7 +26,7 @@ export function Tooltip({ content, children, side = "top", delay = 300, classNam
           <TooltipPrimitive.Content
             side={side}
             sideOffset={6}
-            className={cn("z-[70] max-w-xs rounded-md bg-fg px-2 py-1 text-xs text-bg shadow-md", className)}
+            className={cn("z-[70] max-w-xs rounded-md bg-fg px-2.5 py-1.5 text-xs text-bg shadow-md motion-safe:animate-fade-in", className)}
           >
             {content}
             <TooltipPrimitive.Arrow className="fill-fg" />

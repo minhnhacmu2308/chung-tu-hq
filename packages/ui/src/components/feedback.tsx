@@ -1,4 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useUiLocale } from "../lib/i18n.js";
@@ -94,11 +95,13 @@ export function StatusBadge({ status, label, className }: StatusBadgeProps) {
 
 const ALERT_TONE: Record<Exclude<Tone, "primary">, string> = {
   neutral: "bg-neutral-subtle text-neutral-subtle-fg border-border",
-  success: "bg-success-subtle text-success-subtle-fg border-success",
-  warning: "bg-warning-subtle text-warning-subtle-fg border-warning",
-  danger: "bg-danger-subtle text-danger-subtle-fg border-danger",
-  info: "bg-info-subtle text-info-subtle-fg border-info",
+  success: "bg-success-subtle text-success-subtle-fg border-success/30",
+  warning: "bg-warning-subtle text-warning-subtle-fg border-warning/30",
+  danger: "bg-danger-subtle text-danger-subtle-fg border-danger/30",
+  info: "bg-info-subtle text-info-subtle-fg border-info/30",
 };
+// Icon đi kèm tông màu: không truyền nghĩa chỉ bằng màu.
+const ALERT_ICON = { neutral: Info, success: CircleCheck, warning: TriangleAlert, danger: CircleAlert, info: Info } as const;
 
 export type AlertProps = {
   tone?: Exclude<Tone, "primary">;
@@ -110,11 +113,13 @@ export type AlertProps = {
 
 /** danger/warning dùng role="alert" (đọc ngay); còn lại role="status". */
 export function Alert({ tone = "info", title, children, action, className }: AlertProps) {
+  const Icon = ALERT_ICON[tone];
   return (
     <div
       role={tone === "danger" || tone === "warning" ? "alert" : "status"}
       className={cn("flex items-start gap-3 rounded-md border px-4 py-3 text-sm", ALERT_TONE[tone], className)}
     >
+      <Icon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         {title && <p className="font-semibold">{title}</p>}
         {children && <div>{children}</div>}
@@ -127,7 +132,7 @@ export function Alert({ tone = "info", title, children, action, className }: Ale
 /* ---------------- Skeleton ---------------- */
 
 export function Skeleton({ className, ...props }: ComponentProps<"div">) {
-  return <div aria-hidden="true" className={cn("animate-pulse rounded-md bg-surface-muted", className)} {...props} />;
+  return <div aria-hidden="true" className={cn("skeleton-shimmer rounded-md", className)} {...props} />;
 }
 
 /* ---------------- EmptyState ---------------- */
@@ -144,7 +149,11 @@ export type EmptyStateProps = {
 export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
   return (
     <div className={cn("flex flex-col items-center gap-2 px-6 py-12 text-center", className)}>
-      {icon && <div className="text-fg-subtle" aria-hidden="true">{icon}</div>}
+      {icon && (
+        <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-fg-subtle [&>svg]:h-6 [&>svg]:w-6" aria-hidden="true">
+          {icon}
+        </div>
+      )}
       <p className="text-base font-semibold text-fg">{title}</p>
       {description && <p className="max-w-md text-sm text-fg-muted">{description}</p>}
       {action && <div className="mt-2">{action}</div>}

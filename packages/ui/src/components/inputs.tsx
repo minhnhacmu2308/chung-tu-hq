@@ -5,9 +5,11 @@ import { useFieldControl } from "./field.js";
 const control = [
   "w-full rounded-md border border-border bg-surface text-fg text-sm",
   "placeholder:text-fg-subtle",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:border-focus",
-  "disabled:cursor-not-allowed disabled:opacity-50",
-  "aria-invalid:border-danger aria-invalid:focus-visible:ring-danger",
+  "hover:border-border-strong",
+  // Focus: viền đổi sang màu focus (đủ tương phản) + quầng mờ 3px cho dịu mắt.
+  "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-focus/25 focus-visible:border-focus",
+  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border",
+  "aria-invalid:border-danger aria-invalid:hover:border-danger aria-invalid:focus-visible:border-danger aria-invalid:focus-visible:ring-danger/25",
 ].join(" ");
 
 export function Input({ className, ...props }: ComponentProps<"input">) {

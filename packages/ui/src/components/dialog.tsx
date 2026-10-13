@@ -93,6 +93,27 @@ function CloseIcon() {
   );
 }
 
+// Đếm số cửa sổ đang mở để nhiều dialog chồng nhau đóng theo thứ tự nào cũng trả lại đúng trạng thái cuộn.
+let scrollLocks = 0;
+let overflowBeforeLock = "";
+
+/**
+ * Lớp phủ + khóa cuộn trang của dạng cửa sổ. Phải nằm TRONG Portal: Portal chỉ dựng con khi dialog đang mở,
+ * còn DialogContent thì luôn được render – đặt khóa cuộn ở đó sẽ khóa cả trang ngay khi dialog còn đóng.
+ */
+function ModalOverlay() {
+  useEffect(() => {
+    if (scrollLocks++ === 0) {
+      overflowBeforeLock = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      if (--scrollLocks === 0) document.body.style.overflow = overflowBeforeLock;
+    };
+  }, []);
+  return <div aria-hidden="true" data-slot="dialog-overlay" className="fixed inset-0 z-40 bg-overlay backdrop-blur-xs motion-safe:animate-fade-in" />;
+}
+
 export function DialogContent({
   title,
   icon,
@@ -111,28 +132,19 @@ export function DialogContent({
     if (mode === "panel") e.preventDefault();
   };
   const isModal = mode === "modal";
-  // Khóa cuộn trang khi ở dạng cửa sổ.
-  useEffect(() => {
-    if (!isModal) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [isModal]);
 
   return (
     <DialogPrimitive.Portal>
       {/* Lớp phủ tự làm (Overlay của Radix chỉ có ở chế độ modal). Bấm vào = bấm ngoài → Radix đóng dialog. */}
-      {isModal && <div aria-hidden="true" data-slot="dialog-overlay" className="fixed inset-0 z-40 bg-overlay" />}
+      {isModal && <ModalOverlay />}
       <DialogPrimitive.Content
         data-presentation={mode}
         aria-modal={isModal || undefined}
         className={cn(
           "fixed z-50 flex w-full flex-col border border-border bg-surface text-fg shadow-lg focus-visible:outline-none",
           mode === "modal"
-            ? cn("left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg", MODAL_SIZE[size])
-            : cn("right-0 top-0 h-dvh rounded-l-lg border-r-0", PANEL_SIZE[size]),
+            ? cn("left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg motion-safe:animate-pop-in", MODAL_SIZE[size])
+            : cn("right-0 top-0 h-dvh rounded-l-lg border-r-0 motion-safe:animate-slide-in-right", PANEL_SIZE[size]),
           className,
         )}
         {...(description ? {} : { "aria-describedby": undefined })}

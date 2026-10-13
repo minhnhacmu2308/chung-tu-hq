@@ -60,10 +60,10 @@ export type AssistantPanelProps = {
 };
 
 const PANEL_MODE: Record<AssistantMode, string> = {
-  floating: "fixed bottom-4 right-4 z-40 h-[min(40rem,calc(100dvh-2rem))] w-[min(26rem,calc(100vw-2rem))] rounded-lg border shadow-lg",
+  floating: "fixed bottom-4 right-4 z-40 h-[min(40rem,calc(100dvh-2rem))] w-[min(26rem,calc(100vw-2rem))] rounded-lg border shadow-lg motion-safe:animate-pop-in",
   // Màn nhỏ (< md) không đủ chỗ ghim cạnh nội dung → tự phủ toàn màn hình.
-  docked: "sticky top-0 h-dvh w-full max-w-md shrink-0 border-l max-md:fixed max-md:inset-0 max-md:z-50 max-md:max-w-none max-md:border-l-0",
-  fullscreen: "fixed inset-0 z-50",
+  docked: "sticky top-0 h-dvh w-full max-w-md shrink-0 border-l max-md:fixed max-md:inset-0 max-md:z-50 max-md:max-w-none max-md:border-l-0 motion-safe:animate-slide-in-right",
+  fullscreen: "fixed inset-0 z-50 motion-safe:animate-fade-in",
 };
 
 /**

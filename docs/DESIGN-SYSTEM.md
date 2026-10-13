@@ -25,8 +25,10 @@ apps/web          CHỈ ghép component + utility token. Không tự định ngh
 | Viền | `border-border`, `border-border-strong` | |
 | Thương hiệu | `bg-primary` / `text-primary-fg`, `hover:bg-primary-hover`, `bg-primary-subtle` / `text-primary-subtle-fg`, `ring-focus` | **Khách đổi được** |
 | Trạng thái | `{success,warning,danger,info,neutral}` × `{"", -fg, -subtle, -subtle-fg}` | **Khóa** – đỏ luôn là lỗi |
-| Bo góc | `rounded-sm/md/lg/full` | Theo tùy chọn Bo góc |
-| Bóng | `shadow-sm/md/lg` | |
+| Bo góc | `rounded-sm/md/lg/full` | Theo tùy chọn Bo góc (mặc định 6/10/14px) |
+| Bóng | `shadow-sm/md/lg` | Nhiều lớp mỏng, ngả màu nền – thẻ/nút dùng `sm`, lớp nổi (menu, dialog, toast) dùng `lg` |
+| Chuyển động | `motion-safe:animate-fade-in / pop-in / slide-in-right / slide-up` | Hiệu ứng vào của lớp nổi. **Luôn kèm `motion-safe:`**. Hover/focus của phần tử tương tác đã có transition 150ms mặc định ở lớp base |
+| Chữ | `font-sans`, `font-mono` | App tải webfont bằng `next/font` và gắn biến `--kb-webfont-*` lên `<html>`. Số mặc định `tabular-nums`; tiêu đề `text-wrap: balance` |
 | Khoảng cách | Thang Tailwind `p-1…p-12`, `gap-*`, `h-*` | Co giãn theo Mật độ (`--spacing`) |
 
 Bảng màu mặc định của Tailwind (`blue-500`, `gray-100`…) **đã bị tắt**.
@@ -80,8 +82,12 @@ export default async function RootLayout({ children }) {
 | `Grid` (`cols={{ base:1, md:2, lg:4 }}`), `Stack` | Bố cục. Không tự viết `grid-cols-*` rời rạc |
 | `PageHeader` | Tiêu đề + mô tả + hành động của mỗi trang |
 | `Badge`, `StatusBadge` | Nhãn. **Trạng thái nghiệp vụ luôn dùng `StatusBadge`** (PASS/WARN/FAIL, CROSS_CHECKED, CONFLICT…, luồng xanh/vàng/đỏ) |
-| `Alert` | Thông báo trong trang |
+| `Alert` | Thông báo trong trang. Tự kèm icon theo tông (không truyền nghĩa chỉ bằng màu) |
+| `BrandMark` (`small`, `decorative`) | Ký hiệu logo KhaiBáo AI (tờ khai có góc giấy thành mũi tên gửi đi), vẽ bằng `currentColor`. `small` cho cỡ ≤ 24 px; `decorative` khi đứng cạnh tên viết bằng chữ. Bộ file gốc + quy tắc dùng: `docs/brand/` |
 | `Skeleton`, `Spinner`, `EmptyState` | Trạng thái tải / trống |
+| `Grid` / `Stack` prop `stagger` | Phần tử con lần lượt trồi lên khi khối xuất hiện (thẻ KPI, danh sách). Không lạm dụng: một màn chỉ nên có 1–2 khối |
+| `CountUp` (`value`, `duration`) | Số ĐẾM nguyên chạy từ 0 lên (KPI). **Không dùng cho tiền/trị giá** (Decimal hiển thị nguyên văn). Trình đọc màn hình nhận giá trị cuối |
+| `AiBackdrop`, `AiScanCard` (`title`, `fields`) | Trang trí "AI" cho màn đăng nhập/giới thiệu: nền mạng tín hiệu + minh họa tia quét đọc chứng từ. `aria-hidden`, màu theo token, tắt khi giảm chuyển động |
 | `Tabs` | Tab |
 | `Dialog` (`presentation` / `defaultPresentation` / `onPresentationChange`) + `DialogContent` (`icon`, `size`, nút chuyển trên header) + `DialogFooter` | Popup. Cửa sổ = phủ nền, giữ focus, khóa cuộn. Panel bên phải = **không chặn trang** (thao tác song song). Đổi qua lại **không mất dữ liệu đang nhập** |
 | `AssistantPanel` (`floating/docked/fullscreen`), `AssistantLauncher` (`state`), `AssistantWelcome`, `SuggestionChips`, `ChatMessage`, `ChatComposer` | Trợ lý AI. Nút mở là linh vật `RobotAvatar`; app truyền `state="thinking"` khi trợ lý đang trả lời |

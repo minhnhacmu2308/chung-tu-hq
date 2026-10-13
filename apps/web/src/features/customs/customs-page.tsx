@@ -25,8 +25,8 @@ const COLUMNS = col.columns([
     size: 240,
     meta: { hideable: false, wrap: true },
     cell: (c) => (
-      <div className="min-w-0">
-        <Link href={`/dossiers/${c.row.original.dossierId}?step=submit`} className="font-mono text-xs text-primary hover:underline">
+      <div className="min-w-48">
+        <Link href={`/dossiers/${c.row.original.dossierId}?step=submit`} className="whitespace-nowrap font-mono text-xs text-primary hover:underline">
           {c.getValue()}
         </Link>
         <p className="text-sm text-fg">{c.row.original.partner}</p>

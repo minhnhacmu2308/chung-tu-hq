@@ -38,7 +38,10 @@
   --kb-color-fg: light-dark(var(--kb-gray-900), var(--kb-gray-50));
   --kb-color-fg-muted: light-dark(var(--kb-gray-600), var(--kb-gray-300));
   --kb-color-fg-subtle: light-dark(var(--kb-gray-600), var(--kb-gray-400));
-  --kb-color-overlay: light-dark(rgb(15 23 42 / 0.45), rgb(0 0 0 / 0.6));
+  --kb-color-overlay: light-dark(rgb(15 23 42 / 0.32), rgb(0 0 0 / 0.55));
+  /* Vùng chọn chữ và thanh cuộn – dịu, ăn theo màu thương hiệu / dải xám */
+  --kb-color-selection: color-mix(in oklab, var(--kb-color-primary) 22%, transparent);
+  --kb-color-scrollbar: light-dark(var(--kb-gray-300), var(--kb-gray-700));
 
   /* Thương hiệu – mặc định = createBrandTheme("#0F6B55"), tenant ghi đè */
   --kb-color-primary: light-dark(#0F6B55, #498F7E);
@@ -71,16 +74,22 @@
   --kb-color-neutral-subtle: light-dark(var(--kb-gray-100), var(--kb-gray-800));
   --kb-color-neutral-subtle-fg: light-dark(var(--kb-gray-700), var(--kb-gray-200));
 
-  /* Bóng */
-  --kb-shadow-sm: 0 1px 2px light-dark(rgb(15 23 42 / 0.06), rgb(0 0 0 / 0.4));
-  --kb-shadow-md: 0 4px 12px light-dark(rgb(15 23 42 / 0.08), rgb(0 0 0 / 0.45));
-  --kb-shadow-lg: 0 12px 32px light-dark(rgb(15 23 42 / 0.16), rgb(0 0 0 / 0.55));
+  /* Bóng – nhiều lớp mỏng, ngả màu xám xanh của nền (một nguồn sáng từ trên xuống) để mềm hơn bóng đen đơn lớp */
+  --kb-shadow-sm:
+    0 1px 2px light-dark(rgb(15 23 42 / 0.04), rgb(0 0 0 / 0.35)),
+    0 1px 3px light-dark(rgb(15 23 42 / 0.03), rgb(0 0 0 / 0.25));
+  --kb-shadow-md:
+    0 2px 4px -1px light-dark(rgb(15 23 42 / 0.04), rgb(0 0 0 / 0.35)),
+    0 8px 20px -4px light-dark(rgb(15 23 42 / 0.08), rgb(0 0 0 / 0.45));
+  --kb-shadow-lg:
+    0 4px 8px -2px light-dark(rgb(15 23 42 / 0.05), rgb(0 0 0 / 0.4)),
+    0 20px 48px -8px light-dark(rgb(15 23 42 / 0.14), rgb(0 0 0 / 0.55));
 }
 
 /* ---------- Bo góc (data-radius) ---------- */
-:root, :root[data-radius="default"] { --kb-radius-sm: 4px; --kb-radius-md: 8px; --kb-radius-lg: 12px; }
+:root, :root[data-radius="default"] { --kb-radius-sm: 6px; --kb-radius-md: 10px; --kb-radius-lg: 14px; }
 :root[data-radius="square"] { --kb-radius-sm: 0px; --kb-radius-md: 0px; --kb-radius-lg: 0px; }
-:root[data-radius="rounded"] { --kb-radius-sm: 6px; --kb-radius-md: 12px; --kb-radius-lg: 18px; }
+:root[data-radius="rounded"] { --kb-radius-sm: 8px; --kb-radius-md: 14px; --kb-radius-lg: 20px; }
 
 /* ---------- Mật độ (data-density): co giãn toàn bộ padding/gap/kích thước Tailwind ---------- */
 :root, :root[data-density="comfortable"] { --spacing: 0.25rem; }
@@ -92,12 +101,15 @@
 :root[data-font-size="sm"] { font-size: 15px; }
 :root[data-font-size="lg"] { font-size: 17px; }
 
-/* ---------- Font (data-font). Ứng dụng tự tải webfont (next/font); ở đây chỉ khai báo stack ---------- */
-:root { --kb-font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace; }
-:root, :root[data-font="be-vietnam-pro"] { --kb-font-sans: "Be Vietnam Pro", system-ui, "Segoe UI", Roboto, sans-serif; }
+/*
+ * ---------- Font (data-font). Ứng dụng tự tải webfont (next/font) và gắn tên font đã tải vào biến --kb-webfont-*
+ * trên <html>; chưa tải thì rơi về tên font cài sẵn trên máy rồi tới font hệ thống. ----------
+ */
+:root { --kb-font-mono: var(--kb-webfont-mono, "JetBrains Mono"), ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace; }
+:root, :root[data-font="be-vietnam-pro"] { --kb-font-sans: var(--kb-webfont-be-vietnam-pro, "Be Vietnam Pro"), system-ui, "Segoe UI", Roboto, sans-serif; }
 :root[data-font="geist"] { --kb-font-sans: "Geist", system-ui, "Segoe UI", Roboto, sans-serif; }
-:root[data-font="inter"] { --kb-font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif; }
-:root[data-font="roboto"] { --kb-font-sans: "Roboto", system-ui, "Segoe UI", sans-serif; }
+:root[data-font="inter"] { --kb-font-sans: var(--kb-webfont-inter, "Inter"), system-ui, "Segoe UI", Roboto, sans-serif; }
+:root[data-font="roboto"] { --kb-font-sans: var(--kb-webfont-roboto, "Roboto"), system-ui, "Segoe UI", sans-serif; }
 :root[data-font="sf-pro"] { --kb-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif; }
 :root[data-font="system"] { --kb-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 

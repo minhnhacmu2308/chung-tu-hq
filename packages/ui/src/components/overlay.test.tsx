@@ -102,6 +102,40 @@ describe("Dialog", () => {
     }
   });
 
+  it("chỉ khóa cuộn trang khi cửa sổ ĐANG MỞ; dialog đóng hoặc dạng panel thì trang vẫn cuộn được", async () => {
+    setup();
+    expect(document.body.style.overflow).toBe("");
+    await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));
+    expect(document.body.style.overflow).toBe("hidden");
+    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng panel bên phải" }));
+    expect(document.body.style.overflow).toBe("");
+    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng cửa sổ" }));
+    expect(document.body.style.overflow).toBe("hidden");
+    await userEvent.keyboard("{Escape}");
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("cửa sổ lồng nhau: đóng cửa sổ con vẫn khóa cuộn, đóng hết mới trả lại cuộn trang", async () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent title="Cha">
+          <Dialog>
+            <DialogTrigger asChild><Button>Mở con</Button></DialogTrigger>
+            <DialogContent title="Con">con</DialogContent>
+          </Dialog>
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(document.body.style.overflow).toBe("hidden");
+    await userEvent.click(screen.getByRole("button", { name: "Mở con" }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Con" })).getByRole("button", { name: "Đóng" }));
+    expect(screen.getByRole("dialog", { name: "Cha" })).toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("hidden");
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Cha" })).getByRole("button", { name: "Đóng" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("");
+  });
+
   it("dạng panel không chặn trang: không phủ nền, bấm được nút phía sau, panel vẫn mở", async () => {
     const onOutside = vi.fn();
     render(

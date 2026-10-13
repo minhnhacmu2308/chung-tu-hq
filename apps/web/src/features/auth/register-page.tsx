@@ -65,8 +65,11 @@ export function RegisterPage() {
 
   const joined = company?.found === true && company.existing;
 
+  // Linh vật phản ứng theo form: tra MST → tìm kiếm, gửi đăng ký → suy nghĩ, lỗi → báo lỗi.
+  const robot = lookup.isPending ? "searching" : submit.isPending ? "thinking" : submit.isSuccess ? "happy" : lookup.isError || submit.isError ? "error" : "idle";
+
   return (
-    <AuthFrame>
+    <AuthFrame robot={robot}>
       <Stack gap="xs">
         <h1 className="text-2xl font-semibold text-fg">Đăng ký doanh nghiệp</h1>
         <p className="text-sm text-fg-muted">Mỗi doanh nghiệp (một MST) là một không gian làm việc riêng.</p>

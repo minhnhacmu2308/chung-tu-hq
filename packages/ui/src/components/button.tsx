@@ -7,17 +7,19 @@ import { Spinner } from "./spinner.js";
 export const buttonVariants = cva(
   [
     "inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium select-none",
-    "rounded-md border border-transparent transition-colors",
+    "rounded-md border border-transparent transition-[color,background-color,border-color,box-shadow,scale] duration-150",
+    // Phản hồi khi nhấn: nút lún nhẹ.
+    "motion-safe:active:scale-[0.98]",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
     "disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",
   ],
   {
     variants: {
       variant: {
-        primary: "bg-primary text-primary-fg hover:bg-primary-hover active:bg-primary-active",
-        secondary: "bg-surface text-fg border-border hover:bg-surface-muted",
+        primary: "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover hover:shadow-md active:bg-primary-active active:shadow-sm",
+        secondary: "bg-surface text-fg border-border shadow-sm hover:bg-surface-muted hover:border-border-strong",
         ghost: "bg-transparent text-fg hover:bg-surface-muted",
-        danger: "bg-danger text-danger-fg hover:opacity-90",
+        danger: "bg-danger text-danger-fg shadow-sm hover:opacity-90 hover:shadow-md active:shadow-sm",
         link: "bg-transparent text-primary underline-offset-4 hover:underline px-0",
       },
       size: {

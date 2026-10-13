@@ -1,9 +1,10 @@
-import { useId } from "react";
+import { MousePointer2 } from "lucide-react";
+import { useId, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, useUiLocale, type Messages } from "../lib/i18n.js";
 import { BRAND_PRESETS, DEFAULT_APPEARANCE, type Appearance, type OrgField } from "../theme/appearance.js";
 import type { BrandAdjustment } from "../theme/brand-theme.js";
-import { ColorSwatchPicker, SegmentedControl } from "./choice.js";
+import { ColorSwatchPicker } from "./choice.js";
 
 const KEYS = [
   "panel", "title", "reset", "locked",
@@ -11,6 +12,7 @@ const KEYS = [
   "backdrop", "flat", "aurora", "density", "compact", "comfortable", "spacious", "gray", "brand",
   "radius", "square", "default", "rounded", "fontSize", "small", "medium", "large", "font", "sfPro", "systemFont",
   "adjustLight", "adjustDark",
+  "menuPosition", "menuLeft", "menuTop", "menuRight",
 ] as const;
 type Key = (typeof KEYS)[number];
 
@@ -27,6 +29,7 @@ const MESSAGES = {
     font: "Font chữ", sfPro: "SF Pro (máy Apple)", systemFont: "Font hệ thống",
     adjustLight: "Giao diện sáng: {from} → {to} (đủ tương phản {ratio}:1)",
     adjustDark: "Giao diện tối: {from} → {to} (đủ tương phản {ratio}:1)",
+    menuPosition: "Vị trí menu", menuLeft: "Bên trái", menuTop: "Phía trên", menuRight: "Bên phải",
   },
   en: {
     panel: "Appearance settings", title: "Appearance", reset: "Reset to default", locked: " (locked by organization)",
@@ -40,8 +43,159 @@ const MESSAGES = {
     font: "Font", sfPro: "SF Pro (Apple devices)", systemFont: "System font",
     adjustLight: "Light theme: {from} → {to} (meets {ratio}:1 contrast)",
     adjustDark: "Dark theme: {from} → {to} (meets {ratio}:1 contrast)",
+    menuPosition: "Menu position", menuLeft: "Left", menuTop: "Top", menuRight: "Right",
   },
 } satisfies Messages<Key>;
+
+/* ---------------- Hình mô phỏng cho từng tùy chọn ---------------- */
+// Chỉ để nhìn (aria-hidden). Kích thước/bo góc dùng số cố định để hình KHÔNG đổi theo chính tùy chọn đang chỉnh.
+
+const FRAME = "flex h-12 w-full overflow-hidden rounded-sm border border-border bg-bg";
+
+/** Trang thu nhỏ: dòng tiêu đề + một thẻ. Màu lấy từ token nên theo `color-scheme` của phần tử bao ngoài. */
+function MiniPage({ className }: { className?: string }) {
+  return (
+    <span className={cn("flex h-full min-w-0 flex-1 flex-col gap-1 bg-bg p-1.5", className)}>
+      <span className="h-1.5 w-1/2 shrink-0 rounded-full bg-fg-muted" />
+      <span className="flex-1 rounded-sm border border-border bg-surface" />
+    </span>
+  );
+}
+
+/** Bố cục trang: thanh menu (màu thương hiệu) ở trái / trên / phải, phần còn lại là nội dung. */
+function MenuPositionPreview({ position }: { position: Appearance["menuPosition"] }) {
+  const top = position === "top";
+  return (
+    <span className={cn(FRAME, "gap-1 p-1", top ? "flex-col" : position === "right" && "flex-row-reverse")}>
+      <span className={cn("flex shrink-0 gap-0.5 rounded-sm bg-primary p-0.5", top ? "h-2.5 w-full items-center" : "w-1/4 flex-col")}>
+        {[0, 1, 2].map((i) => (
+          <span key={i} className={cn("rounded-full bg-primary-fg opacity-70", top ? "h-1 w-3" : "h-1 w-full")} />
+        ))}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="h-1.5 w-1/2 rounded-full bg-border-strong" />
+        <span className="flex flex-1 gap-1">
+          <span className="flex-1 rounded-sm bg-surface shadow-sm" />
+          <span className="flex-1 rounded-sm bg-surface shadow-sm" />
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/** Sáng / Tối / Theo hệ thống (nửa sáng nửa tối). Ép `color-scheme` tại chỗ để token tự ra đúng màu. */
+function ModePreview({ mode }: { mode: Appearance["mode"] }) {
+  return (
+    <span className={FRAME}>
+      {mode !== "dark" && <MiniPage className="[color-scheme:light]" />}
+      {mode !== "light" && <MiniPage className="[color-scheme:dark]" />}
+    </span>
+  );
+}
+
+function BackdropPreview({ backdrop }: { backdrop: Appearance["backdrop"] }) {
+  return (
+    <span className={cn(FRAME, backdrop === "aurora" && "bg-linear-to-br from-primary-subtle via-bg to-info-subtle")}>
+      <MiniPage className="bg-transparent" />
+    </span>
+  );
+}
+
+const DENSITY_GAP = { compact: "gap-0.5", comfortable: "gap-1.5", spacious: "gap-2.5" } as const;
+function DensityPreview({ density }: { density: Appearance["density"] }) {
+  return (
+    <span className={cn(FRAME, "flex-col justify-center px-2", DENSITY_GAP[density])}>
+      {["w-full", "w-4/5", "w-full"].map((w, i) => (
+        <span key={i} className={cn("h-1.5 shrink-0 rounded-full bg-border-strong", w)} />
+      ))}
+    </span>
+  );
+}
+
+/** Dải xám: 5 bậc của đúng bảng xám đó (đặt `data-gray-preview` để token xám trong hình không theo cấu hình hiện tại). */
+function GrayPreview({ gray }: { gray: Appearance["gray"] }) {
+  return (
+    <span data-gray-preview={gray} className={cn(FRAME, "[color-scheme:light]")}>
+      {["bg-surface-muted", "bg-border", "bg-border-strong", "bg-fg-muted", "bg-fg"].map((c) => (
+        <span key={c} className={cn("flex-1", c)} />
+      ))}
+    </span>
+  );
+}
+
+const RADIUS_CORNER = { square: "rounded-tl-none", default: "rounded-tl-[8px]", rounded: "rounded-tl-[18px]" } as const;
+function RadiusPreview({ radius }: { radius: Appearance["radius"] }) {
+  return (
+    <span className={cn(FRAME, "items-end justify-end")}>
+      <span className={cn("h-9 w-3/4 border-l-2 border-t-2 border-primary bg-primary-subtle", RADIUS_CORNER[radius])} />
+    </span>
+  );
+}
+
+const FONT_SIZE = { sm: "text-[12px]", md: "text-[15px]", lg: "text-[19px]" } as const;
+function TextPreview({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={cn(FRAME, "items-center justify-center font-semibold text-fg", className)}>{children}</span>;
+}
+
+function CursorPreview({ on }: { on: boolean }) {
+  return (
+    <span className={cn(FRAME, "relative items-center justify-center")}>
+      {on && <span className="absolute h-7 w-7 rounded-full bg-primary opacity-25" />}
+      <MousePointer2 className="relative h-4 w-4 text-fg" />
+    </span>
+  );
+}
+
+function DescriptionPreview({ shown }: { shown: boolean }) {
+  return (
+    <span className={cn(FRAME, "flex-col justify-center gap-1.5 px-2")}>
+      <span className="h-2 w-2/3 rounded-full bg-fg-muted" />
+      {shown && <span className="h-1 w-full rounded-full bg-border-strong" />}
+    </span>
+  );
+}
+
+const CHOICE_COLS = { 2: "grid-cols-2", 3: "grid-cols-3" } as const;
+
+type PreviewOption<T extends string> = { value: T; label: string; preview: ReactNode };
+
+/** Nhóm radio dạng thẻ: mỗi lựa chọn có hình mô phỏng phía trên nhãn để người dùng hình dung trước khi chọn. */
+function PreviewChoice<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  disabled = false,
+}: {
+  label: ReactNode;
+  value: T;
+  onChange: (v: T) => void;
+  options: readonly PreviewOption<T>[];
+  disabled?: boolean;
+}) {
+  const name = useId();
+  return (
+    <fieldset disabled={disabled} className="flex flex-col gap-2 disabled:opacity-60">
+      <legend className="mb-2 text-sm text-fg">{label}</legend>
+      <div className={cn("grid gap-2", CHOICE_COLS[options.length === 2 ? 2 : 3])}>
+        {options.map((o) => (
+          <label
+            key={o.value}
+            className={cn(
+              "flex cursor-pointer flex-col items-center gap-1.5 rounded-md border border-border bg-surface p-2 text-center text-xs text-fg-muted",
+              "hover:border-border-strong has-[:checked]:border-primary has-[:checked]:bg-primary-subtle has-[:checked]:font-medium has-[:checked]:text-primary-subtle-fg",
+              "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus has-[:disabled]:cursor-not-allowed",
+            )}
+          >
+            <input type="radio" className="sr-only" name={name} value={o.value} checked={value === o.value} onChange={() => onChange(o.value)} />
+            <span aria-hidden="true" className="w-full">{o.preview}</span>
+            {o.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
 
 export type AppearancePanelProps = {
   value: Appearance;
@@ -72,6 +226,15 @@ export function AppearancePanel({
   const set = <K extends keyof Appearance>(key: K) => (v: Appearance[K]) => onChange({ ...value, [key]: v });
   const isLocked = (f: OrgField) => locked.includes(f);
   const fontName = useId();
+  // Mỗi font hiện bằng chính font đó (stack giống tokens.css: webfont app đã tải → font cài trên máy → hệ thống).
+  const FONT_STACK: Record<Appearance["font"], string> = {
+    "be-vietnam-pro": 'var(--kb-webfont-be-vietnam-pro, "Be Vietnam Pro"), system-ui, sans-serif',
+    geist: '"Geist", system-ui, sans-serif',
+    inter: 'var(--kb-webfont-inter, "Inter"), system-ui, sans-serif',
+    roboto: 'var(--kb-webfont-roboto, "Roboto"), system-ui, sans-serif',
+    "sf-pro": '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
+    system: "system-ui, sans-serif",
+  };
   const withLock = (label: string, f: OrgField) => (
     <>
       {label}
@@ -106,20 +269,46 @@ export function AppearancePanel({
         </button>
       </div>
 
-      <SegmentedControl label={t.language} value={value.locale} onChange={set("locale")}
-        options={[{ value: "vi", label: "VI" }, { value: "en", label: "EN" }]} />
-      <SegmentedControl label={t.mode} value={value.mode} onChange={set("mode")}
-        options={[{ value: "light", label: t.light }, { value: "dark", label: t.dark }, { value: "system", label: t.system }]} />
-      <SegmentedControl label={t.cursor} value={value.cursorEffect ? "on" : "off"} onChange={(v) => set("cursorEffect")(v === "on")}
-        options={[{ value: "on", label: t.on }, { value: "off", label: t.off }]} />
-      <SegmentedControl label={t.description} value={value.showPageDescription ? "shown" : "hidden"} onChange={(v) => set("showPageDescription")(v === "shown")}
-        options={[{ value: "shown", label: t.shown }, { value: "hidden", label: t.hidden }]} />
-      <SegmentedControl label={withLock(t.backdrop, "backdrop")} value={value.backdrop} onChange={set("backdrop")} disabled={isLocked("backdrop")}
-        options={[{ value: "flat", label: t.flat }, { value: "aurora", label: t.aurora }]} />
-      <SegmentedControl label={t.density} value={value.density} onChange={set("density")}
-        options={[{ value: "compact", label: t.compact }, { value: "comfortable", label: t.comfortable }, { value: "spacious", label: t.spacious }]} />
-      <SegmentedControl label={withLock(t.gray, "gray")} value={value.gray} onChange={set("gray")} disabled={isLocked("gray")}
-        options={[{ value: "slate", label: "Slate" }, { value: "gray", label: "Gray" }]} />
+      <PreviewChoice label={t.language} value={value.locale} onChange={set("locale")}
+        options={[
+          { value: "vi", label: "VI", preview: <TextPreview className="text-xs">Xin chào</TextPreview> },
+          { value: "en", label: "EN", preview: <TextPreview className="text-xs">Hello</TextPreview> },
+        ]} />
+      <PreviewChoice label={t.mode} value={value.mode} onChange={set("mode")}
+        options={(["light", "dark", "system"] as const).map((m) => ({ value: m, label: t[m], preview: <ModePreview mode={m} /> }))} />
+      <PreviewChoice label={t.menuPosition} value={value.menuPosition} onChange={set("menuPosition")}
+        options={[
+          { value: "left", label: t.menuLeft, preview: <MenuPositionPreview position="left" /> },
+          { value: "top", label: t.menuTop, preview: <MenuPositionPreview position="top" /> },
+          { value: "right", label: t.menuRight, preview: <MenuPositionPreview position="right" /> },
+        ]} />
+      <PreviewChoice label={t.density} value={value.density} onChange={set("density")}
+        options={(["compact", "comfortable", "spacious"] as const).map((d) => ({ value: d, label: t[d], preview: <DensityPreview density={d} /> }))} />
+      <PreviewChoice label={t.fontSize} value={value.fontSize} onChange={set("fontSize")}
+        options={[
+          { value: "sm", label: t.small, preview: <TextPreview className={FONT_SIZE.sm}>Aa</TextPreview> },
+          { value: "md", label: t.medium, preview: <TextPreview className={FONT_SIZE.md}>Aa</TextPreview> },
+          { value: "lg", label: t.large, preview: <TextPreview className={FONT_SIZE.lg}>Aa</TextPreview> },
+        ]} />
+      <PreviewChoice label={withLock(t.radius, "radius")} value={value.radius} onChange={set("radius")} disabled={isLocked("radius")}
+        options={(["square", "default", "rounded"] as const).map((r) => ({ value: r, label: t[r], preview: <RadiusPreview radius={r} /> }))} />
+      <PreviewChoice label={withLock(t.backdrop, "backdrop")} value={value.backdrop} onChange={set("backdrop")} disabled={isLocked("backdrop")}
+        options={(["flat", "aurora"] as const).map((b) => ({ value: b, label: t[b], preview: <BackdropPreview backdrop={b} /> }))} />
+      <PreviewChoice label={withLock(t.gray, "gray")} value={value.gray} onChange={set("gray")} disabled={isLocked("gray")}
+        options={[
+          { value: "slate", label: "Slate", preview: <GrayPreview gray="slate" /> },
+          { value: "gray", label: "Gray", preview: <GrayPreview gray="gray" /> },
+        ]} />
+      <PreviewChoice label={t.description} value={value.showPageDescription ? "shown" : "hidden"} onChange={(v) => set("showPageDescription")(v === "shown")}
+        options={[
+          { value: "shown", label: t.shown, preview: <DescriptionPreview shown /> },
+          { value: "hidden", label: t.hidden, preview: <DescriptionPreview shown={false} /> },
+        ]} />
+      <PreviewChoice label={t.cursor} value={value.cursorEffect ? "on" : "off"} onChange={(v) => set("cursorEffect")(v === "on")}
+        options={[
+          { value: "on", label: t.on, preview: <CursorPreview on /> },
+          { value: "off", label: t.off, preview: <CursorPreview on={false} /> },
+        ]} />
 
       <ColorSwatchPicker
         label={withLock(t.brand, "brand")}
@@ -142,24 +331,20 @@ export function AppearancePanel({
         </ul>
       )}
 
-      <SegmentedControl label={withLock(t.radius, "radius")} value={value.radius} onChange={set("radius")} disabled={isLocked("radius")}
-        options={[{ value: "square", label: t.square }, { value: "default", label: t.default }, { value: "rounded", label: t.rounded }]} />
-      <SegmentedControl label={t.fontSize} value={value.fontSize} onChange={set("fontSize")}
-        options={[{ value: "sm", label: t.small }, { value: "md", label: t.medium }, { value: "lg", label: t.large }]} />
-
       <fieldset disabled={isLocked("font")} className="flex flex-col gap-2 disabled:opacity-60">
         <legend className="mb-2 text-sm text-fg">{withLock(t.font, "font")}</legend>
         {fonts.map((f) => (
           <label
             key={f.value}
             className={cn(
-              "cursor-pointer rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg-muted",
+              "flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg-muted",
               "has-[:checked]:border-primary has-[:checked]:bg-primary-subtle has-[:checked]:text-primary-subtle-fg",
               "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus",
             )}
           >
             <input type="radio" className="sr-only" name={fontName} value={f.value} checked={value.font === f.value} onChange={() => set("font")(f.value)} />
-            {f.label}
+            <span style={{ fontFamily: FONT_STACK[f.value] }}>{f.label}</span>
+            <span aria-hidden="true" className="text-base text-fg" style={{ fontFamily: FONT_STACK[f.value] }}>Aa Ăă 123</span>
           </label>
         ))}
       </fieldset>

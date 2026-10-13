@@ -2,7 +2,7 @@
 // Bước 1 – Tạo hồ sơ. Prototype: kiểm tra form bằng zod tại chỗ (bản thật: schema dùng chung @kb/contracts + react-hook-form).
 import {
   Alert, Badge, Breadcrumb, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Combobox,
-  DatePicker, Field, Grid, Input, PageHeader, SegmentedControl, Select, Stack, Textarea, toast,
+  DatePicker, Field, FormSection, Grid, Input, PageHeader, SegmentedControl, Select, Stack, Textarea, toast,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Info } from "lucide-react";
@@ -130,36 +130,36 @@ export function CreateDossierPage() {
       <form onSubmit={submit} noValidate>
         <Grid cols={{ base: 1, lg: 3 }} gap="lg">
           <Card className="lg:col-span-2">
-            <CardHeader>
+            <CardHeader className="pb-5">
               <CardTitle>Thông tin lô hàng</CardTitle>
               <CardDescription>Các trường có dấu * là bắt buộc.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Stack gap="lg">
-                {errorCount > 0 && (
-                  <Alert tone="danger" title={`Còn ${errorCount} trường chưa hợp lệ`}>Kiểm tra các ô được tô đỏ bên dưới.</Alert>
-                )}
-                <div className="flex flex-wrap gap-x-8 gap-y-4">
-                  <SegmentedControl<Direction>
-                    label="Loại hồ sơ"
-                    className="flex-wrap justify-start gap-x-4 gap-y-2 whitespace-nowrap"
-                    value={form.direction}
-                    onChange={changeDirection}
-                    options={[
-                      { value: "NK", label: "Nhập khẩu" },
-                      { value: "XK", label: "Xuất khẩu" },
-                    ]}
-                  />
-                  <SegmentedControl<Dossier["transportMode"]>
-                    label="Vận chuyển"
-                    className="flex-wrap justify-start gap-x-4 gap-y-2 whitespace-nowrap"
-                    value={form.transportMode}
-                    onChange={(v) => set("transportMode", v)}
-                    options={(["SEA", "AIR", "ROAD"] as const).map((m) => ({ value: m, label: TRANSPORT_LABELS[m] }))}
-                  />
-                </div>
+              {errorCount > 0 && (
+                <Alert tone="danger" title={`Còn ${errorCount} trường chưa hợp lệ`} className="mb-6 mt-2">Kiểm tra các ô được tô đỏ bên dưới.</Alert>
+              )}
+              <FormSection title="Loại lô hàng" description="Quyết định mẫu tờ khai (IDA/EDA) và bộ chứng từ cần có.">
+                <SegmentedControl<Direction>
+                  label="Loại hồ sơ"
+                  className="flex-wrap gap-x-4 gap-y-2 whitespace-nowrap"
+                  value={form.direction}
+                  onChange={changeDirection}
+                  options={[
+                    { value: "NK", label: "Nhập khẩu" },
+                    { value: "XK", label: "Xuất khẩu" },
+                  ]}
+                />
+                <SegmentedControl<Dossier["transportMode"]>
+                  label="Vận chuyển"
+                  className="flex-wrap gap-x-4 gap-y-2 whitespace-nowrap"
+                  value={form.transportMode}
+                  onChange={(v) => set("transportMode", v)}
+                  options={(["SEA", "AIR", "ROAD"] as const).map((m) => ({ value: m, label: TRANSPORT_LABELS[m] }))}
+                />
+              </FormSection>
 
-                <Grid cols={{ base: 1, md: 2 }} gap="md">
+              <FormSection title="Khai báo" description="Mã loại hình và chi cục Hải quan nơi đăng ký tờ khai.">
+                <Stack gap="md">
                   <Field label="Mã loại hình" required {...errorProp(errors.typeCode)}>
                     <Combobox
                       options={TYPE_CODES[form.direction]}
@@ -168,7 +168,7 @@ export function CreateDossierPage() {
                       placeholder="Chọn mã loại hình"
                     />
                   </Field>
-                  <Field label="Cơ quan Hải quan" required hint="Chi cục nơi đăng ký tờ khai" {...errorProp(errors.customsOffice)}>
+                  <Field label="Cơ quan Hải quan" required {...errorProp(errors.customsOffice)}>
                     <Combobox
                       options={CUSTOMS_OFFICES}
                       value={form.customsOffice}
@@ -176,13 +176,17 @@ export function CreateDossierPage() {
                       placeholder="Gõ tên hoặc mã chi cục"
                     />
                   </Field>
-                </Grid>
+                </Stack>
+                <Field label="Hạn khai" required className="md:max-w-xs" {...errorProp(errors.dueDate)}>
+                  <DatePicker value={form.dueDate} onChange={(v) => set("dueDate", v)} min={isoDay(0)} />
+                </Field>
+              </FormSection>
 
+              <FormSection title="Đối tác & giao hàng" description="Ghi tên đối tác đúng như trên invoice để AI đối chiếu.">
                 <Stack gap="sm">
                   <Field
                     label={form.direction === "NK" ? "Người bán (đối tác nước ngoài)" : "Người mua (đối tác nước ngoài)"}
                     required
-                    hint="Ghi đúng như trên invoice"
                     {...errorProp(errors.partner)}
                   >
                     <Input value={form.partner} onChange={(e) => set("partner", e.target.value)} placeholder="VD: HANSOL PRECISION CO., LTD." />
@@ -198,23 +202,19 @@ export function CreateDossierPage() {
                     </div>
                   )}
                 </Stack>
+                <Field label="Điều kiện giao hàng" required hint="Incoterms 2020" className="md:max-w-xs">
+                  <Select options={INCOTERMS} value={form.incoterm} onChange={(e) => set("incoterm", e.target.value)} />
+                </Field>
+              </FormSection>
 
-                <Grid cols={{ base: 1, md: 3 }} gap="md">
-                  <Field label="Điều kiện giao hàng" required hint="Incoterms 2020">
-                    <Select options={INCOTERMS} value={form.incoterm} onChange={(e) => set("incoterm", e.target.value)} />
-                  </Field>
-                  <Field label="Hạn khai" required {...errorProp(errors.dueDate)}>
-                    <DatePicker value={form.dueDate} onChange={(v) => set("dueDate", v)} min={isoDay(0)} />
-                  </Field>
-                  <Field label="Bộ Skill AI" hint="Cách AI đọc chứng từ">
-                    <Select options={SKILL_SETS} value={form.skillSetId} onChange={(e) => set("skillSetId", e.target.value)} />
-                  </Field>
-                </Grid>
-
-                <Field label="Ghi chú nội bộ" hint="Không gửi Hải quan" {...errorProp(errors.note)}>
+              <FormSection title="AI & ghi chú" description="Cách AI đọc bộ chứng từ này và ghi chú riêng của nhóm (không gửi Hải quan).">
+                <Field label="Bộ Skill AI" className="md:max-w-xs">
+                  <Select options={SKILL_SETS} value={form.skillSetId} onChange={(e) => set("skillSetId", e.target.value)} />
+                </Field>
+                <Field label="Ghi chú nội bộ" {...errorProp(errors.note)}>
                   <Textarea value={form.note} onChange={(e) => set("note", e.target.value)} placeholder="VD: số PO, cảng hàng về, người liên hệ forwarder" />
                 </Field>
-              </Stack>
+              </FormSection>
             </CardContent>
             <CardFooter className="justify-end">
               <Button asChild variant="ghost">

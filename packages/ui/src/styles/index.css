@@ -172,6 +172,41 @@
   }
 }
 
+/*
+ * Ô đánh dấu tự vẽ (thay ô mặc định của trình duyệt): bo góc, màu thương hiệu khi chọn, dấu tick/gạch bằng mask
+ * nên tự theo màu chữ-trên-nền-thương-hiệu ở cả sáng lẫn tối. Vẫn là <input type="checkbox"> thật.
+ */
+@utility kb-checkbox {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  cursor: pointer;
+  border: 1.5px solid var(--kb-color-control-border);
+  border-radius: var(--kb-radius-sm);
+  background-color: var(--kb-color-surface);
+  &:hover { border-color: var(--kb-color-primary); }
+  &:focus-visible { outline: 2px solid var(--kb-color-focus); outline-offset: 2px; }
+  &:disabled { cursor: not-allowed; opacity: 0.5; }
+  &:checked, &:indeterminate { border-color: var(--kb-color-primary); background-color: var(--kb-color-primary); }
+  &:checked::before, &:indeterminate::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: var(--kb-color-primary-fg);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-6.5'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  &:indeterminate::before {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+  }
+}
+
+/* Phần tử dính trong trang: cách mép trên 1rem, tính cả thanh menu trên (nếu người dùng chọn menu ở trên). */
+@utility top-shell {
+  top: calc(var(--kb-shell-top) + 1rem);
+}
+
 /* Khung tải: dải sáng chạy ngang (thay cho nhấp nháy). Không chuyển động khi người dùng bật giảm chuyển động. */
 @utility skeleton-shimmer {
   background-color: var(--kb-color-surface-muted);

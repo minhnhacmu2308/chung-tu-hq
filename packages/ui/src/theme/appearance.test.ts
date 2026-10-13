@@ -60,3 +60,13 @@ describe("appearanceCss", () => {
     expect(r.adjustments.length).toBeGreaterThan(0);
   });
 });
+
+describe("vị trí menu", () => {
+  it("mặc định bên trái; người dùng đổi được; xuất ra data-menu-position", () => {
+    expect(DEFAULT_APPEARANCE.menuPosition).toBe("left");
+    expect(appearanceAttributes(DEFAULT_APPEARANCE)["data-menu-position"]).toBe("left");
+    const { appearance } = resolveAppearance({}, { menuPosition: "top" });
+    expect(appearanceAttributes(appearance)["data-menu-position"]).toBe("top");
+    expect(() => resolveAppearance({}, { menuPosition: "bottom" as never })).toThrow();
+  });
+});

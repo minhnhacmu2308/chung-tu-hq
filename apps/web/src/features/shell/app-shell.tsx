@@ -97,10 +97,43 @@ function ShellInner({ children }: { children: ReactNode }) {
     toast({ tone: "success", title: "Đã khôi phục dữ liệu mẫu" });
   };
 
+  // Vị trí menu do người dùng chọn trong "Giao diện": cột trái / cột phải / thanh ngang trên đầu.
+  const menu = appearance.menuPosition;
+  const menuOnTop = menu === "top";
+  const content = (
+    <>
+      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+        {/* Menu ở trên đã có sẵn nút ☰ trong thanh menu. */}
+        {!menuOnTop && (
+          <div className="mb-2 md:hidden">
+            <SidebarMobileTrigger onClick={() => setMobileNav(true)} expanded={mobileNav} />
+          </div>
+        )}
+        {/* Mỗi lần đổi trang, nội dung trồi nhẹ lên (key theo đường dẫn; đổi ?step= không chạy lại). */}
+        <div key={pathname} className="motion-safe:animate-slide-up">
+          {children}
+        </div>
+      </main>
+
+      <AssistantPanel
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        mode={aiMode}
+        onModeChange={setAiMode}
+        name="Trợ lý KhaiBáo"
+        tag="AI"
+        composer={chat.composer}
+      >
+        {chat.content}
+      </AssistantPanel>
+    </>
+  );
+
   return (
-    <div className="flex min-h-dvh">
+    <div className={menuOnTop ? "flex min-h-dvh flex-col" : "flex min-h-dvh"}>
       <Sidebar
-        className="sticky top-0"
+        position={menu}
+        {...(menuOnTop ? {} : { className: "sticky top-0" })}
         brand={{ logo: <BrandMark small decorative className="h-6 w-6" />, name: "KhaiBáo AI", href: "/" }}
         items={items}
         activeId={activeId}
@@ -122,7 +155,7 @@ function ShellInner({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <SidebarUser name={session?.user.name ?? "…"} role={session ? ROLE_LABELS[session.user.role] : ""} />
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="right" align="end">
+              <DropdownMenuContent side={menuOnTop ? "bottom" : menu === "right" ? "left" : "right"} align="end">
                 <DropdownMenuItem icon={<UserRound className="h-4 w-4" />} onSelect={() => router.push("/settings")}>
                   Tài khoản & tích hợp
                 </DropdownMenuItem>
@@ -151,28 +184,15 @@ function ShellInner({ children }: { children: ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
-        <div className="mb-2 md:hidden">
-          <SidebarMobileTrigger onClick={() => setMobileNav(true)} expanded={mobileNav} />
-        </div>
-        {/* Mỗi lần đổi trang, nội dung trồi nhẹ lên (key theo đường dẫn; đổi ?step= không chạy lại). */}
-        <div key={pathname} className="motion-safe:animate-slide-up">
-          {children}
-        </div>
-      </main>
-
-      <AssistantPanel
-        open={aiOpen}
-        onOpenChange={setAiOpen}
-        mode={aiMode}
-        onModeChange={setAiMode}
-        name="Trợ lý KhaiBáo"
-        tag="AI"
-        composer={chat.composer}
-      >
-        {chat.content}
-      </AssistantPanel>
-      {!aiOpen && <AssistantLauncher onClick={() => setAiOpen(true)} state={chat.busy ? "thinking" : "idle"} />}
+      {menuOnTop ? <div className="flex min-w-0 flex-1">{content}</div> : content}
+      {!aiOpen && (
+        <AssistantLauncher
+          onClick={() => setAiOpen(true)}
+          state={chat.busy ? "thinking" : "idle"}
+          // Menu bên phải: lùi robot vào trong để không đè lên menu (rộng 16rem, thu gọn 4rem).
+          {...(menu === "right" ? { className: collapsed ? "md:right-20" : "md:right-68" } : {})}
+        />
+      )}
     </div>
   );
 }

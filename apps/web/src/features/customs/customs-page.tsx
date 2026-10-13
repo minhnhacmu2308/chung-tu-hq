@@ -2,9 +2,10 @@
 // Màn "Khai báo Hải quan": tờ khai đã duyệt / đang truyền / đã có kết quả.
 import {
   Alert, Badge, Button, Card, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, Grid, PageHeader, Stack,
-  StatusBadge,
+  StatCard, StatusBadge,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
+import { CircleCheck, Hourglass, Leaf, Send } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { customsKeys, listCustomsDeclarations, OPERATION_LABELS, type CustomsRow } from "@/api/customs";
@@ -97,19 +98,6 @@ const COLUMNS = col.columns([
   }),
 ]);
 
-function Kpi({ title, value, note }: { title: string; value: string; note: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{title}</CardDescription>
-        <CardTitle as="h3" className="text-2xl tabular-nums">
-          {value}
-        </CardTitle>
-        <p className="text-xs text-fg-subtle">{note}</p>
-      </CardHeader>
-    </Card>
-  );
-}
 
 export function CustomsPage() {
   const router = useRouter();
@@ -135,14 +123,17 @@ export function CustomsPage() {
         }
       />
 
-      <Grid cols={{ base: 1, sm: 2, xl: 4 }}>
-        <Kpi title="Chờ truyền" value={q.isLoading ? "…" : String(count("READY"))} note="Đã phê duyệt, chưa ký số" />
-        <Kpi title="Đang truyền / kiểm tra" value={q.isLoading ? "…" : String(count("SENDING") + count("INSPECTING"))} note="Chờ phản hồi hoặc kiểm tra hồ sơ" />
-        <Kpi title="Đã thông quan" value={q.isLoading ? "…" : String(count("CLEARED"))} note="Trong dữ liệu hiện có" />
-        <Kpi
-          title="Tỷ lệ luồng xanh"
-          value={q.isLoading ? "…" : withChannel.length ? `${Math.round((green / withChannel.length) * 100)}%` : "—"}
-          note={`${green}/${withChannel.length} tờ khai đã phân luồng`}
+      <Grid cols={{ base: 1, sm: 2, xl: 4 }} stagger>
+        <StatCard icon={<Hourglass />} tone="neutral" label="Chờ truyền" loading={q.isLoading} value={count("READY")} hint="Đã phê duyệt, chưa ký số" />
+        <StatCard icon={<Send />} tone="info" label="Đang truyền / kiểm tra" loading={q.isLoading} value={count("SENDING") + count("INSPECTING")} hint="Chờ phản hồi hoặc kiểm tra hồ sơ" />
+        <StatCard icon={<CircleCheck />} tone="success" label="Đã thông quan" loading={q.isLoading} value={count("CLEARED")} hint="Trong dữ liệu hiện có" />
+        <StatCard
+          icon={<Leaf />}
+          tone="success"
+          label="Tỷ lệ luồng xanh"
+          loading={q.isLoading}
+          value={withChannel.length ? `${Math.round((green / withChannel.length) * 100)}%` : "—"}
+          hint={`${green}/${withChannel.length} tờ khai đã phân luồng`}
         />
       </Grid>
 

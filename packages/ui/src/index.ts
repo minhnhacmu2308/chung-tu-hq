@@ -30,7 +30,7 @@ export {
 export { AppearancePanel, type AppearancePanelProps } from "./components/appearance-panel.js";
 export {
   Sidebar, SidebarFooterButton, SidebarUser, SidebarMobileTrigger, BrandDot, useSidebar,
-  type NavItem, type SidebarProps, type SidebarFooterButtonProps, type SidebarUserProps,
+  type NavItem, type SidebarPosition, type SidebarProps, type SidebarFooterButtonProps, type SidebarUserProps,
 } from "./components/sidebar.js";
 export {
   Stepper, WorkflowDiagram, layoutWorkflow,
@@ -72,3 +72,5 @@ export { DocumentViewer, DOCUMENT_PAGE_WIDTH, type DocumentViewerProps, type Doc
 export { AiBackdrop, AiScanCard, type AiBackdropProps, type AiScanCardProps, type AiScanField } from "./components/ai-visuals.js";
 export { CountUp, type CountUpProps } from "./components/count-up.js";
 export { BrandMark, type BrandMarkProps } from "./components/brand-mark.js";
+export { StatCard, type StatCardProps } from "./components/stat-card.js";
+export { FormSection, type FormSectionProps } from "./components/form-section.js";

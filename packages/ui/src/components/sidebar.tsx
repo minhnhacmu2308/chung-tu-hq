@@ -1,5 +1,6 @@
 // Menu điều hướng chính, co giãn: mở rộng (icon + nhãn + nhóm con) ↔ thu gọn (cột icon).
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import * as MenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Menu, X } from "lucide-react";
 import {
   createContext,
@@ -32,8 +33,11 @@ export type NavItem = {
   hasSubmenu?: boolean;
 };
 
-type Ctx = { collapsed: boolean };
-const SidebarContext = createContext<Ctx>({ collapsed: false });
+/** Menu nằm ở cạnh trái, cạnh phải (cột dọc) hoặc trên đầu trang (thanh ngang). */
+export type SidebarPosition = "left" | "right" | "top";
+
+type Ctx = { collapsed: boolean; tooltipSide: "left" | "right" | "bottom" };
+const SidebarContext = createContext<Ctx>({ collapsed: false, tooltipSide: "right" });
 export const useSidebar = () => useContext(SidebarContext);
 
 export type SidebarProps = {
@@ -42,6 +46,11 @@ export type SidebarProps = {
   activeId?: string | undefined;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  /**
+   * Vị trí menu trên màn rộng. "top" = thanh ngang dính đầu trang (nhóm con thành menu xổ, chân menu thành cụm icon bên phải;
+   * không có thu gọn). Màn nhỏ luôn là ngăn kéo. Mặc định "left".
+   */
+  position?: SidebarPosition;
   /** Gọi khi chọn mục không có href (hoặc muốn theo dõi điều hướng). */
   onNavigate?: (item: NavItem) => void;
   /** Component link, vd `Link` của Next.js. Mặc định thẻ <a>. */
@@ -72,6 +81,7 @@ export function Sidebar({
   activeId,
   collapsed,
   onCollapsedChange,
+  position = "left",
   onNavigate,
   linkAs: LinkTag = "a",
   footer,
@@ -83,6 +93,9 @@ export function Sidebar({
   const navId = useId();
   const l = useMessages(MESSAGES, labels);
   const hasMobile = onMobileOpenChange !== undefined;
+  const right = position === "right";
+  // Gợi ý và mũi tên thu gọn hướng về phía nội dung trang.
+  const tooltipSide = right ? "left" : "right";
   const [open, setOpen] = useState<Set<string>>(
     () => new Set(items.filter((i) => i.children && containsActive(i, activeId)).map((i) => i.id)),
   );
@@ -134,7 +147,7 @@ export function Sidebar({
       ) : (
         <button type="button" {...common}>{content}</button>
       );
-      return iconOnly ? <Tooltip content={item.label} side="right">{el}</Tooltip> : el;
+      return iconOnly ? <Tooltip content={item.label} side={tooltipSide}>{el}</Tooltip> : el;
     };
 
     return (
@@ -159,9 +172,12 @@ export function Sidebar({
             aria-label={c ? l.expand : l.collapse}
             aria-expanded={!c}
             aria-controls={navId}
-            className="absolute -right-3 top-12 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-fg-muted shadow-sm hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className={cn(
+              "absolute top-12 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-fg-muted shadow-sm hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+              right ? "-left-3" : "-right-3",
+            )}
           >
-            {c ? <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" /> : <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" />}
+            {c !== right ? <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" /> : <ChevronLeft aria-hidden="true" className="h-3.5 w-3.5" />}
           </button>
         )}
 
@@ -187,7 +203,7 @@ export function Sidebar({
               );
               return (
                 <li key={item.id}>
-                  {c ? <Tooltip content={item.label} side="right">{groupBtn}</Tooltip> : groupBtn}
+                  {c ? <Tooltip content={item.label} side={tooltipSide}>{groupBtn}</Tooltip> : groupBtn}
                   {isOpen && (
                     <ul id={groupId} className="ml-4.5 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
                       {item.children.map((ch) => (
@@ -202,7 +218,7 @@ export function Sidebar({
         </nav>
 
         {footer && (
-          <SidebarContext.Provider value={{ collapsed: c }}>
+          <SidebarContext.Provider value={{ collapsed: c, tooltipSide }}>
             <div className="flex flex-col gap-0.5 border-t border-border px-2 py-2">{footer}</div>
           </SidebarContext.Provider>
         )}
@@ -210,35 +226,126 @@ export function Sidebar({
     );
   };
 
-  const asideBase = "relative flex h-dvh shrink-0 flex-col border-r border-border bg-surface";
+  const asideBase = cn("relative flex h-dvh shrink-0 flex-col border-border bg-surface", right ? "border-l" : "border-r");
+  const drawer = hasMobile && (
+    <DialogPrimitive.Root open={mobileOpen} onOpenChange={onMobileOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-overlay motion-safe:animate-fade-in md:hidden" />
+        <DialogPrimitive.Content
+          aria-describedby={undefined}
+          className={cn("fixed inset-y-0 z-50 w-72 max-w-[85vw] shadow-lg focus-visible:outline-none md:hidden", right ? "right-0" : "left-0")}
+        >
+          <DialogPrimitive.Title className="sr-only">{l.nav}</DialogPrimitive.Title>
+          <aside data-mobile="true" className={cn(asideBase, "w-full")}>
+            {renderBody(false, true)}
+          </aside>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+
+  if (position === "top") {
+    const topItem = "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+    return (
+      <>
+        <header data-position="top" className={cn("sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:px-4", className)}>
+          {hasMobile && <SidebarMobileTrigger onClick={() => onMobileOpenChange?.(true)} expanded={mobileOpen} label={l.openMenu} />}
+          <div className="flex shrink-0 items-center gap-2.5 pr-2">
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-fg">{brand.logo}</span>
+            <span className="truncate text-sm font-semibold text-fg">{brand.name}</span>
+          </div>
+          <nav aria-label={l.nav} className="hidden min-w-0 flex-1 md:block">
+            <ul className="flex items-center gap-1 overflow-x-auto py-1">
+              {items.map((item) => {
+                const active = containsActive(item, activeId);
+                const cls = cn(topItem, active && itemActive);
+                const inner = (
+                  <>
+                    {item.icon && <span aria-hidden="true" className={iconBox}>{item.icon}</span>}
+                    {item.label}
+                    {item.badge}
+                  </>
+                );
+                if (!item.children?.length) {
+                  const common = { className: cls, "aria-current": item.id === activeId ? ("page" as const) : undefined, onClick: () => onNavigate?.(item) };
+                  return (
+                    <li key={item.id}>
+                      {item.href ? <LinkTag href={item.href} {...common}>{inner}</LinkTag> : <button type="button" {...common}>{inner}</button>}
+                    </li>
+                  );
+                }
+                return (
+                  <li key={item.id}>
+                    <MenuPrimitive.Root>
+                      <MenuPrimitive.Trigger className={cn(cls, "data-[state=open]:bg-surface-muted")}>
+                        {inner}
+                        <ChevronDown aria-hidden="true" className="h-4 w-4 text-fg-subtle" />
+                      </MenuPrimitive.Trigger>
+                      <MenuPrimitive.Portal>
+                        <MenuPrimitive.Content
+                          align="start"
+                          sideOffset={6}
+                          className="z-50 min-w-48 rounded-lg border border-border bg-surface p-1.5 text-fg shadow-lg motion-safe:animate-pop-in"
+                        >
+                          {item.children.map((ch) => {
+                            const chCls = cn(
+                              "flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm text-fg-muted outline-none data-[highlighted]:bg-surface-muted data-[highlighted]:text-fg",
+                              ch.id === activeId && itemActive,
+                            );
+                            const chInner = (
+                              <>
+                                <span className="flex-1">{ch.label}</span>
+                                {ch.badge}
+                              </>
+                            );
+                            return (
+                              <MenuPrimitive.Item key={ch.id} asChild onSelect={() => onNavigate?.(ch)}>
+                                {ch.href ? (
+                                  <LinkTag href={ch.href} className={chCls} aria-current={ch.id === activeId ? "page" : undefined}>{chInner}</LinkTag>
+                                ) : (
+                                  <button type="button" className={cn(chCls, "w-full text-left")}>{chInner}</button>
+                                )}
+                              </MenuPrimitive.Item>
+                            );
+                          })}
+                        </MenuPrimitive.Content>
+                      </MenuPrimitive.Portal>
+                    </MenuPrimitive.Root>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+          {footer && (
+            <SidebarContext.Provider value={{ collapsed: true, tooltipSide: "bottom" }}>
+              {/* Chân menu thành cụm nút icon; mỗi nút là ô vuông thay vì chiếm hết chiều ngang. */}
+              <div className="ml-auto hidden shrink-0 items-center gap-1 md:flex [&>button]:h-9 [&>button]:w-9">{footer}</div>
+            </SidebarContext.Provider>
+          )}
+        </header>
+        {drawer}
+      </>
+    );
+  }
+
   return (
     <>
       <aside
         data-collapsed={collapsed}
+        data-position={position}
         className={cn(
           asideBase,
           "transition-[width] duration-200 motion-reduce:transition-none",
           collapsed ? "w-16" : "w-64",
+          // DOM giữ menu đứng trước nội dung (thứ tự Tab), chỉ đổi vị trí hiển thị.
+          right && "order-last",
           hasMobile && "hidden md:flex",
           className,
         )}
       >
         {renderBody(collapsed, false)}
       </aside>
-
-      {hasMobile && (
-        <DialogPrimitive.Root open={mobileOpen} onOpenChange={onMobileOpenChange}>
-          <DialogPrimitive.Portal>
-            <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-overlay md:hidden" />
-            <DialogPrimitive.Content aria-describedby={undefined} className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] shadow-lg focus-visible:outline-none md:hidden">
-              <DialogPrimitive.Title className="sr-only">{l.nav}</DialogPrimitive.Title>
-              <aside data-mobile="true" className={cn(asideBase, "w-full")}>
-                {renderBody(false, true)}
-              </aside>
-            </DialogPrimitive.Content>
-          </DialogPrimitive.Portal>
-        </DialogPrimitive.Root>
-      )}
+      {drawer}
     </>
   );
 }
@@ -283,7 +390,7 @@ export type SidebarFooterButtonProps = Omit<ComponentProps<"button">, "children"
 };
 
 export function SidebarFooterButton({ icon, label, trailing, className, ...rest }: SidebarFooterButtonProps) {
-  const { collapsed } = useSidebar();
+  const { collapsed, tooltipSide } = useSidebar();
   const btn = (
     <button type="button" {...rest} className={cn(itemBase, collapsed && "justify-center px-0", className)}>
       <span aria-hidden="true" className={iconBox}>{icon}</span>
@@ -291,13 +398,13 @@ export function SidebarFooterButton({ icon, label, trailing, className, ...rest 
       {!collapsed && trailing}
     </button>
   );
-  return collapsed ? <Tooltip content={label} side="right">{btn}</Tooltip> : btn;
+  return collapsed ? <Tooltip content={label} side={tooltipSide}>{btn}</Tooltip> : btn;
 }
 
 export type SidebarUserProps = Omit<ComponentProps<"button">, "children"> & { name: string; role?: string; initials?: string };
 
 export function SidebarUser({ name, role, initials, className, ...rest }: SidebarUserProps) {
-  const { collapsed } = useSidebar();
+  const { collapsed, tooltipSide } = useSidebar();
   const ini =
     initials ??
     name
@@ -327,7 +434,7 @@ export function SidebarUser({ name, role, initials, className, ...rest }: Sideba
       )}
     </button>
   );
-  return collapsed ? <Tooltip content={name} side="right">{btn}</Tooltip> : btn;
+  return collapsed ? <Tooltip content={name} side={tooltipSide}>{btn}</Tooltip> : btn;
 }
 
 /** Chấm màu thương hiệu hiện tại (đọc từ token, tự đổi theo cấu hình). */

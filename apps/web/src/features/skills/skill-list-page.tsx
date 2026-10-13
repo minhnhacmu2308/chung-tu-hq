@@ -1,10 +1,10 @@
 "use client";
 import {
   Alert, Badge, Button, Card, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, Grid, PageHeader,
-  Skeleton, Stack, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast,
+  Skeleton, Stack, StatCard, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { FilePlus2, RefreshCw, Sparkles, Tags, Target } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
@@ -85,23 +85,13 @@ function Kpis({ skills }: { skills: Skill[] }) {
   const reading = skills.filter((s) => s.kind !== "MAPPING");
   const measured = reading.filter((s) => s.accuracy !== undefined);
   const avg = measured.length ? measured.reduce((a, s) => a + (s.accuracy ?? 0), 0) / measured.length : undefined;
-  const items: [string, string, string][] = [
-    ["Skill đang dùng", `${skills.filter((s) => s.enabled).length}/${skills.length}`, "đọc chứng từ + ánh xạ tờ khai"],
-    ["Độ chính xác trung bình", avg === undefined ? "—" : formatPercent(avg), `đo trên ${measured.length} skill có đủ mẫu`],
-    ["Mẫu đã gắn nhãn", formatNumber(reading.reduce((a, s) => a + s.labeledSamples, 0)), "làm ví dụ cho AI + bộ đo"],
-    ["Cần thêm mẫu", String(reading.filter((s) => s.accuracy === undefined || s.accuracy < 0.9).length), "skill dưới 90% hoặc chưa đo"],
-  ];
+  const needMore = reading.filter((s) => s.accuracy === undefined || s.accuracy < 0.9).length;
   return (
-    <Grid cols={{ base: 2, xl: 4 }}>
-      {items.map(([t, v, s]) => (
-        <Card key={t}>
-          <CardHeader>
-            <CardDescription>{t}</CardDescription>
-            <CardTitle as="h3" className="text-2xl">{v}</CardTitle>
-            <p className="text-xs text-fg-subtle">{s}</p>
-          </CardHeader>
-        </Card>
-      ))}
+    <Grid cols={{ base: 2, xl: 4 }} stagger>
+      <StatCard icon={<Sparkles />} label="Skill đang dùng" value={`${skills.filter((s) => s.enabled).length}/${skills.length}`} hint="đọc chứng từ + ánh xạ tờ khai" />
+      <StatCard icon={<Target />} tone="success" label="Độ chính xác trung bình" value={avg === undefined ? "—" : formatPercent(avg)} hint={`đo trên ${measured.length} skill có đủ mẫu`} />
+      <StatCard icon={<Tags />} tone="info" label="Mẫu đã gắn nhãn" value={reading.reduce((a, s) => a + s.labeledSamples, 0)} hint="làm ví dụ cho AI + bộ đo" />
+      <StatCard icon={<FilePlus2 />} tone={needMore > 0 ? "warning" : "neutral"} label="Cần thêm mẫu" value={needMore} hint="skill dưới 90% hoặc chưa đo" />
     </Grid>
   );
 }

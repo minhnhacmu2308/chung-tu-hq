@@ -1,7 +1,7 @@
 "use client";
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CountUp, EmptyState, Grid, PageHeader,
-  Progress, Skeleton, Stack,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader,
+  Progress, Skeleton, Stack, StatCard,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CalendarClock, FileSearch, FolderOpen, Plus, Send } from "lucide-react";
@@ -16,21 +16,6 @@ import { STEP_LABELS, type Dossier } from "@/mocks/types";
 
 const rowLink =
   "flex rounded-md px-3 py-3 transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
-
-function Kpi({ icon, label, value, hint, alert = false }: { icon: ReactNode; label: string; value: ReactNode; hint: ReactNode; alert?: boolean }) {
-  return (
-    <Card>
-      <CardHeader className="gap-2">
-        <div className="flex items-center justify-between gap-2">
-          <CardDescription>{label}</CardDescription>
-          <span className={alert ? "text-danger" : "text-fg-subtle"} aria-hidden="true">{icon}</span>
-        </div>
-        <CardTitle as="h3" className="text-3xl tabular-nums">{typeof value === "number" ? <CountUp value={value} /> : value}</CardTitle>
-        <p className={alert ? "text-xs text-danger-subtle-fg" : "text-xs text-fg-subtle"}>{hint}</p>
-      </CardHeader>
-    </Card>
-  );
-}
 
 function TodoRow({ d }: { d: Dossier }) {
   return (
@@ -119,21 +104,22 @@ export function DashboardPage() {
         </Grid>
       ) : (
         <Grid cols={{ base: 2, xl: 4 }} stagger>
-          <Kpi
-            icon={<FolderOpen className="h-5 w-5" />}
+          <StatCard
+            icon={<FolderOpen />}
             label="Hồ sơ đang mở"
             value={open.length}
             hint={`${open.filter((d) => d.direction === "NK").length} nhập · ${open.filter((d) => d.direction === "XK").length} xuất`}
           />
-          <Kpi
-            icon={<CalendarClock className="h-5 w-5" />}
+          <StatCard
+            icon={<CalendarClock />}
+            tone={overdue.length > 0 ? "danger" : "warning"}
             label="Sắp hoặc quá hạn khai"
             value={dueSoon.length}
             hint={overdue.length ? `${overdue.length} hồ sơ đã quá hạn` : "Không có hồ sơ quá hạn"}
-            alert={overdue.length > 0}
+            hintTone={overdue.length > 0 ? "danger" : "default"}
           />
-          <Kpi icon={<FileSearch className="h-5 w-5" />} label="Trường cần kiểm tra" value={suspect} hint={`trên ${suspectDossiers} hồ sơ`} />
-          <Kpi icon={<Send className="h-5 w-5" />} label="Tờ khai đã truyền" value={submitted.length} hint="qua Customs Hub" />
+          <StatCard icon={<FileSearch />} tone="info" label="Trường cần kiểm tra" value={suspect} hint={`trên ${suspectDossiers} hồ sơ`} />
+          <StatCard icon={<Send />} tone="success" label="Tờ khai đã truyền" value={submitted.length} hint="qua Customs Hub" />
         </Grid>
       )}
 

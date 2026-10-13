@@ -282,7 +282,7 @@ function IndeterminateCheckbox({
       aria-label={label}
       checked={checked}
       onChange={onChange}
-      className="h-4 w-4 cursor-pointer rounded-sm accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      className="kb-checkbox"
     />
   );
 }
@@ -626,7 +626,7 @@ export function DataTable<TData extends RowData>({
                       aria-sort={canSort ? (sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none") : undefined}
                       style={resizable ? { width: header.getSize() } : undefined}
                       className={cn(
-                        "whitespace-nowrap border-b border-border bg-surface-muted px-3 py-2.5 font-medium text-fg-muted",
+                        "whitespace-nowrap border-b border-border bg-surface-muted px-3 py-2.5 text-xs font-semibold text-fg-muted",
                         ALIGN[meta?.align ?? "start"],
                         stickyHeader ? "sticky top-0 z-10" : resizable && "relative",
                         resizable && "overflow-hidden text-ellipsis",
@@ -677,7 +677,7 @@ export function DataTable<TData extends RowData>({
                   const label = fill(t.filterBy, { label: columnLabel(column) });
                   const value: unknown = column.getFilterValue();
                   return (
-                    <td key={column.id} className="border-b border-border bg-surface px-2 py-1.5">
+                    <td key={column.id} className="border-b border-border bg-surface px-2 py-2">
                       {kind === "select" ? (
                         <Select
                           aria-label={label}
@@ -685,7 +685,7 @@ export function DataTable<TData extends RowData>({
                           options={selectOptions(column)}
                           value={isSelectFilter(value) ? value.equals : ""}
                           onChange={(e) => column.setFilterValue(e.target.value ? { equals: e.target.value } : undefined)}
-                          className="h-8 text-sm"
+                          className="h-8 min-w-24 text-sm"
                         />
                       ) : kind === "text" ? (
                         <Input
@@ -743,9 +743,9 @@ export function DataTable<TData extends RowData>({
                       : undefined
                   }
                   className={cn(
-                    "border-b border-border last:border-b-0",
-                    "data-[selected]:bg-primary-subtle",
-                    clickable && "cursor-pointer hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus",
+                    "border-b border-border last:border-b-0 hover:bg-surface-muted",
+                    "data-[selected]:bg-primary-subtle data-[selected]:hover:bg-primary-subtle",
+                    clickable && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus",
                   )}
                 >
                   {row.getVisibleCells().map((cell) => {
@@ -754,7 +754,7 @@ export function DataTable<TData extends RowData>({
                       <td
                         key={cell.id}
                         className={cn(
-                          "px-3 py-2.5 text-fg",
+                          "px-3 py-3 text-fg",
                           !meta?.wrap && "whitespace-nowrap",
                           resizable && !meta?.wrap && "overflow-hidden text-ellipsis",
                           ALIGN[meta?.align ?? "start"],

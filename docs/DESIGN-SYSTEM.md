@@ -42,6 +42,7 @@ Bảng màu mặc định của Tailwind (`blue-500`, `gray-100`…) **đã bị
 | Hiệu ứng con trỏ | `data-cursor-effect` (app tự xử lý, tôn trọng `prefers-reduced-motion`) | Người dùng |
 | Mô tả trang | `data-page-description` → ẩn `[data-slot=page-description]` | Người dùng |
 | Nền trang Phẳng / Aurora | `data-backdrop` | Doanh nghiệp (có thể khóa) |
+| Vị trí menu Trái / Trên / Phải | `data-menu-position` → `--kb-shell-top`; app truyền `position` cho `Sidebar`. Ô chọn có hình mô phỏng bố cục | Người dùng |
 | Mật độ Gọn / Chuẩn / Thoáng | `data-density` → `--spacing` | Người dùng |
 | Dải xám Slate / Gray | `data-gray` → `--kb-gray-*` | Doanh nghiệp (có thể khóa) |
 | Màu thương hiệu | `brandThemeCss()` – **CSS động duy nhất** | Doanh nghiệp (có thể khóa) |
@@ -77,13 +78,15 @@ export default async function RootLayout({ children }) {
 | Component | Dùng cho |
 |---|---|
 | `Button` (`primary/secondary/ghost/danger/link`, `sm/md/lg/icon`, `loading`, `asChild`) | Mọi nút. `asChild` để bọc `<Link>` |
-| `Field` + `Input` / `Textarea` / `Select` / `Checkbox` | Mọi ô nhập. Field tự gắn nhãn, gợi ý, lỗi, `aria-*` |
+| `Field` + `Input` / `Textarea` / `Select` / `Checkbox` | Mọi ô nhập. Field tự gắn nhãn, gợi ý, lỗi, `aria-*`. `Select` và `Checkbox` vẫn là control gốc của trình duyệt nhưng tự vẽ mũi tên / ô đánh dấu (utility `kb-checkbox`) để đồng bộ giữa các hệ điều hành |
 | `Card` (`Header/Title/Description/Content/Footer`) | Khối nội dung |
 | `Grid` (`cols={{ base:1, md:2, lg:4 }}`), `Stack` | Bố cục. Không tự viết `grid-cols-*` rời rạc |
 | `PageHeader` | Tiêu đề + mô tả + hành động của mỗi trang |
 | `Badge`, `StatusBadge` | Nhãn. **Trạng thái nghiệp vụ luôn dùng `StatusBadge`** (PASS/WARN/FAIL, CROSS_CHECKED, CONFLICT…, luồng xanh/vàng/đỏ) |
 | `Alert` | Thông báo trong trang. Tự kèm icon theo tông (không truyền nghĩa chỉ bằng màu) |
 | `BrandMark` (`small`, `decorative`) | Ký hiệu logo KhaiBáo AI (tờ khai có góc giấy thành mũi tên gửi đi), vẽ bằng `currentColor`. `small` cho cỡ ≤ 24 px; `decorative` khi đứng cạnh tên viết bằng chữ. Bộ file gốc + quy tắc dùng: `docs/brand/` |
+| `StatCard` (`label`, `value`, `hint`, `hintTone`, `icon`, `tone`, `loading`) | Thẻ chỉ số (KPI) dùng thống nhất ở mọi màn tổng quan. `value` là `number` → chạy đếm; chuỗi đã định dạng → hiển thị nguyên văn. Không tự dựng KPI bằng `Card` |
+| `FormSection` (`title`, `description`) | Một nhóm trường của form dài: màn rộng tiêu đề/mô tả bên trái, ô nhập bên phải; tự kẻ đường ngăn giữa các nhóm. Form từ ~5 trường trở lên nên chia nhóm |
 | `Skeleton`, `Spinner`, `EmptyState` | Trạng thái tải / trống |
 | `Grid` / `Stack` prop `stagger` | Phần tử con lần lượt trồi lên khi khối xuất hiện (thẻ KPI, danh sách). Không lạm dụng: một màn chỉ nên có 1–2 khối |
 | `CountUp` (`value`, `duration`) | Số ĐẾM nguyên chạy từ 0 lên (KPI). **Không dùng cho tiền/trị giá** (Decimal hiển thị nguyên văn). Trình đọc màn hình nhận giá trị cuối |
@@ -92,8 +95,8 @@ export default async function RootLayout({ children }) {
 | `Dialog` (`presentation` / `defaultPresentation` / `onPresentationChange`) + `DialogContent` (`icon`, `size`, nút chuyển trên header) + `DialogFooter` | Popup. Cửa sổ = phủ nền, giữ focus, khóa cuộn. Panel bên phải = **không chặn trang** (thao tác song song). Đổi qua lại **không mất dữ liệu đang nhập** |
 | `AssistantPanel` (`floating/docked/fullscreen`), `AssistantLauncher` (`state`), `AssistantWelcome`, `SuggestionChips`, `ChatMessage`, `ChatComposer` | Trợ lý AI. Nút mở là linh vật `RobotAvatar`; app truyền `state="thinking"` khi trợ lý đang trả lời |
 | `RobotAvatar` (`state`: idle/thinking/searching/listening/speaking/working/happy/error/sleeping, `size`, `interactive`, `antenna`) | Đầu robot hoạt hình (thư viện `robot-heads`, canvas). Màu vỏ/màn hình/viền đọc từ token `primary`/`primary-fg`/`primary-subtle` nên tự đổi theo theme và màu thương hiệu; chỉ vẽ phía client, `aria-hidden` |
-| `SegmentedControl`, `ColorSwatchPicker`, `AppearancePanel` | Tùy chọn dạng phân đoạn / chọn màu / bảng cấu hình giao diện |
-| `Sidebar` (`items` có nhóm con, `collapsed` / `onCollapsedChange`, `linkAs={Link}`, `mobileOpen` / `onMobileOpenChange`), `SidebarMobileTrigger`, `SidebarFooterButton`, `SidebarUser`, `BrandDot` | Menu chính co giãn: mở rộng ↔ thu gọn (cột icon + tooltip). Màn nhỏ: ngăn kéo mở bằng nút ☰. `SidebarUser`/`SidebarFooterButton` làm trigger được cho `DropdownMenu`/`Popover` (asChild) |
+| `SegmentedControl`, `ColorSwatchPicker`, `AppearancePanel` | Tùy chọn dạng phân đoạn / chọn màu / bảng cấu hình giao diện. Trong `AppearancePanel` mỗi lựa chọn là một thẻ có **hình mô phỏng** (sáng/tối, vị trí menu, mật độ, cỡ chữ, bo góc, nền, dải xám…); thêm tùy chọn mới thì thêm cả hình mô phỏng |
+| `Sidebar` (`position`: left/right/top, `items` có nhóm con, `collapsed` / `onCollapsedChange`, `linkAs={Link}`, `mobileOpen` / `onMobileOpenChange`), `SidebarMobileTrigger`, `SidebarFooterButton`, `SidebarUser`, `BrandDot` | Menu chính co giãn: mở rộng ↔ thu gọn (cột icon + tooltip). `position="top"` = thanh ngang dính đầu trang (nhóm con thành menu xổ, chân menu thành cụm icon; phần tử dính trong trang dùng `top-shell` để nằm dưới thanh). Màn nhỏ: ngăn kéo mở bằng nút ☰. `SidebarUser`/`SidebarFooterButton` làm trigger được cho `DropdownMenu`/`Popover` (asChild) |
 | `Stepper` (`steps`, `currentId`, `viewingId`, `onStepClick`, `action`) | Thanh các bước của hồ sơ; bước đã qua bấm được để xem lại; `viewingId` = bước đang xem lại (bước hiện tại khi đó bấm được để quay về); `action` để đặt nút "Xem cây quy trình". Màn nhỏ gọn thành "Bước 3/6 · …" |
 | `WorkflowDiagram` (`nodes`: start/end/step/decision + `status`; `edges` có `label`) | Sơ đồ cây quy trình: tự bố cục (dagre), nhánh tách làn, đường đã đi tô màu, bước hiện tại gắn nhãn, phóng to/thu nhỏ. Thường đặt trong `DialogContent size="lg"` |
 | `DocumentViewer` (`label`, `pages`, `regions` {id, page, x/y/w/h theo %, `label`, `content`}, `highlightId`, `onRegionClick`, `page`/`onPageChange`) | Xem chứng từ gốc: chuyển trang, phóng to/thu nhỏ/vừa khung, tô vùng của một trường (tự sang trang chứa vùng, cuộn tới). Vị trí vùng truyền qua biến CSS cục bộ. `content` để in chữ vào vùng khi dựng lại trang từ dữ liệu (prototype chưa có ảnh PDF) |

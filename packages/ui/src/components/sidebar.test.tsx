@@ -19,9 +19,10 @@ const ITEMS: NavItem[] = [
   { id: "settings", label: "Thiết lập", href: "/thiet-lap", icon: <svg />, hasSubmenu: true },
 ];
 
-// jsdom không điều hướng được: chặn mặc định, vẫn gọi onClick (giống <Link> của Next.js)
+// jsdom không điều hướng được: gọi onClick TRƯỚC rồi mới chặn mặc định – đúng thứ tự của <Link> Next.js
+// (chặn trước thì Radix coi như sự kiện đã bị hủy và bỏ qua onSelect của mục menu).
 function TestLink({ onClick, ...p }: ComponentProps<"a">) {
-  return <a {...p} onClick={(e) => { e.preventDefault(); onClick?.(e); }} />;
+  return <a {...p} onClick={(e) => { onClick?.(e); e.preventDefault(); }} />;
 }
 
 function Harness({ initialCollapsed = false, activeId = "import", onNavigate = vi.fn() }) {
@@ -169,5 +170,57 @@ describe("SidebarUser làm trigger cho DropdownMenu", () => {
     expect(trigger).toHaveAttribute("aria-haspopup", "menu");
     await userEvent.click(trigger);
     expect(await screen.findByRole("menuitem", { name: "Đăng xuất" })).toBeInTheDocument();
+  });
+});
+
+describe("Sidebar – vị trí menu", () => {
+  function Positioned({ position, onNavigate = vi.fn() }: { position: "left" | "right" | "top"; onNavigate?: (i: NavItem) => void }) {
+    const [collapsed, setCollapsed] = useState(false);
+    return (
+      <Sidebar
+        position={position}
+        brand={{ logo: <svg />, name: "KhaiBáo AI" }}
+        items={ITEMS}
+        activeId="import"
+        collapsed={collapsed}
+        onCollapsedChange={setCollapsed}
+        onNavigate={onNavigate}
+        linkAs={TestLink}
+        footer={<SidebarFooterButton icon={<svg />} label="Thông báo" />}
+      />
+    );
+  }
+
+  it("bên phải: vẫn là cột có thu gọn, viền quay về phía nội dung và hiển thị sau nội dung", async () => {
+    const { container } = render(<Positioned position="right" />);
+    const aside = container.querySelector("aside")!;
+    expect(aside).toHaveAttribute("data-position", "right");
+    expect(aside).toHaveClass("border-l", "order-last");
+    await userEvent.click(screen.getByRole("button", { name: "Thu gọn menu" }));
+    expect(aside).toHaveAttribute("data-collapsed", "true");
+    await expectNoA11yViolations(container);
+  });
+
+  it("phía trên: thanh ngang, mục thường là link, nhóm con mở thành menu xổ và chọn được", async () => {
+    const onNavigate = vi.fn();
+    const { container } = render(<Positioned position="top" onNavigate={onNavigate} />);
+    expect(container.querySelector("aside")).toBeNull();
+    expect(container.querySelector("header")).toHaveAttribute("data-position", "top");
+    const nav = screen.getByRole("navigation", { name: "Điều hướng chính" });
+    expect(within(nav).getByRole("link", { name: "Tổng quan" })).toBeInTheDocument();
+    // Không có nút thu gọn ở thanh ngang.
+    expect(screen.queryByRole("button", { name: "Thu gọn menu" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(nav).getByRole("button", { name: "Hồ sơ khai báo" }));
+    const item = await screen.findByRole("menuitem", { name: "Nhập khẩu" });
+    expect(item).toHaveAttribute("aria-current", "page");
+    await userEvent.click(screen.getByRole("menuitem", { name: "Xuất khẩu" }));
+    expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({ id: "export" }));
+  });
+
+  it("phía trên: chân menu thành nút icon có tên; không vi phạm a11y", async () => {
+    const { container } = render(<Positioned position="top" />);
+    expect(screen.getByRole("button", { name: "Thông báo" })).toBeInTheDocument();
+    await expectNoA11yViolations(container);
   });
 });

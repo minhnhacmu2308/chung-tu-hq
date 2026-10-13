@@ -15,16 +15,28 @@
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 
-/* ---------- Dải xám (data-gray) – phải trùng theme/palette.ts ---------- */
-:root, :root[data-gray="slate"] {
+/* ---------- Dải xám (data-gray) – phải trùng theme/palette.ts. [data-gray-preview] = hình mô phỏng trong bảng cấu hình ---------- */
+:root, :root[data-gray="slate"], [data-gray-preview="slate"] {
   --kb-gray-50: #F8FAFC; --kb-gray-100: #F1F5F9; --kb-gray-200: #E2E8F0; --kb-gray-300: #CBD5E1;
   --kb-gray-400: #94A3B8; --kb-gray-500: #64748B; --kb-gray-600: #475569; --kb-gray-700: #334155;
   --kb-gray-800: #1E293B; --kb-gray-900: #0F172A; --kb-gray-950: #020617;
 }
-:root[data-gray="gray"] {
+:root[data-gray="gray"], [data-gray-preview="gray"] {
   --kb-gray-50: #FAFAFA; --kb-gray-100: #F4F4F5; --kb-gray-200: #E4E4E7; --kb-gray-300: #D4D4D8;
   --kb-gray-400: #A1A1AA; --kb-gray-500: #71717A; --kb-gray-600: #52525B; --kb-gray-700: #3F3F46;
   --kb-gray-800: #27272A; --kb-gray-900: #18181B; --kb-gray-950: #09090B;
+}
+
+/*
+ * Hình mô phỏng dải xám: token ngữ nghĩa ở :root đã "chốt" theo bảng xám hiện tại, nên phải khai báo lại
+ * ngay tại hình (chỉ các token hình dùng) để nó đọc bảng xám của chính nó.
+ */
+[data-gray-preview] {
+  --kb-color-surface-muted: light-dark(var(--kb-gray-100), var(--kb-gray-800));
+  --kb-color-border: light-dark(var(--kb-gray-200), var(--kb-gray-700));
+  --kb-color-border-strong: light-dark(var(--kb-gray-300), var(--kb-gray-600));
+  --kb-color-fg-muted: light-dark(var(--kb-gray-600), var(--kb-gray-300));
+  --kb-color-fg: light-dark(var(--kb-gray-900), var(--kb-gray-50));
 }
 
 /* ---------- Token ngữ nghĩa ---------- */
@@ -41,6 +53,8 @@
   --kb-color-overlay: light-dark(rgb(15 23 42 / 0.32), rgb(0 0 0 / 0.55));
   /* Vùng chọn chữ và thanh cuộn – dịu, ăn theo màu thương hiệu / dải xám */
   --kb-color-selection: color-mix(in oklab, var(--kb-color-primary) 22%, transparent);
+  /* Viền ô đánh dấu/nút chọn khi chưa chọn: đậm hơn viền thường để đạt tương phản 3:1 với nền. */
+  --kb-color-control-border: light-dark(var(--kb-gray-500), var(--kb-gray-400));
   --kb-color-scrollbar: light-dark(var(--kb-gray-300), var(--kb-gray-700));
 
   /* Thương hiệu – mặc định = createBrandTheme("#0F6B55"), tenant ghi đè */
@@ -120,6 +134,14 @@
     radial-gradient(45% 40% at 95% 5%, color-mix(in oklab, var(--kb-color-info) 12%, transparent), transparent 70%);
   background-attachment: fixed;
 }
+
+/*
+ * ---------- Vị trí menu (data-menu-position) ----------
+ * Menu ở trên chiếm một thanh cao 3.5rem dính đầu trang: phần tử dính khác (panel trợ lý, khung xem chứng từ)
+ * đọc --kb-shell-top để nằm dưới thanh đó thay vì chui xuống dưới nó.
+ */
+:root { --kb-shell-top: 0rem; }
+:root[data-menu-position="top"] { --kb-shell-top: 3.5rem; }
 
 /* ---------- Mô tả trang (data-page-description) ---------- */
 :root[data-page-description="hidden"] [data-slot="page-description"] { display: none; }

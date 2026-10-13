@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useFieldControl } from "./field.js";
@@ -33,14 +34,18 @@ export type SelectProps = Omit<ComponentProps<"select">, "children"> & {
 export function Select({ className, options, placeholder, ...props }: SelectProps) {
   const a11y = useFieldControl(props);
   return (
-    <select className={cn(control, "h-10 px-3 pr-8", className)} {...props} {...a11y}>
-      {placeholder !== undefined && <option value="">{placeholder}</option>}
-      {options.map((o) => (
-        <option key={o.value} value={o.value} disabled={o.disabled}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    // Mũi tên tự vẽ thay cho mũi tên mặc định của trình duyệt (mỗi hệ điều hành một kiểu).
+    <span className="relative block w-full">
+      <select className={cn(control, "h-10 cursor-pointer appearance-none truncate pl-3 pr-9", className)} {...props} {...a11y}>
+        {placeholder !== undefined && <option value="">{placeholder}</option>}
+        {options.map((o) => (
+          <option key={o.value} value={o.value} disabled={o.disabled}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
+    </span>
   );
 }
 
@@ -52,7 +57,7 @@ export function Checkbox({ className, label, id, ...props }: CheckboxProps) {
     <label className={cn("inline-flex cursor-pointer items-center gap-2 text-sm text-fg", className)}>
       <input
         type="checkbox"
-        className="h-4 w-4 rounded-sm border-border accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="kb-checkbox"
         {...props}
         {...a11y}
       />

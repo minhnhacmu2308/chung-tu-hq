@@ -1,4 +1,4 @@
-import { AiBackdrop, AiScanCard, BrandMark, Card, RobotAvatar, type RobotAvatarState } from "@kb/ui";
+import { AiBackdrop, AiScanCard, BrandMark, RobotAvatar, type RobotAvatarState } from "@kb/ui";
 import { FileCheck2, ScanText, Send } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -17,25 +17,25 @@ const SCAN_FIELDS = [
 ];
 
 /**
- * Khung trang đăng nhập/đăng ký: panel thương hiệu bên trái (ẩn trên mobile) + form.
+ * Khung trang đăng nhập/đăng ký, phủ kín màn hình: panel thương hiệu bên trái (ẩn trên mobile) + form canh giữa bên phải.
  * `robot` = trạng thái linh vật trợ lý, phản ứng theo thao tác trên form (đang gõ, đang gửi, lỗi…).
  */
 export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; robot?: RobotAvatarState }) {
   return (
-    <Card className="grid w-full max-w-5xl overflow-hidden p-0 motion-safe:animate-pop-in md:grid-cols-2">
-      <div className="relative hidden overflow-hidden bg-primary p-10 text-primary-fg md:block">
+    <div className="grid min-h-dvh motion-safe:animate-fade-in md:grid-cols-2">
+      <div className="relative hidden overflow-hidden bg-primary p-10 text-primary-fg md:block lg:p-16">
         <AiBackdrop />
-        <div className="stagger-children relative flex h-full flex-col justify-between gap-8">
+        <div className="stagger-children relative mx-auto flex h-full max-w-xl flex-col justify-between gap-8">
           <div className="flex items-center gap-2 text-lg font-semibold">
             <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary-fg text-primary">
               <BrandMark decorative className="h-7 w-7" />
             </span>
             KhaiBáo AI
           </div>
-          <AiScanCard title="COMMERCIAL INVOICE" fields={SCAN_FIELDS} />
+          <AiScanCard title="COMMERCIAL INVOICE" fields={SCAN_FIELDS} className="origin-left lg:scale-125 xl:scale-150" />
           <div className="flex flex-col gap-5">
-            <p className="text-2xl font-semibold leading-snug">Từ bộ chứng từ đến tờ khai hải quan trong một luồng.</p>
-            <ul className="stagger-children flex flex-col gap-3 text-sm">
+            <p className="text-2xl font-semibold leading-snug lg:text-3xl">Từ bộ chứng từ đến tờ khai hải quan trong một luồng.</p>
+            <ul className="stagger-children flex flex-col gap-3 text-sm lg:text-base">
               {POINTS.map((p) => (
                 <li key={p.text} className="flex items-center gap-3">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-hover" aria-hidden="true">
@@ -49,7 +49,9 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
           <p className="text-xs opacity-80">Dữ liệu mỗi doanh nghiệp được tách riêng theo MST.</p>
         </div>
       </div>
-      <div className="stagger-children flex flex-col gap-6 p-6 sm:p-10">
+      {/* Form giữ bề rộng dễ đọc và canh giữa theo chiều dọc dù màn hình rộng tới đâu. */}
+      <div className="flex items-center justify-center p-6 sm:p-10">
+      <div className="stagger-children flex w-full max-w-lg flex-col gap-6">
         {/* Hàng đầu: logo (chỉ mobile – desktop đã có ở panel trái) + linh vật. -mb kéo tiêu đề form lên sát hơn. */}
         <div className="-mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-base font-semibold text-fg md:invisible">
@@ -62,6 +64,7 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
         </div>
         {children}
       </div>
-    </Card>
+      </div>
+    </div>
   );
 }

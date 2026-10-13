@@ -11,6 +11,7 @@ export const APPEARANCE_OPTIONS = {
   gray: ["slate", "gray"],
   backdrop: ["flat", "aurora"],
   radius: ["square", "default", "rounded"],
+  menuPosition: ["left", "top", "right"],
 } as const;
 
 /** Màu thương hiệu gợi ý. Admin vẫn có thể nhập mã màu riêng (được kiểm tra tương phản). */
@@ -36,6 +37,7 @@ export const Appearance = z.object({
   gray: z.enum(APPEARANCE_OPTIONS.gray),
   backdrop: z.enum(APPEARANCE_OPTIONS.backdrop),
   radius: z.enum(APPEARANCE_OPTIONS.radius),
+  menuPosition: z.enum(APPEARANCE_OPTIONS.menuPosition),
   brand: hex,
   cursorEffect: z.boolean(),
   showPageDescription: z.boolean(),
@@ -51,6 +53,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   gray: "slate",
   backdrop: "flat",
   radius: "default",
+  menuPosition: "left",
   brand: "#0F6B55",
   cursorEffect: false,
   showPageDescription: true,
@@ -96,6 +99,7 @@ export function appearanceAttributes(a: Appearance): Record<string, string> {
     "data-gray": a.gray,
     "data-backdrop": a.backdrop,
     "data-radius": a.radius,
+    "data-menu-position": a.menuPosition,
     "data-cursor-effect": a.cursorEffect ? "on" : "off",
     "data-page-description": a.showPageDescription ? "shown" : "hidden",
   };

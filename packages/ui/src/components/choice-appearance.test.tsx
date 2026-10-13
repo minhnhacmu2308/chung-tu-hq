@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -76,5 +76,62 @@ describe("AppearancePanel", () => {
   it("không vi phạm a11y", async () => {
     const { container } = render(<Harness />);
     await expectNoA11yViolations(container);
+  });
+});
+
+describe("AppearancePanel – vị trí menu", () => {
+  function Harness({ onSpy }: { onSpy: (a: Appearance) => void }) {
+    const [v, setV] = useState<Appearance>(DEFAULT_APPEARANCE);
+    return <AppearancePanel value={v} onChange={(n) => { setV(n); onSpy(n); }} />;
+  }
+
+  it("ba lựa chọn có hình mô phỏng; chọn bằng chuột và bàn phím; không vi phạm a11y", async () => {
+    const onSpy = vi.fn();
+    const { container } = render(<Harness onSpy={onSpy} />);
+    const group = screen.getByRole("group", { name: "Vị trí menu" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((r) => r.closest("label")!.textContent)).toEqual(["Bên trái", "Phía trên", "Bên phải"]);
+    expect(within(group).getByRole("radio", { name: "Bên trái" })).toBeChecked();
+    // Mỗi lựa chọn kèm một hình mô phỏng chỉ để nhìn (ẩn với trình đọc màn hình).
+    expect(group.querySelectorAll("label > [aria-hidden=true]")).toHaveLength(3);
+
+    await userEvent.click(within(group).getByRole("radio", { name: "Phía trên" }));
+    expect(onSpy).toHaveBeenLastCalledWith(expect.objectContaining({ menuPosition: "top" }));
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onSpy).toHaveBeenLastCalledWith(expect.objectContaining({ menuPosition: "right" }));
+    await expectNoA11yViolations(container);
+  });
+
+  it("Đặt lại mặc định đưa menu về bên trái", async () => {
+    const onSpy = vi.fn();
+    render(<Harness onSpy={onSpy} />);
+    await userEvent.click(screen.getByRole("radio", { name: "Bên phải" }));
+    await userEvent.click(screen.getByRole("button", { name: "Đặt lại mặc định" }));
+    expect(onSpy).toHaveBeenLastCalledWith(expect.objectContaining({ menuPosition: "left" }));
+  });
+});
+
+describe("AppearancePanel – hình mô phỏng", () => {
+  it("mọi nhóm lựa chọn đều có hình mô phỏng cho từng phương án, ẩn với trình đọc màn hình", () => {
+    render(<AppearancePanel value={DEFAULT_APPEARANCE} onChange={() => {}} />);
+    for (const name of ["Ngôn ngữ", "Giao diện", "Vị trí menu", "Mật độ", "Cỡ chữ", "Bo góc", "Nền trang", "Dải xám", "Mô tả trang", "Hiệu ứng con trỏ"]) {
+      const group = screen.getByRole("group", { name });
+      const radios = within(group).getAllByRole("radio");
+      expect(radios.length).toBeGreaterThanOrEqual(2);
+      expect(group.querySelectorAll("label > [aria-hidden=true]")).toHaveLength(radios.length);
+    }
+  });
+
+  it("hình Sáng/Tối ép color-scheme tại chỗ; hình dải xám dùng đúng bảng xám của nó (không theo cấu hình hiện tại)", () => {
+    render(<AppearancePanel value={{ ...DEFAULT_APPEARANCE, mode: "dark", gray: "gray" }} onChange={() => {}} />);
+    const mode = screen.getByRole("group", { name: "Giao diện" });
+    const light = within(mode).getByRole("radio", { name: "Sáng" }).closest("label")!;
+    expect(light.querySelector('[class*="color-scheme:light"]')).not.toBeNull();
+    expect(light.querySelector('[class*="color-scheme:dark"]')).toBeNull();
+    const system = within(mode).getByRole("radio", { name: "Theo hệ thống" }).closest("label")!;
+    expect(system.querySelector('[class*="color-scheme:light"]')).not.toBeNull();
+    expect(system.querySelector('[class*="color-scheme:dark"]')).not.toBeNull();
+    const gray = screen.getByRole("group", { name: "Dải xám" });
+    expect(within(gray).getByRole("radio", { name: "Slate" }).closest("label")!.querySelector("[data-gray-preview=slate]")).not.toBeNull();
   });
 });

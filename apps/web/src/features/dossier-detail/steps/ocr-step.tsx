@@ -46,7 +46,7 @@ function DocumentTab({ doc, fields, dossierId, filter }: { doc: DossierDocument;
         fields={fields}
         highlightFieldId={active}
         onFieldClick={jumpTo}
-        className="h-120 lg:sticky lg:top-4 lg:h-176 lg:self-start"
+        className="h-120 lg:sticky lg:top-shell lg:h-176 lg:self-start"
       />
       <Stack gap="md" className="min-w-0">
         {visible.length === 0 && !showItems ? (

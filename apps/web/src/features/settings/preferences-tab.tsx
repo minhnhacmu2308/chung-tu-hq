@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getOrganization, settingsKeys, updateSuspectThreshold } from "@/api/settings";
 import { useAppearance } from "@/features/appearance/use-appearance";
 import type { FieldStatus, Organization } from "@/mocks/types";
+import { toastMutationError } from "@/lib/mutation-error";
+import { LoadError } from "@/components/common/load-error";
 
 type Threshold = Organization["suspectThreshold"];
 const THRESHOLDS: { value: Threshold; label: string }[] = [
@@ -26,13 +28,14 @@ const EXPLAIN: Record<Threshold, string> = {
 export function PreferencesTab() {
   const qc = useQueryClient();
   const { appearance, setAppearance, adjustments } = useAppearance();
-  const { data: org, isLoading } = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
+  const { data: org, isLoading, isError, refetch } = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
   const save = useMutation({
     mutationFn: (t: Threshold) => updateSuspectThreshold(t),
     onSuccess: (o) => {
       void qc.invalidateQueries({ queryKey: settingsKeys.org });
       toast({ tone: "success", title: `Ngưỡng: ${THRESHOLDS.find((t) => t.value === o.suspectThreshold)?.label}`, description: "Áp dụng cho các lần đọc tiếp theo." });
     },
+    onError: toastMutationError("Không lưu được ngưỡng"),
   });
   const current = save.isPending && save.variables ? save.variables : org?.suspectThreshold;
 
@@ -44,7 +47,9 @@ export function PreferencesTab() {
           <CardDescription>Quyết định trường nào phải được người xem lại trước khi xác nhận dữ liệu. Không ảnh hưởng tới các luật đối chiếu BLOCKER.</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading || !current ? (
+          {isError ? (
+            <LoadError onRetry={() => void refetch()} />
+          ) : isLoading || !current ? (
             <Skeleton className="h-40" />
           ) : (
             <Stack gap="md">

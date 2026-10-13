@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { listNotifications, markAllNotificationsRead, sessionKeys } from "@/api/session";
 import { formatRelative } from "@/lib/format";
+import { toastMutationError } from "@/lib/mutation-error";
 
 export function NotificationsPanel({ onNavigate }: { onNavigate: () => void }) {
   const qc = useQueryClient();
@@ -11,6 +12,7 @@ export function NotificationsPanel({ onNavigate }: { onNavigate: () => void }) {
   const markAll = useMutation({
     mutationFn: markAllNotificationsRead,
     onSuccess: () => qc.invalidateQueries({ queryKey: sessionKeys.notifications }),
+    onError: toastMutationError("Không đánh dấu được đã đọc"),
   });
 
   if (isLoading) return <Stack gap="sm"><Skeleton className="h-14" /><Skeleton className="h-14" /></Stack>;

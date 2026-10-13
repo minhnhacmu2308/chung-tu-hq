@@ -1,27 +1,10 @@
 // Nhãn trạng thái hồ sơ / hạn khai – dùng chung cho danh sách và chi tiết hồ sơ.
 import { Badge, StatusBadge, type Tone } from "@kb/ui";
-import type { CustomsChannel, DossierStatus } from "@/mocks/types";
+import type { CustomsChannel } from "@/mocks/types";
 import { daysUntil, formatDue } from "@/lib/format";
 
-export const DOSSIER_STATUS_META: Record<DossierStatus, { label: string; tone: Tone }> = {
-  DRAFT: { label: "Nháp", tone: "neutral" },
-  PROCESSING: { label: "Đang xử lý", tone: "info" },
-  NEEDS_REVIEW: { label: "Cần kiểm tra", tone: "warning" },
-  APPROVED: { label: "Đã duyệt", tone: "primary" },
-  SUBMITTED: { label: "Đã truyền HQ", tone: "info" },
-  CLEARED: { label: "Đã thông quan", tone: "success" },
-  CANCELLED: { label: "Đã hủy", tone: "neutral" },
-};
-
-export function DossierStatusBadge({ status }: { status: DossierStatus }) {
-  const m = DOSSIER_STATUS_META[status];
-  return (
-    <Badge tone={m.tone}>
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
-      {m.label}
-    </Badge>
-  );
-}
+// Trạng thái hồ sơ: một nguồn duy nhất ở features/dossiers (ánh xạ sang StatusBadge của @kb/ui).
+export { DossierStatusBadge } from "@/features/dossiers/dossier-badges";
 
 /** Hạn khai: đỏ khi quá hạn, vàng khi còn ≤ 1 ngày. Hồ sơ đã xong thì không cần nhấn mạnh. */
 export function DueBadge({ dueDate, done = false }: { dueDate: string; done?: boolean }) {

@@ -207,6 +207,11 @@
   top: calc(var(--kb-shell-top) + 1rem);
 }
 
+/* Mép phải của cột dính trong bảng: một đường kẻ mảnh để thấy ranh giới khi nội dung cuộn ngang bên dưới. */
+@utility sticky-col-edge {
+  box-shadow: inset -1px 0 0 var(--kb-color-border);
+}
+
 /* Khung tải: dải sáng chạy ngang (thay cho nhấp nháy). Không chuyển động khi người dùng bật giảm chuyển động. */
 @utility skeleton-shimmer {
   background-color: var(--kb-color-surface-muted);

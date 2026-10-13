@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Be_Vietnam_Pro, Inter, JetBrains_Mono, Roboto } from "next/font/google";
+import { Be_Vietnam_Pro, Geist, Inter, JetBrains_Mono, Roboto } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -15,7 +15,9 @@ const beVietnamPro = Be_Vietnam_Pro({ subsets: ["latin", "vietnamese"], weight: 
 const mono = JetBrains_Mono({ subsets: ["latin", "vietnamese"], variable: "--kb-webfont-mono", display: "swap", preload: false });
 const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--kb-webfont-inter", display: "swap", preload: false });
 const roboto = Roboto({ subsets: ["latin", "vietnamese"], weight: ["400", "500", "700"], variable: "--kb-webfont-roboto", display: "swap", preload: false });
-const FONT_VARIABLES = [beVietnamPro, mono, inter, roboto].map((f) => f.variable).join(" ");
+// Geist trên Google Fonts chưa có bộ ký tự tiếng Việt đầy đủ: chữ có dấu thiếu sẽ rơi về font hệ thống.
+const geist = Geist({ subsets: ["latin"], variable: "--kb-webfont-geist", display: "swap", preload: false });
+const FONT_VARIABLES = [beVietnamPro, mono, inter, roboto, geist].map((f) => f.variable).join(" ");
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

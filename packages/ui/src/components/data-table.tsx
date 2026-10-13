@@ -128,6 +128,8 @@ export type DataTableColumnMeta = {
   filterOptions?: readonly { value: string; label: string }[];
   /** `false` = không cho ẩn cột này trong menu "Cột". */
   hideable?: boolean;
+  /** Cột định danh (mã hồ sơ…) đứng yên bên trái khi bảng cuộn ngang. Chỉ nên bật cho MỘT cột. */
+  sticky?: boolean;
   /** `false` = không cho kéo đổi độ rộng cột này (khi bảng bật `resizable`). Độ rộng: `size`/`minSize`/`maxSize` của cột. */
   resizable?: boolean;
 };
@@ -629,6 +631,7 @@ export function DataTable<TData extends RowData>({
                         "whitespace-nowrap border-b border-border bg-surface-muted px-3 py-2.5 text-xs font-semibold text-fg-muted",
                         ALIGN[meta?.align ?? "start"],
                         stickyHeader ? "sticky top-0 z-10" : resizable && "relative",
+                        meta?.sticky && "sticky-col-edge sticky left-0 z-20",
                         resizable && "overflow-hidden text-ellipsis",
                         meta?.headerClassName,
                       )}
@@ -677,7 +680,7 @@ export function DataTable<TData extends RowData>({
                   const label = fill(t.filterBy, { label: columnLabel(column) });
                   const value: unknown = column.getFilterValue();
                   return (
-                    <td key={column.id} className="border-b border-border bg-surface px-2 py-2">
+                    <td key={column.id} className={cn("border-b border-border bg-surface px-2 py-2", column.columnDef.meta?.sticky && "sticky-col-edge sticky left-0 z-[1]")}>
                       {kind === "select" ? (
                         <Select
                           aria-label={label}
@@ -743,7 +746,7 @@ export function DataTable<TData extends RowData>({
                       : undefined
                   }
                   className={cn(
-                    "border-b border-border last:border-b-0 hover:bg-surface-muted",
+                    "group border-b border-border last:border-b-0 hover:bg-surface-muted",
                     "data-[selected]:bg-primary-subtle data-[selected]:hover:bg-primary-subtle",
                     clickable && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus",
                   )}
@@ -759,6 +762,8 @@ export function DataTable<TData extends RowData>({
                           resizable && !meta?.wrap && "overflow-hidden text-ellipsis",
                           ALIGN[meta?.align ?? "start"],
                           meta?.align === "end" && "tabular-nums",
+                          // Ô dính cần nền đặc (để nội dung cuộn chui xuống dưới) và phải theo màu hover/chọn của dòng.
+                          meta?.sticky && "sticky-col-edge sticky left-0 z-[1] bg-surface group-hover:bg-surface-muted group-data-[selected]:bg-primary-subtle",
                           meta?.cellClassName,
                         )}
                       >

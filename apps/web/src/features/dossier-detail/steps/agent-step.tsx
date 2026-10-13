@@ -85,12 +85,12 @@ function ModeDialog({ open, onOpenChange, onStart, pending }: { open: boolean; o
               const m = TASK_META[id];
               return (
                 <li key={id} className={on ? "flex items-start gap-3 rounded-md border border-border p-3" : "flex items-start gap-3 rounded-md border border-border p-3 opacity-50"}>
-                  <span className="mt-0.5 text-fg-muted">{m.icon}</span>
+                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary-subtle text-primary-subtle-fg" aria-hidden="true">{m.icon}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-fg">
                       {m.title} {!on && <span className="font-normal text-fg-subtle">– không chạy</span>}
                     </p>
-                    <p className="text-xs text-fg-muted">{m.description}</p>
+                    <p className="text-sm text-fg-muted">{m.description}</p>
                   </div>
                   <Badge tone={m.whoTone} className="shrink-0">{m.who}</Badge>
                 </li>
@@ -151,7 +151,7 @@ function Orchestration({ view, onRerun }: { view: AgentRunView; onRerun: () => v
                         <p className="text-sm font-medium text-fg">{m.title}</p>
                         <Badge tone={m.whoTone}>{m.who}</Badge>
                       </div>
-                      <p className="mt-0.5 text-xs text-fg-muted">
+                      <p className="mt-0.5 text-sm text-fg-muted">
                         <span className="sr-only">{STATUS_TEXT[t.status]}: </span>
                         {t.message}
                       </p>
@@ -279,7 +279,7 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
     },
     onError: (e) => toast({ tone: "danger", title: errorMessage(e) }),
   });
-  const undo = useMutation({ mutationFn: (it: LineItem) => unconfirmHs(it.id), onSuccess: invalidate });
+  const undo = useMutation({ mutationFn: (it: LineItem) => unconfirmHs(it.id), onSuccess: invalidate, onError: (e) => toast({ tone: "danger", title: errorMessage(e) }) });
 
   const columns = col.columns([
     col.accessor("lineNo", { header: "#", size: 48, meta: { align: "center" } }),
@@ -458,7 +458,7 @@ export function AgentStep({ dossier, goTo }: StepProps) {
                     <span className="text-primary">{TASK_META[id].icon}</span>
                     <p className="text-sm font-medium">{TASK_META[id].title}</p>
                   </div>
-                  <p className="mt-1 text-xs text-fg-muted">{TASK_META[id].description}</p>
+                  <p className="mt-1 text-sm text-fg-muted">{TASK_META[id].description}</p>
                   <Badge tone={TASK_META[id].whoTone} className="mt-2">{TASK_META[id].who}</Badge>
                 </div>
               ))}

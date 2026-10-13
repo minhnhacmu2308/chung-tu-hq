@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { listIntegrations, settingsKeys, testIntegration } from "@/api/settings";
 import { formatRelative } from "@/lib/format";
 import type { Integration } from "@/mocks/types";
+import { LoadError } from "@/components/common/load-error";
 
 const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neutral"; label: string }> = {
   CONNECTED: { tone: "success", label: "Đã kết nối" },
@@ -66,7 +67,7 @@ function IntegrationCard({ it }: { it: Integration }) {
 }
 
 export function IntegrationsTab() {
-  const { data, isLoading } = useQuery({ queryKey: settingsKeys.integrations, queryFn: listIntegrations });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: settingsKeys.integrations, queryFn: listIntegrations });
   return (
     <Stack gap="md">
       <Alert tone="info" title="Khóa API được giữ ở máy chủ">
@@ -75,7 +76,9 @@ export function IntegrationsTab() {
           Khóa của hscodepro, Customs Hub và dịch vụ AI lưu trong kho bí mật phía máy chủ, không bao giờ gửi xuống trình duyệt hay hiện trên màn hình này.
         </span>
       </Alert>
-      {isLoading || !data ? (
+      {isError ? (
+        <LoadError onRetry={() => void refetch()} />
+      ) : isLoading || !data ? (
         <Grid cols={{ base: 1, lg: 2 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-48" />)}</Grid>
       ) : (
         <Grid cols={{ base: 1, lg: 2 }}>

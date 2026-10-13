@@ -259,15 +259,16 @@ export function Sidebar({
               {items.map((item) => {
                 const active = containsActive(item, activeId);
                 const cls = cn(topItem, active && itemActive);
+                // Cửa sổ hẹp (md → lg): mục có icon chỉ hiện icon, nhãn vẫn đọc được và hiện dạng gợi ý khi rê chuột.
                 const inner = (
                   <>
                     {item.icon && <span aria-hidden="true" className={iconBox}>{item.icon}</span>}
-                    {item.label}
+                    <span className={cn(item.icon && "max-lg:sr-only")}>{item.label}</span>
                     {item.badge}
                   </>
                 );
                 if (!item.children?.length) {
-                  const common = { className: cls, "aria-current": item.id === activeId ? ("page" as const) : undefined, onClick: () => onNavigate?.(item) };
+                  const common = { className: cls, title: item.label, "aria-current": item.id === activeId ? ("page" as const) : undefined, onClick: () => onNavigate?.(item) };
                   return (
                     <li key={item.id}>
                       {item.href ? <LinkTag href={item.href} {...common}>{inner}</LinkTag> : <button type="button" {...common}>{inner}</button>}
@@ -277,7 +278,7 @@ export function Sidebar({
                 return (
                   <li key={item.id}>
                     <MenuPrimitive.Root>
-                      <MenuPrimitive.Trigger className={cn(cls, "data-[state=open]:bg-surface-muted")}>
+                      <MenuPrimitive.Trigger title={item.label} className={cn(cls, "data-[state=open]:bg-surface-muted")}>
                         {inner}
                         <ChevronDown aria-hidden="true" className="h-4 w-4 text-fg-subtle" />
                       </MenuPrimitive.Trigger>
@@ -392,10 +393,11 @@ export type SidebarFooterButtonProps = Omit<ComponentProps<"button">, "children"
 export function SidebarFooterButton({ icon, label, trailing, className, ...rest }: SidebarFooterButtonProps) {
   const { collapsed, tooltipSide } = useSidebar();
   const btn = (
-    <button type="button" {...rest} className={cn(itemBase, collapsed && "justify-center px-0", className)}>
+    <button type="button" {...rest} className={cn(itemBase, collapsed && "relative justify-center px-0", className)}>
       <span aria-hidden="true" className={iconBox}>{icon}</span>
       <span className={cn("min-w-0 flex-1 truncate text-left", collapsed && "sr-only")}>{label}</span>
-      {!collapsed && trailing}
+      {/* Thu gọn / thanh ngang: phần phụ (vd số thông báo chưa đọc) thu nhỏ nằm ở góc icon thay vì biến mất. */}
+      {trailing && (collapsed ? <span className="pointer-events-none absolute -right-0.5 -top-0.5 origin-top-right scale-75">{trailing}</span> : trailing)}
     </button>
   );
   return collapsed ? <Tooltip content={label} side={tooltipSide}>{btn}</Tooltip> : btn;

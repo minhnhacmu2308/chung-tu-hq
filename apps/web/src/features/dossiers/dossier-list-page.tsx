@@ -27,7 +27,7 @@ const COLUMNS = col.columns([
     header: "Mã hồ sơ",
     size: 160,
     minSize: 140,
-    meta: { filter: "text", hideable: false },
+    meta: { filter: "text", hideable: false, sticky: true },
     cell: (c) => <span className="font-mono text-xs text-fg">{c.getValue()}</span>,
   }),
   col.accessor("typeCode", {

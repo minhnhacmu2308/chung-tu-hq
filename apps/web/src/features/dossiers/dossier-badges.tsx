@@ -1,11 +1,10 @@
 import { Badge, StatusBadge } from "@kb/ui";
 import { daysUntil, formatDue } from "@/lib/format";
 import type { Dossier, DossierStatus } from "@/mocks/types";
-import { CHANNEL_STATUS, DOSSIER_STATUS_DISPLAY } from "./dossier-display";
+import { CHANNEL_STATUS, DOSSIER_STATUS } from "./dossier-display";
 
 export function DossierStatusBadge({ status }: { status: DossierStatus }) {
-  const s = DOSSIER_STATUS_DISPLAY[status];
-  return <Badge tone={s.tone}>{s.label}</Badge>;
+  return <StatusBadge status={DOSSIER_STATUS[status]} />;
 }
 
 /** Hạn khai: đỏ khi quá hạn, vàng khi còn ≤ 1 ngày. Hồ sơ đã truyền/xong không cảnh báo. */

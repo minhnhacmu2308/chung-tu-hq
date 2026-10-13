@@ -79,7 +79,7 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
                 ) : (
                   <span className={cn("flex items-center gap-2 rounded-md px-2 py-1", isViewing && "bg-primary-subtle")}>{inner}</span>
                 )}
-                {i < steps.length - 1 && <span aria-hidden="true" className={cn("mx-1 h-px w-6 shrink-0", i < currentIndex ? "bg-primary" : "bg-border-strong")} />}
+                {i < steps.length - 1 && <span aria-hidden="true" className={cn("mx-0.5 h-px w-3 shrink-0 xl:mx-1 xl:w-6", i < currentIndex ? "bg-primary" : "bg-border-strong")} />}
               </li>
             );
           })}

@@ -37,7 +37,10 @@ export function StatCard({ label, value, hint, hintTone = "default", icon, tone 
         {loading ? (
           <Skeleton className="my-1 h-8 w-16" />
         ) : (
-          <p className="text-3xl font-semibold leading-tight tracking-tight text-fg">{typeof value === "number" ? <CountUp value={value} /> : value}</p>
+          // Con số và chuỗi ngắn (67%, 11/12) hiện cỡ lớn; chuỗi dài (mã, tên) hạ cỡ để không tràn thẻ.
+          <p className={cn("break-words font-semibold leading-tight tracking-tight text-fg", typeof value === "string" && value.length > 8 ? "text-lg" : "text-3xl")}>
+            {typeof value === "number" ? <CountUp value={value} /> : value}
+          </p>
         )}
         {hint && <p className={cn("text-xs", hintTone === "danger" ? "text-danger-subtle-fg" : "text-fg-subtle")}>{hint}</p>}
       </div>

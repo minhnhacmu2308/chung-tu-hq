@@ -2,7 +2,7 @@
 // Bước 6 – Khai báo Hải quan: chọn chứng thư số → truyền IDA/IDC/HYS/IEX qua Customs Hub → kết quả + nhật ký thông điệp.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Field, Grid, Select, Spinner, Stack,
-  StatusBadge, toast,
+  StatusBadge, toast, toastPromise,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Circle, Clock3, KeyRound, Landmark, RotateCcw, Send, XCircle } from "lucide-react";
@@ -46,7 +46,7 @@ function PipelineList({ rows, canResend, onResend, resending }: { rows: Pipeline
           </Badge>
           <div className="min-w-48 flex-1">
             <p className="text-sm font-medium text-fg">{r.label}</p>
-            <p className="text-xs text-fg-muted">{r.summary ?? (r.status === "NOT_SENT" ? "Chưa gửi" : r.status === "WAITING" ? "Gửi sau khi bước trước hoàn tất" : "Chờ phản hồi từ Hải quan")}</p>
+            <p className="text-sm text-fg-muted">{r.summary ?? (r.status === "NOT_SENT" ? "Chưa gửi" : r.status === "WAITING" ? "Gửi sau khi bước trước hoàn tất" : "Chờ phản hồi từ Hải quan")}</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {r.at && <span className="hidden text-xs text-fg-subtle sm:inline">{formatDateTime(r.at)}</span>}
@@ -88,7 +88,12 @@ function ResultCard({ result, started }: { result: Partial<CustomsResult> | null
       </CardHeader>
       <CardContent>
         {!started || !result ? (
-          <p className="text-sm text-fg-muted">{started ? "Đang chờ phản hồi đầu tiên…" : "Chưa truyền. Kết quả (số tờ khai, phân luồng, thông quan) hiện ở đây."}</p>
+          <EmptyState
+            className="px-2 py-8"
+            icon={started ? <Clock3 /> : <Landmark />}
+            title={started ? "Đang chờ phản hồi đầu tiên" : "Chưa truyền"}
+            description="Số tờ khai, phân luồng và kết quả thông quan sẽ hiện ở đây."
+          />
         ) : (
           <div className="divide-y divide-border">
             <KeyValue label="Số tờ khai" value={result.declarationNo ? <span className="font-mono">{result.declarationNo}</span> : <span className="text-fg-subtle">Đang chờ</span>} />
@@ -97,7 +102,7 @@ function ResultCard({ result, started }: { result: Partial<CustomsResult> | null
               {result.channel ? (
                 <div className="mt-1 flex flex-col gap-1">
                   <StatusBadge status={CHANNEL_STATUS[result.channel]} className="self-start" />
-                  <p className="text-xs text-fg-muted">{result.channelNote}</p>
+                  <p className="text-sm text-fg-muted">{result.channelNote}</p>
                 </div>
               ) : (
                 <p className="mt-1 text-sm text-fg-subtle">Đang chờ</p>
@@ -137,12 +142,14 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id) });
   };
   const submit = useMutation({
-    mutationFn: () => submitDeclaration(dossier.id, selectedId),
-    onSuccess: () => {
-      toast({ tone: "info", title: "Đã ký số và gửi tờ khai", description: "Customs Hub đang truyền tới VNACCS…" });
-      invalidate();
-    },
-    onError: (e) => toast({ tone: "danger", title: errorMessage(e) }),
+    // Một toast đi suốt thao tác: "đang ký số…" → "đã gửi" hoặc lỗi.
+    mutationFn: () =>
+      toastPromise(submitDeclaration(dossier.id, selectedId), {
+        loading: { title: "Đang ký số và gửi tờ khai…" },
+        success: { title: "Đã ký số và gửi tờ khai", description: "Customs Hub đang truyền tới VNACCS…" },
+        error: (e) => ({ title: errorMessage(e) }),
+      }),
+    onSuccess: invalidate,
   });
   const resend = useMutation({
     mutationFn: (r: PipelineRow) => {

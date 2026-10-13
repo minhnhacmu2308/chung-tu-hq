@@ -1,10 +1,10 @@
 "use client";
 import {
   Alert, Badge, Breadcrumb, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader,
-  Skeleton, Stack, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast,
+  Skeleton, Stack, StatCard, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, SearchX } from "lucide-react";
+import { FileText, GitCommitHorizontal, Hash, RefreshCw, SearchX, Target } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -12,20 +12,15 @@ import { fieldAccuracies, getSkillById, MIN_SAMPLES_FOR_ACCURACY, setSkillEnable
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { DOC_KIND_LABELS, type Skill } from "@/mocks/types";
 import { EvaluateButton, FieldAccuracyList } from "./evaluation";
-import { AccuracyBadge, SKILL_KIND_LABELS } from "./skill-display";
+import { accuracyTone, formatPercent, SKILL_KIND_LABELS } from "./skill-display";
 import { SkillFieldsTable } from "./skill-fields-table";
 import { SkillSamples } from "./skill-samples";
 
-function InfoCard({ label, children, sub }: { label: string; children: React.ReactNode; sub?: React.ReactNode }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <div className="text-base font-semibold text-fg">{children}</div>
-        {sub && <p className="text-xs text-fg-subtle">{sub}</p>}
-      </CardHeader>
-    </Card>
-  );
+/** Cùng quy tắc với AccuracyBadge: chưa đủ mẫu thì không hiện con số (số đo trên ít mẫu gây hiểu sai). */
+function accuracyText(skill: Skill): { value: string; tone: "success" | "warning" | "danger" | "neutral" } {
+  if (skill.kind === "MAPPING") return { value: "Quy tắc cố định", tone: "neutral" };
+  if (skill.accuracy === undefined || skill.labeledSamples < MIN_SAMPLES_FOR_ACCURACY) return { value: "Chưa đủ mẫu", tone: "neutral" };
+  return { value: formatPercent(skill.accuracy), tone: accuracyTone(skill.accuracy) };
 }
 
 function EnabledToggle({ skill }: { skill: Skill }) {
@@ -70,19 +65,23 @@ function Detail({ skill }: { skill: Skill }) {
       {!skill.enabled && (
         <Alert tone="warning" title="Skill đang tắt">Hồ sơ mới sẽ không dùng skill này{skill.kind === "SUPPLIER" ? " – chứng từ của nhà cung cấp được đọc bằng skill chung" : ""}.</Alert>
       )}
-      <Grid cols={{ base: 2, xl: 4 }}>
-        <InfoCard label="Mã skill" sub={SKILL_KIND_LABELS[skill.kind]}>
-          <span className="font-mono">{skill.code}</span>
-        </InfoCard>
-        <InfoCard label={skill.supplier ? "Nhà cung cấp" : "Loại chứng từ"} sub={skill.supplier && skill.docKind ? DOC_KIND_LABELS[skill.docKind] : skill.language}>
-          {skill.supplier ?? (skill.docKind ? DOC_KIND_LABELS[skill.docKind] : "Tờ khai VNACCS")}
-        </InfoCard>
-        <InfoCard label="Độ chính xác" sub={mapping ? "kiểm bằng test tự động" : `${formatNumber(skill.labeledSamples)} mẫu đã gắn nhãn`}>
-          <AccuracyBadge skill={skill} />
-        </InfoCard>
-        <InfoCard label="Phiên bản" sub={`cập nhật ${formatDateTime(skill.updatedAt)}`}>
-          v{skill.version}
-        </InfoCard>
+      <Grid cols={{ base: 2, xl: 4 }} stagger>
+        <StatCard icon={<Hash />} tone="neutral" label="Mã skill" value={skill.code} hint={SKILL_KIND_LABELS[skill.kind]} />
+        <StatCard
+          icon={<FileText />}
+          tone="info"
+          label={skill.supplier ? "Nhà cung cấp" : "Loại chứng từ"}
+          value={skill.supplier ?? (skill.docKind ? DOC_KIND_LABELS[skill.docKind] : "Tờ khai VNACCS")}
+          hint={skill.supplier && skill.docKind ? DOC_KIND_LABELS[skill.docKind] : skill.language}
+        />
+        <StatCard
+          icon={<Target />}
+          tone={accuracyText(skill).tone}
+          label="Độ chính xác"
+          value={accuracyText(skill).value}
+          hint={mapping ? "kiểm bằng test tự động" : `${formatNumber(skill.labeledSamples)} mẫu đã gắn nhãn`}
+        />
+        <StatCard icon={<GitCommitHorizontal />} tone="primary" label="Phiên bản" value={`v${skill.version}`} hint={`cập nhật ${formatDateTime(skill.updatedAt)}`} />
       </Grid>
 
       <Tabs value={tab} onValueChange={setTab}>

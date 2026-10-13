@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import { getOrganization, settingsKeys } from "@/api/settings";
 import { formatDate, formatNumber, formatVnd } from "@/lib/format";
 import type { Organization } from "@/mocks/types";
+import { LoadError } from "@/components/common/load-error";
 
 type PlanCode = Organization["plan"]["code"];
 const PLANS: { code: PlanCode; name: string; price: string; dossiers: string; features: string[] }[] = [
@@ -47,7 +48,8 @@ function Meter({ label, used, total, unit }: { label: string; used: number; tota
 }
 
 export function PlanTab() {
-  const { data: org, isLoading } = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
+  const { data: org, isLoading, isError, refetch } = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
+  if (isError) return <LoadError onRetry={() => void refetch()} />;
   if (isLoading || !org) return <Skeleton className="h-96" />;
   const { plan, usage } = org;
   const avgCost = usage.dossiersThisMonth ? Math.round(Number(usage.aiCostVnd) / usage.dossiersThisMonth) : 0;

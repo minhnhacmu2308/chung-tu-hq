@@ -31,12 +31,19 @@ export type SelectProps = Omit<ComponentProps<"select">, "children"> & {
   placeholder?: string;
 };
 
+// Class quyết định CHỖ ĐỨNG của control trong bố cục (bề rộng, flex, lưới) phải nằm ở khung bao ngoài;
+// class về dáng ô (chiều cao, cỡ chữ, màu) nằm ở <select>. Nhờ vậy `className="h-8 sm:w-48"` vẫn chạy như trước.
+const LAYOUT_CLASS = /^(?:[a-z0-9-]+:)*(?:w-|min-w-|max-w-|flex-|grow|shrink|basis-|col-span-|self-|justify-self-|order-|m[trblxy]?-)/;
+
 export function Select({ className, options, placeholder, ...props }: SelectProps) {
   const a11y = useFieldControl(props);
+  const classes = (className ?? "").split(/\s+/).filter(Boolean);
+  const layout = classes.filter((c) => LAYOUT_CLASS.test(c));
+  const visual = classes.filter((c) => !LAYOUT_CLASS.test(c));
   return (
     // Mũi tên tự vẽ thay cho mũi tên mặc định của trình duyệt (mỗi hệ điều hành một kiểu).
-    <span className="relative block w-full">
-      <select className={cn(control, "h-10 cursor-pointer appearance-none truncate pl-3 pr-9", className)} {...props} {...a11y}>
+    <span className={cn("relative block w-full", layout)}>
+      <select className={cn(control, "h-10 cursor-pointer appearance-none truncate pl-3 pr-9", visual)} {...props} {...a11y}>
         {placeholder !== undefined && <option value="">{placeholder}</option>}
         {options.map((o) => (
           <option key={o.value} value={o.value} disabled={o.disabled}>

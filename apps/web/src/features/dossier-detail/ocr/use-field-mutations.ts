@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { dossierKeys } from "@/api/dossiers";
 import { confirmField, ocrKeys, revertField, updateFieldValue } from "@/api/ocr";
 import type { ExtractedField } from "@/mocks/types";
+import { toastMutationError } from "@/lib/mutation-error";
 
 export function useFieldMutations(dossierId: string) {
   const qc = useQueryClient();
@@ -12,8 +13,8 @@ export function useFieldMutations(dossierId: string) {
     void qc.invalidateQueries({ queryKey: dossierKeys.all });
   };
   return {
-    update: useMutation({ mutationFn: ({ id, value }: { id: string; value: string }) => updateFieldValue(id, value), onSuccess: apply }),
-    confirm: useMutation({ mutationFn: (id: string) => confirmField(id), onSuccess: apply }),
-    revert: useMutation({ mutationFn: (id: string) => revertField(id), onSuccess: apply }),
+    update: useMutation({ mutationFn: ({ id, value }: { id: string; value: string }) => updateFieldValue(id, value), onSuccess: apply, onError: toastMutationError("Không lưu được giá trị") }),
+    confirm: useMutation({ mutationFn: (id: string) => confirmField(id), onSuccess: apply, onError: toastMutationError("Không xác nhận được trường") }),
+    revert: useMutation({ mutationFn: (id: string) => revertField(id), onSuccess: apply, onError: toastMutationError("Không hoàn tác được") }),
   };
 }

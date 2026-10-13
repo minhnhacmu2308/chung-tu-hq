@@ -120,7 +120,7 @@ const shell = cn(
 );
 const iconBtn =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-fg-subtle hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed";
-const popover = "z-50 rounded-lg border border-border bg-surface shadow-md";
+const popover = "z-50 rounded-lg border border-border bg-surface shadow-lg motion-safe:animate-pop-in";
 
 type CommonProps = {
   /** Ngày nhỏ nhất cho phép, ISO. */

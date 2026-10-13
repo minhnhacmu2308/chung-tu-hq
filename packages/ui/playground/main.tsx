@@ -12,7 +12,7 @@ import {
   Stepper, WorkflowDiagram, type FlowEdge, type FlowNode,
   Breadcrumb, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   SidebarMobileTrigger, Toaster, toast, UiLocaleProvider,
-  BrandMark,
+  BrandMark, AiBackdrop, AiScanCard, CountUp, FormSection, StatCard, toastPromise,
 } from "../src/index.js";
 import { Showcase } from "./showcase.js";
 
@@ -121,11 +121,12 @@ function Demo() {
   return (
     <UiLocaleProvider locale={appearance.locale}>
     <Toaster />
-    <div className="flex min-h-dvh">
+    <div className={appearance.menuPosition === "top" ? "flex min-h-dvh flex-col" : "flex min-h-dvh"}>
       <Sidebar
+        position={appearance.menuPosition}
         mobileOpen={mobileNav}
         onMobileOpenChange={setMobileNav}
-        className="sticky top-0"
+        {...(appearance.menuPosition === "top" ? {} : { className: "sticky top-0" })}
         brand={{ logo: <BrandMark small decorative className="h-6 w-6" />, name: "KhaiBáo AI" }}
         items={NAV}
         activeId={activeId}
@@ -297,6 +298,65 @@ function Demo() {
           </Card>
 
           <Showcase />
+
+          {/* Thành phần thêm sau: thẻ chỉ số, nhóm form, badge, toast theo tiến trình, hình trang trí AI */}
+          <Grid cols={{ base: 2, xl: 4 }} stagger>
+            <StatCard icon={<FolderOpen />} label="Hồ sơ đang mở" value={8} hint="7 nhập · 1 xuất" />
+            <StatCard icon={<FileCheck2 />} tone="danger" label="Sắp hoặc quá hạn khai" value={4} hint="1 hồ sơ đã quá hạn" hintTone="danger" />
+            <StatCard icon={<Send />} tone="success" label="Tỷ lệ luồng xanh" value="67%" hint="4/6 tờ khai đã phân luồng" />
+            <StatCard icon={<Sparkles />} tone="info" label="Đang tải" value={0} loading />
+          </Grid>
+          <Card>
+            <CardHeader className="pb-5">
+              <CardTitle>FormSection – form chia nhóm</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FormSection title="Khai báo" description="Mã loại hình và chi cục Hải quan nơi đăng ký tờ khai.">
+                <Field label="Mã loại hình" required className="md:max-w-xs">
+                  <Select options={[{ value: "A11", label: "A11 – Nhập kinh doanh tiêu dùng" }, { value: "E21", label: "E21 – Nhập SXXK" }]} />
+                </Field>
+                <Checkbox label="Ghi nhớ lựa chọn cho hồ sơ sau" defaultChecked />
+              </FormSection>
+              <FormSection title="Ghi chú" description="Chỉ nội bộ, không gửi Hải quan.">
+                <Field label="Ghi chú nội bộ"><Textarea placeholder="Ví dụ: số PO, cảng hàng về" /></Field>
+              </FormSection>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5">
+              <Stack gap="md">
+                <p className="text-sm font-medium">Badge – cỡ, chấm, icon · trạng thái hồ sơ / tờ khai dùng chung · toast theo tiến trình</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge size="sm" tone="info">Nhỏ</Badge>
+                  <Badge tone="success" dot>Vừa, có chấm</Badge>
+                  <Badge size="lg" tone="warning" icon={<Sparkles />}>Lớn, có icon</Badge>
+                  <StatusBadge status="DOSSIER_APPROVED" />
+                  <StatusBadge status="DOSSIER_NEEDS_REVIEW" />
+                  <StatusBadge status="CUSTOMS_INSPECTING" />
+                  <StatusBadge status="CUSTOMS_CLEARED" />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      void toastPromise(new Promise((r) => setTimeout(r, 1800)), {
+                        loading: { title: "Đang ký số và gửi tờ khai…" },
+                        success: { title: "Đã gửi tờ khai", description: "Customs Hub đang truyền tới VNACCS." },
+                        error: { title: "Không gửi được" },
+                      })
+                    }
+                  >
+                    Toast theo tiến trình
+                  </Button>
+                  <span className="text-sm text-fg-muted">Số đếm chạy: <CountUp value={1284} /></span>
+                </div>
+                <div className="relative overflow-hidden rounded-lg bg-primary p-6 text-primary-fg">
+                  <AiBackdrop />
+                  <AiScanCard className="relative" title="COMMERCIAL INVOICE" fields={[{ label: "Số invoice", value: "HP-2610-078" }, { label: "Trị giá", value: "20.850,00 USD" }, { label: "Mã HS", value: "8482.10.00" }]} />
+                </div>
+              </Stack>
+            </CardContent>
+          </Card>
         </Stack>
         <Card>
           <CardContent>

@@ -27,7 +27,7 @@ function TodoRow({ d }: { d: Dossier }) {
             <Badge tone={d.direction === "NK" ? "info" : "primary"} variant="outline">{DIRECTION_LABELS[d.direction]}</Badge>
           </div>
           <p className="truncate text-sm font-medium text-fg">{d.partner}</p>
-          <p className="text-xs text-fg-subtle">
+          <p className="text-sm text-fg-muted">
             Bước: {STEP_LABELS[d.step]}
             {d.suspectFields > 0 && ` · ${d.suspectFields} trường cần kiểm tra`}
           </p>

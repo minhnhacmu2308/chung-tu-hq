@@ -2,7 +2,7 @@
 // Màn "Khai báo Hải quan": tờ khai đã duyệt / đang truyền / đã có kết quả.
 import {
   Alert, Badge, Button, Card, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, Grid, PageHeader, Stack,
-  StatCard, StatusBadge,
+  StatCard, STATUS_META, StatusBadge, type Status,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { CircleCheck, Hourglass, Leaf, Send } from "lucide-react";
@@ -11,12 +11,8 @@ import { useRouter } from "next/navigation";
 import { customsKeys, listCustomsDeclarations, OPERATION_LABELS, type CustomsRow } from "@/api/customs";
 import { formatDateTime, formatRelative, formatVnd } from "@/lib/format";
 
-const STATE: Record<CustomsRow["state"], { text: string; tone: "warning" | "info" | "success" | "neutral" }> = {
-  READY: { text: "Chờ truyền", tone: "neutral" },
-  SENDING: { text: "Đang truyền", tone: "info" },
-  INSPECTING: { text: "Đang kiểm tra", tone: "warning" },
-  CLEARED: { text: "Đã thông quan", tone: "success" },
-};
+// Trạng thái tờ khai → mã StatusBadge của @kb/ui (nguồn duy nhất của nhãn + màu).
+const STATE = { READY: "CUSTOMS_READY", SENDING: "CUSTOMS_SENDING", INSPECTING: "CUSTOMS_INSPECTING", CLEARED: "CUSTOMS_CLEARED" } as const satisfies Record<CustomsRow["state"], Status>;
 const CHANNEL_STATUS = { GREEN: "GREEN_CHANNEL", YELLOW: "YELLOW_CHANNEL", RED: "RED_CHANNEL" } as const;
 
 const col = createDataTableColumnHelper<CustomsRow>();
@@ -24,7 +20,7 @@ const COLUMNS = col.columns([
   col.accessor("dossierCode", {
     header: "Hồ sơ",
     size: 240,
-    meta: { hideable: false, wrap: true },
+    meta: { hideable: false, wrap: true, sticky: true },
     cell: (c) => (
       <div className="min-w-48">
         <Link href={`/dossiers/${c.row.original.dossierId}?step=submit`} className="whitespace-nowrap font-mono text-xs text-primary hover:underline">
@@ -83,9 +79,9 @@ const COLUMNS = col.columns([
     header: "Trạng thái",
     meta: {
       filter: "select",
-      filterOptions: (Object.keys(STATE) as CustomsRow["state"][]).map((v) => ({ value: v, label: STATE[v].text })),
+      filterOptions: (Object.keys(STATE) as CustomsRow["state"][]).map((v) => ({ value: v, label: STATUS_META[STATE[v]].label })),
     },
-    cell: (c) => <Badge tone={STATE[c.getValue()].tone}>{STATE[c.getValue()].text}</Badge>,
+    cell: (c) => <StatusBadge status={STATE[c.getValue()]} />,
   }),
   col.accessor("customsTaxVnd", {
     header: "Thuế HQ tính",

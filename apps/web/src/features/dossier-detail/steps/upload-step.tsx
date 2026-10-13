@@ -221,7 +221,7 @@ export function UploadStep({ dossier, goTo }: StepProps) {
                         <span className="sr-only">{ok ? " – đã có" : " – chưa có"}</span>
                         {s.optional && <span className="ml-1 text-xs font-normal text-fg-subtle">(tùy lô)</span>}
                       </p>
-                      <p className="text-xs text-fg-muted">{s.reason}</p>
+                      <p className="text-sm text-fg-muted">{s.reason}</p>
                     </div>
                   </li>
                 );
@@ -236,7 +236,7 @@ export function UploadStep({ dossier, goTo }: StepProps) {
         )}
         <Card>
           <CardContent className="pt-6">
-            <Stack gap="sm">
+            <Stack gap="md">
               {pending.length > 0 && (
                 <>
                   <p className="flex items-center gap-2 text-sm text-fg-muted">

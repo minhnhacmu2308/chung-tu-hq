@@ -68,7 +68,7 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
         )}
       </div>
       {field.note && field.status !== "USER_CONFIRMED" && (
-        <p id={noteId} className={cn("text-xs", field.status === "CONFLICT" || field.status === "INVALID_FORMAT" ? "text-danger-subtle-fg" : "text-fg-muted")}>
+        <p id={noteId} className={cn("text-sm", field.status === "CONFLICT" || field.status === "INVALID_FORMAT" ? "text-danger-subtle-fg" : "text-fg-muted")}>
           {field.note}
         </p>
       )}

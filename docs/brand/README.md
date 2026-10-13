@@ -11,6 +11,7 @@
 | `khaibao-stacked.svg` (+ `-white`, `-mono-0f6b55`) | Chỗ vuông/hẹp: bìa, ảnh đại diện lớn |
 | `khaibao-symbol.svg` (+ `-black`, `-white`, `-mono-0f6b55`, `-square`) | Ký hiệu đứng riêng |
 | `khaibao-symbol-small.svg`, `khaibao-symbol-favicon.svg` | Cỡ ≤ 24 px (dòng chỉ tiêu cao hơn) |
+| `khaibao-symbol-tiny.svg`, `khaibao-symbol-tiny-app-icon.svg` | Cỡ 16 px (tab trình duyệt): chỉ còn MỘT dòng chỉ tiêu đậm và góc mũi tên lớn hơn để không nhòe. Đang dùng cho `icon.svg` + `favicon.ico` |
 | `khaibao-symbol-app-icon.svg`, `icon-512.png`, `apple-touch-icon.png`, `favicon.ico` | Icon ứng dụng / tab trình duyệt (đã cài ở `apps/web/src/app/`) |
 | `khaibao-wordmark.svg` | Chỉ chữ |
 

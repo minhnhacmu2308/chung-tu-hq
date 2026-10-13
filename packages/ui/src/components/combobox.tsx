@@ -248,7 +248,7 @@ export function Combobox(props: ComboboxProps) {
           align="start"
           sideOffset={4}
           aria-label={t.list}
-          className="z-50 w-[var(--radix-popover-trigger-width)] min-w-56 rounded-md border border-border bg-surface text-fg shadow-md"
+          className="z-50 w-[var(--radix-popover-trigger-width)] min-w-56 rounded-lg border border-border bg-surface text-fg shadow-lg motion-safe:animate-pop-in"
         >
           {/* Tự lọc bằng chỉ mục bỏ dấu (nhanh, giới hạn số mục) thay vì để cmdk chấm điểm từng mục. */}
           <Command label={t.list} shouldFilter={false} loop>

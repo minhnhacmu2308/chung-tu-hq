@@ -43,7 +43,7 @@ function FieldTile({ field, currency, note }: { field: DeclarationField; currenc
       </div>
       <p className="break-words text-sm font-medium text-fg">{displayValue(field, currency)}</p>
       {field.suspect && (
-        <p className="flex items-start gap-1 text-xs text-warning-subtle-fg">
+        <p className="flex items-start gap-1 text-sm text-warning-subtle-fg">
           <AlertTriangle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
           <span>
             <span className="font-medium">Cần kiểm tra.</span> {note ?? "Dữ liệu chưa đối chiếu được giữa các chứng từ."}

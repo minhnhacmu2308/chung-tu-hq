@@ -135,3 +135,15 @@ describe("AppearancePanel – hình mô phỏng", () => {
     expect(within(gray).getByRole("radio", { name: "Slate" }).closest("label")!.querySelector("[data-gray-preview=slate]")).not.toBeNull();
   });
 });
+
+describe("AppearancePanel – chia nhóm", () => {
+  it("ba tab; đổi tab đổi nhóm đang hiện", async () => {
+    render(<AppearancePanel value={DEFAULT_APPEARANCE} onChange={() => {}} />);
+    const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(tabs).toEqual(["Chung", "Bố cục & chữ", "Màu sắc"]);
+    const density = screen.getByRole("group", { name: "Mật độ" }).closest("[role=tabpanel]")!;
+    expect(density).toHaveAttribute("data-state", "inactive");
+    await userEvent.click(screen.getByRole("tab", { name: "Bố cục & chữ" }));
+    expect(density).toHaveAttribute("data-state", "active");
+  });
+});

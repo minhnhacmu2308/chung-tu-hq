@@ -5,6 +5,7 @@ import { useMessages, useUiLocale, type Messages } from "../lib/i18n.js";
 import { BRAND_PRESETS, DEFAULT_APPEARANCE, type Appearance, type OrgField } from "../theme/appearance.js";
 import type { BrandAdjustment } from "../theme/brand-theme.js";
 import { ColorSwatchPicker } from "./choice.js";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./overlay.js";
 
 const KEYS = [
   "panel", "title", "reset", "locked",
@@ -13,6 +14,7 @@ const KEYS = [
   "radius", "square", "default", "rounded", "fontSize", "small", "medium", "large", "font", "sfPro", "systemFont",
   "adjustLight", "adjustDark",
   "menuPosition", "menuLeft", "menuTop", "menuRight",
+  "tabs", "tabGeneral", "tabLayout", "tabColor",
 ] as const;
 type Key = (typeof KEYS)[number];
 
@@ -30,6 +32,7 @@ const MESSAGES = {
     adjustLight: "Giao diện sáng: {from} → {to} (đủ tương phản {ratio}:1)",
     adjustDark: "Giao diện tối: {from} → {to} (đủ tương phản {ratio}:1)",
     menuPosition: "Vị trí menu", menuLeft: "Bên trái", menuTop: "Phía trên", menuRight: "Bên phải",
+    tabs: "Nhóm cấu hình", tabGeneral: "Chung", tabLayout: "Bố cục & chữ", tabColor: "Màu sắc",
   },
   en: {
     panel: "Appearance settings", title: "Appearance", reset: "Reset to default", locked: " (locked by organization)",
@@ -44,6 +47,7 @@ const MESSAGES = {
     adjustLight: "Light theme: {from} → {to} (meets {ratio}:1 contrast)",
     adjustDark: "Dark theme: {from} → {to} (meets {ratio}:1 contrast)",
     menuPosition: "Menu position", menuLeft: "Left", menuTop: "Top", menuRight: "Right",
+    tabs: "Setting groups", tabGeneral: "General", tabLayout: "Layout & type", tabColor: "Colors",
   },
 } satisfies Messages<Key>;
 
@@ -95,7 +99,7 @@ function ModePreview({ mode }: { mode: Appearance["mode"] }) {
 
 function BackdropPreview({ backdrop }: { backdrop: Appearance["backdrop"] }) {
   return (
-    <span className={cn(FRAME, backdrop === "aurora" && "bg-linear-to-br from-primary-subtle via-bg to-info-subtle")}>
+    <span className={cn(FRAME, backdrop === "aurora" && "bg-linear-to-br from-primary/45 via-bg to-info/45")}>
       <MiniPage className="bg-transparent" />
     </span>
   );
@@ -229,7 +233,7 @@ export function AppearancePanel({
   // Mỗi font hiện bằng chính font đó (stack giống tokens.css: webfont app đã tải → font cài trên máy → hệ thống).
   const FONT_STACK: Record<Appearance["font"], string> = {
     "be-vietnam-pro": 'var(--kb-webfont-be-vietnam-pro, "Be Vietnam Pro"), system-ui, sans-serif',
-    geist: '"Geist", system-ui, sans-serif',
+    geist: 'var(--kb-webfont-geist, "Geist"), system-ui, sans-serif',
     inter: 'var(--kb-webfont-inter, "Inter"), system-ui, sans-serif',
     roboto: 'var(--kb-webfont-roboto, "Roboto"), system-ui, sans-serif',
     "sf-pro": '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif',
@@ -269,6 +273,14 @@ export function AppearancePanel({
         </button>
       </div>
 
+      {/* Chia 3 nhóm để bảng không dài lê thê. Cả 3 nhóm luôn nằm trong DOM (forceMount), nhóm không chọn chỉ bị ẩn. */}
+      <Tabs defaultValue="general">
+        <TabsList aria-label={t.tabs}>
+          <TabsTrigger value="general">{t.tabGeneral}</TabsTrigger>
+          <TabsTrigger value="layout">{t.tabLayout}</TabsTrigger>
+          <TabsTrigger value="color">{t.tabColor}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="general" forceMount className="flex flex-col gap-4 data-[state=inactive]:hidden">
       <PreviewChoice label={t.language} value={value.locale} onChange={set("locale")}
         options={[
           { value: "vi", label: "VI", preview: <TextPreview className="text-xs">Xin chào</TextPreview> },
@@ -282,23 +294,6 @@ export function AppearancePanel({
           { value: "top", label: t.menuTop, preview: <MenuPositionPreview position="top" /> },
           { value: "right", label: t.menuRight, preview: <MenuPositionPreview position="right" /> },
         ]} />
-      <PreviewChoice label={t.density} value={value.density} onChange={set("density")}
-        options={(["compact", "comfortable", "spacious"] as const).map((d) => ({ value: d, label: t[d], preview: <DensityPreview density={d} /> }))} />
-      <PreviewChoice label={t.fontSize} value={value.fontSize} onChange={set("fontSize")}
-        options={[
-          { value: "sm", label: t.small, preview: <TextPreview className={FONT_SIZE.sm}>Aa</TextPreview> },
-          { value: "md", label: t.medium, preview: <TextPreview className={FONT_SIZE.md}>Aa</TextPreview> },
-          { value: "lg", label: t.large, preview: <TextPreview className={FONT_SIZE.lg}>Aa</TextPreview> },
-        ]} />
-      <PreviewChoice label={withLock(t.radius, "radius")} value={value.radius} onChange={set("radius")} disabled={isLocked("radius")}
-        options={(["square", "default", "rounded"] as const).map((r) => ({ value: r, label: t[r], preview: <RadiusPreview radius={r} /> }))} />
-      <PreviewChoice label={withLock(t.backdrop, "backdrop")} value={value.backdrop} onChange={set("backdrop")} disabled={isLocked("backdrop")}
-        options={(["flat", "aurora"] as const).map((b) => ({ value: b, label: t[b], preview: <BackdropPreview backdrop={b} /> }))} />
-      <PreviewChoice label={withLock(t.gray, "gray")} value={value.gray} onChange={set("gray")} disabled={isLocked("gray")}
-        options={[
-          { value: "slate", label: "Slate", preview: <GrayPreview gray="slate" /> },
-          { value: "gray", label: "Gray", preview: <GrayPreview gray="gray" /> },
-        ]} />
       <PreviewChoice label={t.description} value={value.showPageDescription ? "shown" : "hidden"} onChange={(v) => set("showPageDescription")(v === "shown")}
         options={[
           { value: "shown", label: t.shown, preview: <DescriptionPreview shown /> },
@@ -309,7 +304,37 @@ export function AppearancePanel({
           { value: "on", label: t.on, preview: <CursorPreview on /> },
           { value: "off", label: t.off, preview: <CursorPreview on={false} /> },
         ]} />
-
+        </TabsContent>
+        <TabsContent value="layout" forceMount className="flex flex-col gap-4 data-[state=inactive]:hidden">
+      <PreviewChoice label={t.density} value={value.density} onChange={set("density")}
+        options={(["compact", "comfortable", "spacious"] as const).map((d) => ({ value: d, label: t[d], preview: <DensityPreview density={d} /> }))} />
+      <PreviewChoice label={t.fontSize} value={value.fontSize} onChange={set("fontSize")}
+        options={[
+          { value: "sm", label: t.small, preview: <TextPreview className={FONT_SIZE.sm}>Aa</TextPreview> },
+          { value: "md", label: t.medium, preview: <TextPreview className={FONT_SIZE.md}>Aa</TextPreview> },
+          { value: "lg", label: t.large, preview: <TextPreview className={FONT_SIZE.lg}>Aa</TextPreview> },
+        ]} />
+      <PreviewChoice label={withLock(t.radius, "radius")} value={value.radius} onChange={set("radius")} disabled={isLocked("radius")}
+        options={(["square", "default", "rounded"] as const).map((r) => ({ value: r, label: t[r], preview: <RadiusPreview radius={r} /> }))} />
+      <fieldset disabled={isLocked("font")} className="flex flex-col gap-2 disabled:opacity-60">
+        <legend className="mb-2 text-sm text-fg">{withLock(t.font, "font")}</legend>
+        {fonts.map((f) => (
+          <label
+            key={f.value}
+            className={cn(
+              "flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg-muted",
+              "has-[:checked]:border-primary has-[:checked]:bg-primary-subtle has-[:checked]:text-primary-subtle-fg",
+              "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus",
+            )}
+          >
+            <input type="radio" className="sr-only" name={fontName} value={f.value} checked={value.font === f.value} onChange={() => set("font")(f.value)} />
+            <span style={{ fontFamily: FONT_STACK[f.value] }}>{f.label}</span>
+            <span aria-hidden="true" className="text-base text-fg" style={{ fontFamily: FONT_STACK[f.value] }}>Aa Ăă 123</span>
+          </label>
+        ))}
+      </fieldset>
+        </TabsContent>
+        <TabsContent value="color" forceMount className="flex flex-col gap-4 data-[state=inactive]:hidden">
       <ColorSwatchPicker
         label={withLock(t.brand, "brand")}
         value={value.brand}
@@ -331,23 +356,15 @@ export function AppearancePanel({
         </ul>
       )}
 
-      <fieldset disabled={isLocked("font")} className="flex flex-col gap-2 disabled:opacity-60">
-        <legend className="mb-2 text-sm text-fg">{withLock(t.font, "font")}</legend>
-        {fonts.map((f) => (
-          <label
-            key={f.value}
-            className={cn(
-              "flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-sm text-fg-muted",
-              "has-[:checked]:border-primary has-[:checked]:bg-primary-subtle has-[:checked]:text-primary-subtle-fg",
-              "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus",
-            )}
-          >
-            <input type="radio" className="sr-only" name={fontName} value={f.value} checked={value.font === f.value} onChange={() => set("font")(f.value)} />
-            <span style={{ fontFamily: FONT_STACK[f.value] }}>{f.label}</span>
-            <span aria-hidden="true" className="text-base text-fg" style={{ fontFamily: FONT_STACK[f.value] }}>Aa Ăă 123</span>
-          </label>
-        ))}
-      </fieldset>
+      <PreviewChoice label={withLock(t.backdrop, "backdrop")} value={value.backdrop} onChange={set("backdrop")} disabled={isLocked("backdrop")}
+        options={(["flat", "aurora"] as const).map((b) => ({ value: b, label: t[b], preview: <BackdropPreview backdrop={b} /> }))} />
+      <PreviewChoice label={withLock(t.gray, "gray")} value={value.gray} onChange={set("gray")} disabled={isLocked("gray")}
+        options={[
+          { value: "slate", label: "Slate", preview: <GrayPreview gray="slate" /> },
+          { value: "gray", label: "Gray", preview: <GrayPreview gray="gray" /> },
+        ]} />
+        </TabsContent>
+      </Tabs>
     </section>
   );
 }

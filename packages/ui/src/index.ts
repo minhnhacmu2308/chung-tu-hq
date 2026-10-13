@@ -43,7 +43,7 @@ export {
   type DataTableColumnSizing, type DataTableColumnVisibility,
 } from "./components/data-table.js";
 export { Pagination, getPageItems, type PaginationProps, type PageItem } from "./components/pagination.js";
-export { Toaster, toast, dismissToast, useToast, type ToastOptions, type ToastTone, type ToasterProps } from "./components/toast.js";
+export { Toaster, toast, updateToast, toastPromise, dismissToast, useToast, type ToastOptions, type ToastTone, type ToasterProps } from "./components/toast.js";
 export { Tooltip, TooltipProvider, type TooltipProps } from "./components/tooltip.js";
 export {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem,

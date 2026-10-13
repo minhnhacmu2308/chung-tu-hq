@@ -67,3 +67,28 @@ describe("Alert / EmptyState / Skeleton", () => {
     await expectNoA11yViolations(container);
   });
 });
+
+describe("Badge – cỡ, chấm, icon; trạng thái dùng chung", () => {
+  it("ba cỡ; dot và icon chỉ để trang trí", () => {
+    const { container } = render(
+      <>
+        <Badge size="sm">Nhỏ</Badge>
+        <Badge>Vừa</Badge>
+        <Badge size="lg" dot icon={<svg />}>Lớn</Badge>
+      </>,
+    );
+    expect(screen.getByText("Nhỏ")).toHaveClass("text-[0.6875rem]");
+    expect(screen.getByText("Vừa")).toHaveClass("text-xs");
+    const lg = screen.getByText("Lớn");
+    expect(lg).toHaveClass("text-sm");
+    expect(lg.querySelectorAll("[aria-hidden=true]")).toHaveLength(2);
+    expect(container.querySelector("svg")!.parentElement).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("trạng thái hồ sơ và tờ khai nằm chung trong StatusBadge, đủ nhãn VI + EN", () => {
+    const keys = Object.keys(STATUS_META) as Status[];
+    for (const k of ["DOSSIER_DRAFT", "DOSSIER_APPROVED", "DOSSIER_CLEARED", "CUSTOMS_READY", "CUSTOMS_INSPECTING"] as const) expect(keys).toContain(k);
+    render(<StatusBadge status="DOSSIER_APPROVED" />);
+    expect(screen.getByText("Đã duyệt, chờ truyền")).toHaveAttribute("data-status", "DOSSIER_APPROVED");
+  });
+});

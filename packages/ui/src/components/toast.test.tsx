@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { UiLocaleProvider } from "../lib/i18n.js";
-import { dismissToast, toast, Toaster } from "./toast.js";
+import { dismissToast, toast, toastPromise, Toaster, updateToast } from "./toast.js";
 
 afterEach(() => act(() => dismissToast()));
 
@@ -79,5 +79,56 @@ describe("Toast", () => {
       toast({ tone: "info", title: "Đang tra cứu HS", action: { label: "Xem", onClick: () => {} } });
     });
     await expectNoA11yViolations(container);
+  });
+});
+
+describe("Toast – giới hạn, gộp trùng, theo tiến trình", () => {
+  it("toast trùng nội dung thay cái cũ thay vì xếp thêm", () => {
+    render(<Toaster />);
+    act(() => {
+      toast({ tone: "success", title: "Đã lưu" });
+      toast({ tone: "success", title: "Đã lưu" });
+      toast({ tone: "success", title: "Đã lưu" });
+    });
+    expect(screen.getAllByText("Đã lưu")).toHaveLength(1);
+  });
+
+  it("hiện tối đa 4 toast, cái cũ nhất tự đóng", () => {
+    render(<Toaster />);
+    act(() => {
+      for (let i = 1; i <= 6; i++) toast({ title: `Thông báo ${i}` });
+    });
+    expect(screen.queryByText("Thông báo 1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Thông báo 2")).not.toBeInTheDocument();
+    expect(screen.getByText("Thông báo 3")).toBeInTheDocument();
+    expect(screen.getByText("Thông báo 6")).toBeInTheDocument();
+  });
+
+  it("toastPromise: đang xử lý → thành công, dùng cùng một toast", async () => {
+    render(<Toaster />);
+    let resolve!: (v: string) => void;
+    const p = new Promise<string>((r) => (resolve = r));
+    act(() => void toastPromise(p, { loading: { title: "Đang truyền…" }, success: (v) => ({ title: `Đã truyền ${v}` }), error: { title: "Lỗi" } }));
+    expect(screen.getByText("Đang truyền…").closest("li")).toHaveAttribute("data-tone", "loading");
+    await act(async () => { resolve("IDA"); await p; });
+    expect(screen.queryByText("Đang truyền…")).not.toBeInTheDocument();
+    expect(screen.getByText("Đã truyền IDA").closest("li")).toHaveAttribute("data-tone", "success");
+  });
+
+  it("toastPromise: thất bại → toast lỗi với nội dung từ lỗi", async () => {
+    render(<Toaster />);
+    const p = Promise.reject(new Error("Mất kết nối"));
+    act(() => void toastPromise(p, { loading: { title: "Đang gửi…" }, success: { title: "Xong" }, error: (e) => ({ title: (e as Error).message }) }).catch(() => {}));
+    await act(async () => { await p.catch(() => {}); });
+    expect(screen.getByText("Mất kết nối").closest("li")).toHaveAttribute("data-tone", "danger");
+  });
+
+  it("updateToast đổi nội dung toast đang mở", () => {
+    render(<Toaster />);
+    let id = 0;
+    act(() => { id = toast({ tone: "loading", title: "Đang chạy AI Agent…" }); });
+    act(() => updateToast(id, { tone: "success", title: "AI Agent đã xong" }));
+    expect(screen.getByText("AI Agent đã xong")).toBeInTheDocument();
+    expect(screen.queryByText("Đang chạy AI Agent…")).not.toBeInTheDocument();
   });
 });

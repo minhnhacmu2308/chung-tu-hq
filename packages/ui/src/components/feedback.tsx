@@ -8,8 +8,9 @@ import { useUiLocale } from "../lib/i18n.js";
 
 export type Tone = "neutral" | "primary" | "success" | "warning" | "danger" | "info";
 
-export const badgeVariants = cva("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap", {
+export const badgeVariants = cva("inline-flex items-center gap-1 rounded-full font-medium whitespace-nowrap", {
   variants: {
+    size: { sm: "px-1.5 py-px text-[0.6875rem]", md: "px-2 py-0.5 text-xs", lg: "px-2.5 py-1 text-sm" },
     tone: { neutral: "", primary: "", success: "", warning: "", danger: "", info: "" },
     variant: { subtle: "", solid: "", outline: "border bg-transparent" },
   },
@@ -33,13 +34,25 @@ export const badgeVariants = cva("inline-flex items-center gap-1 rounded-full px
     { variant: "outline", tone: "danger", class: "border-danger text-danger-subtle-fg" },
     { variant: "outline", tone: "info", class: "border-info text-info-subtle-fg" },
   ],
-  defaultVariants: { tone: "neutral", variant: "subtle" },
+  defaultVariants: { tone: "neutral", variant: "subtle", size: "md" },
 });
 
-export type BadgeProps = ComponentProps<"span"> & VariantProps<typeof badgeVariants>;
+export type BadgeProps = ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & {
+    /** Chấm tròn đầu nhãn – dùng cho nhãn trạng thái. */
+    dot?: boolean;
+    /** Icon đầu nhãn (tự co theo cỡ chữ). */
+    icon?: ReactNode;
+  };
 
-export function Badge({ className, tone, variant, ...props }: BadgeProps) {
-  return <span className={cn(badgeVariants({ tone, variant }), className)} {...props} />;
+export function Badge({ className, tone, variant, size, dot = false, icon, children, ...props }: BadgeProps) {
+  return (
+    <span className={cn(badgeVariants({ tone, variant, size }), className)} {...props}>
+      {dot && <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />}
+      {icon && <span aria-hidden="true" className="inline-flex shrink-0 [&>svg]:h-[1em] [&>svg]:w-[1em]">{icon}</span>}
+      {children}
+    </span>
+  );
 }
 
 /* ---------------- StatusBadge ---------------- */
@@ -65,6 +78,19 @@ export const STATUS_META = {
   GREEN_CHANNEL: { tone: "success", label: "Luồng xanh" },
   YELLOW_CHANNEL: { tone: "warning", label: "Luồng vàng" },
   RED_CHANNEL: { tone: "danger", label: "Luồng đỏ" },
+  // Trạng thái hồ sơ khai báo
+  DOSSIER_DRAFT: { tone: "neutral", label: "Nháp" },
+  DOSSIER_PROCESSING: { tone: "info", label: "Đang xử lý" },
+  DOSSIER_NEEDS_REVIEW: { tone: "warning", label: "Cần kiểm tra" },
+  DOSSIER_APPROVED: { tone: "primary", label: "Đã duyệt, chờ truyền" },
+  DOSSIER_SUBMITTED: { tone: "info", label: "Đã truyền HQ" },
+  DOSSIER_CLEARED: { tone: "success", label: "Đã thông quan" },
+  DOSSIER_CANCELLED: { tone: "neutral", label: "Đã hủy" },
+  // Trạng thái tờ khai trên kênh Hải quan
+  CUSTOMS_READY: { tone: "neutral", label: "Chờ truyền" },
+  CUSTOMS_SENDING: { tone: "info", label: "Đang truyền" },
+  CUSTOMS_INSPECTING: { tone: "warning", label: "Đang kiểm tra" },
+  CUSTOMS_CLEARED: { tone: "success", label: "Đã thông quan" },
 } as const satisfies Record<string, { tone: Tone; label: string }>;
 
 export type Status = keyof typeof STATUS_META;
@@ -76,6 +102,9 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   MODEL_UNSURE: "Needs check", USER_CONFIRMED: "Confirmed",
   AUTO_APPROVED: "Auto-approved", NEEDS_REVIEW: "Needs review",
   GREEN_CHANNEL: "Green channel", YELLOW_CHANNEL: "Yellow channel", RED_CHANNEL: "Red channel",
+  DOSSIER_DRAFT: "Draft", DOSSIER_PROCESSING: "Processing", DOSSIER_NEEDS_REVIEW: "Needs check", DOSSIER_APPROVED: "Approved, awaiting submission",
+  DOSSIER_SUBMITTED: "Submitted to customs", DOSSIER_CLEARED: "Cleared", DOSSIER_CANCELLED: "Cancelled",
+  CUSTOMS_READY: "Awaiting submission", CUSTOMS_SENDING: "Submitting", CUSTOMS_INSPECTING: "Under inspection", CUSTOMS_CLEARED: "Cleared",
 };
 
 export type StatusBadgeProps = { status: Status; label?: string; className?: string };
@@ -84,8 +113,7 @@ export function StatusBadge({ status, label, className }: StatusBadgeProps) {
   const meta = STATUS_META[status];
   const locale = useUiLocale();
   return (
-    <Badge tone={meta.tone} className={className} data-status={status}>
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+    <Badge tone={meta.tone} dot className={className} data-status={status}>
       {label ?? (locale === "en" ? STATUS_LABELS_EN[status] : meta.label)}
     </Badge>
   );

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { dossierKeys, updateDossier } from "@/api/dossiers";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { StepProps } from "./types";
+import { toastMutationError } from "@/lib/mutation-error";
 
 const MODE = { SEA: "Đường biển", AIR: "Hàng không", ROAD: "Đường bộ" } as const;
 
@@ -19,6 +20,7 @@ export function CreateSummaryStep({ dossier, goTo }: StepProps) {
       qc.setQueryData(dossierKeys.detail(d.id), d);
       toast({ tone: "success", title: "Đã lưu ghi chú" });
     },
+    onError: toastMutationError("Không lưu được ghi chú"),
   });
 
   const rows: [string, string][] = [

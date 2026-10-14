@@ -57,7 +57,7 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
   });
   const s = STATUS[doc.status];
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 sm:flex-nowrap">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 cq-sm:flex-nowrap">
       <FileText aria-hidden="true" className="h-5 w-5 shrink-0 text-fg-subtle" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-fg">{doc.fileName}</p>
@@ -67,7 +67,7 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
       </div>
       <Select
         aria-label={`Loại chứng từ của ${doc.fileName}`}
-        className="h-8 w-full text-sm sm:w-48"
+        className="h-8 w-full text-sm cq-sm:w-48"
         options={KIND_OPTIONS}
         value={doc.kind}
         disabled={kind.isPending}
@@ -145,8 +145,8 @@ export function UploadStep({ dossier, goTo }: StepProps) {
   const isWaiting = waiting && pending.length > 0;
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      <Stack gap="md" className="lg:col-span-2">
+    <div className="grid grid-cols-1 gap-4 cq-lg:grid-cols-3">
+      <Stack gap="md" className="cq-lg:col-span-2">
         <Card>
           <CardHeader>
             <CardTitle>Upload chứng từ</CardTitle>

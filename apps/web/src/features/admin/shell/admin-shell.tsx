@@ -181,7 +181,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+      <main className="@container min-w-0 flex-1 px-4 py-6 md:px-8">
         {!menuOnTop && (
           <div className="mb-2 md:hidden">
             <SidebarMobileTrigger onClick={() => setMobileNav(true)} expanded={mobileNav} />

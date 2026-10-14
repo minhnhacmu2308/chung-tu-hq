@@ -40,13 +40,13 @@ function DocumentTab({ doc, fields, dossierId, filter }: { doc: DossierDocument;
   const showItems = items.length > 0 && (filter === "all" || items.some((f) => isSuspect(f.status)));
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 cq-lg:grid-cols-2">
       <DocumentPreview
         document={doc}
         fields={fields}
         highlightFieldId={active}
         onFieldClick={jumpTo}
-        className="h-120 lg:sticky lg:top-shell lg:h-176 lg:self-start"
+        className="h-120 cq-lg:sticky cq-lg:top-shell cq-lg:h-176 cq-lg:self-start"
       />
       <Stack gap="md" className="min-w-0">
         {visible.length === 0 && !showItems ? (
@@ -125,7 +125,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 cq-lg:grid-cols-2">
               {/* kb-allow-raw: giữ chỗ đúng bằng chiều cao khung xem chứng từ (h-120) để trang không nhảy khi ảnh về */}
               <Skeleton className="h-120" />
               <Stack gap="sm">
@@ -177,10 +177,10 @@ export function OcrStep({ dossier, goTo }: StepProps) {
         </CardContent>
       </Card>
 
-      {/* Thanh hành động dính đáy màn hình */}
+      {/* Thanh hành động dính đáy màn hình. kb-allow-raw: lề âm/lề phải bám lề của shell và nút trợ lý AI nổi – cả hai theo bề rộng màn hình */}
       <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-surface py-3 pl-4 pr-20 shadow-md md:-mx-8 md:pl-8 md:pr-24">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <p className="min-w-0 basis-full text-sm text-fg-muted sm:flex-1 sm:basis-auto" aria-live="polite">
+          <p className="min-w-0 basis-full text-sm text-fg-muted cq-sm:flex-1 cq-sm:basis-auto" aria-live="polite">
             {loading ? (
               "Đang tải kết quả đọc…"
             ) : suspectTotal > 0 ? (
@@ -193,14 +193,14 @@ export function OcrStep({ dossier, goTo }: StepProps) {
             {blockers > 0 && <span className="text-danger-subtle-fg"> · {blockers} lỗi chặn truyền</span>}
           </p>
           <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => goTo("upload")}>
-            <span className="max-sm:sr-only">Chứng từ</span>
+            <span className="cq-max-sm:sr-only">Chứng từ</span>
           </Button>
           {alreadyPast ? (
             <Button rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => goTo("agent")}>
               Sang AI Agent
             </Button>
           ) : (
-            <Button className="max-sm:flex-1" rightIcon={<ArrowRight className="h-4 w-4" />} loading={advance.isPending} disabled={docs.length === 0} onClick={onConfirmData}>
+            <Button className="cq-max-sm:flex-1" rightIcon={<ArrowRight className="h-4 w-4" />} loading={advance.isPending} disabled={docs.length === 0} onClick={onConfirmData}>
               Xác nhận dữ liệu
             </Button>
           )}

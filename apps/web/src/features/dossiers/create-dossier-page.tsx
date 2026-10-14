@@ -129,7 +129,7 @@ export function CreateDossierPage() {
 
       <form onSubmit={submit} noValidate>
         <Grid cols={{ base: 1, lg: 3 }} gap="lg">
-          <Card className="lg:col-span-2">
+          <Card className="cq-lg:col-span-2">
             <CardHeader className="pb-5">
               <CardTitle>Thông tin lô hàng</CardTitle>
               <CardDescription>Các trường có dấu * là bắt buộc.</CardDescription>
@@ -177,7 +177,7 @@ export function CreateDossierPage() {
                     />
                   </Field>
                 </Stack>
-                <Field label="Hạn khai" required className="md:max-w-xs" {...errorProp(errors.dueDate)}>
+                <Field label="Hạn khai" required className="cq-md:max-w-xs" {...errorProp(errors.dueDate)}>
                   <DatePicker value={form.dueDate} onChange={(v) => set("dueDate", v)} min={isoDay(0)} />
                 </Field>
               </FormSection>
@@ -202,13 +202,13 @@ export function CreateDossierPage() {
                     </div>
                   )}
                 </Stack>
-                <Field label="Điều kiện giao hàng" required hint="Incoterms 2020" className="md:max-w-xs">
+                <Field label="Điều kiện giao hàng" required hint="Incoterms 2020" className="cq-md:max-w-xs">
                   <Select options={INCOTERMS} value={form.incoterm} onChange={(e) => set("incoterm", e.target.value)} />
                 </Field>
               </FormSection>
 
               <FormSection title="AI & ghi chú" description="Cách AI đọc bộ chứng từ này và ghi chú riêng của nhóm (không gửi Hải quan).">
-                <Field label="Bộ Skill AI" className="md:max-w-xs">
+                <Field label="Bộ Skill AI" className="cq-md:max-w-xs">
                   <Select options={SKILL_SETS} value={form.skillSetId} onChange={(e) => set("skillSetId", e.target.value)} />
                 </Field>
                 <Field label="Ghi chú nội bộ" {...errorProp(errors.note)}>

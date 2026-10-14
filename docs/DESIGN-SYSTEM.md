@@ -80,12 +80,13 @@ export default async function RootLayout({ children }) {
 | `Button` (`primary/secondary/ghost/danger/link`, `sm/md/lg/icon`, `loading`, `asChild`) | Mọi nút. `asChild` để bọc `<Link>` |
 | `Field` + `Input` / `Textarea` / `Select` / `Checkbox` | Mọi ô nhập. Field tự gắn nhãn, gợi ý, lỗi, `aria-*`. `Select` và `Checkbox` vẫn là control gốc của trình duyệt nhưng tự vẽ mũi tên / ô đánh dấu (utility `kb-checkbox`) để đồng bộ giữa các hệ điều hành |
 | `Card` (`Header/Title/Description/Content/Footer`) | Khối nội dung |
-| `Grid` (`cols={{ base:1, md:2, lg:4 }}`), `Stack` | Bố cục. Không tự viết `grid-cols-*` rời rạc |
+| `Grid` (`cols={{ base:1, md:2, lg:4 }}`), `Stack` | Bố cục. Không tự viết `grid-cols-*` rời rạc. Mốc cột của `Grid` đo theo **vùng nội dung** (container query, biến thể `cq-sm/md/lg/xl`), không theo màn hình: panel neo bên phải hay popup hẹp thì thẻ tự xuống hàng. Cần tổ tiên `@container` – đã có ở `<main>` các shell, trang đăng nhập và thân `DialogContent` |
 | `PageHeader` | Tiêu đề + mô tả + hành động của mỗi trang |
 | `Badge`, `StatusBadge` | Nhãn. **Trạng thái nghiệp vụ luôn dùng `StatusBadge`** (PASS/WARN/FAIL, CROSS_CHECKED, CONFLICT…, luồng xanh/vàng/đỏ) |
 | `Alert` | Thông báo trong trang. Tự kèm icon theo tông (không truyền nghĩa chỉ bằng màu) |
 | `BrandMark` (`small`, `decorative`) | Ký hiệu logo KhaiBáo AI (tờ khai có góc giấy thành mũi tên gửi đi), vẽ bằng `currentColor`. `small` cho cỡ ≤ 24 px; `decorative` khi đứng cạnh tên viết bằng chữ. Bộ file gốc + quy tắc dùng: `docs/brand/` |
 | `StatCard` (`label`, `value`, `hint`, `hintTone`, `icon`, `tone`, `loading`) | Thẻ chỉ số (KPI) dùng thống nhất ở mọi màn tổng quan. `value` là `number` → chạy đếm; chuỗi đã định dạng → hiển thị nguyên văn. Không tự dựng KPI bằng `Card` |
+| `IconTile` (`icon`, `tone`, `size` sm/md/lg) | Ô vuông nền dịu chứa icon ở đầu thẻ, đầu dòng danh sách (StatCard dùng bên trong). Chỉ trang trí (`aria-hidden`) – nghĩa nằm ở chữ bên cạnh. Không tự ghép `span` + `bg-*-subtle` |
 | `FormSection` (`title`, `description`) | Một nhóm trường của form dài: màn rộng tiêu đề/mô tả bên trái, ô nhập bên phải; tự kẻ đường ngăn giữa các nhóm. Form từ ~5 trường trở lên nên chia nhóm |
 | `Skeleton`, `Spinner`, `EmptyState` | Trạng thái tải / trống |
 | **Loading – chọn theo tình huống** | |
@@ -101,7 +102,7 @@ export default async function RootLayout({ children }) {
 | `CountUp` (`value`, `duration`) | Số ĐẾM nguyên chạy từ 0 lên (KPI). **Không dùng cho tiền/trị giá** (Decimal hiển thị nguyên văn). Trình đọc màn hình nhận giá trị cuối |
 | `AiBackdrop`, `AiScanCard` (`title`, `fields`) | Trang trí "AI" cho màn đăng nhập/giới thiệu: nền mạng tín hiệu + minh họa tia quét đọc chứng từ. `aria-hidden`, màu theo token, tắt khi giảm chuyển động |
 | `Tabs` | Tab |
-| `Dialog` (`presentation` / `defaultPresentation` / `onPresentationChange`) + `DialogContent` (`icon`, `size`, nút chuyển trên header) + `DialogFooter` | Popup. Cửa sổ = phủ nền, giữ focus, khóa cuộn. Panel bên phải = **không chặn trang** (thao tác song song). Đổi qua lại **không mất dữ liệu đang nhập** |
+| `Dialog` (`presentation` / `defaultPresentation` / `onPresentationChange`) + `DialogContent` (`icon`, `size`, nút chuyển trên header) + `DialogFooter` | Popup. Cửa sổ = phủ nền, giữ focus, khóa cuộn. Panel bên phải = thẻ neo cạnh phải, **không chặn trang** (thao tác song song); màn đủ rộng thì trang chính **lùi vào nhường chỗ** (lề phải `body` = `--kb-dialog-dock`), màn hẹp thì panel nằm đè. Đổi qua lại **không mất dữ liệu đang nhập** |
 | `AssistantPanel` (`floating/docked/fullscreen`), `AssistantLauncher` (`state`), `AssistantWelcome`, `SuggestionChips`, `ChatMessage`, `ChatComposer` | Trợ lý AI. Nút mở là linh vật `RobotAvatar`; app truyền `state="thinking"` khi trợ lý đang trả lời |
 | `RobotAvatar` (`state`: idle/thinking/searching/listening/speaking/working/happy/error/sleeping, `size`, `interactive`, `antenna`) | Đầu robot hoạt hình (thư viện `robot-heads`, canvas). Màu vỏ/màn hình/viền đọc từ token `primary`/`primary-fg`/`primary-subtle` nên tự đổi theo theme và màu thương hiệu; chỉ vẽ phía client, `aria-hidden` |
 | `SegmentedControl`, `ColorSwatchPicker`, `AppearancePanel` | Tùy chọn dạng phân đoạn / chọn màu / bảng cấu hình giao diện. Trong `AppearancePanel` mỗi lựa chọn là một thẻ có **hình mô phỏng** (sáng/tối, vị trí menu, mật độ, cỡ chữ, bo góc, nền, dải xám…); thêm tùy chọn mới thì thêm cả hình mô phỏng |
@@ -143,6 +144,11 @@ export default async function RootLayout({ children }) {
 | `apps-raw-control` | `<button>`, `<input>`, `<select>`, `<textarea>` | `apps/*` |
 | `apps-radix-direct` / depcruise `apps-ui-via-public-api` | Import Radix hoặc ruột `@kb/ui` | `apps/*` |
 | `apps-row-menu` | Tự dựng menu "…" (`MoreHorizontal`) – thao tác trên dòng dùng `RowActions` | `apps/*` |
+| `apps-dialog-toggle-off` | `allowPresentationToggle={false}` – popup phải giữ nút chuyển cửa sổ ↔ panel | `apps/*` |
+| `apps-raw-table` | `<table>` tự viết – dùng `DataTable` / `PermissionMatrix` | `apps/*` |
+| `apps-viewport-layout` | `sm:`/`md:`/`lg:`/`xl:`/`max-sm:` – bố cục theo màn hình. Dùng `Grid` hoặc `cq-sm/md/lg/xl:`, `cq-max-sm:` (theo vùng nội dung) | `apps/*` trừ `features/**/shell` |
+| `apps-svg-selector` | `[&>svg]:…` tự chỉnh icon – dùng `leftIcon`/`rightIcon`, `IconTile`, `Badge icon` | `apps/*` |
+| `apps-icon-tile` | Tự ghép ô icon `justify-center` + `bg-*-subtle` – dùng `IconTile` | `apps/*` |
 | `apps-big-skeleton` | `<Skeleton className="h-64…">` nguyên khối – dùng `PageLoading` / `Skeleton*` đúng dáng | `apps/*` |
 
 Thoát hiểm (rất hiếm, reviewer phải đồng ý): comment `kb-allow-raw: <lý do cụ thể>` trên cùng dòng hoặc dòng ngay trên.

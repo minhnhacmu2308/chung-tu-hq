@@ -155,6 +155,24 @@ describe("Dialog", () => {
     expect(screen.getByRole("dialog", { name: "Panel" })).toBeInTheDocument();
   });
 
+  it("dạng panel đẩy trang chính vào (lề phải = bề rộng panel); đổi sang cửa sổ hoặc đóng thì trả lại", async () => {
+    const dock = () => document.documentElement.style.getPropertyValue("--kb-dialog-dock");
+    render(
+      <Dialog defaultPresentation="panel">
+        <DialogTrigger asChild><Button>Mở panel</Button></DialogTrigger>
+        <DialogContent title="Panel">x</DialogContent>
+      </Dialog>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Mở panel" }));
+    expect(dock()).not.toBe("0px");
+    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng cửa sổ" }));
+    expect(dock()).toBe("0px");
+    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng panel bên phải" }));
+    expect(dock()).not.toBe("0px");
+    await userEvent.click(screen.getByRole("button", { name: "Đóng" }));
+    expect(dock()).toBe("0px");
+  });
+
   it("dạng cửa sổ: phủ nền, bấm lớp phủ thì đóng", async () => {
     setup();
     await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));

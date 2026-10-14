@@ -124,7 +124,7 @@ export function SkeletonText({ lines = 3, className }: { lines?: number; classNa
 /** Hàng thẻ chỉ số (StatCard). */
 export function SkeletonStats({ count = 4, className }: { count?: number; className?: string }) {
   return (
-    <div aria-hidden="true" className={cn("grid grid-cols-2 gap-4 xl:grid-cols-4", className)}>
+    <div aria-hidden="true" className={cn("grid grid-cols-2 gap-4 cq-xl:grid-cols-4", className)}>
       {Array.from({ length: count }, (_, i) => (
         <Card key={i} className="flex items-start justify-between gap-3 p-5">
           <div className="flex flex-1 flex-col gap-2">
@@ -224,8 +224,8 @@ export function PageLoading({ variant = "dashboard", label, className }: PageLoa
       {variant === "dashboard" && (
         <>
           <SkeletonStats />
-          <div className="grid gap-6 lg:grid-cols-3">
-            <SkeletonCard lines={6} className="lg:col-span-2" />
+          <div className="grid gap-6 cq-lg:grid-cols-3">
+            <SkeletonCard lines={6} className="cq-lg:col-span-2" />
             <SkeletonCard lines={3} />
           </div>
         </>
@@ -239,7 +239,7 @@ export function PageLoading({ variant = "dashboard", label, className }: PageLoa
       {variant === "detail" && (
         <>
           <Skeleton aria-hidden="true" className="h-12" />
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-6 cq-lg:grid-cols-2">
             <SkeletonCard lines={8} />
             <SkeletonCard lines={8} />
           </div>

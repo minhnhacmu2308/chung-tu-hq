@@ -8,7 +8,8 @@ export type ReasonDialogProps = {
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: ReactNode;
-  icon?: ReactNode;
+  /** Icon đầu popup – bắt buộc như mọi popup của hệ thống. */
+  icon: ReactNode;
   confirmLabel: string;
   /** "danger" cho thao tác chặn khách (khóa, thu hồi). */
   tone?: "primary" | "danger";
@@ -50,7 +51,7 @@ export function ReasonDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={title} size="sm" allowPresentationToggle={false} {...(icon ? { icon } : {})} {...(description ? { description } : {})}>
+      <DialogContent title={title} size="sm" icon={icon} {...(description ? { description } : {})}>
         <form
           noValidate
           onSubmit={(e) => {

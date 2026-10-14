@@ -61,7 +61,7 @@ function EditPlanDialog({ plan, onClose }: { plan: AdminPlan | null; onClose: ()
 
   return (
     <Dialog open={plan !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={`Sửa gói ${plan?.name ?? ""}`} size="sm" icon={<Pencil className="h-4 w-4" />} allowPresentationToggle={false}>
+      <DialogContent title={`Sửa gói ${plan?.name ?? ""}`} size="sm" icon={<Pencil className="h-4 w-4" />}>
         <form
           noValidate
           onSubmit={(e) => {

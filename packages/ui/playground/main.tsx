@@ -12,7 +12,7 @@ import {
   Stepper, WorkflowDiagram, type FlowEdge, type FlowNode,
   Breadcrumb, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   SidebarMobileTrigger, Toaster, toast, UiLocaleProvider,
-  BrandMark, AiBackdrop, AiScanCard, CountUp, FormSection, StatCard, toastPromise,
+  BrandMark, AiBackdrop, AiScanCard, CountUp, FormSection, IconTile, StatCard, toastPromise,
   RowActions, Loader, LoadingDots, LoadingOverlay, LoadingState, SkeletonCard, SkeletonForm, SkeletonList, SkeletonStats, SkeletonTable,
 } from "../src/index.js";
 import { Showcase } from "./showcase.js";
@@ -155,7 +155,7 @@ function Demo() {
           <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} />
         </DialogContent>
       </Dialog>
-      <main className="min-w-0 flex-1 p-6">
+      <main className="@container min-w-0 flex-1 p-6">
         <Stack gap="lg">
           <div className="flex items-center gap-2">
             <SidebarMobileTrigger onClick={() => setMobileNav(true)} expanded={mobileNav} />
@@ -307,6 +307,19 @@ function Demo() {
             <StatCard icon={<Send />} tone="success" label="Tỷ lệ luồng xanh" value="67%" hint="4/6 tờ khai đã phân luồng" />
             <StatCard icon={<Sparkles />} tone="info" label="Đang tải" value={0} loading />
           </Grid>
+          <Card>
+            <CardHeader>
+              <CardTitle>IconTile – ô icon đầu thẻ / đầu dòng</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-3">
+              <IconTile icon={<FolderOpen />} />
+              <IconTile icon={<FileCheck2 />} tone="danger" size="md" />
+              <IconTile icon={<Send />} tone="success" size="sm" />
+              <IconTile icon={<Sparkles />} tone="warning" />
+              <IconTile icon={<Sparkles />} tone="info" />
+              <IconTile icon={<Sparkles />} tone="neutral" />
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader className="pb-5">
               <CardTitle>FormSection – form chia nhóm</CardTitle>

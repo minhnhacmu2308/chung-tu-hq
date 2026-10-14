@@ -73,6 +73,7 @@ export { AiBackdrop, AiScanCard, type AiBackdropProps, type AiScanCardProps, typ
 export { CountUp, type CountUpProps } from "./components/count-up.js";
 export { BrandMark, type BrandMarkProps } from "./components/brand-mark.js";
 export { StatCard, type StatCardProps } from "./components/stat-card.js";
+export { IconTile, type IconTileProps } from "./components/icon-tile.js";
 export { FormSection, type FormSectionProps } from "./components/form-section.js";
 export { RowActions, type RowAction, type RowActionsProps } from "./components/row-actions.js";
 export {

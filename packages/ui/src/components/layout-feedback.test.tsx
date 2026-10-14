@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, Grid, PageHeader, Stack } fro
 describe("Grid / Stack", () => {
   it("Grid tạo class cột tĩnh cho từng breakpoint", () => {
     const { container } = render(<Grid cols={{ base: 1, md: 2, lg: 4 }} gap="lg" />);
-    expect(container.firstChild).toHaveClass("grid", "grid-cols-1", "md:grid-cols-2", "lg:grid-cols-4", "gap-6");
+    expect(container.firstChild).toHaveClass("grid", "grid-cols-1", "cq-md:grid-cols-2", "cq-lg:grid-cols-4", "gap-6");
   });
 
   it("Stack hướng ngang, căn giữa, giãn hai đầu", () => {

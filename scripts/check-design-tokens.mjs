@@ -15,7 +15,7 @@ const ALLOW_RAW_COLOR = [/^packages\/ui\/src\/styles\/tokens\.css$/, /^packages\
 const PALETTE = "slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose";
 const UTIL = "bg|text|border|border-[trblxy]|ring|ring-offset|fill|stroke|from|via|to|outline|decoration|divide|placeholder|accent|caret|shadow";
 
-/** @type {{id:string, scope:"all"|"apps", test:RegExp, msg:string, rawColor?:boolean}[]} */
+/** @type {{id:string, scope:"all"|"apps", test:RegExp, msg:string, rawColor?:boolean, skipPath?:RegExp}[]} */
 export const RULES = [
   { id: "raw-hex", scope: "all", rawColor: true, test: /(^|[^\w&/])#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})(?![\w-])/, msg: "Mã màu hex. Dùng token: bg-surface, text-fg-muted, bg-primary…" },
   { id: "raw-color-fn", scope: "all", rawColor: true, test: /\b(rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(/, msg: "Hàm màu thô. Định nghĩa màu chỉ trong tokens.css." },
@@ -28,6 +28,11 @@ export const RULES = [
   { id: "apps-raw-control", scope: "apps", test: /<(button|input|select|textarea)\b/, msg: "Phần tử điều khiển thô. Dùng Button/Input/Select/Textarea/Checkbox từ @kb/ui." },
   { id: "apps-radix-direct", scope: "apps", test: /from\s+["']@radix-ui\//, msg: "Import Radix trực tiếp. Dùng component đã bọc trong @kb/ui." },
   { id: "apps-row-menu", scope: "apps", test: /\bMoreHorizontal\b/, msg: 'Menu "…" tự dựng. Thao tác trên dòng dùng RowActions của @kb/ui (icon hiện khi rê chuột + menu đủ thao tác).' },
+  { id: "apps-dialog-toggle-off", scope: "apps", test: /allowPresentationToggle=\{false\}/, msg: "Tắt nút chuyển cửa sổ ↔ panel của popup. Mọi popup giữ nút này để người dùng tự chọn dạng hiển thị." },
+  { id: "apps-raw-table", scope: "apps", test: /<table\b/, msg: "Bảng tự viết. Danh sách dùng DataTable; ma trận vai trò × quyền dùng PermissionMatrix (components/common)." },
+  { id: "apps-viewport-layout", scope: "apps", skipPath: /\/shell\//, test: /(?<![\w:-])(?:max-)?(?:sm|md|lg|xl|2xl):(?=[a-z-])/, msg: "Bố cục theo bề rộng MÀN HÌNH – panel neo bên phải/popup hẹp sẽ làm thẻ, form chật. Dùng Grid cols={{ base, md, xl }} hoặc mốc theo vùng nội dung cq-sm/cq-md/cq-lg/cq-xl/cq-max-sm. Chỉ khung ứng dụng (features/**/shell) được dùng sm:/md:/lg:." },
+  { id: "apps-svg-selector", scope: "apps", test: /\[&>svg\]/, msg: "Tự chỉnh cỡ icon bằng [&>svg]. Icon trong nút dùng leftIcon/rightIcon của Button; ô icon dùng IconTile; nhãn có icon dùng Badge icon." },
+  { id: "apps-icon-tile", scope: "apps", test: /className="[^"]*(?:justify-center[^"]*bg-(?:primary|success|warning|danger|info|neutral)-subtle|bg-(?:primary|success|warning|danger|info|neutral)-subtle[^"]*justify-center)/, msg: "Tự dựng ô icon nền dịu. Dùng IconTile của @kb/ui." },
   { id: "apps-big-skeleton", scope: "apps", test: /<Skeleton\b[^>]*className="[^"]*\bh-(?:6[4-9]|[7-9]\d|\d{3,})\b/, msg: "Khung tải nguyên khối. Dùng khung tải đúng dáng: PageLoading / SkeletonCard / SkeletonTable / SkeletonForm / SkeletonList / SkeletonStats." },
 ];
 
@@ -47,6 +52,7 @@ export function checkSource(path, text) {
     for (const r of RULES) {
       if (r.scope === "apps" && !inApps) continue;
       if (r.rawColor && rawColorAllowed) continue;
+      if (r.skipPath?.test(path)) continue;
       if (r.test.test(line)) out.push({ path, line: i + 1, rule: r.id, msg: r.msg, text: line.trim().slice(0, 160) });
     }
   });

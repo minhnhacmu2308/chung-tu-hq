@@ -19,7 +19,7 @@ const rowLink =
 function TodoRow({ d }: { d: Dossier }) {
   return (
     <li>
-      <Link href={`/dossiers/${d.id}`} className={`${rowLink} flex-col gap-2 sm:flex-row sm:items-center sm:gap-4`}>
+      <Link href={`/dossiers/${d.id}`} className={`${rowLink} flex-col gap-2 cq-sm:flex-row cq-sm:items-center cq-sm:gap-4`}>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs text-fg-muted">{d.code}</span>
@@ -34,7 +34,7 @@ function TodoRow({ d }: { d: Dossier }) {
         <div className="flex flex-wrap items-center gap-2">
           <DossierStatusBadge status={d.status} />
           <DueBadge dossier={d} />
-          <ArrowRight className="hidden h-4 w-4 text-fg-subtle sm:block" aria-hidden="true" />
+          <ArrowRight className="hidden h-4 w-4 text-fg-subtle cq-sm:block" aria-hidden="true" />
         </div>
       </Link>
     </li>
@@ -121,7 +121,7 @@ export function DashboardPage() {
       )}
 
       <Grid cols={{ base: 1, lg: 3 }} gap="lg" stagger>
-        <Card className="lg:col-span-2">
+        <Card className="cq-lg:col-span-2">
           <SectionHeader title="Cần xử lý" description="Sắp theo hạn khai, gần nhất lên đầu." href="/dossiers" linkLabel="Xem tất cả" />
           <CardContent>
             {dossiers.isLoading ? (
@@ -189,7 +189,7 @@ export function DashboardPage() {
           ) : recent.length === 0 ? (
             <EmptyState title="Chưa có tờ khai nào được truyền" description="Tờ khai đã truyền qua Customs Hub sẽ hiện ở đây kèm kết quả phân luồng." />
           ) : (
-            <ul className="-mx-3 grid grid-cols-1 gap-x-6 md:grid-cols-2">
+            <ul className="-mx-3 grid grid-cols-1 gap-x-6 cq-md:grid-cols-2">
               {recent.map((d) => (
                 <li key={d.id}>
                   <Link href={`/dossiers/${d.id}?step=submit`} className={`${rowLink} items-center gap-3`}>

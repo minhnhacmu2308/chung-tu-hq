@@ -24,20 +24,22 @@ export function CardFooter({ className, ...props }: ComponentProps<"div">) {
 
 /* ---------------- Grid ---------------- */
 // Class phải là chuỗi tĩnh để Tailwind quét được – không ghép chuỗi động.
+// sm/md/lg/xl là mốc theo VÙNG NỘI DUNG (cq-*, styles/index.css), không theo màn hình: panel neo bên phải
+// hay popup hẹp thì lưới tự xuống hàng. Cần một tổ tiên `@container` (shell <main>, thân DialogContent).
 
 type Cols = 1 | 2 | 3 | 4 | 6 | 12;
 const COLS: Record<"base" | "sm" | "md" | "lg" | "xl", Record<Cols, string>> = {
   base: { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4", 6: "grid-cols-6", 12: "grid-cols-12" },
-  sm: { 1: "sm:grid-cols-1", 2: "sm:grid-cols-2", 3: "sm:grid-cols-3", 4: "sm:grid-cols-4", 6: "sm:grid-cols-6", 12: "sm:grid-cols-12" },
-  md: { 1: "md:grid-cols-1", 2: "md:grid-cols-2", 3: "md:grid-cols-3", 4: "md:grid-cols-4", 6: "md:grid-cols-6", 12: "md:grid-cols-12" },
-  lg: { 1: "lg:grid-cols-1", 2: "lg:grid-cols-2", 3: "lg:grid-cols-3", 4: "lg:grid-cols-4", 6: "lg:grid-cols-6", 12: "lg:grid-cols-12" },
-  xl: { 1: "xl:grid-cols-1", 2: "xl:grid-cols-2", 3: "xl:grid-cols-3", 4: "xl:grid-cols-4", 6: "xl:grid-cols-6", 12: "xl:grid-cols-12" },
+  sm: { 1: "cq-sm:grid-cols-1", 2: "cq-sm:grid-cols-2", 3: "cq-sm:grid-cols-3", 4: "cq-sm:grid-cols-4", 6: "cq-sm:grid-cols-6", 12: "cq-sm:grid-cols-12" },
+  md: { 1: "cq-md:grid-cols-1", 2: "cq-md:grid-cols-2", 3: "cq-md:grid-cols-3", 4: "cq-md:grid-cols-4", 6: "cq-md:grid-cols-6", 12: "cq-md:grid-cols-12" },
+  lg: { 1: "cq-lg:grid-cols-1", 2: "cq-lg:grid-cols-2", 3: "cq-lg:grid-cols-3", 4: "cq-lg:grid-cols-4", 6: "cq-lg:grid-cols-6", 12: "cq-lg:grid-cols-12" },
+  xl: { 1: "cq-xl:grid-cols-1", 2: "cq-xl:grid-cols-2", 3: "cq-xl:grid-cols-3", 4: "cq-xl:grid-cols-4", 6: "cq-xl:grid-cols-6", 12: "cq-xl:grid-cols-12" },
 };
 const GAP = { none: "gap-0", xs: "gap-1", sm: "gap-2", md: "gap-4", lg: "gap-6", xl: "gap-8" } as const;
 type Gap = keyof typeof GAP;
 
 export type GridProps = ComponentProps<"div"> & {
-  /** Số cột; dùng object cho responsive: { base: 1, md: 2, lg: 4 }. */
+  /** Số cột; dùng object cho responsive: { base: 1, md: 2, lg: 4 } – mốc đo theo vùng nội dung, không theo màn hình. */
   cols?: Cols | Partial<Record<keyof typeof COLS, Cols>>;
   gap?: Gap;
   /** Các ô lần lượt trồi lên khi lưới xuất hiện (tắt khi người dùng bật giảm chuyển động). */

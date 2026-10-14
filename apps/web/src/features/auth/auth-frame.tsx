@@ -22,8 +22,8 @@ const SCAN_FIELDS = [
  */
 export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; robot?: RobotAvatarState }) {
   return (
-    <div className="grid min-h-dvh motion-safe:animate-fade-in md:grid-cols-2">
-      <div className="relative hidden overflow-hidden bg-primary p-10 text-primary-fg md:block lg:p-16">
+    <div className="grid min-h-dvh motion-safe:animate-fade-in cq-md:grid-cols-2">
+      <div className="relative hidden overflow-hidden bg-primary p-10 text-primary-fg cq-md:block cq-lg:p-16">
         <AiBackdrop />
         <div className="stagger-children relative mx-auto flex h-full max-w-xl flex-col justify-between gap-8">
           <div className="flex items-center gap-2 text-lg font-semibold">
@@ -32,10 +32,10 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
             </span>
             KhaiBáo AI
           </div>
-          <AiScanCard title="COMMERCIAL INVOICE" fields={SCAN_FIELDS} className="origin-left lg:scale-125 xl:scale-150" />
+          <AiScanCard title="COMMERCIAL INVOICE" fields={SCAN_FIELDS} className="origin-left cq-lg:scale-125 cq-xl:scale-150" />
           <div className="flex flex-col gap-5">
-            <p className="text-2xl font-semibold leading-snug lg:text-3xl">Từ bộ chứng từ đến tờ khai hải quan trong một luồng.</p>
-            <ul className="stagger-children flex flex-col gap-3 text-sm lg:text-base">
+            <p className="text-2xl font-semibold leading-snug cq-lg:text-3xl">Từ bộ chứng từ đến tờ khai hải quan trong một luồng.</p>
+            <ul className="stagger-children flex flex-col gap-3 text-sm cq-lg:text-base">
               {POINTS.map((p) => (
                 <li key={p.text} className="flex items-center gap-3">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-hover" aria-hidden="true">
@@ -50,11 +50,11 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
         </div>
       </div>
       {/* Form giữ bề rộng dễ đọc và canh giữa theo chiều dọc dù màn hình rộng tới đâu. */}
-      <div className="flex items-center justify-center p-6 sm:p-10">
+      <div className="flex items-center justify-center p-6 cq-sm:p-10">
       <div className="stagger-children flex w-full max-w-lg flex-col gap-6">
         {/* Hàng đầu: logo (chỉ mobile – desktop đã có ở panel trái) + linh vật. -mb kéo tiêu đề form lên sát hơn. */}
         <div className="-mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-base font-semibold text-fg md:invisible">
+          <div className="flex items-center gap-2 text-base font-semibold text-fg cq-md:invisible">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg">
               <BrandMark small decorative className="h-6 w-6" />
             </span>

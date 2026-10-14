@@ -121,13 +121,13 @@ function ComposeDialog({ open, onOpenChange, planNames }: { open: boolean; onOpe
               <Textarea value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} rows={4} maxLength={1000} />
             </Field>
             {draft.kind === "MAINTENANCE" && (
-              <Field label="Ngày bảo trì" required className="md:max-w-xs" hint="Giờ cụ thể ghi trong nội dung." {...(errors.maintenanceDate ? { error: errors.maintenanceDate } : {})}>
+              <Field label="Ngày bảo trì" required className="cq-md:max-w-xs" hint="Giờ cụ thể ghi trong nội dung." {...(errors.maintenanceDate ? { error: errors.maintenanceDate } : {})}>
                 <DatePicker value={draft.maintenanceDate} onChange={(maintenanceDate) => setDraft({ ...draft, maintenanceDate })} />
               </Field>
             )}
             <Field
               label="Gửi tới"
-              className="md:max-w-xs"
+              className="cq-md:max-w-xs"
               hint={recipients === undefined ? "Đang đếm doanh nghiệp nhận…" : `${formatNumber(recipients)} doanh nghiệp sẽ nhận (không tính doanh nghiệp đang tạm khóa).`}
             >
               <Select

@@ -443,7 +443,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         <div className="min-w-0 flex-1">
           <p className="text-xs text-fg-muted">Tổng thuế phải nộp dự kiến</p>
           <p className="text-lg font-semibold tabular-nums text-fg">{formatVnd(totalTax)}</p>
-          {totalTax === "0" && <p className="hidden text-xs text-fg-subtle sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%) – xem tab Thuế & chính sách</p>}
+          {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%) – xem tab Thuế & chính sách</p>}
         </div>
         <Button variant="ghost" onClick={() => goTo("ocr")}>
           Quay lại OCR

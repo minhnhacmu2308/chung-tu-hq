@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, Skeleton, Stack, toast } from "@kb/ui";
+import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, IconTile, Skeleton, Stack, toast } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Building2, FileSpreadsheet, KeyRound, PlugZap, Search } from "lucide-react";
 import type { ReactNode } from "react";
@@ -14,10 +14,10 @@ const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neut
   NOT_CONFIGURED: { tone: "neutral", label: "Chưa cấu hình" },
 };
 const ICON: Record<Integration["id"], ReactNode> = {
-  HSCODEPRO: <Search className="h-5 w-5" />,
-  CUSTOMS_HUB: <Building2 className="h-5 w-5" />,
-  AI_PROVIDER: <Bot className="h-5 w-5" />,
-  EINVOICE: <FileSpreadsheet className="h-5 w-5" />,
+  HSCODEPRO: <Search />,
+  CUSTOMS_HUB: <Building2 />,
+  AI_PROVIDER: <Bot />,
+  EINVOICE: <FileSpreadsheet />,
 };
 
 function IntegrationCard({ it }: { it: Integration }) {
@@ -35,9 +35,7 @@ function IntegrationCard({ it }: { it: Integration }) {
     <Card className="flex flex-col">
       <CardHeader>
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary-subtle text-primary-subtle-fg" aria-hidden="true">
-            {ICON[it.id]}
-          </span>
+          <IconTile icon={ICON[it.id]} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle as="h3">{it.name}</CardTitle>

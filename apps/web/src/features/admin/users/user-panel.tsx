@@ -15,11 +15,11 @@ import { useAdminSession } from "../shell/use-admin-session";
 import { availableUserActions, type UserAction } from "./user-actions";
 
 export const USER_ACTION_META: Record<UserAction, { label: string; icon: ReactNode; danger?: boolean }> = {
-  reset: { label: "Gửi email đặt lại mật khẩu", icon: <KeyRound /> },
-  verify: { label: "Gửi lại email xác thực", icon: <MailCheck /> },
-  revoke: { label: "Đăng xuất mọi phiên", icon: <LogOut /> },
-  disable: { label: "Khóa tài khoản", icon: <Lock />, danger: true },
-  enable: { label: "Mở khóa tài khoản", icon: <LockOpen /> },
+  reset: { label: "Gửi email đặt lại mật khẩu", icon: <KeyRound className="h-4 w-4" /> },
+  verify: { label: "Gửi lại email xác thực", icon: <MailCheck className="h-4 w-4" /> },
+  revoke: { label: "Đăng xuất mọi phiên", icon: <LogOut className="h-4 w-4" /> },
+  disable: { label: "Khóa tài khoản", icon: <Lock className="h-4 w-4" />, danger: true },
+  enable: { label: "Mở khóa tài khoản", icon: <LockOpen className="h-4 w-4" /> },
 };
 
 /** Hộp xác nhận (kèm lý do) cho một thao tác trên tài khoản. Dùng chung cho bảng và panel. */
@@ -49,6 +49,7 @@ export function UserActionDialog({ user, action, onClose }: { user: AdminUser; a
       open={action !== null}
       onOpenChange={(o) => !o && onClose()}
       title={meta ? `${meta.label}?` : ""}
+      icon={meta?.icon ?? <KeyRound className="h-4 w-4" />}
       description={`${user.name} · ${user.email}`}
       confirmLabel={meta?.label ?? ""}
       tone={meta?.danger ? "danger" : "primary"}
@@ -133,8 +134,7 @@ export function UserPanel({ user }: { user: AdminUser }) {
           <h3 className="text-sm font-semibold text-fg">Thao tác hỗ trợ</h3>
           <div className="flex flex-col gap-2">
             {actions.map((a) => (
-              <Button key={a} variant={USER_ACTION_META[a].danger ? "danger" : "secondary"} className="justify-start" onClick={() => setAction(a)}>
-                <span aria-hidden="true" className="inline-flex [&>svg]:h-4 [&>svg]:w-4">{USER_ACTION_META[a].icon}</span>
+              <Button key={a} variant={USER_ACTION_META[a].danger ? "danger" : "secondary"} className="justify-start" leftIcon={USER_ACTION_META[a].icon} onClick={() => setAction(a)}>
                 {USER_ACTION_META[a].label}
               </Button>
             ))}

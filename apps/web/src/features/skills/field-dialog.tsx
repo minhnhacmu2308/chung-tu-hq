@@ -98,14 +98,14 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
                 </Field>
               )}
               {!mapping && (
-                <Field label="Nhãn thường gặp trên chứng từ (alias)" hint="Cách nhau bằng dấu phẩy" className="md:col-span-2">
+                <Field label="Nhãn thường gặp trên chứng từ (alias)" hint="Cách nhau bằng dấu phẩy" className="cq-md:col-span-2">
                   <Input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Container No., CNTR No., Số cont" />
                 </Field>
               )}
               <Field
                 label={mapping ? "Quy tắc lấy giá trị" : "Ánh xạ chỉ tiêu tờ khai"}
                 hint={mapping ? "Dạng: Chứng từ › Trường; ghi chú điều kiện nếu có" : "Bỏ trống nếu chỉ dùng để đối chiếu"}
-                className="md:col-span-2"
+                className="cq-md:col-span-2"
               >
                 <Input
                   value={draft.declarationField ?? ""}

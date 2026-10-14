@@ -2,16 +2,8 @@ import type { ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { CountUp } from "./count-up.js";
 import { Skeleton, type Tone } from "./feedback.js";
+import { IconTile } from "./icon-tile.js";
 import { Card } from "./layout.js";
-
-const CHIP: Record<Tone, string> = {
-  neutral: "bg-neutral-subtle text-neutral-subtle-fg",
-  primary: "bg-primary-subtle text-primary-subtle-fg",
-  success: "bg-success-subtle text-success-subtle-fg",
-  warning: "bg-warning-subtle text-warning-subtle-fg",
-  danger: "bg-danger-subtle text-danger-subtle-fg",
-  info: "bg-info-subtle text-info-subtle-fg",
-};
 
 export type StatCardProps = {
   label: string;
@@ -44,11 +36,7 @@ export function StatCard({ label, value, hint, hintTone = "default", icon, tone 
         )}
         {hint && <p className={cn("text-xs", hintTone === "danger" ? "text-danger-subtle-fg" : "text-fg-subtle")}>{hint}</p>}
       </div>
-      {icon && (
-        <span aria-hidden="true" className={cn("inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md [&>svg]:h-5 [&>svg]:w-5", CHIP[tone])}>
-          {icon}
-        </span>
-      )}
+      {icon && <IconTile icon={icon} tone={tone} />}
     </Card>
   );
 }

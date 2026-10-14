@@ -42,11 +42,11 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
   return (
     <div className={cn("flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2", className)}>
       {/* Màn nhỏ: gọn thành 1 dòng "Bước 3/6 · OCR & kiểm tra" (ẩn với trình đọc màn hình vì danh sách đầy đủ vẫn đọc được) */}
-      <p aria-hidden="true" className="min-w-0 flex-1 truncate text-sm sm:hidden">
+      <p aria-hidden="true" className="min-w-0 flex-1 truncate text-sm cq-sm:hidden">
         <span className="text-fg-muted">{t.stepOf.replace("{n}", String(viewingIndex + 1)).replace("{total}", String(steps.length))} · </span>
         <span className="font-medium text-fg">{steps[viewingIndex]?.label}</span>
       </p>
-      <nav aria-label={label ?? t.nav} className="min-w-0 flex-1 overflow-x-auto max-sm:sr-only">
+      <nav aria-label={label ?? t.nav} className="min-w-0 flex-1 overflow-x-auto cq-max-sm:sr-only">
         <ol className="flex items-center gap-1">
           {steps.map((s, i) => {
             const state = i < currentIndex ? "done" : i === currentIndex ? "current" : "todo";
@@ -79,7 +79,7 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
                 ) : (
                   <span className={cn("flex items-center gap-2 rounded-md px-2 py-1", isViewing && "bg-primary-subtle")}>{inner}</span>
                 )}
-                {i < steps.length - 1 && <span aria-hidden="true" className={cn("mx-0.5 h-px w-3 shrink-0 xl:mx-1 xl:w-6", i < currentIndex ? "bg-primary" : "bg-border-strong")} />}
+                {i < steps.length - 1 && <span aria-hidden="true" className={cn("mx-0.5 h-px w-3 shrink-0 cq-xl:mx-1 cq-xl:w-6", i < currentIndex ? "bg-primary" : "bg-border-strong")} />}
               </li>
             );
           })}

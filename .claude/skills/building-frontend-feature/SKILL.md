@@ -47,7 +47,10 @@ apps/web/src/
 | Không tải được dữ liệu | `LoadError` (`@/components/common/load-error`) có nút Thử lại | Để trống hoặc skeleton mãi |
 | Báo kết quả một thao tác | `toast({ tone, title })`; thao tác dài: `toastPromise(promise, { loading, success, error })` | `alert()`, toast riêng cho từng bước |
 | Thao tác ghi dữ liệu (`useMutation`) | LUÔN có `onError` – mặc định `toastMutationError("Không lưu được …")` từ `@/lib/mutation-error` | Mutation chỉ có `onSuccess` (thất bại trong im lặng) |
-| Popup / panel bên phải | `Dialog` + `DialogContent` + `DialogFooter`; nội dung chính cần chiếm hết chỗ (sơ đồ, khung xem) thêm class `dialog-fill` | Đặt `h-160`/`max-h-*` cứng cho nội dung trong dialog |
+| Popup / panel bên phải | `Dialog` + `DialogContent` (luôn có `title` + `icon`) + `DialogFooter`; giữ nút chuyển cửa sổ ↔ panel; nội dung chính cần chiếm hết chỗ (sơ đồ, khung xem) thêm class `dialog-fill` | Đặt `h-160`/`max-h-*` cứng cho nội dung trong dialog; `allowPresentationToggle={false}` (lint `apps-dialog-toggle-off` chặn) |
+| Icon trong nút | `leftIcon` / `rightIcon` của `Button` | Bọc icon trong `span` + `[&>svg]:…` (lint `apps-svg-selector` chặn) |
+| Ô icon nền dịu ở đầu thẻ / đầu dòng | `IconTile` (`tone`, `size`) | Tự ghép `span` + `bg-*-subtle` (lint `apps-icon-tile` chặn) |
+| Bảng vai trò × quyền | `PermissionMatrix` (`@/components/common/permission-matrix`) | `<table>` tự viết (lint `apps-raw-table` chặn) |
 | Phần tử dính đầu trang trong màn | class `top-shell` (tự né thanh menu khi người dùng chọn menu ở trên) | `top-4`, `top-0` |
 | Khối hiện lần lượt khi vào trang | prop `stagger` của `Grid`/`Stack` (tối đa 1–2 khối mỗi màn) | Tự viết animation, thư viện motion |
 | Logo | `BrandMark` (`small` khi ≤ 24px, `decorative` khi đứng cạnh tên) | Nhúng file SVG có mã màu |

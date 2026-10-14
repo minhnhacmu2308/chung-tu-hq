@@ -17,13 +17,13 @@ export function FieldAccuracyList({ fields }: { fields: EvaluationResult["fields
   return (
     <ul className="divide-y divide-border rounded-md border border-border">
       {sorted.map((f) => (
-        <li key={f.key} className="grid grid-cols-1 gap-2 px-4 py-3 sm:grid-cols-12 sm:items-center">
-          <div className="sm:col-span-4">
+        <li key={f.key} className="grid grid-cols-1 gap-2 px-4 py-3 cq-sm:grid-cols-12 cq-sm:items-center">
+          <div className="cq-sm:col-span-4">
             <p className="text-sm font-medium text-fg">{f.label}</p>
             <p className="font-mono text-xs text-fg-subtle">{f.key}</p>
           </div>
-          <Progress className="sm:col-span-5" value={Math.round(f.accuracy * 100)} tone={accuracyTone(f.accuracy)} aria-label={`Độ chính xác ${f.label}`} />
-          <div className="flex items-center gap-2 sm:col-span-3 sm:justify-end">
+          <Progress className="cq-sm:col-span-5" value={Math.round(f.accuracy * 100)} tone={accuracyTone(f.accuracy)} aria-label={`Độ chính xác ${f.label}`} />
+          <div className="flex items-center gap-2 cq-sm:col-span-3 cq-sm:justify-end">
             <Badge tone={accuracyTone(f.accuracy)}>{formatPercent(f.accuracy)}</Badge>
             <span className="text-xs text-fg-subtle">{f.errors} lỗi</span>
           </div>

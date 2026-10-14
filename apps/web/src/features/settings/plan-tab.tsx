@@ -59,7 +59,7 @@ export function PlanTab() {
   return (
     <Stack gap="lg">
       <Grid cols={{ base: 1, lg: 3 }}>
-        <Card className="lg:col-span-2">
+        <Card className="cq-lg:col-span-2">
           <CardHeader>
             <CardTitle>
               Gói {plan.name} <Badge tone="primary">Đang dùng</Badge>

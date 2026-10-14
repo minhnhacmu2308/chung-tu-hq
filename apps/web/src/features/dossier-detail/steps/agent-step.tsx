@@ -2,7 +2,7 @@
 // Bước 4 – AI Agent xử lý: chọn việc → điều phối (tiến trình realtime) → xác nhận mã HS → sang Review.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Combobox, createDataTableColumnHelper,
-  DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Progress, SegmentedControl, Spinner, Stack, StatusBadge, toast,
+  DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Progress, SegmentedControl, Spinner, Stack, StatusBadge, toast, IconTile
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Play, RotateCcw, Search, Workflow, XCircle } from "lucide-react";
@@ -85,7 +85,7 @@ function ModeDialog({ open, onOpenChange, onStart, pending }: { open: boolean; o
               const m = TASK_META[id];
               return (
                 <li key={id} className={on ? "flex items-start gap-3 rounded-md border border-border p-3" : "flex items-start gap-3 rounded-md border border-border p-3 opacity-50"}>
-                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary-subtle text-primary-subtle-fg" aria-hidden="true">{m.icon}</span>
+                  <IconTile icon={m.icon} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-fg">
                       {m.title} {!on && <span className="font-normal text-fg-subtle">– không chạy</span>}

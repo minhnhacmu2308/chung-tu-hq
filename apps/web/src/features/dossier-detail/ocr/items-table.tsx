@@ -62,6 +62,7 @@ export function ItemsTable({
   return (
     <div className="flex flex-col gap-2">
       <div className="relative overflow-x-auto rounded-md border border-border">
+        {/* kb-allow-raw: lưới sửa trực tiếp từng ô + tô vị trí trên chứng từ khi rê vào ô; DataTable chưa hỗ trợ ô sửa được */}
         <table className="w-full text-sm">
           <caption className="sr-only">Danh sách hàng hóa</caption>
           <thead className="bg-surface-muted text-left text-xs text-fg-muted">

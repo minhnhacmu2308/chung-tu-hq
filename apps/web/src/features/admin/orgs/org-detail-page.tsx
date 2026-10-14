@@ -53,10 +53,10 @@ function OverviewTab({ org }: { org: AdminOrgDetail }) {
           <CardDescription>Doanh nghiệp tự khai và tự sửa trong màn Tài khoản & tích hợp. MST không đổi được.</CardDescription>
         </CardHeader>
         <CardContent>
-          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <dl className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2">
             <Info label="Mã số thuế"><span className="font-mono">{org.taxCode}</span></Info>
             <Info label="Số điện thoại">{org.phone || "—"}</Info>
-            <div className="sm:col-span-2"><Info label="Địa chỉ">{org.address || "—"}</Info></div>
+            <div className="cq-sm:col-span-2"><Info label="Địa chỉ">{org.address || "—"}</Info></div>
             <Info label="Chủ sở hữu">
               {org.ownerName}
               {org.ownerEmail && <span className="block break-all text-xs text-fg-subtle">{org.ownerEmail}</span>}
@@ -106,7 +106,7 @@ function PlanTab({ org, onAction }: { org: AdminOrgDetail; onAction: (a: OrgActi
               <p className="text-sm font-medium text-fg">Hồ sơ tháng này</p>
               <QuotaMeter used={org.usage.dossiersThisMonth} limit={org.plan.dossiersPerMonth} bonus={org.quotaBonus} />
             </div>
-            <dl className="grid grid-cols-2 gap-3 rounded-md bg-surface-muted p-3 sm:grid-cols-3">
+            <dl className="grid grid-cols-2 gap-3 rounded-md bg-surface-muted p-3 cq-sm:grid-cols-3">
               <Info label="Trang đã đọc"><span className="font-semibold tabular-nums">{formatNumber(org.usage.pagesThisMonth)}</span></Info>
               <Info label="Chi phí AI"><span className="font-semibold tabular-nums">{formatVnd(org.usage.aiCostVnd)}</span></Info>
               <Info label="Chi phí / hồ sơ">

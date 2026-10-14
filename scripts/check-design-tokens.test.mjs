@@ -37,6 +37,22 @@ describe("check-design-tokens", () => {
     assert.deepEqual(rules("packages/ui/src/c.tsx", `import { MoreHorizontal } from "lucide-react"; <Skeleton className="h-96" />`), []);
   });
 
+  it("trong apps: chặn tắt nút chuyển panel của popup, bảng tự viết, tự chỉnh icon, tự dựng ô icon", () => {
+    assert.deepEqual(rules("apps/web/a.tsx", `<DialogContent title="Sửa gói" allowPresentationToggle={false}>`), ["apps-dialog-toggle-off"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<DialogContent title="Quy trình" allowPresentationToggle>`), []);
+    assert.deepEqual(rules("apps/web/a.tsx", `<table className="w-full text-sm">`), ["apps-raw-table"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<span className="inline-flex [&>svg]:h-4 [&>svg]:w-4">{icon}</span>`), ["apps-svg-selector"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<div className="grid grid-cols-1 lg:grid-cols-3">`), ["apps-viewport-layout"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Card className="lg:col-span-2">`), ["apps-viewport-layout"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<div className="grid grid-cols-1 cq-lg:grid-cols-3"><Card className="cq-lg:col-span-2">`), []);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Field className="md:max-w-xs"><span className="max-sm:sr-only">`), ["apps-viewport-layout"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Grid cols={{ base: 1, md: 2 }}><span className="cq-max-sm:sr-only">`), []);
+    assert.deepEqual(rules("apps/web/src/features/shell/app-shell.tsx", `<main className="px-4 md:px-8">`), []);
+    assert.deepEqual(rules("apps/web/a.tsx", `<span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary-subtle text-primary-subtle-fg">`), ["apps-icon-tile"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<li className="rounded-md border p-3 bg-warning-subtle">`), []); // nền dịu cho cả dòng thì được
+    assert.deepEqual(rules("packages/ui/src/c.tsx", `<table className="w-full" /> <span className="[&>svg]:h-4 justify-center bg-primary-subtle" />`), []);
+  });
+
   it("@kb/ui được dùng giá trị kích thước tùy ý và biến CSS cục bộ (không phải token)", () => {
     assert.deepEqual(rules("packages/ui/src/c.tsx", `className="max-h-[calc(100dvh-2rem)] bg-[var(--swatch)]"`), []);
   });

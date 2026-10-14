@@ -565,7 +565,7 @@ export function DataTable<TData extends RowData>({
       {showToolbar && (
         <div className="flex flex-wrap items-center gap-2">
           {searchable && (
-            <div className="relative w-full sm:w-64">
+            <div className="relative w-full cq-sm:w-64">
               <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
               <Input
                 type="search"

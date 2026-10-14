@@ -1,14 +1,15 @@
 "use client";
-import { InviteStaffInputSchema, STAFF_PERMISSIONS, type Staff, type StaffRole } from "@kb/contracts";
+import { InviteStaffInputSchema, staffCan, type AdminPermission, type Staff, type StaffRole } from "@kb/contracts";
 import {
   Alert, Avatar, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, Dialog, DialogContent,
   Badge, DialogFooter, Field, Input, PageHeader, RowActions, Select, Stack, StatusBadge,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Lock, LockOpen, ShieldOff, UserCog, UserPlus } from "lucide-react";
+import { Lock, LockOpen, ShieldOff, UserCog, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { adminKeys, changeStaffRole, inviteStaff, listStaff, resetStaffMfa, setStaffDisabled } from "@/api/admin";
 import { LoadError } from "@/components/common/load-error";
+import { PermissionMatrix } from "@/components/common/permission-matrix";
 import { formatRelative } from "@/lib/format";
 import { ACCOUNT_STATUS, PERMISSION_LABELS, PERMISSION_ORDER, STAFF_ROLE_LABELS, STAFF_ROLE_ORDER, statusLabel } from "../common/admin-display";
 import { ReasonDialog } from "../common/reason-dialog";
@@ -17,6 +18,7 @@ import { useAdminSession } from "../shell/use-admin-session";
 
 type Row = Staff & { roleLabel: string; statusText: string };
 const ROLE_OPTIONS = STAFF_ROLE_ORDER.map((r) => ({ value: r, label: STAFF_ROLE_LABELS[r] }));
+const staffAllowed = (permission: string, role: string) => staffCan(role as StaffRole, permission as AdminPermission);
 
 function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [draft, setDraft] = useState({ name: "", email: "", role: "SUPPORT" as StaffRole });
@@ -49,7 +51,7 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="Mời quản trị viên" size="sm" icon={<UserPlus className="h-4 w-4" />} description="Người được mời nhận email, tự đặt mật khẩu rồi đăng nhập ở trang đăng nhập chung." allowPresentationToggle={false}>
+      <DialogContent title="Mời quản trị viên" size="sm" icon={<UserPlus className="h-4 w-4" />} description="Người được mời nhận email, tự đặt mật khẩu rồi đăng nhập ở trang đăng nhập chung.">
         <form
           noValidate
           onSubmit={(e) => {
@@ -194,29 +196,12 @@ export function StaffPage() {
           <CardDescription>Thao tác vai trò không được làm sẽ không hiện trên màn hình. Mọi thao tác ghi đều kèm lý do và vào nhật ký quản trị.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-160 text-sm">
-              <caption className="sr-only">Quyền theo vai trò quản trị</caption>
-              <thead>
-                <tr className="border-b border-border text-left text-fg-muted">
-                  <th scope="col" className="py-2 pr-4 font-medium">Quyền</th>
-                  {STAFF_ROLE_ORDER.map((r) => <th key={r} scope="col" className="px-2 py-2 text-center font-medium">{STAFF_ROLE_LABELS[r]}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {PERMISSION_ORDER.map((p) => (
-                  <tr key={p} className="border-b border-border last:border-0">
-                    <th scope="row" className="py-2 pr-4 text-left font-normal text-fg">{PERMISSION_LABELS[p]}</th>
-                    {STAFF_ROLE_ORDER.map((r) => (
-                      <td key={r} className="px-2 py-2 text-center">
-                        {STAFF_PERMISSIONS[r].includes(p) ? <Check className="mx-auto h-4 w-4 text-success" aria-label="Có" /> : <span className="text-fg-subtle" aria-label="Không">–</span>}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PermissionMatrix
+            ariaLabel="Quyền theo vai trò quản trị"
+            permissions={PERMISSION_ORDER.map((p) => ({ id: p, label: PERMISSION_LABELS[p] }))}
+            roles={STAFF_ROLE_ORDER.map((r) => ({ id: r, label: STAFF_ROLE_LABELS[r] }))}
+            allowed={staffAllowed}
+          />
         </CardContent>
       </Card>
 

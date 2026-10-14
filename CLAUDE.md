@@ -35,7 +35,7 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 7. Không truyền tờ khai khi còn BLOCKER FAIL hoặc HS chưa xác nhận.
 8. Mọi lần gọi AI ghi `usage_events`.
 9. Dữ liệu từ ngoài (HTTP, form, AI, file, queue) parse bằng Zod trước khi dùng.
-10. Giao diện chỉ dùng component `@kb/ui` + utility token. Không mã màu, không màu Tailwind mặc định, không `dark:`, không giá trị tùy ý trong app. Thiếu gì thêm vào `@kb/ui`.
+10. Giao diện chỉ dùng component `@kb/ui` + utility token. Không mã màu, không màu Tailwind mặc định, không `dark:`, không giá trị tùy ý trong app. Thiếu gì thêm vào `@kb/ui`. Chi tiết và các lỗi hay gặp: `.claude/rules/dung-component-chung.md`.
 11. Test theo `docs/TESTING.md`; component có test a11y (axe).
 
 ## Skill dự án (`.claude/skills/`)

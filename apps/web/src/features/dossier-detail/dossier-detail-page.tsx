@@ -4,6 +4,7 @@ import {
   Breadcrumb, Button, Card, CardContent, Dialog, DialogContent, DialogFooter, DialogTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, EmptyState, PageHeader, Skeleton, Stack, Stepper, toast, WorkflowDiagram, PageLoading,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// kb-allow-raw: menu "…" cấp TRANG ở đầu hồ sơ (không phải thao tác trên dòng bảng → không dùng RowActions)
 import { Download, GitBranch, MoreHorizontal, XCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -76,6 +77,7 @@ function Header({ dossier, flowAction }: { dossier: Dossier; flowAction: ReactNo
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="secondary" size="icon" aria-label="Thao tác khác">
+                  {/* kb-allow-raw: menu "…" cấp trang, xem ghi chú ở import */}
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>

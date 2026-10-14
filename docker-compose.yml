@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kb_admin
+      POSTGRES_PASSWORD: kb_admin
+      POSTGRES_DB: khaibao
+    ports: ["5433:5432"] # 5433 vì máy dev thường đã có Postgres cục bộ ở 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kb_admin -d khaibao"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redisdata:/data"]
+  minio:
+    # MinIO chính thức không còn phát hành image công khai (10/2026); bản Bitnami legacy vẫn là MinIO, đủ cho dev.
+    image: bitnamilegacy/minio:latest
+    environment:
+      MINIO_ROOT_USER: kb_minio
+      MINIO_ROOT_PASSWORD: kb_minio_secret
+      MINIO_DEFAULT_BUCKETS: khaibao-dev
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["miniodata:/bitnami/minio/data"]
+  mailpit:
+    image: axllent/mailpit:latest
+    ports: ["8025:8025", "1025:1025"]
+volumes:
+  pgdata: {}
+  redisdata: {}
+  miniodata: {}

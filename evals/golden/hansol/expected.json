@@ -1,0 +1,18 @@
+{
+  "/invoice/no": "HSP-2610-0457",
+  "/invoice/date": "2026-10-02",
+  "/invoice/incoterm": "FCA",
+  "/invoice/currency": "USD",
+  "/invoice/totalAmount": "20850",
+  "/invoice/poNo": "AP-2609-114",
+  "/parties/seller/name": "HANSOL PRECISION CO., LTD.",
+  "/parties/seller/country": "KR",
+  "/parties/buyer/taxCode": "0316789012",
+  "/transport/billNo": "HPSEL2610078",
+  "/transport/vessel": "SITC HAIPHONG",
+  "/transport/portOfLoading": "BUSAN, KOREA",
+  "/transport/portOfDischarge": "HAIPHONG, VIETNAM",
+  "/transport/packages": "48",
+  "/transport/grossWeightKg": "3860.5",
+  "/items/length": "7"
+}

@@ -1,0 +1,94 @@
+import type { OrgId, UserId } from "../../../../shared/ids.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsSuggestionRow, LineItemRow } from "../ports.js";
+
+/** Fake mô phỏng RLS theo org; catalog_hs/exchange_rates là bảng chung (mọi org đọc). */
+export class InMemoryDeclarationUow implements DeclarationUow {
+  readonly data = {
+    lineItems: [] as LineItemRow[], suggestions: [] as HsSuggestionRow[], declarations: [] as DeclarationRow[], agentRuns: [] as AgentRunRow[],
+    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string }[],
+  };
+
+  asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: DeclarationRepos) => Promise<T>): Promise<T> {
+    const d = this.data;
+    const org = ctx.orgId as string;
+    const deny = (w: string): never => {
+      throw new Error(`new row violates row-level security policy (${w})`);
+    };
+    const clone = <X>(x: X): X => structuredClone(x);
+    const repos: DeclarationRepos = {
+      lineItems: {
+        list: async (orgId, dossierId) => clone(d.lineItems.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId).sort((a, b) => a.lineNo - b.lineNo)),
+        get: async (orgId, id) => clone(d.lineItems.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
+        upsertForDossier: async (dossierId, rows) => {
+          if (rows.some((r) => r.orgId !== org)) deny("line_items");
+          const out: LineItemRow[] = [];
+          for (const r of rows) {
+            const ex = d.lineItems.find((x) => x.orgId === org && x.dossierId === dossierId && x.lineNo === r.lineNo);
+            if (ex) {
+              Object.assign(ex, { description: r.description, quantity: r.quantity, unit: r.unit, unitPrice: r.unitPrice, amount: r.amount, origin: r.origin, invoiceHsCode: r.invoiceHsCode, updatedAt: r.updatedAt });
+              out.push(clone(ex));
+            } else {
+              d.lineItems.push(clone(r));
+              out.push(clone(r));
+            }
+          }
+          const keep = new Set(rows.map((r) => r.lineNo));
+          d.lineItems = d.lineItems.filter((x) => !(x.orgId === org && x.dossierId === dossierId && !keep.has(x.lineNo)));
+          return out.sort((a, b) => a.lineNo - b.lineNo);
+        },
+        update: async (id, patch) => {
+          const x = d.lineItems.find((y) => y.id === id && y.orgId === org);
+          if (x) Object.assign(x, clone(patch));
+        },
+      },
+      suggestions: {
+        listForItems: async (ids) => clone(d.suggestions.filter((s) => s.orgId === org && ids.includes(s.lineItemId)).sort((a, b) => b.confidence - a.confidence)),
+        replaceForItem: async (itemId, rows) => {
+          if (rows.some((r) => r.orgId !== org)) deny("hs_suggestions");
+          d.suggestions = d.suggestions.filter((s) => !(s.lineItemId === itemId && s.orgId === org)).concat(rows.map(clone));
+        },
+      },
+      declarations: {
+        latest: async (orgId, dossierId) => clone(d.declarations.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId).sort((a, b) => b.version - a.version)[0] ?? null),
+        listLatestByStatus: async (orgId, statuses) => {
+          const latest = new Map<string, DeclarationRow>();
+          for (const x of d.declarations.filter((x) => x.orgId === org && x.orgId === orgId)) if (!latest.has(x.dossierId) || latest.get(x.dossierId)!.version < x.version) latest.set(x.dossierId, x);
+          return clone([...latest.values()].filter((x) => statuses.includes(x.status)));
+        },
+        insert: async (row) => {
+          if (row.orgId !== org) deny("declarations");
+          if (d.declarations.some((x) => x.dossierId === row.dossierId && x.version === row.version)) throw new Error("duplicate key value violates unique constraint declarations_dossier_version_uq");
+          d.declarations.push(clone(row));
+        },
+        update: async (id, patch) => {
+          const x = d.declarations.find((y) => y.id === id && y.orgId === org);
+          if (x) Object.assign(x, clone(patch));
+        },
+      },
+      agentRuns: {
+        latest: async (orgId, dossierId) => clone(d.agentRuns.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId).sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0] ?? null),
+        get: async (orgId, id) => clone(d.agentRuns.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
+        insert: async (row) => void (row.orgId === org ? d.agentRuns.push(clone(row)) : deny("agent_runs")),
+        update: async (id, patch) => {
+          const x = d.agentRuns.find((y) => y.id === id && y.orgId === org);
+          if (x) Object.assign(x, clone(patch));
+        },
+      },
+      catalogHs: {
+        search: async (q, limit) => {
+          const needle = (q ?? "").toLowerCase();
+          return clone(d.catalogHs.filter((h) => !needle || h.code.includes(needle) || h.description.toLowerCase().includes(needle)).slice(0, limit));
+        },
+        get: async (code) => clone(d.catalogHs.find((h) => h.code === code) ?? null),
+        all: async () => clone(d.catalogHs),
+      },
+      exchangeRates: {
+        latest: async (currency, date) => {
+          const r = d.exchangeRates.filter((x) => x.currency === currency && x.date <= date).sort((a, b) => b.date.localeCompare(a.date))[0];
+          return r ? { rate: r.rate, date: r.date } : null;
+        },
+      },
+    };
+    return fn(repos);
+  }
+}

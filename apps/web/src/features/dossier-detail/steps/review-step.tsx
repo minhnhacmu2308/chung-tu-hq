@@ -73,7 +73,7 @@ function GeneralTab({ decl, currency }: { decl: Declaration; currency: string })
             </h3>
             <Grid cols={{ base: 1, md: 2, xl: 3 }} gap="sm">
               {fields.map((f) => (
-                <FieldTile key={f.code} field={f} currency={currency} note={SUSPECT_NOTES[f.code]} />
+                <FieldTile key={f.code} field={f} currency={currency} note={f.note ?? SUSPECT_NOTES[f.code]} />
               ))}
             </Grid>
           </section>

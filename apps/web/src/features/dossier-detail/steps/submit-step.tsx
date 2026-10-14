@@ -8,10 +8,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Circle, Clock3, KeyRound, Landmark, RotateCcw, Send, XCircle } from "lucide-react";
 import { useState } from "react";
 import { dossierKeys } from "@/api/dossiers";
-import { customsKeys, getSubmission, listCertificates, resendOperation, submitDeclaration, type PipelineRow, type PipelineStatus } from "@/api/customs";
+import { customsKeys, getSubmission, listCertificates, resendOperation, submitDeclaration, type PipelineRow, type PipelineStatus, type SubmissionView } from "@/api/customs";
 import { declarationKeys } from "@/api/declaration";
 import { formatDate, formatDateTime, formatRelative, formatTime, formatVnd } from "@/lib/format";
-import type { CustomsChannel, CustomsResult } from "@/mocks/types";
+import type { CustomsChannel } from "@/mocks/types";
 import { errorMessage, KeyValue, StepError, StepLoading } from "./declaration-parts";
 import type { StepProps } from "./types";
 
@@ -76,7 +76,7 @@ const CLEARANCE = {
   CLEARED: { text: "Đã thông quan", tone: "success" },
 } as const;
 
-function ResultCard({ result, started }: { result: Partial<CustomsResult> | null; started: boolean }) {
+function ResultCard({ result, started }: { result: SubmissionView["result"]; started: boolean }) {
   return (
     <Card>
       <CardHeader>

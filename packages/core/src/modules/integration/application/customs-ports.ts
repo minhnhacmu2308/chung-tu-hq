@@ -1,0 +1,93 @@
+// Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
+import type { CustomsOperation, DeclarationStatus, DocKind, DossierStatus, StepId, SubmissionState } from "@kb/contracts";
+import type { Clock } from "../../../shared/clock.js";
+import type { Notifier } from "../../../shared/notifier.js";
+import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
+import type { JobQueue } from "../../../shared/queue.js";
+import type { ProgressEvent } from "../../dossier/index.js";
+import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
+import type { Progress } from "../domain/state-machine.js";
+
+export type OutboxRow = { id: string; orgId: string; dossierId: string; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
+export type MessageRow = { id: string; orgId: string; dossierId: string; operation: CustomsOperation; direction: "OUT" | "IN"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
+export type ResultRow = {
+  id: string; orgId: string; dossierId: string; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
+  clearanceStatus: "WAITING" | "INSPECTING" | "CLEARED" | "REJECTED"; customsTaxVnd: string | null; state: SubmissionState; pollCount: number;
+  /** { progress, lastStatus… } – dữ liệu phụ cho máy trạng thái. */
+  raw: { progress: Progress; receiptNo?: string; lastStatus?: string } | null; updatedAt: Date;
+};
+
+export interface CustomsRepos {
+  outbox: {
+    get(orgId: string, id: string): Promise<OutboxRow | null>;
+    findByKey(orgId: string, key: string): Promise<OutboxRow | null>;
+    listForDossier(orgId: string, dossierId: string): Promise<OutboxRow[]>;
+    insert(row: OutboxRow): Promise<void>;
+    update(id: string, patch: Partial<Pick<OutboxRow, "status" | "attempts" | "lastError" | "nextAttemptAt" | "updatedAt">>): Promise<void>;
+  };
+  messages: {
+    list(orgId: string, dossierId: string): Promise<MessageRow[]>;
+    insert(row: MessageRow): Promise<void>;
+  };
+  results: {
+    get(orgId: string, dossierId: string): Promise<ResultRow | null>;
+    listForOrg(orgId: string): Promise<ResultRow[]>;
+    upsert(row: ResultRow): Promise<void>;
+  };
+}
+export interface CustomsUow {
+  asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T>;
+}
+
+export type GatewayError = { code: string; field?: string; message: string; solution?: string };
+export type GatewayStatus = { declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED"; status: string; cleared: boolean; rejected?: boolean; customsTaxVnd?: string; directives?: string[] };
+
+/** Cổng Hải quan (spec §4.7). Lỗi tạm (mạng/5xx) → throw; lỗi nghiệp vụ FPT → `errors`. */
+export interface CustomsGateway {
+  readonly name: string;
+  preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId: string }, idempotencyKey: string): Promise<{ externalId: string; declarationNo?: string; errors?: GatewayError[] }>;
+  declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }, idempotencyKey: string): Promise<{ accepted: boolean; channel?: "GREEN" | "YELLOW" | "RED"; customsTaxVnd?: string; errors?: GatewayError[] }>;
+  attachDocuments(orgId: string, msg: { externalId: string; dossierId: string; files: { name: string; bytes: Buffer }[] }, idempotencyKey: string): Promise<{ receiptNo?: string; errors?: GatewayError[] }>;
+  queryStatus(orgId: string, externalId: string, dossierId: string): Promise<GatewayStatus>;
+}
+
+/** Tờ khai + dòng hàng từ module declaration (composition root nối). */
+export type DeclarationSnapshot = { declarationId: string; version: number; status: DeclarationStatus; payload: DeclarationPayload; unconfirmedHs: number; estimatedTaxVnd: string };
+export interface DeclarationReader {
+  get(orgId: string, dossierId: string): Promise<DeclarationSnapshot | null>;
+  markSubmitted(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;
+  /** Mở lại: tờ khai DRAFT, hồ sơ NEEDS_REVIEW/review. */
+  markDraft(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;
+  /** Hồ sơ có tờ khai APPROVED/SUBMITTED (màn Khai báo Hải quan). */
+  listForCustoms(orgId: string): Promise<{ dossierId: string; status: DeclarationStatus; approvedAt: Date | null }[]>;
+}
+
+export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; status: DossierStatus; step: StepId; declarationNo: string | null; updatedAt: Date };
+export interface CustomsDossierPort {
+  get(orgId: string, dossierId: string): Promise<DossierBrief | null>;
+  update(orgId: string, dossierId: string, patch: { status?: DossierStatus; step?: StepId; declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED" }): Promise<void>;
+  documents(orgId: string, dossierId: string): Promise<{ id: string; kind: DocKind; fileName: string; storageKey: string }[]>;
+  readFile(storageKey: string): Promise<Buffer>;
+  publish(orgId: string, dossierId: string, event: ProgressEvent): Promise<void>;
+}
+export interface ValidationReader {
+  blockerFails(orgId: string, dossierId: string): Promise<number>;
+}
+export interface CertificateReader {
+  exists(orgId: string, certificateId: string): Promise<boolean>;
+}
+
+export type CustomsDeps = {
+  uow: CustomsUow;
+  queue: JobQueue;
+  gateway: CustomsGateway;
+  declarations: DeclarationReader;
+  dossiers: CustomsDossierPort;
+  validation: ValidationReader;
+  certificates: CertificateReader;
+  /** Khoảng cách giữa hai lần hỏi trạng thái (ms); gateway giả dùng ngắn để demo. */
+  pollDelayMs: number;
+  notify?: Notifier;
+  clock: Clock;
+  idGen: IdGen;
+};

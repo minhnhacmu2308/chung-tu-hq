@@ -15,7 +15,7 @@ export function SkillSamples({ skill }: { skill: Skill }) {
   const invalidate = () => qc.invalidateQueries({ queryKey: skillKeys.all });
 
   const upload = useMutation({
-    mutationFn: (files: File[]) => uploadSamples(skill.id, files.map((f) => ({ name: f.name, size: f.size }))),
+    mutationFn: (files: File[]) => uploadSamples(skill.id, files),
     onSuccess: (added) => {
       void invalidate();
       toast({ tone: "success", title: `Đã tải lên ${added.length} mẫu`, description: "Gắn nhãn xong mẫu mới được tính vào bộ đo." });

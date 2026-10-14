@@ -32,3 +32,13 @@ export async function confirmField(
 - Hàm `domain`: unit test, không mock.
 - Use case: test với fake repo in-memory; có ít nhất 1 test **org khác không đọc/ghi được**.
 - Repo: integration test với Testcontainers Postgres.
+
+## DB (Drizzle + Postgres, RLS)
+
+- Schema ở `src/db/schema/<module>.ts` (tên file = tên module); `shared.ts` có helper `id()`, `orgId()`, `timestamps()`, `money()`, `orgPolicyUsing`. Bảng nghiệp vụ: `orgId()` + index `(org_id, …)` + `pgPolicy(... to: appRole, using: orgPolicyUsing, withCheck: orgPolicyUsing)` + `.enableRLS()`.
+- `modules/<m>/infrastructure` chỉ import `db/schema/<m>.ts` và `shared.ts` (depcruise `module-infra-own-schema`).
+- Mọi truy vấn nghiệp vụ chạy trong `withCtx(db, { orgId, userId }, tx => …)`; đăng nhập/đăng ký dùng `withUser`. App kết nối bằng role `kb_app` (chịu RLS); migration/seed dùng `DATABASE_ADMIN_URL`.
+- Đổi schema: sửa file → `pnpm --filter @kb/core db:generate` → đổi tên file SQL cho dễ đọc (và sửa `drizzle/meta/_journal.json`) → đọc SQL kiểm tra policy → `pnpm db:migrate`.
+- Test repo: `*.int.test.ts` dùng `startTestDb()` (`src/db/test-db.ts`, Testcontainers) – Postgres thật, có RLS. Mỗi repo ≥ 1 test org khác không thấy dữ liệu.
+- Shared kernel `src/shared`: `Result/ok/err`, `DomainError/domainError`, id có brand (`OrgId`…), `Ctx + requireRole`, `Clock`, `Decimal/dec/toDecimalString/sumDec`, port `JobQueue`.
+- Cấu hình: `loadEnv()` (`src/config/env.ts`) parse Zod, ném lỗi liệt kê biến thiếu; biến rỗng coi như không đặt.

@@ -1,0 +1,50 @@
+{
+  "name": "@kb/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./shared": "./src/shared/index.ts",
+    "./config": "./src/config/index.ts",
+    "./db": "./src/db/index.ts",
+    "./modules/*": "./src/modules/*/index.ts",
+    "./modules/*/infrastructure": "./src/modules/*/infrastructure/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:reset": "tsx scripts/reset.ts",
+    "eval": "tsx scripts/eval.ts",
+    "eval:diff": "tsx scripts/eval.ts diff"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "@aws-sdk/client-s3": "^3.1150.0",
+    "@aws-sdk/s3-request-presigner": "^3.1150.0",
+    "@kb/contracts": "workspace:*",
+    "@node-rs/argon2": "^2.2.2",
+    "decimal.js": "^10.6.0",
+    "dotenv": "^17.0.0",
+    "drizzle-orm": "^0.45.4",
+    "fflate": "^0.8.3",
+    "ioredis": "^6.0.0",
+    "nodemailer": "^10.1.0",
+    "pdf-lib": "^1.17.1",
+    "postgres": "^3.4.9",
+    "ulid": "^3.0.2",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^12.2.1",
+    "@types/node": "^26.6.5",
+    "@types/nodemailer": "^8.0.2",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

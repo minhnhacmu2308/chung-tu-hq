@@ -9,11 +9,16 @@ module.exports = {
   forbidden: [
     {
       name: "domain-is-pure",
-      comment: "domain/ chỉ được import domain cùng module và @kb/contracts. Không DB, HTTP, SDK AI.",
+      comment: "domain/ chỉ được import domain cùng module, @kb/contracts, shared kernel thuần (Result, DomainError, ids, Decimal, Clock) và node:crypto (băm). Không DB, HTTP, SDK AI, queue.",
       severity: "error",
       from: { path: `${MOD}domain/` },
       to: {
-        pathNot: ["^packages/core/src/modules/$1/domain/", "^packages/contracts/", "^packages/core/src/shared/domain/"],
+        pathNot: [
+          "^packages/core/src/modules/$1/domain/",
+          "^packages/contracts/",
+          "^packages/core/src/shared/(result|errors|ids|decimal|clock)\\.ts$",
+          "^(node:)?crypto$",
+        ],
         dependencyTypesNot: ["type-only"],
       },
     },
@@ -54,11 +59,11 @@ module.exports = {
       to: { path: "node_modules/(@anthropic-ai/sdk|openai|@google/genai)/" },
     },
     {
-      name: "web-no-db-driver",
-      comment: "apps/web không truy vấn DB trực tiếp.",
+      name: "apps-infra-only-in-container",
+      comment: "Hạ tầng (DB, Redis, queue, config) chỉ được nối trong composition root apps/*/src/container.ts (worker: thêm src/index.ts để tạo Worker).",
       severity: "error",
-      from: { path: "^apps/web/", pathNot: "^apps/web/src/container\\.ts$" },
-      to: { path: "node_modules/(drizzle-orm|postgres|pg)/" },
+      from: { path: "^apps/", pathNot: ["^apps/[^/]+/src/container\\.ts$", "^apps/worker/src/index\\.ts$"] },
+      to: { path: ["^packages/core/src/(db|config)/", "node_modules/(drizzle-orm|postgres|pg|bullmq|ioredis)/"] },
     },
     {
       name: "apps-ui-via-public-api",
@@ -71,6 +76,37 @@ module.exports = {
       },
     },
     {
+      name: "module-infra-own-schema",
+      comment: "modules/<m>/infrastructure chỉ được đọc bảng của chính mình: db/schema/<m>.ts (+ shared).",
+      severity: "error",
+      from: { path: `${MOD}infrastructure/` },
+      to: {
+        path: "^packages/core/src/db/schema/([^/]+)\\.ts$",
+        pathNot: ["^packages/core/src/db/schema/$1\\.ts$", "^packages/core/src/db/schema/shared\\.ts$", "^packages/core/src/db/schema/plans\\.ts$"],
+      },
+    },
+    {
+      name: "web-screens-not-mocks-db",
+      comment: "Màn hình không import mocks/db, mocks/seed, mocks/api trực tiếp; chỉ qua src/api/*.",
+      severity: "error",
+      from: { path: "^apps/web/src/(features|app|components)/" },
+      to: { path: "^apps/web/src/mocks/(db|seed|api)" },
+    },
+    {
+      name: "web-admin-self-contained",
+      comment: "Khu Quản trị hệ thống (features/admin) không dùng màn hình của ứng dụng khách – chỉ được mượn cấu hình giao diện. Giữ ranh giới này để sau tách thành app riêng được.",
+      severity: "error",
+      from: { path: "^apps/web/src/features/admin/" },
+      to: { path: "^apps/web/src/features/", pathNot: "^apps/web/src/features/(admin|appearance)/" },
+    },
+    {
+      name: "web-tenant-not-admin-screens",
+      comment: "Màn hình của khách không import màn quản trị hệ thống (dữ liệu xuyên doanh nghiệp). Kiểm tra quyền quản trị thì gọi src/api/admin.",
+      severity: "error",
+      from: { path: "^apps/web/src/(features|components)/", pathNot: "^apps/web/src/features/admin/" },
+      to: { path: "^apps/web/src/features/admin/" },
+    },
+    {
       name: "no-circular",
       severity: "error",
       from: {},
@@ -79,6 +115,8 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: "node_modules" },
+    // Thư mục build/kết quả test không phải mã nguồn.
+    exclude: { path: ["\\.next(-build)?/", "/dist/", "visual-report/", "test-results/", "playwright-report/"] },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.base.json" },
     enhancedResolveOptions: { exportsFields: ["exports"], conditionNames: ["import", "require", "node", "default"] },

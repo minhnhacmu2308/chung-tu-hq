@@ -95,7 +95,7 @@ export function UploadStep({ dossier, goTo }: StepProps) {
   const docs = docsQuery.data ?? [];
 
   const upload = useMutation({
-    mutationFn: (files: File[]) => uploadDocuments(dossier.id, files.map((f) => ({ name: f.name, size: f.size }))),
+    mutationFn: (files: File[]) => uploadDocuments(dossier.id, files),
     onSuccess: (created) => {
       void qc.invalidateQueries({ queryKey: ocrKeys.documents(dossier.id) });
       void qc.invalidateQueries({ queryKey: dossierKeys.all });

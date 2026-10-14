@@ -1,0 +1,27 @@
+// PUBLIC API của module identity: use case + kiểu. Hạ tầng qua "@kb/core/modules/identity/infrastructure" (chỉ container.ts).
+export type { IdentityDeps, IdentityRepos, IdentityUow, Mailer, PasswordHasher, PlansReader, RateLimiter, SecretStore, TaxRegistryLookup } from "./application/ports.js";
+export { register, type RegisterOutput } from "./application/register.js";
+export { login } from "./application/login.js";
+export { logout } from "./application/logout.js";
+export { getSession } from "./application/get-session.js";
+export { lookupTaxCode } from "./application/lookup-tax-code.js";
+export { verifyEmail } from "./application/verify-email.js";
+export { requestPasswordReset } from "./application/request-password-reset.js";
+export { resetPassword } from "./application/reset-password.js";
+export { acceptInvite } from "./application/accept-invite.js";
+export { listMembers } from "./application/list-members.js";
+export { inviteMember } from "./application/invite-member.js";
+export { changeMemberRole } from "./application/change-member-role.js";
+export { setMemberDisabled } from "./application/set-member-disabled.js";
+export { listJoinRequests } from "./application/list-join-requests.js";
+export { approveJoinRequest } from "./application/approve-join-request.js";
+export { getOrganization } from "./application/get-organization.js";
+export { updateOrganization } from "./application/update-organization.js";
+export { updateSuspectThreshold } from "./application/update-suspect-threshold.js";
+export { listCertificates } from "./application/list-certificates.js";
+export { addCertificate } from "./application/add-certificate.js";
+export { removeCertificate } from "./application/remove-certificate.js";
+export { setDefaultCertificate } from "./application/set-default-certificate.js";
+export { listNotifications } from "./application/list-notifications.js";
+export { markAllNotificationsRead } from "./application/mark-all-notifications-read.js";
+export { notifyExpiringCertificates, CERT_EXPIRY_DAYS } from "./application/notify-expiring-certificates.js";

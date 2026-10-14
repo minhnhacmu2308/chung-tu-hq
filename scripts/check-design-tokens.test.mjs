@@ -29,6 +29,12 @@ describe("check-design-tokens", () => {
     assert.deepEqual(rules("apps/web/a.tsx", `<div style={{ width: 4 }} />`), ["apps-inline-style"]);
     assert.deepEqual(rules("apps/web/a.tsx", `<button onClick={f}>X</button>`), ["apps-raw-control"]);
     assert.deepEqual(rules("apps/web/a.tsx", `import * as D from "@radix-ui/react-dialog";`), ["apps-radix-direct"]);
+    // Thứ đã có component chuẩn thì không tự dựng lại trong app.
+    assert.deepEqual(rules("apps/web/a.tsx", `import { MoreHorizontal, Plus } from "lucide-react";`), ["apps-row-menu"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Skeleton className="h-96" />`), ["apps-big-skeleton"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Skeleton className="mt-2 h-120 w-full" />`), ["apps-big-skeleton"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Skeleton className="h-10 w-64" />`), []); // khối nhỏ đúng dáng một dòng/ô thì được
+    assert.deepEqual(rules("packages/ui/src/c.tsx", `import { MoreHorizontal } from "lucide-react"; <Skeleton className="h-96" />`), []);
   });
 
   it("@kb/ui được dùng giá trị kích thước tùy ý và biến CSS cục bộ (không phải token)", () => {

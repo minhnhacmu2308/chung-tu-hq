@@ -100,7 +100,22 @@ Màn quan trọng nhất là **ocr-review**: PDF bên trái (pdf.js, tô bbox), 
 
 ## 4. Dữ liệu
 
-PostgreSQL + Drizzle. Bảng chính: `organizations, users, memberships, dossiers, documents, document_pages, extractions, shipments, field_audit, validations, skills, skill_versions, skill_examples, declarations, usage_events, job_progress`.
+PostgreSQL + Drizzle, migration trong `packages/core/drizzle/` (0000 nền → 0005 customs). Bảng theo module (`db/schema/<module>.ts`):
+
+| Module | Bảng |
+|---|---|
+| identity | `organizations, users, memberships, sessions, auth_tokens, join_requests, digital_certificates, org_secrets, notifications`; `plans` |
+| dossier | `dossiers, documents, document_pages, job_progress` |
+| extraction | `extractions, shipments, extracted_fields, field_audit` (append-only) |
+| validation | `validations` |
+| skill | `skills` (+ `is_template` ở org `org_system`), `skill_versions, skill_samples, skill_evaluations` |
+| declaration | `line_items, hs_suggestions, declarations, agent_runs`; bảng chung `catalog_hs, exchange_rates` |
+| integration | `integration_status, customs_outbox, customs_messages` (append-only), `customs_results` |
+| billing | `usage_events` |
+
+Cách truy cập: mỗi module có **Unit of Work** (`uow.asOrg(ctx, repos => …)`) bọc một transaction và `set_config('app.org_id')` để Row-Level Security lọc; app kết nối bằng role `kb_app` (chịu RLS), migration/seed bằng admin. Module khác chỉ đọc dữ liệu của nhau qua port + adapter nối ở composition root (`apps/web/src/container.ts`, `apps/worker/src/container.ts`), không import bảng của nhau (depcruise chặn).
+
+Việc nền: BullMQ (`extract-document`, `run-agent`, `customs-send`, `customs-poll`, `skill-sample-read`, `skill-evaluate`, `cert-expiry` hằng ngày). Tiến trình đẩy qua Redis pub/sub → SSE `GET /api/dossiers/:id/events`. Truyền Hải quan theo outbox (ADR 0005): mỗi nghiệp vụ một dòng `customs_outbox` với `idempotency_key`, thông điệp đi/đến ghi `customs_messages` (đã che bí mật), trạng thái ở `customs_results` theo máy trạng thái `domain/state-machine.ts`.
 
 - Multi-tenant theo ADR 0004: mỗi doanh nghiệp (1 MST) là một organization; người dùng là nhân viên, đăng nhập bằng email, vai trò `OWNER / ADMIN / DECLARANT / APPROVER / VIEWER`.
 - Mọi bảng nghiệp vụ có `org_id`; bật Row-Level Security làm lớp bảo vệ thứ hai.
@@ -115,6 +130,8 @@ PostgreSQL + Drizzle. Bảng chính: `organizations, users, memberships, dossier
 | Integration | Vitest + Testcontainers (Postgres) | Use case có DB, kiểm tra cô lập org |
 | Extraction eval | Golden set (`evals/`) | Mọi thay đổi prompt, schema trích xuất, model |
 | E2E | Playwright | 3 luồng: upload→review, review→tờ khai, cấu hình skill |
+
+Lệnh: `pnpm test` (unit + integration, cần Docker cho Testcontainers), `pnpm eval` (golden set `evals/golden`, offline bằng fixture/fake; `--live` gọi AI thật và ghi fixture), `pnpm test:e2e` (Playwright, chạy trên bản build http với `AI_PROVIDER=fake`, xem `apps/web/e2e/`).
 
 CI chặn merge nếu fail: `typecheck · lint · depcruise · test · build`.
 

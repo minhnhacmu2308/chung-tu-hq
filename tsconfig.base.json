@@ -14,8 +14,21 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@kb/contracts": ["packages/contracts/src/index.ts"],
-      "@kb/core/modules/*": ["packages/core/src/modules/*/index.ts"]
+      "@kb/contracts": [
+        "packages/contracts/src/index.ts"
+      ],
+      "@kb/core/modules/*": [
+        "packages/core/src/modules/*/index.ts"
+      ],
+      "@kb/core/db": [
+        "packages/core/src/db/index.ts"
+      ],
+      "@kb/core/shared": [
+        "packages/core/src/shared/index.ts"
+      ],
+      "@kb/core/config": [
+        "packages/core/src/config/index.ts"
+      ]
     }
   }
 }

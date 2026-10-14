@@ -5,6 +5,7 @@ import {
   DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger, Field, Input, Select, Stack, toast,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// kb-allow-raw: menu của thành viên có nhóm radio chọn vai trò – RowActions chỉ nhận thao tác bấm-là-chạy
 import { Check, MoreHorizontal, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { getSession, sessionKeys } from "@/api/session";
@@ -139,6 +140,7 @@ export function MembersTab() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="icon" variant="ghost" aria-label={`Thao tác cho ${m.name}`}>
+                    {/* kb-allow-raw: menu có nhóm radio vai trò, xem ghi chú ở import */}
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>

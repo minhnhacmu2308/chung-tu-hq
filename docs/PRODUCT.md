@@ -195,3 +195,5 @@ Nguyên tắc tích hợp (chi tiết ở ADR 0005):
 3. **Khóa API** hscodepro và Customs Hub: một khóa của bên vận hành dùng cho mọi doanh nghiệp, hay mỗi doanh nghiệp một khóa riêng (prototype đang hiện khóa trong trang tài khoản của doanh nghiệp)?
 4. Chính sách lưu trữ chứng từ và dữ liệu: lưu bao lâu, xóa khi nào, khách tự xóa được không.
 5. Phân quyền "Người duyệt" có bắt buộc khác người tạo tờ khai (nguyên tắc 4 mắt) hay không.
+
+**Trạng thái khi dựng backend (2026-10-14):** (1) chưa chốt – backend chỉ kiểm chứng thư tồn tại khi truyền, giả định FPT ký bằng tài khoản VNACCS (BACKEND-TODO T5); (2) đặc tả FPT không có endpoint/xác thực/webhook – dùng outbox + hỏi IEX định kỳ, gateway giả cho demo (T1); (3) khóa theo doanh nghiệp lưu `org_secrets` (AES-GCM), chưa có màn nhập tài khoản VNACCS; (4) chưa chốt (N4); (5) code có tham số `fourEyes`, mặc định tắt, chưa có cấu hình org (N3).

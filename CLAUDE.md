@@ -53,3 +53,5 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 ## Trước khi báo "xong"
 
 `pnpm typecheck && pnpm lint && pnpm test` phải xanh. Đổi gì liên quan trích xuất → chạy `pnpm eval` và ghi kết quả vào PR.
+
+Đổi gì nhìn thấy được trên giao diện → mở bằng trình duyệt thật và đo/chụp (sáng + tối, desktop + mobile) trước khi báo xong; test jsdom không bắt được bố cục vỡ. Cách làm: skill `adding-ui-component`, mục "Kiểm tra bằng trình duyệt".

@@ -9,11 +9,7 @@ function delay() {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export class ApiError extends Error {
-  constructor(public code: string, message: string) {
-    super(message);
-  }
-}
+export { ApiError } from "./api-error";
 
 /** Đọc dữ liệu. */
 export async function query<T>(fn: (db: MockDb) => T): Promise<T> {

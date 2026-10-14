@@ -4,10 +4,18 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { adminKeys, getAdminSession } from "@/api/admin";
 import { login } from "@/api/session";
 import { AuthFrame } from "./auth-frame";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Tài khoản mẫu của đội vận hành – mỗi vai trò nội bộ một người, để thử phân quyền khu Quản trị hệ thống. */
+const OPERATOR_DEMO_ACCOUNTS = [
+  { email: "bao.hoang@khaibao-demo.vn", label: "Quản trị cấp cao" },
+  { email: "trang.mai@khaibao-demo.vn", label: "Hỗ trợ" },
+  { email: "viet.dinh@khaibao-demo.vn", label: "Chỉ xem" },
+];
 
 export function LoginPage() {
   const router = useRouter();
@@ -21,7 +29,9 @@ export function LoginPage() {
     mutationFn: () => login(email, password),
     onSuccess: async () => {
       await qc.invalidateQueries();
-      router.push("/");
+      // Một trang đăng nhập cho mọi tài khoản: tài khoản đội vận hành vào thẳng khu Quản trị hệ thống.
+      const admin = await qc.fetchQuery({ queryKey: adminKeys.session, queryFn: getAdminSession, staleTime: 0 }).catch(() => null);
+      router.push(admin ? "/admin" : "/");
     },
   });
 
@@ -67,7 +77,17 @@ export function LoginPage() {
         </Stack>
       </form>
 
-      <Alert tone="info" title="Bản demo">Mật khẩu bất kỳ từ 6 ký tự. Dữ liệu là dữ liệu mẫu.</Alert>
+      <Alert tone="info" title="Bản demo">
+        <p>Mật khẩu bất kỳ từ 6 ký tự. Dữ liệu là dữ liệu mẫu.</p>
+        <p className="mt-2">Tài khoản đội vận hành (vào khu Quản trị hệ thống):</p>
+        <ul className="flex flex-col">
+          {OPERATOR_DEMO_ACCOUNTS.map((a) => (
+            <li key={a.email}>
+              <Button type="button" variant="link" size="sm" onClick={() => setEmail(a.email)}>{a.label} – {a.email}</Button>
+            </li>
+          ))}
+        </ul>
+      </Alert>
 
       <p className="text-center text-sm text-fg-muted">
         Doanh nghiệp chưa dùng KhaiBáo AI?{" "}

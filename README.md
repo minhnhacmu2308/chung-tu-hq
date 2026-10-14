@@ -2,6 +2,18 @@
 
 > **PM / thiết kế:** chạy và chỉnh giao diện theo [docs/HUONG-DAN-PM.md](docs/HUONG-DAN-PM.md) – `npx pnpm@10 install` rồi `npx pnpm@10 dev:web` → http://localhost:3100
 
+## Chạy toàn bộ (web + worker + hạ tầng)
+
+```bash
+cp .env.example .env                       # rồi điền APP_MASTER_KEY=$(openssl rand -base64 32)
+pnpm install
+pnpm dev                                   # docker compose (postgres:5433, redis, minio, mailpit) + migrate + web + worker
+pnpm db:seed                               # org demo AN PHÁT, đăng nhập chau.le@anphat-demo.vn / demo1234
+```
+
+Web mặc định chạy dữ liệu mock (`NEXT_PUBLIC_DATA_SOURCE=mock`); đổi sang `http` để dùng backend thật – đã có trọn luồng: đăng ký/đăng nhập → hồ sơ, upload, AI đọc (fake hoặc Claude) → đối chiếu → AI Agent (HS, tờ khai) → duyệt → truyền Hải quan (gateway giả; FPT thật chờ endpoint) → cấu hình Skill. Kiểm tra: http://localhost:3100/api/health. `pnpm test` cần Docker Desktop (Testcontainers); `pnpm eval` đo độ chính xác trích xuất trên `evals/golden`; `pnpm test:e2e` chạy Playwright trên bản build. Việc còn mở: `docs/BACKEND-TODO.md`.
+Thiết kế backend: `docs/superpowers/specs/2026-10-13-backend-design.md`; kế hoạch theo giai đoạn: `docs/superpowers/plans/`.
+
 Thư mục này hiện chứa **kiến trúc, quy ước, skill và cấu hình ép quy tắc**. Code ứng dụng sẽ dựng trên khung này.
 
 ## Người mới vào đọc theo thứ tự

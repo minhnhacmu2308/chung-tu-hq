@@ -13,3 +13,6 @@ next-env.d.ts
 
 # Vercel
 .vercel
+
+apps/web/e2e/.auth/
+apps/web/test-results/

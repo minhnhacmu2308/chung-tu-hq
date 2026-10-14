@@ -27,6 +27,8 @@ export const RULES = [
   { id: "apps-inline-style", scope: "apps", test: /style=\{\{/, msg: "Style inline trong app. Dùng class token / component @kb/ui." },
   { id: "apps-raw-control", scope: "apps", test: /<(button|input|select|textarea)\b/, msg: "Phần tử điều khiển thô. Dùng Button/Input/Select/Textarea/Checkbox từ @kb/ui." },
   { id: "apps-radix-direct", scope: "apps", test: /from\s+["']@radix-ui\//, msg: "Import Radix trực tiếp. Dùng component đã bọc trong @kb/ui." },
+  { id: "apps-row-menu", scope: "apps", test: /\bMoreHorizontal\b/, msg: 'Menu "…" tự dựng. Thao tác trên dòng dùng RowActions của @kb/ui (icon hiện khi rê chuột + menu đủ thao tác).' },
+  { id: "apps-big-skeleton", scope: "apps", test: /<Skeleton\b[^>]*className="[^"]*\bh-(?:6[4-9]|[7-9]\d|\d{3,})\b/, msg: "Khung tải nguyên khối. Dùng khung tải đúng dáng: PageLoading / SkeletonCard / SkeletonTable / SkeletonForm / SkeletonList / SkeletonStats." },
 ];
 
 const ALLOW_COMMENT = /kb-allow-raw:\s*\S.{3,}/;

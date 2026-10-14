@@ -1,0 +1,106 @@
+import { loadEnv } from "@kb/core/config";
+import { createDb } from "@kb/core/db";
+import { createBillingInfrastructure, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
+import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
+import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
+import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
+import { createCustomsInfrastructure } from "@kb/core/modules/integration/infrastructure";
+import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
+import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skill";
+import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
+import { runRules } from "@kb/core/modules/validation";
+import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
+import { asOrgId, asUserId, dec, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
+import { Queue } from "bullmq";
+import { Redis } from "ioredis";
+
+/** Composition root của worker: nối hạ tầng vào use case. Cùng cách nối với apps/web/src/container.ts. */
+export function buildContainer() {
+  const env = loadEnv();
+  const db = createDb(env.DATABASE_URL, { max: 5 });
+  const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  redis.on("error", (e) => console.error("[redis]", e.message));
+  const queues = new Map<QueueName, Queue>();
+  const queue: JobQueue = {
+    async enqueue(name, payload, opts) {
+      let q = queues.get(name);
+      if (!q) {
+        q = new Queue(name, { connection: redis, defaultJobOptions: { attempts: 5, backoff: { type: "exponential", delay: 10_000 }, removeOnComplete: 1000, removeOnFail: 5000 } });
+        queues.set(name, q);
+      }
+      // BullMQ cấm ':' trong jobId tùy chỉnh (trừ đúng 3 phần – quy ước cũ của repeatable job) → thay bằng '_'.
+    await q.add(name, payload, { ...(opts?.jobId ? { jobId: opts.jobId.replace(/:/g, "_") } : {}), ...(opts?.delayMs ? { delay: opts.delayMs } : {}) });
+    },
+  };
+  const identity = createIdentityInfrastructure({ db, redis, env, clock: systemClock });
+  const orgPlan = { get: (orgId: string) => identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId)) };
+  const usageRecorder = new DrizzleUsageRecorder(db, dec(String(env.AI_USD_VND_RATE)));
+  // Mức dùng tháng: số hồ sơ + trang từ module dossier (nối lazy vì dossier tạo sau), chi phí AI từ usage_events.
+  const monthRange = (now: Date) => ({ from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)) });
+  let dossierStats: (orgId: string, now: Date) => Promise<{ dossiers: number; pages: number }> = async () => ({ dossiers: 0, pages: 0 });
+  const billing = createBillingInfrastructure({
+    db, orgPlan, clock: systemClock,
+    usage: { thisMonth: async (orgId, now) => ({ ...(await dossierStats(orgId, now)), aiCostVnd: (await usageRecorder.monthlyTotals(orgId, now)).aiCostVnd }) },
+  });
+  const quota = {
+    check: async (orgId: string, kind: "DOSSIER" | "PAGES", amount: number) => {
+      const op = await orgPlan.get(orgId);
+      const plan = op ? await billing.plans.get(op.planCode) : null;
+      if (!plan) return false;
+      if (kind === "PAGES") return amount <= plan.pagesPerDossier;
+      return (await dossierStats(orgId, systemClock.now())).dossiers + amount <= plan.dossiersPerMonth;
+    },
+  };
+  const dossier = createDossierInfrastructure({ db, redis, env, queue, quota, clock: systemClock });
+  dossierStats = (orgId, now) => {
+    const { from, to } = monthRange(now);
+    return dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.statsInRange(orgId, from, to));
+  };
+  identity.usage = async (orgId) => {
+    const u = await billing.usage.thisMonth(orgId, systemClock.now());
+    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd };
+  };
+  const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
+  const validation = createValidationInfrastructure({ db });
+  const usage = usageRecorder;
+  // Skill trước extraction: extraction cần SkillResolver (gợi ý trường theo skill của org).
+  const skillBase = createSkillInfrastructure({
+    db, queue, storage: dossier.storage, pdf: dossier.pdf, ai: createAiProvider(env), usage,
+    users: { names: async (orgId, ids) => new Map((await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.users.findByIds(ids))).map((u) => [u.id, u.name])) },
+    clock: systemClock,
+  });
+  const extraction = createExtractionInfrastructure({
+    db, env, dossier,
+    orgInfo: async (orgId) => {
+      const o = await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId));
+      return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", suspectThreshold: (o?.suspectThreshold as "STRICT" | "BALANCED" | "RELAXED") ?? "BALANCED" };
+    },
+    validation: { run: (orgId, dossierId, shipment, version, org) => runRules(validation, orgId, dossierId, shipment, version, org) },
+    usage, ai: skillBase.ai, skills: createSkillResolver(skillBase),
+  });
+  extraction.notify = notify;
+  const skill = skillBase;
+  identity.onOrgCreated = async (o) => void (await cloneTemplatesForOrg(skill, o));
+  const declaration = createDeclarationInfrastructure({
+    db, env, queue, dossier, extraction, validation,
+    org: {
+      get: async (orgId) => {
+        const o = await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId));
+        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", fourEyes: false };
+      },
+    },
+    users: skillBase.users,
+  });
+  declaration.notify = notify;
+  const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
+  customs.notify = notify;
+  return {
+    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs,
+    async close() {
+      await Promise.all([...queues.values()].map((q) => q.close()));
+      await db.close();
+      redis.disconnect();
+    },
+  };
+}
+export type Container = ReturnType<typeof buildContainer>;

@@ -32,7 +32,7 @@ export function RegisterPage() {
     onSuccess: (r) => setCompany(r),
   });
   const submit = useMutation({
-    mutationFn: (joinExisting: boolean) => register({ email: account.email, name: account.name, taxCode, joinExisting }),
+    mutationFn: (joinExisting: boolean) => register({ email: account.email, name: account.name, password: account.password, taxCode, joinExisting }),
     onSuccess: () => setStep("done"),
   });
 

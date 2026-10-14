@@ -40,7 +40,9 @@ Quy tắc nào máy kiểm tra được thì đã cấu hình trong lint/depcrui
 ## 3. Frontend
 
 - Component chỉ hiển thị; gọi dữ liệu qua `queries.ts` / `actions.ts` / hook của feature. Không `fetch` trực tiếp trong component.
-- Mỗi màn bất đồng bộ có đủ: loading (skeleton), empty, error (thông báo tiếng Việt + nút thử lại).
+- Mỗi màn bất đồng bộ có đủ: loading (khung tải đúng dáng: `PageLoading` / `Skeleton*`), empty (`EmptyState` + hành động tiếp theo), error (`LoadError` có nút thử lại).
+- Mọi thao tác ghi (`useMutation`) có `onError` – không để thất bại trong im lặng. Thao tác dài báo bằng `toastPromise`.
+- Trước khi viết JSX, tra bảng "Cần gì → dùng gì" trong skill `building-frontend-feature`; không tự dựng lại KPI, nhóm form, nhãn trạng thái, menu thao tác trên dòng.
 - Số, tiền, ngày chỉ format qua `lib/format`. Không tự `toLocaleString` rải rác.
 - Không nhân bản schema: form dùng schema Zod từ `@kb/contracts`.
 - Chỉ dùng component `@kb/ui` + utility token (docs/DESIGN-SYSTEM.md). Thiếu thì thêm vào `@kb/ui`. Máy chặn bằng `pnpm lint` (`scripts/check-design-tokens.mjs` + depcruise).

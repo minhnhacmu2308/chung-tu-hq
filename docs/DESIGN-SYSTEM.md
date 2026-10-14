@@ -142,6 +142,8 @@ export default async function RootLayout({ children }) {
 | `apps-inline-style` | `style={{…}}` | `apps/*` |
 | `apps-raw-control` | `<button>`, `<input>`, `<select>`, `<textarea>` | `apps/*` |
 | `apps-radix-direct` / depcruise `apps-ui-via-public-api` | Import Radix hoặc ruột `@kb/ui` | `apps/*` |
+| `apps-row-menu` | Tự dựng menu "…" (`MoreHorizontal`) – thao tác trên dòng dùng `RowActions` | `apps/*` |
+| `apps-big-skeleton` | `<Skeleton className="h-64…">` nguyên khối – dùng `PageLoading` / `Skeleton*` đúng dáng | `apps/*` |
 
 Thoát hiểm (rất hiếm, reviewer phải đồng ý): comment `kb-allow-raw: <lý do cụ thể>` trên cùng dòng hoặc dòng ngay trên.
 
@@ -153,3 +155,8 @@ Thoát hiểm (rất hiếm, reviewer phải đồng ý): comment `kb-allow-raw:
 - Truyền nghĩa chỉ bằng màu – luôn có chữ hoặc icon kèm nhãn.
 - Viết chuỗi giao diện cứng trong `@kb/ui` mà không cho truyền nhãn qua props (cần cho đa ngôn ngữ).
 - Ghép class động kiểu `` `grid-cols-${n}` `` – Tailwind không quét được; dùng bảng map tĩnh như `Grid`.
+- Tự dựng lại thứ đã có component chuẩn: KPI (→ `StatCard`), nhóm form (→ `FormSection`), nhãn trạng thái nghiệp vụ (→ `StatusBadge`), báo lỗi tải (→ `LoadError`). Bảng tra đầy đủ: skill `building-frontend-feature`, mục "Cần gì → dùng gì".
+- `useMutation` không có `onError` – thao tác thất bại trong im lặng. Mặc định dùng `toastMutationError`.
+- Khai báo bảng trạng thái `{ label, tone }` trong feature – cùng một trạng thái sẽ lệch nhãn giữa các màn. Thêm vào `STATUS_META`.
+- Chiều cao cứng cho nội dung trong `Dialog`, `top-0`/`top-4` cho phần tử dính – dùng `dialog-fill`, `top-shell`.
+- Báo "xong" một thay đổi giao diện khi chưa mở trình duyệt thật (sáng + tối, desktop + mobile). Cách đo: skill `adding-ui-component`, mục "Kiểm tra bằng trình duyệt".

@@ -1,29 +1,48 @@
 # apps/web – Next.js (App Router)
 
-## Giai đoạn hiện tại: PROTOTYPE chạy dữ liệu giả (mock)
+## Nguồn dữ liệu: mock hoặc backend thật
 
-Chưa có backend. Mọi dữ liệu đến từ `src/mocks/` qua lớp `src/api/*`. Khi có backend chỉ thay **thân hàm** trong `src/api/*.ts` – màn hình không phải sửa.
+Chọn bằng `NEXT_PUBLIC_DATA_SOURCE` trong `.env` gốc: `mock` (mặc định – dữ liệu giả trong trình duyệt, dùng cho demo Vercel và PM) hoặc `http` (gọi backend qua route handler). Màn hình không biết đang dùng nguồn nào.
 
 ```
 src/app/            routing + page mỏng (chỉ render component của feature)
+src/app/api/**      route handler MỎNG: session → parse Zod (@kb/contracts) → use case (@kb/core/modules/*) → map DomainError
+src/container.ts    composition root – nơi DUY NHẤT nối @kb/core infrastructure (DB, Redis, queue); depcruise chặn chỗ khác
 src/features/<f>/   màn hình + logic giao diện của từng chức năng
-src/api/*.ts        hàm lấy/ghi dữ liệu (mock) + queryKeys cho TanStack Query
-src/mocks/types.ts  kiểu dữ liệu dùng chung (giữ khi lên backend thật)
+src/api/*.ts        hàm lấy/ghi dữ liệu + queryKeys; chọn mock|http bằng pick() (src/lib/data-source.ts)
+src/api/http/*.ts   hiện thực gọi backend qua src/lib/http.ts (đã có: session, settings, dossiers, ocr, skills, declaration, customs)
+src/lib/server/     route() wrapper (map lỗi → HTTP), requireSession() (cookie kb_session → Ctx), cookies
+src/proxy.ts        chặn trang chưa đăng nhập khi NEXT_PUBLIC_DATA_SOURCE=http (chuyển về /login?next=)
+src/mocks/api/*.ts  hiện thực mock (giữ nguyên chữ ký với http)
+src/mocks/types.ts  re-export kiểu từ @kb/contracts + nhãn tiếng Việt
 src/mocks/seed/*    dữ liệu mẫu – sửa ở đây để đổi nội dung demo
 src/lib/format.ts   MỌI định dạng số/tiền/ngày
 src/components/common/  thành phần riêng của app, chỉ ghép từ @kb/ui
 ```
 
-- Màn hình KHÔNG import `src/mocks/db` hay `src/mocks/seed`; chỉ gọi `src/api/*` qua `useQuery`/`useMutation`.
-- Mô phỏng tiến trình (upload, AI đọc, agent, truyền Hải quan) bằng thời gian: lưu thời điểm bắt đầu, tính tiến độ khi đọc, màn hình `refetchInterval`.
-- Dữ liệu mẫu lưu localStorage; menu người dùng → "Khôi phục dữ liệu mẫu". Đổi cấu trúc seed → tăng `DB_VERSION` trong `src/mocks/db.ts`.
-- Chạy: `pnpm dev:web` (cổng 3100). Dùng webpack (`--webpack`) vì `@kb/ui` import kiểu `./x.js` mà Turbopack chưa hỗ trợ.
+- Màn hình KHÔNG import `src/mocks/db`, `src/mocks/seed`, `src/mocks/api`; chỉ gọi `src/api/*` qua `useQuery`/`useMutation` (depcruise chặn).
+- Kiểu dữ liệu: dùng `@kb/contracts` (Zod). Không khai báo lại kiểu trong `apps/web`.
+- Mock mô phỏng tiến trình bằng thời gian; backend thật đẩy tiến trình qua SSE `/api/dossiers/:id/events` (màn upload hiện poll 1s). Upload nhận `File[]` ở cả mock lẫn http.
+- Route đã có: `auth/*`, `org/*`, `notifications`, `dossiers/**` (hồ sơ, chứng từ, SSE, trường, luật, hoàn tất đọc), `documents/:id/*`, `fields/:id/*`, `skills/**` (danh sách, trường → phiên bản mới, mẫu, xác nhận, đánh giá), `dossiers/:id/agent-run` (GET/POST), `dossiers/:id/line-items`, `hs-catalog?q=`, `line-items/:id/hs/confirm` (POST/DELETE), `dossiers/:id/declaration` (+ `fields/:code` PATCH, `approve` POST), `dossiers/:id/move-to-review`, `dossiers/:id/submission` (GET/POST truyền, `resend` POST), `dossiers/:id/declaration/reopen` (mở lại tờ khai đã duyệt/bị FPT từ chối), `customs/declarations`. Chưa có: dashboard (GĐ 6), admin (GĐ 7).
+- Dữ liệu mock lưu localStorage; menu người dùng → "Khôi phục dữ liệu mẫu". Đổi cấu trúc seed → tăng `DB_VERSION` trong `src/mocks/db.ts`.
+- E2E: `pnpm test:e2e` (Playwright, `apps/web/e2e/`, cần server http + worker đang chạy; đăng nhập qua `global-setup` lưu cookie vào `e2e/.auth/`).
+- Chạy: `pnpm dev` ở gốc (compose + migrate + web + worker) hoặc `pnpm dev:web` (cổng 3100, chỉ web). Dùng webpack (`--webpack`) vì `@kb/ui` import kiểu `./x.js` mà Turbopack chưa hỗ trợ.
+- `/api/health` kiểm tra Postgres + Redis.
+- Đăng nhập thật (chế độ http): tài khoản seed `chau.le@anphat-demo.vn / demo1234`. Email dev in ra log (`MAIL=console`) hoặc Mailpit `localhost:8025` (`MAIL=smtp`).
 
-## Khi có backend (đích đến)
+## Khu Quản trị hệ thống (`/admin`)
 
-- Đọc dữ liệu: Server Component gọi `features/<f>/queries.ts` → use case qua `@kb/core/modules/<m>`.
-- Ghi dữ liệu: Server Action trong `features/<f>/actions.ts`: lấy session → parse Zod (`@kb/contracts`) → gọi use case → map `DomainError.code` sang thông báo tiếng Việt.
-- Dữ liệu thay đổi liên tục (tiến trình job): hook SSE / TanStack Query trong `features/<f>/hooks/`.
+Back-office của đội vận hành KhaiBáo AI – nhìn xuyên doanh nghiệp, **chỉ số liệu tổng hợp** (không nội dung hồ sơ/chứng từ). Thiết kế: `docs/superpowers/specs/2026-10-14-admin-backoffice-design.md`.
+
+- Dùng chung trang `/login`; quyền quản trị gắn theo tài khoản (3 vai trò: `STAFF_PERMISSIONS` trong `@kb/contracts`), không phải vai trò trong doanh nghiệp.
+- Mã nằm gọn ở `src/app/(admin)`, `src/features/admin`, `src/api/admin.ts`, `src/mocks/admin`. Hiện **chỉ có mock**, chưa có backend.
+- Thao tác ghi: dùng `ReasonDialog` (bắt nhập lý do) + `useAdminMutation`; ẩn nút bằng `useAdminSession().can(quyền)`; nghiệp vụ mock ở `mocks/admin/ops.ts` phải gọi `actor(db, quyền)` và `log(...)`, có test trong `ops.test.ts`.
+- `features/admin` không import màn hình của khách và ngược lại (depcruise chặn).
+
+## Route handler (backend)
+
+- Mỗi route trong `src/app/api/**/route.ts`: `requireSession()` → parse input bằng schema `@kb/contracts` → gọi use case qua `@kb/core/modules/<m>` → trả JSON; `DomainError.code` map sang HTTP (`NOT_FOUND` 404, `FORBIDDEN` 403, `RATE_LIMITED` 429, còn lại 409/422); lỗi Zod → 400 `{code:"VALIDATION", issues}`.
+- Không nghiệp vụ trong route. Gọi ngoài (AI, FPT) luôn qua job (`container.queue`).
 - Form: react-hook-form + `zodResolver(schema từ @kb/contracts)`.
 
 ## Luôn đúng (cả prototype)

@@ -7,7 +7,7 @@ import { FileText, GitCommitHorizontal, Hash, RefreshCw, SearchX, Target } from 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { fieldAccuracies, getSkillById, MIN_SAMPLES_FOR_ACCURACY, setSkillEnabled, skillKeys } from "@/api/skills";
+import { getEvaluation, getSkillById, MIN_SAMPLES_FOR_ACCURACY, setSkillEnabled, skillKeys } from "@/api/skills";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { DOC_KIND_LABELS, type Skill } from "@/mocks/types";
 import { EvaluateButton, FieldAccuracyList } from "./evaluation";
@@ -32,6 +32,27 @@ function EnabledToggle({ skill }: { skill: Skill }) {
     },
   });
   return <Switch label="Đang dùng" checked={m.isPending ? !!m.variables : skill.enabled} disabled={m.isPending} onCheckedChange={(v) => m.mutate(v)} />;
+}
+
+/** Độ chính xác từng trường của lần đánh giá gần nhất. */
+function LatestEvaluation({ skill }: { skill: Skill }) {
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: skillKeys.evaluation(skill.id), queryFn: () => getEvaluation(skill.id) });
+  if (isLoading) return <SkeletonTable rows={4} />;
+  if (isError) return <EmptyState title="Không tải được kết quả đánh giá" action={<Button size="sm" variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => refetch()}>Thử lại</Button>} />;
+  if (!data) return <EmptyState title="Chưa chạy đánh giá" description="Bấm Đánh giá lại để đo cấu hình hiện tại trên bộ mẫu đã gắn nhãn." />;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Độ chính xác từng trường · v{data.version}</CardTitle>
+        <CardDescription>
+          Đo trên {formatNumber(data.samples)} mẫu, {formatDateTime(data.finishedAt)}. Trường kém nhất ở trên cùng. Muốn cải thiện: thêm alias cho nhãn hay gặp, hoặc thêm mẫu có lỗi đó rồi đánh giá lại.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <FieldAccuracyList fields={data.fields} />
+      </CardContent>
+    </Card>
+  );
 }
 
 function Detail({ skill }: { skill: Skill }) {
@@ -106,17 +127,7 @@ function Detail({ skill }: { skill: Skill }) {
         {!mapping && (
           <TabsContent value="evaluation" className="pt-4">
             {measured ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Độ chính xác từng trường · v{skill.version}</CardTitle>
-                  <CardDescription>
-                    Trường kém nhất ở trên cùng. Muốn cải thiện: thêm alias cho nhãn hay gặp, hoặc thêm mẫu có lỗi đó rồi đánh giá lại.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <FieldAccuracyList fields={fieldAccuracies(skill)} />
-                </CardContent>
-              </Card>
+              <LatestEvaluation skill={skill} />
             ) : (
               <EmptyState
                 title="Chưa có kết quả đánh giá"

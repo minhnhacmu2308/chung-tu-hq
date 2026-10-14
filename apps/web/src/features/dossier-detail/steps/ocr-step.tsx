@@ -126,6 +126,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
         <CardContent>
           {loading ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {/* kb-allow-raw: giữ chỗ đúng bằng chiều cao khung xem chứng từ (h-120) để trang không nhảy khi ảnh về */}
               <Skeleton className="h-120" />
               <Stack gap="sm">
                 <Skeleton className="h-16" />

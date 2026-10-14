@@ -4,15 +4,26 @@
   "type": "module",
   "packageManager": "pnpm@10.18.0",
   "scripts": {
+    "dev": "docker compose up -d --wait && pnpm db:migrate && concurrently -n web,worker -c blue,magenta \"pnpm dev:web\" \"pnpm dev:worker\"",
     "dev:web": "pnpm --filter @kb/web dev",
+    "dev:worker": "pnpm --filter @kb/worker dev",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "db:migrate": "pnpm --filter @kb/core db:migrate",
+    "db:seed": "pnpm --filter @kb/core db:seed",
+    "db:reset": "pnpm --filter @kb/core db:reset",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test && node --test scripts/*.test.mjs",
     "lint": "pnpm lint:tokens && pnpm lint:deps",
     "lint:tokens": "node scripts/check-design-tokens.mjs",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs apps packages",
-    "ui:playground": "pnpm --filter @kb/ui playground"
+    "ui:playground": "pnpm --filter @kb/ui playground",
+    "eval": "pnpm --filter @kb/core eval",
+    "eval:diff": "pnpm --filter @kb/core eval:diff",
+    "test:e2e": "pnpm --filter @kb/web test:e2e"
   },
   "devDependencies": {
+    "concurrently": "^10.0.6",
     "dependency-cruiser": "^16.10.0",
     "typescript": "^5.9.0"
   }

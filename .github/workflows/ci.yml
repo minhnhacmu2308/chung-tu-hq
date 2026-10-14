@@ -16,9 +16,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: cp .env.example .env && sed -i "s|^APP_MASTER_KEY=.*|APP_MASTER_KEY=$(openssl rand -base64 32)|" .env
       - run: pnpm typecheck
       - run: pnpm lint          # eslint + depcruise ranh giới module
-      - run: pnpm test          # vitest (unit + integration với Testcontainers)
+      - run: pnpm test          # vitest (unit + integration với Testcontainers – runner ubuntu có sẵn Docker)
       - run: pnpm eval          # golden set offline (fixtures), không gọi AI, không tốn tiền
       - run: pnpm build
       # So sánh ảnh giao diện – chỉ chạy khi đã có bộ ảnh chuẩn cho Linux (sinh một lần bằng test:visual:update trên Linux)

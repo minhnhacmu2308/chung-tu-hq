@@ -91,6 +91,27 @@ export const STATUS_META = {
   CUSTOMS_SENDING: { tone: "info", label: "Đang truyền" },
   CUSTOMS_INSPECTING: { tone: "warning", label: "Đang kiểm tra" },
   CUSTOMS_CLEARED: { tone: "success", label: "Đã thông quan" },
+  // Trạng thái tài khoản (thành viên doanh nghiệp, quản trị viên hệ thống)
+  ACCOUNT_ACTIVE: { tone: "success", label: "Đang hoạt động" },
+  ACCOUNT_INVITED: { tone: "warning", label: "Đã mời" },
+  ACCOUNT_DISABLED: { tone: "neutral", label: "Đã khóa" },
+  ACCOUNT_PENDING_JOIN: { tone: "info", label: "Chờ duyệt tham gia" },
+  // Trạng thái doanh nghiệp (back-office)
+  ORG_ACTIVE: { tone: "success", label: "Đang hoạt động" },
+  ORG_SUSPENDED: { tone: "danger", label: "Tạm khóa" },
+  // Kết nối hệ thống ngoài
+  INTEGRATION_CONNECTED: { tone: "success", label: "Đã kết nối" },
+  INTEGRATION_ERROR: { tone: "danger", label: "Lỗi kết nối" },
+  INTEGRATION_NOT_CONFIGURED: { tone: "neutral", label: "Chưa cấu hình" },
+  // Sức khỏe dịch vụ nền
+  SERVICE_UP: { tone: "success", label: "Hoạt động tốt" },
+  SERVICE_DEGRADED: { tone: "warning", label: "Suy giảm" },
+  SERVICE_DOWN: { tone: "danger", label: "Ngừng hoạt động" },
+  // Thông báo hệ thống, skill mẫu
+  ANNOUNCEMENT_SENT: { tone: "success", label: "Đã gửi" },
+  ANNOUNCEMENT_WITHDRAWN: { tone: "neutral", label: "Đã thu hồi" },
+  TEMPLATE_PUBLISHED: { tone: "success", label: "Đã phát hành" },
+  TEMPLATE_DRAFT: { tone: "neutral", label: "Chưa phát hành" },
 } as const satisfies Record<string, { tone: Tone; label: string }>;
 
 export type Status = keyof typeof STATUS_META;
@@ -105,6 +126,11 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   DOSSIER_DRAFT: "Draft", DOSSIER_PROCESSING: "Processing", DOSSIER_NEEDS_REVIEW: "Needs check", DOSSIER_APPROVED: "Approved, awaiting submission",
   DOSSIER_SUBMITTED: "Submitted to customs", DOSSIER_CLEARED: "Cleared", DOSSIER_CANCELLED: "Cancelled",
   CUSTOMS_READY: "Awaiting submission", CUSTOMS_SENDING: "Submitting", CUSTOMS_INSPECTING: "Under inspection", CUSTOMS_CLEARED: "Cleared",
+  ACCOUNT_ACTIVE: "Active", ACCOUNT_INVITED: "Invited", ACCOUNT_DISABLED: "Disabled", ACCOUNT_PENDING_JOIN: "Awaiting approval",
+  ORG_ACTIVE: "Active", ORG_SUSPENDED: "Suspended",
+  INTEGRATION_CONNECTED: "Connected", INTEGRATION_ERROR: "Connection error", INTEGRATION_NOT_CONFIGURED: "Not configured",
+  SERVICE_UP: "Healthy", SERVICE_DEGRADED: "Degraded", SERVICE_DOWN: "Down",
+  ANNOUNCEMENT_SENT: "Sent", ANNOUNCEMENT_WITHDRAWN: "Withdrawn", TEMPLATE_PUBLISHED: "Published", TEMPLATE_DRAFT: "Unpublished",
 };
 
 export type StatusBadgeProps = { status: Status; label?: string; className?: string };

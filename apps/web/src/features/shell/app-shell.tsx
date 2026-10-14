@@ -10,8 +10,9 @@ import { Bell, FolderOpen, LayoutDashboard, LogOut, RotateCcw, Send, Settings2, 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { adminKeys, getAdminSession } from "@/api/admin";
 import { dossierKeys, listDossiers } from "@/api/dossiers";
-import { getSession, listNotifications, resetMockData, sessionKeys } from "@/api/session";
+import { getSession, listNotifications, logout, resetMockData, sessionKeys } from "@/api/session";
 import { useAppearance } from "@/features/appearance/use-appearance";
 import { useAssistantChat } from "@/features/assistant/use-assistant-chat";
 import { NotificationsPanel } from "./notifications-panel";
@@ -65,6 +66,13 @@ function ShellInner({ children }: { children: ReactNode }) {
   const { data: notifications } = useQuery({ queryKey: sessionKeys.notifications, queryFn: listNotifications });
   const unread = notifications?.filter((n) => !n.read).length ?? 0;
 
+  // Tài khoản đội vận hành không thuộc doanh nghiệp nào: không có khu khai báo, chuyển sang khu Quản trị hệ thống.
+  const { data: adminSession } = useQuery({ queryKey: adminKeys.session, queryFn: getAdminSession });
+  const isOperator = !!adminSession?.staff;
+  useEffect(() => {
+    if (isOperator) router.replace("/admin");
+  }, [isOperator, router]);
+
   const [collapsed, setCollapsedState] = useState(false);
   useEffect(() => {
     try {
@@ -111,7 +119,7 @@ function ShellInner({ children }: { children: ReactNode }) {
         )}
         {/* Mỗi lần đổi trang, nội dung trồi nhẹ lên (key theo đường dẫn; đổi ?step= không chạy lại). */}
         <div key={pathname} className="motion-safe:animate-slide-up">
-          {children}
+          {isOperator ? null : children}
         </div>
       </main>
 
@@ -163,7 +171,16 @@ function ShellInner({ children }: { children: ReactNode }) {
                   Khôi phục dữ liệu mẫu
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem icon={<LogOut className="h-4 w-4" />} tone="danger" onSelect={() => router.push("/login")}>
+                <DropdownMenuItem
+                  icon={<LogOut className="h-4 w-4" />}
+                  tone="danger"
+                  onSelect={() => {
+                    void logout().finally(() => {
+                      qc.clear();
+                      router.push("/login");
+                    });
+                  }}
+                >
                   Đăng xuất
                 </DropdownMenuItem>
               </DropdownMenuContent>

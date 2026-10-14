@@ -11,7 +11,7 @@ export const skillKeys = {
 };
 
 export type { EvaluationResult, LabeledSample, SkillFieldPatch } from "@kb/contracts";
-import { MIN_SAMPLES_FOR_ACCURACY, type EvaluationResult, type LabeledSample } from "@kb/contracts";
+import { MIN_SAMPLES_FOR_ACCURACY, type EvaluationResult, type LabeledSample, type SampleLabel } from "@kb/contracts";
 /** Số mẫu tối thiểu để hiện độ chính xác. */
 export { MIN_SAMPLES_FOR_ACCURACY };
 
@@ -140,6 +140,48 @@ export const confirmPendingSamples = (skillId: string) =>
     writeUploaded(all);
     s.labeledSamples += pending;
     return pending;
+  });
+
+// Nhãn (giá trị đúng theo key trường) của từng mẫu – lưu riêng theo id mẫu.
+const LABELS_KEY = "kb-mock-skill-sample-labels";
+function readLabels(): Record<string, Record<string, unknown>> {
+  try {
+    return JSON.parse(localStorage.getItem(LABELS_KEY) ?? "{}") as Record<string, Record<string, unknown>>;
+  } catch {
+    return {};
+  }
+}
+
+/** Mẫu kèm nhãn. Chưa ai sửa → nhãn nháp: mọi trường cần đọc để trống (bản thật là kết quả AI đọc). */
+export const getSampleLabel = (skillId: string, sampleId: string) =>
+  query((db): SampleLabel => {
+    const s = getSkill(db.skills, skillId);
+    const sample = [...(readUploaded()[skillId] ?? []), ...seededSamples(s)].find((x) => x.id === sampleId);
+    if (!sample) throw new ApiError("NOT_FOUND", "Không tìm thấy mẫu");
+    const draft = Object.fromEntries(s.fields.filter((f) => f.extract).map((f) => [f.key, null]));
+    return { sample, expected: { ...draft, ...readLabels()[sampleId] } };
+  });
+
+/** Người duyệt ghi giá trị đúng cho mẫu → mẫu thành "đã gắn nhãn" (mẫu đang chờ được cộng vào bộ đo). */
+export const labelSample = (skillId: string, sampleId: string, expected: Record<string, unknown>) =>
+  mutate((db): LabeledSample => {
+    const s = getSkill(db.skills, skillId);
+    const all = readUploaded();
+    const uploaded = (all[skillId] ?? []).find((x) => x.id === sampleId);
+    const sample = uploaded ?? seededSamples(s).find((x) => x.id === sampleId);
+    if (!sample) throw new ApiError("NOT_FOUND", "Không tìm thấy mẫu");
+    try {
+      localStorage.setItem(LABELS_KEY, JSON.stringify({ ...readLabels(), [sampleId]: expected }));
+    } catch {
+      /* bỏ qua */
+    }
+    if (uploaded) {
+      if (uploaded.status === "PENDING") s.labeledSamples += 1;
+      Object.assign(uploaded, { status: "LABELED", labeledBy: db.members.find((m) => m.id === db.currentUserId)?.name ?? uploaded.labeledBy, labeledAt: nowIso() });
+      writeUploaded(all);
+    }
+    s.updatedAt = nowIso();
+    return uploaded ?? sample;
   });
 
 // ---- Đánh giá lại ----

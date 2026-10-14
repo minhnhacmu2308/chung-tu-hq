@@ -1,7 +1,7 @@
 # Khu Quản trị hệ thống (back-office của đội vận hành)
 
-> Ngày: 2026-10-14 · Trạng thái: FE đã dựng trên dữ liệu mock; backend chưa làm.
-> Phạm vi lần này: **chỉ frontend** (`apps/web`, `packages/ui`, schema trong `packages/contracts`). Không đụng `packages/core`, route handler, worker.
+> Ngày: 2026-10-14 · Trạng thái: FE + backend xong. Backend: module `packages/core/src/modules/admin`, route `/api/admin/**`, role DB `kb_platform` (ADR 0006), migration `0007_admin`.
+> FE chọn mock|http theo `NEXT_PUBLIC_DATA_SOURCE` như các màn khác. Mục 6 bên dưới mô tả bản mock; giới hạn còn lại của bản thật ở mục 9.
 
 ## 1. Mục tiêu
 
@@ -103,3 +103,27 @@ Doanh nghiệp demo (`db.org`, `db.members`) được ghép vào danh sách củ
 - `apps/web`: `mocks/admin/ops.test.ts` – phân quyền theo vai trò, lý do bắt buộc, nhật ký, từng nhóm nghiệp vụ, vòng khép với doanh nghiệp demo; `features/admin/common/admin-display.test.ts`, `features/admin/users/user-actions.test.ts` – logic thuần của màn hình.
 - Đã mở bằng trình duyệt thật: 17 trạng thái màn × sáng/tối × 1366px/390px, không tràn ngang, không lỗi console; chạy tay các luồng đăng nhập chung, khóa doanh nghiệp, đổi gói, gửi thông báo, vai trò Chỉ xem, chặn tài khoản khách vào `/admin`.
 - Chưa có: test Playwright e2e lưu trong repo cho khu `/admin`.
+
+## 9. Bản backend (2026-10-14)
+
+Đã làm B1–B10 của mục 7:
+
+- **Tài khoản vận hành**: bảng `platform_staff` (vai trò, trạng thái) gắn với `users`; đăng nhập chung `/login`, phiên không có org nếu người đó không thuộc doanh nghiệp nào. Mời → tạo tài khoản + liên kết đặt mật khẩu 7 ngày, `INVITED` thành `ACTIVE` ở lần đăng nhập đầu. Tài khoản mẫu (mật khẩu `demo1234`): `bao.hoang@` (Cấp cao), `trang.mai@` (Hỗ trợ), `viet.dinh@khaibao-demo.vn` (Chỉ xem).
+- **Quyền**: mọi use case kiểm `staffCan()`; route `/api/admin/**` 401 khi chưa đăng nhập, 403 khi không phải quản trị viên. `GET /api/admin/session` trả `{ session: null }` cho tài khoản khách (để app khách biết không chuyển sang `/admin`).
+- **Tạm khóa doanh nghiệp** chặn thật: đăng nhập trả `ORG_SUSPENDED`, phiên đang mở hết hiệu lực ngay; mở lại thì phiên cũ dùng tiếp.
+- **Nới hạn mức** chỉ có hiệu lực đúng tháng (giờ VN) đã nới; kiểm tra hạn mức ở web và worker đều cộng phần nới. **Đổi gói** bắt đầu kỳ 30 ngày mới. **Gia hạn dùng thử** lưu `trial_ends_at`.
+- **Báo cáo chi phí** tổng hợp từ `usage_events` (AI_* = đọc chứng từ, HS_* = gợi ý HS, CUSTOMS_* = Customs Hub), hồ sơ/trang từ bảng dossiers/documents, tiền bằng Decimal.
+- **Khóa tích hợp dùng chung** mã hóa bằng `APP_MASTER_KEY` trong `platform_integrations`, API chỉ trả 4 ký tự cuối, lưu xong gọi thử ngay.
+- **Sức khỏe hệ thống** đọc BullMQ thật (đếm, job lỗi, chạy lại); lỗi job được lọc bỏ đường dẫn/tên tệp trước khi hiện.
+- **Skill mẫu**: cột `skills.published`; doanh nghiệp mới chỉ nhận bản sao của skill mẫu đang phát hành.
+- **Thông báo hệ thống**: bảng `announcements`, bản sao vào `notifications` của mọi thành viên đang hoạt động (cột `announcement_id`), thu hồi xóa theo cột này; doanh nghiệp tạm khóa không nhận.
+- **Nhật ký** `admin_audit` append-only, ghi cùng transaction với thao tác.
+
+Kiểm thử: `packages/core/src/flows/admin.int.test.ts` (Postgres thật: kb_app không đọc được bảng admin, phân quyền, tạm khóa chặn đăng nhập, hạn mức, khóa API không lộ, thông báo tới khách rồi thu hồi), `modules/admin/domain/__tests__`, e2e `apps/web/e2e/admin.spec.ts`.
+
+Còn lại:
+
+1. ~~B11 – 2FA~~ **Xong:** TOTP bắt buộc. Đăng nhập chung `/login` không đổi; khu `/admin` hiện bước thiết lập (QR + khóa nhập tay → mã đầu tiên → 8 mã khôi phục chỉ hiện một lần) hoặc nhập mã 6 số cho mỗi phiên. Chưa qua bước này mọi API quản trị trả `MFA_REQUIRED` (403). Khóa TOTP mã hóa bằng `APP_MASTER_KEY`, mã khôi phục lưu hash, không dùng lại được mã đã dùng, 5 lần sai trong 15 phút → khóa tạm. Quản trị cấp cao "Đặt lại xác thực 2 lớp" ở màn Quản trị viên (người đó bị đăng xuất). Bản mock không có 2FA.
+2. **Khóa API lưu ở admin chưa được adapter dùng**: hscodepro/Customs Hub/AI vẫn đọc khóa từ biến môi trường (câu hỏi mở #3 của PRODUCT.md – một khóa chung hay mỗi doanh nghiệp một khóa – chưa chốt). "Kiểm tra" chỉ gọi thử thật với AI (Claude); nhà cung cấp khác báo "chưa có đặc tả API".
+3. Doanh thu trong báo cáo = giá gói hiện tại (chưa có lịch sử giá/hóa đơn) – tháng cũ chỉ là xấp xỉ.
+4. Tháng hạn mức của khách (màn của khách và kiểm tra hạn mức) đang tính theo tháng UTC, phần nới thêm theo tháng giờ VN – lệch tối đa 7 giờ ở ranh giới tháng.

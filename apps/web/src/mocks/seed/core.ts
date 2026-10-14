@@ -18,6 +18,7 @@ const ORG: Organization = {
   plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, renewsAt: isoDay(19) },
   usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "96500" },
   suspectThreshold: "BALANCED",
+  fourEyes: false,
 };
 
 const MEMBERS: Member[] = [

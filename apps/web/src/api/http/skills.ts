@@ -1,5 +1,5 @@
 // Cấu hình Skill AI – gọi backend thật. Cùng chữ ký với src/mocks/api/skills.ts.
-import { EvaluationResultSchema, LabeledSampleSchema, SkillSchema, type EvaluationResult, type SkillField, type SkillFieldPatch, type SkillKind } from "@kb/contracts";
+import { EvaluationResultSchema, LabeledSampleSchema, SampleLabelSchema, SkillSchema, type EvaluationResult, type SkillField, type SkillFieldPatch, type SkillKind } from "@kb/contracts";
 import { z } from "zod";
 import { ApiError } from "@/lib/api-error";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/http";
@@ -17,6 +17,8 @@ export const uploadSamples = (skillId: string, files: File[]) => {
   for (const f of files) form.append("files", f, f.name);
   return apiUpload(`skills/${skillId}/samples`, form, z.array(LabeledSampleSchema));
 };
+export const getSampleLabel = (skillId: string, sampleId: string) => apiGet(`skills/${skillId}/samples/${sampleId}`, SampleLabelSchema);
+export const labelSample = (skillId: string, sampleId: string, expected: Record<string, unknown>) => apiPatch(`skills/${skillId}/samples/${sampleId}`, { expected }, LabeledSampleSchema);
 export const confirmPendingSamples = async (skillId: string) => (await apiPost(`skills/${skillId}/samples/confirm`, {}, z.object({ confirmed: z.number().int() }))).confirmed;
 
 export const getEvaluation = async (skillId: string) => (await apiGet(`skills/${skillId}/evaluation`, z.object({ evaluation: EvaluationResultSchema.nullable() }))).evaluation;

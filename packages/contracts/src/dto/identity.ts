@@ -31,6 +31,8 @@ export const OrganizationSchema = z.object({
   }),
   usage: z.object({ dossiersThisMonth: z.number().int().nonnegative(), pagesThisMonth: z.number().int().nonnegative(), aiCostVnd: DecimalStringSchema }),
   suspectThreshold: z.enum(["STRICT", "BALANCED", "RELAXED"]),
+  /** Nguyên tắc 4 mắt: người duyệt tờ khai phải khác người tạo hồ sơ (Chủ sở hữu được miễn). */
+  fourEyes: z.boolean(),
 });
 export type Organization = z.infer<typeof OrganizationSchema>;
 

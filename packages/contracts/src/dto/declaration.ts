@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DecimalStringSchema, IsoDateSchema, IsoDateTimeSchema, ValueSourceSchema } from "../common.js";
+import { DecimalStringSchema, IsoDateSchema, IsoDateTimeSchema, ValueSourceSchema, type Role } from "../common.js";
 
 export const LineItemSchema = z.object({
   id: z.string(),
@@ -40,6 +40,16 @@ export const DeclarationFieldSchema = z.object({
   note: z.string().optional(),
 });
 export type DeclarationField = z.infer<typeof DeclarationFieldSchema>;
+
+/**
+ * Chỉ tiêu không sửa tay trên tờ khai:
+ * - SOTK: Hải quan cấp sau khi truyền; MA_LH: loại hình của hồ sơ (quyết định cả cách tính thuế) – đổi ở hồ sơ.
+ * - Còn lại là đầu vào của trị giá tính thuế (hóa đơn, hóa đơn cước, tỷ giá): sửa ở bước đọc chứng từ rồi dựng lại, nếu không số trên tờ khai lệch với thuế.
+ */
+export const DERIVED_DECLARATION_FIELD_CODES: readonly string[] = ["SOTK", "MA_LH", "DK_GIA", "MA_TT", "TONG_TG", "TY_GIA", "PHI_VC", "PHI_BH", "KHOAN_DC"];
+export const isDeclarationFieldEditable = (code: string) => !DERIVED_DECLARATION_FIELD_CODES.includes(code);
+/** Vai trò được sửa chỉ tiêu và mở lại tờ khai (VIEWER chỉ xem). Backend chặn bằng requireRole; FE dùng để ẩn nút. */
+export const canEditDeclaration = (role: Role) => role !== "VIEWER";
 
 export const DeclarationStatusSchema = z.enum(["NOT_CREATED", "DRAFT", "APPROVED", "SUBMITTED"]);
 export type DeclarationStatus = z.infer<typeof DeclarationStatusSchema>;

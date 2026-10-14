@@ -43,6 +43,27 @@
       "when": 1791927899935,
       "tag": "0005_customs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791945590802,
+      "tag": "0006_four_eyes",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791962453128,
+      "tag": "0007_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791967666865,
+      "tag": "0008_admin_2fa",
+      "breakpoints": true
     }
   ]
 }

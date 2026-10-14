@@ -20,6 +20,7 @@ import { setMemberDisabled } from "../set-member-disabled.js";
 import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../test/fakes.js";
 import { InMemoryIdentityUow } from "../test/in-memory-uow.js";
 import { updateOrganization } from "../update-organization.js";
+import { updateFourEyes } from "../update-four-eyes.js";
 import { updateSuspectThreshold } from "../update-suspect-threshold.js";
 
 const T0 = "2026-10-13T00:00:00.000Z";
@@ -39,8 +40,8 @@ beforeEach(() => {
   uow = new InMemoryIdentityUow().seed({
     plans: [{ code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40 }],
     orgs: [
-      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "0225", planCode: "PRO", suspectThreshold: "BALANCED", createdAt: day(-40) },
-      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "PRO", suspectThreshold: "BALANCED", createdAt: day(-5) },
+      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "0225", planCode: "PRO", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-40) },
+      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "PRO", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-5) },
     ],
     users: [
       { id: "usr_chau", email: "chau.le@anphat-demo.vn", passwordHash: "h", name: "Lê Minh Châu", emailVerifiedAt: day(-1), createdAt: day(-40) },
@@ -129,6 +130,13 @@ describe("doanh nghiệp", () => {
     const o = unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT MỚI", address: "HP 2", phone: "0225 3 888" }));
     expect(o.name).toBe("AN PHÁT MỚI");
     expectErr(await updateOrganization(deps, ctx("VIEWER", "usr_quang"), { name: "X", address: "", phone: "" }), "FORBIDDEN");
+  });
+  it("updateFourEyes: mặc định tắt; ADMIN/OWNER bật tắt được; vai trò khác → FORBIDDEN và không đổi", async () => {
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).fourEyes).toBe(false);
+    expect(unwrap(await updateFourEyes(deps, ctx("ADMIN"), true)).fourEyes).toBe(true);
+    expectErr(await updateFourEyes(deps, ctx("APPROVER", "usr_quang"), false), "FORBIDDEN");
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).fourEyes).toBe(true);
+    expect(unwrap(await updateFourEyes(deps, ctx("OWNER", "usr_phong"), false)).fourEyes).toBe(false);
   });
   it("updateSuspectThreshold đổi ngưỡng", async () => {
     expect(unwrap(await updateSuspectThreshold(deps, ctx("OWNER", "usr_phong"), "STRICT")).suspectThreshold).toBe("STRICT");

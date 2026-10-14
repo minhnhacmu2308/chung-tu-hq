@@ -5,7 +5,8 @@ export type DomainErrorCode =
   | "DOSSIER_LOCKED" | "QUOTA_EXCEEDED" | "FILE_INVALID" | "FILE_TOO_LARGE" | "NOT_READY" | "NO_ITEMS" | "INVALID_HS" | "NO_DECLARATION"
   | "BLOCKER_FAILED" | "HS_UNCONFIRMED" | "NOT_APPROVED" | "ALREADY_SUBMITTED"
   | "SKILL_IN_USE" | "NOT_ENOUGH_SAMPLES" | "NOT_SUPPORTED" | "NO_CERT"
-  | "INTEGRATION_NOT_CONFIGURED" | "GATEWAY_ERROR";
+  | "INTEGRATION_NOT_CONFIGURED" | "GATEWAY_ERROR"
+  | "CONFLICT" | "ORG_SUSPENDED" | "MFA_REQUIRED" | "MFA_INVALID";
 
 /** Lỗi nghiệp vụ dự kiến. `code` cố định để UI dịch sang tiếng Việt. */
 export type DomainError = { code: DomainErrorCode; message?: string; details?: unknown };

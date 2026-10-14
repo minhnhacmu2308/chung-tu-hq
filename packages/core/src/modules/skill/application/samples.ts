@@ -1,9 +1,10 @@
-import { extractionSchemaFor, type LabeledSample } from "@kb/contracts";
+import { extractionSchemaFor, type LabeledSample, type SampleLabel } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, type DomainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import type { UploadFile } from "../../dossier/index.js";
+import { sampleExt, sampleMime } from "../domain/mime.js";
 import { fieldHints, projectResult } from "../domain/schema-keys.js";
 import { loadSkill, toSample } from "./_dto.js";
 import type { SampleRow, SkillDeps } from "./ports.js";
@@ -18,6 +19,16 @@ export async function listSamples(deps: SkillDeps, ctx: Ctx, skillId: string): P
     const rows = await r.samples.list(ctx.orgId, skillId);
     const names = await deps.users.names(ctx.orgId, [...new Set(rows.map((s) => s.labeledBy).filter((x): x is string => !!x))]);
     return ok(rows.map((s) => toSample(s, names)));
+  });
+}
+
+/** Một mẫu kèm nhãn hiện có (nháp do AI đọc hoặc đã được người sửa) – để mở màn sửa nhãn. */
+export async function getSampleLabel(deps: SkillDeps, ctx: Ctx, sampleId: string): Promise<Result<SampleLabel>> {
+  return deps.uow.asOrg(ctx, async (r) => {
+    const s = await r.samples.get(ctx.orgId, sampleId);
+    if (!s) return err(domainError("NOT_FOUND", "Không tìm thấy mẫu"));
+    const names = await deps.users.names(ctx.orgId, s.labeledBy ? [s.labeledBy] : []);
+    return ok({ sample: toSample(s, names), expected: s.expected });
   });
 }
 
@@ -48,8 +59,7 @@ export async function uploadSamples(deps: SkillDeps, ctx: Ctx, skillId: string, 
     const rows: SampleRow[] = [];
     for (const { f, pages } of inspected) {
       const id = deps.idGen.next("smp");
-      const ext = f.name.toLowerCase().split(".").pop() ?? "bin";
-      const storageKey = `orgs/${ctx.orgId}/skills/${skillId}/samples/${id}.${ext}`;
+      const storageKey = `orgs/${ctx.orgId}/skills/${skillId}/samples/${id}.${sampleExt(sampleMime(f.name, f.bytes))}`;
       await deps.storage.put(storageKey, f.bytes, f.mime);
       const row: SampleRow = { id, orgId: ctx.orgId, skillId, documentId: null, storageKey, fileName: f.name, pages, sizeBytes: f.bytes.length, status: "PENDING", expected: null, labeledBy: ctx.userId, labeledAt: null, createdAt: now, updatedAt: now };
       await r.samples.insert(row);
@@ -78,7 +88,7 @@ export async function readSample(deps: SkillDeps, input: { orgId: string; userId
   const { sample, skill, version } = prep.value;
   if (sample.status === "LABELED" || !skill.docKind) return ok(undefined);
   const bytes = await deps.storage.get(sample.storageKey);
-  const mime = sample.fileName.toLowerCase().endsWith(".pdf") ? "application/pdf" : sample.fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+  const mime = sampleMime(sample.fileName, bytes);
   const pages = Array.from({ length: Math.max(1, sample.pages) }, (_, i) => i + 1);
   const res = await deps.ai.extract({ bytes, mime, pages: sample.pages, fileName: sample.fileName }, pages, extractionSchemaFor(skill.docKind), { kind: skill.docKind, skillHints: fieldHints(version.fields), examples: [], supplierHint: skill.supplier });
   await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens });

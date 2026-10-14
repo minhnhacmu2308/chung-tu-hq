@@ -10,4 +10,7 @@ export class RedisRateLimiter implements RateLimiter {
     if (count === 1) await this.redis.expire(k, windowSec);
     return { allowed: count <= limit, remaining: Math.max(0, limit - count) };
   }
+  async reset(key: string) {
+    await this.redis.del(`rl:${key}`);
+  }
 }

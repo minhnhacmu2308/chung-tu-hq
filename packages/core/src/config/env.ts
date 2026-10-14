@@ -14,6 +14,8 @@ export const EnvSchema = z
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     DATABASE_URL: z.url(),
     DATABASE_ADMIN_URL: z.url(),
+    /** Kết nối của khu Quản trị hệ thống (role kb_platform, ADR 0006). Thiếu → DATABASE_URL với user kb_platform. */
+    DATABASE_PLATFORM_URL: z.url().optional(),
     REDIS_URL: z.url(),
     S3_ENDPOINT: z.url(),
     S3_BUCKET: z.string().min(1),

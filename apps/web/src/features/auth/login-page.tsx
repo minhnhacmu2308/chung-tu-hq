@@ -7,6 +7,7 @@ import { useState, type FormEvent } from "react";
 import { adminKeys, getAdminSession } from "@/api/admin";
 import { login } from "@/api/session";
 import { AuthFrame } from "./auth-frame";
+import { loginErrorMessage } from "./login-error";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -56,7 +57,7 @@ export function LoginPage() {
 
       <form onSubmit={submit} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} noValidate>
         <Stack gap="md">
-          {mutation.isError && <Alert tone="danger" title="Không đăng nhập được">Sai email hoặc mật khẩu.</Alert>}
+          {mutation.isError && <Alert tone="danger" title="Không đăng nhập được">{loginErrorMessage(mutation.error)}</Alert>}
           <Field label="Email" required {...(errors.email ? { error: errors.email } : {})}>
             <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ten@congty.vn" />
           </Field>

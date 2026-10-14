@@ -44,7 +44,8 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   } },
   { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Địa điểm xếp hàng", required: true, from: (i) => {
     const pol = i.shipment.transport.portOfLoading;
-    const r = resolvePort(pol.value) ?? resolvePort("HAIPHONG");
+    // Chỉ mặc định Hải Phòng khi chứng từ KHÔNG ghi cảng xếp; có ghi mà không tra được mã → giữ chữ gốc, nghi ngờ (port()).
+    const r = pol.value ? resolvePort(pol.value) : resolvePort("HAIPHONG");
     return { ...port(pol.value, r, fromSourced(pol, "BILL_OF_LADING").source), ...(pol.value ? {} : { source: "DEFAULT" as const, note: "Mặc định cảng Hải Phòng – sửa nếu xuất qua cảng khác" }) };
   } },
   { code: "PTVC_TEN", no: N.PTVC_TEN, section: "TRANSPORT", label: "Tên phương tiện vận chuyển", required: false, from: (i) => {

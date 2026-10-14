@@ -29,7 +29,7 @@ export function toPartialResult(r: ResultRow | null): Partial<CustomsResult> | n
     ...(r.declarationNo ? { declarationNo: r.declarationNo } : {}),
     ...(r.channel ? { channel: r.channel, channelNote: r.channelNote ?? CHANNEL_NOTES[r.channel] } : {}),
     ...(r.customsTaxVnd ? { customsTaxVnd: r.customsTaxVnd } : {}),
-    clearanceStatus: r.clearanceStatus === "REJECTED" ? "INSPECTING" : r.clearanceStatus,
+    clearanceStatus: r.clearanceStatus,
     updatedAt: r.updatedAt.toISOString(),
   };
 }

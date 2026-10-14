@@ -1,4 +1,5 @@
 import { loadEnv } from "@kb/core/config";
+import { activeQuotaBonus } from "@kb/core/modules/admin";
 import { createDb } from "@kb/core/db";
 import { createBillingInfrastructure, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
@@ -48,7 +49,9 @@ export function buildContainer() {
       const plan = op ? await billing.plans.get(op.planCode) : null;
       if (!plan) return false;
       if (kind === "PAGES") return amount <= plan.pagesPerDossier;
-      return (await dossierStats(orgId, systemClock.now())).dossiers + amount <= plan.dossiersPerMonth;
+      const now = systemClock.now();
+      // Hạn mức nới thêm của đội vận hành chỉ có hiệu lực đúng tháng đã nới.
+      return (await dossierStats(orgId, now)).dossiers + amount <= plan.dossiersPerMonth + activeQuotaBonus({ quotaBonus: op?.quotaBonus ?? 0, quotaBonusMonth: op?.quotaBonusMonth ?? null }, now);
     },
   };
   const dossier = createDossierInfrastructure({ db, redis, env, queue, quota, clock: systemClock });
@@ -86,7 +89,7 @@ export function buildContainer() {
     org: {
       get: async (orgId) => {
         const o = await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId));
-        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", fourEyes: false };
+        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", fourEyes: o?.fourEyes ?? false };
       },
     },
     users: skillBase.users,

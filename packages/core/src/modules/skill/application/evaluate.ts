@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { sampleMime } from "../domain/mime.js";
 import { extractionSchemaFor, MIN_SAMPLES_FOR_ACCURACY, type EvaluationResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
@@ -46,7 +47,7 @@ export async function runEvaluation(deps: SkillDeps, input: { orgId: string; use
   const scores: Record<string, boolean>[] = [];
   for (const s of labeled) {
     const bytes = await deps.storage.get(s.storageKey);
-    const mime = s.fileName.toLowerCase().endsWith(".pdf") ? "application/pdf" : s.fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+    const mime = sampleMime(s.fileName, bytes);
     const pages = Array.from({ length: Math.max(1, s.pages) }, (_, i) => i + 1);
     const res = await deps.ai.extract({ bytes, mime, pages: s.pages, fileName: s.fileName }, pages, extractionSchemaFor(docKind), { kind: docKind, skillHints: fieldHints(version.fields), examples: [], supplierHint: skill.supplier });
     await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens });

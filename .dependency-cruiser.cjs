@@ -79,7 +79,8 @@ module.exports = {
       name: "module-infra-own-schema",
       comment: "modules/<m>/infrastructure chỉ được đọc bảng của chính mình: db/schema/<m>.ts (+ shared).",
       severity: "error",
-      from: { path: `${MOD}infrastructure/` },
+      // Riêng module admin đọc xuyên module bằng role kb_platform (ADR 0006).
+      from: { path: `${MOD}infrastructure/`, pathNot: "^packages/core/src/modules/admin/infrastructure/" },
       to: {
         path: "^packages/core/src/db/schema/([^/]+)\\.ts$",
         pathNot: ["^packages/core/src/db/schema/$1\\.ts$", "^packages/core/src/db/schema/shared\\.ts$", "^packages/core/src/db/schema/plans\\.ts$"],

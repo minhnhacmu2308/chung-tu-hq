@@ -10,5 +10,7 @@ import { adminKeys, getAdminSession } from "@/api/admin";
 export function useAdminSession() {
   const query = useQuery({ queryKey: adminKeys.session, queryFn: getAdminSession });
   const staff = query.data?.staff;
-  return { staff, isLoading: query.isLoading, isSignedOut: query.isSuccess && !staff, can: (permission: AdminPermission) => !!staff && staffCan(staff.role, permission) };
+  // Thiếu `mfa` (bản mô phỏng) = không áp dụng 2FA.
+  const mfa = query.data?.mfa ?? { enrolled: true, verified: true };
+  return { staff, mfa, isLoading: query.isLoading, isSignedOut: query.isSuccess && !staff, can: (permission: AdminPermission) => !!staff && staffCan(staff.role, permission) };
 }

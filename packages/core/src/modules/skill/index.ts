@@ -3,7 +3,7 @@ export type { EvaluationRow, PerFieldAccuracy, SampleFileInspector, SampleRow, S
 export { listSkills, getSkill, setSkillEnabled } from "./application/query-skills.js";
 export { addSkillField, removeSkillField, updateSkillField } from "./application/edit-fields.js";
 export { cloneTemplatesForOrg } from "./application/clone-templates.js";
-export { confirmPendingSamples, labelSample, listSamples, readSample, uploadSamples } from "./application/samples.js";
+export { confirmPendingSamples, getSampleLabel, labelSample, listSamples, readSample, uploadSamples } from "./application/samples.js";
 export { evaluateSkill, getEvaluation, runEvaluation } from "./application/evaluate.js";
 export { createSkillResolver } from "./application/resolve-skill.js";
 export { compareFields, scoreSample, summarize } from "./domain/accuracy.js";

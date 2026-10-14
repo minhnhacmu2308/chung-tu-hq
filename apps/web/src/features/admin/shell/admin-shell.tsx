@@ -13,8 +13,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { adminKeys, getSystemHealth } from "@/api/admin";
 import { logout, resetMockData } from "@/api/session";
 import { useAppearance } from "@/features/appearance/use-appearance";
-import { dataSource } from "@/lib/data-source";
 import { STAFF_ROLE_LABELS } from "../common/admin-display";
+import { MfaGate } from "./mfa-gate";
 import { useAdminSession } from "./use-admin-session";
 
 const COLLAPSE_KEY = "kb-admin-sidebar-collapsed";
@@ -88,8 +88,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const qc = useQueryClient();
   const { appearance, setAppearance, adjustments } = useAppearance();
-  const { staff, isSignedOut } = useAdminSession();
-  const { items, activeId } = useNav(!!staff);
+  const { staff, mfa, isSignedOut } = useAdminSession();
+  const { items, activeId } = useNav(!!staff && mfa.verified);
 
   // Không phải tài khoản đội vận hành (hoặc chưa đăng nhập) → không có khu này: về trang đăng nhập chung.
   useEffect(() => {
@@ -187,13 +187,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <SidebarMobileTrigger onClick={() => setMobileNav(true)} expanded={mobileNav} />
           </div>
         )}
-        {dataSource() === "http" && (
-          <Alert tone="warning" title="Back-office đang hiển thị dữ liệu mẫu" className="mb-6">
-            API <span className="font-mono">/api/admin</span> chưa được dựng. Mọi số liệu và thao tác ở khu vực này là mô phỏng, không đụng tới dữ liệu thật.
-          </Alert>
-        )}
         {/* Chưa biết ai đang đăng nhập thì chưa vẽ màn: tránh lộ khung dữ liệu rồi mới đẩy về trang đăng nhập. */}
-        {staff ? (
+        {staff && !mfa.verified ? (
+          <MfaGate mfa={mfa} />
+        ) : staff ? (
           <div key={pathname} className="motion-safe:animate-slide-up">
             {children}
           </div>

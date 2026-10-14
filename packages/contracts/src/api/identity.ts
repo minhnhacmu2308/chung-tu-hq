@@ -48,6 +48,7 @@ export const OrgProfileInputSchema = z.object({
 export type OrgProfileInput = z.infer<typeof OrgProfileInputSchema>;
 
 export const SuspectThresholdInputSchema = z.object({ threshold: z.enum(["STRICT", "BALANCED", "RELAXED"]) });
+export const FourEyesInputSchema = z.object({ enabled: z.boolean() });
 
 const NonOwnerRole = RoleSchema.exclude(["OWNER"]);
 export const InviteMemberInputSchema = z.object({ email: EmailSchema, role: NonOwnerRole });

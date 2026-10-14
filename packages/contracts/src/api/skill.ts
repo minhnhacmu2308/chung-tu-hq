@@ -20,6 +20,9 @@ export const LabeledSampleSchema = z.object({
   status: z.enum(["LABELED", "PENDING"]),
 });
 export type LabeledSample = z.infer<typeof LabeledSampleSchema>;
+/** Một mẫu kèm nhãn (giá trị đúng theo key trường skill). `expected` null khi AI chưa đọc xong mẫu. */
+export const SampleLabelSchema = z.object({ sample: LabeledSampleSchema, expected: z.record(z.string(), z.unknown()).nullable() });
+export type SampleLabel = z.infer<typeof SampleLabelSchema>;
 
 export const LabelSampleInputSchema = z.object({ expected: z.record(z.string(), z.unknown()) });
 

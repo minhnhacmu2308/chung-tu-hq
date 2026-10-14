@@ -4,7 +4,7 @@ import type {
   AdjustOrgQuotaInput, AdminReasonInput, ChangeOrgPlanInput, ChangeStaffRoleInput, ExtendOrgTrialInput, IntegrationId, InviteStaffInput,
   PlanCode, SendAnnouncementInput, SetTemplatePublishedInput, UpdateIntegrationKeyInput, UpdatePlanInput,
 } from "@kb/contracts";
-import { mutate, query } from "@/lib/mock-request";
+import { ApiError, mutate, query } from "@/lib/mock-request";
 import * as ops from "@/mocks/admin/ops";
 
 export const adminKeys = {
@@ -73,3 +73,12 @@ export const listAdminAudit = (filter: { orgId?: string } = {}) => query((db) =>
 export const listAnnouncements = () => query((db) => ops.listAnnouncements(db));
 export const sendAnnouncement = (input: SendAnnouncementInput) => mutate((db) => ops.sendAnnouncement(db, input));
 export const withdrawAnnouncement = (id: string, input: AdminReasonInput) => mutate((db) => ops.withdrawAnnouncement(db, id, input));
+
+// Bản mô phỏng không có xác thực 2 lớp: phiên quản trị luôn coi như đã xác thực (getAdminSession không trả `mfa`).
+const NO_MFA = () => {
+  throw new ApiError("NOT_SUPPORTED", "Bản mô phỏng không dùng xác thực 2 lớp", 422);
+};
+export const startAdminMfaSetup = async (): Promise<{ secret: string; otpauthUri: string; qrSvg: string }> => NO_MFA();
+export const confirmAdminMfaSetup = async (_code: string): Promise<{ recoveryCodes: string[] }> => NO_MFA();
+export const verifyAdminMfa = async (_code: string): Promise<{ recoveryCodesLeft: number }> => NO_MFA();
+export const resetStaffMfa = async (_id: string, _input: AdminReasonInput): Promise<import("@kb/contracts").Staff> => NO_MFA();

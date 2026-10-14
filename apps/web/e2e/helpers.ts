@@ -33,3 +33,18 @@ export async function uploadAndConfirm(page: Page, files: string[]) {
   if (await proceed.isVisible({ timeout: 3_000 }).catch(() => false)) await proceed.click();
   await expect(page).toHaveURL(/step=agent/);
 }
+
+/** Chạy AI Agent, xác nhận hết HS gợi ý rồi sang bước Review tờ khai. */
+export async function runAgentToReview(page: Page) {
+  await page.getByRole("button", { name: "Chạy AI Agent" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Bắt đầu" }).click();
+  await expect(page.getByText("Đã dựng tờ khai nháp").first()).toBeVisible({ timeout: 90_000 });
+  const confirmButtons = page.getByRole("button", { name: /^Xác nhận mã .* cho dòng \d+$/ });
+  await expect(confirmButtons.first()).toBeVisible();
+  while ((await confirmButtons.count()) > 0) {
+    await confirmButtons.first().click();
+    await page.waitForTimeout(300);
+  }
+  await page.getByRole("button", { name: "Sang Review tờ khai" }).click();
+  await expect(page).toHaveURL(/step=review/);
+}

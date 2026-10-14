@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "four_eyes" boolean DEFAULT false NOT NULL;

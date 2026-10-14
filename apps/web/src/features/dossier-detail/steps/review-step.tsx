@@ -2,14 +2,18 @@
 // Bước 5 – Review tờ khai: xem tờ khai nháp IDA/EDA theo nhóm, nguồn từng chỉ tiêu, thuế dự kiến → phê duyệt.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, createDataTableColumnHelper, DataTable,
-  Dialog, DialogContent, DialogFooter, EmptyState, Grid, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, cn,
+  Dialog, DialogContent, DialogFooter, EmptyState, Field, Grid, Input, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, cn,
 } from "@kb/ui";
+import { canEditDeclaration, isDeclarationFieldEditable } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, FileCheck2, FileText, Paperclip, Plus, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileCheck2, FileText, Paperclip, Pencil, Plus, RotateCcw, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { dossierKeys, listDocuments } from "@/api/dossiers";
-import { approveDeclaration, declarationKeys, getDeclarationView, type DeclarationItemView } from "@/api/declaration";
+import { approveDeclaration, declarationKeys, getDeclarationView, reopenDeclaration, updateDeclarationField, type DeclarationItemView } from "@/api/declaration";
+import { getSession, sessionKeys } from "@/api/session";
+import { getOrganization, settingsKeys } from "@/api/settings";
+import { toastMutationError } from "@/lib/mutation-error";
 import { formatBytesVi, formatDate, formatDateTime, formatMoney, formatNumber, formatVnd } from "@/lib/format";
 import { DOC_KIND_LABELS, type Declaration, type DeclarationField } from "@/mocks/types";
 import { errorMessage, KeyValue, SourceChip, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
@@ -32,7 +36,7 @@ function displayValue(f: DeclarationField, currency: string) {
   return f.value;
 }
 
-function FieldTile({ field, currency, note }: { field: DeclarationField; currency: string; note?: string | undefined }) {
+function FieldTile({ field, currency, note, onEdit }: { field: DeclarationField; currency: string; note?: string | undefined; onEdit?: (() => void) | undefined }) {
   return (
     <div className={cn("flex flex-col gap-1.5 rounded-md border p-3", field.suspect ? "border-warning bg-warning-subtle" : "border-border bg-surface")}>
       <div className="flex items-start justify-between gap-2">
@@ -41,7 +45,14 @@ function FieldTile({ field, currency, note }: { field: DeclarationField; currenc
         </p>
         <SourceChip source={field.source} className="shrink-0" />
       </div>
-      <p className="break-words text-sm font-medium text-fg">{displayValue(field, currency)}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 break-words text-sm font-medium text-fg">{displayValue(field, currency) || <span className="font-normal text-fg-subtle">Chưa có giá trị</span>}</p>
+        {onEdit && (
+          <Button size="sm" variant="ghost" className="-my-1 shrink-0" leftIcon={<Pencil className="h-3.5 w-3.5" />} aria-label={`Sửa ${field.label}`} onClick={onEdit}>
+            Sửa
+          </Button>
+        )}
+      </div>
       {field.suspect && (
         <p className="flex items-start gap-1 text-sm text-warning-subtle-fg">
           <AlertTriangle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
@@ -60,7 +71,7 @@ const SUSPECT_NOTES: Record<string, string> = {
   TY_GIA: "Tỷ giá theo ngày khai dự kiến, sẽ cập nhật khi đăng ký tờ khai.",
 };
 
-function GeneralTab({ decl, currency }: { decl: Declaration; currency: string }) {
+function GeneralTab({ decl, currency, onEdit }: { decl: Declaration; currency: string; onEdit?: ((f: DeclarationField) => void) | undefined }) {
   return (
     <Stack gap="lg">
       {(Object.keys(SECTION_LABELS) as DeclarationField["section"][]).map((section) => {
@@ -73,7 +84,7 @@ function GeneralTab({ decl, currency }: { decl: Declaration; currency: string })
             </h3>
             <Grid cols={{ base: 1, md: 2, xl: 3 }} gap="sm">
               {fields.map((f) => (
-                <FieldTile key={f.code} field={f} currency={currency} note={f.note ?? SUSPECT_NOTES[f.code]} />
+                <FieldTile key={f.code} field={f} currency={currency} note={f.note ?? SUSPECT_NOTES[f.code]} onEdit={onEdit && isDeclarationFieldEditable(f.code) ? () => onEdit(f) : undefined} />
               ))}
             </Grid>
           </section>
@@ -228,6 +239,54 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
   );
 }
 
+/** Sửa tay một chỉ tiêu trên tờ khai nháp. Giá trị mới mang nguồn "Người khai sửa" và được ghi vào lịch sử sửa. */
+function EditFieldDialog({ dossierId, field, currency, onClose }: { dossierId: string; field: DeclarationField; currency: string; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [value, setValue] = useState(field.value);
+  const isDate = DATE_CODES.has(field.code);
+  const next = value.trim();
+  const save = useMutation({
+    mutationFn: () => updateDeclarationField(dossierId, field.code, next),
+    onSuccess: () => {
+      toast({ tone: "success", title: `Đã sửa ${field.label}` });
+      void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
+      void qc.invalidateQueries({ queryKey: dossierKeys.all });
+      onClose();
+    },
+    onError: toastMutationError("Không lưu được chỉ tiêu"),
+  });
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent title="Sửa chỉ tiêu tờ khai" icon={<Pencil className="h-4 w-4" />} description={`${field.label} · ${field.no ?? field.code}`} size="sm">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (next !== field.value && !save.isPending) save.mutate();
+          }}
+        >
+          <Stack gap="md">
+            <div className="divide-y divide-border rounded-md border border-border px-3">
+              <KeyValue label="Giá trị hiện tại" hint={<SourceChip source={field.source} />} value={displayValue(field, currency) || "—"} />
+            </div>
+            {field.suspect && field.note && <Alert tone="warning">{field.note}</Alert>}
+            <Field label="Giá trị mới" hint="Sau khi lưu, chỉ tiêu mang nguồn “Người khai sửa” và được giữ khi dựng lại tờ khai.">
+              <Input type={isDate ? "date" : "text"} value={value} maxLength={500} autoFocus onChange={(e) => setValue(e.currentTarget.value)} />
+            </Field>
+          </Stack>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Hủy
+            </Button>
+            <Button type="submit" loading={save.isPending} disabled={next === field.value}>
+              Lưu
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const TABS = ["general", "items", "tax", "docs"] as const;
 type Tab = (typeof TABS)[number];
 
@@ -246,6 +305,23 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checked, setChecked] = useState(false);
+  const [editing, setEditing] = useState<DeclarationField | null>(null);
+  const [reopenOpen, setReopenOpen] = useState(false);
+  const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
+  const canEdit = session.data ? canEditDeclaration(session.data.user.role) : false;
+  const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
+  // Nguyên tắc 4 mắt: người tạo hồ sơ không tự duyệt (Chủ sở hữu được miễn). Backend chặn lần nữa.
+  const blockedByFourEyes = Boolean(org.data?.fourEyes && session.data && session.data.user.role !== "OWNER" && session.data.user.id === dossier.ownerId);
+  const reopen = useMutation({
+    mutationFn: () => reopenDeclaration(dossier.id),
+    onSuccess: () => {
+      setReopenOpen(false);
+      toast({ tone: "success", title: "Đã mở lại tờ khai", description: "Sửa xong cần phê duyệt lại trước khi truyền Hải quan." });
+      void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id) });
+      void qc.invalidateQueries({ queryKey: dossierKeys.all });
+    },
+    onError: toastMutationError("Không mở lại được tờ khai"),
+  });
   const viewQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
@@ -316,6 +392,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 Được tô vàng trong tab Thông tin chung: {suspect.map((f) => f.label).join(", ")}.
               </Alert>
             )}
+            {isDraft && blockedByFourEyes && (
+              <Alert tone="info" title="Cần người khác phê duyệt">
+                Doanh nghiệp bật nguyên tắc 4 mắt: bạn là người tạo hồ sơ này nên không tự phê duyệt được. Nhờ một Người duyệt khác hoặc Chủ sở hữu.
+              </Alert>
+            )}
             {unconfirmedHs > 0 && (
               <Alert
                 tone="danger"
@@ -343,7 +424,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               <TabsTrigger value="docs">Chứng từ đính kèm</TabsTrigger>
             </TabsList>
             <TabsContent value="general">
-              <GeneralTab decl={decl} currency={dossier.currency} />
+              <GeneralTab decl={decl} currency={dossier.currency} onEdit={isDraft && canEdit ? setEditing : undefined} />
             </TabsContent>
             <TabsContent value="items">
               <ItemsTab items={items} currency={dossier.currency} />
@@ -370,7 +451,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         {isDraft ? (
           <Button
             leftIcon={<ShieldCheck className="h-4 w-4" />}
-            disabled={unconfirmedHs > 0}
+            disabled={unconfirmedHs > 0 || blockedByFourEyes}
             onClick={() => {
               setChecked(false);
               setConfirmOpen(true);
@@ -379,9 +460,32 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             Phê duyệt tờ khai
           </Button>
         ) : (
-          <Button onClick={() => goTo("submit")}>Sang khai báo Hải quan</Button>
+          <>
+            {decl.status === "APPROVED" && canEdit && (
+              <Button variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setReopenOpen(true)}>
+                Mở lại để sửa
+              </Button>
+            )}
+            <Button onClick={() => goTo("submit")}>Sang khai báo Hải quan</Button>
+          </>
         )}
       </StickyActionBar>
+
+      {editing && <EditFieldDialog key={editing.code} dossierId={dossier.id} field={editing} currency={dossier.currency} onClose={() => setEditing(null)} />}
+
+      <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
+        <DialogContent title="Mở lại tờ khai để sửa" icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
+          <p className="text-sm text-fg-muted">Tờ khai quay về bản nháp và phê duyệt hiện tại bị hủy. Sau khi sửa, người duyệt phải phê duyệt lại thì mới truyền Hải quan được.</p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReopenOpen(false)}>
+              Hủy
+            </Button>
+            <Button loading={reopen.isPending} onClick={() => reopen.mutate()}>
+              Mở lại tờ khai
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent title="Phê duyệt tờ khai" icon={<ShieldCheck className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">

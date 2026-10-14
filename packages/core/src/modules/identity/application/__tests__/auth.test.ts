@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock, type Clock } from "../../../../shared/clock.js";
 import { sequentialIdGen } from "../../../../shared/ids.js";
-import { unwrap } from "../../../../shared/result.js";
+import { unwrap, errCode } from "../../../../shared/result.js";
 import { acceptInvite } from "../accept-invite.js";
 import { getSession } from "../get-session.js";
 import { login } from "../login.js";
@@ -11,6 +11,7 @@ import type { IdentityDeps } from "../ports.js";
 import { register } from "../register.js";
 import { requestPasswordReset } from "../request-password-reset.js";
 import { resetPassword } from "../reset-password.js";
+import { provisionStaffAccount, resendVerificationEmail } from "../staff-account.js";
 import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../test/fakes.js";
 import { InMemoryIdentityUow } from "../test/in-memory-uow.js";
 import { verifyEmail } from "../verify-email.js";
@@ -28,8 +29,8 @@ beforeEach(() => {
   uow = new InMemoryIdentityUow().seed({
     plans: [{ code: "TRIAL", name: "Dùng thử", dossiersPerMonth: 10, pagesPerDossier: 20 }, { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40 }],
     orgs: [
-      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "", planCode: "PRO", suspectThreshold: "BALANCED", createdAt: day(-40) },
-      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "TRIAL", suspectThreshold: "BALANCED", createdAt: day(-5) },
+      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "", planCode: "PRO", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-40) },
+      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "TRIAL", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-5) },
     ],
     users: [
       { id: "usr_chau", email: "chau.le@anphat-demo.vn", passwordHash: "h:demo1234", name: "Lê Minh Châu", emailVerifiedAt: day(-40), createdAt: day(-40) },
@@ -111,6 +112,44 @@ describe("login / getSession / logout", () => {
     for (let i = 0; i < 11; i++) last = await login(deps, { email: "chau.le@anphat-demo.vn", password: "sai-roi-1" }, META);
     expect(last?.ok).toBe(false);
     if (last && !last.ok) expect(last.error.code).toBe("RATE_LIMITED");
+  });
+  it("đăng nhập đúng nhiều lần không bị khóa; đăng nhập đúng xóa bộ đếm các lần sai trước đó", async () => {
+    for (let i = 0; i < 12; i++) expect((await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META)).ok).toBe(true);
+    for (let i = 0; i < 9; i++) await login(deps, { email: "chau.le@anphat-demo.vn", password: "sai-roi-1" }, META);
+    expect((await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META)).ok).toBe(true);
+    for (let i = 0; i < 9; i++) expect(errCode(await login(deps, { email: "chau.le@anphat-demo.vn", password: "sai-roi-1" }, META))).toBe("INVALID_CREDENTIALS");
+  });
+  it("doanh nghiệp bị tạm khóa: đăng nhập → ORG_SUSPENDED, phiên đang có hết hiệu lực; mở lại thì dùng tiếp", async () => {
+    const { sessionToken } = unwrap(await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META));
+    uow.data.orgs.find((o) => o.id === "org_a")!.status = "SUSPENDED";
+    expect(errCode(await getSession(deps, sessionToken))).toBe("UNAUTHENTICATED");
+    expect(errCode(await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META))).toBe("ORG_SUSPENDED");
+    uow.data.orgs.find((o) => o.id === "org_a")!.status = "ACTIVE";
+    expect((await getSession(deps, sessionToken)).ok).toBe(true);
+  });
+  it("quản trị viên hệ thống không thuộc doanh nghiệp: đăng nhập được, phiên không có org (API của khách vẫn 401); bị khóa → MEMBERSHIP_DISABLED", async () => {
+    uow.data.users.push({ id: "usr_ops", email: "ops@khaibao.vn", passwordHash: "h:demo1234", name: "Ops", emailVerifiedAt: day(-1), createdAt: day(-1) });
+    expect(errCode(await login(deps, { email: "ops@khaibao.vn", password: "demo1234" }, META))).toBe("NO_ORGANIZATION");
+    let status: "ACTIVE" | "DISABLED" = "ACTIVE";
+    deps.platformStaff = async (id) => (id === "usr_ops" ? { status } : null);
+    const { sessionToken } = unwrap(await login(deps, { email: "ops@khaibao.vn", password: "demo1234" }, META));
+    expect(uow.data.sessions.at(-1)).toMatchObject({ userId: "usr_ops", orgId: null });
+    expect(errCode(await getSession(deps, sessionToken))).toBe("UNAUTHENTICATED");
+    status = "DISABLED";
+    expect(errCode(await login(deps, { email: "ops@khaibao.vn", password: "demo1234" }, META))).toBe("MEMBERSHIP_DISABLED");
+  });
+  it("tài khoản cho quản trị viên mới: email mới → tạo user + liên kết đặt mật khẩu 7 ngày; email đã có → dùng lại; gửi lại xác thực", async () => {
+    const created = unwrap(await provisionStaffAccount(deps, { email: "moi@khaibao.vn", name: "Người Mới" }));
+    expect(created.created).toBe(true);
+    expect(mailer.sent.at(-1)?.to).toBe("moi@khaibao.vn");
+    expect(mailer.sent.at(-1)?.text).toMatch(/reset-password\?token=/);
+    expect(uow.data.authTokens.at(-1)?.expiresAt.getTime()).toBe(new Date(T0).getTime() + 7 * 24 * 3_600_000);
+    expect(unwrap(await provisionStaffAccount(deps, { email: "chau.le@anphat-demo.vn", name: "X" }))).toEqual({ userId: "usr_chau", created: false });
+    expect(errCode(await resendVerificationEmail(deps, "usr_chau"))).toBe("CONFLICT");
+    uow.data.users.find((u) => u.id === "usr_b")!.emailVerifiedAt = null;
+    unwrap(await resendVerificationEmail(deps, "usr_b"));
+    expect(mailer.sent.at(-1)).toMatchObject({ to: "b@b.vn" });
+    expect(errCode(await resendVerificationEmail(deps, "usr_none"))).toBe("NOT_FOUND");
   });
   it("thành viên DISABLED → MEMBERSHIP_DISABLED; chỉ có yêu cầu tham gia → MEMBERSHIP_PENDING", async () => {
     const d = await login(deps, { email: "quang@anphat-demo.vn", password: "demo1234" }, META);

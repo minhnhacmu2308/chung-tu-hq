@@ -33,7 +33,7 @@ export async function register(deps: IdentityDeps, input: RegisterInput, meta: {
     const orgId = deps.idGen.next("org");
     await r.orgs.insert({
       id: orgId, taxCode: input.taxCode, name: registry.found ? registry.name : `Doanh nghiệp MST ${input.taxCode}`, address: registry.found ? registry.address : "",
-      phone: "", planCode: "TRIAL", suspectThreshold: "BALANCED", createdAt: now,
+      phone: "", planCode: "TRIAL", suspectThreshold: "BALANCED", fourEyes: false, createdAt: now,
     });
     const t = newToken(deps.random);
     await r.authTokens.insert({ id: deps.idGen.next("tok"), userId, orgId, kind: "VERIFY_EMAIL", tokenHash: t.hash, expiresAt: new Date(now.getTime() + TOKEN_TTL_MS.VERIFY_EMAIL), usedAt: null });

@@ -19,7 +19,7 @@ export async function getSession(deps: IdentityDeps, sessionToken: string): Prom
   const orgId = s.orgId;
   return deps.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId(s.userId) }, async (r) => {
     const [user, org, membership] = await Promise.all([r.users.findById(s.userId), r.orgs.findById(orgId), r.memberships.find(orgId, s.userId)]);
-    if (!user || !org || !membership || membership.status !== "ACTIVE") return UNAUTH();
+    if (!user || !org || !membership || membership.status !== "ACTIVE" || org.status === "SUSPENDED") return UNAUTH();
     await r.sessions.touch(s.id, now, shouldExtend(s, now) ? sessionExpiry(now) : s.expiresAt);
     const plan = await deps.plans.get(org.planCode);
     const ctx: Ctx = { orgId: asOrgId(org.id), userId: asUserId(user.id), role: membership.role };

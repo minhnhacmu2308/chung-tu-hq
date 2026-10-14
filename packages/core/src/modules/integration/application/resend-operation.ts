@@ -24,10 +24,10 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const recorded = op === "IDA" || op === "EDA" ? !!st.declarationNo : op === "IDC" || op === "EDC" ? !!st.channel : op === "HYS" ? !!result.raw?.receiptNo : true;
 
   if (op === "IEX" || recorded) {
-    const transition = progress === "DOCS_SENT" || progress === "DONE" ? next(result.state, progress, { type: "STATUS", cleared: st.cleared }) : null;
+    const transition = progress === "DOCS_SENT" || progress === "DONE" ? next(result.state, progress, { type: "STATUS", cleared: st.cleared, ...(st.rejected ? { rejected: true } : {}) }) : null;
     await deps.uow.asOrg(ctx, async (r) => {
       await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: "IEX", direction: "IN", result: "OK", summary: op === "IEX" ? `Trạng thái tờ khai: ${st.status}` : `Hải quan đã ghi nhận ${op} – không gửi lại (trạng thái: ${st.status})`, payloadMasked: { nghiepVu: "IEX", trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now() });
-      if (transition) await r.results.upsert({ ...result, state: transition.state, clearanceStatus: st.cleared ? "CLEARED" : "INSPECTING", raw: { ...(result.raw ?? { progress }), progress: transition.progress, lastStatus: st.status }, updatedAt: now() });
+      if (transition) await r.results.upsert({ ...result, state: transition.state, clearanceStatus: st.rejected ? "REJECTED" : st.cleared ? "CLEARED" : "INSPECTING", raw: { ...(result.raw ?? { progress }), progress: transition.progress, lastStatus: st.status }, updatedAt: now() });
     });
     if (st.cleared) await deps.dossiers.update(ctx.orgId, dossierId, { status: "CLEARED" });
     await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });

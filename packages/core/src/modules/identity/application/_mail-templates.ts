@@ -10,6 +10,11 @@ export const resetPasswordMail = (appUrl: string, token: string): Mail => ({
   text: `Chào bạn,\n\nBấm liên kết sau để đặt lại mật khẩu (hiệu lực 1 giờ):\n${appUrl}/reset-password?token=${token}\n\nNếu bạn không yêu cầu, bỏ qua email này.`,
 });
 
+export const staffInviteMail = (appUrl: string, token: string): Mail => ({
+  subject: "Bạn được mời vào khu Quản trị hệ thống KhaiBáo AI",
+  text: `Chào bạn,\n\nBạn được thêm làm quản trị viên hệ thống KhaiBáo AI. Bấm liên kết để đặt mật khẩu (hiệu lực 7 ngày), sau đó đăng nhập ở ${appUrl}/login:\n${appUrl}/reset-password?token=${token}`,
+});
+
 export const inviteMail = (appUrl: string, token: string, orgName: string, inviterName: string): Mail => ({
   subject: `${inviterName} mời bạn vào ${orgName} trên KhaiBáo AI`,
   text: `Chào bạn,\n\n${inviterName} mời bạn tham gia doanh nghiệp ${orgName} trên KhaiBáo AI. Bấm liên kết để đặt mật khẩu và bắt đầu (hiệu lực 7 ngày):\n${appUrl}/accept-invite?token=${token}`,

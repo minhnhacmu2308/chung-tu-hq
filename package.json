@@ -23,6 +23,7 @@
     "test:e2e": "pnpm --filter @kb/web test:e2e"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "5.0.4",
     "concurrently": "^10.0.6",
     "dependency-cruiser": "^16.10.0",
     "typescript": "^5.9.0"

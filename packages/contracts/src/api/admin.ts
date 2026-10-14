@@ -56,3 +56,20 @@ export const SendAnnouncementInputSchema = z
   })
   .refine((v) => v.kind !== "MAINTENANCE" || !!v.maintenanceDate, { path: ["maintenanceDate"], message: "Chọn ngày bảo trì" });
 export type SendAnnouncementInput = z.infer<typeof SendAnnouncementInputSchema>;
+
+/** Mã 6 số từ ứng dụng xác thực, hoặc mã khôi phục dạng "abcd-efgh". */
+export const AdminMfaCodeInputSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .refine((v) => /^\d{3}\s?\d{3}$/.test(v) || /^[a-z2-9]{4}-[a-z2-9]{4}$/i.test(v), "Nhập mã 6 số trong ứng dụng xác thực hoặc mã khôi phục"),
+});
+export type AdminMfaCodeInput = z.infer<typeof AdminMfaCodeInputSchema>;
+
+/** Bước thiết lập: khóa (để nhập tay) + URI + mã QR dạng SVG. */
+export const AdminMfaSetupSchema = z.object({ secret: z.string(), otpauthUri: z.string(), qrSvg: z.string() });
+export type AdminMfaSetup = z.infer<typeof AdminMfaSetupSchema>;
+
+/** Bật xong: mã khôi phục chỉ hiện MỘT lần. */
+export const AdminMfaEnabledSchema = z.object({ recoveryCodes: z.array(z.string()) });
+export type AdminMfaEnabled = z.infer<typeof AdminMfaEnabledSchema>;

@@ -26,6 +26,15 @@ export const updateSuspectThreshold = (threshold: Organization["suspectThreshold
     return db.org;
   });
 
+/** Bật/tắt nguyên tắc 4 mắt (chỉ Quản trị / Chủ sở hữu). */
+export const updateFourEyes = (enabled: boolean) =>
+  mutate((db) => {
+    const role = db.members.find((m) => m.id === db.currentUserId)?.role;
+    if (role !== "OWNER" && role !== "ADMIN") throw new ApiError("FORBIDDEN", "Cần vai trò Quản trị hoặc Chủ sở hữu");
+    db.org.fourEyes = enabled;
+    return db.org;
+  });
+
 export const listMembers = () => query((db) => db.members);
 
 export const inviteMember = (input: { email: string; role: Role }) =>

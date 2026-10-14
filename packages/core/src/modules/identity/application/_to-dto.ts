@@ -12,11 +12,16 @@ export function toMember(u: UserRow, m: MembershipRow, lastSeen?: Date): Member 
   };
 }
 
-/** `usage` do billing cung cấp (container nối); không có → 0. renewsAt = ngày tạo + bội số 30 ngày tiếp theo. */
+/**
+ * `usage` do billing cung cấp (container nối); không có → 0.
+ * renewsAt = mốc (lần đổi gói gần nhất, hoặc ngày tạo) + bội số 30 ngày tiếp theo; dùng thử được gia hạn tay → đúng ngày hết hạn đó.
+ * Cùng công thức với `renewsAt` của module admin (domain/period.ts).
+ */
 export function toOrganization(o: OrgRow, plan: PlanRow | null, now: Date, usage?: Organization["usage"]): Organization {
   const DAY = 86_400_000;
-  const elapsed = Math.max(0, now.getTime() - o.createdAt.getTime());
-  const renews = new Date(o.createdAt.getTime() + (Math.floor(elapsed / (30 * DAY)) + 1) * 30 * DAY);
+  const anchor = o.planStartedAt ?? o.createdAt;
+  const elapsed = Math.max(0, now.getTime() - anchor.getTime());
+  const renews = o.planCode === "TRIAL" && o.trialEndsAt ? o.trialEndsAt : new Date(anchor.getTime() + (Math.floor(elapsed / (30 * DAY)) + 1) * 30 * DAY);
   return {
     id: o.id,
     name: o.name,
@@ -32,5 +37,6 @@ export function toOrganization(o: OrgRow, plan: PlanRow | null, now: Date, usage
     },
     usage: usage ?? { dossiersThisMonth: 0, pagesThisMonth: 0, aiCostVnd: "0" },
     suspectThreshold: o.suspectThreshold as Organization["suspectThreshold"],
+    fourEyes: o.fourEyes,
   };
 }

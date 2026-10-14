@@ -1,2 +1,44 @@
-// Back-office của bên vận hành. Hiện chỉ có mock (backend /api/admin/** chưa dựng) – khi có, thêm ./http/admin.ts rồi chọn bằng pick() như settings.ts.
-export * from "@/mocks/api/admin";
+// Back-office của bên vận hành. Chọn mock|http theo NEXT_PUBLIC_DATA_SOURCE (backend: /api/admin/**, ADR 0006).
+import { pick } from "@/lib/data-source";
+import * as mock from "@/mocks/api/admin";
+import * as http from "./http/admin";
+
+export const adminKeys = mock.adminKeys;
+
+export const getAdminSession = pick(mock.getAdminSession, http.getAdminSession);
+export const getAdminOverview = pick(mock.getAdminOverview, http.getAdminOverview);
+export const listAdminOrgs = pick(mock.listAdminOrgs, http.listAdminOrgs);
+export const getAdminOrg = pick(mock.getAdminOrg, http.getAdminOrg);
+export const suspendOrg = pick(mock.suspendOrg, http.suspendOrg);
+export const reactivateOrg = pick(mock.reactivateOrg, http.reactivateOrg);
+export const changeOrgPlan = pick(mock.changeOrgPlan, http.changeOrgPlan);
+export const adjustOrgQuota = pick(mock.adjustOrgQuota, http.adjustOrgQuota);
+export const extendOrgTrial = pick(mock.extendOrgTrial, http.extendOrgTrial);
+export const listAdminUsers = pick(mock.listAdminUsers, http.listAdminUsers);
+export const setAdminUserDisabled = pick(mock.setAdminUserDisabled, http.setAdminUserDisabled);
+export const sendUserPasswordReset = pick(mock.sendUserPasswordReset, http.sendUserPasswordReset);
+export const resendUserVerification = pick(mock.resendUserVerification, http.resendUserVerification);
+export const revokeUserSessions = pick(mock.revokeUserSessions, http.revokeUserSessions);
+export const listAdminPlans = pick(mock.listAdminPlans, http.listAdminPlans);
+export const updateAdminPlan = pick(mock.updateAdminPlan, http.updateAdminPlan);
+export const listUsageMonths = pick(mock.listUsageMonths, http.listUsageMonths);
+export const getUsageReport = pick(mock.getUsageReport, http.getUsageReport);
+export const listPlatformIntegrations = pick(mock.listPlatformIntegrations, http.listPlatformIntegrations);
+export const testPlatformIntegration = pick(mock.testPlatformIntegration, http.testPlatformIntegration);
+export const updateIntegrationKey = pick(mock.updateIntegrationKey, http.updateIntegrationKey);
+export const getSystemHealth = pick(mock.getSystemHealth, http.getSystemHealth);
+export const retryFailedJob = pick(mock.retryFailedJob, http.retryFailedJob);
+export const listSkillTemplates = pick(mock.listSkillTemplates, http.listSkillTemplates);
+export const setSkillTemplatePublished = pick(mock.setSkillTemplatePublished, http.setSkillTemplatePublished);
+export const listStaff = pick(mock.listStaff, http.listStaff);
+export const inviteStaff = pick(mock.inviteStaff, http.inviteStaff);
+export const changeStaffRole = pick(mock.changeStaffRole, http.changeStaffRole);
+export const setStaffDisabled = pick(mock.setStaffDisabled, http.setStaffDisabled);
+export const listAdminAudit = pick(mock.listAdminAudit, http.listAdminAudit);
+export const listAnnouncements = pick(mock.listAnnouncements, http.listAnnouncements);
+export const sendAnnouncement = pick(mock.sendAnnouncement, http.sendAnnouncement);
+export const withdrawAnnouncement = pick(mock.withdrawAnnouncement, http.withdrawAnnouncement);
+export const startAdminMfaSetup = pick(mock.startAdminMfaSetup, http.startAdminMfaSetup);
+export const confirmAdminMfaSetup = pick(mock.confirmAdminMfaSetup, http.confirmAdminMfaSetup);
+export const verifyAdminMfa = pick(mock.verifyAdminMfa, http.verifyAdminMfa);
+export const resetStaffMfa = pick(mock.resetStaffMfa, http.resetStaffMfa);

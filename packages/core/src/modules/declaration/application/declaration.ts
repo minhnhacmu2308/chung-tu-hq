@@ -2,7 +2,7 @@ import type { Declaration, DeclarationView } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { canApprove, canMoveToReview } from "../domain/guards.js";
+import { canApprove, canEditField, canMoveToReview } from "../domain/guards.js";
 import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
 import { loadDossier, toDeclaration, toLineItem, unconfirmedCount } from "./_dto.js";
@@ -46,6 +46,8 @@ export async function updateDeclarationField(deps: DeclarationDeps, ctx: Ctx, do
     if (decl.status !== "DRAFT") return err(domainError("INVALID_STATE", "Tờ khai đã duyệt – không sửa"));
     const f = decl.fields[code];
     if (!f) return err(domainError("NOT_FOUND", "Không có chỉ tiêu này trên tờ khai"));
+    const editable = canEditField(decl.kind, code, value);
+    if (!editable.ok) return editable;
     const fields = { ...decl.fields, [code]: { no: f.no, label: f.label, section: f.section, value, source: "USER" as const } };
     await r.declarations.update(decl.id, { fields, updatedAt: now });
     return ok({ old: f.value, decl: { ...decl, fields, updatedAt: now } });

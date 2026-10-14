@@ -22,7 +22,8 @@ export const CustomsResultSchema = z.object({
   declarationNo: z.string(),
   channel: CustomsChannelSchema,
   channelNote: z.string(),
-  clearanceStatus: z.enum(["WAITING", "INSPECTING", "CLEARED"]),
+  /** REJECTED: Hải quan từ chối tờ khai (tra IEX) – hiện rõ để người khai xử lý, không gộp vào "đang kiểm tra". */
+  clearanceStatus: z.enum(["WAITING", "INSPECTING", "CLEARED", "REJECTED"]),
   customsTaxVnd: DecimalStringSchema,
   updatedAt: IsoDateTimeSchema,
 });

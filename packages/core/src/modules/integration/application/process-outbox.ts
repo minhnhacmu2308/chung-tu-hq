@@ -72,7 +72,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       } else event = { type: "PRE_DECLARE_FAIL" };
     } else if (ob.operation === "IDC" || ob.operation === "EDC") {
       const res = await deps.gateway.declare(input.orgId, { kind: ob.operation, externalId: result.externalId ?? "", dossierId: ob.dossierId }, ob.idempotencyKey);
-      errors = res.errors ?? (res.accepted ? undefined : [{ code: "E-IDC-REJECT", message: "Hải quan không chấp nhận khai chính thức" }]);
+      errors = res.errors ?? (!res.accepted ? [{ code: "E-IDC-REJECT", message: "Hải quan không chấp nhận khai chính thức" }] : res.channel ? undefined : [{ code: "E-IDC-NO-CHANNEL", message: "Hải quan chấp nhận nhưng chưa trả kết quả phân luồng – bấm Tra cứu trạng thái hoặc gửi lại" }]);
       if (!errors?.length && res.channel) {
         patch.channel = res.channel;
         patch.channelNote = CHANNEL_NOTES[res.channel];

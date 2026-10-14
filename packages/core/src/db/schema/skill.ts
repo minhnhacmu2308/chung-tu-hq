@@ -25,6 +25,8 @@ export const skills = pgTable(
     language: text("language").notNull().default("Đa ngôn ngữ"),
     enabled: boolean("enabled").notNull().default(true),
     isTemplate: boolean("is_template").notNull().default(false),
+    /** Skill mẫu: đã phát hành thì doanh nghiệp mới được cấp sẵn bản sao. */
+    published: boolean("published").notNull().default(true),
     templateId: text("template_id"),
     currentVersion: integer("current_version").notNull().default(1),
     labeledSamples: integer("labeled_samples").notNull().default(0),

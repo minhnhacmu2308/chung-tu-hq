@@ -154,6 +154,16 @@ describe("HS và tờ khai", () => {
     expect(errCode(await updateDeclarationField(deps, declarant, D, "NOPE", "x"))).toBe("NOT_FOUND");
   });
 
+  it("updateDeclarationField: chỉ tiêu tính từ hóa đơn/tỷ giá không sửa tay; chỉ tiêu bắt buộc không để trống; VIEWER bị chặn", async () => {
+    await runFull("DECLARATION");
+    const before = unwrap(await getDeclarationView(deps, declarant, D)).declaration!;
+    for (const code of ["TONG_TG", "MA_TT", "DK_GIA", "TY_GIA", "PHI_VC"]) expect(errCode(await updateDeclarationField(deps, declarant, D, code, "1"))).toBe("VALIDATION");
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "SO_HD", ""))).toBe("VALIDATION");
+    expect(errCode(await updateDeclarationField(deps, viewer, D, "KHO", "x"))).toBe("FORBIDDEN");
+    expect(unwrap(await getDeclarationView(deps, declarant, D)).declaration!.fields).toEqual(before.fields);
+    expect(audit.rows.filter((r) => r.source === "DECL_EDIT")).toHaveLength(0);
+  });
+
   it("moveToReview cần HS đủ + tờ khai; approve: VIEWER/DECLARANT FORBIDDEN, BLOCKER → BLOCKER_FAILED, HS thiếu → HS_UNCONFIRMED, đủ → APPROVED + hồ sơ sang submit", async () => {
     await runFull("DECLARATION");
     expect(errCode(await moveToReview(deps, declarant, D))).toBe("HS_UNCONFIRMED");

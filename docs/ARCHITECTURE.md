@@ -27,6 +27,7 @@ Một repo, một DB, triển khai bằng Docker Compose (web, worker, postgres,
 | `declaration` | Ánh xạ shipment → tờ khai IDA/EDA, gợi ý HS, thuế dự kiến, chặn truyền khi còn BLOCKER |
 | `billing` | Gói, hạn mức, usage (token, chi phí) theo org |
 | `integration` | Adapter: Customs Hub, hscodepro, tra cứu HĐĐT, nhà cung cấp AI, object storage |
+| `admin` | Khu Quản trị hệ thống của đội vận hành (`/admin`): đọc xuyên doanh nghiệp bằng role `kb_platform`, chỉ số liệu tổng hợp, mọi thao tác ghi `admin_audit` (ADR 0006) |
 
 ### Tầng trong mỗi module
 

@@ -2,12 +2,12 @@
 import { InviteStaffInputSchema, STAFF_PERMISSIONS, type Staff, type StaffRole } from "@kb/contracts";
 import {
   Alert, Avatar, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, Dialog, DialogContent,
-  DialogFooter, Field, Input, PageHeader, RowActions, Select, Stack, StatusBadge,
+  Badge, DialogFooter, Field, Input, PageHeader, RowActions, Select, Stack, StatusBadge,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Check, Lock, LockOpen, UserCog, UserPlus } from "lucide-react";
+import { Check, Lock, LockOpen, ShieldOff, UserCog, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { adminKeys, changeStaffRole, inviteStaff, listStaff, setStaffDisabled } from "@/api/admin";
+import { adminKeys, changeStaffRole, inviteStaff, listStaff, resetStaffMfa, setStaffDisabled } from "@/api/admin";
 import { LoadError } from "@/components/common/load-error";
 import { formatRelative } from "@/lib/format";
 import { ACCOUNT_STATUS, PERMISSION_LABELS, PERMISSION_ORDER, STAFF_ROLE_LABELS, STAFF_ROLE_ORDER, statusLabel } from "../common/admin-display";
@@ -82,7 +82,7 @@ export function StaffPage() {
   const { staff: me, can } = useAdminSession();
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: adminKeys.staff, queryFn: listStaff });
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [dialog, setDialog] = useState<{ staff: Staff; action: "role" | "disable" | "enable" } | null>(null);
+  const [dialog, setDialog] = useState<{ staff: Staff; action: "role" | "disable" | "enable" | "mfa-reset" } | null>(null);
   const [role, setRole] = useState<StaffRole>("SUPPORT");
   const close = () => setDialog(null);
 
@@ -90,6 +90,12 @@ export function StaffPage() {
     mutationFn: (v: { id: string; role: StaffRole; reason: string }) => changeStaffRole(v.id, { role: v.role, reason: v.reason }),
     success: (s) => `${s.name} → ${STAFF_ROLE_LABELS[s.role]}`,
     errorTitle: "Không đổi được vai trò",
+    onSuccess: close,
+  });
+  const mfaReset = useAdminMutation({
+    mutationFn: (v: { id: string; reason: string }) => resetStaffMfa(v.id, { reason: v.reason }),
+    success: (s) => `Đã đặt lại xác thực 2 lớp của ${s.name}`,
+    errorTitle: "Không đặt lại được xác thực 2 lớp",
     onSuccess: close,
   });
   const toggle = useAdminMutation({
@@ -117,6 +123,9 @@ export function StaffPage() {
                 {c.getValue()} {c.row.original.id === meId && <span className="text-xs font-normal text-fg-subtle">(bạn)</span>}
               </p>
               <p className="text-xs text-fg-subtle">{c.row.original.email}</p>
+              {c.row.original.mfaEnabled === false && c.row.original.status === "ACTIVE" && (
+                <Badge tone="warning" size="sm" className="mt-1">Chưa bật xác thực 2 lớp</Badge>
+              )}
             </div>
           </div>
         ),
@@ -166,6 +175,7 @@ export function StaffPage() {
                       rowLabel={r.name}
                       actions={[
                         { id: "role", label: "Đổi vai trò", icon: <UserCog />, disabled: self, onSelect: () => { setRole(r.role); setDialog({ staff: r, action: "role" }); } },
+                        ...(r.mfaEnabled && !self ? [{ id: "mfa-reset", label: "Đặt lại xác thực 2 lớp", icon: <ShieldOff />, quick: false, onSelect: () => setDialog({ staff: r, action: "mfa-reset" }) }] : []),
                         r.status === "DISABLED"
                           ? { id: "enable", label: "Mở khóa", icon: <LockOpen />, quick: false, onSelect: () => setDialog({ staff: r, action: "enable" }) }
                           : { id: "disable", label: "Khóa tài khoản", icon: <Lock />, tone: "danger" as const, quick: false, disabled: self || r.status === "INVITED", onSelect: () => setDialog({ staff: r, action: "disable" }) },
@@ -228,6 +238,19 @@ export function StaffPage() {
         </Field>
         {role === "SUPER_ADMIN" && <Alert tone="warning">Quản trị cấp cao đổi được gói, khóa API và phân quyền của mọi quản trị viên khác.</Alert>}
       </ReasonDialog>
+
+      <ReasonDialog
+        open={dialog?.action === "mfa-reset"}
+        onOpenChange={(o) => !o && close()}
+        title="Đặt lại xác thực 2 lớp?"
+        icon={<ShieldOff className="h-4 w-4" />}
+        description={target ? `${target.name} · ${target.email}` : undefined}
+        confirmLabel="Đặt lại"
+        tone="danger"
+        pending={mfaReset.isPending}
+        reasonHint="Dùng khi người này mất hoặc đổi điện thoại. Họ bị đăng xuất và phải thiết lập lại ở lần đăng nhập sau."
+        onConfirm={(reason) => target && mfaReset.mutate({ id: target.id, reason })}
+      />
 
       <ReasonDialog
         open={dialog?.action === "disable" || dialog?.action === "enable"}

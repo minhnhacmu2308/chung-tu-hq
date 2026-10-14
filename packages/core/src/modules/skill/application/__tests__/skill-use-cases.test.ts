@@ -9,7 +9,7 @@ import { cloneTemplatesForOrg } from "../clone-templates.js";
 import { evaluateSkill, getEvaluation, runEvaluation } from "../evaluate.js";
 import { getSkill, listSkills, setSkillEnabled } from "../query-skills.js";
 import { createSkillResolver } from "../resolve-skill.js";
-import { confirmPendingSamples, labelSample, listSamples, readSample, uploadSamples } from "../samples.js";
+import { confirmPendingSamples, getSampleLabel, labelSample, listSamples, readSample, uploadSamples } from "../samples.js";
 import type { SkillDeps } from "../ports.js";
 import { fakePdf, fakeUsers, MemoryStorage, RecordingUsage, ScriptedAi, SYSTEM_ORG, templateRows } from "../test/fakes.js";
 import { InMemorySkillUow } from "../test/in-memory-uow.js";
@@ -117,6 +117,8 @@ describe("mẫu và đánh giá", () => {
     const l = unwrap(await labelSample(deps, admin, s!.id, { invoice_no: "A-1", total_amount: "100", po_no: null }));
     expect(l.status).toBe("LABELED");
     expect(unwrap(await getSkill(deps, admin, id)).labeledSamples).toBe(1);
+    expect(unwrap(await getSampleLabel(deps, admin, s!.id))).toMatchObject({ sample: { id: s!.id, status: "LABELED" }, expected: { invoice_no: "A-1", total_amount: "100", po_no: null } });
+    expect(errCode(await getSampleLabel(deps, other, s!.id))).toBe("NOT_FOUND");
     // Gắn nhãn lại không cộng thêm.
     unwrap(await labelSample(deps, admin, s!.id, { invoice_no: "A-1" }));
     expect(unwrap(await getSkill(deps, admin, id)).labeledSamples).toBe(1);

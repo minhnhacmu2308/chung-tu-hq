@@ -1,0 +1,343 @@
+// Khu Quản trị hệ thống trên Postgres thật: role kb_platform (BYPASSRLS) đọc xuyên doanh nghiệp, kb_app không đọc được bảng admin,
+// quyền theo vai trò, nhật ký cùng transaction, tác động tới ứng dụng của khách (đăng nhập, hạn mức, thông báo).
+import { sql } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createDb, type Db } from "../db/client.js";
+import { runSeed } from "../db/seed/index.js";
+import { startTestDb, type TestDb } from "../db/test-db.js";
+import { systemClock } from "../shared/clock.js";
+import { ulidIdGen } from "../shared/ids.js";
+import { errCode, unwrap } from "../shared/result.js";
+import { getSession, hashToken, listNotifications, login, provisionStaffAccount, register, requestPasswordReset, resendVerificationEmail, type IdentityDeps } from "../modules/identity/index.js";
+import { FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../modules/identity/application/test/fakes.js";
+import { AesSecretStore, Argon2Hasher, DrizzleIdentityUow, DrizzlePlansReader } from "../modules/identity/infrastructure/index.js";
+import {
+  adjustOrgQuota, changeOrgPlan, changeStaffRole, extendOrgTrial, getAdminSession, getOrg, getOverview, getSystemHealth, getUsageReport, inviteStaff, listAudit, listOrgs,
+  listPlans, listPlatformIntegrations, listSkillTemplates, listStaff, listUsers, reactivateOrg, resolveStaff, retryFailedJob, revokeUserSessions, sendAnnouncement,
+  setSkillTemplatePublished, setStaffDisabled, setUserDisabled, suspendOrg, testPlatformIntegration, updateIntegrationKey, updatePlan, withdrawAnnouncement,
+  confirmMfaSetup, resetStaffMfa, resolveStaffSession, startMfaSetup, verifyMfa,
+  type AdminDeps, type FailedJobInfo, type StaffActor,
+} from "../modules/admin/index.js";
+import { createAdminInfrastructure, platformStaffOf, type DrizzleAdminUow } from "../modules/admin/infrastructure/index.js";
+import { base32Decode, totp } from "../modules/admin/domain/totp.js";
+
+let t: TestDb;
+let appDb: Db;
+let identity: IdentityDeps;
+let admin: AdminDeps & { db: Db };
+let mailer: RecordingMailer;
+const failed: FailedJobInfo[] = [];
+const retried: string[] = [];
+const META = { ip: "127.0.0.1" };
+const R = { reason: "Khách yêu cầu qua hotline" };
+
+// Đồng hồ của module admin chạy nhanh 31 giây sau mỗi lần nhập mã 2FA → mỗi lần là một mã mới (mã đã dùng bị từ chối).
+let skew = 0;
+const adminClock = { now: () => new Date(Date.now() + skew) };
+const secrets = new Map<string, string>();
+const codeFor = (email: string) => totp(base32Decode(secrets.get(email)!), adminClock.now());
+
+/** Đăng nhập + qua bước 2FA (thiết lập ở lần đầu) → quản trị viên dùng được API quản trị. */
+async function staff(email: string): Promise<StaffActor> {
+  const { sessionToken } = unwrap(await login(identity, { email, password: "demo1234" }, META));
+  const s = unwrap(await resolveStaffSession(admin, sessionToken));
+  skew += 31_000;
+  if (!s.mfa.enrolled) {
+    const setup = unwrap(await startMfaSetup(admin, sessionToken));
+    secrets.set(email, setup.secret);
+    unwrap(await confirmMfaSetup(admin, sessionToken, codeFor(email)));
+  } else unwrap(await verifyMfa(admin, sessionToken, codeFor(email)));
+  return unwrap(await resolveStaff(admin, sessionToken));
+}
+
+beforeAll(async () => {
+  t = await startTestDb();
+  await runSeed(t.adminUrl);
+  appDb = createDb(t.appUrl, { max: 4 });
+  mailer = new RecordingMailer();
+  identity = {
+    uow: new DrizzleIdentityUow(appDb), plans: new DrizzlePlansReader(appDb), hasher: new Argon2Hasher(), rateLimiter: new InMemoryRateLimiter(systemClock), mailer,
+    taxRegistry: new FakeTaxRegistry(), clock: systemClock, idGen: ulidIdGen, appUrl: "http://localhost:3100",
+  };
+  admin = createAdminInfrastructure({
+    platformUrl: t.platformUrl,
+    identity: {
+      hashToken,
+      sendPasswordReset: (email) => requestPasswordReset(identity, email, META),
+      resendVerification: (id) => resendVerificationEmail(identity, id),
+      provisionAccount: (i) => provisionStaffAccount(identity, i),
+    },
+    jobs: {
+      stats: async () => [{ queue: "extract-document", waiting: 1, active: 0, failed: failed.length, completedToday: 3 }],
+      failed: async (limit) => failed.slice(0, limit),
+      retry: async (queue, id) => {
+        const i = failed.findIndex((j) => j.queue === queue && j.id === id);
+        if (i < 0) return false;
+        failed.splice(i, 1);
+        retried.push(id);
+        return true;
+      },
+    },
+    system: { services: async (now) => [{ id: "POSTGRES", name: "Cơ sở dữ liệu", status: "UP", detail: "ok", checkedAt: now.toISOString() }] },
+    probe: { test: async (_id, key) => (key?.startsWith("good") ? { ok: true, detail: "Gọi thử thành công" } : { ok: false, detail: "401 – khóa bị từ chối" }) },
+    vault: new AesSecretStore(Buffer.alloc(32, 9).toString("base64")),
+    limiter: new InMemoryRateLimiter(systemClock),
+    clock: adminClock,
+  });
+  identity.platformStaff = (userId) => platformStaffOf(admin.uow as DrizzleAdminUow, userId);
+  // Doanh nghiệp thứ hai (gói dùng thử) để kiểm tra đọc xuyên doanh nghiệp và nhóm nhận thông báo.
+  unwrap(await register(identity, { email: "an@minhkhang.vn", name: "Nguyễn Văn An", password: "matkhau123", taxCode: "0101234567", joinExisting: false }, META));
+}, 120_000);
+
+afterAll(async () => {
+  await admin?.db.close();
+  await appDb?.close();
+  await t?.stop();
+});
+
+describe("ranh giới dữ liệu (ADR 0006)", () => {
+  it("kb_app không đọc được bảng của khu quản trị; kb_platform đọc được mọi doanh nghiệp", async () => {
+    const appRows = await appDb.execute(sql`select count(*)::int as n from platform_staff`);
+    expect((appRows as unknown as { n: number }[])[0]!.n).toBe(0);
+    const platformRows = await admin.db.execute(sql`select count(*)::int as n from platform_staff`);
+    expect((platformRows as unknown as { n: number }[])[0]!.n).toBe(3);
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    expect(unwrap(await listOrgs(admin, bao)).map((o) => o.taxCode).sort()).toEqual(expect.arrayContaining(["0101234567", "0316789012"]));
+  });
+});
+
+describe("phiên quản trị", () => {
+  it("quản trị viên không thuộc doanh nghiệp đăng nhập được, phiên không có org; khách không có quyền quản trị → null / FORBIDDEN", async () => {
+    const { sessionToken } = unwrap(await login(identity, { email: "bao.hoang@khaibao-demo.vn", password: "demo1234" }, META));
+    expect(errCode(await getSession(identity, sessionToken))).toBe("UNAUTHENTICATED"); // API của khách
+    expect(unwrap(await getAdminSession(admin, sessionToken))?.staff).toMatchObject({ email: "bao.hoang@khaibao-demo.vn", role: "SUPER_ADMIN", status: "ACTIVE" });
+    expect(errCode(await resolveStaff(admin, sessionToken))).toBe("MFA_REQUIRED"); // chưa qua 2FA → mọi API quản trị bị chặn
+    const chau = unwrap(await login(identity, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META)).sessionToken;
+    expect(unwrap(await getAdminSession(admin, chau))).toBeNull();
+    expect(errCode(await resolveStaff(admin, chau))).toBe("FORBIDDEN");
+    expect(errCode(await resolveStaff(admin, "token-la"))).toBe("UNAUTHENTICATED");
+  });
+});
+
+describe("doanh nghiệp", () => {
+  it("Chỉ xem không thao tác được; Hỗ trợ tạm khóa → thành viên không đăng nhập được, phiên cũ hết hiệu lực; mở lại → dùng tiếp; mỗi bước có nhật ký", async () => {
+    const viet = await staff("viet.dinh@khaibao-demo.vn");
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    expect(errCode(await suspendOrg(admin, viet, "org_anphat", R))).toBe("FORBIDDEN");
+    const chauSession = unwrap(await login(identity, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META)).sessionToken;
+
+    expect(unwrap(await suspendOrg(admin, trang, "org_anphat", R))).toMatchObject({ status: "SUSPENDED", suspendedReason: R.reason });
+    expect(errCode(await suspendOrg(admin, trang, "org_anphat", R))).toBe("CONFLICT");
+    expect(errCode(await getSession(identity, chauSession))).toBe("UNAUTHENTICATED");
+    expect(errCode(await login(identity, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META))).toBe("ORG_SUSPENDED");
+
+    unwrap(await reactivateOrg(admin, trang, "org_anphat", { reason: "Đã xác minh, mở lại" }));
+    expect((await getSession(identity, chauSession)).ok).toBe(true);
+    const log = unwrap(await listAudit(admin, viet, { orgId: "org_anphat" }));
+    expect(log.slice(0, 2).map((a) => [a.action, a.staffName, a.reason])).toEqual([
+      ["ORG_REACTIVATED", "Mai Thị Thu Trang", "Đã xác minh, mở lại"],
+      ["ORG_SUSPENDED", "Mai Thị Thu Trang", R.reason],
+    ]);
+    expect(errCode(await suspendOrg(admin, trang, "org_khong_co", R))).toBe("NOT_FOUND");
+  });
+
+  it("đổi gói (Cấp cao) → kỳ 30 ngày mới; nới hạn mức chỉ tháng này; gia hạn chỉ cho gói dùng thử; Hỗ trợ không có quyền BILLING", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    const minhKhang = unwrap(await listOrgs(admin, bao)).find((o) => o.taxCode === "0101234567")!;
+    expect(errCode(await changeOrgPlan(admin, trang, minhKhang.id, { planCode: "BASIC", ...R }))).toBe("FORBIDDEN");
+
+    const trialEnds = unwrap(await extendOrgTrial(admin, bao, minhKhang.id, { days: 14, ...R })).plan.renewsAt;
+    expect(new Date(`${trialEnds}T00:00:00Z`).getTime()).toBeGreaterThan(Date.now() + 40 * 86_400_000); // 30 ngày kỳ hiện tại + 14
+    const changed = unwrap(await changeOrgPlan(admin, bao, minhKhang.id, { planCode: "BASIC", ...R }));
+    expect(changed.plan).toMatchObject({ code: "BASIC", name: "Cơ bản", dossiersPerMonth: 50 });
+    expect(new Date(`${changed.plan.renewsAt}T00:00:00Z`).getTime() - Date.now()).toBeLessThan(31 * 86_400_000);
+    expect(errCode(await changeOrgPlan(admin, bao, minhKhang.id, { planCode: "BASIC", ...R }))).toBe("CONFLICT");
+    expect(errCode(await extendOrgTrial(admin, bao, minhKhang.id, { days: 7, ...R }))).toBe("CONFLICT");
+    expect(unwrap(await adjustOrgQuota(admin, bao, minhKhang.id, { bonusDossiers: 20, ...R })).quotaBonus).toBe(20);
+    const detail = unwrap(await getOrg(admin, bao, minhKhang.id));
+    expect(detail).toMatchObject({ quotaBonus: 20, ownerEmail: "an@minhkhang.vn", memberCount: 1, integrations: [], certificates: [] });
+    expect(unwrap(await listAudit(admin, bao, { orgId: minhKhang.id })).map((a) => a.detail)).toEqual(["+20 hồ sơ tháng này", "Dùng thử → Cơ bản", "+14 ngày dùng thử"]);
+  });
+});
+
+describe("người dùng", () => {
+  it("khóa tài khoản trong doanh nghiệp → đăng nhập bị chặn, phiên ở đó bị xóa; mở lại; đăng xuất mọi phiên; gửi đặt lại mật khẩu", async () => {
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    const id = "org_anphat~usr_ha";
+    unwrap(await login(identity, { email: "ha.nguyen@anphat-demo.vn", password: "demo1234" }, META));
+    const before = unwrap(await listUsers(admin, trang, { orgId: "org_anphat" })).find((u) => u.id === id)!;
+    expect(before).toMatchObject({ orgName: "CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT", role: "DECLARANT", status: "ACTIVE" });
+    expect(before.sessions.length).toBeGreaterThan(0);
+
+    expect(unwrap(await setUserDisabled(admin, trang, id, true, R))).toMatchObject({ status: "DISABLED", sessions: [] });
+    expect(errCode(await login(identity, { email: "ha.nguyen@anphat-demo.vn", password: "demo1234" }, META))).toBe("MEMBERSHIP_DISABLED");
+    expect(errCode(await setUserDisabled(admin, trang, id, true, R))).toBe("CONFLICT");
+    unwrap(await setUserDisabled(admin, trang, id, false, R));
+    unwrap(await login(identity, { email: "ha.nguyen@anphat-demo.vn", password: "demo1234" }, META));
+    expect(unwrap(await revokeUserSessions(admin, trang, id, R)).sessions).toEqual([]);
+    expect(errCode(await revokeUserSessions(admin, trang, id, R))).toBe("CONFLICT");
+    expect(errCode(await setUserDisabled(admin, trang, "org_anphat~usr_linh", true, R))).toBe("CONFLICT"); // INVITED
+    expect(errCode(await setUserDisabled(admin, trang, "khong-hop-le", true, R))).toBe("NOT_FOUND");
+  });
+});
+
+describe("gói, chi phí, tích hợp, hệ thống, skill mẫu", () => {
+  it("sửa gói ghi chi tiết thay đổi; không đổi gì → CONFLICT; báo cáo tháng có mọi doanh nghiệp, tiền là chuỗi thập phân", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const pro = unwrap(await listPlans(admin, bao)).find((p) => p.code === "PRO")!;
+    const updated = unwrap(await updatePlan(admin, bao, "PRO", { name: pro.name, dossiersPerMonth: 160, pagesPerDossier: pro.pagesPerDossier, priceVnd: "3190000", ...R }));
+    expect(updated).toMatchObject({ dossiersPerMonth: 160, priceVnd: "3190000" });
+    expect(errCode(await updatePlan(admin, bao, "PRO", { name: pro.name, dossiersPerMonth: 160, pagesPerDossier: pro.pagesPerDossier, priceVnd: "3190000.00", ...R }))).toBe("CONFLICT");
+    expect(unwrap(await listAudit(admin, bao))[0]).toMatchObject({ action: "PLAN_UPDATED", detail: "Hồ sơ/tháng 150 → 160 · Giá 2990000 → 3190000 VND" });
+
+    const month = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 7);
+    const report = unwrap(await getUsageReport(admin, bao, month));
+    expect(report.rows.map((r) => r.orgId)).toEqual(expect.arrayContaining(["org_anphat"]));
+    expect(report.totals.totalCostVnd).toMatch(/^\d+$/);
+    expect(errCode(await getUsageReport(admin, bao, "2001-01"))).toBe("NOT_FOUND");
+  });
+
+  it("khóa tích hợp: lưu mã hóa, chỉ trả 4 ký tự cuối, gọi thử ngay; chưa có khóa → INTEGRATION_NOT_CONFIGURED; chỉ PLATFORM được đổi khóa", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    expect(errCode(await testPlatformIntegration(admin, trang, "HSCODEPRO"))).toBe("INTEGRATION_NOT_CONFIGURED");
+    expect(errCode(await updateIntegrationKey(admin, trang, "HSCODEPRO", { apiKey: "good-key-1234", ...R }))).toBe("FORBIDDEN");
+    const saved = unwrap(await updateIntegrationKey(admin, bao, "HSCODEPRO", { apiKey: "good-key-1234", ...R }));
+    expect(saved).toMatchObject({ status: "CONNECTED", keyLast4: "1234" });
+    expect(JSON.stringify(saved)).not.toContain("good-key");
+    const stored = (await admin.db.execute(sql`select ciphertext from platform_integrations where id = 'HSCODEPRO'`)) as unknown as { ciphertext: string }[];
+    expect(stored[0]!.ciphertext).not.toContain("good-key");
+    expect(unwrap(await testPlatformIntegration(admin, trang, "HSCODEPRO")).status).toBe("CONNECTED");
+    unwrap(await updateIntegrationKey(admin, bao, "AI_PROVIDER", { apiKey: "bad-key-9999", ...R }));
+    const list = unwrap(await listPlatformIntegrations(admin, trang));
+    expect(list.map((i) => [i.id, i.status])).toEqual([["AI_PROVIDER", "ERROR"], ["HSCODEPRO", "CONNECTED"], ["CUSTOMS_HUB", "NOT_CONFIGURED"], ["EINVOICE", "NOT_CONFIGURED"]]);
+    expect(unwrap(await getOverview(admin, trang)).attention.map((a) => a.id)).toContain("integration_AI_PROVIDER");
+  });
+
+  it("job lỗi: lỗi được lọc tên tệp, gắn tên doanh nghiệp; chạy lại → ghi nhật ký; job không còn → NOT_FOUND", async () => {
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    failed.push({ id: "42", queue: "extract-document", orgId: "org_anphat", error: "Không mở được Commercial Invoice.pdf\n at x", attempts: 5, failedAt: new Date() });
+    const health = unwrap(await getSystemHealth(admin, trang));
+    expect(health.failedJobs[0]).toMatchObject({ id: "extract-document~42", kind: "Đọc chứng từ", orgName: "CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT", error: "Không mở được <tệp>" });
+    expect(health.queues[0]).toMatchObject({ id: "extract-document", name: "Đọc chứng từ", failed: 1 });
+    unwrap(await retryFailedJob(admin, trang, "extract-document~42", R));
+    expect(retried).toEqual(["42"]);
+    expect(errCode(await retryFailedJob(admin, trang, "extract-document~42", R))).toBe("NOT_FOUND");
+    expect(unwrap(await listAudit(admin, trang, { orgId: "org_anphat" }))[0]).toMatchObject({ action: "JOB_RETRIED" });
+  });
+
+  it("skill mẫu: ngừng phát hành / phát hành lại; trùng trạng thái → CONFLICT; số trường lấy từ phiên bản hiện tại", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const list = unwrap(await listSkillTemplates(admin, bao));
+    expect(list.length).toBeGreaterThan(5);
+    const tpl = list.find((x) => x.code === "SK-INV-GEN")!;
+    expect(tpl).toMatchObject({ published: true });
+    expect(tpl.fieldCount).toBeGreaterThan(5);
+    expect(tpl.orgCount).toBeGreaterThanOrEqual(1);
+    expect(unwrap(await setSkillTemplatePublished(admin, bao, tpl.id, { published: false, ...R })).published).toBe(false);
+    expect(errCode(await setSkillTemplatePublished(admin, bao, tpl.id, { published: false, ...R }))).toBe("CONFLICT");
+    unwrap(await setSkillTemplatePublished(admin, bao, tpl.id, { published: true, ...R }));
+  });
+});
+
+describe("quản trị viên", () => {
+  it("mời: tạo tài khoản + mail đặt mật khẩu, INVITED tới lần đăng nhập đầu; trùng → DUPLICATE; không tự đổi vai trò/khóa mình; khóa → đăng xuất", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    expect(errCode(await inviteStaff(admin, trang, { email: "moi@khaibao-demo.vn", name: "Người Mới", role: "SUPPORT" }))).toBe("FORBIDDEN");
+    const invited = unwrap(await inviteStaff(admin, bao, { email: "moi@khaibao-demo.vn", name: "Người Mới", role: "SUPPORT" }));
+    expect(invited).toMatchObject({ status: "INVITED", role: "SUPPORT" });
+    expect(mailer.sent.at(-1)).toMatchObject({ to: "moi@khaibao-demo.vn" });
+    expect(errCode(await inviteStaff(admin, bao, { email: "moi@khaibao-demo.vn", name: "X", role: "READONLY" }))).toBe("DUPLICATE");
+    expect(errCode(await setStaffDisabled(admin, bao, invited.id, true, R))).toBe("CONFLICT");
+
+    expect(errCode(await changeStaffRole(admin, bao, bao.userId, { role: "SUPPORT", ...R }))).toBe("FORBIDDEN");
+    expect(errCode(await setStaffDisabled(admin, bao, bao.userId, true, R))).toBe("FORBIDDEN");
+    expect(unwrap(await changeStaffRole(admin, bao, trang.userId, { role: "READONLY", ...R })).role).toBe("READONLY");
+    const trangToken = unwrap(await login(identity, { email: "trang.mai@khaibao-demo.vn", password: "demo1234" }, META)).sessionToken;
+    unwrap(await setStaffDisabled(admin, bao, trang.userId, true, R));
+    expect(errCode(await resolveStaff(admin, trangToken))).toBe("UNAUTHENTICATED");
+    expect(errCode(await login(identity, { email: "trang.mai@khaibao-demo.vn", password: "demo1234" }, META))).toBe("MEMBERSHIP_DISABLED");
+    unwrap(await setStaffDisabled(admin, bao, trang.userId, false, R));
+    unwrap(await changeStaffRole(admin, bao, trang.userId, { role: "SUPPORT", ...R }));
+    expect(unwrap(await listStaff(admin, bao)).find((s) => s.id === trang.userId)).toMatchObject({ role: "SUPPORT", status: "ACTIVE" });
+  });
+});
+
+describe("thông báo hệ thống", () => {
+  it("gửi theo gói → thành viên đang hoạt động nhận trong panel Thông báo; doanh nghiệp tạm khóa không nhận; thu hồi → biến mất", async () => {
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    const chau = { orgId: "org_anphat", userId: "usr_chau", role: "ADMIN" } as const;
+    const a = unwrap(await sendAnnouncement(admin, trang, { title: "Bảo trì hệ thống tối thứ Bảy", body: "Hệ thống tạm dừng từ 22:00 đến 23:00 để nâng cấp.", kind: "MAINTENANCE", audience: "ALL", maintenanceDate: "2026-10-18" }));
+    expect(a).toMatchObject({ status: "SENT", recipients: 2, sentByName: "Mai Thị Thu Trang", maintenanceDate: "2026-10-18" });
+    expect(unwrap(await listNotifications(identity, chau as never)).map((n) => n.title)).toContain("Bảo trì hệ thống tối thứ Bảy");
+
+    expect(errCode(await sendAnnouncement(admin, trang, { title: "Riêng gói Doanh nghiệp", body: "Nội dung chỉ cho gói Doanh nghiệp.", kind: "INFO", audience: "ENTERPRISE" }))).toBe("CONFLICT");
+    unwrap(await suspendOrg(admin, trang, "org_anphat", R));
+    expect(unwrap(await sendAnnouncement(admin, trang, { title: "Chỉ doanh nghiệp đang hoạt động", body: "Doanh nghiệp tạm khóa không nhận được.", kind: "INFO", audience: "ALL" })).recipients).toBe(1);
+    unwrap(await reactivateOrg(admin, trang, "org_anphat", R));
+
+    unwrap(await withdrawAnnouncement(admin, trang, a.id, R));
+    expect(unwrap(await listNotifications(identity, chau as never)).map((n) => n.title)).not.toContain("Bảo trì hệ thống tối thứ Bảy");
+    expect(errCode(await withdrawAnnouncement(admin, trang, a.id, R))).toBe("CONFLICT");
+  });
+});
+
+describe("xác thực 2 lớp (B11)", () => {
+  it("thiết lập: chưa xác nhận mã thì chưa bật; mã sai → MFA_INVALID; đúng → bật + 8 mã khôi phục, phiên dùng được; khóa không lưu dạng rõ", async () => {
+    // Các test trước đã cho Việt thiết lập 2FA (qua helper) → đặt lại để bắt đầu từ đầu.
+    unwrap(await resetStaffMfa(admin, await staff("bao.hoang@khaibao-demo.vn"), "usr_stf_viet", { reason: "Chuẩn bị kiểm thử thiết lập" }));
+    const { sessionToken } = unwrap(await login(identity, { email: "viet.dinh@khaibao-demo.vn", password: "demo1234" }, META));
+    expect(unwrap(await getAdminSession(admin, sessionToken))?.mfa).toEqual({ enrolled: false, verified: false });
+    const setup = unwrap(await startMfaSetup(admin, sessionToken));
+    expect(setup.otpauthUri).toMatch(/^otpauth:\/\/totp\/.+secret=[A-Z2-7]{32}&/);
+    expect(setup.qrSvg).toMatch(/^<svg/);
+    expect(unwrap(await getAdminSession(admin, sessionToken))?.mfa?.enrolled).toBe(false);
+    expect(errCode(await confirmMfaSetup(admin, sessionToken, "000000"))).toBe("MFA_INVALID");
+    const enabled = unwrap(await confirmMfaSetup(admin, sessionToken, totp(base32Decode(setup.secret), adminClock.now())));
+    expect(enabled.recoveryCodes).toHaveLength(8);
+    secrets.set("viet.dinh@khaibao-demo.vn", setup.secret);
+    expect(unwrap(await getAdminSession(admin, sessionToken))?.mfa).toEqual({ enrolled: true, verified: true });
+    expect(unwrap(await listOrgs(admin, unwrap(await resolveStaff(admin, sessionToken)))).length).toBeGreaterThan(0);
+    expect(errCode(await startMfaSetup(admin, sessionToken))).toBe("CONFLICT");
+    const row = (await admin.db.execute(sql`select totp_ciphertext, recovery_codes from platform_staff where user_id = 'usr_stf_viet'`)) as unknown as { totp_ciphertext: string; recovery_codes: string[] }[];
+    expect(row[0]!.totp_ciphertext).not.toContain(setup.secret);
+    expect(row[0]!.recovery_codes).not.toContain(enabled.recoveryCodes[0]);
+
+    // Phiên mới: phải nhập mã; mã đã dùng bị từ chối; mã khôi phục dùng được đúng một lần.
+    const second = unwrap(await login(identity, { email: "viet.dinh@khaibao-demo.vn", password: "demo1234" }, META)).sessionToken;
+    expect(errCode(await resolveStaff(admin, second))).toBe("MFA_REQUIRED");
+    expect(unwrap(await verifyMfa(admin, second, enabled.recoveryCodes[0]!.toUpperCase()))).toEqual({ recoveryCodesLeft: 7 });
+    expect((await resolveStaff(admin, second)).ok).toBe(true);
+    const third = unwrap(await login(identity, { email: "viet.dinh@khaibao-demo.vn", password: "demo1234" }, META)).sessionToken;
+    expect(errCode(await verifyMfa(admin, third, enabled.recoveryCodes[0]!))).toBe("MFA_INVALID");
+  });
+
+  it("nhập sai 5 lần → RATE_LIMITED kể cả khi mã đúng", async () => {
+    const email = "viet.dinh@khaibao-demo.vn";
+    const { sessionToken } = unwrap(await login(identity, { email, password: "demo1234" }, META));
+    // Lần nhập sai ở test trước (mã khôi phục đã dùng) cũng tính – tối đa 5 lần sai trong 15 phút.
+    let wrong = 0;
+    while (errCode(await verifyMfa(admin, sessionToken, "111111")) === "MFA_INVALID") wrong++;
+    expect(wrong).toBeGreaterThan(0);
+    expect(wrong).toBeLessThanOrEqual(5);
+    skew += 31_000;
+    expect(errCode(await verifyMfa(admin, sessionToken, codeFor(email)))).toBe("RATE_LIMITED");
+  });
+
+  it("đặt lại 2FA (quyền STAFF, không tự đặt lại mình) → người đó bị đăng xuất, lần sau phải thiết lập lại; có nhật ký", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    expect(errCode(await resetStaffMfa(admin, trang, bao.userId, R))).toBe("FORBIDDEN");
+    expect(errCode(await resetStaffMfa(admin, bao, bao.userId, R))).toBe("FORBIDDEN");
+    const trangToken = unwrap(await login(identity, { email: "trang.mai@khaibao-demo.vn", password: "demo1234" }, META)).sessionToken;
+    expect(unwrap(await resetStaffMfa(admin, bao, trang.userId, { reason: "Mất điện thoại" })).mfaEnabled).toBe(false);
+    expect(errCode(await resolveStaffSession(admin, trangToken))).toBe("UNAUTHENTICATED");
+    expect(errCode(await resetStaffMfa(admin, bao, trang.userId, R))).toBe("CONFLICT");
+    const again = unwrap(await login(identity, { email: "trang.mai@khaibao-demo.vn", password: "demo1234" }, META)).sessionToken;
+    expect(unwrap(await getAdminSession(admin, again))?.mfa).toEqual({ enrolled: false, verified: false });
+    expect(unwrap(await listAudit(admin, bao))[0]).toMatchObject({ action: "STAFF_MFA_RESET", reason: "Mất điện thoại", targetLabel: "Mai Thị Thu Trang" });
+    secrets.delete("trang.mai@khaibao-demo.vn");
+  });
+});

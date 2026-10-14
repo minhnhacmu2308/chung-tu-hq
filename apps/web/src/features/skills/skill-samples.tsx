@@ -4,16 +4,19 @@ import {
   Alert, Badge, Button, Card, CardContent, EmptyState, FileDropzone, Skeleton, Stack, toast, SkeletonList,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, RefreshCw, Tags } from "lucide-react";
-import { confirmPendingSamples, listSamples, MIN_SAMPLES_FOR_ACCURACY, skillKeys, uploadSamples } from "@/api/skills";
+import { FileText, Pencil, RefreshCw, Tags } from "lucide-react";
+import { useState } from "react";
+import { confirmPendingSamples, listSamples, MIN_SAMPLES_FOR_ACCURACY, skillKeys, uploadSamples, type LabeledSample } from "@/api/skills";
 import { formatBytesVi, formatRelative } from "@/lib/format";
 import type { Skill } from "@/mocks/types";
+import { SampleLabelDialog } from "./sample-label-dialog";
 
 export function SkillSamples({ skill }: { skill: Skill }) {
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: skillKeys.samples(skill.id), queryFn: () => listSamples(skill.id) });
   const invalidate = () => qc.invalidateQueries({ queryKey: skillKeys.all });
 
+  const [labeling, setLabeling] = useState<LabeledSample | null>(null);
   const upload = useMutation({
     mutationFn: (files: File[]) => uploadSamples(skill.id, files),
     onSuccess: (added) => {
@@ -53,7 +56,7 @@ export function SkillSamples({ skill }: { skill: Skill }) {
           title={`${pending} mẫu đang chờ gắn nhãn`}
           action={<Button size="sm" leftIcon={<Tags className="h-4 w-4" />} loading={confirm.isPending} onClick={() => confirm.mutate()}>Gắn nhãn xong</Button>}
         >
-          Bản thật: mở từng mẫu, kiểm tra kết quả AI đọc và sửa cho đúng – kết quả đã sửa chính là nhãn.
+          Mở từng mẫu để kiểm tra và sửa giá trị cho đúng, hoặc bấm “Gắn nhãn xong” để nhận nguyên kết quả AI đọc.
         </Alert>
       )}
       {isError ? (
@@ -76,6 +79,9 @@ export function SkillSamples({ skill }: { skill: Skill }) {
                     </p>
                   </div>
                   {s.status === "LABELED" ? <Badge tone="success">Đã gắn nhãn</Badge> : <Badge tone="warning">Chờ gắn nhãn</Badge>}
+                  <Button size="sm" variant="ghost" leftIcon={<Pencil className="h-3.5 w-3.5" />} aria-label={`${s.status === "LABELED" ? "Sửa nhãn" : "Gắn nhãn"} ${s.fileName}`} onClick={() => setLabeling(s)}>
+                    {s.status === "LABELED" ? "Sửa nhãn" : "Gắn nhãn"}
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -83,6 +89,7 @@ export function SkillSamples({ skill }: { skill: Skill }) {
           </CardContent>
         </Card>
       )}
+      {labeling && <SampleLabelDialog key={labeling.id} skill={skill} sample={labeling} onClose={() => setLabeling(null)} />}
     </Stack>
   );
 }

@@ -74,6 +74,7 @@ const CLEARANCE = {
   WAITING: { text: "Chờ kết quả", tone: "neutral" },
   INSPECTING: { text: "Đang kiểm tra", tone: "warning" },
   CLEARED: { text: "Đã thông quan", tone: "success" },
+  REJECTED: { text: "Hải quan từ chối", tone: "danger" },
 } as const;
 
 function ResultCard({ result, started }: { result: SubmissionView["result"]; started: boolean }) {

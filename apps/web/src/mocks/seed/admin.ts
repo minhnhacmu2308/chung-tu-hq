@@ -132,6 +132,7 @@ function toStored(seeds: OrgSeed[]): { orgs: StoredOrg[]; users: StoredUser[] } 
         plan: { code: plan.code, name: plan.name, dossiersPerMonth: plan.dossiersPerMonth, pagesPerDossier: plan.pagesPerDossier, renewsAt: isoDay(s.renewsIn) },
         usage: { dossiersThisMonth: s.dossiers, pagesThisMonth: s.pages, aiCostVnd: s.cost },
         suspectThreshold: "BALANCED",
+        fourEyes: false,
       },
       meta: {
         status: s.suspended ? "SUSPENDED" : "ACTIVE",

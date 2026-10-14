@@ -17,3 +17,6 @@ export const approveDeclaration = (dossierId: string) => apiPost(`dossiers/${dos
 export const moveToReview = async (dossierId: string) => {
   await apiPost(`dossiers/${dossierId}/move-to-review`, {}, z.object({ ok: z.literal(true) }));
 };
+export const reopenDeclaration = async (dossierId: string) => {
+  await apiPost(`dossiers/${dossierId}/declaration/reopen`, {}, z.object({ ok: z.literal(true) }));
+};

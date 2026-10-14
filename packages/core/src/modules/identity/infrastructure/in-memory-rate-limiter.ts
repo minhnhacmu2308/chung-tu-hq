@@ -13,4 +13,7 @@ export class InMemoryRateLimiter implements RateLimiter {
     this.hits.set(key, entry);
     return { allowed: entry.count <= limit, remaining: Math.max(0, limit - entry.count) };
   }
+  async reset(key: string) {
+    this.hits.delete(key);
+  }
 }

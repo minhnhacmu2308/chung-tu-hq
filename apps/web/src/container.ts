@@ -1,7 +1,9 @@
 // Composition root của web: nơi DUY NHẤT nối hạ tầng (DB, Redis, queue) vào use case của @kb/core.
 // Route handler chỉ gọi getContainer(); không import drizzle/postgres/bullmq ở nơi khác (depcruise chặn).
 import { loadEnv, type Env } from "@kb/core/config";
-import { createDb, runSeed, type Db } from "@kb/core/db";
+import { createDb, platformDbUrl, runSeed, type Db } from "@kb/core/db";
+import { activeQuotaBonus, type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
+import { createAdminInfrastructure, platformStaffOf, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
 import type { BillingDeps } from "@kb/core/modules/billing";
 import type { DeclarationDeps } from "@kb/core/modules/declaration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
@@ -12,13 +14,13 @@ import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modul
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
 import { createBillingInfrastructure, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
-import type { IdentityDeps, SecretStore } from "@kb/core/modules/identity";
+import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import type { CustomsDeps, IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { createCustomsInfrastructure, createIntegrationInfrastructure } from "@kb/core/modules/integration/infrastructure";
-import { asOrgId, asUserId, dec, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
+import { asOrgId, asUserId, dec, QUEUE_NAMES, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
 import { Queue } from "bullmq";
 import { sql } from "drizzle-orm";
 import { Redis } from "ioredis";
@@ -39,6 +41,8 @@ export type Container = {
   skill: SkillDeps;
   declaration: DeclarationDeps;
   customs: CustomsDeps;
+  /** Khu Quản trị hệ thống – kết nối kb_platform riêng (ADR 0006). */
+  admin: AdminDeps;
   /** Chỉ dev/test: nạp lại dữ liệu mẫu. */
   resetDemo: () => Promise<void>;
 };
@@ -58,6 +62,72 @@ class BullMqJobQueue implements JobQueue {
     // BullMQ cấm ':' trong jobId tùy chỉnh (trừ đúng 3 phần – quy ước cũ của repeatable job) → thay bằng '_'.
     await q.add(name, payload, { ...(opts?.jobId ? { jobId: opts.jobId.replace(/:/g, "_") } : {}), ...(opts?.delayMs ? { delay: opts.delayMs } : {}) });
   }
+}
+
+/** Hàng đợi cho khu Quản trị: chỉ số đếm, job lỗi (id, orgId, lỗi) và chạy lại – không trả payload. */
+class BullMqJobMonitor implements JobMonitor {
+  private queues = new Map<string, Queue>();
+  constructor(private redis: Redis) {}
+  private q(name: string) {
+    let q = this.queues.get(name);
+    if (!q) this.queues.set(name, (q = new Queue(name, { connection: this.redis })));
+    return q;
+  }
+  async stats() {
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(-7, 0, 0, 0); // 00:00 giờ VN
+    if (startOfDay.getTime() > Date.now()) startOfDay.setUTCDate(startOfDay.getUTCDate() - 1);
+    return Promise.all(
+      QUEUE_NAMES.map(async (name) => {
+        const q = this.q(name);
+        const c = await q.getJobCounts("waiting", "delayed", "active", "failed");
+        const done = await q.getCompleted(0, 999);
+        return { queue: name, waiting: (c.waiting ?? 0) + (c.delayed ?? 0), active: c.active ?? 0, failed: c.failed ?? 0, completedToday: done.filter((j) => (j.finishedOn ?? 0) >= startOfDay.getTime()).length };
+      }),
+    );
+  }
+  async failed(limit: number) {
+    const all: FailedJobInfo[] = [];
+    for (const name of QUEUE_NAMES) {
+      for (const j of await this.q(name).getFailed(0, limit - 1)) {
+        const orgId = (j.data as { orgId?: unknown } | undefined)?.orgId;
+        all.push({ id: String(j.id), queue: name, orgId: typeof orgId === "string" ? orgId : null, error: j.failedReason ?? null, attempts: j.attemptsMade, failedAt: new Date(j.finishedOn ?? j.timestamp) });
+      }
+    }
+    return all.sort((a, b) => b.failedAt.getTime() - a.failedAt.getTime()).slice(0, limit);
+  }
+  async retry(queue: string, jobId: string) {
+    if (!(QUEUE_NAMES as readonly string[]).includes(queue)) return false;
+    const job = await this.q(queue).getJob(jobId);
+    if (!job || !(await job.isFailed())) return false;
+    await job.retry();
+    return true;
+  }
+  async workerCount() {
+    return (await this.q("extract-document").getWorkers()).length;
+  }
+}
+
+/**
+ * Gọi thử tích hợp dùng chung. Hiện chỉ AI (Claude) có API công khai để kiểm khóa; các nhà cung cấp còn lại chưa có đặc tả
+ * (docs/BACKEND-TODO.md T1, T2, T4) → báo rõ thay vì giả vờ thành công.
+ */
+function integrationProbe(env: Env): IntegrationProbe {
+  return {
+    async test(id, apiKey) {
+      if (!apiKey) return { ok: false, detail: "Chưa có khóa API" };
+      if (id === "AI_PROVIDER") {
+        try {
+          const res = await fetch("https://api.anthropic.com/v1/models?limit=1", { headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" }, signal: AbortSignal.timeout(8000) });
+          if (res.ok) return { ok: true, detail: `Gọi thử thành công · hệ thống đang dùng ${env.AI_PROVIDER === "claude" ? "Claude" : "AI giả lập (AI_PROVIDER=fake)"}` };
+          return { ok: false, detail: `${res.status} – nhà cung cấp từ chối khóa này` };
+        } catch {
+          return { ok: false, detail: "Không kết nối được tới nhà cung cấp AI" };
+        }
+      }
+      return { ok: false, detail: "Đã lưu khóa. Chưa gọi thử được: chưa có đặc tả API của nhà cung cấp này (xem docs/BACKEND-TODO.md)" };
+    },
+  };
 }
 
 function build(): Container {
@@ -86,8 +156,10 @@ function build(): Container {
       const plan = op ? await billing.plans.get(op.planCode) : null;
       if (!plan) return false;
       if (kind === "PAGES") return amount <= plan.pagesPerDossier;
-      const used = (await dossierStats(orgId, systemClock.now())).dossiers;
-      return used + amount <= plan.dossiersPerMonth;
+      const now = systemClock.now();
+      const used = (await dossierStats(orgId, now)).dossiers;
+      // Hạn mức nới thêm của đội vận hành chỉ có hiệu lực đúng tháng đã nới.
+      return used + amount <= plan.dossiersPerMonth + activeQuotaBonus({ quotaBonus: op?.quotaBonus ?? 0, quotaBonusMonth: op?.quotaBonusMonth ?? null }, now);
     },
   };
   const dossier = createDossierInfrastructure({ db, redis, env, queue, quota, clock: systemClock });
@@ -119,13 +191,12 @@ function build(): Container {
     usage, ai: skill.ai, skills: createSkillResolver(skill),
   });
   extraction.notify = notify;
-  // Nguyên tắc 4 mắt: chưa có cấu hình org (BACKEND-TODO N3) → tắt.
   const declaration = createDeclarationInfrastructure({
     db, env, queue, dossier, extraction, validation,
     org: {
       get: async (orgId) => {
         const o = await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId));
-        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", fourEyes: false };
+        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", fourEyes: o?.fourEyes ?? false };
       },
     },
     users: skill.users,
@@ -133,6 +204,50 @@ function build(): Container {
   declaration.notify = notify;
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
   customs.notify = notify;
+  const jobs = new BullMqJobMonitor(redis);
+  const system: SystemProbe = {
+    async services(now) {
+      const check = async (fn: () => Promise<unknown>) => {
+        const t0 = Date.now();
+        try {
+          await fn();
+          return { ok: true, ms: Date.now() - t0 };
+        } catch (e) {
+          console.error("[admin/system]", (e as Error).message);
+          return { ok: false, ms: Date.now() - t0 };
+        }
+      };
+      const at = now.toISOString();
+      const [pg, rd, st, workers] = await Promise.all([
+        check(() => db.execute(sql`select 1`)),
+        check(() => redis.ping()),
+        check(async () => {
+          await dossier.storage.put("_health/admin-check", Buffer.from("ok"), "text/plain");
+          await dossier.storage.delete("_health/admin-check");
+        }),
+        jobs.workerCount().catch(() => -1),
+      ]);
+      const svc = (id: "POSTGRES" | "REDIS" | "STORAGE", name: string, r: { ok: boolean; ms: number }) => ({ id, name, status: r.ok ? (r.ms > 1000 ? "DEGRADED" : "UP") : "DOWN", detail: r.ok ? `Phản hồi ${r.ms} ms` : "Không kết nối được", checkedAt: at }) as const;
+      return [
+        svc("POSTGRES", "Cơ sở dữ liệu", pg),
+        svc("REDIS", "Redis (hàng đợi)", rd),
+        svc("STORAGE", "Lưu trữ chứng từ", st),
+        { id: "WORKER", name: "Worker xử lý nền", status: workers > 0 ? "UP" : "DOWN", detail: workers > 0 ? `${workers} worker đang nghe hàng đợi` : workers === 0 ? "Không có worker nào đang chạy – job sẽ không được xử lý" : "Không đọc được trạng thái worker", checkedAt: at },
+      ];
+    },
+  };
+  const admin = createAdminInfrastructure({
+    platformUrl: platformDbUrl(env),
+    identity: {
+      hashToken,
+      sendPasswordReset: (email) => requestPasswordReset(identity, email, { ip: "admin" }),
+      resendVerification: (userId) => resendVerificationEmail(identity, userId),
+      provisionAccount: (input) => provisionStaffAccount(identity, input),
+    },
+    jobs, system, probe: integrationProbe(env), vault: identity.secrets, limiter: identity.rateLimiter, clock: systemClock,
+  });
+  // Đăng nhập: tài khoản quản trị viên không thuộc doanh nghiệp vẫn vào được khu /admin.
+  identity.platformStaff = (userId) => platformStaffOf(admin.uow as DrizzleAdminUow, userId);
   return {
     env,
     db,
@@ -151,6 +266,7 @@ function build(): Container {
     skill,
     declaration,
     customs,
+    admin,
     resetDemo: () => runSeed(env.DATABASE_ADMIN_URL),
   };
 }

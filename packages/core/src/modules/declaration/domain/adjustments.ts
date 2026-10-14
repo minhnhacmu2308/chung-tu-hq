@@ -6,11 +6,18 @@ const SOURCE_BY_KIND: Partial<Record<DocKind, ValueSource>> = { FREIGHT_INVOICE:
 /** Phí nội địa (THC, D/O, CFS, lưu kho…) không cộng vào trị giá tính thuế. */
 const DOMESTIC = /THC|D\/O|CFS|HANDLING|LOCAL|ĐỊA PHƯƠNG|DIA PHUONG|LƯU|LUU KHO|STORAGE|CLEANING|VỆ SINH|SEAL|CIC|EBS\b/i;
 export const FREIGHT_NOT_INCLUDED = new Set(["EXW", "FCA", "FAS", "FOB"]);
+const FREIGHT_LABEL = /FREIGHT|CƯỚC|O\/F|OCEAN|AIR FREIGHT/i;
+
+/** "FOB BUSAN", "CIF Hai Phong" → mã điều kiện 3 chữ (trích xuất chấp nhận điều kiện kèm địa danh). Không phải Incoterm → giữ nguyên. */
+export function incotermCode(raw: string | null): string {
+  const v = (raw ?? "").trim().toUpperCase();
+  return /^(EXW|FCA|FAS|FOB|CFR|CNF|CIF|CPT|CIP|DAP|DPU|DDP|DAT)\b/.exec(v)?.[1] ?? v;
+}
 
 export type AdjustmentPlan = { adjustments: Adjustment[]; notes: string[] };
 
 export function planAdjustments(s: Shipment): AdjustmentPlan {
-  const incoterm = (s.invoice.incoterm.value ?? "").toUpperCase();
+  const incoterm = incotermCode(s.invoice.incoterm.value);
   const currency = s.invoice.currency.value ?? "";
   const out: Adjustment[] = [];
   const notes: string[] = [];
@@ -30,7 +37,9 @@ export function planAdjustments(s: Shipment): AdjustmentPlan {
   }
   for (const o of s.charges.other) {
     if (DOMESTIC.test(o.label)) continue;
-    if (/FREIGHT|CƯỚC|O\/F|OCEAN|AIR FREIGHT/i.test(o.label) && out.some((a) => a.label.startsWith("Cước"))) continue;
+    // Cước nằm trong "phí khác": bỏ khi giá đã gồm cước (CIF, CFR, DAP…) hoặc đã cộng cước từ hóa đơn cước – tránh cộng hai lần.
+    const freightIncluded = incoterm !== "" && !FREIGHT_NOT_INCLUDED.has(incoterm);
+    if (FREIGHT_LABEL.test(o.label) && (freightIncluded || out.some((a) => a.label.startsWith("Cước")))) continue;
     out.push({ label: o.label, amount: o.amount, currency: o.currency, source: src(o.sourceKind, "SYSTEM"), kind: "ADD" });
   }
   return { adjustments: out, notes };

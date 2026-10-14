@@ -24,7 +24,9 @@ export async function notifyExpiringCertificates(deps: IdentityDeps, opts: { day
       for (const c of expiring) {
         const title = `Chứng thư số ${c.issuer} hết hạn ${c.validTo}`;
         for (const m of managers) {
-          const dup = (await r.notifications.list(org.id, m.userId)).some((x) => x.title === title && x.createdAt.toISOString().slice(0, 10) === today);
+          // RLS notifications chỉ lộ thông báo của chính người dùng → đọc trong ngữ cảnh của người nhận (ngữ cảnh job có userId rỗng không thấy gì).
+          const mine = await deps.uow.asOrg({ orgId: asOrgId(org.id), userId: asUserId(m.userId) }, (u) => u.notifications.list(org.id, m.userId));
+          const dup = mine.some((x) => x.title === title && x.createdAt.toISOString().slice(0, 10) === today);
           if (dup) continue;
           await r.notifications.insert({ id: deps.idGen.next("ntf"), orgId: org.id, userId: m.userId, title, body: "Gia hạn hoặc thêm chứng thư mới ở Tài khoản & tích hợp → Chứng thư số để không gián đoạn truyền tờ khai.", href: "/settings?tab=certificates", readAt: null, createdAt: now });
           n++;

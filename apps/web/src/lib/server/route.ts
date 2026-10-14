@@ -14,7 +14,7 @@ export class HttpError extends Error {
   }
 }
 
-class DomainHttpError extends HttpError {
+export class DomainHttpError extends HttpError {
   constructor(e: DomainError) {
     super(STATUS_BY_CODE[e.code] ?? 422, e.code, e.message ?? e.code);
   }
@@ -53,6 +53,10 @@ const STATUS_BY_CODE: Partial<Record<DomainErrorCode, number>> = {
   NO_CERT: 400,
   GATEWAY_ERROR: 502,
   INTEGRATION_NOT_CONFIGURED: 409,
+  CONFLICT: 409,
+  ORG_SUSPENDED: 403,
+  MFA_REQUIRED: 403,
+  MFA_INVALID: 400,
 };
 
 /** ok → value; err → ném để route() trả HTTP tương ứng. */

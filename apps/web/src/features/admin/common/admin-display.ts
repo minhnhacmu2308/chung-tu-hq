@@ -68,6 +68,8 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   STAFF_ROLE_CHANGED: "Đổi vai trò quản trị viên",
   STAFF_DISABLED: "Khóa quản trị viên",
   STAFF_ENABLED: "Mở khóa quản trị viên",
+  STAFF_MFA_ENABLED: "Bật xác thực 2 lớp",
+  STAFF_MFA_RESET: "Đặt lại xác thực 2 lớp",
   ANNOUNCEMENT_SENT: "Gửi thông báo hệ thống",
   ANNOUNCEMENT_WITHDRAWN: "Thu hồi thông báo",
 };

@@ -17,7 +17,7 @@ function repos(tx: Tx): SkillRepos {
         const s = (await tx.select().from(skills).where(and(eq(skills.orgId, orgId), eq(skills.id, id))).limit(1))[0];
         return s ? toSkill(s) : null;
       },
-      listTemplates: async () => (await tx.select().from(skills).where(eq(skills.isTemplate, true)).orderBy(skills.code)).map(toSkill),
+      listTemplates: async () => (await tx.select().from(skills).where(and(eq(skills.isTemplate, true), eq(skills.published, true))).orderBy(skills.code)).map(toSkill),
       insert: async (row) => void (await tx.insert(skills).values(row)),
       update: async (id, patch) => void (await tx.update(skills).set(patch).where(eq(skills.id, id))),
     },

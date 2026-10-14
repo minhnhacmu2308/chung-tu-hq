@@ -15,6 +15,18 @@ export const organizations = pgTable(
       .notNull()
       .references(() => plans.code),
     suspectThreshold: text("suspect_threshold").notNull().default("BALANCED"),
+    /** Nguyên tắc 4 mắt: người duyệt tờ khai phải khác người tạo hồ sơ. */
+    fourEyes: boolean("four_eyes").notNull().default(false),
+    /** ACTIVE | SUSPENDED – đội vận hành tạm khóa: không đăng nhập, phiên cũ hết hiệu lực. */
+    status: text("status").notNull().default("ACTIVE"),
+    suspendedReason: text("suspended_reason"),
+    /** Số hồ sơ nới thêm cho đúng tháng `quota_bonus_month` (YYYY-MM, giờ VN) – sang tháng khác tự hết. */
+    quotaBonus: integer("quota_bonus").notNull().default(0),
+    quotaBonusMonth: text("quota_bonus_month"),
+    /** Mốc tính kỳ 30 ngày của gói (đổi gói → kỳ mới); null = ngày tạo doanh nghiệp. */
+    planStartedAt: timestamp("plan_started_at", { withTimezone: true }),
+    /** Hết hạn dùng thử (gói TRIAL) khi được gia hạn; null = theo kỳ 30 ngày. */
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [
@@ -95,6 +107,8 @@ export const sessions = pgTable(
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     ip: text("ip"),
     userAgent: text("user_agent"),
+    /** Phiên đã qua bước xác thực 2 lớp (chỉ khu Quản trị hệ thống dùng – ADR 0006). */
+    mfaVerifiedAt: timestamp("mfa_verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -199,6 +213,8 @@ export const notifications = pgTable(
     title: text("title").notNull(),
     body: text("body").notNull().default(""),
     href: text("href"),
+    /** Bản sao của thông báo hệ thống – thu hồi thì xóa theo cột này. */
+    announcementId: text("announcement_id"),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

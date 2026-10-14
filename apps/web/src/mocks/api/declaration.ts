@@ -1,5 +1,6 @@
 // Bước 4–5: AI Agent (tra HS, ánh xạ, dựng tờ khai, số hóa) và tờ khai nháp (mock).
 // Tiến trình agent mô phỏng theo thời gian: lưu startedAt, tính tiến độ mỗi lần đọc.
+import { canEditDeclaration, isDeclarationFieldEditable } from "@kb/contracts";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
@@ -159,7 +160,21 @@ function refreshDeclaration(db: MockDb, dossierId: string) {
   if (old.status !== "DRAFT") return;
   const dossier = db.dossiers.find((d) => d.id === dossierId)!;
   const fresh = buildDeclaration(dossier, db.lineItems.filter((i) => i.dossierId === dossierId), db.org);
-  db.declarations[idx] = { ...fresh, status: old.status };
+  // Giữ chỉ tiêu người dùng đã sửa tay (nguồn USER) khi dựng lại – giống backend.
+  const edited = new Map(old.fields.filter((f) => f.source === "USER").map((f) => [f.code, f.value]));
+  const fields = fresh.fields.map((f) => {
+    const value = edited.get(f.code);
+    if (value === undefined) return f;
+    const { suspect: _s, note: _n, ...rest } = f;
+    return { ...rest, value, source: "USER" as const };
+  });
+  db.declarations[idx] = { ...fresh, fields, status: old.status };
+}
+
+/** Vai trò được sửa / mở lại tờ khai (backend: requireRole DECLARANT/APPROVER/ADMIN, OWNER luôn được). */
+function assertCanEdit(db: MockDb) {
+  const role = db.members.find((m) => m.id === db.currentUserId)?.role;
+  if (!role || !canEditDeclaration(role)) throw new ApiError("FORBIDDEN", "Vai trò của bạn không được sửa tờ khai");
 }
 
 /** Người dùng xác nhận mã HS (giữ gợi ý hoặc chọn mã khác). */
@@ -217,6 +232,8 @@ export const approveDeclaration = (dossierId: string) =>
     if (!decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
     if (db.lineItems.some((i) => i.dossierId === dossierId && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
     const me = db.members.find((m) => m.id === db.currentUserId);
+    const owner = db.dossiers.find((d) => d.id === dossierId)?.ownerId;
+    if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw new ApiError("FORBIDDEN", "Người duyệt phải khác người tạo hồ sơ (nguyên tắc 4 mắt)");
     Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     Object.assign(dossier, { status: "APPROVED", step: "submit", suspectFields: 0, updatedAt: nowIso() });
@@ -231,4 +248,35 @@ export const moveToReview = (dossierId: string) =>
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     const suspect = db.declarations.find((d) => d.dossierId === dossierId)!.fields.filter((f) => f.suspect).length;
     Object.assign(dossier, { step: "review", status: "NEEDS_REVIEW", suspectFields: suspect, updatedAt: nowIso() });
+  });
+
+/** Sửa tay một chỉ tiêu trên tờ khai nháp: nguồn USER, hết nghi ngờ (bản thật ghi field_audit). */
+export const updateDeclarationField = (dossierId: string, code: string, value: string) =>
+  mutate((db) => {
+    assertCanEdit(db);
+    const decl = db.declarations.find((d) => d.dossierId === dossierId);
+    if (!decl) throw new ApiError("NO_DECLARATION", "Chưa có tờ khai");
+    if (decl.status !== "DRAFT") throw new ApiError("INVALID_STATE", "Tờ khai đã duyệt – không sửa");
+    const idx = decl.fields.findIndex((f) => f.code === code);
+    if (idx < 0) throw new ApiError("NOT_FOUND", "Không có chỉ tiêu này trên tờ khai");
+    if (!isDeclarationFieldEditable(code)) throw new ApiError("VALIDATION", "Chỉ tiêu này không sửa tay trên tờ khai: số tờ khai do Hải quan cấp, loại hình đổi ở hồ sơ, trị giá/cước/tỷ giá sửa ở bước đọc chứng từ rồi dựng lại");
+    const { suspect: _s, note: _n, ...rest } = decl.fields[idx]!;
+    decl.fields[idx] = { ...rest, value: value.trim(), source: "USER" };
+    const dossier = db.dossiers.find((d) => d.id === dossierId);
+    if (dossier) Object.assign(dossier, { suspectFields: decl.fields.filter((f) => f.suspect).length, updatedAt: nowIso() });
+    return decl;
+  });
+
+/** Mở lại tờ khai đã duyệt nhưng chưa truyền → DRAFT, hồ sơ quay về bước Review để sửa và duyệt lại. */
+export const reopenDeclaration = (dossierId: string) =>
+  mutate((db) => {
+    assertCanEdit(db);
+    const decl = db.declarations.find((d) => d.dossierId === dossierId);
+    const dossier = db.dossiers.find((d) => d.id === dossierId);
+    if (!decl || !dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
+    if (decl.status === "SUBMITTED") throw new ApiError("DOSSIER_LOCKED", "Hải quan đã ghi nhận tờ khai – không mở lại được, dùng khai sửa đổi");
+    if (decl.status !== "APPROVED") throw new ApiError("INVALID_STATE", "Tờ khai chưa được duyệt");
+    const { approvedBy: _b, approvedAt: _a, ...rest } = decl;
+    db.declarations[db.declarations.indexOf(decl)] = { ...rest, status: "DRAFT" };
+    Object.assign(dossier, { status: "NEEDS_REVIEW", step: "review", suspectFields: decl.fields.filter((f) => f.suspect).length, updatedAt: nowIso() });
   });

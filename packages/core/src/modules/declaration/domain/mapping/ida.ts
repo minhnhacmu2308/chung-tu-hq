@@ -1,6 +1,6 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA). Người nhập khẩu lấy theo tài khoản (MST), KHÔNG lấy tên tiếng Anh trên invoice (PRODUCT §7.4).
 import { resolveDischargePort, resolvePackageUnit, resolvePayment, resolvePort, transportModeCode } from "../catalog-resolve.js";
-import { FREIGHT_NOT_INCLUDED } from "../adjustments.js";
+import { FREIGHT_NOT_INCLUDED, incotermCode } from "../adjustments.js";
 import { IDA_NO as N } from "./numbers.js";
 import { fixed, fromSourced, missing, plainNumber, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
@@ -10,7 +10,7 @@ const port = (raw: string | null, pick: ReturnType<typeof resolvePort>, source: 
 const charge = (i: MappingInput, label: string): MappedValue => {
   const a = i.adjustments.find((x) => x.label.startsWith(label));
   if (a) return { value: `${a.amount} ${a.currency}`, source: a.source, ...(a.rate ? {} : { suspect: true, note: `Chưa có tỷ giá cho ${a.currency}` }) };
-  const incoterm = (i.shipment.invoice.incoterm.value ?? "").toUpperCase();
+  const incoterm = incotermCode(i.shipment.invoice.incoterm.value);
   if (label.startsWith("Cước") && FREIGHT_NOT_INCLUDED.has(incoterm)) return missing("SYSTEM", `${incoterm}: cần cước vận chuyển quốc tế – chưa có hóa đơn cước / Arrival Notice`);
   return { value: null, source: "SYSTEM", note: "Đã gồm trong giá hóa đơn" };
 };

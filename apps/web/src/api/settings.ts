@@ -9,6 +9,7 @@ export type { OrgProfileInput } from "@kb/contracts";
 export const getOrganization = pick(mock.getOrganization, http.getOrganization);
 export const updateOrganization = pick(mock.updateOrganization, http.updateOrganization);
 export const updateSuspectThreshold = pick(mock.updateSuspectThreshold, http.updateSuspectThreshold);
+export const updateFourEyes = pick(mock.updateFourEyes, http.updateFourEyes);
 export const listMembers = pick(mock.listMembers, http.listMembers);
 export const inviteMember = pick(mock.inviteMember, http.inviteMember);
 export const changeMemberRole = pick(mock.changeMemberRole, http.changeMemberRole);

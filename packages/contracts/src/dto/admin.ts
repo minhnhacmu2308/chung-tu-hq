@@ -36,10 +36,18 @@ export const StaffSchema = z.object({
   role: StaffRoleSchema,
   status: AccountStatusSchema,
   lastActiveAt: IsoDateTimeSchema.optional(),
+  /** Đã bật xác thực 2 lớp (ứng dụng xác thực). */
+  mfaEnabled: z.boolean().optional(),
 });
 export type Staff = z.infer<typeof StaffSchema>;
 
-export const AdminSessionSchema = z.object({ staff: StaffSchema });
+/**
+ * `mfa`: trạng thái xác thực 2 lớp của phiên – `enrolled` đã thiết lập ứng dụng xác thực, `verified` phiên này đã nhập mã.
+ * Chưa `verified` thì mọi API quản trị trả MFA_REQUIRED; màn hình hiện bước thiết lập / nhập mã. Bản mock luôn verified.
+ */
+export const AdminMfaStateSchema = z.object({ enrolled: z.boolean(), verified: z.boolean() });
+export type AdminMfaState = z.infer<typeof AdminMfaStateSchema>;
+export const AdminSessionSchema = z.object({ staff: StaffSchema, mfa: AdminMfaStateSchema.optional() });
 export type AdminSession = z.infer<typeof AdminSessionSchema>;
 
 /* ---------------- Doanh nghiệp ---------------- */
@@ -261,6 +269,8 @@ export const AdminActionSchema = z.enum([
   "STAFF_ROLE_CHANGED",
   "STAFF_DISABLED",
   "STAFF_ENABLED",
+  "STAFF_MFA_ENABLED",
+  "STAFF_MFA_RESET",
   "ANNOUNCEMENT_SENT",
   "ANNOUNCEMENT_WITHDRAWN",
 ]);

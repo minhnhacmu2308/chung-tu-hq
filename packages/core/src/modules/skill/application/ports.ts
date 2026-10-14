@@ -26,6 +26,7 @@ export interface SkillRepos {
     list(orgId: string, kind?: SkillKind | undefined): Promise<SkillRow[]>;
     get(orgId: string, id: string): Promise<SkillRow | null>;
     /** Skill mẫu của org hệ thống (policy cho mọi org đọc). */
+    /** Skill mẫu đã phát hành (khu Quản trị hệ thống bật/tắt) – bản sao cấp cho doanh nghiệp mới. */
     listTemplates(): Promise<SkillRow[]>;
     insert(row: SkillRow): Promise<void>;
     update(id: string, patch: Partial<Pick<SkillRow, "name" | "enabled" | "currentVersion" | "labeledSamples" | "accuracy" | "updatedAt">>): Promise<void>;

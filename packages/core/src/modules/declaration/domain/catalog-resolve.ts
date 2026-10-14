@@ -52,7 +52,9 @@ export function resolvePort(name: string | null): Resolved {
   const direct = PORTS.find((p) => n.split(" ").includes(p.code));
   if (direct) return { code: direct.code, name: direct.name };
   // Thứ tự trong PORTS là thứ tự ưu tiên: bến cụ thể (Tân Vũ, Đình Vũ, Cát Lái…) đứng trước cảng/thành phố chung.
-  const hit = PORTS.find((p) => p.aliases.some((a) => n.includes(a)));
+  // So theo nguyên từ: alias ngắn như "HAN" (Nội Bài) không được khớp vào giữa "SHANGHAI" hay "CHANGI".
+  const padded = ` ${n} `;
+  const hit = PORTS.find((p) => p.aliases.some((a) => padded.includes(` ${a} `)));
   return hit ? { code: hit.code, name: hit.name } : null;
 }
 

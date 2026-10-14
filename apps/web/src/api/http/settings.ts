@@ -11,6 +11,7 @@ export type { OrgProfileInput };
 export const getOrganization = () => apiGet("org", OrganizationSchema);
 export const updateOrganization = (input: OrgProfileInput) => apiPatch("org", input, OrganizationSchema);
 export const updateSuspectThreshold = (threshold: Organization["suspectThreshold"]) => apiPatch("org/suspect-threshold", { threshold }, OrganizationSchema);
+export const updateFourEyes = (enabled: boolean) => apiPatch("org/four-eyes", { enabled }, OrganizationSchema);
 export const listMembers = () => apiGet("org/members", z.array(MemberSchema));
 export const inviteMember = (input: { email: string; role: Role }) => apiPost("org/members", input, MemberSchema);
 export const changeMemberRole = (id: string, role: Role) => apiPatch(`org/members/${id}/role`, { role }, MemberSchema);

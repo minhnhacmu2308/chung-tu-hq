@@ -1,0 +1,8 @@
+# Không tải lên Vercel: bản build/cache cục bộ, kết quả test, khóa đăng nhập e2e, tài liệu nghiệp vụ nội bộ.
+**/.next
+**/.next-build
+**/test-results
+**/visual-report
+.playwright-mcp
+apps/web/e2e/.auth
+business

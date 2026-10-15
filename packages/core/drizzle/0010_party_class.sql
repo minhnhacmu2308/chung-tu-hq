@@ -1,0 +1,1 @@
+ALTER TABLE "dossiers" ADD COLUMN "party_class" text DEFAULT '4' NOT NULL;

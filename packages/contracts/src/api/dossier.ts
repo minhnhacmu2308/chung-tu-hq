@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DirectionSchema, DossierStatusSchema, IsoDateSchema, StepIdSchema, TransportModeSchema } from "../common.js";
+import { DEFAULT_PARTY_CLASS, DirectionSchema, DossierStatusSchema, IsoDateSchema, PartyClassSchema, StepIdSchema, TransportModeSchema } from "../common.js";
 
 export const CreateDossierInputSchema = z.object({
   direction: DirectionSchema,
@@ -10,6 +10,7 @@ export const CreateDossierInputSchema = z.object({
   dueDate: IsoDateSchema,
   incoterm: z.string().trim().toUpperCase().min(3),
   transportMode: TransportModeSchema,
+  partyClass: PartyClassSchema.default(DEFAULT_PARTY_CLASS),
   note: z.string().trim().optional(),
 });
 export type CreateDossierInput = z.infer<typeof CreateDossierInputSchema>;

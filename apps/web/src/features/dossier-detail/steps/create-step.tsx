@@ -5,11 +5,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { dossierKeys, updateDossier } from "@/api/dossiers";
+import { PARTY_CLASS_LABELS } from "@kb/contracts";
+import { TRANSPORT_LABELS } from "@/features/dossiers/dossier-display";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { StepProps } from "./types";
 import { toastMutationError } from "@/lib/mutation-error";
-
-const MODE = { SEA: "Đường biển", AIR: "Hàng không", ROAD: "Đường bộ" } as const;
 
 export function CreateSummaryStep({ dossier, goTo }: StepProps) {
   const qc = useQueryClient();
@@ -27,9 +27,10 @@ export function CreateSummaryStep({ dossier, goTo }: StepProps) {
     ["Loại hồ sơ", dossier.direction === "NK" ? "Nhập khẩu" : "Xuất khẩu"],
     ["Mã loại hình", dossier.typeCode],
     ["Đối tác nước ngoài", dossier.partner],
+    ...(dossier.direction === "NK" ? [["Phân loại cá nhân/tổ chức", PARTY_CLASS_LABELS[dossier.partyClass]] as [string, string]] : []),
     ["Cơ quan Hải quan", dossier.customsOffice],
     ["Điều kiện giao hàng", dossier.incoterm],
-    ["Phương thức vận chuyển", MODE[dossier.transportMode]],
+    ["Phương thức vận chuyển", TRANSPORT_LABELS[dossier.transportMode]],
     ["Số vận đơn", dossier.billNo || "Chưa có – lấy từ B/L/AWB khi đọc chứng từ"],
     ["Bộ Skill AI", dossier.skillSetId === "default" ? "Mặc định của doanh nghiệp" : dossier.skillSetId],
     ["Hạn khai", formatDate(dossier.dueDate)],

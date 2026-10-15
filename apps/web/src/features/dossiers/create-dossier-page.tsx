@@ -9,11 +9,12 @@ import { CheckCircle2, Circle, Info } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
+import { DEFAULT_PARTY_CLASS, PartyClassSchema, TransportModeSchema } from "@kb/contracts";
 import { z } from "zod";
 import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
 import type { Direction, Dossier } from "@/mocks/types";
 import { CUSTOMS_OFFICES, INCOTERMS, SKILL_SETS, suggestedDocuments, TYPE_CODES } from "./create-dossier-options";
-import { TRANSPORT_LABELS } from "./dossier-display";
+import { PARTY_CLASS_OPTIONS, TRANSPORT_LABELS, TRANSPORT_OPTIONS } from "./dossier-display";
 
 const isoDay = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
@@ -23,7 +24,8 @@ const schema = z.object({
   partner: z.string().trim().min(3, "Nhập tên đối tác nước ngoài (ít nhất 3 ký tự)"),
   customsOffice: z.string({ error: "Chọn cơ quan Hải quan" }).min(1, "Chọn cơ quan Hải quan"),
   incoterm: z.string().min(1),
-  transportMode: z.enum(["SEA", "AIR", "ROAD"]),
+  transportMode: TransportModeSchema,
+  partyClass: PartyClassSchema,
   dueDate: z.string({ error: "Chọn hạn khai" }).regex(/^\d{4}-\d{2}-\d{2}$/, "Chọn hạn khai"),
   skillSetId: z.string().min(1),
   note: z.string().max(500, "Ghi chú tối đa 500 ký tự"),
@@ -36,6 +38,7 @@ type FormState = {
   customsOffice: string | null;
   incoterm: string;
   transportMode: Dossier["transportMode"];
+  partyClass: Dossier["partyClass"];
   dueDate: string | null;
   skillSetId: string;
   note: string;
@@ -49,7 +52,8 @@ const INITIAL: FormState = {
   partner: "",
   customsOffice: null,
   incoterm: "CIF",
-  transportMode: "SEA",
+  transportMode: "SEA_CONTAINER",
+  partyClass: DEFAULT_PARTY_CLASS,
   dueDate: isoDay(3),
   skillSetId: "default",
   note: "",
@@ -112,6 +116,8 @@ export function CreateDossierPage() {
       dueDate: v.dueDate,
       incoterm: v.incoterm,
       transportMode: v.transportMode,
+      // Chỉ tờ khai nhập khẩu có chỉ tiêu này; hồ sơ xuất khẩu giữ mặc định.
+      partyClass: v.direction === "NK" ? v.partyClass : DEFAULT_PARTY_CLASS,
       ...(v.note.trim() ? { note: v.note.trim() } : {}),
     });
   };
@@ -149,13 +155,13 @@ export function CreateDossierPage() {
                     { value: "XK", label: "Xuất khẩu" },
                   ]}
                 />
-                <SegmentedControl<Dossier["transportMode"]>
-                  label="Vận chuyển"
-                  className="flex-wrap gap-x-4 gap-y-2 whitespace-nowrap"
-                  value={form.transportMode}
-                  onChange={(v) => set("transportMode", v)}
-                  options={(["SEA", "AIR", "ROAD"] as const).map((m) => ({ value: m, label: TRANSPORT_LABELS[m] }))}
-                />
+                <Field label="Phương thức vận chuyển" required hint="Mã VNACCS – chỉ tiêu phương thức vận chuyển trên tờ khai" className="md:max-w-sm">
+                  <Select
+                    options={TRANSPORT_OPTIONS}
+                    value={form.transportMode}
+                    onChange={(e) => set("transportMode", TransportModeSchema.parse(e.target.value))}
+                  />
+                </Field>
               </FormSection>
 
               <FormSection title="Khai báo" description="Mã loại hình và chi cục Hải quan nơi đăng ký tờ khai.">
@@ -202,6 +208,15 @@ export function CreateDossierPage() {
                     </div>
                   )}
                 </Stack>
+                {form.direction === "NK" && (
+                  <Field label="Phân loại cá nhân/tổ chức" required hint="Chỉ tiêu 1.7 tờ khai nhập khẩu – người gửi (nước ngoài) và người nhận" className="md:max-w-sm">
+                    <Select
+                      options={PARTY_CLASS_OPTIONS}
+                      value={form.partyClass}
+                      onChange={(e) => set("partyClass", PartyClassSchema.parse(e.target.value))}
+                    />
+                  </Field>
+                )}
                 <Field label="Điều kiện giao hàng" required hint="Incoterms 2020" className="md:max-w-xs">
                   <Select options={INCOTERMS} value={form.incoterm} onChange={(e) => set("incoterm", e.target.value)} />
                 </Field>

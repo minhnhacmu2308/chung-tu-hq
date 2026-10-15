@@ -5,7 +5,7 @@ const dossier = {
   id: "dos_021", code: "HS-NK-2610-021", direction: "NK", typeCode: "A11", partner: "HANSOL PRECISION CO., LTD.",
   customsOffice: "03CE – Chi cục HQ cửa khẩu cảng Hải Phòng KV III", skillSetId: "set_default", status: "NEEDS_REVIEW",
   step: "ocr", dueDate: "2026-10-14", createdAt: "2026-10-12T06:00:00.000Z", updatedAt: "2026-10-13T06:00:00.000Z",
-  ownerId: "usr_chau", invoiceValue: "20850.00", currency: "USD", incoterm: "FCA", transportMode: "SEA",
+  ownerId: "usr_chau", invoiceValue: "20850.00", currency: "USD", incoterm: "FCA", transportMode: "SEA_CONTAINER", partyClass: "4",
   billNo: "HPSEL2610078", suspectFields: 16,
 };
 

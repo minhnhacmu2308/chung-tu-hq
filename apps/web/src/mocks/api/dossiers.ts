@@ -52,6 +52,7 @@ export const createDossier = (input: CreateDossierInput) =>
       currency: "USD",
       incoterm: input.incoterm,
       transportMode: input.transportMode,
+      partyClass: input.partyClass,
       billNo: "",
       suspectFields: 0,
       ...(input.note ? { note: input.note } : {}),

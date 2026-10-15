@@ -6,7 +6,7 @@ import type { OrgId, UserId } from "../../../shared/ids.js";
 import type { DocumentRow, DossierRepos, DossierRow, DossierUow } from "../application/ports.js";
 
 function repos(tx: Tx): DossierRepos {
-  const toDossier = (d: typeof dossiers.$inferSelect): DossierRow => ({ ...d, direction: d.direction as DossierRow["direction"], status: d.status as DossierRow["status"], step: d.step as DossierRow["step"], transportMode: d.transportMode as DossierRow["transportMode"] });
+  const toDossier = (d: typeof dossiers.$inferSelect): DossierRow => ({ ...d, direction: d.direction as DossierRow["direction"], status: d.status as DossierRow["status"], step: d.step as DossierRow["step"], transportMode: d.transportMode as DossierRow["transportMode"], partyClass: d.partyClass as DossierRow["partyClass"] });
   const toDocument = (d: typeof documents.$inferSelect): DocumentRow => ({ ...d, kind: d.kind as DocumentRow["kind"], kindSource: d.kindSource as DocumentRow["kindSource"], status: d.status as DocumentRow["status"] });
   return {
     dossiers: {

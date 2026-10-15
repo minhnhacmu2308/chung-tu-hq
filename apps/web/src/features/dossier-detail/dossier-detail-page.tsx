@@ -11,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type ComponentType, type ReactNode } from "react";
 import { cancelDossier, dossierKeys, getDossier } from "@/api/dossiers";
 import { ChannelBadge, DossierStatusBadge, DueBadge } from "@/components/common/dossier-status";
+import { TRANSPORT_LABELS } from "@/features/dossiers/dossier-display";
 import { formatDate, formatMoney } from "@/lib/format";
 import { STEP_LABELS, STEP_ORDER, type Dossier, type StepId } from "@/mocks/types";
 import { AgentStep } from "./steps/agent-step";
@@ -33,7 +34,6 @@ const STEP_COMPONENTS: Record<StepId, ComponentType<StepProps>> = {
 
 const STEPS = STEP_ORDER.map((id) => ({ id, label: STEP_LABELS[id] }));
 const DIRECTION_LABEL = { NK: "Nhập khẩu", XK: "Xuất khẩu" } as const;
-const MODE_LABEL = { SEA: "Đường biển", AIR: "Hàng không", ROAD: "Đường bộ" } as const;
 
 const isStep = (s: string | null): s is StepId => !!s && (STEP_ORDER as string[]).includes(s);
 
@@ -100,7 +100,7 @@ function Header({ dossier, flowAction }: { dossier: Dossier; flowAction: ReactNo
           {DIRECTION_LABEL[dossier.direction]} · <span className="font-medium text-fg">{dossier.typeCode}</span>
         </span>
         <span>
-          {dossier.incoterm} · {MODE_LABEL[dossier.transportMode]}
+          {dossier.incoterm} · {TRANSPORT_LABELS[dossier.transportMode]}
         </span>
         {dossier.billNo && <span className="font-mono">{dossier.billNo}</span>}
         {dossier.invoiceValue !== "0" && <span>{formatMoney(dossier.invoiceValue, dossier.currency)}</span>}

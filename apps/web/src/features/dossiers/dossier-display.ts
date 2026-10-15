@@ -1,4 +1,5 @@
 // Cách hiển thị các mã của hồ sơ (dùng chung cho Tổng quan, danh sách, chi tiết).
+import { PARTY_CLASS_LABELS, PartyClassSchema, TRANSPORT_MODE_INFO, TransportModeSchema, type TransportMode } from "@kb/contracts";
 import { STATUS_META, type Status, type Tone } from "@kb/ui";
 import type { CustomsChannel, Direction, Dossier, DossierStatus } from "@/mocks/types";
 
@@ -20,7 +21,15 @@ export const DOSSIER_STATUS_DISPLAY = Object.fromEntries(
 
 export const DIRECTION_LABELS: Record<Direction, string> = { NK: "Nhập khẩu", XK: "Xuất khẩu" };
 
-export const TRANSPORT_LABELS: Record<Dossier["transportMode"], string> = { SEA: "Đường biển", AIR: "Hàng không", ROAD: "Đường bộ" };
+export const TRANSPORT_LABELS = Object.fromEntries(
+  TransportModeSchema.options.map((m) => [m, TRANSPORT_MODE_INFO[m].label]),
+) as Record<TransportMode, string>;
+
+/** Lựa chọn phân loại cá nhân/tổ chức: "1 – Cá nhân gửi cá nhân"… theo đúng mã VNACCS. */
+export const PARTY_CLASS_OPTIONS = PartyClassSchema.options.map((c) => ({ value: c, label: `${c} – ${PARTY_CLASS_LABELS[c]}` }));
+
+/** Lựa chọn cho ô chọn phương thức vận chuyển: "1 – Đường hàng không"… theo đúng mã VNACCS. */
+export const TRANSPORT_OPTIONS = TransportModeSchema.options.map((m) => ({ value: m, label: `${TRANSPORT_MODE_INFO[m].code} – ${TRANSPORT_MODE_INFO[m].label}` }));
 
 /** Ánh xạ sang StatusBadge của @kb/ui. */
 export const CHANNEL_STATUS = { GREEN: "GREEN_CHANNEL", YELLOW: "YELLOW_CHANNEL", RED: "RED_CHANNEL" } as const satisfies Record<CustomsChannel, string>;

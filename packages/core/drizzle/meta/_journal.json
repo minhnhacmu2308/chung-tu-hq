@@ -64,6 +64,20 @@
       "when": 1791967666865,
       "tag": "0008_admin_2fa",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791991539960,
+      "tag": "0009_transport_modes",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791994130516,
+      "tag": "0010_party_class",
+      "breakpoints": true
     }
   ]
 }

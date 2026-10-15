@@ -31,8 +31,32 @@ export type DossierStatus = z.infer<typeof DossierStatusSchema>;
 export const CustomsChannelSchema = z.enum(["GREEN", "YELLOW", "RED"]);
 export type CustomsChannel = z.infer<typeof CustomsChannelSchema>;
 
-export const TransportModeSchema = z.enum(["SEA", "AIR", "ROAD"]);
+/** Phương thức vận chuyển – người dùng chọn khi tạo hồ sơ, khai thẳng vào chỉ tiêu 1.6/2.6 (bảng TRANSPORT_MODES). */
+export const TransportModeSchema = z.enum(["AIR", "SEA_CONTAINER", "SEA_BULK", "ROAD", "RAIL", "RIVER", "OTHER"]);
 export type TransportMode = z.infer<typeof TransportModeSchema>;
+export const TRANSPORT_MODE_INFO: Record<TransportMode, { code: string; label: string }> = {
+  AIR: { code: "1", label: "Đường hàng không" },
+  SEA_CONTAINER: { code: "2", label: "Đường biển (chứa trong container)" },
+  SEA_BULK: { code: "3", label: "Đường biển (không chứa trong container)" },
+  ROAD: { code: "4", label: "Đường bộ" },
+  RAIL: { code: "5", label: "Đường sắt" },
+  RIVER: { code: "6", label: "Đường sông" },
+  OTHER: { code: "9", label: "Khác" },
+};
+export const isSeaMode = (m: TransportMode) => m === "SEA_CONTAINER" || m === "SEA_BULK";
+
+/** Phân loại cá nhân/tổ chức – chỉ tiêu 1.7 tờ khai nhập khẩu (VN_IDA.TK_SKB). Tờ khai xuất khẩu không có chỉ tiêu này. Giá trị là mã VNACCS. */
+export const PartyClassSchema = z.enum(["1", "2", "3", "4", "5"]);
+export type PartyClass = z.infer<typeof PartyClassSchema>;
+export const PARTY_CLASS_LABELS: Record<PartyClass, string> = {
+  "1": "Cá nhân gửi cá nhân",
+  "2": "Tổ chức gửi cá nhân",
+  "3": "Cá nhân gửi tổ chức",
+  "4": "Tổ chức gửi tổ chức",
+  "5": "Khác",
+};
+/** Doanh nghiệp tự khai báo (ADR 0004) → mặc định tổ chức gửi tổ chức. */
+export const DEFAULT_PARTY_CLASS: PartyClass = "4";
 
 export const DocKindSchema = z.enum([
   "INVOICE",

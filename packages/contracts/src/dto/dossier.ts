@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CustomsChannelSchema, DecimalStringSchema, DirectionSchema, DossierStatusSchema, IsoDateSchema, IsoDateTimeSchema, StepIdSchema, TransportModeSchema } from "../common.js";
+import { CustomsChannelSchema, DecimalStringSchema, DirectionSchema, DossierStatusSchema, IsoDateSchema, IsoDateTimeSchema, PartyClassSchema, StepIdSchema, TransportModeSchema } from "../common.js";
 
 export const DossierSchema = z.object({
   id: z.string(),
@@ -19,6 +19,7 @@ export const DossierSchema = z.object({
   currency: z.string(),
   incoterm: z.string(),
   transportMode: TransportModeSchema,
+  partyClass: PartyClassSchema,
   billNo: z.string(),
   suspectFields: z.number().int().nonnegative(),
   note: z.string().optional(),

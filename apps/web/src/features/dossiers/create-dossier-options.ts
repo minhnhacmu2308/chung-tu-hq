@@ -70,9 +70,13 @@ export function suggestedDocuments(direction: Direction, mode: Dossier["transpor
     { kind: "INVOICE", name: "Commercial Invoice", note: "Trị giá, điều kiện giao hàng, người bán/mua", important: true },
     { kind: "PACKING_LIST", name: "Packing List", note: "Số kiện, trọng lượng – lô nhỏ có thể không có" },
   ];
-  if (mode === "SEA") docs.push({ kind: "BILL_OF_LADING", name: "Bill of Lading", note: "Số vận đơn, cảng xếp/dỡ, container", important: true });
+  if (mode === "SEA_CONTAINER") docs.push({ kind: "BILL_OF_LADING", name: "Bill of Lading", note: "Số vận đơn, cảng xếp/dỡ, số container/seal", important: true });
+  if (mode === "SEA_BULK") docs.push({ kind: "BILL_OF_LADING", name: "Bill of Lading", note: "Số vận đơn, cảng xếp/dỡ, tên tàu – hàng rời/lỏng không có container", important: true });
   if (mode === "AIR") docs.push({ kind: "AIR_WAYBILL", name: "Air Waybill (MAWB/HAWB)", note: "Số vận đơn, sân bay, số kiện", important: true });
-  if (mode === "ROAD") docs.push({ kind: "OTHER", name: "Chứng từ vận tải đường bộ", note: "CMR / phiếu giao hàng" });
+  if (mode === "ROAD") docs.push({ kind: "OTHER", name: "Chứng từ vận tải đường bộ", note: "CMR / phiếu giao hàng, biển số xe" });
+  if (mode === "RAIL") docs.push({ kind: "OTHER", name: "Vận đơn đường sắt", note: "Railway bill (SMGS/CIM), số toa" });
+  if (mode === "RIVER") docs.push({ kind: "OTHER", name: "Vận đơn đường sông", note: "Số vận đơn, tên sà lan/phương tiện thủy nội địa" });
+  if (mode === "OTHER") docs.push({ kind: "OTHER", name: "Chứng từ vận tải", note: "Chứng từ chứng minh việc giao hàng (nếu có)" });
   if (direction === "NK") {
     docs.push({ kind: "ARRIVAL_NOTICE", name: "Arrival Notice", note: "Ngày hàng đến, phí local, cước (nếu có)" });
     if (FREIGHT_NOT_INCLUDED.has(incoterm)) {

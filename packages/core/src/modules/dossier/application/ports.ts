@@ -1,4 +1,4 @@
-import type { DocKind, DocumentStatus, DossierStatus, StepId } from "@kb/contracts";
+import type { DocKind, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
@@ -6,7 +6,7 @@ import type { JobQueue } from "../../../shared/queue.js";
 export type DossierRow = {
   id: string; orgId: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; customsOfficeCode: string; customsOfficeName: string;
   skillSetId: string; status: DossierStatus; step: StepId; dueDate: string; ownerId: string; note: string | null; invoiceValue: string; currency: string;
-  incoterm: string; transportMode: "SEA" | "AIR" | "ROAD"; billNo: string; suspectFields: number; declarationNo: string | null; channel: string | null;
+  incoterm: string; transportMode: TransportMode; partyClass: PartyClass; billNo: string; suspectFields: number; declarationNo: string | null; channel: string | null;
   createdAt: Date; updatedAt: Date;
 };
 export type DocumentRow = {

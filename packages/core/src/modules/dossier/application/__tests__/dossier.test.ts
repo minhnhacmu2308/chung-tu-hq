@@ -19,7 +19,7 @@ import { updateDossier } from "../update-dossier.js";
 import { uploadDocuments } from "../upload-documents.js";
 
 const ctx = (role: Ctx["role"] = "DECLARANT", orgId = "org_a", userId = "usr_a"): Ctx => ({ orgId: asOrgId(orgId), userId: asUserId(userId), role });
-const INPUT = { direction: "NK" as const, typeCode: "A11", partner: "HANSOL", customsOffice: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", skillSetId: "default", dueDate: "2026-10-20", incoterm: "FCA", transportMode: "SEA" as const };
+const INPUT = { direction: "NK" as const, typeCode: "A11", partner: "HANSOL", customsOffice: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", skillSetId: "default", dueDate: "2026-10-20", incoterm: "FCA", transportMode: "SEA_CONTAINER" as const, partyClass: "4" as const };
 const pdf = (name: string, pages = 2) => ({ name, mime: "application/pdf", bytes: Buffer.from(`%PDF-fake-${name}-${pages}`) });
 
 let uow: InMemoryDossierUow;

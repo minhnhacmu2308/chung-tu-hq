@@ -21,7 +21,7 @@ export async function createDossier(deps: DossierDeps, ctx: Ctx, input: CreateDo
       id: deps.idGen.next("dos"), orgId: ctx.orgId, code: nextDossierCode(input.direction, now, existing), direction: input.direction, typeCode: input.typeCode,
       partner: input.partner, customsOfficeCode: office.code, customsOfficeName: office.name, skillSetId: input.skillSetId, status: "DRAFT", step: "upload",
       dueDate: input.dueDate, ownerId: ctx.userId, note: input.note ?? null, invoiceValue: "0", currency: "USD", incoterm: input.incoterm, transportMode: input.transportMode,
-      billNo: "", suspectFields: 0, declarationNo: null, channel: null, createdAt: now, updatedAt: now,
+      partyClass: input.partyClass, billNo: "", suspectFields: 0, declarationNo: null, channel: null, createdAt: now, updatedAt: now,
     };
     await r.dossiers.insert(row);
     return ok(toDossier(row));

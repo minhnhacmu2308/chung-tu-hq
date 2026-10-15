@@ -115,3 +115,13 @@ describe("FptVnaccsGateway (phản hồi thật của FPT)", () => {
     expect(f.calls).toHaveLength(0);
   });
 });
+
+describe("FptVnaccsGateway.send – nghiệp vụ chưa có đặc tả FPT", () => {
+  const g = new FptVnaccsGateway({ post: async () => { throw new Error("không được gọi HTTP"); } }, { get: async () => null });
+  it.each(["IDB", "IDD", "IDA01", "IDE", "CONT", "PORT_FEE"] as const)("%s → NOT_SUPPORTED nêu chưa có đặc tả, không gọi HTTP", async (op) => {
+    await expect(g.send("org", { op })).rejects.toMatchObject({ code: "NOT_SUPPORTED", message: expect.stringMatching(new RegExp(`${op}.*chưa có đặc tả API FPT`)) });
+  });
+  it("AMA/AMB/AMC → NOT_SUPPORTED nêu đã có đặc tả nhưng chưa ánh xạ", async () => {
+    await expect(g.send("org", { op: "AMA" })).rejects.toMatchObject({ code: "NOT_SUPPORTED", message: expect.stringMatching(/VNACCS_AMA/) });
+  });
+});

@@ -1,10 +1,13 @@
-// Truyền tờ khai (ADR 0005 outbox): guard canSubmit → outbox IDA/EDA (idempotency_key) → declaration SUBMITTED → dossier SUBMITTED → job customs-send.
+// Ký số & khai tạm lần đầu (ADR 0005 outbox): guard → outbox IDA/EDA (idempotency_key) → declaration SUBMITTED → dossier SUBMITTED → job customs-send.
+// Chỉ gửi khai tạm; khai chính thức (IDC/EDC) và các nghiệp vụ sau do người khai bấm (performOperation).
 import { sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
+import { stageOf } from "../domain/state-machine.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
+import { performOperation } from "./perform-operation.js";
 
 export const outboxKey = (dossierId: string, op: string, version: number, retry = 0) => `${dossierId}:${op}:v${version}${retry ? `:retry${retry}` : ""}`;
 
@@ -29,6 +32,12 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   if (!certificateId || !(await deps.certificates.exists(ctx.orgId, certificateId))) return err(domainError("NO_CERT", "Chọn chứng thư số để ký"));
 
   const op = snap.payload.kind === "IDA" ? "IDA" : "EDA";
+  // Đã có số tờ khai (gọi về sửa rồi duyệt lại) → khai tạm lại theo luồng, không tạo kết quả truyền mới.
+  const existingResult = await deps.uow.asOrg(ctx, (r) => r.results.get(ctx.orgId, dossierId));
+  if (existingResult && stageOf(existingResult) !== "NOT_SENT") {
+    const sent = await performOperation(deps, ctx, dossierId, op);
+    return sent.ok ? ok({ outboxId: "" }) : sent;
+  }
   const built = buildFptRequest(snap.payload);
   if (built.blockers.length) return err(domainError("BLOCKER_FAILED", `Tờ khai chưa truyền được: ${built.blockers.join("; ")}`));
   const now = deps.clock.now();
@@ -48,7 +57,7 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
       if (/duplicate key|unique/i.test(e instanceof Error ? e.message : String(e))) return err(domainError("ALREADY_SUBMITTED", "Tờ khai đã được truyền – không gửi trùng"));
       throw e;
     }
-    const result: ResultRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, externalId: null, declarationNo: null, channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: snap.estimatedTaxVnd, state: "APPROVED", pollCount: 0, raw: { progress: "APPROVED" }, updatedAt: now };
+    const result: ResultRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, externalId: null, declarationNo: null, channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: snap.estimatedTaxVnd, state: "APPROVED", pollCount: 0, raw: { stage: "NOT_SENT", certificateId }, updatedAt: now };
     await r.results.upsert(result);
     return ok(row);
   });

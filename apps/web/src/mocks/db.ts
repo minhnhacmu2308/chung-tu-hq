@@ -13,6 +13,7 @@ import { seedSkills } from "./seed/skills";
 import { seedSettings } from "./seed/settings";
 import { seedAdmin } from "./seed/admin";
 import type { AdminDb } from "./admin/types";
+import type { CustomsFlow } from "./customs-sim";
 
 export type MockDb = {
   version: number;
@@ -28,6 +29,8 @@ export type MockDb = {
   declarations: Declaration[];
   customsMessages: CustomsMessage[];
   customsResults: CustomsResult[];
+  /** Giai đoạn luồng nghiệp vụ Hải quan theo hồ sơ (xem mocks/customs-sim CustomsFlow). */
+  customsFlows: Record<string, CustomsFlow>;
   skills: Skill[];
   integrations: Integration[];
   certificates: DigitalCertificate[];
@@ -41,7 +44,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {

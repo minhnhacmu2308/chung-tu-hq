@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildFptRequest, type DeclarationPayload } from "../declaration-to-fpt.js";
 import { maskPayload } from "../mask.js";
-import { next, nextOperation, rowState } from "../state-machine.js";
+import { coarseState, rowState, stageOf } from "../state-machine.js";
 
 const PAYLOAD: DeclarationPayload = {
   kind: "IDA", direction: "NK", currency: "USD", containers: ["SITU2246781"],
@@ -114,29 +114,25 @@ describe("mask", () => {
   });
 });
 
-describe("state-machine", () => {
-  it("đi đủ IDA → IDC → HYS → thông quan; lỗi giữ bước; RETRY về bước đã đạt; cạnh sai → null", () => {
-    let s = next("APPROVED", "APPROVED", { type: "PRE_DECLARE_OK" })!;
-    expect(s).toEqual({ state: "PRE_DECLARED", progress: "PRE_DECLARED" });
-    expect(nextOperation("NK", s.progress)).toBe("IDC");
-    expect(next(s.state, s.progress, { type: "DOCS_OK" })).toBeNull();
-    s = next(s.state, s.progress, { type: "DECLARE_OK", channel: "YELLOW" })!;
-    expect(nextOperation("NK", s.progress)).toBe("HYS");
-    const failed = next(s.state, s.progress, { type: "DOCS_FAIL" })!;
-    expect(failed).toEqual({ state: "SEND_FAILED", progress: "DECLARED" });
-    expect(nextOperation("NK", failed.progress)).toBe("HYS");
-    expect(next(failed.state, failed.progress, { type: "RETRY" })).toEqual({ state: "DECLARED", progress: "DECLARED" });
-    s = next(s.state, s.progress, { type: "DOCS_OK" })!;
-    expect(s).toEqual({ state: "DOCS_SENT", progress: "DOCS_SENT" });
-    expect(nextOperation("NK", s.progress)).toBeNull();
-    expect(next(s.state, s.progress, { type: "STATUS", cleared: false })).toEqual({ state: "INSPECTION", progress: "DOCS_SENT" });
-    expect(next("INSPECTION", "DOCS_SENT", { type: "STATUS", cleared: true })).toEqual({ state: "CLEARED", progress: "DONE" });
-    expect(next("CLEARED", "DONE", { type: "RETRY" })).toBeNull();
-    expect(next("APPROVED", "APPROVED", { type: "STATUS", cleared: true })).toBeNull();
-    expect(nextOperation("XK", "APPROVED")).toBe("EDA");
-    expect(rowState("APPROVED", false, false)).toBe("READY");
+describe("state-machine (giai đoạn lưu ở raw.stage)", () => {
+  it("stageOf: ưu tiên raw.stage; dữ liệu cũ đọc từ progress/state; chưa có kết quả → NOT_SENT", () => {
+    expect(stageOf(null)).toBe("NOT_SENT");
+    expect(stageOf({ state: "DECLARED", raw: { stage: "AMEND_RECALLED" } })).toBe("AMEND_RECALLED");
+    expect(stageOf({ state: "INSPECTION", raw: { progress: "DOCS_SENT" } })).toBe("DECLARED");
+    expect(stageOf({ state: "CLEARED", raw: { progress: "DONE" } })).toBe("CLEARED");
+  });
+  it("coarseState: cột state thô theo giai đoạn; lỗi gửi → SEND_FAILED", () => {
+    expect(coarseState("NOT_SENT")).toBe("APPROVED");
+    expect(coarseState("RECALLED")).toBe("PRE_DECLARED");
+    expect(coarseState("AMEND_PRE_DECLARED")).toBe("DECLARED");
+    expect(coarseState("POST_RECALLED")).toBe("CLEARED");
+    expect(coarseState("DECLARED", true)).toBe("SEND_FAILED");
+  });
+  it("rowState cho màn danh sách", () => {
+    expect(rowState("NOT_SENT", false, false)).toBe("READY");
     expect(rowState("DECLARED", true, true)).toBe("SENDING");
-    expect(rowState("INSPECTION", true, false)).toBe("INSPECTING");
-    expect(rowState("CLEARED", true, false)).toBe("CLEARED");
+    expect(rowState("PRE_DECLARED", true, false)).toBe("SENDING");
+    expect(rowState("DECLARED", true, false)).toBe("INSPECTING");
+    expect(rowState("POST_EDITING", true, false)).toBe("CLEARED");
   });
 });

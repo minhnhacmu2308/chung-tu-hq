@@ -4,6 +4,7 @@ export * from "./api/index.js";
 export * from "./extraction/index.js";
 export * from "./catalog/index.js";
 export * from "./shipment.js";
+export * from "./customs-flow.js";
 export * from "./declaration/index.js";
 export * from "./fpt/index.js";
 export * from "./integrations/hscodepro.js";

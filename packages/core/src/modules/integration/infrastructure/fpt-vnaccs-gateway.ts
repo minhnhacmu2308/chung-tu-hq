@@ -2,10 +2,10 @@
 // Vỏ phản hồi theo mẫu thật (docdungapivnacss): { objVNACCS_ACCOUNT, errorList, objIDA: [...], objEDA: [...], ... };
 // mỗi phần tử objEDA/objIDA = { objMsgResult, objVN_<KIND>, objVN_<KIND>_TRANGTHAI, … }.
 // externalId = số tờ khai VNACCS (tK_ECN/tK_ICN) – EDC/IDC/IEX tra theo số này.
-import { EdaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, IdaRequestSchema, type FptVnaccsCredentials } from "@kb/contracts";
+import { EdaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, IdaRequestSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
-import type { CustomsGateway, GatewayError, GatewayStatus } from "../application/customs-ports.js";
+import type { CustomsGateway, GatewayError, GatewaySendResult, GatewayStatus } from "../application/customs-ports.js";
 import { buildFptRequest, type DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
 
@@ -94,6 +94,12 @@ export class FptVnaccsGateway implements CustomsGateway {
     if (errors) return { errors };
     const jno = env["tK_JNO"];
     return jno ? { receiptNo: String(jno) } : {};
+  }
+
+  /** Nghiệp vụ chưa có đặc tả API FPT trong bộ tài liệu → báo rõ, không retry. AMA đã có đặc tả (VNACCS_AMA v1.3) nhưng chưa ánh xạ. */
+  async send(_orgId: string, msg: { op: CustomsOperation }): Promise<GatewaySendResult> {
+    const why = msg.op === "AMA" || msg.op === "AMB" || msg.op === "AMC" ? "đã có đặc tả VNACCS_AMA nhưng chưa ánh xạ payload" : "chưa có đặc tả API FPT";
+    throw domainError("NOT_SUPPORTED", `Nghiệp vụ ${msg.op} chưa kết nối FPT.VNACCS (${why}) – thực hiện trên phần mềm khai báo`);
   }
 
   async queryStatus(orgId: string, externalId: string): Promise<GatewayStatus> {

@@ -1,7 +1,18 @@
 import { z } from "zod";
 import { CustomsChannelSchema, DecimalStringSchema, IsoDateSchema, IsoDateTimeSchema } from "../common.js";
 
-export const CustomsOperationSchema = z.enum(["IDA", "IDC", "EDA", "EDC", "HYS", "IEX"]);
+/**
+ * Nghiệp vụ VNACCS / Customs Hub. Tờ khai nhập: IDA khai tạm, IDB gọi sửa khai tạm, IDC khai chính thức, IDD gọi tờ khai đã phân luồng,
+ * IDA01 khai tạm sửa đổi bổ sung, IDE khai chính thức sửa đổi bổ sung, IID tra cứu; tờ khai xuất tương ứng EDA/EDB/EDC/EDD/EDA01/EDE/IEX.
+ * Sau thông quan: AMA khai tạm sửa đổi, AMB gọi sửa bản khai AMA, AMC khai chính thức AMA.
+ * Chứng từ & cảng: HYS số hóa chứng từ, CONT container qua khu vực giám sát, PORT_FEE lệ phí (phí hạ tầng) cảng biển.
+ */
+export const CustomsOperationSchema = z.enum([
+  "IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "IID",
+  "EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "IEX",
+  "AMA", "AMB", "AMC",
+  "HYS", "CONT", "PORT_FEE",
+]);
 export type CustomsOperation = z.infer<typeof CustomsOperationSchema>;
 
 export const CustomsMessageSchema = z.object({

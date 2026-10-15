@@ -8,7 +8,8 @@ import { useQuery } from "@tanstack/react-query";
 import { CircleCheck, Hourglass, Leaf, Send } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { customsKeys, listCustomsDeclarations, OPERATION_LABELS, type CustomsRow } from "@/api/customs";
+import { CUSTOMS_OPERATIONS } from "@kb/contracts";
+import { customsKeys, listCustomsDeclarations, type CustomsRow } from "@/api/customs";
 import { formatDateTime, formatRelative, formatVnd } from "@/lib/format";
 
 // Trạng thái tờ khai → mã StatusBadge của @kb/ui (nguồn duy nhất của nhãn + màu).
@@ -46,7 +47,7 @@ const COLUMNS = col.columns([
     cell: (c) => {
       const op = c.getValue();
       return op ? (
-        <span title={OPERATION_LABELS[op]}>
+        <span title={CUSTOMS_OPERATIONS[op].label}>
           <Badge tone="neutral" variant="outline" className="font-mono">
             {op}
           </Badge>

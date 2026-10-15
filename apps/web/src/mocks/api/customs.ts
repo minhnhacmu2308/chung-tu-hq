@@ -1,11 +1,19 @@
-// Bước 6: truyền tờ khai qua Customs Hub (mock). Thông điệp sinh sẵn theo dòng thời gian,
-// màn hình chỉ thấy thông điệp đã "đến" (at <= bây giờ) → poll để thấy tiến trình.
+// Bước 6: luồng nghiệp vụ Hải quan (mock). Quy tắc bấm được / chuyển giai đoạn dùng chung với backend: @kb/contracts customs-flow.
+// Mỗi nghiệp vụ gửi đi: thông điệp OUT ngay, thông điệp IN "đến" sau ~2,5 giây (màn hình chỉ thấy thông điệp có at <= bây giờ → poll).
+// Khi phản hồi đã đến, settle() áp stageAfter + tác dụng phụ (số tờ khai, phân luồng, mở lại tờ khai, thông quan…).
+import {
+  baseOp, CUSTOMS_OPERATIONS, hasDeclarationNumber, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
+  operationAvailability, operationsFor, queryOpFor, stageAfter,
+  type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
+  type ResendResult, type SubmissionView,
+} from "@kb/contracts";
+import { formatVnd } from "@/lib/format";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
-import { buildSubmission, CHANNEL_NOTES } from "@/mocks/customs-sim";
+import {
+  basePayload, CHANNEL_NOTES, CHANNEL_VI, channelFor, containersFor, declarationNoFor, emptyFlow, estimatedTaxVnd, type CustomsFlow,
+} from "@/mocks/customs-sim";
 import type { MockDb } from "@/mocks/db";
-import type {
-  CustomsChannel, CustomsMessage, CustomsOperation, CustomsResult, DeclarationStatus, DigitalCertificate, Direction,
-} from "@/mocks/types";
+import type { CustomsMessage, CustomsOperation, CustomsResult, Declaration, DigitalCertificate, Dossier } from "@/mocks/types";
 
 export const customsKeys = {
   all: ["customs"] as const,
@@ -14,20 +22,14 @@ export const customsKeys = {
   certificates: ["customs", "certificates"] as const,
 };
 
-/** Bước demo trực tiếp: mỗi thông điệp cách nhau 2,5 giây. */
-const LIVE_UNIT_MS = 2_500;
-
-export const OPERATION_LABELS: Record<CustomsOperation, string> = {
-  IDA: "Khai trước thông tin tờ khai nhập",
-  IDC: "Khai chính thức – nhận phân luồng",
-  EDA: "Khai trước thông tin tờ khai xuất",
-  EDC: "Khai chính thức – nhận phân luồng",
-  HYS: "Gửi hồ sơ chứng từ điện tử",
-  IEX: "Tham chiếu trạng thái tờ khai",
-};
-
-export const opsFor = (direction: Direction): CustomsOperation[] =>
-  direction === "NK" ? ["IDA", "IDC", "HYS", "IEX"] : ["EDA", "EDC", "HYS", "IEX"];
+/** Hải quan (mô phỏng) trả lời mỗi nghiệp vụ sau 2,5 giây. */
+export const LIVE_REPLY_MS = 2_500;
+/** Luồng xanh: thông quan sau khai chính thức vài giây. */
+export const GREEN_CLEAR_MS = 5_000;
+/** Luồng vàng/đỏ: thông quan vài giây sau khi đã gửi HYS (mô phỏng kiểm tra hồ sơ). */
+export const INSPECTION_CLEAR_MS = 6_000;
+/** Lệ phí cảng biển mô phỏng – KHÔNG phải biểu phí thật. */
+const PORT_FEE_DEMO_VND = "250000";
 
 const FALLBACK_CERTS = (db: MockDb): DigitalCertificate[] => [
   { id: "cert_vnpt", subject: db.org.name, issuer: "VNPT-CA", serial: "5404FFFEB7033FB316D672201B7B8F3F", validTo: "2027-12-31", isDefault: true },
@@ -36,182 +38,423 @@ const FALLBACK_CERTS = (db: MockDb): DigitalCertificate[] => [
 
 export const listCertificates = () => query((db) => (db.certificates.length ? db.certificates : FALLBACK_CERTS(db)));
 
-/** Cập nhật hồ sơ theo thông điệp đã đến (số tờ khai, phân luồng, thông quan). */
-function sync(db: MockDb, now: number) {
-  for (const r of db.customsResults) {
-    const dossier = db.dossiers.find((d) => d.id === r.dossierId);
-    if (!dossier) continue;
-    const seen = db.customsMessages.filter((m) => m.dossierId === r.dossierId && new Date(m.at).getTime() <= now);
-    if (seen.some((m) => (m.operation === "IDA" || m.operation === "EDA") && m.direction === "IN")) dossier.declarationNo = r.declarationNo;
-    if (seen.some((m) => (m.operation === "IDC" || m.operation === "EDC") && m.direction === "IN")) dossier.channel = r.channel;
-    const finished = new Date(r.updatedAt).getTime() <= now;
-    const target = finished && r.clearanceStatus === "CLEARED" ? "CLEARED" : "SUBMITTED";
-    if (dossier.status !== target && (dossier.status === "APPROVED" || dossier.status === "SUBMITTED")) {
-      dossier.status = target;
-      dossier.updatedAt = nowIso();
+/* ---------------- Trạng thái ---------------- */
+
+type Ctx = { dossier: Dossier; decl: Declaration | undefined; flow: CustomsFlow; result: CustomsResult | undefined };
+
+function flowOf(db: MockDb, dossierId: string): CustomsFlow {
+  db.customsFlows ??= {};
+  let f = db.customsFlows[dossierId];
+  if (!f) {
+    const r = db.customsResults.find((x) => x.dossierId === dossierId);
+    f = { ...emptyFlow(), ...(r ? { stage: r.clearanceStatus === "CLEARED" ? "CLEARED" : "DECLARED" } : {}) };
+    db.customsFlows[dossierId] = f;
+  }
+  return f;
+}
+
+function load(db: MockDb, dossierId: string): Ctx {
+  const dossier = db.dossiers.find((d) => d.id === dossierId);
+  if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
+  return {
+    dossier,
+    decl: db.declarations.find((d) => d.dossierId === dossierId),
+    flow: flowOf(db, dossierId),
+    result: db.customsResults.find((r) => r.dossierId === dossierId),
+  };
+}
+
+const containersOf = (db: MockDb, d: Dossier) => containersFor(d, db.documents, db.fields);
+
+function availabilityInput(db: MockDb, c: Ctx): OperationAvailabilityInput {
+  return {
+    direction: c.dossier.direction,
+    stage: c.flow.stage,
+    approved: c.decl?.status === "APPROVED",
+    channel: isChanneled(c.flow.stage) ? (c.result?.channel ?? null) : null,
+    hasContainers: containersOf(db, c.dossier).length > 0,
+    pending: c.flow.pending ? [c.flow.pending.op] : [],
+    done: c.flow.done,
+  };
+}
+
+function message(dossierId: string, op: CustomsOperation, dir: "OUT" | "IN", result: CustomsMessage["result"], summary: string, atMs: number, payload: Record<string, unknown>): CustomsMessage {
+  return { id: newId("msg"), dossierId, operation: op, direction: dir, result, summary, at: new Date(atMs).toISOString(), payloadPreview: JSON.stringify({ nghiepVu: op, ...payload }, null, 2) };
+}
+
+/** Mở lại tờ khai để sửa: bản nháp, hủy phê duyệt, hồ sơ về bước Review (như reopenDeclaration). */
+function reopen(db: MockDb, dossierId: string) {
+  const decl = db.declarations.find((d) => d.dossierId === dossierId);
+  const dossier = db.dossiers.find((d) => d.id === dossierId);
+  if (!decl || !dossier) return;
+  const { approvedBy: _b, approvedAt: _a, ...rest } = decl;
+  db.declarations[db.declarations.indexOf(decl)] = { ...rest, status: "DRAFT" };
+  Object.assign(dossier, { status: "NEEDS_REVIEW", step: "review", suspectFields: decl.fields.filter((f) => f.suspect).length, updatedAt: nowIso() });
+}
+
+const hysNoOf = (no: string) => `HYS${no.slice(-6)}`;
+const receiptOf = (no: string) => `BL-${no.slice(-6)}`;
+
+/** Phản hồi đã đến → áp giai đoạn mới và tác dụng phụ. */
+function apply(db: MockDb, c: Ctx) {
+  const p = c.flow.pending!;
+  c.flow.pending = null;
+  const at = Date.parse(p.doneAt);
+  if (p.outcome === "ERROR") return;
+  const next = stageAfter(c.flow.stage, p.op);
+  if (next === null) return;
+  c.flow.stage = next;
+  if (!c.flow.done.includes(p.op)) c.flow.done.push(p.op);
+  const r = c.result;
+  const b = baseOp(p.op);
+  if (r) {
+    r.updatedAt = p.doneAt;
+    if (isContentOperation(p.op) && c.decl) r.customsTaxVnd = estimatedTaxVnd(c.decl);
+    if (b === "IDA") {
+      c.dossier.declarationNo = r.declarationNo;
+      r.clearanceStatus = "WAITING";
     }
+    if (b === "IDC" || b === "IDE") {
+      c.dossier.channel = r.channel;
+      r.clearanceStatus = r.channel === "GREEN" ? "WAITING" : "INSPECTING";
+      if (b === "IDE") c.flow.amendments += 1;
+      c.flow.clearAt = r.channel === "GREEN" ? new Date(at + GREEN_CLEAR_MS).toISOString() : c.flow.done.includes("HYS") ? new Date(at + INSPECTION_CLEAR_MS).toISOString() : null;
+    }
+    if (p.op === "HYS") {
+      c.flow.side.hysNo = hysNoOf(r.declarationNo);
+      if (c.flow.stage === "DECLARED" && r.channel !== "GREEN" && !c.flow.clearAt) c.flow.clearAt = new Date(at + INSPECTION_CLEAR_MS).toISOString();
+    }
+    if (p.op === "CONT") c.flow.side.containers = containersOf(db, c.dossier);
+    if (p.op === "PORT_FEE") c.flow.side.portFeeReceipt = receiptOf(r.declarationNo);
+    if (p.op === "AMC") {
+      c.flow.postAmendments += 1;
+      r.clearanceStatus = "CLEARED";
+      Object.assign(c.dossier, { status: "CLEARED", step: "submit", updatedAt: nowIso() });
+    }
+  }
+  if (b === "IDD") c.flow.clearAt = null;
+  if (isRecallOperation(p.op)) reopen(db, c.dossier.id);
+}
+
+/** Thông quan mô phỏng: hỏi trạng thái định kỳ (IID/IEX) trả "Đã thông quan". */
+function clearIfDue(db: MockDb, c: Ctx, now: number) {
+  const due = c.flow.clearAt ? Date.parse(c.flow.clearAt) : null;
+  if (due === null || due > now || c.flow.pending) return;
+  c.flow.clearAt = null;
+  if (c.flow.stage !== "DECLARED" || !c.result) return;
+  const q = queryOpFor(c.dossier.direction);
+  const no = c.result.declarationNo;
+  const after = c.result.channel === "GREEN" ? "Đã thông quan" : "Đã thông quan sau kiểm tra hồ sơ";
+  db.customsMessages.push(
+    message(c.dossier.id, q, "OUT", "OK", "Hỏi trạng thái tờ khai định kỳ", due - 800, { soToKhai: no, yeuCau: "Tra cứu" }),
+    message(c.dossier.id, q, "IN", "OK", `Trạng thái tờ khai: ${after}`, due, { soToKhai: no, trangThai: "Thông quan" }),
+  );
+  c.flow.stage = "CLEARED";
+  c.result.clearanceStatus = "CLEARED";
+  c.result.updatedAt = new Date(due).toISOString();
+  if (c.dossier.status === "SUBMITTED" || c.dossier.status === "APPROVED") Object.assign(c.dossier, { status: "CLEARED", updatedAt: nowIso() });
+}
+
+/** Áp mọi phản hồi đã đến. Gọi đầu mỗi thao tác đọc/ghi. */
+function settle(db: MockDb, now: number) {
+  for (const id of Object.keys(db.customsFlows ?? {})) {
+    if (!db.dossiers.some((d) => d.id === id)) continue;
+    const c = load(db, id);
+    if (c.flow.pending && Date.parse(c.flow.pending.doneAt) <= now) apply(db, c);
+    clearIfDue(db, c, now);
   }
 }
 
-export type PipelineStatus = "NOT_SENT" | "WAITING" | "SENDING" | "OK" | "ERROR";
-export type PipelineRow = { op: CustomsOperation; label: string; status: PipelineStatus; at?: string; summary?: string };
+/* ---------------- Gửi nghiệp vụ ---------------- */
 
-export type SubmissionView = {
-  declarationStatus: DeclarationStatus;
-  hsUnconfirmed: number;
-  started: boolean;
-  inProgress: boolean;
-  pipeline: PipelineRow[];
-  /** Thông điệp đã đến, mới nhất trước. */
-  messages: CustomsMessage[];
-  result: Partial<CustomsResult> | null;
+/** Bất biến 7: nghiệp vụ gửi nội dung chỉ khi tờ khai đã duyệt và HS đủ. */
+function assertSendable(db: MockDb, c: Ctx) {
+  if (!c.decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
+  if (c.decl.status !== "APPROVED") throw new ApiError("NOT_APPROVED", "Tờ khai chưa được phê duyệt");
+  if (db.lineItems.some((i) => i.dossierId === c.dossier.id && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
+}
+
+const STAGE_TEXT: Record<CustomsStage, string> = {
+  NOT_SENT: "Chưa khai báo",
+  PRE_DECLARED: "Đã khai tạm, chưa khai chính thức",
+  RECALLED: "Tờ khai tạm đang gọi về sửa",
+  DECLARED: "Đã phân luồng – chờ thông quan",
+  AMEND_RECALLED: "Đang sửa đổi bổ sung (đã gọi tờ khai về)",
+  AMEND_PRE_DECLARED: "Đã khai tạm sửa đổi, chờ khai chính thức sửa đổi",
+  CLEARED: "Đã thông quan",
+  POST_EDITING: "Đã thông quan – đang sửa sau thông quan",
+  POST_PRE_DECLARED: "Đã thông quan – đã khai tạm AMA, chờ khai chính thức",
+  POST_RECALLED: "Đã thông quan – bản khai AMA đang gọi về sửa",
+  REJECTED: "Hải quan từ chối / hủy tờ khai",
 };
 
-function view(db: MockDb, dossierId: string, now: number): SubmissionView {
-  const dossier = db.dossiers.find((d) => d.id === dossierId);
-  if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
-  const decl = db.declarations.find((d) => d.dossierId === dossierId);
-  const all = db.customsMessages.filter((m) => m.dossierId === dossierId).sort((a, b) => a.at.localeCompare(b.at));
-  const seen = all.filter((m) => new Date(m.at).getTime() <= now);
-  const result = db.customsResults.find((r) => r.dossierId === dossierId);
-  const next = all.find((m) => new Date(m.at).getTime() > now);
+function statusText(c: Ctx) {
+  if (c.flow.stage === "DECLARED" && c.result) {
+    return c.result.channel === "GREEN" ? "Luồng xanh – chờ thông quan" : c.result.channel === "YELLOW" ? "Luồng vàng – chờ kiểm tra chi tiết hồ sơ" : "Luồng đỏ – chờ kiểm tra thực tế hàng hóa";
+  }
+  return STAGE_TEXT[c.flow.stage];
+}
 
-  const pipeline: PipelineRow[] = opsFor(dossier.direction).map((op) => {
-    const mine = seen.filter((m) => m.operation === op);
-    const last = mine[mine.length - 1];
-    const label = OPERATION_LABELS[op];
-    if (!last) {
-      const sending = next?.operation === op;
-      return { op, label, status: all.some((m) => m.operation === op) ? (sending ? "SENDING" : "WAITING") : "NOT_SENT" };
+/** Nội dung thông điệp gửi/nhận của từng nghiệp vụ (mô phỏng). */
+function texts(db: MockDb, c: Ctx, op: CustomsOperation, no: string): { out: string; in: string; payload: Record<string, unknown> } {
+  const r = c.result!;
+  const tax = c.decl ? estimatedTaxVnd(c.decl) : r.customsTaxVnd;
+  const amend = c.flow.amendments + 1;
+  const post = c.flow.postAmendments + 1;
+  const payload = { soToKhai: no };
+  switch (baseOp(op)) {
+    case "IDA":
+      return {
+        out: `Khai tạm thông tin tờ khai (${op})${c.flow.stage === "RECALLED" ? " sau khi gọi sửa" : ""}`,
+        in: `${c.flow.stage === "RECALLED" ? "Hải quan tiếp nhận khai tạm lại" : "Hải quan cấp số"} tờ khai ${no} – thuế dự kiến ${formatVnd(tax)}`,
+        payload: { ...basePayload(c.dossier, db.org.taxCode), soToKhai: no, thueDuKien: `${tax} VND` },
+      };
+    case "IDB":
+      return { out: `Gọi sửa đổi tờ khai tạm (${op})`, in: "Hải quan chấp nhận gọi sửa – tờ khai mở lại để sửa và phê duyệt lại", payload };
+    case "IDC":
+      return { out: `Khai chính thức tờ khai (${op}) – đã ký số`, in: `Kết quả phân luồng: luồng ${CHANNEL_VI[r.channel]}`, payload: { ...payload, chuKySo: "Đã ký", maPhanLuong: r.channel === "GREEN" ? 1 : r.channel === "YELLOW" ? 2 : 3 } };
+    case "IDD":
+      return { out: `Gọi tờ khai đã phân luồng để sửa đổi bổ sung (${op})`, in: `Hải quan chấp nhận – tờ khai mở lại để sửa đổi bổ sung lần ${amend}`, payload };
+    case "IDA01":
+      return { out: `Khai tạm sửa đổi bổ sung lần ${amend} (${op})`, in: `Hải quan tiếp nhận khai tạm sửa đổi lần ${amend} – thuế dự kiến ${formatVnd(tax)}`, payload: { ...payload, lanSua: amend, thueDuKien: `${tax} VND` } };
+    case "IDE":
+      return { out: `Khai chính thức sửa đổi bổ sung lần ${amend} (${op}) – đã ký số`, in: `Hải quan chấp nhận sửa đổi bổ sung lần ${amend} – giữ luồng ${CHANNEL_VI[r.channel]}`, payload: { ...payload, lanSua: amend, chuKySo: "Đã ký" } };
+    case "AMA":
+      return { out: `Khai tạm sửa đổi sau thông quan lần ${post} (AMA)`, in: `Hải quan tiếp nhận bản khai sửa đổi AMA lần ${post} – thuế tính lại ${formatVnd(tax)}`, payload: { ...payload, lanSua: post, thueTinhLai: `${tax} VND` } };
+    case "AMB":
+      return { out: "Gọi sửa bản khai tạm AMA (AMB)", in: "Bản khai AMA đã gọi về – tờ khai mở lại để sửa và phê duyệt lại", payload };
+    case "AMC":
+      return { out: "Khai chính thức bản khai AMA (AMC) – đã ký số", in: `Hải quan chấp nhận khai bổ sung sau thông quan lần ${post}`, payload: { ...payload, lanSua: post, chuKySo: "Đã ký" } };
+    case "HYS": {
+      const files = db.documents.filter((d) => d.dossierId === c.dossier.id).length || 3;
+      return { out: `Gửi hồ sơ chứng từ điện tử (${files} tệp đính kèm)`, in: `Hải quan tiếp nhận hồ sơ – số tiếp nhận ${hysNoOf(no)}`, payload: { ...payload, soTep: files, soTiepNhan: hysNoOf(no) } };
     }
-    const awaitingReply = (op === "IDA" || op === "IDC" || op === "EDA" || op === "EDC") && !mine.some((m) => m.direction === "IN");
-    const retrying = last.result === "ERROR" && next?.operation === op;
-    const status: PipelineStatus = awaitingReply || retrying ? "SENDING" : last.result === "ERROR" ? "ERROR" : last.result === "PENDING" ? "SENDING" : "OK";
-    return { op, label, status, at: last.at, summary: last.summary };
+    case "CONT": {
+      const list = containersOf(db, c.dossier);
+      return { out: `Đăng ký container qua khu vực giám sát (${list.length} container)`, in: `Đã đăng ký qua khu vực giám sát: ${list.join(", ")}`, payload: { ...payload, soVanDon: c.dossier.billNo, container: list } };
+    }
+    case "PORT_FEE":
+      return {
+        out: "Khai nộp lệ phí cảng biển",
+        in: `Đã có biên lai ${receiptOf(no)} – số tiền mô phỏng ${formatVnd(PORT_FEE_DEMO_VND)}, không phải biểu phí thật`,
+        payload: { ...payload, bienLai: receiptOf(no), soTienMoPhong: `${PORT_FEE_DEMO_VND} VND`, ghiChu: "Mô phỏng – không phải biểu phí thật" },
+      };
+    default:
+      return { out: `Gửi ${op}`, in: `Hải quan tiếp nhận ${op}`, payload };
+  }
+}
+
+/** Gửi một nghiệp vụ: OUT ngay, IN sau LIVE_REPLY_MS; giai đoạn đổi khi IN đã đến. */
+function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number) {
+  if (!c.result) {
+    if (!c.decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
+    const channel = channelFor(c.dossier);
+    c.result = {
+      dossierId: c.dossier.id,
+      declarationNo: c.dossier.declarationNo ?? declarationNoFor(c.dossier),
+      channel,
+      channelNote: CHANNEL_NOTES[channel],
+      clearanceStatus: "WAITING",
+      customsTaxVnd: estimatedTaxVnd(c.decl),
+      updatedAt: new Date(now).toISOString(),
+    };
+    db.customsResults = db.customsResults.filter((r) => r.dossierId !== c.dossier.id).concat(c.result);
+  }
+  const t = texts(db, c, op, c.result.declarationNo);
+  const doneAt = now + LIVE_REPLY_MS;
+  db.customsMessages.push(message(c.dossier.id, op, "OUT", "OK", t.out, now, t.payload), message(c.dossier.id, op, "IN", "OK", t.in, doneAt, { ...t.payload, ketQua: "Thành công" }));
+  c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString() };
+  if (isContentOperation(op) && c.decl) {
+    c.decl.status = "SUBMITTED";
+    Object.assign(c.dossier, { status: "SUBMITTED", step: "submit", updatedAt: nowIso() });
+  }
+}
+
+/** Tra cứu trạng thái: trả lời ngay, không đổi giai đoạn. */
+function answerQuery(db: MockDb, c: Ctx, now: number): OperationResult {
+  if (!hasDeclarationNumber(c.flow.stage) || !c.result) throw new ApiError("OPERATION_LOCKED", "Chưa có số tờ khai để tra cứu – khai tạm trước");
+  const q = queryOpFor(c.dossier.direction);
+  const text = statusText(c);
+  db.customsMessages.push(
+    message(c.dossier.id, q, "OUT", "OK", "Tra cứu trạng thái tờ khai", now, { soToKhai: c.result.declarationNo, yeuCau: "Tra cứu" }),
+    message(c.dossier.id, q, "IN", "OK", `Trạng thái tờ khai: ${text}`, now, { soToKhai: c.result.declarationNo, trangThai: text }),
+  );
+  return { sent: false, message: `Trạng thái tờ khai: ${text}` };
+}
+
+function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: number): OperationResult {
+  settle(db, now);
+  const c = load(db, dossierId);
+  if (op === queryOpFor(c.dossier.direction)) return answerQuery(db, c, now);
+  if (CUSTOMS_OPERATIONS[op].kind === "query") throw new ApiError("INVALID_OPERATION", "Tờ khai nhập tra cứu bằng IID, tờ khai xuất bằng IEX");
+  const a = operationAvailability(availabilityInput(db, c)).find((x) => x.op === op);
+  if (!a) throw new ApiError("INVALID_OPERATION", `Nghiệp vụ ${op} không dùng cho tờ khai ${c.dossier.direction === "NK" ? "nhập" : "xuất"} khẩu`);
+  if (!a.enabled) throw new ApiError("OPERATION_LOCKED", a.reason || "Nghiệp vụ chưa thực hiện được ở giai đoạn này");
+  if (a.action === "EDIT") throw new ApiError("NOT_APPROVED", a.reason ?? "Sửa tờ khai và phê duyệt lại trước");
+  if (a.action === "START_POST_EDIT") throw new ApiError("POST_EDIT_REQUIRED", "Bắt đầu sửa sau thông quan trước khi khai AMA");
+  if (isContentOperation(op)) assertSendable(db, c);
+  send(db, c, op, now);
+  return { sent: true, message: `Đã gửi ${op} – ${CUSTOMS_OPERATIONS[op].label.toLowerCase()}. Chờ Hải quan phản hồi.` };
+}
+
+/** Thực hiện một nghiệp vụ theo quy tắc chung (operationAvailability); bị khóa → lỗi kèm lý do. */
+export const performOperation = (dossierId: string, op: CustomsOperation) => mutate((db) => perform(db, dossierId, op, Date.now()));
+
+/** Ký số và khai tạm lần đầu (IDA/EDA). Khai chính thức (IDC/EDC) là thao tác riêng của người khai. */
+export const submitDeclaration = (dossierId: string, certificateId: string) =>
+  mutate((db) => {
+    if (!certificateId) throw new ApiError("NO_CERT", "Chọn chứng thư số để ký");
+    const dossier = db.dossiers.find((d) => d.id === dossierId);
+    if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
+    settle(db, Date.now());
+    const c = load(db, dossierId);
+    if (c.flow.stage !== "NOT_SENT" && c.flow.stage !== "RECALLED") throw new ApiError("ALREADY_SUBMITTED", "Tờ khai đã được khai tạm – không gửi trùng");
+    perform(db, dossierId, dossier.direction === "NK" ? "IDA" : "EDA", Date.now());
   });
 
-  let partial: Partial<CustomsResult> | null = null;
-  if (result && seen.length) {
-    const has = (ops: CustomsOperation[]) => seen.some((m) => ops.includes(m.operation) && m.direction === "IN");
-    const finished = new Date(result.updatedAt).getTime() <= now;
-    const lastIex = [...seen].reverse().find((m) => m.operation === "IEX" && m.direction === "IN");
-    partial = {
-      dossierId,
-      ...(has(["IDA", "EDA"]) ? { declarationNo: result.declarationNo } : {}),
-      ...(has(["IDC", "EDC"]) ? { channel: result.channel, channelNote: result.channelNote, customsTaxVnd: result.customsTaxVnd } : {}),
-      ...(lastIex ? { clearanceStatus: lastIex.summary.includes("Đã thông quan") ? "CLEARED" : "INSPECTING" } : finished ? { clearanceStatus: result.clearanceStatus } : { clearanceStatus: "WAITING" }),
-      updatedAt: seen[seen.length - 1]!.at,
+/** Bắt đầu sửa đổi sau thông quan: CLEARED → POST_EDITING, mở lại tờ khai để sửa và duyệt lại rồi khai AMA. */
+export const startPostAmendment = (dossierId: string) =>
+  mutate((db) => {
+    settle(db, Date.now());
+    const c = load(db, dossierId);
+    const a = operationAvailability(availabilityInput(db, c)).find((x) => x.op === "AMA");
+    if (!a || a.action !== "START_POST_EDIT" || !a.enabled) throw new ApiError("INVALID_STATE", a?.reason || "Chỉ sửa sau thông quan khi tờ khai đã thông quan");
+    c.flow.stage = "POST_EDITING";
+    reopen(db, dossierId);
+  });
+
+/**
+ * Gửi lại một nghiệp vụ bị lỗi. Nguyên tắc chống gửi trùng (ADR 0005): luôn tra cứu (IID/IEX) trước,
+ * chỉ gửi lại khi Hải quan chưa ghi nhận.
+ */
+export const resendOperation = (dossierId: string, op: CustomsOperation) =>
+  mutate((db): ResendResult => {
+    const now = Date.now();
+    settle(db, now);
+    const c = load(db, dossierId);
+    if (!c.result) throw new ApiError("NOT_FOUND", "Hồ sơ chưa truyền");
+    const q = queryOpFor(c.dossier.direction);
+    if (op === q) {
+      const r = answerQuery(db, c, now);
+      return { resent: false, message: r.message };
+    }
+    if (c.flow.pending) throw new ApiError("BUSY", `Đang chờ phản hồi ${c.flow.pending.op}`);
+    const last = db.customsMessages.filter((m) => m.dossierId === dossierId && m.operation === op && Date.parse(m.at) <= now).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
+    if (last?.result !== "ERROR") throw new ApiError("NOTHING_TO_RESEND", `${op} không có lỗi cần gửi lại`);
+    const no = c.result.declarationNo;
+    const text = statusText(c);
+    const t = texts(db, c, op, no);
+    const outAt = now + 2_400;
+    const doneAt = outAt + LIVE_REPLY_MS;
+    db.customsMessages.push(
+      message(dossierId, q, "OUT", "OK", "Tra cứu trạng thái trước khi gửi lại", now, { soToKhai: no, yeuCau: "Tra cứu" }),
+      message(dossierId, q, "IN", "OK", `Chưa ghi nhận ${op} mới nhất – được phép gửi lại (trạng thái: ${text})`, now + 1_200, { soToKhai: no, trangThai: text }),
+      message(dossierId, op, "OUT", "OK", `Gửi lại: ${t.out}`, outAt, { ...t.payload, lanGui: 2 }),
+      message(dossierId, op, "IN", "OK", t.in, doneAt, { ...t.payload, ketQua: "Thành công" }),
+    );
+    c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString() };
+    return { resent: true, message: `Đang gửi lại ${CUSTOMS_OPERATIONS[op].label.toLowerCase()}` };
+  });
+
+/* ---------------- Đọc ---------------- */
+
+function clearanceOf(stage: CustomsStage, r: CustomsResult): CustomsResult["clearanceStatus"] {
+  if (stage === "REJECTED") return "REJECTED";
+  if (stage === "CLEARED" || stage.startsWith("POST_")) return "CLEARED";
+  if (stage === "DECLARED" || stage.startsWith("AMEND_")) return r.channel === "GREEN" ? "WAITING" : "INSPECTING";
+  return "WAITING";
+}
+
+function view(db: MockDb, dossierId: string, now: number): SubmissionView {
+  const c = load(db, dossierId);
+  const input = availabilityInput(db, c);
+  const avail = operationAvailability(input);
+  const all = db.customsMessages.filter((m) => m.dossierId === dossierId).sort((a, b) => a.at.localeCompare(b.at));
+  const seen = all.filter((m) => Date.parse(m.at) <= now);
+  const stage = c.flow.stage;
+
+  const pipeline: PipelineRow[] = operationsFor(c.dossier.direction).map((op) => {
+    const a = avail.find((x) => x.op === op)!;
+    const last = seen.filter((m) => m.operation === op).at(-1);
+    const status: PipelineStatus =
+      c.flow.pending?.op === op ? "SENDING" : !last ? "NOT_SENT" : last.result === "ERROR" ? "ERROR" : last.result === "PENDING" ? "SENDING" : "OK";
+    return {
+      op,
+      label: CUSTOMS_OPERATIONS[op].label,
+      status,
+      phase: CUSTOMS_OPERATIONS[op].phase,
+      enabled: a.enabled,
+      action: a.action,
+      ...(a.reason ? { reason: a.reason } : {}),
+      ...(last ? { at: last.at, summary: last.summary } : {}),
     };
-  }
+  });
+
+  const r = c.result;
+  const result: Partial<CustomsResult> | null =
+    r && hasDeclarationNumber(stage)
+      ? {
+          dossierId,
+          declarationNo: r.declarationNo,
+          ...(isChanneled(stage) ? { channel: r.channel, channelNote: r.channelNote } : {}),
+          customsTaxVnd: r.customsTaxVnd,
+          clearanceStatus: clearanceOf(stage, r),
+          updatedAt: seen.at(-1)?.at ?? r.updatedAt,
+        }
+      : null;
 
   return {
-    declarationStatus: decl?.status ?? "NOT_CREATED",
+    declarationStatus: c.decl?.status ?? "NOT_CREATED",
     hsUnconfirmed: db.lineItems.filter((i) => i.dossierId === dossierId && !i.hsConfirmed).length,
     started: all.length > 0,
-    inProgress: Boolean(next),
+    inProgress: Boolean(c.flow.pending) || Boolean(c.flow.clearAt) || all.some((m) => Date.parse(m.at) > now),
+    stage,
+    nextOp: nextCustomsOperation(input),
+    queryOp: queryOpFor(c.dossier.direction),
+    amendments: c.flow.amendments,
+    postAmendments: c.flow.postAmendments,
     pipeline,
     messages: [...seen].reverse(),
-    result: partial,
+    result,
   };
 }
 
 export const getSubmission = (dossierId: string) =>
   mutate((db) => {
     const now = Date.now();
-    sync(db, now);
+    settle(db, now);
     return view(db, dossierId, now);
   });
-
-/** Truyền tờ khai: chặn khi chưa phê duyệt / còn HS chưa xác nhận / đã truyền. */
-export const submitDeclaration = (dossierId: string, certificateId: string) =>
-  mutate((db) => {
-    const dossier = db.dossiers.find((d) => d.id === dossierId);
-    const decl = db.declarations.find((d) => d.dossierId === dossierId);
-    if (!dossier || !decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
-    if (decl.status !== "APPROVED") throw new ApiError("NOT_APPROVED", "Tờ khai chưa được phê duyệt");
-    if (db.lineItems.some((i) => i.dossierId === dossierId && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
-    if (db.customsMessages.some((m) => m.dossierId === dossierId)) throw new ApiError("ALREADY_SUBMITTED", "Tờ khai đã được truyền – không gửi trùng");
-    if (!certificateId) throw new ApiError("NO_CERT", "Chọn chứng thư số để ký");
-    const docs = db.documents.filter((d) => d.dossierId === dossierId).length;
-    const { messages, result } = buildSubmission(dossier, decl, db.org.taxCode, Date.now() + 600, LIVE_UNIT_MS, { documentCount: docs || 3 });
-    db.customsMessages.push(...messages);
-    db.customsResults = db.customsResults.filter((r) => r.dossierId !== dossierId).concat(result);
-    decl.status = "SUBMITTED";
-    Object.assign(dossier, { status: "SUBMITTED", step: "submit", updatedAt: nowIso() });
-  });
-
-/**
- * Gửi lại một nghiệp vụ. Nguyên tắc chống gửi trùng (ADR 0005): luôn tra IEX trước,
- * chỉ gửi lại khi Hải quan chưa ghi nhận.
- */
-export const resendOperation = (dossierId: string, op: CustomsOperation) =>
-  mutate((db) => {
-    const dossier = db.dossiers.find((d) => d.id === dossierId);
-    const result = db.customsResults.find((r) => r.dossierId === dossierId);
-    if (!dossier || !result) throw new ApiError("NOT_FOUND", "Hồ sơ chưa truyền");
-    const t = Date.now();
-    const msg = (o: CustomsOperation, dir: "OUT" | "IN", summary: string, offset: number, payload: Record<string, unknown>): CustomsMessage => ({
-      id: newId("msg"),
-      dossierId,
-      operation: o,
-      direction: dir,
-      result: "OK",
-      summary,
-      at: new Date(t + offset).toISOString(),
-      payloadPreview: JSON.stringify({ nghiepVu: o, soToKhai: result.declarationNo, ...payload }, null, 2),
-    });
-    const status = result.clearanceStatus === "CLEARED" ? "Đã thông quan" : "Đang kiểm tra";
-    const added: CustomsMessage[] = [msg("IEX", "OUT", "Tra cứu trạng thái trước khi gửi lại", 0, { yeuCau: "Tra cứu" })];
-    if (op === "IEX") {
-      added.push(msg("IEX", "IN", `Trạng thái tờ khai: ${status}`, 1_500, { trangThai: status }));
-    } else {
-      added.push(msg("IEX", "IN", `Chưa ghi nhận ${op} mới nhất – được phép gửi lại (trạng thái: ${status})`, 1_200, { trangThai: status }));
-      added.push(msg(op, "OUT", `Gửi lại ${OPERATION_LABELS[op].toLowerCase()}`, 2_400, { lanGui: 2 }));
-    }
-    db.customsMessages.push(...added);
-    return { resent: op !== "IEX", message: op === "IEX" ? `Trạng thái: ${status}` : `Đang gửi lại ${OPERATION_LABELS[op].toLowerCase()}` };
-  });
-
-export type CustomsRow = {
-  dossierId: string;
-  dossierCode: string;
-  direction: Direction;
-  partner: string;
-  typeCode: string;
-  lastOperation?: CustomsOperation;
-  declarationNo?: string;
-  channel?: CustomsChannel;
-  channelNote?: string;
-  state: "READY" | "SENDING" | "INSPECTING" | "CLEARED";
-  customsTaxVnd?: string;
-  updatedAt: string;
-};
 
 /** Danh sách tờ khai đã duyệt / đang / đã truyền cho màn "Khai báo Hải quan". */
 export const listCustomsDeclarations = () =>
   mutate((db): CustomsRow[] => {
     const now = Date.now();
-    sync(db, now);
+    settle(db, now);
     return db.declarations
-      .filter((d) => d.status === "APPROVED" || d.status === "SUBMITTED")
-      .map((decl) => {
-        const d = db.dossiers.find((x) => x.id === decl.dossierId)!;
+      .filter((d) => d.status === "APPROVED" || d.status === "SUBMITTED" || (db.customsFlows?.[d.dossierId]?.stage ?? "NOT_SENT") !== "NOT_SENT")
+      .flatMap((decl) => {
+        const d = db.dossiers.find((x) => x.id === decl.dossierId);
+        if (!d) return [];
         const v = view(db, d.id, now);
         const last = v.messages[0];
-        const state: CustomsRow["state"] = !v.started ? "READY" : v.inProgress ? "SENDING" : v.result?.clearanceStatus === "CLEARED" ? "CLEARED" : "INSPECTING";
-        return {
+        const pending = v.pipeline.some((p) => p.status === "SENDING");
+        const state: CustomsRow["state"] =
+          v.stage === "NOT_SENT" ? (pending ? "SENDING" : "READY") : pending ? "SENDING" : v.result?.clearanceStatus === "CLEARED" ? "CLEARED" : "INSPECTING";
+        return [{
           dossierId: d.id,
           dossierCode: d.code,
           direction: d.direction,
           partner: d.partner,
           typeCode: d.typeCode,
           state,
+          stage: v.stage,
           updatedAt: last?.at ?? decl.approvedAt ?? d.updatedAt,
           ...(last ? { lastOperation: last.operation } : {}),
           ...(v.result?.declarationNo ? { declarationNo: v.result.declarationNo } : {}),
           ...(v.result?.channel ? { channel: v.result.channel, channelNote: CHANNEL_NOTES[v.result.channel] } : {}),
           ...(v.result?.customsTaxVnd ? { customsTaxVnd: v.result.customsTaxVnd } : {}),
-        };
+        }];
       })
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   });

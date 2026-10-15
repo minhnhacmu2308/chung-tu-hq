@@ -1,4 +1,4 @@
-// Luồng GĐ 5 trên Postgres thật: hồ sơ đã duyệt (từ pipeline GĐ2–4) → truyền (outbox) → customs-send IDA→IDC→HYS → poll IEX → CLEARED.
+// Luồng GĐ 5 trên Postgres thật: hồ sơ đã duyệt (từ pipeline GĐ2–4) → khai tạm IDA (outbox) → người khai bấm IDC, HYS → poll IID → CLEARED.
 // Adapter thật sang declaration/dossier/validation/identity; FakeCustomsGateway; RLS thật.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../db/client.js";
@@ -23,7 +23,7 @@ import { addCertificate, listCertificates, type IdentityDeps } from "../modules/
 import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../modules/identity/application/test/fakes.js";
 import { DrizzlePlansReader } from "../modules/identity/infrastructure/drizzle-plans-reader.js";
 import { DrizzleIdentityUow } from "../modules/identity/infrastructure/drizzle-uow.js";
-import { getSubmission, listCustomsDeclarations, pollStatus, processOutbox, resendOperation, submitDeclaration, type CustomsDeps } from "../modules/integration/index.js";
+import { getSubmission, listCustomsDeclarations, performOperation, pollStatus, processOutbox, resendOperation, submitDeclaration, type CustomsDeps } from "../modules/integration/index.js";
 import { createCertificateReader, createCustomsDossierPort, createCustomsValidationReader, createDeclarationReader, DrizzleCustomsUow, FakeCustomsGateway } from "../modules/integration/infrastructure/index.js";
 import { dec } from "../shared/decimal.js";
 
@@ -106,7 +106,7 @@ async function drain() {
 }
 
 describe("luồng truyền Hải quan trên Postgres thật", () => {
-  it("truyền hồ sơ đã duyệt: cần chứng thư; IDA→IDC→HYS→IEX; số tờ khai/phân luồng/thông quan; hồ sơ CLEARED; org khác không thấy; truyền lần 2 → ALREADY_SUBMITTED", async () => {
+  it("truyền hồ sơ đã duyệt: cần chứng thư; IDA → (người khai) IDC → HYS → hỏi IID; số tờ khai/phân luồng/thông quan; hồ sơ CLEARED; org khác không thấy; truyền lần 2 → ALREADY_SUBMITTED", async () => {
     const id = await approvedDossier();
     expect(errCode(await submitDeclaration(customs, chau, id, "cert_nope"))).toBe("NO_CERT");
     const cert = unwrap(await addCertificate(identity, admin, { issuer: "VNPT-CA", serial: "5404FFFEB7033FB3", validTo: "2027-12-31" }));
@@ -114,8 +114,12 @@ describe("luồng truyền Hải quan trên Postgres thật", () => {
     unwrap(await submitDeclaration(customs, chau, id, cert.id));
     expect(errCode(await submitDeclaration(customs, chau, id, cert.id))).toBe("ALREADY_SUBMITTED");
     await drain();
+    expect(unwrap(await getSubmission(customs, chau, id))).toMatchObject({ stage: "PRE_DECLARED", nextOp: "IDC" });
+    unwrap(await performOperation(customs, chau, id, "IDC"));
+    unwrap(await performOperation(customs, chau, id, "HYS"));
+    await drain();
     const v = unwrap(await getSubmission(customs, chau, id));
-    expect(v.pipeline.map((p) => `${p.op}:${p.status}`)).toEqual(["IDA:OK", "IDC:OK", "HYS:OK", "IEX:OK"]);
+    expect(v.pipeline.filter((p) => p.status === "OK").map((p) => p.op)).toEqual(["IDA", "IDC", "HYS"]);
     expect(v.result?.declarationNo).toMatch(/^107\d{9}$/);
     expect(v.result?.clearanceStatus).toBe("CLEARED");
     expect(v.messages.every((m) => !m.payloadPreview.includes("0316789012"))).toBe(true);

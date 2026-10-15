@@ -6,15 +6,15 @@ import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
 import type { ProgressEvent } from "../../dossier/index.js";
 import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
-import type { Progress } from "../domain/state-machine.js";
+import type { ResultRaw } from "../domain/state-machine.js";
 
 export type OutboxRow = { id: string; orgId: string; dossierId: string; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
 export type MessageRow = { id: string; orgId: string; dossierId: string; operation: CustomsOperation; direction: "OUT" | "IN"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
 export type ResultRow = {
   id: string; orgId: string; dossierId: string; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
   clearanceStatus: "WAITING" | "INSPECTING" | "CLEARED" | "REJECTED"; customsTaxVnd: string | null; state: SubmissionState; pollCount: number;
-  /** { progress, lastStatus… } – dữ liệu phụ cho máy trạng thái. */
-  raw: { progress: Progress; receiptNo?: string; lastStatus?: string } | null; updatedAt: Date;
+  /** Giai đoạn vòng đời + dữ liệu phụ (xem ResultRaw). */
+  raw: ResultRaw | null; updatedAt: Date;
 };
 
 export interface CustomsRepos {
@@ -49,7 +49,13 @@ export interface CustomsGateway {
   declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }, idempotencyKey: string): Promise<{ accepted: boolean; channel?: "GREEN" | "YELLOW" | "RED"; customsTaxVnd?: string; errors?: GatewayError[] }>;
   attachDocuments(orgId: string, msg: { externalId: string; dossierId: string; files: { name: string; bytes: Buffer }[]; declaration?: DeclarationPayload }, idempotencyKey: string): Promise<{ receiptNo?: string; errors?: GatewayError[] }>;
   queryStatus(orgId: string, externalId: string, dossierId: string): Promise<GatewayStatus>;
+  /**
+   * Nghiệp vụ còn lại của luồng: gọi sửa (IDB/IDD/AMB, EDB/EDD), khai tạm sửa đổi (IDA01/EDA01, AMA), khai chính thức sửa đổi (IDE/EDE, AMC),
+   * container qua khu vực giám sát (CONT), lệ phí cảng biển (PORT_FEE). Gateway chưa hỗ trợ nghiệp vụ → ném DomainError NOT_SUPPORTED.
+   */
+  send(orgId: string, msg: { op: CustomsOperation; externalId: string; dossierId: string; request?: unknown }, idempotencyKey: string): Promise<GatewaySendResult>;
 }
+export type GatewaySendResult = { channel?: "GREEN" | "YELLOW" | "RED"; receiptNo?: string; customsTaxVnd?: string; note?: string; errors?: GatewayError[] };
 
 /** Tờ khai + dòng hàng từ module declaration (composition root nối). */
 export type DeclarationSnapshot = { declarationId: string; version: number; status: DeclarationStatus; payload: DeclarationPayload; unconfirmedHs: number; estimatedTaxVnd: string; /** Ngày (giờ VN) tra tỷ giá tính thuế khi dựng tờ khai. */ exchangeRateDate: string };

@@ -1,8 +1,8 @@
-import type { CustomsRow, SubmissionView } from "@kb/contracts";
+import { AWAITING_CLEARANCE, type CustomsRow, type SubmissionView } from "@kb/contracts";
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { rowState, TERMINAL } from "../domain/state-machine.js";
+import { rowState, stageOf } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, toSubmissionView } from "./_customs-view.js";
 import type { CustomsDeps } from "./customs-ports.js";
 
@@ -11,8 +11,9 @@ export async function getSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: stri
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   const { messages, outbox, result } = await deps.uow.asOrg(ctx, async (r) => ({ messages: await r.messages.list(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId), result: await r.results.get(ctx.orgId, dossierId) }));
-  const polling = !!result && !TERMINAL.has(result.state) && (result.raw?.progress === "DOCS_SENT" || result.raw?.progress === "DONE") && result.state !== "SEND_FAILED";
-  return ok(toSubmissionView({ declarationStatus: snap?.status ?? "NOT_CREATED", hsUnconfirmed: snap?.unconfirmedHs ?? 0, direction: dossier.direction, messages, outbox, result, polling }));
+  const polling = !!result && AWAITING_CLEARANCE.has(stageOf(result)) && result.state !== "SEND_FAILED";
+  const flow = { direction: dossier.direction, approved: snap?.status === "APPROVED", hasContainers: (snap?.payload.containers.length ?? 0) > 0 };
+  return ok(toSubmissionView({ declarationStatus: snap?.status ?? "NOT_CREATED", hsUnconfirmed: snap?.unconfirmedHs ?? 0, flow, messages, outbox, result, polling }));
 }
 
 /** Màn Khai báo Hải quan: tờ khai đã duyệt / đang / đã truyền của org. */
@@ -27,9 +28,10 @@ export async function listCustomsDeclarations(deps: CustomsDeps, ctx: Ctx): Prom
     const { messages, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ messages: await r.messages.list(ctx.orgId, d.dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, d.dossierId) }));
     const last = messages.at(-1);
     const pending = outbox.some((o) => o.status === "PENDING");
+    const stage = stageOf(res);
     rows.push({
       dossierId: d.dossierId, dossierCode: dossier.code, direction: dossier.direction, partner: dossier.partner, typeCode: dossier.typeCode,
-      state: rowState(res?.state ?? "APPROVED", messages.length > 0, pending),
+      state: rowState(stage, messages.length > 0, pending), stage,
       updatedAt: (last?.at ?? d.approvedAt ?? dossier.updatedAt).toISOString(),
       ...(last ? { lastOperation: last.operation } : {}),
       ...(res?.declarationNo ? { declarationNo: res.declarationNo } : {}),

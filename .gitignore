@@ -9,7 +9,9 @@ test-results/
 .playwright-mcp/
 next-env.d.ts
 .env.*
-!.env.example
+!deploy/.env.prod.example
+# Bản backup DB trên máy chủ
+deploy/backups/
 
 # Vercel
 .vercel

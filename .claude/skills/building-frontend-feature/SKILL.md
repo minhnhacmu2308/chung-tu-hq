@@ -41,7 +41,7 @@ apps/web/src/
 | Nhãn phụ không phải trạng thái nghiệp vụ | `Badge` (`size`, `dot`, `icon`) | |
 | Chọn một trong nhiều lựa chọn có nhãn dài / mô tả (câu hỏi, phương án) | `RadioGroup` (dọc; ít lựa chọn ngắn → `SegmentedControl`) | Nhiều `Button` giả radio; `<input type="radio">` thô |
 | Thao tác trên một dòng bảng/danh sách | `RowActions` (icon hiện khi rê chuột + nút "…" đủ thao tác); DataTable: truyền qua `rowActions` | Tự dựng `DropdownMenu` + `MoreHorizontal` (lint `apps-row-menu` chặn) |
-| Bảng danh sách | `DataTable`; cột định danh `meta: { sticky: true }`; cột thao tác tự dính phải | `<table>` tự viết |
+| Bảng danh sách | `DataTable`; cột định danh `meta: { sticky: true }`; thao tác dòng (`rowActions`) không chiếm cột – cụm nút nổi đè cuối dòng khi rê chuột/Tab, cảm ứng chỉ hiện "…" | `<table>` tự viết |
 | Đang tải – đã biết dáng nội dung | `PageLoading` (cả trang) / `SkeletonStats` / `SkeletonCard` / `SkeletonTable` / `SkeletonForm` / `SkeletonList` | `<Skeleton className="h-80" />` cho cả khối (lint `apps-big-skeleton` chặn) |
 | Đang tải – chưa biết dáng (chờ AI, chờ Hải quan) | `LoadingState` với tiêu đề nói rõ đang làm gì | Spinner trơ giữa trang |
 | Đang lưu / tải lại trên nội dung đã có | `LoadingOverlay` | Xóa nội dung cũ rồi hiện skeleton |

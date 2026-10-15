@@ -457,13 +457,26 @@ export function DataTable<TData extends RowData>({
           id: "__actions",
           enableSorting: false,
           enableHiding: false,
-          // Đủ chỗ cho 2–3 icon thao tác nhanh + nút "…" (bảng table-fixed không tự giãn theo nội dung).
-          size: 148,
-          minSize: 48,
+          // Không chừa cột: ô rộng 0 dính mép phải, cụm nút nổi đè lên cuối dòng khi rê chuột / Tab vào dòng.
+          size: 0,
+          minSize: 0,
           header: () => <span className="sr-only">{t.actions}</span>,
-          cell: ({ row }) => <div className="flex justify-end gap-1">{rowActions(row.original)}</div>,
-          // Cột thao tác dính mép phải: icon hiện khi rê chuột phải nằm trong tầm mắt dù bảng đang cuộn ngang.
-          meta: { align: "end", cellClassName: "w-px whitespace-nowrap", sticky: "end" },
+          cell: ({ row }) => (
+            <div
+              data-slot="row-actions-overlay"
+              className={cn(
+                "absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5 shadow-md",
+                "pointer-events-none opacity-0 transition-opacity duration-150",
+                "group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+                // Menu "…" đang mở: giữ cụm nút dù chuột đã rời dòng. Cảm ứng (không có hover): luôn hiện (RowActions chỉ còn nút "…").
+                "has-[[data-state=open]]:pointer-events-auto has-[[data-state=open]]:opacity-100",
+                "[@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
+              )}
+            >
+              {rowActions(row.original)}
+            </div>
+          ),
+          meta: { align: "end", resizable: false, headerClassName: "w-0 p-0", cellClassName: "sticky right-0 w-0 p-0 overflow-visible" },
         }),
       );
     }

@@ -114,6 +114,25 @@ describe("DataTable – bấm dòng & hành động", () => {
   });
 });
 
+describe("DataTable – thao tác dòng nổi khi rê chuột", () => {
+  it("không chừa cột: ô thao tác rộng 0; cụm nút nổi (absolute) ẩn tới khi rê chuột / Tab vào dòng / menu đang mở; cảm ứng luôn hiện", () => {
+    setup({ pagination: false, rowLabel: (r) => r.code, rowActions: (r) => <button type="button">Sửa {r.code}</button> });
+    const header = screen.getByRole("columnheader", { name: "Thao tác" });
+    expect(header.className).toMatch(/\bw-0\b/);
+    expect(header.className).toMatch(/\bp-0\b/);
+    const overlay = screen.getByRole("button", { name: "Sửa HS-001" }).closest("[data-slot=row-actions-overlay]")!;
+    expect(overlay).not.toBeNull();
+    expect(overlay.className).toMatch(/\babsolute\b/);
+    expect(overlay.className).toContain("opacity-0");
+    expect(overlay.className).toContain("group-hover:opacity-100");
+    expect(overlay.className).toContain("group-focus-within:opacity-100");
+    expect(overlay.className).toContain("[@media(hover:none)]:opacity-100");
+    const cell = overlay.closest("td")!;
+    expect(cell.className).toMatch(/\bw-0\b/);
+    expect(cell.className).toMatch(/\bp-0\b/);
+  });
+});
+
 describe("DataTable – trạng thái", () => {
   it("loading: aria-busy, dòng skeleton, thông báo cho trình đọc màn hình, ẩn phân trang", () => {
     setup({ loading: true, loadingRows: 4 });

@@ -2,7 +2,7 @@
 
 SaaS đa doanh nghiệp: upload bộ chứng từ nhập/xuất khẩu → AI đọc → đối chiếu chéo → người duyệt → dựng tờ khai → truyền Hải quan.
 
-Sản phẩm (luồng, màn hình, tích hợp): `docs/PRODUCT.md`. Kiến trúc chi tiết: `docs/ARCHITECTURE.md`. Quy ước đầy đủ: `docs/CONVENTIONS.md`. Quyết định: `docs/adr/`.
+Sản phẩm (luồng, màn hình, tích hợp): `docs/PRODUCT.md`. Quy trình nghiệp vụ toàn hệ thống theo code hiện tại: `docs/QUY-TRINH-NGHIEP-VU.md`. Kiến trúc chi tiết: `docs/ARCHITECTURE.md`. Quy ước đầy đủ: `docs/CONVENTIONS.md`. Quyết định: `docs/adr/`.
 
 ## Lệnh
 

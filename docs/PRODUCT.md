@@ -2,6 +2,7 @@
 
 > Phiên bản 0.1 · 2026-10-12 · Nguồn: prototype `khaibao-ai-v2.html`, POC `ocr-engine/poc`, các quyết định trong `docs/adr/`.
 > Sơ đồ kiến trúc: `docs/architecture.html` (mở bằng trình duyệt).
+> **Quy trình nghiệp vụ theo hệ thống hiện tại** (gồm luồng 12 nghiệp vụ Hải quan ở bước 6, thay cho mô tả bước 6 bên dưới): `docs/QUY-TRINH-NGHIEP-VU.md`.
 
 ## 1. Sản phẩm là gì
 

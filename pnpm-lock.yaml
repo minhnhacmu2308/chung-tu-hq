@@ -23,6 +23,9 @@ importers:
 
   apps/fpt-mock:
     dependencies:
+      '@kb/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       decimal.js:
         specifier: ^10.6.0
         version: 10.6.0
@@ -30,9 +33,6 @@ importers:
         specifier: ^4.6.6
         version: 4.6.6
     devDependencies:
-      '@kb/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5

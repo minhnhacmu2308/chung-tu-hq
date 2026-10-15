@@ -1,20 +1,58 @@
 import { describe, expect, it } from "vitest";
 import { RULES, ruleByCode } from "../index.js";
 import { runAllRules } from "../../run.js";
-import { hansol, ORG } from "../../test/shipments.js";
+import { anphatExport, hansol, NK_SEA, ORG, XK_SEA } from "../../test/shipments.js";
 
 const run = (code: string, mutate: Parameters<typeof hansol>[0] = () => {}) => ruleByCode(code)!.run(hansol(mutate), { org: ORG });
 
+const SEVERITY_ORDER = { BLOCKER: 0, WARNING: 1, INFO: 2 } as const;
+
 describe("bộ luật", () => {
-  it("đăng ký đủ 13 luật, mã duy nhất, có severity", () => {
-    expect(RULES.map((r) => r.code).sort()).toEqual(["R-AMOUNT-SUM", "R-BUYER-MST", "R-DATE-ORDER", "R-HS-6", "R-INCOTERM-FREIGHT", "R-INVOICE-REF", "R-LAW-MO-CU", "R-ORIGIN-CO", "R-POD-TRANSSHIP", "R-QTY-PL-INV", "R-SHARED-CONTAINER", "R-WAREHOUSE-CODE", "R-WEIGHT-PL-BL"]);
-    expect(new Set(RULES.map((r) => r.code)).size).toBe(13);
+  it("đăng ký đủ 26 luật, mã duy nhất, có severity", () => {
+    expect(RULES.map((r) => r.code).sort()).toEqual([
+      "R-AMOUNT-SUM", "R-AWB-LENGTH", "R-BUYER-MST", "R-CONTAINER-LIST", "R-COUNTRY-CODE", "R-DATE-ORDER", "R-DESCRIPTION-LENGTH", "R-GROSS-WEIGHT-DIGITS", "R-HS-6",
+      "R-INCOTERM-CODE", "R-INCOTERM-FREIGHT", "R-INSURANCE-INCOTERM", "R-INVOICE-REF", "R-LAW-MO-CU", "R-LINE-AMOUNT", "R-LINE-VALUE-DIGITS", "R-MAX-50-LINES", "R-ORIGIN-CO",
+      "R-PACKAGES-INTEGER", "R-PARTY-NAME-LENGTH", "R-POD-TRANSSHIP", "R-QTY-DECIMALS", "R-QTY-PL-INV", "R-SHARED-CONTAINER", "R-WAREHOUSE-CODE", "R-WEIGHT-PL-BL",
+    ]);
+    expect(new Set(RULES.map((r) => r.code)).size).toBe(26);
+  });
+  it("thứ tự hiển thị: BLOCKER trước, rồi WARNING, INFO", () => {
+    const ranks = RULES.map((r) => SEVERITY_ORDER[r.severity]);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+  });
+  it("luật chỉ áp dụng hàng nhập đánh dấu directions NK", () => {
+    const nkOnly = RULES.filter((r) => r.directions?.length === 1 && r.directions[0] === "NK").map((r) => r.code).sort();
+    expect(nkOnly).toEqual(["R-BUYER-MST", "R-DATE-ORDER", "R-INCOTERM-FREIGHT", "R-INSURANCE-INCOTERM", "R-LAW-MO-CU", "R-POD-TRANSSHIP"]);
   });
   it("runAllRules với hồ sơ HANSOL: không FAIL BLOCKER; mọi luật đều có detail tiếng Việt", () => {
     const out = runAllRules(hansol(), { org: ORG });
-    expect(out).toHaveLength(13);
+    expect(out).toHaveLength(26);
     expect(out.filter((o) => o.severity === "BLOCKER" && o.result === "FAIL")).toEqual([]);
     expect(out.every((o) => o.detail.length > 0)).toBe(true);
+  });
+  it("runAllRules với HANSOL + hồ sơ NK đường biển container: không FAIL BLOCKER, luật cần hồ sơ đã chạy", () => {
+    const out = runAllRules(hansol(), { org: ORG, dossier: NK_SEA });
+    expect(out.filter((o) => o.severity === "BLOCKER" && o.result === "FAIL")).toEqual([]);
+    for (const code of ["R-GROSS-WEIGHT-DIGITS", "R-CONTAINER-LIST", "R-COUNTRY-CODE", "R-PARTY-NAME-LENGTH"]) expect(out.find((o) => o.code === code)!.result).toBe("PASS");
+    expect(out.find((o) => o.code === "R-AWB-LENGTH")!.result).toBe("SKIPPED");
+  });
+  it("hồ sơ XK: luật chỉ áp dụng nhập trả SKIPPED 'Không áp dụng cho tờ khai xuất khẩu'", () => {
+    const out = runAllRules(anphatExport(), { org: ORG, dossier: XK_SEA });
+    for (const code of ["R-POD-TRANSSHIP", "R-INCOTERM-FREIGHT", "R-LAW-MO-CU", "R-BUYER-MST", "R-DATE-ORDER", "R-INSURANCE-INCOTERM"]) {
+      const o = out.find((x) => x.code === code)!;
+      expect(o.result).toBe("SKIPPED");
+      expect(o.detail).toBe("Không áp dụng cho tờ khai xuất khẩu");
+    }
+    expect(out.filter((o) => o.severity === "BLOCKER" && o.result === "FAIL")).toEqual([]);
+    expect(out.find((o) => o.code === "R-CONTAINER-LIST")!.result).toBe("PASS");
+  });
+  it("không có hồ sơ: chạy cả luật chỉ áp dụng nhập (như trước)", () => {
+    const out = runAllRules(anphatExport(), { org: ORG });
+    expect(out.find((o) => o.code === "R-POD-TRANSSHIP")!.result).toBe("WARN");
+  });
+  it("luật NK-only trên hồ sơ NK vẫn chạy bình thường", () => {
+    const out = runAllRules(hansol(), { org: ORG, dossier: NK_SEA });
+    expect(out.find((o) => o.code === "R-INCOTERM-FREIGHT")!.result).toBe("PASS");
   });
 });
 
@@ -117,7 +155,7 @@ describe("R-DATE-ORDER (WARNING)", () => {
 describe("luật theo công văn", () => {
   it("R-LAW-MO-CU: hàng chương 84/85 → INFO nhắc khai MO/CU (CV 2061); không có chương 84/85 → SKIPPED", () => {
     expect(run("R-LAW-MO-CU").result).toBe("WARN");
-    expect(run("R-LAW-MO-CU").detail).toMatch(/MO|CU/);
+    expect(run("R-LAW-MO-CU").detail).toMatch(/^3 dòng chương 84\/85: ô 1 chỉ tiêu 1\.37 phải khai MO .* CU .*CV 2061\/TCHQ-GSQL\)$/);
     expect(run("R-LAW-MO-CU", (s) => s.items.forEach((i) => (i.hsOnInvoice.value = "6109.10.00"))).result).toBe("SKIPPED");
   });
   it("R-SHARED-CONTAINER: SKIPPED khi không có dấu hiệu chung container; WARN khi B/L ghi nhiều số vận đơn liên quan (ghi chú)", () => {

@@ -7,7 +7,7 @@ import {
   PRICE_KINDS, TRANSPORT_MODES, TYPE_CODES_NK, TYPE_CODES_XK, UNITS,
 } from "./code-tables.js";
 
-const FPT_FIELD = /^(VN_IDA|VN_IDA_VANDON|VN_IDA_KTG|VN_IDA_HANG|VN_EDA|VN_EDA_HANG|VN_EDA_CON)\.[A-Z0-9_]+$/;
+const FPT_FIELD = /^(VN_IDA|VN_IDA_VANDON|VN_IDA_KTG|VN_IDA_HANG|VN_IDA_CTHQ|VN_EDA|VN_EDA_HANG|VN_EDA_CON|VN_EDA_CTHQ)\.[A-Z0-9_]+$/;
 const minor = (no: string) => Number(no.split(".")[1]);
 const byNo = (catalog: DeclarationFieldDef[], no: string) => {
   const field = catalog.find((x) => x.no === no);
@@ -149,7 +149,7 @@ describe("code-tables", () => {
     expect(TRANSPORT_MODES.map((x) => x.code)).toEqual(["1", "2", "3", "4", "5", "6", "9"]);
     expect(INVOICE_KINDS.map((x) => x.code)).toEqual(["A", "B", "D"]);
     expect(PRICE_KINDS.map((x) => x.code)).toEqual(["A", "B", "C", "D"]);
-    expect(INCOTERMS).toHaveLength(11);
+    expect(INCOTERMS).toHaveLength(19); // 11 Incoterms 2020 + C&F, CNF, C&I, DAT, DAF, DDU, DES, DEQ
     expect(COUNTRIES.every((x) => /^[A-Z]{2}$/.test(x.code))).toBe(true);
     expect(CURRENCIES.every((x) => /^[A-Z]{3}$/.test(x.code))).toBe(true);
     expect(CUSTOMS_OFFICES.every((x) => /^[0-9]{2}[A-Z0-9]{2}$/.test(x.code))).toBe(true);

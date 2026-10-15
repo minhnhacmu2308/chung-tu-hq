@@ -26,6 +26,7 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
 
   const op = snap.payload.kind === "IDA" ? "IDA" : "EDA";
   const built = buildFptRequest(snap.payload);
+  if (built.blockers.length) return err(domainError("BLOCKER_FAILED", `Tờ khai chưa truyền được: ${built.blockers.join("; ")}`));
   const now = deps.clock.now();
   const key = outboxKey(dossierId, op, snap.version);
   const created = await deps.uow.asOrg(ctx, async (r) => {

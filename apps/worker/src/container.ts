@@ -64,7 +64,16 @@ export function buildContainer() {
     return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd };
   };
   const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
-  const validation = createValidationInfrastructure({ db });
+  // Luật đối chiếu cần biết hồ sơ nhập/xuất + phương thức vận chuyển: nối từ module dossier tại đây (validation không import dossier).
+  const validation = createValidationInfrastructure({
+    db,
+    dossiers: {
+      profile: async (orgId, dossierId) => {
+        const d = await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId));
+        return d ? { direction: d.direction, typeCode: d.typeCode, transportMode: d.transportMode } : null;
+      },
+    },
+  });
   const usage = usageRecorder;
   // Skill trước extraction: extraction cần SkillResolver (gợi ý trường theo skill của org).
   const skillBase = createSkillInfrastructure({

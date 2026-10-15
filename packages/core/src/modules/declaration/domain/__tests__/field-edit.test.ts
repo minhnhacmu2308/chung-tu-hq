@@ -28,6 +28,24 @@ describe("canEditField", () => {
     expect(canEditField("IDA", "SO_VD", "COSU6402210870").ok).toBe(true);
   });
 
+  it("độ dài theo catalog: ghi chú (1.68) tối đa 100 ký tự, số quản lý nội bộ (1.69) tối đa 20; chỉ tiêu nhiều ô (1.31) không xét theo ô 1", () => {
+    expect(canEditField("IDA", "GHI_CHU", "x".repeat(100)).ok).toBe(true);
+    expect(canEditField("IDA", "GHI_CHU", "x".repeat(101))).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringMatching(/vượt giới hạn 100.*HYS/) } });
+    expect(errCode(canEditField("IDA", "SO_QLNB", "x".repeat(21)))).toBe("VALIDATION");
+    expect(canEditField("IDA", "PTVC_TEN", "SITC HAIPHONG V.2641S").ok).toBe(true);
+  });
+
+  it("mã văn bản pháp quy (1.37): hàng 84/85 (blocking) → ô 1 phải MO/CU, không để trống; tối đa 5 mã, không trùng", () => {
+    const vbpq = { ...built.fields["VBPQ"]! };
+    expect(vbpq.blocking).toBe(true);
+    expect(canEditField("IDA", "VBPQ", "MO", vbpq).ok).toBe(true);
+    expect(canEditField("IDA", "VBPQ", "CU; KT", vbpq).ok).toBe(true);
+    for (const bad of ["", "KT", "KT MO"]) expect(errCode(canEditField("IDA", "VBPQ", bad, vbpq)), bad).toBe("VALIDATION");
+    expect(canEditField("IDA", "VBPQ", "KT").ok).toBe(true); // không có hàng 84/85
+    expect(errCode(canEditField("IDA", "VBPQ", "A1 A2 A3 A4 A5 A6"))).toBe("VALIDATION");
+    expect(errCode(canEditField("IDA", "VBPQ", "KT KT"))).toBe("VALIDATION");
+  });
+
   it("giá trị hệ thống tự dựng luôn qua được chính luật này (không tự mâu thuẫn với ánh xạ)", () => {
     expect(built.kind).toBe("IDA");
     const rejected = Object.entries(built.fields)

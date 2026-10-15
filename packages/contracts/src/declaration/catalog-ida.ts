@@ -28,7 +28,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Căn cứ hồ sơ, mục đích nhập khẩu để chọn mã loại hình theo bảng mã của TCHQ (ví dụ A11, A12, E31, G11).",
   }),
   f("1.5", "GENERAL", "Mã phân loại hàng hóa", "code", "C", {
-    maxLen: 1, fptField: "VN_IDA.TK_CCC",
+    maxLen: 1, codeTable: "CARGO_CLASS", fptField: "VN_IDA.TK_CCC",
     legalNote: "Bắt buộc với hàng đặc thù: A quà biếu, B an ninh quốc phòng, C cứu trợ khẩn cấp, D phòng chống thiên tai/dịch bệnh, E viện trợ, F bưu chính/CPN, G tài sản di chuyển, H PTVT XNC, I ngoại giao, J khác theo CP, K bảo quản đặc biệt.",
   }),
   f("1.6", "GENERAL", "Mã hiệu phương thức vận chuyển", "code", "M", {
@@ -36,7 +36,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "1 hàng không, 2 biển (container), 3 biển (hàng rời, lỏng; cả hàng LCL vào kho CFS), 4 bộ, 5 sắt, 6 sông, 9 khác (đường ống, NK tại chỗ, hàng vào kho ngoại quan).",
   }),
   f("1.7", "GENERAL", "Phân loại cá nhân/tổ chức", "code", "M", {
-    maxLen: 1, fptField: "VN_IDA.TK_SKB",
+    maxLen: 1, codeTable: "PARTY_CLASS", fptField: "VN_IDA.TK_SKB",
     legalNote: "1 cá nhân gửi cá nhân; 2 tổ chức gửi cá nhân; 3 cá nhân gửi tổ chức; 4 tổ chức gửi tổ chức; 5 khác.",
   }),
   f("1.8", "GENERAL", "Cơ quan Hải quan", "code", "O", {
@@ -101,9 +101,9 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     maxLen: 35, fptField: "VN_IDA.TK_EPA",
     legalNote: "Địa chỉ người xuất khẩu, 4 ô × 35 ký tự: ô 1–2 đường, số nhà/P.O.BOX (TK_EPA, TK_EP2); ô 3 thành phố (TK_EP3); ô 4 tên nước (TK_EP4). Chỉ nhập khi hệ thống không tự hỗ trợ.",
   }),
-  f("1.23", "PARTIES", "Mã nước", "code", "C", {
+  f("1.23", "PARTIES", "Mã nước", "code", "M", {
     maxLen: 2, codeTable: "COUNTRY", fptField: "VN_IDA.TK_EPO",
-    legalNote: "Mã nước của người xuất khẩu, 2 ký tự theo UN/LOCODE.",
+    legalNote: "Mã nước gửi hàng, 2 ký tự UN/LOCODE: vận chuyển thẳng hoặc qua nước trung gian không có mua bán, gia công, chế biến, thông quan → nước xuất khẩu; có các hoạt động đó → nước trung gian cuối cùng trước khi đến VN; không xác định được → mã nước của người xuất khẩu.",
   }),
   f("1.24", "PARTIES", "Tên người ủy thác xuất khẩu", "text", "O", {
     maxLen: 70, fptField: "VN_IDA.TK_ENM", amendedBy121: true,
@@ -115,19 +115,19 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
   }),
 
   // ── Vận tải ─────────────────────────────────────────────────────────
-  f("1.26", "TRANSPORT", "Số vận đơn (Số B/L, số AWB v.v.)", "text", "C", {
+  f("1.26", "TRANSPORT", "Số vận đơn (Số B/L, số AWB v.v.)", "text", "M", {
     maxLen: 35, fptField: "VN_IDA_VANDON.VD_BL1",
-    legalNote: "Vận đơn có người nhận là người NK. Tối đa 5 số (VD_BL1..5) cùng người gửi, người nhận, phương tiện, chuyến, ngày đến. AWB ≤ 20 ký tự. Vận đơn tách/không có vận đơn: dùng số hệ thống cấp (mẫu 12, 13).",
+    legalNote: "Vận đơn có người nhận là người NK. Tối đa 5 số (VD_BL1..5) cùng người gửi, người nhận, phương tiện, chuyến, ngày đến. AWB ≤ 20 ký tự. Một vận đơn nhiều tờ khai: tách vận đơn (mẫu 12), khai số vận đơn nhánh; không có vận đơn: số quản lý hàng hóa hệ thống cấp (mẫu 13).",
   }),
   f("1.27", "TRANSPORT", "Số lượng", "int", "M", {
-    maxLen: 8, codeTable: "UNIT", fptField: "VN_IDA_VANDON.VD_NO",
-    legalNote: "Số lượng kiện: ô 1 tổng số kiện, không thập phân, hàng không đóng kiện nhập \"1\" (VD_NO); ô 2 mã loại kiện, ví dụ CS thùng, BX hộp (VD_NOT).",
+    maxLen: 8, codeTable: "PACKAGE_KIND", fptField: "VN_IDA_VANDON.VD_NO",
+    legalNote: "Số lượng kiện: ô 1 tổng số kiện, không thập phân, hàng không thể hiện bằng kiện, thùng nhập \"1\" (VD_NO); ô 2 mã loại kiện theo bảng \"Mã loại kiện\", ví dụ CS thùng, BX hộp (VD_NOT).",
   }),
   f("1.28", "TRANSPORT", "Tổng trọng lượng hàng (Gross)", "decimal", "C", {
     maxLen: 10, codeTable: "UNIT", fptField: "VN_IDA_VANDON.VD_GW",
     legalNote: "Ô 1 tổng trọng lượng gross (VD_GW): đường không 8+1 số, khác 6+3 số; ô 2 mã đơn vị KGM/TNE/LBR (VD_GWT), LBR tự quy đổi KGM. Không nhập khi PTVC mã 9.",
   }),
-  f("1.29", "TRANSPORT", "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", "code", "C", {
+  f("1.29", "TRANSPORT", "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", "code", "M", {
     maxLen: 7, codeTable: "A202", fptField: "VN_IDA_VANDON.VD_ST",
     legalNote: "Mã kho/bãi/cảng nơi hàng chờ thông quan theo thông báo hàng đến (A202 địa điểm lưu kho); CV 4613/TCHQ-VNACCS, ví dụ 03CCS03.",
   }),
@@ -153,7 +153,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
   }),
   f("1.35", "TRANSPORT", "Số lượng container", "int", "C", {
     maxLen: 3, fptField: "VN_IDA_VANDON.VD_COC",
-    legalNote: "Hệ thống tự xuất nếu đã đăng ký; hàng không/không dùng container/hàng đóng chung container thì không nhập.",
+    legalNote: "Hệ thống tự xuất nếu đã đăng ký. Không nhập khi đường không, phương thức không dùng container, hàng đóng chung container từ kho CFS. Danh sách container (số hiệu, ký hiệu, số seal) khai bằng nghiệp vụ HYS, file Excel theo định dạng của cơ quan Hải quan.",
   }),
   f("1.36", "TRANSPORT", "Mã kết quả kiểm tra nội dung", "code", "O", {
     maxLen: 1, fptField: "VN_IDA.TK_N4", manual: true,
@@ -163,11 +163,11 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
   // ── Giấy phép, hóa đơn, trị giá ────────────────────────────────────
   f("1.37", "VALUE", "Mã văn bản pháp quy khác", "code", "C", {
     maxLen: 2, codeTable: "A519", fptField: "VN_IDA.TK_OL1",
-    legalNote: "Mã văn bản quản lý mặt hàng (giấy phép, kiểm dịch, ATTP, kiểm tra chất lượng…). Tối đa 5 mã không trùng (TK_OL1..5); hàng thuộc quản lý chuyên ngành bắt buộc nhập.",
+    legalNote: "Mã văn bản quản lý mặt hàng (giấy phép, kiểm dịch, ATTP, kiểm tra chất lượng…). Tối đa 5 mã không trùng (TK_OL1..5); hàng thuộc quản lý chuyên ngành bắt buộc nhập. Hàng chương 84, 85: ô 1 bắt buộc \"MO\" chưa qua sử dụng hoặc \"CU\" đã qua sử dụng, sai thì bị từ chối (CV 2061/TCHQ-GSQL).",
   }),
   f("1.38", "VALUE", "Giấy phép nhập khẩu", "code", "C", {
     maxLen: 4, codeTable: "A528", fptField: "VN_IDA.TK_SS1", amendedBy121: true,
-    legalNote: "Tối đa 5: ô 1 mã phân loại giấy phép/mã xác định trước/danh mục trừ lùi (TK_SS1..5), ANQP nhập QPGP hoặc MTTB; ô 2 số giấy phép/văn bản/số tiếp nhận HĐ gia công (TK_SN1..5).",
+    legalNote: "Tối đa 5: ô 1 mã phân loại giấy phép/mã xác định trước/danh mục trừ lùi (TK_SS1..5); ô 2 số giấy phép/văn bản KTCN/xác định trước/số tiếp nhận HĐ gia công (TK_SN1..5). ANQP (TT121): \"QPGP\" giấy phép NK, \"MTTB\" thông báo miễn thuế, kèm số và ngày, ví dụ \"MTTB 08TB18062025\".",
   }),
   f("1.39", "VALUE", "Phân loại hình thức hóa đơn", "code", "M", {
     maxLen: 1, codeTable: "INVOICE_KIND", fptField: "VN_IDA.TK_IV1",
@@ -179,43 +179,43 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
   }),
   f("1.41", "VALUE", "Số hóa đơn", "text", "C", {
     maxLen: 35, fptField: "VN_IDA.TK_IV3",
-    legalNote: "Số hóa đơn thương mại hoặc chứng từ tương đương/bảng kê hóa đơn.",
+    legalNote: "Số hóa đơn thương mại hoặc chứng từ tương đương/bảng kê 02/BKHĐ/GSQL. Không có hóa đơn thương mại thì không nhập. Hàng gửi kho ngoại quan nhập nội địa nhiều lần: số hóa đơn do người bán nước ngoài phát hành.",
   }),
-  f("1.42", "VALUE", "Ngày phát hành", "date", "C", {
+  f("1.42", "VALUE", "Ngày phát hành", "date", "M", {
     fptField: "VN_IDA.TK_IVD",
-    legalNote: "Ngày phát hành hóa đơn thương mại (hoặc ngày lập chứng từ tương đương/bảng kê).",
+    legalNote: "Ngày phát hành hóa đơn thương mại (hoặc ngày lập chứng từ tương đương/bảng kê). Không có hóa đơn thương mại: nhập ngày thực hiện nghiệp vụ IDA.",
   }),
-  f("1.43", "VALUE", "Phương thức thanh toán", "code", "C", {
+  f("1.43", "VALUE", "Phương thức thanh toán", "code", "M", {
     maxLen: 7, codeTable: "PAYMENT", fptField: "VN_IDA.TK_IVP",
-    legalNote: "Mã BIENMAU, DA, CAD, CANTRU, CASH, CHEQUE, DP, GV, H-D-H, H-T-N, HPH, KHONGTT, LC, LDDT, OA, TTR, KC. Kết hợp nhiều hình thức: KC và ghi chi tiết tại \"Chi tiết khai trị giá\".",
+    legalNote: "Mã BIENMAU, DA, CAD, CANTRU, CASH, CHEQUE, DP, GV, H-D-H, H-T-N, HPH, KHONGTT, LC, LDDT, OA, TTR, KC (KC gồm cả thanh toán TT). Hình thức khác/kết hợp: KC và ghi phương thức thực tế tại 1.50. Chủ hàng gửi kho ngoại quan: KHONGTT.",
   }),
   f("1.44", "VALUE", "Tổng trị giá hóa đơn", "decimal", "C", {
     maxLen: 20, codeTable: "PRICE_KIND", fptField: "VN_IDA.TK_IP4", amendedBy121: true,
-    legalNote: "Ô 1 mã phân loại giá hóa đơn A–D (TK_IP1); ô 2 điều kiện giá Incoterms, TT121 thêm DPU (TK_IP2); ô 3 mã đồng tiền hóa đơn (TK_IP3); ô 4 tổng trị giá hóa đơn (TK_IP4).",
+    legalNote: "Ô 1 phân loại giá A–D (TK_IP1); ô 2 điều kiện giá, 18 mã gồm DPU, không khai được DPU thì khai DAT và ghi DPU ở 1.50 (TK_IP2); ô 3 mã tiền (TK_IP3); ô 4 tổng trị giá, VND không thập phân, ngoại tệ ≤ 4 số (TK_IP4). Gia công dùng HĐ bên thứ ba/không HĐ, mua từ phi thuế quan/kho NQ nhóm E, F: CIF.",
   }),
   f("1.45", "VALUE", "Mã phân loại khai trị giá", "code", "C", {
-    maxLen: 1, fptField: "VN_IDA_KTG.KTG_VD1",
-    legalNote: "6 trị giá giao dịch; 7 có quan hệ đặc biệt không ảnh hưởng giá; 8 trị giá giao dịch nhưng phân bổ thủ công; 1, 2 hàng giống hệt/tương tự; 3 khấu trừ; 4 tính toán; 9 suy luận; T trường hợp đặc biệt.",
+    maxLen: 1, codeTable: "VALUATION_METHOD", fptField: "VN_IDA_KTG.KTG_VD1",
+    legalNote: "1 giống hệt; 2 tương tự; 3 khấu trừ; 4 tính toán; 6 trị giá giao dịch; 7 quan hệ đặc biệt không ảnh hưởng; 8 giao dịch, phân bổ thủ công; 9 suy luận; T đặc biệt (Đ17 TT39/2015, gia công cho NN). Nhiều phương pháp: mã dùng nhiều nhất; 6, 7 chỉ khi đủ điều kiện PP giao dịch; 0, 5, Z chưa dùng.",
   }),
   f("1.46", "VALUE", "Số tiếp nhận tờ khai trị giá tổng hợp", "text", "F", {
     maxLen: 9, fptField: "VN_IDA_KTG.KTG_VD2",
     legalNote: "Cả 3 ô: không nhập dữ liệu cho đến khi có hướng dẫn mới.",
   }),
   f("1.47", "VALUE", "Phí vận chuyển", "decimal", "C", {
-    maxLen: 18, fptField: "VN_IDA_KTG.KTG_FR3",
-    legalNote: "Ô 1 mã phân loại phí vận chuyển A–F (KTG_FR1); ô 2 mã tiền (KTG_FR2); ô 3 số tiền cước (KTG_FR3). Mã E khi giá đã gồm cước nhưng cước thực tế vượt.",
+    maxLen: 18, codeTable: "FREIGHT_CLASS", fptField: "VN_IDA_KTG.KTG_FR3",
+    legalNote: "Ô 1 mã A–F (KTG_FR1): A cước chung; B tách cước hàng FOC; C nhập một phần lô; D phân bổ theo trọng lượng/dung tích (tờ khai trị giá); E giá đã gồm cước nhưng cước thực tế vượt, khai phần chênh; F vượt cước và nhập một phần. Ô 2 mã tiền (KTG_FR2); ô 3 số tiền (KTG_FR3). Không hóa đơn: không khai.",
   }),
   f("1.48", "VALUE", "Phí bảo hiểm", "decimal", "C", {
-    maxLen: 16, fptField: "VN_IDA_KTG.KTG_IN3",
-    legalNote: "Ô 1 mã phân loại bảo hiểm: A riêng, D không bảo hiểm (KTG_IN1); ô 2 mã tiền (KTG_IN2); ô 3 số tiền (KTG_IN3); ô 4 chưa áp dụng (KTG_IN4). Không nhập được khi điều kiện giá là CIF, CIP, DDP, DAP…",
+    maxLen: 16, codeTable: "INSURANCE_CLASS", fptField: "VN_IDA_KTG.KTG_IN3",
+    legalNote: "Ô 1 A bảo hiểm riêng, D không bảo hiểm, B chưa áp dụng (KTG_IN1); ô 2 mã tiền, ô 3 số tiền khi mã A (KTG_IN2, KTG_IN3); ô 4 chưa áp dụng (KTG_IN4). Không nhập được khi điều kiện giá là CIF, CIP, C&I, DDU, DDP, DAP, DAF, DAT. Không hóa đơn: không khai.",
   }),
   f("1.49", "VALUE", "Mã, tên khoản điều chỉnh", "code", "C", {
-    maxLen: 1, fptField: "VN_IDA_KTG.KTG_VR1",
-    legalNote: "Tối đa 5 khoản: ô 1 mã tên khoản (KTG_VR1..5); ô 2 mã phân loại AD cộng/SB trừ/IP/DP (KTG_VI); ô 3 mã tiền (KTG_VC); ô 4 trị giá khoản điều chỉnh (KTG_VP); ô 5 tổng hệ số phân bổ (KTG_VT).",
+    maxLen: 1, codeTable: "ADJUSTMENT_CODE", fptField: "VN_IDA_KTG.KTG_VR1",
+    legalNote: "Tối đa 5 khoản: ô 1 mã (KTG_VR1..5), cộng A, B, C, D, E, P, Q, K, M; trừ U, V, H, T, G, S, L; N khác; giảm giá theo số lượng không khai G mà ghi ở 1.50. Ô 2 AD/SB/IP/DP (KTG_VI); ô 3 mã tiền (KTG_VC); ô 4 trị giá (KTG_VP); ô 5 tổng hệ số phân bổ ≤ 1.51 (KTG_VT).",
   }),
   f("1.50", "VALUE", "Chi tiết khai trị giá", "text", "C", {
     maxLen: 280, fptField: "VN_IDA_KTG.KTG_VLD", amendedBy121: true,
-    legalNote: "Ngày vận đơn DDMMYYYY#&; chi tiết khoản điều chỉnh; giá tạm tính; giảm giá chưa trừ; số hợp đồng mua bán (nếu có); đề nghị tham vấn một lần dùng nhiều lần; đề nghị giải phóng hàng (TT121).",
+    legalNote: "Ngày vận đơn DDMMYYYY#&; chi tiết khoản điều chỉnh; giá tạm tính; giảm giá chưa trừ; số hợp đồng; DPU khi khai DAT; dòng hàng FOC; PTTT thực tế khi khai KC. TT121: tham vấn 1 lần dùng nhiều lần (STT hàng, số/ngày Thông báo trị giá, mã Chi cục); \"tham vấn gián tiếp\".",
   }),
   f("1.51", "VALUE", "Tổng hệ số phân bổ trị giá tính thuế", "decimal", "C", {
     maxLen: 20, fptField: "VN_IDA.TK_TP",
@@ -223,13 +223,13 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
   }),
 
   // ── Nộp thuế, hạn mức, bảo lãnh ─────────────────────────────────────
-  f("1.52", "TAX", "Người nộp thuế", "code", "C", {
-    maxLen: 1, fptField: "VN_IDA.TK_TPM",
+  f("1.52", "TAX", "Người nộp thuế", "code", "M", {
+    maxLen: 1, codeTable: "TAX_PAYER", fptField: "VN_IDA.TK_TPM",
     legalNote: "1 người nộp thuế là người nhập khẩu; 2 là đại lý hải quan.",
   }),
   f("1.53", "TAX", "Mã lý do đề nghị BP", "code", "C", {
-    maxLen: 1, fptField: "VN_IDA.TK_BP", manual: true,
-    legalNote: "Giải phóng hàng trên cơ sở bảo lãnh: A chờ xác định mã số, B chờ xác định trị giá, C khác.",
+    maxLen: 1, codeTable: "BP_REASON", fptField: "VN_IDA.TK_BP", manual: true,
+    legalNote: "Giải phóng hàng trên cơ sở bảo lãnh: A chờ xác định mã số, B chờ xác định trị giá tính thuế, C khác. Giải phóng hàng trên cơ sở nộp thuế: không nhập ô này, ghi đề nghị tại 1.50.",
   }),
   f("1.54", "TAX", "Mã ngân hàng trả thuế thay", "code", "C", {
     maxLen: 11, fptField: "VN_IDA.TK_BRC", manual: true,
@@ -248,8 +248,8 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Số chứng từ hạn mức (tối đa 10 ký tự); bắt buộc nếu đã nhập Mã ngân hàng trả thuế thay.",
   }),
   f("1.58", "TAX", "Mã xác định thời hạn nộp thuế", "code", "C", {
-    maxLen: 1, fptField: "VN_IDA.TK_ENC", manual: true,
-    legalNote: "A bảo lãnh riêng; B bảo lãnh chung; C có thời hạn nộp thuế không cần bảo lãnh; D nộp thuế ngay.",
+    maxLen: 1, codeTable: "DUE_DATE", fptField: "VN_IDA.TK_ENC", manual: true,
+    legalNote: "A thời hạn nộp thuế do bảo lãnh riêng; B do bảo lãnh chung; C có thời hạn nộp thuế, không bảo lãnh; D nộp thuế ngay – cũng nhập D khi khai bổ sung để thông quan sau tạm giải phóng hàng.",
   }),
   f("1.59", "TAX", "Mã ngân hàng bảo lãnh", "code", "C", {
     maxLen: 11, fptField: "VN_IDA.TK_SBC", manual: true,
@@ -291,25 +291,26 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
   }),
   f("1.68", "GENERAL", "Phần ghi chú", "text", "O", {
     maxLen: 100, fptField: "VN_IDA.TK_NT2", amendedBy121: true,
-    legalNote: "Ví dụ: #&số tờ khai NK khi chuyển tiêu thụ nội địa; số/ngày C/O ưu đãi đặc biệt; hóa đơn GTGT khi mua bán với DNCX; NK tại chỗ ghi tên, địa chỉ người nước ngoài chỉ định (TT121). Quá 100 ký tự ghi tiếp ở Mô tả hàng hóa/HYS.",
+    legalNote: "Nhiều nội dung ngăn cách \";\", ≤ 100 ký tự, vượt thì ghi tiếp ở 1.30/1.50/1.78 hoặc HYS. Gồm: #&số TK NK khi chuyển tiêu thụ nội địa; số/ngày C/O ưu đãi đặc biệt; HĐ GTGT khi mua bán với DNCX; NK tại chỗ: tên, địa chỉ người NN chỉ định nhận hàng; \"đề nghị giải phóng hàng… đang chờ KQPTPL\" (TT121).",
   }),
   f("1.69", "GENERAL", "Số quản lý của nội bộ doanh nghiệp", "text", "O", {
     maxLen: 20, fptField: "VN_IDA.TK_REF", amendedBy121: true,
-    legalNote: "Mã quản lý nội bộ hoặc ký hiệu theo hướng dẫn: #&NKTC#&số TK xuất tại chỗ; #&GCPTQ; #&NKPTQ; tạm nhập/quà biếu/ngoại giao… #&1..#&5 (TT121 sửa).",
+    legalNote: "#&NKTC#&số TK XK tại chỗ (11 ký tự); #&GCPTQ gia công với DNCX; #&NKPTQ#&số TK XK tương ứng (DNCX – nội địa); #&1 tạm nhập cá nhân miễn thuế, #&2 dụng cụ nghề nghiệp, #&3 PT quay vòng, #&4 quà từ nước ngoài, #&5 ngoại giao, #&6 viện trợ, #&7 hàng mẫu, #&8 tài sản di chuyển, #&9 hành lý (TT121).",
   }),
   f("1.70", "GENERAL", "Phân loại chỉ thị của Hải quan", "code", "F", {
-    maxLen: 1,
+    maxLen: 1, fptField: "VN_IDA_CTHQ.CTHQ_CCM",
     legalNote: "Phần dành cho công chức hải quan: A hướng dẫn sửa đổi, B thay đổi khai báo nhập khẩu.",
   }),
   f("1.71", "GENERAL", "Ngày", "date", "F", {
+    fptField: "VN_IDA_CTHQ.CTHQ_D01",
     legalNote: "Phần dành cho công chức hải quan: ngày thông báo chỉ thị tới người khai.",
   }),
   f("1.72", "GENERAL", "Tên", "text", "F", {
-    maxLen: 40,
+    maxLen: 40, fptField: "VN_IDA_CTHQ.CTHQ_T01",
     legalNote: "Phần dành cho công chức hải quan: trích yếu nội dung chỉ thị.",
   }),
   f("1.73", "GENERAL", "Nội dung", "text", "F", {
-    maxLen: 140,
+    maxLen: 140, fptField: "VN_IDA_CTHQ.CTHQ_I01",
     legalNote: "Phần dành cho công chức hải quan: nội dung chỉ thị.",
   }),
 ];

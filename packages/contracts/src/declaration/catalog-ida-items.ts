@@ -17,7 +17,7 @@ export const CATALOG_IDA_ITEMS: DeclarationFieldDef[] = [
   }),
   f("1.76", "ITEMS", "Thuế suất", "decimal", "C", {
     maxLen: 10, fptField: "VN_IDA_HANG.HAG_TXA",
-    legalNote: "Hệ thống tự xác định thuế suất NK theo mã HS và mã biểu thuế; chỉ nhập tay khi hệ thống báo lỗi E1004, E1006, E1008, E1009.",
+    legalNote: "Hệ thống tự xác định thuế suất NK theo mã HS và mã biểu thuế; chỉ nhập tay khi hệ thống báo lỗi E1004, E1006, E1008, E1009. Mã biểu thuế B30 (không chịu thuế): nhập \"0\".",
   }),
   f("1.77", "ITEMS", "Mức thuế tuyệt đối", "decimal", "C", {
     maxLen: 10, fptField: "VN_IDA_HANG.HAG_TXB",
@@ -25,7 +25,7 @@ export const CATALOG_IDA_ITEMS: DeclarationFieldDef[] = [
   }),
   f("1.78", "ITEMS", "Mô tả hàng hóa", "text", "M", {
     maxLen: 200, fptField: "VN_IDA_HANG.HAG_CMN", amendedBy121: true,
-    legalNote: "Tên hàng, nhãn hiệu, quy cách, thông số, thành phần, hàm lượng, model, công dụng, quy cách đóng gói, nhà sản xuất… làm căn cứ xác định mã số (TT121). GC/SXXK: mã NPL#&tên hàng. Tiếng Việt hoặc tiếng Anh.",
+    legalNote: "Tên hàng, nhãn hiệu, quy cách, thông số, thành phần, hàm lượng, model, công dụng, quy cách đóng gói, nhà sản xuất… làm căn cứ xác định mã số (TT121). GC/SXXK: mã NPL#&tên hàng. Chương 98: ghi thêm mã Chương 98. Dùng KQ PTPL: số/ngày thông báo. Số lượng > 2 số thập phân: \"mô tả#&số lượng\".",
   }),
   f("1.79", "ITEMS", "Mã nước xuất xứ", "code", "M", {
     maxLen: 2, codeTable: "COUNTRY", fptField: "VN_IDA_HANG.HAG_OR",
@@ -33,7 +33,7 @@ export const CATALOG_IDA_ITEMS: DeclarationFieldDef[] = [
   }),
   f("1.80", "ITEMS", "Mã Biểu thuế nhập khẩu", "code", "M", {
     maxLen: 3, codeTable: "TAX_TABLE", fptField: "VN_IDA_HANG.HAG_ORS", amendedBy121: true,
-    legalNote: "Theo \"Bảng mã Biểu thuế nhập khẩu\" trên website Cục Hải quan (B01 MFN, B03 thông thường, B04 ATIGA, B05 ACFTA…). Chương 98: B02 hoặc B17. Hàng miễn thuế vẫn chọn mã biểu thuế tương ứng (TT121).",
+    legalNote: "Theo \"Bảng mã Biểu thuế nhập khẩu\" trên website Cục Hải quan (TT121 thay danh sách B01…B30 của TT39). Chương 98: B02 hoặc B17 theo \"Biểu thuế Chương 98 - B02 và B17\". Hàng miễn thuế không khai mã của đối tượng không chịu thuế mà chọn biểu tương ứng loại thuế suất.",
   }),
   f("1.81", "ITEMS", "Mã ngoài hạn ngạch", "code", "C", {
     maxLen: 1, fptField: "VN_IDA_HANG.HAG_KWS",
@@ -45,7 +45,7 @@ export const CATALOG_IDA_ITEMS: DeclarationFieldDef[] = [
   }),
   f("1.83", "ITEMS", "Số lượng (1)", "decimal", "M", {
     maxLen: 12, codeTable: "A501", fptField: "VN_IDA_HANG.HAG_QN1",
-    legalNote: "Ô 1 số lượng theo ĐVT trong Danh mục hàng hóa XNK hoặc thực tế giao dịch (HAG_QN1); ô 2 mã ĐVT (HAG_QT1). Hàng chịu thuế tuyệt đối: theo ĐVT tính thuế.",
+    legalNote: "Ô 1 số lượng theo ĐVT trong Danh mục hàng hóa XNK hoặc thực tế giao dịch, ≤ 2 số thập phân; vượt thì làm tròn, ghi số lượng thực tế, đơn giá ở 1.78 \"mô tả#&số lượng\", không khai 1.86 (HAG_QN1); ô 2 mã ĐVT (HAG_QT1). Hàng chịu thuế tuyệt đối: theo ĐVT tính thuế.",
   }),
   f("1.84", "ITEMS", "Số lượng (2)", "decimal", "C", {
     maxLen: 12, codeTable: "A501", fptField: "VN_IDA_HANG.HAG_QN2",
@@ -53,11 +53,11 @@ export const CATALOG_IDA_ITEMS: DeclarationFieldDef[] = [
   }),
   f("1.85", "ITEMS", "Trị giá hóa đơn", "decimal", "C", {
     maxLen: 20, fptField: "VN_IDA_HANG.HAG_BPR",
-    legalNote: "Trị giá hóa đơn từng dòng hàng, tối đa 4 số thập phân. Hàng thuê gia công ở nước ngoài: trị giá đến cửa khẩu nhập đầu tiên (CIF hoặc tương đương).",
+    legalNote: "Trị giá hóa đơn từng dòng hàng, tối đa 4 số thập phân; phần nguyên vượt 12 chữ số thì tách dòng (tổng lượng không đổi). Không có hóa đơn hoặc dòng hàng FOC: để trống. Hàng thuê gia công ở nước ngoài: trị giá đến cửa khẩu nhập đầu tiên (CIF hoặc tương đương).",
   }),
   f("1.86", "ITEMS", "Đơn giá hóa đơn", "decimal", "C", {
     maxLen: 9, fptField: "VN_IDA_HANG.HAG_UPR",
-    legalNote: "Ô 1 đơn giá (HAG_UPR); ô 2 mã đồng tiền (HAG_UPC); ô 3 đơn vị tính của đơn giá (HAG_TSC). Đơn giá × số lượng = trị giá hóa đơn ± 1.",
+    legalNote: "Ô 1 đơn giá (HAG_UPR); ô 2 mã đồng tiền (HAG_UPC); ô 3 đơn vị tính của đơn giá (HAG_TSC). Đơn giá × số lượng = trị giá hóa đơn ± 1. Đơn giá vượt 9 ký tự: không khai ở đây mà ghi ở 1.78. Không có hóa đơn hoặc dòng hàng FOC: để trống.",
   }),
   f("1.87", "ITEMS", "Trị giá tính thuế", "decimal", "C", {
     maxLen: 20, fptField: "VN_IDA_HANG.HAG_DPR",

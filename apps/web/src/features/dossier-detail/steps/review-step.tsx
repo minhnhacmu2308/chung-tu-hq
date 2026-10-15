@@ -17,6 +17,7 @@ import { toastMutationError } from "@/lib/mutation-error";
 import { formatBytesVi, formatDate, formatDateTime, formatMoney, formatNumber, formatVnd } from "@/lib/format";
 import { DOC_KIND_LABELS, type Declaration, type DeclarationField } from "@/mocks/types";
 import { errorMessage, KeyValue, SourceChip, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
+import { fieldGuide } from "./field-guide";
 import type { StepProps } from "./types";
 
 const SECTION_LABELS: Record<DeclarationField["section"], string> = {
@@ -240,9 +241,10 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
 }
 
 /** Sửa tay một chỉ tiêu trên tờ khai nháp. Giá trị mới mang nguồn "Người khai sửa" và được ghi vào lịch sử sửa. */
-function EditFieldDialog({ dossierId, field, currency, onClose }: { dossierId: string; field: DeclarationField; currency: string; onClose: () => void }) {
+function EditFieldDialog({ dossierId, kind, field, currency, onClose }: { dossierId: string; kind: Declaration["kind"]; field: DeclarationField; currency: string; onClose: () => void }) {
   const qc = useQueryClient();
   const [value, setValue] = useState(field.value);
+  const guide = fieldGuide(kind, field.no);
   const isDate = DATE_CODES.has(field.code);
   const next = value.trim();
   const save = useMutation({
@@ -269,6 +271,11 @@ function EditFieldDialog({ dossierId, field, currency, onClose }: { dossierId: s
               <KeyValue label="Giá trị hiện tại" hint={<SourceChip source={field.source} />} value={displayValue(field, currency) || "—"} />
             </div>
             {field.suspect && field.note && <Alert tone="warning">{field.note}</Alert>}
+            {guide && (
+              <Alert tone="info" title={`Hướng dẫn khai chỉ tiêu ${guide.no}${guide.amendedBy121 ? " (sửa đổi theo TT121/2025)" : ""}`}>
+                {guide.note}
+              </Alert>
+            )}
             <Field label="Giá trị mới" hint="Sau khi lưu, chỉ tiêu mang nguồn “Người khai sửa” và được giữ khi dựng lại tờ khai.">
               <Input type={isDate ? "date" : "text"} value={value} maxLength={500} autoFocus onChange={(e) => setValue(e.currentTarget.value)} />
             </Field>
@@ -471,7 +478,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         )}
       </StickyActionBar>
 
-      {editing && <EditFieldDialog key={editing.code} dossierId={dossier.id} field={editing} currency={dossier.currency} onClose={() => setEditing(null)} />}
+      {editing && <EditFieldDialog key={editing.code} dossierId={dossier.id} kind={decl.kind} field={editing} currency={dossier.currency} onClose={() => setEditing(null)} />}
 
       <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
         <DialogContent title="Mở lại tờ khai để sửa" icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">

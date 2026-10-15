@@ -10,6 +10,9 @@ export const CodeTableSchema = z.enum([
   "A014", "A038", "A016", "A202", "A501", "A519", "A520", "A527", "A528", "A546", "A601", "A620",
   "CURRENCY", "COUNTRY", "UNIT", "PAYMENT", "INCOTERM", "TRANSPORT_MODE", "INVOICE_KIND", "PRICE_KIND",
   "LAW_CODE", "TYPE_CODE", "TAX_TABLE",
+  // Bảng mã ghi ngay trong Phụ lục II (dữ liệu ở code-tables.ts, tra qua CODE_TABLES).
+  "PACKAGE_KIND", "CARGO_CLASS", "PARTY_CLASS", "VALUATION_METHOD", "FREIGHT_CLASS", "INSURANCE_CLASS",
+  "ADJUSTMENT_CODE", "ADJUSTMENT_KIND", "TAX_PAYER", "BP_REASON", "DUE_DATE",
 ]);
 
 export const DeclarationFieldDefSchema = z.object({
@@ -24,7 +27,7 @@ export const DeclarationFieldDefSchema = z.object({
   /** M bắt buộc, C bắt buộc có điều kiện, O tùy chọn, F hệ thống/không khai. */
   required: z.enum(["M", "C", "O", "F"]),
   codeTable: CodeTableSchema.optional(),
-  /** Tên trường FPT: "VN_IDA.TK_ICB", "VN_IDA_VANDON.VD_BL1", "VN_IDA_KTG.KTG_xxx", "VN_IDA_HANG.HAG_xxx", "VN_EDA.TK_ECB", "VN_EDA_HANG.HAG_xxx", "VN_EDA_CON.CON_xxx". Để trống khi không khớp chắc chắn. */
+  /** Tên trường FPT: "VN_IDA.TK_ICB", "VN_IDA_VANDON.VD_BL1", "VN_IDA_KTG.KTG_xxx", "VN_IDA_HANG.HAG_xxx", "VN_EDA.TK_ECB", "VN_EDA_HANG.HAG_xxx", "VN_EDA_CON.CON_xxx", "VN_IDA_CTHQ.CTHQ_xxx"/"VN_EDA_CTHQ.CTHQ_xxx" (chỉ thị HQ). Để trống khi không khớp chắc chắn. */
   fptField: z.string().optional(),
   /** Hệ thống không điền tự động – người khai nhập tay. */
   manual: z.boolean().optional(),

@@ -1,5 +1,6 @@
 import type { DocKind, RuleResult, RuleSeverity } from "@kb/contracts";
 import type { OrgId, UserId } from "../../../shared/ids.js";
+import type { DossierProfile } from "../domain/helpers.js";
 
 export type ValidationRow = { id: string; orgId: string; dossierId: string; shipmentVersion: string; ruleCode: string; title: string; detail: string; result: RuleResult; severity: RuleSeverity; documentKinds: DocKind[]; fields: string[]; createdAt: Date };
 
@@ -12,4 +13,8 @@ export interface ValidationRepos {
 export interface ValidationUow {
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: ValidationRepos) => Promise<T>): Promise<T>;
 }
-export type ValidationDeps = { uow: ValidationUow; idGen: { next(prefix: "chk"): string }; clock: { now(): Date } };
+/** Đọc hồ sơ (nhập/xuất, loại hình, phương thức vận chuyển) – composition root nối từ module dossier. */
+export interface DossierProfileReader {
+  profile(orgId: string, dossierId: string): Promise<DossierProfile | null>;
+}
+export type ValidationDeps = { uow: ValidationUow; idGen: { next(prefix: "chk"): string }; clock: { now(): Date }; dossiers?: DossierProfileReader };

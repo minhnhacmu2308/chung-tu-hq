@@ -4,6 +4,8 @@
  * "DANH MUC CHUAN VNACCS.xlsx" (FPT) chỉ mô tả cấu trúc bảng (API SyncCategory), không chứa dữ liệu,
  * nên các mã không có trong tài liệu được đánh dấu `unverified: true` – cần đồng bộ lại từ danh mục VNACCS.
  */
+import type { CodeTable } from "./catalog-types.js";
+
 export interface CodeEntry {
   code: string;
   label: string;
@@ -29,7 +31,11 @@ export const INVOICE_KINDS: CodeEntry[] = [
   { code: "D", label: "Hóa đơn điện tử (đăng ký trên VNACCS)" },
 ];
 
-/** Chỉ tiêu 1.44 ô 1 / 2.39 ô 4 – Mã phân loại giá hóa đơn. */
+/**
+ * Chỉ tiêu 1.44 ô 1 / 2.39 ô 4 – Mã phân loại giá hóa đơn.
+ * Nhãn D "(kể cả không có hóa đơn thương mại)" theo TT121 cho 1.44. Riêng 2.39 ô 4 (TT39): không có hóa đơn và không
+ * nhập "Số hóa đơn" thì không khai ô này.
+ */
 export const PRICE_KINDS: CodeEntry[] = [
   { code: "A", label: "Giá hóa đơn cho hàng hóa phải trả tiền" },
   { code: "B", label: "Giá hóa đơn cho hàng hóa không phải trả tiền (FOC/hàng khuyến mại)" },
@@ -59,8 +65,8 @@ export const PAYMENT_METHODS: CodeEntry[] = [
 ];
 
 /**
- * Incoterms 2020. Ô điều kiện giá trên VNACCS còn chấp nhận mã cũ: C&F (CNF), DAT, C&I, DAF, DDU, DES, DEQ
- * (Phụ lục II); TT121 bổ sung DPU cho 1.44.
+ * Điều kiện giá hóa đơn (1.44 ô 2 / 2.39 ô 1): 11 mã Incoterms 2020 và các mã cũ VNACCS vẫn chấp nhận theo Phụ lục II
+ * TT39: C&F (CNF), DAT, C&I, DAF, DDU, DES, DEQ. Mã nào dùng được cho mẫu nào: xem INCOTERMS_IDA / INCOTERMS_EDA.
  */
 export const INCOTERMS: CodeEntry[] = [
   { code: "EXW", label: "Giao tại xưởng" },
@@ -74,7 +80,42 @@ export const INCOTERMS: CodeEntry[] = [
   { code: "DAP", label: "Giao tại nơi đến" },
   { code: "DPU", label: "Giao tại nơi đến đã dỡ xuống" },
   { code: "DDP", label: "Giao hàng đã nộp thuế" },
+  { code: "C&F", label: "Tiền hàng và cước phí (cách viết cũ của CFR)" },
+  { code: "CNF", label: "Tiền hàng và cước phí (cách viết khác của C&F)" },
+  { code: "C&I", label: "Tiền hàng và bảo hiểm" },
+  { code: "DAT", label: "Giao tại bến (Incoterms 2010)" },
+  { code: "DAF", label: "Giao tại biên giới (Incoterms 2000)" },
+  { code: "DDU", label: "Giao hàng chưa nộp thuế (Incoterms 2000)" },
+  { code: "DES", label: "Giao tại tàu (Incoterms 2000)" },
+  { code: "DEQ", label: "Giao tại cầu cảng (Incoterms 2000)" },
 ];
+
+/** Mã viết khác của cùng một điều kiện giá: Phụ lục II ghi "C&F (CNF)" là một mục. */
+export const INCOTERM_ALIASES: Readonly<Record<string, string>> = { CNF: "C&F" };
+
+/** 1.44 ô 2 (Mẫu 01, IDA): 18 mã theo TT121 – 17 mã của TT39 cộng DPU. CNF được chấp nhận như C&F. */
+export const INCOTERMS_IDA: readonly string[] = [
+  "CIF", "CIP", "FOB", "FCA", "FAS", "EXW", "C&F", "CFR", "CPT", "DDP", "DAP", "DAT", "C&I", "DAF", "DDU", "DES", "DEQ", "DPU",
+];
+
+/** 2.39 ô 1 (Mẫu 02, EDA): 17 mã theo TT39, không có DPU (TT121 chỉ bổ sung DPU cho 1.44). */
+export const INCOTERMS_EDA: readonly string[] = INCOTERMS_IDA.filter((code) => code !== "DPU");
+
+/** Mã điều kiện giá có dùng được cho mẫu tờ khai không (chấp nhận mã viết khác, ví dụ CNF). */
+export function isIncotermAllowed(code: string, form: "01" | "02"): boolean {
+  const normalized = INCOTERM_ALIASES[code] ?? code;
+  return (form === "01" ? INCOTERMS_IDA : INCOTERMS_EDA).includes(normalized);
+}
+
+/**
+ * 1.48: điều kiện giá đã gồm bảo hiểm – ô phí bảo hiểm không nhập được (TT39: CIF, CIP, C&I, DDU, DDP, DAP, DAF, DAT).
+ * DPU KHÔNG có trong danh sách của văn bản (TT121 không sửa 1.48) nên không đưa vào, dù về bản chất DPU cũng là nhóm D
+ * như DAP – khi khai DPU cần người khai tự xác nhận.
+ */
+export const INCOTERMS_WITH_INSURANCE: readonly string[] = ["CIF", "CIP", "C&I", "DDU", "DDP", "DAP", "DAF", "DAT"];
+
+/** Nhóm E, F: giá chưa gồm cước vận tải quốc tế (phải khai phí vận chuyển 1.47). */
+export const INCOTERMS_FREIGHT_NOT_INCLUDED: readonly string[] = ["EXW", "FCA", "FAS", "FOB"];
 
 /** Đơn vị tính số lượng hàng (A501, chuẩn UN/ECE Rec 20) – nhóm hay gặp. */
 export const UNITS: CodeEntry[] = [
@@ -110,11 +151,14 @@ export const UNITS: CodeEntry[] = [
   { code: "KIEN", label: "Kiện (mã tiếng Việt)", unverified: true },
 ];
 
-/** Mã loại kiện cho ô 2 chỉ tiêu 1.27 / 2.25 (UN/ECE Rec 21; ví dụ CS, BX ghi trong Phụ lục II). */
+/**
+ * Mã loại kiện cho ô 2 chỉ tiêu 1.27 / 2.25 (bảng "Mã loại kiện", UN/ECE Rec 21; chỉ CS, BX được ghi làm ví dụ trong
+ * Phụ lục II). Bảng mã catalog "PACKAGE_KIND" trỏ tới bảng này.
+ */
 export const PACKAGE_UNITS: CodeEntry[] = [
   { code: "CS", label: "Thùng (case)" },
   { code: "BX", label: "Hộp" },
-  { code: "PK", label: "Kiện (package)" },
+  { code: "PK", label: "Kiện (package)", unverified: true },
   { code: "CT", label: "Thùng carton", unverified: true },
   { code: "BG", label: "Bao/túi", unverified: true },
   { code: "PX", label: "Pallet", unverified: true },
@@ -261,3 +305,189 @@ export const TYPE_CODES_XK: CodeEntry[] = [
   { code: "G61", label: "Tạm xuất hàng hóa", unverified: true },
   { code: "H21", label: "Xuất khẩu hàng khác", unverified: true },
 ];
+
+/** Chỉ tiêu 1.5 / 2.5 – Mã phân loại hàng hóa (TT39 Mẫu 01, Mẫu 02). Chỉ dùng "J" khi Chính phủ có văn bản riêng. */
+export const CARGO_CLASSES: CodeEntry[] = [
+  { code: "A", label: "Hàng quà biếu, quà tặng" },
+  { code: "B", label: "Hàng an ninh, quốc phòng" },
+  { code: "C", label: "Hàng cứu trợ khẩn cấp" },
+  { code: "D", label: "Hàng phòng chống thiên tai, dịch bệnh" },
+  { code: "E", label: "Hàng viện trợ nhân đạo, viện trợ không hoàn lại" },
+  { code: "F", label: "Hàng bưu chính, chuyển phát nhanh" },
+  { code: "G", label: "Hàng tài sản di chuyển" },
+  { code: "H", label: "Hàng hóa được sử dụng cho PTVT xuất, nhập cảnh" },
+  { code: "I", label: "Hàng ngoại giao" },
+  { code: "J", label: "Hàng khác theo quy định của Chính phủ" },
+  { code: "K", label: "Hàng bảo quản đặc biệt" },
+];
+
+/** Chỉ tiêu 1.7 – Phân loại cá nhân/tổ chức (TT39 Mẫu 01). */
+export const PARTY_CLASSES: CodeEntry[] = [
+  { code: "1", label: "Cá nhân gửi cá nhân" },
+  { code: "2", label: "Tổ chức/công ty gửi cá nhân" },
+  { code: "3", label: "Cá nhân gửi tổ chức/công ty" },
+  { code: "4", label: "Tổ chức/công ty gửi tổ chức/công ty" },
+  { code: "5", label: "Khác" },
+];
+
+/**
+ * Chỉ tiêu 1.45 – Mã phân loại khai trị giá (TT39 Mẫu 01). Mã "0", "5", "Z" (tờ khai trị giá tổng hợp) chưa áp dụng nên
+ * không có trong bảng. Nhiều phương pháp trong một lô: khai mã áp dụng nhiều nhất; "6", "7" chỉ khi đủ điều kiện trị giá giao dịch.
+ */
+export const VALUATION_METHODS: CodeEntry[] = [
+  { code: "1", label: "Trị giá giao dịch của hàng hóa giống hệt" },
+  { code: "2", label: "Trị giá giao dịch của hàng hóa tương tự" },
+  { code: "3", label: "Phương pháp khấu trừ" },
+  { code: "4", label: "Phương pháp tính toán" },
+  { code: "6", label: "Phương pháp trị giá giao dịch" },
+  { code: "7", label: "Trị giá giao dịch, có quan hệ đặc biệt nhưng không ảnh hưởng tới trị giá giao dịch" },
+  { code: "8", label: "Trị giá giao dịch, phân bổ khoản điều chỉnh thủ công vào trị giá tính thuế từng dòng hàng" },
+  { code: "9", label: "Phương pháp suy luận" },
+  { code: "T", label: "Trường hợp đặc biệt (Điều 17 TT39/2015, hàng NK để gia công cho thương nhân nước ngoài)" },
+];
+
+/** Chỉ tiêu 1.47 ô 1 – Mã phân loại phí vận chuyển (TT39 Mẫu 01). */
+export const FREIGHT_CLASSES: CodeEntry[] = [
+  { code: "A", label: "Chứng từ vận tải ghi tổng cước phí chung cho tất cả hàng hóa trên chứng từ" },
+  { code: "B", label: "Có cả hàng trả tiền và hàng FOC, tách riêng cước của hàng trả tiền (chỉ khai cước hàng trả tiền)" },
+  { code: "C", label: "Tờ khai chỉ nhập khẩu một phần hàng hóa của lô hàng trên chứng từ vận tải" },
+  { code: "D", label: "Phân bổ cước theo tỷ lệ trọng lượng, dung tích (phải khai tờ khai trị giá)" },
+  { code: "E", label: "Giá hóa đơn đã có cước (CIF, C&F, CIP) nhưng cước thực tế vượt cước trên hóa đơn – khai số chênh lệch" },
+  { code: "F", label: "Có cước vượt cước và chỉ nhập khẩu một phần hàng hóa của lô hàng" },
+];
+
+/** Chỉ tiêu 1.48 ô 1 – Mã phân loại bảo hiểm (TT39 Mẫu 01). Mã "B" bảo hiểm tổng hợp chưa áp dụng nên không có trong bảng. */
+export const INSURANCE_CLASSES: CodeEntry[] = [
+  { code: "A", label: "Bảo hiểm riêng" },
+  { code: "D", label: "Không bảo hiểm" },
+];
+
+/** Mã tên khoản điều chỉnh kèm chiều điều chỉnh: AD cộng thêm, SB trừ đi; không có `kind` khi văn bản không quy định (mã N). */
+export interface AdjustmentCodeEntry extends CodeEntry {
+  kind?: "AD" | "SB";
+}
+
+/**
+ * Chỉ tiêu 1.49 ô 1 – Mã tên khoản điều chỉnh (TT39 Mẫu 01). Giảm giá theo số lượng không khai "G", mà ghi rõ tại 1.50.
+ */
+export const ADJUSTMENT_CODES: AdjustmentCodeEntry[] = [
+  { code: "A", label: "Phí hoa hồng bán hàng, phí môi giới", kind: "AD" },
+  { code: "B", label: "Chi phí bao bì được coi là đồng nhất với hàng hóa nhập khẩu", kind: "AD" },
+  { code: "C", label: "Chi phí đóng gói hàng hóa", kind: "AD" },
+  { code: "D", label: "Khoản trợ giúp", kind: "AD" },
+  { code: "E", label: "Phí bản quyền, phí giấy phép", kind: "AD" },
+  { code: "P", label: "Khoản tiền người NK phải trả từ số tiền thu được sau khi bán lại, định đoạt, sử dụng hàng NK", kind: "AD" },
+  { code: "Q", label: "Khoản người mua phải thanh toán chưa tính vào giá hóa đơn: trả trước, ứng trước, đặt cọc", kind: "AD" },
+  { code: "K", label: "Khoản người mua thanh toán cho người thứ ba theo yêu cầu của người bán", kind: "AD" },
+  { code: "M", label: "Khoản tiền được thanh toán bằng cách bù trừ nợ", kind: "AD" },
+  { code: "U", label: "Chi phí hoạt động phát sinh sau nhập khẩu: xây dựng, lắp đặt, bảo dưỡng, trợ giúp/tư vấn kỹ thuật, giám sát…", kind: "SB" },
+  { code: "V", label: "Phí vận tải phát sinh sau khi hàng đến cửa khẩu nhập đầu tiên", kind: "SB" },
+  { code: "H", label: "Phí bảo hiểm phát sinh sau khi hàng đến cửa khẩu nhập đầu tiên", kind: "SB" },
+  { code: "T", label: "Thuế, phí, lệ phí phải nộp ở Việt Nam đã nằm trong giá mua", kind: "SB" },
+  { code: "G", label: "Khoản giảm giá", kind: "SB" },
+  { code: "S", label: "Chi phí người mua chịu liên quan đến tiếp thị hàng hóa nhập khẩu", kind: "SB" },
+  { code: "L", label: "Tiền lãi theo thỏa thuận tài chính của người mua liên quan đến việc mua hàng NK", kind: "SB" },
+  { code: "N", label: "Khác" },
+];
+
+/** Chỉ tiêu 1.49 ô 2 – Mã phân loại điều chỉnh trị giá (TT39 Mẫu 01). */
+export const ADJUSTMENT_KINDS: CodeEntry[] = [
+  { code: "AD", label: "Cộng thêm số tiền điều chỉnh" },
+  { code: "SB", label: "Trừ đi số tiền điều chỉnh" },
+  { code: "IP", label: "Trị giá tính thuế là trị giá hóa đơn" },
+  { code: "DP", label: "Nhập tổng trị giá tính thuế tính bằng tay" },
+];
+
+/** Chỉ tiêu 1.52 / 2.43 – Người nộp thuế (TT39 Mẫu 01, Mẫu 02; Mẫu 02 cũng ghi "người nhập khẩu" cho mã 1). */
+export const TAX_PAYERS: CodeEntry[] = [
+  { code: "1", label: "Người nộp thuế là người xuất khẩu/nhập khẩu" },
+  { code: "2", label: "Người nộp thuế là đại lý hải quan" },
+];
+
+/** Chỉ tiêu 1.53 – Mã lý do đề nghị giải phóng hàng trên cơ sở bảo lãnh (TT39 Mẫu 01). */
+export const BP_REASONS: CodeEntry[] = [
+  { code: "A", label: "Chờ xác định mã số hàng hóa" },
+  { code: "B", label: "Chờ xác định trị giá tính thuế" },
+  { code: "C", label: "Trường hợp khác" },
+];
+
+/** Chỉ tiêu 1.58 / 2.48 – Mã xác định thời hạn nộp thuế (TT39 Mẫu 01, Mẫu 02). */
+export const DUE_DATE_CODES: CodeEntry[] = [
+  { code: "A", label: "Áp dụng thời hạn nộp thuế do sử dụng bảo lãnh riêng" },
+  { code: "B", label: "Áp dụng thời hạn nộp thuế do sử dụng bảo lãnh chung" },
+  { code: "C", label: "Áp dụng thời hạn nộp thuế không sử dụng bảo lãnh" },
+  { code: "D", label: "Nộp thuế ngay (cả khi khai bổ sung để thông quan sau tạm giải phóng hàng)" },
+];
+
+/**
+ * Chỉ tiêu 1.80 – Mã Biểu thuế nhập khẩu theo danh sách TT39 Mẫu 01. TT121 thay danh sách này bằng "Bảng mã Biểu thuế
+ * nhập khẩu" trên website Cục Hải quan, nên mã của các FTA mới (EVFTA, CPTPP, RCEP, UKVFTA, VKFTA…) KHÔNG có trong văn bản
+ * nguồn – không thêm theo trí nhớ; phải đồng bộ từ bảng mã của Cục Hải quan.
+ */
+export const TAX_TABLES: CodeEntry[] = [
+  { code: "B01", label: "Biểu thuế nhập khẩu ưu đãi (thuế suất MFN)" },
+  { code: "B02", label: "Chương 98 (1) Biểu thuế nhập khẩu ưu đãi" },
+  { code: "B03", label: "Biểu thuế nhập khẩu thông thường (150% thuế suất MFN)" },
+  { code: "B04", label: "Ưu đãi đặc biệt ATIGA (ASEAN)" },
+  { code: "B05", label: "Ưu đãi đặc biệt ACFTA (ASEAN – Trung Quốc)" },
+  { code: "B06", label: "Ưu đãi đặc biệt AKFTA (ASEAN – Hàn Quốc)" },
+  { code: "B07", label: "Ưu đãi đặc biệt AANZFTA (ASEAN – Úc – Niu Di-lân)" },
+  { code: "B08", label: "Ưu đãi đặc biệt AIFTA (ASEAN – Ấn Độ)" },
+  { code: "B09", label: "Ưu đãi đặc biệt AJCEP (ASEAN – Nhật Bản)" },
+  { code: "B10", label: "Ưu đãi đặc biệt VJEPA (Việt Nam – Nhật Bản)" },
+  { code: "B11", label: "Ưu đãi thuế suất nhập khẩu Việt – Lào" },
+  { code: "B12", label: "Hàng hóa có xuất xứ Campuchia" },
+  { code: "B13", label: "Ưu đãi đặc biệt VCFTA (Việt Nam – Chi Lê)" },
+  { code: "B14", label: "Biểu thuế nhập khẩu ngoài hạn ngạch" },
+  { code: "B15", label: "Biểu thuế nhập khẩu tuyệt đối" },
+  { code: "B16", label: "Biểu thuế nhập khẩu hỗn hợp" },
+  { code: "B17", label: "Chương 98 (2) Biểu thuế nhập khẩu ưu đãi" },
+  { code: "B30", label: "Đối tượng không chịu thuế nhập khẩu (thuế suất 0)" },
+];
+
+/** Chỉ tiêu 1.37 ô 1 – hàng chương 84, 85 trên tờ khai nhập khẩu (CV 2061/TCHQ-GSQL, từ 01/4/2020; sai thì hệ thống từ chối). */
+export const MACHINERY_CONDITION_CODES: CodeEntry[] = [
+  { code: "MO", label: "Máy móc, thiết bị chưa qua sử dụng" },
+  { code: "CU", label: "Máy móc, thiết bị đã qua sử dụng" },
+];
+
+/**
+ * Tra bảng mã theo tên `codeTable` trong catalog. Bảng chỉ có trên danh mục VNACCS (A014, A016, A202, A519, A520, A528,
+ * A546…) chưa có dữ liệu trong repo – nằm ở VNACCS_SYNCED_CODE_TABLES, không có trong map này.
+ */
+export const CODE_TABLES: Readonly<Partial<Record<CodeTable, readonly CodeEntry[]>>> = {
+  A038: CUSTOMS_OFFICES,
+  A501: UNITS,
+  A527: CURRENCIES,
+  CURRENCY: CURRENCIES,
+  COUNTRY: COUNTRIES,
+  UNIT: UNITS,
+  PACKAGE_KIND: PACKAGE_UNITS,
+  PAYMENT: PAYMENT_METHODS,
+  INCOTERM: INCOTERMS,
+  TRANSPORT_MODE: TRANSPORT_MODES,
+  INVOICE_KIND: INVOICE_KINDS,
+  PRICE_KIND: PRICE_KINDS,
+  TYPE_CODE: [...TYPE_CODES_NK, ...TYPE_CODES_XK],
+  TAX_TABLE: TAX_TABLES,
+  CARGO_CLASS: CARGO_CLASSES,
+  PARTY_CLASS: PARTY_CLASSES,
+  VALUATION_METHOD: VALUATION_METHODS,
+  FREIGHT_CLASS: FREIGHT_CLASSES,
+  INSURANCE_CLASS: INSURANCE_CLASSES,
+  ADJUSTMENT_CODE: ADJUSTMENT_CODES,
+  ADJUSTMENT_KIND: ADJUSTMENT_KINDS,
+  TAX_PAYER: TAX_PAYERS,
+  BP_REASON: BP_REASONS,
+  DUE_DATE: DUE_DATE_CODES,
+};
+
+/** Bảng mã chỉ có trên danh mục VNACCS/website Cục Hải quan, cần đồng bộ (FPT SyncCategory) – chưa có dữ liệu trong repo. */
+export const VNACCS_SYNCED_CODE_TABLES: readonly CodeTable[] = [
+  "A014", "A016", "A202", "A519", "A520", "A528", "A546", "A601", "A620", "LAW_CODE",
+];
+
+/** Bảng mã theo tên; `undefined` khi bảng phải đồng bộ từ VNACCS (VNACCS_SYNCED_CODE_TABLES). */
+export function codeTableEntries(name: CodeTable): readonly CodeEntry[] | undefined {
+  return CODE_TABLES[name];
+}

@@ -1,6 +1,7 @@
 // Dựng tờ khai từ dữ liệu lô hàng – bản mô phỏng của phần "code + cấu hình" (ADR 0002, không dùng AI).
 // Dùng chung cho seed (tờ khai có sẵn) và api/declaration (tờ khai dựng khi agent chạy xong).
 // Biểu thuế/HS dưới đây là DỮ LIỆU MẪU cho prototype, không dùng để khai thật.
+import { PARTY_CLASS_LABELS, TRANSPORT_MODE_INFO } from "@kb/contracts";
 import { applyRate, fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import type { Declaration, DeclarationField, Dossier, IsoDate, LineItem, Organization, ValueSource } from "./types";
 
@@ -195,16 +196,32 @@ export function computeTaxes(d: Dossier, items: LineItem[], adjustments: Declara
   };
 }
 
-const TRANSPORT_LABEL = { SEA: "2 – Đường biển (container)", AIR: "1 – Đường hàng không", ROAD: "3 – Đường bộ" } as const;
+const transportLabel = (m: Dossier["transportMode"]) => `${TRANSPORT_MODE_INFO[m].code} – ${TRANSPORT_MODE_INFO[m].label}`;
+
+/** Số chỉ tiêu Phụ lục II (giống packages/core declaration/domain/mapping/numbers.ts) – để màn Review hiện hướng dẫn khai theo catalog. */
+const FIELD_NO: Record<"IDA" | "EDA", Record<string, string>> = {
+  IDA: {
+    SOTK: "1.1", MA_LH: "1.4", PTVC: "1.6", PL_CN: "1.7", CQHQ: "1.8", NGAY_DK: "1.11", NNK_MST: "1.12", NNK_TEN: "1.13", NNK_DC: "1.15",
+    NXK_TEN: "1.20", NXK_DC: "1.22", MA_NUOC: "1.23", SO_VD: "1.26", SO_KIEN: "1.27", TRONG_LUONG: "1.28", NGAY_DEN: "1.32", CANG_DO: "1.33", CANG_XEP: "1.34",
+    SO_HD: "1.41", NGAY_HD: "1.42", PT_TT: "1.43", DK_GIA: "1.44", MA_TT: "1.44", TONG_TG: "1.44",
+  },
+  EDA: {
+    SOTK: "2.1", MA_LH: "2.4", PTVC: "2.6", CQHQ: "2.8", NGAY_DK: "2.10", NXK_MST: "2.11", NXK_TEN: "2.12", NXK_DC: "2.14",
+    NNK_TEN: "2.19", NNK_DC: "2.21", MA_NUOC: "2.22", SO_VD: "2.24", SO_KIEN: "2.25", TRONG_LUONG: "2.26", CANG_DO: "2.28", CANG_XEP: "2.29", NGAY_DEN: "2.31",
+    SO_HD: "2.36", NGAY_HD: "2.37", PT_TT: "2.38", DK_GIA: "2.39", MA_TT: "2.39", TONG_TG: "2.39",
+  },
+};
 
 /** Dựng tờ khai nháp IDA (nhập) / EDA (xuất). */
 export function buildDeclaration(d: Dossier, items: LineItem[], org: Organization): Declaration {
   const s = shipmentOf(d);
   const t = computeTaxes(d, items, s.adjustments);
   const nk = d.direction === "NK";
+  const numbers = FIELD_NO[nk ? "IDA" : "EDA"];
   const f = (section: DeclarationField["section"], code: string, label: string, value: string, source: ValueSource): DeclarationField => ({
     section,
     code,
+    ...(numbers[code] ? { no: numbers[code] } : {}),
     label,
     value,
     source,
@@ -225,11 +242,11 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     f("GENERAL", "MA_LH", "Mã loại hình", d.typeCode, "DOSSIER"),
     f("GENERAL", "CQHQ", "Cơ quan Hải quan", d.customsOffice, "DOSSIER"),
     f("GENERAL", "NGAY_DK", "Ngày khai dự kiến", isoDayOffset(0), "SYSTEM"),
-    f("GENERAL", "PL_CN", "Mã phân loại cá nhân/tổ chức", "4 – Tổ chức gửi tổ chức", "DEFAULT"),
+    ...(nk ? [f("GENERAL", "PL_CN", "Mã phân loại cá nhân/tổ chức", `${d.partyClass} – ${PARTY_CLASS_LABELS[d.partyClass]}`, "DOSSIER")] : []),
     ...orgParty,
     ...partner,
     f("TRANSPORT", "SO_VD", d.transportMode === "AIR" ? "Số vận đơn (AWB)" : "Số vận đơn (B/L)", d.billNo || "—", "BILL_OF_LADING"),
-    f("TRANSPORT", "PTVC", "Phương thức vận chuyển", TRANSPORT_LABEL[d.transportMode], "DOSSIER"),
+    f("TRANSPORT", "PTVC", "Phương thức vận chuyển", transportLabel(d.transportMode), "DOSSIER"),
     f("TRANSPORT", "CANG_XEP", "Địa điểm xếp hàng", s.loadingPort, "BILL_OF_LADING"),
     f("TRANSPORT", "CANG_DO", "Địa điểm dỡ hàng", s.dischargePort, "BILL_OF_LADING"),
     f("TRANSPORT", "NGAY_DEN", nk ? "Ngày hàng đến" : "Ngày hàng đi dự kiến", isoDayOffset(s.arrivalInDays), "BILL_OF_LADING"),

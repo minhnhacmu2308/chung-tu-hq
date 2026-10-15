@@ -1,11 +1,18 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA). Người nhập khẩu lấy theo tài khoản (MST), KHÔNG lấy tên tiếng Anh trên invoice (PRODUCT §7.4).
-import { resolveDischargePort, resolvePackageUnit, resolvePayment, resolvePort, transportModeCode } from "../catalog-resolve.js";
+import { PARTY_CLASS_LABELS } from "@kb/contracts";
+import { resolveDischargePort, resolvePort, transportModeCode } from "../catalog-resolve.js";
 import { FREIGHT_NOT_INCLUDED, incotermCode } from "../adjustments.js";
 import { IDA_NO as N } from "./numbers.js";
+import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, port, priceKind } from "./shared.js";
 import { fixed, fromSourced, missing, plainNumber, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
-const port = (raw: string | null, pick: ReturnType<typeof resolvePort>, source: MappedValue["source"]): MappedValue =>
-  pick ? { value: `${pick.code} – ${pick.name}`, source } : raw ? { value: raw, source, suspect: true, note: `Không tìm thấy mã VNACCS cho “${raw}” – chọn mã địa điểm` } : missing(source, "Chưa có địa điểm trên chứng từ");
+/** 1.68 Phần ghi chú: TT121 yêu cầu ghi số và ngày cấp C/O tại đây; các nội dung ngăn cách bằng dấu “;”. */
+const coRef = (i: MappingInput) => {
+  const o = i.shipment.origin;
+  if (o.rexNo.value) return `REX ${o.rexNo.value}`;
+  if (o.coNo.value) return `C/O${o.coForm.value ? ` form ${o.coForm.value}` : ""} số ${o.coNo.value}`;
+  return null;
+};
 
 const charge = (i: MappingInput, label: string): MappedValue => {
   const a = i.adjustments.find((x) => x.label.startsWith(label));
@@ -20,9 +27,9 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   { code: "MA_LH", no: N.MA_LH, section: "GENERAL", label: "Mã loại hình", required: true, from: (i) => ({ value: i.dossier.typeCode, source: "DOSSIER" }) },
   { code: "PTVC", no: N.PTVC, section: "GENERAL", label: "Mã phương thức vận chuyển", required: true, from: (i) => {
     const m = transportModeCode(i.dossier.transportMode, i.shipment.transport.containers.length > 0);
-    return { value: `${m.code} – ${m.name}`, source: "DOSSIER" };
+    return { value: `${m.code} – ${m.name}`, source: "DOSSIER", ...(m.note ? { suspect: true, note: m.note } : {}) };
   } },
-  { code: "PL_CN", no: N.PL_CN, section: "GENERAL", label: "Mã phân loại cá nhân/tổ chức", required: true, from: () => fixed("4 – Tổ chức gửi tổ chức") },
+  { code: "PL_CN", no: N.PL_CN, section: "GENERAL", label: "Mã phân loại cá nhân/tổ chức", required: true, from: (i) => ({ value: `${i.dossier.partyClass} – ${PARTY_CLASS_LABELS[i.dossier.partyClass]}`, source: "DOSSIER" }) },
   { code: "CQHQ", no: N.CQHQ, section: "GENERAL", label: "Mã cơ quan Hải quan", required: true, from: (i) => ({ value: i.dossier.customsOfficeName ? `${i.dossier.customsOfficeCode} – ${i.dossier.customsOfficeName}` : i.dossier.customsOfficeCode, source: "DOSSIER" }) },
   { code: "NGAY_DK", no: N.NGAY_DK, section: "GENERAL", label: "Ngày khai báo dự kiến", required: false, from: (i) => ({ value: vnDate(i.now), source: "SYSTEM" }) },
 
@@ -38,11 +45,7 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     const s = i.shipment.transport.billNo.value ? i.shipment.transport.billNo : i.shipment.transport.masterBillNo;
     return s.value ? fromSourced(s, "BILL_OF_LADING") : missing("BILL_OF_LADING", "Chưa có vận đơn (B/L hoặc AWB)");
   } },
-  { code: "SO_KIEN", no: N.SO_KIEN, section: "TRANSPORT", label: "Số lượng kiện", required: true, from: (i) => {
-    const p = fromSourced(i.shipment.transport.packages, "PACKING_LIST");
-    const u = resolvePackageUnit(i.shipment.transport.packageUnit.value);
-    return p.value === null ? missing("PACKING_LIST", "Chưa có số kiện trên Packing List / vận đơn") : { ...p, value: `${p.value} ${u?.code ?? "PK"}` };
-  } },
+  { code: "SO_KIEN", no: N.SO_KIEN, section: "TRANSPORT", label: "Số lượng kiện", required: true, from: (i) => packageCount(i, "Chưa có số kiện trên Packing List / vận đơn") },
   { code: "TRONG_LUONG", no: N.TRONG_LUONG, section: "TRANSPORT", label: "Tổng trọng lượng hàng (Gross)", required: true, from: (i) => {
     const g = fromSourced(i.shipment.transport.grossWeightKg, "PACKING_LIST");
     return g.value === null ? missing("PACKING_LIST", "Chưa có tổng trọng lượng") : { ...g, value: plainNumber(g.value) };
@@ -68,16 +71,12 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     return d.value === null ? missing("ARRIVAL_NOTICE", "Chưa có ngày hàng đến (ETA trên Arrival Notice)") : d;
   } },
 
-  { code: "HD_PL", no: N.HD_PL, section: "VALUE", label: "Phân loại hình thức hóa đơn", required: true, from: () => fixed("A – Hóa đơn thương mại") },
+  { code: "HD_PL", no: N.HD_PL, section: "VALUE", label: "Phân loại hình thức hóa đơn", required: true, from: (i) => invoiceKind(i, "IDA") },
   { code: "SO_HD", no: N.SO_HD, section: "VALUE", label: "Số hóa đơn", required: true, from: (i) => fromSourced(i.shipment.invoice.no, "INVOICE") },
   { code: "NGAY_HD", no: N.NGAY_HD, section: "VALUE", label: "Ngày phát hành hóa đơn", required: true, from: (i) => fromSourced(i.shipment.invoice.date, "INVOICE") },
-  { code: "PT_TT", no: N.PT_TT, section: "VALUE", label: "Phương thức thanh toán", required: true, from: (i) => {
-    const raw = i.shipment.invoice.paymentTerms;
-    const r = resolvePayment(raw.value);
-    return r ? { ...fromSourced(raw, "CONTRACT"), value: `${r.code} – ${r.name}` } : missing("CONTRACT", "Chưa có phương thức thanh toán trên invoice / hợp đồng");
-  } },
-  { code: "GIA_PL", no: N.GIA_PL, section: "VALUE", label: "Mã phân loại giá hóa đơn", required: true, from: () => fixed("A – Giá hóa đơn cho hàng hóa phải trả tiền") },
-  { code: "DK_GIA", no: N.DK_GIA, section: "VALUE", label: "Điều kiện giá hóa đơn", required: true, from: (i) => fromSourced(i.shipment.invoice.incoterm, "INVOICE", (v) => v.toUpperCase()) },
+  { code: "PT_TT", no: N.PT_TT, section: "VALUE", label: "Phương thức thanh toán", required: true, from: (i) => paymentMethod(i, "IDA") },
+  { code: "GIA_PL", no: N.GIA_PL, section: "VALUE", label: "Mã phân loại giá hóa đơn", required: true, from: (i) => priceKind(i, "IDA") },
+  { code: "DK_GIA", no: N.DK_GIA, section: "VALUE", label: "Điều kiện giá hóa đơn", required: true, from: (i) => incotermField(i, "IDA") },
   { code: "MA_TT", no: N.MA_TT, section: "VALUE", label: "Mã đồng tiền của hóa đơn", required: true, from: (i) => fromSourced(i.shipment.invoice.currency, "INVOICE") },
   { code: "TONG_TG", no: N.TONG_TG, section: "VALUE", label: "Tổng trị giá hóa đơn", required: true, from: (i) => {
     const t = fromSourced(i.shipment.invoice.totalAmount, "INVOICE");
@@ -97,20 +96,25 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   } },
   { code: "SO_CO", no: null, section: "VALUE", label: "Chứng từ chứng nhận xuất xứ", required: false, from: (i) => {
     const o = i.shipment.origin;
-    if (o.rexNo.value) return { ...fromSourced(o.rexNo, "CERT_OF_ORIGIN"), value: `REX ${o.rexNo.value} (tự chứng nhận EVFTA)` };
-    if (o.coNo.value) return { ...fromSourced(o.coNo, "CERT_OF_ORIGIN"), value: o.coForm.value ? `${o.coNo.value} (form ${o.coForm.value})` : o.coNo.value };
+    const inNote = "Đã ghi vào Phần ghi chú (1.68) – TT121 yêu cầu ghi cả ngày cấp C/O";
+    if (o.rexNo.value) return { ...fromSourced(o.rexNo, "CERT_OF_ORIGIN"), value: `REX ${o.rexNo.value} (tự chứng nhận EVFTA)`, note: inNote };
+    if (o.coNo.value) return { ...fromSourced(o.coNo, "CERT_OF_ORIGIN"), value: o.coForm.value ? `${o.coNo.value} (form ${o.coForm.value})` : o.coNo.value, note: inNote };
     return { value: null, source: "CERT_OF_ORIGIN", note: "Không có C/O – áp thuế suất MFN" };
   } },
+  // CV 2061/TCHQ-GSQL: tờ khai NK có hàng chương 84/85 → ô 1 chỉ tiêu 1.37 bắt buộc MO/CU, sai thì hệ thống từ chối đăng ký.
+  // Không tự điền MO: tình trạng mới/đã qua sử dụng không suy ra được từ chứng từ, người khai phải chọn.
   { code: "VBPQ", no: N.VBPQ, section: "GENERAL", label: "Mã văn bản pháp quy khác", required: false, from: (i) => {
-    const ch8485 = i.shipment.items.filter((it) => /^(84|85)/.test((it.hsOnInvoice.value ?? "").replace(/\D/g, "")));
-    if (!ch8485.length) return { value: null, source: "SYSTEM" };
-    return { value: "MO", source: "DEFAULT", suspect: true, note: `${ch8485.length} dòng chương 84/85: khai MO (máy móc chưa qua sử dụng) hoặc CU (đã qua sử dụng) theo CV 2061/TCHQ-GSQL – xác nhận tình trạng hàng` };
+    const n = lineHs(i).filter((h) => /^(84|85)/.test(h)).length;
+    if (!n) return { value: null, source: "SYSTEM" };
+    return { value: null, source: "DOSSIER", suspect: true, blocking: true, note: `${n} dòng chương 84/85: ô 1 khai MO (máy móc, thiết bị chưa qua sử dụng) hoặc CU (đã qua sử dụng) – thiếu/sai hệ thống từ chối đăng ký tờ khai (CV 2061/TCHQ-GSQL)` };
   } },
   { code: "NGUOI_NT", no: N.NGUOI_NT, section: "GENERAL", label: "Người nộp thuế", required: true, from: () => fixed("1 – Người nhập khẩu") },
   { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: (i) => {
     const c = i.shipment.transport.containers;
-    const parts = [c.length ? `Container: ${c.map((x) => x.no).join(", ")}` : null, i.dossier.note].filter(Boolean);
-    return { value: parts.length ? parts.join(". ") : null, source: "DOSSIER" };
+    const co = coRef(i);
+    const parts = [co, i.dossier.note, c.length ? `Container: ${c.map((x) => x.no).join(", ")}` : null].filter(Boolean);
+    const value = parts.length ? parts.join("; ") : null;
+    return co ? { value, source: "DOSSIER", suspect: true, note: "Bổ sung ngày cấp C/O sau số C/O (TT121, chỉ tiêu 1.68)" } : { value, source: "DOSSIER" };
   } },
   { code: "SO_QLNB", no: N.SO_QLNB, section: "GENERAL", label: "Số quản lý nội bộ doanh nghiệp", required: false, from: (i) => ({ value: i.dossier.code, source: "DOSSIER" }) },
 ];

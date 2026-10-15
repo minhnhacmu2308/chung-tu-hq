@@ -30,7 +30,7 @@ export function currenciesOf(shipment: Shipment, dossier: DossierInfo): string[]
 }
 
 export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier: DossierInfo, org: OrgInfo, items: LineItemRow[], exchange: ExchangeInfo): BuiltDeclaration {
-  return buildDeclaration({ shipment, dossier, org, items: items.map((i) => ({ id: i.id, amount: i.amount, importDutyRate: i.importDutyRate, vatRate: i.vatRate })), now: deps.clock.now(), exchange });
+  return buildDeclaration({ shipment, dossier, org, items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, amount: i.amount, importDutyRate: i.importDutyRate, vatRate: i.vatRate, hsConfirmed: i.hsConfirmed })), now: deps.clock.now(), exchange });
 }
 
 /** Giữ giá trị người dùng đã sửa (source USER) khi dựng lại. */

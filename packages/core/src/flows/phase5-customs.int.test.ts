@@ -17,7 +17,7 @@ import { runRules } from "../modules/validation/index.js";
 import { createValidationInfrastructure } from "../modules/validation/infrastructure/index.js";
 import { finishReading, processDocument, type ExtractionDeps } from "../modules/extraction/index.js";
 import { createDocumentsAdapter, DrizzleExtractionUow, FakeAiProvider } from "../modules/extraction/infrastructure/index.js";
-import { approveDeclaration, confirmHs, listLineItems, moveToReview, runAgent, startAgentRun, type DeclarationDeps } from "../modules/declaration/index.js";
+import { approveDeclaration, confirmHs, listLineItems, moveToReview, runAgent, startAgentRun, updateDeclarationField, type DeclarationDeps } from "../modules/declaration/index.js";
 import { createAuditWriter, createDossierAdapter, createShipmentReader, createValidationReader, DrizzleDeclarationUow, FakeHsClassifier } from "../modules/declaration/infrastructure/index.js";
 import { addCertificate, listCertificates, type IdentityDeps } from "../modules/identity/index.js";
 import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../modules/identity/application/test/fakes.js";
@@ -73,7 +73,7 @@ afterAll(async () => {
 });
 
 async function approvedDossier() {
-  const d = unwrap(await createDossier(dossier, chau, { direction: "NK", typeCode: "A11", partner: "HANSOL", customsOffice: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", skillSetId: "default", dueDate: "2026-10-20", incoterm: "FCA", transportMode: "SEA" }));
+  const d = unwrap(await createDossier(dossier, chau, { direction: "NK", typeCode: "A11", partner: "HANSOL", customsOffice: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", skillSetId: "default", dueDate: "2026-10-20", incoterm: "FCA", transportMode: "SEA_CONTAINER", partyClass: "4" }));
   const docs = unwrap(await uploadDocuments(dossier, chau, d.id, ["Commercial Invoice.pdf", "Packing List.pdf", "Hoa don cuoc GTGT.pdf"].map(pdf)));
   for (const doc of docs) unwrap(await processDocument(extraction, { orgId: chau.orgId, dossierId: d.id, documentId: doc.id, mode: "FULL" }));
   unwrap(await finishReading(extraction, chau, d.id));
@@ -82,6 +82,7 @@ async function approvedDossier() {
   unwrap(await runAgent(declaration, { orgId: chau.orgId, userId: chau.userId, dossierId: d.id, agentRunId: job.agentRunId }));
   for (const it of unwrap(await listLineItems(declaration, chau, d.id))) unwrap(await confirmHs(declaration, chau, it.id, it.hsSuggested ?? "8482.10.00"));
   unwrap(await moveToReview(declaration, chau, d.id));
+  unwrap(await updateDeclarationField(declaration, chau, d.id, "VBPQ", "MO")); // hàng chương 84 – CV 2061/TCHQ-GSQL
   unwrap(await approveDeclaration(declaration, tuan, d.id));
   return d.id;
 }

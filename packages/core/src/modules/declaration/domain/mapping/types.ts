@@ -8,8 +8,11 @@ export type Section = "GENERAL" | "PARTIES" | "TRANSPORT" | "VALUE";
 export type ExchangeInfo = { date: string; rates: Record<string, string>; missing: string[] };
 /** Ngày theo giờ Việt Nam (UTC+7) – ngày khai báo dự kiến, ngày tra tỷ giá. */
 export const vnDate = (now: Date) => new Date(now.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
-export type MappedValue = { value: string | null; source: ValueSource; suspect?: boolean; note?: string };
-export type MappingInput = { shipment: Shipment; dossier: DossierInfo; org: OrgInfo; now: Date; adjustments: Adjustment[]; valuation: Valuation; exchange: ExchangeInfo };
+/** `blocking`: thiếu giá trị thì chặn phê duyệt (Hải quan chắc chắn từ chối đăng ký, ví dụ MO/CU theo CV 2061). */
+export type MappedValue = { value: string | null; source: ValueSource; suspect?: boolean; note?: string; blocking?: true };
+/** Dòng hàng đã lưu: mã HS người dùng đã xác nhận – căn cứ chính thay cho HS trên invoice nước ngoài. */
+export type MappingLine = { lineNo: number; hsConfirmed: string | null };
+export type MappingInput = { shipment: Shipment; dossier: DossierInfo; org: OrgInfo; now: Date; adjustments: Adjustment[]; valuation: Valuation; exchange: ExchangeInfo; lines: MappingLine[] };
 export type FieldMapping = {
   /** Khóa ổn định (mnemonic) dùng cho FE/API. */
   code: string;

@@ -70,6 +70,15 @@ describe("guards", () => {
     expect(canApprove({ ...base, exchangeRate: "0" })).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
     expect(canApprove({ ...base, exchangeRate: "26150" }).ok).toBe(true);
   });
+  it("canApprove: chỉ tiêu blocking còn trống → BLOCKER_FAILED nêu tên + số chỉ tiêu; đã điền hoặc không blocking → qua", () => {
+    const base = { role: "APPROVER" as const, userId: "u2", ownerId: "u1", fourEyes: false, blockerFails: 0, items: items(3), status: "DRAFT" as const };
+    const vbpq = { no: "1.37", label: "Mã văn bản pháp quy khác", section: "GENERAL" as const, value: "", source: "DOSSIER" as const, blocking: true as const, note: "chọn MO/CU" };
+    expect(canApprove({ ...base, fields: { VBPQ: vbpq } })).toMatchObject({ ok: false, error: { code: "BLOCKER_FAILED", message: expect.stringMatching(/Mã văn bản pháp quy khác \(1\.37\) – chọn MO\/CU/) } });
+    expect(canApprove({ ...base, fields: { VBPQ: { ...vbpq, value: "  " } } }).ok).toBe(false);
+    expect(canApprove({ ...base, fields: { VBPQ: { ...vbpq, value: "CU" } } }).ok).toBe(true);
+    const { blocking: _, ...plain } = vbpq;
+    expect(canApprove({ ...base, fields: { VBPQ: plain } }).ok).toBe(true);
+  });
   it("canSubmit: phải APPROVED, không BLOCKER, chưa SUBMITTED", () => {
     expect(canSubmit({ status: "APPROVED", blockerFails: 0 }).ok).toBe(true);
     expect(canSubmit({ status: "DRAFT", blockerFails: 0 })).toMatchObject({ ok: false, error: { code: "NOT_APPROVED" } });

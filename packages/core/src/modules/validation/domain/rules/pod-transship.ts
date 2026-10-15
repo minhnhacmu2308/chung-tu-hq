@@ -8,6 +8,7 @@ export const podTransship: Rule = {
   title: "Cảng dỡ hàng phải ở Việt Nam",
   severity: "WARNING",
   docKinds: ["BILL_OF_LADING", "ARRIVAL_NOTICE"],
+  directions: ["NK"], // hàng xuất luôn dỡ ở cảng nước ngoài
   run(s) {
     const pod = s.transport.portOfDischarge.value;
     if (!pod) return skipped("Chưa đọc được cảng dỡ hàng");

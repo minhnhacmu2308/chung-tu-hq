@@ -16,6 +16,6 @@ export const EDA_NO = {
   NXK_MST: "2.11", NXK_TEN: "2.12", NXK_DC: "2.14", NXK_DT: "2.15",
   NNK_TEN: "2.19", NNK_DC: "2.21", MA_NUOC: "2.22",
   SO_VD: "2.24", SO_KIEN: "2.25", TRONG_LUONG: "2.26", KHO: "2.27", CANG_DO: "2.28", CANG_XEP: "2.29", PTVC_TEN: "2.30", NGAY_DI: "2.31",
-  SO_HD: "2.36", NGAY_HD: "2.37", PT_TT: "2.38", GIA_PL: "2.39", DK_GIA: "2.39", MA_TT: "2.39", TONG_TG: "2.39",
+  HD_PL: "2.34", SO_HD: "2.36", NGAY_HD: "2.37", PT_TT: "2.38", GIA_PL: "2.39", DK_GIA: "2.39", MA_TT: "2.39", TONG_TG: "2.39",
   GHI_CHU: "2.57", SO_QLNB: "2.58",
 } as const;

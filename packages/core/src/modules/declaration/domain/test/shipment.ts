@@ -35,6 +35,6 @@ export function hansol(overrides: (s: Shipment) => void = () => {}): Shipment {
 
 export const DOSSIER: DossierInfo = {
   id: "dos_1", code: "HS-NK-2610-021", direction: "NK", typeCode: "A11", partner: "HANSOL PRECISION", customsOfficeCode: "03CE", customsOfficeName: "Chi cục HQ CK cảng Hải Phòng KV III", status: "NEEDS_REVIEW", step: "agent",
-  ownerId: "usr_chau", invoiceValue: "20850", currency: "USD", incoterm: "FCA", transportMode: "SEA", billNo: "HPSEL2610078", declarationNo: null, note: null,
+  ownerId: "usr_chau", invoiceValue: "20850", currency: "USD", incoterm: "FCA", transportMode: "SEA_CONTAINER", partyClass: "4", billNo: "HPSEL2610078", declarationNo: null, note: null,
 };
 export const ORG: OrgInfo = { taxCode: "0316789012", name: "CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT", address: "Lô B4, KCN Tràng Duệ, An Dương, Hải Phòng", phone: "0225 3 888 123", fourEyes: false };

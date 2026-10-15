@@ -36,7 +36,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 3;
+const DB_VERSION = 6;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {

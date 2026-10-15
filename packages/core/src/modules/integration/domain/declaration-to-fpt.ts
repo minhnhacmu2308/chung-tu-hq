@@ -14,7 +14,8 @@ export type DeclarationPayload = {
   note?: string | undefined;
 };
 
-export type FptBuild = { request: IdaRequest | EdaRequest; warnings: string[]; issues: string[] };
+/** `issues`: payload sai đặc tả FPT (Zod). `blockers`: lỗi nghiệp vụ chắc chắn làm tờ khai sai – không được truyền. */
+export type FptBuild = { request: IdaRequest | EdaRequest; warnings: string[]; issues: string[]; blockers: string[] };
 
 // Cùng tên trường nhưng size khác nhau giữa IDA và EDA (TK_EPN 70 vs 100) → bảng riêng từng mẫu.
 const SIZE_IDA = new Map([...VN_IDA_FIELDS, ...VN_IDA_HANG_FIELDS, ...VN_IDA_VANDON_FIELDS, ...VN_IDA_KTG_FIELDS].map((f) => [f.name, f.size]));
@@ -34,8 +35,17 @@ const unitPart = (v: string, fallback: string) => v.split(" ")[1] ?? fallback;
 const hs8 = (code: string | null) => (code ?? "").replace(/\D/g, "").slice(0, 8);
 /** Mã áp dụng thuế suất GTGT (VB9xx) theo thuế suất – CHƯA đối chiếu bảng "Thue khac - GTGT.xls" (D3). */
 const vatCode = (rate: string | null) => ({ "10": "VB901", "8": "VB903", "5": "VB905", "0": "VB900" })[String(num(rate ?? "10"))] ?? "VB901";
-/** Mã biểu thuế NK (A527) suy từ ghi chú chính sách (chưa lưu riêng – BACKEND-TODO). */
-const taxTable = (note: string | null) => (note?.includes("AKFTA") ? "B07" : note?.includes("EVFTA") ? "B17" : note?.includes("ATIGA") ? "B04" : note?.includes("ACFTA") ? "B05" : "B01");
+/**
+ * Mã Biểu thuế NK (chỉ tiêu 1.80) suy từ ghi chú chính sách (dòng hàng chưa lưu mã riêng – BACKEND-TODO). Danh sách Phụ lục II TT39:
+ * B04 ATIGA, B05 ACFTA, B06 AKFTA, B09 AJCEP, B10 VJEPA (B17 là Chương 98). FTA khác chưa có mã trong văn bản đã đối chiếu → null (chặn truyền).
+ */
+const FTA_TAX_TABLES: [string, string | null][] = [["ATIGA", "B04"], ["ACFTA", "B05"], ["AKFTA", "B06"], ["AJCEP", "B09"], ["VJEPA", "B10"], ["EVFTA", null], ["VKFTA", null], ["CPTPP", null], ["RCEP", null]];
+const taxTable = (note: string | null): { code: string | null; fta?: string } => {
+  const hit = FTA_TAX_TABLES.find(([name]) => note?.includes(name));
+  return hit ? { code: hit[1], fta: hit[0] } : { code: "B01" };
+};
+/** Mô tả hàng xuất khẩu phải kết thúc bằng “#&” + mã nước xuất xứ (TT121, chỉ tiêu 2.69). */
+const withOrigin = (description: string, origin: string) => (!origin || /#&[A-Z]{2}$/.test(description.trim()) ? description : `${description.trim()}#&${origin}`);
 
 /** Gán giá trị kèm cắt độ dài theo đặc tả; key JSON theo fptKey. */
 function setter(target: Record<string, unknown>, warnings: string[], sizes: Map<string, number | undefined>) {
@@ -69,14 +79,15 @@ function splitAddress(addr: string, names: string[], set: ReturnType<typeof sett
   chunks.forEach((c, i) => set(names[i]!, c));
 }
 
-function items(p: DeclarationPayload, warnings: string[]) {
+function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
   const sizes = p.kind === "IDA" ? SIZE_IDA : SIZE_EDA;
   return p.items.map((it, i) => {
     const h: Record<string, unknown> = {};
     const set = setter(h, warnings, sizes);
-    set("HAG_B25", String(i + 1).padStart(2, "0"));
+    set(p.kind === "IDA" ? "HAG_B25" : "HAG_R01", String(i + 1).padStart(2, "0"));
     set("HAG_CMD", hs8(it.hsConfirmed));
-    set("HAG_CMN", it.description);
+    if (p.kind === "EDA" && !it.origin) blockers.push(`Dòng ${it.lineNo}: chưa có mã nước xuất xứ – mô tả hàng xuất khẩu phải ghi “mô tả#&mã nước” (chỉ tiêu 2.69)`);
+    set("HAG_CMN", p.kind === "EDA" ? withOrigin(it.description, it.origin) : it.description);
     set("HAG_QN1", num(it.quantity));
     set("HAG_QT1", it.unit || "PCE");
     set("HAG_QN2", num(it.quantity)); // số lượng (2) theo đơn vị tính của biểu thuế – chưa có bảng quy đổi (D3), dùng số lượng (1)
@@ -87,7 +98,9 @@ function items(p: DeclarationPayload, warnings: string[]) {
     set("HAG_TSC", it.unit || "PCE");
     if (p.kind === "IDA") {
       set("HAG_OR", it.origin);
-      set("HAG_ORS", taxTable(it.policyNote));
+      const table = taxTable(it.policyNote);
+      if (table.code) set("HAG_ORS", table.code);
+      else blockers.push(`Dòng ${it.lineNo}: chưa có mã Biểu thuế nhập khẩu cho ${table.fta} – tra Bảng mã Biểu thuế trên website Cục Hải quan (chỉ tiêu 1.80)`);
       if (it.importDutyRate !== null) set("HAG_TXA", num(it.importDutyRate));
       set("HAG_TX5", vatCode(it.vatRate)); // mã áp dụng thuế suất GTGT (bảng "Thue khac - GTGT") – mã chưa đối chiếu (D3)
     }
@@ -97,6 +110,7 @@ function items(p: DeclarationPayload, warnings: string[]) {
 
 export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const warnings: string[] = [];
+  const blockers: string[] = [];
   if (p.kind === "IDA") {
     const tk: Record<string, unknown> = {};
     const set = setter(tk, warnings, SIZE_IDA);
@@ -116,7 +130,11 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     set("TK_EPN", val(p, "NXK_TEN"));
     splitAddress(val(p, "NXK_DC"), ["TK_EPA", "TK_EP2", "TK_EP3", "TK_EP4"], set);
     set("TK_EPO", val(p, "MA_NUOC"));
-    set("TK_OL1", val(p, "VBPQ"));
+    // 1.37: tối đa 5 mã, không trùng (TK_OL1..5); hàng chương 84/85 thì ô 1 là MO/CU (CV 2061/TCHQ-GSQL).
+    const laws = [...new Set(val(p, "VBPQ").split(/[;,\s]+/).filter(Boolean))];
+    laws.slice(0, 5).forEach((c, k) => set(`TK_OL${k + 1}`, c));
+    if (laws.length > 5) warnings.push(`Mã văn bản pháp quy: chỉ gửi 5 mã đầu (${laws.slice(5).join(", ")} bị bỏ)`);
+    if (p.items.some((it) => /^(84|85)/.test(hs8(it.hsConfirmed))) && !/^(MO|CU)$/.test(laws[0] ?? "")) blockers.push("Hàng chương 84/85: ô 1 Mã văn bản pháp quy khác (1.37) phải là MO hoặc CU – CV 2061/TCHQ-GSQL");
     set("TK_IV1", firstToken(val(p, "HD_PL")) || "A");
     set("TK_IV3", val(p, "SO_HD"));
     set("TK_IVD", ddmmyyyy(val(p, "NGAY_HD")));
@@ -144,7 +162,9 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     setVd("VD_PSN", pol.name);
     setVd("VD_VSN", val(p, "PTVC_TEN"));
     setVd("VD_ARR", ddmmyyyy(val(p, "NGAY_DEN")));
-    if (p.containers.length) setVd("VD_COC", p.containers.length);
+    // 1.35: không nhập số lượng container khi đường hàng không (1) hoặc hàng đóng chung container vào kho CFS khai mã 3 (TT39 PL II).
+    const mode = firstToken(val(p, "PTVC"));
+    if (p.containers.length && mode !== "1" && mode !== "3") setVd("VD_COC", p.containers.length);
 
     const ktg: Record<string, unknown> = {};
     const setKtg = setter(ktg, warnings, SIZE_IDA);
@@ -161,9 +181,12 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
       setKtg("KTG_IN2", ins.currency);
       setKtg("KTG_IN3", num(ins.amount));
     }
-    const request = { objVN_IDA: tk, objVN_IDA_HANG: items(p, warnings), objVN_IDA_VANDON: vd, objVN_IDA_KTG: ktg };
+    // Khoản điều chỉnh khác (1.49, KTG_VR/VI/VC/VP) chưa ánh xạ được mã khoản → không gửi thì Hải quan tính thiếu trị giá: chặn truyền.
+    const others = p.adjustments.filter((a) => !a.label.startsWith("Cước") && !a.label.startsWith("Phí bảo hiểm"));
+    if (others.length) blockers.push(`Khoản điều chỉnh cộng vào trị giá chưa được khai ở chỉ tiêu 1.49: ${others.map((a) => `${a.label} ${a.amount} ${a.currency}`).join("; ")} – khai trên phần mềm khai báo`);
+    const request = { objVN_IDA: tk, objVN_IDA_HANG: items(p, warnings, blockers), objVN_IDA_VANDON: vd, objVN_IDA_KTG: ktg };
     const parsed = IdaRequestSchema.safeParse(request);
-    return { request: (parsed.success ? parsed.data : request) as IdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
+    return { request: (parsed.success ? parsed.data : request) as IdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), blockers };
   }
 
   const tk: Record<string, unknown> = {};
@@ -193,7 +216,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_PSN", psc.name);
   set("TK_VSN", val(p, "PTVC_TEN"));
   set("TK_SYM", ddmmyyyy(val(p, "NGAY_DI")));
-  set("TK_IV1", "A");
+  set("TK_IV1", firstToken(val(p, "HD_PL")) || "A");
   set("TK_IV3", val(p, "SO_HD"));
   set("TK_IVD", ddmmyyyy(val(p, "NGAY_HD")));
   set("TK_IVP", firstToken(val(p, "PT_TT")));
@@ -206,7 +229,8 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const con: Record<string, unknown> = {};
   const setCon = setter(con, warnings, SIZE_EDA);
   p.containers.slice(0, 50).forEach((c, i) => setCon(`CON_C${String(i + 1).padStart(2, "0")}`, c));
-  const request = { objVN_EDA: tk, objVN_EDA_CON: p.containers.length ? con : null, objVN_EDA_HANG: items(p, warnings) };
+  if (p.containers.length > 50) warnings.push(`Có ${p.containers.length} container – chỉ tiêu 2.60 nhận 50, khai phần còn lại qua HYS`);
+  const request = { objVN_EDA: tk, objVN_EDA_CON: p.containers.length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers) };
   const parsed = EdaRequestSchema.safeParse(request);
-  return { request: (parsed.success ? parsed.data : request) as EdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };
+  return { request: (parsed.success ? parsed.data : request) as EdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), blockers };
 }

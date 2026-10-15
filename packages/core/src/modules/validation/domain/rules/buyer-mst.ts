@@ -6,6 +6,7 @@ export const buyerMst: Rule = {
   title: "Người mua trên invoice là doanh nghiệp (theo MST)",
   severity: "INFO",
   docKinds: ["INVOICE"],
+  directions: ["NK"], // hàng xuất: người mua ở nước ngoài
   run(s, ctx) {
     const mst = s.parties.buyer.taxCode.value;
     if (!mst) return skipped("Invoice không ghi MST người mua");

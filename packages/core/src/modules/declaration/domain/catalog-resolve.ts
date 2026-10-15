@@ -1,5 +1,6 @@
 // Tên trên chứng từ → mã VNACCS (cảng/sân bay, phương thức thanh toán, đơn vị kiện, phương thức vận chuyển). Thuần.
 // Thiếu mã → trả null; use case đánh dấu suspect "Không tìm thấy mã cho …" để người khai chọn (BACKEND-TODO D3).
+import { TRANSPORT_MODE_INFO, type TransportMode } from "@kb/contracts";
 
 export type Resolved = { code: string; name: string } | null;
 
@@ -14,7 +15,7 @@ export const PORTS: { code: string; name: string; aliases: string[]; country: st
   { code: "VNSGN", name: "Cảng Sài Gòn (TP.HCM)", aliases: ["HO CHI MINH", "HOCHIMINH", "SAIGON", "SAI GON", "HCM", "HCMC"], country: "VN" },
   { code: "VNDAD", name: "Cảng Đà Nẵng", aliases: ["DA NANG", "DANANG"], country: "VN" },
   { code: "VNHAN", name: "Sân bay Nội Bài (Hà Nội)", aliases: ["NOI BAI", "NOIBAI", "HANOI", "HAN"], country: "VN" },
-  { code: "VNSGN-A", name: "Sân bay Tân Sơn Nhất (TP.HCM)", aliases: ["TAN SON NHAT", "SGN AIRPORT"], country: "VN" },
+  // Tân Sơn Nhất: mã địa điểm VNACCS chưa đối chiếu được (mã cũ "VNSGN-A" không phải UN/LOCODE, ô VD_DST/TK_PSC chỉ 6 ký tự) → không tra, người khai chọn mã.
   { code: "KRPUS", name: "Busan", aliases: ["BUSAN", "PUSAN"], country: "KR" },
   { code: "KRINC", name: "Incheon", aliases: ["INCHEON", "ICN"], country: "KR" },
   { code: "CNSHA", name: "Shanghai", aliases: ["SHANGHAI"], country: "CN" },
@@ -68,35 +69,54 @@ export function resolveDischargePort(pod: string | null, finalDestination: strin
   return { resolved: p, ...(p ? { note: "Cảng dỡ không phải cảng Việt Nam – kiểm tra điểm đến cuối" } : {}) };
 }
 
-/** Phương thức thanh toán trên chứng từ → mã TK_IVP VNACCS. */
-export function resolvePayment(raw: string | null): Resolved {
+export type ResolvedPayment = { code: string; name: string; note?: string; suspect?: true };
+
+/**
+ * Phương thức thanh toán trên chứng từ → mã TK_IVP (chỉ tiêu 1.43 / 2.38, Phụ lục II TT39).
+ * TTR là "chuyển tiền bồi hoàn bằng điện" (hoàn trả L/C), KHÔNG phải T/T thường: T/T, chuyển khoản → KC ("Khác, bao gồm cả TT")
+ * và ghi phương thức thực tế vào chi tiết khai trị giá (1.50) / ghi chú (2.57). Không nhận ra → KC kèm nghi ngờ.
+ */
+export function resolvePayment(raw: string | null): ResolvedPayment | null {
   if (!raw) return null;
   const n = norm(raw);
-  if (/\bL ?C\b|LETTER OF CREDIT/.test(n)) return { code: "LC", name: "Thư tín dụng (L/C)" };
-  if (/\bD ?A\b|ACCEPTANCE/.test(n)) return { code: "DA", name: "Nhờ thu chấp nhận chứng từ (D/A)" };
-  if (/\bD ?P\b|AGAINST PAYMENT/.test(n)) return { code: "DP", name: "Nhờ thu trả tiền đổi chứng từ (D/P)" };
-  if (/\bCAD\b/.test(n)) return { code: "CAD", name: "Trả tiền lấy chứng từ (CAD)" };
-  if (/\bT ?T\b|TTR|TELEGRAPHIC|WIRE|BANK TRANSFER|CHUYEN KHOAN/.test(n)) return { code: "TTR", name: "Chuyển tiền điện (T/T)" };
-  if (/\bOA\b|OPEN ACCOUNT/.test(n)) return { code: "KC", name: "Khác (ghi sổ)" };
-  return { code: "KC", name: "Khác" };
+  const kcNote = (what: string) => `Mã KC gồm cả ${what} – ghi phương thức thực tế (“${raw.trim()}”) vào chi tiết khai trị giá / ghi chú`;
+  if (/\bTTR\b|REIMBURSE/.test(n)) return { code: "TTR", name: "Chuyển tiền bồi hoàn bằng điện" };
+  if (/\bL ?C\b|LETTER OF CREDIT/.test(n)) return { code: "LC", name: "Tín dụng thư (L/C)" };
+  if (/\bD ?A\b|DOCUMENTS? AGAINST ACCEPTANCE/.test(n)) return { code: "DA", name: "Nhờ thu chấp nhận chứng từ (D/A)" };
+  if (/\bD ?P\b|DOCUMENTS? AGAINST PAYMENT/.test(n)) return { code: "DP", name: "Nhờ thu kèm chứng từ (D/P)" };
+  if (/\bCAD\b|CASH AGAINST DOCUMENTS?/.test(n)) return { code: "CAD", name: "Trả tiền lấy chứng từ (CAD)" };
+  if (/\bOA\b|OPEN ACCOUNT/.test(n)) return { code: "OA", name: "Mở tài khoản thanh toán (O/A)" };
+  if (/\bCHEQUE\b|\bCHECK\b|\bSEC\b/.test(n)) return { code: "CHEQUE", name: "Séc" };
+  if (/\bCASH\b|TIEN MAT/.test(n)) return { code: "CASH", name: "Tiền mặt" };
+  if (/FREE OF CHARGE|\bFOC\b|NO COMMERCIAL VALUE|KHONG THANH TOAN|NO PAYMENT/.test(n)) return { code: "KHONGTT", name: "Không thanh toán" };
+  if (/NETTING|OFFSET|CAN TRU|BU TRU/.test(n)) return { code: "CANTRU", name: "Cấn trừ, bù trừ" };
+  if (/\bT ?T\b|TELEGRAPHIC|\bWIRE\b|BANK TRANSFER|REMITTANCE|CHUYEN KHOAN/.test(n)) return { code: "KC", name: "Khác (bao gồm cả TT)", note: kcNote("T/T, chuyển khoản") };
+  return { code: "KC", name: "Khác", suspect: true, note: `Không nhận ra phương thức thanh toán “${raw.trim()}” – chọn mã TK_IVP; nếu khai KC thì ghi phương thức thực tế vào chi tiết khai trị giá / ghi chú` };
 }
 
-/** Đơn vị kiện → mã VNACCS. */
-export function resolvePackageUnit(raw: string | null): Resolved {
+/**
+ * Đơn vị kiện → mã loại kiện ô 2 chỉ tiêu 1.27 / 2.25 (UN/ECE Rec 21, cùng mã với PACKAGE_UNITS của @kb/contracts: pallet PX, cuộn RO).
+ * Không nhận ra → PK kèm `guessed` để người khai chọn lại (Phụ lục II chỉ nêu ví dụ CS, BX).
+ */
+export function resolvePackageUnit(raw: string | null): (NonNullable<Resolved> & { guessed?: true }) | null {
   if (!raw) return null;
   const n = norm(raw);
   const map: [RegExp, string, string][] = [
-    [/^(PL|PLT|PALLET|PALLETS)$/, "PL", "Pallet"], [/^(CT|CTN|CTNS|CARTON|CARTONS)$/, "CT", "Carton"], [/^(PK|PKG|PKGS|PACKAGE|PACKAGES)$/, "PK", "Package"],
-    [/^(BX|BOX|BOXES)$/, "BX", "Box"], [/^(BG|BAG|BAGS)$/, "BG", "Bag"], [/^(CS|CASE|CASES)$/, "CS", "Case"], [/^(DR|DRUM|DRUMS)$/, "DR", "Drum"], [/^(RL|ROLL|ROLLS)$/, "RL", "Roll"],
-    [/^(CR|CRATE|CRATES)$/, "CR", "Crate"], [/^(BE|BUNDLE|BUNDLES)$/, "BE", "Bundle"], [/^(PC|PCS|PIECE|PIECES)$/, "PC", "Piece"],
+    [/^(PL|PX|PLT|PLTS|PALLET|PALLETS)$/, "PX", "Pallet"], [/^(CT|CTN|CTNS|CARTON|CARTONS)$/, "CT", "Carton"], [/^(PK|PKG|PKGS|PACKAGE|PACKAGES)$/, "PK", "Package"],
+    [/^(BX|BOX|BOXES)$/, "BX", "Box"], [/^(BG|BAG|BAGS)$/, "BG", "Bag"], [/^(CS|CASE|CASES)$/, "CS", "Case"], [/^(DR|DRUM|DRUMS)$/, "DR", "Drum"], [/^(RO|RL|ROLL|ROLLS)$/, "RO", "Roll"],
+    [/^(CR|CRATE|CRATES)$/, "CR", "Crate"], [/^(BE|BDL|BUNDLE|BUNDLES)$/, "BE", "Bundle"], [/^(BL|BALE|BALES)$/, "BL", "Bale"], [/^(SA|SACK|SACKS)$/, "SA", "Sack"],
   ];
   const hit = map.find(([re]) => re.test(n));
-  return hit ? { code: hit[1], name: hit[2] } : { code: "PK", name: "Package" };
+  return hit ? { code: hit[1], name: hit[2] } : { code: "PK", name: "Package", guessed: true };
 }
 
-/** Mã phương thức vận chuyển VNACCS (chỉ tiêu 1.6/2.6): 1 hàng không, 2 biển container, 3 biển hàng rời, 4 bộ. */
-export function transportModeCode(mode: "SEA" | "AIR" | "ROAD", hasContainers: boolean): { code: string; name: string } {
-  if (mode === "AIR") return { code: "1", name: "Đường hàng không" };
-  if (mode === "ROAD") return { code: "4", name: "Đường bộ" };
-  return hasContainers ? { code: "2", name: "Đường biển (container)" } : { code: "3", name: "Đường biển (hàng rời)" };
+/**
+ * Mã phương thức vận chuyển VNACCS (chỉ tiêu 1.6/2.6, bảng TRANSPORT_MODES): lấy đúng lựa chọn trên hồ sơ.
+ * Đường biển mà vận đơn không khớp (có/không container) → giữ mã người chọn, kèm ghi chú để người duyệt xem lại.
+ */
+export function transportModeCode(mode: TransportMode, hasContainers: boolean): { code: string; name: string; note?: string } {
+  const { code, label } = TRANSPORT_MODE_INFO[mode];
+  if (mode === "SEA_CONTAINER" && !hasContainers) return { code, name: label, note: "Vận đơn không có số container – kiểm tra lại mã 2 hay 3 (hàng không chứa trong container)" };
+  if (mode === "SEA_BULK" && hasContainers) return { code, name: label, note: "Vận đơn có số container – kiểm tra lại mã 3 hay 2 (hàng chứa trong container)" };
+  return { code, name: label };
 }

@@ -41,16 +41,17 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
     expect(f["NXK_DT"]?.suspect).toBeUndefined();
   });
 
-  it("thiếu số vận đơn → lấy vận đơn chủ; thiếu cả hai → để trống, không nghi ngờ (bổ sung sau)", () => {
-    expect(eda({ mutate: (s) => void (s.transport.billNo = nul()) })["SO_VD"]?.value).toBe("SITCHPH2610441");
+  it("2.24 là số quản lý hàng hóa (Mẫu 14), không lấy số B/L/booking: để trống, bắt buộc, ghi chú nhắc không khai số vận đơn", () => {
+    expect(eda()["SO_VD"]).toMatchObject({ value: "", source: "DOSSIER", suspect: true, note: expect.stringMatching(/số quản lý hàng hóa.*HPSEL2610078/) });
     const none = eda({ mutate: (s) => { s.transport.billNo = nul(); s.transport.masterBillNo = nul(); } })["SO_VD"];
-    expect(none).toMatchObject({ value: "", source: "BILL_OF_LADING", note: expect.stringMatching(/booking/) });
-    expect(none?.suspect).toBeUndefined();
+    expect(none).toMatchObject({ value: "", suspect: true });
+    expect(none?.note).not.toMatch(/vận đơn\/booking/);
   });
 
-  it("số kiện: thiếu → nghi ngờ; không có đơn vị → mặc định PK", () => {
+  it("số kiện: thiếu → nghi ngờ; không có đơn vị → tạm PK và nghi ngờ; đơn vị lạ → tạm PK, nghi ngờ nêu chữ gốc", () => {
     expect(eda({ mutate: (s) => void (s.transport.packages = nul()) })["SO_KIEN"]).toMatchObject({ value: "", suspect: true, note: "Chưa có số kiện trên Packing List" });
-    expect(eda({ mutate: (s) => void (s.transport.packageUnit = nul()) })["SO_KIEN"]?.value).toBe("48 PK");
+    expect(eda({ mutate: (s) => void (s.transport.packageUnit = nul()) })["SO_KIEN"]).toMatchObject({ value: "48 PK", suspect: true, note: expect.stringMatching(/không ghi loại kiện/) });
+    expect(eda({ mutate: (s) => void (s.transport.packageUnit = val("SKIDS")) })["SO_KIEN"]).toMatchObject({ value: "48 PK", suspect: true, note: expect.stringMatching(/SKIDS/) });
   });
 
   it("trọng lượng: thiếu → nghi ngờ; số có 0 thừa → rút gọn", () => {
@@ -62,15 +63,30 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
     expect(eda()["KHO"]).toMatchObject({ value: "", source: "DOSSIER", suspect: true });
   });
 
-  it("địa điểm nhận hàng cuối: tra được mã; không tra được → giữ nguyên chữ, nghi ngờ; thiếu → nghi ngờ", () => {
-    expect(eda()["CANG_DO"]?.value).toBe("VNHPH – Cảng Hải Phòng");
-    expect(eda({ mutate: (s) => void (s.transport.portOfDischarge = val("MOMBASA, KENYA")) })["CANG_DO"]).toMatchObject({ value: "MOMBASA, KENYA", suspect: true, note: expect.stringMatching(/Không tìm thấy mã VNACCS/) });
-    expect(eda({ mutate: (s) => void (s.transport.portOfDischarge = nul()) })["CANG_DO"]).toMatchObject({ value: "", suspect: true, note: "Chưa có địa điểm trên chứng từ" });
+  it("địa điểm nhận hàng cuối (2.28): ưu tiên điểm đến cuối; không có thì cảng dỡ; không tra được → giữ chữ, nghi ngờ; thiếu → nghi ngờ", () => {
+    expect(eda({ mutate: (s) => void (s.transport.finalDestination = val("BUSAN CY, KOREA")) })["CANG_DO"]?.value).toBe("KRPUS – Busan");
+    const noFd = (pod: ReturnType<typeof val> | ReturnType<typeof nul>) => eda({ mutate: (s) => { s.transport.finalDestination = nul(); s.transport.portOfDischarge = pod; } })["CANG_DO"];
+    expect(noFd(val("BUSAN, KOREA"))?.value).toBe("KRPUS – Busan");
+    expect(noFd(val("MOMBASA, KENYA"))).toMatchObject({ value: "MOMBASA, KENYA", suspect: true, note: expect.stringMatching(/Không tìm thấy mã VNACCS/) });
+    expect(noFd(nul())).toMatchObject({ value: "", suspect: true, note: "Chưa có địa điểm trên chứng từ" });
   });
 
-  it("địa điểm xếp hàng: thiếu → mặc định cảng Hải Phòng (nguồn DEFAULT); tra được → mã theo chứng từ", () => {
-    expect(eda({ mutate: (s) => void (s.transport.portOfLoading = nul()) })["CANG_XEP"]).toMatchObject({ value: "VNHPH – Cảng Hải Phòng", source: "DEFAULT", note: expect.stringMatching(/Mặc định cảng Hải Phòng/) });
-    expect(eda()["CANG_XEP"]).toMatchObject({ value: "KRPUS – Busan", source: "BILL_OF_LADING" });
+  it("địa điểm xếp hàng (2.29): bắt buộc, không tự điền Hải Phòng; tra được cảng VN → mã; cảng nước ngoài → nghi ngờ", () => {
+    expect(eda({ mutate: (s) => void (s.transport.portOfLoading = nul()) })["CANG_XEP"]).toMatchObject({ value: "", suspect: true, note: expect.stringMatching(/bắt buộc \(chỉ tiêu 2.29\)/) });
+    expect(eda({ mutate: (s) => void (s.transport.portOfLoading = val("CAT LAI, HCMC")) })["CANG_XEP"]).toMatchObject({ value: "VNCLI – Cảng Cát Lái (TP.HCM)", source: "BILL_OF_LADING" });
+    expect(eda({ mutate: (s) => void (s.transport.portOfLoading = val("CAT LAI, HCMC")) })["CANG_XEP"]?.suspect).toBeUndefined();
+    expect(eda()["CANG_XEP"]).toMatchObject({ value: "KRPUS – Busan", suspect: true, note: expect.stringMatching(/tại Việt Nam/) });
+  });
+
+  it("ngày hàng đi dự kiến (2.31): không lấy ngày hàng đến – để trống, bắt buộc", () => {
+    expect(eda()["NGAY_DI"]).toMatchObject({ no: "2.31", value: "", suspect: true, note: expect.stringMatching(/ETD/) });
+  });
+
+  it("hình thức hóa đơn (2.34): 1 hóa đơn → A; nhiều hóa đơn → B kèm hướng dẫn bảng kê; không có → B", () => {
+    expect(eda()["HD_PL"]).toMatchObject({ no: "2.34", value: "A – Hóa đơn thương mại" });
+    const two = eda({ mutate: (s) => void s.documents.push({ id: "doc_inv2", kind: "INVOICE", pages: 1 }) })["HD_PL"];
+    expect(two).toMatchObject({ value: expect.stringMatching(/^B/), suspect: true, note: expect.stringMatching(/2 hóa đơn.*HYS/) });
+    expect(eda({ mutate: (s) => void (s.documents = s.documents.filter((d) => d.kind !== "INVOICE")) })["HD_PL"]?.value).toMatch(/^B/);
   });
 
   // Nghi lỗi (báo cáo, chưa sửa): eda.ts CANG_XEP dùng `resolvePort(pol) ?? resolvePort("HAIPHONG")` – cảng có trên chứng từ
@@ -84,14 +100,32 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
     expect(eda()["PTVC_TEN"]?.value).toBe("SITC HAIPHONG");
   });
 
-  it("phương thức thanh toán: L/C → mã LC; thiếu → nghi ngờ", () => {
-    expect(eda({ mutate: (s) => void (s.invoice.paymentTerms = val("L/C at sight")) })["PT_TT"]).toMatchObject({ value: "LC – Thư tín dụng (L/C)" });
+  it("phương thức thanh toán: L/C → mã LC; T/T → KC kèm hướng dẫn; thiếu → nghi ngờ", () => {
+    expect(eda({ mutate: (s) => void (s.invoice.paymentTerms = val("L/C at sight")) })["PT_TT"]).toMatchObject({ value: "LC – Tín dụng thư (L/C)" });
+    expect(eda({ mutate: (s) => void (s.invoice.paymentTerms = val("T/T in advance")) })["PT_TT"]).toMatchObject({ value: "KC – Khác (bao gồm cả TT)", note: expect.stringMatching(/T\/T in advance/) });
     expect(eda({ mutate: (s) => void (s.invoice.paymentTerms = nul()) })["PT_TT"]).toMatchObject({ value: "", suspect: true, note: "Chưa có phương thức thanh toán" });
   });
 
-  it("điều kiện giá viết hoa; thiếu tổng trị giá → tính từ tổng các dòng", () => {
+  it("điều kiện giá: chỉ lấy mã (bỏ địa danh), C&F/CNF chuẩn hóa; thiếu tổng trị giá → tính từ tổng các dòng", () => {
     expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("fob")) })["DK_GIA"]?.value).toBe("FOB");
+    expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("FOB HAIPHONG")) })["DK_GIA"]?.value).toBe("FOB");
+    expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("CNF Busan")) })["DK_GIA"]?.value).toBe("C&F");
+    expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("C & I")) })["DK_GIA"]?.value).toBe("C&I");
     expect(eda({ mutate: (s) => void (s.invoice.totalAmount = nul()) })["TONG_TG"]).toMatchObject({ value: "20850", source: "SYSTEM", note: "Tính từ tổng các dòng hàng" });
+  });
+
+  it("điều kiện giá không có trong bảng mã → nghi ngờ; EDA không có DPU; IDA DPU hợp lệ kèm hướng dẫn DAT", () => {
+    expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("Franco")) })["DK_GIA"]).toMatchObject({ value: "FRANCO", suspect: true, note: expect.stringMatching(/không có trong bảng mã/) });
+    expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("DPU")) })["DK_GIA"]).toMatchObject({ value: "DPU", suspect: true, note: expect.stringMatching(/Mẫu 02.*không có mã DPU/) });
+    const idaDpu = ida({ mutate: (s) => void (s.invoice.incoterm = val("DPU")) })["DK_GIA"];
+    expect(idaDpu).toMatchObject({ value: "DPU", note: expect.stringMatching(/DAT/) });
+    expect(idaDpu?.suspect).toBeUndefined();
+  });
+
+  it("mã phân loại giá: có dòng trị giá 0 (FOC) → C kèm số dòng; toàn bộ FOC → B; không có hóa đơn → EDA không khai", () => {
+    expect(eda({ mutate: (s) => void (s.items[2]!.amount = val("0")) })["GIA_PL"]).toMatchObject({ value: expect.stringMatching(/^C/), suspect: true, note: expect.stringMatching(/Dòng 3.*2\.57/) });
+    expect(eda({ mutate: (s) => s.items.forEach((it) => void (it.amount = val("0"))) })["GIA_PL"]?.value).toMatch(/^B/);
+    expect(eda({ mutate: (s) => void (s.documents = s.documents.filter((d) => d.kind !== "INVOICE")) })["GIA_PL"]).toMatchObject({ value: "" });
   });
 
   it("tỷ giá: thiếu tiền tệ hóa đơn → theo tiền tệ hồ sơ; chưa có tỷ giá → nghi ngờ", () => {
@@ -99,13 +133,31 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
     expect(eda({ rates: { VND: "1" } })["TY_GIA"]).toMatchObject({ value: "", suspect: true, note: "Chưa có tỷ giá tính thuế cho USD" });
   });
 
-  it.each([["AIR", false, "1 – Đường hàng không"], ["ROAD", false, "4 – Đường bộ"], ["SEA", true, "2 – Đường biển (container)"], ["SEA", false, "3 – Đường biển (hàng rời)"]] as const)(
+  it.each([
+    ["AIR", false, "1 – Đường hàng không"], ["SEA_CONTAINER", true, "2 – Đường biển (chứa trong container)"], ["SEA_BULK", false, "3 – Đường biển (không chứa trong container)"],
+    ["ROAD", false, "4 – Đường bộ"], ["RAIL", false, "5 – Đường sắt"], ["RIVER", false, "6 – Đường sông"], ["OTHER", false, "9 – Khác"],
+  ] as const)(
     "phương thức vận chuyển %s (container: %s) → %s",
     (mode, hasContainers, expected) => {
       const f = eda({ dossier: { transportMode: mode }, mutate: (s) => void (s.transport.containers = hasContainers ? s.transport.containers : []) });
       expect(f["PTVC"]?.value).toBe(expected);
+      expect(f["PTVC"]?.suspect).toBeUndefined();
     },
   );
+
+  it.each([["1", "1 – Cá nhân gửi cá nhân"], ["2", "2 – Tổ chức gửi cá nhân"], ["3", "3 – Cá nhân gửi tổ chức"], ["4", "4 – Tổ chức gửi tổ chức"], ["5", "5 – Khác"]] as const)(
+    "IDA: phân loại cá nhân/tổ chức %s lấy từ hồ sơ → %s",
+    (partyClass, expected) => expect(ida({ dossier: { partyClass } })["PL_CN"]).toMatchObject({ value: expected, source: "DOSSIER" }),
+  );
+
+  it("EDA không có chỉ tiêu phân loại cá nhân/tổ chức", () => {
+    expect(eda({ dossier: { partyClass: "1" } })["PL_CN"]).toBeUndefined();
+  });
+
+  it("đường biển container nhưng vận đơn không có container → nghi ngờ, không tự đổi mã", () => {
+    const f = eda({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: (s) => void (s.transport.containers = []) });
+    expect(f["PTVC"]).toMatchObject({ value: "2 – Đường biển (chứa trong container)", suspect: true });
+  });
 });
 
 describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
@@ -196,10 +248,28 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
     expect(f["VBPQ"]?.suspect).toBeUndefined();
   });
 
-  it("ghi chú: không container + có ghi chú hồ sơ → chỉ ghi chú; không có gì → trống; có cả hai → nối bằng dấu chấm", () => {
-    expect(ida({ mutate: (s) => void (s.transport.containers = []), dossier: { note: "Hàng mẫu" } })["GHI_CHU"]?.value).toBe("Hàng mẫu");
-    expect(ida({ mutate: (s) => void (s.transport.containers = []) })["GHI_CHU"]?.value).toBe("");
-    expect(ida({ dossier: { note: "Hàng mẫu" } })["GHI_CHU"]?.value).toBe("Container: SITU2246781. Hàng mẫu");
+  it("ghi chú (1.68): C/O trước (TT121), rồi ghi chú hồ sơ, rồi container – ngăn cách bằng “;”; có C/O → nhắc bổ sung ngày cấp", () => {
+    const noCo = (s: Shipment) => void (s.origin.coNo = nul());
+    expect(ida({ mutate: (s) => { noCo(s); s.transport.containers = []; }, dossier: { note: "Hàng mẫu" } })["GHI_CHU"]?.value).toBe("Hàng mẫu");
+    expect(ida({ mutate: (s) => { noCo(s); s.transport.containers = []; } })["GHI_CHU"]?.value).toBe("");
+    expect(ida({ mutate: noCo })["GHI_CHU"]?.suspect).toBeUndefined();
+    expect(ida({ dossier: { note: "Hàng mẫu" } })["GHI_CHU"]).toMatchObject({ value: "C/O form AK số KR2610-0457-AK; Hàng mẫu; Container: SITU2246781", suspect: true });
+    expect(ida({ mutate: (s) => void (s.origin.rexNo = val("DEREX12345")) })["GHI_CHU"]?.value).toMatch(/^REX DEREX12345;/);
+  });
+
+  it("hình thức hóa đơn (1.39) và mã phân loại giá (1.44): không có hóa đơn → B và D", () => {
+    const f = ida({ mutate: (s) => void (s.documents = s.documents.filter((d) => d.kind !== "INVOICE")) });
+    expect(f["HD_PL"]?.value).toMatch(/^B/);
+    expect(f["GIA_PL"]?.value).toMatch(/^D/);
+  });
+
+  it("phí bảo hiểm với điều kiện đã gồm bảo hiểm (C&I, DAT…) → không cộng (TT39 chỉ tiêu 1.48)", () => {
+    const ins = (s: Shipment) => void (s.charges.insurance = { value: "35", sources: [{ documentId: "doc_invoice", kind: "INVOICE", page: 1, raw: "35", normalized: "35" }], status: "SINGLE_SOURCE" });
+    for (const term of ["C&I", "DAT", "DDU", "DAF"]) expect(ida({ mutate: (s) => { ins(s); s.invoice.incoterm = val(term); } })["PHI_BH"]?.value, term).toBe("");
+  });
+
+  it("VBPQ: hàng chương 84/85 → để trống, nghi ngờ, chặn duyệt (không tự điền MO)", () => {
+    expect(ida()["VBPQ"]).toMatchObject({ value: "", suspect: true, blocking: true, note: expect.stringMatching(/5 dòng chương 84\/85/) });
   });
 
   it("số tờ khai đã cấp → hiện số; tên chi cục rỗng → chỉ mã", () => {

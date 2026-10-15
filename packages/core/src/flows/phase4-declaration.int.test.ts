@@ -60,7 +60,7 @@ afterAll(async () => {
 });
 
 async function prepareDossier(files: string[]) {
-  const d = unwrap(await createDossier(dossier, chau, { direction: "NK", typeCode: "A11", partner: "HANSOL", customsOffice: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", skillSetId: "default", dueDate: "2026-10-20", incoterm: "FCA", transportMode: "SEA" }));
+  const d = unwrap(await createDossier(dossier, chau, { direction: "NK", typeCode: "A11", partner: "HANSOL", customsOffice: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", skillSetId: "default", dueDate: "2026-10-20", incoterm: "FCA", transportMode: "SEA_CONTAINER", partyClass: "4" }));
   const docs = unwrap(await uploadDocuments(dossier, chau, d.id, files.map(pdf)));
   for (const doc of docs) unwrap(await processDocument(extraction, { orgId: chau.orgId, dossierId: d.id, documentId: doc.id, mode: "FULL" }));
   unwrap(await finishReading(extraction, chau, d.id));
@@ -118,6 +118,7 @@ describe("luồng tờ khai trên Postgres thật", () => {
     await runAgentFor(id);
     for (const it of unwrap(await listLineItems(declaration, chau, id))) unwrap(await confirmHs(declaration, chau, it.id, it.hsSuggested ?? "8482.10.00"));
     unwrap(await moveToReview(declaration, chau, id));
+    unwrap(await updateDeclarationField(declaration, chau, id, "VBPQ", "MO")); // hàng chương 84 – CV 2061/TCHQ-GSQL
     const a = unwrap(await approveDeclaration(declaration, tuan, id));
     expect(a).toMatchObject({ status: "APPROVED", approvedBy: "Phạm Anh Tuấn" });
     const row = await dossier.uow.asOrg(chau, (r) => r.dossiers.get(chau.orgId, id));

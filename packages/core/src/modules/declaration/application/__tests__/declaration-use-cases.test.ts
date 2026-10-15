@@ -175,6 +175,12 @@ describe("HS và tờ khai", () => {
     fails[D] = 1;
     expect(errCode(await approveDeclaration(deps, approver, D))).toBe("BLOCKER_FAILED");
     fails[D] = 0;
+    // Hàng chương 84/85 (CV 2061): chưa chọn MO/CU → chặn duyệt; chọn sai mã → không cho lưu; chọn MO → duyệt được.
+    const noMoCu = await approveDeclaration(deps, approver, D);
+    expect(noMoCu).toMatchObject({ ok: false, error: { code: "BLOCKER_FAILED", message: expect.stringMatching(/Mã văn bản pháp quy khác \(1\.37\)/) } });
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "VBPQ", "XX"))).toBe("VALIDATION");
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "VBPQ", ""))).toBe("VALIDATION");
+    unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
     const a = unwrap(await approveDeclaration(deps, approver, D));
     expect(a).toMatchObject({ status: "APPROVED", approvedBy: "Tên usr_tuan", approvedAt: "2026-10-14T03:00:00.000Z" });
     expect(dossiers.rows[0]).toMatchObject({ status: "APPROVED", step: "submit", suspectFields: 0 });

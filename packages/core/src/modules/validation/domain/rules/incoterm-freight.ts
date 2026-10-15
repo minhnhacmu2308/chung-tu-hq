@@ -8,6 +8,7 @@ export const incotermFreight: Rule = {
   title: "Cước vận chuyển để cộng trị giá theo Incoterm",
   severity: "BLOCKER",
   docKinds: ["INVOICE", "FREIGHT_INVOICE", "ARRIVAL_NOTICE"],
+  directions: ["NK"], // cước chỉ cộng vào trị giá tính thuế hàng nhập
   run(s) {
     const term = s.invoice.incoterm.value?.slice(0, 3).toUpperCase();
     if (!term) return skipped("Chưa đọc được điều kiện giao hàng");

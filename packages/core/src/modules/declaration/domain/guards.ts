@@ -3,10 +3,14 @@ import { CATALOG_EDA, CATALOG_IDA, isDeclarationFieldEditable, type DeclarationF
 import { dec } from "../../../shared/decimal.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { mappingsFor } from "./build.js";
+import { lengthIssue, mappingsFor } from "./build.js";
+import type { StoredField } from "./types.js";
 
 type ItemHs = { hsConfirmed: string | null };
 const unconfirmed = (items: ItemHs[]) => items.filter((i) => !i.hsConfirmed).length;
+
+/** Chỉ tiêu bắt buộc có điều kiện còn trống mà Hải quan chắc chắn từ chối (vd MO/CU hàng chương 84/85 – CV 2061/TCHQ-GSQL). */
+export const missingBlockingFields = (fields: Record<string, StoredField>) => Object.values(fields).filter((f) => f.blocking && f.value.trim() === "");
 
 export function canMoveToReview(items: ItemHs[], hasDeclaration: boolean): Result<void> {
   const n = unconfirmed(items);
@@ -15,10 +19,12 @@ export function canMoveToReview(items: ItemHs[], hasDeclaration: boolean): Resul
   return ok(undefined);
 }
 
-export function canApprove(p: { role: Role; userId: string; ownerId: string; fourEyes: boolean; blockerFails: number; items: ItemHs[]; status: DeclarationStatus; exchangeRate?: string }): Result<void> {
+export function canApprove(p: { role: Role; userId: string; ownerId: string; fourEyes: boolean; blockerFails: number; items: ItemHs[]; status: DeclarationStatus; exchangeRate?: string; fields?: Record<string, StoredField> }): Result<void> {
   if (p.role !== "APPROVER" && p.role !== "OWNER") return err(domainError("FORBIDDEN", "Chỉ Người duyệt hoặc Chủ sở hữu được phê duyệt tờ khai"));
   if (p.status !== "DRAFT") return err(domainError("INVALID_STATE", p.status === "NOT_CREATED" ? "Chưa có tờ khai" : "Tờ khai đã được duyệt"));
   if (p.blockerFails > 0) return err(domainError("BLOCKER_FAILED", `Còn ${p.blockerFails} luật lỗi chặn truyền – xử lý ở bước OCR & kiểm tra`));
+  const blocking = p.fields ? missingBlockingFields(p.fields) : [];
+  if (blocking.length) return err(domainError("BLOCKER_FAILED", `Chưa khai chỉ tiêu bắt buộc: ${blocking.map((f) => `${f.label}${f.no ? ` (${f.no})` : ""}${f.note ? ` – ${f.note}` : ""}`).join("; ")}`));
   const n = unconfirmed(p.items);
   if (n > 0) return err(domainError("HS_UNCONFIRMED", `Còn ${n} mã HS chưa xác nhận`));
   if (p.exchangeRate !== undefined && dec(p.exchangeRate).isZero()) return err(domainError("INVALID_STATE", "Chưa có tỷ giá tính thuế – nhập tỷ giá rồi chạy lại agent"));
@@ -42,13 +48,21 @@ const FIELD_FORMATS: Partial<Record<DeclarationFieldDef["type"], { test: (v: str
 
 /**
  * Người dùng sửa tay một chỉ tiêu: chặn chỉ tiêu là đầu vào tính thuế (hóa đơn, cước, tỷ giá), chỉ tiêu bắt buộc để trống,
- * và giá trị sai kiểu số/ngày theo catalog Phụ lục II (chỉ áp khi số chỉ tiêu ứng với đúng một ô – ô ghép như 1.44 bỏ qua).
+ * giá trị sai kiểu số/ngày hoặc vượt độ dài theo catalog Phụ lục II (chỉ áp khi số chỉ tiêu ứng với đúng một ô – ô ghép như 1.44 bỏ qua),
+ * và mã văn bản pháp quy ô 1 không phải MO/CU khi tờ khai có hàng chương 84/85 (`current.blocking`, CV 2061/TCHQ-GSQL).
  */
-export function canEditField(kind: "IDA" | "EDA", code: string, value: string): Result<void> {
+export function canEditField(kind: "IDA" | "EDA", code: string, value: string, current?: StoredField): Result<void> {
   if (!isDeclarationFieldEditable(code)) return err(domainError("VALIDATION", "Chỉ tiêu này không sửa tay trên tờ khai: số tờ khai do Hải quan cấp, loại hình đổi ở hồ sơ, trị giá/cước/tỷ giá sửa ở bước đọc chứng từ rồi dựng lại"));
   const mappings = mappingsFor(kind);
   const mapping = mappings.find((m) => m.code === code);
-  if (value === "") return mapping?.required ? err(domainError("VALIDATION", "Chỉ tiêu bắt buộc – không được để trống")) : ok(undefined);
+  if (value === "") return mapping?.required || current?.blocking ? err(domainError("VALIDATION", "Chỉ tiêu bắt buộc – không được để trống")) : ok(undefined);
+  if (code === "VBPQ") {
+    const codes = value.split(/[;,\s]+/).filter(Boolean);
+    if (current?.blocking && !/^(MO|CU)$/.test(codes[0] ?? "")) return err(domainError("VALIDATION", "Hàng chương 84/85: ô 1 phải là MO (chưa qua sử dụng) hoặc CU (đã qua sử dụng) – CV 2061/TCHQ-GSQL"));
+    if (codes.length > 5 || new Set(codes).size !== codes.length) return err(domainError("VALIDATION", "Tối đa 5 mã văn bản pháp quy, không trùng nhau (chỉ tiêu 1.37)"));
+  }
+  const tooLong = lengthIssue(kind, code, value);
+  if (tooLong) return err(domainError("VALIDATION", tooLong));
   if (!mapping?.no || mappings.filter((m) => m.no === mapping.no).length !== 1) return ok(undefined);
   const def = (kind === "IDA" ? CATALOG_IDA : CATALOG_EDA).find((d) => d.no === mapping.no);
   const format = def ? FIELD_FORMATS[def.type] : undefined;

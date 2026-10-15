@@ -46,9 +46,9 @@ export async function updateDeclarationField(deps: DeclarationDeps, ctx: Ctx, do
     if (decl.status !== "DRAFT") return err(domainError("INVALID_STATE", "Tờ khai đã duyệt – không sửa"));
     const f = decl.fields[code];
     if (!f) return err(domainError("NOT_FOUND", "Không có chỉ tiêu này trên tờ khai"));
-    const editable = canEditField(decl.kind, code, value);
+    const editable = canEditField(decl.kind, code, value, f);
     if (!editable.ok) return editable;
-    const fields = { ...decl.fields, [code]: { no: f.no, label: f.label, section: f.section, value, source: "USER" as const } };
+    const fields = { ...decl.fields, [code]: { no: f.no, label: f.label, section: f.section, value, source: "USER" as const, ...(f.blocking ? { blocking: true as const } : {}) } };
     await r.declarations.update(decl.id, { fields, updatedAt: now });
     return ok({ old: f.value, decl: { ...decl, fields, updatedAt: now } });
   });
@@ -67,7 +67,7 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
   const r0 = await deps.uow.asOrg(ctx, async (r) => {
     const decl = await r.declarations.latest(ctx.orgId, dossierId);
     const items = await r.lineItems.list(ctx.orgId, dossierId);
-    const guard = canApprove({ role: ctx.role, userId: ctx.userId, ownerId: d.value.ownerId, fourEyes: org.fourEyes, blockerFails, items, status: decl?.status ?? "NOT_CREATED", ...(decl ? { exchangeRate: decl.exchangeRate } : {}) });
+    const guard = canApprove({ role: ctx.role, userId: ctx.userId, ownerId: d.value.ownerId, fourEyes: org.fourEyes, blockerFails, items, status: decl?.status ?? "NOT_CREATED", ...(decl ? { exchangeRate: decl.exchangeRate, fields: decl.fields } : {}) });
     if (!guard.ok) return guard;
     const patch = { status: "APPROVED" as const, approvedBy: ctx.userId, approvedAt: now, updatedAt: now };
     await r.declarations.update(decl!.id, patch);

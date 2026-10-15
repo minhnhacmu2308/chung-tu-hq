@@ -24,13 +24,22 @@ describe("adjustments", () => {
 
 describe("rates", () => {
   const hs = { code: "8482.10.00", description: "Ổ bi cầu", mfn: "3", pref: { AK: "0" }, vat: "8", policy: null, keywords: [] };
-  it("MFN B01; C/O AK hợp lệ → thuế ưu đãi đặc biệt B07; E21 miễn thuế; XK 0/0; HS không có → 0/8", () => {
+  it("MFN B01; C/O AK hợp lệ → thuế ưu đãi đặc biệt B06 (AKFTA theo bảng TT39); E21 miễn thuế; XK 0/0; HS không có → 0/8", () => {
     expect(ratesFor(hs, { direction: "NK", typeCode: "A11", coForm: null })).toMatchObject({ importDutyRate: "3", vatRate: "8", taxTableCode: "B01" });
-    expect(ratesFor(hs, { direction: "NK", typeCode: "A11", coForm: "AK" })).toMatchObject({ importDutyRate: "0", vatRate: "8", taxTableCode: "B07", policyNote: expect.stringMatching(/AKFTA/) });
+    expect(ratesFor(hs, { direction: "NK", typeCode: "A11", coForm: "AK" })).toMatchObject({ importDutyRate: "0", vatRate: "8", taxTableCode: "B06", policyNote: expect.stringMatching(/AKFTA/) });
     expect(ratesFor(hs, { direction: "NK", typeCode: "A11", coForm: "E" })).toMatchObject({ importDutyRate: "3", taxTableCode: "B01" });
     expect(ratesFor(hs, { direction: "NK", typeCode: "E21", coForm: "AK" })).toMatchObject({ importDutyRate: "0", vatRate: "0" });
     expect(ratesFor(hs, { direction: "XK", typeCode: "B11", coForm: null })).toMatchObject({ importDutyRate: "0", vatRate: "0" });
     expect(ratesFor(null, { direction: "NK", typeCode: "A11", coForm: null })).toMatchObject({ importDutyRate: "0", vatRate: "8" });
+  });
+  it("mã biểu thuế theo bảng TT39: AJCEP B09, VJEPA B10; EVFTA không có mã trong văn bản → để trống (không dùng B17 – Chương 98)", () => {
+    const multi = { ...hs, pref: { AJ: "1", VJ: "2", EVFTA: "0" } };
+    expect(ratesFor(multi, { direction: "NK", typeCode: "A11", coForm: "AJ" })).toMatchObject({ importDutyRate: "1", taxTableCode: "B09" });
+    expect(ratesFor(multi, { direction: "NK", typeCode: "A11", coForm: "VJ" })).toMatchObject({ importDutyRate: "2", taxTableCode: "B10" });
+    expect(ratesFor(multi, { direction: "NK", typeCode: "A11", coForm: "EVFTA" })).toMatchObject({ importDutyRate: "0", taxTableCode: "" });
+  });
+  it("HS có chính sách riêng → ghi chú vẫn mở đầu bằng tên FTA (bước truyền suy mã biểu thuế từ tên)", () => {
+    expect(ratesFor({ ...hs, policy: "Kiểm tra chất lượng" }, { direction: "NK", typeCode: "A11", coForm: "AK" }).policyNote).toBe("AKFTA (C/O form AK); Kiểm tra chất lượng");
   });
 });
 
@@ -43,15 +52,19 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(f("NNK_TEN").value).toBe(ORG.name);
     expect(f("NXK_TEN")).toMatchObject({ value: "HANSOL PRECISION CO., LTD.", source: "INVOICE" });
     expect(f("MA_NUOC").value).toBe("KR");
-    expect(f("PTVC").value).toBe("2 – Đường biển (container)");
+    expect(f("PTVC").value).toBe("2 – Đường biển (chứa trong container)");
     expect(f("CANG_XEP").value).toBe("KRPUS – Busan");
     expect(f("CANG_DO")).toMatchObject({ value: "VNHPH – Cảng Hải Phòng", source: "BILL_OF_LADING" });
-    expect(f("PT_TT")).toMatchObject({ value: "TTR – Chuyển tiền điện (T/T)", suspect: true });
-    expect(f("SO_KIEN").value).toBe("48 PL");
+    // T/T thường là KC (TTR = chuyển tiền bồi hoàn bằng điện); nghi ngờ vì model không chắc chuỗi gốc.
+    expect(f("PT_TT")).toMatchObject({ value: "KC – Khác (bao gồm cả TT)", suspect: true, note: expect.stringMatching(/T\/T 30 days/) });
+    expect(f("SO_KIEN").value).toBe("48 PX");
+    expect(f("HD_PL").value).toBe("A – Hóa đơn thương mại");
+    expect(f("GIA_PL").value).toBe("A – Giá hóa đơn cho hàng hóa phải trả tiền");
+    expect(f("DK_GIA").value).toBe("FCA");
     expect(f("PTVC_TEN").value).toBe("SITC HAIPHONG V.2641S");
     expect(f("SO_VD")).toMatchObject({ value: "HPSEL2610078", source: "BILL_OF_LADING" });
     expect(f("SO_CO").value).toBe("KR2610-0457-AK (form AK)");
-    expect(f("GHI_CHU").value).toContain("SITU2246781");
+    expect(f("GHI_CHU")).toMatchObject({ value: "C/O form AK số KR2610-0457-AK; Container: SITU2246781", suspect: true, note: expect.stringMatching(/ngày cấp C\/O/) });
     expect(f("SO_QLNB").value).toBe("HS-NK-2610-021");
   });
   it("trọng lượng CONFLICT và kho chưa có → suspect kèm ghi chú; cước FCA là khoản điều chỉnh; trị giá/thuế đúng", () => {
@@ -63,8 +76,19 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(f("PHI_BH").value).toBe("");
     expect(built.valuation.customsValueVnd).toBe("558800000");
     expect(built.taxes.importDutyVnd).toBe("2974906");
-    expect(f("VBPQ")).toMatchObject({ no: "1.37", value: "MO", suspect: true });
-    expect(built.suspectCount).toBe(4);
+    // CV 2061: không tự điền MO – để trống, nghi ngờ và chặn phê duyệt đến khi người khai chọn MO/CU.
+    expect(f("VBPQ")).toMatchObject({ no: "1.37", value: "", suspect: true, blocking: true, note: expect.stringMatching(/MO.*CU.*CV 2061/) });
+    expect(built.suspectCount).toBe(5); // TRONG_LUONG, KHO, PT_TT, VBPQ, GHI_CHU (ngày C/O)
+  });
+  it("VBPQ xét HS đã xác nhận trước HS trên invoice: xác nhận 3926 cho mọi dòng → không cần MO/CU", () => {
+    const items = ITEMS.map((it, k) => ({ ...it, lineNo: k + 1, hsConfirmed: "39269099" }));
+    const b = buildDeclaration({ shipment: hansol(), dossier: DOSSIER, org: ORG, items, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    expect(b.fields["VBPQ"]).toMatchObject({ value: "", source: "SYSTEM" });
+    expect(b.fields["VBPQ"]?.blocking).toBeUndefined();
+  });
+  it("ghi chú vượt 100 ký tự (chỉ tiêu 1.68) → nghi ngờ, hướng dẫn khai phần còn lại qua HYS", () => {
+    const b = buildDeclaration({ shipment: hansol(), dossier: { ...DOSSIER, note: "x".repeat(90) }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    expect(b.fields["GHI_CHU"]).toMatchObject({ suspect: true, note: expect.stringMatching(/vượt giới hạn 100 ký tự.*HYS/) });
   });
   it("POD nước ngoài → điểm đến cuối tại VN và đánh dấu nghi ngờ; EDA dùng buyer làm người nhập khẩu", () => {
     const b2 = buildDeclaration({ shipment: hansol((s) => void (s.transport.portOfDischarge.value = "SINGAPORE")), dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });

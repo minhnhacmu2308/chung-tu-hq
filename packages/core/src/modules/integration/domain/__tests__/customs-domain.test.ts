@@ -44,10 +44,41 @@ describe("declaration-to-fpt", () => {
     expect(r.objVN_IDA_VANDON["vD_ARR"]).toBe("15/10/2026");
     expect(r.objVN_IDA_KTG["ktG_FR3"]).toBe(29200000);
     expect(r.objVN_IDA_KTG["ktG_FR2"]).toBe("VND");
-    expect(r.objVN_IDA_HANG[0]).toMatchObject({ haG_B25: "01", haG_CMD: "84821000", haG_ORS: "B07", haG_QN1: 2000, haG_UPC: "USD" });
+    // AKFTA là B06 theo bảng mã biểu thuế Phụ lục II TT39 (B07 là AANZFTA).
+    expect(r.objVN_IDA_HANG[0]).toMatchObject({ haG_B25: "01", haG_CMD: "84821000", haG_ORS: "B06", haG_QN1: 2000, haG_UPC: "USD" });
     expect(r.objVN_IDA_HANG[1]!["haG_ORS"]).toBe("B01");
+    expect(r.objVN_IDA["tK_OL1"]).toBe("MO");
+    expect(r.objVN_IDA_VANDON["vD_COC"]).toBe(1);
     expect(b.warnings.some((w) => w.startsWith("TK_EPN"))).toBe(true);
     expect(b.issues).toEqual([]);
+    expect(b.blockers).toEqual([]);
+  });
+
+  it("1.37: nhiều mã → TK_OL1..5, bỏ trùng; hàng 84/85 mà ô 1 không phải MO/CU → chặn truyền (CV 2061)", () => {
+    const multi = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, VBPQ: { value: "CU; KT, KT" } } });
+    const r = multi.request as { objVN_IDA: Record<string, unknown> };
+    expect([r.objVN_IDA["tK_OL1"], r.objVN_IDA["tK_OL2"], r.objVN_IDA["tK_OL3"]]).toEqual(["CU", "KT", undefined]);
+    expect(multi.blockers).toEqual([]);
+    expect(buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, VBPQ: { value: "" } } }).blockers.join(" ")).toMatch(/MO hoặc CU/);
+    expect(buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, VBPQ: { value: "KT MO" } } }).blockers).toHaveLength(1);
+  });
+
+  it("mã biểu thuế: FTA chưa có mã trong văn bản (EVFTA) → không gửi B17 (Chương 98) mà chặn truyền", () => {
+    const evfta = buildFptRequest({ ...PAYLOAD, items: [{ ...PAYLOAD.items[0]!, policyNote: "Áp thuế suất ưu đãi đặc biệt EVFTA (REX)" }] });
+    expect((evfta.request as { objVN_IDA_HANG: Record<string, unknown>[] }).objVN_IDA_HANG[0]!["haG_ORS"]).toBeUndefined();
+    expect(evfta.blockers.join(" ")).toMatch(/Dòng 1.*EVFTA.*1\.80/);
+  });
+
+  it("khoản điều chỉnh khác (1.49) chưa gửi được → chặn truyền nêu khoản; cước/bảo hiểm không chặn", () => {
+    const b = buildFptRequest({ ...PAYLOAD, adjustments: [...PAYLOAD.adjustments, { label: "Royalty", amount: "500", currency: "USD" }] });
+    expect(b.blockers.join(" ")).toMatch(/1\.49: Royalty 500 USD/);
+  });
+
+  it("1.35: đường hàng không hoặc hàng CFS khai mã 3 → không gửi số lượng container", () => {
+    for (const ptvc of ["1 – Đường không", "3 – Đường biển (hàng rời)"]) {
+      const b = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: ptvc } } });
+      expect((b.request as { objVN_IDA_VANDON: Record<string, unknown> }).objVN_IDA_VANDON["vD_COC"], ptvc).toBeUndefined();
+    }
   });
   it("thiếu mã địa điểm lưu kho (bắt buộc VD_ST) → issues; EDA dùng buyer + container CON_C01", () => {
     const noKho = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, KHO: { value: "" } } });
@@ -58,7 +89,20 @@ describe("declaration-to-fpt", () => {
     expect(String(r.objVN_EDA["tK_CGA"]).length).toBeLessThanOrEqual(35);
     expect(r.objVN_EDA["tK_CAT"]).toMatch(/Phòng/);
     expect(r.objVN_EDA["tK_SYM"]).toBe("20/10/2026");
+    expect(r.objVN_EDA["tK_IV1"]).toBe("A");
     expect(r.objVN_EDA_CON["coN_C01"]).toBe("SITU2246781");
+  });
+
+  it("EDA dòng hàng: số dòng HAG_R01 (không phải HAG_B25 của IDA); mô tả kèm “#&mã nước xuất xứ” (TT121 2.69), không nhân đôi; thiếu xuất xứ → chặn", () => {
+    const base = { ...PAYLOAD, kind: "EDA" as const, direction: "XK" as const, fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, HD_PL: { value: "B – Bảng kê" } } };
+    const eda = buildFptRequest({ ...base, items: [{ ...PAYLOAD.items[0]!, origin: "VN" }, { ...PAYLOAD.items[1]!, origin: "VN", description: "Thanh trượt#&VN" }] });
+    const r = eda.request as { objVN_EDA: Record<string, unknown>; objVN_EDA_HANG: Record<string, unknown>[] };
+    expect(r.objVN_EDA_HANG[0]).toMatchObject({ haG_R01: "01", haG_CMN: "Vòng bi cầu 6205-2RS#&VN" });
+    expect(r.objVN_EDA_HANG[0]!["haG_B25"]).toBeUndefined();
+    expect(r.objVN_EDA_HANG[1]!["haG_CMN"]).toBe("Thanh trượt#&VN");
+    expect(r.objVN_EDA["tK_IV1"]).toBe("B");
+    expect(eda.blockers).toEqual([]);
+    expect(buildFptRequest({ ...base, items: [{ ...PAYLOAD.items[0]!, origin: "" }] }).blockers.join(" ")).toMatch(/Dòng 1.*2\.69/);
   });
 });
 

@@ -49,7 +49,7 @@ afterAll(async () => {
 
 describe("luồng đọc chứng từ trên Postgres", () => {
   it("upload 3 file → đọc 3 → trường + luật, sửa trường có audit, xác nhận dữ liệu", async () => {
-    const d = unwrap(await createDossier(dossier, ctx, { direction: "NK", typeCode: "A11", partner: "HANSOL", customsOffice: "03CE – HP", skillSetId: "default", dueDate: "2026-10-20", incoterm: "FCA", transportMode: "SEA" }));
+    const d = unwrap(await createDossier(dossier, ctx, { direction: "NK", typeCode: "A11", partner: "HANSOL", customsOffice: "03CE – HP", skillSetId: "default", dueDate: "2026-10-20", incoterm: "FCA", transportMode: "SEA_CONTAINER", partyClass: "4" }));
     const docs = unwrap(await uploadDocuments(dossier, ctx, d.id, [pdf("Commercial Invoice.pdf"), pdf("Packing List.pdf"), pdf("HBL.pdf")]));
     for (const doc of docs) unwrap(await processDocument(extraction, { orgId: ctx.orgId, dossierId: d.id, documentId: doc.id, mode: "FULL" }));
     const after = unwrap(await listDocuments(dossier, ctx, d.id));

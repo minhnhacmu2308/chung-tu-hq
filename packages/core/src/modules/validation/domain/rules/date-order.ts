@@ -6,6 +6,7 @@ export const dateOrder: Rule = {
   title: "Thứ tự ngày chứng từ hợp lý",
   severity: "WARNING",
   docKinds: ["INVOICE", "ARRIVAL_NOTICE"],
+  directions: ["NK"], // so với ngày hàng đến
   run(s) {
     const inv = s.invoice.date.value;
     const arr = s.transport.arrivalDate.value;

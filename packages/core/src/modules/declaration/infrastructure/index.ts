@@ -33,7 +33,7 @@ export function createDossierAdapter(dossier: DossierDeps): DossierPort {
       if (!d) return null;
       return {
         id: d.id, code: d.code, direction: d.direction, typeCode: d.typeCode, partner: d.partner, customsOfficeCode: d.customsOfficeCode, customsOfficeName: d.customsOfficeName, status: d.status, step: d.step,
-        ownerId: d.ownerId, invoiceValue: d.invoiceValue, currency: d.currency, incoterm: d.incoterm, transportMode: d.transportMode, billNo: d.billNo, declarationNo: d.declarationNo, note: d.note,
+        ownerId: d.ownerId, invoiceValue: d.invoiceValue, currency: d.currency, incoterm: d.incoterm, transportMode: d.transportMode, partyClass: d.partyClass, billNo: d.billNo, declarationNo: d.declarationNo, note: d.note,
       };
     },
     update: (orgId, dossierId, patch) => dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.update(dossierId, { ...patch, updatedAt: dossier.clock.now() })),

@@ -1,4 +1,5 @@
 // Cấu hình Skill AI (mock). Có backend → thay thân hàm, giữ chữ ký.
+import { resolveSkillFieldKey } from "@kb/contracts";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { Skill, SkillField, SkillFieldPatch, SkillKind } from "@/mocks/types";
 
@@ -52,6 +53,8 @@ export const addSkillField = (skillId: string, field: SkillField) =>
     const key = field.key.trim();
     if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(key)) throw new ApiError("VALIDATION", "Mã trường chỉ gồm chữ không dấu, số, dấu _ và bắt đầu bằng chữ");
     if (s.fields.some((f) => f.key === key)) throw new ApiError("DUPLICATE", "Mã trường đã tồn tại trong skill");
+    const custom = (k: string) => !s.docKind || !resolveSkillFieldKey(s.docKind, k).standard;
+    if (custom(key) && s.fields.filter((f) => custom(f.key)).length >= 20) throw new ApiError("VALIDATION", "Tối đa 20 trường bổ sung cho một skill");
     if (!field.label.trim()) throw new ApiError("VALIDATION", "Nhập tên hiển thị");
     s.fields.push({ ...field, key, label: field.label.trim() });
     s.updatedAt = nowIso();
@@ -61,6 +64,7 @@ export const addSkillField = (skillId: string, field: SkillField) =>
 export const removeSkillField = (skillId: string, key: string) =>
   mutate((db) => {
     const s = getSkill(db.skills, skillId);
+    if (s.docKind && resolveSkillFieldKey(s.docKind, key).standard) throw new ApiError("FORBIDDEN", "Trường chuẩn của chứng từ không xóa được – tắt Đọc/Hiển thị nếu không cần");
     s.fields = s.fields.filter((f) => f.key !== key);
     s.updatedAt = nowIso();
     return s;
@@ -211,14 +215,13 @@ export function fieldAccuracies(s: Skill): EvaluationResult["fields"] {
 export const getEvaluation = (skillId: string) =>
   query((db): EvaluationResult | null => {
     const s = getSkill(db.skills, skillId);
-    if (s.kind === "MAPPING" || s.accuracy === undefined || s.labeledSamples < MIN_SAMPLES_FOR_ACCURACY) return null;
+    if (s.accuracy === undefined || s.labeledSamples < MIN_SAMPLES_FOR_ACCURACY) return null;
     return { skillId, version: s.version, accuracy: s.accuracy, samples: s.labeledSamples, fields: fieldAccuracies(s), finishedAt: s.updatedAt };
   });
 
 export const evaluateSkill = (skillId: string) =>
   mutate((db): EvaluationResult => {
     const s = getSkill(db.skills, skillId);
-    if (s.kind === "MAPPING") throw new ApiError("NOT_SUPPORTED", "Skill ánh xạ là quy tắc cố định – kiểm bằng test, không đánh giá trên mẫu");
     if (s.labeledSamples < MIN_SAMPLES_FOR_ACCURACY)
       throw new ApiError("NOT_ENOUGH_SAMPLES", `Cần ít nhất ${MIN_SAMPLES_FOR_ACCURACY} mẫu đã gắn nhãn để đánh giá (hiện có ${s.labeledSamples})`);
     const previous = s.accuracy;

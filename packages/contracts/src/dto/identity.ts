@@ -47,3 +47,24 @@ export const IntegrationSchema = z.object({
   detail: z.string().optional(),
 });
 export type Integration = z.infer<typeof IntegrationSchema>;
+
+/**
+ * Tài khoản VNACCS của doanh nghiệp (gửi kèm mọi nghiệp vụ FPT trong `objVNACCS_ACCOUNT`).
+ * Lưu mã hóa ở `org_secrets` (kind VNACCS). Mật khẩu và terminal access key không bao giờ trả về.
+ * Độ dài theo đặc tả FPT: Text 50.
+ */
+export const VnaccsAccountInputSchema = z.object({
+  userId: z.string().trim().min(1, "Nhập User ID VNACCS").max(50, "Tối đa 50 ký tự"),
+  password: z.string().min(1, "Nhập mật khẩu VNACCS").max(50, "Tối đa 50 ký tự"),
+  terminalId: z.string().trim().min(1, "Nhập Terminal ID").max(50, "Tối đa 50 ký tự"),
+  terminalAccessKey: z.string().trim().min(1, "Nhập Terminal Access Key").max(50, "Tối đa 50 ký tự"),
+});
+export type VnaccsAccountInput = z.infer<typeof VnaccsAccountInputSchema>;
+
+export const VnaccsAccountSchema = z.object({
+  configured: z.boolean(),
+  userId: z.string().nullable(),
+  terminalId: z.string().nullable(),
+  updatedAt: IsoDateTimeSchema.nullable(),
+});
+export type VnaccsAccount = z.infer<typeof VnaccsAccountSchema>;

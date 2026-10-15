@@ -137,7 +137,7 @@ describe("format.json – mẫu EDA", () => {
     const res = VnEdaHangSchema.safeParse(firstEdaHang());
     expect(res.success).toBe(false);
     const paths = (res.error?.issues ?? []).map((i) => i.path.join(".")).sort();
-    expect(paths).toEqual(["haG_BPR", "haG_UPC", "haG_UPR", "haG_XX"]);
+    expect(paths).toEqual(["haG_BPR", "haG_UPC", "haG_UPR"]);
   });
 
   it("EdaRequestSchema ghép đúng object", () => {

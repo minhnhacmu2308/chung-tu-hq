@@ -10,7 +10,9 @@ import { AlertTriangle, CheckCircle2, FileCheck2, FileText, Paperclip, Pencil, P
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { dossierKeys, listDocuments } from "@/api/dossiers";
+import type { ExchangeRateInfo } from "@kb/contracts";
 import { approveDeclaration, declarationKeys, getDeclarationView, reopenDeclaration, updateDeclarationField, type DeclarationItemView } from "@/api/declaration";
+import { rateSourceHint } from "./rate-source";
 import { getSession, sessionKeys } from "@/api/session";
 import { getOrganization, settingsKeys } from "@/api/settings";
 import { toastMutationError } from "@/lib/mutation-error";
@@ -18,6 +20,7 @@ import { formatBytesVi, formatDate, formatDateTime, formatMoney, formatNumber, f
 import { DOC_KIND_LABELS, type Declaration, type DeclarationField } from "@/mocks/types";
 import { errorMessage, KeyValue, SourceChip, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
 import { fieldGuide } from "./field-guide";
+import { provenanceLabel } from "./provenance";
 import type { StepProps } from "./types";
 
 const SECTION_LABELS: Record<DeclarationField["section"], string> = {
@@ -54,6 +57,7 @@ function FieldTile({ field, currency, note, onEdit }: { field: DeclarationField;
           </Button>
         )}
       </div>
+      {provenanceLabel(field.provenance) && <p className="text-xs text-fg-subtle">{provenanceLabel(field.provenance)}</p>}
       {field.suspect && (
         <p className="flex items-start gap-1 text-sm text-warning-subtle-fg">
           <AlertTriangle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
@@ -144,7 +148,7 @@ function ItemsTab({ items, currency }: { items: DeclarationItemView[]; currency:
   return <DataTable aria-label="Danh sách hàng trên tờ khai" columns={columns} data={items} getRowId={(r) => r.id} />;
 }
 
-function TaxTab({ decl, items, currency }: { decl: Declaration; items: DeclarationItemView[]; currency: string }) {
+function TaxTab({ decl, items, currency, rateInfo }: { decl: Declaration; items: DeclarationItemView[]; currency: string; rateInfo?: ExchangeRateInfo | null | undefined }) {
   const invoice = decl.fields.find((f) => f.code === "TONG_TG")?.value ?? "0";
   const policies = Array.from(new Set(items.map((i) => i.policyNote).filter((p): p is string => Boolean(p))));
   const totalTax = String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd));
@@ -173,7 +177,7 @@ function TaxTab({ decl, items, currency }: { decl: Declaration; items: Declarati
           ))}
           <KeyValue
             label="Tỷ giá tính thuế"
-            hint={`Ngày ${formatDate(decl.exchangeRateDate)} · nguồn chính thức theo ngày, không dùng tỷ giá trên chứng từ forwarder`}
+            hint={currency === "VND" ? "Hóa đơn bằng VND – không quy đổi" : rateSourceHint(rateInfo, decl.exchangeRateDate)}
             value={`${formatNumber(decl.exchangeRate)} VND/${currency}`}
           />
           <KeyValue strong label="Trị giá tính thuế" value={formatVnd(decl.customsValueVnd)} />
@@ -437,7 +441,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               <ItemsTab items={items} currency={dossier.currency} />
             </TabsContent>
             <TabsContent value="tax">
-              <TaxTab decl={decl} items={items} currency={dossier.currency} />
+              <TaxTab decl={decl} items={items} currency={dossier.currency} rateInfo={viewQ.data?.exchangeRateInfo} />
             </TabsContent>
             <TabsContent value="docs">
               <DocumentsTab dossierId={dossier.id} />
@@ -450,7 +454,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         <div className="min-w-0 flex-1">
           <p className="text-xs text-fg-muted">Tổng thuế phải nộp dự kiến</p>
           <p className="text-lg font-semibold tabular-nums text-fg">{formatVnd(totalTax)}</p>
-          {totalTax === "0" && <p className="hidden text-xs text-fg-subtle sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%) – xem tab Thuế & chính sách</p>}
+          {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%) – xem tab Thuế & chính sách</p>}
         </div>
         <Button variant="ghost" onClick={() => goTo("ocr")}>
           Quay lại OCR

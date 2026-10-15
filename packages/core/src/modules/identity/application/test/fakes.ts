@@ -1,6 +1,6 @@
 // Test double dùng chung cho use case identity.
 import type { Clock } from "../../../../shared/clock.js";
-import type { Mailer, PasswordHasher, RateLimiter, TaxRegistryLookup } from "../ports.js";
+import type { Mailer, PasswordHasher, RateLimiter, SecretStore, TaxRegistryLookup } from "../ports.js";
 
 export class FakeHasher implements PasswordHasher {
   async hash(p: string) {
@@ -38,5 +38,15 @@ export class FakeTaxRegistry implements TaxRegistryLookup {
   async lookup(taxCode: string) {
     if (taxCode.endsWith("000")) return { found: false as const };
     return { found: true as const, name: `CÔNG TY TNHH MST ${taxCode}`, address: "Địa chỉ theo đăng ký thuế (dữ liệu giả)" };
+  }
+}
+
+/** "Mã hóa" đảo ngược được, không lộ chuỗi gốc trong ciphertext (đủ để kiểm use case không lưu bản rõ). */
+export class FakeSecretStore implements SecretStore {
+  encrypt(plain: string) {
+    return { ciphertext: `enc:${Buffer.from(plain, "utf8").toString("base64")}`, keyVersion: 1 };
+  }
+  decrypt(ciphertext: string) {
+    return Buffer.from(ciphertext.replace(/^enc:/, ""), "base64").toString("utf8");
   }
 }

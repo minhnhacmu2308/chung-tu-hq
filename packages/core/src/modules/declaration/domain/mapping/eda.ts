@@ -2,7 +2,8 @@
 import { PORTS, resolvePort, transportModeCode } from "../catalog-resolve.js";
 import { EDA_NO as N } from "./numbers.js";
 import { incotermField, invoiceKind, packageCount, paymentMethod, port, priceKind } from "./shared.js";
-import { fromSourced, missing, plainNumber, vnDate, type FieldMapping } from "./types.js";
+import { profileSource, SRC } from "./sources.js";
+import { fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping } from "./types.js";
 
 const isVn = (code: string | undefined) => PORTS.find((p) => p.code === code)?.country === "VN";
 
@@ -24,7 +25,8 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   { code: "NNK_DC", no: N.NNK_DC, section: "PARTIES", label: "Địa chỉ người nhập khẩu", required: true, from: (i) => fromSourced(i.shipment.parties.buyer.address, "INVOICE") },
   { code: "MA_NUOC", no: N.MA_NUOC, section: "PARTIES", label: "Mã nước người nhập khẩu", required: true, from: (i) => fromSourced(i.shipment.parties.buyer.country, "INVOICE") },
 
-  // 2.24 là số quản lý hàng hóa do hệ thống cấp khi khai thông tin hàng hóa xuất khẩu (Mẫu 14), không phải số B/L (TT39 PL II; TT121 Đ.18 kh.1 đ.k).
+  // 2.24 là số quản lý hàng hóa do hệ thống cấp khi khai thông tin hàng hóa xuất khẩu (Mẫu 14), không phải số B/L (TT39 PL II; TT121 Đ.18 kh.1 đ.k)
+  // → không cho chọn nguồn vận đơn/booking.
   { code: "SO_VD", no: N.SO_VD, section: "TRANSPORT", label: "Số vận đơn (số quản lý hàng hóa)", required: true, from: (i) => {
     const bl = i.shipment.transport.billNo.value ?? i.shipment.transport.masterBillNo.value;
     return missing("DOSSIER", `Nhập số quản lý hàng hóa do hệ thống cấp sau khi khai thông tin hàng hóa xuất khẩu${bl ? ` – không khai số vận đơn/booking ${bl} vào ô này` : ""} (chỉ tiêu 2.24)`);
@@ -34,7 +36,8 @@ export const EDA_MAPPINGS: FieldMapping[] = [
     const g = fromSourced(i.shipment.transport.grossWeightKg, "PACKING_LIST");
     return g.value === null ? missing("PACKING_LIST", "Chưa có tổng trọng lượng") : { ...g, value: plainNumber(g.value) };
   } },
-  { code: "KHO", no: N.KHO, section: "TRANSPORT", label: "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", required: true, from: () => missing("DOSSIER", "Chọn mã địa điểm lưu kho / tập kết hàng xuất; dùng mã dùng chung của Chi cục (…OZZ) thì ghi địa điểm tập kết, thời gian đóng container, xếp hàng ở ô địa chỉ 2.59") },
+  { code: "KHO", no: N.KHO, section: "TRANSPORT", label: "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", required: true, options: { sources: [profileSource("KHO")], allowFixed: true }, from: (i) =>
+    profileOr(i, "KHO", missing("DOSSIER", "Chọn mã địa điểm lưu kho / tập kết hàng xuất; dùng mã dùng chung của Chi cục (…OZZ) thì ghi địa điểm tập kết, thời gian đóng container, xếp hàng ở ô địa chỉ 2.59")) },
   // 2.28: nơi hàng được giao cuối cùng ở nước ngoài – ưu tiên điểm đến cuối (place of delivery), không có thì cảng dỡ.
   { code: "CANG_DO", no: N.CANG_DO, section: "TRANSPORT", label: "Địa điểm nhận hàng cuối cùng", required: true, from: (i) => {
     const fd = i.shipment.transport.finalDestination;
@@ -54,14 +57,18 @@ export const EDA_MAPPINGS: FieldMapping[] = [
     const v = fromSourced(i.shipment.transport.vessel, "BILL_OF_LADING");
     return v.value === null ? { value: null, source: "BILL_OF_LADING", note: "Bổ sung khi có booking" } : v;
   } },
-  // 2.31: ngày hàng đi dự kiến (ETD). Chứng từ hiện chỉ cho ngày hàng đến → không lấy thay.
-  { code: "NGAY_DI", no: N.NGAY_DI, section: "TRANSPORT", label: "Ngày hàng đi dự kiến", required: true, from: () => missing("DOSSIER", "Nhập ngày hàng đi dự kiến (ETD trên booking) – không dùng ngày hàng đến") },
+  // 2.31 (bắt buộc): ngày đi = ngày phát hành B/L / ngày bay / ngày đi trên C/O; không dùng ngày hàng đến (ETA).
+  { code: "NGAY_DI", no: N.NGAY_DI, section: "TRANSPORT", label: "Ngày hàng đi dự kiến", required: true, options: { sources: [SRC.departureDate], allowFixed: true }, from: (i) => {
+    const d = fromSourced(i.shipment.transport.departureDate, "BILL_OF_LADING");
+    return d.value === null ? missing("BILL_OF_LADING", "Nhập ngày hàng đi dự kiến (ETD trên booking) – không dùng ngày hàng đến") : d;
+  } },
 
-  { code: "HD_PL", no: N.HD_PL, section: "VALUE", label: "Phân loại hình thức hóa đơn", required: true, from: (i) => invoiceKind(i, "EDA") },
+  { code: "HD_PL", no: N.HD_PL, section: "VALUE", label: "Phân loại hình thức hóa đơn", required: true, options: { sources: [profileSource("HD_PL")], allowFixed: true }, from: (i) => invoiceKind(i, "EDA") },
   { code: "SO_HD", no: N.SO_HD, section: "VALUE", label: "Số hóa đơn", required: true, from: (i) => fromSourced(i.shipment.invoice.no, "INVOICE") },
   { code: "NGAY_HD", no: N.NGAY_HD, section: "VALUE", label: "Ngày phát hành hóa đơn", required: true, from: (i) => fromSourced(i.shipment.invoice.date, "INVOICE") },
-  { code: "PT_TT", no: N.PT_TT, section: "VALUE", label: "Phương thức thanh toán", required: true, from: (i) => paymentMethod(i, "EDA") },
-  { code: "GIA_PL", no: N.GIA_PL, section: "VALUE", label: "Mã phân loại giá hóa đơn", required: false, from: (i) => priceKind(i, "EDA") },
+  { code: "PT_TT", no: N.PT_TT, section: "VALUE", label: "Phương thức thanh toán", required: true, options: { sources: [profileSource("PT_TT")], allowFixed: true }, from: (i) => paymentMethod(i, "EDA") },
+  // Không có hóa đơn → không khai 2.39 ô 4, nên không bắt buộc.
+  { code: "GIA_PL", no: N.GIA_PL, section: "VALUE", label: "Mã phân loại giá hóa đơn", required: false, options: { sources: [profileSource("GIA_PL")], allowFixed: true }, from: (i) => priceKind(i, "EDA") },
   { code: "DK_GIA", no: N.DK_GIA, section: "VALUE", label: "Điều kiện giá hóa đơn", required: true, from: (i) => incotermField(i, "EDA") },
   { code: "MA_TT", no: N.MA_TT, section: "VALUE", label: "Mã đồng tiền của hóa đơn", required: true, from: (i) => fromSourced(i.shipment.invoice.currency, "INVOICE") },
   { code: "TONG_TG", no: N.TONG_TG, section: "VALUE", label: "Tổng trị giá hóa đơn", required: true, from: (i) => {

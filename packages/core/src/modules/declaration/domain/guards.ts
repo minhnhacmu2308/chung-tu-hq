@@ -3,7 +3,8 @@ import { CATALOG_EDA, CATALOG_IDA, isDeclarationFieldEditable, type DeclarationF
 import { dec } from "../../../shared/decimal.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { lengthIssue, mappingsFor } from "./build.js";
+import { lengthIssue } from "./field-length.js";
+import { mappingsFor } from "./mapping/registry.js";
 import type { StoredField } from "./types.js";
 
 type ItemHs = { hsConfirmed: string | null };
@@ -19,17 +20,30 @@ export function canMoveToReview(items: ItemHs[], hasDeclaration: boolean): Resul
   return ok(undefined);
 }
 
-export function canApprove(p: { role: Role; userId: string; ownerId: string; fourEyes: boolean; blockerFails: number; items: ItemHs[]; status: DeclarationStatus; exchangeRate?: string; fields?: Record<string, StoredField> }): Result<void> {
+/** Chỉ tiêu bắt buộc (theo ánh xạ VNACCS) đang trống – FPT sẽ từ chối, nên chặn ngay ở bước duyệt. */
+export function missingRequiredFields(kind: "IDA" | "EDA", fields: Record<string, { value: string }>): { code: string; label: string }[] {
+  return mappingsFor(kind).filter((m) => m.required && !fields[m.code]?.value?.trim()).map((m) => ({ code: m.code, label: m.label }));
+}
+
+export function canApprove(p: {
+  role: Role; userId: string; ownerId: string; fourEyes: boolean; blockerFails: number; items: ItemHs[]; status: DeclarationStatus; exchangeRate?: string;
+  missingFields?: { code: string; label: string }[]; fields?: Record<string, StoredField>;
+}): Result<void> {
   if (p.role !== "APPROVER" && p.role !== "OWNER") return err(domainError("FORBIDDEN", "Chỉ Người duyệt hoặc Chủ sở hữu được phê duyệt tờ khai"));
   if (p.status !== "DRAFT") return err(domainError("INVALID_STATE", p.status === "NOT_CREATED" ? "Chưa có tờ khai" : "Tờ khai đã được duyệt"));
   if (p.blockerFails > 0) return err(domainError("BLOCKER_FAILED", `Còn ${p.blockerFails} luật lỗi chặn truyền – xử lý ở bước OCR & kiểm tra`));
-  const blocking = p.fields ? missingBlockingFields(p.fields) : [];
-  if (blocking.length) return err(domainError("BLOCKER_FAILED", `Chưa khai chỉ tiêu bắt buộc: ${blocking.map((f) => `${f.label}${f.no ? ` (${f.no})` : ""}${f.note ? ` – ${f.note}` : ""}`).join("; ")}`));
   const n = unconfirmed(p.items);
   if (n > 0) return err(domainError("HS_UNCONFIRMED", `Còn ${n} mã HS chưa xác nhận`));
   if (p.exchangeRate !== undefined && dec(p.exchangeRate).isZero()) return err(domainError("INVALID_STATE", "Chưa có tỷ giá tính thuế – nhập tỷ giá rồi chạy lại agent"));
   // Nguyên tắc 4 mắt (cấu hình org): người duyệt khác người tạo hồ sơ; Chủ sở hữu được miễn.
   if (p.fourEyes && p.role !== "OWNER" && p.userId === p.ownerId) return err(domainError("FORBIDDEN", "Người duyệt phải khác người tạo hồ sơ (nguyên tắc 4 mắt)"));
+  // Sau kiểm quyền: người không được duyệt nhận FORBIDDEN, không phải danh sách chỉ tiêu.
+  const blocking = p.fields ? missingBlockingFields(p.fields) : [];
+  if (blocking.length) return err(domainError("BLOCKER_FAILED", `Chưa khai chỉ tiêu bắt buộc: ${blocking.map((f) => `${f.label}${f.no ? ` (${f.no})` : ""}${f.note ? ` – ${f.note}` : ""}`).join("; ")}`));
+  if (p.missingFields?.length) {
+    const names = p.missingFields.map((f) => f.label);
+    return err(domainError("VALIDATION", `Còn ${names.length} chỉ tiêu bắt buộc chưa nhập: ${names.join(", ")} – bấm Sửa ở từng chỉ tiêu rồi duyệt lại`, { missingFields: p.missingFields }));
+  }
   return ok(undefined);
 }
 

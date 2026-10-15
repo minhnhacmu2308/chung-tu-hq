@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, Skeleton, Stack, toast } from "@kb/ui";
+import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, IconTile, Skeleton, Stack, toast } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Building2, FileSpreadsheet, KeyRound, PlugZap, Search } from "lucide-react";
 import type { ReactNode } from "react";
@@ -7,6 +7,7 @@ import { listIntegrations, settingsKeys, testIntegration } from "@/api/settings"
 import { formatRelative } from "@/lib/format";
 import type { Integration } from "@/mocks/types";
 import { LoadError } from "@/components/common/load-error";
+import { VnaccsAccountSection } from "./vnaccs-account";
 
 const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neutral"; label: string }> = {
   CONNECTED: { tone: "success", label: "Đã kết nối" },
@@ -14,10 +15,10 @@ const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neut
   NOT_CONFIGURED: { tone: "neutral", label: "Chưa cấu hình" },
 };
 const ICON: Record<Integration["id"], ReactNode> = {
-  HSCODEPRO: <Search className="h-5 w-5" />,
-  CUSTOMS_HUB: <Building2 className="h-5 w-5" />,
-  AI_PROVIDER: <Bot className="h-5 w-5" />,
-  EINVOICE: <FileSpreadsheet className="h-5 w-5" />,
+  HSCODEPRO: <Search />,
+  CUSTOMS_HUB: <Building2 />,
+  AI_PROVIDER: <Bot />,
+  EINVOICE: <FileSpreadsheet />,
 };
 
 function IntegrationCard({ it }: { it: Integration }) {
@@ -35,9 +36,7 @@ function IntegrationCard({ it }: { it: Integration }) {
     <Card className="flex flex-col">
       <CardHeader>
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary-subtle text-primary-subtle-fg" aria-hidden="true">
-            {ICON[it.id]}
-          </span>
+          <IconTile icon={ICON[it.id]} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle as="h3">{it.name}</CardTitle>
@@ -48,13 +47,16 @@ function IntegrationCard({ it }: { it: Integration }) {
         </div>
       </CardHeader>
       <CardContent className="flex-1">
-        {it.status === "ERROR" && it.detail ? (
-          <Alert tone="danger">{it.detail}</Alert>
-        ) : it.detail ? (
-          <p className="text-sm text-fg-muted">{it.detail}</p>
-        ) : (
-          <p className="text-sm text-fg-subtle">Chưa bật cho doanh nghiệp. Liên hệ quản trị KhaiBáo AI để kích hoạt.</p>
-        )}
+        <Stack gap="sm">
+          {it.status === "ERROR" && it.detail ? (
+            <Alert tone="danger">{it.detail}</Alert>
+          ) : it.detail ? (
+            <p className="text-sm text-fg-muted">{it.detail}</p>
+          ) : (
+            <p className="text-sm text-fg-subtle">Chưa bật cho doanh nghiệp. Liên hệ quản trị KhaiBáo AI để kích hoạt.</p>
+          )}
+          {it.id === "CUSTOMS_HUB" && <VnaccsAccountSection />}
+        </Stack>
       </CardContent>
       <CardFooter className="justify-between">
         <span className="text-xs text-fg-subtle">{it.lastCheckedAt ? `Kiểm tra ${formatRelative(it.lastCheckedAt)}` : "Chưa kiểm tra"}</span>
@@ -73,7 +75,7 @@ export function IntegrationsTab() {
       <Alert tone="info" title="Khóa API được giữ ở máy chủ">
         <span className="inline-flex items-start gap-2">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          Khóa của hscodepro, Customs Hub và dịch vụ AI lưu trong kho bí mật phía máy chủ, không bao giờ gửi xuống trình duyệt hay hiện trên màn hình này.
+          Khóa của hscodepro, Customs Hub, dịch vụ AI và mật khẩu VNACCS lưu mã hóa phía máy chủ, không bao giờ gửi xuống trình duyệt hay hiện trên màn hình này.
         </span>
       </Alert>
       {isError ? (

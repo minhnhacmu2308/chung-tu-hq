@@ -168,7 +168,7 @@ function DetailInner({ id }: { id: string }) {
       <Dialog>
         <DialogTrigger asChild>
           <Button variant="secondary" leftIcon={<GitBranch className="h-4 w-4" />}>
-            <span className="max-sm:sr-only">Xem cây quy trình</span>
+            <span className="cq-max-sm:sr-only">Xem cây quy trình</span>
           </Button>
         </DialogTrigger>
         <DialogContent title={`Quy trình hồ sơ ${dossier.code}`} icon={<GitBranch className="h-4 w-4" />} size="lg" allowPresentationToggle>

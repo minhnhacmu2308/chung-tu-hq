@@ -31,4 +31,8 @@ export const QUEUE_LABELS: Record<string, string> = {
   "skill-evaluate": "Đánh giá skill",
   "skill-sample-read": "Đọc mẫu skill",
   "cert-expiry": "Nhắc chứng thư hết hạn",
+  "hs-poll": "Hỏi kết quả phân loại HS",
+  "hs-answer": "Gửi trả lời cho AI phân loại HS",
+  "hs-reclassify": "Phân loại lại mã HS",
+  "exchange-rate-weekly": "Lấy tỷ giá tính thuế (Vietcombank)",
 };

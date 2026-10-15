@@ -2,7 +2,7 @@
 // Bước 4 – AI Agent xử lý: chọn việc → điều phối (tiến trình realtime) → xác nhận mã HS → sang Review.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Combobox, createDataTableColumnHelper,
-  DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Progress, SegmentedControl, Spinner, Stack, StatusBadge, toast,
+  DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Progress, RadioGroup, SegmentedControl, Spinner, Stack, StatusBadge, toast, IconTile
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Play, RotateCcw, Search, Workflow, XCircle } from "lucide-react";
@@ -15,6 +15,9 @@ import {
 import { formatDateTime, formatMoney, formatNumber, formatTime } from "@/lib/format";
 import type { AgentTaskId, AgentTaskStatus, LineItem } from "@/mocks/types";
 import { errorMessage, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
+import { HsSuggestionCell } from "./hs/hs-cell";
+import { HsAnswerDialog, ReclassifyDialog } from "./hs/hs-dialogs";
+import { formatRates, formatTax, hsBusy, normalizeHsInput } from "./hs/hs-format";
 import type { StepProps } from "./types";
 
 const TASK_META: Record<AgentTaskId, { title: string; who: string; whoTone: "primary" | "neutral" | "info"; icon: ReactNode; description: string }> = {
@@ -85,7 +88,7 @@ function ModeDialog({ open, onOpenChange, onStart, pending }: { open: boolean; o
               const m = TASK_META[id];
               return (
                 <li key={id} className={on ? "flex items-start gap-3 rounded-md border border-border p-3" : "flex items-start gap-3 rounded-md border border-border p-3 opacity-50"}>
-                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary-subtle text-primary-subtle-fg" aria-hidden="true">{m.icon}</span>
+                  <IconTile icon={m.icon} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-fg">
                       {m.title} {!on && <span className="font-normal text-fg-subtle">– không chạy</span>}
@@ -195,70 +198,96 @@ const sixDigits = (code: string) => {
   return d.length === 6 ? `${d.slice(0, 4)}.${d.slice(4)}` : code;
 };
 
-function ConfidenceMeter({ value }: { value: number }) {
-  const pct = Math.round(value * 100);
-  const tone = pct >= 85 ? "success" : pct >= 70 ? "primary" : "warning";
+function ChangeHsDialog({ item, onClose, dossierId }: { item: LineItem | null; onClose: () => void; dossierId: string }) {
   return (
-    <div className="flex w-28 items-center gap-2">
-      <Progress value={pct} size="sm" tone={tone} aria-label={`Độ tin cậy ${pct}%`} className="flex-1" />
-      <span className="w-9 text-right text-xs tabular-nums text-fg-muted">{pct}%</span>
-    </div>
+    <Dialog open={item !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent title={`Chọn mã HS – dòng ${item?.lineNo ?? ""}`} icon={<Search className="h-4 w-4" />} description={item?.description} size="md">
+        {item && <ChangeHsForm key={item.id} item={item} onDone={onClose} dossierId={dossierId} />}
+      </DialogContent>
+    </Dialog>
   );
 }
 
-function ChangeHsDialog({ item, onClose, dossierId }: { item: LineItem | null; onClose: () => void; dossierId: string }) {
+function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () => void; dossierId: string }) {
   const qc = useQueryClient();
   const catalog = useQuery({ queryKey: declarationKeys.hsCatalog, queryFn: listHsCatalog, staleTime: Infinity });
-  const [code, setCode] = useState<string | null>(null);
-  const current = code ?? item?.hsConfirmed ?? item?.hsSuggested ?? null;
-  const entry = catalog.data?.find((h) => h.code === current);
+  const candidates = item.hs?.candidates ?? [];
+  const [picked, setPicked] = useState<string | null>(item.hsConfirmed ?? item.hsSuggested ?? candidates[0]?.code ?? null);
+  const [manual, setManual] = useState("");
+  const manualCode = normalizeHsInput(manual);
+  const code = manual.trim() ? manualCode : picked;
+  const cand = candidates.find((c) => c.code === code);
+  const entry = catalog.data?.find((h) => h.code === code);
   const save = useMutation({
-    mutationFn: () => confirmHs(item!.id, current!),
+    mutationFn: () => confirmHs(item.id, code!),
     onSuccess: () => {
-      toast({ tone: "success", title: `Đã xác nhận ${current} cho dòng ${item!.lineNo}` });
+      toast({ tone: "success", title: `Đã xác nhận ${code} cho dòng ${item.lineNo}` });
       void qc.invalidateQueries({ queryKey: declarationKeys.items(dossierId) });
       void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
-      setCode(null);
-      onClose();
+      onDone();
     },
     onError: (e) => toast({ tone: "danger", title: errorMessage(e) }),
   });
-  const options = useMemo(
-    () => (catalog.data ?? []).map((h) => ({ value: h.code, label: h.code, description: h.description })),
-    [catalog.data],
+  const catalogOptions = useMemo(
+    () => (catalog.data ?? []).filter((h) => !candidates.some((c) => c.code === h.code)).map((h) => ({ value: h.code, label: h.code, description: h.description })),
+    [catalog.data, candidates],
   );
   return (
-    <Dialog open={item !== null} onOpenChange={(o) => !o && (setCode(null), onClose())}>
-      <DialogContent title={`Chọn mã HS – dòng ${item?.lineNo ?? ""}`} description={item?.description} size="md">
-        <Stack gap="md">
-          <Field label="Mã HS 8 số (biểu thuế Việt Nam)" hint="Gõ mã hoặc mô tả, không cần dấu: “o bi”, “8483”">
-            <Combobox options={options} value={current} onChange={setCode} placeholder="Chọn mã HS" />
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (code) save.mutate();
+      }}
+    >
+      <Stack gap="md">
+        {candidates.length > 0 && (
+          <RadioGroup
+            label="Gợi ý của hscodepro"
+            description="Mã chính và các mã thay thế, kèm thuế NK · VAT theo C/O của lô hàng"
+            value={manual.trim() ? null : picked}
+            onChange={(v) => (setPicked(v), setManual(""))}
+            options={candidates.map((c, i) => ({
+              value: c.code,
+              label: `${c.code} · ${Math.round(c.confidence * 100)}% · ${formatTax(c)}${i === 0 ? " · gợi ý chính" : ""}`,
+              description: c.whyNot ? `${c.description} – Vì sao không chọn: ${c.whyNot}` : c.description,
+            }))}
+          />
+        )}
+        {catalogOptions.length > 0 && (
+          <Field label="Hoặc chọn từ biểu thuế" hint="Gõ mã hoặc mô tả, không cần dấu: “o bi”, “8483”">
+            <Combobox options={catalogOptions} value={catalogOptions.some((o) => o.value === picked) ? picked : null} onChange={(v) => (setPicked(v), setManual(""))} placeholder="Chọn mã HS" />
           </Field>
-          {entry && (
-            <div className="rounded-md border border-border bg-surface-muted p-3 text-sm">
-              <p className="font-medium text-fg">{entry.description}</p>
-              <p className="mt-1 text-fg-muted">
-                Thuế NK MFN {entry.mfn}%
-                {entry.pref?.AK !== undefined && ` · AKFTA ${entry.pref.AK}%`}
-                {entry.pref?.EVFTA !== undefined && ` · EVFTA ${entry.pref.EVFTA}%`} · VAT {entry.vat}%
-              </p>
-              {entry.policy && <p className="mt-1 text-warning-subtle-fg">{entry.policy}</p>}
-            </div>
-          )}
-          {item?.hsSuggested && current !== item.hsSuggested && (
-            <Alert tone="info">Khác gợi ý hscodepro ({item.hsSuggested}). Lý do chọn mã sẽ được ghi vào nhật ký sửa.</Alert>
-          )}
-        </Stack>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button disabled={!current} loading={save.isPending} onClick={() => save.mutate()}>
-            Xác nhận mã này
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        )}
+        <Field label="Hoặc nhập tay mã 8 số" hint="Mã ngoài gợi ý/biểu thuế: tờ khai chưa có thuế suất cho dòng này – kiểm tra biểu thuế trước khi khai" {...(manual.trim() && !manualCode ? { error: "Cần đủ 8 chữ số, vd 8483.40.90" } : {})}>
+          <Input className="cq-sm:max-w-48 font-mono" value={manual} onChange={(e) => setManual(e.target.value)} placeholder="8483.40.90" />
+        </Field>
+        {(cand || entry) && (
+          <div className="rounded-md border border-border bg-surface-muted p-3 text-sm">
+            <p className="font-medium text-fg">{cand?.description ?? entry?.description}</p>
+            <p className="mt-1 text-fg-muted">{cand ? `Thuế NK · VAT: ${formatTax(cand)}` : entry ? `Thuế NK MFN ${entry.mfn}% · VAT ${entry.vat}%` : null}</p>
+            {entry?.policy && <p className="mt-1 text-warning-subtle-fg">{entry.policy}</p>}
+          </div>
+        )}
+        {item.hs?.reasoning && (
+          <div className="text-sm">
+            <p className="font-medium text-fg">Lý do AI chọn {item.hsSuggested}</p>
+            <p className="mt-1 text-fg-muted">{item.hs.reasoning}</p>
+            {item.hs.legalBasis.length > 0 && <p className="mt-1 text-xs text-fg-subtle">Căn cứ: {item.hs.legalBasis.join("; ")}</p>}
+          </div>
+        )}
+        {item.hsSuggested && code && code !== item.hsSuggested && (
+          <Alert tone="info">Khác gợi ý hscodepro ({item.hsSuggested}). Lựa chọn của bạn được ghi vào nhật ký sửa.</Alert>
+        )}
+      </Stack>
+      <DialogFooter>
+        <Button variant="ghost" type="button" onClick={onDone}>
+          Hủy
+        </Button>
+        <Button type="submit" disabled={!code} loading={save.isPending}>
+          Xác nhận mã này
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 
@@ -267,6 +296,8 @@ const col = createDataTableColumnHelper<LineItem>();
 function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId: string; currency: string }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<LineItem | null>(null);
+  const [answering, setAnswering] = useState<LineItem | null>(null);
+  const [reclassifying, setReclassifying] = useState<LineItem | null>(null);
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: declarationKeys.items(dossierId) });
     void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
@@ -312,16 +343,9 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
     }),
     col.accessor("hsSuggested", {
       header: "Gợi ý hscodepro",
-      cell: (c) => {
-        const it = c.row.original;
-        if (!it.hsSuggested) return <span className="text-xs text-fg-subtle">Chưa tra</span>;
-        return (
-          <div className="flex flex-col gap-1">
-            <span className="font-mono text-sm text-fg">{it.hsSuggested}</span>
-            {it.hsConfidence !== undefined && <ConfidenceMeter value={it.hsConfidence} />}
-          </div>
-        );
-      },
+      size: 220,
+      meta: { wrap: true },
+      cell: (c) => <HsSuggestionCell item={c.row.original} onAnswer={setAnswering} onReclassify={setReclassifying} />,
     }),
     col.accessor("importDutyRate", {
       header: "Thuế NK · VAT",
@@ -329,11 +353,13 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
         const it = c.row.original;
         return it.hsConfirmed ? (
           <div>
-            <p className="tabular-nums text-fg">
-              {it.importDutyRate}% · {it.vatRate}%
-            </p>
+            <p className="tabular-nums text-fg">{formatRates(it.importDutyRate, it.vatRate)}</p>
             {it.policyNote && <p className="max-w-56 whitespace-normal text-xs text-fg-muted">{it.policyNote}</p>}
           </div>
+        ) : it.hs?.candidates[0] ? (
+          <p className="tabular-nums text-fg-muted" title="Theo gợi ý – áp dụng khi bạn xác nhận mã">
+            {formatTax(it.hs.candidates[0])}
+          </p>
         ) : (
           <span className="text-xs text-fg-subtle">Sau khi xác nhận</span>
         );
@@ -368,7 +394,7 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
             >
               Xác nhận
             </Button>
-            <Button size="sm" variant="secondary" disabled={!it.hsSuggested} onClick={() => setEditing(it)}>
+            <Button size="sm" variant="secondary" disabled={!!it.hs && hsBusy(it.hs.status)} onClick={() => setEditing(it)}>
               Chọn mã khác
             </Button>
           </div>
@@ -381,6 +407,8 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
     <>
       <DataTable aria-label="Xác nhận mã HS từng dòng hàng" columns={columns} data={items} getRowId={(r) => r.id} />
       <ChangeHsDialog item={editing} onClose={() => setEditing(null)} dossierId={dossierId} />
+      <HsAnswerDialog item={answering} onClose={() => setAnswering(null)} dossierId={dossierId} />
+      <ReclassifyDialog item={reclassifying} onClose={() => setReclassifying(null)} dossierId={dossierId} />
     </>
   );
 }
@@ -405,6 +433,8 @@ export function AgentStep({ dossier, goTo }: StepProps) {
   const itemsQ = useQuery({
     queryKey: [...declarationKeys.items(dossier.id), lookupDone],
     queryFn: () => listLineItems(dossier.id),
+    // HSCodePro chạy nền (20–90 giây/dòng): còn dòng đang chờ / đang phân loại / đang gửi trả lời → tự làm mới.
+    refetchInterval: (q) => (q.state.data?.some((i) => i.hs && hsBusy(i.hs.status)) ? 3000 : false),
   });
 
   const start = useMutation({

@@ -207,10 +207,10 @@ export function seedAdmin(): { admin: AdminDb } {
         { id: "tpl_bl", code: "SK-BL-GEN", name: "Bill of Lading – tổng quát", kind: "DOCUMENT", docKind: "BILL_OF_LADING", version: 5, fieldCount: 26, published: true, orgCount: 12, updatedAt: isoTime(-24 * 14) },
         { id: "tpl_awb", code: "SK-AWB-GEN", name: "Air Waybill – tổng quát", kind: "DOCUMENT", docKind: "AIR_WAYBILL", version: 3, fieldCount: 22, published: true, orgCount: 12, updatedAt: isoTime(-24 * 33) },
         { id: "tpl_co", code: "SK-CO-GEN", name: "C/O – form E, D, AK, VK", kind: "DOCUMENT", docKind: "CERT_OF_ORIGIN", version: 2, fieldCount: 15, published: true, orgCount: 12, updatedAt: isoTime(-24 * 48) },
-        { id: "tpl_map_ida", code: "SK-MAP-IDA", name: "Ánh xạ tờ khai nhập (IDA)", kind: "MAPPING", version: 9, fieldCount: 112, published: true, orgCount: 12, updatedAt: isoTime(-24 * 3) },
-        { id: "tpl_map_eda", code: "SK-MAP-EDA", name: "Ánh xạ tờ khai xuất (EDA)", kind: "MAPPING", version: 6, fieldCount: 87, published: true, orgCount: 12, updatedAt: isoTime(-24 * 11) },
         { id: "tpl_an", code: "SK-AN-GEN", name: "Arrival Notice – tổng quát", kind: "DOCUMENT", docKind: "ARRIVAL_NOTICE", version: 1, fieldCount: 12, published: false, orgCount: 0, updatedAt: isoTime(-24 * 1) },
       ],
+      exchangeRates: seedExchangeRates(),
+      rateFetches: [{ id: "rf_seed", ranAt: rateRunAt(-7), effectiveFrom: rateWeek(0), status: "OK", count: 20, boardAt: rateRunAt(-7, -14), error: null }],
       audit: [
         { id: "aud_12", at: isoTime(-3), staffId: "stf_trang", staffName: "Mai Thị Thu Trang", action: "USER_PASSWORD_RESET_SENT", targetType: "USER", targetId: "usr_minhkhang_2", targetLabel: "Vũ Thị Hồng Nhung", orgId: "org_minhkhang", orgName: "CÔNG TY CỔ PHẦN XUẤT NHẬP KHẨU MINH KHANG", reason: "Khách gọi hotline báo quên mật khẩu, không nhận được email tự gửi" },
         { id: "aud_11", at: isoTime(-20), staffId: "stf_bao", staffName, action: "ORG_QUOTA_ADJUSTED", targetType: "ORG", targetId: "org_vietuc", targetLabel: "CÔNG TY CỔ PHẦN THỰC PHẨM VIỆT ÚC", orgId: "org_vietuc", orgName: "CÔNG TY CỔ PHẦN THỰC PHẨM VIỆT ÚC", reason: "Cao điểm hàng Tết, khách đề nghị nới tạm trong lúc chờ nâng gói", detail: "+20 hồ sơ tháng này" },
@@ -232,4 +232,25 @@ export function seedAdmin(): { admin: AdminDb } {
       announcementNotifications: {},
     },
   };
+}
+
+/** Thứ Hai của tuần hiện tại + n tuần (YYYY-MM-DD, giờ VN xấp xỉ theo UTC – đủ cho dữ liệu mẫu). */
+function rateWeek(n: number): string {
+  const d = new Date();
+  const dow = d.getUTCDay();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((dow + 6) % 7) + 7 * n)).toISOString().slice(0, 10);
+}
+/** 16:30 UTC thứ Năm của tuần trước tuần (rateWeek(0)) + `days` ngày, lệch `hours` giờ. */
+function rateRunAt(days: number, hours = 0): string {
+  const mon = Date.parse(`${rateWeek(0)}T16:30:00Z`);
+  return new Date(mon - 4 * 86_400_000 + (days + 7) * 86_400_000 + hours * 3_600_000).toISOString();
+}
+function seedExchangeRates() {
+  const base: Record<string, number> = { USD: 25710, EUR: 28535.52, CNY: 3809.81, JPY: 159.55, KRW: 18.47, AUD: 17734.65, SGD: 19620.4, HKD: 3239.51, GBP: 33725.65, THB: 744.12 };
+  const out: { currency: string; effectiveFrom: string; rate: string; source: "VCB" | "MANUAL" | "SEED"; snapshotAt: string | null; updatedByName: string | null; note: string | null }[] = [];
+  for (let w = 0; w >= -3; w--) {
+    for (const [c, v] of Object.entries(base)) out.push({ currency: c, effectiveFrom: rateWeek(w), rate: (v * (1 + w * 0.002)).toFixed(2), source: "VCB", snapshotAt: rateRunAt(7 * w - 7, -14), updatedByName: null, note: null });
+  }
+  out.push({ currency: "TWD", effectiveFrom: rateWeek(-1), rate: "802.30", source: "MANUAL", snapshotAt: null, updatedByName: "Hoàng Gia Bảo", note: "Tỷ giá chéo NHNN – Vietcombank không công bố TWD" });
+  return out;
 }

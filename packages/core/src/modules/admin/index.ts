@@ -10,3 +10,4 @@ export { listPlatformIntegrations, testPlatformIntegration, updateIntegrationKey
 export { listAnnouncements, sendAnnouncement, withdrawAnnouncement } from "./application/announcements.js";
 export { getOverview } from "./application/overview.js";
 export { activeQuotaBonus, vnMonth } from "./domain/period.js";
+export { captureWeeklyRates, listExchangeRates, recordRateFetchFailure, upsertExchangeRate, nextRateRunAt, RATE_JOB_CRON, type RateDeps, type VcbRateSource } from "./application/exchange-rates.js";

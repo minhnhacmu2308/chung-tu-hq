@@ -1,4 +1,5 @@
 // Dữ liệu tờ khai cho module integration (truyền Hải quan): snapshot để dựng payload FPT, đánh dấu đã truyền, danh sách.
+import { rebuildDraft } from "./_rebuild.js";
 import type { DeclarationStatus } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
@@ -12,7 +13,7 @@ import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
 export type DeclarationSnapshot = {
   declarationId: string; version: number; status: DeclarationStatus; kind: "IDA" | "EDA"; direction: "NK" | "XK"; currency: string;
   fields: Record<string, { value: string }>; items: Pick<LineItemRow, "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
-  adjustments: { label: string; amount: string; currency: string }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string;
+  adjustments: { label: string; amount: string; currency: string }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
 };
 
 export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: string, dossierId: string): Promise<DeclarationSnapshot | null> {
@@ -32,6 +33,7 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
     containers: shipment?.transport.containers.map((c) => c.no) ?? [],
     unconfirmedHs: unconfirmedCount(items),
     estimatedTaxVnd: String(BigInt(taxes.importDutyVnd) + BigInt(taxes.vatVnd)),
+    exchangeRateDate: decl.exchangeRateDate,
   };
 }
 
@@ -57,6 +59,9 @@ export async function markDeclarationDraft(deps: DeclarationDeps, ctx: { orgId: 
     return ok(undefined);
   });
   if (!r0.ok) return r0;
+  // Dựng lại nháp ngay: tỷ giá tính thuế theo tuần đăng ký – mở lại sau khi sang tuần mới phải lấy tỷ giá tuần này (giữ sửa tay).
+  const rebuilt = await rebuildDraft(deps, ctx, dossierId);
+  if (!rebuilt.ok) return rebuilt;
   await deps.dossiers.update(ctx.orgId, dossierId, { status: "NEEDS_REVIEW", step: "review" });
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "dossier.updated" });
   return ok(undefined);

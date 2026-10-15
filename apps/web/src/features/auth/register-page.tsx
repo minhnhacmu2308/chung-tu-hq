@@ -86,7 +86,7 @@ export function RegisterPage() {
             <Field label="Email công việc" required hint="Dùng để đăng nhập và nhận thông báo" {...err(accountErrors.email)}>
               <Input type="email" autoComplete="email" value={account.email} onChange={(e) => setField("email", e.target.value)} placeholder="ten@congty.vn" />
             </Field>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2">
               <Field label="Mật khẩu" required {...err(accountErrors.password)}>
                 <Input type="password" autoComplete="new-password" value={account.password} onChange={(e) => setField("password", e.target.value)} />
               </Field>

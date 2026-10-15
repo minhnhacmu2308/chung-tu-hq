@@ -8,10 +8,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Info } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { DEFAULT_PARTY_CLASS, PartyClassSchema, TransportModeSchema } from "@kb/contracts";
 import { z } from "zod";
 import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
+import { getDeclarationProfile, settingsKeys } from "@/api/settings";
+import { prefillFromProfile } from "./profile-prefill";
 import type { Direction, Dossier } from "@/mocks/types";
 import { CUSTOMS_OFFICES, INCOTERMS, SKILL_SETS, suggestedDocuments, TYPE_CODES } from "./create-dossier-options";
 import { PARTY_CLASS_OPTIONS, TRANSPORT_LABELS, TRANSPORT_OPTIONS } from "./dossier-display";
@@ -66,6 +68,14 @@ export function CreateDossierPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState>(INITIAL);
   const [errors, setErrors] = useState<Errors>({});
+  // Ô người dùng đã tự chọn – không bị Mặc định khai báo ghi đè.
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const profile = useQuery({ queryKey: settingsKeys.declarationProfile(form.direction), queryFn: () => getDeclarationProfile(form.direction) });
+  useEffect(() => {
+    if (profile.data) setForm((f) => prefillFromProfile(f, profile.data.values, touched));
+    // touched cố ý không nằm trong deps: chỉ điền khi tải xong mặc định của chiều đang chọn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.data]);
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
 
   const recentPartners = useMemo(() => {
@@ -76,10 +86,12 @@ export function CreateDossierPage() {
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
+    if (key === "typeCode" || key === "customsOffice") setTouched((t) => new Set(t).add(key));
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
   };
 
   const changeDirection = (d: Direction) => {
+    setTouched(new Set());
     setForm((f) => ({ ...f, direction: d, typeCode: d === "NK" ? "A11" : "B11", incoterm: d === "NK" ? "CIF" : "FOB" }));
   };
 
@@ -135,7 +147,7 @@ export function CreateDossierPage() {
 
       <form onSubmit={submit} noValidate>
         <Grid cols={{ base: 1, lg: 3 }} gap="lg">
-          <Card className="lg:col-span-2">
+          <Card className="cq-lg:col-span-2">
             <CardHeader className="pb-5">
               <CardTitle>Thông tin lô hàng</CardTitle>
               <CardDescription>Các trường có dấu * là bắt buộc.</CardDescription>
@@ -155,7 +167,7 @@ export function CreateDossierPage() {
                     { value: "XK", label: "Xuất khẩu" },
                   ]}
                 />
-                <Field label="Phương thức vận chuyển" required hint="Mã VNACCS – chỉ tiêu phương thức vận chuyển trên tờ khai" className="md:max-w-sm">
+                <Field label="Phương thức vận chuyển" required hint="Mã VNACCS – chỉ tiêu phương thức vận chuyển trên tờ khai" className="cq-md:max-w-sm">
                   <Select
                     options={TRANSPORT_OPTIONS}
                     value={form.transportMode}
@@ -183,7 +195,7 @@ export function CreateDossierPage() {
                     />
                   </Field>
                 </Stack>
-                <Field label="Hạn khai" required className="md:max-w-xs" {...errorProp(errors.dueDate)}>
+                <Field label="Hạn khai" required className="cq-md:max-w-xs" {...errorProp(errors.dueDate)}>
                   <DatePicker value={form.dueDate} onChange={(v) => set("dueDate", v)} min={isoDay(0)} />
                 </Field>
               </FormSection>
@@ -209,7 +221,7 @@ export function CreateDossierPage() {
                   )}
                 </Stack>
                 {form.direction === "NK" && (
-                  <Field label="Phân loại cá nhân/tổ chức" required hint="Chỉ tiêu 1.7 tờ khai nhập khẩu – người gửi (nước ngoài) và người nhận" className="md:max-w-sm">
+                  <Field label="Phân loại cá nhân/tổ chức" required hint="Chỉ tiêu 1.7 tờ khai nhập khẩu – người gửi (nước ngoài) và người nhận" className="cq-md:max-w-sm">
                     <Select
                       options={PARTY_CLASS_OPTIONS}
                       value={form.partyClass}
@@ -217,13 +229,13 @@ export function CreateDossierPage() {
                     />
                   </Field>
                 )}
-                <Field label="Điều kiện giao hàng" required hint="Incoterms 2020" className="md:max-w-xs">
+                <Field label="Điều kiện giao hàng" required hint="Incoterms 2020" className="cq-md:max-w-xs">
                   <Select options={INCOTERMS} value={form.incoterm} onChange={(e) => set("incoterm", e.target.value)} />
                 </Field>
               </FormSection>
 
               <FormSection title="AI & ghi chú" description="Cách AI đọc bộ chứng từ này và ghi chú riêng của nhóm (không gửi Hải quan).">
-                <Field label="Bộ Skill AI" className="md:max-w-xs">
+                <Field label="Bộ Skill AI" className="cq-md:max-w-xs">
                   <Select options={SKILL_SETS} value={form.skillSetId} onChange={(e) => set("skillSetId", e.target.value)} />
                 </Field>
                 <Field label="Ghi chú nội bộ" {...errorProp(errors.note)}>

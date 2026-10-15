@@ -50,13 +50,12 @@ export const fakePdf: SampleFileInspector = { inspect: async (bytes, mime) => ({
 const f = (key: string, label: string, type: SkillField["type"], required: boolean, aliases: string[] = [], extract = true): SkillField => ({ key, label, type, required, aliases, extract, display: extract });
 
 export const SYSTEM_ORG = "org_system";
-/** Ba skill mẫu đủ cho test: DOCUMENT, SUPPLIER (HANSOL), MAPPING. */
+/** Hai skill mẫu đủ cho test: DOCUMENT, SUPPLIER (HANSOL). */
 export function templateRows(now: Date): { skills: SkillRow[]; versions: SkillVersionRow[] } {
   const base = { orgId: SYSTEM_ORG, language: "EN", enabled: true, isTemplate: true, templateId: null, currentVersion: 1, labeledSamples: 0, accuracy: null, createdAt: now, updatedAt: now };
   const skills: SkillRow[] = [
     { ...base, id: "sk_tpl_inv", code: "SK-INV-GEN", name: "Commercial Invoice – chung", kind: "DOCUMENT", docKind: "INVOICE", supplier: null },
     { ...base, id: "sk_tpl_hansol", code: "SK-INV-HANSOL", name: "Invoice – HANSOL", kind: "SUPPLIER", docKind: "INVOICE", supplier: "HANSOL PRECISION CO., LTD." },
-    { ...base, id: "sk_tpl_map", code: "SK-MAP-IDA", name: "Ánh xạ IDA", kind: "MAPPING", docKind: null, supplier: null },
   ];
   const versions: SkillVersionRow[] = [
     { id: "skv_tpl_inv", orgId: SYSTEM_ORG, skillId: "sk_tpl_inv", version: 1, promptNotes: null, createdBy: null, createdAt: now, fields: [f("invoice_no", "Số hóa đơn", "code", true, ["Invoice No."]), f("total_amount", "Tổng trị giá", "decimal", true, ["Total"]), f("po_no", "Số PO", "code", false, ["PO"])] },

@@ -4,9 +4,17 @@ import { ulidIdGen } from "../../../shared/ids.js";
 import { randomBytes } from "node:crypto";
 import QRCode from "qrcode";
 import type { AdminDeps, AttemptLimiter, IdentityGateway, IntegrationProbe, JobMonitor, KeyVault, QrRenderer, SystemProbe } from "../application/ports.js";
+import type { RateDeps } from "../application/exchange-rates.js";
 import { DrizzleAdminUow } from "./drizzle-uow.js";
+import { HttpVcbRateSource } from "./vcb-rate-source.js";
 
-export { DrizzleAdminUow };
+export { DrizzleAdminUow, HttpVcbRateSource };
+
+/** Cho worker: job tỷ giá tính thuế ghi bảng nền tảng qua kết nối kb_platform (pool 1). */
+export function createRateDeps(platformUrl: string, opts: { vcb?: RateDeps["vcb"]; clock?: Clock } = {}): RateDeps & { db: Db } {
+  const db = createDb(platformUrl, { max: 1 });
+  return { db, uow: new DrizzleAdminUow(db), vcb: opts.vcb ?? new HttpVcbRateSource(), clock: opts.clock ?? systemClock, idGen: ulidIdGen };
+}
 
 /** Mã QR SVG (mức sửa lỗi M, lề 1) cho URI otpauth của bước thiết lập 2FA. */
 export const svgQr: QrRenderer = { svg: (text) => QRCode.toString(text, { type: "svg", errorCorrectionLevel: "M", margin: 1 }) };

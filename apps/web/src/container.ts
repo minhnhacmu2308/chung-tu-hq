@@ -19,7 +19,7 @@ import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/i
 import type { CustomsDeps, IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
-import { createCustomsInfrastructure, createIntegrationInfrastructure } from "@kb/core/modules/integration/infrastructure";
+import { createCustomsInfrastructure, createIntegrationInfrastructure, createVnaccsCredentialsReader, envVnaccsCredentials } from "@kb/core/modules/integration/infrastructure";
 import { asOrgId, asUserId, dec, QUEUE_NAMES, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
 import { Queue } from "bullmq";
 import { sql } from "drizzle-orm";
@@ -267,7 +267,7 @@ function build(): Container {
     },
     identity,
     secrets: identity.secrets,
-    integration: createIntegrationInfrastructure({ db, env, clock: systemClock, defaultCertificate }),
+    integration: createIntegrationInfrastructure({ db, env, clock: systemClock, defaultCertificate, vnaccs: createVnaccsCredentialsReader(identity, envVnaccsCredentials(env)) }),
     billing,
     dossier,
     validation,

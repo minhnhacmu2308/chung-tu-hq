@@ -1,5 +1,13 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { login } from "./helpers";
+
+/** Gỡ các trường thử nghiệm e2e_* còn sót trên skill (mỗi skill tối đa 20 trường bổ sung – chạy e2e nhiều lần sẽ chạm giới hạn). */
+async function removeE2eFields(page: Page, skillId: string) {
+  const skill = (await (await page.request.get(`/api/skills/${skillId}`)).json()) as { fields: { key: string }[] };
+  for (const f of skill.fields.filter((x) => x.key.startsWith("e2e_"))) {
+    expect((await page.request.delete(`/api/skills/${skillId}/fields/${encodeURIComponent(f.key)}`)).ok()).toBeTruthy();
+  }
+}
 
 test("cấu hình skill: danh sách → chi tiết → thêm trường tạo phiên bản mới → bật/tắt skill", async ({ page }) => {
   await login(page);
@@ -7,6 +15,9 @@ test("cấu hình skill: danh sách → chi tiết → thêm trường tạo phi
   await expect(page.getByRole("heading", { name: "Cấu hình Skill AI" })).toBeVisible();
   await page.getByRole("link", { name: /SK-INV-GEN/ }).first().click();
   await expect(page.getByRole("heading", { name: "Commercial Invoice – chung" })).toBeVisible();
+  const skillId = new URL(page.url()).pathname.split("/").at(-1)!;
+  await removeE2eFields(page, skillId);
+  await page.reload();
   const versionBefore = await page.getByText(/^v\d+$/).first().textContent();
 
   await page.getByRole("button", { name: "Thêm trường" }).click();
@@ -25,4 +36,5 @@ test("cấu hình skill: danh sách → chi tiết → thêm trường tạo phi
   await expect(toggle).toBeChecked({ checked: !was });
   await toggle.click();
   await expect(toggle).toBeChecked({ checked: was });
+  await removeE2eFields(page, skillId);
 });

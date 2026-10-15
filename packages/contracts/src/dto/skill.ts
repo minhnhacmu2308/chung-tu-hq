@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { DocKindSchema, IsoDateTimeSchema } from "../common.js";
 
-export const SkillKindSchema = z.enum(["DOCUMENT", "SUPPLIER", "MAPPING"]);
+/** Loại skill đọc chứng từ. Ánh xạ sang tờ khai không còn là skill: cấu hình ở Cài đặt → Khai báo (spec 2026-10-15 C7). */
+export const SkillKindSchema = z.enum(["DOCUMENT", "SUPPLIER"]);
 export type SkillKind = z.infer<typeof SkillKindSchema>;
 
 export const SkillFieldSchema = z.object({

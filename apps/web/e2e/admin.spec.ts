@@ -10,6 +10,7 @@ const SCREENS: [string, string][] = [
   ["/admin/plans", "Gói dịch vụ"],
   ["/admin/usage", "Sử dụng & chi phí"],
   ["/admin/integrations", "Tích hợp dùng chung"],
+  ["/admin/exchange-rates", "Tỷ giá tính thuế"],
   ["/admin/system", "Sức khỏe hệ thống"],
   ["/admin/skill-templates", "Skill mẫu"],
   ["/admin/staff", "Quản trị viên"],

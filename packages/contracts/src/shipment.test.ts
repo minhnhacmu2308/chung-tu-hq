@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyShipment, ShipmentSchema } from "./shipment.js";
+import { emptyShipment, ShipmentSchema, withShipmentDefaults, type Shipment } from "./shipment.js";
 
 describe("ShipmentSchema", () => {
   it("emptyShipment hợp lệ và mọi giá trị null, không có nguồn", () => {
@@ -14,5 +14,19 @@ describe("ShipmentSchema", () => {
     expect(ShipmentSchema.parse(s).invoice.totalAmount.value).toBe("20850.00");
     s.invoice.totalAmount = { value: "20,850.00", status: "SINGLE_SOURCE", sources: [] };
     expect(ShipmentSchema.safeParse(s).success).toBe(false);
+  });
+});
+
+describe("withShipmentDefaults", () => {
+  it("shipment lưu trước v2 thiếu trường mới → bổ sung giá trị rỗng, giữ nguyên dữ liệu cũ", () => {
+    const old = emptyShipment() as unknown as Record<string, Record<string, unknown>>;
+    delete old["transport"]!["warehouseCode"];
+    delete old["custom"];
+    old["transport"]!["billNo"] = { value: "B1", sources: [], status: "SINGLE_SOURCE" };
+    const s = withShipmentDefaults(old as unknown as Shipment);
+    expect(s.transport.warehouseCode).toEqual({ value: null, sources: [], status: "SINGLE_SOURCE" });
+    expect(s.transport.billNo.value).toBe("B1");
+    expect(s.custom).toEqual({});
+    expect(s.origin.criteria).toEqual([]);
   });
 });

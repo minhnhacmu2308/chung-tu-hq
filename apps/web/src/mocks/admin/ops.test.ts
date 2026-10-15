@@ -314,3 +314,22 @@ describe("tổng quan vận hành", () => {
     expect(ops.getOverview(db).attention.some((a) => a.id.endsWith("org_baotin"))).toBe(false);
   });
 });
+
+describe("tỷ giá tính thuế", () => {
+  it("xem: nhóm theo tuần mới nhất trước, có lần lấy gần nhất; ai cũng xem được", () => {
+    as("viet.dinh");
+    const v = ops.listExchangeRates(db);
+    expect(v.weeks.length).toBeGreaterThan(0);
+    expect(v.weeks[0]!.rates.find((r) => r.currency === "USD")?.source).toBe("VCB");
+    expect(v.lastFetch?.status).toBe("OK");
+  });
+  it("sửa tay: chỉ quyền PLATFORM; ghi MANUAL + nhật ký có lý do; thứ Hai bắt buộc", () => {
+    as("trang.mai");
+    const input = { currency: "TWD", effectiveFrom: ops.listExchangeRates(db).weeks[0]!.effectiveFrom, rate: "805.12", reason: "Tỷ giá chéo NHNN" };
+    expect(codeOf(() => ops.upsertExchangeRate(db, input))).toBe("FORBIDDEN");
+    as("bao.hoang");
+    expect(ops.upsertExchangeRate(db, input)).toMatchObject({ currency: "TWD", rate: "805.12", source: "MANUAL", updatedByName: expect.any(String) });
+    expect(db.admin.audit[0]).toMatchObject({ action: "EXCHANGE_RATE_UPDATED", reason: "Tỷ giá chéo NHNN" });
+    expect(codeOf(() => ops.upsertExchangeRate(db, { ...input, effectiveFrom: "2026-10-15" }))).toBe("VALIDATION");
+  });
+});

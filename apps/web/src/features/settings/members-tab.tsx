@@ -6,12 +6,13 @@ import {
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 // kb-allow-raw: menu của thành viên có nhóm radio chọn vai trò – RowActions chỉ nhận thao tác bấm-là-chạy
-import { Check, MoreHorizontal, UserPlus } from "lucide-react";
+import { MoreHorizontal, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { getSession, sessionKeys } from "@/api/session";
 import { changeMemberRole, inviteMember, listMembers, setMemberDisabled, settingsKeys } from "@/api/settings";
 import { formatRelative } from "@/lib/format";
 import { ROLE_LABELS, type Member, type Role } from "@/mocks/types";
+import { PermissionMatrix } from "@/components/common/permission-matrix";
 
 const ASSIGNABLE: Role[] = ["ADMIN", "DECLARANT", "APPROVER", "VIEWER"];
 const STATUS: Record<Member["status"], { tone: "success" | "warning" | "neutral"; label: string }> = {
@@ -30,6 +31,7 @@ const PERMISSIONS: { label: string; roles: Role[] }[] = [
   { label: "Gói dịch vụ, thanh toán, chuyển quyền sở hữu", roles: ["OWNER"] },
 ];
 const ROLE_ORDER: Role[] = ["OWNER", "ADMIN", "DECLARANT", "APPROVER", "VIEWER"];
+const memberAllowed = (permission: string, role: string) => !!PERMISSIONS.find((p) => p.label === permission)?.roles.includes(role as Role);
 
 const col = createDataTableColumnHelper<Member>();
 
@@ -194,35 +196,12 @@ export function MembersTab() {
           <CardDescription>Người duyệt có thể khác người tạo tờ khai (nguyên tắc 4 mắt) – bật trong cấu hình quy trình.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-160 text-sm">
-              <caption className="sr-only">Quyền theo vai trò</caption>
-              <thead>
-                <tr className="border-b border-border text-left text-fg-muted">
-                  <th scope="col" className="py-2 pr-4 font-medium">Quyền</th>
-                  {ROLE_ORDER.map((r) => (
-                    <th key={r} scope="col" className="px-2 py-2 text-center font-medium">{ROLE_LABELS[r]}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {PERMISSIONS.map((p) => (
-                  <tr key={p.label} className="border-b border-border last:border-0">
-                    <th scope="row" className="py-2 pr-4 text-left font-normal text-fg">{p.label}</th>
-                    {ROLE_ORDER.map((r) => (
-                      <td key={r} className="px-2 py-2 text-center">
-                        {p.roles.includes(r) ? (
-                          <Check className="mx-auto h-4 w-4 text-success" aria-label="Có" />
-                        ) : (
-                          <span className="text-fg-subtle" aria-label="Không">–</span>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PermissionMatrix
+            ariaLabel="Quyền theo vai trò"
+            permissions={PERMISSIONS.map((p) => ({ id: p.label, label: p.label }))}
+            roles={ROLE_ORDER.map((r) => ({ id: r, label: ROLE_LABELS[r] }))}
+            allowed={memberAllowed}
+          />
         </CardContent>
       </Card>
       <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />

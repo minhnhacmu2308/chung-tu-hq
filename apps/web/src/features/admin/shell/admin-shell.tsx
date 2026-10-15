@@ -26,6 +26,7 @@ const LEAVES = [
   { id: "plans", href: "/admin/plans" },
   { id: "usage", href: "/admin/usage" },
   { id: "integrations", href: "/admin/integrations" },
+  { id: "exchange-rates", href: "/admin/exchange-rates" },
   { id: "system", href: "/admin/system" },
   { id: "skill-templates", href: "/admin/skill-templates" },
   { id: "staff", href: "/admin/staff" },
@@ -64,6 +65,7 @@ function useNav(enabled: boolean): { items: NavItem[]; activeId: string | undefi
       icon: <Activity />,
       children: [
         { id: "integrations", label: "Tích hợp dùng chung", href: "/admin/integrations" },
+        { id: "exchange-rates", label: "Tỷ giá tính thuế", href: "/admin/exchange-rates" },
         { id: "system", label: "Sức khỏe hệ thống", href: "/admin/system", ...(failed > 0 ? { badge: <Badge tone="warning">{failed}</Badge> } : {}) },
         { id: "skill-templates", label: "Skill mẫu", href: "/admin/skill-templates" },
       ],
@@ -181,7 +183,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+      <main className="@container min-w-0 flex-1 px-4 py-6 md:px-8">
         {!menuOnTop && (
           <div className="mb-2 md:hidden">
             <SidebarMobileTrigger onClick={() => setMobileNav(true)} expanded={mobileNav} />

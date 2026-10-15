@@ -149,42 +149,6 @@ const SKILLS: Skill[] = [
       ["items", "Danh sách hàng hóa", "items", true, "Descrizione|Articolo|Description", "Danh sách hàng"],
     ]),
   },
-  {
-    id: "sk_map_ida", code: "SK-MAP-IDA", name: "Ánh xạ tờ khai nhập khẩu (IDA)", kind: "MAPPING",
-    language: "Quy tắc (không dùng AI)", version: 9, labeledSamples: 0, updatedAt: t(4), enabled: true,
-    fields: fields([
-      ["NNK", "Người nhập khẩu", "party", true, "", "MST doanh nghiệp (Tài khoản) – không lấy tên tiếng Anh trên invoice"],
-      ["NXK", "Người xuất khẩu", "party", true, "", "Invoice › Người bán"],
-      ["SHDV", "Số vận đơn", "code", true, "", "B/L › Số vận đơn (lô hàng không: AWB › Số HAWB, không có thì MAWB)"],
-      ["SLKH", "Số lượng kiện", "decimal", true, "", "Packing List › Số kiện; thiếu PL → B/L › Số kiện"],
-      ["TTLH", "Tổng trọng lượng hàng (Gross)", "decimal", true, "", "Packing List › GW; đối chiếu B/L › GW"],
-      ["DDDH", "Địa điểm dỡ hàng", "code", true, "", "B/L › POD; nếu là cảng chuyển tải nước ngoài → điểm đến cuối tại VN"],
-      ["DDXH", "Địa điểm xếp hàng", "code", true, "", "B/L › POL"],
-      ["PTVC", "Phương tiện vận chuyển", "string", true, "", "B/L › Tên tàu / chuyến"],
-      ["DKGHD", "Điều kiện giá hóa đơn", "code", true, "", "Invoice › Incoterm"],
-      ["TGHD", "Tổng trị giá hóa đơn", "decimal", true, "", "Invoice › Tổng trị giá"],
-      ["PVC", "Phí vận chuyển", "decimal", false, "", "Bắt buộc khi EXW/FCA/FAS/FOB: Hóa đơn cước › Cước quốc tế, không có → Arrival Notice › O/F"],
-      ["TGTT", "Tỷ giá tính thuế", "decimal", true, "", "Hệ thống – tỷ giá HQ theo ngày đăng ký tờ khai"],
-      ["MBTUD", "Mã biểu thuế ưu đãi", "code", false, "", "C/O › Mẫu (AK → B07…); REX hợp lệ → EVFTA"],
-      ["MLH", "Mã loại hình", "code", true, "", "Hồ sơ › Mã loại hình"],
-      ["CQHQ", "Cơ quan Hải quan", "code", true, "", "Hồ sơ › Cơ quan Hải quan"],
-    ]),
-  },
-  {
-    id: "sk_map_eda", code: "SK-MAP-EDA", name: "Ánh xạ tờ khai xuất khẩu (EDA)", kind: "MAPPING",
-    language: "Quy tắc (không dùng AI)", version: 4, labeledSamples: 0, updatedAt: t(20), enabled: true,
-    fields: fields([
-      ["NXK", "Người xuất khẩu", "party", true, "", "MST doanh nghiệp (Tài khoản)"],
-      ["NNK", "Người nhập khẩu", "party", true, "", "Invoice › Người mua"],
-      ["SHDV", "Số vận đơn / booking", "code", false, "", "B/L › Số vận đơn (có thể bổ sung sau)"],
-      ["SLKH", "Số lượng kiện", "decimal", true, "", "Packing List › Số kiện"],
-      ["TTLH", "Tổng trọng lượng hàng (Gross)", "decimal", true, "", "Packing List › GW"],
-      ["DDXH", "Địa điểm xếp hàng", "code", true, "", "Hồ sơ › Cảng xuất (mặc định VNHPH)"],
-      ["DKGHD", "Điều kiện giá hóa đơn", "code", true, "", "Invoice › Incoterm"],
-      ["TGHD", "Tổng trị giá hóa đơn", "decimal", true, "", "Invoice › Tổng trị giá"],
-      ["MLH", "Mã loại hình", "code", true, "", "Hồ sơ › Mã loại hình (B11 mặc định)"],
-    ]),
-  },
 ];
 
 export function seedSkills(): { skills: Skill[] } {

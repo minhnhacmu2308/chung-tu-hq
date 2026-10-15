@@ -5,6 +5,7 @@ import {
 } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import { resolveSkillFieldKey } from "@kb/contracts";
 import { useMemo, useState } from "react";
 import { removeSkillField, skillKeys, updateSkillField, type SkillFieldPatch } from "@/api/skills";
 import type { Skill, SkillField } from "@/mocks/types";
@@ -22,22 +23,10 @@ function useFieldMutation(skill: Skill) {
   });
 }
 
-const SOURCES = ["Invoice", "B/L", "AWB", "Packing List", "C/O", "Hóa đơn cước", "Arrival Notice", "Hồ sơ", "Hệ thống", "Tài khoản"];
-
-/** Nguồn chính của quy tắc = nguồn được nhắc đầu tiên: "Invoice › Người bán" → "Invoice". */
-function ruleSource(rule: string | undefined): string {
-  if (!rule) return "—";
-  let best = { name: "Hồ sơ", at: Infinity };
-  for (const name of SOURCES) {
-    const at = rule.indexOf(name);
-    if (at >= 0 && at < best.at) best = { name, at };
-  }
-  return best.name;
-}
-
 export function SkillFieldsTable({ skill }: { skill: Skill }) {
   const qc = useQueryClient();
-  const mapping = skill.kind === "MAPPING";
+  // Trường thuộc danh mục chuẩn của loại chứng từ không xóa được; trường còn lại là trường bổ sung riêng (AI đọc vào `custom`).
+  const isStandard = (f: SkillField) => !!skill.docKind && resolveSkillFieldKey(skill.docKind, f.key).standard;
   const update = useFieldMutation(skill);
   const [editing, setEditing] = useState<SkillField | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -66,10 +55,10 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
             { id: "edit", label: "Sửa", icon: <Pencil />, onSelect: () => openDialog(c.row.original) },
             {
               id: "remove",
-              label: c.row.original.required ? "Trường bắt buộc – không xóa được" : "Xóa",
+              label: isStandard(c.row.original) ? "Trường chuẩn – tắt Trích xuất thay vì xóa" : "Xóa",
               icon: <Trash2 />,
               tone: "danger",
-              disabled: c.row.original.required,
+              disabled: isStandard(c.row.original),
               onSelect: () => remove.mutate(c.row.original.key),
             },
           ]}
@@ -77,35 +66,25 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
       ),
     });
     const code = col.accessor("key", {
-      header: mapping ? "Mã chỉ tiêu" : "Mã trường",
+      header: "Mã trường",
       meta: { hideable: false },
       cell: (c) => <span className="font-mono text-xs">{c.getValue()}</span>,
     });
-    const label = col.accessor("label", { header: mapping ? "Chỉ tiêu tờ khai" : "Tên hiển thị", meta: { wrap: true } });
+    const label = col.accessor("label", { header: "Tên hiển thị", meta: { wrap: true } });
+    const group = col.accessor((f) => (isStandard(f) ? "Chuẩn" : "Bổ sung"), {
+      id: "group",
+      header: "Nhóm",
+      cell: (c) => (c.getValue() === "Chuẩn" ? <Badge tone="neutral">Trường chuẩn</Badge> : <Badge tone="primary">Trường bổ sung</Badge>),
+    });
     const required = col.accessor("required", {
       header: "Bắt buộc",
       cell: (c) => (c.getValue() ? <Badge tone="warning">Bắt buộc</Badge> : <span className="text-fg-subtle">Không</span>),
     });
 
-    if (mapping) {
-      return col.columns([
-        code,
-        label,
-        col.accessor((f) => ruleSource(f.declarationField), { id: "source", header: "Nguồn", cell: (c) => <Badge tone="info">{c.getValue()}</Badge> }),
-        col.accessor((f) => f.declarationField ?? "", {
-          id: "rule",
-          header: "Quy tắc lấy giá trị",
-          meta: { wrap: true },
-          cell: (c) => <span className="text-fg-muted">{c.getValue() || "—"}</span>,
-        }),
-        required,
-        actions,
-      ]);
-    }
-
     return col.columns([
       code,
       label,
+      group,
       col.accessor((f) => FIELD_TYPE_LABELS[f.type], { id: "type", header: "Kiểu" }),
       required,
       col.accessor((f) => f.aliases.join(" "), {
@@ -157,24 +136,18 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
       actions,
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapping, update.isPending]);
+  }, [skill.docKind, update.isPending]);
 
   const extracted = skill.fields.filter((f) => f.extract).length;
   const shown = skill.fields.filter((f) => f.display).length;
 
   return (
     <Stack gap="md">
-      {mapping ? (
-        <Alert tone="info" title="Ánh xạ là quy tắc cố định, không dùng AI">
-          Mỗi dòng quy định một chỉ tiêu tờ khai lấy giá trị từ đâu. Kết quả giống nhau mọi lần chạy và được kiểm bằng test – đổi quy tắc chỉ áp dụng cho hồ sơ tạo sau khi lưu.
-        </Alert>
-      ) : (
-        <Alert tone="info" title="Doanh nghiệp tự chọn trường cần lấy">
-          Tắt <b>Trích xuất</b>: AI không đọc trường đó (nhanh và rẻ hơn). Tắt <b>Hiển thị</b>: vẫn đọc để đối chiếu chéo nhưng ẩn khỏi màn kiểm tra. Trường bắt buộc của tờ khai luôn được trích xuất.
-        </Alert>
-      )}
+      <Alert tone="info" title="Trường chuẩn + trường bổ sung riêng">
+        <b>Trường chuẩn</b> giống nhau cho mọi khách hàng (bảng đọc chứng từ, dựng tờ khai) – chỉ sửa nhãn thường gặp và bật/tắt. <b>Trường bổ sung</b> do doanh nghiệp thêm (tối đa 20), AI đọc thật và hiện ở màn kiểm tra, bảng đọc chứng từ. Tắt <b>Trích xuất</b>: AI không đọc trường đó; tắt <b>Hiển thị</b>: vẫn đọc để đối chiếu nhưng ẩn khỏi màn kiểm tra.
+      </Alert>
       <DataTable
-        aria-label={mapping ? "Quy tắc ánh xạ" : "Trường dữ liệu"}
+        aria-label="Trường dữ liệu"
         columns={columns}
         data={skill.fields}
         getRowId={(f) => f.key}
@@ -183,17 +156,15 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
         pagination={false}
         toolbarActions={
           <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => openDialog()}>
-            {mapping ? "Thêm chỉ tiêu" : "Thêm trường"}
+            Thêm trường bổ sung
           </Button>
         }
         emptyTitle="Chưa có trường"
         emptyDescription="Thêm trường đầu tiên để AI biết cần đọc gì."
       />
-      {!mapping && (
-        <p className="text-sm text-fg-muted">
-          {skill.fields.length} trường · {extracted} được trích xuất · {shown} hiển thị trên màn kiểm tra
-        </p>
-      )}
+      <p className="text-sm text-fg-muted">
+        {skill.fields.length} trường · {extracted} được trích xuất · {shown} hiển thị trên màn kiểm tra
+      </p>
       <FieldDialog
         skill={skill}
         field={editing}

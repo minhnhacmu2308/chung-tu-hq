@@ -7,3 +7,5 @@ export * from "./skill.js";
 export * from "./identity.js";
 export * from "./notification.js";
 export * from "./admin.js";
+export * from "./declaration-profile.js";
+export * from "./exchange-rate.js";

@@ -218,7 +218,7 @@ export const VN_EDA_HANG_ROWS = [
   ["HAG_TXA", "decimal", "18.4", false, "Thuế suất"],
   ["HAG_TXB", "decimal", "18.4", false, "Mức thuế tuyệt đối"],
   ["HAG_MAHANG", "text", "255", false, "Mã hàng"],
-  ["HAG_XX", "text", "5", true, "HAG_XX"],
+  ["HAG_XX", "text", "5", false, "HAG_XX", { note: "Sheet đánh Required nhưng request EDA thật gửi thành công không có trường này (docdungapivnacss, 14/10/2026) → tùy chọn" }],
 ] as const satisfies readonly FptFieldRow[];
 
 /** Sheet `VN_EDA_CON` (VNACCS_EDA v1.2.xlsx) – 59 dòng. */
@@ -342,7 +342,7 @@ export const VN_EDA_TRANGTHAI_FIELDS: FptFieldMeta[] = toFptFields(VN_EDA_TRANGT
 
 export const VnEdaSchema = fptObjectSchema(VN_EDA_ROWS);
 export type VnEda = z.infer<typeof VnEdaSchema>;
-/** Lưu ý: sheet đánh dấu HAG_XX (Text 5, không mô tả) là bắt buộc, nhưng mẫu format.json không có. */
+/** Lưu ý: sheet đánh dấu HAG_XX (Text 5, không mô tả) là bắt buộc, nhưng FPT thật nhận dòng hàng không có nó → để tùy chọn. */
 export const VnEdaHangSchema = fptObjectSchema(VN_EDA_HANG_ROWS);
 export type VnEdaHang = z.infer<typeof VnEdaHangSchema>;
 export const VnEdaConSchema = fptObjectSchema(VN_EDA_CON_ROWS);

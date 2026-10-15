@@ -1,4 +1,4 @@
-import { extractionSchemaFor, type LabeledSample, type SampleLabel } from "@kb/contracts";
+import { customFieldsOf, extractionSchemaFor, withCustomFields, type LabeledSample, type SampleLabel } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, type DomainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
@@ -55,7 +55,6 @@ export async function uploadSamples(deps: SkillDeps, ctx: Ctx, skillId: string, 
   const created = await deps.uow.asOrg(ctx, async (r) => {
     const l = await loadSkill(r, ctx.orgId, skillId);
     if (!l.ok) return l;
-    if (l.value.skill.kind === "MAPPING") return err(domainError("NOT_SUPPORTED", "Skill ánh xạ không dùng mẫu chứng từ"));
     const rows: SampleRow[] = [];
     for (const { f, pages } of inspected) {
       const id = deps.idGen.next("smp");
@@ -90,9 +89,9 @@ export async function readSample(deps: SkillDeps, input: { orgId: string; userId
   const bytes = await deps.storage.get(sample.storageKey);
   const mime = sampleMime(sample.fileName, bytes);
   const pages = Array.from({ length: Math.max(1, sample.pages) }, (_, i) => i + 1);
-  const res = await deps.ai.extract({ bytes, mime, pages: sample.pages, fileName: sample.fileName }, pages, extractionSchemaFor(skill.docKind), { kind: skill.docKind, skillHints: fieldHints(version.fields), examples: [], supplierHint: skill.supplier });
+  const res = await deps.ai.extract({ bytes, mime, pages: sample.pages, fileName: sample.fileName }, pages, withCustomFields(extractionSchemaFor(skill.docKind), customFieldsOf(skill.docKind, version.fields)), { kind: skill.docKind, skillHints: fieldHints(skill.docKind, version.fields), examples: [], supplierHint: skill.supplier });
   await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens });
-  const expected = projectResult(version.fields, res.result);
+  const expected = projectResult(skill.docKind, version.fields, res.result);
   await deps.uow.asOrg(ctx, (r) => r.samples.update(sample.id, { expected, updatedAt: deps.clock.now() }));
   return ok(undefined);
 }

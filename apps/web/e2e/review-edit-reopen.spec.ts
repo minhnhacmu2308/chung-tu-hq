@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { stateFor } from "./global-setup";
-import { createDossier, login, runAgentToReview, uploadAndConfirm } from "./helpers";
+import { createDossier, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
 
 const KHO = "Mã địa điểm lưu kho hàng chờ thông quan dự kiến";
 
@@ -40,6 +40,7 @@ test("Review: sửa chỉ tiêu (chặn chỉ tiêu tính thuế, sai dạng s�
     expect((await page.request.post(`/api/dossiers/${id}/declaration/approve`, { data: {} })).status()).toBe(403);
 
     // Người duyệt khác: duyệt được, rồi mở lại để sửa → về bản nháp, sửa tiếp được.
+    await fillManualFields(page, id);
     const approverCtx = await browser.newContext({ storageState: stateFor("tuan") });
     const approver = await approverCtx.newPage();
     await approver.goto(`/dossiers/${id}?step=review`);

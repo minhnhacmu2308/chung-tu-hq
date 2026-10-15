@@ -1,10 +1,10 @@
 "use client";
 import type { AttentionKind } from "@kb/contracts";
 import {
-  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader, SkeletonList, SkeletonStats, Stack, StatCard,
+  Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, IconTile, PageHeader, SkeletonList, SkeletonStats, Stack, StatCard,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, CalendarClock, CircleCheck, Coins, FolderOpen, Gauge, PlugZap, ServerCrash, UserRoundPlus, UsersRound } from "lucide-react";
+import { ArrowRight, Building2, CalendarClock, CircleCheck, Coins, FolderOpen, Gauge, Landmark, PlugZap, ServerCrash, UserRoundPlus, UsersRound } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { adminKeys, getAdminOverview } from "@/api/admin";
@@ -19,6 +19,7 @@ const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
   INTEGRATION_ERROR: <PlugZap />,
   JOBS_FAILED: <ServerCrash />,
   JOIN_PENDING: <UserRoundPlus />,
+  RATE_FETCH: <Landmark />,
 };
 
 const rowLink =
@@ -67,7 +68,7 @@ export function AdminOverviewPage() {
 
       {!isError && (
         <Grid cols={{ base: 1, lg: 3 }} gap="lg" stagger>
-          <Card className="lg:col-span-2">
+          <Card className="cq-lg:col-span-2">
             <CardHeader>
               <CardTitle>Cần chú ý</CardTitle>
               <CardDescription>Việc khẩn đứng trước. Bấm vào để mở đúng màn xử lý.</CardDescription>
@@ -82,18 +83,13 @@ export function AdminOverviewPage() {
                   {data.attention.map((a) => (
                     <li key={a.id}>
                       <Link href={a.href} className={rowLink}>
-                        <span
-                          aria-hidden="true"
-                          className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md [&>svg]:h-4.5 [&>svg]:w-4.5 ${a.severity === "danger" ? "bg-danger-subtle text-danger-subtle-fg" : "bg-warning-subtle text-warning-subtle-fg"}`}
-                        >
-                          {ATTENTION_ICON[a.kind]}
-                        </span>
+                        <IconTile icon={ATTENTION_ICON[a.kind]} tone={a.severity === "danger" ? "danger" : "warning"} size="md" />
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                           <p className="text-sm font-medium text-fg">{a.title}</p>
                           <p className="text-sm text-fg-muted">{a.detail}</p>
                         </div>
                         <Badge tone={a.severity === "danger" ? "danger" : "warning"}>{a.severity === "danger" ? "Khẩn" : "Lưu ý"}</Badge>
-                        <ArrowRight className="hidden h-4 w-4 shrink-0 text-fg-subtle sm:block" aria-hidden="true" />
+                        <ArrowRight className="hidden h-4 w-4 shrink-0 text-fg-subtle cq-sm:block" aria-hidden="true" />
                       </Link>
                     </li>
                   ))}

@@ -1,15 +1,16 @@
-import type { AgentRunView, AgentTaskId, Declaration, DeclarationField, HsEntry, LineItem } from "@kb/contracts";
+import type { AgentRunView, AgentTaskId, Declaration, DeclarationField, HsEntry, LineItem, LineItemHs } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { mappingsFor } from "../domain/build.js";
 import type { Shipment } from "@kb/contracts";
-import type { AgentRunRow, DeclarationRepos, DeclarationRow, DossierInfo, HsCatalogRow, LineItemRow } from "./ports.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DossierInfo, HsCatalogRow, HsSuggestionRow, LineItemRow } from "./ports.js";
 import type { DeclarationDeps } from "./ports.js";
 
 export const TASK_ORDER: AgentTaskId[] = ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION", "DIGITIZE"];
 export const TASKS_BY_MODE: Record<AgentRunRow["mode"], AgentTaskId[]> = { DECLARATION: ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION"], DIGITIZE: ["DIGITIZE"], BOTH: TASK_ORDER };
 
-export function toLineItem(r: LineItemRow): LineItem {
+/** `sugs`: gợi ý HS của dòng (gợi ý chính đứng đầu theo tin cậy). Không truyền → không kèm khối `hs`. */
+export function toLineItem(r: LineItemRow, sugs?: HsSuggestionRow[]): LineItem {
   return {
     id: r.id, dossierId: r.dossierId, lineNo: r.lineNo, description: r.description, quantity: r.quantity, unit: r.unit, unitPrice: r.unitPrice, amount: r.amount, origin: r.origin,
     ...(r.invoiceHsCode ? { invoiceHsCode: r.invoiceHsCode } : {}),
@@ -19,6 +20,16 @@ export function toLineItem(r: LineItemRow): LineItem {
     ...(r.importDutyRate !== null ? { importDutyRate: r.importDutyRate } : {}),
     ...(r.vatRate !== null ? { vatRate: r.vatRate } : {}),
     ...(r.policyNote ? { policyNote: r.policyNote } : {}),
+    ...(sugs ? { hs: toLineItemHs(r, sugs) } : {}),
+  };
+}
+
+function toLineItemHs(r: LineItemRow, sugs: HsSuggestionRow[]): LineItemHs {
+  const mine = sugs.filter((x) => x.lineItemId === r.id).sort((a, b) => (a.code === r.hsSuggested ? -1 : b.code === r.hsSuggested ? 1 : b.confidence - a.confidence));
+  return {
+    status: r.hsStatus, question: r.hsQuestion, error: r.hsError,
+    reasoning: r.hsDetail?.reasoning ?? null, legalBasis: r.hsDetail?.legalBasis ?? [], warnings: r.hsDetail?.warnings ?? [],
+    candidates: mine.map((x) => ({ code: x.code, description: x.description, confidence: x.confidence, whyNot: x.whyNot, importRate: x.rates?.importRate ?? null, basis: x.rates?.basis ?? null, agreement: x.rates?.agreement ?? null, vatRate: x.rates?.vatRate ?? null })),
   };
 }
 
@@ -32,7 +43,7 @@ export function toDeclaration(d: DeclarationRow, approvedByName: string | null):
   const codes = [...order.filter((c) => c in d.fields), ...Object.keys(d.fields).filter((c) => !order.includes(c))];
   const fields: DeclarationField[] = codes.map((code) => {
     const f = d.fields[code]!;
-    return { code, label: f.label, value: f.value, source: f.source, section: f.section, ...(f.no ? { no: f.no } : {}), ...(f.suspect ? { suspect: true } : {}), ...(f.note ? { note: f.note } : {}) };
+    return { code, label: f.label, value: f.value, source: f.source, section: f.section, ...(f.no ? { no: f.no } : {}), ...(f.suspect ? { suspect: true } : {}), ...(f.note ? { note: f.note } : {}), ...(f.provenance ? { provenance: f.provenance } : {}) };
   });
   return {
     dossierId: d.dossierId, kind: d.kind, status: d.status, fields, exchangeRate: d.exchangeRate, exchangeRateDate: d.exchangeRateDate, customsValueVnd: d.customsValueVnd,
@@ -68,7 +79,8 @@ export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, 
   const rows: LineItemRow[] = shipment.items.map((it) => ({
     id: deps.idGen.next("itm"), orgId, dossierId, lineNo: it.lineNo, description: it.description.value ?? "", quantity: it.quantity.value ?? "0", unit: it.unit.value ?? "PCE",
     unitPrice: it.unitPrice.value ?? "0", amount: it.amount.value ?? "0", origin: it.origin.value ?? "", invoiceHsCode: it.hsOnInvoice.value,
-    hsSuggested: null, hsConfidence: null, hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null, createdAt: now, updatedAt: now,
+    hsSuggested: null, hsConfidence: null, hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null,
+    hsJobId: null, hsItemId: null, hsStatus: "idle", hsQuestion: null, hsError: null, hsDetail: null, createdAt: now, updatedAt: now,
   }));
   return r.lineItems.upsertForDossier(dossierId, rows);
 }

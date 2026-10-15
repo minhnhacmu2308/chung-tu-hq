@@ -273,10 +273,11 @@ export const AdminActionSchema = z.enum([
   "STAFF_MFA_RESET",
   "ANNOUNCEMENT_SENT",
   "ANNOUNCEMENT_WITHDRAWN",
+  "EXCHANGE_RATE_UPDATED",
 ]);
 export type AdminAction = z.infer<typeof AdminActionSchema>;
 
-export const AdminTargetTypeSchema = z.enum(["ORG", "USER", "PLAN", "INTEGRATION", "JOB", "SKILL_TEMPLATE", "STAFF", "ANNOUNCEMENT"]);
+export const AdminTargetTypeSchema = z.enum(["ORG", "USER", "PLAN", "INTEGRATION", "JOB", "SKILL_TEMPLATE", "STAFF", "ANNOUNCEMENT", "EXCHANGE_RATE"]);
 export type AdminTargetType = z.infer<typeof AdminTargetTypeSchema>;
 
 /** Append-only: không có API sửa/xóa. */
@@ -324,7 +325,7 @@ export type Announcement = z.infer<typeof AnnouncementSchema>;
 
 /* ---------------- Tổng quan vận hành ---------------- */
 
-export const AttentionKindSchema = z.enum(["QUOTA", "PLAN_EXPIRING", "INTEGRATION_ERROR", "JOBS_FAILED", "JOIN_PENDING"]);
+export const AttentionKindSchema = z.enum(["QUOTA", "PLAN_EXPIRING", "INTEGRATION_ERROR", "JOBS_FAILED", "JOIN_PENDING", "RATE_FETCH"]);
 export type AttentionKind = z.infer<typeof AttentionKindSchema>;
 
 export const AttentionItemSchema = z.object({

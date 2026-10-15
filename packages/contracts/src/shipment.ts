@@ -33,13 +33,15 @@ export const ShipmentItemSchema = z.object({
   amount: dec(),
   origin: str(),
   hsOnInvoice: str(),
+  /** Mã hàng / Part No / Model (v2). */
+  partNo: str(),
 });
 export type ShipmentItem = z.infer<typeof ShipmentItemSchema>;
 
 export const ShipmentSchema = z.object({
   version: z.number().int().nonnegative(),
   parties: z.object({ seller: ShipmentPartySchema, buyer: ShipmentPartySchema }),
-  invoice: z.object({ no: str(), date: date(), incoterm: str(), currency: str(), totalAmount: dec(), paymentTerms: str(), poNo: str() }),
+  invoice: z.object({ no: str(), date: date(), incoterm: str(), currency: str(), totalAmount: dec(), paymentTerms: str(), poNo: str(), incotermPlace: str() }),
   transport: z.object({
     mode: str(),
     billNo: str(),
@@ -54,9 +56,18 @@ export const ShipmentSchema = z.object({
     packageUnit: str(),
     grossWeightKg: dec(),
     netWeightKg: dec(),
+    /** v2: vận đơn nhà (HB/L, HAWB) tách khỏi billNo để giữ tương thích. */
+    houseBillNo: str(),
+    flightNo: str(),
+    /** Ngày hàng đi / phát hành vận đơn. */
+    departureDate: date(),
+    placeOfIssue: str(),
+    /** Kho / CY chờ thông quan (Arrival Notice). */
+    warehouseCode: str(),
+    warehouseName: str(),
     containers: z.array(z.object({ no: z.string(), sealNo: z.string().nullable(), size: z.string().nullable() })),
   }),
-  origin: z.object({ country: str(), coForm: str(), coNo: str(), rexNo: str(), coInvoiceNo: str() }),
+  origin: z.object({ country: str(), coForm: str(), coNo: str(), rexNo: str(), coInvoiceNo: str(), criteria: z.array(z.object({ hs6: z.string().nullable(), criterion: z.string().nullable() })) }),
   charges: z.object({
     freight: dec(),
     /** Tiền tệ của cước (hóa đơn GTGT cước thường là VND, khác tiền tệ hóa đơn). Thiếu → coi như tiền tệ hóa đơn. */
@@ -67,6 +78,8 @@ export const ShipmentSchema = z.object({
   }),
   items: z.array(ShipmentItemSchema),
   documents: z.array(z.object({ id: z.string(), kind: DocKindSchema, pages: z.number().int().nonnegative() })),
+  /** Trường bổ sung riêng của doanh nghiệp: custom[loại chứng từ][key]. */
+  custom: z.record(z.string(), z.record(z.string(), str())),
 });
 export type Shipment = z.infer<typeof ShipmentSchema>;
 
@@ -77,14 +90,31 @@ export function emptyShipment(): Shipment {
   return {
     version: 0,
     parties: { seller: emptyParty(), buyer: emptyParty() },
-    invoice: { no: empty(), date: empty(), incoterm: empty(), currency: empty(), totalAmount: empty(), paymentTerms: empty(), poNo: empty() },
+    invoice: { no: empty(), date: empty(), incoterm: empty(), currency: empty(), totalAmount: empty(), paymentTerms: empty(), poNo: empty(), incotermPlace: empty() },
     transport: {
       mode: empty(), billNo: empty(), masterBillNo: empty(), vessel: empty(), voyage: empty(), portOfLoading: empty(), portOfDischarge: empty(),
-      finalDestination: empty(), arrivalDate: empty(), packages: empty(), packageUnit: empty(), grossWeightKg: empty(), netWeightKg: empty(), containers: [],
+      finalDestination: empty(), arrivalDate: empty(), packages: empty(), packageUnit: empty(), grossWeightKg: empty(), netWeightKg: empty(),
+      houseBillNo: empty(), flightNo: empty(), departureDate: empty(), placeOfIssue: empty(), warehouseCode: empty(), warehouseName: empty(), containers: [],
     },
-    origin: { country: empty(), coForm: empty(), coNo: empty(), rexNo: empty(), coInvoiceNo: empty() },
+    origin: { country: empty(), coForm: empty(), coNo: empty(), rexNo: empty(), coInvoiceNo: empty(), criteria: [] },
     charges: { freight: empty(), insurance: empty(), other: [] },
     items: [],
     documents: [],
+    custom: {},
+  };
+}
+
+/** Shipment lưu trước khi thêm trường (v1) → bổ sung trường còn thiếu bằng giá trị rỗng; không đổi dữ liệu có sẵn. */
+export function withShipmentDefaults(s: Shipment): Shipment {
+  const base = emptyShipment();
+  const fill = <T extends object>(def: T, got: Partial<T> | undefined): T => ({ ...def, ...(got ?? {}) });
+  return {
+    ...base,
+    ...s,
+    invoice: fill(base.invoice, s.invoice),
+    transport: fill(base.transport, s.transport),
+    origin: fill(base.origin, s.origin),
+    items: (s.items ?? []).map((it) => ({ ...it, partNo: it.partNo ?? empty<string>() })),
+    custom: s.custom ?? {},
   };
 }

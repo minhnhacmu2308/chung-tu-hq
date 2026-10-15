@@ -18,7 +18,7 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 
 ## Cấu trúc
 
-- `apps/web` – Next.js, MỎNG. `apps/worker` – BullMQ, MỎNG.
+- `apps/web` – Next.js, MỎNG. `apps/worker` – BullMQ, MỎNG. `apps/fpt-mock` – server giả lập FPT.VNACCS + HSCodePro (`pnpm fpt-mock`); dev/test KHÔNG gọi cổng FPT thật (production). Kiểm khói HSCodePro thật: `pnpm hscodepro:smoke`. Xem `apps/fpt-mock/README.md`.
 - `packages/core/src/modules/<module>/{domain,application,infrastructure,index.ts}` – toàn bộ nghiệp vụ.
 - `packages/contracts` – Zod schema dùng chung FE/BE.
 - `packages/ui` – design system `@kb/ui`: token, component, theme. Xem `docs/DESIGN-SYSTEM.md`.
@@ -35,7 +35,7 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 7. Không truyền tờ khai khi còn BLOCKER FAIL hoặc HS chưa xác nhận.
 8. Mọi lần gọi AI ghi `usage_events`.
 9. Dữ liệu từ ngoài (HTTP, form, AI, file, queue) parse bằng Zod trước khi dùng.
-10. Giao diện chỉ dùng component `@kb/ui` + utility token. Không mã màu, không màu Tailwind mặc định, không `dark:`, không giá trị tùy ý trong app. Thiếu gì thêm vào `@kb/ui`.
+10. Giao diện chỉ dùng component `@kb/ui` + utility token. Không mã màu, không màu Tailwind mặc định, không `dark:`, không giá trị tùy ý trong app. Thiếu gì thêm vào `@kb/ui`. Chi tiết và các lỗi hay gặp: `.claude/rules/dung-component-chung.md`.
 11. Test theo `docs/TESTING.md`; component có test a11y (axe).
 
 ## Skill dự án (`.claude/skills/`)

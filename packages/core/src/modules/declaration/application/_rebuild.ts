@@ -5,7 +5,8 @@ import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { planAdjustments } from "../domain/adjustments.js";
 import { buildDeclaration, type BuiltDeclaration, type ExchangeInfo } from "../domain/build.js";
-import { vnDate } from "../domain/mapping/types.js";
+import { vnDate, type FieldOverride } from "../domain/mapping/types.js";
+import { profileFor } from "./declaration-profile.js";
 import type { DeclarationDeps, DeclarationRepos, DeclarationRow, DossierInfo, LineItemRow, OrgInfo, StoredField } from "./ports.js";
 
 export type RebuildCtx = { orgId: string; userId: string };
@@ -29,15 +30,22 @@ export function currenciesOf(shipment: Shipment, dossier: DossierInfo): string[]
   return [invoiceCurrency, ...planAdjustments(shipment).adjustments.map((a) => a.currency)];
 }
 
-export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier: DossierInfo, org: OrgInfo, items: LineItemRow[], exchange: ExchangeInfo): BuiltDeclaration {
-  return buildDeclaration({ shipment, dossier, org, items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, amount: i.amount, importDutyRate: i.importDutyRate, vatRate: i.vatRate, hsConfirmed: i.hsConfirmed })), now: deps.clock.now(), exchange });
+/** `cfg` = Mặc định khai báo + ghi đè của doanh nghiệp (profileFor). */
+export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier: DossierInfo, org: OrgInfo, items: LineItemRow[], exchange: ExchangeInfo, cfg: { profile: Record<string, string>; overrides: Record<string, FieldOverride> } = { profile: {}, overrides: {} }): BuiltDeclaration {
+  const lines = items.map((i) => ({ id: i.id, lineNo: i.lineNo, amount: i.amount, importDutyRate: i.importDutyRate, vatRate: i.vatRate, hsConfirmed: i.hsConfirmed }));
+  return buildDeclaration({ shipment, dossier, org, items: lines, now: deps.clock.now(), exchange, ...cfg });
 }
 
 /** Giữ giá trị người dùng đã sửa (source USER) khi dựng lại. */
 export function mergeUserEdits(fresh: Record<string, StoredField>, old: Record<string, StoredField> | undefined): Record<string, StoredField> {
   if (!old) return fresh;
   const out = { ...fresh };
-  for (const [code, f] of Object.entries(old)) if (f.source === "USER") out[code] = { ...(fresh[code] ?? f), value: f.value, source: "USER", suspect: false };
+  // Giống editDeclarationField: ô sửa tay không mang nguồn gốc/ghi chú của quy tắc (tránh hiện sai nguồn cho người duyệt).
+  for (const [code, f] of Object.entries(old)) {
+    if (f.source !== "USER") continue;
+    const base = fresh[code] ?? f;
+    out[code] = { no: base.no, label: base.label, section: base.section, value: f.value, source: "USER", suspect: false };
+  }
   return out;
 }
 
@@ -57,7 +65,7 @@ export async function rebuildDraft(deps: DeclarationDeps, ctx: RebuildCtx, dossi
     if (!current || current.status !== "DRAFT") return ok(current);
     const items = await r.lineItems.list(ctx.orgId, dossierId);
     const exchange = await exchangeFor(r, currenciesOf(shipment, dossier), vnDate(now));
-    const built = computeBuilt(deps, shipment, dossier, org, items, exchange);
+    const built = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, ctx.orgId, dossier.direction));
     const patch = {
       fields: mergeUserEdits(built.fields, current.fields), updatedAt: now, exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date,
       customsValueVnd: built.valuation.customsValueVnd, valueAdjustments: built.adjustments, estImportDutyVnd: built.taxes.importDutyVnd, estVatVnd: built.taxes.vatVnd,

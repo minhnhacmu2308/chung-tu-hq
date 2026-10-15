@@ -4,14 +4,14 @@ import type { IntegrationId, Role, StaffRole } from "@kb/contracts";
 import { and, desc, eq, gt, gte, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import {
-  adminAudit, announcements, digitalCertificates, documents, dossiers, integrationStatus, joinRequests, memberships, notifications, organizations,
+  adminAudit, announcements, digitalCertificates, documents, dossiers, exchangeRateFetches, exchangeRates, integrationStatus, joinRequests, memberships, notifications, organizations,
   plans, platformIntegrations, platformStaff, sessions, skills, usageEvents, users,
 } from "../../../db/schema/index.js";
 import type { StaffStatus } from "../domain/staff-rules.js";
 
 /** Doanh nghiệp hệ thống giữ skill mẫu (db/seed/skills.ts) – không hiện ở khu quản trị. */
 const SYSTEM_ORG_ID = "org_system";
-import type { AdminOrgRow, AdminRepos, AdminUow, AnnouncementRow, AuditRow, OrgUsage, PlatformIntegrationRow, StaffRow } from "../application/ports.js";
+import type { AdminOrgRow, AdminRepos, AdminUow, AnnouncementRow, AuditRow, ExchangeRateRow, OrgUsage, PlatformIntegrationRow, RateFetchRow, StaffRow } from "../application/ports.js";
 
 /** Phân loại giá vốn theo `usage_events.kind`: AI_* = đọc chứng từ, HS_* = gợi ý HS, CUSTOMS_* = Customs Hub. */
 const costByKind = (prefix: string) => sql<string>`coalesce(sum(case when ${usageEvents.kind} like ${`${prefix}%`} then ${usageEvents.costVnd} else 0 end), 0)::text`;
@@ -139,6 +139,36 @@ function repos(tx: Tx): AdminRepos {
       integrations: async (orgId) => (await tx.select({ id: integrationStatus.kind, status: integrationStatus.status }).from(integrationStatus).where(eq(integrationStatus.orgId, orgId))).map((r) => ({ id: r.id as IntegrationId, status: r.status })),
       certificates: async (orgId) =>
         tx.select({ id: digitalCertificates.id, issuer: digitalCertificates.issuer, validTo: digitalCertificates.validTo, isDefault: digitalCertificates.isDefault }).from(digitalCertificates).where(eq(digitalCertificates.orgId, orgId)),
+    },
+    exchangeRates: {
+      list: async (fromEffective) =>
+        (
+          await tx
+            .select({ r: exchangeRates, name: users.name })
+            .from(exchangeRates)
+            .leftJoin(users, eq(users.id, exchangeRates.updatedBy))
+            .where(and(gte(exchangeRates.date, fromEffective), eq(exchangeRates.active, true)))
+            .orderBy(desc(exchangeRates.date), exchangeRates.currency)
+        ).map(({ r, name }): ExchangeRateRow => ({ currency: r.currency, effectiveFrom: r.date, rate: r.rate, source: r.source as ExchangeRateRow["source"], snapshotAt: r.snapshotAt, updatedBy: r.updatedBy, updatedByName: name ?? null, note: r.note })),
+      upsertAuto: async (rows, boardAt, _at) => {
+        for (const x of rows) {
+          await tx
+            .insert(exchangeRates)
+            .values({ id: `fx_${x.currency}_${x.effectiveFrom}`, currency: x.currency, date: x.effectiveFrom, rate: x.rate, source: "VCB", snapshotAt: boardAt })
+            .onConflictDoUpdate({ target: [exchangeRates.currency, exchangeRates.date], set: { rate: x.rate, source: "VCB", snapshotAt: boardAt, active: true }, setWhere: ne(exchangeRates.source, "MANUAL") });
+        }
+      },
+      upsertManual: async (x, _at) => {
+        const set = { rate: x.rate, source: "MANUAL", updatedBy: x.updatedBy, note: x.note, snapshotAt: null, active: true };
+        await tx.insert(exchangeRates).values({ id: `fx_${x.currency}_${x.effectiveFrom}`, currency: x.currency, date: x.effectiveFrom, ...set }).onConflictDoUpdate({ target: [exchangeRates.currency, exchangeRates.date], set });
+      },
+    },
+    rateFetches: {
+      insert: async (row) => void (await tx.insert(exchangeRateFetches).values(row)),
+      latest: async () => {
+        const r = (await tx.select().from(exchangeRateFetches).orderBy(desc(exchangeRateFetches.ranAt)).limit(1))[0];
+        return r ? ({ ...r, status: r.status as RateFetchRow["status"] }) : null;
+      },
     },
     platformIntegrations: {
       list: async () => (await tx.select().from(platformIntegrations)).map((r): PlatformIntegrationRow => ({ ...r, id: r.id as IntegrationId, environment: r.environment as PlatformIntegrationRow["environment"], status: r.status as PlatformIntegrationRow["status"] })),

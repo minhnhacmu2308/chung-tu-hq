@@ -27,7 +27,7 @@ export async function uploadAndConfirm(page: Page, files: string[]) {
   await page.locator('input[type="file"]').first().setInputFiles(files.map(PDF));
   await expect(page.getByText(new RegExp(`đã đọc ${files.length}/${files.length}`))).toBeVisible({ timeout: 90_000 });
   await page.getByRole("button", { name: "Xem kết quả đọc" }).click();
-  await expect(page.getByRole("heading", { name: "AI đối chiếu chéo" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AI đối chiếu chéo" })).toBeVisible({ timeout: 60_000 }); // dev server biên dịch trang OCR lần đầu có thể > 15s
   await page.getByRole("button", { name: "Xác nhận dữ liệu" }).click();
   const proceed = page.getByRole("button", { name: "Vẫn tiếp tục" });
   if (await proceed.isVisible({ timeout: 3_000 }).catch(() => false)) await proceed.click();
@@ -47,4 +47,15 @@ export async function runAgentToReview(page: Page) {
   }
   await page.getByRole("button", { name: "Sang Review tờ khai" }).click();
   await expect(page).toHaveURL(/step=review/);
+}
+
+/** Bộ HANSOL không có vận đơn và mã kho luôn nhập tay → điền các chỉ tiêu bắt buộc còn trống (như người khai bấm Sửa) trước khi duyệt. */
+export const MANUAL_FIELDS: Record<string, string> = { SO_VD: "HSPL261014001", KHO: "03CCS01 – Kho CFS Tân Vũ", CANG_DO: "VNHPH – Cảng Hải Phòng", CANG_XEP: "KRPUS – BUSAN", PTVC_TEN: "HANSOL VOY 2610", NGAY_DEN: "2026-10-20" };
+export async function fillManualFields(page: Page, dossierId: string) {
+  const view = (await (await page.request.get(`/api/dossiers/${dossierId}/declaration`)).json()) as { declaration: { fields: { code: string; value: string }[] } };
+  for (const [code, value] of Object.entries(MANUAL_FIELDS)) {
+    if (view.declaration.fields.find((f) => f.code === code)?.value.trim()) continue;
+    const res = await page.request.patch(`/api/dossiers/${dossierId}/declaration/fields/${code}`, { data: { value } });
+    expect(res.ok(), `${code}: ${await res.text()}`).toBeTruthy();
+  }
 }

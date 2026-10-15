@@ -21,7 +21,6 @@ const TYPE_OPTIONS = (Object.keys(FIELD_TYPE_LABELS) as SkillField["type"][]).ma
 
 export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props) {
   const qc = useQueryClient();
-  const mapping = skill.kind === "MAPPING";
   const [draft, setDraft] = useState<SkillField>(field ?? EMPTY);
   const [aliases, setAliases] = useState((field?.aliases ?? []).join(", "));
 
@@ -54,17 +53,13 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
     },
   });
 
-  const title = mapping ? (field ? `Sửa quy tắc ${field.key}` : "Thêm chỉ tiêu") : field ? `Sửa trường ${field.key}` : "Thêm trường";
+  const title = field ? `Sửa trường ${field.key}` : "Thêm trường bổ sung";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         title={title}
-        description={
-          mapping
-            ? "Quy tắc là cấu hình chạy bằng code – thay đổi có hiệu lực từ hồ sơ tạo sau khi lưu."
-            : "Trường mới được dùng từ lần đọc tiếp theo. Nên thêm vài mẫu đã gắn nhãn rồi bấm Đánh giá lại."
-        }
+        description="Trường bổ sung được AI đọc từ lần đọc tiếp theo (tối đa 20). Nên thêm vài mẫu đã gắn nhãn rồi bấm Đánh giá lại."
       >
         <form
           onSubmit={(e) => {
@@ -75,47 +70,43 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
           <Stack gap="md">
             {save.isError && <Alert tone="danger">{save.error.message}</Alert>}
             <Grid cols={{ base: 1, md: 2 }}>
-              <Field label={mapping ? "Mã chỉ tiêu" : "Mã trường"} required hint={field ? "Không đổi được mã sau khi tạo" : "Chữ không dấu, số, dấu _"}>
+              <Field label="Mã trường" required hint={field ? "Không đổi được mã sau khi tạo" : "Chữ không dấu, số, dấu _"}>
                 <Input
                   value={draft.key}
                   disabled={!!field}
                   className="font-mono"
                   onChange={(e) => setDraft({ ...draft, key: e.target.value })}
-                  placeholder={mapping ? "PVC" : "container_no"}
+                  placeholder="lc_no"
                 />
               </Field>
-              <Field label={mapping ? "Tên chỉ tiêu" : "Tên hiển thị"} required>
-                <Input value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder={mapping ? "Phí vận chuyển" : "Số container"} />
+              <Field label="Tên hiển thị" required>
+                <Input value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Số L/C" />
               </Field>
-              {!mapping && (
-                <Field label="Kiểu dữ liệu">
-                  <Select
-                    options={TYPE_OPTIONS}
-                    value={draft.type}
-                    disabled={!!field}
-                    onChange={(e) => setDraft({ ...draft, type: e.target.value as SkillField["type"] })}
-                  />
-                </Field>
-              )}
-              {!mapping && (
-                <Field label="Nhãn thường gặp trên chứng từ (alias)" hint="Cách nhau bằng dấu phẩy" className="md:col-span-2">
-                  <Input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Container No., CNTR No., Số cont" />
-                </Field>
-              )}
+              <Field label="Kiểu dữ liệu">
+                <Select
+                  options={TYPE_OPTIONS}
+                  value={draft.type}
+                  disabled={!!field}
+                  onChange={(e) => setDraft({ ...draft, type: e.target.value as SkillField["type"] })}
+                />
+              </Field>
+              <Field label="Nhãn thường gặp trên chứng từ (alias)" hint="Cách nhau bằng dấu phẩy" className="cq-md:col-span-2">
+                <Input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="L/C No., Letter of Credit No." />
+              </Field>
               <Field
-                label={mapping ? "Quy tắc lấy giá trị" : "Ánh xạ chỉ tiêu tờ khai"}
-                hint={mapping ? "Dạng: Chứng từ › Trường; ghi chú điều kiện nếu có" : "Bỏ trống nếu chỉ dùng để đối chiếu"}
-                className="md:col-span-2"
+                label="Ghi chú cho người khai"
+                hint="Ví dụ: dùng cho chỉ tiêu nào trên tờ khai. Nguồn chỉ tiêu cấu hình ở Cài đặt → Khai báo"
+                className="cq-md:col-span-2"
               >
                 <Input
                   value={draft.declarationField ?? ""}
                   onChange={(e) => setDraft({ ...draft, declarationField: e.target.value })}
-                  placeholder={mapping ? "Hóa đơn cước › Cước quốc tế" : "Số hiệu container"}
+                  placeholder="Đối chiếu với L/C khi duyệt"
                 />
               </Field>
             </Grid>
             <Checkbox
-              label={mapping ? "Bắt buộc có giá trị trước khi truyền" : "Bắt buộc – thiếu thì đánh dấu nghi ngờ"}
+              label="Bắt buộc – thiếu thì đánh dấu nghi ngờ"
               checked={draft.required}
               onChange={(e) => setDraft({ ...draft, required: e.target.checked })}
             />

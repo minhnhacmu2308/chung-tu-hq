@@ -49,7 +49,7 @@ function PipelineList({ rows, canResend, onResend, resending }: { rows: Pipeline
             <p className="text-sm text-fg-muted">{r.summary ?? (r.status === "NOT_SENT" ? "Chưa gửi" : r.status === "WAITING" ? "Gửi sau khi bước trước hoàn tất" : "Chờ phản hồi từ Hải quan")}</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            {r.at && <span className="hidden text-xs text-fg-subtle sm:inline">{formatDateTime(r.at)}</span>}
+            {r.at && <span className="hidden text-xs text-fg-subtle cq-sm:inline">{formatDateTime(r.at)}</span>}
             <Badge tone={PIPE[r.status].tone}>{PIPE[r.status].text}</Badge>
             {canResend && (r.status === "OK" || r.status === "ERROR") && (r.op === "HYS" || r.op === "IEX" || r.status === "ERROR") && (
               <Button
@@ -198,7 +198,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       )}
 
       <Grid cols={{ base: 1, lg: 3 }} gap="lg">
-        <Card className="lg:col-span-2">
+        <Card className="cq-lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Send aria-hidden="true" className="h-5 w-5 text-primary" />
@@ -211,7 +211,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
           <CardContent>
             <Stack gap="md">
               {!s.started && (
-                <div className="flex flex-col gap-3 rounded-md border border-border bg-surface-muted p-4 md:flex-row md:items-end">
+                <div className="flex flex-col gap-3 rounded-md border border-border bg-surface-muted p-4 cq-md:flex-row cq-md:items-end">
                   <Field label="Chứng thư số dùng để ký" className="flex-1">
                     <Select
                       value={selectedId}

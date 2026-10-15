@@ -6,3 +6,19 @@
 .playwright-mcp
 apps/web/e2e/.auth
 business
+# File .env cục bộ (khóa thật, NEXT_PUBLIC_DATA_SOURCE=http) – bản demo Vercel chạy mock, không cần.
+.env
+**/.env.local
+**/.env.*.local
+# Thông tin đăng nhập thật (mẫu curl FPT) và dữ liệu khách hàng / tài liệu nội bộ – tuyệt đối không tải lên.
+docdungapivnacss
+TAI LIEU TICH HOP VNACCS
+lo mẫu
+LÔ FANS25040166
+evals/private
+deploy/backups
+deploy/.env.prod
+.superpowers
+**/.next-e2e
+**/.next-mock
+.env.*

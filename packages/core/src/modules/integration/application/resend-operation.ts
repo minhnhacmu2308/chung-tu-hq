@@ -1,4 +1,5 @@
 // "Gửi lại" một nghiệp vụ: LUÔN tra IEX trước (ADR 0005); Hải quan đã ghi nhận → không gửi; chưa → outbox mới (…:retryN) và job.
+import { sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
@@ -34,6 +35,12 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
     return ok({ resent: false, message: op === "IEX" ? `Trạng thái: ${st.status}` : `Hải quan đã ghi nhận ${op}, không cần gửi lại` });
   }
 
+  // Khai lại IDA/EDA chưa được ghi nhận = đăng ký mới: tỷ giá phải thuộc tuần đăng ký (như lúc truyền).
+  if (op === "IDA" || op === "EDA") {
+    const snap = await deps.declarations.get(ctx.orgId, dossierId);
+    if (snap && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
+      return err(domainError("RATE_WEEK_CHANGED", `Tờ khai dùng tỷ giá tuần ${weekStart(snap.exchangeRateDate)} – đã sang tuần tỷ giá mới. Mở lại tờ khai để dựng lại với tỷ giá tuần này rồi duyệt và truyền lại`));
+  }
   const outbox = await deps.uow.asOrg(ctx, (r) => r.outbox.listForDossier(ctx.orgId, dossierId));
   const base = outbox.filter((o) => o.operation === op);
   const last = base.at(-1);

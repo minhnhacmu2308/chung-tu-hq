@@ -12,11 +12,10 @@ import { formatNumber, formatRelative } from "@/lib/format";
 import { DOC_KIND_LABELS, type Skill, type SkillKind } from "@/mocks/types";
 import { AccuracyBadge, formatPercent, SKILL_KIND_LABELS } from "./skill-display";
 
-const KINDS: SkillKind[] = ["DOCUMENT", "SUPPLIER", "MAPPING"];
+const KINDS: SkillKind[] = ["DOCUMENT", "SUPPLIER"];
 const KIND_HINT: Record<SkillKind, string> = {
   DOCUMENT: "Cách đọc từng loại chứng từ: trường cần lấy, nhãn thường gặp (alias), mẫu đã gắn nhãn.",
   SUPPLIER: "Skill riêng cho nhà cung cấp có mẫu chứng từ đặc thù – được ưu tiên hơn skill chung khi nhận ra nhà cung cấp.",
-  MAPPING: "Quy tắc đưa dữ liệu lô hàng vào chỉ tiêu tờ khai VNACCS. Là code + cấu hình, không dùng AI.",
 };
 
 function EnabledSwitch({ skill }: { skill: Skill }) {
@@ -62,18 +61,14 @@ function columnsFor(kind: SkillKind) {
         </div>
       ),
     }),
-    ...(kind === "MAPPING"
-      ? [col.accessor((s) => s.fields.length, { id: "rules", header: "Số chỉ tiêu", meta: { align: "end" } })]
-      : [
-          col.accessor((s) => (s.docKind ? DOC_KIND_LABELS[s.docKind] : "—"), { id: "docKind", header: "Loại chứng từ" }),
-          col.accessor("language", { header: "Ngôn ngữ", meta: { wrap: true } }),
-          col.accessor((s) => s.accuracy ?? -1, {
-            id: "accuracy",
-            header: "Độ chính xác",
-            cell: (c) => <AccuracyBadge skill={c.row.original} />,
-          }),
-          col.accessor("labeledSamples", { header: "Mẫu", meta: { align: "end", label: "Mẫu đã gắn nhãn" }, cell: (c) => formatNumber(c.getValue()) }),
-        ]),
+    col.accessor((s) => (s.docKind ? DOC_KIND_LABELS[s.docKind] : "—"), { id: "docKind", header: "Loại chứng từ" }),
+    col.accessor("language", { header: "Ngôn ngữ", meta: { wrap: true } }),
+    col.accessor((s) => s.accuracy ?? -1, {
+      id: "accuracy",
+      header: "Độ chính xác",
+      cell: (c) => <AccuracyBadge skill={c.row.original} />,
+    }),
+    col.accessor("labeledSamples", { header: "Mẫu", meta: { align: "end", label: "Mẫu đã gắn nhãn" }, cell: (c) => formatNumber(c.getValue()) }),
     col.accessor("version", { header: "Bản", meta: { align: "end", label: "Phiên bản" }, cell: (c) => `v${c.getValue()}` }),
     col.accessor("updatedAt", { header: "Cập nhật", cell: (c) => <span className="text-fg-muted">{formatRelative(c.getValue())}</span> }),
     col.accessor("enabled", { header: "Bật", meta: { label: "Đang dùng" }, enableSorting: false, cell: (c) => <EnabledSwitch skill={c.row.original} /> }),
@@ -81,13 +76,13 @@ function columnsFor(kind: SkillKind) {
 }
 
 function Kpis({ skills }: { skills: Skill[] }) {
-  const reading = skills.filter((s) => s.kind !== "MAPPING");
+  const reading = skills;
   const measured = reading.filter((s) => s.accuracy !== undefined);
   const avg = measured.length ? measured.reduce((a, s) => a + (s.accuracy ?? 0), 0) / measured.length : undefined;
   const needMore = reading.filter((s) => s.accuracy === undefined || s.accuracy < 0.9).length;
   return (
     <Grid cols={{ base: 2, xl: 4 }} stagger>
-      <StatCard icon={<Sparkles />} label="Skill đang dùng" value={`${skills.filter((s) => s.enabled).length}/${skills.length}`} hint="đọc chứng từ + ánh xạ tờ khai" />
+      <StatCard icon={<Sparkles />} label="Skill đang dùng" value={`${skills.filter((s) => s.enabled).length}/${skills.length}`} hint="theo loại chứng từ + nhà cung cấp" />
       <StatCard icon={<Target />} tone="success" label="Độ chính xác trung bình" value={avg === undefined ? "—" : formatPercent(avg)} hint={`đo trên ${measured.length} skill có đủ mẫu`} />
       <StatCard icon={<Tags />} tone="info" label="Mẫu đã gắn nhãn" value={reading.reduce((a, s) => a + s.labeledSamples, 0)} hint="làm ví dụ cho AI + bộ đo" />
       <StatCard icon={<FilePlus2 />} tone={needMore > 0 ? "warning" : "neutral"} label="Cần thêm mẫu" value={needMore} hint="skill dưới 90% hoặc chưa đo" />
@@ -102,7 +97,7 @@ function SkillListInner() {
   const raw = params.get("kind");
   const kind: SkillKind = KINDS.includes(raw as SkillKind) ? (raw as SkillKind) : "DOCUMENT";
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: skillKeys.list, queryFn: () => listSkills() });
-  const columns = useMemo(() => ({ DOCUMENT: columnsFor("DOCUMENT"), SUPPLIER: columnsFor("SUPPLIER"), MAPPING: columnsFor("MAPPING") }), []);
+  const columns = useMemo(() => ({ DOCUMENT: columnsFor("DOCUMENT"), SUPPLIER: columnsFor("SUPPLIER") }), []);
 
   const setKind = (k: string) => router.replace(`${pathname}?kind=${k}`, { scroll: false });
 

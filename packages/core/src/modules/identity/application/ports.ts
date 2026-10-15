@@ -17,6 +17,8 @@ export type JoinRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type JoinRequestRow = { id: string; orgId: string; userId: string; status: JoinRequestStatus; createdAt: Date };
 export type CertificateRow = { id: string; orgId: string; subject: string; issuer: string; serial: string; validTo: string; isDefault: boolean };
 export type NotificationRow = { id: string; orgId: string; userId: string; title: string; body: string; href: string | null; readAt: Date | null; createdAt: Date };
+/** Bí mật đã mã hóa của doanh nghiệp (org_secrets); `kind` duy nhất trong một org. */
+export type OrgSecretRow = { id: string; orgId: string; kind: string; ciphertext: string; keyVersion: number; updatedAt: Date };
 export type PlanRow = { code: string; name: string; dossiersPerMonth: number; pagesPerDossier: number };
 
 export interface IdentityRepos {
@@ -67,6 +69,12 @@ export interface IdentityRepos {
     setDefault(orgId: string, id: string): Promise<void>;
     delete(orgId: string, id: string): Promise<void>;
   };
+  secrets: {
+    get(orgId: string, kind: string): Promise<OrgSecretRow | null>;
+    /** Ghi đè theo (orgId, kind). */
+    upsert(row: OrgSecretRow): Promise<void>;
+    delete(orgId: string, kind: string): Promise<void>;
+  };
   notifications: {
     list(orgId: string, userId: string): Promise<NotificationRow[]>;
     insert(row: NotificationRow): Promise<void>;
@@ -115,6 +123,8 @@ export type IdentityDeps = {
   idGen: IdGen;
   appUrl: string;
   random?: (n: number) => Buffer;
+  /** Mã hóa org_secrets (tài khoản VNACCS…); thiếu → các use case cần bí mật trả INTEGRATION_NOT_CONFIGURED. */
+  secrets?: SecretStore;
   /** Sau khi tạo org mới (đăng ký MST mới): composition root nối việc sao chép skill mẫu… Lỗi ở đây không làm hỏng đăng ký. */
   onOrgCreated?: (org: { orgId: string; userId: string }) => Promise<void>;
   /** Tài khoản có quyền quản trị hệ thống không (module admin cung cấp qua container, ADR 0006); thiếu → không ai là quản trị viên. */

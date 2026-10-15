@@ -45,7 +45,7 @@ export function CreateSummaryStep({ dossier, goTo }: StepProps) {
       </CardHeader>
       <CardContent>
         <Grid cols={{ base: 1, md: 2 }}>
-          <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 md:col-span-2 xl:grid-cols-3">
+          <dl className="grid gap-x-6 gap-y-3 cq-sm:grid-cols-2 cq-md:col-span-2 cq-xl:grid-cols-3">
             {rows.map(([k, v]) => (
               <div key={k} className="min-w-0">
                 <dt className="text-xs text-fg-subtle">{k}</dt>
@@ -53,7 +53,7 @@ export function CreateSummaryStep({ dossier, goTo }: StepProps) {
               </div>
             ))}
           </dl>
-          <Field label="Ghi chú nội bộ" hint="Chỉ người trong doanh nghiệp thấy" className="md:col-span-2">
+          <Field label="Ghi chú nội bộ" hint="Chỉ người trong doanh nghiệp thấy" className="cq-md:col-span-2">
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Ví dụ: số PO, cảng hàng về, người liên hệ" />
           </Field>
         </Grid>

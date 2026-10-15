@@ -13,6 +13,19 @@
  * TẮT toàn bộ bảng màu, bo góc, bóng, font mặc định của Tailwind: chỉ dùng được token bên dưới.
  * Giữ nguyên thang spacing của Tailwind (p-4, gap-2...) vì nó nhân với --spacing (mật độ).
  */
+/*
+ * Mốc chia cột theo BỀ RỘNG VÙNG NỘI DUNG (container query), không theo bề rộng màn hình.
+ * Vùng nội dung hẹp lại (sidebar mở, panel bên phải neo vào, nằm trong popup) thì lưới tự xuống hàng.
+ * Đo theo phần tử `@container` gần nhất: <main> của shell, thân DialogContent. Grid dùng các mốc này.
+ * Ngưỡng ≈ chỗ nội dung có được ở mốc màn hình cùng tên khi sidebar đang mở.
+ */
+@custom-variant cq-sm { @container (width >= 36rem) { @slot; } }
+@custom-variant cq-md { @container (width >= 42rem) { @slot; } }
+@custom-variant cq-lg { @container (width >= 48rem) { @slot; } }
+@custom-variant cq-xl { @container (width >= 56rem) { @slot; } }
+/* Ngược lại của cq-sm: vùng nội dung hẹp (vd chỉ hiện icon, ẩn chữ của nút). */
+@custom-variant cq-max-sm { @container (width < 36rem) { @slot; } }
+
 @theme {
   --color-*: initial;
   --radius-*: initial;
@@ -163,6 +176,11 @@
   ::selection { background: var(--kb-color-selection); }
   /* Thanh cuộn mảnh trong các khung cuộn bên trong trang (bảng, panel, danh sách). */
   :where(body *) { scrollbar-width: thin; }
+  /* Dialog dạng panel đang mở: trang chính chừa lề phải bằng bề rộng panel (components/dialog.tsx, PanelDock). */
+  body {
+    padding-inline-end: var(--kb-dialog-dock, 0px);
+    @media (prefers-reduced-motion: no-preference) { transition: padding-inline-end 200ms ease; }
+  }
 
   /*
    * Mọi phần tử tương tác đổi trạng thái (hover, focus, chọn) mượt thay vì giật.
@@ -205,6 +223,23 @@
   &:indeterminate::before {
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
   }
+}
+
+/* Radio tròn cùng dáng với kb-checkbox (RadioGroup). */
+@utility kb-radio {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  cursor: pointer;
+  border: 1.5px solid var(--kb-color-control-border);
+  border-radius: 9999px;
+  background-color: var(--kb-color-surface);
+  &:hover { border-color: var(--kb-color-primary); }
+  &:focus-visible { outline: 2px solid var(--kb-color-focus); outline-offset: 2px; }
+  &:disabled { cursor: not-allowed; opacity: 0.5; }
+  &:checked { border-color: var(--kb-color-primary); border-width: 5px; }
 }
 
 /* Phần tử dính trong trang: cách mép trên 1rem, tính cả thanh menu trên (nếu người dùng chọn menu ở trên). */

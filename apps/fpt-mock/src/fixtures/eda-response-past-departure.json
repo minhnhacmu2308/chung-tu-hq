@@ -1,0 +1,28 @@
+{
+  "objVNACCS_ACCOUNT": {
+    "useR_ID": "BI820001",
+    "password": "12345678",
+    "terminaL_ID": "Z0000M",
+    "terminaL_ACCESS_KEY": "MOCKTERMINALKEY0"
+  },
+  "errorList": [
+    {
+      "errorCode": "S1139",
+      "indexCode": "SYM",
+      "nameCode": "Departure Planned Date",
+      "errorContent": "Ngày hàng đi dự kiến là ngày trong quá khứ khi so với Ngày khai báo (Dự kiến)\r\n",
+      "proposedSolution": "Kiểm tra nội dung đã nhập.\r\n",
+      "rowPosition": "0000"
+    }
+  ],
+  "objIDA": null,
+  "objEDA": null,
+  "objAMA": null,
+  "vaF8030": null,
+  "vaF8010": null,
+  "vaE8000": null,
+  "vaE4740": null,
+  "vaL0020": null,
+  "vaD8000": null,
+  "vaD4870": null
+}

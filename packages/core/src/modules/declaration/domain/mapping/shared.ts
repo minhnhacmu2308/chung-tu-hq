@@ -2,7 +2,9 @@
 import { dec } from "../../../../shared/decimal.js";
 import { incotermCode, isIncotermCode } from "../adjustments.js";
 import { resolvePackageUnit, resolvePayment, resolvePort } from "../catalog-resolve.js";
-import { fixed, fromSourced, missing, type MappedValue, type MappingInput } from "./types.js";
+// Suy từ chứng từ (không có/nhiều hóa đơn, dòng FOC, phương thức thanh toán trên invoice) luôn thắng; chứng từ không cho tín hiệu riêng
+// thì dùng Mặc định khai báo của doanh nghiệp (profileOr). Ghi đè nguồn/giá trị cố định của doanh nghiệp vẫn chạy trước (evaluateMapping).
+import { fixed, fromSourced, missing, profileOr, type MappedValue, type MappingInput } from "./types.js";
 
 type Kind = "IDA" | "EDA";
 
@@ -19,7 +21,7 @@ export function invoiceKind(i: MappingInput, kind: Kind): MappedValue {
   const no = kind === "IDA" ? "1.39" : "2.34";
   if (n === 0) return { value: "B – Không có hóa đơn thương mại", source: "SYSTEM", suspect: true, note: `Hồ sơ chưa có hóa đơn: khai B và để trống số hóa đơn; nếu có hóa đơn thì tải lên (chỉ tiêu ${no})` };
   if (n > 1) return { value: "B – Bảng kê hóa đơn (nhiều hóa đơn)", source: "SYSTEM", suspect: true, note: `Có ${n} hóa đơn: khai B, số hóa đơn là số bảng kê/hóa đơn tổng, đính kèm danh sách hóa đơn qua HYS (chỉ tiêu ${no})` };
-  return fixed("A – Hóa đơn thương mại", "INVOICE");
+  return profileOr(i, "HD_PL", fixed("A – Hóa đơn thương mại", "INVOICE"));
 }
 
 /** 1.44 ô 1 / 2.39 ô 4 – Mã phân loại giá hóa đơn: A phải trả tiền, B toàn bộ FOC, C có cả hai; không có hóa đơn → IDA D, EDA không khai. */
@@ -31,14 +33,14 @@ export function priceKind(i: MappingInput, kind: Kind): MappedValue {
     const where = kind === "IDA" ? "chi tiết khai trị giá (1.50)" : "phần ghi chú (2.57)";
     return { value: "C – Gồm hàng phải trả tiền và không phải trả tiền", source: "INVOICE", suspect: true, note: `Dòng ${foc.join(", ")} có trị giá 0 (FOC): ghi số thứ tự các dòng này vào ${where}${kind === "IDA" ? " và nhập trị giá tính thuế từng dòng (1.87)" : ""}` };
   }
-  return fixed("A – Giá hóa đơn cho hàng hóa phải trả tiền", "INVOICE");
+  return profileOr(i, "GIA_PL", fixed("A – Giá hóa đơn cho hàng hóa phải trả tiền", "INVOICE"));
 }
 
-/** 1.43 / 2.38 – Phương thức thanh toán (xem resolvePayment: T/T thường là KC, không phải TTR). */
+/** 1.43 / 2.38 – Phương thức thanh toán (xem resolvePayment: T/T thường là KC, không phải TTR). Chứng từ không ghi → Mặc định khai báo. */
 export function paymentMethod(i: MappingInput, kind: Kind): MappedValue {
   const raw = i.shipment.invoice.paymentTerms;
   const r = resolvePayment(raw.value);
-  if (!r) return missing("CONTRACT", kind === "IDA" ? "Chưa có phương thức thanh toán trên invoice / hợp đồng" : "Chưa có phương thức thanh toán");
+  if (!r) return profileOr(i, "PT_TT", missing("CONTRACT", kind === "IDA" ? "Chưa có phương thức thanh toán trên invoice / hợp đồng" : "Chưa có phương thức thanh toán"));
   const base = fromSourced(raw, "CONTRACT");
   const note = [base.note, r.note].filter(Boolean).join(". ");
   return { ...base, value: `${r.code} – ${r.name}`, ...(r.suspect || base.suspect ? { suspect: true } : {}), ...(note ? { note } : {}) };

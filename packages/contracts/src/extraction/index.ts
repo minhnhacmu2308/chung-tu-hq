@@ -23,7 +23,7 @@ export * from "./packing-list.js";
 export * from "./sales-contract.js";
 
 /** Tăng khi đổi bất kỳ schema trích xuất nào (B10). */
-export const EXTRACTION_SCHEMA_VERSION = 1;
+export const EXTRACTION_SCHEMA_VERSION = 2;
 
 /** Chứng từ loại OTHER: chỉ lấy tiêu đề + tóm tắt để người dùng xếp loại. */
 export const OtherExtractionSchema = z.object({
@@ -47,3 +47,33 @@ const BY_KIND: Record<DocKind, ZodType> = {
 export function extractionSchemaFor(kind: DocKind): ZodType {
   return BY_KIND[kind];
 }
+
+/**
+ * Điền `null` cho key bị thiếu mà schema cho phép null (đệ quy vào object và phần tử mảng).
+ * Structured output luôn trả đủ key; hàm này để kết quả/fixture ghi theo schema cũ (v1) vẫn parse được bằng schema mới.
+ */
+export function fillMissingNullable(schema: ZodType, value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  const inner = unwrap(schema);
+  if (inner instanceof z.ZodArray) return Array.isArray(value) ? value.map((v) => fillMissingNullable(inner.element as ZodType, v)) : value;
+  if (!(inner instanceof z.ZodObject) || Array.isArray(value)) return value;
+  const out: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+  for (const [key, field] of Object.entries(inner.shape as Record<string, ZodType>)) {
+    if (!(key in out)) {
+      if (field.safeParse(null).success) out[key] = null;
+      else if (unwrap(field) instanceof z.ZodObject) {
+        // Object bắt buộc mà mọi trường con đều nullable (vd `custom` – trường bổ sung) → object toàn null.
+        const empty = fillMissingNullable(field, {});
+        if (field.safeParse(empty).success) out[key] = empty;
+      }
+    } else out[key] = fillMissingNullable(field, out[key]);
+  }
+  return out;
+}
+
+function unwrap(schema: ZodType): ZodType {
+  let s: ZodType = schema;
+  while (s instanceof z.ZodNullable || s instanceof z.ZodOptional) s = s.unwrap() as ZodType;
+  return s;
+}
+export * from "./ai-schema.js";

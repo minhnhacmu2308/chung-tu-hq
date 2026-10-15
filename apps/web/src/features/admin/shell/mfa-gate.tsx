@@ -45,7 +45,7 @@ function Enroll({ onDone }: { onDone: () => void }) {
         <Alert tone="success" title="Đã bật xác thực 2 lớp">
           Lưu 8 mã khôi phục dưới đây ở nơi an toàn (trình quản lý mật khẩu). Mỗi mã dùng được một lần khi mất điện thoại. Mã chỉ hiện lần này.
         </Alert>
-        <ol aria-label="Mã khôi phục" className="grid grid-cols-2 gap-2 rounded-md border border-border bg-surface-muted p-4 font-mono text-sm text-fg sm:grid-cols-4">
+        <ol aria-label="Mã khôi phục" className="grid grid-cols-2 gap-2 rounded-md border border-border bg-surface-muted p-4 font-mono text-sm text-fg cq-sm:grid-cols-4">
           {confirm.data.recoveryCodes.map((c) => (
             <li key={c}>{c}</li>
           ))}

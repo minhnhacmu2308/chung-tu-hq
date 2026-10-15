@@ -80,7 +80,7 @@ export function CrossCheckPanel({ checks, loading }: { checks: CrossCheck[] | un
         ) : (
           <Stack gap="sm">
             {issues.length > 0 && (
-              <ul className="grid gap-1.5 xl:grid-cols-2" aria-label="Luật cần chú ý">
+              <ul className="grid gap-1.5 cq-xl:grid-cols-2" aria-label="Luật cần chú ý">
                 {issues.map((c) => (
                   <CheckRow key={c.id} c={c} />
                 ))}

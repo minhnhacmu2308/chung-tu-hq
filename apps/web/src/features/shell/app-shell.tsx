@@ -110,7 +110,7 @@ function ShellInner({ children }: { children: ReactNode }) {
   const menuOnTop = menu === "top";
   const content = (
     <>
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+      <main className="@container min-w-0 flex-1 px-4 py-6 md:px-8">
         {/* Menu ở trên đã có sẵn nút ☰ trong thanh menu. */}
         {!menuOnTop && (
           <div className="mb-2 md:hidden">

@@ -1,6 +1,6 @@
 // Pipeline đọc một chứng từ (chạy trong worker): phân loại → trích xuất (idempotent) → gộp hồ sơ → luật → trạng thái.
 import { createHash } from "node:crypto";
-import { EXTRACTION_SCHEMA_VERSION, extractionSchemaFor, type DocKind } from "@kb/contracts";
+import { EXTRACTION_SCHEMA_VERSION, extractionSchemaFor, fillMissingNullable, withCustomFields, type DocKind } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -44,12 +44,14 @@ export async function processDocument(deps: ExtractionDeps, input: ProcessDocume
     const ctx = { orgId: asOrgId(orgId), userId: asUserId("") };
     const existing = await deps.uow.asOrg(ctx, (r) => r.extractions.findByKey(key));
     if (!existing) {
-      const schema = extractionSchemaFor(kind);
+      // Trường bổ sung riêng của doanh nghiệp (skill) được thêm vào schema để AI đọc thật.
+      const schema = withCustomFields(extractionSchemaFor(kind), skill.customFields);
       const pages = Array.from({ length: Math.max(1, doc.pages) }, (_, i) => i + 1);
       const res = await deps.ai.extract(file, pages, schema, { kind, skillHints: skill.fieldHints, examples: skill.examples, supplierHint });
       // Token đã tốn dù model trả sai cấu trúc → ghi usage trước khi parse (bất biến 8).
       const usageEventId = await deps.usage.record({ orgId, dossierId, documentId: doc.id, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens });
-      const parsed = schema.safeParse(res.result);
+      // Kết quả/fixture theo schema cũ thiếu trường mới (nullable) → coi như null.
+      const parsed = schema.safeParse(fillMissingNullable(schema, res.result));
       if (!parsed.success) throw new AiDataError(`Model trả dữ liệu không đúng cấu trúc (${parsed.error.issues[0]?.path.join(".") ?? "?"})`);
       // Hai job cùng chứng từ chạy song song: insert thứ hai trùng khóa → bỏ qua (kết quả như nhau).
       await deps.uow.asOrg(ctx, (r) =>

@@ -193,6 +193,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const set = setter(tk, warnings, SIZE_EDA);
   set("TK_ECB", val(p, "MA_LH"));
   set("TK_CH", firstToken(val(p, "CQHQ")));
+  set("TK_CHB", "00"); // bắt buộc (sheet VN_EDA); đội thủ tục mặc định như IDA – đổi khi có danh mục A038 chi tiết (D3)
   set("TK_MTC", firstToken(val(p, "PTVC")));
   set("TK_ECD", ddmmyyyy(val(p, "NGAY_DK")));
   set("TK_EPC", val(p, "NXK_MST"));

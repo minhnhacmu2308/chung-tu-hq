@@ -10,6 +10,7 @@ export const InvoiceItemSchema = z.object({
   unitPrice: nNum("Đơn giá"),
   amount: nNum("Thành tiền của dòng"),
   origin: nStr("Xuất xứ dòng hàng (mã nước ISO-2) nếu in"),
+  partNo: nStr("Mã hàng / Part No / Model / Item code của dòng (vd APSX116D, VT-AD2150) – tách riêng, không gộp vào mô tả"),
 });
 
 export const InvoiceExtractionSchema = z.object({
@@ -25,6 +26,8 @@ export const InvoiceExtractionSchema = z.object({
   items: z.array(InvoiceItemSchema).describe("Danh sách dòng hàng theo thứ tự in"),
   grossWeightKg: nNum("Tổng trọng lượng cả bì (Gross Weight) tính bằng kg nếu in trên invoice"),
   packages: nNum("Tổng số kiện (packages / cartons / pallets) nếu in"),
+  incotermPlace: nStr("Địa danh đi kèm điều kiện giao hàng (EX-Works Shenzhen → Shenzhen; FOB BUSAN → BUSAN)"),
+  originStatement: nStr("Câu xuất xứ in trên hóa đơn (vd \"Made In China\") nguyên văn"),
   uncertainties: UncertaintiesSchema,
 });
 export type InvoiceExtraction = z.infer<typeof InvoiceExtractionSchema>;

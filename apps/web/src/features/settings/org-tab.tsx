@@ -43,7 +43,7 @@ export function OrgTab() {
         <CardContent>
           {save.isError && <Alert tone="danger" className="mb-6">{save.error.message}</Alert>}
           <FormSection title="Định danh" description="MST là định danh của doanh nghiệp trên hệ thống – không đổi được. Cần đổi: liên hệ hỗ trợ.">
-            <Field label="Mã số thuế" className="md:max-w-xs">
+            <Field label="Mã số thuế" className="cq-md:max-w-xs">
               <div className="relative">
                 <Input value={org.taxCode} readOnly disabled className="pr-9 font-mono" />
                 <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" aria-hidden="true" />
@@ -57,7 +57,7 @@ export function OrgTab() {
             <Field label="Địa chỉ">
               <Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
             </Field>
-            <Field label="Số điện thoại" className="md:max-w-xs">
+            <Field label="Số điện thoại" className="cq-md:max-w-xs">
               <Input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} inputMode="tel" />
             </Field>
           </FormSection>

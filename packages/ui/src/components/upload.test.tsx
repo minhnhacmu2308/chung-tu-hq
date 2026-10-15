@@ -62,6 +62,16 @@ describe("FileDropzone", () => {
     expect(onFiles).not.toHaveBeenCalled();
   });
 
+  it("size sm: một dòng gọn, gợi ý định dạng vẫn đọc được bằng trình đọc màn hình", async () => {
+    const onFiles = vi.fn();
+    render(<FileDropzone size="sm" accept=".pdf" maxSize={1024} onFiles={onFiles} labels={{ title: "Thả hoặc chọn file Invoice", browse: "" }} />);
+    const zone = screen.getByRole("button", { name: /Thả hoặc chọn file Invoice/ });
+    expect(zone).toHaveClass("flex-row", "py-2.5");
+    expect(zone).toHaveAccessibleDescription(/Định dạng: \.pdf/);
+    expect(screen.queryByText("hoặc bấm để chọn tệp")).not.toBeInTheDocument();
+    await expectNoA11yViolations(zone.parentElement!);
+  });
+
   it("tiếng Anh dưới UiLocaleProvider", () => {
     render(
       <UiLocaleProvider locale="en">

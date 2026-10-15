@@ -29,6 +29,11 @@ export const IDA_TRANSPORT: FieldMapping[] = [
 ];
 ```
 
+## Cấu hình theo doanh nghiệp (2026-10-15)
+- `FieldMapping.from` là quy tắc mặc định (code có test). Muốn cho doanh nghiệp đổi nguồn: thêm `options: { sources: SourceOption[], allowFixed }` (nguồn dùng chung ở `mapping/sources.ts`). Chỉ tiêu trị giá/thuế (`DERIVED_DECLARATION_FIELD_CODES`) KHÔNG có `options`.
+- Giá trị có thể lấy từ Mặc định khai báo: `profileOr(i, "<CODE>", fallback)` – mã phải nằm trong `PROFILE_FIELD_CODES`.
+- `evaluateMapping` áp ghi đè và ghi `provenance`; `validateOverrides` kiểm khi lưu. Test tương đương "không ghi đè = from" ở `__tests__/rules.test.ts` phải xanh.
+
 ## Các bước
 1. Xác định chỉ tiêu theo văn bản hướng dẫn tờ khai hiện hành; ghi nguồn văn bản trong comment.
 2. Thêm/sửa `FieldMapping` (nguồn, hàm lấy, chuyển đổi mã/đơn vị, bắt buộc, validate).

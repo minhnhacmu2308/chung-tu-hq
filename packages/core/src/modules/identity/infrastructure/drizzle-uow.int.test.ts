@@ -53,6 +53,18 @@ describe("DrizzleIdentityUow", () => {
     await uow.asOrg(ANPHAT, (r) => r.certificates.delete("org_anphat", "cert_1"));
     expect(await uow.asOrg(ANPHAT, (r) => r.certificates.list("org_anphat"))).toHaveLength(1);
   });
+  it("secrets: upsert ghi đè theo (org, kind), org khác không đọc/xóa được (RLS), delete", async () => {
+    const row = (ciphertext: string) => ({ id: `sec_${ciphertext}`, orgId: "org_anphat", kind: "VNACCS", ciphertext, keyVersion: 1, updatedAt: new Date("2026-10-14T08:00:00Z") });
+    await uow.asOrg(ANPHAT, (r) => r.secrets.upsert(row("c1")));
+    await uow.asOrg(ANPHAT, (r) => r.secrets.upsert(row("c2")));
+    expect(await uow.asOrg(ANPHAT, (r) => r.secrets.get("org_anphat", "VNACCS"))).toMatchObject({ ciphertext: "c2", keyVersion: 1 });
+    expect(await uow.asOrg(OTHER, (r) => r.secrets.get("org_anphat", "VNACCS"))).toBeNull();
+    await uow.asOrg(OTHER, (r) => r.secrets.delete("org_anphat", "VNACCS"));
+    expect(await uow.asOrg(ANPHAT, (r) => r.secrets.get("org_anphat", "VNACCS"))).not.toBeNull();
+    await expect(uow.asOrg(OTHER, (r) => r.secrets.upsert({ ...row("x"), id: "sec_x" }))).rejects.toThrow();
+    await uow.asOrg(ANPHAT, (r) => r.secrets.delete("org_anphat", "VNACCS"));
+    expect(await uow.asOrg(ANPHAT, (r) => r.secrets.get("org_anphat", "VNACCS"))).toBeNull();
+  });
   it("sessions: insert qua system, tìm theo hash, asUser chỉ thấy của mình, touch, lastSeenByUsers, delete", async () => {
     const now = new Date();
     await uow.system((r) => r.sessions.insert({ id: "ses_1", userId: "usr_chau", orgId: "org_anphat", tokenHash: "h1", expiresAt: exp, lastSeenAt: now }));

@@ -39,7 +39,7 @@ beforeEach(() => {
   uow.data.exchangeRates.push({ currency: "USD", date: "2026-10-13", rate: "25400" });
   queue = new InMemoryJobQueue();
   hs = new ScriptedHs([
-    { match: /ball bearing/i, code: "8482.10.00", description: "Ổ bi cầu", confidence: 0.8 },
+    { match: /ball bearing/i, code: "8482.10.00", description: "Ổ bi cầu", confidence: 0.8, importRate: 0, basis: "FTA", agreement: "AKFTA", vat: 8 },
     { match: /tapered/i, code: "8482.20.00", description: "Ổ bi đũa côn", confidence: 0.88 },
     { match: /linear guide/i, code: "8466.93.90", description: "Bộ phận máy công cụ", confidence: 0.61 },
     { match: /linear guide/i, code: "8482.80.00", description: "Ổ bi khác", confidence: 0.55 },
@@ -84,13 +84,15 @@ describe("agent run", () => {
     expect(v.run.tasks.every((t) => t.status === "DONE")).toBe(true);
     const items = unwrap(await listLineItems(deps, declarant, D));
     expect(items[0]).toMatchObject({ hsSuggested: "8482.10.00" });
-    expect(items[0]!.hsConfidence).toBeCloseTo(0.95, 2); // 0.8 + khớp 6 số invoice
+    expect(items[0]!.hsConfidence).toBeCloseTo(0.8, 2); // tin cậy do HSCodePro trả (API tự xét HS trên invoice)
     expect(items[4]).toMatchObject({ hsSuggested: "8466.93.90", hsConfidence: 0.61 });
     expect(items[3]!.hsSuggested).toBeUndefined(); // "Cylindrical" không có luật → không gợi ý
     expect(v.logs.some((l) => l.text.includes("không có gợi ý"))).toBe(true);
     expect(v.logs.some((l) => l.text.includes("Người nhập khẩu lấy theo MST"))).toBe(true);
     const view = unwrap(await getDeclarationView(deps, declarant, D));
     expect(view.declaration).toMatchObject({ kind: "IDA", status: "DRAFT", exchangeRate: "25400", customsValueVnd: "558800000" });
+    // Nguồn tỷ giá hiện ở màn Review: tiền tệ, tuần hiệu lực, nguồn (SEED/VCB/MANUAL).
+    expect(view.exchangeRateInfo).toEqual({ currency: "USD", rate: "25400", effectiveFrom: "2026-10-13", source: "SEED", snapshotAt: null });
     expect(view.declaration!.fields[0]!.code).toBe("SOTK");
     expect(view.declaration!.fields.find((f) => f.code === "NNK_MST")).toMatchObject({ no: "1.12", value: "0316789012", source: "ACCOUNT" });
     expect(view.items[0]!.customsValueVnd).toBe("99163549");
@@ -104,7 +106,7 @@ describe("agent run", () => {
     await runFull("DECLARATION");
     expect(uow.data.declarations.map((d) => d.version)).toEqual([1, 2]);
     expect(uow.data.lineItems).toHaveLength(7);
-    expect(uow.data.suggestions.filter((s) => s.lineItemId === items[4]!.id)).toHaveLength(2);
+    expect(uow.data.suggestions.filter((s) => s.lineItemId === items[4]!.id)).toHaveLength(1); // một gợi ý chính, không nhân đôi khi chạy lại
     expect(hs.calls).toBe(before + 7);
   });
 
@@ -126,10 +128,10 @@ describe("agent run", () => {
 });
 
 describe("HS và tờ khai", () => {
-  it("confirmHs: INVALID_HS khi không có trong biểu thuế; xác nhận → thuế suất AK 0%, audit HS_CONFIRM, tờ khai dựng lại có thuế; unconfirm bỏ", async () => {
+  it("confirmHs: INVALID_HS khi mã không đủ 8 số; xác nhận → thuế suất AK 0%, audit HS_CONFIRM, tờ khai dựng lại có thuế; unconfirm bỏ", async () => {
     await runFull("DECLARATION");
     const items = unwrap(await listLineItems(deps, declarant, D));
-    expect(errCode(await confirmHs(deps, declarant, items[0]!.id, "9999.99.99"))).toBe("INVALID_HS");
+    expect(errCode(await confirmHs(deps, declarant, items[0]!.id, "8482.10"))).toBe("INVALID_HS");
     const c = unwrap(await confirmHs(deps, declarant, items[0]!.id, "8482.10.00"));
     expect(c).toMatchObject({ hsConfirmed: "8482.10.00", importDutyRate: "0", vatRate: "8", policyNote: expect.stringMatching(/AKFTA/) });
     expect(audit.rows).toEqual([{ orgId: ORG_ID, dossierId: D, key: "hs:1", oldValue: "8482.10.00", newValue: "8482.10.00", source: "HS_CONFIRM" }]);
@@ -175,12 +177,16 @@ describe("HS và tờ khai", () => {
     fails[D] = 1;
     expect(errCode(await approveDeclaration(deps, approver, D))).toBe("BLOCKER_FAILED");
     fails[D] = 0;
-    // Hàng chương 84/85 (CV 2061): chưa chọn MO/CU → chặn duyệt; chọn sai mã → không cho lưu; chọn MO → duyệt được.
+    // Hàng chương 84/85 (CV 2061): chưa chọn MO/CU → chặn duyệt; chọn sai mã → không cho lưu; chọn MO.
     const noMoCu = await approveDeclaration(deps, approver, D);
     expect(noMoCu).toMatchObject({ ok: false, error: { code: "BLOCKER_FAILED", message: expect.stringMatching(/Mã văn bản pháp quy khác \(1\.37\)/) } });
     expect(errCode(await updateDeclarationField(deps, declarant, D, "VBPQ", "XX"))).toBe("VALIDATION");
     expect(errCode(await updateDeclarationField(deps, declarant, D, "VBPQ", ""))).toBe("VALIDATION");
     unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
+    // Mã kho luôn nhập tay (D3): còn trống → không duyệt được, nêu tên chỉ tiêu.
+    const missing = await approveDeclaration(deps, approver, D);
+    expect(missing).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringContaining("Mã địa điểm lưu kho") } });
+    unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));
     const a = unwrap(await approveDeclaration(deps, approver, D));
     expect(a).toMatchObject({ status: "APPROVED", approvedBy: "Tên usr_tuan", approvedAt: "2026-10-14T03:00:00.000Z" });
     expect(dossiers.rows[0]).toMatchObject({ status: "APPROVED", step: "submit", suspectFields: 0 });

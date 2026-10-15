@@ -18,11 +18,18 @@ const FTA_TABLE: Record<string, { code: string; name: string }> = {
  * Ghi chú chính sách luôn mở đầu bằng tên FTA – bước truyền suy mã biểu thuế từ tên này (dòng hàng chưa lưu mã biểu thuế riêng).
  */
 export function ratesFor(hs: HsCatalogRow | null, p: { direction: "NK" | "XK"; typeCode: string; coForm: string | null }): Rates {
-  if (p.direction === "XK") return { importDutyRate: "0", vatRate: "0", policyNote: "Hàng xuất khẩu – thuế XK 0%", taxTableCode: "" };
+  const fixed = fixedRatesFor(p);
+  if (fixed) return fixed;
   if (!hs) return { importDutyRate: "0", vatRate: "8", policyNote: null, taxTableCode: "B01" };
-  if (/^E(21|31|11|41)$/.test(p.typeCode)) return { importDutyRate: "0", vatRate: "0", policyNote: `Loại hình ${p.typeCode}: miễn thuế NK, không thu VAT khâu nhập khẩu`, taxTableCode: "B01" };
   const fta = p.coForm ? FTA_TABLE[p.coForm.toUpperCase()] : undefined;
   const pref = p.coForm ? hs.pref[p.coForm.toUpperCase()] ?? (p.coForm.toUpperCase().startsWith("EVFTA") ? hs.pref["EVFTA"] : undefined) : undefined;
   if (fta && pref !== undefined) return { importDutyRate: pref, vatRate: hs.vat, policyNote: hs.policy ? `${fta.name}; ${hs.policy}` : `Áp thuế suất ưu đãi đặc biệt ${fta.name}`, taxTableCode: fta.code };
   return { importDutyRate: hs.mfn, vatRate: hs.vat, policyNote: hs.policy, taxTableCode: "B01" };
+}
+
+/** Thuế suất không phụ thuộc mã HS: hàng XK, loại hình miễn thuế (E21/E31/E11/E41). Còn lại → null. */
+export function fixedRatesFor(p: { direction: "NK" | "XK"; typeCode: string }): Rates | null {
+  if (p.direction === "XK") return { importDutyRate: "0", vatRate: "0", policyNote: "Hàng xuất khẩu – thuế XK 0%", taxTableCode: "" };
+  if (/^E(21|31|11|41)$/.test(p.typeCode)) return { importDutyRate: "0", vatRate: "0", policyNote: `Loại hình ${p.typeCode}: miễn thuế NK, không thu VAT khâu nhập khẩu`, taxTableCode: "B01" };
+  return null;
 }

@@ -1,17 +1,55 @@
-import type { DocKind, Shipment } from "@kb/contracts";
+import type { DocKind, HsAnswerRequest, HsCreateRequest, HsJob, HsJobItem, Shipment } from "@kb/contracts";
 import type { ProgressEvent } from "../../../dossier/index.js";
-import type { AuditWriter, DossierInfo, DossierPort, HsClassifier, OrgInfo, OrgReader, ShipmentReader, UserNames, ValidationReader } from "../ports.js";
+import { HsApiError, type AuditWriter, type DossierInfo, type DossierPort, type HsClassificationService, type OrgInfo, type OrgReader, type ShipmentReader, type UserNames, type ValidationReader } from "../ports.js";
 
-/** Classifier giả: gợi ý theo từ khóa cấu hình; mô tả không khớp → []. `failOn` ném lỗi tạm (test retry). */
-export class ScriptedHs implements HsClassifier {
+/**
+ * HSCodePro giả cho test use case. Mặc định: lượt hoàn tất ngay theo `rules` (khớp mô tả).
+ * `onGet(jobId)` cho phép kịch bản trạng thái theo từng lần hỏi; ghi lại create/answer/cancel.
+ */
+export class ScriptedHs implements HsClassificationService {
   readonly name = "fake-hs";
   calls = 0;
   failOn: string | null = null;
-  constructor(private rules: { match: RegExp; code: string; description: string; confidence: number }[]) {}
-  async classify(input: { description: string; invoiceHs: string | null; origin: string }) {
-    this.calls++;
-    if (this.failOn && input.description.includes(this.failOn)) throw new Error("classifier 503");
-    return this.rules.filter((r) => r.match.test(input.description)).map(({ code, description, confidence }) => ({ code, description, confidence }));
+  created: HsCreateRequest[] = [];
+  answers: { jobId: string; itemId: string; body: HsAnswerRequest }[] = [];
+  cancelled: string[] = [];
+  answerError: Error | null = null;
+  jobs = new Map<string, HsJob>();
+  onGet: ((job: HsJob) => HsJob) | null = null;
+  private seq = 0;
+  constructor(private rules: { match: RegExp; code: string; description: string; confidence: number; importRate?: number; basis?: "MFN" | "FTA"; agreement?: string; vat?: number; alternatives?: { code: string; importRate: number; whyNot: string }[] }[]) {}
+  async create(req: HsCreateRequest): Promise<HsJob> {
+    this.created.push(req);
+    if (this.failOn && req.items.some((i) => i.description.includes(this.failOn!))) throw new HsApiError(503, "HTTP_503", "classifier 503");
+    const id = `hsjob_${++this.seq}`;
+    const tax = (rate: number, basis: "MFN" | "FTA" = "MFN", agreement: string | null = null, vat = 10) => ({ import: { rate, basis, agreement }, vat: { rate: vat, note: null }, source_date: req.import_date ?? "" });
+    const items: HsJobItem[] = req.items.map((it, i) => {
+      this.calls++;
+      const r = this.rules.find((x) => x.match.test(it.description));
+      const base = { id: `${id}_it${i + 1}`, line_no: it.line_no, question: null };
+      if (!r) return { ...base, status: "failed" as const, result: null, error: { code: "NO_SUGGESTION", message: "Không có gợi ý" } };
+      return { ...base, status: "completed" as const, error: null, result: {
+        hs_code: r.code.replace(/\D/g, ""), hs_description: r.description, confidence: Math.round(r.confidence * 100), reasoning: "test", legal_basis: [], warnings: [], tax: tax(r.importRate ?? 5, r.basis, r.agreement ?? null, r.vat),
+        alternatives: (r.alternatives ?? []).map((a) => ({ hs_code: a.code.replace(/\D/g, ""), hs_description: "", confidence: 10, why_not: a.whyNot, tax: tax(a.importRate) })),
+      } };
+    });
+    const job: HsJob = { id, external_ref: req.external_ref ?? null, import_date: req.import_date ?? "", status: "completed", created_at: "2026-10-14T03:00:00.000Z", items };
+    this.jobs.set(id, job);
+    return structuredClone(job);
+  }
+  async get(jobId: string): Promise<HsJob> {
+    const j = this.jobs.get(jobId);
+    if (!j) throw new HsApiError(404, "NOT_FOUND", "không có lượt");
+    const next = this.onGet ? this.onGet(structuredClone(j)) : j;
+    this.jobs.set(jobId, next);
+    return structuredClone(next);
+  }
+  async answer(jobId: string, itemId: string, body: HsAnswerRequest) {
+    if (this.answerError) throw this.answerError;
+    this.answers.push({ jobId, itemId, body });
+  }
+  async cancel(jobId: string) {
+    this.cancelled.push(jobId);
   }
 }
 

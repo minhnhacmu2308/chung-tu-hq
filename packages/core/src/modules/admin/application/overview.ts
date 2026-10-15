@@ -2,6 +2,7 @@
 import type { AdminOverview } from "@kb/contracts";
 import { ok, type Result } from "../../../shared/result.js";
 import { buildAttention } from "../domain/attention.js";
+import { rateAttentionInput } from "./exchange-rates.js";
 import { guarded, sumMoney, type StaffActor } from "./_shared.js";
 import { orgSnapshot } from "./orgs.js";
 import { PLATFORM_INTEGRATIONS } from "./platform.js";
@@ -34,6 +35,7 @@ export async function getOverview(deps: AdminDeps, actor: StaffActor): Promise<R
           failedJobs,
           pendingJoins: joins.map((j) => j.requestedAt),
           now,
+          rates: await rateAttentionInput(r, now),
         }),
         recentOrgs: [...orgs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5),
       });

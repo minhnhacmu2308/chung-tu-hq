@@ -3,8 +3,8 @@
 import {
   AdjustOrgQuotaInputSchema, AdminReasonInputSchema, ChangeOrgPlanInputSchema, ChangeStaffRoleInputSchema, ExtendOrgTrialInputSchema,
   InviteStaffInputSchema, SendAnnouncementInputSchema, SetTemplatePublishedInputSchema, staffCan, UpdateIntegrationKeyInputSchema,
-  UpdatePlanInputSchema, UsageMonthSchema,
-  type AdminAction, type AdminAuditEntry, type AdminOrg, type AdminOrgDetail, type AdminOverview, type AdminPermission, type AdminPlan,
+  UpdatePlanInputSchema, UpsertExchangeRateInputSchema, UsageMonthSchema,
+  type AdminAction, type ExchangeRate, type ExchangeRatesView, type AdminAuditEntry, type AdminOrg, type AdminOrgDetail, type AdminOverview, type AdminPermission, type AdminPlan,
   type AdminSession, type AdminTargetType, type AdminUser, type Announcement, type AttentionItem, type FailedJob, type IntegrationId,
   type Organization, type OrgUsageRow, type PlanCode, type PlatformIntegration, type SkillTemplate, type Staff, type SystemHealth,
   type UsageReport,
@@ -661,4 +661,29 @@ export function getOverview(db: AdminScope): AdminOverview {
     attention: attention.sort((a, b) => Number(b.severity === "danger") - Number(a.severity === "danger")),
     recentOrgs: [...orgs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5),
   };
+}
+
+/* ---------- Tỷ giá tính thuế (D2) ---------- */
+
+export function listExchangeRates(db: AdminScope): ExchangeRatesView {
+  actor(db, "VIEW");
+  const weeks = new Map<string, ExchangeRate[]>();
+  for (const r of db.admin.exchangeRates) weeks.set(r.effectiveFrom, [...(weeks.get(r.effectiveFrom) ?? []), r]);
+  const now = new Date();
+  let next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 16, 30));
+  while (next.getUTCDay() !== 4 || next <= now) next = new Date(next.getTime() + DAY);
+  return {
+    weeks: [...weeks.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([effectiveFrom, rates]) => ({ effectiveFrom, rates: rates.sort((a, b) => a.currency.localeCompare(b.currency)) })),
+    lastFetch: db.admin.rateFetches.at(-1) ?? null,
+    nextRunAt: next.toISOString(),
+  };
+}
+
+export function upsertExchangeRate(db: AdminScope, input: unknown): ExchangeRate {
+  const staff = actor(db, "PLATFORM");
+  const { currency, effectiveFrom, rate, reason } = parse(UpsertExchangeRateInputSchema, input);
+  const row: ExchangeRate = { currency, effectiveFrom, rate, source: "MANUAL", snapshotAt: null, updatedByName: staff.name, note: reason };
+  db.admin.exchangeRates = [...db.admin.exchangeRates.filter((r) => !(r.currency === currency && r.effectiveFrom === effectiveFrom)), row];
+  log(db, staff, "EXCHANGE_RATE_UPDATED", { type: "EXCHANGE_RATE", id: `${currency}_${effectiveFrom}`, label: `${currency} tuần ${effectiveFrom}` }, reason, `Tỷ giá ${rate}`);
+  return row;
 }

@@ -4,7 +4,7 @@ import { sequentialIdGen } from "../../../../shared/ids.js";
 import { unwrap } from "../../../../shared/result.js";
 import { AiDataError, type ExtractionDeps } from "../ports.js";
 import { processDocument } from "../process-document.js";
-import { FakeDocuments, InMemoryExtractionUow, NoSkills, NoValidation, RecordingUsage, ScriptedAi } from "../test/fakes.js";
+import { FakeDocuments, FixedSkills, InMemoryExtractionUow, NoSkills, NoValidation, RecordingUsage, ScriptedAi } from "../test/fakes.js";
 
 const INVOICE = {
   invoiceNo: "HSP-2610-0457", invoiceDate: "2026-10-02",
@@ -44,7 +44,7 @@ describe("processDocument", () => {
     expect(ai.calls).toEqual({ classify: 1, extract: 1 });
     expect(docs.docs[0]).toMatchObject({ status: "DONE", kind: "INVOICE", kindSource: "AI" });
     expect(uow.data.extractions).toHaveLength(1);
-    expect(uow.data.extractions[0]).toMatchObject({ kind: "INVOICE", status: "DONE", promptVersion: "1", usageEventId: "use_2" });
+    expect(uow.data.extractions[0]).toMatchObject({ kind: "INVOICE", status: "DONE", promptVersion: "2", usageEventId: "use_2" });
     expect(usage.events).toHaveLength(2); // classify + extract
     expect(uow.data.shipments[0]?.version).toBe(1);
     expect(uow.data.shipments[0]?.data.invoice.no.value).toBe("HSP-2610-0457");
@@ -53,6 +53,22 @@ describe("processDocument", () => {
     expect(docs.dossierUpdates.at(-1)).toMatchObject({ dossierId: "dos_1", allDone: true, invoiceValue: "20850", currency: "USD" });
     expect(docs.events.map((e) => e.type)).toContain("document.status");
     expect(docs.events.map((e) => e.type)).toContain("fields.updated");
+  });
+  it("skill có trường bổ sung → schema gửi AI có custom; kết quả vào shipment.custom; AI trả custom sai kiểu → chứng từ ERROR, không hỏng trường chuẩn đã có", async () => {
+    deps = { ...deps, skills: new FixedSkills([{ key: "lc_no", label: "Số L/C", aliases: ["L/C No"], type: "text" }]) };
+    addDoc("doc_inv", "INVOICE", "USER");
+    ai = new ScriptedAi({ INVOICE: { ...INVOICE, custom: { lc_no: "LC-2026-01" } } });
+    deps = { ...deps, ai };
+    unwrap(await processDocument(deps, { orgId: ORG, dossierId: "dos_1", documentId: "doc_inv", mode: "FULL" }));
+    const shape = (ai.lastSchema as unknown as { shape: Record<string, unknown> }).shape;
+    expect(Object.keys(shape)).toContain("custom");
+    expect(uow.data.shipments.at(-1)?.data.custom["INVOICE"]?.["lc_no"]?.value).toBe("LC-2026-01");
+
+    addDoc("doc_bad", "INVOICE", "USER");
+    deps = { ...deps, ai: new ScriptedAi({ INVOICE: { ...INVOICE, custom: { lc_no: 123 } } }) };
+    unwrap(await processDocument(deps, { orgId: ORG, dossierId: "dos_1", documentId: "doc_bad", mode: "FULL" }));
+    expect(docs.docs.find((d) => d.id === "doc_bad")).toMatchObject({ status: "ERROR" });
+    expect(docs.docs.find((d) => d.id === "doc_inv")).toMatchObject({ status: "DONE" });
   });
   it("kind do người dùng đặt hoặc AI đã phân loại → không gọi phân loại", async () => {
     addDoc("doc_inv", "INVOICE", "USER");

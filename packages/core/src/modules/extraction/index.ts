@@ -11,3 +11,4 @@ export { normalizeEdit } from "./domain/edit-normalize.js";
 export { countryCode, nameSimilarity, normalizeCompanyName, packageUnitCode, parseDate, parseNumber, unitCode } from "./domain/normalize.js";
 export { isSuspect, type Threshold } from "./domain/field-status.js";
 export { mergeExtractions, type FileExtraction } from "./domain/merge.js";
+export { documentSheets } from "./application/document-sheets.js";

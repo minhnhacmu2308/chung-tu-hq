@@ -4,6 +4,7 @@ export { Button, buttonVariants, type ButtonProps } from "./components/button.js
 export { Spinner, type SpinnerProps } from "./components/spinner.js";
 export { Field, Label, useFieldControl, type FieldProps } from "./components/field.js";
 export { Input, Textarea, Select, Checkbox, type SelectOption, type SelectProps, type CheckboxProps } from "./components/inputs.js";
+export { RadioGroup, type RadioGroupProps, type RadioOption } from "./components/radio-group.js";
 export {
   Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,
   Grid, Stack, PageHeader,
@@ -73,6 +74,7 @@ export { AiBackdrop, AiScanCard, type AiBackdropProps, type AiScanCardProps, typ
 export { CountUp, type CountUpProps } from "./components/count-up.js";
 export { BrandMark, type BrandMarkProps } from "./components/brand-mark.js";
 export { StatCard, type StatCardProps } from "./components/stat-card.js";
+export { IconTile, type IconTileProps } from "./components/icon-tile.js";
 export { FormSection, type FormSectionProps } from "./components/form-section.js";
 export { RowActions, type RowAction, type RowActionsProps } from "./components/row-actions.js";
 export {

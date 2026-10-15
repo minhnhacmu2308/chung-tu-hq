@@ -99,6 +99,22 @@ function mergeCharges(files: FileExtraction[], s: Shipment) {
   s.charges = { freight: pick(freight, freightSources), freightCurrency: pick(freightCur, freightSources), insurance: pick(insurance, insuranceSources), insuranceCurrency: pick(insuranceCur, insuranceSources), other };
 }
 
+/** Trường bổ sung riêng của doanh nghiệp (`data.custom`): custom[loại][key], chứng từ đầu tiên có giá trị thắng. */
+function mergeCustom(files: FileExtraction[]): Shipment["custom"] {
+  const out: Shipment["custom"] = {};
+  for (const f of files) {
+    const custom = f.data["custom"] as Record<string, unknown> | null | undefined;
+    if (!custom || typeof custom !== "object") continue;
+    for (const [key, raw] of Object.entries(custom)) {
+      if (raw === null || raw === undefined || raw === "") continue;
+      const byKind = (out[f.kind] ??= {});
+      if (byKind[key]?.value) continue;
+      byKind[key] = { value: String(raw), sources: [{ documentId: f.documentId, kind: f.kind, page: 1, raw: String(raw) }], status: "SINGLE_SOURCE" };
+    }
+  }
+  return out;
+}
+
 export function mergeExtractions(files: FileExtraction[], opts: MergeOptions): Shipment {
   const s = emptyShipment();
   s.version = opts.version;
@@ -116,6 +132,11 @@ export function mergeExtractions(files: FileExtraction[], opts: MergeOptions): S
     .map((c) => ({ no: String(c["no"]), sealNo: (c["sealNo"] as string | null) ?? null, size: (c["size"] as string | null) ?? null }));
   s.items = mergeItems(files);
   mergeCharges(files, s);
+  const co = files.find((f) => f.kind === "CERT_OF_ORIGIN");
+  s.origin.criteria = ((co?.data["items"] as Record<string, unknown>[] | undefined) ?? [])
+    .map((i) => ({ hs6: (i["hs6"] as string | null) ?? null, criterion: (i["criterion"] as string | null) ?? null }))
+    .filter((c) => c.hs6 || c.criterion);
+  s.custom = mergeCustom(files);
   s.documents = files.map((f) => ({ id: f.documentId, kind: f.kind, pages: f.pages }));
   return s;
 }

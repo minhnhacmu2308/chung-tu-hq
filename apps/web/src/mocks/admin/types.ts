@@ -1,6 +1,7 @@
 // Phần dữ liệu back-office trong "DB" giả. Doanh nghiệp demo (db.org + db.members) được ghép vào lúc đọc,
 // nên thao tác ở /admin (đổi gói, khóa người dùng, gửi thông báo) hiện ngay bên ứng dụng của khách.
 import type {
+  ExchangeRate, ExchangeRateFetch,
   AdminAuditEntry, AdminPlan, AdminUser, AdminUserSession, Announcement, FailedJob, IntegrationId, Organization, OrgStatus,
   PlatformIntegration, QueueStat, ServiceHealth, SkillTemplate, Staff,
 } from "@kb/contracts";
@@ -29,6 +30,9 @@ export type AdminDb = {
   queues: QueueStat[];
   failedJobs: FailedJob[];
   skillTemplates: SkillTemplate[];
+  /** Tỷ giá tính thuế theo tuần (D2) + nhật ký lần lấy Vietcombank. */
+  exchangeRates: ExchangeRate[];
+  rateFetches: ExchangeRateFetch[];
   /** Mới nhất đứng đầu. */
   audit: AdminAuditEntry[];
   announcements: Announcement[];

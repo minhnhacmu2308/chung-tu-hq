@@ -123,7 +123,7 @@ export function OrgActionDialogs({ org, action, onClose }: Props) {
         <Field
           label="Số hồ sơ cộng thêm trong tháng này"
           required
-          className="md:max-w-xs"
+          className="cq-md:max-w-xs"
           hint="Chỉ có hiệu lực tới hết kỳ hiện tại. Nhập 0 để bỏ phần đã nới."
           {...(bonus !== "" && !bonusCheck.success ? { error: bonusCheck.error.issues[0]?.message } : {})}
         >
@@ -142,7 +142,7 @@ export function OrgActionDialogs({ org, action, onClose }: Props) {
         canSubmit={daysCheck.success}
         onConfirm={(reason) => daysCheck.success && trial.mutate({ days: daysCheck.data, reason })}
       >
-        <Field label="Số ngày thêm" required className="md:max-w-xs" hint="Từ 1 đến 90 ngày." {...(days !== "" && !daysCheck.success ? { error: daysCheck.error.issues[0]?.message } : {})}>
+        <Field label="Số ngày thêm" required className="cq-md:max-w-xs" hint="Từ 1 đến 90 ngày." {...(days !== "" && !daysCheck.success ? { error: daysCheck.error.issues[0]?.message } : {})}>
           <Input inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />
         </Field>
       </ReasonDialog>

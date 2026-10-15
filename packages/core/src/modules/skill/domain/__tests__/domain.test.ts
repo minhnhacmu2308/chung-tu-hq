@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compareFields, scoreSample, summarize } from "../accuracy.js";
-import { applyFieldPatch, canAddField, resolveCandidates } from "../field-rules.js";
+import { applyFieldPatch, canAddField, canRemoveField, resolveCandidates } from "../field-rules.js";
 
 const FIELDS = [
   { key: "invoice_no", label: "Số hóa đơn", type: "code" as const, required: true, aliases: ["Invoice No."], extract: true, display: true },
@@ -44,9 +44,17 @@ describe("field-rules", () => {
     expect(ok.ok && ok.value.find((f) => f.key === "invoice_date")).toMatchObject({ extract: false, display: false });
     expect(applyFieldPatch(FIELDS, "nope", { label: "x" }).ok).toBe(false);
   });
-  it("canAddField: key trùng → DUPLICATE; hợp lệ → ok", () => {
-    expect(canAddField(FIELDS, "invoice_no").ok).toBe(false);
-    expect(canAddField(FIELDS, "po_no").ok).toBe(true);
+  it("canAddField: key trùng → DUPLICATE; hợp lệ → ok; quá 20 trường bổ sung → VALIDATION", () => {
+    expect(canAddField("INVOICE", FIELDS, "invoice_no").ok).toBe(false);
+    expect(canAddField("INVOICE", FIELDS, "po_no").ok).toBe(true);
+    const many = Array.from({ length: 20 }, (_, i) => ({ ...FIELDS[0]!, key: `extra_${i}` }));
+    expect(canAddField("INVOICE", [...FIELDS, ...many], "extra_x")).toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+    expect(canAddField("INVOICE", [...FIELDS, ...many], "po_no").ok).toBe(true); // trường chuẩn không tính vào giới hạn
+  });
+  it("canRemoveField: trường chuẩn trong danh mục → FORBIDDEN (tắt đọc/hiển thị thay vì xóa); trường bổ sung → ok", () => {
+    expect(canRemoveField("INVOICE", FIELDS, "invoice_no")).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(canRemoveField("INVOICE", [...FIELDS, { ...FIELDS[0]!, key: "lc_no" }], "lc_no").ok).toBe(true);
+    expect(canRemoveField("INVOICE", FIELDS, "nope")).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   });
   it("resolveCandidates: SUPPLIER khớp tên nhà cung cấp ưu tiên, rồi DOCUMENT theo loại, chỉ enabled", () => {
     const skills = [
@@ -64,13 +72,17 @@ describe("field-rules", () => {
 
 describe("schema-keys", () => {
   it("key skill → key kết quả AI: ngoại lệ bảng, còn lại snake→camel; projectResult lấy theo trường extract, thiếu → null", async () => {
-    const { fieldHints, projectResult, schemaKeyFor } = await import("../schema-keys.js");
-    expect(schemaKeyFor("invoice_no")).toBe("invoiceNo");
-    expect(schemaKeyFor("bl_no")).toBe("billNo");
-    expect(schemaKeyFor("gross_weight")).toBe("grossWeightKg");
-    expect(schemaKeyFor("po_no")).toBe("poNo");
-    expect(projectResult(FIELDS, { invoiceNo: "A1", totalAmount: 100, seller: { name: "X" }, note: "bỏ" })).toEqual({ invoice_no: "A1", total_amount: 100, invoice_date: null, seller: { name: "X" } });
-    expect(fieldHints(FIELDS)[0]).toContain("Invoice No.");
-    expect(fieldHints(FIELDS)).toHaveLength(4);
+    const { fieldHints, projectResult } = await import("../schema-keys.js");
+    expect(projectResult("INVOICE", FIELDS, { invoiceNo: "A1", totalAmount: 100, seller: { name: "X" }, note: "bỏ" })).toEqual({ invoice_no: "A1", total_amount: 100, invoice_date: null, seller: { name: "X" } });
+    expect(fieldHints("INVOICE", FIELDS)[0]).toContain("Invoice No.");
+    expect(fieldHints("INVOICE", FIELDS)[0]).toContain("(invoiceNo)");
+    expect(fieldHints("INVOICE", FIELDS)).toHaveLength(4);
+  });
+  it("trường bổ sung riêng: lấy từ result.custom; gợi ý ghi rõ là trường bổ sung", async () => {
+    const { fieldHints, projectResult } = await import("../schema-keys.js");
+    const withCustom = [...FIELDS, { key: "lc_no", label: "Số L/C", type: "string" as const, required: false, aliases: ["L/C No"], extract: true, display: true }];
+    expect(projectResult("INVOICE", withCustom, { invoiceNo: "A1", custom: { lc_no: "LC-9" } })).toMatchObject({ invoice_no: "A1", lc_no: "LC-9" });
+    expect(projectResult("INVOICE", withCustom, { invoiceNo: "A1" })).toMatchObject({ lc_no: null });
+    expect(fieldHints("INVOICE", withCustom).at(-1)).toBe("Số L/C (custom.lc_no – trường bổ sung): nhãn thường gặp L/C No");
   });
 });

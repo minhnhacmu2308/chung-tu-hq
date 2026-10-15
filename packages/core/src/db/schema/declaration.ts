@@ -28,6 +28,13 @@ export const lineItems = pgTable(
     importDutyRate: money("import_duty_rate"),
     vatRate: money("vat_rate"),
     policyNote: text("policy_note"),
+    /** Phân loại HSCodePro: lượt (hs_jobs.id), id dòng phía HSCodePro, trạng thái, câu hỏi chờ trả lời, lỗi, chi tiết (lý do, căn cứ, cảnh báo). */
+    hsJobId: text("hs_job_id"),
+    hsItemId: text("hs_item_id"),
+    hsStatus: text("hs_status").notNull().default("idle"),
+    hsQuestion: jsonb("hs_question"),
+    hsError: jsonb("hs_error"),
+    hsDetail: jsonb("hs_detail"),
     ...timestamps(),
   },
   (t) => [uniqueIndex("line_items_dossier_line_uq").on(t.dossierId, t.lineNo), index("line_items_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("line_items_rls")],
@@ -46,10 +53,29 @@ export const hsSuggestions = pgTable(
     description: text("description").notNull().default(""),
     confidence: real("confidence").notNull(),
     rates: jsonb("rates"),
+    /** Vì sao HSCodePro không chọn mã thay thế này. */
+    whyNot: text("why_not"),
     source: text("source").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("hs_suggestions_item_idx").on(t.lineItemId), orgRls("hs_suggestions_rls")],
+).enableRLS();
+
+/** Lượt phân loại HSCodePro (≤ 50 dòng). `external_id` = id lượt phía HSCodePro; `polls` = số lần đã hỏi trạng thái. */
+export const hsJobs = pgTable(
+  "hs_jobs",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id")
+      .notNull()
+      .references(() => dossiers.id, { onDelete: "cascade" }),
+    externalId: text("external_id").notNull(),
+    status: text("status").notNull(),
+    polls: integer("polls").notNull().default(0),
+    ...timestamps(),
+  },
+  (t) => [index("hs_jobs_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("hs_jobs_rls")],
 ).enableRLS();
 
 /** Tờ khai nháp/duyệt; `fields` = Record<chỉ tiêu, { value, source, suspect?, note? }>. Mỗi lần dựng lại = version mới. */
@@ -76,6 +102,21 @@ export const declarations = pgTable(
     ...timestamps(),
   },
   (t) => [uniqueIndex("declarations_dossier_version_uq").on(t.dossierId, t.version), index("declarations_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("declarations_rls")],
+).enableRLS();
+
+/** Mặc định khai báo + ghi đè nguồn chỉ tiêu của doanh nghiệp, theo chiều NK/XK (spec 2026-10-15 §5.2). */
+export const declarationProfiles = pgTable(
+  "declaration_profiles",
+  {
+    id: id(),
+    orgId: orgId(),
+    direction: text("direction").notNull(),
+    values: jsonb("values").notNull().default({}),
+    overrides: jsonb("overrides").notNull().default({}),
+    updatedBy: text("updated_by"),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex("declaration_profiles_org_direction_uq").on(t.orgId, t.direction), orgRls("declaration_profiles_rls")],
 ).enableRLS();
 
 /** Lần chạy AI Agent (HS → ánh xạ → dựng tờ khai → số hóa). `tasks` = AgentRun.tasks; `log` = dòng nhật ký. */
@@ -123,8 +164,24 @@ export const exchangeRates = pgTable(
     currency: text("currency").notNull(),
     date: date("date").notNull(),
     rate: money("rate").notNull(),
-    source: text("source").notNull().default("MANUAL"),
+    /** VCB (job tối thứ Năm) | MANUAL (đội vận hành nhập/sửa) | SEED (dữ liệu mẫu). `date` = thứ Hai bắt đầu hiệu lực. */
+    source: text("source").notNull().default("SEED"),
     active: boolean("active").notNull().default(true),
+    /** Giờ của bảng Vietcombank đã chụp. */
+    snapshotAt: timestamp("snapshot_at", { withTimezone: true }),
+    updatedBy: text("updated_by"),
+    note: text("note"),
   },
   (t) => [uniqueIndex("exchange_rates_currency_date_uq").on(t.currency, t.date), pgPolicy("exchange_rates_read", { for: "select", to: appRole, using: sql`true` })],
 ).enableRLS();
+
+/** Nhật ký các lần lấy tỷ giá Vietcombank (khu Quản trị). Không theo org; kb_app không có policy → không đọc/ghi. */
+export const exchangeRateFetches = pgTable("exchange_rate_fetches", {
+  id: id(),
+  ranAt: timestamp("ran_at", { withTimezone: true }).notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  status: text("status").notNull(),
+  count: integer("count").notNull().default(0),
+  boardAt: timestamp("board_at", { withTimezone: true }),
+  error: text("error"),
+}).enableRLS();

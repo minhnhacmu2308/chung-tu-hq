@@ -42,19 +42,18 @@ beforeEach(async () => {
 describe("sao chép skill mẫu", () => {
   it("org mới có đủ skill (version 1, chưa có mẫu, không phải template); org khác không thấy", async () => {
     const mine = unwrap(await listSkills(deps, admin));
-    expect(mine.map((s) => s.code).sort()).toEqual(["SK-INV-GEN", "SK-INV-HANSOL", "SK-MAP-IDA"]);
+    expect(mine.map((s) => s.code).sort()).toEqual(["SK-INV-GEN", "SK-INV-HANSOL"]);
     expect(mine.every((s) => s.version === 1 && s.labeledSamples === 0 && s.accuracy === undefined && s.enabled)).toBe(true);
     expect(mine.find((s) => s.code === "SK-INV-GEN")?.fields.map((f) => f.key)).toEqual(["invoice_no", "total_amount", "po_no"]);
     expect(unwrap(await listSkills(deps, other))).toEqual([]);
-    expect(unwrap(await listSkills(deps, admin, "MAPPING")).map((s) => s.code)).toEqual(["SK-MAP-IDA"]);
     // Gọi lại không nhân đôi.
     expect(unwrap(await cloneTemplatesForOrg(deps, { orgId: ORG, userId: "usr_1" }))).toBe(0);
-    expect(unwrap(await listSkills(deps, admin))).toHaveLength(3);
+    expect(unwrap(await listSkills(deps, admin))).toHaveLength(2);
   });
   it("skill mẫu của org hệ thống không lộ qua getSkill của org thường", async () => {
     const r = await getSkill(deps, admin, "sk_tpl_inv");
     expect(r.ok).toBe(false);
-    expect(uow.data.skills.filter((s) => s.orgId === SYSTEM_ORG)).toHaveLength(3);
+    expect(uow.data.skills.filter((s) => s.orgId === SYSTEM_ORG)).toHaveLength(2);
   });
 });
 
@@ -123,11 +122,9 @@ describe("mẫu và đánh giá", () => {
     unwrap(await labelSample(deps, admin, s!.id, { invoice_no: "A-1" }));
     expect(unwrap(await getSkill(deps, admin, id)).labeledSamples).toBe(1);
   });
-  it("evaluateSkill: thiếu mẫu → NOT_ENOUGH_SAMPLES; MAPPING → NOT_SUPPORTED; đủ mẫu → job skill-evaluate", async () => {
+  it("evaluateSkill: thiếu mẫu → NOT_ENOUGH_SAMPLES; đủ mẫu → job skill-evaluate", async () => {
     const id = await invId();
     expect(errCode(await evaluateSkill(deps, admin, id))).toBe("NOT_ENOUGH_SAMPLES");
-    const map = unwrap(await listSkills(deps, admin, "MAPPING"))[0]!;
-    expect(errCode(await evaluateSkill(deps, admin, map.id))).toBe("NOT_SUPPORTED");
     await uploadAndRead(id, ["a.pdf", "b.pdf", "a.pdf", "b.pdf", "a.pdf"]);
     unwrap(await confirmPendingSamples(deps, admin, id));
     const r = unwrap(await evaluateSkill(deps, admin, id));
@@ -169,6 +166,6 @@ describe("chọn skill cho trích xuất", () => {
     const hansol = uow.data.skills.find((s) => s.orgId === ORG && s.code === "SK-INV-HANSOL")!;
     unwrap(await setSkillEnabled(deps, admin, hansol.id, false));
     expect((await resolver.resolve(ORG, "INVOICE", "HANSOL")).skillVersionId).toBe(gen.skillVersionId);
-    expect(await resolver.resolve("org_b", "INVOICE", null)).toEqual({ skillVersionId: null, fieldHints: [], examples: [] });
+    expect(await resolver.resolve("org_b", "INVOICE", null)).toEqual({ skillVersionId: null, fieldHints: [], examples: [], customFields: [] });
   });
 });

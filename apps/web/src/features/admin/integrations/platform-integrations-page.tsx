@@ -1,6 +1,6 @@
 "use client";
 import { UpdateIntegrationKeyInputSchema, type IntegrationId, type PlatformIntegration } from "@kb/contracts";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Field, Grid, Input, PageHeader, SkeletonCard, Stack, StatusBadge, toast } from "@kb/ui";
+import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Field, Grid, IconTile, Input, PageHeader, SkeletonCard, Stack, StatusBadge, toast } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Building2, FileSpreadsheet, KeyRound, PlugZap, Search } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -14,10 +14,10 @@ import { useAdminMutation } from "../common/use-admin-mutation";
 import { useAdminSession } from "../shell/use-admin-session";
 
 const ICON: Record<IntegrationId, ReactNode> = {
-  HSCODEPRO: <Search className="h-5 w-5" />,
-  CUSTOMS_HUB: <Building2 className="h-5 w-5" />,
-  AI_PROVIDER: <Bot className="h-5 w-5" />,
-  EINVOICE: <FileSpreadsheet className="h-5 w-5" />,
+  HSCODEPRO: <Search />,
+  CUSTOMS_HUB: <Building2 />,
+  AI_PROVIDER: <Bot />,
+  EINVOICE: <FileSpreadsheet />,
 };
 
 function KeyDialog({ integration, onClose }: { integration: PlatformIntegration | null; onClose: () => void }) {
@@ -67,7 +67,7 @@ function IntegrationCard({ it, onEditKey }: { it: PlatformIntegration; onEditKey
     <Card className="flex flex-col">
       <CardHeader>
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary-subtle text-primary-subtle-fg" aria-hidden="true">{ICON[it.id]}</span>
+          <IconTile icon={ICON[it.id]} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle as="h3">{it.name}</CardTitle>

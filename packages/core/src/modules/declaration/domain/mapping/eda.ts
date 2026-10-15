@@ -25,9 +25,9 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   { code: "NNK_DC", no: N.NNK_DC, section: "PARTIES", label: "Địa chỉ người nhập khẩu", required: true, from: (i) => fromSourced(i.shipment.parties.buyer.address, "INVOICE") },
   { code: "MA_NUOC", no: N.MA_NUOC, section: "PARTIES", label: "Mã nước người nhập khẩu", required: true, from: (i) => fromSourced(i.shipment.parties.buyer.country, "INVOICE") },
 
-  // 2.24 là số quản lý hàng hóa do hệ thống cấp khi khai thông tin hàng hóa xuất khẩu (Mẫu 14), không phải số B/L (TT39 PL II; TT121 Đ.18 kh.1 đ.k)
-  // → không cho chọn nguồn vận đơn/booking.
-  { code: "SO_VD", no: N.SO_VD, section: "TRANSPORT", label: "Số vận đơn (số quản lý hàng hóa)", required: true, from: (i) => {
+  // 2.24 là số quản lý hàng hóa do hệ thống cấp khi khai thông tin hàng hóa xuất khẩu (Mẫu 14), không phải số B/L (TT39 PL II; TT121 Đ.18 kh.1 đ.k):
+  // mặc định để trống, nhắc nhập số quản lý hàng hóa. Doanh nghiệp vẫn có thể chọn lấy số vận đơn nhà/chủ ở Cài đặt → Khai báo (cấu hình riêng).
+  { code: "SO_VD", no: N.SO_VD, section: "TRANSPORT", label: "Số vận đơn (số quản lý hàng hóa)", required: true, options: { sources: [SRC.houseBill, SRC.masterBill], allowFixed: false }, from: (i) => {
     const bl = i.shipment.transport.billNo.value ?? i.shipment.transport.masterBillNo.value;
     return missing("DOSSIER", `Nhập số quản lý hàng hóa do hệ thống cấp sau khi khai thông tin hàng hóa xuất khẩu${bl ? ` – không khai số vận đơn/booking ${bl} vào ô này` : ""} (chỉ tiêu 2.24)`);
   } },

@@ -2,6 +2,7 @@ import type { Shipment, Sourced } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { buildDeclaration } from "../build.js";
 import { DOSSIER, hansol, ORG } from "../test/shipment.js";
+import type { FieldOverride } from "../mapping/types.js";
 import type { DossierInfo, OrgInfo } from "../types.js";
 
 const NOW = new Date("2026-10-14T03:00:00.000Z");
@@ -10,11 +11,11 @@ const RATES = { VND: "1", USD: "25400" };
 const nul = (): Sourced<string> => ({ value: null, sources: [], status: "SINGLE_SOURCE" });
 const val = (value: string): Sourced<string> => ({ value, sources: [], status: "SINGLE_SOURCE" });
 
-type Opts = { mutate?: (s: Shipment) => void; dossier?: Partial<DossierInfo>; org?: Partial<OrgInfo>; rates?: Record<string, string> };
+type Opts = { mutate?: (s: Shipment) => void; dossier?: Partial<DossierInfo>; org?: Partial<OrgInfo>; rates?: Record<string, string>; profile?: Record<string, string>; overrides?: Record<string, FieldOverride> };
 const build = (direction: "NK" | "XK", o: Opts = {}) =>
   buildDeclaration({
     shipment: hansol(o.mutate), dossier: { ...DOSSIER, direction, typeCode: direction === "NK" ? "A11" : "B11", ...o.dossier }, org: { ...ORG, ...o.org }, items: ITEMS, now: NOW,
-    exchange: { date: "2026-10-14", rates: o.rates ?? RATES, missing: [] },
+    exchange: { date: "2026-10-14", rates: o.rates ?? RATES, missing: [] }, ...(o.profile ? { profile: o.profile } : {}), ...(o.overrides ? { overrides: o.overrides } : {}),
   }).fields;
 const ida = (o?: Opts) => build("NK", o);
 const eda = (o?: Opts) => build("XK", o);
@@ -284,5 +285,24 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
     expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("SHANGHAI, CHINA")) })["CANG_XEP"]?.value).toBe("CNSHA – Shanghai");
     expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("CHANGI AIRPORT")) })["CANG_XEP"]).toMatchObject({ value: "CHANGI AIRPORT", suspect: true });
     expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("HAN, VIETNAM")) })["CANG_XEP"]?.value).toBe("VNHAN – Sân bay Nội Bài (Hà Nội)");
+  });
+});
+
+describe("giữ cả hai: quy định chỉ tiêu + cấu hình doanh nghiệp (Mặc định khai báo / ghi đè)", () => {
+  it("EDA 2.24: mặc định để trống nhắc số quản lý hàng hóa; doanh nghiệp chọn nguồn vận đơn nhà → lấy số vận đơn", () => {
+    expect(eda()["SO_VD"]).toMatchObject({ value: "", suspect: true, note: expect.stringMatching(/số quản lý hàng hóa/) });
+    const viaBill = eda({ mutate: (s) => void (s.transport.houseBillNo = val("HPSEL2610078")), overrides: { SO_VD: { sources: ["transport.houseBillNo"] } } })["SO_VD"];
+    expect(viaBill).toMatchObject({ value: "HPSEL2610078", provenance: { via: "source", sourceId: "transport.houseBillNo" } });
+  });
+  it("IDA 1.7: hồ sơ chọn khác 4 → theo hồ sơ; hồ sơ để mặc định 4 → Mặc định khai báo của doanh nghiệp; không có → 4", () => {
+    const profile = { PL_CN: "2 – Tổ chức gửi cá nhân" };
+    expect(ida({ dossier: { partyClass: "1" }, profile })["PL_CN"]).toMatchObject({ value: "1 – Cá nhân gửi cá nhân", source: "DOSSIER" });
+    expect(ida({ dossier: { partyClass: "4" }, profile })["PL_CN"]).toMatchObject({ value: "2 – Tổ chức gửi cá nhân", provenance: { via: "profile" } });
+    expect(ida({ dossier: { partyClass: "4" } })["PL_CN"]).toMatchObject({ value: "4 – Tổ chức gửi tổ chức", source: "DOSSIER" });
+  });
+  it("hình thức hóa đơn / phân loại giá: chứng từ có tín hiệu riêng (không có hóa đơn) thắng Mặc định khai báo; thông thường → Mặc định khai báo", () => {
+    const profile = { HD_PL: "D – Hóa đơn điện tử", GIA_PL: "A – Giá hóa đơn cho hàng hóa phải trả tiền" };
+    expect(ida({ profile })["HD_PL"]).toMatchObject({ value: "D – Hóa đơn điện tử", provenance: { via: "profile" } });
+    expect(ida({ profile, mutate: (s) => void (s.documents = s.documents.filter((d) => d.kind !== "INVOICE")) })["HD_PL"]?.value).toMatch(/^B/);
   });
 });

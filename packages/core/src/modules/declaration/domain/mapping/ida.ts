@@ -1,5 +1,5 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA). Người nhập khẩu lấy theo tài khoản (MST), KHÔNG lấy tên tiếng Anh trên invoice (PRODUCT §7.4).
-import { PARTY_CLASS_LABELS } from "@kb/contracts";
+import { DEFAULT_PARTY_CLASS, PARTY_CLASS_LABELS } from "@kb/contracts";
 import { resolveDischargePort, resolvePort, transportModeCode } from "../catalog-resolve.js";
 import { FREIGHT_NOT_INCLUDED, incotermCode } from "../adjustments.js";
 import { IDA_NO as N } from "./numbers.js";
@@ -30,8 +30,12 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     const m = transportModeCode(i.dossier.transportMode, i.shipment.transport.containers.length > 0);
     return { value: `${m.code} – ${m.name}`, source: "DOSSIER", ...(m.note ? { suspect: true, note: m.note } : {}) };
   } },
-  // Chọn theo từng hồ sơ khi tạo (mặc định 4); doanh nghiệp vẫn có thể ghi đè bằng Mặc định khai báo / giá trị cố định.
-  { code: "PL_CN", no: N.PL_CN, section: "GENERAL", label: "Mã phân loại cá nhân/tổ chức", required: true, options: { sources: [profileSource("PL_CN")], allowFixed: true }, from: (i) => ({ value: `${i.dossier.partyClass} – ${PARTY_CLASS_LABELS[i.dossier.partyClass]}`, source: "DOSSIER" }) },
+  // Hồ sơ chọn khác mặc định (4) → theo hồ sơ; còn để mặc định → Mặc định khai báo của doanh nghiệp nếu có, không thì 4 – Tổ chức gửi tổ chức.
+  // Ghi đè nguồn / giá trị cố định của doanh nghiệp vẫn chạy trước (evaluateMapping).
+  { code: "PL_CN", no: N.PL_CN, section: "GENERAL", label: "Mã phân loại cá nhân/tổ chức", required: true, options: { sources: [profileSource("PL_CN")], allowFixed: true }, from: (i) => {
+    const fromDossier: MappedValue = { value: `${i.dossier.partyClass} – ${PARTY_CLASS_LABELS[i.dossier.partyClass]}`, source: "DOSSIER" };
+    return i.dossier.partyClass === DEFAULT_PARTY_CLASS ? profileOr(i, "PL_CN", fromDossier) : fromDossier;
+  } },
   { code: "CQHQ", no: N.CQHQ, section: "GENERAL", label: "Mã cơ quan Hải quan", required: true, from: (i) => ({ value: i.dossier.customsOfficeName ? `${i.dossier.customsOfficeCode} – ${i.dossier.customsOfficeName}` : i.dossier.customsOfficeCode, source: "DOSSIER" }) },
   { code: "NGAY_DK", no: N.NGAY_DK, section: "GENERAL", label: "Ngày khai báo dự kiến", required: false, from: (i) => ({ value: vnDate(i.now), source: "SYSTEM" }) },
 

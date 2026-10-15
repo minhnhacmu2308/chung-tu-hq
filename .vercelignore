@@ -10,3 +10,15 @@ business
 .env
 **/.env.local
 **/.env.*.local
+# Thông tin đăng nhập thật (mẫu curl FPT) và dữ liệu khách hàng / tài liệu nội bộ – tuyệt đối không tải lên.
+docdungapivnacss
+TAI LIEU TICH HOP VNACCS
+lo mẫu
+LÔ FANS25040166
+evals/private
+deploy/backups
+deploy/.env.prod
+.superpowers
+**/.next-e2e
+**/.next-mock
+.env.*

@@ -7,5 +7,7 @@ export type DossierInfo = {
 };
 export type OrgInfo = { taxCode: string; name: string; address: string; phone: string; fourEyes: boolean };
 /** Giá trị một chỉ tiêu đã dựng: khóa là `code` mnemonic (ổn định cho FE/API), `no` số chỉ tiêu Phụ lục II. */
-export type StoredField = { no: string; label: string; section: "GENERAL" | "PARTIES" | "TRANSPORT" | "VALUE"; value: string; source: ValueSource; suspect?: boolean; note?: string };
+/** Nguồn gốc giá trị: quy tắc mặc định / nguồn doanh nghiệp chọn / giá trị cố định / Mặc định khai báo. */
+export type FieldProvenance = { rule: string; via: "default" | "source" | "fixed" | "profile"; sourceId?: string };
+export type StoredField = { no: string; label: string; section: "GENERAL" | "PARTIES" | "TRANSPORT" | "VALUE"; value: string; source: ValueSource; suspect?: boolean; note?: string; provenance?: FieldProvenance };
 export type HsCatalogRow = { code: string; description: string; mfn: string; pref: Record<string, string>; vat: string; policy: string | null; keywords: string[] };

@@ -156,6 +156,8 @@ export function Showcase() {
                 onRemove={(id) => setUploads((u) => u.filter((x) => x.id !== id))}
                 onRetry={(id) => setUploads((u) => u.map((x) => (x.id === id ? { ...x, status: "uploading", progress: 10 } : x)))}
               />
+              {/* Dạng gọn: đặt trong ô của từng loại chứng từ */}
+              <FileDropzone size="sm" accept=".pdf,.jpg,.png" labels={{ title: "Thả hoặc chọn file Packing List", browse: "" }} onFiles={() => {}} />
             </Stack>
           </CardContent>
         </Card>

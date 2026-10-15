@@ -29,7 +29,6 @@ let usage: RecordingUsage;
 let deps: SkillDeps;
 let aiFiles: { file: AiFile; pages: number[] }[];
 let invId: string;
-let mapId: string;
 
 beforeEach(async () => {
   uow = new InMemorySkillUow();
@@ -49,7 +48,6 @@ beforeEach(async () => {
   await cloneTemplatesForOrg(deps, { orgId: ORG, userId: "usr_1" });
   const skills = unwrap(await listSkills(deps, admin));
   invId = skills.find((s) => s.code === "SK-INV-GEN")!.id;
-  mapId = skills.find((s) => s.code === "SK-MAP-IDA")!.id;
 });
 
 let seq = 0;
@@ -88,8 +86,7 @@ describe("uploadSamples – kiểm tra file", () => {
     expect(uow.data.samples).toHaveLength(0);
   });
 
-  it("skill ánh xạ → NOT_SUPPORTED; skill không tồn tại / org khác → NOT_FOUND; không lưu file, không xếp job", async () => {
-    expect(errCode(await uploadSamples(deps, admin, mapId, [pdf("a.pdf")]))).toBe("NOT_SUPPORTED");
+  it("skill không tồn tại / org khác → NOT_FOUND; không lưu file, không xếp job", async () => {
     expect(errCode(await uploadSamples(deps, admin, "sk_khong_co", [pdf("a.pdf")]))).toBe("NOT_FOUND");
     expect(errCode(await uploadSamples(deps, other, invId, [pdf("a.pdf")]))).toBe("NOT_FOUND");
     expect(storage.files.size).toBe(0);
@@ -125,11 +122,9 @@ describe("readSample (job)", () => {
     expect(errCode(await read(row.id))).toBe("NOT_FOUND");
   });
 
-  it("mẫu đã LABELED hoặc skill không gắn loại chứng từ → bỏ qua, không gọi AI", async () => {
+  it("mẫu đã LABELED → bỏ qua, không gọi AI", async () => {
     const labeled = await seedSample();
     unwrap(await read(labeled.id));
-    const onMap = await seedSample({ status: "PENDING", skillId: mapId });
-    unwrap(await read(onMap.id));
     expect(aiFiles).toHaveLength(0);
     expect(usage.events).toHaveLength(0);
   });
@@ -193,10 +188,9 @@ describe("evaluateSkill / runEvaluation / getEvaluation – nhánh biên", () =>
     expect(queue.jobs[0]?.jobId).toMatch(new RegExp(`^skill-eval:${invId}:1:[0-9a-f]{16}$`));
   });
 
-  it("runEvaluation: skill không tồn tại → NOT_FOUND; phiên bản không có → NOT_FOUND; skill ánh xạ → NOT_SUPPORTED", async () => {
+  it("runEvaluation: skill không tồn tại → NOT_FOUND; phiên bản không có → NOT_FOUND", async () => {
     expect(errCode(await runEval(1, "sk_khong_co"))).toBe("NOT_FOUND");
     expect(errCode(await runEval(99))).toBe("NOT_FOUND");
-    expect(errCode(await runEval(1, mapId))).toBe("NOT_SUPPORTED");
   });
 
   it("runEvaluation: mẫu LABELED mà expected null không tính → thiếu mẫu NOT_ENOUGH_SAMPLES, không gọi AI", async () => {

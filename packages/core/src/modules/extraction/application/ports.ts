@@ -1,4 +1,4 @@
-import type { ClassifyResult, CrossCheck, DocKind, DocumentStatus, DossierStatus, FieldGroup, FieldStatus, Region, Shipment } from "@kb/contracts";
+import type { CustomFieldDef, ClassifyResult, CrossCheck, DocKind, DocumentStatus, DossierStatus, FieldGroup, FieldStatus, Region, Shipment } from "@kb/contracts";
 import type { ZodType } from "zod";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
@@ -80,7 +80,8 @@ export interface UsageRecorder {
 }
 
 export interface SkillResolver {
-  resolve(orgId: string, kind: DocKind, supplierHint: string | null): Promise<{ skillVersionId: string | null; fieldHints: string[]; examples: unknown[] }>;
+  /** `customFields` = trường bổ sung riêng của doanh nghiệp (thêm vào schema gửi AI). */
+  resolve(orgId: string, kind: DocKind, supplierHint: string | null): Promise<{ skillVersionId: string | null; fieldHints: string[]; examples: unknown[]; customFields: CustomFieldDef[] }>;
 }
 
 export type ExtractionDeps = {
@@ -96,4 +97,4 @@ export type ExtractionDeps = {
 };
 
 export const PIPELINE_VERSION = "1";
-export const PROMPT_VERSION = "1";
+export const PROMPT_VERSION = "2";

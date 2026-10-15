@@ -23,6 +23,8 @@ export const BillOfLadingExtractionSchema = z.object({
   packages: nNum("Tổng số kiện"),
   packageUnit: nStr("Loại kiện"),
   grossWeightKg: nNum("Tổng trọng lượng cả bì (kg)"),
+  placeOfIssue: nStr("Nơi phát hành vận đơn (Place of issue) nguyên văn"),
+  dateOfIssue: nDate("Ngày phát hành vận đơn (Place and date of issue)"),
   freightTerm: z.enum(["PREPAID", "COLLECT"]).nullable().describe("Freight prepaid / collect"),
   uncertainties: UncertaintiesSchema,
 });

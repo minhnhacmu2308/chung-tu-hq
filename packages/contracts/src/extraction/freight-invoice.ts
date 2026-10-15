@@ -8,6 +8,7 @@ export const FreightInvoiceExtractionSchema = z.object({
   totalAmount: nNum("Tổng tiền thanh toán"),
   currency: nStr("Tiền tệ (VND/USD)"),
   vatAmount: nNum("Tiền thuế GTGT nếu tách riêng"),
+  billRef: nStr("Số vận đơn/AWB ghi trong nội dung hóa đơn (vd B/L: FANS25040166)"),
   services: z.array(z.object({ label: nStr("Tên dịch vụ (cước vận chuyển quốc tế, phí THC, phí D/O…)"), amount: nNum("Số tiền chưa VAT") })),
   uncertainties: UncertaintiesSchema,
 });

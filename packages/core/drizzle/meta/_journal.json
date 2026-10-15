@@ -64,6 +64,34 @@
       "when": 1791967666865,
       "tag": "0008_admin_2fa",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791999887395,
+      "tag": "0009_declaration_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792000907651,
+      "tag": "0010_skill_drop_mapping",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792030018059,
+      "tag": "0011_hscodepro",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792033032685,
+      "tag": "0012_exchange_rate_source",
+      "breakpoints": true
     }
   ]
 }

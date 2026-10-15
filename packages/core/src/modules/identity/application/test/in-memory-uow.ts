@@ -1,7 +1,7 @@
 // Fake cho test use case: giữ dữ liệu trong mảng, mô phỏng RLS bằng cách lọc theo org/user của ngữ cảnh.
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type {
-  AuthTokenRow, CertificateRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgRow,
+  AuthTokenRow, CertificateRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgRow, OrgSecretRow,
   PlanRow, PlansReader, SessionRow, UserRow,
 } from "../ports.js";
 
@@ -14,13 +14,14 @@ export type MemoryData = {
   joinRequests: JoinRequestRow[];
   certificates: CertificateRow[];
   notifications: NotificationRow[];
+  secrets: OrgSecretRow[];
   plans: PlanRow[];
 };
 
 type Scope = { kind: "system" } | { kind: "user"; userId: string } | { kind: "org"; orgId: string; userId: string };
 
 export class InMemoryIdentityUow implements IdentityUow, PlansReader {
-  readonly data: MemoryData = { users: [], orgs: [], memberships: [], sessions: [], authTokens: [], joinRequests: [], certificates: [], notifications: [], plans: [] };
+  readonly data: MemoryData = { users: [], orgs: [], memberships: [], sessions: [], authTokens: [], joinRequests: [], certificates: [], notifications: [], secrets: [], plans: [] };
 
   seed(partial: Partial<MemoryData>) {
     for (const k of Object.keys(partial) as (keyof MemoryData)[]) (this.data[k] as unknown[]).push(...(partial[k] as unknown[]));
@@ -126,6 +127,14 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
           for (const c of d.certificates) if (c.orgId === orgId) c.isDefault = c.id === id;
         },
         delete: async (orgId, id) => void (d.certificates = d.certificates.filter((c) => !(c.orgId === orgId && c.id === id && orgOk(orgId)))),
+      },
+      secrets: {
+        get: async (orgId, kind) => clone(orgOk(orgId) ? d.secrets.find((x) => x.orgId === orgId && x.kind === kind) ?? null : null),
+        upsert: async (row) => {
+          if (!orgOk(row.orgId)) return deny("org_secrets upsert");
+          d.secrets = [...d.secrets.filter((x) => !(x.orgId === row.orgId && x.kind === row.kind)), clone(row)];
+        },
+        delete: async (orgId, kind) => void (d.secrets = d.secrets.filter((x) => !(x.orgId === orgId && x.kind === kind && orgOk(orgId)))),
       },
       notifications: {
         list: async (orgId, userId) => clone(orgOk(orgId) && userOk(userId) ? d.notifications.filter((n) => n.orgId === orgId && n.userId === userId) : []),

@@ -1,6 +1,7 @@
 // Back-office của bên vận hành (mock). Nghiệp vụ nằm ở mocks/admin/ops.ts; file này chỉ thêm độ trễ mạng giả + lưu localStorage.
 // Thay thân hàm bằng fetch tới /api/admin/** khi có backend – giữ nguyên chữ ký.
 import type {
+  UpsertExchangeRateInput,
   AdjustOrgQuotaInput, AdminReasonInput, ChangeOrgPlanInput, ChangeStaffRoleInput, ExtendOrgTrialInput, IntegrationId, InviteStaffInput,
   PlanCode, SendAnnouncementInput, SetTemplatePublishedInput, UpdateIntegrationKeyInput, UpdatePlanInput,
 } from "@kb/contracts";
@@ -18,6 +19,7 @@ export const adminKeys = {
   usageMonths: ["admin", "usage", "months"] as const,
   usage: (month: string) => ["admin", "usage", month] as const,
   integrations: ["admin", "integrations"] as const,
+  exchangeRates: ["admin", "exchange-rates"] as const,
   system: ["admin", "system"] as const,
   skillTemplates: ["admin", "skill-templates"] as const,
   staff: ["admin", "staff"] as const,
@@ -54,6 +56,8 @@ export const listUsageMonths = () => query(() => ops.usageMonths());
 export const getUsageReport = (month: string) => query((db) => ops.getUsageReport(db, month));
 
 export const listPlatformIntegrations = () => query((db) => ops.listPlatformIntegrations(db));
+export const listExchangeRates = () => query((db) => ops.listExchangeRates(db));
+export const upsertExchangeRate = (input: UpsertExchangeRateInput) => mutate((db) => ops.upsertExchangeRate(db, input));
 export const testPlatformIntegration = (id: IntegrationId) => mutate((db) => ops.testPlatformIntegration(db, id));
 export const updateIntegrationKey = (id: IntegrationId, input: UpdateIntegrationKeyInput) => mutate((db) => ops.updateIntegrationKey(db, id, input));
 

@@ -1,4 +1,4 @@
-import type { DocKind, SkillField, SkillFieldPatch } from "@kb/contracts";
+import { resolveSkillFieldKey, type DocKind, type SkillField, type SkillFieldPatch } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 
@@ -17,12 +17,26 @@ export function applyFieldPatch(fields: SkillField[], key: string, patch: SkillF
   return ok(fields.map((x) => (x.key === key ? next : x)));
 }
 
-export function canAddField(fields: SkillField[], key: string): Result<void> {
+/** Tối đa trường bổ sung riêng mỗi skill (mỗi trường thêm token cho mọi lần đọc). */
+export const MAX_CUSTOM_FIELDS = 20;
+
+export function canAddField(kind: DocKind, fields: SkillField[], key: string): Result<void> {
   if (fields.some((f) => f.key === key)) return err(domainError("DUPLICATE", "Mã trường đã tồn tại trong skill"));
+  const isCustom = !resolveSkillFieldKey(kind, key).standard;
+  if (isCustom && fields.filter((f) => !resolveSkillFieldKey(kind, f.key).standard).length >= MAX_CUSTOM_FIELDS) {
+    return err(domainError("VALIDATION", `Tối đa ${MAX_CUSTOM_FIELDS} trường bổ sung cho một skill`));
+  }
   return ok(undefined);
 }
 
-type Candidate = { id: string; kind: "DOCUMENT" | "SUPPLIER" | "MAPPING"; docKind: DocKind | null; supplier: string | null; enabled: boolean };
+/** Trường chuẩn (thuộc danh mục) không xóa được – tắt Đọc/Hiển thị nếu không cần; trường bổ sung xóa được. */
+export function canRemoveField(kind: DocKind, fields: SkillField[], key: string): Result<void> {
+  if (!fields.some((f) => f.key === key)) return err(domainError("NOT_FOUND", "Không tìm thấy trường"));
+  if (resolveSkillFieldKey(kind, key).standard) return err(domainError("FORBIDDEN", "Trường chuẩn của chứng từ không xóa được – tắt Đọc/Hiển thị nếu không cần"));
+  return ok(undefined);
+}
+
+type Candidate = { id: string; kind: "DOCUMENT" | "SUPPLIER"; docKind: DocKind | null; supplier: string | null; enabled: boolean };
 const tok = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").split(" ").filter((w) => w.length > 2);
 
 /** Chọn skill cho (loại chứng từ, gợi ý nhà cung cấp): SUPPLIER khớp tên trước, rồi DOCUMENT; chỉ enabled. */

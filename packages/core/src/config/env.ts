@@ -17,12 +17,17 @@ export const EnvSchema = z
     /** Kết nối của khu Quản trị hệ thống (role kb_platform, ADR 0006). Thiếu → DATABASE_URL với user kb_platform. */
     DATABASE_PLATFORM_URL: z.url().optional(),
     REDIS_URL: z.url(),
-    S3_ENDPOINT: z.url(),
-    S3_BUCKET: z.string().min(1),
-    S3_ACCESS_KEY_ID: z.string().min(1),
-    S3_SECRET_ACCESS_KEY: z.string().min(1),
+    /** Nơi lưu file chứng từ: s3 (MinIO dev / R2) hoặc azure (Azure Blob Storage). */
+    STORAGE: z.enum(["s3", "azure"]).default("s3"),
+    S3_ENDPOINT: z.url().optional(),
+    S3_BUCKET: z.string().min(1).optional(),
+    S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+    S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     S3_REGION: z.string().default("auto"),
     S3_FORCE_PATH_STYLE: bool.default(true),
+    /** Connection string của Storage account (Azure Portal → Access keys). Cần AccountKey để tạo link xem file (SAS). */
+    AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
+    AZURE_STORAGE_CONTAINER: z.string().regex(/^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$/, "Tên container Azure: 3–63 ký tự a-z, 0-9, dấu - (không đứng đầu/cuối, không liền nhau)").default("khaibao-documents"),
     APP_MASTER_KEY: base64Key32,
     APP_URL: z.url(),
     AI_PROVIDER: z.enum(["fake", "claude"]).default("fake"),
@@ -30,9 +35,22 @@ export const EnvSchema = z
     AI_MODEL: z.string().default("claude-sonnet-5-5"),
     AI_USD_VND_RATE: z.coerce.number().positive().default(25400),
     CUSTOMS_GATEWAY: z.enum(["fake", "fpt"]).default("fake"),
+    /** Gốc API FPT.VNACCS. Dev/test: apps/fpt-mock (http://localhost:7070) – KHÔNG dùng cổng thật (production). */
     FPT_API_BASE_URL: z.url().optional(),
+    /** Tài khoản API (POST /api/auth/login → JWT), khác tài khoản VNACCS của doanh nghiệp. */
+    FPT_API_USERNAME: z.string().optional(),
+    FPT_API_PASSWORD: z.string().optional(),
+    FPT_API_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+    /** Tài khoản VNACCS dùng khi doanh nghiệp chưa nhập (T5: chưa có màn nhập). Chỉ để dev/test với fpt-mock. */
+    FPT_VNACCS_USER_ID: z.string().optional(),
+    FPT_VNACCS_PASSWORD: z.string().optional(),
+    FPT_VNACCS_TERMINAL_ID: z.string().optional(),
+    FPT_VNACCS_TERMINAL_ACCESS_KEY: z.string().optional(),
     HS_CLASSIFIER: z.enum(["fake", "hscodepro"]).default("fake"),
+    /** HSCodePro – phân loại HS (docs/integrations/hscodepro-api-v1.md). Dev: https://dev.aixuatnhapkhau.cloud; giả lập: http://localhost:7070 (pnpm fpt-mock). */
     HSCODEPRO_URL: z.url().optional(),
+    /** Header X-Internal-Api-Key – chỉ dùng phía máy chủ, không log. */
+    HSCODEPRO_INTERNAL_KEY: z.string().optional(),
     MAIL: z.enum(["console", "smtp"]).default("console"),
     SMTP_URL: z.string().optional(),
   })
@@ -41,8 +59,13 @@ export const EnvSchema = z
       if (cond) ctx.addIssue({ code: "custom", path: [key], message: `${key} bắt buộc khi ${when}` });
     };
     need(e.AI_PROVIDER === "claude" && !e.ANTHROPIC_API_KEY, "ANTHROPIC_API_KEY", "AI_PROVIDER=claude");
+    for (const k of ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const) need(e.STORAGE === "s3" && !e[k], k, "STORAGE=s3");
+    need(e.STORAGE === "azure" && !e.AZURE_STORAGE_CONNECTION_STRING, "AZURE_STORAGE_CONNECTION_STRING", "STORAGE=azure");
     need(e.CUSTOMS_GATEWAY === "fpt" && !e.FPT_API_BASE_URL, "FPT_API_BASE_URL", "CUSTOMS_GATEWAY=fpt");
+    need(e.CUSTOMS_GATEWAY === "fpt" && !e.FPT_API_USERNAME, "FPT_API_USERNAME", "CUSTOMS_GATEWAY=fpt");
+    need(e.CUSTOMS_GATEWAY === "fpt" && !e.FPT_API_PASSWORD, "FPT_API_PASSWORD", "CUSTOMS_GATEWAY=fpt");
     need(e.HS_CLASSIFIER === "hscodepro" && !e.HSCODEPRO_URL, "HSCODEPRO_URL", "HS_CLASSIFIER=hscodepro");
+    need(e.HS_CLASSIFIER === "hscodepro" && !e.HSCODEPRO_INTERNAL_KEY, "HSCODEPRO_INTERNAL_KEY", "HS_CLASSIFIER=hscodepro");
     need(e.MAIL === "smtp" && !e.SMTP_URL, "SMTP_URL", "MAIL=smtp");
   });
 

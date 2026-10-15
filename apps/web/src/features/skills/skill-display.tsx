@@ -8,7 +8,6 @@ import type { Skill, SkillField, SkillKind } from "@/mocks/types";
 export const SKILL_KIND_LABELS: Record<SkillKind, string> = {
   DOCUMENT: "Theo loại chứng từ",
   SUPPLIER: "Theo nhà cung cấp",
-  MAPPING: "Ánh xạ tờ khai",
 };
 
 export const FIELD_TYPE_LABELS: Record<SkillField["type"], string> = {
@@ -28,7 +27,6 @@ export function accuracyTone(v: number) {
 }
 
 export function AccuracyBadge({ skill }: { skill: Pick<Skill, "accuracy" | "labeledSamples" | "kind"> }) {
-  if (skill.kind === "MAPPING") return <Badge tone="neutral">Quy tắc cố định</Badge>;
   if (skill.accuracy === undefined || skill.labeledSamples < MIN_SAMPLES_FOR_ACCURACY) {
     return (
       <Tooltip content={`Cần ít nhất ${MIN_SAMPLES_FOR_ACCURACY} mẫu đã gắn nhãn để đo độ chính xác`}>

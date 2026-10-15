@@ -92,6 +92,16 @@ describe("customs-bridge", () => {
     expect(uow.data.declarations[0]!.status).toBe("APPROVED");
   });
 
+  it("markDeclarationDraft sang tuần tỷ giá mới → dựng lại tờ khai với tỷ giá + ngày tra mới (không kẹt RATE_WEEK_CHANGED)", async () => {
+    await runFull();
+    const d = uow.data.declarations.at(-1)!;
+    d.status = "APPROVED";
+    expect(d.exchangeRateDate).toBe("2026-10-14");
+    uow.data.exchangeRates.push({ currency: "USD", date: "2026-10-19", rate: "25710", source: "VCB" });
+    deps.clock = fixedClock("2026-10-19T03:00:00.000Z"); // thứ Hai tuần sau
+    unwrap(await markDeclarationDraft(deps, declarant, D));
+    expect(uow.data.declarations.at(-1)).toMatchObject({ status: "DRAFT", exchangeRateDate: "2026-10-19", exchangeRate: "25710" });
+  });
   it("markDeclarationDraft: chưa có tờ khai → NO_DECLARATION, không đổi hồ sơ", async () => {
     expect(errCode(await markDeclarationDraft(deps, declarant, D))).toBe("NO_DECLARATION");
     expect(dossiers.events).toEqual([]);
@@ -204,7 +214,8 @@ describe("agent run – nhánh biên", () => {
     delete deps.notify;
     expect((await runFull()).finished).toBe(true);
     unwrap(await startAgentRun(deps, declarant, D, "DECLARATION"));
-    deps.hs = { name: "boom", classify: async () => { throw "hết hạn mức"; } };
+    const boom = async (): Promise<never> => { throw "hết hạn mức"; };
+    deps.hs = { name: "boom", create: boom, get: boom, answer: boom, cancel: boom };
     await expect(run(lastJob().agentRunId)).rejects.toBe("hết hạn mức");
     expect(uow.data.agentRuns.at(-1)?.log.at(-1)?.text).toBe("Lỗi tạm thời: hết hạn mức – sẽ thử lại");
   });

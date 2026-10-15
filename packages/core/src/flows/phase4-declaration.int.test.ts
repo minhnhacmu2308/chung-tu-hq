@@ -18,7 +18,7 @@ import { createValidationInfrastructure } from "../modules/validation/infrastruc
 import { finishReading, processDocument, type ExtractionDeps } from "../modules/extraction/index.js";
 import { createDocumentsAdapter, DrizzleExtractionUow, FakeAiProvider } from "../modules/extraction/infrastructure/index.js";
 import { approveDeclaration, confirmHs, getAgentRun, getDeclarationView, listLineItems, moveToReview, runAgent, startAgentRun, updateDeclarationField, type DeclarationDeps } from "../modules/declaration/index.js";
-import { createAuditWriter, createDossierAdapter, createShipmentReader, createValidationReader, DrizzleDeclarationUow, FakeHsClassifier } from "../modules/declaration/infrastructure/index.js";
+import { createAuditWriter, createDossierAdapter, createShipmentReader, createValidationReader, DrizzleDeclarationUow, FakeHsClassificationService } from "../modules/declaration/infrastructure/index.js";
 import { dec } from "../shared/decimal.js";
 import { withCtx } from "../db/with-ctx.js";
 import { sql } from "drizzle-orm";
@@ -45,11 +45,11 @@ beforeAll(async () => {
   extraction = {
     uow: new DrizzleExtractionUow(db), documents: createDocumentsAdapter(dossier, async () => ({ ...ORG, suspectThreshold: "BALANCED" })),
     validation: { run: (orgId, dossierId, shipment, version, org) => runRules(validation, orgId, dossierId, shipment, version, org) },
-    ai: new FakeAiProvider(), usage: new DrizzleUsageRecorder(db, dec("25400")), skills: { resolve: async () => ({ skillVersionId: null, fieldHints: [], examples: [] }) }, clock: systemClock, idGen: ulidIdGen,
+    ai: new FakeAiProvider(), usage: new DrizzleUsageRecorder(db, dec("25400")), skills: { resolve: async () => ({ skillVersionId: null, fieldHints: [], examples: [], customFields: [] }) }, clock: systemClock, idGen: ulidIdGen,
   };
   const uow = new DrizzleDeclarationUow(db);
   declaration = {
-    uow, queue, hs: new FakeHsClassifier(() => uow.asOrg({ orgId: asOrgId("org_anphat"), userId: asUserId("") }, (r) => r.catalogHs.all())),
+    uow, queue, hs: new FakeHsClassificationService(() => uow.asOrg({ orgId: asOrgId("org_anphat"), userId: asUserId("") }, (r) => r.catalogHs.all())),
     shipments: createShipmentReader(extraction, dossier), dossiers: createDossierAdapter(dossier), validation: createValidationReader(validation), org: { get: async () => ORG },
     audit: createAuditWriter(extraction), users: { names: async (_o, ids) => new Map(ids.map((id) => [id, id === "usr_tuan" ? "Phạm Anh Tuấn" : id])) }, clock: systemClock, idGen: ulidIdGen,
   };
@@ -70,6 +70,13 @@ async function runAgentFor(dossierId: string) {
   unwrap(await startAgentRun(declaration, chau, dossierId, "BOTH"));
   const job = queue.jobs.filter((j) => j.name === "run-agent").at(-1)!.payload as { agentRunId: string };
   return unwrap(await runAgent(declaration, { orgId: chau.orgId, userId: chau.userId, dossierId, agentRunId: job.agentRunId }));
+}
+
+/** Bộ HANSOL không có vận đơn/kho → người khai nhập tay các chỉ tiêu bắt buộc còn trống trước khi duyệt. */
+const MANUAL_FIELDS: Record<string, string> = { SO_VD: "HSPL261014001", KHO: "03CCS01", CANG_DO: "VNHPH – Cảng Hải Phòng", CANG_XEP: "KRPUS – BUSAN", PTVC_TEN: "HANSOL VOY 2610", NGAY_DEN: "2026-10-20" };
+async function fillManualFields(deps: DeclarationDeps, ctx: Parameters<typeof updateDeclarationField>[1], dossierId: string) {
+  const fields = unwrap(await getDeclarationView(deps, ctx, dossierId)).declaration!.fields;
+  for (const [code, value] of Object.entries(MANUAL_FIELDS)) if (!fields.find((f) => f.code === code)?.value.trim()) unwrap(await updateDeclarationField(deps, ctx, dossierId, code, value));
 }
 
 describe("luồng tờ khai trên Postgres thật", () => {
@@ -118,6 +125,8 @@ describe("luồng tờ khai trên Postgres thật", () => {
     await runAgentFor(id);
     for (const it of unwrap(await listLineItems(declaration, chau, id))) unwrap(await confirmHs(declaration, chau, it.id, it.hsSuggested ?? "8482.10.00"));
     unwrap(await moveToReview(declaration, chau, id));
+    expect(errCode(await approveDeclaration(declaration, tuan, id))).toBe("VALIDATION"); // chỉ tiêu bắt buộc (kho, vận đơn) còn trống
+    await fillManualFields(declaration, chau, id);
     const a = unwrap(await approveDeclaration(declaration, tuan, id));
     expect(a).toMatchObject({ status: "APPROVED", approvedBy: "Phạm Anh Tuấn" });
     const row = await dossier.uow.asOrg(chau, (r) => r.dossiers.get(chau.orgId, id));

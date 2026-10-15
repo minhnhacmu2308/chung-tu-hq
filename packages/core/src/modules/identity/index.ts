@@ -1,5 +1,5 @@
 // PUBLIC API của module identity: use case + kiểu. Hạ tầng qua "@kb/core/modules/identity/infrastructure" (chỉ container.ts).
-export type { IdentityDeps, IdentityRepos, IdentityUow, Mailer, PasswordHasher, PlansReader, RateLimiter, SecretStore, TaxRegistryLookup } from "./application/ports.js";
+export type { IdentityDeps, IdentityRepos, IdentityUow, Mailer, OrgSecretRow, PasswordHasher, PlansReader, RateLimiter, SecretStore, TaxRegistryLookup } from "./application/ports.js";
 export { register, type RegisterOutput } from "./application/register.js";
 export { login } from "./application/login.js";
 export { logout } from "./application/logout.js";
@@ -23,6 +23,7 @@ export { listCertificates } from "./application/list-certificates.js";
 export { addCertificate } from "./application/add-certificate.js";
 export { removeCertificate } from "./application/remove-certificate.js";
 export { setDefaultCertificate } from "./application/set-default-certificate.js";
+export { getVnaccsAccount, readVnaccsCredentials, removeVnaccsAccount, saveVnaccsAccount, VNACCS_SECRET_KIND } from "./application/vnaccs-account.js";
 export { listNotifications } from "./application/list-notifications.js";
 export { markAllNotificationsRead } from "./application/mark-all-notifications-read.js";
 export { hashToken } from "./domain/token.js";

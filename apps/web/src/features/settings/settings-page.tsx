@@ -3,6 +3,7 @@ import { PageHeader, Stack, Tabs, TabsContent, TabsList, TabsTrigger } from "@kb
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { CertificatesTab } from "./certificates-tab";
+import { DeclarationTab } from "./declaration-tab";
 import { IntegrationsTab } from "./integrations-tab";
 import { MembersTab } from "./members-tab";
 import { OrgTab } from "./org-tab";
@@ -15,6 +16,7 @@ const TABS: { id: string; label: string; render: () => ReactNode }[] = [
   { id: "members", label: "Thành viên & vai trò", render: () => <MembersTab /> },
   { id: "integrations", label: "Kết nối hệ thống", render: () => <IntegrationsTab /> },
   { id: "certificates", label: "Chứng thư số", render: () => <CertificatesTab /> },
+  { id: "declaration", label: "Khai báo", render: () => <DeclarationTab /> },
   { id: "preferences", label: "Ngưỡng & giao diện", render: () => <PreferencesTab /> },
 ];
 

@@ -26,6 +26,7 @@ const LEAVES = [
   { id: "plans", href: "/admin/plans" },
   { id: "usage", href: "/admin/usage" },
   { id: "integrations", href: "/admin/integrations" },
+  { id: "exchange-rates", href: "/admin/exchange-rates" },
   { id: "system", href: "/admin/system" },
   { id: "skill-templates", href: "/admin/skill-templates" },
   { id: "staff", href: "/admin/staff" },
@@ -64,6 +65,7 @@ function useNav(enabled: boolean): { items: NavItem[]; activeId: string | undefi
       icon: <Activity />,
       children: [
         { id: "integrations", label: "Tích hợp dùng chung", href: "/admin/integrations" },
+        { id: "exchange-rates", label: "Tỷ giá tính thuế", href: "/admin/exchange-rates" },
         { id: "system", label: "Sức khỏe hệ thống", href: "/admin/system", ...(failed > 0 ? { badge: <Badge tone="warning">{failed}</Badge> } : {}) },
         { id: "skill-templates", label: "Skill mẫu", href: "/admin/skill-templates" },
       ],

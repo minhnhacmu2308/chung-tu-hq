@@ -225,6 +225,23 @@
   }
 }
 
+/* Radio tròn cùng dáng với kb-checkbox (RadioGroup). */
+@utility kb-radio {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  cursor: pointer;
+  border: 1.5px solid var(--kb-color-control-border);
+  border-radius: 9999px;
+  background-color: var(--kb-color-surface);
+  &:hover { border-color: var(--kb-color-primary); }
+  &:focus-visible { outline: 2px solid var(--kb-color-focus); outline-offset: 2px; }
+  &:disabled { cursor: not-allowed; opacity: 0.5; }
+  &:checked { border-color: var(--kb-color-primary); border-width: 5px; }
+}
+
 /* Phần tử dính trong trang: cách mép trên 1rem, tính cả thanh menu trên (nếu người dùng chọn menu ở trên). */
 @utility top-shell {
   top: calc(var(--kb-shell-top) + 1rem);

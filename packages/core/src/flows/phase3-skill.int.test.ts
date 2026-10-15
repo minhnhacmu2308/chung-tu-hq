@@ -54,24 +54,24 @@ afterAll(async () => {
 });
 
 describe("luồng skill trên Postgres thật", () => {
-  it("seed: org hệ thống giữ 12 skill mẫu; org demo được sao chép đủ; skill mẫu không lộ qua getSkill; org khác không thấy", async () => {
+  it("seed: org hệ thống giữ 10 skill mẫu (không còn skill ánh xạ); org demo được sao chép đủ; skill mẫu không lộ qua getSkill; org khác không thấy", async () => {
     const mine = unwrap(await listSkills(skill, chau));
     expect(mine.map((s) => s.code)).toContain("SK-INV-GEN");
-    expect(mine).toHaveLength(12);
+    expect(mine).toHaveLength(10);
     expect(mine.every((s) => s.version === 1 && s.labeledSamples === 0)).toBe(true);
     expect(errCode(await getSkill(skill, chau, "sk_tpl_sk_inv_gen"))).toBe("NOT_FOUND");
     const other: Ctx = { orgId: asOrgId("org_khac"), userId: asUserId("usr_x"), role: "ADMIN" };
     expect(unwrap(await listSkills(skill, other))).toEqual([]);
     // Policy: org thường đọc được template qua repo (để sao chép) nhưng không ghi được vào org hệ thống.
     await expect(skill.uow.asOrg(chau, (r) => r.skills.insert({ id: "sk_hack", orgId: SYSTEM_ORG_ID, code: "X", name: "x", kind: "DOCUMENT", docKind: "INVOICE", supplier: null, language: "", enabled: true, isTemplate: true, templateId: null, currentVersion: 1, labeledSamples: 0, accuracy: null, createdAt: new Date(), updatedAt: new Date() }))).rejects.toThrow();
-    expect(await skill.uow.asOrg(chau, (r) => r.skills.listTemplates())).toHaveLength(12);
+    expect(await skill.uow.asOrg(chau, (r) => r.skills.listTemplates())).toHaveLength(10);
   });
 
   it("đăng ký MST mới → org mới có đủ skill sao chép (hook onOrgCreated)", async () => {
     const r = unwrap(await register(identity, { email: "an@minhkhang.vn", name: "Nguyễn Văn An", password: "matkhau123", taxCode: "0101234567", joinExisting: false }, { ip: "127.0.0.1" }));
     const s = unwrap(await getSession(identity, r.sessionToken));
     const theirs = unwrap(await listSkills(skill, s.ctx));
-    expect(theirs).toHaveLength(12);
+    expect(theirs).toHaveLength(10);
     expect(theirs.find((x) => x.code === "SK-INV-HANSOL")?.supplier).toBe("HANSOL PRECISION CO., LTD.");
   });
 

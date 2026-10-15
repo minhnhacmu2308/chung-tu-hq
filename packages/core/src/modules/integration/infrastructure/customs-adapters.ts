@@ -2,9 +2,10 @@
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { getDeclarationSnapshot, listDeclarationsForCustoms, markDeclarationDraft, markDeclarationSubmitted, type DeclarationDeps } from "../../declaration/index.js";
 import type { DossierDeps } from "../../dossier/index.js";
-import type { IdentityDeps } from "../../identity/index.js";
+import { readVnaccsCredentials, type IdentityDeps } from "../../identity/index.js";
 import type { ValidationDeps } from "../../validation/index.js";
 import type { CertificateReader, CustomsDossierPort, DeclarationReader, ValidationReader } from "../application/customs-ports.js";
+import type { VnaccsCredentialsReader } from "./fpt-vnaccs-gateway.js";
 
 const sys = (orgId: string) => ({ orgId: asOrgId(orgId), userId: asUserId("") });
 
@@ -14,7 +15,7 @@ export function createDeclarationReader(declaration: DeclarationDeps): Declarati
       const s = await getDeclarationSnapshot(declaration, orgId, dossierId);
       if (!s) return null;
       return {
-        declarationId: s.declarationId, version: s.version, status: s.status, unconfirmedHs: s.unconfirmedHs, estimatedTaxVnd: s.estimatedTaxVnd,
+        declarationId: s.declarationId, version: s.version, status: s.status, unconfirmedHs: s.unconfirmedHs, estimatedTaxVnd: s.estimatedTaxVnd, exchangeRateDate: s.exchangeRateDate,
         payload: { kind: s.kind, direction: s.direction, currency: s.currency, fields: s.fields, items: s.items, adjustments: s.adjustments, containers: s.containers },
       };
     },
@@ -49,4 +50,15 @@ export function createCustomsValidationReader(validation: ValidationDeps): Valid
 
 export function createCertificateReader(identity: IdentityDeps): CertificateReader {
   return { exists: async (orgId, id) => (await identity.uow.asOrg(sys(orgId), (r) => r.certificates.list(orgId))).some((c) => c.id === id) };
+}
+
+/** Tài khoản VNACCS của doanh nghiệp (org_secrets); chưa nhập → `fallback` (tài khoản chung từ env, chỉ dev với fpt-mock). */
+export function createVnaccsCredentialsReader(identity: IdentityDeps, fallback?: VnaccsCredentialsReader): VnaccsCredentialsReader {
+  return {
+    get: async (orgId) => {
+      const a = await readVnaccsCredentials(identity, orgId);
+      if (a) return { useR_ID: a.userId, password: a.password, terminaL_ID: a.terminalId, terminaL_ACCESS_KEY: a.terminalAccessKey };
+      return (await fallback?.get(orgId)) ?? null;
+    },
+  };
 }

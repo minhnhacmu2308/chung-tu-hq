@@ -17,7 +17,6 @@ import { SkillSamples } from "./skill-samples";
 
 /** Cùng quy tắc với AccuracyBadge: chưa đủ mẫu thì không hiện con số (số đo trên ít mẫu gây hiểu sai). */
 function accuracyText(skill: Skill): { value: string; tone: "success" | "warning" | "danger" | "neutral" } {
-  if (skill.kind === "MAPPING") return { value: "Quy tắc cố định", tone: "neutral" };
   if (skill.accuracy === undefined || skill.labeledSamples < MIN_SAMPLES_FOR_ACCURACY) return { value: "Chưa đủ mẫu", tone: "neutral" };
   return { value: formatPercent(skill.accuracy), tone: accuracyTone(skill.accuracy) };
 }
@@ -59,8 +58,7 @@ function Detail({ skill }: { skill: Skill }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const mapping = skill.kind === "MAPPING";
-  const tabs = mapping ? ["fields"] : ["fields", "samples", "evaluation"];
+  const tabs = ["fields", "samples", "evaluation"];
   const tab = tabs.includes(params.get("tab") ?? "") ? params.get("tab")! : "fields";
   const setTab = (t: string) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
   const measured = skill.accuracy !== undefined && skill.labeledSamples >= MIN_SAMPLES_FOR_ACCURACY;
@@ -70,15 +68,11 @@ function Detail({ skill }: { skill: Skill }) {
       <Breadcrumb linkAs={Link} items={[{ label: "Cấu hình Skill AI", href: `/skills?kind=${skill.kind}` }, { label: skill.code }]} />
       <PageHeader
         title={skill.name}
-        description={
-          mapping
-            ? "Quy tắc đưa dữ liệu lô hàng vào từng chỉ tiêu tờ khai. Chạy bằng code – cùng dữ liệu luôn ra cùng kết quả."
-            : "Cấu hình cách AI đọc loại chứng từ này: trường cần lấy, nhãn thường gặp và mẫu đã gắn nhãn để đo độ chính xác."
-        }
+        description="Cấu hình cách AI đọc loại chứng từ này: trường cần lấy, nhãn thường gặp và mẫu đã gắn nhãn để đo độ chính xác."
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <EnabledToggle skill={skill} />
-            {!mapping && <EvaluateButton skill={skill} onDone={() => setTab("evaluation")} />}
+            <EvaluateButton skill={skill} onDone={() => setTab("evaluation")} />
           </div>
         }
       />
@@ -99,7 +93,7 @@ function Detail({ skill }: { skill: Skill }) {
           tone={accuracyText(skill).tone}
           label="Độ chính xác"
           value={accuracyText(skill).value}
-          hint={mapping ? "kiểm bằng test tự động" : `${formatNumber(skill.labeledSamples)} mẫu đã gắn nhãn`}
+          hint={`${formatNumber(skill.labeledSamples)} mẫu đã gắn nhãn`}
         />
         <StatCard icon={<GitCommitHorizontal />} tone="primary" label="Phiên bản" value={`v${skill.version}`} hint={`cập nhật ${formatDateTime(skill.updatedAt)}`} />
       </Grid>
@@ -107,25 +101,20 @@ function Detail({ skill }: { skill: Skill }) {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList aria-label="Nội dung skill">
           <TabsTrigger value="fields">
-            {mapping ? "Quy tắc ánh xạ" : "Trường dữ liệu"} <Badge tone="neutral">{skill.fields.length}</Badge>
+            Trường dữ liệu <Badge tone="neutral">{skill.fields.length}</Badge>
           </TabsTrigger>
-          {!mapping && (
-            <TabsTrigger value="samples">
+          <TabsTrigger value="samples">
               Mẫu đã gắn nhãn <Badge tone="neutral">{skill.labeledSamples}</Badge>
             </TabsTrigger>
-          )}
-          {!mapping && <TabsTrigger value="evaluation">Kết quả đánh giá</TabsTrigger>}
+          <TabsTrigger value="evaluation">Kết quả đánh giá</TabsTrigger>
         </TabsList>
         <TabsContent value="fields" className="pt-4">
           <SkillFieldsTable skill={skill} />
         </TabsContent>
-        {!mapping && (
-          <TabsContent value="samples" className="pt-4">
+        <TabsContent value="samples" className="pt-4">
             <SkillSamples skill={skill} />
           </TabsContent>
-        )}
-        {!mapping && (
-          <TabsContent value="evaluation" className="pt-4">
+        <TabsContent value="evaluation" className="pt-4">
             {measured ? (
               <LatestEvaluation skill={skill} />
             ) : (
@@ -136,7 +125,6 @@ function Detail({ skill }: { skill: Skill }) {
               />
             )}
           </TabsContent>
-        )}
       </Tabs>
     </Stack>
   );

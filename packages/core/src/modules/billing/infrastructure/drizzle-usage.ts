@@ -5,10 +5,14 @@ import { withCtx } from "../../../db/with-ctx.js";
 import { Decimal, dec, toDecimalString } from "../../../shared/decimal.js";
 import { asOrgId, asUserId, ulidIdGen } from "../../../shared/ids.js";
 
-/** Giá USD/1M token (cập nhật khi đổi model). */
+/** Giá USD/1M token theo bảng giá Anthropic (cập nhật 2026-10). Gồm cả model dự phòng khi model chính từ chối (fallbacks). */
 export const MODEL_PRICING_USD_PER_MTOK: Record<string, { input: string; output: string }> = {
-  "claude-sonnet-5-5": { input: "3", output: "15" },
-  "claude-opus-5-5": { input: "15", output: "75" },
+  "claude-sonnet-5-5": { input: "2", output: "10" },
+  "claude-sonnet-5": { input: "2", output: "10" },
+  "claude-opus-5-5": { input: "4", output: "20" },
+  "claude-opus-5": { input: "5", output: "25" },
+  "claude-opus-4-8": { input: "5", output: "25" },
+  "claude-haiku-4-5": { input: "1", output: "5" },
   "claude-haiku-4-5-20251001": { input: "1", output: "5" },
   fake: { input: "0", output: "0" },
 };

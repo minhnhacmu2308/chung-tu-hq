@@ -1,13 +1,14 @@
 // AI Agent: tra HS → ánh xạ → dựng tờ khai → số hóa. Worker chạy `runAgent`; web gọi start/get.
 import type { AgentMode, AgentRunView, AgentTaskId, Shipment } from "@kb/contracts";
+import { profileFor } from "./declaration-profile.js";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { rankHs } from "../domain/hs-rank.js";
 import { computeBuilt, currenciesOf, exchangeFor, invoiceRate, mergeUserEdits } from "./_rebuild.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { loadDossier, syncLineItems, TASKS_BY_MODE, toAgentRunView } from "./_dto.js";
+import { hsSummaryLogs, startHsClassification } from "./hs-classification.js";
 import type { AgentLog, AgentRunRow, AgentTask, DeclarationDeps } from "./ports.js";
 
 export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: string, mode: AgentMode): Promise<Result<AgentRunView>> {
@@ -48,7 +49,8 @@ export type RunAgentInput = { orgId: string; userId: string; dossierId: string; 
 
 /**
  * Worker. Idempotent: task đã DONE không chạy lại; run không còn RUNNING → bỏ qua.
- * Lỗi tra HS từng dòng không chặn; lỗi tạm (classifier 5xx) ném ra để BullMQ retry.
+ * Tra HS qua HSCodePro: dòng cần hỏi lại / lỗi không chặn; lỗi tạm (5xx, 429) ném ra để BullMQ retry.
+ * Lượt còn processing → dừng ở HS_LOOKUP (RUNNING); hs-poll đánh dấu xong và đẩy lại run-agent.
  */
 export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Promise<Result<AgentRunView>> {
   const ctx = { orgId: asOrgId(input.orgId), userId: asUserId(input.userId) };
@@ -77,27 +79,29 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
     for (const t of tasks) {
       if (t.status === "DONE") continue;
       if (t.id === "HS_LOOKUP") {
+        const open = await deps.uow.asOrg(ctx, (r) => r.hsJobs.openForDossier(input.orgId, input.dossierId));
+        const waiting = open.some((j) => j.status === "processing");
         const items = await deps.uow.asOrg(ctx, (r) => r.lineItems.list(input.orgId, input.dossierId));
-        await setTask("HS_LOOKUP", "RUNNING", 0, `Đang tra dòng 1/${items.length}`);
-        say(`${deps.hs.name} – bắt đầu tra ${items.length} dòng hàng`);
-        for (const [i, it] of items.entries()) {
-          if (it.hsConfirmed) {
-            say(`Dòng ${it.lineNo}: giữ mã đã xác nhận ${it.hsConfirmed}`);
-          } else {
-            const candidates = await deps.hs.classify({ description: it.description, invoiceHs: it.invoiceHsCode, origin: it.origin });
-            const ranked = rankHs(candidates, it.invoiceHsCode);
-            const now = deps.clock.now();
-            await deps.uow.asOrg(ctx, async (r) => {
-              await r.lineItems.update(it.id, { hsSuggested: ranked.hsSuggested, hsConfidence: ranked.hsConfidence, updatedAt: now });
-              await r.suggestions.replaceForItem(it.id, ranked.ranked.map((c) => ({ id: deps.idGen.next("itm"), orgId: input.orgId, lineItemId: it.id, code: c.code, description: c.description ?? "", confidence: c.confidence, rates: null, source: deps.hs.name, createdAt: now })));
-            });
-            if (ranked.hsSuggested) {
-              const conf = Math.round((ranked.hsConfidence ?? 0) * 100);
-              say(`Dòng ${it.lineNo}: ${ranked.hsSuggested} (tin cậy ${conf}%)${conf < 70 ? " – cần người xác nhận kỹ" : ""}`, conf < 70 ? "warning" : "info");
-            } else say(`Dòng ${it.lineNo}: không có gợi ý – chọn mã HS thủ công`, "warning");
-          }
-          await setTask("HS_LOOKUP", "RUNNING", Math.round(((i + 1) / items.length) * 100), `Đang tra dòng ${Math.min(i + 2, items.length)}/${items.length}`);
+        let started: Result<{ pending: boolean }>;
+        if (t.status === "RUNNING") {
+          // Chạy lại (BullMQ thử lại / hs-poll đẩy lại): gửi nốt dòng chưa có lượt (lỗi giữa chừng lần trước); còn lượt đang chạy → chờ hs-poll.
+          const unsent = items.filter((it) => !it.hsConfirmed && it.hsJobId === null && it.hsStatus === "queued").map((it) => it.id);
+          started = unsent.length ? await startHsClassification(deps, ctx, input.dossierId, { lineItemIds: unsent }) : ok({ pending: false });
+        } else {
+          const todo = items.filter((it) => !it.hsConfirmed);
+          await setTask("HS_LOOKUP", "RUNNING", 10, `Đang gửi ${todo.length}/${items.length} dòng hàng`);
+          say(`${deps.hs.name} – bắt đầu tra ${todo.length} dòng hàng`);
+          for (const it of items) if (it.hsConfirmed) say(`Dòng ${it.lineNo}: giữ mã đã xác nhận ${it.hsConfirmed}`);
+          started = todo.length ? await startHsClassification(deps, ctx, input.dossierId) : ok({ pending: false });
         }
+        if (!started.ok) return started;
+        if (started.value.pending || (t.status === "RUNNING" && waiting)) {
+          say("Đã gửi HSCodePro – đang chờ kết quả phân loại (AI có thể hỏi lại người khai)");
+          await setTask("HS_LOOKUP", "RUNNING", 30, "Đang chờ kết quả phân loại HS");
+          return ok(toAgentRunView({ ...run, tasks, log }));
+        }
+        const after = await deps.uow.asOrg(ctx, (r) => r.lineItems.list(input.orgId, input.dossierId));
+        log.push(...hsSummaryLogs(after, at()));
         await setTask("HS_LOOKUP", "DONE", 100, `Đã tra ${items.length}/${items.length} dòng hàng`);
       } else if (t.id === "MAPPING") {
         await setTask("MAPPING", "RUNNING", 10, `Đang áp quy tắc ánh xạ ${dossier.direction === "NK" ? "IDA" : "EDA"}`);
@@ -110,7 +114,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
         const built = await deps.uow.asOrg(ctx, async (r) => {
           const items = await r.lineItems.list(input.orgId, input.dossierId);
           const exchange = await exchangeFor(r, currenciesOf(shipment, dossier), vnDate(deps.clock.now()));
-          const b = computeBuilt(deps, shipment, dossier, org, items, exchange);
+          const b = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, input.orgId, dossier.direction));
           const prev = await r.declarations.latest(input.orgId, input.dossierId);
           if (prev && prev.status !== "DRAFT") return { b, skipped: true as const, exchange };
           const now = deps.clock.now();

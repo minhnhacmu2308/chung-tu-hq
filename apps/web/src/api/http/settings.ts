@@ -1,10 +1,10 @@
 // Tài khoản doanh nghiệp, thành viên, kết nối, chứng thư số – gọi backend thật. Cùng chữ ký với src/mocks/api/settings.ts.
 import {
-  DigitalCertificateSchema, IntegrationSchema, MemberSchema, OkSchema, OrganizationSchema,
-  type Integration, type OrgProfileInput, type Organization, type Role,
+  DeclarationProfileSchema, DigitalCertificateSchema, IntegrationSchema, MemberSchema, OkSchema, OrganizationSchema, RuleOptionViewSchema, VnaccsAccountSchema,
+  type DeclarationDirection, type DeclarationProfileInput, type Integration, type OrgProfileInput, type Organization, type Role, type VnaccsAccountInput,
 } from "@kb/contracts";
 import { z } from "zod";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/http";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/http";
 
 export type { OrgProfileInput };
 
@@ -18,6 +18,12 @@ export const changeMemberRole = (id: string, role: Role) => apiPatch(`org/member
 export const setMemberDisabled = (id: string, disabled: boolean) => apiPatch(`org/members/${id}/disabled`, { disabled }, MemberSchema);
 export const listIntegrations = () => apiGet("org/integrations", z.array(IntegrationSchema));
 export const testIntegration = (id: Integration["id"]) => apiPost(`org/integrations/${id}/test`, {}, IntegrationSchema);
+export const getVnaccsAccount = () => apiGet("org/vnaccs-account", VnaccsAccountSchema);
+export const saveVnaccsAccount = (input: VnaccsAccountInput) => apiPut("org/vnaccs-account", input, VnaccsAccountSchema);
+export const removeVnaccsAccount = () => apiDelete("org/vnaccs-account", VnaccsAccountSchema);
+export const getDeclarationProfile = (direction: DeclarationDirection) => apiGet(`org/declaration-profile/${direction}`, DeclarationProfileSchema);
+export const saveDeclarationProfile = (direction: DeclarationDirection, input: DeclarationProfileInput) => apiPut(`org/declaration-profile/${direction}`, input, DeclarationProfileSchema);
+export const listDeclarationRules = (direction: DeclarationDirection) => apiGet(`org/declaration-rules/${direction}`, z.array(RuleOptionViewSchema));
 export const listCertificates = () => apiGet("org/certificates", z.array(DigitalCertificateSchema));
 export const setDefaultCertificate = async (id: string) => {
   await apiPost(`org/certificates/${id}/default`, {}, OkSchema);

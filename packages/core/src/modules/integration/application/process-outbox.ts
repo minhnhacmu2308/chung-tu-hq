@@ -85,7 +85,8 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     } else if (ob.operation === "HYS") {
       const docs = payload.files ?? [];
       const files = await Promise.all(docs.map(async (f) => ({ name: f.name, bytes: await deps.dossiers.readFile(f.storageKey) })));
-      const res = await deps.gateway.attachDocuments(input.orgId, { externalId: result.externalId ?? "", dossierId: ob.dossierId, files }, ob.idempotencyKey);
+      const declaration = (await deps.declarations.get(input.orgId, ob.dossierId))?.payload;
+      const res = await deps.gateway.attachDocuments(input.orgId, { externalId: result.externalId ?? "", dossierId: ob.dossierId, files, ...(declaration ? { declaration } : {}) }, ob.idempotencyKey);
       errors = res.errors;
       if (!errors?.length) {
         event = { type: "DOCS_OK" };

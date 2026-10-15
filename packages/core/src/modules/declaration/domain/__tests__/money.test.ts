@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { allocateCustomsValue } from "../valuation.js";
 import { computeTaxes } from "../tax.js";
-import { canApprove, canMoveToReview, canSubmit } from "../guards.js";
-import { rankHs } from "../hs-rank.js";
+import { canApprove, canMoveToReview, canSubmit, missingRequiredFields } from "../guards.js";
 
 // Hồ sơ HANSOL: 7 dòng tổng 20.850 USD, FCA + cước 1.150 USD, tỷ giá 25.400 → 558.800.000 VND.
 const ITEMS = [
@@ -70,21 +69,20 @@ describe("guards", () => {
     expect(canApprove({ ...base, exchangeRate: "0" })).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
     expect(canApprove({ ...base, exchangeRate: "26150" }).ok).toBe(true);
   });
+  it("canApprove: còn chỉ tiêu bắt buộc trống → VALIDATION nêu tên chỉ tiêu; missingRequiredFields bỏ qua chỉ tiêu tùy chọn và khoảng trắng tính là trống", () => {
+    const base = { role: "APPROVER" as const, userId: "u2", ownerId: "u1", fourEyes: false, blockerFails: 0, items: items(3), status: "DRAFT" as const };
+    const missing = missingRequiredFields("IDA", { SO_VD: { value: "  " }, KHO: { value: "03CCS01" } });
+    expect(missing.map((m) => m.code)).toContain("SO_VD");
+    expect(missing.map((m) => m.code)).not.toContain("KHO");
+    expect(missing.map((m) => m.code)).not.toContain("GHI_CHU");
+    const r = canApprove({ ...base, missingFields: [{ code: "SO_VD", label: "Số vận đơn" }, { code: "NGAY_DEN", label: "Ngày hàng đến" }] });
+    expect(r).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringContaining("Số vận đơn, Ngày hàng đến") } });
+    expect(canApprove({ ...base, missingFields: [] }).ok).toBe(true);
+  });
   it("canSubmit: phải APPROVED, không BLOCKER, chưa SUBMITTED", () => {
     expect(canSubmit({ status: "APPROVED", blockerFails: 0 }).ok).toBe(true);
     expect(canSubmit({ status: "DRAFT", blockerFails: 0 })).toMatchObject({ ok: false, error: { code: "NOT_APPROVED" } });
     expect(canSubmit({ status: "APPROVED", blockerFails: 1 })).toMatchObject({ ok: false, error: { code: "BLOCKER_FAILED" } });
     expect(canSubmit({ status: "SUBMITTED", blockerFails: 0 })).toMatchObject({ ok: false, error: { code: "ALREADY_SUBMITTED" } });
-  });
-});
-
-describe("hs-rank", () => {
-  it("ứng viên khớp 6 số với HS trên invoice được cộng tin cậy (tối đa 0,99); không có ứng viên → không gợi ý", () => {
-    const r = rankHs([{ code: "8466.93.90", confidence: 0.61 }, { code: "8482.80.00", confidence: 0.55 }], "8482.80.0000");
-    expect(r.hsSuggested).toBe("8482.80.00");
-    expect(r.hsConfidence).toBeCloseTo(0.7, 5);
-    expect(r.ranked.map((x) => x.code)).toEqual(["8482.80.00", "8466.93.90"]);
-    expect(rankHs([{ code: "8482.10.00", confidence: 0.95 }], "8482.10.1000").hsConfidence).toBe(0.99);
-    expect(rankHs([], null)).toEqual({ hsSuggested: null, hsConfidence: null, ranked: [] });
   });
 });

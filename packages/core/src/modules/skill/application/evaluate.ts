@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sampleMime } from "../domain/mime.js";
-import { extractionSchemaFor, MIN_SAMPLES_FOR_ACCURACY, type EvaluationResult } from "@kb/contracts";
+import { customFieldsOf, extractionSchemaFor, MIN_SAMPLES_FOR_ACCURACY, withCustomFields, type EvaluationResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
@@ -17,7 +17,6 @@ export async function evaluateSkill(deps: SkillDeps, ctx: Ctx, skillId: string):
   const check = await deps.uow.asOrg(ctx, async (r) => {
     const l = await loadSkill(r, ctx.orgId, skillId);
     if (!l.ok) return l;
-    if (l.value.skill.kind === "MAPPING") return err(domainError("NOT_SUPPORTED", "Skill ánh xạ là quy tắc cố định – kiểm bằng test, không đánh giá trên mẫu"));
     const labeled = (await r.samples.list(ctx.orgId, skillId)).filter((s) => s.status === "LABELED");
     if (labeled.length < MIN_SAMPLES_FOR_ACCURACY) return err(domainError("NOT_ENOUGH_SAMPLES", `Cần ít nhất ${MIN_SAMPLES_FOR_ACCURACY} mẫu đã gắn nhãn để đánh giá (hiện có ${labeled.length})`));
     const setHash = createHash("sha256").update(labeled.map((s) => `${s.id}:${s.labeledAt?.toISOString() ?? ""}`).sort().join("|")).digest("hex").slice(0, 16);
@@ -49,9 +48,9 @@ export async function runEvaluation(deps: SkillDeps, input: { orgId: string; use
     const bytes = await deps.storage.get(s.storageKey);
     const mime = sampleMime(s.fileName, bytes);
     const pages = Array.from({ length: Math.max(1, s.pages) }, (_, i) => i + 1);
-    const res = await deps.ai.extract({ bytes, mime, pages: s.pages, fileName: s.fileName }, pages, extractionSchemaFor(docKind), { kind: docKind, skillHints: fieldHints(version.fields), examples: [], supplierHint: skill.supplier });
+    const res = await deps.ai.extract({ bytes, mime, pages: s.pages, fileName: s.fileName }, pages, withCustomFields(extractionSchemaFor(docKind), customFieldsOf(docKind, version.fields)), { kind: docKind, skillHints: fieldHints(docKind, version.fields), examples: [], supplierHint: skill.supplier });
     await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens });
-    scores.push(scoreSample(version.fields, s.expected!, projectResult(version.fields, res.result)));
+    scores.push(scoreSample(version.fields, s.expected!, projectResult(docKind, version.fields, res.result)));
   }
   const sum = summarize(version.fields, scores);
   const now = deps.clock.now();

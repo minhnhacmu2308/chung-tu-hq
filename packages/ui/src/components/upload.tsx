@@ -92,6 +92,8 @@ export type FileDropzoneProps = {
   /** Số tệp tối đa trong một lần chọn/thả. */
   maxFiles?: number;
   disabled?: boolean;
+  /** md = vùng thả lớn (cả bộ chứng từ); sm = một dòng gọn, đặt trong ô của từng loại chứng từ. */
+  size?: "md" | "sm";
   labels?: Partial<Record<UploadMessageKey, string>>;
   className?: string;
 };
@@ -104,9 +106,11 @@ export function FileDropzone({
   maxSize,
   maxFiles,
   disabled = false,
+  size = "md",
   labels,
   className,
 }: FileDropzoneProps) {
+  const sm = size === "sm";
   const t = useMessages(MESSAGES, labels);
   const locale = useUiLocale();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -164,18 +168,20 @@ export function FileDropzone({
         }}
         onDrop={onDrop}
         className={cn(
-          "flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border-strong bg-surface px-6 py-8 text-center transition-colors",
+          "flex w-full items-center rounded-lg border-dashed border-border-strong bg-surface text-center transition-colors",
+          sm ? "flex-row justify-center gap-2 border px-3 py-2.5" : "flex-col gap-2 border-2 px-6 py-8",
           "hover:border-primary hover:bg-surface-muted",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
           "data-[dragging]:border-primary data-[dragging]:bg-primary-subtle",
           "disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
-        <UploadCloud aria-hidden="true" className={cn("h-8 w-8", dragging ? "text-primary" : "text-fg-subtle")} />
-        <span className="text-sm font-medium text-fg">{t.title}</span>
-        <span className="text-sm text-primary">{t.browse}</span>
+        <UploadCloud aria-hidden="true" className={cn(sm ? "h-4 w-4 shrink-0" : "h-8 w-8", dragging ? "text-primary" : "text-fg-subtle")} />
+        <span className={cn("text-sm text-fg", sm ? "text-fg-muted" : "font-medium")}>{t.title}</span>
+        {t.browse && <span className="text-sm text-primary">{t.browse}</span>}
         {hints.length > 0 && (
-          <span id={hintId} className="text-xs text-fg-subtle">
+          // Dạng gọn: gợi ý định dạng/dung lượng chỉ để trình đọc màn hình đọc, không chiếm chỗ.
+          <span id={hintId} className={sm ? "sr-only" : "text-xs text-fg-subtle"}>
             {hints.join(" · ")}
           </span>
         )}

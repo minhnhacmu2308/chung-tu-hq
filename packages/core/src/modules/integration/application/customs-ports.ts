@@ -47,12 +47,12 @@ export interface CustomsGateway {
   readonly name: string;
   preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId: string }, idempotencyKey: string): Promise<{ externalId: string; declarationNo?: string; errors?: GatewayError[] }>;
   declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }, idempotencyKey: string): Promise<{ accepted: boolean; channel?: "GREEN" | "YELLOW" | "RED"; customsTaxVnd?: string; errors?: GatewayError[] }>;
-  attachDocuments(orgId: string, msg: { externalId: string; dossierId: string; files: { name: string; bytes: Buffer }[] }, idempotencyKey: string): Promise<{ receiptNo?: string; errors?: GatewayError[] }>;
+  attachDocuments(orgId: string, msg: { externalId: string; dossierId: string; files: { name: string; bytes: Buffer }[]; declaration?: DeclarationPayload }, idempotencyKey: string): Promise<{ receiptNo?: string; errors?: GatewayError[] }>;
   queryStatus(orgId: string, externalId: string, dossierId: string): Promise<GatewayStatus>;
 }
 
 /** Tờ khai + dòng hàng từ module declaration (composition root nối). */
-export type DeclarationSnapshot = { declarationId: string; version: number; status: DeclarationStatus; payload: DeclarationPayload; unconfirmedHs: number; estimatedTaxVnd: string };
+export type DeclarationSnapshot = { declarationId: string; version: number; status: DeclarationStatus; payload: DeclarationPayload; unconfirmedHs: number; estimatedTaxVnd: string; /** Ngày (giờ VN) tra tỷ giá tính thuế khi dựng tờ khai. */ exchangeRateDate: string };
 export interface DeclarationReader {
   get(orgId: string, dossierId: string): Promise<DeclarationSnapshot | null>;
   markSubmitted(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;

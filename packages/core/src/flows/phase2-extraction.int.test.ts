@@ -38,7 +38,7 @@ beforeAll(async () => {
     validation: { run: (orgId, dossierId, shipment, version, org) => runRules(validationDeps, orgId, dossierId, shipment, version, org) },
     ai: new FakeAiProvider(),
     usage: new DrizzleUsageRecorder(db, dec("25400")),
-    skills: { resolve: async () => ({ skillVersionId: null, fieldHints: [], examples: [] }) },
+    skills: { resolve: async () => ({ skillVersionId: null, fieldHints: [], examples: [], customFields: [] }) },
     clock, idGen: ulidIdGen,
   };
 });

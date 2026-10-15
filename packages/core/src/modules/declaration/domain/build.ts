@@ -2,19 +2,22 @@
 import type { Shipment } from "@kb/contracts";
 import type { DossierInfo, OrgInfo, StoredField } from "./types.js";
 import { planAdjustments } from "./adjustments.js";
-import { EDA_MAPPINGS } from "./mapping/eda.js";
-import { IDA_MAPPINGS } from "./mapping/ida.js";
-import type { ExchangeInfo, FieldMapping, MappingInput } from "./mapping/types.js";
+import { evaluateMapping } from "./mapping/evaluate.js";
+import { mappingsFor } from "./mapping/registry.js";
+import type { ExchangeInfo, FieldOverride, MappingInput } from "./mapping/types.js";
 import { computeTaxes, type TaxResult } from "./tax.js";
 import { allocateCustomsValue, type Adjustment, type Valuation } from "./valuation.js";
 export type { ExchangeInfo } from "./mapping/types.js";
 
-export type BuildInput = { shipment: Shipment; dossier: DossierInfo; org: OrgInfo; items: { id: string; amount: string; importDutyRate: string | null; vatRate: string | null }[]; now: Date; exchange: ExchangeInfo };
+export type BuildInput = {
+  shipment: Shipment; dossier: DossierInfo; org: OrgInfo; items: { id: string; amount: string; importDutyRate: string | null; vatRate: string | null }[]; now: Date; exchange: ExchangeInfo;
+  /** Mặc định khai báo (theo chiều NK/XK) và ghi đè của doanh nghiệp. */
+  profile?: Record<string, string>;
+  overrides?: Record<string, FieldOverride>;
+};
 export type BuiltDeclaration = { kind: "IDA" | "EDA"; fields: Record<string, StoredField>; adjustments: Adjustment[]; valuation: Valuation; taxes: TaxResult; notes: string[]; suspectCount: number };
 
-export function mappingsFor(kind: "IDA" | "EDA"): FieldMapping[] {
-  return kind === "IDA" ? IDA_MAPPINGS : EDA_MAPPINGS;
-}
+export { mappingsFor } from "./mapping/registry.js";
 
 export function buildDeclaration(input: BuildInput): BuiltDeclaration {
   const kind = input.dossier.direction === "NK" ? "IDA" : "EDA";
@@ -25,13 +28,13 @@ export function buildDeclaration(input: BuildInput): BuiltDeclaration {
     const it = input.items.find((x) => x.id === p.id)!;
     return { id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: it.importDutyRate, vatRate: it.vatRate };
   }));
-  const ctx: MappingInput = { shipment: input.shipment, dossier: input.dossier, org: input.org, now: input.now, adjustments: valuation.adjustments, valuation, exchange: input.exchange };
+  const ctx: MappingInput = { shipment: input.shipment, dossier: input.dossier, org: input.org, now: input.now, adjustments: valuation.adjustments, valuation, exchange: input.exchange, profile: input.profile ?? {}, overrides: input.overrides ?? {} };
   const fields: Record<string, StoredField> = {};
   for (const m of mappingsFor(kind)) {
-    const v = m.from(ctx);
+    const v = evaluateMapping(m, ctx.overrides[m.code], ctx);
     const suspect = v.suspect === true || (m.required && v.value === null);
     const note = v.note ?? (m.required && v.value === null ? "Chỉ tiêu bắt buộc chưa có dữ liệu" : undefined);
-    fields[m.code] = { no: m.no ?? "", label: m.label, section: m.section, value: v.value ?? "", source: v.source, ...(suspect ? { suspect: true } : {}), ...(note ? { note } : {}) };
+    fields[m.code] = { no: m.no ?? "", label: m.label, section: m.section, value: v.value ?? "", source: v.source, ...(suspect ? { suspect: true } : {}), ...(note ? { note } : {}), provenance: v.provenance };
   }
   return { kind, fields, adjustments: valuation.adjustments, valuation, taxes, notes: [...plan.notes, ...valuation.warnings], suspectCount: Object.values(fields).filter((f) => f.suspect).length };
 }

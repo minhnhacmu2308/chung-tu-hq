@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { stateFor } from "./global-setup";
-import { createDossier, login, runAgentToReview, uploadAndConfirm } from "./helpers";
+import { createDossier, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
 
 test("danh sách hồ sơ: hồ sơ mới hiện ở đầu, tìm theo đối tác, lọc theo phạm vi, mở chi tiết", async ({ page }) => {
   await login(page);
@@ -39,6 +39,8 @@ test("truyền Hải quan: ký số & truyền → IDA/IDC/HYS/IEX qua cổng gi
   await uploadAndConfirm(page, ["Commercial Invoice.pdf", "Packing List.pdf", "Hoa don cuoc GTGT.pdf"]);
   await runAgentToReview(page);
 
+  await fillManualFields(page, id);
+
   const approverCtx = await browser.newContext({ storageState: stateFor("tuan") });
   const approver = await approverCtx.newPage();
   await approver.goto(`/dossiers/${id}?step=review`);
@@ -59,9 +61,11 @@ test("truyền Hải quan: ký số & truyền → IDA/IDC/HYS/IEX qua cổng gi
   if (!(await cleared.isVisible()) && (await resendHys.isVisible())) await resendHys.click();
   await expect(cleared).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText(/luồng (xanh|vàng|đỏ)/i).first()).toBeVisible();
-  const view = (await (await page.request.get(`/api/dossiers/${id}/submission`)).json()) as { result: { declarationNo: string | null; clearanceStatus: string } };
-  expect(view.result.declarationNo).toMatch(/^\d{12}$/);
-  expect(view.result.clearanceStatus).toBe("CLEARED");
+  type View = { result: { declarationNo: string | null; clearanceStatus: string } };
+  const submission = async () => (await (await page.request.get(`/api/dossiers/${id}/submission`)).json()) as View;
+  // Giao diện có thể hiện "Đã thông quan" trước một nhịp so với lần đọc API → chờ API.
+  await expect.poll(async () => (await submission()).result.clearanceStatus, { timeout: 15_000 }).toBe("CLEARED");
+  expect((await submission()).result.declarationNo).toMatch(/^\d{12}$/);
   // Đã truyền: không mở lại tờ khai được nữa.
   expect((await page.request.post(`/api/dossiers/${id}/declaration/reopen`, { data: {} })).status()).toBe(409);
 });

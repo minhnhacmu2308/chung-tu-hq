@@ -7,6 +7,7 @@ import { listIntegrations, settingsKeys, testIntegration } from "@/api/settings"
 import { formatRelative } from "@/lib/format";
 import type { Integration } from "@/mocks/types";
 import { LoadError } from "@/components/common/load-error";
+import { VnaccsAccountSection } from "./vnaccs-account";
 
 const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neutral"; label: string }> = {
   CONNECTED: { tone: "success", label: "Đã kết nối" },
@@ -46,13 +47,16 @@ function IntegrationCard({ it }: { it: Integration }) {
         </div>
       </CardHeader>
       <CardContent className="flex-1">
-        {it.status === "ERROR" && it.detail ? (
-          <Alert tone="danger">{it.detail}</Alert>
-        ) : it.detail ? (
-          <p className="text-sm text-fg-muted">{it.detail}</p>
-        ) : (
-          <p className="text-sm text-fg-subtle">Chưa bật cho doanh nghiệp. Liên hệ quản trị KhaiBáo AI để kích hoạt.</p>
-        )}
+        <Stack gap="sm">
+          {it.status === "ERROR" && it.detail ? (
+            <Alert tone="danger">{it.detail}</Alert>
+          ) : it.detail ? (
+            <p className="text-sm text-fg-muted">{it.detail}</p>
+          ) : (
+            <p className="text-sm text-fg-subtle">Chưa bật cho doanh nghiệp. Liên hệ quản trị KhaiBáo AI để kích hoạt.</p>
+          )}
+          {it.id === "CUSTOMS_HUB" && <VnaccsAccountSection />}
+        </Stack>
       </CardContent>
       <CardFooter className="justify-between">
         <span className="text-xs text-fg-subtle">{it.lastCheckedAt ? `Kiểm tra ${formatRelative(it.lastCheckedAt)}` : "Chưa kiểm tra"}</span>
@@ -71,7 +75,7 @@ export function IntegrationsTab() {
       <Alert tone="info" title="Khóa API được giữ ở máy chủ">
         <span className="inline-flex items-start gap-2">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          Khóa của hscodepro, Customs Hub và dịch vụ AI lưu trong kho bí mật phía máy chủ, không bao giờ gửi xuống trình duyệt hay hiện trên màn hình này.
+          Khóa của hscodepro, Customs Hub, dịch vụ AI và mật khẩu VNACCS lưu mã hóa phía máy chủ, không bao giờ gửi xuống trình duyệt hay hiện trên màn hình này.
         </span>
       </Alert>
       {isError ? (

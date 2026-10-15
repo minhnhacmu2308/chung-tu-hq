@@ -1,0 +1,117 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { FptRestClient, FptTransientError } from "./fpt-rest-client.js";
+import { FptVnaccsGateway } from "./fpt-vnaccs-gateway.js";
+
+// Phản hồi thật của FPT (đã che terminal key) – cùng bộ mẫu mà apps/fpt-mock phải khớp.
+const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../../../../../apps/fpt-mock/src/fixtures/${name}`, import.meta.url), "utf8")) as Record<string, unknown>;
+const SUCCESS = fixture("eda-response-success.json");
+const PAST_DEPARTURE = fixture("eda-response-past-departure.json");
+const REQUEST = fixture("eda-request.json");
+const CREDS = { useR_ID: "BI820001", password: "12345678", terminaL_ID: "Z0000M", terminaL_ACCESS_KEY: "MOCKTERMINALKEY0" };
+
+type Call = { path: string; auth: string | null; body: Record<string, unknown> };
+/** fetch giả: ghi lại lời gọi, trả lời theo `routes[path]` (hàm nhận số thứ tự lần gọi path đó). */
+function fakeFetch(routes: Record<string, (n: number, call: Call) => Response>) {
+  const calls: Call[] = [];
+  const count: Record<string, number> = {};
+  const fn = (async (url: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(String(url)).pathname;
+    const call: Call = { path, auth: new Headers(init?.headers).get("authorization"), body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown> };
+    calls.push(call);
+    count[path] = (count[path] ?? 0) + 1;
+    const route = routes[path];
+    return route ? route(count[path], call) : new Response("", { status: 404 });
+  }) as typeof fetch;
+  return { fn, calls };
+}
+const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+const login = (n: number) => ok({ token: `tok-${n}`, expiration: "2026-10-14T18:02:22Z" });
+const NOW = new Date("2026-10-14T15:01:21Z");
+const client = (fetchFn: typeof fetch, now = () => NOW) => new FptRestClient({ baseUrl: "http://fpt.test/", username: "test", password: "pw", fetch: fetchFn, now });
+
+describe("FptRestClient", () => {
+  it("đăng nhập trước, gửi Bearer + objVNACCS_ACCOUNT; lần gọi sau dùng lại token", async () => {
+    const f = fakeFetch({ "/api/auth/login": login, "/api/EDA": () => ok(SUCCESS) });
+    const c = client(f.fn);
+    await c.post("EDA", { objVN_EDA: {} }, CREDS);
+    await c.post("EDA", { objVN_EDA: {} }, CREDS);
+    expect(f.calls.map((x) => x.path)).toEqual(["/api/auth/login", "/api/EDA", "/api/EDA"]);
+    expect(f.calls[0]!.body).toEqual({ username: "test", password: "pw" });
+    expect(f.calls[1]!.auth).toBe("Bearer tok-1");
+    expect(f.calls[1]!.body["objVNACCS_ACCOUNT"]).toEqual(CREDS);
+  });
+  it("token sắp hết hạn → đăng nhập lại trước khi gọi", async () => {
+    const f = fakeFetch({ "/api/auth/login": login, "/api/EDA": () => ok(SUCCESS) });
+    let now = NOW;
+    const c = client(f.fn, () => now);
+    await c.post("EDA", {}, CREDS);
+    now = new Date("2026-10-14T17:58:00Z"); // còn < 5 phút
+    await c.post("EDA", {}, CREDS);
+    expect(f.calls.filter((x) => x.path === "/api/auth/login")).toHaveLength(2);
+    expect(f.calls.at(-1)!.auth).toBe("Bearer tok-2");
+  });
+  it("nghiệp vụ trả 401 → đăng nhập lại đúng một lần rồi gửi lại", async () => {
+    const f = fakeFetch({ "/api/auth/login": login, "/api/EDA": (n) => (n === 1 ? new Response("", { status: 401 }) : ok(SUCCESS)) });
+    await client(f.fn).post("EDA", {}, CREDS);
+    expect(f.calls.map((x) => `${x.path} ${x.auth ?? ""}`.trim())).toEqual(["/api/auth/login", "/api/EDA Bearer tok-1", "/api/auth/login", "/api/EDA Bearer tok-2"]);
+  });
+  it("nhiều lời gọi song song chỉ đăng nhập một lần", async () => {
+    const f = fakeFetch({ "/api/auth/login": login, "/api/EDA": () => ok(SUCCESS) });
+    const c = client(f.fn);
+    await Promise.all([c.post("EDA", {}, CREDS), c.post("EDA", {}, CREDS), c.post("EDA", {}, CREDS)]);
+    expect(f.calls.filter((x) => x.path === "/api/auth/login")).toHaveLength(1);
+  });
+  it("sai tài khoản API → INTEGRATION_NOT_CONFIGURED (không retry)", async () => {
+    const f = fakeFetch({ "/api/auth/login": () => new Response("", { status: 401 }) });
+    await expect(client(f.fn).post("EDA", {}, CREDS)).rejects.toMatchObject({ code: "INTEGRATION_NOT_CONFIGURED" });
+  });
+  it.each([429, 500, 503])("HTTP %i → FptTransientError (BullMQ retry)", async (status) => {
+    const f = fakeFetch({ "/api/auth/login": login, "/api/EDA": () => new Response("", { status }) });
+    await expect(client(f.fn).post("EDA", {}, CREDS)).rejects.toBeInstanceOf(FptTransientError);
+  });
+  it("mất kết nối → FptTransientError", async () => {
+    const c = client((async () => { throw new TypeError("fetch failed"); }) as typeof fetch);
+    await expect(c.post("EDA", {}, CREDS)).rejects.toBeInstanceOf(FptTransientError);
+  });
+  it("HTTP 404 → GATEWAY_ERROR gợi ý sửa đường dẫn", async () => {
+    const f = fakeFetch({ "/api/auth/login": login });
+    await expect(client(f.fn).post("IEX", {}, CREDS)).rejects.toMatchObject({ code: "GATEWAY_ERROR", message: expect.stringContaining("FPT_PATHS") });
+  });
+});
+
+describe("FptVnaccsGateway (phản hồi thật của FPT)", () => {
+  const gateway = (routes: Parameters<typeof fakeFetch>[0]) => {
+    const f = fakeFetch({ "/api/auth/login": login, ...routes });
+    return { g: new FptVnaccsGateway(client(f.fn), { get: async () => CREDS }), calls: f.calls };
+  };
+  const request = { objVN_EDA: REQUEST["objVN_EDA"], objVN_EDA_CON: REQUEST["objVN_EDA_CON"], objVN_EDA_CTHQ: REQUEST["objVN_EDA_CTHQ"], objVN_EDA_HANG: REQUEST["objVN_EDA_HANG"] };
+
+  it("EDA thành công → externalId = số tờ khai trong objEDA[0]", async () => {
+    const { g } = gateway({ "/api/EDA": () => ok(SUCCESS) });
+    expect(await g.preDeclare("org1", { kind: "EDA", request })).toEqual({ externalId: "309062686130", declarationNo: "309062686130" });
+  });
+  it("EDA lỗi S1139 → errors kèm chỉ tiêu và cách khắc phục, bỏ \\r\\n", async () => {
+    const { g } = gateway({ "/api/EDA": () => ok(PAST_DEPARTURE) });
+    expect((await g.preDeclare("org1", { kind: "EDA", request })).errors).toEqual([
+      { code: "S1139", field: "SYM", message: "Ngày hàng đi dự kiến là ngày trong quá khứ khi so với Ngày khai báo (Dự kiến)", solution: "Kiểm tra nội dung đã nhập." },
+    ]);
+  });
+  it("EDC gửi tK_ECN dạng số, đọc phân luồng từ objVN_EDA_TRANGTHAI", async () => {
+    const declared = structuredClone(SUCCESS) as { objEDA: { objVN_EDA_TRANGTHAI: Record<string, unknown> }[] };
+    declared.objEDA[0]!.objVN_EDA_TRANGTHAI["tK_LUONG"] = "2";
+    const { g, calls } = gateway({ "/api/EDC": () => ok(declared) });
+    expect(await g.declare("org1", { kind: "EDC", externalId: "309062686130" })).toEqual({ accepted: true, channel: "YELLOW" });
+    expect(calls.at(-1)!.body["tK_ECN"]).toBe(309062686130);
+  });
+  it("IEX: chưa thông quan → nhãn trạng thái tiếng Việt, không cleared", async () => {
+    const { g } = gateway({ "/api/IEX": () => ok(SUCCESS) });
+    expect(await g.queryStatus("org1", "309062686130")).toEqual({ status: "Khai báo tạm (IDA)", cleared: false, declarationNo: "309062686130" });
+  });
+  it("chưa có tài khoản VNACCS → INTEGRATION_NOT_CONFIGURED, không gọi mạng", async () => {
+    const f = fakeFetch({});
+    const g = new FptVnaccsGateway(client(f.fn), { get: async () => null });
+    await expect(g.preDeclare("org1", { kind: "EDA", request })).rejects.toMatchObject({ code: "INTEGRATION_NOT_CONFIGURED" });
+    expect(f.calls).toHaveLength(0);
+  });
+});

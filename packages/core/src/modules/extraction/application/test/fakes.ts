@@ -1,4 +1,4 @@
-import type { ClassifyResult, DocKind, Region, Shipment } from "@kb/contracts";
+import type { ClassifyResult, DocKind, Region, Shipment, CustomFieldDef } from "@kb/contracts";
 import type { ZodType } from "zod";
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type { ProgressEvent } from "../../../dossier/index.js";
@@ -101,7 +101,15 @@ export class RecordingUsage implements UsageRecorder {
 
 export class NoSkills implements SkillResolver {
   async resolve() {
-    return { skillVersionId: null, fieldHints: [], examples: [] };
+    return { skillVersionId: null, fieldHints: [], examples: [], customFields: [] };
+  }
+}
+
+/** Skill cố định cho test: một phiên bản có trường bổ sung riêng. */
+export class FixedSkills implements SkillResolver {
+  constructor(private customFields: CustomFieldDef[]) {}
+  async resolve() {
+    return { skillVersionId: "skv_test", fieldHints: [], examples: [], customFields: this.customFields };
   }
 }
 
@@ -124,8 +132,11 @@ export class ScriptedAi implements AiProvider {
     if (this.failWith) throw this.failWith;
     return { result: this.classify ?? { documents: [{ kind: "OTHER", pages: Array.from({ length: file.pages }, (_, i) => i + 1), isDuplicateCopy: false, supplierHint: null }] }, usage: { model: "fake", inputTokens: 10, outputTokens: 5 } };
   }
-  async extract(_file: AiFile, _pages: number[], _schema: ZodType, prompt: { kind: DocKind }) {
+  /** Schema nhận ở lần extract gần nhất (kiểm trường bổ sung). */
+  lastSchema: ZodType | null = null;
+  async extract(_file: AiFile, _pages: number[], schema: ZodType, prompt: { kind: DocKind }) {
     this.calls.extract++;
+    this.lastSchema = schema;
     if (this.failWith) throw this.failWith;
     return { result: this.byKind[prompt.kind] ?? { title: "x", summary: "y", uncertainties: [] }, regions: this.regions, usage: { model: "fake", inputTokens: 100, outputTokens: 50 } };
   }

@@ -4,7 +4,7 @@ import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, IconTile, PageHeader, SkeletonList, SkeletonStats, Stack, StatCard,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, CalendarClock, CircleCheck, Coins, FolderOpen, Gauge, PlugZap, ServerCrash, UserRoundPlus, UsersRound } from "lucide-react";
+import { ArrowRight, Building2, CalendarClock, CircleCheck, Coins, FolderOpen, Gauge, Landmark, PlugZap, ServerCrash, UserRoundPlus, UsersRound } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { adminKeys, getAdminOverview } from "@/api/admin";
@@ -19,6 +19,7 @@ const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
   INTEGRATION_ERROR: <PlugZap />,
   JOBS_FAILED: <ServerCrash />,
   JOIN_PENDING: <UserRoundPlus />,
+  RATE_FETCH: <Landmark />,
 };
 
 const rowLink =

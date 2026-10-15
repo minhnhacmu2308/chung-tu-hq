@@ -39,6 +39,7 @@ apps/web/src/
 | Form từ ~5 trường | Chia nhóm bằng `FormSection`; ô ngắn (ngày, mã, số ĐT) thêm `className="md:max-w-xs"` | Một cột trường dài hoặc lưới 2–3 cột đều nhau |
 | Trạng thái nghiệp vụ (hồ sơ, tờ khai, luồng, đối chiếu) | `StatusBadge` – thêm trạng thái mới vào `STATUS_META` (+ nhãn EN) của `@kb/ui` | Khai báo bảng `{ label, tone }` trong feature rồi dùng `Badge` |
 | Nhãn phụ không phải trạng thái nghiệp vụ | `Badge` (`size`, `dot`, `icon`) | |
+| Chọn một trong nhiều lựa chọn có nhãn dài / mô tả (câu hỏi, phương án) | `RadioGroup` (dọc; ít lựa chọn ngắn → `SegmentedControl`) | Nhiều `Button` giả radio; `<input type="radio">` thô |
 | Thao tác trên một dòng bảng/danh sách | `RowActions` (icon hiện khi rê chuột + nút "…" đủ thao tác); DataTable: truyền qua `rowActions` | Tự dựng `DropdownMenu` + `MoreHorizontal` (lint `apps-row-menu` chặn) |
 | Bảng danh sách | `DataTable`; cột định danh `meta: { sticky: true }`; cột thao tác tự dính phải | `<table>` tự viết |
 | Đang tải – đã biết dáng nội dung | `PageLoading` (cả trang) / `SkeletonStats` / `SkeletonCard` / `SkeletonTable` / `SkeletonForm` / `SkeletonList` | `<Skeleton className="h-80" />` cho cả khối (lint `apps-big-skeleton` chặn) |

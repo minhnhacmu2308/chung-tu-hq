@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DecimalStringSchema, IsoDateSchema, IsoDateTimeSchema, ValueSourceSchema, type Role } from "../common.js";
+import { HsItemErrorSchema, HsPendingQuestionSchema } from "../integrations/hscodepro.js";
 
 export const LineItemSchema = z.object({
   id: z.string(),
@@ -20,11 +21,36 @@ export const LineItemSchema = z.object({
   importDutyRate: DecimalStringSchema.optional(),
   vatRate: DecimalStringSchema.optional(),
   policyNote: z.string().optional(),
+  /** Phân loại HS (HSCodePro): trạng thái dòng, câu hỏi chờ trả lời, gợi ý + mã thay thế kèm thuế. */
+  hs: z.lazy(() => LineItemHsSchema).optional(),
 });
 export type LineItem = z.infer<typeof LineItemSchema>;
 
+/** idle: chưa gửi · skipped: không gửi được (thiếu xuất xứ/mô tả) · answering: đã trả lời, đang gửi. Còn lại theo HSCodePro. */
+export const LineItemHsStatusSchema = z.enum(["idle", "skipped", "queued", "processing", "need_info", "answering", "completed", "failed", "cancelled"]);
+export type LineItemHsStatus = z.infer<typeof LineItemHsStatusSchema>;
+export const HsCandidateSchema = z.object({
+  code: z.string(), description: z.string(), confidence: z.number().min(0).max(1), whyNot: z.string().nullable(),
+  importRate: DecimalStringSchema.nullable(), basis: z.enum(["MFN", "FTA"]).nullable(), agreement: z.string().nullable(), vatRate: DecimalStringSchema.nullable(),
+});
+export type HsCandidate = z.infer<typeof HsCandidateSchema>;
+export const LineItemHsSchema = z.object({
+  status: LineItemHsStatusSchema,
+  question: HsPendingQuestionSchema.nullable(),
+  error: HsItemErrorSchema.nullable(),
+  reasoning: z.string().nullable(),
+  legalBasis: z.array(z.string()),
+  warnings: z.array(z.string()),
+  /** Gợi ý chính đứng đầu, sau đó các mã thay thế. */
+  candidates: z.array(HsCandidateSchema),
+});
+export type LineItemHs = z.infer<typeof LineItemHsSchema>;
+
 export const DeclarationSectionSchema = z.enum(["GENERAL", "PARTIES", "TRANSPORT", "VALUE"]);
 export type DeclarationSection = z.infer<typeof DeclarationSectionSchema>;
+
+export const FieldProvenanceSchema = z.object({ rule: z.string(), via: z.enum(["default", "source", "fixed", "profile"]), sourceId: z.string().optional() });
+export type FieldProvenance = z.infer<typeof FieldProvenanceSchema>;
 
 export const DeclarationFieldSchema = z.object({
   /** Khóa ổn định của chỉ tiêu (mnemonic, ví dụ TONG_TG) – dùng cho FE và API sửa. */
@@ -38,6 +64,8 @@ export const DeclarationFieldSchema = z.object({
   suspect: z.boolean().optional(),
   /** Lý do nghi ngờ / ghi chú cho người duyệt. */
   note: z.string().optional(),
+  /** Nguồn gốc giá trị: quy tắc mặc định / Mặc định khai báo / giá trị cố định / nguồn doanh nghiệp chọn (Cài đặt → Khai báo). */
+  provenance: FieldProvenanceSchema.optional(),
 });
 export type DeclarationField = z.infer<typeof DeclarationFieldSchema>;
 

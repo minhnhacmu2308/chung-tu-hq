@@ -16,3 +16,8 @@ next-env.d.ts
 
 apps/web/e2e/.auth/
 apps/web/test-results/
+
+# Lô chứng từ thật của khách (eval) – không commit
+evals/private/
+lo mẫu/
+LÔ FANS25040166/

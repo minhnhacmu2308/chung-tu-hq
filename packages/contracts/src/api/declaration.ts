@@ -28,5 +28,25 @@ export type HsEntry = z.infer<typeof HsEntrySchema>;
 export const DeclarationItemViewSchema = LineItemSchema.extend({ customsValueVnd: DecimalStringSchema, importDutyVnd: DecimalStringSchema, vatVnd: DecimalStringSchema });
 export type DeclarationItemView = z.infer<typeof DeclarationItemViewSchema>;
 
-export const DeclarationViewSchema = z.object({ declaration: DeclarationSchema.nullable(), items: z.array(DeclarationItemViewSchema), unconfirmedHs: z.number().int().nonnegative() });
+/** Tỷ giá đã dùng khi dựng tờ khai + nguồn (màn Review): tuần hiệu lực (thứ Hai), VCB tự động / nhập tay / dữ liệu mẫu. */
+export const ExchangeRateInfoSchema = z.object({ currency: z.string(), rate: DecimalStringSchema, effectiveFrom: z.string(), source: z.enum(["VCB", "MANUAL", "SEED"]), snapshotAt: IsoDateTimeSchema.nullable() });
+export type ExchangeRateInfo = z.infer<typeof ExchangeRateInfoSchema>;
+export const DeclarationViewSchema = z.object({ declaration: DeclarationSchema.nullable(), items: z.array(DeclarationItemViewSchema), unconfirmedHs: z.number().int().nonnegative(), exchangeRateInfo: ExchangeRateInfoSchema.nullable().optional() });
 export type DeclarationView = z.infer<typeof DeclarationViewSchema>;
+
+/** Người khai trả lời câu hỏi của AI phân loại HS (mỗi câu con một phần tử). */
+export const HsAnswerInputSchema = z.object({
+  questionId: z.string().min(1),
+  answers: z
+    .array(
+      z.object({ id: z.string().min(1), selected: z.array(z.string()), custom: z.string().trim().max(1000).nullable() })
+        .refine((a) => a.selected.length > 0 || !!a.custom, "Chọn ít nhất một đáp án hoặc nhập trả lời khác"),
+    )
+    .min(1)
+    .max(3),
+});
+export type HsAnswerInput = z.infer<typeof HsAnswerInputSchema>;
+
+/** Phân loại lại một dòng: có thể bổ sung mô tả / xuất xứ (ISO-2). */
+export const HsReclassifyInputSchema = z.object({ extraDescription: z.string().trim().max(500).optional(), origin: z.string().regex(/^[A-Z]{2}$/, "Mã nước 2 chữ in hoa (vd CN, TW)").optional() });
+export type HsReclassifyInput = z.infer<typeof HsReclassifyInputSchema>;

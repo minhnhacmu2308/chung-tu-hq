@@ -1,7 +1,7 @@
 // Hiện thực IdentityUow bằng Drizzle: mỗi lời gọi là một transaction với ngữ cảnh RLS (withSystem/withUser/withCtx).
 import { and, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { authTokens, digitalCertificates, joinRequests, memberships, notifications, organizations, sessions, users } from "../../../db/schema/identity.js";
+import { authTokens, digitalCertificates, joinRequests, memberships, notifications, organizations, orgSecrets, sessions, users } from "../../../db/schema/identity.js";
 import { withCtx, withSystem, withUser } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import type { IdentityRepos, IdentityUow, JoinRequestStatus, MembershipRow, MembershipStatus } from "../application/ports.js";
@@ -74,6 +74,14 @@ function repos(tx: Tx): IdentityRepos {
         await tx.update(digitalCertificates).set({ isDefault: sql`(${digitalCertificates.id} = ${id})`, updatedAt: new Date() }).where(eq(digitalCertificates.orgId, orgId));
       },
       delete: async (orgId, id) => void (await tx.delete(digitalCertificates).where(and(eq(digitalCertificates.orgId, orgId), eq(digitalCertificates.id, id)))),
+    },
+    secrets: {
+      get: async (orgId, kind) => (await tx.select().from(orgSecrets).where(and(eq(orgSecrets.orgId, orgId), eq(orgSecrets.kind, kind))).limit(1))[0] ?? null,
+      upsert: async (row) => {
+        const { id, updatedAt, ...rest } = row;
+        await tx.insert(orgSecrets).values({ id, ...rest, updatedAt }).onConflictDoUpdate({ target: [orgSecrets.orgId, orgSecrets.kind], set: { ciphertext: rest.ciphertext, keyVersion: rest.keyVersion, updatedAt } });
+      },
+      delete: async (orgId, kind) => void (await tx.delete(orgSecrets).where(and(eq(orgSecrets.orgId, orgId), eq(orgSecrets.kind, kind)))),
     },
     notifications: {
       list: async (orgId, userId) => tx.select().from(notifications).where(and(eq(notifications.orgId, orgId), eq(notifications.userId, userId))).orderBy(desc(notifications.createdAt)).limit(50),

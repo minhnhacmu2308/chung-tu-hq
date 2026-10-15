@@ -112,3 +112,43 @@ describe("projectFields", () => {
     expect(f?.shipmentPath).toBe("/invoice/no");
   });
 });
+
+describe("mergeExtractions – trường v2 (chuẩn trường chứng từ)", () => {
+  const opts = { version: 1 };
+  const an: FileExtraction = {
+    documentId: "doc_an", kind: "ARRIVAL_NOTICE", pages: 1,
+    data: { billNo: "FANS25040166", masterBillNo: "LLLHCM25414116", vessel: "INTERASIA VISION / S079", eta: "2025-04-25", portOfDischarge: "CANG CAT LAI (HCM)", warehouseCode: null, warehouseName: "CÁT LÁI KHO 3", packages: 1, packageUnit: "PALLETS", grossWeightKg: 119.5, note: "CFS/CFS", charges: [], uncertainties: [] },
+  };
+  const blV1: FileExtraction = { documentId: "doc_bl2", kind: "BILL_OF_LADING", pages: 1, data: { billNo: "FANS25040166", date: "2025-04-22", portOfLoading: "SHENZHEN,CHINA", containers: [], uncertainties: [] } };
+
+  it("Arrival Notice cấp MB/L, kho; B/L v1 (thiếu placeOfIssue) vẫn gộp, ngày đi lấy ngày B/L", () => {
+    const s = mergeExtractions([an, blV1], opts);
+    expect(s.transport.masterBillNo.value).toBe("LLLHCM25414116");
+    expect(s.transport.houseBillNo.value).toBe("FANS25040166");
+    expect(s.transport.houseBillNo.status).toBe("CROSS_CHECKED");
+    expect(s.transport.warehouseName.value).toBe("CÁT LÁI KHO 3");
+    expect(s.transport.warehouseCode.value).toBeNull();
+    expect(s.transport.departureDate.value).toBe("2025-04-22");
+    expect(s.transport.placeOfIssue.value).toBeNull();
+  });
+  it("hàng air: chuyến bay lệch giữa HAWB và Arrival Notice → CONFLICT; HAWB vào houseBillNo, MAWB vào masterBillNo; ngày bay vào ngày đi", () => {
+    const awb: FileExtraction = { documentId: "a", kind: "AIR_WAYBILL", pages: 1, data: { awbNo: "92147391621", hawbNo: "YZS24120950", flight: "O3141", flightDate: "2024-12-21", uncertainties: [] } };
+    const an2: FileExtraction = { documentId: "b", kind: "ARRIVAL_NOTICE", pages: 1, data: { billNo: "YZS24120950", flightNo: "O30141", warehouseCode: "02B1A04", warehouseName: "KHO SCSC", charges: [], uncertainties: [] } };
+    const s = mergeExtractions([awb, an2], opts);
+    expect(s.transport.flightNo.status).toBe("CONFLICT");
+    expect(s.transport.houseBillNo.value).toBe("YZS24120950");
+    expect(s.transport.masterBillNo.value).toBe("92147391621");
+    expect(s.transport.departureDate.value).toBe("2024-12-21");
+    expect(s.transport.arrivalDate.value).toBeNull(); // ngày bay không phải ETA – NGAY_DEN dự phòng ở bước ánh xạ
+    expect(s.transport.warehouseCode.value).toBe("02B1A04");
+  });
+  it("invoice: nơi giao hàng, Part No theo dòng; C/O: tiêu chí xuất xứ; trường bổ sung riêng vào custom", () => {
+    const inv: FileExtraction = { ...invoice, data: { ...invoice.data, incotermPlace: "Shenzhen", items: [{ ...(invoice.data["items"] as Record<string, unknown>[])[0], partNo: "APSX116D" }], custom: { lcNo: "LC-001" } } };
+    const co: FileExtraction = { documentId: "doc_co", kind: "CERT_OF_ORIGIN", pages: 1, data: { coNo: "E25", items: [{ description: "LCD", hs6: "852859", criterion: "PE" }], uncertainties: [] } };
+    const s = mergeExtractions([inv, co], opts);
+    expect(s.invoice.incotermPlace.value).toBe("Shenzhen");
+    expect(s.items[0]?.partNo.value).toBe("APSX116D");
+    expect(s.origin.criteria).toEqual([{ hs6: "852859", criterion: "PE" }]);
+    expect(s.custom["INVOICE"]?.["lcNo"]?.value).toBe("LC-001");
+  });
+});

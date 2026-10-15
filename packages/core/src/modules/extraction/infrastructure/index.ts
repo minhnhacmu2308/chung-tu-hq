@@ -20,7 +20,7 @@ export function createAiProvider(env: Env, fixturesDir = path.resolve(process.cw
 }
 
 /** Skill chưa có (GĐ 3): không gợi ý trường. */
-export const noSkillResolver: SkillResolver = { resolve: async () => ({ skillVersionId: null, fieldHints: [], examples: [] }) };
+export const noSkillResolver: SkillResolver = { resolve: async () => ({ skillVersionId: null, fieldHints: [], examples: [], customFields: [] }) };
 
 export function createExtractionInfrastructure(opts: {
   db: Db; env: Env; dossier: DossierDeps; orgInfo: OrgInfoReader; validation: ValidationPort; usage: UsageRecorder; skills?: SkillResolver; ai?: AiProvider; clock?: Clock;

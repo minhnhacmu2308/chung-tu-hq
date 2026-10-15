@@ -18,7 +18,7 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 
 ## Cấu trúc
 
-- `apps/web` – Next.js, MỎNG. `apps/worker` – BullMQ, MỎNG.
+- `apps/web` – Next.js, MỎNG. `apps/worker` – BullMQ, MỎNG. `apps/fpt-mock` – server giả lập FPT.VNACCS + HSCodePro (`pnpm fpt-mock`); dev/test KHÔNG gọi cổng FPT thật (production). Kiểm khói HSCodePro thật: `pnpm hscodepro:smoke`. Xem `apps/fpt-mock/README.md`.
 - `packages/core/src/modules/<module>/{domain,application,infrastructure,index.ts}` – toàn bộ nghiệp vụ.
 - `packages/contracts` – Zod schema dùng chung FE/BE.
 - `packages/ui` – design system `@kb/ui`: token, component, theme. Xem `docs/DESIGN-SYSTEM.md`.

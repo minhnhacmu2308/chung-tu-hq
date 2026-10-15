@@ -8,8 +8,19 @@ export type Section = "GENERAL" | "PARTIES" | "TRANSPORT" | "VALUE";
 export type ExchangeInfo = { date: string; rates: Record<string, string>; missing: string[] };
 /** Ngày theo giờ Việt Nam (UTC+7) – ngày khai báo dự kiến, ngày tra tỷ giá. */
 export const vnDate = (now: Date) => new Date(now.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
-export type MappedValue = { value: string | null; source: ValueSource; suspect?: boolean; note?: string };
-export type MappingInput = { shipment: Shipment; dossier: DossierInfo; org: OrgInfo; now: Date; adjustments: Adjustment[]; valuation: Valuation; exchange: ExchangeInfo };
+/** `via: "profile"` = giá trị lấy từ Mặc định khai báo của doanh nghiệp (để ghi nguồn gốc). */
+export type MappedValue = { value: string | null; source: ValueSource; suspect?: boolean; note?: string; via?: "profile" };
+export type MappingInput = {
+  shipment: Shipment; dossier: DossierInfo; org: OrgInfo; now: Date; adjustments: Adjustment[]; valuation: Valuation; exchange: ExchangeInfo;
+  /** Mặc định khai báo của doanh nghiệp theo chiều NK/XK: mã chỉ tiêu → giá trị. */
+  profile: Record<string, string>;
+  /** Ghi đè của doanh nghiệp theo mã chỉ tiêu. */
+  overrides: Record<string, FieldOverride>;
+};
+/** Nguồn thay thế được phép cho một chỉ tiêu: hàm đọc thuần; null/value null = nguồn không có giá trị. */
+export type SourceOption = { id: string; label: string; read: (i: MappingInput) => MappedValue | null };
+export type FieldOverride = { sources: string[] } | { fixed: string };
+export type Provenance = { rule: string; via: "default" | "source" | "fixed" | "profile"; sourceId?: string };
 export type FieldMapping = {
   /** Khóa ổn định (mnemonic) dùng cho FE/API. */
   code: string;
@@ -20,6 +31,8 @@ export type FieldMapping = {
   /** Bắt buộc theo Phụ lục II: thiếu giá trị → suspect. */
   required: boolean;
   from: (i: MappingInput) => MappedValue;
+  /** Doanh nghiệp được chọn nguồn (theo thứ tự) trong danh sách này hoặc đặt giá trị cố định. Không có = không ghi đè được. */
+  options?: { sources: SourceOption[]; allowFixed: boolean };
 };
 
 const SOURCE_BY_KIND: Record<DocKind, ValueSource> = {
@@ -40,3 +53,9 @@ export function fromSourced(s: Sourced<string>, fallback: ValueSource = "SYSTEM"
 export const plainNumber = (v: string) => (/^-?\d+(\.\d+)?$/.test(v) ? v.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "") : v);
 export const fixed = (value: string, source: ValueSource = "DEFAULT"): MappedValue => ({ value, source });
 export const missing = (source: ValueSource, note: string): MappedValue => ({ value: null, source, suspect: true, note });
+
+/** Giá trị theo Mặc định khai báo nếu doanh nghiệp đã đặt, ngược lại giá trị mặc định của hệ thống. */
+export const profileOr = (i: MappingInput, code: string, fallback: MappedValue): MappedValue => {
+  const v = i.profile[code]?.trim();
+  return v ? { value: v, source: "DEFAULT", via: "profile" } : fallback;
+};

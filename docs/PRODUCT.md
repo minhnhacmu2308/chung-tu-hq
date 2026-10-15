@@ -48,7 +48,8 @@ Mỗi doanh nghiệp (1 MST) là một **organization**. Đăng nhập bằng **
 | Chứng từ | Một văn bản trong lô (1 file có thể chứa nhiều chứng từ) | `Document` |
 | Dữ liệu lô hàng | Kết quả đọc + gộp + chuẩn hóa từ mọi chứng từ | `Shipment` |
 | Luật đối chiếu | Kiểm tra chéo giữa chứng từ → PASS/WARN/FAIL/SKIPPED, mức BLOCKER/WARNING/INFO | `ValidationRule` |
-| Skill AI | Cấu hình cách đọc 1 loại chứng từ (trường, alias nhãn, ví dụ đã duyệt) hoặc cách ánh xạ tờ khai | `Skill` |
+| Skill AI | Cấu hình cách đọc 1 loại chứng từ: trường chuẩn theo danh mục (`DOC_CATALOG`) + **trường bổ sung riêng** của doanh nghiệp (AI đọc thật), alias nhãn, ví dụ đã duyệt | `Skill` |
+| Mặc định khai báo | Giá trị mặc định (loại hình, chi cục, kho, PTTT…) và nguồn từng chỉ tiêu trong phạm vi quy tắc cho phép – Cài đặt → Khai báo | `DeclarationProfile` |
 | Tờ khai | IDA/IDC (nhập), EDA/EDC (xuất) theo VNACCS | `Declaration` |
 | Dữ liệu số hóa | Bản dữ liệu chuẩn hóa của chứng từ (JSON/XML) để lưu trữ và đính kèm HYS | `DigitizedDocument` |
 
@@ -90,8 +91,8 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 
 | Bước | Làm gì | Ai làm |
 |---|---|---|
-| Tra cứu mã HS | Gọi hscodepro cho từng dòng hàng → mã HS, mô tả, điểm tin cậy, thuế NK (MFN/FTA), VAT, chính sách quản lý chuyên ngành | hscodepro (gợi ý) – **người phải xác nhận** |
-| Ánh xạ dữ liệu | Áp skill ánh xạ (SK-MAP-IDA / SK-MAP-EDA) đưa dữ liệu vào chỉ tiêu tờ khai | **Code + cấu hình**, không dùng AI (ADR 0002) |
+| Tra cứu mã HS | Gửi HSCodePro theo lượt (≤ 50 dòng, chạy nền, poll 3 giây) → mã HS 8 số, độ tin cậy, lý do + căn cứ, cảnh báo, thuế NK (MFN/FTA theo C/O), VAT, tối đa 3 mã thay thế. AI có thể **hỏi lại người khai** (bảng "Xác nhận mã HS" → "Trả lời AI"); dòng lỗi/thiếu xuất xứ → "Phân loại lại". Dòng cần hỏi không chặn agent | HSCodePro (gợi ý) – **người phải xác nhận** (mã gợi ý, mã thay thế, mã trong biểu, hoặc nhập tay 8 số) |
+| Ánh xạ dữ liệu | Quy tắc chỉ tiêu (`declaration/domain/mapping`) + Mặc định khai báo + ghi đè nguồn của doanh nghiệp; mỗi chỉ tiêu ghi nguồn gốc (provenance) | **Code + cấu hình**, không dùng AI (ADR 0002) |
 | Dựng tờ khai | Tạo tờ khai nháp, tính trị giá tính thuế, thuế dự kiến; đề xuất thuế suất ưu đãi nếu C/O/REX hợp lệ | Code |
 | Số hóa chứng từ | Tạo bản dữ liệu số cho từng chứng từ để lưu và đính kèm HYS | Code |
 
@@ -101,7 +102,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 - Tờ khai IDA/EDA dạng form, trạng thái "Bản nháp, chờ duyệt". Tab: **Thông tin chung · Danh sách hàng · Thuế & chính sách · Chứng từ đính kèm**.
 - Mỗi chỉ tiêu có **nhãn nguồn**: Invoice / B/L / Packing List / Contract / C/O / Hồ sơ / Tài khoản / Mặc định / Hệ thống.
 - Thanh dưới: **Tổng thuế phải nộp dự kiến** · Quay lại OCR · **Phê duyệt tờ khai** (vai trò Người duyệt).
-- Tỷ giá tính thuế lấy từ nguồn chính thức theo ngày, không dùng tỷ giá trên chứng từ forwarder.
+- Tỷ giá tính thuế: tỷ giá mua chuyển khoản Vietcombank cuối ngày thứ Năm tuần trước, áp cho tờ khai đăng ký trong tuần (tự lấy tối thứ Năm; đội vận hành sửa/nhập tay ở khu Quản trị → Tỷ giá tính thuế). Không dùng tỷ giá trên chứng từ forwarder. Màn Review hiện tuần + nguồn tỷ giá; tờ khai dựng tuần trước bị chặn truyền khi sang tuần mới (mở lại để dựng lại).
 - Incoterm EXW/FCA/FAS/FOB: hiển thị rõ cước, bảo hiểm, phí nước ngoài được cộng vào trị giá tính thuế và nguồn của từng khoản (hóa đơn cước, Arrival Notice).
 
 ### Bước 6 – Khai báo Hải quan
@@ -121,14 +122,14 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 | Tạo hồ sơ | Bước 1 |
 | Chi tiết hồ sơ | Thanh 6 bước + màn của bước hiện tại (bước 2–6) |
 | Khai báo Hải quan | Danh sách tờ khai đã/đang truyền: hồ sơ, nghiệp vụ, số tờ khai, phân luồng, trạng thái, cập nhật |
-| Cấu hình Skill AI | Danh sách skill (theo chứng từ, theo nhà cung cấp, ánh xạ tờ khai) kèm **độ chính xác đo trên mẫu đã gắn nhãn**. Chi tiết skill: tên, loại chứng từ, ngôn ngữ; bảng trường (mã, tên hiển thị, kiểu, bắt buộc, ánh xạ chỉ tiêu tờ khai); chứng từ mẫu đã gắn nhãn; nút **Đánh giá lại** |
+| Cấu hình Skill AI | Danh sách skill (theo chứng từ, theo nhà cung cấp) kèm **độ chính xác đo trên mẫu đã gắn nhãn**. Chi tiết skill: tên, loại chứng từ, ngôn ngữ; bảng trường (mã, tên hiển thị, kiểu, bắt buộc, ánh xạ chỉ tiêu tờ khai); chứng từ mẫu đã gắn nhãn; nút **Đánh giá lại** |
 | Tài khoản & tích hợp | Thông tin doanh nghiệp (MST khóa), gói dịch vụ, thành viên & vai trò, kết nối hệ thống (hscodepro, Customs Hub, dịch vụ AI) kèm trạng thái, chứng thư số, ngưỡng hiển thị trường nghi ngờ |
 
 ## 6. Tích hợp hệ thống bên thứ 3
 
 | Hệ thống | Dùng cho | Gọi từ | Ghi chú |
 |---|---|---|---|
-| **hscodepro** (`/v1/classify`) | Gợi ý HS, biểu thuế, chính sách theo mô tả + xuất xứ | Job nền ở bước 4 | Kết quả là gợi ý; lưu điểm tin cậy; người xác nhận mới dùng; cache theo (org, mô tả chuẩn hóa) |
+| **HSCodePro** (`/internal/v1/hs-classifications`, tài liệu `docs/integrations/hscodepro-api-v1.md`) | Gợi ý HS 8 số + thuế NK/VAT theo C/O + mã thay thế; hỏi lại khi mô tả chưa đủ | Job nền: `run-agent` tạo lượt, `hs-poll` 3 giây, `hs-answer` gửi câu trả lời, `hs-reclassify` | Kết quả là gợi ý; người xác nhận mới dùng; khóa chỉ ở máy chủ (`HSCODEPRO_INTERNAL_KEY`) |
 | **Customs Hub** (`/customs-hub/v1/vnaccs/{IDA,IDC,EDA,EDC,HYS,IEX}`) | Truyền tờ khai, gửi hồ sơ điện tử, tra trạng thái | Job nền ở bước 6 | Có ký số; lưu toàn bộ thông điệp; xem nguyên tắc dưới |
 | **Nhà cung cấp AI** (Claude mặc định) | Đọc chứng từ | Worker bước 3 | Qua port `AiProvider`; đổi hãng không ảnh hưởng nghiệp vụ |
 | Tra cứu hóa đơn điện tử | Đọc XML hóa đơn GTGT cước | Worker bước 3 | Rẻ và chính xác hơn đọc PDF |

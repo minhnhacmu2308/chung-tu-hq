@@ -8,9 +8,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Info } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { z } from "zod";
 import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
+import { getDeclarationProfile, settingsKeys } from "@/api/settings";
+import { prefillFromProfile } from "./profile-prefill";
 import type { Direction, Dossier } from "@/mocks/types";
 import { CUSTOMS_OFFICES, INCOTERMS, SKILL_SETS, suggestedDocuments, TYPE_CODES } from "./create-dossier-options";
 import { TRANSPORT_LABELS } from "./dossier-display";
@@ -62,6 +64,14 @@ export function CreateDossierPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState<FormState>(INITIAL);
   const [errors, setErrors] = useState<Errors>({});
+  // Ô người dùng đã tự chọn – không bị Mặc định khai báo ghi đè.
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  const profile = useQuery({ queryKey: settingsKeys.declarationProfile(form.direction), queryFn: () => getDeclarationProfile(form.direction) });
+  useEffect(() => {
+    if (profile.data) setForm((f) => prefillFromProfile(f, profile.data.values, touched));
+    // touched cố ý không nằm trong deps: chỉ điền khi tải xong mặc định của chiều đang chọn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.data]);
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
 
   const recentPartners = useMemo(() => {
@@ -72,10 +82,12 @@ export function CreateDossierPage() {
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
+    if (key === "typeCode" || key === "customsOffice") setTouched((t) => new Set(t).add(key));
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
   };
 
   const changeDirection = (d: Direction) => {
+    setTouched(new Set());
     setForm((f) => ({ ...f, direction: d, typeCode: d === "NK" ? "A11" : "B11", incoterm: d === "NK" ? "CIF" : "FOB" }));
   };
 

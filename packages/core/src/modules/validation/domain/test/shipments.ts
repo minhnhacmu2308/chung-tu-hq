@@ -7,22 +7,21 @@ const src = (value: string | null, kinds: ("INVOICE" | "PACKING_LIST" | "BILL_OF
   status: value === null ? "SINGLE_SOURCE" : kinds.length > 1 ? "CROSS_CHECKED" : "SINGLE_SOURCE",
 });
 const item = (lineNo: number, description: string, quantity: string, unit: string, unitPrice: string, amount: string, origin: string, hs: string | null) => ({
-  lineNo, description: src(description), quantity: src(quantity), unit: src(unit), unitPrice: src(unitPrice), amount: src(amount), origin: src(origin), hsOnInvoice: src(hs),
-});
+  lineNo, description: src(description), quantity: src(quantity), unit: src(unit), unitPrice: src(unitPrice), amount: src(amount), origin: src(origin), hsOnInvoice: src(hs), partNo: src(null) });
 
 export function hansol(overrides: (s: Shipment) => void = () => {}): Shipment {
   const s = emptyShipment();
   s.version = 1;
   s.parties.seller = { name: src("HANSOL PRECISION CO., LTD.", ["INVOICE", "BILL_OF_LADING"]), address: src("Changwon, Korea"), taxCode: src(null), country: src("KR") };
   s.parties.buyer = { name: src("AN PHAT INDUSTRIAL EQUIPMENT CO., LTD", ["INVOICE", "BILL_OF_LADING"]), address: src("Hai Phong"), taxCode: src("0316789012"), country: src("VN") };
-  s.invoice = { no: src("HSP-2610-0457", ["INVOICE", "PACKING_LIST", "CERT_OF_ORIGIN"]), date: src("2026-10-02"), incoterm: src("FCA"), currency: src("USD"), totalAmount: src("20850"), paymentTerms: src("T/T"), poNo: src("AP-2609-114") };
-  s.transport = {
+  s.invoice = { ...s.invoice, no: src("HSP-2610-0457", ["INVOICE", "PACKING_LIST", "CERT_OF_ORIGIN"]), date: src("2026-10-02"), incoterm: src("FCA"), currency: src("USD"), totalAmount: src("20850"), paymentTerms: src("T/T"), poNo: src("AP-2609-114") };
+  s.transport = { ...s.transport,
     mode: src("SEA", ["BILL_OF_LADING"]), billNo: src("HPSEL2610078", ["BILL_OF_LADING"]), masterBillNo: src(null), vessel: src("SITC HAIPHONG", ["BILL_OF_LADING"]), voyage: src("2641S", ["BILL_OF_LADING"]),
     portOfLoading: src("BUSAN, KOREA", ["BILL_OF_LADING"]), portOfDischarge: src("HAIPHONG, VIETNAM", ["BILL_OF_LADING"]), finalDestination: src(null), arrivalDate: src("2026-10-15", ["ARRIVAL_NOTICE"]),
     packages: src("48", ["PACKING_LIST", "BILL_OF_LADING"]), packageUnit: src("PL", ["PACKING_LIST"]), grossWeightKg: src("3860.5", ["PACKING_LIST", "BILL_OF_LADING"], ["3.860,50", "3860.5"]), netWeightKg: src("3600", ["PACKING_LIST"]),
     containers: [{ no: "CMAU1234452", sealNo: "S1", size: "40HC" }],
   };
-  s.origin = { country: src("KR", ["CERT_OF_ORIGIN"]), coForm: src("AK", ["CERT_OF_ORIGIN"]), coNo: src("KR2610-0457-AK", ["CERT_OF_ORIGIN"]), rexNo: src(null), coInvoiceNo: src("HSP-2610-0457", ["CERT_OF_ORIGIN"]) };
+  s.origin = { ...s.origin, country: src("KR", ["CERT_OF_ORIGIN"]), coForm: src("AK", ["CERT_OF_ORIGIN"]), coNo: src("KR2610-0457-AK", ["CERT_OF_ORIGIN"]), rexNo: src(null), coInvoiceNo: src("HSP-2610-0457", ["CERT_OF_ORIGIN"]) };
   s.charges = { freight: src("1150", ["FREIGHT_INVOICE"]), insurance: src(null), other: [] };
   s.items = [
     item(1, "Vòng bi cầu 6205-2RS", "2000", "PCE", "1.85", "3700", "KR", "8482.10.1000"),

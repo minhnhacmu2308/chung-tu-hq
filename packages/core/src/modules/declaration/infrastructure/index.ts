@@ -6,11 +6,11 @@ import type { JobQueue } from "../../../shared/queue.js";
 import type { DossierDeps } from "../../dossier/index.js";
 import type { ExtractionDeps } from "../../extraction/index.js";
 import type { ValidationDeps } from "../../validation/index.js";
-import type { AuditWriter, DeclarationDeps, DossierPort, HsClassifier, OrgReader, ShipmentReader, UserNames, ValidationReader } from "../application/ports.js";
+import type { AuditWriter, DeclarationDeps, DossierPort, HsClassificationService, OrgReader, ShipmentReader, UserNames, ValidationReader } from "../application/ports.js";
 import { DrizzleDeclarationUow } from "./drizzle-uow.js";
-import { FakeHsClassifier, HscodeproClassifier } from "./hs-classifier.js";
+import { FakeHsClassificationService, HscodeproHttpService } from "./hs-classifier.js";
 
-export { DrizzleDeclarationUow, FakeHsClassifier, HscodeproClassifier };
+export { DrizzleDeclarationUow, FakeHsClassificationService, HscodeproHttpService };
 
 const sys = (orgId: string) => ({ orgId: asOrgId(orgId), userId: asUserId("") });
 
@@ -55,19 +55,19 @@ export function createAuditWriter(extraction: ExtractionDeps): AuditWriter {
   };
 }
 
-export function createHsClassifier(env: Env, db: Db): HsClassifier {
-  if (env.HS_CLASSIFIER === "hscodepro" && env.HSCODEPRO_URL) return new HscodeproClassifier(env.HSCODEPRO_URL);
+export function createHsService(env: Env, db: Db): HsClassificationService {
+  if (env.HS_CLASSIFIER === "hscodepro" && env.HSCODEPRO_URL && env.HSCODEPRO_INTERNAL_KEY) return new HscodeproHttpService(env.HSCODEPRO_URL, env.HSCODEPRO_INTERNAL_KEY);
   const uow = new DrizzleDeclarationUow(db);
-  return new FakeHsClassifier(() => uow.asOrg(sys("org_system"), (r) => r.catalogHs.all()));
+  return new FakeHsClassificationService(() => uow.asOrg(sys("org_system"), (r) => r.catalogHs.all()));
 }
 
 export function createDeclarationInfrastructure(opts: {
-  db: Db; env: Env; queue: JobQueue; dossier: DossierDeps; extraction: ExtractionDeps; validation: ValidationDeps; org: OrgReader; users: UserNames; hs?: HsClassifier; clock?: Clock;
+  db: Db; env: Env; queue: JobQueue; dossier: DossierDeps; extraction: ExtractionDeps; validation: ValidationDeps; org: OrgReader; users: UserNames; hs?: HsClassificationService; clock?: Clock;
 }): DeclarationDeps {
   return {
     uow: new DrizzleDeclarationUow(opts.db),
     queue: opts.queue,
-    hs: opts.hs ?? createHsClassifier(opts.env, opts.db),
+    hs: opts.hs ?? createHsService(opts.env, opts.db),
     shipments: createShipmentReader(opts.extraction, opts.dossier),
     dossiers: createDossierAdapter(opts.dossier),
     validation: createValidationReader(opts.validation),

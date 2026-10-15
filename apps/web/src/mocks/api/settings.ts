@@ -1,5 +1,7 @@
 // Tài khoản doanh nghiệp, thành viên, tích hợp, chứng thư số (mock).
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
+import { DeclarationProfileInputSchema, PROFILE_FIELD_CODES, VnaccsAccountInputSchema, type DeclarationDirection, type DeclarationProfile, type DeclarationProfileInput, type RuleOptionView, type VnaccsAccount, type VnaccsAccountInput } from "@kb/contracts";
+import { mockRules } from "@/mocks/seed/declaration-rules";
 import type { DigitalCertificate, Integration, Member, Organization, Role } from "@/mocks/types";
 
 export const settingsKeys = {
@@ -7,6 +9,9 @@ export const settingsKeys = {
   members: ["settings", "members"] as const,
   integrations: ["settings", "integrations"] as const,
   certificates: ["settings", "certificates"] as const,
+  vnaccs: ["settings", "vnaccs-account"] as const,
+  declarationProfile: (direction: "NK" | "XK") => ["settings", "declaration-profile", direction] as const,
+  declarationRules: (direction: "NK" | "XK") => ["settings", "declaration-rules", direction] as const,
 };
 
 export const getOrganization = () => query((db) => db.org);
@@ -80,7 +85,10 @@ export const testIntegration = (id: Integration["id"]) =>
     if (id === "CUSTOMS_HUB") {
       const def = db.certificates.find((c) => c.isDefault);
       const days = def ? (new Date(def.validTo).getTime() - Date.now()) / 86_400_000 : -1;
-      if (days >= 30) {
+      if (days >= 30 && !db.vnaccsAccount) {
+        it.status = "ERROR";
+        it.detail = "Chưa nhập tài khoản VNACCS – bấm \"Nhập tài khoản VNACCS\" trên thẻ này.";
+      } else if (days >= 30) {
         it.status = "CONNECTED";
         it.detail = `Ký thử thành công bằng chứng thư ${def!.issuer} · môi trường sandbox`;
       } else {
@@ -94,6 +102,52 @@ export const testIntegration = (id: Integration["id"]) =>
     }
     return it;
   });
+
+/** Tài khoản VNACCS: mock chỉ giữ User ID/Terminal ID – mật khẩu và terminal key không lưu ở trình duyệt. */
+const NO_VNACCS: VnaccsAccount = { configured: false, userId: null, terminalId: null, updatedAt: null };
+const requireManager = (db: { members: Member[]; currentUserId: string }) => {
+  const role = db.members.find((m) => m.id === db.currentUserId)?.role;
+  if (role !== "OWNER" && role !== "ADMIN") throw new ApiError("FORBIDDEN", "Cần vai trò Quản trị hoặc Chủ sở hữu");
+};
+export const getVnaccsAccount = () => query((db): VnaccsAccount => (db.vnaccsAccount ? { configured: true, ...db.vnaccsAccount } : NO_VNACCS));
+export const saveVnaccsAccount = (input: VnaccsAccountInput) =>
+  mutate((db): VnaccsAccount => {
+    requireManager(db);
+    const parsed = VnaccsAccountInputSchema.safeParse(input);
+    if (!parsed.success) throw new ApiError("VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
+    db.vnaccsAccount = { userId: parsed.data.userId, terminalId: parsed.data.terminalId, updatedAt: nowIso() };
+    return { configured: true, ...db.vnaccsAccount };
+  });
+export const removeVnaccsAccount = () =>
+  mutate((db): VnaccsAccount => {
+    requireManager(db);
+    db.vnaccsAccount = null;
+    return NO_VNACCS;
+  });
+
+/** Mặc định khai báo (mock): kiểm như máy chủ ở mức cơ bản (quyền, mã cho phép, độ dài mã kho, chỉ tiêu khóa). */
+export const getDeclarationProfile = (direction: DeclarationDirection) =>
+  query((db): DeclarationProfile => db.declarationProfiles[direction] ?? { direction, values: {}, overrides: {}, updatedAt: null });
+export const saveDeclarationProfile = (direction: DeclarationDirection, input: DeclarationProfileInput) =>
+  mutate((db): DeclarationProfile => {
+    requireManager(db);
+    const parsed = DeclarationProfileInputSchema.safeParse(input);
+    if (!parsed.success) throw new ApiError("VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
+    for (const code of Object.keys(parsed.data.values)) if (!(PROFILE_FIELD_CODES as readonly string[]).includes(code)) throw new ApiError("VALIDATION", `Không đặt mặc định cho chỉ tiêu ${code}`);
+    const kho = parsed.data.values["KHO"]?.split(/\s+[–-]\s+/)[0];
+    if (kho && kho.length > 7) throw new ApiError("VALIDATION", "KHO: mã tối đa 7 ký tự");
+    const rules = mockRules(direction);
+    for (const [code, o] of Object.entries(parsed.data.overrides)) {
+      const r = rules.find((x) => x.code === code);
+      if (!r || r.locked) throw new ApiError("FORBIDDEN", `Chỉ tiêu ${code} không cho phép doanh nghiệp đổi nguồn`);
+      if ("fixed" in o && !r.allowFixed) throw new ApiError("VALIDATION", `${r.label}: không cho phép giá trị cố định`);
+      if ("sources" in o && o.sources.some((id) => !r.sources.some((s) => s.id === id))) throw new ApiError("VALIDATION", `${r.label}: nguồn không được phép`);
+    }
+    const values = Object.fromEntries(Object.entries(parsed.data.values).filter(([, v]) => v.trim()));
+    db.declarationProfiles[direction] = { direction, values, overrides: parsed.data.overrides, updatedAt: nowIso() };
+    return db.declarationProfiles[direction]!;
+  });
+export const listDeclarationRules = (direction: DeclarationDirection) => query((): RuleOptionView[] => mockRules(direction));
 
 export const listCertificates = () => query((db) => db.certificates);
 

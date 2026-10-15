@@ -2,7 +2,7 @@ import type { Declaration, DeclarationView } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { canApprove, canEditField, canMoveToReview } from "../domain/guards.js";
+import { canApprove, canEditField, canMoveToReview, missingRequiredFields } from "../domain/guards.js";
 import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
 import { loadDossier, toDeclaration, toLineItem, unconfirmedCount } from "./_dto.js";
@@ -17,13 +17,19 @@ async function approvedName(deps: DeclarationDeps, orgId: string, d: Declaration
 export async function getDeclarationView(deps: DeclarationDeps, ctx: Ctx, dossierId: string): Promise<Result<DeclarationView>> {
   const d = await loadDossier(deps, ctx.orgId, dossierId);
   if (!d.ok) return d;
-  const { decl, items } = await deps.uow.asOrg(ctx, async (r) => ({ decl: await r.declarations.latest(ctx.orgId, dossierId), items: await r.lineItems.list(ctx.orgId, dossierId) }));
   const currency = d.value.currency;
+  const { decl, items, fx } = await deps.uow.asOrg(ctx, async (r) => {
+    const decl = await r.declarations.latest(ctx.orgId, dossierId);
+    // Nguồn tỷ giá: bản ghi hiệu lực tại ngày tra khi dựng tờ khai (tiền tệ hóa đơn).
+    const fx = decl && currency !== "VND" ? await r.exchangeRates.latest(currency, decl.exchangeRateDate) : null;
+    return { decl, items: await r.lineItems.list(ctx.orgId, dossierId), fx };
+  });
   const valuation = decl ? allocateCustomsValue({ items: items.map((i) => ({ id: i.id, amount: i.amount })), adjustments: decl.valueAdjustments, currency, rates: { [currency]: decl.exchangeRate } }) : null;
   const taxes = valuation ? computeTaxes(valuation.perItem.map((p) => ({ id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: items.find((i) => i.id === p.id)?.importDutyRate ?? null, vatRate: items.find((i) => i.id === p.id)?.vatRate ?? null }))) : null;
   return ok({
     declaration: decl ? toDeclaration(decl, await approvedName(deps, ctx.orgId, decl)) : null,
     unconfirmedHs: unconfirmedCount(items),
+    exchangeRateInfo: decl && fx ? { currency, rate: decl.exchangeRate, effectiveFrom: fx.date, source: fx.source, snapshotAt: fx.snapshotAt?.toISOString() ?? null } : null,
     items: items.map((i) => ({
       ...toLineItem(i),
       customsValueVnd: valuation?.perItem.find((p) => p.id === i.id)?.customsValueVnd ?? "0",
@@ -67,7 +73,7 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
   const r0 = await deps.uow.asOrg(ctx, async (r) => {
     const decl = await r.declarations.latest(ctx.orgId, dossierId);
     const items = await r.lineItems.list(ctx.orgId, dossierId);
-    const guard = canApprove({ role: ctx.role, userId: ctx.userId, ownerId: d.value.ownerId, fourEyes: org.fourEyes, blockerFails, items, status: decl?.status ?? "NOT_CREATED", ...(decl ? { exchangeRate: decl.exchangeRate } : {}) });
+    const guard = canApprove({ role: ctx.role, userId: ctx.userId, ownerId: d.value.ownerId, fourEyes: org.fourEyes, blockerFails, items, status: decl?.status ?? "NOT_CREATED", ...(decl ? { exchangeRate: decl.exchangeRate, missingFields: missingRequiredFields(decl.kind, decl.fields) } : {}) });
     if (!guard.ok) return guard;
     const patch = { status: "APPROVED" as const, approvedBy: ctx.userId, approvedAt: now, updatedAt: now };
     await r.declarations.update(decl!.id, patch);

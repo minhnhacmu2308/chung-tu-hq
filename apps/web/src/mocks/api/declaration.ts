@@ -4,6 +4,7 @@ import { canEditDeclaration, isDeclarationFieldEditable } from "@kb/contracts";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
+import type { ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
 import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
 
 export const declarationKeys = {
@@ -137,17 +138,79 @@ export const startAgentRun = (dossierId: string, mode: AgentMode) =>
     Object.assign(dossier, { step: "agent", status: "PROCESSING", updatedAt: nowIso() });
   });
 
-/** Dòng hàng. Gợi ý hscodepro chỉ hiện khi bước tra HS đã xong. */
+/** Mô phỏng HSCodePro: dòng có "linear guide"/"thanh trượt" → AI hỏi công dụng; trả lời xong ~2 giây có kết quả. Chỉ trong phiên trình duyệt. */
+const hsAnsweredAt = new Map<string, number>();
+const NEEDS_INFO = /linear guide|thanh trượt|guide rail/i;
+const HS_QUESTION = {
+  id: "mock-q-use",
+  questions: [{ id: "use", header: "Công dụng", question: "Thanh trượt này dùng cho loại máy nào?", options: [{ label: "Máy công cụ (CNC, máy phay, máy tiện)" }, { label: "Máy in 3D / thiết bị tự động hoá nhẹ" }, { label: "Khác", description: "Ghi rõ ở ô trả lời khác" }], multiSelect: false }],
+};
+
+function mockHs(db: MockDb, i: LineItem, now = Date.now()): LineItemHs {
+  const empty = { question: null, error: null, reasoning: null, legalBasis: [], warnings: [], candidates: [] };
+  if (NEEDS_INFO.test(i.description) && !i.hsConfirmed) {
+    const t = hsAnsweredAt.get(i.id);
+    if (t === undefined) return { ...empty, status: "need_info", question: HS_QUESTION };
+    if (now - t < 2000) return { ...empty, status: "answering" };
+  }
+  if (!i.hsSuggested) return { ...empty, status: "failed", error: { code: "NO_SUGGESTION", message: "Không có gợi ý – chọn mã HS thủ công" } };
+  const dossier = db.dossiers.find((d) => d.id === i.dossierId)!;
+  const cand = (code: string, confidence: number, whyNot: string | null) => {
+    const hs = findHs(code);
+    const r = ratesFor(dossier, code);
+    const fta = !!hs && r.importDutyRate !== hs.mfn && dossier.direction === "NK";
+    return { code, description: hs?.description ?? "", confidence, whyNot, importRate: r.importDutyRate, basis: fta ? ("FTA" as const) : ("MFN" as const), agreement: fta ? "AKFTA" : null, vatRate: r.vatRate };
+  };
+  const main = i.hsSuggested;
+  const alt = HS_CATALOG.find((h) => h.code !== main && h.code.slice(0, 4) === main.slice(0, 4)) ?? HS_CATALOG.find((h) => h.code !== main)!;
+  const conf = i.hsConfidence ?? 0.5;
+  return {
+    ...empty, status: "completed",
+    reasoning: `Mô tả "${i.description}" khớp nhóm ${main.slice(0, 4)} của biểu thuế (giả lập).`,
+    legalBasis: ["Quy tắc tổng quát 1 và 6"],
+    warnings: conf < 0.6 ? ["Mô tả chưa nêu rõ công dụng – kiểm tra lại trước khi khai"] : [],
+    candidates: [cand(main, conf, null), cand(alt.code, 0.12, "Mô tả hàng không khớp phân nhóm này")],
+  };
+}
+
+/** Dòng hàng. Gợi ý hscodepro chỉ hiện khi bước tra HS đã xong (và AI không còn chờ người khai trả lời). */
 export const listLineItems = (dossierId: string) =>
   query((db) => {
     const show = hsLookupDone(db, dossierId);
     return db.lineItems
       .filter((i) => i.dossierId === dossierId)
       .map((i): LineItem => {
-        if (show || i.hsConfirmed) return i;
-        const { hsSuggested: _s, hsConfidence: _c, ...rest } = i;
-        return rest;
+        if (!show && !i.hsConfirmed) {
+          const { hsSuggested: _s, hsConfidence: _c, ...rest } = i;
+          return { ...rest, hs: { status: "processing", question: null, error: null, reasoning: null, legalBasis: [], warnings: [], candidates: [] } };
+        }
+        const hs = mockHs(db, i);
+        if (hs.status !== "completed" && !i.hsConfirmed) {
+          const { hsSuggested: _s, hsConfidence: _c, ...rest } = i;
+          return { ...rest, hs };
+        }
+        return { ...i, hs };
       });
+  });
+
+/** Trả lời câu hỏi của AI (mô phỏng): ~2 giây sau có mã gợi ý. */
+export const answerHs = (itemId: string, input: HsAnswerInput) =>
+  mutate((db) => {
+    const item = db.lineItems.find((i) => i.id === itemId);
+    if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
+    if (input.questionId !== HS_QUESTION.id || hsAnsweredAt.has(itemId)) throw new ApiError("INVALID_STATE", "Câu hỏi đã được trả lời hoặc không còn hiệu lực – tải lại bảng");
+    hsAnsweredAt.set(itemId, Date.now());
+    return { ...item, hs: mockHs(db, item) };
+  });
+
+/** Phân loại lại một dòng (mô phỏng): cập nhật xuất xứ nếu có, kết quả như lần đầu. */
+export const reclassifyHs = (itemId: string, input: HsReclassifyInput) =>
+  mutate((db) => {
+    const item = db.lineItems.find((i) => i.id === itemId);
+    if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
+    if (item.hsConfirmed) throw new ApiError("INVALID_STATE", "Dòng đã xác nhận mã HS – bỏ xác nhận trước khi phân loại lại");
+    if (input.origin) item.origin = input.origin;
+    return { ...item, hs: mockHs(db, item) };
   });
 
 export const listHsCatalog = () => query(() => HS_CATALOG);
@@ -182,7 +245,7 @@ export const confirmHs = (itemId: string, code: string) =>
   mutate((db) => {
     const item = db.lineItems.find((i) => i.id === itemId);
     if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
-    if (!findHs(code)) throw new ApiError("INVALID_HS", "Mã HS không có trong biểu thuế");
+    if (code.replace(/\D/g, "").length !== 8) throw new ApiError("INVALID_HS", "Mã HS phải đủ 8 chữ số (vd 8482.10.00)");
     const dossier = db.dossiers.find((d) => d.id === item.dossierId)!;
     const r = ratesFor(dossier, code);
     item.hsConfirmed = code;
@@ -207,7 +270,7 @@ export const unconfirmHs = (itemId: string) =>
   });
 
 export type DeclarationItemView = LineItem & Omit<ItemTax, "itemId">;
-export type DeclarationView = { declaration: Declaration | null; items: DeclarationItemView[]; unconfirmedHs: number };
+export type DeclarationView = { declaration: Declaration | null; items: DeclarationItemView[]; unconfirmedHs: number; exchangeRateInfo?: ExchangeRateInfo | null };
 
 export const getDeclarationView = (dossierId: string) =>
   query((db): DeclarationView => {
@@ -215,8 +278,14 @@ export const getDeclarationView = (dossierId: string) =>
     const dossier = db.dossiers.find((d) => d.id === dossierId);
     const items = db.lineItems.filter((i) => i.dossierId === dossierId);
     const taxes = dossier && declaration ? computeTaxes(dossier, items, declaration.valueAdjustments).perItem : [];
+    // Nguồn tỷ giá (mô phỏng): bảng Vietcombank tối thứ Năm tuần trước, áp từ thứ Hai tuần của ngày tra.
+    const monday = (iso: string) => { const d = new Date(`${iso}T00:00:00Z`); return new Date(d.getTime() - ((d.getUTCDay() + 6) % 7) * 86_400_000).toISOString().slice(0, 10); };
+    const exchangeRateInfo: ExchangeRateInfo | null = declaration && dossier && dossier.currency !== "VND"
+      ? { currency: dossier.currency, rate: declaration.exchangeRate, effectiveFrom: monday(declaration.exchangeRateDate), source: "VCB", snapshotAt: new Date(Date.parse(`${monday(declaration.exchangeRateDate)}T15:00:00Z`) - 4 * 86_400_000).toISOString() }
+      : null;
     return {
       declaration,
+      exchangeRateInfo,
       unconfirmedHs: items.filter((i) => !i.hsConfirmed).length,
       items: items.map((i) => {
         const t = taxes.find((x) => x.itemId === i.id);

@@ -36,3 +36,12 @@ export const CrossCheckSchema = z.object({
   documentKinds: z.array(DocKindSchema),
 });
 export type CrossCheck = z.infer<typeof CrossCheckSchema>;
+
+/** Bảng đọc một chứng từ theo danh mục trường chuẩn (màn "Theo chứng từ", xuất Excel). */
+export const DocumentSheetSchema = z.object({
+  documentId: z.string(),
+  fileName: z.string(),
+  kind: DocKindSchema,
+  rows: z.array(z.object({ stt: z.number().int().positive(), key: z.string(), label: z.string(), value: z.string() })),
+});
+export type DocumentSheet = z.infer<typeof DocumentSheetSchema>;

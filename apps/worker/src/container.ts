@@ -1,6 +1,7 @@
 import { loadEnv } from "@kb/core/config";
 import { activeQuotaBonus } from "@kb/core/modules/admin";
-import { createDb } from "@kb/core/db";
+import { createRateDeps } from "@kb/core/modules/admin/infrastructure";
+import { createDb, platformDbUrl } from "@kb/core/db";
 import { createBillingInfrastructure, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
@@ -97,10 +98,13 @@ export function buildContainer() {
   declaration.notify = notify;
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
   customs.notify = notify;
+  // Tỷ giá tính thuế: bảng nền tảng, ghi bằng role kb_platform (ADR 0006).
+  const rates = createRateDeps(platformDbUrl(env));
   return {
-    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs,
+    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs, rates,
     async close() {
       await Promise.all([...queues.values()].map((q) => q.close()));
+      await rates.db.close();
       await db.close();
       redis.disconnect();
     },

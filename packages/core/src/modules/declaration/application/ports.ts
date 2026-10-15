@@ -1,9 +1,10 @@
-import type { AgentMode, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, Shipment, StepId } from "@kb/contracts";
+import type { AgentMode, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
 import type { ProgressEvent } from "../../dossier/index.js";
+import type { FieldOverride } from "../domain/mapping/types.js";
 import type { Adjustment } from "../domain/valuation.js";
 import type { DossierInfo, HsCatalogRow, OrgInfo, StoredField } from "../domain/types.js";
 
@@ -12,9 +13,17 @@ export type { DossierInfo, HsCatalogRow, OrgInfo, StoredField };
 export type LineItemRow = {
   id: string; orgId: string; dossierId: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string;
   invoiceHsCode: string | null; hsSuggested: string | null; hsConfidence: number | null; hsConfirmed: string | null; hsConfirmedBy: string | null; hsConfirmedAt: Date | null;
-  importDutyRate: string | null; vatRate: string | null; policyNote: string | null; createdAt: Date; updatedAt: Date;
+  importDutyRate: string | null; vatRate: string | null; policyNote: string | null;
+  /** Phân loại HSCodePro (xem LineItemHsStatus trong contracts). */
+  hsJobId: string | null; hsItemId: string | null; hsStatus: LineItemHsStatus; hsQuestion: HsPendingQuestion | null; hsError: { code: string; message: string } | null; hsDetail: HsDetail | null;
+  createdAt: Date; updatedAt: Date;
 };
-export type HsSuggestionRow = { id: string; orgId: string; lineItemId: string; code: string; description: string; confidence: number; rates: { mfn: string; vat: string } | null; source: string; createdAt: Date };
+export type HsDetail = { reasoning: string; legalBasis: string[]; warnings: string[] };
+/** Thuế của một ứng viên (chuỗi thập phân); null khi HSCodePro chưa tra được. */
+export type HsSuggestionRates = { importRate: string | null; basis: "MFN" | "FTA" | null; agreement: string | null; vatRate: string | null };
+export type HsSuggestionRow = { id: string; orgId: string; lineItemId: string; code: string; description: string; confidence: number; rates: HsSuggestionRates | null; whyNot: string | null; source: string; createdAt: Date };
+export type HsJobRow = { id: string; orgId: string; dossierId: string; externalId: string; status: "processing" | "need_info" | "completed" | "cancelled"; polls: number; createdAt: Date; updatedAt: Date };
+export type HsLinePatch = Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "hsJobId" | "hsItemId" | "hsStatus" | "hsQuestion" | "hsError" | "hsDetail" | "description" | "origin" | "updatedAt">>;
 export type DeclarationRow = {
   id: string; orgId: string; dossierId: string; kind: "IDA" | "EDA"; version: number; status: DeclarationStatus; fields: Record<string, StoredField>;
   exchangeRate: string; exchangeRateDate: string; customsValueVnd: string; valueAdjustments: Adjustment[]; estImportDutyVnd: string; estVatVnd: string;
@@ -24,13 +33,23 @@ export type AgentTask = { id: AgentTaskId; status: AgentTaskStatus; progress: nu
 export type AgentLog = { at: string; text: string; tone: "info" | "success" | "warning" };
 export type AgentRunRow = { id: string; orgId: string; dossierId: string; mode: AgentMode; status: "RUNNING" | "DONE" | "ERROR" | "CANCELLED"; tasks: AgentTask[]; log: AgentLog[]; startedBy: string; startedAt: Date; finishedAt: Date | null };
 
+export type ProfileRow = { id: string; orgId: string; direction: "NK" | "XK"; values: Record<string, string>; overrides: Record<string, FieldOverride>; updatedBy: string | null; updatedAt: Date };
+
 export interface DeclarationRepos {
   lineItems: {
     list(orgId: string, dossierId: string): Promise<LineItemRow[]>;
     get(orgId: string, id: string): Promise<LineItemRow | null>;
     /** Ghi dòng hàng theo (dossier, lineNo): dòng đã có giữ HS đã xác nhận; dòng thừa bị xóa. */
     upsertForDossier(dossierId: string, rows: LineItemRow[]): Promise<LineItemRow[]>;
-    update(id: string, patch: Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "updatedAt">>): Promise<void>;
+    update(id: string, patch: HsLinePatch): Promise<void>;
+    findByHsItem(orgId: string, hsItemId: string): Promise<LineItemRow | null>;
+  };
+  hsJobs: {
+    insert(row: HsJobRow): Promise<void>;
+    get(orgId: string, id: string): Promise<HsJobRow | null>;
+    /** Lượt chưa xong (processing/need_info) của hồ sơ. */
+    openForDossier(orgId: string, dossierId: string): Promise<HsJobRow[]>;
+    update(id: string, patch: Partial<Pick<HsJobRow, "status" | "polls" | "updatedAt">>): Promise<void>;
   };
   suggestions: {
     listForItems(lineItemIds: string[]): Promise<HsSuggestionRow[]>;
@@ -54,9 +73,14 @@ export interface DeclarationRepos {
     get(code: string): Promise<HsCatalogRow | null>;
     all(): Promise<HsCatalogRow[]>;
   };
+  profiles: {
+    get(orgId: string, direction: "NK" | "XK"): Promise<ProfileRow | null>;
+    /** Ghi đè theo (org, chiều). */
+    upsert(row: ProfileRow): Promise<void>;
+  };
   exchangeRates: {
     /** Tỷ giá gần nhất ≤ ngày (VND / 1 đơn vị). */
-    latest(currency: string, date: string): Promise<{ rate: string; date: string } | null>;
+    latest(currency: string, date: string): Promise<{ rate: string; date: string; source: "VCB" | "MANUAL" | "SEED"; snapshotAt: Date | null } | null>;
   };
 }
 
@@ -64,10 +88,25 @@ export interface DeclarationUow {
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: DeclarationRepos) => Promise<T>): Promise<T>;
 }
 
-/** Gợi ý mã HS (hscodepro hoặc giả). Lỗi tạm → throw; không có gợi ý → []. */
-export interface HsClassifier {
+/** Phân loại HS bất đồng bộ (HSCodePro hoặc giả): tạo lượt → hỏi trạng thái → trả lời câu hỏi → hủy. Lỗi → HsApiError. */
+export interface HsClassificationService {
   readonly name: string;
-  classify(input: { description: string; invoiceHs: string | null; origin: string }): Promise<{ code: string; description: string; confidence: number }[]>;
+  create(req: HsCreateRequest): Promise<HsJob>;
+  get(jobId: string): Promise<HsJob>;
+  answer(jobId: string, itemId: string, body: HsAnswerRequest): Promise<void>;
+  cancel(jobId: string): Promise<void>;
+}
+
+/** Lỗi từ HSCodePro: `status` HTTP + `code` theo tài liệu §8 (INVALID_INPUT, INVALID_STATE, RATE_LIMITED, NOT_CONFIGURED…). */
+export class HsApiError extends Error {
+  constructor(readonly status: number, readonly code: string, message: string, readonly details?: { field: string; message: string }[]) {
+    super(message);
+    this.name = "HsApiError";
+  }
+  /** Lỗi tạm (mạng/5xx trừ 503 chưa cấu hình, 429) → để BullMQ thử lại. */
+  get transient() {
+    return this.status === 429 || (this.status >= 500 && this.code !== "NOT_CONFIGURED" && this.code !== "BAD_RESPONSE");
+  }
 }
 
 /** Dữ liệu từ module extraction (composition root nối qua uow của extraction). */
@@ -105,7 +144,7 @@ export interface UserNames {
 export type DeclarationDeps = {
   uow: DeclarationUow;
   queue: JobQueue;
-  hs: HsClassifier;
+  hs: HsClassificationService;
   shipments: ShipmentReader;
   dossiers: DossierPort;
   validation: ValidationReader;

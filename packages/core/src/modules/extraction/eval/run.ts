@@ -2,7 +2,7 @@
 // Chạy pipeline đọc (phân loại → trích xuất → gộp) rồi so từng trường; offline dùng FakeAiProvider + fixture, --live gọi AI thật và ghi fixture.
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { extractionSchemaFor, type DocKind, type Shipment } from "@kb/contracts";
+import { extractionSchemaFor, fillMissingNullable, type DocKind, type Shipment } from "@kb/contracts";
 import { dec } from "../../../shared/decimal.js";
 import type { AiProvider } from "../application/ports.js";
 import { mergeExtractions, type FileExtraction } from "../domain/merge.js";
@@ -39,7 +39,7 @@ export async function readLot(ai: AiProvider, dir: string): Promise<Shipment> {
     for (const d of cls.result.documents.filter((x) => !x.isDuplicateCopy)) {
       const kind = d.kind as DocKind;
       const res = await ai.extract(file, d.pages, extractionSchemaFor(kind), { kind, skillHints: [], examples: [], supplierHint: d.supplierHint });
-      const parsed = extractionSchemaFor(kind).safeParse(res.result);
+      const parsed = extractionSchemaFor(kind).safeParse(fillMissingNullable(extractionSchemaFor(kind), res.result));
       files.push({ documentId: `eval_${name}`, kind, pages: d.pages.length, data: (parsed.success ? parsed.data : res.result) as Record<string, unknown> });
     }
   }

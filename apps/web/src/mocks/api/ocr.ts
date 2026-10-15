@@ -1,6 +1,7 @@
 // Bước 2–3: chứng từ của hồ sơ (upload, phân loại, đọc) + kết quả trích xuất và đối chiếu chéo (mock).
 // Mô phỏng tiến trình bằng thời gian: mỗi chứng từ đi UPLOADING → QUEUED → READING → DONE tính từ lúc bắt đầu;
 // màn hình gọi lại (refetchInterval) để thấy tiến độ. Có backend → SSE/polling trạng thái job thật.
+import type { DocumentSheet } from "@kb/contracts";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
 import { generateChecks, generateFieldsForDocument, SUSPECT_STATUSES } from "@/mocks/seed/ocr";
@@ -10,6 +11,7 @@ export const ocrKeys = {
   documents: (dossierId: string) => ["ocr", "documents", dossierId] as const,
   fields: (dossierId: string) => ["ocr", "fields", dossierId] as const,
   checks: (dossierId: string) => ["ocr", "checks", dossierId] as const,
+  sheets: (dossierId: string) => ["ocr", "document-sheets", dossierId] as const,
 };
 
 export const isSuspect = (s: FieldStatus) => SUSPECT_STATUSES.includes(s);
@@ -165,6 +167,22 @@ export const retryDocument = (documentId: string) =>
   });
 
 /* ---------------- Trường trích xuất & đối chiếu ---------------- */
+
+/** Bản mock: dựng bảng đọc từ các trường mẫu của từng chứng từ (bản thật theo danh mục trường chuẩn). */
+export const listDocumentSheets = (dossierId: string) =>
+  query((db): DocumentSheet[] =>
+    db.documents
+      .filter((d) => d.dossierId === dossierId && d.status === "DONE")
+      .map((d) => ({
+        documentId: d.id, fileName: d.fileName, kind: d.kind,
+        rows: db.fields.filter((f) => f.documentId === d.id).map((f, i) => ({ stt: i + 1, key: f.key, label: f.label, value: f.value })),
+      })),
+  );
+export async function downloadDocumentSheets(dossierId: string): Promise<Blob> {
+  const sheets = await listDocumentSheets(dossierId);
+  const { buildDocumentSheetsWorkbook } = await import("@/lib/document-sheets-xlsx");
+  return new Blob([await buildDocumentSheetsWorkbook(sheets)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
 
 export const listFields = (dossierId: string) =>
   query((db) => {

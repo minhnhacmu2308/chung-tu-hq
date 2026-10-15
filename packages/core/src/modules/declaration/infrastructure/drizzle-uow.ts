@@ -1,12 +1,13 @@
 import { and, desc, eq, ilike, inArray, lte, or } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { agentRuns, catalogHs, declarations, exchangeRates, hsSuggestions, lineItems } from "../../../db/schema/declaration.js";
+import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems } from "../../../db/schema/declaration.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsSuggestionRow, LineItemRow } from "../application/ports.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProfileRow } from "../application/ports.js";
 
 function repos(tx: Tx): DeclarationRepos {
-  const toItem = (r: typeof lineItems.$inferSelect): LineItemRow => ({ ...r });
+  const toItem = (r: typeof lineItems.$inferSelect): LineItemRow => ({ ...r, hsStatus: r.hsStatus as LineItemRow["hsStatus"], hsQuestion: r.hsQuestion as LineItemRow["hsQuestion"], hsError: r.hsError as LineItemRow["hsError"], hsDetail: r.hsDetail as LineItemRow["hsDetail"] });
+  const toJob = (r: typeof hsJobs.$inferSelect): HsJobRow => ({ ...r, status: r.status as HsJobRow["status"] });
   const toSug = (r: typeof hsSuggestions.$inferSelect): HsSuggestionRow => ({ ...r, rates: r.rates as HsSuggestionRow["rates"] });
   const toDecl = (r: typeof declarations.$inferSelect): DeclarationRow => ({ ...r, kind: r.kind as DeclarationRow["kind"], status: r.status as DeclarationRow["status"], fields: r.fields as DeclarationRow["fields"], valueAdjustments: r.valueAdjustments as DeclarationRow["valueAdjustments"] });
   const toRun = (r: typeof agentRuns.$inferSelect): AgentRunRow => ({ ...r, mode: r.mode as AgentRunRow["mode"], status: r.status as AgentRunRow["status"], tasks: r.tasks as AgentRunRow["tasks"], log: r.log as AgentRunRow["log"] });
@@ -37,6 +38,19 @@ function repos(tx: Tx): DeclarationRepos {
         return out.sort((a, b) => a.lineNo - b.lineNo);
       },
       update: async (id, patch) => void (await tx.update(lineItems).set(patch).where(eq(lineItems.id, id))),
+      findByHsItem: async (orgId, hsItemId) => {
+        const r = (await tx.select().from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.hsItemId, hsItemId))).limit(1))[0];
+        return r ? toItem(r) : null;
+      },
+    },
+    hsJobs: {
+      insert: async (row) => void (await tx.insert(hsJobs).values(row)),
+      get: async (orgId, id) => {
+        const r = (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.id, id))).limit(1))[0];
+        return r ? toJob(r) : null;
+      },
+      openForDossier: async (orgId, dossierId) => (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.dossierId, dossierId), inArray(hsJobs.status, ["processing", "need_info"]))).orderBy(hsJobs.createdAt)).map(toJob),
+      update: async (id, patch) => void (await tx.update(hsJobs).set(patch).where(eq(hsJobs.id, id))),
     },
     suggestions: {
       listForItems: async (ids) => (ids.length ? (await tx.select().from(hsSuggestions).where(inArray(hsSuggestions.lineItemId, ids)).orderBy(desc(hsSuggestions.confidence))).map(toSug) : []),
@@ -83,10 +97,20 @@ function repos(tx: Tx): DeclarationRepos {
       },
       all: async () => (await tx.select().from(catalogHs).orderBy(catalogHs.code)).map(toHs),
     },
+    profiles: {
+      get: async (orgId, direction) => {
+        const r = (await tx.select().from(declarationProfiles).where(and(eq(declarationProfiles.orgId, orgId), eq(declarationProfiles.direction, direction))).limit(1))[0];
+        return r ? { id: r.id, orgId: r.orgId, direction: r.direction as ProfileRow["direction"], values: r.values as ProfileRow["values"], overrides: r.overrides as ProfileRow["overrides"], updatedBy: r.updatedBy, updatedAt: r.updatedAt } : null;
+      },
+      upsert: async (row) => {
+        await tx.insert(declarationProfiles).values({ id: row.id, orgId: row.orgId, direction: row.direction, values: row.values, overrides: row.overrides, updatedBy: row.updatedBy, updatedAt: row.updatedAt })
+          .onConflictDoUpdate({ target: [declarationProfiles.orgId, declarationProfiles.direction], set: { values: row.values, overrides: row.overrides, updatedBy: row.updatedBy, updatedAt: row.updatedAt } });
+      },
+    },
     exchangeRates: {
       latest: async (currency, date) => {
         const r = (await tx.select().from(exchangeRates).where(and(eq(exchangeRates.currency, currency), eq(exchangeRates.active, true), lte(exchangeRates.date, date))).orderBy(desc(exchangeRates.date)).limit(1))[0];
-        return r ? { rate: r.rate, date: r.date } : null;
+        return r ? { rate: r.rate, date: r.date, source: r.source as "VCB" | "MANUAL" | "SEED", snapshotAt: r.snapshotAt } : null;
       },
     },
   };

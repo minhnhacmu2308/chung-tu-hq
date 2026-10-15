@@ -1,5 +1,6 @@
 // Back-office (/api/admin/**) – gọi backend thật. Cùng chữ ký với src/mocks/api/admin.ts.
 import {
+  ExchangeRateSchema, ExchangeRatesViewSchema, type UpsertExchangeRateInput,
   AdminAuditEntrySchema, AdminMfaEnabledSchema, AdminMfaSetupSchema, AdminOrgDetailSchema, AdminOrgSchema, AdminOverviewSchema, AdminPlanSchema, AdminSessionSchema, AdminUserSchema, AnnouncementSchema,
   FailedJobSchema, PlatformIntegrationSchema, SkillTemplateSchema, StaffSchema, SystemHealthSchema, UsageMonthSchema, UsageReportSchema,
   type AdjustOrgQuotaInput, type AdminReasonInput, type ChangeOrgPlanInput, type ChangeStaffRoleInput, type ExtendOrgTrialInput, type IntegrationId,
@@ -47,6 +48,9 @@ export const getUsageReport = (month: string) => apiGet(`admin/usage?month=${enc
 export const listPlatformIntegrations = () => apiGet("admin/integrations", z.array(PlatformIntegrationSchema));
 export const testPlatformIntegration = (id: IntegrationId) => apiPost(`admin/integrations/${enc(id)}/test`, {}, PlatformIntegrationSchema);
 export const updateIntegrationKey = (id: IntegrationId, input: UpdateIntegrationKeyInput) => apiPut(`admin/integrations/${enc(id)}/key`, input, PlatformIntegrationSchema);
+
+export const listExchangeRates = () => apiGet("admin/exchange-rates", ExchangeRatesViewSchema);
+export const upsertExchangeRate = (input: UpsertExchangeRateInput) => apiPut("admin/exchange-rates", input, ExchangeRateSchema);
 
 export const getSystemHealth = () => apiGet("admin/system", SystemHealthSchema);
 export const retryFailedJob = (id: string, input: AdminReasonInput) => apiPost(`admin/system/jobs/${enc(id)}/retry`, input, FailedJobSchema);

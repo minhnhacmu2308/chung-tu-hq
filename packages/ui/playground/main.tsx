@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import "../src/styles/index.css";
 import {
   Alert, AppearancePanel, AssistantLauncher, RobotAvatar, AssistantPanel, AssistantWelcome, Badge, Button, Card, CardContent,
-  CardDescription, CardFooter, CardHeader, CardTitle, ChatComposer, ChatMessage, Checkbox, Dialog, DialogContent,
+  CardDescription, CardFooter, CardHeader, CardTitle, ChatComposer, ChatMessage, Checkbox, Dialog, DialogContent, RadioGroup,
   DialogFooter, DialogTrigger, EmptyState, Field, Grid, Input, PageHeader, Select, Skeleton, Spinner, Stack,
   StatusBadge, SuggestionChips, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, type AssistantMode,
   BrandDot, Sidebar, SidebarFooterButton, SidebarUser, type NavItem,
@@ -112,6 +112,7 @@ function Demo() {
   const [activeId, setActiveId] = useState("dossier-import");
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [machineUse, setMachineUse] = useState<string | null>("cnc");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
 
   const send = (text: string, files: File[]) => {
@@ -288,6 +289,18 @@ function Demo() {
                   <Select options={[{ value: "CIF", label: "CIF" }, { value: "FCA", label: "FCA" }, { value: "EXW", label: "EXW" }]} />
                 </Field>
               </Grid>
+              <RadioGroup
+                className="mt-4"
+                label="Thanh trượt này dùng cho loại máy nào?"
+                description="Câu hỏi của AI phân loại HS – chọn một"
+                value={machineUse}
+                onChange={setMachineUse}
+                options={[
+                  { value: "cnc", label: "Máy công cụ (CNC, máy phay, máy tiện)" },
+                  { value: "3d", label: "Máy in 3D / thiết bị tự động hoá nhẹ" },
+                  { value: "other", label: "Khác", description: "Ghi rõ ở ô trả lời khác" },
+                ]}
+              />
               <Stack direction="row" gap="md" className="mt-4" align="center" wrap>
                 <Checkbox label="Đã kiểm tra chứng từ gốc" defaultChecked />
                 <Button size="sm" variant="secondary">Nhỏ</Button>

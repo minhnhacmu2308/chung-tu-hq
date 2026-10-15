@@ -12,6 +12,7 @@ import { isSuspect, listChecks, listDossierDocuments, listFields, ocrKeys } from
 import { DocumentPreview } from "@/components/common/document-preview";
 import { DOC_KIND_LABELS, FIELD_GROUP_LABELS, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { CrossCheckPanel } from "../ocr/cross-check-panel";
+import { DocumentSheetsCard } from "../ocr/document-sheets";
 import { FieldRow, fieldDomId } from "../ocr/field-row";
 import { ItemsTable } from "../ocr/items-table";
 import { useFieldMutations } from "../ocr/use-field-mutations";
@@ -176,6 +177,8 @@ export function OcrStep({ dossier, goTo }: StepProps) {
           )}
         </CardContent>
       </Card>
+
+      <DocumentSheetsCard dossierId={dossier.id} dossierCode={dossier.code} />
 
       {/* Thanh hành động dính đáy màn hình. kb-allow-raw: lề âm/lề phải bám lề của shell và nút trợ lý AI nổi – cả hai theo bề rộng màn hình */}
       <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-surface py-3 pl-4 pr-20 shadow-md md:-mx-8 md:pl-8 md:pr-24">

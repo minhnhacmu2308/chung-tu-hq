@@ -1,11 +1,14 @@
 // Dữ liệu mẫu Tài khoản & tích hợp. Khóa API bên thứ 3 nằm ở server (secret store) – không bao giờ có ở đây.
+import type { DeclarationProfile } from "@kb/contracts";
 import type { DigitalCertificate, Integration } from "../types";
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
 
-export function seedSettings(): { integrations: Integration[]; certificates: DigitalCertificate[] } {
+export function seedSettings(): { integrations: Integration[]; certificates: DigitalCertificate[]; vnaccsAccount: { userId: string; terminalId: string; updatedAt: string }; declarationProfiles: Partial<Record<"NK" | "XK", DeclarationProfile>> } {
   return {
+    declarationProfiles: { NK: { direction: "NK", values: { KHO: "03CCS01 – Kho CFS Tân Vũ" }, overrides: {}, updatedAt: hoursAgo(48) } },
+    vnaccsAccount: { userId: "BI820001", terminalId: "Z9999M", updatedAt: hoursAgo(72) },
     integrations: [
       {
         id: "HSCODEPRO",

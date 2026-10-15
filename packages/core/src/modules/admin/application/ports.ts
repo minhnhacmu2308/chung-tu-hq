@@ -90,6 +90,17 @@ export interface AdminRepos {
     list(): Promise<TemplateRow[]>;
     setPublished(id: string, published: boolean, at: Date): Promise<void>;
   };
+  exchangeRates: {
+    /** Tỷ giá có ngày hiệu lực ≥ `fromEffective`, mới nhất trước. */
+    list(fromEffective: string): Promise<ExchangeRateRow[]>;
+    /** Ghi tỷ giá tự động (VCB); bản ghi MANUAL cùng (tiền tệ, tuần) giữ nguyên. */
+    upsertAuto(rows: { currency: string; effectiveFrom: string; rate: string }[], boardAt: Date, at: Date): Promise<void>;
+    upsertManual(row: { currency: string; effectiveFrom: string; rate: string; updatedBy: string; note: string }, at: Date): Promise<void>;
+  };
+  rateFetches: {
+    insert(row: RateFetchRow): Promise<void>;
+    latest(): Promise<RateFetchRow | null>;
+  };
   audit: {
     insert(row: AuditRow): Promise<void>;
     list(filter: { orgId?: string; limit: number }): Promise<AuditRow[]>;
@@ -107,6 +118,9 @@ export interface AdminRepos {
 }
 
 /** Một lời gọi = một transaction trên kết nối kb_platform (thao tác + dòng nhật ký cùng commit). */
+export type ExchangeRateRow = { currency: string; effectiveFrom: string; rate: string; source: "VCB" | "MANUAL" | "SEED"; snapshotAt: Date | null; updatedBy: string | null; updatedByName: string | null; note: string | null };
+export type RateFetchRow = { id: string; ranAt: Date; effectiveFrom: string; status: "OK" | "FAILED"; count: number; boardAt: Date | null; error: string | null };
+
 export interface AdminUow {
   run<T>(fn: (r: AdminRepos) => Promise<T>): Promise<T>;
 }

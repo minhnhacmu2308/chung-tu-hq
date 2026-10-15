@@ -7,4 +7,4 @@ export { confirmPendingSamples, getSampleLabel, labelSample, listSamples, readSa
 export { evaluateSkill, getEvaluation, runEvaluation } from "./application/evaluate.js";
 export { createSkillResolver } from "./application/resolve-skill.js";
 export { compareFields, scoreSample, summarize } from "./domain/accuracy.js";
-export { fieldHints, projectResult, schemaKeyFor } from "./domain/schema-keys.js";
+export { fieldHints, projectResult } from "./domain/schema-keys.js";

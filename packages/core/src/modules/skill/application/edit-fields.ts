@@ -2,7 +2,7 @@ import type { Skill, SkillField, SkillFieldPatch } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { applyFieldPatch, canAddField } from "../domain/field-rules.js";
+import { applyFieldPatch, canAddField, canRemoveField } from "../domain/field-rules.js";
 import { loadSkill, toSkill } from "./_dto.js";
 import type { SkillDeps, SkillRepos, SkillRow, SkillVersionRow } from "./ports.js";
 
@@ -37,7 +37,8 @@ export async function addSkillField(deps: SkillDeps, ctx: Ctx, skillId: string, 
   return deps.uow.asOrg(ctx, async (r) => {
     const l = await loadSkill(r, ctx.orgId, skillId);
     if (!l.ok) return l;
-    const can = canAddField(l.value.version.fields, key);
+    if (!l.value.skill.docKind) return err(domainError("NOT_SUPPORTED", "Skill không gắn loại chứng từ"));
+    const can = canAddField(l.value.skill.docKind, l.value.version.fields, key);
     if (!can.ok) return can;
     return ok(await commitVersion(deps, ctx, r, l.value.skill, [...l.value.version.fields, { ...field, key, label: field.label.trim() }]));
   });
@@ -49,7 +50,9 @@ export async function removeSkillField(deps: SkillDeps, ctx: Ctx, skillId: strin
   return deps.uow.asOrg(ctx, async (r) => {
     const l = await loadSkill(r, ctx.orgId, skillId);
     if (!l.ok) return l;
-    if (!l.value.version.fields.some((f) => f.key === key)) return err(domainError("NOT_FOUND", "Không tìm thấy trường"));
+    if (!l.value.skill.docKind) return err(domainError("NOT_SUPPORTED", "Skill không gắn loại chứng từ"));
+    const can = canRemoveField(l.value.skill.docKind, l.value.version.fields, key);
+    if (!can.ok) return can;
     return ok(await commitVersion(deps, ctx, r, l.value.skill, l.value.version.fields.filter((f) => f.key !== key)));
   });
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { stateFor } from "./global-setup";
-import { createDossier, login, uploadAndConfirm } from "./helpers";
+import { createDossier, fillManualFields, login, uploadAndConfirm } from "./helpers";
 
 test("AI Agent chạy → xác nhận HS → Review tờ khai (chỉ tiêu + nguồn) → Người duyệt phê duyệt → bước truyền", async ({ page, browser }) => {
   await login(page);
@@ -22,6 +22,8 @@ test("AI Agent chạy → xác nhận HS → Review tờ khai (chỉ tiêu + ngu
   await expect(page.getByText("Mã số thuế người nhập khẩu")).toBeVisible();
   await expect(page.getByText("0316789012").first()).toBeVisible();
   await expect(page.getByText("Tài khoản").first()).toBeVisible(); // nguồn ACCOUNT
+
+  await fillManualFields(page, id);
 
   const approverCtx = await browser.newContext({ storageState: stateFor("tuan") });
   const approver = await approverCtx.newPage();

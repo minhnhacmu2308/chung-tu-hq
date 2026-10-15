@@ -41,7 +41,7 @@ export const statusLabel = (s: Status) => STATUS_META[s].label;
 /** Gói là nhãn phân loại (Badge), không phải trạng thái nghiệp vụ. */
 export const PLAN_TONE: Record<PlanCode, Tone> = { TRIAL: "neutral", BASIC: "info", PRO: "primary", ENTERPRISE: "success" };
 
-export const SKILL_KIND_LABELS: Record<SkillKind, string> = { DOCUMENT: "Đọc chứng từ", SUPPLIER: "Theo nhà cung cấp", MAPPING: "Ánh xạ tờ khai" };
+export const SKILL_KIND_LABELS: Record<SkillKind, string> = { DOCUMENT: "Đọc chứng từ", SUPPLIER: "Theo nhà cung cấp" };
 
 export const ANNOUNCEMENT_KIND_LABELS: Record<AnnouncementKind, string> = { INFO: "Thông tin", MAINTENANCE: "Bảo trì" };
 
@@ -72,6 +72,7 @@ export const ACTION_LABELS: Record<AdminAction, string> = {
   STAFF_MFA_RESET: "Đặt lại xác thực 2 lớp",
   ANNOUNCEMENT_SENT: "Gửi thông báo hệ thống",
   ANNOUNCEMENT_WITHDRAWN: "Thu hồi thông báo",
+  EXCHANGE_RATE_UPDATED: "Sửa tỷ giá tính thuế",
 };
 
 export const TARGET_TYPE_LABELS: Record<AdminTargetType, string> = {
@@ -83,6 +84,7 @@ export const TARGET_TYPE_LABELS: Record<AdminTargetType, string> = {
   SKILL_TEMPLATE: "Skill mẫu",
   STAFF: "Quản trị viên",
   ANNOUNCEMENT: "Thông báo",
+  EXCHANGE_RATE: "Tỷ giá",
 };
 
 /** Ngưỡng cảnh báo hạn mức – cùng mốc với mục "Cần chú ý" ở màn tổng quan. */

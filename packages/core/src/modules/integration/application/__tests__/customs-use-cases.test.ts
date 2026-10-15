@@ -32,10 +32,12 @@ const payload = (kind: "IDA" | "EDA" = "IDA"): DeclarationPayload => ({
 
 class FakeDeclarations implements DeclarationReader {
   constructor(public status: DeclarationStatus = "APPROVED", public unconfirmedHs = 0, public kind: "IDA" | "EDA" = "IDA") {}
+  /** Ngày tra tỷ giá khi dựng tờ khai (giờ VN). */
+  rateDate = "2026-10-14";
   readonly submitted: string[] = [];
   async get(_orgId: string, dossierId: string) {
     if (dossierId === "dos_none") return null;
-    return { declarationId: "dec_1", version: 2, status: this.status, payload: payload(this.kind), unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312" };
+    return { declarationId: "dec_1", version: 2, status: this.status, payload: payload(this.kind), unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate };
   }
   async markSubmitted(_ctx: { orgId: string }, dossierId: string) {
     this.submitted.push(dossierId);
@@ -125,6 +127,14 @@ describe("submitDeclaration", () => {
     expect(errCode(await submitDeclaration(deps, viewer, D, "cert_1"))).toBe("FORBIDDEN");
     expect(errCode(await submitDeclaration(deps, other, D, "cert_1"))).toBe("NOT_FOUND");
     expect(uow.data.outbox).toHaveLength(0);
+  });
+  it("tờ khai dựng với tỷ giá tuần trước → chặn truyền RATE_WEEK_CHANGED (tỷ giá tính thuế áp theo tuần đăng ký); cùng tuần → truyền được", async () => {
+    decls.rateDate = "2026-10-11"; // Chủ nhật tuần trước; hôm nay 14/10 (thứ Tư)
+    const r = await submitDeclaration(deps, declarant, D, "cert_1");
+    expect(errCode(r)).toBe("RATE_WEEK_CHANGED");
+    expect(uow.data.outbox).toHaveLength(0);
+    decls.rateDate = "2026-10-12";
+    expect(unwrap(await submitDeclaration(deps, declarant, D, "cert_1")).outboxId).toBeTruthy();
   });
   it("hồ sơ không ở APPROVED (chưa duyệt / đã hủy) → không truyền dù tờ khai APPROVED", async () => {
     dossiers.rows[0]!.status = "NEEDS_REVIEW";
@@ -230,6 +240,17 @@ describe("customs-send / poll", () => {
     // markOutboxFailed (worker) trên outbox PENDING → FAILED.
     unwrap(await markOutboxFailed(deps, { orgId: ORG, outboxId: uow.data.outbox[1]!.id, reason: "timeout" }));
     expect(uow.data.outbox[1]!.status).toBe("FAILED");
+  });
+  it("Gửi lại IDA chưa được ghi nhận sang tuần tỷ giá mới → RATE_WEEK_CHANGED, không tạo outbox", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    const ob = uow.data.outbox[0]!;
+    ob.attempts = 5;
+    unwrap(await processOutbox(deps, { orgId: ORG, userId: "usr_chau", outboxId: ob.id }));
+    deps.gateway = { ...gateway, queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) } as unknown as FakeCustomsGateway;
+    uow.data.results[0]!.externalId = "fpt-x";
+    deps.clock = fixedClock("2026-10-19T03:00:00.000Z"); // thứ Hai tuần sau; tờ khai tra tỷ giá 14/10
+    expect(errCode(await resendOperation(deps, declarant, D, "IDA"))).toBe("RATE_WEEK_CHANGED");
+    expect(uow.data.outbox).toHaveLength(1);
   });
   it("chạy lại job IDA sau crash khi Hải quan đã cấp số → không gọi preDeclare lần nữa", async () => {
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));

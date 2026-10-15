@@ -1,4 +1,5 @@
 // Truyền tờ khai (ADR 0005 outbox): guard canSubmit → outbox IDA/EDA (idempotency_key) → declaration SUBMITTED → dossier SUBMITTED → job customs-send.
+import { sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -20,6 +21,9 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   if (snap.status === "SUBMITTED") return err(domainError("ALREADY_SUBMITTED", "Tờ khai đã được truyền – không gửi trùng"));
   if (snap.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Tờ khai chưa được phê duyệt"));
   if (snap.unconfirmedHs > 0) return err(domainError("HS_UNCONFIRMED", `Còn ${snap.unconfirmedHs} mã HS chưa xác nhận`));
+  // Tỷ giá tính thuế áp theo tuần đăng ký tờ khai (thứ Hai → Chủ nhật, giờ VN): dựng tuần trước mà truyền tuần này → sai thuế.
+  if (!sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
+    return err(domainError("RATE_WEEK_CHANGED", `Tờ khai dùng tỷ giá tuần ${weekStart(snap.exchangeRateDate)} – đã sang tuần tỷ giá mới. Mở lại tờ khai để dựng lại với tỷ giá tuần này rồi duyệt lại`));
   const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
   if (blockers > 0) return err(domainError("BLOCKER_FAILED", `Còn ${blockers} luật lỗi chặn truyền`));
   if (!certificateId || !(await deps.certificates.exists(ctx.orgId, certificateId))) return err(domainError("NO_CERT", "Chọn chứng thư số để ký"));

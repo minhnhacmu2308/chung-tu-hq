@@ -1,7 +1,7 @@
 // Input của nhóm API back-office (/api/admin/**). Dùng ở form (zod) và – khi có backend – ở route handler.
 import { z } from "zod";
 import { DecimalStringSchema, IsoDateSchema } from "../common.js";
-import { AnnouncementAudienceSchema, AnnouncementKindSchema, PlanCodeSchema, StaffRoleSchema } from "../dto/index.js";
+import { AnnouncementAudienceSchema, AnnouncementKindSchema, isMonday, PlanCodeSchema, StaffRoleSchema } from "../dto/index.js";
 import { EmailSchema } from "./identity.js";
 
 /** Mọi thao tác ghi ảnh hưởng tới khách hoặc cấu hình đều kèm lý do – ghi vào nhật ký quản trị. */
@@ -73,3 +73,12 @@ export type AdminMfaSetup = z.infer<typeof AdminMfaSetupSchema>;
 /** Bật xong: mã khôi phục chỉ hiện MỘT lần. */
 export const AdminMfaEnabledSchema = z.object({ recoveryCodes: z.array(z.string()) });
 export type AdminMfaEnabled = z.infer<typeof AdminMfaEnabledSchema>;
+
+/** Đội vận hành thêm/sửa tỷ giá tính thuế một tuần (thứ Hai hiệu lực) – vd tỷ giá chéo NHNN cho ngoại tệ Vietcombank không công bố. */
+export const UpsertExchangeRateInputSchema = z.object({
+  currency: z.string().regex(/^[A-Z]{3}$/, "Mã tiền tệ 3 chữ in hoa (USD, TWD…)"),
+  effectiveFrom: IsoDateSchema.refine(isMonday, "Ngày hiệu lực phải là thứ Hai"),
+  rate: DecimalStringSchema.refine((v) => Number(v) > 0, "Tỷ giá phải lớn hơn 0"),
+  ...withReason,
+});
+export type UpsertExchangeRateInput = z.infer<typeof UpsertExchangeRateInputSchema>;

@@ -1,11 +1,11 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsSuggestionRow, LineItemRow } from "../ports.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProfileRow } from "../ports.js";
 
 /** Fake mô phỏng RLS theo org; catalog_hs/exchange_rates là bảng chung (mọi org đọc). */
 export class InMemoryDeclarationUow implements DeclarationUow {
   readonly data = {
-    lineItems: [] as LineItemRow[], suggestions: [] as HsSuggestionRow[], declarations: [] as DeclarationRow[], agentRuns: [] as AgentRunRow[],
-    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string }[],
+    lineItems: [] as LineItemRow[], hsJobs: [] as HsJobRow[], suggestions: [] as HsSuggestionRow[], declarations: [] as DeclarationRow[], agentRuns: [] as AgentRunRow[],
+    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string; source?: "VCB" | "MANUAL" | "SEED"; snapshotAt?: Date | null }[], profiles: [] as ProfileRow[],
   };
 
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: DeclarationRepos) => Promise<T>): Promise<T> {
@@ -38,6 +38,19 @@ export class InMemoryDeclarationUow implements DeclarationUow {
         },
         update: async (id, patch) => {
           const x = d.lineItems.find((y) => y.id === id && y.orgId === org);
+          if (x) Object.assign(x, clone(patch));
+        },
+        findByHsItem: async (orgId, hsItemId) => clone(d.lineItems.find((x) => x.hsItemId === hsItemId && x.orgId === org && x.orgId === orgId) ?? null),
+      },
+      hsJobs: {
+        insert: async (row) => {
+          if (row.orgId !== org) deny("hs_jobs");
+          d.hsJobs.push(clone(row));
+        },
+        get: async (orgId, id) => clone(d.hsJobs.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
+        openForDossier: async (orgId, dossierId) => clone(d.hsJobs.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId && (x.status === "processing" || x.status === "need_info"))),
+        update: async (id, patch) => {
+          const x = d.hsJobs.find((y) => y.id === id && y.orgId === org);
           if (x) Object.assign(x, clone(patch));
         },
       },
@@ -82,10 +95,17 @@ export class InMemoryDeclarationUow implements DeclarationUow {
         get: async (code) => clone(d.catalogHs.find((h) => h.code === code) ?? null),
         all: async () => clone(d.catalogHs),
       },
+      profiles: {
+        get: async (orgId, direction) => clone(d.profiles.find((x) => x.orgId === org && x.orgId === orgId && x.direction === direction) ?? null),
+        upsert: async (row) => {
+          if (row.orgId !== org) deny("declaration_profiles");
+          d.profiles = [...d.profiles.filter((x) => !(x.orgId === row.orgId && x.direction === row.direction)), clone(row)];
+        },
+      },
       exchangeRates: {
         latest: async (currency, date) => {
           const r = d.exchangeRates.filter((x) => x.currency === currency && x.date <= date).sort((a, b) => b.date.localeCompare(a.date))[0];
-          return r ? { rate: r.rate, date: r.date } : null;
+          return r ? { rate: r.rate, date: r.date, source: r.source ?? "SEED", snapshotAt: r.snapshotAt ?? null } : null;
         },
       },
     };

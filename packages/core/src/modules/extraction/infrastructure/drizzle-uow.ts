@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import type { DocKind, FieldGroup, FieldStatus, Region, Shipment } from "@kb/contracts";
+import { withShipmentDefaults, type DocKind, type FieldGroup, type FieldStatus, type Region, type Shipment } from "@kb/contracts";
 import type { Db, Tx } from "../../../db/client.js";
 import { extractedFields, extractions, fieldAudit, shipments } from "../../../db/schema/extraction.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -8,7 +8,7 @@ import type { ExtractionRepos, ExtractionRow, ExtractionUow, FieldRow, ShipmentR
 
 function repos(tx: Tx): ExtractionRepos {
   const toExtraction = (r: typeof extractions.$inferSelect): ExtractionRow => ({ ...r, kind: r.kind as DocKind, regions: r.regions as Record<string, Region> | null, status: r.status as ExtractionRow["status"] });
-  const toShipment = (r: typeof shipments.$inferSelect): ShipmentRow => ({ ...r, version: Number(r.version), data: r.data as Shipment });
+  const toShipment = (r: typeof shipments.$inferSelect): ShipmentRow => ({ ...r, version: Number(r.version), data: withShipmentDefaults(r.data as Shipment) }); // shipment lưu trước v2 thiếu trường mới
   const toField = (r: typeof extractedFields.$inferSelect): FieldRow => ({ ...r, group: r.group as FieldGroup, status: r.status as FieldStatus, region: r.region as Region | null });
   return {
     lockDossier: async (dossierId) => void (await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${dossierId}))`)),

@@ -18,8 +18,21 @@ describe("loadEnv", () => {
     expect(env.MAIL).toBe("console");
     expect(env.S3_FORCE_PATH_STYLE).toBe(true);
   });
+  it("STORAGE: mặc định s3 (cần S3_*); azure cần AZURE_STORAGE_CONNECTION_STRING, không cần S3_*", () => {
+    expect(loadEnv(base).STORAGE).toBe("s3");
+    const { S3_ENDPOINT: _e, S3_BUCKET: _b, S3_ACCESS_KEY_ID: _a, S3_SECRET_ACCESS_KEY: _s, ...noS3 } = base;
+    expect(() => loadEnv(noS3)).toThrow(/S3_BUCKET/);
+    expect(() => loadEnv({ ...noS3, STORAGE: "azure" })).toThrow(/AZURE_STORAGE_CONNECTION_STRING/);
+    const az = loadEnv({ ...noS3, STORAGE: "azure", AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=https;AccountName=a;AccountKey=k;EndpointSuffix=core.windows.net" });
+    expect(az.AZURE_STORAGE_CONTAINER).toBe("khaibao-documents");
+    expect(() => loadEnv({ ...noS3, STORAGE: "azure", AZURE_STORAGE_CONNECTION_STRING: "x", AZURE_STORAGE_CONTAINER: "Chung_Tu" })).toThrow(/AZURE_STORAGE_CONTAINER/);
+  });
   it("biến rỗng \"\" coi như không đặt (giá trị mặc định áp dụng)", () => {
     expect(loadEnv({ ...base, ANTHROPIC_API_KEY: "", AI_MODEL: "" }).AI_MODEL).toBe("claude-sonnet-5-5");
+  });
+  it("HS_CLASSIFIER=hscodepro cần HSCODEPRO_URL và HSCODEPRO_INTERNAL_KEY", () => {
+    expect(() => loadEnv({ ...base, HS_CLASSIFIER: "hscodepro", HSCODEPRO_URL: "https://dev.aixuatnhapkhau.cloud" })).toThrow(/HSCODEPRO_INTERNAL_KEY/);
+    expect(loadEnv({ ...base, HS_CLASSIFIER: "hscodepro", HSCODEPRO_URL: "https://dev.aixuatnhapkhau.cloud", HSCODEPRO_INTERNAL_KEY: "k" }).HSCODEPRO_INTERNAL_KEY).toBe("k");
   });
   it("AI_PROVIDER=claude mà thiếu ANTHROPIC_API_KEY thì ném lỗi nêu tên biến", () => {
     expect(() => loadEnv({ ...base, AI_PROVIDER: "claude" })).toThrow(/ANTHROPIC_API_KEY/);

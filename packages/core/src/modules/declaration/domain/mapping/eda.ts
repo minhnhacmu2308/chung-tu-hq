@@ -4,7 +4,7 @@ import { EDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
 import { incotermCode, planExportAdjustments } from "../adjustments.js";
 import { incotermField, invoiceKind, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
-import { BY_WATER, IN_CONTAINER, RE_EXPORT, TEMP_EXPORT } from "./conditions.js";
+import { BY_WATER, EXPORT_VALUE, IN_CONTAINER, RE_EXPORT, TEMP_EXPORT } from "./conditions.js";
 import { profileSource, SRC } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
@@ -114,7 +114,7 @@ export const EDA_MAPPINGS: FieldMapping[] = [
     return rate ? { value: plainNumber(rate), source: "SYSTEM" } : missing("SYSTEM", `Chưa có tỷ giá tính thuế cho ${cur}`);
   } },
   { code: "GP", no: N.GP, section: "VALUE", label: "Giấy phép xuất khẩu", required: false, from: (i) => permitsField(i, "EDA") },
-  { code: "TG_TT", no: N.TG_TT, section: "VALUE", label: "Trị giá tính thuế", required: false, when: { label: "Điều kiện giá khác FOB/DAP/DAF hoặc không có hóa đơn", test: (i) => !NO_240.has(incotermCode(i.shipment.invoice.incoterm.value)) || i.shipment.documents.every((d) => d.kind !== "INVOICE") }, from: exportCustomsValue },
+  { code: "TG_TT", no: N.TG_TT, section: "VALUE", label: "Trị giá tính thuế", required: false, when: EXPORT_VALUE, from: exportCustomsValue },
   { code: "NGUOI_NT", no: N.NGUOI_NT, section: "GENERAL", label: "Người nộp thuế", required: false, options: { sources: [profileSource("NGUOI_NT")], allowFixed: true }, from: (i) => profileOr(i, "NGUOI_NT", fixed("1 – Người xuất khẩu")) },
   // 2.80 khai theo từng dòng hàng (HAG_OL1..5). Chứng từ không cho biết mặt hàng thuộc quản lý chuyên ngành → người khai nhập.
   { code: "VBPQ", no: N.VBPQ, section: "VALUE", label: "Mã văn bản pháp luật khác (theo dòng hàng)", required: false, from: () => ({ value: null, source: "DOSSIER", note: "Khai khi hàng xuất khẩu thuộc quản lý chuyên ngành. Mã áp cho mọi dòng ghi cách nhau dấu cách; riêng từng dòng ghi “số dòng: mã”, các phần cách nhau dấu “;” (ví dụ “XK; 2: GP KD”). Tối đa 5 mã mỗi dòng" }) },

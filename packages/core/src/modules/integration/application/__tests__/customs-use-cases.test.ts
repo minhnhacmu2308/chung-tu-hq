@@ -869,15 +869,16 @@ describe("performOperation – luồng nghiệp vụ", () => {
 describe("rejection – lỗi Hải quan gắn vào chỉ tiêu", () => {
   it("IDA bị từ chối → view.rejection có mã chỉ tiêu + dòng hàng; gửi lại thành công → xóa", async () => {
     let calls = 0;
+    const gw: CustomsGateway = gateway; // ghi đè hành vi theo kiểu cổng (port), không theo kiểu suy ra của cổng giả
     const real = gateway.preDeclare.bind(gateway);
-    gateway.preDeclare = async (orgId, msg, key) => {
+    gw.preDeclare = async (orgId, msg) => {
       calls += 1;
       if (calls === 1) return { externalId: `fpt-${hashId(D)}`, errors: [{ code: "MOCK-REQ", field: "EPA", message: "Chưa nhập địa chỉ người xuất khẩu", solution: "Nhập địa chỉ" }, { code: "E1004", field: "CMD", message: "Mã HS không tồn tại", line: 2 }] };
-      return real(orgId, msg, key);
+      return real(orgId, msg);
     };
     // Lần khai bị từ chối: Hải quan chưa ghi nhận tờ khai (tra cứu không có số) → được gửi lại.
     const realQuery = gateway.queryStatus.bind(gateway);
-    gateway.queryStatus = async (o, e, d) => (calls < 2 ? { status: "Chưa ghi nhận", cleared: false } : realQuery(o, e, d));
+    gw.queryStatus = async (o, e, d) => (calls < 2 ? { status: "Chưa ghi nhận", cleared: false } : realQuery(o, e, d));
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     await drain();
     let v = unwrap(await getSubmission(deps, declarant, D));

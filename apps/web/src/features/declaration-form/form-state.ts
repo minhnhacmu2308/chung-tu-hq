@@ -9,13 +9,16 @@ export type FormValues = Record<string, string>;
 
 const has = (v: FormValues, key: string) => Boolean(v[key]?.trim());
 
-/** Dữ liệu xét điều kiện lấy từ chính giá trị trên form (đổi loại hình/phương thức vận chuyển → ô ẩn/hiện ngay). */
+/** Dữ liệu xét điều kiện lấy từ chính giá trị trên form (đổi loại hình/phương thức vận chuyển, định danh, HAWB → ô ẩn/hiện ngay). */
 export function conditionContext(kind: Kind, v: FormValues): ConditionContext {
   return {
     typeCode: (kind === "IDA" ? v["TK_ICB"] : v["TK_ECB"]) ?? "",
     transportCode: v["TK_MTC"] ?? "",
     incoterm: (v["TK_IP2"] ?? "").trim().toUpperCase(),
     hasInvoice: v["TK_IV1"] !== "B" && has(v, "TK_IV3"),
+    identMode: v["APP_DD_PT"] ?? "",
+    hawbIssued: v["APP_HAWB_CO"] === "CO",
+    splitCargo: v["TVD_LOAIHANG"] ?? "",
   };
 }
 

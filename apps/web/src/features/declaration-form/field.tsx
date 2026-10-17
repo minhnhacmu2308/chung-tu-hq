@@ -1,6 +1,6 @@
 "use client";
 // Một ô chỉ tiêu của bản mẫu tờ khai: nhãn "số · tên", vai trò, hướng dẫn khai (catalog Phụ lục II), "Còn thiếu", lý do áp dụng / không áp dụng.
-import { Badge, Button, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, Textarea } from "@kb/ui";
+import { Badge, Button, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
 import { DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type LayoutField } from "@kb/contracts";
 import { Info } from "lucide-react";
 import { ROLE_INFO } from "../dossier-detail/steps/declaration-groups";
@@ -86,6 +86,20 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const hint = [name ? `→ ${name}` : null, condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : null].filter(Boolean).join(" · ") || undefined;
   const missing = !suppressMissing && applicable && missingRequired(kind, field, values, parentNo, parentCondition, ctx);
   const set = (v: string) => onChange?.(field.key, v);
+  if (field.input === "choice") {
+    return (
+      <div className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+        <RadioGroup label={title} description={hint} options={field.options ?? []} value={value || null} onChange={set} />
+        {!compact && (
+          <div className="flex flex-wrap items-center gap-2">
+            <RoleBadge role={fieldRole(kind, field, parentNo)} />
+            <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} />
+          </div>
+        )}
+        {missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>}
+      </div>
+    );
+  }
   const control =
     field.input === "textarea" ? <Textarea rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
     : <Input type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;

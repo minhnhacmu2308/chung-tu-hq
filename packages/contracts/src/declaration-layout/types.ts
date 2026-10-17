@@ -6,7 +6,9 @@ import type { ConditionId } from "../declaration/conditions.js";
  * Dữ liệu thuần: khóa ô = tên trường VNACCS (TK_IMC, VD_BL2, HAG_TX3…); ô không có trong đặc tả dùng tiền tố APP_.
  * Vai trò/hướng dẫn tra từ catalog Phụ lục II theo số chỉ tiêu (`no` của ô, hoặc của nhóm chứa ô).
  */
-export type FieldInput = "text" | "code" | "date" | "time" | "number" | "textarea";
+/** choice: chọn một trong `options` (ô riêng của phần mềm, mã trạng thái của nghiệp vụ). */
+export type FieldInput = "text" | "code" | "date" | "time" | "number" | "textarea" | "choice";
+export type FieldOption = { value: string; label: string; description?: string };
 /** DECLARANT: người khai nhập; CUSTOMS: Hải quan cấp/tính, chỉ đọc. */
 export type FieldOrigin = "DECLARANT" | "CUSTOMS";
 
@@ -21,6 +23,9 @@ export type LayoutField = {
   codeTable?: CodeTable;
   origin?: FieldOrigin;
   condition?: ConditionId;
+  options?: FieldOption[];
+  /** Ô bắt buộc theo đặc tả nghiệp vụ không có trong Phụ lục II (định danh, tách vận đơn). */
+  required?: boolean;
 };
 /** Chỉ tiêu nhiều ô con nằm ngang (địa chỉ 4 dòng, tổng trị giá 4 ô…). */
 export type LayoutGroup = {

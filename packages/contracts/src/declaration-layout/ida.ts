@@ -1,5 +1,5 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA): bố cục đầy đủ chỉ tiêu theo ảnh mẫu CHITIEU_NHAPKHAU + Phụ lục II TT39/TT121 + VNACCS_IDA v1.2.
-import { attachmentBlocks, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, permitsBlock, rep, taxPaymentBlocks, transitBlock } from "./shared.js";
+import { attachmentBlocks, billIdentFields, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, permitsBlock, rep, taxPaymentBlocks, transitBlock } from "./shared.js";
 import type { DeclarationLayout, LayoutBlock } from "./types.js";
 
 /** Dòng hàng – phần người khai nhập (VN_IDA_HANG). */
@@ -135,8 +135,12 @@ export const LAYOUT_IDA: DeclarationLayout = {
       id: "van-chuyen", title: "Vận đơn & vận chuyển", blocks: [
         {
           id: "van-don", title: "Vận đơn", items: [
-            rep("Số vận đơn", "1.26", 5, [fld("VD_BL{n}", "Số vận đơn", "text", { width: "md" })]),
-            fld("APP_NGAY_VD", "Ngày vận đơn", "date", { width: "sm" }),
+            ...billIdentFields,
+            rep("Số vận đơn", "1.26", 5, [
+              fld("VD_BL{n}", "Số vận đơn", "text", { width: "md" }),
+              fld("APP_NGAY_VD{n}", "Ngày vận đơn", "date", { width: "sm" }),
+              fld("APP_HAWB{n}", "Số HAWB", "text", { width: "md", condition: "HAS_HAWB" }),
+            ]),
             grp("Số kiện", "1.27", [fld("VD_NO", "Số lượng kiện", "number", { width: "sm" }), fld("VD_NOT", "Loại kiện", "code", { codeTable: "PACKAGE_KIND", width: "xs" })]),
             grp("Tổng trọng lượng (Gross)", "1.28", [fld("VD_GW", "Trọng lượng", "number", { width: "sm" }), fld("VD_GWT", "Đơn vị", "code", { codeTable: "UNIT", width: "xs" })]),
             fld("VD_COC", "Số lượng container", "number", { no: "1.35", width: "xs", condition: "IN_CONTAINER" }),

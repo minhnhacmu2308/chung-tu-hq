@@ -48,7 +48,7 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
         </TabsList>
         <TabsContent value="khai" className="pt-4">
           <DeclarantTab
-            layout={layout} values={values} items={items} section={view.section} onSection={(id) => go({ section: id })}
+            layout={layout} stage={view.stage} values={values} items={items} section={view.section} onSection={(id) => go({ section: id })}
             onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
             onItemChange={(i, k, v) => setItems((s) => s.map((it, j) => (j === i ? { ...it, [k]: v } : it)))}
             showInapplicable={showInapplicable} onShowInapplicable={setShowInapplicable}

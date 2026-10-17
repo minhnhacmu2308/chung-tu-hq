@@ -1,5 +1,5 @@
 // Mẫu 02 – tờ khai xuất khẩu (EDA): bố cục đầy đủ chỉ tiêu theo ảnh mẫu CHITIEU_XUATKHAU + Phụ lục II TT39/TT121 + VNACCS_EDA v1.2.
-import { attachmentBlocks, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, permitsBlock, rep, taxPaymentBlocks, transitBlock } from "./shared.js";
+import { attachmentBlocks, billIdentFields, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, permitsBlock, rep, taxPaymentBlocks, transitBlock } from "./shared.js";
 import type { DeclarationLayout, LayoutBlock } from "./types.js";
 
 /** Dòng hàng – phần người khai nhập (VN_EDA_HANG). */
@@ -111,7 +111,12 @@ export const LAYOUT_EDA: DeclarationLayout = {
       id: "van-chuyen", title: "Vận đơn & vận chuyển", blocks: [
         {
           id: "van-don", title: "Vận đơn", items: [
-            fld("TK_EKN", "Số vận đơn / số quản lý hàng hóa", "text", { no: "2.24", width: "md" }),
+            ...billIdentFields,
+            grp("Số vận đơn / số quản lý hàng hóa", "2.24", [
+              fld("TK_EKN", "Số vận đơn", "text", { width: "md" }),
+              fld("APP_NGAY_VD", "Ngày vận đơn", "date", { width: "sm" }),
+              fld("APP_HAWB", "Số HAWB", "text", { width: "md", condition: "HAS_HAWB" }),
+            ]),
             grp("Số kiện", "2.25", [fld("TK_NO", "Số lượng kiện", "number", { width: "sm" }), fld("TK_NOT", "Loại kiện", "code", { codeTable: "PACKAGE_KIND", width: "xs" })]),
             grp("Tổng trọng lượng (Gross)", "2.26", [fld("TK_GW", "Trọng lượng", "number", { width: "sm" }), fld("TK_GWT", "Đơn vị", "code", { codeTable: "UNIT", width: "xs" })]),
             fld("TK_MRK", "Ký hiệu và số hiệu", "textarea", { no: "2.32", width: "full" }),

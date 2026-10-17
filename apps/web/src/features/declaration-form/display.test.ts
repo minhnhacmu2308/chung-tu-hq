@@ -45,3 +45,12 @@ describe("fieldTitle", () => {
     expect(fieldTitle(undefined, "Ngày vận đơn")).toBe("Ngày vận đơn");
   });
 });
+
+describe("displayValue – ô lựa chọn", () => {
+  const opts = [{ value: "BIEN", label: "Đường biển" }, { value: "HANG_KHONG", label: "Hàng không" }];
+  it("giá trị chữ → nhãn; mã số → 'mã · nhãn'; không có trong danh sách → giữ nguyên", () => {
+    expect(displayValue({ key: "APP_DD_PT", input: "choice", options: opts }, "HANG_KHONG")).toBe("Hàng không");
+    expect(displayValue({ key: "TRANG_THAI", input: "choice", options: [{ value: "15", label: "Hải quan đã duyệt" }] }, "15")).toBe("15 · Hải quan đã duyệt");
+    expect(displayValue({ key: "APP_DD_PT", input: "choice", options: opts }, "X")).toBe("X");
+  });
+});

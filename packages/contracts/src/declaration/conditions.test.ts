@@ -31,4 +31,14 @@ describe("DECLARATION_CONDITIONS – chỉ tiêu theo tình huống", () => {
   it("mỗi điều kiện có nhãn giải thích cho người khai", () => {
     for (const c of Object.values(C)) expect(c.label.length).toBeGreaterThan(5);
   });
+  it("AIR_IDENT: định danh theo hàng không; HAS_HAWB: hàng không và có phát hành HAWB; SPLIT_CONTAINER: tách vận đơn hàng container", () => {
+    expect(C.AIR_IDENT.test(ctx({ identMode: "HANG_KHONG" }))).toBe(true);
+    expect(C.AIR_IDENT.test(ctx({ identMode: "BIEN" }))).toBe(false);
+    expect(C.AIR_IDENT.test(ctx({}))).toBe(false);
+    expect(C.HAS_HAWB.test(ctx({ identMode: "HANG_KHONG", hawbIssued: true }))).toBe(true);
+    expect(C.HAS_HAWB.test(ctx({ identMode: "HANG_KHONG", hawbIssued: false }))).toBe(false);
+    expect(C.HAS_HAWB.test(ctx({ identMode: "BIEN", hawbIssued: true }))).toBe(false);
+    expect(C.SPLIT_CONTAINER.test(ctx({ splitCargo: "1" }))).toBe(true);
+    expect(C.SPLIT_CONTAINER.test(ctx({ splitCargo: "0" }))).toBe(false);
+  });
 });

@@ -20,9 +20,11 @@ const STATUS: Record<string, (v: string) => string | undefined> = {
   TK_TRANGTHAI: (v) => (FPT_DECLARATION_STATES as Record<string, string>)[v],
 };
 
-export function displayValue(f: Pick<LayoutField, "key" | "input">, value: string): string {
+export function displayValue(f: Pick<LayoutField, "key" | "input" | "options">, value: string): string {
   const v = value.trim();
   if (!v) return "";
+  const option = f.options?.find((o) => o.value === v);
+  if (option) return /^\d+$/.test(v) ? `${v} · ${option.label}` : option.label;
   if (f.key === "TK_A06" || f.key === "TK_K07") return inspectionLabel(v) ?? v;
   const status = STATUS[f.key]?.(v);
   if (status) return `${v} · ${status}`;

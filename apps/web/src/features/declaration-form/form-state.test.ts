@@ -20,7 +20,7 @@ const base: FormValues = { TK_ICB: "A11", TK_MTC: "1", VD_BL1: "618-58265281" };
 
 describe("conditionContext", () => {
   it("lấy loại hình theo mẫu, điều kiện giá viết hoa, có hóa đơn khi có số và không phải loại B", () => {
-    expect(conditionContext("EDA", { TK_ECB: "B11", TK_IP2: "fob", TK_IV1: "A", TK_IV3: "X" })).toEqual({ typeCode: "B11", incoterm: "FOB", hasInvoice: true, transportCode: "" });
+    expect(conditionContext("EDA", { TK_ECB: "B11", TK_IP2: "fob", TK_IV1: "A", TK_IV3: "X" })).toEqual({ typeCode: "B11", incoterm: "FOB", hasInvoice: true, transportCode: "", identMode: "", hawbIssued: false, splitCargo: "" });
     expect(conditionContext("IDA", { TK_ICB: "G12", TK_MTC: "2", TK_IV1: "B", TK_IV3: "X" })).toMatchObject({ typeCode: "G12", transportCode: "2", hasInvoice: false });
   });
 });
@@ -88,5 +88,19 @@ describe("review: bộ đếm khớp với ô, không báo thiếu ô không áp
     if (g.kind !== "group") throw new Error("test setup");
     expect(groupMissing("EDA", g, base, conditionContext("EDA", base), "IN_CONTAINER")).toBe(true);
     expect(groupMissing("EDA", g, { ...base, CON_VN: "Kho X" }, conditionContext("EDA", base), "IN_CONTAINER")).toBe(false);
+  });
+});
+
+describe("conditionContext – ô riêng của phần mềm", () => {
+  it("đọc định danh theo đường biển/hàng không, có HAWB, loại hàng khi tách vận đơn", () => {
+    expect(conditionContext("IDA", { APP_DD_PT: "HANG_KHONG", APP_HAWB_CO: "CO", TVD_LOAIHANG: "1" })).toMatchObject({ identMode: "HANG_KHONG", hawbIssued: true, splitCargo: "1" });
+    expect(conditionContext("IDA", { APP_DD_PT: "BIEN", APP_HAWB_CO: "KHONG" })).toMatchObject({ identMode: "BIEN", hawbIssued: false, splitCargo: "" });
+  });
+  it("ô Số HAWB bắt buộc ở dòng vận đơn 1 chỉ khi hàng không có HAWB", () => {
+    const hawb = { kind: "field", key: "APP_HAWB1", label: "Số HAWB", input: "text", condition: "HAS_HAWB" } as const;
+    const air = { APP_DD_PT: "HANG_KHONG", APP_HAWB_CO: "CO" };
+    expect(missingRequired("IDA", hawb, air, "1.26", undefined, conditionContext("IDA", air))).toBe(true);
+    const noHawb = { ...air, APP_HAWB_CO: "KHONG" };
+    expect(missingRequired("IDA", hawb, noHawb, "1.26", undefined, conditionContext("IDA", noHawb))).toBe(false);
   });
 });

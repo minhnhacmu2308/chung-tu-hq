@@ -12,6 +12,12 @@ export const rep = (label: string, no: string | undefined, count: number, fields
 /** Số chỉ tiêu theo mẫu: n("1.39", "2.34"). */
 const n = (k: Kind) => (ida: string, eda: string) => (k === "IDA" ? ida : eda);
 
+/** Ô riêng của phần mềm ở đầu khối Vận đơn: khai định danh theo đường biển / hàng không; hàng không → có phát hành HAWB không (có → ô số HAWB cạnh số vận đơn). */
+export const billIdentFields: LayoutField[] = [
+  fld("APP_DD_PT", "Khai báo định danh theo", "choice", { options: [{ value: "BIEN", label: "Đường biển" }, { value: "HANG_KHONG", label: "Hàng không" }] }),
+  fld("APP_HAWB_CO", "Có phát hành vận đơn thứ cấp (HAWB)?", "choice", { condition: "AIR_IDENT", options: [{ value: "CO", label: "Có" }, { value: "KHONG", label: "Không" }] }),
+];
+
 export function invoiceBlock(k: Kind): LayoutBlock {
   const no = n(k);
   return {

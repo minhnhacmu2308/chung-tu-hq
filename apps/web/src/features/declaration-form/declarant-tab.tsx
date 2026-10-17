@@ -5,10 +5,13 @@ import type { DeclarationLayout } from "@kb/contracts";
 import { BlockView } from "./block-view";
 import { conditionContext, itemProgress, sectionProgress, type FormValues } from "./form-state";
 import { ItemsSection } from "./items";
+import type { Stage } from "./fixtures";
+import { TransportOperationsBar } from "./transport-operations-bar";
 import { ITEMS_SECTION, navSections } from "./view-state";
 
 type Props = {
   layout: DeclarationLayout;
+  stage: Stage;
   values: FormValues;
   items: FormValues[];
   section: string;
@@ -19,7 +22,7 @@ type Props = {
   onShowInapplicable: (v: boolean) => void;
 };
 
-export function DeclarantTab({ layout, values, items, section, onSection, onChange, onItemChange, showInapplicable, onShowInapplicable }: Props) {
+export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, showInapplicable, onShowInapplicable }: Props) {
   const kind = layout.kind;
   const ctx = conditionContext(kind, values);
   const itemsMissing = items.reduce((n, it) => n + itemProgress(kind, layout, it).missing, 0);
@@ -57,6 +60,7 @@ export function DeclarantTab({ layout, values, items, section, onSection, onChan
           ) : (
             current && (
               <Stack gap="md">
+                {current.id === "van-chuyen" && <TransportOperationsBar kind={kind} header={values} stage={stage} showInapplicable={showInapplicable} />}
                 {current.blocks.map((b) => (
                   <BlockView key={b.id} kind={kind} block={b} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} />
                 ))}

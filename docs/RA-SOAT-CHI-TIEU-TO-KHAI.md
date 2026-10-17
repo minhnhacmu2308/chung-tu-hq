@@ -367,5 +367,6 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 4. **Bổ sung chỉ tiêu ưu tiên cao**: 1.50, 1.38/2.33, 2.40, 2.80, hiển thị 1.80, 1.94, 1.58.
 5. **Cấu hình `when` cho chỉ tiêu ĐK**, rồi thêm dần các chỉ tiêu theo tình huống ở mục 6.
 6. Nghiệp vụ còn thiếu: định danh hàng hóa (hiện QR), tách vận đơn (Mẫu 12), bổ sung chứng từ V5.
+   - Bản mẫu (2026-10-17): nhóm 3 "Vận đơn & vận chuyển" có nút **Chia tách vận đơn** (chỉ nhập khẩu, TachVanDonReq) và **Khai báo định danh** (V5IdentifierReq) – panel đủ chỉ tiêu theo đặc tả FPT, điền sẵn từ tờ khai, phần kết quả chỉ đọc (`packages/contracts/src/declaration-layout/transport-operations.ts`). Khối Vận đơn thêm lựa chọn khai định danh theo đường biển / hàng không, hàng không → có phát hành HAWB → ô Số HAWB cạnh từng số vận đơn; ngày vận đơn theo từng số. Chưa có: gửi/hỏi kết quả thật, hiện ảnh QR, ghép ngày vận đơn vào 1.50.
 
 Mọi thay đổi chỉ tiêu bắt buộc hoặc trị giá cần người có nghiệp vụ hải quan review (skill `mapping-declaration-fields`, bước 7).

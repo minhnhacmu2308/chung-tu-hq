@@ -348,6 +348,12 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
   - Màn Review: ô lỗi viền đỏ kèm nội dung và cách khắc phục, khung tổng hợp lỗi ở đầu màn, số lỗi trên tab. Bước Khai báo có nút "Xem lỗi trên tờ khai".
 - Còn có thể bổ sung: 1.17–1.19, 1.24 (ủy thác, tại chỗ – cần dữ liệu hồ sơ cho biết), 1.40 (theo 1.39 = D), 1.53–1.62 (bảo lãnh/hạn mức), 1.64–1.67 (kho ngoại quan, vận chuyển kết hợp); lỗi theo dòng hàng gắn vào bảng hàng.
 
+**Bản mẫu tờ khai đầy đủ chỉ tiêu (xong, nhánh `feat/to-khai-day-du-ban-mau`):**
+- Trang `/ban-mau/to-khai` (không nằm trong menu): 3 tab theo luồng làm việc (Người khai nhập / Hải quan trả về / Theo dõi & nghiệp vụ). Dữ liệu giả theo ảnh mẫu `CHITIEU_NHAPKHAU`/`CHITIEU_XUATKHAU`, có 3 giai đoạn. Thiết kế: `docs/superpowers/specs/2026-10-17-to-khai-day-du-ban-mau-design.md`.
+- Bố cục là dữ liệu trong `@kb/contracts/declaration-layout` (khóa ô = tên trường VNACCS), có test bắt buộc đủ 1.1–1.96 (trừ 1.46) và 2.1–2.80.
+- Luật "theo tình huống" giờ là một nguồn chung (`DECLARATION_CONDITIONS`), backend và bản mẫu cùng dùng.
+- Cần đối chiếu khi làm thật: catalog EDA ghi 2.79 là `HAG_TXR`, nhưng đặc tả VNACCS_EDA là `HAG_ADE`.
+
 **Phát hiện thêm khi làm đợt 1 (để đợt 3 xử lý):**
 - Tờ khai xuất đang tính "thuế" bằng thuế suất **nhập khẩu** và VAT (`declaration/domain/tax.ts`). Chưa có thuế suất xuất khẩu.
 - Tờ khai xuất điều kiện FOB vẫn cộng cước quốc tế vào trị giá tính thuế (dữ liệu mẫu `dos_020`). Trị giá tính thuế xuất khẩu là giá FOB, không cộng cước.

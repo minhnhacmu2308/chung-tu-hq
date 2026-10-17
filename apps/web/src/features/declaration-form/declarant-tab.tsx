@@ -50,7 +50,8 @@ export function DeclarantTab({ layout, values, items, section, onSection, onChan
             ))}
           </ul>
         </nav>
-        <div className={cn("min-w-0 cq-lg:col-span-3")}>
+        <div className={cn("flex min-w-0 flex-col gap-3 cq-lg:col-span-3")}>
+          <h2 className="text-base font-semibold text-fg">{nav.find((n) => n.id === section)?.title}</h2>
           {section === ITEMS_SECTION ? (
             <ItemsSection layout={layout} items={items} onItemChange={onItemChange} showInapplicable={showInapplicable} />
           ) : (

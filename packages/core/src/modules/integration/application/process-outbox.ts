@@ -119,8 +119,13 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
 
   const failed = !!outcome.errors?.length;
   const nextStage = failed ? stage : stageAfter(stage, op) ?? stage;
+  const { rejection: prevRejection, ...prevRaw } = result.raw ?? {};
+  // Lỗi có nội dung từ Hải quan → lưu để màn Review gắn vào ô chỉ tiêu; gửi lại thành công cùng nghiệp vụ → xóa.
+  const rejection = failed
+    ? { operation: op, at: now().toISOString(), errors: outcome.errors!.map((e) => ({ code: e.code, message: e.message, ...(e.solution ? { solution: e.solution } : {}), ...(e.field ? { field: e.field } : {}), ...(e.line ? { line: e.line } : {}) })) }
+    : prevRejection && prevRejection.operation !== op ? prevRejection : undefined;
   const raw: ResultRaw = {
-    ...(result.raw ?? {}), ...(outcome.patch.raw ?? {}), stage: nextStage,
+    ...prevRaw, ...(outcome.patch.raw ?? {}), stage: nextStage, ...(rejection ? { rejection } : {}),
     ...(failed ? {} : { done: [...new Set([...(result.raw?.done ?? []), op])] }),
     ...(outcome.side ? { side: { ...(result.raw?.side ?? {}), [op]: outcome.side } } : {}),
     ...(!failed && (b === "IDE") ? { amendments: (result.raw?.amendments ?? 0) + 1 } : {}),

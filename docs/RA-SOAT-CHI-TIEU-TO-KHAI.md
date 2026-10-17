@@ -337,6 +337,17 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 - Mock web: tờ khai xuất FOB hết cộng cước; có các chỉ tiêu mới (`DB_VERSION` 10).
 - **Chưa làm được, thiếu dữ liệu:** số lượng (2) theo đơn vị tính biểu thuế (`HAG_QN2/QT2`) cần bảng đơn vị tính theo mã HS. 1.69 vẫn điền mã hồ sơ: cần biết tình huống tại chỗ / gia công với DNCX để dùng cú pháp TT121.
 
+**Đợt 4 – chỉ tiêu theo tình huống và lỗi Hải quan gắn vào ô (xong):**
+- `FieldMapping.when { label, test }` (`mapping/conditions.ts`): chỉ tiêu chỉ có trên tờ khai khi điều kiện đúng. Lý do hiện được lưu ở `condition` và hiển thị dưới ô ("Có trên tờ khai vì: …").
+  - Chỉ tiêu không áp dụng thì không gửi Hải quan, không bị chặn phê duyệt, và giá trị người khai đã sửa trước đó bị bỏ khi dựng lại.
+  - Đã có: 1.3 / 2.3 số tờ khai TN-TX (G51 / G21–G24); 1.10 / 2.7 thời hạn tái xuất / tái nhập (G11–G14 / G61); 1.31 / 2.30 hô hiệu (đường biển/sông); 1.35 số lượng container, 2.60 số container (mã 2); 2.40 (điều kiện giá khác FOB/DAP/DAF).
+  - Dữ liệu gửi FPT tương ứng: `TK_TDN`, `TK_RED`/`TK_RID`, `VD_VSC`/`TK_VSC`, `VD_COC`, `CON_C01..`.
+- Lỗi Hải quan:
+  - `fieldDefForFptIndex` (`@kb/contracts`) đổi `indexCode` FPT (EPN, IP2, SN3, CMD…) sang số chỉ tiêu.
+  - Gateway đọc `rowPosition` thành dòng hàng; outbox lưu `raw.rejection` và xóa khi chính nghiệp vụ đó gửi lại thành công; view trả `rejection`.
+  - Màn Review: ô lỗi viền đỏ kèm nội dung và cách khắc phục, khung tổng hợp lỗi ở đầu màn, số lỗi trên tab. Bước Khai báo có nút "Xem lỗi trên tờ khai".
+- Còn có thể bổ sung: 1.17–1.19, 1.24 (ủy thác, tại chỗ – cần dữ liệu hồ sơ cho biết), 1.40 (theo 1.39 = D), 1.53–1.62 (bảo lãnh/hạn mức), 1.64–1.67 (kho ngoại quan, vận chuyển kết hợp); lỗi theo dòng hàng gắn vào bảng hàng.
+
 **Phát hiện thêm khi làm đợt 1 (để đợt 3 xử lý):**
 - Tờ khai xuất đang tính "thuế" bằng thuế suất **nhập khẩu** và VAT (`declaration/domain/tax.ts`). Chưa có thuế suất xuất khẩu.
 - Tờ khai xuất điều kiện FOB vẫn cộng cước quốc tế vào trị giá tính thuế (dữ liệu mẫu `dos_020`). Trị giá tính thuế xuất khẩu là giá FOB, không cộng cước.

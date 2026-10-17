@@ -6,7 +6,7 @@ import {
 } from "@kb/ui";
 import { canEditDeclaration, isDeclarationFieldEditable } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, FileCheck2, FileText, Paperclip, Pencil, Plus, RotateCcw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileCheck2, FileText, Paperclip, Pencil, Plus, RotateCcw, ShieldCheck, XCircle } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { dossierKeys, listDocuments } from "@/api/dossiers";
@@ -22,11 +22,12 @@ import { DOC_KIND_LABELS, type Declaration, type DeclarationField } from "@/mock
 import { errorMessage, KeyValue, SourceChip, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
 import { fieldGuide } from "./field-guide";
 import { CustomsInfoPanel } from "./customs-info-panel";
+import { errorPlace, errorsForField, fieldErrors, type FieldError } from "./customs-errors";
 import { fieldTitle, groupDeclarationFields, ROLE_INFO, type RoledField } from "./declaration-groups";
 import { provenanceLabel } from "./provenance";
 import type { StepProps } from "./types";
 
-const DATE_CODES = new Set(["NGAY_DK", "NGAY_DEN", "NGAY_HD"]);
+const DATE_CODES = new Set(["NGAY_DK", "NGAY_DEN", "NGAY_DI", "NGAY_HD", "HAN_TX", "HAN_TN"]);
 
 function displayValue(f: DeclarationField, currency: string) {
   if (DATE_CODES.has(f.code) && /^\d{4}-\d{2}-\d{2}$/.test(f.value)) return formatDate(f.value);
@@ -46,9 +47,9 @@ function RoleBadge({ role }: { role: RoledField["role"] }) {
   );
 }
 
-function FieldTile({ field, currency, note, onEdit }: { field: RoledField; currency: string; note?: string | undefined; onEdit?: (() => void) | undefined }) {
+function FieldTile({ field, currency, note, errors = [], onEdit }: { field: RoledField; currency: string; note?: string | undefined; errors?: FieldError[]; onEdit?: (() => void) | undefined }) {
   return (
-    <div className={cn("flex flex-col gap-1.5 rounded-md border p-3", field.suspect ? "border-warning bg-warning-subtle" : "border-border bg-surface")}>
+    <div className={cn("flex flex-col gap-1.5 rounded-md border p-3", errors.length ? "border-danger bg-danger-subtle" : field.suspect ? "border-warning bg-warning-subtle" : "border-border bg-surface")}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs text-fg-muted">{fieldTitle(field)}</p>
         <SourceChip source={field.source} className="shrink-0" />
@@ -65,6 +66,16 @@ function FieldTile({ field, currency, note, onEdit }: { field: RoledField; curre
         <RoleBadge role={field.role} />
         {provenanceLabel(field.provenance) && <span className="text-xs text-fg-subtle">{provenanceLabel(field.provenance)}</span>}
       </div>
+      {field.condition && <p className="text-xs text-fg-subtle">Có trên tờ khai vì: {field.condition}</p>}
+      {errors.map((e, i) => (
+        <p key={i} className="flex items-start gap-1 text-sm text-danger-subtle-fg">
+          <XCircle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
+          <span>
+            <span className="font-medium">Hải quan báo lỗi {e.code}:</span> {e.message}
+            {e.solution ? ` → ${e.solution}` : ""}
+          </span>
+        </p>
+      ))}
       {field.suspect && (
         <p className="flex items-start gap-1 text-sm text-warning-subtle-fg">
           <AlertTriangle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
@@ -101,7 +112,7 @@ function RoleLegend({ roles }: { roles: RoledField["role"][] }) {
   );
 }
 
-function GeneralTab({ decl, currency, onEdit }: { decl: Declaration; currency: string; onEdit?: ((f: DeclarationField) => void) | undefined }) {
+function GeneralTab({ decl, currency, errors, onEdit }: { decl: Declaration; currency: string; errors: FieldError[]; onEdit?: ((f: DeclarationField) => void) | undefined }) {
   const groups = groupDeclarationFields(decl.kind, decl.fields);
   return (
     <Stack gap="lg">
@@ -116,7 +127,7 @@ function GeneralTab({ decl, currency, onEdit }: { decl: Declaration; currency: s
             {group.description && <p className="mt-0.5 text-xs text-fg-subtle">{group.description}</p>}
             <Grid cols={{ base: 1, md: 2, xl: 3 }} gap="sm" className="mt-2">
               {fields.map((f) => (
-                <FieldTile key={f.code} field={f} currency={currency} note={f.note ?? SUSPECT_NOTES[f.code]} onEdit={onEdit && isDeclarationFieldEditable(f.code) ? () => onEdit(f) : undefined} />
+                <FieldTile key={f.code} field={f} currency={currency} note={f.note ?? SUSPECT_NOTES[f.code]} errors={errorsForField(errors, f.no)} onEdit={onEdit && isDeclarationFieldEditable(f.code) ? () => onEdit(f) : undefined} />
               ))}
             </Grid>
           </section>
@@ -395,6 +406,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const viewQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const subQ = useQuery({ queryKey: customsKeys.submission(dossier.id), queryFn: () => getSubmission(dossier.id) });
   const customsInfo = subQ.data?.customsInfo ?? null;
+  const rejection = subQ.data?.rejection ?? null;
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
     onSuccess: () => {
@@ -427,6 +439,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   }
 
   const suspect = decl.fields.filter((f) => f.suspect);
+  const errs = fieldErrors(decl.kind, rejection);
   const totalTax = String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd));
   const isDraft = decl.status === "DRAFT";
   const kindLabel = decl.kind === "IDA" ? "Tờ khai nhập khẩu (IDA)" : "Tờ khai xuất khẩu (EDA)";
@@ -454,6 +467,19 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         </CardHeader>
         <CardContent>
           <Stack gap="sm">
+            {rejection && errs.length > 0 && (
+              <Alert tone="danger" title={`Hải quan từ chối ${rejection.operation} lúc ${formatDateTime(rejection.at)} – ${errs.length} lỗi`}>
+                <p>{isDraft ? "Sửa các ô đánh dấu đỏ trong tab Thông tin chung (lỗi theo dòng hàng: sửa ở bước OCR/AI Agent), phê duyệt lại rồi khai lại." : "Mở lại tờ khai để sửa các ô đánh dấu đỏ, phê duyệt lại rồi khai lại."}</p>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {errs.map((e, i) => (
+                    <li key={i}>
+                      <span className="font-medium">{errorPlace(e)}:</span> {e.message}
+                      {e.solution ? ` → ${e.solution}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </Alert>
+            )}
             {!isDraft && decl.approvedBy && (
               <Alert tone="success" title="Đã phê duyệt">
                 {decl.approvedBy} phê duyệt lúc {decl.approvedAt ? formatDateTime(decl.approvedAt) : "—"}.
@@ -487,7 +513,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
           <Tabs value={tab} onValueChange={setTab} className="mt-4">
             <TabsList aria-label="Nhóm chỉ tiêu tờ khai">
               <TabsTrigger value="general">
-                Thông tin chung {suspect.length > 0 && <Badge tone="warning">{suspect.length}</Badge>}
+                Thông tin chung {errs.length > 0 && <Badge tone="danger">{errs.length} lỗi</Badge>} {suspect.length > 0 && <Badge tone="warning">{suspect.length}</Badge>}
               </TabsTrigger>
               <TabsTrigger value="items">
                 Danh sách hàng <Badge tone="neutral">{items.length}</Badge>
@@ -501,7 +527,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               )}
             </TabsList>
             <TabsContent value="general">
-              <GeneralTab decl={decl} currency={dossier.currency} onEdit={isDraft && canEdit ? setEditing : undefined} />
+              <GeneralTab decl={decl} currency={dossier.currency} errors={errs} onEdit={isDraft && canEdit ? setEditing : undefined} />
             </TabsContent>
             <TabsContent value="items">
               <ItemsTab kind={decl.kind} items={items} currency={dossier.currency} />

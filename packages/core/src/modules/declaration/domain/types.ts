@@ -10,5 +10,5 @@ export type OrgInfo = { taxCode: string; name: string; address: string; phone: s
 /** Nguồn gốc giá trị: quy tắc mặc định / nguồn doanh nghiệp chọn / giá trị cố định / Mặc định khai báo. */
 export type FieldProvenance = { rule: string; via: "default" | "source" | "fixed" | "profile"; sourceId?: string };
 /** `blocking`: chỉ tiêu bắt buộc có điều kiện mà để trống thì chặn phê duyệt (xem `canApprove`). */
-export type StoredField = { no: string; label: string; section: "GENERAL" | "PARTIES" | "TRANSPORT" | "VALUE"; value: string; source: ValueSource; suspect?: boolean; note?: string; provenance?: FieldProvenance; blocking?: true };
+export type StoredField = { no: string; label: string; section: "GENERAL" | "PARTIES" | "TRANSPORT" | "VALUE"; value: string; source: ValueSource; suspect?: boolean; note?: string; provenance?: FieldProvenance; blocking?: true; /** Lý do chỉ tiêu theo tình huống xuất hiện (FieldMapping.when.label). */ condition?: string };
 export type HsCatalogRow = { code: string; description: string; mfn: string; pref: Record<string, string>; vat: string; policy: string | null; keywords: string[] };

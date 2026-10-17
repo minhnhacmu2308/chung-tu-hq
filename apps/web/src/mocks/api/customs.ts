@@ -5,7 +5,7 @@ import {
   baseOp, CUSTOMS_OPERATIONS, hasDeclarationNumber, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
   operationAvailability, operationsFor, queryOpFor, stageAfter,
   type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
-  type CustomsInfo, type ResendResult, type SubmissionView,
+  type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
 import { computeTaxes } from "@/mocks/declaration-builder";
 import { formatVnd } from "@/lib/format";
@@ -101,7 +101,11 @@ function apply(db: MockDb, c: Ctx) {
   const p = c.flow.pending!;
   c.flow.pending = null;
   const at = Date.parse(p.doneAt);
-  if (p.outcome === "ERROR") return;
+  if (p.outcome === "ERROR") {
+    c.flow.rejection = { operation: p.op, at: p.doneAt, errors: p.errors ?? [] };
+    return;
+  }
+  if (c.flow.rejection?.operation === p.op) delete c.flow.rejection;
   const next = stageAfter(c.flow.stage, p.op);
   if (next === null) return;
   c.flow.stage = next;
@@ -245,6 +249,15 @@ function texts(db: MockDb, c: Ctx, op: CustomsOperation, no: string): { out: str
   }
 }
 
+/** Luật mô phỏng: khai tạm khi địa chỉ đối tác nước ngoài còn trống → lỗi đúng dạng errorList của FPT (indexCode = mã trường VNACCS). */
+function rejectionErrors(c: Ctx, op: CustomsOperation): CustomsError[] {
+  if (baseOp(op) !== "IDA" || !c.decl) return [];
+  const nk = c.dossier.direction === "NK";
+  const addr = c.decl.fields.find((f) => f.code === (nk ? "NXK_DC" : "NNK_DC"))?.value.trim() ?? "";
+  if (addr && addr !== "—") return [];
+  return [{ code: "MOCK-REQ", field: nk ? "EPA" : "CGA", message: nk ? "Chưa nhập địa chỉ người xuất khẩu" : "Chưa nhập địa chỉ người nhập khẩu", solution: "Nhập địa chỉ theo hóa đơn/hợp đồng rồi khai lại" }];
+}
+
 /** Gửi một nghiệp vụ: OUT ngay, IN sau LIVE_REPLY_MS; giai đoạn đổi khi IN đã đến. */
 function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number) {
   if (!c.result) {
@@ -263,6 +276,14 @@ function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number) {
   }
   const t = texts(db, c, op, c.result.declarationNo);
   const doneAt = now + LIVE_REPLY_MS;
+  const errors = rejectionErrors(c, op);
+  if (errors.length) {
+    // Hải quan (mô phỏng) từ chối khai tạm: nhật ký ghi lỗi, màn Review gắn lỗi vào đúng ô chỉ tiêu.
+    const summary = `${CUSTOMS_OPERATIONS[op].label} bị từ chối: ${errors.map((e) => `${e.code} (${e.field}): ${e.message}`).join("; ")}`;
+    db.customsMessages.push(message(c.dossier.id, op, "OUT", "OK", t.out, now, t.payload), message(c.dossier.id, op, "IN", "ERROR", summary, doneAt, { errorList: errors }));
+    c.flow.pending = { op, outcome: "ERROR", doneAt: new Date(doneAt).toISOString(), errors };
+    return;
+  }
   db.customsMessages.push(message(c.dossier.id, op, "OUT", "OK", t.out, now, t.payload), message(c.dossier.id, op, "IN", "OK", t.in, doneAt, { ...t.payload, ketQua: "Thành công" }));
   c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString() };
   if (isContentOperation(op) && c.decl) {
@@ -475,6 +496,7 @@ function view(db: MockDb, dossierId: string, now: number): SubmissionView {
     messages: [...seen].reverse(),
     result,
     customsInfo: customsInfoOf(db, c, stage, seen),
+    rejection: c.flow.rejection ?? null,
   };
 }
 

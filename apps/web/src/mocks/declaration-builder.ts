@@ -206,13 +206,13 @@ const FIELD_NO: Record<"IDA" | "EDA", Record<string, string>> = {
     SOTK: "1.1", MA_LH: "1.4", PTVC: "1.6", PL_CN: "1.7", CQHQ: "1.8", NGAY_DK: "1.11", NNK_MST: "1.12", NNK_TEN: "1.13", NNK_DC: "1.15",
     NXK_TEN: "1.20", NXK_DC: "1.22", MA_NUOC: "1.23", SO_VD: "1.26", SO_KIEN: "1.27", TRONG_LUONG: "1.28", NGAY_DEN: "1.32", CANG_DO: "1.33", CANG_XEP: "1.34",
     SO_HD: "1.41", NGAY_HD: "1.42", PT_TT: "1.43", DK_GIA: "1.44", MA_TT: "1.44", TONG_TG: "1.44",
-    GP: "1.38", CT_TG: "1.50", NGUOI_NT: "1.52",
+    GP: "1.38", CT_TG: "1.50", NGUOI_NT: "1.52", HO_HIEU: "1.31", HAN_TX: "1.10", TNTX_TK: "1.3",
   },
   EDA: {
     SOTK: "2.1", MA_LH: "2.4", PTVC: "2.6", CQHQ: "2.8", NGAY_DK: "2.10", NXK_MST: "2.11", NXK_TEN: "2.12", NXK_DC: "2.14",
     NNK_TEN: "2.19", NNK_DC: "2.21", MA_NUOC: "2.22", SO_VD: "2.24", SO_KIEN: "2.25", TRONG_LUONG: "2.26", CANG_DO: "2.28", CANG_XEP: "2.29", NGAY_DEN: "2.31",
     SO_HD: "2.36", NGAY_HD: "2.37", PT_TT: "2.38", DK_GIA: "2.39", MA_TT: "2.39", TONG_TG: "2.39",
-    GP: "2.33", TG_TT: "2.40", NGUOI_NT: "2.43", VBPQ: "2.80",
+    GP: "2.33", TG_TT: "2.40", NGUOI_NT: "2.43", VBPQ: "2.80", HO_HIEU: "2.30", HAN_TN: "2.7", TNTX_TK: "2.3",
   },
 };
 
@@ -233,6 +233,7 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     source,
     ...(s.suspect.includes(code) ? { suspect: true } : {}),
   });
+  const when = (field: DeclarationField, condition: string): DeclarationField => ({ ...field, condition });
   const orgParty = [
     f("PARTIES", nk ? "NNK_MST" : "NXK_MST", nk ? "Mã số thuế người nhập khẩu" : "Mã số thuế người xuất khẩu", org.taxCode, "ACCOUNT"),
     f("PARTIES", nk ? "NNK_TEN" : "NXK_TEN", nk ? "Tên người nhập khẩu" : "Tên người xuất khẩu", org.name, "ACCOUNT"),
@@ -268,9 +269,17 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     ...(nk
       ? [f("VALUE", "CT_TG", "Chi tiết khai trị giá", `${isoDayOffset(-s.invoiceDaysAgo).split("-").reverse().join("")}#&`, "BILL_OF_LADING")]
       : [
-          f("VALUE", "TG_TT", "Trị giá tính thuế", ["FOB", "DAP", "DAF"].includes(d.incoterm) ? "" : `${t.invoiceTotal} ${d.currency}`, "SYSTEM"),
+          ...(["FOB", "DAP", "DAF"].includes(d.incoterm) ? [] : [when(f("VALUE", "TG_TT", "Trị giá tính thuế", `${t.invoiceTotal} ${d.currency}`, "SYSTEM"), "Điều kiện giá khác FOB/DAP/DAF hoặc không có hóa đơn")]),
           f("VALUE", "VBPQ", "Mã văn bản pháp luật khác (theo dòng hàng)", "", "DOSSIER"),
         ]),
+    // Chỉ tiêu theo tình huống (giống backend mapping/conditions.ts).
+    ...(nk && /^G1[1-4]$/.test(d.typeCode) ? [when(f("GENERAL", "HAN_TX", "Thời hạn tái xuất khẩu", "", "DOSSIER"), "Loại hình tạm nhập (G11–G14)")] : []),
+    ...(nk && d.typeCode === "G51" ? [when(f("GENERAL", "TNTX_TK", "Số tờ khai tạm xuất tương ứng", "", "DOSSIER"), "Loại hình tái nhập hàng đã tạm xuất (G51)")] : []),
+    ...(!nk && /^G2[1-4]$/.test(d.typeCode) ? [when(f("GENERAL", "TNTX_TK", "Số tờ khai tạm nhập tương ứng", "", "DOSSIER"), "Loại hình tái xuất hàng đã tạm nhập (G21–G24)")] : []),
+    ...(!nk && d.typeCode === "G61" ? [when(f("GENERAL", "HAN_TN", "Thời hạn tái nhập khẩu", "", "DOSSIER"), "Loại hình tạm xuất (G61)")] : []),
+    ...(d.transportMode === "SEA_CONTAINER" || d.transportMode === "SEA_BULK" || d.transportMode === "RIVER"
+      ? [when(f("TRANSPORT", "HO_HIEU", "Hô hiệu phương tiện (call sign)", "", "BILL_OF_LADING"), "Vận chuyển đường biển / đường sông (mã 2, 3, 6)")]
+      : []),
     f("GENERAL", "NGUOI_NT", "Người nộp thuế", nk ? "1 – Người nhập khẩu" : "1 – Người xuất khẩu", "DEFAULT"),
     f("VALUE", "TY_GIA", "Tỷ giá tính thuế", t.exchangeRate, "SYSTEM"),
     ...(s.coNo ? [f("VALUE", "SO_CO", s.coForm === "EVFTA" ? "Chứng từ chứng nhận xuất xứ (REX)" : "Số C/O (form AK)", s.coNo, "CERT_OF_ORIGIN")] : []),

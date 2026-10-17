@@ -43,7 +43,7 @@ export function toDeclaration(d: DeclarationRow, approvedByName: string | null):
   const codes = [...order.filter((c) => c in d.fields), ...Object.keys(d.fields).filter((c) => !order.includes(c))];
   const fields: DeclarationField[] = codes.map((code) => {
     const f = d.fields[code]!;
-    return { code, label: f.label, value: f.value, source: f.source, section: f.section, ...(f.no ? { no: f.no } : {}), ...(f.suspect ? { suspect: true } : {}), ...(f.note ? { note: f.note } : {}), ...(f.provenance ? { provenance: f.provenance } : {}) };
+    return { code, label: f.label, value: f.value, source: f.source, section: f.section, ...(f.no ? { no: f.no } : {}), ...(f.suspect ? { suspect: true } : {}), ...(f.note ? { note: f.note } : {}), ...(f.provenance ? { provenance: f.provenance } : {}), ...(f.condition ? { condition: f.condition } : {}) };
   });
   return {
     dossierId: d.dossierId, kind: d.kind, status: d.status, fields, exchangeRate: d.exchangeRate, exchangeRateDate: d.exchangeRateDate, customsValueVnd: d.customsValueVnd,

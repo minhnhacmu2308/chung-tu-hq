@@ -155,6 +155,9 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     const tk: Record<string, unknown> = {};
     const set = setter(tk, warnings, SIZE_IDA);
     set("TK_ICB", val(p, "MA_LH"));
+    // Chỉ tiêu theo tình huống: chỉ có trên tờ khai khi loại hình phù hợp (mapping `when`).
+    if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""))); // 1.3
+    set("TK_RED", ddmmyyyy(val(p, "HAN_TX"))); // 1.10
     set("TK_CH", firstToken(val(p, "CQHQ")));
     set("TK_CHB", "00"); // đội thủ tục mặc định (format.json) – đổi khi có danh mục A038 chi tiết (D3)
     set("TK_IMY", "000000"); // mã bưu chính: org chưa lưu → mặc định, xem warnings
@@ -201,11 +204,14 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     const pol = split(val(p, "CANG_XEP"));
     setVd("VD_PSC", pol.code);
     setVd("VD_PSN", pol.name);
+    setVd("VD_VSC", val(p, "HO_HIEU")); // 1.31 ô 1
     setVd("VD_VSN", val(p, "PTVC_TEN"));
     setVd("VD_ARR", ddmmyyyy(val(p, "NGAY_DEN")));
     // 1.35: không nhập số lượng container khi đường hàng không (1) hoặc hàng đóng chung container vào kho CFS khai mã 3 (TT39 PL II).
     const mode = firstToken(val(p, "PTVC"));
-    if (p.containers.length && mode !== "1" && mode !== "3") setVd("VD_COC", p.containers.length);
+    // Người khai sửa 1.35 trên tờ khai → dùng số đã sửa.
+    const contCount = val(p, "SL_CONT") ? Math.round(num(val(p, "SL_CONT"))) : p.containers.length;
+    if (contCount && mode !== "1" && mode !== "3") setVd("VD_COC", contCount);
 
     const ktg: Record<string, unknown> = {};
     const setKtg = setter(ktg, warnings, SIZE_IDA);
@@ -234,6 +240,8 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const tk: Record<string, unknown> = {};
   const set = setter(tk, warnings, SIZE_EDA);
   set("TK_ECB", val(p, "MA_LH"));
+  if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""))); // 2.3
+  set("TK_RID", ddmmyyyy(val(p, "HAN_TN"))); // 2.7
   set("TK_CH", firstToken(val(p, "CQHQ")));
   set("TK_CHB", "00"); // bắt buộc (sheet VN_EDA); đội thủ tục mặc định như IDA – đổi khi có danh mục A038 chi tiết (D3)
   set("TK_MTC", firstToken(val(p, "PTVC")));
@@ -257,6 +265,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const psc = split(val(p, "CANG_XEP"));
   set("TK_PSC", psc.code);
   set("TK_PSN", psc.name);
+  set("TK_VSC", val(p, "HO_HIEU")); // 2.30 ô 1
   set("TK_VSN", val(p, "PTVC_TEN"));
   set("TK_SYM", ddmmyyyy(val(p, "NGAY_DI")));
   set("TK_IV1", firstToken(val(p, "HD_PL")) || "A");
@@ -279,9 +288,11 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_REF", val(p, "SO_QLNB"));
   const con: Record<string, unknown> = {};
   const setCon = setter(con, warnings, SIZE_EDA);
-  p.containers.slice(0, 50).forEach((c, i) => setCon(`CON_C${String(i + 1).padStart(2, "0")}`, c));
-  if (p.containers.length > 50) warnings.push(`Có ${p.containers.length} container – chỉ tiêu 2.60 nhận 50, khai phần còn lại qua HYS`);
-  const request = { objVN_EDA: tk, objVN_EDA_CON: p.containers.length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers) };
+  // 2.60: danh sách người khai thấy/sửa trên tờ khai (SO_CONT) ưu tiên; chưa có ô này (dữ liệu cũ) → container của vận đơn.
+  const containers = val(p, "SO_CONT") ? val(p, "SO_CONT").split(/[\s,;]+/).filter(Boolean) : p.containers;
+  containers.slice(0, 50).forEach((c, i) => setCon(`CON_C${String(i + 1).padStart(2, "0")}`, c));
+  if (containers.length > 50) warnings.push(`Có ${containers.length} container – chỉ tiêu 2.60 nhận 50, khai phần còn lại qua HYS`);
+  const request = { objVN_EDA: tk, objVN_EDA_CON: containers.length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers) };
   const parsed = EdaRequestSchema.safeParse(request);
   return { request: (parsed.success ? parsed.data : request) as EdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), blockers };
 }

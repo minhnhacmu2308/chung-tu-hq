@@ -66,5 +66,6 @@ export function toSubmissionView(p: { declarationStatus: DeclarationStatus; hsUn
     messages: [...p.messages].reverse().map(toMessage),
     result: toPartialResult(p.result),
     customsInfo: p.result?.raw?.customsInfo ?? null,
+    rejection: p.result?.raw?.rejection ?? null,
   };
 }

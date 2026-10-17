@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DecimalStringSchema, DirectionSchema, IsoDateTimeSchema } from "../common.js";
 import { CustomsActionSchema, CustomsPhaseSchema, CustomsStageSchema } from "../customs-flow.js";
-import { CustomsInfoSchema, CustomsMessageSchema, CustomsOperationSchema, CustomsResultSchema } from "../dto/customs.js";
+import { CustomsInfoSchema, CustomsRejectionSchema, CustomsMessageSchema, CustomsOperationSchema, CustomsResultSchema } from "../dto/customs.js";
 import { DeclarationStatusSchema } from "../dto/declaration.js";
 
 /** Trạng thái truyền của một tờ khai (ADR 0005): lỗi gửi giữ bước, chỉ bước kế tiếp mới tiến. */
@@ -48,6 +48,8 @@ export const SubmissionViewSchema = z.object({
   result: CustomsResultSchema.partial().nullable(),
   /** Thông tin Hải quan trả về (số tờ khai, đăng ký, thuế, tỷ giá, trị giá từng dòng, chỉ thị, cấp phép); null khi chưa có phản hồi. */
   customsInfo: CustomsInfoSchema.nullable().default(null),
+  /** Lỗi Hải quan của lần gửi bị từ chối gần nhất – màn Review gắn vào đúng ô chỉ tiêu. */
+  rejection: CustomsRejectionSchema.nullable().default(null),
 });
 export type SubmissionView = z.infer<typeof SubmissionViewSchema>;
 

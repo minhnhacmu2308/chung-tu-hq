@@ -20,7 +20,7 @@ export type BuildInput = {
 
 export { fieldDef, lengthIssue } from "./field-length.js";
 
-export type BuiltDeclaration = { kind: "IDA" | "EDA"; fields: Record<string, StoredField>; adjustments: Adjustment[]; valuation: Valuation; taxes: TaxResult; notes: string[]; suspectCount: number };
+export type BuiltDeclaration = { kind: "IDA" | "EDA"; fields: Record<string, StoredField>; /** Chỉ tiêu theo tình huống không áp dụng cho lô này (when = false). */ hidden: string[]; adjustments: Adjustment[]; valuation: Valuation; taxes: TaxResult; notes: string[]; suspectCount: number };
 
 export { mappingsFor } from "./mapping/registry.js";
 
@@ -37,15 +37,20 @@ export function buildDeclaration(input: BuildInput): BuiltDeclaration {
   const lines = input.items.flatMap((it) => (it.lineNo === undefined ? [] : [{ lineNo: it.lineNo, hsConfirmed: it.hsConfirmed ?? null }]));
   const ctx: MappingInput = { shipment: input.shipment, dossier: input.dossier, org: input.org, now: input.now, adjustments: valuation.adjustments, valuation, exchange: input.exchange, profile: input.profile ?? {}, overrides: input.overrides ?? {}, lines };
   const fields: Record<string, StoredField> = {};
+  const hidden: string[] = [];
   for (const m of mappingsFor(kind)) {
+    if (m.when && !m.when.test(ctx)) {
+      hidden.push(m.code);
+      continue;
+    }
     const v = evaluateMapping(m, ctx.overrides[m.code], ctx);
     const tooLong = v.value === null ? undefined : lengthIssue(kind, m.code, v.value);
     const suspect = v.suspect === true || (m.required && v.value === null) || tooLong !== undefined;
     const note = [v.note ?? (m.required && v.value === null ? "Chỉ tiêu bắt buộc chưa có dữ liệu" : undefined), tooLong].filter(Boolean).join(". ") || undefined;
     fields[m.code] = {
       no: m.no ?? "", label: m.label, section: m.section, value: v.value ?? "", source: v.source,
-      ...(suspect ? { suspect: true } : {}), ...(note ? { note } : {}), provenance: v.provenance, ...(v.blocking ? { blocking: true as const } : {}),
+      ...(suspect ? { suspect: true } : {}), ...(note ? { note } : {}), provenance: v.provenance, ...(v.blocking ? { blocking: true as const } : {}), ...(m.when ? { condition: m.when.label } : {}),
     };
   }
-  return { kind, fields, adjustments: valuation.adjustments, valuation, taxes, notes: [...plan.notes, ...valuation.warnings], suspectCount: Object.values(fields).filter((f) => f.suspect).length };
+  return { kind, fields, hidden, adjustments: valuation.adjustments, valuation, taxes, notes: [...plan.notes, ...valuation.warnings], suspectCount: Object.values(fields).filter((f) => f.suspect).length };
 }

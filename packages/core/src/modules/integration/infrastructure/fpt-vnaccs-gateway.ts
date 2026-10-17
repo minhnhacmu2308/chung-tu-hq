@@ -44,6 +44,7 @@ const toErrors = (env: { errorList?: { errorCode?: string | null | undefined; in
         ...(e.indexCode ? { field: e.indexCode } : {}),
         message: `${(e.errorContent ?? "Lỗi FPT").trim()}${e.rowPosition && e.rowPosition !== "0000" ? ` (dòng hàng ${Number(e.rowPosition)})` : ""}`,
         ...(e.proposedSolution ? { solution: e.proposedSolution.trim() } : {}),
+        ...(e.rowPosition && Number(e.rowPosition) > 0 ? { line: Number(e.rowPosition) } : {}),
       }))
     : undefined;
 const channelOf = (luong: unknown): "GREEN" | "YELLOW" | "RED" | undefined => {

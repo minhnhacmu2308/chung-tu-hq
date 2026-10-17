@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Shipment } from "@kb/contracts";
 import { planAdjustments } from "../adjustments.js";
 import { buildDeclaration } from "../build.js";
+import { missingRequiredFields } from "../guards.js";
 import { ratesFor } from "../rates.js";
 import { DOSSIER, hansol, ORG } from "../test/shipment.js";
 
@@ -147,7 +148,8 @@ describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)",
     expect(cfr.adjustments).toEqual([]);
     expect(cfr.fields["TG_TT"]).toMatchObject({ value: "20850 USD", suspect: true, note: expect.stringMatching(/cần số cước/) });
     const fob = build(hansol((s) => void (s.invoice.incoterm = { value: "FOB", sources: [], status: "SINGLE_SOURCE" })), XK);
-    expect(fob.fields["TG_TT"]).toMatchObject({ value: "", note: expect.stringMatching(/không khai chỉ tiêu 2.40/) });
+    expect(fob.fields["TG_TT"]).toBeUndefined(); // FOB: chỉ tiêu 2.40 không áp dụng → không có ô
+    expect(fob.hidden).toContain("TG_TT");
   });
 
   it("EDA 2.43 người nộp thuế mặc định 1, theo Mặc định khai báo nếu có; 2.80 để người khai nhập", () => {
@@ -155,5 +157,49 @@ describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)",
     const withProfile = buildDeclaration({ shipment: hansol(), dossier: XK, org: ORG, items: ITEMS, now: NOW, exchange: EX, profile: { NGUOI_NT: "2 – Đại lý hải quan" } });
     expect(withProfile.fields["NGUOI_NT"]?.value).toBe("2 – Đại lý hải quan");
     expect(build(hansol(), XK).fields["VBPQ"]).toMatchObject({ no: "2.80", value: "" });
+  });
+});
+
+describe("chỉ tiêu theo tình huống (bật/tắt theo loại hình, phương thức vận chuyển, điều kiện giá)", () => {
+  const EX = { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] };
+  const build = (dossier: typeof DOSSIER, shipment = hansol()) => buildDeclaration({ shipment, dossier, org: ORG, items: ITEMS, now: NOW, exchange: EX });
+  const codes = (b: ReturnType<typeof build>) => Object.keys(b.fields);
+
+  it("A11 đường biển container: không có 1.3/1.10; có hô hiệu 1.31 và số lượng container 1.35 kèm lý do hiện", () => {
+    const b = build(DOSSIER);
+    expect(codes(b)).not.toContain("HAN_TX");
+    expect(codes(b)).not.toContain("TNTX_TK");
+    expect(b.hidden).toEqual(expect.arrayContaining(["HAN_TX", "TNTX_TK"]));
+    expect(b.fields["SL_CONT"]).toMatchObject({ no: "1.35", value: "1", condition: expect.stringMatching(/container/) });
+    expect(b.fields["HO_HIEU"]).toMatchObject({ no: "1.31", value: "", condition: expect.stringMatching(/đường biển/) });
+    expect(b.fields["HO_HIEU"]?.suspect).toBeUndefined();
+  });
+
+  it("tạm nhập G12 → 1.10 bắt buộc (thiếu → nghi ngờ); tái nhập G51 → 1.3", () => {
+    expect(build({ ...DOSSIER, typeCode: "G12" }).fields["HAN_TX"]).toMatchObject({ no: "1.10", suspect: true, condition: expect.stringMatching(/tạm nhập/) });
+    const g51 = build({ ...DOSSIER, typeCode: "G51" });
+    expect(g51.fields["TNTX_TK"]).toMatchObject({ no: "1.3", suspect: true });
+    expect(codes(g51)).not.toContain("HAN_TX");
+  });
+
+  it("chặn phê duyệt chỉ xét chỉ tiêu tình huống khi có trên tờ khai: A11 không đòi 1.10; G12 đòi 1.10", () => {
+    expect(missingRequiredFields("IDA", build(DOSSIER).fields).map((m) => m.code)).not.toContain("HAN_TX");
+    expect(missingRequiredFields("IDA", build({ ...DOSSIER, typeCode: "G12" }).fields).map((m) => m.code)).toContain("HAN_TX");
+  });
+
+  it("đường hàng không → không có hô hiệu, số lượng container", () => {
+    const air = build({ ...DOSSIER, transportMode: "AIR" }, hansol((s) => void (s.transport.containers = [])));
+    expect(codes(air)).not.toContain("HO_HIEU");
+    expect(codes(air)).not.toContain("SL_CONT");
+  });
+
+  it("EDA: tái xuất G21 → 2.3; tạm xuất G61 → 2.7; container → 2.60; FOB → không có 2.40", () => {
+    const XK = { ...DOSSIER, direction: "XK" as const };
+    expect(build({ ...XK, typeCode: "G21" }).fields["TNTX_TK"]).toMatchObject({ no: "2.3", suspect: true });
+    expect(build({ ...XK, typeCode: "G61" }).fields["HAN_TN"]).toMatchObject({ no: "2.7", suspect: true });
+    const b11 = build({ ...XK, typeCode: "B11" }, hansol((s) => void (s.invoice.incoterm = { value: "FOB", sources: [], status: "SINGLE_SOURCE" })));
+    expect(b11.fields["SO_CONT"]).toMatchObject({ no: "2.60", value: "SITU2246781" });
+    expect(codes(b11)).not.toContain("TG_TT");
+    expect(codes(b11)).not.toContain("HAN_TN");
   });
 });

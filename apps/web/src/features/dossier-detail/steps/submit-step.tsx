@@ -446,6 +446,20 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         </Alert>
       )}
 
+      {s.rejection && (
+        <Alert
+          tone="danger"
+          title={`Hải quan từ chối ${s.rejection.operation} – ${s.rejection.errors.length} lỗi`}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => goTo("review")}>
+              Xem lỗi trên tờ khai
+            </Button>
+          }
+        >
+          Lỗi được gắn vào đúng ô chỉ tiêu ở bước Review tờ khai. Mở lại tờ khai, sửa, phê duyệt lại rồi gửi lại {s.rejection.operation}.
+        </Alert>
+      )}
+
       <Grid cols={{ base: 1, lg: 3 }} gap="lg">
         <Card className="cq-lg:col-span-2">
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">

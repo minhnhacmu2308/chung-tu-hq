@@ -96,6 +96,13 @@ export const CustomsInfoSchema = z.object({
   chiefName: z.string().optional(),
 });
 export type CustomsInfo = z.infer<typeof CustomsInfoSchema>;
+
+/** Một lỗi Hải quan/FPT trả về: `field` = mã chỉ tiêu lỗi (indexCode, ví dụ "EPN"), `line` = dòng hàng (rowPosition). */
+export const CustomsErrorSchema = z.object({ code: z.string(), message: z.string(), solution: z.string().optional(), field: z.string().optional(), line: z.number().int().positive().optional() });
+/** Lần gửi gần nhất bị từ chối (còn hiệu lực tới khi chính nghiệp vụ đó gửi lại thành công). */
+export const CustomsRejectionSchema = z.object({ operation: CustomsOperationSchema, at: IsoDateTimeSchema, errors: z.array(CustomsErrorSchema) });
+export type CustomsError = z.infer<typeof CustomsErrorSchema>;
+export type CustomsRejection = z.infer<typeof CustomsRejectionSchema>;
 export type CustomsInfoTax = z.infer<typeof CustomsInfoTaxSchema>;
 export type CustomsInfoItem = z.infer<typeof CustomsInfoItemSchema>;
 export type CustomsDirective = z.infer<typeof CustomsDirectiveSchema>;

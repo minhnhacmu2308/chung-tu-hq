@@ -39,7 +39,7 @@ export interface CustomsUow {
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T>;
 }
 
-export type GatewayError = { code: string; field?: string; message: string; solution?: string };
+export type GatewayError = { code: string; field?: string; message: string; solution?: string; /** Dòng hàng lỗi (rowPosition). */ line?: number };
 export type GatewayStatus = { declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED"; status: string; cleared: boolean; rejected?: boolean; customsTaxVnd?: string; directives?: string[]; info?: CustomsInfo };
 
 /** Cổng Hải quan (spec §4.7). Lỗi tạm (mạng/5xx) → throw; lỗi nghiệp vụ FPT → `errors`. */

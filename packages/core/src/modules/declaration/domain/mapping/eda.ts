@@ -4,6 +4,7 @@ import { EDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
 import { incotermCode, planExportAdjustments } from "../adjustments.js";
 import { incotermField, invoiceKind, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
+import { BY_WATER, IN_CONTAINER, RE_EXPORT, TEMP_EXPORT } from "./conditions.js";
 import { profileSource, SRC } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
@@ -40,6 +41,8 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   } },
   { code: "CQHQ", no: N.CQHQ, section: "GENERAL", label: "Mã cơ quan Hải quan", required: true, from: (i) => ({ value: i.dossier.customsOfficeName ? `${i.dossier.customsOfficeCode} – ${i.dossier.customsOfficeName}` : i.dossier.customsOfficeCode, source: "DOSSIER" }) },
   { code: "NGAY_DK", no: N.NGAY_DK, section: "GENERAL", label: "Ngày khai báo dự kiến", required: false, from: (i) => ({ value: vnDate(i.now), source: "SYSTEM" }) },
+  { code: "TNTX_TK", no: N.TNTX_TK, section: "GENERAL", label: "Số tờ khai tạm nhập tương ứng", required: true, when: RE_EXPORT, from: () => ({ value: null, source: "DOSSIER", note: "Nhập số tờ khai tạm nhập (12 số) của lô hàng tái xuất" }) },
+  { code: "HAN_TN", no: N.HAN_TN, section: "GENERAL", label: "Thời hạn tái nhập khẩu", required: true, when: TEMP_EXPORT, from: () => ({ value: null, source: "DOSSIER", note: "Nhập ngày hết hạn hàng tạm xuất phải tái nhập theo quy định" }) },
 
   { code: "NXK_MST", no: N.NXK_MST, section: "PARTIES", label: "Mã số thuế người xuất khẩu", required: true, from: (i) => ({ value: i.org.taxCode, source: "ACCOUNT" }) },
   { code: "NXK_TEN", no: N.NXK_TEN, section: "PARTIES", label: "Tên người xuất khẩu", required: true, from: (i) => ({ value: i.org.name, source: "ACCOUNT" }) },
@@ -77,6 +80,12 @@ export const EDA_MAPPINGS: FieldMapping[] = [
     const v = pol.value ? port(pol.value, r, fromSourced(pol, "BILL_OF_LADING").source) : missing("BILL_OF_LADING", "Chọn địa điểm xếp hàng tại Việt Nam (cảng, ICD, cửa khẩu, sân bay) – bắt buộc (chỉ tiêu 2.29)");
     return r && !isVn(r.code) ? { ...v, suspect: true, note: "Địa điểm xếp hàng của tờ khai xuất phải là địa điểm tại Việt Nam" } : v;
   } },
+  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, when: BY_WATER, from: () => ({ value: null, source: "BILL_OF_LADING", note: "Ô 1 chỉ tiêu 2.30: hô hiệu tàu; tàu chưa đăng ký trên hệ thống nhập 9999. Bỏ trống nếu hệ thống tự nhận theo tên tàu" }) },
+  // 2.60: tối đa 50 số container (phần dư khai qua HYS).
+  { code: "SO_CONT", no: N.SO_CONT, section: "TRANSPORT", label: "Số container", required: false, when: IN_CONTAINER, from: (i) => {
+    const c = i.shipment.transport.containers.map((x) => x.no);
+    return c.length ? { value: c.join(", "), source: "BILL_OF_LADING" } : missing("BILL_OF_LADING", "Chưa có số container – nhập khi hàng đóng container");
+  } },
   { code: "PTVC_TEN", no: N.PTVC_TEN, section: "TRANSPORT", label: "Tên phương tiện vận chuyển", required: false, from: (i) => {
     const v = fromSourced(i.shipment.transport.vessel, "BILL_OF_LADING");
     return v.value === null ? { value: null, source: "BILL_OF_LADING", note: "Bổ sung khi có booking" } : v;
@@ -105,7 +114,7 @@ export const EDA_MAPPINGS: FieldMapping[] = [
     return rate ? { value: plainNumber(rate), source: "SYSTEM" } : missing("SYSTEM", `Chưa có tỷ giá tính thuế cho ${cur}`);
   } },
   { code: "GP", no: N.GP, section: "VALUE", label: "Giấy phép xuất khẩu", required: false, from: (i) => permitsField(i, "EDA") },
-  { code: "TG_TT", no: N.TG_TT, section: "VALUE", label: "Trị giá tính thuế", required: false, from: exportCustomsValue },
+  { code: "TG_TT", no: N.TG_TT, section: "VALUE", label: "Trị giá tính thuế", required: false, when: { label: "Điều kiện giá khác FOB/DAP/DAF hoặc không có hóa đơn", test: (i) => !NO_240.has(incotermCode(i.shipment.invoice.incoterm.value)) || i.shipment.documents.every((d) => d.kind !== "INVOICE") }, from: exportCustomsValue },
   { code: "NGUOI_NT", no: N.NGUOI_NT, section: "GENERAL", label: "Người nộp thuế", required: false, options: { sources: [profileSource("NGUOI_NT")], allowFixed: true }, from: (i) => profileOr(i, "NGUOI_NT", fixed("1 – Người xuất khẩu")) },
   // 2.80 khai theo từng dòng hàng (HAG_OL1..5). Chứng từ không cho biết mặt hàng thuộc quản lý chuyên ngành → người khai nhập.
   { code: "VBPQ", no: N.VBPQ, section: "VALUE", label: "Mã văn bản pháp luật khác (theo dòng hàng)", required: false, from: () => ({ value: null, source: "DOSSIER", note: "Khai khi hàng xuất khẩu thuộc quản lý chuyên ngành. Mã áp cho mọi dòng ghi cách nhau dấu cách; riêng từng dòng ghi “số dòng: mã”, các phần cách nhau dấu “;” (ví dụ “XK; 2: GP KD”). Tối đa 5 mã mỗi dòng" }) },

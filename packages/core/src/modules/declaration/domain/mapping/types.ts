@@ -39,6 +39,11 @@ export type FieldMapping = {
   from: (i: MappingInput) => MappedValue;
   /** Doanh nghiệp được chọn nguồn (theo thứ tự) trong danh sách này hoặc đặt giá trị cố định. Không có = không ghi đè được. */
   options?: { sources: SourceOption[]; allowFixed: boolean };
+  /**
+   * Chỉ tiêu "theo tình huống" (Phụ lục II): chỉ có trên tờ khai khi `test` đúng; `label` giải thích cho người khai vì sao chỉ tiêu xuất hiện.
+   * Không có `when` = luôn có.
+   */
+  when?: { label: string; test: (i: MappingInput) => boolean };
 };
 
 const SOURCE_BY_KIND: Record<DocKind, ValueSource> = {

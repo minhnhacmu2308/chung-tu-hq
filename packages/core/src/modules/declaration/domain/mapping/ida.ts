@@ -5,6 +5,7 @@ import { FREIGHT_NOT_INCLUDED, incotermCode } from "../adjustments.js";
 import { IDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
 import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
+import { BY_WATER, IN_CONTAINER, RE_IMPORT, TEMP_IMPORT } from "./conditions.js";
 import { profileSource, SRC, warehouseFromAn } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
@@ -53,6 +54,8 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   } },
   { code: "CQHQ", no: N.CQHQ, section: "GENERAL", label: "Mã cơ quan Hải quan", required: true, from: (i) => ({ value: i.dossier.customsOfficeName ? `${i.dossier.customsOfficeCode} – ${i.dossier.customsOfficeName}` : i.dossier.customsOfficeCode, source: "DOSSIER" }) },
   { code: "NGAY_DK", no: N.NGAY_DK, section: "GENERAL", label: "Ngày khai báo dự kiến", required: false, from: (i) => ({ value: vnDate(i.now), source: "SYSTEM" }) },
+  { code: "TNTX_TK", no: N.TNTX_TK, section: "GENERAL", label: "Số tờ khai tạm xuất tương ứng", required: true, when: RE_IMPORT, from: () => ({ value: null, source: "DOSSIER", note: "Nhập số tờ khai tạm xuất (12 số) của lô hàng tái nhập; tờ khai tạm xuất phải còn hiệu lực" }) },
+  { code: "HAN_TX", no: N.HAN_TX, section: "GENERAL", label: "Thời hạn tái xuất khẩu", required: true, when: TEMP_IMPORT, from: () => ({ value: null, source: "DOSSIER", note: "Nhập ngày hết hạn hàng tạm nhập được lưu tại Việt Nam theo quy định của loại hình" }) },
 
   { code: "NNK_MST", no: N.NNK_MST, section: "PARTIES", label: "Mã số thuế người nhập khẩu", required: true, from: (i) => ({ value: i.org.taxCode, source: "ACCOUNT" }) },
   { code: "NNK_TEN", no: N.NNK_TEN, section: "PARTIES", label: "Tên người nhập khẩu", required: true, from: (i) => ({ value: i.org.name, source: "ACCOUNT" }) },
@@ -82,6 +85,12 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Mã địa điểm xếp hàng", required: true, from: (i) => {
     const pol = i.shipment.transport.portOfLoading;
     return port(pol.value, resolvePort(pol.value), fromSourced(pol, "BILL_OF_LADING").source);
+  } },
+  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, when: BY_WATER, from: () => ({ value: null, source: "BILL_OF_LADING", note: "Ô 1 chỉ tiêu 1.31: hô hiệu tàu; tàu chưa đăng ký trên hệ thống nhập 9999. Bỏ trống nếu hệ thống tự nhận theo tên tàu" }) },
+  // 1.35: hệ thống tự xuất nếu đã đăng ký; không khai khi đường hàng không / hàng rời / hàng CFS (mã 3).
+  { code: "SL_CONT", no: N.SL_CONT, section: "TRANSPORT", label: "Số lượng container", required: false, when: IN_CONTAINER, from: (i) => {
+    const n = i.shipment.transport.containers.length;
+    return n ? { value: String(n), source: "BILL_OF_LADING" } : missing("BILL_OF_LADING", "Vận đơn chưa có số container");
   } },
   { code: "PTVC_TEN", no: N.PTVC_TEN, section: "TRANSPORT", label: "Tên phương tiện vận chuyển", required: true, from: (i) => {
     const v = fromSourced(i.shipment.transport.vessel, "BILL_OF_LADING");

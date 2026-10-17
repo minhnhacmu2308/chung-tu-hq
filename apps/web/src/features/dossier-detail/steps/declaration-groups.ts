@@ -29,7 +29,7 @@ const GROUP_INFO: Record<FieldGroupId, { title: string; description?: string }> 
 /** Nhãn và màu cho từng vai trò (dùng cho huy hiệu trên ô chỉ tiêu và chú thích đầu tab). */
 export const ROLE_INFO: Record<DeclarationFieldRole, { label: string; tone: "primary" | "info" | "neutral" | "success"; meaning: string }> = {
   REQUIRED: { label: "Bắt buộc", tone: "primary", meaning: "Phải có giá trị thì Hải quan mới nhận tờ khai" },
-  CONDITIONAL: { label: "Theo tình huống", tone: "info", meaning: "Bắt buộc khi lô hàng rơi vào trường hợp Phụ lục II quy định" },
+  CONDITIONAL: { label: "Theo tình huống", tone: "info", meaning: "Bắt buộc khi lô hàng rơi vào trường hợp Phụ lục II quy định; ô chỉ hiện khi áp dụng, lý do ghi dưới ô" },
   OPTIONAL: { label: "Không bắt buộc", tone: "neutral", meaning: "Khai khi có thông tin" },
   ASSIST: { label: "VNACCS tự xác định", tone: "neutral", meaning: "Bỏ trống thì hệ thống Hải quan tự xác định; chỉ khai khi muốn chỉ định" },
   CUSTOMS: { label: "Hải quan trả về", tone: "success", meaning: "Người khai không nhập – Hải quan cấp sau khi khai báo" },

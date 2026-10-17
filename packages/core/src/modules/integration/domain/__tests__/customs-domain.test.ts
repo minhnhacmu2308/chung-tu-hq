@@ -169,3 +169,21 @@ describe("declaration-to-fpt – chỉ tiêu bổ sung (1.38/2.33, 1.50, 2.40, 2
     expect(fob.objVN_EDA_HANG![0]!["haG_OL1"]).toBeUndefined();
   });
 });
+
+describe("declaration-to-fpt – chỉ tiêu theo tình huống", () => {
+  type Req = { objVN_IDA?: Record<string, unknown>; objVN_IDA_VANDON?: Record<string, unknown>; objVN_EDA?: Record<string, unknown>; objVN_EDA_CON?: Record<string, unknown> | null };
+  it("IDA: 1.3 → TK_TDN, 1.10 → TK_RED, hô hiệu → VD_VSC, 1.35 đã sửa → VD_COC", () => {
+    const r = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, TNTX_TK: { value: "305123456780" }, HAN_TX: { value: "2027-01-31" }, HO_HIEU: { value: "3WAB9" }, SL_CONT: { value: "2" } } }).request as Req;
+    expect(r.objVN_IDA).toMatchObject({ tK_TDN: 305123456780, tK_RED: "31/01/2027" });
+    expect(r.objVN_IDA_VANDON).toMatchObject({ vD_VSC: "3WAB9", vD_COC: 2 });
+    const plain = buildFptRequest(PAYLOAD).request as Req;
+    expect(plain.objVN_IDA!["tK_TDN"]).toBeUndefined();
+    expect(plain.objVN_IDA_VANDON!["vD_COC"]).toBe(1);
+  });
+  it("EDA: 2.3 → TK_TDN, 2.7 → TK_RID, hô hiệu → TK_VSC, 2.60 đã sửa → CON_C01..", () => {
+    const EDA = { ...PAYLOAD, kind: "EDA" as const, direction: "XK" as const, fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, NGAY_DI: { value: "2026-10-20" }, VBPQ: { value: "" } } };
+    const r = buildFptRequest({ ...EDA, fields: { ...EDA.fields, TNTX_TK: { value: "105000000010" }, HAN_TN: { value: "2027-03-01" }, HO_HIEU: { value: "9999" }, SO_CONT: { value: "AAAU1234567, BBBU7654321" } } }).request as Req;
+    expect(r.objVN_EDA).toMatchObject({ tK_TDN: 105000000010, tK_RID: "01/03/2027", tK_VSC: "9999" });
+    expect(r.objVN_EDA_CON).toMatchObject({ coN_C01: "AAAU1234567", coN_C02: "BBBU7654321" });
+  });
+});

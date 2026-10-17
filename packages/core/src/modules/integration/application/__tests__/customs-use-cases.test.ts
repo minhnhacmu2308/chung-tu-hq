@@ -163,6 +163,9 @@ describe("customs-send / poll", () => {
     let v = unwrap(await getSubmission(deps, declarant, D));
     // Khai tạm xong: không tự khai chính thức – chờ người khai xem số tờ khai + thuế dự kiến.
     expect(v).toMatchObject({ stage: "PRE_DECLARED", nextOp: "IDC", queryOp: "IID", inProgress: false });
+    // Hải quan trả về sau khai tạm: số tờ khai, Chi cục, tỷ giá, thuế; thời điểm nhận theo clock hệ thống.
+    expect(v.customsInfo).toMatchObject({ declarationNo: gateway.declarationNoFor(D, "IDA"), customsOfficeName: "CCHQ mô phỏng", exchangeRates: [{ currency: "USD", rate: "26150" }], totalTaxVnd: "0", receivedAt: "2026-10-14T03:00:00.000Z" });
+    expect(v.customsInfo?.registeredDate).toBeUndefined();
     expect(v.pipeline.slice(0, 3).map((p) => `${p.op}:${p.status}:${p.enabled}`)).toEqual(["IDA:OK:false", "IDB:NOT_SENT:true", "IDC:NOT_SENT:true"]);
     expect(uow.data.outbox.map((o) => o.operation)).toEqual(["IDA"]);
     expect(unwrap(await performOperation(deps, declarant, D, "IDC"))).toMatchObject({ sent: true });
@@ -170,6 +173,11 @@ describe("customs-send / poll", () => {
     v = unwrap(await getSubmission(deps, declarant, D));
     expect(v.result).toMatchObject({ declarationNo: gateway.declarationNoFor(D, "IDA"), channel: gateway.channelFor(D), clearanceStatus: "CLEARED" });
     expect(v).toMatchObject({ stage: "CLEARED", inProgress: false });
+    // Gộp dần: khai chính thức thêm ngày đăng ký + mã phân loại kiểm tra, thông quan thêm ngày cấp phép; số tờ khai, tỷ giá từ IDA vẫn giữ.
+    expect(v.customsInfo).toMatchObject({
+      declarationNo: gateway.declarationNoFor(D, "IDA"), exchangeRates: [{ currency: "USD", rate: "26150" }],
+      registeredDate: "2026-10-14", inspectionCode: { GREEN: "1", YELLOW: "2", RED: "3" }[gateway.channelFor(D)], permitDate: "2026-10-14",
+    });
     expect(v.messages.map((m) => `${m.operation}/${m.direction}/${m.result}`)).toContain("IDC/IN/OK");
     expect(v.messages[v.messages.length - 1]!.payloadPreview).not.toContain("0316789012"); // MST đã che
     expect(uow.data.outbox.map((o) => `${o.operation}:${o.status}`)).toEqual(["IDA:SENT", "IDC:SENT"]);
@@ -855,5 +863,29 @@ describe("performOperation – luồng nghiệp vụ", () => {
     expect(v.pipeline.find((p) => p.op === "IDB")).toMatchObject({ status: "ERROR", summary: expect.stringMatching(/NOT_SUPPORTED/) });
     expect(decls.reopened).toEqual([]);
     expect(uow.data.results[0]!.state).toBe("SEND_FAILED");
+  });
+});
+
+describe("rejection – lỗi Hải quan gắn vào chỉ tiêu", () => {
+  it("IDA bị từ chối → view.rejection có mã chỉ tiêu + dòng hàng; gửi lại thành công → xóa", async () => {
+    let calls = 0;
+    const real = gateway.preDeclare.bind(gateway);
+    gateway.preDeclare = async (orgId, msg, key) => {
+      calls += 1;
+      if (calls === 1) return { externalId: `fpt-${hashId(D)}`, errors: [{ code: "MOCK-REQ", field: "EPA", message: "Chưa nhập địa chỉ người xuất khẩu", solution: "Nhập địa chỉ" }, { code: "E1004", field: "CMD", message: "Mã HS không tồn tại", line: 2 }] };
+      return real(orgId, msg, key);
+    };
+    // Lần khai bị từ chối: Hải quan chưa ghi nhận tờ khai (tra cứu không có số) → được gửi lại.
+    const realQuery = gateway.queryStatus.bind(gateway);
+    gateway.queryStatus = async (o, e, d) => (calls < 2 ? { status: "Chưa ghi nhận", cleared: false } : realQuery(o, e, d));
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    let v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.rejection).toMatchObject({ operation: "IDA", at: "2026-10-14T03:00:00.000Z", errors: [{ code: "MOCK-REQ", field: "EPA", solution: "Nhập địa chỉ" }, { code: "E1004", field: "CMD", line: 2 }] });
+    unwrap(await resendOperation(deps, declarant, D, "IDA"));
+    await drain();
+    v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.rejection).toBeNull();
+    expect(v.stage).toBe("PRE_DECLARED");
   });
 });

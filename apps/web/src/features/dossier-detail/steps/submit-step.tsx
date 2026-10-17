@@ -16,10 +16,11 @@ import {
   customsKeys, getSubmission, listCertificates, performOperation, resendOperation, startPostAmendment, submitDeclaration,
   type PipelineRow, type PipelineStatus, type SubmissionView,
 } from "@/api/customs";
-import { declarationKeys } from "@/api/declaration";
+import { declarationKeys, getDeclarationView } from "@/api/declaration";
 import { formatDate, formatDateTime, formatRelative, formatTime, formatVnd } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
-import type { CustomsChannel } from "@/mocks/types";
+import type { CustomsChannel, Declaration } from "@/mocks/types";
+import { CustomsInfoPanel, type CustomsEstimate } from "./customs-info-panel";
 import { errorMessage, KeyValue, StepError, StepLoading } from "./declaration-parts";
 import type { StepProps } from "./types";
 
@@ -312,7 +313,18 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
   );
 }
 
+/** Số ứng dụng ước tính lúc dựng tờ khai (tờ khai xuất chưa ước tính thuế). */
+function estimateOf(decl: Declaration | null | undefined): CustomsEstimate | undefined {
+  if (!decl) return undefined;
+  return {
+    customsValueVnd: decl.customsValueVnd,
+    exchangeRate: decl.exchangeRate,
+    ...(decl.kind === "IDA" ? { taxVnd: String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd)) } : {}),
+  };
+}
+
 export function SubmitStep({ dossier, goTo }: StepProps) {
+  const declQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const qc = useQueryClient();
   const [certId, setCertId] = useState<string>("");
   const [busyOp, setBusyOp] = useState<CustomsOperation | null>(null);
@@ -434,6 +446,20 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         </Alert>
       )}
 
+      {s.rejection && (
+        <Alert
+          tone="danger"
+          title={`Hải quan từ chối ${s.rejection.operation} – ${s.rejection.errors.length} lỗi`}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => goTo("review")}>
+              Xem lỗi trên tờ khai
+            </Button>
+          }
+        >
+          Lỗi được gắn vào đúng ô chỉ tiêu ở bước Review tờ khai. Mở lại tờ khai, sửa, phê duyệt lại rồi gửi lại {s.rejection.operation}.
+        </Alert>
+      )}
+
       <Grid cols={{ base: 1, lg: 3 }} gap="lg">
         <Card className="cq-lg:col-span-2">
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
@@ -511,6 +537,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
 
         <ResultCard s={s} />
       </Grid>
+
+      {s.customsInfo && <CustomsInfoPanel kind={dossier.direction === "NK" ? "IDA" : "EDA"} info={s.customsInfo} estimate={estimateOf(declQ.data?.declaration)} />}
 
       <MessageLog messages={s.messages} />
 

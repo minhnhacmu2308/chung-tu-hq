@@ -89,7 +89,10 @@ describe("FptVnaccsGateway (phản hồi thật của FPT)", () => {
 
   it("EDA thành công → externalId = số tờ khai trong objEDA[0]", async () => {
     const { g } = gateway({ "/api/EDA": () => ok(SUCCESS) });
-    expect(await g.preDeclare("org1", { kind: "EDA", request })).toEqual({ externalId: "309062686130", declarationNo: "309062686130" });
+    const res = await g.preDeclare("org1", { kind: "EDA", request });
+    expect(res).toMatchObject({ externalId: "309062686130", declarationNo: "309062686130" });
+    // Thông tin Hải quan trả về đọc từ cùng phản hồi: HS đại diện, tên Chi cục, tỷ giá, trị giá từng dòng.
+    expect("info" in res ? res.info : undefined).toMatchObject({ declarationNo: "309062686130", representativeHs: "5512", customsOfficeName: "CCHQTN", exchangeRates: [{ currency: "USD", rate: "25720" }], items: [{ lineNo: 1, hsCode: "55121900" }] });
   });
   it("EDA lỗi S1139 → errors kèm chỉ tiêu và cách khắc phục, bỏ \\r\\n", async () => {
     const { g } = gateway({ "/api/EDA": () => ok(PAST_DEPARTURE) });
@@ -101,12 +104,12 @@ describe("FptVnaccsGateway (phản hồi thật của FPT)", () => {
     const declared = structuredClone(SUCCESS) as { objEDA: { objVN_EDA_TRANGTHAI: Record<string, unknown> }[] };
     declared.objEDA[0]!.objVN_EDA_TRANGTHAI["tK_LUONG"] = "2";
     const { g, calls } = gateway({ "/api/EDC": () => ok(declared) });
-    expect(await g.declare("org1", { kind: "EDC", externalId: "309062686130" })).toEqual({ accepted: true, channel: "YELLOW" });
+    expect(await g.declare("org1", { kind: "EDC", externalId: "309062686130" })).toMatchObject({ accepted: true, channel: "YELLOW", info: { declarationNo: "309062686130" } });
     expect(calls.at(-1)!.body["tK_ECN"]).toBe(309062686130);
   });
   it("IEX: chưa thông quan → nhãn trạng thái tiếng Việt, không cleared", async () => {
     const { g } = gateway({ "/api/IEX": () => ok(SUCCESS) });
-    expect(await g.queryStatus("org1", "309062686130")).toEqual({ status: "Khai báo tạm (IDA)", cleared: false, declarationNo: "309062686130" });
+    expect(await g.queryStatus("org1", "309062686130")).toMatchObject({ status: "Khai báo tạm (IDA)", cleared: false, declarationNo: "309062686130", info: { declarationNo: "309062686130" } });
   });
   it("chưa có tài khoản VNACCS → INTEGRATION_NOT_CONFIGURED, không gọi mạng", async () => {
     const f = fakeFetch({});

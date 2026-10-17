@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { Shipment } from "@kb/contracts";
 import { planAdjustments } from "../adjustments.js";
 import { buildDeclaration } from "../build.js";
+import { missingRequiredFields } from "../guards.js";
 import { ratesFor } from "../rates.js";
 import { DOSSIER, hansol, ORG } from "../test/shipment.js";
 
@@ -78,7 +80,7 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(built.taxes.importDutyVnd).toBe("2974906");
     // CV 2061: không tự điền MO – để trống, nghi ngờ và chặn phê duyệt đến khi người khai chọn MO/CU.
     expect(f("VBPQ")).toMatchObject({ no: "1.37", value: "", suspect: true, blocking: true, note: expect.stringMatching(/MO.*CU.*CV 2061/) });
-    expect(built.suspectCount).toBe(5); // TRONG_LUONG, KHO, PT_TT, VBPQ, GHI_CHU (ngày C/O)
+    expect(built.suspectCount).toBe(6); // TRONG_LUONG, KHO, PT_TT, VBPQ, GHI_CHU (ngày C/O), CT_TG (thiếu ngày vận đơn)
   });
   it("VBPQ xét HS đã xác nhận trước HS trên invoice: xác nhận 3926 cho mọi dòng → không cần MO/CU", () => {
     const items = ITEMS.map((it, k) => ({ ...it, lineNo: k + 1, hsConfirmed: "39269099" }));
@@ -98,5 +100,106 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(eda.fields["NXK_MST"]).toMatchObject({ no: "2.11", value: "0316789012", source: "ACCOUNT" });
     expect(eda.fields["NNK_TEN"]?.value).toBe("AN PHAT INDUSTRIAL EQUIPMENT CO., LTD");
     expect(eda.adjustments).toEqual([]);
+  });
+});
+
+describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)", () => {
+  const EX = { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] };
+  const XK = { ...DOSSIER, direction: "XK" as const, typeCode: "B11" };
+  const build = (shipment = hansol(), dossier = DOSSIER, items = ITEMS) => buildDeclaration({ shipment, dossier, org: ORG, items, now: NOW, exchange: EX });
+  const withDate = (s: Shipment) => void (s.transport.departureDate = { value: "2026-10-05", sources: [{ documentId: "doc_bl", kind: "BILL_OF_LADING", page: 1, raw: "05 OCT 2026", normalized: "2026-10-05" }], status: "SINGLE_SOURCE" });
+
+  it("1.50 mở đầu bằng ngày vận đơn DDMMYYYY#&, ghi dòng hàng FOC; thiếu ngày vận đơn → nghi ngờ, không tự điền", () => {
+    expect(build(hansol(withDate)).fields["CT_TG"]).toMatchObject({ no: "1.50", value: "05102026#&", source: "BILL_OF_LADING" });
+    const foc = build(hansol((s) => { withDate(s); s.items[2]!.amount = { value: "0", sources: [], status: "SINGLE_SOURCE" }; })).fields["CT_TG"];
+    expect(foc?.value).toBe("05102026#&Dòng hàng 3 là hàng không thanh toán (FOC/khuyến mại)");
+    expect(build().fields["CT_TG"]).toMatchObject({ value: "", suspect: true, note: expect.stringMatching(/ngày vận đơn/) });
+  });
+
+  it("1.38 / 2.33 giấy phép: người khai nhập; loại hình gia công (E21, E52) → nghi ngờ, nhắc khai số tiếp nhận hợp đồng gia công", () => {
+    expect(build().fields["GP"]).toMatchObject({ no: "1.38", value: "" });
+    expect(build().fields["GP"]?.suspect).toBeUndefined();
+    expect(build(hansol(), { ...DOSSIER, typeCode: "E21" }).fields["GP"]).toMatchObject({ suspect: true, note: expect.stringMatching(/số tiếp nhận hợp đồng/) });
+    expect(build(hansol(), { ...XK, typeCode: "E52" }).fields["GP"]).toMatchObject({ no: "2.33", suspect: true });
+  });
+
+  it("EDA không ước tính thuế bằng thuế suất nhập khẩu: thuế XK và GTGT dự kiến = 0", () => {
+    const eda = build(hansol(), XK);
+    expect(eda.taxes).toMatchObject({ importDutyVnd: "0", vatVnd: "0" });
+    expect(build().taxes.importDutyVnd).not.toBe("0");
+  });
+
+  it("EDA CIF: trừ cước và bảo hiểm quốc tế khỏi trị giá; 2.40 = giá hóa đơn − cước − bảo hiểm (cùng tiền tệ)", () => {
+    const cif = build(hansol((s) => {
+      s.invoice.incoterm = { value: "CIF", sources: [], status: "SINGLE_SOURCE" };
+      s.charges.insurance = { value: "40", sources: [], status: "SINGLE_SOURCE" };
+    }), XK);
+    expect(cif.adjustments.map((a) => `${a.label}:${a.kind}:${a.amount}`)).toEqual(["Cước vận chuyển quốc tế:SUBTRACT:1150", "Phí bảo hiểm:SUBTRACT:40"]);
+    expect(cif.valuation.customsValueVnd).toBe(String((20850 - 1150 - 40) * 25400));
+    expect(cif.fields["TG_TT"]).toMatchObject({ no: "2.40", value: "19660 USD", note: expect.stringMatching(/Đã trừ/) });
+    expect(cif.fields["TG_TT"]?.suspect).toBeUndefined();
+  });
+
+  it("EDA CFR chưa có số cước → không trừ bừa, 2.40 nghi ngờ kèm hướng dẫn; FOB → không khai 2.40", () => {
+    const cfr = build(hansol((s) => {
+      s.invoice.incoterm = { value: "CFR", sources: [], status: "SINGLE_SOURCE" };
+      s.charges.freight = { value: null, sources: [], status: "SINGLE_SOURCE" };
+    }), XK);
+    expect(cfr.adjustments).toEqual([]);
+    expect(cfr.fields["TG_TT"]).toMatchObject({ value: "20850 USD", suspect: true, note: expect.stringMatching(/cần số cước/) });
+    const fob = build(hansol((s) => void (s.invoice.incoterm = { value: "FOB", sources: [], status: "SINGLE_SOURCE" })), XK);
+    expect(fob.fields["TG_TT"]).toBeUndefined(); // FOB: chỉ tiêu 2.40 không áp dụng → không có ô
+    expect(fob.hidden).toContain("TG_TT");
+  });
+
+  it("EDA 2.43 người nộp thuế mặc định 1, theo Mặc định khai báo nếu có; 2.80 để người khai nhập", () => {
+    expect(build(hansol(), XK).fields["NGUOI_NT"]).toMatchObject({ no: "2.43", value: "1 – Người xuất khẩu" });
+    const withProfile = buildDeclaration({ shipment: hansol(), dossier: XK, org: ORG, items: ITEMS, now: NOW, exchange: EX, profile: { NGUOI_NT: "2 – Đại lý hải quan" } });
+    expect(withProfile.fields["NGUOI_NT"]?.value).toBe("2 – Đại lý hải quan");
+    expect(build(hansol(), XK).fields["VBPQ"]).toMatchObject({ no: "2.80", value: "" });
+  });
+});
+
+describe("chỉ tiêu theo tình huống (bật/tắt theo loại hình, phương thức vận chuyển, điều kiện giá)", () => {
+  const EX = { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] };
+  const build = (dossier: typeof DOSSIER, shipment = hansol()) => buildDeclaration({ shipment, dossier, org: ORG, items: ITEMS, now: NOW, exchange: EX });
+  const codes = (b: ReturnType<typeof build>) => Object.keys(b.fields);
+
+  it("A11 đường biển container: không có 1.3/1.10; có hô hiệu 1.31 và số lượng container 1.35 kèm lý do hiện", () => {
+    const b = build(DOSSIER);
+    expect(codes(b)).not.toContain("HAN_TX");
+    expect(codes(b)).not.toContain("TNTX_TK");
+    expect(b.hidden).toEqual(expect.arrayContaining(["HAN_TX", "TNTX_TK"]));
+    expect(b.fields["SL_CONT"]).toMatchObject({ no: "1.35", value: "1", condition: expect.stringMatching(/container/) });
+    expect(b.fields["HO_HIEU"]).toMatchObject({ no: "1.31", value: "", condition: expect.stringMatching(/đường biển/) });
+    expect(b.fields["HO_HIEU"]?.suspect).toBeUndefined();
+  });
+
+  it("tạm nhập G12 → 1.10 bắt buộc (thiếu → nghi ngờ); tái nhập G51 → 1.3", () => {
+    expect(build({ ...DOSSIER, typeCode: "G12" }).fields["HAN_TX"]).toMatchObject({ no: "1.10", suspect: true, condition: expect.stringMatching(/tạm nhập/) });
+    const g51 = build({ ...DOSSIER, typeCode: "G51" });
+    expect(g51.fields["TNTX_TK"]).toMatchObject({ no: "1.3", suspect: true });
+    expect(codes(g51)).not.toContain("HAN_TX");
+  });
+
+  it("chặn phê duyệt chỉ xét chỉ tiêu tình huống khi có trên tờ khai: A11 không đòi 1.10; G12 đòi 1.10", () => {
+    expect(missingRequiredFields("IDA", build(DOSSIER).fields).map((m) => m.code)).not.toContain("HAN_TX");
+    expect(missingRequiredFields("IDA", build({ ...DOSSIER, typeCode: "G12" }).fields).map((m) => m.code)).toContain("HAN_TX");
+  });
+
+  it("đường hàng không → không có hô hiệu, số lượng container", () => {
+    const air = build({ ...DOSSIER, transportMode: "AIR" }, hansol((s) => void (s.transport.containers = [])));
+    expect(codes(air)).not.toContain("HO_HIEU");
+    expect(codes(air)).not.toContain("SL_CONT");
+  });
+
+  it("EDA: tái xuất G21 → 2.3; tạm xuất G61 → 2.7; container → 2.60; FOB → không có 2.40", () => {
+    const XK = { ...DOSSIER, direction: "XK" as const };
+    expect(build({ ...XK, typeCode: "G21" }).fields["TNTX_TK"]).toMatchObject({ no: "2.3", suspect: true });
+    expect(build({ ...XK, typeCode: "G61" }).fields["HAN_TN"]).toMatchObject({ no: "2.7", suspect: true });
+    const b11 = build({ ...XK, typeCode: "B11" }, hansol((s) => void (s.invoice.incoterm = { value: "FOB", sources: [], status: "SINGLE_SOURCE" })));
+    expect(b11.fields["SO_CONT"]).toMatchObject({ no: "2.60", value: "SITU2246781" });
+    expect(codes(b11)).not.toContain("TG_TT");
+    expect(codes(b11)).not.toContain("HAN_TN");
   });
 });

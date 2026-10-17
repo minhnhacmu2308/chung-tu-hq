@@ -7,6 +7,7 @@ import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
 import type { CustomsGateway, GatewayError, GatewaySendResult, GatewayStatus } from "../application/customs-ports.js";
 import { buildFptRequest, type DeclarationPayload } from "../domain/declaration-to-fpt.js";
+import { parseCustomsInfo } from "../domain/customs-info.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
 
 export type FptOperation = "IDA" | "IDC" | "EDA" | "EDC" | "HYS" | "IEX";
@@ -43,6 +44,7 @@ const toErrors = (env: { errorList?: { errorCode?: string | null | undefined; in
         ...(e.indexCode ? { field: e.indexCode } : {}),
         message: `${(e.errorContent ?? "Lỗi FPT").trim()}${e.rowPosition && e.rowPosition !== "0000" ? ` (dòng hàng ${Number(e.rowPosition)})` : ""}`,
         ...(e.proposedSolution ? { solution: e.proposedSolution.trim() } : {}),
+        ...(e.rowPosition && Number(e.rowPosition) > 0 ? { line: Number(e.rowPosition) } : {}),
       }))
     : undefined;
 const channelOf = (luong: unknown): "GREEN" | "YELLOW" | "RED" | undefined => {
@@ -72,7 +74,7 @@ export class FptVnaccsGateway implements CustomsGateway {
     const head = sub(result?.item, `objVN_${msg.kind}`);
     const no = String(head[numberField(msg.kind)] ?? (result?.item["objMsgResult"] as Obj | undefined)?.["decNumber"] ?? "");
     if (!no) return { externalId: "", errors: [{ code: "E-FPT-NO-NUMBER", message: "FPT trả thành công nhưng không có số tờ khai", solution: "Tra cứu trạng thái hoặc liên hệ FPT" }] };
-    return { externalId: no, declarationNo: no };
+    return { externalId: no, declarationNo: no, ...(result ? { info: parseCustomsInfo(result.kind, result.item, new Date()) } : {}) };
   }
 
   async declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string }) {
@@ -80,7 +82,7 @@ export class FptVnaccsGateway implements CustomsGateway {
     const { errors, result } = await this.call(orgId, msg.kind, { [numberField(kind)]: Number(msg.externalId) });
     if (errors) return { accepted: false, errors };
     const channel = channelOf(sub(result?.item, `objVN_${kind}_TRANGTHAI`)["tK_LUONG"]);
-    return { accepted: true, ...(channel ? { channel } : {}) };
+    return { accepted: true, ...(channel ? { channel } : {}), ...(result ? { info: parseCustomsInfo(result.kind, result.item, new Date()) } : {}) };
   }
 
   async attachDocuments(orgId: string, msg: { externalId: string; files: { name: string; bytes: Buffer }[]; declaration?: DeclarationPayload }) {
@@ -112,6 +114,6 @@ export class FptVnaccsGateway implements CustomsGateway {
     const cleared = Number(tt["tK_THONGQUAN"] ?? 0) === 1;
     const channel = channelOf(tt["tK_LUONG"]);
     const label = cleared ? "Đã thông quan" : (FPT_DECLARATION_STATES as Record<string, string>)[code] ?? code;
-    return { status: label, cleared, ...(code === "R" ? { rejected: true } : {}), ...(no ? { declarationNo: String(no) } : {}), ...(channel ? { channel } : {}) };
+    return { status: label, cleared, info: parseCustomsInfo(result.kind, result.item, new Date()), ...(code === "R" ? { rejected: true } : {}), ...(no ? { declarationNo: String(no) } : {}), ...(channel ? { channel } : {}) };
   }
 }

@@ -61,6 +61,40 @@ function setter(target: Record<string, unknown>, warnings: string[], sizes: Map<
   };
 }
 
+/** 1.38 / 2.33: "QPGP 06GPTC17032025; MTTB 08TB18062025" → [{ code, no }] (mã phân loại giấy phép + số giấy phép), theo thứ tự khai. */
+export function parsePermits(value: string): { code: string; no: string }[] {
+  return value.split(";").map((x) => x.trim()).filter(Boolean).map((x) => {
+    const [code = "", ...rest] = x.split(/\s+/);
+    return { code: code.toUpperCase(), no: rest.join("") };
+  });
+}
+
+/**
+ * 2.80 (mã văn bản pháp luật khác, theo dòng hàng): phần không có "số dòng:" áp cho mọi dòng; "2: GP KD" chỉ cho dòng 2.
+ * Các phần cách nhau ";", mã cách nhau dấu cách/phẩy; mỗi dòng bỏ mã trùng.
+ */
+export function lawCodesByLine(value: string, lineNos: number[]): Map<number, string[]> {
+  const all: string[] = [];
+  const own = new Map<number, string[]>();
+  for (const part of value.split(";").map((x) => x.trim()).filter(Boolean)) {
+    const m = /^(\d+)\s*:\s*(.*)$/.exec(part);
+    const codes = (m ? m[2]! : part).split(/[\s,]+/).filter(Boolean).map((c) => c.toUpperCase());
+    if (m) own.set(Number(m[1]), [...(own.get(Number(m[1])) ?? []), ...codes]);
+    else all.push(...codes);
+  }
+  return new Map(lineNos.map((n) => [n, [...new Set([...all, ...(own.get(n) ?? [])])]]));
+}
+
+/** Tối đa 5 giấy phép (TK_SS1..5 mã phân loại, TK_SN1..5 số). */
+function setPermits(value: string, set: ReturnType<typeof setter>, warnings: string[]) {
+  const permits = parsePermits(value);
+  permits.slice(0, 5).forEach((x, k) => {
+    set(`TK_SS${k + 1}`, x.code);
+    set(`TK_SN${k + 1}`, x.no);
+  });
+  if (permits.length > 5) warnings.push(`Giấy phép: chỉ gửi 5 giấy phép đầu (${permits.slice(5).map((x) => x.code).join(", ")} bị bỏ)`);
+}
+
 /** Chia địa chỉ dài thành 4 ô 35 ký tự (EPA/EP2/EP3/EP4 hoặc CGA/CAT/CAC/CAS). */
 function splitAddress(addr: string, names: string[], set: ReturnType<typeof setter>) {
   const chunks: string[] = [];
@@ -81,6 +115,7 @@ function splitAddress(addr: string, names: string[], set: ReturnType<typeof sett
 
 function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
   const sizes = p.kind === "IDA" ? SIZE_IDA : SIZE_EDA;
+  const laws = p.kind === "EDA" ? lawCodesByLine(val(p, "VBPQ"), p.items.map((it) => it.lineNo)) : null;
   return p.items.map((it, i) => {
     const h: Record<string, unknown> = {};
     const set = setter(h, warnings, sizes);
@@ -96,6 +131,11 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
     set("HAG_UPR", num(it.unitPrice));
     set("HAG_UPC", p.currency);
     set("HAG_TSC", it.unit || "PCE");
+    if (laws) {
+      const codes = laws.get(it.lineNo) ?? [];
+      codes.slice(0, 5).forEach((c, k) => set(`HAG_OL${k + 1}`, c));
+      if (codes.length > 5) warnings.push(`Dòng ${it.lineNo}: chỉ gửi 5 mã văn bản pháp luật đầu (${codes.slice(5).join(", ")} bị bỏ)`);
+    }
     if (p.kind === "IDA") {
       set("HAG_OR", it.origin);
       const table = taxTable(it.policyNote);
@@ -115,6 +155,9 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     const tk: Record<string, unknown> = {};
     const set = setter(tk, warnings, SIZE_IDA);
     set("TK_ICB", val(p, "MA_LH"));
+    // Chỉ tiêu theo tình huống: chỉ có trên tờ khai khi loại hình phù hợp (mapping `when`).
+    if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""))); // 1.3
+    set("TK_RED", ddmmyyyy(val(p, "HAN_TX"))); // 1.10
     set("TK_CH", firstToken(val(p, "CQHQ")));
     set("TK_CHB", "00"); // đội thủ tục mặc định (format.json) – đổi khi có danh mục A038 chi tiết (D3)
     set("TK_IMY", "000000"); // mã bưu chính: org chưa lưu → mặc định, xem warnings
@@ -135,6 +178,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     laws.slice(0, 5).forEach((c, k) => set(`TK_OL${k + 1}`, c));
     if (laws.length > 5) warnings.push(`Mã văn bản pháp quy: chỉ gửi 5 mã đầu (${laws.slice(5).join(", ")} bị bỏ)`);
     if (p.items.some((it) => /^(84|85)/.test(hs8(it.hsConfirmed))) && !/^(MO|CU)$/.test(laws[0] ?? "")) blockers.push("Hàng chương 84/85: ô 1 Mã văn bản pháp quy khác (1.37) phải là MO hoặc CU – CV 2061/TCHQ-GSQL");
+    setPermits(val(p, "GP"), set, warnings); // 1.38
     set("TK_IV1", firstToken(val(p, "HD_PL")) || "A");
     set("TK_IV3", val(p, "SO_HD"));
     set("TK_IVD", ddmmyyyy(val(p, "NGAY_HD")));
@@ -160,15 +204,19 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     const pol = split(val(p, "CANG_XEP"));
     setVd("VD_PSC", pol.code);
     setVd("VD_PSN", pol.name);
+    setVd("VD_VSC", val(p, "HO_HIEU")); // 1.31 ô 1
     setVd("VD_VSN", val(p, "PTVC_TEN"));
     setVd("VD_ARR", ddmmyyyy(val(p, "NGAY_DEN")));
     // 1.35: không nhập số lượng container khi đường hàng không (1) hoặc hàng đóng chung container vào kho CFS khai mã 3 (TT39 PL II).
     const mode = firstToken(val(p, "PTVC"));
-    if (p.containers.length && mode !== "1" && mode !== "3") setVd("VD_COC", p.containers.length);
+    // Người khai sửa 1.35 trên tờ khai → dùng số đã sửa.
+    const contCount = val(p, "SL_CONT") ? Math.round(num(val(p, "SL_CONT"))) : p.containers.length;
+    if (contCount && mode !== "1" && mode !== "3") setVd("VD_COC", contCount);
 
     const ktg: Record<string, unknown> = {};
     const setKtg = setter(ktg, warnings, SIZE_IDA);
     setKtg("KTG_VD1", firstToken(val(p, "KHAI_TG")) || "6");
+    setKtg("KTG_VLD", val(p, "CT_TG")); // 1.50 chi tiết khai trị giá
     const freight = p.adjustments.find((a) => a.label.startsWith("Cước"));
     if (freight) {
       setKtg("KTG_FR1", "A");
@@ -192,6 +240,8 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const tk: Record<string, unknown> = {};
   const set = setter(tk, warnings, SIZE_EDA);
   set("TK_ECB", val(p, "MA_LH"));
+  if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""))); // 2.3
+  set("TK_RID", ddmmyyyy(val(p, "HAN_TN"))); // 2.7
   set("TK_CH", firstToken(val(p, "CQHQ")));
   set("TK_CHB", "00"); // bắt buộc (sheet VN_EDA); đội thủ tục mặc định như IDA – đổi khi có danh mục A038 chi tiết (D3)
   set("TK_MTC", firstToken(val(p, "PTVC")));
@@ -215,6 +265,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const psc = split(val(p, "CANG_XEP"));
   set("TK_PSC", psc.code);
   set("TK_PSN", psc.name);
+  set("TK_VSC", val(p, "HO_HIEU")); // 2.30 ô 1
   set("TK_VSN", val(p, "PTVC_TEN"));
   set("TK_SYM", ddmmyyyy(val(p, "NGAY_DI")));
   set("TK_IV1", firstToken(val(p, "HD_PL")) || "A");
@@ -225,13 +276,23 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_IP2", val(p, "DK_GIA"));
   set("TK_IP3", val(p, "MA_TT") || p.currency);
   set("TK_IP4", num(val(p, "TONG_TG")));
+  // 2.40 trị giá tính thuế dạng "19660 USD" → TK_FKK + TK_FCD; điều kiện FOB/DAP/DAF không khai (ô trống).
+  const fkk = val(p, "TG_TT");
+  if (fkk) {
+    set("TK_FKK", numPart(fkk));
+    set("TK_FCD", unitPart(fkk, p.currency));
+  }
+  set("TK_TPM", firstToken(val(p, "NGUOI_NT"))); // 2.43
+  setPermits(val(p, "GP"), set, warnings); // 2.33
   set("TK_NT2", val(p, "GHI_CHU"));
   set("TK_REF", val(p, "SO_QLNB"));
   const con: Record<string, unknown> = {};
   const setCon = setter(con, warnings, SIZE_EDA);
-  p.containers.slice(0, 50).forEach((c, i) => setCon(`CON_C${String(i + 1).padStart(2, "0")}`, c));
-  if (p.containers.length > 50) warnings.push(`Có ${p.containers.length} container – chỉ tiêu 2.60 nhận 50, khai phần còn lại qua HYS`);
-  const request = { objVN_EDA: tk, objVN_EDA_CON: p.containers.length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers) };
+  // 2.60: danh sách người khai thấy/sửa trên tờ khai (SO_CONT) ưu tiên; chưa có ô này (dữ liệu cũ) → container của vận đơn.
+  const containers = val(p, "SO_CONT") ? val(p, "SO_CONT").split(/[\s,;]+/).filter(Boolean) : p.containers;
+  containers.slice(0, 50).forEach((c, i) => setCon(`CON_C${String(i + 1).padStart(2, "0")}`, c));
+  if (containers.length > 50) warnings.push(`Có ${containers.length} container – chỉ tiêu 2.60 nhận 50, khai phần còn lại qua HYS`);
+  const request = { objVN_EDA: tk, objVN_EDA_CON: containers.length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers) };
   const parsed = EdaRequestSchema.safeParse(request);
   return { request: (parsed.success ? parsed.data : request) as EdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), blockers };
 }

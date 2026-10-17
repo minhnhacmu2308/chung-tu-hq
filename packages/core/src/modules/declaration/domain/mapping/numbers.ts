@@ -8,6 +8,7 @@ export const IDA_NO = {
   SO_VD: "1.26", SO_KIEN: "1.27", TRONG_LUONG: "1.28", KHO: "1.29", PTVC_TEN: "1.31", NGAY_DEN: "1.32", CANG_DO: "1.33", CANG_XEP: "1.34",
   VBPQ: "1.37", HD_PL: "1.39", SO_HD: "1.41", NGAY_HD: "1.42", PT_TT: "1.43", GIA_PL: "1.44", DK_GIA: "1.44", MA_TT: "1.44", TONG_TG: "1.44", KHAI_TG: "1.45",
   PHI_VC: "1.47", PHI_BH: "1.48", KHOAN_DC: "1.49", NGUOI_NT: "1.52", GHI_CHU: "1.68", SO_QLNB: "1.69",
+  GP: "1.38", CT_TG: "1.50", TNTX_TK: "1.3", HAN_TX: "1.10", HO_HIEU: "1.31", SL_CONT: "1.35",
 } as const;
 
 // Mẫu 02 – tờ khai xuất khẩu (EDA). Không có chỉ tiêu phân loại cá nhân/tổ chức, khai trị giá, phí vận chuyển/bảo hiểm.
@@ -18,4 +19,5 @@ export const EDA_NO = {
   SO_VD: "2.24", SO_KIEN: "2.25", TRONG_LUONG: "2.26", KHO: "2.27", CANG_DO: "2.28", CANG_XEP: "2.29", PTVC_TEN: "2.30", NGAY_DI: "2.31",
   HD_PL: "2.34", SO_HD: "2.36", NGAY_HD: "2.37", PT_TT: "2.38", GIA_PL: "2.39", DK_GIA: "2.39", MA_TT: "2.39", TONG_TG: "2.39",
   GHI_CHU: "2.57", SO_QLNB: "2.58",
+  GP: "2.33", TG_TT: "2.40", NGUOI_NT: "2.43", VBPQ: "2.80", TNTX_TK: "2.3", HAN_TN: "2.7", HO_HIEU: "2.30", SO_CONT: "2.60",
 } as const;

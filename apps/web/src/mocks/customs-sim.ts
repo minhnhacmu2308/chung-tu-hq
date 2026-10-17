@@ -1,6 +1,6 @@
 // Mô phỏng truyền nhận VNACCS qua Customs Hub: sinh thông điệp theo thời gian.
 // Dùng cho seed (lô đã truyền) và api/customs (lô truyền trong buổi demo). Quy tắc luồng: @kb/contracts customs-flow.
-import { queryOpFor, type CustomsStage } from "@kb/contracts";
+import { queryOpFor, type CustomsError, type CustomsRejection, type CustomsStage } from "@kb/contracts";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import type { CustomsChannel, CustomsMessage, CustomsOperation, CustomsResult, Declaration, Dossier, ExtractedField, DossierDocument } from "./types";
 
@@ -18,7 +18,9 @@ export const CHANNEL_VI: Record<CustomsChannel, string> = { GREEN: "xanh", YELLO
  */
 export type CustomsFlow = {
   stage: CustomsStage;
-  pending: { op: CustomsOperation; outcome: "OK" | "ERROR"; doneAt: string } | null;
+  pending: { op: CustomsOperation; outcome: "OK" | "ERROR"; doneAt: string; errors?: CustomsError[] } | null;
+  /** Lần gửi bị từ chối gần nhất (giống results.raw.rejection ở backend). */
+  rejection?: CustomsRejection;
   /** Số lần sửa đổi bổ sung (IDE/EDE) và sửa sau thông quan (AMC) thành công. */
   amendments: number;
   postAmendments: number;

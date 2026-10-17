@@ -31,6 +31,10 @@ export const DeclarationFieldDefSchema = z.object({
   fptField: z.string().optional(),
   /** Hệ thống không điền tự động – người khai nhập tay. */
   manual: z.boolean().optional(),
+  /** VNACCS tự xác định/tự hiện ra khi người khai bỏ trống (Phụ lục II: "trường hợp không nhập, hệ thống sẽ tự động…"). */
+  assist: z.boolean().optional(),
+  /** Phụ lục II ghi "không nhập dữ liệu cho đến khi có hướng dẫn mới". */
+  unused: z.boolean().optional(),
   /** Trích hướng dẫn khai ngắn gọn (≤ 300 ký tự) hoặc "cần đối chiếu" khi chưa chắc. */
   legalNote: z.string().optional(),
   /** true khi TT121/2025 sửa/thêm chỉ tiêu này. */

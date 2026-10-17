@@ -3,7 +3,7 @@ import type { Shipment } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { planAdjustments } from "../domain/adjustments.js";
+import { planAdjustmentsFor } from "../domain/adjustments.js";
 import { buildDeclaration, type BuiltDeclaration, type ExchangeInfo } from "../domain/build.js";
 import { vnDate, type FieldOverride } from "../domain/mapping/types.js";
 import { profileFor } from "./declaration-profile.js";
@@ -27,7 +27,7 @@ export async function exchangeFor(r: DeclarationRepos, currencies: string[], dat
 /** Các tiền tệ một lô hàng cần tỷ giá: tiền tệ hóa đơn + tiền tệ của từng khoản điều chỉnh. */
 export function currenciesOf(shipment: Shipment, dossier: DossierInfo): string[] {
   const invoiceCurrency = shipment.invoice.currency.value ?? dossier.currency;
-  return [invoiceCurrency, ...planAdjustments(shipment).adjustments.map((a) => a.currency)];
+  return [invoiceCurrency, ...planAdjustmentsFor(dossier.direction === "NK" ? "IDA" : "EDA", shipment).adjustments.map((a) => a.currency)];
 }
 
 /** `cfg` = Mặc định khai báo + ghi đè của doanh nghiệp (profileFor). */
@@ -37,14 +37,16 @@ export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier:
 }
 
 /** Giữ giá trị người dùng đã sửa (source USER) khi dựng lại. */
-export function mergeUserEdits(fresh: Record<string, StoredField>, old: Record<string, StoredField> | undefined): Record<string, StoredField> {
+export function mergeUserEdits(fresh: Record<string, StoredField>, old: Record<string, StoredField> | undefined, hidden: readonly string[] = []): Record<string, StoredField> {
   if (!old) return fresh;
   const out = { ...fresh };
   // Giống editDeclarationField: ô sửa tay không mang nguồn gốc/ghi chú của quy tắc (tránh hiện sai nguồn cho người duyệt).
   for (const [code, f] of Object.entries(old)) {
     if (f.source !== "USER") continue;
+    // Chỉ tiêu theo tình huống không còn áp dụng (đổi loại hình, phương thức vận chuyển…) → bỏ giá trị đã sửa, không gửi Hải quan.
+    if (hidden.includes(code)) continue;
     const base = fresh[code] ?? f;
-    out[code] = { no: base.no, label: base.label, section: base.section, value: f.value, source: "USER", suspect: false };
+    out[code] = { no: base.no, label: base.label, section: base.section, value: f.value, source: "USER", suspect: false, ...(base.condition ? { condition: base.condition } : {}) };
   }
   return out;
 }
@@ -67,7 +69,7 @@ export async function rebuildDraft(deps: DeclarationDeps, ctx: RebuildCtx, dossi
     const exchange = await exchangeFor(r, currenciesOf(shipment, dossier), vnDate(now));
     const built = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, ctx.orgId, dossier.direction));
     const patch = {
-      fields: mergeUserEdits(built.fields, current.fields), updatedAt: now, exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date,
+      fields: mergeUserEdits(built.fields, current.fields, built.hidden), updatedAt: now, exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date,
       customsValueVnd: built.valuation.customsValueVnd, valueAdjustments: built.adjustments, estImportDutyVnd: built.taxes.importDutyVnd, estVatVnd: built.taxes.vatVnd,
     };
     await r.declarations.update(current.id, patch);

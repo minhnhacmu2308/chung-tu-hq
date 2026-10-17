@@ -13,4 +13,11 @@ describe("mergeUserEdits", () => {
     expect(out.provenance).toBeUndefined();
     expect(out.note).toBeUndefined();
   });
+
+  it("chỉ tiêu theo tình huống không còn áp dụng (đổi loại hình) → bỏ giá trị đã sửa; còn áp dụng → giữ cả lý do hiện", () => {
+    const old: Record<string, StoredField> = { HAN_TX: { no: "1.10", label: "Thời hạn tái xuất", section: "GENERAL", value: "2027-01-31", source: "USER" } };
+    expect(mergeUserEdits({}, old, ["HAN_TX"])["HAN_TX"]).toBeUndefined();
+    const fresh: Record<string, StoredField> = { HAN_TX: { no: "1.10", label: "Thời hạn tái xuất", section: "GENERAL", value: "", source: "DOSSIER", condition: "Loại hình tạm nhập" } };
+    expect(mergeUserEdits(fresh, old, [])["HAN_TX"]).toMatchObject({ value: "2027-01-31", source: "USER", condition: "Loại hình tạm nhập" });
+  });
 });

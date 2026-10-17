@@ -22,7 +22,8 @@ export function canMoveToReview(items: ItemHs[], hasDeclaration: boolean): Resul
 
 /** Chỉ tiêu bắt buộc (theo ánh xạ VNACCS) đang trống – FPT sẽ từ chối, nên chặn ngay ở bước duyệt. */
 export function missingRequiredFields(kind: "IDA" | "EDA", fields: Record<string, { value: string }>): { code: string; label: string }[] {
-  return mappingsFor(kind).filter((m) => m.required && !fields[m.code]?.value?.trim()).map((m) => ({ code: m.code, label: m.label }));
+  // Chỉ tiêu theo tình huống (when) chỉ bắt buộc khi có trên tờ khai – không áp dụng cho lô này thì không có ô.
+  return mappingsFor(kind).filter((m) => m.required && (!m.when || m.code in fields) && !fields[m.code]?.value?.trim()).map((m) => ({ code: m.code, label: m.label }));
 }
 
 export function canApprove(p: {

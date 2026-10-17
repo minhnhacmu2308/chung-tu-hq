@@ -66,6 +66,8 @@ export const DeclarationFieldSchema = z.object({
   note: z.string().optional(),
   /** Nguồn gốc giá trị: quy tắc mặc định / Mặc định khai báo / giá trị cố định / nguồn doanh nghiệp chọn (Cài đặt → Khai báo). */
   provenance: FieldProvenanceSchema.optional(),
+  /** Chỉ tiêu theo tình huống: lý do chỉ tiêu xuất hiện trên tờ khai này (ví dụ "Loại hình tạm nhập (G11–G14)"). */
+  condition: z.string().optional(),
 });
 export type DeclarationField = z.infer<typeof DeclarationFieldSchema>;
 

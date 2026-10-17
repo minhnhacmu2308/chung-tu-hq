@@ -3,6 +3,7 @@ import { AWAITING_CLEARANCE, queryOpFor } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import type { CustomsDeps } from "./customs-ports.js";
 
@@ -30,7 +31,7 @@ export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Pro
       ...result, state: coarseState(nextStage, result.state === "SEND_FAILED" && nextStage === stage), pollCount: result.pollCount + 1,
       clearanceStatus: st.rejected ? "REJECTED" : st.cleared ? "CLEARED" : "INSPECTING",
       ...(st.customsTaxVnd ? { customsTaxVnd: st.customsTaxVnd } : {}), ...(st.declarationNo ? { declarationNo: st.declarationNo } : {}), ...(st.channel ? { channel: st.channel } : {}),
-      raw: { ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status }, updatedAt: now,
+      raw: { ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status, ...(st.info ? { customsInfo: mergeCustomsInfo(result.raw?.customsInfo, { ...st.info, receivedAt: now.toISOString() }) } : {}) }, updatedAt: now,
     });
   });
   if (st.cleared) {

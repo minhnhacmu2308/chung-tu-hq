@@ -65,15 +65,15 @@ export function StepError({ error, onRetry }: { error: unknown; onRetry: () => v
 /** Thông báo lỗi nghiệp vụ từ api (ApiError có message tiếng Việt). */
 export const errorMessage = (e: unknown) => (e instanceof Error ? e.message : "Có lỗi xảy ra, thử lại sau");
 
-/** Hai cột nhãn – giá trị dùng trong các khối tổng hợp. */
-export function KeyValue({ label, value, hint, strong = false }: { label: ReactNode; value: ReactNode; hint?: ReactNode; strong?: boolean }) {
+/** Hai cột nhãn – giá trị dùng trong các khối tổng hợp. `wrap`: giá trị chữ dài (tên cơ quan…) được xuống dòng thay vì giữ một dòng. */
+export function KeyValue({ label, value, hint, strong = false, wrap = false }: { label: ReactNode; value: ReactNode; hint?: ReactNode; strong?: boolean; wrap?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2">
       <div className="min-w-0">
         <p className={cn("text-sm", strong ? "font-semibold text-fg" : "text-fg-muted")}>{label}</p>
         {hint && <div className="mt-0.5 text-xs text-fg-subtle">{hint}</div>}
       </div>
-      <p className={cn("shrink-0 text-right text-sm tabular-nums", strong ? "text-base font-semibold text-fg" : "text-fg")}>{value}</p>
+      <p className={cn("text-right text-sm tabular-nums", wrap ? "min-w-0 break-words" : "shrink-0", strong ? "text-base font-semibold text-fg" : "text-fg")}>{value}</p>
     </div>
   );
 }

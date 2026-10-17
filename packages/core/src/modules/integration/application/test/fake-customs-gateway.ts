@@ -1,7 +1,7 @@
 // Cổng Hải quan GIẢ (dev/test/demo) – deterministic theo id hồ sơ: số tờ khai 12 số, phân luồng 60/30/10,
 // HYS lỗi lần đầu khi hash%7==0 (thử "Gửi lại"), trạng thái tiến dần qua các lần hỏi. Không mạng. Dùng được trong test use case
 // (đặt ở application/test) và tái xuất qua infrastructure cho container.
-import type { CustomsOperation } from "@kb/contracts";
+import type { CustomsInfo, CustomsOperation } from "@kb/contracts";
 import type { CustomsGateway, GatewayError, GatewaySendResult } from "../customs-ports.js";
 
 export function hashId(s: string) {
@@ -9,6 +9,10 @@ export function hashId(s: string) {
   for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return h;
 }
+
+/** Thông tin Hải quan trả về (mô phỏng) – thời điểm nhận do use case ghi đè bằng clock. */
+const info = (patch: Partial<CustomsInfo>): CustomsInfo => ({ receivedAt: "1970-01-01T00:00:00.000Z", exchangeRates: [], taxes: [], items: [], directives: [], ...patch });
+const INSPECTION = { GREEN: "1", YELLOW: "2", RED: "3" } as const;
 
 export class FakeCustomsGateway implements CustomsGateway {
   readonly name = "fake-customs";
@@ -33,10 +37,18 @@ export class FakeCustomsGateway implements CustomsGateway {
     const errors: GatewayError[] = [];
     if (!tk["tK_ICB"] && !tk["tK_ECB"]) errors.push({ code: "E-ICB-001", field: "TK_ICB", message: "Thiếu mã loại hình", solution: "Khai mã loại hình (A11, B11…)" });
     if (errors.length) return { externalId: `fpt-${hashId(msg.dossierId)}`, errors };
-    return { externalId: `fpt-${hashId(msg.dossierId)}`, declarationNo: this.declarationNoFor(msg.dossierId, msg.kind) };
+    const no = this.declarationNoFor(msg.dossierId, msg.kind);
+    return {
+      externalId: `fpt-${hashId(msg.dossierId)}`, declarationNo: no,
+      info: info({ declarationNo: no, customsOfficeName: "CCHQ mô phỏng", exchangeRates: [{ currency: "USD", rate: "26150" }], taxes: [{ code: "N", name: "Thuế NK", amountVnd: "0" }], totalTaxVnd: "0" }),
+    };
   }
   async declare(_orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }) {
-    return { accepted: true, channel: this.channelFor(msg.dossierId) };
+    const channel = this.channelFor(msg.dossierId);
+    return {
+      accepted: true, channel,
+      info: info({ registeredDate: "2026-10-14", registeredTime: "10:00:00", inspectionCode: INSPECTION[channel], ...(channel === "GREEN" ? {} : { directives: [{ title: "Nộp chứng từ", content: "Nộp bộ chứng từ qua HYS" }] }) }),
+    };
   }
   async attachDocuments(_orgId: string, msg: { externalId: string; dossierId: string; files: { name: string; bytes: Buffer }[] }) {
     const n = (this.hysAttempts.get(msg.dossierId) ?? 0) + 1;
@@ -76,6 +88,9 @@ export class FakeCustomsGateway implements CustomsGateway {
     this.polls.set(externalId, n);
     const channel = this.channelFor(dossierId);
     const cleared = channel === "GREEN" || n >= (this.opts.clearAfterPolls ?? 3);
-    return { declarationNo: this.declarationNoFor(dossierId, "IDA"), channel, status: cleared ? "Đã thông quan" : channel === "YELLOW" ? "Chờ kiểm tra chi tiết hồ sơ" : "Chờ kiểm tra thực tế hàng hóa", cleared };
+    return {
+      declarationNo: this.declarationNoFor(dossierId, "IDA"), channel, status: cleared ? "Đã thông quan" : channel === "YELLOW" ? "Chờ kiểm tra chi tiết hồ sơ" : "Chờ kiểm tra thực tế hàng hóa", cleared,
+      ...(cleared ? { info: info({ permitDate: "2026-10-14", permitTime: "11:00:00" }) } : {}),
+    };
   }
 }

@@ -4,7 +4,8 @@ import { initialPickedSources, profileFieldsFor, toProfileInput, validateProfile
 describe("declaration-profile-form", () => {
   it("NK có đủ ô mặc định; XK bỏ các ô chỉ có ở tờ khai nhập", () => {
     expect(profileFieldsFor("NK").map((f) => f.code)).toEqual(["MA_LH", "CQHQ", "PTVC", "KHO", "PT_TT", "KHAI_TG", "NGUOI_NT", "PL_CN", "HD_PL", "GIA_PL"]);
-    expect(profileFieldsFor("XK").map((f) => f.code)).toEqual(["MA_LH", "CQHQ", "PTVC", "KHO", "PT_TT", "GIA_PL"]);
+    expect(profileFieldsFor("XK").map((f) => f.code)).toEqual(["MA_LH", "CQHQ", "PTVC", "KHO", "PT_TT", "NGUOI_NT", "GIA_PL"]);
+    expect(profileFieldsFor("XK").find((f) => f.code === "NGUOI_NT")?.placeholder).toBe("1 – Người xuất khẩu");
   });
   it("ô chọn mã dùng bảng mã, giá trị dạng “mã – tên” như trên tờ khai", () => {
     const lh = profileFieldsFor("NK").find((f) => f.code === "MA_LH")!;

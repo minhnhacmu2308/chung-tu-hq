@@ -39,14 +39,17 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Chỉ khai với loại hình tạm xuất: ngày hết hạn tạm xuất.",
   }),
   f("2.8", "GENERAL", "Cơ quan Hải quan", "code", "O", {
+    assist: true,
     maxLen: 6, codeTable: "A038", fptField: "VN_EDA.TK_CH",
     legalNote: "Mã Chi cục HQ nơi đăng ký tờ khai. Không nhập thì hệ thống tự xác định theo địa điểm lưu giữ hàng chờ thông quan.",
   }),
   f("2.9", "GENERAL", "Mã bộ phận xử lý tờ khai", "code", "O", {
+    assist: true,
     maxLen: 2, codeTable: "A014", fptField: "VN_EDA.TK_CHB",
     legalNote: "Mã Đội thủ tục xử lý tờ khai. Không nhập thì hệ thống tự xác định dựa trên mã HS.",
   }),
   f("2.10", "GENERAL", "Ngày khai báo (dự kiến)", "date", "O", {
+    assist: true,
     fptField: "VN_EDA.TK_ECD",
     legalNote: "Ngày dự kiến thực hiện nghiệp vụ EDC; không nhập thì hệ thống lấy ngày thực hiện nghiệp vụ.",
   }),
@@ -65,10 +68,12 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Mã bưu chính của người xuất khẩu (nếu có).",
   }),
   f("2.14", "PARTIES", "Địa chỉ người xuất khẩu", "text", "O", {
+    assist: true,
     maxLen: 100, fptField: "VN_EDA.TK_EPA",
     legalNote: "Không cần nhập nếu hệ thống tự hiển thị; nhập lại nếu hệ thống hiển thị sai.",
   }),
   f("2.15", "PARTIES", "Số điện thoại người xuất khẩu", "text", "O", {
+    assist: true,
     maxLen: 20, fptField: "VN_EDA.TK_EPT",
     legalNote: "Không dùng dấu gạch ngang; không cần nhập nếu hệ thống tự hiển thị đúng.",
   }),
@@ -101,6 +106,7 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Mã nước nhận hàng, 2 ký tự UN/LOCODE: vận chuyển thẳng hoặc qua nước trung gian không có mua bán, gia công, chế biến, thông quan → nước nhập khẩu; có các hoạt động đó → nước trung gian đầu tiên sau khi rời VN biết được khi khai; không xác định được → mã nước của người nhập khẩu.",
   }),
   f("2.23", "PARTIES", "Mã đại lý Hải quan", "text", "O", {
+    assist: true,
     maxLen: 5, fptField: "VN_EDA.TK_ECC", manual: true,
     legalNote: "Không nhập nếu đại lý thực hiện EDA và nghiệp vụ tiếp theo; nhập mã người sử dụng khi người khai EDA khác người khai EDC.",
   }),
@@ -181,6 +187,7 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Nhập \"N\" nếu số tiền thuế và trị giá hải quan không cần quy đổi sang VND.",
   }),
   f("2.42", "VALUE", "Tổng hệ số phân bổ trị giá tính thuế", "decimal", "C", {
+    assist: true,
     maxLen: 20, fptField: "VN_EDA.TK_TP",
     legalNote: "Tổng trị giá hóa đơn trước điều chỉnh; bắt buộc khi một hóa đơn nhiều tờ khai; không nhập thì hệ thống cộng trị giá các dòng hàng.",
   }),
@@ -287,10 +294,12 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Mã quản lý hàng hóa (nếu có).",
   }),
   f("2.67", "ITEMS", "Thuế suất", "decimal", "C", {
+    assist: true,
     maxLen: 10, fptField: "VN_EDA_HANG.HAG_TXA", amendedBy121: true,
     legalNote: "Hệ thống tự xác định thuế suất XK theo mã HS; không xác định được thì nhập tay. Hàng không có tên trong Biểu thuế XK, không thuộc STT 211 thì không khai (TT121).",
   }),
   f("2.68", "ITEMS", "Mức thuế tuyệt đối", "decimal", "C", {
+    assist: true,
     maxLen: 10, fptField: "VN_EDA_HANG.HAG_TXB",
     legalNote: "Ô 1 mức thuế tuyệt đối (HAG_TXB); ô 2 mã đơn vị tính (HAG_TXC); ô 3 mã đồng tiền (HAG_TXD).",
   }),
@@ -323,6 +332,7 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Ô 1 đơn giá (HAG_UPR); ô 2 mã đồng tiền (HAG_UPC); ô 3 đơn vị tính (HAG_TSC). Đơn giá × số lượng = trị giá ± 1. Sản phẩm gia công: khai giá (phí) gia công.",
   }),
   f("2.76", "ITEMS", "Trị giá tính thuế", "decimal", "C", {
+    assist: true,
     maxLen: 20, fptField: "VN_EDA_HANG.HAG_DPR",
     legalNote: "Chỉ nhập khi phân bổ thủ công: ô 1 mã đồng tiền (HAG_BPC); ô 2 trị giá tính thuế dòng hàng (HAG_DPR). Hệ thống ưu tiên trị giá nhập tay.",
   }),

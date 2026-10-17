@@ -3,7 +3,9 @@ import { DEFAULT_PARTY_CLASS, PARTY_CLASS_LABELS } from "@kb/contracts";
 import { resolveDischargePort, resolvePort, transportModeCode } from "../catalog-resolve.js";
 import { FREIGHT_NOT_INCLUDED, incotermCode } from "../adjustments.js";
 import { IDA_NO as N } from "./numbers.js";
-import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, port, priceKind } from "./shared.js";
+import { dec } from "../../../../shared/decimal.js";
+import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
+import { BY_WATER, IN_CONTAINER, RE_IMPORT, TEMP_IMPORT } from "./conditions.js";
 import { profileSource, SRC, warehouseFromAn } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
@@ -13,6 +15,20 @@ const coRef = (i: MappingInput) => {
   if (o.rexNo.value) return `REX ${o.rexNo.value}`;
   if (o.coNo.value) return `C/O${o.coForm.value ? ` form ${o.coForm.value}` : ""} số ${o.coNo.value}`;
   return null;
+};
+
+/**
+ * 1.50 Chi tiết khai trị giá (≤ 280 ký tự): mở đầu bằng ngày vận đơn dạng DDMMYYYY#& (TT121), sau đó các ghi chú trị giá suy được từ chứng từ
+ * (dòng hàng FOC). Thiếu ngày vận đơn → để người khai bổ sung, không tự điền.
+ */
+const valuationDetail = (i: MappingInput): MappedValue => {
+  const d = i.shipment.transport.departureDate.value;
+  const foc = i.shipment.items.filter((it) => it.amount.value !== null && dec(it.amount.value).isZero()).map((it) => it.lineNo);
+  const notes = foc.length ? [`Dòng hàng ${foc.join(", ")} là hàng không thanh toán (FOC/khuyến mại)`] : [];
+  if (!d) return { value: notes.length ? notes.join("; ") : null, source: "BILL_OF_LADING", suspect: true, note: "Thiếu ngày vận đơn – chỉ tiêu 1.50 mở đầu bằng ngày vận đơn dạng DDMMYYYY#& (TT121)" };
+  const date = `${d.slice(8, 10)}${d.slice(5, 7)}${d.slice(0, 4)}#&`;
+  const src = fromSourced(i.shipment.transport.departureDate, "BILL_OF_LADING");
+  return { ...src, value: `${date}${notes.join("; ")}` };
 };
 
 const charge = (i: MappingInput, label: string): MappedValue => {
@@ -38,6 +54,8 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   } },
   { code: "CQHQ", no: N.CQHQ, section: "GENERAL", label: "Mã cơ quan Hải quan", required: true, from: (i) => ({ value: i.dossier.customsOfficeName ? `${i.dossier.customsOfficeCode} – ${i.dossier.customsOfficeName}` : i.dossier.customsOfficeCode, source: "DOSSIER" }) },
   { code: "NGAY_DK", no: N.NGAY_DK, section: "GENERAL", label: "Ngày khai báo dự kiến", required: false, from: (i) => ({ value: vnDate(i.now), source: "SYSTEM" }) },
+  { code: "TNTX_TK", no: N.TNTX_TK, section: "GENERAL", label: "Số tờ khai tạm xuất tương ứng", required: true, when: RE_IMPORT, from: () => ({ value: null, source: "DOSSIER", note: "Nhập số tờ khai tạm xuất (12 số) của lô hàng tái nhập; tờ khai tạm xuất phải còn hiệu lực" }) },
+  { code: "HAN_TX", no: N.HAN_TX, section: "GENERAL", label: "Thời hạn tái xuất khẩu", required: true, when: TEMP_IMPORT, from: () => ({ value: null, source: "DOSSIER", note: "Nhập ngày hết hạn hàng tạm nhập được lưu tại Việt Nam theo quy định của loại hình" }) },
 
   { code: "NNK_MST", no: N.NNK_MST, section: "PARTIES", label: "Mã số thuế người nhập khẩu", required: true, from: (i) => ({ value: i.org.taxCode, source: "ACCOUNT" }) },
   { code: "NNK_TEN", no: N.NNK_TEN, section: "PARTIES", label: "Tên người nhập khẩu", required: true, from: (i) => ({ value: i.org.name, source: "ACCOUNT" }) },
@@ -68,6 +86,12 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     const pol = i.shipment.transport.portOfLoading;
     return port(pol.value, resolvePort(pol.value), fromSourced(pol, "BILL_OF_LADING").source);
   } },
+  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, when: BY_WATER, from: () => ({ value: null, source: "BILL_OF_LADING", note: "Ô 1 chỉ tiêu 1.31: hô hiệu tàu; tàu chưa đăng ký trên hệ thống nhập 9999. Bỏ trống nếu hệ thống tự nhận theo tên tàu" }) },
+  // 1.35: hệ thống tự xuất nếu đã đăng ký; không khai khi đường hàng không / hàng rời / hàng CFS (mã 3).
+  { code: "SL_CONT", no: N.SL_CONT, section: "TRANSPORT", label: "Số lượng container", required: false, when: IN_CONTAINER, from: (i) => {
+    const n = i.shipment.transport.containers.length;
+    return n ? { value: String(n), source: "BILL_OF_LADING" } : missing("BILL_OF_LADING", "Vận đơn chưa có số container");
+  } },
   { code: "PTVC_TEN", no: N.PTVC_TEN, section: "TRANSPORT", label: "Tên phương tiện vận chuyển", required: true, from: (i) => {
     const v = fromSourced(i.shipment.transport.vessel, "BILL_OF_LADING");
     const voy = i.shipment.transport.voyage.value;
@@ -94,6 +118,8 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     return t.value === null ? { value: i.valuation.invoiceTotal, source: "SYSTEM", note: "Tính từ tổng các dòng hàng" } : t;
   } },
   { code: "KHAI_TG", no: N.KHAI_TG, section: "VALUE", label: "Mã phân loại khai trị giá", required: true, options: { sources: [profileSource("KHAI_TG")], allowFixed: true }, from: (i) => profileOr(i, "KHAI_TG", fixed("6 – Áp dụng phương pháp trị giá giao dịch")) },
+  { code: "GP", no: N.GP, section: "VALUE", label: "Giấy phép nhập khẩu", required: false, from: (i) => permitsField(i, "IDA") },
+  { code: "CT_TG", no: N.CT_TG, section: "VALUE", label: "Chi tiết khai trị giá", required: false, from: valuationDetail },
   { code: "PHI_VC", no: N.PHI_VC, section: "VALUE", label: "Phí vận chuyển", required: false, from: (i) => charge(i, "Cước") },
   { code: "PHI_BH", no: N.PHI_BH, section: "VALUE", label: "Phí bảo hiểm", required: false, from: (i) => charge(i, "Phí bảo hiểm") },
   { code: "KHOAN_DC", no: N.KHOAN_DC, section: "VALUE", label: "Khoản điều chỉnh khác", required: false, from: (i) => {

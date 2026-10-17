@@ -16,10 +16,12 @@ export const CATALOG_IDA_ITEMS: DeclarationFieldDef[] = [
     legalNote: "Số thứ tự mặt hàng trong Danh mục máy móc thiết bị đồng bộ (chương 84, 85, 90) hoặc danh mục trừ lùi đã đăng ký.",
   }),
   f("1.76", "ITEMS", "Thuế suất", "decimal", "C", {
+    assist: true,
     maxLen: 10, fptField: "VN_IDA_HANG.HAG_TXA",
     legalNote: "Hệ thống tự xác định thuế suất NK theo mã HS và mã biểu thuế; chỉ nhập tay khi hệ thống báo lỗi E1004, E1006, E1008, E1009. Mã biểu thuế B30 (không chịu thuế): nhập \"0\".",
   }),
   f("1.77", "ITEMS", "Mức thuế tuyệt đối", "decimal", "C", {
+    assist: true,
     maxLen: 10, fptField: "VN_IDA_HANG.HAG_TXB",
     legalNote: "Ô 1 mức thuế tuyệt đối (HAG_TXB); ô 2 mã đơn vị tính (HAG_TXC); ô 3 mã đồng tiền (HAG_TXD). Hệ thống tự xác định theo mã áp dụng mức thuế tuyệt đối.",
   }),
@@ -60,6 +62,7 @@ export const CATALOG_IDA_ITEMS: DeclarationFieldDef[] = [
     legalNote: "Ô 1 đơn giá (HAG_UPR); ô 2 mã đồng tiền (HAG_UPC); ô 3 đơn vị tính của đơn giá (HAG_TSC). Đơn giá × số lượng = trị giá hóa đơn ± 1. Đơn giá vượt 9 ký tự: không khai ở đây mà ghi ở 1.78. Không có hóa đơn hoặc dòng hàng FOC: để trống.",
   }),
   f("1.87", "ITEMS", "Trị giá tính thuế", "decimal", "C", {
+    assist: true,
     maxLen: 20, fptField: "VN_IDA_HANG.HAG_DPR",
     legalNote: "Chỉ nhập khi phân bổ thủ công (mã khai trị giá 1, 2, 3, 4, 8, 9, T): ô 1 mã đồng tiền (HAG_BPC); ô 2 trị giá (HAG_DPR), VND không có thập phân. Mã 6, 7 hệ thống tự tính.",
   }),

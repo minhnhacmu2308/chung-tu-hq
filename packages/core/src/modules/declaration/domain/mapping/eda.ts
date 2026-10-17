@@ -1,11 +1,35 @@
 // Mẫu 02 – tờ khai xuất khẩu (EDA). Người xuất khẩu = doanh nghiệp (tài khoản); người nhập khẩu = buyer trên invoice.
 import { PORTS, resolvePort, transportModeCode } from "../catalog-resolve.js";
 import { EDA_NO as N } from "./numbers.js";
-import { incotermField, invoiceKind, packageCount, paymentMethod, port, priceKind } from "./shared.js";
+import { dec } from "../../../../shared/decimal.js";
+import { incotermCode, planExportAdjustments } from "../adjustments.js";
+import { incotermField, invoiceKind, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { profileSource, SRC } from "./sources.js";
-import { fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping } from "./types.js";
+import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
 const isVn = (code: string | undefined) => PORTS.find((p) => p.code === code)?.country === "VN";
+
+/**
+ * 2.40 Trị giá tính thuế (tổng): khai khi điều kiện giá khác FOB/DAP/DAF hoặc không có hóa đơn. Trị giá hải quan hàng xuất = giá đến
+ * cửa khẩu xuất, không gồm cước và bảo hiểm quốc tế (planExportAdjustments đã trừ). Cùng tiền tệ hóa đơn thì khai theo tiền tệ đó, khác thì VND.
+ */
+const NO_240 = new Set(["FOB", "DAP", "DAF"]);
+const exportCustomsValue = (i: MappingInput): MappedValue => {
+  const incoterm = incotermCode(i.shipment.invoice.incoterm.value);
+  const noInvoice = i.shipment.documents.every((d) => d.kind !== "INVOICE");
+  if (NO_240.has(incoterm) && !noInvoice) {
+    return { value: null, source: "SYSTEM", note: `${incoterm}: không khai chỉ tiêu 2.40 – Hải quan lấy trị giá hóa đơn làm trị giá tính thuế` };
+  }
+  const cur = i.shipment.invoice.currency.value ?? i.dossier.currency;
+  const notes = planExportAdjustments(i.shipment).notes;
+  const same = i.adjustments.every((a) => a.currency === cur);
+  const value = same
+    ? `${plainNumber(i.adjustments.reduce((s, a) => (a.kind === "SUBTRACT" ? s.minus(a.amount) : s.plus(a.amount)), dec(i.valuation.invoiceTotal)).toFixed())} ${cur}`
+    : `${i.valuation.customsValueVnd} VND`;
+  const deducted = i.adjustments.filter((a) => a.kind === "SUBTRACT").map((a) => a.label.toLowerCase());
+  const note = [deducted.length ? `Đã trừ ${deducted.join(", ")} khỏi giá hóa đơn ${incoterm}` : null, ...notes].filter(Boolean).join(". ");
+  return { value, source: "SYSTEM", ...(notes.length ? { suspect: true } : {}), ...(note ? { note } : {}) };
+};
 
 export const EDA_MAPPINGS: FieldMapping[] = [
   { code: "SOTK", no: N.SOTK, section: "GENERAL", label: "Số tờ khai", required: false, from: (i) => ({ value: i.dossier.declarationNo ?? "Chưa cấp – nhận sau khi truyền EDA", source: "SYSTEM" }) },
@@ -80,6 +104,11 @@ export const EDA_MAPPINGS: FieldMapping[] = [
     const rate = i.exchange.rates[cur];
     return rate ? { value: plainNumber(rate), source: "SYSTEM" } : missing("SYSTEM", `Chưa có tỷ giá tính thuế cho ${cur}`);
   } },
+  { code: "GP", no: N.GP, section: "VALUE", label: "Giấy phép xuất khẩu", required: false, from: (i) => permitsField(i, "EDA") },
+  { code: "TG_TT", no: N.TG_TT, section: "VALUE", label: "Trị giá tính thuế", required: false, from: exportCustomsValue },
+  { code: "NGUOI_NT", no: N.NGUOI_NT, section: "GENERAL", label: "Người nộp thuế", required: false, options: { sources: [profileSource("NGUOI_NT")], allowFixed: true }, from: (i) => profileOr(i, "NGUOI_NT", fixed("1 – Người xuất khẩu")) },
+  // 2.80 khai theo từng dòng hàng (HAG_OL1..5). Chứng từ không cho biết mặt hàng thuộc quản lý chuyên ngành → người khai nhập.
+  { code: "VBPQ", no: N.VBPQ, section: "VALUE", label: "Mã văn bản pháp luật khác (theo dòng hàng)", required: false, from: () => ({ value: null, source: "DOSSIER", note: "Khai khi hàng xuất khẩu thuộc quản lý chuyên ngành. Mã áp cho mọi dòng ghi cách nhau dấu cách; riêng từng dòng ghi “số dòng: mã”, các phần cách nhau dấu “;” (ví dụ “XK; 2: GP KD”). Tối đa 5 mã mỗi dòng" }) },
   { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: (i) => ({ value: i.dossier.note ?? null, source: "DOSSIER" }) },
   { code: "SO_QLNB", no: N.SO_QLNB, section: "GENERAL", label: "Số quản lý nội bộ doanh nghiệp", required: false, from: (i) => ({ value: i.dossier.code, source: "DOSSIER" }) },
 ];

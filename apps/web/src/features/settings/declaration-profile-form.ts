@@ -16,14 +16,18 @@ const ALL: (ProfileField & { directions: DeclarationDirection[] })[] = [
   { code: "KHO", label: "Mã địa điểm lưu kho mặc định", hint: "Dùng khi Arrival Notice không ghi kho (chỉ tiêu 1.29)", placeholder: "03CCS01 – Kho CFS Tân Vũ", short: true, directions: ["NK", "XK"] },
   { code: "PT_TT", label: "Phương thức thanh toán", hint: "Dùng khi hóa đơn/hợp đồng không ghi", options: opts(PAYMENT_METHODS), directions: ["NK", "XK"] },
   { code: "KHAI_TG", label: "Mã phân loại khai trị giá", placeholder: "6 – Áp dụng phương pháp trị giá giao dịch", directions: ["NK"] },
-  { code: "NGUOI_NT", label: "Người nộp thuế", placeholder: "1 – Người nhập khẩu", directions: ["NK"] },
+  { code: "NGUOI_NT", label: "Người nộp thuế", hint: "Chỉ tiêu 1.52 (nhập) / 2.43 (xuất)", placeholder: "1 – Người nhập khẩu", directions: ["NK", "XK"] },
   { code: "PL_CN", label: "Mã phân loại cá nhân/tổ chức", placeholder: "4 – Tổ chức gửi tổ chức", directions: ["NK"] },
   { code: "HD_PL", label: "Phân loại hình thức hóa đơn", options: opts(INVOICE_KINDS), directions: ["NK"] },
   { code: "GIA_PL", label: "Mã phân loại giá hóa đơn", options: opts(PRICE_KINDS), directions: ["NK", "XK"] },
 ];
 
 export function profileFieldsFor(direction: DeclarationDirection): ProfileField[] {
-  return ALL.filter((f) => f.directions.includes(direction)).map(({ directions: _d, ...f }) => (f.code === "MA_LH" ? { ...f, options: opts(direction === "NK" ? TYPE_CODES_NK : TYPE_CODES_XK) } : f));
+  return ALL.filter((f) => f.directions.includes(direction)).map(({ directions: _d, ...f }) => {
+    if (f.code === "MA_LH") return { ...f, options: opts(direction === "NK" ? TYPE_CODES_NK : TYPE_CODES_XK) };
+    if (f.code === "NGUOI_NT" && direction === "XK") return { ...f, placeholder: "1 – Người xuất khẩu" };
+    return f;
+  });
 }
 
 export type ProfileValues = Partial<Record<ProfileFieldCode, string>>;

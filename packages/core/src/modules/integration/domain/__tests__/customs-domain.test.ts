@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFptRequest, type DeclarationPayload } from "../declaration-to-fpt.js";
+import { buildFptRequest, lawCodesByLine, parsePermits, type DeclarationPayload } from "../declaration-to-fpt.js";
 import { maskPayload } from "../mask.js";
 import { coarseState, rowState, stageOf } from "../state-machine.js";
 
@@ -134,5 +134,38 @@ describe("state-machine (giai đoạn lưu ở raw.stage)", () => {
     expect(rowState("PRE_DECLARED", true, false)).toBe("SENDING");
     expect(rowState("DECLARED", true, false)).toBe("INSPECTING");
     expect(rowState("POST_EDITING", true, false)).toBe("CLEARED");
+  });
+});
+
+describe("declaration-to-fpt – chỉ tiêu bổ sung (1.38/2.33, 1.50, 2.40, 2.43, 2.80)", () => {
+  const EDA = { ...PAYLOAD, kind: "EDA" as const, direction: "XK" as const, fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, NGAY_DI: { value: "2026-10-20" }, VBPQ: { value: "" } } };
+  type Req = { objVN_IDA?: Record<string, unknown>; objVN_IDA_KTG?: Record<string, unknown>; objVN_EDA?: Record<string, unknown>; objVN_EDA_HANG?: Record<string, unknown>[] };
+
+  it("parsePermits / lawCodesByLine", () => {
+    expect(parsePermits("QPGP 06GPTC17032025; mttb 08TB 18062025;")).toEqual([{ code: "QPGP", no: "06GPTC17032025" }, { code: "MTTB", no: "08TB18062025" }]);
+    expect(Object.fromEntries(lawCodesByLine("xk; 2: GP, KD; 2: XK", [1, 2, 3]))).toEqual({ 1: ["XK"], 2: ["XK", "GP", "KD"], 3: ["XK"] });
+    expect(Object.fromEntries(lawCodesByLine("", [1]))).toEqual({ 1: [] });
+  });
+
+  it("IDA: 1.38 → TK_SS/TK_SN (tối đa 5, cảnh báo phần dư); 1.50 → KTG_VLD", () => {
+    const gp = Array.from({ length: 6 }, (_, k) => `G${k} SO${k}`).join("; ");
+    const b = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, GP: { value: gp }, CT_TG: { value: "05102026#&HĐ số 01/2026" } } });
+    const r = b.request as Req;
+    expect(r.objVN_IDA).toMatchObject({ tK_SS1: "G0", tK_SN1: "SO0", tK_SS5: "G4", tK_SN5: "SO4" });
+    expect(r.objVN_IDA!["tK_SS6"]).toBeUndefined();
+    expect(b.warnings.join(" ")).toMatch(/5 giấy phép đầu.*G5/);
+    expect(r.objVN_IDA_KTG!["ktG_VLD"]).toBe("05102026#&HĐ số 01/2026");
+  });
+
+  it("EDA: 2.40 → TK_FKK/TK_FCD; trống (FOB) → không gửi; 2.43 → TK_TPM; 2.33 → TK_SS1; 2.80 → HAG_OL theo dòng", () => {
+    const b = buildFptRequest({ ...EDA, fields: { ...EDA.fields, TG_TT: { value: "19660 USD" }, NGUOI_NT: { value: "1 – Người xuất khẩu" }, GP: { value: "XK 123/GP" }, VBPQ: { value: "XK; 2: KD" } } });
+    const r = b.request as Req;
+    expect(r.objVN_EDA).toMatchObject({ tK_FKK: 19660, tK_FCD: "USD", tK_TPM: "1", tK_SS1: "XK", tK_SN1: "123/GP" });
+    expect(r.objVN_EDA_HANG![0]).toMatchObject({ haG_OL1: "XK" });
+    expect(r.objVN_EDA_HANG![0]!["haG_OL2"]).toBeUndefined();
+    expect(r.objVN_EDA_HANG![1]).toMatchObject({ haG_OL1: "XK", haG_OL2: "KD" });
+    const fob = buildFptRequest(EDA).request as Req;
+    expect(fob.objVN_EDA!["tK_FKK"]).toBeUndefined();
+    expect(fob.objVN_EDA_HANG![0]!["haG_OL1"]).toBeUndefined();
   });
 });

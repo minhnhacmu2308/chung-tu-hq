@@ -50,3 +50,45 @@ export function planAdjustments(s: Shipment): AdjustmentPlan {
   }
   return { adjustments: out, notes };
 }
+
+/**
+ * Điều kiện giá xuất khẩu không phải trừ cước/bảo hiểm: nhóm E/F (giá chưa gồm cước quốc tế) và FOB/DAP/DAF –
+ * chỉ tiêu 2.40 Phụ lục II: điều kiện giá FOB, DAP, DAF thì không khai trị giá tính thuế (lấy theo giá hóa đơn).
+ */
+export const EXPORT_NO_DEDUCTION = new Set(["EXW", "FCA", "FAS", "FOB", "DAP", "DAF"]);
+
+/**
+ * Tờ khai xuất (EDA): trị giá hải quan là giá bán đến cửa khẩu xuất, KHÔNG gồm phí vận tải quốc tế và phí bảo hiểm quốc tế
+ * (Điều 7 TT39/2015/TT-BTC; chỉ tiêu 2.40 Phụ lục II). Giá hóa đơn đã gồm cước/bảo hiểm (CFR, CIF, CPT, CIP, nhóm D…) → trừ ra.
+ * Chưa có số cước/bảo hiểm thì không trừ bừa – ghi chú để người khai bổ sung.
+ */
+export function planExportAdjustments(s: Shipment): AdjustmentPlan {
+  const incoterm = incotermCode(s.invoice.incoterm.value);
+  const currency = s.invoice.currency.value ?? "";
+  const out: Adjustment[] = [];
+  const notes: string[] = [];
+  const src = (kind: DocKind | undefined, fallback: ValueSource): ValueSource => (kind && SOURCE_BY_KIND[kind]) || fallback;
+  if (!incoterm || EXPORT_NO_DEDUCTION.has(incoterm)) {
+    if (incoterm === "EXW") notes.push("EXW: trị giá tính thuế xuất khẩu phải gồm chi phí đưa hàng đến cửa khẩu xuất – bổ sung ở chỉ tiêu 2.40 nếu có");
+    return { adjustments: out, notes };
+  }
+  const freightIncluded = incoterm !== "C&I";
+  if (freightIncluded) {
+    if (s.charges.freight.value !== null) {
+      out.push({ label: "Cước vận chuyển quốc tế", amount: s.charges.freight.value, currency: s.charges.freightCurrency?.value ?? currency, source: src(s.charges.freight.sources[0]?.kind, "SYSTEM"), kind: "SUBTRACT" });
+    } else {
+      notes.push(`${incoterm}: giá hóa đơn đã gồm cước quốc tế – cần số cước để trừ ra khi tính trị giá tính thuế xuất khẩu (chỉ tiêu 2.40)`);
+    }
+  }
+  if (INSURANCE_INCLUDED.has(incoterm)) {
+    if (s.charges.insurance.value !== null) {
+      out.push({ label: "Phí bảo hiểm", amount: s.charges.insurance.value, currency: s.charges.insuranceCurrency?.value ?? currency, source: src(s.charges.insurance.sources[0]?.kind, "SYSTEM"), kind: "SUBTRACT" });
+    } else {
+      notes.push(`${incoterm}: giá hóa đơn đã gồm bảo hiểm quốc tế – cần phí bảo hiểm để trừ ra (chỉ tiêu 2.40)`);
+    }
+  }
+  return { adjustments: out, notes };
+}
+
+/** Khoản điều chỉnh theo chiều tờ khai: nhập cộng (1.47–1.49), xuất trừ về giá tại cửa khẩu xuất (2.40). */
+export const planAdjustmentsFor = (kind: "IDA" | "EDA", s: Shipment): AdjustmentPlan => (kind === "IDA" ? planAdjustments(s) : planExportAdjustments(s));

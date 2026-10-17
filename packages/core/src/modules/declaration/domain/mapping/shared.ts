@@ -74,3 +74,17 @@ export function packageCount(i: MappingInput, missingNote: string): MappedValue 
 /** HS từng dòng để xét chính sách: ưu tiên mã đã xác nhận (biểu VN), chưa có thì mã trên invoice. */
 export const lineHs = (i: MappingInput) =>
   i.shipment.items.map((it) => (i.lines.find((l) => l.lineNo === it.lineNo)?.hsConfirmed ?? it.hsOnInvoice.value ?? "").replace(/\D/g, ""));
+
+/** Loại hình gia công: nhập E21–E23, xuất E52–E56 – ô 2 chỉ tiêu 1.38/2.33 khai số tiếp nhận hợp đồng/phụ lục hợp đồng gia công. */
+const isProcessingType = (typeCode: string) => /^E[25]\d$/.test(typeCode.trim().toUpperCase());
+
+/**
+ * 1.38 / 2.33 – Giấy phép (tối đa 5 cặp "mã phân loại + số", cách nhau ";"). Chứng từ không cho thông tin này → người khai nhập.
+ * Loại hình gia công bắt buộc khai số tiếp nhận hợp đồng gia công (TT39 PL II) → đánh dấu cần kiểm tra.
+ */
+export function permitsField(i: MappingInput, kind: Kind): MappedValue {
+  const no = kind === "IDA" ? "1.38" : "2.33";
+  const guide = "Dạng “mã phân loại số giấy phép”, tối đa 5, cách nhau dấu “;” (ví dụ “QPGP 06GPTC17032025”)";
+  if (isProcessingType(i.dossier.typeCode)) return { value: null, source: "DOSSIER", suspect: true, note: `Loại hình gia công: khai số tiếp nhận hợp đồng/phụ lục hợp đồng gia công ở chỉ tiêu ${no}. ${guide}` };
+  return { value: null, source: "DOSSIER", note: `Khai khi hàng phải có giấy phép, kết quả kiểm tra chuyên ngành, văn bản xác định trước, danh mục miễn thuế… ${guide}` };
+}

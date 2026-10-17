@@ -3,7 +3,8 @@ import { DEFAULT_PARTY_CLASS, PARTY_CLASS_LABELS } from "@kb/contracts";
 import { resolveDischargePort, resolvePort, transportModeCode } from "../catalog-resolve.js";
 import { FREIGHT_NOT_INCLUDED, incotermCode } from "../adjustments.js";
 import { IDA_NO as N } from "./numbers.js";
-import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, port, priceKind } from "./shared.js";
+import { dec } from "../../../../shared/decimal.js";
+import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { profileSource, SRC, warehouseFromAn } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
@@ -13,6 +14,20 @@ const coRef = (i: MappingInput) => {
   if (o.rexNo.value) return `REX ${o.rexNo.value}`;
   if (o.coNo.value) return `C/O${o.coForm.value ? ` form ${o.coForm.value}` : ""} số ${o.coNo.value}`;
   return null;
+};
+
+/**
+ * 1.50 Chi tiết khai trị giá (≤ 280 ký tự): mở đầu bằng ngày vận đơn dạng DDMMYYYY#& (TT121), sau đó các ghi chú trị giá suy được từ chứng từ
+ * (dòng hàng FOC). Thiếu ngày vận đơn → để người khai bổ sung, không tự điền.
+ */
+const valuationDetail = (i: MappingInput): MappedValue => {
+  const d = i.shipment.transport.departureDate.value;
+  const foc = i.shipment.items.filter((it) => it.amount.value !== null && dec(it.amount.value).isZero()).map((it) => it.lineNo);
+  const notes = foc.length ? [`Dòng hàng ${foc.join(", ")} là hàng không thanh toán (FOC/khuyến mại)`] : [];
+  if (!d) return { value: notes.length ? notes.join("; ") : null, source: "BILL_OF_LADING", suspect: true, note: "Thiếu ngày vận đơn – chỉ tiêu 1.50 mở đầu bằng ngày vận đơn dạng DDMMYYYY#& (TT121)" };
+  const date = `${d.slice(8, 10)}${d.slice(5, 7)}${d.slice(0, 4)}#&`;
+  const src = fromSourced(i.shipment.transport.departureDate, "BILL_OF_LADING");
+  return { ...src, value: `${date}${notes.join("; ")}` };
 };
 
 const charge = (i: MappingInput, label: string): MappedValue => {
@@ -94,6 +109,8 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     return t.value === null ? { value: i.valuation.invoiceTotal, source: "SYSTEM", note: "Tính từ tổng các dòng hàng" } : t;
   } },
   { code: "KHAI_TG", no: N.KHAI_TG, section: "VALUE", label: "Mã phân loại khai trị giá", required: true, options: { sources: [profileSource("KHAI_TG")], allowFixed: true }, from: (i) => profileOr(i, "KHAI_TG", fixed("6 – Áp dụng phương pháp trị giá giao dịch")) },
+  { code: "GP", no: N.GP, section: "VALUE", label: "Giấy phép nhập khẩu", required: false, from: (i) => permitsField(i, "IDA") },
+  { code: "CT_TG", no: N.CT_TG, section: "VALUE", label: "Chi tiết khai trị giá", required: false, from: valuationDetail },
   { code: "PHI_VC", no: N.PHI_VC, section: "VALUE", label: "Phí vận chuyển", required: false, from: (i) => charge(i, "Cước") },
   { code: "PHI_BH", no: N.PHI_BH, section: "VALUE", label: "Phí bảo hiểm", required: false, from: (i) => charge(i, "Phí bảo hiểm") },
   { code: "KHOAN_DC", no: N.KHOAN_DC, section: "VALUE", label: "Khoản điều chỉnh khác", required: false, from: (i) => {

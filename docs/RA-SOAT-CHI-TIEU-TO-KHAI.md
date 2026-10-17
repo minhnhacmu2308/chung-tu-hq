@@ -234,7 +234,7 @@ Tất cả phản hồi lỗi (`errorList`) đều có `indexCode`/`nameCode` (c
 1.3/1.10/1.89 (tạm nhập – tái xuất); 1.5; 1.17–1.19, 1.24 (ủy thác, nhập khẩu tại chỗ); 1.25 (đại lý); hô hiệu tàu 1.31/2.30; 1.35/2.60 hiển thị container; 1.36; 1.40; 1.47–1.49 hiện đủ mã phân loại và đủ 5 khoản điều chỉnh; 1.51; 1.53–1.62 (bảo lãnh, hạn mức); 1.63; 1.64–1.67 (kho ngoại quan, vận chuyển kết hợp); 1.75, 1.77, 1.81, 1.82, 1.88, 1.90–1.93, 1.95–1.96; 2.59 vanning.
 
 ### Sai nghiệp vụ cần sửa
-- `TK_IMY = "000000"` và `TK_CHB = "00"` được gửi cứng (`integration/domain/declaration-to-fpt.ts:118-120`). Chỉ tiêu tùy chọn hoặc HT thì **không gửi** để VNACCS tự xác định, đúng quy tắc "thiếu thì để trống".
+- ~~`TK_IMY = "000000"` và `TK_CHB = "00"` gửi cứng là sai~~ – **đính chính (đợt 3):** đặc tả `VNACCS_IDA/EDA v1.2` đánh dấu `TK_IMY` và `TK_CHB` là Required (X), và phản hồi thật của FPT trả `tK_CHB: "00"`. Bỏ hai trường này có thể làm FPT từ chối, nên **giữ nguyên**. Cách đúng lâu dài: lưu mã bưu chính của doanh nghiệp ở Tài khoản và gửi giá trị thật thay cho `000000`.
 - `HAG_QN2/QT2` chép từ số lượng (1) (`declaration-to-fpt.ts:93-94`).
 - 1.69 luôn điền mã hồ sơ, sẽ đè cú pháp TT121 bắt buộc (`#&NKTC#&…`, `#&GCPTQ`, `#&1…#&9`) khi rơi vào các tình huống đó.
 - Tiêu đề thuế của EDA ghi "Thuế NK / VAT" (`review-step.tsx` `ItemsTab`, `TaxTab`).
@@ -324,6 +324,18 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 - fpt-mock trả thêm ngày giờ đăng ký, mã phân loại kiểm tra và ngày giờ cấp phép.
 - Giao diện: khối "Hải quan trả về" ở bước Khai báo Hải quan và tab cùng tên ở màn Review. Khối này hiện chỉ thị Hải quan nổi bật và so sánh số Hải quan với số ứng dụng ước tính.
 - Còn lại: gắn `errorList` (`indexCode`) vào đúng ô chỉ tiêu; đọc các thông điệp VAD8000/VAE8000 (chỉ thị gửi riêng) và ân hạn thuế.
+
+**Đợt 3 – dữ liệu gửi Hải quan và trị giá/thuế (xong):**
+- Tờ khai xuất: trị giá tính thuế = giá tại cửa khẩu xuất. Giá CFR/CIF/CPT/CIP/nhóm D thì **trừ** cước và bảo hiểm quốc tế (`planExportAdjustments`); thiếu số cước thì không trừ bừa mà đánh dấu cần kiểm tra. FOB/DAP/DAF không trừ.
+- Tờ khai xuất không còn ước tính "thuế" bằng thuế suất nhập khẩu + GTGT (thuế dự kiến = 0, Hải quan tính).
+- Chỉ tiêu mới, dựng và gửi FPT:
+  - 1.38/2.33 giấy phép → `TK_SS/SN`; loại hình gia công thì nhắc khai số tiếp nhận hợp đồng.
+  - 1.50 chi tiết khai trị giá → `KTG_VLD`: ngày vận đơn `DDMMYYYY#&` cộng ghi chú dòng FOC.
+  - 2.40 trị giá tính thuế → `TK_FKK/TK_FCD`.
+  - 2.43 người nộp thuế → `TK_TPM`; có thể đặt mặc định ở Cài đặt cho cả tờ khai xuất.
+  - 2.80 mã văn bản pháp luật theo dòng → `HAG_OL1..5`, cú pháp "mã chung; số dòng: mã riêng".
+- Mock web: tờ khai xuất FOB hết cộng cước; có các chỉ tiêu mới (`DB_VERSION` 10).
+- **Chưa làm được, thiếu dữ liệu:** số lượng (2) theo đơn vị tính biểu thuế (`HAG_QN2/QT2`) cần bảng đơn vị tính theo mã HS. 1.69 vẫn điền mã hồ sơ: cần biết tình huống tại chỗ / gia công với DNCX để dùng cú pháp TT121.
 
 **Phát hiện thêm khi làm đợt 1 (để đợt 3 xử lý):**
 - Tờ khai xuất đang tính "thuế" bằng thuế suất **nhập khẩu** và VAT (`declaration/domain/tax.ts`). Chưa có thuế suất xuất khẩu.

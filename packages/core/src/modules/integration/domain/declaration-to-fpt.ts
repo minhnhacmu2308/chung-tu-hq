@@ -61,6 +61,40 @@ function setter(target: Record<string, unknown>, warnings: string[], sizes: Map<
   };
 }
 
+/** 1.38 / 2.33: "QPGP 06GPTC17032025; MTTB 08TB18062025" → [{ code, no }] (mã phân loại giấy phép + số giấy phép), theo thứ tự khai. */
+export function parsePermits(value: string): { code: string; no: string }[] {
+  return value.split(";").map((x) => x.trim()).filter(Boolean).map((x) => {
+    const [code = "", ...rest] = x.split(/\s+/);
+    return { code: code.toUpperCase(), no: rest.join("") };
+  });
+}
+
+/**
+ * 2.80 (mã văn bản pháp luật khác, theo dòng hàng): phần không có "số dòng:" áp cho mọi dòng; "2: GP KD" chỉ cho dòng 2.
+ * Các phần cách nhau ";", mã cách nhau dấu cách/phẩy; mỗi dòng bỏ mã trùng.
+ */
+export function lawCodesByLine(value: string, lineNos: number[]): Map<number, string[]> {
+  const all: string[] = [];
+  const own = new Map<number, string[]>();
+  for (const part of value.split(";").map((x) => x.trim()).filter(Boolean)) {
+    const m = /^(\d+)\s*:\s*(.*)$/.exec(part);
+    const codes = (m ? m[2]! : part).split(/[\s,]+/).filter(Boolean).map((c) => c.toUpperCase());
+    if (m) own.set(Number(m[1]), [...(own.get(Number(m[1])) ?? []), ...codes]);
+    else all.push(...codes);
+  }
+  return new Map(lineNos.map((n) => [n, [...new Set([...all, ...(own.get(n) ?? [])])]]));
+}
+
+/** Tối đa 5 giấy phép (TK_SS1..5 mã phân loại, TK_SN1..5 số). */
+function setPermits(value: string, set: ReturnType<typeof setter>, warnings: string[]) {
+  const permits = parsePermits(value);
+  permits.slice(0, 5).forEach((x, k) => {
+    set(`TK_SS${k + 1}`, x.code);
+    set(`TK_SN${k + 1}`, x.no);
+  });
+  if (permits.length > 5) warnings.push(`Giấy phép: chỉ gửi 5 giấy phép đầu (${permits.slice(5).map((x) => x.code).join(", ")} bị bỏ)`);
+}
+
 /** Chia địa chỉ dài thành 4 ô 35 ký tự (EPA/EP2/EP3/EP4 hoặc CGA/CAT/CAC/CAS). */
 function splitAddress(addr: string, names: string[], set: ReturnType<typeof setter>) {
   const chunks: string[] = [];
@@ -81,6 +115,7 @@ function splitAddress(addr: string, names: string[], set: ReturnType<typeof sett
 
 function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
   const sizes = p.kind === "IDA" ? SIZE_IDA : SIZE_EDA;
+  const laws = p.kind === "EDA" ? lawCodesByLine(val(p, "VBPQ"), p.items.map((it) => it.lineNo)) : null;
   return p.items.map((it, i) => {
     const h: Record<string, unknown> = {};
     const set = setter(h, warnings, sizes);
@@ -96,6 +131,11 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
     set("HAG_UPR", num(it.unitPrice));
     set("HAG_UPC", p.currency);
     set("HAG_TSC", it.unit || "PCE");
+    if (laws) {
+      const codes = laws.get(it.lineNo) ?? [];
+      codes.slice(0, 5).forEach((c, k) => set(`HAG_OL${k + 1}`, c));
+      if (codes.length > 5) warnings.push(`Dòng ${it.lineNo}: chỉ gửi 5 mã văn bản pháp luật đầu (${codes.slice(5).join(", ")} bị bỏ)`);
+    }
     if (p.kind === "IDA") {
       set("HAG_OR", it.origin);
       const table = taxTable(it.policyNote);
@@ -135,6 +175,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     laws.slice(0, 5).forEach((c, k) => set(`TK_OL${k + 1}`, c));
     if (laws.length > 5) warnings.push(`Mã văn bản pháp quy: chỉ gửi 5 mã đầu (${laws.slice(5).join(", ")} bị bỏ)`);
     if (p.items.some((it) => /^(84|85)/.test(hs8(it.hsConfirmed))) && !/^(MO|CU)$/.test(laws[0] ?? "")) blockers.push("Hàng chương 84/85: ô 1 Mã văn bản pháp quy khác (1.37) phải là MO hoặc CU – CV 2061/TCHQ-GSQL");
+    setPermits(val(p, "GP"), set, warnings); // 1.38
     set("TK_IV1", firstToken(val(p, "HD_PL")) || "A");
     set("TK_IV3", val(p, "SO_HD"));
     set("TK_IVD", ddmmyyyy(val(p, "NGAY_HD")));
@@ -169,6 +210,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     const ktg: Record<string, unknown> = {};
     const setKtg = setter(ktg, warnings, SIZE_IDA);
     setKtg("KTG_VD1", firstToken(val(p, "KHAI_TG")) || "6");
+    setKtg("KTG_VLD", val(p, "CT_TG")); // 1.50 chi tiết khai trị giá
     const freight = p.adjustments.find((a) => a.label.startsWith("Cước"));
     if (freight) {
       setKtg("KTG_FR1", "A");
@@ -225,6 +267,14 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_IP2", val(p, "DK_GIA"));
   set("TK_IP3", val(p, "MA_TT") || p.currency);
   set("TK_IP4", num(val(p, "TONG_TG")));
+  // 2.40 trị giá tính thuế dạng "19660 USD" → TK_FKK + TK_FCD; điều kiện FOB/DAP/DAF không khai (ô trống).
+  const fkk = val(p, "TG_TT");
+  if (fkk) {
+    set("TK_FKK", numPart(fkk));
+    set("TK_FCD", unitPart(fkk, p.currency));
+  }
+  set("TK_TPM", firstToken(val(p, "NGUOI_NT"))); // 2.43
+  setPermits(val(p, "GP"), set, warnings); // 2.33
   set("TK_NT2", val(p, "GHI_CHU"));
   set("TK_REF", val(p, "SO_QLNB"));
   const con: Record<string, unknown> = {};

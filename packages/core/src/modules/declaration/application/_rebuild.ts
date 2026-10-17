@@ -3,7 +3,7 @@ import type { Shipment } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { planAdjustments } from "../domain/adjustments.js";
+import { planAdjustmentsFor } from "../domain/adjustments.js";
 import { buildDeclaration, type BuiltDeclaration, type ExchangeInfo } from "../domain/build.js";
 import { vnDate, type FieldOverride } from "../domain/mapping/types.js";
 import { profileFor } from "./declaration-profile.js";
@@ -27,7 +27,7 @@ export async function exchangeFor(r: DeclarationRepos, currencies: string[], dat
 /** Các tiền tệ một lô hàng cần tỷ giá: tiền tệ hóa đơn + tiền tệ của từng khoản điều chỉnh. */
 export function currenciesOf(shipment: Shipment, dossier: DossierInfo): string[] {
   const invoiceCurrency = shipment.invoice.currency.value ?? dossier.currency;
-  return [invoiceCurrency, ...planAdjustments(shipment).adjustments.map((a) => a.currency)];
+  return [invoiceCurrency, ...planAdjustmentsFor(dossier.direction === "NK" ? "IDA" : "EDA", shipment).adjustments.map((a) => a.currency)];
 }
 
 /** `cfg` = Mặc định khai báo + ghi đè của doanh nghiệp (profileFor). */

@@ -40,10 +40,12 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "1 cá nhân gửi cá nhân; 2 tổ chức gửi cá nhân; 3 cá nhân gửi tổ chức; 4 tổ chức gửi tổ chức; 5 khác.",
   }),
   f("1.8", "GENERAL", "Cơ quan Hải quan", "code", "O", {
+    assist: true,
     maxLen: 6, codeTable: "A038", fptField: "VN_IDA.TK_CH",
     legalNote: "Mã Chi cục HQ nơi đăng ký tờ khai. Không nhập thì hệ thống tự xác định theo địa điểm lưu giữ hàng chờ thông quan.",
   }),
   f("1.9", "GENERAL", "Mã bộ phận xử lý tờ khai", "code", "O", {
+    assist: true,
     maxLen: 2, codeTable: "A014", fptField: "VN_IDA.TK_CHB",
     legalNote: "Mã Đội thủ tục xử lý tờ khai. Không nhập thì hệ thống tự xác định dựa trên mã HS.",
   }),
@@ -52,6 +54,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Chỉ khai với loại hình tạm nhập: ngày hết hạn hàng tạm nhập được lưu tại Việt Nam.",
   }),
   f("1.11", "GENERAL", "Ngày khai báo (dự kiến)", "date", "O", {
+    assist: true,
     fptField: "VN_IDA.TK_ICD",
     legalNote: "Ngày dự kiến thực hiện nghiệp vụ IDC; không nhập thì hệ thống lấy ngày thực hiện nghiệp vụ.",
   }),
@@ -70,10 +73,12 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Mã bưu chính của người nhập khẩu (nếu có).",
   }),
   f("1.15", "PARTIES", "Địa chỉ người nhập khẩu", "text", "O", {
+    assist: true,
     maxLen: 100, fptField: "VN_IDA.TK_IMA",
     legalNote: "Không cần nhập nếu hệ thống tự hiển thị; nhập lại nếu hệ thống hiển thị sai.",
   }),
   f("1.16", "PARTIES", "Số điện thoại người nhập khẩu", "text", "O", {
+    assist: true,
     maxLen: 20, fptField: "VN_IDA.TK_IMT",
     legalNote: "Không dùng dấu gạch ngang; không cần nhập nếu hệ thống tự hiển thị đúng.",
   }),
@@ -110,6 +115,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Tên người ủy thác xuất khẩu (nếu có). NK tại chỗ: tên người nước ngoài chỉ định giao hàng tại VN (TT121).",
   }),
   f("1.25", "PARTIES", "Mã đại lý hải quan", "text", "O", {
+    assist: true,
     maxLen: 5, fptField: "VN_IDA.TK_ICC", manual: true,
     legalNote: "Không nhập nếu đại lý thực hiện IDA và nghiệp vụ tiếp theo; nhập mã người sử dụng khi người khai IDA khác người khai IDC.",
   }),
@@ -152,6 +158,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Ô 1 mã UN/LOCODE nơi xếp hàng (VD_PSC); không có mã: mã nước + \"ZZZ\"; NK tại chỗ \"VNZZZ\"; ô 2 tên địa điểm xếp hàng (VD_PSN).",
   }),
   f("1.35", "TRANSPORT", "Số lượng container", "int", "C", {
+    assist: true,
     maxLen: 3, fptField: "VN_IDA_VANDON.VD_COC",
     legalNote: "Hệ thống tự xuất nếu đã đăng ký. Không nhập khi đường không, phương thức không dùng container, hàng đóng chung container từ kho CFS. Danh sách container (số hiệu, ký hiệu, số seal) khai bằng nghiệp vụ HYS, file Excel theo định dạng của cơ quan Hải quan.",
   }),
@@ -198,6 +205,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "1 giống hệt; 2 tương tự; 3 khấu trừ; 4 tính toán; 6 trị giá giao dịch; 7 quan hệ đặc biệt không ảnh hưởng; 8 giao dịch, phân bổ thủ công; 9 suy luận; T đặc biệt (Đ17 TT39/2015, gia công cho NN). Nhiều phương pháp: mã dùng nhiều nhất; 6, 7 chỉ khi đủ điều kiện PP giao dịch; 0, 5, Z chưa dùng.",
   }),
   f("1.46", "VALUE", "Số tiếp nhận tờ khai trị giá tổng hợp", "text", "F", {
+    unused: true,
     maxLen: 9, fptField: "VN_IDA_KTG.KTG_VD2",
     legalNote: "Cả 3 ô: không nhập dữ liệu cho đến khi có hướng dẫn mới.",
   }),
@@ -218,6 +226,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Ngày vận đơn DDMMYYYY#&; chi tiết khoản điều chỉnh; giá tạm tính; giảm giá chưa trừ; số hợp đồng; DPU khi khai DAT; dòng hàng FOC; PTTT thực tế khi khai KC. TT121: tham vấn 1 lần dùng nhiều lần (STT hàng, số/ngày Thông báo trị giá, mã Chi cục); \"tham vấn gián tiếp\".",
   }),
   f("1.51", "VALUE", "Tổng hệ số phân bổ trị giá tính thuế", "decimal", "C", {
+    assist: true,
     maxLen: 20, fptField: "VN_IDA.TK_TP",
     legalNote: "Tổng trị giá hóa đơn trước điều chỉnh, tối đa 4 số thập phân; bắt buộc khi một hóa đơn khai nhiều tờ khai; không nhập thì hệ thống tự tính.",
   }),

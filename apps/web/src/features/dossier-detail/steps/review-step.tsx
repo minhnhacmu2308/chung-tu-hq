@@ -20,15 +20,9 @@ import { formatBytesVi, formatDate, formatDateTime, formatMoney, formatNumber, f
 import { DOC_KIND_LABELS, type Declaration, type DeclarationField } from "@/mocks/types";
 import { errorMessage, KeyValue, SourceChip, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
 import { fieldGuide } from "./field-guide";
+import { fieldTitle, groupDeclarationFields, ROLE_INFO, type RoledField } from "./declaration-groups";
 import { provenanceLabel } from "./provenance";
 import type { StepProps } from "./types";
-
-const SECTION_LABELS: Record<DeclarationField["section"], string> = {
-  GENERAL: "Thông tin chung",
-  PARTIES: "Người xuất khẩu / nhập khẩu",
-  TRANSPORT: "Vận đơn & vận chuyển",
-  VALUE: "Hóa đơn & trị giá",
-};
 
 const DATE_CODES = new Set(["NGAY_DK", "NGAY_DEN", "NGAY_HD"]);
 
@@ -40,13 +34,21 @@ function displayValue(f: DeclarationField, currency: string) {
   return f.value;
 }
 
-function FieldTile({ field, currency, note, onEdit }: { field: DeclarationField; currency: string; note?: string | undefined; onEdit?: (() => void) | undefined }) {
+function RoleBadge({ role }: { role: RoledField["role"] }) {
+  const info = ROLE_INFO[role];
+  return (
+    <Badge tone={info.tone} size="sm">
+      <span className="sr-only">Vai trò: </span>
+      {info.label}
+    </Badge>
+  );
+}
+
+function FieldTile({ field, currency, note, onEdit }: { field: RoledField; currency: string; note?: string | undefined; onEdit?: (() => void) | undefined }) {
   return (
     <div className={cn("flex flex-col gap-1.5 rounded-md border p-3", field.suspect ? "border-warning bg-warning-subtle" : "border-border bg-surface")}>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-fg-muted">
-          {field.label} <span className="font-mono text-fg-subtle">· {field.code}</span>
-        </p>
+        <p className="text-xs text-fg-muted">{fieldTitle(field)}</p>
         <SourceChip source={field.source} className="shrink-0" />
       </div>
       <div className="flex items-start justify-between gap-2">
@@ -57,7 +59,10 @@ function FieldTile({ field, currency, note, onEdit }: { field: DeclarationField;
           </Button>
         )}
       </div>
-      {provenanceLabel(field.provenance) && <p className="text-xs text-fg-subtle">{provenanceLabel(field.provenance)}</p>}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <RoleBadge role={field.role} />
+        {provenanceLabel(field.provenance) && <span className="text-xs text-fg-subtle">{provenanceLabel(field.provenance)}</span>}
+      </div>
       {field.suspect && (
         <p className="flex items-start gap-1 text-sm text-warning-subtle-fg">
           <AlertTriangle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
@@ -76,18 +81,38 @@ const SUSPECT_NOTES: Record<string, string> = {
   TY_GIA: "Tỷ giá theo ngày khai dự kiến, sẽ cập nhật khi đăng ký tờ khai.",
 };
 
+/** Chú thích nhãn vai trò – chỉ các vai trò có mặt trên tờ khai này. */
+function RoleLegend({ roles }: { roles: RoledField["role"][] }) {
+  const present = (Object.keys(ROLE_INFO) as RoledField["role"][]).filter((r) => roles.includes(r));
+  return (
+    <section aria-label="Cách đọc nhãn chỉ tiêu" className="rounded-md border border-border bg-surface-muted px-3 py-2.5">
+      <p className="mb-1.5 text-xs font-medium text-fg-muted">Số trước tên là số chỉ tiêu theo Phụ lục II (TT39/2018, sửa đổi TT121/2025). Nhãn vai trò:</p>
+      <ul className="flex flex-col gap-1.5 cq-md:flex-row cq-md:flex-wrap cq-md:gap-x-4">
+        {present.map((r) => (
+          <li key={r} className="flex items-center gap-1.5 text-xs text-fg-muted">
+            <RoleBadge role={r} />
+            <span>{ROLE_INFO[r].meaning}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function GeneralTab({ decl, currency, onEdit }: { decl: Declaration; currency: string; onEdit?: ((f: DeclarationField) => void) | undefined }) {
+  const groups = groupDeclarationFields(decl.kind, decl.fields);
   return (
     <Stack gap="lg">
-      {(Object.keys(SECTION_LABELS) as DeclarationField["section"][]).map((section) => {
-        const fields = decl.fields.filter((f) => f.section === section);
-        if (!fields.length) return null;
+      <RoleLegend roles={groups.flatMap((g) => g.fields.map((f) => f.role))} />
+      {groups.map((group) => {
+        const { id, fields } = group;
         return (
-          <section key={section} aria-labelledby={`sec-${section}`}>
-            <h3 id={`sec-${section}`} className="mb-2 text-sm font-semibold text-fg">
-              {SECTION_LABELS[section]}
+          <section key={id} aria-labelledby={`sec-${id}`}>
+            <h3 id={`sec-${id}`} className="text-sm font-semibold text-fg">
+              {group.title}
             </h3>
-            <Grid cols={{ base: 1, md: 2, xl: 3 }} gap="sm">
+            {group.description && <p className="mt-0.5 text-xs text-fg-subtle">{group.description}</p>}
+            <Grid cols={{ base: 1, md: 2, xl: 3 }} gap="sm" className="mt-2">
               {fields.map((f) => (
                 <FieldTile key={f.code} field={f} currency={currency} note={f.note ?? SUSPECT_NOTES[f.code]} onEdit={onEdit && isDeclarationFieldEditable(f.code) ? () => onEdit(f) : undefined} />
               ))}
@@ -101,7 +126,8 @@ function GeneralTab({ decl, currency, onEdit }: { decl: Declaration; currency: s
 
 const col = createDataTableColumnHelper<DeclarationItemView>();
 
-function ItemsTab({ items, currency }: { items: DeclarationItemView[]; currency: string }) {
+// Trị giá tính thuế và thuế từng dòng là số ứng dụng ước tính – VNACCS tự phân bổ, tính lại khi khai (chỉ tiêu 1.76, 1.87 / 2.67, 2.76).
+function ItemsTab({ kind, items, currency }: { kind: Declaration["kind"]; items: DeclarationItemView[]; currency: string }) {
   const columns = col.columns([
     col.accessor("lineNo", { header: "#", size: 48, meta: { align: "center" } }),
     col.accessor("description", {
@@ -124,29 +150,47 @@ function ItemsTab({ items, currency }: { items: DeclarationItemView[]; currency:
     col.accessor("unitPrice", { header: `Đơn giá (${currency})`, meta: { align: "end" }, cell: (c) => formatMoney(c.getValue(), undefined, 3) }),
     col.accessor("amount", { header: `Trị giá (${currency})`, meta: { align: "end" }, cell: (c) => formatMoney(c.getValue()) }),
     col.accessor("customsValueVnd", { header: "Trị giá tính thuế (VND)", meta: { align: "end" }, cell: (c) => formatMoney(c.getValue(), undefined, 0) }),
-    col.accessor("importDutyVnd", {
-      header: "Thuế NK",
-      meta: { align: "end" },
-      cell: (c) => (
-        <div>
-          <p className="tabular-nums">{formatMoney(c.getValue(), undefined, 0)}</p>
-          <p className="text-xs text-fg-subtle">{c.row.original.importDutyRate ?? "—"}%</p>
-        </div>
-      ),
-    }),
-    col.accessor("vatVnd", {
-      header: "VAT",
-      meta: { align: "end" },
-      cell: (c) => (
-        <div>
-          <p className="tabular-nums">{formatMoney(c.getValue(), undefined, 0)}</p>
-          <p className="text-xs text-fg-subtle">{c.row.original.vatRate ?? "—"}%</p>
-        </div>
-      ),
-    }),
+    // Tờ khai xuất: ứng dụng chưa ước tính thuế xuất khẩu và không thu thuế GTGT – không hiện cột thuế.
+    ...(kind === "IDA"
+      ? [
+          col.accessor("importDutyVnd", {
+            header: "Thuế NK",
+            meta: { align: "end" },
+            cell: (c) => (
+              <div>
+                <p className="tabular-nums">{formatMoney(c.getValue(), undefined, 0)}</p>
+                <p className="text-xs text-fg-subtle">{c.row.original.importDutyRate ?? "—"}%</p>
+              </div>
+            ),
+          }),
+          col.accessor("vatVnd", {
+            header: "VAT",
+            meta: { align: "end" },
+            cell: (c) => (
+              <div>
+                <p className="tabular-nums">{formatMoney(c.getValue(), undefined, 0)}</p>
+                <p className="text-xs text-fg-subtle">{c.row.original.vatRate ?? "—"}%</p>
+              </div>
+            ),
+          }),
+        ]
+      : []),
   ]);
-  return <DataTable aria-label="Danh sách hàng trên tờ khai" columns={columns} data={items} getRowId={(r) => r.id} />;
+  return (
+    <Stack gap="sm">
+      <p className="text-xs text-fg-subtle">
+        {kind === "IDA"
+          ? "Trị giá tính thuế, thuế NK và VAT là số ứng dụng ước tính – Hải quan tự phân bổ, tính lại khi khai báo."
+          : "Trị giá tính thuế là số ứng dụng ước tính – Hải quan tự phân bổ, tính lại khi khai báo. Thuế xuất khẩu do Hải quan tính."}
+      </p>
+      <DataTable aria-label="Danh sách hàng trên tờ khai" columns={columns} data={items} getRowId={(r) => r.id} />
+    </Stack>
+  );
 }
+
+/** Tờ khai xuất: ứng dụng chưa ước tính thuế xuất khẩu – chỉ dẫn người dùng tới số Hải quan trả về. */
+const exportTaxText = (status: Declaration["status"]) =>
+  status === "SUBMITTED" ? "Xem số thuế Hải quan trả về ở bước Khai báo Hải quan" : "Hải quan tính sau khi khai tạm EDA";
 
 function TaxTab({ decl, items, currency, rateInfo }: { decl: Declaration; items: DeclarationItemView[]; currency: string; rateInfo?: ExchangeRateInfo | null | undefined }) {
   const invoice = decl.fields.find((f) => f.code === "TONG_TG")?.value ?? "0";
@@ -156,7 +200,7 @@ function TaxTab({ decl, items, currency, rateInfo }: { decl: Declaration; items:
     <Grid cols={{ base: 1, lg: 2 }} gap="md">
       <Card>
         <CardHeader>
-          <CardTitle as="h3">Trị giá tính thuế</CardTitle>
+          <CardTitle as="h3">Trị giá tính thuế (ước tính)</CardTitle>
           <CardDescription>Theo điều kiện giá {decl.fields.find((f) => f.code === "DK_GIA")?.value}. Khoản cộng ghi rõ nguồn.</CardDescription>
         </CardHeader>
         <CardContent className="divide-y divide-border">
@@ -184,17 +228,30 @@ function TaxTab({ decl, items, currency, rateInfo }: { decl: Declaration; items:
         </CardContent>
       </Card>
       <Stack gap="md">
-        <Card>
-          <CardHeader>
-            <CardTitle as="h3">Thuế dự kiến</CardTitle>
-            <CardDescription>Số liệu tham khảo – thuế chính thức theo thông báo của Hải quan.</CardDescription>
-          </CardHeader>
-          <CardContent className="divide-y divide-border">
-            <KeyValue label="Thuế nhập khẩu" value={formatVnd(decl.estimatedImportDutyVnd)} />
-            <KeyValue label="Thuế GTGT (VAT)" value={formatVnd(decl.estimatedVatVnd)} />
-            <KeyValue strong label="Tổng thuế phải nộp dự kiến" value={formatVnd(totalTax)} />
-          </CardContent>
-        </Card>
+        {decl.kind === "IDA" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle as="h3">Thuế dự kiến</CardTitle>
+              <CardDescription>Số ứng dụng ước tính – thuế chính thức do Hải quan tính và trả về sau khi khai tạm IDA.</CardDescription>
+            </CardHeader>
+            <CardContent className="divide-y divide-border">
+              <KeyValue label="Thuế nhập khẩu" value={formatVnd(decl.estimatedImportDutyVnd)} />
+              <KeyValue label="Thuế GTGT (VAT)" value={formatVnd(decl.estimatedVatVnd)} />
+              <KeyValue strong label="Tổng thuế phải nộp dự kiến" value={formatVnd(totalTax)} />
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle as="h3">Thuế xuất khẩu</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Alert tone="info" title={exportTaxText(decl.status)}>
+                Ứng dụng chưa ước tính thuế xuất khẩu theo Biểu thuế xuất khẩu. Số thuế chính thức do Hải quan tính, hiện ở bước Khai báo Hải quan. Tờ khai xuất khẩu không thu thuế GTGT.
+              </Alert>
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader>
             <CardTitle as="h3">Chính sách & ưu đãi</CardTitle>
@@ -400,7 +457,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             )}
             {isDraft && suspect.length > 0 && (
               <Alert tone="warning" title={`${suspect.length} chỉ tiêu cần kiểm tra`}>
-                Được tô vàng trong tab Thông tin chung: {suspect.map((f) => f.label).join(", ")}.
+                Được tô vàng trong tab Thông tin chung: {suspect.map((f) => fieldTitle(f)).join(", ")}.
               </Alert>
             )}
             {isDraft && blockedByFourEyes && (
@@ -438,7 +495,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               <GeneralTab decl={decl} currency={dossier.currency} onEdit={isDraft && canEdit ? setEditing : undefined} />
             </TabsContent>
             <TabsContent value="items">
-              <ItemsTab items={items} currency={dossier.currency} />
+              <ItemsTab kind={decl.kind} items={items} currency={dossier.currency} />
             </TabsContent>
             <TabsContent value="tax">
               <TaxTab decl={decl} items={items} currency={dossier.currency} rateInfo={viewQ.data?.exchangeRateInfo} />
@@ -451,11 +508,18 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
       </Card>
 
       <StickyActionBar>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs text-fg-muted">Tổng thuế phải nộp dự kiến</p>
-          <p className="text-lg font-semibold tabular-nums text-fg">{formatVnd(totalTax)}</p>
-          {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%) – xem tab Thuế & chính sách</p>}
-        </div>
+        {decl.kind === "IDA" ? (
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-fg-muted">Tổng thuế phải nộp dự kiến (ước tính)</p>
+            <p className="text-lg font-semibold tabular-nums text-fg">{formatVnd(totalTax)}</p>
+            {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%) – xem tab Thuế & chính sách</p>}
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-fg-muted">Thuế xuất khẩu</p>
+            <p className="text-sm font-medium text-fg">{exportTaxText(decl.status)}</p>
+          </div>
+        )}
         <Button variant="ghost" onClick={() => goTo("ocr")}>
           Quay lại OCR
         </Button>
@@ -503,8 +567,8 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
           <Stack gap="md">
             <div className="divide-y divide-border rounded-md border border-border px-3">
               <KeyValue label="Đối tác" value={dossier.partner} />
-              <KeyValue label="Trị giá tính thuế" value={formatVnd(decl.customsValueVnd)} />
-              <KeyValue strong label="Thuế dự kiến" value={formatVnd(totalTax)} />
+              <KeyValue label="Trị giá tính thuế (ước tính)" value={formatVnd(decl.customsValueVnd)} />
+              {decl.kind === "IDA" && <KeyValue strong label="Thuế dự kiến (ước tính)" value={formatVnd(totalTax)} />}
             </div>
             {suspect.length > 0 && (
               <>

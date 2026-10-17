@@ -8,3 +8,4 @@ export * from "./customs-flow.js";
 export * from "./declaration/index.js";
 export * from "./fpt/index.js";
 export * from "./integrations/hscodepro.js";
+export * from "./declaration-layout/index.js";

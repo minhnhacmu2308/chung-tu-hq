@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { CATALOG_EDA } from "../declaration/catalog-eda.js";
 import { CATALOG_IDA } from "../declaration/catalog-ida.js";
 import { catalogFieldRole } from "../declaration/field-role.js";
 import { VN_IDA_CTHQ_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_THUE_FIELDS, VN_IDA_TRANGTHAI_FIELDS, VN_IDA_VANDON_FIELDS } from "../fpt/ida.js";
-import { expandRepeat, fieldRole, LAYOUT_IDA, layoutFields, layoutNumbers, type DeclarationLayout, type LayoutBlock, type LayoutField } from "./index.js";
+import { VN_EDA_CON_FIELDS, VN_EDA_CTHQ_FIELDS, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_EDA_TRANGTHAI_FIELDS } from "../fpt/eda.js";
+import { expandRepeat, fieldRole, LAYOUT_EDA, LAYOUT_IDA, layoutFields, layoutFor, layoutNumbers, type DeclarationLayout, type LayoutBlock, type LayoutField } from "./index.js";
 
+const SPEC_EDA = new Set([VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_EDA_CON_FIELDS, VN_EDA_CTHQ_FIELDS, VN_EDA_TRANGTHAI_FIELDS].flat().map((f) => f.name));
 const SPEC_IDA = new Set([VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_VANDON_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_THUE_FIELDS, VN_IDA_CTHQ_FIELDS, VN_IDA_TRANGTHAI_FIELDS].flat().map((f) => f.name));
 
 /** Mọi ô (đã expand) của các khối. */
 const fieldsOf = (blocks: LayoutBlock[]): LayoutField[] => layoutFields({ kind: "IDA", summary: [], declarant: [{ id: "x", title: "x", blocks }], customs: [], item: { columns: [], declarant: [], customs: [] } });
 
-describe.each([{ name: "IDA", layout: LAYOUT_IDA as DeclarationLayout, catalog: CATALOG_IDA, spec: SPEC_IDA, skip: ["1.46"] }])("bố cục $name", ({ layout, catalog, spec, skip }) => {
+describe.each([{ name: "IDA", layout: LAYOUT_IDA as DeclarationLayout, catalog: CATALOG_IDA, spec: SPEC_IDA, skip: ["1.46"] }, { name: "EDA", layout: LAYOUT_EDA as DeclarationLayout, catalog: CATALOG_EDA, spec: SPEC_EDA, skip: [] as string[] }])("bố cục $name", ({ layout, catalog, spec, skip }) => {
   it("có ô cho mọi chỉ tiêu Phụ lục II (trừ chỉ tiêu chưa sử dụng)", () => {
     const nos = layoutNumbers(layout);
     const missing = catalog.map((d) => d.no).filter((no) => !skip.includes(no) && !nos.has(no));
@@ -60,5 +63,17 @@ describe("fieldRole", () => {
   });
   it("ô có số chỉ tiêu riêng ưu tiên số của ô", () => {
     expect(fieldRole("IDA", { kind: "field", key: "TK_ICB", label: "Mã loại hình", no: "1.4", input: "code" }, "1.99")).toBe("REQUIRED");
+  });
+});
+
+describe("EDA – container", () => {
+  it("khối container: 5 mã địa điểm đóng hàng + 50 số container", () => {
+    const keys = new Set(layoutFields(LAYOUT_EDA).map((f) => f.key));
+    for (let i = 1; i <= 5; i++) expect(keys.has(`CON_VC${i}`)).toBe(true);
+    for (let i = 1; i <= 50; i++) expect(keys.has(`CON_C${String(i).padStart(2, "0")}`)).toBe(true);
+  });
+  it("layoutFor chọn đúng mẫu", () => {
+    expect(layoutFor("IDA")).toBe(LAYOUT_IDA);
+    expect(layoutFor("EDA")).toBe(LAYOUT_EDA);
   });
 });

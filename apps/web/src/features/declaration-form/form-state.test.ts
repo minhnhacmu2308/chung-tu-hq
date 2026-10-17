@@ -1,6 +1,6 @@
 import { LAYOUT_EDA, type DeclarationLayout, type LayoutSection } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { conditionContext, groupMissing, isApplicable, itemProgress, missingRequired, sectionProgress, type FormValues } from "./form-state";
+import { choiceControl, conditionContext, toggleChoice, groupMissing, isApplicable, itemProgress, missingRequired, sectionProgress, type FormValues } from "./form-state";
 
 // Bố cục nhỏ dựng trong test: 1.4 bắt buộc, 1.10 theo tình huống tạm nhập, nhóm phương tiện có hô hiệu theo đường biển, 5 vận đơn.
 const SECTION: LayoutSection = {
@@ -102,5 +102,17 @@ describe("conditionContext – ô riêng của phần mềm", () => {
     expect(missingRequired("IDA", hawb, air, "1.26", undefined, conditionContext("IDA", air))).toBe(true);
     const noHawb = { ...air, APP_HAWB_CO: "KHONG" };
     expect(missingRequired("IDA", hawb, noHawb, "1.26", undefined, conditionContext("IDA", noHawb))).toBe(false);
+  });
+});
+
+describe("ô lựa chọn – radio hay checkbox", () => {
+  it("không bắt buộc → checkbox (bỏ chọn được); bắt buộc → radio", () => {
+    expect(choiceControl("IDA", { kind: "field", key: "APP_DD_PT", label: "Định danh", input: "choice" })).toBe("checkbox");
+    expect(choiceControl("IDA", { kind: "field", key: "LOAI_DT", label: "Loại đối tượng", input: "choice", required: true })).toBe("radio");
+  });
+  it("toggleChoice: chọn ô khác → đổi sang ô đó; bấm lại ô đang chọn → bỏ chọn", () => {
+    expect(toggleChoice("", "BIEN")).toBe("BIEN");
+    expect(toggleChoice("BIEN", "HANG_KHONG")).toBe("HANG_KHONG");
+    expect(toggleChoice("HANG_KHONG", "HANG_KHONG")).toBe("");
   });
 });

@@ -68,3 +68,9 @@ export function sectionProgress(kind: Kind, s: LayoutSection, v: FormValues): { 
 export function itemProgress(kind: Kind, layout: DeclarationLayout, item: FormValues): { missing: number } {
   return { missing: sectionProgress(kind, { id: "item", title: "", blocks: layout.item.declarant }, item).missingRequired };
 }
+
+/** Ô lựa chọn: bắt buộc → radio (luôn có một giá trị); không bắt buộc → checkbox chọn một, bấm lại để bỏ chọn. */
+export const choiceControl = (kind: Kind, f: LayoutField, parentNo?: string): "radio" | "checkbox" => (fieldRole(kind, f, parentNo) === "REQUIRED" ? "radio" : "checkbox");
+
+/** Bấm một checkbox của ô lựa chọn: ô đang chọn → bỏ chọn; ô khác → chọn ô đó (bỏ ô cũ). */
+export const toggleChoice = (current: string, value: string) => (current === value ? "" : value);

@@ -1,12 +1,12 @@
 "use client";
 // Một ô chỉ tiêu của bản mẫu tờ khai: nhãn "số · tên", vai trò, hướng dẫn khai (catalog Phụ lục II), "Còn thiếu", lý do áp dụng / không áp dụng.
-import { Badge, Button, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
+import { Badge, Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
 import { DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type LayoutField } from "@kb/contracts";
 import { Info } from "lucide-react";
 import { ROLE_INFO } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
 import { codeLabel, displayValue, fieldTitle } from "./display";
-import { isApplicable, missingRequired, type FormValues } from "./form-state";
+import { choiceControl, isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 
 type Kind = "IDA" | "EDA";
 
@@ -89,7 +89,19 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   if (field.input === "choice") {
     return (
       <div className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
-        <RadioGroup label={title} description={hint} options={field.options ?? []} value={value || null} onChange={set} />
+        {choiceControl(kind, field, parentNo) === "radio" ? (
+          <RadioGroup label={title} description={hint} options={field.options ?? []} value={value || null} onChange={set} />
+        ) : (
+          <fieldset className="min-w-0">
+            <legend className="text-sm font-medium text-fg">{title}</legend>
+            {hint && <p className="mt-0.5 text-xs text-fg-muted">{hint}</p>}
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+              {(field.options ?? []).map((o) => (
+                <Checkbox key={o.value} label={o.label} checked={value === o.value} onChange={() => set(toggleChoice(value, o.value))} />
+              ))}
+            </div>
+          </fieldset>
+        )}
         {!compact && (
           <div className="flex flex-wrap items-center gap-2">
             <RoleBadge role={fieldRole(kind, field, parentNo)} />

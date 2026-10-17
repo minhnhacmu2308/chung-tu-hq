@@ -16,7 +16,8 @@ describe("Vận đơn – định danh đường biển / hàng không, HAWB, ng
   it.each([LAYOUT_IDA, LAYOUT_EDA])("$kind: lựa chọn định danh theo đường biển / hàng không; hỏi HAWB chỉ khi hàng không", (layout) => {
     const vd = [block(layout, "van-don")];
     expect(byKey(vd, "APP_DD_PT")).toMatchObject({ input: "choice", options: [{ value: "BIEN" }, { value: "HANG_KHONG" }] });
-    expect(byKey(vd, "APP_HAWB_CO")).toMatchObject({ input: "choice", condition: "AIR_IDENT", options: [{ value: "CO" }, { value: "KHONG" }] });
+    expect(byKey(vd, "APP_HAWB_CO")).toMatchObject({ input: "choice", condition: "AIR_IDENT", options: [{ value: "CO", label: "Có phát hành HAWB" }] });
+    expect(byKey(vd, "APP_DD_PT")!.required).toBeUndefined();
   });
   it("EDA: số vận đơn 2.24 kèm ngày vận đơn và số HAWB", () => {
     const vd = [block(LAYOUT_EDA, "van-don")];

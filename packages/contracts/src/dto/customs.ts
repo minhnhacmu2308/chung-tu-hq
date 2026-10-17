@@ -40,6 +40,66 @@ export const CustomsResultSchema = z.object({
 });
 export type CustomsResult = z.infer<typeof CustomsResultSchema>;
 
+/**
+ * Thông tin Hải quan trả về cho tờ khai (người khai không nhập) – đọc từ phản hồi IDA/IDC/IID (VN_IDA, VN_IDA_HANG, VN_IDA_THUE,
+ * VN_IDA_CTHQ, VN_IDA_TRANGTHAI) và EDA/EDC/IEX (VN_EDA, VN_EDA_HANG, VN_EDA_CTHQ, VN_EDA_TRANGTHAI). Đặc tả VNACCS_IDA/EDA v1.2.
+ * Mọi trường tùy chọn: Hải quan trả dần theo nghiệp vụ (số tờ khai sau khai tạm, phân luồng/ngày đăng ký sau khai chính thức, cấp phép khi thông quan).
+ */
+export const CustomsInfoTaxSchema = z.object({
+  /** Mã sắc thuế (THUE_KF*), ví dụ "N" nhập khẩu, "V" GTGT. */
+  code: z.string().optional(),
+  name: z.string(),
+  amountVnd: DecimalStringSchema,
+});
+export const CustomsInfoItemSchema = z.object({
+  lineNo: z.number().int().positive(),
+  hsCode: z.string().optional(),
+  /** Trị giá tính thuế Hải quan tính cho dòng (HAG_B36/HAG_R07). */
+  customsValue: DecimalStringSchema.optional(),
+  customsValueCurrency: z.string().optional(),
+  /** Thuế suất chính (nhập khẩu / xuất khẩu), %. */
+  taxRate: DecimalStringSchema.optional(),
+  /** Tiền thuế chính (nhập khẩu HAG_B47 / xuất khẩu HAG_TAX), VND. */
+  taxAmountVnd: DecimalStringSchema.optional(),
+});
+export const CustomsDirectiveSchema = z.object({ date: IsoDateSchema.optional(), title: z.string().optional(), content: z.string() });
+export const CustomsInfoSchema = z.object({
+  /** Lần cuối nhận phản hồi có dữ liệu. */
+  receivedAt: IsoDateTimeSchema,
+  declarationNo: z.string().optional(),
+  /** Tờ khai chia nhỏ: nhánh thứ mấy / tổng số (TK_BNO / TK_DNO). */
+  branch: z.object({ no: z.number().int(), of: z.number().int() }).optional(),
+  /** Ngày giờ đăng ký (TK_A09/TK_AD11 · TK_K10/TK_RT1) – mốc áp tỷ giá, thuế suất. */
+  registeredDate: IsoDateSchema.optional(),
+  registeredTime: z.string().optional(),
+  customsOfficeName: z.string().optional(),
+  /** Đội thủ tục (TK_CHB) Hải quan xác định. */
+  subsection: z.string().optional(),
+  /** Mã phân loại kiểm tra (TK_A06 / TK_K07). */
+  inspectionCode: z.string().optional(),
+  /** Mã số hàng hóa đại diện (TK_A00 / TK_K01). */
+  representativeHs: z.string().optional(),
+  pages: z.number().int().optional(),
+  lines: z.number().int().optional(),
+  exchangeRates: z.array(z.object({ currency: z.string(), rate: DecimalStringSchema })),
+  totalCustomsValue: z.object({ amount: DecimalStringSchema, currency: z.string() }).optional(),
+  taxes: z.array(CustomsInfoTaxSchema),
+  totalTaxVnd: DecimalStringSchema.optional(),
+  guaranteeVnd: DecimalStringSchema.optional(),
+  items: z.array(CustomsInfoItemSchema),
+  /** Phân loại chỉ thị (CTHQ_CCM): A hướng dẫn sửa đổi, B thay đổi khai báo. */
+  directiveKind: z.string().optional(),
+  directives: z.array(CustomsDirectiveSchema),
+  permitDate: IsoDateSchema.optional(),
+  permitTime: z.string().optional(),
+  inspectionDoneDate: IsoDateSchema.optional(),
+  chiefName: z.string().optional(),
+});
+export type CustomsInfo = z.infer<typeof CustomsInfoSchema>;
+export type CustomsInfoTax = z.infer<typeof CustomsInfoTaxSchema>;
+export type CustomsInfoItem = z.infer<typeof CustomsInfoItemSchema>;
+export type CustomsDirective = z.infer<typeof CustomsDirectiveSchema>;
+
 export const DigitalCertificateSchema = z.object({
   id: z.string(),
   subject: z.string(),

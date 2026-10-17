@@ -8,7 +8,7 @@ import { buildDeclarationResult, msgResult, validateDeclaration, type Declaratio
 import { fptEnvelope, mockError, WRONG_PASSWORD, type FptError } from "./envelope.js";
 import { issueToken, verifyToken } from "./jwt.js";
 import { createHscodeproMock } from "./hscodepro.js";
-import { vnDate } from "./vn-time.js";
+import { vnDate, vnHms } from "./vn-time.js";
 
 export type MockOptions = {
   now?: () => Date;
@@ -31,6 +31,8 @@ type Channel = 0 | 1 | 2 | 3;
 export type MockDeclaration = {
   kind: Kind; declarationNo: string; tkId: string; userId: string; createdAt: string;
   state: "A" | "C" | "R"; channel: Channel; cleared: boolean; polls: number; result: Record<string, unknown>;
+  /** Thời điểm khai chính thức (EDC/IDC) và thông quan – trả ngày giờ đăng ký / cấp phép (GIẢ ĐỊNH theo đặc tả VNACCS). */
+  registeredAt?: Date; clearedAt?: Date;
 };
 
 const ISSUER = "https://fpt-mock.local";
@@ -105,9 +107,14 @@ export function createFptMock(opts: MockOptions = {}) {
   /** Kết quả rút gọn cho EDC/IDC/IEX: objMsgResult + head + TRANGTHAI hiện tại. */
   const statusResult = (d: MockDeclaration, fn: string, code: string, name: string) => {
     const p = `objVN_${d.kind}`;
+    const eda = d.kind === "EDA";
+    // Ngày giờ đăng ký (TK_K10/TK_RT1 · TK_A09/TK_AD11), mã phân loại kiểm tra (TK_K07 · TK_A06), cấp phép (TK_K86/TK_AD5 · TK_C21/TK_AD4).
+    const reg = d.registeredAt ? { [eda ? "tK_K10" : "tK_A09"]: vnDate(d.registeredAt), [eda ? "tK_RT1" : "tK_AD11"]: vnHms(d.registeredAt), [eda ? "tK_K07" : "tK_A06"]: String(d.channel) } : {};
+    const permit = d.cleared && d.clearedAt ? { [eda ? "tK_K86" : "tK_C21"]: vnDate(d.clearedAt), [eda ? "tK_AD5" : "tK_AD4"]: vnHms(d.clearedAt) } : {};
     return {
       ...d.result, objMsgResult: msgResult(fn, code, name, d.declarationNo, now()),
-      [`${p}_TRANGTHAI`]: { ...(d.result[`${p}_TRANGTHAI`] as object), tK_LUONG: String(d.channel), tK_TRANGTHAI: d.state, tK_THONGQUAN: d.cleared ? "1" : "0", ...(d.cleared ? { tK_K86: vnDate(now()) } : {}) },
+      [p]: { ...(d.result[p] as object), ...reg },
+      [`${p}_TRANGTHAI`]: { ...(d.result[`${p}_TRANGTHAI`] as object), tK_LUONG: String(d.channel), tK_TRANGTHAI: d.state, tK_THONGQUAN: d.cleared ? "1" : "0", ...permit },
     };
   };
   const findDecl = (b: Record<string, unknown>) => {
@@ -127,7 +134,7 @@ export function createFptMock(opts: MockOptions = {}) {
     const expected = kind === "EDC" ? "EDA" : "IDA";
     if (!d || d.kind !== expected) return reply(res, b.objVNACCS_ACCOUNT, { errorList: [notFound(no, field.slice(3))] }, {}, ASSUMED);
     if (d.state === "C") log(`${kind} ${no}: đã khai chính thức – trả lại kết quả cũ`);
-    else { d.state = "C"; d.channel = d.channel || channelFor(no); }
+    else { d.state = "C"; d.channel = d.channel || channelFor(no); d.registeredAt = now(); }
     log(`${kind} ${no} → luồng ${d.channel}`);
     const name = kind === "EDC" ? "Đăng Ký Tờ Khai Xuất Khẩu" : "Đăng Ký Tờ Khai Nhập Khẩu";
     return reply(res, b.objVNACCS_ACCOUNT, { [envKey(d.kind)]: [statusResult(d, kind, kind === "EDC" ? "VAE1LF0" : "VAD1AC0", name)] }, {}, ASSUMED);
@@ -141,7 +148,7 @@ export function createFptMock(opts: MockOptions = {}) {
     if (accErr.length) return reply(res, b.objVNACCS_ACCOUNT, { errorList: accErr }, {}, ASSUMED);
     const { no, d } = findDecl(b);
     if (!d) return reply(res, b.objVNACCS_ACCOUNT, { errorList: [notFound(no, "SOTK")] }, {}, ASSUMED);
-    if (d.state === "C" && !d.cleared && ++d.polls >= pollsToClear) d.cleared = true;
+    if (d.state === "C" && !d.cleared && ++d.polls >= pollsToClear) { d.cleared = true; d.clearedAt = now(); }
     return reply(res, b.objVNACCS_ACCOUNT, { [envKey(d.kind)]: [statusResult(d, "IEX", "VAS0LA0", "Tham Chiếu Tờ Khai")] }, {}, ASSUMED);
   }
 

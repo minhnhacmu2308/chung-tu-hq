@@ -14,12 +14,14 @@ import type { ExchangeRateInfo } from "@kb/contracts";
 import { approveDeclaration, declarationKeys, getDeclarationView, reopenDeclaration, updateDeclarationField, type DeclarationItemView } from "@/api/declaration";
 import { rateSourceHint } from "./rate-source";
 import { getSession, sessionKeys } from "@/api/session";
+import { customsKeys, getSubmission } from "@/api/customs";
 import { getOrganization, settingsKeys } from "@/api/settings";
 import { toastMutationError } from "@/lib/mutation-error";
 import { formatBytesVi, formatDate, formatDateTime, formatMoney, formatNumber, formatVnd } from "@/lib/format";
 import { DOC_KIND_LABELS, type Declaration, type DeclarationField } from "@/mocks/types";
 import { errorMessage, KeyValue, SourceChip, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
 import { fieldGuide } from "./field-guide";
+import { CustomsInfoPanel } from "./customs-info-panel";
 import { fieldTitle, groupDeclarationFields, ROLE_INFO, type RoledField } from "./declaration-groups";
 import { provenanceLabel } from "./provenance";
 import type { StepProps } from "./types";
@@ -355,7 +357,7 @@ function EditFieldDialog({ dossierId, kind, field, currency, onClose }: { dossie
   );
 }
 
-const TABS = ["general", "items", "tax", "docs"] as const;
+const TABS = ["general", "items", "tax", "docs", "customs"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
@@ -391,6 +393,8 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     onError: toastMutationError("Không mở lại được tờ khai"),
   });
   const viewQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
+  const subQ = useQuery({ queryKey: customsKeys.submission(dossier.id), queryFn: () => getSubmission(dossier.id) });
+  const customsInfo = subQ.data?.customsInfo ?? null;
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
     onSuccess: () => {
@@ -490,6 +494,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               </TabsTrigger>
               <TabsTrigger value="tax">Thuế & chính sách</TabsTrigger>
               <TabsTrigger value="docs">Chứng từ đính kèm</TabsTrigger>
+              {customsInfo && (
+                <TabsTrigger value="customs">
+                  Hải quan trả về {customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge>}
+                </TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="general">
               <GeneralTab decl={decl} currency={dossier.currency} onEdit={isDraft && canEdit ? setEditing : undefined} />
@@ -503,6 +512,15 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <TabsContent value="docs">
               <DocumentsTab dossierId={dossier.id} />
             </TabsContent>
+            {customsInfo && (
+              <TabsContent value="customs">
+                <CustomsInfoPanel
+                  kind={decl.kind}
+                  info={customsInfo}
+                  estimate={{ customsValueVnd: decl.customsValueVnd, exchangeRate: decl.exchangeRate, ...(decl.kind === "IDA" ? { taxVnd: totalTax } : {}) }}
+                />
+              </TabsContent>
+            )}
           </Tabs>
         </CardContent>
       </Card>

@@ -1,5 +1,5 @@
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
-import type { CustomsOperation, DeclarationStatus, DocKind, DossierStatus, StepId, SubmissionState } from "@kb/contracts";
+import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, StepId, SubmissionState } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -40,13 +40,13 @@ export interface CustomsUow {
 }
 
 export type GatewayError = { code: string; field?: string; message: string; solution?: string };
-export type GatewayStatus = { declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED"; status: string; cleared: boolean; rejected?: boolean; customsTaxVnd?: string; directives?: string[] };
+export type GatewayStatus = { declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED"; status: string; cleared: boolean; rejected?: boolean; customsTaxVnd?: string; directives?: string[]; info?: CustomsInfo };
 
 /** Cổng Hải quan (spec §4.7). Lỗi tạm (mạng/5xx) → throw; lỗi nghiệp vụ FPT → `errors`. */
 export interface CustomsGateway {
   readonly name: string;
-  preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId: string }, idempotencyKey: string): Promise<{ externalId: string; declarationNo?: string; errors?: GatewayError[] }>;
-  declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }, idempotencyKey: string): Promise<{ accepted: boolean; channel?: "GREEN" | "YELLOW" | "RED"; customsTaxVnd?: string; errors?: GatewayError[] }>;
+  preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId: string }, idempotencyKey: string): Promise<{ externalId: string; declarationNo?: string; info?: CustomsInfo; errors?: GatewayError[] }>;
+  declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }, idempotencyKey: string): Promise<{ accepted: boolean; channel?: "GREEN" | "YELLOW" | "RED"; customsTaxVnd?: string; info?: CustomsInfo; errors?: GatewayError[] }>;
   attachDocuments(orgId: string, msg: { externalId: string; dossierId: string; files: { name: string; bytes: Buffer }[]; declaration?: DeclarationPayload }, idempotencyKey: string): Promise<{ receiptNo?: string; errors?: GatewayError[] }>;
   queryStatus(orgId: string, externalId: string, dossierId: string): Promise<GatewayStatus>;
   /**

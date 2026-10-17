@@ -5,8 +5,9 @@ import {
   baseOp, CUSTOMS_OPERATIONS, hasDeclarationNumber, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
   operationAvailability, operationsFor, queryOpFor, stageAfter,
   type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
-  type ResendResult, type SubmissionView,
+  type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
+import { computeTaxes } from "@/mocks/declaration-builder";
 import { formatVnd } from "@/lib/format";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import {
@@ -365,6 +366,63 @@ function clearanceOf(stage: CustomsStage, r: CustomsResult): CustomsResult["clea
   return "WAITING";
 }
 
+const vnDateOf = (iso: string) => new Date(Date.parse(iso) + 7 * 3_600_000).toISOString().slice(0, 10);
+const vnTimeOf = (iso: string) => new Date(Date.parse(iso) + 7 * 3_600_000).toISOString().slice(11, 19);
+const INSPECTION_CODE = { GREEN: "1", YELLOW: "2", RED: "3" } as const;
+
+/**
+ * Thông tin Hải quan trả về (mô phỏng): số tờ khai, trị giá/thuế/tỷ giá theo tờ khai nháp (Hải quan mock tính giống ứng dụng),
+ * ngày giờ đăng ký + mã phân loại kiểm tra sau khai chính thức, chỉ thị khi luồng vàng/đỏ, cấp phép khi thông quan.
+ */
+function customsInfoOf(db: MockDb, c: Ctx, stage: CustomsStage, seen: CustomsMessage[]): CustomsInfo | null {
+  const r = c.result;
+  if (!r || !c.decl || !hasDeclarationNumber(stage)) return null;
+  const items = db.lineItems.filter((i) => i.dossierId === c.dossier.id).sort((a, b) => a.lineNo - b.lineNo);
+  const t = computeTaxes(c.dossier, items, c.decl.valueAdjustments);
+  const nk = c.dossier.direction === "NK";
+  const opAt = (ops: CustomsOperation[]) => seen.filter((m) => m.direction === "IN" && m.result === "OK" && ops.includes(m.operation)).at(0)?.at;
+  const registeredAt = isChanneled(stage) ? opAt(["IDC", "EDC"]) : undefined;
+  const cleared = stage === "CLEARED" || stage.startsWith("POST_");
+  const clearedAt = cleared ? seen.filter((m) => m.direction === "IN").at(-1)?.at : undefined;
+  const channel = isChanneled(stage) ? r.channel : undefined;
+  const taxes = nk
+    ? [{ code: "N", name: "Thuế nhập khẩu", amountVnd: t.importDutyVnd }, { code: "V", name: "Thuế GTGT", amountVnd: t.vatVnd }]
+    : [{ name: "Thuế xuất khẩu", amountVnd: "0" }];
+  const total = nk ? String(Number(t.importDutyVnd) + Number(t.vatVnd)) : "0";
+  const hs = items[0]?.hsConfirmed;
+  return {
+    receivedAt: seen.at(-1)?.at ?? r.updatedAt,
+    declarationNo: r.declarationNo,
+    customsOfficeName: c.dossier.customsOffice,
+    subsection: "00",
+    ...(hs ? { representativeHs: hs.replace(/\D/g, "").slice(0, 4) } : {}),
+    pages: 3,
+    lines: items.length,
+    exchangeRates: c.dossier.currency === "VND" ? [] : [{ currency: c.dossier.currency, rate: t.exchangeRate }],
+    totalCustomsValue: { amount: t.customsValueVnd, currency: "VND" },
+    taxes,
+    totalTaxVnd: total,
+    items: items.map((it) => {
+      const tax = t.perItem.find((p) => p.itemId === it.id);
+      return {
+        lineNo: it.lineNo,
+        ...(it.hsConfirmed ? { hsCode: it.hsConfirmed.replace(/\D/g, "") } : {}),
+        ...(tax ? { customsValue: tax.customsValueVnd, customsValueCurrency: "VND", taxAmountVnd: nk ? tax.importDutyVnd : "0" } : {}),
+        taxRate: nk ? (it.importDutyRate ?? "0") : "0",
+      };
+    }),
+    ...(registeredAt ? { registeredDate: vnDateOf(registeredAt), registeredTime: vnTimeOf(registeredAt) } : {}),
+    ...(channel ? { inspectionCode: INSPECTION_CODE[channel] } : {}),
+    ...(channel && channel !== "GREEN"
+      ? {
+          directiveKind: "A",
+          directives: [{ ...(registeredAt ? { date: vnDateOf(registeredAt) } : {}), title: "Nộp chứng từ giấy tờ", content: "Đề nghị nộp bộ chứng từ (hóa đơn, vận đơn, phiếu đóng gói) qua nghiệp vụ HYS để kiểm tra hồ sơ." }],
+        }
+      : { directives: [] }),
+    ...(clearedAt ? { permitDate: vnDateOf(clearedAt), permitTime: vnTimeOf(clearedAt), chiefName: "Chi cục trưởng (mô phỏng)" } : {}),
+  };
+}
+
 function view(db: MockDb, dossierId: string, now: number): SubmissionView {
   const c = load(db, dossierId);
   const input = availabilityInput(db, c);
@@ -416,6 +474,7 @@ function view(db: MockDb, dossierId: string, now: number): SubmissionView {
     pipeline,
     messages: [...seen].reverse(),
     result,
+    customsInfo: customsInfoOf(db, c, stage, seen),
   };
 }
 

@@ -1,10 +1,11 @@
 // Worker `customs-send`: một dòng outbox → ghi OUT (một lần) → gọi gateway → ghi IN → chuyển giai đoạn (customs-flow.stageAfter).
 // Không tự gửi nghiệp vụ kế tiếp: người khai điều khiển luồng (IDA → IDC…). Khai chính thức thành công → hỏi trạng thái định kỳ.
-import { baseOp, CUSTOMS_OPERATIONS, isRecallOperation, stageAfter, type CustomsOperation } from "@kb/contracts";
+import { baseOp, CUSTOMS_OPERATIONS, isRecallOperation, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { maskPayload } from "../domain/mask.js";
+import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
@@ -17,6 +18,10 @@ const isDomainError = (e: unknown): e is { code: string; message?: string } => t
 const fmtErrors = (errors: GatewayError[]) => errors.map((e) => `${e.code}${e.field ? ` (${e.field})` : ""}: ${e.message}${e.solution ? ` → ${e.solution}` : ""}`).join("; ");
 const channelVi = (c: "GREEN" | "YELLOW" | "RED") => (c === "GREEN" ? "xanh" : c === "YELLOW" ? "vàng" : "đỏ");
 const outSummary = (op: CustomsOperation) => `${OPERATION_LABELS[op]} (${op})`;
+
+/** Gộp thông tin Hải quan trả về vào raw (thời điểm nhận theo clock của hệ thống). */
+const withInfo = (raw: ResultRaw | null, info: CustomsInfo | undefined, at: Date): { raw?: ResultRaw } =>
+  info ? { raw: { customsInfo: mergeCustomsInfo(raw?.customsInfo, { ...info, receivedAt: at.toISOString() }) } } : {};
 
 type Outcome = { errors?: GatewayError[]; summary: string; payload: unknown; patch: Partial<ResultRow>; side?: string };
 
@@ -65,17 +70,17 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     if (b === "IDA") {
       // Chạy lại sau crash ở lần khai đầu: Hải quan đã cấp số cho lần gửi trước thì không gửi lại (spec §3.3).
       const already = ob.attempts > 0 && result.externalId && stage === "NOT_SENT" ? await deps.gateway.queryStatus(input.orgId, result.externalId, ob.dossierId).catch(() => null) : null;
-      const res = already?.declarationNo ? { externalId: result.externalId!, declarationNo: already.declarationNo } : await deps.gateway.preDeclare(input.orgId, { kind: op === "EDA" ? "EDA" : "IDA", request: payload.request, dossierId: ob.dossierId }, ob.idempotencyKey);
+      const res = already?.declarationNo ? { externalId: result.externalId!, declarationNo: already.declarationNo, ...(already.info ? { info: already.info } : {}) } : await deps.gateway.preDeclare(input.orgId, { kind: op === "EDA" ? "EDA" : "IDA", request: payload.request, dossierId: ob.dossierId }, ob.idempotencyKey);
       const no = res.declarationNo ?? result.declarationNo;
       outcome = res.errors?.length
         ? { errors: res.errors, summary: "", payload: null, patch: res.externalId ? { externalId: res.externalId } : {} }
-        : { summary: `Hải quan cấp số tờ khai ${no ?? "(chưa có)"} – kiểm tra thuế dự kiến rồi khai chính thức`, payload: { nghiepVu: op, ketQua: "Thành công", soToKhai: no, warnings: payload.warnings }, patch: { externalId: res.externalId, declarationNo: no ?? null } };
+        : { summary: `Hải quan cấp số tờ khai ${no ?? "(chưa có)"} – kiểm tra thuế dự kiến rồi khai chính thức`, payload: { nghiepVu: op, ketQua: "Thành công", soToKhai: no, warnings: payload.warnings }, patch: { externalId: res.externalId, declarationNo: no ?? null, ...withInfo(result.raw, res.info, now()) } };
     } else if (b === "IDC") {
       const res = await deps.gateway.declare(input.orgId, { kind: op === "EDC" ? "EDC" : "IDC", externalId: result.externalId ?? "", dossierId: ob.dossierId }, ob.idempotencyKey);
       const errors = res.errors ?? (!res.accepted ? [{ code: "E-IDC-REJECT", message: "Hải quan không chấp nhận khai chính thức" }] : res.channel ? undefined : [{ code: "E-IDC-NO-CHANNEL", message: "Hải quan chấp nhận nhưng chưa trả kết quả phân luồng – bấm Tra cứu trạng thái hoặc gửi lại" }]);
       outcome = errors?.length || !res.channel
         ? { errors: errors ?? [], summary: "", payload: null, patch: {} }
-        : { summary: `Kết quả phân luồng: luồng ${channelVi(res.channel)}`, payload: { nghiepVu: op, soToKhai: result.declarationNo, maPhanLuong: res.channel === "GREEN" ? 1 : res.channel === "YELLOW" ? 2 : 3, thueDuKien: `${res.customsTaxVnd ?? result.customsTaxVnd ?? "0"} VND` }, patch: { channel: res.channel, channelNote: CHANNEL_NOTES[res.channel], ...(res.customsTaxVnd ? { customsTaxVnd: res.customsTaxVnd } : {}) } };
+        : { summary: `Kết quả phân luồng: luồng ${channelVi(res.channel)}`, payload: { nghiepVu: op, soToKhai: result.declarationNo, maPhanLuong: res.channel === "GREEN" ? 1 : res.channel === "YELLOW" ? 2 : 3, thueDuKien: `${res.customsTaxVnd ?? result.customsTaxVnd ?? "0"} VND` }, patch: { channel: res.channel, channelNote: CHANNEL_NOTES[res.channel], ...(res.customsTaxVnd ? { customsTaxVnd: res.customsTaxVnd } : {}), ...withInfo(result.raw, res.info, now()) } };
     } else if (op === "HYS") {
       const docs = payload.files ?? [];
       const files = await Promise.all(docs.map(async (f) => ({ name: f.name, bytes: await deps.dossiers.readFile(f.storageKey) })));

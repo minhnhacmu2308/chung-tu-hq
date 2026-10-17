@@ -8,6 +8,7 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
+import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
@@ -95,7 +96,7 @@ async function queryNow(deps: CustomsDeps, ctx: Ctx, dossierId: string, directio
     await r.results.upsert({
       ...result, state: coarseState(nextStage, result.state === "SEND_FAILED" && nextStage === stage),
       ...(stage !== "NOT_SENT" && stage !== "PRE_DECLARED" && stage !== "RECALLED" ? { clearanceStatus: st.rejected ? "REJECTED" as const : st.cleared ? "CLEARED" as const : "INSPECTING" as const } : {}),
-      raw: { ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status }, updatedAt: now(),
+      raw: { ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status, ...(st.info ? { customsInfo: mergeCustomsInfo(result.raw?.customsInfo, { ...st.info, receivedAt: now().toISOString() }) } : {}) }, updatedAt: now(),
     });
   });
   if (cleared) await deps.dossiers.update(ctx.orgId, dossierId, { status: "CLEARED" });

@@ -65,5 +65,6 @@ export function toSubmissionView(p: { declarationStatus: DeclarationStatus; hsUn
     pipeline: buildPipeline(p.flow, p.messages, p.outbox, p.result),
     messages: [...p.messages].reverse().map(toMessage),
     result: toPartialResult(p.result),
+    customsInfo: p.result?.raw?.customsInfo ?? null,
   };
 }

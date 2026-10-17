@@ -12,6 +12,12 @@ export function vnDateTime(now: Date): string {
   return `${vnDate(now)} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
+/** Giờ VN dạng HHmmss (trường giờ VNACCS Text 6). */
+export function vnHms(at: Date): string {
+  const d = new Date(at.getTime() + VN_OFFSET_MS);
+  return `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+}
+
 /** "dd/MM/yyyy" → số so sánh được (yyyymmdd); sai dạng/ngày không tồn tại → null. */
 export function parseFptDate(s: string): number | null {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);

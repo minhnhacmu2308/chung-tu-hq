@@ -317,6 +317,14 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
   - Trị giá tính thuế và thuế ghi rõ là ước tính.
   - Tờ khai xuất không còn hiện "Thuế NK / VAT"; thay bằng chỉ dẫn xem thuế Hải quan trả về.
 
+**Đợt 2 – Hải quan trả về (xong):**
+- `CustomsInfoSchema` (`@kb/contracts`, `SubmissionView.customsInfo`).
+- `parseCustomsInfo` / `mergeCustomsInfo` (`integration/domain/customs-info.ts`) đọc VN_IDA/VN_EDA, _HANG, _THUE, _CTHQ, _TRANGTHAI: số tờ khai và tờ khai nhánh, ngày giờ đăng ký, mã phân loại kiểm tra, Chi cục/đội, HS đại diện, số trang/dòng, tỷ giá, tổng trị giá tính thuế, thuế theo sắc thuế, bảo lãnh, trị giá/thuế từng dòng, chỉ thị Hải quan, cấp phép. Có test với phản hồi EDA thật của FPT.
+- Gateway FPT trả `info` cho IDA/EDA, IDC/EDC, IID/IEX. Thông tin được gộp dần và lưu ở `customs_results.raw.customsInfo` (không cần migration).
+- fpt-mock trả thêm ngày giờ đăng ký, mã phân loại kiểm tra và ngày giờ cấp phép.
+- Giao diện: khối "Hải quan trả về" ở bước Khai báo Hải quan và tab cùng tên ở màn Review. Khối này hiện chỉ thị Hải quan nổi bật và so sánh số Hải quan với số ứng dụng ước tính.
+- Còn lại: gắn `errorList` (`indexCode`) vào đúng ô chỉ tiêu; đọc các thông điệp VAD8000/VAE8000 (chỉ thị gửi riêng) và ân hạn thuế.
+
 **Phát hiện thêm khi làm đợt 1 (để đợt 3 xử lý):**
 - Tờ khai xuất đang tính "thuế" bằng thuế suất **nhập khẩu** và VAT (`declaration/domain/tax.ts`). Chưa có thuế suất xuất khẩu.
 - Tờ khai xuất điều kiện FOB vẫn cộng cước quốc tế vào trị giá tính thuế (dữ liệu mẫu `dos_020`). Trị giá tính thuế xuất khẩu là giá FOB, không cộng cước.

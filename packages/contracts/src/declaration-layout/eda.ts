@@ -131,7 +131,7 @@ export const LAYOUT_EDA: DeclarationLayout = {
             grp("Địa điểm xếp hàng lên xe chở hàng (vanning)", "2.59", [
               fld("CON_VC1", "Mã 1", "code", { width: "xs" }), fld("CON_VC2", "Mã 2", "code", { width: "xs" }), fld("CON_VC3", "Mã 3", "code", { width: "xs" }), fld("CON_VC4", "Mã 4", "code", { width: "xs" }), fld("CON_VC5", "Mã 5", "code", { width: "xs" }),
               fld("CON_VN", "Tên", "text", { width: "lg" }), fld("CON_VA", "Địa chỉ", "text", { width: "lg" }),
-            ]),
+            ], { fill: "any" }),
             rep("Số container", "2.60", 50, [fld("CON_C{nn}", "Số container", "text", { width: "sm" })]),
           ],
         },

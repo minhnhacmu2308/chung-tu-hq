@@ -58,15 +58,19 @@ export type FormFieldProps = {
   parentCondition?: ConditionId | undefined;
   /** Ô con trong nhóm: không lặp số chỉ tiêu, vai trò, hướng dẫn (nhóm đã hiện). */
   compact?: boolean;
+  /** Ô chiếm đủ bề rộng ô chứa (lưới container) thay vì bề rộng cố định theo `width`. */
+  fill?: boolean;
+  /** Nhóm "chỉ cần một ô" tự báo thiếu ở cấp nhóm – ô con không báo riêng. */
+  suppressMissing?: boolean;
 };
 
-export function FormField({ kind, field, values, onChange, ctx, showInapplicable, parentNo, parentCondition, compact = false }: FormFieldProps) {
+export function FormField({ kind, field, values, onChange, ctx, showInapplicable, parentNo, parentCondition, compact = false, fill = false, suppressMissing = false }: FormFieldProps) {
   const applicable = isApplicable(field, ctx);
   if (!applicable && !showInapplicable) return null;
   const value = values[field.key] ?? "";
   const title = compact ? field.label : fieldTitle(field.no, field.label);
   const readOnly = field.origin === "CUSTOMS" || !onChange;
-  const sizeClass = compact ? WIDTH[field.width ?? "sm"] : spansRow(field) ? "col-span-full" : undefined;
+  const sizeClass = fill ? "w-full" : compact ? WIDTH[field.width ?? "sm"] : spansRow(field) ? "col-span-full" : undefined;
 
   if (readOnly) {
     return (
@@ -80,7 +84,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const condition = field.condition ? DECLARATION_CONDITIONS[field.condition].label : undefined;
   const name = codeLabel(field.codeTable, value);
   const hint = [name ? `→ ${name}` : null, condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : null].filter(Boolean).join(" · ") || undefined;
-  const missing = applicable && missingRequired(kind, field, values, parentNo, parentCondition);
+  const missing = !suppressMissing && applicable && missingRequired(kind, field, values, parentNo, parentCondition, ctx);
   const set = (v: string) => onChange?.(field.key, v);
   const control =
     field.input === "textarea" ? <Textarea rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />

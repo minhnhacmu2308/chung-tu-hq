@@ -23,7 +23,11 @@ export type LayoutField = {
   condition?: ConditionId;
 };
 /** Chỉ tiêu nhiều ô con nằm ngang (địa chỉ 4 dòng, tổng trị giá 4 ô…). */
-export type LayoutGroup = { kind: "group"; label: string; no?: string; condition?: ConditionId; fields: LayoutField[] };
+export type LayoutGroup = {
+  kind: "group"; label: string; no?: string; condition?: ConditionId; fields: LayoutField[];
+  /** "any": các ô con là lựa chọn thay thế – nhập một ô là đủ chỉ tiêu (2.59 địa điểm đóng hàng: 5 mã hoặc tên/địa chỉ). */
+  fill?: "any";
+};
 /** Nhóm lặp: key chứa "{n}" (1..count) hoặc "{nn}" (01..count); mỗi dòng = các ô của `fields`. */
 export type LayoutRepeat = { kind: "repeat"; label: string; no?: string; count: number; condition?: ConditionId; fields: LayoutField[] };
 export type LayoutItem = LayoutField | LayoutGroup | LayoutRepeat;

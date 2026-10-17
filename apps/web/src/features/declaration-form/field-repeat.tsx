@@ -1,7 +1,7 @@
 "use client";
 // Nhóm lặp (5 vận đơn, 5 giấy phép, 5 khoản điều chỉnh, 10 chỉ thị, 50 container…): dòng có dữ liệu + dòng trống, nút "Thêm dòng".
 import { Button, cn, Grid } from "@kb/ui";
-import { expandRepeat, fieldRole, type ConditionContext, type LayoutRepeat } from "@kb/contracts";
+import { expandRepeat, fieldRole, type ConditionContext, type ConditionId, type LayoutRepeat } from "@kb/contracts";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { fieldTitle, visibleRows } from "./display";
@@ -15,12 +15,14 @@ type Props = {
   onChange?: ((key: string, value: string) => void) | undefined;
   ctx: ConditionContext;
   showInapplicable: boolean;
+  /** Điều kiện của khối chứa nhóm lặp. */
+  parentCondition?: ConditionId | undefined;
 };
 
 /** 50 số container: lưới thay vì từng dòng. */
 const isGrid = (r: LayoutRepeat) => r.fields.length === 1 && r.count > 10;
 
-export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapplicable }: Props) {
+export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapplicable, parentCondition }: Props) {
   const [extra, setExtra] = useState(0);
   const applicable = isApplicable(repeat, ctx);
   if (!applicable && !showInapplicable) return null;
@@ -29,9 +31,12 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
   if (readOnly && rows.length === 0) return null;
   const all = expandRepeat(repeat);
   const indexOf = (key: string) => all.findIndex((r) => r[0]?.key === key) + 1;
+  /** Khóa ô đầu của dòng chứa ô `key`. */
+  const rowKey = (key: string) => all.find((r) => r.some((f) => f.key === key))?.[0]?.key ?? key;
   const first = repeat.fields[0];
+  // Nhóm lặp bắt buộc khi có ít nhất dòng 1 (giống bộ đếm sectionProgress) – dòng thêm không tự báo thiếu.
   const field = (f: (typeof rows)[number][number]) => (
-    <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={repeat.no ?? f.no} parentCondition={repeat.condition} compact={!f.no} />
+    <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={repeat.no ?? f.no} parentCondition={repeat.condition ?? parentCondition} compact={!f.no} fill={isGrid(repeat)} suppressMissing={indexOf(rowKey(f.key)) > 1} />
   );
   return (
     <fieldset className={cn("col-span-full flex min-w-0 flex-col gap-2 rounded-md border border-border px-3 pb-3 pt-1", !applicable && "opacity-60")}>

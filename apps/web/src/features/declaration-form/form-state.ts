@@ -1,7 +1,7 @@
 // Logic thuần của bản mẫu tờ khai đầy đủ: ô nào đang áp dụng (theo tình huống), bộ đếm "đã nhập / tổng", ô bắt buộc còn thiếu.
 import {
   DECLARATION_CONDITIONS, expandRepeat, fieldRole,
-  type ConditionContext, type ConditionId, type DeclarationLayout, type LayoutField, type LayoutItem, type LayoutSection,
+  type ConditionContext, type ConditionId, type DeclarationLayout, type LayoutField, type LayoutGroup, type LayoutItem, type LayoutSection,
 } from "@kb/contracts";
 
 type Kind = "IDA" | "EDA";
@@ -22,35 +22,43 @@ export function conditionContext(kind: Kind, v: FormValues): ConditionContext {
 export const isApplicable = (x: { condition?: ConditionId | undefined }, ctx: ConditionContext) => !x.condition || DECLARATION_CONDITIONS[x.condition].test(ctx);
 
 /**
- * Ô bắt buộc còn trống: vai trò "Bắt buộc", hoặc "Theo tình huống" mà ô (hay nhóm chứa ô) có điều kiện đang áp dụng.
+ * Ô bắt buộc còn trống: vai trò "Bắt buộc", hoặc "Theo tình huống" mà ô (hay nhóm/khối chứa ô) có điều kiện ĐANG áp dụng.
+ * Điều kiện không áp dụng (ô hiện mờ khi bật "hiện cả chỉ tiêu không áp dụng") → không báo thiếu.
  * Ô "theo tình huống" không gắn điều kiện cụ thể (ví dụ số hóa đơn) không bị coi là thiếu – tránh báo sai.
  */
-export function missingRequired(kind: Kind, f: LayoutField, v: FormValues, parentNo?: string, parentCondition?: ConditionId): boolean {
+export function missingRequired(kind: Kind, f: LayoutField, v: FormValues, parentNo: string | undefined, parentCondition: ConditionId | undefined, ctx: ConditionContext): boolean {
   if (f.origin === "CUSTOMS" || has(v, f.key)) return false;
+  const condition = f.condition ?? parentCondition;
+  if (condition && !DECLARATION_CONDITIONS[condition].test(ctx)) return false;
   const role = fieldRole(kind, f, parentNo);
-  return role === "REQUIRED" || (role === "CONDITIONAL" && Boolean(f.condition ?? parentCondition));
+  return role === "REQUIRED" || (role === "CONDITIONAL" && Boolean(condition));
 }
 
-type Counted = { field: LayoutField; parentNo: string | undefined; parentCondition: ConditionId | undefined };
+/** Nhóm "chỉ cần một ô" (fill: any) còn thiếu: đang áp dụng, chưa ô nào có giá trị, và chỉ tiêu bắt buộc trong tình huống này. */
+export function groupMissing(kind: Kind, g: LayoutGroup, v: FormValues, ctx: ConditionContext, blockCondition?: ConditionId): boolean {
+  if (g.fields.some((f) => has(v, f.key))) return false;
+  return g.fields.some((f) => missingRequired(kind, f, v, g.no, g.condition ?? blockCondition, ctx));
+}
 
-/** Ô người khai đang áp dụng của một mục (nhóm lặp chỉ tính dòng 1). */
-function applicableFields(item: LayoutItem, ctx: ConditionContext, blockCondition?: ConditionId): Counted[] {
+type Unit = { filled: boolean; missing: boolean };
+
+/** Đơn vị đếm của một mục: mỗi ô người khai đang áp dụng (nhóm lặp chỉ dòng 1); nhóm "chỉ cần một ô" = 1 đơn vị. */
+function units(kind: Kind, item: LayoutItem, v: FormValues, ctx: ConditionContext, blockCondition?: ConditionId): Unit[] {
   if (blockCondition && !isApplicable({ condition: blockCondition }, ctx)) return [];
   if (!isApplicable(item, ctx)) return [];
+  if (item.kind === "group" && item.fill === "any") return [{ filled: item.fields.some((f) => has(v, f.key)), missing: groupMissing(kind, item, v, ctx, blockCondition) }];
   const fields = item.kind === "field" ? [item] : item.kind === "group" ? item.fields : (expandRepeat(item)[0] ?? []);
   const parentNo = item.kind === "field" ? undefined : item.no;
   const parentCondition = item.kind === "field" ? blockCondition : item.condition ?? blockCondition;
-  return fields.filter((f) => f.origin !== "CUSTOMS" && isApplicable(f, ctx)).map((field) => ({ field, parentNo, parentCondition }));
+  return fields
+    .filter((f) => f.origin !== "CUSTOMS" && isApplicable(f, ctx))
+    .map((f) => ({ filled: has(v, f.key), missing: missingRequired(kind, f, v, parentNo, parentCondition, ctx) }));
 }
 
 export function sectionProgress(kind: Kind, s: LayoutSection, v: FormValues): { filled: number; total: number; missingRequired: number } {
   const ctx = conditionContext(kind, v);
-  const counted = s.blocks.flatMap((b) => b.items.flatMap((it) => applicableFields(it, ctx, b.condition)));
-  return {
-    total: counted.length,
-    filled: counted.filter((c) => has(v, c.field.key)).length,
-    missingRequired: counted.filter((c) => missingRequired(kind, c.field, v, c.parentNo, c.parentCondition)).length,
-  };
+  const all = s.blocks.flatMap((b) => b.items.flatMap((it) => units(kind, it, v, ctx, b.condition)));
+  return { total: all.length, filled: all.filter((u) => u.filled).length, missingRequired: all.filter((u) => u.missing).length };
 }
 
 /** Số ô bắt buộc còn thiếu của một dòng hàng (điều kiện xét theo giá trị của chính dòng). */

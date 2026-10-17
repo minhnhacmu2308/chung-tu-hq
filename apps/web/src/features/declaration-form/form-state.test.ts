@@ -1,6 +1,6 @@
-import type { DeclarationLayout, LayoutSection } from "@kb/contracts";
+import { LAYOUT_EDA, type DeclarationLayout, type LayoutSection } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { conditionContext, isApplicable, itemProgress, missingRequired, sectionProgress, type FormValues } from "./form-state";
+import { conditionContext, groupMissing, isApplicable, itemProgress, missingRequired, sectionProgress, type FormValues } from "./form-state";
 
 // Bố cục nhỏ dựng trong test: 1.4 bắt buộc, 1.10 theo tình huống tạm nhập, nhóm phương tiện có hô hiệu theo đường biển, 5 vận đơn.
 const SECTION: LayoutSection = {
@@ -47,8 +47,8 @@ describe("missingRequired / isApplicable", () => {
   it("ô bắt buộc trống → thiếu; có giá trị (kể cả khoảng trắng bị bỏ) → không", () => {
     const icb = SECTION.blocks[0]!.items[0]!;
     if (icb.kind !== "field") throw new Error("test setup");
-    expect(missingRequired("IDA", icb, { TK_ICB: "  " })).toBe(true);
-    expect(missingRequired("IDA", icb, { TK_ICB: "A11" })).toBe(false);
+    expect(missingRequired("IDA", icb, { TK_ICB: "  " }, undefined, undefined, conditionContext("IDA", {}))).toBe(true);
+    expect(missingRequired("IDA", icb, { TK_ICB: "A11" }, undefined, undefined, conditionContext("IDA", {}))).toBe(false);
   });
   it("không có điều kiện → luôn áp dụng", () => {
     expect(isApplicable({}, conditionContext("IDA", {}))).toBe(true);
@@ -64,5 +64,29 @@ describe("itemProgress", () => {
   it("đếm ô bắt buộc còn thiếu của dòng hàng", () => {
     expect(itemProgress("IDA", layout, { HAG_CMD: "22083090" })).toEqual({ missing: 1 });
     expect(itemProgress("IDA", layout, { HAG_CMD: "22083090", HAG_CMN: "Rượu" })).toEqual({ missing: 0 });
+  });
+});
+
+describe("review: bộ đếm khớp với ô, không báo thiếu ô không áp dụng", () => {
+  const eda = LAYOUT_EDA.declarant.find((s) => s.id === "van-chuyen")!;
+  const base: FormValues = { TK_ECB: "B11", TK_MTC: "2", TK_EKN: "X", TK_NO: "1", TK_NOT: "PK", TK_GW: "1", TK_GWT: "KGM", TK_ST: "06B1A04", TK_DSC: "SGSIN", TK_DSN: "SINGAPORE", TK_PSC: "VNSGN", TK_SYM: "2026-09-12", TK_VSN: "A" };
+  it("EDA đường biển container: 2.59 (một địa điểm đóng hàng) tính 1 ô thiếu, không phải 7; số container 1; hô hiệu 1", () => {
+    expect(sectionProgress("EDA", eda, base).missingRequired).toBe(3);
+    // Có một mã địa điểm đóng hàng là đủ 2.59.
+    expect(sectionProgress("EDA", eda, { ...base, CON_VC1: "02CIS01" }).missingRequired).toBe(2);
+  });
+  it("ô thuộc nhóm có điều kiện không áp dụng → không 'Còn thiếu' (EDA FOB có hóa đơn: 2.40)", () => {
+    const tg = LAYOUT_EDA.declarant.flatMap((s) => s.blocks).find((b) => b.id === "tri-gia")!.items[0]!;
+    if (tg.kind !== "group") throw new Error("test setup");
+    const v: FormValues = { TK_ECB: "B11", TK_IP2: "FOB", TK_IV1: "A", TK_IV3: "INV-1" };
+    expect(missingRequired("EDA", tg.fields[1]!, v, tg.no, tg.condition, conditionContext("EDA", v))).toBe(false);
+    const cif = { ...v, TK_IP2: "CIF" };
+    expect(missingRequired("EDA", tg.fields[1]!, cif, tg.no, tg.condition, conditionContext("EDA", cif))).toBe(true);
+  });
+  it("nhóm 'chỉ cần một ô' (2.59) báo thiếu ở cấp nhóm", () => {
+    const g = eda.blocks.find((b) => b.id === "container")!.items[0]!;
+    if (g.kind !== "group") throw new Error("test setup");
+    expect(groupMissing("EDA", g, base, conditionContext("EDA", base), "IN_CONTAINER")).toBe(true);
+    expect(groupMissing("EDA", g, { ...base, CON_VN: "Kho X" }, conditionContext("EDA", base), "IN_CONTAINER")).toBe(false);
   });
 });

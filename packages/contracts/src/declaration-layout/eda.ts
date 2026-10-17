@@ -84,7 +84,7 @@ export const LAYOUT_EDA: DeclarationLayout = {
       ],
     },
     {
-      id: "cac-ben", title: "Các bên", blocks: [
+      id: "cac-ben", title: "Đơn vị xuất nhập khẩu", blocks: [
         {
           id: "nguoi-xuat-khau", title: "Người xuất khẩu", items: [
             fld("TK_EPC", "Mã người xuất khẩu (MST)", "text", { no: "2.11", width: "sm" }),
@@ -138,9 +138,9 @@ export const LAYOUT_EDA: DeclarationLayout = {
         transitBlock("EDA"),
       ],
     },
-    { id: "giay-phep", title: "Giấy phép", blocks: [permitsBlock("EDA")] },
+    { id: "giay-phep", title: "Văn bản & giấy phép", blocks: [permitsBlock("EDA")] },
     {
-      id: "hoa-don-tri-gia", title: "Hóa đơn & trị giá", blocks: [
+      id: "hoa-don-tri-gia", title: "Hóa đơn, hợp đồng & trị giá", blocks: [
         invoiceBlock("EDA"),
         internalContractBlock,
         {

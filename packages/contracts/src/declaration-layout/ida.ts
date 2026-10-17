@@ -107,7 +107,7 @@ export const LAYOUT_IDA: DeclarationLayout = {
       ],
     },
     {
-      id: "cac-ben", title: "Các bên", blocks: [
+      id: "cac-ben", title: "Đơn vị xuất nhập khẩu", blocks: [
         {
           id: "nguoi-nhap-khau", title: "Người nhập khẩu", items: [
             fld("TK_IMC", "Mã người nhập khẩu (MST)", "text", { no: "1.12", width: "sm" }),
@@ -158,13 +158,13 @@ export const LAYOUT_IDA: DeclarationLayout = {
       ],
     },
     {
-      id: "giay-phep", title: "Văn bản pháp quy & giấy phép", blocks: [
+      id: "giay-phep", title: "Văn bản & giấy phép", blocks: [
         { id: "van-ban", title: "Văn bản pháp quy khác", items: [rep("Mã văn bản pháp quy khác (hàng chương 84/85: ô 1 là MO hoặc CU)", "1.37", 5, [fld("TK_OL{n}", "Mã", "code", { codeTable: "A519", width: "xs" })])] },
         permitsBlock("IDA"),
       ],
     },
     {
-      id: "hoa-don-tri-gia", title: "Hóa đơn & trị giá", blocks: [
+      id: "hoa-don-tri-gia", title: "Hóa đơn, hợp đồng & trị giá", blocks: [
         invoiceBlock("IDA"),
         internalContractBlock,
         {

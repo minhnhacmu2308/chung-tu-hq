@@ -5,7 +5,7 @@ import type { DeclarationLayout } from "@kb/contracts";
 import { BlockView } from "./block-view";
 import { conditionContext, itemProgress, sectionProgress, type FormValues } from "./form-state";
 import { ItemsSection } from "./items";
-import { ITEMS_SECTION } from "./view-state";
+import { ITEMS_SECTION, navSections } from "./view-state";
 
 type Props = {
   layout: DeclarationLayout;
@@ -23,10 +23,10 @@ export function DeclarantTab({ layout, values, items, section, onSection, onChan
   const kind = layout.kind;
   const ctx = conditionContext(kind, values);
   const itemsMissing = items.reduce((n, it) => n + itemProgress(kind, layout, it).missing, 0);
-  const nav = [
-    ...layout.declarant.map((s, i) => ({ id: s.id, title: `${i + 1}. ${s.title}`, p: sectionProgress(kind, s, values) })),
-    { id: ITEMS_SECTION, title: `${layout.declarant.length + 1}. Danh sách hàng`, p: { filled: items.length, total: items.length, missingRequired: itemsMissing } },
-  ];
+  const nav = navSections(layout).map((n) => {
+    const s = layout.declarant.find((x) => x.id === n.id);
+    return { ...n, p: s ? sectionProgress(kind, s, values) : { filled: items.length, total: items.length, missingRequired: itemsMissing } };
+  });
   const current = layout.declarant.find((s) => s.id === section);
   return (
     <Stack gap="md">
@@ -40,7 +40,7 @@ export function DeclarantTab({ layout, values, items, section, onSection, onChan
             {nav.map((n) => (
               <li key={n.id}>
                 <Button variant={n.id === section ? "secondary" : "ghost"} fullWidth className="h-auto justify-between py-2 text-left" aria-current={n.id === section ? "true" : undefined} onClick={() => onSection(n.id)}>
-                  <span className="min-w-0 flex-1 truncate">{n.title}</span>
+                  <span className="min-w-0 flex-1 whitespace-normal break-words">{n.title}</span>
                   <span className="flex shrink-0 items-center gap-1">
                     {n.p.missingRequired > 0 && <Badge tone="warning" size="sm">thiếu {n.p.missingRequired}</Badge>}
                     <span className="text-xs tabular-nums text-fg-subtle">{n.id === ITEMS_SECTION ? `${n.p.total} dòng` : `${n.p.filled}/${n.p.total}`}</span>

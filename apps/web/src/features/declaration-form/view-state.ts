@@ -1,11 +1,11 @@
 // Trạng thái màn bản mẫu lưu trên URL (F5 / chia sẻ link vẫn đúng chỗ): loại tờ khai, giai đoạn, tab, nhóm. Thuần.
-import { itemFields, layoutFor, type LayoutBlock } from "@kb/contracts";
+import { itemFields, layoutFor, type DeclarationLayout, type LayoutBlock } from "@kb/contracts";
 import type { Stage } from "./fixtures";
 import type { FormValues } from "./form-state";
 
 export type Tab = "khai" | "hai-quan" | "nghiep-vu";
 export type ViewState = { kind: "IDA" | "EDA"; stage: Stage; tab: Tab; section: string };
-/** Nhóm 8 của tab Người khai nhập (không nằm trong cấu hình bố cục). */
+/** Nhóm "Danh sách hàng" của tab Người khai nhập (không nằm trong cấu hình bố cục). */
 export const ITEMS_SECTION = "hang";
 
 const STAGES: readonly Stage[] = ["nhap", "da-khai", "thong-quan"];
@@ -25,3 +25,11 @@ export const toQuery = (v: ViewState) =>
 
 /** Khối có ít nhất một ô có giá trị (khối Hải quan không có → hiện câu "Có sau khi …"). */
 export const blockHasData = (b: LayoutBlock, v: FormValues) => b.items.flatMap(itemFields).some((f) => Boolean(v[f.key]?.trim()));
+
+/** Nhóm của tab Người khai nhập theo thứ tự hiển thị: "Danh sách hàng" đứng trước "Đính kèm & ghi chú" (nhóm cuối), số thứ tự đánh lại. */
+export function navSections(layout: DeclarationLayout): { id: string; title: string }[] {
+  const ids = layout.declarant.map((s) => ({ id: s.id, title: s.title }));
+  const at = ids.findIndex((s) => s.id === "dinh-kem");
+  ids.splice(at < 0 ? ids.length : at, 0, { id: ITEMS_SECTION, title: "Danh sách hàng" });
+  return ids.map((s, i) => ({ id: s.id, title: `${i + 1}. ${s.title}` }));
+}

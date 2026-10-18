@@ -1,13 +1,16 @@
 "use client";
 // Ô mã có tra cứu danh mục VNACCS: màn chính chỉ hiện mã, tên mã hiện khi rê chuột / đặt con trỏ vào ô.
 // Danh mục ngắn → danh sách thả xuống có ô lọc (Combobox); danh mục dài → gõ mã trực tiếp + nút tra cứu mở popup (DataTable tìm không dấu).
-import { Alert, Button, Checkbox, cn, Combobox, createDataTableColumnHelper, DataTable, Dialog, DialogContent, Input, Stack, Tooltip } from "@kb/ui";
+import { Alert, Button, Checkbox, cn, Combobox, createDataTableColumnHelper, DataTable, Dialog, DialogContent, Input, SkeletonTable, Stack, Tooltip } from "@kb/ui";
 import { CODE_LIST_META, codeListFor, type CodeListEntry, type CodeTable } from "@kb/contracts";
 import { Search } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { codeName, codeScope, lookupMode, scopedEntries, type CodeScope } from "./code-scope";
 import type { FormValues } from "./form-state";
-import { useCodeList } from "./use-code-list";
+import { LoadError } from "@/components/common/load-error";
+import { formatNumber } from "@/lib/format";
+import type { CodeListState } from "./code-list-cache";
+import { useCodeListState } from "./use-code-list";
 
 type Props = {
   table: CodeTable;
@@ -28,13 +31,14 @@ type Props = {
 const col = createDataTableColumnHelper<CodeListEntry>();
 
 /** Popup tra cứu: bấm vào dòng là chọn, đóng bằng nút ✕ của popup (không có thao tác nào cần thanh nút ở đáy). */
-function LookupDialog({ label, entries, scope, title, hasParent, parentLabel, oldCodes, inactiveCount, onPick }: {
-  label: string; entries: CodeListEntry[]; scope: CodeScope | null; title: string; hasParent: boolean; parentLabel: string | undefined;
+function LookupDialog({ label, state, onRetry, scope, title, hasParent, parentLabel, oldCodes, inactiveCount, onPick }: {
+  label: string; state: CodeListState | undefined; onRetry: () => void; scope: CodeScope | null; title: string; hasParent: boolean; parentLabel: string | undefined;
   oldCodes: boolean; inactiveCount: number; onPick: (code: string) => void;
 }) {
   const [all, setAll] = useState(false);
   const [inactive, setInactive] = useState(false);
-  const data = useMemo(() => scopedEntries(entries, scope, { all, inactive }), [entries, scope, all, inactive]);
+  const entries = state?.status === "ready" ? state.list : null;
+  const data = useMemo(() => (entries ? scopedEntries(entries, scope, { all, inactive }) : []), [entries, scope, all, inactive]);
   const columns = useMemo(
     () => col.columns([
       col.accessor("code", { header: "Mã", cell: (c) => <span className="font-mono">{c.getValue()}</span> }),
@@ -45,7 +49,7 @@ function LookupDialog({ label, entries, scope, title, hasParent, parentLabel, ol
     [hasParent, parentLabel],
   );
   return (
-    <DialogContent title={`Tra cứu: ${label}`} icon={<Search className="h-4 w-4" />} description={`${title} – ${data.length.toLocaleString("vi-VN")} mã. Gõ mã hoặc tên (không dấu) để lọc, bấm vào dòng để chọn.`} size="lg">
+    <DialogContent title={`Tra cứu: ${label}`} icon={<Search className="h-4 w-4" />} description={`${title}${entries ? ` – ${formatNumber(data.length)} mã` : ""}. Gõ mã hoặc tên (không dấu) để lọc, bấm vào dòng để chọn.`} size="lg">
       <Stack gap="sm">
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {scope?.optional && <Checkbox label={`Chỉ hiện ${scope.label}`} checked={!all} onChange={() => setAll((a) => !a)} />}
@@ -56,7 +60,9 @@ function LookupDialog({ label, entries, scope, title, hasParent, parentLabel, ol
             Danh mục địa điểm lưu kho (04/2025) dùng mã chi cục trước đợt sắp xếp 2025, ví dụ 02B1A04 KHO SCSC – phần mềm khai báo hiện dùng 06B1A04. Đối chiếu mã trước khi khai.
           </Alert>
         )}
-        <DataTable aria-label={`Danh mục ${title}`} columns={columns} data={data} getRowId={(e) => `${e.parent ?? ""}|${e.code}`} searchable pagination={{ mode: "client", initialPageSize: 10 }} onRowClick={(e) => onPick(e.code)} />
+        {state?.status === "error" ? <LoadError title="Không tải được danh mục" onRetry={onRetry} />
+        : !entries ? <SkeletonTable rows={6} cols={3} />
+        : <DataTable aria-label={`Danh mục ${title}`} columns={columns} data={data} getRowId={(e) => `${e.parent ?? ""}|${e.code}`} searchable pagination={{ mode: "client", initialPageSize: 10 }} onRowClick={(e) => onPick(e.code)} />}
       </Stack>
     </DialogContent>
   );
@@ -65,7 +71,8 @@ function LookupDialog({ label, entries, scope, title, hasParent, parentLabel, ol
 export function CodeInput({ table, fieldKey, kind, values, value, onChange, label, ariaLabel, widthClass = "w-32" }: Props) {
   const id = codeListFor(table)!;
   const meta = CODE_LIST_META[id];
-  const list = useCodeList(id);
+  const { state, retry } = useCodeListState(id);
+  const list = state?.status === "ready" ? state.list : null;
   const [open, setOpen] = useState(false);
   const nameId = useId();
   const office = values["TK_CH"] ?? "";
@@ -106,7 +113,7 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
       <Dialog open={open} onOpenChange={setOpen}>
         {open && (
           <LookupDialog
-            label={label} entries={list ?? []} scope={scope} title={meta.title} hasParent={meta.hasParent} parentLabel={meta.parentLabel}
+            label={label} state={state} onRetry={retry} scope={scope} title={meta.title} hasParent={meta.hasParent} parentLabel={meta.parentLabel}
             oldCodes={Boolean(meta.usesOldOfficeCodes)} inactiveCount={meta.inactive}
             onPick={(code) => { onChange(code); setOpen(false); }}
           />

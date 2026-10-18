@@ -18,9 +18,11 @@ type Props = {
   showInapplicable: boolean;
   /** Điều kiện của khối chứa nhóm (ví dụ khối Container – hàng container đường biển). */
   parentCondition?: ConditionId | undefined;
+  /** Khối chứa nhóm đang không áp dụng – ô nhập mờ. */
+  dimmed?: boolean;
 };
 
-export function FormFieldGroup({ kind, group, values, onChange, ctx, showInapplicable, parentCondition }: Props) {
+export function FormFieldGroup({ kind, group, values, onChange, ctx, showInapplicable, parentCondition, dimmed = false }: Props) {
   const { labelsLeft } = useViewPrefs();
   const applicable = isApplicable(group, ctx);
   if (!applicable && !showInapplicable) return null;
@@ -36,15 +38,15 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
   return (
     <FieldFrame
       data-missing={anyMissing || undefined}
-      className={cn(span, !applicable && "opacity-60")}
+      className={cn(span)}
       legend={<>{fieldTitle(group.no, group.label)}{!readOnly && first && <RoleMark role={fieldRole(kind, first, group.no)} />}</>}
       legendAction={!readOnly && <GuideButton kind={kind} no={group.no} role={first ? fieldRole(kind, first, group.no) : undefined} reason={reasonInGuide} label={group.label} />}
     >
       {!readOnly && notes.length > 0 && <p className="text-xs text-fg-subtle">{notes.join(" · ")}</p>}
-      {anyMissing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>}
+      {anyMissing && <p className="text-sm font-medium text-warning-subtle-fg">Còn thiếu</p>}
       <div className="flex flex-wrap items-start gap-3">
         {group.fields.map((f) => (
-          <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={group.no} parentCondition={effectiveCondition} compact suppressMissing={group.fill === "any"} />
+          <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={group.no} parentCondition={effectiveCondition} compact suppressMissing={group.fill === "any"} dimmed={dimmed || !applicable} />
         ))}
       </div>
     </FieldFrame>

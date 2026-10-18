@@ -45,7 +45,7 @@ export function BlockView({ kind, block, values, onChange, ctx, showInapplicable
     </Button>
   );
   return (
-    <Card className={cn(!applicable && "opacity-60")}>
+    <Card>
       <CardHeader className={cn(!open && "pb-5")}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle as="h3" className="flex flex-wrap items-center gap-2 text-base">
@@ -74,11 +74,11 @@ export function BlockView({ kind, block, values, onChange, ctx, showInapplicable
             <Grid cols={labelsLeft ? { base: 1, lg: 2 } : { base: 1, sm: 2, md: 3, xl: 4 }} gap="md">
               {items.map((it, i) =>
                 it.kind === "field" ? (
-                  <FormField key={it.key} kind={kind} field={it} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} parentCondition={block.condition} />
+                  <FormField key={it.key} kind={kind} field={it} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} parentCondition={block.condition} dimmed={!applicable} />
                 ) : it.kind === "group" ? (
-                  <FormFieldGroup key={`g${i}`} kind={kind} group={it} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} parentCondition={block.condition} />
+                  <FormFieldGroup key={`g${i}`} kind={kind} group={it} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} parentCondition={block.condition} dimmed={!applicable} />
                 ) : (
-                  <FormFieldRepeat key={`r${i}`} kind={kind} repeat={it} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} parentCondition={block.condition} />
+                  <FormFieldRepeat key={`r${i}`} kind={kind} repeat={it} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} parentCondition={block.condition} dimmed={!applicable} />
                 ),
               )}
             </Grid>

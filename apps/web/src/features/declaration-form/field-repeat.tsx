@@ -20,6 +20,8 @@ type Props = {
   showInapplicable: boolean;
   /** Điều kiện của khối chứa nhóm lặp. */
   parentCondition?: ConditionId | undefined;
+  /** Khối chứa nhóm lặp đang không áp dụng – ô nhập mờ. */
+  dimmed?: boolean;
 };
 
 /** 50 số container: lưới thay vì bảng. */
@@ -63,7 +65,7 @@ function Cell({ kind, f, n, values, onChange }: { kind: "IDA" | "EDA"; f: Layout
   );
 }
 
-export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapplicable, parentCondition }: Props) {
+export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapplicable, parentCondition, dimmed = false }: Props) {
   const [extra, setExtra] = useState(0);
   const applicable = isApplicable(repeat, ctx);
   if (!applicable && !showInapplicable) return null;
@@ -88,7 +90,9 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
       )}
     </div>
   );
-  const box = cn("col-span-full gap-2 pb-2", !applicable && "opacity-60");
+  const box = "col-span-full gap-2 pb-2";
+  // Không áp dụng: chỉ làm mờ ô nhập, tên cột / nhãn giữ đủ tương phản.
+  const off = dimmed || !applicable;
 
   if (isGrid(repeat)) {
     const all = expandRepeat(repeat);
@@ -98,7 +102,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
         <Grid cols={{ base: 2, md: 4 }} gap="sm">
           {rows.map((row) =>
             row.map((f) => (
-              <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={repeat.no ?? f.no} parentCondition={condition} compact fill suppressMissing={indexOf(f.key) > 1} />
+              <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={repeat.no ?? f.no} parentCondition={condition} compact fill suppressMissing={indexOf(f.key) > 1} dimmed={off} />
             )),
           )}
         </Grid>
@@ -123,7 +127,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
                 <span className="sr-only">Dòng</span>
               </th>
               {cols.map(({ f }) => (
-                <th key={f.key} scope="col" className={cn("pb-1 pr-2 text-left text-xs font-medium text-fg-muted", !isApplicable(f, ctx) && "opacity-60")}>
+                <th key={f.key} scope="col" className="pb-1 pr-2 text-left text-xs font-medium text-fg-muted">
                   {fieldLabelNode(f, false)}
                 </th>
               ))}
@@ -136,7 +140,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
                 <tr key={row[0]!.key}>
                   <td className="pb-1.5 pr-2 align-middle text-xs tabular-nums text-fg-subtle">({n || r + 1})</td>
                   {cols.map(({ f, i }) => (
-                    <td key={f.key} className={cn("pb-1.5 pr-2 align-middle", !isApplicable(f, ctx) && "opacity-60", readOnly && "min-w-24 max-w-md")}>
+                    <td key={f.key} className={cn("pb-1.5 pr-2 align-middle", (off || !isApplicable(f, ctx)) && "opacity-60", readOnly && "min-w-24 max-w-md")}>
                       {row[i] && <Cell kind={kind} f={row[i]} n={n || r + 1} values={values} onChange={readOnly ? undefined : onChange} />}
                     </td>
                   ))}
@@ -146,7 +150,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
           </tbody>
         </table>
       </div>
-      {firstRowMissing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu ở dòng 1</p>}
+      {firstRowMissing && <p className="text-sm font-medium text-warning-subtle-fg">Còn thiếu ở dòng 1</p>}
       {footer}
     </FieldFrame>
   );

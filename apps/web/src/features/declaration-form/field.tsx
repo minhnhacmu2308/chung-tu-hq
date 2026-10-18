@@ -96,9 +96,11 @@ export type FormFieldProps = {
   fill?: boolean;
   /** Nhóm "chỉ cần một ô" tự báo thiếu ở cấp nhóm – ô con không báo riêng. */
   suppressMissing?: boolean;
+  /** Nhóm / khối chứa ô đang không áp dụng (xem tất cả ô) – ô nhập mờ như ô không áp dụng. */
+  dimmed?: boolean;
 };
 
-export function FormField({ kind, field, values, onChange, ctx, showInapplicable, parentNo, parentCondition, compact = false, fill = false, suppressMissing = false }: FormFieldProps) {
+export function FormField({ kind, field, values, onChange, ctx, showInapplicable, parentNo, parentCondition, compact = false, fill = false, suppressMissing = false, dimmed = false }: FormFieldProps) {
   // Khai sửa đổi bổ sung: chỉ tiêu không được sửa hiện chỉ đọc kèm lý do.
   const lock = useAmendLock()(field.key);
   const { labelsLeft } = useViewPrefs();
@@ -141,16 +143,18 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const reasonInGuide = !compact && applicable;
   const shownReason = applicable ? undefined : reason;
   const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
-  const missingNote = missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>;
+  const missingNote = missing && <p className="text-sm font-medium text-warning-subtle-fg">Còn thiếu</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
   // Ô đứng riêng: khung viền, tên trên đường viền – cùng kiểu với nhóm ô / nhóm lặp trên mọi màn hình. Nhãn bên trái (F) giữ kiểu cũ.
   const framed = !compact && !labelsLeft;
+  // Không áp dụng: chỉ làm mờ ô nhập – nhãn và "Không áp dụng vì…" giữ đủ tương phản (WCAG 1.4.3).
+  const dim = (!applicable || dimmed) && "opacity-60";
 
   if (field.input === "choice") {
     const options = (field.options ?? []).map((o) => ({ ...o, label: optionLabel(o) }));
     const radio = choiceControl(kind, field, parentNo) === "radio";
     const checkboxes = (
-      <div className="flex flex-wrap gap-x-5 gap-y-2">
+      <div className={cn("flex flex-wrap gap-x-5 gap-y-2", dim)}>
         {options.map((o) => (
           <Checkbox key={o.value} label={o.label} checked={value === o.value} onChange={() => set(toggleChoice(value, o.value))} />
         ))}
@@ -159,7 +163,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     // Radio xếp ngang chiếm cả hàng lưới: không kéo dài một ô thành cột cao đẩy các chỉ tiêu bên cạnh xuống xa (Nhóm loại hình 4 lựa chọn).
     if (framed && !radio) {
       return (
-        <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+        <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", sizeClass)}>
           <FieldFrame legend={label} legendAction={guide} className="flex-1">
             {shownReason && <p className="text-xs text-fg-subtle">{shownReason}</p>}
             {checkboxes}
@@ -169,7 +173,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
       );
     }
     return (
-      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", radio && !compact && !fill ? "col-span-full" : sizeClass)}>
+      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", radio && !compact && !fill ? "col-span-full" : sizeClass)}>
         <div className="flex items-start gap-1">
           <div className="min-w-0 flex-1">
             {radio ? (
@@ -191,14 +195,14 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
 
   const inline = !compact && !listId && Boolean(name) && !spansRow(field);
   const control =
-    listId && field.codeTable ? <CodeInput table={field.codeTable} fieldKey={field.key} kind={kind} values={values} value={value} onChange={set} label={field.label} widthClass={compact ? fieldWidthClass(field) : "w-32"} />
-    : field.input === "textarea" ? <Textarea className={compact ? undefined : "min-w-0 flex-1"} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
-    : <Input className={compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1"} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
+    listId && field.codeTable ? <div className={cn("min-w-0", dim)}><CodeInput table={field.codeTable} fieldKey={field.key} kind={kind} values={values} value={value} onChange={set} label={field.label} widthClass={compact ? fieldWidthClass(field) : "w-32"} /></div>
+    : field.input === "textarea" ? <Textarea className={cn(!compact && "min-w-0 flex-1", dim)} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
+    : <Input className={cn(compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1", dim)} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
   // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô; nút ⓘ trên đường viền sau tên (nhãn bên trái: cuối hàng).
   const hint = [compact && !listId && name ? `→ ${name}` : null, shownReason].filter(Boolean).join(" · ") || undefined;
 
   return (
-    <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+    <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", sizeClass)}>
       <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} framed={framed} labelAction={framed ? guide : null} className={cn(framed && "flex-1")} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
         {compact ? control : (
           <div className="flex min-w-0 items-center gap-2">

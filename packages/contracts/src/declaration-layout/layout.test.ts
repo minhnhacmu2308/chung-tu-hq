@@ -105,3 +105,19 @@ describe("Vận đơn – ô theo tình huống đầu khối có khung viền",
     expect(framed).toEqual(["APP_HAWB_CO", "VD_COC"]);
   });
 });
+
+describe("Mã PTVC khai trước ở đầu khối Vận đơn", () => {
+  // PTVC quyết định định danh, HAWB, số lượng container → ô đầu tiên của nhóm Vận đơn & vận chuyển, không còn ở Thông tin chung.
+  const keysOf = (b: LayoutBlock) => b.items.map((it) => (it.kind === "field" ? it.key : it.label));
+  it.each([[LAYOUT_IDA, "1.6"], [LAYOUT_EDA, "2.6"]] as const)("%#", (layout, no) => {
+    const chung = layout.declarant.find((s) => s.id === "chung")!;
+    expect(chung.blocks.flatMap(keysOf)).not.toContain("TK_MTC");
+    const vd = layout.declarant.find((s) => s.id === "van-chuyen")!.blocks[0]!;
+    expect(vd.id).toBe("van-don");
+    expect(vd.items[0]).toMatchObject({ key: "TK_MTC", no });
+  });
+  it("IDA: thứ tự PTVC → định danh → HAWB / số lượng container", () => {
+    const vd = LAYOUT_IDA.declarant.flatMap((s) => s.blocks).find((b) => b.id === "van-don")!;
+    expect(keysOf(vd).slice(0, 4)).toEqual(["TK_MTC", "APP_DD_PT", "APP_HAWB_CO", "VD_COC"]);
+  });
+});

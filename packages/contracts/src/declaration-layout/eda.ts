@@ -73,7 +73,6 @@ export const LAYOUT_EDA: DeclarationLayout = withShortLabels({
             typeGroupField,
             fld("TK_ECB", "Mã loại hình", "code", { no: "2.4", codeTable: "TYPE_CODE", width: "sm" }),
             fld("TK_CCC", "Mã phân loại hàng hóa", "code", { no: "2.5", codeTable: "CARGO_CLASS", width: "xs" }),
-            fld("TK_MTC", "Mã phương thức vận chuyển", "code", { no: "2.6", codeTable: "TRANSPORT_MODE", width: "sm" }),
             fld("TK_CH", "Cơ quan hải quan", "code", { no: "2.8", codeTable: "A038", width: "sm" }),
             fld("TK_CHB", "Bộ phận xử lý tờ khai", "code", { no: "2.9", codeTable: "A014", width: "xs" }),
             fld("TK_ECD", "Ngày khai báo (dự kiến)", "date", { no: "2.10", width: "sm" }),
@@ -118,6 +117,8 @@ export const LAYOUT_EDA: DeclarationLayout = withShortLabels({
         {
           id: "van-don", title: "Vận đơn", items: [
             // Theo ảnh tạo mới: chỉ một ô số vận đơn; chọn định danh đường biển / hàng không nằm trong panel Khai mã định danh hàng hóa.
+            // Khai trước: PTVC quyết định hô hiệu, khối Container (mã 2).
+            fld("TK_MTC", "Mã phương thức vận chuyển", "code", { no: "2.6", codeTable: "TRANSPORT_MODE", width: "sm" }),
             fld("TK_EKN", "Số vận đơn / số quản lý hàng hóa", "text", { no: "2.24", width: "md" }),
             grp("Số kiện", "2.25", [fld("TK_NO", "Số lượng kiện", "number", { width: "sm" }), fld("TK_NOT", "Loại kiện", "code", { codeTable: "PACKAGE_KIND", width: "xs" })]),
             grp("Tổng trọng lượng (Gross)", "2.26", [fld("TK_GW", "Trọng lượng", "number", { width: "sm" }), fld("TK_GWT", "Đơn vị", "code", { codeTable: "UNIT", width: "xs" })]),

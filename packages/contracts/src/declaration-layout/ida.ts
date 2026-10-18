@@ -94,7 +94,6 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
             typeGroupField,
             fld("TK_ICB", "Mã loại hình", "code", { no: "1.4", codeTable: "TYPE_CODE", width: "sm" }),
             fld("TK_CCC", "Mã phân loại hàng hóa", "code", { no: "1.5", codeTable: "CARGO_CLASS", width: "xs" }),
-            fld("TK_MTC", "Mã phương thức vận chuyển", "code", { no: "1.6", codeTable: "TRANSPORT_MODE", width: "sm" }),
             fld("TK_SKB", "Phân loại cá nhân/tổ chức", "code", { no: "1.7", codeTable: "PARTY_CLASS", width: "sm" }),
             fld("TK_CH", "Cơ quan hải quan", "code", { no: "1.8", codeTable: "A038", width: "sm" }),
             fld("TK_CHB", "Bộ phận xử lý tờ khai", "code", { no: "1.9", codeTable: "A014", width: "xs" }),
@@ -140,6 +139,8 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
       id: "van-chuyen", title: "Vận đơn & vận chuyển", blocks: [
         {
           id: "van-don", title: "Vận đơn", items: [
+            // Khai trước: PTVC quyết định định danh (biển / hàng không), HAWB, số lượng container.
+            fld("TK_MTC", "Mã phương thức vận chuyển", "code", { no: "1.6", codeTable: "TRANSPORT_MODE", width: "sm" }),
             ...billIdentFields,
             // Cạnh ô HAWB (hàng không) – cùng là ô theo tình huống của phương thức vận chuyển, đóng khung để dễ nhận ra.
             fld("VD_COC", "Số lượng container", "number", { no: "1.35", width: "xs", condition: "IN_CONTAINER", framed: true }),

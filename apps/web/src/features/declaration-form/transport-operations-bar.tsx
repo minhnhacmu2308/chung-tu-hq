@@ -44,9 +44,9 @@ function OperationDialog({ form, kind, header, stage, showInapplicable, onClose 
   );
 }
 
-export function TransportOperationsBar({ kind, header, stage, showInapplicable }: { kind: Kind; header: FormValues; stage: Stage; showInapplicable: boolean }) {
+export function TransportOperationsBar({ kind, header, stage, amending, showInapplicable }: { kind: Kind; header: FormValues; stage: Stage; amending: boolean; showInapplicable: boolean }) {
   const [open, setOpen] = useState<TransportOperationForm["id"] | null>(null);
-  const forms = operationsFor(kind);
+  const forms = operationsFor(kind, amending);
   const current = forms.find((f) => f.id === open);
   return (
     <div className="flex flex-wrap gap-2">

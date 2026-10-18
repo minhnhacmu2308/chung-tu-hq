@@ -17,9 +17,11 @@ type Props = {
   onChange?: ((key: string, value: string) => void) | undefined;
   ctx: ConditionContext;
   showInapplicable: boolean;
+  /** Thao tác của khối (chép số container…) – ẩn khi khai sửa đổi (ảnh EDA01 không có). */
+  showActions?: boolean;
 };
 
-export function BlockView({ kind, block, values, onChange, ctx, showInapplicable }: Props) {
+export function BlockView({ kind, block, values, onChange, ctx, showInapplicable, showActions = true }: Props) {
   const applicable = isApplicable(block, ctx);
   if (!applicable && !showInapplicable) return null;
   const customs = block.items.flatMap(itemFields).every((f) => f.origin === "CUSTOMS");
@@ -32,7 +34,7 @@ export function BlockView({ kind, block, values, onChange, ctx, showInapplicable
           {block.title}
         </CardTitle>
         {condition && <p className="text-xs text-fg-subtle">{applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`}</p>}
-        {onChange && block.actions?.length ? (
+        {onChange && showActions && block.actions?.length ? (
           <div className="flex flex-wrap gap-2 pt-1">
             {block.actions.map((a) => (
               <Button key={a.id} size="sm" variant="secondary" leftIcon={<Copy className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: "Bản mẫu – chưa kết nối", description: a.label })}>

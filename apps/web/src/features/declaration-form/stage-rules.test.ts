@@ -1,7 +1,7 @@
 import { LAYOUT_EDA, LAYOUT_IDA } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { fixtureFor, valuesAt } from "./fixtures";
-import { declarantEditable, lookupsAt, operationsAt, summaryAt, taxSummary } from "./stage-rules";
+import { changedCount, declarantEditable, lookupsAt, operationsAt, summaryAt, taxSummary } from "./stage-rules";
 
 describe("declarantEditable – phần người khai nhập theo giai đoạn", () => {
   it("nháp sửa được; đã khai chỉ sửa khi đang khai sửa đổi bổ sung; đã thông quan chỉ đọc", () => {
@@ -9,6 +9,14 @@ describe("declarantEditable – phần người khai nhập theo giai đoạn", 
     expect(declarantEditable("da-khai", false)).toBe(false);
     expect(declarantEditable("da-khai", true)).toBe(true);
     expect(declarantEditable("thong-quan", true)).toBe(false);
+  });
+});
+
+describe("changedCount – số ô đã sửa so với tờ khai đã đăng ký", () => {
+  it("đếm ô phần đầu và ô dòng hàng khác giá trị đăng ký; xóa trắng ô có giá trị cũng tính", () => {
+    const before = { header: { TK_IV3: "A", TK_IMA: "X" }, items: [{ HAG_QN1: "1" }, { HAG_QN1: "2" }] };
+    expect(changedCount(before, { header: { TK_IV3: "A", TK_IMA: "X" }, items: [{ HAG_QN1: "1" }, { HAG_QN1: "2" }] })).toBe(0);
+    expect(changedCount(before, { header: { TK_IV3: "B", TK_IMA: "" }, items: [{ HAG_QN1: "1" }, { HAG_QN1: "3", HAG_FOO: "" }] })).toBe(3);
   });
 });
 

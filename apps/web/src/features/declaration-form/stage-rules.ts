@@ -31,3 +31,10 @@ export function taxSummary(kind: "IDA" | "EDA", v: FormValues): TaxSummary | nul
   if (!val("TK_ETA")) return null;
   return { rate: val("TK_RD1") ? { currency: val("TK_RC1"), value: val("TK_RD1") } : null, lines: [{ label: "Thuế xuất khẩu", value: val("TK_ETA") }], total: null };
 }
+
+type Snapshot = { header: FormValues; items: FormValues[] };
+const diff = (a: FormValues, b: FormValues) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => (a[k] ?? "") !== (b[k] ?? "")).length;
+
+/** Số ô đã sửa so với tờ khai đã đăng ký (phần đầu + từng dòng hàng) – hiện khi khai sửa đổi bổ sung. */
+export const changedCount = (before: Snapshot, after: Snapshot) =>
+  diff(before.header, after.header) + after.items.reduce((n, it, i) => n + diff(before.items[i] ?? {}, it), 0);

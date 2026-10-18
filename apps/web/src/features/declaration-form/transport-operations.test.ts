@@ -11,6 +11,10 @@ describe("operationsFor – nút nghiệp vụ ở nhóm Vận đơn & vận chu
     expect(operationsFor("IDA").map((f) => f.menu)).toEqual(["Chia tách vận đơn", "Khai báo định danh"]);
     expect(operationsFor("EDA")).toEqual([EXPORT_IDENTIFIER_FORM]);
   });
+  it("đang khai sửa đổi (ảnh IDA01/EDA01): nhập khẩu chỉ còn Chia tách vận đơn; xuất khẩu giữ Khai mã định danh", () => {
+    expect(operationsFor("IDA", true).map((f) => f.id)).toEqual(["tach-van-don"]);
+    expect(operationsFor("EDA", true)).toEqual([EXPORT_IDENTIFIER_FORM]);
+  });
 });
 
 describe("operationValues – điền sẵn từ tờ khai", () => {

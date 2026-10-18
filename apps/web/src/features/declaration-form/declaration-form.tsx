@@ -11,7 +11,7 @@ import { displayValue } from "./display";
 import { fixtureFor, valuesAt, type Stage } from "./fixtures";
 import type { FormValues } from "./form-state";
 import { OperationsTab } from "./operations-tab";
-import { declarantEditable, summaryAt } from "./stage-rules";
+import { changedCount, declarantEditable, summaryAt } from "./stage-rules";
 import { parseView, toQuery, type Tab, type ViewState } from "./view-state";
 
 const STAGE_OPTIONS = [
@@ -62,7 +62,7 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
             layout={layout} stage={view.stage} values={values} items={items} section={view.section} onSection={(id) => go({ section: id })}
             onChange={editable ? (k, v) => setValues((s) => ({ ...s, [k]: v })) : undefined}
             onItemChange={editable ? (i, k, v) => setItems((s) => s.map((it, j) => (j === i ? { ...it, [k]: v } : it))) : undefined}
-            amending={amending} onAmend={amend}
+            amending={amending} onAmend={amend} changed={amending ? changedCount(initial, { header: values, items }) : 0}
             showInapplicable={showInapplicable} onShowInapplicable={setShowInapplicable}
           />
         </TabsContent>

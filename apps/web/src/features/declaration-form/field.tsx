@@ -2,7 +2,8 @@
 // Một ô chỉ tiêu của bản mẫu tờ khai: nhãn "số · tên", vai trò, hướng dẫn khai (catalog Phụ lục II), "Còn thiếu", lý do áp dụng / không áp dụng.
 import { Badge, Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
 import { DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type LayoutField } from "@kb/contracts";
-import { Info } from "lucide-react";
+import { Info, Lock } from "lucide-react";
+import { useAmendLock } from "./amend-context";
 import { ROLE_INFO } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
 import { codeLabel, displayValue, fieldTitle } from "./display";
@@ -65,11 +66,13 @@ export type FormFieldProps = {
 };
 
 export function FormField({ kind, field, values, onChange, ctx, showInapplicable, parentNo, parentCondition, compact = false, fill = false, suppressMissing = false }: FormFieldProps) {
+  // Khai sửa đổi bổ sung: chỉ tiêu không được sửa hiện chỉ đọc kèm lý do.
+  const lock = useAmendLock()(field.key);
   const applicable = isApplicable(field, ctx);
   if (!applicable && !showInapplicable) return null;
   const value = values[field.key] ?? "";
   const title = compact ? field.label : fieldTitle(field.no, field.label);
-  const readOnly = field.origin === "CUSTOMS" || !onChange;
+  const readOnly = field.origin === "CUSTOMS" || !onChange || Boolean(lock);
   const sizeClass = fill ? "w-full" : compact ? WIDTH[field.width ?? "sm"] : spansRow(field) ? "col-span-full" : undefined;
 
   if (readOnly) {
@@ -79,6 +82,12 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
       <div className={cn("flex min-w-0 flex-col gap-0.5 rounded-md px-3 py-2", customs ? "bg-info-subtle" : "bg-surface-muted", sizeClass)}>
         <p className={cn("text-xs", customs ? "text-info-subtle-fg" : "text-fg-muted")}>{title}</p>
         <p className={cn("break-words text-sm font-medium", customs ? "text-info-subtle-fg" : "text-fg")}>{displayValue(field, value) || "—"}</p>
+        {lock && onChange && (
+          <p className="flex items-start gap-1 text-xs text-fg-muted">
+            <Lock aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
+            {lock.reason}
+          </p>
+        )}
       </div>
     );
   }

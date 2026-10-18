@@ -5,8 +5,12 @@ import type { FormValues } from "./form-state";
 
 type Kind = "IDA" | "EDA";
 
-/** Tách vận đơn chỉ cho hàng nhập (vận đơn gốc về cảng nhập); định danh cho cả nhập và xuất (xuất: panel có chọn đường biển / hàng không). */
-export const operationsFor = (kind: Kind): TransportOperationForm[] => (kind === "IDA" ? [BILL_SPLIT_FORM, IDENTIFIER_FORM] : [EXPORT_IDENTIFIER_FORM]);
+/**
+ * Tách vận đơn chỉ cho hàng nhập (vận đơn gốc về cảng nhập); định danh cho cả nhập và xuất (xuất: panel có chọn đường biển / hàng không).
+ * Đang khai sửa đổi: theo ảnh IDA01 chỉ còn "Chọn số VĐ tách"; EDA01 vẫn còn "Khai mã định danh hàng hóa".
+ */
+export const operationsFor = (kind: Kind, amending = false): TransportOperationForm[] =>
+  kind === "IDA" ? (amending ? [BILL_SPLIT_FORM] : [BILL_SPLIT_FORM, IDENTIFIER_FORM]) : [EXPORT_IDENTIFIER_FORM];
 
 /** Kết quả giả khi tờ khai đã khai: Hải quan đã duyệt định danh. */
 const IDENTIFIER_RESULT: FormValues = {

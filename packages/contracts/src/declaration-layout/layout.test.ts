@@ -96,8 +96,8 @@ describe("Đơn vị xuất nhập khẩu – ô ngắn chung một hàng", () =
   });
 });
 
-describe("Vận đơn – ô theo tình huống đầu khối có khung viền", () => {
-  it("IDA: 1.35 số lượng container ngay cạnh ô HAWB; cả hai đóng khung", () => {
+describe("Vận đơn – ô theo tình huống đầu khối", () => {
+  it("IDA: 1.35 số lượng container ngay cạnh ô HAWB", () => {
     const block = LAYOUT_IDA.declarant.flatMap((s) => s.blocks).find((b) => b.id === "van-don")!;
     const keys = block.items.map((it) => (it.kind === "field" ? it.key : it.label));
     expect(keys.indexOf("VD_COC")).toBe(keys.indexOf("APP_HAWB_CO") + 1);
@@ -120,13 +120,7 @@ describe("Mã PTVC khai trước ở đầu khối Vận đơn", () => {
   });
 });
 
-describe("Vận đơn & vận chuyển – mọi ô lẻ đóng khung như nhóm", () => {
-  it.each([LAYOUT_IDA, LAYOUT_EDA])("%#", (layout) => {
-    const sec = layout.declarant.find((s) => s.id === "van-chuyen")!;
-    const loose = sec.blocks.flatMap((b) => b.items).filter((it): it is LayoutField => it.kind === "field");
-    expect(loose.length).toBeGreaterThan(3);
-    expect(loose.filter((f) => !f.framed).map((f) => f.key)).toEqual([]);
-  });
+describe("Vận đơn & vận chuyển – HAWB", () => {
   it("HAWB: chỉ ô chọn 'Có phát hành HAWB', không nhãn / hướng dẫn riêng", () => {
     const hawb = LAYOUT_IDA.declarant.flatMap((s) => s.blocks).flatMap((b) => b.items).find((it) => it.kind === "field" && it.key === "APP_HAWB_CO");
     expect(hawb).toMatchObject({ hideLabel: true, options: [{ label: "Có phát hành HAWB" }] });

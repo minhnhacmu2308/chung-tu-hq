@@ -2,7 +2,7 @@
 export { cn } from "./lib/cn.js";
 export { Button, buttonVariants, type ButtonProps } from "./components/button.js";
 export { Spinner, type SpinnerProps } from "./components/spinner.js";
-export { Field, Label, useFieldControl, type FieldProps } from "./components/field.js";
+export { Field, FieldFrame, Label, useFieldControl, type FieldFrameProps, type FieldProps } from "./components/field.js";
 export { Abbreviation, type AbbreviationProps } from "./components/abbreviation.js";
 export { Input, Textarea, Select, Checkbox, type SelectOption, type SelectProps, type CheckboxProps } from "./components/inputs.js";
 export { RadioGroup, type RadioGroupProps, type RadioOption } from "./components/radio-group.js";

@@ -1,5 +1,5 @@
 // Hàm dựng gọn + các khối giống nhau giữa Mẫu 01 (IDA) và Mẫu 02 (EDA): cùng tên trường VNACCS, khác số chỉ tiêu.
-import type { FieldInput, LayoutBlock, LayoutField, LayoutGroup, LayoutRepeat, LayoutSection } from "./types.js";
+import type { FieldInput, LayoutBlock, LayoutField, LayoutGroup, LayoutRepeat } from "./types.js";
 
 type Kind = "IDA" | "EDA";
 type Extra = Partial<Omit<LayoutField, "kind" | "key" | "label" | "input">>;
@@ -144,9 +144,3 @@ export function directivesBlock(k: Kind): LayoutBlock {
     ],
   };
 }
-
-/** Mọi ô lẻ của nhóm màn hình đóng khung viền như nhóm ô / nhóm lặp – nhìn đồng nhất (Vận đơn & vận chuyển). */
-export const framedSection = (s: LayoutSection): LayoutSection => ({
-  ...s,
-  blocks: s.blocks.map((b) => ({ ...b, items: b.items.map((it) => (it.kind === "field" ? { ...it, framed: true } : it)) })),
-});

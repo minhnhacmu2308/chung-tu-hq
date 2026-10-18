@@ -63,4 +63,11 @@ describe("RadioGroup", () => {
     const { container } = render(<Demo initial="cnc" />);
     await expectNoA11yViolations(container);
   });
+
+  it("framed: khung viền, tên nhóm nằm trên đường viền như FieldFrame", async () => {
+    const { container } = render(<RadioGroup framed label="Nhóm loại hình" options={OPTIONS} value={null} onChange={() => {}} />);
+    const group = screen.getByRole("radiogroup", { name: "Nhóm loại hình" });
+    expect(group).toHaveAttribute("data-frame");
+    await expectNoA11yViolations(container);
+  });
 });

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
-import { Field } from "./field.js";
+import { Field, FieldFrame } from "./field.js";
 import { Checkbox, Input, Select, Textarea } from "./inputs.js";
 
 describe("Field + control", () => {
@@ -88,5 +88,22 @@ describe("Field + control", () => {
   it("mặc định dọc (nhãn trên ô)", () => {
     const { container } = render(<Field label="Tên"><Input /></Field>);
     expect(container.firstElementChild).toHaveAttribute("data-orientation", "vertical");
+  });
+
+  it("FieldFrame: khung viền, tên nằm trên đường viền (legend) – là một nhóm có tên", async () => {
+    const { container } = render(<FieldFrame legend="1.27 · Số kiện"><Field label="Số lượng kiện"><Input /></Field></FieldFrame>);
+    const group = screen.getByRole("group", { name: "1.27 · Số kiện" });
+    expect(group.tagName).toBe("FIELDSET");
+    expect(group).toHaveAttribute("data-frame");
+    await expectNoA11yViolations(container);
+  });
+
+  it("framed: ô đứng riêng có khung như nhóm, nhãn trên đường viền vẫn gắn với ô; gợi ý, bắt buộc đúng chuẩn", async () => {
+    const { container } = render(<Field label="1.6 · Mã PTVC" hint="Mã 1–9" required framed><Input /></Field>);
+    const input = screen.getByRole("textbox", { name: "1.6 · Mã PTVC" });
+    expect(input).toBeRequired();
+    expect(input).toHaveAccessibleDescription("Mã 1–9");
+    expect(container.querySelector("fieldset[data-frame] > legend label")).toHaveTextContent("1.6 · Mã PTVC");
+    await expectNoA11yViolations(container);
   });
 });

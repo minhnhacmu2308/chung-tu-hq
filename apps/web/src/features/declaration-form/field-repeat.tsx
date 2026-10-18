@@ -1,7 +1,7 @@
 "use client";
 // Nhóm lặp (5 vận đơn, 5 giấy phép, 5 khoản điều chỉnh, 10 chỉ thị…) dạng bảng (phương án C): nhãn ở tiêu đề cột, mỗi dòng một hàng,
 // nút "Thêm dòng". 50 số container: lưới. Bảng hẹp hơn nội dung thì cuộn ngang trong khung, trang không tràn.
-import { Button, Checkbox, cn, Grid, Input } from "@kb/ui";
+import { Button, Checkbox, cn, FieldFrame, Grid, Input } from "@kb/ui";
 import { codeListFor, expandRepeat, fieldRole, type ConditionContext, type ConditionId, type LayoutField, type LayoutRepeat } from "@kb/contracts";
 import { Lock, Plus } from "lucide-react";
 import { useState } from "react";
@@ -73,10 +73,10 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
   const first = repeat.fields[0];
   const condition = repeat.condition ?? parentCondition;
   const legend = (
-    <legend className="px-1 text-xs font-medium text-fg-muted">
+    <>
       {fieldTitle(repeat.no, repeat.label)} <span className="font-normal text-fg-subtle">(tối đa {repeat.count})</span>
       {!readOnly && first && repeat.no && <RoleMark role={fieldRole(kind, first, repeat.no)} />}
-    </legend>
+    </>
   );
   const footer = !readOnly && (
     <div className="flex flex-wrap items-center gap-2">
@@ -88,14 +88,13 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
       <GuideButton kind={kind} no={repeat.no} role={first ? fieldRole(kind, first, repeat.no) : undefined} />
     </div>
   );
-  const box = cn("col-span-full flex min-w-0 flex-col gap-2 rounded-md border border-border px-3 pb-2 pt-1", !applicable && "opacity-60");
+  const box = cn("col-span-full gap-2 pb-2", !applicable && "opacity-60");
 
   if (isGrid(repeat)) {
     const all = expandRepeat(repeat);
     const indexOf = (key: string) => all.findIndex((r) => r[0]?.key === key) + 1;
     return (
-      <fieldset className={box}>
-        {legend}
+      <FieldFrame legend={legend} className={box}>
         <Grid cols={{ base: 2, md: 4 }} gap="sm">
           {rows.map((row) =>
             row.map((f) => (
@@ -104,7 +103,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
           )}
         </Grid>
         {footer}
-      </fieldset>
+      </FieldFrame>
     );
   }
 
@@ -113,8 +112,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
   // Như bộ đếm sectionProgress: nhóm lặp bắt buộc khi có ít nhất dòng 1 – dòng thêm không tự báo thiếu.
   const firstRowMissing = !readOnly && applicable && (rows[0] ?? []).some((f) => isApplicable(f, ctx) && missingRequired(kind, f, values, repeat.no ?? f.no, condition, ctx));
   return (
-    <fieldset data-missing={firstRowMissing || undefined} className={box}>
-      {legend}
+    <FieldFrame data-missing={firstRowMissing || undefined} legend={legend} className={box}>
       {/* relative: chữ ẩn (sr-only, định vị tuyệt đối) trong ô bảng nằm trong khung cuộn – không thoát ra làm trang tràn ngang. */}
       <div className="relative min-w-0 overflow-x-auto">
         {/* kb-allow-raw: lưới sửa trực tiếp các dòng của nhóm lặp (vận đơn, giấy phép, khoản điều chỉnh…); DataTable chưa hỗ trợ ô sửa được */}
@@ -150,6 +148,6 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
       </div>
       {firstRowMissing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu ở dòng 1</p>}
       {footer}
-    </fieldset>
+    </FieldFrame>
   );
 }

@@ -2,7 +2,7 @@
 // Một ô chỉ tiêu của bản mẫu tờ khai, dạng gọn (phương án B): nhãn "số · tên" kèm dấu * (bắt buộc) hoặc chữ nhỏ "tình huống";
 // nút ⓘ mở hướng dẫn khai (catalog Phụ lục II) kèm nghĩa vai trò (VNACCS tự xác định…). Ô mã có danh mục VNACCS: chỉ hiện mã, tên khi rê chuột,
 // tra cứu bằng danh sách thả xuống / popup (CodeInput); chỉ đọc thì hiện "mã · tên". Tùy chọn nhãn bên trái (phương án F). "Còn thiếu", lý do áp dụng.
-import { Abbreviation, Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
+import { Abbreviation, Button, Checkbox, cn, Field, FieldFrame, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
 import type { ReactNode } from "react";
 import { codeListFor, DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type FieldOption, type LayoutField } from "@kb/contracts";
 import { Info, Lock } from "lucide-react";
@@ -143,27 +143,45 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const guide = compact || field.hideLabel ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
   const missingNote = missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
-  const frame = field.framed && "rounded-md border border-border px-3 py-2";
+  // Ô đứng riêng: khung viền, tên trên đường viền – cùng kiểu với nhóm ô / nhóm lặp trên mọi màn hình. Nhãn bên trái (F) giữ kiểu cũ.
+  const framed = !compact && !labelsLeft;
 
   if (field.input === "choice") {
     const options = (field.options ?? []).map((o) => ({ ...o, label: optionLabel(o) }));
     const radio = choiceControl(kind, field, parentNo) === "radio";
+    const checkboxes = (
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        {options.map((o) => (
+          <Checkbox key={o.value} label={o.label} checked={value === o.value} onChange={() => set(toggleChoice(value, o.value))} />
+        ))}
+      </div>
+    );
     // Radio xếp ngang chiếm cả hàng lưới: không kéo dài một ô thành cột cao đẩy các chỉ tiêu bên cạnh xuống xa (Nhóm loại hình 4 lựa chọn).
+    if (framed && !radio) {
+      return (
+        <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+          <FieldFrame legend={label} hideLegend={Boolean(field.hideLabel)} className="flex-1">
+            {shownReason && <p className="text-xs text-fg-subtle">{shownReason}</p>}
+            <div className="flex items-start justify-between gap-1">
+              {checkboxes}
+              {guide}
+            </div>
+          </FieldFrame>
+          {missingNote}
+        </div>
+      );
+    }
     return (
-      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", frame, radio && !compact && !fill ? "col-span-full" : sizeClass)}>
+      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", radio && !compact && !fill ? "col-span-full" : sizeClass)}>
         <div className="flex items-start gap-1">
           <div className="min-w-0 flex-1">
             {radio ? (
-              <RadioGroup orientation="horizontal" label={<>{title}<RoleMark role={role} /></>} description={shownReason} options={options} value={value || null} onChange={set} />
+              <RadioGroup orientation="horizontal" framed={framed} label={<>{title}<RoleMark role={role} /></>} description={shownReason} options={options} value={value || null} onChange={set} />
             ) : (
               <fieldset className="min-w-0">
                 <legend className={cn("text-sm font-medium text-fg", field.hideLabel && "sr-only")}>{label}</legend>
                 {shownReason && <p className="mt-0.5 text-xs text-fg-subtle">{shownReason}</p>}
-                <div className={cn("flex flex-wrap gap-x-5 gap-y-2", !field.hideLabel && "mt-1.5")}>
-                  {options.map((o) => (
-                    <Checkbox key={o.value} label={o.label} checked={value === o.value} onChange={() => set(toggleChoice(value, o.value))} />
-                  ))}
-                </div>
+                <div className={cn(!field.hideLabel && "mt-1.5")}>{checkboxes}</div>
               </fieldset>
             )}
           </div>
@@ -183,8 +201,8 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const hint = [compact && !listId && name ? `→ ${name}` : null, shownReason].filter(Boolean).join(" · ") || undefined;
 
   return (
-    <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", frame, sizeClass)}>
-      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
+    <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} framed={framed} className={cn(framed && "flex-1")} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
         {compact ? control : (
           <div className="flex min-w-0 items-center gap-2">
             {control}

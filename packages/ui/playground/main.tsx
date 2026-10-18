@@ -6,7 +6,7 @@ import "../src/styles/index.css";
 import {
   Alert, AppearancePanel, AssistantLauncher, RobotAvatar, AssistantPanel, AssistantWelcome, Badge, Button, Card, CardContent,
   CardDescription, CardFooter, CardHeader, CardTitle, ChatComposer, ChatMessage, Checkbox, Dialog, DialogContent, RadioGroup,
-  DialogFooter, DialogTrigger, EmptyState, Field, Grid, Input, PageHeader, Select, Skeleton, Spinner, Stack,
+  DialogFooter, DialogTrigger, EmptyState, Field, FieldFrame, Grid, Input, PageHeader, Select, Skeleton, Spinner, Stack,
   StatusBadge, SuggestionChips, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, type AssistantMode,
   BrandDot, Sidebar, SidebarFooterButton, SidebarUser, type NavItem,
   Stepper, WorkflowDiagram, type FlowEdge, type FlowNode,
@@ -186,6 +186,12 @@ function Demo() {
                       <Field label="Số tờ khai đầu tiên" orientation="horizontal" hint="Nhãn bên trái – form dày ô như tờ khai" className="md:col-span-2">
                         <Input placeholder="107284900661" />
                       </Field>
+                      <Field label="1.6 · Mã PTVC" framed required hint="Ô đứng riêng có khung – tên trên đường viền như nhóm ô">
+                        <Input placeholder="1" />
+                      </Field>
+                      <FieldFrame legend="1.27 · Số kiện">
+                        <Field label="Số lượng kiện"><Input placeholder="1" /></Field>
+                      </FieldFrame>
                     </Grid>
                     <DialogFooter>
                       <Button variant="ghost">Huỷ</Button>

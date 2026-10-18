@@ -1,7 +1,7 @@
 "use client";
 // Chỉ tiêu nhiều ô con nằm ngang (địa chỉ 4 dòng, tổng trị giá hóa đơn 4 ô…): một nhãn chung "số · tên" kèm dấu bắt buộc / chữ vai trò, nút ⓘ cuối hàng.
 // Nhóm 2–3 ô ngắn chỉ chiếm nửa hàng của lưới (phương án D).
-import { cn } from "@kb/ui";
+import { cn, FieldFrame } from "@kb/ui";
 import { DECLARATION_CONDITIONS, fieldRole, type ConditionContext, type ConditionId, type LayoutGroup } from "@kb/contracts";
 import { groupSpan } from "./compact-rules";
 import { fieldTitle, groupGuideReason } from "./display";
@@ -34,11 +34,11 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
   const reasonInGuide = groupGuideReason(group, ctx);
   const notes = [condition && !applicable ? `Không áp dụng vì: ${condition}` : null, group.fill === "any" ? "Chỉ cần nhập một ô" : null].filter(Boolean);
   return (
-    <fieldset data-missing={anyMissing || undefined} className={cn("flex min-w-0 flex-col gap-1.5 rounded-md border border-border px-3 pb-3 pt-1", span, !applicable && "opacity-60")}>
-      <legend className="px-1 text-xs font-medium text-fg-muted">
-        {fieldTitle(group.no, group.label)}
-        {!readOnly && first && <RoleMark role={fieldRole(kind, first, group.no)} />}
-      </legend>
+    <FieldFrame
+      data-missing={anyMissing || undefined}
+      className={cn(span, !applicable && "opacity-60")}
+      legend={<>{fieldTitle(group.no, group.label)}{!readOnly && first && <RoleMark role={fieldRole(kind, first, group.no)} />}</>}
+    >
       {!readOnly && notes.length > 0 && <p className="text-xs text-fg-subtle">{notes.join(" · ")}</p>}
       {anyMissing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>}
       <div className="flex flex-wrap items-start gap-3">
@@ -47,6 +47,6 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
         ))}
         {!readOnly && <span className="pt-7"><GuideButton kind={kind} no={group.no} role={first ? fieldRole(kind, first, group.no) : undefined} reason={reasonInGuide} label={group.label} /></span>}
       </div>
-    </fieldset>
+    </FieldFrame>
   );
 }

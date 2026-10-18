@@ -46,12 +46,14 @@ export type FieldProps = {
   required?: boolean;
   /** horizontal: nhãn bên trái (2/5), ô bên phải (3/5) khi vùng nội dung từ mốc md – form dày ô (tờ khai). Hẹp hơn vẫn xếp dọc. */
   orientation?: "vertical" | "horizontal";
+  /** Khung viền như nhóm ô, nhãn nằm trên đường viền (FieldFrame) – ô đứng riêng của form dày ô (tờ khai). Bỏ qua `orientation`. */
+  framed?: boolean;
   className?: string;
   children: ReactNode;
 };
 
 /** Bọc 1 control: gắn nhãn, gợi ý, lỗi đúng chuẩn a11y. Luôn dùng Field cho ô nhập trong form. */
-export function Field({ label, hint, error, required = false, orientation = "vertical", className, children }: FieldProps) {
+export function Field({ label, hint, error, required = false, orientation = "vertical", framed = false, className, children }: FieldProps) {
   const horizontal = orientation === "horizontal";
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
@@ -63,6 +65,18 @@ export function Field({ label, hint, error, required = false, orientation = "ver
     invalid: Boolean(error),
     required,
   };
+  if (framed) {
+    const star = required && <span className="ml-0.5 text-danger" aria-hidden="true">*</span>;
+    return (
+      <FieldContext.Provider value={value}>
+        <FieldFrame legend={<label htmlFor={id} id={`${id}-label`}>{label}{star}</label>} className={className}>
+          {children}
+          {hint && <p id={hintId} className="text-xs text-fg-subtle">{hint}</p>}
+          {error && <p id={errorId} className="text-sm text-danger-subtle-fg" role="alert">{error}</p>}
+        </FieldFrame>
+      </FieldContext.Provider>
+    );
+  }
   return (
     <FieldContext.Provider value={value}>
       <div data-orientation={orientation} className={cn("flex flex-col gap-1.5", horizontal && "cq-md:grid cq-md:grid-cols-5 cq-md:gap-x-3 cq-md:gap-y-1", className)}>
@@ -87,5 +101,27 @@ export function Field({ label, hint, error, required = false, orientation = "ver
         )}
       </div>
     </FieldContext.Provider>
+  );
+}
+
+/** Lớp của khung: dùng chung cho FieldFrame và RadioGroup `framed`. */
+export const FRAME_CLASS = "min-w-0 rounded-md border border-border px-3 pb-3 pt-1";
+export const FRAME_LEGEND_CLASS = "px-1 text-xs font-medium text-fg-muted";
+
+export type FieldFrameProps = Omit<ComponentProps<"fieldset">, "children"> & {
+  /** Tên nằm trên đường viền. */
+  legend: ReactNode;
+  /** Ẩn tên (vẫn đọc được bằng trình đọc màn hình) – khung chỉ có một ô chọn tự mang chữ. */
+  hideLegend?: boolean;
+  children: ReactNode;
+};
+
+/** Khung viền, tên nằm trên đường viền (fieldset + legend): nhóm ô, nhóm lặp, ô đứng riêng của form dày ô (tờ khai) – một kiểu cho mọi khung. */
+export function FieldFrame({ legend, hideLegend = false, className, children, ...props }: FieldFrameProps) {
+  return (
+    <fieldset data-frame="" className={cn("flex flex-col gap-1.5", FRAME_CLASS, className)} {...props}>
+      <legend className={cn(FRAME_LEGEND_CLASS, hideLegend && "sr-only")}>{legend}</legend>
+      {children}
+    </fieldset>
   );
 }

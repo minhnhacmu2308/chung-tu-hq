@@ -276,3 +276,54 @@ describe("Combobox – a11y", () => {
     await expectNoA11yViolations(document.body);
   });
 });
+
+describe("Combobox – mở rộng danh sách để đọc hết nội dung (expandable)", () => {
+  const LONG: ComboboxOption[] = [
+    { value: "01", label: "01", description: "Bộ phận hàng hóa nhập khẩu mậu dịch Kho SCSC – tiếp nhận tờ khai đường hàng không" },
+    { value: "05", label: "05", description: "Bộ phận hàng hóa xuất khẩu kho SCSC" },
+  ];
+  function Expandable() {
+    const [v, setV] = useState<string | null>(null);
+    return (
+      <Field label="Bộ phận xử lý">
+        <Combobox options={LONG} value={v} onChange={setV} expandable />
+      </Field>
+    );
+  }
+
+  it("mặc định cắt một dòng; bấm Mở rộng → khung rộng hơn, nội dung xuống dòng đọc trọn; bấm lại Thu gọn", async () => {
+    render(<Expandable />);
+    await userEvent.click(screen.getByRole("combobox", { name: "Bộ phận xử lý" }));
+    const list = screen.getByRole("dialog", { name: "Danh sách lựa chọn" });
+    expect(list).toHaveAttribute("data-expanded", "false");
+    const expand = within(list).getByRole("button", { name: "Mở rộng" });
+    expect(expand).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(expand);
+    expect(list).toHaveAttribute("data-expanded", "true");
+    expect(within(list).getByRole("button", { name: "Thu gọn" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(list).getByText(/tiếp nhận tờ khai đường hàng không/)).not.toHaveClass("truncate");
+    await userEvent.click(within(list).getByRole("button", { name: "Thu gọn" }));
+    expect(list).toHaveAttribute("data-expanded", "false");
+  });
+
+  it("vẫn chọn được sau khi mở rộng; không bật expandable thì không có nút", async () => {
+    render(<Expandable />);
+    await userEvent.click(screen.getByRole("combobox"));
+    await userEvent.click(screen.getByRole("button", { name: "Mở rộng" }));
+    await userEvent.click(screen.getByRole("option", { name: /05/ }));
+    expect(screen.getByRole("combobox")).toHaveTextContent("05");
+  });
+
+  it("không bật expandable thì không có nút Mở rộng", async () => {
+    render(<Single />);
+    await userEvent.click(screen.getByRole("combobox"));
+    expect(screen.queryByRole("button", { name: "Mở rộng" })).toBeNull();
+  });
+
+  it("không vi phạm a11y khi đã mở rộng", async () => {
+    render(<Expandable />);
+    await userEvent.click(screen.getByRole("combobox"));
+    await userEvent.click(screen.getByRole("button", { name: "Mở rộng" }));
+    await expectNoA11yViolations(document.body);
+  });
+});

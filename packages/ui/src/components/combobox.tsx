@@ -1,7 +1,7 @@
 // Combobox: chọn một hoặc nhiều giá trị có ô tìm kiếm (lọc không dấu tiếng Việt), hỗ trợ tải từ server.
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Command } from "cmdk";
-import { Check, ChevronsUpDown, X } from "lucide-react";
+import { Check, ChevronsUpDown, Maximize2, Minimize2, X } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { intlLocale, useMessages, useUiLocale, type Messages } from "../lib/i18n.js";
@@ -19,6 +19,8 @@ const MESSAGES = {
     list: "Danh sách lựa chọn",
     selected: "đã chọn",
     more: "Còn {n} kết quả – gõ thêm để thu hẹp",
+    expand: "Mở rộng",
+    collapse: "Thu gọn",
   },
   en: {
     placeholder: "Select…",
@@ -30,8 +32,10 @@ const MESSAGES = {
     list: "Options",
     selected: "selected",
     more: "{n} more results – keep typing to narrow down",
+    expand: "Expand",
+    collapse: "Collapse",
   },
-} satisfies Messages<"placeholder" | "search" | "empty" | "loading" | "clear" | "remove" | "list" | "selected" | "more">;
+} satisfies Messages<"placeholder" | "search" | "empty" | "loading" | "clear" | "remove" | "list" | "selected" | "more" | "expand" | "collapse">;
 
 export type ComboboxOption = { value: string; label: string; description?: string; disabled?: boolean };
 
@@ -97,6 +101,8 @@ type BaseProps = {
   /** Số mục hiển thị tối đa (mặc định 100). Còn nhiều hơn → dòng "còn n kết quả – gõ thêm để thu hẹp". */
   maxResults?: number;
   clearable?: boolean;
+  /** Nút "Mở rộng" trong danh sách: khung rộng hơn, nhãn/mô tả xuống dòng để đọc hết (mô tả dài như tên đơn vị, hướng dẫn mã). */
+  expandable?: boolean;
   disabled?: boolean;
   className?: string;
   labels?: Partial<Record<keyof (typeof MESSAGES)["vi"], string>>;
@@ -126,6 +132,7 @@ export function Combobox(props: ComboboxProps) {
     onSearchChange,
     maxResults = 100,
     clearable = false,
+    expandable = false,
     disabled = false,
     className,
     labels,
@@ -137,6 +144,8 @@ export function Combobox(props: ComboboxProps) {
   const moreId = useId();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const wrap = expandable && expanded;
 
   const selected: string[] = props.multiple ? [...props.value] : props.value ? [props.value] : [];
   const byValue = useMemo(() => new Map(options.map((o) => [o.value, o])), [options]);
@@ -247,24 +256,43 @@ export function Combobox(props: ComboboxProps) {
         <PopoverPrimitive.Content
           align="start"
           sideOffset={4}
+          // Chừa 1rem với mép màn hình khi Radix đẩy khung vào trong (danh sách mở rộng trên màn hẹp).
+          collisionPadding={16}
           aria-label={t.list}
-          className="z-50 w-[var(--radix-popover-trigger-width)] min-w-56 rounded-lg border border-border bg-surface text-fg shadow-lg motion-safe:animate-pop-in"
+          data-expanded={expandable ? String(expanded) : undefined}
+          className={cn(
+            "z-50 min-w-56 rounded-lg border border-border bg-surface text-fg shadow-lg motion-safe:animate-pop-in",
+            // Mở rộng: tới 36rem nhưng không vượt màn hình (chừa 1rem mỗi bên).
+            wrap ? "w-[min(36rem,calc(100vw-2rem))]" : "w-[var(--radix-popover-trigger-width)]",
+          )}
         >
           {/* Tự lọc bằng chỉ mục bỏ dấu (nhanh, giới hạn số mục) thay vì để cmdk chấm điểm từng mục. */}
           <Command label={t.list} shouldFilter={false} loop>
-            <div className="border-b border-border p-1.5">
+            <div className="flex items-center gap-1 border-b border-border p-1.5">
               <Command.Input
                 value={search}
                 onValueChange={setSearchValue}
                 placeholder={t.search}
-                className="h-8 w-full rounded-sm bg-transparent px-2 text-sm text-fg placeholder:text-fg-subtle focus-visible:outline-none"
+                className="h-8 w-full min-w-0 rounded-sm bg-transparent px-2 text-sm text-fg placeholder:text-fg-subtle focus-visible:outline-none"
               />
+              {expandable && (
+                <button
+                  type="button"
+                  aria-pressed={expanded}
+                  aria-label={expanded ? t.collapse : t.expand}
+                  title={expanded ? t.collapse : t.expand}
+                  onClick={() => setExpanded((e) => !e)}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-fg-subtle hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {expanded ? <Minimize2 aria-hidden="true" className="h-4 w-4" /> : <Maximize2 aria-hidden="true" className="h-4 w-4" />}
+                </button>
+              )}
             </div>
             <Command.List
               id={listId}
               aria-label={t.list}
               aria-describedby={remaining > 0 ? moreId : undefined}
-              className="max-h-64 overflow-y-auto p-1"
+              className={cn("overflow-y-auto p-1", wrap ? "max-h-96" : "max-h-64")}
             >
               {loading && (
                 <Command.Loading>
@@ -291,8 +319,8 @@ export function Combobox(props: ComboboxProps) {
                   >
                     <Check aria-hidden="true" className={cn("mt-0.5 h-4 w-4 shrink-0 text-primary", !isSelected && "invisible")} />
                     <span className="flex min-w-0 flex-col">
-                      <span className="truncate">{o.label}</span>
-                      {o.description && <span className="truncate text-xs text-fg-subtle">{o.description}</span>}
+                      <span className={wrap ? "break-words" : "truncate"}>{o.label}</span>
+                      {o.description && <span className={cn("text-xs text-fg-subtle", wrap ? "whitespace-normal break-words" : "truncate")}>{o.description}</span>}
                     </span>
                     {isSelected && <span className="sr-only">({t.selected})</span>}
                   </Command.Item>

@@ -76,7 +76,8 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
 
   if (list && lookupMode(entries, scope) === "dropdown") {
     // Giá trị đang có mà không nằm trong danh mục (vd "C&F" cách viết cũ) vẫn giữ để không mất dữ liệu.
-    const options = entries.map((e) => ({ value: e.code, label: e.code, description: e.name }));
+    // Mô tả = tên + ghi chú (hướng dẫn dùng mã, tên đầy đủ…): gọn một dòng khi đóng, bấm “Mở rộng” trong danh sách để đọc hết.
+    const options = entries.map((e) => ({ value: e.code, label: e.code, description: e.note ? `${e.name} – ${e.note}` : e.name }));
     if (value && !options.some((o) => o.value === value)) options.unshift({ value, label: value, description: "Không có trong danh mục" });
     return (
       <Combobox
@@ -86,6 +87,7 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
         value={value || null}
         onChange={(v) => onChange(v ?? "")}
         clearable
+        expandable
         placeholder="Chọn mã"
         labels={{ search: "Gõ mã hoặc tên…" }}
         {...(ariaLabel ? { "aria-label": ariaLabel } : {})}

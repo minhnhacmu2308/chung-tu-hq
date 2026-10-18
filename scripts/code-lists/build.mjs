@@ -46,7 +46,8 @@ function entry(code, name, extra = {}) {
   if (!code || !name) return null;
   const e = { code, name };
   if (extra.parent) e.parent = String(extra.parent).trim();
-  if (extra.note && extra.note.trim() && extra.note.trim() !== name) e.note = clip(extra.note.trim());
+  // Ghi chú giữ nguyên văn (đọc hết khi mở rộng danh sách); chỉ danh mục lớn rút gọn lúc ghi ra (LARGE_LIST).
+  if (extra.note && extra.note.trim() && extra.note.trim() !== name) e.note = extra.note.trim();
   if (extra.inactive) e.inactive = true;
   return e;
 }
@@ -174,7 +175,12 @@ const skipped = [
   { source: sourceOf("22.DM_THUESUATTUYETDOI_GANCODE__1"), reason: "Sheet A402A là mô tả cấu trúc bảng, không phải dữ liệu" },
 ];
 mkdirSync(OUT, { recursive: true });
-for (const l of LISTS) writeFileSync(join(OUT, `${l.id}.json`), `${JSON.stringify(l.entries)}\n`);
+/** Danh mục trên 2.000 mã (địa điểm lưu kho, cảng, hãng tàu): ghi chú là địa chỉ / tên đầy đủ – rút còn 120 ký tự để giữ dung lượng tải. */
+const LARGE_LIST = 2000;
+for (const l of LISTS) {
+  if (l.entries.length > LARGE_LIST) l.entries = l.entries.map((e) => (e.note ? { ...e, note: clip(e.note) } : e));
+  writeFileSync(join(OUT, `${l.id}.json`), `${JSON.stringify(l.entries)}\n`);
+}
 const manifest = {
   note: "Sinh bởi scripts/code-lists/build.mjs từ thư mục 02_DANHMUC_VNACCS – không sửa tay.",
   oldToNewOfficeCodes: Object.fromEntries([...OLD_TO_NEW].sort()),

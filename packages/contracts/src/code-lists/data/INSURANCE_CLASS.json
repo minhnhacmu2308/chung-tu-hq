@@ -1,1 +1,1 @@
-[{"code":"B","name":"Bảo hiểm tổng hợp","note":"Bảo hiểm tổng hợp."},{"code":"D","name":"Không bảo hiểm","note":"Không bảo hiểm. Nếu trong mục điều kiện giá Invoice đã được nhập là giá CIF, CIP hay C&I, DDU, DDP, DAP, DAF, DAT thì k…"}]
+[{"code":"B","name":"Bảo hiểm tổng hợp","note":"Bảo hiểm tổng hợp."},{"code":"D","name":"Không bảo hiểm","note":"Không bảo hiểm. Nếu trong mục điều kiện giá Invoice đã được nhập là giá CIF, CIP hay C&I, DDU, DDP, DAP, DAF, DAT thì không thể nhập được. Lưu ý: Mã “B” là bảo hiểm tổng hợp, chưa áp dụng cho đến khi có hướng dẫn."}]

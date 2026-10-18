@@ -122,7 +122,7 @@ export default async function RootLayout({ children }) {
 | `Avatar`, `AvatarGroup` | Người dùng, người duyệt |
 | `Switch` (`label`, `description`) | Bật/tắt cấu hình |
 | `Breadcrumb` (`items`, `linkAs`, `maxItems`) | Đường dẫn đầu trang |
-| `Combobox` (`options`, `multiple`, `clearable`, `maxResults` (mặc định 100), `onSearchChange` + `loading` cho tìm phía server); hàm `buildSearchIndex`/`searchOptions`/`foldVietnamese` | Chọn có tìm kiếm; **lọc không dấu tiếng Việt** ("hai phong" → Hải Phòng). Danh sách dài (đã thử 20.000 mục, lọc < 1 ms): chỉ hiện `maxResults` kết quả đầu + dòng "còn n kết quả – gõ thêm để thu hẹp"; không cuộn ảo. Trên ~100.000 mục → tìm phía server |
+| `Combobox` (`options`, `multiple`, `clearable`, `expandable` (nút Mở rộng: khung tới 36rem, nhãn/mô tả xuống dòng đọc hết), `maxResults` (mặc định 100), `onSearchChange` + `loading` cho tìm phía server); hàm `buildSearchIndex`/`searchOptions`/`foldVietnamese` | Chọn có tìm kiếm; **lọc không dấu tiếng Việt** ("hai phong" → Hải Phòng). Danh sách dài (đã thử 20.000 mục, lọc < 1 ms): chỉ hiện `maxResults` kết quả đầu + dòng "còn n kết quả – gõ thêm để thu hẹp"; không cuộn ảo. Trên ~100.000 mục → tìm phía server |
 | `DatePicker`, `DateRangePicker` (giá trị ISO `YYYY-MM-DD`, `min`/`max`) | Ngày nghiệp vụ; hiển thị dd/MM/yyyy (vi) hoặc MM/dd/yyyy (en); không lệch múi giờ. Cả hai **gõ tay được**; DateRangePicker có 2 ô Từ/Đến, báo lỗi sai định dạng, ngoài `min`/`max`, Từ > Đến; đồng bộ hai chiều với lịch. Trong `Field`, cả hai ô đều đọc kèm nhãn Field |
 
 ## 4b. Đa ngôn ngữ (VI/EN)

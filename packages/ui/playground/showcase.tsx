@@ -166,7 +166,7 @@ export function Showcase() {
           <CardHeader><CardTitle>Nhập liệu nâng cao</CardTitle></CardHeader>
           <CardContent>
             <Stack gap="md">
-              <Field label="Cảng dỡ hàng" hint="Gõ không dấu: “hai phong”"><Combobox options={PORTS} value={port} onChange={setPort} clearable /></Field>
+              <Field label="Cảng dỡ hàng" hint="Gõ không dấu: “hai phong” · nút Mở rộng để đọc hết mô tả"><Combobox options={PORTS} value={port} onChange={setPort} clearable expandable /></Field>
               <Field label="Loại chứng từ"><Combobox multiple options={DOC_TYPES} value={docs} onChange={setDocs} /></Field>
               <Field label="Đối tác (20.000 mục)" hint="Gõ “da nang 00123” – chỉ hiện 100 kết quả đầu, gõ thêm để thu hẹp">
                 <Combobox options={PARTNERS} value={partner} onChange={setPartner} clearable />

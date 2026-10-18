@@ -77,3 +77,21 @@ describe("EDA – container", () => {
     expect(layoutFor("EDA")).toBe(LAYOUT_EDA);
   });
 });
+
+describe("Đơn vị xuất nhập khẩu – ô ngắn chung một hàng", () => {
+  // Ô chiếm cả hàng (tên, địa chỉ) đặt sau: các ô ngắn (mã, mã bưu chính, điện thoại, mã nước) nằm cùng một hàng ở đầu khối.
+  const wideItem = (it: LayoutBlock["items"][number]) => it.kind !== "field" || it.input === "textarea" || it.width === "lg" || it.width === "full";
+  const cases = [
+    [LAYOUT_IDA, "nguoi-nhap-khau", ["1.12", "1.14", "1.16"]],
+    [LAYOUT_IDA, "nguoi-xuat-khau", ["1.19", "1.21", "1.23"]],
+    [LAYOUT_EDA, "nguoi-xuat-khau", ["2.11", "2.13", "2.15"]],
+    [LAYOUT_EDA, "nguoi-nhap-khau", ["2.18", "2.20", "2.22"]],
+  ] as const;
+  it.each(cases.map(([l, id, nos]) => [`${l.kind} ${id}`, l, id, nos] as const))("%s", (_name, layout, id, shortNos) => {
+    const block = layout.declarant.flatMap((s) => s.blocks).find((b) => b.id === id)!;
+    const firstWide = block.items.findIndex(wideItem);
+    const head = block.items.slice(0, firstWide);
+    expect(head.map((it) => it.no)).toEqual(shortNos);
+    expect(block.items.slice(firstWide).every(wideItem)).toBe(true);
+  });
+});

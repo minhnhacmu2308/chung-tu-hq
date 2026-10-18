@@ -92,21 +92,22 @@ export const LAYOUT_EDA: DeclarationLayout = withShortLabels({
       id: "cac-ben", title: "Đơn vị xuất nhập khẩu", blocks: [
         {
           id: "nguoi-xuat-khau", title: "Người xuất khẩu", items: [
+            // Ô ngắn chung một hàng đầu khối, tên / địa chỉ (cả hàng) bên dưới.
             fld("TK_EPC", "Mã người xuất khẩu (MST)", "text", { no: "2.11", width: "sm" }),
-            fld("TK_EPN", "Tên người xuất khẩu", "textarea", { no: "2.12", width: "full" }),
             fld("TK_EPP", "Mã bưu chính", "text", { no: "2.13", width: "xs" }),
-            fld("TK_EPA", "Địa chỉ", "textarea", { no: "2.14", width: "full" }),
             fld("TK_EPT", "Số điện thoại", "text", { no: "2.15", width: "sm" }),
+            fld("TK_EPN", "Tên người xuất khẩu", "textarea", { no: "2.12", width: "full" }),
+            fld("TK_EPA", "Địa chỉ", "textarea", { no: "2.14", width: "full" }),
           ],
         },
         { id: "uy-thac-xk", title: "Người ủy thác xuất khẩu", items: [fld("TK_EXC", "Mã người ủy thác xuất khẩu", "text", { no: "2.16", width: "sm" }), fld("TK_EXN", "Tên người ủy thác xuất khẩu", "text", { no: "2.17", width: "lg" })] },
         {
           id: "nguoi-nhap-khau", title: "Người nhập khẩu", items: [
             fld("TK_CGC", "Mã người nhập khẩu", "text", { no: "2.18", width: "sm" }),
-            fld("TK_CGN", "Tên người nhập khẩu", "text", { no: "2.19", width: "lg" }),
             fld("TK_CGP", "Mã bưu chính", "text", { no: "2.20", width: "xs" }),
-            grp("Địa chỉ (4 dòng × 35 ký tự)", "2.21", [fld("TK_CGA", "Dòng 1 – đường, số nhà", "text", { width: "lg" }), fld("TK_CAT", "Dòng 2", "text", { width: "lg" }), fld("TK_CAC", "Dòng 3 – thành phố", "text", { width: "lg" }), fld("TK_CAS", "Dòng 4 – tỉnh/bang, nước", "text", { width: "lg" })]),
             fld("TK_CGK", "Mã nước", "code", { no: "2.22", codeTable: "COUNTRY", width: "xs" }),
+            fld("TK_CGN", "Tên người nhập khẩu", "text", { no: "2.19", width: "lg" }),
+            grp("Địa chỉ (4 dòng × 35 ký tự)", "2.21", [fld("TK_CGA", "Dòng 1 – đường, số nhà", "text", { width: "lg" }), fld("TK_CAT", "Dòng 2", "text", { width: "lg" }), fld("TK_CAC", "Dòng 3 – thành phố", "text", { width: "lg" }), fld("TK_CAS", "Dòng 4 – tỉnh/bang, nước", "text", { width: "lg" })]),
           ],
         },
         { id: "dai-ly", title: "Đại lý hải quan", items: [fld("TK_ECC", "Mã đại lý hải quan", "text", { no: "2.23", width: "sm" })] },

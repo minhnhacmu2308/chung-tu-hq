@@ -114,21 +114,22 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
       id: "cac-ben", title: "Đơn vị xuất nhập khẩu", blocks: [
         {
           id: "nguoi-nhap-khau", title: "Người nhập khẩu", items: [
+            // Ô ngắn chung một hàng đầu khối, tên / địa chỉ (cả hàng) bên dưới.
             fld("TK_IMC", "Mã người nhập khẩu (MST)", "text", { no: "1.12", width: "sm" }),
-            fld("TK_IMN", "Tên người nhập khẩu", "textarea", { no: "1.13", width: "full" }),
             fld("TK_IMY", "Mã bưu chính", "text", { no: "1.14", width: "xs" }),
-            fld("TK_IMA", "Địa chỉ", "textarea", { no: "1.15", width: "full" }),
             fld("TK_IMT", "Số điện thoại", "text", { no: "1.16", width: "sm" }),
+            fld("TK_IMN", "Tên người nhập khẩu", "textarea", { no: "1.13", width: "full" }),
+            fld("TK_IMA", "Địa chỉ", "textarea", { no: "1.15", width: "full" }),
           ],
         },
         { id: "uy-thac-nk", title: "Người ủy thác nhập khẩu", items: [fld("TK_NMC", "Mã người ủy thác nhập khẩu", "text", { no: "1.17", width: "sm" }), fld("TK_NMN", "Tên người ủy thác nhập khẩu", "text", { no: "1.18", width: "lg" })] },
         {
           id: "nguoi-xuat-khau", title: "Người xuất khẩu", items: [
             fld("TK_EPC", "Mã người xuất khẩu", "text", { no: "1.19", width: "sm" }),
-            fld("TK_EPN", "Tên người xuất khẩu", "text", { no: "1.20", width: "lg" }),
             fld("TK_EPY", "Mã bưu chính", "text", { no: "1.21", width: "xs" }),
-            grp("Địa chỉ (4 dòng × 35 ký tự)", "1.22", [fld("TK_EPA", "Dòng 1 – đường, số nhà", "text", { width: "lg" }), fld("TK_EP2", "Dòng 2", "text", { width: "lg" }), fld("TK_EP3", "Dòng 3 – thành phố", "text", { width: "lg" }), fld("TK_EP4", "Dòng 4 – tỉnh/bang, nước", "text", { width: "lg" })]),
             fld("TK_EPO", "Mã nước", "code", { no: "1.23", codeTable: "COUNTRY", width: "xs" }),
+            fld("TK_EPN", "Tên người xuất khẩu", "text", { no: "1.20", width: "lg" }),
+            grp("Địa chỉ (4 dòng × 35 ký tự)", "1.22", [fld("TK_EPA", "Dòng 1 – đường, số nhà", "text", { width: "lg" }), fld("TK_EP2", "Dòng 2", "text", { width: "lg" }), fld("TK_EP3", "Dòng 3 – thành phố", "text", { width: "lg" }), fld("TK_EP4", "Dòng 4 – tỉnh/bang, nước", "text", { width: "lg" })]),
           ],
         },
         { id: "uy-thac-xk", title: "Người ủy thác xuất khẩu", items: [fld("TK_ENM", "Tên người ủy thác xuất khẩu", "text", { no: "1.24", width: "lg" })] },

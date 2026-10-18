@@ -8,7 +8,7 @@ import { useState } from "react";
 import { useAmendLock } from "./amend-context";
 import { CodeInput } from "./code-input";
 import { displayValue, fieldTitle, visibleRows } from "./display";
-import { FormField, GuideButton, RoleMark } from "./field";
+import { fieldLabelNode, FormField, GuideButton, RoleMark } from "./field";
 import { isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 
 type Props = {
@@ -115,7 +115,8 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
   return (
     <fieldset data-missing={firstRowMissing || undefined} className={box}>
       {legend}
-      <div className="min-w-0 overflow-x-auto">
+      {/* relative: chữ ẩn (sr-only, định vị tuyệt đối) trong ô bảng nằm trong khung cuộn – không thoát ra làm trang tràn ngang. */}
+      <div className="relative min-w-0 overflow-x-auto">
         {/* kb-allow-raw: lưới sửa trực tiếp các dòng của nhóm lặp (vận đơn, giấy phép, khoản điều chỉnh…); DataTable chưa hỗ trợ ô sửa được */}
         <table className="text-sm">
           <thead>
@@ -125,7 +126,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
               </th>
               {cols.map(({ f }) => (
                 <th key={f.key} scope="col" className={cn("pb-1 pr-2 text-left text-xs font-medium text-fg-muted", !isApplicable(f, ctx) && "opacity-60")}>
-                  {f.label}
+                  {fieldLabelNode(f, false)}
                 </th>
               ))}
             </tr>

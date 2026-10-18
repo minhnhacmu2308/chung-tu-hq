@@ -38,6 +38,7 @@ export function BlockView({ kind, block, values, onChange, ctx, showInapplicable
   if (compactable && items.length === 0) return null;
   const condition = block.condition ? DECLARATION_CONDITIONS[block.condition].label : undefined;
   const empty = !customs && !blockHasData(block, values);
+  // Lưới đo theo cột form (@container ở DeclarantTab): 4 cột từ 56rem (ô ≥ ~200px, nhãn một dòng), 3 cột từ 42rem.
   const toggle = compactable && empty && (
     <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={bodyId} rightIcon={open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />} onClick={() => setOpen((o) => !o)}>
       {open ? "Thu gọn" : onChange ? "Mở để nhập" : "Mở"}
@@ -70,7 +71,7 @@ export function BlockView({ kind, block, values, onChange, ctx, showInapplicable
           {customs && block.emptyNote && !blockHasData(block, values) ? (
             <p className="rounded-md bg-surface-muted px-3 py-2 text-sm text-fg-muted">{block.emptyNote}</p>
           ) : (
-            <Grid cols={labelsLeft ? { base: 1, xl: 2 } : { base: 1, sm: 2, md: 3, xl: 4 }} gap="md">
+            <Grid cols={labelsLeft ? { base: 1, lg: 2 } : { base: 1, sm: 2, md: 3, xl: 4 }} gap="md">
               {items.map((it, i) =>
                 it.kind === "field" ? (
                   <FormField key={it.key} kind={kind} field={it} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} parentCondition={block.condition} />

@@ -1,5 +1,6 @@
 // Mẫu 02 – tờ khai xuất khẩu (EDA): bố cục đầy đủ chỉ tiêu theo ảnh mẫu CHITIEU_XUATKHAU + Phụ lục II TT39/TT121 + VNACCS_EDA v1.2.
 import { attachmentBlocks, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, itemExtraFields, manualValueField, permitsBlock, rep, taxPaymentBlocks, transitBlock, typeGroupField } from "./shared.js";
+import { withShortLabels } from "./short-labels.js";
 import type { DeclarationLayout, LayoutBlock } from "./types.js";
 
 /** Dòng hàng – phần người khai nhập (VN_EDA_HANG). */
@@ -56,7 +57,7 @@ const ITEM_CUSTOMS: LayoutBlock[] = [
   },
 ];
 
-export const LAYOUT_EDA: DeclarationLayout = {
+export const LAYOUT_EDA: DeclarationLayout = withShortLabels({
   kind: "EDA",
   summary: [
     hq("TK_ECN", "Số tờ khai", "text", { no: "2.1" }),
@@ -210,4 +211,4 @@ export const LAYOUT_EDA: DeclarationLayout = {
     },
   ],
   item: { columns: ["HAG_CMD", "HAG_CMN", "HAG_QN1", "HAG_QT1", "HAG_BPR"], declarant: ITEM_DECLARANT, customs: ITEM_CUSTOMS },
-};
+});

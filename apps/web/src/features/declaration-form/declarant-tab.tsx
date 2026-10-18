@@ -140,7 +140,8 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
           </ul>
         </nav>
         <AmendLockProvider kind={kind} values={values} active={stage === "da-khai" && amending}>
-          <div className={cn("flex min-w-0 flex-col gap-3 cq-lg:col-span-3")}>
+          {/* @container: lưới ô trong khối đo theo bề rộng cột form (không tính cột mục lục) – 4 cột chỉ khi mỗi ô đủ rộng cho nhãn một dòng. */}
+          <div className={cn("@container flex min-w-0 flex-col gap-3 cq-lg:col-span-3")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 ref={headingRef} className="scroll-mt-20 text-base font-semibold text-fg">{here?.title}</h2>
               <div className="flex flex-wrap items-center gap-2">

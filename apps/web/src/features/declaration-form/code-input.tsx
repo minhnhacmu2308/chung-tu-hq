@@ -82,7 +82,7 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
     return (
       <Combobox
         // Tối thiểu w-32: đủ chỗ cho mã + nút mở + nút xóa, không bị cắt chữ.
-        className={cn(widthClass === "w-24" ? "w-32" : widthClass, "shrink-0")}
+        className={cn(widthClass === "w-24" || widthClass === "w-28" ? "w-32" : widthClass, "shrink-0")}
         options={options}
         value={value || null}
         onChange={(v) => onChange(v ?? "")}

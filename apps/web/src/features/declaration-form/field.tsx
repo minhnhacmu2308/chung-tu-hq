@@ -2,7 +2,8 @@
 // Một ô chỉ tiêu của bản mẫu tờ khai, dạng gọn (phương án B): nhãn "số · tên" kèm dấu * (bắt buộc) hoặc chữ nhỏ "tình huống";
 // nút ⓘ mở hướng dẫn khai (catalog Phụ lục II) kèm nghĩa vai trò (VNACCS tự xác định…). Ô mã có danh mục VNACCS: chỉ hiện mã, tên khi rê chuột,
 // tra cứu bằng danh sách thả xuống / popup (CodeInput); chỉ đọc thì hiện "mã · tên". Tùy chọn nhãn bên trái (phương án F). "Còn thiếu", lý do áp dụng.
-import { Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
+import { Abbreviation, Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
+import type { ReactNode } from "react";
 import { codeListFor, DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type LayoutField } from "@kb/contracts";
 import { Info, Lock } from "lucide-react";
 import { useMemo } from "react";
@@ -11,16 +12,16 @@ import { CodeInput } from "./code-input";
 import { codeScope } from "./code-scope";
 import { ROLE_INFO } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
-import { displayValue, fieldTitle } from "./display";
+import { displayValue } from "./display";
 import { choiceControl, isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 import { useCodeName } from "./use-code-list";
 import { useViewPrefs } from "./view-prefs";
 
 type Kind = "IDA" | "EDA";
 
-/** Chữ nhỏ cạnh nhãn thay cho huy hiệu vai trò. Bắt buộc → dấu * (trình đọc màn hình nghe "bắt buộc"). Không bắt buộc, VNACCS tự xác định,
+/** Chữ nhỏ cạnh nhãn thay cho huy hiệu vai trò. Bắt buộc → dấu * (trình đọc màn hình nghe "bắt buộc"); theo tình huống → "TH" (bấm xem nghĩa). Không bắt buộc, VNACCS tự xác định,
  * chưa sử dụng → không ghi (nghĩa vai trò xem ở nút ⓘ). */
-const ROLE_TAG: Partial<Record<DeclarationFieldRole, string>> = { CONDITIONAL: "tình huống", REFERENCE: "tham khảo" };
+const ROLE_TAG: Partial<Record<DeclarationFieldRole, string>> = { REFERENCE: "tham khảo" };
 /** Vai trò không hiện cạnh nhãn – ghi nghĩa trong hướng dẫn. */
 const ROLE_IN_GUIDE = new Set<DeclarationFieldRole>(["ASSIST", "UNUSED"]);
 
@@ -32,6 +33,14 @@ export function RoleMark({ role, star = true }: { role: DeclarationFieldRole; st
         <span className="sr-only"> (bắt buộc)</span>
       </>
     ) : null;
+  }
+  // Theo tình huống: viết tắt "TH" (nhãn khỏi xuống dòng), bấm xem nghĩa đầy đủ.
+  if (role === "CONDITIONAL") {
+    return (
+      <span className="ml-1.5 text-xs font-normal text-fg-subtle">
+        <Abbreviation short="TH" full={`Theo tình huống – ${ROLE_INFO.CONDITIONAL.meaning}.`} />
+      </span>
+    );
   }
   const tag = ROLE_TAG[role];
   return tag ? <span className="ml-1.5 text-xs font-normal text-fg-subtle">{tag}</span> : null;
@@ -60,7 +69,14 @@ export function GuideButton({ kind, no, role }: { kind: Kind; no: string | undef
   );
 }
 
-const WIDTH: Record<NonNullable<LayoutField["width"]>, string> = { xs: "w-24", sm: "w-40", md: "w-64", lg: "w-full", full: "w-full" };
+/** Nhãn ô: "số · tên"; tên dài có chữ viết tắt (short-labels) → hiện chữ viết tắt, bấm xem tên đầy đủ. Ô con trong nhóm không lặp số chỉ tiêu. */
+export function fieldLabelNode(f: Pick<LayoutField, "no" | "label" | "short">, withNo = true): ReactNode {
+  const name = f.short ? <Abbreviation short={f.short} full={f.label} /> : f.label;
+  return withNo && f.no ? <>{f.no} · {name}</> : name;
+}
+
+/** Bề rộng ô con trong nhóm – xs 112px đủ một dòng cho nhãn ngắn ~15 ký tự (“Công thức chuẩn”). */
+const WIDTH: Record<NonNullable<LayoutField["width"]>, string> = { xs: "w-28", sm: "w-40", md: "w-64", lg: "w-full", full: "w-full" };
 /** Ô rộng chiếm cả hàng của lưới khối. */
 export const spansRow = (f: Pick<LayoutField, "width" | "input">) => f.width === "full" || f.width === "lg" || f.input === "textarea";
 
@@ -94,7 +110,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const applicable = isApplicable(field, ctx);
   if (!applicable && !showInapplicable) return null;
   const value = values[field.key] ?? "";
-  const title = compact ? field.label : fieldTitle(field.no, field.label);
+  const title = fieldLabelNode(field, !compact);
   const readOnly = field.origin === "CUSTOMS" || !onChange || Boolean(lock);
   // Ô mã có tra cứu trong nhóm: bề rộng theo ô mã + nút tra cứu (CodeInput tự đặt bề rộng ô mã).
   const sizeClass = fill ? "w-full" : compact ? (listId ? undefined : WIDTH[field.width ?? "sm"]) : spansRow(field) ? "col-span-full" : undefined;

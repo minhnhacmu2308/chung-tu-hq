@@ -1,5 +1,6 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA): bố cục đầy đủ chỉ tiêu theo ảnh mẫu CHITIEU_NHAPKHAU + Phụ lục II TT39/TT121 + VNACCS_IDA v1.2.
 import { attachmentBlocks, billIdentFields, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, itemExtraFields, manualValueField, permitsBlock, rep, taxPaymentBlocks, transitBlock, typeGroupField } from "./shared.js";
+import { withShortLabels } from "./short-labels.js";
 import type { DeclarationLayout, LayoutBlock } from "./types.js";
 
 /** Dòng hàng – phần người khai nhập (VN_IDA_HANG). */
@@ -77,7 +78,7 @@ const ITEM_CUSTOMS: LayoutBlock[] = [
   },
 ];
 
-export const LAYOUT_IDA: DeclarationLayout = {
+export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
   kind: "IDA",
   summary: [
     hq("TK_ICN", "Số tờ khai", "text", { no: "1.1" }),
@@ -264,4 +265,4 @@ export const LAYOUT_IDA: DeclarationLayout = {
     },
   ],
   item: { columns: ["HAG_CMD", "HAG_CMN", "HAG_QN1", "HAG_QT1", "HAG_BPR", "HAG_OR"], declarant: ITEM_DECLARANT, customs: ITEM_CUSTOMS },
-};
+});

@@ -2,9 +2,9 @@
 import { Filter, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import {
-  Avatar, AvatarGroup, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
+  Abbreviation, Avatar, AvatarGroup, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
   DatePicker, DateRangePicker, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-  Field, FileDropzone, FileUploadList, Grid, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
+  Field, FileDropzone, FileUploadList, Grid, Input, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
 } from "../src/index.js";
 
@@ -168,6 +168,7 @@ export function Showcase() {
             <Stack gap="md">
               <Field label="Cảng dỡ hàng" hint="Gõ không dấu: “hai phong” · nút Mở rộng để đọc hết mô tả"><Combobox options={PORTS} value={port} onChange={setPort} clearable expandable /></Field>
               <Field label="Loại chứng từ"><Combobox multiple options={DOC_TYPES} value={docs} onChange={setDocs} /></Field>
+              <Field label={<>1.5 · <Abbreviation short="Mã PLHH" full="Mã phân loại hàng hóa" /></>} hint="Nhãn dài viết tắt – bấm chữ gạch chấm xem tên đầy đủ"><Input /></Field>
               <Field label="Đối tác (20.000 mục)" hint="Gõ “da nang 00123” – chỉ hiện 100 kết quả đầu, gõ thêm để thu hẹp">
                 <Combobox options={PARTNERS} value={partner} onChange={setPartner} clearable />
               </Field>

@@ -26,6 +26,8 @@ export type LayoutField = {
   options?: FieldOption[];
   /** Ô bắt buộc theo đặc tả nghiệp vụ không có trong Phụ lục II (định danh, tách vận đơn). */
   required?: boolean;
+  /** Chữ viết tắt khi tên dài làm vỡ lưới form (vd "Mã PLHH") – giao diện hiện chữ này, bấm vào xem tên đầy đủ. Gắn ở short-labels.ts. */
+  short?: string;
 };
 /** Chỉ tiêu nhiều ô con nằm ngang (địa chỉ 4 dòng, tổng trị giá 4 ô…). */
 export type LayoutGroup = {

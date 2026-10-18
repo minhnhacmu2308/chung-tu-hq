@@ -6,7 +6,7 @@ import { Alert, Badge, Button, cn, Grid, Select, Stack, toast } from "@kb/ui";
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, CircleAlert, FileCheck2, Pencil, Send, Undo2 } from "lucide-react";
 import type { DeclarationLayout } from "@kb/contracts";
 import { useRef, useState, type ReactNode } from "react";
-import { AmendLockProvider } from "./amend-context";
+import { AmendLockProvider, type FieldLockLookup } from "./amend-context";
 import { BlockView } from "./block-view";
 import { neighborSections } from "./compact-rules";
 import { conditionContext, itemProgress, sectionProgress, type FormValues } from "./form-state";
@@ -31,6 +31,12 @@ type Props = {
   onAmend: (on: boolean) => void;
   /** Số ô đã sửa so với tờ khai đã đăng ký (khi khai sửa đổi). */
   changed: number;
+  /** Khóa từng ô do nơi dùng quyết định (tờ khai của hồ sơ: ô chưa lưu được). */
+  lockOf?: FieldLockLookup | undefined;
+  /** Thao tác bản mẫu chưa kết nối (chia tách vận đơn, khai định danh, chép số cont) – tắt khi chạy trên hồ sơ thật. */
+  prototypeActions?: boolean;
+  /** Đếm / báo ô bắt buộc còn thiếu – tắt khi phần mềm tự điền ô lúc truyền (tờ khai của hồ sơ). */
+  showMissing?: boolean;
 };
 
 type NoticeProps = { kind: "IDA" | "EDA"; stage: Stage; amending: boolean; onAmend: (on: boolean) => void; changed: number };
@@ -92,7 +98,7 @@ function goToMissing() {
   el.querySelector<HTMLElement>("input, textarea, select")?.focus({ preventScroll: true });
 }
 
-export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, amending, onAmend, changed }: Props) {
+export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, amending, onAmend, changed, lockOf, prototypeActions = true, showMissing = true }: Props) {
   const { mode } = useViewPrefs();
   const showInapplicable = mode === "tat-ca";
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -101,7 +107,8 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
   const itemsMissing = items.reduce((n, it) => n + itemProgress(kind, layout, it).missing, 0);
   const nav = navSections(layout).map((n) => {
     const s = layout.declarant.find((x) => x.id === n.id);
-    return { ...n, p: s ? sectionProgress(kind, s, values) : { filled: items.length, total: items.length, missingRequired: itemsMissing } };
+    const p = s ? sectionProgress(kind, s, values) : { filled: items.length, total: items.length, missingRequired: itemsMissing };
+    return { ...n, p: showMissing ? p : { ...p, missingRequired: 0 } };
   });
   const current = layout.declarant.find((s) => s.id === section);
   const here = nav.find((n) => n.id === section);
@@ -139,7 +146,7 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
             ))}
           </ul>
         </nav>
-        <AmendLockProvider kind={kind} values={values} active={stage === "da-khai" && amending}>
+        <AmendLockProvider kind={kind} values={values} active={stage === "da-khai" && amending} override={lockOf}>
           {/* @container: lưới ô trong khối đo theo bề rộng cột form (không tính cột mục lục) – 4 cột chỉ khi mỗi ô đủ rộng cho nhãn một dòng. */}
           <div className={cn("@container flex min-w-0 flex-col gap-3 cq-lg:col-span-3")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -154,9 +161,9 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
             ) : (
               current && (
                 <Stack gap="md">
-                  {current.id === "van-chuyen" && <TransportOperationsBar kind={kind} header={values} stage={stage} amending={amending} showInapplicable={showInapplicable} />}
+                  {prototypeActions && current.id === "van-chuyen" && <TransportOperationsBar kind={kind} header={values} stage={stage} amending={amending} showInapplicable={showInapplicable} />}
                   {current.blocks.map((b) => (
-                    <BlockView key={`${b.id}-${mode}`} kind={kind} block={b} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} showActions={stage === "nhap"} compactable />
+                    <BlockView key={`${b.id}-${mode}`} kind={kind} block={b} values={values} onChange={onChange} ctx={ctx} showInapplicable={showInapplicable} showActions={prototypeActions && stage === "nhap"} compactable />
                   ))}
                 </Stack>
               )

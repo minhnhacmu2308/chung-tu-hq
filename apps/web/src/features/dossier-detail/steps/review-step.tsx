@@ -26,6 +26,7 @@ import { errorPlace, errorsForField, fieldErrors, type FieldError } from "./cust
 import { fieldTitle, groupDeclarationFields, ROLE_INFO, type RoledField } from "./declaration-groups";
 import { provenanceLabel } from "./provenance";
 import type { StepProps } from "./types";
+import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 
 const DATE_CODES = new Set(["NGAY_DK", "NGAY_DEN", "NGAY_DI", "NGAY_HD", "HAN_TX", "HAN_TN"]);
 
@@ -368,7 +369,7 @@ function EditFieldDialog({ dossierId, kind, field, currency, onClose }: { dossie
   );
 }
 
-const TABS = ["general", "items", "tax", "docs", "customs"] as const;
+const TABS = ["general", "full", "items", "tax", "docs", "customs"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
@@ -515,6 +516,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               <TabsTrigger value="general">
                 Thông tin chung {errs.length > 0 && <Badge tone="danger">{errs.length} lỗi</Badge>} {suspect.length > 0 && <Badge tone="warning">{suspect.length}</Badge>}
               </TabsTrigger>
+              <TabsTrigger value="full">Tờ khai đầy đủ</TabsTrigger>
               <TabsTrigger value="items">
                 Danh sách hàng <Badge tone="neutral">{items.length}</Badge>
               </TabsTrigger>
@@ -528,6 +530,9 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             </TabsList>
             <TabsContent value="general">
               <GeneralTab decl={decl} currency={dossier.currency} errors={errs} onEdit={isDraft && canEdit ? setEditing : undefined} />
+            </TabsContent>
+            <TabsContent value="full">
+              <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} canEdit={isDraft && canEdit} />
             </TabsContent>
             <TabsContent value="items">
               <ItemsTab kind={decl.kind} items={items} currency={dossier.currency} />

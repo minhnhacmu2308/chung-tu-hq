@@ -35,7 +35,7 @@ function Cell({ kind, f, n, values, onChange }: { kind: "IDA" | "EDA"; f: Layout
   if (!onChange || lock || f.origin === "CUSTOMS") {
     return (
       <span className="flex items-start gap-1 break-words text-sm text-fg">
-        {lock && onChange && (
+        {lock?.reason && onChange && (
           <>
             <Lock aria-hidden="true" className="mt-1 h-3 w-3 shrink-0 text-fg-muted" />
             <span className="sr-only">{lock.reason}: </span>

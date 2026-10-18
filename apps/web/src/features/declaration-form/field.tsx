@@ -124,7 +124,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
       <div className={cn("flex min-w-0 flex-col gap-0.5 rounded-md px-3 py-2", customs ? "bg-info-subtle" : "bg-surface-muted", sizeClass)}>
         <p className={cn("text-xs", customs ? "text-info-subtle-fg" : "text-fg-muted")}>{title}</p>
         <p className={cn("break-words text-sm font-medium", customs ? "text-info-subtle-fg" : "text-fg")}>{[displayValue(field, value), value.trim() && field.codeTable ? name : undefined].filter(Boolean).join(" · ") || "—"}</p>
-        {lock && onChange && (
+        {lock?.reason && onChange && (
           <p className="flex items-start gap-1 text-xs text-fg-muted">
             <Lock aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
             {lock.reason}

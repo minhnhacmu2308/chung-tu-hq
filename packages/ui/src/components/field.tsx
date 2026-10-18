@@ -48,12 +48,14 @@ export type FieldProps = {
   orientation?: "vertical" | "horizontal";
   /** Khung viền như nhóm ô, nhãn nằm trên đường viền (FieldFrame) – ô đứng riêng của form dày ô (tờ khai). Bỏ qua `orientation`. */
   framed?: boolean;
+  /** Với `framed`: nút đặt trên đường viền sau nhãn (vd ⓘ hướng dẫn). */
+  labelAction?: ReactNode;
   className?: string;
   children: ReactNode;
 };
 
 /** Bọc 1 control: gắn nhãn, gợi ý, lỗi đúng chuẩn a11y. Luôn dùng Field cho ô nhập trong form. */
-export function Field({ label, hint, error, required = false, orientation = "vertical", framed = false, className, children }: FieldProps) {
+export function Field({ label, hint, error, required = false, orientation = "vertical", framed = false, labelAction, className, children }: FieldProps) {
   const horizontal = orientation === "horizontal";
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
@@ -69,7 +71,7 @@ export function Field({ label, hint, error, required = false, orientation = "ver
     const star = required && <span className="ml-0.5 text-danger" aria-hidden="true">*</span>;
     return (
       <FieldContext.Provider value={value}>
-        <FieldFrame legend={<label htmlFor={id} id={`${id}-label`}>{label}{star}</label>} className={className}>
+        <FieldFrame legend={<label htmlFor={id} id={`${id}-label`}>{label}{star}</label>} legendAction={labelAction} className={className}>
           {children}
           {hint && <p id={hintId} className="text-xs text-fg-subtle">{hint}</p>}
           {error && <p id={errorId} className="text-sm text-danger-subtle-fg" role="alert">{error}</p>}
@@ -111,17 +113,33 @@ export const FRAME_LEGEND_CLASS = "px-1 text-xs font-medium text-fg-muted";
 export type FieldFrameProps = Omit<ComponentProps<"fieldset">, "children"> & {
   /** Tên nằm trên đường viền. */
   legend: ReactNode;
+  /** Nút đặt trên đường viền ngay sau tên (vd ⓘ hướng dẫn) – không tính vào tên của khung. */
+  legendAction?: ReactNode;
   /** Ẩn tên (vẫn đọc được bằng trình đọc màn hình) – khung chỉ có một ô chọn tự mang chữ. */
   hideLegend?: boolean;
   children: ReactNode;
 };
 
 /** Khung viền, tên nằm trên đường viền (fieldset + legend): nhóm ô, nhóm lặp, ô đứng riêng của form dày ô (tờ khai) – một kiểu cho mọi khung. */
-export function FieldFrame({ legend, hideLegend = false, className, children, ...props }: FieldFrameProps) {
+export function FieldFrame({ legend, legendAction, hideLegend = false, className, children, ...props }: FieldFrameProps) {
+  const nameId = useId();
   return (
-    <fieldset data-frame="" className={cn("flex flex-col gap-1.5", FRAME_CLASS, className)} {...props}>
-      <legend className={cn(FRAME_LEGEND_CLASS, hideLegend && "sr-only")}>{legend}</legend>
+    <fieldset data-frame="" aria-labelledby={legendAction ? nameId : undefined} className={cn("flex flex-col gap-1.5", FRAME_CLASS, className)} {...props}>
+      <legend className={cn(FRAME_LEGEND_CLASS, hideLegend && "sr-only")}>
+        <FrameLegend nameId={nameId} legend={legend} action={legendAction} />
+      </legend>
       {children}
     </fieldset>
+  );
+}
+
+/** Tên trên đường viền + nút sau tên; nút co về chiều cao dòng chữ (-my-1) để viền không lệch. */
+export function FrameLegend({ nameId, legend, action }: { nameId: string; legend: ReactNode; action?: ReactNode }) {
+  if (!action) return <>{legend}</>;
+  return (
+    <span className="flex items-center gap-1.5">
+      <span id={nameId}>{legend}</span>
+      <span className="-my-1 inline-flex">{action}</span>
+    </span>
   );
 }

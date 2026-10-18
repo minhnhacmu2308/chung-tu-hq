@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { Field, FieldFrame } from "./field.js";
 import { Checkbox, Input, Select, Textarea } from "./inputs.js";
+import { Button } from "./button.js";
 
 describe("Field + control", () => {
   it("gắn nhãn với ô nhập (tìm được bằng label)", () => {
@@ -104,6 +105,20 @@ describe("Field + control", () => {
     expect(input).toBeRequired();
     expect(input).toHaveAccessibleDescription("Mã 1–9");
     expect(container.querySelector("fieldset[data-frame] > legend label")).toHaveTextContent("1.6 · Mã PTVC");
+    await expectNoA11yViolations(container);
+  });
+
+  it("legendAction: nút (ⓘ) nằm trên đường viền sau tên; tên nhóm chỉ là tên, không lẫn tên nút", async () => {
+    const { container } = render(<FieldFrame legend="1.27 · Số kiện" legendAction={<Button size="icon-sm" aria-label="Hướng dẫn khai chỉ tiêu 1.27">i</Button>}><Field label="Số lượng kiện"><Input /></Field></FieldFrame>);
+    const group = screen.getByRole("group", { name: "1.27 · Số kiện" });
+    expect(group.querySelector("legend")).toContainElement(screen.getByRole("button", { name: "Hướng dẫn khai chỉ tiêu 1.27" }));
+    await expectNoA11yViolations(container);
+  });
+
+  it("Field framed + labelAction: nút trên đường viền, tên ô nhập không đổi", async () => {
+    const { container } = render(<Field label="1.6 · Mã PTVC" framed required labelAction={<Button size="icon-sm" aria-label="Hướng dẫn khai chỉ tiêu 1.6">i</Button>}><Input /></Field>);
+    expect(screen.getByRole("textbox", { name: "1.6 · Mã PTVC" })).toBeInTheDocument();
+    expect(container.querySelector("legend")).toContainElement(screen.getByRole("button", { name: "Hướng dẫn khai chỉ tiêu 1.6" }));
     await expectNoA11yViolations(container);
   });
 });

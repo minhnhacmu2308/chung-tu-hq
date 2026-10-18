@@ -27,6 +27,8 @@ export const buttonVariants = cva(
         md: "h-10 px-4 text-sm",
         lg: "h-12 px-6 text-base",
         icon: "h-10 w-10 p-0",
+        /** Nút biểu tượng nhỏ (24px) – trên đường viền khung (FieldFrame legendAction), cạnh nhãn. */
+        "icon-sm": "h-6 w-6 p-0",
       },
       fullWidth: { true: "w-full" },
     },

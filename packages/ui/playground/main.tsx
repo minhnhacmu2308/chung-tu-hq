@@ -186,7 +186,7 @@ function Demo() {
                       <Field label="Số tờ khai đầu tiên" orientation="horizontal" hint="Nhãn bên trái – form dày ô như tờ khai" className="md:col-span-2">
                         <Input placeholder="107284900661" />
                       </Field>
-                      <Field label="1.6 · Mã PTVC" framed required hint="Ô đứng riêng có khung – tên trên đường viền như nhóm ô">
+                      <Field label="1.6 · Mã PTVC" framed required hint="Ô đứng riêng có khung – tên và nút ⓘ trên đường viền như nhóm ô" labelAction={<Button size="icon-sm" variant="ghost" aria-label="Hướng dẫn khai chỉ tiêu 1.6">i</Button>}>
                         <Input placeholder="1" />
                       </Field>
                       <FieldFrame legend="1.27 · Số kiện">

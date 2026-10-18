@@ -70,4 +70,10 @@ describe("RadioGroup", () => {
     expect(group).toHaveAttribute("data-frame");
     await expectNoA11yViolations(container);
   });
+
+  it("framed + legendAction: nút trên đường viền sau tên, tên nhóm không lẫn tên nút", () => {
+    render(<RadioGroup framed label="Nhóm loại hình" legendAction={<button type="button" aria-label="Hướng dẫn">i</button>} options={OPTIONS} value={null} onChange={() => {}} />);
+    const group = screen.getByRole("radiogroup", { name: "Nhóm loại hình" });
+    expect(group.querySelector("legend")).toContainElement(screen.getByRole("button", { name: "Hướng dẫn" }));
+  });
 });

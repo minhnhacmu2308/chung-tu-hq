@@ -38,6 +38,7 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
       data-missing={anyMissing || undefined}
       className={cn(span, !applicable && "opacity-60")}
       legend={<>{fieldTitle(group.no, group.label)}{!readOnly && first && <RoleMark role={fieldRole(kind, first, group.no)} />}</>}
+      legendAction={!readOnly && <GuideButton kind={kind} no={group.no} role={first ? fieldRole(kind, first, group.no) : undefined} reason={reasonInGuide} label={group.label} />}
     >
       {!readOnly && notes.length > 0 && <p className="text-xs text-fg-subtle">{notes.join(" · ")}</p>}
       {anyMissing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>}
@@ -45,7 +46,6 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
         {group.fields.map((f) => (
           <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={group.no} parentCondition={effectiveCondition} compact suppressMissing={group.fill === "any"} />
         ))}
-        {!readOnly && <span className="pt-7"><GuideButton kind={kind} no={group.no} role={first ? fieldRole(kind, first, group.no) : undefined} reason={reasonInGuide} label={group.label} /></span>}
       </div>
     </FieldFrame>
   );

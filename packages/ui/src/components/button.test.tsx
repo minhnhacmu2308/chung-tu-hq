@@ -61,4 +61,9 @@ describe("Button", () => {
     );
     await expectNoA11yViolations(container);
   });
+
+  it("size icon-sm: nút biểu tượng 24px (vừa dòng tên trên đường viền khung, vẫn đủ vùng bấm tối thiểu)", () => {
+    render(<Button size="icon-sm" aria-label="Hướng dẫn">i</Button>);
+    expect(screen.getByRole("button", { name: "Hướng dẫn" })).toHaveClass("h-6", "w-6");
+  });
 });

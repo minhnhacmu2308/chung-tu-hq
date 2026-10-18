@@ -78,6 +78,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
       {!readOnly && first && repeat.no && <RoleMark role={fieldRole(kind, first, repeat.no)} />}
     </>
   );
+  const guide = !readOnly && <GuideButton kind={kind} no={repeat.no} role={first ? fieldRole(kind, first, repeat.no) : undefined} />;
   const footer = !readOnly && (
     <div className="flex flex-wrap items-center gap-2">
       {rows.length < repeat.count && (
@@ -85,7 +86,6 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
           Thêm dòng
         </Button>
       )}
-      <GuideButton kind={kind} no={repeat.no} role={first ? fieldRole(kind, first, repeat.no) : undefined} />
     </div>
   );
   const box = cn("col-span-full gap-2 pb-2", !applicable && "opacity-60");
@@ -94,7 +94,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
     const all = expandRepeat(repeat);
     const indexOf = (key: string) => all.findIndex((r) => r[0]?.key === key) + 1;
     return (
-      <FieldFrame legend={legend} className={box}>
+      <FieldFrame legend={legend} legendAction={guide} className={box}>
         <Grid cols={{ base: 2, md: 4 }} gap="sm">
           {rows.map((row) =>
             row.map((f) => (
@@ -112,7 +112,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
   // Như bộ đếm sectionProgress: nhóm lặp bắt buộc khi có ít nhất dòng 1 – dòng thêm không tự báo thiếu.
   const firstRowMissing = !readOnly && applicable && (rows[0] ?? []).some((f) => isApplicable(f, ctx) && missingRequired(kind, f, values, repeat.no ?? f.no, condition, ctx));
   return (
-    <FieldFrame data-missing={firstRowMissing || undefined} legend={legend} className={box}>
+    <FieldFrame data-missing={firstRowMissing || undefined} legend={legend} legendAction={guide} className={box}>
       {/* relative: chữ ẩn (sr-only, định vị tuyệt đối) trong ô bảng nằm trong khung cuộn – không thoát ra làm trang tràn ngang. */}
       <div className="relative min-w-0 overflow-x-auto">
         {/* kb-allow-raw: lưới sửa trực tiếp các dòng của nhóm lặp (vận đơn, giấy phép, khoản điều chỉnh…); DataTable chưa hỗ trợ ô sửa được */}

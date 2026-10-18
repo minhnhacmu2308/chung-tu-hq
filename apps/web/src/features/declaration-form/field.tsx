@@ -55,8 +55,8 @@ export function GuideButton({ kind, no, role, reason, label }: { kind: Kind; no:
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-fg-muted" aria-label={guide ? `Hướng dẫn khai chỉ tiêu ${guide.no}` : `Hướng dẫn: ${label ?? ""}`}>
-          <Info className="h-4 w-4" />
+        <Button size="icon-sm" variant="ghost" className="shrink-0 text-fg-muted" aria-label={guide ? `Hướng dẫn khai chỉ tiêu ${guide.no}` : `Hướng dẫn: ${label ?? ""}`}>
+          <Info className="h-3.5 w-3.5" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-w-sm text-sm" showClose>
@@ -160,12 +160,9 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     if (framed && !radio) {
       return (
         <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
-          <FieldFrame legend={label} hideLegend={Boolean(field.hideLabel)} className="flex-1">
+          <FieldFrame legend={label} legendAction={guide} hideLegend={Boolean(field.hideLabel)} className="flex-1">
             {shownReason && <p className="text-xs text-fg-subtle">{shownReason}</p>}
-            <div className="flex items-start justify-between gap-1">
-              {checkboxes}
-              {guide}
-            </div>
+            {checkboxes}
           </FieldFrame>
           {missingNote}
         </div>
@@ -176,7 +173,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
         <div className="flex items-start gap-1">
           <div className="min-w-0 flex-1">
             {radio ? (
-              <RadioGroup orientation="horizontal" framed={framed} label={<>{title}<RoleMark role={role} /></>} description={shownReason} options={options} value={value || null} onChange={set} />
+              <RadioGroup orientation="horizontal" framed={framed} legendAction={framed ? guide : null} label={<>{title}<RoleMark role={role} /></>} description={shownReason} options={options} value={value || null} onChange={set} />
             ) : (
               <fieldset className="min-w-0">
                 <legend className={cn("text-sm font-medium text-fg", field.hideLabel && "sr-only")}>{label}</legend>
@@ -185,7 +182,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
               </fieldset>
             )}
           </div>
-          {guide}
+          {!framed && guide}
         </div>
         {missingNote}
       </div>
@@ -197,17 +194,17 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     listId && field.codeTable ? <CodeInput table={field.codeTable} fieldKey={field.key} kind={kind} values={values} value={value} onChange={set} label={field.label} widthClass={compact ? fieldWidthClass(field) : "w-32"} />
     : field.input === "textarea" ? <Textarea className={compact ? undefined : "min-w-0 flex-1"} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
     : <Input className={compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1"} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
-  // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô, nút ⓘ cuối hàng.
+  // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô; nút ⓘ trên đường viền sau tên (nhãn bên trái: cuối hàng).
   const hint = [compact && !listId && name ? `→ ${name}` : null, shownReason].filter(Boolean).join(" · ") || undefined;
 
   return (
     <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
-      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} framed={framed} className={cn(framed && "flex-1")} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
+      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} framed={framed} labelAction={framed ? guide : null} className={cn(framed && "flex-1")} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
         {compact ? control : (
           <div className="flex min-w-0 items-center gap-2">
             {control}
             {inline && <span className="min-w-0 text-xs text-fg-subtle">{name}</span>}
-            {guide}
+            {!framed && guide}
           </div>
         )}
       </Field>

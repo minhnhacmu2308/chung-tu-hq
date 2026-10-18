@@ -46,24 +46,24 @@ export function RoleMark({ role, star = true }: { role: DeclarationFieldRole; st
   return tag ? <span className="ml-1.5 text-xs font-normal text-fg-subtle">{tag}</span> : null;
 }
 
-/** Nút ⓘ mở hướng dẫn khai của chỉ tiêu (Phụ lục II, ghi chú nếu TT121 sửa đổi). Không có hướng dẫn → không hiện. */
-export function GuideButton({ kind, no, role }: { kind: Kind; no: string | undefined; role?: DeclarationFieldRole | undefined }) {
+/** Nút ⓘ mở hướng dẫn khai của chỉ tiêu (Phụ lục II, ghi chú nếu TT121 sửa đổi) và lý do ô đang hiện ("Có vì: …").
+ * Không có hướng dẫn lẫn lý do → không hiện. Ô riêng của phần mềm (không số chỉ tiêu) lấy tên từ `label`. */
+export function GuideButton({ kind, no, role, reason, label }: { kind: Kind; no: string | undefined; role?: DeclarationFieldRole | undefined; reason?: string | undefined; label?: string | undefined }) {
   const guide = fieldGuide(kind, no);
-  if (!guide) return null;
+  if (!guide && !reason) return null;
+  const title = guide ? `${guide.no} · ${guide.label}${guide.amendedBy121 ? " (sửa đổi theo TT121/2025)" : ""}` : label;
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-fg-muted" aria-label={`Hướng dẫn khai chỉ tiêu ${guide.no}`}>
+        <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-fg-muted" aria-label={guide ? `Hướng dẫn khai chỉ tiêu ${guide.no}` : `Hướng dẫn: ${label ?? ""}`}>
           <Info className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-w-sm text-sm" showClose>
-        <p className="font-medium text-fg">
-          {guide.no} · {guide.label}
-          {guide.amendedBy121 ? " (sửa đổi theo TT121/2025)" : ""}
-        </p>
+        {title && <p className="font-medium text-fg">{title}</p>}
+        {reason && <p className="mt-1 font-medium text-fg">{reason}</p>}
         {role && ROLE_IN_GUIDE.has(role) && <p className="mt-1 font-medium text-fg">{ROLE_INFO[role].label}: {ROLE_INFO[role].meaning}.</p>}
-        <p className="mt-1 text-fg-muted">{guide.note}</p>
+        {guide && <p className="mt-1 text-fg-muted">{guide.note}</p>}
       </PopoverContent>
     </Popover>
   );
@@ -139,24 +139,28 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const reason = condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : undefined;
   const missing = !suppressMissing && applicable && missingRequired(kind, field, values, parentNo, parentCondition, ctx);
   const set = (v: string) => onChange?.(field.key, v);
-  const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} />;
+  // "Có vì: …" nằm trong hướng dẫn ⓘ (gọn nhãn); "Không áp dụng vì: …" và ô con trong nhóm (không có ⓘ) vẫn ghi dưới ô.
+  const reasonInGuide = !compact && applicable;
+  const shownReason = reasonInGuide ? undefined : reason;
+  const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
   const missingNote = missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
+  const frame = field.framed && "rounded-md border border-border px-3 py-2";
 
   if (field.input === "choice") {
     const options = (field.options ?? []).map((o) => ({ ...o, label: optionLabel(o) }));
     const radio = choiceControl(kind, field, parentNo) === "radio";
     // Radio xếp ngang chiếm cả hàng lưới: không kéo dài một ô thành cột cao đẩy các chỉ tiêu bên cạnh xuống xa (Nhóm loại hình 4 lựa chọn).
     return (
-      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", radio && !compact && !fill ? "col-span-full" : sizeClass)}>
+      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", frame, radio && !compact && !fill ? "col-span-full" : sizeClass)}>
         <div className="flex items-start gap-1">
           <div className="min-w-0 flex-1">
             {radio ? (
-              <RadioGroup orientation="horizontal" label={<>{title}<RoleMark role={role} /></>} description={reason} options={options} value={value || null} onChange={set} />
+              <RadioGroup orientation="horizontal" label={<>{title}<RoleMark role={role} /></>} description={shownReason} options={options} value={value || null} onChange={set} />
             ) : (
               <fieldset className="min-w-0">
                 <legend className="text-sm font-medium text-fg">{label}</legend>
-                {reason && <p className="mt-0.5 text-xs text-fg-subtle">{reason}</p>}
+                {shownReason && <p className="mt-0.5 text-xs text-fg-subtle">{shownReason}</p>}
                 <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-2">
                   {options.map((o) => (
                     <Checkbox key={o.value} label={o.label} checked={value === o.value} onChange={() => set(toggleChoice(value, o.value))} />
@@ -178,10 +182,10 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     : field.input === "textarea" ? <Textarea className={compact ? undefined : "min-w-0 flex-1"} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
     : <Input className={compact ? undefined : inline ? "w-32 shrink-0" : "min-w-0 flex-1"} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
   // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô, nút ⓘ cuối hàng.
-  const hint = [compact && !listId && name ? `→ ${name}` : null, reason].filter(Boolean).join(" · ") || undefined;
+  const hint = [compact && !listId && name ? `→ ${name}` : null, shownReason].filter(Boolean).join(" · ") || undefined;
 
   return (
-    <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+    <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", frame, sizeClass)}>
       <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
         {compact ? control : (
           <div className="flex min-w-0 items-center gap-2">

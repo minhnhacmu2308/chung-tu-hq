@@ -31,6 +31,8 @@ export type LayoutField = {
   short?: string;
   /** Ý nghĩa hiện khi bấm chữ viết tắt; không có → hiện `label`. */
   full?: string;
+  /** Đóng khung viền để dễ nhận ra (ô theo tình huống đầu khối Vận đơn: HAWB, số lượng container). */
+  framed?: boolean;
 };
 /** Chỉ tiêu nhiều ô con nằm ngang (địa chỉ 4 dòng, tổng trị giá 4 ô…). */
 export type LayoutGroup = {

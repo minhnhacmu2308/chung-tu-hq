@@ -30,7 +30,9 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
   const effectiveCondition = group.condition ?? parentCondition;
   const anyMissing = group.fill === "any" && applicable && !readOnly && groupMissing(kind, group, values, ctx, parentCondition);
   const span = groupSpan(group) === "full" ? "col-span-full" : labelsLeft ? undefined : "cq-sm:col-span-2";
-  const notes = [condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : null, group.fill === "any" ? "Chỉ cần nhập một ô" : null].filter(Boolean);
+  // "Có vì: …" nằm trong hướng dẫn ⓘ như ô thường; "Không áp dụng vì" và "Chỉ cần nhập một ô" vẫn ghi dưới nhãn.
+  const reasonInGuide = condition && applicable ? `Có vì: ${condition}` : undefined;
+  const notes = [condition && !applicable ? `Không áp dụng vì: ${condition}` : null, group.fill === "any" ? "Chỉ cần nhập một ô" : null].filter(Boolean);
   return (
     <fieldset data-missing={anyMissing || undefined} className={cn("flex min-w-0 flex-col gap-1.5 rounded-md border border-border px-3 pb-3 pt-1", span, !applicable && "opacity-60")}>
       <legend className="px-1 text-xs font-medium text-fg-muted">
@@ -43,7 +45,7 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
         {group.fields.map((f) => (
           <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={group.no} parentCondition={effectiveCondition} compact suppressMissing={group.fill === "any"} />
         ))}
-        {!readOnly && <span className="pt-7"><GuideButton kind={kind} no={group.no} role={first ? fieldRole(kind, first, group.no) : undefined} /></span>}
+        {!readOnly && <span className="pt-7"><GuideButton kind={kind} no={group.no} role={first ? fieldRole(kind, first, group.no) : undefined} reason={reasonInGuide} label={group.label} /></span>}
       </div>
     </fieldset>
   );

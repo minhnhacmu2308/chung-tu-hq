@@ -141,6 +141,8 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
         {
           id: "van-don", title: "Vận đơn", items: [
             ...billIdentFields,
+            // Cạnh ô HAWB (hàng không) – cùng là ô theo tình huống của phương thức vận chuyển, đóng khung để dễ nhận ra.
+            fld("VD_COC", "Số lượng container", "number", { no: "1.35", width: "xs", condition: "IN_CONTAINER", framed: true }),
             rep("Số vận đơn", "1.26", 5, [
               fld("VD_BL{n}", "Số vận đơn", "text", { width: "md" }),
               fld("APP_NGAY_VD{n}", "Ngày vận đơn", "date", { width: "sm" }),
@@ -148,7 +150,6 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
             ]),
             grp("Số kiện", "1.27", [fld("VD_NO", "Số lượng kiện", "number", { width: "sm" }), fld("VD_NOT", "Loại kiện", "code", { codeTable: "PACKAGE_KIND", width: "xs" })]),
             grp("Tổng trọng lượng (Gross)", "1.28", [fld("VD_GW", "Trọng lượng", "number", { width: "sm" }), fld("VD_GWT", "Đơn vị", "code", { codeTable: "UNIT", width: "xs" })]),
-            fld("VD_COC", "Số lượng container", "number", { no: "1.35", width: "xs", condition: "IN_CONTAINER" }),
             fld("VD_MRK", "Ký hiệu và số hiệu", "textarea", { no: "1.30", width: "full" }),
           ],
         },

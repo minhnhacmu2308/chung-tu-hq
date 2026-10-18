@@ -95,3 +95,13 @@ describe("Đơn vị xuất nhập khẩu – ô ngắn chung một hàng", () =
     expect(block.items.slice(firstWide).every(wideItem)).toBe(true);
   });
 });
+
+describe("Vận đơn – ô theo tình huống đầu khối có khung viền", () => {
+  it("IDA: 1.35 số lượng container ngay cạnh ô HAWB; cả hai đóng khung", () => {
+    const block = LAYOUT_IDA.declarant.flatMap((s) => s.blocks).find((b) => b.id === "van-don")!;
+    const keys = block.items.map((it) => (it.kind === "field" ? it.key : it.label));
+    expect(keys.indexOf("VD_COC")).toBe(keys.indexOf("APP_HAWB_CO") + 1);
+    const framed = block.items.filter((it) => it.kind === "field" && it.framed).map((it) => (it as LayoutField).key);
+    expect(framed).toEqual(["APP_HAWB_CO", "VD_COC"]);
+  });
+});

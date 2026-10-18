@@ -3,10 +3,10 @@
 // nghiệp vụ bổ sung, tra cứu, số hóa chứng từ. Nháp: chỉ nghiệp vụ dùng được khi chưa có số tờ khai. Bản mẫu: nút chỉ báo "chưa kết nối".
 import { Button, Card, CardContent, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, EmptyState, Field, Grid, Stack, Textarea, toast } from "@kb/ui";
 import { FileDown, FileStack, FileUp, Receipt, Save, Search } from "lucide-react";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import type { PrototypeFixture, Stage } from "./fixtures";
 import type { FormValues } from "./form-state";
-import { lookupsAt, operationsAt, taxSummary } from "./stage-rules";
+import { lookupsAt, operationsAt, taxAmount, taxSummary } from "./stage-rules";
 
 type Message = PrototypeFixture["messages"][number];
 const col = createDataTableColumnHelper<Message>();
@@ -19,11 +19,11 @@ const columns = col.columns([
 const notConnected = (name: string) => () => toast({ tone: "info", title: "Bản mẫu – chưa kết nối", description: name });
 
 const CANCEL = "Cập nhật trạng thái tờ khai hủy";
-const amount = (v: string) => (/^-?d+(.d+)?$/.test(v) ? formatNumber(v, v.split(".")[1]?.length ?? 0) : v);
 
-function TaxCard({ kind, values }: { kind: "IDA" | "EDA"; values: FormValues }) {
+/** `edi`: nút Ghi / Open EDI (bản mẫu – chưa kết nối). */
+export function TaxCard({ kind, values, edi = true }: { kind: "IDA" | "EDA"; values: FormValues; edi?: boolean }) {
   const tax = taxSummary(kind, values);
-  const rows = tax ? [...(tax.rate ? [{ label: `Tỷ giá tính thuế (${tax.rate.currency})`, value: amount(tax.rate.value) }] : []), ...tax.lines.map((l) => ({ label: l.label, value: amount(l.value) })), ...(tax.total ? [{ label: "Tổng tiền thuế (VND)", value: amount(tax.total) }] : [])] : [];
+  const rows = tax ? [...(tax.rate ? [{ label: `Tỷ giá tính thuế (${tax.rate.currency})`, value: taxAmount(tax.rate.value) }] : []), ...tax.lines.map((l) => ({ label: l.label, value: taxAmount(l.value) })), ...(tax.total ? [{ label: "Tổng tiền thuế (VND)", value: taxAmount(tax.total) }] : [])] : [];
   return (
     <Card>
       <CardHeader>
@@ -41,12 +41,12 @@ function TaxCard({ kind, values }: { kind: "IDA" | "EDA"; values: FormValues }) 
               ))}
             </dl>
           ) : (
-            <EmptyState icon={<Receipt />} title="Chưa có số thuế" description="Tỷ giá và tiền thuế có sau khi Hải quan tiếp nhận tờ khai. Bản mẫu chưa tạm tính thuế." />
+            <EmptyState icon={<Receipt />} title="Chưa có số thuế" description={edi ? "Tỷ giá và tiền thuế có sau khi Hải quan tiếp nhận tờ khai. Bản mẫu chưa tạm tính thuế." : "Tỷ giá và tiền thuế chính thức có sau khi Hải quan tiếp nhận tờ khai (khai tạm)."} />
           )}
-          <div className="flex flex-wrap gap-2">
+          {edi && <div className="flex flex-wrap gap-2">
             <Button variant="secondary" leftIcon={<Save className="h-4 w-4" />} onClick={notConnected("Ghi EDI")}>Ghi EDI</Button>
             <Button variant="secondary" leftIcon={<FileDown className="h-4 w-4" />} onClick={notConnected("Open EDI")}>Open EDI</Button>
-          </div>
+          </div>}
         </Stack>
       </CardContent>
     </Card>

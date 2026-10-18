@@ -16,8 +16,8 @@ export function CustomsTab({ layout, values, items }: { layout: DeclarationLayou
         Hệ thống VNACCS cấp và tính sau từng nghiệp vụ (khai tạm, khai chính thức, thông quan). Số thuế ở đây là số chính thức, thay cho số ứng dụng ước tính.
       </Alert>
       {layout.customs.map((s) => (
-        <section key={s.id} aria-labelledby={`hq-${s.id}`}>
-          <h2 id={`hq-${s.id}`} className="mb-2 text-sm font-semibold text-fg">
+        <div key={s.id}>
+          <h2 className="mb-2 text-sm font-semibold text-fg">
             {s.title}
           </h2>
           <Stack gap="md">
@@ -25,10 +25,10 @@ export function CustomsTab({ layout, values, items }: { layout: DeclarationLayou
               <BlockView key={b.id} kind={kind} block={b} values={values} ctx={ctx} showInapplicable={false} />
             ))}
           </Stack>
-        </section>
+        </div>
       ))}
-      <section aria-labelledby="hq-dong-hang">
-        <h2 id="hq-dong-hang" className="mb-2 text-sm font-semibold text-fg">
+      <div>
+        <h2 className="mb-2 text-sm font-semibold text-fg">
           Từng dòng hàng
         </h2>
         {!itemHasData ? (
@@ -54,7 +54,7 @@ export function CustomsTab({ layout, values, items }: { layout: DeclarationLayou
             ))}
           </Stack>
         )}
-      </section>
+      </div>
     </Stack>
   );
 }

@@ -42,7 +42,7 @@ const STAGE_TEXT: Record<CustomsStage, string> = {
   REJECTED: "Hải quan từ chối / hủy tờ khai",
 };
 
-const PIPE: Record<PipelineStatus, { text: string; tone: Tone }> = {
+export const PIPE: Record<PipelineStatus, { text: string; tone: Tone }> = {
   NOT_SENT: { text: "Chưa gửi", tone: "neutral" },
   WAITING: { text: "Chờ đến lượt", tone: "neutral" },
   SENDING: { text: "Đang xử lý", tone: "info" },
@@ -230,7 +230,7 @@ function ResultCard({ s }: { s: SubmissionView }) {
   );
 }
 
-function MessageLog({ messages }: { messages: SubmissionView["messages"] }) {
+export function MessageLog({ messages }: { messages: SubmissionView["messages"] }) {
   return (
     <Card>
       <CardHeader>

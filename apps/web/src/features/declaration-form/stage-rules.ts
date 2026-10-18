@@ -1,6 +1,7 @@
 // Quy tắc hiển thị theo giai đoạn tờ khai (thuần). Căn cứ: màn hình tạo mới của phần mềm khai báo (CHITIEU_NHAPKHAU_TAOMOI / CHITIEU_XUATKHAU_TAOMOI)
 // – nháp chỉ có ô người khai nhập, chưa có kết quả Hải quan; sau khi đăng ký, phần người khai chỉ đọc, sửa qua khai sửa đổi bổ sung.
 import type { DeclarationLayout, LayoutField } from "@kb/contracts";
+import { formatNumber } from "@/lib/format";
 import type { Stage } from "./fixtures";
 import type { FormValues } from "./form-state";
 
@@ -38,3 +39,6 @@ const diff = (a: FormValues, b: FormValues) => [...new Set([...Object.keys(a), .
 /** Số ô đã sửa so với tờ khai đã đăng ký (phần đầu + từng dòng hàng) – hiện khi khai sửa đổi bổ sung. */
 export const changedCount = (before: Snapshot, after: Snapshot) =>
   diff(before.header, after.header) + after.items.reduce((n, it, i) => n + diff(before.items[i] ?? {}, it), 0);
+
+/** Số thuế / tỷ giá (chuỗi thập phân) → có phân tách hàng nghìn, giữ đủ phần lẻ; giá trị không phải số giữ nguyên. */
+export const taxAmount = (v: string) => (/^-?\d+(\.\d+)?$/.test(v) ? formatNumber(v, v.split(".")[1]?.length ?? 0) : v);

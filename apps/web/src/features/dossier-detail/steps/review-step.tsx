@@ -2,7 +2,7 @@
 // Bước 5 – Review tờ khai: xem tờ khai nháp IDA/EDA theo nhóm, nguồn từng chỉ tiêu, thuế dự kiến → phê duyệt.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, createDataTableColumnHelper, DataTable,
-  Dialog, DialogContent, DialogFooter, EmptyState, Field, Grid, Input, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, cn,
+  Dialog, DialogContent, DialogFooter, EmptyState, Field, Grid, Input, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, cn,
 } from "@kb/ui";
 import { canEditDeclaration, isDeclarationFieldEditable } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,6 +27,8 @@ import { fieldTitle, groupDeclarationFields, ROLE_INFO, type RoledField } from "
 import { provenanceLabel } from "./provenance";
 import type { StepProps } from "./types";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
+import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
+import { LoadError } from "@/components/common/load-error";
 
 const DATE_CODES = new Set(["NGAY_DK", "NGAY_DEN", "NGAY_DI", "NGAY_HD", "HAN_TX", "HAN_TN"]);
 
@@ -369,7 +371,7 @@ function EditFieldDialog({ dossierId, kind, field, currency, onClose }: { dossie
   );
 }
 
-const TABS = ["general", "full", "items", "tax", "docs", "customs"] as const;
+const TABS = ["general", "full", "items", "tax", "docs", "customs", "ops"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
@@ -522,11 +524,10 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               </TabsTrigger>
               <TabsTrigger value="tax">Thuế & chính sách</TabsTrigger>
               <TabsTrigger value="docs">Chứng từ đính kèm</TabsTrigger>
-              {customsInfo && (
-                <TabsTrigger value="customs">
-                  Hải quan trả về {customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge>}
-                </TabsTrigger>
-              )}
+              <TabsTrigger value="customs">
+                Hải quan trả về {customsInfo ? customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge> : <Badge tone="neutral">chưa có</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="ops">Theo dõi & nghiệp vụ</TabsTrigger>
             </TabsList>
             <TabsContent value="general">
               <GeneralTab decl={decl} currency={dossier.currency} errors={errs} onEdit={isDraft && canEdit ? setEditing : undefined} />
@@ -543,15 +544,26 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <TabsContent value="docs">
               <DocumentsTab dossierId={dossier.id} />
             </TabsContent>
-            {customsInfo && (
-              <TabsContent value="customs">
-                <CustomsInfoPanel
-                  kind={decl.kind}
-                  info={customsInfo}
-                  estimate={{ customsValueVnd: decl.customsValueVnd, exchangeRate: decl.exchangeRate, ...(decl.kind === "IDA" ? { taxVnd: totalTax } : {}) }}
-                />
-              </TabsContent>
-            )}
+            <TabsContent value="customs">
+              {subQ.isLoading ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
+                <Stack gap="lg">
+                  {/* Tóm tắt + so với số ứng dụng ước tính, rồi đủ chỉ tiêu Hải quan trả về theo Phụ lục II. */}
+                  {customsInfo && (
+                    <CustomsInfoPanel
+                      kind={decl.kind}
+                      info={customsInfo}
+                      estimate={{ customsValueVnd: decl.customsValueVnd, exchangeRate: decl.exchangeRate, ...(decl.kind === "IDA" ? { taxVnd: totalTax } : {}) }}
+                    />
+                  )}
+                  <DossierCustomsTab kind={decl.kind} submission={subQ.data} items={items} />
+                </Stack>
+              )}
+            </TabsContent>
+            <TabsContent value="ops">
+              {subQ.isLoading ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
+                <DossierOperationsTab kind={decl.kind} submission={subQ.data} onGoSubmit={isDraft ? undefined : () => goTo("submit")} />
+              )}
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>

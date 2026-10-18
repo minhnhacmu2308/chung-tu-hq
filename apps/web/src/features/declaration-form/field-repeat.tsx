@@ -118,7 +118,8 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
   return (
     <FieldFrame data-missing={firstRowMissing || undefined} legend={legend} legendAction={guide} className={box}>
       {/* relative: chữ ẩn (sr-only, định vị tuyệt đối) trong ô bảng nằm trong khung cuộn – không thoát ra làm trang tràn ngang. */}
-      <div className="relative min-w-0 overflow-x-auto">
+      {/* Chỉ đọc (không có ô nhập để Tab tới): khung cuộn nhận focus để cuộn ngang bằng bàn phím. */}
+      <div className="relative min-w-0 overflow-x-auto rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" {...(readOnly ? { tabIndex: 0, role: "group", "aria-label": `${repeat.label} – cuộn ngang để xem hết` } : {})}>
         {/* kb-allow-raw: lưới sửa trực tiếp các dòng của nhóm lặp (vận đơn, giấy phép, khoản điều chỉnh…); DataTable chưa hỗ trợ ô sửa được */}
         <table className="text-sm">
           <thead>

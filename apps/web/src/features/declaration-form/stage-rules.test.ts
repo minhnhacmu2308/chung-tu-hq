@@ -1,7 +1,7 @@
 import { LAYOUT_EDA, LAYOUT_IDA } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { fixtureFor, valuesAt } from "./fixtures";
-import { changedCount, declarantEditable, lookupsAt, operationsAt, summaryAt, taxSummary } from "./stage-rules";
+import { changedCount, declarantEditable, lookupsAt, operationsAt, summaryAt, taxAmount, taxSummary } from "./stage-rules";
 
 describe("declarantEditable – phần người khai nhập theo giai đoạn", () => {
   it("nháp sửa được; đã khai chỉ sửa khi đang khai sửa đổi bổ sung; đã thông quan chỉ đọc", () => {
@@ -60,5 +60,14 @@ describe("taxSummary – thông tin thuế tờ khai", () => {
     const t = taxSummary("EDA", h)!;
     expect(t.rate).toEqual({ currency: "USD", value: h["TK_RD1"] });
     expect(t.lines).toEqual([{ label: "Thuế xuất khẩu", value: "0" }]);
+  });
+});
+
+describe("taxAmount – số thuế / tỷ giá hiện có phân tách hàng nghìn", () => {
+  it("số nguyên, số lẻ, số âm định dạng; chữ giữ nguyên", () => {
+    expect(taxAmount("155000")).toBe("155.000");
+    expect(taxAmount("25450.5")).toBe("25.450,5");
+    expect(taxAmount("-1200")).toBe("-1.200");
+    expect(taxAmount("Miễn")).toBe("Miễn");
   });
 });

@@ -8,7 +8,8 @@ import type { ConditionId } from "../declaration/conditions.js";
  */
 /** choice: chọn một trong `options` (ô riêng của phần mềm, mã trạng thái của nghiệp vụ). */
 export type FieldInput = "text" | "code" | "date" | "time" | "number" | "textarea" | "choice";
-export type FieldOption = { value: string; label: string; description?: string };
+/** `short` / `full`: chữ viết tắt của lựa chọn và ý nghĩa hiện khi bấm (short-labels.ts). */
+export type FieldOption = { value: string; label: string; description?: string; short?: string; full?: string };
 /** DECLARANT: người khai nhập; CUSTOMS: Hải quan cấp/tính, chỉ đọc. */
 export type FieldOrigin = "DECLARANT" | "CUSTOMS";
 
@@ -28,6 +29,8 @@ export type LayoutField = {
   required?: boolean;
   /** Chữ viết tắt khi tên dài làm vỡ lưới form (vd "Mã PLHH") – giao diện hiện chữ này, bấm vào xem tên đầy đủ. Gắn ở short-labels.ts. */
   short?: string;
+  /** Ý nghĩa hiện khi bấm chữ viết tắt; không có → hiện `label`. */
+  full?: string;
 };
 /** Chỉ tiêu nhiều ô con nằm ngang (địa chỉ 4 dòng, tổng trị giá 4 ô…). */
 export type LayoutGroup = {

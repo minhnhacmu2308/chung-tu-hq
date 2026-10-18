@@ -4,7 +4,7 @@
 // tra cứu bằng danh sách thả xuống / popup (CodeInput); chỉ đọc thì hiện "mã · tên". Tùy chọn nhãn bên trái (phương án F). "Còn thiếu", lý do áp dụng.
 import { Abbreviation, Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
 import type { ReactNode } from "react";
-import { codeListFor, DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type LayoutField } from "@kb/contracts";
+import { codeListFor, DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type FieldOption, type LayoutField } from "@kb/contracts";
 import { Info, Lock } from "lucide-react";
 import { useMemo } from "react";
 import { useAmendLock } from "./amend-context";
@@ -70,10 +70,12 @@ export function GuideButton({ kind, no, role }: { kind: Kind; no: string | undef
 }
 
 /** Nhãn ô: "số · tên"; tên dài có chữ viết tắt (short-labels) → hiện chữ viết tắt, bấm xem tên đầy đủ. Ô con trong nhóm không lặp số chỉ tiêu. */
-export function fieldLabelNode(f: Pick<LayoutField, "no" | "label" | "short">, withNo = true): ReactNode {
-  const name = f.short ? <Abbreviation short={f.short} full={f.label} /> : f.label;
+export function fieldLabelNode(f: Pick<LayoutField, "no" | "label" | "short" | "full">, withNo = true): ReactNode {
+  const name = f.short ? <Abbreviation short={f.short} full={f.full ?? f.label} /> : f.label;
   return withNo && f.no ? <>{f.no} · {name}</> : name;
 }
+/** Lựa chọn có chữ viết tắt (vd "SXXK") → hiện chữ viết tắt, bấm xem ý nghĩa. */
+const optionLabel = (o: FieldOption): ReactNode => (o.short ? <Abbreviation short={o.short} full={o.full ?? o.label} /> : o.label);
 
 /** Bề rộng ô con trong nhóm – xs 112px đủ một dòng cho nhãn ngắn ~15 ký tự (“Công thức chuẩn”). */
 const WIDTH: Record<NonNullable<LayoutField["width"]>, string> = { xs: "w-28", sm: "w-40", md: "w-64", lg: "w-full", full: "w-full" };
@@ -142,7 +144,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
 
   if (field.input === "choice") {
-    const options = field.options ?? [];
+    const options = (field.options ?? []).map((o) => ({ ...o, label: optionLabel(o) }));
     return (
       <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
         <div className="flex items-start gap-1">

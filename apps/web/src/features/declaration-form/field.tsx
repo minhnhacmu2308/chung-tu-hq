@@ -140,7 +140,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   // "Có vì: …" nằm trong hướng dẫn ⓘ (ô con: ⓘ của nhóm – groupGuideReason); chỉ "Không áp dụng vì: …" (xem tất cả ô) ghi dưới ô.
   const reasonInGuide = !compact && applicable;
   const shownReason = applicable ? undefined : reason;
-  const guide = compact || field.hideLabel ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
+  const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
   const missingNote = missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
   // Ô đứng riêng: khung viền, tên trên đường viền – cùng kiểu với nhóm ô / nhóm lặp trên mọi màn hình. Nhãn bên trái (F) giữ kiểu cũ.
@@ -160,7 +160,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     if (framed && !radio) {
       return (
         <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
-          <FieldFrame legend={label} legendAction={guide} hideLegend={Boolean(field.hideLabel)} className="flex-1">
+          <FieldFrame legend={label} legendAction={guide} className="flex-1">
             {shownReason && <p className="text-xs text-fg-subtle">{shownReason}</p>}
             {checkboxes}
           </FieldFrame>
@@ -176,9 +176,9 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
               <RadioGroup orientation="horizontal" framed={framed} legendAction={framed ? guide : null} label={<>{title}<RoleMark role={role} /></>} description={shownReason} options={options} value={value || null} onChange={set} />
             ) : (
               <fieldset className="min-w-0">
-                <legend className={cn("text-sm font-medium text-fg", field.hideLabel && "sr-only")}>{label}</legend>
+                <legend className="text-sm font-medium text-fg">{label}</legend>
                 {shownReason && <p className="mt-0.5 text-xs text-fg-subtle">{shownReason}</p>}
-                <div className={cn(!field.hideLabel && "mt-1.5")}>{checkboxes}</div>
+                <div className="mt-1.5">{checkboxes}</div>
               </fieldset>
             )}
           </div>

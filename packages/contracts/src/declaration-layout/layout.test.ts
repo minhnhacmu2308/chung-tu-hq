@@ -121,8 +121,9 @@ describe("Mã PTVC khai trước ở đầu khối Vận đơn", () => {
 });
 
 describe("Vận đơn & vận chuyển – HAWB", () => {
-  it("HAWB: chỉ ô chọn 'Có phát hành HAWB', không nhãn / hướng dẫn riêng", () => {
+  it("HAWB: tên 'HAWB' trên đường viền như các khung khác, lựa chọn 'Có HAWB'", () => {
     const hawb = LAYOUT_IDA.declarant.flatMap((s) => s.blocks).flatMap((b) => b.items).find((it) => it.kind === "field" && it.key === "APP_HAWB_CO");
-    expect(hawb).toMatchObject({ hideLabel: true, options: [{ label: "Có phát hành HAWB" }] });
+    expect(hawb).toMatchObject({ short: "HAWB", options: [{ value: "CO", label: "Có HAWB" }] });
+    expect(hawb).not.toHaveProperty("hideLabel");
   });
 });

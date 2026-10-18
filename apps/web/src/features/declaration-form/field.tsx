@@ -1,35 +1,42 @@
 "use client";
-// Một ô chỉ tiêu của bản mẫu tờ khai: nhãn "số · tên", vai trò, hướng dẫn khai (catalog Phụ lục II), "Còn thiếu", lý do áp dụng / không áp dụng.
-import { Badge, Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
+// Một ô chỉ tiêu của bản mẫu tờ khai, dạng gọn (phương án B): nhãn "số · tên" kèm dấu * (bắt buộc) hoặc chữ nhỏ "tình huống" / "tự xác định";
+// tên mã hiện ngay bên phải ô mã; nút ⓘ mở hướng dẫn khai (catalog Phụ lục II). Tùy chọn nhãn bên trái (phương án F). "Còn thiếu", lý do áp dụng.
+import { Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
 import { DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type LayoutField } from "@kb/contracts";
 import { Info, Lock } from "lucide-react";
 import { useAmendLock } from "./amend-context";
-import { ROLE_INFO } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
 import { codeLabel, displayValue, fieldTitle } from "./display";
 import { choiceControl, isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
+import { useViewPrefs } from "./view-prefs";
 
 type Kind = "IDA" | "EDA";
 
-export function RoleBadge({ role }: { role: DeclarationFieldRole }) {
-  const info = ROLE_INFO[role];
-  return (
-    <Badge tone={info.tone} size="sm">
-      <span className="sr-only">Vai trò: </span>
-      {info.label}
-    </Badge>
-  );
+/** Chữ nhỏ cạnh nhãn thay cho huy hiệu vai trò. Bắt buộc → dấu * (trình đọc màn hình nghe "bắt buộc"). Không bắt buộc → không ghi gì. */
+const ROLE_TAG: Partial<Record<DeclarationFieldRole, string>> = { CONDITIONAL: "tình huống", ASSIST: "tự xác định", UNUSED: "chưa dùng", REFERENCE: "tham khảo" };
+
+export function RoleMark({ role, star = true }: { role: DeclarationFieldRole; star?: boolean }) {
+  if (role === "REQUIRED") {
+    return star ? (
+      <>
+        <span className="ml-0.5 text-danger" aria-hidden="true">*</span>
+        <span className="sr-only"> (bắt buộc)</span>
+      </>
+    ) : null;
+  }
+  const tag = ROLE_TAG[role];
+  return tag ? <span className="ml-1.5 text-xs font-normal text-fg-subtle">{tag}</span> : null;
 }
 
-/** Nút mở hướng dẫn khai của chỉ tiêu (Phụ lục II, ghi chú nếu TT121 sửa đổi). Không có hướng dẫn → không hiện. */
+/** Nút ⓘ mở hướng dẫn khai của chỉ tiêu (Phụ lục II, ghi chú nếu TT121 sửa đổi). Không có hướng dẫn → không hiện. */
 export function GuideButton({ kind, no }: { kind: Kind; no: string | undefined }) {
   const guide = fieldGuide(kind, no);
   if (!guide) return null;
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="ghost" className="-my-1 h-6 px-1.5 text-xs" leftIcon={<Info className="h-3.5 w-3.5" />} aria-label={`Hướng dẫn khai chỉ tiêu ${guide.no}`}>
-          Hướng dẫn
+        <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-fg-muted" aria-label={`Hướng dẫn khai chỉ tiêu ${guide.no}`}>
+          <Info className="h-4 w-4" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-w-sm text-sm" showClose>
@@ -68,6 +75,7 @@ export type FormFieldProps = {
 export function FormField({ kind, field, values, onChange, ctx, showInapplicable, parentNo, parentCondition, compact = false, fill = false, suppressMissing = false }: FormFieldProps) {
   // Khai sửa đổi bổ sung: chỉ tiêu không được sửa hiện chỉ đọc kèm lý do.
   const lock = useAmendLock()(field.key);
+  const { labelsLeft } = useViewPrefs();
   const applicable = isApplicable(field, ctx);
   if (!applicable && !showInapplicable) return null;
   const value = values[field.key] ?? "";
@@ -92,53 +100,62 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     );
   }
 
+  const role = fieldRole(kind, field, parentNo);
   const condition = field.condition ? DECLARATION_CONDITIONS[field.condition].label : undefined;
+  const reason = condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : undefined;
   const name = codeLabel(field.codeTable, value);
-  const hint = [name ? `→ ${name}` : null, condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : null].filter(Boolean).join(" · ") || undefined;
   const missing = !suppressMissing && applicable && missingRequired(kind, field, values, parentNo, parentCondition, ctx);
   const set = (v: string) => onChange?.(field.key, v);
+  const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} />;
+  const missingNote = missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>;
+  const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
+
   if (field.input === "choice") {
+    const options = field.options ?? [];
     return (
-      <div className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
-        {choiceControl(kind, field, parentNo) === "radio" ? (
-          <RadioGroup label={title} description={hint} options={field.options ?? []} value={value || null} onChange={set} />
-        ) : (
-          <fieldset className="min-w-0">
-            <legend className="text-sm font-medium text-fg">{title}</legend>
-            {hint && <p className="mt-0.5 text-xs text-fg-muted">{hint}</p>}
-            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
-              {(field.options ?? []).map((o) => (
-                <Checkbox key={o.value} label={o.label} checked={value === o.value} onChange={() => set(toggleChoice(value, o.value))} />
-              ))}
-            </div>
-          </fieldset>
-        )}
-        {!compact && (
-          <div className="flex flex-wrap items-center gap-2">
-            <RoleBadge role={fieldRole(kind, field, parentNo)} />
-            <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} />
+      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+        <div className="flex items-start gap-1">
+          <div className="min-w-0 flex-1">
+            {choiceControl(kind, field, parentNo) === "radio" ? (
+              <RadioGroup label={<>{title}<RoleMark role={role} /></>} description={reason} options={options} value={value || null} onChange={set} />
+            ) : (
+              <fieldset className="min-w-0">
+                <legend className="text-sm font-medium text-fg">{label}</legend>
+                {reason && <p className="mt-0.5 text-xs text-fg-subtle">{reason}</p>}
+                <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-2">
+                  {options.map((o) => (
+                    <Checkbox key={o.value} label={o.label} checked={value === o.value} onChange={() => set(toggleChoice(value, o.value))} />
+                  ))}
+                </div>
+              </fieldset>
+            )}
           </div>
-        )}
-        {missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>}
+          {guide}
+        </div>
+        {missingNote}
       </div>
     );
   }
+
+  const inline = !compact && Boolean(name) && !spansRow(field);
   const control =
-    field.input === "textarea" ? <Textarea rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
-    : <Input type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
+    field.input === "textarea" ? <Textarea className={compact ? undefined : "min-w-0 flex-1"} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
+    : <Input className={compact ? undefined : inline ? "w-32 shrink-0" : "min-w-0 flex-1"} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
+  // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô, nút ⓘ cuối hàng.
+  const hint = [compact && name ? `→ ${name}` : null, reason].filter(Boolean).join(" · ") || undefined;
 
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
-      <Field label={title} hint={hint}>
-        {control}
+    <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
+        {compact ? control : (
+          <div className="flex min-w-0 items-center gap-2">
+            {control}
+            {inline && <span className="min-w-0 text-xs text-fg-subtle">{name}</span>}
+            {guide}
+          </div>
+        )}
       </Field>
-      {!compact && (
-        <div className="flex flex-wrap items-center gap-2">
-          <RoleBadge role={fieldRole(kind, field, parentNo)} />
-          <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} />
-        </div>
-      )}
-      {missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>}
+      {missingNote}
     </div>
   );
 }

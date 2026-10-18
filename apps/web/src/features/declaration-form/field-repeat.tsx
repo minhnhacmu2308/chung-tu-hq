@@ -1,12 +1,14 @@
 "use client";
-// Nhóm lặp (5 vận đơn, 5 giấy phép, 5 khoản điều chỉnh, 10 chỉ thị, 50 container…): dòng có dữ liệu + dòng trống, nút "Thêm dòng".
-import { Button, cn, Grid } from "@kb/ui";
-import { expandRepeat, fieldRole, type ConditionContext, type ConditionId, type LayoutRepeat } from "@kb/contracts";
-import { Plus } from "lucide-react";
+// Nhóm lặp (5 vận đơn, 5 giấy phép, 5 khoản điều chỉnh, 10 chỉ thị…) dạng bảng (phương án C): nhãn ở tiêu đề cột, mỗi dòng một hàng,
+// nút "Thêm dòng". 50 số container: lưới. Bảng hẹp hơn nội dung thì cuộn ngang trong khung, trang không tràn.
+import { Button, Checkbox, cn, Grid, Input } from "@kb/ui";
+import { expandRepeat, fieldRole, type ConditionContext, type ConditionId, type LayoutField, type LayoutRepeat } from "@kb/contracts";
+import { Lock, Plus } from "lucide-react";
 import { useState } from "react";
-import { fieldTitle, visibleRows } from "./display";
-import { FormField, GuideButton, RoleBadge } from "./field";
-import { isApplicable, type FormValues } from "./form-state";
+import { useAmendLock } from "./amend-context";
+import { displayValue, fieldTitle, visibleRows } from "./display";
+import { FormField, GuideButton, RoleMark } from "./field";
+import { isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 
 type Props = {
   kind: "IDA" | "EDA";
@@ -19,8 +21,42 @@ type Props = {
   parentCondition?: ConditionId | undefined;
 };
 
-/** 50 số container: lưới thay vì từng dòng. */
+/** 50 số container: lưới thay vì bảng. */
 const isGrid = (r: LayoutRepeat) => r.fields.length === 1 && r.count > 10;
+const WIDTH: Record<NonNullable<LayoutField["width"]>, string> = { xs: "w-24", sm: "w-40", md: "w-56", lg: "w-64", full: "w-64" };
+
+function Cell({ f, n, values, onChange }: { f: LayoutField; n: number; values: FormValues; onChange: ((key: string, value: string) => void) | undefined }) {
+  const lock = useAmendLock()(f.key);
+  const value = values[f.key] ?? "";
+  const name = `${f.label} dòng ${n}`;
+  if (!onChange || lock || f.origin === "CUSTOMS") {
+    return (
+      <span className="flex items-start gap-1 break-words text-sm text-fg">
+        {lock && onChange && (
+          <>
+            <Lock aria-hidden="true" className="mt-1 h-3 w-3 shrink-0 text-fg-muted" />
+            <span className="sr-only">{lock.reason}: </span>
+          </>
+        )}
+        {displayValue(f, value) || "—"}
+      </span>
+    );
+  }
+  if (f.input === "choice") {
+    const opt = f.options?.[0];
+    return opt ? <Checkbox label={<span className="sr-only">{`${name}: ${opt.label}`}</span>} checked={value === opt.value} onChange={() => onChange(f.key, toggleChoice(value, opt.value))} /> : null;
+  }
+  return (
+    <Input
+      aria-label={name}
+      className={cn("h-9", WIDTH[f.width ?? "sm"])}
+      type={f.input === "date" ? "date" : f.input === "time" ? "time" : "text"}
+      inputMode={f.input === "number" ? "decimal" : undefined}
+      value={value}
+      onChange={(e) => onChange(f.key, e.currentTarget.value)}
+    />
+  );
+}
 
 export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapplicable, parentCondition }: Props) {
   const [extra, setExtra] = useState(0);
@@ -29,47 +65,85 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
   const readOnly = !onChange || repeat.fields.every((f) => f.origin === "CUSTOMS");
   const rows = visibleRows(repeat, values, extra, readOnly);
   if (readOnly && rows.length === 0) return null;
-  const all = expandRepeat(repeat);
-  const indexOf = (key: string) => all.findIndex((r) => r[0]?.key === key) + 1;
-  /** Khóa ô đầu của dòng chứa ô `key`. */
-  const rowKey = (key: string) => all.find((r) => r.some((f) => f.key === key))?.[0]?.key ?? key;
   const first = repeat.fields[0];
-  // Nhóm lặp bắt buộc khi có ít nhất dòng 1 (giống bộ đếm sectionProgress) – dòng thêm không tự báo thiếu.
-  const field = (f: (typeof rows)[number][number]) => (
-    <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={repeat.no ?? f.no} parentCondition={repeat.condition ?? parentCondition} compact={!f.no} fill={isGrid(repeat)} suppressMissing={indexOf(rowKey(f.key)) > 1} />
+  const condition = repeat.condition ?? parentCondition;
+  const legend = (
+    <legend className="px-1 text-xs font-medium text-fg-muted">
+      {fieldTitle(repeat.no, repeat.label)} <span className="font-normal text-fg-subtle">(tối đa {repeat.count})</span>
+      {!readOnly && first && repeat.no && <RoleMark role={fieldRole(kind, first, repeat.no)} />}
+    </legend>
   );
-  return (
-    <fieldset className={cn("col-span-full flex min-w-0 flex-col gap-2 rounded-md border border-border px-3 pb-3 pt-1", !applicable && "opacity-60")}>
-      <legend className="px-1 text-xs font-medium text-fg-muted">
-        {fieldTitle(repeat.no, repeat.label)} <span className="font-normal text-fg-subtle">(tối đa {repeat.count})</span>
-      </legend>
-      {!readOnly && first && repeat.no && (
-        <div className="flex flex-wrap items-center gap-2">
-          <RoleBadge role={fieldRole(kind, first, repeat.no)} />
-          <GuideButton kind={kind} no={repeat.no} />
-        </div>
-      )}
-      {isGrid(repeat) ? (
-        <Grid cols={{ base: 2, md: 4 }} gap="sm">
-          {rows.map((row) => row.map(field))}
-        </Grid>
-      ) : (
-        <ol className="flex flex-col gap-3">
-          {rows.map((row) => (
-            <li key={row[0]!.key} className="flex flex-wrap items-start gap-3">
-              <span className="w-6 pt-7 text-xs tabular-nums text-fg-subtle" aria-hidden="true">
-                ({indexOf(row[0]!.key)})
-              </span>
-              {row.map(field)}
-            </li>
-          ))}
-        </ol>
-      )}
-      {!readOnly && rows.length < repeat.count && (
-        <Button size="sm" variant="ghost" className="self-start" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setExtra((n) => n + 1)}>
+  const footer = !readOnly && (
+    <div className="flex flex-wrap items-center gap-2">
+      {rows.length < repeat.count && (
+        <Button size="sm" variant="ghost" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setExtra((n) => n + 1)}>
           Thêm dòng
         </Button>
       )}
+      <GuideButton kind={kind} no={repeat.no} />
+    </div>
+  );
+  const box = cn("col-span-full flex min-w-0 flex-col gap-2 rounded-md border border-border px-3 pb-2 pt-1", !applicable && "opacity-60");
+
+  if (isGrid(repeat)) {
+    const all = expandRepeat(repeat);
+    const indexOf = (key: string) => all.findIndex((r) => r[0]?.key === key) + 1;
+    return (
+      <fieldset className={box}>
+        {legend}
+        <Grid cols={{ base: 2, md: 4 }} gap="sm">
+          {rows.map((row) =>
+            row.map((f) => (
+              <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={repeat.no ?? f.no} parentCondition={condition} compact fill suppressMissing={indexOf(f.key) > 1} />
+            )),
+          )}
+        </Grid>
+        {footer}
+      </fieldset>
+    );
+  }
+
+  // Cột theo ô mẫu của nhóm lặp; ô có điều kiện (số HAWB khi hàng không có HAWB) chỉ thành cột khi đang áp dụng.
+  const cols = repeat.fields.map((f, i) => ({ f, i })).filter(({ f }) => isApplicable(f, ctx) || showInapplicable);
+  // Như bộ đếm sectionProgress: nhóm lặp bắt buộc khi có ít nhất dòng 1 – dòng thêm không tự báo thiếu.
+  const firstRowMissing = !readOnly && applicable && (rows[0] ?? []).some((f) => isApplicable(f, ctx) && missingRequired(kind, f, values, repeat.no ?? f.no, condition, ctx));
+  return (
+    <fieldset data-missing={firstRowMissing || undefined} className={box}>
+      {legend}
+      <div className="min-w-0 overflow-x-auto">
+        {/* kb-allow-raw: lưới sửa trực tiếp các dòng của nhóm lặp (vận đơn, giấy phép, khoản điều chỉnh…); DataTable chưa hỗ trợ ô sửa được */}
+        <table className="text-sm">
+          <thead>
+            <tr>
+              <th scope="col" className="w-8 pb-1 pr-2 text-left text-xs font-medium text-fg-muted">
+                <span className="sr-only">Dòng</span>
+              </th>
+              {cols.map(({ f }) => (
+                <th key={f.key} scope="col" className={cn("pb-1 pr-2 text-left text-xs font-medium text-fg-muted", !isApplicable(f, ctx) && "opacity-60")}>
+                  {f.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, r) => {
+              const n = expandRepeat(repeat).findIndex((x) => x[0]?.key === row[0]?.key) + 1;
+              return (
+                <tr key={row[0]!.key}>
+                  <td className="pb-1.5 pr-2 align-middle text-xs tabular-nums text-fg-subtle">({n || r + 1})</td>
+                  {cols.map(({ f, i }) => (
+                    <td key={f.key} className={cn("pb-1.5 pr-2 align-middle", !isApplicable(f, ctx) && "opacity-60", readOnly && "min-w-24 max-w-md")}>
+                      {row[i] && <Cell f={row[i]} n={n || r + 1} values={values} onChange={readOnly ? undefined : onChange} />}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {firstRowMissing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu ở dòng 1</p>}
+      {footer}
     </fieldset>
   );
 }

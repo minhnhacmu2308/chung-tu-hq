@@ -247,6 +247,11 @@
   top: calc(var(--kb-shell-top) + 1rem);
 }
 
+/* Thanh dính sát mép trên vùng nội dung (thanh chọn nhóm trên mobile): không chừa khe 1rem để nội dung cuộn lộ phía trên. */
+@utility top-shell-flush {
+  top: var(--kb-shell-top);
+}
+
 /* Mép phải của cột dính trong bảng: một đường kẻ mảnh để thấy ranh giới khi nội dung cuộn ngang bên dưới. */
 @utility sticky-col-edge {
   box-shadow: inset -1px 0 0 var(--kb-color-border);

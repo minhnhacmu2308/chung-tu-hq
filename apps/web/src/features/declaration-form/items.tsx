@@ -54,7 +54,7 @@ export function ItemsSection({ layout, items, onItemChange, showInapplicable }: 
           <DialogContent title={`Dòng ${open + 1}${current["HAG_CMD"] ? ` · HS ${current["HAG_CMD"]}` : ""}`} icon={<Package className="h-4 w-4" />} description="Chỉ tiêu dòng hàng – phần người khai nhập và phần Hải quan tính" size="lg">
             <Stack gap="md">
               {layout.item.declarant.map((b) => (
-                <BlockView key={b.id} kind={kind} block={b} values={current} onChange={onItemChange && ((k, v) => onItemChange(open, k, v))} ctx={conditionContext(kind, current)} showInapplicable={showInapplicable} />
+                <BlockView key={b.id} kind={kind} block={b} values={current} onChange={onItemChange && ((k, v) => onItemChange(open, k, v))} ctx={conditionContext(kind, current)} showInapplicable={showInapplicable} compactable />
               ))}
               {layout.item.customs.map((b) => (
                 <BlockView key={b.id} kind={kind} block={b} values={current} ctx={conditionContext(kind, current)} showInapplicable={showInapplicable} />

@@ -72,4 +72,21 @@ describe("Field + control", () => {
     );
     await expectNoA11yViolations(container);
   });
+
+  it("orientation=\"horizontal\": nhãn bên trái ở vùng nội dung rộng – vẫn gắn nhãn, gợi ý, lỗi đúng chuẩn", async () => {
+    const { container } = render(
+      <Field label="Số hóa đơn" hint="Theo invoice" error="Thiếu" orientation="horizontal">
+        <Input />
+      </Field>,
+    );
+    const input = screen.getByLabelText("Số hóa đơn");
+    expect(input).toHaveAccessibleDescription("Theo invoice Thiếu");
+    expect(container.firstElementChild).toHaveAttribute("data-orientation", "horizontal");
+    await expectNoA11yViolations(container);
+  });
+
+  it("mặc định dọc (nhãn trên ô)", () => {
+    const { container } = render(<Field label="Tên"><Input /></Field>);
+    expect(container.firstElementChild).toHaveAttribute("data-orientation", "vertical");
+  });
 });

@@ -107,7 +107,8 @@ export function PageHeader({ title, description, actions, className }: PageHeade
           </p>
         )}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {/* Không shrink-0: nhóm nút rộng hơn màn hẹp thì tự xuống dòng thay vì đẩy trang tràn ngang. */}
+      {actions && <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

@@ -78,7 +78,7 @@ export default async function RootLayout({ children }) {
 | Component | Dùng cho |
 |---|---|
 | `Button` (`primary/secondary/ghost/danger/link`, `sm/md/lg/icon`, `loading`, `asChild`) | Mọi nút. `asChild` để bọc `<Link>` |
-| `Field` + `Input` / `Textarea` / `Select` / `Checkbox` | Mọi ô nhập. Field tự gắn nhãn, gợi ý, lỗi, `aria-*`. `Select` và `Checkbox` vẫn là control gốc của trình duyệt nhưng tự vẽ mũi tên / ô đánh dấu (utility `kb-checkbox`) để đồng bộ giữa các hệ điều hành |
+| `Field` + `Input` / `Textarea` / `Select` / `Checkbox` | Mọi ô nhập. Field tự gắn nhãn, gợi ý, lỗi, `aria-*`. `Select` và `Checkbox` vẫn là control gốc của trình duyệt nhưng tự vẽ mũi tên / ô đánh dấu (utility `kb-checkbox`) để đồng bộ giữa các hệ điều hành. `orientation="horizontal"`: nhãn bên trái (2/5), ô bên phải khi vùng nội dung từ mốc `cq-md` – cho form dày ô như tờ khai |
 | `Card` (`Header/Title/Description/Content/Footer`) | Khối nội dung |
 | `Grid` (`cols={{ base:1, md:2, lg:4 }}`), `Stack` | Bố cục. Không tự viết `grid-cols-*` rời rạc. Mốc cột của `Grid` đo theo **vùng nội dung** (container query, biến thể `cq-sm/md/lg/xl`), không theo màn hình: panel neo bên phải hay popup hẹp thì thẻ tự xuống hàng. Cần tổ tiên `@container` – đã có ở `<main>` các shell, trang đăng nhập và thân `DialogContent` |
 | `PageHeader` | Tiêu đề + mô tả + hành động của mỗi trang |
@@ -165,5 +165,5 @@ Thoát hiểm (rất hiếm, reviewer phải đồng ý): comment `kb-allow-raw:
 - Tự dựng lại thứ đã có component chuẩn: KPI (→ `StatCard`), nhóm form (→ `FormSection`), nhãn trạng thái nghiệp vụ (→ `StatusBadge`), báo lỗi tải (→ `LoadError`). Bảng tra đầy đủ: skill `building-frontend-feature`, mục "Cần gì → dùng gì".
 - `useMutation` không có `onError` – thao tác thất bại trong im lặng. Mặc định dùng `toastMutationError`.
 - Khai báo bảng trạng thái `{ label, tone }` trong feature – cùng một trạng thái sẽ lệch nhãn giữa các màn. Thêm vào `STATUS_META`.
-- Chiều cao cứng cho nội dung trong `Dialog`, `top-0`/`top-4` cho phần tử dính – dùng `dialog-fill`, `top-shell`.
+- Chiều cao cứng cho nội dung trong `Dialog`, `top-0`/`top-4` cho phần tử dính – dùng `dialog-fill`, `top-shell` (cách mép 1rem) hoặc `top-shell-flush` (sát mép, cho thanh dính cần nền liền như thanh chọn nhóm trên mobile).
 - Báo "xong" một thay đổi giao diện khi chưa mở trình duyệt thật (sáng + tối, desktop + mobile). Cách đo: skill `adding-ui-component`, mục "Kiểm tra bằng trình duyệt".

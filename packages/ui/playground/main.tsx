@@ -183,6 +183,9 @@ function Demo() {
                       <Field label="Ghi chú nội bộ" className="md:col-span-2">
                         <Textarea placeholder="Ví dụ: số PO, cảng hàng về" />
                       </Field>
+                      <Field label="Số tờ khai đầu tiên" orientation="horizontal" hint="Nhãn bên trái – form dày ô như tờ khai" className="md:col-span-2">
+                        <Input placeholder="107284900661" />
+                      </Field>
                     </Grid>
                     <DialogFooter>
                       <Button variant="ghost">Huỷ</Button>

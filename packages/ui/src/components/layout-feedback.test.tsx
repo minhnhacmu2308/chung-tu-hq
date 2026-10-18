@@ -27,6 +27,13 @@ describe("Card / PageHeader", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Hồ sơ" })).toBeInTheDocument();
     expect(screen.getByText("Danh sách hồ sơ")).toHaveAttribute("data-slot", "page-description");
   });
+
+  it("PageHeader: nhóm nút được co và xuống dòng – không đẩy trang tràn ngang trên màn hẹp", () => {
+    render(<PageHeader title="Tờ khai" actions={<button type="button">Lọc</button>} />);
+    const actions = screen.getByRole("button", { name: "Lọc" }).parentElement!;
+    expect(actions).toHaveClass("flex-wrap", "max-w-full", "min-w-0");
+    expect(actions).not.toHaveClass("shrink-0");
+  });
 });
 
 describe("Badge / StatusBadge", () => {

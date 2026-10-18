@@ -47,6 +47,18 @@ describe("RadioGroup", () => {
     render(<RadioGroup label="Q" options={[{ value: "Khác (ghi rõ)", label: "Khác (ghi rõ)", description: "Ghi rõ ở ô trả lời khác" }]} value={null} onChange={() => {}} />);
     expect(screen.getByRole("radio", { name: /^Khác \(ghi rõ\)/ })).toHaveAccessibleDescription("Ghi rõ ở ô trả lời khác");
   });
+  it("xếp ngang (lựa chọn ngắn): báo hướng cho trình đọc màn hình, mặc định dọc; vẫn chọn được, không vi phạm a11y", async () => {
+    const u = userEvent.setup();
+    const short = [{ value: "KD", label: "Kinh doanh" }, { value: "GC", label: "Gia công" }];
+    const onChange = (v: string) => void (document.title = v);
+    const { container, rerender } = render(<RadioGroup label="Nhóm loại hình" options={short} value={null} onChange={onChange} />);
+    expect(screen.getByRole("radiogroup")).toHaveAttribute("aria-orientation", "vertical");
+    rerender(<RadioGroup label="Nhóm loại hình" options={short} value={null} onChange={onChange} orientation="horizontal" />);
+    expect(screen.getByRole("radiogroup")).toHaveAttribute("aria-orientation", "horizontal");
+    await u.click(screen.getByText("Gia công"));
+    expect(document.title).toBe("GC");
+    await expectNoA11yViolations(container);
+  });
   it("không vi phạm a11y", async () => {
     const { container } = render(<Demo initial="cnc" />);
     await expectNoA11yViolations(container);

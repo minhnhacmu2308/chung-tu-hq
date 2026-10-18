@@ -304,6 +304,18 @@ function Demo() {
                   { value: "other", label: "Khác", description: "Ghi rõ ở ô trả lời khác" },
                 ]}
               />
+              <RadioGroup
+                className="mt-4"
+                orientation="horizontal"
+                label="Nhóm loại hình (xếp ngang)"
+                value={machineUse}
+                onChange={setMachineUse}
+                options={[
+                  { value: "cnc", label: "Kinh doanh" },
+                  { value: "3d", label: "Sản xuất xuất khẩu" },
+                  { value: "other", label: "Gia công" },
+                ]}
+              />
               <Stack direction="row" gap="md" className="mt-4" align="center" wrap>
                 <Checkbox label="Đã kiểm tra chứng từ gốc" defaultChecked />
                 <Button size="sm" variant="secondary">Nhỏ</Button>

@@ -145,12 +145,14 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
 
   if (field.input === "choice") {
     const options = (field.options ?? []).map((o) => ({ ...o, label: optionLabel(o) }));
+    const radio = choiceControl(kind, field, parentNo) === "radio";
+    // Radio xếp ngang chiếm cả hàng lưới: không kéo dài một ô thành cột cao đẩy các chỉ tiêu bên cạnh xuống xa (Nhóm loại hình 4 lựa chọn).
     return (
-      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>
+      <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", radio && !compact && !fill ? "col-span-full" : sizeClass)}>
         <div className="flex items-start gap-1">
           <div className="min-w-0 flex-1">
-            {choiceControl(kind, field, parentNo) === "radio" ? (
-              <RadioGroup label={<>{title}<RoleMark role={role} /></>} description={reason} options={options} value={value || null} onChange={set} />
+            {radio ? (
+              <RadioGroup orientation="horizontal" label={<>{title}<RoleMark role={role} /></>} description={reason} options={options} value={value || null} onChange={set} />
             ) : (
               <fieldset className="min-w-0">
                 <legend className="text-sm font-medium text-fg">{label}</legend>

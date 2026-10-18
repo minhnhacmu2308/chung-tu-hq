@@ -1,4 +1,4 @@
-// Nhóm radio dọc: mỗi lựa chọn có nhãn (+ mô tả). Dựa trên fieldset + input radio gốc → phím mũi tên, trình đọc màn hình tự đúng.
+// Nhóm radio (mặc định dọc; orientation="horizontal" cho lựa chọn ngắn xếp một hàng): mỗi lựa chọn có nhãn (+ mô tả). Dựa trên fieldset + input radio gốc → phím mũi tên, trình đọc màn hình tự đúng.
 import { useId, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 
@@ -13,17 +13,19 @@ export type RadioGroupProps<T extends string> = {
   disabled?: boolean;
   /** Ẩn nhãn nhóm (vẫn đọc được bằng trình đọc màn hình). */
   hideLabel?: boolean;
+  /** "horizontal": lựa chọn ngắn xếp một hàng (tự xuống dòng khi hẹp). Mặc định "vertical". */
+  orientation?: "vertical" | "horizontal";
   className?: string;
 };
 
-export function RadioGroup<T extends string>({ label, description, options, value, onChange, disabled, hideLabel, className }: RadioGroupProps<T>) {
+export function RadioGroup<T extends string>({ label, description, options, value, onChange, disabled, hideLabel, orientation = "vertical", className }: RadioGroupProps<T>) {
   const name = useId();
   const descId = `${name}-desc`;
   return (
-    <fieldset role="radiogroup" aria-describedby={description ? descId : undefined} disabled={disabled} className={cn("min-w-0", className)}>
+    <fieldset role="radiogroup" aria-orientation={orientation} aria-describedby={description ? descId : undefined} disabled={disabled} className={cn("min-w-0", className)}>
       <legend className={cn("text-sm font-medium text-fg", hideLabel && "sr-only")}>{label}</legend>
       {description && <p id={descId} className="mt-0.5 text-xs text-fg-muted">{description}</p>}
-      <div className="mt-2 flex flex-col gap-1">
+      <div className={cn("mt-2 flex gap-1", orientation === "horizontal" ? "flex-row flex-wrap" : "flex-col")}>
         {options.map((o, i) => {
           // id theo vị trí: giá trị có thể là nhãn có khoảng trắng/dấu – không dùng được trong aria-describedby.
           const id = `${name}-${i}`;

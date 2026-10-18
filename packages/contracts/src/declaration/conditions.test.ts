@@ -41,4 +41,9 @@ describe("DECLARATION_CONDITIONS – chỉ tiêu theo tình huống", () => {
     expect(C.SPLIT_CONTAINER.test(ctx({ splitCargo: "1" }))).toBe(true);
     expect(C.SPLIT_CONTAINER.test(ctx({ splitCargo: "0" }))).toBe(false);
   });
+  it("MANUAL_VALUE: dòng hàng chọn tự nhập trị giá tính thuế", () => {
+    expect(C.MANUAL_VALUE.test(ctx({ manualValue: true }))).toBe(true);
+    expect(C.MANUAL_VALUE.test(ctx({ manualValue: false }))).toBe(false);
+    expect(C.MANUAL_VALUE.test(ctx({}))).toBe(false);
+  });
 });

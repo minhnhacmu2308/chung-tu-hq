@@ -1,7 +1,7 @@
 // Nghiệp vụ đi kèm vận đơn (nhóm 3 "Vận đơn & vận chuyển"), gửi riêng, không nằm trong tờ khai:
 // khai báo định danh hàng hóa (FPT V5IdentifierReq / V5IdentifierRes) và chia tách vận đơn (TachVanDonReq / TachVanDonRes, mẫu 12).
 // Khóa ô = tên chỉ tiêu trong đặc tả FPT (tailieuchitieukhaibao/KHAI BAO LAY MA DINH DANH v1.1.xlsx, TACH VAN DON.xlsx).
-import { fld, grp, hq, rep } from "./shared.js";
+import { billIdentFields, fld, grp, hq, rep } from "./shared.js";
 import type { FieldOption, LayoutBlock } from "./types.js";
 
 export type TransportOperationForm = {
@@ -71,6 +71,16 @@ export const IDENTIFIER_FORM: TransportOperationForm = {
       ],
     },
   ],
+};
+
+/**
+ * Tờ khai xuất: màn hình tạo mới chỉ có một ô số vận đơn và link "Khai mã định danh hàng hóa" (CHITIEU_XUATKHAU_TAOMOI),
+ * nên lựa chọn định danh theo đường biển / hàng không (không bắt buộc) nằm trong panel này thay vì trên form chính.
+ */
+export const EXPORT_IDENTIFIER_FORM: TransportOperationForm = {
+  ...IDENTIFIER_FORM,
+  menu: "Khai mã định danh hàng hóa",
+  blocks: [{ id: "phuong-thuc", title: "Phương thức khai báo", items: [billIdentFields[0]!] }, ...IDENTIFIER_FORM.blocks],
 };
 
 export const BILL_SPLIT_FORM: TransportOperationForm = {

@@ -1,4 +1,4 @@
-import { BILL_SPLIT_FORM, IDENTIFIER_FORM } from "@kb/contracts";
+import { BILL_SPLIT_FORM, EXPORT_IDENTIFIER_FORM, IDENTIFIER_FORM } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { fixtureFor, valuesAt } from "./fixtures";
 import type { FormValues } from "./form-state";
@@ -9,6 +9,7 @@ describe("operationsFor – nút nghiệp vụ ở nhóm Vận đơn & vận chu
     expect(operationsFor("IDA").map((f) => f.id)).toEqual(["tach-van-don", "dinh-danh"]);
     expect(operationsFor("EDA").map((f) => f.id)).toEqual(["dinh-danh"]);
     expect(operationsFor("IDA").map((f) => f.menu)).toEqual(["Chia tách vận đơn", "Khai báo định danh"]);
+    expect(operationsFor("EDA")).toEqual([EXPORT_IDENTIFIER_FORM]);
   });
 });
 

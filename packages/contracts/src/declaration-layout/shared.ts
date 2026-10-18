@@ -18,6 +18,20 @@ export const billIdentFields: LayoutField[] = [
   fld("APP_HAWB_CO", "Vận đơn thứ cấp (HAWB)", "choice", { condition: "AIR_IDENT", options: [{ value: "CO", label: "Có phát hành HAWB" }] }),
 ];
 
+/** Ô riêng của phần mềm ở đầu khối Tờ khai: lọc mã loại hình theo nhóm. Phần mềm luôn chọn sẵn một nhóm → bắt buộc (radio). */
+export const typeGroupField: LayoutField = fld("APP_NHOM_LH", "Nhóm loại hình", "choice", {
+  required: true,
+  options: [{ value: "KD", label: "Kinh doanh" }, { value: "SXXK", label: "Sản xuất xuất khẩu" }, { value: "GC", label: "Gia công" }, { value: "CX", label: "Chế xuất" }],
+});
+
+/** Ô riêng của phần mềm ở dòng hàng (ảnh tạo mới): số lượng thực tế, hàng khuyến mãi. */
+export const itemExtraFields: LayoutField[] = [
+  fld("APP_SL_THUC_TE", "Số lượng thực tế", "number", { width: "sm" }),
+  fld("APP_FOC", "Hàng FOC", "choice", { options: [{ value: "1", label: "Hàng khuyến mãi (FOC)" }] }),
+];
+/** Bật nhập tay trị giá tính thuế của dòng (mở nhóm trị giá tính thuế phân bổ thủ công). */
+export const manualValueField: LayoutField = fld("APP_TGTT_TAY", "Nhập trị giá tính thuế", "choice", { options: [{ value: "1", label: "Tự nhập trị giá tính thuế (Manual)" }] });
+
 export function invoiceBlock(k: Kind): LayoutBlock {
   const no = n(k);
   return {

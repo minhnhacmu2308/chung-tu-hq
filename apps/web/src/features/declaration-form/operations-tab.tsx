@@ -1,9 +1,12 @@
 "use client";
-// Tab 3 – Theo dõi & nghiệp vụ: nhật ký thông điệp Hải quan, nghiệp vụ bổ sung, tra cứu, số hóa chứng từ. Bản mẫu: nút chỉ báo "chưa kết nối".
+// Tab 3 – Theo dõi & nghiệp vụ (≈ tab "Quản lý tờ khai" của phần mềm): thông điệp Hải quan, thông tin thuế tờ khai + Ghi/Open EDI,
+// nghiệp vụ bổ sung, tra cứu, số hóa chứng từ. Nháp: chỉ nghiệp vụ dùng được khi chưa có số tờ khai. Bản mẫu: nút chỉ báo "chưa kết nối".
 import { Button, Card, CardContent, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, EmptyState, Field, Grid, Stack, Textarea, toast } from "@kb/ui";
-import { FileStack, FileUp, Search } from "lucide-react";
-import { formatDateTime } from "@/lib/format";
+import { FileDown, FileStack, FileUp, Receipt, Save, Search } from "lucide-react";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import type { PrototypeFixture, Stage } from "./fixtures";
+import type { FormValues } from "./form-state";
+import { lookupsAt, operationsAt, taxSummary } from "./stage-rules";
 
 type Message = PrototypeFixture["messages"][number];
 const col = createDataTableColumnHelper<Message>();
@@ -13,12 +16,47 @@ const columns = col.columns([
   col.accessor("at", { header: "Thời gian", cell: (c) => formatDateTime(c.getValue()) }),
 ]);
 
-const OPERATIONS = ["Đăng ký bổ sung file đính kèm (HYS)", "Khai sửa đổi bổ sung sau thông quan (AMA)", "Khai báo danh sách container", "Lấy danh sách container", "Chứng từ bổ sung", "Cập nhật trạng thái tờ khai hủy"];
-const LOOKUPS = ["Tra cứu trạng thái tờ khai VNACCS", "Tra cứu nợ thuế", "Tra cứu nộp thuế", "In mã vạch qua KVGS", "Lấy phản hồi phân luồng thông quan"];
 const notConnected = (name: string) => () => toast({ tone: "info", title: "Bản mẫu – chưa kết nối", description: name });
 
-export function OperationsTab({ fixture, stage }: { fixture: PrototypeFixture; stage: Stage }) {
+const CANCEL = "Cập nhật trạng thái tờ khai hủy";
+const amount = (v: string) => (/^-?d+(.d+)?$/.test(v) ? formatNumber(v, v.split(".")[1]?.length ?? 0) : v);
+
+function TaxCard({ kind, values }: { kind: "IDA" | "EDA"; values: FormValues }) {
+  const tax = taxSummary(kind, values);
+  const rows = tax ? [...(tax.rate ? [{ label: `Tỷ giá tính thuế (${tax.rate.currency})`, value: amount(tax.rate.value) }] : []), ...tax.lines.map((l) => ({ label: l.label, value: amount(l.value) })), ...(tax.total ? [{ label: "Tổng tiền thuế (VND)", value: amount(tax.total) }] : [])] : [];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle as="h2">Thông tin thuế tờ khai</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Stack gap="md">
+          {tax ? (
+            <dl className="flex flex-wrap gap-x-8 gap-y-3">
+              {rows.map((r) => (
+                <div key={r.label} className="flex min-w-0 flex-col">
+                  <dt className="text-xs text-fg-muted">{r.label}</dt>
+                  <dd className="text-sm font-medium tabular-nums text-fg">{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <EmptyState icon={<Receipt />} title="Chưa có số thuế" description="Tỷ giá và tiền thuế có sau khi Hải quan tiếp nhận tờ khai. Bản mẫu chưa tạm tính thuế." />
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" leftIcon={<Save className="h-4 w-4" />} onClick={notConnected("Ghi EDI")}>Ghi EDI</Button>
+            <Button variant="secondary" leftIcon={<FileDown className="h-4 w-4" />} onClick={notConnected("Open EDI")}>Open EDI</Button>
+          </div>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function OperationsTab({ kind, fixture, stage, values }: { kind: "IDA" | "EDA"; fixture: PrototypeFixture; stage: Stage; values: FormValues }) {
   const messages = stage === "nhap" ? [] : stage === "da-khai" ? fixture.messages.slice(0, 2) : fixture.messages;
+  const operations = operationsAt(stage);
+  const lookups = lookupsAt(stage);
   return (
     <Stack gap="lg">
       <Card>
@@ -33,38 +71,43 @@ export function OperationsTab({ fixture, stage }: { fixture: PrototypeFixture; s
           )}
         </CardContent>
       </Card>
-      <Grid cols={{ base: 1, lg: 2 }} gap="lg">
+      <TaxCard kind={kind} values={values} />
+      <Grid cols={{ base: 1, lg: lookups.length ? 2 : 1 }} gap="lg">
         <Card>
           <CardHeader>
             <CardTitle as="h2">Nghiệp vụ bổ sung</CardTitle>
           </CardHeader>
           <CardContent>
             <Stack gap="sm">
-              {OPERATIONS.map((o) => (
+              {operations.map((o) => (
                 <Button key={o} variant="secondary" className="justify-start" leftIcon={<FileUp className="h-4 w-4" />} onClick={notConnected(o)}>
                   {o}
                 </Button>
               ))}
-              <Field label="Lý do hủy tờ khai">
-                <Textarea rows={2} placeholder="Nhập khi cập nhật hủy tờ khai" />
-              </Field>
+              {operations.includes(CANCEL) && (
+                <Field label="Lý do hủy tờ khai">
+                  <Textarea rows={2} placeholder="Nhập khi cập nhật hủy tờ khai" />
+                </Field>
+              )}
             </Stack>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle as="h2">Tra cứu tờ khai</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Stack gap="sm">
-              {LOOKUPS.map((o) => (
-                <Button key={o} variant="secondary" className="justify-start" leftIcon={<Search className="h-4 w-4" />} onClick={notConnected(o)}>
-                  {o}
-                </Button>
-              ))}
-            </Stack>
-          </CardContent>
-        </Card>
+        {lookups.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle as="h2">Tra cứu tờ khai</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Stack gap="sm">
+                {lookups.map((o) => (
+                  <Button key={o} variant="secondary" className="justify-start" leftIcon={<Search className="h-4 w-4" />} onClick={notConnected(o)}>
+                    {o}
+                  </Button>
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+        )}
       </Grid>
       <Card>
         <CardHeader>

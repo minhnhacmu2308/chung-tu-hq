@@ -1,12 +1,12 @@
 // Nghiệp vụ đi kèm vận đơn trên bản mẫu (thuần): nút nào hiện theo loại tờ khai, giá trị điền sẵn từ tờ khai + kết quả giả theo giai đoạn.
-import { BILL_SPLIT_FORM, IDENTIFIER_FORM, type TransportOperationForm } from "@kb/contracts";
+import { BILL_SPLIT_FORM, EXPORT_IDENTIFIER_FORM, IDENTIFIER_FORM, type TransportOperationForm } from "@kb/contracts";
 import type { Stage } from "./fixtures";
 import type { FormValues } from "./form-state";
 
 type Kind = "IDA" | "EDA";
 
-/** Tách vận đơn chỉ cho hàng nhập (vận đơn gốc về cảng nhập); định danh cho cả nhập và xuất. */
-export const operationsFor = (kind: Kind): TransportOperationForm[] => (kind === "IDA" ? [BILL_SPLIT_FORM, IDENTIFIER_FORM] : [IDENTIFIER_FORM]);
+/** Tách vận đơn chỉ cho hàng nhập (vận đơn gốc về cảng nhập); định danh cho cả nhập và xuất (xuất: panel có chọn đường biển / hàng không). */
+export const operationsFor = (kind: Kind): TransportOperationForm[] => (kind === "IDA" ? [BILL_SPLIT_FORM, IDENTIFIER_FORM] : [EXPORT_IDENTIFIER_FORM]);
 
 /** Kết quả giả khi tờ khai đã khai: Hải quan đã duyệt định danh. */
 const IDENTIFIER_RESULT: FormValues = {

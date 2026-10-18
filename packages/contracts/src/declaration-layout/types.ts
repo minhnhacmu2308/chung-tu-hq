@@ -44,6 +44,8 @@ export type LayoutBlock = {
   items: LayoutItem[];
   /** Khối Hải quan trả về: câu hiện khi chưa có dữ liệu ("Có sau khi …"). */
   emptyNote?: string;
+  /** Thao tác của phần mềm trên khối (chép số container từ tờ khai khác…) – chỉ hiện khi đang sửa. */
+  actions?: { id: string; label: string }[];
 };
 export type LayoutSection = { id: string; title: string; blocks: LayoutBlock[] };
 

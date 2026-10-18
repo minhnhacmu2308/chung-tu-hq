@@ -14,7 +14,8 @@ const col = createDataTableColumnHelper<Row>();
 type Props = {
   layout: DeclarationLayout;
   items: FormValues[];
-  onItemChange: (index: number, key: string, value: string) => void;
+  /** Không truyền → dòng hàng chỉ đọc (tờ khai đã đăng ký). */
+  onItemChange?: ((index: number, key: string, value: string) => void) | undefined;
   showInapplicable: boolean;
 };
 
@@ -46,14 +47,14 @@ export function ItemsSection({ layout, items, onItemChange, showInapplicable }: 
   const current = open === null ? null : items[open];
   return (
     <Stack gap="sm">
-      <p className="text-sm text-fg-muted">{items.length} dòng hàng – bấm vào dòng để xem và sửa đủ chỉ tiêu của dòng (gồm phần Hải quan tính).</p>
+      <p className="text-sm text-fg-muted">{items.length} dòng hàng – bấm vào dòng để {onItemChange ? "xem và sửa" : "xem"} đủ chỉ tiêu của dòng (gồm phần Hải quan tính).</p>
       <DataTable aria-label="Danh sách hàng" columns={columns} data={rows} getRowId={(r) => String(r.index)} onRowClick={(r) => setOpen(r.index)} />
       <Dialog open={current !== null && current !== undefined} onOpenChange={(o) => !o && setOpen(null)} defaultPresentation="panel">
         {current && open !== null && (
           <DialogContent title={`Dòng ${open + 1}${current["HAG_CMD"] ? ` · HS ${current["HAG_CMD"]}` : ""}`} icon={<Package className="h-4 w-4" />} description="Chỉ tiêu dòng hàng – phần người khai nhập và phần Hải quan tính" size="lg">
             <Stack gap="md">
               {layout.item.declarant.map((b) => (
-                <BlockView key={b.id} kind={kind} block={b} values={current} onChange={(k, v) => onItemChange(open, k, v)} ctx={conditionContext(kind, current)} showInapplicable={showInapplicable} />
+                <BlockView key={b.id} kind={kind} block={b} values={current} onChange={onItemChange && ((k, v) => onItemChange(open, k, v))} ctx={conditionContext(kind, current)} showInapplicable={showInapplicable} />
               ))}
               {layout.item.customs.map((b) => (
                 <BlockView key={b.id} kind={kind} block={b} values={current} ctx={conditionContext(kind, current)} showInapplicable={showInapplicable} />

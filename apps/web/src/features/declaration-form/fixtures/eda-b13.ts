@@ -7,6 +7,8 @@ import type { PrototypeFixture } from "./types";
 const RATE = 25890;
 const line = (cmd: string, cmn: string, qty: string, unit: string, price: string, amount: string): FormValues => ({
   HAG_CMD: cmd, HAG_CMN: cmn, HAG_QN1: qty, HAG_QT1: unit, HAG_QN2: qty, HAG_QT2: unit, HAG_BPR: amount, HAG_UPR: price, HAG_UPC: "USD", HAG_TSC: unit, HAG_RE: "XN180",
+  // Ô xuất xứ của phần mềm khớp mã nước ghi sau "#&" trong mô tả (2.69).
+  APP_XUAT_XU: /#&([A-Z]{2})$/.exec(cmn)?.[1] ?? "",
 });
 const ITEMS: FormValues[] = [
   { ...line("33049930", "Bộ Sản Phẩm Dưỡng Da Du Lịch Almora Botanica Travel Essentials Must Have Kit Set 15ml, gồm 15ml dầu dưỡng và dụng cụ mát-xa bằng đá, 167948. Mới 100%#&CN", "70", "SET", "24.8", "1736"), HAG_MAHANG: "167948" },
@@ -30,10 +32,10 @@ const DECLARED: FormValues = {
 export const EDA_B13: PrototypeFixture = {
   code: "HS-XK-BAN-MAU-B13",
   declarant: {
-    TK_ECB: "B13", TK_MTC: "1", TK_CH: "06B1", TK_CHB: "05", TK_ECD: "2026-09-04",
+    APP_NHOM_LH: "KD", TK_ECB: "B13", TK_MTC: "1", TK_CH: "06B1", TK_CHB: "05", TK_ECD: "2026-09-04",
     TK_EPC: "0102325399", TK_EPN: "CÔNG TY CỔ PHẦN HÀNG KHÔNG VIETJET", TK_EPP: "(+84)43", TK_EPA: "302/3 phố Kim Mã, Phường Ngọc Hà, Thành phố Hà Nội, Việt Nam", TK_EPT: "08.35471866",
     TK_CGN: "DFASS SINGAPORE PTE LTD", TK_CGP: "(+84)43", TK_CGA: "51 CHANGI BUSINESS PARK CENTRAL 2", TK_CAT: "#09-14 THE SIGNATURE", TK_CAS: "SINGAPORE 486066", TK_CGK: "SG",
-    APP_DD_PT: "HANG_KHONG", TK_EKN: "122600046825044", APP_NGAY_VD: "2026-09-04", TK_NO: "1", TK_NOT: "PK", TK_GW: "156", TK_GWT: "KGM", TK_MRK: "TK CHUNG KIEN/KG:308917724750/61630/91030,",
+    TK_EKN: "122600046825044", TK_NO: "1", TK_NOT: "PK", TK_GW: "156", TK_GWT: "KGM", TK_MRK: "TK CHUNG KIEN/KG:308917724750/61630/91030,",
     TK_ST: "06B1A04", TK_DSC: "SGSIN", TK_DSN: "SINGAPORE", TK_PSC: "VNSGN", TK_PSN: "HO CHI MINH", TK_VSN: "CX0764/12SEP", TK_SYM: "2026-09-12",
     TK_DPD: "2026-09-04", TK_ARP: "06B1A04", TK_ADT: "2026-09-04",
     TK_IV1: "A", TK_IV3: "VJC-DFS-2026-03F-NDG", TK_IVD: "2026-09-04", TK_IVP: "KC", TK_IP1: "A", TK_IP2: "DDU", TK_IP4: "4566.17", TK_IP3: "USD",

@@ -1,5 +1,5 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA): bố cục đầy đủ chỉ tiêu theo ảnh mẫu CHITIEU_NHAPKHAU + Phụ lục II TT39/TT121 + VNACCS_IDA v1.2.
-import { attachmentBlocks, billIdentFields, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, permitsBlock, rep, taxPaymentBlocks, transitBlock } from "./shared.js";
+import { attachmentBlocks, billIdentFields, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, itemExtraFields, manualValueField, permitsBlock, rep, taxPaymentBlocks, transitBlock, typeGroupField } from "./shared.js";
 import type { DeclarationLayout, LayoutBlock } from "./types.js";
 
 /** Dòng hàng – phần người khai nhập (VN_IDA_HANG). */
@@ -14,6 +14,7 @@ const ITEM_DECLARANT: LayoutBlock[] = [
       grp("Số lượng (1)", "1.83", [fld("HAG_QN1", "Số lượng", "number", { width: "sm" }), fld("HAG_QT1", "Đơn vị tính", "code", { codeTable: "UNIT", width: "xs" })]),
       grp("Số lượng (2)", "1.84", [fld("HAG_QN2", "Số lượng", "number", { width: "sm" }), fld("HAG_QT2", "Đơn vị tính", "code", { codeTable: "UNIT", width: "xs" })]),
       fld("HAG_BPR", "Trị giá hóa đơn", "number", { no: "1.85", width: "md" }),
+      ...itemExtraFields,
       grp("Đơn giá hóa đơn", "1.86", [fld("HAG_UPR", "Đơn giá", "number", { width: "sm" }), fld("HAG_UPC", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" }), fld("HAG_TSC", "Đơn vị của đơn giá", "code", { codeTable: "UNIT", width: "xs" })]),
       rep("Số của mục khai khoản điều chỉnh", "1.88", 5, [fld("HAG_VN{n}", "Mục", "number", { width: "xs" })]),
     ],
@@ -26,7 +27,8 @@ const ITEM_DECLARANT: LayoutBlock[] = [
       fld("HAG_TXA", "Thuế suất (nhập tay khi hệ thống không tự xác định)", "number", { no: "1.76", width: "sm" }),
       fld("HAG_SPD", "Mã áp dụng mức thuế tuyệt đối", "text", { no: "1.82", width: "sm" }),
       grp("Mức thuế tuyệt đối", "1.77", [fld("HAG_TXB", "Mức thuế", "number", { width: "sm" }), fld("HAG_TXC", "Đơn vị tính", "code", { codeTable: "UNIT", width: "xs" }), fld("HAG_TXD", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" })]),
-      grp("Trị giá tính thuế (phân bổ thủ công)", "1.87", [fld("HAG_DPR", "Trị giá tính thuế", "number", { width: "md" }), fld("HAG_BPC", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" })]),
+      manualValueField,
+      grp("Trị giá tính thuế (phân bổ thủ công)", "1.87", [fld("HAG_DPR", "Trị giá tính thuế", "number", { width: "md" }), fld("HAG_BPC", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" })], { condition: "MANUAL_VALUE" }),
       fld("HAG_TDL", "STT dòng hàng trên tờ khai TN-TX tương ứng", "number", { no: "1.89", width: "xs" }),
       fld("HAG_TXN", "Danh mục miễn thuế nhập khẩu", "text", { no: "1.90", width: "md" }),
       fld("HAG_TXR", "Số dòng trong danh mục miễn thuế", "number", { no: "1.91", width: "xs" }),
@@ -88,12 +90,13 @@ export const LAYOUT_IDA: DeclarationLayout = {
       id: "chung", title: "Thông tin chung", blocks: [
         {
           id: "to-khai", title: "Tờ khai", items: [
+            typeGroupField,
             fld("TK_ICB", "Mã loại hình", "code", { no: "1.4", codeTable: "TYPE_CODE", width: "sm" }),
             fld("TK_CCC", "Mã phân loại hàng hóa", "code", { no: "1.5", codeTable: "CARGO_CLASS", width: "xs" }),
             fld("TK_MTC", "Mã phương thức vận chuyển", "code", { no: "1.6", codeTable: "TRANSPORT_MODE", width: "sm" }),
             fld("TK_SKB", "Phân loại cá nhân/tổ chức", "code", { no: "1.7", codeTable: "PARTY_CLASS", width: "sm" }),
             fld("TK_CH", "Cơ quan hải quan", "code", { no: "1.8", codeTable: "A038", width: "sm" }),
-            fld("TK_CHB", "Nhóm xử lý hồ sơ (đội thủ tục)", "code", { no: "1.9", codeTable: "A014", width: "xs" }),
+            fld("TK_CHB", "Bộ phận xử lý tờ khai", "code", { no: "1.9", codeTable: "A014", width: "xs" }),
             fld("TK_ICD", "Ngày khai báo (dự kiến)", "date", { no: "1.11", width: "sm" }),
           ],
         },
@@ -193,6 +196,7 @@ export const LAYOUT_IDA: DeclarationLayout = {
               fld("KTG_VC{n}", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" }),
               fld("KTG_VP{n}", "Trị giá khoản điều chỉnh", "number", { width: "md" }),
               fld("KTG_VT{n}", "Tổng hệ số phân bổ", "number", { width: "md" }),
+              fld("APP_PB{n}", "Phân bổ phí", "choice", { options: [{ value: "1", label: "Cho tất cả dòng hàng" }] }),
             ]),
           ],
         },

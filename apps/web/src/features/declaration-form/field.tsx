@@ -73,10 +73,12 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const sizeClass = fill ? "w-full" : compact ? WIDTH[field.width ?? "sm"] : spansRow(field) ? "col-span-full" : undefined;
 
   if (readOnly) {
+    // Ô Hải quan trả về nền thông tin; ô người khai đã khóa (tờ khai đã đăng ký) nền trung tính.
+    const customs = field.origin === "CUSTOMS";
     return (
-      <div className={cn("flex min-w-0 flex-col gap-0.5 rounded-md bg-info-subtle px-3 py-2", sizeClass)}>
-        <p className="text-xs text-info-subtle-fg">{title}</p>
-        <p className="break-words text-sm font-medium text-info-subtle-fg">{displayValue(field, value) || "—"}</p>
+      <div className={cn("flex min-w-0 flex-col gap-0.5 rounded-md px-3 py-2", customs ? "bg-info-subtle" : "bg-surface-muted", sizeClass)}>
+        <p className={cn("text-xs", customs ? "text-info-subtle-fg" : "text-fg-muted")}>{title}</p>
+        <p className={cn("break-words text-sm font-medium", customs ? "text-info-subtle-fg" : "text-fg")}>{displayValue(field, value) || "—"}</p>
       </div>
     );
   }

@@ -1,6 +1,8 @@
 "use client";
 // Tab 1 – Người khai nhập: mục lục nhóm (đếm đã nhập / tổng, ô bắt buộc còn thiếu), công tắc hiện ô không áp dụng, các khối của nhóm đang chọn.
-import { Badge, Button, cn, Grid, Select, Stack, Switch } from "@kb/ui";
+// Tờ khai đã đăng ký: phần người khai chỉ đọc; đã khai (chưa thông quan) mở sửa qua khai sửa đổi bổ sung.
+import { Alert, Badge, Button, cn, Grid, Select, Stack, Switch, toast } from "@kb/ui";
+import { Pencil, Send, Undo2 } from "lucide-react";
 import type { DeclarationLayout } from "@kb/contracts";
 import { BlockView } from "./block-view";
 import { conditionContext, itemProgress, sectionProgress, type FormValues } from "./form-state";
@@ -16,13 +18,47 @@ type Props = {
   items: FormValues[];
   section: string;
   onSection: (id: string) => void;
-  onChange: (key: string, value: string) => void;
-  onItemChange: (index: number, key: string, value: string) => void;
+  /** Không truyền → phần người khai chỉ đọc. */
+  onChange?: ((key: string, value: string) => void) | undefined;
+  onItemChange?: ((index: number, key: string, value: string) => void) | undefined;
+  amending: boolean;
+  onAmend: (on: boolean) => void;
   showInapplicable: boolean;
   onShowInapplicable: (v: boolean) => void;
 };
 
-export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, showInapplicable, onShowInapplicable }: Props) {
+function StageNotice({ kind, stage, amending, onAmend }: { kind: "IDA" | "EDA"; stage: Stage; amending: boolean; onAmend: (on: boolean) => void }) {
+  const code = kind === "IDA" ? "IDA01" : "EDA01";
+  if (stage === "thong-quan") {
+    return (
+      <Alert tone="info" title="Tờ khai đã thông quan – thông tin người khai chỉ đọc">
+        Sửa sau thông quan dùng “Khai sửa đổi bổ sung sau thông quan (AMA)” ở tab Theo dõi & nghiệp vụ.
+      </Alert>
+    );
+  }
+  if (stage !== "da-khai") return null;
+  if (!amending) {
+    return (
+      <Alert tone="info" title="Tờ khai đã đăng ký – thông tin người khai chỉ đọc">
+        <p>Cần sửa trước khi thông quan thì khai sửa đổi bổ sung ({code}).</p>
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button size="sm" variant="secondary" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => onAmend(true)}>Khai sửa đổi bổ sung</Button>
+        </div>
+      </Alert>
+    );
+  }
+  return (
+    <Alert tone="warning" title={`Đang khai sửa đổi bổ sung (${code})`}>
+      <p>Sửa các ô cần thay đổi rồi gửi để Hải quan xét lại. Hủy sửa đổi trả lại thông tin đã đăng ký.</p>
+      <div className="flex flex-wrap gap-2 pt-2">
+        <Button size="sm" leftIcon={<Send className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: "Bản mẫu – chưa kết nối", description: `Gửi khai sửa đổi bổ sung (${code})` })}>Gửi khai sửa đổi</Button>
+        <Button size="sm" variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} onClick={() => onAmend(false)}>Hủy sửa đổi</Button>
+      </div>
+    </Alert>
+  );
+}
+
+export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, amending, onAmend, showInapplicable, onShowInapplicable }: Props) {
   const kind = layout.kind;
   const ctx = conditionContext(kind, values);
   const itemsMissing = items.reduce((n, it) => n + itemProgress(kind, layout, it).missing, 0);
@@ -33,6 +69,7 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
   const current = layout.declarant.find((s) => s.id === section);
   return (
     <Stack gap="md">
+      <StageNotice kind={kind} stage={stage} amending={amending} onAmend={onAmend} />
       <Switch label="Hiện cả chỉ tiêu không áp dụng" description="Ô theo tình huống không áp dụng cho tờ khai này (ví dụ thời hạn tái xuất khi không phải tạm nhập) hiện mờ kèm lý do – để đối chiếu đủ ô." checked={showInapplicable} onCheckedChange={onShowInapplicable} />
       <Grid cols={{ base: 1, lg: 4 }} gap="lg">
         <nav aria-label="Nhóm chỉ tiêu" className="min-w-0">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BILL_SPLIT_FORM, expandRepeat, fieldRole, IDENTIFIER_FORM, itemFields, LAYOUT_EDA, LAYOUT_IDA, type LayoutBlock, type LayoutField, type LayoutRepeat } from "./index.js";
+import { BILL_SPLIT_FORM, EXPORT_IDENTIFIER_FORM, expandRepeat, fieldRole, IDENTIFIER_FORM, itemFields, LAYOUT_EDA, LAYOUT_IDA, type LayoutBlock, type LayoutField, type LayoutRepeat } from "./index.js";
 
 const block = (layout: typeof LAYOUT_IDA, id: string) => layout.declarant.find((s) => s.id === "van-chuyen")!.blocks.find((b) => b.id === id)!;
 const fields = (blocks: LayoutBlock[]): LayoutField[] => blocks.flatMap((b) => b.items.flatMap(itemFields));
@@ -13,17 +13,25 @@ describe("Vận đơn – định danh đường biển / hàng không, HAWB, ng
     expect(bl.fields.find((f) => f.key === "APP_HAWB{n}")!.condition).toBe("HAS_HAWB");
     expect(fields([vd]).some((f) => f.key === "APP_NGAY_VD")).toBe(false);
   });
-  it.each([LAYOUT_IDA, LAYOUT_EDA])("$kind: lựa chọn định danh theo đường biển / hàng không; hỏi HAWB chỉ khi hàng không", (layout) => {
-    const vd = [block(layout, "van-don")];
+  it("IDA: lựa chọn định danh theo đường biển / hàng không; hỏi HAWB chỉ khi hàng không", () => {
+    const vd = [block(LAYOUT_IDA, "van-don")];
     expect(byKey(vd, "APP_DD_PT")).toMatchObject({ input: "choice", options: [{ value: "BIEN" }, { value: "HANG_KHONG" }] });
     expect(byKey(vd, "APP_HAWB_CO")).toMatchObject({ input: "choice", condition: "AIR_IDENT", options: [{ value: "CO", label: "Có phát hành HAWB" }] });
     expect(byKey(vd, "APP_DD_PT")!.required).toBeUndefined();
   });
-  it("EDA: số vận đơn 2.24 kèm ngày vận đơn và số HAWB", () => {
+  it("EDA (theo ảnh tạo mới): chỉ một ô số vận đơn 2.24 – không ngày vận đơn, không chọn định danh, không HAWB", () => {
     const vd = [block(LAYOUT_EDA, "van-don")];
-    const g = vd[0]!.items.find((it) => it.kind === "group" && it.no === "2.24");
-    expect(g && itemFields(g).map((f) => f.key)).toEqual(["TK_EKN", "APP_NGAY_VD", "APP_HAWB"]);
-    expect(byKey(vd, "APP_HAWB")!.condition).toBe("HAS_HAWB");
+    expect(byKey(vd, "TK_EKN")).toMatchObject({ no: "2.24" });
+    for (const k of ["APP_DD_PT", "APP_HAWB_CO", "APP_NGAY_VD", "APP_HAWB"]) expect(byKey(vd, k)).toBeUndefined();
+  });
+  it("EDA: chọn đường biển / hàng không nằm trong panel Khai mã định danh hàng hóa (không bắt buộc)", () => {
+    expect(EXPORT_IDENTIFIER_FORM.id).toBe("dinh-danh");
+    expect(EXPORT_IDENTIFIER_FORM.menu).toBe("Khai mã định danh hàng hóa");
+    const f = byKey(EXPORT_IDENTIFIER_FORM.blocks, "APP_DD_PT");
+    expect(f).toMatchObject({ input: "choice", options: [{ value: "BIEN" }, { value: "HANG_KHONG" }] });
+    expect(f!.required).toBeUndefined();
+    expect(fields(EXPORT_IDENTIFIER_FORM.blocks).map((x) => x.key)).toEqual(expect.arrayContaining(fields(IDENTIFIER_FORM.blocks).map((x) => x.key)));
+    expect(EXPORT_IDENTIFIER_FORM.result).toBe(IDENTIFIER_FORM.result);
   });
 });
 

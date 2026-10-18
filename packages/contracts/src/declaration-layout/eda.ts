@@ -1,5 +1,5 @@
 // Mẫu 02 – tờ khai xuất khẩu (EDA): bố cục đầy đủ chỉ tiêu theo ảnh mẫu CHITIEU_XUATKHAU + Phụ lục II TT39/TT121 + VNACCS_EDA v1.2.
-import { attachmentBlocks, billIdentFields, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, permitsBlock, rep, taxPaymentBlocks, transitBlock } from "./shared.js";
+import { attachmentBlocks, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, itemExtraFields, manualValueField, permitsBlock, rep, taxPaymentBlocks, transitBlock, typeGroupField } from "./shared.js";
 import type { DeclarationLayout, LayoutBlock } from "./types.js";
 
 /** Dòng hàng – phần người khai nhập (VN_EDA_HANG). */
@@ -9,11 +9,13 @@ const ITEM_DECLARANT: LayoutBlock[] = [
       fld("HAG_CMD", "Mã số hàng hóa", "code", { no: "2.65", width: "sm" }),
       fld("HAG_COC", "Mã quản lý riêng", "text", { no: "2.66", width: "sm" }),
       fld("HAG_MAHANG", "Mã hàng", "text", { width: "sm" }),
+      fld("APP_XUAT_XU", "Xuất xứ", "code", { codeTable: "COUNTRY", width: "xs" }),
       fld("HAG_R03", "Mã phân loại tái xác nhận giá", "text", { width: "xs" }),
       fld("HAG_CMN", "Mô tả hàng hóa (kèm #&mã nước xuất xứ)", "textarea", { no: "2.69", width: "full" }),
       grp("Số lượng (1)", "2.72", [fld("HAG_QN1", "Số lượng", "number", { width: "sm" }), fld("HAG_QT1", "Đơn vị tính", "code", { codeTable: "UNIT", width: "xs" })]),
       grp("Số lượng (2)", "2.73", [fld("HAG_QN2", "Số lượng", "number", { width: "sm" }), fld("HAG_QT2", "Đơn vị tính", "code", { codeTable: "UNIT", width: "xs" })]),
       fld("HAG_BPR", "Trị giá hóa đơn", "number", { no: "2.74", width: "md" }),
+      ...itemExtraFields,
       grp("Đơn giá hóa đơn", "2.75", [fld("HAG_UPR", "Đơn giá", "number", { width: "sm" }), fld("HAG_UPC", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" }), fld("HAG_TSC", "Đơn vị của đơn giá", "code", { codeTable: "UNIT", width: "xs" })]),
     ],
   },
@@ -21,7 +23,8 @@ const ITEM_DECLARANT: LayoutBlock[] = [
     id: "thue-xk", title: "Thuế xuất khẩu", items: [
       fld("HAG_TXA", "Thuế suất (nhập tay khi hệ thống không tự xác định)", "number", { no: "2.67", width: "sm" }),
       grp("Mức thuế tuyệt đối", "2.68", [fld("HAG_TXB", "Mức thuế", "number", { width: "sm" }), fld("HAG_TXC", "Đơn vị tính", "code", { codeTable: "UNIT", width: "xs" }), fld("HAG_TXD", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" })]),
-      grp("Trị giá tính thuế (phân bổ thủ công)", "2.76", [fld("HAG_DPR", "Trị giá tính thuế", "number", { width: "md" }), fld("HAG_BPC", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" })]),
+      manualValueField,
+      grp("Trị giá tính thuế (phân bổ thủ công)", "2.76", [fld("HAG_DPR", "Trị giá tính thuế", "number", { width: "md" }), fld("HAG_BPC", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" })], { condition: "MANUAL_VALUE" }),
       fld("HAG_TDL", "STT dòng hàng trên tờ khai TN-TX tương ứng", "number", { no: "2.77", width: "xs" }),
       fld("HAG_TXN", "Danh mục miễn thuế xuất khẩu", "text", { no: "2.78", width: "md" }),
       fld("HAG_ADE", "Số dòng trong danh mục miễn thuế", "number", { no: "2.79", width: "xs" }),
@@ -66,6 +69,7 @@ export const LAYOUT_EDA: DeclarationLayout = {
       id: "chung", title: "Thông tin chung", blocks: [
         {
           id: "to-khai", title: "Tờ khai", items: [
+            typeGroupField,
             fld("TK_ECB", "Mã loại hình", "code", { no: "2.4", codeTable: "TYPE_CODE", width: "sm" }),
             fld("TK_CCC", "Mã phân loại hàng hóa", "code", { no: "2.5", codeTable: "CARGO_CLASS", width: "xs" }),
             fld("TK_MTC", "Mã phương thức vận chuyển", "code", { no: "2.6", codeTable: "TRANSPORT_MODE", width: "sm" }),
@@ -111,12 +115,8 @@ export const LAYOUT_EDA: DeclarationLayout = {
       id: "van-chuyen", title: "Vận đơn & vận chuyển", blocks: [
         {
           id: "van-don", title: "Vận đơn", items: [
-            ...billIdentFields,
-            grp("Số vận đơn / số quản lý hàng hóa", "2.24", [
-              fld("TK_EKN", "Số vận đơn", "text", { width: "md" }),
-              fld("APP_NGAY_VD", "Ngày vận đơn", "date", { width: "sm" }),
-              fld("APP_HAWB", "Số HAWB", "text", { width: "md", condition: "HAS_HAWB" }),
-            ]),
+            // Theo ảnh tạo mới: chỉ một ô số vận đơn; chọn định danh đường biển / hàng không nằm trong panel Khai mã định danh hàng hóa.
+            fld("TK_EKN", "Số vận đơn / số quản lý hàng hóa", "text", { no: "2.24", width: "md" }),
             grp("Số kiện", "2.25", [fld("TK_NO", "Số lượng kiện", "number", { width: "sm" }), fld("TK_NOT", "Loại kiện", "code", { codeTable: "PACKAGE_KIND", width: "xs" })]),
             grp("Tổng trọng lượng (Gross)", "2.26", [fld("TK_GW", "Trọng lượng", "number", { width: "sm" }), fld("TK_GWT", "Đơn vị", "code", { codeTable: "UNIT", width: "xs" })]),
             fld("TK_MRK", "Ký hiệu và số hiệu", "textarea", { no: "2.32", width: "full" }),
@@ -132,7 +132,7 @@ export const LAYOUT_EDA: DeclarationLayout = {
           ],
         },
         {
-          id: "container", title: "Container", condition: "IN_CONTAINER", items: [
+          id: "container", title: "Container", condition: "IN_CONTAINER", actions: [{ id: "copy-cont", label: "Copy số cont từ tờ khai khác" }], items: [
             grp("Địa điểm xếp hàng lên xe chở hàng (vanning)", "2.59", [
               fld("CON_VC1", "Mã 1", "code", { width: "xs" }), fld("CON_VC2", "Mã 2", "code", { width: "xs" }), fld("CON_VC3", "Mã 3", "code", { width: "xs" }), fld("CON_VC4", "Mã 4", "code", { width: "xs" }), fld("CON_VC5", "Mã 5", "code", { width: "xs" }),
               fld("CON_VN", "Tên", "text", { width: "lg" }), fld("CON_VA", "Địa chỉ", "text", { width: "lg" }),

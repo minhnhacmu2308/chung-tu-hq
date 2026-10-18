@@ -19,6 +19,7 @@ export function conditionContext(kind: Kind, v: FormValues): ConditionContext {
     identMode: v["APP_DD_PT"] ?? "",
     hawbIssued: v["APP_HAWB_CO"] === "CO",
     splitCargo: v["TVD_LOAIHANG"] ?? "",
+    manualValue: v["APP_TGTT_TAY"] === "1",
   };
 }
 

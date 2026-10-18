@@ -11,6 +11,7 @@ import { displayValue } from "./display";
 import { fixtureFor, valuesAt, type Stage } from "./fixtures";
 import type { FormValues } from "./form-state";
 import { OperationsTab } from "./operations-tab";
+import { declarantEditable, summaryAt } from "./stage-rules";
 import { parseView, toQuery, type Tab, type ViewState } from "./view-state";
 
 const STAGE_OPTIONS = [
@@ -27,11 +28,21 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
   const [values, setValues] = useState<FormValues>(initial.header);
   const [items, setItems] = useState<FormValues[]>(initial.items);
   const [showInapplicable, setShowInapplicable] = useState(false);
+  // Khai sửa đổi bổ sung (chỉ giai đoạn đã khai): mở khóa phần người khai; hủy → trả lại giá trị đã đăng ký.
+  const [amending, setAmending] = useState(false);
+  const editable = declarantEditable(view.stage, amending);
+  const amend = (on: boolean) => {
+    if (!on) {
+      setValues(initial.header);
+      setItems(initial.items);
+    }
+    setAmending(on);
+  };
   const missing = <span className="text-fg-subtle">Chưa có</span>;
   return (
     <Stack gap="lg">
       <dl className="flex flex-wrap gap-x-6 gap-y-2 rounded-md border border-border bg-surface px-4 py-3">
-        {layout.summary.map((f) => (
+        {summaryAt(layout, view.stage).map((f) => (
           <div key={f.key} className="flex min-w-0 flex-col">
             <dt className="text-xs text-fg-muted">{f.label}</dt>
             <dd className="text-sm font-medium text-fg">{displayValue(f, values[f.key] ?? "") || missing}</dd>
@@ -49,8 +60,9 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
         <TabsContent value="khai" className="pt-4">
           <DeclarantTab
             layout={layout} stage={view.stage} values={values} items={items} section={view.section} onSection={(id) => go({ section: id })}
-            onChange={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
-            onItemChange={(i, k, v) => setItems((s) => s.map((it, j) => (j === i ? { ...it, [k]: v } : it)))}
+            onChange={editable ? (k, v) => setValues((s) => ({ ...s, [k]: v })) : undefined}
+            onItemChange={editable ? (i, k, v) => setItems((s) => s.map((it, j) => (j === i ? { ...it, [k]: v } : it))) : undefined}
+            amending={amending} onAmend={amend}
             showInapplicable={showInapplicable} onShowInapplicable={setShowInapplicable}
           />
         </TabsContent>
@@ -58,7 +70,7 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
           <CustomsTab layout={layout} values={values} items={items} />
         </TabsContent>
         <TabsContent value="nghiep-vu" className="pt-4">
-          <OperationsTab fixture={fixture} stage={view.stage} />
+          <OperationsTab kind={view.kind} fixture={fixture} stage={view.stage} values={values} />
         </TabsContent>
       </Tabs>
     </Stack>

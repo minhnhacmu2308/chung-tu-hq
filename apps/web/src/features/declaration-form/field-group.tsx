@@ -4,7 +4,7 @@
 import { cn } from "@kb/ui";
 import { DECLARATION_CONDITIONS, fieldRole, type ConditionContext, type ConditionId, type LayoutGroup } from "@kb/contracts";
 import { groupSpan } from "./compact-rules";
-import { fieldTitle } from "./display";
+import { fieldTitle, groupGuideReason } from "./display";
 import { FormField, GuideButton, RoleMark } from "./field";
 import { groupMissing, isApplicable, type FormValues } from "./form-state";
 import { useViewPrefs } from "./view-prefs";
@@ -30,8 +30,8 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
   const effectiveCondition = group.condition ?? parentCondition;
   const anyMissing = group.fill === "any" && applicable && !readOnly && groupMissing(kind, group, values, ctx, parentCondition);
   const span = groupSpan(group) === "full" ? "col-span-full" : labelsLeft ? undefined : "cq-sm:col-span-2";
-  // "Có vì: …" nằm trong hướng dẫn ⓘ như ô thường; "Không áp dụng vì" và "Chỉ cần nhập một ô" vẫn ghi dưới nhãn.
-  const reasonInGuide = condition && applicable ? `Có vì: ${condition}` : undefined;
+  // "Có vì: …" của nhóm và ô con (hô hiệu khi đường biển…) nằm trong hướng dẫn ⓘ; "Không áp dụng vì" và "Chỉ cần nhập một ô" vẫn ghi dưới nhãn.
+  const reasonInGuide = groupGuideReason(group, ctx);
   const notes = [condition && !applicable ? `Không áp dụng vì: ${condition}` : null, group.fill === "any" ? "Chỉ cần nhập một ô" : null].filter(Boolean);
   return (
     <fieldset data-missing={anyMissing || undefined} className={cn("flex min-w-0 flex-col gap-1.5 rounded-md border border-border px-3 pb-3 pt-1", span, !applicable && "opacity-60")}>

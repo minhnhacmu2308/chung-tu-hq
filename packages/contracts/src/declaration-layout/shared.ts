@@ -1,5 +1,5 @@
 // Hàm dựng gọn + các khối giống nhau giữa Mẫu 01 (IDA) và Mẫu 02 (EDA): cùng tên trường VNACCS, khác số chỉ tiêu.
-import type { FieldInput, LayoutBlock, LayoutField, LayoutGroup, LayoutRepeat } from "./types.js";
+import type { FieldInput, LayoutBlock, LayoutField, LayoutGroup, LayoutRepeat, LayoutSection } from "./types.js";
 
 type Kind = "IDA" | "EDA";
 type Extra = Partial<Omit<LayoutField, "kind" | "key" | "label" | "input">>;
@@ -15,7 +15,7 @@ const n = (k: Kind) => (ida: string, eda: string) => (k === "IDA" ? ida : eda);
 /** Ô riêng của phần mềm ở đầu khối Vận đơn: khai định danh theo đường biển / hàng không; hàng không → có phát hành HAWB không (có → ô số HAWB cạnh số vận đơn). Không bắt buộc → hiện checkbox, bỏ chọn được. */
 export const billIdentFields: LayoutField[] = [
   fld("APP_DD_PT", "Khai báo định danh theo", "choice", { options: [{ value: "BIEN", label: "Đường biển" }, { value: "HANG_KHONG", label: "Hàng không" }] }),
-  fld("APP_HAWB_CO", "Vận đơn thứ cấp (HAWB)", "choice", { condition: "AIR_IDENT", framed: true, options: [{ value: "CO", label: "Có phát hành HAWB" }] }),
+  fld("APP_HAWB_CO", "Vận đơn thứ cấp (HAWB)", "choice", { condition: "AIR_IDENT", hideLabel: true, options: [{ value: "CO", label: "Có phát hành HAWB" }] }),
 ];
 
 /** Ô riêng của phần mềm ở đầu khối Tờ khai: lọc mã loại hình theo nhóm. Phần mềm luôn chọn sẵn một nhóm → bắt buộc (radio). */
@@ -144,3 +144,9 @@ export function directivesBlock(k: Kind): LayoutBlock {
     ],
   };
 }
+
+/** Mọi ô lẻ của nhóm màn hình đóng khung viền như nhóm ô / nhóm lặp – nhìn đồng nhất (Vận đơn & vận chuyển). */
+export const framedSection = (s: LayoutSection): LayoutSection => ({
+  ...s,
+  blocks: s.blocks.map((b) => ({ ...b, items: b.items.map((it) => (it.kind === "field" ? { ...it, framed: true } : it)) })),
+});

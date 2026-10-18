@@ -1,8 +1,8 @@
 // Hiển thị giá trị trên bản mẫu tờ khai (thuần): tên theo bảng mã, ngày/số theo lib/format, mã trạng thái Hải quan kèm nghĩa, dòng của nhóm lặp.
-import { CODE_TABLES, expandRepeat, FPT_CHANNELS, FPT_CLEARANCE, FPT_DECLARATION_STATES, type CodeTable, type LayoutField, type LayoutRepeat } from "@kb/contracts";
+import { CODE_TABLES, DECLARATION_CONDITIONS, expandRepeat, FPT_CHANNELS, FPT_CLEARANCE, FPT_DECLARATION_STATES, type CodeTable, type ConditionContext, type LayoutField, type LayoutGroup, type LayoutRepeat } from "@kb/contracts";
 import { formatDate, formatNumber } from "@/lib/format";
 import { inspectionLabel } from "../dossier-detail/steps/customs-info-view";
-import type { FormValues } from "./form-state";
+import { isApplicable, type FormValues } from "./form-state";
 
 /** "1.44 · Tổng trị giá hóa đơn"; không có số chỉ tiêu → chỉ tên. */
 export const fieldTitle = (no: string | undefined, label: string) => (no ? `${no} · ${label}` : label);
@@ -43,4 +43,17 @@ export function visibleRows(r: LayoutRepeat, values: FormValues, extra: number, 
   if (readOnly) return rows.filter((_, i) => filled[i]);
   const last = filled.lastIndexOf(true);
   return rows.slice(0, Math.min(r.count, last + 2 + extra));
+}
+
+/** Bề rộng ô theo `width` (ô con trong nhóm, ô trong bảng nhóm lặp) – xs 112px đủ một dòng cho nhãn ngắn ~15 ký tự (“Công thức chuẩn”). */
+const WIDTH: Record<NonNullable<LayoutField["width"]>, string> = { xs: "w-28", sm: "w-40", md: "w-64", lg: "w-full", full: "w-full" };
+/** Mọi ô ngày trên form cùng một bề rộng (đủ dd/mm/yyyy + nút lịch). */
+export const DATE_WIDTH = "w-40";
+export const fieldWidthClass = (f: Pick<LayoutField, "input" | "width">) => (f.input === "date" ? DATE_WIDTH : WIDTH[f.width ?? "sm"]);
+
+/** Lý do nhóm / ô con đang hiện ("Có vì: …") – nằm trong hướng dẫn ⓘ của nhóm, không ghi dưới ô (ô con không có ⓘ riêng). */
+export function groupGuideReason(g: LayoutGroup, ctx: ConditionContext): string | undefined {
+  const own = g.condition && isApplicable(g, ctx) ? `Có vì: ${DECLARATION_CONDITIONS[g.condition].label}` : null;
+  const subs = g.fields.filter((f) => f.condition && isApplicable(f, ctx)).map((f) => `${f.label} – Có vì: ${DECLARATION_CONDITIONS[f.condition!].label}`);
+  return [own, ...subs].filter(Boolean).join(" · ") || undefined;
 }

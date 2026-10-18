@@ -7,7 +7,7 @@ import { Lock, Plus } from "lucide-react";
 import { useState } from "react";
 import { useAmendLock } from "./amend-context";
 import { CodeInput } from "./code-input";
-import { displayValue, fieldTitle, visibleRows } from "./display";
+import { DATE_WIDTH, displayValue, fieldTitle, visibleRows } from "./display";
 import { fieldLabelNode, FormField, GuideButton, RoleMark } from "./field";
 import { isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 
@@ -54,7 +54,7 @@ function Cell({ kind, f, n, values, onChange }: { kind: "IDA" | "EDA"; f: Layout
   return (
     <Input
       aria-label={name}
-      className={cn("h-9", WIDTH[f.width ?? "sm"])}
+      className={cn("h-9", f.input === "date" ? DATE_WIDTH : WIDTH[f.width ?? "sm"])}
       type={f.input === "date" ? "date" : f.input === "time" ? "time" : "text"}
       inputMode={f.input === "number" ? "decimal" : undefined}
       value={value}

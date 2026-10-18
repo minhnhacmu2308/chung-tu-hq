@@ -31,8 +31,10 @@ export type LayoutField = {
   short?: string;
   /** Ý nghĩa hiện khi bấm chữ viết tắt; không có → hiện `label`. */
   full?: string;
-  /** Đóng khung viền để dễ nhận ra (ô theo tình huống đầu khối Vận đơn: HAWB, số lượng container). */
+  /** Đóng khung viền như nhóm ô (cả nhóm Vận đơn & vận chuyển – framedSection). */
   framed?: boolean;
+  /** Chỉ hiện ô chọn kèm chữ của lựa chọn (nhãn chỉ cho trình đọc màn hình), không nút ⓘ – HAWB: "Có phát hành HAWB". */
+  hideLabel?: boolean;
 };
 /** Chỉ tiêu nhiều ô con nằm ngang (địa chỉ 4 dòng, tổng trị giá 4 ô…). */
 export type LayoutGroup = {

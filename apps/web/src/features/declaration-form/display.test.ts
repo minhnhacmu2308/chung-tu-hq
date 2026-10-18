@@ -1,6 +1,7 @@
-import type { LayoutRepeat } from "@kb/contracts";
+import { DECLARATION_CONDITIONS, type LayoutGroup, type LayoutRepeat } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { codeLabel, displayValue, fieldTitle, visibleRows } from "./display";
+import { codeLabel, DATE_WIDTH, displayValue, fieldTitle, fieldWidthClass, groupGuideReason, visibleRows } from "./display";
+import { conditionContext } from "./form-state";
 
 describe("codeLabel", () => {
   it("tra tên theo bảng mã có trong repo; bảng chưa có dữ liệu hoặc mã lạ → undefined", () => {
@@ -52,5 +53,29 @@ describe("displayValue – ô lựa chọn", () => {
     expect(displayValue({ key: "APP_DD_PT", input: "choice", options: opts }, "HANG_KHONG")).toBe("Hàng không");
     expect(displayValue({ key: "TRANG_THAI", input: "choice", options: [{ value: "15", label: "Hải quan đã duyệt" }] }, "15")).toBe("15 · Hải quan đã duyệt");
     expect(displayValue({ key: "APP_DD_PT", input: "choice", options: opts }, "X")).toBe("X");
+  });
+});
+
+describe("groupGuideReason – 'Có vì' của nhóm và ô con nằm trong hướng dẫn ⓘ của nhóm", () => {
+  const g: LayoutGroup = { kind: "group", label: "Phương tiện vận chuyển", no: "1.31", fields: [
+    { kind: "field", key: "VD_VSC", label: "Hô hiệu (call sign)", input: "text", condition: "BY_WATER" },
+    { kind: "field", key: "VD_VSN", label: "Tên phương tiện / chuyến", input: "text" },
+  ] };
+  it("ô con theo tình huống đang áp dụng → tên ô + lý do; không áp dụng → không có", () => {
+    expect(groupGuideReason(g, conditionContext("IDA", { TK_MTC: "2" }))).toBe(`Hô hiệu (call sign) – Có vì: ${DECLARATION_CONDITIONS.BY_WATER.label}`);
+    expect(groupGuideReason(g, conditionContext("IDA", { TK_MTC: "1" }))).toBeUndefined();
+  });
+  it("nhóm có điều kiện → lý do của nhóm đứng đầu", () => {
+    const air = conditionContext("IDA", { TK_MTC: "2", APP_DD_PT: "HANG_KHONG" });
+    expect(groupGuideReason({ ...g, condition: "AIR_IDENT" }, air)?.startsWith(`Có vì: ${DECLARATION_CONDITIONS.AIR_IDENT.label} · Hô hiệu`)).toBe(true);
+  });
+});
+
+describe("fieldWidthClass – ô ngày cùng một bề rộng trên toàn form", () => {
+  it("ô ngày luôn DATE_WIDTH dù khai báo width nào; ô khác theo width (mặc định sm)", () => {
+    expect(fieldWidthClass({ input: "date" })).toBe(DATE_WIDTH);
+    expect(fieldWidthClass({ input: "date", width: "md" })).toBe(DATE_WIDTH);
+    expect(fieldWidthClass({ input: "text", width: "md" })).toBe("w-64");
+    expect(fieldWidthClass({ input: "text" })).toBe("w-40");
   });
 });

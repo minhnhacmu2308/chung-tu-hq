@@ -12,7 +12,7 @@ import { CodeInput } from "./code-input";
 import { codeScope } from "./code-scope";
 import { ROLE_INFO } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
-import { displayValue } from "./display";
+import { DATE_WIDTH, displayValue, fieldWidthClass } from "./display";
 import { choiceControl, isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 import { useCodeName } from "./use-code-list";
 import { useViewPrefs } from "./view-prefs";
@@ -77,8 +77,6 @@ export function fieldLabelNode(f: Pick<LayoutField, "no" | "label" | "short" | "
 /** Lựa chọn có chữ viết tắt (vd "SXXK") → hiện chữ viết tắt, bấm xem ý nghĩa. */
 const optionLabel = (o: FieldOption): ReactNode => (o.short ? <Abbreviation short={o.short} full={o.full ?? o.label} /> : o.label);
 
-/** Bề rộng ô con trong nhóm – xs 112px đủ một dòng cho nhãn ngắn ~15 ký tự (“Công thức chuẩn”). */
-const WIDTH: Record<NonNullable<LayoutField["width"]>, string> = { xs: "w-28", sm: "w-40", md: "w-64", lg: "w-full", full: "w-full" };
 /** Ô rộng chiếm cả hàng của lưới khối. */
 export const spansRow = (f: Pick<LayoutField, "width" | "input">) => f.width === "full" || f.width === "lg" || f.input === "textarea";
 
@@ -115,7 +113,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const title = fieldLabelNode(field, !compact);
   const readOnly = field.origin === "CUSTOMS" || !onChange || Boolean(lock);
   // Ô mã có tra cứu trong nhóm: bề rộng theo ô mã + nút tra cứu (CodeInput tự đặt bề rộng ô mã).
-  const sizeClass = fill ? "w-full" : compact ? (listId ? undefined : WIDTH[field.width ?? "sm"]) : spansRow(field) ? "col-span-full" : undefined;
+  const sizeClass = fill ? "w-full" : compact ? (listId ? undefined : fieldWidthClass(field)) : spansRow(field) ? "col-span-full" : undefined;
 
   if (readOnly) {
     // Ô Hải quan trả về nền thông tin; ô người khai đã khóa (tờ khai đã đăng ký) nền trung tính.
@@ -139,10 +137,10 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const reason = condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : undefined;
   const missing = !suppressMissing && applicable && missingRequired(kind, field, values, parentNo, parentCondition, ctx);
   const set = (v: string) => onChange?.(field.key, v);
-  // "Có vì: …" nằm trong hướng dẫn ⓘ (gọn nhãn); "Không áp dụng vì: …" và ô con trong nhóm (không có ⓘ) vẫn ghi dưới ô.
+  // "Có vì: …" nằm trong hướng dẫn ⓘ (ô con: ⓘ của nhóm – groupGuideReason); chỉ "Không áp dụng vì: …" (xem tất cả ô) ghi dưới ô.
   const reasonInGuide = !compact && applicable;
-  const shownReason = reasonInGuide ? undefined : reason;
-  const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
+  const shownReason = applicable ? undefined : reason;
+  const guide = compact || field.hideLabel ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
   const missingNote = missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
   const frame = field.framed && "rounded-md border border-border px-3 py-2";
@@ -159,9 +157,9 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
               <RadioGroup orientation="horizontal" label={<>{title}<RoleMark role={role} /></>} description={shownReason} options={options} value={value || null} onChange={set} />
             ) : (
               <fieldset className="min-w-0">
-                <legend className="text-sm font-medium text-fg">{label}</legend>
+                <legend className={cn("text-sm font-medium text-fg", field.hideLabel && "sr-only")}>{label}</legend>
                 {shownReason && <p className="mt-0.5 text-xs text-fg-subtle">{shownReason}</p>}
-                <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-2">
+                <div className={cn("flex flex-wrap gap-x-5 gap-y-2", !field.hideLabel && "mt-1.5")}>
                   {options.map((o) => (
                     <Checkbox key={o.value} label={o.label} checked={value === o.value} onChange={() => set(toggleChoice(value, o.value))} />
                   ))}
@@ -178,9 +176,9 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
 
   const inline = !compact && !listId && Boolean(name) && !spansRow(field);
   const control =
-    listId && field.codeTable ? <CodeInput table={field.codeTable} fieldKey={field.key} kind={kind} values={values} value={value} onChange={set} label={field.label} widthClass={compact ? WIDTH[field.width ?? "sm"] : "w-32"} />
+    listId && field.codeTable ? <CodeInput table={field.codeTable} fieldKey={field.key} kind={kind} values={values} value={value} onChange={set} label={field.label} widthClass={compact ? fieldWidthClass(field) : "w-32"} />
     : field.input === "textarea" ? <Textarea className={compact ? undefined : "min-w-0 flex-1"} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
-    : <Input className={compact ? undefined : inline ? "w-32 shrink-0" : "min-w-0 flex-1"} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
+    : <Input className={compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1"} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
   // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô, nút ⓘ cuối hàng.
   const hint = [compact && !listId && name ? `→ ${name}` : null, shownReason].filter(Boolean).join(" · ") || undefined;
 

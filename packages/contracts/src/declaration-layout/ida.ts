@@ -1,5 +1,5 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA): bố cục đầy đủ chỉ tiêu theo ảnh mẫu CHITIEU_NHAPKHAU + Phụ lục II TT39/TT121 + VNACCS_IDA v1.2.
-import { attachmentBlocks, billIdentFields, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, itemExtraFields, manualValueField, permitsBlock, rep, taxPaymentBlocks, transitBlock, typeGroupField } from "./shared.js";
+import { attachmentBlocks, billIdentFields, directivesBlock, fld, framedSection, grp, hq, internalContractBlock, invoiceBlock, itemExtraFields, manualValueField, permitsBlock, rep, taxPaymentBlocks, transitBlock, typeGroupField } from "./shared.js";
 import { withShortLabels } from "./short-labels.js";
 import type { DeclarationLayout, LayoutBlock } from "./types.js";
 
@@ -135,15 +135,15 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
         { id: "dai-ly", title: "Đại lý hải quan", items: [fld("TK_ICC", "Mã đại lý hải quan", "text", { no: "1.25", width: "sm" })] },
       ],
     },
-    {
+    framedSection({
       id: "van-chuyen", title: "Vận đơn & vận chuyển", blocks: [
         {
           id: "van-don", title: "Vận đơn", items: [
             // Khai trước: PTVC quyết định định danh (biển / hàng không), HAWB, số lượng container.
             fld("TK_MTC", "Mã phương thức vận chuyển", "code", { no: "1.6", codeTable: "TRANSPORT_MODE", width: "sm" }),
             ...billIdentFields,
-            // Cạnh ô HAWB (hàng không) – cùng là ô theo tình huống của phương thức vận chuyển, đóng khung để dễ nhận ra.
-            fld("VD_COC", "Số lượng container", "number", { no: "1.35", width: "xs", condition: "IN_CONTAINER", framed: true }),
+            // Cạnh ô HAWB (hàng không) – cùng là ô theo tình huống của phương thức vận chuyển.
+            fld("VD_COC", "Số lượng container", "number", { no: "1.35", width: "xs", condition: "IN_CONTAINER" }),
             rep("Số vận đơn", "1.26", 5, [
               fld("VD_BL{n}", "Số vận đơn", "text", { width: "md" }),
               fld("APP_NGAY_VD{n}", "Ngày vận đơn", "date", { width: "sm" }),
@@ -167,7 +167,7 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
         },
         transitBlock("IDA"),
       ],
-    },
+    }),
     {
       id: "giay-phep", title: "Văn bản & giấy phép", blocks: [
         { id: "van-ban", title: "Văn bản pháp quy khác", items: [rep("Mã văn bản pháp quy khác (hàng chương 84/85: ô 1 là MO hoặc CU)", "1.37", 5, [fld("TK_OL{n}", "Mã", "code", { codeTable: "A519", width: "xs" })])] },

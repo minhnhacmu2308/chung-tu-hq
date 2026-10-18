@@ -1,11 +1,12 @@
 // Tờ khai của hồ sơ (chỉ tiêu theo mã app: MA_LH, PTVC, CANG_DO…) ↔ form tờ khai đầy đủ (ô theo tên trường VNACCS: TK_ICB, TK_MTC, VD_DST…).
-// Cách tách ô giống lúc truyền FPT (packages/core integration/domain/declaration-to-fpt.ts) để màn hình hiện đúng những gì sẽ gửi.
-// Bản đầu chỉ sửa được ô một–một đã có trên tờ khai (qua API sửa chỉ tiêu, có ghi field_audit); ô ghép / ô chưa lưu chỉ đọc.
+// Tách ô giống lúc truyền FPT (packages/core integration/domain/declaration-to-fpt.ts) để màn hình hiện đúng những gì sẽ gửi; sửa ô con thì ghép
+// lại đúng định dạng của chỉ tiêu ("mã – tên", "số đơn vị", địa chỉ một dòng…) rồi lưu qua API sửa chỉ tiêu (backend kiểm tra, ghi field_audit).
 import { isDeclarationFieldEditable, type DeclarationField, type LineItem } from "@kb/contracts";
 import type { FormValues } from "./form-state";
 
 type Kind = "IDA" | "EDA";
-type Rule = { code: string; to: (v: string) => FormValues; editable: boolean };
+/** `keys`: ô form của chỉ tiêu; `to`: giá trị chỉ tiêu → ô; `from`: ô → giá trị chỉ tiêu (không có → chỉ đọc). */
+type Rule = { code: string; keys: string[]; to: (v: string) => FormValues; from?: (v: FormValues) => string };
 
 const firstToken = (v: string) => v.split(/\s*[–-]\s*/)[0]!.trim();
 const splitCodeName = (v: string) => {
@@ -29,23 +30,38 @@ function splitAddress(addr: string, max: number): string[] {
   }
   return out;
 }
+const get = (v: FormValues, k: string) => (v[k] ?? "").trim();
+const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 
-const direct = (code: string, key: string): Rule => ({ code, to: (v) => ({ [key]: v }), editable: true });
-const token = (code: string, key: string): Rule => ({ code, to: (v) => ({ [key]: firstToken(v) }), editable: true });
-const codeName = (code: string, [c, n]: [string, string]): Rule => ({ code, to: (v) => { const s = splitCodeName(v); return { [c]: s.code, [n]: s.name }; }, editable: false });
-const qty = (code: string, [n, u]: [string, string]): Rule => ({ code, to: (v) => ({ [n]: v.split(" ")[0] ?? "", [u]: v.split(" ")[1] ?? "" }), editable: false });
-const weight = (code: string, [w, u]: [string, string]): Rule => ({ code, to: (v) => ({ [w]: v, [u]: "KGM" }), editable: false });
-const address = (code: string, keys: string[]): Rule => ({ code, to: (v) => Object.fromEntries(splitAddress(v, keys.length).map((c, i) => [keys[i]!, c])), editable: false });
+const direct = (code: string, key: string): Rule => ({ code, keys: [key], to: (v) => ({ [key]: v }), from: (v) => get(v, key) });
+/** Ô mã (PTVC "1 – Đường hàng không" → "1"): sửa thì lưu phần mã (FPT chỉ gửi phần mã). */
+const token = (code: string, key: string): Rule => ({ code, keys: [key], to: (v) => ({ [key]: firstToken(v) }), from: (v) => get(v, key) });
+const codeName = (code: string, [c, n]: [string, string]): Rule => ({
+  code, keys: [c, n],
+  to: (v) => { const s = splitCodeName(v); return { [c]: s.code, [n]: s.name }; },
+  from: (v) => (get(v, c) && get(v, n) && get(v, c) !== get(v, n) ? `${get(v, c)} – ${get(v, n)}` : get(v, c) || get(v, n)),
+});
+const qty = (code: string, [n, u]: [string, string]): Rule => ({
+  code, keys: [n, u], to: (v) => ({ [n]: v.split(" ")[0] ?? "", [u]: v.split(" ")[1] ?? "" }), from: (v) => [get(v, n), get(v, u)].filter(Boolean).join(" "),
+});
+/** Trọng lượng: đơn vị luôn KGM khi truyền – chỉ sửa số. */
+const weight = (code: string, [w, u]: [string, string]): Rule => ({ code, keys: [w], to: (v) => ({ [w]: v, [u]: "KGM" }), from: (v) => get(v, w) });
+const address = (code: string, keys: string[]): Rule => ({
+  code, keys, to: (v) => Object.fromEntries(splitAddress(v, keys.length).map((c, i) => [keys[i]!, c])), from: (v) => keys.map((k) => get(v, k)).filter(Boolean).join(" "),
+});
 const list = (code: string, key: (i: number) => string, max: number): Rule => ({
-  code, to: (v) => Object.fromEntries([...new Set(v.split(/[;,\s]+/).filter(Boolean))].slice(0, max).map((c, i) => [key(i + 1), c])), editable: false,
+  code, keys: range(max).map(key),
+  to: (v) => Object.fromEntries([...new Set(v.split(/[;,\s]+/).filter(Boolean))].slice(0, max).map((c, i) => [key(i + 1), c])),
+  from: (v) => range(max).map((i) => get(v, key(i))).filter(Boolean).join(", "),
 });
 const permits: Rule = {
   code: "GP",
+  keys: range(5).flatMap((i) => [`TK_SS${i}`, `TK_SN${i}`]),
   to: (v) => Object.fromEntries(v.split(";").map((x) => x.trim()).filter(Boolean).slice(0, 5).flatMap((x, i) => {
     const [c = "", ...rest] = x.split(/\s+/);
     return [[`TK_SS${i + 1}`, c.toUpperCase()], [`TK_SN${i + 1}`, rest.join("")]];
   })),
-  editable: false,
+  from: (v) => range(5).map((i) => [get(v, `TK_SS${i}`), get(v, `TK_SN${i}`)].filter(Boolean).join(" ")).filter(Boolean).join("; "),
 };
 
 const COMMON_INVOICE = (): Rule[] => [
@@ -90,7 +106,7 @@ export function declarationValues(kind: Kind, fields: Pick<DeclarationField, "co
   return out;
 }
 
-/** Dòng hàng → ô HAG_* (chỉ đọc ở bản đầu – sửa HS / dòng hàng ở bước OCR, AI Agent). */
+/** Dòng hàng → ô HAG_* (chỉ đọc – sửa HS / dòng hàng ở bước OCR, AI Agent). */
 export function itemValues(kind: Kind, items: Pick<LineItem, "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsSuggested" | "hsConfirmed" | "importDutyRate">[]): FormValues[] {
   return items.map((it) => {
     const v: FormValues = {
@@ -106,24 +122,25 @@ export function itemValues(kind: Kind, items: Pick<LineItem, "description" | "qu
   });
 }
 
-/** Ô form sửa được → mã chỉ tiêu: ô một–một, chỉ tiêu đã có trên tờ khai và được sửa (isDeclarationFieldEditable). `canEdit` = nháp + có quyền. */
+/** Ô form sửa được → mã chỉ tiêu: chỉ tiêu đã có trên tờ khai và được sửa (isDeclarationFieldEditable). `canEdit` = nháp + có quyền. */
 export function editableKeys(kind: Kind, fields: Pick<DeclarationField, "code">[], canEdit: boolean): Map<string, string> {
   const out = new Map<string, string>();
   if (!canEdit) return out;
   for (const r of RULES[kind]) {
-    if (!r.editable || !isDeclarationFieldEditable(r.code) || !fields.some((x) => x.code === r.code)) continue;
-    const [key] = Object.keys(r.to("x"));
-    if (key && !out.has(key)) out.set(key, r.code);
+    if (!r.from || !isDeclarationFieldEditable(r.code) || !fields.some((x) => x.code === r.code)) continue;
+    for (const key of r.keys) if (!out.has(key)) out.set(key, r.code);
   }
   return out;
 }
 
-/** Các chỉ tiêu cần lưu: ô sửa được có giá trị khác bản gốc. */
-export function pendingEdits(original: FormValues, draft: FormValues, editable: Map<string, string>): { code: string; value: string }[] {
+/** Các chỉ tiêu cần lưu: chỉ tiêu có ô sửa được mà giá trị ghép lại khác bản gốc. */
+export function pendingEdits(kind: Kind, original: FormValues, draft: FormValues, editable: Map<string, string>): { code: string; value: string }[] {
   const out: { code: string; value: string }[] = [];
-  for (const [key, code] of editable) {
-    const next = (draft[key] ?? "").trim();
-    if (next !== (original[key] ?? "").trim()) out.push({ code, value: next });
+  for (const code of new Set(editable.values())) {
+    const r = RULES[kind].find((x) => x.code === code);
+    if (!r?.from) continue;
+    const next = r.from(draft);
+    if (next !== r.from(original)) out.push({ code, value: next });
   }
   return out;
 }

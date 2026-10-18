@@ -1,298 +1,33 @@
 "use client";
-// Bước 5 – Review tờ khai: xem tờ khai nháp IDA/EDA theo nhóm, nguồn từng chỉ tiêu, thuế dự kiến → phê duyệt.
+// Bước 5 – Review tờ khai: tờ khai đầy đủ theo Phụ lục II (sửa chỉ tiêu nháp), chứng từ đính kèm, Hải quan trả về, theo dõi nghiệp vụ → phê duyệt.
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, createDataTableColumnHelper, DataTable,
-  Dialog, DialogContent, DialogFooter, EmptyState, Field, Grid, Input, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, cn,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
+  Dialog, DialogContent, DialogFooter, EmptyState, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast,
 } from "@kb/ui";
-import { canEditDeclaration, isDeclarationFieldEditable } from "@kb/contracts";
+import { canEditDeclaration } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, FileCheck2, FileText, Paperclip, Pencil, Plus, RotateCcw, ShieldCheck, XCircle } from "lucide-react";
+import { FileCheck2, FileText, Paperclip, RotateCcw, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { dossierKeys, listDocuments } from "@/api/dossiers";
-import type { ExchangeRateInfo } from "@kb/contracts";
-import { approveDeclaration, declarationKeys, getDeclarationView, reopenDeclaration, updateDeclarationField, type DeclarationItemView } from "@/api/declaration";
-import { rateSourceHint } from "./rate-source";
+import { approveDeclaration, declarationKeys, getDeclarationView, reopenDeclaration } from "@/api/declaration";
 import { getSession, sessionKeys } from "@/api/session";
 import { customsKeys, getSubmission } from "@/api/customs";
 import { getOrganization, settingsKeys } from "@/api/settings";
 import { toastMutationError } from "@/lib/mutation-error";
-import { formatBytesVi, formatDate, formatDateTime, formatMoney, formatNumber, formatVnd } from "@/lib/format";
-import { DOC_KIND_LABELS, type Declaration, type DeclarationField } from "@/mocks/types";
-import { errorMessage, KeyValue, SourceChip, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
-import { fieldGuide } from "./field-guide";
+import { formatBytesVi, formatDateTime, formatMoney, formatVnd } from "@/lib/format";
+import { DOC_KIND_LABELS, type Declaration } from "@/mocks/types";
+import { errorMessage, KeyValue, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
 import { CustomsInfoPanel } from "./customs-info-panel";
-import { errorPlace, errorsForField, fieldErrors, type FieldError } from "./customs-errors";
-import { fieldTitle, groupDeclarationFields, ROLE_INFO, type RoledField } from "./declaration-groups";
-import { provenanceLabel } from "./provenance";
+import { errorPlace, fieldErrors } from "./customs-errors";
+import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { LoadError } from "@/components/common/load-error";
 
-const DATE_CODES = new Set(["NGAY_DK", "NGAY_DEN", "NGAY_DI", "NGAY_HD", "HAN_TX", "HAN_TN"]);
-
-function displayValue(f: DeclarationField, currency: string) {
-  if (DATE_CODES.has(f.code) && /^\d{4}-\d{2}-\d{2}$/.test(f.value)) return formatDate(f.value);
-  if (f.code === "TONG_TG") return formatMoney(f.value, currency);
-  if (f.code === "TY_GIA") return `${formatNumber(f.value)} VND/${currency}`;
-  if (f.code === "TRONG_LUONG") return `${formatNumber(f.value, 2)} kg`;
-  return f.value;
-}
-
-function RoleBadge({ role }: { role: RoledField["role"] }) {
-  const info = ROLE_INFO[role];
-  return (
-    <Badge tone={info.tone} size="sm">
-      <span className="sr-only">Vai trò: </span>
-      {info.label}
-    </Badge>
-  );
-}
-
-function FieldTile({ field, currency, note, errors = [], onEdit }: { field: RoledField; currency: string; note?: string | undefined; errors?: FieldError[]; onEdit?: (() => void) | undefined }) {
-  return (
-    <div className={cn("flex flex-col gap-1.5 rounded-md border p-3", errors.length ? "border-danger bg-danger-subtle" : field.suspect ? "border-warning bg-warning-subtle" : "border-border bg-surface")}>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-fg-muted">{fieldTitle(field)}</p>
-        <SourceChip source={field.source} className="shrink-0" />
-      </div>
-      <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 break-words text-sm font-medium text-fg">{displayValue(field, currency) || <span className="font-normal text-fg-subtle">Chưa có giá trị</span>}</p>
-        {onEdit && (
-          <Button size="sm" variant="ghost" className="-my-1 shrink-0" leftIcon={<Pencil className="h-3.5 w-3.5" />} aria-label={`Sửa ${field.label}`} onClick={onEdit}>
-            Sửa
-          </Button>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <RoleBadge role={field.role} />
-        {provenanceLabel(field.provenance) && <span className="text-xs text-fg-subtle">{provenanceLabel(field.provenance)}</span>}
-      </div>
-      {field.condition && <p className="text-xs text-fg-subtle">Có trên tờ khai vì: {field.condition}</p>}
-      {errors.map((e, i) => (
-        <p key={i} className="flex items-start gap-1 text-sm text-danger-subtle-fg">
-          <XCircle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
-          <span>
-            <span className="font-medium">Hải quan báo lỗi {e.code}:</span> {e.message}
-            {e.solution ? ` → ${e.solution}` : ""}
-          </span>
-        </p>
-      ))}
-      {field.suspect && (
-        <p className="flex items-start gap-1 text-sm text-warning-subtle-fg">
-          <AlertTriangle aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
-          <span>
-            <span className="font-medium">Cần kiểm tra.</span> {note ?? "Dữ liệu chưa đối chiếu được giữa các chứng từ."}
-          </span>
-        </p>
-      )}
-    </div>
-  );
-}
-
-const SUSPECT_NOTES: Record<string, string> = {
-  CANG_DO: "B/L và Arrival Notice ghi cảng khác nhau – đã lấy điểm đến cuối tại Việt Nam.",
-  TRONG_LUONG: "Packing List 5.420,00 kg – B/L 5.402,00 kg.",
-  TY_GIA: "Tỷ giá theo ngày khai dự kiến, sẽ cập nhật khi đăng ký tờ khai.",
-};
-
-/** Chú thích nhãn vai trò – chỉ các vai trò có mặt trên tờ khai này. */
-function RoleLegend({ roles }: { roles: RoledField["role"][] }) {
-  const present = (Object.keys(ROLE_INFO) as RoledField["role"][]).filter((r) => roles.includes(r));
-  return (
-    <section aria-label="Cách đọc nhãn chỉ tiêu" className="rounded-md border border-border bg-surface-muted px-3 py-2.5">
-      <p className="mb-1.5 text-xs font-medium text-fg-muted">Số trước tên là số chỉ tiêu theo Phụ lục II (TT39/2018, sửa đổi TT121/2025). Nhãn vai trò:</p>
-      <ul className="flex flex-col gap-1.5 cq-md:flex-row cq-md:flex-wrap cq-md:gap-x-4">
-        {present.map((r) => (
-          <li key={r} className="flex items-center gap-1.5 text-xs text-fg-muted">
-            <RoleBadge role={r} />
-            <span>{ROLE_INFO[r].meaning}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function GeneralTab({ decl, currency, errors, onEdit }: { decl: Declaration; currency: string; errors: FieldError[]; onEdit?: ((f: DeclarationField) => void) | undefined }) {
-  const groups = groupDeclarationFields(decl.kind, decl.fields);
-  return (
-    <Stack gap="lg">
-      <RoleLegend roles={groups.flatMap((g) => g.fields.map((f) => f.role))} />
-      {groups.map((group) => {
-        const { id, fields } = group;
-        return (
-          <section key={id} aria-labelledby={`sec-${id}`}>
-            <h3 id={`sec-${id}`} className="text-sm font-semibold text-fg">
-              {group.title}
-            </h3>
-            {group.description && <p className="mt-0.5 text-xs text-fg-subtle">{group.description}</p>}
-            <Grid cols={{ base: 1, md: 2, xl: 3 }} gap="sm" className="mt-2">
-              {fields.map((f) => (
-                <FieldTile key={f.code} field={f} currency={currency} note={f.note ?? SUSPECT_NOTES[f.code]} errors={errorsForField(errors, f.no)} onEdit={onEdit && isDeclarationFieldEditable(f.code) ? () => onEdit(f) : undefined} />
-              ))}
-            </Grid>
-          </section>
-        );
-      })}
-    </Stack>
-  );
-}
-
-const col = createDataTableColumnHelper<DeclarationItemView>();
-
-// Trị giá tính thuế và thuế từng dòng là số ứng dụng ước tính – VNACCS tự phân bổ, tính lại khi khai (chỉ tiêu 1.76, 1.87 / 2.67, 2.76).
-function ItemsTab({ kind, items, currency }: { kind: Declaration["kind"]; items: DeclarationItemView[]; currency: string }) {
-  const columns = col.columns([
-    col.accessor("lineNo", { header: "#", size: 48, meta: { align: "center" } }),
-    col.accessor("description", {
-      header: "Mô tả hàng hóa",
-      meta: { wrap: true },
-      size: 260,
-      cell: (c) => (
-        <div>
-          <p className="text-fg">{c.getValue()}</p>
-          <p className="text-xs text-fg-subtle">Xuất xứ {c.row.original.origin}</p>
-        </div>
-      ),
-    }),
-    col.accessor("hsConfirmed", { header: "Mã HS", cell: (c) => <span className="font-mono">{c.getValue() ?? "—"}</span> }),
-    col.accessor("quantity", {
-      header: "Lượng",
-      meta: { align: "end" },
-      cell: (c) => `${formatNumber(c.getValue())} ${c.row.original.unit}`,
-    }),
-    col.accessor("unitPrice", { header: `Đơn giá (${currency})`, meta: { align: "end" }, cell: (c) => formatMoney(c.getValue(), undefined, 3) }),
-    col.accessor("amount", { header: `Trị giá (${currency})`, meta: { align: "end" }, cell: (c) => formatMoney(c.getValue()) }),
-    col.accessor("customsValueVnd", { header: "Trị giá tính thuế (VND)", meta: { align: "end" }, cell: (c) => formatMoney(c.getValue(), undefined, 0) }),
-    // Tờ khai xuất: ứng dụng chưa ước tính thuế xuất khẩu và không thu thuế GTGT – không hiện cột thuế.
-    ...(kind === "IDA"
-      ? [
-          col.accessor("importDutyVnd", {
-            header: "Thuế NK",
-            meta: { align: "end" },
-            cell: (c) => (
-              <div>
-                <p className="tabular-nums">{formatMoney(c.getValue(), undefined, 0)}</p>
-                <p className="text-xs text-fg-subtle">{c.row.original.importDutyRate ?? "—"}%</p>
-              </div>
-            ),
-          }),
-          col.accessor("vatVnd", {
-            header: "VAT",
-            meta: { align: "end" },
-            cell: (c) => (
-              <div>
-                <p className="tabular-nums">{formatMoney(c.getValue(), undefined, 0)}</p>
-                <p className="text-xs text-fg-subtle">{c.row.original.vatRate ?? "—"}%</p>
-              </div>
-            ),
-          }),
-        ]
-      : []),
-  ]);
-  return (
-    <Stack gap="sm">
-      <p className="text-xs text-fg-subtle">
-        {kind === "IDA"
-          ? "Trị giá tính thuế, thuế NK và VAT là số ứng dụng ước tính – Hải quan tự phân bổ, tính lại khi khai báo."
-          : "Trị giá tính thuế là số ứng dụng ước tính – Hải quan tự phân bổ, tính lại khi khai báo. Thuế xuất khẩu do Hải quan tính."}
-      </p>
-      <DataTable aria-label="Danh sách hàng trên tờ khai" columns={columns} data={items} getRowId={(r) => r.id} />
-    </Stack>
-  );
-}
-
-/** Tờ khai xuất: ứng dụng chưa ước tính thuế xuất khẩu – chỉ dẫn người dùng tới số Hải quan trả về. */
 const exportTaxText = (status: Declaration["status"]) =>
   status === "SUBMITTED" ? "Xem số thuế Hải quan trả về ở bước Khai báo Hải quan" : "Hải quan tính sau khi khai tạm EDA";
-
-function TaxTab({ decl, items, currency, rateInfo }: { decl: Declaration; items: DeclarationItemView[]; currency: string; rateInfo?: ExchangeRateInfo | null | undefined }) {
-  const invoice = decl.fields.find((f) => f.code === "TONG_TG")?.value ?? "0";
-  const policies = Array.from(new Set(items.map((i) => i.policyNote).filter((p): p is string => Boolean(p))));
-  const totalTax = String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd));
-  return (
-    <Grid cols={{ base: 1, lg: 2 }} gap="md">
-      <Card>
-        <CardHeader>
-          <CardTitle as="h3">Trị giá tính thuế (ước tính)</CardTitle>
-          <CardDescription>Theo điều kiện giá {decl.fields.find((f) => f.code === "DK_GIA")?.value}. Khoản cộng ghi rõ nguồn.</CardDescription>
-        </CardHeader>
-        <CardContent className="divide-y divide-border">
-          <KeyValue label="Trị giá hóa đơn" hint={<SourceChip source="INVOICE" />} value={formatMoney(invoice, currency)} />
-          {decl.valueAdjustments.length === 0 && <KeyValue label="Khoản điều chỉnh cộng" hint="Giá CIF/CIP – không cần cộng cước, bảo hiểm" value="0" />}
-          {decl.valueAdjustments.map((a) => (
-            <KeyValue
-              key={a.label}
-              label={
-                <span className="inline-flex items-center gap-1">
-                  <Plus aria-hidden="true" className="h-3.5 w-3.5 text-fg-subtle" />
-                  {a.label}
-                </span>
-              }
-              hint={<SourceChip source={a.source} />}
-              value={formatMoney(a.amount, a.currency)}
-            />
-          ))}
-          <KeyValue
-            label="Tỷ giá tính thuế"
-            hint={currency === "VND" ? "Hóa đơn bằng VND – không quy đổi" : rateSourceHint(rateInfo, decl.exchangeRateDate)}
-            value={`${formatNumber(decl.exchangeRate)} VND/${currency}`}
-          />
-          <KeyValue strong label="Trị giá tính thuế" value={formatVnd(decl.customsValueVnd)} />
-        </CardContent>
-      </Card>
-      <Stack gap="md">
-        {decl.kind === "IDA" ? (
-          <Card>
-            <CardHeader>
-              <CardTitle as="h3">Thuế dự kiến</CardTitle>
-              <CardDescription>Số ứng dụng ước tính – thuế chính thức do Hải quan tính và trả về sau khi khai tạm IDA.</CardDescription>
-            </CardHeader>
-            <CardContent className="divide-y divide-border">
-              <KeyValue label="Thuế nhập khẩu" value={formatVnd(decl.estimatedImportDutyVnd)} />
-              <KeyValue label="Thuế GTGT (VAT)" value={formatVnd(decl.estimatedVatVnd)} />
-              <KeyValue strong label="Tổng thuế phải nộp dự kiến" value={formatVnd(totalTax)} />
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle as="h3">Thuế xuất khẩu</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Alert tone="info" title={exportTaxText(decl.status)}>
-                Ứng dụng chưa ước tính thuế xuất khẩu theo Biểu thuế xuất khẩu. Số thuế chính thức do Hải quan tính, hiện ở bước Khai báo Hải quan. Tờ khai xuất khẩu không thu thuế GTGT.
-              </Alert>
-            </CardContent>
-          </Card>
-        )}
-        <Card>
-          <CardHeader>
-            <CardTitle as="h3">Chính sách & ưu đãi</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {policies.length === 0 ? (
-              <p className="flex items-center gap-2 text-sm text-fg-muted">
-                <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-success" />
-                Không có chính sách quản lý chuyên ngành cho các mã HS này.
-              </p>
-            ) : (
-              <Stack gap="sm">
-                {policies.map((p) => (
-                  <Alert key={p} tone={p.startsWith("Kiểm tra") ? "warning" : "info"}>
-                    {p}
-                  </Alert>
-                ))}
-              </Stack>
-            )}
-          </CardContent>
-        </Card>
-      </Stack>
-    </Grid>
-  );
-}
 
 function DocumentsTab({ dossierId }: { dossierId: string }) {
   const docs = useQuery({ queryKey: dossierKeys.documents(dossierId), queryFn: () => listDocuments(dossierId) });
@@ -317,61 +52,7 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
   );
 }
 
-/** Sửa tay một chỉ tiêu trên tờ khai nháp. Giá trị mới mang nguồn "Người khai sửa" và được ghi vào lịch sử sửa. */
-function EditFieldDialog({ dossierId, kind, field, currency, onClose }: { dossierId: string; kind: Declaration["kind"]; field: DeclarationField; currency: string; onClose: () => void }) {
-  const qc = useQueryClient();
-  const [value, setValue] = useState(field.value);
-  const guide = fieldGuide(kind, field.no);
-  const isDate = DATE_CODES.has(field.code);
-  const next = value.trim();
-  const save = useMutation({
-    mutationFn: () => updateDeclarationField(dossierId, field.code, next),
-    onSuccess: () => {
-      toast({ tone: "success", title: `Đã sửa ${field.label}` });
-      void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
-      void qc.invalidateQueries({ queryKey: dossierKeys.all });
-      onClose();
-    },
-    onError: toastMutationError("Không lưu được chỉ tiêu"),
-  });
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent title="Sửa chỉ tiêu tờ khai" icon={<Pencil className="h-4 w-4" />} description={`${field.label} · ${field.no ?? field.code}`} size="sm">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (next !== field.value && !save.isPending) save.mutate();
-          }}
-        >
-          <Stack gap="md">
-            <div className="divide-y divide-border rounded-md border border-border px-3">
-              <KeyValue label="Giá trị hiện tại" hint={<SourceChip source={field.source} />} value={displayValue(field, currency) || "—"} />
-            </div>
-            {field.suspect && field.note && <Alert tone="warning">{field.note}</Alert>}
-            {guide && (
-              <Alert tone="info" title={`Hướng dẫn khai chỉ tiêu ${guide.no}${guide.amendedBy121 ? " (sửa đổi theo TT121/2025)" : ""}`}>
-                {guide.note}
-              </Alert>
-            )}
-            <Field label="Giá trị mới" hint="Sau khi lưu, chỉ tiêu mang nguồn “Người khai sửa” và được giữ khi dựng lại tờ khai.">
-              <Input type={isDate ? "date" : "text"} value={value} maxLength={500} autoFocus onChange={(e) => setValue(e.currentTarget.value)} />
-            </Field>
-          </Stack>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Hủy
-            </Button>
-            <Button type="submit" loading={save.isPending} disabled={next === field.value}>
-              Lưu
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-const TABS = ["general", "full", "items", "tax", "docs", "customs", "ops"] as const;
+const TABS = ["full", "docs", "customs", "ops"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
@@ -380,7 +61,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const pathname = usePathname();
   const params = useSearchParams();
   const tabParam = params.get("tab");
-  const tab: Tab = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "general";
+  const tab: Tab = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "full";
   const setTab = (t: string) => {
     const next = new URLSearchParams(params.toString());
     next.set("tab", t);
@@ -389,7 +70,6 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checked, setChecked] = useState(false);
-  const [editing, setEditing] = useState<DeclarationField | null>(null);
   const [reopenOpen, setReopenOpen] = useState(false);
   const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
   const canEdit = session.data ? canEditDeclaration(session.data.user.role) : false;
@@ -472,7 +152,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
           <Stack gap="sm">
             {rejection && errs.length > 0 && (
               <Alert tone="danger" title={`Hải quan từ chối ${rejection.operation} lúc ${formatDateTime(rejection.at)} – ${errs.length} lỗi`}>
-                <p>{isDraft ? "Sửa các ô đánh dấu đỏ trong tab Thông tin chung (lỗi theo dòng hàng: sửa ở bước OCR/AI Agent), phê duyệt lại rồi khai lại." : "Mở lại tờ khai để sửa các ô đánh dấu đỏ, phê duyệt lại rồi khai lại."}</p>
+                <p>{isDraft ? "Sửa các chỉ tiêu báo lỗi dưới đây ở tab Tờ khai đầy đủ (lỗi theo dòng hàng: sửa ở bước OCR/AI Agent), phê duyệt lại rồi khai lại." : "Mở lại tờ khai để sửa các chỉ tiêu báo lỗi dưới đây, phê duyệt lại rồi khai lại."}</p>
                 <ul className="mt-1 flex flex-col gap-1">
                   {errs.map((e, i) => (
                     <li key={i}>
@@ -490,7 +170,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             )}
             {isDraft && suspect.length > 0 && (
               <Alert tone="warning" title={`${suspect.length} chỉ tiêu cần kiểm tra`}>
-                Được tô vàng trong tab Thông tin chung: {suspect.map((f) => fieldTitle(f)).join(", ")}.
+                Kiểm tra ở tab Tờ khai đầy đủ: {suspect.map((f) => fieldTitle(f)).join(", ")}.
               </Alert>
             )}
             {isDraft && blockedByFourEyes && (
@@ -515,31 +195,17 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
           <Tabs value={tab} onValueChange={setTab} className="mt-4">
             <TabsList aria-label="Nhóm chỉ tiêu tờ khai">
-              <TabsTrigger value="general">
-                Thông tin chung {errs.length > 0 && <Badge tone="danger">{errs.length} lỗi</Badge>} {suspect.length > 0 && <Badge tone="warning">{suspect.length}</Badge>}
+              <TabsTrigger value="full">
+                Tờ khai đầy đủ {errs.length > 0 && <Badge tone="danger">{errs.length} lỗi</Badge>}
               </TabsTrigger>
-              <TabsTrigger value="full">Tờ khai đầy đủ</TabsTrigger>
-              <TabsTrigger value="items">
-                Danh sách hàng <Badge tone="neutral">{items.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="tax">Thuế & chính sách</TabsTrigger>
               <TabsTrigger value="docs">Chứng từ đính kèm</TabsTrigger>
               <TabsTrigger value="customs">
                 Hải quan trả về {customsInfo ? customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge> : <Badge tone="neutral">chưa có</Badge>}
               </TabsTrigger>
               <TabsTrigger value="ops">Theo dõi & nghiệp vụ</TabsTrigger>
             </TabsList>
-            <TabsContent value="general">
-              <GeneralTab decl={decl} currency={dossier.currency} errors={errs} onEdit={isDraft && canEdit ? setEditing : undefined} />
-            </TabsContent>
             <TabsContent value="full">
               <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} canEdit={isDraft && canEdit} />
-            </TabsContent>
-            <TabsContent value="items">
-              <ItemsTab kind={decl.kind} items={items} currency={dossier.currency} />
-            </TabsContent>
-            <TabsContent value="tax">
-              <TaxTab decl={decl} items={items} currency={dossier.currency} rateInfo={viewQ.data?.exchangeRateInfo} />
             </TabsContent>
             <TabsContent value="docs">
               <DocumentsTab dossierId={dossier.id} />
@@ -573,7 +239,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
           <div className="min-w-0 flex-1">
             <p className="text-xs text-fg-muted">Tổng thuế phải nộp dự kiến (ước tính)</p>
             <p className="text-lg font-semibold tabular-nums text-fg">{formatVnd(totalTax)}</p>
-            {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%) – xem tab Thuế & chính sách</p>}
+            {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%)</p>}
           </div>
         ) : (
           <div className="min-w-0 flex-1">
@@ -607,7 +273,6 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         )}
       </StickyActionBar>
 
-      {editing && <EditFieldDialog key={editing.code} dossierId={dossier.id} kind={decl.kind} field={editing} currency={dossier.currency} onClose={() => setEditing(null)} />}
 
       <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
         <DialogContent title="Mở lại tờ khai để sửa" icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">

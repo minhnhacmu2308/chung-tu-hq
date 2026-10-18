@@ -1,7 +1,7 @@
 "use client";
 // Form tờ khai đầy đủ (Phụ lục II) chạy trên tờ khai thật của hồ sơ – tab "Tờ khai đầy đủ" ở bước Review.
-// Giá trị lấy từ chỉ tiêu của tờ khai qua bảng chuyển mã (dossier-adapter). Sửa được ô một–một đã có trên tờ khai, lưu bằng API sửa chỉ tiêu
-// (backend ghi field_audit); ô ghép / ô chưa lưu chỉ đọc. Dòng hàng chỉ đọc (sửa ở bước OCR, AI Agent).
+// Giá trị lấy từ chỉ tiêu của tờ khai qua bảng chuyển mã (dossier-adapter). Sửa được chỉ tiêu đã có trên tờ khai (ô ghép lưu lại đúng định dạng),
+// lưu bằng API sửa chỉ tiêu (backend ghi field_audit); chỉ tiêu tính từ chứng từ / chưa lưu được chỉ đọc. Dòng hàng chỉ đọc (sửa ở bước OCR, AI Agent).
 import { Alert, Button, Stack, toast } from "@kb/ui";
 import { layoutFor, type Declaration, type LineItem } from "@kb/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -53,7 +53,8 @@ export function DossierDeclarationForm({ dossierId, decl, items, canEdit }: Prop
   // (quay lại cửa sổ) cùng dữ liệu không xóa phần đang sửa dở.
   const originalKey = JSON.stringify(original);
   useEffect(() => setDraft(original), [originalKey]);
-  const edits = pendingEdits(original, draft, editable);
+  const edits = pendingEdits(kind, original, draft, editable);
+  const editableCount = new Set(editable.values()).size;
   const lockOf: FieldLockLookup = (key) => (editable.has(key) ? null : NOT_SAVED);
 
   const save = useMutation({
@@ -73,8 +74,8 @@ export function DossierDeclarationForm({ dossierId, decl, items, canEdit }: Prop
   const notice = canEdit ? (
     <Alert tone={edits.length ? "warning" : "info"} title={edits.length ? `Có ${formatNumber(edits.length)} chỉ tiêu chưa lưu` : "Tờ khai đầy đủ theo Phụ lục II"}>
       <p>
-        Sửa được {formatNumber(editable.size)} chỉ tiêu đã có trên tờ khai. Ô nền xám là ô phần mềm tự ghép khi truyền hoặc chưa lưu được ở bản này – sửa ở tab Thông tin chung,
-        dòng hàng sửa ở bước OCR / AI Agent.
+        Sửa được {formatNumber(editableCount)} chỉ tiêu đã có trên tờ khai. Ô nền xám chỉ đọc: chỉ tiêu tính từ chứng từ (loại hình, trị giá, phí…), phần mềm tự
+        điền khi truyền hoặc chưa lưu được ở bản này. Dòng hàng sửa ở bước OCR / AI Agent.
       </p>
       {edits.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-1">

@@ -35,20 +35,6 @@ describe("itemValues – dòng hàng → ô HAG_* của form", () => {
   });
 });
 
-describe("editableKeys / pendingEdits – chỉ sửa ô một–một đã có trên tờ khai, sửa được theo quy tắc", () => {
-  const fields = [f("SO_HD", "INV-1"), f("PTVC", "1 – Đường hàng không"), f("MA_LH", "A11"), f("CANG_DO", "VNHPH – CANG HAI PHONG"), f("TONG_TG", "10")];
-  it("không quyền / không phải nháp → không ô nào; ô bị khóa (MA_LH, TONG_TG) và ô ghép (cảng) không sửa", () => {
-    expect(editableKeys("IDA", fields, false).size).toBe(0);
-    const keys = editableKeys("IDA", fields, true);
-    expect(Object.fromEntries(keys)).toEqual({ TK_IV3: "SO_HD", TK_MTC: "PTVC" });
-  });
-  it("chỉ gửi ô đã đổi, theo mã app; bỏ khoảng trắng thừa", () => {
-    const original = declarationValues("IDA", fields);
-    const keys = editableKeys("IDA", fields, true);
-    expect(pendingEdits(original, { ...original, TK_IV3: " INV-2 ", TK_MTC: "1", VD_DST: "VNSGN" }, keys)).toEqual([{ code: "SO_HD", value: "INV-2" }]);
-    expect(pendingEdits(original, { ...original, TK_MTC: "2" }, keys)).toEqual([{ code: "PTVC", value: "2" }]);
-  });
-});
 
 describe("bảng chuyển mã khớp bố cục form", () => {
   it.each(["IDA", "EDA"] as const)("%s: mọi ô sinh ra có trên form đầy đủ (dòng hàng: ô HAG_*)", (kind) => {
@@ -67,5 +53,41 @@ describe("itemValues – tờ khai xuất", () => {
     const [v] = itemValues("EDA", [{ description: "Áo #&VN", quantity: "1", unit: "PCE", unitPrice: "1", amount: "1", origin: "VN", importDutyRate: "0" }]);
     expect(v).not.toHaveProperty("HAG_OR");
     expect(v).not.toHaveProperty("HAG_TXA");
+  });
+});
+
+describe("editableKeys / pendingEdits – sửa ô đã có trên tờ khai; ô ghép lưu lại đúng định dạng chỉ tiêu", () => {
+  const fields = [
+    f("SO_HD", "INV-1"), f("PTVC", "1 – Đường hàng không"), f("MA_LH", "A11"), f("TONG_TG", "10"),
+    f("CANG_DO", "VNHPH – CANG HAI PHONG"), f("SO_KIEN", "12 PK"), f("TRONG_LUONG", "133"), f("NXK_DC", "123 SAMSUNG-RO, YEONGTONG-GU, SUWON-SI, GYEONGGI-DO, KOREA 16677"),
+    f("VBPQ", "MO"), f("GP", "GP01 123/BYT"),
+  ];
+  const original = declarationValues("IDA", fields);
+  const keys = editableKeys("IDA", fields, true);
+  it("không quyền / không phải nháp → không ô nào; chỉ tiêu khóa (MA_LH, TONG_TG) và đơn vị trọng lượng cố định KGM không sửa", () => {
+    expect(editableKeys("IDA", fields, false).size).toBe(0);
+    expect(keys.get("TK_IV3")).toBe("SO_HD");
+    expect(keys.get("VD_DST")).toBe("CANG_DO");
+    expect(keys.get("VD_DSN")).toBe("CANG_DO");
+    expect(keys.get("TK_EP4")).toBe("NXK_DC");
+    expect(keys.get("TK_OL5")).toBe("VBPQ");
+    expect(keys.get("TK_SN5")).toBe("GP");
+    for (const k of ["TK_ICB", "TK_IP4", "VD_GWT"]) expect(keys.has(k)).toBe(false);
+  });
+  it("chỉ gửi chỉ tiêu đã đổi; bỏ khoảng trắng thừa; ô mã gửi phần mã", () => {
+    expect(pendingEdits("IDA", original, original, keys)).toEqual([]);
+    expect(pendingEdits("IDA", original, { ...original, TK_IV3: " INV-2 ", TK_MTC: "1" }, keys)).toEqual([{ code: "SO_HD", value: "INV-2" }]);
+    expect(pendingEdits("IDA", original, { ...original, TK_MTC: "2" }, keys)).toEqual([{ code: "PTVC", value: "2" }]);
+  });
+  it("ô ghép: cảng 'mã – tên', số kiện 'số đơn vị', địa chỉ nối dòng, VBPQ nối phẩy, giấy phép 'mã số; …'", () => {
+    const edits = pendingEdits("IDA", original, { ...original, VD_DST: "VNSGN", VD_DSN: "CANG SAI GON", VD_NO: "15", TK_EP2: "SUWON-SI, GYEONGGI-DO, KOREA 16678", TK_OL2: "CU", TK_SS2: "GP02", TK_SN2: "45" }, keys);
+    expect(edits).toEqual(expect.arrayContaining([
+      { code: "CANG_DO", value: "VNSGN – CANG SAI GON" },
+      { code: "SO_KIEN", value: "15 PK" },
+      { code: "VBPQ", value: "MO, CU" },
+      { code: "GP", value: "GP01 123/BYT; GP02 45" },
+    ]));
+    expect(edits.find((e) => e.code === "NXK_DC")?.value).toBe("123 SAMSUNG-RO, YEONGTONG-GU, SUWON-SI, GYEONGGI-DO, KOREA 16678");
+    expect(edits).toHaveLength(5);
   });
 });

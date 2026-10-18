@@ -1,0 +1,472 @@
+{
+  "note": "Sinh bởi scripts/code-lists/build.mjs từ thư mục 02_DANHMUC_VNACCS – không sửa tay.",
+  "oldToNewOfficeCodes": {
+    "01B2": "01B1",
+    "01B5": "01B1",
+    "01B6": "01B1",
+    "01PL": "01M1",
+    "02B1": "06B1",
+    "02DS": "01DD",
+    "02F2": "02F1",
+    "02H2": "02H1",
+    "02H3": "02H1",
+    "02PJ": "02XE",
+    "03PA": "03NK",
+    "10BF": "10BD",
+    "11B2": "11B1",
+    "11G2": "11G1",
+    "12B2": "12B1",
+    "12F1": "12BI",
+    "12F2": "12BI",
+    "12H2": "12H1",
+    "13G2": "13G1",
+    "18B2": "18B1",
+    "27B2": "27B1",
+    "30BI": "30BB",
+    "30F2": "30F1",
+    "33CF": "33CC",
+    "38B2": "38B1",
+    "38PD": "38BC",
+    "43K4": "43K1",
+    "43PB": "43NG",
+    "45B2": "45B1",
+    "45C2": "45C1",
+    "45F2": "45F1",
+    "47D2": "47D1",
+    "47D3": "47D1",
+    "49BE": "49BB",
+    "49BG": "49BF",
+    "49C2": "49C1",
+    "51C2": "51C1",
+    "53BK": "53BC",
+    "53CD": "53BC",
+    "60C2": "60C1"
+  },
+  "lists": [
+    {
+      "id": "A038",
+      "title": "Cơ quan Hải quan",
+      "sources": [
+        "Ma_DVHQ_01.06.2026 ver 16"
+      ],
+      "superseded": [
+        "1.Bang ma don vi HQ 2025 17032025"
+      ],
+      "count": 197,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "A014",
+      "title": "Bộ phận xử lý tờ khai",
+      "sources": [
+        "Ma_DVHQ_01.06.2026 ver 16"
+      ],
+      "parentLabel": "Cơ quan Hải quan",
+      "superseded": [
+        "2.DM_Bo_Phan_Xuly_ToKhai"
+      ],
+      "count": 213,
+      "inactive": 0,
+      "hasParent": true
+    },
+    {
+      "id": "A202",
+      "title": "Địa điểm lưu kho",
+      "sources": [
+        "13.DM_DDLK_CTQ"
+      ],
+      "parentLabel": "Cơ quan Hải quan",
+      "usesOldOfficeCodes": true,
+      "count": 14754,
+      "inactive": 0,
+      "hasParent": true
+    },
+    {
+      "id": "A016",
+      "title": "Địa điểm xếp / dỡ hàng",
+      "sources": [
+        "11a.DM_DDXEPDOHANG_Cang - ICDtrongnuoc",
+        "11.DM.DD_XEPDOHANG",
+        "12.DM.DD_XEPDOHANG_NUOCNGOAI"
+      ],
+      "parentLabel": "Mã nước",
+      "count": 14710,
+      "inactive": 14,
+      "hasParent": true
+    },
+    {
+      "id": "COUNTRY",
+      "title": "Mã nước",
+      "sources": [
+        "10.QUOCGIA"
+      ],
+      "count": 246,
+      "inactive": 1,
+      "hasParent": false
+    },
+    {
+      "id": "PACKAGE_KIND",
+      "title": "Loại kiện",
+      "sources": [
+        "14.DM_MA_LOAIKIEN"
+      ],
+      "count": 138,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "UNIT",
+      "title": "Đơn vị tính",
+      "sources": [
+        "15.DM_DVT"
+      ],
+      "count": 158,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "CURRENCY",
+      "title": "Mã tiền tệ",
+      "sources": [
+        "16.DM_TIENTE"
+      ],
+      "count": 26,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "TYPE_CODE",
+      "title": "Mã loại hình",
+      "sources": [
+        "Bang ma loai hinh XNK - QD 1357-TCHQ"
+      ],
+      "parentLabel": "Nhập / xuất",
+      "superseded": [
+        "8.LOAIHINH_NHAPKHAU",
+        "9.LOAIHINH_XUATKHAU"
+      ],
+      "count": 40,
+      "inactive": 0,
+      "hasParent": true
+    },
+    {
+      "id": "A520",
+      "title": "Mã miễn / giảm / không chịu thuế",
+      "sources": [
+        "23.DM_MAMIENGIAMTHUESUAT_TONGHOP"
+      ],
+      "count": 138,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "OTHER_TAX",
+      "title": "Mã áp dụng thuế suất / mức thuế và thu khác",
+      "sources": [
+        "24.DM_MA_MGTHUETHUKHAC"
+      ],
+      "count": 288,
+      "inactive": 1,
+      "hasParent": false
+    },
+    {
+      "id": "BANK",
+      "title": "Ngân hàng",
+      "sources": [
+        "25.DM_NGANHANG"
+      ],
+      "count": 1354,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "TAX_TABLE",
+      "title": "Mã biểu thuế nhập khẩu",
+      "sources": [
+        "26.DM_BIEUTHUE"
+      ],
+      "count": 29,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "ABS_TAX",
+      "title": "Mã áp dụng mức thuế tuyệt đối",
+      "sources": [
+        "22.DM_THUESUATTUYETDOI_GANCODE"
+      ],
+      "count": 7,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "A546",
+      "title": "Phân loại đính kèm khai báo điện tử",
+      "sources": [
+        "20.DM_KHAI_HYS_GANCODE"
+      ],
+      "count": 14,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "A519",
+      "title": "Mã văn bản pháp quy",
+      "sources": [
+        "3. CẬP NHẬT MÃ VĂN BẢN 08052026"
+      ],
+      "superseded": [
+        "6.DM_VANBANPHAPQUY_PHANLOAIGIAYPHEP"
+      ],
+      "count": 130,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "A528",
+      "title": "Mã phân loại giấy phép",
+      "sources": [
+        "3. CẬP NHẬT MÃ VĂN BẢN 08052026"
+      ],
+      "superseded": [
+        "6.DM_VANBANPHAPQUY_PHANLOAIGIAYPHEP"
+      ],
+      "count": 140,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "CARGO_CLASS",
+      "title": "Mã phân loại hàng hóa",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 11,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "TRANSPORT_MODE",
+      "title": "Mã phương thức vận chuyển",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 7,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "PARTY_CLASS",
+      "title": "Phân loại cá nhân / tổ chức",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 5,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "INVOICE_KIND",
+      "title": "Phân loại hình thức hóa đơn",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 3,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "PRICE_KIND",
+      "title": "Mã phân loại giá hóa đơn",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 4,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "PAYMENT",
+      "title": "Phương thức thanh toán",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 15,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "INCOTERM",
+      "title": "Điều kiện giao hàng",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 15,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "VALUATION_METHOD",
+      "title": "Mã phân loại khai trị giá",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 9,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "FREIGHT_CLASS",
+      "title": "Phân loại phí vận chuyển",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 6,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "INSURANCE_CLASS",
+      "title": "Phân loại phí bảo hiểm",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 2,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "ADJUSTMENT_CODE",
+      "title": "Mã tên khoản điều chỉnh",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 17,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "TAX_PAYER",
+      "title": "Người nộp thuế",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 2,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "DUE_DATE",
+      "title": "Mã xác định thời hạn nộp thuế",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 4,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "AIRLINE",
+      "title": "Hãng hàng không",
+      "sources": [
+        "17.DM_HANG_HANGKHONG"
+      ],
+      "unassigned": true,
+      "count": 162,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "SHIPPING_LINE",
+      "title": "Hãng tàu biển",
+      "sources": [
+        "18.DM_HANG_TAUBIEN"
+      ],
+      "unassigned": true,
+      "count": 5020,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "RAIL_CARRIER",
+      "title": "Hãng tàu hỏa",
+      "sources": [
+        "19.DM_HANGTAUHOA"
+      ],
+      "unassigned": true,
+      "count": 19,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "VEHICLE_KIND",
+      "title": "Phương tiện vận chuyển (ít dùng)",
+      "sources": [
+        "5.DM_PTVC_ITDUNG"
+      ],
+      "unassigned": true,
+      "count": 37,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "LICENSING_BODY",
+      "title": "Đơn vị cấp phép (Một cửa)",
+      "sources": [
+        "7.DONVICAPPHEP_1CUA"
+      ],
+      "unassigned": true,
+      "count": 20,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "CANCEL_REASON",
+      "title": "Lý do hủy tờ khai",
+      "sources": [
+        "21.DM_LYDOHUYTK_DVC"
+      ],
+      "unassigned": true,
+      "count": 9,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "IMPORT_TAX_RATE_KIND",
+      "title": "Mã thuế suất thuế nhập khẩu",
+      "sources": [
+        "27.MathuesuatthueNK_HQTV"
+      ],
+      "unassigned": true,
+      "count": 7,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "TAX_KIND",
+      "title": "Mã sắc thuế",
+      "sources": [
+        "28.Sacthue_ma_mien_giam_HQTV"
+      ],
+      "unassigned": true,
+      "count": 11,
+      "inactive": 0,
+      "hasParent": false
+    }
+  ],
+  "skipped": [
+    {
+      "source": "3.DM_DL_HAIQUAN",
+      "reason": "Danh sách đại lý của riêng doanh nghiệp (1 dòng mẫu) – dữ liệu khách hàng, không phải danh mục VNACCS"
+    },
+    {
+      "source": "4.DM.UYTHAC",
+      "reason": "Danh sách người ủy thác của riêng doanh nghiệp (1 dòng mẫu)"
+    },
+    {
+      "source": "22.DM_THUESUATTUYETDOI_GANCODE",
+      "reason": "Sheet A402A là mô tả cấu trúc bảng, không phải dữ liệu"
+    }
+  ]
+}

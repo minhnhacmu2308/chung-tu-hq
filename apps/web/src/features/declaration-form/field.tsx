@@ -1,19 +1,28 @@
 "use client";
-// Một ô chỉ tiêu của bản mẫu tờ khai, dạng gọn (phương án B): nhãn "số · tên" kèm dấu * (bắt buộc) hoặc chữ nhỏ "tình huống" / "tự xác định";
-// tên mã hiện ngay bên phải ô mã; nút ⓘ mở hướng dẫn khai (catalog Phụ lục II). Tùy chọn nhãn bên trái (phương án F). "Còn thiếu", lý do áp dụng.
+// Một ô chỉ tiêu của bản mẫu tờ khai, dạng gọn (phương án B): nhãn "số · tên" kèm dấu * (bắt buộc) hoặc chữ nhỏ "tình huống";
+// nút ⓘ mở hướng dẫn khai (catalog Phụ lục II) kèm nghĩa vai trò (VNACCS tự xác định…). Ô mã có danh mục VNACCS: chỉ hiện mã, tên khi rê chuột,
+// tra cứu bằng danh sách thả xuống / popup (CodeInput); chỉ đọc thì hiện "mã · tên". Tùy chọn nhãn bên trái (phương án F). "Còn thiếu", lý do áp dụng.
 import { Button, Checkbox, cn, Field, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
-import { DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type LayoutField } from "@kb/contracts";
+import { codeListFor, DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type LayoutField } from "@kb/contracts";
 import { Info, Lock } from "lucide-react";
+import { useMemo } from "react";
 import { useAmendLock } from "./amend-context";
+import { CodeInput } from "./code-input";
+import { codeScope } from "./code-scope";
+import { ROLE_INFO } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
-import { codeLabel, displayValue, fieldTitle } from "./display";
+import { displayValue, fieldTitle } from "./display";
 import { choiceControl, isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
+import { useCodeName } from "./use-code-list";
 import { useViewPrefs } from "./view-prefs";
 
 type Kind = "IDA" | "EDA";
 
-/** Chữ nhỏ cạnh nhãn thay cho huy hiệu vai trò. Bắt buộc → dấu * (trình đọc màn hình nghe "bắt buộc"). Không bắt buộc → không ghi gì. */
-const ROLE_TAG: Partial<Record<DeclarationFieldRole, string>> = { CONDITIONAL: "tình huống", ASSIST: "tự xác định", UNUSED: "chưa dùng", REFERENCE: "tham khảo" };
+/** Chữ nhỏ cạnh nhãn thay cho huy hiệu vai trò. Bắt buộc → dấu * (trình đọc màn hình nghe "bắt buộc"). Không bắt buộc, VNACCS tự xác định,
+ * chưa sử dụng → không ghi (nghĩa vai trò xem ở nút ⓘ). */
+const ROLE_TAG: Partial<Record<DeclarationFieldRole, string>> = { CONDITIONAL: "tình huống", REFERENCE: "tham khảo" };
+/** Vai trò không hiện cạnh nhãn – ghi nghĩa trong hướng dẫn. */
+const ROLE_IN_GUIDE = new Set<DeclarationFieldRole>(["ASSIST", "UNUSED"]);
 
 export function RoleMark({ role, star = true }: { role: DeclarationFieldRole; star?: boolean }) {
   if (role === "REQUIRED") {
@@ -29,7 +38,7 @@ export function RoleMark({ role, star = true }: { role: DeclarationFieldRole; st
 }
 
 /** Nút ⓘ mở hướng dẫn khai của chỉ tiêu (Phụ lục II, ghi chú nếu TT121 sửa đổi). Không có hướng dẫn → không hiện. */
-export function GuideButton({ kind, no }: { kind: Kind; no: string | undefined }) {
+export function GuideButton({ kind, no, role }: { kind: Kind; no: string | undefined; role?: DeclarationFieldRole | undefined }) {
   const guide = fieldGuide(kind, no);
   if (!guide) return null;
   return (
@@ -44,6 +53,7 @@ export function GuideButton({ kind, no }: { kind: Kind; no: string | undefined }
           {guide.no} · {guide.label}
           {guide.amendedBy121 ? " (sửa đổi theo TT121/2025)" : ""}
         </p>
+        {role && ROLE_IN_GUIDE.has(role) && <p className="mt-1 font-medium text-fg">{ROLE_INFO[role].label}: {ROLE_INFO[role].meaning}.</p>}
         <p className="mt-1 text-fg-muted">{guide.note}</p>
       </PopoverContent>
     </Popover>
@@ -76,12 +86,18 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   // Khai sửa đổi bổ sung: chỉ tiêu không được sửa hiện chỉ đọc kèm lý do.
   const lock = useAmendLock()(field.key);
   const { labelsLeft } = useViewPrefs();
+  // Ô mã có danh mục VNACCS: phạm vi lọc (cơ quan Hải quan, nhập/xuất) và tên của mã.
+  const listId = field.input === "code" ? codeListFor(field.codeTable) : undefined;
+  const office = values["TK_CH"] ?? "";
+  const scope = useMemo(() => (listId ? codeScope(listId, field.key, kind, { TK_CH: office }) : null), [listId, field.key, kind, office]);
+  const name = useCodeName(field.codeTable, values[field.key] ?? "", scope);
   const applicable = isApplicable(field, ctx);
   if (!applicable && !showInapplicable) return null;
   const value = values[field.key] ?? "";
   const title = compact ? field.label : fieldTitle(field.no, field.label);
   const readOnly = field.origin === "CUSTOMS" || !onChange || Boolean(lock);
-  const sizeClass = fill ? "w-full" : compact ? WIDTH[field.width ?? "sm"] : spansRow(field) ? "col-span-full" : undefined;
+  // Ô mã có tra cứu trong nhóm: bề rộng theo ô mã + nút tra cứu (CodeInput tự đặt bề rộng ô mã).
+  const sizeClass = fill ? "w-full" : compact ? (listId ? undefined : WIDTH[field.width ?? "sm"]) : spansRow(field) ? "col-span-full" : undefined;
 
   if (readOnly) {
     // Ô Hải quan trả về nền thông tin; ô người khai đã khóa (tờ khai đã đăng ký) nền trung tính.
@@ -89,7 +105,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     return (
       <div className={cn("flex min-w-0 flex-col gap-0.5 rounded-md px-3 py-2", customs ? "bg-info-subtle" : "bg-surface-muted", sizeClass)}>
         <p className={cn("text-xs", customs ? "text-info-subtle-fg" : "text-fg-muted")}>{title}</p>
-        <p className={cn("break-words text-sm font-medium", customs ? "text-info-subtle-fg" : "text-fg")}>{displayValue(field, value) || "—"}</p>
+        <p className={cn("break-words text-sm font-medium", customs ? "text-info-subtle-fg" : "text-fg")}>{[displayValue(field, value), value.trim() && field.codeTable ? name : undefined].filter(Boolean).join(" · ") || "—"}</p>
         {lock && onChange && (
           <p className="flex items-start gap-1 text-xs text-fg-muted">
             <Lock aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
@@ -103,10 +119,9 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const role = fieldRole(kind, field, parentNo);
   const condition = field.condition ? DECLARATION_CONDITIONS[field.condition].label : undefined;
   const reason = condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : undefined;
-  const name = codeLabel(field.codeTable, value);
   const missing = !suppressMissing && applicable && missingRequired(kind, field, values, parentNo, parentCondition, ctx);
   const set = (v: string) => onChange?.(field.key, v);
-  const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} />;
+  const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} />;
   const missingNote = missing && <p className="text-xs font-medium text-warning-subtle-fg">Còn thiếu</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
 
@@ -137,12 +152,13 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     );
   }
 
-  const inline = !compact && Boolean(name) && !spansRow(field);
+  const inline = !compact && !listId && Boolean(name) && !spansRow(field);
   const control =
-    field.input === "textarea" ? <Textarea className={compact ? undefined : "min-w-0 flex-1"} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
+    listId && field.codeTable ? <CodeInput table={field.codeTable} fieldKey={field.key} kind={kind} values={values} value={value} onChange={set} label={field.label} widthClass={compact ? WIDTH[field.width ?? "sm"] : "w-32"} />
+    : field.input === "textarea" ? <Textarea className={compact ? undefined : "min-w-0 flex-1"} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
     : <Input className={compact ? undefined : inline ? "w-32 shrink-0" : "min-w-0 flex-1"} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
   // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô, nút ⓘ cuối hàng.
-  const hint = [compact && name ? `→ ${name}` : null, reason].filter(Boolean).join(" · ") || undefined;
+  const hint = [compact && !listId && name ? `→ ${name}` : null, reason].filter(Boolean).join(" · ") || undefined;
 
   return (
     <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", !applicable && "opacity-60", sizeClass)}>

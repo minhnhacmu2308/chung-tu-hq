@@ -482,9 +482,12 @@ export const CODE_TABLES: Readonly<Partial<Record<CodeTable, readonly CodeEntry[
   DUE_DATE: DUE_DATE_CODES,
 };
 
-/** Bảng mã chỉ có trên danh mục VNACCS/website Cục Hải quan, cần đồng bộ (FPT SyncCategory) – chưa có dữ liệu trong repo. */
+/**
+ * Bảng mã chỉ có trên danh mục VNACCS/website Cục Hải quan, cần đồng bộ (FPT SyncCategory) – không có trong bảng mã gọn ở đây.
+ * Bản danh mục đầy đủ (thư mục 02_DANHMUC_VNACCS) đã có ở code-lists/ cho tra cứu trên tờ khai (trừ A601, A620, LAW_CODE).
+ */
 export const VNACCS_SYNCED_CODE_TABLES: readonly CodeTable[] = [
-  "A014", "A016", "A202", "A519", "A520", "A528", "A546", "A601", "A620", "LAW_CODE",
+  "A014", "A016", "A202", "A519", "A520", "A528", "A546", "A601", "A620", "LAW_CODE", "BANK", "OTHER_TAX", "ABS_TAX",
 ];
 
 /** Bảng mã theo tên; `undefined` khi bảng phải đồng bộ từ VNACCS (VNACCS_SYNCED_CODE_TABLES). */

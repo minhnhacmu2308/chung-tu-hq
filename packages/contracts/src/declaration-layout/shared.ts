@@ -84,7 +84,7 @@ export function taxPaymentBlocks(k: Kind): LayoutBlock[] {
     },
     {
       id: "han-muc", title: "Hạn mức ngân hàng trả thuế thay", items: [
-        fld("TK_BRC", "Mã ngân hàng trả thuế thay", "text", { no: no("1.54", "2.44"), width: "sm" }),
+        fld("TK_BRC", "Mã ngân hàng trả thuế thay", "code", { codeTable: "BANK", no: no("1.54", "2.44"), width: "sm" }),
         fld("TK_BYA", "Năm phát hành hạn mức", "number", { no: no("1.55", "2.45"), width: "xs" }),
         fld("TK_BCM", "Ký hiệu chứng từ hạn mức", "text", { no: no("1.56", "2.46"), width: "sm" }),
         fld("TK_BCN", "Số chứng từ hạn mức", "text", { no: no("1.57", "2.47"), width: "sm" }),
@@ -92,7 +92,7 @@ export function taxPaymentBlocks(k: Kind): LayoutBlock[] {
     },
     {
       id: "bao-lanh", title: "Bảo lãnh", items: [
-        fld("TK_SBC", "Mã ngân hàng bảo lãnh", "text", { no: no("1.59", "2.49"), width: "sm" }),
+        fld("TK_SBC", "Mã ngân hàng bảo lãnh", "code", { codeTable: "BANK", no: no("1.59", "2.49"), width: "sm" }),
         fld("TK_RYA", "Năm phát hành bảo lãnh", "number", { no: no("1.60", "2.50"), width: "xs" }),
         fld("TK_SCM", "Ký hiệu chứng từ bảo lãnh", "text", { no: no("1.61", "2.51"), width: "sm" }),
         fld("TK_SCN", "Số chứng từ bảo lãnh", "text", { no: no("1.62", "2.52"), width: "sm" }),

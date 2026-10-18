@@ -43,7 +43,7 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
         {group.fields.map((f) => (
           <FormField key={f.key} kind={kind} field={f} values={values} onChange={readOnly ? undefined : onChange} ctx={ctx} showInapplicable={showInapplicable} parentNo={group.no} parentCondition={effectiveCondition} compact suppressMissing={group.fill === "any"} />
         ))}
-        {!readOnly && <span className="pt-7"><GuideButton kind={kind} no={group.no} /></span>}
+        {!readOnly && <span className="pt-7"><GuideButton kind={kind} no={group.no} role={first ? fieldRole(kind, first, group.no) : undefined} /></span>}
       </div>
     </fieldset>
   );

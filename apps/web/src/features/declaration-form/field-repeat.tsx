@@ -2,10 +2,11 @@
 // Nhóm lặp (5 vận đơn, 5 giấy phép, 5 khoản điều chỉnh, 10 chỉ thị…) dạng bảng (phương án C): nhãn ở tiêu đề cột, mỗi dòng một hàng,
 // nút "Thêm dòng". 50 số container: lưới. Bảng hẹp hơn nội dung thì cuộn ngang trong khung, trang không tràn.
 import { Button, Checkbox, cn, Grid, Input } from "@kb/ui";
-import { expandRepeat, fieldRole, type ConditionContext, type ConditionId, type LayoutField, type LayoutRepeat } from "@kb/contracts";
+import { codeListFor, expandRepeat, fieldRole, type ConditionContext, type ConditionId, type LayoutField, type LayoutRepeat } from "@kb/contracts";
 import { Lock, Plus } from "lucide-react";
 import { useState } from "react";
 import { useAmendLock } from "./amend-context";
+import { CodeInput } from "./code-input";
 import { displayValue, fieldTitle, visibleRows } from "./display";
 import { FormField, GuideButton, RoleMark } from "./field";
 import { isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
@@ -25,7 +26,7 @@ type Props = {
 const isGrid = (r: LayoutRepeat) => r.fields.length === 1 && r.count > 10;
 const WIDTH: Record<NonNullable<LayoutField["width"]>, string> = { xs: "w-24", sm: "w-40", md: "w-56", lg: "w-64", full: "w-64" };
 
-function Cell({ f, n, values, onChange }: { f: LayoutField; n: number; values: FormValues; onChange: ((key: string, value: string) => void) | undefined }) {
+function Cell({ kind, f, n, values, onChange }: { kind: "IDA" | "EDA"; f: LayoutField; n: number; values: FormValues; onChange: ((key: string, value: string) => void) | undefined }) {
   const lock = useAmendLock()(f.key);
   const value = values[f.key] ?? "";
   const name = `${f.label} dòng ${n}`;
@@ -41,6 +42,10 @@ function Cell({ f, n, values, onChange }: { f: LayoutField; n: number; values: F
         {displayValue(f, value) || "—"}
       </span>
     );
+  }
+  // Ô mã có danh mục VNACCS trong bảng: cùng cách tra cứu như ô thường.
+  if (f.input === "code" && f.codeTable && codeListFor(f.codeTable)) {
+    return <CodeInput table={f.codeTable} fieldKey={f.key} kind={kind} values={values} value={value} onChange={(v) => onChange(f.key, v)} label={f.label} ariaLabel={name} widthClass={WIDTH[f.width ?? "sm"]} />;
   }
   if (f.input === "choice") {
     const opt = f.options?.[0];
@@ -80,7 +85,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
           Thêm dòng
         </Button>
       )}
-      <GuideButton kind={kind} no={repeat.no} />
+      <GuideButton kind={kind} no={repeat.no} role={first ? fieldRole(kind, first, repeat.no) : undefined} />
     </div>
   );
   const box = cn("col-span-full flex min-w-0 flex-col gap-2 rounded-md border border-border px-3 pb-2 pt-1", !applicable && "opacity-60");
@@ -133,7 +138,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
                   <td className="pb-1.5 pr-2 align-middle text-xs tabular-nums text-fg-subtle">({n || r + 1})</td>
                   {cols.map(({ f, i }) => (
                     <td key={f.key} className={cn("pb-1.5 pr-2 align-middle", !isApplicable(f, ctx) && "opacity-60", readOnly && "min-w-24 max-w-md")}>
-                      {row[i] && <Cell f={row[i]} n={n || r + 1} values={values} onChange={readOnly ? undefined : onChange} />}
+                      {row[i] && <Cell kind={kind} f={row[i]} n={n || r + 1} values={values} onChange={readOnly ? undefined : onChange} />}
                     </td>
                   ))}
                 </tr>

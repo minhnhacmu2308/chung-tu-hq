@@ -25,7 +25,7 @@ const ITEM_DECLARANT: LayoutBlock[] = [
       fld("HAG_ORS", "Mã biểu thuế nhập khẩu", "code", { no: "1.80", codeTable: "TAX_TABLE", width: "xs" }),
       fld("HAG_KWS", "Mã ngoài hạn ngạch", "text", { no: "1.81", width: "xs" }),
       fld("HAG_TXA", "Thuế suất (nhập tay khi hệ thống không tự xác định)", "number", { no: "1.76", width: "sm" }),
-      fld("HAG_SPD", "Mã áp dụng mức thuế tuyệt đối", "text", { no: "1.82", width: "sm" }),
+      fld("HAG_SPD", "Mã áp dụng mức thuế tuyệt đối", "code", { codeTable: "ABS_TAX", no: "1.82", width: "sm" }),
       grp("Mức thuế tuyệt đối", "1.77", [fld("HAG_TXB", "Mức thuế", "number", { width: "sm" }), fld("HAG_TXC", "Đơn vị tính", "code", { codeTable: "UNIT", width: "xs" }), fld("HAG_TXD", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" })]),
       manualValueField,
       grp("Trị giá tính thuế (phân bổ thủ công)", "1.87", [fld("HAG_DPR", "Trị giá tính thuế", "number", { width: "md" }), fld("HAG_BPC", "Mã tiền", "code", { codeTable: "CURRENCY", width: "xs" })], { condition: "MANUAL_VALUE" }),
@@ -39,7 +39,7 @@ const ITEM_DECLARANT: LayoutBlock[] = [
   {
     id: "thu-khac", title: "Thuế và thu khác", items: [
       rep("Khoản thuế và thu khác (1 chống bán phá giá · 2 chống phân biệt đối xử · 3 TTĐB · 4 BVMT · 5 GTGT)", undefined, 5, [
-        fld("HAG_TX{n}", "Mã áp dụng thuế suất", "text", { no: "1.94", width: "sm" }),
+        fld("HAG_TX{n}", "Mã áp dụng thuế suất", "code", { codeTable: "OTHER_TAX", no: "1.94", width: "sm" }),
         fld("HAG_TR{n}", "Mã miễn/giảm/không chịu thuế", "code", { no: "1.95", codeTable: "A520", width: "sm" }),
         fld("HAG_TG{n}", "Số tiền giảm", "number", { no: "1.96", width: "sm" }),
       ]),

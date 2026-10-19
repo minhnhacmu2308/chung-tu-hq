@@ -6,3 +6,11 @@ export { LAYOUT_EDA } from "./eda.js";
 export { layoutFor } from "./layout-for.js";
 export { BILL_SPLIT_FORM, EXPORT_IDENTIFIER_FORM, IDENTIFIER_FORM, type TransportOperationForm } from "./transport-operations.js";
 export { amendLock, type AmendLock, type AmendLockBasis } from "./amend.js";
+export {
+  appFieldMeta, declarationEditMode, declarationFormValues, DERIVED_LOCK, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, formKeysOf, isExtraFieldKey, mappedAppCodes, pendingFormEdits,
+  type DeclarationEditMode, type ExtraFieldMeta, type FptObjectName,
+} from "./app-fields.js";
+export {
+  isItemFieldKey, itemDefaults, itemFieldClass, itemFieldCode, itemFieldFpt, itemFieldIssue, itemFieldMeta, itemInputKeys, itemOverrides, lawCodesByLine, parseItemFieldCode, taxTable, vatCode,
+  type ItemDefaultsInput, type ItemFieldClass,
+} from "./item-fields.js";

@@ -1,4 +1,4 @@
-// Dùng chung cho sửa/xác nhận/hoàn tác một trường: ghi audit, cập nhật shipment, chạy lại luật, đếm nghi ngờ.
+// Dùng chung cho sửa/xác nhận/hoàn tác một trường: ghi audit, cập nhật shipment, chạy lại luật, cập nhật tờ khai nháp, đếm nghi ngờ.
 import type { ExtractedField, FieldStatus } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
@@ -44,6 +44,7 @@ export async function editField(
   if (!res.ok) return res;
   const { field, dossierId, shipment, suspect } = res.value;
   if (shipment) await deps.validation.run(ctx.orgId, dossierId, shipment.data, shipment.version, { taxCode: org.taxCode, name: org.name });
+  if (shipment) await deps.onShipmentEdited?.(ctx.orgId, dossierId);
   const docs = await deps.documents.listForDossier(ctx.orgId, dossierId);
   await deps.documents.afterMerge(ctx.orgId, dossierId, { suspectFields: suspect, allDone: docs.every((d) => d.status === "DONE" || d.status === "ERROR") });
   await deps.documents.publish(ctx.orgId, dossierId, { type: "fields.updated" });

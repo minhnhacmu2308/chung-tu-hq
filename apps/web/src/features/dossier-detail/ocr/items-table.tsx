@@ -1,5 +1,6 @@
 "use client";
-// Danh sách hàng hóa trên chứng từ: mỗi dòng 3 trường (mô tả, số lượng, thành tiền), sửa trực tiếp như trường thường.
+// Danh sách hàng hóa trên chứng từ: mỗi dòng mô tả, số lượng, ĐVT, đơn giá, thành tiền, xuất xứ – sửa trực tiếp như trường thường
+// (ô nào chứng từ không có thì để trống). Sửa xong, dòng hàng của tờ khai nháp cập nhật theo.
 import { Button, cn, Input, Tooltip } from "@kb/ui";
 import { Check, CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -8,19 +9,26 @@ import { formatMoney } from "@/lib/format";
 import type { ExtractedField } from "@/mocks/types";
 import { fieldDomId } from "./field-row";
 
-type Cell = "description" | "quantity" | "amount";
-const COLS: { key: Cell; label: string; className: string }[] = [
-  { key: "description", label: "Mô tả hàng hóa", className: "min-w-48" },
-  { key: "quantity", label: "Số lượng", className: "w-28 min-w-24" },
-  { key: "amount", label: "Thành tiền (USD)", className: "w-28 min-w-24" },
+type Cell = "description" | "quantity" | "unit" | "unit_price" | "amount" | "origin";
+// Bề rộng tối thiểu đặt trên ô nhập (trình duyệt bỏ qua min-width của ô bảng): khung hẹp thì bảng cuộn ngang, không cắt mất giá trị.
+const COLS: { key: Cell; label: string; input: string; numeric?: boolean }[] = [
+  { key: "description", label: "Mô tả hàng hóa", input: "min-w-36" },
+  { key: "quantity", label: "Số lượng", input: "min-w-20" },
+  { key: "unit", label: "ĐVT", input: "min-w-14" },
+  { key: "unit_price", label: "Đơn giá", input: "min-w-20", numeric: true },
+  { key: "amount", label: "Thành tiền", input: "min-w-24", numeric: true },
+  { key: "origin", label: "Xuất xứ", input: "min-w-12" },
 ];
+const AMOUNT_COL = COLS.findIndex((c) => c.key === "amount");
 
 function CellInput({
   field,
+  className,
   onSave,
   onActivate,
 }: {
   field: ExtractedField;
+  className: string;
   onSave: (id: string, value: string) => void;
   onActivate: (id: string | null) => void;
 }) {
@@ -32,7 +40,7 @@ function CellInput({
       id={`${fieldDomId(field.id)}-input`}
       aria-label={field.label}
       value={value}
-      className={cn("h-8 text-sm", field.key.endsWith("amount") && "text-right tabular-nums")}
+      className={cn("h-8 px-2 text-sm", className, /\.(amount|unit_price)$/.test(field.key) && "text-right tabular-nums")}
       onChange={(e) => setValue(e.target.value)}
       onBlur={commit}
       onFocus={() => onActivate(field.id)}
@@ -69,7 +77,7 @@ export function ItemsTable({
             <tr>
               <th scope="col" className="w-10 px-2 py-2 font-medium">#</th>
               {COLS.map((c) => (
-                <th key={c.key} scope="col" className={cn("px-2 py-2 font-medium", c.className, c.key === "amount" && "text-right")}>
+                <th key={c.key} scope="col" className={cn("px-2 py-2 font-medium", c.numeric && "text-right")}>
                   {c.label}
                 </th>
               ))}
@@ -93,7 +101,7 @@ export function ItemsTable({
                   <td className="px-2 py-1.5 text-fg-muted tabular-nums">{n}</td>
                   {cells.map((f, i) => (
                     <td key={COLS[i]!.key} id={f ? fieldDomId(f.id) : undefined} className="px-2 py-1.5">
-                      {f ? <CellInput field={f} onSave={onSave} onActivate={onActivate} /> : null}
+                      {f ? <CellInput field={f} className={COLS[i]!.input} onSave={onSave} onActivate={onActivate} /> : null}
                     </td>
                   ))}
                   <td className="px-2 py-1.5">
@@ -116,11 +124,11 @@ export function ItemsTable({
           </tbody>
           <tfoot>
             <tr className="border-t border-border-strong">
-              <td colSpan={3} className="px-2 py-2 text-right text-xs text-fg-muted">
+              <td colSpan={AMOUNT_COL + 1} className="px-2 py-2 text-right text-xs text-fg-muted">
                 Cộng {lines.length} dòng
               </td>
               <td className="px-2 py-2 text-right font-semibold tabular-nums">{formatMoney(String(total))}</td>
-              <td />
+              <td colSpan={COLS.length - AMOUNT_COL} />
             </tr>
           </tfoot>
         </table>

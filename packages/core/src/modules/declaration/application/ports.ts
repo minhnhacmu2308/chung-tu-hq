@@ -1,4 +1,4 @@
-import type { AgentMode, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
+import type { AgentMode, CustomsStage, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -153,6 +153,8 @@ export type DeclarationDeps = {
   users: UserNames;
   /** Thông báo trong app (tùy chọn; container nối). */
   notify?: Notifier;
+  /** Giai đoạn truyền Hải quan của hồ sơ (module integration; container nối) – chặn sửa chỉ tiêu theo giai đoạn. Không nối → coi như chưa khai. */
+  customsStage?: (orgId: string, dossierId: string) => Promise<CustomsStage>;
   clock: Clock;
   idGen: IdGen;
 };

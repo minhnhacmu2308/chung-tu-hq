@@ -1,13 +1,15 @@
 "use client";
 // Bước 3 – OCR & kiểm tra: đối chiếu chéo ở đầu; mỗi chứng từ một tab: trái chứng từ gốc, phải kết quả theo nhóm.
 // Rê chuột/focus vào trường → tô vùng trên chứng từ; bấm vùng trên chứng từ → nhảy tới trường.
+// ?dong=<số dòng> (từ panel dòng hàng của tờ khai đầy đủ): mở chứng từ có dòng đó và đưa con trỏ tới ô mô tả của dòng.
 import {
   Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, SegmentedControl,
   Skeleton, Stack, Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { isSuspect, listChecks, listDossierDocuments, listFields, ocrKeys } from "@/api/ocr";
 import { DocumentPreview } from "@/components/common/document-preview";
 import { DOC_KIND_LABELS, FIELD_GROUP_LABELS, type DossierDocument, type ExtractedField } from "@/mocks/types";
@@ -22,7 +24,7 @@ import type { StepProps } from "./types";
 const GROUPS = Object.keys(FIELD_GROUP_LABELS) as ExtractedField["group"][];
 type Filter = "all" | "suspect";
 
-function DocumentTab({ doc, fields, dossierId, filter }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter }) {
+function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined }) {
   const [active, setActive] = useState<string | null>(null);
   const m = useFieldMutations(dossierId);
   const save = (id: string, value: string) => m.update.mutate({ id, value });
@@ -35,6 +37,13 @@ function DocumentTab({ doc, fields, dossierId, filter }: { doc: DossierDocument;
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
     document.getElementById(`${fieldDomId(id)}-input`)?.focus({ preventScroll: true });
   };
+
+  // Mở từ tờ khai đầy đủ: nhảy tới dòng hàng cần sửa khi tab đã hiện.
+  useEffect(() => {
+    if (!focusId) return;
+    const t = requestAnimationFrame(() => jumpTo(focusId));
+    return () => cancelAnimationFrame(t);
+  }, [focusId]);
 
   const visible = filter === "suspect" ? fields.filter((f) => isSuspect(f.status)) : fields;
   const items = fields.filter((f) => f.group === "ITEMS");
@@ -96,8 +105,11 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const suspectDocs = docs.filter((d) => suspectOf(d.id) > 0).length;
   const blockers = (checksQuery.data ?? []).filter((c) => c.result === "FAIL" && c.severity === "BLOCKER").length;
   const [tab, setTab] = useState<string | undefined>(undefined);
+  const params = useSearchParams();
+  const line = params.get("dong");
+  const focus = line ? fields.find((f) => f.group === "ITEMS" && f.key === `item.${line}.description`) : undefined;
   const firstSuspect = docs.find((d) => suspectOf(d.id) > 0)?.id ?? docs[0]?.id;
-  const currentTab = tab && docs.some((d) => d.id === tab) ? tab : firstSuspect;
+  const currentTab = tab && docs.some((d) => d.id === tab) ? tab : (focus?.documentId ?? firstSuspect);
 
   const proceed = () => advance.mutate({ patch: { step: "agent", suspectFields: suspectTotal }, to: "agent" });
   const onConfirmData = () => (suspectTotal > 0 || blockers > 0 ? setConfirmOpen(true) : proceed());
@@ -108,6 +120,11 @@ export function OcrStep({ dossier, goTo }: StepProps) {
 
   return (
     <Stack gap="lg">
+      {line && fieldsQuery.isSuccess && !focus && (
+        <Alert tone="info" title={`Kết quả đọc chứng từ không có dòng hàng ${line}`}>
+          Dòng hàng này không lấy từ bảng hàng của chứng từ đã đọc. Kiểm tra lại chứng từ (tải bản rõ hơn) hoặc sửa ở bước AI Agent.
+        </Alert>
+      )}
       <CrossCheckPanel checks={checksQuery.data} loading={checksQuery.isLoading} />
 
       <Card>
@@ -170,7 +187,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
               </TabsList>
               {docs.map((d) => (
                 <TabsContent key={d.id} value={d.id} className="pt-4">
-                  <DocumentTab doc={d} fields={byDoc(d.id)} dossierId={dossier.id} filter={filter} />
+                  <DocumentTab doc={d} fields={byDoc(d.id)} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} />
                 </TabsContent>
               ))}
             </Tabs>

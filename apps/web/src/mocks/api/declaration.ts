@@ -1,6 +1,7 @@
 // Bước 4–5: AI Agent (tra HS, ánh xạ, dựng tờ khai, số hóa) và tờ khai nháp (mock).
 // Tiến trình agent mô phỏng theo thời gian: lưu startedAt, tính tiến độ mỗi lần đọc.
-import { canEditDeclaration, isDeclarationFieldEditable } from "@kb/contracts";
+import { appFieldMeta, canEditDeclaration, declarationEditMode, extraFieldIssue, extraFieldMeta, itemFieldIssue, itemFieldMeta, parseItemFieldCode, fieldEditBlock, isDeclarationFieldEditable } from "@kb/contracts";
+import { customsStageOf } from "./customs";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
@@ -216,7 +217,8 @@ export const reclassifyHs = (itemId: string, input: HsReclassifyInput) =>
 export const listHsCatalog = () => query(() => HS_CATALOG);
 export type { HsEntry };
 
-function refreshDeclaration(db: MockDb, dossierId: string) {
+/** Dựng lại tờ khai nháp từ dòng hàng (giữ chỉ tiêu người dùng sửa tay) – gọi sau khi xác nhận HS, sửa dòng hàng ở OCR. */
+export function refreshDeclaration(db: MockDb, dossierId: string) {
   const idx = db.declarations.findIndex((d) => d.dossierId === dossierId);
   if (idx < 0) return;
   const old = db.declarations[idx]!;
@@ -231,6 +233,9 @@ function refreshDeclaration(db: MockDb, dossierId: string) {
     const { suspect: _s, note: _n, ...rest } = f;
     return { ...rest, value, source: "USER" as const };
   });
+  // Chỉ tiêu người dùng nhập thêm (chỉ tiêu app chưa có, ô bổ sung) không có trong bản dựng mới → giữ nguyên.
+  const freshCodes = new Set(fresh.fields.map((f) => f.code));
+  for (const f of old.fields) if (f.source === "USER" && !freshCodes.has(f.code) && (extraFieldMeta(old.kind, f.code) || appFieldMeta(old.kind, f.code) || parseItemFieldCode(f.code))) fields.push(f);
   db.declarations[idx] = { ...fresh, fields, status: old.status };
 }
 
@@ -326,11 +331,25 @@ export const updateDeclarationField = (dossierId: string, code: string, value: s
     const decl = db.declarations.find((d) => d.dossierId === dossierId);
     if (!decl) throw new ApiError("NO_DECLARATION", "Chưa có tờ khai");
     if (decl.status !== "DRAFT") throw new ApiError("INVALID_STATE", "Tờ khai đã duyệt – không sửa");
+    const block = fieldEditBlock(decl.kind, code, declarationEditMode(decl.status, customsStageOf(db, dossierId)), decl.fields);
+    if (block) throw new ApiError("INVALID_STATE", block);
     const idx = decl.fields.findIndex((f) => f.code === code);
-    if (idx < 0) throw new ApiError("NOT_FOUND", "Không có chỉ tiêu này trên tờ khai");
+    // Chỉ tiêu chưa có trên tờ khai, người khai nhập lần đầu (chỉ tiêu app, ô bổ sung – mã = tên trường VNACCS, ô dòng hàng HANG.<id>.<ô>) → thêm vào tờ khai.
+    const itemMeta = idx < 0 ? itemFieldMeta(decl.kind, code) : null;
+    const line = itemMeta ? db.lineItems.find((i) => i.dossierId === dossierId && i.id === itemMeta.itemId) : undefined;
+    const extra = idx < 0
+      ? (appFieldMeta(decl.kind, code) ?? extraFieldMeta(decl.kind, code) ?? (itemMeta && line ? { label: `Dòng ${line.lineNo} – ${itemMeta.label}`, section: "VALUE" as const, ...(itemMeta.no ? { no: itemMeta.no } : {}) } : null))
+      : null;
+    if (idx < 0 && !extra) throw new ApiError("NOT_FOUND", "Không có chỉ tiêu này trên tờ khai");
+    const parsed = parseItemFieldCode(code);
+    const issue = parsed ? itemFieldIssue(decl.kind, parsed.key, value) : extraFieldIssue(decl.kind, code, value);
+    if (issue) throw new ApiError("VALIDATION", issue);
     if (!isDeclarationFieldEditable(code)) throw new ApiError("VALIDATION", "Chỉ tiêu này không sửa tay trên tờ khai: số tờ khai do Hải quan cấp, loại hình đổi ở hồ sơ, trị giá/cước/tỷ giá sửa ở bước đọc chứng từ rồi dựng lại");
-    const { suspect: _s, note: _n, ...rest } = decl.fields[idx]!;
-    decl.fields[idx] = { ...rest, value: value.trim(), source: "USER" };
+    if (extra) decl.fields.push({ code, label: extra.label, section: extra.section, ...(extra.no ? { no: extra.no } : {}), value: value.trim(), source: "USER" });
+    else {
+      const { suspect: _s, note: _n, ...rest } = decl.fields[idx]!;
+      decl.fields[idx] = { ...rest, value: value.trim(), source: "USER" };
+    }
     const dossier = db.dossiers.find((d) => d.id === dossierId);
     if (dossier) Object.assign(dossier, { suspectFields: decl.fields.filter((f) => f.suspect).length, updatedAt: nowIso() });
     return decl;

@@ -31,6 +31,35 @@ describe("sửa chỉ tiêu tờ khai (mock)", () => {
   });
 });
 
+describe("sửa theo giai đoạn tờ khai (mock)", () => {
+  it("chưa khai báo: ô người khai chưa có mã app (mã phân loại hàng hóa 1.5) lưu được theo tên trường VNACCS, giữ khi dựng lại", async () => {
+    const after = await updateDeclarationField(DRAFT, "TK_CCC", " B ");
+    expect(after.fields.find((f) => f.code === "TK_CCC")).toMatchObject({ value: "B", source: "USER", no: "1.5" });
+    const item = getDb().lineItems.find((i) => i.dossierId === DRAFT && i.hsConfirmed)!;
+    await confirmHs(item.id, item.hsConfirmed!);
+    expect((await getDeclarationView(DRAFT)).declaration!.fields.find((f) => f.code === "TK_CCC")?.value).toBe("B");
+  });
+  it("đã phân luồng + gọi IDD: chặn chỉ tiêu không được khai bổ sung (mục 3.1), cho chỉ tiêu khác", async () => {
+    getDb().customsFlows = { ...getDb().customsFlows, [DRAFT]: { ...(getDb().customsFlows?.[DRAFT] ?? {}), stage: "AMEND_RECALLED" } as never };
+    expect(await code(updateDeclarationField(DRAFT, "PTVC", "2"))).toBe("INVALID_STATE");
+    expect(await code(updateDeclarationField(DRAFT, "TK_CCC", "B"))).toBe("INVALID_STATE");
+    expect(await code(updateDeclarationField(DRAFT, "SO_HD", "INV-9"))).toBe("OK");
+  });
+  it("ô dòng hàng chỉ có trên tờ khai lưu theo id dòng; số liệu chứng từ / dòng của hồ sơ khác → NOT_FOUND; sai kiểu → VALIDATION", async () => {
+    const line = getDb().lineItems.find((i) => i.dossierId === DRAFT)!;
+    const other = getDb().lineItems.find((i) => i.dossierId !== DRAFT)!;
+    const after = await updateDeclarationField(DRAFT, `HANG.${line.id}.HAG_RE`, "XN210");
+    expect(after.fields.find((f) => f.code === `HANG.${line.id}.HAG_RE`)).toMatchObject({ value: "XN210", no: "1.92", label: `Dòng ${line.lineNo} – Mã miễn/giảm/không chịu thuế nhập khẩu` });
+    expect(await code(updateDeclarationField(DRAFT, `HANG.${line.id}.HAG_CMN`, "x"))).toBe("NOT_FOUND");
+    expect(await code(updateDeclarationField(DRAFT, `HANG.${other.id}.HAG_RE`, "x"))).toBe("NOT_FOUND");
+    expect(await code(updateDeclarationField(DRAFT, `HANG.${line.id}.HAG_QN2`, "1,5"))).toBe("VALIDATION");
+  });
+  it("đã thông quan: khóa toàn bộ (sửa sau thông quan là nghiệp vụ AMA)", async () => {
+    getDb().customsFlows = { ...getDb().customsFlows, [DRAFT]: { ...(getDb().customsFlows?.[DRAFT] ?? {}), stage: "POST_EDITING" } as never };
+    expect(await code(updateDeclarationField(DRAFT, "SO_HD", "INV-9"))).toBe("INVALID_STATE");
+  });
+});
+
 describe("mở lại tờ khai (mock)", () => {
   it("đã duyệt chưa truyền → nháp, hồ sơ về bước review, duyệt lại được", async () => {
     await reopenDeclaration(APPROVED);

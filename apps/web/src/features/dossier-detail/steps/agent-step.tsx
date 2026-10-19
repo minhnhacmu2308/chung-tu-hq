@@ -198,7 +198,8 @@ const sixDigits = (code: string) => {
   return d.length === 6 ? `${d.slice(0, 4)}.${d.slice(4)}` : code;
 };
 
-function ChangeHsDialog({ item, onClose, dossierId }: { item: LineItem | null; onClose: () => void; dossierId: string }) {
+/** Chọn / xác nhận mã HS cho một dòng – dùng ở bước AI Agent và panel dòng hàng của tờ khai đầy đủ. */
+export function ChangeHsDialog({ item, onClose, dossierId }: { item: LineItem | null; onClose: () => void; dossierId: string }) {
   return (
     <Dialog open={item !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={`Chọn mã HS – dòng ${item?.lineNo ?? ""}`} icon={<Search className="h-4 w-4" />} description={item?.description} size="md">

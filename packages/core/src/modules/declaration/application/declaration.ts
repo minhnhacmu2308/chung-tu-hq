@@ -1,10 +1,11 @@
-import type { Declaration, DeclarationView } from "@kb/contracts";
+import { declarationEditMode, extraFieldMeta, fieldEditBlock, itemFieldMeta, type Declaration, type DeclarationView } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { canApprove, canEditField, canMoveToReview, missingRequiredFields } from "../domain/guards.js";
 import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
+import { mappingsFor } from "../domain/mapping/registry.js";
 import { loadDossier, toDeclaration, toLineItem, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow } from "./ports.js";
 
@@ -46,11 +47,25 @@ export async function updateDeclarationField(deps: DeclarationDeps, ctx: Ctx, do
   const d = await loadDossier(deps, ctx.orgId, dossierId);
   if (!d.ok) return d;
   const now = deps.clock.now();
+  const stage = deps.customsStage ? await deps.customsStage(ctx.orgId, dossierId) : "NOT_SENT";
   const r0 = await deps.uow.asOrg(ctx, async (r) => {
     const decl = await r.declarations.latest(ctx.orgId, dossierId);
     if (!decl) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
     if (decl.status !== "DRAFT") return err(domainError("INVALID_STATE", "Tờ khai đã duyệt – không sửa"));
-    const f = decl.fields[code];
+    // Theo giai đoạn: đã phân luồng + gọi IDD → khóa theo Phụ lục II; đã thông quan → khóa toàn bộ (cùng quy tắc với form ở FE).
+    const block = fieldEditBlock(decl.kind, code, declarationEditMode(decl.status, stage), Object.entries(decl.fields).map(([c, x]) => ({ code: c, value: x.value })));
+    if (block) return err(domainError("INVALID_STATE", block));
+    // Chỉ tiêu chưa có trên tờ khai, người khai nhập lần đầu: chỉ tiêu app (theo mapping) hoặc ô bổ sung (mã = tên trường VNACCS) → thêm vào tờ khai.
+    // Ô dòng hàng người khai nhập (HANG.<id dòng>.<ô>): dòng phải thuộc hồ sơ; nhãn ghi số dòng để nhật ký sửa đọc được.
+    const mapping = decl.fields[code] ? undefined : mappingsFor(decl.kind).find((m) => m.code === code);
+    const extra = decl.fields[code] || mapping ? null : extraFieldMeta(decl.kind, code);
+    const itemMeta = decl.fields[code] || mapping || extra ? null : itemFieldMeta(decl.kind, code);
+    const line = itemMeta ? (await r.lineItems.list(ctx.orgId, dossierId)).find((i) => i.id === itemMeta.itemId) : undefined;
+    const meta = mapping ? { no: mapping.no ?? "", label: mapping.label, section: mapping.section }
+      : extra ? { no: extra.no ?? "", label: extra.label, section: extra.section }
+      : itemMeta && line ? { no: itemMeta.no ?? "", label: `Dòng ${line.lineNo} – ${itemMeta.label}`, section: "VALUE" as const }
+      : null;
+    const f = decl.fields[code] ?? (meta ? { ...meta, value: "", source: "USER" as const } : undefined);
     if (!f) return err(domainError("NOT_FOUND", "Không có chỉ tiêu này trên tờ khai"));
     const editable = canEditField(decl.kind, code, value, f);
     if (!editable.ok) return editable;

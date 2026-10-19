@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fptKey } from "@kb/contracts";
 import { buildFptRequest, lawCodesByLine, parsePermits, type DeclarationPayload } from "../declaration-to-fpt.js";
 import { maskPayload } from "../mask.js";
 import { coarseState, rowState, stageOf } from "../state-machine.js";
@@ -185,5 +186,46 @@ describe("declaration-to-fpt – chỉ tiêu theo tình huống", () => {
     const r = buildFptRequest({ ...EDA, fields: { ...EDA.fields, TNTX_TK: { value: "105000000010" }, HAN_TN: { value: "2027-03-01" }, HO_HIEU: { value: "9999" }, SO_CONT: { value: "AAAU1234567, BBBU7654321" } } }).request as Req;
     expect(r.objVN_EDA).toMatchObject({ tK_TDN: 105000000010, tK_RID: "01/03/2027", tK_VSC: "9999" });
     expect(r.objVN_EDA_CON).toMatchObject({ coN_C01: "AAAU1234567", coN_C02: "BBBU7654321" });
+  });
+});
+
+describe("declaration-to-fpt – ô bổ sung người khai nhập trên form đầy đủ (mã = tên trường VNACCS)", () => {
+  type Req = { objVN_IDA: Record<string, unknown>; objVN_IDA_VANDON: Record<string, unknown>; objVN_IDA_KTG: Record<string, unknown>; objVN_EDA?: Record<string, unknown>; objVN_EDA_CON?: Record<string, unknown> | null };
+  it("IDA: vào đúng object, đổi kiểu theo đặc tả, ghi đè mặc định (TK_CHB, TK_IMY – bỏ cảnh báo); ô APP_* không gửi; vẫn hợp lệ Zod", () => {
+    const b = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, TK_CCC: { value: "B" }, TK_CHB: { value: "01" }, TK_IMY: { value: "180000" }, TK_BYA: { value: "2026" }, VD_BL2: { value: "HAWB-2" }, VD_ISD: { value: "2026-10-16" }, KTG_IN4: { value: "BH-01" }, APP_HAWB1: { value: "H1" } } });
+    const r = b.request as Req;
+    expect(r.objVN_IDA).toMatchObject({ tK_CCC: "B", tK_CHB: "01", tK_IMY: "180000", tK_BYA: 2026 });
+    expect(r.objVN_IDA_VANDON).toMatchObject({ vD_BL2: "HAWB-2", vD_ISD: "16/10/2026" });
+    expect(r.objVN_IDA_KTG[fptKey("KTG_IN4")]).toBe("BH-01");
+    expect(JSON.stringify(r)).not.toContain("H1\"");
+    expect(b.warnings.some((w) => w.startsWith("TK_IMY"))).toBe(false);
+    expect(b.issues).toEqual([]);
+  });
+  it("EDA: ô địa điểm xếp hàng lên container (2.60) gửi object CON kể cả khi chưa có số container", () => {
+    const b = buildFptRequest({ ...PAYLOAD, kind: "EDA", direction: "XK", containers: [], fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, VBPQ: { value: "" }, TK_CGC: { value: "KR123" }, CON_VN: { value: "KHO A" } } });
+    const r = b.request as Req;
+    expect(r.objVN_EDA?.["tK_CGC"]).toBe("KR123");
+    expect(r.objVN_EDA_CON?.[fptKey("CON_VN")]).toBe("KHO A");
+  });
+});
+
+describe("declaration-to-fpt – ô dòng hàng người khai nhập (HANG.<id dòng>.<ô>)", () => {
+  type Req = { objVN_IDA_HANG: Record<string, unknown>[] };
+  const withIds = { ...PAYLOAD, items: PAYLOAD.items.map((it, i) => ({ ...it, id: `li${i + 1}` })) };
+  it("ghi đè giá trị tự điền đúng dòng (theo id), đổi kiểu số; ô người khai nhập thêm được gửi", () => {
+    const b = buildFptRequest({ ...withIds, fields: { ...withIds.fields, "HANG.li2.HAG_QN2": { value: "12.5" }, "HANG.li2.HAG_RE": { value: "XN210" }, "HANG.li1.HAG_TX5": { value: "VB905" } } });
+    const r = b.request as Req;
+    expect(r.objVN_IDA_HANG[1]?.[fptKey("HAG_QN2")]).toBe(12.5);
+    expect(r.objVN_IDA_HANG[1]?.[fptKey("HAG_RE")]).toBe("XN210");
+    expect(r.objVN_IDA_HANG[0]?.[fptKey("HAG_QN2")]).toBe(2000);
+    expect(r.objVN_IDA_HANG[0]?.[fptKey("HAG_TX5")]).toBe("VB905");
+    expect(b.issues).toEqual([]);
+  });
+  it("FTA chưa có mã biểu thuế: chặn truyền, trừ khi người khai nhập 1.80 cho dòng", () => {
+    const evfta = { ...withIds, items: withIds.items.map((it) => ({ ...it, policyNote: "EVFTA" })) };
+    expect(buildFptRequest(evfta).blockers.filter((x) => x.includes("1.80"))).toHaveLength(2);
+    const fixed = buildFptRequest({ ...evfta, fields: { ...evfta.fields, "HANG.li1.HAG_ORS": { value: "B30" }, "HANG.li2.HAG_ORS": { value: "B30" } } });
+    expect(fixed.blockers.filter((x) => x.includes("1.80"))).toEqual([]);
+    expect((fixed.request as Req).objVN_IDA_HANG[0]?.[fptKey("HAG_ORS")]).toBe("B30");
   });
 });

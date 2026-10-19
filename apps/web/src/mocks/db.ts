@@ -44,19 +44,20 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 11;
+const DB_VERSION = 14;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
   const core = seedCore();
-  const ocr = seedOcr(core.dossiers, core.documents);
+  const declaration = seedDeclaration(core.dossiers);
+  const ocr = seedOcr(core.dossiers, core.documents, declaration.lineItems);
   // Bản sao sâu: seed dùng hằng số cấp module (doanh nghiệp, thành viên, gói…) – nếu trả thẳng tham chiếu thì
   // thao tác của người dùng sửa luôn hằng số và "Khôi phục dữ liệu mẫu" không còn về đúng dữ liệu ban đầu.
   return structuredClone({
     version: DB_VERSION,
     ...core,
     ...ocr,
-    ...seedDeclaration(core.dossiers),
+    ...declaration,
     ...seedCustoms(core.dossiers),
     ...seedSkills(),
     ...seedSettings(),

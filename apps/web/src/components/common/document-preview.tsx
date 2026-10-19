@@ -48,9 +48,12 @@ const TERMS = [
 
 const ITEM_HEAD = [
   { x: 8, w: 6, text: "No." },
-  { x: 14, w: 42, text: "Description of goods" },
-  { x: 58, w: 16, text: "Quantity" },
-  { x: 76, w: 16, text: "Amount (USD)" },
+  { x: 14, w: 34, text: "Description of goods" },
+  { x: 49, w: 10, text: "Quantity" },
+  { x: 60, w: 7, text: "Unit" },
+  { x: 68, w: 10, text: "Unit price" },
+  { x: 79, w: 11, text: "Amount" },
+  { x: 91, w: 6, text: "Origin" },
 ];
 
 function buildRegions(doc: DossierDocument, fields: ExtractedField[]): DocumentRegion[] {

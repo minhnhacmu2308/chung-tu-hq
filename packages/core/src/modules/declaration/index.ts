@@ -9,7 +9,7 @@ export { computeTaxes } from "./domain/tax.js";
 export { canApprove, canMoveToReview, canSubmit } from "./domain/guards.js";
 export { ratesFor } from "./domain/rates.js";
 export { PORTS, resolvePort } from "./domain/catalog-resolve.js";
-export { getDeclarationSnapshot, listDeclarationsForCustoms, markDeclarationDraft, markDeclarationSubmitted, type DeclarationSnapshot } from "./application/customs-bridge.js";
+export { getDeclarationSnapshot, listDeclarationsForCustoms, markDeclarationDraft, markDeclarationSubmitted, refreshFromShipment, type DeclarationSnapshot } from "./application/customs-bridge.js";
 export { getDeclarationProfile, listRuleOptions, saveDeclarationProfile } from "./application/declaration-profile.js";
 export { HsApiError } from "./application/ports.js";
 export { answerHsQuestion, failHsWork, pollHsJob, reclassifyHs, runHsReclassify, sendHsAnswer, startHsClassification } from "./application/hs-classification.js";

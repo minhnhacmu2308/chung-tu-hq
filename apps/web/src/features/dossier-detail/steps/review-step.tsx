@@ -4,7 +4,7 @@ import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
   Dialog, DialogContent, DialogFooter, EmptyState, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast,
 } from "@kb/ui";
-import { canEditDeclaration } from "@kb/contracts";
+import { canEditDeclaration, declarationEditMode } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCheck2, FileText, Paperclip, RotateCcw, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -125,6 +125,8 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const errs = fieldErrors(decl.kind, rejection);
   const totalTax = String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd));
   const isDraft = decl.status === "DRAFT";
+  // Giai đoạn truyền chưa tải xong → chỉ đọc (tránh mở ô rồi khóa lại); không đọc được → coi như chưa khai, backend vẫn chặn theo giai đoạn thật.
+  const editMode = subQ.isPending ? "LOCKED" : declarationEditMode(decl.status, subQ.data?.stage ?? "NOT_SENT");
   const kindLabel = decl.kind === "IDA" ? "Tờ khai nhập khẩu (IDA)" : "Tờ khai xuất khẩu (EDA)";
 
   return (
@@ -205,7 +207,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               <TabsTrigger value="ops">Theo dõi & nghiệp vụ</TabsTrigger>
             </TabsList>
             <TabsContent value="full">
-              <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} canEdit={isDraft && canEdit} />
+              <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} />
             </TabsContent>
             <TabsContent value="docs">
               <DocumentsTab dossierId={dossier.id} />

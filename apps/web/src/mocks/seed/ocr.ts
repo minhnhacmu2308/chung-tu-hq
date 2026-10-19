@@ -2,7 +2,7 @@
 // Hồ sơ trình diễn dos_021 có dữ liệu chi tiết, khớp nhau giữa các chứng từ (và lệch đúng chỗ cần lệch).
 // Hồ sơ khác: sinh tự động từ chứng từ (generateFieldsForDocument) – cũng dùng khi người dùng upload chứng từ mới.
 // Vị trí (region) tính bằng bố cục chuẩn dưới đây; màn hình dựng lại trang chứng từ theo đúng các vùng này.
-import type { CrossCheck, DocKind, Dossier, DossierDocument, ExtractedField, FieldStatus, Region } from "../types";
+import type { CrossCheck, DocKind, Dossier, DossierDocument, ExtractedField, FieldStatus, LineItem, Region } from "../types";
 import { SHOWCASE_DOSSIER_ID } from "./core";
 
 /* ---------------- Bố cục trang (đơn vị % trang) ---------------- */
@@ -16,7 +16,9 @@ export const LAYOUT = {
   colW: 40,
   wideW: 84,
   itemRowH: 4.4,
-  itemCols: { description: { x: 14, w: 42 }, quantity: { x: 58, w: 16 }, amount: { x: 76, w: 16 } },
+  itemCols: {
+    description: { x: 14, w: 34 }, quantity: { x: 49, w: 10 }, unit: { x: 60, w: 7 }, unit_price: { x: 68, w: 10 }, amount: { x: 79, w: 11 }, origin: { x: 91, w: 6 },
+  },
 } as const;
 
 type Def = {
@@ -31,7 +33,7 @@ type Def = {
   page?: number;
 };
 
-const ITEM_KEY = /^item\.(\d+)\.(description|quantity|amount)$/;
+const ITEM_KEY = /^item\.(\d+)\.(description|quantity|unit|unit_price|amount|origin)$/;
 
 /** Gán vùng cho từng trường theo bố cục chuẩn: trường thường xếp 2 cột, dòng hàng thành bảng phía dưới. */
 function layoutFields(documentId: string, defs: Def[]): ExtractedField[] {
@@ -93,15 +95,19 @@ const BUYER_EN = "AN PHAT INDUSTRIAL EQUIPMENT CO., LTD";
 const BUYER_NOTE = "Tên tiếng Anh – tờ khai dùng tên theo MST 0316789012: CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT";
 const INV_NO = "HPS-INV-2610-078";
 
-const items = (rows: [string, string, string, FieldStatus?, string?][]): Def[] =>
-  rows.flatMap(([description, quantity, amount, unsure, note], i) => {
+/** Dòng hàng trên invoice: [mô tả, số lượng, thành tiền, đơn giá, (trạng thái nghi ngờ, "ô ghi chú")]; ĐVT "PCE", xuất xứ "KR" như invoice mẫu. */
+const items = (rows: [string, string, string, string, FieldStatus?, string?][]): Def[] =>
+  rows.flatMap(([description, quantity, amount, unitPrice, unsure, note], i) => {
     const n = i + 1;
     const st = (k: "description" | "quantity" | "amount"): Pick<Def, "status" | "note"> =>
       unsure && note?.startsWith(k) ? { status: unsure, note: note.slice(k.length + 1) } : {};
     return [
       { key: `item.${n}.description`, label: `Dòng ${n} – Mô tả`, value: description, group: "ITEMS", ...st("description") },
       { key: `item.${n}.quantity`, label: `Dòng ${n} – Số lượng`, value: quantity, group: "ITEMS", ...st("quantity") },
+      { key: `item.${n}.unit`, label: `Dòng ${n} – Đơn vị`, value: "PCE", group: "ITEMS" },
+      { key: `item.${n}.unit_price`, label: `Dòng ${n} – Đơn giá`, value: unitPrice, group: "ITEMS" },
       { key: `item.${n}.amount`, label: `Dòng ${n} – Thành tiền (USD)`, value: amount, group: "ITEMS", ...st("amount") },
+      { key: `item.${n}.origin`, label: `Dòng ${n} – Xuất xứ`, value: "KR", group: "ITEMS" },
     ] satisfies Def[];
   });
 
@@ -118,10 +124,10 @@ const SHOWCASE: Record<string, Def[]> = {
     { key: "buyer_tax_code", label: "MST người mua", value: "031678901", group: "PARTIES", status: "INVALID_FORMAT", note: "MST phải có 10 hoặc 13 chữ số – MST đăng ký: 0316789012" },
     { key: "port_loading", label: "Cảng xếp hàng", value: "CHANGWON (MASAN), KOREA", group: "TRANSPORT" },
     ...items([
-      ["DEEP GROOVE BALL BEARING 6205-2RS", "600 PCS", "2910.00"],
-      ["TAPERED ROLLER BEARING 30208", "320 PCS", "4288.00"],
-      ["LINEAR GUIDE RAIL HGR20 L=1000MM", "120 PCS", "8220.00", "MODEL_UNSURE", "quantity Chữ số mờ: có thể là 120 hoặc 12O – tổng số lượng khớp Packing List nếu là 120"],
-      ["LINEAR BLOCK HGH20CA", "200 PCS", "5432.00", "MODEL_UNSURE", "description Mã HGH20CA hay HGH20CC – ký tự cuối bị nhòe"],
+      ["DEEP GROOVE BALL BEARING 6205-2RS", "600 PCS", "2910.00", "4.85"],
+      ["TAPERED ROLLER BEARING 30208", "320 PCS", "4288.00", "13.40"],
+      ["LINEAR GUIDE RAIL HGR20 L=1000MM", "120 PCS", "8220.00", "68.50", "MODEL_UNSURE", "quantity Chữ số mờ: có thể là 120 hoặc 12O – tổng số lượng khớp Packing List nếu là 120"],
+      ["LINEAR BLOCK HGH20CA", "200 PCS", "5432.00", "27.16", "MODEL_UNSURE", "description Mã HGH20CA hay HGH20CC – ký tự cuối bị nhòe"],
     ]),
     { key: "incoterm", label: "Điều kiện giao hàng", value: "FCA CHANGWON", group: "COMMERCIAL", page: 2 },
     { key: "currency", label: "Đồng tiền", value: "USD", group: "COMMERCIAL", page: 2 },
@@ -207,6 +213,17 @@ const SHOWCASE_CHECKS: Omit<CrossCheck, "id" | "dossierId">[] = [
 
 /* ---------------- Sinh tự động cho hồ sơ khác / chứng từ mới upload ---------------- */
 
+/** Bảng hàng trên invoice của hồ sơ đã có dòng hàng mẫu – cùng số liệu với dòng hàng để sửa ở OCR thấy tờ khai đổi theo. */
+const lineDefs = (lines: LineItem[]): Def[] =>
+  lines.flatMap(({ lineNo: n, description, quantity, unit, unitPrice, amount, origin }) => [
+    { key: `item.${n}.description`, label: `Dòng ${n} – Mô tả`, value: description, group: "ITEMS" },
+    { key: `item.${n}.quantity`, label: `Dòng ${n} – Số lượng`, value: quantity, group: "ITEMS" },
+    { key: `item.${n}.unit`, label: `Dòng ${n} – Đơn vị`, value: unit, group: "ITEMS" },
+    { key: `item.${n}.unit_price`, label: `Dòng ${n} – Đơn giá`, value: unitPrice, group: "ITEMS" },
+    { key: `item.${n}.amount`, label: `Dòng ${n} – Thành tiền`, value: amount, group: "ITEMS" },
+    { key: `item.${n}.origin`, label: `Dòng ${n} – Xuất xứ`, value: origin, group: "ITEMS" },
+  ] satisfies Def[]);
+
 function genericDefs(kind: DocKind, d: Dossier): Def[] {
   const ref = d.code.split("-").pop() ?? "001";
   const value = d.invoiceValue === "0" ? "12480.00" : d.invoiceValue;
@@ -264,9 +281,9 @@ function genericDefs(kind: DocKind, d: Dossier): Def[] {
 
 /**
  * Trường cho một chứng từ của hồ sơ thường. `suspect` = số trường đánh dấu nghi ngờ
- * (đã xác nhận nếu hồ sơ đã qua bước OCR).
+ * (đã xác nhận nếu hồ sơ đã qua bước OCR). `lines`: dòng hàng mẫu của hồ sơ – thành bảng hàng trên invoice.
  */
-export function generateFieldsForDocument(doc: DossierDocument, dossier: Dossier, suspect = 0, confirmed = false): ExtractedField[] {
+export function generateFieldsForDocument(doc: DossierDocument, dossier: Dossier, suspect = 0, confirmed = false, lines: LineItem[] = []): ExtractedField[] {
   const defs = genericDefs(doc.kind, dossier).map((d, i): Def => {
     if (i >= suspect || d.status === "MODEL_UNSURE") return d;
     if (confirmed) return { ...d, status: "USER_CONFIRMED" };
@@ -274,7 +291,7 @@ export function generateFieldsForDocument(doc: DossierDocument, dossier: Dossier
       ? { ...d, status: "MODEL_UNSURE", note: "Chữ in mờ – kiểm tra lại với chứng từ gốc" }
       : { ...d, status: "CONFLICT", note: "Giá trị khác với chứng từ khác trong bộ" };
   });
-  return layoutFields(doc.id, defs);
+  return layoutFields(doc.id, doc.kind === "INVOICE" ? [...defs, ...lineDefs(lines)] : defs);
 }
 
 export function generateChecks(dossier: Dossier, kinds: DocKind[]): CrossCheck[] {
@@ -303,7 +320,7 @@ export function generateChecks(dossier: Dossier, kinds: DocKind[]): CrossCheck[]
 /** Hồ sơ đã qua bước upload → đã có kết quả đọc. */
 const PAST_UPLOAD = new Set(["ocr", "agent", "review", "submit"]);
 
-export function seedOcr(dossiers: Dossier[], documents: DossierDocument[]): { fields: ExtractedField[]; checks: CrossCheck[] } {
+export function seedOcr(dossiers: Dossier[], documents: DossierDocument[], lineItems: LineItem[] = []): { fields: ExtractedField[]; checks: CrossCheck[] } {
   const fields: ExtractedField[] = [];
   const checks: CrossCheck[] = [];
   for (const d of dossiers) {
@@ -320,7 +337,7 @@ export function seedOcr(dossiers: Dossier[], documents: DossierDocument[]): { fi
     docs.forEach((doc, i) => {
       const n = i === docs.length - 1 ? left : Math.min(left, Math.ceil(left / (docs.length - i)));
       left -= n;
-      fields.push(...generateFieldsForDocument(doc, d, n, !atOcr));
+      fields.push(...generateFieldsForDocument(doc, d, n, !atOcr, lineItems.filter((l) => l.dossierId === d.id)));
     });
     checks.push(...generateChecks(d, docs.map((x) => x.kind)));
   }

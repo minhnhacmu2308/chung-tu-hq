@@ -1,6 +1,6 @@
 import { LAYOUT_EDA, LAYOUT_IDA, layoutFields } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { declarationValues, editableKeys, itemValues, mappedCodes, pendingEdits } from "./dossier-adapter";
+import { declarationValues, editableKeys, itemValues, mappedCodes, pendingEdits, pendingItemEdits } from "./dossier-adapter";
 
 const f = (code: string, value: string) => ({ code, value });
 
@@ -63,9 +63,9 @@ describe("editableKeys / pendingEdits – sửa ô đã có trên tờ khai; ô 
     f("VBPQ", "MO"), f("GP", "GP01 123/BYT"),
   ];
   const original = declarationValues("IDA", fields);
-  const keys = editableKeys("IDA", fields, true);
-  it("không quyền / không phải nháp → không ô nào; chỉ tiêu khóa (MA_LH, TONG_TG) và đơn vị trọng lượng cố định KGM không sửa", () => {
-    expect(editableKeys("IDA", fields, false).size).toBe(0);
+  const keys = editableKeys("IDA", fields, "FULL");
+  it("khóa (không quyền, đã duyệt, đã thông quan) → không ô nào; chỉ tiêu khóa (MA_LH, TONG_TG) và đơn vị trọng lượng cố định KGM không sửa", () => {
+    expect(editableKeys("IDA", fields, "LOCKED").size).toBe(0);
     expect(keys.get("TK_IV3")).toBe("SO_HD");
     expect(keys.get("VD_DST")).toBe("CANG_DO");
     expect(keys.get("VD_DSN")).toBe("CANG_DO");
@@ -89,5 +89,25 @@ describe("editableKeys / pendingEdits – sửa ô đã có trên tờ khai; ô 
     ]));
     expect(edits.find((e) => e.code === "NXK_DC")?.value).toBe("123 SAMSUNG-RO, YEONGTONG-GU, SUWON-SI, GYEONGGI-DO, KOREA 16678");
     expect(edits).toHaveLength(5);
+  });
+});
+
+describe("itemValues / pendingItemEdits – ô dòng hàng chỉ có trên tờ khai", () => {
+  const items = [
+    { id: "li1", lineNo: 1, description: "Vòng bi", quantity: "10", unit: "PCE", unitPrice: "2", amount: "20", origin: "KR", hsConfirmed: "84821000", vatRate: "8", policyNote: "AKFTA" },
+    { id: "li2", lineNo: 2, description: "Trục", quantity: "5", unit: "KGM", unitPrice: "4", amount: "20", origin: "CN", hsConfirmed: "84831000", vatRate: "10" },
+  ];
+  it("hiện giá trị tự điền khi truyền; ô người khai đã nhập (theo id dòng) đè lên", () => {
+    const rows = itemValues("IDA", items, { currency: "USD", fields: [f("HANG.li2.HAG_ORS", "B30"), f("HANG.li2.HAG_RE", "XN210")] });
+    expect(rows[0]).toMatchObject({ HAG_QN2: "10", HAG_QT2: "PCE", HAG_UPC: "USD", HAG_ORS: "B06", HAG_TX5: "VB903" });
+    expect(rows[1]).toMatchObject({ HAG_ORS: "B30", HAG_RE: "XN210", HAG_TX5: "VB901" });
+  });
+  it("chỉ lưu ô người khai nhập đã đổi, theo id dòng; ô số liệu chứng từ bỏ qua", () => {
+    const original = itemValues("IDA", items, { currency: "USD" });
+    const draft = original.map((r, i) => (i === 1 ? { ...r, HAG_RE: " XN210 ", HAG_CMN: "đổi tên" } : r));
+    expect(pendingItemEdits("IDA", ["li1", "li2"], original, draft)).toEqual([{ code: "HANG.li2.HAG_RE", value: "XN210" }]);
+  });
+  it("EDA: ô Xuất xứ của app lấy từ dòng hàng", () => {
+    expect(itemValues("EDA", items)[1]?.["APP_XUAT_XU"]).toBe("CN");
   });
 });

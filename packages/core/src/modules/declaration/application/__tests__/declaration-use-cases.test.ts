@@ -7,6 +7,7 @@ import { RecordingNotifier } from "../../../../shared/notifier.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
 import { DOSSIER, hansol, ORG } from "../../domain/test/shipment.js";
 import { getAgentRun, runAgent, startAgentRun } from "../agent-run.js";
+import { refreshFromShipment } from "../customs-bridge.js";
 import { approveDeclaration, getDeclarationView, moveToReview, updateDeclarationField } from "../declaration.js";
 import { confirmHs, listHsCatalog, listLineItems, unconfirmHs } from "../line-items.js";
 import type { DeclarationDeps } from "../ports.js";
@@ -164,6 +165,62 @@ describe("HS và tờ khai", () => {
     expect(errCode(await updateDeclarationField(deps, viewer, D, "KHO", "x"))).toBe("FORBIDDEN");
     expect(unwrap(await getDeclarationView(deps, declarant, D)).declaration!.fields).toEqual(before.fields);
     expect(audit.rows.filter((r) => r.source === "DECL_EDIT")).toHaveLength(0);
+  });
+
+  it("updateDeclarationField theo giai đoạn: chưa khai → lưu ô bổ sung (mã = tên trường VNACCS), kiểm tra đặc tả; đã phân luồng + IDD → khóa theo Phụ lục II; đã thông quan → khóa hết", async () => {
+    await runFull("DECLARATION");
+    const d = unwrap(await updateDeclarationField(deps, declarant, D, "TK_CCC", "B"));
+    expect(d.fields.find((f) => f.code === "TK_CCC")).toMatchObject({ value: "B", source: "USER", no: "1.5" });
+    expect(audit.rows.at(-1)).toMatchObject({ key: "decl:TK_CCC", oldValue: "", newValue: "B" });
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "TK_CCC", "AB"))).toBe("VALIDATION");
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "TK_BYA", "năm"))).toBe("VALIDATION");
+    const items = unwrap(await listLineItems(deps, declarant, D));
+    unwrap(await confirmHs(deps, declarant, items[0]!.id, "8482.10.00")); // dựng lại – giữ ô bổ sung
+    expect(unwrap(await getDeclarationView(deps, declarant, D)).declaration!.fields.find((f) => f.code === "TK_CCC")?.value).toBe("B");
+
+    deps.customsStage = async () => "AMEND_RECALLED";
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "PTVC", "1"))).toBe("INVALID_STATE");
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "TK_CCC", "A"))).toBe("INVALID_STATE");
+    unwrap(await updateDeclarationField(deps, declarant, D, "SO_HD", "INV-AMEND"));
+    deps.customsStage = async () => "POST_EDITING";
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "SO_HD", "INV-POST"))).toBe("INVALID_STATE");
+    delete deps.customsStage;
+  });
+
+  it("updateDeclarationField ô dòng hàng (HANG.<id>.<ô>): ô chỉ có trên tờ khai lưu theo id dòng, nhãn ghi số dòng; số liệu chứng từ / dòng lạ → NOT_FOUND", async () => {
+    await runFull("DECLARATION");
+    const [line] = unwrap(await listLineItems(deps, declarant, D));
+    const d = unwrap(await updateDeclarationField(deps, declarant, D, `HANG.${line!.id}.HAG_RE`, "XN210"));
+    expect(d.fields.find((f) => f.code === `HANG.${line!.id}.HAG_RE`)).toMatchObject({ value: "XN210", source: "USER", no: "1.92", label: `Dòng ${line!.lineNo} – Mã miễn/giảm/không chịu thuế nhập khẩu` });
+    expect(errCode(await updateDeclarationField(deps, declarant, D, `HANG.${line!.id}.HAG_QN2`, "1,5"))).toBe("VALIDATION");
+    expect(errCode(await updateDeclarationField(deps, declarant, D, `HANG.${line!.id}.HAG_CMN`, "x"))).toBe("NOT_FOUND");
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "HANG.li_khac.HAG_RE", "x"))).toBe("NOT_FOUND");
+  });
+
+  it("refreshFromShipment: sửa dòng hàng ở OCR → dòng hàng cập nhật (giữ id, HS đã xác nhận), ô người khai nhập theo id dòng còn nguyên, tờ khai nháp dựng lại", async () => {
+    await runFull("DECLARATION");
+    const [line] = unwrap(await listLineItems(deps, declarant, D));
+    unwrap(await confirmHs(deps, declarant, line!.id, "8482.10.00"));
+    unwrap(await updateDeclarationField(deps, declarant, D, `HANG.${line!.id}.HAG_RE`, "XN210"));
+    const shipment = (deps.shipments as FakeShipments).byDossier[D]!;
+    shipment.items[0]!.unit.value = "SET";
+    shipment.items[0]!.unitPrice.value = "5.10";
+    unwrap(await refreshFromShipment(deps, declarant, D));
+    const [after] = unwrap(await listLineItems(deps, declarant, D));
+    expect(after).toMatchObject({ id: line!.id, unit: "SET", unitPrice: "5.10", hsConfirmed: "8482.10.00" });
+    expect(unwrap(await getDeclarationView(deps, declarant, D)).declaration!.fields.find((f) => f.code === `HANG.${line!.id}.HAG_RE`)?.value).toBe("XN210");
+  });
+
+  it("refreshFromShipment: tờ khai đã duyệt → không đổi dòng hàng", async () => {
+    await runFull("DECLARATION");
+    for (const it of unwrap(await listLineItems(deps, declarant, D))) unwrap(await confirmHs(deps, declarant, it.id, "8482.10.00"));
+    unwrap(await moveToReview(deps, declarant, D));
+    unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
+    unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));
+    unwrap(await approveDeclaration(deps, approver, D));
+    (deps.shipments as FakeShipments).byDossier[D]!.items[0]!.unit.value = "SET";
+    unwrap(await refreshFromShipment(deps, declarant, D));
+    expect(unwrap(await listLineItems(deps, declarant, D))[0]?.unit).not.toBe("SET");
   });
 
   it("moveToReview cần HS đủ + tờ khai; approve: VIEWER/DECLARANT FORBIDDEN, BLOCKER → BLOCKER_FAILED, HS thiếu → HS_UNCONFIRMED, đủ → APPROVED + hồ sơ sang submit", async () => {

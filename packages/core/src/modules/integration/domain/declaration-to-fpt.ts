@@ -1,13 +1,14 @@
 // Tờ khai (chỉ tiêu theo mnemonic `code`) → object FPT.VNACCS (objVN_IDA/HANG/VANDON/KTG, objVN_EDA/HANG/CON).
 // Cắt độ dài theo đặc tả (ghi cảnh báo), ngày → dd/MM/yyyy, số → number. Thuần; kiểm tra bằng Zod của @kb/contracts/fpt.
-import { EdaRequestSchema, fptKey, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
+import { EdaRequestSchema, extraFieldFpt, fptKey, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
 
 /** Dữ liệu tờ khai đủ để dựng payload – không phụ thuộc kiểu của module declaration. */
 export type DeclarationPayload = {
   kind: "IDA" | "EDA";
   direction: "NK" | "XK";
   fields: Record<string, { value: string }>;
-  items: { lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; policyNote: string | null }[];
+  /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền. */
+  items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; policyNote: string | null }[];
   adjustments: { label: string; amount: string; currency: string }[];
   containers: string[];
   currency: string;
@@ -33,17 +34,6 @@ const num = (v: string) => (/^-?\d+(\.\d+)?$/.test(v) ? Number(v) : 0);
 const numPart = (v: string) => num(v.split(" ")[0] ?? "");
 const unitPart = (v: string, fallback: string) => v.split(" ")[1] ?? fallback;
 const hs8 = (code: string | null) => (code ?? "").replace(/\D/g, "").slice(0, 8);
-/** Mã áp dụng thuế suất GTGT (VB9xx) theo thuế suất – CHƯA đối chiếu bảng "Thue khac - GTGT.xls" (D3). */
-const vatCode = (rate: string | null) => ({ "10": "VB901", "8": "VB903", "5": "VB905", "0": "VB900" })[String(num(rate ?? "10"))] ?? "VB901";
-/**
- * Mã Biểu thuế NK (chỉ tiêu 1.80) suy từ ghi chú chính sách (dòng hàng chưa lưu mã riêng – BACKEND-TODO). Danh sách Phụ lục II TT39:
- * B04 ATIGA, B05 ACFTA, B06 AKFTA, B09 AJCEP, B10 VJEPA (B17 là Chương 98). FTA khác chưa có mã trong văn bản đã đối chiếu → null (chặn truyền).
- */
-const FTA_TAX_TABLES: [string, string | null][] = [["ATIGA", "B04"], ["ACFTA", "B05"], ["AKFTA", "B06"], ["AJCEP", "B09"], ["VJEPA", "B10"], ["EVFTA", null], ["VKFTA", null], ["CPTPP", null], ["RCEP", null]];
-const taxTable = (note: string | null): { code: string | null; fta?: string } => {
-  const hit = FTA_TAX_TABLES.find(([name]) => note?.includes(name));
-  return hit ? { code: hit[1], fta: hit[0] } : { code: "B01" };
-};
 /** Mô tả hàng xuất khẩu phải kết thúc bằng “#&” + mã nước xuất xứ (TT121, chỉ tiêu 2.69). */
 const withOrigin = (description: string, origin: string) => (!origin || /#&[A-Z]{2}$/.test(description.trim()) ? description : `${description.trim()}#&${origin}`);
 
@@ -69,21 +59,8 @@ export function parsePermits(value: string): { code: string; no: string }[] {
   });
 }
 
-/**
- * 2.80 (mã văn bản pháp luật khác, theo dòng hàng): phần không có "số dòng:" áp cho mọi dòng; "2: GP KD" chỉ cho dòng 2.
- * Các phần cách nhau ";", mã cách nhau dấu cách/phẩy; mỗi dòng bỏ mã trùng.
- */
-export function lawCodesByLine(value: string, lineNos: number[]): Map<number, string[]> {
-  const all: string[] = [];
-  const own = new Map<number, string[]>();
-  for (const part of value.split(";").map((x) => x.trim()).filter(Boolean)) {
-    const m = /^(\d+)\s*:\s*(.*)$/.exec(part);
-    const codes = (m ? m[2]! : part).split(/[\s,]+/).filter(Boolean).map((c) => c.toUpperCase());
-    if (m) own.set(Number(m[1]), [...(own.get(Number(m[1])) ?? []), ...codes]);
-    else all.push(...codes);
-  }
-  return new Map(lineNos.map((n) => [n, [...new Set([...all, ...(own.get(n) ?? [])])]]));
-}
+/** 2.80 mã văn bản pháp luật theo dòng – quy tắc ở @kb/contracts (form hiện cùng giá trị). */
+export { lawCodesByLine };
 
 /** Tối đa 5 giấy phép (TK_SS1..5 mã phân loại, TK_SN1..5 số). */
 function setPermits(value: string, set: ReturnType<typeof setter>, warnings: string[]) {
@@ -113,36 +90,49 @@ function splitAddress(addr: string, names: string[], set: ReturnType<typeof sett
   chunks.forEach((c, i) => set(names[i]!, c));
 }
 
+/**
+ * Ô bổ sung người khai nhập trên form đầy đủ (mã chỉ tiêu = tên trường VNACCS: TK_CCC, TK_ICC, VD_BL2, KTG_IN4…) → đúng object FPT, đổi kiểu theo đặc tả.
+ * Gọi sau các ô suy từ chỉ tiêu app nên ghi đè giá trị mặc định (TK_CHB, TK_IMY). Ô APP_* chỉ lưu trong app, không gửi.
+ */
+function applyExtras(p: DeclarationPayload, targets: Partial<Record<FptObjectName, ReturnType<typeof setter>>>) {
+  for (const [code, f] of Object.entries(p.fields)) {
+    const spec = extraFieldFpt(p.kind, code);
+    const v = f.value?.trim() ?? "";
+    const set = spec ? targets[spec.object] : undefined;
+    if (!spec || !v || !set) continue;
+    set(code, spec.field.type === "date" ? ddmmyyyy(v) : spec.field.type === "decimal" || spec.field.type === "long" ? num(v) : v);
+  }
+}
+
 function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
   const sizes = p.kind === "IDA" ? SIZE_IDA : SIZE_EDA;
-  const laws = p.kind === "EDA" ? lawCodesByLine(val(p, "VBPQ"), p.items.map((it) => it.lineNo)) : null;
+  const lineNos = p.items.map((it) => it.lineNo);
   return p.items.map((it, i) => {
     const h: Record<string, unknown> = {};
     const set = setter(h, warnings, sizes);
+    // Ô người khai nhập / sửa đè trên form đầy đủ (theo id dòng) thắng giá trị tự điền.
+    const own = it.id ? itemOverrides(Object.entries(p.fields).map(([code, f]) => ({ code, value: f.value })), it.id) : {};
+    const auto = itemDefaults(p.kind, it, { currency: p.currency, vbpq: val(p, "VBPQ"), lineNos });
     set(p.kind === "IDA" ? "HAG_B25" : "HAG_R01", String(i + 1).padStart(2, "0"));
     set("HAG_CMD", hs8(it.hsConfirmed));
     if (p.kind === "EDA" && !it.origin) blockers.push(`Dòng ${it.lineNo}: chưa có mã nước xuất xứ – mô tả hàng xuất khẩu phải ghi “mô tả#&mã nước” (chỉ tiêu 2.69)`);
     set("HAG_CMN", p.kind === "EDA" ? withOrigin(it.description, it.origin) : it.description);
     set("HAG_QN1", num(it.quantity));
     set("HAG_QT1", it.unit || "PCE");
-    set("HAG_QN2", num(it.quantity)); // số lượng (2) theo đơn vị tính của biểu thuế – chưa có bảng quy đổi (D3), dùng số lượng (1)
-    set("HAG_QT2", it.unit || "PCE");
     set("HAG_BPR", num(it.amount));
     set("HAG_UPR", num(it.unitPrice));
-    set("HAG_UPC", p.currency);
-    set("HAG_TSC", it.unit || "PCE");
-    if (laws) {
-      const codes = laws.get(it.lineNo) ?? [];
-      codes.slice(0, 5).forEach((c, k) => set(`HAG_OL${k + 1}`, c));
-      if (codes.length > 5) warnings.push(`Dòng ${it.lineNo}: chỉ gửi 5 mã văn bản pháp luật đầu (${codes.slice(5).join(", ")} bị bỏ)`);
-    }
     if (p.kind === "IDA") {
       set("HAG_OR", it.origin);
-      const table = taxTable(it.policyNote);
-      if (table.code) set("HAG_ORS", table.code);
-      else blockers.push(`Dòng ${it.lineNo}: chưa có mã Biểu thuế nhập khẩu cho ${table.fta} – tra Bảng mã Biểu thuế trên website Cục Hải quan (chỉ tiêu 1.80)`);
       if (it.importDutyRate !== null) set("HAG_TXA", num(it.importDutyRate));
-      set("HAG_TX5", vatCode(it.vatRate)); // mã áp dụng thuế suất GTGT (bảng "Thue khac - GTGT") – mã chưa đối chiếu (D3)
+      const table = taxTable(it.policyNote);
+      if (!own["HAG_ORS"] && !table.code) blockers.push(`Dòng ${it.lineNo}: chưa có mã Biểu thuế nhập khẩu cho ${table.fta} – nhập chỉ tiêu 1.80 trên tờ khai (tra Bảng mã Biểu thuế trên website Cục Hải quan)`);
+    }
+    const codes = p.kind === "EDA" ? lawCodesByLine(val(p, "VBPQ"), lineNos).get(it.lineNo) ?? [] : [];
+    if (codes.length > 5 && !own["HAG_OL1"]) warnings.push(`Dòng ${it.lineNo}: chỉ gửi 5 mã văn bản pháp luật đầu (${codes.slice(5).join(", ")} bị bỏ)`);
+    for (const [key, v] of Object.entries({ ...auto, ...own })) {
+      const spec = itemFieldFpt(p.kind, key);
+      if (!spec || !v) continue;
+      set(key, spec.type === "date" ? ddmmyyyy(v) : spec.type === "decimal" || spec.type === "long" ? num(v) : v);
     }
     return h;
   });
@@ -159,9 +149,11 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""))); // 1.3
     set("TK_RED", ddmmyyyy(val(p, "HAN_TX"))); // 1.10
     set("TK_CH", firstToken(val(p, "CQHQ")));
-    set("TK_CHB", "00"); // đội thủ tục mặc định (format.json) – đổi khi có danh mục A038 chi tiết (D3)
-    set("TK_IMY", "000000"); // mã bưu chính: org chưa lưu → mặc định, xem warnings
-    warnings.push("TK_IMY: mã bưu chính người nhập khẩu chưa có trong tài khoản – gửi 000000");
+    set("TK_CHB", "00"); // đội thủ tục mặc định (format.json) – đổi khi có danh mục A038 chi tiết (D3); người khai nhập 1.9 thì ghi đè (applyExtras)
+    if (!val(p, "TK_IMY")) {
+      set("TK_IMY", "000000"); // mã bưu chính: người khai chưa nhập 1.14, org chưa lưu → mặc định
+      warnings.push("TK_IMY: mã bưu chính người nhập khẩu chưa có trong tài khoản – gửi 000000");
+    }
     set("TK_TPM", firstToken(val(p, "NGUOI_NT")) || "1");
     set("TK_MTC", firstToken(val(p, "PTVC")));
     set("TK_SKB", firstToken(val(p, "PL_CN")) || "4");
@@ -232,6 +224,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     // Khoản điều chỉnh khác (1.49, KTG_VR/VI/VC/VP) chưa ánh xạ được mã khoản → không gửi thì Hải quan tính thiếu trị giá: chặn truyền.
     const others = p.adjustments.filter((a) => !a.label.startsWith("Cước") && !a.label.startsWith("Phí bảo hiểm"));
     if (others.length) blockers.push(`Khoản điều chỉnh cộng vào trị giá chưa được khai ở chỉ tiêu 1.49: ${others.map((a) => `${a.label} ${a.amount} ${a.currency}`).join("; ")} – khai trên phần mềm khai báo`);
+    applyExtras(p, { objVN_IDA: set, objVN_IDA_VANDON: setVd, objVN_IDA_KTG: setKtg });
     const request = { objVN_IDA: tk, objVN_IDA_HANG: items(p, warnings, blockers), objVN_IDA_VANDON: vd, objVN_IDA_KTG: ktg };
     const parsed = IdaRequestSchema.safeParse(request);
     return { request: (parsed.success ? parsed.data : request) as IdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), blockers };
@@ -292,7 +285,8 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const containers = val(p, "SO_CONT") ? val(p, "SO_CONT").split(/[\s,;]+/).filter(Boolean) : p.containers;
   containers.slice(0, 50).forEach((c, i) => setCon(`CON_C${String(i + 1).padStart(2, "0")}`, c));
   if (containers.length > 50) warnings.push(`Có ${containers.length} container – chỉ tiêu 2.60 nhận 50, khai phần còn lại qua HYS`);
-  const request = { objVN_EDA: tk, objVN_EDA_CON: containers.length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers) };
+  applyExtras(p, { objVN_EDA: set, objVN_EDA_CON: setCon });
+  const request = { objVN_EDA: tk, objVN_EDA_CON: Object.keys(con).length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers) };
   const parsed = EdaRequestSchema.safeParse(request);
   return { request: (parsed.success ? parsed.data : request) as EdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), blockers };
 }

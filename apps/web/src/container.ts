@@ -5,7 +5,7 @@ import { createDb, platformDbUrl, runSeed, type Db } from "@kb/core/db";
 import { activeQuotaBonus, type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
 import { createAdminInfrastructure, platformStaffOf, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
 import type { BillingDeps } from "@kb/core/modules/billing";
-import type { DeclarationDeps } from "@kb/core/modules/declaration";
+import { refreshFromShipment, type DeclarationDeps } from "@kb/core/modules/declaration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import type { DossierDeps } from "@kb/core/modules/dossier";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
@@ -16,7 +16,7 @@ import { createValidationInfrastructure } from "@kb/core/modules/validation/infr
 import { createBillingInfrastructure, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
-import type { CustomsDeps, IntegrationDeps } from "@kb/core/modules/integration";
+import { stageOf, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { createCustomsInfrastructure, createIntegrationInfrastructure, createVnaccsCredentialsReader, envVnaccsCredentials } from "@kb/core/modules/integration/infrastructure";
@@ -211,8 +211,15 @@ function build(): Container {
     users: skill.users,
   });
   declaration.notify = notify;
+  // Sửa dữ liệu chứng từ ở OCR → dòng hàng + tờ khai nháp cập nhật theo (lỗi không chặn việc lưu trường; ghi log).
+  extraction.onShipmentEdited = async (orgId, dossierId) => {
+    const r = await refreshFromShipment(declaration, { orgId: asOrgId(orgId), userId: asUserId("") }, dossierId);
+    if (!r.ok) console.error("[extraction→declaration]", r.error.code, r.error.message);
+  };
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
   customs.notify = notify;
+  // Sửa chỉ tiêu tờ khai theo giai đoạn truyền (chưa khai / sửa đổi bổ sung / đã thông quan).
+  declaration.customsStage = async (orgId, dossierId) => stageOf(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.get(orgId, dossierId)));
   const jobs = new BullMqJobMonitor(redis);
   const system: SystemProbe = {
     async services(now) {

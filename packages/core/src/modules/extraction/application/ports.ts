@@ -92,6 +92,8 @@ export type ExtractionDeps = {
   usage: UsageRecorder;
   skills: SkillResolver;
   notify?: Notifier;
+  /** Người dùng sửa dữ liệu chứng từ (OCR) → tờ khai nháp cập nhật dòng hàng và dựng lại (module declaration; container nối). */
+  onShipmentEdited?: (orgId: string, dossierId: string) => Promise<void>;
   clock: Clock;
   idGen: IdGen;
 };

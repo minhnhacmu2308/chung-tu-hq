@@ -7,12 +7,12 @@ import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
-import { unconfirmedCount } from "./_dto.js";
+import { syncLineItems, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
 
 export type DeclarationSnapshot = {
   declarationId: string; version: number; status: DeclarationStatus; kind: "IDA" | "EDA"; direction: "NK" | "XK"; currency: string;
-  fields: Record<string, { value: string }>; items: Pick<LineItemRow, "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
+  fields: Record<string, { value: string }>; items: Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
   adjustments: { label: string; amount: string; currency: string }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
 };
 
@@ -28,7 +28,7 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
   return {
     declarationId: decl.id, version: decl.version, status: decl.status, kind: decl.kind, direction: dossier.direction, currency: dossier.currency,
     fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value }])),
-    items: items.map((i) => ({ lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, policyNote: i.policyNote })),
+    items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, policyNote: i.policyNote })),
     adjustments: decl.valueAdjustments.map((a) => ({ label: a.label, amount: a.amount, currency: a.currency })),
     containers: shipment?.transport.containers.map((c) => c.no) ?? [],
     unconfirmedHs: unconfirmedCount(items),
@@ -70,4 +70,22 @@ export async function markDeclarationDraft(deps: DeclarationDeps, ctx: { orgId: 
 export async function listDeclarationsForCustoms(deps: DeclarationDeps, orgId: string): Promise<{ dossierId: string; status: DeclarationStatus; approvedAt: Date | null }[]> {
   const rows: DeclarationRow[] = await deps.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.declarations.listLatestByStatus(orgId, ["APPROVED", "SUBMITTED"]));
   return rows.map((d) => ({ dossierId: d.dossierId, status: d.status, approvedAt: d.approvedAt }));
+}
+
+/**
+ * Dữ liệu chứng từ đổi (người dùng sửa ở OCR) → đồng bộ dòng hàng theo số dòng (giữ id dòng, HS đã xác nhận – ô người khai nhập theo id dòng không mất)
+ * và dựng lại tờ khai nháp (giữ sửa tay). Chưa có dòng hàng (chưa sang Agent) → không tạo; tờ khai đã duyệt/truyền → không đổi (OCR bị khóa khi đó).
+ */
+export async function refreshFromShipment(deps: DeclarationDeps, ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<Result<void>> {
+  const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
+  if (!shipment?.items.length) return ok(undefined);
+  const decl = await deps.uow.asOrg(ctx, async (r) => {
+    const latest = await r.declarations.latest(ctx.orgId, dossierId);
+    if (latest && latest.status !== "DRAFT") return latest;
+    if ((await r.lineItems.list(ctx.orgId, dossierId)).length) await syncLineItems(deps, r, ctx.orgId, dossierId, shipment);
+    return latest;
+  });
+  if (!decl || decl.status !== "DRAFT") return ok(undefined);
+  const rebuilt = await rebuildDraft(deps, ctx, dossierId);
+  return rebuilt.ok ? ok(undefined) : rebuilt;
 }

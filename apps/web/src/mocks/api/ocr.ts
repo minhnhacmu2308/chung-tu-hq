@@ -4,6 +4,7 @@
 import type { DocumentSheet } from "@kb/contracts";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
+import { refreshDeclaration } from "./declaration";
 import { generateChecks, generateFieldsForDocument, SUSPECT_STATUSES } from "@/mocks/seed/ocr";
 import type { CrossCheck, DocKind, DossierDocument, ExtractedField, FieldStatus } from "@/mocks/types";
 
@@ -202,6 +203,27 @@ function syncSuspectCount(db: MockDb, documentId: string) {
 }
 
 /** Người dùng sửa giá trị → USER_CONFIRMED, giữ originalValue (bản thật ghi field_audit). */
+const ITEM_FIELD = /^item\.(\d+)\.(description|quantity|unit|unit_price|amount|origin)$/;
+/**
+ * Ô dòng hàng trên chứng từ đổi giá trị → cập nhật dòng hàng cùng số dòng (giữ HS đã xác nhận, ô người khai nhập theo id dòng) và dựng lại tờ khai nháp
+ * – giống backend (extraction → declaration.refreshFromShipment).
+ */
+function syncLineItem(db: MockDb, f: ExtractedField) {
+  const m = ITEM_FIELD.exec(f.key);
+  const doc = db.documents.find((d) => d.id === f.documentId);
+  if (!m || !doc) return;
+  const line = db.lineItems.find((i) => i.dossierId === doc.dossierId && i.lineNo === Number(m[1]));
+  if (!line) return;
+  const v = f.value.trim();
+  if (m[2] === "description") line.description = v;
+  else if (m[2] === "quantity") line.quantity = v.split(/\s+/)[0] ?? line.quantity;
+  else if (m[2] === "unit") line.unit = v.toUpperCase();
+  else if (m[2] === "unit_price") line.unitPrice = v;
+  else if (m[2] === "amount") line.amount = v;
+  else if (/^[A-Za-z]{2}$/.test(v)) line.origin = v.toUpperCase();
+  refreshDeclaration(db, doc.dossierId);
+}
+
 export const updateFieldValue = (fieldId: string, value: string) =>
   mutate((db): ExtractedField => {
     const f = db.fields.find((x) => x.id === fieldId);
@@ -209,6 +231,7 @@ export const updateFieldValue = (fieldId: string, value: string) =>
     f.value = value.trim();
     f.status = "USER_CONFIRMED";
     syncSuspectCount(db, f.documentId);
+    syncLineItem(db, f);
     return f;
   });
 
@@ -230,6 +253,7 @@ export const revertField = (fieldId: string) =>
     f.value = f.originalValue;
     f.status = "MODEL_UNSURE";
     syncSuspectCount(db, f.documentId);
+    syncLineItem(db, f);
     return f;
   });
 

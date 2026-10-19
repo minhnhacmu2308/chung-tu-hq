@@ -54,6 +54,9 @@ function flowOf(db: MockDb, dossierId: string): CustomsFlow {
   return f;
 }
 
+/** Giai đoạn truyền của hồ sơ – API sửa chỉ tiêu dùng để chặn sửa theo giai đoạn (giống backend). */
+export const customsStageOf = (db: MockDb, dossierId: string): CustomsStage => flowOf(db, dossierId).stage;
+
 function load(db: MockDb, dossierId: string): Ctx {
   const dossier = db.dossiers.find((d) => d.id === dossierId);
   if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");

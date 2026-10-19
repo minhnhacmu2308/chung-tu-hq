@@ -3,7 +3,8 @@
 //   được Điều 20 TT38 (sửa đổi TT121/2025) dẫn chiếu.
 // - SYSTEM: mục 4 Phụ lục II bản TT38 "Hệ thống không hỗ trợ khai bổ sung" – sửa bằng cách ghi nội dung đúng vào ô "Ký hiệu và số hiệu".
 //   Bản TT39 thay mục 4 bằng 4.1–4.3 và không còn liệt kê nhóm này; phần mềm khai báo (ảnh CHITIEU_*_SUA_*01) vẫn khóa.
-// - SOFTWARE: chỉ thấy khóa trên ảnh màn hình IDA01/EDA01, chưa tìm thấy căn cứ văn bản – cần xác nhận.
+// - SOFTWARE: chỉ thấy khóa trên ảnh màn hình IDA01/EDA01, chưa tìm thấy căn cứ văn bản – nghiệp vụ đã chốt giữ khóa như phần mềm khai báo
+//   (2026-10-19; mã/tên đối tác nước ngoài: IDA 1.19/1.20, EDA 2.18/2.19).
 type Kind = "IDA" | "EDA";
 export type AmendLockBasis = "LAW" | "SYSTEM" | "SOFTWARE";
 export type AmendLock = { basis: AmendLockBasis; reason: string };

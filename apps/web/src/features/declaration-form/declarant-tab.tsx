@@ -27,6 +27,8 @@ type Props = {
   /** Không truyền → phần người khai chỉ đọc. */
   onChange?: ((key: string, value: string) => void) | undefined;
   onItemChange?: ((index: number, key: string, value: string) => void) | undefined;
+  /** Thao tác ở đầu panel chi tiết dòng hàng (sửa số liệu chứng từ ở OCR, chọn mã HS…). */
+  itemActions?: ((index: number) => ReactNode) | undefined;
   amending: boolean;
   onAmend: (on: boolean) => void;
   /** Số ô đã sửa so với tờ khai đã đăng ký (khi khai sửa đổi). */
@@ -98,7 +100,7 @@ function goToMissing() {
   el.querySelector<HTMLElement>("input, textarea, select")?.focus({ preventScroll: true });
 }
 
-export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, amending, onAmend, changed, lockOf, prototypeActions = true, showMissing = true }: Props) {
+export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, itemActions, amending, onAmend, changed, lockOf, prototypeActions = true, showMissing = true }: Props) {
   const { mode } = useViewPrefs();
   const showInapplicable = mode === "tat-ca";
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -157,7 +159,7 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
               </div>
             </div>
             {section === ITEMS_SECTION ? (
-              <ItemsSection layout={layout} items={items} onItemChange={onItemChange} showInapplicable={showInapplicable} />
+              <ItemsSection layout={layout} items={items} onItemChange={onItemChange} actions={itemActions} showInapplicable={showInapplicable} />
             ) : (
               current && (
                 <Stack gap="md">

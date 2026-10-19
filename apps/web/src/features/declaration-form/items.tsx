@@ -3,7 +3,7 @@
 import { Badge, createDataTableColumnHelper, DataTable, Dialog, DialogContent, Stack } from "@kb/ui";
 import type { DeclarationLayout } from "@kb/contracts";
 import { Package } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { BlockView } from "./block-view";
 import { displayValue } from "./display";
 import { conditionContext, itemProgress, type FormValues } from "./form-state";
@@ -16,10 +16,12 @@ type Props = {
   items: FormValues[];
   /** Không truyền → dòng hàng chỉ đọc (tờ khai đã đăng ký). */
   onItemChange?: ((index: number, key: string, value: string) => void) | undefined;
+  /** Thao tác ở đầu panel chi tiết dòng (tờ khai của hồ sơ: sửa số liệu chứng từ ở OCR, chọn mã HS). */
+  actions?: ((index: number) => ReactNode) | undefined;
   showInapplicable: boolean;
 };
 
-export function ItemsSection({ layout, items, onItemChange, showInapplicable }: Props) {
+export function ItemsSection({ layout, items, onItemChange, actions, showInapplicable }: Props) {
   const [open, setOpen] = useState<number | null>(null);
   const kind = layout.kind;
   const fields = layout.item.declarant.flatMap((b) => b.items).flatMap((it) => (it.kind === "field" ? [it] : it.fields));
@@ -53,6 +55,7 @@ export function ItemsSection({ layout, items, onItemChange, showInapplicable }: 
         {current && open !== null && (
           <DialogContent title={`Dòng ${open + 1}${current["HAG_CMD"] ? ` · HS ${current["HAG_CMD"]}` : ""}`} icon={<Package className="h-4 w-4" />} description="Chỉ tiêu dòng hàng – phần người khai nhập và phần Hải quan tính" size="lg">
             <Stack gap="md">
+              {actions?.(open)}
               {layout.item.declarant.map((b) => (
                 <BlockView key={b.id} kind={kind} block={b} values={current} onChange={onItemChange && ((k, v) => onItemChange(open, k, v))} ctx={conditionContext(kind, current)} showInapplicable={showInapplicable} compactable />
               ))}

@@ -1,5 +1,5 @@
 // Điều kiện chuyển bước/duyệt/truyền (bất biến 7: không truyền khi còn BLOCKER FAIL hoặc HS chưa xác nhận). Thuần.
-import { CATALOG_EDA, CATALOG_IDA, isDeclarationFieldEditable, type DeclarationFieldDef, type DeclarationStatus, type Role } from "@kb/contracts";
+import { CATALOG_EDA, CATALOG_IDA, extraFieldIssue, isDeclarationFieldEditable, itemFieldIssue, parseItemFieldCode, type DeclarationFieldDef, type DeclarationStatus, type Role } from "@kb/contracts";
 import { dec } from "../../../shared/decimal.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -68,6 +68,10 @@ const FIELD_FORMATS: Partial<Record<DeclarationFieldDef["type"], { test: (v: str
  */
 export function canEditField(kind: "IDA" | "EDA", code: string, value: string, current?: StoredField): Result<void> {
   if (!isDeclarationFieldEditable(code)) return err(domainError("VALIDATION", "Chỉ tiêu này không sửa tay trên tờ khai: số tờ khai do Hải quan cấp, loại hình đổi ở hồ sơ, trị giá/cước/tỷ giá sửa ở bước đọc chứng từ rồi dựng lại"));
+  // Ô bổ sung (mã = tên trường VNACCS) / ô dòng hàng (HANG.<id>.<ô>): kiểu / độ dài theo đặc tả FPT.
+  const item = parseItemFieldCode(code);
+  const extraIssue = item ? itemFieldIssue(kind, item.key, value) : extraFieldIssue(kind, code, value);
+  if (extraIssue) return err(domainError("VALIDATION", extraIssue));
   const mappings = mappingsFor(kind);
   const mapping = mappings.find((m) => m.code === code);
   if (value === "") return mapping?.required || current?.blocking ? err(domainError("VALIDATION", "Chỉ tiêu bắt buộc – không được để trống")) : ok(undefined);

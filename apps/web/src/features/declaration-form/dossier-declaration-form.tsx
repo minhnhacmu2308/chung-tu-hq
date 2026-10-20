@@ -156,7 +156,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
         {!canEdit
           ? "Bạn không có quyền sửa tờ khai."
           : cleared
-            ? "Tờ khai đã thông quan – không sửa trên tờ khai gốc. Sửa sau thông quan: lập bản khai bổ sung AMA (Bắt đầu sửa sau thông quan ở bước Khai báo Hải quan), sửa ở tab Khai bổ sung AMA."
+            ? "Tờ khai đã thông quan – không sửa trên tờ khai gốc. Cần sửa thì lập bản khai bổ sung AMA ở bước 7 “Sửa sau thông quan”."
             : "Tờ khai đã phê duyệt / đã truyền. Mở lại tờ khai (chưa khai báo) hoặc gọi về sửa đổi bổ sung (IDD, khi đã phân luồng) để sửa."}
       </Alert>
     );

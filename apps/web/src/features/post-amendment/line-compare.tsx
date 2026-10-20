@@ -5,10 +5,10 @@ import { Badge, Button, Card, CardContent, Disclosure, Grid, Input, Stack, toast
 import {
   AMA_COMPUTED_KEYS, AMA_LINE_LAYOUT, AMA_OTHER_TAX_SLOTS, amaLineDelta, amaLineLocked, LINE_LOCK_REASON, parseDec, type PostAmendmentLine,
 } from "@kb/contracts";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Calculator, Plus, Save, Trash2, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { removePostAmendmentLine, updatePostAmendmentField } from "@/api/post-amendment";
+import { postAmendmentKeys, removePostAmendmentLine, updatePostAmendmentField } from "@/api/post-amendment";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { AmendLockProvider, type FieldLockLookup } from "../declaration-form/amend-context";
@@ -18,7 +18,7 @@ import { conditionContext } from "../declaration-form/form-state";
 import { ViewPrefsProvider } from "../declaration-form/view-prefs";
 import { StickyActionBar } from "../dossier-detail/steps/declaration-parts";
 import type { AmaStepCtx } from "./ama-context";
-import { amaChangeSummary, applyEdits, changedKeys, IMPORT_COMPARE_ROWS, otherCompareRows, otherSlotsInUse, type CompareRow } from "./ama-wizard";
+import { amaChangeSummary, applyEdits, changedKeys, IMPORT_COMPARE_ROWS, lineSaves, otherCompareRows, otherSlotsInUse, type CompareRow } from "./ama-wizard";
 
 type Edits = Record<string, Record<string, string>>;
 
@@ -33,6 +33,7 @@ const signed = (v: string | null) => (v === null ? null : `${v.startsWith("-") ?
 
 export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChange: (n: number) => void }) {
   const { a, editable } = ctx;
+  const qc = useQueryClient();
   const [edits, setEdits] = useState<Edits>({});
   const dirty = Object.values(edits).reduce((n, e) => n + Object.keys(e).length, 0);
   useEffect(() => {
@@ -45,12 +46,15 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
 
   const save = useMutation({
     mutationFn: async () => {
-      for (const d of drafts) {
-        for (const key of Object.keys(edits[d.id] ?? {})) await updatePostAmendmentField(ctx.dossierId, { lineId: d.id, key, value: d.values[key] ?? "" });
-      }
+      // Gửi giá trị người khai nhập ("" = bỏ sửa tay) – máy chủ tự tính lại như ở đây.
+      const saves = lineSaves(edits, a.lines.map((l) => l.id));
+      for (const { lineId, key, value } of saves) await updatePostAmendmentField(ctx.dossierId, { lineId, key, value });
+      // Chờ dữ liệu mới về rồi mới bỏ nháp – không thì ô vừa lưu chớp về giá trị cũ một nhịp.
+      await qc.refetchQueries({ queryKey: postAmendmentKeys.view(ctx.dossierId) });
+      return saves.length;
     },
-    onSuccess: () => {
-      toast({ tone: "success", title: `Đã lưu ${formatNumber(dirty)} thay đổi` });
+    onSuccess: (n) => {
+      toast({ tone: "success", title: `Đã lưu ${formatNumber(n)} thay đổi` });
       setEdits({});
     },
     onError: toastMutationError("Không lưu được dòng hàng"),

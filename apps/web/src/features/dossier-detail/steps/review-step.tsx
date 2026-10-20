@@ -1,6 +1,6 @@
 "use client";
 // Bước 5 – Review tờ khai: tờ khai đầy đủ theo Phụ lục II (sửa chỉ tiêu nháp), chứng từ đính kèm, Hải quan trả về, theo dõi nghiệp vụ → phê duyệt.
-// Sau thông quan: tab "Khai bổ sung AMA" (bản khai riêng, tờ khai gốc chỉ đọc) – mở mặc định khi đang sửa sau thông quan.
+// Sau thông quan: tờ khai gốc chỉ đọc – sửa bằng bản khai bổ sung AMA ở bước 7 "Sửa sau thông quan".
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
   Dialog, DialogContent, DialogFooter, EmptyState, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast,

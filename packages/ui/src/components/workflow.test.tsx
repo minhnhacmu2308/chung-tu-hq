@@ -201,19 +201,28 @@ describe("Stepper", () => {
 });
 
 describe("Stepper – cuộn tới bước đang xem", () => {
-  it("bước đang xem nằm ngoài vùng cuộn thì được cuộn vào tầm nhìn (theo chiều ngang)", () => {
-    // Chrome mới: scrollIntoView trả Promise – effect không được trả nó về (React coi là hàm dọn dẹp → "is not a function" khi gỡ).
-    const spy = vi.fn(() => Promise.resolve());
-    const orig = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = spy;
+  it("chỉ cuộn ngang vùng bước (scrollLeft) đưa bước đang xem vào giữa – không scrollIntoView (kéo cả trang theo chiều dọc)", () => {
+    const into = vi.fn(() => Promise.resolve());
+    const origInto = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = into;
+    const left = vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (this: HTMLElement) {
+      return this.textContent?.startsWith("7") ? 600 : 0;
+    });
+    const width = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(100);
+    const client = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+    const setLeft = vi.spyOn(HTMLElement.prototype, "scrollLeft", "set");
     try {
       const steps = Array.from({ length: 7 }, (_, i) => ({ id: `s${i}`, label: `Bước số ${i + 1}` }));
       const { unmount } = render(<Stepper steps={steps} currentId="s6" viewingId="s6" label="Các bước" />);
-      expect(spy).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
-      expect(spy.mock.contexts.at(-1)).toHaveTextContent("Bước số 7");
+      expect(into).not.toHaveBeenCalled();
+      expect(setLeft).toHaveBeenCalledWith(450);
       expect(() => unmount()).not.toThrow();
     } finally {
-      Element.prototype.scrollIntoView = orig;
+      Element.prototype.scrollIntoView = origInto;
+      left.mockRestore();
+      width.mockRestore();
+      client.mockRestore();
+      setLeft.mockRestore();
     }
   });
 });

@@ -50,7 +50,7 @@ function editable(db: MockDb, dossierId: string): PostAmendment {
   const role = db.members.find((m) => m.id === db.currentUserId)?.role;
   if (!role || !canEditDeclaration(role)) throw new ApiError("FORBIDDEN", "Vai trò của bạn không được sửa bản khai bổ sung");
   const a = openAmendment(db, dossierId);
-  if (!a) throw new ApiError("NOT_FOUND", "Chưa lập bản khai bổ sung – bấm Bắt đầu sửa sau thông quan ở bước Khai báo Hải quan");
+  if (!a) throw new ApiError("NOT_FOUND", "Chưa lập bản khai bổ sung – lập ở bước 7 “Sửa sau thông quan”");
   if (!postAmendmentEditable(a.status)) {
     throw new ApiError("LOCKED", a.status === "PRE_DECLARED" ? "Bản khai đã khai tạm AMA – gọi về (AMB) trước khi sửa" : "Bản khai đã khai chính thức AMC – khóa toàn bộ");
   }

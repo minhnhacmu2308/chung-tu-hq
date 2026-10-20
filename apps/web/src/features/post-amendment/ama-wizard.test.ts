@@ -1,7 +1,7 @@
 import type { LayoutBlock, PostAmendment, PostAmendmentLine } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import {
-  amaChangeSummary, amaDeadline, amaPrimaryAction, applyEdits, approveBlockers, changedKeys, defaultSubStep, maxSubStep, missingOther, otherSlotsInUse, postStepVisible, reasonLayout, resolveSubStep,
+  amaChangeSummary, amaDeadline, amaPrimaryAction, amaRejection, applyEdits, lineSaves, reviewTarget, approveBlockers, changedKeys, defaultSubStep, maxSubStep, missingOther, otherSlotsInUse, postStepVisible, reasonLayout, resolveSubStep,
   subStepEditable,
 } from "./ama-wizard";
 
@@ -152,5 +152,33 @@ describe("maxSubStep – bước xa nhất được tới", () => {
   it("resolveSubStep: Nháp có dòng mở được bước lý do, chưa tới khai Hải quan", () => {
     expect(resolveSubStep(pa({ lines: oneLine }), "reason")).toBe("reason");
     expect(resolveSubStep(pa({ lines: oneLine }), "declare")).toBe("edit");
+  });
+});
+
+describe("amaRejection – lỗi Hải quan của bản khai đang xem", () => {
+  const rej = (operation: "AMA" | "AMB" | "AMC" | "IDA", at: string) => ({ operation, at, errors: [{ code: "E1", message: "Sai" }] });
+  const cur = pa({ status: "PRE_DECLARED", createdAt: "2026-10-20T01:00:00.000Z" });
+  it("AMC bị từ chối khi đã khai tạm vẫn hiện, không gợi ý sửa lại", () =>
+    expect(amaRejection(cur, rej("AMC", "2026-10-20T02:00:00.000Z"), true)).toMatchObject({ rejection: { operation: "AMC" }, fixable: false }));
+  it("AMA bị từ chối → gợi ý sửa lại", () => expect(amaRejection(pa({ createdAt: "2026-10-20T01:00:00.000Z" }), rej("AMA", "2026-10-20T02:00:00.000Z"), true)?.fixable).toBe(true));
+  it("lỗi từ trước khi lập bản khai này (bản trước) → không hiện", () => expect(amaRejection(cur, rej("AMB", "2026-10-19T02:00:00.000Z"), true)).toBeNull());
+  it("lỗi của nghiệp vụ tờ khai gốc → không hiện", () => expect(amaRejection(cur, rej("IDA", "2026-10-20T02:00:00.000Z"), true)).toBeNull());
+  it("bản đã khai chính thức (lịch sử) → không hiện", () => expect(amaRejection(cur, rej("AMC", "2026-10-20T02:00:00.000Z"), false)).toBeNull());
+});
+
+describe("lineSaves – gửi đúng giá trị người khai nhập", () => {
+  it("Tự tính lại gửi chuỗi rỗng để máy chủ bỏ đánh dấu sửa tay", () =>
+    expect(lineSaves({ l1: { HAG_AKA: "", HAG_AKR: "3" } }, ["l1"])).toEqual([
+      { lineId: "l1", key: "HAG_AKA", value: "" },
+      { lineId: "l1", key: "HAG_AKR", value: "3" },
+    ]));
+  it("bỏ qua thay đổi của dòng không còn trong bản khai", () => expect(lineSaves({ gone: { HAG_AKR: "3" } }, ["l1"])).toEqual([]));
+});
+
+describe("reviewTarget – nút xem lại ở bước khai Hải quan", () => {
+  it("đã duyệt → về lý do & phê duyệt", () => expect(reviewTarget(pa({ status: "APPROVED", lines: oneLine }))).toBe("reason"));
+  it("đã khai tạm / chính thức → xem nội dung sửa", () => {
+    expect(reviewTarget(pa({ status: "PRE_DECLARED", lines: oneLine }))).toBe("edit");
+    expect(reviewTarget(pa({ status: "REGISTERED", lines: oneLine }))).toBe("edit");
   });
 });

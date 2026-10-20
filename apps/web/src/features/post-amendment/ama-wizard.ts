@@ -2,7 +2,7 @@
 // Tách khỏi màn hình để test bằng vitest (apps/web chỉ chạy test .ts trong môi trường node).
 import {
   addDec, AMA_HEADER_LAYOUT, AMA_IMPORT_TAX_COLUMNS, AMA_OTHER_TAX_SLOTS, amaHeaderLocked, amaLineDelta, applyAmaLineEdit, amaOtherTaxColumns, DEC_ZERO, formatDec, parseDec,
-  type AmaTaxColumn, type CustomsOperation, type CustomsStage, type LayoutBlock, type LayoutField, type LayoutItem, type PostAmendment, type PostAmendmentLine,
+  type AmaTaxColumn, type CustomsOperation, type CustomsRejection, type CustomsStage, type LayoutBlock, type LayoutField, type LayoutItem, type PostAmendment, type PostAmendmentLine,
   type PostAmendmentValues,
 } from "@kb/contracts";
 
@@ -167,3 +167,25 @@ export function missingOther(header: PostAmendmentValues): LayoutField[] {
     .other.flatMap((b) => b.items.flatMap((i) => (i.kind === "field" ? [i] : i.fields)))
     .filter((f) => f.required && !header[f.key]?.trim());
 }
+
+// ---------------------------------------------------------------- bước ④: lỗi Hải quan, nút xem lại
+
+/**
+ * Lỗi Hải quan của bản khai đang mở (AMA/AMB/AMC, từ sau khi lập bản khai này). Backend chỉ xóa lỗi khi chính nghiệp vụ đó gửi lại thành công,
+ * nên lỗi AMB của bản trước có thể còn – so thời điểm với lúc lập. `fixable`: AMA bị từ chối thì sửa nội dung rồi khai lại; AMB/AMC thì không.
+ */
+export function amaRejection(
+  a: PostAmendment,
+  rejection: CustomsRejection | null,
+  isCurrent: boolean,
+): { rejection: CustomsRejection; fixable: boolean } | null {
+  if (!isCurrent || !rejection || !AMA_OPS.has(rejection.operation) || rejection.at < a.createdAt) return null;
+  return { rejection, fixable: rejection.operation === "AMA" };
+}
+
+/** Ô dòng hàng cần gửi khi lưu: giá trị người khai nhập (không phải giá trị đã tính) – "" = bỏ sửa tay, máy chủ tự tính lại. */
+export const lineSaves = (edits: Record<string, Record<string, string>>, lineIds: readonly string[]) =>
+  lineIds.flatMap((lineId) => Object.entries(edits[lineId] ?? {}).map(([key, value]) => ({ lineId, key, value })));
+
+/** Bước ④ → xem lại: đã duyệt thì về ③ (còn sửa được), đã khai thì xem nội dung sửa (chỉ đọc). */
+export const reviewTarget = (a: PostAmendment): AmaSubStep => (a.status === "APPROVED" ? "reason" : "edit");

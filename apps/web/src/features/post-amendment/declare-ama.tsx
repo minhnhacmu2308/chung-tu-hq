@@ -4,14 +4,14 @@
 import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Grid, Spinner, Stack, Stepper, toast } from "@kb/ui";
 import type { PostAmendment } from "@kb/contracts";
 import { useMutation } from "@tanstack/react-query";
-import { FilePlus2, MessageSquareText, RotateCcw, Send } from "lucide-react";
+import { ArrowLeft, FilePlus2, MessageSquareText, RotateCcw, Send } from "lucide-react";
 import { useState } from "react";
 import { performOperation, startPostAmendment } from "@/api/customs";
 import { formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { StickyActionBar } from "../dossier-detail/steps/declaration-parts";
 import type { AmaStepCtx } from "./ama-context";
-import { AMA_OPS, amaPrimaryAction } from "./ama-wizard";
+import { AMA_OPS, amaPrimaryAction, amaRejection, reviewTarget } from "./ama-wizard";
 
 
 const MILESTONES = [
@@ -28,7 +28,8 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
   const sending = s.pipeline.some((r) => AMA_OPS.has(r.op) && r.status === "SENDING");
   const primary = amaPrimaryAction(a, { stage: s.stage, sending });
   const isCurrent = a === view.current;
-  const rejection = s.rejection && AMA_OPS.has(s.rejection.operation) && isCurrent && a.status !== "PRE_DECLARED" ? s.rejection : null;
+  const rejected = amaRejection(a, s.rejection, isCurrent);
+  const rejection = rejected?.rejection ?? null;
   const messages = s.messages.filter((m) => AMA_OPS.has(m.operation));
 
   const perform = useMutation({
@@ -71,11 +72,16 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
               <Alert
                 tone="danger"
                 title={`Hải quan từ chối ${rejection.operation} lúc ${formatDateTime(rejection.at)}`}
-                action={
-                  <Button size="sm" variant="secondary" onClick={() => ctx.goSub("edit")}>
-                    Sửa lại
-                  </Button>
-                }
+                // AMA bị từ chối: sửa nội dung rồi khai lại. AMB/AMC bị từ chối: bản khai giữ nguyên, xem lỗi rồi gửi lại.
+                {...(rejected?.fixable
+                  ? {
+                      action: (
+                        <Button size="sm" variant="secondary" onClick={() => ctx.goSub("edit")}>
+                          Sửa lại
+                        </Button>
+                      ),
+                    }
+                  : {})}
               >
                 <ul className="flex flex-col gap-1">
                   {rejection.errors.map((e, i) => (
@@ -146,6 +152,10 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
         <p className="min-w-0 flex-1 basis-48 text-sm text-fg-muted">
           {primary ? "Việc tiếp theo" : sending ? "Đang chờ Hải quan" : a.status === "REGISTERED" ? "Đã hoàn tất bản khai bổ sung" : "Chưa đến bước khai – phê duyệt bản khai trước"}
         </p>
+        {/* Màn hẹp thanh bước nhỏ không bấm được – nút này là đường quay lại xem/sửa bản khai. */}
+        <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub(reviewTarget(a))}>
+          Xem lại bản khai
+        </Button>
         {canRecall && (
           <Button variant="ghost" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setRecallOpen(true)}>
             Gọi về sửa (AMB)

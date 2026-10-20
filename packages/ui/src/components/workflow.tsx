@@ -39,10 +39,14 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
   const currentIndex = Math.max(0, steps.findIndex((s) => s.id === currentId));
   const viewing = viewingId ?? currentId;
   const viewingIndex = Math.max(0, steps.findIndex((s) => s.id === viewing));
-  // Nhiều bước hơn bề ngang: cuộn bước đang xem vào tầm nhìn (không thì bước cuối – vd "Sửa sau thông quan" – bị khuất).
+  // Nhiều bước hơn bề ngang: cuộn NGANG vùng bước để bước đang xem ở giữa (không thì bước cuối – vd "Sửa sau thông quan" – bị khuất).
+  // Không dùng scrollIntoView: nó cuộn cả trang theo chiều dọc mỗi khi bước đổi. nav là `relative` nên offsetLeft tính theo nav.
+  const navRef = useRef<HTMLElement>(null);
   const viewingRef = useRef<HTMLLIElement>(null);
   useEffect(() => {
-    viewingRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    const nav = navRef.current;
+    const li = viewingRef.current;
+    if (nav && li) nav.scrollLeft = Math.max(0, li.offsetLeft - (nav.clientWidth - li.offsetWidth) / 2);
   }, [viewing]);
   return (
     <div className={cn("flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2", className)}>
@@ -52,7 +56,7 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
         <span className="font-medium text-fg">{steps[viewingIndex]?.label}</span>
       </p>
       {/* `relative`: chữ ẩn sr-only (absolute) trong bước phải bị cắt theo vùng cuộn – không thì đẩy cả trang tràn ngang khi nhiều bước */}
-      <nav aria-label={label ?? t.nav} className="relative min-w-0 flex-1 overflow-x-auto cq-max-sm:sr-only">
+      <nav ref={navRef} aria-label={label ?? t.nav} className="relative min-w-0 flex-1 overflow-x-auto cq-max-sm:sr-only">
         <ol className="flex items-center gap-1">
           {steps.map((s, i) => {
             const state = i < currentIndex ? "done" : i === currentIndex ? "current" : "todo";

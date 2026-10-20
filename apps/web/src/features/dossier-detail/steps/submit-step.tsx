@@ -107,13 +107,6 @@ function RowButton({ r, h }: { r: PipelineRow; h: RowHandlers }) {
       </Button>
     );
   }
-  if (r.action === "START_POST_EDIT") {
-    return (
-      <Button size="sm" variant="secondary" leftIcon={<FilePen className="h-3.5 w-3.5" />} loading={loading} onClick={() => h.onAction(r)}>
-        Bắt đầu sửa sau thông quan
-      </Button>
-    );
-  }
   return (
     <Button
       size="sm"

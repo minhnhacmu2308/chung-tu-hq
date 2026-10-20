@@ -334,7 +334,7 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   if (!a) throw new ApiError("INVALID_OPERATION", `Nghiệp vụ ${op} không dùng cho tờ khai ${c.dossier.direction === "NK" ? "nhập" : "xuất"} khẩu`);
   if (!a.enabled) throw new ApiError("OPERATION_LOCKED", a.reason || "Nghiệp vụ chưa thực hiện được ở giai đoạn này");
   if (a.action === "EDIT") throw new ApiError("NOT_APPROVED", a.reason ?? "Sửa tờ khai và phê duyệt lại trước");
-  if (a.action === "START_POST_EDIT") throw new ApiError("POST_EDIT_REQUIRED", "Bắt đầu sửa sau thông quan trước khi khai AMA");
+  if (a.action === "START_POST_EDIT") throw new ApiError("POST_EDIT_REQUIRED", "Lập bản khai bổ sung ở bước 7 “Sửa sau thông quan” trước khi khai AMA");
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
   send(db, c, op, now);

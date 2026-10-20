@@ -6,7 +6,7 @@ import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, Dialog
 import { canEditDeclaration } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FilePlus2, FileText, Undo2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { customsKeys, getSubmission, startPostAmendment } from "@/api/customs";
 import { dossierKeys } from "@/api/dossiers";
@@ -19,6 +19,7 @@ import { StepError, StepLoading } from "../dossier-detail/steps/declaration-part
 import type { StepProps } from "../dossier-detail/steps/types";
 import { AMA_SUB_STEPS, amaDeadline, maxSubStep, resolveSubStep, subStepEditable, type AmaSubStep } from "./ama-wizard";
 import { AMA_STATUS, type AmaStepCtx } from "./ama-context";
+import { DeclareAma } from "./declare-ama";
 import { EditLines } from "./line-compare";
 import { PickLines } from "./pick-lines";
 import { ReasonApprove } from "./reason-approve";
@@ -31,7 +32,19 @@ export function PostAmendmentStep({ dossier }: StepProps) {
   const params = useSearchParams();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: postAmendmentKeys.view(dossier.id), queryFn: () => getPostAmendmentView(dossier.id) });
-  const subQ = useQuery({ queryKey: customsKeys.submission(dossier.id), queryFn: () => getSubmission(dossier.id) });
+  const subQ = useQuery({
+    queryKey: customsKeys.submission(dossier.id),
+    queryFn: () => getSubmission(dossier.id),
+    // Đang chờ Hải quan phản hồi AMA/AMB/AMC → hỏi lại mỗi giây.
+    refetchInterval: (sq) => (sq.state.data?.inProgress ? 1000 : false),
+  });
+  // Giai đoạn đổi do phản hồi Hải quan → trạng thái bản khai (và bước nhỏ) đổi theo.
+  const stage = subQ.data?.stage;
+  useEffect(() => {
+    if (!stage) return;
+    void qc.invalidateQueries({ queryKey: postAmendmentKeys.view(dossier.id) });
+    void qc.invalidateQueries({ queryKey: dossierKeys.all });
+  }, [stage, qc, dossier.id]);
   const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
   const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
   const canEdit = session.data ? canEditDeclaration(session.data.user.role) : false;
@@ -122,11 +135,7 @@ export function PostAmendmentStep({ dossier }: StepProps) {
       ) : sub === "reason" ? (
         <ReasonApprove ctx={ctx} />
       ) : (
-        <Card>
-          <CardContent className="pt-5">
-            <EmptyState title="Đang xây dựng" description={AMA_SUB_STEPS.find((s) => s.id === sub)?.label ?? ""} />
-          </CardContent>
-        </Card>
+        <DeclareAma ctx={ctx} />
       )}
 
       <Dialog open={leaveTo !== null} onOpenChange={(o) => !o && setLeaveTo(null)}>

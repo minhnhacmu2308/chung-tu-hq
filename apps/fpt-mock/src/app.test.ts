@@ -116,3 +116,15 @@ describe("fpt-mock: luồng đủ EDA → EDC → HYS → IEX", () => {
     expect(res.status).toBe(503);
   });
 });
+
+describe("fpt-mock: AMA khai bổ sung sau thông quan (giả định)", () => {
+  const acc = edaRequest.objVNACCS_ACCOUNT;
+  it("đủ số tờ khai, mã lý do, dòng hàng → cấp số tờ khai bổ sung; thiếu → lỗi theo chỉ tiêu", async () => {
+    const token = await login();
+    const ok = (await (await post("/api/AMA", { objVNACCS_ACCOUNT: acc, objVN_AMA: { tK_ICN: 108173826831, tK_REC: "6" }, objVN_AMA_HANG: [{ haG_RAN: "01" }] }, token)).json()) as { errorList: unknown; objAMA: { objVN_AMA: Record<string, unknown> }[] };
+    expect(ok.errorList).toBeNull();
+    expect(String(ok.objAMA[0]!.objVN_AMA["tK_SYN"])).toMatch(/^3\d{11}$/);
+    const bad = (await (await post("/api/AMA", { objVNACCS_ACCOUNT: acc, objVN_AMA: {} }, token)).json()) as { errorList: { indexCode: string }[] };
+    expect(bad.errorList.map((e) => e.indexCode)).toEqual(["ICN", "REC", "RAN"]);
+  });
+});

@@ -1,9 +1,9 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { CustomsRepos, CustomsUow, MessageRow, OutboxRow, ResultRow } from "../customs-ports.js";
+import type { CustomsRepos, CustomsUow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
 
 /** Fake mô phỏng RLS theo org; outbox unique theo idempotency_key; messages append-only. */
 export class InMemoryCustomsUow implements CustomsUow {
-  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[] };
+  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[] };
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T> {
     const d = this.data;
     const org = ctx.orgId as string;
@@ -38,6 +38,18 @@ export class InMemoryCustomsUow implements CustomsUow {
           const i = d.results.findIndex((r) => r.dossierId === row.dossierId);
           if (i >= 0) d.results[i] = clone(row);
           else d.results.push(clone(row));
+        },
+      },
+      amendments: {
+        listForDossier: async (orgId, dossierId) => clone(d.amendments.filter((a) => a.orgId === org && a.orgId === orgId && a.dossierId === dossierId).sort((a, b) => a.seq - b.seq)),
+        insert: async (row) => {
+          if (row.orgId !== org) deny("post_amendments");
+          if (d.amendments.some((a) => a.dossierId === row.dossierId && a.seq === row.seq)) throw new Error("duplicate key value violates unique constraint post_amendments_dossier_seq_uq");
+          d.amendments.push(clone(row));
+        },
+        update: async (row) => {
+          const i = d.amendments.findIndex((a) => a.id === row.id && a.orgId === org);
+          if (i >= 0) d.amendments[i] = clone(row);
         },
       },
     });

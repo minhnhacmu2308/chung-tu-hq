@@ -1,5 +1,5 @@
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
-import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, StepId, SubmissionState } from "@kb/contracts";
+import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -34,6 +34,20 @@ export interface CustomsRepos {
     listForOrg(orgId: string): Promise<ResultRow[]>;
     upsert(row: ResultRow): Promise<void>;
   };
+  /** Bản khai bổ sung sau thông quan (AMA) – bản riêng, tờ khai gốc không đổi. */
+  amendments: {
+    listForDossier(orgId: string, dossierId: string): Promise<PostAmendmentRow[]>;
+    insert(row: PostAmendmentRow): Promise<void>;
+    update(row: PostAmendmentRow): Promise<void>;
+  };
+}
+
+/** Bản khai bổ sung trong DB (thời điểm là Date; DTO `PostAmendment` dùng chuỗi ISO). */
+export type PostAmendmentRow = Omit<PostAmendment, "approvedAt" | "createdAt" | "updatedAt"> & { orgId: string; approvedAt: Date | null; createdAt: Date; updatedAt: Date };
+
+/** field_audit (append-only, bất biến 6) – composition root nối sang bảng của extraction. */
+export interface CustomsAuditWriter {
+  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "AMA_EDIT" }): Promise<void>;
 }
 export interface CustomsUow {
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T>;
@@ -68,7 +82,7 @@ export interface DeclarationReader {
   listForCustoms(orgId: string): Promise<{ dossierId: string; status: DeclarationStatus; approvedAt: Date | null }[]>;
 }
 
-export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; status: DossierStatus; step: StepId; declarationNo: string | null; updatedAt: Date };
+export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; status: DossierStatus; step: StepId; declarationNo: string | null; updatedAt: Date; /** Người tạo hồ sơ (nguyên tắc 4 mắt). */ ownerId?: string };
 export interface CustomsDossierPort {
   get(orgId: string, dossierId: string): Promise<DossierBrief | null>;
   update(orgId: string, dossierId: string, patch: { status?: DossierStatus; step?: StepId; declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED" }): Promise<void>;
@@ -91,6 +105,9 @@ export type CustomsDeps = {
   dossiers: CustomsDossierPort;
   validation: ValidationReader;
   certificates: CertificateReader;
+  audit: CustomsAuditWriter;
+  /** Cấu hình doanh nghiệp: nguyên tắc 4 mắt khi phê duyệt bản khai bổ sung. */
+  org: { fourEyes(orgId: string): Promise<boolean> };
   /** Khoảng cách giữa hai lần hỏi trạng thái (ms); gateway giả dùng ngắn để demo. */
   pollDelayMs: number;
   notify?: Notifier;

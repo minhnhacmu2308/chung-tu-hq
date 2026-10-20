@@ -1,9 +1,10 @@
 export type { IntegrationDeps, IntegrationProbe, IntegrationStatusRepo, IntegrationStatusRow } from "./application/ports.js";
 export { listIntegrations } from "./application/list-integrations.js";
 export { testIntegration } from "./application/test-integration.js";
-export type { CertificateReader, CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsRepos, CustomsUow, DeclarationReader, DeclarationSnapshot, DossierBrief, GatewayError, GatewaySendResult, GatewayStatus, MessageRow, OutboxRow, ResultRow, ValidationReader as CustomsValidationReader } from "./application/customs-ports.js";
+export type { CertificateReader, CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsRepos, CustomsUow, DeclarationReader, DeclarationSnapshot, DossierBrief, GatewayError, GatewaySendResult, GatewayStatus, MessageRow, OutboxRow, PostAmendmentRow, ResultRow, ValidationReader as CustomsValidationReader } from "./application/customs-ports.js";
 export { submitDeclaration, outboxKey } from "./application/submit-declaration.js";
 export { performOperation, startPostAmendment } from "./application/perform-operation.js";
+export { addPostAmendmentLines, approvePostAmendment, getPostAmendmentView, removePostAmendmentLine, updatePostAmendmentField } from "./application/post-amendment.js";
 export { MAX_ATTEMPTS as CUSTOMS_MAX_ATTEMPTS, processOutbox, type ProcessOutboxInput } from "./application/process-outbox.js";
 export { pollStatus, type PollStatusInput } from "./application/poll-status.js";
 export { resendOperation } from "./application/resend-operation.js";
@@ -12,4 +13,5 @@ export { markOutboxFailed, reopenDeclaration } from "./application/reopen-declar
 export { OPERATION_LABELS } from "./application/_customs-view.js";
 export { buildFptRequest, type DeclarationPayload, type FptBuild } from "./domain/declaration-to-fpt.js";
 export { maskPayload } from "./domain/mask.js";
+export { buildAmaRequest, type AmaBuild } from "./domain/post-amendment.js";
 export { coarseState, rowState, stageOf, type ResultRaw } from "./domain/state-machine.js";

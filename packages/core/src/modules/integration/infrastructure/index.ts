@@ -47,6 +47,7 @@ export function createCustomsInfrastructure(opts: {
   return {
     uow: new DrizzleCustomsUow(opts.db), queue: opts.queue, gateway,
     declarations: createDeclarationReader(opts.declaration), dossiers: createCustomsDossierPort(opts.dossier), validation: createCustomsValidationReader(opts.validation), certificates: createCertificateReader(opts.identity),
+    audit: opts.declaration.audit, org: { fourEyes: async (orgId) => (await opts.declaration.org.get(orgId)).fourEyes },
     pollDelayMs: gateway.name === "fake-customs" ? 3_000 : 30_000, clock: opts.clock ?? systemClock, idGen: ulidIdGen,
   };
 }

@@ -4,7 +4,7 @@ import type {
   AgentRun, CrossCheck, CustomsMessage, CustomsResult, Declaration, DigitalCertificate, Dossier, DossierDocument,
   ExtractedField, Integration, LineItem, Member, Notification, Organization, Skill,
 } from "./types";
-import type { DeclarationProfile } from "@kb/contracts";
+import type { DeclarationProfile, PostAmendment } from "@kb/contracts";
 import { seedCore } from "./seed/core";
 import { seedOcr } from "./seed/ocr";
 import { seedDeclaration } from "./seed/declaration";
@@ -31,6 +31,8 @@ export type MockDb = {
   customsResults: CustomsResult[];
   /** Giai đoạn luồng nghiệp vụ Hải quan theo hồ sơ (xem mocks/customs-sim CustomsFlow). */
   customsFlows: Record<string, CustomsFlow>;
+  /** Bản khai bổ sung sau thông quan (AMA) – bản riêng, không sửa tờ khai gốc. */
+  postAmendments: PostAmendment[];
   skills: Skill[];
   integrations: Integration[];
   certificates: DigitalCertificate[];
@@ -44,7 +46,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 14;
+const DB_VERSION = 15;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -59,6 +61,7 @@ function createSeed(): MockDb {
     ...ocr,
     ...declaration,
     ...seedCustoms(core.dossiers),
+    postAmendments: [],
     ...seedSkills(),
     ...seedSettings(),
     ...seedAdmin(),

@@ -91,6 +91,12 @@ export const STATUS_META = {
   CUSTOMS_SENDING: { tone: "info", label: "Đang truyền" },
   CUSTOMS_INSPECTING: { tone: "warning", label: "Đang kiểm tra" },
   CUSTOMS_CLEARED: { tone: "success", label: "Đã thông quan" },
+  // Bản khai bổ sung sau thông quan (AMA)
+  AMA_DRAFT: { tone: "warning", label: "Bản nháp, chờ duyệt" },
+  AMA_APPROVED: { tone: "primary", label: "Đã duyệt, chờ khai AMA" },
+  AMA_PRE_DECLARED: { tone: "info", label: "Đã khai tạm AMA" },
+  AMA_RECALLED: { tone: "warning", label: "Đã gọi về sửa (AMB)" },
+  AMA_REGISTERED: { tone: "success", label: "Đã khai chính thức (AMC)" },
   // Trạng thái tài khoản (thành viên doanh nghiệp, quản trị viên hệ thống)
   ACCOUNT_ACTIVE: { tone: "success", label: "Đang hoạt động" },
   ACCOUNT_INVITED: { tone: "warning", label: "Đã mời" },
@@ -126,6 +132,7 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   DOSSIER_DRAFT: "Draft", DOSSIER_PROCESSING: "Processing", DOSSIER_NEEDS_REVIEW: "Needs check", DOSSIER_APPROVED: "Approved, awaiting submission",
   DOSSIER_SUBMITTED: "Submitted to customs", DOSSIER_CLEARED: "Cleared", DOSSIER_CANCELLED: "Cancelled",
   CUSTOMS_READY: "Awaiting submission", CUSTOMS_SENDING: "Submitting", CUSTOMS_INSPECTING: "Under inspection", CUSTOMS_CLEARED: "Cleared",
+  AMA_DRAFT: "Draft, awaiting approval", AMA_APPROVED: "Approved, awaiting AMA", AMA_PRE_DECLARED: "AMA pre-declared", AMA_RECALLED: "Recalled for edit (AMB)", AMA_REGISTERED: "Registered (AMC)",
   ACCOUNT_ACTIVE: "Active", ACCOUNT_INVITED: "Invited", ACCOUNT_DISABLED: "Disabled", ACCOUNT_PENDING_JOIN: "Awaiting approval",
   ORG_ACTIVE: "Active", ORG_SUSPENDED: "Suspended",
   INTEGRATION_CONNECTED: "Connected", INTEGRATION_ERROR: "Connection error", INTEGRATION_NOT_CONFIGURED: "Not configured",

@@ -9,9 +9,11 @@ import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
+import { buildAmaRequest } from "../domain/post-amendment.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
+import { createPostAmendment, isPostStage, openPostAmendment } from "./post-amendment.js";
 
 export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -20,18 +22,28 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   if (!snap) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
-  const { result, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
+  const { result, outbox, amendment } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId), amendment: await openPostAmendment(r, ctx.orgId, dossierId) }));
   if (!result) return err(domainError("INVALID_STATE", "Hồ sơ chưa truyền – ký số và khai tạm trước"));
   if (op === queryOpFor(dossier.direction) || CUSTOMS_OPERATIONS[op].kind === "query") return queryNow(deps, ctx, dossierId, dossier.direction, result);
 
-  const flow = { direction: dossier.direction, approved: snap.status === "APPROVED", hasContainers: snap.payload.containers.length > 0 };
+  // Sau thông quan: "đã duyệt" là bản khai bổ sung AMA (tờ khai gốc giữ nguyên, không duyệt lại).
+  const approved = isPostStage(result) ? amendment?.status === "APPROVED" : snap.status === "APPROVED";
+  const flow = { direction: dossier.direction, approved, hasContainers: snap.payload.containers.length > 0 };
   const a = operationAvailability(availabilityInput(flow, result, outbox)).find((x) => x.op === op);
   if (!a) return err(domainError("VALIDATION", `Nghiệp vụ ${op} không thuộc luồng tờ khai ${dossier.direction === "NK" ? "nhập" : "xuất"} khẩu`));
   if (!a.enabled) return err(domainError("INVALID_STATE", a.reason ?? `Chưa thực hiện được ${op}`));
   if (a.action === "EDIT") return err(domainError("INVALID_STATE", a.reason ?? "Sửa tờ khai ở bước Review và phê duyệt lại trước"));
-  if (a.action === "START_POST_EDIT") return err(domainError("INVALID_STATE", "Bấm “Bắt đầu sửa sau thông quan” để mở tờ khai trước"));
+  if (a.action === "START_POST_EDIT") return err(domainError("INVALID_STATE", "Bấm “Bắt đầu sửa sau thông quan” để lập bản khai bổ sung trước"));
 
   let payload: Record<string, unknown> = { request: { soToKhai: result.declarationNo }, certificateId: result.raw?.certificateId };
+  if (op === "AMA") {
+    // Bản khai bổ sung riêng: đã duyệt, đủ dòng hàng + mã lý do; tờ khai gốc không gửi lại, không đổi trạng thái.
+    if (amendment?.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Bản khai bổ sung chưa được phê duyệt"));
+    const built = buildAmaRequest(amendment);
+    if (built.blockers.length) return err(domainError("BLOCKER_FAILED", `Bản khai bổ sung chưa gửi được: ${built.blockers.join("; ")}`));
+    payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId, amendmentId: amendment.id };
+    return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: false });
+  }
   if (isContentOperation(op)) {
     // Bất biến 7: chỉ gửi nội dung tờ khai đã duyệt, HS đủ, không còn BLOCKER.
     if (snap.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Tờ khai chưa được phê duyệt lại sau khi sửa"));
@@ -42,8 +54,7 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
       return err(domainError("RATE_WEEK_CHANGED", `Tờ khai dùng tỷ giá tuần ${weekStart(snap.exchangeRateDate)} – đã sang tuần tỷ giá mới. Dựng lại tờ khai với tỷ giá tuần này rồi duyệt lại`));
     const built = buildFptRequest(snap.payload);
     if (built.blockers.length) return err(domainError("BLOCKER_FAILED", `Tờ khai chưa truyền được: ${built.blockers.join("; ")}`));
-    const request = op === "AMA" ? { soToKhai: result.declarationNo, toKhaiSauSua: built.request } : built.request;
-    payload = { request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
+    payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
   } else if (op === "HYS") {
     payload = { files: (await deps.dossiers.documents(ctx.orgId, dossierId)).map((d) => ({ name: d.fileName, storageKey: d.storageKey })), certificateId: result.raw?.certificateId };
   } else if (op === "CONT" || op === "PORT_FEE") {
@@ -104,7 +115,7 @@ async function queryNow(deps: CustomsDeps, ctx: Ctx, dossierId: string, directio
   return ok({ sent: false, message: `Trạng thái tờ khai: ${st.status}` });
 }
 
-/** Đã thông quan → mở tờ khai để sửa sau thông quan (giai đoạn POST_EDITING; sửa ở Review, duyệt lại rồi khai AMA). */
+/** Đã thông quan → lập bản khai bổ sung AMA (giai đoạn POST_EDITING). Tờ khai gốc giữ nguyên – không mở lại. */
 export async function startPostAmendment(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<void>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
@@ -113,8 +124,11 @@ export async function startPostAmendment(deps: CustomsDeps, ctx: Ctx, dossierId:
   const { result, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
   if (!result || stageOf(result) !== "CLEARED") return err(domainError("INVALID_STATE", "Chỉ sửa đổi sau thông quan khi tờ khai đã thông quan"));
   if (outbox.some((o) => o.status === "PENDING")) return err(domainError("INVALID_STATE", "Đang chờ phản hồi một nghiệp vụ khác"));
-  await deps.uow.asOrg(ctx, (r) => r.results.upsert({ ...result, state: coarseState("POST_EDITING"), raw: { ...(result.raw ?? {}), stage: "POST_EDITING" }, updatedAt: deps.clock.now() }));
-  await deps.declarations.markDraft(ctx, dossierId);
+  await deps.uow.asOrg(ctx, async (r) => {
+    await createPostAmendment(deps, r, ctx, dossierId, result);
+    await r.results.upsert({ ...result, state: coarseState("POST_EDITING"), raw: { ...(result.raw ?? {}), stage: "POST_EDITING" }, updatedAt: deps.clock.now() });
+  });
+  await deps.dossiers.update(ctx.orgId, dossierId, { step: "review" });
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });
   return ok(undefined);
 }

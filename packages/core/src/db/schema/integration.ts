@@ -79,3 +79,25 @@ export const customsResults = pgTable(
   },
   (t) => [uniqueIndex("customs_results_dossier_uq").on(t.dossierId), index("customs_results_org_idx").on(t.orgId, t.updatedAt), orgRls("customs_results_rls")],
 ).enableRLS();
+
+/**
+ * Bản khai bổ sung sau thông quan (AMA) – bản riêng tham chiếu tờ khai gốc, không sửa tờ khai gốc.
+ * `header`/`lines` lưu theo tên trường VNACCS (VN_AMA / VN_AMA_HANG); `result` = Hải quan trả về sau AMA. Một hồ sơ nhiều lần (seq).
+ */
+export const postAmendments = pgTable(
+  "post_amendments",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id").notNull(),
+    seq: integer("seq").notNull(),
+    status: text("status").notNull().default("DRAFT"),
+    header: jsonb("header").notNull(),
+    lines: jsonb("lines").notNull(),
+    approvedBy: text("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    result: jsonb("result"),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex("post_amendments_dossier_seq_uq").on(t.dossierId, t.seq), index("post_amendments_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("post_amendments_rls")],
+).enableRLS();

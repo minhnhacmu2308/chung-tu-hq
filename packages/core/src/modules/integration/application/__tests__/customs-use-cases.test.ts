@@ -17,12 +17,14 @@ import { MAX_ATTEMPTS, processOutbox } from "../process-outbox.js";
 import { resendOperation } from "../resend-operation.js";
 import { submitDeclaration } from "../submit-declaration.js";
 import { performOperation, startPostAmendment } from "../perform-operation.js";
+import { addPostAmendmentLines, approvePostAmendment, getPostAmendmentView, updatePostAmendmentField } from "../post-amendment.js";
 import { FakeCustomsGateway, hashId } from "../test/fake-customs-gateway.js";
 import { InMemoryCustomsUow } from "../test/in-memory-customs-uow.js";
 
 const ORG = "org_a";
 const declarant: Ctx = { orgId: asOrgId(ORG), userId: asUserId("usr_chau"), role: "DECLARANT" };
 const viewer: Ctx = { orgId: asOrgId(ORG), userId: asUserId("usr_v"), role: "VIEWER" };
+const approver: Ctx = { orgId: asOrgId(ORG), userId: asUserId("usr_duyet"), role: "APPROVER" };
 const other: Ctx = { orgId: asOrgId("org_b"), userId: asUserId("usr_x"), role: "ADMIN" };
 
 const payload = (kind: "IDA" | "EDA" = "IDA"): DeclarationPayload => ({
@@ -85,6 +87,8 @@ let dossiers: FakeDossiers;
 let blockers: number;
 let deps: CustomsDeps;
 let notifier: RecordingNotifier;
+let audits: { dossierId: string; key: string; oldValue: string; newValue: string }[];
+let fourEyes: boolean;
 const D = "dos_1";
 
 beforeEach(() => {
@@ -95,9 +99,12 @@ beforeEach(() => {
   dossiers = new FakeDossiers([{ id: D, orgId: ORG, code: "HS-NK-2610-021", direction: "NK", typeCode: "A11", partner: "HANSOL", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: new Date("2026-10-14T02:00:00.000Z") }]);
   blockers = 0;
   notifier = new RecordingNotifier();
+  audits = [];
+  fourEyes = false;
   deps = {
     notify: notifier,
     uow, queue, gateway, declarations: decls, dossiers, validation: { blockerFails: async () => blockers }, certificates: { exists: async (_o, id) => id === "cert_1" },
+    audit: { append: async (_c, row) => void audits.push(row) }, org: { fourEyes: async () => fourEyes },
     pollDelayMs: 10, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
   };
 });
@@ -783,24 +790,49 @@ describe("performOperation – luồng nghiệp vụ", () => {
     expect(queue.jobs.some((j) => j.name === "customs-poll")).toBe(true);
   });
 
-  it("sau thông quan: bắt đầu sửa → AMA (sau khi duyệt lại) → AMB gọi sửa → AMA lại → AMC → CLEARED, đếm 1 lần sửa sau thông quan", async () => {
+  it("sau thông quan: lập bản khai bổ sung (tờ khai gốc giữ nguyên) → duyệt → AMA → AMB → duyệt lại → AMA → AMC → CLEARED", async () => {
     gateway = new FakeCustomsGateway({ alwaysGreen: true });
     deps.gateway = gateway;
     await declared();
     expect((await view())).toMatchObject({ stage: "CLEARED" });
     expect((await view()).pipeline.find((p) => p.op === "AMA")).toMatchObject({ enabled: true, action: "START_POST_EDIT" });
     expect(errCode(await perform("AMA"))).toBe("INVALID_STATE");
+    const before = decls.status;
     unwrap(await startPostAmendment(deps, declarant, D));
     expect((await view()).stage).toBe("POST_EDITING");
-    expect(decls.reopened).toEqual([D]);
-    decls.status = "APPROVED";
+    expect(decls.reopened).toEqual([]);
+    expect(decls.status).toBe(before);
+    let pa = unwrap(await getPostAmendmentView(deps, declarant, D)).current!;
+    expect(pa).toMatchObject({ status: "DRAFT", seq: 1, header: { TK_YNK: "I", TK_ICB: "A11", TK_TTC: "VND" }, lines: [] });
+    expect((await view()).pipeline.find((p) => p.op === "AMA")).toMatchObject({ action: "EDIT" });
+
+    expect(errCode(await approvePostAmendment(deps, approver, D))).toBe("VALIDATION");
+    pa = unwrap(await addPostAmendmentLines(deps, declarant, D, [1]));
+    expect(pa.lines[0]!.values).toMatchObject({ HAG_RAN: "01", HAG_CMB: "Vòng bi", HAG_CMA: "Vòng bi", HAG_MKT: "84821000", HAG_MK1: "VB903", HAG_AK1: "VB903" });
+    pa = unwrap(await updatePostAmendmentField(deps, declarant, D, { lineId: pa.lines[0]!.id, key: "HAG_AKB", value: "100000000" }));
+    expect(pa.lines[0]!.values).toMatchObject({ HAG_AKA: "3000000.0000", HAG_AB1: "103000000", HAG_AA1: "8240000.0000" });
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "2" }));
+    expect(audits.map((a) => a.key)).toEqual(["ama:1:1:HAG_AKB", "ama:1:TK_REC"]);
+    expect(errCode(await updatePostAmendmentField(deps, declarant, D, { key: "TK_ICN", value: "1" }))).toBe("INVALID_STATE");
+    expect(errCode(await approvePostAmendment(deps, declarant, D))).toBe("FORBIDDEN");
+    unwrap(await approvePostAmendment(deps, approver, D));
+
     unwrap(await perform("AMA"));
     await drain();
     expect((await view()).stage).toBe("POST_PRE_DECLARED");
+    const sent = uow.data.outbox.find((o) => o.operation === "AMA")!.payload as { request: { objVN_AMA: Record<string, unknown>; objVN_AMA_HANG: Record<string, unknown>[] } };
+    expect(sent.request.objVN_AMA).toMatchObject({ tK_YNK: "I", tK_REC: "2", tK_ICB: "A11" });
+    expect(sent.request.objVN_AMA_HANG[0]).toMatchObject({ haG_RAN: "01", haG_AKB: 100000000, haG_AKA: "3000000.0000" });
+    pa = unwrap(await getPostAmendmentView(deps, declarant, D)).current!;
+    expect(pa).toMatchObject({ status: "PRE_DECLARED", result: { TK_SYN: expect.stringMatching(/^SD/), TK_A25: "1" } });
+    expect(errCode(await updatePostAmendmentField(deps, declarant, D, { key: "TK_NTA", value: "x" }))).toBe("INVALID_STATE");
+
     unwrap(await perform("AMB"));
     await drain();
     expect((await view()).stage).toBe("POST_RECALLED");
-    decls.status = "APPROVED";
+    expect(decls.reopened).toEqual([]);
+    expect(unwrap(await getPostAmendmentView(deps, declarant, D)).current?.status).toBe("RECALLED");
+    unwrap(await approvePostAmendment(deps, approver, D));
     unwrap(await perform("AMA"));
     await drain();
     unwrap(await perform("AMC"));
@@ -808,7 +840,25 @@ describe("performOperation – luồng nghiệp vụ", () => {
     const v = await view();
     expect(v).toMatchObject({ stage: "CLEARED", postAmendments: 1, result: { clearanceStatus: "CLEARED" } });
     expect(dossiers.rows[0]!.status).toBe("CLEARED");
+    const final = unwrap(await getPostAmendmentView(deps, declarant, D));
+    expect(final.current).toBeNull();
+    expect(final.history.map((h) => h.status)).toEqual(["REGISTERED"]);
     expect(uow.data.outbox.filter((o) => o.operation === "AMA").map((o) => o.idempotencyKey)).toEqual([`${D}:AMA:n1`, `${D}:AMA:n2`]);
+  });
+
+  it("bản khai bổ sung: org khác không đọc/ghi được; nguyên tắc 4 mắt chặn người tạo hồ sơ tự duyệt", async () => {
+    deps.gateway = new FakeCustomsGateway({ alwaysGreen: true });
+    await declared();
+    unwrap(await startPostAmendment(deps, declarant, D));
+    unwrap(await addPostAmendmentLines(deps, declarant, D, [1]));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "6" }));
+    expect(unwrap(await getPostAmendmentView(deps, other, D)).current).toBeNull();
+    expect(errCode(await updatePostAmendmentField(deps, other, D, { key: "TK_REC", value: "1" }))).toBe("NOT_FOUND");
+    fourEyes = true;
+    dossiers.rows[0]!.ownerId = "usr_duyet";
+    expect(errCode(await approvePostAmendment(deps, approver, D))).toBe("FORBIDDEN");
+    dossiers.rows[0]!.ownerId = "usr_chau";
+    unwrap(await approvePostAmendment(deps, approver, D));
   });
 
   it("chứng từ & cảng: container qua khu vực giám sát và lệ phí cảng biển – ghi số tiếp nhận, đánh dấu đã làm, không đổi giai đoạn", async () => {

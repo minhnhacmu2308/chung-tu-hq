@@ -419,6 +419,16 @@ export const DUE_DATE_CODES: CodeEntry[] = [
   { code: "D", label: "Nộp thuế ngay (cả khi khai bổ sung để thông quan sau tạm giải phóng hàng)" },
 ];
 
+/** Khai bổ sung sau thông quan (AMA) – Mã lý do khai bổ sung (TK_REC), theo hướng dẫn nhập của phần mềm khai báo. */
+export const AMA_REASONS: CodeEntry[] = [
+  { code: "1", label: "Sai sót về tính thuế" },
+  { code: "2", label: "Sai sót về trị giá hải quan" },
+  { code: "3", label: "Sai sót về thuế suất" },
+  { code: "4", label: "Sai sót về mã HS" },
+  { code: "5", label: "Sai sót về số lượng" },
+  { code: "6", label: "Các lý do khác" },
+];
+
 /**
  * Chỉ tiêu 1.80 – Mã Biểu thuế nhập khẩu theo danh sách TT39 Mẫu 01. TT121 thay danh sách này bằng "Bảng mã Biểu thuế
  * nhập khẩu" trên website Cục Hải quan, nên mã của các FTA mới (EVFTA, CPTPP, RCEP, UKVFTA, VKFTA…) KHÔNG có trong văn bản
@@ -480,6 +490,7 @@ export const CODE_TABLES: Readonly<Partial<Record<CodeTable, readonly CodeEntry[
   TAX_PAYER: TAX_PAYERS,
   BP_REASON: BP_REASONS,
   DUE_DATE: DUE_DATE_CODES,
+  AMA_REASON: AMA_REASONS,
 };
 
 /**

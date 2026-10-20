@@ -1,5 +1,6 @@
 "use client";
 // Bước 5 – Review tờ khai: tờ khai đầy đủ theo Phụ lục II (sửa chỉ tiêu nháp), chứng từ đính kèm, Hải quan trả về, theo dõi nghiệp vụ → phê duyệt.
+// Sau thông quan: tab "Khai bổ sung AMA" (bản khai riêng, tờ khai gốc chỉ đọc) – mở mặc định khi đang sửa sau thông quan.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
   Dialog, DialogContent, DialogFooter, EmptyState, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast,
@@ -25,6 +26,7 @@ import type { StepProps } from "./types";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { LoadError } from "@/components/common/load-error";
+import { PostAmendmentPanel } from "../../post-amendment/post-amendment-panel";
 
 const exportTaxText = (status: Declaration["status"]) =>
   status === "SUBMITTED" ? "Xem số thuế Hải quan trả về ở bước Khai báo Hải quan" : "Hải quan tính sau khi khai tạm EDA";
@@ -52,7 +54,7 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
   );
 }
 
-const TABS = ["full", "docs", "customs", "ops"] as const;
+const TABS = ["ama", "full", "docs", "customs", "ops"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
@@ -61,7 +63,6 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const pathname = usePathname();
   const params = useSearchParams();
   const tabParam = params.get("tab");
-  const tab: Tab = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "full";
   const setTab = (t: string) => {
     const next = new URLSearchParams(params.toString());
     next.set("tab", t);
@@ -89,6 +90,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const viewQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const subQ = useQuery({ queryKey: customsKeys.submission(dossier.id), queryFn: () => getSubmission(dossier.id) });
   const customsInfo = subQ.data?.customsInfo ?? null;
+  // Có bản khai bổ sung AMA: đang sửa sau thông quan, hoặc đã khai chính thức AMC ít nhất một lần.
+  const stage = subQ.data?.stage;
+  const postEditing = Boolean(stage?.startsWith("POST_"));
+  const hasAma = postEditing || (stage === "CLEARED" && (subQ.data?.postAmendments ?? 0) > 0);
+  const tab: Tab = (TABS as readonly string[]).includes(tabParam ?? "") && (tabParam !== "ama" || hasAma) ? (tabParam as Tab) : postEditing ? "ama" : "full";
   const rejection = subQ.data?.rejection ?? null;
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
@@ -197,6 +203,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
           <Tabs value={tab} onValueChange={setTab} className="mt-4">
             <TabsList aria-label="Nhóm chỉ tiêu tờ khai">
+              {hasAma && <TabsTrigger value="ama">Khai bổ sung AMA</TabsTrigger>}
               <TabsTrigger value="full">
                 Tờ khai đầy đủ {errs.length > 0 && <Badge tone="danger">{errs.length} lỗi</Badge>}
               </TabsTrigger>
@@ -206,8 +213,20 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               </TabsTrigger>
               <TabsTrigger value="ops">Theo dõi & nghiệp vụ</TabsTrigger>
             </TabsList>
+            {hasAma && (
+              <TabsContent value="ama">
+                <PostAmendmentPanel
+                  dossierId={dossier.id}
+                  kind={decl.kind}
+                  canEdit={canEdit}
+                  blockedByFourEyes={blockedByFourEyes}
+                  messages={subQ.data?.messages ?? []}
+                  onGoSubmit={() => goTo("submit")}
+                />
+              </TabsContent>
+            )}
             <TabsContent value="full">
-              <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} />
+              <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
             </TabsContent>
             <TabsContent value="docs">
               <DocumentsTab dossierId={dossier.id} />
@@ -236,7 +255,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         </CardContent>
       </Card>
 
-      <StickyActionBar>
+      {tab !== "ama" && <StickyActionBar>
         {decl.kind === "IDA" ? (
           <div className="min-w-0 flex-1">
             <p className="text-xs text-fg-muted">Tổng thuế phải nộp dự kiến (ước tính)</p>
@@ -273,7 +292,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <Button onClick={() => goTo("submit")}>Sang khai báo Hải quan</Button>
           </>
         )}
-      </StickyActionBar>
+      </StickyActionBar>}
 
 
       <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>

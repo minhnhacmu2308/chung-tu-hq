@@ -236,7 +236,7 @@ Màn sắp theo **dòng đời tờ khai**: đầu trang là số tờ khai, ph�
 |---|---|---|
 | ① Khai báo tờ khai | **IDA**/EDA → **IDB**/EDB → **IDC**/EDC | Khai tạm (nhận số tờ khai, thuế dự kiến) → gọi sửa khai tạm nếu cần → khai chính thức (phân luồng) |
 | ② Sửa đổi bổ sung (trước thông quan) | **IDD**/EDD → **IDA01**/EDA01 → **IDE**/EDE | Gọi tờ khai đã phân luồng về → khai tạm sửa đổi → khai chính thức sửa đổi |
-| ③ Sửa đổi sau thông quan | **AMA** → **AMB** → **AMC** | Khai tạm sửa đổi → gọi sửa bản khai tạm → khai chính thức (trong 60 ngày – TT121 Điều 20) |
+| ③ Sửa đổi sau thông quan | **AMA** → **AMB** → **AMC** | Bản khai bổ sung riêng (tờ khai gốc giữ nguyên): khai tạm → gọi sửa bản khai tạm → khai chính thức (trong 60 ngày – TT121 Điều 20) |
 | ④ Chứng từ & cảng | **HYS** · **Container qua KVGS** · **Lệ phí cảng biển** | Số hóa chứng từ · đưa container qua khu vực giám sát · nộp lệ phí cảng biển |
 | Đầu trang | **IID** / IEX | Tra cứu trạng thái tờ khai, dùng mọi lúc khi đã có số tờ khai |
 
@@ -254,10 +254,10 @@ stateDiagram-v2
   AMEND_PRE_DECLARED --> AMEND_RECALLED: IDD lần nữa
   AMEND_PRE_DECLARED --> DECLARED: IDE
   DECLARED --> CLEARED: Hải quan thông quan (tra cứu IID)
-  CLEARED --> POST_EDITING: Bắt đầu sửa sau thông quan
-  POST_EDITING --> POST_PRE_DECLARED: sửa + duyệt lại → AMA
+  CLEARED --> POST_EDITING: Bắt đầu sửa sau thông quan (lập bản khai bổ sung)
+  POST_EDITING --> POST_PRE_DECLARED: sửa bản khai + duyệt → AMA
   POST_PRE_DECLARED --> POST_RECALLED: AMB gọi sửa
-  POST_RECALLED --> POST_PRE_DECLARED: sửa + duyệt lại → AMA
+  POST_RECALLED --> POST_PRE_DECLARED: sửa bản khai + duyệt lại → AMA
   POST_PRE_DECLARED --> CLEARED: AMC
   DECLARED --> REJECTED: Hải quan từ chối
 ```
@@ -265,14 +265,15 @@ stateDiagram-v2
 ### 9.2 Quy tắc
 
 - **Ký số & khai tạm (IDA)** chỉ gửi khai tạm. Người khai xem số tờ khai + thuế dự kiến rồi tự bấm **Khai chính thức (IDC)**.
-- **Gọi sửa** (IDB, IDD, AMB) và **Bắt đầu sửa sau thông quan**: có hộp thoại xác nhận; thành công thì tờ khai **mở lại ở bước Review** (bản nháp). Người khai sửa chỉ tiêu, Người duyệt phê duyệt lại, rồi mới gửi được nghiệp vụ nội dung tiếp theo (IDA, IDA01, AMA).
-- Nghiệp vụ gửi nội dung tờ khai (IDA, IDA01, AMA) luôn kiểm: đã duyệt, HS đủ, không còn BLOCKER, không còn lỗi chặn khi dựng dữ liệu FPT, tỷ giá đúng tuần (IDA).
+- **Gọi sửa** (IDB, IDD): có hộp thoại xác nhận; thành công thì tờ khai **mở lại ở bước Review** (bản nháp). Người khai sửa chỉ tiêu, Người duyệt phê duyệt lại, rồi mới gửi được nghiệp vụ nội dung tiếp theo (IDA, IDA01).
+- **Sửa sau thông quan (AMA)** là bản khai riêng, **không sửa tờ khai gốc** (tờ khai gốc khóa toàn bộ): **Bắt đầu sửa sau thông quan** lập bản khai bổ sung, đầu bản khai điền sẵn từ tờ khai gốc + số Hải quan trả về. Ở bước Review, tab **Khai bổ sung AMA** (theo giao diện phần mềm khai báo – `CHIEUTIEU_AMA_NHAP_XUAT.docx`): Thông tin tờ khai (mã lý do khai bổ sung 1–6, tỷ giá & ghi chú trước/sau, hợp đồng gia công chèn vào ghi chú), Danh sách hàng (chọn dòng của tờ khai gốc; "Trước" chỉ đọc theo tờ khai gốc, "Sau" sửa được, tiền thuế "Sau" tự tính: thuế XNK = trị giá × thuế suất, GTGT = (trị giá + thuế XNK + thu khác) × thuế suất; sửa tay thì giữ), Thông điệp HQ. Người duyệt phê duyệt bản khai (4 mắt) → khai AMA. **AMB** gọi bản khai về (sửa, duyệt lại, khai AMA lại); **AMC** khai chính thức → bản khai khóa toàn bộ. Mọi lần sửa ô ghi field_audit. Đặc tả: `docs/superpowers/specs/2026-10-19-ama-khai-bo-sung-sau-thong-quan-design.md`.
+- Nghiệp vụ gửi nội dung (IDA, IDA01) luôn kiểm: đã duyệt, HS đủ, không còn BLOCKER, không còn lỗi chặn khi dựng dữ liệu FPT, tỷ giá đúng tuần (IDA). AMA kiểm: bản khai bổ sung đã duyệt, có dòng hàng, có mã lý do.
 - **Chặn truyền** (lỗi dựng dữ liệu FPT): thiếu MO/CU cho hàng 84/85; thiếu mã biểu thuế FTA; khoản điều chỉnh trị giá (ngoài cước/bảo hiểm) chưa gửi được ở chỉ tiêu 1.49; tờ khai xuất thiếu xuất xứ dòng hàng.
 - Sau **IDC/IDE** hệ thống tự **hỏi trạng thái** (IID nhập / IEX xuất) tới khi thông quan hoặc bị từ chối.
 - Đang chờ phản hồi một nghiệp vụ thì các nút khác khóa.
 - **Không gửi trùng** (ADR 0005): mỗi nghiệp vụ một dòng outbox có khóa idempotency; **Gửi lại** luôn tra trạng thái trước, Hải quan đã ghi nhận thì không gửi.
 - Mọi thông điệp gửi/nhận lưu ở **Nhật ký thông điệp** (đã che MST, mật khẩu) làm hồ sơ pháp lý.
-- Kết nối FPT.VNACCS thật hiện hỗ trợ IDA/IDC/EDA/EDC, HYS và tra cứu. Các nghiệp vụ còn lại báo "chưa kết nối FPT" cho tới khi có đặc tả API (AMA đã có đặc tả, chưa ánh xạ). Môi trường dev/demo dùng cổng giả lập đủ 12 nghiệp vụ.
+- Kết nối FPT.VNACCS thật hiện hỗ trợ IDA/IDC/EDA/EDC, HYS, AMA (payload theo VNACCS_AMA v1.3; đường dẫn /api/AMA và vị trí số tờ khai bổ sung trong phản hồi là suy luận, cần đối chiếu) và tra cứu. Các nghiệp vụ còn lại báo "chưa kết nối FPT" cho tới khi có đặc tả API. Môi trường dev/demo dùng cổng giả lập đủ 12 nghiệp vụ.
 
 Chi tiết thiết kế: `docs/superpowers/specs/2026-10-15-luong-nghiep-vu-hai-quan-design.md`.
 
@@ -362,7 +363,8 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 
 | Mảng | Hiện trạng |
 |---|---|
-| Kết nối FPT.VNACCS | Chưa có đặc tả API cho IDB, IDD, IDA01, IDE, AMB, AMC, container qua KVGS, lệ phí cảng biển; AMA có đặc tả nhưng chưa ánh xạ |
+| Kết nối FPT.VNACCS | Chưa có đặc tả API cho IDB, IDD, IDA01, IDE, AMB, AMC, container qua KVGS, lệ phí cảng biển; AMA đã ánh xạ nhưng đường dẫn API và vỏ phản hồi chưa đối chiếu với FPT |
+| AMA – tự tính thuế "Sau" | Chỉ thuế XNK và GTGT theo %; thuế tuyệt đối, TTĐB, BVMT, chống bán phá giá người khai nhập tiền thuế |
 | Bảng mã biểu thuế | Chưa có mã cho EVFTA, VKFTA, CPTPP, RCEP (TT121 dẫn chiếu bảng mã trên website Cục Hải quan) |
 | Khoản điều chỉnh trị giá 1.49 | Chưa gửi được sang FPT (chặn truyền nếu có) |
 | Số quản lý hàng hóa (tờ khai xuất, Mẫu 14) | Chưa lấy tự động; người khai nhập tay |

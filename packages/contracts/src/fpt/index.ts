@@ -3,3 +3,4 @@ export * from "./ida.js";
 export * from "./eda.js";
 export * from "./hys.js";
 export * from "./status.js";
+export * from "./ama.js";

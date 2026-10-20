@@ -14,6 +14,7 @@ export const FPT_PATHS: Record<FptOperation | "LOGIN", string> = {
   IDC: "/api/IDC",
   HYS: "/api/HYS",
   IEX: "/api/IEX",
+  AMA: "/api/AMA",
 };
 
 const LoginResponseSchema = z.object({ token: z.string().min(1), expiration: z.iso.datetime({ offset: true }) });

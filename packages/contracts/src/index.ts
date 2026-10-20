@@ -10,3 +10,4 @@ export * from "./fpt/index.js";
 export * from "./integrations/hscodepro.js";
 export * from "./declaration-layout/index.js";
 export * from "./code-lists/index.js";
+export * from "./post-amendment/index.js";

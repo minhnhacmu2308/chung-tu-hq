@@ -36,9 +36,9 @@ const STAGE_TEXT: Record<CustomsStage, string> = {
   AMEND_RECALLED: "Đang sửa đổi bổ sung – sửa, phê duyệt lại rồi khai tạm sửa đổi",
   AMEND_PRE_DECLARED: "Đã khai tạm sửa đổi – chờ khai chính thức sửa đổi",
   CLEARED: "Đã thông quan",
-  POST_EDITING: "Sửa sau thông quan – sửa, phê duyệt lại rồi khai AMA",
+  POST_EDITING: "Sửa sau thông quan – lập bản khai bổ sung, phê duyệt rồi khai AMA",
   POST_PRE_DECLARED: "Đã khai tạm AMA – chờ khai chính thức (AMC)",
-  POST_RECALLED: "Bản khai AMA đã gọi về – sửa, phê duyệt lại rồi khai AMA lại",
+  POST_RECALLED: "Bản khai AMA đã gọi về – sửa bản khai bổ sung, phê duyệt lại rồi khai AMA lại",
   REJECTED: "Hải quan từ chối / hủy tờ khai",
 };
 
@@ -271,11 +271,12 @@ export function MessageLog({ messages }: { messages: SubmissionView["messages"] 
   );
 }
 
-/** Nghiệp vụ cần xác nhận: gọi về sửa (IDB/IDD/AMB) hoặc bắt đầu sửa sau thông quan – đều mở lại tờ khai. */
+/** Nghiệp vụ cần xác nhận: gọi về sửa (IDB/IDD mở lại tờ khai; AMB gọi về bản khai bổ sung) hoặc bắt đầu sửa sau thông quan (lập bản khai bổ sung AMA). */
 type Confirm = { row: PipelineRow; kind: "recall" | "post" };
 
 function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { confirm: Confirm | null; onClose: () => void; onConfirm: (c: Confirm) => void; pending: boolean; code: string }) {
   const post = confirm?.kind === "post";
+  const amb = confirm?.row.op === "AMB";
   return (
     <Dialog open={confirm !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
@@ -293,10 +294,10 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
           <Stack gap="sm">
             <p className="text-sm text-fg-muted">
               {post
-                ? "Tờ khai đã thông quan sẽ được mở lại để sửa chỉ tiêu (khai bổ sung trong 60 ngày – TT121 Điều 20)."
-                : "Hải quan chấp nhận gọi về thì tờ khai được mở lại để sửa chỉ tiêu."}{" "}
-              Tờ khai quay về bản nháp ở bước Review và phê duyệt hiện tại bị hủy – sửa xong, Người duyệt phải phê duyệt lại thì mới gửi
-              {post ? " AMA" : " lại"} được.
+                ? "Lập bản khai bổ sung AMA riêng, điền sẵn từ tờ khai gốc và số Hải quan trả về (khai bổ sung trong 60 ngày – TT121 Điều 20). Tờ khai gốc giữ nguyên, không sửa trực tiếp. Chọn dòng hàng cần bổ sung, sửa phần Sau, phê duyệt rồi khai AMA."
+                : amb
+                  ? "Hải quan chấp nhận gọi về thì bản khai bổ sung mở lại để sửa ở bước Review (tab Khai bổ sung AMA). Phê duyệt hiện tại bị hủy – sửa xong, Người duyệt phải phê duyệt lại rồi khai AMA lại."
+                  : "Hải quan chấp nhận gọi về thì tờ khai được mở lại để sửa chỉ tiêu. Tờ khai quay về bản nháp ở bước Review và phê duyệt hiện tại bị hủy – sửa xong, Người duyệt phải phê duyệt lại thì mới gửi lại được."}
             </p>
           </Stack>
           <DialogFooter>
@@ -304,7 +305,7 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
               Hủy
             </Button>
             <Button type="submit" loading={pending} leftIcon={<RotateCcw className="h-4 w-4" />}>
-              {post ? "Mở sửa sau thông quan" : `Gọi về sửa (${confirm?.row.op ?? ""})`}
+              {post ? "Lập bản khai bổ sung" : `Gọi về sửa (${confirm?.row.op ?? ""})`}
             </Button>
           </DialogFooter>
         </form>
@@ -384,7 +385,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     },
     onSuccess: () => {
       setConfirm(null);
-      toast({ tone: "success", title: "Đã mở tờ khai để sửa sau thông quan", description: "Sửa chỉ tiêu, phê duyệt lại rồi quay lại đây khai AMA." });
+      toast({ tone: "success", title: "Đã lập bản khai bổ sung AMA", description: "Chọn dòng hàng cần bổ sung, sửa phần Sau, phê duyệt rồi quay lại đây khai AMA." });
       invalidate();
       goTo("review");
     },

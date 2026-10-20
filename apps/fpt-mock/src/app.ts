@@ -173,6 +173,32 @@ export function createFptMock(opts: MockOptions = {}) {
     return reply(res, objVNACCS_ACCOUNT, {}, { ...fields, tK_JNO: jno, tK_TNM: "Hồ sơ đính kèm", tK_YMD: vnDate(now()), tK_SNM: null, tK_SAD: null }, ASSUMED);
   }
 
+  /** AMA – khai bổ sung sau thông quan (GIẢ ĐỊNH: đường dẫn, vỏ objAMA; chỉ tiêu theo VNACCS_AMA v1.3). Cấp số tờ khai bổ sung tK_SYN. */
+  let amaSeq = 0;
+  async function ama(body: unknown, res: ServerResponse) {
+    const parsed = WithAccount.extend({ objVN_AMA: Rec, objVN_AMA_HANG: z.array(Rec).nullish() }).safeParse(body);
+    if (!parsed.success) return zodProblem(res, parsed.error);
+    const b = parsed.data;
+    const accErr = accountErrors(b.objVNACCS_ACCOUNT);
+    if (accErr.length) return reply(res, b.objVNACCS_ACCOUNT, { errorList: accErr }, {}, ASSUMED);
+    const head = b.objVN_AMA;
+    const lines = b.objVN_AMA_HANG ?? [];
+    const errors: FptError[] = [];
+    if (!String(head["tK_ICN"] ?? "")) errors.push(mockError("MOCK-REQ", "ICN", "Declaration Number", "Chưa nhập số tờ khai cần bổ sung (tK_ICN)."));
+    if (!String(head["tK_REC"] ?? "")) errors.push(mockError("MOCK-REQ", "REC", "Reason Code", "Chưa nhập mã lý do khai bổ sung (tK_REC)."));
+    if (!lines.length) errors.push(mockError("MOCK-REQ", "RAN", "Line", "Chưa có dòng hàng khai bổ sung."));
+    if (errors.length) return reply(res, b.objVNACCS_ACCOUNT, { errorList: errors }, {}, ASSUMED);
+    const syn = `3${String(head["tK_ICN"]).slice(1, 11)}${++amaSeq}`;
+    log(`AMA ${String(head["tK_ICN"])} (${lines.length} dòng) → số tờ khai bổ sung ${syn}`);
+    return reply(res, b.objVNACCS_ACCOUNT, {
+      objAMA: [{
+        objVN_AMA: { ...head, tK_SYN: syn, tK_ADD: `${vnDate(now()).slice(-4)}${String(amaSeq).padStart(8, "0")}`, tK_A02: vnDate(now()), tK_AD1: vnHms(now()), tK_A25: lines.length },
+        objVN_AMA_HANG: lines,
+        objVN_AMA_TRANGTHAI: { tK_TRANGTHAI: "Đã tiếp nhận", tK_KETQUAXYLY: 0 },
+      }],
+    }, {}, ASSUMED);
+  }
+
   const hs = createHscodeproMock({ apiKey: opts.hscodeproKey ?? "dev-hs-key", now, log });
 
   const handler: RequestListener = async (req, res) => {
@@ -230,6 +256,7 @@ export function createFptMock(opts: MockOptions = {}) {
         case "/api/IDC": return await register("IDC", body, res);
         case "/api/IEX": return await iex(body, res);
         case "/api/HYS": return await hys(body, res);
+        case "/api/AMA": return await ama(body, res);
         default: return json(res, 404, undefined);
       }
     } catch (e) {

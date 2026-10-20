@@ -2,7 +2,7 @@
 // Vỏ phản hồi theo mẫu thật (docdungapivnacss): { objVNACCS_ACCOUNT, errorList, objIDA: [...], objEDA: [...], ... };
 // mỗi phần tử objEDA/objIDA = { objMsgResult, objVN_<KIND>, objVN_<KIND>_TRANGTHAI, … }.
 // externalId = số tờ khai VNACCS (tK_ECN/tK_ICN) – EDC/IDC/IEX tra theo số này.
-import { EdaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, IdaRequestSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
+import { AmaRequestSchema, EdaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, IdaRequestSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
 import type { CustomsGateway, GatewayError, GatewaySendResult, GatewayStatus } from "../application/customs-ports.js";
@@ -10,7 +10,7 @@ import { buildFptRequest, type DeclarationPayload } from "../domain/declaration-
 import { parseCustomsInfo } from "../domain/customs-info.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
 
-export type FptOperation = "IDA" | "IDC" | "EDA" | "EDC" | "HYS" | "IEX";
+export type FptOperation = "IDA" | "IDC" | "EDA" | "EDC" | "HYS" | "IEX" | "AMA";
 export interface FptHttpClient {
   /** Gửi `body` (client tự thêm `objVNACCS_ACCOUNT` + token); trả JSON thô. */
   post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials): Promise<unknown>;
@@ -98,10 +98,23 @@ export class FptVnaccsGateway implements CustomsGateway {
     return jno ? { receiptNo: String(jno) } : {};
   }
 
-  /** Nghiệp vụ chưa có đặc tả API FPT trong bộ tài liệu → báo rõ, không retry. AMA đã có đặc tả (VNACCS_AMA v1.3) nhưng chưa ánh xạ. */
-  async send(_orgId: string, msg: { op: CustomsOperation }): Promise<GatewaySendResult> {
-    const why = msg.op === "AMA" || msg.op === "AMB" || msg.op === "AMC" ? "đã có đặc tả VNACCS_AMA nhưng chưa ánh xạ payload" : "chưa có đặc tả API FPT";
-    throw domainError("NOT_SUPPORTED", `Nghiệp vụ ${msg.op} chưa kết nối FPT.VNACCS (${why}) – thực hiện trên phần mềm khai báo`);
+  /**
+   * AMA: payload theo VNACCS_AMA v1.3 (objVN_AMA + objVN_AMA_HANG). Đường dẫn /api/AMA và vị trí số tờ khai bổ sung trong phản hồi
+   * (objAMA[0].objVN_AMA.tK_SYN) là SUY LUẬN theo mẫu EDA – cần đối chiếu T1.
+   * Nghiệp vụ còn lại chưa có đặc tả API FPT trong bộ tài liệu (AMB, AMC, IDB…) → báo rõ, không retry.
+   */
+  async send(orgId: string, msg: { op: CustomsOperation; request?: unknown }): Promise<GatewaySendResult> {
+    if (msg.op === "AMA") {
+      const parsed = AmaRequestSchema.safeParse(msg.request);
+      if (!parsed.success) return { errors: parsed.error.issues.map(describeSchemaIssue) };
+      const { env, errors } = await this.call(orgId, "AMA", parsed.data);
+      if (errors) return { errors };
+      const list = env["objAMA"];
+      const head = Array.isArray(list) && list[0] && typeof list[0] === "object" ? sub(list[0] as Obj, "objVN_AMA") : {};
+      const syn = head["tK_SYN"];
+      return { ...(syn ? { receiptNo: String(syn) } : {}), note: "Hải quan tiếp nhận bản khai bổ sung" };
+    }
+    throw domainError("NOT_SUPPORTED", `Nghiệp vụ ${msg.op} chưa kết nối FPT.VNACCS (chưa có đặc tả API FPT) – thực hiện trên phần mềm khai báo`);
   }
 
   async queryStatus(orgId: string, externalId: string): Promise<GatewayStatus> {

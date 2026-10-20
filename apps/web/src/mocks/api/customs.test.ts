@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb, saveDb } from "@/mocks/db";
 import { approveDeclaration } from "./declaration";
 import { getSubmission, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
+import { addPostAmendmentLines, approvePostAmendment, updatePostAmendmentField } from "./post-amendment";
 
 // Bỏ độ trễ mạng giả để test nhanh; thời gian nghiệp vụ điều khiển bằng đồng hồ giả (chỉ Date).
 vi.mock("@/lib/mock-request", async (importOriginal) => {
@@ -115,25 +116,42 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
     expect((await getSubmission(INSPECTING)).stage).toBe("CLEARED");
   });
 
-  it("sau thông quan: mở sửa → duyệt lại → AMA → AMC", async () => {
+  it("sau thông quan: lập bản khai bổ sung (tờ khai gốc giữ nguyên) → duyệt → AMA → AMB → duyệt lại → AMA → AMC", async () => {
     let s = await getSubmission(CLEARED);
     expect(s.stage).toBe("CLEARED");
     expect(s.pipeline.find((r) => r.op === "AMA")).toMatchObject({ enabled: true, action: "START_POST_EDIT" });
     expect(await err(performOperation(CLEARED, "AMA"))).toMatchObject({ code: "POST_EDIT_REQUIRED" });
+    const original = structuredClone(decl(CLEARED));
 
     await startPostAmendment(CLEARED);
     s = await getSubmission(CLEARED);
     expect(s.stage).toBe("POST_EDITING");
-    expect(decl(CLEARED).status).toBe("DRAFT");
+    expect(decl(CLEARED)).toEqual(original);
     expect(dossier(CLEARED).step).toBe("review");
     expect(s.pipeline.find((r) => r.op === "AMA")).toMatchObject({ action: "EDIT" });
+    const pa = () => getDb().postAmendments.find((a) => a.dossierId === CLEARED)!;
+    expect(pa()).toMatchObject({ status: "DRAFT", seq: 1, header: { TK_YNK: "I", TK_ICN: s.result?.declarationNo } });
 
-    await approveDeclaration(CLEARED);
+    expect(await err(approvePostAmendment(CLEARED))).toMatchObject({ code: "NO_LINES" });
+    await addPostAmendmentLines(CLEARED, [1]);
+    await updatePostAmendmentField(CLEARED, { key: "TK_REC", value: "3" });
+    await approvePostAmendment(CLEARED);
+    expect((await getSubmission(CLEARED)).pipeline.find((r) => r.op === "AMA")).toMatchObject({ enabled: true });
     await run(CLEARED, "AMA");
     expect((await getSubmission(CLEARED)).stage).toBe("POST_PRE_DECLARED");
+    expect(pa()).toMatchObject({ status: "PRE_DECLARED", result: { TK_SYN: expect.any(String), TK_A25: "1" } });
+    expect(await err(updatePostAmendmentField(CLEARED, { key: "TK_REC", value: "1" }))).toMatchObject({ code: "LOCKED" });
+
+    await run(CLEARED, "AMB");
+    expect((await getSubmission(CLEARED)).stage).toBe("POST_RECALLED");
+    expect(pa().status).toBe("RECALLED");
+    expect(decl(CLEARED)).toEqual(original);
+    await approvePostAmendment(CLEARED);
+    await run(CLEARED, "AMA");
     await run(CLEARED, "AMC");
     s = await getSubmission(CLEARED);
     expect(s).toMatchObject({ stage: "CLEARED", postAmendments: 1 });
+    expect(pa().status).toBe("REGISTERED");
     expect(dossier(CLEARED).status).toBe("CLEARED");
     expect(await err(startPostAmendment(NEW))).toMatchObject({ code: "INVALID_STATE" });
   });

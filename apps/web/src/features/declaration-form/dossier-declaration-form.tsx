@@ -30,6 +30,8 @@ type Props = {
   mode: DeclarationEditMode;
   /** Vai trò được sửa tờ khai (VIEWER chỉ xem). */
   canEdit: boolean;
+  /** Tờ khai đã thông quan: không sửa tờ khai gốc, sửa qua bản khai bổ sung AMA. */
+  cleared?: boolean;
 };
 
 /** Lý do ô dòng hàng không sửa trên tờ khai (ô người khai nhập → null). */
@@ -39,7 +41,7 @@ const ITEM_LOCK: Record<"DOC" | "HS" | "DERIVED", AmendLock> = {
   DERIVED: { basis: "SOFTWARE", reason: "Theo nguyên tệ hóa đơn" },
 };
 
-export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode, canEdit }: Props) {
+export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode, canEdit, cleared = false }: Props) {
   const mode: DeclarationEditMode = canEdit ? stageMode : "LOCKED";
   const qc = useQueryClient();
   const router = useRouter();
@@ -153,8 +155,8 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
       <Alert tone="info" title="Tờ khai đầy đủ theo Phụ lục II – chỉ đọc">
         {!canEdit
           ? "Bạn không có quyền sửa tờ khai."
-          : decl.status === "DRAFT"
-            ? "Tờ khai đã thông quan – không sửa trên tờ khai gốc. Sửa sau thông quan khai bằng nghiệp vụ AMA ở bước Khai báo Hải quan."
+          : cleared
+            ? "Tờ khai đã thông quan – không sửa trên tờ khai gốc. Sửa sau thông quan: lập bản khai bổ sung AMA (Bắt đầu sửa sau thông quan ở bước Khai báo Hải quan), sửa ở tab Khai bổ sung AMA."
             : "Tờ khai đã phê duyệt / đã truyền. Mở lại tờ khai (chưa khai báo) hoặc gọi về sửa đổi bổ sung (IDD, khi đã phân luồng) để sửa."}
       </Alert>
     );

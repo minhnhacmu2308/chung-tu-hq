@@ -124,7 +124,20 @@ describe("FptVnaccsGateway.send – nghiệp vụ chưa có đặc tả FPT", ()
   it.each(["IDB", "IDD", "IDA01", "IDE", "CONT", "PORT_FEE"] as const)("%s → NOT_SUPPORTED nêu chưa có đặc tả, không gọi HTTP", async (op) => {
     await expect(g.send("org", { op })).rejects.toMatchObject({ code: "NOT_SUPPORTED", message: expect.stringMatching(new RegExp(`${op}.*chưa có đặc tả API FPT`)) });
   });
-  it("AMA/AMB/AMC → NOT_SUPPORTED nêu đã có đặc tả nhưng chưa ánh xạ", async () => {
-    await expect(g.send("org", { op: "AMA" })).rejects.toMatchObject({ code: "NOT_SUPPORTED", message: expect.stringMatching(/VNACCS_AMA/) });
+  it.each(["AMB", "AMC"] as const)("%s → NOT_SUPPORTED (chưa có đặc tả API FPT)", async (op) => {
+    await expect(g.send("org", { op })).rejects.toMatchObject({ code: "NOT_SUPPORTED" });
+  });
+  it("AMA sai đặc tả (thiếu objVN_AMA) → lỗi theo chỉ tiêu, không gọi HTTP", async () => {
+    expect((await g.send("org", { op: "AMA", request: {} })).errors?.length).toBeGreaterThan(0);
+  });
+  it("AMA đúng đặc tả → POST AMA, số tờ khai bổ sung từ objAMA[0].objVN_AMA.tK_SYN", async () => {
+    const calls: string[] = [];
+    const ok = new FptVnaccsGateway(
+      { post: async (op) => (calls.push(op), { errorList: null, objAMA: [{ objVN_AMA: { tK_SYN: "308173826831" } }] }) },
+      { get: async () => ({ useR_ID: "u", password: "p", terminaL_ID: "t", terminaL_ACCESS_KEY: "k" }) },
+    );
+    const res = await ok.send("org", { op: "AMA", request: { objVN_AMA: { tK_ICN: 108173826831, tK_ICB: "A12", tK_CHS: "10BB", tK_CHB: "00", tK_IDD: "23/04/2026", tK_IPD: "28/04/2026", tK_REC: "6", tK_TTC: "VND" }, objVN_AMA_HANG: [{ haG_RAN: "01" }] } });
+    expect(calls).toEqual(["AMA"]);
+    expect(res).toMatchObject({ receiptNo: "308173826831" });
   });
 });

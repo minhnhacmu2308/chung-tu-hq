@@ -9,6 +9,7 @@ import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
+import { applyPostAmendmentResult } from "./post-amendment.js";
 
 export type ProcessOutboxInput = { orgId: string; userId: string; outboxId: string };
 /** Quá số lần thử (= attempts của BullMQ) → outbox FAILED, người dùng "Gửi lại". */
@@ -23,7 +24,7 @@ const outSummary = (op: CustomsOperation) => `${OPERATION_LABELS[op]} (${op})`;
 const withInfo = (raw: ResultRaw | null, info: CustomsInfo | undefined, at: Date): { raw?: ResultRaw } =>
   info ? { raw: { customsInfo: mergeCustomsInfo(raw?.customsInfo, { ...info, receivedAt: at.toISOString() }) } } : {};
 
-type Outcome = { errors?: GatewayError[]; summary: string; payload: unknown; patch: Partial<ResultRow>; side?: string };
+type Outcome = { errors?: GatewayError[]; summary: string; payload: unknown; patch: Partial<ResultRow>; side?: string; /** Số tiếp nhận Hải quan trả về (AMA: số tờ khai bổ sung). */ receiptNo?: string };
 
 export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput): Promise<Result<{ status: OutboxRow["status"]; next: CustomsOperation | null }>> {
   const ctx = { orgId: asOrgId(input.orgId), userId: asUserId(input.userId) };
@@ -100,6 +101,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
             payload: { nghiepVu: op, soToKhai: result.declarationNo, ...(res.receiptNo ? { soTiepNhan: res.receiptNo } : {}), ...(res.channel ? { phanLuong: res.channel } : {}) },
             patch: res.channel ? { channel: res.channel, channelNote: CHANNEL_NOTES[res.channel], ...(res.customsTaxVnd ? { customsTaxVnd: res.customsTaxVnd } : {}) } : {},
             ...(op === "CONT" || op === "PORT_FEE" ? { side: detail } : {}),
+            ...(res.receiptNo ? { receiptNo: res.receiptNo } : {}),
           };
     }
   } catch (e) {
@@ -140,6 +142,8 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       await msg(r, { operation: op, direction: "IN", result: "OK", summary: outcome.summary, payloadMasked: maskPayload(outcome.payload), externalRef: patch.externalId ?? result.externalId });
       await r.outbox.update(ob.id, { status: "SENT", lastError: null, updatedAt: now() });
     }
+    // Sau thông quan: AMA/AMB/AMC đổi trạng thái bản khai bổ sung (tờ khai gốc giữ nguyên).
+    if (!failed && (op === "AMA" || op === "AMB" || op === "AMC")) await applyPostAmendmentResult(r, input.orgId, ob.dossierId, op, now(), { receiptNo: outcome.receiptNo });
     await r.results.upsert({
       ...result, ...patch, raw, state: coarseState(nextStage, failed),
       ...(!failed && op === "AMC" ? { clearanceStatus: "CLEARED" as const } : {}),
@@ -150,14 +154,21 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   if (!failed) {
     if (patch.declarationNo || patch.channel) await deps.dossiers.update(input.orgId, ob.dossierId, { ...(patch.declarationNo ? { declarationNo: patch.declarationNo } : {}), ...(patch.channel ? { channel: patch.channel } : {}) });
     // Gọi về sửa: mở lại tờ khai (DRAFT, bước Review) để sửa chỉ tiêu và duyệt lại.
-    if (isRecallOperation(op)) await deps.declarations.markDraft(ctx, ob.dossierId);
+    if (isRecallOperation(op) && op !== "AMB") await deps.declarations.markDraft(ctx, ob.dossierId);
     if (op === "AMC") await deps.dossiers.update(input.orgId, ob.dossierId, { status: "CLEARED" });
     // Khai chính thức / khai chính thức sửa đổi → hỏi trạng thái tới khi thông quan.
     if (b === "IDC" || b === "IDE") await deps.queue.enqueue("customs-poll", { orgId: input.orgId, userId: input.userId, dossierId: ob.dossierId, attempt: 1 }, { jobId: `customs-poll:${ob.dossierId}:${ob.id}:1`, delayMs: deps.pollDelayMs });
   }
   await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
   if (!failed && patch.channel) await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId, roles: ["APPROVER"] }, { title: `${dossier.code}: ${CHANNEL_NOTES[patch.channel].split(" – ")[0]}`, body: `Số tờ khai ${patch.declarationNo ?? result.declarationNo ?? ""}. ${CHANNEL_NOTES[patch.channel]}.`, href: `/dossiers/${ob.dossierId}?step=submit` });
-  if (!failed && isRecallOperation(op)) await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, { title: `${dossier.code}: đã gọi tờ khai về sửa (${op})`, body: "Sửa chỉ tiêu ở bước Review, phê duyệt lại rồi gửi khai tạm.", href: `/dossiers/${ob.dossierId}?step=review` });
+  if (!failed && isRecallOperation(op)) {
+    const amb = op === "AMB";
+    await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, {
+      title: `${dossier.code}: ${amb ? "đã gọi bản khai bổ sung về sửa" : "đã gọi tờ khai về sửa"} (${op})`,
+      body: amb ? "Sửa bản khai bổ sung ở bước Review (tab Khai bổ sung AMA), phê duyệt lại rồi khai AMA." : "Sửa chỉ tiêu ở bước Review, phê duyệt lại rồi gửi khai tạm.",
+      href: `/dossiers/${ob.dossierId}?step=review`,
+    });
+  }
   if (failed) await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, { title: `${dossier.code}: ${OPERATION_LABELS[op]} bị từ chối`, body: fmtErrors(outcome.errors!).slice(0, 300), href: `/dossiers/${ob.dossierId}?step=submit` });
   return ok({ status: failed ? "FAILED" : "SENT", next: null });
 }

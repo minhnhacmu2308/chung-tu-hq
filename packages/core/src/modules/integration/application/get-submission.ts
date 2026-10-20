@@ -5,14 +5,17 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { rowState, stageOf } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, toSubmissionView } from "./_customs-view.js";
 import type { CustomsDeps } from "./customs-ports.js";
+import { isPostStage, openPostAmendment } from "./post-amendment.js";
 
 export async function getSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<SubmissionView>> {
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
-  const { messages, outbox, result } = await deps.uow.asOrg(ctx, async (r) => ({ messages: await r.messages.list(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId), result: await r.results.get(ctx.orgId, dossierId) }));
+  const { messages, outbox, result, amendment } = await deps.uow.asOrg(ctx, async (r) => ({ messages: await r.messages.list(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId), result: await r.results.get(ctx.orgId, dossierId), amendment: await openPostAmendment(r, ctx.orgId, dossierId) }));
   const polling = !!result && AWAITING_CLEARANCE.has(stageOf(result)) && result.state !== "SEND_FAILED";
-  const flow = { direction: dossier.direction, approved: snap?.status === "APPROVED", hasContainers: (snap?.payload.containers.length ?? 0) > 0 };
+  // Sau thông quan: "đã duyệt" là bản khai bổ sung AMA, không phải tờ khai gốc.
+  const approved = isPostStage(result) ? amendment?.status === "APPROVED" : snap?.status === "APPROVED";
+  const flow = { direction: dossier.direction, approved, hasContainers: (snap?.payload.containers.length ?? 0) > 0 };
   return ok(toSubmissionView({ declarationStatus: snap?.status ?? "NOT_CREATED", hsUnconfirmed: snap?.unconfirmedHs ?? 0, flow, messages, outbox, result, polling }));
 }
 

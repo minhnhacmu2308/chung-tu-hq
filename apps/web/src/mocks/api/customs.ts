@@ -14,6 +14,7 @@ import {
   basePayload, CHANNEL_NOTES, CHANNEL_VI, channelFor, containersFor, declarationNoFor, emptyFlow, estimatedTaxVnd, type CustomsFlow,
 } from "@/mocks/customs-sim";
 import type { MockDb } from "@/mocks/db";
+import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
 import type { CustomsMessage, CustomsOperation, CustomsResult, Declaration, DigitalCertificate, Dossier } from "@/mocks/types";
 
 export const customsKeys = {
@@ -74,7 +75,8 @@ function availabilityInput(db: MockDb, c: Ctx): OperationAvailabilityInput {
   return {
     direction: c.dossier.direction,
     stage: c.flow.stage,
-    approved: c.decl?.status === "APPROVED",
+    // Sau thông quan: "đã duyệt" là bản khai bổ sung AMA, không phải tờ khai gốc (tờ khai gốc giữ nguyên, khóa).
+    approved: c.flow.stage.startsWith("POST_") ? openAmendment(db, c.dossier.id)?.status === "APPROVED" : c.decl?.status === "APPROVED",
     channel: isChanneled(c.flow.stage) ? (c.result?.channel ?? null) : null,
     hasContainers: containersOf(db, c.dossier).length > 0,
     pending: c.flow.pending ? [c.flow.pending.op] : [],
@@ -141,7 +143,8 @@ function apply(db: MockDb, c: Ctx) {
     }
   }
   if (b === "IDD") c.flow.clearAt = null;
-  if (isRecallOperation(p.op)) reopen(db, c.dossier.id);
+  if (p.op === "AMA" || p.op === "AMB" || p.op === "AMC") applyPostOperation(db, c.dossier.id, p.op, p.doneAt, r?.declarationNo ?? "");
+  else if (isRecallOperation(p.op)) reopen(db, c.dossier.id);
 }
 
 /** Thông quan mô phỏng: hỏi trạng thái định kỳ (IID/IEX) trả "Đã thông quan". */
@@ -176,6 +179,14 @@ function settle(db: MockDb, now: number) {
 /* ---------------- Gửi nghiệp vụ ---------------- */
 
 /** Bất biến 7: nghiệp vụ gửi nội dung chỉ khi tờ khai đã duyệt và HS đủ. */
+/** Bản khai bổ sung gửi được: đã duyệt, có ít nhất một dòng hàng, đủ ô bắt buộc. */
+function assertAmendmentSendable(db: MockDb, c: Ctx) {
+  const a = openAmendment(db, c.dossier.id);
+  if (!a || a.status !== "APPROVED") throw new ApiError("NOT_APPROVED", "Bản khai bổ sung chưa được phê duyệt");
+  if (!a.lines.length) throw new ApiError("NO_LINES", "Bản khai bổ sung chưa có dòng hàng");
+  if (!a.header["TK_REC"]?.trim()) throw new ApiError("MISSING_FIELD", "Chưa nhập mã lý do khai bổ sung");
+}
+
 function assertSendable(db: MockDb, c: Ctx) {
   if (!c.decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
   if (c.decl.status !== "APPROVED") throw new ApiError("NOT_APPROVED", "Tờ khai chưa được phê duyệt");
@@ -227,10 +238,17 @@ function texts(db: MockDb, c: Ctx, op: CustomsOperation, no: string): { out: str
       return { out: `Khai tạm sửa đổi bổ sung lần ${amend} (${op})`, in: `Hải quan tiếp nhận khai tạm sửa đổi lần ${amend} – thuế dự kiến ${formatVnd(tax)}`, payload: { ...payload, lanSua: amend, thueDuKien: `${tax} VND` } };
     case "IDE":
       return { out: `Khai chính thức sửa đổi bổ sung lần ${amend} (${op}) – đã ký số`, in: `Hải quan chấp nhận sửa đổi bổ sung lần ${amend} – giữ luồng ${CHANNEL_VI[r.channel]}`, payload: { ...payload, lanSua: amend, chuKySo: "Đã ký" } };
-    case "AMA":
-      return { out: `Khai tạm sửa đổi sau thông quan lần ${post} (AMA)`, in: `Hải quan tiếp nhận bản khai sửa đổi AMA lần ${post} – thuế tính lại ${formatVnd(tax)}`, payload: { ...payload, lanSua: post, thueTinhLai: `${tax} VND` } };
+    case "AMA": {
+      const a = openAmendment(db, c.dossier.id);
+      const delta = a ? amendmentDelta(a) : "0";
+      return {
+        out: `Khai tạm bản khai bổ sung sau thông quan lần ${post} (AMA) – ${a?.lines.length ?? 0} dòng hàng`,
+        in: `Hải quan tiếp nhận bản khai bổ sung AMA lần ${post} – tiền thuế ${delta.startsWith("-") ? "giảm" : "tăng"} ${formatVnd(delta.replace("-", ""))}`,
+        payload: { ...payload, lanSua: post, lyDo: a?.header["TK_REC"] ?? "", soDong: a?.lines.length ?? 0, tangGiamThue: `${delta} VND` },
+      };
+    }
     case "AMB":
-      return { out: "Gọi sửa bản khai tạm AMA (AMB)", in: "Bản khai AMA đã gọi về – tờ khai mở lại để sửa và phê duyệt lại", payload };
+      return { out: "Gọi sửa bản khai tạm AMA (AMB)", in: "Bản khai AMA đã gọi về – sửa bản khai bổ sung, phê duyệt lại rồi khai AMA", payload };
     case "AMC":
       return { out: "Khai chính thức bản khai AMA (AMC) – đã ký số", in: `Hải quan chấp nhận khai bổ sung sau thông quan lần ${post}`, payload: { ...payload, lanSua: post, chuKySo: "Đã ký" } };
     case "HYS": {
@@ -289,7 +307,7 @@ function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number) {
   }
   db.customsMessages.push(message(c.dossier.id, op, "OUT", "OK", t.out, now, t.payload), message(c.dossier.id, op, "IN", "OK", t.in, doneAt, { ...t.payload, ketQua: "Thành công" }));
   c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString() };
-  if (isContentOperation(op) && c.decl) {
+  if (isContentOperation(op) && op !== "AMA" && c.decl) {
     c.decl.status = "SUBMITTED";
     Object.assign(c.dossier, { status: "SUBMITTED", step: "submit", updatedAt: nowIso() });
   }
@@ -317,7 +335,8 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   if (!a.enabled) throw new ApiError("OPERATION_LOCKED", a.reason || "Nghiệp vụ chưa thực hiện được ở giai đoạn này");
   if (a.action === "EDIT") throw new ApiError("NOT_APPROVED", a.reason ?? "Sửa tờ khai và phê duyệt lại trước");
   if (a.action === "START_POST_EDIT") throw new ApiError("POST_EDIT_REQUIRED", "Bắt đầu sửa sau thông quan trước khi khai AMA");
-  if (isContentOperation(op)) assertSendable(db, c);
+  if (op === "AMA") assertAmendmentSendable(db, c);
+  else if (isContentOperation(op)) assertSendable(db, c);
   send(db, c, op, now);
   return { sent: true, message: `Đã gửi ${op} – ${CUSTOMS_OPERATIONS[op].label.toLowerCase()}. Chờ Hải quan phản hồi.` };
 }
@@ -337,16 +356,30 @@ export const submitDeclaration = (dossierId: string, certificateId: string) =>
     perform(db, dossierId, dossier.direction === "NK" ? "IDA" : "EDA", Date.now());
   });
 
-/** Bắt đầu sửa đổi sau thông quan: CLEARED → POST_EDITING, mở lại tờ khai để sửa và duyệt lại rồi khai AMA. */
+/** Bắt đầu sửa đổi sau thông quan: CLEARED → POST_EDITING, lập bản khai bổ sung AMA (tờ khai gốc không mở lại). */
 export const startPostAmendment = (dossierId: string) =>
   mutate((db) => {
     settle(db, Date.now());
     const c = load(db, dossierId);
     const a = operationAvailability(availabilityInput(db, c)).find((x) => x.op === "AMA");
     if (!a || a.action !== "START_POST_EDIT" || !a.enabled) throw new ApiError("INVALID_STATE", a?.reason || "Chỉ sửa sau thông quan khi tờ khai đã thông quan");
+    if (!c.decl || !c.result) throw new ApiError("NOT_FOUND", "Chưa có tờ khai đã thông quan");
+    // AMA là bản khai riêng: tờ khai gốc giữ nguyên (khóa), lập bản khai bổ sung điền sẵn từ tờ khai gốc + số Hải quan trả về.
+    const seen = db.customsMessages.filter((m) => m.dossierId === dossierId && Date.parse(m.at) <= Date.now()).sort((a, b) => a.at.localeCompare(b.at));
+    createAmendment(db, c.dossier, c.decl, customsInfoOf(db, c, c.flow.stage, seen), c.result.declarationNo);
     c.flow.stage = "POST_EDITING";
-    reopen(db, dossierId);
+    Object.assign(c.dossier, { step: "review", updatedAt: nowIso() });
   });
+
+/** Thông tin Hải quan trả về hiện tại của hồ sơ (bản khai bổ sung dùng làm phần "Trước"). */
+export function customsInfoNow(db: MockDb, dossierId: string): CustomsInfo | null {
+  const c = load(db, dossierId);
+  const seen = db.customsMessages.filter((m) => m.dossierId === dossierId && Date.parse(m.at) <= Date.now()).sort((a, b) => a.at.localeCompare(b.at));
+  return customsInfoOf(db, c, c.flow.stage, seen);
+}
+
+/** Chốt các phản hồi đã đến (màn hình bản khai bổ sung đọc trạng thái mới nhất). */
+export const settleCustoms = (db: MockDb) => settle(db, Date.now());
 
 /**
  * Gửi lại một nghiệp vụ bị lỗi. Nguyên tắc chống gửi trùng (ADR 0005): luôn tra cứu (IID/IEX) trước,

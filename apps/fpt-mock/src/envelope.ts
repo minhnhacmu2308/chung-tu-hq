@@ -1,13 +1,13 @@
 // Vỏ phản hồi chung của FPT.VNACCS – đúng thứ tự key như response thật (OUTPUT_API_THANH_CONG / thatbai).
 export type FptError = { errorCode: string; indexCode: string; nameCode: string; errorContent: string; proposedSolution: string; rowPosition: string };
 
-export function fptEnvelope(account: unknown, patch: { errorList?: FptError[]; objIDA?: unknown[]; objEDA?: unknown[] } = {}) {
+export function fptEnvelope(account: unknown, patch: { errorList?: FptError[]; objIDA?: unknown[]; objEDA?: unknown[]; objAMA?: unknown[] } = {}) {
   return {
     objVNACCS_ACCOUNT: account ?? null,
     errorList: patch.errorList ?? null,
     objIDA: patch.objIDA ?? null,
     objEDA: patch.objEDA ?? null,
-    objAMA: null,
+    objAMA: patch.objAMA ?? null,
     vaF8030: null,
     vaF8010: null,
     vaE8000: null,

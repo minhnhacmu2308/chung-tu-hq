@@ -64,7 +64,7 @@ beforeAll(async () => {
   customs = {
     uow: new DrizzleCustomsUow(db), queue, gateway: new FakeCustomsGateway({ clearAfterPolls: 2, flakyHys: false }),
     declarations: createDeclarationReader(declaration), dossiers: createCustomsDossierPort(dossier), validation: createCustomsValidationReader(validation), certificates: createCertificateReader(identity),
-    pollDelayMs: 1, clock: systemClock, idGen: ulidIdGen,
+    audit: declaration.audit, org: { fourEyes: async () => false }, pollDelayMs: 1, clock: systemClock, idGen: ulidIdGen,
   };
 });
 afterAll(async () => {

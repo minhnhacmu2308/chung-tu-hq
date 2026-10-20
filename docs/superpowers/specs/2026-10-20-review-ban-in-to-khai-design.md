@@ -27,7 +27,7 @@ Ngoài phạm vi: máy chủ tạo PDF; mã vạch thật (chừa chỗ); bản 
 | # | Quyết định |
 |---|---|
 | Q1 | Theo **mẫu in chính thức VNACCS** (không theo Mẫu 01/02 Phụ lục II, không tự chế bố cục). |
-| Q2 | Sửa bằng **bấm ô trên bản in → panel bên phải** (mobile: sheet dưới). Bản in luôn giữ hình dạng giấy. |
+| Q2 | Sửa bằng **bấm ô trên bản in → panel bên phải** (`Dialog presentation="panel"` sẵn có: màn rộng trang lùi nhường chỗ, màn hẹp panel đè lên trang). Bản in luôn giữ hình dạng giấy. |
 | Q3 | Bản in **thay hẳn** tab "Tờ khai đầy đủ" và gộp tab "Hải quan trả về". Thông tin không có trên mẫu in → khối **"Chỉ tiêu khác"**. Form cũ giữ sau cờ cấu hình trong giai đoạn thử nghiệm rồi xóa. |
 | Q4 | In / PDF bằng **CSS print của trình duyệt**; không có máy chủ PDF. |
 
@@ -50,18 +50,19 @@ Desktop – hai cột:
 ```
 
 - Trang giấy dựng HTML/CSS theo thứ tự, cách nhóm và nhãn **y như mẫu**; giá trị font đơn cách. Số chỉ tiêu (1.44…) không in trên trang; hiện ở tooltip khi rê chuột và ở panel.
-- IDA: 2 trang chung + mỗi dòng hàng một khối (`< 01 >`, `< 02 >`…). EDA: trang chung + Vanning/container + dòng hàng. Khối dòng hàng xếp liên tục trên màn hình; khi in theo mẫu: IDA mỗi dòng hàng một trang, EDA các dòng hàng nối tiếp và chỉ ngắt trang khi hết chỗ (không cắt đôi một khối dòng hàng).
+- IDA: 2 trang chung + mỗi dòng hàng một khối (`< 01 >`, `< 02 >`…). EDA: trang chung + Vanning/container + dòng hàng. Khối dòng hàng xếp liên tục trên màn hình; khi in theo mẫu: IDA mỗi dòng hàng một trang, EDA 2 dòng hàng một trang. Tổng số trang = số trang chung + ⌈số dòng hàng / số dòng mỗi trang⌉.
 - Tiêu đề theo giai đoạn:
 
 | Giai đoạn | Tiêu đề |
 |---|---|
-| Chưa khai (nháp / đã duyệt / khai tạm chưa có số) | "Tờ khai hàng hóa nhập khẩu – BẢN NHÁP" + watermark |
-| Đã có số tờ khai, đã phân luồng | "… (thông báo kết quả phân luồng)" |
+| Chưa khai, bị từ chối (`NOT_SENT`, `REJECTED`, chưa có kết quả) | "Tờ khai hàng hóa nhập khẩu – BẢN NHÁP" + watermark "BẢN NHÁP – CHƯA KHAI HẢI QUAN" |
+| Khai tạm, chưa đăng ký (`PRE_DECLARED`, `RECALLED`) | "… – KHAI TẠM" + watermark "KHAI TẠM – CHƯA ĐĂNG KÝ" |
+| Đã phân luồng (`DECLARED`, `AMEND_*`) | "… (thông báo kết quả phân luồng)" |
 | Đã thông quan | "… (thông quan)" |
 
 - Ô do Hải quan trả về (số tờ khai, mã phân loại kiểm tra, ngày đăng ký, thuế theo sắc thuế, chỉ thị, mục thông báo…) chưa có dữ liệu → in như mẫu ("- / /", để trống), riêng số tờ khai hiện "Chưa cấp".
 - Khối **"Chỉ tiêu khác (không có trên mẫu in)"** dưới trang cuối: chỉ tiêu người khai không có chỗ trên mẫu (chỉ tiêu theo tình huống đang áp dụng, ô `APP_*` của phần mềm…), nhóm theo Phụ lục II, mỗi ô dạng nhãn – giá trị; bấm mở panel như ô trên bản in. Không có ô nào → không hiện khối.
-- Mobile: panel thành sheet từ dưới lên; trang giấy co theo bề ngang, không cuộn ngang trang; dưới ngưỡng hẹp, vùng hai cột của mẫu xếp một cột.
+- Mobile: panel đè lên trang (Dialog panel); trang giấy co theo bề ngang, không cuộn ngang trang; dưới ngưỡng hẹp, vùng hai cột của mẫu xếp một cột.
 
 ### 3.2 Trạng thái ô (chỉ trên màn hình)
 
@@ -90,7 +91,7 @@ Chỉ thị Hải quan (tr.2) có nội dung → khối chỉ thị nổi bật 
 - Đầu panel: số chỉ tiêu · tên đầy đủ · huy hiệu vai trò (`declarationFieldRole`: K / ĐK / HT / HQ…).
 - Ô nhập theo `FieldInput` (text, code có tra danh mục, date, number, choice…). Ô thuộc `LayoutGroup` / `LayoutRepeat` → panel hiện cả nhóm (địa chỉ 4 dòng, tổng trị giá 4 ô, 5 giấy phép…).
 - Lỗi Hải quan + cách khắc phục; "Có trên tờ khai vì: …" (`condition`); hướng dẫn TT121 từ catalog.
-- Nguồn giá trị: chứng từ, trang; nút "Xem trên chứng từ" (mở bước OCR đúng chứng từ/trường).
+- Nguồn giá trị: loại chứng từ (`DeclarationField.source`, ví dụ Hóa đơn, Vận đơn; dữ liệu chưa có số trang); nút "Xem ở bước OCR" (dòng hàng: mở đúng dòng `?step=ocr&dong=n`).
 - Ô theo chứng từ / mã HS / tính từ nguyên tệ (`ITEM_LOCK`, `DERIVED_LOCK`): không sửa trong panel; nút dẫn tới bước OCR hoặc hộp "Chọn mã HS" như hiện nay.
 - **Lưu / Hủy**: lưu từng ô bằng API sửa chỉ tiêu hiện có (`updateDeclarationField`, backend kiểm tra lại, ghi `field_audit`). Tab / Shift+Tab trong panel → ô kế tiếp / trước theo thứ tự in. Esc đóng panel. Có thay đổi chưa lưu mà chọn ô khác → hỏi lưu / bỏ.
 - Vai trò VIEWER hoặc tờ khai chỉ đọc: panel chỉ đọc.
@@ -110,16 +111,18 @@ Chỉ thị Hải quan (tr.2) có nội dung → khối chỉ thị nổi bật 
 
 ### 4.2 `@kb/ui`
 
-- `PaperSheet`: khung trang A4 (tỉ lệ, lề, ngắt trang khi in, watermark tùy chọn, số trang).
+- `PaperSheet`: khung trang A4 (tỉ lệ, lề, ngắt trang khi in, watermark tùy chọn, số trang). `PaperStack` bọc các trang, khi in chỉ phần này hiện.
+- `PaperField`: một ô nhãn – giá trị trên trang giấy, có trạng thái §3.2, bấm được (nút), đánh dấu tự ẩn khi in.
 - Token: font đơn cách cho giá trị, đường kẻ trang giấy, màu trạng thái ô in (ánh xạ về token danger/warning/accent sẵn có). Có trong playground; test a11y (axe).
 
 ### 4.3 `apps/web/src/features/declaration-print/`
 
 - `print-declaration.tsx`: vẽ header lặp + trang + khối dòng hàng + "Chỉ tiêu khác" từ `PrintLayout`; giá trị và quyền sửa lấy qua `dossier-adapter` (`declarationValues`, `itemValues`, `editableKeys`) và `customs-adapter`; khóa theo `formKeyLock`. Không viết lại logic giá trị / khóa.
-- `print-cell.tsx`: một ô có trạng thái; `role="button"`, `aria-label` = số chỉ tiêu + tên đầy đủ + giá trị + trạng thái.
+- `print-cell.tsx`: bọc `PaperField`; `aria-label` = số chỉ tiêu + tên đầy đủ + giá trị + trạng thái.
+- `print-state.ts`: logic thuần (trạng thái ô, số ước tính, danh sách ô cần xử lý, số trang).
 - `field-edit-panel.tsx`: ô nhập + lưu; tách phần dùng chung từ `declaration-form` (`field.tsx`, `field-group.tsx`, `field-repeat.tsx`, `code-input.tsx`) thay vì sao chép.
 - `print-toolbar.tsx`, `use-attention-cells.ts` (danh sách ô lỗi / còn thiếu theo thứ tự in).
-- `print.css`: chỉ quy tắc `@media print`.
+- In: quy tắc `@media print` nằm ở `@kb/ui` (`PaperStack` / `PaperSheet` / `PaperField`), app không có CSS riêng.
 
 ### 4.4 `review-step.tsx`
 
@@ -133,7 +136,8 @@ Chỉ thị Hải quan (tr.2) có nội dung → khối chỉ thị nổi bật 
   - Phủ khóa: mọi khóa `origin` người khai trong `layoutFor(kind)` có mặt **đúng một lần** ở bản in hoặc `otherFields`; mọi `PrintCell.key` tồn tại trong `layoutFor(kind)`.
   - Mọi ô Hải quan trả về có trên mẫu in có khóa tương ứng.
   - `printTitle` theo giai đoạn.
-- Web (vitest + axe): `PrintCell` đủ trạng thái §3.2; panel lưu / hủy / ô khóa / ô dẫn sang OCR; "Chỉ ô cần xử lý" nhảy đúng thứ tự; cờ legacy.
+- `@kb/ui` (vitest + axe): `PaperField` đủ trạng thái §3.2, bàn phím; `PaperSheet` watermark, số trang.
+- Web (vitest, logic thuần): trạng thái ô, số ước tính, "Chỉ ô cần xử lý" đúng thứ tự, số trang, cờ legacy. Panel và màn hình kiểm bằng trình duyệt thật.
 - Mock: `dos_021` (nháp, watermark), `dos_019` (phân luồng vàng), `dos_018` (thông quan) – đúng tiêu đề, số Hải quan, so sánh ước tính.
 - Trình duyệt thật: sáng + tối, desktop + mobile; Ctrl+P đối chiếu từng trang với hai PDF mẫu (bố cục, ngắt trang, không lộ đánh dấu).
 - `pnpm typecheck && pnpm lint && pnpm test` xanh.

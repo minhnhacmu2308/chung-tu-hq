@@ -173,6 +173,17 @@ export function panelOrder(kind: Kind, lines: number): PrintTarget[] {
   return slotOrder(kind, Math.max(0, lines));
 }
 
+/** Ô kế tiếp (dir 1) / trước (dir -1) trong `order`, bỏ qua ô cùng nhóm (`groupKeys`) cùng dòng với `current` (panel đã hiện cả nhóm); quay vòng. */
+export function nextTarget(order: PrintTarget[], current: PrintTarget, groupKeys: string[], dir: 1 | -1): PrintTarget | undefined {
+  const n = order.length;
+  const i = order.findIndex((t) => t.key === current.key && t.line === current.line);
+  for (let step = 1; step <= n; step++) {
+    const t = order[(((i + dir * step) % n) + n) % n]!;
+    if (t.line !== current.line || !groupKeys.includes(t.key)) return t;
+  }
+  return undefined;
+}
+
 /** Ô của chỉ tiêu mỗi lỗi, theo thứ tự `order`. Lỗi không có `no` / dòng không có trong `lineNos` → []. */
 function slotsPerError(kind: Kind, order: Slot[], errors: FieldError[], lineNos: number[]): Slot[][] {
   const loc = fieldLocator(kind);

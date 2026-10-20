@@ -92,18 +92,20 @@ export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf,
       <AmendLockProvider kind={kind} values={values} active={false} override={lockOf}>
         <Stack gap="sm">
           {spot.group.map((f) => (
-            <FormField
-              key={f.key}
-              kind={kind}
-              field={f}
-              values={values}
-              onChange={onChange}
-              ctx={ctx}
-              showInapplicable
-              parentNo={spot.parentNo}
-              parentCondition={spot.parentCondition ?? spot.blockCondition}
-              fill
-            />
+            // data-panel-field: panel đặt focus vào đúng ô người dùng chọn trong nhóm.
+            <div key={f.key} data-panel-field={f.key} className="contents">
+              <FormField
+                kind={kind}
+                field={f}
+                values={values}
+                onChange={onChange}
+                ctx={ctx}
+                showInapplicable
+                parentNo={spot.parentNo}
+                parentCondition={spot.parentCondition ?? spot.blockCondition}
+                fill
+              />
+            </div>
           ))}
         </Stack>
       </AmendLockProvider>

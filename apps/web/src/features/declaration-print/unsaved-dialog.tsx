@@ -13,9 +13,11 @@ type Props = {
   onSave: () => void;
   onDiscard: () => void;
   onStay: () => void;
+  /** Hộp đóng (mọi lựa chọn): nơi gọi tự đặt lại focus (thay cho focus mặc định của Radix về đầu trang). */
+  onClosed: () => void;
 };
 
-export function UnsavedDialog({ open, title, count, saving, onSave, onDiscard, onStay }: Props) {
+export function UnsavedDialog({ open, title, count, saving, onSave, onDiscard, onStay, onClosed }: Props) {
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !saving && onStay()}>
       <DialogContent
@@ -23,6 +25,10 @@ export function UnsavedDialog({ open, title, count, saving, onSave, onDiscard, o
         icon={<Save className="h-4 w-4" />}
         description={`Có ${formatNumber(count)} chỉ tiêu chưa lưu. Rời ô này mà không lưu sẽ mất thay đổi.`}
         size="sm"
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          onClosed();
+        }}
       >
         <form
           onSubmit={(e) => {

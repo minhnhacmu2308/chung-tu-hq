@@ -1,6 +1,6 @@
 import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, pageCount, panelOrder, printValue, sameNumber } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, printValue, sameNumber } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -217,5 +217,30 @@ describe("panelOrder", () => {
     const other = otherFieldKeys("IDA");
     const lastKey = other.item.length > 0 ? other.item[other.item.length - 1]! : other.decl[other.decl.length - 1]!;
     expect(order[order.length - 1]!.key).toBe(lastKey);
+  });
+});
+
+describe("nextTarget", () => {
+  const order = panelOrder("IDA", 1);
+  const loc = fieldLocator("IDA");
+  // Nhóm ô tờ khai có ít nhất 3 ô liền nhau trong thứ tự (vd địa chỉ) – lấy ô giữa.
+  const start = order.findIndex((t, i) => {
+    const g = loc.get(t.key)!.group;
+    return t.line === undefined && g.length >= 3 && g[0]!.key === t.key && g.every((f, j) => order[i + j]?.key === f.key);
+  });
+  const group = loc.get(order[start]!.key)!.group.map((f) => f.key);
+  const middle = order[start + 1]!;
+
+  it("Tab từ một ô trong nhóm → ô đầu tiên sau cả nhóm", () => {
+    expect(nextTarget(order, middle, group, 1)).toEqual(order[start + group.length]);
+  });
+  it("Shift+Tab → ô ngay trước nhóm", () => {
+    expect(start).toBeGreaterThan(0);
+    expect(nextTarget(order, middle, group, -1)).toEqual(order[start - 1]);
+  });
+  it("ô dòng hàng: chỉ bỏ ô cùng nhóm cùng dòng; quay vòng ở cuối", () => {
+    const last = order[order.length - 1]!;
+    expect(nextTarget(order, last, [last.key], 1)).toEqual(order[0]);
+    expect(nextTarget([], last, [last.key], 1)).toBeUndefined();
   });
 });

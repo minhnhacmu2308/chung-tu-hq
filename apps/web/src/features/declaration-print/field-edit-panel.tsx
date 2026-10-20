@@ -1,12 +1,13 @@
 "use client";
 // Panel sửa ô của bản in (Dialog dạng panel bên phải, không chặn trang): mở khi chọn một ô, hiện cả nhóm ô của chỉ tiêu, lưu bằng API sửa chỉ tiêu.
 // `target` = ô người dùng vừa chọn; panel hiện `shown`. Còn thay đổi chưa lưu mà chọn ô khác / đóng / Tab sang ô khác / sang bước OCR
-// → hỏi Lưu · Bỏ thay đổi · Ở lại (Ở lại trả lựa chọn về ô đang sửa). Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`.
+// → hỏi Lưu · Bỏ thay đổi · Ở lại (Ở lại trả lựa chọn và focus về ô đang sửa). Đang lưu → chờ lưu xong mới chuyển ô (không hỏi / lưu lặp).
+// Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
 import { Button, Dialog, DialogContent, DialogFooter } from "@kb/ui";
 import { fieldRole, type Declaration, type DeclarationEditMode, type LineItem } from "@kb/contracts";
 import { PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { formatNumber } from "@/lib/format";
 import { ChangeHsDialog } from "../dossier-detail/steps/agent-step";
 import { errorsForField, type FieldError } from "../dossier-detail/steps/customs-errors";
@@ -16,7 +17,7 @@ import { fieldTitle } from "../declaration-form/display";
 import type { FormValues } from "../declaration-form/form-state";
 import { useSaveDeclarationEdits } from "../declaration-form/use-save-edits";
 import { PanelDetails } from "./panel-details";
-import { fieldLocator, type PrintTarget } from "./print-state";
+import { fieldLocator, nextTarget, type PrintTarget } from "./print-state";
 import { UnsavedDialog } from "./unsaved-dialog";
 
 type Props = {
@@ -36,6 +37,7 @@ type Props = {
 };
 
 const tid = (t: PrintTarget | null) => (t ? `${t.line ?? ""}:${t.key}` : "");
+const INPUTS = "input:not([disabled]), textarea:not([disabled]), select:not([disabled])";
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
 export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdit, values, itemRows, errors, order, target, onTarget }: Props) {
@@ -64,11 +66,15 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
   const dirty = edits.length > 0;
 
   // Ô được chọn đổi (bấm ô, Tab, đóng, "Chỉ ô cần xử lý"): chưa lưu → hỏi; không thì chuyển ngay.
+  // Đang lưu → chưa xét (giữ `seen`): lưu xong vẽ lại, phần sửa đã xóa → chuyển ngay; lưu lỗi → còn thay đổi → hỏi.
   const [seen, setSeen] = useState(target);
-  if (tid(seen) !== tid(target)) {
+  if (tid(seen) !== tid(target) && !save.isPending) {
     setSeen(target);
+    // Ô khác cùng nhóm, cùng dòng: panel đang hiện đúng các ô đó → giữ phần đang sửa, chỉ đổi ô được chọn.
+    const sameGroup = Boolean(target && shown && target.line === shown.line && spot?.group.some((f) => f.key === target.key));
     if (tid(target) !== tid(shown)) {
-      if (dirty) setConfirm({ next: target });
+      if (sameGroup) setShown(target);
+      else if (dirty) setConfirm({ next: target });
       else {
         setShown(target);
         setChanges({});
@@ -83,12 +89,25 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
     setChanges({});
   }
 
-  // Chuyển ô → focus ô nhập đầu tiên của ô mới (Tab tiếp tục điền).
+  // Chuyển ô → focus ô nhập của đúng ô được chọn trong nhóm; ô đó chỉ đọc → ô nhập đầu tiên của nhóm.
   const body = useRef<HTMLDivElement>(null);
+  const lastFocus = useRef<HTMLElement | null>(null);
+  const shownKey = shown?.key;
+  const focusField = useCallback((key: string | undefined) => {
+    const root = body.current;
+    const own = key ? root?.querySelector<HTMLElement>(`[data-panel-field="${key}"] :is(${INPUTS})`) : null;
+    (own ?? root?.querySelector<HTMLElement>(INPUTS))?.focus();
+  }, []);
   const shownId = tid(shown);
   useEffect(() => {
-    if (shownId) body.current?.querySelector<HTMLElement>("input:not([disabled]), textarea:not([disabled]), select:not([disabled])")?.focus();
-  }, [shownId]);
+    if (shownId) focusField(shownKey);
+  }, [shownId, shownKey, focusField]);
+  /** Đóng hộp hỏi: focus lại ô đang focus trước đó trong panel (còn trên trang), không thì ô đang chọn. */
+  const restoreFocus = () => {
+    const el = lastFocus.current;
+    if (el?.isConnected && body.current?.contains(el)) el.focus();
+    else focusField(shownKey);
+  };
 
   const proceed = (next: PrintTarget | null, href?: string) => {
     setConfirm(null);
@@ -101,6 +120,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
     if (tid(target) !== tid(shown)) onTarget(shown);
   };
   const goOcr = () => {
+    if (save.isPending) return;
     const href = item ? `${pathname}?step=ocr&dong=${item.lineNo}` : `${pathname}?step=ocr`;
     if (dirty) setConfirm({ next: shown, href });
     else router.replace(href, { scroll: false });
@@ -111,8 +131,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
     const nodes = [...e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.offsetParent !== null || n === document.activeElement);
     const edge = e.shiftKey ? nodes[0] : nodes[nodes.length - 1];
     if (!edge || document.activeElement !== edge) return;
-    const i = order.findIndex((t) => tid(t) === tid(shown));
-    const next = order[(i + (e.shiftKey ? -1 : 1) + order.length) % order.length];
+    const next = nextTarget(order, shown, spot?.group.map((f) => f.key) ?? [shown.key], e.shiftKey ? -1 : 1);
     if (!next) return;
     e.preventDefault();
     e.stopPropagation();
@@ -122,19 +141,23 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
   const field = spot?.field;
   const no = field ? field.no ?? spot.parentNo : undefined;
   const title = field ? fieldTitle(no, field.label) : "";
+  const role = field && spot ? fieldRole(kind, field, spot.parentNo) : undefined;
+  // Vai trò cạnh tiêu đề (dòng mô tả của header), không nằm trong tên trợ năng của panel và không bị cắt.
+  const roleNode = role === "REQUIRED" ? "Bắt buộc" : role === "CONDITIONAL" || role === "REFERENCE" ? <RoleMark role={role} /> : null;
+  const description = item || roleNode ? <>{item ? `Dòng hàng ${item.lineNo}` : null}{item && roleNode ? " · " : null}{roleNode}</> : null;
   const cellErrors = !field ? [] : item ? errors.filter((e) => e.no !== undefined && e.no === no && e.line === item.lineNo) : errorsForField(errors, no);
 
   return (
     <>
       <Dialog open={Boolean(shown && spot)} defaultPresentation="panel" onOpenChange={(o) => !o && onTarget(null)}>
         <DialogContent
-          title={field ? <>{title}{spot && <RoleMark role={fieldRole(kind, field, spot.parentNo)} />}</> : ""}
+          title={title}
           icon={<PenLine className="h-4 w-4" />}
-          {...(item ? { description: `Dòng hàng ${item.lineNo}` } : {})}
+          {...(description ? { description } : {})}
           onKeyDownCapture={onKeyDownCapture}
         >
           {spot && (
-            <div ref={body} className="flex min-h-0 flex-1 flex-col gap-4">
+            <div ref={body} className="flex min-h-0 flex-1 flex-col gap-4" onFocus={(e) => { lastFocus.current = e.target; }}>
               <PanelDetails
                 kind={kind}
                 spot={spot}
@@ -154,7 +177,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
                 ) : (
                   <>
                     <Button type="button" variant="ghost" disabled={save.isPending} onClick={() => { setChanges({}); onTarget(null); }}>Hủy</Button>
-                    <Button type="button" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty} onClick={() => save.mutate(edits)}>
+                    <Button type="button" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty} onClick={() => save.mutate(edits, { onSuccess: () => setChanges({}) })}>
                       {dirty ? `Lưu ${formatNumber(edits.length)} thay đổi` : "Lưu"}
                     </Button>
                   </>
@@ -171,11 +194,12 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
         saving={save.isPending}
         onSave={() => {
           const c = confirm;
-          if (!c) return;
+          if (!c || save.isPending) return;
           save.mutate(edits, { onSuccess: () => proceed(c.next, c.href), onError: stay });
         }}
         onDiscard={() => confirm && proceed(confirm.next, confirm.href)}
         onStay={stay}
+        onClosed={restoreFocus}
       />
       <ChangeHsDialog item={hsItem} onClose={() => setHsItem(null)} dossierId={dossierId} />
     </>

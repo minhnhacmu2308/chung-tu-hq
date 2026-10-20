@@ -8,6 +8,9 @@ import { memo } from "react";
 import { fieldTitle } from "../declaration-form/display";
 import { fieldLocator, NOT_ISSUED, printValue } from "./print-state";
 
+/** Giá trị `data-print-cell` của ô bấm được (chỉ số dòng hàng 0-based + khóa) – để cuộn tới ô ("Chỉ ô cần xử lý"). */
+export const cellDomId = (key: string, line?: number) => `${line ?? ""}:${key}`;
+
 /** Giá trị thô + trạng thái của một ô (tính ở print-declaration). */
 export type CellLook = { raw: string; state: PaperFieldState; compareTo: string | null };
 
@@ -26,9 +29,11 @@ type Props = {
   selected: boolean;
   /** Không truyền → ô chỉ đọc, không bấm được (vd đầu trang lặp từ trang 2). */
   onSelect?: ((key: string, line?: number) => void) | undefined;
+  /** Lớp bố cục thêm (vd số cột theo bề rộng vùng nội dung). */
+  className?: string | undefined;
 };
 
-export const PrintCell = memo(function PrintCell({ kind, cellKey, label, span = 12, align, line, raw, state, compareTo, selected, onSelect }: Props) {
+export const PrintCell = memo(function PrintCell({ kind, cellKey, label, span = 12, align, line, raw, state, compareTo, selected, onSelect, className }: Props) {
   const spot = fieldLocator(kind).get(cellKey);
   const no = spot ? spot.field.no ?? spot.parentNo : undefined;
   const name = spot?.field.label ?? label;
@@ -44,10 +49,11 @@ export const PrintCell = memo(function PrintCell({ kind, cellKey, label, span = 
         state={state}
         compareTo={compareTo}
         selected={selected}
-        {...(onSelect ? { onSelect: () => onSelect(cellKey, line) } : {})}
+        {...(onSelect ? { onSelect: () => onSelect(cellKey, line), "data-print-cell": cellDomId(cellKey, line) } : {})}
         ariaLabel={ariaLabel}
         span={span}
         {...(align ? { align } : {})}
+        {...(className ? { className } : {})}
       />
     </Tooltip>
   );

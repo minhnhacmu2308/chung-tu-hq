@@ -1,0 +1,42 @@
+"use client";
+// Hỏi khi panel sửa ô còn thay đổi chưa lưu mà người dùng chọn ô khác / đóng panel / Tab sang ô khác / sang bước OCR: Lưu · Bỏ thay đổi · Ở lại.
+import { Button, Dialog, DialogContent, DialogFooter } from "@kb/ui";
+import { Save } from "lucide-react";
+import { formatNumber } from "@/lib/format";
+
+type Props = {
+  open: boolean;
+  /** "1.44 · Tổng trị giá hóa đơn". */
+  title: string;
+  count: number;
+  saving: boolean;
+  onSave: () => void;
+  onDiscard: () => void;
+  onStay: () => void;
+};
+
+export function UnsavedDialog({ open, title, count, saving, onSave, onDiscard, onStay }: Props) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && !saving && onStay()}>
+      <DialogContent
+        title={`Lưu thay đổi ở ${title}?`}
+        icon={<Save className="h-4 w-4" />}
+        description={`Có ${formatNumber(count)} chỉ tiêu chưa lưu. Rời ô này mà không lưu sẽ mất thay đổi.`}
+        size="sm"
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSave();
+          }}
+        >
+          <DialogFooter>
+            <Button type="button" variant="ghost" disabled={saving} onClick={onStay}>Ở lại</Button>
+            <Button type="button" variant="secondary" disabled={saving} onClick={onDiscard}>Bỏ thay đổi</Button>
+            <Button type="submit" loading={saving} autoFocus>Lưu</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -168,6 +168,11 @@ function slotOrder(kind: Kind, rows: number): Slot[] {
   return order;
 }
 
+/** Thứ tự Tab trong panel sửa ô: thứ tự in (đầu trang, trang chung, từng dòng hàng) rồi "Chỉ tiêu khác". `line` 0-based. */
+export function panelOrder(kind: Kind, lines: number): PrintTarget[] {
+  return slotOrder(kind, Math.max(0, lines));
+}
+
 /** Ô của chỉ tiêu mỗi lỗi, theo thứ tự `order`. Lỗi không có `no` / dòng không có trong `lineNos` → []. */
 function slotsPerError(kind: Kind, order: Slot[], errors: FieldError[], lineNos: number[]): Slot[][] {
   const loc = fieldLocator(kind);

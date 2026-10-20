@@ -12,6 +12,8 @@ type Region = PrintRegion | [PrintRegion, PrintRegion];
 
 /** id DOM của một vùng trang chung (vd "print-chi-thi") – để cuộn tới. */
 export const regionDomId = (id: string) => `print-${id}`;
+/** id DOM của trang giấy thứ `page` (1-based) – thanh công cụ cuộn tới. */
+export const pageDomId = (page: number) => `print-page-${page}`;
 
 type Props = {
   kind: Kind;
@@ -94,14 +96,14 @@ export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Pr
   return (
     <PaperStack>
       {layout.pages.map((pg, i) => (
-        <PaperSheet key={pg.id} id={`print-page-${i + 1}`} page={i + 1} total={total} header={header(i + 1)} watermark={title.watermark}>
+        <PaperSheet key={pg.id} id={pageDomId(i + 1)} page={i + 1} total={total} header={header(i + 1)} watermark={title.watermark}>
           {regions(pg.regions, undefined)}
         </PaperSheet>
       ))}
       {itemPages.map((block, p) => {
         const page = layout.pages.length + p + 1;
         return (
-          <PaperSheet key={page} id={`print-page-${page}`} page={page} total={total} header={header(page)} watermark={title.watermark}>
+          <PaperSheet key={page} id={pageDomId(page)} page={page} total={total} header={header(page)} watermark={title.watermark}>
             {block.map((line) => (
               <Fragment key={line}>
                 <p className="col-span-12 pt-2 font-mono text-sm font-semibold">{`< ${pad2(line + 1)} >`}</p>

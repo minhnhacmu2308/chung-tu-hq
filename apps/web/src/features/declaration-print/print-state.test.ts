@@ -1,6 +1,6 @@
-import { layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
+import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, pageCount, printValue, sameNumber } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, pageCount, panelOrder, printValue, sameNumber } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -203,5 +203,19 @@ describe("otherFieldGroups", () => {
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     for (const g of groups.decl) expect(g.title).toBe(blocks.find((b) => b.id === g.id)!.title);
+  });
+});
+
+describe("panelOrder", () => {
+  it("thứ tự in (đầu trang trước), dòng hàng theo thứ tự, cuối là Chỉ tiêu khác", () => {
+    const order = panelOrder("IDA", 2);
+    const firstHeader = expandPrintRow(printLayoutFor("IDA").header[0]!).flat()[0]!.key;
+    expect(order[0]).toEqual({ key: firstHeader });
+    const at = (line: number) => order.findIndex((t) => t.key === "HAG_CMD" && t.line === line);
+    expect(at(0)).toBeGreaterThanOrEqual(0);
+    expect(at(1)).toBeGreaterThan(at(0));
+    const other = otherFieldKeys("IDA");
+    const lastKey = other.item.length > 0 ? other.item[other.item.length - 1]! : other.decl[other.decl.length - 1]!;
+    expect(order[order.length - 1]!.key).toBe(lastKey);
   });
 });

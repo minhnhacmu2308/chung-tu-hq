@@ -1,7 +1,7 @@
-import type { PostAmendment, PostAmendmentLine } from "@kb/contracts";
+import type { LayoutBlock, PostAmendment, PostAmendmentLine } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import {
-  amaChangeSummary, amaDeadline, amaPrimaryAction, applyEdits, approveBlockers, changedKeys, defaultSubStep, otherSlotsInUse, postStepVisible, resolveSubStep,
+  amaChangeSummary, amaDeadline, amaPrimaryAction, applyEdits, approveBlockers, changedKeys, defaultSubStep, maxSubStep, missingOther, otherSlotsInUse, postStepVisible, reasonLayout, resolveSubStep,
   subStepEditable,
 } from "./ama-wizard";
 
@@ -121,5 +121,36 @@ describe("applyEdits", () => {
     const d = applyEdits(saved, { HAG_AKA: "5000000", HAG_AKR: "3" });
     expect(d.manual).toContain("HAG_AKA");
     expect(d.values["HAG_AKA"]).toBe("5000000");
+  });
+});
+
+describe("reasonLayout", () => {
+  const keysOf = (blocks: LayoutBlock[]) =>
+    blocks.flatMap((b) => b.items.flatMap((i) => (i.kind === "field" ? [i.key] : i.fields.map((f) => f.key))));
+  const { main, other } = reasonLayout();
+  it("hiện sẵn chỉ mã lý do và ghi chú sau", () => expect(keysOf([main])).toEqual(["TK_REC", "TK_NTA"]));
+  it("thông tin khác: ô sửa được còn lại, kể cả ô bắt buộc đã điền sẵn", () => expect(keysOf(other)).toEqual(expect.arrayContaining(["TK_CHB", "TK_TTC", "TK_BRC", "TK_CDA", "TK_RTA"])));
+  it("không có ô khóa theo tờ khai gốc, không lặp ô hiện sẵn", () => {
+    const k = keysOf(other);
+    for (const x of ["TK_ICN", "TK_IPD", "TK_NTB", "TK_CDB", "TK_RTB", "TK_SYN", "TK_REC", "TK_NTA"]) expect(k).not.toContain(x);
+  });
+  it("bỏ nhóm/khối rỗng sau khi lọc", () => expect(other.every((b) => b.items.length > 0 && b.items.every((i) => i.kind === "field" || i.fields.length > 0))).toBe(true));
+});
+
+describe("missingOther", () => {
+  it("liệt kê ô bắt buộc còn trống trong thông tin khác", () => expect(missingOther({ TK_TTC: "VND", TK_CHB: "" }).map((f) => f.key)).toContain("TK_CHB"));
+  it("đủ thì rỗng", () => expect(missingOther({ TK_TTC: "VND", TK_CHB: "00" })).toEqual([]));
+});
+
+describe("maxSubStep – bước xa nhất được tới", () => {
+  it("Nháp chưa có dòng → chỉ chọn dòng", () => expect(maxSubStep(pa())).toBe("pick"));
+  it("Nháp / gọi về có dòng → tới lý do & phê duyệt", () => {
+    expect(maxSubStep(pa({ lines: oneLine }))).toBe("reason");
+    expect(maxSubStep(pa({ status: "RECALLED", lines: oneLine }))).toBe("reason");
+  });
+  it("đã duyệt trở đi → tới khai Hải quan", () => expect(maxSubStep(pa({ status: "APPROVED", lines: oneLine }))).toBe("declare"));
+  it("resolveSubStep: Nháp có dòng mở được bước lý do, chưa tới khai Hải quan", () => {
+    expect(resolveSubStep(pa({ lines: oneLine }), "reason")).toBe("reason");
+    expect(resolveSubStep(pa({ lines: oneLine }), "declare")).toBe("edit");
   });
 });

@@ -35,7 +35,9 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
   const { a, editable } = ctx;
   const [edits, setEdits] = useState<Edits>({});
   const dirty = Object.values(edits).reduce((n, e) => n + Object.keys(e).length, 0);
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  useEffect(() => {
+    onDirtyChange(dirty);
+  }, [dirty, onDirtyChange]);
 
   const drafts = a.lines.map((l) => applyEdits(l, edits[l.id] ?? {}));
   const summary = amaChangeSummary({ ...a, lines: drafts });

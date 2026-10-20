@@ -17,10 +17,11 @@ import { formatDate, formatNumber } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { StepError, StepLoading } from "../dossier-detail/steps/declaration-parts";
 import type { StepProps } from "../dossier-detail/steps/types";
-import { AMA_SUB_STEPS, amaDeadline, defaultSubStep, resolveSubStep, subStepEditable, type AmaSubStep } from "./ama-wizard";
+import { AMA_SUB_STEPS, amaDeadline, maxSubStep, resolveSubStep, subStepEditable, type AmaSubStep } from "./ama-wizard";
 import { AMA_STATUS, type AmaStepCtx } from "./ama-context";
 import { EditLines } from "./line-compare";
 import { PickLines } from "./pick-lines";
+import { ReasonApprove } from "./reason-approve";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -108,7 +109,7 @@ export function PostAmendmentStep({ dossier }: StepProps) {
           <Stepper
             label="Các bước sửa sau thông quan"
             steps={AMA_SUB_STEPS}
-            currentId={defaultSubStep(a)}
+            currentId={maxSubStep(a)}
             viewingId={sub}
             onStepClick={(s) => (sub === "edit" && dirty > 0 ? setLeaveTo(s as AmaSubStep) : goSub(s as AmaSubStep))}
           />
@@ -118,6 +119,8 @@ export function PostAmendmentStep({ dossier }: StepProps) {
         <PickLines ctx={ctx} />
       ) : sub === "edit" ? (
         <EditLines ctx={ctx} onDirtyChange={setDirty} />
+      ) : sub === "reason" ? (
+        <ReasonApprove ctx={ctx} />
       ) : (
         <Card>
           <CardContent className="pt-5">

@@ -34,11 +34,12 @@ export function Disclosure({ title, meta, actions, defaultOpen = false, open, on
           aria-expanded={isOpen}
           aria-controls={id}
           onClick={toggle}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm font-medium text-fg hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          // Màn hẹp: meta xuống dòng dưới tiêu đề thay vì ép tiêu đề thành cột chữ hẹp.
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 rounded-md px-3 py-2.5 text-left text-sm font-medium text-fg hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <ChevronDown aria-hidden="true" className={cn("h-4 w-4 shrink-0 text-fg-subtle", isOpen ? "rotate-0" : "-rotate-90")} />
-          <span className="min-w-0 flex-1">{title}</span>
-          {meta && <span className="flex shrink-0 flex-wrap items-center gap-1 text-xs font-normal text-fg-muted">{meta}</span>}
+          <span className="min-w-0 flex-1 basis-40">{title}</span>
+          {meta && <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs font-normal text-fg-muted">{meta}</span>}
         </button>
         {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
       </div>

@@ -1,8 +1,9 @@
 // Logic thuần của bước 7 "Sửa sau thông quan": bước nhỏ hiện tại, ô đã đổi, hạn 60 ngày (TT121 Điều 20), lý do chưa duyệt được, nút chính.
 // Tách khỏi màn hình để test bằng vitest (apps/web chỉ chạy test .ts trong môi trường node).
 import {
-  addDec, AMA_IMPORT_TAX_COLUMNS, AMA_OTHER_TAX_SLOTS, amaLineDelta, applyAmaLineEdit, amaOtherTaxColumns, DEC_ZERO, formatDec, parseDec,
-  type AmaTaxColumn, type CustomsOperation, type CustomsStage, type PostAmendment, type PostAmendmentLine, type PostAmendmentValues,
+  addDec, AMA_HEADER_LAYOUT, AMA_IMPORT_TAX_COLUMNS, AMA_OTHER_TAX_SLOTS, amaHeaderLocked, amaLineDelta, applyAmaLineEdit, amaOtherTaxColumns, DEC_ZERO, formatDec, parseDec,
+  type AmaTaxColumn, type CustomsOperation, type CustomsStage, type LayoutBlock, type LayoutField, type LayoutItem, type PostAmendment, type PostAmendmentLine,
+  type PostAmendmentValues,
 } from "@kb/contracts";
 
 export type AmaSubStep = "pick" | "edit" | "reason" | "declare";
@@ -25,11 +26,16 @@ export function defaultSubStep(a: PostAmendment): AmaSubStep {
   }
 }
 
-/** `?sub=` hợp lệ và không vượt bước mặc định thì xem; ngược lại về bước mặc định. */
+/** Bước xa nhất mở được: Nháp/Gọi về có dòng tới ③ (chưa duyệt thì chưa khai); đã duyệt trở đi tới ④. */
+export function maxSubStep(a: PostAmendment): AmaSubStep {
+  if (a.status === "DRAFT" || a.status === "RECALLED") return a.lines.length ? "reason" : "pick";
+  return "declare";
+}
+
+/** `?sub=` hợp lệ và không vượt bước xa nhất thì xem; ngược lại về bước mặc định. */
 export function resolveSubStep(a: PostAmendment, requested: string | null): AmaSubStep {
-  const def = defaultSubStep(a);
   const i = ORDER.indexOf(requested as AmaSubStep);
-  return i >= 0 && i <= ORDER.indexOf(def) ? ORDER[i]! : def;
+  return i >= 0 && i <= ORDER.indexOf(maxSubStep(a)) ? ORDER[i]! : defaultSubStep(a);
 }
 
 export const subStepEditable = (a: PostAmendment, s: AmaSubStep, canEdit: boolean) =>
@@ -134,3 +140,30 @@ export function amaPrimaryAction(a: PostAmendment, o: { stage: CustomsStage; sen
 
 /** Nghiệp vụ của bản khai bổ sung – làm ở bước 7, bước 6 không hiện. */
 export const AMA_OPS: ReadonlySet<CustomsOperation> = new Set<CustomsOperation>(["AMA", "AMB", "AMC"]);
+
+// ---------------------------------------------------------------- bước ③: ô hiện sẵn / thông tin khác
+
+const MAIN_KEYS = ["TK_REC", "TK_NTA"];
+const keep = (f: LayoutField) => !amaHeaderLocked(f.key) && !MAIN_KEYS.includes(f.key) && f.origin !== "CUSTOMS";
+
+/** Bước ③: hiện sẵn Mã lý do + Ghi chú sau; các ô sửa được còn lại của đầu bản khai vào "Thông tin khác" (bỏ ô khóa theo tờ khai gốc). */
+export function reasonLayout(): { main: LayoutBlock; other: LayoutBlock[] } {
+  const fields = AMA_HEADER_LAYOUT.flatMap((b) => b.items).filter((i): i is LayoutField => i.kind === "field");
+  const main: LayoutBlock = { id: "ama-ly-do-chinh", title: "Lý do khai bổ sung", items: MAIN_KEYS.map((k) => fields.find((f) => f.key === k)!) };
+  const other = AMA_HEADER_LAYOUT.map((b) => ({
+    ...b,
+    items: b.items.flatMap((i): LayoutItem[] => {
+      if (i.kind === "field") return keep(i) ? [i] : [];
+      const kept = i.fields.filter(keep);
+      return kept.length ? [{ ...i, fields: kept }] : [];
+    }),
+  })).filter((b) => b.items.length > 0);
+  return { main, other };
+}
+
+/** Ô bắt buộc của "Thông tin khác" còn trống – có thì khối tự mở và báo. */
+export function missingOther(header: PostAmendmentValues): LayoutField[] {
+  return reasonLayout()
+    .other.flatMap((b) => b.items.flatMap((i) => (i.kind === "field" ? [i] : i.fields)))
+    .filter((f) => f.required && !header[f.key]?.trim());
+}

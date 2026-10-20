@@ -41,7 +41,9 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
   const viewingIndex = Math.max(0, steps.findIndex((s) => s.id === viewing));
   // Nhiều bước hơn bề ngang: cuộn bước đang xem vào tầm nhìn (không thì bước cuối – vd "Sửa sau thông quan" – bị khuất).
   const viewingRef = useRef<HTMLLIElement>(null);
-  useEffect(() => viewingRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" }), [viewing]);
+  useEffect(() => {
+    viewingRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [viewing]);
   return (
     <div className={cn("flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2", className)}>
       {/* Màn nhỏ: gọn thành 1 dòng "Bước 3/6 · OCR & kiểm tra" (ẩn với trình đọc màn hình vì danh sách đầy đủ vẫn đọc được) */}

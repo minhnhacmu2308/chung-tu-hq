@@ -202,14 +202,16 @@ describe("Stepper", () => {
 
 describe("Stepper – cuộn tới bước đang xem", () => {
   it("bước đang xem nằm ngoài vùng cuộn thì được cuộn vào tầm nhìn (theo chiều ngang)", () => {
-    const spy = vi.fn();
+    // Chrome mới: scrollIntoView trả Promise – effect không được trả nó về (React coi là hàm dọn dẹp → "is not a function" khi gỡ).
+    const spy = vi.fn(() => Promise.resolve());
     const orig = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = spy;
     try {
       const steps = Array.from({ length: 7 }, (_, i) => ({ id: `s${i}`, label: `Bước số ${i + 1}` }));
-      render(<Stepper steps={steps} currentId="s6" viewingId="s6" label="Các bước" />);
+      const { unmount } = render(<Stepper steps={steps} currentId="s6" viewingId="s6" label="Các bước" />);
       expect(spy).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
       expect(spy.mock.contexts.at(-1)).toHaveTextContent("Bước số 7");
+      expect(() => unmount()).not.toThrow();
     } finally {
       Element.prototype.scrollIntoView = orig;
     }

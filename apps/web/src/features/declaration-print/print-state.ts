@@ -6,6 +6,7 @@ import {
 import type { PaperFieldState } from "@kb/ui";
 import { conditionContext, groupMissing, isApplicable, missingRequired, type FormValues } from "../declaration-form/form-state";
 import type { FieldError } from "../dossier-detail/steps/customs-errors";
+import { codeLabel, displayValue } from "../declaration-form/display";
 
 type Kind = "IDA" | "EDA";
 
@@ -209,4 +210,32 @@ export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[]
     if (missing) out.push(cell(s, "MISSING"));
   }
   return out;
+}
+
+/**
+ * Chữ in trong ô bản in: rỗng → "" (ô ngày rỗng in "/ /" như mẫu); ô mã có danh mục → "mã  tên"; còn lại theo `displayValue`.
+ * Hai khoảng trắng giữa mã và tên: một khoảng không ngắt dòng + một khoảng thường (HTML gộp khoảng trắng liền nhau).
+ */
+export function printValue(field: Pick<LayoutField, "key" | "input" | "options" | "codeTable"> | undefined, raw: string | undefined): string {
+  const v = (raw ?? "").trim();
+  if (!v) return field?.input === "date" ? "/ /" : "";
+  if (!field) return v;
+  const name = codeLabel(field.codeTable, v);
+  return name ? `${v}\u00a0 ${name}` : displayValue(field, v);
+}
+
+/** Ô "Chỉ tiêu khác" (không có trên mẫu in) đang áp dụng – khối, chỉ tiêu cha và chính ô đều thỏa điều kiện. */
+export function otherFieldCells(kind: Kind, decl: FormValues, items: FormValues[]): { decl: string[]; items: string[][] } {
+  const loc = fieldLocator(kind);
+  const keys = otherFieldKeys(kind);
+  const applicable = (key: string, ctx: ConditionContext) => {
+    const spot = loc.get(key);
+    if (!spot) return false;
+    return isApplicable({ condition: spot.blockCondition }, ctx) && isApplicable({ condition: spot.parentCondition }, ctx) && isApplicable(spot.field, ctx);
+  };
+  const declCtx = conditionContext(kind, decl);
+  return {
+    decl: keys.decl.filter((k) => applicable(k, declCtx)),
+    items: items.map((v) => { const ctx = conditionContext(kind, v); return keys.item.filter((k) => applicable(k, ctx)); }),
+  };
 }

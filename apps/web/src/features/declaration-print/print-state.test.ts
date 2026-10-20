@@ -1,6 +1,6 @@
 import { otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, pageCount, sameNumber } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, otherFieldCells, pageCount, printValue, sameNumber } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -145,5 +145,34 @@ describe("attentionCells", () => {
     const loc = fieldLocator("IDA");
     const cells = attentionCells("IDA", {}, [{}], [], [1]);
     expect(cells.every((c) => loc.get(c.key)!.field.origin !== "CUSTOMS")).toBe(true);
+  });
+});
+
+describe("printValue", () => {
+  const field = (key: string) => fieldLocator("IDA").get(key)!.field;
+  it("rỗng → chuỗi rỗng, ô ngày rỗng → / /", () => {
+    expect(printValue(field("TK_IMN"), undefined)).toBe("");
+    expect(printValue(field("TK_IMN"), "  ")).toBe("");
+    expect(printValue(field("TK_A09"), "")).toBe("/ /");
+    expect(printValue(undefined, undefined)).toBe("");
+  });
+  it("ô mã có danh mục → mã + tên", () => {
+    const v = printValue(field("TK_MTC"), "2");
+    expect(v.startsWith("2\u00a0 ")).toBe(true);
+    expect(v.length).toBeGreaterThan(3);
+  });
+  it("mã không có trong danh mục / ô thường → giữ giá trị", () => {
+    expect(printValue(field("TK_CH"), "ZZZZ")).toBe("ZZZZ");
+    expect(printValue(field("TK_IMN"), "CONG TY A")).toBe("CONG TY A");
+  });
+});
+
+describe("otherFieldCells", () => {
+  it("chỉ ô đang áp dụng, mỗi dòng hàng một danh sách", () => {
+    const out = otherFieldCells("IDA", {}, [{}, {}]);
+    expect(out.items).toHaveLength(2);
+    const loc = fieldLocator("IDA");
+    for (const k of out.decl) expect(loc.get(k)?.scope).toBe("decl");
+    for (const k of out.items[0]!) expect(loc.get(k)?.scope).toBe("item");
   });
 });

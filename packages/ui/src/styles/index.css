@@ -43,6 +43,9 @@
   --color-border: var(--kb-color-border);
   --color-border-strong: var(--kb-color-border-strong);
   --color-fg: var(--kb-color-fg);
+  --color-paper: var(--kb-color-paper);
+  --color-paper-fg: var(--kb-color-paper-fg);
+  --color-paper-rule: var(--kb-color-paper-rule);
   --color-fg-muted: var(--kb-color-fg-muted);
   --color-fg-subtle: var(--kb-color-fg-subtle);
   --color-overlay: var(--kb-color-overlay);
@@ -307,4 +310,15 @@
   background-color: var(--kb-color-bg);
   background-image: radial-gradient(var(--kb-color-border-strong) 1px, transparent 1px);
   background-size: 16px 16px;
+}
+
+/* In tờ khai: chỉ [data-print-root] hiện ra; dấu hiệu trạng thái (data-paper-mark) bị ẩn, mỗi trang giấy một trang in. */
+@media print {
+  /* Giấy luôn đen trên trắng khi in, bất kể giao diện sáng/tối */
+  :root { --kb-color-paper: white; --kb-color-paper-fg: black; --kb-color-paper-rule: black; }
+  body * { visibility: hidden; }
+  [data-print-root], [data-print-root] * { visibility: visible; }
+  [data-print-root] { position: absolute; inset: 0; }
+  [data-paper-mark] { display: none; }
+  [data-paper-sheet] { break-after: page; box-shadow: none; border: 0; }
 }

@@ -68,4 +68,9 @@ describe.each(MATRIX)("tương phản – dải xám $gray, chế độ $mode", 
   it("màu thương hiệu mặc định đọc được trên surface", () => {
     expect(c("--kb-color-primary", "--kb-color-surface")).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
   });
+
+  it("giấy: chữ và đường kẻ đọc được trên nền giấy", () => {
+    expect(c("--kb-color-paper-fg", "--kb-color-paper")).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+    expect(c("--kb-color-paper-rule", "--kb-color-paper")).toBeGreaterThanOrEqual(1.5);
+  });
 });

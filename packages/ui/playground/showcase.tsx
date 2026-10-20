@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Abbreviation, Avatar, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-  Field, FileDropzone, FileUploadList, Grid, Input, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
+  Field, FileDropzone, FileUploadList, Grid, Input, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
 } from "../src/index.js";
 
@@ -210,6 +210,23 @@ export function Showcase() {
               </Stack>
             </Stack>
           </Grid>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Trang giấy</CardTitle></CardHeader>
+        <CardContent>
+          <PaperStack>
+            <PaperSheet page={1} total={2} watermark="BẢN NHÁP" header={<div className="text-sm font-semibold">TỜ KHAI HẢI QUAN NHẬP KHẨU</div>}>
+              <PaperField span={6} label="1. Số tờ khai" value="107000000001" ariaLabel="Số tờ khai" onSelect={() => {}} />
+              <PaperField span={6} label="2. Mã loại hình" value="A11" ariaLabel="Mã loại hình" selected onSelect={() => {}} />
+              <PaperField span={6} label="3. Tên người xuất khẩu" value="KOREA BEARING SOLUTION" ariaLabel="Tên người xuất khẩu" state="error" />
+              <PaperField span={6} label="4. Mã bưu chính" value="" ariaLabel="Mã bưu chính" state="missing" />
+              <PaperField span={4} label="5. Tổng trị giá hóa đơn" value="886.187.500" ariaLabel="Tổng trị giá hóa đơn" state="estimate" />
+              <PaperField span={4} label="6. Trọng lượng (kg)" value="1.250" ariaLabel="Trọng lượng" state="edited" compareTo="1.200" />
+              <PaperField span={4} label="7. Số kiện" value="12" ariaLabel="Số kiện" />
+            </PaperSheet>
+          </PaperStack>
         </CardContent>
       </Card>
     </Stack>

@@ -48,6 +48,10 @@
   --kb-color-border: light-dark(var(--kb-gray-200), var(--kb-gray-700));
   --kb-color-border-strong: light-dark(var(--kb-gray-300), var(--kb-gray-600));
   --kb-color-fg: light-dark(var(--kb-gray-900), var(--kb-gray-50));
+  /* Giấy tờ khai (màn hình): sáng = trắng, tối = theo nền tối; khi in luôn đen trên trắng (xem index.css) */
+  --kb-color-paper: light-dark(#FFFFFF, var(--kb-gray-900));
+  --kb-color-paper-fg: light-dark(var(--kb-gray-900), var(--kb-gray-50));
+  --kb-color-paper-rule: light-dark(var(--kb-gray-400), var(--kb-gray-500));
   --kb-color-fg-muted: light-dark(var(--kb-gray-600), var(--kb-gray-300));
   --kb-color-fg-subtle: light-dark(var(--kb-gray-600), var(--kb-gray-400));
   --kb-color-overlay: light-dark(rgb(15 23 42 / 0.32), rgb(0 0 0 / 0.55));

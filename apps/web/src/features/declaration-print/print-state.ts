@@ -17,11 +17,11 @@ export type PrintTarget = { key: string; line?: number };
 
 /**
  * Vị trí một ô trên bố cục Phụ lục II. group = các ô cùng LayoutGroup / cùng dòng LayoutRepeat (hoặc [field]).
- * repeatRow: số dòng (1-based) khi ô thuộc nhóm lặp; fillAny: ô thuộc nhóm "chỉ cần một ô".
+ * repeatRow / repeatCount: số dòng (1-based) và số dòng của nhóm khi ô thuộc nhóm lặp; fillAny: ô thuộc nhóm "chỉ cần một ô".
  */
 export type FieldSpot = {
   field: LayoutField; group: LayoutField[]; parentNo?: string; parentCondition?: ConditionId; blockCondition?: ConditionId; scope: "decl" | "item";
-  repeatRow?: number; fillAny?: boolean;
+  repeatRow?: number; repeatCount?: number; fillAny?: boolean;
 };
 
 function locate(blocks: LayoutBlock[], scope: "decl" | "item", out: Map<string, FieldSpot>) {
@@ -35,7 +35,7 @@ function locate(blocks: LayoutBlock[], scope: "decl" | "item", out: Map<string, 
         for (const f of it.fields) put({ ...parent, field: f, group: it.fields, ...(it.fill === "any" ? { fillAny: true } : {}) });
         continue;
       }
-      expandRepeat(it).forEach((row, i) => { for (const f of row) put({ ...parent, field: f, group: row, repeatRow: i + 1 }); });
+      expandRepeat(it).forEach((row, i) => { for (const f of row) put({ ...parent, field: f, group: row, repeatRow: i + 1, repeatCount: it.count }); });
     }
   }
 }
@@ -296,6 +296,16 @@ export function printCode(field: Pick<LayoutField, "key" | "input" | "options" |
   if (!v || !field) return null;
   if (codeLabel(field.codeTable, v) || field.options?.some((o) => o.value === v)) return v;
   return displayValue(field, v).startsWith(`${v} · `) ? v : null;
+}
+
+/**
+ * Giá trị không được bẻ giữa cụm (PaperField keepTogether – chỉ xuống dòng sau "/", ":", "-", "."): ngày, giờ, mã / số định danh
+ * (chữ + số liền nhau, không giới hạn độ dài: số tờ khai 12 số, số vận đơn). Số tiền (dấu chấm/phẩy nghìn) và chữ có khoảng trắng: không.
+ */
+export function keepTogetherValue(value: string, input?: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  return input === "date" || /^\d{1,2}:\d{2}(:\d{2})?$/.test(v) || /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v) || /^[A-Za-z0-9]+$/.test(v);
 }
 
 /** Ô "Chỉ tiêu khác" (không có trên mẫu in) đang áp dụng – khối, chỉ tiêu cha và chính ô đều thỏa điều kiện. */

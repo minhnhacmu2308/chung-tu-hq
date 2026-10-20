@@ -32,6 +32,8 @@ export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Pr
   const layout = printLayoutFor(kind);
   const total = pageCount(kind, lines);
 
+  // Nhãn trống của dòng lặp = khoảng trắng không ngắt: mọi ô cùng chiều cao với ô đầu (nhãn "1") trên màn hình.
+  const NBSP = String.fromCharCode(160);
   const headerOnce = (row: PrintRepeatRow) => row.count > 1 && row.cells.reduce((n, c) => n + (c.span ?? 12), 0) <= 12;
 
   const printCell = (cell: Cell, line: number | undefined, interactive: boolean, label = cell.label) => {
@@ -66,7 +68,7 @@ export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Pr
         {!Array.isArray(row) && headerOnce(row) ? (
           <>
             {row.cells.map((c, i) => <PaperLabel key={`h${i}`} span={c.span ?? 12} {...(c.align ? { align: c.align } : {})}>{c.label}</PaperLabel>)}
-            {expandPrintRow(row).map((cells, i) => cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? String(i + 1) : "")))}
+            {expandPrintRow(row).map((cells, i) => cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? String(i + 1) : NBSP)))}
           </>
         ) : !Array.isArray(row) && row.count > 1 ? (
           // Lần lặp nhiều hàng lưới: nhãn từng ô như mẫu, số thứ tự trước nhãn ô đầu ("1 Tên").
@@ -100,7 +102,7 @@ export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Pr
   const header = (page: number) => (
     <div className="flex flex-col gap-1" aria-hidden={page > 1 ? true : undefined}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm font-bold uppercase">{title.title}</p>
+        <p data-paper-title className="text-sm font-bold uppercase">{title.title}</p>
         <p className="font-mono text-xs">{page} / {total}</p>
       </div>
       <Grid cols={12} gap="none">{rows(layout.header, undefined, page === 1)}</Grid>

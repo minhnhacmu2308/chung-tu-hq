@@ -6,7 +6,7 @@ import { PaperField, Tooltip, type PaperFieldState } from "@kb/ui";
 import type { PrintCell as Cell } from "@kb/contracts";
 import { memo } from "react";
 import { fieldTitle } from "../declaration-form/display";
-import { fieldLocator, NOT_ISSUED, printCode, printValue } from "./print-state";
+import { fieldLocator, keepTogetherValue, NOT_ISSUED, printCode, printValue } from "./print-state";
 
 /** Giá trị `data-print-cell` của ô bấm được (chỉ số dòng hàng 0-based + khóa) – để cuộn tới ô ("Chỉ ô cần xử lý"). */
 export const cellDomId = (key: string, line?: number) => `${line ?? ""}:${key}`;
@@ -36,23 +36,25 @@ type Props = {
 export const PrintCell = memo(function PrintCell({ kind, cellKey, label, span = 12, align, line, raw, state, compareTo, selected, onSelect, className }: Props) {
   const spot = fieldLocator(kind).get(cellKey);
   const no = spot ? spot.field.no ?? spot.parentNo : undefined;
-  // Ô của nhóm lặp: tên kèm số dòng ("Số vận đơn 2") – bản in chỉ in nhãn cột một lần, mỗi dòng in số thứ tự.
-  const name = `${spot?.field.label ?? label}${spot?.repeatRow ? ` ${spot.repeatRow}` : ""}`;
+  // Ô của nhóm lặp nhiều dòng: tên kèm số dòng ("Số vận đơn 2") – bản in chỉ in nhãn cột một lần, mỗi dòng in số thứ tự.
+  const name = `${spot?.field.label ?? label}${spot?.repeatRow && (spot.repeatCount ?? 0) > 1 ? ` ${spot.repeatRow}` : ""}`;
   const value = printValue(spot?.field, raw);
-  // Ô mã (bảng mã, lựa chọn, "mã · nghĩa"): trang giấy đủ rộng hiện "mã  tên"; trang hẹp và bản in chỉ mã như mẫu VNACCS. Tên vẫn có ở panel.
+  // Ô mã (bảng mã, lựa chọn, "mã · nghĩa"): trang giấy đủ rộng hiện "mã  tên"; trang hẹp và bản in chỉ mã như mẫu VNACCS.
+  // Ô hẹp (≤ 2 cột) chỉ mã ở mọi bề rộng. Tên vẫn có ở tooltip và panel.
   const code = printCode(spot?.field, raw);
-  // Giữ một dòng: ngày, giờ, mã ngắn (không bẻ "00:09:58" giữa chừng). Số tiền thì không – xuống dòng còn hơn bị cắt.
-  // Ô mã có tên: bản ngắn đã ngắn, bản đủ "mã  tên" được xuống dòng.
-  const keep = !code && (spot?.field.input === "date" || /^\d{1,2}:\d{2}(:\d{2})?$/.test(value) || /^[A-Z0-9]{1,8}$/.test(value));
+  const narrowCode = code !== null && span <= 2;
+  const shown = narrowCode ? code : value;
+  // Không bẻ giữa cụm: ngày, giờ, mã, số định danh (chỉ xuống dòng sau dấu phân cách – PaperField keepTogether).
+  const keep = code !== null || keepTogetherValue(shown, spot?.field.input);
   // PaperField đọc tên này trước giá trị và dấu trạng thái → "1.6 Mã phương thức vận chuyển: 2 …"; rỗng → "…: trống".
   const blank = !raw.trim() && value !== NOT_ISSUED;
   const ariaLabel = `${no ? `${no} ` : ""}${name}:${blank ? " trống" : ""}`;
   return (
-    <Tooltip content={fieldTitle(no, name)}>
+    <Tooltip content={narrowCode ? `${fieldTitle(no, name)}: ${value}` : fieldTitle(no, name)}>
       <PaperField
         label={label}
-        value={value}
-        {...(code && code !== value ? { compact: code } : {})}
+        value={shown}
+        {...(!narrowCode && code !== null && code !== value ? { compact: code } : {})}
         keepTogether={keep}
         state={state}
         compareTo={compareTo}

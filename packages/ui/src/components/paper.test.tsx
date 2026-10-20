@@ -183,12 +183,30 @@ describe("PaperField", () => {
     expect(container.querySelector("[data-paper-compact], [data-paper-full]")).toBeNull();
   });
 
-  it("keepTogether: giá trị một dòng, không bẻ giữa chữ", () => {
-    const { rerender } = render(<PaperField label="Giờ" value="00:09:58" ariaLabel="ô" keepTogether />);
-    expect(screen.getByText("00:09:58")).toHaveClass("whitespace-nowrap", "text-ellipsis");
-    expect(screen.getByText("00:09:58")).not.toHaveClass("break-words");
-    rerender(<PaperField label="Giờ" value="00:09:58" ariaLabel="ô" />);
-    expect(screen.getByText("00:09:58")).toHaveClass("break-words");
+  it("keepTogether: chỉ xuống dòng sau dấu phân cách (<wbr>), không bẻ giữa cụm, không cắt bớt", () => {
+    const { container, rerender } = render(<PaperField label="Ngày" value="18/10/2026" ariaLabel="ô" keepTogether />);
+    const date = screen.getByText("18/10/2026");
+    expect(date).toHaveTextContent("18/10/2026");
+    expect(date.querySelectorAll("wbr")).toHaveLength(2);
+    expect(date).toHaveClass("break-normal");
+    expect(date).not.toHaveClass("break-words", "whitespace-nowrap", "text-ellipsis", "overflow-hidden");
+
+    rerender(<PaperField label="Giờ" value="00:02:17" ariaLabel="ô" keepTogether />);
+    expect(screen.getByText("00:02:17").querySelectorAll("wbr")).toHaveLength(2);
+
+    // Số tờ khai 12 số: không có điểm ngắt nào bên trong – cả cụm xuống dòng (nếu cần), không bị tách.
+    rerender(<PaperField label="Số tờ khai" value="107621548840" ariaLabel="ô" keepTogether />);
+    const id = screen.getByText("107621548840");
+    expect(id.querySelectorAll("wbr")).toHaveLength(0);
+    expect(id).toHaveClass("break-normal");
+
+    // Có bản ngắn: cả hai bản đều được chèn điểm ngắt.
+    rerender(<PaperField label="Mã" value="A-1 · Tên" compact="A-1" ariaLabel="ô" keepTogether />);
+    expect(container.querySelector("[data-paper-compact]")!.querySelectorAll("wbr")).toHaveLength(1);
+
+    rerender(<PaperField label="Ngày" value="18/10/2026" ariaLabel="ô" />);
+    expect(screen.getByText("18/10/2026")).toHaveClass("break-words");
+    expect(screen.getByText("18/10/2026").querySelectorAll("wbr")).toHaveLength(0);
   });
 
   it("PaperLabel: nhãn cột nhóm lặp, aria-hidden, theo lưới", () => {

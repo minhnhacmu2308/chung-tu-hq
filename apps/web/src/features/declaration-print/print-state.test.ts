@@ -1,6 +1,6 @@
 import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, printAttention, printCode, printValue, sameNumber, type PrintData } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printValue, sameNumber, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -279,5 +279,15 @@ describe("printCode", () => {
     expect(printCode({ key: "X", input: "date" }, "2026-10-19")).toBeNull();
     expect(printCode(loc.get("TK_A06")!.field, "")).toBeNull();
     expect(printCode(undefined, "2")).toBeNull();
+  });
+});
+
+describe("keepTogetherValue (Fix round 2)", () => {
+  it("ngày, giờ, mã và số định danh không giới hạn độ dài → không bẻ giữa cụm", () => {
+    for (const v of ["18/10/2026", "00:02:17", "08:30", "107621548840", "COSU6402215870", "E21", "VNHPH"]) expect(keepTogetherValue(v), v).toBe(true);
+    expect(keepTogetherValue("2026-10-18", "date")).toBe(true);
+  });
+  it("số tiền, chữ có khoảng trắng, rỗng → không", () => {
+    for (const v of ["1.244.609.250", "46.215,00", "CÔNG TY A", "", "  "]) expect(keepTogetherValue(v), v).toBe(false);
   });
 });

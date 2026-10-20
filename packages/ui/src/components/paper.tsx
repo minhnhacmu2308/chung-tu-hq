@@ -2,7 +2,7 @@
 // Trên màn hình giấy theo giao diện (sáng: trắng, tối: theo nền tối); khi in luôn chữ đen nền trắng và ẩn mọi dấu hiệu trạng thái
 // (phần tử có `data-paper-mark`). Quy tắc @media print nằm ở styles/index.css.
 import { TriangleAlert } from "lucide-react";
-import type { HTMLAttributes, ReactNode, Ref } from "react";
+import { Fragment, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
@@ -46,7 +46,7 @@ export function PaperSheet({ page, total, header, watermark, id, children, label
       role="region"
       aria-label={name}
       data-paper-sheet
-      className="@container/paper relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-3 text-paper-fg shadow-md sm:p-[10mm] print:min-h-0 print:max-w-none print:border-0 print:p-0 print:pt-1 print:shadow-none"
+      className="@container/paper relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-3 text-paper-fg shadow-md sm:p-[10mm] print:min-h-0 print:max-w-none print:border-0 print:p-0 print:shadow-none"
     >
       {header && <div className="mb-3 border-b border-paper-rule pb-2 print:mb-1 print:pb-1">{header}</div>}
       <div className="relative grid grid-cols-12 gap-px">{children}</div>
@@ -83,6 +83,18 @@ export function PaperLabel({ children, span = 12, align }: { children?: ReactNod
   );
 }
 
+/** Chữ có điểm ngắt dòng chỉ sau dấu phân cách ("/", ":", "-", ".", khoảng trắng): "18/10/" + "2026", không bao giờ giữa một cụm số. */
+function breakAtSeparators(node: ReactNode): ReactNode {
+  if (typeof node !== "string") return node;
+  const parts = node.split(/(?<=[/:. -])/);
+  return parts.map((p, i) => (
+    <Fragment key={i}>
+      {p}
+      {i < parts.length - 1 && <wbr />}
+    </Fragment>
+  ));
+}
+
 export type PaperFieldProps = {
   /** Chỉ nội dung dòng chữ (phrasing content), không chứa phần tử tương tác (không Abbreviation/button/link) – ô có thể là <button>. */
   label: ReactNode;
@@ -91,7 +103,10 @@ export type PaperFieldProps = {
   state?: PaperFieldState;
   /** Bản ngắn của giá trị (vd chỉ mã, không kèm tên): hiện thay `value` trên trang giấy hẹp và khi in. */
   compact?: ReactNode;
-  /** Giữ giá trị trên một dòng (giờ, ngày, mã ngắn): không bẻ giữa chữ; chữ nhỏ lại, quá ô thì cắt bằng dấu ba chấm. */
+  /**
+   * Không bẻ giữa một cụm (giờ, ngày, số tờ khai, mã): chỉ xuống dòng sau dấu phân cách ("18/10/" + "2026"); cụm không có dấu phân cách
+   * thì xuống dòng nguyên cụm, chữ nhỏ lại một chút. Không cắt bớt giá trị.
+   */
   keepTogether?: boolean;
   /** Giá trị cũ để so sánh – hiện gạch ngang cạnh giá trị chính (chỉ trên màn hình). */
   compareTo?: string | null;
@@ -113,7 +128,8 @@ export function PaperField({ label, value, compact, keepTogether = false, state 
     // In: nhãn và giá trị cùng một dòng, chữ nhỏ – mỗi trang giấy vừa một trang A4 như mẫu VNACCS.
     "relative block min-w-0 border border-paper-rule bg-paper px-1.5 py-1 text-left text-paper-fg print:flex print:flex-wrap print:items-baseline print:gap-x-1.5 print:px-1 print:py-0",
     SPAN[span],
-    keepTogether && "px-1",
+    // Cụm không bẻ (giờ, mã) trong ô 1 cột của trang hẹp: lề ngang và chữ nhỏ lại để "01:" / "USD" vừa ô; trang rộng chữ như ô khác.
+    keepTogether && "px-0.5 paper-wide:px-1",
     state === "error" && "border-danger bg-danger-subtle text-danger-subtle-fg print:border-paper-rule print:bg-paper print:text-paper-fg",
     state === "missing" && "border-dashed border-warning print:border-solid print:border-paper-rule",
     onSelect && "cursor-pointer hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
@@ -127,14 +143,14 @@ export function PaperField({ label, value, compact, keepTogether = false, state 
       {" "}
       <span aria-hidden="true" className="block text-[10px] leading-tight opacity-80 print:text-[7pt] print:opacity-100">{label}</span>
       {" "}
-      <span className={cn("flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs print:flex-auto print:text-[7.5pt] print:leading-tight", keepTogether && "flex-nowrap text-[10px] tracking-tight", align === "end" && "justify-end text-right")}>
-        <span className={cn("min-w-0", keepTogether ? "overflow-hidden text-ellipsis whitespace-nowrap" : "break-words", state === "estimate" && "italic print:not-italic")}>
+      <span className={cn("flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs print:flex-auto print:text-[7.5pt] print:leading-tight", keepTogether && "text-[10px] tracking-tight paper-wide:text-xs paper-wide:tracking-normal print:text-[7.5pt]! print:tracking-normal!", align === "end" && "justify-end text-right")}>
+        <span className={cn("min-w-0", keepTogether ? "break-normal" : "break-words", state === "estimate" && "italic print:not-italic")}>
           {compact != null ? (
             <>
-              <span data-paper-full className="hidden paper-wide:inline">{value}</span>
-              <span data-paper-compact className="paper-wide:hidden">{compact}</span>
+              <span data-paper-full className="hidden paper-wide:inline">{keepTogether ? breakAtSeparators(value) : value}</span>
+              <span data-paper-compact className="paper-wide:hidden">{keepTogether ? breakAtSeparators(compact) : compact}</span>
             </>
-          ) : value}
+          ) : keepTogether ? breakAtSeparators(value) : value}
         </span>
         {compareTo && (
           <span data-paper-mark className="opacity-70">

@@ -1,5 +1,5 @@
 "use client";
-// Chi tiết hồ sơ: đầu trang + thanh 6 bước + màn của bước đang xem (?step=…, mặc định bước đang dở).
+// Chi tiết hồ sơ: đầu trang + thanh 6 bước (+ bước 7 "Sửa sau thông quan" khi đã thông quan) + màn của bước đang xem (?step=…, mặc định bước đang dở).
 import {
   Breadcrumb, Button, Card, CardContent, Dialog, DialogContent, DialogFooter, DialogTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, EmptyState, PageHeader, Skeleton, Stack, Stepper, toast, WorkflowDiagram, PageLoading,
 } from "@kb/ui";
@@ -9,6 +9,7 @@ import { Download, GitBranch, MoreHorizontal, XCircle } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type ComponentType, type ReactNode } from "react";
+import { customsKeys, getSubmission } from "@/api/customs";
 import { cancelDossier, dossierKeys, getDossier } from "@/api/dossiers";
 import { ChannelBadge, DossierStatusBadge, DueBadge } from "@/components/common/dossier-status";
 import { TRANSPORT_LABELS } from "@/features/dossiers/dossier-display";
@@ -19,20 +20,25 @@ import { CreateSummaryStep } from "./steps/create-step";
 import { OcrStep } from "./steps/ocr-step";
 import { ReviewStep } from "./steps/review-step";
 import { SubmitStep } from "./steps/submit-step";
-import type { StepProps } from "./steps/types";
+import type { StepProps, ViewStep } from "./steps/types";
 import { UploadStep } from "./steps/upload-step";
 import { buildFlow } from "./workflow-flow";
+import { postStepVisible } from "../post-amendment/ama-wizard";
+import { PostAmendmentStep } from "../post-amendment/post-amendment-step";
 
-const STEP_COMPONENTS: Record<StepId, ComponentType<StepProps>> = {
+const STEP_COMPONENTS: Record<ViewStep, ComponentType<StepProps>> = {
   create: CreateSummaryStep,
   upload: UploadStep,
   ocr: OcrStep,
   agent: AgentStep,
   review: ReviewStep,
   submit: SubmitStep,
+  post: PostAmendmentStep,
 };
 
 const STEPS = STEP_ORDER.map((id) => ({ id, label: STEP_LABELS[id] }));
+/** Bước 7 chỉ hiện khi tờ khai đã thông quan / đang sửa sau thông quan. */
+const POST_STEP = { id: "post", label: "Sửa sau thông quan" } as const;
 const DIRECTION_LABEL = { NK: "Nhập khẩu", XK: "Xuất khẩu" } as const;
 
 const isStep = (s: string | null): s is StepId => !!s && (STEP_ORDER as string[]).includes(s);
@@ -128,6 +134,8 @@ function DetailInner({ id }: { id: string }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const { data: dossier, isLoading, isError, error, refetch } = useQuery({ queryKey: dossierKeys.detail(id), queryFn: () => getDossier(id), retry: false });
+  // Giai đoạn Hải quan quyết định có bước 7 không – chỉ hỏi khi hồ sơ đã tới bước Review/Khai báo.
+  const subQ = useQuery({ queryKey: customsKeys.submission(id), queryFn: () => getSubmission(id), enabled: dossier?.step === "submit" || dossier?.step === "review" });
 
   if (isLoading) {
     return (
@@ -153,10 +161,16 @@ function DetailInner({ id }: { id: string }) {
     );
   }
 
-  const progressIndex = STEP_ORDER.indexOf(dossier.step);
+  // Bước 7 theo giai đoạn Hải quan, không theo dossier.step (backend chuyển dossier.step về review/submit trong lúc AMA – thiết kế cũ).
+  const stage = subQ.data?.stage;
+  const hasPost = postStepVisible(stage);
+  const progressIndex = hasPost ? STEP_ORDER.length - 1 : STEP_ORDER.indexOf(dossier.step);
   const requested = params.get("step");
-  const viewing: StepId = isStep(requested) && STEP_ORDER.indexOf(requested) <= progressIndex ? requested : dossier.step;
-  const goTo = (step: StepId) => router.replace(`${pathname}?step=${step}`, { scroll: false });
+  // Đang sửa sau thông quan → mặc định mở bước 7; đã thông quan, chưa sửa → mặc định bước Khai báo.
+  const fallback: ViewStep = stage?.startsWith("POST_") ? "post" : hasPost ? "submit" : dossier.step;
+  const viewing: ViewStep =
+    requested === "post" && hasPost ? "post" : isStep(requested) && STEP_ORDER.indexOf(requested) <= progressIndex ? requested : fallback;
+  const goTo = (step: ViewStep) => router.replace(`${pathname}?step=${step}`, { scroll: false });
   const StepView = STEP_COMPONENTS[viewing];
   const flow = buildFlow(dossier);
 
@@ -187,10 +201,11 @@ function DetailInner({ id }: { id: string }) {
         }
       />
       <Stepper
-        steps={STEPS}
-        currentId={dossier.step}
+        steps={hasPost ? [...STEPS, POST_STEP] : STEPS}
+        // Đã thông quan: bước Khai báo coi như xong, bước 7 là bước mở được.
+        currentId={hasPost ? "post" : dossier.step}
         viewingId={viewing}
-        onStepClick={(s) => goTo(s as StepId)}
+        onStepClick={(s) => goTo(s as ViewStep)}
       />
       {dossier.status === "CANCELLED" ? (
         <Card>

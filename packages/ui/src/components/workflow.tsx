@@ -46,7 +46,8 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
         <span className="text-fg-muted">{t.stepOf.replace("{n}", String(viewingIndex + 1)).replace("{total}", String(steps.length))} · </span>
         <span className="font-medium text-fg">{steps[viewingIndex]?.label}</span>
       </p>
-      <nav aria-label={label ?? t.nav} className="min-w-0 flex-1 overflow-x-auto cq-max-sm:sr-only">
+      {/* `relative`: chữ ẩn sr-only (absolute) trong bước phải bị cắt theo vùng cuộn – không thì đẩy cả trang tràn ngang khi nhiều bước */}
+      <nav aria-label={label ?? t.nav} className="relative min-w-0 flex-1 overflow-x-auto cq-max-sm:sr-only">
         <ol className="flex items-center gap-1">
           {steps.map((s, i) => {
             const state = i < currentIndex ? "done" : i === currentIndex ? "current" : "todo";

@@ -190,3 +190,12 @@ describe("layoutWorkflow – quy trình hồ sơ đầy đủ (2 điểm rẽ nh
     }
   });
 });
+
+describe("Stepper", () => {
+  it("vùng cuộn ngang là khung định vị – chữ ẩn sr-only (absolute) của bước bị cắt theo vùng cuộn, không đẩy trang tràn ngang", () => {
+    const steps = Array.from({ length: 7 }, (_, i) => ({ id: `s${i}`, label: `Bước số ${i + 1}` }));
+    render(<Stepper steps={steps} currentId="s6" label="Các bước" />);
+    const nav = screen.getByRole("navigation", { name: "Các bước" });
+    expect(nav).toHaveClass("overflow-x-auto", "relative");
+  });
+});

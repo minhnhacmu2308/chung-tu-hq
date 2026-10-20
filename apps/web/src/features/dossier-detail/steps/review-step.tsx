@@ -1,5 +1,6 @@
 "use client";
-// Bước 5 – Review tờ khai: tờ khai đầy đủ theo Phụ lục II (sửa chỉ tiêu nháp), chứng từ đính kèm, Hải quan trả về, theo dõi nghiệp vụ → phê duyệt.
+// Bước 5 – Review tờ khai: tờ khai dạng bản in VNACCS (sửa chỉ tiêu nháp bằng panel, gồm cả số Hải quan trả về), chứng từ đính kèm,
+// theo dõi nghiệp vụ → phê duyệt. Cờ NEXT_PUBLIC_REVIEW_LEGACY_FORM=1 → form Phụ lục II cũ + tab "Hải quan trả về" (dự phòng khi thử nghiệm).
 // Sau thông quan: tờ khai gốc chỉ đọc – sửa bằng bản khai bổ sung AMA ở bước 7 "Sửa sau thông quan".
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
@@ -16,7 +17,8 @@ import { getSession, sessionKeys } from "@/api/session";
 import { customsKeys, getSubmission } from "@/api/customs";
 import { getOrganization, settingsKeys } from "@/api/settings";
 import { toastMutationError } from "@/lib/mutation-error";
-import { formatBytesVi, formatDateTime, formatMoney, formatVnd } from "@/lib/format";
+import { legacyReviewForm } from "@/lib/feature-flags";
+import { formatBytesVi, formatDateTime, formatMoney, formatNumber, formatVnd } from "@/lib/format";
 import { DOC_KIND_LABELS, type Declaration } from "@/mocks/types";
 import { errorMessage, KeyValue, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
 import { CustomsInfoPanel } from "./customs-info-panel";
@@ -25,6 +27,7 @@ import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
+import { PrintDeclaration } from "../../declaration-print/print-declaration";
 import { LoadError } from "@/components/common/load-error";
 
 const exportTaxText = (status: Declaration["status"]) =>
@@ -53,8 +56,10 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
   );
 }
 
-const TABS = ["full", "docs", "customs", "ops"] as const;
-type Tab = (typeof TABS)[number];
+const LEGACY_TABS = ["full", "docs", "customs", "ops"] as const;
+type Tab = (typeof LEGACY_TABS)[number];
+// Bản in gộp tab "Hải quan trả về" vào tab "Tờ khai": ?tab=customs cũ → "full".
+const PRINT_TABS: readonly Tab[] = ["full", "docs", "ops"];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
   const qc = useQueryClient();
@@ -71,6 +76,9 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checked, setChecked] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
+  const legacy = legacyReviewForm();
+  /** Số ô cần xử lý (lỗi + còn thiếu) của bản in – huy hiệu tab "Tờ khai". */
+  const [attention, setAttention] = useState(0);
   const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
   const canEdit = session.data ? canEditDeclaration(session.data.user.role) : false;
   const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
@@ -92,7 +100,8 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   // Đang sửa sau thông quan (bản khai bổ sung AMA ở bước 7): tờ khai gốc giữ nguyên, khóa như đã thông quan.
   const stage = subQ.data?.stage;
   const postEditing = Boolean(stage?.startsWith("POST_"));
-  const tab: Tab = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "full";
+  const tabs: readonly Tab[] = legacy ? LEGACY_TABS : PRINT_TABS;
+  const tab: Tab = (tabs as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "full";
   const rejection = subQ.data?.rejection ?? null;
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
@@ -156,7 +165,8 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         </CardHeader>
         <CardContent>
           <Stack gap="sm">
-            {rejection && errs.length > 0 && (
+            {/* Bản in: lỗi Hải quan hiện trên ô + "Chỉ ô cần xử lý" ở thanh công cụ – không cần khung tổng hợp. */}
+            {legacy && rejection && errs.length > 0 && (
               <Alert tone="danger" title={`Hải quan từ chối ${rejection.operation} lúc ${formatDateTime(rejection.at)} – ${errs.length} lỗi`}>
                 <p>{isDraft ? "Sửa các chỉ tiêu báo lỗi dưới đây ở tab Tờ khai đầy đủ (lỗi theo dòng hàng: sửa ở bước OCR/AI Agent), phê duyệt lại rồi khai lại." : "Mở lại tờ khai để sửa các chỉ tiêu báo lỗi dưới đây, phê duyệt lại rồi khai lại."}</p>
                 <ul className="mt-1 flex flex-col gap-1">
@@ -176,7 +186,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             )}
             {isDraft && suspect.length > 0 && (
               <Alert tone="warning" title={`${suspect.length} chỉ tiêu cần kiểm tra`}>
-                Kiểm tra ở tab Tờ khai đầy đủ: {suspect.map((f) => fieldTitle(f)).join(", ")}.
+                Kiểm tra ở tab {legacy ? "Tờ khai đầy đủ" : "Tờ khai"}: {suspect.map((f) => fieldTitle(f)).join(", ")}.
               </Alert>
             )}
             {isDraft && blockedByFourEyes && (
@@ -201,36 +211,57 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
           <Tabs value={tab} onValueChange={setTab} className="mt-4">
             <TabsList aria-label="Nhóm chỉ tiêu tờ khai">
-              <TabsTrigger value="full">
-                Tờ khai đầy đủ {errs.length > 0 && <Badge tone="danger">{errs.length} lỗi</Badge>}
-              </TabsTrigger>
+              {legacy ? (
+                <TabsTrigger value="full">
+                  Tờ khai đầy đủ {errs.length > 0 && <Badge tone="danger">{errs.length} lỗi</Badge>}
+                </TabsTrigger>
+              ) : (
+                <TabsTrigger value="full">
+                  Tờ khai{" "}
+                  {attention > 0 && (
+                    <Badge tone={errs.length > 0 ? "danger" : "warning"}>
+                      {formatNumber(attention)}
+                      <span className="sr-only"> ô cần xử lý</span>
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              )}
               <TabsTrigger value="docs">Chứng từ đính kèm</TabsTrigger>
-              <TabsTrigger value="customs">
-                Hải quan trả về {customsInfo ? customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge> : <Badge tone="neutral">chưa có</Badge>}
-              </TabsTrigger>
+              {legacy && (
+                <TabsTrigger value="customs">
+                  Hải quan trả về {customsInfo ? customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge> : <Badge tone="neutral">chưa có</Badge>}
+                </TabsTrigger>
+              )}
               <TabsTrigger value="ops">Theo dõi & nghiệp vụ</TabsTrigger>
             </TabsList>
-            <TabsContent value="full">
-              <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
+            {/* Bản in luôn gắn (ẩn bằng hidden khi ở tab khác): huy hiệu số ô cần xử lý đúng ngay cả khi mở thẳng tab khác, panel giữ phần đang sửa. */}
+            <TabsContent value="full" {...(legacy ? {} : { forceMount: true as const, hidden: tab !== "full" })}>
+              {legacy ? (
+                <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
+              ) : (
+                <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} submission={subQ.data} onAttentionChange={setAttention} />
+              )}
             </TabsContent>
             <TabsContent value="docs">
               <DocumentsTab dossierId={dossier.id} />
             </TabsContent>
-            <TabsContent value="customs">
-              {subQ.isLoading ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
-                <Stack gap="lg">
-                  {/* Tóm tắt + so với số ứng dụng ước tính, rồi đủ chỉ tiêu Hải quan trả về theo Phụ lục II. */}
-                  {customsInfo && (
-                    <CustomsInfoPanel
-                      kind={decl.kind}
-                      info={customsInfo}
-                      estimate={{ customsValueVnd: decl.customsValueVnd, exchangeRate: decl.exchangeRate, ...(decl.kind === "IDA" ? { taxVnd: totalTax } : {}) }}
-                    />
-                  )}
-                  <DossierCustomsTab kind={decl.kind} submission={subQ.data} items={items} />
-                </Stack>
-              )}
-            </TabsContent>
+            {legacy && (
+              <TabsContent value="customs">
+                {subQ.isLoading ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
+                  <Stack gap="lg">
+                    {/* Tóm tắt + so với số ứng dụng ước tính, rồi đủ chỉ tiêu Hải quan trả về theo Phụ lục II. */}
+                    {customsInfo && (
+                      <CustomsInfoPanel
+                        kind={decl.kind}
+                        info={customsInfo}
+                        estimate={{ customsValueVnd: decl.customsValueVnd, exchangeRate: decl.exchangeRate, ...(decl.kind === "IDA" ? { taxVnd: totalTax } : {}) }}
+                      />
+                    )}
+                    <DossierCustomsTab kind={decl.kind} submission={subQ.data} items={items} />
+                  </Stack>
+                )}
+              </TabsContent>
+            )}
             <TabsContent value="ops">
               {subQ.isLoading ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
                 <DossierOperationsTab kind={decl.kind} submission={subQ.data} onGoSubmit={isDraft ? undefined : () => goTo("submit")} />

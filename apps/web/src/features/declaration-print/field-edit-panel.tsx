@@ -103,19 +103,25 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
     if (shownId) focusField(shownKey);
   }, [shownId, shownKey, focusField]);
   /** Đóng hộp hỏi: focus lại ô đang focus trước đó trong panel (còn trên trang), không thì ô đang chọn. */
+  // Chỉ khi chọn "Ở lại" (hoặc lưu lỗi): Lưu / Bỏ thay đổi đã chuyển ô – focus do effect chuyển ô đặt, không kéo về ô cũ.
+  const stayed = useRef(false);
   const restoreFocus = () => {
+    if (!stayed.current) return;
+    stayed.current = false;
     const el = lastFocus.current;
     if (el?.isConnected && body.current?.contains(el)) el.focus();
     else focusField(shownKey);
   };
 
   const proceed = (next: PrintTarget | null, href?: string) => {
+    stayed.current = false;
     setConfirm(null);
     setChanges({});
     setShown(next);
     if (href) router.replace(href, { scroll: false });
   };
   const stay = () => {
+    stayed.current = true;
     setConfirm(null);
     if (tid(target) !== tid(shown)) onTarget(shown);
   };
@@ -169,6 +175,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
                 errors={cellErrors}
                 readOnlyReason={readOnlyReason}
                 onOcr={goOcr}
+                busy={save.isPending}
                 onHs={setHsItem}
               />
               <DialogFooter>

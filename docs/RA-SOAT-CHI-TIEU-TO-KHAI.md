@@ -354,6 +354,8 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 - Luật "theo tình huống" giờ là một nguồn chung (`DECLARATION_CONDITIONS`), backend và bản mẫu cùng dùng.
 - Cần đối chiếu khi làm thật: catalog EDA ghi 2.79 là `HAG_TXR`, nhưng đặc tả VNACCS_EDA là `HAG_ADE`.
 
+**Bước 5 dạng bản in (xong, nhánh `feat/review-ban-in-to-khai`):** bước 5 hiện tờ khai giống mẫu in VNACCS (`@kb/contracts/print-layout`, `features/declaration-print/`), sửa ô bằng panel, lỗi / còn thiếu / ước tính đánh dấu trên ô, gộp tab "Hải quan trả về"; form cũ còn sau cờ `NEXT_PUBLIC_REVIEW_LEGACY_FORM=1` đến hết thử nghiệm (BACKEND-TODO K9).
+
 **Phát hiện thêm khi làm đợt 1 (để đợt 3 xử lý):**
 - Tờ khai xuất đang tính "thuế" bằng thuế suất **nhập khẩu** và VAT (`declaration/domain/tax.ts`). Chưa có thuế suất xuất khẩu.
 - Tờ khai xuất điều kiện FOB vẫn cộng cước quốc tế vào trị giá tính thuế (dữ liệu mẫu `dos_020`). Trị giá tính thuế xuất khẩu là giá FOB, không cộng cước.

@@ -5,7 +5,7 @@
 import { PaperField, Tooltip, type PaperFieldState } from "@kb/ui";
 import type { PrintCell as Cell } from "@kb/contracts";
 import { memo } from "react";
-import { fieldTitle } from "../declaration-form/display";
+import { codeLabel, fieldTitle } from "../declaration-form/display";
 import { fieldLocator, NOT_ISSUED, printValue } from "./print-state";
 
 /** Giá trị `data-print-cell` của ô bấm được (chỉ số dòng hàng 0-based + khóa) – để cuộn tới ô ("Chỉ ô cần xử lý"). */
@@ -38,6 +38,10 @@ export const PrintCell = memo(function PrintCell({ kind, cellKey, label, span = 
   const no = spot ? spot.field.no ?? spot.parentNo : undefined;
   const name = spot?.field.label ?? label;
   const value = printValue(spot?.field, raw);
+  // Mã có tên danh mục: trang giấy đủ rộng hiện "mã  tên"; trang hẹp (mobile) và bản in chỉ mã như mẫu VNACCS – ô hẹp không bị
+  // kéo cao / vỡ chữ từng ký tự. Tên vẫn có ở panel.
+  const codeName = spot && raw.trim() ? codeLabel(spot.field.codeTable, raw.trim()) : null;
+  const shown = codeName ? <>{raw.trim()}<span className="print:hidden"><span className="hidden paper-wide:inline">&nbsp; {codeName}</span></span></> : value;
   // PaperField đọc tên này trước giá trị và dấu trạng thái → "1.6 Mã phương thức vận chuyển: 2 …"; rỗng → "…: trống".
   const blank = !raw.trim() && value !== NOT_ISSUED;
   const ariaLabel = `${no ? `${no} ` : ""}${name}:${blank ? " trống" : ""}`;
@@ -45,7 +49,7 @@ export const PrintCell = memo(function PrintCell({ kind, cellKey, label, span = 
     <Tooltip content={fieldTitle(no, name)}>
       <PaperField
         label={label}
-        value={value}
+        value={shown}
         state={state}
         compareTo={compareTo}
         selected={selected}

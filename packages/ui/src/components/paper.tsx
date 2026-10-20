@@ -46,9 +46,9 @@ export function PaperSheet({ page, total, header, watermark, id, children, label
       role="region"
       aria-label={name}
       data-paper-sheet
-      className="@container/paper relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-[10mm] text-paper-fg shadow-md print:min-h-0 print:max-w-none print:border-0 print:shadow-none"
+      className="@container/paper relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-[10mm] text-paper-fg shadow-md print:min-h-0 print:max-w-none print:border-0 print:p-0 print:shadow-none"
     >
-      {header && <div className="mb-3 border-b border-paper-rule pb-2">{header}</div>}
+      {header && <div className="mb-3 border-b border-paper-rule pb-2 print:mb-1 print:pb-1">{header}</div>}
       <div className="relative grid grid-cols-12 gap-px">{children}</div>
       {watermark && (
         <div className="pointer-events-none absolute inset-0 flex select-none items-center justify-center overflow-hidden">
@@ -94,7 +94,8 @@ export type PaperFieldProps = {
 export function PaperField({ label, value, state = "none", compareTo, selected = false, onSelect, ariaLabel, span = 12, align, labels, ref, className, onClick, ...rest }: PaperFieldProps) {
   const t = useMessages(FIELD_MESSAGES, labels);
   const cls = cn(
-    "relative block min-w-0 border border-paper-rule bg-paper px-1.5 py-1 text-left text-paper-fg",
+    // In: nhãn và giá trị cùng một dòng, chữ nhỏ – mỗi trang giấy vừa một trang A4 như mẫu VNACCS.
+    "relative block min-w-0 border border-paper-rule bg-paper px-1.5 py-1 text-left text-paper-fg print:flex print:flex-wrap print:items-baseline print:gap-x-1.5 print:px-1 print:py-0",
     SPAN[span],
     state === "error" && "border-danger bg-danger-subtle text-danger-subtle-fg print:border-paper-rule print:bg-paper print:text-paper-fg",
     state === "missing" && "border-dashed border-warning print:border-solid print:border-paper-rule",
@@ -107,9 +108,9 @@ export function PaperField({ label, value, state = "none", compareTo, selected =
     <>
       <span className="sr-only">{ariaLabel}</span>
       {" "}
-      <span aria-hidden="true" className="block text-[10px] leading-tight opacity-80">{label}</span>
+      <span aria-hidden="true" className="block text-[10px] leading-tight opacity-80 print:text-[7pt] print:opacity-100">{label}</span>
       {" "}
-      <span className={cn("flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs", align === "end" && "justify-end text-right")}>
+      <span className={cn("flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs print:flex-auto print:text-[7.5pt] print:leading-tight", align === "end" && "justify-end text-right")}>
         <span className={cn("min-w-0 break-words", state === "estimate" && "italic print:not-italic")}>{value}</span>
         {compareTo && (
           <span data-paper-mark className="opacity-70">

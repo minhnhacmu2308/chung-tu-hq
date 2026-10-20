@@ -219,7 +219,9 @@ flowchart LR
   D -- Chưa đạt --> C
 ```
 
-- Tờ khai dạng form theo nhóm, mỗi chỉ tiêu có **nhãn nguồn** (Invoice, B/L, C/O, Hồ sơ, Tài khoản, Mặc định, Hệ thống, Người khai sửa). Bấm **Sửa** hiện **hướng dẫn khai chỉ tiêu** trích Phụ lục II.
+- Tờ khai hiện **giống bản in VNACCS** (mẫu in tờ khai nhập / xuất): các trang A4 theo đúng thứ tự vùng của mẫu, tiêu đề theo giai đoạn (bản nháp có chữ mờ "BẢN NHÁP – CHƯA KHAI HẢI QUAN"), số Hải quan trả về điền thẳng vào ô (khác số ước tính thì hiện cả hai). Chỉ tiêu không có chỗ trên mẫu nằm ở khối **Chỉ tiêu khác** dưới trang cuối.
+- Ô lỗi Hải quan, ô bắt buộc còn trống, số ước tính và ô người khai đã sửa được đánh dấu ngay trên trang; nút **Chỉ ô cần xử lý (n)** nhảy lần lượt tới từng ô (số n cũng hiện trên tab "Tờ khai"). **In / Lưu PDF** in đúng khổ A4 như mẫu, không lộ các dấu đánh dấu.
+- Bấm một ô mở **panel sửa ô** bên phải: số và tên chỉ tiêu, **nhãn nguồn** (Invoice, B/L, C/O…, Người khai nhập), lý do có trên tờ khai, **hướng dẫn khai chỉ tiêu** trích Phụ lục II, lỗi Hải quan và cách khắc phục. Rời ô khi còn thay đổi chưa lưu thì được hỏi Lưu / Bỏ thay đổi / Ở lại. Ô theo chứng từ có nút sang bước OCR.
 - Sửa tay: ghi `field_audit`, giữ qua các lần dựng lại; không sửa tay được số tờ khai, mã loại hình và các chỉ tiêu trị giá/cước/tỷ giá (sửa ở bước 3 rồi dựng lại); kiểm định dạng và độ dài theo danh mục chỉ tiêu.
 - **Tỷ giá tính thuế**: tỷ giá mua chuyển khoản Vietcombank lấy tối thứ Năm, áp cho tờ khai đăng ký từ thứ Hai tuần sau. Tờ khai dựng tuần trước sẽ bị chặn khai tạm khi đã sang tuần tỷ giá mới (mở lại để dựng lại).
 - Incoterm EXW/FCA/FAS/FOB hiển thị rõ cước, bảo hiểm, phí nước ngoài cộng vào trị giá tính thuế và nguồn từng khoản; phí nội địa (THC, D/O, CFS, lưu kho) không cộng.

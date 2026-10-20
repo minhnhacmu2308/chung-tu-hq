@@ -13,7 +13,7 @@ type Props = {
   onSave: () => void;
   onDiscard: () => void;
   onStay: () => void;
-  /** Hộp đóng (mọi lựa chọn): nơi gọi tự đặt lại focus (thay cho focus mặc định của Radix về đầu trang). */
+  /** Hộp đóng (mọi lựa chọn): focus mặc định của Radix bị chặn, nơi gọi tự quyết (chỉ đặt lại khi "Ở lại"). */
   onClosed: () => void;
 };
 

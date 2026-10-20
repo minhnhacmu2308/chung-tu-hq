@@ -49,6 +49,7 @@ Ghi lại trong lúc dựng backend theo `docs/superpowers/specs/2026-10-13-back
 | K6 | Thông báo trong app | Port `Notifier` (shared) → adapter identity ghi `notifications`; sự kiện: đọc xong chứng từ, agent xong, chờ duyệt (APPROVER/OWNER), đã duyệt, phân luồng, thông quan, FPT từ chối, chứng thư ≤30 ngày (job `cert-expiry` 01:00 UTC). Chưa gửi email cho các sự kiện này |
 | K7 | Dashboard | Màn Tổng quan tự tính từ `GET dossiers` + session (đủ cho GĐ này); route `GET dashboard` tổng hợp để dành cho API/Enterprise |
 | K8 | Eval trích xuất | **2026-10-15:** `pnpm eval --live --lot <thư mục>` chấm trên lô thật (PDF + Excel đáp án STT/Tên trường/Trị giá, `mapping.json` tùy chọn). Lô FANS25040166 (biển) + YZS24120950 (air): **73/75 = 97,3%** (trước khi có danh mục: 66,7%); 2 lệch còn lại: C/O ô 3 (đáp án kèm chữ nhãn mẫu), số C/O lô YZS (đáp án Excel sai – PDF ghi 02241416230537193). Lô thật để ngoài git (`lo mẫu/`, `evals/private/`). `pnpm eval` offline vẫn dùng bộ HANSOL giả |
+| K9 | Bước 5 Review: xóa form cũ sau thử nghiệm bản in | **2026-10-21:** bước 5 hiện tờ khai dạng bản in VNACCS (`features/declaration-print/`, spec `2026-10-20-review-ban-in-to-khai-design.md`). Form Phụ lục II cũ + tab "Hải quan trả về" còn giữ sau cờ `NEXT_PUBLIC_REVIEW_LEGACY_FORM=1` (`apps/web/src/lib/feature-flags.ts`) để dự phòng. Hết thử nghiệm: xóa cờ, nhánh `legacy` trong `review-step.tsx` và phần `declaration-form` chỉ bước 5 dùng (giữ phần bản in, bản mẫu và bước 7 còn dùng) |
 
 ## Ngoài phạm vi chuẩn trường chứng từ (2026-10-15)
 

@@ -32,6 +32,8 @@ type Props = {
   /** Lý do cả panel chỉ đọc (VIEWER / tờ khai chỉ đọc); null = sửa được theo từng ô. */
   readOnlyReason: string | null;
   onOcr: () => void;
+  /** Đang lưu → khóa nút sang bước OCR (không rời trang giữa chừng). */
+  busy?: boolean;
   onHs: (item: LineItem) => void;
 };
 
@@ -43,7 +45,7 @@ function sourceLabel(kind: Kind, decl: Declaration, key: string, item: LineItem 
   return (DOC_KIND_LABELS as Record<string, string>)[f.source] ?? null;
 }
 
-export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf, errors, readOnlyReason, onOcr, onHs }: Props) {
+export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf, errors, readOnlyReason, onOcr, busy = false, onHs }: Props) {
   const field = spot.field;
   const ctx = conditionContext(kind, values);
   const condition = field.condition ?? spot.parentCondition ?? spot.blockCondition;
@@ -77,7 +79,7 @@ export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf,
       {(fromDocs || (itemClass === "HS" && item && !readOnlyReason)) && (
         <Stack direction="row" gap="sm" wrap>
           {fromDocs && (
-            <Button size="sm" variant="secondary" leftIcon={<FileSearch className="h-4 w-4" />} onClick={onOcr}>
+            <Button size="sm" variant="secondary" leftIcon={<FileSearch className="h-4 w-4" />} disabled={busy} onClick={onOcr}>
               Xem ở bước OCR
             </Button>
           )}

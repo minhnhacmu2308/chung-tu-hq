@@ -36,7 +36,7 @@ export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Pr
   const rows = (list: PrintRow[], line: number | undefined, interactive = true): ReactNode =>
     list.map((row, r) => (
       <Fragment key={r}>
-        {!Array.isArray(row) && row.label && <p className="col-span-12 px-1.5 pt-1 text-xs font-semibold">{row.label}</p>}
+        {!Array.isArray(row) && row.label && <p data-paper-heading className="col-span-12 px-1.5 pt-1 text-xs font-semibold">{row.label}</p>}
         {expandPrintRow(row).flat().map((cell) => {
           const l = look(cell.key, line);
           return (
@@ -60,8 +60,8 @@ export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Pr
     ));
 
   const region = (rg: PrintRegion, line: number | undefined) => (
-    <div key={rg.id} id={line === undefined ? regionDomId(rg.id) : undefined} className="min-w-0 pt-1">
-      {rg.title && <h3 className="px-1.5 py-1 text-xs font-semibold">{rg.title}</h3>}
+    <div key={rg.id} id={line === undefined ? regionDomId(rg.id) : undefined} className="min-w-0 pt-1 print:pt-0.5">
+      {rg.title && <h3 data-paper-heading className="px-1.5 py-1 text-xs font-semibold">{rg.title}</h3>}
       {rg.rows.length > 0 && <Grid cols={12} gap="none">{rows(rg.rows, line)}</Grid>}
     </div>
   );

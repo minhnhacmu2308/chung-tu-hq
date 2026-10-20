@@ -3,14 +3,13 @@
 //
 // Ô có trên mẫu nhưng bố cục IDA không có khóa nào → bỏ:
 // - Đầu trang: mã vạch; "<IMP>"; số trang "n / N" (tính khi vẽ); ô "-" sau "Thời hạn tái nhập/ tái xuất".
-// - Tr.1: ô "-" cuối dòng "Tổng hệ số phân bổ trị giá"; ô thứ hai không nhãn ở "Tổng trị giá tính thuế".
 // - Tr.2: "Số quản lý người sử dụng"; mục thông báo: "Ngày khai báo nộp thuế", "Tổng số tiền thuế chậm nộp".
-// - Dòng hàng: số thứ tự dòng "< 01 >" (tính khi vẽ); ô "-" sau thuế suất nhập khẩu.
+// - Dòng hàng: số thứ tự dòng "< 01 >" (tính khi vẽ).
 // Ba dòng không nhãn "tên … / /  tên … / /" ở mục thông báo = 6 sắc thuế được ân hạn (TK_KO{n} tên, TK_KP{n} hạn nộp), hai sắc thuế mỗi dòng.
 import type { PrintCell, PrintLayout, PrintRegion, PrintRow } from "./types.js";
 
 const c = (key: string, label = "", span?: PrintCell["span"], align?: "end"): PrintCell => ({ key, label, ...(span ? { span } : {}), ...(align ? { align } : {}) });
-const rep = (count: number, cells: PrintCell[]): PrintRow => ({ kind: "repeat", count, cells });
+const rep = (count: number, cells: PrintCell[], label?: string): PrintRow => ({ kind: "repeat", ...(label ? { label } : {}), count, cells });
 
 /** Đầu trang – lặp ở mọi trang. */
 const HEADER: PrintRow[] = [
@@ -18,6 +17,7 @@ const HEADER: PrintRow[] = [
   [c("TK_TDN", "Số tờ khai tạm nhập tái xuất tương ứng", 12)],
   // Mã loại hình | mã phân loại hàng hóa | mã hiệu PTVC | [phân loại cá nhân/tổ chức]: "A11  2 [ 4 ]".
   [c("TK_A06", "Mã phân loại kiểm tra", 3), c("TK_ICB", "Mã loại hình", 2), c("TK_CCC", "", 1), c("TK_MTC", "", 1), c("TK_SKB", "", 1), c("TK_A00", "Mã số hàng hóa đại diện của tờ khai", 4)],
+  // TK_CH (danh mục A038): ô mã in "mã  tên" theo danh mục → hiện mã + tên Chi cục cả trước lẫn sau đăng ký; dùng TK_A07 (tên Hải quan trả về) sẽ mất ô bắt buộc của người khai trên bản in.
   [c("TK_CH", "Tên cơ quan Hải quan tiếp nhận tờ khai", 6), c("TK_CHB", "Mã bộ phận xử lý tờ khai", 6)],
   [c("TK_A09", "Ngày đăng ký", 3), c("TK_AD11", "", 1), c("TK_AD21", "Ngày thay đổi đăng ký", 3), c("TK_AD31", "", 1), c("TK_RED", "Thời hạn tái nhập/ tái xuất", 4)],
 ];
@@ -68,7 +68,8 @@ const VALUE: PrintRegion[] = [
       [c("TK_IVP", "Phương thức thanh toán", 12)],
       [c("TK_IP1", "Tổng trị giá hóa đơn", 4), c("TK_IP2", "", 2), c("TK_IP3", "", 2), c("TK_IP4", "", 4, "end")],
       [c("TK_A86", "Tổng trị giá tính thuế", 12, "end")],
-      [c("TK_TP", "Tổng hệ số phân bổ trị giá", 12, "end")],
+      // "34.375 -": ô một ký tự sau tổng hệ số phân bổ = mã phân loại nhập liệu tổng giá cơ bản (TK_A97, dài 1). Dòng "Tổng trị giá tính thuế" chỉ có một ô (TK_A86).
+      [c("TK_TP", "Tổng hệ số phân bổ trị giá", 6, "end"), c("TK_A97", "", 1)],
       [c("TK_N4", "Mã kết quả kiểm tra nội dung", 12)],
     ],
   },
@@ -84,8 +85,8 @@ const VALUE: PrintRegion[] = [
       [c("KTG_VD2", "Khai trị giá tổng hợp", 4), c("KTG_A93", "", 1), c("KTG_A94", "", 1), c("KTG_A95", "", 1), c("KTG_VCC", "", 1), c("KTG_VPC", "", 4, "end")],
       [c("KTG_FR1", "Phí vận chuyển", 4), c("KTG_FR2", "", 2), c("KTG_FR3", "", 6, "end")],
       [c("KTG_IN1", "Phí bảo hiểm", 4), c("KTG_IN2", "", 2), c("KTG_IN3", "", 3, "end"), c("KTG_IN4", "", 3)],
-      // Mục "Các khoản điều chỉnh" – nhãn = tiêu đề cột in trên mẫu, số dòng 1–5 do lúc vẽ đánh.
-      rep(5, [c("KTG_VR{n}", "Mã tên", 2), c("KTG_VI{n}", "Mã phân loại", 2), c("KTG_VC{n}", "", 1), c("KTG_VP{n}", "Trị giá khoản điều chỉnh", 4, "end"), c("KTG_VT{n}", "Tổng hệ số phân bổ", 3, "end")]),
+      // Nhãn ô = tiêu đề cột in trên mẫu, số dòng 1–5 do lúc vẽ đánh.
+      rep(5, [c("KTG_VR{n}", "Mã tên", 2), c("KTG_VI{n}", "Mã phân loại", 2), c("KTG_VC{n}", "", 1), c("KTG_VP{n}", "Trị giá khoản điều chỉnh", 4, "end"), c("KTG_VT{n}", "Tổng hệ số phân bổ", 3, "end")], "Các khoản điều chỉnh"),
       [c("KTG_VLD", "Chi tiết khai trị giá", 12)],
     ],
   },
@@ -105,7 +106,7 @@ const TAX: [PrintRegion, PrintRegion] = [
 ];
 
 const PAGE_2: PrintRegion[] = [
-  { id: "dinh-kem", rows: [[c("TK_EA1", "Số đính kèm khai báo điện tử", 4), c("TK_EB1", "", 2), c("TK_EA2", "", 1), c("TK_EB2", "", 2), c("TK_EA3", "", 1), c("TK_EB3", "", 2)]] },
+  { id: "dinh-kem", title: "Số đính kèm khai báo điện tử", rows: [[c("TK_EA1", "1", 1), c("TK_EB1", "", 3), c("TK_EA2", "2", 1), c("TK_EB2", "", 3), c("TK_EA3", "3", 1), c("TK_EB3", "", 3)]] },
   { id: "ghi-chu", rows: [[c("TK_NT2", "Phần ghi chú", 12)]] },
   { id: "so-quan-ly", rows: [[c("TK_REF", "Số quản lý của nội bộ doanh nghiệp", 6)]] },
   { id: "chi-thi", rows: [[c("CTHQ_CCM", "Phân loại chỉ thị của Hải quan", 12)], rep(10, [c("CTHQ_D{nn}", "Ngày", 2), c("CTHQ_T{nn}", "Tên", 4), c("CTHQ_I{nn}", "Nội dung", 6)])] },
@@ -115,8 +116,8 @@ const PAGE_2: PrintRegion[] = [
       [c("TK_KO3", "", 4), c("TK_KP3", "", 2), c("TK_KO4", "", 4), c("TK_KP4", "", 2)],
       [c("TK_KO5", "", 4), c("TK_KP5", "", 2), c("TK_KO6", "", 4), c("TK_KP6", "", 2)],
       [c("TK_DPD", "Thời hạn cho phép vận chuyển bảo thuế (khởi hành)", 12)],
-      // "Thông tin trung chuyển" 1–3: cột Địa điểm / Ngày đến / Ngày khởi hành.
-      rep(3, [c("TK_ST{n}", "Địa điểm", 4), c("TK_AD{n}", "Ngày đến", 4), c("TK_SD{n}", "Ngày khởi hành", 4)]),
+      // Dòng 1–3: cột Địa điểm / Ngày đến / Ngày khởi hành.
+      rep(3, [c("TK_ST{n}", "Địa điểm", 4), c("TK_AD{n}", "Ngày đến", 4), c("TK_SD{n}", "Ngày khởi hành", 4)], "Thông tin trung chuyển"),
       [c("TK_ARP", "Địa điểm đích cho vận chuyển bảo thuế", 6), c("TK_ADT", "", 6)],
     ],
   },
@@ -146,13 +147,14 @@ const ITEM: PrintRegion[] = [
     ],
   },
   {
-    // Mỗi khoản 1–5: cột trái tên/trị giá/thuế suất/tiền thuế/miễn giảm, cột phải mã áp dụng/số lượng/miễn giảm.
+    // Mỗi khoản 1–5: cột trái tên/trị giá/thuế suất/tiền thuế/miễn giảm, cột phải mã áp dụng/số lượng/miễn giảm thu khác. Tiền thuế, tiền miễn giảm mỗi ô một dòng (cột phải trống như mẫu).
     id: "thu-khac", title: "Thuế và thu khác", rows: [
       rep(5, [
         c("HAG_KQ{n}", "Tên", 6), c("HAG_TX{n}", "Mã áp dụng thuế suất", 6),
         c("HAG_KS{n}", "Trị giá tính thuế", 6, "end"), c("HAG_KT{n}", "Số lượng tính thuế", 4, "end"), c("HAG_KU{n}", "", 2),
         c("HAG_KY{n}", "Thuế suất", 6, "end"), c("HAG_TR{n}", "Miễn / Giảm / Không chịu thuế và thu khác", 4), c("HAG_LC{n}", "", 2),
-        c("HAG_KZ{n}", "Số tiền thuế", 6, "end"), c("HAG_LB{n}", "Số tiền miễn giảm", 6, "end"),
+        c("HAG_KZ{n}", "Số tiền thuế", 12),
+        c("HAG_LB{n}", "Số tiền miễn giảm", 12),
       ]),
     ],
   },

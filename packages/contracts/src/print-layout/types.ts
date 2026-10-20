@@ -4,8 +4,8 @@
  */
 /** span: số cột trên lưới 12 cột của trang; align "end": căn phải (số tiền). */
 export type PrintCell = { key: string; label: string; span?: 1 | 2 | 3 | 4 | 6 | 12; align?: "end" };
-/** Dòng lặp: key chứa "{n}" (1..count) hoặc "{nn}" (01..count) như LayoutRepeat; mỗi lần lặp = một dòng các ô `cells`. */
-export type PrintRepeatRow = { kind: "repeat"; count: number; cells: PrintCell[] };
+/** Dòng lặp: key chứa "{n}" (1..count) hoặc "{nn}" (01..count) như LayoutRepeat; mỗi lần lặp = một dòng các ô `cells`. `label`: tiêu đề in phía trên nhóm (vd "Các khoản điều chỉnh"). */
+export type PrintRepeatRow = { kind: "repeat"; label?: string; count: number; cells: PrintCell[] };
 export type PrintRow = PrintCell[] | PrintRepeatRow;
 export type PrintRegion = { id: string; title?: string; rows: PrintRow[] };
 /** Vùng dạng cặp = hai vùng nằm cạnh nhau như mẫu (vận đơn | địa điểm…). */

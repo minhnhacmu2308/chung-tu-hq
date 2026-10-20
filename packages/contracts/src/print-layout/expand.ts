@@ -1,4 +1,4 @@
-import { pad2 } from "../declaration-layout/expand.js";
+import { fillIndex } from "../declaration-layout/expand.js";
 import { itemFields, layoutFor, type LayoutBlock } from "../declaration-layout/index.js";
 import { printLayoutFor } from "./layout-for.js";
 import type { PrintCell, PrintLayout, PrintRegion, PrintRow } from "./types.js";
@@ -6,7 +6,7 @@ import type { PrintCell, PrintLayout, PrintRegion, PrintRow } from "./types.js";
 /** Dòng in → các dòng ô; dòng lặp thay {n}/{nn} theo số dòng (giống expandRepeat). */
 export function expandPrintRow(row: PrintRow): PrintCell[][] {
   if (Array.isArray(row)) return [row];
-  return Array.from({ length: row.count }, (_, i) => row.cells.map((c) => ({ ...c, key: c.key.replaceAll("{nn}", pad2(i + 1)).replaceAll("{n}", String(i + 1)) })));
+  return Array.from({ length: row.count }, (_, i) => row.cells.map((c) => ({ ...c, key: fillIndex(c.key, i + 1) })));
 }
 
 const rowKeys = (rows: PrintRow[]) => rows.flatMap(expandPrintRow).flat().map((c) => c.key);

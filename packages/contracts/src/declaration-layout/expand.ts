@@ -1,10 +1,12 @@
 import type { DeclarationLayout, LayoutBlock, LayoutField, LayoutItem, LayoutRepeat } from "./types.js";
 
-export const pad2 = (n: number) => String(n).padStart(2, "0");
+const pad2 = (n: number) => String(n).padStart(2, "0");
+/** Thay "{nn}" (01, 02…) / "{n}" (1, 2…) trong khóa ô lặp bằng số dòng `i` (bắt đầu từ 1). */
+export const fillIndex = (key: string, i: number): string => key.replaceAll("{nn}", pad2(i)).replaceAll("{n}", String(i));
 
 /** Nhóm lặp → các dòng ô đã thay {n}/{nn} theo số dòng. */
 export function expandRepeat(r: LayoutRepeat): LayoutField[][] {
-  return Array.from({ length: r.count }, (_, i) => r.fields.map((f) => ({ ...f, key: f.key.replaceAll("{nn}", pad2(i + 1)).replaceAll("{n}", String(i + 1)) })));
+  return Array.from({ length: r.count }, (_, i) => r.fields.map((f) => ({ ...f, key: fillIndex(f.key, i + 1) })));
 }
 
 /** Ô phẳng của một mục bố cục (nhóm lặp đã expand). */

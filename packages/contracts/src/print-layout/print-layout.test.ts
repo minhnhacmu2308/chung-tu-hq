@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { fillIndex } from "../declaration-layout/expand.js";
 import { layoutFields, layoutFor } from "../declaration-layout/index.js";
 import { expandPrintRow, otherFieldKeys, printKeys, printLayoutFor } from "./index.js";
 
 const range = <T,>(n: number, f: (i: number) => T): T[] => Array.from({ length: n }, (_, i) => f(i + 1));
-const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /** Chỉ tiêu người khai nhập không có chỗ trên mẫu in IDA (đối chiếu MAUIN_TOKHAI_NHAPKHAU.pdf) → khối "Chỉ tiêu khác". */
 const OTHER_IDA = {
@@ -49,13 +49,23 @@ describe("bản in IDA", () => {
   const p = printLayoutFor("IDA");
   it("ô chính của mẫu có mặt", () => {
     const { decl, item } = printKeys(p);
-    expect(decl).toEqual(expect.arrayContaining(["TK_ICN", "TK_B12", "TK_B13", "TK_A86", "THUE_B02", ...range(6, (i) => `THUE_KG${i}`), ...range(10, (i) => `CTHQ_D${pad2(i)}`)]));
+    expect(decl).toEqual(expect.arrayContaining(["TK_ICN", "TK_B12", "TK_B13", "TK_A86", "THUE_B02", ...range(6, (i) => `THUE_KG${i}`), ...range(10, (i) => `CTHQ_D${String(i).padStart(2, "0")}`)]));
     expect(item).toEqual(expect.arrayContaining(["HAG_CMD", "HAG_CMN", "HAG_QN1", "HAG_QN2", "HAG_BPR", "HAG_UPR", "HAG_ORS", ...range(5, (i) => `HAG_TX${i}`)]));
+  });
+  it("tiêu đề nhóm lặp in trên mẫu được giữ", () => {
+    const labels = p.pages.flatMap((pg) => pg.regions.flat()).flatMap((r) => r.rows).flatMap((row) => (Array.isArray(row) ? [] : [row.label]));
+    expect(labels).toEqual(expect.arrayContaining(["Các khoản điều chỉnh", "Thông tin trung chuyển"]));
   });
   it("hai trang chung, một dòng hàng mỗi trang", () => {
     expect(p.kind).toBe("IDA");
     expect(p.pages).toHaveLength(2);
     expect(p.itemsPerPage).toBe(1);
+  });
+});
+
+describe("fillIndex", () => {
+  it("thay {nn} hai chữ số, {n} không đệm", () => {
+    expect([fillIndex("CTHQ_D{nn}", 3), fillIndex("CTHQ_D{nn}", 10), fillIndex("VD_BL{n}", 4)]).toEqual(["CTHQ_D03", "CTHQ_D10", "VD_BL4"]);
   });
 });
 

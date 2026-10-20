@@ -1,6 +1,7 @@
 "use client";
-// Bước 6 – Khai báo Hải quan: dòng đời tờ khai theo giai đoạn ① Khai báo ② Sửa đổi bổ sung ③ Sau thông quan ④ Chứng từ & cảng.
-// Quy tắc bấm được / việc tiếp theo do backend (hoặc mock) tính bằng @kb/contracts customs-flow – màn chỉ hiển thị.
+// Bước 6 – Khai báo Hải quan: dòng đời tờ khai theo giai đoạn ① Khai báo ② Sửa đổi bổ sung ④ Chứng từ & cảng.
+// Sửa sau thông quan (AMA/AMB/AMC) làm ở bước 7 – ở đây chỉ còn thẻ lối vào. Quy tắc bấm được / việc tiếp theo do backend (hoặc mock)
+// tính bằng @kb/contracts customs-flow – màn chỉ hiển thị.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, Field,
   Grid, IconTile, Select, Spinner, Stack, StatusBadge, toast, toastPromise, type Tone,
@@ -13,16 +14,19 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
 import {
-  customsKeys, getSubmission, listCertificates, performOperation, resendOperation, startPostAmendment, submitDeclaration,
+  customsKeys, getSubmission, listCertificates, performOperation, resendOperation, submitDeclaration,
   type PipelineRow, type PipelineStatus, type SubmissionView,
 } from "@/api/customs";
 import { declarationKeys, getDeclarationView } from "@/api/declaration";
+import { getPostAmendmentView, postAmendmentKeys } from "@/api/post-amendment";
 import { formatDate, formatDateTime, formatRelative, formatTime, formatVnd } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import type { CustomsChannel, Declaration } from "@/mocks/types";
 import { CustomsInfoPanel, type CustomsEstimate } from "./customs-info-panel";
 import { errorMessage, KeyValue, StepError, StepLoading } from "./declaration-parts";
 import type { StepProps } from "./types";
+import { AMA_STATUS } from "../../post-amendment/ama-context";
+import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 
 const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
 
@@ -271,20 +275,13 @@ export function MessageLog({ messages }: { messages: SubmissionView["messages"] 
   );
 }
 
-/** Nghiệp vụ cần xác nhận: gọi về sửa (IDB/IDD mở lại tờ khai; AMB gọi về bản khai bổ sung) hoặc bắt đầu sửa sau thông quan (lập bản khai bổ sung AMA). */
-type Confirm = { row: PipelineRow; kind: "recall" | "post" };
+/** Nghiệp vụ cần xác nhận: gọi về sửa (IDB/IDD mở lại tờ khai). AMB (gọi về bản khai bổ sung) làm ở bước 7. */
+type Confirm = { row: PipelineRow };
 
 function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { confirm: Confirm | null; onClose: () => void; onConfirm: (c: Confirm) => void; pending: boolean; code: string }) {
-  const post = confirm?.kind === "post";
-  const amb = confirm?.row.op === "AMB";
   return (
     <Dialog open={confirm !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent
-        title={post ? "Bắt đầu sửa đổi sau thông quan" : `${confirm?.row.label ?? ""} (${confirm?.row.op ?? ""})`}
-        icon={<RotateCcw className="h-4 w-4" />}
-        description={code}
-        size="sm"
-      >
+      <DialogContent title={`${confirm?.row.label ?? ""} (${confirm?.row.op ?? ""})`} icon={<RotateCcw className="h-4 w-4" />} description={code} size="sm">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -293,11 +290,7 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
         >
           <Stack gap="sm">
             <p className="text-sm text-fg-muted">
-              {post
-                ? "Lập bản khai bổ sung AMA riêng, điền sẵn từ tờ khai gốc và số Hải quan trả về (khai bổ sung trong 60 ngày – TT121 Điều 20). Tờ khai gốc giữ nguyên, không sửa trực tiếp. Chọn dòng hàng cần bổ sung, sửa phần Sau, phê duyệt rồi khai AMA."
-                : amb
-                  ? "Hải quan chấp nhận gọi về thì bản khai bổ sung mở lại để sửa ở bước Review (tab Khai bổ sung AMA). Phê duyệt hiện tại bị hủy – sửa xong, Người duyệt phải phê duyệt lại rồi khai AMA lại."
-                  : "Hải quan chấp nhận gọi về thì tờ khai được mở lại để sửa chỉ tiêu. Tờ khai quay về bản nháp ở bước Review và phê duyệt hiện tại bị hủy – sửa xong, Người duyệt phải phê duyệt lại thì mới gửi lại được."}
+              Hải quan chấp nhận gọi về thì tờ khai được mở lại để sửa chỉ tiêu. Tờ khai quay về bản nháp ở bước Review và phê duyệt hiện tại bị hủy – sửa xong, Người duyệt phải phê duyệt lại thì mới gửi lại được.
             </p>
           </Stack>
           <DialogFooter>
@@ -305,7 +298,7 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
               Hủy
             </Button>
             <Button type="submit" loading={pending} leftIcon={<RotateCcw className="h-4 w-4" />}>
-              {post ? "Lập bản khai bổ sung" : `Gọi về sửa (${confirm?.row.op ?? ""})`}
+              Gọi về sửa ({confirm?.row.op ?? ""})
             </Button>
           </DialogFooter>
         </form>
@@ -378,20 +371,6 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     onError: toastMutationError("Không thực hiện được nghiệp vụ"),
     onSettled: () => setBusyOp(null),
   });
-  const postEdit = useMutation({
-    mutationFn: () => {
-      setBusyOp("AMA");
-      return startPostAmendment(dossier.id);
-    },
-    onSuccess: () => {
-      setConfirm(null);
-      toast({ tone: "success", title: "Đã lập bản khai bổ sung AMA", description: "Chọn dòng hàng cần bổ sung, sửa phần Sau, phê duyệt rồi quay lại đây khai AMA." });
-      invalidate();
-      goTo("review");
-    },
-    onError: toastMutationError("Không mở được sửa sau thông quan"),
-    onSettled: () => setBusyOp(null),
-  });
   const resend = useMutation({
     mutationFn: (r: PipelineRow) => {
       setBusyOp(r.op);
@@ -413,14 +392,16 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const blocked = notApproved || s.hsUnconfirmed > 0;
   const certExpired = selected ? selected.validTo < new Date().toISOString().slice(0, 10) : false;
   const sending = s.pipeline.find((r) => r.status === "SENDING");
-  const anyBusy = Boolean(sending) || perform.isPending || resend.isPending || postEdit.isPending || submit.isPending;
+  const anyBusy = Boolean(sending) || perform.isPending || resend.isPending || submit.isPending;
   const hasNumber = Boolean(s.result?.declarationNo);
-  const next = s.nextOp ? s.pipeline.find((r) => r.op === s.nextOp) : undefined;
+  // AMA/AMB/AMC thuộc bước 7 – không hiện ở danh sách nghiệp vụ / việc tiếp theo của bước này.
+  const pipeline = s.pipeline.filter((r) => !AMA_OPS.has(r.op));
+  const next = s.nextOp && !AMA_OPS.has(s.nextOp) ? pipeline.find((r) => r.op === s.nextOp) : undefined;
+  const rejection = s.rejection && !AMA_OPS.has(s.rejection.operation) ? s.rejection : null;
 
   const onAction = (r: PipelineRow) => {
     if (r.action === "EDIT") return goTo("review");
-    if (r.action === "START_POST_EDIT") return setConfirm({ row: r, kind: "post" });
-    if (isRecall(r.op)) return setConfirm({ row: r, kind: "recall" });
+    if (isRecall(r.op)) return setConfirm({ row: r });
     if (firstSend && baseOp(r.op) === "IDA") return submit.mutate();
     perform.mutate(r.op);
   };
@@ -447,17 +428,19 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         </Alert>
       )}
 
-      {s.rejection && (
+      {postStepVisible(s.stage) && <PostAmendmentEntry dossierId={dossier.id} onOpen={() => goTo("post")} />}
+
+      {rejection && (
         <Alert
           tone="danger"
-          title={`Hải quan từ chối ${s.rejection.operation} – ${s.rejection.errors.length} lỗi`}
+          title={`Hải quan từ chối ${rejection.operation} – ${rejection.errors.length} lỗi`}
           action={
             <Button size="sm" variant="secondary" onClick={() => goTo("review")}>
               Xem lỗi trên tờ khai
             </Button>
           }
         >
-          Lỗi được gắn vào đúng ô chỉ tiêu ở bước Review tờ khai. Mở lại tờ khai, sửa, phê duyệt lại rồi gửi lại {s.rejection.operation}.
+          Lỗi được gắn vào đúng ô chỉ tiêu ở bước Review tờ khai. Mở lại tờ khai, sửa, phê duyệt lại rồi gửi lại {rejection.operation}.
         </Alert>
       )}
 
@@ -529,8 +512,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
               />
               {firstSend && certExpired && <Alert tone="warning">Chứng thư số đã hết hạn – chọn chứng thư khác.</Alert>}
 
-              {CUSTOMS_PHASES.map((p, i) => (
-                <PhaseSection key={p.id} index={i + 1} phase={p} rows={s.pipeline.filter((r) => r.phase === p.id)} h={h} />
+              {CUSTOMS_PHASES.filter((p) => pipeline.some((r) => r.phase === p.id)).map((p, i) => (
+                <PhaseSection key={p.id} index={i + 1} phase={p} rows={pipeline.filter((r) => r.phase === p.id)} h={h} />
               ))}
             </Stack>
           </CardContent>
@@ -546,11 +529,37 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       <ConfirmReopenDialog
         confirm={confirm}
         code={`${dossier.code} · ${dossier.partner}`}
-        pending={perform.isPending || postEdit.isPending}
+        pending={perform.isPending}
         onClose={() => setConfirm(null)}
-        onConfirm={(c) => (c.kind === "post" ? postEdit.mutate() : perform.mutate(c.row.op))}
+        onConfirm={(c) => perform.mutate(c.row.op)}
       />
     </Stack>
+  );
+}
+
+/** Thẻ lối vào bước 7: tờ khai đã thông quan – sửa sau thông quan làm ở bước riêng. */
+function PostAmendmentEntry({ dossierId, onOpen }: { dossierId: string; onOpen: () => void }) {
+  const q = useQuery({ queryKey: postAmendmentKeys.view(dossierId), queryFn: () => getPostAmendmentView(dossierId) });
+  const current = q.data?.current ?? null;
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center gap-3 pt-5">
+        <IconTile icon={<FilePen />} tone={current ? "warning" : "neutral"} size="md" />
+        <div className="min-w-0 flex-1 basis-48">
+          {current ? (
+            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-fg">
+              Đang khai bổ sung lần {current.seq} <StatusBadge status={AMA_STATUS[current.status]} />
+            </p>
+          ) : (
+            <p className="text-sm font-medium text-fg">Cần sửa sau thông quan?</p>
+          )}
+          <p className="text-sm text-fg-muted">Bản khai bổ sung AMA riêng, tờ khai gốc giữ nguyên – hạn 60 ngày kể từ ngày thông quan.</p>
+        </div>
+        <Button variant={current ? "primary" : "secondary"} rightIcon={<ArrowRight className="h-4 w-4" />} disabled={q.isLoading} onClick={onOpen}>
+          {current ? "Tiếp tục" : "Lập bản khai bổ sung"}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -573,11 +582,11 @@ function NextStep({
     );
   }
   if (!next) {
-    const cleared = s.stage === "CLEARED";
+    const cleared = s.stage === "CLEARED" || s.stage.startsWith("POST_");
     return (
       <Alert tone={cleared ? "success" : "info"} title={cleared ? "Tờ khai đã thông quan" : "Đang chờ Hải quan"}>
         {cleared
-          ? "Không còn việc bắt buộc. Khi cần, mở sửa đổi sau thông quan hoặc làm thủ tục chứng từ & cảng bên dưới."
+          ? "Không còn việc bắt buộc. Cần sửa thì dùng thẻ Sửa sau thông quan ở trên; thủ tục chứng từ & cảng ở bên dưới."
           : s.inProgress
             ? "Hệ thống tự hỏi trạng thái tờ khai định kỳ; kết quả thông quan sẽ hiện ở đây."
             : "Không có việc cần làm ngay – tra cứu trạng thái để cập nhật."}

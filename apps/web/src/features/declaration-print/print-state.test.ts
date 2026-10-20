@@ -1,6 +1,6 @@
 import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printValue, sameNumber, type PrintData } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printValue, sameNumber, unplacedErrors, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -289,5 +289,26 @@ describe("keepTogetherValue (Fix round 2)", () => {
   });
   it("số tiền, chữ có khoảng trắng, rỗng → không", () => {
     for (const v of ["1.244.609.250", "46.215,00", "CÔNG TY A", "", "  "]) expect(keepTogetherValue(v), v).toBe(false);
+  });
+});
+
+describe("unplacedErrors / printIssues (final review)", () => {
+  const base = (errors: Parameters<typeof attentionCells>[3]): PrintData => ({
+    kind: "IDA", lineNos: [1], values: {}, itemRows: [{}], errors, customs: {}, estimate: {}, estimated: new Set(),
+  });
+  const noNo = { code: "E9", message: "Lỗi chung" };
+  const badLine = { no: "1.74", line: 9, code: "E8", message: "Dòng không có" };
+  const placed = { no: "1.22", code: "E1", message: "x" };
+  it("lỗi không có số chỉ tiêu / dòng hàng không có → không gắn được vào ô", () => {
+    expect(unplacedErrors("IDA", [noNo, badLine, placed], [1])).toEqual([noNo, badLine]);
+  });
+  it("được đếm cùng ô cần xử lý (huy hiệu + thanh công cụ), cả khi tờ khai chỉ đọc", () => {
+    const d = base([noNo, badLine, placed]);
+    const locked = printIssues(d, "LOCKED", true);
+    expect(locked.unplaced).toEqual([noNo, badLine]);
+    expect(locked.cells).toEqual([{ key: "TK_EPA", reason: "ERROR" }]);
+    expect(locked.count).toBe(3);
+    const open = printIssues(d, "FULL", true);
+    expect(open.count).toBe(open.cells.length + 2);
   });
 });

@@ -15,13 +15,15 @@ type Props = {
   kind: "IDA" | "EDA";
   decl: FormValues;
   items: FormValues[];
+  /** Số dòng hàng (`lineNo`) theo thứ tự dòng. */
+  lineNos: number[];
   look: (key: string, line?: number) => CellLook;
   selected: PrintTarget | null;
   /** Phải ổn định (useCallback). */
   onSelect: (key: string, line?: number) => void;
 };
 
-export function OtherFields({ kind, decl, items, look, selected, onSelect }: Props) {
+export function OtherFields({ kind, decl, items, lineNos, look, selected, onSelect }: Props) {
   const groups = useMemo(() => otherFieldGroups(kind, decl, items), [kind, decl, items]);
   const all: [OtherGroup, number | undefined][] = [...groups.decl.map((g) => [g, undefined] as [OtherGroup, undefined]), ...groups.items.flatMap((gs, line) => gs.map((g) => [g, line] as [OtherGroup, number]))];
   const count = all.reduce((n, [g]) => n + g.keys.length, 0);
@@ -74,7 +76,7 @@ export function OtherFields({ kind, decl, items, look, selected, onSelect }: Pro
           {groups.items.map((gs, line) =>
             gs.length > 0 ? (
               <Stack key={`dong-${line}`} gap="sm">
-                <h3 className="text-sm font-semibold text-fg">Dòng hàng {line + 1}</h3>
+                <h3 className="text-sm font-semibold text-fg">Dòng hàng {lineNos[line] ?? line + 1}</h3>
                 {gs.map((g) => group(g, line, "h4"))}
               </Stack>
             ) : null,

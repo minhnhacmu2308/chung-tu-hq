@@ -8,6 +8,7 @@ import { conditionContext, groupMissing, isApplicable, missingRequired, type For
 import { customsItemValues, customsValues } from "../declaration-form/customs-adapter";
 import { declarationValues, itemValues } from "../declaration-form/dossier-adapter";
 import { fieldErrors, type FieldError } from "../dossier-detail/steps/customs-errors";
+import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { codeLabel, displayValue } from "../declaration-form/display";
 
 type Kind = "IDA" | "EDA";
@@ -249,7 +250,8 @@ export function printData(decl: Declaration, items: LineItem[], submission: Subm
   const customs = customsValues(kind, info, submission?.result ?? null);
   const est: Estimate = {
     customsValueVnd: decl.customsValueVnd, currency, exchangeRate: decl.exchangeRate, lines: items.length,
-    ...(kind === "IDA" ? { taxVnd: String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd)) } : {}),
+    // Cộng tiền bằng số nguyên đồng (lib/decimal), không cộng số thực.
+    ...(kind === "IDA" ? { taxVnd: fromMinor(sumMinor([toMinor(decl.estimatedImportDutyVnd, 0), toMinor(decl.estimatedVatVnd, 0)]), 0) } : {}),
   };
   const { values: customsFilled, estimated } = estimateValues(kind, customs, est);
   const estimate = estimateValues(kind, {}, est).values;
@@ -266,9 +268,24 @@ export function printAttention(data: PrintData, mode: DeclarationEditMode, canEd
   return mode === "LOCKED" || !canEdit ? cells.filter((c) => c.reason !== "MISSING") : cells;
 }
 
-/** Ô cần xử lý từ dữ liệu tờ khai (huy hiệu tab "Tờ khai" ở review-step – cùng hàm với thanh công cụ của bản in). */
-export function printAttentionCells(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean): AttentionCell[] {
-  return printAttention(printData(decl, items, submission), mode, canEdit);
+/** Lỗi Hải quan không gắn được vào ô nào (không có số chỉ tiêu, dòng hàng không có, chỉ tiêu không có trên bản in) – liệt kê riêng. */
+export function unplacedErrors(kind: Kind, errors: FieldError[], lineNos: number[]): FieldError[] {
+  const slots = slotsPerError(kind, slotOrder(kind, lineNos.length), errors, lineNos);
+  return errors.filter((_, i) => slots[i]!.length === 0);
+}
+
+/** Việc cần xử lý của bản in: ô (lỗi → còn thiếu) + lỗi không gắn được vào ô. `count` = huy hiệu tab và số trên thanh công cụ. */
+export type PrintIssues = { cells: AttentionCell[]; unplaced: FieldError[]; count: number };
+
+export function printIssues(data: PrintData, mode: DeclarationEditMode, canEdit: boolean): PrintIssues {
+  const cells = printAttention(data, mode, canEdit);
+  const unplaced = unplacedErrors(data.kind, data.errors, data.lineNos);
+  return { cells, unplaced, count: cells.length + unplaced.length };
+}
+
+/** Việc cần xử lý từ dữ liệu tờ khai (huy hiệu tab "Tờ khai" ở review-step – cùng hàm với thanh công cụ của bản in). */
+export function printIssuesOf(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean): PrintIssues {
+  return printIssues(printData(decl, items, submission), mode, canEdit);
 }
 
 /** Số tờ khai chưa có (chưa đăng ký) – in thay cho ô trống (spec §3.1). */

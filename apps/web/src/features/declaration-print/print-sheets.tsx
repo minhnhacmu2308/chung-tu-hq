@@ -18,8 +18,8 @@ export const pageDomId = (page: number) => `print-page-${page}`;
 type Props = {
   kind: Kind;
   title: { title: string; watermark: string | null };
-  /** Số dòng hàng. */
-  lines: number;
+  /** Số dòng hàng (`lineNo`) theo thứ tự dòng – in `< 01 >` theo số dòng thật, không theo vị trí mảng. */
+  lineNos: number[];
   look: (key: string, line?: number) => CellLook;
   selected: PrintTarget | null;
   /** Phải ổn định (useCallback) để ô không vẽ lại khi chọn ô khác. */
@@ -28,8 +28,9 @@ type Props = {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Props) {
+export function PrintSheets({ kind, title, lineNos, look, selected, onSelect }: Props) {
   const layout = printLayoutFor(kind);
+  const lines = lineNos.length;
   const total = pageCount(kind, lines);
 
   // Nhãn trống của dòng lặp = khoảng trắng không ngắt: mọi ô cùng chiều cao với ô đầu (nhãn "1") trên màn hình.
@@ -126,7 +127,7 @@ export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Pr
           <PaperSheet key={page} id={pageDomId(page)} page={page} total={total} header={header(page)} watermark={title.watermark}>
             {block.map((line) => (
               <Fragment key={line}>
-                <p className="col-span-12 pt-2 font-mono text-sm font-semibold">{`< ${pad2(line + 1)} >`}</p>
+                <p className="col-span-12 pt-2 font-mono text-sm font-semibold">{`< ${pad2(lineNos[line] ?? line + 1)} >`}</p>
                 {regions(layout.item, line)}
               </Fragment>
             ))}

@@ -29,7 +29,7 @@ import { DossierDeclarationForm } from "../../declaration-form/dossier-declarati
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
 import type { LeaveGuard } from "../../declaration-print/field-edit-panel";
-import { printAttentionCells } from "../../declaration-print/print-state";
+import { printIssuesOf } from "../../declaration-print/print-state";
 import { LoadError } from "@/components/common/load-error";
 
 const exportTaxText = (status: Declaration["status"]) =>
@@ -58,11 +58,11 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
   );
 }
 
-/** Huy hiệu tab "Tờ khai": số ô cần xử lý – cùng hàm với "Chỉ ô cần xử lý" của bản in (tab không cần gắn bản in). */
+/** Huy hiệu tab "Tờ khai": số ô cần xử lý + lỗi Hải quan không gắn được vào ô – cùng hàm với thanh công cụ của bản in (tab không cần gắn bản in). */
 function AttentionBadge({ decl, items, submission, mode, canEdit, hasErrors }: {
   decl: Declaration; items: LineItem[]; submission: SubmissionView | undefined; mode: DeclarationEditMode; canEdit: boolean; hasErrors: boolean;
 }) {
-  const n = useMemo(() => printAttentionCells(decl, items, submission, mode, canEdit).length, [decl, items, submission, mode, canEdit]);
+  const n = useMemo(() => printIssuesOf(decl, items, submission, mode, canEdit).count, [decl, items, submission, mode, canEdit]);
   if (n === 0) return null;
   return (
     <Badge tone={hasErrors ? "danger" : "warning"}>
@@ -85,6 +85,12 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const tabParam = params.get("tab");
   // Rời tab bản in khi panel còn thay đổi chưa lưu → panel hỏi Lưu / Bỏ / Ở lại, tự chuyển tab khi Lưu hoặc Bỏ.
   const leaveGuard: LeaveGuard = useRef(null);
+  /** Rời bản in (sang bước khác, mở hộp phê duyệt): còn thay đổi chưa lưu → panel hỏi trước; Lưu / Bỏ thì đi tới `href`. */
+  const leave = (href: string, go: () => void) => {
+    if (leaveGuard.current?.(href)) return;
+    go();
+  };
+  const goStep = (step: Parameters<typeof goTo>[0]) => leave(`${pathname}?step=${step}`, () => goTo(step));
   const setTab = (t: string) => {
     const next = new URLSearchParams(params.toString());
     next.set("tab", t);
@@ -217,7 +223,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 tone="danger"
                 title={`Còn ${unconfirmedHs} mã HS chưa xác nhận`}
                 action={
-                  <Button size="sm" variant="secondary" onClick={() => goTo("agent")}>
+                  <Button size="sm" variant="secondary" onClick={() => goStep("agent")}>
                     Xác nhận HS
                   </Button>
                 }
@@ -235,7 +241,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 </TabsTrigger>
               ) : (
                 <TabsTrigger value="full">
-                  Tờ khai <AttentionBadge decl={decl} items={items} submission={subQ.data} mode={editMode} canEdit={canEdit} hasErrors={errs.length > 0} />
+                  Tờ khai {subQ.isSuccess && <AttentionBadge decl={decl} items={items} submission={subQ.data} mode={editMode} canEdit={canEdit} hasErrors={errs.length > 0} />}
                 </TabsTrigger>
               )}
               <TabsTrigger value="docs">Chứng từ đính kèm</TabsTrigger>
@@ -250,7 +256,10 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               {legacy ? (
                 <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
               ) : (
-                <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} submission={subQ.data} leaveGuard={leaveGuard} />
+                // Chưa có giai đoạn Hải quan thì chưa vẽ: tránh hiện "BẢN NHÁP" / watermark cho tờ khai đã khai.
+                subQ.isPending ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
+                  <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} submission={subQ.data} leaveGuard={leaveGuard} />
+                )
               )}
             </TabsContent>
             <TabsContent value="docs">
@@ -295,17 +304,20 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <p className="text-sm font-medium text-fg">{exportTaxText(decl.status)}</p>
           </div>
         )}
-        <Button variant="ghost" onClick={() => goTo("ocr")}>
+        <Button variant="ghost" onClick={() => goStep("ocr")}>
           Quay lại OCR
         </Button>
         {isDraft ? (
           <Button
             leftIcon={<ShieldCheck className="h-4 w-4" />}
             disabled={unconfirmedHs > 0 || blockedByFourEyes}
-            onClick={() => {
-              setChecked(false);
-              setConfirmOpen(true);
-            }}
+            onClick={() =>
+              // Còn thay đổi chưa lưu ở panel → hỏi trước (Lưu / Bỏ giữ nguyên trang), rồi bấm Phê duyệt lại.
+              leave(`${pathname}?${params.toString()}`, () => {
+                setChecked(false);
+                setConfirmOpen(true);
+              })
+            }
           >
             Phê duyệt tờ khai
           </Button>
@@ -316,7 +328,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 Mở lại để sửa
               </Button>
             )}
-            <Button onClick={() => goTo("submit")}>Sang khai báo Hải quan</Button>
+            <Button onClick={() => goStep("submit")}>Sang khai báo Hải quan</Button>
           </>
         )}
       </StickyActionBar>

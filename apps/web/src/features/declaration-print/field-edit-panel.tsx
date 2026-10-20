@@ -135,7 +135,8 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
     leaveGuard.current = (href) => {
       if (save.isPending) return true;
       if (!dirty) return false;
-      setConfirm({ next: null, href });
+      // Giữ ô đang chọn: rời trang thì panel bị gỡ; ở lại trang (mở hộp phê duyệt) thì panel vẫn đúng ô đang chọn.
+      setConfirm({ next: shown, href });
       return true;
     };
     return () => { leaveGuard.current = null; };

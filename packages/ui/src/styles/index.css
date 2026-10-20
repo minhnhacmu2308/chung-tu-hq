@@ -316,9 +316,10 @@
 @media print {
   /* Giấy luôn đen trên trắng khi in, bất kể giao diện sáng/tối */
   :root { --kb-color-paper: white; --kb-color-paper-fg: black; --kb-color-paper-rule: black; }
-  body * { visibility: hidden; }
-  [data-print-root], [data-print-root] * { visibility: visible; }
-  [data-print-root] { position: absolute; inset: 0; }
+  /* Chỉ giữ gốc in, tổ tiên và con cháu của nó; còn lại display:none (visibility:hidden để lại trang trắng / Firefox chỉ in trang 1) */
+  body *:not(:has([data-print-root])):not([data-print-root]):not([data-print-root] *) { display: none !important; }
+  html, body, :has(> [data-print-root]), :has([data-print-root]) { position: static !important; overflow: visible !important; height: auto !important; }
   [data-paper-mark] { display: none; }
   [data-paper-sheet] { break-after: page; box-shadow: none; border: 0; }
+  [data-paper-sheet]:last-child { break-after: auto; }
 }

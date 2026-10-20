@@ -46,7 +46,7 @@ export function PaperSheet({ page, total, header, watermark, id, children, label
       role="region"
       aria-label={name}
       data-paper-sheet
-      className="relative aspect-[210/297] w-full max-w-[210mm] overflow-hidden border border-paper-rule bg-paper p-[10mm] text-paper-fg shadow-md print:aspect-auto print:max-w-none print:border-0 print:shadow-none"
+      className="relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-[10mm] text-paper-fg shadow-md print:min-h-0 print:max-w-none print:border-0 print:shadow-none"
     >
       {header && <div className="mb-3 border-b border-paper-rule pb-2">{header}</div>}
       <div className="relative grid grid-cols-12 gap-px">{children}</div>
@@ -64,13 +64,16 @@ const SPAN = {
 } as const;
 
 export type PaperFieldProps = {
+  /** Chỉ nội dung dòng chữ (phrasing content), không chứa phần tử tương tác (không Abbreviation/button/link) – ô có thể là <button>. */
   label: ReactNode;
+  /** Như `label`: chỉ nội dung dòng chữ, không phần tử tương tác. */
   value: ReactNode;
   state?: PaperFieldState;
   /** Giá trị cũ để so sánh – hiện gạch ngang cạnh giá trị chính (chỉ trên màn hình). */
   compareTo?: string | null;
   selected?: boolean;
   onSelect?: () => void;
+  /** Tên đầy đủ của ô (đọc trước giá trị và trạng thái) – hiển thị dưới dạng sr-only, không ghi đè aria-label. */
   ariaLabel: string;
   span?: 1 | 2 | 3 | 4 | 6 | 12;
   labels?: Partial<{ missing: string; estimate: string; edited: string; error: string }>;
@@ -81,7 +84,7 @@ export function PaperField({ label, value, state = "none", compareTo, selected =
   const cls = cn(
     "relative block min-w-0 border border-paper-rule bg-paper px-1.5 py-1 text-left text-paper-fg",
     SPAN[span],
-    state === "error" && "border-danger bg-danger-subtle text-danger-subtle-fg print:bg-paper print:text-paper-fg",
+    state === "error" && "border-danger bg-danger-subtle text-danger-subtle-fg print:border-paper-rule print:bg-paper print:text-paper-fg",
     state === "missing" && "border-dashed border-warning print:border-solid print:border-paper-rule",
     onSelect && "cursor-pointer hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
     selected && "ring-2 ring-primary",
@@ -89,9 +92,12 @@ export function PaperField({ label, value, state = "none", compareTo, selected =
   );
   const body = (
     <>
-      <span className="block text-[10px] leading-tight opacity-80">{label}</span>
+      <span className="sr-only">{ariaLabel}</span>
+      {" "}
+      <span aria-hidden="true" className="block text-[10px] leading-tight opacity-80">{label}</span>
+      {" "}
       <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs">
-        <span className={cn("min-w-0 break-words", state === "estimate" && "italic")}>{value}</span>
+        <span className={cn("min-w-0 break-words", state === "estimate" && "italic print:not-italic")}>{value}</span>
         {compareTo && (
           <span data-paper-mark className="opacity-70">
             <s>{compareTo}</s>
@@ -118,13 +124,13 @@ export function PaperField({ label, value, state = "none", compareTo, selected =
   );
   if (onSelect) {
     return (
-      <button type="button" aria-label={ariaLabel} aria-pressed={selected} onClick={onSelect} className={cls}>
+      <button type="button" aria-pressed={selected} onClick={onSelect} className={cls}>
         {body}
       </button>
     );
   }
   return (
-    <div role="group" aria-label={ariaLabel} className={cls}>
+    <div className={cls}>
       {body}
     </div>
   );

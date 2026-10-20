@@ -51,7 +51,7 @@ describe("PaperField", () => {
   it("có onSelect: là button đúng tên; chuột, Enter, Space đều chọn", async () => {
     const onSelect = vi.fn();
     render(<PaperField label="Mã loại hình" value="A11" ariaLabel="Chọn ô Mã loại hình" onSelect={onSelect} />);
-    const btn = screen.getByRole("button", { name: "Chọn ô Mã loại hình" });
+    const btn = screen.getByRole("button", { name: /Chọn ô Mã loại hình/ });
     await userEvent.click(btn);
     expect(onSelect).toHaveBeenCalledTimes(1);
     btn.focus();
@@ -60,11 +60,21 @@ describe("PaperField", () => {
     expect(onSelect).toHaveBeenCalledTimes(3);
   });
 
+  it("tên của nút gồm tên ô, giá trị và trạng thái (không bị aria-label che)", () => {
+    render(<PaperField label="Mã loại hình" value="A11" ariaLabel="Mã loại hình" state="missing" compareTo="B22" onSelect={() => {}} />);
+    const btn = screen.getByRole("button");
+    expect(btn).not.toHaveAttribute("aria-label");
+    const name = btn.textContent ?? "";
+    expect(name).toContain("A11");
+    expect(name).toContain("Còn thiếu");
+    expect(screen.getByRole("button", { name: /Mã loại hình.*A11.*Còn thiếu/ })).toBeInTheDocument();
+  });
+
   it("selected => aria-pressed=true", () => {
     const { rerender } = render(<PaperField label="a" value="b" ariaLabel="ô" onSelect={() => {}} selected />);
-    expect(screen.getByRole("button", { name: "ô" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^ô/ })).toHaveAttribute("aria-pressed", "true");
     rerender(<PaperField label="a" value="b" ariaLabel="ô" onSelect={() => {}} />);
-    expect(screen.getByRole("button", { name: "ô" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /^ô/ })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("missing: chữ 'Còn thiếu' (data-paper-mark)", () => {

@@ -226,6 +226,10 @@ export function Showcase() {
               <PaperField span={4} label="6. Trọng lượng (kg)" value="1.250" ariaLabel="Trọng lượng" state="edited" compareTo="1.200" />
               <PaperField span={4} label="7. Số kiện" value="12" ariaLabel="Số kiện" />
             </PaperSheet>
+            <PaperSheet page={2} total={2}>
+              <PaperField span={6} label="8. Mã hàng" value="84821000" ariaLabel="Mã hàng" />
+              <PaperField span={6} label="9. Thuế suất" value="0%" ariaLabel="Thuế suất" />
+            </PaperSheet>
           </PaperStack>
         </CardContent>
       </Card>

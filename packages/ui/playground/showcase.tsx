@@ -2,8 +2,8 @@
 import { Filter, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import {
-  Abbreviation, Avatar, AvatarGroup, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
-  DatePicker, DateRangePicker, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  Abbreviation, Avatar, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
+  DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   Field, FileDropzone, FileUploadList, Grid, Input, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
 } from "../src/index.js";
@@ -176,6 +176,10 @@ export function Showcase() {
                 <DateRangePicker value={period} onChange={setPeriod} min="2024-01-01" max="2026-12-31" />
               </Field>
               <Field label="Ngày hóa đơn"><DatePicker value={invoiceDate} onChange={setInvoiceDate} min="2024-01-01" /></Field>
+              <Disclosure title="Thông tin khác (không bắt buộc)">Nộp thuế, ngân hàng trả thay, bảo lãnh…</Disclosure>
+              <Disclosure title="Dòng 1 · Vòng bi tuyến tính LM20" meta={<Badge tone="info">2 ô đã đổi</Badge>} actions={<Button size="sm" variant="ghost">Bỏ dòng</Button>} defaultOpen>
+                Bảng so sánh Trước | Sau
+              </Disclosure>
               <Switch label="Tự truyền tờ khai khi không còn lỗi" description="Chỉ áp dụng cho hồ sơ luồng tự duyệt" checked={autoSubmit} onCheckedChange={setAutoSubmit} />
             </Stack>
           </CardContent>

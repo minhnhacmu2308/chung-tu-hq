@@ -95,6 +95,19 @@ describe("bản in EDA", () => {
     expect(p.pages).toHaveLength(2);
     expect(p.itemsPerPage).toBe(2);
   });
+  it("lệ phí | bảo hiểm cạnh nhau trong khối dòng hàng", () => {
+    const pair = p.item.find((r) => Array.isArray(r));
+    expect(Array.isArray(pair) && pair.map((r) => r.title)).toEqual(["Tiền lệ phí", "Tiền bảo hiểm"]);
+    expect(printKeys(p).item).toEqual(expect.arrayContaining(["HAG_CPR", "HAG_IPR"]));
+  });
+  it("tiêu đề Vanning và địa điểm xếp hàng lên xe chở hàng", () => {
+    const titles = p.pages[1]!.regions.flat().map((r) => r.title);
+    expect(titles.slice(0, 3)).toEqual(["Vanning", "Địa điểm xếp hàng lên xe chở hàng", "Số container"]);
+  });
+  it("tổng số tiền lệ phí cùng dòng số tiền bảo lãnh", () => {
+    const row = p.pages[0]!.regions.flat().flatMap((r) => r.rows).find((row) => Array.isArray(row) && row.some((c) => c.key === "TK_SAM"));
+    expect(Array.isArray(row) && row.map((c) => c.key)).toEqual(["TK_SAM", "TK_AD8", "TK_TCO"]);
+  });
 });
 
 describe("printTitle", () => {
@@ -111,6 +124,10 @@ describe("printTitle", () => {
     ["IDA", "AMEND_PRE_DECLARED", routed],
     ["EDA", "CLEARED", cleared("xuất")],
     ["IDA", "POST_EDITING", cleared("nhập")],
+    ["IDA", "NOT_SENT", draft],
+    ["IDA", "AMEND_RECALLED", routed],
+    ["IDA", "POST_PRE_DECLARED", cleared("nhập")],
+    ["IDA", "POST_RECALLED", cleared("nhập")],
   ] as const)("%s %s", (kind, stage, expected) => {
     expect(printTitle(kind, stage)).toEqual(expected);
   });

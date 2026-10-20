@@ -1,7 +1,7 @@
 import { fillIndex } from "../declaration-layout/expand.js";
 import { itemFields, layoutFor, type LayoutBlock } from "../declaration-layout/index.js";
 import { printLayoutFor } from "./layout-for.js";
-import type { PrintCell, PrintLayout, PrintRegion, PrintRow } from "./types.js";
+import type { PrintCell, PrintLayout, PrintPage, PrintRow } from "./types.js";
 
 /** Dòng in → các dòng ô; dòng lặp thay {n}/{nn} theo số dòng (giống expandRepeat). */
 export function expandPrintRow(row: PrintRow): PrintCell[][] {
@@ -10,12 +10,11 @@ export function expandPrintRow(row: PrintRow): PrintCell[][] {
 }
 
 const rowKeys = (rows: PrintRow[]) => rows.flatMap(expandPrintRow).flat().map((c) => c.key);
-const regionKeys = (regions: PrintRegion[]) => regions.flatMap((r) => rowKeys(r.rows));
+const regionKeys = (regions: PrintPage["regions"]) => regions.flat().flatMap((r) => rowKeys(r.rows));
 
 /** Khóa trên bản in theo thứ tự in: decl = đầu trang + các trang chung; item = khối dòng hàng. */
 export function printKeys(p: PrintLayout): { decl: string[]; item: string[] } {
-  const pageRegions = p.pages.flatMap((pg) => pg.regions.flatMap((r) => (Array.isArray(r) ? r : [r])));
-  return { decl: [...rowKeys(p.header), ...regionKeys(pageRegions)], item: regionKeys(p.item) };
+  return { decl: [...rowKeys(p.header), ...regionKeys(p.pages.flatMap((pg) => pg.regions))], item: regionKeys(p.item) };
 }
 
 const declarantKeys = (blocks: LayoutBlock[]) => blocks.flatMap((b) => b.items.flatMap(itemFields)).filter((f) => f.origin !== "CUSTOMS").map((f) => f.key);

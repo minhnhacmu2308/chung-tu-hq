@@ -6,10 +6,8 @@
 // - Tr.2: "Số quản lý người sử dụng"; mục thông báo: "Ngày khai báo nộp thuế", "Tổng số tiền thuế chậm nộp".
 // - Dòng hàng: số thứ tự dòng "< 01 >" (tính khi vẽ).
 // Ba dòng không nhãn "tên … / /  tên … / /" ở mục thông báo = 6 sắc thuế được ân hạn (TK_KO{n} tên, TK_KP{n} hạn nộp), hai sắc thuế mỗi dòng.
-import type { PrintCell, PrintLayout, PrintRegion, PrintRow } from "./types.js";
-
-const c = (key: string, label = "", span?: PrintCell["span"], align?: "end"): PrintCell => ({ key, label, ...(span ? { span } : {}), ...(align ? { align } : {}) });
-const rep = (count: number, cells: PrintCell[], label?: string): PrintRow => ({ kind: "repeat", ...(label ? { label } : {}), count, cells });
+import { c, rep } from "./cells.js";
+import type { PrintLayout, PrintRegion, PrintRow } from "./types.js";
 
 /** Đầu trang – lặp ở mọi trang. */
 const HEADER: PrintRow[] = [

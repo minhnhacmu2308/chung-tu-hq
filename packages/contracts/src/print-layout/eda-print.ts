@@ -4,13 +4,13 @@
 // Ô / chữ có trên mẫu nhưng bố cục EDA không có khóa nào → bỏ:
 // - Đầu trang: mã vạch; "<EXP>"; số trang "n / N" (tính khi vẽ); ô "-" sau "Thời hạn tái nhập/ tái xuất".
 // - Tr.1: "Số quản lý người sử dụng"; chữ "VND" cố định sau "Tổng số tiền lệ phí".
-// - Tr.2: tiêu đề phụ "Địa điểm xếp hàng lên xe chở hàng" giữa "Vanning" và dòng "Mã" (vùng chỉ có một tiêu đề); số dòng chỉ thị 1–10 (tính khi vẽ).
-// - Dòng hàng: số thứ tự dòng "< 01 >" (tính khi vẽ); chữ "VND" cố định sau "Khoản tiền" lệ phí / bảo hiểm.
+// - Tr.2: số dòng chỉ thị 1–10 (tính khi vẽ).
+// - Dòng hàng: số thứ tự dòng "< 01 >" (tính khi vẽ); chữ "VND" cố định sau "Khoản tiền" lệ phí / bảo hiểm;
+//   dòng không nhãn dưới "Đơn giá hóa đơn" ("73.005,1898 VND KGM" – đơn giá tính thuế quy VND của Hải quan, bố cục EDA không có khóa).
 // Dãy ô đánh số trên cùng một dòng ("Mã 1 … 2 … 5", "Mã văn bản pháp luật khác 1 … 5"): ô đầu mang nhãn dòng + số, các ô sau mang số.
-import type { PrintCell, PrintLayout, PrintRegion, PrintRow } from "./types.js";
+import { c, rep } from "./cells.js";
+import type { PrintLayout, PrintRegion, PrintRow } from "./types.js";
 
-const c = (key: string, label = "", span?: PrintCell["span"], align?: "end"): PrintCell => ({ key, label, ...(span ? { span } : {}), ...(align ? { align } : {}) });
-const rep = (count: number, cells: PrintCell[], label?: string): PrintRow => ({ kind: "repeat", ...(label ? { label } : {}), count, cells });
 const nums = (n: number, f: (i: number) => PrintRow): PrintRow[] => Array.from({ length: n }, (_, i) => f(i + 1));
 
 /** Đầu trang – lặp ở mọi trang (6 dòng dưới tiêu đề). */
@@ -75,8 +75,8 @@ const PERMIT_VALUE: [PrintRegion, PrintRegion] = [
 const TAX: PrintRegion = {
   id: "nop-thue", rows: [
     [c("TK_CNV", "Phân loại không cần quy đổi VND", 3), c("TK_TPM", "Người nộp thuế", 3), c("TK_ENC", "Mã xác định thời hạn nộp thuế", 3), c("TK_PAY", "Phân loại nộp thuế", 3)],
-    [c("TK_ETA", "Tổng số tiền thuế xuất khẩu", 4, "end"), c("TK_AD7", "", 2), c("TK_TCO", "Tổng số tiền lệ phí", 6, "end")],
-    [c("TK_SAM", "Số tiền bảo lãnh", 4, "end"), c("TK_AD8", "", 2)],
+    [c("TK_ETA", "Tổng số tiền thuế xuất khẩu", 4, "end"), c("TK_AD7", "", 2)],
+    [c("TK_SAM", "Số tiền bảo lãnh", 4, "end"), c("TK_AD8", "", 2), c("TK_TCO", "Tổng số tiền lệ phí", 6, "end")],
   ],
 };
 
@@ -99,8 +99,9 @@ const PAGE_1_TAIL: PrintRegion[] = [
 ];
 
 const PAGE_2: PrintRegion[] = [
+  { id: "vanning", title: "Vanning", rows: [] },
   {
-    id: "vanning", title: "Vanning", rows: [
+    id: "vanning-dia-diem", title: "Địa điểm xếp hàng lên xe chở hàng", rows: [
       [c("CON_VC1", "Mã 1", 4), c("CON_VC2", "2", 2), c("CON_VC3", "3", 2), c("CON_VC4", "4", 2), c("CON_VC5", "5", 2)],
       [c("CON_VN", "Tên", 12)],
       [c("CON_VA", "Địa chỉ", 12)],
@@ -112,7 +113,7 @@ const PAGE_2: PrintRegion[] = [
 ];
 
 /** Khối một dòng hàng (tr.3+ của mẫu, hai khối mỗi trang). */
-const ITEM: PrintRegion[] = [
+const ITEM: (PrintRegion | [PrintRegion, PrintRegion])[] = [
   {
     id: "hang", rows: [
       [c("HAG_CMD", "Mã số hàng hóa", 4), c("HAG_COC", "Mã quản lý riêng", 4), c("HAG_R03", "Mã phân loại tái xác nhận giá", 4)],
@@ -138,9 +139,10 @@ const ITEM: PrintRegion[] = [
       [c("HAG_TXN", "Danh mục miễn thuế xuất khẩu", 6), c("HAG_ADE", "", 2)],
     ],
   },
-  // Mẫu in lệ phí | bảo hiểm cạnh nhau; `item` chỉ nhận vùng đơn → hai vùng liền nhau.
-  { id: "le-phi", title: "Tiền lệ phí", rows: [[c("HAG_CUP", "Đơn giá", 6, "end")], [c("HAG_CQU", "Số lượng", 4, "end"), c("HAG_CQC", "", 2)], [c("HAG_CPR", "Khoản tiền", 6, "end")]] },
-  { id: "bao-hiem", title: "Tiền bảo hiểm", rows: [[c("HAG_IUP", "Đơn giá", 6, "end")], [c("HAG_IQU", "Số lượng", 4, "end"), c("HAG_IQC", "", 2)], [c("HAG_IPR", "Khoản tiền", 6, "end")]] },
+  [
+    { id: "le-phi", title: "Tiền lệ phí", rows: [[c("HAG_CUP", "Đơn giá", 6, "end")], [c("HAG_CQU", "Số lượng", 4, "end"), c("HAG_CQC", "", 2)], [c("HAG_CPR", "Khoản tiền", 6, "end")]] },
+    { id: "bao-hiem", title: "Tiền bảo hiểm", rows: [[c("HAG_IUP", "Đơn giá", 6, "end")], [c("HAG_IQU", "Số lượng", 4, "end"), c("HAG_IQC", "", 2)], [c("HAG_IPR", "Khoản tiền", 6, "end")]] },
+  ],
   {
     id: "van-ban-mien-giam", rows: [
       [c("HAG_OL1", "Mã văn bản pháp luật khác 1", 4), c("HAG_OL2", "2", 2), c("HAG_OL3", "3", 2), c("HAG_OL4", "4", 2), c("HAG_OL5", "5", 2)],

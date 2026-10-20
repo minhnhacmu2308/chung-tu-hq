@@ -11,7 +11,7 @@ export type PrintRegion = { id: string; title?: string; rows: PrintRow[] };
 /** Vùng dạng cặp = hai vùng nằm cạnh nhau như mẫu (vận đơn | địa điểm…). */
 export type PrintPage = { id: string; regions: (PrintRegion | [PrintRegion, PrintRegion])[] };
 /**
- * header: đầu trang lặp ở mọi trang; pages: các trang chung của tờ khai; item: khối một dòng hàng, `itemsPerPage` khối mỗi trang.
+ * header: đầu trang lặp ở mọi trang; pages: các trang chung của tờ khai; item: khối một dòng hàng (vùng cặp = hai cột như pages), `itemsPerPage` khối mỗi trang.
  * Tổng số trang = pages.length + ceil(số dòng hàng / itemsPerPage).
  */
-export type PrintLayout = { kind: "IDA" | "EDA"; header: PrintRow[]; pages: PrintPage[]; item: PrintRegion[]; itemsPerPage: 1 | 2 };
+export type PrintLayout = { kind: "IDA" | "EDA"; header: PrintRow[]; pages: PrintPage[]; item: (PrintRegion | [PrintRegion, PrintRegion])[]; itemsPerPage: 1 | 2 };

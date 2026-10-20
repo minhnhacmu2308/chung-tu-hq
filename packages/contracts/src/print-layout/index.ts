@@ -2,3 +2,5 @@ export type { PrintCell, PrintLayout, PrintPage, PrintRegion, PrintRepeatRow, Pr
 export { expandPrintRow, otherFieldKeys, printKeys } from "./expand.js";
 export { printLayoutFor } from "./layout-for.js";
 export { PRINT_IDA } from "./ida-print.js";
+export { PRINT_EDA } from "./eda-print.js";
+export { printTitle } from "./title.js";

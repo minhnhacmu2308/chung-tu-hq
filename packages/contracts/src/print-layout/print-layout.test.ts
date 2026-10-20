@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fillIndex } from "../declaration-layout/expand.js";
 import { layoutFields, layoutFor } from "../declaration-layout/index.js";
-import { expandPrintRow, otherFieldKeys, printKeys, printLayoutFor } from "./index.js";
+import { expandPrintRow, otherFieldKeys, printKeys, printLayoutFor, printTitle } from "./index.js";
 
 const range = <T,>(n: number, f: (i: number) => T): T[] => Array.from({ length: n }, (_, i) => f(i + 1));
 
@@ -29,7 +29,27 @@ const OTHER_IDA = {
   ],
 };
 
-describe.each([{ kind: "IDA" as const, other: OTHER_IDA }])("bản in $kind", ({ kind, other }) => {
+/** Chỉ tiêu người khai nhập không có chỗ trên mẫu in EDA (đối chiếu MAUIN_TOKHAI_XUATKHAU.pdf) → khối "Chỉ tiêu khác". */
+const OTHER_EDA = {
+  decl: [
+    "APP_NHOM_LH", // ô lọc mã loại hình của phần mềm
+    "TK_ECD", // ngày khai báo dự kiến – mẫu in chỉ có ngày đăng ký (Hải quan)
+    "APP_HDGC_SO", "APP_HDGC_NGAY", // hợp đồng gia công – phần mềm
+    "APP_HD_SO", "APP_HD_NGAY", "APP_HD_HET_HAN", // hợp đồng nội bộ – phần mềm
+    "TK_BRC", "TK_BYA", "TK_BCM", "TK_BCN", // hạn mức ngân hàng trả thuế thay – mẫu không in
+    "TK_SBC", "TK_RYA", "TK_SCM", "TK_SCN", // bảo lãnh – mẫu chỉ in số tiền bảo lãnh (Hải quan)
+  ],
+  item: [
+    "HAG_MAHANG", // mã hàng nội bộ
+    "APP_XUAT_XU", // phần mềm – xuất xứ in trong mô tả hàng hóa (#&VN)
+    "APP_SL_THUC_TE", "APP_FOC", // phần mềm
+    "HAG_TXA", "HAG_TXB", "HAG_TXC", "HAG_TXD", // thuế suất / mức thuế tuyệt đối nhập tay – mẫu in thuế suất Hải quan xác định (HAG_TRA)
+    "APP_TGTT_TAY", // phần mềm
+    "HAG_DPR", "HAG_BPC", // trị giá tính thuế phân bổ tay – mẫu in trị giá tính thuế Hải quan (S)/(M)
+  ],
+};
+
+describe.each([{ kind: "IDA" as const, other: OTHER_IDA }, { kind: "EDA" as const, other: OTHER_EDA }])("bản in $kind", ({ kind, other }) => {
   const p = printLayoutFor(kind);
   const keys = printKeys(p);
   it("mọi khóa trên bản in có trong bố cục declaration-layout", () => {
@@ -60,6 +80,39 @@ describe("bản in IDA", () => {
     expect(p.kind).toBe("IDA");
     expect(p.pages).toHaveLength(2);
     expect(p.itemsPerPage).toBe(1);
+  });
+});
+
+describe("bản in EDA", () => {
+  const p = printLayoutFor("EDA");
+  it("ô chính của mẫu có mặt", () => {
+    const { decl, item } = printKeys(p);
+    expect(decl).toEqual(expect.arrayContaining(["TK_ECN", "TK_K69", "TK_K70", "TK_ETA", "TK_TCO", "TK_RC1", "TK_RD1", ...range(5, (i) => `CON_VC${i}`), "CON_VN", "CON_VA", ...range(50, (i) => `CON_C${String(i).padStart(2, "0")}`)]));
+    expect(item).toEqual(expect.arrayContaining(["HAG_CMD", "HAG_CMN", "HAG_QN1", "HAG_QN2", "HAG_BPR", ...range(5, (i) => `HAG_OL${i}`)]));
+  });
+  it("hai trang chung, hai dòng hàng mỗi trang", () => {
+    expect(p.kind).toBe("EDA");
+    expect(p.pages).toHaveLength(2);
+    expect(p.itemsPerPage).toBe(2);
+  });
+});
+
+describe("printTitle", () => {
+  const draft = { title: "Tờ khai hàng hóa nhập khẩu – BẢN NHÁP", watermark: "BẢN NHÁP – CHƯA KHAI HẢI QUAN" };
+  const tentative = (k: string) => ({ title: `Tờ khai hàng hóa ${k} khẩu – KHAI TẠM`, watermark: "KHAI TẠM – CHƯA ĐĂNG KÝ" });
+  const routed = { title: "Tờ khai hàng hóa nhập khẩu (thông báo kết quả phân luồng)", watermark: null };
+  const cleared = (k: string) => ({ title: `Tờ khai hàng hóa ${k} khẩu (thông quan)`, watermark: null });
+  it.each([
+    ["IDA", undefined, draft],
+    ["IDA", "REJECTED", draft],
+    ["EDA", "PRE_DECLARED", tentative("xuất")],
+    ["IDA", "RECALLED", tentative("nhập")],
+    ["IDA", "DECLARED", routed],
+    ["IDA", "AMEND_PRE_DECLARED", routed],
+    ["EDA", "CLEARED", cleared("xuất")],
+    ["IDA", "POST_EDITING", cleared("nhập")],
+  ] as const)("%s %s", (kind, stage, expected) => {
+    expect(printTitle(kind, stage)).toEqual(expected);
   });
 });
 

@@ -4,21 +4,18 @@
 // chưa khai báo → mọi ô người khai (trừ ô tính từ chứng từ); đã phân luồng + gọi IDD → khóa ô theo Phụ lục II, ghi căn cứ dưới ô; đã thông quan → chỉ đọc.
 // Dòng hàng: số liệu chứng từ sửa ở bước OCR (nút mở đúng dòng), mã HS qua hộp chọn mã HS; ô chỉ có trên tờ khai (mã biểu thuế, miễn giảm…) sửa trực tiếp,
 // lưu theo id dòng (HANG.<id>.<ô>). Lưu bằng API sửa chỉ tiêu (backend kiểm tra lại cùng quy tắc, ghi field_audit).
-import { Alert, Button, Stack, toast } from "@kb/ui";
-import { DERIVED_LOCK, formKeyLock, isItemFieldKey, itemFieldClass, layoutFor, type AmendLock, type Declaration, type DeclarationEditMode, type LineItem } from "@kb/contracts";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Alert, Button, Stack } from "@kb/ui";
+import { layoutFor, type Declaration, type DeclarationEditMode, type LineItem } from "@kb/contracts";
 import { FileSearch, Save, Search, Undo2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { declarationKeys, updateDeclarationField } from "@/api/declaration";
-import { dossierKeys } from "@/api/dossiers";
-import { toastMutationError } from "@/lib/mutation-error";
 import { formatNumber } from "@/lib/format";
 import type { FieldLockLookup } from "./amend-context";
 import { DeclarantTab } from "./declarant-tab";
 import { ChangeHsDialog } from "../dossier-detail/steps/agent-step";
-import { declarationValues, editableKeys, itemValues, pendingEdits, pendingItemEdits } from "./dossier-adapter";
+import { declarationLockOf, declarationValues, editableKeys, itemValues, pendingEdits, pendingItemEdits } from "./dossier-adapter";
 import type { FormValues } from "./form-state";
+import { useSaveDeclarationEdits } from "./use-save-edits";
 import { ViewPrefsProvider } from "./view-prefs";
 import { navSections } from "./view-state";
 
@@ -34,16 +31,9 @@ type Props = {
   cleared?: boolean;
 };
 
-/** Lý do ô dòng hàng không sửa trên tờ khai (ô người khai nhập → null). */
-const ITEM_LOCK: Record<"DOC" | "HS" | "DERIVED", AmendLock> = {
-  DOC: { basis: "SOFTWARE", reason: "Số liệu chứng từ – sửa ở bước OCR" },
-  HS: { basis: "SOFTWARE", reason: "Theo mã HS – nút Chọn mã HS" },
-  DERIVED: { basis: "SOFTWARE", reason: "Theo nguyên tệ hóa đơn" },
-};
-
 export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode, canEdit, cleared = false }: Props) {
   const mode: DeclarationEditMode = canEdit ? stageMode : "LOCKED";
-  const qc = useQueryClient();
+  const save = useSaveDeclarationEdits(dossierId);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -72,15 +62,9 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   // (quay lại cửa sổ) cùng dữ liệu không xóa phần đang sửa dở.
   const originalKey = JSON.stringify(original);
   useEffect(() => setDraft(original), [originalKey]);
+  const lockOf: FieldLockLookup = declarationLockOf(kind, mode, original, editable);
   const edits = [...pendingEdits(kind, original, draft, editable), ...(mode === "LOCKED" ? [] : pendingItemEdits(kind, items.map((it) => it.id), itemRows, itemDraft))];
   const editableCount = new Set(editable.values()).size;
-  const lockOf: FieldLockLookup = (key) => {
-    if (isItemFieldKey(kind, key)) {
-      const c = itemFieldClass(kind, key);
-      return c === "INPUT" ? formKeyLock(kind, key, mode, original) : ITEM_LOCK[c];
-    }
-    return editable.has(key) ? null : formKeyLock(kind, key, mode, original) ?? DERIVED_LOCK;
-  };
   const goOcr = (lineNo: number) => router.replace(`${pathname}?step=ocr&dong=${lineNo}`, { scroll: false });
   const itemActions = (index: number) => {
     const it = items[index];
@@ -104,20 +88,6 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
       </Stack>
     );
   };
-
-  const save = useMutation({
-    mutationFn: async (list: { code: string; value: string }[]) => {
-      // Lưu lần lượt: mỗi chỉ tiêu một lần gọi (backend kiểm tra và ghi nhật ký sửa từng chỉ tiêu).
-      for (const e of list) await updateDeclarationField(dossierId, e.code, e.value);
-    },
-    onSuccess: (_d, list) => toast({ tone: "success", title: `Đã lưu ${formatNumber(list.length)} chỉ tiêu` }),
-    onError: toastMutationError("Không lưu được tờ khai"),
-    // Lưu dở (lỗi giữa chừng) vẫn tải lại để màn hình đúng với dữ liệu đã lưu.
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
-      void qc.invalidateQueries({ queryKey: dossierKeys.all });
-    },
-  });
 
   const actions = edits.length > 0 && (
     <div className="flex flex-wrap gap-2 pt-1">

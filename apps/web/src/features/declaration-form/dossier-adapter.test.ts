@@ -1,6 +1,6 @@
-import { LAYOUT_EDA, LAYOUT_IDA, layoutFields } from "@kb/contracts";
+import { LAYOUT_EDA, LAYOUT_IDA, isItemFieldKey, itemFieldClass, layoutFields } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { declarationValues, editableKeys, itemValues, mappedCodes, pendingEdits, pendingItemEdits } from "./dossier-adapter";
+import { ITEM_LOCK, declarationLockOf, declarationValues, editableKeys, itemValues, mappedCodes, pendingEdits, pendingItemEdits } from "./dossier-adapter";
 
 const f = (code: string, value: string) => ({ code, value });
 
@@ -109,5 +109,19 @@ describe("itemValues / pendingItemEdits – ô dòng hàng chỉ có trên tờ 
   });
   it("EDA: ô Xuất xứ của app lấy từ dòng hàng", () => {
     expect(itemValues("EDA", items)[1]?.["APP_XUAT_XU"]).toBe("CN");
+  });
+});
+
+describe("declarationLockOf – ô nào khóa và vì sao", () => {
+  it("mode LOCKED: ô người khai bị khóa", () => {
+    expect(declarationLockOf("IDA", "LOCKED", {}, new Map())("TK_IMC")).not.toBeNull();
+  });
+  it("mode FULL: ô nằm trong editable → null", () => {
+    expect(declarationLockOf("IDA", "FULL", {}, new Map([["TK_IMC", "NNK_MST"]]))("TK_IMC")).toBeNull();
+  });
+  it("ô dòng hàng lớp DOC → ITEM_LOCK.DOC", () => {
+    const key = "HAG_CMN";
+    expect(isItemFieldKey("IDA", key) && itemFieldClass("IDA", key)).toBe("DOC");
+    expect(declarationLockOf("IDA", "FULL", {}, new Map())(key)).toBe(ITEM_LOCK.DOC);
   });
 });

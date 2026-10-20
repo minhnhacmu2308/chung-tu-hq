@@ -1,6 +1,6 @@
 // Tờ khai của hồ sơ (chỉ tiêu theo mã app: MA_LH, PTVC, CANG_DO…) ↔ form tờ khai đầy đủ (ô theo tên trường VNACCS: TK_ICB, TK_MTC, VD_DST…).
 // Bảng chuyển mã và quy tắc ô nào sửa được theo giai đoạn ở @kb/contracts (app-fields) – backend dùng cùng quy tắc khi lưu.
-import { declarationFormValues, editableFormKeys, itemDefaults, itemFieldCode, itemInputKeys, itemOverrides, mappedAppCodes, pendingFormEdits, type DeclarationEditMode, type DeclarationField, type LineItem } from "@kb/contracts";
+import { DERIVED_LOCK, declarationFormValues, editableFormKeys, formKeyLock, isItemFieldKey, itemDefaults, itemFieldClass, itemFieldCode, itemInputKeys, itemOverrides, mappedAppCodes, pendingFormEdits, type AmendLock, type DeclarationEditMode, type DeclarationField, type LineItem } from "@kb/contracts";
 import type { FormValues } from "./form-state";
 
 type Kind = "IDA" | "EDA";
@@ -48,3 +48,21 @@ export const pendingEdits = (kind: Kind, original: FormValues, draft: FormValues
 
 /** Mã chỉ tiêu app có ô trên form đầy đủ. */
 export const mappedCodes = (kind: Kind): string[] => mappedAppCodes(kind);
+
+/** Lý do ô dòng hàng không sửa trên tờ khai (ô người khai nhập → null). */
+export const ITEM_LOCK: Record<"DOC" | "HS" | "DERIVED", AmendLock> = {
+  DOC: { basis: "SOFTWARE", reason: "Số liệu chứng từ – sửa ở bước OCR" },
+  HS: { basis: "SOFTWARE", reason: "Theo mã HS – nút Chọn mã HS" },
+  DERIVED: { basis: "SOFTWARE", reason: "Theo nguyên tệ hóa đơn" },
+};
+
+/** Ô nào khóa và vì sao (null = sửa được) – dùng chung cho form đầy đủ và bản in. */
+export function declarationLockOf(kind: Kind, mode: DeclarationEditMode, original: FormValues, editable: Map<string, string>): (key: string) => AmendLock | null {
+  return (key) => {
+    if (isItemFieldKey(kind, key)) {
+      const c = itemFieldClass(kind, key);
+      return c === "INPUT" ? formKeyLock(kind, key, mode, original) : ITEM_LOCK[c];
+    }
+    return editable.has(key) ? null : formKeyLock(kind, key, mode, original) ?? DERIVED_LOCK;
+  };
+}

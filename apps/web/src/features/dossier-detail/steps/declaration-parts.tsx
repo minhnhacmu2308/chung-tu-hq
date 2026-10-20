@@ -23,8 +23,8 @@ export function StickyActionBar({ children, className }: { children: ReactNode; 
   return (
     <div
       className={cn(
-        // kb-allow-raw: chừa chỗ cho nút trợ lý AI nổi (fixed, theo bề rộng màn hình)
-        "sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 shadow-lg md:pr-20",
+        // kb-allow-raw: chừa chỗ cho nút trợ lý AI nổi (fixed, ở mọi bề rộng – màn hẹp nút trợ lý cũng đè lên góc phải thanh)
+        "sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface py-3 pl-4 pr-20 shadow-lg",
         className,
       )}
     >

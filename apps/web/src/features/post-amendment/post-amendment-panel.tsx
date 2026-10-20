@@ -159,8 +159,13 @@ export function PostAmendmentPanel({ dossierId, kind, canEdit, blockedByFourEyes
       <Stack gap="md">
         <Alert
           tone={pending.length ? "warning" : a.status === "REGISTERED" ? "success" : "info"}
-          title={pending.length ? `Có ${formatNumber(pending.length)} chỉ tiêu chưa lưu` : `Bản khai bổ sung sau thông quan lần ${a.seq}`}
-          action={<StatusBadge status={STATUS[a.status]} />}
+          title={
+            // Huy hiệu nằm cùng tiêu đề (xuống dòng khi hẹp) – để ở `action` thì màn hẹp ép nội dung thành cột chữ rất hẹp.
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {pending.length ? `Có ${formatNumber(pending.length)} chỉ tiêu chưa lưu` : `Bản khai bổ sung sau thông quan lần ${a.seq}`}
+              <StatusBadge status={STATUS[a.status]} />
+            </span>
+          }
         >
           <p>{statusNote[a.status]} Tờ khai gốc giữ nguyên, không sửa trực tiếp.</p>
           {pending.length > 0 && (
@@ -290,7 +295,7 @@ export function PostAmendmentPanel({ dossierId, kind, canEdit, blockedByFourEyes
       </Stack>
 
       <StickyActionBar>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <p className="text-xs text-fg-muted">Bản khai bổ sung lần {a.seq}</p>
           <p className="text-sm font-medium text-fg">{formatNumber(a.lines.length)} dòng hàng · lý do {a.header["TK_REC"] || "chưa nhập"}</p>
         </div>

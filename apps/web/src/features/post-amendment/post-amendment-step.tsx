@@ -2,10 +2,11 @@
 // Bước 7 "Sửa sau thông quan": mọi việc của bản khai bổ sung AMA ở một chỗ – dòng tóm tắt tờ khai gốc + hạn 60 ngày,
 // rồi 4 bước nhỏ ① Chọn dòng · ② Sửa nội dung · ③ Lý do & phê duyệt · ④ Khai Hải quan (?sub=…, mặc định theo trạng thái bản khai).
 // Spec: docs/superpowers/specs/2026-10-20-ama-sau-thong-quan-redesign-design.md
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Stack, StatusBadge, Stepper, toast } from "@kb/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, Stack, StatusBadge, Stepper, toast } from "@kb/ui";
 import { canEditDeclaration } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FilePlus2, FileText } from "lucide-react";
+import { FilePlus2, FileText, Undo2 } from "lucide-react";
+import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { customsKeys, getSubmission, startPostAmendment } from "@/api/customs";
 import { dossierKeys } from "@/api/dossiers";
@@ -18,6 +19,7 @@ import { StepError, StepLoading } from "../dossier-detail/steps/declaration-part
 import type { StepProps } from "../dossier-detail/steps/types";
 import { AMA_SUB_STEPS, amaDeadline, defaultSubStep, resolveSubStep, subStepEditable, type AmaSubStep } from "./ama-wizard";
 import { AMA_STATUS, type AmaStepCtx } from "./ama-context";
+import { EditLines } from "./line-compare";
 import { PickLines } from "./pick-lines";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -33,6 +35,9 @@ export function PostAmendmentStep({ dossier }: StepProps) {
   const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
   const canEdit = session.data ? canEditDeclaration(session.data.user.role) : false;
   const fourEyes = Boolean(org.data?.fourEyes && session.data && session.data.user.role !== "OWNER" && session.data.user.id === dossier.ownerId);
+  // Bước ② còn ô chưa lưu mà bấm sang bước khác → hỏi trước khi bỏ.
+  const [dirty, setDirty] = useState(0);
+  const [leaveTo, setLeaveTo] = useState<AmaSubStep | null>(null);
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: postAmendmentKeys.view(dossier.id) });
@@ -105,12 +110,14 @@ export function PostAmendmentStep({ dossier }: StepProps) {
             steps={AMA_SUB_STEPS}
             currentId={defaultSubStep(a)}
             viewingId={sub}
-            onStepClick={(s) => goSub(s as AmaSubStep)}
+            onStepClick={(s) => (sub === "edit" && dirty > 0 ? setLeaveTo(s as AmaSubStep) : goSub(s as AmaSubStep))}
           />
         </CardHeader>
       </Card>
       {sub === "pick" ? (
         <PickLines ctx={ctx} />
+      ) : sub === "edit" ? (
+        <EditLines ctx={ctx} onDirtyChange={setDirty} />
       ) : (
         <Card>
           <CardContent className="pt-5">
@@ -118,6 +125,29 @@ export function PostAmendmentStep({ dossier }: StepProps) {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={leaveTo !== null} onOpenChange={(o) => !o && setLeaveTo(null)}>
+        <DialogContent title="Bỏ thay đổi chưa lưu?" icon={<Undo2 className="h-4 w-4" />} description={`Còn ${formatNumber(dirty)} ô đã sửa ở bước Sửa nội dung chưa lưu.`} size="sm">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (leaveTo) goSub(leaveTo);
+              setDirty(0);
+              setLeaveTo(null);
+            }}
+          >
+            <p className="text-sm text-fg-muted">Chuyển bước sẽ bỏ các thay đổi này. Muốn giữ thì ở lại và bấm Lưu.</p>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setLeaveTo(null)}>
+                Ở lại
+              </Button>
+              <Button type="submit" variant="danger">
+                Bỏ thay đổi
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Stack>
   );
 }

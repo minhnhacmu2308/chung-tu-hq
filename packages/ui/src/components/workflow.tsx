@@ -39,6 +39,9 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
   const currentIndex = Math.max(0, steps.findIndex((s) => s.id === currentId));
   const viewing = viewingId ?? currentId;
   const viewingIndex = Math.max(0, steps.findIndex((s) => s.id === viewing));
+  // Nhiều bước hơn bề ngang: cuộn bước đang xem vào tầm nhìn (không thì bước cuối – vd "Sửa sau thông quan" – bị khuất).
+  const viewingRef = useRef<HTMLLIElement>(null);
+  useEffect(() => viewingRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" }), [viewing]);
   return (
     <div className={cn("flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2", className)}>
       {/* Màn nhỏ: gọn thành 1 dòng "Bước 3/6 · OCR & kiểm tra" (ẩn với trình đọc màn hình vì danh sách đầy đủ vẫn đọc được) */}
@@ -72,7 +75,7 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
               </>
             );
             return (
-              <li key={s.id} className="flex items-center gap-1" aria-current={state === "current" ? "step" : undefined}>
+              <li key={s.id} ref={isViewing ? viewingRef : undefined} className="flex items-center gap-1" aria-current={state === "current" ? "step" : undefined}>
                 {clickable ? (
                   <button type="button" onClick={() => onStepClick(s.id)} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     {inner}

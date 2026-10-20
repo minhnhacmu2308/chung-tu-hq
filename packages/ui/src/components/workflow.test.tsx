@@ -199,3 +199,19 @@ describe("Stepper", () => {
     expect(nav).toHaveClass("overflow-x-auto", "relative");
   });
 });
+
+describe("Stepper – cuộn tới bước đang xem", () => {
+  it("bước đang xem nằm ngoài vùng cuộn thì được cuộn vào tầm nhìn (theo chiều ngang)", () => {
+    const spy = vi.fn();
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = spy;
+    try {
+      const steps = Array.from({ length: 7 }, (_, i) => ({ id: `s${i}`, label: `Bước số ${i + 1}` }));
+      render(<Stepper steps={steps} currentId="s6" viewingId="s6" label="Các bước" />);
+      expect(spy).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+      expect(spy.mock.contexts.at(-1)).toHaveTextContent("Bước số 7");
+    } finally {
+      Element.prototype.scrollIntoView = orig;
+    }
+  });
+});

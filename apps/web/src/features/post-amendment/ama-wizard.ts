@@ -1,8 +1,8 @@
 // Logic thuần của bước 7 "Sửa sau thông quan": bước nhỏ hiện tại, ô đã đổi, hạn 60 ngày (TT121 Điều 20), lý do chưa duyệt được, nút chính.
 // Tách khỏi màn hình để test bằng vitest (apps/web chỉ chạy test .ts trong môi trường node).
 import {
-  addDec, AMA_IMPORT_TAX_COLUMNS, AMA_OTHER_TAX_SLOTS, amaLineDelta, amaOtherTaxColumns, DEC_ZERO, formatDec, parseDec,
-  type CustomsOperation, type CustomsStage, type PostAmendment, type PostAmendmentLine, type PostAmendmentValues,
+  addDec, AMA_IMPORT_TAX_COLUMNS, AMA_OTHER_TAX_SLOTS, amaLineDelta, applyAmaLineEdit, amaOtherTaxColumns, DEC_ZERO, formatDec, parseDec,
+  type AmaTaxColumn, type CustomsOperation, type CustomsStage, type PostAmendment, type PostAmendmentLine, type PostAmendmentValues,
 } from "@kb/contracts";
 
 export type AmaSubStep = "pick" | "edit" | "reason" | "declare";
@@ -37,17 +37,17 @@ export const subStepEditable = (a: PostAmendment, s: AmaSubStep, canEdit: boolea
 
 // ---------------------------------------------------------------- so sánh Trước | Sau
 
-export type CompareRow = { label: string; before: string; after: string; computed?: boolean };
+/** Một hàng so sánh: cột thuế của @kb/contracts (khóa Trước/Sau, kiểu ô, danh mục) + ô tiền thuế tự tính. */
+export type CompareRow = AmaTaxColumn & { computed?: boolean };
 
 const IMPORT_LABEL: Record<string, string> = { HAG_MKA: "Tiền thuế NK/XK" };
 export const IMPORT_COMPARE_ROWS: CompareRow[] = AMA_IMPORT_TAX_COLUMNS.map((c) => ({
+  ...c,
   label: IMPORT_LABEL[c.before] ?? c.label,
-  before: c.before,
-  after: c.after,
   ...(c.after === "HAG_AKA" ? { computed: true } : {}),
 }));
 export const otherCompareRows = (n: number): CompareRow[] =>
-  amaOtherTaxColumns(n).map((c) => ({ label: c.label, before: c.before, after: c.after, ...(c.after === `HAG_AA${n}` ? { computed: true } : {}) }));
+  amaOtherTaxColumns(n).map((c) => ({ ...c, ...(c.after === `HAG_AA${n}` ? { computed: true } : {}) }));
 
 /** Nhóm thu khác (1–5) đang có giá trị Trước hoặc Sau. */
 export const otherSlotsInUse = (values: PostAmendmentValues): number[] =>
@@ -68,6 +68,10 @@ function same(a: string | undefined, b: string | undefined): boolean {
   const dy = parseDec(y);
   return dx && dy ? formatDec(dx) === formatDec(dy) : x === y;
 }
+
+/** Dòng đang sửa = dòng đã lưu + các ô người khai đổi chưa lưu (theo thứ tự đổi), tính lại tiền thuế như khi lưu. */
+export const applyEdits = (line: PostAmendmentLine, edits: Record<string, string>): PostAmendmentLine =>
+  Object.entries(edits).reduce((l, [k, v]) => applyAmaLineEdit(l, k, v), line);
 
 /** Khóa "Sau" khác "Trước" tương ứng (số so theo giá trị: "120000" = "120000.00"). */
 export const changedKeys = (line: PostAmendmentLine): string[] =>
@@ -92,15 +96,24 @@ export function amaDeadline(ipd: string | undefined, today: string): { due: stri
   return { due: new Date(due).toISOString().slice(0, 10), daysLeft, overdue: daysLeft < 0 };
 }
 
-export function amaChangeSummary(a: PostAmendment): { lines: number; changed: number; taxDelta: string } {
-  let tax = DEC_ZERO;
+/** Ô tiền thuế Trước / Sau của dòng: thuế XNK + thu khác 1–5. */
+const TAX_PAIRS: [string, string][] = [["HAG_MKA", "HAG_AKA"], ...AMA_OTHER_TAX_SLOTS.map((n): [string, string] => [`HAG_MA${n}`, `HAG_AA${n}`])];
+
+export function amaChangeSummary(a: PostAmendment): { lines: number; changed: number; taxBefore: string; taxAfter: string; taxDelta: string } {
+  let before = DEC_ZERO;
+  let after = DEC_ZERO;
+  let delta = DEC_ZERO;
   let changed = 0;
   for (const l of a.lines) {
     changed += changedKeys(l).length;
+    for (const [b, af] of TAX_PAIRS) {
+      before = addDec(before, parseDec(l.values[b]) ?? DEC_ZERO);
+      after = addDec(after, parseDec(l.values[af]) ?? DEC_ZERO);
+    }
     const d = amaLineDelta(l.values);
-    for (const x of [d.importTax, ...d.other.map((o) => o.amount)]) tax = addDec(tax, parseDec(x) ?? DEC_ZERO);
+    for (const x of [d.importTax, ...d.other.map((o) => o.amount)]) delta = addDec(delta, parseDec(x) ?? DEC_ZERO);
   }
-  return { lines: a.lines.length, changed, taxDelta: formatDec(tax) };
+  return { lines: a.lines.length, changed, taxBefore: formatDec(before), taxAfter: formatDec(after), taxDelta: formatDec(delta) };
 }
 
 export function approveBlockers(a: PostAmendment, o: { pendingEdits: number; fourEyes: boolean }): string[] {

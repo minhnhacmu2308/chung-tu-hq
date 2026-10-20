@@ -1,7 +1,7 @@
 import type { PostAmendment, PostAmendmentLine } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import {
-  amaChangeSummary, amaDeadline, amaPrimaryAction, approveBlockers, changedKeys, defaultSubStep, otherSlotsInUse, postStepVisible, resolveSubStep,
+  amaChangeSummary, amaDeadline, amaPrimaryAction, applyEdits, approveBlockers, changedKeys, defaultSubStep, otherSlotsInUse, postStepVisible, resolveSubStep,
   subStepEditable,
 } from "./ama-wizard";
 
@@ -81,9 +81,9 @@ describe("amaChangeSummary", () => {
         line({ HAG_MKA: "100", HAG_AKA: "100", HAG_MA1: "10.5", HAG_AA1: "10.75" }, "l2", 2),
       ],
     });
-    expect(amaChangeSummary(a)).toEqual({ lines: 2, changed: 3, taxDelta: "-2399999.75" });
+    expect(amaChangeSummary(a)).toEqual({ lines: 2, changed: 3, taxBefore: "6000110.5", taxAfter: "3600110.75", taxDelta: "-2399999.75" });
   });
-  it("không có dòng → 0", () => expect(amaChangeSummary(pa())).toEqual({ lines: 0, changed: 0, taxDelta: "0" }));
+  it("không có dòng → 0", () => expect(amaChangeSummary(pa())).toEqual({ lines: 0, changed: 0, taxBefore: "0", taxAfter: "0", taxDelta: "0" }));
 });
 
 describe("approveBlockers", () => {
@@ -106,4 +106,20 @@ describe("amaPrimaryAction", () => {
   it("đang chờ Hải quan → không có nút chính", () => expect(amaPrimaryAction(pa({ status: "PRE_DECLARED" }), { stage: "POST_PRE_DECLARED", sending: true })).toBeNull());
   it.each(["DRAFT", "RECALLED", "REGISTERED"] as const)("%s → không có nút chính", (status) =>
     expect(amaPrimaryAction(pa({ status }), { stage: "POST_EDITING", sending: false })).toBeNull());
+});
+
+describe("applyEdits", () => {
+  const saved = line({ HAG_MKB: "120000000", HAG_MKR: "5", HAG_MKA: "6000000", HAG_AKB: "120000000", HAG_AKR: "5", HAG_AKA: "6000000" });
+  it("không có thay đổi → giữ nguyên dòng đã lưu", () => expect(applyEdits(saved, {})).toEqual(saved));
+  it("đổi thuế suất Sau → tiền thuế Sau tự tính lại", () => {
+    const d = applyEdits(saved, { HAG_AKR: "3" });
+    expect(d.values["HAG_AKR"]).toBe("3");
+    expect(Number(d.values["HAG_AKA"])).toBe(3600000);
+    expect(changedKeys(d)).toEqual(expect.arrayContaining(["HAG_AKR", "HAG_AKA"]));
+  });
+  it("sửa tay tiền thuế → đánh dấu sửa tay, không tính đè", () => {
+    const d = applyEdits(saved, { HAG_AKA: "5000000", HAG_AKR: "3" });
+    expect(d.manual).toContain("HAG_AKA");
+    expect(d.values["HAG_AKA"]).toBe("5000000");
+  });
 });

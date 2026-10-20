@@ -1,6 +1,6 @@
-import { otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
+import { layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, otherFieldCells, pageCount, printValue, sameNumber } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, pageCount, printValue, sameNumber } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -156,6 +156,12 @@ describe("printValue", () => {
     expect(printValue(field("TK_A09"), "")).toBe("/ /");
     expect(printValue(undefined, undefined)).toBe("");
   });
+  it("số tờ khai rỗng → Chưa cấp (IDA TK_ICN, EDA TK_ECN); có số → giữ số", () => {
+    expect(printValue(field("TK_ICN"), "")).toBe(NOT_ISSUED);
+    expect(NOT_ISSUED).toBe("Chưa cấp");
+    expect(printValue(fieldLocator("EDA").get("TK_ECN")!.field, undefined)).toBe("Chưa cấp");
+    expect(printValue(field("TK_ICN"), "107000000001")).toBe("107000000001");
+  });
   it("ô mã có danh mục → mã + tên", () => {
     const v = printValue(field("TK_MTC"), "2");
     expect(v.startsWith("2\u00a0 ")).toBe(true);
@@ -174,5 +180,28 @@ describe("otherFieldCells", () => {
     const loc = fieldLocator("IDA");
     for (const k of out.decl) expect(loc.get(k)?.scope).toBe("decl");
     for (const k of out.items[0]!) expect(loc.get(k)?.scope).toBe("item");
+  });
+});
+
+describe("otherFieldGroups", () => {
+  it.each(["IDA", "EDA"] as const)("%s: nhóm theo khối Phụ lục II, đủ và đúng thứ tự ô của otherFieldCells", (kind) => {
+    const items = [{}, {}];
+    const cells = otherFieldCells(kind, {}, items);
+    const groups = otherFieldGroups(kind, {}, items);
+    expect(groups.decl.flatMap((g) => g.keys).sort()).toEqual([...cells.decl].sort());
+    expect(groups.items).toHaveLength(2);
+    groups.items.forEach((gs, i) => expect(gs.flatMap((g) => g.keys).sort()).toEqual([...cells.items[i]!].sort()));
+    for (const g of [...groups.decl, ...groups.items.flat()]) {
+      expect(g.keys.length).toBeGreaterThan(0);
+      expect(g.title.length).toBeGreaterThan(0);
+    }
+  });
+  it("tiêu đề nhóm = tiêu đề khối của layoutFor, theo thứ tự khối", () => {
+    const groups = otherFieldGroups("IDA", {}, []);
+    const blocks = layoutFor("IDA").declarant.flatMap((s) => s.blocks);
+    const order = groups.decl.map((g) => blocks.findIndex((b) => b.id === g.id));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    for (const g of groups.decl) expect(g.title).toBe(blocks.find((b) => b.id === g.id)!.title);
   });
 });

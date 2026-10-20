@@ -1,6 +1,6 @@
 // Logic thuần của bản in tờ khai (Review bước 5): vị trí ô trên bố cục, số ước tính, trạng thái ô, danh sách ô cần xử lý, số trang.
 import {
-  expandRepeat, formKeysOf, layoutFor, otherFieldKeys, printKeys, printLayoutFor,
+  expandRepeat, formKeysOf, itemFields, layoutFor, otherFieldKeys, printKeys, printLayoutFor,
   type ConditionContext, type ConditionId, type LayoutBlock, type LayoutField,
 } from "@kb/contracts";
 import type { PaperFieldState } from "@kb/ui";
@@ -212,13 +212,17 @@ export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[]
   return out;
 }
 
+/** Số tờ khai chưa có (chưa đăng ký) – in thay cho ô trống (spec §3.1). */
+export const NOT_ISSUED = "Chưa cấp";
+const DECLARATION_NO = new Set(["TK_ICN", "TK_ECN"]);
+
 /**
- * Chữ in trong ô bản in: rỗng → "" (ô ngày rỗng in "/ /" như mẫu); ô mã có danh mục → "mã  tên"; còn lại theo `displayValue`.
+ * Chữ in trong ô bản in: rỗng → "" (ô ngày rỗng in "/ /" như mẫu, số tờ khai rỗng in "Chưa cấp"); ô mã có danh mục → "mã  tên"; còn lại theo `displayValue`.
  * Hai khoảng trắng giữa mã và tên: một khoảng không ngắt dòng + một khoảng thường (HTML gộp khoảng trắng liền nhau).
  */
 export function printValue(field: Pick<LayoutField, "key" | "input" | "options" | "codeTable"> | undefined, raw: string | undefined): string {
   const v = (raw ?? "").trim();
-  if (!v) return field?.input === "date" ? "/ /" : "";
+  if (!v) return field && DECLARATION_NO.has(field.key) ? NOT_ISSUED : field?.input === "date" ? "/ /" : "";
   if (!field) return v;
   const name = codeLabel(field.codeTable, v);
   return name ? `${v}\u00a0 ${name}` : displayValue(field, v);
@@ -238,4 +242,23 @@ export function otherFieldCells(kind: Kind, decl: FormValues, items: FormValues[
     decl: keys.decl.filter((k) => applicable(k, declCtx)),
     items: items.map((v) => { const ctx = conditionContext(kind, v); return keys.item.filter((k) => applicable(k, ctx)); }),
   };
+}
+
+export type OtherGroup = { id: string; title: string; keys: string[] };
+
+/** Nhóm ô theo khối Phụ lục II (thứ tự khối của bố cục, trong khối giữ thứ tự `keys`); khối không có ô → bỏ. */
+function groupByBlock(blocks: LayoutBlock[], keys: string[]): OtherGroup[] {
+  const blockOf = new Map<string, string>();
+  for (const b of blocks) for (const f of b.items.flatMap(itemFields)) if (!blockOf.has(f.key)) blockOf.set(f.key, b.id);
+  return blocks
+    .map((b) => ({ id: b.id, title: b.title, keys: keys.filter((k) => blockOf.get(k) === b.id) }))
+    .filter((g) => g.keys.length > 0);
+}
+
+/** "Chỉ tiêu khác" nhóm theo khối Phụ lục II: phần tờ khai, và từng dòng hàng (mỗi dòng nhóm theo khối của dòng hàng). */
+export function otherFieldGroups(kind: Kind, decl: FormValues, items: FormValues[]): { decl: OtherGroup[]; items: OtherGroup[][] } {
+  const cells = otherFieldCells(kind, decl, items);
+  const l = layoutFor(kind);
+  const declBlocks = l.declarant.flatMap((sec) => sec.blocks);
+  return { decl: groupByBlock(declBlocks, cells.decl), items: cells.items.map((keys) => groupByBlock(l.item.declarant, keys)) };
 }

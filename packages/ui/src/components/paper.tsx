@@ -2,7 +2,7 @@
 // Trên màn hình giấy theo giao diện (sáng: trắng, tối: theo nền tối); khi in luôn chữ đen nền trắng và ẩn mọi dấu hiệu trạng thái
 // (phần tử có `data-paper-mark`). Quy tắc @media print nằm ở styles/index.css.
 import { TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
@@ -14,9 +14,9 @@ const SHEET_MESSAGES = {
 } satisfies Messages<"page">;
 
 const FIELD_MESSAGES = {
-  vi: { missing: "Còn thiếu", estimate: "ƯT", edited: "Đã sửa", error: "Có lỗi" },
-  en: { missing: "Missing", estimate: "Est.", edited: "Edited", error: "Error" },
-} satisfies Messages<"missing" | "estimate" | "edited" | "error">;
+  vi: { missing: "Còn thiếu", estimate: "ƯT", edited: "Đã sửa", error: "Có lỗi", compare: "ước tính" },
+  en: { missing: "Missing", estimate: "Est.", edited: "Edited", error: "Error", compare: "estimate" },
+} satisfies Messages<"missing" | "estimate" | "edited" | "error" | "compare">;
 
 export function PaperStack({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -46,7 +46,7 @@ export function PaperSheet({ page, total, header, watermark, id, children, label
       role="region"
       aria-label={name}
       data-paper-sheet
-      className="relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-[10mm] text-paper-fg shadow-md print:min-h-0 print:max-w-none print:border-0 print:shadow-none"
+      className="@container/paper relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-[10mm] text-paper-fg shadow-md print:min-h-0 print:max-w-none print:border-0 print:shadow-none"
     >
       {header && <div className="mb-3 border-b border-paper-rule pb-2">{header}</div>}
       <div className="relative grid grid-cols-12 gap-px">{children}</div>
@@ -63,6 +63,14 @@ const SPAN = {
   1: "col-span-1", 2: "col-span-2", 3: "col-span-3", 4: "col-span-4", 6: "col-span-6", 12: "col-span-12",
 } as const;
 
+/**
+ * Hai vùng nằm cạnh nhau như mẫu in (vận đơn | địa điểm…), chiếm cả bề ngang trang. Đo theo bề rộng TRANG GIẤY (container `paper`),
+ * không theo vùng nội dung của ứng dụng: trang hẹp (mobile) → một cột; khi in luôn hai cột.
+ */
+export function PaperColumns({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("col-span-12 grid min-w-0 grid-cols-1 paper-wide:grid-cols-2 print:grid-cols-2", className)}>{children}</div>;
+}
+
 export type PaperFieldProps = {
   /** Chỉ nội dung dòng chữ (phrasing content), không chứa phần tử tương tác (không Abbreviation/button/link) – ô có thể là <button>. */
   label: ReactNode;
@@ -76,10 +84,14 @@ export type PaperFieldProps = {
   /** Tên đầy đủ của ô (đọc trước giá trị và trạng thái) – hiển thị dưới dạng sr-only, không ghi đè aria-label. */
   ariaLabel: string;
   span?: 1 | 2 | 3 | 4 | 6 | 12;
-  labels?: Partial<{ missing: string; estimate: string; edited: string; error: string }>;
-};
+  /** "end": căn phải giá trị (số tiền, số lượng). */
+  align?: "end";
+  labels?: Partial<{ missing: string; estimate: string; edited: string; error: string; compare: string }>;
+  /** Phần tử gốc (button khi có onSelect, ngược lại div) – để làm đích Tooltip asChild. */
+  ref?: Ref<HTMLElement>;
+} & Omit<HTMLAttributes<HTMLElement>, "children" | "onSelect">;
 
-export function PaperField({ label, value, state = "none", compareTo, selected = false, onSelect, ariaLabel, span = 12, labels }: PaperFieldProps) {
+export function PaperField({ label, value, state = "none", compareTo, selected = false, onSelect, ariaLabel, span = 12, align, labels, ref, className, onClick, ...rest }: PaperFieldProps) {
   const t = useMessages(FIELD_MESSAGES, labels);
   const cls = cn(
     "relative block min-w-0 border border-paper-rule bg-paper px-1.5 py-1 text-left text-paper-fg",
@@ -89,6 +101,7 @@ export function PaperField({ label, value, state = "none", compareTo, selected =
     onSelect && "cursor-pointer hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
     selected && "ring-2 ring-primary",
     "print:ring-0",
+    className,
   );
   const body = (
     <>
@@ -96,10 +109,11 @@ export function PaperField({ label, value, state = "none", compareTo, selected =
       {" "}
       <span aria-hidden="true" className="block text-[10px] leading-tight opacity-80">{label}</span>
       {" "}
-      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs">
+      <span className={cn("flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs", align === "end" && "justify-end text-right")}>
         <span className={cn("min-w-0 break-words", state === "estimate" && "italic print:not-italic")}>{value}</span>
         {compareTo && (
           <span data-paper-mark className="opacity-70">
+            <span className="sr-only">{t.compare} </span>
             <s>{compareTo}</s>
           </span>
         )}
@@ -124,13 +138,23 @@ export function PaperField({ label, value, state = "none", compareTo, selected =
   );
   if (onSelect) {
     return (
-      <button type="button" aria-pressed={selected} onClick={onSelect} className={cls}>
+      <button
+        {...rest}
+        ref={ref as Ref<HTMLButtonElement>}
+        type="button"
+        aria-pressed={selected}
+        onClick={(e) => {
+          onClick?.(e);
+          onSelect();
+        }}
+        className={cls}
+      >
         {body}
       </button>
     );
   }
   return (
-    <div className={cls}>
+    <div {...rest} ref={ref as Ref<HTMLDivElement>} onClick={onClick} className={cls}>
       {body}
     </div>
   );

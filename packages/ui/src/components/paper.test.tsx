@@ -2,8 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
+import { createRef } from "react";
 import { UiLocaleProvider } from "../lib/i18n.js";
-import { PaperField, PaperSheet, PaperStack, type PaperFieldState } from "./paper.js";
+import { PaperColumns, PaperField, PaperSheet, PaperStack, type PaperFieldState } from "./paper.js";
+import { Tooltip } from "./tooltip.js";
 
 describe("PaperStack / PaperSheet", () => {
   it("PaperStack là gốc in (data-print-root)", () => {
@@ -30,6 +32,13 @@ describe("PaperStack / PaperSheet", () => {
     expect(screen.getByText("BẢN NHÁP")).toHaveAttribute("aria-hidden", "true");
     rerender(<PaperSheet page={1} total={1} watermark={null}>x</PaperSheet>);
     expect(screen.queryByText("BẢN NHÁP")).not.toBeInTheDocument();
+  });
+
+  it("PaperSheet là container 'paper'; PaperColumns hai cột theo bề rộng trang và khi in", () => {
+    render(<PaperSheet page={1} total={1}><PaperColumns><span>trái</span><span>phải</span></PaperColumns></PaperSheet>);
+    expect(screen.getByRole("region", { name: "Trang 1 / 1" })).toHaveClass("@container/paper");
+    const cols = screen.getByText("trái").parentElement!;
+    expect(cols).toHaveClass("col-span-12", "grid-cols-1", "paper-wide:grid-cols-2", "print:grid-cols-2");
   });
 
   it("header và id được render", () => {
@@ -114,6 +123,46 @@ describe("PaperField", () => {
     expect(screen.getByText("Thiếu!")).toBeInTheDocument();
   });
 
+  it("compareTo: tên trợ năng có tiền tố 'ước tính' (EN: 'estimate')", () => {
+    const { rerender } = render(<PaperField label="a" value="900" ariaLabel="Trị giá" compareTo="886" onSelect={() => {}} />);
+    expect(screen.getByRole("button", { name: /Trị giá.*900.*ước tính 886/ })).toBeInTheDocument();
+    expect(screen.getByText("ước tính")).toHaveClass("sr-only");
+    rerender(<UiLocaleProvider locale="en"><PaperField label="a" value="900" ariaLabel="Value" compareTo="886" onSelect={() => {}} /></UiLocaleProvider>);
+    expect(screen.getByRole("button", { name: /Value.*900.*estimate 886/ })).toBeInTheDocument();
+  });
+
+  it("ref trỏ tới phần tử gốc (button / div); thuộc tính DOM khác được truyền xuống", () => {
+    const btnRef = createRef<HTMLElement>();
+    const { rerender } = render(<PaperField ref={btnRef} label="a" value="b" ariaLabel="ô" onSelect={() => {}} data-x="1" aria-describedby="mo-ta" />);
+    expect(btnRef.current).toBe(screen.getByRole("button"));
+    expect(btnRef.current).toHaveAttribute("data-x", "1");
+    expect(btnRef.current).toHaveAttribute("aria-describedby", "mo-ta");
+    const divRef = createRef<HTMLElement>();
+    rerender(<PaperField ref={divRef} label="a" value="b" ariaLabel="ô" />);
+    expect(divRef.current?.tagName).toBe("DIV");
+  });
+
+  it("onClick của nơi gọi (vd Tooltip) chạy cùng onSelect; làm đích Tooltip asChild được", async () => {
+    const onSelect = vi.fn();
+    const onClick = vi.fn();
+    render(<PaperField label="a" value="b" ariaLabel="ô" onSelect={onSelect} onClick={onClick} />);
+    await userEvent.click(screen.getByRole("button"));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("Tooltip asChild: focus ô thì hiện gợi ý", async () => {
+    render(<Tooltip content="1.6 · Mã phương thức" delay={0}><PaperField label="a" value="2" ariaLabel="ô" onSelect={() => {}} /></Tooltip>);
+    await userEvent.tab();
+    expect(screen.getByRole("button")).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("1.6 · Mã phương thức");
+  });
+
+  it("align end: căn phải giá trị", () => {
+    render(<PaperField label="a" value="1.000" ariaLabel="ô" align="end" />);
+    expect(screen.getByText("1.000").parentElement).toHaveClass("justify-end", "text-right");
+  });
+
   it("span áp lưới 12 cột", () => {
     const { container } = render(<PaperField label="a" value="b" ariaLabel="x" span={6} />);
     expect(container.firstElementChild).toHaveClass("col-span-6");
@@ -123,7 +172,7 @@ describe("PaperField", () => {
     const { container } = render(
       <div>
         <PaperField label="Nhãn" value="Giá trị" ariaLabel="Ô một" state={state} compareTo="1" />
-        <PaperField label="Nhãn 2" value="Giá trị" ariaLabel="Ô hai" state={state} onSelect={() => {}} selected />
+        <PaperField label="Nhãn 2" value="Giá trị" ariaLabel="Ô hai" state={state} onSelect={() => {}} selected align="end" />
       </div>,
     );
     await expectNoA11yViolations(container);

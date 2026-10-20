@@ -25,6 +25,8 @@
 @custom-variant cq-xl { @container (width >= 56rem) { @slot; } }
 /* Ngược lại của cq-sm: vùng nội dung hẹp (vd chỉ hiện icon, ẩn chữ của nút). */
 @custom-variant cq-max-sm { @container (width < 36rem) { @slot; } }
+/* Theo bề rộng TRANG GIẤY (PaperSheet là container `paper`): vùng hai cột của mẫu in (PaperColumns). */
+@custom-variant paper-wide { @container paper (width >= 36rem) { @slot; } }
 
 @theme {
   --color-*: initial;

@@ -1,50 +1,54 @@
 "use client";
 // Một ô trên bản in tờ khai: nhãn in đúng chữ của mẫu, giá trị theo danh mục / định dạng (printValue), trạng thái ô (lỗi, thiếu, ước tính, đã sửa).
 // Số chỉ tiêu không in trên trang – chỉ ở tooltip (và panel, Task 7) và trong tên trợ năng.
-import { cn, PaperField, Tooltip, type PaperFieldState } from "@kb/ui";
+// memo + props nguyên thủy + onSelect ổn định từ nơi gọi: chọn một ô chỉ vẽ lại ô cũ và ô mới, không vẽ lại mọi tooltip.
+import { PaperField, Tooltip, type PaperFieldState } from "@kb/ui";
 import type { PrintCell as Cell } from "@kb/contracts";
+import { memo } from "react";
 import { fieldTitle } from "../declaration-form/display";
-import { fieldLocator, printValue } from "./print-state";
-
-/** Class tĩnh để Tailwind quét được. */
-const SPAN = { 1: "col-span-1", 2: "col-span-2", 3: "col-span-3", 4: "col-span-4", 6: "col-span-6", 12: "col-span-12" } as const;
+import { fieldLocator, NOT_ISSUED, printValue } from "./print-state";
 
 /** Giá trị thô + trạng thái của một ô (tính ở print-declaration). */
 export type CellLook = { raw: string; state: PaperFieldState; compareTo: string | null };
 
 type Props = {
   kind: "IDA" | "EDA";
-  cell: Cell;
-  look: CellLook;
-  selected?: boolean;
+  cellKey: string;
+  /** Chữ in trên mẫu ("" khi mẫu không in nhãn). */
+  label: string;
+  span?: Cell["span"] | undefined;
+  align?: Cell["align"] | undefined;
+  /** Chỉ số dòng hàng (0-based) khi ô thuộc dòng hàng. */
+  line?: number | undefined;
+  raw: string;
+  state: PaperFieldState;
+  compareTo: string | null;
+  selected: boolean;
   /** Không truyền → ô chỉ đọc, không bấm được (vd đầu trang lặp từ trang 2). */
-  onSelect?: (() => void) | undefined;
-  /** true: không chiếm cột trên lưới 12 cột của trang (ô nằm trong lưới riêng, vd "Chỉ tiêu khác"). */
-  free?: boolean;
+  onSelect?: ((key: string, line?: number) => void) | undefined;
 };
 
-export function PrintCell({ kind, cell, look, selected = false, onSelect, free = false }: Props) {
-  const spot = fieldLocator(kind).get(cell.key);
+export const PrintCell = memo(function PrintCell({ kind, cellKey, label, span = 12, align, line, raw, state, compareTo, selected, onSelect }: Props) {
+  const spot = fieldLocator(kind).get(cellKey);
   const no = spot ? spot.field.no ?? spot.parentNo : undefined;
-  const name = spot?.field.label ?? cell.label;
-  const value = printValue(spot?.field, look.raw);
+  const name = spot?.field.label ?? label;
+  const value = printValue(spot?.field, raw);
   // PaperField đọc tên này trước giá trị và dấu trạng thái → "1.6 Mã phương thức vận chuyển: 2 …"; rỗng → "…: trống".
-  const ariaLabel = `${no ? `${no} ` : ""}${name}:${look.raw.trim() ? "" : " trống"}`;
+  const blank = !raw.trim() && value !== NOT_ISSUED;
+  const ariaLabel = `${no ? `${no} ` : ""}${name}:${blank ? " trống" : ""}`;
   return (
     <Tooltip content={fieldTitle(no, name)}>
-      {/* Khung giữ cột trên lưới trang và làm đích tooltip (PaperField không nhận ref); lưới 12 cột để ô (span 12) giãn đầy khung cả chiều cao. */}
-      <div className={cn("grid min-w-0 grid-cols-12", !free && SPAN[cell.span ?? 12])}>
-        <PaperField
-          label={cell.label}
-          value={value}
-          state={look.state}
-          compareTo={look.compareTo}
-          selected={selected}
-          {...(onSelect ? { onSelect } : {})}
-          ariaLabel={ariaLabel}
-          span={12}
-        />
-      </div>
+      <PaperField
+        label={label}
+        value={value}
+        state={state}
+        compareTo={compareTo}
+        selected={selected}
+        {...(onSelect ? { onSelect: () => onSelect(cellKey, line) } : {})}
+        ariaLabel={ariaLabel}
+        span={span}
+        {...(align ? { align } : {})}
+      />
     </Tooltip>
   );
-}
+});

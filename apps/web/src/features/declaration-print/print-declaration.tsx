@@ -4,7 +4,7 @@
 import { Alert, Button, Stack } from "@kb/ui";
 import { parseItemFieldCode, printTitle, type Declaration, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { ArrowDown } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { customsItemValues, customsValues } from "../declaration-form/customs-adapter";
 import { declarationValues, itemValues } from "../declaration-form/dossier-adapter";
 import type { FormValues } from "../declaration-form/form-state";
@@ -82,6 +82,8 @@ function printModel(decl: Declaration, items: LineItem[], submission: Submission
 
 export function PrintDeclaration({ decl, items, submission, onAttentionChange }: Props) {
   const [selected, setSelected] = useState<PrintTarget | null>(null);
+  // Ổn định qua các lần vẽ: PrintCell (memo) không vẽ lại khi chọn ô khác.
+  const select = useCallback((key: string, line?: number) => setSelected(line === undefined ? { key } : { key, line }), []);
   const model = useMemo(() => printModel(decl, items, submission), [decl, items, submission]);
   const attentionCount = model.attention.length;
   useEffect(() => onAttentionChange?.(attentionCount), [attentionCount, onAttentionChange]);
@@ -107,9 +109,9 @@ export function PrintDeclaration({ decl, items, submission, onAttentionChange }:
         lines={items.length}
         look={model.look}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={select}
       />
-      <OtherFields kind={model.kind} decl={model.values} items={model.itemRows} look={model.look} selected={selected} onSelect={setSelected} />
+      <OtherFields kind={model.kind} decl={model.values} items={model.itemRows} look={model.look} selected={selected} onSelect={select} />
     </Stack>
   );
 }

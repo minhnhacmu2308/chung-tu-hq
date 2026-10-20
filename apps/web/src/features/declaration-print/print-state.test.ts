@@ -1,6 +1,6 @@
 import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, printValue, sameNumber } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, printAttention, printCode, printValue, sameNumber, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -242,5 +242,42 @@ describe("nextTarget", () => {
     const last = order[order.length - 1]!;
     expect(nextTarget(order, last, [last.key], 1)).toEqual(order[0]);
     expect(nextTarget([], last, [last.key], 1)).toBeUndefined();
+  });
+});
+
+describe("printAttention (Fix round 1)", () => {
+  const data = (errors: Parameters<typeof attentionCells>[3] = []): PrintData => ({
+    kind: "IDA", lineNos: [1], values: {}, itemRows: [{}], errors, customs: {}, estimate: {}, estimated: new Set(),
+  });
+  it("sửa được → lỗi và ô còn thiếu, như attentionCells", () => {
+    const d = data([{ no: "1.22", code: "E1", message: "x" }]);
+    expect(printAttention(d, "FULL", true)).toEqual(attentionCells("IDA", {}, [{}], d.errors, [1]));
+    expect(printAttention(d, "FULL", true).some((c) => c.reason === "MISSING")).toBe(true);
+  });
+  it("chỉ đọc (LOCKED hoặc không có quyền sửa) → bỏ ô còn thiếu, giữ ô lỗi Hải quan", () => {
+    const d = data([{ no: "1.22", code: "E1", message: "x" }]);
+    for (const cells of [printAttention(d, "LOCKED", true), printAttention(d, "FULL", false)]) {
+      expect(cells).toEqual([{ key: "TK_EPA", reason: "ERROR" }]);
+    }
+    expect(printAttention(data(), "LOCKED", true)).toEqual([]);
+  });
+});
+
+describe("printCode", () => {
+  const loc = fieldLocator("IDA");
+  it("ô mã có tên (bảng mã / 'mã · nghĩa' / lựa chọn) → chỉ mã", () => {
+    expect(printCode(loc.get("TK_A06")!.field, "2")).toBe("2");
+    expect(printValue(loc.get("TK_A06")!.field, "2")).not.toBe("2");
+    const withOptions = [...loc.values()].find((s) => s.field.options?.length)!.field;
+    const opt = withOptions.options![0]!.value;
+    expect(printCode(withOptions, opt)).toBe(opt);
+    const withTable = [...loc.values()].find((s) => s.field.codeTable && printValue(s.field, "VN") !== "VN");
+    if (withTable) expect(printCode(withTable.field, "VN")).toBe("VN");
+  });
+  it("ô thường, ngày, rỗng → null", () => {
+    expect(printCode(loc.get("TK_IMN")?.field, "CÔNG TY A")).toBeNull();
+    expect(printCode({ key: "X", input: "date" }, "2026-10-19")).toBeNull();
+    expect(printCode(loc.get("TK_A06")!.field, "")).toBeNull();
+    expect(printCode(undefined, "2")).toBeNull();
   });
 });

@@ -1,11 +1,13 @@
 // Logic thuần của bản in tờ khai (Review bước 5): vị trí ô trên bố cục, số ước tính, trạng thái ô, danh sách ô cần xử lý, số trang.
 import {
   expandRepeat, formKeysOf, itemFields, layoutFor, otherFieldKeys, printKeys, printLayoutFor,
-  type ConditionContext, type ConditionId, type LayoutBlock, type LayoutField,
+  type ConditionContext, type ConditionId, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
 } from "@kb/contracts";
 import type { PaperFieldState } from "@kb/ui";
 import { conditionContext, groupMissing, isApplicable, missingRequired, type FormValues } from "../declaration-form/form-state";
-import type { FieldError } from "../dossier-detail/steps/customs-errors";
+import { customsItemValues, customsValues } from "../declaration-form/customs-adapter";
+import { declarationValues, itemValues } from "../declaration-form/dossier-adapter";
+import { fieldErrors, type FieldError } from "../dossier-detail/steps/customs-errors";
 import { codeLabel, displayValue } from "../declaration-form/display";
 
 type Kind = "IDA" | "EDA";
@@ -228,6 +230,47 @@ export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[]
   return out;
 }
 
+/**
+ * Giá trị in của tờ khai: người khai (dossier-adapter) + Hải quan trả về (customs-adapter) + số ứng dụng ước tính cho ô Hải quan còn trống;
+ * từng dòng hàng; lỗi Hải quan. Dùng chung cho bản in và huy hiệu tab "Tờ khai" (cùng một nguồn số ô cần xử lý).
+ */
+export type PrintData = {
+  kind: Kind; lineNos: number[]; values: FormValues; itemRows: FormValues[]; errors: FieldError[];
+  /** Số Hải quan trả về (chưa điền ước tính) và số ứng dụng ước tính – để so sánh trên ô. */
+  customs: FormValues; estimate: FormValues; estimated: Set<string>;
+};
+
+export function printData(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined): PrintData {
+  const kind: Kind = decl.kind;
+  const lineNos = items.map((it) => it.lineNo);
+  const currency = decl.fields.find((f) => f.code === "MA_TT")?.value.trim() || "USD";
+  const vbpq = decl.fields.find((f) => f.code === "VBPQ")?.value ?? "";
+  const info = submission?.customsInfo ?? null;
+  const customs = customsValues(kind, info, submission?.result ?? null);
+  const est: Estimate = {
+    customsValueVnd: decl.customsValueVnd, currency, exchangeRate: decl.exchangeRate, lines: items.length,
+    ...(kind === "IDA" ? { taxVnd: String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd)) } : {}),
+  };
+  const { values: customsFilled, estimated } = estimateValues(kind, customs, est);
+  const estimate = estimateValues(kind, {}, est).values;
+  const values: FormValues = { ...declarationValues(kind, decl.fields), ...customsFilled };
+  const customsItems = customsItemValues(kind, info, lineNos);
+  const itemRows = itemValues(kind, items, { fields: decl.fields, currency, vbpq }).map((v, i) => ({ ...v, ...customsItems[i] }));
+  const errors = fieldErrors(kind, submission?.rejection ?? null);
+  return { kind, lineNos, values, itemRows, errors, customs, estimate, estimated };
+}
+
+/** Ô cần xử lý của bản in. Tờ khai chỉ đọc (LOCKED / không có quyền sửa): bỏ ô còn thiếu (không làm gì được), giữ ô lỗi Hải quan. */
+export function printAttention(data: PrintData, mode: DeclarationEditMode, canEdit: boolean): AttentionCell[] {
+  const cells = attentionCells(data.kind, data.values, data.itemRows, data.errors, data.lineNos);
+  return mode === "LOCKED" || !canEdit ? cells.filter((c) => c.reason !== "MISSING") : cells;
+}
+
+/** Ô cần xử lý từ dữ liệu tờ khai (huy hiệu tab "Tờ khai" ở review-step – cùng hàm với thanh công cụ của bản in). */
+export function printAttentionCells(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean): AttentionCell[] {
+  return printAttention(printData(decl, items, submission), mode, canEdit);
+}
+
 /** Số tờ khai chưa có (chưa đăng ký) – in thay cho ô trống (spec §3.1). */
 export const NOT_ISSUED = "Chưa cấp";
 const DECLARATION_NO = new Set(["TK_ICN", "TK_ECN"]);
@@ -242,6 +285,17 @@ export function printValue(field: Pick<LayoutField, "key" | "input" | "options" 
   if (!field) return v;
   const name = codeLabel(field.codeTable, v);
   return name ? `${v}\u00a0 ${name}` : displayValue(field, v);
+}
+
+/**
+ * Bản ngắn của ô mã (trang giấy hẹp và bản in, như mẫu VNACCS chỉ in mã): ô có tên theo bảng mã / lựa chọn / "mã · nghĩa"
+ * (mã phân loại kiểm tra, trạng thái Hải quan) → chỉ mã; ô khác → null (in như printValue).
+ */
+export function printCode(field: Pick<LayoutField, "key" | "input" | "options" | "codeTable"> | undefined, raw: string | undefined): string | null {
+  const v = (raw ?? "").trim();
+  if (!v || !field) return null;
+  if (codeLabel(field.codeTable, v) || field.options?.some((o) => o.value === v)) return v;
+  return displayValue(field, v).startsWith(`${v} · `) ? v : null;
 }
 
 /** Ô "Chỉ tiêu khác" (không có trên mẫu in) đang áp dụng – khối, chỉ tiêu cha và chính ô đều thỏa điều kiện. */

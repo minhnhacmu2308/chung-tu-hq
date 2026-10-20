@@ -318,14 +318,18 @@
 @media print {
   /* Giấy luôn đen trên trắng khi in, bất kể giao diện sáng/tối */
   :root { --kb-color-paper: white; --kb-color-paper-fg: black; --kb-color-paper-rule: black; }
-  /* Chỉ giữ gốc in, tổ tiên và con cháu của nó; còn lại display:none (visibility:hidden để lại trang trắng / Firefox chỉ in trang 1) */
-  body *:not(:has([data-print-root])):not([data-print-root]):not([data-print-root] *) { display: none !important; }
+  /* Trang có gốc in: chỉ giữ gốc in, tổ tiên và con cháu của nó; còn lại display:none (visibility:hidden để lại trang trắng / Firefox chỉ in trang 1).
+     Trang không có gốc in (vd tab khác của bước Review) in bình thường. */
+  body:has([data-print-root]) *:not(:has([data-print-root])):not([data-print-root]):not([data-print-root] *) { display: none !important; }
   html, body, :has(> [data-print-root]), :has([data-print-root]) { position: static !important; overflow: visible !important; height: auto !important; }
   @page { size: A4 portrait; margin: 8mm; }
   html, body { background: white !important; }
   /* Tổ tiên của gốc in (thẻ, khung trang ứng dụng) không in khung, lề, nền */
   body :has([data-print-root]) { border: 0 !important; border-radius: 0 !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; background: transparent !important; max-width: none !important; }
   [data-paper-mark] { display: none; }
+  /* Giá trị có bản ngắn (PaperField compact): khi in luôn bản ngắn, như mẫu chỉ in mã */
+  [data-paper-full] { display: none !important; }
+  [data-paper-compact] { display: inline !important; }
   /* Tiêu đề nhóm trên trang giấy (data-paper-heading): chữ nhỏ, sát dòng – mỗi trang giấy vừa một trang A4 */
   [data-paper-sheet] [data-paper-heading] { font-size: 7.5pt; padding-top: 1px; padding-bottom: 0; }
   [data-paper-sheet] { break-after: page; box-shadow: none; border: 0; }

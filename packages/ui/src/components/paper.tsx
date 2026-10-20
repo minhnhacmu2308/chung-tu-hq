@@ -46,7 +46,7 @@ export function PaperSheet({ page, total, header, watermark, id, children, label
       role="region"
       aria-label={name}
       data-paper-sheet
-      className="@container/paper relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-[10mm] text-paper-fg shadow-md print:min-h-0 print:max-w-none print:border-0 print:p-0 print:shadow-none"
+      className="@container/paper relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-3 text-paper-fg shadow-md sm:p-[10mm] print:min-h-0 print:max-w-none print:border-0 print:p-0 print:pt-1 print:shadow-none"
     >
       {header && <div className="mb-3 border-b border-paper-rule pb-2 print:mb-1 print:pb-1">{header}</div>}
       <div className="relative grid grid-cols-12 gap-px">{children}</div>
@@ -71,12 +71,28 @@ export function PaperColumns({ children, className }: { children: ReactNode; cla
   return <div className={cn("col-span-12 grid min-w-0 grid-cols-1 paper-wide:grid-cols-2 print:grid-cols-2", className)}>{children}</div>;
 }
 
+/**
+ * Nhãn cột của nhóm ô lặp (in một lần phía trên các dòng, như mẫu VNACCS: "Số vận đơn", "Tên sắc thuế | Tổng tiền thuế"…).
+ * Chỉ để nhìn (aria-hidden): mỗi ô PaperField của dòng lặp vẫn mang tên đầy đủ trong `ariaLabel`.
+ */
+export function PaperLabel({ children, span = 12, align }: { children?: ReactNode; span?: 1 | 2 | 3 | 4 | 6 | 12; align?: "end" }) {
+  return (
+    <div aria-hidden="true" className={cn("min-w-0 px-1.5 pt-0.5 text-[10px] leading-tight text-paper-fg opacity-80 print:px-1 print:pt-0 print:text-[7pt] print:opacity-100", SPAN[span], align === "end" && "text-right")}>
+      {children}
+    </div>
+  );
+}
+
 export type PaperFieldProps = {
   /** Chỉ nội dung dòng chữ (phrasing content), không chứa phần tử tương tác (không Abbreviation/button/link) – ô có thể là <button>. */
   label: ReactNode;
   /** Như `label`: chỉ nội dung dòng chữ, không phần tử tương tác. */
   value: ReactNode;
   state?: PaperFieldState;
+  /** Bản ngắn của giá trị (vd chỉ mã, không kèm tên): hiện thay `value` trên trang giấy hẹp và khi in. */
+  compact?: ReactNode;
+  /** Giữ giá trị trên một dòng (giờ, ngày, mã ngắn): không bẻ giữa chữ; chữ nhỏ lại, quá ô thì cắt bằng dấu ba chấm. */
+  keepTogether?: boolean;
   /** Giá trị cũ để so sánh – hiện gạch ngang cạnh giá trị chính (chỉ trên màn hình). */
   compareTo?: string | null;
   selected?: boolean;
@@ -91,12 +107,13 @@ export type PaperFieldProps = {
   ref?: Ref<HTMLElement>;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "onSelect">;
 
-export function PaperField({ label, value, state = "none", compareTo, selected = false, onSelect, ariaLabel, span = 12, align, labels, ref, className, onClick, ...rest }: PaperFieldProps) {
+export function PaperField({ label, value, compact, keepTogether = false, state = "none", compareTo, selected = false, onSelect, ariaLabel, span = 12, align, labels, ref, className, onClick, ...rest }: PaperFieldProps) {
   const t = useMessages(FIELD_MESSAGES, labels);
   const cls = cn(
     // In: nhãn và giá trị cùng một dòng, chữ nhỏ – mỗi trang giấy vừa một trang A4 như mẫu VNACCS.
     "relative block min-w-0 border border-paper-rule bg-paper px-1.5 py-1 text-left text-paper-fg print:flex print:flex-wrap print:items-baseline print:gap-x-1.5 print:px-1 print:py-0",
     SPAN[span],
+    keepTogether && "px-1",
     state === "error" && "border-danger bg-danger-subtle text-danger-subtle-fg print:border-paper-rule print:bg-paper print:text-paper-fg",
     state === "missing" && "border-dashed border-warning print:border-solid print:border-paper-rule",
     onSelect && "cursor-pointer hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
@@ -110,8 +127,15 @@ export function PaperField({ label, value, state = "none", compareTo, selected =
       {" "}
       <span aria-hidden="true" className="block text-[10px] leading-tight opacity-80 print:text-[7pt] print:opacity-100">{label}</span>
       {" "}
-      <span className={cn("flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs print:flex-auto print:text-[7.5pt] print:leading-tight", align === "end" && "justify-end text-right")}>
-        <span className={cn("min-w-0 break-words", state === "estimate" && "italic print:not-italic")}>{value}</span>
+      <span className={cn("flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs print:flex-auto print:text-[7.5pt] print:leading-tight", keepTogether && "flex-nowrap text-[10px] tracking-tight", align === "end" && "justify-end text-right")}>
+        <span className={cn("min-w-0", keepTogether ? "overflow-hidden text-ellipsis whitespace-nowrap" : "break-words", state === "estimate" && "italic print:not-italic")}>
+          {compact != null ? (
+            <>
+              <span data-paper-full className="hidden paper-wide:inline">{value}</span>
+              <span data-paper-compact className="paper-wide:hidden">{compact}</span>
+            </>
+          ) : value}
+        </span>
         {compareTo && (
           <span data-paper-mark className="opacity-70">
             <span className="sr-only">{t.compare} </span>

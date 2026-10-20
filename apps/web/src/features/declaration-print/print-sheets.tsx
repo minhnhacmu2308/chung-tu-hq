@@ -1,8 +1,8 @@
 "use client";
 // Các trang giấy của bản in: đầu trang lặp ở mọi trang, trang chung theo `pages`, rồi khối dòng hàng (`< 01 >`…) theo `itemsPerPage` khối mỗi trang.
 // Vùng dạng cặp = hai cột như mẫu (PaperColumns – đo theo bề rộng trang giấy, khi in luôn hai cột).
-import { Grid, PaperColumns, PaperSheet, PaperStack } from "@kb/ui";
-import { expandPrintRow, printLayoutFor, type PrintRegion, type PrintRow } from "@kb/contracts";
+import { Grid, PaperColumns, PaperLabel, PaperSheet, PaperStack } from "@kb/ui";
+import { expandPrintRow, printLayoutFor, type PrintCell as Cell, type PrintRegion, type PrintRepeatRow, type PrintRow } from "@kb/contracts";
 import { Fragment, type ReactNode } from "react";
 import { PrintCell, type CellLook } from "./print-cell";
 import { pageCount, type PrintTarget } from "./print-state";
@@ -32,30 +32,48 @@ export function PrintSheets({ kind, title, lines, look, selected, onSelect }: Pr
   const layout = printLayoutFor(kind);
   const total = pageCount(kind, lines);
 
-  /** Các ô của một danh sách dòng in, đặt thẳng vào lưới 12 cột. `interactive` = false → ô chỉ đọc (đầu trang lặp). */
+  const headerOnce = (row: PrintRepeatRow) => row.count > 1 && row.cells.reduce((n, c) => n + (c.span ?? 12), 0) <= 12;
+
+  const printCell = (cell: Cell, line: number | undefined, interactive: boolean, label = cell.label) => {
+    const l = look(cell.key, line);
+    return (
+      <PrintCell
+        key={cell.key}
+        kind={kind}
+        cellKey={cell.key}
+        label={label}
+        span={cell.span}
+        align={cell.align}
+        line={line}
+        raw={l.raw}
+        state={l.state}
+        compareTo={l.compareTo}
+        selected={selected?.key === cell.key && selected.line === line}
+        onSelect={interactive ? onSelect : undefined}
+      />
+    );
+  };
+
+  /**
+   * Các ô của một danh sách dòng in, đặt thẳng vào lưới 12 cột. `interactive` = false → ô chỉ đọc (đầu trang lặp).
+   * Nhóm lặp nhiều dòng mà mỗi lần lặp nằm gọn một hàng lưới (như mẫu: vận đơn, sắc thuế, khoản điều chỉnh…): nhãn cột in một lần,
+   * mỗi dòng chỉ số thứ tự (nhãn của ô đầu) + giá trị. Lần lặp nhiều hàng lưới ("Thuế và thu khác") giữ nhãn từng ô như mẫu.
+   */
   const rows = (list: PrintRow[], line: number | undefined, interactive = true): ReactNode =>
     list.map((row, r) => (
       <Fragment key={r}>
         {!Array.isArray(row) && row.label && <p data-paper-heading className="col-span-12 px-1.5 pt-1 text-xs font-semibold">{row.label}</p>}
-        {expandPrintRow(row).flat().map((cell) => {
-          const l = look(cell.key, line);
-          return (
-            <PrintCell
-              key={cell.key}
-              kind={kind}
-              cellKey={cell.key}
-              label={cell.label}
-              span={cell.span}
-              align={cell.align}
-              line={line}
-              raw={l.raw}
-              state={l.state}
-              compareTo={l.compareTo}
-              selected={selected?.key === cell.key && selected.line === line}
-              onSelect={interactive ? onSelect : undefined}
-            />
-          );
-        })}
+        {!Array.isArray(row) && headerOnce(row) ? (
+          <>
+            {row.cells.map((c, i) => <PaperLabel key={`h${i}`} span={c.span ?? 12} {...(c.align ? { align: c.align } : {})}>{c.label}</PaperLabel>)}
+            {expandPrintRow(row).map((cells, i) => cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? String(i + 1) : "")))}
+          </>
+        ) : !Array.isArray(row) && row.count > 1 ? (
+          // Lần lặp nhiều hàng lưới: nhãn từng ô như mẫu, số thứ tự trước nhãn ô đầu ("1 Tên").
+          expandPrintRow(row).map((cells, i) => cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? `${i + 1} ${cell.label}` : cell.label)))
+        ) : (
+          expandPrintRow(row).flat().map((cell) => printCell(cell, line, interactive))
+        )}
       </Fragment>
     ));
 

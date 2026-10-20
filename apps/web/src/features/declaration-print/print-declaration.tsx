@@ -5,17 +5,13 @@ import { Alert, Button, Stack } from "@kb/ui";
 import { otherFieldKeys, parseItemFieldCode, printTitle, type Declaration, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { customsItemValues, customsValues } from "../declaration-form/customs-adapter";
-import { declarationValues, itemValues } from "../declaration-form/dossier-adapter";
-import type { FormValues } from "../declaration-form/form-state";
-import { fieldErrors } from "../dossier-detail/steps/customs-errors";
-import { FieldEditPanel } from "./field-edit-panel";
+import { FieldEditPanel, type LeaveGuard } from "./field-edit-panel";
 import { OTHER_FIELDS_DOM_ID, OtherFields } from "./other-fields";
 import { cellDomId, type CellLook } from "./print-cell";
 import { regionDomId, PrintSheets } from "./print-sheets";
 import {
-  attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, otherFieldCells, pageCount, panelOrder, printValue, sameNumber,
-  type Estimate, type PrintTarget,
+  cellState, editedKeys, errorSlots, fieldLocator, otherFieldCells, pageCount, panelOrder, printAttention, printData, printValue, sameNumber,
+  type PrintTarget,
 } from "./print-state";
 import { PrintToolbar } from "./print-toolbar";
 
@@ -29,33 +25,23 @@ type Props = {
   mode: DeclarationEditMode;
   canEdit: boolean;
   submission: SubmissionView | undefined;
-  /** Số ô cần xử lý (lỗi + còn thiếu) – gọi lại mỗi khi đổi (huy hiệu tab). */
-  onAttentionChange?: (n: number) => void;
+  /**
+   * Nơi gọi (review-step) hỏi trước khi rời tab "Tờ khai": gọi `current(href)` → true = panel còn thay đổi chưa lưu, đã mở hộp
+   * Lưu / Bỏ thay đổi / Ở lại và sẽ tự chuyển tới `href` khi người dùng chọn Lưu hoặc Bỏ; false = rời được ngay.
+   */
+  leaveGuard?: LeaveGuard;
 };
 
 const slotId = (key: string, line?: number) => `${line ?? ""}:${key}`;
 
-function printModel(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined) {
-  const kind: Kind = decl.kind;
-  const lineNos = items.map((it) => it.lineNo);
-  const currency = decl.fields.find((f) => f.code === "MA_TT")?.value.trim() || "USD";
-  const vbpq = decl.fields.find((f) => f.code === "VBPQ")?.value ?? "";
+function printModel(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean) {
+  const data = printData(decl, items, submission);
+  const { kind, values, itemRows, errors, lineNos, customs, estimate, estimated } = data;
   const info = submission?.customsInfo ?? null;
 
-  const customs = customsValues(kind, info, submission?.result ?? null);
-  const est: Estimate = {
-    customsValueVnd: decl.customsValueVnd, currency, exchangeRate: decl.exchangeRate, lines: items.length,
-    ...(kind === "IDA" ? { taxVnd: String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd)) } : {}),
-  };
-  const { values: customsFilled, estimated } = estimateValues(kind, customs, est);
-  const estimate = estimateValues(kind, {}, est).values;
-  const values: FormValues = { ...declarationValues(kind, decl.fields), ...customsFilled };
-  const customsItems = customsItemValues(kind, info, lineNos);
-  const itemRows = itemValues(kind, items, { fields: decl.fields, currency, vbpq }).map((v, i) => ({ ...v, ...customsItems[i] }));
-
-  const errors = fieldErrors(kind, submission?.rejection ?? null);
   const errorIds = new Set(errorSlots(kind, errors, lineNos).map((s) => slotId(s.key, s.line)));
-  const attention = attentionCells(kind, values, itemRows, errors, lineNos);
+  // Cùng hàm với huy hiệu tab ở review-step: chỉ đọc → không có ô "còn thiếu".
+  const attention = printAttention(data, mode, canEdit);
   const missingIds = new Set(attention.filter((c) => c.reason === "MISSING").map((c) => slotId(c.key, c.line)));
   const editedDecl = editedKeys(kind, decl.fields);
   const editedItem = items.map((it) => editedKeys(kind, decl.fields.filter((f) => parseItemFieldCode(f.code)?.itemId === it.id)));
@@ -90,7 +76,7 @@ function printModel(decl: Declaration, items: LineItem[], submission: Submission
   return { kind, values, itemRows, errors, attention, look, order, hasOther, directives: info?.directives.length ?? 0 };
 }
 
-export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submission, onAttentionChange }: Props) {
+export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submission, leaveGuard }: Props) {
   const [selected, setSelected] = useState<PrintTarget | null>(null);
   // Ổn định qua các lần vẽ: PrintCell (memo) không vẽ lại khi chọn ô khác.
   const select = useCallback((key: string, line?: number) => setSelected(line === undefined ? { key } : { key, line }), []);
@@ -103,9 +89,8 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
     setSelected(t);
     if (t) setScrollTo((s) => ({ id: cellDomId(t.key, t.line), n: (s?.n ?? 0) + 1 }));
   }, []);
-  const model = useMemo(() => printModel(decl, items, submission), [decl, items, submission]);
+  const model = useMemo(() => printModel(decl, items, submission, mode, canEdit), [decl, items, submission, mode, canEdit]);
   const attentionCount = model.attention.length;
-  useEffect(() => onAttentionChange?.(attentionCount), [attentionCount, onAttentionChange]);
 
   // Ô cần xử lý kế tiếp sau ô đang chọn (theo thứ tự lỗi → còn thiếu), quay vòng.
   const nextAttention = () => {
@@ -157,6 +142,7 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
         order={model.order}
         target={selected}
         onTarget={goTo}
+        {...(leaveGuard ? { leaveGuard } : {})}
       />
     </Stack>
   );

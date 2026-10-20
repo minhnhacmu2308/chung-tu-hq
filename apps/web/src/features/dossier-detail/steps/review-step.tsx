@@ -6,11 +6,11 @@ import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
   Dialog, DialogContent, DialogFooter, EmptyState, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast,
 } from "@kb/ui";
-import { canEditDeclaration, declarationEditMode } from "@kb/contracts";
+import { canEditDeclaration, declarationEditMode, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCheck2, FileText, Paperclip, RotateCcw, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { dossierKeys, listDocuments } from "@/api/dossiers";
 import { approveDeclaration, declarationKeys, getDeclarationView, reopenDeclaration } from "@/api/declaration";
 import { getSession, sessionKeys } from "@/api/session";
@@ -28,6 +28,8 @@ import type { StepProps } from "./types";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
+import type { LeaveGuard } from "../../declaration-print/field-edit-panel";
+import { printAttentionCells } from "../../declaration-print/print-state";
 import { LoadError } from "@/components/common/load-error";
 
 const exportTaxText = (status: Declaration["status"]) =>
@@ -56,6 +58,20 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
   );
 }
 
+/** Huy hiệu tab "Tờ khai": số ô cần xử lý – cùng hàm với "Chỉ ô cần xử lý" của bản in (tab không cần gắn bản in). */
+function AttentionBadge({ decl, items, submission, mode, canEdit, hasErrors }: {
+  decl: Declaration; items: LineItem[]; submission: SubmissionView | undefined; mode: DeclarationEditMode; canEdit: boolean; hasErrors: boolean;
+}) {
+  const n = useMemo(() => printAttentionCells(decl, items, submission, mode, canEdit).length, [decl, items, submission, mode, canEdit]);
+  if (n === 0) return null;
+  return (
+    <Badge tone={hasErrors ? "danger" : "warning"}>
+      {formatNumber(n)}
+      <span className="sr-only"> ô cần xử lý</span>
+    </Badge>
+  );
+}
+
 const LEGACY_TABS = ["full", "docs", "customs", "ops"] as const;
 type Tab = (typeof LEGACY_TABS)[number];
 // Bản in gộp tab "Hải quan trả về" vào tab "Tờ khai": ?tab=customs cũ → "full".
@@ -67,18 +83,20 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const pathname = usePathname();
   const params = useSearchParams();
   const tabParam = params.get("tab");
+  // Rời tab bản in khi panel còn thay đổi chưa lưu → panel hỏi Lưu / Bỏ / Ở lại, tự chuyển tab khi Lưu hoặc Bỏ.
+  const leaveGuard: LeaveGuard = useRef(null);
   const setTab = (t: string) => {
     const next = new URLSearchParams(params.toString());
     next.set("tab", t);
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    const href = `${pathname}?${next.toString()}`;
+    if (t !== "full" && leaveGuard.current?.(href)) return;
+    router.replace(href, { scroll: false });
   };
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checked, setChecked] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const legacy = legacyReviewForm();
-  /** Số ô cần xử lý (lỗi + còn thiếu) của bản in – huy hiệu tab "Tờ khai". */
-  const [attention, setAttention] = useState(0);
   const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
   const canEdit = session.data ? canEditDeclaration(session.data.user.role) : false;
   const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
@@ -217,13 +235,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 </TabsTrigger>
               ) : (
                 <TabsTrigger value="full">
-                  Tờ khai{" "}
-                  {attention > 0 && (
-                    <Badge tone={errs.length > 0 ? "danger" : "warning"}>
-                      {formatNumber(attention)}
-                      <span className="sr-only"> ô cần xử lý</span>
-                    </Badge>
-                  )}
+                  Tờ khai <AttentionBadge decl={decl} items={items} submission={subQ.data} mode={editMode} canEdit={canEdit} hasErrors={errs.length > 0} />
                 </TabsTrigger>
               )}
               <TabsTrigger value="docs">Chứng từ đính kèm</TabsTrigger>
@@ -234,12 +246,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               )}
               <TabsTrigger value="ops">Theo dõi & nghiệp vụ</TabsTrigger>
             </TabsList>
-            {/* Bản in luôn gắn (ẩn bằng hidden khi ở tab khác): huy hiệu số ô cần xử lý đúng ngay cả khi mở thẳng tab khác, panel giữ phần đang sửa. */}
-            <TabsContent value="full" {...(legacy ? {} : { forceMount: true as const, hidden: tab !== "full" })}>
+            <TabsContent value="full">
               {legacy ? (
                 <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
               ) : (
-                <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} submission={subQ.data} onAttentionChange={setAttention} />
+                <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} submission={subQ.data} leaveGuard={leaveGuard} />
               )}
             </TabsContent>
             <TabsContent value="docs">

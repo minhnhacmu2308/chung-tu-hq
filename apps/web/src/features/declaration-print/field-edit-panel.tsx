@@ -7,7 +7,7 @@ import { Button, Dialog, DialogContent, DialogFooter } from "@kb/ui";
 import { fieldRole, type Declaration, type DeclarationEditMode, type LineItem } from "@kb/contracts";
 import { PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { formatNumber } from "@/lib/format";
 import { ChangeHsDialog } from "../dossier-detail/steps/agent-step";
 import { errorsForField, type FieldError } from "../dossier-detail/steps/customs-errors";
@@ -19,6 +19,9 @@ import { useSaveDeclarationEdits } from "../declaration-form/use-save-edits";
 import { PanelDetails } from "./panel-details";
 import { fieldLocator, nextTarget, type PrintTarget } from "./print-state";
 import { UnsavedDialog } from "./unsaved-dialog";
+
+/** Hỏi trước khi rời bản in (đổi tab): true = còn thay đổi chưa lưu, đã mở hộp hỏi (Lưu / Bỏ → chuyển tới href); false = rời ngay. */
+export type LeaveGuard = RefObject<((href: string) => boolean) | null>;
 
 type Props = {
   dossierId: string;
@@ -34,13 +37,14 @@ type Props = {
   order: PrintTarget[];
   target: PrintTarget | null;
   onTarget: (t: PrintTarget | null) => void;
+  leaveGuard?: LeaveGuard;
 };
 
 const tid = (t: PrintTarget | null) => (t ? `${t.line ?? ""}:${t.key}` : "");
 const INPUTS = "input:not([disabled]), textarea:not([disabled]), select:not([disabled])";
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
-export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdit, values, itemRows, errors, order, target, onTarget }: Props) {
+export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdit, values, itemRows, errors, order, target, onTarget, leaveGuard }: Props) {
   const kind = decl.kind;
   const mode: DeclarationEditMode = canEdit ? stageMode : "LOCKED";
   const readOnlyReason = !canEdit ? "Bạn không có quyền sửa tờ khai." : mode === "LOCKED" ? "Tờ khai đã phê duyệt / đã truyền hoặc đã thông quan – không sửa ở giai đoạn này." : null;
@@ -125,6 +129,17 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
     setConfirm(null);
     if (tid(target) !== tid(shown)) onTarget(shown);
   };
+  // Rời tab "Tờ khai" (panel sẽ bị gỡ): còn thay đổi chưa lưu → hỏi như khi chọn ô khác; đang lưu → chặn (chờ lưu xong).
+  useEffect(() => {
+    if (!leaveGuard) return;
+    leaveGuard.current = (href) => {
+      if (save.isPending) return true;
+      if (!dirty) return false;
+      setConfirm({ next: null, href });
+      return true;
+    };
+    return () => { leaveGuard.current = null; };
+  });
   const goOcr = () => {
     if (save.isPending) return;
     const href = item ? `${pathname}?step=ocr&dong=${item.lineNo}` : `${pathname}?step=ocr`;

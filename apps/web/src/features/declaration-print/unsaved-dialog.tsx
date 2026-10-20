@@ -25,6 +25,9 @@ export function UnsavedDialog({ open, title, count, saving, onSave, onDiscard, o
         icon={<Save className="h-4 w-4" />}
         description={`Có ${formatNumber(count)} chỉ tiêu chưa lưu. Rời ô này mà không lưu sẽ mất thay đổi.`}
         size="sm"
+        // Phải chọn rõ ràng (Esc = Ở lại): hộp có thể mở ngay lúc nhấn chuột xuống (tab kích hoạt khi mousedown) – lần nhả chuột / focus
+        // ngay sau đó nằm ngoài hộp không được tính là bấm ra ngoài.
+        onInteractOutside={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => {
           e.preventDefault();
           onClosed();

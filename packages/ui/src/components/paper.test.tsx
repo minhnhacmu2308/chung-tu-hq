@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { createRef } from "react";
 import { UiLocaleProvider } from "../lib/i18n.js";
-import { PaperColumns, PaperField, PaperSheet, PaperStack, type PaperFieldState } from "./paper.js";
+import { PaperColumns, PaperField, PaperLabel, PaperSheet, PaperStack, type PaperFieldState } from "./paper.js";
 import { Tooltip } from "./tooltip.js";
 
 describe("PaperStack / PaperSheet", () => {
@@ -166,6 +166,35 @@ describe("PaperField", () => {
   it("span áp lưới 12 cột", () => {
     const { container } = render(<PaperField label="a" value="b" ariaLabel="x" span={6} />);
     expect(container.firstElementChild).toHaveClass("col-span-6");
+  });
+
+  it("compact: bản đủ chỉ hiện trên trang giấy rộng, bản ngắn trên trang hẹp; in luôn bản ngắn (data-paper-*)", () => {
+    render(<PaperField label="Mã loại hình" value="E21 · Nhập nguyên liệu" compact="E21" ariaLabel="ô" />);
+    const full = screen.getByText("E21 · Nhập nguyên liệu");
+    const short = screen.getByText("E21");
+    expect(full).toHaveAttribute("data-paper-full");
+    expect(full).toHaveClass("hidden", "paper-wide:inline");
+    expect(short).toHaveAttribute("data-paper-compact");
+    expect(short).toHaveClass("paper-wide:hidden");
+  });
+
+  it("không có compact → không có bản ngắn", () => {
+    const { container } = render(<PaperField label="a" value="b" ariaLabel="ô" />);
+    expect(container.querySelector("[data-paper-compact], [data-paper-full]")).toBeNull();
+  });
+
+  it("keepTogether: giá trị một dòng, không bẻ giữa chữ", () => {
+    const { rerender } = render(<PaperField label="Giờ" value="00:09:58" ariaLabel="ô" keepTogether />);
+    expect(screen.getByText("00:09:58")).toHaveClass("whitespace-nowrap", "text-ellipsis");
+    expect(screen.getByText("00:09:58")).not.toHaveClass("break-words");
+    rerender(<PaperField label="Giờ" value="00:09:58" ariaLabel="ô" />);
+    expect(screen.getByText("00:09:58")).toHaveClass("break-words");
+  });
+
+  it("PaperLabel: nhãn cột nhóm lặp, aria-hidden, theo lưới", () => {
+    const { container } = render(<PaperLabel span={4} align="end">Tổng tiền thuế</PaperLabel>);
+    expect(container.firstElementChild).toHaveAttribute("aria-hidden", "true");
+    expect(container.firstElementChild).toHaveClass("col-span-4", "text-right");
   });
 
   it.each<PaperFieldState>(["none", "error", "missing", "estimate", "edited"])("axe không vi phạm: %s (có và không onSelect)", async (state) => {

@@ -44,9 +44,10 @@ export function fieldLocator(kind: Kind): Map<string, FieldSpot> {
   if (cached) return cached;
   const l = layoutFor(kind);
   const out = new Map<string, FieldSpot>();
-  for (const f of l.summary) out.set(f.key, { field: f, group: [f], scope: "decl" });
   locate(l.declarant.flatMap((s) => s.blocks), "decl", out);
   locate(l.customs.flatMap((s) => s.blocks), "decl", out);
+  // Đầu trang sau hai tab: ô đầu trang lặp lại ô của tab Hải quan (TK_A09…) giữ nhóm của tab.
+  for (const f of l.summary) if (!out.has(f.key)) out.set(f.key, { field: f, group: [f], scope: "decl" });
   locate(l.item.declarant, "item", out);
   locate(l.item.customs, "item", out);
   locators.set(kind, out);
@@ -78,31 +79,40 @@ export function estimateValues(kind: Kind, customs: FormValues, est: Estimate): 
   return { values, estimated };
 }
 
+const DECIMAL = /^[-+]?(\d+\.?\d*|\.\d+)$/;
+const toNumber = (t: string): number | null => (DECIMAL.test(t) ? Number(t) : null);
+
 /**
- * Chuỗi số → giá trị. Có cả chấm và phẩy → dấu sau cùng là thập phân; một loại dấu xuất hiện nhiều lần → phân cách nghìn;
- * xuất hiện một lần với đúng 3 chữ số theo sau → phân cách nghìn, ngược lại → thập phân.
+ * Số Hải quan (có thể viết kiểu VN) → các cách đọc. Có cả chấm và phẩy → dấu sau cùng là thập phân;
+ * một loại dấu xuất hiện nhiều lần → phân cách nghìn; xuất hiện một lần với đúng 3 chữ số theo sau → mơ hồ (đọc cả hai cách);
+ * còn lại → thập phân.
  */
-function parseNumber(s: string): number | null {
-  let t = s.replace(/\s/g, "");
-  if (!t) return null;
+function customsReadings(s: string): number[] {
+  const t = s.replace(/\s/g, "");
+  if (!t) return [];
   const dot = t.lastIndexOf(".");
   const comma = t.lastIndexOf(",");
+  let candidates = [t];
   if (dot >= 0 && comma >= 0) {
     const dec = dot > comma ? "." : ",";
-    t = t.replaceAll(dec === "." ? "," : ".", "").replace(dec, ".");
+    candidates = [t.replaceAll(dec === "." ? "," : ".", "").replace(dec, ".")];
   } else if (dot >= 0 || comma >= 0) {
     const parts = t.split(dot >= 0 ? "." : ",");
-    t = parts.length > 2 || parts[1]?.length === 3 ? parts.join("") : parts.join(".");
+    if (parts.length > 2) candidates = [parts.join("")];
+    else if (parts[1]?.length === 3) candidates = [parts.join(""), parts.join(".")];
+    else candidates = [parts.join(".")];
   }
-  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(t)) return null;
-  return Number(t);
+  return candidates.map(toNumber).filter((n): n is number => n !== null);
 }
 
-/** Hai chuỗi cùng một số (bỏ qua cách viết phân cách nghìn / số 0 thập phân); chuỗi rỗng không bằng số nào. */
-export function sameNumber(a: string, b: string): boolean {
-  const x = parseNumber(a);
-  const y = parseNumber(b);
-  return x !== null && y !== null && x === y;
+/**
+ * Số Hải quan trả về có bằng số của ứng dụng không. `app` = DecimalString chuẩn (chấm thập phân, không phân cách nghìn – "170.125000");
+ * `customs` có thể viết kiểu VN ("886.187.500", "170,125"); cách viết mơ hồ ("1.500") khớp nếu một trong hai cách đọc bằng.
+ * Rỗng ở bất kỳ bên nào → false.
+ */
+export function sameNumber(customs: string, app: string): boolean {
+  const y = toNumber(app.trim());
+  return y !== null && customsReadings(customs).some((x) => x === y);
 }
 
 /** Khóa ô của các chỉ tiêu người dùng đã sửa (source "USER"). */
@@ -126,27 +136,22 @@ function isMissing(kind: Kind, spot: FieldSpot, v: FormValues, ctx: ConditionCon
   if (spot.blockCondition && !isApplicable({ condition: spot.blockCondition }, ctx)) return false;
   if (spot.parentCondition && !isApplicable({ condition: spot.parentCondition }, ctx)) return false;
   if (spot.repeatRow !== undefined && spot.repeatRow > 1) return false;
-  if (!isApplicable(spot.field, ctx)) return false;
   const parentCondition = spot.parentCondition ?? spot.blockCondition;
+  // Như units(): nhóm "chỉ cần một ô" xét cả nhóm, trước khi lọc điều kiện riêng của ô con.
   if (spot.fillAny) {
     if (spot.group[0]?.key !== spot.field.key) return false;
     return groupMissing(kind, { kind: "group", label: "", fields: spot.group, fill: "any", ...(spot.parentNo ? { no: spot.parentNo } : {}) }, v, ctx, parentCondition);
   }
+  if (!isApplicable(spot.field, ctx)) return false;
   return missingRequired(kind, spot.field, v, spot.parentNo, parentCondition, ctx);
 }
 
 type Slot = { key: string; line?: number };
 const slotId = (c: Slot) => `${c.line ?? ""}:${c.key}`;
 
-/**
- * Ô cần xử lý theo thứ tự nhảy: mọi ô lỗi rồi mới tới ô còn thiếu. Trong mỗi nhóm: printKeys (tờ khai, rồi từng dòng hàng),
- * sau đó "Chỉ tiêu khác" (tờ khai, rồi từng dòng). Lỗi gắn vào ô đầu tiên (theo thứ tự đó) của chỉ tiêu `no`;
- * `error.line` (số dòng hàng, 1-based) → chỉ số dòng = vị trí trong `lineNos`; không tìm thấy → bỏ qua.
- */
-export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[], errors: FieldError[], lineNos: number[]): AttentionCell[] {
+/** Thứ tự nhảy của mọi ô: printKeys (tờ khai, rồi từng dòng hàng), sau đó "Chỉ tiêu khác" (tờ khai, rồi từng dòng). */
+function slotOrder(kind: Kind, rows: number): Slot[] {
   const loc = fieldLocator(kind);
-  const printed = printKeys(printLayoutFor(kind));
-  const other = otherFieldKeys(kind);
   const order: Slot[] = [];
   const seen = new Set<string>();
   const push = (s: Slot) => {
@@ -155,19 +160,43 @@ export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[]
     seen.add(slotId(s));
     order.push(s);
   };
-  for (const keys of [printed, other]) {
+  for (const keys of [printKeys(printLayoutFor(kind)), otherFieldKeys(kind)]) {
     for (const key of keys.decl) push({ key });
-    items.forEach((_, line) => { for (const key of keys.item) push({ key, line }); });
+    for (let line = 0; line < rows; line++) for (const key of keys.item) push({ key, line });
   }
+  return order;
+}
 
-  const errorIds = new Set<string>();
-  for (const e of errors) {
-    if (!e.no) continue;
+/** Ô của chỉ tiêu mỗi lỗi, theo thứ tự `order`. Lỗi không có `no` / dòng không có trong `lineNos` → []. */
+function slotsPerError(kind: Kind, order: Slot[], errors: FieldError[], lineNos: number[]): Slot[][] {
+  const loc = fieldLocator(kind);
+  const noOf = (s: Slot) => { const spot = loc.get(s.key)!; return spot.field.no ?? spot.parentNo; };
+  return errors.map((e) => {
+    if (!e.no) return [];
     const line = e.line === undefined ? undefined : lineNos.indexOf(e.line);
-    if (line === -1 || (line !== undefined && line >= items.length)) continue;
-    const hit = order.find((s) => s.line === line && (loc.get(s.key)!.field.no ?? loc.get(s.key)!.parentNo) === e.no);
-    if (hit) errorIds.add(slotId(hit));
-  }
+    if (line === -1) return [];
+    return order.filter((s) => s.line === line && noOf(s) === e.no);
+  });
+}
+
+/**
+ * Mọi ô (khóa tờ khai, hoặc khóa dòng hàng + chỉ số dòng 0-based) thuộc chỉ tiêu của các lỗi, theo thứ tự nhảy.
+ * `error.line` (số dòng hàng, 1-based) → chỉ số dòng = vị trí trong `lineNos`; không tìm thấy → bỏ qua.
+ */
+export function errorSlots(kind: Kind, errors: FieldError[], lineNos: number[]): PrintTarget[] {
+  const order = slotOrder(kind, lineNos.length);
+  const hit = new Set(slotsPerError(kind, order, errors, lineNos).flat().map(slotId));
+  return order.filter((s) => hit.has(slotId(s)));
+}
+
+/**
+ * Ô cần xử lý theo thứ tự nhảy: mọi ô lỗi rồi mới tới ô còn thiếu; trong mỗi nhóm theo `slotOrder`.
+ * Mỗi lỗi gắn vào ô đầu tiên (theo thứ tự đó) của chỉ tiêu (xem `errorSlots`).
+ */
+export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[], errors: FieldError[], lineNos: number[]): AttentionCell[] {
+  const loc = fieldLocator(kind);
+  const order = slotOrder(kind, items.length);
+  const errorIds = new Set(slotsPerError(kind, order, errors, lineNos).flatMap((slots) => (slots[0] ? [slotId(slots[0])] : [])));
 
   const declCtx = conditionContext(kind, decl);
   const itemCtx = items.map((v) => conditionContext(kind, v));

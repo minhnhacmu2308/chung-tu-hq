@@ -1,6 +1,6 @@
 import { otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, estimateValues, fieldLocator, pageCount, sameNumber } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, pageCount, sameNumber } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -47,11 +47,18 @@ describe("estimateValues", () => {
 });
 
 describe("sameNumber", () => {
-  it("so sánh theo giá trị số", () => {
-    expect(sameNumber("886187500", "886.187.500")).toBe(true);
-    expect(sameNumber("25780.00", "25780")).toBe(true);
+  it("so sánh số Hải quan (định dạng VN) với DecimalString của ứng dụng", () => {
+    expect(sameNumber("886.187.500", "886187500")).toBe(true);
+    expect(sameNumber("25780", "25780.00")).toBe(true);
+    expect(sameNumber("170,125", "170.125000")).toBe(true);
+    expect(sameNumber("0,125", "0.125000")).toBe(true);
+    expect(sameNumber("1.500", "1500")).toBe(true);
+    expect(sameNumber("1.500", "1.5")).toBe(true);
+    expect(sameNumber("1.234.567,89", "1234567.89")).toBe(true);
+    expect(sameNumber("2", "1")).toBe(false);
     expect(sameNumber("1", "2")).toBe(false);
     expect(sameNumber("", "0")).toBe(false);
+    expect(sameNumber("0", "")).toBe(false);
   });
 });
 
@@ -80,6 +87,24 @@ describe("fieldLocator", () => {
     expect(loc.get("HAG_TX3")!.scope).toBe("item");
     expect(loc.get("TK_EP2")!.group.map((f) => f.key)).toEqual(["TK_EPA", "TK_EP2", "TK_EP3", "TK_EP4"]);
     expect(loc.get("TK_IMC")!.group.map((f) => f.key)).toEqual(["TK_IMC"]);
+  });
+  it("ô đầu trang trùng ô tab Hải quan giữ nhóm của tab", () => {
+    expect(fieldLocator("IDA").get("TK_A09")!.group.map((f) => f.key)).toContain("TK_AD11");
+  });
+});
+
+describe("errorSlots", () => {
+  it("mọi ô của chỉ tiêu lỗi, theo thứ tự nhảy", () => {
+    const loc = fieldLocator("IDA");
+    const expected = [...loc.values()].filter((s) => s.scope === "decl" && (s.field.no ?? s.parentNo) === "1.22").map((s) => s.field.key);
+    const slots = errorSlots("IDA", [{ no: "1.22", code: "E1", message: "x" }], []);
+    expect(slots.map((s) => s.key).sort()).toEqual([...expected].sort());
+    expect(slots.map((s) => s.key)).toEqual(["TK_EPA", "TK_EP2", "TK_EP3", "TK_EP4"]);
+    expect(slots.every((s) => s.line === undefined)).toBe(true);
+  });
+  it("lỗi dòng hàng → ô dòng hàng với chỉ số 0-based; dòng lạ bỏ qua", () => {
+    expect(errorSlots("IDA", [{ no: "1.74", line: 7, code: "E1", message: "x" }], [3, 7])).toEqual([{ key: "HAG_CMD", line: 1 }]);
+    expect(errorSlots("IDA", [{ no: "1.74", line: 9, code: "E1", message: "x" }], [3, 7])).toEqual([]);
   });
 });
 

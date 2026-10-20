@@ -1,6 +1,6 @@
 import type { DeclarationLayout, LayoutBlock, LayoutField, LayoutItem, LayoutRepeat } from "./types.js";
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
+export const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /** Nhóm lặp → các dòng ô đã thay {n}/{nn} theo số dòng. */
 export function expandRepeat(r: LayoutRepeat): LayoutField[][] {

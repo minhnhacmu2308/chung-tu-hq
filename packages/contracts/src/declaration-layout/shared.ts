@@ -38,7 +38,7 @@ export function invoiceBlock(k: Kind): LayoutBlock {
     id: "hoa-don", title: "Hóa đơn thương mại", items: [
       fld("TK_IV1", "Phân loại hình thức hóa đơn", "code", { no: no("1.39", "2.34"), codeTable: "INVOICE_KIND", width: "sm" }),
       fld("TK_IV3", "Số hóa đơn", "text", { no: no("1.41", "2.36"), width: "md" }),
-      fld("TK_IV2", "Số tiếp nhận hóa đơn điện tử", "text", { no: no("1.40", "2.35"), width: "md" }),
+      fld("TK_IV2", "Số tiếp nhận hóa đơn điện tử", "text", { no: no("1.40", "2.35"), width: "md", condition: "E_INVOICE" }),
       fld("TK_IVD", "Ngày phát hành", "date", { no: no("1.42", "2.37"), width: "sm" }),
       fld("TK_IVP", "Phương thức thanh toán", "code", { no: no("1.43", "2.38"), codeTable: "PAYMENT", width: "sm" }),
       grp(k === "IDA" ? "Tổng trị giá hóa đơn" : "Trị giá hóa đơn", no("1.44", "2.39"), [
@@ -83,7 +83,7 @@ export function taxPaymentBlocks(k: Kind): LayoutBlock[] {
       ],
     },
     {
-      id: "han-muc", title: "Hạn mức ngân hàng trả thuế thay", items: [
+      id: "han-muc", title: "Hạn mức ngân hàng trả thuế thay", fill: "all", items: [
         fld("TK_BRC", "Mã ngân hàng trả thuế thay", "code", { codeTable: "BANK", no: no("1.54", "2.44"), width: "sm" }),
         fld("TK_BYA", "Năm phát hành hạn mức", "number", { no: no("1.55", "2.45"), width: "xs" }),
         fld("TK_BCM", "Ký hiệu chứng từ hạn mức", "text", { no: no("1.56", "2.46"), width: "sm" }),
@@ -91,7 +91,7 @@ export function taxPaymentBlocks(k: Kind): LayoutBlock[] {
       ],
     },
     {
-      id: "bao-lanh", title: "Bảo lãnh", items: [
+      id: "bao-lanh", title: "Bảo lãnh", fill: "all", items: [
         fld("TK_SBC", "Mã ngân hàng bảo lãnh", "code", { codeTable: "BANK", no: no("1.59", "2.49"), width: "sm" }),
         fld("TK_RYA", "Năm phát hành bảo lãnh", "number", { no: no("1.60", "2.50"), width: "xs" }),
         fld("TK_SCM", "Ký hiệu chứng từ bảo lãnh", "text", { no: no("1.61", "2.51"), width: "sm" }),

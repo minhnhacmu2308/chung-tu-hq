@@ -1,7 +1,7 @@
 // Điều kiện xuất hiện của chỉ tiêu "theo tình huống" (Phụ lục II TT39/2018 sửa đổi TT121/2025) – MỘT nguồn cho backend (mapping)
 // và giao diện (bố cục tờ khai). Loại hình theo bảng mã của Cục Hải quan: G11–G14 tạm nhập, G51 tái nhập, G21–G24 tái xuất, G61 tạm xuất.
 
-export type ConditionId = "TEMP_IMPORT" | "RE_IMPORT" | "RE_EXPORT" | "TEMP_EXPORT" | "BY_WATER" | "IN_CONTAINER" | "EXPORT_VALUE" | "AIR_IDENT" | "HAS_HAWB" | "SPLIT_CONTAINER" | "MANUAL_VALUE";
+export type ConditionId = "TEMP_IMPORT" | "RE_IMPORT" | "RE_EXPORT" | "TEMP_EXPORT" | "BY_WATER" | "IN_CONTAINER" | "EXPORT_VALUE" | "AIR_IDENT" | "HAS_HAWB" | "SPLIT_CONTAINER" | "MANUAL_VALUE" | "E_INVOICE";
 
 /**
  * Dữ liệu tối thiểu để xét điều kiện: mã loại hình, mã phương thức vận chuyển (1.6/2.6), điều kiện giá, có hóa đơn hay không.
@@ -12,6 +12,8 @@ export type ConditionContext = {
   identMode?: string; hawbIssued?: boolean; splitCargo?: string;
   /** Dòng hàng chọn tự nhập trị giá tính thuế. */
   manualValue?: boolean;
+  /** Mã phân loại hình thức hóa đơn 1.39 / 2.34 (A, B, D) – giá trị trên tờ khai (người khai sửa được). */
+  invoiceKind?: string;
 };
 
 const type = (c: ConditionContext) => c.typeCode.trim().toUpperCase();
@@ -39,4 +41,9 @@ export const DECLARATION_CONDITIONS: Record<ConditionId, { label: string; test: 
   SPLIT_CONTAINER: { label: "Tách vận đơn hàng container", test: (c) => c.splitCargo === "1" },
   /** Dòng hàng: trị giá tính thuế phân bổ thủ công chỉ nhập khi chọn tự nhập. */
   MANUAL_VALUE: { label: "Chọn tự nhập trị giá tính thuế (Manual)", test: (c) => c.manualValue === true },
+  /**
+   * 1.40 / 2.35 số tiếp nhận hóa đơn điện tử: Phụ lục II TT39 – "bắt buộc nhập khi Phân loại hình thức hóa đơn là D; không nhập được với mã khác".
+   * Xét trên giá trị tờ khai (không phải chứng từ) vì người khai đổi được 1.39 / 2.34.
+   */
+  E_INVOICE: { label: "Phân loại hình thức hóa đơn là D (hóa đơn điện tử)", test: (c) => (c.invoiceKind ?? "").trim().toUpperCase().split(/\s*[–-]\s*|\s+/)[0] === "D" },
 };

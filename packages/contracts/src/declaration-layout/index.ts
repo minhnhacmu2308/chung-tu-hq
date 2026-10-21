@@ -14,4 +14,5 @@ export {
   isItemFieldKey, itemDefaults, itemFieldClass, itemFieldCode, itemFieldFpt, itemFieldIssue, itemFieldMeta, itemInputKeys, itemOverrides, lawCodesByLine, parseItemFieldCode, taxTable, vatCode,
   type ItemDefaultsInput, type ItemFieldClass,
 } from "./item-fields.js";
-export { conditionContext, declarationRequiredGaps, groupMissing, isApplicable, itemFormValues, missingRequired, requiredGaps, requiredGapsText, type ItemFormInput, type RequiredGap } from "./required.js";
+export { declarantFieldApplicable, inapplicableExtraCodes } from "./applicable.js";
+export { allOrNoneGaps, conditionContext, declarationRequiredGaps, groupMissing, isApplicable, itemFormValues, missingRequired, requiredGaps, requiredGapsText, type ItemFormInput, type RequiredGap } from "./required.js";

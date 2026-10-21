@@ -60,13 +60,13 @@ Cột "App":
 | 1.14 | Mã bưu chính | Tùy chọn | — | ⚠️ 📤 **Gửi `"000000"` khi không có dữ liệu**, trái quy tắc "thiếu thì để trống" |
 | 1.15 | Địa chỉ người nhập khẩu | HT | Chỉ nhập khi hệ thống hiện sai | ✅ |
 | 1.16 | Điện thoại | HT | — | ✅ |
-| 1.17–1.18 | Mã/tên người ủy thác nhập khẩu | ĐK | Nhập khẩu ủy thác | ❌ |
-| 1.19 | Mã người xuất khẩu | Tùy chọn / ĐK | Gửi kho ngoại quan. TT121: nhập khẩu tại chỗ bắt buộc MST người giao hàng | ❌ |
+| 1.17–1.18 | Mã/tên người ủy thác nhập khẩu | ĐK | Nhập khẩu ủy thác | ✅ người khai nhập, tùy chọn (đợt 5) |
+| 1.19 | Mã người xuất khẩu | Tùy chọn / ĐK | Gửi kho ngoại quan. TT121: nhập khẩu tại chỗ bắt buộc MST người giao hàng | ✅ người khai nhập, tùy chọn (đợt 5) |
 | 1.20 | Tên người xuất khẩu | K | Theo hợp đồng. Gia công thì ghi bên đặt gia công | ✅ |
 | 1.21 | Mã bưu chính người xuất khẩu | Tùy chọn | — | ❌ (chấp nhận được) |
 | 1.22 | Địa chỉ người xuất khẩu (4 ô × 35 ký tự) | K | — | ✅ (app tự tách 4 ô) |
 | 1.23 | Mã nước | K | — | ✅ |
-| 1.24 | Tên người ủy thác xuất khẩu | ĐK | Mua qua bên thứ ba theo chỉ định, nhập khẩu tại chỗ (TT121) | ❌ |
+| 1.24 | Tên người ủy thác xuất khẩu | ĐK | Mua qua bên thứ ba theo chỉ định, nhập khẩu tại chỗ (TT121) | ✅ người khai nhập, tùy chọn (đợt 5) |
 | 1.25 | Mã đại lý hải quan | HT / ĐK | Người khai IDA khác người khai IDC | ❌ Cần có cho khách hàng là đại lý |
 
 ### 3.3 Vận đơn và vận chuyển (1.26–1.36, 1.64–1.67)
@@ -84,8 +84,8 @@ Cột "App":
 | 1.34 | Địa điểm xếp hàng | K | — | ✅ |
 | 1.35 | Số lượng container | ĐK / HT | Đường biển, hàng container | 📤 Gửi `VD_COC` nhưng không hiển thị |
 | 1.36 | Mã kết quả kiểm tra nội dung | ĐK | Đã xem hàng trước khi khai | ❌ |
-| 1.64 | Ngày được phép nhập kho đầu tiên | ĐK | Kho ngoại quan, loại hình A41 | ❌ |
-| 1.65–1.67 | Vận chuyển kết hợp: ngày khởi hành, tối đa 3 điểm trung chuyển, điểm đích | ĐK | Khai vận chuyển kết hợp (bảo thuế) | ❌ |
+| 1.64 | Ngày được phép nhập kho đầu tiên | ĐK | Kho ngoại quan, loại hình A41 | ✅ người khai nhập, tùy chọn (đợt 5) |
+| 1.65–1.67 | Vận chuyển kết hợp: ngày khởi hành, tối đa 3 điểm trung chuyển, điểm đích | ĐK | Khai vận chuyển kết hợp (bảo thuế) | ✅ người khai nhập, tùy chọn (đợt 5) |
 
 ### 3.4 Giấy phép, hóa đơn, trị giá (1.37–1.51)
 
@@ -94,7 +94,7 @@ Cột "App":
 | 1.37 | Mã văn bản pháp quy khác (tối đa 5) | ĐK | Hàng quản lý chuyên ngành. **Chương 84/85: ô 1 bắt buộc MO/CU** (CV 2061) | ✅ (có chặn MO/CU) |
 | 1.38 | Giấy phép nhập khẩu (5 cặp mã + số) | ĐK | Giấy phép/kết quả kiểm tra chuyên ngành, danh mục miễn thuế/trừ lùi, xác định trước, **số tiếp nhận hợp đồng gia công**; TT121 thêm `QPGP`, `MTTB` | ❌ **Thiếu quan trọng** |
 | 1.39 | Phân loại hình thức hóa đơn | K | — | ✅ |
-| 1.40 | Số tiếp nhận hóa đơn điện tử | ĐK | 1.39 = D | ❌ |
+| 1.40 | Số tiếp nhận hóa đơn điện tử | ĐK | 1.39 = D | ✅ chỉ khi 1.39 = D (đợt 5) |
 | 1.41 | Số hóa đơn | ĐK | Có hóa đơn | ✅ |
 | 1.42 | Ngày phát hành | K | — | ✅ |
 | 1.43 | Phương thức thanh toán | K | — | ✅ |
@@ -112,10 +112,10 @@ Cột "App":
 | STT | Chỉ tiêu | Loại | Khi nào cần | App |
 |---|---|---|---|---|
 | 1.52 | Người nộp thuế | K | — | ✅ |
-| 1.53 | Mã lý do đề nghị giải phóng hàng (BP) | ĐK | Giải phóng hàng trên cơ sở bảo lãnh | ❌ |
-| 1.54–1.57 | Ngân hàng trả thuế thay, năm, ký hiệu, số hạn mức | ĐK (khai cả nhóm) | Dùng hạn mức ngân hàng | ❌ |
-| 1.58 | Mã xác định thời hạn nộp thuế (A/B/C/D) | ĐK (thực tế thường khai) | Bảo lãnh, ân hạn, nộp ngay | ❌ **Nên có** |
-| 1.59–1.62 | Ngân hàng bảo lãnh, năm, ký hiệu, số | ĐK (khai cả nhóm) | Bảo lãnh riêng/chung | ❌ |
+| 1.53 | Mã lý do đề nghị giải phóng hàng (BP) | ĐK | Giải phóng hàng trên cơ sở bảo lãnh | ✅ người khai nhập (đợt 5) |
+| 1.54–1.57 | Ngân hàng trả thuế thay, năm, ký hiệu, số hạn mức | ĐK (khai cả nhóm) | Dùng hạn mức ngân hàng | ✅ khai cả nhóm (đợt 5) |
+| 1.58 | Mã xác định thời hạn nộp thuế (A/B/C/D) | ĐK (thực tế thường khai) | Bảo lãnh, ân hạn, nộp ngay | ✅ luôn hiện, tùy chọn (đợt 5) |
+| 1.59–1.62 | Ngân hàng bảo lãnh, năm, ký hiệu, số | ĐK (khai cả nhóm) | Bảo lãnh riêng/chung | ✅ khai cả nhóm (đợt 5) |
 
 ### 3.6 Đính kèm, ghi chú, chỉ thị Hải quan (1.63, 1.68–1.73)
 
@@ -162,7 +162,7 @@ Chỉ ghi các điểm **khác** Mẫu 01. Các chỉ tiêu có cùng bản ch�
 | 2.1 | Số tờ khai | **HQ** | — | ✅ (đặt sai chỗ, giống 1.1) |
 | 2.2, 2.3, 2.5, 2.7 | Tách tờ khai, tờ khai TN-TX, phân loại hàng, thời hạn tái nhập | ĐK | > 50 dòng, tạm xuất/tái xuất, hàng đặc thù | ❌ |
 | 2.9 | Đội thủ tục | HT | — | ⚠️ gửi cứng `"00"` |
-| 2.16–2.18 | Người ủy thác xuất khẩu; mã người nhập khẩu (TT121: xuất khẩu tại chỗ bắt buộc MST người nhận) | ĐK | — | ❌ |
+| 2.16–2.18 | Người ủy thác xuất khẩu; mã người nhập khẩu (TT121: xuất khẩu tại chỗ bắt buộc MST người nhận) | ĐK | — | ✅ người khai nhập, tùy chọn (đợt 5) |
 | 2.23 | Mã đại lý hải quan | HT / ĐK | — | ❌ |
 | 2.24 | Số vận đơn = **số quản lý hàng hóa** (đăng ký trước theo Mẫu 14) | ĐK | — | ✅ |
 | 2.28 | Địa điểm nhận hàng cuối cùng | K | — | ✅ |
@@ -173,8 +173,8 @@ Chỉ ghi các điểm **khác** Mẫu 01. Các chỉ tiêu có cùng bản ch�
 | 2.41 | Phân loại không cần quy đổi VND | Tùy chọn | — | ❌ |
 | 2.42 | Tổng hệ số phân bổ | ĐK | — | ❌ |
 | 2.43 | Người nộp thuế | ĐK | — | ❌ EDA không gửi `TK_TPM` |
-| 2.44–2.52 | Hạn mức, thời hạn nộp thuế, bảo lãnh | ĐK | — | ❌ |
-| 2.53–2.56 | Đính kèm HYS, vận chuyển kết hợp | ĐK | — | ❌ |
+| 2.44–2.52 | Hạn mức, thời hạn nộp thuế, bảo lãnh | ĐK | — | ✅ khai cả nhóm; 2.48 tùy chọn (đợt 5) |
+| 2.53–2.56 | Đính kèm HYS, vận chuyển kết hợp | ĐK | — | 2.54–2.56 ✅ người khai nhập, tùy chọn (đợt 5); 2.53 ❌ |
 | 2.59 | Địa điểm đóng hàng lên xe (vanning), tối đa 5 mã + tên + địa chỉ | ĐK | Hàng container đóng ngoài khu vực giám sát | ❌ |
 | 2.60 | Số container (tối đa 50) | ĐK | Đường biển, hàng container | 📤 Gửi `CON_C01..50` nhưng không hiển thị |
 | 2.61–2.64 | Chỉ thị của Hải quan | **HQ** | — | ❌ |
@@ -346,7 +346,15 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
   - `fieldDefForFptIndex` (`@kb/contracts`) đổi `indexCode` FPT (EPN, IP2, SN3, CMD…) sang số chỉ tiêu.
   - Gateway đọc `rowPosition` thành dòng hàng; outbox lưu `raw.rejection` và xóa khi chính nghiệp vụ đó gửi lại thành công; view trả `rejection`.
   - Màn Review: ô lỗi viền đỏ kèm nội dung và cách khắc phục, khung tổng hợp lỗi ở đầu màn, số lỗi trên tab. Bước Khai báo có nút "Xem lỗi trên tờ khai".
-- Còn có thể bổ sung: 1.17–1.19, 1.24 (ủy thác, tại chỗ – cần dữ liệu hồ sơ cho biết), 1.40 (theo 1.39 = D), 1.53–1.62 (bảo lãnh/hạn mức), 1.64–1.67 (kho ngoại quan, vận chuyển kết hợp); lỗi theo dòng hàng gắn vào bảng hàng.
+- Còn có thể bổ sung: ~~1.17–1.19, 1.24, 1.40, 1.53–1.62, 1.64–1.67~~ (đợt 5); lỗi theo dòng hàng gắn vào bảng hàng.
+
+**Đợt 5 – chỉ tiêu theo tình huống người khai nhập (xong, nhánh `feat/be-a5-conditional-fields`, cần người có nghiệp vụ hải quan review):**
+- Các chỉ tiêu dưới đây là **ô bổ sung** (mã lưu = tên trường VNACCS, nguồn "Người khai nhập"), sửa trên bản in bước 5, gửi FPT qua `applyExtras` **chỉ khi có giá trị**. Không có `FieldMapping` riêng vì không suy được từ chứng từ.
+- 1.40 / 2.35 số tiếp nhận hóa đơn điện tử → `TK_IV2`: điều kiện mới `E_INVOICE` (1.39 / 2.34 = D) trong `DECLARATION_CONDITIONS`, xét trên **giá trị tờ khai** (người khai đổi được 1.39). Bắt buộc khi D; mã khác → không gửi, không chặn, bỏ khi dựng lại (`inapplicableExtraCodes`, `mergeUserEdits(…, kind)`).
+- 1.53 `TK_BP`, 1.58 / 2.48 `TK_ENC` (luôn hiện, tùy chọn); hạn mức 1.54–1.57 / 2.44–2.47 (`TK_BRC/BYA/BCM/BCN`) và bảo lãnh 1.59–1.62 / 2.49–2.52 (`TK_SBC/RYA/SCM/SCN`): khối `fill: "all"` – **khai cả nhóm**, đã nhập một ô thì các ô còn lại thành ô bắt buộc còn thiếu (`allOrNoneGaps` trong `requiredGaps`, chặn Phê duyệt / Ký số).
+- 1.17–1.19, 1.24 (`TK_NMC/NMN/EPC/ENM`) · 2.16–2.18 (`TK_EXC/EXN/CGC`): tùy chọn, **không gắn điều kiện** – hồ sơ không cho biết lô ủy thác / tại chỗ và bảng mã loại hình trong repo chưa đối chiếu (`unverified`), nên không suy theo loại hình.
+- 1.64 `VD_ISD`, 1.65–1.67 / 2.54–2.56 (`TK_DPD`, `TK_ST/AD/SD1..3`, `TK_ARP/ADT`): tùy chọn, không gắn điều kiện (A41 trong bảng mã của repo là "quyền nhập khẩu", không phải kho ngoại quan – cần đối chiếu).
+- Chưa làm: form cũ (`NEXT_PUBLIC_REVIEW_LEGACY_FORM`) chưa hiện luật khai cả nhóm; luật "TK_BP chỉ khi giải phóng hàng trên cơ sở bảo lãnh" và liên hệ 1.58 ↔ bảo lãnh chưa kiểm.
 
 **Bản mẫu tờ khai đầy đủ chỉ tiêu (xong, nhánh `feat/to-khai-day-du-ban-mau`):**
 - Trang `/ban-mau/to-khai` (không nằm trong menu): 3 tab theo luồng làm việc (Người khai nhập / Hải quan trả về / Theo dõi & nghiệp vụ). Dữ liệu giả theo ảnh mẫu `CHITIEU_NHAPKHAU`/`CHITIEU_XUATKHAU`, có 3 giai đoạn. Thiết kế: `docs/superpowers/specs/2026-10-17-to-khai-day-du-ban-mau-design.md`.

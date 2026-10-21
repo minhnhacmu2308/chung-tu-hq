@@ -1,6 +1,6 @@
 // Tờ khai (chỉ tiêu theo mnemonic `code`) → object FPT.VNACCS (objVN_IDA/HANG/VANDON/KTG, objVN_EDA/HANG/CON).
 // Cắt độ dài theo đặc tả (ghi cảnh báo), ngày → dd/MM/yyyy, số → number. Thuần; kiểm tra bằng Zod của @kb/contracts/fpt.
-import { DECLARATION_CONDITIONS, EdaRequestSchema, extraFieldFpt, fptKey, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
+import { DECLARATION_CONDITIONS, EdaRequestSchema, extraFieldFpt, fptKey, inapplicableExtraCodes, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
 
 /** Dữ liệu tờ khai đủ để dựng payload – không phụ thuộc kiểu của module declaration. */
 export type DeclarationPayload = {
@@ -82,13 +82,15 @@ function splitAddress(addr: string, names: string[], set: ReturnType<typeof sett
 /**
  * Ô bổ sung người khai nhập trên form đầy đủ (mã chỉ tiêu = tên trường VNACCS: TK_CCC, TK_ICC, VD_BL2, KTG_IN4…) → đúng object FPT, đổi kiểu theo đặc tả.
  * Gọi sau các ô suy từ chỉ tiêu app nên ghi đè giá trị mặc định (TK_CHB, TK_IMY). Ô APP_* chỉ lưu trong app, không gửi.
+ * Ô theo tình huống không áp dụng với giá trị tờ khai (1.40 / 2.35 khi 1.39 / 2.34 khác D) → không gửi, kể cả khi người khai đã nhập trước đó.
  */
 function applyExtras(p: DeclarationPayload, targets: Partial<Record<FptObjectName, ReturnType<typeof setter>>>) {
+  const skip = new Set(inapplicableExtraCodes(p.kind, Object.entries(p.fields).map(([code, f]) => ({ code, value: f.value ?? "" }))));
   for (const [code, f] of Object.entries(p.fields)) {
     const spec = extraFieldFpt(p.kind, code);
     const v = f.value?.trim() ?? "";
     const set = spec ? targets[spec.object] : undefined;
-    if (!spec || !v || !set) continue;
+    if (!spec || !v || !set || skip.has(code)) continue;
     set(code, spec.field.type === "date" ? ddmmyyyy(v) : spec.field.type === "decimal" || spec.field.type === "long" ? num(v) : v);
   }
 }

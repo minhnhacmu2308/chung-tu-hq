@@ -9,14 +9,14 @@ import { CheckCircle2, Circle, Info } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { DEFAULT_PARTY_CLASS, PartyClassSchema, TransportModeSchema } from "@kb/contracts";
+import { DEFAULT_PARTY_CLASS, TransportModeSchema } from "@kb/contracts";
 import { z } from "zod";
 import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
 import { getDeclarationProfile, settingsKeys } from "@/api/settings";
 import { prefillFromProfile } from "./profile-prefill";
 import type { Direction, Dossier } from "@/mocks/types";
-import { CUSTOMS_OFFICES, INCOTERMS, SKILL_SETS, suggestedDocuments, TYPE_CODES } from "./create-dossier-options";
-import { PARTY_CLASS_OPTIONS, TRANSPORT_LABELS, TRANSPORT_OPTIONS } from "./dossier-display";
+import { CUSTOMS_OFFICES, INCOTERMS, SKILL_SETS, suggestedDocuments, TYPE_GROUPS, typeCodesIn, typeGroupOf, type TypeGroup } from "./create-dossier-options";
+import { TRANSPORT_LABELS, TRANSPORT_OPTIONS } from "./dossier-display";
 
 const isoDay = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
@@ -27,7 +27,6 @@ const schema = z.object({
   customsOffice: z.string({ error: "Chọn cơ quan Hải quan" }).min(1, "Chọn cơ quan Hải quan"),
   incoterm: z.string().min(1),
   transportMode: TransportModeSchema,
-  partyClass: PartyClassSchema,
   dueDate: z.string({ error: "Chọn hạn khai" }).regex(/^\d{4}-\d{2}-\d{2}$/, "Chọn hạn khai"),
   skillSetId: z.string().min(1),
   note: z.string().max(500, "Ghi chú tối đa 500 ký tự"),
@@ -40,7 +39,8 @@ type FormState = {
   customsOffice: string | null;
   incoterm: string;
   transportMode: Dossier["transportMode"];
-  partyClass: Dossier["partyClass"];
+  /** Nhóm loại hình người dùng chọn; null → theo mã loại hình đang chọn (kể cả mã điền sẵn từ Mặc định khai báo). */
+  typeGroup: TypeGroup | null;
   dueDate: string | null;
   skillSetId: string;
   note: string;
@@ -55,7 +55,7 @@ const INITIAL: FormState = {
   customsOffice: null,
   incoterm: "CIF",
   transportMode: "SEA_CONTAINER",
-  partyClass: DEFAULT_PARTY_CLASS,
+  typeGroup: null,
   dueDate: isoDay(3),
   skillSetId: "default",
   note: "",
@@ -92,7 +92,17 @@ export function CreateDossierPage() {
 
   const changeDirection = (d: Direction) => {
     setTouched(new Set());
-    setForm((f) => ({ ...f, direction: d, typeCode: d === "NK" ? "A11" : "B11", incoterm: d === "NK" ? "CIF" : "FOB" }));
+    setForm((f) => ({ ...f, direction: d, typeCode: d === "NK" ? "A11" : "B11", typeGroup: null, incoterm: d === "NK" ? "CIF" : "FOB" }));
+  };
+
+  const typeGroup = form.typeGroup ?? typeGroupOf(form.typeCode);
+  const typeOptions = typeCodesIn(form.direction, typeGroup);
+  // Đổi nhóm: giữ mã nếu vẫn thuộc nhóm, không thì chọn mã đầu của nhóm.
+  const changeTypeGroup = (g: TypeGroup) => {
+    const codes = typeCodesIn(form.direction, g);
+    const keep = codes.some((o) => o.value === form.typeCode);
+    setForm((f) => ({ ...f, typeGroup: g, typeCode: keep ? f.typeCode : (codes[0]?.value ?? null) }));
+    setTouched((t) => new Set(t).add("typeCode"));
   };
 
   const create = useMutation({
@@ -128,8 +138,8 @@ export function CreateDossierPage() {
       dueDate: v.dueDate,
       incoterm: v.incoterm,
       transportMode: v.transportMode,
-      // Chỉ tờ khai nhập khẩu có chỉ tiêu này; hồ sơ xuất khẩu giữ mặc định.
-      partyClass: v.direction === "NK" ? v.partyClass : DEFAULT_PARTY_CLASS,
+      // Không hỏi ở bước tạo hồ sơ: tờ khai lấy theo Mặc định khai báo (PL_CN), sửa ở bước Review nếu cần.
+      partyClass: DEFAULT_PARTY_CLASS,
       ...(v.note.trim() ? { note: v.note.trim() } : {}),
     });
   };
@@ -178,9 +188,16 @@ export function CreateDossierPage() {
 
               <FormSection title="Khai báo" description="Mã loại hình và chi cục Hải quan nơi đăng ký tờ khai.">
                 <Stack gap="md">
+                  <SegmentedControl<TypeGroup>
+                    label="Nhóm loại hình"
+                    className="flex-wrap gap-x-4 gap-y-2 whitespace-nowrap"
+                    value={typeGroup}
+                    onChange={changeTypeGroup}
+                    options={TYPE_GROUPS}
+                  />
                   <Field label="Mã loại hình" required {...errorProp(errors.typeCode)}>
                     <Combobox
-                      options={TYPE_CODES[form.direction]}
+                      options={typeOptions}
                       value={form.typeCode}
                       onChange={(v) => set("typeCode", v)}
                       placeholder="Chọn mã loại hình"
@@ -220,15 +237,6 @@ export function CreateDossierPage() {
                     </div>
                   )}
                 </Stack>
-                {form.direction === "NK" && (
-                  <Field label="Phân loại cá nhân/tổ chức" required hint="Chỉ tiêu 1.7 tờ khai nhập khẩu – người gửi (nước ngoài) và người nhận" className="cq-md:max-w-sm">
-                    <Select
-                      options={PARTY_CLASS_OPTIONS}
-                      value={form.partyClass}
-                      onChange={(e) => set("partyClass", PartyClassSchema.parse(e.target.value))}
-                    />
-                  </Field>
-                )}
                 <Field label="Điều kiện giao hàng" required hint="Incoterms 2020" className="cq-md:max-w-xs">
                   <Select options={INCOTERMS} value={form.incoterm} onChange={(e) => set("incoterm", e.target.value)} />
                 </Field>

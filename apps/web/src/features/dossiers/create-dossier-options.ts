@@ -29,6 +29,20 @@ export const TYPE_CODES: Record<Direction, ComboboxOption[]> = {
   ],
 };
 
+/** Nhóm loại hình (như ô "Nhóm loại hình" đầu khối Tờ khai – APP_NHOM_LH): lọc danh sách mã loại hình. */
+export type TypeGroup = "KD" | "SXXK" | "GC" | "CX";
+export const TYPE_GROUPS: { value: TypeGroup; label: string }[] = [
+  { value: "KD", label: "Kinh doanh" },
+  { value: "SXXK", label: "Sản xuất xuất khẩu" },
+  { value: "GC", label: "Gia công" },
+  { value: "CX", label: "Chế xuất" },
+];
+const GROUP_OF: Record<string, TypeGroup> = { E11: "CX", E42: "CX", E21: "GC", E41: "GC", E52: "GC", E31: "SXXK", E62: "SXXK" };
+/** Nhóm của mã loại hình; mã không thuộc loại hình E (kinh doanh, tạm nhập tái xuất…) → Kinh doanh. */
+export const typeGroupOf = (code: string | null): TypeGroup => (code && GROUP_OF[code]) || "KD";
+export const typeCodesIn = (direction: Direction, group: TypeGroup): ComboboxOption[] =>
+  TYPE_CODES[direction].filter((o) => typeGroupOf(o.value) === group);
+
 export const CUSTOMS_OFFICES: ComboboxOption[] = [
   { value: "03CE", label: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", description: "Cảng Đình Vũ, Tân Vũ, Nam Hải" },
   { value: "03CC", label: "03CC – Chi cục HQ CK cảng Hải Phòng KV I", description: "Cảng Hoàng Diệu, Chùa Vẽ" },

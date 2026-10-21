@@ -262,6 +262,25 @@ export function printData(decl: Declaration, items: LineItem[], submission: Subm
   return { kind, lineNos, values, itemRows, errors, customs, estimate, estimated };
 }
 
+/** Ô tên do Hải quan trả về theo mã người khai chọn (tên địa điểm lưu kho theo mã A202) – trước khi Hải quan trả, tra danh mục để hiện ước tính. */
+export const LOOKUP_NAME_CELLS: Record<Kind, { code: string; name: string }[]> = {
+  IDA: [{ code: "VD_ST", name: "VD_A51" }],
+  EDA: [{ code: "TK_ST", name: "TK_K42" }],
+};
+
+/** Điền tên tra từ danh mục vào ô tên Hải quan còn trống (đánh dấu ước tính); Hải quan đã trả tên → giữ tên Hải quan. */
+export function withLookupNames(data: PrintData, names: Record<string, string | undefined>): PrintData {
+  const fill = Object.entries(names).filter((e): e is [string, string] => Boolean(e[1]) && !data.values[e[0]]?.trim());
+  if (!fill.length) return data;
+  const estimated = new Set(data.estimated);
+  const values = { ...data.values };
+  for (const [k, v] of fill) {
+    values[k] = v;
+    estimated.add(k);
+  }
+  return { ...data, values, estimated };
+}
+
 /** Ô cần xử lý của bản in. Tờ khai chỉ đọc (LOCKED / không có quyền sửa): bỏ ô còn thiếu (không làm gì được), giữ ô lỗi Hải quan. */
 export function printAttention(data: PrintData, mode: DeclarationEditMode, canEdit: boolean): AttentionCell[] {
   const cells = attentionCells(data.kind, data.values, data.itemRows, data.errors, data.lineNos);

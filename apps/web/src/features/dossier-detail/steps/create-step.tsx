@@ -5,8 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { dossierKeys, updateDossier } from "@/api/dossiers";
-import { PARTY_CLASS_LABELS } from "@kb/contracts";
 import { TRANSPORT_LABELS } from "@/features/dossiers/dossier-display";
+import { TYPE_GROUPS, typeGroupOf } from "@/features/dossiers/create-dossier-options";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { StepProps } from "./types";
 import { toastMutationError } from "@/lib/mutation-error";
@@ -25,9 +25,9 @@ export function CreateSummaryStep({ dossier, goTo }: StepProps) {
 
   const rows: [string, string][] = [
     ["Loại hồ sơ", dossier.direction === "NK" ? "Nhập khẩu" : "Xuất khẩu"],
+    ["Nhóm loại hình", TYPE_GROUPS.find((g) => g.value === typeGroupOf(dossier.typeCode))?.label ?? ""],
     ["Mã loại hình", dossier.typeCode],
     ["Đối tác nước ngoài", dossier.partner],
-    ...(dossier.direction === "NK" ? [["Phân loại cá nhân/tổ chức", PARTY_CLASS_LABELS[dossier.partyClass]] as [string, string]] : []),
     ["Cơ quan Hải quan", dossier.customsOffice],
     ["Điều kiện giao hàng", dossier.incoterm],
     ["Phương thức vận chuyển", TRANSPORT_LABELS[dossier.transportMode]],

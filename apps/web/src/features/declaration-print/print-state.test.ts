@@ -1,6 +1,6 @@
 import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printValue, sameNumber, unplacedErrors, type PrintData } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printValue, sameNumber, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -310,5 +310,26 @@ describe("unplacedErrors / printIssues (final review)", () => {
     expect(locked.count).toBe(3);
     const open = printIssues(d, "FULL", true);
     expect(open.count).toBe(open.cells.length + 2);
+  });
+});
+
+describe("withLookupNames (tên địa điểm lưu kho theo mã)", () => {
+  const base = (values: Record<string, string>): PrintData => ({
+    kind: "IDA", lineNos: [], values, itemRows: [], errors: [], customs: {}, estimate: {}, estimated: new Set(),
+  });
+  it("ô tên còn trống → điền tên tra danh mục, đánh dấu ước tính", () => {
+    const d = withLookupNames(base({ VD_ST: "03CCS03" }), { VD_A51: "KHO CFS TAN VU" });
+    expect(d.values.VD_A51).toBe("KHO CFS TAN VU");
+    expect(d.estimated.has("VD_A51")).toBe(true);
+  });
+  it("Hải quan đã trả tên → giữ tên Hải quan, không đánh dấu ước tính", () => {
+    const src = base({ VD_ST: "03CCS03", VD_A51: "KHO SCSC" });
+    const d = withLookupNames(src, { VD_A51: "KHO CFS TAN VU" });
+    expect(d.values.VD_A51).toBe("KHO SCSC");
+    expect(d.estimated.has("VD_A51")).toBe(false);
+  });
+  it("không tra được tên → giữ nguyên", () => {
+    const src = base({ VD_ST: "XXXXXXX" });
+    expect(withLookupNames(src, { VD_A51: undefined })).toBe(src);
   });
 });

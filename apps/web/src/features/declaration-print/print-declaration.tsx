@@ -10,9 +10,11 @@ import { OTHER_FIELDS_DOM_ID, OtherFields } from "./other-fields";
 import { cellDomId, type CellLook } from "./print-cell";
 import { regionDomId, PrintSheets } from "./print-sheets";
 import {
-  cellState, editedKeys, errorSlots, fieldLocator, otherFieldCells, pageCount, panelOrder, printData, printIssues, printValue, sameNumber,
-  type PrintTarget,
+  cellState, editedKeys, errorSlots, fieldLocator, LOOKUP_NAME_CELLS, otherFieldCells, pageCount, panelOrder, printData, printIssues, printValue,
+  sameNumber, withLookupNames, type PrintData, type PrintTarget,
 } from "./print-state";
+import { codeScope } from "../declaration-form/code-scope";
+import { useCodeName } from "../declaration-form/use-code-list";
 import { PrintToolbar } from "./print-toolbar";
 import { formatDateTime } from "@/lib/format";
 import { errorPlace } from "../dossier-detail/steps/customs-errors";
@@ -38,8 +40,7 @@ const slotId = (key: string, line?: number) => `${line ?? ""}:${key}`;
 /** Khung liệt kê lỗi Hải quan không gắn được vào ô ("Chỉ ô cần xử lý" cuộn tới khi không còn ô). */
 const UNPLACED_DOM_ID = "print-unplaced-errors";
 
-function printModel(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean) {
-  const data = printData(decl, items, submission);
+function printModel(data: PrintData, decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean) {
   const { kind, values, itemRows, errors, lineNos, customs, estimate, estimated } = data;
   const info = submission?.customsInfo ?? null;
 
@@ -94,7 +95,14 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
     setSelected(t);
     if (t) setScrollTo((s) => ({ id: cellDomId(t.key, t.line), n: (s?.n ?? 0) + 1 }));
   }, []);
-  const model = useMemo(() => printModel(decl, items, submission, mode, canEdit), [decl, items, submission, mode, canEdit]);
+  const base = useMemo(() => printData(decl, items, submission), [decl, items, submission]);
+  // Tên địa điểm lưu kho: Hải quan trả theo mã; trước đó tra danh mục A202 (trong phạm vi chi cục) để hiện ước tính.
+  const storage = LOOKUP_NAME_CELLS[base.kind][0]!;
+  const office = base.values["TK_CH"] ?? "";
+  const scope = useMemo(() => codeScope("A202", storage.code, base.kind, { TK_CH: office }), [storage.code, base.kind, office]);
+  const storageName = useCodeName("A202", base.values[storage.code] ?? "", scope);
+  const data = useMemo(() => withLookupNames(base, { [storage.name]: storageName }), [base, storage.name, storageName]);
+  const model = useMemo(() => printModel(data, decl, items, submission, mode, canEdit), [data, decl, items, submission, mode, canEdit]);
   // Cùng số với huy hiệu tab: ô cần xử lý + lỗi Hải quan không gắn được vào ô.
   const attentionCount = model.issueCount;
 

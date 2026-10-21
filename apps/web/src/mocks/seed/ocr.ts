@@ -200,7 +200,7 @@ const SHOWCASE: Record<string, Def[]> = {
 
 const SHOWCASE_CHECKS: Omit<CrossCheck, "id" | "dossierId">[] = [
   { ruleCode: "R-FREIGHT-INCOTERM", title: "FCA: chưa cộng cước vận chuyển vào trị giá", detail: "Trị giá invoice 20.850,00 USD là giá FCA. Đã tìm thấy hóa đơn cước 0004512: 1.150,00 USD – cần cộng vào trị giá tính thuế ở bước Review tờ khai.", result: "FAIL", severity: "BLOCKER", documentKinds: ["INVOICE", "FREIGHT_INVOICE", "ARRIVAL_NOTICE"] },
-  { ruleCode: "R-BUYER-TAXCODE", title: "Tên người mua là tên tiếng Anh, MST sai định dạng", detail: "Tờ khai dùng tên và MST theo đăng ký của doanh nghiệp: CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT – 0316789012.", result: "WARN", severity: "WARNING", documentKinds: ["INVOICE", "BILL_OF_LADING"] },
+  { ruleCode: "R-BUYER-MST", title: "MST người mua trên invoice khác MST doanh nghiệp", detail: "Invoice ghi MST sai định dạng, khác MST doanh nghiệp 0316789012 – kiểm tra lại MST người mua ở tab Commercial Invoice. Tờ khai luôn dùng tên và MST đã đăng ký: CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT – 0316789012.", result: "WARN", severity: "INFO", documentKinds: ["INVOICE", "BILL_OF_LADING"] },
   { ruleCode: "R-CBM-PL-BL", title: "Thể tích Packing List lệch B/L", detail: "Packing List 21,35 CBM – B/L 21,53 CBM (có thể đảo chữ số). Không ảnh hưởng thuế.", result: "WARN", severity: "INFO", documentKinds: ["PACKING_LIST", "BILL_OF_LADING"] },
   { ruleCode: "R-WEIGHT-PL-BL", title: "Trọng lượng Packing List khớp B/L", detail: "Gross weight 3.860,50 kg = 3.860,50 kg · 18 pallets.", result: "PASS", severity: "WARNING", documentKinds: ["PACKING_LIST", "BILL_OF_LADING"] },
   { ruleCode: "R-INVOICE-REF", title: "Số invoice khớp trên Packing List và C/O", detail: `${INV_NO} ngày 02/10/2026 xuất hiện đúng trên cả 3 chứng từ.`, result: "PASS", severity: "BLOCKER", documentKinds: ["INVOICE", "PACKING_LIST", "CERT_OF_ORIGIN"] },
@@ -311,7 +311,7 @@ export function generateChecks(dossier: Dossier, kinds: DocKind[]): CrossCheck[]
       documentKinds: ["INVOICE"],
     });
   }
-  list.push({ ruleCode: "R-BUYER-TAXCODE", title: "Tên người mua là tên tiếng Anh", detail: "Tờ khai dùng tên theo MST 0316789012.", result: "WARN", severity: "WARNING", documentKinds: ["INVOICE"] });
+  list.push({ ruleCode: "R-BUYER-MST", title: "Người mua trên invoice là doanh nghiệp (theo MST)", detail: "Tên người mua trên invoice là tên tiếng Anh; tờ khai dùng tên theo MST 0316789012: CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT.", result: "PASS", severity: "INFO", documentKinds: ["INVOICE"] });
   return list.map((c, i) => ({ ...c, id: `chk_${dossier.id}_${i + 1}`, dossierId: dossier.id }));
 }
 

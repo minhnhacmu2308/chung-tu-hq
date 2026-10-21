@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { displayNameFromEmail, normalizeEmail } from "../email.js";
 import { isPasswordAcceptable } from "../password.js";
-import { canChangeRole, canDisable, canInvite, canManageOrg } from "../role-rules.js";
+import { canChangeRole, canDisable, canInvite, canManageOrg, canTransferOwnership } from "../role-rules.js";
 import { SESSION_TTL_MS, sessionExpiry, shouldExtend } from "../session-policy.js";
 import { normalizeTaxCode } from "../tax-code.js";
 import { hashToken, newToken } from "../token.js";
@@ -66,5 +66,14 @@ describe("role-rules", () => {
     expect(canInvite("ADMIN").ok).toBe(true);
     expect(canInvite("DECLARANT").ok).toBe(false);
     expect(canManageOrg("VIEWER").ok).toBe(false);
+  });
+  it("canTransferOwnership: chỉ OWNER; người nhận đang hoạt động, không phải mình", () => {
+    const code = (r: { ok: boolean; error?: { code: string } }) => (r.ok ? "OK" : r.error?.code);
+    expect(code(canTransferOwnership("OWNER", { role: "ADMIN", status: "ACTIVE", isSelf: false }))).toBe("OK");
+    expect(code(canTransferOwnership("OWNER", { role: "VIEWER", status: "ACTIVE", isSelf: false }))).toBe("OK");
+    expect(code(canTransferOwnership("ADMIN", { role: "DECLARANT", status: "ACTIVE", isSelf: false }))).toBe("FORBIDDEN");
+    expect(code(canTransferOwnership("OWNER", { role: "OWNER", status: "ACTIVE", isSelf: true }))).toBe("FORBIDDEN");
+    expect(code(canTransferOwnership("OWNER", { role: "DECLARANT", status: "INVITED", isSelf: false }))).toBe("INVALID_STATE");
+    expect(code(canTransferOwnership("OWNER", { role: "DECLARANT", status: "DISABLED", isSelf: false }))).toBe("INVALID_STATE");
   });
 });

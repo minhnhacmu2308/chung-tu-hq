@@ -15,6 +15,8 @@ export { changeMemberRole } from "./application/change-member-role.js";
 export { setMemberDisabled } from "./application/set-member-disabled.js";
 export { listJoinRequests } from "./application/list-join-requests.js";
 export { approveJoinRequest } from "./application/approve-join-request.js";
+export { rejectJoinRequest } from "./application/reject-join-request.js";
+export { transferOwnership } from "./application/transfer-ownership.js";
 export { getOrganization } from "./application/get-organization.js";
 export { updateOrganization } from "./application/update-organization.js";
 export { updateSuspectThreshold } from "./application/update-suspect-threshold.js";

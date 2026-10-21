@@ -74,3 +74,21 @@ export const JoinRequestSchema = z.object({ id: z.string(), userId: z.string(), 
 export type JoinRequest = z.infer<typeof JoinRequestSchema>;
 
 export const OkSchema = z.object({ ok: z.literal(true) });
+
+/** Từ chối yêu cầu tham gia: lý do tùy chọn, gửi kèm email cho người xin. Chuỗi rỗng = không có lý do. */
+export const RejectJoinRequestInputSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(500, "Lý do tối đa 500 ký tự")
+    .optional()
+    .transform((s) => (s ? s : undefined)),
+});
+export type RejectJoinRequestInput = z.input<typeof RejectJoinRequestInputSchema>;
+
+/** Chuyển quyền sở hữu: nhập lại mật khẩu của Chủ sở hữu hiện tại để xác nhận. */
+export const TransferOwnershipInputSchema = z.object({ password: z.string().min(1, "Nhập mật khẩu để xác nhận").max(128) });
+export type TransferOwnershipInput = z.infer<typeof TransferOwnershipInputSchema>;
+/** Kết quả: người nhận thành OWNER, chủ cũ thành ADMIN. */
+export const TransferOwnershipResultSchema = z.object({ owner: MemberSchema, previousOwner: MemberSchema });
+export type TransferOwnershipResult = z.infer<typeof TransferOwnershipResultSchema>;

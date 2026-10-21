@@ -4,7 +4,7 @@ import type {
   AgentRun, CrossCheck, CustomsMessage, CustomsResult, Declaration, DigitalCertificate, Dossier, DossierDocument,
   ExtractedField, Integration, LineItem, Member, Notification, Organization, Skill,
 } from "./types";
-import type { DeclarationProfile, PostAmendment } from "@kb/contracts";
+import type { DeclarationProfile, JoinRequest, PostAmendment } from "@kb/contracts";
 import { seedCore } from "./seed/core";
 import { seedOcr } from "./seed/ocr";
 import { seedDeclaration } from "./seed/declaration";
@@ -20,6 +20,8 @@ export type MockDb = {
   currentUserId: string;
   org: Organization;
   members: Member[];
+  /** Yêu cầu tham gia đang chờ duyệt (duyệt → thành viên; từ chối → bỏ khỏi danh sách). */
+  joinRequests: JoinRequest[];
   dossiers: Dossier[];
   documents: DossierDocument[];
   fields: ExtractedField[];
@@ -46,7 +48,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 20;
+const DB_VERSION = 21;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {

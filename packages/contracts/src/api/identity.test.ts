@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InviteMemberInputSchema, LoginInputSchema, OrgProfileInputSchema, PostalCodeSchema, RegisterInputSchema, TaxCodeSchema } from "./identity.js";
+import { InviteMemberInputSchema, LoginInputSchema, OrgProfileInputSchema, PostalCodeSchema, RegisterInputSchema, RejectJoinRequestInputSchema, TaxCodeSchema, TransferOwnershipInputSchema } from "./identity.js";
 
 describe("contract identity", () => {
   it("email chuẩn hóa lowercase + trim", () => {
@@ -27,5 +27,16 @@ describe("contract identity", () => {
   it("Hồ sơ doanh nghiệp: mã bưu chính tùy chọn (không gửi = giữ nguyên)", () => {
     expect(OrgProfileInputSchema.parse({ name: "A", address: "", phone: "" }).postalCode).toBeUndefined();
     expect(OrgProfileInputSchema.safeParse({ name: "A", address: "", phone: "", postalCode: "12" }).success).toBe(false);
+  });
+  it("Từ chối yêu cầu tham gia: lý do tùy chọn, cắt khoảng trắng, rỗng → không có, tối đa 500 ký tự", () => {
+    expect(RejectJoinRequestInputSchema.parse({}).reason).toBeUndefined();
+    expect(RejectJoinRequestInputSchema.parse({ reason: "   " }).reason).toBeUndefined();
+    expect(RejectJoinRequestInputSchema.parse({ reason: " Không phải nhân viên " }).reason).toBe("Không phải nhân viên");
+    expect(RejectJoinRequestInputSchema.safeParse({ reason: "x".repeat(501) }).success).toBe(false);
+  });
+  it("Chuyển quyền sở hữu: bắt buộc nhập mật khẩu", () => {
+    expect(TransferOwnershipInputSchema.safeParse({ password: "" }).success).toBe(false);
+    expect(TransferOwnershipInputSchema.safeParse({}).success).toBe(false);
+    expect(TransferOwnershipInputSchema.parse({ password: "demo1234" }).password).toBe("demo1234");
   });
 });

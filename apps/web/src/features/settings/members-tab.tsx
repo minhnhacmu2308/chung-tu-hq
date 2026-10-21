@@ -6,14 +6,16 @@ import {
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 // kb-allow-raw: menu của thành viên có nhóm radio chọn vai trò – RowActions chỉ nhận thao tác bấm-là-chạy
-import { MoreHorizontal, UserPlus } from "lucide-react";
+import { Crown, MoreHorizontal, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { getSession, sessionKeys } from "@/api/session";
 import { changeMemberRole, inviteMember, listMembers, setMemberDisabled, settingsKeys } from "@/api/settings";
 import { formatRelative } from "@/lib/format";
 import { ROLE_LABELS, type Member, type Role } from "@/mocks/types";
 import { PermissionMatrix } from "@/components/common/permission-matrix";
+import { JoinRequestsCard } from "./join-requests-card";
 import { MEMBERS_TAB_MESSAGES } from "./members-tab.messages";
+import { TransferOwnershipDialog } from "./transfer-ownership-dialog";
 
 const ASSIGNABLE: Role[] = ["ADMIN", "DECLARANT", "APPROVER", "VIEWER"];
 const STATUS_TONE: Record<Member["status"], "success" | "warning" | "neutral"> = {
@@ -109,6 +111,10 @@ export function MembersTab() {
     onError,
   });
   const meId = session?.user.id;
+  const myRole = session?.user.role;
+  const isOwner = myRole === "OWNER";
+  const isManager = isOwner || myRole === "ADMIN";
+  const [transferTarget, setTransferTarget] = useState<Member | null>(null);
 
   const columns = useMemo(
     () =>
@@ -166,6 +172,16 @@ export function MembersTab() {
                   <DropdownMenuItem tone="danger" disabled={locked} onSelect={() => disable.mutate({ id: m.id, d: m.status !== "DISABLED" })}>
                     {m.status === "DISABLED" ? t.unlock : t.lock}
                   </DropdownMenuItem>
+                  {/* Chỉ Chủ sở hữu thấy; người nhận phải đang hoạt động (backend kiểm lại). */}
+                  {isOwner && (
+                    <DropdownMenuItem
+                      icon={<Crown className="h-4 w-4" />}
+                      disabled={locked || m.status !== "ACTIVE"}
+                      onSelect={() => setTransferTarget(m)}
+                    >
+                      {t.transfer}
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             );
@@ -173,11 +189,12 @@ export function MembersTab() {
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [meId, t, roleLabels],
+    [meId, isOwner, t, roleLabels],
   );
 
   return (
     <Stack gap="lg">
+      {isManager && <JoinRequestsCard />}
       <Stack gap="sm">
         <div>
           <h2 className="text-base font-semibold text-fg">{t.members}</h2>
@@ -211,6 +228,7 @@ export function MembersTab() {
         </CardContent>
       </Card>
       <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+      <TransferOwnershipDialog target={transferTarget} onOpenChange={(o) => !o && setTransferTarget(null)} />
     </Stack>
   );
 }

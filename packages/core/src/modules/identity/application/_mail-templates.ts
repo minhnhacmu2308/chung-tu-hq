@@ -25,6 +25,16 @@ export const joinRequestMail = (appUrl: string, orgName: string, requesterName: 
   text: `${requesterName} (${requesterEmail}) đã đăng ký với MST của ${orgName} và xin tham gia. Vào ${appUrl}/settings?tab=members để duyệt.`,
 });
 
+export const joinRejectedMail = (orgName: string, reason: string | undefined): Mail => ({
+  subject: `Yêu cầu tham gia ${orgName} chưa được chấp nhận`,
+  text: `Chào bạn,\n\nYêu cầu tham gia doanh nghiệp ${orgName} trên KhaiBáo AI của bạn chưa được Chủ sở hữu/Quản trị chấp nhận.${reason ? `\nLý do: ${reason}` : ""}\n\nNếu cần, hãy liên hệ trực tiếp người quản lý tài khoản của doanh nghiệp.`,
+});
+
+export const ownershipTransferredMail = (appUrl: string, orgName: string, fromName: string): Mail => ({
+  subject: `Bạn là Chủ sở hữu mới của ${orgName}`,
+  text: `Chào bạn,\n\n${fromName} đã chuyển quyền sở hữu doanh nghiệp ${orgName} trên KhaiBáo AI cho bạn. Từ nay bạn quản lý gói dịch vụ, thanh toán và toàn bộ thành viên. Đăng nhập tại ${appUrl}/login.`,
+});
+
 export const joinApprovedMail = (appUrl: string, orgName: string): Mail => ({
   subject: `Bạn đã được duyệt vào ${orgName}`,
   text: `Yêu cầu tham gia ${orgName} của bạn đã được duyệt. Đăng nhập tại ${appUrl}/login.`,

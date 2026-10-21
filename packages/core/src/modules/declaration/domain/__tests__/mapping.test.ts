@@ -42,6 +42,12 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
     expect(f["NXK_DT"]?.suspect).toBeUndefined();
   });
 
+  it("2.13 mã bưu chính người xuất khẩu lấy từ Tài khoản (TK_EPP); chưa có → trống, không bắt buộc", () => {
+    expect(eda({ org: { postalCode: "180000" } })["TK_EPP"]).toMatchObject({ value: "180000", source: "ACCOUNT", no: "2.13" });
+    expect(eda()["TK_EPP"]).toMatchObject({ value: "" });
+    expect(eda()["TK_EPP"]?.suspect).toBeUndefined();
+  });
+
   it("2.24 là số quản lý hàng hóa (Mẫu 14), không lấy số B/L/booking: để trống, bắt buộc, ghi chú nhắc không khai số vận đơn", () => {
     expect(eda()["SO_VD"]).toMatchObject({ value: "", source: "DOSSIER", suspect: true, note: expect.stringMatching(/số quản lý hàng hóa.*HPSEL2610078/) });
     const none = eda({ mutate: (s) => { s.transport.billNo = nul(); s.transport.masterBillNo = nul(); } })["SO_VD"];
@@ -162,10 +168,19 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
 });
 
 describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
-  it("địa chỉ doanh nghiệp rỗng → nghi ngờ; điện thoại rỗng → để trống", () => {
+  it("1.15 địa chỉ doanh nghiệp rỗng (chỉ tiêu HT – VNACCS tự hiện theo MST) → không bắt buộc, không nghi ngờ, ghi chú hướng dẫn; điện thoại rỗng → để trống", () => {
     const f = ida({ org: { address: "", phone: "" } });
-    expect(f["NNK_DC"]).toMatchObject({ value: "", suspect: true, note: "Cập nhật địa chỉ doanh nghiệp ở Tài khoản" });
+    expect(f["NNK_DC"]).toMatchObject({ value: "", source: "ACCOUNT", no: "1.15", note: expect.stringContaining("Tài khoản") });
+    expect(f["NNK_DC"]?.suspect).toBeUndefined();
     expect(f["NNK_DT"]?.value).toBe("");
+  });
+
+  it("1.14 mã bưu chính lấy từ Tài khoản (mã chỉ tiêu = ô VNACCS TK_IMY); chưa có → trống, không nghi ngờ, ghi chú sẽ gửi 000000", () => {
+    expect(ida({ org: { postalCode: "180000" } })["TK_IMY"]).toMatchObject({ value: "180000", source: "ACCOUNT", no: "1.14", section: "PARTIES" });
+    const empty = ida({ org: { postalCode: "" } })["TK_IMY"];
+    expect(empty).toMatchObject({ value: "", source: "ACCOUNT", note: expect.stringContaining("000000") });
+    expect(empty?.suspect).toBeUndefined();
+    expect(ida()["TK_IMY"]?.value).toBe(""); // OrgInfo cũ chưa có postalCode
   });
 
   it("vận đơn: thiếu số B/L → dùng MAWB/master; thiếu cả hai → nghi ngờ (bắt buộc)", () => {

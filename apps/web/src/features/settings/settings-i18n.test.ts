@@ -22,6 +22,7 @@ const ORG: Organization = {
   taxCode: "0316789012",
   address: "Hải Phòng",
   phone: "0225 3 888 123",
+  postalCode: "180000",
   plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, renewsAt: "2026-11-30" },
   usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "96500" },
   suspectThreshold: "BALANCED",
@@ -44,6 +45,7 @@ describe("Cài đặt – đa ngôn ngữ", () => {
     const org = render("zh", OrgTab);
     expect(org).toContain("企业信息");
     expect(org).toContain("保存更改");
+    expect(org).toContain("邮政编码");
     expect(org).not.toContain("Lưu thay đổi");
     const plan = render("zh", PlanTab);
     expect(plan).toContain("套餐对比");
@@ -59,6 +61,8 @@ describe("Cài đặt – đa ngôn ngữ", () => {
   });
   it("vi: giữ nguyên chữ cũ", () => {
     expect(render("vi", OrgTab)).toContain("Thông tin doanh nghiệp");
+    expect(render("vi", OrgTab)).toContain("Mã bưu chính");
+    expect(render("en", OrgTab)).toContain("Postal code");
     expect(render("vi", PlanTab)).toContain("So sánh gói");
   });
   it("lỗi form và nhãn chỉ tiêu theo ngôn ngữ; giá trị mẫu dạng tờ khai giữ tiếng Việt", () => {

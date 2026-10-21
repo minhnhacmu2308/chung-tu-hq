@@ -10,6 +10,8 @@ const AUTO_FILLED: Record<Kind, string[]> = {
   IDA: ["TK_CHB", "TK_IMY", "TK_IP1", "TK_IP3", "VD_GWT", "HAG_QN2", "HAG_QT2", "HAG_UPC"],
   EDA: ["TK_CHB", "HAG_QN2", "HAG_QT2", "HAG_UPC"],
 };
+/** Ô FPT bắt buộc nhưng là chỉ tiêu HT (TT39) – VNACCS tự hiện theo MST, phần mềm điền từ Tài khoản: trống không chặn duyệt. */
+const SYSTEM_ASSIST: Record<Kind, string[]> = { IDA: ["TK_IMA"], EDA: [] };
 const FPT_REQUIRED: Record<Kind, string[]> = {
   IDA: [...VN_IDA_FIELDS, ...VN_IDA_HANG_FIELDS, ...VN_IDA_VANDON_FIELDS, ...VN_IDA_KTG_FIELDS].filter((f) => f.required).map((f) => f.name),
   EDA: [...VN_EDA_FIELDS, ...VN_EDA_HANG_FIELDS].filter((f) => f.required).map((f) => f.name),
@@ -35,7 +37,7 @@ describe("ô FPT bắt buộc trên form", () => {
   it.each(["IDA", "EDA"] as const)("%s: mọi ô FPT bắt buộc người khai nhập đều là Bắt buộc, trừ ô phần mềm tự điền", (kind) => {
     const L = layoutFor(kind);
     const onForm = formFields([...L.declarant.flatMap((s) => s.blocks), ...L.item.declarant]).filter(({ f }) => FPT_REQUIRED[kind].includes(f.key) && f.origin !== "CUSTOMS");
-    const notRequired = onForm.filter(({ f, no }) => fieldRole(kind, f, no) !== "REQUIRED" && !AUTO_FILLED[kind].includes(f.key)).map(({ f }) => f.key);
+    const notRequired = onForm.filter(({ f, no }) => fieldRole(kind, f, no) !== "REQUIRED" && !AUTO_FILLED[kind].includes(f.key) && !SYSTEM_ASSIST[kind].includes(f.key)).map(({ f }) => f.key);
     expect(notRequired).toEqual([]);
   });
 
@@ -54,6 +56,13 @@ describe("requiredGaps – ô bắt buộc còn trống trước khi khai", () =
   it("thiếu địa chỉ người xuất khẩu dòng 1 → báo 1.22", () => {
     const { decl, item } = complete("IDA");
     expect(requiredGaps("IDA", { ...decl, TK_EPA: "" }, [item])).toEqual([{ key: "TK_EPA", no: "1.22", label: expect.stringContaining("Địa chỉ") }]);
+  });
+
+  it("1.15 địa chỉ người nhập khẩu (HT – VNACCS tự hiện theo MST) và 1.14 mã bưu chính (trống gửi 000000) trống → không chặn", () => {
+    const { decl, item } = complete("IDA");
+    expect(requiredGaps("IDA", { ...decl, TK_IMA: "", TK_IMY: "" }, [item])).toEqual([]);
+    const f = layoutFor("IDA").declarant.flatMap((s) => s.blocks).flatMap((b) => b.items).find((it) => it.kind === "field" && it.key === "TK_IMA");
+    expect(f?.kind === "field" && fieldRole("IDA", f)).toBe("ASSIST");
   });
 
   it("ô APP_* (nhóm loại hình, ngày vận đơn) không gửi Hải quan → không chặn", () => {

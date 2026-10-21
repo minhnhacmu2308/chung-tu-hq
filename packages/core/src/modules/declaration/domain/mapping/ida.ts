@@ -59,7 +59,13 @@ export const IDA_MAPPINGS: FieldMapping[] = [
 
   { code: "NNK_MST", no: N.NNK_MST, section: "PARTIES", label: "Mã số thuế người nhập khẩu", required: true, from: (i) => ({ value: i.org.taxCode, source: "ACCOUNT" }) },
   { code: "NNK_TEN", no: N.NNK_TEN, section: "PARTIES", label: "Tên người nhập khẩu", required: true, from: (i) => ({ value: i.org.name, source: "ACCOUNT" }) },
-  { code: "NNK_DC", no: N.NNK_DC, section: "PARTIES", label: "Địa chỉ người nhập khẩu", required: true, from: (i) => ({ value: i.org.address || null, source: "ACCOUNT", ...(i.org.address ? {} : { suspect: true, note: "Cập nhật địa chỉ doanh nghiệp ở Tài khoản" }) }) },
+  // 1.14 mã bưu chính: lấy từ Tài khoản (mã chỉ tiêu = tên ô VNACCS TK_IMY, cùng khóa ô bổ sung trên form đầy đủ nên sửa tay vẫn thắng – nguồn USER).
+  // Phụ lục II ghi tùy chọn nhưng đặc tả FPT bắt buộc TK_IMY: còn trống thì khi truyền gửi "000000" kèm cảnh báo (integration/declaration-to-fpt).
+  { code: "TK_IMY", no: "1.14", section: "PARTIES", label: "Mã bưu chính", required: false, from: (i) => (i.org.postalCode
+    ? { value: i.org.postalCode, source: "ACCOUNT" }
+    : { value: null, source: "ACCOUNT", note: "Chưa có mã bưu chính ở Tài khoản → Doanh nghiệp – khi truyền sẽ gửi 000000" }) },
+  // 1.15 là chỉ tiêu HT (TT39): VNACCS tự hiện địa chỉ theo MST, người khai chỉ nhập khi hệ thống hiện sai → không bắt buộc, trống không chặn duyệt.
+  { code: "NNK_DC", no: N.NNK_DC, section: "PARTIES", label: "Địa chỉ người nhập khẩu", required: false, from: (i) => ({ value: i.org.address || null, source: "ACCOUNT", ...(i.org.address ? {} : { note: "Chưa có địa chỉ ở Tài khoản – VNACCS tự hiện theo mã số thuế; cập nhật địa chỉ doanh nghiệp ở Tài khoản" }) }) },
   { code: "NNK_DT", no: N.NNK_DT, section: "PARTIES", label: "Số điện thoại người nhập khẩu", required: false, from: (i) => ({ value: i.org.phone || null, source: "ACCOUNT" }) },
   { code: "NXK_TEN", no: N.NXK_TEN, section: "PARTIES", label: "Tên người xuất khẩu", required: true, from: (i) => fromSourced(i.shipment.parties.seller.name, "INVOICE") },
   { code: "NXK_DC", no: N.NXK_DC, section: "PARTIES", label: "Địa chỉ người xuất khẩu", required: true, from: (i) => fromSourced(i.shipment.parties.seller.address, "INVOICE") },

@@ -22,6 +22,8 @@ export const OrganizationSchema = z.object({
   taxCode: z.string(),
   address: z.string(),
   phone: z.string(),
+  /** Mã bưu chính (6 số) – điền chỉ tiêu 1.14 IDA / 2.13 EDA. Thiếu hoặc "" = chưa khai. */
+  postalCode: z.string().optional(),
   plan: z.object({
     code: PlanCodeSchema,
     name: z.string(),

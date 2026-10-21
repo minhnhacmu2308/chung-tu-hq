@@ -131,6 +131,19 @@ describe("doanh nghiệp", () => {
     expect(o.name).toBe("AN PHÁT MỚI");
     expectErr(await updateOrganization(deps, ctx("VIEWER", "usr_quang"), { name: "X", address: "", phone: "" }), "FORBIDDEN");
   });
+  it("updateOrganization: lưu mã bưu chính (1.14/2.13); không gửi → giữ nguyên, \"\" → xóa; org khác không đọc/ghi được của org A", async () => {
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).postalCode).toBe("");
+    const o = unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT", address: "HP", phone: "0225", postalCode: "180000" }));
+    expect(o.postalCode).toBe("180000");
+    expect(unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT 2", address: "HP", phone: "0225" })).postalCode).toBe("180000");
+    expectErr(await updateOrganization(deps, ctx("DECLARANT", "usr_ha"), { name: "X", address: "", phone: "", postalCode: "999999" }), "FORBIDDEN");
+    // Chủ org B chỉ sửa được org B (ctx.orgId) – org A không đổi.
+    const b = unwrap(await updateOrganization(deps, ctx("OWNER", "usr_b", "org_b"), { name: "B", address: "", phone: "", postalCode: "100000" }));
+    expect(b).toMatchObject({ id: "org_b", postalCode: "100000" });
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).postalCode).toBe("180000");
+    expect(uow.data.orgs.find((x) => x.id === "org_a")?.postalCode).toBe("180000");
+    expect(unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT", address: "HP", phone: "0225", postalCode: "" })).postalCode).toBe("");
+  });
   it("updateFourEyes: mặc định tắt; ADMIN/OWNER bật tắt được; vai trò khác → FORBIDDEN và không đổi", async () => {
     expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).fourEyes).toBe(false);
     expect(unwrap(await updateFourEyes(deps, ctx("ADMIN"), true)).fourEyes).toBe(true);

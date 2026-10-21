@@ -16,12 +16,15 @@ export const settingsKeys = {
 
 export const getOrganization = () => query((db) => db.org);
 
-import type { OrgProfileInput } from "@kb/contracts";
+import { OrgProfileInputSchema, type OrgProfileInput } from "@kb/contracts";
 export type { OrgProfileInput };
+/** Giống backend: parse Zod (tên bắt buộc, mã bưu chính 6 số); không gửi mã bưu chính → giữ nguyên. */
 export const updateOrganization = (input: OrgProfileInput) =>
   mutate((db) => {
-    if (!input.name.trim()) throw new ApiError("VALIDATION", "Tên doanh nghiệp không được để trống");
-    Object.assign(db.org, { name: input.name.trim(), address: input.address.trim(), phone: input.phone.trim() });
+    const parsed = OrgProfileInputSchema.safeParse(input);
+    if (!parsed.success) throw new ApiError("VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
+    const { name, address, phone, postalCode } = parsed.data;
+    Object.assign(db.org, { name, address, phone, ...(postalCode !== undefined ? { postalCode } : {}) });
     return db.org;
   });
 

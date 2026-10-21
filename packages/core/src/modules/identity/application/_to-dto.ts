@@ -28,6 +28,7 @@ export function toOrganization(o: OrgRow, plan: PlanRow | null, now: Date, usage
     taxCode: o.taxCode,
     address: o.address,
     phone: o.phone,
+    postalCode: o.postalCode ?? "",
     plan: {
       code: (plan?.code ?? o.planCode) as Organization["plan"]["code"],
       name: plan?.name ?? o.planCode,

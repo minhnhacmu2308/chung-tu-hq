@@ -40,10 +40,17 @@ export const ResetPasswordInputSchema = z.object({ token: z.string().min(16), pa
 export const AcceptInviteInputSchema = z.object({ token: z.string().min(16), name: z.string().trim().min(2, "Nhập họ tên"), password: PasswordSchema });
 export type AcceptInviteInput = z.infer<typeof AcceptInviteInputSchema>;
 
+/**
+ * Mã bưu chính doanh nghiệp: 6 chữ số theo VNACCS (ô TK_IMY/TK_EPP, chỉ tiêu 1.14 IDA / 2.13 EDA); "" = xóa (khi truyền IDA gửi "000000").
+ */
+export const PostalCodeSchema = z.string().trim().regex(/^(\d{6})?$/, "Mã bưu chính gồm 6 chữ số");
+
 export const OrgProfileInputSchema = z.object({
   name: z.string().trim().min(1, "Tên doanh nghiệp không được để trống"),
   address: z.string().trim(),
   phone: z.string().trim(),
+  /** Không gửi = giữ nguyên. */
+  postalCode: PostalCodeSchema.optional(),
 });
 export type OrgProfileInput = z.infer<typeof OrgProfileInputSchema>;
 

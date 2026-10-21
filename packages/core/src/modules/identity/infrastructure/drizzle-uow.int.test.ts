@@ -38,6 +38,16 @@ describe("DrizzleIdentityUow", () => {
     expect(o?.id).toBe("org_anphat");
     expect((await new DrizzlePlansReader(db).get("PRO"))?.dossiersPerMonth).toBe(150);
   });
+  it("orgs: mã bưu chính đọc/ghi theo org đang đặt; org khác không sửa được (RLS)", async () => {
+    expect((await uow.asOrg(ANPHAT, (r) => r.orgs.findById("org_anphat")))?.postalCode).toBe("180000");
+    expect((await uow.asOrg(OTHER, (r) => r.orgs.findById("org_khac")))?.postalCode).toBe(""); // mặc định cột
+    await uow.asOrg(ANPHAT, (r) => r.orgs.update("org_anphat", { postalCode: "100000" }));
+    expect((await uow.asOrg(ANPHAT, (r) => r.orgs.findById("org_anphat")))?.postalCode).toBe("100000");
+    await uow.asOrg(OTHER, (r) => r.orgs.update("org_anphat", { postalCode: "999999" })).catch(() => undefined);
+    expect(await uow.asOrg(OTHER, (r) => r.orgs.findById("org_anphat"))).toBeNull();
+    expect((await uow.asOrg(ANPHAT, (r) => r.orgs.findById("org_anphat")))?.postalCode).toBe("100000");
+    await uow.asOrg(ANPHAT, (r) => r.orgs.update("org_anphat", { postalCode: "180000" }));
+  });
   it("asOrg: liệt kê 6 membership của AN PHÁT; org khác không thấy (RLS)", async () => {
     expect(await uow.asOrg(ANPHAT, (r) => r.memberships.listByOrg("org_anphat"))).toHaveLength(6);
     expect(await uow.asOrg(OTHER, (r) => r.memberships.listByOrg("org_anphat"))).toEqual([]);

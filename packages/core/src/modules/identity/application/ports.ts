@@ -6,6 +6,8 @@ import type { AuthTokenKind } from "../domain/token.js";
 export type UserRow = { id: string; email: string; passwordHash: string; name: string; emailVerifiedAt: Date | null; createdAt: Date };
 export type OrgRow = {
   id: string; taxCode: string; name: string; address: string; phone: string; planCode: string; suspectThreshold: string; fourEyes: boolean; createdAt: Date;
+  /** Mã bưu chính (6 số) – chỉ tiêu 1.14 IDA / 2.13 EDA; thiếu = mặc định của DB (""). */
+  postalCode?: string;
   /** Do khu Quản trị hệ thống đặt (module admin); thiếu = mặc định của DB. */
   status?: string; quotaBonus?: number; quotaBonusMonth?: string | null; planStartedAt?: Date | null; trialEndsAt?: Date | null;
 };
@@ -35,7 +37,7 @@ export interface IdentityRepos {
     /** Mọi org (chỉ dùng trong ngữ cảnh hệ thống: job định kỳ). */
     listAll(): Promise<OrgRow[]>;
     insert(row: OrgRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "suspectThreshold" | "fourEyes" | "planCode">>): Promise<void>;
+    update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "postalCode" | "suspectThreshold" | "fourEyes" | "planCode">>): Promise<void>;
   };
   memberships: {
     listByOrg(orgId: string): Promise<MembershipRow[]>;

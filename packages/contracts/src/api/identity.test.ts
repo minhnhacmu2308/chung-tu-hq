@@ -18,10 +18,11 @@ describe("contract identity", () => {
     expect(InviteMemberInputSchema.safeParse({ email: "a@b.vn", role: "OWNER" }).success).toBe(false);
     expect(InviteMemberInputSchema.parse({ email: "a@b.vn", role: "VIEWER" }).role).toBe("VIEWER");
   });
-  it("Mã bưu chính: 6 chữ số (trim) hoặc rỗng; sai định dạng bị từ chối", () => {
+  it("Mã bưu chính: 5 (mã mới từ 2018) hoặc 6 chữ số (trim) hoặc rỗng; sai định dạng bị từ chối", () => {
     expect(PostalCodeSchema.parse(" 180000 ")).toBe("180000");
     expect(PostalCodeSchema.parse("")).toBe("");
-    for (const bad of ["18000", "1800000", "18A000", "180 000"]) expect(PostalCodeSchema.safeParse(bad).success).toBe(false);
+    expect(PostalCodeSchema.parse("10000")).toBe("10000");
+    for (const bad of ["1800", "1800000", "18A000", "180 000"]) expect(PostalCodeSchema.safeParse(bad).success).toBe(false);
   });
   it("Hồ sơ doanh nghiệp: mã bưu chính tùy chọn (không gửi = giữ nguyên)", () => {
     expect(OrgProfileInputSchema.parse({ name: "A", address: "", phone: "" }).postalCode).toBeUndefined();

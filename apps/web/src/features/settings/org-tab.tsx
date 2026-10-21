@@ -21,7 +21,7 @@ export function OrgTab() {
   useEffect(() => {
     if (org) setDraft(toDraft(org));
   }, [org]);
-  // Mã bưu chính: cùng quy tắc Zod với backend (6 chữ số hoặc để trống).
+  // Mã bưu chính: cùng quy tắc Zod với backend (5–6 chữ số hoặc để trống).
   const postalInvalid = !PostalCodeSchema.safeParse(draft.postalCode).success;
 
   const save = useMutation({

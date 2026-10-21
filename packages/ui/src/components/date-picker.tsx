@@ -1,11 +1,11 @@
 // DatePicker / DateRangePicker. Giá trị là chuỗi ISO "YYYY-MM-DD" (ngày nghiệp vụ) – không bao giờ dùng toISOString
-// để tránh lệch múi giờ. Hiển thị dd/MM/yyyy (vi) hoặc MM/dd/yyyy (en).
+// để tránh lệch múi giờ. Hiển thị dd/MM/yyyy (vi), MM/dd/yyyy (en) hoặc yyyy/MM/dd (zh).
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { format, isValid, parse } from "date-fns";
 import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useId, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { DayPicker, type ClassNames, type ChevronProps, type DateRange } from "react-day-picker";
-import { enUS, vi } from "react-day-picker/locale";
+import { enUS, vi, zhCN } from "react-day-picker/locale";
 import { cn } from "../lib/cn.js";
 import { useMessages, useUiLocale, type Messages, type UiLocale } from "../lib/i18n.js";
 import { useFieldControl, useFieldLabelId } from "./field.js";
@@ -33,13 +33,27 @@ const MESSAGES = {
     to: "To",
     order: "Start date must be on or before end date",
   },
+  zh: {
+    placeholder: "yyyy/mm/dd",
+    rangePlaceholder: "选择日期范围",
+    openCalendar: "打开日历",
+    clear: "清除日期",
+    invalid: "日期无效（yyyy/mm/dd）",
+    outOfRange: "日期超出允许范围",
+    from: "开始日期",
+    to: "结束日期",
+    order: "开始日期必须早于或等于结束日期",
+  },
 } satisfies Messages<"placeholder" | "rangePlaceholder" | "openCalendar" | "clear" | "invalid" | "outOfRange" | "from" | "to" | "order">;
 
 const FORMAT: Record<UiLocale, { display: string; parse: string }> = {
   vi: { display: "dd/MM/yyyy", parse: "d/M/yyyy" },
   en: { display: "MM/dd/yyyy", parse: "M/d/yyyy" },
+  zh: { display: "yyyy/MM/dd", parse: "yyyy/M/d" },
 };
-const DAY_LOCALE = { vi, en: enUS } as const;
+const DAY_LOCALE = { vi, en: enUS, zh: zhCN } as const satisfies Record<UiLocale, unknown>;
+/** Tuần bắt đầu thứ Hai (vi, zh) hoặc Chủ nhật (en). */
+const WEEK_START: Record<UiLocale, 0 | 1> = { vi: 1, en: 0, zh: 1 };
 
 /* ---------------- Chuyển đổi ISO ↔ Date (giờ địa phương, 00:00) ---------------- */
 
@@ -63,10 +77,11 @@ export function formatIsoDate(iso: string | null | undefined, locale: UiLocale):
   return d ? format(d, FORMAT[locale].display) : "";
 }
 
-/** Đọc ngày người dùng gõ theo định dạng của ngôn ngữ (chấp nhận / . - làm dấu phân cách). Trả ISO hoặc null. */
+/** Đọc ngày người dùng gõ theo định dạng của ngôn ngữ (chấp nhận / . - làm dấu phân cách; zh nhận cả 年月日). Trả ISO hoặc null. */
 export function parseTypedDate(text: string, locale: UiLocale): string | null {
-  const t = text.trim().replace(/[.\-\s]+/g, "/");
-  if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(t)) return null;
+  const t = text.trim().replace(/日$/, "").replace(/[年月.\-\s]+/g, "/");
+  const shape = locale === "zh" ? /^\d{4}\/\d{1,2}\/\d{1,2}$/ : /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+  if (!shape.test(t)) return null;
   const d = parse(t, FORMAT[locale].parse, new Date(2000, 0, 1));
   return isValid(d) ? dateToIso(d) : null;
 }
@@ -251,7 +266,7 @@ export function DatePicker({
               {...(maxD ? { endMonth: maxD } : {})}
               disabled={disabledDays}
               locale={DAY_LOCALE[locale]}
-              weekStartsOn={locale === "vi" ? 1 : 0}
+              weekStartsOn={WEEK_START[locale]}
               autoFocus
               classNames={CALENDAR_CLASSES}
               components={{ Chevron: CalendarChevron }}
@@ -447,7 +462,7 @@ export function DateRangePicker({
               {...(maxD ? { endMonth: maxD } : {})}
               disabled={disabledDays}
               locale={DAY_LOCALE[locale]}
-              weekStartsOn={locale === "vi" ? 1 : 0}
+              weekStartsOn={WEEK_START[locale]}
               autoFocus
               classNames={CALENDAR_CLASSES}
               components={{ Chevron: CalendarChevron }}

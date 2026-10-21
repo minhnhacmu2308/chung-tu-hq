@@ -1,7 +1,7 @@
 "use client";
 // Các thao tác trên một doanh nghiệp (khóa/mở, đổi gói, nới hạn mức, gia hạn dùng thử). Dùng ở cả danh sách lẫn trang chi tiết.
 import { AdjustOrgQuotaInputSchema, ExtendOrgTrialInputSchema, type AdminOrg, type PlanCode } from "@kb/contracts";
-import { Alert, Field, Input, Select } from "@kb/ui";
+import { Alert, Field, fill, Input, Select, useMessages } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarPlus, Gauge, Lock, LockOpen, Repeat } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -9,6 +9,7 @@ import { adjustOrgQuota, adminKeys, changeOrgPlan, extendOrgTrial, listAdminPlan
 import { formatDate, formatNumber } from "@/lib/format";
 import { ReasonDialog } from "../common/reason-dialog";
 import { useAdminMutation } from "../common/use-admin-mutation";
+import { ORG_ACTIONS_MESSAGES } from "./orgs.messages";
 
 export type OrgAction = "suspend" | "reactivate" | "plan" | "quota" | "trial";
 
@@ -17,7 +18,12 @@ type Props = { org: Pick<AdminOrg, "id" | "name" | "plan" | "quotaBonus" | "usag
 /** Số nguyên từ ô nhập; rỗng hoặc không phải số → NaN để schema báo lỗi. */
 const toInt = (s: string) => (s.trim() === "" ? Number.NaN : Number(s));
 
+/** Thông báo của schema (@kb/contracts) chỉ có tiếng Việt → hiển thị theo mã lỗi. */
+const issueText = (code: string | undefined, m: { int: string; min: string; max: string }) =>
+  code === "too_small" ? m.min : code === "too_big" ? m.max : m.int;
+
 export function OrgActionDialogs({ org, action, onClose }: Props) {
+  const t = useMessages(ORG_ACTIONS_MESSAGES);
   const plans = useQuery({ queryKey: adminKeys.plans, queryFn: listAdminPlans, enabled: action === "plan" });
   const [planCode, setPlanCode] = useState<PlanCode | "">("");
   const [bonus, setBonus] = useState("");
@@ -30,24 +36,24 @@ export function OrgActionDialogs({ org, action, onClose }: Props) {
 
   const onOpenChange = (open: boolean) => !open && onClose();
   const done = { onSuccess: onClose };
-  const suspend = useAdminMutation({ mutationFn: (reason: string) => suspendOrg(org.id, { reason }), success: () => `Đã tạm khóa ${org.name}`, errorTitle: "Không khóa được doanh nghiệp", ...done });
-  const reactivate = useAdminMutation({ mutationFn: (reason: string) => reactivateOrg(org.id, { reason }), success: () => `Đã mở khóa ${org.name}`, errorTitle: "Không mở khóa được doanh nghiệp", ...done });
+  const suspend = useAdminMutation({ mutationFn: (reason: string) => suspendOrg(org.id, { reason }), success: () => fill(t.suspendedToast, { name: org.name }), errorTitle: t.suspendError, ...done });
+  const reactivate = useAdminMutation({ mutationFn: (reason: string) => reactivateOrg(org.id, { reason }), success: () => fill(t.reactivatedToast, { name: org.name }), errorTitle: t.reactivateError, ...done });
   const plan = useAdminMutation({
     mutationFn: (v: { planCode: PlanCode; reason: string }) => changeOrgPlan(org.id, v),
-    success: (o) => `Đã chuyển sang gói ${o.plan.name}`,
-    errorTitle: "Không đổi được gói",
+    success: (o) => fill(t.planToast, { plan: o.plan.name }),
+    errorTitle: t.planError,
     ...done,
   });
   const quota = useAdminMutation({
     mutationFn: (v: { bonusDossiers: number; reason: string }) => adjustOrgQuota(org.id, v),
-    success: (o) => (o.quotaBonus > 0 ? `Đã nới thêm ${formatNumber(o.quotaBonus)} hồ sơ` : "Đã bỏ phần nới hạn mức"),
-    errorTitle: "Không đổi được hạn mức",
+    success: (o) => (o.quotaBonus > 0 ? fill(t.quotaToast, { n: formatNumber(o.quotaBonus) }) : t.quotaRemovedToast),
+    errorTitle: t.quotaError,
     ...done,
   });
   const trial = useAdminMutation({
     mutationFn: (v: { days: number; reason: string }) => extendOrgTrial(org.id, v),
-    success: (o) => `Dùng thử kéo dài tới ${formatDate(o.plan.renewsAt)}`,
-    errorTitle: "Không gia hạn được dùng thử",
+    success: (o) => fill(t.trialToast, { date: formatDate(o.plan.renewsAt) }),
+    errorTitle: t.trialError,
     ...done,
   });
 
@@ -60,25 +66,25 @@ export function OrgActionDialogs({ org, action, onClose }: Props) {
       <ReasonDialog
         open={action === "suspend"}
         onOpenChange={onOpenChange}
-        title="Tạm khóa doanh nghiệp?"
+        title={t.suspendTitle}
         icon={<Lock className="h-4 w-4" />}
         description={org.name}
-        confirmLabel="Tạm khóa"
+        confirmLabel={t.suspendConfirm}
         tone="danger"
         pending={suspend.isPending}
-        reasonHint="Lý do này hiện cho cả đội vận hành ở trang doanh nghiệp và trong nhật ký."
+        reasonHint={t.suspendHint}
         onConfirm={(reason) => suspend.mutate(reason)}
       >
-        <Alert tone="warning">Mọi thành viên của doanh nghiệp không dùng được hệ thống cho tới khi mở khóa. Dữ liệu hồ sơ vẫn được giữ nguyên.</Alert>
+        <Alert tone="warning">{t.suspendWarning}</Alert>
       </ReasonDialog>
 
       <ReasonDialog
         open={action === "reactivate"}
         onOpenChange={onOpenChange}
-        title="Mở khóa doanh nghiệp?"
+        title={t.reactivateTitle}
         icon={<LockOpen className="h-4 w-4" />}
         description={org.name}
-        confirmLabel="Mở khóa"
+        confirmLabel={t.reactivateConfirm}
         pending={reactivate.isPending}
         onConfirm={(reason) => reactivate.mutate(reason)}
       />
@@ -86,25 +92,25 @@ export function OrgActionDialogs({ org, action, onClose }: Props) {
       <ReasonDialog
         open={action === "plan"}
         onOpenChange={onOpenChange}
-        title="Đổi gói dịch vụ"
+        title={t.planTitle}
         icon={<Repeat className="h-4 w-4" />}
-        description={`${org.name} · đang dùng gói ${org.plan.name}`}
-        confirmLabel="Đổi gói"
+        description={fill(t.planDescription, { name: org.name, plan: org.plan.name })}
+        confirmLabel={t.planConfirm}
         pending={plan.isPending}
         canSubmit={planCode !== ""}
         onConfirm={(reason) => planCode !== "" && plan.mutate({ planCode, reason })}
       >
-        <Field label="Gói mới" required hint={nextPlan ? `${formatNumber(nextPlan.dossiersPerMonth)} hồ sơ/tháng · ${nextPlan.pagesPerDossier} trang/hồ sơ. Kỳ mới tính từ hôm nay.` : "Hạn mức mới áp dụng ngay."}>
+        <Field label={t.newPlan} required hint={nextPlan ? fill(t.newPlanHint, { dossiers: formatNumber(nextPlan.dossiersPerMonth), pages: nextPlan.pagesPerDossier }) : t.newPlanHintEmpty}>
           <Select
             value={planCode}
             onChange={(e) => setPlanCode(e.target.value as PlanCode | "")}
-            placeholder={plans.isLoading ? "Đang tải danh sách gói…" : "Chọn gói"}
+            placeholder={plans.isLoading ? t.loadingPlans : t.choosePlan}
             options={(plans.data ?? []).filter((p) => p.code !== org.plan.code).map((p) => ({ value: p.code, label: p.name }))}
           />
         </Field>
         {nextPlan && org.usage.dossiersThisMonth > nextPlan.dossiersPerMonth && (
           <Alert tone="warning">
-            Tháng này doanh nghiệp đã dùng {formatNumber(org.usage.dossiersThisMonth)} hồ sơ – vượt hạn mức {formatNumber(nextPlan.dossiersPerMonth)} của gói {nextPlan.name}.
+            {fill(t.overNewPlan, { used: formatNumber(org.usage.dossiersThisMonth), limit: formatNumber(nextPlan.dossiersPerMonth), plan: nextPlan.name })}
           </Alert>
         )}
       </ReasonDialog>
@@ -112,20 +118,20 @@ export function OrgActionDialogs({ org, action, onClose }: Props) {
       <ReasonDialog
         open={action === "quota"}
         onOpenChange={onOpenChange}
-        title="Nới hạn mức tạm thời"
+        title={t.quotaTitle}
         icon={<Gauge className="h-4 w-4" />}
-        description={`${org.name} · gói ${org.plan.name}: ${formatNumber(org.plan.dossiersPerMonth)} hồ sơ/tháng`}
-        confirmLabel="Lưu hạn mức"
+        description={fill(t.quotaDescription, { name: org.name, plan: org.plan.name, dossiers: formatNumber(org.plan.dossiersPerMonth) })}
+        confirmLabel={t.quotaConfirm}
         pending={quota.isPending}
         canSubmit={bonusCheck.success}
         onConfirm={(reason) => bonusCheck.success && quota.mutate({ bonusDossiers: bonusCheck.data, reason })}
       >
         <Field
-          label="Số hồ sơ cộng thêm trong tháng này"
+          label={t.bonusLabel}
           required
           className="cq-md:max-w-xs"
-          hint="Chỉ có hiệu lực tới hết kỳ hiện tại. Nhập 0 để bỏ phần đã nới."
-          {...(bonus !== "" && !bonusCheck.success ? { error: bonusCheck.error.issues[0]?.message } : {})}
+          hint={t.bonusHint}
+          {...(bonus !== "" && !bonusCheck.success ? { error: issueText(bonusCheck.error.issues[0]?.code, { int: t.bonusInt, min: t.bonusMin, max: t.bonusMax }) } : {})}
         >
           <Input inputMode="numeric" value={bonus} onChange={(e) => setBonus(e.target.value)} />
         </Field>
@@ -134,15 +140,15 @@ export function OrgActionDialogs({ org, action, onClose }: Props) {
       <ReasonDialog
         open={action === "trial"}
         onOpenChange={onOpenChange}
-        title="Gia hạn dùng thử"
+        title={t.trialTitle}
         icon={<CalendarPlus className="h-4 w-4" />}
-        description={`${org.name} · dùng thử tới ${formatDate(org.plan.renewsAt)}`}
-        confirmLabel="Gia hạn"
+        description={fill(t.trialDescription, { name: org.name, date: formatDate(org.plan.renewsAt) })}
+        confirmLabel={t.trialConfirm}
         pending={trial.isPending}
         canSubmit={daysCheck.success}
         onConfirm={(reason) => daysCheck.success && trial.mutate({ days: daysCheck.data, reason })}
       >
-        <Field label="Số ngày thêm" required className="cq-md:max-w-xs" hint="Từ 1 đến 90 ngày." {...(days !== "" && !daysCheck.success ? { error: daysCheck.error.issues[0]?.message } : {})}>
+        <Field label={t.daysLabel} required className="cq-md:max-w-xs" hint={t.daysHint} {...(days !== "" && !daysCheck.success ? { error: issueText(daysCheck.error.issues[0]?.code, { int: t.daysInt, min: t.daysMin, max: t.daysMax }) } : {})}>
           <Input inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} />
         </Field>
       </ReasonDialog>

@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, IconTile, Skeleton, Stack, toast } from "@kb/ui";
+import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, IconTile, Skeleton, Stack, fill, toast, useMessages } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Building2, FileSpreadsheet, KeyRound, PlugZap, Search } from "lucide-react";
 import type { ReactNode } from "react";
@@ -7,12 +7,13 @@ import { listIntegrations, settingsKeys, testIntegration } from "@/api/settings"
 import { formatRelative } from "@/lib/format";
 import type { Integration } from "@/mocks/types";
 import { LoadError } from "@/components/common/load-error";
+import { INTEGRATIONS_TAB_MESSAGES } from "./integrations-tab.messages";
 import { VnaccsAccountSection } from "./vnaccs-account";
 
-const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neutral"; label: string }> = {
-  CONNECTED: { tone: "success", label: "Đã kết nối" },
-  ERROR: { tone: "danger", label: "Lỗi kết nối" },
-  NOT_CONFIGURED: { tone: "neutral", label: "Chưa cấu hình" },
+const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neutral"; label: "connected" | "error" | "notConfigured" }> = {
+  CONNECTED: { tone: "success", label: "connected" },
+  ERROR: { tone: "danger", label: "error" },
+  NOT_CONFIGURED: { tone: "neutral", label: "notConfigured" },
 };
 const ICON: Record<Integration["id"], ReactNode> = {
   HSCODEPRO: <Search />,
@@ -23,11 +24,12 @@ const ICON: Record<Integration["id"], ReactNode> = {
 
 function IntegrationCard({ it }: { it: Integration }) {
   const qc = useQueryClient();
+  const m = useMessages(INTEGRATIONS_TAB_MESSAGES);
   const test = useMutation({
     mutationFn: () => testIntegration(it.id),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: settingsKeys.integrations });
-      toast(r.status === "CONNECTED" ? { tone: "success", title: `${r.name}: kết nối tốt` } : { tone: "danger", title: `${r.name}: lỗi`, description: r.detail ?? "" });
+      toast(r.status === "CONNECTED" ? { tone: "success", title: fill(m.testOk, { name: r.name }) } : { tone: "danger", title: fill(m.testFail, { name: r.name }), description: r.detail ?? "" });
     },
     onError: (e: Error) => toast({ tone: "warning", title: it.name, description: e.message }),
   });
@@ -40,7 +42,7 @@ function IntegrationCard({ it }: { it: Integration }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle as="h3">{it.name}</CardTitle>
-              <Badge tone={s.tone}>{s.label}</Badge>
+              <Badge tone={s.tone}>{m[s.label]}</Badge>
             </div>
             <CardDescription>{it.description}</CardDescription>
           </div>
@@ -53,15 +55,15 @@ function IntegrationCard({ it }: { it: Integration }) {
           ) : it.detail ? (
             <p className="text-sm text-fg-muted">{it.detail}</p>
           ) : (
-            <p className="text-sm text-fg-subtle">Chưa bật cho doanh nghiệp. Liên hệ quản trị KhaiBáo AI để kích hoạt.</p>
+            <p className="text-sm text-fg-subtle">{m.notEnabled}</p>
           )}
           {it.id === "CUSTOMS_HUB" && <VnaccsAccountSection />}
         </Stack>
       </CardContent>
       <CardFooter className="justify-between">
-        <span className="text-xs text-fg-subtle">{it.lastCheckedAt ? `Kiểm tra ${formatRelative(it.lastCheckedAt)}` : "Chưa kiểm tra"}</span>
+        <span className="text-xs text-fg-subtle">{it.lastCheckedAt ? fill(m.checked, { when: formatRelative(it.lastCheckedAt) }) : m.notChecked}</span>
         <Button size="sm" variant="secondary" leftIcon={<PlugZap className="h-4 w-4" />} loading={test.isPending} onClick={() => test.mutate()}>
-          Kiểm tra kết nối
+          {m.test}
         </Button>
       </CardFooter>
     </Card>
@@ -69,13 +71,14 @@ function IntegrationCard({ it }: { it: Integration }) {
 }
 
 export function IntegrationsTab() {
+  const m = useMessages(INTEGRATIONS_TAB_MESSAGES);
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: settingsKeys.integrations, queryFn: listIntegrations });
   return (
     <Stack gap="md">
-      <Alert tone="info" title="Khóa API được giữ ở máy chủ">
+      <Alert tone="info" title={m.keysTitle}>
         <span className="inline-flex items-start gap-2">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          Khóa của hscodepro, Customs Hub, dịch vụ AI và mật khẩu VNACCS lưu mã hóa phía máy chủ, không bao giờ gửi xuống trình duyệt hay hiện trên màn hình này.
+          {m.keysBody}
         </span>
       </Alert>
       {isError ? (

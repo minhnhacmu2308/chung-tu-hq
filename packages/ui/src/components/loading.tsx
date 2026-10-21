@@ -7,7 +7,7 @@ import { BrandMark } from "./brand-mark.js";
 import { Skeleton } from "./feedback.js";
 import { Card } from "./layout.js";
 
-const MESSAGES = { vi: { loading: "Đang tải" }, en: { loading: "Loading" } } satisfies Messages<"loading">;
+const MESSAGES = { vi: { loading: "Đang tải" }, en: { loading: "Loading" }, zh: { loading: "加载中" } } satisfies Messages<"loading">;
 
 /* ---------------- Loader: logo trong vòng xoay ---------------- */
 

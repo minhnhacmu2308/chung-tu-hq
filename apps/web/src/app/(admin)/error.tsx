@@ -1,20 +1,21 @@
 "use client";
-import { Button, EmptyState } from "@kb/ui";
-import { TriangleAlert } from "lucide-react";
+import { Button, EmptyState, useMessages } from "@kb/ui";
 import Link from "next/link";
+import { ADMIN_ERROR_MESSAGES } from "./error.messages";
 
 // Lỗi không lường trước ở một màn quản trị: giữ nguyên menu, cho thử lại ngay tại chỗ.
 export default function AdminError({ reset }: { error: Error; reset: () => void }) {
+  const t = useMessages(ADMIN_ERROR_MESSAGES);
   return (
     <EmptyState
-      icon={<TriangleAlert />}
-      title="Màn hình này gặp lỗi"
-      description="Chưa có thao tác nào bị thực hiện dở. Thử tải lại màn hình; nếu vẫn lỗi, quay về tổng quan vận hành."
+      illustration="error"
+      title={t.title}
+      description={t.description}
       action={
         <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={reset}>Thử lại</Button>
+          <Button onClick={reset}>{t.retry}</Button>
           <Button asChild variant="secondary">
-            <Link href="/admin">Về tổng quan vận hành</Link>
+            <Link href="/admin">{t.back}</Link>
           </Button>
         </div>
       }

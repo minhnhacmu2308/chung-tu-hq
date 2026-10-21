@@ -4,7 +4,7 @@
 // tính bằng @kb/contracts customs-flow – màn chỉ hiển thị.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, Field,
-  Grid, IconTile, Select, Spinner, Stack, StatusBadge, toast, toastPromise, type Tone,
+  fill, Grid, IconTile, pickMessages, Select, Spinner, Stack, StatusBadge, toast, toastPromise, useMessages, useUiLocale, type Tone, type UiLocale,
 } from "@kb/ui";
 import { baseOp, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -29,49 +29,51 @@ import { AMA_STATUS } from "../../post-amendment/ama-context";
 import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
+import { OPERATION_MESSAGES, PHASE_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
+
+type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
 const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
 
 const CHANNEL_STATUS = { GREEN: "GREEN_CHANNEL", YELLOW: "YELLOW_CHANNEL", RED: "RED_CHANNEL" } as const satisfies Record<CustomsChannel, string>;
 
-const STAGE_TEXT: Record<CustomsStage, string> = {
-  NOT_SENT: "Chưa khai báo – ký số và khai tạm để nhận số tờ khai",
-  PRE_DECLARED: "Đã khai tạm – kiểm tra số tờ khai, thuế dự kiến rồi khai chính thức",
-  RECALLED: "Tờ khai tạm đã gọi về sửa – sửa, phê duyệt lại rồi khai tạm lại",
-  DECLARED: "Đã khai chính thức và phân luồng – chờ thông quan",
-  AMEND_RECALLED: "Đang sửa đổi bổ sung – sửa, phê duyệt lại rồi khai tạm sửa đổi",
-  AMEND_PRE_DECLARED: "Đã khai tạm sửa đổi – chờ khai chính thức sửa đổi",
-  CLEARED: "Đã thông quan",
-  POST_EDITING: "Sửa sau thông quan – lập bản khai bổ sung, phê duyệt rồi khai AMA",
-  POST_PRE_DECLARED: "Đã khai tạm AMA – chờ khai chính thức (AMC)",
-  POST_RECALLED: "Bản khai AMA đã gọi về – sửa bản khai bổ sung, phê duyệt lại rồi khai AMA lại",
-  REJECTED: "Hải quan từ chối / hủy tờ khai",
-};
+const PIPE_TONE: Record<PipelineStatus, Tone> = { NOT_SENT: "neutral", WAITING: "neutral", SENDING: "info", OK: "success", ERROR: "danger" };
+const PIPE_KEY = { NOT_SENT: "pipeNotSent", WAITING: "pipeWaiting", SENDING: "pipeSending", OK: "pipeOk", ERROR: "pipeError" } as const satisfies Record<PipelineStatus, keyof SubmitText>;
 
-export const PIPE: Record<PipelineStatus, { text: string; tone: Tone }> = {
-  NOT_SENT: { text: "Chưa gửi", tone: "neutral" },
-  WAITING: { text: "Chờ đến lượt", tone: "neutral" },
-  SENDING: { text: "Đang xử lý", tone: "info" },
-  OK: { text: "Thành công", tone: "success" },
-  ERROR: { text: "Lỗi", tone: "danger" },
-};
+/** Nhãn + màu trạng thái từng nghiệp vụ theo ngôn ngữ. */
+export function pipeStatus(locale: UiLocale): Record<PipelineStatus, { text: string; tone: Tone }> {
+  const t = pickMessages(SUBMIT_MESSAGES, locale);
+  return Object.fromEntries((Object.keys(PIPE_TONE) as PipelineStatus[]).map((k) => [k, { text: t[PIPE_KEY[k]], tone: PIPE_TONE[k] }])) as Record<PipelineStatus, { text: string; tone: Tone }>;
+}
+/** @deprecated Bản tiếng Việt cố định – giữ cho nơi gọi cũ (declaration-form/dossier-tabs.tsx); dùng `pipeStatus(locale)`. */
+export const PIPE = pipeStatus("vi");
+
+type OpKey = keyof (typeof OPERATION_MESSAGES)["vi"];
+/** Tên mô tả nghiệp vụ theo ngôn ngữ (mã giữ nguyên); mã lạ → nhãn có sẵn trên dòng. */
+const opLabel = (ops: Record<OpKey, string>, r: Pick<PipelineRow, "op" | "label">) => ops[baseOp(r.op) as OpKey] ?? r.label;
 
 /** Nhãn nút gửi theo nghiệp vụ gốc (mã nhập; mã xuất E… dùng chung). */
-const SEND_LABEL: Partial<Record<CustomsOperation, string>> = {
-  IDA: "Khai tạm", IDB: "Gọi về sửa", IDC: "Khai chính thức", IDD: "Gọi về sửa", IDA01: "Khai tạm sửa đổi", IDE: "Khai chính thức sửa đổi",
-  AMA: "Khai tạm AMA", AMB: "Gọi về sửa", AMC: "Khai chính thức AMA", HYS: "Gửi", CONT: "Gửi", PORT_FEE: "Nộp lệ phí",
+const SEND_KEY: Partial<Record<CustomsOperation, keyof SubmitText>> = {
+  IDA: "sendIDA", IDB: "sendRecall", IDC: "sendIDC", IDD: "sendRecall", IDA01: "sendIDA01", IDE: "sendIDE",
+  AMA: "sendAMA", AMB: "sendRecall", AMC: "sendAMC", HYS: "send", CONT: "send", PORT_FEE: "sendPortFee",
 };
-const sendLabel = (r: PipelineRow, stage: CustomsStage) => (baseOp(r.op) === "IDA" && stage === "RECALLED" ? "Khai tạm lại" : SEND_LABEL[baseOp(r.op)] ?? "Gửi");
+const sendLabel = (t: SubmitText, r: PipelineRow, stage: CustomsStage) => {
+  if (baseOp(r.op) === "IDA" && stage === "RECALLED") return t.sendIDAAgain;
+  const key = SEND_KEY[baseOp(r.op)];
+  return key ? t[key] : t.send;
+};
+/** Tháng/năm hết hạn chứng thư: "10/2027" (vi, en) · "2027/10" (zh). */
+const monthYear = (iso: string, locale: UiLocale) => (locale === "zh" ? `${iso.slice(0, 4)}/${iso.slice(5, 7)}` : `${iso.slice(5, 7)}/${iso.slice(0, 4)}`);
 /** Gửi lại khi lỗi: chỉ các nghiệp vụ có kịch bản tra cứu-trước-khi-gửi-lại (ADR 0005). */
 const RESENDABLE: ReadonlySet<CustomsOperation> = new Set(["IDA", "EDA", "IDC", "EDC", "HYS"]);
 const isRecall = (op: CustomsOperation) => CUSTOMS_OPERATIONS[op].kind === "recall";
 
 type PhaseState = { text: string; tone: Tone };
-function phaseState(rows: PipelineRow[], stage: CustomsStage, phase: CustomsPhase): PhaseState {
-  if (rows.some((r) => r.status === "SENDING" || r.enabled)) return { text: "Đang mở", tone: "info" };
-  if (rows.some((r) => r.status === "OK")) return { text: "Hoàn tất", tone: "success" };
+function phaseState(t: SubmitText, rows: PipelineRow[], stage: CustomsStage, phase: CustomsPhase): PhaseState {
+  if (rows.some((r) => r.status === "SENDING" || r.enabled)) return { text: t.phaseOpen, tone: "info" };
+  if (rows.some((r) => r.status === "OK")) return { text: t.phaseDone, tone: "success" };
   const passed = phase === "AMEND" && (stage === "CLEARED" || stage.startsWith("POST_"));
-  return passed ? { text: "Không phát sinh", tone: "neutral" } : { text: "Chưa tới", tone: "neutral" };
+  return passed ? { text: t.phaseSkipped, tone: "neutral" } : { text: t.phasePending, tone: "neutral" };
 }
 
 function PipeIcon({ status }: { status: PipelineStatus }) {
@@ -92,11 +94,12 @@ type RowHandlers = {
 };
 
 function RowButton({ r, h }: { r: PipelineRow; h: RowHandlers }) {
+  const t = useMessages(SUBMIT_MESSAGES);
   const loading = h.busyOp === r.op;
   if (r.status === "ERROR" && RESENDABLE.has(r.op) && h.canResend) {
     return (
-      <Button size="sm" variant="secondary" leftIcon={<RotateCcw className="h-3.5 w-3.5" />} loading={loading} onClick={() => h.onResend(r)} aria-label={`Gửi lại ${r.op}`}>
-        Gửi lại
+      <Button size="sm" variant="secondary" leftIcon={<RotateCcw className="h-3.5 w-3.5" />} loading={loading} onClick={() => h.onResend(r)} aria-label={fill(t.resendAria, { op: r.op })}>
+        {t.resend}
       </Button>
     );
   }
@@ -104,8 +107,8 @@ function RowButton({ r, h }: { r: PipelineRow; h: RowHandlers }) {
   const primary = h.nextOp === r.op;
   if (r.action === "EDIT") {
     return (
-      <Button size="sm" variant={primary ? "primary" : "secondary"} leftIcon={<FilePen className="h-3.5 w-3.5" />} onClick={() => h.onAction(r)} aria-label={`Sửa tờ khai trước khi gửi ${r.op}`}>
-        Sửa tờ khai
+      <Button size="sm" variant={primary ? "primary" : "secondary"} leftIcon={<FilePen className="h-3.5 w-3.5" />} onClick={() => h.onAction(r)} aria-label={fill(t.editBeforeAria, { op: r.op })}>
+        {t.editDecl}
       </Button>
     );
   }
@@ -116,15 +119,19 @@ function RowButton({ r, h }: { r: PipelineRow; h: RowHandlers }) {
       leftIcon={isRecall(r.op) ? <RotateCcw className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
       loading={loading}
       onClick={() => h.onAction(r)}
-      aria-label={`${sendLabel(r, h.stage)} (${r.op})`}
+      aria-label={`${sendLabel(t, r, h.stage)} (${r.op})`}
     >
-      {sendLabel(r, h.stage)}
+      {sendLabel(t, r, h.stage)}
     </Button>
   );
 }
 
 function OperationRow({ r, h }: { r: PipelineRow; h: RowHandlers }) {
+  const locale = useUiLocale();
+  const ops = useMessages(OPERATION_MESSAGES);
+  const pipe = pipeStatus(locale);
   // Khóa vì đang chờ phản hồi: khung "Việc tiếp theo" đã báo – dòng giữ kết quả gần nhất cho đỡ lặp.
+  // kb-allow-raw: khớp tiền tố lý do khóa do backend/mock trả về (dữ liệu tiếng Việt, không phải chữ hiển thị)
   const busyLock = r.status === "SENDING" || Boolean(r.reason?.startsWith("Đang chờ phản hồi"));
   // Ưu tiên: hướng dẫn sửa tờ khai → kết quả gần nhất (đã gửi) → lý do bị khóa (chưa gửi).
   const note = r.enabled && r.action === "EDIT" ? r.reason : r.summary ?? (busyLock ? undefined : r.reason);
@@ -136,8 +143,8 @@ function OperationRow({ r, h }: { r: PipelineRow; h: RowHandlers }) {
           <Badge tone="neutral" variant="outline" className="font-mono">
             {r.op}
           </Badge>
-          <span className="text-sm font-medium text-fg">{r.label}</span>
-          <Badge tone={PIPE[r.status].tone}>{PIPE[r.status].text}</Badge>
+          <span className="text-sm font-medium text-fg">{opLabel(ops, r)}</span>
+          <Badge tone={pipe[r.status].tone}>{pipe[r.status].text}</Badge>
         </div>
         {note && <p className={r.enabled || r.summary === note ? "text-sm text-fg-muted" : "text-sm text-fg-subtle"}>{note}</p>}
         {r.at && <p className="text-xs tabular-nums text-fg-subtle">{formatDateTime(r.at)}</p>}
@@ -150,21 +157,24 @@ function OperationRow({ r, h }: { r: PipelineRow; h: RowHandlers }) {
 }
 
 function PhaseSection({ index, phase, rows, h }: { index: number; phase: (typeof CUSTOMS_PHASES)[number]; rows: PipelineRow[]; h: RowHandlers }) {
-  const st = phaseState(rows, h.stage, phase.id);
+  const t = useMessages(SUBMIT_MESSAGES);
+  const phases = useMessages(PHASE_MESSAGES);
+  const title = phases[phase.id];
+  const st = phaseState(t, rows, h.stage, phase.id);
   return (
     <section aria-labelledby={`phase-${phase.id}`} className="rounded-md border border-border">
       <header className="flex flex-wrap items-start justify-between gap-2 border-b border-border bg-surface-muted px-3 py-2.5">
         <div className="min-w-0 flex-1">
           <h3 id={`phase-${phase.id}`} className="text-sm font-semibold text-fg">
-            {index}. {phase.title}
+            {index}. {title}
           </h3>
-          <p className="text-xs text-fg-muted">{phase.hint}</p>
+          <p className="text-xs text-fg-muted">{phases[`${phase.id}_hint`]}</p>
         </div>
         <Badge tone={st.tone} dot>
           {st.text}
         </Badge>
       </header>
-      <ol className="flex flex-col divide-y divide-border" aria-label={phase.title}>
+      <ol className="flex flex-col divide-y divide-border" aria-label={title}>
         {rows.map((r) => (
           <OperationRow key={r.op} r={r} h={h} />
         ))}
@@ -174,54 +184,55 @@ function PhaseSection({ index, phase, rows, h }: { index: number; phase: (typeof
 }
 
 const CLEARANCE = {
-  WAITING: { text: "Chờ kết quả", tone: "neutral" },
-  INSPECTING: { text: "Đang kiểm tra", tone: "warning" },
-  CLEARED: { text: "Đã thông quan", tone: "success" },
-  REJECTED: { text: "Hải quan từ chối", tone: "danger" },
+  WAITING: { key: "clearWaiting", tone: "neutral" },
+  INSPECTING: { key: "clearInspecting", tone: "warning" },
+  CLEARED: { key: "clearCleared", tone: "success" },
+  REJECTED: { key: "clearRejected", tone: "danger" },
 } as const;
 
 function ResultCard({ s }: { s: SubmissionView }) {
+  const t = useMessages(SUBMIT_MESSAGES);
   const result = s.result;
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Landmark aria-hidden="true" className="h-5 w-5 text-primary" />
-          Kết quả từ Hải quan
+          {t.resultTitle}
         </CardTitle>
-        {result?.updatedAt && <CardDescription>Cập nhật {formatRelative(result.updatedAt)}</CardDescription>}
+        {result?.updatedAt && <CardDescription>{fill(t.updated, { when: formatRelative(result.updatedAt) })}</CardDescription>}
       </CardHeader>
       <CardContent>
         {!result ? (
           <EmptyState
             className="px-2 py-8"
             icon={s.started ? <Clock3 /> : <Landmark />}
-            title={s.started ? "Đang chờ phản hồi đầu tiên" : "Chưa khai báo"}
-            description="Số tờ khai, thuế dự kiến, phân luồng và kết quả thông quan sẽ hiện ở đây."
+            title={s.started ? t.waitingFirst : t.notFiled}
+            description={t.resultEmptyDesc}
           />
         ) : (
           <div className="divide-y divide-border">
-            <KeyValue label="Số tờ khai" value={result.declarationNo ? <span className="font-mono">{result.declarationNo}</span> : <span className="text-fg-subtle">Đang chờ</span>} />
+            <KeyValue label={t.declNo} value={result.declarationNo ? <span className="font-mono">{result.declarationNo}</span> : <span className="text-fg-subtle">{t.waiting}</span>} />
             <div className="py-2">
-              <p className="text-sm text-fg-muted">Phân luồng</p>
+              <p className="text-sm text-fg-muted">{t.channel}</p>
               {result.channel ? (
                 <div className="mt-1 flex flex-col gap-1">
                   <StatusBadge status={CHANNEL_STATUS[result.channel]} className="self-start" />
                   <p className="text-sm text-fg-muted">{result.channelNote}</p>
                 </div>
               ) : (
-                <p className="mt-1 text-sm text-fg-subtle">Có sau khi khai chính thức</p>
+                <p className="mt-1 text-sm text-fg-subtle">{t.afterOfficial}</p>
               )}
             </div>
             <KeyValue
-              label="Trạng thái"
-              value={<Badge tone={CLEARANCE[result.clearanceStatus ?? "WAITING"].tone}>{CLEARANCE[result.clearanceStatus ?? "WAITING"].text}</Badge>}
+              label={t.status}
+              value={<Badge tone={CLEARANCE[result.clearanceStatus ?? "WAITING"].tone}>{t[CLEARANCE[result.clearanceStatus ?? "WAITING"].key]}</Badge>}
             />
-            <KeyValue label="Thuế dự kiến" value={result.customsTaxVnd ? formatVnd(result.customsTaxVnd) : <span className="text-fg-subtle">Đang chờ</span>} />
+            <KeyValue label={t.estTax} value={result.customsTaxVnd ? formatVnd(result.customsTaxVnd) : <span className="text-fg-subtle">{t.waiting}</span>} />
             {(s.amendments > 0 || s.postAmendments > 0) && (
-              <KeyValue label="Đã sửa đổi" value={`${s.amendments} lần bổ sung · ${s.postAmendments} lần sau thông quan`} />
+              <KeyValue label={t.amended} value={fill(t.amendedValue, { a: s.amendments, p: s.postAmendments })} />
             )}
-            {result.updatedAt && <KeyValue label="Cập nhật lúc" value={formatDateTime(result.updatedAt)} />}
+            {result.updatedAt && <KeyValue label={t.updatedAt} value={formatDateTime(result.updatedAt)} />}
           </div>
         )}
       </CardContent>
@@ -230,15 +241,16 @@ function ResultCard({ s }: { s: SubmissionView }) {
 }
 
 export function MessageLog({ messages }: { messages: SubmissionView["messages"] }) {
+  const t = useMessages(SUBMIT_MESSAGES);
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Nhật ký thông điệp</CardTitle>
-        <CardDescription>Mỗi lần gửi/nhận một dòng – lưu làm hồ sơ pháp lý (đã che thông tin nhạy cảm).</CardDescription>
+        <CardTitle>{t.logTitle}</CardTitle>
+        <CardDescription>{t.logDesc}</CardDescription>
       </CardHeader>
       <CardContent>
         {messages.length === 0 ? (
-          <EmptyState title="Chưa có thông điệp" description="Thông điệp gửi/nhận với Hải quan sẽ hiện ở đây sau khi khai báo." />
+          <EmptyState title={t.logEmptyTitle} description={t.logEmptyDesc} />
         ) : (
           <ul className="flex flex-col divide-y divide-border rounded-md border border-border" aria-live="polite">
             {messages.map((m) => (
@@ -246,16 +258,16 @@ export function MessageLog({ messages }: { messages: SubmissionView["messages"] 
                 <details className="group">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-3 py-2.5 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     {m.direction === "OUT" ? (
-                      <ArrowUpRight aria-label="Gửi đi" className="h-4 w-4 text-fg-subtle" />
+                      <ArrowUpRight aria-label={t.outgoing} className="h-4 w-4 text-fg-subtle" />
                     ) : (
-                      <ArrowDownLeft aria-label="Nhận về" className="h-4 w-4 text-primary" />
+                      <ArrowDownLeft aria-label={t.incoming} className="h-4 w-4 text-primary" />
                     )}
                     <Badge tone="neutral" variant="outline" className="font-mono">
                       {m.operation}
                     </Badge>
                     <span className="min-w-0 flex-1 text-sm text-fg cq-sm:min-w-48">{m.summary}</span>
                     <Badge tone={m.result === "OK" ? "success" : m.result === "ERROR" ? "danger" : "info"}>
-                      {m.result === "OK" ? "Thành công" : m.result === "ERROR" ? "Lỗi" : "Đang xử lý"}
+                      {m.result === "OK" ? t.pipeOk : m.result === "ERROR" ? t.pipeError : t.pipeSending}
                     </Badge>
                     <span className="text-xs tabular-nums text-fg-subtle" title={formatDateTime(m.at)}>{isToday(m.at) ? formatTime(m.at) : formatDateTime(m.at)}</span>
                   </summary>
@@ -274,9 +286,11 @@ export function MessageLog({ messages }: { messages: SubmissionView["messages"] 
 type Confirm = { row: PipelineRow };
 
 function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { confirm: Confirm | null; onClose: () => void; onConfirm: (c: Confirm) => void; pending: boolean; code: string }) {
+  const t = useMessages(SUBMIT_MESSAGES);
+  const ops = useMessages(OPERATION_MESSAGES);
   return (
     <Dialog open={confirm !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={`${confirm?.row.label ?? ""} (${confirm?.row.op ?? ""})`} icon={<RotateCcw className="h-4 w-4" />} description={code} size="sm">
+      <DialogContent title={`${confirm ? opLabel(ops, confirm.row) : ""} (${confirm?.row.op ?? ""})`} icon={<RotateCcw className="h-4 w-4" />} description={code} size="sm">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -285,15 +299,15 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
         >
           <Stack gap="sm">
             <p className="text-sm text-fg-muted">
-              Hải quan chấp nhận gọi về thì tờ khai được mở lại để sửa chỉ tiêu. Tờ khai quay về bản nháp ở bước Review và phê duyệt hiện tại bị hủy – sửa xong, Người duyệt phải phê duyệt lại thì mới gửi lại được.
+              {t.recallBody}
             </p>
           </Stack>
           <DialogFooter>
             <Button variant="ghost" type="button" onClick={onClose}>
-              Hủy
+              {t.cancel}
             </Button>
             <Button type="submit" loading={pending} leftIcon={<RotateCcw className="h-4 w-4" />}>
-              Gọi về sửa ({confirm?.row.op ?? ""})
+              {fill(t.recallAction, { op: confirm?.row.op ?? "" })}
             </Button>
           </DialogFooter>
         </form>
@@ -313,6 +327,9 @@ function estimateOf(decl: Declaration | null | undefined): CustomsEstimate | und
 }
 
 export function SubmitStep({ dossier, goTo }: StepProps) {
+  const t = useMessages(SUBMIT_MESSAGES);
+  const stages = useMessages(STAGE_MESSAGES);
+  const locale = useUiLocale();
   const declQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const qc = useQueryClient();
   const [certId, setCertId] = useState<string>("");
@@ -345,9 +362,9 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     // Một toast đi suốt thao tác: "đang ký số…" → "đã gửi" hoặc lỗi.
     mutationFn: () =>
       toastPromise(submitDeclaration(dossier.id, selectedId), {
-        loading: { title: "Đang ký số và khai tạm tờ khai…" },
-        success: { title: "Đã ký số và gửi khai tạm", description: "Chờ Hải quan cấp số tờ khai và tính thuế dự kiến." },
-        error: (e) => ({ title: errorMessage(e) }),
+        loading: { title: t.submitLoading },
+        success: { title: t.submitSuccess, description: t.submitSuccessDesc },
+        error: (e) => ({ title: errorMessage(e, locale) }),
       }),
     onSuccess: invalidate,
     // Lỗi đã hiện trong toast của toastPromise (cùng một toast với "đang ký số…").
@@ -363,7 +380,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       toast({ tone: r.sent ? "info" : "success", title: r.message });
       invalidate();
     },
-    onError: toastMutationError("Không thực hiện được nghiệp vụ"),
+    onError: toastMutationError(t.performFailed),
     onSettled: () => setBusyOp(null),
   });
   const resend = useMutation({
@@ -372,10 +389,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       return resendOperation(dossier.id, r.op);
     },
     onSuccess: (res, r) => {
-      toast({ tone: "info", title: res.resent ? `Đang gửi lại ${r.op}` : res.message, description: "Đã tra cứu trạng thái trước để không gửi trùng thông điệp." });
+      toast({ tone: "info", title: res.resent ? fill(t.resending, { op: r.op }) : res.message, description: t.resendDesc });
       invalidate();
     },
-    onError: toastMutationError("Không gửi lại được"),
+    onError: toastMutationError(t.resendFailed),
     onSettled: () => setBusyOp(null),
   });
 
@@ -410,24 +427,25 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       {notApproved && (
         <Alert
           tone="danger"
-          title="Chưa thể khai báo tờ khai"
+          title={t.notReadyTitle}
           action={
             <Button size="sm" variant="secondary" onClick={() => goTo(s.declarationStatus === "NOT_CREATED" ? "agent" : "review")}>
-              {s.declarationStatus === "NOT_CREATED" ? "Sang AI Agent" : "Mở Review tờ khai"}
+              {s.declarationStatus === "NOT_CREATED" ? t.toAgent : t.openReview}
             </Button>
           }
         >
-          {s.declarationStatus === "NOT_CREATED" ? "Hồ sơ chưa có tờ khai." : "Tờ khai chưa được Người duyệt phê duyệt."} Hệ thống chặn gửi khi còn lỗi BLOCKER, mã HS chưa xác nhận hoặc chưa phê duyệt.
+          {s.declarationStatus === "NOT_CREATED" ? t.noDecl : t.notApproved}
+          {t.blockedNote}
         </Alert>
       )}
       {!notApproved && s.hsUnconfirmed > 0 && (
-        <Alert tone="danger" title={`Còn ${s.hsUnconfirmed} mã HS chưa xác nhận`}>
-          Xác nhận mã HS ở bước AI Agent trước khi gửi nội dung tờ khai.
+        <Alert tone="danger" title={fill(t.hsTitle, { n: s.hsUnconfirmed })}>
+          {t.hsBody}
         </Alert>
       )}
 
-      <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel="Mở Review tờ khai" onAction={() => goTo("review")}>
-        Tờ khai đã duyệt nhưng còn thiếu ô bắt buộc – Hải quan sẽ từ chối. Mở lại tờ khai ở bước Review để nhập rồi duyệt lại.
+      <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel={t.openReview} onAction={() => goTo("review")}>
+        {t.gapsBody}
       </RequiredGapsAlert>
 
       {postStepVisible(s.stage) && <PostAmendmentEntry dossierId={dossier.id} onOpen={() => goTo("post")} />}
@@ -435,14 +453,14 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       {rejection && (
         <Alert
           tone="danger"
-          title={`Hải quan từ chối ${rejection.operation} – ${rejection.errors.length} lỗi`}
+          title={fill(t.rejectedTitle, { op: rejection.operation, n: rejection.errors.length })}
           action={
             <Button size="sm" variant="secondary" onClick={() => goTo("review")}>
-              Xem lỗi trên tờ khai
+              {t.viewErrors}
             </Button>
           }
         >
-          Lỗi được gắn vào đúng ô chỉ tiêu ở bước Review tờ khai. Mở lại tờ khai, sửa, phê duyệt lại rồi gửi lại {rejection.operation}.
+          {fill(t.rejectedBody, { op: rejection.operation })}
         </Alert>
       )}
 
@@ -454,14 +472,14 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
                 <Send aria-hidden="true" className="h-5 w-5 text-primary" />
                 {hasNumber ? (
                   <>
-                    Tờ khai <span className="font-mono">{s.result!.declarationNo}</span>
+                    {t.declTitle} <span className="font-mono">{s.result!.declarationNo}</span>
                   </>
                 ) : (
-                  "Khai báo Hải quan"
+                  t.filingTitle
                 )}
                 {s.result?.channel && <StatusBadge status={CHANNEL_STATUS[s.result.channel]} />}
               </CardTitle>
-              <CardDescription>{STAGE_TEXT[s.stage]}</CardDescription>
+              <CardDescription>{stages[s.stage]}</CardDescription>
             </div>
             <Button
               size="sm"
@@ -471,7 +489,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
               loading={busyOp === s.queryOp}
               onClick={() => perform.mutate(s.queryOp)}
             >
-              Tra cứu trạng thái ({s.queryOp})
+              {fill(t.query, { op: s.queryOp })}
             </Button>
           </CardHeader>
           <CardContent>
@@ -485,12 +503,12 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
                 certPicker={
                   firstSend && next && baseOp(next.op) === "IDA" ? (
                     <div className="flex flex-col gap-3 cq-md:flex-row cq-md:items-end">
-                      <Field label="Chứng thư số dùng để ký" className="flex-1">
+                      <Field label={t.certLabel} className="flex-1">
                         <Select
                           value={selectedId}
                           onChange={(e) => setCertId(e.currentTarget.value)}
                           disabled={certQ.isLoading || blocked}
-                          options={certs.map((c) => ({ value: c.id, label: `${c.subject} – ${c.issuer}, hết hạn ${formatDate(c.validTo).slice(3)}` }))}
+                          options={certs.map((c) => ({ value: c.id, label: fill(t.certOption, { subject: c.subject, issuer: c.issuer, date: monthYear(c.validTo, locale) }) }))}
                         />
                       </Field>
                       <Button
@@ -499,7 +517,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
                         loading={submit.isPending}
                         onClick={() => submit.mutate()}
                       >
-                        Ký số & khai tạm ({next.op})
+                        {fill(t.signSend, { op: next.op })}
                       </Button>
                     </div>
                   ) : null
@@ -507,12 +525,12 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
                 certNote={
                   firstSend && selected ? (
                     <p className="text-xs text-fg-subtle">
-                      Số serial {selected.serial.slice(0, 14)}… · hết hạn {formatDate(selected.validTo)} · Customs Hub ký thay bằng chứng thư đã đăng ký
+                      {fill(t.certNote, { serial: selected.serial.slice(0, 14), date: formatDate(selected.validTo) })}
                     </p>
                   ) : null
                 }
               />
-              {firstSend && certExpired && <Alert tone="warning">Chứng thư số đã hết hạn – chọn chứng thư khác.</Alert>}
+              {firstSend && certExpired && <Alert tone="warning">{t.certExpired}</Alert>}
 
               {CUSTOMS_PHASES.filter((p) => pipeline.some((r) => r.phase === p.id)).map((p, i) => (
                 <PhaseSection key={p.id} index={i + 1} phase={p} rows={pipeline.filter((r) => r.phase === p.id)} h={h} />
@@ -541,6 +559,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
 
 /** Thẻ lối vào bước 7: tờ khai đã thông quan – sửa sau thông quan làm ở bước riêng. */
 function PostAmendmentEntry({ dossierId, onOpen }: { dossierId: string; onOpen: () => void }) {
+  const t = useMessages(SUBMIT_MESSAGES);
   const q = useQuery({ queryKey: postAmendmentKeys.view(dossierId), queryFn: () => getPostAmendmentView(dossierId) });
   const current = q.data?.current ?? null;
   return (
@@ -550,15 +569,15 @@ function PostAmendmentEntry({ dossierId, onOpen }: { dossierId: string; onOpen: 
         <div className="min-w-0 flex-1 basis-48">
           {current ? (
             <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-fg">
-              Đang khai bổ sung lần {current.seq} <StatusBadge status={AMA_STATUS[current.status]} />
+              {fill(t.postAmending, { n: current.seq })} <StatusBadge status={AMA_STATUS[current.status]} />
             </p>
           ) : (
-            <p className="text-sm font-medium text-fg">Cần sửa sau thông quan?</p>
+            <p className="text-sm font-medium text-fg">{t.postNeed}</p>
           )}
-          <p className="text-sm text-fg-muted">Bản khai bổ sung AMA riêng, tờ khai gốc giữ nguyên – hạn 60 ngày kể từ ngày thông quan.</p>
+          <p className="text-sm text-fg-muted">{t.postDesc}</p>
         </div>
         <Button variant={current ? "primary" : "secondary"} rightIcon={<ArrowRight className="h-4 w-4" />} disabled={q.isLoading} onClick={onOpen}>
-          {current ? "Tiếp tục" : "Lập bản khai bổ sung"}
+          {current ? t.continue : t.postCreate}
         </Button>
       </CardContent>
     </Card>
@@ -576,22 +595,20 @@ function NextStep({
   certPicker: ReactNode;
   certNote: ReactNode;
 }) {
+  const t = useMessages(SUBMIT_MESSAGES);
+  const ops = useMessages(OPERATION_MESSAGES);
   if (sending) {
     return (
-      <Alert tone="info" title={`Đang chờ phản hồi ${sending.op} – ${sending.label.toLowerCase()}`}>
-        Đang trao đổi thông điệp với Hải quan; các nghiệp vụ khác tạm khóa. Có thể rời màn hình – hệ thống thông báo khi có kết quả.
+      <Alert tone="info" title={fill(t.awaiting, { op: sending.op, label: opLabel(ops, sending).toLowerCase() })}>
+        {t.awaitingBody}
       </Alert>
     );
   }
   if (!next) {
     const cleared = s.stage === "CLEARED" || s.stage.startsWith("POST_");
     return (
-      <Alert tone={cleared ? "success" : "info"} title={cleared ? "Tờ khai đã thông quan" : "Đang chờ Hải quan"}>
-        {cleared
-          ? "Không còn việc bắt buộc. Cần sửa thì dùng thẻ Sửa sau thông quan ở trên; thủ tục chứng từ & cảng ở bên dưới."
-          : s.inProgress
-            ? "Hệ thống tự hỏi trạng thái tờ khai định kỳ; kết quả thông quan sẽ hiện ở đây."
-            : "Không có việc cần làm ngay – tra cứu trạng thái để cập nhật."}
+      <Alert tone={cleared ? "success" : "info"} title={cleared ? t.clearedTitle : t.waitingCustoms}>
+        {cleared ? t.clearedBody : s.inProgress ? t.pollingBody : t.idleBody}
       </Alert>
     );
   }
@@ -600,12 +617,12 @@ function NextStep({
       <div className="flex flex-wrap items-start gap-3">
         <IconTile icon={<Sparkles />} tone="primary" size="md" />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-primary-subtle-fg">Việc tiếp theo</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-primary-subtle-fg">{t.nextStep}</p>
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
             <Badge tone="primary" variant="outline" className="font-mono">
               {next.op}
             </Badge>
-            {next.label}
+            {opLabel(ops, next)}
           </p>
           {next.reason && <p className="mt-1 text-sm text-fg-muted">{next.reason}</p>}
         </div>
@@ -621,7 +638,7 @@ function NextStep({
       {firstSend && (
         <p className="flex items-center gap-1.5 text-xs text-fg-subtle">
           <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />
-          Khai tạm chưa phải khai chính thức: xem số tờ khai và thuế dự kiến trước, rồi mới khai chính thức để nhận phân luồng.
+          {t.provisionalNote}
         </p>
       )}
     </div>

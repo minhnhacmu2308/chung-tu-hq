@@ -114,14 +114,14 @@ describe("itemValues / pendingItemEdits – ô dòng hàng chỉ có trên tờ 
 
 describe("declarationLockOf – ô nào khóa và vì sao", () => {
   it("mode LOCKED: ô người khai bị khóa", () => {
-    expect(declarationLockOf("IDA", "LOCKED", {}, new Map())("TK_IMC")).not.toBeNull();
+    expect(declarationLockOf("IDA", "LOCKED", {}, new Map(), "vi")("TK_IMC")).not.toBeNull();
   });
   it("mode FULL: ô nằm trong editable → null", () => {
-    expect(declarationLockOf("IDA", "FULL", {}, new Map([["TK_IMC", "NNK_MST"]]))("TK_IMC")).toBeNull();
+    expect(declarationLockOf("IDA", "FULL", {}, new Map([["TK_IMC", "NNK_MST"]]), "vi")("TK_IMC")).toBeNull();
   });
   it("ô dòng hàng lớp DOC → ITEM_LOCK.DOC", () => {
     const key = "HAG_CMN";
     expect(isItemFieldKey("IDA", key) && itemFieldClass("IDA", key)).toBe("DOC");
-    expect(declarationLockOf("IDA", "FULL", {}, new Map())(key)).toBe(ITEM_LOCK.DOC);
+    expect(declarationLockOf("IDA", "FULL", {}, new Map(), "vi")(key)).toBe(ITEM_LOCK.vi.DOC);
   });
 });

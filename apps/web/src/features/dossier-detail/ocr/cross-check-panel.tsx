@@ -1,37 +1,40 @@
 "use client";
 // Khối "AI đối chiếu chéo": luật lỗi/lưu ý lên đầu, luật khớp gọn lại (bấm để xem).
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, cn, Skeleton, Stack } from "@kb/ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, cn, fill, Skeleton, Stack, useMessages } from "@kb/ui";
 import { CheckCircle2, ChevronDown, MinusCircle, Sparkles, TriangleAlert, XCircle } from "lucide-react";
 import { useState } from "react";
 import { DOC_KIND_LABELS, type CrossCheck, type RuleResult } from "@/mocks/types";
+import { CROSS_CHECK_MESSAGES } from "./ocr.messages";
 
 const ORDER: Record<RuleResult, number> = { FAIL: 0, WARN: 1, SKIPPED: 2, PASS: 3 };
 
-const ICON: Record<RuleResult, { icon: typeof CheckCircle2; className: string; label: string }> = {
-  PASS: { icon: CheckCircle2, className: "text-success-subtle-fg", label: "Khớp" },
-  WARN: { icon: TriangleAlert, className: "text-warning-subtle-fg", label: "Lưu ý" },
-  FAIL: { icon: XCircle, className: "text-danger-subtle-fg", label: "Lỗi" },
-  SKIPPED: { icon: MinusCircle, className: "text-fg-subtle", label: "Chưa kiểm tra" },
+const ICON: Record<RuleResult, { icon: typeof CheckCircle2; className: string; label: "pass" | "warn" | "fail" | "skipped" }> = {
+  PASS: { icon: CheckCircle2, className: "text-success-subtle-fg", label: "pass" },
+  WARN: { icon: TriangleAlert, className: "text-warning-subtle-fg", label: "warn" },
+  FAIL: { icon: XCircle, className: "text-danger-subtle-fg", label: "fail" },
+  SKIPPED: { icon: MinusCircle, className: "text-fg-subtle", label: "skipped" },
 };
 
 function CheckRow({ c }: { c: CrossCheck }) {
+  const t = useMessages(CROSS_CHECK_MESSAGES);
+  const kindLabels = useMessages(DOC_KIND_LABELS);
   const { icon: Icon, className, label } = ICON[c.result];
   return (
     <li className={cn("flex gap-3 rounded-md px-3 py-2", c.result === "FAIL" && "bg-danger-subtle", c.result === "WARN" && "bg-warning-subtle")}>
       <Icon aria-hidden="true" className={cn("mt-0.5 h-4 w-4 shrink-0", className)} />
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-fg">
-          <span className="sr-only">{label}: </span>
+          <span className="sr-only">{t[label]}: </span>
           {c.title}
           {c.result === "FAIL" && c.severity === "BLOCKER" && (
             <Badge tone="danger" variant="solid">
-              Chặn truyền tờ khai
+              {t.blocksSubmit}
             </Badge>
           )}
         </p>
         <p className="mt-0.5 text-sm text-fg-muted">{c.detail}</p>
         <p className="mt-1 text-xs text-fg-subtle">
-          {c.documentKinds.map((k) => DOC_KIND_LABELS[k]).join(" · ")} <span className="font-mono">· {c.ruleCode}</span>
+          {c.documentKinds.map((k) => kindLabels[k]).join(" · ")} <span className="font-mono">· {c.ruleCode}</span>
         </p>
       </div>
     </li>
@@ -40,6 +43,7 @@ function CheckRow({ c }: { c: CrossCheck }) {
 
 export function CrossCheckPanel({ checks, loading }: { checks: CrossCheck[] | undefined; loading: boolean }) {
   const [showPass, setShowPass] = useState(false);
+  const t = useMessages(CROSS_CHECK_MESSAGES);
   if (loading || !checks) {
     return (
       <Card>
@@ -64,23 +68,23 @@ export function CrossCheckPanel({ checks, loading }: { checks: CrossCheck[] | un
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Sparkles aria-hidden="true" className="h-4 w-4 text-primary" />
-          AI đối chiếu chéo
+          {t.title}
         </CardTitle>
         <CardDescription className="flex flex-wrap items-center gap-2">
-          <span>{checks.length} luật đã chạy trên bộ chứng từ</span>
-          <Badge tone="success">{count("PASS")} khớp</Badge>
-          {count("WARN") > 0 && <Badge tone="warning">{count("WARN")} lưu ý</Badge>}
-          {count("FAIL") > 0 && <Badge tone="danger">{count("FAIL")} lỗi</Badge>}
-          {count("SKIPPED") > 0 && <Badge tone="neutral">{count("SKIPPED")} chờ dữ liệu</Badge>}
+          <span>{fill(t.rulesRun, { n: checks.length })}</span>
+          <Badge tone="success">{fill(t.passCount, { n: count("PASS") })}</Badge>
+          {count("WARN") > 0 && <Badge tone="warning">{fill(t.warnCount, { n: count("WARN") })}</Badge>}
+          {count("FAIL") > 0 && <Badge tone="danger">{fill(t.failCount, { n: count("FAIL") })}</Badge>}
+          {count("SKIPPED") > 0 && <Badge tone="neutral">{fill(t.skippedCount, { n: count("SKIPPED") })}</Badge>}
         </CardDescription>
       </CardHeader>
       <CardContent>
         {checks.length === 0 ? (
-          <p className="text-sm text-fg-muted">Chưa đủ chứng từ để đối chiếu.</p>
+          <p className="text-sm text-fg-muted">{t.notEnough}</p>
         ) : (
           <Stack gap="sm">
             {issues.length > 0 && (
-              <ul className="grid gap-1.5 cq-xl:grid-cols-2" aria-label="Luật cần chú ý">
+              <ul className="grid gap-1.5 cq-xl:grid-cols-2" aria-label={t.issuesLabel}>
                 {issues.map((c) => (
                   <CheckRow key={c.id} c={c} />
                 ))}
@@ -96,10 +100,10 @@ export function CrossCheckPanel({ checks, loading }: { checks: CrossCheck[] | un
                   rightIcon={<ChevronDown className={cn("h-4 w-4 transition-transform", showPass && "rotate-180")} />}
                   onClick={() => setShowPass((v) => !v)}
                 >
-                  {showPass ? "Ẩn" : "Xem"} {passed.length} luật khác (đã khớp / chờ dữ liệu)
+                  {fill(showPass ? t.hideOthers : t.showOthers, { n: passed.length })}
                 </Button>
                 {showPass && (
-                  <ul className="flex flex-col gap-1.5" aria-label="Luật đã khớp hoặc chờ dữ liệu">
+                  <ul className="flex flex-col gap-1.5" aria-label={t.passedLabel}>
                     {passed.map((c) => (
                       <CheckRow key={c.id} c={c} />
                     ))}

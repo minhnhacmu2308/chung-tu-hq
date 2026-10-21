@@ -31,9 +31,14 @@ describe("nhãn hiển thị", () => {
     expect(audienceLabel("PRO", { PRO: "Chuyên nghiệp" })).toBe("Gói Chuyên nghiệp");
     expect(audienceLabel("BASIC")).toBe("Gói BASIC");
   });
+  it("nhãn theo ngôn ngữ (en/zh)", () => {
+    expect(monthLabel("2026-03", "zh")).toBe("2026年3月");
+    expect(audienceLabel("ALL", {}, "en")).toBe("All organizations");
+    expect(quotaState(150, 150, "zh").label).toBe("额度已用完");
+  });
   it("bảng quyền hiển thị phủ đủ mọi quyền được cấp cho các vai trò", () => {
     const granted = new Set(Object.values(STAFF_PERMISSIONS).flat());
     expect(new Set(PERMISSION_ORDER)).toEqual(granted);
-    for (const p of granted) expect(PERMISSION_LABELS[p]).toBeTruthy();
+    for (const locale of ["vi", "en", "zh"] as const) for (const p of granted) expect(PERMISSION_LABELS[locale][p]).toBeTruthy();
   });
 });

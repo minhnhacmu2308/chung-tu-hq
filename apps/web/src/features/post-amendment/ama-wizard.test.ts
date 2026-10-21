@@ -88,10 +88,10 @@ describe("amaChangeSummary", () => {
 
 describe("approveBlockers", () => {
   it("thiếu dòng và mã lý do → hai lý do, đúng thứ tự", () =>
-    expect(approveBlockers(pa(), { pendingEdits: 0, fourEyes: false })).toEqual(["Chưa có dòng hàng", "Chưa nhập mã lý do khai bổ sung"]));
-  it("đủ điều kiện → không chặn", () => expect(approveBlockers(pa({ lines: oneLine, header: { TK_REC: "1" } }), { pendingEdits: 0, fourEyes: false })).toEqual([]));
+    expect(approveBlockers(pa(), { pendingEdits: 0, fourEyes: false }, "vi")).toEqual(["Chưa có dòng hàng", "Chưa nhập mã lý do khai bổ sung"]));
+  it("đủ điều kiện → không chặn", () => expect(approveBlockers(pa({ lines: oneLine, header: { TK_REC: "1" } }), { pendingEdits: 0, fourEyes: false }, "vi")).toEqual([]));
   it("còn thay đổi chưa lưu và 4 mắt", () =>
-    expect(approveBlockers(pa({ lines: oneLine, header: { TK_REC: "1" } }), { pendingEdits: 2, fourEyes: true })).toEqual([
+    expect(approveBlockers(pa({ lines: oneLine, header: { TK_REC: "1" } }), { pendingEdits: 2, fourEyes: true }, "vi")).toEqual([
       "Còn thay đổi chưa lưu",
       "Nguyên tắc 4 mắt: nhờ Người duyệt khác phê duyệt",
     ]));
@@ -99,13 +99,13 @@ describe("approveBlockers", () => {
 
 describe("amaPrimaryAction", () => {
   it("đã duyệt → khai tạm AMA", () =>
-    expect(amaPrimaryAction(pa({ status: "APPROVED" }), { stage: "POST_EDITING", sending: false })).toEqual({ op: "AMA", label: "Ký số & khai tạm AMA" }));
-  it("gọi về đã duyệt lại → khai tạm AMA", () => expect(amaPrimaryAction(pa({ status: "APPROVED" }), { stage: "POST_RECALLED", sending: false })?.op).toBe("AMA"));
+    expect(amaPrimaryAction(pa({ status: "APPROVED" }), { stage: "POST_EDITING", sending: false }, "vi")).toEqual({ op: "AMA", label: "Ký số & khai tạm AMA" }));
+  it("gọi về đã duyệt lại → khai tạm AMA", () => expect(amaPrimaryAction(pa({ status: "APPROVED" }), { stage: "POST_RECALLED", sending: false }, "vi")?.op).toBe("AMA"));
   it("đã khai tạm → khai chính thức AMC", () =>
-    expect(amaPrimaryAction(pa({ status: "PRE_DECLARED" }), { stage: "POST_PRE_DECLARED", sending: false })).toEqual({ op: "AMC", label: "Khai chính thức AMC" }));
-  it("đang chờ Hải quan → không có nút chính", () => expect(amaPrimaryAction(pa({ status: "PRE_DECLARED" }), { stage: "POST_PRE_DECLARED", sending: true })).toBeNull());
+    expect(amaPrimaryAction(pa({ status: "PRE_DECLARED" }), { stage: "POST_PRE_DECLARED", sending: false }, "vi")).toEqual({ op: "AMC", label: "Khai chính thức AMC" }));
+  it("đang chờ Hải quan → không có nút chính", () => expect(amaPrimaryAction(pa({ status: "PRE_DECLARED" }), { stage: "POST_PRE_DECLARED", sending: true }, "vi")).toBeNull());
   it.each(["DRAFT", "RECALLED", "REGISTERED"] as const)("%s → không có nút chính", (status) =>
-    expect(amaPrimaryAction(pa({ status }), { stage: "POST_EDITING", sending: false })).toBeNull());
+    expect(amaPrimaryAction(pa({ status }), { stage: "POST_EDITING", sending: false }, "vi")).toBeNull());
 });
 
 describe("applyEdits", () => {
@@ -127,7 +127,7 @@ describe("applyEdits", () => {
 describe("reasonLayout", () => {
   const keysOf = (blocks: LayoutBlock[]) =>
     blocks.flatMap((b) => b.items.flatMap((i) => (i.kind === "field" ? [i.key] : i.fields.map((f) => f.key))));
-  const { main, other } = reasonLayout();
+  const { main, other } = reasonLayout("vi");
   it("hiện sẵn chỉ mã lý do và ghi chú sau", () => expect(keysOf([main])).toEqual(["TK_REC", "TK_NTA"]));
   it("thông tin khác: ô sửa được còn lại, kể cả ô bắt buộc đã điền sẵn", () => expect(keysOf(other)).toEqual(expect.arrayContaining(["TK_CHB", "TK_TTC", "TK_BRC", "TK_CDA", "TK_RTA"])));
   it("không có ô khóa theo tờ khai gốc, không lặp ô hiện sẵn", () => {

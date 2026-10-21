@@ -1,26 +1,33 @@
-import { AiBackdrop, AiScanCard, BrandMark, RobotAvatar, type RobotAvatarState } from "@kb/ui";
+"use client";
+import { AiBackdrop, AiScanCard, BrandMark, RobotAvatar, useMessages, type RobotAvatarState } from "@kb/ui";
 import { FileCheck2, ScanText, Send } from "lucide-react";
 import type { ReactNode } from "react";
+import { APP_TITLES } from "@/app/app-titles.messages";
+import { LanguageSelect } from "@/features/appearance/language-switcher";
+import { usePageTitle } from "@/features/shell/use-page-title";
+import { AUTH_FRAME_MESSAGES } from "./auth.messages";
 
-const POINTS = [
-  { icon: <ScanText className="h-4 w-4" />, text: "AI đọc cả bộ chứng từ, ra một bộ dữ liệu chuẩn" },
-  { icon: <FileCheck2 className="h-4 w-4" />, text: "Đối chiếu chéo Invoice, Packing List, B/L, C/O" },
-  { icon: <Send className="h-4 w-4" />, text: "Dựng tờ khai và truyền Hải quan qua Customs Hub" },
-];
-
-// Minh họa "AI vừa đọc được" – dữ liệu mẫu, chỉ để trang trí.
-const SCAN_FIELDS = [
-  { label: "Số invoice", value: "HP-2610-078" },
-  { label: "Trị giá", value: "20.850,00 USD" },
-  { label: "Điều kiện", value: "FCA" },
-  { label: "Mã HS", value: "8482.10.00" },
-];
+const BRAND = APP_TITLES.vi.brand;
 
 /**
  * Khung trang đăng nhập/đăng ký, phủ kín màn hình: panel thương hiệu bên trái (ẩn trên mobile) + form canh giữa bên phải.
  * `robot` = trạng thái linh vật trợ lý, phản ứng theo thao tác trên form (đang gõ, đang gửi, lỗi…).
  */
 export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; robot?: RobotAvatarState }) {
+  const t = useMessages(AUTH_FRAME_MESSAGES);
+  usePageTitle();
+  const points = [
+    { icon: <ScanText className="h-4 w-4" />, text: t.pointRead },
+    { icon: <FileCheck2 className="h-4 w-4" />, text: t.pointCheck },
+    { icon: <Send className="h-4 w-4" />, text: t.pointSubmit },
+  ];
+  // Minh họa "AI vừa đọc được" – dữ liệu mẫu, chỉ để trang trí.
+  const scanFields = [
+    { label: t.scanInvoiceNo, value: "HP-2610-078" },
+    { label: t.scanValue, value: "20.850,00 USD" },
+    { label: t.scanTerms, value: "FCA" },
+    { label: t.scanHs, value: "8482.10.00" },
+  ];
   return (
     <div className="grid min-h-dvh motion-safe:animate-fade-in cq-md:grid-cols-2">
       <div className="relative hidden overflow-hidden bg-primary p-10 text-primary-fg cq-md:block cq-lg:p-16">
@@ -30,13 +37,13 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
             <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary-fg text-primary">
               <BrandMark decorative className="h-7 w-7" />
             </span>
-            KhaiBáo AI
+            {BRAND}
           </div>
-          <AiScanCard title="COMMERCIAL INVOICE" fields={SCAN_FIELDS} className="origin-left cq-lg:scale-125 cq-xl:scale-150" />
+          <AiScanCard title="COMMERCIAL INVOICE" fields={scanFields} className="origin-left cq-lg:scale-125 cq-xl:scale-150" />
           <div className="flex flex-col gap-5">
-            <p className="text-2xl font-semibold leading-snug cq-lg:text-3xl">Từ bộ chứng từ đến tờ khai hải quan trong một luồng.</p>
+            <p className="text-2xl font-semibold leading-snug cq-lg:text-3xl">{t.headline}</p>
             <ul className="stagger-children flex flex-col gap-3 text-sm cq-lg:text-base">
-              {POINTS.map((p) => (
+              {points.map((p) => (
                 <li key={p.text} className="flex items-center gap-3">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-hover" aria-hidden="true">
                     {p.icon}
@@ -46,7 +53,7 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
               ))}
             </ul>
           </div>
-          <p className="text-xs opacity-80">Dữ liệu mỗi doanh nghiệp được tách riêng theo MST.</p>
+          <p className="text-xs opacity-80">{t.isolation}</p>
         </div>
       </div>
       {/* Form giữ bề rộng dễ đọc và canh giữa theo chiều dọc dù màn hình rộng tới đâu. */}
@@ -58,9 +65,12 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-fg">
               <BrandMark small decorative className="h-6 w-6" />
             </span>
-            KhaiBáo AI
+            {BRAND}
           </div>
-          <RobotAvatar state={robot} size={56} />
+          <div className="flex items-center gap-3">
+            <LanguageSelect className="w-36" />
+            <RobotAvatar state={robot} size={56} />
+          </div>
         </div>
         {children}
       </div>

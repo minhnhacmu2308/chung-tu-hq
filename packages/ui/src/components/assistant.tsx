@@ -7,13 +7,15 @@ import { RobotAvatar, type RobotAvatarState } from "./robot-avatar.js";
 const PANEL_MESSAGES = {
   vi: { floating: "Khung nổi", docked: "Ghim bên cạnh", fullscreen: "Toàn màn hình", close: "Đóng trợ lý", history: "Lịch sử hội thoại", modes: "Chế độ hiển thị", assistant: "Trợ lý AI" },
   en: { floating: "Floating", docked: "Docked", fullscreen: "Full screen", close: "Close assistant", history: "Conversation history", modes: "Display mode", assistant: "AI assistant" },
+  zh: { floating: "浮动窗口", docked: "停靠侧边", fullscreen: "全屏", close: "关闭助手", history: "对话历史", modes: "显示模式", assistant: "AI 助手" },
 } satisfies Messages<"floating" | "docked" | "fullscreen" | "close" | "history" | "modes" | "assistant">;
 
-const LAUNCHER_MESSAGES = { vi: { open: "Mở trợ lý AI" }, en: { open: "Open AI assistant" } } satisfies Messages<"open">;
-const CHIPS_MESSAGES = { vi: { suggestions: "Gợi ý câu hỏi" }, en: { suggestions: "Suggested questions" } } satisfies Messages<"suggestions">;
+const LAUNCHER_MESSAGES = { vi: { open: "Mở trợ lý AI" }, en: { open: "Open AI assistant" }, zh: { open: "打开 AI 助手" } } satisfies Messages<"open">;
+const CHIPS_MESSAGES = { vi: { suggestions: "Gợi ý câu hỏi" }, en: { suggestions: "Suggested questions" }, zh: { suggestions: "推荐问题" } } satisfies Messages<"suggestions">;
 const COMPOSER_MESSAGES = {
   vi: { input: "Nội dung tin nhắn", attach: "Đính kèm tệp", mic: "Nhập bằng giọng nói", send: "Gửi", removeFile: "Bỏ tệp", placeholder: "Nhập câu hỏi hoặc kéo tệp vào đây…" },
   en: { input: "Message", attach: "Attach files", mic: "Voice input", send: "Send", removeFile: "Remove file", placeholder: "Ask a question or drop files here…" },
+  zh: { input: "消息内容", attach: "添加附件", mic: "语音输入", send: "发送", removeFile: "移除文件", placeholder: "输入问题或将文件拖到此处…" },
 } satisfies Messages<"input" | "attach" | "mic" | "send" | "removeFile" | "placeholder">;
 
 /** floating = khung nổi góc màn hình; docked = ghim cạnh phải, đẩy nội dung; fullscreen = toàn màn hình. */

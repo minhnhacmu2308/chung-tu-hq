@@ -1,0 +1,40 @@
+import { defineMessages } from "@kb/ui";
+
+export const SETTINGS_PAGE_MESSAGES = defineMessages({
+  vi: {
+    title: "Tài khoản & tích hợp",
+    description: "Thông tin doanh nghiệp, gói dịch vụ, thành viên, kết nối hệ thống bên ngoài và chứng thư số.",
+    tabsLabel: "Mục thiết lập",
+    org: "Doanh nghiệp",
+    plan: "Gói dịch vụ & sử dụng",
+    members: "Thành viên & vai trò",
+    integrations: "Kết nối hệ thống",
+    certificates: "Chứng thư số",
+    declaration: "Khai báo",
+    preferences: "Ngưỡng & giao diện",
+  },
+  en: {
+    title: "Account & integrations",
+    description: "Organization details, plan, members, external system connections and digital certificates.",
+    tabsLabel: "Settings sections",
+    org: "Organization",
+    plan: "Plan & usage",
+    members: "Members & roles",
+    integrations: "Integrations",
+    certificates: "Digital certificates",
+    declaration: "Declaration",
+    preferences: "Thresholds & appearance",
+  },
+  zh: {
+    title: "账户与集成",
+    description: "企业信息、套餐、成员、外部系统连接和数字证书。",
+    tabsLabel: "设置项",
+    org: "企业",
+    plan: "套餐与用量",
+    members: "成员与角色",
+    integrations: "系统连接",
+    certificates: "数字证书",
+    declaration: "申报",
+    preferences: "阈值与外观",
+  },
+});

@@ -14,7 +14,7 @@ export {
   type GridProps, type StackProps, type PageHeaderProps,
 } from "./components/layout.js";
 export {
-  Badge, badgeVariants, StatusBadge, STATUS_META, Alert, Skeleton, EmptyState,
+  Badge, badgeVariants, StatusBadge, STATUS_META, STATUS_LABELS_EN, STATUS_LABELS_ZH, statusLabel, Alert, Skeleton, EmptyState,
   type BadgeProps, type Tone, type Status, type StatusBadgeProps, type AlertProps, type EmptyStateProps,
 } from "./components/feedback.js";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/overlay.js";
@@ -84,3 +84,4 @@ export {
   Loader, LoadingDots, LoadingOverlay, LoadingState, PageLoading, SkeletonCard, SkeletonForm, SkeletonList, SkeletonStats, SkeletonTable, SkeletonText,
   type LoaderProps, type LoadingOverlayProps, type LoadingStateProps, type PageLoadingProps,
 } from "./components/loading.js";
+export { Illustration, ILLUSTRATIONS, type IllustrationName, type IllustrationProps } from "./components/illustration.js";

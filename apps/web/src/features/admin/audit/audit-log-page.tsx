@@ -1,12 +1,14 @@
 "use client";
-import { Alert, DateRangePicker, Field, PageHeader, Stack, type IsoDateRange } from "@kb/ui";
+import { Alert, DateRangePicker, Field, PageHeader, Stack, useMessages, type IsoDateRange } from "@kb/ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { AuditTable } from "./audit-table";
+import { AUDIT_MESSAGES } from "./audit.messages";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 function AuditInner() {
+  const t = useMessages(AUDIT_MESSAGES);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -28,11 +30,11 @@ function AuditInner() {
   return (
     <Stack gap="lg">
       <PageHeader
-        title="Nhật ký quản trị"
-        description="Mọi thao tác của đội vận hành: ai làm, làm gì, với ai, vì sao. Chỉ ghi thêm – không sửa, không xóa được."
+        title={t.title}
+        description={t.description}
       />
-      <Alert tone="info">Dùng ô tìm kiếm và bộ lọc ngay trên bảng để lọc theo người thực hiện, hành động hoặc doanh nghiệp.</Alert>
-      <Field label="Khoảng ngày" className="max-w-md">
+      <Alert tone="info">{t.filterTip}</Alert>
+      <Field label={t.dateRange} className="max-w-md">
         <DateRangePicker value={range} onChange={setRange} />
       </Field>
       <AuditTable from={range.from} to={range.to} />

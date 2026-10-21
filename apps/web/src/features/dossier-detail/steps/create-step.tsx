@@ -1,47 +1,50 @@
 "use client";
 // Bước 1 – xem lại thông tin đã khai khi tạo hồ sơ; ghi chú nội bộ sửa được.
-import { Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Field, Grid, Textarea, toast } from "@kb/ui";
+import { Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Field, Grid, Textarea, toast, useMessages, useUiLocale } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { dossierKeys, updateDossier } from "@/api/dossiers";
-import { TRANSPORT_LABELS } from "@/features/dossiers/dossier-display";
-import { TYPE_GROUPS, typeGroupOf } from "@/features/dossiers/create-dossier-options";
+import { transportLabels } from "@/features/dossiers/dossier-display";
+import { typeGroupOf, typeGroupOptions } from "@/features/dossiers/create-dossier-options";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { StepProps } from "./types";
+import { CREATE_STEP_MESSAGES } from "./create-step.messages";
 import { toastMutationError } from "@/lib/mutation-error";
 
 export function CreateSummaryStep({ dossier, goTo }: StepProps) {
+  const t = useMessages(CREATE_STEP_MESSAGES);
+  const locale = useUiLocale();
   const qc = useQueryClient();
   const [note, setNote] = useState(dossier.note ?? "");
   const save = useMutation({
     mutationFn: () => updateDossier(dossier.id, { note: note.trim() }),
     onSuccess: (d) => {
       qc.setQueryData(dossierKeys.detail(d.id), d);
-      toast({ tone: "success", title: "Đã lưu ghi chú" });
+      toast({ tone: "success", title: t.noteSaved });
     },
-    onError: toastMutationError("Không lưu được ghi chú"),
+    onError: toastMutationError(t.noteSaveFailed),
   });
 
   const rows: [string, string][] = [
-    ["Loại hồ sơ", dossier.direction === "NK" ? "Nhập khẩu" : "Xuất khẩu"],
-    ["Nhóm loại hình", TYPE_GROUPS.find((g) => g.value === typeGroupOf(dossier.typeCode))?.label ?? ""],
-    ["Mã loại hình", dossier.typeCode],
-    ["Đối tác nước ngoài", dossier.partner],
-    ["Cơ quan Hải quan", dossier.customsOffice],
-    ...(dossier.incoterm ? [["Điều kiện giao hàng", dossier.incoterm] as [string, string]] : []),
-    ["Phương thức vận chuyển", TRANSPORT_LABELS[dossier.transportMode]],
-    ["Số vận đơn", dossier.billNo || "Chưa có – lấy từ B/L/AWB khi đọc chứng từ"],
-    ["Bộ Skill AI", dossier.skillSetId === "default" ? "Mặc định của doanh nghiệp" : dossier.skillSetId],
-    ["Hạn khai", formatDate(dossier.dueDate)],
-    ["Ngày tạo", formatDateTime(dossier.createdAt)],
+    [t.dossierType, dossier.direction === "NK" ? t.import : t.export],
+    [t.typeGroup, typeGroupOptions(locale).find((g) => g.value === typeGroupOf(dossier.typeCode))?.label ?? ""],
+    [t.typeCode, dossier.typeCode],
+    [t.partner, dossier.partner],
+    [t.customsOffice, dossier.customsOffice],
+    ...(dossier.incoterm ? [[t.incoterm, dossier.incoterm] as [string, string]] : []),
+    [t.transportMode, transportLabels(locale)[dossier.transportMode]],
+    [t.billNo, dossier.billNo || t.billNoMissing],
+    [t.skillSet, dossier.skillSetId === "default" ? t.skillSetDefault : dossier.skillSetId],
+    [t.dueDate, formatDate(dossier.dueDate)],
+    [t.createdAt, formatDateTime(dossier.createdAt)],
   ];
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Thông tin hồ sơ</CardTitle>
-        <CardDescription>Khai khi tạo hồ sơ. Thông tin lô hàng chi tiết được lấy từ chứng từ ở các bước sau.</CardDescription>
+        <CardTitle>{t.title}</CardTitle>
+        <CardDescription>{t.description}</CardDescription>
       </CardHeader>
       <CardContent>
         <Grid cols={{ base: 1, md: 2 }}>
@@ -53,17 +56,17 @@ export function CreateSummaryStep({ dossier, goTo }: StepProps) {
               </div>
             ))}
           </dl>
-          <Field label="Ghi chú nội bộ" hint="Chỉ người trong doanh nghiệp thấy" className="cq-md:col-span-2">
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Ví dụ: số PO, cảng hàng về, người liên hệ" />
+          <Field label={t.noteLabel} hint={t.noteHint} className="cq-md:col-span-2">
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder={t.notePlaceholder} />
           </Field>
         </Grid>
       </CardContent>
       <CardFooter>
         <Button variant="secondary" loading={save.isPending} disabled={note.trim() === (dossier.note ?? "")} onClick={() => save.mutate()}>
-          Lưu ghi chú
+          {t.saveNote}
         </Button>
         <Button rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => goTo("upload")}>
-          Upload chứng từ
+          {t.toUpload}
         </Button>
       </CardFooter>
     </Card>

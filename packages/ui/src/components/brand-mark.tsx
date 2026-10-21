@@ -5,6 +5,7 @@ import { useMessages, type Messages } from "../lib/i18n.js";
 const MESSAGES = {
   vi: { name: "KhaiBáo AI" },
   en: { name: "KhaiBáo AI" },
+  zh: { name: "KhaiBáo AI" },
 } satisfies Messages<"name">;
 
 // Hình gốc: docs/brand/khaibao-symbol.svg (lưới 256). Sửa logo → sửa file gốc rồi chép path sang đây.

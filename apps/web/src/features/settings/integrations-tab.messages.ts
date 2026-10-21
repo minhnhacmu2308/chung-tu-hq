@@ -1,0 +1,43 @@
+import { defineMessages } from "@kb/ui";
+
+export const INTEGRATIONS_TAB_MESSAGES = defineMessages({
+  vi: {
+    connected: "Đã kết nối",
+    error: "Lỗi kết nối",
+    notConfigured: "Chưa cấu hình",
+    testOk: "{name}: kết nối tốt",
+    testFail: "{name}: lỗi",
+    notEnabled: "Chưa bật cho doanh nghiệp. Liên hệ quản trị KhaiBáo AI để kích hoạt.",
+    checked: "Kiểm tra {when}",
+    notChecked: "Chưa kiểm tra",
+    test: "Kiểm tra kết nối",
+    keysTitle: "Khóa API được giữ ở máy chủ",
+    keysBody: "Khóa của hscodepro, Customs Hub, dịch vụ AI và mật khẩu VNACCS lưu mã hóa phía máy chủ, không bao giờ gửi xuống trình duyệt hay hiện trên màn hình này.",
+  },
+  en: {
+    connected: "Connected",
+    error: "Connection error",
+    notConfigured: "Not configured",
+    testOk: "{name}: connection OK",
+    testFail: "{name}: error",
+    notEnabled: "Not enabled for your organization. Contact KhaiBáo AI administrators to activate it.",
+    checked: "Checked {when}",
+    notChecked: "Not checked yet",
+    test: "Test connection",
+    keysTitle: "API keys are kept on the server",
+    keysBody: "Keys for hscodepro, Customs Hub, the AI service and the VNACCS password are stored encrypted on the server and are never sent to the browser or shown on this screen.",
+  },
+  zh: {
+    connected: "已连接",
+    error: "连接错误",
+    notConfigured: "未配置",
+    testOk: "{name}：连接正常",
+    testFail: "{name}：错误",
+    notEnabled: "尚未为企业启用。请联系 KhaiBáo AI 管理员开通。",
+    checked: "检查于 {when}",
+    notChecked: "尚未检查",
+    test: "测试连接",
+    keysTitle: "API 密钥保存在服务器",
+    keysBody: "hscodepro、Customs Hub、AI 服务的密钥及 VNACCS 密码均加密保存在服务器端，绝不会发送到浏览器或显示在此页面。",
+  },
+});

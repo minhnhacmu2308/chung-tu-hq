@@ -1,13 +1,14 @@
 "use client";
 // Tab "Hải quan trả về" và "Theo dõi & nghiệp vụ" của form đầy đủ, chạy trên dữ liệu truyền Hải quan thật của hồ sơ (bước Review).
 // Chỉ đọc: thực hiện nghiệp vụ (khai tạm/chính thức, gọi về sửa, sửa đổi, HYS…) ở bước Khai báo Hải quan – tab này dẫn sang đó.
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Stack } from "@kb/ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { layoutFor, type CustomsInfo, type LineItem, type SubmissionView } from "@kb/contracts";
 import { ArrowRight, Send } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
-import { MessageLog, PIPE } from "../dossier-detail/steps/submit-step";
+import { MessageLog, pipeStatus } from "../dossier-detail/steps/submit-step";
 import { customsItemValues, customsValues } from "./customs-adapter";
 import { CustomsTab } from "./customs-tab";
+import { FORM_MESSAGES } from "./form.messages";
 import { itemValues } from "./dossier-adapter";
 import { TaxCard } from "./operations-tab";
 
@@ -25,6 +26,8 @@ export function DossierCustomsTab({ kind, submission, items }: { kind: Kind; sub
 /** Theo dõi & nghiệp vụ – thông điệp gửi/nhận, thuế chính thức, trạng thái từng nghiệp vụ; thao tác ở bước Khai báo Hải quan. */
 /** `onGoSubmit` không truyền (tờ khai còn nháp) → không có nút sang bước Khai báo. */
 export function DossierOperationsTab({ kind, submission, onGoSubmit }: { kind: Kind; submission: SubmissionView | undefined; onGoSubmit?: (() => void) | undefined }) {
+  const t = useMessages(FORM_MESSAGES);
+  const pipe = pipeStatus(useUiLocale());
   const values = customsValues(kind, submission?.customsInfo ?? null, submission?.result ?? null);
   const rows = (submission?.pipeline ?? []).filter((r) => r.status !== "NOT_SENT" || r.enabled);
   return (
@@ -33,8 +36,8 @@ export function DossierOperationsTab({ kind, submission, onGoSubmit }: { kind: K
       <TaxCard kind={kind} values={values} edi={false} />
       <Card>
         <CardHeader>
-          <CardTitle as="h2">Nghiệp vụ Hải quan</CardTitle>
-          <CardDescription>Khai tạm, khai chính thức, gọi về sửa, sửa đổi bổ sung, số hóa chứng từ… thực hiện ở bước Khai báo Hải quan.</CardDescription>
+          <CardTitle as="h2">{t.opsTitle}</CardTitle>
+          <CardDescription>{t.opsDesc}</CardDescription>
         </CardHeader>
         <CardContent>
           <Stack gap="md">
@@ -47,18 +50,18 @@ export function DossierOperationsTab({ kind, submission, onGoSubmit }: { kind: K
                       {r.label}
                       {r.summary && <span className="block text-xs text-fg-muted">{r.summary}</span>}
                     </span>
-                    <Badge tone={r.enabled && r.status === "NOT_SENT" ? "info" : PIPE[r.status].tone}>{r.enabled && r.status === "NOT_SENT" ? "Sẵn sàng" : PIPE[r.status].text}</Badge>
+                    <Badge tone={r.enabled && r.status === "NOT_SENT" ? "info" : pipe[r.status].tone}>{r.enabled && r.status === "NOT_SENT" ? t.ready : pipe[r.status].text}</Badge>
                     {r.at && <span className="text-xs tabular-nums text-fg-subtle">{formatDateTime(r.at)}</span>}
                   </li>
                 ))}
               </ul>
             ) : (
-              <EmptyState icon={<Send />} title="Chưa thực hiện nghiệp vụ nào" description="Tờ khai cần được phê duyệt trước khi khai báo Hải quan." />
+              <EmptyState icon={<Send />} title={t.noOps} description={t.noOpsDesc} />
             )}
             {onGoSubmit && (
               <div>
                 <Button variant="secondary" rightIcon={<ArrowRight className="h-4 w-4" />} onClick={onGoSubmit}>
-                  Sang bước Khai báo Hải quan
+                  {t.goSubmit}
                 </Button>
               </div>
             )}

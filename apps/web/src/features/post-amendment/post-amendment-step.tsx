@@ -2,7 +2,7 @@
 // Bước 7 "Sửa sau thông quan": mọi việc của bản khai bổ sung AMA ở một chỗ – dòng tóm tắt tờ khai gốc + hạn 60 ngày,
 // rồi 4 bước nhỏ ① Chọn dòng · ② Sửa nội dung · ③ Lý do & phê duyệt · ④ Khai Hải quan (?sub=…, mặc định theo trạng thái bản khai).
 // Spec: docs/superpowers/specs/2026-10-20-ama-sau-thong-quan-redesign-design.md
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, Stack, StatusBadge, Stepper, toast } from "@kb/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, Stack, StatusBadge, Stepper, fill, toast, useMessages, useUiLocale } from "@kb/ui";
 import { canEditDeclaration } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FilePlus2, FileText, Undo2 } from "lucide-react";
@@ -17,7 +17,8 @@ import { formatDate, formatNumber } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { StepError, StepLoading } from "../dossier-detail/steps/declaration-parts";
 import type { StepProps } from "../dossier-detail/steps/types";
-import { AMA_SUB_STEPS, amaDeadline, maxSubStep, resolveSubStep, subStepEditable, type AmaSubStep } from "./ama-wizard";
+import { AMA_MESSAGES } from "./ama.messages";
+import { amaSubSteps, amaDeadline, maxSubStep, resolveSubStep, subStepEditable, type AmaSubStep } from "./ama-wizard";
 import { AMA_STATUS, type AmaStepCtx } from "./ama-context";
 import { DeclareAma } from "./declare-ama";
 import { EditLines } from "./line-compare";
@@ -31,6 +32,8 @@ export function PostAmendmentStep({ dossier }: StepProps) {
   const pathname = usePathname();
   const params = useSearchParams();
   const qc = useQueryClient();
+  const t = useMessages(AMA_MESSAGES);
+  const locale = useUiLocale();
   const q = useQuery({ queryKey: postAmendmentKeys.view(dossier.id), queryFn: () => getPostAmendmentView(dossier.id) });
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
@@ -62,11 +65,11 @@ export function PostAmendmentStep({ dossier }: StepProps) {
   const start = useMutation({
     mutationFn: () => startPostAmendment(dossier.id),
     onSuccess: () => {
-      toast({ tone: "success", title: "Đã lập bản khai bổ sung", description: "Chọn dòng hàng cần sửa." });
+      toast({ tone: "success", title: t.createdToast, description: t.createdDesc });
       refresh();
       goSub("pick");
     },
-    onError: toastMutationError("Không lập được bản khai bổ sung"),
+    onError: toastMutationError(t.createFailed),
   });
 
   if (q.isLoading || subQ.isLoading) return <StepLoading />;
@@ -83,9 +86,9 @@ export function PostAmendmentStep({ dossier }: StepProps) {
         <CardContent className="pt-5">
           <EmptyState
             icon={<FilePlus2 />}
-            title="Cần sửa sau thông quan?"
-            description="Lập bản khai bổ sung riêng, điền sẵn từ tờ khai gốc và số Hải quan trả về. Tờ khai gốc giữ nguyên. Hạn khai bổ sung: 60 ngày kể từ ngày thông quan (TT121 Điều 20)."
-            {...(canStart ? { action: <Button loading={start.isPending} onClick={() => start.mutate()}>Lập bản khai bổ sung</Button> } : {})}
+            title={t.emptyTitle}
+            description={t.emptyDesc}
+            {...(canStart ? { action: <Button loading={start.isPending} onClick={() => start.mutate()}>{t.createButton}</Button> } : {})}
           />
         </CardContent>
       </Card>
@@ -101,27 +104,27 @@ export function PostAmendmentStep({ dossier }: StepProps) {
   };
   const h = a.header;
   const deadline = amaDeadline(h["TK_IPD"], today());
-  const original = [h["TK_ICN"] && `TK ${h["TK_ICN"]}`, h["TK_ICB"], h["TK_CHS"], h["TK_IPD"] && `thông quan ${formatDate(h["TK_IPD"])}`].filter(Boolean).join(" · ");
+  const original = [h["TK_ICN"] && fill(t.origDecl, { no: h["TK_ICN"] }), h["TK_ICB"], h["TK_CHS"], h["TK_IPD"] && fill(t.clearedOn, { d: formatDate(h["TK_IPD"]) })].filter(Boolean).join(" · ");
 
   return (
     <Stack gap="lg">
       <Card>
         <CardHeader className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <CardTitle>Bản khai bổ sung lần {formatNumber(a.seq)}</CardTitle>
+            <CardTitle>{fill(t.seqTitle, { n: formatNumber(a.seq) })}</CardTitle>
             <StatusBadge status={AMA_STATUS[a.status]} />
             {deadline && a.status !== "REGISTERED" && (
               deadline.overdue ? (
-                <Badge tone="warning">Quá hạn 60 ngày ({formatDate(deadline.due)})</Badge>
+                <Badge tone="warning">{fill(t.overdue, { d: formatDate(deadline.due) })}</Badge>
               ) : (
-                <Badge tone="neutral">Hạn {formatDate(deadline.due)} · còn {formatNumber(deadline.daysLeft)} ngày</Badge>
+                <Badge tone="neutral">{fill(t.due, { d: formatDate(deadline.due), n: formatNumber(deadline.daysLeft) })}</Badge>
               )
             )}
           </div>
-          {original && <p className="flex items-center gap-2 text-sm text-fg-muted"><FileText aria-hidden="true" className="h-4 w-4 shrink-0" />Tờ khai gốc: {original}</p>}
+          {original && <p className="flex items-center gap-2 text-sm text-fg-muted"><FileText aria-hidden="true" className="h-4 w-4 shrink-0" />{fill(t.original, { s: original })}</p>}
           <Stepper
-            label="Các bước sửa sau thông quan"
-            steps={AMA_SUB_STEPS}
+            label={t.stepperLabel}
+            steps={amaSubSteps(locale)}
             currentId={maxSubStep(a)}
             viewingId={sub}
             onStepClick={(s) => (sub === "edit" && dirty > 0 ? setLeaveTo(s as AmaSubStep) : goSub(s as AmaSubStep))}
@@ -139,7 +142,7 @@ export function PostAmendmentStep({ dossier }: StepProps) {
       )}
 
       <Dialog open={leaveTo !== null} onOpenChange={(o) => !o && setLeaveTo(null)}>
-        <DialogContent title="Bỏ thay đổi chưa lưu?" icon={<Undo2 className="h-4 w-4" />} description={`Còn ${formatNumber(dirty)} ô đã sửa ở bước Sửa nội dung chưa lưu.`} size="sm">
+        <DialogContent title={t.leaveTitle} icon={<Undo2 className="h-4 w-4" />} description={fill(t.leaveDesc, { n: formatNumber(dirty) })} size="sm">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -148,13 +151,13 @@ export function PostAmendmentStep({ dossier }: StepProps) {
               setLeaveTo(null);
             }}
           >
-            <p className="text-sm text-fg-muted">Chuyển bước sẽ bỏ các thay đổi này. Muốn giữ thì ở lại và bấm Lưu.</p>
+            <p className="text-sm text-fg-muted">{t.leaveBody}</p>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setLeaveTo(null)}>
-                Ở lại
+                {t.stay}
               </Button>
               <Button type="submit" variant="danger">
-                Bỏ thay đổi
+                {t.discard}
               </Button>
             </DialogFooter>
           </form>

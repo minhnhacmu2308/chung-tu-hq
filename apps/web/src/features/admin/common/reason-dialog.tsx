@@ -1,7 +1,8 @@
 "use client";
 import { AdminReasonSchema } from "@kb/contracts";
-import { Button, Dialog, DialogContent, DialogFooter, Field, Stack, Textarea } from "@kb/ui";
+import { Button, Dialog, DialogContent, DialogFooter, Field, Stack, Textarea, useMessages } from "@kb/ui";
 import { useEffect, useState, type ReactNode } from "react";
+import { REASON_DIALOG_MESSAGES } from "./reason-dialog.messages";
 
 export type ReasonDialogProps = {
   open: boolean;
@@ -29,6 +30,7 @@ export type ReasonDialogProps = {
 export function ReasonDialog({
   open, onOpenChange, title, description, icon, confirmLabel, tone = "primary", pending, children, canSubmit = true, reasonHint, onConfirm,
 }: ReasonDialogProps) {
+  const t = useMessages(REASON_DIALOG_MESSAGES);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   // Mỗi lần mở là một thao tác mới: không giữ lý do của lần trước.
@@ -42,7 +44,9 @@ export function ReasonDialog({
   const submit = () => {
     const parsed = AdminReasonSchema.safeParse(reason);
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Nhập lý do");
+      // Thông báo của schema (@kb/contracts) chỉ có tiếng Việt → hiển thị theo mã lỗi.
+      const code = parsed.error.issues[0]?.code;
+      setError(code === "too_small" ? t.reasonMin : code === "too_big" ? t.reasonMax : t.reasonRequired);
       return;
     }
     setError(null);
@@ -61,12 +65,12 @@ export function ReasonDialog({
         >
           <Stack gap="md">
             {children}
-            <Field label="Lý do" required hint={reasonHint ?? "Ghi vào nhật ký quản trị – người khác đọc phải hiểu vì sao làm việc này."} {...(error ? { error } : {})}>
+            <Field label={t.reason} required hint={reasonHint ?? t.hint} {...(error ? { error } : {})}>
               <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500} />
             </Field>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Hủy</Button>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" variant={tone === "danger" ? "danger" : "primary"} loading={pending} disabled={!canSubmit}>{confirmLabel}</Button>
           </DialogFooter>
         </form>

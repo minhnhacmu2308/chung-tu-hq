@@ -1,8 +1,8 @@
 "use client";
 // Bước ③ Lý do & phê duyệt: hiện sẵn Mã lý do (bắt buộc) + Ghi chú sau + tóm tắt thay đổi; các ô còn lại của đầu bản khai trong "Thông tin khác"
 // (đóng sẵn, tự mở khi thiếu ô bắt buộc). Ô khóa theo tờ khai gốc không hiện ở đây – đã có ở dòng tóm tắt đầu bước 7.
-import { Alert, Button, Card, CardContent, Dialog, DialogContent, DialogFooter, Disclosure, Field, Select, Stack, toast } from "@kb/ui";
-import { processingContractNote } from "@kb/contracts";
+import { Alert, Button, Card, CardContent, Dialog, DialogContent, DialogFooter, Disclosure, Field, fill, Select, Stack, toast, useMessages, useUiLocale } from "@kb/ui";
+import { processingContractNote, type LayoutBlock } from "@kb/contracts";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Save, ShieldCheck, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -15,13 +15,16 @@ import { conditionContext, type FormValues } from "../declaration-form/form-stat
 import { ViewPrefsProvider } from "../declaration-form/view-prefs";
 import { StickyActionBar } from "../dossier-detail/steps/declaration-parts";
 import type { AmaStepCtx } from "./ama-context";
+import { AMA_MESSAGES } from "./ama.messages";
 import { amaChangeSummary, approveBlockers, missingOther, reasonLayout } from "./ama-wizard";
 
-const LAYOUT = reasonLayout();
 const signed = (v: string) => `${v.startsWith("-") ? "−" : "+"}${formatMoney(v.replace("-", ""), "VND", 0)}`;
 
 export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
   const { a, editable } = ctx;
+  const t = useMessages(AMA_MESSAGES);
+  const locale = useUiLocale();
+  const LAYOUT = useMemo(() => reasonLayout(locale), [locale]);
   const saved = useMemo<FormValues>(() => a.header, [a]);
   const [draft, setDraft] = useState<FormValues>(saved);
   const savedKey = JSON.stringify(saved);
@@ -32,7 +35,7 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
 
   const pending = editable ? Object.keys(draft).filter((k) => (draft[k] ?? "") !== (saved[k] ?? "")) : [];
   const summary = amaChangeSummary(a);
-  const blockers = approveBlockers({ ...a, header: draft }, { pendingEdits: pending.length, fourEyes: ctx.fourEyes });
+  const blockers = approveBlockers({ ...a, header: draft }, { pendingEdits: pending.length, fourEyes: ctx.fourEyes }, locale);
   const missing = missingOther(draft);
   const lock: FieldLockLookup = () => (editable ? null : { basis: "SOFTWARE", reason: "" });
   const onChange = editable ? (k: string, v: string) => setDraft((d) => ({ ...d, [k]: v })) : undefined;
@@ -41,23 +44,23 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
     mutationFn: async (keys: string[]) => {
       for (const key of keys) await updatePostAmendmentField(ctx.dossierId, { key, value: draft[key] ?? "" });
     },
-    onSuccess: (_d, keys) => toast({ tone: "success", title: `Đã lưu ${formatNumber(keys.length)} chỉ tiêu` }),
-    onError: toastMutationError("Không lưu được bản khai bổ sung"),
+    onSuccess: (_d, keys) => toast({ tone: "success", title: fill(t.savedFields, { n: formatNumber(keys.length) }) }),
+    onError: toastMutationError(t.saveAmaFailed),
     onSettled: ctx.refresh,
   });
   const approve = useMutation({
     mutationFn: () => approvePostAmendment(ctx.dossierId),
     onSuccess: () => {
       setApproveOpen(false);
-      toast({ tone: "success", title: "Đã phê duyệt bản khai bổ sung", description: "Bước tiếp theo: ký số và khai tạm AMA." });
+      toast({ tone: "success", title: t.approvedToast, description: t.approvedToastDesc });
       ctx.refresh();
       ctx.goSub("declare");
     },
-    onError: toastMutationError("Không phê duyệt được bản khai bổ sung"),
+    onError: toastMutationError(t.approveFailed),
   });
 
   const approved = a.status === "APPROVED";
-  const block = (b: (typeof LAYOUT.other)[number] | typeof LAYOUT.main) => (
+  const block = (b: LayoutBlock) => (
     <BlockView key={b.id} kind={ctx.kind} block={b} values={draft} onChange={onChange} ctx={conditionContext(ctx.kind, draft)} showInapplicable={false} showActions={false} />
   );
 
@@ -66,28 +69,28 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
       <AmendLockProvider kind={ctx.kind} values={draft} active={false} override={lock}>
         <Stack gap="md">
           {approved && (
-            <Alert tone="success" title="Đã phê duyệt">
-              {a.approvedBy ? `${a.approvedBy} phê duyệt${a.approvedAt ? ` lúc ${formatDateTime(a.approvedAt)}` : ""}. ` : ""}Sửa tiếp thì phải phê duyệt lại.
+            <Alert tone="success" title={t.approvedTitle}>
+              {a.approvedBy ? (a.approvedAt ? fill(t.approvedByAt, { who: a.approvedBy, at: formatDateTime(a.approvedAt) }) : fill(t.approvedBy, { who: a.approvedBy })) : ""}{t.reapprove}
             </Alert>
           )}
           <Card>
             <CardContent className="@container flex flex-col gap-3 pt-5">
               {block(LAYOUT.main)}
               <p className="text-sm text-fg-muted">
-                Tóm tắt: {formatNumber(summary.lines)} dòng · {formatNumber(summary.changed)} chỉ tiêu đổi · Thuế <span className="font-medium tabular-nums text-fg">{signed(summary.taxDelta)}</span>
+                {fill(t.summary, { l: formatNumber(summary.lines), c: formatNumber(summary.changed) })}<span className="font-medium tabular-nums text-fg">{signed(summary.taxDelta)}</span>
               </p>
             </CardContent>
           </Card>
 
-          <Disclosure title="Thông tin khác (không bắt buộc)" defaultOpen={missing.length > 0} meta={missing.length > 0 ? <span className="text-warning-subtle-fg">thiếu {formatNumber(missing.length)} ô</span> : "nộp thuế, ngân hàng, bảo lãnh, tỷ giá, người khai"}>
+          <Disclosure title={t.otherInfo} defaultOpen={missing.length > 0} meta={missing.length > 0 ? <span className="text-warning-subtle-fg">{fill(t.missingCellsN, { n: formatNumber(missing.length) })}</span> : t.otherMeta}>
             <div className="@container flex min-w-0 flex-col gap-3">
-              {missing.length > 0 && <Alert tone="warning" title="Còn ô bắt buộc trống">{missing.map((f) => f.label).join(", ")}.</Alert>}
+              {missing.length > 0 && <Alert tone="warning" title={t.requiredEmpty}>{missing.map((f) => f.label).join(", ")}.</Alert>}
               {LAYOUT.other.map(block)}
               {editable && ctx.view.contracts.length > 0 && (
-                <Field label="Hợp đồng gia công" hint="Chọn để chèn số và ngày hợp đồng vào ghi chú sau khai bổ sung">
+                <Field label={t.contractLabel} hint={t.contractHint}>
                   <Select
                     className="cq-sm:w-72"
-                    placeholder="Chọn hợp đồng…"
+                    placeholder={t.contractPh}
                     options={ctx.view.contracts.map((c) => ({ value: c.no, label: c.date ? `${c.no} · ${formatDate(c.date)}` : c.no }))}
                     value={draft["APP_HD_GC"] ?? ""}
                     onChange={(e) => {
@@ -110,34 +113,34 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
       <StickyActionBar>
         <div className="min-w-0 flex-1 basis-48">
           {pending.length > 0 ? (
-            <p className="text-sm font-medium text-warning-subtle-fg">{formatNumber(pending.length)} chỉ tiêu chưa lưu</p>
+            <p className="text-sm font-medium text-warning-subtle-fg">{fill(t.pendingFields, { n: formatNumber(pending.length) })}</p>
           ) : editable && blockers.length > 0 ? (
             <p className="text-sm text-fg-muted">{blockers[0]}</p>
           ) : (
-            <p className="text-sm text-fg-muted">{approved ? "Bản khai đã phê duyệt" : "Sẵn sàng phê duyệt"}</p>
+            <p className="text-sm text-fg-muted">{approved ? t.amaApproved : t.readyApprove}</p>
           )}
         </div>
         {pending.length > 0 ? (
           <>
             <Button variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => setDraft(saved)}>
-              Hoàn tác
+              {t.undo}
             </Button>
             <Button leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={() => save.mutate(pending)}>
-              Lưu {formatNumber(pending.length)} thay đổi
+              {fill(t.saveN, { n: formatNumber(pending.length) })}
             </Button>
           </>
         ) : (
           <>
             <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub("edit")}>
-              Quay lại
+              {t.back}
             </Button>
             {approved || !editable ? (
               <Button rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => ctx.goSub("declare")} disabled={!approved && a.status === "DRAFT"}>
-                Tiếp: khai Hải quan
+                {t.nextDeclare}
               </Button>
             ) : (
               <Button leftIcon={<ShieldCheck className="h-4 w-4" />} disabled={blockers.length > 0} onClick={() => setApproveOpen(true)}>
-                Phê duyệt
+                {t.approve}
               </Button>
             )}
           </>
@@ -145,20 +148,20 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
       </StickyActionBar>
 
       <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
-        <DialogContent title="Phê duyệt bản khai bổ sung" icon={<ShieldCheck className="h-4 w-4" />} description={`Lần ${a.seq} · ${formatNumber(a.lines.length)} dòng hàng`} size="sm">
+        <DialogContent title={t.approveTitle} icon={<ShieldCheck className="h-4 w-4" />} description={fill(t.approveDesc, { seq: a.seq, n: formatNumber(a.lines.length) })} size="sm">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               approve.mutate();
             }}
           >
-            <p className="text-sm text-fg-muted">Sau khi phê duyệt, bản khai được khóa để khai tạm AMA. Sửa tiếp phải phê duyệt lại. Hạn khai bổ sung: 60 ngày kể từ ngày thông quan (TT121 Điều 20).</p>
+            <p className="text-sm text-fg-muted">{t.approveBody}</p>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setApproveOpen(false)}>
-                Hủy
+                {t.cancel}
               </Button>
               <Button type="submit" loading={approve.isPending}>
-                Phê duyệt
+                {t.approve}
               </Button>
             </DialogFooter>
           </form>

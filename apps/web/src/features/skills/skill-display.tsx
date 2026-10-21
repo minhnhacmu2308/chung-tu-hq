@@ -1,23 +1,12 @@
 "use client";
 // Hiển thị dùng chung cho màn Skill AI.
-import { Badge, Tooltip } from "@kb/ui";
+import { Badge, fill, Tooltip, useMessages } from "@kb/ui";
 import { MIN_SAMPLES_FOR_ACCURACY } from "@/api/skills";
 import { formatNumber } from "@/lib/format";
-import type { Skill, SkillField, SkillKind } from "@/mocks/types";
+import type { Skill } from "@/mocks/types";
+import { DISPLAY_MESSAGES } from "./skills.messages";
 
-export const SKILL_KIND_LABELS: Record<SkillKind, string> = {
-  DOCUMENT: "Theo loại chứng từ",
-  SUPPLIER: "Theo nhà cung cấp",
-};
-
-export const FIELD_TYPE_LABELS: Record<SkillField["type"], string> = {
-  string: "Văn bản",
-  decimal: "Số thập phân",
-  date: "Ngày",
-  code: "Mã / số hiệu",
-  party: "Thương nhân",
-  items: "Bảng dòng hàng",
-};
+export { FIELD_TYPE_LABELS, SKILL_KIND_LABELS } from "./skills.messages";
 
 export const formatPercent = (v: number) => `${formatNumber(v * 100, 1)}%`;
 
@@ -27,11 +16,12 @@ export function accuracyTone(v: number) {
 }
 
 export function AccuracyBadge({ skill }: { skill: Pick<Skill, "accuracy" | "labeledSamples" | "kind"> }) {
+  const t = useMessages(DISPLAY_MESSAGES);
   if (skill.accuracy === undefined || skill.labeledSamples < MIN_SAMPLES_FOR_ACCURACY) {
     return (
-      <Tooltip content={`Cần ít nhất ${MIN_SAMPLES_FOR_ACCURACY} mẫu đã gắn nhãn để đo độ chính xác`}>
+      <Tooltip content={fill(t.needSamples, { n: MIN_SAMPLES_FOR_ACCURACY })}>
         <span tabIndex={0} className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-          <Badge tone="neutral" variant="outline">Chưa đủ mẫu</Badge>
+          <Badge tone="neutral" variant="outline">{t.notEnough}</Badge>
         </span>
       </Tooltip>
     );

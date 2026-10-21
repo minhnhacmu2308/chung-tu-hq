@@ -1,18 +1,17 @@
 // Câu giải thích nguồn gốc chỉ tiêu cho người duyệt (chỉ hiện khi khác quy tắc mặc định của hệ thống).
 import type { FieldProvenance } from "@kb/contracts";
+import { fill, pickMessages, type UiLocale } from "@kb/ui";
+import { PROVENANCE_MESSAGES } from "./provenance.messages";
 
-const SOURCE_LABELS: Record<string, string> = {
-  "an.warehouse": "Kho / CY trên Arrival Notice",
-  "transport.houseBillNo": "Vận đơn nhà (HB/L, HAWB)",
-  "transport.masterBillNo": "Vận đơn chủ (MB/L, MAWB)",
-  "transport.arrivalDate": "Ngày đến (ETA) trên Arrival Notice",
-  "transport.departureDate": "Ngày đi (ngày B/L, ngày bay)",
-};
+const SOURCE_IDS = new Set(["an.warehouse", "transport.houseBillNo", "transport.masterBillNo", "transport.arrivalDate", "transport.departureDate"]);
+type SourceId = "an.warehouse" | "transport.houseBillNo" | "transport.masterBillNo" | "transport.arrivalDate" | "transport.departureDate";
 
-export function provenanceLabel(p: FieldProvenance | undefined): string | null {
+export function provenanceLabel(p: FieldProvenance | undefined, locale: UiLocale): string | null {
   if (!p || p.via === "default") return null;
-  if (p.via === "profile") return "Theo Mặc định khai báo của doanh nghiệp";
-  if (p.via === "fixed") return "Giá trị cố định doanh nghiệp đặt";
+  const t = pickMessages(PROVENANCE_MESSAGES, locale);
+  if (p.via === "profile") return t.profile;
+  if (p.via === "fixed") return t.fixed;
   const id = p.sourceId ?? "";
-  return `Nguồn doanh nghiệp chọn: ${id.startsWith("profile.") ? "Mặc định khai báo" : (SOURCE_LABELS[id] ?? id)}`;
+  const source = id.startsWith("profile.") ? t.profileSource : SOURCE_IDS.has(id) ? t[id as SourceId] : id;
+  return fill(t.chosen, { source });
 }

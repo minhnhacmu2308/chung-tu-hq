@@ -10,6 +10,7 @@ import { Button } from "./button.js";
 const MESSAGES = {
   vi: { prev: "Trang trước", next: "Trang sau", page: "Trang {n}/{total}", zoomIn: "Phóng to", zoomOut: "Thu nhỏ", fit: "Vừa khung", zoom: "Mức phóng {n}%" },
   en: { prev: "Previous page", next: "Next page", page: "Page {n} of {total}", zoomIn: "Zoom in", zoomOut: "Zoom out", fit: "Fit width", zoom: "Zoom {n}%" },
+  zh: { prev: "上一页", next: "下一页", page: "第 {n}/{total} 页", zoomIn: "放大", zoomOut: "缩小", fit: "适合宽度", zoom: "缩放 {n}%" },
 } satisfies Messages<"prev" | "next" | "page" | "zoomIn" | "zoomOut" | "fit" | "zoom">;
 
 /**

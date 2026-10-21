@@ -1,6 +1,6 @@
 "use client";
 import type { AdminUser } from "@kb/contracts";
-import { Avatar, Badge, createDataTableColumnHelper, DataTable, Dialog, DialogContent, RowActions, StatusBadge, type DataTableColumnVisibility } from "@kb/ui";
+import { Avatar, Badge, createDataTableColumnHelper, DataTable, Dialog, DialogContent, RowActions, StatusBadge, useMessages, useUiLocale, type DataTableColumnVisibility } from "@kb/ui";
 import { UserRound } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -9,14 +9,17 @@ import { ROLE_LABELS } from "@/mocks/types";
 import { ACCOUNT_STATUS, statusLabel } from "../common/admin-display";
 import { useAdminSession } from "../shell/use-admin-session";
 import { availableUserActions, type UserAction } from "./user-actions";
-import { UserActionDialog, UserPanel, USER_ACTION_META } from "./user-panel";
+import { useUserActionMeta, UserActionDialog, UserPanel } from "./user-panel";
+import { USER_TABLE_MESSAGES } from "./users.messages";
 
 type Row = AdminUser & { roleLabel: string; statusText: string; verifiedText: string };
 
 const col = createDataTableColumnHelper<Row>();
-const COLUMNS = col.columns([
+type TableMessages = (typeof USER_TABLE_MESSAGES)["vi"];
+
+const makeColumns = (t: TableMessages) => col.columns([
   col.accessor("name", {
-    header: "Người dùng",
+    header: t.colUser,
     size: 280,
     minSize: 220,
     meta: { hideable: false },
@@ -31,9 +34,9 @@ const COLUMNS = col.columns([
     ),
   }),
   // Cột ẩn chỉ để ô tìm kiếm khớp được email.
-  col.accessor("email", { header: "Email" }),
+  col.accessor("email", { header: t.colEmail }),
   col.accessor("orgName", {
-    header: "Doanh nghiệp",
+    header: t.colOrg,
     size: 260,
     meta: { wrap: true, filter: "select" },
     cell: (c) => (
@@ -41,30 +44,30 @@ const COLUMNS = col.columns([
     ),
   }),
   col.accessor("roleLabel", {
-    header: "Vai trò",
+    header: t.colRole,
     size: 170,
     meta: { filter: "select" },
     cell: (c) => (c.row.original.status === "PENDING_JOIN" ? <span className="text-fg-subtle">—</span> : c.getValue()),
   }),
-  col.accessor("statusText", { header: "Trạng thái", size: 180, meta: { filter: "select" }, cell: (c) => <StatusBadge status={ACCOUNT_STATUS[c.row.original.status]} /> }),
+  col.accessor("statusText", { header: t.colStatus, size: 180, meta: { filter: "select" }, cell: (c) => <StatusBadge status={ACCOUNT_STATUS[c.row.original.status]} /> }),
   col.accessor("verifiedText", {
-    header: "Email",
+    header: t.colEmail,
     size: 150,
-    meta: { filter: "select", label: "Xác thực email" },
+    meta: { filter: "select", label: t.colVerifiedLabel },
     cell: (c) => <Badge tone={c.row.original.emailVerified ? "success" : "warning"} variant="outline">{c.getValue()}</Badge>,
   }),
   col.accessor((u) => u.lastActiveAt ?? "", {
     id: "lastActive",
-    header: "Hoạt động gần nhất",
+    header: t.colLastActive,
     size: 170,
-    meta: { label: "Hoạt động gần nhất" },
-    cell: (c) => <span className="text-fg-muted">{c.getValue() ? formatRelative(c.getValue()) : "Chưa đăng nhập"}</span>,
+    meta: { label: t.colLastActive },
+    cell: (c) => <span className="text-fg-muted">{c.getValue() ? formatRelative(c.getValue()) : t.neverSignedIn}</span>,
   }),
   col.accessor((u) => u.joinRequestedAt ?? "", {
     id: "joinRequested",
-    header: "Xin tham gia",
+    header: t.colJoinRequested,
     size: 150,
-    meta: { label: "Xin tham gia" },
+    meta: { label: t.colJoinRequested },
     cell: (c) => <span className="text-fg-muted">{c.getValue() ? formatRelative(c.getValue()) : "—"}</span>,
   }),
 ]);
@@ -80,13 +83,18 @@ export function UserTable({ users, loading, showOrg = true, showJoinRequested = 
   showJoinRequested?: boolean;
   emptyTitle: string;
 }) {
+  const t = useMessages(USER_TABLE_MESSAGES);
+  const roleLabels = useMessages(ROLE_LABELS);
+  const locale = useUiLocale();
+  const USER_ACTION_META = useUserActionMeta();
+  const columns = useMemo(() => makeColumns(t), [t]);
   const { can } = useAdminSession();
   const [openId, setOpenId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ userId: string; action: UserAction } | null>(null);
 
   const rows = useMemo<Row[]>(
-    () => users.map((u) => ({ ...u, roleLabel: ROLE_LABELS[u.role], statusText: statusLabel(ACCOUNT_STATUS[u.status]), verifiedText: u.emailVerified ? "Đã xác thực" : "Chưa xác thực" })),
-    [users],
+    () => users.map((u) => ({ ...u, roleLabel: roleLabels[u.role], statusText: statusLabel(ACCOUNT_STATUS[u.status], locale), verifiedText: u.emailVerified ? t.verified : t.unverified })),
+    [users, roleLabels, locale, t],
   );
   // Lấy lại theo id từ dữ liệu mới nhất để panel/hộp thoại tự cập nhật sau mỗi thao tác.
   const opened = users.find((u) => u.id === openId);
@@ -96,8 +104,8 @@ export function UserTable({ users, loading, showOrg = true, showJoinRequested = 
   return (
     <>
       <DataTable
-        aria-label="Người dùng"
-        columns={COLUMNS}
+        aria-label={t.tableLabel}
+        columns={columns}
         data={rows}
         getRowId={(r) => r.id}
         rowLabel={(r) => r.name}
@@ -112,7 +120,7 @@ export function UserTable({ users, loading, showOrg = true, showJoinRequested = 
           <RowActions
             rowLabel={r.name}
             actions={[
-              { id: "open", label: "Xem chi tiết", icon: <UserRound />, onSelect: () => setOpenId(r.id) },
+              { id: "open", label: t.viewDetail, icon: <UserRound />, onSelect: () => setOpenId(r.id) },
               ...(can("SUPPORT")
                 ? availableUserActions(r).map((a) => ({
                     id: a,
@@ -129,7 +137,7 @@ export function UserTable({ users, loading, showOrg = true, showJoinRequested = 
       />
 
       <Dialog open={!!opened} onOpenChange={(o) => !o && setOpenId(null)} defaultPresentation="panel">
-        <DialogContent title="Tài khoản" size="sm" icon={<UserRound className="h-4 w-4" />}>
+        <DialogContent title={t.accountTitle} size="sm" icon={<UserRound className="h-4 w-4" />}>
           {opened && <UserPanel user={opened} />}
         </DialogContent>
       </Dialog>

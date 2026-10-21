@@ -1,5 +1,7 @@
 // Tra cứu mã trên tờ khai (thuần): phạm vi lọc danh mục theo tờ khai đang khai, kiểu tra cứu (thả xuống / popup), tên của mã.
 import { officeCodeAliases, SMALL_CODE_LIST_MAX, type CodeListEntry, type CodeListId } from "@kb/contracts";
+import { fill, pickMessages, type UiLocale } from "@kb/ui";
+import { FORM_MESSAGES } from "./form.messages";
 import type { FormValues } from "./form-state";
 
 /** parents: mã cha được giữ lại; optional: người dùng bỏ lọc được ("Chỉ hiện …"). */
@@ -8,17 +10,18 @@ export type CodeScope = { parents: string[]; label: string; optional: boolean };
 /** Ô cảng/địa điểm trong nước: dỡ hàng của tờ khai nhập, xếp hàng của tờ khai xuất. */
 const DOMESTIC_PLACE = new Set(["VD_DST", "TK_PSC"]);
 
-export function codeScope(id: CodeListId, fieldKey: string, kind: "IDA" | "EDA", values: FormValues): CodeScope | null {
+export function codeScope(id: CodeListId, fieldKey: string, kind: "IDA" | "EDA", values: FormValues, locale: UiLocale): CodeScope | null {
   const office = values["TK_CH"]?.trim();
+  const t = pickMessages(FORM_MESSAGES, locale);
   switch (id) {
     case "A014":
-      return office ? { parents: [office], label: `bộ phận của ${office}`, optional: false } : null;
+      return office ? { parents: [office], label: fill(t.scopeDept, { office }), optional: false } : null;
     case "A202":
-      return office ? { parents: officeCodeAliases(office), label: `địa điểm thuộc cơ quan Hải quan ${office}`, optional: true } : null;
+      return office ? { parents: officeCodeAliases(office), label: fill(t.scopePlace, { office }), optional: true } : null;
     case "TYPE_CODE":
-      return kind === "IDA" ? { parents: ["NK"], label: "mã loại hình nhập khẩu", optional: false } : { parents: ["XK"], label: "mã loại hình xuất khẩu", optional: false };
+      return kind === "IDA" ? { parents: ["NK"], label: t.scopeImportType, optional: false } : { parents: ["XK"], label: t.scopeExportType, optional: false };
     case "A016":
-      return DOMESTIC_PLACE.has(fieldKey) ? { parents: ["VN"], label: "địa điểm Việt Nam", optional: true } : null;
+      return DOMESTIC_PLACE.has(fieldKey) ? { parents: ["VN"], label: t.scopeVn, optional: true } : null;
     default:
       return null;
   }

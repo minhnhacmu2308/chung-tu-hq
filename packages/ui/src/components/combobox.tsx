@@ -35,6 +35,19 @@ const MESSAGES = {
     expand: "Expand",
     collapse: "Collapse",
   },
+  zh: {
+    placeholder: "请选择…",
+    search: "搜索…",
+    empty: "无结果",
+    loading: "加载中…",
+    clear: "清除选择",
+    remove: "移除",
+    list: "选项列表",
+    selected: "已选",
+    more: "还有 {n} 条结果 – 继续输入以缩小范围",
+    expand: "展开",
+    collapse: "收起",
+  },
 } satisfies Messages<"placeholder" | "search" | "empty" | "loading" | "clear" | "remove" | "list" | "selected" | "more" | "expand" | "collapse">;
 
 export type ComboboxOption = { value: string; label: string; description?: string; disabled?: boolean };

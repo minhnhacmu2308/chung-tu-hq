@@ -31,7 +31,8 @@ describe("exchange_rates (kb_platform)", () => {
     await uow.run((r) => r.exchangeRates.upsertAuto([{ currency: "USD", effectiveFrom: "2026-10-19", rate: "25710.00" }, { currency: "EUR", effectiveFrom: "2026-10-19", rate: "28535.52" }], BOARD, AT));
     await uow.run((r) => r.exchangeRates.upsertManual({ currency: "USD", effectiveFrom: "2026-10-19", rate: "25800", updatedBy: "usr_bao", note: "Sửa theo công văn" }, AT));
     await uow.run((r) => r.exchangeRates.upsertAuto([{ currency: "USD", effectiveFrom: "2026-10-19", rate: "1" }, { currency: "EUR", effectiveFrom: "2026-10-19", rate: "28600" }], BOARD, AT));
-    const rows = await uow.run((r) => r.exchangeRates.list("2026-10-19"));
+    // list() trả cả các ngày sau; seed ghi tỷ giá SEED theo ngày chạy test → chỉ xét tuần 19/10.
+    const rows = (await uow.run((r) => r.exchangeRates.list("2026-10-19"))).filter((x) => x.effectiveFrom === "2026-10-19");
     expect(rows.find((x) => x.currency === "USD")).toMatchObject({ rate: "25800.000000", source: "MANUAL", updatedBy: "usr_bao", note: "Sửa theo công văn" });
     expect(rows.find((x) => x.currency === "EUR")).toMatchObject({ rate: "28600.000000", source: "VCB" });
     expect(rows.find((x) => x.currency === "EUR")!.snapshotAt?.toISOString()).toBe(BOARD.toISOString());

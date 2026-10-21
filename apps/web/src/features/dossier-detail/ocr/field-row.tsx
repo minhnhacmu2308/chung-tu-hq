@@ -1,10 +1,11 @@
 "use client";
 // Một trường trích xuất: nhãn + trạng thái, ô sửa trực tiếp, nút "Đúng", ghi chú khi mâu thuẫn, "AI đọc: …" khi đã sửa.
-import { Button, cn, Input, Label, StatusBadge } from "@kb/ui";
+import { Button, cn, fill, Input, Label, StatusBadge, useMessages } from "@kb/ui";
 import { Check, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { isSuspect } from "@/api/ocr";
 import type { ExtractedField } from "@/mocks/types";
+import { FIELD_ROW_MESSAGES } from "./ocr.messages";
 
 export type FieldRowProps = {
   field: ExtractedField;
@@ -19,6 +20,7 @@ export type FieldRowProps = {
 export const fieldDomId = (id: string) => `field-${id}`;
 
 export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, busy = false }: FieldRowProps) {
+  const t = useMessages(FIELD_ROW_MESSAGES);
   const [value, setValue] = useState(field.value);
   useEffect(() => setValue(field.value), [field.value]);
   const suspect = isSuspect(field.status);
@@ -62,8 +64,8 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
           }}
         />
         {suspect && (
-          <Button size="sm" variant="secondary" leftIcon={<Check className="h-4 w-4" />} disabled={busy} onClick={() => onConfirm(field.id)} aria-label={`Xác nhận ${field.label} đúng`}>
-            Đúng
+          <Button size="sm" variant="secondary" leftIcon={<Check className="h-4 w-4" />} disabled={busy} onClick={() => onConfirm(field.id)} aria-label={fill(t.confirmField, { label: field.label })}>
+            {t.correct}
           </Button>
         )}
       </div>
@@ -74,9 +76,9 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
       )}
       {edited && (
         <p className="flex flex-wrap items-center gap-1 text-xs text-fg-subtle">
-          AI đọc: <span className="font-mono line-through">{field.originalValue}</span>
+          {t.aiRead} <span className="font-mono line-through">{field.originalValue}</span>
           <Button size="sm" variant="link" className="h-auto px-1 py-0 text-xs" leftIcon={<Undo2 className="h-3 w-3" />} onClick={() => onRevert(field.id)}>
-            Hoàn tác
+            {t.revert}
           </Button>
         </p>
       )}

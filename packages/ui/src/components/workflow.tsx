@@ -8,6 +8,7 @@ import { useMessages, type Messages } from "../lib/i18n.js";
 const STEPPER_MESSAGES = {
   vi: { nav: "Các bước xử lý hồ sơ", done: "(đã xong)", current: "(đang thực hiện)", todo: "(chưa tới)", viewing: "(đang xem)", stepOf: "Bước {n}/{total}" },
   en: { nav: "Dossier steps", done: "(done)", current: "(in progress)", todo: "(upcoming)", viewing: "(viewing)", stepOf: "Step {n} of {total}" },
+  zh: { nav: "档案处理步骤", done: "（已完成）", current: "（进行中）", todo: "（未开始）", viewing: "（正在查看）", stepOf: "第 {n}/{total} 步" },
 } satisfies Messages<"nav" | "done" | "current" | "todo" | "viewing" | "stepOf">;
 
 const DIAGRAM_MESSAGES = {
@@ -15,6 +16,8 @@ const DIAGRAM_MESSAGES = {
     done: "đã xong", current: "đang thực hiện", pending: "chưa tới", skipped: "không đi qua", error: "có lỗi" },
   en: { zoomIn: "Zoom in", zoomOut: "Zoom out", fit: "Fit", currentBadge: "You are here",
     done: "done", current: "in progress", pending: "upcoming", skipped: "not taken", error: "error" },
+  zh: { zoomIn: "放大", zoomOut: "缩小", fit: "适合窗口", currentBadge: "当前步骤",
+    done: "已完成", current: "进行中", pending: "未开始", skipped: "未经过", error: "有错误" },
 } satisfies Messages<"zoomIn" | "zoomOut" | "fit" | "currentBadge" | "done" | "current" | "pending" | "skipped" | "error">;
 
 /* ===================== Stepper ===================== */

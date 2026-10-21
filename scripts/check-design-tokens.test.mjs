@@ -72,6 +72,22 @@ describe("check-design-tokens", () => {
     assert.ok(rules("apps/web/a.tsx", `<img className="bg-[#ffcc00]" /> // kb-allow-raw:`).length > 0, "thiếu lý do thì không được miễn");
   });
 
+  it("apps/web: chặn chữ tiếng Việt viết cứng; cho qua bộ nhãn, nội dung pháp lý *.vi.ts, comment, test, route API", () => {
+    const f = "apps/web/src/features/x/a.tsx";
+    assert.deepEqual(rules(f, `<Button>Lưu hồ sơ</Button>`), ["apps-hardcoded-text"]);
+    assert.deepEqual(rules(f, `toast.error("Không tải được");`), ["apps-hardcoded-text"]);
+    assert.deepEqual(rules(f, `<Button>{t.save}</Button> // nút Lưu`), []);
+    assert.deepEqual(rules(f, `  // Đổi ngôn ngữ → dựng lại`), []);
+    assert.deepEqual(rules(f, `   * Hàm này trả nhãn`), []);
+    assert.deepEqual(rules(f, `{/* Khối chú thích */}<Card />`), []);
+    assert.deepEqual(rules(f, `const url = "https://vnaccs.example/đi";`), ["apps-hardcoded-text"], "// trong URL không phải comment");
+    assert.deepEqual(rules("apps/web/src/features/x/a.messages.ts", `vi: { save: "Lưu" },`), []);
+    assert.deepEqual(rules("apps/web/src/features/x/print.vi.ts", `title: "TỜ KHAI HÀNG HÓA NHẬP KHẨU"`), []);
+    assert.deepEqual(rules("apps/web/src/features/x/a.test.tsx", `getByText("Lưu")`), []);
+    assert.deepEqual(rules("apps/web/src/app/api/x/route.ts", `throw new HttpError(404, "X", "Không thấy")`), []);
+    assert.deepEqual(rules("apps/web/src/mocks/seed/a.ts", `name: "Công ty An Phát"`), [], "dữ liệu mẫu không phải nhãn giao diện");
+  });
+
   it("toàn repo hiện tại sạch", () => {
     assert.deepEqual(checkRepo(), []);
   });

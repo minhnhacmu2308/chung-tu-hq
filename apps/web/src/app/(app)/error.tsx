@@ -1,20 +1,21 @@
 "use client";
-import { Button, EmptyState } from "@kb/ui";
-import { TriangleAlert } from "lucide-react";
+import { Button, EmptyState, useMessages } from "@kb/ui";
 import Link from "next/link";
+import { APP_ERROR_MESSAGES } from "@/app/app-pages.messages";
 
 // Lỗi không lường trước ở một màn: giữ nguyên menu, cho thử lại ngay tại chỗ.
 export default function AppError({ reset }: { error: Error; reset: () => void }) {
+  const t = useMessages(APP_ERROR_MESSAGES);
   return (
     <EmptyState
-      icon={<TriangleAlert />}
-      title="Màn hình này gặp lỗi"
-      description="Dữ liệu của bạn không bị ảnh hưởng. Thử tải lại màn hình; nếu vẫn lỗi, quay về trang tổng quan."
+      illustration="error"
+      title={t.title}
+      description={t.description}
       action={
         <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={reset}>Thử lại</Button>
+          <Button onClick={reset}>{t.retry}</Button>
           <Button asChild variant="secondary">
-            <Link href="/">Về trang tổng quan</Link>
+            <Link href="/">{t.home}</Link>
           </Button>
         </div>
       }

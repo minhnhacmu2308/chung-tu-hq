@@ -2,7 +2,7 @@ import { useId, type CSSProperties, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
-const MESSAGES = { vi: { custom: "Màu khác" }, en: { custom: "Custom color" } } satisfies Messages<"custom">;
+const MESSAGES = { vi: { custom: "Màu khác" }, en: { custom: "Custom color" }, zh: { custom: "自定义颜色" } } satisfies Messages<"custom">;
 
 /* ---------------- SegmentedControl ---------------- */
 // Nhóm radio gốc của trình duyệt (bàn phím mũi tên, trình đọc màn hình hoạt động sẵn), chỉ đổi giao diện.

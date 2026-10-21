@@ -7,6 +7,7 @@ import { useMessages, type Messages } from "../lib/i18n.js";
 const MESSAGES = {
   vi: { close: "Đóng", modal: "Hiển thị dạng cửa sổ", panel: "Hiển thị dạng panel bên phải" },
   en: { close: "Close", modal: "Show as window", panel: "Show as side panel" },
+  zh: { close: "关闭", modal: "以窗口显示", panel: "以右侧面板显示" },
 } satisfies Messages<"close" | "modal" | "panel">;
 
 export const DialogTrigger = DialogPrimitive.Trigger;

@@ -1,14 +1,16 @@
 "use client";
 // Bước xác thực 2 lớp của khu Quản trị hệ thống: lần đầu thiết lập ứng dụng xác thực (QR + mã khôi phục), các phiên sau nhập mã 6 số.
 import type { AdminMfaState } from "@kb/contracts";
-import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Field, Input, LoadingState, PageHeader, Stack } from "@kb/ui";
+import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Field, Input, LoadingState, PageHeader, Stack, useMessages } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { confirmAdminMfaSetup, startAdminMfaSetup, verifyAdminMfa } from "@/api/admin";
 import { LoadError } from "@/components/common/load-error";
+import { MFA_GATE_MESSAGES } from "./mfa-gate.messages";
 
-const errorMessage = (e: unknown) => (e instanceof Error ? e.message : "Có lỗi xảy ra, thử lại sau");
+/** Lỗi từ máy chủ giữ nguyên chữ; lỗi không rõ dùng `fallback` theo ngôn ngữ. */
+const errorMessage = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 /** Ô nhập mã + nút xác nhận dùng chung cho thiết lập và đăng nhập. */
 function CodeForm({ label, hint, submitLabel, pending, error, onSubmit }: { label: string; hint: string; submitLabel: string; pending: boolean; error: string | null; onSubmit: (code: string) => void }) {
@@ -36,16 +38,17 @@ function CodeForm({ label, hint, submitLabel, pending, error, onSubmit }: { labe
 function Enroll({ onDone }: { onDone: () => void }) {
   // Mỗi lần mở màn là một khóa mới (khóa cũ chưa xác nhận bị thay) – không cache.
   const setup = useQuery({ queryKey: ["admin", "mfa", "setup"], queryFn: startAdminMfaSetup, gcTime: 0, staleTime: Infinity, retry: false });
+  const t = useMessages(MFA_GATE_MESSAGES);
   const confirm = useMutation({ mutationFn: confirmAdminMfaSetup });
   const [saved, setSaved] = useState(false);
 
   if (confirm.data) {
     return (
       <Stack gap="md">
-        <Alert tone="success" title="Đã bật xác thực 2 lớp">
-          Lưu 8 mã khôi phục dưới đây ở nơi an toàn (trình quản lý mật khẩu). Mỗi mã dùng được một lần khi mất điện thoại. Mã chỉ hiện lần này.
+        <Alert tone="success" title={t.enabledTitle}>
+          {t.enabledBody}
         </Alert>
-        <ol aria-label="Mã khôi phục" className="grid grid-cols-2 gap-2 rounded-md border border-border bg-surface-muted p-4 font-mono text-sm text-fg cq-sm:grid-cols-4">
+        <ol aria-label={t.recoveryCodes} className="grid grid-cols-2 gap-2 rounded-md border border-border bg-surface-muted p-4 font-mono text-sm text-fg cq-sm:grid-cols-4">
           {confirm.data.recoveryCodes.map((c) => (
             <li key={c}>{c}</li>
           ))}
@@ -58,35 +61,35 @@ function Enroll({ onDone }: { onDone: () => void }) {
             }}
             loading={saved}
           >
-            Tôi đã lưu mã khôi phục
+            {t.savedCodes}
           </Button>
         </div>
       </Stack>
     );
   }
   if (setup.isError) return <LoadError onRetry={() => void setup.refetch()} />;
-  if (!setup.data) return <LoadingState title="Đang tạo khóa xác thực" />;
+  if (!setup.data) return <LoadingState title={t.creatingKey} />;
   return (
     <Stack gap="lg">
       <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm text-fg-muted">
-        <li>Mở ứng dụng xác thực trên điện thoại (Google Authenticator, Microsoft Authenticator…).</li>
-        <li>Quét mã QR bên dưới, hoặc nhập khóa thủ công.</li>
-        <li>Nhập mã 6 số ứng dụng hiện ra để xác nhận.</li>
+        <li>{t.step1}</li>
+        <li>{t.step2}</li>
+        <li>{t.step3}</li>
       </ol>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         {/* SVG do máy chủ vẽ từ URI otpauth – nền trắng, đọc được cả ở chế độ tối. */}
-        <img src={`data:image/svg+xml;utf8,${encodeURIComponent(setup.data.qrSvg)}`} alt="Mã QR thiết lập ứng dụng xác thực" className="h-44 w-44 shrink-0 rounded-md border border-border" />
+        <img src={`data:image/svg+xml;utf8,${encodeURIComponent(setup.data.qrSvg)}`} alt={t.qrAlt} className="h-44 w-44 shrink-0 rounded-md border border-border" />
         <div className="min-w-0">
-          <p className="text-sm text-fg-muted">Khóa nhập thủ công</p>
+          <p className="text-sm text-fg-muted">{t.manualKey}</p>
           <p className="font-mono text-sm text-fg">{setup.data.secret.replace(/(.{4})/g, "$1 ").trim()}</p>
         </div>
       </div>
       <CodeForm
-        label="Mã 6 số"
-        hint="Mã đổi sau mỗi 30 giây."
-        submitLabel="Bật xác thực 2 lớp"
+        label={t.sixDigit}
+        hint={t.sixDigitHint}
+        submitLabel={t.enable}
         pending={confirm.isPending}
-        error={confirm.isError ? errorMessage(confirm.error) : null}
+        error={confirm.isError ? errorMessage(confirm.error, t.genericError) : null}
         onSubmit={(code) => confirm.mutate(code)}
       />
     </Stack>
@@ -94,14 +97,15 @@ function Enroll({ onDone }: { onDone: () => void }) {
 }
 
 function Verify({ onDone }: { onDone: () => void }) {
+  const t = useMessages(MFA_GATE_MESSAGES);
   const verify = useMutation({ mutationFn: verifyAdminMfa, onSuccess: onDone });
   return (
     <CodeForm
-      label="Mã xác thực"
-      hint="Mã 6 số trong ứng dụng xác thực. Mất điện thoại: nhập một mã khôi phục (dạng abcd-efgh) hoặc nhờ Quản trị cấp cao đặt lại."
-      submitLabel="Xác nhận"
+      label={t.code}
+      hint={t.codeHint}
+      submitLabel={t.confirm}
       pending={verify.isPending}
-      error={verify.isError ? errorMessage(verify.error) : null}
+      error={verify.isError ? errorMessage(verify.error, t.genericError) : null}
       onSubmit={(code) => verify.mutate(code)}
     />
   );
@@ -109,23 +113,24 @@ function Verify({ onDone }: { onDone: () => void }) {
 
 /** Thay nội dung khu quản trị cho tới khi phiên qua bước 2FA. Xong → tải lại mọi dữ liệu (lần trước bị chặn MFA_REQUIRED). */
 export function MfaGate({ mfa }: { mfa: AdminMfaState }) {
+  const t = useMessages(MFA_GATE_MESSAGES);
   const qc = useQueryClient();
   const done = () => void qc.invalidateQueries();
   return (
     <Stack gap="lg" className="mx-auto max-w-2xl">
       <PageHeader
-        title={mfa.enrolled ? "Xác thực 2 lớp" : "Thiết lập xác thực 2 lớp"}
+        title={mfa.enrolled ? t.titleVerify : t.titleSetup}
         description={
           mfa.enrolled
-            ? "Khu quản trị nhìn được dữ liệu của mọi doanh nghiệp, nên mỗi phiên đăng nhập cần thêm mã từ điện thoại của bạn."
-            : "Bắt buộc với mọi tài khoản quản trị hệ thống trước khi xem dữ liệu của doanh nghiệp."
+            ? t.descVerify
+            : t.descSetup
         }
       />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <KeyRound aria-hidden="true" className="h-5 w-5 text-primary" />
-            {mfa.enrolled ? "Nhập mã từ ứng dụng xác thực" : "Kết nối ứng dụng xác thực"}
+            {mfa.enrolled ? t.cardVerify : t.cardSetup}
           </CardTitle>
         </CardHeader>
         <CardContent>{mfa.enrolled ? <Verify onDone={done} /> : <Enroll onDone={done} />}</CardContent>

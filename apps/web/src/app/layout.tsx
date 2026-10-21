@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro, Geist, Inter, JetBrains_Mono, Roboto } from "next/font/google";
 import type { ReactNode } from "react";
+import { VI_TITLES } from "./app-titles.messages";
 import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: { default: "KhaiBáo AI", template: "%s · KhaiBáo AI" },
-  description: "Từ bộ chứng từ đến tờ khai hải quan trong một luồng.",
+  title: { default: VI_TITLES.brand, template: VI_TITLES.template },
+  description: VI_TITLES.description,
 };
 
 // next/font bắt buộc tham số là hằng viết trực tiếp (không dùng biến chung).

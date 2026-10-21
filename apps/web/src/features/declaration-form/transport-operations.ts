@@ -15,6 +15,7 @@ export const operationsFor = (kind: Kind, amending = false): TransportOperationF
 /** Kết quả giả khi tờ khai đã khai: Hải quan đã duyệt định danh. */
 const IDENTIFIER_RESULT: FormValues = {
   REF_ID: "DD-2026-000184", SO_TN: "300012845", NGAY_TN: "2026-10-08", NAM_TN: "2026",
+  // kb-allow-raw: dữ liệu giả Hải quan trả về (kết quả định danh tiếng Việt như phản hồi VNACCS)
   SO_DD: "26VN01B1000184", NGAY_DD: "2026-10-08", CODE_CONTENT: "Có – tải mã QR khi kết nối", TRANG_THAI: "15", KET_QUA: "Cấp số định danh thành công",
 };
 

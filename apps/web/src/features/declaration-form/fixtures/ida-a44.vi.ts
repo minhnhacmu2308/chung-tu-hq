@@ -1,3 +1,4 @@
+// Dữ liệu giả của bản mẫu (tiếng Việt như tờ khai VNACCS thật) – file .vi.ts: nội dung nghiệp vụ, không dịch.
 // Tờ khai nhập A44 (tạm nhập hàng bán tại cửa hàng miễn thuế), đường hàng không, luồng vàng – chép từ ảnh mẫu CHITIEU_NHAPKHAU.
 import type { PrototypeFixture } from "./types";
 

@@ -44,6 +44,25 @@ const MESSAGES = {
     retry: "Retry {name}",
     progressOf: "Upload progress for {name}",
   },
+  zh: {
+    title: "将文件拖放到此处",
+    browse: "或点击选择文件",
+    accept: "格式：{accept}",
+    maxSize: "每个文件最大 {size}",
+    maxFiles: "最多 {n} 个文件",
+    rejectType: "{name}：格式不支持",
+    rejectSize: "{name}：超过 {size}",
+    rejectCount: "{name}：超过 {n} 个文件的数量限制",
+    rejectedTitle: "以下文件未被接受",
+    list: "已上传文件",
+    queued: "等待上传",
+    uploading: "上传中",
+    done: "已上传",
+    error: "错误",
+    remove: "删除 {name}",
+    retry: "重试 {name}",
+    progressOf: "{name} 上传进度",
+  },
 } satisfies Messages<
   | "title" | "browse" | "accept" | "maxSize" | "maxFiles" | "rejectType" | "rejectSize" | "rejectCount"
   | "rejectedTitle" | "list" | "queued" | "uploading" | "done" | "error" | "remove" | "retry" | "progressOf"

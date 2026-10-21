@@ -1,6 +1,6 @@
 // Đa ngôn ngữ cho @kb/ui và app (VI/EN/ZH). Mỗi component tự khai báo bộ nhãn của mình:
 //
-//   const MESSAGES = { vi: { close: "Đóng" }, en: { close: "Close" } } satisfies Messages<"close">;
+//   const MESSAGES = { vi: { close: "Đóng" }, en: { close: "Close" }, zh: { close: "关闭" } } satisfies Messages<"close">;
 //   const t = useMessages(MESSAGES, labels);   // labels (props) ghi đè từng nhãn
 //
 // App bọc gốc bằng <UiLocaleProvider locale={appearance.locale}>.

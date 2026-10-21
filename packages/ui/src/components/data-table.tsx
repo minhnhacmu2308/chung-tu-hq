@@ -93,6 +93,24 @@ const MESSAGES = {
     columnsLabel: "Visible columns",
     resizeColumn: "Resize column {label}",
   },
+  zh: {
+    selectAll: "全选",
+    selectRow: "选择行 {label}",
+    actions: "操作",
+    emptyTitle: "暂无数据",
+    loading: "正在加载数据",
+    search: "在表格中搜索",
+    searchPlaceholder: "搜索…",
+    filterBy: "按{label}筛选",
+    filterAll: "全部",
+    clearFilters: "清除筛选",
+    filteredCount: "显示 {shown}/{total} 行",
+    noResultsTitle: "没有匹配的结果",
+    noResultsDescription: "请尝试其他关键词或清除筛选。",
+    columns: "列",
+    columnsLabel: "显示列",
+    resizeColumn: "调整列宽 {label}",
+  },
 } satisfies Messages<
   | "selectAll"
   | "selectRow"
@@ -744,9 +762,9 @@ export function DataTable<TData extends RowData>({
               <tr>
                 <td colSpan={colCount}>
                   {isFiltered && data.length > 0 ? (
-                    <EmptyState title={t.noResultsTitle} description={t.noResultsDescription} action={clearButton} />
+                    <EmptyState illustration="no-results" illustrationSize="sm" title={t.noResultsTitle} description={t.noResultsDescription} action={clearButton} />
                   ) : (
-                    <EmptyState title={emptyTitle ?? t.emptyTitle} description={emptyDescription} action={emptyAction} />
+                    <EmptyState illustration="empty" illustrationSize="sm" title={emptyTitle ?? t.emptyTitle} description={emptyDescription} action={emptyAction} />
                   )}
                 </td>
               </tr>

@@ -91,6 +91,7 @@ export function useToast() {
 const MESSAGES = {
   vi: { close: "Đóng thông báo", region: "Thông báo" },
   en: { close: "Dismiss notification", region: "Notifications" },
+  zh: { close: "关闭通知", region: "通知" },
 } satisfies Messages<"close" | "region">;
 
 const TONE: Record<ToastTone, { cls: string; icon: ReactNode }> = {

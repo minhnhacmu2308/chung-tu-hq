@@ -1,7 +1,7 @@
 "use client";
 // Nhóm lặp (5 vận đơn, 5 giấy phép, 5 khoản điều chỉnh, 10 chỉ thị…) dạng bảng (phương án C): nhãn ở tiêu đề cột, mỗi dòng một hàng,
 // nút "Thêm dòng". 50 số container: lưới. Bảng hẹp hơn nội dung thì cuộn ngang trong khung, trang không tràn.
-import { Button, Checkbox, cn, FieldFrame, Grid, Input } from "@kb/ui";
+import { Button, Checkbox, cn, FieldFrame, fill, Grid, Input, useMessages } from "@kb/ui";
 import { codeListFor, expandRepeat, fieldRole, type ConditionContext, type ConditionId, type LayoutField, type LayoutRepeat } from "@kb/contracts";
 import { Lock, Plus } from "lucide-react";
 import { useState } from "react";
@@ -9,6 +9,7 @@ import { useAmendLock } from "./amend-context";
 import { CodeInput } from "./code-input";
 import { DATE_WIDTH, displayValue, fieldTitle, visibleRows } from "./display";
 import { fieldLabelNode, FormField, GuideButton, RoleMark } from "./field";
+import { FORM_MESSAGES } from "./form.messages";
 import { isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 
 type Props = {
@@ -30,8 +31,9 @@ const WIDTH: Record<NonNullable<LayoutField["width"]>, string> = { xs: "w-24", s
 
 function Cell({ kind, f, n, values, onChange }: { kind: "IDA" | "EDA"; f: LayoutField; n: number; values: FormValues; onChange: ((key: string, value: string) => void) | undefined }) {
   const lock = useAmendLock()(f.key);
+  const t = useMessages(FORM_MESSAGES);
   const value = values[f.key] ?? "";
-  const name = `${f.label} dòng ${n}`;
+  const name = fill(t.rowName, { label: f.label, n });
   if (!onChange || lock || f.origin === "CUSTOMS") {
     return (
       <span className="flex items-start gap-1 break-words text-sm text-fg">
@@ -67,6 +69,7 @@ function Cell({ kind, f, n, values, onChange }: { kind: "IDA" | "EDA"; f: Layout
 
 export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapplicable, parentCondition, dimmed = false }: Props) {
   const [extra, setExtra] = useState(0);
+  const t = useMessages(FORM_MESSAGES);
   const applicable = isApplicable(repeat, ctx);
   if (!applicable && !showInapplicable) return null;
   const readOnly = !onChange || repeat.fields.every((f) => f.origin === "CUSTOMS");
@@ -76,7 +79,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
   const condition = repeat.condition ?? parentCondition;
   const legend = (
     <>
-      {fieldTitle(repeat.no, repeat.label)} <span className="font-normal text-fg-subtle">(tối đa {repeat.count})</span>
+      {fieldTitle(repeat.no, repeat.label)} <span className="font-normal text-fg-subtle">{fill(t.maxN, { n: repeat.count })}</span>
       {!readOnly && first && repeat.no && <RoleMark role={fieldRole(kind, first, repeat.no)} />}
     </>
   );
@@ -85,7 +88,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
     <div className="flex flex-wrap items-center gap-2">
       {rows.length < repeat.count && (
         <Button size="sm" variant="ghost" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setExtra((n) => n + 1)}>
-          Thêm dòng
+          {t.addRow}
         </Button>
       )}
     </div>
@@ -119,13 +122,13 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
     <FieldFrame data-missing={firstRowMissing || undefined} legend={legend} legendAction={guide} className={box}>
       {/* relative: chữ ẩn (sr-only, định vị tuyệt đối) trong ô bảng nằm trong khung cuộn – không thoát ra làm trang tràn ngang. */}
       {/* Chỉ đọc (không có ô nhập để Tab tới): khung cuộn nhận focus để cuộn ngang bằng bàn phím. */}
-      <div className="relative min-w-0 overflow-x-auto rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" {...(readOnly ? { tabIndex: 0, role: "group", "aria-label": `${repeat.label} – cuộn ngang để xem hết` } : {})}>
+      <div className="relative min-w-0 overflow-x-auto rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" {...(readOnly ? { tabIndex: 0, role: "group", "aria-label": fill(t.scrollHint, { label: repeat.label }) } : {})}>
         {/* kb-allow-raw: lưới sửa trực tiếp các dòng của nhóm lặp (vận đơn, giấy phép, khoản điều chỉnh…); DataTable chưa hỗ trợ ô sửa được */}
         <table className="text-sm">
           <thead>
             <tr>
               <th scope="col" className="w-8 pb-1 pr-2 text-left text-xs font-medium text-fg-muted">
-                <span className="sr-only">Dòng</span>
+                <span className="sr-only">{t.rowHeader}</span>
               </th>
               {cols.map(({ f }) => (
                 <th key={f.key} scope="col" className="pb-1 pr-2 text-left text-xs font-medium text-fg-muted">
@@ -151,7 +154,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
           </tbody>
         </table>
       </div>
-      {firstRowMissing && <p className="text-sm font-medium text-warning-subtle-fg">Còn thiếu ở dòng 1</p>}
+      {firstRowMissing && <p className="text-sm font-medium text-warning-subtle-fg">{t.missingRow1}</p>}
       {footer}
     </FieldFrame>
   );

@@ -136,6 +136,22 @@ describe("AppearancePanel – hình mô phỏng", () => {
   });
 });
 
+describe("AppearancePanel – ngôn ngữ", () => {
+  it("ba ngôn ngữ, mỗi tên viết bằng chính ngôn ngữ đó; chọn 中文 gọi onChange với locale zh", async () => {
+    const onChange = vi.fn();
+    render(<AppearancePanel value={DEFAULT_APPEARANCE} onChange={onChange} />);
+    const group = screen.getByRole("group", { name: "Ngôn ngữ" });
+    expect(within(group).getAllByRole("radio").map((r) => r.closest("label")!.textContent)).toEqual([
+      expect.stringContaining("Tiếng Việt"),
+      expect.stringContaining("English"),
+      expect.stringContaining("中文"),
+    ]);
+    expect(within(group).getByRole("radio", { name: "Tiếng Việt" })).toBeChecked();
+    await userEvent.click(within(group).getByRole("radio", { name: "中文" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ locale: "zh" }));
+  });
+});
+
 describe("AppearancePanel – chia nhóm", () => {
   it("ba tab; đổi tab đổi nhóm đang hiện", async () => {
     render(<AppearancePanel value={DEFAULT_APPEARANCE} onChange={() => {}} />);

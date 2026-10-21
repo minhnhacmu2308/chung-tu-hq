@@ -4,7 +4,7 @@
 // chưa khai báo → mọi ô người khai (trừ ô tính từ chứng từ); đã phân luồng + gọi IDD → khóa ô theo Phụ lục II, ghi căn cứ dưới ô; đã thông quan → chỉ đọc.
 // Dòng hàng: số liệu chứng từ sửa ở bước OCR (nút mở đúng dòng), mã HS qua hộp chọn mã HS; ô chỉ có trên tờ khai (mã biểu thuế, miễn giảm…) sửa trực tiếp,
 // lưu theo id dòng (HANG.<id>.<ô>). Lưu bằng API sửa chỉ tiêu (backend kiểm tra lại cùng quy tắc, ghi field_audit).
-import { Alert, Button, Stack } from "@kb/ui";
+import { Alert, Button, fill, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { layoutFor, type Declaration, type DeclarationEditMode, type LineItem } from "@kb/contracts";
 import { FileSearch, Save, Search, Undo2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -13,6 +13,7 @@ import { formatNumber } from "@/lib/format";
 import type { FieldLockLookup } from "./amend-context";
 import { DeclarantTab } from "./declarant-tab";
 import { ChangeHsDialog } from "../dossier-detail/steps/agent-step";
+import { FORM_MESSAGES } from "./form.messages";
 import { declarationLockOf, declarationValues, editableKeys, itemValues, pendingEdits, pendingItemEdits } from "./dossier-adapter";
 import type { FormValues } from "./form-state";
 import { useSaveDeclarationEdits } from "./use-save-edits";
@@ -32,6 +33,8 @@ type Props = {
 };
 
 export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode, canEdit, cleared = false }: Props) {
+  const t = useMessages(FORM_MESSAGES);
+  const locale = useUiLocale();
   const mode: DeclarationEditMode = canEdit ? stageMode : "LOCKED";
   const save = useSaveDeclarationEdits(dossierId);
   const router = useRouter();
@@ -39,7 +42,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   const params = useSearchParams();
   const kind = decl.kind;
   const layout = layoutFor(kind);
-  const sections = navSections(layout);
+  const sections = navSections(layout, locale);
   const requested = params.get("nhom");
   const section = sections.some((s) => s.id === requested) ? requested! : sections[0]!.id;
   const setSection = (id: string) => {
@@ -62,7 +65,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   // (quay lại cửa sổ) cùng dữ liệu không xóa phần đang sửa dở.
   const originalKey = JSON.stringify(original);
   useEffect(() => setDraft(original), [originalKey]);
-  const lockOf: FieldLockLookup = declarationLockOf(kind, mode, original, editable);
+  const lockOf: FieldLockLookup = declarationLockOf(kind, mode, original, editable, locale);
   const edits = [...pendingEdits(kind, original, draft, editable), ...(mode === "LOCKED" ? [] : pendingItemEdits(kind, items.map((it) => it.id), itemRows, itemDraft))];
   const editableCount = new Set(editable.values()).size;
   const goOcr = (lineNo: number) => router.replace(`${pathname}?step=ocr&dong=${lineNo}`, { scroll: false });
@@ -79,10 +82,10 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
         )}
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" leftIcon={<FileSearch className="h-4 w-4" />} onClick={() => goOcr(it.lineNo)}>
-            Sửa số liệu chứng từ ở bước OCR
+            {t.editAtOcr}
           </Button>
           <Button size="sm" variant="secondary" leftIcon={<Search className="h-4 w-4" />} onClick={() => setHsItem(it)}>
-            Chọn mã HS
+            {t.pickHs}
           </Button>
         </div>
       </Stack>
@@ -92,42 +95,36 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   const actions = edits.length > 0 && (
     <div className="flex flex-wrap gap-2 pt-1">
       <Button size="sm" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={() => save.mutate(edits)}>
-        Lưu {formatNumber(edits.length)} thay đổi
+        {fill(t.saveN, { n: formatNumber(edits.length) })}
       </Button>
       <Button size="sm" variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => {
           setDraft(original);
           setItemDraft(itemRows);
         }}>
-        Hoàn tác
+        {t.undo}
       </Button>
     </div>
   );
-  const pending = edits.length ? `Có ${formatNumber(edits.length)} chỉ tiêu chưa lưu` : null;
+  const pending = edits.length ? fill(t.pendingN, { n: formatNumber(edits.length) }) : null;
 
   const notice =
     mode === "FULL" ? (
-      <Alert tone={pending ? "warning" : "info"} title={pending ?? "Tờ khai chưa khai báo – nhập đủ chỉ tiêu theo Phụ lục II"}>
-        <p>
-          Sửa được {formatNumber(editableCount)} chỉ tiêu người khai nhập. Ô nền xám chỉ đọc: chỉ tiêu tính từ chứng từ (loại hình, trị giá, cước, bảo hiểm, khoản điều chỉnh…)
-          – sửa ở bước đọc chứng từ rồi dựng lại. Dòng hàng: bấm vào dòng để nhập ô chỉ có trên tờ khai (mã biểu thuế, miễn giảm, thuế khác…); số liệu chứng từ và mã HS sửa qua nút ở đầu panel dòng.
-        </p>
+      <Alert tone={pending ? "warning" : "info"} title={pending ?? t.fullTitle}>
+        <p>{fill(t.fullBody, { n: formatNumber(editableCount) })}</p>
         {actions}
       </Alert>
     ) : mode === "AMEND" ? (
-      <Alert tone="warning" title={pending ?? "Khai sửa đổi bổ sung – tờ khai đã phân luồng"}>
-        <p>
-          Chỉ sửa chỉ tiêu được khai bổ sung. Ô khóa ghi căn cứ ngay dưới ô: mục 3 Phụ lục II (không được khai bổ sung; thêm nhóm vận đơn, hóa đơn, bảo lãnh khi đã đề nghị
-          giải phóng hàng), mục 4 (hệ thống không hỗ trợ – ghi nội dung đúng vào ô Ký hiệu và số hiệu). Sửa xong phê duyệt lại rồi khai tạm sửa đổi (IDA01).
-        </p>
+      <Alert tone="warning" title={pending ?? t.amendTitle}>
+        <p>{t.amendBody}</p>
         {actions}
       </Alert>
     ) : (
-      <Alert tone="info" title="Tờ khai đầy đủ theo Phụ lục II – chỉ đọc">
+      <Alert tone="info" title={t.readTitle}>
         {!canEdit
-          ? "Bạn không có quyền sửa tờ khai."
+          ? t.noPermission
           : cleared
-            ? "Tờ khai đã thông quan – không sửa trên tờ khai gốc. Cần sửa thì lập bản khai bổ sung AMA ở bước 7 “Sửa sau thông quan”."
-            : "Tờ khai đã phê duyệt / đã truyền. Mở lại tờ khai (chưa khai báo) hoặc gọi về sửa đổi bổ sung (IDD, khi đã phân luồng) để sửa."}
+            ? t.clearedNote
+            : t.lockedNote}
       </Alert>
     );
 

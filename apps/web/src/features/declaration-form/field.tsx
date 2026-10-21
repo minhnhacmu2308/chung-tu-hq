@@ -2,7 +2,7 @@
 // Một ô chỉ tiêu của bản mẫu tờ khai, dạng gọn (phương án B): nhãn "số · tên" kèm dấu * (bắt buộc) hoặc chữ nhỏ "tình huống";
 // nút ⓘ mở hướng dẫn khai (catalog Phụ lục II) kèm nghĩa vai trò (VNACCS tự xác định…). Ô mã có danh mục VNACCS: chỉ hiện mã, tên khi rê chuột,
 // tra cứu bằng danh sách thả xuống / popup (CodeInput); chỉ đọc thì hiện "mã · tên". Tùy chọn nhãn bên trái (phương án F). "Còn thiếu", lý do áp dụng.
-import { Abbreviation, Button, Checkbox, cn, Field, FieldFrame, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea } from "@kb/ui";
+import { Abbreviation, Button, Checkbox, cn, Field, FieldFrame, fill, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea, useMessages, useUiLocale } from "@kb/ui";
 import type { ReactNode } from "react";
 import { codeListFor, DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type FieldOption, type LayoutField } from "@kb/contracts";
 import { Info, Lock } from "lucide-react";
@@ -10,9 +10,10 @@ import { useMemo } from "react";
 import { useAmendLock } from "./amend-context";
 import { CodeInput } from "./code-input";
 import { codeScope } from "./code-scope";
-import { ROLE_INFO } from "../dossier-detail/steps/declaration-groups";
+import { roleInfo } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
 import { DATE_WIDTH, displayValue, fieldWidthClass } from "./display";
+import { FORM_MESSAGES } from "./form.messages";
 import { choiceControl, isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 import { useCodeName } from "./use-code-list";
 import { useViewPrefs } from "./view-prefs";
@@ -21,16 +22,21 @@ type Kind = "IDA" | "EDA";
 
 /** Chữ nhỏ cạnh nhãn thay cho huy hiệu vai trò. Bắt buộc → dấu * (trình đọc màn hình nghe "bắt buộc"); theo tình huống → "TH" (bấm xem nghĩa). Không bắt buộc, VNACCS tự xác định,
  * chưa sử dụng → không ghi (nghĩa vai trò xem ở nút ⓘ). */
-const ROLE_TAG: Partial<Record<DeclarationFieldRole, string>> = { REFERENCE: "tham khảo" };
+/** `fill` của @kb/ui – FormField có prop trùng tên `fill`. */
+const fillText = fill;
+
+const ROLE_TAG: Partial<Record<DeclarationFieldRole, "reference">> = { REFERENCE: "reference" };
 /** Vai trò không hiện cạnh nhãn – ghi nghĩa trong hướng dẫn. */
 const ROLE_IN_GUIDE = new Set<DeclarationFieldRole>(["ASSIST", "UNUSED"]);
 
 export function RoleMark({ role, star = true }: { role: DeclarationFieldRole; star?: boolean }) {
+  const t = useMessages(FORM_MESSAGES);
+  const locale = useUiLocale();
   if (role === "REQUIRED") {
     return star ? (
       <>
         <span className="ml-0.5 text-danger" aria-hidden="true">*</span>
-        <span className="sr-only"> (bắt buộc)</span>
+        <span className="sr-only">{t.requiredSr}</span>
       </>
     ) : null;
   }
@@ -38,31 +44,33 @@ export function RoleMark({ role, star = true }: { role: DeclarationFieldRole; st
   if (role === "CONDITIONAL") {
     return (
       <span className="ml-1.5 text-xs font-normal text-fg-subtle">
-        <Abbreviation short="TH" full={`Theo tình huống – ${ROLE_INFO.CONDITIONAL.meaning}.`} />
+        <Abbreviation short={t.condShort} full={fill(t.condFull, { meaning: roleInfo(locale).CONDITIONAL.meaning })} />
       </span>
     );
   }
   const tag = ROLE_TAG[role];
-  return tag ? <span className="ml-1.5 text-xs font-normal text-fg-subtle">{tag}</span> : null;
+  return tag ? <span className="ml-1.5 text-xs font-normal text-fg-subtle">{t[tag]}</span> : null;
 }
 
 /** Nút ⓘ mở hướng dẫn khai của chỉ tiêu (Phụ lục II, ghi chú nếu TT121 sửa đổi) và lý do ô đang hiện ("Có vì: …").
  * Không có hướng dẫn lẫn lý do → không hiện. Ô riêng của phần mềm (không số chỉ tiêu) lấy tên từ `label`. */
 export function GuideButton({ kind, no, role, reason, label }: { kind: Kind; no: string | undefined; role?: DeclarationFieldRole | undefined; reason?: string | undefined; label?: string | undefined }) {
+  const t = useMessages(FORM_MESSAGES);
+  const roles = roleInfo(useUiLocale());
   const guide = fieldGuide(kind, no);
   if (!guide && !reason) return null;
-  const title = guide ? `${guide.no} · ${guide.label}${guide.amendedBy121 ? " (sửa đổi theo TT121/2025)" : ""}` : label;
+  const title = guide ? `${guide.no} · ${guide.label}${guide.amendedBy121 ? t.amended121 : ""}` : label;
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="icon-sm" variant="ghost" className="shrink-0 text-fg-muted" aria-label={guide ? `Hướng dẫn khai chỉ tiêu ${guide.no}` : `Hướng dẫn: ${label ?? ""}`}>
+        <Button size="icon-sm" variant="ghost" className="shrink-0 text-fg-muted" aria-label={guide ? fill(t.guideAria, { no: guide.no }) : fill(t.guideAriaLabel, { label: label ?? "" })}>
           <Info className="h-3.5 w-3.5" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="max-w-sm text-sm" showClose>
         {title && <p className="font-medium text-fg">{title}</p>}
         {reason && <p className="mt-1 font-medium text-fg">{reason}</p>}
-        {role && ROLE_IN_GUIDE.has(role) && <p className="mt-1 font-medium text-fg">{ROLE_INFO[role].label}: {ROLE_INFO[role].meaning}.</p>}
+        {role && ROLE_IN_GUIDE.has(role) && <p className="mt-1 font-medium text-fg">{roles[role].label}: {roles[role].meaning}.</p>}
         {guide && <p className="mt-1 text-fg-muted">{guide.note}</p>}
       </PopoverContent>
     </Popover>
@@ -104,10 +112,12 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   // Khai sửa đổi bổ sung: chỉ tiêu không được sửa hiện chỉ đọc kèm lý do.
   const lock = useAmendLock()(field.key);
   const { labelsLeft } = useViewPrefs();
+  const t = useMessages(FORM_MESSAGES);
+  const locale = useUiLocale();
   // Ô mã có danh mục VNACCS: phạm vi lọc (cơ quan Hải quan, nhập/xuất) và tên của mã.
   const listId = field.input === "code" ? codeListFor(field.codeTable) : undefined;
   const office = values["TK_CH"] ?? "";
-  const scope = useMemo(() => (listId ? codeScope(listId, field.key, kind, { TK_CH: office }) : null), [listId, field.key, kind, office]);
+  const scope = useMemo(() => (listId ? codeScope(listId, field.key, kind, { TK_CH: office }, locale) : null), [listId, field.key, kind, office, locale]);
   const name = useCodeName(field.codeTable, values[field.key] ?? "", scope);
   const applicable = isApplicable(field, ctx);
   if (!applicable && !showInapplicable) return null;
@@ -136,14 +146,14 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
 
   const role = fieldRole(kind, field, parentNo);
   const condition = field.condition ? DECLARATION_CONDITIONS[field.condition].label : undefined;
-  const reason = condition ? (applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`) : undefined;
+  const reason = condition ? fillText(applicable ? t.presentBecause : t.notApplicableBecause, { c: condition }) : undefined;
   const missing = !suppressMissing && applicable && missingRequired(kind, field, values, parentNo, parentCondition, ctx);
   const set = (v: string) => onChange?.(field.key, v);
   // "Có vì: …" nằm trong hướng dẫn ⓘ (ô con: ⓘ của nhóm – groupGuideReason); chỉ "Không áp dụng vì: …" (xem tất cả ô) ghi dưới ô.
   const reasonInGuide = !compact && applicable;
   const shownReason = applicable ? undefined : reason;
   const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
-  const missingNote = missing && <p className="text-sm font-medium text-warning-subtle-fg">Còn thiếu</p>;
+  const missingNote = missing && <p className="text-sm font-medium text-warning-subtle-fg">{t.missing}</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
   // Ô đứng riêng: khung viền, tên trên đường viền – cùng kiểu với nhóm ô / nhóm lặp trên mọi màn hình. Nhãn bên trái (F) giữ kiểu cũ.
   const framed = !compact && !labelsLeft;

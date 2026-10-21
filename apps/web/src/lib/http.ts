@@ -1,6 +1,11 @@
 // Lớp gọi backend: mọi hàm trong src/api/http/* đi qua đây. Mọi thất bại đều ném ApiError để màn hình hiện thông báo tiếng Việt.
 import type { ZodType } from "zod";
+import { fill, pickMessages } from "@kb/ui";
 import { ApiError } from "./api-error";
+import { ERROR_MESSAGES } from "./errors.messages";
+import { getFormatLocale } from "./format";
+
+const msg = () => pickMessages(ERROR_MESSAGES, getFormatLocale());
 
 const BASE = "/api";
 
@@ -9,14 +14,14 @@ async function request<T>(method: string, path: string, init: RequestInit, schem
   try {
     res = await fetch(`${BASE}/${path}`, { ...init, method, credentials: "include" });
   } catch {
-    throw new ApiError("NETWORK", "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.", 0);
+    throw new ApiError("NETWORK", msg().network, 0);
   }
   if (!res.ok) throw await toApiError(res);
   if (!hasJsonBody(res)) return undefined as T;
   const data: unknown = await res.json();
   if (!schema) return data as T;
   const parsed = schema.safeParse(data);
-  if (!parsed.success) throw new ApiError("CONTRACT_MISMATCH", "Dữ liệu máy chủ trả về không đúng định dạng.", res.status);
+  if (!parsed.success) throw new ApiError("CONTRACT_MISMATCH", msg().contractMismatch, res.status);
   return parsed.data;
 }
 
@@ -33,7 +38,7 @@ async function toApiError(res: Response): Promise<ApiError> {
   } catch {
     /* body không phải JSON */
   }
-  return new ApiError(`HTTP_${res.status}`, `Lỗi máy chủ (${res.status})`, res.status);
+  return new ApiError(`HTTP_${res.status}`, fill(msg().serverError, { status: res.status }), res.status);
 }
 
 const json = (body: unknown): RequestInit => ({ headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

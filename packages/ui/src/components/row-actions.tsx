@@ -9,6 +9,7 @@ import { Tooltip } from "./tooltip.js";
 const MESSAGES = {
   vi: { more: "Thao tác khác" },
   en: { more: "More actions" },
+  zh: { more: "更多操作" },
 } satisfies Messages<"more">;
 
 export type RowAction = {

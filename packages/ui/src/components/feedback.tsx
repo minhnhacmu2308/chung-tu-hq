@@ -2,7 +2,8 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../lib/cn.js";
-import { useUiLocale } from "../lib/i18n.js";
+import { Illustration, type IllustrationName, type IllustrationProps } from "./illustration.js";
+import { useUiLocale, type UiLocale } from "../lib/i18n.js";
 
 /* ---------------- Badge ---------------- */
 
@@ -140,6 +141,31 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   ANNOUNCEMENT_SENT: "Sent", ANNOUNCEMENT_WITHDRAWN: "Withdrawn", TEMPLATE_PUBLISHED: "Published", TEMPLATE_DRAFT: "Unpublished",
 };
 
+/** Nhãn tiếng Trung (giản thể) tương ứng STATUS_META. */
+export const STATUS_LABELS_ZH: Record<Status, string> = {
+  PASS: "一致", WARN: "注意", FAIL: "错误", SKIPPED: "已跳过",
+  CROSS_CHECKED: "已交叉核对", SINGLE_SOURCE: "单一来源", CONFLICT: "冲突", INVALID_FORMAT: "格式错误",
+  MODEL_UNSURE: "需检查", USER_CONFIRMED: "已确认",
+  AUTO_APPROVED: "可自动批准", NEEDS_REVIEW: "需审批人审核",
+  GREEN_CHANNEL: "绿色通道", YELLOW_CHANNEL: "黄色通道", RED_CHANNEL: "红色通道",
+  DOSSIER_DRAFT: "草稿", DOSSIER_PROCESSING: "处理中", DOSSIER_NEEDS_REVIEW: "需检查", DOSSIER_APPROVED: "已批准，待发送",
+  DOSSIER_SUBMITTED: "已发送海关", DOSSIER_CLEARED: "已通关", DOSSIER_CANCELLED: "已取消",
+  CUSTOMS_READY: "待发送", CUSTOMS_SENDING: "发送中", CUSTOMS_INSPECTING: "查验中", CUSTOMS_CLEARED: "已通关",
+  AMA_DRAFT: "草稿，待批准", AMA_APPROVED: "已批准，待 AMA 申报", AMA_PRE_DECLARED: "已 AMA 临时申报", AMA_RECALLED: "已调回修改（AMB）", AMA_REGISTERED: "已正式申报（AMC）",
+  ACCOUNT_ACTIVE: "正常", ACCOUNT_INVITED: "已邀请", ACCOUNT_DISABLED: "已停用", ACCOUNT_PENDING_JOIN: "待批准加入",
+  ORG_ACTIVE: "正常", ORG_SUSPENDED: "已暂停",
+  INTEGRATION_CONNECTED: "已连接", INTEGRATION_ERROR: "连接错误", INTEGRATION_NOT_CONFIGURED: "未配置",
+  SERVICE_UP: "运行正常", SERVICE_DEGRADED: "性能下降", SERVICE_DOWN: "已停止",
+  ANNOUNCEMENT_SENT: "已发送", ANNOUNCEMENT_WITHDRAWN: "已撤回", TEMPLATE_PUBLISHED: "已发布", TEMPLATE_DRAFT: "未发布",
+};
+
+/** Nhãn trạng thái theo ngôn ngữ – dùng cho code không phải component (bộ lọc bảng, xuất file…). */
+export function statusLabel(status: Status, locale: UiLocale): string {
+  if (locale === "en") return STATUS_LABELS_EN[status];
+  if (locale === "zh") return STATUS_LABELS_ZH[status];
+  return STATUS_META[status].label;
+}
+
 export type StatusBadgeProps = { status: Status; label?: string; className?: string };
 
 export function StatusBadge({ status, label, className }: StatusBadgeProps) {
@@ -147,7 +173,7 @@ export function StatusBadge({ status, label, className }: StatusBadgeProps) {
   const locale = useUiLocale();
   return (
     <Badge tone={meta.tone} dot className={className} data-status={status}>
-      {label ?? (locale === "en" ? STATUS_LABELS_EN[status] : meta.label)}
+      {label ?? statusLabel(status, locale)}
     </Badge>
   );
 }
@@ -200,6 +226,9 @@ export function Skeleton({ className, ...props }: ComponentProps<"div">) {
 
 export type EmptyStateProps = {
   icon?: ReactNode;
+  /** Hình minh họa thay cho icon (bảng trống, không có kết quả, trang 404, lỗi). Không có cả icon lẫn illustration → "empty". */
+  illustration?: IllustrationName;
+  illustrationSize?: IllustrationProps["size"];
   title: ReactNode;
   description?: ReactNode;
   /** Hành động tiếp theo – bắt buộc nghĩ tới: người dùng nên làm gì khi trống. */
@@ -207,10 +236,14 @@ export type EmptyStateProps = {
   className?: string;
 };
 
-export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon, illustration: illustrationProp, illustrationSize, title, description, action, className }: EmptyStateProps) {
+  // Không truyền icon → mặc định hình minh họa "trống" (khối nhỏ gọn thì truyền icon).
+  const illustration = illustrationProp ?? (icon ? undefined : "empty");
   return (
     <div className={cn("flex flex-col items-center gap-2 px-6 py-12 text-center", className)}>
-      {icon && (
+      {illustration ? (
+        <Illustration name={illustration} size={illustrationSize ?? (illustrationProp ? "md" : "sm")} className="mb-2 motion-safe:animate-fade-in" />
+      ) : icon && (
         <div className="mb-1 inline-flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-fg-subtle [&>svg]:h-6 [&>svg]:w-6" aria-hidden="true">
           {icon}
         </div>

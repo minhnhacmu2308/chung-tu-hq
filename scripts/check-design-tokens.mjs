@@ -36,7 +36,7 @@ export const RULES = [
   {
     id: "apps-hardcoded-text", scope: "apps", codeOnly: true,
     onlyPath: /^apps\/web\/src\/(features|components|app|lib)\//,
-    skipPath: /^apps\/web\/src\/app\/api\/|^apps\/web\/src\/lib\/server\/|\.(messages|vi)\.tsx?$|\.test\.tsx?$/,
+    skipPath: /^apps\/web\/src\/app\/api\/|^apps\/web\/src\/lib\/server\/|(^|[\/.])(messages|vi)\.tsx?$|\.test\.tsx?$/,
     test: new RegExp(`[${VI_CHARS}${VI_CHARS.toUpperCase()}]`),
     msg: "Chữ hiển thị viết cứng. Giao diện có 3 ngôn ngữ (vi/en/zh): đưa nhãn vào bộ nhãn defineMessages trong file *.messages.ts rồi dùng useMessages(...). Nội dung pháp lý chỉ có tiếng Việt (bản in tờ khai) để trong file *.vi.ts.",
   },

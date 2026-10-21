@@ -1,11 +1,12 @@
 "use client";
 // Thêm / sửa một trường của skill (hoặc một quy tắc của skill ánh xạ).
-import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Select, Stack } from "@kb/ui";
+import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Select, Stack, fill, useMessages } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { addSkillField, skillKeys, updateSkillField } from "@/api/skills";
 import type { Skill, SkillField } from "@/mocks/types";
 import { FIELD_TYPE_LABELS } from "./skill-display";
+import { FIELD_DIALOG_MESSAGES } from "./skills.messages";
 
 type Props = {
   skill: Skill;
@@ -17,9 +18,11 @@ type Props = {
 };
 
 const EMPTY: SkillField = { key: "", label: "", type: "string", required: false, aliases: [], extract: true, display: true };
-const TYPE_OPTIONS = (Object.keys(FIELD_TYPE_LABELS) as SkillField["type"][]).map((v) => ({ value: v, label: FIELD_TYPE_LABELS[v] }));
 
 export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props) {
+  const t = useMessages(FIELD_DIALOG_MESSAGES);
+  const typeLabels = useMessages(FIELD_TYPE_LABELS);
+  const typeOptions = (Object.keys(typeLabels) as SkillField["type"][]).map((v) => ({ value: v, label: typeLabels[v] }));
   const qc = useQueryClient();
   const [draft, setDraft] = useState<SkillField>(field ?? EMPTY);
   const [aliases, setAliases] = useState((field?.aliases ?? []).join(", "));
@@ -49,17 +52,17 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: skillKeys.all });
       onOpenChange(false);
-      onSaved(field ? `Đã lưu "${draft.label}"` : `Đã thêm "${draft.label}"`);
+      onSaved(fill(field ? t.saved : t.added, { label: draft.label }));
     },
   });
 
-  const title = field ? `Sửa trường ${field.key}` : "Thêm trường bổ sung";
+  const title = field ? fill(t.editTitle, { key: field.key }) : t.addTitle;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         title={title}
-        description="Trường bổ sung được AI đọc từ lần đọc tiếp theo (tối đa 20). Nên thêm vài mẫu đã gắn nhãn rồi bấm Đánh giá lại."
+        description={t.description}
       >
         <form
           onSubmit={(e) => {
@@ -70,7 +73,7 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
           <Stack gap="md">
             {save.isError && <Alert tone="danger">{save.error.message}</Alert>}
             <Grid cols={{ base: 1, md: 2 }}>
-              <Field label="Mã trường" required hint={field ? "Không đổi được mã sau khi tạo" : "Chữ không dấu, số, dấu _"}>
+              <Field label={t.key} required hint={field ? t.keyLocked : t.keyHint}>
                 <Input
                   value={draft.key}
                   disabled={!!field}
@@ -79,41 +82,41 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
                   placeholder="lc_no"
                 />
               </Field>
-              <Field label="Tên hiển thị" required>
-                <Input value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Số L/C" />
+              <Field label={t.label} required>
+                <Input value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder={t.labelPlaceholder} />
               </Field>
-              <Field label="Kiểu dữ liệu">
+              <Field label={t.type}>
                 <Select
-                  options={TYPE_OPTIONS}
+                  options={typeOptions}
                   value={draft.type}
                   disabled={!!field}
                   onChange={(e) => setDraft({ ...draft, type: e.target.value as SkillField["type"] })}
                 />
               </Field>
-              <Field label="Nhãn thường gặp trên chứng từ (alias)" hint="Cách nhau bằng dấu phẩy" className="cq-md:col-span-2">
+              <Field label={t.aliases} hint={t.aliasesHint} className="cq-md:col-span-2">
                 <Input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="L/C No., Letter of Credit No." />
               </Field>
               <Field
-                label="Ghi chú cho người khai"
-                hint="Ví dụ: dùng cho chỉ tiêu nào trên tờ khai. Nguồn chỉ tiêu cấu hình ở Cài đặt → Khai báo"
+                label={t.note}
+                hint={t.noteHint}
                 className="cq-md:col-span-2"
               >
                 <Input
                   value={draft.declarationField ?? ""}
                   onChange={(e) => setDraft({ ...draft, declarationField: e.target.value })}
-                  placeholder="Đối chiếu với L/C khi duyệt"
+                  placeholder={t.notePlaceholder}
                 />
               </Field>
             </Grid>
             <Checkbox
-              label="Bắt buộc – thiếu thì đánh dấu nghi ngờ"
+              label={t.required}
               checked={draft.required}
               onChange={(e) => setDraft({ ...draft, required: e.target.checked })}
             />
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Hủy</Button>
-            <Button type="submit" loading={save.isPending}>{field ? "Lưu" : "Thêm"}</Button>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="submit" loading={save.isPending}>{field ? t.save : t.add}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

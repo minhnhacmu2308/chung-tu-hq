@@ -7,7 +7,7 @@ export { layoutFor } from "./layout-for.js";
 export { BILL_SPLIT_FORM, EXPORT_IDENTIFIER_FORM, IDENTIFIER_FORM, type TransportOperationForm } from "./transport-operations.js";
 export { amendLock, type AmendLock, type AmendLockBasis } from "./amend.js";
 export {
-  appFieldMeta, declarationEditMode, declarationFormValues, DERIVED_LOCK, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, formKeysOf, isExtraFieldKey, mappedAppCodes, pendingFormEdits,
+  appFieldMeta, declarationEditMode, declarationFormValues, DERIVED_LOCK, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, formKeysOf, isExtraFieldKey, mappedAppCodes, pendingFormEdits, splitAddressLines,
   type DeclarationEditMode, type ExtraFieldMeta, type FptObjectName,
 } from "./app-fields.js";
 export {

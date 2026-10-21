@@ -23,8 +23,16 @@ const splitCodeName = (v: string) => {
   const m = /^([A-Z0-9-]{1,12})\s*[–-]\s*(.+)$/.exec(v);
   return m ? { code: m[1]!, name: m[2]!.trim() } : { code: v, name: v };
 };
-/** Địa chỉ dài → tối đa 4 ô 35 ký tự, cắt ở khoảng trắng. */
-function splitAddress(addr: string, max: number): string[] {
+/**
+ * Địa chỉ → tối đa `max` ô 35 ký tự (FE form + backend truyền FPT dùng chung).
+ * Có xuống dòng ("\n") = người khai đã chia dòng trên form → giữ đúng dòng (dòng trống giữ chỗ, dòng thừa dồn vào ô cuối);
+ * không có → cắt tự động ở khoảng trắng.
+ */
+export function splitAddressLines(addr: string, max: number): string[] {
+  if (addr.includes("\n")) {
+    const lines = addr.trim().split("\n").map((l) => l.trim());
+    return lines.length <= max ? lines : [...lines.slice(0, max - 1), lines.slice(max - 1).filter(Boolean).join(" ")];
+  }
   const out: string[] = [];
   let rest = addr.trim();
   while (rest && out.length < max) {
@@ -56,8 +64,15 @@ const qty = (code: string, [n, u]: [string, string]): Rule => ({
 });
 /** Trọng lượng: đơn vị luôn KGM khi truyền – chỉ sửa số. */
 const weight = (code: string, [w, u]: [string, string]): Rule => ({ code, keys: [w], to: (v) => ({ [w]: v, [u]: "KGM" }), from: (v) => get(v, w) });
+/** Ô địa chỉ → chỉ tiêu: cắt tự động ra đúng các dòng đang nhập thì lưu một chuỗi; khác (vd chỉ nhập dòng 3–4) thì lưu kèm xuống dòng. */
+function joinAddressLines(lines: string[]): string {
+  const used = lines.slice(0, lines.findLastIndex(Boolean) + 1);
+  const flat = used.filter(Boolean).join(" ");
+  const auto = splitAddressLines(flat, lines.length);
+  return auto.length === used.length && auto.every((l, i) => l === used[i]) ? flat : used.join("\n");
+}
 const address = (code: string, keys: string[]): Rule => ({
-  code, keys, to: (v) => Object.fromEntries(splitAddress(v, keys.length).map((c, i) => [keys[i]!, c])), from: (v) => keys.map((k) => get(v, k)).filter(Boolean).join(" "),
+  code, keys, to: (v) => Object.fromEntries(splitAddressLines(v, keys.length).map((c, i) => [keys[i]!, c])), from: (v) => joinAddressLines(keys.map((k) => get(v, k))),
 });
 const list = (code: string, key: (i: number) => string, max: number): Rule => ({
   code, keys: range(max).map(key),

@@ -181,6 +181,11 @@ describe("declaration-to-fpt – chỉ tiêu theo tình huống", () => {
     expect(plain.objVN_IDA!["tK_TDN"]).toBeUndefined();
     expect(plain.objVN_IDA_VANDON!["vD_COC"]).toBe(1);
   });
+  it("IDA 1.22: địa chỉ người khai chia dòng trên form (có xuống dòng) → gửi đúng ô TK_EPA..EP4", () => {
+    const r = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, NXK_DC: { value: "51 CHANGI BUSINESS PARK\n\nSINGAPORE\n486066" } } }).request as Req;
+    expect(r.objVN_IDA).toMatchObject({ tK_EPA: "51 CHANGI BUSINESS PARK", tK_EP3: "SINGAPORE", tK_EP4: "486066" });
+    expect(r.objVN_IDA!["tK_EP2"] ?? "").toBe("");
+  });
   it("EDA: 2.3 → TK_TDN, 2.7 → TK_RID, hô hiệu → TK_VSC, 2.60 đã sửa → CON_C01..", () => {
     const EDA = { ...PAYLOAD, kind: "EDA" as const, direction: "XK" as const, fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, NGAY_DI: { value: "2026-10-20" }, VBPQ: { value: "" } } };
     const r = buildFptRequest({ ...EDA, fields: { ...EDA.fields, TNTX_TK: { value: "105000000010" }, HAN_TN: { value: "2027-03-01" }, HO_HIEU: { value: "9999" }, SO_CONT: { value: "AAAU1234567, BBBU7654321" } } }).request as Req;

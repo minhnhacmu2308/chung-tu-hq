@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appFieldMeta, declarationEditMode, declarationFormValues, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, isExtraFieldKey, pendingFormEdits } from "./index.js";
+import { appFieldMeta, declarationEditMode, declarationFormValues, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, isExtraFieldKey, pendingFormEdits, splitAddressLines } from "./index.js";
 
 const f = (code: string, value: string) => ({ code, value });
 const FIELDS = [f("MA_LH", "A11"), f("PTVC", "1"), f("CQHQ", "02B1"), f("NNK_MST", "0101234567"), f("NNK_TEN", "CONG TY A"), f("NXK_TEN", "SAMSUNG"), f("SO_HD", "INV-1"), f("SO_VD", "MAWB1"), f("CANG_DO", "VNHPH – CANG HAI PHONG"), f("GHI_CHU", "")];
@@ -80,6 +80,31 @@ describe("pendingFormEdits – ô bổ sung lưu theo tên trường, bỏ kho�
     const keys = editableFormKeys("IDA", "FULL", original);
     expect(pendingFormEdits("IDA", original, { ...original, TK_CCC: " B ", TK_IV3: "INV-2" }, keys)).toEqual(expect.arrayContaining([{ code: "TK_CCC", value: "B" }, { code: "SO_HD", value: "INV-2" }]));
     expect(pendingFormEdits("IDA", original, original, keys)).toEqual([]);
+  });
+});
+
+describe("địa chỉ 4 dòng (1.22 TK_EPA..EP4) – giữ đúng dòng người khai nhập", () => {
+  const ADDR = [f("NXK_DC", "51 CHANGI BUSINESS PARK CENTRAL 2")];
+  const edit = (draft: Record<string, string>) => {
+    const original = declarationFormValues("IDA", ADDR);
+    return pendingFormEdits("IDA", original, { ...original, ...draft }, editableFormKeys("IDA", "FULL", original));
+  };
+  const lines = (v: Record<string, string>) => [v["TK_EPA"], v["TK_EP2"], v["TK_EP3"], v["TK_EP4"]];
+
+  it("nhập dòng 3, dòng 4 → lưu xong vẫn ở dòng 3, dòng 4", () => {
+    const [saved] = edit({ TK_EP3: "SINGAPORE", TK_EP4: "486066" });
+    expect(saved?.code).toBe("NXK_DC");
+    expect(lines(declarationFormValues("IDA", [saved!]))).toEqual(["51 CHANGI BUSINESS PARK CENTRAL 2", undefined, "SINGAPORE", "486066"]);
+  });
+
+  it("địa chỉ không tách dòng riêng vẫn lưu một chuỗi (cắt tự động 35 ký tự như cũ)", () => {
+    expect(edit({ TK_EPA: "51 CHANGI BUSINESS PARK CENTRAL 3" })).toEqual([{ code: "NXK_DC", value: "51 CHANGI BUSINESS PARK CENTRAL 3" }]);
+    expect(lines(declarationFormValues("IDA", [f("NXK_DC", "123 SAMSUNG-RO, YEONGTONG-GU, SUWON-SI, GYEONGGI-DO")]))).toEqual(["123 SAMSUNG-RO, YEONGTONG-GU,", "SUWON-SI, GYEONGGI-DO", undefined, undefined]);
+  });
+
+  it("splitAddressLines: chuỗi có xuống dòng → đúng dòng; quá số ô → dồn vào ô cuối", () => {
+    expect(splitAddressLines("A\n\nC", 4)).toEqual(["A", "", "C"]);
+    expect(splitAddressLines("A\nB\nC\nD\nE", 4)).toEqual(["A", "B", "C", "D E"]);
   });
 });
 

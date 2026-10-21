@@ -1,6 +1,6 @@
 // Tờ khai (chỉ tiêu theo mnemonic `code`) → object FPT.VNACCS (objVN_IDA/HANG/VANDON/KTG, objVN_EDA/HANG/CON).
 // Cắt độ dài theo đặc tả (ghi cảnh báo), ngày → dd/MM/yyyy, số → number. Thuần; kiểm tra bằng Zod của @kb/contracts/fpt.
-import { EdaRequestSchema, extraFieldFpt, fptKey, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
+import { EdaRequestSchema, extraFieldFpt, fptKey, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
 
 /** Dữ liệu tờ khai đủ để dựng payload – không phụ thuộc kiểu của module declaration. */
 export type DeclarationPayload = {
@@ -72,22 +72,9 @@ function setPermits(value: string, set: ReturnType<typeof setter>, warnings: str
   if (permits.length > 5) warnings.push(`Giấy phép: chỉ gửi 5 giấy phép đầu (${permits.slice(5).map((x) => x.code).join(", ")} bị bỏ)`);
 }
 
-/** Chia địa chỉ dài thành 4 ô 35 ký tự (EPA/EP2/EP3/EP4 hoặc CGA/CAT/CAC/CAS). */
+/** Chia địa chỉ thành 4 ô 35 ký tự (EPA/EP2/EP3/EP4 hoặc CGA/CAT/CAC/CAS) – cùng quy tắc form (giữ dòng người khai chia sẵn). */
 function splitAddress(addr: string, names: string[], set: ReturnType<typeof setter>) {
-  const chunks: string[] = [];
-  let rest = addr.trim();
-  while (rest && chunks.length < names.length) {
-    if (rest.length <= 35) {
-      chunks.push(rest);
-      rest = "";
-    } else {
-      const cut = rest.lastIndexOf(" ", 35);
-      const at = cut > 10 ? cut : 35;
-      chunks.push(rest.slice(0, at).trim());
-      rest = rest.slice(at).trim();
-    }
-  }
-  chunks.forEach((c, i) => set(names[i]!, c));
+  splitAddressLines(addr, names.length).forEach((c, i) => c && set(names[i]!, c));
 }
 
 /**

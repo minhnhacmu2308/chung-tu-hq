@@ -3,7 +3,7 @@ import { z } from "zod";
 import { brandThemeCss, createBrandTheme, type BrandAdjustment } from "./brand-theme.js";
 
 export const APPEARANCE_OPTIONS = {
-  locale: ["vi", "en"],
+  locale: ["vi", "en", "zh"],
   mode: ["light", "dark", "system"],
   density: ["compact", "comfortable", "spacious"],
   fontSize: ["sm", "md", "lg"],

@@ -40,7 +40,7 @@ export {
   Stepper, WorkflowDiagram, layoutWorkflow,
   type StepperProps, type StepperStep, type WorkflowDiagramProps, type FlowNode, type FlowEdge, type FlowNodeKind, type FlowNodeStatus,
 } from "./components/workflow.js";
-export { UiLocaleProvider, useUiLocale, useMessages, intlLocale, type UiLocale, type Messages } from "./lib/i18n.js";
+export { UiLocaleProvider, useUiLocale, useMessages, defineMessages, pickMessages, fill, intlLocale, UI_LOCALES, type UiLocale, type Messages } from "./lib/i18n.js";
 export {
   DataTable, createDataTableColumnHelper, dataTableFeatures,
   type DataTableProps, type DataTableColumn, type DataTableColumnMeta, type DataTablePagination, type DataTableFeatures,

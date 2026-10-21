@@ -21,6 +21,7 @@ import { declarationKeys, getDeclarationView } from "@/api/declaration";
 import { getPostAmendmentView, postAmendmentKeys } from "@/api/post-amendment";
 import { formatDate, formatDateTime, formatRelative, formatTime, formatVnd } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
+import { rowReason } from "@/lib/reason-codes";
 import type { CustomsChannel, Declaration } from "@/mocks/types";
 import { CustomsInfoPanel, type CustomsEstimate } from "./customs-info-panel";
 import { errorMessage, KeyValue, StepError, StepLoading } from "./declaration-parts";
@@ -131,10 +132,11 @@ function OperationRow({ r, h }: { r: PipelineRow; h: RowHandlers }) {
   const ops = useMessages(OPERATION_MESSAGES);
   const pipe = pipeStatus(locale);
   // Khóa vì đang chờ phản hồi: khung "Việc tiếp theo" đã báo – dòng giữ kết quả gần nhất cho đỡ lặp.
-  // kb-allow-raw: khớp tiền tố lý do khóa do backend/mock trả về (dữ liệu tiếng Việt, không phải chữ hiển thị)
-  const busyLock = r.status === "SENDING" || Boolean(r.reason?.startsWith("Đang chờ phản hồi"));
+  const busyLock = r.status === "SENDING" || r.reasonCode === "OPERATION_PENDING";
+  // Lý do theo mã (dịch theo ngôn ngữ); mã lạ → câu tiếng Việt server gửi kèm.
+  const reason = rowReason(r, locale);
   // Ưu tiên: hướng dẫn sửa tờ khai → kết quả gần nhất (đã gửi) → lý do bị khóa (chưa gửi).
-  const note = r.enabled && r.action === "EDIT" ? r.reason : r.summary ?? (busyLock ? undefined : r.reason);
+  const note = r.enabled && r.action === "EDIT" ? reason : r.summary ?? (busyLock ? undefined : reason);
   return (
     <li className="flex flex-wrap items-start gap-3 px-3 py-3">
       <PipeIcon status={r.status} />
@@ -597,6 +599,7 @@ function NextStep({
 }) {
   const t = useMessages(SUBMIT_MESSAGES);
   const ops = useMessages(OPERATION_MESSAGES);
+  const locale = useUiLocale();
   if (sending) {
     return (
       <Alert tone="info" title={fill(t.awaiting, { op: sending.op, label: opLabel(ops, sending).toLowerCase() })}>
@@ -624,7 +627,7 @@ function NextStep({
             </Badge>
             {opLabel(ops, next)}
           </p>
-          {next.reason && <p className="mt-1 text-sm text-fg-muted">{next.reason}</p>}
+          {next.reason && <p className="mt-1 text-sm text-fg-muted">{rowReason(next, locale)}</p>}
         </div>
         {!certPicker && (
           <div className="flex items-center gap-2">

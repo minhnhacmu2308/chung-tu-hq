@@ -5,7 +5,7 @@ import {
   type CustomsOperation, type OperationResult,
 } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
-import { domainError } from "../../../shared/errors.js";
+import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
@@ -23,7 +23,7 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   if (!snap) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
   const { result, outbox, amendment } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId), amendment: await openPostAmendment(r, ctx.orgId, dossierId) }));
-  if (!result) return err(domainError("INVALID_STATE", "Hồ sơ chưa truyền – ký số và khai tạm trước"));
+  if (!result) return err(reasonError("INVALID_STATE", "NOT_SUBMITTED_YET"));
   if (op === queryOpFor(dossier.direction) || CUSTOMS_OPERATIONS[op].kind === "query") return queryNow(deps, ctx, dossierId, dossier.direction, result);
 
   // Sau thông quan: "đã duyệt" là bản khai bổ sung AMA (tờ khai gốc giữ nguyên, không duyệt lại).
@@ -31,29 +31,29 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
   const flow = { direction: dossier.direction, approved, hasContainers: snap.payload.containers.length > 0 };
   const a = operationAvailability(availabilityInput(flow, result, outbox)).find((x) => x.op === op);
   if (!a) return err(domainError("VALIDATION", `Nghiệp vụ ${op} không thuộc luồng tờ khai ${dossier.direction === "NK" ? "nhập" : "xuất"} khẩu`));
-  if (!a.enabled) return err(domainError("INVALID_STATE", a.reason ?? `Chưa thực hiện được ${op}`));
-  if (a.action === "EDIT") return err(domainError("INVALID_STATE", a.reason ?? "Sửa tờ khai ở bước Review và phê duyệt lại trước"));
-  if (a.action === "START_POST_EDIT") return err(domainError("INVALID_STATE", "Bấm “Bắt đầu sửa sau thông quan” để lập bản khai bổ sung trước"));
+  if (!a.enabled) return err(a.reasonCode ? reasonError("INVALID_STATE", a.reasonCode, a.reasonParams) : domainError("INVALID_STATE", `Chưa thực hiện được ${op}`));
+  if (a.action === "EDIT") return err(reasonError("INVALID_STATE", a.reasonCode ?? "EDIT_DECLARATION_FIRST", a.reasonParams));
+  if (a.action === "START_POST_EDIT") return err(reasonError("INVALID_STATE", "START_POST_EDIT_FIRST"));
 
   let payload: Record<string, unknown> = { request: { soToKhai: result.declarationNo }, certificateId: result.raw?.certificateId };
   if (op === "AMA") {
     // Bản khai bổ sung riêng: đã duyệt, đủ dòng hàng + mã lý do; tờ khai gốc không gửi lại, không đổi trạng thái.
-    if (amendment?.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Bản khai bổ sung chưa được phê duyệt"));
+    if (amendment?.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "AMENDMENT_NOT_APPROVED"));
     const built = buildAmaRequest(amendment);
-    if (built.blockers.length) return err(domainError("BLOCKER_FAILED", `Bản khai bổ sung chưa gửi được: ${built.blockers.join("; ")}`));
+    if (built.blockers.length) return err(reasonError("BLOCKER_FAILED", "AMENDMENT_NOT_TRANSMITTABLE", { blockers: built.blockers.join("; ") }));
     payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId, amendmentId: amendment.id };
     return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: false });
   }
   if (isContentOperation(op)) {
     // Bất biến 7: chỉ gửi nội dung tờ khai đã duyệt, HS đủ, không còn BLOCKER.
-    if (snap.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Tờ khai chưa được phê duyệt lại sau khi sửa"));
-    if (snap.unconfirmedHs > 0) return err(domainError("HS_UNCONFIRMED", `Còn ${snap.unconfirmedHs} mã HS chưa xác nhận`));
+    if (snap.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
+    if (snap.unconfirmedHs > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs }));
     const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
-    if (blockers > 0) return err(domainError("BLOCKER_FAILED", `Còn ${blockers} luật lỗi chặn truyền`));
+    if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
     if (baseOp(op) === "IDA" && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
-      return err(domainError("RATE_WEEK_CHANGED", `Tờ khai dùng tỷ giá tuần ${weekStart(snap.exchangeRateDate)} – đã sang tuần tỷ giá mới. Dựng lại tờ khai với tỷ giá tuần này rồi duyệt lại`));
+      return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
     const built = buildFptRequest(snap.payload);
-    if (built.blockers.length) return err(domainError("BLOCKER_FAILED", `Tờ khai chưa truyền được: ${built.blockers.join("; ")}`));
+    if (built.blockers.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: built.blockers.join("; ") }));
     payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
   } else if (op === "HYS") {
     payload = { files: (await deps.dossiers.documents(ctx.orgId, dossierId)).map((d) => ({ name: d.fileName, storageKey: d.storageKey })), certificateId: result.raw?.certificateId };

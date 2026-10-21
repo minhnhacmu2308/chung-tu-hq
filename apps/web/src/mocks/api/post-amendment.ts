@@ -8,6 +8,7 @@ import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
 import { newLine, openAmendment, sourceLines } from "@/mocks/post-amendment-sim";
 import { customsInfoNow, settleCustoms } from "./customs";
+import { reasonApiError } from "@/mocks/reason-error";
 
 export const postAmendmentKeys = { view: (dossierId: string) => ["post-amendment", dossierId] as const };
 
@@ -118,7 +119,7 @@ export const approvePostAmendment = (dossierId: string) =>
     if (!a.header["TK_REC"]?.trim()) throw new ApiError("MISSING_FIELD", "Chưa nhập mã lý do khai bổ sung");
     const me = db.members.find((m) => m.id === db.currentUserId);
     const owner = db.dossiers.find((d) => d.id === dossierId)?.ownerId;
-    if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw new ApiError("FORBIDDEN", "Người duyệt phải khác người tạo hồ sơ (nguyên tắc 4 mắt)");
+    if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw reasonApiError("FORBIDDEN", "FOUR_EYES");
     Object.assign(a, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso(), updatedAt: nowIso() });
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     Object.assign(dossier, { step: "submit", updatedAt: nowIso() });

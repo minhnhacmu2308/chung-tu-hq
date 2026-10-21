@@ -40,6 +40,12 @@ describe("route()", () => {
       expect(await res.json()).toEqual({ code, message: "m" });
     }
   });
+  it("DomainError có mã lý do → JSON {code, message, reason, params} (server không dịch)", async () => {
+    const error = { code: "HS_UNCONFIRMED" as const, message: "Còn 2 mã HS chưa xác nhận", reason: "HS_UNCONFIRMED" as const, params: { n: 2 } };
+    const res = await route(async () => fromResult({ ok: false, error }))(req(), ctx);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ code: "HS_UNCONFIRMED", message: "Còn 2 mã HS chưa xác nhận", reason: "HS_UNCONFIRMED", params: { n: 2 } });
+  });
   it("lỗi lạ → 500 INTERNAL, không lộ message", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await route(async () => {

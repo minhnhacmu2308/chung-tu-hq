@@ -12,6 +12,7 @@ import { useMemo } from "react";
 import { CUSTOMS_OPERATIONS } from "@kb/contracts";
 import { customsKeys, listCustomsDeclarations, type CustomsRow } from "@/api/customs";
 import { formatDateTime, formatRelative, formatVnd } from "@/lib/format";
+import { errorText } from "@/lib/reason-codes";
 import { CUSTOMS_PAGE_MESSAGES } from "./customs.messages";
 
 // Trạng thái tờ khai → mã StatusBadge của @kb/ui (nguồn duy nhất của nhãn + màu).
@@ -151,7 +152,7 @@ export function CustomsPage() {
             </Button>
           }
         >
-          {q.error instanceof Error ? q.error.message : t.unknownError}
+          {errorText(q.error, locale, t.unknownError)}
         </Alert>
       ) : (
         <Card className="p-4">

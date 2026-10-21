@@ -3,11 +3,14 @@ import type { DomainError, DomainErrorCode, Result } from "@kb/core/shared";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError, type ZodType } from "zod";
 
+/** `reason` + `params`: mã lý do ổn định (@kb/contracts reason-codes) để giao diện dịch – server không dịch, `message` luôn tiếng Việt. */
 export class HttpError extends Error {
   constructor(
     public status: number,
     public code: string,
     message: string,
+    public reason?: string,
+    public params?: Record<string, string | number>,
   ) {
     super(message);
     this.name = "HttpError";
@@ -16,7 +19,7 @@ export class HttpError extends Error {
 
 export class DomainHttpError extends HttpError {
   constructor(e: DomainError) {
-    super(STATUS_BY_CODE[e.code] ?? 422, e.code, e.message ?? e.code);
+    super(STATUS_BY_CODE[e.code] ?? 422, e.code, e.message ?? e.code, e.reason, e.params);
   }
 }
 
@@ -81,10 +84,13 @@ export function clientIp(req: NextRequest): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "0.0.0.0";
 }
 
+/** Thân JSON của lỗi: {code, message} + mã lý do và tham số khi có. */
+export const errorBody = (e: HttpError) => ({ code: e.code, message: e.message, ...(e.reason ? { reason: e.reason } : {}), ...(e.params ? { params: e.params } : {}) });
+
 type Params = Record<string, string>;
 type Handler = (req: NextRequest, params: Params) => Promise<Response | unknown>;
 
-/** Bọc handler: kết quả object → JSON 200; Response trả nguyên; lỗi → JSON {code,message}. */
+/** Bọc handler: kết quả object → JSON 200; Response trả nguyên; lỗi → JSON {code,message,reason?,params?}. */
 export function route(handler: Handler) {
   return async (req: NextRequest, ctx: { params: Promise<Params> }): Promise<Response> => {
     try {
@@ -94,7 +100,7 @@ export function route(handler: Handler) {
       if (out === undefined) return new NextResponse(null, { status: 204 });
       return NextResponse.json(out);
     } catch (e) {
-      if (e instanceof HttpError) return NextResponse.json({ code: e.code, message: e.message }, { status: e.status });
+      if (e instanceof HttpError) return NextResponse.json(errorBody(e), { status: e.status });
       if (e instanceof ZodError) {
         return NextResponse.json({ code: "VALIDATION", message: "Dữ liệu không hợp lệ", issues: e.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, { status: 400 });
       }

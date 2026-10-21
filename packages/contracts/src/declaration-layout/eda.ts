@@ -99,6 +99,7 @@ export const LAYOUT_EDA: DeclarationLayout = withShortLabels({
             fld("TK_EPA", "Địa chỉ", "textarea", { no: "2.14", width: "full" }),
           ],
         },
+        // 2.16–2.18 (ủy thác, xuất khẩu tại chỗ – TT121): ô bổ sung người khai nhập, không gắn điều kiện (hồ sơ không cho biết tình huống) – tùy chọn.
         { id: "uy-thac-xk", title: "Người ủy thác xuất khẩu", items: [fld("TK_EXC", "Mã người ủy thác xuất khẩu", "text", { no: "2.16", width: "sm" }), fld("TK_EXN", "Tên người ủy thác xuất khẩu", "text", { no: "2.17", width: "lg" })] },
         {
           id: "nguoi-nhap-khau", title: "Người nhập khẩu", items: [

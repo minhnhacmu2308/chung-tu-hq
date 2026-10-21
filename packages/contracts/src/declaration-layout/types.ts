@@ -51,6 +51,11 @@ export type LayoutBlock = {
   emptyNote?: string;
   /** Thao tác của phần mềm trên khối (chép số container từ tờ khai khác…) – chỉ hiện khi đang sửa. */
   actions?: { id: string; label: string }[];
+  /**
+   * "all": khai cả nhóm – đã nhập một ô của khối thì mọi ô còn lại bắt buộc (Phụ lục II: "bắt buộc nếu đã nhập Mã ngân hàng…",
+   * hạn mức 1.54–1.57 / 2.44–2.47, bảo lãnh 1.59–1.62 / 2.49–2.52). Chưa nhập ô nào → không bắt buộc. Kiểm ở requiredGaps.
+   */
+  fill?: "all";
 };
 export type LayoutSection = { id: string; title: string; blocks: LayoutBlock[] };
 

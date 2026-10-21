@@ -120,7 +120,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
           const now = deps.clock.now();
           await r.declarations.insert({
             id: deps.idGen.next("dec"), orgId: input.orgId, dossierId: input.dossierId, kind: b.kind, version: (prev?.version ?? 0) + 1, status: "DRAFT",
-            fields: mergeUserEdits(b.fields, prev?.fields, b.hidden), exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date, customsValueVnd: b.valuation.customsValueVnd,
+            fields: mergeUserEdits(b.fields, prev?.fields, b.hidden, b.kind), exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date, customsValueVnd: b.valuation.customsValueVnd,
             valueAdjustments: b.adjustments, estImportDutyVnd: b.taxes.importDutyVnd, estVatVnd: b.taxes.vatVnd, approvedBy: null, approvedAt: null, createdAt: now, updatedAt: now,
           });
           return { b, skipped: false as const, exchange };

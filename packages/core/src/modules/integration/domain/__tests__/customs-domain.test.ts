@@ -217,6 +217,58 @@ describe("declaration-to-fpt – ô bổ sung người khai nhập trên form đ
   });
 });
 
+describe("declaration-to-fpt – Đợt 5: chỉ tiêu theo tình huống người khai nhập (ô bổ sung)", () => {
+  type Obj = Record<string, unknown>;
+  type Req = { objVN_IDA: Obj; objVN_IDA_VANDON: Obj; objVN_EDA?: Obj };
+  const EDA: DeclarationPayload = { ...PAYLOAD, kind: "EDA", direction: "XK", fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, NXK_DT: { value: "0225 3 888 123" }, NGAY_DI: { value: "2026-10-20" }, VBPQ: { value: "" } } };
+  const withFields = (p: DeclarationPayload, extra: Record<string, string>) => buildFptRequest({ ...p, fields: { ...p.fields, ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, { value: v }])) } });
+
+  it.each([["IDA", PAYLOAD, "objVN_IDA"], ["EDA", EDA, "objVN_EDA"]] as const)("%s 1.40/2.35 → TK_IV2 (số) chỉ khi 1.39/2.34 = D; mã khác thì không gửi dù đã nhập", (_k, base, obj) => {
+    const d = withFields(base, { HD_PL: "D – Hóa đơn điện tử (đăng ký trên VNACCS)", TK_IV2: "100000012345" });
+    expect((d.request as unknown as Record<string, Obj>)[obj]).toMatchObject({ tK_IV1: "D", tK_IV2: 100000012345 });
+    expect(d.issues).toEqual([]);
+    const a = withFields(base, { HD_PL: "A – Hóa đơn thương mại", TK_IV2: "100000012345" });
+    expect((a.request as unknown as Record<string, Obj>)[obj]!["tK_IV2"]).toBeUndefined();
+  });
+
+  it("IDA: ủy thác / tại chỗ (1.17–1.19, 1.24), nộp thuế – hạn mức – bảo lãnh (1.53–1.62), kho ngoại quan (1.64), vận chuyển kết hợp (1.65–1.67) → đúng trường FPT, đúng kiểu", () => {
+    const b = withFields(PAYLOAD, {
+      TK_NMC: "0101234567", TK_NMN: "CÔNG TY ỦY THÁC", TK_EPC: "0309876543", TK_ENM: "FOREIGN NOMINATOR LTD",
+      TK_BP: "A", TK_BRC: "01201001", TK_BYA: "2026", TK_BCM: "HM", TK_BCN: "0001", TK_ENC: "C", TK_SBC: "79202001", TK_RYA: "2026", TK_SCM: "BL", TK_SCN: "0002",
+      VD_ISD: "2026-10-16", TK_DPD: "2026-10-17", TK_ST1: "02CIS01", TK_AD1: "2026-10-18", TK_SD1: "2026-10-19", TK_ARP: "03CCS01", TK_ADT: "2026-10-20",
+    });
+    const r = b.request as Req;
+    expect(r.objVN_IDA).toMatchObject({
+      tK_NMC: "0101234567", tK_NMN: "CÔNG TY ỦY THÁC", tK_EPC: "0309876543", tK_ENM: "FOREIGN NOMINATOR LTD",
+      tK_BP: "A", tK_BRC: "01201001", tK_BYA: 2026, tK_BCM: "HM", tK_BCN: "0001", tK_ENC: "C", tK_SBC: "79202001", tK_RYA: 2026, tK_SCM: "BL", tK_SCN: "0002",
+      tK_DPD: "17/10/2026", tK_ST1: "02CIS01", tK_AD1: "18/10/2026", tK_SD1: "19/10/2026", tK_ARP: "03CCS01", tK_ADT: "20/10/2026",
+    });
+    expect(r.objVN_IDA_VANDON["vD_ISD"]).toBe("16/10/2026");
+    expect(b.issues).toEqual([]);
+  });
+
+  it("EDA: ủy thác / tại chỗ (2.16–2.18), hạn mức – thời hạn nộp thuế – bảo lãnh (2.44–2.52), vận chuyển kết hợp (2.54–2.56)", () => {
+    const b = withFields(EDA, {
+      TK_EXC: "0101234567", TK_EXN: "CÔNG TY ỦY THÁC XK", TK_CGC: "0309876543",
+      TK_BRC: "01201001", TK_BYA: "2026", TK_BCM: "HM", TK_BCN: "0001", TK_ENC: "D", TK_SBC: "79202001", TK_RYA: "2026", TK_SCM: "BL", TK_SCN: "0002",
+      TK_DPD: "2026-10-17", TK_ST1: "02CIS01", TK_ARP: "03CCS01", TK_ADT: "2026-10-20",
+    });
+    expect((b.request as Req).objVN_EDA).toMatchObject({
+      tK_EXC: "0101234567", tK_EXN: "CÔNG TY ỦY THÁC XK", tK_CGC: "0309876543",
+      tK_BRC: "01201001", tK_BYA: 2026, tK_BCM: "HM", tK_BCN: "0001", tK_ENC: "D", tK_SBC: "79202001", tK_RYA: 2026, tK_SCM: "BL", tK_SCN: "0002",
+      tK_DPD: "17/10/2026", tK_ST1: "02CIS01", tK_ARP: "03CCS01", tK_ADT: "20/10/2026",
+    });
+    expect(b.issues).toEqual([]);
+  });
+
+  it("chưa nhập (hoặc chỉ khoảng trắng) → không gửi trường nào", () => {
+    const keys = ["TK_NMC", "TK_EPC", "TK_ENM", "TK_BP", "TK_BRC", "TK_BYA", "TK_ENC", "TK_SBC", "TK_DPD", "TK_ST1", "TK_ARP", "TK_IV2"];
+    const r = withFields(PAYLOAD, { TK_ENC: " ", TK_BYA: "" }).request as Req;
+    for (const k of keys) expect(r.objVN_IDA[fptKey(k)], k).toBeUndefined();
+    expect(r.objVN_IDA_VANDON["vD_ISD"]).toBeUndefined();
+  });
+});
+
 describe("declaration-to-fpt – ô dòng hàng người khai nhập (HANG.<id dòng>.<ô>)", () => {
   type Req = { objVN_IDA_HANG: Record<string, unknown>[] };
   const withIds = { ...PAYLOAD, items: PAYLOAD.items.map((it, i) => ({ ...it, id: `li${i + 1}` })) };

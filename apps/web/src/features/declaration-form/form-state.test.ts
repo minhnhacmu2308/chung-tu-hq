@@ -20,7 +20,7 @@ const base: FormValues = { TK_ICB: "A11", TK_MTC: "1", VD_BL1: "618-58265281" };
 
 describe("conditionContext", () => {
   it("lấy loại hình theo mẫu, điều kiện giá viết hoa, có hóa đơn khi có số và không phải loại B", () => {
-    expect(conditionContext("EDA", { TK_ECB: "B11", TK_IP2: "fob", TK_IV1: "A", TK_IV3: "X" })).toEqual({ typeCode: "B11", incoterm: "FOB", hasInvoice: true, transportCode: "", identMode: "", hawbIssued: false, splitCargo: "", manualValue: false });
+    expect(conditionContext("EDA", { TK_ECB: "B11", TK_IP2: "fob", TK_IV1: "A", TK_IV3: "X" })).toEqual({ typeCode: "B11", incoterm: "FOB", hasInvoice: true, transportCode: "", identMode: "", hawbIssued: false, splitCargo: "", manualValue: false, invoiceKind: "A" });
     expect(conditionContext("IDA", { APP_TGTT_TAY: "1" }).manualValue).toBe(true);
     expect(conditionContext("IDA", { TK_ICB: "G12", TK_MTC: "2", TK_IV1: "B", TK_IV3: "X" })).toMatchObject({ typeCode: "G12", transportCode: "2", hasInvoice: false });
   });

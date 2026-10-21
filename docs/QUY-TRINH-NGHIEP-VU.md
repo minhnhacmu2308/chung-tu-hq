@@ -205,6 +205,9 @@ Người khai chọn **Tạo tờ khai** / **Số hóa chứng từ** / **Cả h
 | 1.37 Văn bản pháp quy | Hàng chương 84/85: **không tự điền**; để trống, chặn phê duyệt đến khi người khai chọn MO (mới) hoặc CU (đã qua sử dụng) |
 | 1.39/2.34 Hình thức hóa đơn | 1 hóa đơn → A; nhiều hóa đơn / không có → B (kèm hướng dẫn bảng kê) |
 | 1.43/2.38 Phương thức thanh toán | T/T, chuyển khoản → **KC** (ghi phương thức thực tế); TTR chỉ dùng cho chuyển tiền bồi hoàn; O/A → OA |
+| 1.40/2.35 Số tiếp nhận hóa đơn điện tử | Chỉ có khi 1.39/2.34 = **D** (xét trên giá trị tờ khai): khi đó bắt buộc; đổi 1.39 sang mã khác → không gửi, không chặn, bỏ khi dựng lại |
+| 1.53–1.62 / 2.44–2.52 Nộp thuế, hạn mức, bảo lãnh | Người khai nhập; 1.58/2.48 luôn hiện (tùy chọn). Hạn mức (1.54–1.57) và bảo lãnh (1.59–1.62) **khai cả nhóm**: nhập một ô thì các ô còn lại bắt buộc |
+| 1.17–1.19, 1.24 / 2.16–2.18 Ủy thác, tại chỗ; 1.64; 1.65–1.67 / 2.54–2.56 | Người khai nhập, tùy chọn, không tự suy (hồ sơ không cho biết ủy thác/tại chỗ/kho ngoại quan/vận chuyển kết hợp); chỉ gửi FPT khi có giá trị |
 | 1.44/2.39 Điều kiện giá | Chỉ lấy mã (bỏ địa danh); C&F/CNF chuẩn hóa; tờ khai xuất không có DPU |
 | 1.44 ô 1 / 2.39 ô 4 Phân loại giá | Có dòng trị giá 0 (FOC) → C; toàn bộ FOC → B; không có hóa đơn → D (nhập) / không khai (xuất) |
 | 1.48 Phí bảo hiểm | Điều kiện đã gồm bảo hiểm (CIF, CIP, C&I, DDU, DDP, DAP, DAF, DAT) → không cộng |

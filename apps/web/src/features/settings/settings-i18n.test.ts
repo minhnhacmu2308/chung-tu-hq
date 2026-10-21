@@ -5,7 +5,9 @@ import * as React from "react";
 import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { sessionKeys } from "@/api/session";
 import { settingsKeys } from "@/api/settings";
+import type { JoinRequest } from "@kb/contracts";
 import type { Member, Organization } from "@/mocks/types";
 import { profileFieldsFor, validateProfileForm } from "./declaration-profile-form";
 import { MembersTab } from "./members-tab";
@@ -32,10 +34,14 @@ const MEMBERS: Member[] = [
   { id: "u2", name: "Đỗ Khánh Linh", email: "linh@example.com", role: "DECLARANT", status: "INVITED" },
 ];
 
-function render(locale: UiLocale, Comp: ComponentType) {
+const JOIN_REQUESTS: JoinRequest[] = [{ id: "jr_1", userId: "u9", name: "Mẫn Đức Thịnh", email: "thinh@example.com", requestedAt: "2026-10-20T00:00:00.000Z" }];
+
+function render(locale: UiLocale, Comp: ComponentType, me: Member = MEMBERS[0]!) {
   const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
   qc.setQueryData(settingsKeys.org, ORG);
   qc.setQueryData(settingsKeys.members, MEMBERS);
+  qc.setQueryData(settingsKeys.joinRequests, JOIN_REQUESTS);
+  qc.setQueryData(sessionKeys.me, { user: me, org: ORG });
   return renderToStaticMarkup(createElement(QueryClientProvider, { client: qc }, createElement(UiLocaleProvider, { locale, children: createElement(Comp) })));
 }
 
@@ -56,6 +62,19 @@ describe("Cài đặt – đa ngôn ngữ", () => {
     expect(html).toContain("Approve declarations, submit to Customs");
     expect(html).toContain("Declarant");
     expect(html).not.toContain("Vai trò làm được gì");
+  });
+  it("Yêu cầu tham gia: Quản trị thấy nút Duyệt / Từ chối theo ngôn ngữ; vai trò khác không thấy", () => {
+    const vi = render("vi", MembersTab);
+    expect(vi).toContain("Yêu cầu tham gia");
+    expect(vi).toContain("Mẫn Đức Thịnh");
+    expect(vi).toContain('aria-label="Từ chối Mẫn Đức Thịnh"');
+    expect(vi).toContain('aria-label="Duyệt Mẫn Đức Thịnh"');
+    const zh = render("zh", MembersTab);
+    expect(zh).toContain("加入申请");
+    expect(zh).toContain("拒绝");
+    expect(zh).not.toContain("Từ chối");
+    const declarant: Member = { id: "u3", name: "Nguyễn Thu Hà", email: "ha@example.com", role: "DECLARANT", status: "ACTIVE" };
+    expect(render("vi", MembersTab, declarant)).not.toContain("Yêu cầu tham gia");
   });
   it("vi: giữ nguyên chữ cũ", () => {
     expect(render("vi", OrgTab)).toContain("Thông tin doanh nghiệp");

@@ -27,3 +27,14 @@ export function canDisable(actor: Role, target: Target): Result<void> {
   if (target.role === "OWNER") return forbid("Không thể khóa Chủ sở hữu");
   return ok(undefined);
 }
+
+type OwnershipTarget = { role: Role; status: "ACTIVE" | "INVITED" | "DISABLED"; isSelf: boolean };
+
+/** Chuyển quyền sở hữu: chỉ Chủ sở hữu hiện tại; người nhận là thành viên ĐANG HOẠT ĐỘNG khác mình. */
+export function canTransferOwnership(actor: Role, target: OwnershipTarget): Result<void> {
+  if (actor !== "OWNER") return forbid("Chỉ Chủ sở hữu được chuyển quyền sở hữu");
+  if (target.isSelf) return forbid("Không thể chuyển quyền sở hữu cho chính mình");
+  if (target.role === "OWNER") return forbid("Người này đã là Chủ sở hữu");
+  if (target.status !== "ACTIVE") return err(domainError("INVALID_STATE", "Chỉ chuyển được cho thành viên đang hoạt động"));
+  return ok(undefined);
+}

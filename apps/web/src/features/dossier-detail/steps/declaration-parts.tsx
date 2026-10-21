@@ -1,8 +1,9 @@
 "use client";
 // Mảnh giao diện dùng chung cho bước 4–6 (agent, review tờ khai, truyền Hải quan).
 import { getFormatLocale } from "@/lib/format";
+import { errorText } from "@/lib/reason-codes";
 import {
-  Alert, Badge, Button, Card, CardContent, Skeleton, Stack, cn, SkeletonCard, pickMessages, useMessages, type UiLocale,
+  Alert, Badge, Button, Card, CardContent, Skeleton, Stack, cn, SkeletonCard, pickMessages, useMessages, useUiLocale, type UiLocale,
 } from "@kb/ui";
 import { FileText } from "lucide-react";
 import type { ReactNode } from "react";
@@ -49,6 +50,7 @@ export function StepLoading() {
 
 export function StepError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   const t = useMessages(DECLARATION_PARTS_MESSAGES);
+  const locale = useUiLocale();
   return (
     <Card>
       <CardContent className="pt-5">
@@ -61,15 +63,15 @@ export function StepError({ error, onRetry }: { error: unknown; onRetry: () => v
             </Button>
           }
         >
-          {error instanceof Error ? error.message : t.unknownError}
+          {errorText(error, locale, t.unknownError)}
         </Alert>
       </CardContent>
     </Card>
   );
 }
 
-/** Thông báo lỗi nghiệp vụ từ api (ApiError có message tiếng Việt – dữ liệu backend, không dịch). Câu dự phòng theo `locale`. */
-export const errorMessage = (e: unknown, locale: UiLocale = getFormatLocale()) => (e instanceof Error ? e.message : pickMessages(DECLARATION_PARTS_MESSAGES, locale).genericError);
+/** Thông báo lỗi nghiệp vụ từ api: có mã lý do/mã lỗi đã biết → dịch theo `locale`, không thì câu tiếng Việt của server (errorText). */
+export const errorMessage = (e: unknown, locale: UiLocale = getFormatLocale()) => errorText(e, locale, pickMessages(DECLARATION_PARTS_MESSAGES, locale).genericError);
 
 /** Hai cột nhãn – giá trị dùng trong các khối tổng hợp. `wrap`: giá trị chữ dài (tên cơ quan…) được xuống dòng thay vì giữ một dòng. */
 export function KeyValue({ label, value, hint, strong = false, wrap = false }: { label: ReactNode; value: ReactNode; hint?: ReactNode; strong?: boolean; wrap?: boolean }) {

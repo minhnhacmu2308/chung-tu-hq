@@ -1,11 +1,15 @@
 // Lớp gọi backend: mọi hàm trong src/api/http/* đi qua đây. Mọi thất bại đều ném ApiError để màn hình hiện thông báo tiếng Việt.
-import type { ZodType } from "zod";
+import { z, type ZodType } from "zod";
+import { ReasonParamsSchema } from "@kb/contracts";
 import { fill, pickMessages } from "@kb/ui";
 import { ApiError } from "./api-error";
 import { ERROR_MESSAGES } from "./errors.messages";
 import { getFormatLocale } from "./format";
 
 const msg = () => pickMessages(ERROR_MESSAGES, getFormatLocale());
+
+/** Thân lỗi của route() (lib/server/route.ts): {code, message, reason?, params?}. */
+const ErrorBodySchema = z.object({ code: z.string(), message: z.string().optional(), reason: z.string().optional(), params: ReasonParamsSchema.optional() });
 
 const BASE = "/api";
 
@@ -33,8 +37,11 @@ function hasJsonBody(res: Response) {
 
 async function toApiError(res: Response): Promise<ApiError> {
   try {
-    const body = (await res.json()) as { code?: string; message?: string };
-    if (body && typeof body.code === "string") return new ApiError(body.code, body.message ?? body.code, res.status);
+    const body = ErrorBodySchema.safeParse(await res.json());
+    if (body.success) {
+      const { code, message, reason, params } = body.data;
+      return new ApiError(code, message ?? code, res.status, { reason, params });
+    }
   } catch {
     /* body không phải JSON */
   }

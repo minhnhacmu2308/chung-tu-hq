@@ -69,6 +69,17 @@ describe("guards", () => {
     expect(canApprove({ ...base, exchangeRate: "0" })).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
     expect(canApprove({ ...base, exchangeRate: "26150" }).ok).toBe(true);
   });
+  it("lỗi chặn duyệt/truyền kèm mã lý do + tham số; câu tiếng Việt giữ nguyên", () => {
+    const base = { role: "APPROVER" as const, userId: "u2", ownerId: "u1", fourEyes: false, blockerFails: 0, items: items(3), status: "DRAFT" as const };
+    expect(canApprove({ ...base, items: items(1) })).toMatchObject({ ok: false, error: { code: "HS_UNCONFIRMED", reason: "HS_UNCONFIRMED", params: { n: 2 }, message: "Còn 2 mã HS chưa xác nhận" } });
+    expect(canApprove({ ...base, blockerFails: 2 })).toMatchObject({ error: { reason: "BLOCKER_RULES_FAILED_FIX_IN_OCR", message: "Còn 2 luật lỗi chặn truyền – xử lý ở bước OCR & kiểm tra" } });
+    expect(canApprove({ ...base, fourEyes: true, userId: "u1" })).toMatchObject({ error: { reason: "FOUR_EYES", message: "Người duyệt phải khác người tạo hồ sơ (nguyên tắc 4 mắt)" } });
+    expect(canApprove({ ...base, requiredGaps: [{ key: "TK_ADR", no: "1.22", label: "Địa chỉ" }] })).toMatchObject({
+      error: { code: "VALIDATION", reason: "REQUIRED_FIELDS_MISSING_APPROVE", params: { n: 1, fields: "1.22 Địa chỉ" }, message: "Còn 1 chỉ tiêu bắt buộc chưa nhập: 1.22 Địa chỉ – nhập trên tờ khai rồi duyệt lại" },
+    });
+    expect(canSubmit({ status: "DRAFT", blockerFails: 0 })).toMatchObject({ error: { code: "NOT_APPROVED", reason: "DECLARATION_NOT_APPROVED", message: "Tờ khai chưa được phê duyệt" } });
+    expect(canMoveToReview(items(3), false)).toMatchObject({ error: { reason: "DECLARATION_NOT_BUILT" } });
+  });
   it("canApprove: chỉ tiêu blocking còn trống → BLOCKER_FAILED nêu tên + số chỉ tiêu; đã điền hoặc không blocking → qua", () => {
     const base = { role: "APPROVER" as const, userId: "u2", ownerId: "u1", fourEyes: false, blockerFails: 0, items: items(3), status: "DRAFT" as const };
     const vbpq = { no: "1.37", label: "Mã văn bản pháp quy khác", section: "GENERAL" as const, value: "", source: "DOSSIER" as const, blocking: true as const, note: "chọn MO/CU" };

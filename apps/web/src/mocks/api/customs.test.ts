@@ -158,6 +158,9 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
 
   it("nghiệp vụ bị khóa → lỗi kèm lý do; sai chiều tờ khai → INVALID_OPERATION; đang chờ → khóa", async () => {
     expect(await err(performOperation(NEW, "IDC"))).toEqual({ code: "OPERATION_LOCKED", message: "Khai tạm trước để nhận số tờ khai" });
+    // Cùng mã lý do backend gửi → giao diện dịch được ở chế độ mock.
+    await expect(performOperation(NEW, "IDC")).rejects.toMatchObject({ reason: "IDC_REQUIRES_PRE_DECLARED" });
+    expect((await getSubmission(NEW)).pipeline.find((r) => r.op === "IDC")).toMatchObject({ reasonCode: "IDC_REQUIRES_PRE_DECLARED", reason: "Khai tạm trước để nhận số tờ khai" });
     expect(await err(performOperation(NEW, "EDA"))).toMatchObject({ code: "INVALID_OPERATION" });
     expect(await err(performOperation(NEW, "IID"))).toMatchObject({ code: "OPERATION_LOCKED" });
     expect(await err(submitDeclaration(NEW, ""))).toMatchObject({ code: "NO_CERT" });
@@ -166,6 +169,7 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
     const saved = kho.value;
     kho.value = "";
     expect(await err(submitDeclaration(NEW, CERT))).toMatchObject({ code: "VALIDATION", message: expect.stringContaining("Chưa khai được") });
+    await expect(submitDeclaration(NEW, CERT)).rejects.toMatchObject({ reason: "REQUIRED_FIELDS_MISSING_SUBMIT", params: { n: expect.any(Number) } });
     expect((await getSubmission(NEW)).stage).toBe("NOT_SENT");
     kho.value = saved;
     await submitDeclaration(NEW, CERT);

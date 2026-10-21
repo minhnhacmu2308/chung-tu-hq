@@ -21,6 +21,10 @@ describe("http", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, { code: "NOT_FOUND", message: "Không tìm thấy hồ sơ" })));
     await expect(apiGet("dossiers/x")).rejects.toMatchObject(new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ", 404));
   });
+  it("lỗi có mã lý do → ApiError giữ reason + params để giao diện dịch", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(409, { code: "HS_UNCONFIRMED", message: "Còn 2 mã HS chưa xác nhận", reason: "HS_UNCONFIRMED", params: { n: 2 } })));
+    await expect(apiPost("x", {})).rejects.toMatchObject({ code: "HS_UNCONFIRMED", message: "Còn 2 mã HS chưa xác nhận", status: 409, reason: "HS_UNCONFIRMED", params: { n: 2 } });
+  });
   it("lỗi không có body JSON → ApiError code HTTP_<status>", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Bad Gateway", { status: 502 })));
     await expect(apiPost("x", {})).rejects.toMatchObject({ code: "HTTP_502" });

@@ -6,6 +6,7 @@ import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
+import { reasonApiError } from "@/mocks/reason-error";
 import type { ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
 import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
 
@@ -304,11 +305,12 @@ export const getDeclarationView = (dossierId: string) =>
 export const approveDeclaration = (dossierId: string) =>
   mutate((db) => {
     const decl = db.declarations.find((d) => d.dossierId === dossierId);
-    if (!decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
-    if (db.lineItems.some((i) => i.dossierId === dossierId && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
+    if (!decl) throw reasonApiError("NOT_FOUND", "DECLARATION_NOT_CREATED");
+    const unconfirmed = db.lineItems.filter((i) => i.dossierId === dossierId && !i.hsConfirmed).length;
+    if (unconfirmed) throw reasonApiError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: unconfirmed });
     const me = db.members.find((m) => m.id === db.currentUserId);
     const owner = db.dossiers.find((d) => d.id === dossierId)?.ownerId;
-    if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw new ApiError("FORBIDDEN", "Người duyệt phải khác người tạo hồ sơ (nguyên tắc 4 mắt)");
+    if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw reasonApiError("FORBIDDEN", "FOUR_EYES");
     assertNoGaps(db, decl, "phê duyệt");
     Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
@@ -319,8 +321,9 @@ export const approveDeclaration = (dossierId: string) =>
 /** Chuyển hồ sơ sang bước Review sau khi xác nhận đủ HS. */
 export const moveToReview = (dossierId: string) =>
   mutate((db) => {
-    if (db.lineItems.some((i) => i.dossierId === dossierId && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
-    if (!db.declarations.some((d) => d.dossierId === dossierId)) throw new ApiError("NO_DECLARATION", "Chưa dựng tờ khai – chạy agent với lựa chọn có “Tạo tờ khai”");
+    const unconfirmed = db.lineItems.filter((i) => i.dossierId === dossierId && !i.hsConfirmed).length;
+    if (unconfirmed) throw reasonApiError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: unconfirmed });
+    if (!db.declarations.some((d) => d.dossierId === dossierId)) throw reasonApiError("NO_DECLARATION", "DECLARATION_NOT_BUILT");
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     const suspect = db.declarations.find((d) => d.dossierId === dossierId)!.fields.filter((f) => f.suspect).length;
     Object.assign(dossier, { step: "review", status: "NEEDS_REVIEW", suspectFields: suspect, updatedAt: nowIso() });

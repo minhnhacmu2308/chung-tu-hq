@@ -1,5 +1,5 @@
 // Điều kiện chuyển bước/duyệt/truyền (bất biến 7: không truyền khi còn BLOCKER FAIL hoặc HS chưa xác nhận). Thuần.
-import { CATALOG_EDA, CATALOG_IDA, extraFieldIssue, isDeclarationFieldEditable, itemFieldIssue, parseItemFieldCode, type DeclarationFieldDef, type DeclarationStatus, type Role } from "@kb/contracts";
+import { CATALOG_EDA, CATALOG_IDA, extraFieldIssue, requiredGapsText, type RequiredGap, isDeclarationFieldEditable, itemFieldIssue, parseItemFieldCode, type DeclarationFieldDef, type DeclarationStatus, type Role } from "@kb/contracts";
 import { dec } from "../../../shared/decimal.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -29,6 +29,8 @@ export function missingRequiredFields(kind: "IDA" | "EDA", fields: Record<string
 export function canApprove(p: {
   role: Role; userId: string; ownerId: string; fourEyes: boolean; blockerFails: number; items: ItemHs[]; status: DeclarationStatus; exchangeRate?: string;
   missingFields?: { code: string; label: string }[]; fields?: Record<string, StoredField>;
+  /** Ô bắt buộc còn trống trên tờ khai đầy đủ (@kb/contracts declarationRequiredGaps) – cùng quy tắc nút Phê duyệt ở giao diện. */
+  requiredGaps?: RequiredGap[]; lineNos?: number[];
 }): Result<void> {
   if (p.role !== "APPROVER" && p.role !== "OWNER") return err(domainError("FORBIDDEN", "Chỉ Người duyệt hoặc Chủ sở hữu được phê duyệt tờ khai"));
   if (p.status !== "DRAFT") return err(domainError("INVALID_STATE", p.status === "NOT_CREATED" ? "Chưa có tờ khai" : "Tờ khai đã được duyệt"));
@@ -44,6 +46,9 @@ export function canApprove(p: {
   if (p.missingFields?.length) {
     const names = p.missingFields.map((f) => f.label);
     return err(domainError("VALIDATION", `Còn ${names.length} chỉ tiêu bắt buộc chưa nhập: ${names.join(", ")} – bấm Sửa ở từng chỉ tiêu rồi duyệt lại`, { missingFields: p.missingFields }));
+  }
+  if (p.requiredGaps?.length) {
+    return err(domainError("VALIDATION", `Còn ${p.requiredGaps.length} chỉ tiêu bắt buộc chưa nhập: ${requiredGapsText(p.requiredGaps, p.lineNos)} – nhập trên tờ khai rồi duyệt lại`, { requiredGaps: p.requiredGaps }));
   }
   return ok(undefined);
 }

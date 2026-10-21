@@ -28,16 +28,16 @@ describe("conditionContext", () => {
 
 describe("sectionProgress", () => {
   it("A11 đường không: 1.10 và hô hiệu không áp dụng, không vào tổng; ô Hải quan không tính; nhóm lặp chỉ tính dòng 1", () => {
-    // Áp dụng: TK_ICB, VD_VSN, VD_BL1 → 3; đã nhập: TK_ICB, VD_BL1 → 2.
-    expect(sectionProgress("IDA", SECTION, base)).toEqual({ filled: 2, total: 3, missingRequired: 0 });
+    // Áp dụng: TK_ICB, VD_VSN, VD_BL1 → 3; đã nhập: TK_ICB, VD_BL1 → 2. VD_VSN (tên phương tiện) FPT bắt buộc → thiếu 1.
+    expect(sectionProgress("IDA", SECTION, base)).toEqual({ filled: 2, total: 3, missingRequired: 1 });
   });
   it("đổi sang tạm nhập G12 → 1.10 vào tổng và là ô bắt buộc còn thiếu", () => {
-    expect(sectionProgress("IDA", SECTION, { ...base, TK_ICB: "G12" })).toEqual({ filled: 2, total: 4, missingRequired: 1 });
+    expect(sectionProgress("IDA", SECTION, { ...base, TK_ICB: "G12" })).toEqual({ filled: 2, total: 4, missingRequired: 2 });
   });
   it("ô có giá trị nhưng không còn áp dụng không làm đã nhập vượt tổng", () => {
     const p = sectionProgress("IDA", SECTION, { ...base, TK_RED: "2027-01-31" });
     expect(p.filled).toBeLessThanOrEqual(p.total);
-    expect(p).toEqual({ filled: 2, total: 3, missingRequired: 0 });
+    expect(p).toEqual({ filled: 2, total: 3, missingRequired: 1 });
   });
   it("đường biển → hô hiệu áp dụng", () => {
     expect(sectionProgress("IDA", SECTION, { ...base, TK_MTC: "2" }).total).toBe(4);
@@ -72,9 +72,10 @@ describe("review: bộ đếm khớp với ô, không báo thiếu ô không áp
   const eda = LAYOUT_EDA.declarant.find((s) => s.id === "van-chuyen")!;
   const base: FormValues = { TK_ECB: "B11", TK_MTC: "2", TK_EKN: "X", TK_NO: "1", TK_NOT: "PK", TK_GW: "1", TK_GWT: "KGM", TK_ST: "06B1A04", TK_DSC: "SGSIN", TK_DSN: "SINGAPORE", TK_PSC: "VNSGN", TK_SYM: "2026-09-12", TK_VSN: "A" };
   it("EDA đường biển container: 2.59 (một địa điểm đóng hàng) tính 1 ô thiếu, không phải 7; số container 1; hô hiệu 1", () => {
-    expect(sectionProgress("EDA", eda, base).missingRequired).toBe(3);
+    // + TK_PSN (tên địa điểm xếp hàng) FPT bắt buộc.
+    expect(sectionProgress("EDA", eda, base).missingRequired).toBe(4);
     // Có một mã địa điểm đóng hàng là đủ 2.59.
-    expect(sectionProgress("EDA", eda, { ...base, CON_VC1: "02CIS01" }).missingRequired).toBe(2);
+    expect(sectionProgress("EDA", eda, { ...base, CON_VC1: "02CIS01" }).missingRequired).toBe(3);
   });
   it("ô thuộc nhóm có điều kiện không áp dụng → không 'Còn thiếu' (EDA FOB có hóa đơn: 2.40)", () => {
     const tg = LAYOUT_EDA.declarant.flatMap((s) => s.blocks).find((b) => b.id === "tri-gia")!.items[0]!;

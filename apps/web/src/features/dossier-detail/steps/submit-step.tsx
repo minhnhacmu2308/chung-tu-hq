@@ -26,6 +26,8 @@ import { CustomsInfoPanel, type CustomsEstimate } from "./customs-info-panel";
 import { errorMessage, KeyValue, StepError, StepLoading } from "./declaration-parts";
 import type { StepProps } from "./types";
 import { AMA_STATUS } from "../../post-amendment/ama-context";
+import { declarationGapsOf } from "../../declaration-print/print-state";
+import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 
 const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
@@ -382,7 +384,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const s = subQ.data!;
   const firstSend = s.stage === "NOT_SENT";
   const notApproved = s.declarationStatus === "NOT_CREATED" || (firstSend && s.declarationStatus === "DRAFT");
-  const blocked = notApproved || s.hsUnconfirmed > 0;
+  // Lần khai đầu: kiểm lại ô bắt buộc (dữ liệu có thể đổi sau khi duyệt) – backend chặn lần nữa trước khi đánh dấu đã khai.
+  const view = declQ.data;
+  const required = firstSend && !notApproved && view?.declaration ? declarationGapsOf(view.declaration, view.items, s) : { gaps: [], lineNos: [] };
+  const blocked = notApproved || s.hsUnconfirmed > 0 || required.gaps.length > 0;
   const certExpired = selected ? selected.validTo < new Date().toISOString().slice(0, 10) : false;
   const sending = s.pipeline.find((r) => r.status === "SENDING");
   const anyBusy = Boolean(sending) || perform.isPending || resend.isPending || submit.isPending;
@@ -420,6 +425,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
           Xác nhận mã HS ở bước AI Agent trước khi gửi nội dung tờ khai.
         </Alert>
       )}
+
+      <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel="Mở Review tờ khai" onAction={() => goTo("review")}>
+        Tờ khai đã duyệt nhưng còn thiếu ô bắt buộc – Hải quan sẽ từ chối. Mở lại tờ khai ở bước Review để nhập rồi duyệt lại.
+      </RequiredGapsAlert>
 
       {postStepVisible(s.stage) && <PostAmendmentEntry dossierId={dossier.id} onOpen={() => goTo("post")} />}
 

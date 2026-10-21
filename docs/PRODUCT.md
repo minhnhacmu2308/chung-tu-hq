@@ -104,6 +104,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 - Tờ khai IDA/EDA dạng form, trạng thái "Bản nháp, chờ duyệt". Tab: **Thông tin chung · Danh sách hàng · Thuế & chính sách · Chứng từ đính kèm**.
 - Mỗi chỉ tiêu có **nhãn nguồn**: Invoice / B/L / Packing List / Contract / C/O / Hồ sơ / Tài khoản / Mặc định / Hệ thống.
 - Thanh dưới: **Tổng thuế phải nộp dự kiến** · Quay lại OCR · **Phê duyệt tờ khai** (vai trò Người duyệt).
+- **Ô bắt buộc còn trống → khóa Phê duyệt**: khung "Còn N chỉ tiêu bắt buộc chưa nhập" liệt kê ô, nút **Đến ô cần xử lý** mở panel sửa ô. Bắt buộc = Phụ lục II (M, hoặc C khi tình huống áp dụng) + ô FPT.VNACCS bắt buộc người khai nhập (ô phần mềm tự điền và ô APP_* không tính). Một quy tắc (`@kb/contracts` requiredGaps) cho giao diện, mock và backend.
 - Tỷ giá tính thuế: tỷ giá mua chuyển khoản Vietcombank cuối ngày thứ Năm tuần trước, áp cho tờ khai đăng ký trong tuần (tự lấy tối thứ Năm; đội vận hành sửa/nhập tay ở khu Quản trị → Tỷ giá tính thuế). Không dùng tỷ giá trên chứng từ forwarder. Màn Review hiện tuần + nguồn tỷ giá; tờ khai dựng tuần trước bị chặn truyền khi sang tuần mới (mở lại để dựng lại).
 - Incoterm EXW/FCA/FAS/FOB: hiển thị rõ cước, bảo hiểm, phí nước ngoài được cộng vào trị giá tính thuế và nguồn của từng khoản (hóa đơn cước, Arrival Notice).
 
@@ -112,7 +113,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 - Danh sách nghiệp vụ truyền nhận với trạng thái và nút **Gửi lại**: IDA/EDA → IDC/EDC → HYS → IEX.
 - **Kết quả từ Hải quan**: số tờ khai, phân luồng (xanh/vàng/đỏ + diễn giải), trạng thái (vd Đã thông quan), thuế HQ tính, thời điểm cập nhật.
 - **Nhật ký thông điệp**: mỗi lần gửi/nhận một dòng (nghiệp vụ, kết quả, thời điểm), mở rộng xem chi tiết.
-- **Chặn truyền** khi còn luật BLOCKER = FAIL, HS chưa xác nhận, hoặc chưa được phê duyệt.
+- **Chặn truyền** khi còn luật BLOCKER = FAIL, HS chưa xác nhận, chưa được phê duyệt, còn ô bắt buộc trống (kiểm lại lúc Ký số & khai tạm) hoặc thông điệp sai đặc tả FPT – chặn trước khi đánh dấu đã khai.
 
 ## 5. Màn hình
 

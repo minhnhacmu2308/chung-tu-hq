@@ -60,6 +60,8 @@ export type ShipmentInfo = {
   packages: string;
   grossKg: string;
   paymentTerm: string;
+  /** Mã địa điểm lưu kho (A202). null = chưa có (hồ sơ trình diễn chặn duyệt khi thiếu ô bắt buộc); không ghi = kho mặc định của chi cục. */
+  storage?: string | null;
   coForm?: "AK" | "EVFTA";
   coNo?: string;
   adjustments: Declaration["valueAdjustments"];
@@ -99,6 +101,7 @@ const SHIPMENTS: Record<string, ShipmentInfo> = {
     packages: "126 CT",
     grossKg: "5420.00",
     paymentTerm: "TTR",
+    storage: null,
     adjustments: [{ label: "Cước vận chuyển quốc tế – theo Arrival Notice", amount: "1380.00", currency: "USD", source: "BILL_OF_LADING" }],
     suspect: ["TRONG_LUONG", "TY_GIA"],
     suspectNotes: {
@@ -127,11 +130,24 @@ const SHIPMENTS: Record<string, ShipmentInfo> = {
   },
 };
 
+/** Địa chỉ đối tác mô phỏng theo nước (hồ sơ không có dữ liệu lô hàng riêng) – 1.22/2.21 dòng 1 là ô bắt buộc. */
+const PARTNER_ADDRESS: Record<string, string> = {
+  CN: "No. 18 Baolong 6th Rd, Longgang District, Shenzhen, China",
+  IT: "Via Bergamo 18, 20010 Pregnana Milanese (MI), Italy",
+  JP: "2-4-1 Shibakoen, Minato-ku, Tokyo 105-0011, Japan",
+  TW: "No. 7 Jingke Rd, Nantun District, Taichung City, Taiwan",
+  SE: "Industrigatan 12, 211 24 Malmo, Sweden",
+  SG: "51 Changi Business Park Central 2, Singapore 486066",
+  KR: "45 Gongdan-ro 140beon-gil, Changwon-si, Gyeongsangnam-do, Korea",
+};
+const countryOf = (d: Dossier) =>
+  d.partner.includes("SHENZHEN") ? "CN" : d.partner.includes("ARTEMIDE") ? "IT" : d.partner.includes("MORINAGA") ? "JP" : d.partner.includes("TAIWAN") ? "TW" : d.partner.includes("NORDIC") ? "SE" : d.partner.includes("PACIFIC") ? "SG" : "KR";
+
 const DEFAULT_SHIPMENT = (d: Dossier): ShipmentInfo => ({
   invoiceNo: `INV-${d.code.split("-").pop()}`,
   invoiceDaysAgo: 8,
-  sellerAddress: "—",
-  countryCode: d.partner.includes("SHENZHEN") ? "CN" : d.partner.includes("ARTEMIDE") ? "IT" : d.partner.includes("MORINAGA") ? "JP" : d.partner.includes("TAIWAN") ? "TW" : d.partner.includes("NORDIC") ? "SE" : d.partner.includes("PACIFIC") ? "SG" : "KR",
+  sellerAddress: PARTNER_ADDRESS[countryOf(d)]!,
+  countryCode: countryOf(d),
   loadingPort: d.transportMode === "AIR" ? "Sân bay đi" : "Cảng xếp hàng",
   dischargePort: d.transportMode === "AIR" ? "VNHAN – Sân bay Nội Bài" : "VNHPH – Cảng Hải Phòng",
   arrivalInDays: -3,
@@ -145,6 +161,11 @@ const DEFAULT_SHIPMENT = (d: Dossier): ShipmentInfo => ({
 });
 
 export const shipmentOf = (d: Dossier): ShipmentInfo => SHIPMENTS[d.id] ?? DEFAULT_SHIPMENT(d);
+
+/** Kho mặc định theo chi cục (mã thuộc danh mục A202 của chi cục đó). */
+const STORAGE_BY_OFFICE: Record<string, string> = { "03CE": "03CEC01", "01B1": "01B1A02", "02CI": "02CIC01" };
+/** Tên phương tiện / chuyến và hô hiệu mô phỏng (đọc từ B/L, AWB). */
+const vesselOf = (d: Dossier) => (d.transportMode === "AIR" ? "VN0313" : "COSCO ARIES / 041S");
 
 /** Tỷ giá tính thuế mẫu (VND / 1 đơn vị ngoại tệ). */
 export const EXCHANGE_RATES: Record<string, number> = { USD: 26_150, EUR: 30_420, JPY: 175 };
@@ -206,12 +227,14 @@ const FIELD_NO: Record<"IDA" | "EDA", Record<string, string>> = {
     SOTK: "1.1", MA_LH: "1.4", PTVC: "1.6", PL_CN: "1.7", CQHQ: "1.8", NGAY_DK: "1.11", NNK_MST: "1.12", NNK_TEN: "1.13", NNK_DC: "1.15",
     NXK_TEN: "1.20", NXK_DC: "1.22", MA_NUOC: "1.23", SO_VD: "1.26", SO_KIEN: "1.27", TRONG_LUONG: "1.28", NGAY_DEN: "1.32", CANG_DO: "1.33", CANG_XEP: "1.34",
     SO_HD: "1.41", NGAY_HD: "1.42", PT_TT: "1.43", DK_GIA: "1.44", MA_TT: "1.44", TONG_TG: "1.44",
+    KHO: "1.29", PTVC_TEN: "1.31", HD_PL: "1.39", GIA_PL: "1.44",
     GP: "1.38", CT_TG: "1.50", NGUOI_NT: "1.52", HO_HIEU: "1.31", HAN_TX: "1.10", TNTX_TK: "1.3",
   },
   EDA: {
     SOTK: "2.1", MA_LH: "2.4", PTVC: "2.6", CQHQ: "2.8", NGAY_DK: "2.10", NXK_MST: "2.11", NXK_TEN: "2.12", NXK_DC: "2.14",
     NNK_TEN: "2.19", NNK_DC: "2.21", MA_NUOC: "2.22", SO_VD: "2.24", SO_KIEN: "2.25", TRONG_LUONG: "2.26", CANG_DO: "2.28", CANG_XEP: "2.29", NGAY_DEN: "2.31",
     SO_HD: "2.36", NGAY_HD: "2.37", PT_TT: "2.38", DK_GIA: "2.39", MA_TT: "2.39", TONG_TG: "2.39",
+    KHO: "2.27", PTVC_TEN: "2.30", HD_PL: "2.34", GIA_PL: "2.39", NXK_DT: "2.15",
     GP: "2.33", TG_TT: "2.40", NGUOI_NT: "2.43", VBPQ: "2.80", HO_HIEU: "2.30", HAN_TN: "2.7", TNTX_TK: "2.3",
   },
 };
@@ -238,6 +261,7 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     f("PARTIES", nk ? "NNK_MST" : "NXK_MST", nk ? "Mã số thuế người nhập khẩu" : "Mã số thuế người xuất khẩu", org.taxCode, "ACCOUNT"),
     f("PARTIES", nk ? "NNK_TEN" : "NXK_TEN", nk ? "Tên người nhập khẩu" : "Tên người xuất khẩu", org.name, "ACCOUNT"),
     f("PARTIES", nk ? "NNK_DC" : "NXK_DC", "Địa chỉ", org.address, "ACCOUNT"),
+    ...(nk ? [] : [f("PARTIES", "NXK_DT", "Số điện thoại người xuất khẩu", org.phone, "ACCOUNT")]),
   ];
   const partner = [
     f("PARTIES", nk ? "NXK_TEN" : "NNK_TEN", nk ? "Tên người xuất khẩu (nước ngoài)" : "Tên người nhập khẩu (nước ngoài)", d.partner, "INVOICE"),
@@ -258,9 +282,13 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     f("TRANSPORT", "CANG_DO", "Địa điểm dỡ hàng", s.dischargePort, "BILL_OF_LADING"),
     f("TRANSPORT", "NGAY_DEN", nk ? "Ngày hàng đến" : "Ngày hàng đi dự kiến", isoDayOffset(s.arrivalInDays), "BILL_OF_LADING"),
     f("TRANSPORT", "SO_KIEN", "Số lượng kiện", s.packages, "PACKING_LIST"),
+    f("TRANSPORT", "KHO", "Mã địa điểm lưu kho hàng chờ thông quan", s.storage === undefined ? STORAGE_BY_OFFICE[d.customsOffice.slice(0, 4)] ?? "" : s.storage ?? "", "BILL_OF_LADING"),
+    f("TRANSPORT", "PTVC_TEN", d.transportMode === "AIR" ? "Số chuyến bay" : "Tên tàu / số chuyến", vesselOf(d), "BILL_OF_LADING"),
     f("TRANSPORT", "TRONG_LUONG", "Tổng trọng lượng hàng (gross, kg)", s.grossKg, "PACKING_LIST"),
+    f("VALUE", "HD_PL", "Phân loại hình thức hóa đơn", "A – Hóa đơn thương mại", "DEFAULT"),
     f("VALUE", "SO_HD", "Số hóa đơn", s.invoiceNo, "INVOICE"),
     f("VALUE", "NGAY_HD", "Ngày phát hành hóa đơn", isoDayOffset(-s.invoiceDaysAgo), "INVOICE"),
+    f("VALUE", "GIA_PL", "Mã phân loại giá hóa đơn", "A – Giá hóa đơn cho hàng hóa phải trả tiền", "DEFAULT"),
     f("VALUE", "DK_GIA", "Điều kiện giá hóa đơn", d.incoterm, "INVOICE"),
     f("VALUE", "PT_TT", "Phương thức thanh toán", s.paymentTerm, "CONTRACT"),
     f("VALUE", "MA_TT", "Mã đồng tiền", d.currency, "INVOICE"),
@@ -278,7 +306,7 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     ...(!nk && /^G2[1-4]$/.test(d.typeCode) ? [when(f("GENERAL", "TNTX_TK", "Số tờ khai tạm nhập tương ứng", "", "DOSSIER"), "Loại hình tái xuất hàng đã tạm nhập (G21–G24)")] : []),
     ...(!nk && d.typeCode === "G61" ? [when(f("GENERAL", "HAN_TN", "Thời hạn tái nhập khẩu", "", "DOSSIER"), "Loại hình tạm xuất (G61)")] : []),
     ...(d.transportMode === "SEA_CONTAINER" || d.transportMode === "SEA_BULK" || d.transportMode === "RIVER"
-      ? [when(f("TRANSPORT", "HO_HIEU", "Hô hiệu phương tiện (call sign)", "", "BILL_OF_LADING"), "Vận chuyển đường biển / đường sông (mã 2, 3, 6)")]
+      ? [when(f("TRANSPORT", "HO_HIEU", "Hô hiệu phương tiện (call sign)", "VRDK5", "BILL_OF_LADING"), "Vận chuyển đường biển / đường sông (mã 2, 3, 6)")]
       : []),
     f("GENERAL", "NGUOI_NT", "Người nộp thuế", nk ? "1 – Người nhập khẩu" : "1 – Người xuất khẩu", "DEFAULT"),
     f("VALUE", "TY_GIA", "Tỷ giá tính thuế", t.exchangeRate, "SYSTEM"),

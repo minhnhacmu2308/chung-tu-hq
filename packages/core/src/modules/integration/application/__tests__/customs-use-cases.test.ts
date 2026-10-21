@@ -29,7 +29,10 @@ const other: Ctx = { orgId: asOrgId("org_b"), userId: asUserId("usr_x"), role: "
 
 const payload = (kind: "IDA" | "EDA" = "IDA"): DeclarationPayload => ({
   kind, direction: kind === "IDA" ? "NK" : "XK", currency: "USD", containers: ["SITU2246781"], adjustments: [],
-  fields: { MA_LH: { value: "A11" }, CQHQ: { value: "03CE – HP" }, PTVC: { value: "2 – Biển" }, NNK_MST: { value: "0316789012" }, NNK_TEN: { value: "AN PHÁT" }, NNK_DC: { value: "Hải Phòng" }, NXK_MST: { value: "0316789012" }, NXK_TEN: { value: "HANSOL" }, NXK_DC: { value: "Changwon" }, MA_NUOC: { value: "KR" }, SO_VD: { value: "HPSEL2610078" }, SO_KIEN: { value: "48 PL" }, TRONG_LUONG: { value: "3860.5" }, KHO: { value: "03CCS01 – Kho" }, CANG_DO: { value: "VNHPH – Cảng Hải Phòng" }, CANG_XEP: { value: "KRPUS – Busan" }, PTVC_TEN: { value: "SITC" }, NGAY_DEN: { value: "2026-10-15" }, NGAY_DI: { value: "2026-10-15" }, SO_HD: { value: "HSP-1" }, NGAY_HD: { value: "2026-10-02" }, PT_TT: { value: "TTR – T/T" }, DK_GIA: { value: "FCA" }, MA_TT: { value: "USD" }, TONG_TG: { value: "20850" }, VBPQ: { value: "MO" } },
+  fields: { MA_LH: { value: "A11" }, CQHQ: { value: "03CE – HP" }, PTVC: { value: "2 – Biển" }, NNK_MST: { value: "0316789012" }, NNK_TEN: { value: "AN PHÁT" }, NNK_DC: { value: "Hải Phòng" }, NXK_MST: { value: "0316789012" }, NXK_TEN: { value: "HANSOL" }, NXK_DC: { value: "Changwon" }, MA_NUOC: { value: "KR" }, SO_VD: { value: "HPSEL2610078" }, SO_KIEN: { value: "48 PL" }, TRONG_LUONG: { value: "3860.5" }, KHO: { value: "03CCS01 – Kho" }, CANG_DO: { value: "VNHPH – Cảng Hải Phòng" }, CANG_XEP: { value: "KRPUS – Busan" }, PTVC_TEN: { value: "SITC" }, NGAY_DEN: { value: "2026-10-15" }, NGAY_DI: { value: "2026-10-15" }, SO_HD: { value: "HSP-1" }, NGAY_HD: { value: "2026-10-02" }, PT_TT: { value: "TTR – T/T" }, DK_GIA: { value: "FCA" }, MA_TT: { value: "USD" }, TONG_TG: { value: "20850" }, VBPQ: { value: "MO" },
+    // Đủ ô bắt buộc trước khi khai (@kb/contracts declarationRequiredGaps): IDA và EDA đường biển container, giá FCA.
+    PL_CN: { value: "4 – Tổ chức" }, HO_HIEU: { value: "VRDK5" }, HD_PL: { value: "A – Hóa đơn thương mại" }, GIA_PL: { value: "A" }, NGUOI_NT: { value: "1" },
+    NXK_DT: { value: "0225 3 888 123" }, TG_TT: { value: "20850 USD" }, SO_CONT: { value: "SITU2246781" }, CON_VC1: { value: "03CCS01" } },
   items: [{ lineNo: 1, description: "Vòng bi", quantity: "2000", unit: "PCE", unitPrice: "1.85", amount: "3700", origin: "KR", hsConfirmed: "8482.10.00", importDutyRate: "3", vatRate: "8", policyNote: null }],
 });
 
@@ -37,10 +40,13 @@ class FakeDeclarations implements DeclarationReader {
   constructor(public status: DeclarationStatus = "APPROVED", public unconfirmedHs = 0, public kind: "IDA" | "EDA" = "IDA") {}
   /** Ngày tra tỷ giá khi dựng tờ khai (giờ VN). */
   rateDate = "2026-10-14";
+  /** Ghi đè chỉ tiêu của payload (giá trị rỗng = người khai xóa ô sau khi duyệt). */
+  fields: Record<string, { value: string }> = {};
   readonly submitted: string[] = [];
   async get(_orgId: string, dossierId: string) {
     if (dossierId === "dos_none") return null;
-    return { declarationId: "dec_1", version: 2, status: this.status, payload: payload(this.kind), unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate };
+    const p = payload(this.kind);
+    return { declarationId: "dec_1", version: 2, status: this.status, payload: { ...p, fields: { ...p.fields, ...this.fields } }, unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate };
   }
   async markSubmitted(_ctx: { orgId: string }, dossierId: string) {
     this.submitted.push(dossierId);
@@ -134,6 +140,19 @@ describe("submitDeclaration", () => {
     expect(errCode(await submitDeclaration(deps, declarant, D, "cert_nope"))).toBe("NO_CERT");
     expect(errCode(await submitDeclaration(deps, viewer, D, "cert_1"))).toBe("FORBIDDEN");
     expect(errCode(await submitDeclaration(deps, other, D, "cert_1"))).toBe("NOT_FOUND");
+    expect(uow.data.outbox).toHaveLength(0);
+  });
+  it("ô bắt buộc trống (đổi sau khi duyệt) → VALIDATION nêu chỉ tiêu, không tạo outbox, hồ sơ chưa SUBMITTED", async () => {
+    decls.fields = { KHO: { value: "" } };
+    const r = await submitDeclaration(deps, declarant, D, "cert_1");
+    expect(r).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringContaining("1.29 Mã địa điểm lưu kho") } });
+    expect(uow.data.outbox).toHaveLength(0);
+    expect(decls.submitted).toEqual([]);
+  });
+  it("sai đặc tả FPT (vd ngày hàng đến sai định dạng) → chặn trước khi đánh dấu đã khai", async () => {
+    decls.fields = { NGAY_DEN: { value: "15.10.2026" } };
+    const r = await submitDeclaration(deps, declarant, D, "cert_1");
+    expect(r).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringContaining("đặc tả truyền Hải quan") } });
     expect(uow.data.outbox).toHaveLength(0);
   });
   it("tờ khai dựng với tỷ giá tuần trước → chặn truyền RATE_WEEK_CHANGED (tỷ giá tính thuế áp theo tuần đăng ký); cùng tuần → truyền được", async () => {

@@ -1,4 +1,4 @@
-import { declarationEditMode, extraFieldMeta, fieldEditBlock, itemFieldMeta, type Declaration, type DeclarationView } from "@kb/contracts";
+import { declarationEditMode, declarationRequiredGaps, extraFieldMeta, fieldEditBlock, itemFieldMeta, type Declaration, type DeclarationView } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -87,10 +87,13 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
   const now = deps.clock.now();
   const r0 = await deps.uow.asOrg(ctx, async (r) => {
     const decl = await r.declarations.latest(ctx.orgId, dossierId);
-    const items = await r.lineItems.list(ctx.orgId, dossierId);
+    const items = (await r.lineItems.list(ctx.orgId, dossierId)).sort((a, b) => a.lineNo - b.lineNo);
     const guard = canApprove({
       role: ctx.role, userId: ctx.userId, ownerId: d.value.ownerId, fourEyes: org.fourEyes, blockerFails, items, status: decl?.status ?? "NOT_CREATED",
-      ...(decl ? { exchangeRate: decl.exchangeRate, missingFields: missingRequiredFields(decl.kind, decl.fields), fields: decl.fields } : {}),
+      ...(decl ? {
+        exchangeRate: decl.exchangeRate, missingFields: missingRequiredFields(decl.kind, decl.fields), fields: decl.fields,
+        requiredGaps: declarationRequiredGaps(decl.kind, Object.entries(decl.fields).map(([code, f]) => ({ code, value: f.value })), items), lineNos: items.map((i) => i.lineNo),
+      } : {}),
     });
     if (!guard.ok) return guard;
     const patch = { status: "APPROVED" as const, approvedBy: ctx.userId, approvedAt: now, updatedAt: now };

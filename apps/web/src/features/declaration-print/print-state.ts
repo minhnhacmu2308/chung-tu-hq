@@ -1,10 +1,10 @@
 // Logic thuần của bản in tờ khai (Review bước 5): vị trí ô trên bố cục, số ước tính, trạng thái ô, danh sách ô cần xử lý, số trang.
 import {
-  expandRepeat, formKeysOf, itemFields, layoutFor, otherFieldKeys, printKeys, printLayoutFor,
-  type ConditionContext, type ConditionId, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
+  expandRepeat, formKeysOf, itemFields, layoutFor, otherFieldKeys, printKeys, printLayoutFor, requiredGaps,
+  type ConditionContext, type ConditionId, type RequiredGap, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
 } from "@kb/contracts";
 import type { PaperFieldState } from "@kb/ui";
-import { conditionContext, groupMissing, isApplicable, missingRequired, type FormValues } from "../declaration-form/form-state";
+import { conditionContext, isApplicable, type FormValues } from "../declaration-form/form-state";
 import { customsItemValues, customsValues } from "../declaration-form/customs-adapter";
 import { declarationValues, itemValues } from "../declaration-form/dossier-adapter";
 import { fieldErrors, type FieldError } from "../dossier-detail/steps/customs-errors";
@@ -135,21 +135,6 @@ export function cellState(a: { error: boolean; missing: boolean; estimated: bool
 
 export type AttentionCell = { key: string; line?: number; reason: "ERROR" | "MISSING" };
 
-/** Ô người khai còn thiếu – cùng ngữ nghĩa form cũ: nhóm lặp chỉ xét dòng 1; nhóm "chỉ cần một ô" báo ở ô đầu; khối/nhóm không áp dụng → không thiếu. */
-function isMissing(kind: Kind, spot: FieldSpot, v: FormValues, ctx: ConditionContext): boolean {
-  if (spot.blockCondition && !isApplicable({ condition: spot.blockCondition }, ctx)) return false;
-  if (spot.parentCondition && !isApplicable({ condition: spot.parentCondition }, ctx)) return false;
-  if (spot.repeatRow !== undefined && spot.repeatRow > 1) return false;
-  const parentCondition = spot.parentCondition ?? spot.blockCondition;
-  // Như units(): nhóm "chỉ cần một ô" xét cả nhóm, trước khi lọc điều kiện riêng của ô con.
-  if (spot.fillAny) {
-    if (spot.group[0]?.key !== spot.field.key) return false;
-    return groupMissing(kind, { kind: "group", label: "", fields: spot.group, fill: "any", ...(spot.parentNo ? { no: spot.parentNo } : {}) }, v, ctx, parentCondition);
-  }
-  if (!isApplicable(spot.field, ctx)) return false;
-  return missingRequired(kind, spot.field, v, spot.parentNo, parentCondition, ctx);
-}
-
 type Slot = { key: string; line?: number };
 const slotId = (c: Slot) => `${c.line ?? ""}:${c.key}`;
 
@@ -214,19 +199,16 @@ export function errorSlots(kind: Kind, errors: FieldError[], lineNos: number[]):
  * Mỗi lỗi gắn vào ô đầu tiên (theo thứ tự đó) của chỉ tiêu (xem `errorSlots`).
  */
 export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[], errors: FieldError[], lineNos: number[]): AttentionCell[] {
-  const loc = fieldLocator(kind);
   const order = slotOrder(kind, items.length);
   const errorIds = new Set(slotsPerError(kind, order, errors, lineNos).flatMap((slots) => (slots[0] ? [slotId(slots[0])] : [])));
 
-  const declCtx = conditionContext(kind, decl);
-  const itemCtx = items.map((v) => conditionContext(kind, v));
+  // Ô bắt buộc còn trống: cùng quy tắc nút Phê duyệt / Ký số và backend (@kb/contracts requiredGaps).
+  const missingIds = new Set(requiredGaps(kind, decl, items).map(slotId));
   const cell = (s: Slot, reason: AttentionCell["reason"]): AttentionCell => ({ key: s.key, ...(s.line === undefined ? {} : { line: s.line }), reason });
   const out = order.filter((s) => errorIds.has(slotId(s))).map((s) => cell(s, "ERROR"));
   for (const s of order) {
     if (errorIds.has(slotId(s))) continue;
-    const spot = loc.get(s.key)!;
-    const missing = s.line === undefined ? isMissing(kind, spot, decl, declCtx) : isMissing(kind, spot, items[s.line]!, itemCtx[s.line]!);
-    if (missing) out.push(cell(s, "MISSING"));
+    if (missingIds.has(slotId(s))) out.push(cell(s, "MISSING"));
   }
   return out;
 }
@@ -377,4 +359,10 @@ export function otherFieldGroups(kind: Kind, decl: FormValues, items: FormValues
   const l = layoutFor(kind);
   const declBlocks = l.declarant.flatMap((sec) => sec.blocks);
   return { decl: groupByBlock(declBlocks, cells.decl), items: cells.items.map((keys) => groupByBlock(l.item.declarant, keys)) };
+}
+
+/** Ô bắt buộc còn trống của tờ khai – nút Phê duyệt / Ký số khóa khi còn ô (cùng quy tắc mock + backend: @kb/contracts requiredGaps). */
+export function declarationGapsOf(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined): { gaps: RequiredGap[]; lineNos: number[] } {
+  const data = printData(decl, items, submission);
+  return { gaps: requiredGaps(data.kind, data.values, data.itemRows), lineNos: data.lineNos };
 }

@@ -1,6 +1,6 @@
 export type { DeclarationLayout, FieldInput, FieldOption, FieldOrigin, LayoutBlock, LayoutField, LayoutGroup, LayoutItem, LayoutRepeat, LayoutSection } from "./types.js";
 export { expandRepeat, itemFields, layoutFields, layoutNumbers } from "./expand.js";
-export { fieldGuideNo, fieldRole } from "./role.js";
+export { FPT_REQUIRED_KEYS, fieldGuideNo, fieldRole } from "./role.js";
 export { LAYOUT_IDA } from "./ida.js";
 export { LAYOUT_EDA } from "./eda.js";
 export { layoutFor } from "./layout-for.js";
@@ -14,3 +14,4 @@ export {
   isItemFieldKey, itemDefaults, itemFieldClass, itemFieldCode, itemFieldFpt, itemFieldIssue, itemFieldMeta, itemInputKeys, itemOverrides, lawCodesByLine, parseItemFieldCode, taxTable, vatCode,
   type ItemDefaultsInput, type ItemFieldClass,
 } from "./item-fields.js";
+export { conditionContext, declarationRequiredGaps, groupMissing, isApplicable, itemFormValues, missingRequired, requiredGaps, requiredGapsText, type ItemFormInput, type RequiredGap } from "./required.js";

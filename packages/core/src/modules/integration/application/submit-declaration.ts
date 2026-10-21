@@ -1,6 +1,6 @@
 // Ký số & khai tạm lần đầu (ADR 0005 outbox): guard → outbox IDA/EDA (idempotency_key) → declaration SUBMITTED → dossier SUBMITTED → job customs-send.
 // Chỉ gửi khai tạm; khai chính thức (IDC/EDC) và các nghiệp vụ sau do người khai bấm (performOperation).
-import { sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
+import { declarationRequiredGaps, requiredGapsText, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -29,6 +29,10 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
     return err(domainError("RATE_WEEK_CHANGED", `Tờ khai dùng tỷ giá tuần ${weekStart(snap.exchangeRateDate)} – đã sang tuần tỷ giá mới. Mở lại tờ khai để dựng lại với tỷ giá tuần này rồi duyệt lại`));
   const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
   if (blockers > 0) return err(domainError("BLOCKER_FAILED", `Còn ${blockers} luật lỗi chặn truyền`));
+  // Dữ liệu có thể đổi sau khi duyệt: kiểm lại ô bắt buộc trước khi tạo thông điệp (cùng quy tắc nút Ký số ở giao diện).
+  const items = [...snap.payload.items].sort((a, b) => a.lineNo - b.lineNo);
+  const gaps = declarationRequiredGaps(snap.payload.kind, Object.entries(snap.payload.fields).map(([code, f]) => ({ code, value: f.value })), items);
+  if (gaps.length) return err(domainError("VALIDATION", `Còn ${gaps.length} chỉ tiêu bắt buộc chưa nhập: ${requiredGapsText(gaps, items.map((i) => i.lineNo))} – mở lại tờ khai để nhập rồi duyệt lại`, { requiredGaps: gaps }));
   if (!certificateId || !(await deps.certificates.exists(ctx.orgId, certificateId))) return err(domainError("NO_CERT", "Chọn chứng thư số để ký"));
 
   const op = snap.payload.kind === "IDA" ? "IDA" : "EDA";
@@ -40,6 +44,8 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   }
   const built = buildFptRequest(snap.payload);
   if (built.blockers.length) return err(domainError("BLOCKER_FAILED", `Tờ khai chưa truyền được: ${built.blockers.join("; ")}`));
+  // Sai đặc tả FPT (thiếu ô Required, sai kiểu/độ dài) → Hải quan/FPT từ chối: chặn trước khi đánh dấu đã khai thay vì để cổng gửi báo lỗi sau.
+  if (built.issues.length) return err(domainError("VALIDATION", `Tờ khai chưa đúng đặc tả truyền Hải quan: ${built.issues.join("; ")}`, { issues: built.issues }));
   const now = deps.clock.now();
   const key = outboxKey(dossierId, op, snap.version);
   const created = await deps.uow.asOrg(ctx, async (r) => {

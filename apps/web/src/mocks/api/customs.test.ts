@@ -161,6 +161,13 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
     expect(await err(performOperation(NEW, "EDA"))).toMatchObject({ code: "INVALID_OPERATION" });
     expect(await err(performOperation(NEW, "IID"))).toMatchObject({ code: "OPERATION_LOCKED" });
     expect(await err(submitDeclaration(NEW, ""))).toMatchObject({ code: "NO_CERT" });
+    // Ô bắt buộc bị xóa sau khi duyệt → chặn khai, chưa gửi gì.
+    const kho = decl(NEW).fields.find((f) => f.code === "KHO")!;
+    const saved = kho.value;
+    kho.value = "";
+    expect(await err(submitDeclaration(NEW, CERT))).toMatchObject({ code: "VALIDATION", message: expect.stringContaining("Chưa khai được") });
+    expect((await getSubmission(NEW)).stage).toBe("NOT_SENT");
+    kho.value = saved;
     await submitDeclaration(NEW, CERT);
     expect(await err(performOperation(NEW, "HYS"))).toMatchObject({ code: "OPERATION_LOCKED", message: "Đang chờ phản hồi IDA" });
     wait(3_000);

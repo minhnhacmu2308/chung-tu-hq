@@ -60,6 +60,15 @@ describe("sửa theo giai đoạn tờ khai (mock)", () => {
   });
 });
 
+describe("phê duyệt chặn khi còn ô bắt buộc trống (mock)", () => {
+  it("dos_023 thiếu mã địa điểm lưu kho (1.29) → VALIDATION nêu chỉ tiêu; nhập xong → duyệt được", async () => {
+    await expect(approveDeclaration(DRAFT)).rejects.toMatchObject({ code: "VALIDATION", message: expect.stringContaining("1.29 Mã địa điểm lưu kho") });
+    expect(getDb().declarations.find((d) => d.dossierId === DRAFT)!.status).toBe("DRAFT");
+    await updateDeclarationField(DRAFT, "KHO", "03CEC01");
+    expect((await approveDeclaration(DRAFT)).status).toBe("APPROVED");
+  });
+});
+
 describe("mở lại tờ khai (mock)", () => {
   it("đã duyệt chưa truyền → nháp, hồ sơ về bước review, duyệt lại được", async () => {
     await reopenDeclaration(APPROVED);

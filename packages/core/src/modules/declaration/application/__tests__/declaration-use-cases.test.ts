@@ -217,6 +217,7 @@ describe("HS và tờ khai", () => {
     unwrap(await moveToReview(deps, declarant, D));
     unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
     unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));
+    unwrap(await updateDeclarationField(deps, declarant, D, "HO_HIEU", "9999"));
     unwrap(await approveDeclaration(deps, approver, D));
     (deps.shipments as FakeShipments).byDossier[D]!.items[0]!.unit.value = "SET";
     unwrap(await refreshFromShipment(deps, declarant, D));
@@ -244,6 +245,10 @@ describe("HS và tờ khai", () => {
     const missing = await approveDeclaration(deps, approver, D);
     expect(missing).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringContaining("Mã địa điểm lưu kho") } });
     unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));
+    // Ô bắt buộc trên tờ khai đầy đủ (@kb/contracts declarationRequiredGaps): đường biển phải có hô hiệu (1.31 ô 1, tàu chưa đăng ký nhập 9999).
+    const noCallSign = await approveDeclaration(deps, approver, D);
+    expect(noCallSign).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringContaining("1.31 Phương tiện vận chuyển – Hô hiệu") } });
+    unwrap(await updateDeclarationField(deps, declarant, D, "HO_HIEU", "9999"));
     const a = unwrap(await approveDeclaration(deps, approver, D));
     expect(a).toMatchObject({ status: "APPROVED", approvedBy: "Tên usr_tuan", approvedAt: "2026-10-14T03:00:00.000Z" });
     expect(dossiers.rows[0]).toMatchObject({ status: "APPROVED", step: "submit", suspectFields: 0 });

@@ -109,9 +109,10 @@ export const VN_EDA_ROWS = [
   ["TK_IP4", "decimal", "20.4", true, "Tổng trị giá hóa đơn"],
   ["TK_IP1", "text", "1", false, "Mã phân loại giá hóa đơn"],
   ["TK_SBC", "text", "11", false, "Mã ngân hàng bảo lãnh"],
-  ["TK_FCD", "text", "3", true, "Mã đồng tiền của tổng trị giá tính thuế"],
+  // 2.40: sheet ghi bắt buộc nhưng Phụ lục II chỉ khai khi điều kiện giá khác FOB/DAP/DAF (EXPORT_VALUE) – để tùy chọn, form bắt theo điều kiện.
+  ["TK_FCD", "text", "3", false, "Mã đồng tiền của tổng trị giá tính thuế"],
   ["TK_RYA", "long", null, false, "Năm phát hành bảo lãnh"],
-  ["TK_FKK", "decimal", "20.4", true, "Tổng trị giá tính thuế", { acceptString: "numeric", note: "format.json gửi \"5543.17\" (chuỗi số)" }],
+  ["TK_FKK", "decimal", "20.4", false, "Tổng trị giá tính thuế", { acceptString: "numeric", note: "format.json gửi \"5543.17\" (chuỗi số)" }],
   ["TK_SCM", "text", "10", false, "Ký hiệu chứng từ bảo lãnh"],
   ["TK_RC1", "text", "3", false, "Mã đồng tiền của tỷ giá tính thuế"],
   ["TK_RD1", "decimal", "17.8", false, "Tỷ giá tính thuế"],

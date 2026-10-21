@@ -10,7 +10,7 @@ import { canEditDeclaration, declarationEditMode, type DeclarationEditMode, type
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCheck2, FileText, Paperclip, RotateCcw, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { dossierKeys, listDocuments } from "@/api/dossiers";
 import { approveDeclaration, declarationKeys, getDeclarationView, reopenDeclaration } from "@/api/declaration";
 import { getSession, sessionKeys } from "@/api/session";
@@ -29,7 +29,9 @@ import { DossierDeclarationForm } from "../../declaration-form/dossier-declarati
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
 import type { LeaveGuard } from "../../declaration-print/field-edit-panel";
-import { printIssuesOf } from "../../declaration-print/print-state";
+import { cellDomId } from "../../declaration-print/print-cell";
+import { declarationGapsOf, printIssuesOf } from "../../declaration-print/print-state";
+import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { LoadError } from "@/components/common/load-error";
 
 const exportTaxText = (status: Declaration["status"]) =>
@@ -127,6 +129,17 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const tabs: readonly Tab[] = legacy ? LEGACY_TABS : PRINT_TABS;
   const tab: Tab = (tabs as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "full";
   const rejection = subQ.data?.rejection ?? null;
+  // "Đến ô cần xử lý": mở tab bản in rồi bấm vào ô (mở panel sửa ô) sau khi tab đã vẽ; n để bấm lại cùng ô.
+  const [jump, setJump] = useState<{ id: string; n: number } | null>(null);
+  useEffect(() => {
+    if (!jump || tab !== "full") return;
+    const frame = requestAnimationFrame(() => {
+      const cell = document.querySelector<HTMLElement>(`[data-print-cell="${jump.id}"]`);
+      cell?.scrollIntoView({ block: "center" });
+      cell?.click();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [jump, tab]);
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
     onSuccess: () => {
@@ -165,6 +178,14 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   // Giai đoạn truyền chưa tải xong → chỉ đọc (tránh mở ô rồi khóa lại); không đọc được → coi như chưa khai, backend vẫn chặn theo giai đoạn thật.
   const editMode = subQ.isPending ? "LOCKED" : declarationEditMode(decl.status, subQ.data?.stage ?? "NOT_SENT");
   const kindLabel = decl.kind === "IDA" ? "Tờ khai nhập khẩu (IDA)" : "Tờ khai xuất khẩu (EDA)";
+  // Ô bắt buộc còn trống → khóa Phê duyệt (backend chặn lần nữa khi duyệt và khi khai).
+  const required = isDraft ? declarationGapsOf(decl, items, subQ.data) : { gaps: [], lineNos: [] };
+  const goToGap = () => {
+    const g = required.gaps[0];
+    if (!g) return;
+    if (tab !== "full") setTab("full");
+    setJump((j) => ({ id: cellDomId(g.key, g.line), n: (j?.n ?? 0) + 1 }));
+  };
 
   return (
     <Stack gap="lg">
@@ -217,6 +238,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               <Alert tone="info" title="Cần người khác phê duyệt">
                 Doanh nghiệp bật nguyên tắc 4 mắt: bạn là người tạo hồ sơ này nên không tự phê duyệt được. Nhờ một Người duyệt khác hoặc Chủ sở hữu.
               </Alert>
+            )}
+            {!legacy && (
+              <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel="Đến ô cần xử lý" onAction={goToGap}>
+                Thiếu các ô này Hải quan sẽ từ chối tờ khai. Nhập đủ rồi mới phê duyệt được.
+              </RequiredGapsAlert>
             )}
             {unconfirmedHs > 0 && (
               <Alert
@@ -310,7 +336,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         {isDraft ? (
           <Button
             leftIcon={<ShieldCheck className="h-4 w-4" />}
-            disabled={unconfirmedHs > 0 || blockedByFourEyes}
+            disabled={unconfirmedHs > 0 || blockedByFourEyes || required.gaps.length > 0}
             onClick={() =>
               // Còn thay đổi chưa lưu ở panel → hỏi trước (Lưu / Bỏ giữ nguyên trang), rồi bấm Phê duyệt lại.
               leave(`${pathname}?${params.toString()}`, () => {

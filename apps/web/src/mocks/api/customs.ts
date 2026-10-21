@@ -14,6 +14,7 @@ import {
   basePayload, CHANNEL_NOTES, CHANNEL_VI, channelFor, containersFor, declarationNoFor, emptyFlow, estimatedTaxVnd, type CustomsFlow,
 } from "@/mocks/customs-sim";
 import type { MockDb } from "@/mocks/db";
+import { assertNoGaps } from "@/mocks/required-gaps";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
 import type { CustomsMessage, CustomsOperation, CustomsResult, Declaration, DigitalCertificate, Dossier } from "@/mocks/types";
 
@@ -191,6 +192,8 @@ function assertSendable(db: MockDb, c: Ctx) {
   if (!c.decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
   if (c.decl.status !== "APPROVED") throw new ApiError("NOT_APPROVED", "Tờ khai chưa được phê duyệt");
   if (db.lineItems.some((i) => i.dossierId === c.dossier.id && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
+  // Dữ liệu có thể đổi sau khi duyệt – kiểm lại trước khi gửi.
+  assertNoGaps(db, c.decl, "khai");
 }
 
 const STAGE_TEXT: Record<CustomsStage, string> = {

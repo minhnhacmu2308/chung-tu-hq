@@ -5,6 +5,7 @@ import { customsStageOf } from "./customs";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
+import { assertNoGaps } from "@/mocks/required-gaps";
 import type { ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
 import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
 
@@ -299,7 +300,7 @@ export const getDeclarationView = (dossierId: string) =>
     };
   });
 
-/** Phê duyệt tờ khai (vai trò Người duyệt). Chặn khi còn HS chưa xác nhận. */
+/** Phê duyệt tờ khai (vai trò Người duyệt). Chặn khi còn HS chưa xác nhận hoặc ô bắt buộc trống. */
 export const approveDeclaration = (dossierId: string) =>
   mutate((db) => {
     const decl = db.declarations.find((d) => d.dossierId === dossierId);
@@ -308,6 +309,7 @@ export const approveDeclaration = (dossierId: string) =>
     const me = db.members.find((m) => m.id === db.currentUserId);
     const owner = db.dossiers.find((d) => d.id === dossierId)?.ownerId;
     if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw new ApiError("FORBIDDEN", "Người duyệt phải khác người tạo hồ sơ (nguyên tắc 4 mắt)");
+    assertNoGaps(db, decl, "phê duyệt");
     Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     Object.assign(dossier, { status: "APPROVED", step: "submit", suspectFields: 0, updatedAt: nowIso() });

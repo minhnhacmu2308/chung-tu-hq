@@ -122,6 +122,9 @@ describe("Chỉ tiêu then chốt Mẫu 02 (xuất khẩu)", () => {
     ["2.72", "Số lượng (1)", "VN_EDA_HANG.HAG_QN1"],
     ["2.74", "Trị giá hóa đơn", "VN_EDA_HANG.HAG_BPR"],
     ["2.75", "Đơn giá hóa đơn", "VN_EDA_HANG.HAG_UPR"],
+    ["2.78", "Danh mục miễn thuế xuất khẩu", "VN_EDA_HANG.HAG_TXN"],
+    // Đặc tả VNACCS_EDA: số dòng trong danh mục miễn thuế là HAG_ADE (HAG_TXR là "Danh mục miễn thuế xuất khẩu"); form đầy đủ cũng dùng HAG_ADE.
+    ["2.79", "Số dòng tương ứng trong Danh mục miễn thuế xuất khẩu", "VN_EDA_HANG.HAG_ADE"],
     ["2.80", "Mã văn bản pháp luật khác", "VN_EDA_HANG.HAG_OL1"],
   ])("%s %s → %s", (no, label, fptField) => {
     expect(byNo(CATALOG_EDA, no)).toMatchObject({ label, fptField });

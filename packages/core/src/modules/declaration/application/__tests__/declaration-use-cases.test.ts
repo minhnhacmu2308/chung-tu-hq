@@ -157,6 +157,21 @@ describe("HS và tờ khai", () => {
     expect(errCode(await updateDeclarationField(deps, declarant, D, "NOPE", "x"))).toBe("NOT_FOUND");
   });
 
+  it("1.14 mã bưu chính: tờ khai lấy từ Tài khoản; người khai sửa → USER thắng, giữ qua lần dựng lại; sai đặc tả → VALIDATION; org khác không sửa được", async () => {
+    deps = { ...deps, org: fakeOrg({ ...ORG, postalCode: "180000" }) };
+    await runFull("DECLARATION");
+    const view = async () => unwrap(await getDeclarationView(deps, declarant, D)).declaration!.fields.find((f) => f.code === "TK_IMY");
+    expect(await view()).toMatchObject({ value: "180000", source: "ACCOUNT", no: "1.14" });
+    unwrap(await updateDeclarationField(deps, declarant, D, "TK_IMY", "100000"));
+    expect(audit.rows.at(-1)).toMatchObject({ key: "decl:TK_IMY", oldValue: "180000", newValue: "100000" });
+    const items = unwrap(await listLineItems(deps, declarant, D));
+    unwrap(await confirmHs(deps, declarant, items[0]!.id, "8482.10.00")); // dựng lại
+    expect(await view()).toMatchObject({ value: "100000", source: "USER" });
+    expect(errCode(await updateDeclarationField(deps, declarant, D, "TK_IMY", "12345678"))).toBe("VALIDATION"); // TK_IMY tối đa 7 ký tự
+    expect(errCode(await updateDeclarationField(deps, other, D, "TK_IMY", "200000"))).toBe("NOT_FOUND");
+    expect(await view()).toMatchObject({ value: "100000" });
+  });
+
   it("updateDeclarationField: chỉ tiêu tính từ hóa đơn/tỷ giá không sửa tay; chỉ tiêu bắt buộc không để trống; VIEWER bị chặn", async () => {
     await runFull("DECLARATION");
     const before = unwrap(await getDeclarationView(deps, declarant, D)).declaration!;
@@ -224,6 +239,8 @@ describe("HS và tờ khai", () => {
   });
 
   it("moveToReview cần HS đủ + tờ khai; approve: VIEWER/DECLARANT FORBIDDEN, BLOCKER → BLOCKER_FAILED, HS thiếu → HS_UNCONFIRMED, đủ → APPROVED + hồ sơ sang submit", async () => {
+    // Doanh nghiệp chưa có địa chỉ: 1.15 là chỉ tiêu HT (VNACCS tự hiện theo MST) – không chặn duyệt.
+    deps = { ...deps, org: fakeOrg({ ...ORG, address: "" }) };
     await runFull("DECLARATION");
     expect(errCode(await moveToReview(deps, declarant, D))).toBe("HS_UNCONFIRMED");
     for (const it of unwrap(await listLineItems(deps, declarant, D))) unwrap(await confirmHs(deps, declarant, it.id, "8482.10.00"));

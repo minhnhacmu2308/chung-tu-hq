@@ -23,6 +23,7 @@ export async function seedDemoOrg(db: Db, opts: { passwordHash: string }) {
       name: "CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT",
       address: "Lô B4, KCN Tràng Duệ, xã Lê Lợi, huyện An Dương, TP. Hải Phòng",
       phone: "0225 3 888 123",
+      postalCode: "180000",
       planCode: "PRO",
     })
     .onConflictDoNothing();

@@ -16,6 +16,7 @@ const ORG: Organization = {
   taxCode: "0316789012",
   address: "Lô B4, KCN Tràng Duệ, xã Lê Lợi, huyện An Dương, TP. Hải Phòng",
   phone: "0225 3 888 123",
+  postalCode: "180000",
   plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, renewsAt: isoDay(19) },
   usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "96500" },
   suspectThreshold: "BALANCED",

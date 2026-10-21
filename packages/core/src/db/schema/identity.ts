@@ -11,6 +11,8 @@ export const organizations = pgTable(
     name: text("name").notNull(),
     address: text("address").notNull().default(""),
     phone: text("phone").notNull().default(""),
+    /** Mã bưu chính của doanh nghiệp (6 số VN) – chỉ tiêu 1.14 IDA (TK_IMY) / 2.13 EDA (TK_EPP); "" = chưa khai. */
+    postalCode: text("postal_code").notNull().default(""),
     planCode: text("plan_code")
       .notNull()
       .references(() => plans.code),

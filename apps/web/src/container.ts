@@ -205,7 +205,7 @@ function build(): Container {
     org: {
       get: async (orgId) => {
         const o = await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId));
-        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", fourEyes: o?.fourEyes ?? false };
+        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", postalCode: o?.postalCode ?? "", fourEyes: o?.fourEyes ?? false };
       },
     },
     users: skill.users,

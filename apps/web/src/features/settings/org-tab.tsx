@@ -2,21 +2,27 @@
 import {
   Alert, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Field, FormSection, Grid, Input, Skeleton, Stack, toast, SkeletonForm, useMessages,
 } from "@kb/ui";
+import { PostalCodeSchema, type Organization } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { sessionKeys } from "@/api/session";
-import { getOrganization, settingsKeys, updateOrganization, type OrgProfileInput } from "@/api/settings";
+import { getOrganization, settingsKeys, updateOrganization } from "@/api/settings";
 import { ORG_TAB_MESSAGES } from "./org-tab.messages";
+
+type Draft = { name: string; address: string; phone: string; postalCode: string };
+const toDraft = (o: Organization): Draft => ({ name: o.name, address: o.address, phone: o.phone, postalCode: o.postalCode ?? "" });
 
 export function OrgTab() {
   const qc = useQueryClient();
   const m = useMessages(ORG_TAB_MESSAGES);
   const { data: org, isLoading } = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
-  const [draft, setDraft] = useState<OrgProfileInput>({ name: "", address: "", phone: "" });
+  const [draft, setDraft] = useState<Draft>({ name: "", address: "", phone: "", postalCode: "" });
   useEffect(() => {
-    if (org) setDraft({ name: org.name, address: org.address, phone: org.phone });
+    if (org) setDraft(toDraft(org));
   }, [org]);
+  // Mã bưu chính: cùng quy tắc Zod với backend (6 chữ số hoặc để trống).
+  const postalInvalid = !PostalCodeSchema.safeParse(draft.postalCode).success;
 
   const save = useMutation({
     mutationFn: () => updateOrganization(draft),
@@ -28,14 +34,15 @@ export function OrgTab() {
   });
 
   if (isLoading || !org) return <Card className="max-w-4xl p-5"><SkeletonForm fields={4} /></Card>;
-  const dirty = draft.name !== org.name || draft.address !== org.address || draft.phone !== org.phone;
+  const saved = toDraft(org);
+  const dirty = (Object.keys(saved) as (keyof Draft)[]).some((k) => draft[k] !== saved[k]);
 
   return (
     <Card className="max-w-4xl">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          save.mutate();
+          if (!postalInvalid) save.mutate();
         }}
       >
         <CardHeader className="pb-5">
@@ -62,13 +69,16 @@ export function OrgTab() {
             <Field label={m.phone} className="cq-md:max-w-xs">
               <Input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} inputMode="tel" />
             </Field>
+            <Field label={m.postalCode} hint={m.postalCodeHint} {...(postalInvalid ? { error: m.postalCodeInvalid } : {})} className="cq-md:max-w-xs">
+              <Input value={draft.postalCode} onChange={(e) => setDraft({ ...draft, postalCode: e.target.value })} inputMode="numeric" maxLength={6} className="font-mono" />
+            </Field>
           </FormSection>
         </CardContent>
         <CardFooter>
-          <Button type="button" variant="ghost" disabled={!dirty} onClick={() => setDraft({ name: org.name, address: org.address, phone: org.phone })}>
+          <Button type="button" variant="ghost" disabled={!dirty} onClick={() => setDraft(saved)}>
             {m.undo}
           </Button>
-          <Button type="submit" disabled={!dirty} loading={save.isPending}>{m.save}</Button>
+          <Button type="submit" disabled={!dirty || postalInvalid} loading={save.isPending}>{m.save}</Button>
         </CardFooter>
       </form>
     </Card>

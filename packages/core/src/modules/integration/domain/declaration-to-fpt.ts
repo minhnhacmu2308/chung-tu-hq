@@ -139,9 +139,11 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     set("TK_RED", ddmmyyyy(val(p, "HAN_TX"))); // 1.10
     set("TK_CH", firstToken(val(p, "CQHQ")));
     set("TK_CHB", "00"); // đội thủ tục mặc định (format.json) – đổi khi có danh mục A038 chi tiết (D3); người khai nhập 1.9 thì ghi đè (applyExtras)
+    // 1.14 mã bưu chính: tờ khai đã điền từ Tài khoản (mapping TK_IMY), người khai sửa thì giá trị sửa thắng – gửi qua applyExtras.
+    // Đặc tả VNACCS_IDA bắt buộc TK_IMY: chỉ khi vẫn trống mới gửi "000000".
     if (!val(p, "TK_IMY")) {
-      set("TK_IMY", "000000"); // mã bưu chính: người khai chưa nhập 1.14, org chưa lưu → mặc định
-      warnings.push("TK_IMY: mã bưu chính người nhập khẩu chưa có trong tài khoản – gửi 000000");
+      set("TK_IMY", "000000");
+      warnings.push("TK_IMY: chưa có mã bưu chính người nhập khẩu (1.14) – gửi 000000; cập nhật ở Tài khoản → Doanh nghiệp");
     }
     set("TK_TPM", firstToken(val(p, "NGUOI_NT")) || "1");
     set("TK_MTC", firstToken(val(p, "PTVC")));

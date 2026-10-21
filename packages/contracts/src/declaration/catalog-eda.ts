@@ -65,7 +65,7 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
   }),
   f("2.13", "PARTIES", "Mã bưu chính", "text", "O", {
     maxLen: 7, fptField: "VN_EDA.TK_EPP",
-    legalNote: "Mã bưu chính của người xuất khẩu (nếu có).",
+    legalNote: "Mã bưu chính của người xuất khẩu (nếu có). Phần mềm điền theo mã bưu chính ở Tài khoản.",
   }),
   f("2.14", "PARTIES", "Địa chỉ người xuất khẩu", "text", "O", {
     assist: true,
@@ -345,8 +345,8 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Số Danh mục miễn thuế XK đã thông báo trên hệ thống; nhập kèm mã miễn thuế tại 2.70.",
   }),
   f("2.79", "ITEMS", "Số dòng tương ứng trong Danh mục miễn thuế xuất khẩu", "text", "C", {
-    maxLen: 3, fptField: "VN_EDA_HANG.HAG_TXR", manual: true,
-    legalNote: "Số thứ tự dòng hàng trong Danh mục miễn thuế. Cần đối chiếu FPT: đặc tả FPT mô tả HAG_TXR là \"Danh mục miễn thuế\" (khớp theo mã VNACCS TXR).",
+    maxLen: 3, fptField: "VN_EDA_HANG.HAG_ADE", manual: true,
+    legalNote: "Số thứ tự dòng hàng trong Danh mục miễn thuế. Đặc tả VNACCS_EDA: ô HAG_ADE \"Số dòng tương ứng trong danh mục miễn thuế\" (HAG_TXR là \"Danh mục miễn thuế xuất khẩu\", không phải số dòng).",
   }),
   f("2.80", "ITEMS", "Mã văn bản pháp luật khác", "code", "C", {
     maxLen: 2, codeTable: "A519", fptField: "VN_EDA_HANG.HAG_OL1",

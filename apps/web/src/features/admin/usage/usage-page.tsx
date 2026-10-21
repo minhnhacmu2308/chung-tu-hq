@@ -36,6 +36,8 @@ const makeColumns = (m: UsageMessages) => col.columns([
   col.accessor("dossiers", { header: m.colDossiers, size: 100, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
   col.accessor("pages", { header: m.colPages, size: 130, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
   col.accessor("aiCalls", { header: m.colAiCalls, size: 150, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
+  col.accessor("hsItems", { header: m.colHsItems, size: 170, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
+  col.accessor("customsMessages", { header: m.colCustomsMessages, size: 190, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
   money("readCostVnd", m.colReadCost),
   money("hsCostVnd", m.colHsCost),
   money("customsCostVnd", m.colCustomsCost),
@@ -70,8 +72,8 @@ function UsageInner() {
   const requested = params.get("month");
   const month = months.data?.includes(requested ?? "") ? requested! : months.data?.[0];
   const report = useQuery({ queryKey: adminKeys.usage(month ?? ""), queryFn: () => getUsageReport(month!), enabled: !!month });
-  // Mặc định gọn: ẩn phần tách giá vốn theo loại lệnh gọi; bật lại qua nút "Cột".
-  const [columnVisibility, setColumnVisibility] = useState<DataTableColumnVisibility>({ readCostVnd: false, hsCostVnd: false, customsCostVnd: false, aiCalls: false });
+  // Mặc định gọn: ẩn phần tách giá vốn/số lượng theo nhà cung cấp (AI, HSCodePro, Customs Hub); bật lại qua nút "Cột".
+  const [columnVisibility, setColumnVisibility] = useState<DataTableColumnVisibility>({ readCostVnd: false, hsCostVnd: false, customsCostVnd: false, aiCalls: false, hsItems: false, customsMessages: false });
 
   const t = report.data?.totals;
   const failed = months.isError || report.isError;

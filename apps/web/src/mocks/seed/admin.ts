@@ -1,7 +1,16 @@
 // Dữ liệu mẫu back-office. Toàn bộ tên công ty, MST, người, email, IP là GIẢ (IP thuộc dải dành cho tài liệu).
 import type { AdminUserSession, PlanCode, Role } from "@kb/contracts";
 import type { AdminDb, StoredOrg, StoredPlan, StoredUser } from "../admin/types";
+import { fromMinor, toMinor } from "@/lib/decimal";
 import { isoDay, isoTime } from "./core";
+
+/** Tách giá vốn tháng theo nhà cung cấp (mô phỏng): AI đọc chứng từ ~72%, HSCodePro ~20%, còn lại Customs Hub. */
+function splitCost(total: string): { aiCostVnd: string; hsCostVnd: string; customsCostVnd: string } {
+  const t = toMinor(total, 0);
+  const ai = Math.round(t * 0.72);
+  const hs = Math.round(t * 0.2);
+  return { aiCostVnd: fromMinor(ai, 0), hsCostVnd: fromMinor(hs, 0), customsCostVnd: fromMinor(t - ai - hs, 0) };
+}
 
 export const DEMO_ORG_ID = "org_anphat";
 
@@ -130,7 +139,7 @@ function toStored(seeds: OrgSeed[]): { orgs: StoredOrg[]; users: StoredUser[] } 
         address: s.city,
         phone: `024 3 ${700 + oi * 37} ${100 + oi * 53}`,
         plan: { code: plan.code, name: plan.name, dossiersPerMonth: plan.dossiersPerMonth, pagesPerDossier: plan.pagesPerDossier, renewsAt: isoDay(s.renewsIn) },
-        usage: { dossiersThisMonth: s.dossiers, pagesThisMonth: s.pages, aiCostVnd: s.cost },
+        usage: { dossiersThisMonth: s.dossiers, pagesThisMonth: s.pages, ...splitCost(s.cost) },
         suspectThreshold: "BALANCED",
         fourEyes: false,
       },

@@ -3,6 +3,7 @@ import { AWAITING_CLEARANCE, queryOpFor } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { meterSafely } from "../../../shared/usage.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import type { CustomsDeps } from "./customs-ports.js";
@@ -20,6 +21,7 @@ export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Pro
   const op = queryOpFor(dossier?.direction ?? "NK");
 
   const st = await deps.gateway.queryStatus(input.orgId, result.externalId, input.dossierId);
+  await meterSafely(deps.usage, { orgId: input.orgId, dossierId: input.dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: op, quantity: 1, meta: { attempt: input.attempt } });
   const nextStage = st.rejected ? "REJECTED" : st.cleared ? "CLEARED" : stage;
   const now = deps.clock.now();
   const changed = st.status !== result.raw?.lastStatus;

@@ -24,7 +24,7 @@ const ORG: Organization = {
   phone: "0225 3 888 123",
   postalCode: "180000",
   plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, renewsAt: "2026-11-30" },
-  usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "96500" },
+  usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "69500", hsCostVnd: "19300", customsCostVnd: "7700" },
   suspectThreshold: "BALANCED",
   fourEyes: false,
 };
@@ -51,6 +51,10 @@ describe("Cài đặt – đa ngôn ngữ", () => {
     expect(plan).toContain("套餐对比");
     expect(plan).toContain("切换到此套餐");
     expect(plan).not.toContain("So sánh gói");
+    // Chi phí tháng tách theo nhà cung cấp.
+    expect(plan).toContain("本月服务费用");
+    expect(plan).toContain("HS 编码建议（HSCodePro）");
+    expect(plan).toContain("海关申报传输（Customs Hub）");
   });
   it("en: tab Thành viên dùng nhãn vai trò, quyền, trạng thái tiếng Anh", () => {
     const html = render("en", MembersTab);

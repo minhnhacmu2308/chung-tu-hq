@@ -4,6 +4,7 @@ import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { meterSafely } from "../../../shared/usage.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps } from "./customs-ports.js";
@@ -28,6 +29,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
 
   await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: qop, direction: "OUT", result: "OK", summary: "Tra cứu trạng thái trước khi gửi lại", payloadMasked: { nghiepVu: qop, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
   const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId);
+  await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: qop, quantity: 1, meta: { beforeResend: op } });
   const stage = stageOf(result);
   const b = baseOp(op);
   // Chỉ nhận biết chắc được: số tờ khai của lần khai đầu, phân luồng của khai chính thức, số tiếp nhận HYS.

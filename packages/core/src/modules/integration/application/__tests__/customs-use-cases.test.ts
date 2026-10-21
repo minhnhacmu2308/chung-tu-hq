@@ -12,6 +12,7 @@ import type { CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsUow, Decla
 import { getSubmission, listCustomsDeclarations } from "../get-submission.js";
 import { markOutboxFailed, reopenDeclaration } from "../reopen-declaration.js";
 import { domainError } from "../../../../shared/errors.js";
+import { RecordingUsageMeter } from "../../../../shared/usage.js";
 import { MAX_POLLS, pollStatus } from "../poll-status.js";
 import { MAX_ATTEMPTS, processOutbox } from "../process-outbox.js";
 import { resendOperation } from "../resend-operation.js";
@@ -957,5 +958,84 @@ describe("rejection – lỗi Hải quan gắn vào chỉ tiêu", () => {
     v = unwrap(await getSubmission(deps, declarant, D));
     expect(v.rejection).toBeNull();
     expect(v.stage).toBe("PRE_DECLARED");
+  });
+});
+
+describe("ghi chi phí Customs Hub (usage_events)", () => {
+  let meter: RecordingUsageMeter;
+  beforeEach(() => {
+    meter = new RecordingUsageMeter();
+    deps.usage = meter;
+  });
+  const sends = () => meter.events.filter((e) => e.kind === "CUSTOMS_SEND").map((e) => e.operation);
+  const queries = () => meter.events.filter((e) => e.kind === "CUSTOMS_QUERY").map((e) => e.operation);
+
+  it("luồng IDA → IDC → hỏi IID tới thông quan: mỗi nghiệp vụ gửi thật 1 sự kiện, mỗi lần hỏi trạng thái 1 sự kiện", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    unwrap(await perform("IDC"));
+    await drain();
+    expect(sends()).toEqual(["IDA", "IDC"]);
+    expect(queries().length).toBe(uow.data.results[0]!.pollCount);
+    expect(queries().every((q) => q === "IID")).toBe(true);
+    expect(meter.events.every((e) => e.provider === "CUSTOMS_HUB" && e.orgId === ORG && e.dossierId === D && e.quantity === 1)).toBe(true);
+    expect(meter.events.find((e) => e.operation === "IDA")?.dedupeKey).toBe(`customs:${D}:IDA:v2`);
+  });
+
+  it("lỗi tạm (503) rồi thử lại thành công → chỉ 1 sự kiện IDA; job chạy lại sau khi đã SENT → không ghi thêm", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    const ob = uow.data.outbox[0]!.id;
+    deps.gateway = gw({ preDeclare: async () => { throw new Error("FPT 503"); } });
+    await expect(send(ob)).rejects.toThrow(/503/);
+    expect(meter.events).toEqual([]);
+    deps.gateway = gateway;
+    unwrap(await send(ob));
+    unwrap(await send(ob));
+    expect(sends()).toEqual(["IDA"]);
+  });
+
+  it("đã gửi nhưng chưa kịp ghi SENT (crash) → job chạy lại gửi lại cùng khóa idempotency, không tính hai lần", async () => {
+    seedResult({ state: "PRE_DECLARED", raw: { progress: "PRE_DECLARED" } });
+    const ob = seedOutbox({ operation: "IDC", idempotencyKey: `${D}:IDC:v2` });
+    unwrap(await send(ob.id));
+    // Mô phỏng crash: dòng outbox vẫn PENDING như trước khi ghi kết quả.
+    Object.assign(uow.data.outbox[0]!, { status: "PENDING", attempts: 1 });
+    unwrap(await send(ob.id));
+    expect(sends()).toEqual(["IDC"]);
+  });
+
+  it("Hải quan từ chối nghiệp vụ (có danh sách lỗi) → thông điệp đã xử lý, vẫn ghi 1 lần", async () => {
+    seedResult({ state: "PRE_DECLARED", raw: { progress: "PRE_DECLARED" } });
+    deps.gateway = gw({ declare: async () => ({ accepted: false, errors: [{ code: "E1", message: "sai" }] }) });
+    const ob = seedOutbox({ operation: "IDC", idempotencyKey: `${D}:IDC:v2` });
+    expect(unwrap(await send(ob.id)).status).toBe("FAILED");
+    expect(sends()).toEqual(["IDC"]);
+  });
+
+  it("cổng chưa hỗ trợ nghiệp vụ (chưa gửi được) → không ghi", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    deps.gateway = gw({ send: async () => { throw domainError("NOT_SUPPORTED", "Nghiệp vụ IDB chưa kết nối FPT.VNACCS"); } });
+    unwrap(await perform("IDB"));
+    await drain();
+    expect(sends()).toEqual(["IDA"]);
+  });
+
+  it("chạy lại IDA sau crash: tra IID thấy đã cấp số → ghi 1 lần hỏi IID, không gửi/ghi IDA lần hai", async () => {
+    seedResult({ externalId: "fpt-1", declarationNo: null, state: "APPROVED", raw: { progress: "APPROVED" } });
+    deps.gateway = gw({ queryStatus: async () => ({ declarationNo: "107111", status: "Đã cấp số", cleared: false }), preDeclare: async () => { throw new Error("không được gửi lại"); } });
+    const ob = seedOutbox({ attempts: 1 });
+    expect(unwrap(await send(ob.id)).status).toBe("SENT");
+    expect(sends()).toEqual([]);
+    expect(queries()).toEqual(["IID"]);
+  });
+
+  it("nút Tra cứu (IID) → 1 sự kiện hỏi trạng thái; meter lỗi không làm hỏng tra cứu", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    unwrap(await perform("IID"));
+    expect(queries()).toEqual(["IID"]);
+    meter.fail = true;
+    expect(unwrap(await perform("IID")).sent).toBe(false);
   });
 });

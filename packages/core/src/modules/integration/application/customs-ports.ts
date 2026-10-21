@@ -4,6 +4,7 @@ import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
+import type { ServiceUsageMeter } from "../../../shared/usage.js";
 import type { ProgressEvent } from "../../dossier/index.js";
 import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import type { ResultRaw } from "../domain/state-machine.js";
@@ -111,6 +112,8 @@ export type CustomsDeps = {
   /** Khoảng cách giữa hai lần hỏi trạng thái (ms); gateway giả dùng ngắn để demo. */
   pollDelayMs: number;
   notify?: Notifier;
+  /** Ghi chi phí Customs Hub vào usage_events (module billing; container nối). Không nối → không ghi. */
+  usage?: ServiceUsageMeter;
   clock: Clock;
   idGen: IdGen;
 };

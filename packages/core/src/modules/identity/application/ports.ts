@@ -1,4 +1,4 @@
-import type { Role } from "@kb/contracts";
+import type { Organization, Role } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { AuthTokenKind } from "../domain/token.js";
@@ -132,5 +132,5 @@ export type IdentityDeps = {
   /** Tài khoản có quyền quản trị hệ thống không (module admin cung cấp qua container, ADR 0006); thiếu → không ai là quản trị viên. */
   platformStaff?: (userId: string) => Promise<{ status: "ACTIVE" | "INVITED" | "DISABLED" } | null>;
   /** Mức dùng tháng của org (billing cung cấp qua container); thiếu → 0. */
-  usage?: (orgId: string) => Promise<{ dossiersThisMonth: number; pagesThisMonth: number; aiCostVnd: string }>;
+  usage?: (orgId: string) => Promise<Organization["usage"]>;
 };

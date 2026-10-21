@@ -13,7 +13,7 @@ import type { ExtractionDeps } from "@kb/core/modules/extraction";
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
-import { createBillingInfrastructure, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
+import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { stageOf, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
@@ -141,12 +141,19 @@ function build(): Container {
   const defaultCertificate = async (orgId: string) =>
     (await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.certificates.list(orgId))).find((c) => c.isDefault) ?? null;
   const usageRecorder = new DrizzleUsageRecorder(db, dec(String(env.AI_USD_VND_RATE)));
+  // Chi phí HSCodePro / Customs Hub (đơn giá từ env, mặc định 0) – nối vào declaration và customs bên dưới.
+  const serviceUsage = createServiceUsageMeter(db, env);
   // Mức dùng tháng: số hồ sơ + trang từ module dossier (nối lazy vì dossier tạo sau), chi phí AI từ usage_events.
   const monthRange = (now: Date) => ({ from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)) });
   let dossierStats: (orgId: string, now: Date) => Promise<{ dossiers: number; pages: number }> = async () => ({ dossiers: 0, pages: 0 });
   const billing = createBillingInfrastructure({
     db, orgPlan, clock: systemClock,
-    usage: { thisMonth: async (orgId, now) => ({ ...(await dossierStats(orgId, now)), aiCostVnd: (await usageRecorder.monthlyTotals(orgId, now)).aiCostVnd }) },
+    usage: {
+      thisMonth: async (orgId, now) => {
+        const { aiCostVnd, hsCostVnd, customsCostVnd } = await usageRecorder.monthlyTotals(orgId, now);
+        return { ...(await dossierStats(orgId, now)), aiCostVnd, hsCostVnd, customsCostVnd };
+      },
+    },
   });
   const queue = new BullMqJobQueue(redis);
   // Hạn mức theo gói: hồ sơ/tháng và trang/hồ sơ (billing giữ số; dossier chỉ hỏi được/không).
@@ -169,7 +176,7 @@ function build(): Container {
   };
   identity.usage = async (orgId) => {
     const u = await billing.usage.thisMonth(orgId, systemClock.now());
-    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd };
+    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd, hsCostVnd: u.hsCostVnd, customsCostVnd: u.customsCostVnd };
   };
   const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
   // Luật đối chiếu cần biết hồ sơ nhập/xuất + phương thức vận chuyển: nối từ module dossier tại đây (validation không import dossier).
@@ -211,6 +218,7 @@ function build(): Container {
     users: skill.users,
   });
   declaration.notify = notify;
+  declaration.usage = serviceUsage;
   // Sửa dữ liệu chứng từ ở OCR → dòng hàng + tờ khai nháp cập nhật theo (lỗi không chặn việc lưu trường; ghi log).
   extraction.onShipmentEdited = async (orgId, dossierId) => {
     const r = await refreshFromShipment(declaration, { orgId: asOrgId(orgId), userId: asUserId("") }, dossierId);
@@ -218,6 +226,7 @@ function build(): Container {
   };
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
   customs.notify = notify;
+  customs.usage = serviceUsage;
   // Sửa chỉ tiêu tờ khai theo giai đoạn truyền (chưa khai / sửa đổi bổ sung / đã thông quan).
   declaration.customsStage = async (orgId, dossierId) => stageOf(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.get(orgId, dossierId)));
   const jobs = new BullMqJobMonitor(redis);

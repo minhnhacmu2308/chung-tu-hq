@@ -5,6 +5,7 @@ import type { HsAnswerInput, HsJob, HsReclassifyInput, LineItem } from "@kb/cont
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { meterSafely } from "../../../shared/usage.js";
 import { candidatesFromResult, chunk, toHsRequestItems } from "../domain/hscodepro-map.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { rebuildDraft } from "./_rebuild.js";
@@ -23,15 +24,20 @@ const localStatus = (api: HsJob): HsJobRow["status"] => (busyApi(api) ? "process
 const asCtx = (c: SysCtx) => c as unknown as Ctx;
 const LOCKED = ["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"];
 
-/** Ghi trạng thái/kết quả của một lượt vào các dòng còn thuộc lượt đó (dòng đã chuyển sang lượt khác bị bỏ qua). */
-async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, job: HsJobRow, api: HsJob) {
+/**
+ * Ghi trạng thái/kết quả của một lượt vào các dòng còn thuộc lượt đó (dòng đã chuyển sang lượt khác bị bỏ qua).
+ * Trả số dòng vừa có kết quả mới (trước đó chưa completed) – dùng ghi chi phí "nhận kết quả".
+ */
+async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, job: HsJobRow, api: HsJob): Promise<number> {
   const now = deps.clock.now();
+  let fresh = 0;
   for (const it of api.items) {
     const row = await r.lineItems.findByHsItem(orgId, it.id);
     if (!row || row.hsJobId !== job.id) continue;
     // Đã trả lời nhưng HSCodePro chưa nhận (job hs-answer chưa chạy) → giữ "đang gửi".
     if (row.hsStatus === "answering" && it.status === "need_info" && it.question?.id === row.hsQuestion?.id) continue;
     if (it.status === "completed" && it.result) {
+      if (row.hsStatus !== "completed") fresh++;
       const cands = candidatesFromResult(it.result);
       await r.lineItems.update(row.id, {
         hsStatus: "completed", hsSuggested: cands[0]!.code, hsConfidence: cands[0]!.confidence, hsQuestion: null, hsError: null,
@@ -50,6 +56,7 @@ async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string,
       await r.lineItems.update(row.id, { hsStatus: it.status, hsQuestion: null, hsError: null, updatedAt: now });
     }
   }
+  return fresh;
 }
 
 /** Dòng nhật ký agent cho từng dòng hàng theo trạng thái phân loại. */
@@ -77,7 +84,7 @@ export function hsSummaryLogs(rows: LineItemRow[], at: string): AgentLog[] {
  * Gửi lại cả hồ sơ → hủy lượt cũ còn dở. Kết quả có ngay → ghi luôn; còn processing → hẹn hs-poll.
  */
 export async function startHsClassification(
-  deps: DeclarationDeps, c: SysCtx, dossierId: string, opts: { lineItemIds?: string[]; extra?: Record<string, string | undefined> } = {},
+  deps: DeclarationDeps, c: SysCtx, dossierId: string, opts: { lineItemIds?: string[]; extra?: Record<string, string | undefined>; operation?: "CLASSIFY" | "RECLASSIFY" } = {},
 ): Promise<Result<{ jobIds: string[]; skipped: number; pending: boolean }>> {
   const dossier = await deps.dossiers.get(c.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
@@ -143,6 +150,11 @@ export async function startHsClassification(
   for (const part of chunk(items, CHUNK)) {
     const api = await createSafely(part);
     if (!api) continue;
+    // HSCodePro đã nhận lượt → ghi chi phí theo số dòng gửi (khóa theo mã lượt ngoài: ghi lại không nhân đôi).
+    await meterSafely(deps.usage, {
+      orgId: c.orgId, dossierId, provider: "HSCODEPRO", kind: "HS_CLASSIFY", operation: opts.operation ?? "CLASSIFY", quantity: api.items.length,
+      dedupeKey: `hscodepro:create:${api.id}`, meta: { externalJobId: api.id },
+    });
     const job: HsJobRow = { id: deps.idGen.next("hsj"), orgId: c.orgId, dossierId, externalId: api.id, status: localStatus(api), polls: 0, createdAt: now, updatedAt: now };
     await deps.uow.asOrg(ctx, async (r) => {
       await r.hsJobs.insert(job);
@@ -188,7 +200,9 @@ export async function pollHsJob(deps: DeclarationDeps, input: SysCtx & { dossier
   const api = await deps.hs.get(job.externalId);
   const polls = job.polls + 1;
   const now = deps.clock.now();
-  await deps.uow.asOrg(ctx, (r) => ingest(deps, r, input.orgId, job, api));
+  const fresh = await deps.uow.asOrg(ctx, (r) => ingest(deps, r, input.orgId, job, api));
+  // Chỉ lượt hỏi có kết quả mới mới ghi (hỏi 3 giây/lần mà chưa xong thì không); chạy lại job → dòng đã completed, không đếm lại.
+  if (fresh > 0) await meterSafely(deps.usage, { orgId: input.orgId, dossierId: input.dossierId, provider: "HSCODEPRO", kind: "HS_RESULT", operation: "POLL", quantity: fresh, meta: { externalJobId: job.externalId } });
 
   const busy = busyApi(api);
   if (busy && polls < HS_MAX_POLLS) {
@@ -252,6 +266,11 @@ export async function sendHsAnswer(
   if (!found) return ok(undefined);
   try {
     await deps.hs.answer(found.job.externalId, found.itemId, { question_id: input.questionId, answers: input.answers.map((a) => ({ id: a.id, selected: a.selected, custom: a.custom })) });
+    // HSCodePro nhận câu trả lời → phân loại lại dòng đó: ghi chi phí 1 dòng. 409 (đã gửi ở lần chạy trước) không ghi lại.
+    await meterSafely(deps.usage, {
+      orgId: input.orgId, dossierId: input.dossierId, provider: "HSCODEPRO", kind: "HS_ANSWER", operation: "ANSWER", quantity: 1,
+      dedupeKey: `hscodepro:answer:${found.job.externalId}:${found.itemId}:${input.questionId}`, meta: { externalJobId: found.job.externalId },
+    });
   } catch (e) {
     if (!(e instanceof HsApiError) || e.transient) throw e;
     if (e.code !== "INVALID_STATE") {
@@ -292,7 +311,7 @@ export async function reclassifyHs(deps: DeclarationDeps, ctx: Ctx, lineItemId: 
 
 /** Job hs-reclassify: tạo lượt mới cho một dòng. */
 export async function runHsReclassify(deps: DeclarationDeps, input: SysCtx & { dossierId: string; lineItemId: string; extraDescription?: string }): Promise<Result<{ pending: boolean }>> {
-  const r = await startHsClassification(deps, input, input.dossierId, { lineItemIds: [input.lineItemId], extra: { [input.lineItemId]: input.extraDescription } });
+  const r = await startHsClassification(deps, input, input.dossierId, { lineItemIds: [input.lineItemId], extra: { [input.lineItemId]: input.extraDescription }, operation: "RECLASSIFY" });
   return r.ok ? ok({ pending: r.value.pending }) : r;
 }
 

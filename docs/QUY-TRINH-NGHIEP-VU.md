@@ -315,7 +315,21 @@ Menu **Tài khoản & tích hợp**:
 | ENTERPRISE | 1.000 | 100 | Theo hợp đồng |
 
 - Tạo hồ sơ vượt số hồ sơ/tháng (gồm cả phần thưởng thêm trong tháng do đội vận hành cấp) hoặc upload vượt số trang/hồ sơ → `QUOTA_EXCEEDED`.
-- Kỳ tính theo tháng dương lịch. Mọi lần gọi AI ghi `usage_events` (token, chi phí USD và VND) theo doanh nghiệp.
+- Kỳ tính theo tháng dương lịch. Mọi lần gọi dịch vụ trả phí ghi `usage_events` theo doanh nghiệp (cột `provider`, `kind`; số lượng + nghiệp vụ + đơn giá trong `meta`):
+
+| Nhà cung cấp | `kind` | Khi nào ghi | Chi phí |
+|---|---|---|---|
+| AI (đọc chứng từ) | `AI_CLASSIFY`, `AI_EXTRACT` | Mỗi lần gọi model | Token × giá model (USD) × tỷ giá `AI_USD_VND_RATE` |
+| HSCodePro | `HS_CLASSIFY` | Tạo lượt phân loại / phân loại lại được HSCodePro nhận (số dòng gửi) | `HSCODEPRO_PRICE_PER_ITEM_VND` × số dòng |
+| HSCodePro | `HS_ANSWER` | Gửi câu trả lời cho một dòng thành công (409 "đã gửi" khi job chạy lại không ghi) | `HSCODEPRO_PRICE_PER_ITEM_VND` × 1 |
+| HSCodePro | `HS_RESULT` | Lượt hỏi kết quả có dòng vừa có kết quả (hỏi 3 giây/lần mà chưa xong thì không ghi) | 0 – dòng đã tính lúc gửi |
+| Customs Hub | `CUSTOMS_SEND` | Mỗi nghiệp vụ (IDA, IDC, HYS, IDB…) được cổng trả lời, kể cả bị Hải quan từ chối | `CUSTOMS_HUB_PRICE_PER_MESSAGE_VND` × 1 |
+| Customs Hub | `CUSTOMS_QUERY` | Mỗi lần hỏi trạng thái IID/IEX (job `customs-poll`, nút Tra cứu, tra trước khi Gửi lại) | `CUSTOMS_HUB_PRICE_PER_MESSAGE_VND` × 1 |
+
+- Đơn giá HSCodePro / Customs Hub đặt trong biến môi trường (chuỗi thập phân VND; chưa có giá hợp đồng → để trống = 0). Tiền tính bằng Decimal.
+- Không tính trùng: `CUSTOMS_SEND` khóa theo `idempotencyKey` của outbox (job chạy lại sau crash gửi lại cùng thông điệp chỉ ghi một lần; "Gửi lại" tạo outbox mới = thông điệp mới); lỗi tạm (mạng/5xx) và nghiệp vụ cổng chưa hỗ trợ (chưa gửi được) không ghi. `HS_CLASSIFY` khóa theo mã lượt HSCodePro.
+- Ghi chi phí là "cố gắng hết sức": ghi lỗi chỉ log `[usage]`, không làm hỏng nghiệp vụ đã gửi.
+- Tab **Gói & sử dụng** hiện chi phí tháng tách AI / HSCodePro / Customs Hub (tất cả do KhaiBáo AI chịu theo gói). Báo cáo **Sử dụng & chi phí** của đội vận hành tách giá vốn theo nhà cung cấp, kèm số lệnh gọi AI, số dòng gửi HSCodePro, số thông điệp Customs Hub.
 
 ## 12. Khu Quản trị hệ thống (đội vận hành)
 
@@ -337,8 +351,8 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 |---|---|
 | `extract-document` | Đọc một chứng từ (hoặc chỉ gộp lại) |
 | `run-agent` | Chạy các việc của AI Agent |
-| `hs-poll`, `hs-answer`, `hs-reclassify` | Theo dõi / trả lời / phân loại lại mã HS với HSCodePro (hỏi mỗi 3 giây, tối đa 15 phút) |
-| `customs-send`, `customs-poll` | Gửi một nghiệp vụ Hải quan; hỏi trạng thái tới khi thông quan |
+| `hs-poll`, `hs-answer`, `hs-reclassify` | Theo dõi / trả lời / phân loại lại mã HS với HSCodePro (hỏi mỗi 3 giây, tối đa 15 phút); ghi chi phí HSCodePro (§11) |
+| `customs-send`, `customs-poll` | Gửi một nghiệp vụ Hải quan; hỏi trạng thái tới khi thông quan; ghi chi phí Customs Hub mỗi thông điệp thật sự gửi (§11) |
 | `skill-sample-read`, `skill-evaluate` | Đọc nháp nhãn mẫu; đánh giá độ chính xác Skill |
 | `cert-expiry` | Hằng ngày: nhắc chứng thư số sắp hết hạn |
 | `exchange-rate-weekly` | Thứ Năm 23:30 giờ VN: lấy tỷ giá Vietcombank (thử lại mỗi 30 phút) |
@@ -364,7 +378,7 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 5. AI chỉ đọc chứng từ và gợi ý HS; đối chiếu, ánh xạ, thuế, chặn truyền là code thuần có test.
 6. Người dùng sửa trường → ghi `field_audit` append-only.
 7. Không truyền tờ khai khi còn BLOCKER FAIL hoặc HS chưa xác nhận.
-8. Mọi lần gọi AI ghi `usage_events`.
+8. Mọi lần gọi AI, HSCodePro, Customs Hub ghi `usage_events`.
 9. Dữ liệu từ ngoài (HTTP, form, AI, file, queue) kiểm bằng Zod trước khi dùng.
 
 ## 15. Chưa làm / hạn chế hiện tại
@@ -379,5 +393,5 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 | Hàng LCL qua kho CFS | Hai văn bản hướng dẫn khác nhau (TT39: mã 3; CV 6376: mã 2) – cần chốt |
 | Đọc chứng từ | Chưa đọc lớp chữ PDF / XML hóa đơn điện tử; mọi chứng từ gửi AI |
 | Tài khoản | Xác thực email chưa bắt buộc khi đăng nhập; chưa có trang xác thực email / đặt lại mật khẩu / nhận lời mời; chưa chuyển quyền sở hữu, chưa từ chối yêu cầu tham gia; tra cứu MST là giả lập |
-| Chi phí | Chỉ ghi chi phí AI; chưa ghi chi phí HSCodePro và Customs Hub |
+| Chi phí | HSCodePro và Customs Hub ghi theo đơn giá cấu hình (mặc định 0 – chưa có giá hợp đồng); chưa có lịch sử giá theo thời gian (đổi đơn giá không tính lại sự kiện cũ) |
 | Khác | Hủy tờ khai (Mẫu 06), tách vận đơn (Mẫu 12), khai danh sách container qua HYS, đóng chung container nhiều tờ khai xuất (Mẫu 15); đại lý khai hộ nhiều doanh nghiệp; app mobile |

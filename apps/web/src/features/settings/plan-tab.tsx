@@ -5,6 +5,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { getOrganization, settingsKeys } from "@/api/settings";
+import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { formatDate, formatNumber, formatVnd } from "@/lib/format";
 import type { Organization } from "@/mocks/types";
 import { LoadError } from "@/components/common/load-error";
@@ -39,7 +40,14 @@ export function PlanTab() {
   if (isError) return <LoadError onRetry={() => void refetch()} />;
   if (isLoading || !org) return <SkeletonCard lines={6} />;
   const { plan, usage } = org;
-  const avgCost = usage.dossiersThisMonth ? Math.round(Number(usage.aiCostVnd) / usage.dossiersThisMonth) : 0;
+  // Chi phí tháng tách theo nhà cung cấp; cộng theo đơn vị nhỏ nhất (VND nguyên) để không sai số thập phân.
+  const costs = [
+    { key: "ai", label: m.costAi, value: usage.aiCostVnd },
+    { key: "hs", label: m.costHs, value: usage.hsCostVnd },
+    { key: "customs", label: m.costCustoms, value: usage.customsCostVnd },
+  ];
+  const totalCost = sumMinor(costs.map((c) => toMinor(c.value, 0)));
+  const avgCost = usage.dossiersThisMonth ? Math.round(totalCost / usage.dossiersThisMonth) : 0;
 
   return (
     <Stack gap="lg">
@@ -63,12 +71,22 @@ export function PlanTab() {
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>{m.aiCost}</CardDescription>
-            <CardTitle as="h3" className="text-2xl">{formatVnd(usage.aiCostVnd)}</CardTitle>
+            <CardDescription>{m.serviceCost}</CardDescription>
+            <CardTitle as="h3" className="text-2xl">{formatVnd(fromMinor(totalCost, 0))}</CardTitle>
             <p className="text-xs text-fg-subtle">{fill(m.avgCost, { cost: formatVnd(String(avgCost)) })}</p>
           </CardHeader>
           <CardContent>
-            <Alert tone="info">{m.aiCostNote}</Alert>
+            <Stack gap="md">
+              <dl className="space-y-1 text-sm">
+                {costs.map((c) => (
+                  <div key={c.key} className="flex items-baseline justify-between gap-2">
+                    <dt className="text-fg-muted">{c.label}</dt>
+                    <dd className="font-medium tabular-nums text-fg">{formatVnd(c.value)}</dd>
+                  </div>
+                ))}
+              </dl>
+              <Alert tone="info">{m.aiCostNote}</Alert>
+            </Stack>
           </CardContent>
         </Card>
       </Grid>

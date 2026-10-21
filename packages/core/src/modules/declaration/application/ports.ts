@@ -3,6 +3,7 @@ import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
+import type { ServiceUsageMeter } from "../../../shared/usage.js";
 import type { ProgressEvent } from "../../dossier/index.js";
 import type { FieldOverride } from "../domain/mapping/types.js";
 import type { Adjustment } from "../domain/valuation.js";
@@ -155,6 +156,8 @@ export type DeclarationDeps = {
   notify?: Notifier;
   /** Giai đoạn truyền Hải quan của hồ sơ (module integration; container nối) – chặn sửa chỉ tiêu theo giai đoạn. Không nối → coi như chưa khai. */
   customsStage?: (orgId: string, dossierId: string) => Promise<CustomsStage>;
+  /** Ghi chi phí HSCodePro vào usage_events (module billing; container nối). Không nối → không ghi. */
+  usage?: ServiceUsageMeter;
   clock: Clock;
   idGen: IdGen;
 };

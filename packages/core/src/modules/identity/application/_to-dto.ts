@@ -36,7 +36,7 @@ export function toOrganization(o: OrgRow, plan: PlanRow | null, now: Date, usage
       pagesPerDossier: plan?.pagesPerDossier ?? 0,
       renewsAt: renews.toISOString().slice(0, 10),
     },
-    usage: usage ?? { dossiersThisMonth: 0, pagesThisMonth: 0, aiCostVnd: "0" },
+    usage: usage ?? { dossiersThisMonth: 0, pagesThisMonth: 0, aiCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" },
     suspectThreshold: o.suspectThreshold as Organization["suspectThreshold"],
     fourEyes: o.fourEyes,
   };

@@ -2,7 +2,7 @@ import { loadEnv } from "@kb/core/config";
 import { activeQuotaBonus } from "@kb/core/modules/admin";
 import { createRateDeps } from "@kb/core/modules/admin/infrastructure";
 import { createDb, platformDbUrl } from "@kb/core/db";
-import { createBillingInfrastructure, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
+import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
@@ -37,12 +37,19 @@ export function buildContainer() {
   const identity = createIdentityInfrastructure({ db, redis, env, clock: systemClock });
   const orgPlan = { get: (orgId: string) => identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId)) };
   const usageRecorder = new DrizzleUsageRecorder(db, dec(String(env.AI_USD_VND_RATE)));
+  // Chi phí HSCodePro / Customs Hub (đơn giá từ env, mặc định 0) – nối vào declaration và customs bên dưới.
+  const serviceUsage = createServiceUsageMeter(db, env);
   // Mức dùng tháng: số hồ sơ + trang từ module dossier (nối lazy vì dossier tạo sau), chi phí AI từ usage_events.
   const monthRange = (now: Date) => ({ from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)) });
   let dossierStats: (orgId: string, now: Date) => Promise<{ dossiers: number; pages: number }> = async () => ({ dossiers: 0, pages: 0 });
   const billing = createBillingInfrastructure({
     db, orgPlan, clock: systemClock,
-    usage: { thisMonth: async (orgId, now) => ({ ...(await dossierStats(orgId, now)), aiCostVnd: (await usageRecorder.monthlyTotals(orgId, now)).aiCostVnd }) },
+    usage: {
+      thisMonth: async (orgId, now) => {
+        const { aiCostVnd, hsCostVnd, customsCostVnd } = await usageRecorder.monthlyTotals(orgId, now);
+        return { ...(await dossierStats(orgId, now)), aiCostVnd, hsCostVnd, customsCostVnd };
+      },
+    },
   });
   const quota = {
     check: async (orgId: string, kind: "DOSSIER" | "PAGES", amount: number) => {
@@ -62,7 +69,7 @@ export function buildContainer() {
   };
   identity.usage = async (orgId) => {
     const u = await billing.usage.thisMonth(orgId, systemClock.now());
-    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd };
+    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd, hsCostVnd: u.hsCostVnd, customsCostVnd: u.customsCostVnd };
   };
   const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
   // Luật đối chiếu cần biết hồ sơ nhập/xuất + phương thức vận chuyển: nối từ module dossier tại đây (validation không import dossier).
@@ -105,8 +112,10 @@ export function buildContainer() {
     users: skillBase.users,
   });
   declaration.notify = notify;
+  declaration.usage = serviceUsage;
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
   customs.notify = notify;
+  customs.usage = serviceUsage;
   // Tỷ giá tính thuế: bảng nền tảng, ghi bằng role kb_platform (ADR 0006).
   const rates = createRateDeps(platformDbUrl(env));
   return {

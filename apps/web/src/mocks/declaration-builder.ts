@@ -306,7 +306,7 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     ...(!nk && /^G2[1-4]$/.test(d.typeCode) ? [when(f("GENERAL", "TNTX_TK", "Số tờ khai tạm nhập tương ứng", "", "DOSSIER"), "Loại hình tái xuất hàng đã tạm nhập (G21–G24)")] : []),
     ...(!nk && d.typeCode === "G61" ? [when(f("GENERAL", "HAN_TN", "Thời hạn tái nhập khẩu", "", "DOSSIER"), "Loại hình tạm xuất (G61)")] : []),
     ...(d.transportMode === "SEA_CONTAINER" || d.transportMode === "SEA_BULK" || d.transportMode === "RIVER"
-      ? [when(f("TRANSPORT", "HO_HIEU", "Hô hiệu phương tiện (call sign)", "VRDK5", "BILL_OF_LADING"), "Vận chuyển đường biển / đường sông (mã 2, 3, 6)")]
+      ? [when(f("TRANSPORT", "HO_HIEU", "Hô hiệu phương tiện (call sign)", "9999", "DEFAULT"), "Vận chuyển đường biển / đường sông (mã 2, 3, 6)")]
       : []),
     f("GENERAL", "NGUOI_NT", "Người nộp thuế", nk ? "1 – Người nhập khẩu" : "1 – Người xuất khẩu", "DEFAULT"),
     f("VALUE", "TY_GIA", "Tỷ giá tính thuế", t.exchangeRate, "SYSTEM"),

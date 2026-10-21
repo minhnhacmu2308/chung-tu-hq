@@ -177,6 +177,9 @@ describe("declaration-to-fpt – chỉ tiêu theo tình huống", () => {
     const r = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, TNTX_TK: { value: "305123456780" }, HAN_TX: { value: "2027-01-31" }, HO_HIEU: { value: "3WAB9" }, SL_CONT: { value: "2" } } }).request as Req;
     expect(r.objVN_IDA).toMatchObject({ tK_TDN: 305123456780, tK_RED: "31/01/2027" });
     expect(r.objVN_IDA_VANDON).toMatchObject({ vD_VSC: "3WAB9", vD_COC: 2 });
+    // Đổi sang đường hàng không sau khi dựng: hô hiệu cũ không gửi.
+    const air = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "1 – Đường hàng không" }, HO_HIEU: { value: "9999" } } }).request as Req;
+    expect(air.objVN_IDA_VANDON!["vD_VSC"]).toBeUndefined();
     const plain = buildFptRequest(PAYLOAD).request as Req;
     expect(plain.objVN_IDA!["tK_TDN"]).toBeUndefined();
     expect(plain.objVN_IDA_VANDON!["vD_COC"]).toBe(1);

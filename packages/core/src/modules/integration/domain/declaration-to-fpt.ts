@@ -1,6 +1,6 @@
 // Tờ khai (chỉ tiêu theo mnemonic `code`) → object FPT.VNACCS (objVN_IDA/HANG/VANDON/KTG, objVN_EDA/HANG/CON).
 // Cắt độ dài theo đặc tả (ghi cảnh báo), ngày → dd/MM/yyyy, số → number. Thuần; kiểm tra bằng Zod của @kb/contracts/fpt.
-import { EdaRequestSchema, extraFieldFpt, fptKey, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
+import { DECLARATION_CONDITIONS, EdaRequestSchema, extraFieldFpt, fptKey, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
 
 /** Dữ liệu tờ khai đủ để dựng payload – không phụ thuộc kiểu của module declaration. */
 export type DeclarationPayload = {
@@ -29,6 +29,8 @@ const split = (v: string) => {
   return m ? { code: m[1]!, name: m[2]!.trim() } : { code: v, name: v };
 };
 const firstToken = (v: string) => v.split(/\s*[–-]\s*/)[0]!.trim();
+/** Hô hiệu (1.31/2.30 ô 1) chỉ có khi đường biển/sông – đổi phương thức sau khi dựng thì giá trị cũ không gửi. */
+const callSign = (p: DeclarationPayload) => (DECLARATION_CONDITIONS.BY_WATER.test({ typeCode: "", transportCode: firstToken(val(p, "PTVC")), incoterm: "", hasInvoice: true }) ? val(p, "HO_HIEU") : "");
 const ddmmyyyy = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso);
 const num = (v: string) => (/^-?\d+(\.\d+)?$/.test(v) ? Number(v) : 0);
 const numPart = (v: string) => num(v.split(" ")[0] ?? "");
@@ -183,7 +185,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     const pol = split(val(p, "CANG_XEP"));
     setVd("VD_PSC", pol.code);
     setVd("VD_PSN", pol.name);
-    setVd("VD_VSC", val(p, "HO_HIEU")); // 1.31 ô 1
+    setVd("VD_VSC", callSign(p)); // 1.31 ô 1
     setVd("VD_VSN", val(p, "PTVC_TEN"));
     setVd("VD_ARR", ddmmyyyy(val(p, "NGAY_DEN")));
     // 1.35: không nhập số lượng container khi đường hàng không (1) hoặc hàng đóng chung container vào kho CFS khai mã 3 (TT39 PL II).
@@ -245,7 +247,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const psc = split(val(p, "CANG_XEP"));
   set("TK_PSC", psc.code);
   set("TK_PSN", psc.name);
-  set("TK_VSC", val(p, "HO_HIEU")); // 2.30 ô 1
+  set("TK_VSC", callSign(p)); // 2.30 ô 1
   set("TK_VSN", val(p, "PTVC_TEN"));
   set("TK_SYM", ddmmyyyy(val(p, "NGAY_DI")));
   set("TK_IV1", firstToken(val(p, "HD_PL")) || "A");

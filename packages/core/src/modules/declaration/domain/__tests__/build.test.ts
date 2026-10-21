@@ -165,13 +165,13 @@ describe("chỉ tiêu theo tình huống (bật/tắt theo loại hình, phươn
   const build = (dossier: typeof DOSSIER, shipment = hansol()) => buildDeclaration({ shipment, dossier, org: ORG, items: ITEMS, now: NOW, exchange: EX });
   const codes = (b: ReturnType<typeof build>) => Object.keys(b.fields);
 
-  it("A11 đường biển container: không có 1.3/1.10; có hô hiệu 1.31 và số lượng container 1.35 kèm lý do hiện", () => {
+  it("A11 đường biển container: không có 1.3/1.10; có hô hiệu 1.31 (điền sẵn 9999) và số lượng container 1.35 kèm lý do hiện", () => {
     const b = build(DOSSIER);
     expect(codes(b)).not.toContain("HAN_TX");
     expect(codes(b)).not.toContain("TNTX_TK");
     expect(b.hidden).toEqual(expect.arrayContaining(["HAN_TX", "TNTX_TK"]));
     expect(b.fields["SL_CONT"]).toMatchObject({ no: "1.35", value: "1", condition: expect.stringMatching(/container/) });
-    expect(b.fields["HO_HIEU"]).toMatchObject({ no: "1.31", value: "", condition: expect.stringMatching(/đường biển/) });
+    expect(b.fields["HO_HIEU"]).toMatchObject({ no: "1.31", value: "9999", source: "DEFAULT", condition: expect.stringMatching(/đường biển/) });
     expect(b.fields["HO_HIEU"]?.suspect).toBeUndefined();
   });
 

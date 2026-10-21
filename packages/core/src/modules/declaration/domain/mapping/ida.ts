@@ -86,7 +86,7 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     const pol = i.shipment.transport.portOfLoading;
     return port(pol.value, resolvePort(pol.value), fromSourced(pol, "BILL_OF_LADING").source);
   } },
-  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, when: BY_WATER, from: () => ({ value: null, source: "BILL_OF_LADING", note: "Ô 1 chỉ tiêu 1.31: hô hiệu tàu; tàu chưa đăng ký trên hệ thống nhập 9999. Bỏ trống nếu hệ thống tự nhận theo tên tàu" }) },
+  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, when: BY_WATER, from: () => ({ ...fixed("9999"), note: "Ô 1 chỉ tiêu 1.31: hô hiệu tàu – điền sẵn 9999 (tàu chưa đăng ký trên hệ thống); B/L có hô hiệu thật thì sửa lại. Phương thức khác đường biển/sông: không có ô này" }) },
   // 1.35: hệ thống tự xuất nếu đã đăng ký; không khai khi đường hàng không / hàng rời / hàng CFS (mã 3).
   { code: "SL_CONT", no: N.SL_CONT, section: "TRANSPORT", label: "Số lượng container", required: false, when: IN_CONTAINER, from: (i) => {
     const n = i.shipment.transport.containers.length;

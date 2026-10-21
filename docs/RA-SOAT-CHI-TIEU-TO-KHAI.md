@@ -78,7 +78,7 @@ Cột "App":
 | 1.28 | Tổng trọng lượng + đơn vị | K | Trừ khi PTVC = 9 | ✅ |
 | 1.29 | Mã kho chờ thông quan | K | — | ✅ |
 | 1.30 | Ký hiệu và số hiệu | Tùy chọn | Thường dùng để ghi tiếp khi phần ghi chú bị tràn | ❌ |
-| 1.31 | Phương tiện: hô hiệu + tên | K (tên) / ĐK (hô hiệu khi đi đường biển/sông) | — | ✅ tên · ❌ hô hiệu (call sign) |
+| 1.31 | Phương tiện: hô hiệu + tên | K (tên) / ĐK (hô hiệu khi đi đường biển/sông) | — | ✅ tên · ✅ hô hiệu (call sign, điền sẵn 9999 – 2026-10-21) |
 | 1.32 | Ngày hàng đến | K | — | ✅ |
 | 1.33 | Địa điểm dỡ hàng | K (trừ PTVC 9) | — | ✅ |
 | 1.34 | Địa điểm xếp hàng | K | — | ✅ |
@@ -166,7 +166,7 @@ Chỉ ghi các điểm **khác** Mẫu 01. Các chỉ tiêu có cùng bản ch�
 | 2.23 | Mã đại lý hải quan | HT / ĐK | — | ❌ |
 | 2.24 | Số vận đơn = **số quản lý hàng hóa** (đăng ký trước theo Mẫu 14) | ĐK | — | ✅ |
 | 2.28 | Địa điểm nhận hàng cuối cùng | K | — | ✅ |
-| 2.30 | Phương tiện vận chuyển dự kiến (hô hiệu + tên) | ĐK | — | ✅ tên · ❌ hô hiệu |
+| 2.30 | Phương tiện vận chuyển dự kiến (hô hiệu + tên) | ĐK | — | ✅ tên · ✅ hô hiệu (điền sẵn 9999 – 2026-10-21) |
 | 2.33 | Giấy phép xuất khẩu (5 cặp) | ĐK | Hàng phải có giấy phép, kết quả kiểm tra chuyên ngành, xác định trước | ❌ |
 | 2.39 | Trị giá hóa đơn (điều kiện giá · mã tiền · trị giá · phân loại giá) | K | — | ✅ |
 | 2.40 | **Trị giá tính thuế (tổng) + mã tiền** | ĐK | **Bắt buộc khi điều kiện giá khác FOB/DAP/DAF** (ví dụ CIF, CFR) hoặc không có hóa đơn | ❌ **Thiếu quan trọng**: thuế xuất khẩu tính trên trị giá FOB |
@@ -231,7 +231,7 @@ Tất cả phản hồi lỗi (`errorList`) đều có `indexCode`/`nameCode` (c
 - 1.2 / 2.2 Tách tờ khai khi > 50 dòng: hiện mới chặn, chưa hỗ trợ.
 
 ### Thiếu, ưu tiên trung bình (theo tình huống)
-1.3/1.10/1.89 (tạm nhập – tái xuất); 1.5; 1.17–1.19, 1.24 (ủy thác, nhập khẩu tại chỗ); 1.25 (đại lý); hô hiệu tàu 1.31/2.30; 1.35/2.60 hiển thị container; 1.36; 1.40; 1.47–1.49 hiện đủ mã phân loại và đủ 5 khoản điều chỉnh; 1.51; 1.53–1.62 (bảo lãnh, hạn mức); 1.63; 1.64–1.67 (kho ngoại quan, vận chuyển kết hợp); 1.75, 1.77, 1.81, 1.82, 1.88, 1.90–1.93, 1.95–1.96; 2.59 vanning.
+1.3/1.10/1.89 (tạm nhập – tái xuất); 1.5; 1.17–1.19, 1.24 (ủy thác, nhập khẩu tại chỗ); 1.25 (đại lý); ~~hô hiệu tàu 1.31/2.30~~ (xong 2026-10-21); 1.35/2.60 hiển thị container; 1.36; 1.40; 1.47–1.49 hiện đủ mã phân loại và đủ 5 khoản điều chỉnh; 1.51; 1.53–1.62 (bảo lãnh, hạn mức); 1.63; 1.64–1.67 (kho ngoại quan, vận chuyển kết hợp); 1.75, 1.77, 1.81, 1.82, 1.88, 1.90–1.93, 1.95–1.96; 2.59 vanning.
 
 ### Sai nghiệp vụ cần sửa
 - ~~`TK_IMY = "000000"` và `TK_CHB = "00"` gửi cứng là sai~~ – **đính chính (đợt 3):** đặc tả `VNACCS_IDA/EDA v1.2` đánh dấu `TK_IMY` và `TK_CHB` là Required (X), và phản hồi thật của FPT trả `tK_CHB: "00"`. Bỏ hai trường này có thể làm FPT từ chối, nên **giữ nguyên**. Cách đúng lâu dài: lưu mã bưu chính của doanh nghiệp ở Tài khoản và gửi giá trị thật thay cho `000000`.
@@ -355,6 +355,12 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 - Cần đối chiếu khi làm thật: catalog EDA ghi 2.79 là `HAG_TXR`, nhưng đặc tả VNACCS_EDA là `HAG_ADE`.
 
 **Bước 5 dạng bản in (xong, nhánh `feat/review-ban-in-to-khai`):** bước 5 hiện tờ khai giống mẫu in VNACCS (`@kb/contracts/print-layout`, `features/declaration-print/`), sửa ô bằng panel, lỗi / còn thiếu / ước tính đánh dấu trên ô, gộp tab "Hải quan trả về"; form cũ còn sau cờ `NEXT_PUBLIC_REVIEW_LEGACY_FORM=1` đến hết thử nghiệm (BACKEND-TODO K9).
+
+**Cập nhật 2026-10-21:**
+- **Ô bắt buộc trống chặn Phê duyệt và Ký số & khai tạm**: một quy tắc `requiredGaps` (`@kb/contracts`) = Phụ lục II (M, hoặc C khi tình huống áp dụng) + ô FPT.VNACCS Required người khai nhập (không tính ô APP_* và ô phần mềm tự điền). Backend từ chối trước khi đánh dấu SUBMITTED; lỗi sai đặc tả FPT giờ chặn thay vì chỉ ghi log. 2.40 (`TK_FCD`/`TK_FKK`) đổi thành không bắt buộc trong schema FPT (Phụ lục II bỏ qua khi FOB/DAP/DAF); form vẫn bắt buộc khi áp dụng.
+- **1.31 / 2.30 hô hiệu**: điền sẵn `9999` khi đường biển/sông, người khai sửa theo B/L; phương thức khác không gửi `VD_VSC`/`TK_VSC`.
+- **Địa chỉ 4 dòng** (`TK_EP3`/`TK_EP4`, EDA `TK_CAC`/`TK_CAS`): giữ đúng dòng người khai chia (`splitAddressLines` dùng chung form + FPT), không dồn lại theo 35 ký tự.
+- **Bản in**: tên địa điểm lưu kho (`VD_A51` / `TK_K42`) tra trước theo danh mục A202, đánh dấu ước tính đến khi Hải quan trả.
 
 **Phát hiện thêm khi làm đợt 1 (để đợt 3 xử lý):**
 - Tờ khai xuất đang tính "thuế" bằng thuế suất **nhập khẩu** và VAT (`declaration/domain/tax.ts`). Chưa có thuế suất xuất khẩu.

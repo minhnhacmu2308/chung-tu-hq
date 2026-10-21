@@ -1,6 +1,6 @@
 # Quy trình nghiệp vụ KhaiBáo AI
 
-> Cập nhật 2026-10-16 theo code hiện tại (nhánh `main`). Tài liệu này mô tả **hệ thống đang chạy thế nào**. Định hướng sản phẩm: `docs/PRODUCT.md`; kiến trúc: `docs/ARCHITECTURE.md`; quyết định: `docs/adr/`.
+> Cập nhật 2026-10-21 theo code hiện tại (nhánh `main`). Tài liệu này mô tả **hệ thống đang chạy thế nào**. Định hướng sản phẩm: `docs/PRODUCT.md`; kiến trúc: `docs/ARCHITECTURE.md`; quyết định: `docs/adr/`.
 > Căn cứ pháp lý chính: Phụ lục II TT39/2018/TT-BTC sửa đổi bởi TT121/2025/TT-BTC (hiệu lực 01/02/2026), CV 2061/TCHQ-GSQL.
 
 ## Mục lục
@@ -111,15 +111,17 @@ Người khai nhập:
 | Thông tin | Ghi chú |
 |---|---|
 | Nhập khẩu / Xuất khẩu | Quyết định mẫu tờ khai: IDA (Mẫu 01) hay EDA (Mẫu 02) |
+| Phương thức vận chuyển | 7 mã VNACCS: 1 không · 2 biển container · 3 biển hàng rời/lỏng (cả hàng LCL vào kho CFS) · 4 bộ · 5 sắt · 6 sông · 9 khác (chỉ tiêu 1.6/2.6) |
+| Nhóm loại hình | Kinh doanh / Sản xuất xuất khẩu / Gia công / Chế xuất – lọc danh sách mã loại hình |
 | Mã loại hình | A11, A12, E21, B11… |
 | Cơ quan Hải quan | Chi cục đăng ký tờ khai |
-| Phương thức vận chuyển | 7 mã VNACCS: 1 không · 2 biển container · 3 biển hàng rời/lỏng (cả hàng LCL vào kho CFS) · 4 bộ · 5 sắt · 6 sông · 9 khác (chỉ tiêu 1.6/2.6) |
-| Phân loại cá nhân/tổ chức | Chỉ tờ khai nhập (chỉ tiêu 1.7), mặc định 4 – tổ chức gửi tổ chức |
-| Đối tác nước ngoài, điều kiện giao hàng, hạn khai, bộ Skill AI, ghi chú nội bộ | |
+| Đối tác nước ngoài, hạn khai, bộ Skill AI, ghi chú nội bộ | |
+
+Không hỏi **điều kiện giao hàng** (lấy từ invoice ở bước OCR – dùng cho ô điều kiện giá, cộng cước/bảo hiểm, luật thiếu cước) và **phân loại cá nhân/tổ chức** (chỉ tiêu 1.7, lấy theo Mặc định khai báo, sửa ở bước Review). Hồ sơ cũ đã có điều kiện giao hàng vẫn hiện.
 
 Mã hồ sơ tự sinh `HS-{NK|XK}-{YYMM}-{NNN}`. Tạo hồ sơ tính vào hạn mức hồ sơ/tháng của gói.
 
-**Chứng từ gợi ý** (chỉ gợi ý, không chặn): Invoice, Packing List, Hợp đồng (tùy chọn); B/L (biển) hoặc AWB (không); hàng nhập thêm Arrival Notice, C/O, và hóa đơn cước khi điều kiện EXW/FCA/FAS/FOB.
+**Chứng từ gợi ý** (chỉ gợi ý, không chặn): Invoice, Packing List, Hợp đồng (tùy chọn); B/L (biển) hoặc AWB (không); hàng nhập thêm Arrival Notice, C/O (tùy chọn) và **hóa đơn cước (tùy chọn)** – cần khi giá EXW/FCA/FAS/FOB; thiếu cước thì luật đối chiếu ở bước OCR báo BLOCKER.
 
 ## 5. Bước 2 – Upload chứng từ
 
@@ -197,6 +199,8 @@ Người khai chọn **Tạo tờ khai** / **Số hóa chứng từ** / **Cả h
 | Chỉ tiêu | Quy tắc |
 |---|---|
 | 1.12/2.11 Người nhập/xuất khẩu | Theo MST tài khoản, không theo tên tiếng Anh trên chứng từ |
+| Địa chỉ 4 dòng × 35 ký tự (vd 1.22) | Tự cắt ở khoảng trắng; người khai tự chia dòng trên form thì giữ đúng dòng đã nhập (form và dữ liệu gửi FPT dùng chung một hàm cắt) |
+| 1.31/2.30 Phương tiện vận chuyển | Ô 1 hô hiệu (call sign) chỉ có khi đường biển/sông (PTVC 2/3/6): **điền sẵn 9999** (tàu chưa đăng ký trên hệ thống), B/L có hô hiệu thật thì sửa lại. Đổi sang phương thức khác → không gửi hô hiệu cũ |
 | 1.33 Cảng dỡ | Cảng trên B/L là cảng chuyển tải nước ngoài → lấy điểm đến cuối tại Việt Nam |
 | 1.37 Văn bản pháp quy | Hàng chương 84/85: **không tự điền**; để trống, chặn phê duyệt đến khi người khai chọn MO (mới) hoặc CU (đã qua sử dụng) |
 | 1.39/2.34 Hình thức hóa đơn | 1 hóa đơn → A; nhiều hóa đơn / không có → B (kèm hướng dẫn bảng kê) |
@@ -220,8 +224,10 @@ flowchart LR
 ```
 
 - Tờ khai hiện **giống bản in VNACCS** (mẫu in tờ khai nhập / xuất): các trang A4 theo đúng thứ tự vùng của mẫu, tiêu đề theo giai đoạn (bản nháp có chữ mờ "BẢN NHÁP – CHƯA KHAI HẢI QUAN"), số Hải quan trả về điền thẳng vào ô (khác số ước tính thì hiện cả hai). Chỉ tiêu không có chỗ trên mẫu nằm ở khối **Chỉ tiêu khác** dưới trang cuối.
-- Ô lỗi Hải quan, ô bắt buộc còn trống, số ước tính và ô người khai đã sửa được đánh dấu ngay trên trang; nút **Chỉ ô cần xử lý (n)** nhảy lần lượt tới từng ô (số n cũng hiện trên tab "Tờ khai"). **In / Lưu PDF** in đúng khổ A4 như mẫu, không lộ các dấu đánh dấu.
-- Bấm một ô mở **panel sửa ô** bên phải: số và tên chỉ tiêu, **nhãn nguồn** (Invoice, B/L, C/O…, Người khai nhập), lý do có trên tờ khai, **hướng dẫn khai chỉ tiêu** trích Phụ lục II, lỗi Hải quan và cách khắc phục. Rời ô khi còn thay đổi chưa lưu thì được hỏi Lưu / Bỏ thay đổi / Ở lại. Ô theo chứng từ có nút sang bước OCR.
+- Ô lỗi Hải quan, ô bắt buộc còn trống, số ước tính và ô người khai đã sửa được đánh dấu ngay trên trang; nút **Chỉ ô cần xử lý (n)** nhảy lần lượt tới từng ô (số n cũng hiện trên tab "Tờ khai"). Lỗi Hải quan không gắn được vào ô nào hiện thành khung riêng (vị trí lỗi · nội dung → cách khắc phục) và vẫn tính vào n. Tờ khai chỉ đọc (đã khóa hoặc không có quyền sửa) không đếm ô còn thiếu, chỉ giữ ô lỗi Hải quan. **In / Lưu PDF** in đúng khổ A4 như mẫu, không lộ các dấu đánh dấu; ô mã chỉ in mã.
+- Tên địa điểm lưu kho (do Hải quan trả về) được tra trước theo danh mục A202 từ mã kho người khai chọn, đánh dấu ước tính đến khi Hải quan trả tên.
+- **Ô bắt buộc còn trống → khóa Phê duyệt**: khung "Còn N chỉ tiêu bắt buộc chưa nhập" liệt kê ô, nút **Đến ô cần xử lý** mở panel sửa ô. Bắt buộc = Phụ lục II (M, hoặc C khi tình huống áp dụng) + ô FPT.VNACCS bắt buộc mà người khai phải nhập; ô phần mềm tự điền và ô APP_* không tính. Một quy tắc chung (`@kb/contracts` `requiredGaps`) cho giao diện, mock và backend.
+- Bấm một ô mở **panel sửa ô** bên phải: số và tên chỉ tiêu, **nhãn nguồn** (Invoice, B/L, C/O…, Người khai nhập), lý do có trên tờ khai, **hướng dẫn khai chỉ tiêu** trích Phụ lục II, lỗi Hải quan và cách khắc phục. Panel còn thay đổi chưa lưu mà chọn ô khác, đổi tab, Quay lại OCR, Xác nhận HS, Sang khai báo Hải quan hoặc Phê duyệt → hỏi Lưu / Bỏ thay đổi / Ở lại. Ô theo chứng từ có nút sang bước OCR.
 - Sửa tay: ghi `field_audit`, giữ qua các lần dựng lại; không sửa tay được số tờ khai, mã loại hình và các chỉ tiêu trị giá/cước/tỷ giá (sửa ở bước 3 rồi dựng lại); kiểm định dạng và độ dài theo danh mục chỉ tiêu.
 - **Tỷ giá tính thuế**: tỷ giá mua chuyển khoản Vietcombank lấy tối thứ Năm, áp cho tờ khai đăng ký từ thứ Hai tuần sau. Tờ khai dựng tuần trước sẽ bị chặn khai tạm khi đã sang tuần tỷ giá mới (mở lại để dựng lại).
 - Incoterm EXW/FCA/FAS/FOB hiển thị rõ cước, bảo hiểm, phí nước ngoài cộng vào trị giá tính thuế và nguồn từng khoản; phí nội địa (THC, D/O, CFS, lưu kho) không cộng.
@@ -269,8 +275,8 @@ stateDiagram-v2
 - **Ký số & khai tạm (IDA)** chỉ gửi khai tạm. Người khai xem số tờ khai + thuế dự kiến rồi tự bấm **Khai chính thức (IDC)**.
 - **Gọi sửa** (IDB, IDD): có hộp thoại xác nhận; thành công thì tờ khai **mở lại ở bước Review** (bản nháp). Người khai sửa chỉ tiêu, Người duyệt phê duyệt lại, rồi mới gửi được nghiệp vụ nội dung tiếp theo (IDA, IDA01).
 - **Sửa sau thông quan (AMA)** là bản khai riêng, **không sửa tờ khai gốc** (tờ khai gốc khóa toàn bộ). Chỉ khi tờ khai đã thông quan, hồ sơ có thêm **bước 7 "Sửa sau thông quan"** (bước 6 có thẻ lối vào); mọi việc AMA nằm ở đó, theo 4 bước nhỏ: ① **Chọn dòng** của tờ khai gốc cần sửa → ② **Sửa nội dung**: bảng so sánh Trước (theo tờ khai gốc + số Hải quan trả về, chỉ đọc) | Sau (sửa được), ô đã đổi được đánh dấu, tiền thuế "Sau" tự tính (thuế XNK = trị giá × thuế suất, GTGT = (trị giá + thuế XNK + thu khác) × thuế suất; sửa tay thì giữ); mô tả/xuất xứ và thuế – thu khác thu gọn → ③ **Lý do & phê duyệt**: hiện sẵn mã lý do khai bổ sung (1–6) + ghi chú sau; các ô khác (nộp thuế, ngân hàng, bảo lãnh, tỷ giá sau, người khai, hợp đồng gia công) trong "Thông tin khác"; Người duyệt phê duyệt (4 mắt) → ④ **Khai Hải quan**: một nút chính (khai tạm AMA, rồi khai chính thức AMC), **AMB** gọi bản khai về là nút phụ (gọi về xong tự về ②); sau AMC bản khai khóa, có thể lập bản khai bổ sung lần tiếp theo. Đầu bước 7 hiện hạn 60 ngày (ngày cấp phép + 60). Mọi lần sửa ô ghi field_audit. Đặc tả: `docs/superpowers/specs/2026-10-19-ama-khai-bo-sung-sau-thong-quan-design.md` (nghiệp vụ), `docs/superpowers/specs/2026-10-20-ama-sau-thong-quan-redesign-design.md` (giao diện).
-- Nghiệp vụ gửi nội dung (IDA, IDA01) luôn kiểm: đã duyệt, HS đủ, không còn BLOCKER, không còn lỗi chặn khi dựng dữ liệu FPT, tỷ giá đúng tuần (IDA). AMA kiểm: bản khai bổ sung đã duyệt, có dòng hàng, có mã lý do.
-- **Chặn truyền** (lỗi dựng dữ liệu FPT): thiếu MO/CU cho hàng 84/85; thiếu mã biểu thuế FTA; khoản điều chỉnh trị giá (ngoài cước/bảo hiểm) chưa gửi được ở chỉ tiêu 1.49; tờ khai xuất thiếu xuất xứ dòng hàng.
+- Nghiệp vụ gửi nội dung (IDA, IDA01) luôn kiểm: đã duyệt, HS đủ, không còn BLOCKER, **không còn ô bắt buộc trống** (kiểm lại ngay lúc Ký số & khai tạm), không còn lỗi chặn khi dựng dữ liệu FPT, tỷ giá đúng tuần (IDA). Backend từ chối trước khi đánh dấu tờ khai đã khai. AMA kiểm: bản khai bổ sung đã duyệt, có dòng hàng, có mã lý do.
+- **Chặn truyền** (lỗi dựng dữ liệu FPT): thiếu MO/CU cho hàng 84/85; thiếu mã biểu thuế FTA; khoản điều chỉnh trị giá (ngoài cước/bảo hiểm) chưa gửi được ở chỉ tiêu 1.49; tờ khai xuất thiếu xuất xứ dòng hàng; thông điệp sai đặc tả FPT (trước đây chỉ ghi log, nay chặn).
 - Sau **IDC/IDE** hệ thống tự **hỏi trạng thái** (IID nhập / IEX xuất) tới khi thông quan hoặc bị từ chối.
 - Đang chờ phản hồi một nghiệp vụ thì các nút khác khóa.
 - **Không gửi trùng** (ADR 0005): mỗi nghiệp vụ một dòng outbox có khóa idempotency; **Gửi lại** luôn tra trạng thái trước, Hải quan đã ghi nhận thì không gửi.

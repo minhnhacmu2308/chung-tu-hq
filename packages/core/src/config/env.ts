@@ -51,6 +51,13 @@ export const EnvSchema = z
     HSCODEPRO_URL: z.url().optional(),
     /** Header X-Internal-Api-Key – chỉ dùng phía máy chủ, không log. */
     HSCODEPRO_INTERNAL_KEY: z.string().optional(),
+    /**
+     * Giá vốn HSCodePro: VND cho mỗi dòng hàng gửi phân loại (tạo lượt, phân loại lại, trả lời câu hỏi) – ghi usage_events.
+     * Chưa có giá hợp đồng → để trống = 0. Chuỗi thập phân (tiền tính bằng Decimal).
+     */
+    HSCODEPRO_PRICE_PER_ITEM_VND: z.string().regex(/^\d+(\.\d+)?$/, "Đơn giá VND không âm, dạng 1500 hoặc 1500.5").default("0"),
+    /** Giá vốn Customs Hub (FPT.VNACCS): VND cho mỗi thông điệp gửi (IDA, IDC, HYS…) hoặc hỏi trạng thái (IID/IEX). Trống = 0. */
+    CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: z.string().regex(/^\d+(\.\d+)?$/, "Đơn giá VND không âm, dạng 1500 hoặc 1500.5").default("0"),
     MAIL: z.enum(["console", "smtp"]).default("console"),
     SMTP_URL: z.string().optional(),
   })

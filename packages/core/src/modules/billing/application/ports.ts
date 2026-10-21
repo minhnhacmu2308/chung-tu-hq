@@ -11,7 +11,7 @@ export interface OrgPlanReader {
 export type BillingDeps = {
   plans: PlansReader;
   orgPlan: OrgPlanReader;
-  /** Mức dùng tháng hiện tại; GĐ 6 lấy từ usage_events/dossiers. */
-  usage: { thisMonth(orgId: string, now: Date): Promise<{ dossiers: number; pages: number; aiCostVnd: DecimalString }> };
+  /** Mức dùng tháng hiện tại: hồ sơ/trang từ dossiers, chi phí theo nhà cung cấp từ usage_events. */
+  usage: { thisMonth(orgId: string, now: Date): Promise<{ dossiers: number; pages: number; aiCostVnd: DecimalString; hsCostVnd: DecimalString; customsCostVnd: DecimalString }> };
   clock: Clock;
 };

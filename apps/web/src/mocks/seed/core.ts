@@ -17,7 +17,7 @@ const ORG: Organization = {
   address: "Lô B4, KCN Tràng Duệ, xã Lê Lợi, huyện An Dương, TP. Hải Phòng",
   phone: "0225 3 888 123",
   plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, renewsAt: isoDay(19) },
-  usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "96500" },
+  usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "69500", hsCostVnd: "19300", customsCostVnd: "7700" },
   suspectThreshold: "BALANCED",
   fourEyes: false,
 };

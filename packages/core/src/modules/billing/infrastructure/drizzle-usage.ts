@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "../../../db/client.js";
 import { usageEvents } from "../../../db/schema/billing.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import { Decimal, dec, toDecimalString } from "../../../shared/decimal.js";
 import { asOrgId, asUserId, ulidIdGen } from "../../../shared/ids.js";
+import type { ServiceUsage, ServiceUsageMeter } from "../../../shared/usage.js";
+import { serviceCostVnd, type ServicePrices } from "../domain/service-pricing.js";
 
 /** Giá USD/1M token theo bảng giá Anthropic (cập nhật 2026-10). Gồm cả model dự phòng khi model chính từ chối (fallbacks). */
 export const MODEL_PRICING_USD_PER_MTOK: Record<string, { input: string; output: string }> = {
@@ -35,12 +38,45 @@ export class DrizzleUsageRecorder {
     );
     return id;
   }
-  /** Tổng chi phí AI (VND) và số trang đã đọc của tháng chứa `now`. */
-  async monthlyTotals(orgId: string, now: Date): Promise<{ aiCostVnd: string; events: number }> {
+  /** Tổng chi phí tháng chứa `now` (VND), tách theo nhà cung cấp theo tiền tố `kind`: AI_* (đọc chứng từ), HS_* (HSCodePro), CUSTOMS_* (Customs Hub). */
+  async monthlyTotals(orgId: string, now: Date): Promise<{ aiCostVnd: string; hsCostVnd: string; customsCostVnd: string; events: number }> {
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const byPrefix = (prefix: string) => sql<string>`coalesce(sum(case when ${usageEvents.kind} like ${`${prefix}%`} then ${usageEvents.costVnd} else 0 end), 0)::text`;
     const row = await withCtx(this.db, { orgId: asOrgId(orgId), userId: asUserId("") }, async (tx) =>
-      (await tx.select({ cost: sql<string>`coalesce(sum(${usageEvents.costVnd}), 0)`, n: sql<number>`count(*)::int` }).from(usageEvents).where(and(eq(usageEvents.orgId, orgId), gte(usageEvents.at, start))))[0],
+      (
+        await tx
+          .select({ ai: byPrefix("AI_"), hs: byPrefix("HS_"), customs: byPrefix("CUSTOMS_"), n: sql<number>`count(*)::int` })
+          .from(usageEvents)
+          .where(and(eq(usageEvents.orgId, orgId), gte(usageEvents.at, start)))
+      )[0],
     );
-    return { aiCostVnd: toDecimalString(dec(String(row?.cost ?? "0")), 0), events: row?.n ?? 0 };
+    const vnd = (v: string | undefined) => toDecimalString(dec(String(v ?? "0")), 0);
+    return { aiCostVnd: vnd(row?.ai), hsCostVnd: vnd(row?.hs), customsCostVnd: vnd(row?.customs), events: row?.n ?? 0 };
+  }
+}
+
+/** id cố định theo khóa chống trùng → ghi lại cùng khóa (job chạy lại) không tạo dòng mới. */
+export const usageIdFor = (dedupeKey: string) => `use_${createHash("sha256").update(dedupeKey).digest("hex").slice(0, 32)}`;
+
+/**
+ * Ghi chi phí HSCodePro / Customs Hub vào usage_events (cột `model` để trống; nghiệp vụ + số lượng + đơn giá trong `meta`).
+ * Tiền tính bằng Decimal theo đơn giá cấu hình (HSCODEPRO_PRICE_PER_ITEM_VND, CUSTOMS_HUB_PRICE_PER_MESSAGE_VND).
+ */
+export class DrizzleServiceUsageMeter implements ServiceUsageMeter {
+  constructor(private db: Db, private prices: ServicePrices) {}
+  async record(e: ServiceUsage): Promise<void> {
+    const cost = serviceCostVnd(e, this.prices);
+    const unit = e.provider === "HSCODEPRO" ? this.prices.hscodeproPerItemVnd : this.prices.customsHubPerMessageVnd;
+    const id = e.dedupeKey ? usageIdFor(e.dedupeKey) : ulidIdGen.next("use");
+    await withCtx(this.db, { orgId: asOrgId(e.orgId), userId: asUserId("") }, (tx) =>
+      tx
+        .insert(usageEvents)
+        .values({
+          id, orgId: e.orgId, dossierId: e.dossierId, documentId: null, kind: e.kind, provider: e.provider, model: null,
+          costUsd: "0", costVnd: toDecimalString(cost, 2),
+          meta: { ...(e.meta ?? {}), operation: e.operation, quantity: e.quantity, unitPriceVnd: toDecimalString(unit), ...(e.dedupeKey ? { dedupeKey: e.dedupeKey } : {}) },
+        })
+        .onConflictDoNothing({ target: usageEvents.id }),
+    );
   }
 }

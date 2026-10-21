@@ -13,8 +13,11 @@ import type { StaffStatus } from "../domain/staff-rules.js";
 const SYSTEM_ORG_ID = "org_system";
 import type { AdminOrgRow, AdminRepos, AdminUow, AnnouncementRow, AuditRow, ExchangeRateRow, OrgUsage, PlatformIntegrationRow, RateFetchRow, StaffRow } from "../application/ports.js";
 
-/** Phân loại giá vốn theo `usage_events.kind`: AI_* = đọc chứng từ, HS_* = gợi ý HS, CUSTOMS_* = Customs Hub. */
+/** Phân loại giá vốn theo `usage_events.kind`: AI_* = đọc chứng từ, HS_* = HSCodePro, CUSTOMS_* = Customs Hub. */
 const costByKind = (prefix: string) => sql<string>`coalesce(sum(case when ${usageEvents.kind} like ${`${prefix}%`} then ${usageEvents.costVnd} else 0 end), 0)::text`;
+const countByKind = (prefix: string) => sql<number>`count(*) filter (where ${usageEvents.kind} like ${`${prefix}%`})::int`;
+/** Số dòng gửi HSCodePro (meta.quantity của HS_CLASSIFY/HS_ANSWER; HS_RESULT chỉ là kết quả về, không tính). */
+const hsItemsSql = sql<number>`coalesce(sum(case when ${usageEvents.kind} in ('HS_CLASSIFY', 'HS_ANSWER') then coalesce((${usageEvents.meta}->>'quantity')::int, 0) else 0 end), 0)::int`;
 
 function repos(tx: Tx): AdminRepos {
   const staffSelect = () =>
@@ -122,16 +125,16 @@ function repos(tx: Tx): AdminRepos {
           tx.select({ orgId: dossiers.orgId, n: sql<number>`count(*)::int` }).from(dossiers).where(and(gte(dossiers.createdAt, from), lt(dossiers.createdAt, to))).groupBy(dossiers.orgId),
           tx.select({ orgId: documents.orgId, n: sql<number>`coalesce(sum(${documents.pages}), 0)::int` }).from(documents).where(and(gte(documents.createdAt, from), lt(documents.createdAt, to))).groupBy(documents.orgId),
           tx
-            .select({ orgId: usageEvents.orgId, calls: sql<number>`count(*)::int`, read: costByKind("AI_"), hs: costByKind("HS_"), customs: costByKind("CUSTOMS_") })
+            .select({ orgId: usageEvents.orgId, calls: countByKind("AI_"), hsItems: hsItemsSql, customsMessages: countByKind("CUSTOMS_"), read: costByKind("AI_"), hs: costByKind("HS_"), customs: costByKind("CUSTOMS_") })
             .from(usageEvents)
             .where(and(gte(usageEvents.at, from), lt(usageEvents.at, to)))
             .groupBy(usageEvents.orgId),
         ]);
         const out = new Map<string, OrgUsage>();
-        const row = (orgId: string) => out.get(orgId) ?? out.set(orgId, { orgId, dossiers: 0, pages: 0, aiCalls: 0, readCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" }).get(orgId)!;
+        const row = (orgId: string) => out.get(orgId) ?? out.set(orgId, { orgId, dossiers: 0, pages: 0, aiCalls: 0, hsItems: 0, customsMessages: 0, readCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" }).get(orgId)!;
         for (const r of dossierRows) row(r.orgId).dossiers = r.n;
         for (const r of pageRows) row(r.orgId).pages = r.n;
-        for (const r of costRows) Object.assign(row(r.orgId), { aiCalls: r.calls, readCostVnd: r.read, hsCostVnd: r.hs, customsCostVnd: r.customs });
+        for (const r of costRows) Object.assign(row(r.orgId), { aiCalls: r.calls, hsItems: r.hsItems, customsMessages: r.customsMessages, readCostVnd: r.read, hsCostVnd: r.hs, customsCostVnd: r.customs });
         return [...out.values()];
       },
     },

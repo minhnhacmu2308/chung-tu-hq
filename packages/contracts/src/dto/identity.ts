@@ -29,7 +29,14 @@ export const OrganizationSchema = z.object({
     pagesPerDossier: z.number().int().nonnegative(),
     renewsAt: IsoDateSchema,
   }),
-  usage: z.object({ dossiersThisMonth: z.number().int().nonnegative(), pagesThisMonth: z.number().int().nonnegative(), aiCostVnd: DecimalStringSchema }),
+  /** Mức dùng tháng hiện tại; chi phí (VND, từ usage_events) tách theo nhà cung cấp: AI đọc chứng từ, HSCodePro, Customs Hub. */
+  usage: z.object({
+    dossiersThisMonth: z.number().int().nonnegative(),
+    pagesThisMonth: z.number().int().nonnegative(),
+    aiCostVnd: DecimalStringSchema,
+    hsCostVnd: DecimalStringSchema,
+    customsCostVnd: DecimalStringSchema,
+  }),
   suspectThreshold: z.enum(["STRICT", "BALANCED", "RELAXED"]),
   /** Nguyên tắc 4 mắt: người duyệt tờ khai phải khác người tạo hồ sơ (Chủ sở hữu được miễn). */
   fourEyes: z.boolean(),

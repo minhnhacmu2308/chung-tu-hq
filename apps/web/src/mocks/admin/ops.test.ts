@@ -190,6 +190,10 @@ describe("gói & sử dụng", () => {
     const sum = (k: "totalCostVnd" | "planPriceVnd") => r.rows.reduce((n, x) => n + Number(x[k]), 0);
     expect(Number(r.totals.totalCostVnd)).toBe(sum("totalCostVnd"));
     expect(Number(r.totals.marginVnd)).toBe(sum("planPriceVnd") - sum("totalCostVnd"));
+    // Giá vốn theo nhà cung cấp (AI / HSCodePro / Customs Hub) cộng lại đúng tổng.
+    expect(Number(r.totals.readCostVnd) + Number(r.totals.hsCostVnd) + Number(r.totals.customsCostVnd)).toBe(Number(r.totals.totalCostVnd));
+    expect(r.totals.hsItems).toBe(r.rows.reduce((n, x) => n + x.hsItems, 0));
+    expect(r.totals.customsMessages).toBe(r.rows.reduce((n, x) => n + x.customsMessages, 0));
     for (const x of r.rows) {
       expect(Number(x.readCostVnd) + Number(x.hsCostVnd) + Number(x.customsCostVnd)).toBe(Number(x.totalCostVnd));
       expect(Number(x.marginVnd)).toBe(Number(x.planPriceVnd) - Number(x.totalCostVnd));

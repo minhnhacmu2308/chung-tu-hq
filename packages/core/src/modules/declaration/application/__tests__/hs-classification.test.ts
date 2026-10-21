@@ -6,6 +6,7 @@ import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
+import { RecordingUsageMeter } from "../../../../shared/usage.js";
 import { DOSSIER, hansol, ORG } from "../../domain/test/shipment.js";
 import { runAgent, startAgentRun } from "../agent-run.js";
 import { answerHsQuestion, failHsWork, pollHsJob, reclassifyHs, runHsReclassify, sendHsAnswer, startHsClassification } from "../hs-classification.js";
@@ -327,5 +328,70 @@ describe("sửa sau review", () => {
     const l4 = (await items())[3]!;
     unwrap(await reclassifyHs(deps, declarant, l4.id, { origin: "JP" }));
     expect((deps.audit as RecordingAudit).rows).toContainEqual(expect.objectContaining({ key: "origin:4", oldValue: "KR", newValue: "JP", source: "DECL_EDIT" }));
+  });
+});
+
+describe("ghi chi phí HSCodePro (usage_events)", () => {
+  let meter: RecordingUsageMeter;
+  beforeEach(() => {
+    meter = new RecordingUsageMeter();
+    deps.usage = meter;
+  });
+  const kinds = () => meter.events.map((e) => `${e.kind}:${e.operation}:${e.quantity}`);
+
+  it("tạo lượt → 1 sự kiện HS_CLASSIFY theo số dòng gửi; lượt hỏi chưa xong không ghi; lượt có kết quả mới → HS_RESULT một lần", async () => {
+    scriptJobs([(j) => ({ ...j, status: "processing", items: j.items.map((i) => ({ ...i, status: "processing", result: null })) })]);
+    await items();
+    unwrap(await startHsClassification(deps, sys, D));
+    const sent = hs.created[0]!.items.length;
+    expect(meter.events).toEqual([expect.objectContaining({ orgId: ORG_ID, dossierId: D, provider: "HSCODEPRO", kind: "HS_CLASSIFY", operation: "CLASSIFY", quantity: sent })]);
+    const job = uow.data.hsJobs[0]!;
+    unwrap(await pollHsJob(deps, { ...sys, hsJobId: job.id })); // còn processing
+    expect(meter.events).toHaveLength(1);
+    unwrap(await pollHsJob(deps, { ...sys, hsJobId: job.id })); // xong
+    expect(kinds()).toEqual([`HS_CLASSIFY:CLASSIFY:${sent}`, `HS_RESULT:POLL:${sent}`]);
+    // Job hs-poll chạy lại sau khi lượt đã xong → không ghi thêm.
+    unwrap(await pollHsJob(deps, { ...sys, hsJobId: job.id }));
+    expect(meter.events).toHaveLength(2);
+  });
+
+  it("phân loại lại một dòng → HS_CLASSIFY RECLASSIFY số lượng 1", async () => {
+    await items();
+    unwrap(await startHsClassification(deps, sys, D));
+    const l4 = (await items())[3]!;
+    unwrap(await reclassifyHs(deps, declarant, l4.id, {}));
+    unwrap(await runHsReclassify(deps, jobsNamed("hs-reclassify").at(-1)!.payload as Parameters<typeof runHsReclassify>[1]));
+    expect(meter.events.at(-1)).toMatchObject({ kind: "HS_CLASSIFY", operation: "RECLASSIFY", quantity: 1 });
+  });
+
+  it("HSCodePro từ chối tạo lượt (400) → không ghi chi phí", async () => {
+    await items();
+    hs.create = async () => {
+      throw new HsApiError(400, "INVALID_INPUT", "sai");
+    };
+    unwrap(await startHsClassification(deps, sys, D));
+    expect(meter.events).toEqual([]);
+  });
+
+  it("trả lời câu hỏi → HS_ANSWER 1 dòng; job chạy lại (409 đã gửi) không ghi thêm", async () => {
+    scriptJobs([(j) => ({ ...j, status: "need_info", items: j.items.map((i) => (i.line_no === 5 ? { ...i, status: "need_info", result: null, question: { id: "q1", questions: [{ id: "use", question: "Dùng cho máy nào?" }] } } : i)) })]);
+    await items();
+    unwrap(await startHsClassification(deps, sys, D));
+    unwrap(await pollHsJob(deps, { ...sys, hsJobId: uow.data.hsJobs[0]!.id }));
+    const l5 = (await items())[4]!;
+    unwrap(await answerHsQuestion(deps, declarant, l5.id, { questionId: "q1", answers: [{ id: "use", selected: [], custom: "Máy đóng gói" }] }));
+    const job = jobsNamed("hs-answer").at(-1)!.payload as Parameters<typeof sendHsAnswer>[1];
+    unwrap(await sendHsAnswer(deps, job));
+    hs.answerError = new HsApiError(409, "INVALID_STATE", "đã trả lời");
+    unwrap(await sendHsAnswer(deps, job));
+    expect(meter.events.filter((e) => e.kind === "HS_ANSWER")).toEqual([expect.objectContaining({ provider: "HSCODEPRO", operation: "ANSWER", quantity: 1, dossierId: D })]);
+  });
+
+  it("ghi chi phí lỗi → phân loại vẫn chạy bình thường", async () => {
+    meter.fail = true;
+    await items();
+    const r = unwrap(await startHsClassification(deps, sys, D));
+    expect(r.jobIds).toHaveLength(1);
+    expect((await items())[0]).toMatchObject({ hsSuggested: "8482.10.00" });
   });
 });

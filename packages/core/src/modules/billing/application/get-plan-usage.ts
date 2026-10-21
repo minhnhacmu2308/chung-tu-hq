@@ -16,6 +16,6 @@ export async function getPlanUsage(deps: BillingDeps, ctx: Ctx): Promise<Result<
   const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   return ok({
     plan: { code: plan.code as Organization["plan"]["code"], name: plan.name, dossiersPerMonth: plan.dossiersPerMonth, pagesPerDossier: plan.pagesPerDossier, renewsAt: next.toISOString().slice(0, 10) },
-    usage: { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd },
+    usage: { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd, hsCostVnd: u.hsCostVnd, customsCostVnd: u.customsCostVnd },
   });
 }

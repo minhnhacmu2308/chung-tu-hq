@@ -7,6 +7,7 @@ import {
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { meterSafely } from "../../../shared/usage.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { buildAmaRequest } from "../domain/post-amendment.js";
@@ -99,6 +100,7 @@ async function queryNow(deps: CustomsDeps, ctx: Ctx, dossierId: string, directio
   const now = () => deps.clock.now();
   await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: op, direction: "OUT", result: "OK", summary: `Tra cứu trạng thái tờ khai (${op})`, payloadMasked: { nghiepVu: op, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
   const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId);
+  await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: op, quantity: 1 });
   const stage = stageOf(result);
   const cleared = st.cleared && (stage === "DECLARED" || stage === "AMEND_PRE_DECLARED" || stage === "AMEND_RECALLED");
   const nextStage = st.rejected ? "REJECTED" : cleared ? "CLEARED" : stage;

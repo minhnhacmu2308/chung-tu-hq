@@ -1,9 +1,10 @@
 // Worker `customs-send`: một dòng outbox → ghi OUT (một lần) → gọi gateway → ghi IN → chuyển giai đoạn (customs-flow.stageAfter).
 // Không tự gửi nghiệp vụ kế tiếp: người khai điều khiển luồng (IDA → IDC…). Khai chính thức thành công → hỏi trạng thái định kỳ.
-import { baseOp, CUSTOMS_OPERATIONS, isRecallOperation, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
+import { baseOp, CUSTOMS_OPERATIONS, isRecallOperation, queryOpFor, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { meterSafely } from "../../../shared/usage.js";
 import { maskPayload } from "../domain/mask.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js";
@@ -66,18 +67,31 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   const op = ob.operation;
   const b = baseOp(op);
   if (CUSTOMS_OPERATIONS[op].kind === "query") return err(domainError("NOT_SUPPORTED", `${op} là tra cứu – không gửi qua outbox`));
+  /**
+   * Ghi chi phí Customs Hub ngay khi gateway trả lời (kể cả bị từ chối nghiệp vụ – thông điệp đã được xử lý).
+   * Khóa = idempotencyKey của outbox: job chạy lại gửi lại cùng thông điệp (FPT không xử lý lần hai) không tính thêm.
+   * Lỗi tạm (mạng/5xx, ném ra) và lỗi chưa cấu hình/chưa hỗ trợ (chưa gửi được) → không ghi.
+   */
+  const meterSent = () =>
+    meterSafely(deps.usage, { orgId: input.orgId, dossierId: ob.dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_SEND", operation: op, quantity: 1, dedupeKey: `customs:${ob.idempotencyKey}`, meta: { outboxId: ob.id } });
   let outcome: Outcome;
   try {
     if (b === "IDA") {
       // Chạy lại sau crash ở lần khai đầu: Hải quan đã cấp số cho lần gửi trước thì không gửi lại (spec §3.3).
       const already = ob.attempts > 0 && result.externalId && stage === "NOT_SENT" ? await deps.gateway.queryStatus(input.orgId, result.externalId, ob.dossierId).catch(() => null) : null;
+      if (already) {
+        const qop = queryOpFor(dossier.direction);
+        await meterSafely(deps.usage, { orgId: input.orgId, dossierId: ob.dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: qop, quantity: 1, meta: { outboxId: ob.id } });
+      }
       const res = already?.declarationNo ? { externalId: result.externalId!, declarationNo: already.declarationNo, ...(already.info ? { info: already.info } : {}) } : await deps.gateway.preDeclare(input.orgId, { kind: op === "EDA" ? "EDA" : "IDA", request: payload.request, dossierId: ob.dossierId }, ob.idempotencyKey);
+      if (!already?.declarationNo) await meterSent();
       const no = res.declarationNo ?? result.declarationNo;
       outcome = res.errors?.length
         ? { errors: res.errors, summary: "", payload: null, patch: res.externalId ? { externalId: res.externalId } : {} }
         : { summary: `Hải quan cấp số tờ khai ${no ?? "(chưa có)"} – kiểm tra thuế dự kiến rồi khai chính thức`, payload: { nghiepVu: op, ketQua: "Thành công", soToKhai: no, warnings: payload.warnings }, patch: { externalId: res.externalId, declarationNo: no ?? null, ...withInfo(result.raw, res.info, now()) } };
     } else if (b === "IDC") {
       const res = await deps.gateway.declare(input.orgId, { kind: op === "EDC" ? "EDC" : "IDC", externalId: result.externalId ?? "", dossierId: ob.dossierId }, ob.idempotencyKey);
+      await meterSent();
       const errors = res.errors ?? (!res.accepted ? [{ code: "E-IDC-REJECT", message: "Hải quan không chấp nhận khai chính thức" }] : res.channel ? undefined : [{ code: "E-IDC-NO-CHANNEL", message: "Hải quan chấp nhận nhưng chưa trả kết quả phân luồng – bấm Tra cứu trạng thái hoặc gửi lại" }]);
       outcome = errors?.length || !res.channel
         ? { errors: errors ?? [], summary: "", payload: null, patch: {} }
@@ -87,12 +101,14 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       const files = await Promise.all(docs.map(async (f) => ({ name: f.name, bytes: await deps.dossiers.readFile(f.storageKey) })));
       const declaration = (await deps.declarations.get(input.orgId, ob.dossierId))?.payload;
       const res = await deps.gateway.attachDocuments(input.orgId, { externalId: result.externalId ?? "", dossierId: ob.dossierId, files, ...(declaration ? { declaration } : {}) }, ob.idempotencyKey);
+      await meterSent();
       const side = `Đã tiếp nhận ${files.length} tệp${res.receiptNo ? ` – số tiếp nhận ${res.receiptNo}` : ""}`;
       outcome = res.errors?.length
         ? { errors: res.errors, summary: "", payload: null, patch: {} }
         : { summary: `Đã tiếp nhận hồ sơ chứng từ điện tử (${files.length} tệp)${res.receiptNo ? ` – số tiếp nhận ${res.receiptNo}` : ""}`, payload: { nghiepVu: "HYS", soToKhai: result.declarationNo, soTep: files.length, soTiepNhan: res.receiptNo }, patch: res.receiptNo ? { raw: { receiptNo: res.receiptNo } } : {}, side };
     } else {
       const res = await deps.gateway.send(input.orgId, { op, externalId: result.externalId ?? "", dossierId: ob.dossierId, request: payload.request }, ob.idempotencyKey);
+      await meterSent();
       const detail = [res.note, res.receiptNo ? `số tiếp nhận ${res.receiptNo}` : null, res.channel ? `luồng ${channelVi(res.channel)}` : null].filter(Boolean).join(" – ");
       outcome = res.errors?.length
         ? { errors: res.errors, summary: "", payload: null, patch: {} }

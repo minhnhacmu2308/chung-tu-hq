@@ -34,6 +34,12 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...base, HS_CLASSIFIER: "hscodepro", HSCODEPRO_URL: "https://dev.aixuatnhapkhau.cloud" })).toThrow(/HSCODEPRO_INTERNAL_KEY/);
     expect(loadEnv({ ...base, HS_CLASSIFIER: "hscodepro", HSCODEPRO_URL: "https://dev.aixuatnhapkhau.cloud", HSCODEPRO_INTERNAL_KEY: "k" }).HSCODEPRO_INTERNAL_KEY).toBe("k");
   });
+  it("đơn giá HSCodePro / Customs Hub: mặc định 0, nhận chuỗi thập phân, từ chối số âm/chữ", () => {
+    expect(loadEnv(base)).toMatchObject({ HSCODEPRO_PRICE_PER_ITEM_VND: "0", CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: "0" });
+    expect(loadEnv({ ...base, HSCODEPRO_PRICE_PER_ITEM_VND: "1500.5", CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: "2200" })).toMatchObject({ HSCODEPRO_PRICE_PER_ITEM_VND: "1500.5", CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: "2200" });
+    expect(() => loadEnv({ ...base, CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: "-1" })).toThrow(/CUSTOMS_HUB_PRICE_PER_MESSAGE_VND/);
+    expect(() => loadEnv({ ...base, HSCODEPRO_PRICE_PER_ITEM_VND: "abc" })).toThrow(/HSCODEPRO_PRICE_PER_ITEM_VND/);
+  });
   it("AI_PROVIDER=claude mà thiếu ANTHROPIC_API_KEY thì ném lỗi nêu tên biến", () => {
     expect(() => loadEnv({ ...base, AI_PROVIDER: "claude" })).toThrow(/ANTHROPIC_API_KEY/);
   });

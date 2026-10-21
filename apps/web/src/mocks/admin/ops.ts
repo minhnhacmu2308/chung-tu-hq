@@ -118,6 +118,8 @@ function allUsers(db: AdminScope): AdminUser[] {
   return [...demo, ...db.admin.users.map((u): AdminUser => ({ ...u, orgName: names.get(u.orgId) ?? "—" }))];
 }
 
+const orgCostMinor = (u: { aiCostVnd: string; hsCostVnd: string; customsCostVnd: string }) => sumMinor([u.aiCostVnd, u.hsCostVnd, u.customsCostVnd].map((v) => toMinor(v, 0)));
+
 function toAdminOrg(r: OrgRef, users: readonly AdminUser[]): AdminOrg {
   const members = users.filter((u) => u.orgId === r.org.id && u.status !== "PENDING_JOIN");
   const owner = members.find((u) => u.role === "OWNER");
@@ -130,7 +132,8 @@ function toAdminOrg(r: OrgRef, users: readonly AdminUser[]): AdminOrg {
     ...(r.meta.suspendedReason ? { suspendedReason: r.meta.suspendedReason } : {}),
     plan: r.org.plan,
     quotaBonus: r.meta.quotaBonus,
-    usage: r.org.usage,
+    // Màn quản trị xem tổng giá vốn (AI + HSCodePro + Customs Hub) như backend (admin/_shared).
+    usage: { dossiersThisMonth: r.org.usage.dossiersThisMonth, pagesThisMonth: r.org.usage.pagesThisMonth, aiCostVnd: fromMinor(orgCostMinor(r.org.usage), 0) },
     memberCount: members.length,
     ownerName: owner?.name ?? "—",
     ownerEmail: owner?.email ?? "",
@@ -341,11 +344,16 @@ export function usageMonths(now = new Date()): string[] {
   });
 }
 
-function usageRow(db: AdminScope, r: OrgRef, dossiers: number, pages: number, totalCost: number): OrgUsageRow {
-  // Tách giá vốn theo loại lệnh gọi: đọc chứng từ ~72%, gợi ý HS ~20%, còn lại là Customs Hub.
-  const read = Math.round(totalCost * 0.72);
-  const hs = Math.round(totalCost * 0.2);
-  const customs = totalCost - read - hs;
+type CostSplit = { read: number; hs: number; customs: number };
+/** Tháng cũ (mô phỏng): tách tổng giá vốn theo nhà cung cấp – đọc chứng từ ~72%, HSCodePro ~20%, còn lại Customs Hub. */
+const splitMinor = (total: number): CostSplit => {
+  const read = Math.round(total * 0.72);
+  const hs = Math.round(total * 0.2);
+  return { read, hs, customs: total - read - hs };
+};
+
+function usageRow(db: AdminScope, r: OrgRef, dossiers: number, pages: number, cost: CostSplit): OrgUsageRow {
+  const totalCost = cost.read + cost.hs + cost.customs;
   const price = toMinor(planOf(db, r.org.plan.code).priceVnd, 0);
   return {
     orgId: r.org.id,
@@ -355,9 +363,12 @@ function usageRow(db: AdminScope, r: OrgRef, dossiers: number, pages: number, to
     dossiers,
     pages,
     aiCalls: Math.round(pages * 1.25) + dossiers * 2,
-    readCostVnd: fromMinor(read, 0),
-    hsCostVnd: fromMinor(hs, 0),
-    customsCostVnd: fromMinor(customs, 0),
+    // Mô phỏng: ~6 dòng hàng/hồ sơ gửi HSCodePro; ~4 thông điệp Customs Hub/hồ sơ (IDA, IDC, HYS, hỏi trạng thái).
+    hsItems: dossiers * 6,
+    customsMessages: dossiers * 4,
+    readCostVnd: fromMinor(cost.read, 0),
+    hsCostVnd: fromMinor(cost.hs, 0),
+    customsCostVnd: fromMinor(cost.customs, 0),
     totalCostVnd: fromMinor(totalCost, 0),
     planPriceVnd: fromMinor(price, 0),
     marginVnd: fromMinor(price - totalCost, 0),
@@ -373,11 +384,11 @@ export function getUsageReport(db: AdminScope, monthInput: string): UsageReport 
     .map((r, i): OrgUsageRow | null => {
       if (r.meta.createdAt.slice(0, 7) > month) return null; // chưa đăng ký ở tháng đó
       const u = r.org.usage;
-      if (k === 0) return usageRow(db, r, u.dossiersThisMonth, u.pagesThisMonth, toMinor(u.aiCostVnd, 0));
+      if (k === 0) return usageRow(db, r, u.dossiersThisMonth, u.pagesThisMonth, { read: toMinor(u.aiCostVnd, 0), hs: toMinor(u.hsCostVnd, 0), customs: toMinor(u.customsCostVnd, 0) });
       // Tháng cũ: số mô phỏng ổn định theo (doanh nghiệp, tháng) – không ngẫu nhiên để F5 không đổi.
       const base = Math.max(u.dossiersThisMonth, Math.round(r.org.plan.dossiersPerMonth * 0.3));
       const dossiers = Math.round((base * (60 + ((i * 7 + k * 13) % 50))) / 100);
-      return usageRow(db, r, dossiers, dossiers * (8 + (i % 5)), dossiers * (2400 + ((i * 137) % 900)));
+      return usageRow(db, r, dossiers, dossiers * (8 + (i % 5)), splitMinor(dossiers * (2400 + ((i * 137) % 900))));
     })
     .filter((x): x is OrgUsageRow => x !== null)
     .sort((a, b) => toMinor(b.totalCostVnd, 0) - toMinor(a.totalCostVnd, 0));
@@ -390,6 +401,11 @@ export function getUsageReport(db: AdminScope, monthInput: string): UsageReport 
       dossiers: rows.reduce((n, x) => n + x.dossiers, 0),
       pages: rows.reduce((n, x) => n + x.pages, 0),
       aiCalls: rows.reduce((n, x) => n + x.aiCalls, 0),
+      hsItems: rows.reduce((n, x) => n + x.hsItems, 0),
+      customsMessages: rows.reduce((n, x) => n + x.customsMessages, 0),
+      readCostVnd: fromMinor(sumMinor(rows.map((x) => toMinor(x.readCostVnd, 0))), 0),
+      hsCostVnd: fromMinor(sumMinor(rows.map((x) => toMinor(x.hsCostVnd, 0))), 0),
+      customsCostVnd: fromMinor(sumMinor(rows.map((x) => toMinor(x.customsCostVnd, 0))), 0),
       totalCostVnd: fromMinor(cost, 0),
       revenueVnd: fromMinor(revenue, 0),
       marginVnd: fromMinor(revenue - cost, 0),

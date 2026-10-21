@@ -8,7 +8,8 @@ export const CreateDossierInputSchema = z.object({
   customsOffice: z.string().trim().min(1, "Chọn cơ quan Hải quan"),
   skillSetId: z.string().min(1),
   dueDate: IsoDateSchema,
-  incoterm: z.string().trim().toUpperCase().min(3),
+  /** Không hỏi khi tạo hồ sơ: tờ khai lấy điều kiện giao hàng đọc từ invoice (bước OCR). Giữ để tương thích – rỗng = chưa biết. */
+  incoterm: z.string().trim().toUpperCase().default(""),
   transportMode: TransportModeSchema,
   partyClass: PartyClassSchema.default(DEFAULT_PARTY_CLASS),
   note: z.string().trim().optional(),

@@ -15,7 +15,7 @@ import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
 import { getDeclarationProfile, settingsKeys } from "@/api/settings";
 import { prefillFromProfile } from "./profile-prefill";
 import type { Direction, Dossier } from "@/mocks/types";
-import { CUSTOMS_OFFICES, INCOTERMS, SKILL_SETS, suggestedDocuments, TYPE_GROUPS, typeCodesIn, typeGroupOf, type TypeGroup } from "./create-dossier-options";
+import { CUSTOMS_OFFICES, SKILL_SETS, suggestedDocuments, TYPE_GROUPS, typeCodesIn, typeGroupOf, type TypeGroup } from "./create-dossier-options";
 import { TRANSPORT_LABELS, TRANSPORT_OPTIONS } from "./dossier-display";
 
 const isoDay = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
@@ -25,7 +25,6 @@ const schema = z.object({
   typeCode: z.string({ error: "Chọn mã loại hình" }).min(1, "Chọn mã loại hình"),
   partner: z.string().trim().min(3, "Nhập tên đối tác nước ngoài (ít nhất 3 ký tự)"),
   customsOffice: z.string({ error: "Chọn cơ quan Hải quan" }).min(1, "Chọn cơ quan Hải quan"),
-  incoterm: z.string().min(1),
   transportMode: TransportModeSchema,
   dueDate: z.string({ error: "Chọn hạn khai" }).regex(/^\d{4}-\d{2}-\d{2}$/, "Chọn hạn khai"),
   skillSetId: z.string().min(1),
@@ -37,7 +36,6 @@ type FormState = {
   typeCode: string | null;
   partner: string;
   customsOffice: string | null;
-  incoterm: string;
   transportMode: Dossier["transportMode"];
   /** Nhóm loại hình người dùng chọn; null → theo mã loại hình đang chọn (kể cả mã điền sẵn từ Mặc định khai báo). */
   typeGroup: TypeGroup | null;
@@ -53,7 +51,6 @@ const INITIAL: FormState = {
   typeCode: "A11",
   partner: "",
   customsOffice: null,
-  incoterm: "CIF",
   transportMode: "SEA_CONTAINER",
   typeGroup: null,
   dueDate: isoDay(3),
@@ -92,7 +89,7 @@ export function CreateDossierPage() {
 
   const changeDirection = (d: Direction) => {
     setTouched(new Set());
-    setForm((f) => ({ ...f, direction: d, typeCode: d === "NK" ? "A11" : "B11", typeGroup: null, incoterm: d === "NK" ? "CIF" : "FOB" }));
+    setForm((f) => ({ ...f, direction: d, typeCode: d === "NK" ? "A11" : "B11", typeGroup: null }));
   };
 
   const typeGroup = form.typeGroup ?? typeGroupOf(form.typeCode);
@@ -136,7 +133,8 @@ export function CreateDossierPage() {
       customsOffice: office,
       skillSetId: v.skillSetId,
       dueDate: v.dueDate,
-      incoterm: v.incoterm,
+      // Không hỏi khi tạo hồ sơ: tờ khai lấy điều kiện giao hàng đọc từ invoice ở bước OCR.
+      incoterm: "",
       transportMode: v.transportMode,
       // Không hỏi ở bước tạo hồ sơ: tờ khai lấy theo Mặc định khai báo (PL_CN), sửa ở bước Review nếu cần.
       partyClass: DEFAULT_PARTY_CLASS,
@@ -144,7 +142,7 @@ export function CreateDossierPage() {
     });
   };
 
-  const docs = suggestedDocuments(form.direction, form.transportMode, form.incoterm);
+  const docs = suggestedDocuments(form.direction, form.transportMode);
   const errorCount = Object.values(errors).filter(Boolean).length;
 
   return (
@@ -217,7 +215,7 @@ export function CreateDossierPage() {
                 </Field>
               </FormSection>
 
-              <FormSection title="Đối tác & giao hàng" description="Ghi tên đối tác đúng như trên invoice để AI đối chiếu.">
+              <FormSection title="Đối tác" description="Ghi tên đối tác đúng như trên invoice để AI đối chiếu.">
                 <Stack gap="sm">
                   <Field
                     label={form.direction === "NK" ? "Người bán (đối tác nước ngoài)" : "Người mua (đối tác nước ngoài)"}
@@ -237,9 +235,6 @@ export function CreateDossierPage() {
                     </div>
                   )}
                 </Stack>
-                <Field label="Điều kiện giao hàng" required hint="Incoterms 2020" className="cq-md:max-w-xs">
-                  <Select options={INCOTERMS} value={form.incoterm} onChange={(e) => set("incoterm", e.target.value)} />
-                </Field>
               </FormSection>
 
               <FormSection title="AI & ghi chú" description="Cách AI đọc bộ chứng từ này và ghi chú riêng của nhóm (không gửi Hải quan).">
@@ -263,7 +258,7 @@ export function CreateDossierPage() {
             <CardHeader>
               <CardTitle>Chứng từ gợi ý cần có</CardTitle>
               <CardDescription>
-                {form.direction === "NK" ? "Nhập khẩu" : "Xuất khẩu"} · {TRANSPORT_LABELS[form.transportMode].toLowerCase()} · {form.incoterm}
+                {form.direction === "NK" ? "Nhập khẩu" : "Xuất khẩu"} · {TRANSPORT_LABELS[form.transportMode].toLowerCase()}
               </CardDescription>
             </CardHeader>
             <CardContent>

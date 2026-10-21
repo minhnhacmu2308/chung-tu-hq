@@ -238,7 +238,7 @@ export function UploadStep({ dossier, goTo }: StepProps) {
             <CardTitle as="h3">Chứng từ theo loại</CardTitle>
             <CardDescription>
               {docs.length === 0
-                ? `Theo ${dossier.direction === "NK" ? "hồ sơ nhập khẩu" : "hồ sơ xuất khẩu"} ${dossier.typeCode} · ${dossier.incoterm}. Có thể thả file thẳng vào từng ô.`
+                ? `Theo ${dossier.direction === "NK" ? "hồ sơ nhập khẩu" : "hồ sơ xuất khẩu"} ${dossier.typeCode}${dossier.incoterm ? ` · ${dossier.incoterm}` : ""}. Có thể thả file thẳng vào từng ô.`
                 : `${docs.length} chứng từ · ${docs.reduce((n, d) => n + d.pages, 0)} trang · đã đọc ${done}/${docs.length}. Nhận sai loại thì đổi loại ngay trên dòng.`}
             </CardDescription>
           </CardHeader>

@@ -70,8 +70,9 @@ Mỗi doanh nghiệp (1 MST) là một **organization**. Đăng nhập bằng **
 ```
 
 ### Bước 1 – Tạo hồ sơ
-- Chọn **Nhập khẩu / Xuất khẩu**, **mã loại hình** (vd A11), **bộ Skill AI** áp dụng (mặc định của doanh nghiệp), **đối tác nước ngoài**, **cơ quan Hải quan**, ghi chú nội bộ.
+- Chọn **Nhập khẩu / Xuất khẩu**, **phương thức vận chuyển**, **nhóm loại hình** (Kinh doanh / SXXK / Gia công / Chế xuất – lọc mã loại hình), **mã loại hình** (vd A11), **hạn khai**, **bộ Skill AI** áp dụng (mặc định của doanh nghiệp), **đối tác nước ngoài**, **cơ quan Hải quan**, ghi chú nội bộ.
 - Hệ thống gợi ý danh sách chứng từ cần có theo loại hồ sơ. **Danh sách này là gợi ý có thể cấu hình, không chặn cứng**: thực tế nhiều lô không có Packing List (vd lô hàng không nhỏ).
+- Không hỏi **điều kiện giao hàng** và **phân loại cá nhân/tổ chức**: điều kiện giao hàng lấy từ invoice ở bước OCR (dùng cho ô điều kiện giá, cộng cước/bảo hiểm, luật thiếu cước); phân loại cá nhân/tổ chức lấy theo Mặc định khai báo, sửa ở bước Review.
 
 ### Bước 2 – Upload chứng từ
 - Kéo thả nhiều PDF/ảnh hoặc 1 file zip. Giới hạn số trang/dung lượng mỗi hồ sơ theo gói.

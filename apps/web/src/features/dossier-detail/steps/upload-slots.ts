@@ -18,6 +18,9 @@ export function suggestedKinds(d: Pick<Dossier, "transportMode" | "incoterm" | "
   ];
   if (["EXW", "FCA", "FAS", "FOB"].includes(d.incoterm)) {
     list.push({ kind: "FREIGHT_INVOICE", reason: `Điều kiện ${d.incoterm}: cần cước vận chuyển để cộng vào trị giá tính thuế` });
+  } else if (!d.incoterm && d.direction === "NK") {
+    // Hồ sơ không khai điều kiện giao hàng (lấy từ invoice khi đọc): gợi ý tùy lô; thiếu cước thì luật đối chiếu ở bước OCR báo lỗi chặn.
+    list.push({ kind: "FREIGHT_INVOICE", reason: "Khi giá EXW/FCA/FAS/FOB: cần cước vận chuyển để cộng vào trị giá tính thuế", optional: true });
   }
   if (d.direction === "NK") list.push({ kind: "CERT_OF_ORIGIN", reason: "Chỉ cần khi hưởng thuế ưu đãi đặc biệt (FTA)", optional: true });
   return list;

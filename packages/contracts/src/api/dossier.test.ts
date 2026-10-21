@@ -14,6 +14,11 @@ describe("contract dossier/ocr", () => {
     expect(CreateDossierInputSchema.parse({ ...base, partyClass: "1" }).partyClass).toBe("1");
     expect(CreateDossierInputSchema.safeParse({ ...base, partyClass: "6" }).success).toBe(false);
   });
+  it("CreateDossierInput: điều kiện giao hàng không bắt buộc (rỗng = chưa biết, lấy từ invoice)", () => {
+    const base = { direction: "NK", typeCode: "A11", partner: "HANSOL", customsOffice: "03CE", skillSetId: "default", dueDate: "2026-10-20", transportMode: "AIR" };
+    expect(CreateDossierInputSchema.parse(base).incoterm).toBe("");
+    expect(CreateDossierInputSchema.parse({ ...base, incoterm: " fca " }).incoterm).toBe("FCA");
+  });
   it("DossierFilter chấp nhận rỗng và từ chối status lạ", () => {
     expect(DossierFilterSchema.parse({})).toEqual({});
     expect(DossierFilterSchema.safeParse({ status: "XYZ" }).success).toBe(false);

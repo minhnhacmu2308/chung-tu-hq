@@ -106,7 +106,7 @@ function Header({ dossier, flowAction }: { dossier: Dossier; flowAction: ReactNo
           {DIRECTION_LABEL[dossier.direction]} · <span className="font-medium text-fg">{dossier.typeCode}</span>
         </span>
         <span>
-          {dossier.incoterm} · {TRANSPORT_LABELS[dossier.transportMode]}
+          {dossier.incoterm && `${dossier.incoterm} · `}{TRANSPORT_LABELS[dossier.transportMode]}
         </span>
         {dossier.billNo && <span className="font-mono">{dossier.billNo}</span>}
         {dossier.invoiceValue !== "0" && <span>{formatMoney(dossier.invoiceValue, dossier.currency)}</span>}

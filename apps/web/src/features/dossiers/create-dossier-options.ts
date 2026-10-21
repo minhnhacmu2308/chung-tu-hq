@@ -62,14 +62,6 @@ export const CUSTOMS_OFFICES: ComboboxOption[] = [
   { value: "15SI", label: "15SI – Chi cục HQ CK quốc tế Lào Cai" },
 ];
 
-export const INCOTERMS: SelectOption[] = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"].map((v) => ({
-  value: v,
-  label: v,
-}));
-
-/** Incoterm mà cước/bảo hiểm quốc tế chưa nằm trong giá → phải cộng vào trị giá tính thuế (NK). */
-export const FREIGHT_NOT_INCLUDED = new Set(["EXW", "FCA", "FAS", "FOB"]);
-
 export const SKILL_SETS: SelectOption[] = [
   { value: "default", label: "Mặc định doanh nghiệp" },
   { value: "supplier-hansol", label: "Theo nhà cung cấp – HANSOL PRECISION" },
@@ -79,7 +71,7 @@ export const SKILL_SETS: SelectOption[] = [
 export type SuggestedDoc = { kind: DocKind; name: string; note: string; important?: boolean };
 
 /** Danh sách chứng từ gợi ý theo loại hồ sơ. Chỉ là gợi ý – không chặn khi thiếu (PRODUCT.md bước 1). */
-export function suggestedDocuments(direction: Direction, mode: Dossier["transportMode"], incoterm: string): SuggestedDoc[] {
+export function suggestedDocuments(direction: Direction, mode: Dossier["transportMode"]): SuggestedDoc[] {
   const docs: SuggestedDoc[] = [
     { kind: "INVOICE", name: "Commercial Invoice", note: "Trị giá, điều kiện giao hàng, người bán/mua", important: true },
     { kind: "PACKING_LIST", name: "Packing List", note: "Số kiện, trọng lượng – lô nhỏ có thể không có" },
@@ -93,9 +85,8 @@ export function suggestedDocuments(direction: Direction, mode: Dossier["transpor
   if (mode === "OTHER") docs.push({ kind: "OTHER", name: "Chứng từ vận tải", note: "Chứng từ chứng minh việc giao hàng (nếu có)" });
   if (direction === "NK") {
     docs.push({ kind: "ARRIVAL_NOTICE", name: "Arrival Notice", note: "Ngày hàng đến, phí local, cước (nếu có)" });
-    if (FREIGHT_NOT_INCLUDED.has(incoterm)) {
-      docs.push({ kind: "FREIGHT_INVOICE", name: "Hóa đơn cước quốc tế", note: `${incoterm}: cước phải cộng vào trị giá tính thuế`, important: true });
-    }
+    // Điều kiện giao hàng chỉ biết sau khi đọc invoice → gợi ý theo điều kiện, không đánh dấu "Nên có".
+    docs.push({ kind: "FREIGHT_INVOICE", name: "Hóa đơn cước quốc tế", note: "Khi giá EXW/FCA/FAS/FOB: cước phải cộng vào trị giá tính thuế" });
     docs.push({ kind: "CERT_OF_ORIGIN", name: "C/O hoặc chứng từ tự chứng nhận xuất xứ", note: "Để hưởng thuế suất ưu đãi FTA (form E, AK, VK, REX…)" });
   }
   docs.push({ kind: "SALES_CONTRACT", name: "Sales Contract", note: "Không bắt buộc – dùng đối chiếu điều khoản" });

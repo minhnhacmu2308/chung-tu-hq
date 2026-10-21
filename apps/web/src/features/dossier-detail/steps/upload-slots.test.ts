@@ -7,6 +7,16 @@ const doc = (id: string, kind: DocKind): DossierDocument => ({
 });
 const seaFob = suggestedKinds({ transportMode: "SEA_CONTAINER", incoterm: "FOB", direction: "NK" });
 
+describe("suggestedKinds – hồ sơ không khai điều kiện giao hàng", () => {
+  it("nhập khẩu: hóa đơn cước là ô tùy lô (thiếu cước thì luật đối chiếu ở bước OCR báo)", () => {
+    const s = suggestedKinds({ transportMode: "SEA_CONTAINER", incoterm: "", direction: "NK" });
+    expect(s.find((k) => k.kind === "FREIGHT_INVOICE")).toMatchObject({ optional: true });
+  });
+  it("xuất khẩu: không gợi ý hóa đơn cước", () => {
+    expect(suggestedKinds({ transportMode: "SEA_CONTAINER", incoterm: "", direction: "XK" }).some((k) => k.kind === "FREIGHT_INVOICE")).toBe(false);
+  });
+});
+
 describe("buildSlots", () => {
   it("hồ sơ chưa có file: hiện đủ ô gợi ý theo thứ tự, chưa có ô Khác", () => {
     const slots = buildSlots(seaFob, []);

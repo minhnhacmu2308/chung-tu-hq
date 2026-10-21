@@ -29,7 +29,7 @@ export function CreateSummaryStep({ dossier, goTo }: StepProps) {
     ["Mã loại hình", dossier.typeCode],
     ["Đối tác nước ngoài", dossier.partner],
     ["Cơ quan Hải quan", dossier.customsOffice],
-    ["Điều kiện giao hàng", dossier.incoterm],
+    ...(dossier.incoterm ? [["Điều kiện giao hàng", dossier.incoterm] as [string, string]] : []),
     ["Phương thức vận chuyển", TRANSPORT_LABELS[dossier.transportMode]],
     ["Số vận đơn", dossier.billNo || "Chưa có – lấy từ B/L/AWB khi đọc chứng từ"],
     ["Bộ Skill AI", dossier.skillSetId === "default" ? "Mặc định của doanh nghiệp" : dossier.skillSetId],

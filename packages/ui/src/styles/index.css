@@ -324,6 +324,8 @@
   html, body, :has(> [data-print-root]), :has([data-print-root]) { position: static !important; overflow: visible !important; height: auto !important; }
   @page { size: A4 portrait; margin: 8mm; }
   html, body { background: white !important; }
+  /* Panel đang mở (Dialog dạng panel) chừa lề phải cho trang – panel không in nên bỏ lề, tờ khai in đủ khổ giấy */
+  body { padding-inline-end: 0 !important; }
   /* Tổ tiên của gốc in (thẻ, khung trang ứng dụng) không in khung, lề, nền */
   body :has([data-print-root]) { border: 0 !important; border-radius: 0 !important; padding: 0 !important; margin: 0 !important; box-shadow: none !important; background: transparent !important; max-width: none !important; }
   [data-paper-mark] { display: none; }

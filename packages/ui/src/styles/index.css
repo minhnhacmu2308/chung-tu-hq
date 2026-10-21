@@ -331,9 +331,12 @@
   [data-paper-full] { display: none !important; }
   [data-paper-compact] { display: inline !important; }
   /* Tiêu đề nhóm trên trang giấy (data-paper-heading): chữ nhỏ, sát dòng – mỗi trang giấy vừa một trang A4 */
-  [data-paper-sheet] [data-paper-heading] { font-size: 7.5pt; padding-top: 1px; padding-bottom: 0; }
+  [data-paper-sheet] [data-paper-heading] { font-size: 7.5pt; font-weight: normal; padding-top: 1px; padding-bottom: 0; }
   /* Tiêu đề trang (data-paper-title): chừa 0.5em phía trên cho dấu chồng (Ẩ, Ấ, Ể) – sheet in không có lề trên, dấu không lấn sang trang trước */
   [data-paper-sheet] [data-paper-title] { padding-top: 0.5em; }
   [data-paper-sheet] { break-after: page; box-shadow: none; border: 0; }
   [data-paper-sheet]:last-child { break-after: auto; }
+  /* Như mẫu VNACCS: kẻ ngang giữa các khối của trang giấy (không kẻ khung từng ô) */
+  [data-paper-body] > * + * { border-top: 1px solid var(--kb-color-paper-rule); }
+  [data-paper-body] > [data-paper-item] + * { border-top: 0; }
 }

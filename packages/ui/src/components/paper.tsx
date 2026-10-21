@@ -1,6 +1,7 @@
 // Giấy tờ khai: khung trang A4 mô phỏng bản in VNACCS (PaperStack > PaperSheet > PaperField).
-// Trên màn hình giấy theo giao diện (sáng: trắng, tối: theo nền tối); khi in luôn chữ đen nền trắng và ẩn mọi dấu hiệu trạng thái
-// (phần tử có `data-paper-mark`). Quy tắc @media print nằm ở styles/index.css.
+// Trên màn hình giấy theo giao diện (sáng: trắng, tối: theo nền tối), mỗi ô có khung để bấm sửa; khi in theo đúng kiểu bản in VNACCS:
+// không khung ô, nhãn và giá trị cùng dòng (giá trị chữ đơn cách), chỉ kẻ ngang giữa các khối và kẻ dọc giữa hai cột; chữ đen nền trắng,
+// ẩn mọi dấu hiệu trạng thái (phần tử có `data-paper-mark`). Quy tắc @media print nằm ở styles/index.css.
 import { TriangleAlert } from "lucide-react";
 import { Fragment, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "../lib/cn.js";
@@ -49,7 +50,7 @@ export function PaperSheet({ page, total, header, watermark, id, children, label
       className="@container/paper relative min-h-[297mm] w-full max-w-[210mm] border border-paper-rule bg-paper p-3 text-paper-fg shadow-md sm:p-[10mm] print:min-h-0 print:max-w-none print:border-0 print:p-0 print:shadow-none"
     >
       {header && <div className="mb-3 border-b border-paper-rule pb-2 print:mb-1 print:pb-1">{header}</div>}
-      <div className="relative grid grid-cols-12 gap-px">{children}</div>
+      <div data-paper-body className="relative grid grid-cols-12 gap-px print:gap-0">{children}</div>
       {watermark && (
         <div className="pointer-events-none absolute inset-0 flex select-none items-center justify-center overflow-hidden">
           <span aria-hidden="true" className="-rotate-[30deg] whitespace-nowrap text-6xl font-bold uppercase tracking-widest text-paper-fg opacity-10">{watermark}</span>
@@ -68,7 +69,7 @@ const SPAN = {
  * không theo vùng nội dung của ứng dụng: trang hẹp (mobile) → một cột; khi in luôn hai cột.
  */
 export function PaperColumns({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("col-span-12 grid min-w-0 grid-cols-1 paper-wide:grid-cols-2 print:grid-cols-2", className)}>{children}</div>;
+  return <div className={cn("col-span-12 grid min-w-0 grid-cols-1 paper-wide:grid-cols-2 print:grid-cols-2 print:divide-x print:divide-paper-rule", className)}>{children}</div>;
 }
 
 /**
@@ -130,18 +131,19 @@ export function PaperField({ label, value, compact, keepTogether = false, state 
     SPAN[span],
     // Cụm không bẻ (giờ, mã) trong ô 1 cột của trang hẹp: lề ngang và chữ nhỏ lại để "01:" / "USD" vừa ô; trang rộng chữ như ô khác.
     keepTogether && "px-0.5 paper-wide:px-1",
-    state === "error" && "border-danger bg-danger-subtle text-danger-subtle-fg print:border-paper-rule print:bg-paper print:text-paper-fg",
-    state === "missing" && "border-dashed border-warning print:border-solid print:border-paper-rule",
+    state === "error" && "border-danger bg-danger-subtle text-danger-subtle-fg",
+    state === "missing" && "border-dashed border-warning",
     onSelect && "cursor-pointer hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
     selected && "ring-2 ring-primary",
-    "print:ring-0",
+    // In như mẫu VNACCS: không khung ô, không nền trạng thái.
+    "print:border-0 print:bg-transparent print:text-paper-fg print:ring-0",
     className,
   );
   const body = (
     <>
       <span className="sr-only">{ariaLabel}</span>
       {" "}
-      <span aria-hidden="true" className="block text-[10px] leading-tight opacity-80 print:text-[7pt] print:opacity-100">{label}</span>
+      <span aria-hidden="true" className={cn("block text-[10px] leading-tight opacity-80 print:shrink-0 print:text-[7pt] print:opacity-100", span >= 6 && "print:min-w-[13em]")}>{label}</span>
       {" "}
       <span className={cn("flex min-w-0 flex-wrap items-baseline gap-x-2 font-mono text-xs print:flex-auto print:text-[7.5pt] print:leading-tight", keepTogether && "text-[10px] tracking-tight paper-wide:text-xs paper-wide:tracking-normal print:text-[7.5pt]! print:tracking-normal!", align === "end" && "justify-end text-right")}>
         <span className={cn("min-w-0", keepTogether ? "break-normal" : "break-words", state === "estimate" && "italic print:not-italic")}>

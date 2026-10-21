@@ -103,7 +103,7 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect }: 
   const header = (page: number) => (
     <div className="flex flex-col gap-1" aria-hidden={page > 1 ? true : undefined}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p data-paper-title className="text-sm font-bold uppercase">{title.title}</p>
+        <p data-paper-title className="text-sm font-bold uppercase print:flex-1 print:text-center print:text-base print:normal-case">{title.title}</p>
         <p className="font-mono text-xs">{page} / {total}</p>
       </div>
       <Grid cols={12} gap="none">{rows(layout.header, undefined, page === 1)}</Grid>
@@ -127,7 +127,7 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect }: 
           <PaperSheet key={page} id={pageDomId(page)} page={page} total={total} header={header(page)} watermark={title.watermark}>
             {block.map((line) => (
               <Fragment key={line}>
-                <p className="col-span-12 pt-2 font-mono text-sm font-semibold">{`< ${pad2(lineNos[line] ?? line + 1)} >`}</p>
+                <p data-paper-item className="col-span-12 pt-2 font-mono text-sm font-semibold">{`< ${pad2(lineNos[line] ?? line + 1)} >`}</p>
                 {regions(layout.item, line)}
               </Fragment>
             ))}

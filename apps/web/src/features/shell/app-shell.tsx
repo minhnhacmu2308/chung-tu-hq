@@ -15,6 +15,7 @@ import { dossierKeys, listDossiers } from "@/api/dossiers";
 import { getSession, listNotifications, logout, resetMockData, sessionKeys } from "@/api/session";
 import { APP_TITLES } from "@/app/app-titles.messages";
 import { LanguageMenuSub } from "@/features/appearance/language-switcher";
+import { InstallAppMenuItem } from "@/features/pwa/install-app";
 import { useAppearance } from "@/features/appearance/use-appearance";
 import { useAssistantChat } from "@/features/assistant/use-assistant-chat";
 import { NotificationsPanel } from "./notifications-panel";
@@ -180,6 +181,7 @@ function ShellInner({ children }: { children: ReactNode }) {
                   {t.appearanceTitle}
                 </DropdownMenuItem>
                 <LanguageMenuSub />
+                <InstallAppMenuItem />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem icon={<RotateCcw className="h-4 w-4" />} onSelect={reset}>
                   {t.resetData}

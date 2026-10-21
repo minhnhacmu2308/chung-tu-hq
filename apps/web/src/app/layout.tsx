@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Be_Vietnam_Pro, Geist, Inter, JetBrains_Mono, Roboto } from "next/font/google";
 import type { ReactNode } from "react";
 import { VI_TITLES } from "./app-titles.messages";
@@ -8,6 +8,14 @@ import { Providers } from "./providers";
 export const metadata: Metadata = {
   title: { default: VI_TITLES.brand, template: VI_TITLES.template },
   description: VI_TITLES.description,
+  applicationName: VI_TITLES.brand,
+  // Safari (macOS "Thêm vào Dock", iOS "Thêm vào MH chính") – manifest đã khai cho Chrome/Edge.
+  appleWebApp: { capable: true, title: VI_TITLES.brand, statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  // kb-allow-raw: màu thanh tiêu đề cửa sổ ứng dụng phải là mã màu cố định – đúng màu primary của token
+  themeColor: "#0F6B55",
 };
 
 // next/font bắt buộc tham số là hằng viết trực tiếp (không dùng biến chung).

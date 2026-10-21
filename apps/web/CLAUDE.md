@@ -30,6 +30,7 @@ src/components/common/  thành phần riêng của app, chỉ ghép từ @kb/ui
 - Truyền Hải quan qua HTTP thật (dev): `pnpm fpt-mock` + web/worker với `CUSTOMS_GATEWAY=fpt` (xem `apps/fpt-mock/README.md`); e2e `E2E_CUSTOMS_GATEWAY=fpt pnpm test:e2e vnaccs-fpt`.
 - Chạy: `pnpm dev` ở gốc (compose + migrate + web + worker) hoặc `pnpm dev:web` (cổng 3100, chỉ web). Dùng webpack (`--webpack`) vì `@kb/ui` import kiểu `./x.js` mà Turbopack chưa hỗ trợ.
 - `/api/health` kiểm tra Postgres + Redis.
+- PWA (cài thành ứng dụng máy tính): `src/app/manifest.ts` + `public/icons/` (icon 192/512/maskable dựng từ `app/icon.svg`); `src/features/pwa/` bắt `beforeinstallprompt` ở cấp module (`useInstallApp`). Thêm file tĩnh mới ở gốc → thêm vào `matcher` của `src/proxy.ts` để không bị chặn khi chưa đăng nhập.
 - Đăng nhập thật (chế độ http): tài khoản seed `chau.le@anphat-demo.vn / demo1234`. Email dev in ra log (`MAIL=console`) hoặc Mailpit `localhost:8025` (`MAIL=smtp`).
 
 ## Khu Quản trị hệ thống (`/admin`)

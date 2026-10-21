@@ -7,6 +7,7 @@ import { useAppearance } from "@/features/appearance/use-appearance";
 import type { FieldStatus, Organization } from "@/mocks/types";
 import { toastMutationError } from "@/lib/mutation-error";
 import { LoadError } from "@/components/common/load-error";
+import { InstallAppCard } from "@/features/pwa/install-app";
 import { PREFERENCES_TAB_MESSAGES } from "./preferences-tab.messages";
 
 type Threshold = Organization["suspectThreshold"];
@@ -96,6 +97,7 @@ export function PreferencesTab() {
             )}
           </CardContent>
         </Card>
+        <InstallAppCard />
       </Stack>
       <Card>
         <CardHeader>

@@ -9,7 +9,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { DOC_KIND_LABELS } from "@/mocks/types";
 import { pendingAttachments } from "./add-to-dossier";
-import { openAttachment, STATUS, type InboxActions } from "./inbox-message-detail";
+import { STATUS, type InboxActions } from "./inbox-message-detail";
 import { INBOX_MESSAGES } from "./inbox.messages";
 
 type Messages = Record<keyof (typeof INBOX_MESSAGES)["vi"], string>;
@@ -136,7 +136,7 @@ export function InboxTable({
       ...(canFile ? [{ id: "create", label: t.createDossier, icon: <FilePlus2 />, onSelect: () => actions.onCreateDossier(m), quick: false }] : []),
       ...(actions.canUse && m.status === "NEW" ? [{ id: "ignore", label: t.ignore, icon: <EyeOff />, onSelect: () => actions.onSetStatus(m, "IGNORED"), quick: false }] : []),
       ...(actions.canUse && m.status === "IGNORED" ? [{ id: "restore", label: t.restore, icon: <RotateCcw />, onSelect: () => actions.onSetStatus(m, "NEW") }] : []),
-      ...m.attachments.map((a) => ({ id: `view-${a.id}`, label: fill(t.viewFile, { name: a.fileName }), icon: <Eye />, onSelect: () => openAttachment(a.id), quick: false })),
+      ...m.attachments.map((a) => ({ id: `view-${a.id}`, label: fill(t.viewFile, { name: a.fileName }), icon: <Eye />, onSelect: () => actions.onPreview(a), quick: false })),
     ];
     return <RowActions rowLabel={m.subject} actions={list} />;
   };

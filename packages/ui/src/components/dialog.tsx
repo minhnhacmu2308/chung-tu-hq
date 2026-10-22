@@ -103,6 +103,7 @@ let overflowBeforeLock = "";
  * Lớp phủ + khóa cuộn trang của dạng cửa sổ. Phải nằm TRONG Portal: Portal chỉ dựng con khi dialog đang mở,
  * còn DialogContent thì luôn được render – đặt khóa cuộn ở đó sẽ khóa cả trang ngay khi dialog còn đóng.
  */
+// z-50 như nội dung: cửa sổ mở chồng lên drawer (vd xem file từ chi tiết email) thì lớp phủ che cả drawer (đứng trước trong DOM).
 function ModalOverlay() {
   useEffect(() => {
     if (scrollLocks++ === 0) {
@@ -113,7 +114,7 @@ function ModalOverlay() {
       if (--scrollLocks === 0) document.body.style.overflow = overflowBeforeLock;
     };
   }, []);
-  return <div aria-hidden="true" data-slot="dialog-overlay" className="fixed inset-0 z-40 bg-overlay backdrop-blur-xs motion-safe:animate-fade-in" />;
+  return <div aria-hidden="true" data-slot="dialog-overlay" className="fixed inset-0 z-50 bg-overlay backdrop-blur-xs motion-safe:animate-fade-in" />;
 }
 
 /** Drawer hẹp nhất / phần trang chừa lại bên trái tối thiểu khi kéo rộng. */

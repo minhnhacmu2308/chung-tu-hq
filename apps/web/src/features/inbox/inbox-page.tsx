@@ -1,6 +1,6 @@
 "use client";
 // Hộp thư chứng từ: email có file đính kèm lấy từ Gmail / Outlook đã kết nối; xếp file vào hồ sơ (có gợi ý hồ sơ khớp) hoặc bỏ qua.
-import type { InboxMessage, InboxMessageStatus } from "@kb/contracts";
+import type { InboxAttachment, InboxMessage, InboxMessageStatus } from "@kb/contracts";
 import { Alert, Button, EmptyState, fill, PageHeader, SkeletonTable, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, useMessages } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MailPlus, RefreshCw, Settings2 } from "lucide-react";
@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { inboxKeys, listInbox, mailboxKeys, requestMailSync, setInboxMessageStatus } from "@/api/mailbox";
 import { LoadError } from "@/components/common/load-error";
 import { toastMutationError } from "@/lib/mutation-error";
+import { AttachmentPreviewDialog } from "./attachment-preview";
 import { AddToDossierDialog, pendingAttachments, useAddToDossier } from "./add-to-dossier";
 import { InboxMessageDetail, type InboxActions } from "./inbox-message-detail";
 import { InboxTable } from "./inbox-table";
@@ -30,6 +31,7 @@ export function InboxPage() {
   const [dialogFor, setDialogFor] = useState<InboxMessage | null>(null);
   // Giữ id (không giữ bản sao) để chi tiết cập nhật theo danh sách sau khi xếp file / bỏ qua.
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<InboxAttachment | null>(null);
 
   const { canUse, session } = useMailboxSession();
   const overview = useMailboxOverview();
@@ -72,6 +74,7 @@ export function InboxPage() {
     onAddTo: setDialogFor,
     onCreateDossier: (m) => router.push(`/dossiers/new?inbox=${encodeURIComponent(m.id)}`),
     onSetStatus: (m, s) => setStatus.mutate({ id: m.id, status: s }),
+    onPreview: setPreview,
   };
 
   const setFilter = (v: string) => {
@@ -160,6 +163,7 @@ export function InboxPage() {
 
       <InboxMessageDetail m={detail} actions={actions} onOpenChange={(o) => !o && setDetailId(null)} />
       <AddToDossierDialog message={dialogFor} onOpenChange={(o) => !o && setDialogFor(null)} />
+      <AttachmentPreviewDialog attachment={preview} onOpenChange={(o) => !o && setPreview(null)} />
     </Stack>
   );
 }

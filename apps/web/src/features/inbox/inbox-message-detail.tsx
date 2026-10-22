@@ -8,7 +8,6 @@ import {
 import { Eye, EyeOff, FilePlus2, FileText, FolderInput, Lightbulb, Mail, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { inboxAttachmentUrl } from "@/api/mailbox";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { DOC_KIND_LABELS } from "@/mocks/types";
 import { pendingAttachments } from "./add-to-dossier";
@@ -16,9 +15,7 @@ import { INBOX_MESSAGES } from "./inbox.messages";
 
 export const STATUS = { NEW: "INBOX_NEW", DONE: "INBOX_DONE", IGNORED: "INBOX_IGNORED" } as const;
 
-export const openAttachment = (id: string) => window.open(inboxAttachmentUrl(id), "_blank", "noopener");
-
-function AttachmentRow({ a }: { a: InboxAttachment }) {
+function AttachmentRow({ a, onPreview }: { a: InboxAttachment; onPreview: (a: InboxAttachment) => void }) {
   const t = useMessages(INBOX_MESSAGES);
   const kinds = useMessages(DOC_KIND_LABELS);
   const locale = useUiLocale();
@@ -39,7 +36,7 @@ function AttachmentRow({ a }: { a: InboxAttachment }) {
         </span>
       </div>
       <Tooltip content={fill(t.viewFile, { name: a.fileName })}>
-        <Button size="icon-sm" variant="ghost" aria-label={fill(t.viewFile, { name: a.fileName })} onClick={() => openAttachment(a.id)}>
+        <Button size="icon-sm" variant="ghost" aria-label={fill(t.viewFile, { name: a.fileName })} onClick={() => onPreview(a)}>
           <Eye className="h-4 w-4" aria-hidden="true" />
         </Button>
       </Tooltip>
@@ -53,6 +50,8 @@ export type InboxActions = {
   onAddTo: (m: InboxMessage) => void;
   onCreateDossier: (m: InboxMessage) => void;
   onSetStatus: (m: InboxMessage, status: "NEW" | "IGNORED") => void;
+  /** Xem trước file đính kèm trong popup (không chuyển trang). */
+  onPreview: (a: InboxAttachment) => void;
   /** Email đang được thêm vào hồ sơ gợi ý (khóa nút). */
   addingId: string | null;
 };
@@ -124,7 +123,7 @@ function DetailBody({ m, actions }: { m: InboxMessage; actions: InboxActions }) 
       <section className="flex flex-col gap-1.5" aria-labelledby={`${m.id}-files`}>
         <h3 id={`${m.id}-files`} className="text-xs font-medium text-fg-muted">{fill(t.attachments, { n: m.attachments.length })}</h3>
         <ul aria-labelledby={`${m.id}-files`} className="flex flex-col gap-1.5">
-          {m.attachments.map((a) => <AttachmentRow key={a.id} a={a} />)}
+          {m.attachments.map((a) => <AttachmentRow key={a.id} a={a} onPreview={actions.onPreview} />)}
         </ul>
       </section>
 

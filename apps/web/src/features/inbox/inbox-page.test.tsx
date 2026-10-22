@@ -76,6 +76,28 @@ describe("Hộp thư chứng từ", () => {
     expect(getDb().inboxMessages.find((m) => m.id === "imsg_seed_1")?.status).toBe("DONE");
   }, 20_000);
 
+  it("xem file đính kèm: mở popup xem trước ngay trên trang (không mở tab mới); không vi phạm a11y", async () => {
+    const createObjectURL = vi.fn(() => "blob:preview");
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    renderWithProviders(<InboxPage />);
+    const table = await screen.findByRole("table", { name: "Danh sách email chứng từ" }, T);
+    await userEvent.click(rowOf(table, /Dongguan Changli/));
+    const detail = await screen.findByRole("dialog", { name: /Dongguan Changli/ }, T);
+    await userEvent.click(within(detail).getByRole("button", { name: "Xem file HBL_OOLU2741199012.pdf" }));
+    const preview = await screen.findByRole("dialog", { name: "HBL_OOLU2741199012.pdf" }, T);
+    const frame = await within(preview).findByTitle("HBL_OOLU2741199012.pdf", undefined, T);
+    expect(frame.tagName).toBe("IFRAME");
+    expect(frame.getAttribute("src")).toMatch(/^blob:preview/);
+    expect(within(preview).getByRole("link", { name: "Mở ở tab mới" })).toBeTruthy();
+    expect(open).not.toHaveBeenCalled();
+    await expectNoA11yViolations(preview);
+    await userEvent.click(within(preview).getAllByRole("button", { name: "Đóng" }).at(-1)!);
+    expect(screen.queryByRole("dialog", { name: "HBL_OOLU2741199012.pdf" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: /Dongguan Changli/ })).toBeTruthy();
+    open.mockRestore();
+  }, 20_000);
+
   it("Thêm vào hồ sơ… (từ chi tiết): popup chọn sẵn mọi file chờ, chọn hồ sơ rồi thêm; không vi phạm a11y", async () => {
     renderWithProviders(<InboxPage />);
     const table = await screen.findByRole("table", { name: "Danh sách email chứng từ" }, T);

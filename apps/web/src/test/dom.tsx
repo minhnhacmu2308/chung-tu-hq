@@ -42,6 +42,7 @@ export function renderWithProviders(ui: ReactElement, locale: UiLocale = "vi") {
 
 /** 0 vi phạm axe. Tắt "color-contrast" (jsdom không tính màu thật) và "region" (khối đứng riêng, không có landmark). */
 export async function expectNoA11yViolations(container: Element): Promise<void> {
-  const results = await axe.run(container, { rules: { "color-contrast": { enabled: false }, region: { enabled: false } } });
+  // iframes: false – jsdom không chạy được axe trong khung con (vd khung xem PDF); nội dung khung là file, không phải giao diện.
+  const results = await axe.run(container, { iframes: false, rules: { "color-contrast": { enabled: false }, region: { enabled: false } } });
   expect(results.violations.map((v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(" ")).join(", ")})`)).toEqual([]);
 }

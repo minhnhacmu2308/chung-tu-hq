@@ -1,6 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, IconTile, PageHeader, RecordCard, SegmentedControl, Stack, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
+  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, fill, IconTile, PageHeader, RecordCard, SegmentedControl, Stack, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Container, Download, FolderOpen, Package, Plane, Plus, Ship, TrainFront, Truck, XCircle, type LucideIcon } from "lucide-react";
@@ -187,6 +187,11 @@ function ListInner() {
               onClearFilters={() => setScope("ALL")}
               emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">{t.create}</Link></Button>}
               viewStorageKey="dossiers"
+              selectionActions={(picked) => (
+                <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: t.exporting, description: t.exportMock })}>
+                  {fill(t.exportSelected, { n: picked.length })}
+                </Button>
+              )}
               renderCard={(r, parts) => {
                 const Transport = TRANSPORT_ICON[r.transportMode];
                 return (

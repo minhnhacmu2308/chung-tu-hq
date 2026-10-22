@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
+import { Button } from "./button.js";
 import { UiLocaleProvider } from "../lib/i18n.js";
 import { createDataTableColumnHelper, DataTable, type DataTableProps } from "./data-table.js";
 import { RecordCard } from "./record-card.js";
@@ -261,6 +262,34 @@ describe("DataTable – tìm kiếm toàn bảng", () => {
 
 /** Ô lọc theo cột nằm trong hộp lọc mở từ nút phễu cạnh ô tìm kiếm. */
 const openFilters = (name: RegExp = /^Bộ lọc/) => userEvent.click(screen.getByRole("button", { name }));
+
+describe("DataTable – thao tác hàng loạt", () => {
+  it("chọn dòng → thanh nổi giữa đáy màn hình: đếm số dòng, nút thao tác nhận các dòng đã chọn, Bỏ chọn ẩn thanh; không vi phạm a11y", async () => {
+    const onBulk = vi.fn();
+    setupVn({ selectable: true, rowLabel: (r) => r.code, selectionActions: (rows) => <Button onClick={() => onBulk(rows.map((r) => r.code))}>Xuất</Button> });
+    expect(screen.queryByRole("toolbar", { name: "Thao tác với các dòng đã chọn" })).toBeNull();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng HS-001" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng HS-003" }));
+    const bar = screen.getByRole("toolbar", { name: "Thao tác với các dòng đã chọn" });
+    expect(bar.parentElement).toBe(document.body);
+    expect(bar).toHaveTextContent("Đã chọn 2");
+    await userEvent.click(within(bar).getByRole("button", { name: "Xuất" }));
+    expect(onBulk).toHaveBeenCalledWith(["HS-001", "HS-003"]);
+    await expectNoA11yViolations(document.body);
+    await userEvent.click(within(bar).getByRole("button", { name: "Bỏ chọn" }));
+    expect(screen.queryByRole("toolbar", { name: "Thao tác với các dòng đã chọn" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Chọn dòng HS-001" })).not.toBeChecked();
+  });
+
+  it("dòng đã chọn bị xóa khỏi dữ liệu → không còn tính, hết dòng thì thanh ẩn", async () => {
+    const actions = () => <Button>Xóa</Button>;
+    const { rerender } = setupVn({ selectable: true, rowLabel: (r) => r.code, selectionActions: actions });
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng HS-002" }));
+    expect(screen.getByRole("toolbar")).toHaveTextContent("Đã chọn 1");
+    rerender(<DataTable aria-label="Danh sách hồ sơ" columns={VN_COLUMNS} data={VN_DATA.filter((r) => r.id !== "b")} getRowId={(r) => r.id} pagination={false} selectable rowLabel={(r) => r.code} selectionActions={actions} />);
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+});
 
 describe("DataTable – lọc theo cột", () => {
   it("không có hàng ô lọc dưới tiêu đề; nút phễu mở hộp lọc, đếm số bộ lọc đang bật; không vi phạm a11y", async () => {

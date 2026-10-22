@@ -174,7 +174,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     if (framed && !radio) {
       return (
         <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", sizeClass)}>
-          <FieldFrame legend={label} legendAction={guide} className="flex-1">
+          <FieldFrame variant="panel" legend={label} legendAction={guide} className="flex-1">
             {shownReason && <p className="text-xs text-fg-subtle">{shownReason}</p>}
             {checkboxes}
           </FieldFrame>

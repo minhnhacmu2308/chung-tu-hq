@@ -93,7 +93,6 @@ export function ProductCatalogPage() {
   const canEdit = !!session && EDITORS.has(session.user.role);
   const [editing, setEditing] = useState<{ product: ProductCatalogItem | null } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
   const [toDelete, setToDelete] = useState<ProductCatalogItem[] | null>(null);
 
   const columns = useMemo(() => buildColumns(t), [t]);
@@ -117,7 +116,6 @@ export function ProductCatalogPage() {
       void qc.invalidateQueries({ queryKey: productKeys.all });
       toast({ tone: "success", title: fill(t.deleted, { n: r.deleted }) });
       setToDelete(null);
-      setSelected([]);
     },
     onError: toastMutationError(t.failed),
   });
@@ -161,19 +159,16 @@ export function ProductCatalogPage() {
         columnToggle
         resizable
         selectable={canEdit}
-        onSelectionChange={setSelected}
         initialSorting={[{ id: "lastSort", desc: true }]}
         columnVisibility={visibility ?? autoVisibility}
         onColumnVisibilityChange={setVisibility}
         pagination={{ initialPageSize: 20, pageSizeOptions: [20, 50, 100] }}
         {...(canEdit ? { onRowClick: (r: Row) => setEditing({ product: byId.get(r.id) ?? r }) } : {})}
-        toolbarActions={
-          canEdit && selected.length > 0 && (
-            <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => setToDelete(selected.map((id) => byId.get(id)).filter((p): p is ProductCatalogItem => !!p))}>
-              {fill(t.deleteSelected, { n: selected.length })}
-            </Button>
-          )
-        }
+        selectionActions={(picked) => (
+          <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => setToDelete(picked.map((r) => byId.get(r.id)).filter((p): p is ProductCatalogItem => !!p))}>
+            {fill(t.deleteSelected, { n: picked.length })}
+          </Button>
+        )}
         emptyTitle={t.emptyTitle}
         emptyDescription={t.emptyDescription}
         {...(canEdit ? { emptyAction: <Button size="sm" leftIcon={<FileSpreadsheet className="h-4 w-4" />} onClick={() => setImportOpen(true)}>{t.importButton}</Button> } : {})}

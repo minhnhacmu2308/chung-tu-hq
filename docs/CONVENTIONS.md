@@ -46,6 +46,7 @@ Quy tắc nào máy kiểm tra được thì đã cấu hình trong lint/depcrui
 - Số, tiền, ngày chỉ format qua `lib/format`. Không tự `toLocaleString` rải rác.
 - Không nhân bản schema: form dùng schema Zod từ `@kb/contracts`.
 - Chỉ dùng component `@kb/ui` + utility token (docs/DESIGN-SYSTEM.md). Thiếu thì thêm vào `@kb/ui`. Máy chặn bằng `pnpm lint` (`scripts/check-design-tokens.mjs` + depcruise).
+- **3 ngôn ngữ (vi / en / zh) là bắt buộc** cho mọi chữ hiển thị mới – thiếu bản dịch là chưa xong. Nhãn trong `*.messages.ts` (`defineMessages` + `useMessages`). Xem `.claude/rules/ho-tro-3-ngon-ngu.md`.
 - Test theo `docs/TESTING.md`.
 - Truy cập bằng bàn phím được trên màn ocr-review và declaration-review.
 

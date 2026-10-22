@@ -3,6 +3,7 @@ import { defineMessages } from "@kb/ui";
 
 export const FORM_MESSAGES = defineMessages({
   vi: {
+    openEdi: "Mở EDI",
     // dùng chung
     presentBecause: "Có vì: {c}",
     notApplicableBecause: "Không áp dụng vì: {c}",
@@ -196,6 +197,7 @@ export const FORM_MESSAGES = defineMessages({
     saveFailed: "Không lưu được tờ khai",
   },
   en: {
+    openEdi: "Open EDI",
     presentBecause: "Shown because: {c}",
     notApplicableBecause: "Not applicable because: {c}",
     prototypeNotConnected: "Prototype – not connected",
@@ -371,6 +373,7 @@ export const FORM_MESSAGES = defineMessages({
     saveFailed: "Could not save the declaration",
   },
   zh: {
+    openEdi: "打开 EDI",
     presentBecause: "显示原因：{c}",
     notApplicableBecause: "不适用原因：{c}",
     prototypeNotConnected: "样板 – 未连接",

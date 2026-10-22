@@ -215,6 +215,7 @@ export const ORG_LIST_MESSAGES = defineMessages({
 
 export const ORG_DETAIL_MESSAGES = defineMessages({
   vi: {
+    taxCodeShort: "MST",
     tabOverview: "Tổng quan",
     tabMembers: "Thành viên",
     tabPlan: "Gói & sử dụng",
@@ -280,6 +281,7 @@ export const ORG_DETAIL_MESSAGES = defineMessages({
     noMembers: "Doanh nghiệp chưa có thành viên",
   },
   en: {
+    taxCodeShort: "Tax code",
     tabOverview: "Overview",
     tabMembers: "Members",
     tabPlan: "Plan & usage",
@@ -345,6 +347,7 @@ export const ORG_DETAIL_MESSAGES = defineMessages({
     noMembers: "The organization has no members yet",
   },
   zh: {
+    taxCodeShort: "税号",
     tabOverview: "概览",
     tabMembers: "成员",
     tabPlan: "套餐与用量",

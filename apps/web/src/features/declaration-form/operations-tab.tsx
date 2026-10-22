@@ -41,7 +41,7 @@ export function TaxCard({ kind, values, edi = true }: { kind: "IDA" | "EDA"; val
           )}
           {edi && <div className="flex flex-wrap gap-2">
             <Button variant="secondary" leftIcon={<Save className="h-4 w-4" />} onClick={notConnected(t.prototypeNotConnected, t.saveEdi)}>{t.saveEdi}</Button>
-            <Button variant="secondary" leftIcon={<FileDown className="h-4 w-4" />} onClick={notConnected(t.prototypeNotConnected, "Open EDI")}>Open EDI</Button>
+            <Button variant="secondary" leftIcon={<FileDown className="h-4 w-4" />} onClick={notConnected(t.prototypeNotConnected, t.openEdi)}>{t.openEdi}</Button>
           </div>}
         </Stack>
       </CardContent>

@@ -73,7 +73,7 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
               <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus />
             </Field>
             <Field label={t.workEmail} required {...(errors.email ? { error: errors.email } : {})}>
-              <Input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="ten@khaibao.vn" />
+              <Input type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder={t.emailExample} />
             </Field>
             <Field label={t.role} hint={t.roleHint}>
               <Select options={roleOptions} value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as StaffRole })} />

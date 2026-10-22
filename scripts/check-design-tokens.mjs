@@ -40,6 +40,14 @@ export const RULES = [
     test: new RegExp(`[${VI_CHARS}${VI_CHARS.toUpperCase()}]`),
     msg: "Chữ hiển thị viết cứng. Giao diện có 3 ngôn ngữ (vi/en/zh): đưa nhãn vào bộ nhãn defineMessages trong file *.messages.ts rồi dùng useMessages(...). Nội dung pháp lý chỉ có tiếng Việt (bản in tờ khai) để trong file *.vi.ts.",
   },
+  {
+    // Chữ không dấu (tiếng Anh, viết tắt…) viết cứng trong JSX hoặc prop hiển thị – rule trên chỉ bắt được chữ có dấu.
+    id: "apps-hardcoded-latin-text", scope: "apps", codeOnly: true,
+    onlyPath: /^apps\/web\/src\/(features|components|app)\/.*\.tsx$/,
+    skipPath: /^apps\/web\/src\/app\/api\/|(^|[\/.])(messages|vi)\.tsx?$|\.test\.tsx?$/,
+    test: /(?<![=-])>[^<>{}"'`=&|?():;]*[A-Za-z]{2}[^<>{}"'`=&|?():;]*<|\b(?:label|title|placeholder|description|aria-label|alt|emptyTitle|emptyDescription|hint|tooltip)="[^"]*[A-Za-z]{2}[^"]*"/,
+    msg: "Chữ hiển thị viết cứng (kể cả tiếng Anh/viết tắt). Giao diện có 3 ngôn ngữ (vi/en/zh): đưa vào bộ nhãn *.messages.ts. Mã/ví dụ định dạng không cần dịch → comment `kb-allow-raw: <lý do>`. Xem .claude/rules/ho-tro-3-ngon-ngu.md",
+  },
   { id: "apps-viewport-layout", scope: "apps", skipPath: /\/shell\//, test: /(?<![\w:-])(?:max-)?(?:sm|md|lg|xl|2xl):(?=[a-z-])/, msg: "Bố cục theo bề rộng MÀN HÌNH – panel neo bên phải/popup hẹp sẽ làm thẻ, form chật. Dùng Grid cols={{ base, md, xl }} hoặc mốc theo vùng nội dung cq-sm/cq-md/cq-lg/cq-xl/cq-max-sm. Chỉ khung ứng dụng (features/**/shell) được dùng sm:/md:/lg:." },
   { id: "apps-svg-selector", scope: "apps", test: /\[&>svg\]/, msg: "Tự chỉnh cỡ icon bằng [&>svg]. Icon trong nút dùng leftIcon/rightIcon của Button; ô icon dùng IconTile; nhãn có icon dùng Badge icon." },
   { id: "apps-icon-tile", scope: "apps", test: /className="[^"]*(?:justify-center[^"]*bg-(?:primary|success|warning|danger|info|neutral)-subtle|bg-(?:primary|success|warning|danger|info|neutral)-subtle[^"]*justify-center)/, msg: "Tự dựng ô icon nền dịu. Dùng IconTile của @kb/ui." },

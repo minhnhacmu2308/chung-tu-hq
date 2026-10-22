@@ -38,6 +38,8 @@ export const AUTH_FRAME_MESSAGES = defineMessages({
 
 export const LOGIN_MESSAGES = defineMessages({
   vi: {
+    emailExample: "ten@congty.vn",
+    email: "Email",
     title: "Đăng nhập",
     subtitle: "Dùng email công việc mà doanh nghiệp đã mời bạn.",
     invalidEmail: "Email không hợp lệ",
@@ -60,6 +62,8 @@ export const LOGIN_MESSAGES = defineMessages({
     wrongCredentials: "Sai email hoặc mật khẩu.",
   },
   en: {
+    emailExample: "name@company.com",
+    email: "Email",
     title: "Sign in",
     subtitle: "Use the work email your organization invited.",
     invalidEmail: "Invalid email",
@@ -82,6 +86,8 @@ export const LOGIN_MESSAGES = defineMessages({
     wrongCredentials: "Incorrect email or password.",
   },
   zh: {
+    emailExample: "name@company.com",
+    email: "邮箱",
     title: "登录",
     subtitle: "请使用企业邀请您的工作邮箱。",
     invalidEmail: "邮箱无效",
@@ -107,6 +113,7 @@ export const LOGIN_MESSAGES = defineMessages({
 
 export const REGISTER_MESSAGES = defineMessages({
   vi: {
+    emailExample: "ten@congty.vn",
     stepAccount: "Tài khoản",
     stepCompany: "Doanh nghiệp",
     stepDone: "Hoàn tất",
@@ -151,6 +158,7 @@ export const REGISTER_MESSAGES = defineMessages({
     signIn: "Đăng nhập",
   },
   en: {
+    emailExample: "name@company.com",
     stepAccount: "Account",
     stepCompany: "Organization",
     stepDone: "Done",
@@ -195,6 +203,7 @@ export const REGISTER_MESSAGES = defineMessages({
     signIn: "Sign in",
   },
   zh: {
+    emailExample: "name@company.com",
     stepAccount: "账户",
     stepCompany: "企业",
     stepDone: "完成",

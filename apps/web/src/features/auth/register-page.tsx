@@ -86,7 +86,7 @@ export function RegisterPage() {
               <Input autoComplete="name" value={account.name} onChange={(e) => setField("name", e.target.value)} placeholder={t.fullNamePlaceholder} />
             </Field>
             <Field label={t.workEmail} required hint={t.workEmailHint} {...err(accountErrors.email)}>
-              <Input type="email" autoComplete="email" value={account.email} onChange={(e) => setField("email", e.target.value)} placeholder="ten@congty.vn" />
+              <Input type="email" autoComplete="email" value={account.email} onChange={(e) => setField("email", e.target.value)} placeholder={t.emailExample} />
             </Field>
             <div className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2">
               <Field label={t.password} required {...err(accountErrors.password)}>

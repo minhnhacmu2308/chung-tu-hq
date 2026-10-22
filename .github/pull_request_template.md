@@ -10,6 +10,7 @@
 - [ ] Dữ liệu từ ngoài được parse bằng Zod ở biên
 - [ ] Không có nghiệp vụ trong `apps/*` (chỉ gọi use case)
 - [ ] Màn hình mới có loading / empty / error; chỉ dùng `@kb/ui` + token (`pnpm lint` xanh); đã xem ở sáng + tối
+- [ ] Chữ hiển thị mới có đủ 3 ngôn ngữ vi / en / zh (đã dịch thật, đã xem màn ở English và 中文) – `.claude/rules/ho-tro-3-ngon-ngu.md`
 - [ ] Test theo `docs/TESTING.md` (component có test a11y)
 - [ ] Bảng DB mới: `org_id`, index, RLS, migration
 

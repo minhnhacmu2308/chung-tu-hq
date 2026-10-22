@@ -39,6 +39,7 @@ export function AuthFrame({ children, robot = "idle" }: { children: ReactNode; r
             </span>
             {BRAND}
           </div>
+          {/* kb-allow-raw: tên chứng từ in trên bản gốc (tiếng Anh) – hình trang trí, không phải nhãn giao diện */}
           <AiScanCard title="COMMERCIAL INVOICE" fields={scanFields} className="origin-left cq-lg:scale-125 cq-xl:scale-150" />
           <div className="flex flex-col gap-5">
             <p className="text-2xl font-semibold leading-snug cq-lg:text-3xl">{t.headline}</p>

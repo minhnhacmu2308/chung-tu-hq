@@ -2,6 +2,7 @@ import { defineMessages } from "@kb/ui";
 
 export const STAFF_PAGE_MESSAGES = defineMessages({
   vi: {
+    emailExample: "ten@khaibao.vn",
     inviteSent: "Đã gửi lời mời tới {email}",
     inviteError: "Không mời được quản trị viên",
     inviteTitle: "Mời quản trị viên",
@@ -50,6 +51,7 @@ export const STAFF_PAGE_MESSAGES = defineMessages({
     lockTitle: "Khóa quản trị viên?",
   },
   en: {
+    emailExample: "name@khaibao.vn",
     inviteSent: "Invitation sent to {email}",
     inviteError: "Couldn't invite admin",
     inviteTitle: "Invite admin",
@@ -98,6 +100,7 @@ export const STAFF_PAGE_MESSAGES = defineMessages({
     lockTitle: "Disable admin?",
   },
   zh: {
+    emailExample: "name@khaibao.vn",
     inviteSent: "已向 {email} 发送邀请",
     inviteError: "无法邀请管理员",
     inviteTitle: "邀请管理员",

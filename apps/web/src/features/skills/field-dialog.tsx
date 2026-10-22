@@ -79,6 +79,7 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
                   disabled={!!field}
                   className="font-mono"
                   onChange={(e) => setDraft({ ...draft, key: e.target.value })}
+                  // kb-allow-raw: ví dụ mã trường (snake_case), không dịch
                   placeholder="lc_no"
                 />
               </Field>
@@ -94,6 +95,7 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
                 />
               </Field>
               <Field label={t.aliases} hint={t.aliasesHint} className="cq-md:col-span-2">
+                {/* kb-allow-raw: ví dụ nhãn in trên chứng từ gốc (tiếng Anh), không dịch */}
                 <Input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="L/C No., Letter of Credit No." />
               </Field>
               <Field

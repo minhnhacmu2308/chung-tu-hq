@@ -88,6 +88,22 @@ describe("check-design-tokens", () => {
     assert.deepEqual(rules("apps/web/src/mocks/seed/a.ts", `name: "Công ty An Phát"`), [], "dữ liệu mẫu không phải nhãn giao diện");
   });
 
+  it("apps/web: chặn chữ không dấu viết cứng trong JSX và prop hiển thị; cho qua biểu thức, kiểu generic, bộ nhãn, test", () => {
+    const f = "apps/web/src/features/x/a.tsx";
+    assert.deepEqual(rules(f, `<Button>Open EDI</Button>`), ["apps-hardcoded-latin-text"]);
+    assert.deepEqual(rules(f, `<span>MST <span className="font-mono">{x}</span></span>`), ["apps-hardcoded-latin-text"]);
+    assert.deepEqual(rules(f, `<Field label="Email" required>`), ["apps-hardcoded-latin-text"]);
+    assert.deepEqual(rules(f, `<Input placeholder="name@company.com" />`), ["apps-hardcoded-latin-text"]);
+    assert.deepEqual(rules(f, `<Field label={t.email}><Input placeholder={t.emailExample} /></Field>`), []);
+    assert.deepEqual(rules(f, `{a ? <Spinner /> : b.isError ? <LoadError /> : null}`), []);
+    assert.deepEqual(rules(f, `const rows = items.filter((a) => at >= start && at <= end);`), []);
+    assert.deepEqual(rules(f, `function f(t: Record<K, string>, labels: Record<K, string>) {}`), []);
+    assert.deepEqual(rules(f, `<Badge>{n}</Badge><Icon className="h-4 w-4" />`), []);
+    assert.deepEqual(rules(f, `{/* kb-allow-raw: ví dụ định dạng mã */}\n<Input placeholder="BI820001" />`), []);
+    assert.deepEqual(rules("apps/web/src/features/x/a.test.tsx", `<Button>Save</Button>`), []);
+    assert.deepEqual(rules("apps/web/src/features/x/a.messages.ts", `en: { save: "Save" },`), []);
+  });
+
   it("toàn repo hiện tại sạch", () => {
     assert.deepEqual(checkRepo(), []);
   });

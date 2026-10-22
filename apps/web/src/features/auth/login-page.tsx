@@ -61,8 +61,8 @@ export function LoginPage() {
       <form onSubmit={submit} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} noValidate>
         <Stack gap="md">
           {mutation.isError && <Alert tone="danger" title={t.failed}>{loginErrorMessage(mutation.error, locale)}</Alert>}
-          <Field label="Email" required {...(errors.email ? { error: errors.email } : {})}>
-            <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ten@congty.vn" />
+          <Field label={t.email} required {...(errors.email ? { error: errors.email } : {})}>
+            <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t.emailExample} />
           </Field>
           <Field label={t.password} required {...(errors.password ? { error: errors.password } : {})}>
             <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />

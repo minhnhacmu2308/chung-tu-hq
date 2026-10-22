@@ -57,6 +57,7 @@ function VnaccsDialog({ open, onOpenChange, current }: { open: boolean; onOpenCh
           <Stack gap="md">
             {save.isError && <Alert tone="danger">{save.error.message}</Alert>}
             <Field label={t.userId} required {...errorProp(errors.userId)}>
+              {/* kb-allow-raw: ví dụ định dạng mã người dùng VNACCS, không dịch */}
               <Input value={form.userId} onChange={set("userId")} autoComplete="off" className="font-mono" placeholder="BI820001" />
             </Field>
             <Field label={t.password} required hint={current.userId ? t.passwordHint : undefined} {...errorProp(errors.password)}>

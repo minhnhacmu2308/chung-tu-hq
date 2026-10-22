@@ -216,7 +216,7 @@ function DetailInner({ id }: { id: string }) {
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge status={ORG_STATUS[o.status]} />
             <Badge tone={PLAN_TONE[o.plan.code]}>{o.plan.name}</Badge>
-            <span>MST <span className="font-mono">{o.taxCode}</span></span>
+            <span>{t.taxCodeShort} <span className="font-mono">{o.taxCode}</span></span>
           </span>
         }
         actions={

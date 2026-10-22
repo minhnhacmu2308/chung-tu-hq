@@ -26,6 +26,7 @@ apps/web/src/
 6. **State**: tab/filter/trang lưu trên URL (`searchParams`); server state qua RSC/TanStack Query; còn lại `useState`.
 7. **Giao diện chỉ ghép từ `@kb/ui`** (Button, Field/Input/Select, Card, Grid/Stack, PageHeader, StatusBadge, Alert, Dialog, Tabs, EmptyState, Skeleton…) + utility token (`bg-surface`, `text-fg-muted`, `gap-4`). Thiếu thứ gì → **REQUIRED SUB-SKILL:** `adding-ui-component`, không tự vá. `pnpm lint` chặn mã màu, màu Tailwind mặc định, `dark:`, giá trị tùy ý, `<button>` thô.
    Số/tiền/ngày qua `lib/format`; trạng thái nghiệp vụ qua `StatusBadge`; mỗi trang mở đầu bằng `PageHeader`.
+7b. **3 ngôn ngữ (BẮT BUỘC)**: mọi chữ hiển thị đặt trong `*.messages.ts` cạnh component, đủ `vi`/`en`/`zh` và dịch thật – kể cả nút, placeholder, `aria-label`, toast, lỗi. Đổi ngôn ngữ trên trình duyệt để xem màn ở English và 中文. Chi tiết: `.claude/rules/ho-tro-3-ngon-ngu.md`.
 8. **A11y**: control có label; dùng được bằng bàn phím; không truyền nghĩa chỉ bằng màu.
 8b. **Chọn component theo bảng "Cần gì → dùng gì" bên dưới** trước khi viết JSX. Tự dựng lại thứ đã có là lỗi review.
 8c. **Xem bằng trình duyệt thật** trước khi báo xong (sáng + tối, 1366px + 390px): test xanh không bắt được bố cục vỡ. Cách chạy: mục "Kiểm tra bằng trình duyệt" trong skill `adding-ui-component`.

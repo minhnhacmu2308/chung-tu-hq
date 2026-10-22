@@ -1,6 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, PageHeader, SegmentedControl, Stack, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
+  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, PageHeader, RecordCard, SegmentedControl, Stack, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FolderOpen, Plus, XCircle } from "lucide-react";
@@ -181,6 +181,24 @@ function ListInner() {
               filtered={scope !== "ALL"}
               onClearFilters={() => setScope("ALL")}
               emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">{t.create}</Link></Button>}
+              viewStorageKey="dossiers"
+              renderCard={(r, parts) => (
+                <RecordCard
+                  title={<span className="font-mono">{r.code}</span>}
+                  subtitle={r.partner}
+                  leading={<Badge tone={r.direction === "NK" ? "info" : "primary"} variant="outline">{r.direction}</Badge>}
+                  status={<DossierStatusBadge status={r.status} />}
+                  select={parts.select}
+                  actions={parts.actions}
+                  fields={[
+                    { label: t.colType, value: r.typeCode },
+                    { label: t.colValue, value: <span className="tabular-nums">{formatMoney(r.invoiceValue, r.currency)}</span> },
+                    { label: t.colStep, value: r.stepLabel },
+                    { label: t.colDue, value: <DueBadge dossier={r} /> },
+                  ]}
+                  footer={`${t.colOwner}: ${r.ownerName}`}
+                />
+              )}
               rowActions={(r) => (
                 <RowActions
                   rowLabel={r.code}

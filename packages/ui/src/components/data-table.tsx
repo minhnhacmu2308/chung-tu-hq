@@ -1,5 +1,6 @@
 // Bảng dữ liệu: sắp xếp phía client, chọn dòng, hành động theo dòng, loading/rỗng, header dính, phân trang.
-// Tùy chọn (mặc định tắt): tìm kiếm không dấu, lọc theo cột (meta.filter), ẩn/hiện cột, kéo đổi độ rộng cột.
+// Tùy chọn (mặc định tắt): tìm kiếm không dấu, lọc theo cột (meta.filter), ẩn/hiện cột, kéo đổi độ rộng cột,
+// dạng thẻ (`renderCard` → nút chuyển Bảng ↔ Thẻ; thẻ dùng chung tìm kiếm, lọc, sắp xếp, chọn, phân trang).
 // Dùng @tanstack/react-table v9 (useTable + tableFeatures). Cột khai báo bằng createDataTableColumnHelper<T>().
 import {
   columnFilteringFeature,
@@ -31,7 +32,7 @@ import {
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, FilterX, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, Filter, FilterX, LayoutGrid, Rows3, Search } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -45,6 +46,7 @@ import {
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 import { Button } from "./button.js";
+import { SegmentedControl } from "./choice.js";
 import { EmptyState, Skeleton } from "./feedback.js";
 import { Input, Select } from "./inputs.js";
 import {
@@ -74,6 +76,16 @@ const MESSAGES = {
     columns: "Cột",
     columnsLabel: "Hiện cột",
     resizeColumn: "Đổi độ rộng cột {label}",
+    view: "Kiểu hiển thị",
+    viewTable: "Bảng",
+    viewCards: "Thẻ",
+    sortBy: "Sắp xếp theo",
+    sortDefault: "Sắp xếp mặc định",
+    filters: "Bộ lọc",
+    filtersActive: "Bộ lọc ({n})",
+    sortAsc: "Tăng dần",
+    sortDesc: "Giảm dần",
+    sortDirection: "Đổi chiều sắp xếp",
   },
   en: {
     selectAll: "Select all",
@@ -92,6 +104,16 @@ const MESSAGES = {
     columns: "Columns",
     columnsLabel: "Visible columns",
     resizeColumn: "Resize column {label}",
+    view: "View",
+    viewTable: "Table",
+    viewCards: "Cards",
+    sortBy: "Sort by",
+    sortDefault: "Default order",
+    filters: "Filters",
+    filtersActive: "Filters ({n})",
+    sortAsc: "Ascending",
+    sortDesc: "Descending",
+    sortDirection: "Toggle sort direction",
   },
   zh: {
     selectAll: "全选",
@@ -110,6 +132,16 @@ const MESSAGES = {
     columns: "列",
     columnsLabel: "显示列",
     resizeColumn: "调整列宽 {label}",
+    view: "显示方式",
+    viewTable: "表格",
+    viewCards: "卡片",
+    sortBy: "排序方式",
+    sortDefault: "默认排序",
+    filters: "筛选",
+    filtersActive: "筛选（{n}）",
+    sortAsc: "升序",
+    sortDesc: "降序",
+    sortDirection: "切换排序方向",
   },
 } satisfies Messages<
   | "selectAll"
@@ -128,6 +160,16 @@ const MESSAGES = {
   | "columns"
   | "columnsLabel"
   | "resizeColumn"
+  | "view"
+  | "viewTable"
+  | "viewCards"
+  | "sortBy"
+  | "sortDefault"
+  | "sortAsc"
+  | "sortDesc"
+  | "sortDirection"
+  | "filters"
+  | "filtersActive"
 >;
 
 /** Thông tin hiển thị theo cột (đặt trong `meta` của column). */
@@ -219,6 +261,10 @@ export type DataTablePagination =
       pageSizeOptions?: readonly number[];
     };
 
+export type DataTableView = "table" | "cards";
+/** Phần bảng tự dựng cho từng thẻ: ô chọn (khi `selectable`) và thao tác (`rowActions`) – đặt vào `RecordCard` qua `select` / `actions`. */
+export type DataTableCardParts = { select: ReactNode | null; actions: ReactNode | null; selected: boolean };
+
 export type DataTableProps<TData extends RowData> = {
   columns: readonly DataTableColumn<TData>[];
   data: readonly TData[];
@@ -269,6 +315,17 @@ export type DataTableProps<TData extends RowData> = {
   labels?: Partial<Record<keyof (typeof MESSAGES)["vi"], string>>;
   /** Class cho khung cuộn (vd max-h-96 để header dính có tác dụng). */
   className?: string;
+  /**
+   * Dạng thẻ: nội dung một thẻ (thường là `RecordCard` nhận `parts.select` + `parts.actions`). Có prop này → thanh công cụ
+   * có nút chuyển Bảng ↔ Thẻ; dạng thẻ dùng chung tìm kiếm, lọc theo cột, sắp xếp (chọn cột), chọn dòng, phân trang.
+   */
+  renderCard?: (row: TData, parts: DataTableCardParts) => ReactNode;
+  /** Kiểu hiển thị điều khiển từ ngoài. */
+  view?: DataTableView;
+  defaultView?: DataTableView;
+  onViewChange?: (view: DataTableView) => void;
+  /** Nhớ kiểu hiển thị người dùng chọn trong trình duyệt (localStorage) theo khóa này, vd "dossiers". */
+  viewStorageKey?: string;
 };
 
 const ALIGN = { start: "text-left", center: "text-center", end: "text-right" } as const;
@@ -418,8 +475,38 @@ export function DataTable<TData extends RowData>({
   toolbarActions,
   labels,
   className,
+  renderCard,
+  view: viewProp,
+  defaultView = "table",
+  onViewChange,
+  viewStorageKey,
 }: DataTableProps<TData>) {
   const t = useMessages(MESSAGES, labels);
+  const [viewState, setViewState] = useControllable(viewProp, onViewChange, defaultView);
+  // Dạng thẻ: thanh lọc theo cột thu gọn sau nút "Bộ lọc" (không có hàng lọc dưới tiêu đề như dạng bảng).
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const view: DataTableView = renderCard ? viewState : "table";
+  const storageKey = viewStorageKey ? `kb-table-view:${viewStorageKey}` : null;
+  // Đọc lựa chọn đã nhớ sau khi gắn (không đọc lúc dựng → khớp HTML dựng ở máy chủ). Trình duyệt chặn bộ nhớ → bỏ qua.
+  useEffect(() => {
+    if (!storageKey || viewProp !== undefined) return;
+    try {
+      const saved = window.localStorage.getItem(storageKey);
+      if (saved === "table" || saved === "cards") setViewState(saved);
+    } catch {
+      /* bỏ qua */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+  const changeView = (v: DataTableView) => {
+    setViewState(v);
+    if (!storageKey) return;
+    try {
+      window.localStorage.setItem(storageKey, v);
+    } catch {
+      /* bỏ qua */
+    }
+  };
 
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -580,7 +667,7 @@ export function DataTable<TData extends RowData>({
   const filterColumns = leafColumns.filter((c) => c.columnDef.meta?.filter && c.getCanFilter());
   const hasFilterRow = filterColumns.length > 0;
   const isFiltered = globalFilter.trim() !== "" || columnFilters.length > 0;
-  const showToolbar = searchable || columnToggle || hasFilterRow || !!toolbarActions;
+  const showToolbar = searchable || columnToggle || hasFilterRow || !!toolbarActions || !!renderCard;
   const clearFilters = () => {
     setGlobalFilter("");
     setColumnFilters([]);
@@ -611,6 +698,72 @@ export function DataTable<TData extends RowData>({
     onRowClick?.(row);
   };
 
+  const cardParts = (row: (typeof rows)[number]): DataTableCardParts => ({
+    selected: row.getIsSelected(),
+    select: selectable ? (
+      <IndeterminateCheckbox
+        label={fill(t.selectRow, { label: rowLabel ? rowLabel(row.original) : row.id })}
+        checked={row.getIsSelected()}
+        indeterminate={false}
+        onChange={row.getToggleSelectedHandler()}
+      />
+    ) : null,
+    actions: rowActions ? rowActions(row.original) : null,
+  });
+
+  // Ô lọc của một cột – dưới tiêu đề (dạng bảng) hoặc trên thanh lọc (dạng thẻ, có nhãn hiện ra).
+  const filterControl = (column: (typeof leafColumns)[number], withLabel: boolean) => {
+    const kind = column.columnDef.meta?.filter;
+    const label = fill(t.filterBy, { label: columnLabel(column) });
+    const value: unknown = column.getFilterValue();
+    const control =
+      kind === "select" ? (
+        <Select
+          aria-label={label}
+          placeholder={t.filterAll}
+          options={selectOptions(column)}
+          value={isSelectFilter(value) ? value.equals : ""}
+          onChange={(e) => column.setFilterValue(e.target.value ? { equals: e.target.value } : undefined)}
+          className="h-8 min-w-24 text-sm"
+        />
+      ) : kind === "text" ? (
+        <Input type="search" aria-label={label} value={typeof value === "string" ? value : ""} onChange={(e) => column.setFilterValue(e.target.value)} className="h-8" />
+      ) : null;
+    if (!withLabel || !control) return control;
+    return (
+      <div key={column.id} className="flex min-w-0 flex-col gap-1">
+        <span aria-hidden="true" className="text-xs text-fg-muted">{columnLabel(column)}</span>
+        {control}
+      </div>
+    );
+  };
+
+  // Sắp xếp ở dạng thẻ (không có tiêu đề cột để bấm): chọn cột + đổi chiều.
+  const sortableColumns = leafColumns.filter((c) => c.getCanSort() && !c.id.startsWith("__"));
+  const sortedBy = sorting[0];
+  const sortControls = (
+    <div className="flex items-center gap-1">
+      <Select
+        aria-label={t.sortBy}
+        options={[{ value: "", label: t.sortDefault }, ...sortableColumns.map((c) => ({ value: c.id, label: columnLabel(c) }))]}
+        value={sortedBy?.id ?? ""}
+        onChange={(e) => setSorting(e.target.value ? [{ id: e.target.value, desc: sortedBy?.desc ?? false }] : [])}
+        className="h-9 min-w-36 text-sm"
+      />
+      {sortedBy && (
+        <Button
+          variant="secondary"
+          size="icon-sm"
+          aria-label={`${t.sortDirection}: ${sortedBy.desc ? t.sortDesc : t.sortAsc}`}
+          title={sortedBy.desc ? t.sortDesc : t.sortAsc}
+          onClick={() => setSorting([{ id: sortedBy.id, desc: !sortedBy.desc }])}
+        >
+          {sortedBy.desc ? <ArrowDown aria-hidden="true" className="h-4 w-4" /> : <ArrowUp aria-hidden="true" className="h-4 w-4" />}
+        </Button>
+      )}
+    </div>
+  );
+
   const clearButton = (
     <Button variant="ghost" size="sm" leftIcon={<FilterX aria-hidden="true" className="h-4 w-4" />} onClick={clearFilters}>
       {t.clearFilters}
@@ -638,9 +791,21 @@ export function DataTable<TData extends RowData>({
           <p role="status" className="text-sm text-fg-muted">
             {isFiltered && !loading ? fill(t.filteredCount, { shown: filteredCount, total: data.length }) : null}
           </p>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {view === "cards" && hasFilterRow && (
+              <Button
+                variant={columnFilters.length ? "primary" : "secondary"}
+                size="sm"
+                aria-expanded={filtersOpen}
+                leftIcon={<Filter aria-hidden="true" className="h-4 w-4" />}
+                onClick={() => setFiltersOpen((o) => !o)}
+              >
+                {columnFilters.length ? fill(t.filtersActive, { n: columnFilters.length }) : t.filters}
+              </Button>
+            )}
+            {view === "cards" && sortableColumns.length > 0 && sortControls}
             {/* Menu không modal: bảng vẫn truy cập được (cả với trình đọc màn hình) trong lúc bật/tắt cột */}
-            {columnToggle && (
+            {columnToggle && view === "table" && (
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="secondary" size="sm" leftIcon={<Columns3 aria-hidden="true" className="h-4 w-4" />}>
@@ -666,10 +831,77 @@ export function DataTable<TData extends RowData>({
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+            {renderCard && (
+              <SegmentedControl<DataTableView>
+                label={t.view}
+                hideLabel
+                value={view}
+                onChange={changeView}
+                options={[
+                  { value: "table", label: t.viewTable, icon: <Rows3 className="h-4 w-4" /> },
+                  { value: "cards", label: t.viewCards, icon: <LayoutGrid className="h-4 w-4" /> },
+                ]}
+              />
+            )}
             {toolbarActions}
           </div>
         </div>
       )}
+
+      {view === "cards" && hasFilterRow && filtersOpen && (
+        <div className="grid grid-cols-2 gap-2 cq-md:grid-cols-4">{filterColumns.map((c) => filterControl(c, true))}</div>
+      )}
+
+      {view === "cards" ? (
+        <div>
+          {loading ? (
+            <ul aria-label={ariaLabel} aria-busy="true" className="grid grid-cols-1 gap-3 cq-lg:grid-cols-2">
+              {Array.from({ length: Math.min(loadingRows, 6) }, (_, i) => (
+                <li key={i} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-3 w-3/4" />
+                  <Skeleton className="h-3 w-2/3" />
+                </li>
+              ))}
+            </ul>
+          ) : rows.length === 0 ? (
+            <div className="rounded-lg border border-border bg-surface">
+              {noResults ? (
+                <EmptyState illustration="no-results" illustrationSize="sm" title={t.noResultsTitle} description={t.noResultsDescription} action={canClear ? clearButton : undefined} />
+              ) : (
+                <EmptyState illustration="empty" illustrationSize="sm" title={emptyTitle ?? t.emptyTitle} description={emptyDescription} action={emptyAction} />
+              )}
+            </div>
+          ) : (
+            <ul aria-label={ariaLabel} className="grid grid-cols-1 gap-3 cq-lg:grid-cols-2">
+              {rows.map((row) => (
+                <li
+                  key={row.id}
+                  data-selected={row.getIsSelected() || undefined}
+                  aria-label={rowLabel ? rowLabel(row.original) : row.id}
+                  tabIndex={clickable ? 0 : undefined}
+                  onClick={clickable ? (e) => activate(row.original, e) : undefined}
+                  onKeyDown={
+                    clickable
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
+                            e.preventDefault();
+                            onRowClick?.(row.original);
+                          }
+                        }
+                      : undefined
+                  }
+                  className={cn("group min-w-0 rounded-lg", clickable && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus")}
+                >
+                  {renderCard!(row.original, cardParts(row))}
+                </li>
+              ))}
+            </ul>
+          )}
+          {loading && <span className="sr-only" role="status">{t.loading}</span>}
+        </div>
+      ) : (
 
       <div ref={scrollRef} className={cn("overflow-auto rounded-lg border border-border bg-surface", className)}>
         <table
@@ -743,33 +975,11 @@ export function DataTable<TData extends RowData>({
             ))}
             {hasFilterRow && (
               <tr>
-                {leafColumns.map((column) => {
-                  const kind = column.columnDef.meta?.filter;
-                  const label = fill(t.filterBy, { label: columnLabel(column) });
-                  const value: unknown = column.getFilterValue();
-                  return (
-                    <td key={column.id} className={cn("border-b border-border bg-surface px-2 py-2", stickyCell(column.columnDef.meta?.sticky, "z-[1]"))}>
-                      {kind === "select" ? (
-                        <Select
-                          aria-label={label}
-                          placeholder={t.filterAll}
-                          options={selectOptions(column)}
-                          value={isSelectFilter(value) ? value.equals : ""}
-                          onChange={(e) => column.setFilterValue(e.target.value ? { equals: e.target.value } : undefined)}
-                          className="h-8 min-w-24 text-sm"
-                        />
-                      ) : kind === "text" ? (
-                        <Input
-                          type="search"
-                          aria-label={label}
-                          value={typeof value === "string" ? value : ""}
-                          onChange={(e) => column.setFilterValue(e.target.value)}
-                          className="h-8"
-                        />
-                      ) : null}
-                    </td>
-                  );
-                })}
+                {leafColumns.map((column) => (
+                  <td key={column.id} className={cn("border-b border-border bg-surface px-2 py-2", stickyCell(column.columnDef.meta?.sticky, "z-[1]"))}>
+                    {filterControl(column, false)}
+                  </td>
+                ))}
               </tr>
             )}
           </thead>
@@ -848,6 +1058,7 @@ export function DataTable<TData extends RowData>({
         </table>
         {loading && <span className="sr-only" role="status">{t.loading}</span>}
       </div>
+      )}
 
       {pagination !== false && !loading && totalRows > 0 && (
         <Pagination

@@ -43,6 +43,7 @@ apps/web/src/
 | Chọn một trong nhiều lựa chọn có nhãn dài / mô tả (câu hỏi, phương án) | `RadioGroup` (dọc; ít lựa chọn ngắn → `SegmentedControl`) | Nhiều `Button` giả radio; `<input type="radio">` thô |
 | Thao tác trên một dòng bảng/danh sách | `RowActions` (icon hiện khi rê chuột + nút "…" đủ thao tác); DataTable: truyền qua `rowActions` | Tự dựng `DropdownMenu` + `MoreHorizontal` (lint `apps-row-menu` chặn) |
 | Bảng danh sách | `DataTable`; cột định danh `meta: { sticky: true }`; thao tác dòng (`rowActions`) không chiếm cột – cụm nút nổi đè cuối dòng khi rê chuột/Tab, cảm ứng chỉ hiện "…" | `<table>` tự viết |
+| Danh sách xem được cả dạng thẻ (bấm qua lại Bảng ↔ Thẻ) | `DataTable` + `renderCard={(r, parts) => <RecordCard … select={parts.select} actions={parts.actions} />}` + `viewStorageKey` (mẫu: `features/dossiers/dossier-list-page.tsx`) | Tự dựng lưới `Card` + ô tìm kiếm / phân trang riêng |
 | Đang tải – đã biết dáng nội dung | `PageLoading` (cả trang) / `SkeletonStats` / `SkeletonCard` / `SkeletonTable` / `SkeletonForm` / `SkeletonList` | `<Skeleton className="h-80" />` cho cả khối (lint `apps-big-skeleton` chặn) |
 | Đang tải – chưa biết dáng (chờ AI, chờ Hải quan) | `LoadingState` với tiêu đề nói rõ đang làm gì | Spinner trơ giữa trang |
 | Đang lưu / tải lại trên nội dung đã có | `LoadingOverlay` | Xóa nội dung cũ rồi hiện skeleton |

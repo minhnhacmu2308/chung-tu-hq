@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { UiLocaleProvider } from "../lib/i18n.js";
 import { createDataTableColumnHelper, DataTable, type DataTableProps } from "./data-table.js";
+import { RecordCard } from "./record-card.js";
 
 type HoSo = { id: string; code: string; partner: string; value: number };
 const col = createDataTableColumnHelper<HoSo>();
@@ -492,5 +493,97 @@ describe("DataTable – tính năng mở rộng: tiếng Anh & a11y", () => {
     });
     await userEvent.type(screen.getByRole("searchbox", { name: "Tìm trong bảng" }), "hai");
     await expectNoA11yViolations(container);
+  });
+});
+
+describe("DataTable – dạng thẻ", () => {
+  const FILTER_COLUMNS = col.columns([
+    col.accessor("code", { header: "Mã hồ sơ" }),
+    col.accessor("partner", { header: "Đối tác", meta: { filter: "select" } }),
+    col.accessor("value", { header: "Trị giá" }),
+  ]);
+  const card = (r: HoSo, parts: { select: React.ReactNode; actions: React.ReactNode }) => (
+    <RecordCard title={r.code} subtitle={r.partner} select={parts.select} actions={parts.actions} fields={[{ label: "Trị giá", value: r.value }]} />
+  );
+  const cardTitles = () => within(screen.getByRole("list", { name: "Hồ sơ khai báo" })).getAllByRole("listitem").map((li) => li.querySelector("[data-slot=record-card] .font-semibold")!.textContent);
+
+  it("không có renderCard → không có nút chuyển kiểu hiển thị", () => {
+    setup();
+    expect(screen.queryByRole("radio", { name: /Thẻ/ })).toBeNull();
+  });
+
+  it("chuyển Bảng ↔ Thẻ; thẻ dùng chung tìm kiếm, phân trang; không vi phạm a11y", async () => {
+    const { container } = setup({ renderCard: card, searchable: true, pagination: { initialPageSize: 2 } });
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /Thẻ/ }));
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(cardTitles()).toHaveLength(2);
+    expect(screen.getByRole("navigation")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox", { name: "Tìm trong bảng" }), "slamp");
+    expect(cardTitles()).toEqual(["HS-003"]);
+    await expectNoA11yViolations(container);
+    await userEvent.click(screen.getByRole("radio", { name: /Bảng/ }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("dạng thẻ: sắp xếp bằng chọn cột + đổi chiều; ô lọc theo cột thu gọn sau nút Bộ lọc (đếm bộ lọc đang bật)", async () => {
+    render(<DataTable aria-label="Hồ sơ khai báo" columns={FILTER_COLUMNS} data={DATA} getRowId={(r) => r.id} renderCard={card} defaultView="cards" pagination={false} />);
+    expect(cardTitles()).toEqual(["HS-002", "HS-001", "HS-003"]);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Sắp xếp theo" }), "code");
+    expect(cardTitles()).toEqual(["HS-001", "HS-002", "HS-003"]);
+    await userEvent.click(screen.getByRole("button", { name: /Đổi chiều sắp xếp/ }));
+    expect(cardTitles()).toEqual(["HS-003", "HS-002", "HS-001"]);
+    expect(screen.queryByRole("combobox", { name: "Lọc theo Đối tác" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Lọc theo Đối tác" }), "Artemide");
+    expect(cardTitles()).toEqual(["HS-001"]);
+    expect(screen.getByRole("button", { name: "Bộ lọc (1)" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("dạng thẻ: bấm / Enter trên thẻ gọi onRowClick; ô chọn và thao tác không kích hoạt thẻ", async () => {
+    const onRowClick = vi.fn();
+    const onSelectionChange = vi.fn();
+    setup({
+      renderCard: card, defaultView: "cards", pagination: false, selectable: true, onRowClick, onSelectionChange,
+      rowLabel: (r) => r.code, rowActions: (r) => <button type="button">Mở {r.code}</button>,
+    });
+    await userEvent.click(screen.getByText("Korea Bearing"));
+    expect(onRowClick).toHaveBeenCalledWith(DATA[0]);
+    screen.getByRole("listitem", { name: "HS-001" }).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onRowClick).toHaveBeenLastCalledWith(DATA[1]);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng HS-003" }));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["c"]);
+    expect(screen.getByRole("listitem", { name: "HS-003" })).toHaveAttribute("data-selected");
+    await userEvent.click(screen.getByRole("button", { name: "Mở HS-002" }));
+    expect(onRowClick).toHaveBeenCalledTimes(2);
+  });
+
+  it("nhớ kiểu hiển thị theo viewStorageKey", async () => {
+    window.localStorage.removeItem("kb-table-view:test");
+    const { unmount } = setup({ renderCard: card, viewStorageKey: "test" });
+    await userEvent.click(screen.getByRole("radio", { name: /Thẻ/ }));
+    expect(window.localStorage.getItem("kb-table-view:test")).toBe("cards");
+    unmount();
+    setup({ renderCard: card, viewStorageKey: "test" });
+    expect(await screen.findByRole("list", { name: "Hồ sơ khai báo" })).toBeInTheDocument();
+    window.localStorage.removeItem("kb-table-view:test");
+  });
+
+  it("dạng thẻ: rỗng → trạng thái trống; đang tải → khung xương", () => {
+    const { rerender } = setup({ renderCard: card, defaultView: "cards", data: [], emptyTitle: "Chưa có hồ sơ" });
+    expect(screen.getByText("Chưa có hồ sơ")).toBeInTheDocument();
+    rerender(<DataTable aria-label="Hồ sơ khai báo" columns={COLUMNS} data={[]} getRowId={(r) => r.id} renderCard={card} defaultView="cards" loading />);
+    expect(screen.getByRole("list", { name: "Hồ sơ khai báo" })).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("nhãn tiếng Anh", () => {
+    render(
+      <UiLocaleProvider locale="en">
+        <DataTable aria-label="Dossiers" columns={COLUMNS} data={DATA} getRowId={(r) => r.id} renderCard={card} />
+      </UiLocaleProvider>,
+    );
+    expect(screen.getByRole("radio", { name: /Cards/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Table/ })).toBeInTheDocument();
   });
 });

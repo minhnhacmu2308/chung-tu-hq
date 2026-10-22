@@ -44,8 +44,9 @@ export { UiLocaleProvider, useUiLocale, useMessages, defineMessages, pickMessage
 export {
   DataTable, createDataTableColumnHelper, dataTableFeatures,
   type DataTableProps, type DataTableColumn, type DataTableColumnMeta, type DataTablePagination, type DataTableFeatures,
-  type DataTableColumnSizing, type DataTableColumnVisibility,
+  type DataTableColumnSizing, type DataTableColumnVisibility, type DataTableView, type DataTableCardParts,
 } from "./components/data-table.js";
+export { RecordCard, type RecordCardProps, type RecordCardField } from "./components/record-card.js";
 export { Pagination, getPageItems, type PaginationProps, type PageItem } from "./components/pagination.js";
 export { Toaster, toast, updateToast, toastPromise, dismissToast, useToast, type ToastOptions, type ToastTone, type ToasterProps } from "./components/toast.js";
 export { Tooltip, TooltipProvider, type TooltipProps } from "./components/tooltip.js";

@@ -26,6 +26,22 @@ describe("RecordCard", () => {
     await expectNoA11yViolations(container);
   });
 
+  it("tone → đầu thẻ nền dịu + họa tiết + hình chìm (chỉ trang trí, ẩn với trình đọc màn hình); không vi phạm a11y", async () => {
+    const { container } = render(<RecordCard title="HS-NK-2610-027" tone="info" pattern="grid" art={<svg data-testid="art" />} actions={<button type="button">Thao tác</button>} />);
+    const head = container.querySelector("[data-slot=record-card-head]")!;
+    expect(head).toHaveClass("bg-info-subtle");
+    expect(head.querySelector("pattern path")).not.toBeNull();
+    expect(screen.getByTestId("art").closest("[aria-hidden=true]")).not.toBeNull();
+    expect(head).toContainElement(screen.getByRole("button", { name: "Thao tác" }));
+    await expectNoA11yViolations(container);
+  });
+
+  it("không có tone → đầu thẻ trơn, không họa tiết", () => {
+    const { container } = render(<RecordCard title="A" art={<svg />} />);
+    expect(container.querySelector("[data-slot=record-card-head]")).toBeNull();
+    expect(container.querySelector("pattern")).toBeNull();
+  });
+
   it("không có trường / chân thẻ → không dựng phần trống", () => {
     const { container } = render(<RecordCard title="A" />);
     expect(container.querySelector("dl")).toBeNull();

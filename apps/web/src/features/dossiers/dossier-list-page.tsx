@@ -1,9 +1,9 @@
 "use client";
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, PageHeader, RecordCard, SegmentedControl, Stack, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
+  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, IconTile, PageHeader, RecordCard, SegmentedControl, Stack, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FolderOpen, Plus, XCircle } from "lucide-react";
+import { Container, Download, FolderOpen, Package, Plane, Plus, Ship, TrainFront, Truck, XCircle, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
@@ -14,6 +14,11 @@ import { STEP_LABELS, STEP_ORDER, type Direction, type Dossier, type DossierStat
 import { DossierStatusBadge, DueBadge } from "./dossier-badges";
 import { DIRECTION_LABELS, dossierStatusDisplay } from "./dossier-display";
 import { DOSSIER_LIST_MESSAGES } from "./dossiers.messages";
+
+/** Hình đầu thẻ theo phương thức vận chuyển (chỉ trang trí – nghĩa nằm ở chữ trên thẻ). */
+const TRANSPORT_ICON: Record<Dossier["transportMode"], LucideIcon> = {
+  AIR: Plane, SEA_CONTAINER: Container, SEA_BULK: Ship, ROAD: Truck, RAIL: TrainFront, RIVER: Ship, OTHER: Package,
+};
 
 /** Dòng hiển thị: thêm nhãn chữ để ô tìm kiếm/lọc khớp với điều người dùng nhìn thấy. */
 type Row = Dossier & { stepLabel: string; statusLabel: string; ownerName: string };
@@ -182,23 +187,37 @@ function ListInner() {
               onClearFilters={() => setScope("ALL")}
               emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">{t.create}</Link></Button>}
               viewStorageKey="dossiers"
-              renderCard={(r, parts) => (
+              renderCard={(r, parts) => {
+                const Transport = TRANSPORT_ICON[r.transportMode];
+                return (
                 <RecordCard
                   title={<span className="font-mono">{r.code}</span>}
                   subtitle={r.partner}
-                  leading={<Badge tone={r.direction === "NK" ? "info" : "primary"} variant="outline">{r.direction}</Badge>}
+                  tone={r.direction === "NK" ? "info" : "primary"}
+                  pattern={r.direction === "NK" ? "dots" : "diagonal"}
+                  leading={<IconTile icon={<Transport />} tone={r.direction === "NK" ? "info" : "primary"} size="md" className="bg-surface" />}
+                  art={<Transport />}
                   status={<DossierStatusBadge status={r.status} />}
                   select={parts.select}
                   actions={parts.actions}
                   fields={[
-                    { label: t.colType, value: r.typeCode },
+                    {
+                      label: t.colType,
+                      value: (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Badge tone={r.direction === "NK" ? "info" : "primary"} variant="outline">{r.direction}</Badge>
+                          {r.typeCode}
+                        </span>
+                      ),
+                    },
                     { label: t.colValue, value: <span className="tabular-nums">{formatMoney(r.invoiceValue, r.currency)}</span> },
                     { label: t.colStep, value: r.stepLabel },
                     { label: t.colDue, value: <DueBadge dossier={r} /> },
                   ]}
                   footer={`${t.colOwner}: ${r.ownerName}`}
                 />
-              )}
+                );
+              }}
               rowActions={(r) => (
                 <RowActions
                   rowLabel={r.code}

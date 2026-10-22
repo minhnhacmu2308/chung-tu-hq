@@ -855,7 +855,7 @@ export function DataTable<TData extends RowData>({
       {view === "cards" ? (
         <div>
           {loading ? (
-            <ul aria-label={ariaLabel} aria-busy="true" className="grid grid-cols-1 gap-3 cq-lg:grid-cols-2">
+            <ul aria-label={ariaLabel} aria-busy="true" className="grid grid-cols-1 gap-3 cq-md:grid-cols-2 cq-xl:grid-cols-3">
               {Array.from({ length: Math.min(loadingRows, 6) }, (_, i) => (
                 <li key={i} className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
                   <Skeleton className="h-4 w-1/2" />
@@ -873,7 +873,7 @@ export function DataTable<TData extends RowData>({
               )}
             </div>
           ) : (
-            <ul aria-label={ariaLabel} className="grid grid-cols-1 gap-3 cq-lg:grid-cols-2">
+            <ul aria-label={ariaLabel} className="grid grid-cols-1 gap-3 cq-md:grid-cols-2 cq-xl:grid-cols-3">
               {rows.map((row) => (
                 <li
                   key={row.id}

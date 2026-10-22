@@ -4,7 +4,7 @@ import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
-import { completeMailConnect, disconnectMailbox, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, syncMailConnection } from "../connections.js";
+import { completeMailConnect, disconnectMailbox, failMailSync, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, syncMailConnection } from "../connections.js";
 import { addInboxToDossier, getInboxAttachmentFile, listInbox, setInboxMessageStatus } from "../inbox.js";
 import type { MailboxDeps } from "../ports.js";
 import { FakeDossierIntake, FakeMailProvider, FakeStateSigner, fakeCipher, MemoryBlobStore } from "../test/fakes.js";
@@ -150,6 +150,16 @@ describe("lấy chứng từ mới", () => {
     deps.clock = fixedClock("2026-10-22T05:30:00.000Z");
     expect(await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id })).toMatchObject({ status: "REAUTH" });
     expect(uow.data.connections[0]).toMatchObject({ status: "REAUTH", lastError: "MAILBOX_REAUTH_REQUIRED" });
+  });
+
+  it("job hết lượt thử vì lỗi hạ tầng → hộp thư đang lấy chuyển ERROR; trạng thái khác giữ nguyên", async () => {
+    const c = await connect();
+    await requestMailSync(deps, ctx("DECLARANT"));
+    await failMailSync(deps, { orgId: "org_a", connectionId: c.id });
+    expect(uow.data.connections[0]).toMatchObject({ status: "ERROR", lastError: "MAILBOX_SYNC_FAILED" });
+    uow.data.connections[0]!.status = "REAUTH";
+    await failMailSync(deps, { orgId: "org_a", connectionId: c.id });
+    expect(uow.data.connections[0]!.status).toBe("REAUTH");
   });
 });
 

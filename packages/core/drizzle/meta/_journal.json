@@ -127,6 +127,13 @@
       "when": 1792651625459,
       "tag": "0017_product_catalog_details",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792655933497,
+      "tag": "0018_mailbox_inbox",
+      "breakpoints": true
     }
   ]
 }

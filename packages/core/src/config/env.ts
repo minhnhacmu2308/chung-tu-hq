@@ -58,6 +58,25 @@ export const EnvSchema = z
     HSCODEPRO_PRICE_PER_ITEM_VND: z.string().regex(/^\d+(\.\d+)?$/, "Đơn giá VND không âm, dạng 1500 hoặc 1500.5").default("0"),
     /** Giá vốn Customs Hub (FPT.VNACCS): VND cho mỗi thông điệp gửi (IDA, IDC, HYS…) hoặc hỏi trạng thái (IID/IEX). Trống = 0. */
     CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: z.string().regex(/^\d+(\.\d+)?$/, "Đơn giá VND không âm, dạng 1500 hoặc 1500.5").default("0"),
+    /**
+     * Hộp thư chứng từ (kết nối Gmail / Outlook): `fake` = hộp thư giả lập (dev/demo, không gọi Google/Microsoft);
+     * `live` = OAuth thật – nhà cung cấp nào có đủ client id + secret thì nút kết nối mới bật.
+     * Redirect URI phải khai báo ở Google Cloud Console (OAuth client "Web application") và Azure App registrations (Web):
+     * `${APP_URL}/api/mailbox/oauth/callback`.
+     */
+    MAILBOX_PROVIDER: z.enum(["fake", "live"]).default("fake"),
+    /**
+     * Google OAuth client (Google Cloud Console → APIs & Services → Credentials), bật Gmail API.
+     * gmail.readonly là "restricted scope": chạy công khai trên production phải qua Google verification + đánh giá bảo mật (CASA);
+     * khi app ở chế độ Testing chỉ tối đa 100 test user khai báo sẵn dùng được.
+     */
+    GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+    /** Microsoft Entra ID (Azure App registrations), quyền delegated Mail.Read + User.Read + offline_access. */
+    MICROSOFT_OAUTH_CLIENT_ID: z.string().optional(),
+    MICROSOFT_OAUTH_CLIENT_SECRET: z.string().optional(),
+    /** `common` (mọi tài khoản Microsoft 365 + Outlook.com), `organizations`, hoặc tenant id riêng. */
+    MICROSOFT_OAUTH_TENANT: z.string().default("common"),
     MAIL: z.enum(["console", "smtp"]).default("console"),
     SMTP_URL: z.string().optional(),
   })

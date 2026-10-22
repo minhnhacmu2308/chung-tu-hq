@@ -11,3 +11,4 @@ export { changeDocumentKind } from "./application/change-document-kind.js";
 export { deleteDocument } from "./application/delete-document.js";
 export { retryDocument } from "./application/retry-document.js";
 export { toDossier, toDocument } from "./application/_dto.js";
+export { classifyByFileName } from "./domain/upload-rules.js";

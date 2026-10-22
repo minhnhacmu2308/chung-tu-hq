@@ -110,6 +110,14 @@ export const STATUS_META = {
   INTEGRATION_CONNECTED: { tone: "success", label: "Đã kết nối" },
   INTEGRATION_ERROR: { tone: "danger", label: "Lỗi kết nối" },
   INTEGRATION_NOT_CONFIGURED: { tone: "neutral", label: "Chưa cấu hình" },
+  // Hộp thư chứng từ: kết nối Gmail / Outlook và email lấy về
+  MAILBOX_ACTIVE: { tone: "success", label: "Đang kết nối" },
+  MAILBOX_SYNCING: { tone: "info", label: "Đang lấy thư" },
+  MAILBOX_ERROR: { tone: "danger", label: "Lỗi lấy thư" },
+  MAILBOX_REAUTH: { tone: "warning", label: "Cần kết nối lại" },
+  INBOX_NEW: { tone: "info", label: "Chưa xếp" },
+  INBOX_DONE: { tone: "success", label: "Đã xếp vào hồ sơ" },
+  INBOX_IGNORED: { tone: "neutral", label: "Đã bỏ qua" },
   // Sức khỏe dịch vụ nền
   SERVICE_UP: { tone: "success", label: "Hoạt động tốt" },
   SERVICE_DEGRADED: { tone: "warning", label: "Suy giảm" },
@@ -137,6 +145,8 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   ACCOUNT_ACTIVE: "Active", ACCOUNT_INVITED: "Invited", ACCOUNT_DISABLED: "Disabled", ACCOUNT_PENDING_JOIN: "Awaiting approval",
   ORG_ACTIVE: "Active", ORG_SUSPENDED: "Suspended",
   INTEGRATION_CONNECTED: "Connected", INTEGRATION_ERROR: "Connection error", INTEGRATION_NOT_CONFIGURED: "Not configured",
+  MAILBOX_ACTIVE: "Connected", MAILBOX_SYNCING: "Fetching emails", MAILBOX_ERROR: "Fetch failed", MAILBOX_REAUTH: "Reconnect needed",
+  INBOX_NEW: "Not filed", INBOX_DONE: "Filed to dossier", INBOX_IGNORED: "Ignored",
   SERVICE_UP: "Healthy", SERVICE_DEGRADED: "Degraded", SERVICE_DOWN: "Down",
   ANNOUNCEMENT_SENT: "Sent", ANNOUNCEMENT_WITHDRAWN: "Withdrawn", TEMPLATE_PUBLISHED: "Published", TEMPLATE_DRAFT: "Unpublished",
 };
@@ -155,6 +165,8 @@ export const STATUS_LABELS_ZH: Record<Status, string> = {
   ACCOUNT_ACTIVE: "正常", ACCOUNT_INVITED: "已邀请", ACCOUNT_DISABLED: "已停用", ACCOUNT_PENDING_JOIN: "待批准加入",
   ORG_ACTIVE: "正常", ORG_SUSPENDED: "已暂停",
   INTEGRATION_CONNECTED: "已连接", INTEGRATION_ERROR: "连接错误", INTEGRATION_NOT_CONFIGURED: "未配置",
+  MAILBOX_ACTIVE: "已连接", MAILBOX_SYNCING: "正在获取邮件", MAILBOX_ERROR: "获取失败", MAILBOX_REAUTH: "需重新连接",
+  INBOX_NEW: "未归档", INBOX_DONE: "已归入档案", INBOX_IGNORED: "已忽略",
   SERVICE_UP: "运行正常", SERVICE_DEGRADED: "性能下降", SERVICE_DOWN: "已停止",
   ANNOUNCEMENT_SENT: "已发送", ANNOUNCEMENT_WITHDRAWN: "已撤回", TEMPLATE_PUBLISHED: "已发布", TEMPLATE_DRAFT: "未发布",
 };

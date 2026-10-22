@@ -9,3 +9,4 @@ export * from "./billing.js";
 export * from "./skill.js";
 export * from "./declaration.js";
 export * from "./admin.js";
+export * from "./mailbox.js";

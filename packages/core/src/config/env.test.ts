@@ -16,6 +16,8 @@ describe("loadEnv", () => {
     expect(env.AI_PROVIDER).toBe("fake");
     expect(env.CUSTOMS_GATEWAY).toBe("fake");
     expect(env.MAIL).toBe("console");
+    expect(env.MAILBOX_PROVIDER).toBe("fake");
+    expect(env.MICROSOFT_OAUTH_TENANT).toBe("common");
     expect(env.S3_FORCE_PATH_STYLE).toBe(true);
   });
   it("STORAGE: mặc định s3 (cần S3_*); azure cần AZURE_STORAGE_CONNECTION_STRING, không cần S3_*", () => {

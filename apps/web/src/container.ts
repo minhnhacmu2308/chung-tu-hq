@@ -16,6 +16,8 @@ import { createValidationInfrastructure } from "@kb/core/modules/validation/infr
 import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
+import type { MailboxDeps } from "@kb/core/modules/mailbox";
+import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { stageOf, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
@@ -41,6 +43,8 @@ export type Container = {
   skill: SkillDeps;
   declaration: DeclarationDeps;
   customs: CustomsDeps;
+  /** Hộp thư chứng từ (kết nối Gmail / Outlook, email có file đính kèm). */
+  mailbox: MailboxDeps;
   /** Khu Quản trị hệ thống – kết nối kb_platform riêng (ADR 0006). */
   admin: AdminDeps;
   /** Chỉ dev/test: nạp lại dữ liệu mẫu. */
@@ -229,6 +233,7 @@ function build(): Container {
   customs.usage = serviceUsage;
   // Sửa chỉ tiêu tờ khai theo giai đoạn truyền (chưa khai / sửa đổi bổ sung / đã thông quan).
   declaration.customsStage = async (orgId, dossierId) => stageOf(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.get(orgId, dossierId)));
+  const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
   const jobs = new BullMqJobMonitor(redis);
   const system: SystemProbe = {
     async services(now) {
@@ -291,6 +296,7 @@ function build(): Container {
     skill,
     declaration,
     customs,
+    mailbox,
     admin,
     resetDemo: () => runSeed(env.DATABASE_ADMIN_URL),
   };

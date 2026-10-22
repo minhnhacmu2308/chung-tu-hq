@@ -8,6 +8,7 @@ import { formatRelative } from "@/lib/format";
 import type { Integration } from "@/mocks/types";
 import { LoadError } from "@/components/common/load-error";
 import { INTEGRATIONS_TAB_MESSAGES } from "./integrations-tab.messages";
+import { MailboxSection } from "./mailbox-section";
 import { VnaccsAccountSection } from "./vnaccs-account";
 
 const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neutral"; label: "connected" | "error" | "notConfigured" }> = {
@@ -90,6 +91,7 @@ export function IntegrationsTab() {
           {data.map((it) => <IntegrationCard key={it.id} it={it} />)}
         </Grid>
       )}
+      <MailboxSection />
     </Stack>
   );
 }

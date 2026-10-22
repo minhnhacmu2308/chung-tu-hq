@@ -107,34 +107,36 @@ const estimatePages = (size: number) => Math.max(1, Math.min(12, Math.round(size
 
 /** Upload file (mock: chỉ lấy tên + dung lượng). File .zip được bung thành các chứng từ bên trong. */
 export const uploadDocuments = (dossierId: string, uploaded: File[]) =>
-  mutate((db) => {
-    const files = uploaded.map((f) => ({ name: f.name, size: f.size }));
-    const dossier = db.dossiers.find((d) => d.id === dossierId);
-    if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
-    const entries = files.flatMap((f) => {
-      if (!f.name.toLowerCase().endsWith(".zip")) return [f];
-      const base = f.name.replace(/\.zip$/i, "");
-      return [
-        { name: `${base}/INVOICE.pdf`, size: Math.round(f.size * 0.35) },
-        { name: `${base}/PACKING_LIST.pdf`, size: Math.round(f.size * 0.2) },
-        { name: `${base}/${dossier.transportMode === "AIR" ? "AWB" : "BL"}.pdf`, size: Math.round(f.size * 0.45) },
-      ];
-    });
-    const created: DossierDocument[] = entries.map((e) => ({
-      id: newId("doc"),
-      dossierId,
-      kind: classifyByFileName(e.name.split("/").pop() ?? e.name),
-      fileName: e.name.split("/").pop() ?? e.name,
-      sizeBytes: e.size,
-      pages: estimatePages(e.size),
-      status: "UPLOADING",
-      uploadedAt: nowIso(),
-    }));
-    db.documents.push(...created);
-    if (dossier.status === "DRAFT") dossier.status = "PROCESSING";
-    dossier.updatedAt = nowIso();
-    return created;
+  mutate((db) => addDocumentFiles(db, dossierId, uploaded.map((f) => ({ name: f.name, size: f.size }))));
+
+/** Thêm file vào hồ sơ như upload tay (dùng chung cho upload và "Thêm vào hồ sơ" từ Hộp thư chứng từ). */
+export function addDocumentFiles(db: MockDb, dossierId: string, files: { name: string; size: number }[]): DossierDocument[] {
+  const dossier = db.dossiers.find((d) => d.id === dossierId);
+  if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
+  const entries = files.flatMap((f) => {
+    if (!f.name.toLowerCase().endsWith(".zip")) return [f];
+    const base = f.name.replace(/\.zip$/i, "");
+    return [
+      { name: `${base}/INVOICE.pdf`, size: Math.round(f.size * 0.35) },
+      { name: `${base}/PACKING_LIST.pdf`, size: Math.round(f.size * 0.2) },
+      { name: `${base}/${dossier.transportMode === "AIR" ? "AWB" : "BL"}.pdf`, size: Math.round(f.size * 0.45) },
+    ];
   });
+  const created: DossierDocument[] = entries.map((e) => ({
+    id: newId("doc"),
+    dossierId,
+    kind: classifyByFileName(e.name.split("/").pop() ?? e.name),
+    fileName: e.name.split("/").pop() ?? e.name,
+    sizeBytes: e.size,
+    pages: estimatePages(e.size),
+    status: "UPLOADING",
+    uploadedAt: nowIso(),
+  }));
+  db.documents.push(...created);
+  if (dossier.status === "DRAFT") dossier.status = "PROCESSING";
+  dossier.updatedAt = nowIso();
+  return created;
+}
 
 export const changeDocumentKind = (documentId: string, kind: DocKind) =>
   mutate((db) => {

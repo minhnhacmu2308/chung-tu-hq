@@ -8,8 +8,10 @@ import { RATE_JOB_CRON, recordRateFetchFailure } from "@kb/core/modules/admin";
 import { failHsWork } from "@kb/core/modules/declaration";
 import { markDocumentFailed } from "@kb/core/modules/extraction";
 import { markOutboxFailed } from "@kb/core/modules/integration";
+import { failMailSync } from "@kb/core/modules/mailbox";
 import { exchangeRateJob } from "./jobs/exchange-rate.js";
 import { hsAnswerJob, hsPollJob, hsReclassifyJob } from "./jobs/hs.js";
+import { mailboxSyncJob } from "./jobs/mailbox-sync.js";
 import { runAgentJob } from "./jobs/run-agent.js";
 import { skillEvaluateJob, skillSampleReadJob } from "./jobs/skill.js";
 
@@ -29,6 +31,7 @@ const workers = [
   new Worker("customs-poll", async (job) => customsPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("cert-expiry", async () => certExpiryJob(c.identity), { connection: c.redis, concurrency: 1 }),
   new Worker("exchange-rate-weekly", async () => exchangeRateJob(c.rates), { connection: c.redis, concurrency: 1 }),
+  new Worker("mailbox-sync", async (job) => mailboxSyncJob(c.mailbox, job.data), { connection: c.redis, concurrency: 2 }),
 ];
 // Lịch hằng ngày 01:00 (UTC) – BullMQ repeatable; thêm lại là idempotent theo jobId.
 const certQueue = new Queue("cert-expiry", { connection: c.redis });
@@ -50,11 +53,12 @@ for (const w of workers) {
       void failHsWork(c.declaration, { orgId: d["orgId"], userId: d["userId"], dossierId: d["dossierId"], ...(d["hsJobId"] ? { hsJobId: d["hsJobId"] } : {}), ...(d["lineItemId"] ? { lineItemId: d["lineItemId"] } : {}), error: reason }).catch((x) => console.error("[worker] failHsWork", x));
     }
     if (w.name === "exchange-rate-weekly") void recordRateFetchFailure(c.rates, reason).catch((x) => console.error("[worker] recordRateFetchFailure", x));
+    if (w.name === "mailbox-sync" && d["orgId"] && d["connectionId"]) void failMailSync(c.mailbox, { orgId: d["orgId"], connectionId: d["connectionId"] }).catch((x) => console.error("[worker] failMailSync", x));
     if (w.name === "customs-send" && d["orgId"] && d["outboxId"]) void markOutboxFailed(c.customs, { orgId: d["orgId"], outboxId: d["outboxId"], reason }).catch((x) => console.error("[worker] markOutboxFailed", x));
   });
   w.on("completed", (job, result) => console.log(`[worker] ${w.name} job ${job.id} xong: ${String(result)}`));
 }
-console.log(`[worker] sẵn sàng: ${workers.map((w) => w.name).join(", ")} · AI=${c.env.AI_PROVIDER} · HS=${c.env.HS_CLASSIFIER}`);
+console.log(`[worker] sẵn sàng: ${workers.map((w) => w.name).join(", ")} · AI=${c.env.AI_PROVIDER} · HS=${c.env.HS_CLASSIFIER} · MAIL=${c.env.MAILBOX_PROVIDER}`);
 
 async function shutdown(signal: string) {
   console.log(`[worker] ${signal} → đóng`);

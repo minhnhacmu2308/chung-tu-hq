@@ -6,12 +6,13 @@ import {
   SidebarMobileTrigger, SidebarUser, toast, useMessages, type AssistantMode, type NavItem,
 } from "@kb/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, FolderOpen, LayoutDashboard, LogOut, Package, RotateCcw, Send, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
+import { Bell, FolderOpen, Inbox, LayoutDashboard, LogOut, Package, RotateCcw, Send, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { adminKeys, getAdminSession } from "@/api/admin";
 import { dossierKeys, listDossiers } from "@/api/dossiers";
+import { inboxKeys, listInbox } from "@/api/mailbox";
 import { getSession, listNotifications, logout, resetMockData, sessionKeys } from "@/api/session";
 import { APP_TITLES } from "@/app/app-titles.messages";
 import { LanguageMenuSub } from "@/features/appearance/language-switcher";
@@ -35,6 +36,9 @@ function useNav(): { items: NavItem[]; activeId: string | undefined } {
   const badge = (n: number) => (n > 0 ? <Badge tone="warning">{n}</Badge> : undefined);
   const nk = badge(needsReview("NK"));
   const xk = badge(needsReview("XK"));
+  const { data: inbox } = useQuery({ queryKey: inboxKeys.list, queryFn: listInbox });
+  const newMail = inbox?.filter((m) => m.status === "NEW").length ?? 0;
+  const mail = newMail > 0 ? <Badge tone="info">{newMail}</Badge> : undefined;
 
   const items: NavItem[] = [
     { id: "overview", label: t.navOverview, icon: <LayoutDashboard />, href: "/" },
@@ -48,6 +52,7 @@ function useNav(): { items: NavItem[]; activeId: string | undefined } {
         { id: "dossiers-all", label: t.navAll, href: "/dossiers" },
       ],
     },
+    { id: "inbox", label: t.navInbox, icon: <Inbox />, href: "/inbox", ...(mail ? { badge: mail } : {}) },
     { id: "customs", label: t.navCustoms, icon: <Send />, href: "/customs" },
     { id: "products", label: t.navProducts, icon: <Package />, href: "/products" },
     { id: "skills", label: t.navSkills, icon: <Sparkles />, href: "/skills" },

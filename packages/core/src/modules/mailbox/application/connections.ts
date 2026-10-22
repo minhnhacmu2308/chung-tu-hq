@@ -182,3 +182,12 @@ export async function syncMailConnection(deps: MailboxDeps, input: MailboxSyncPa
     return { added: 0, status: reauth ? "REAUTH" : "ERROR" };
   }
 }
+
+/** Job lấy thư hết lượt thử vì lỗi hạ tầng (ngoài syncMailConnection) → không để hộp thư kẹt "Đang lấy thư". */
+export async function failMailSync(deps: MailboxDeps, input: MailboxSyncPayload): Promise<void> {
+  const ctx = sysCtx(input.orgId);
+  await deps.uow.asOrg(ctx, async (r) => {
+    const cur = await r.connections.get(input.orgId, input.connectionId);
+    if (cur?.status === "SYNCING") await r.connections.update({ ...cur, status: "ERROR", lastError: "MAILBOX_SYNC_FAILED", updatedAt: deps.clock.now() });
+  });
+}

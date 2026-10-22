@@ -8,6 +8,7 @@ import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modul
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { createCustomsInfrastructure } from "@kb/core/modules/integration/infrastructure";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
+import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { runRules } from "@kb/core/modules/validation";
@@ -116,10 +117,12 @@ export function buildContainer() {
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
   customs.notify = notify;
   customs.usage = serviceUsage;
+  // Hộp thư chứng từ: lấy thư Gmail / Outlook, file lưu cùng kho chứng từ.
+  const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
   // Tỷ giá tính thuế: bảng nền tảng, ghi bằng role kb_platform (ADR 0006).
   const rates = createRateDeps(platformDbUrl(env));
   return {
-    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs, rates,
+    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs, mailbox, rates,
     async close() {
       await Promise.all([...queues.values()].map((q) => q.close()));
       await rates.db.close();

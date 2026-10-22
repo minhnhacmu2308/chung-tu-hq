@@ -7,11 +7,13 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Info } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { DEFAULT_PARTY_CLASS, TransportModeSchema } from "@kb/contracts";
 import { z } from "zod";
 import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
+import { addInboxToDossier, inboxKeys, listInbox } from "@/api/mailbox";
+import { errorText } from "@/lib/reason-codes";
 import { getDeclarationProfile, settingsKeys } from "@/api/settings";
 import { prefillFromProfile } from "./profile-prefill";
 import type { Direction, Dossier } from "@/mocks/types";
@@ -83,6 +85,11 @@ export function CreateDossierPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.data]);
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
+  // Tạo hồ sơ từ email ở Hộp thư chứng từ (?inbox=<mã email>): tạo xong thì thêm các file chờ xếp vào hồ sơ mới.
+  const inboxId = useSearchParams().get("inbox");
+  const inbox = useQuery({ queryKey: inboxKeys.list, queryFn: listInbox, enabled: !!inboxId });
+  const fromMail = inbox.data?.find((m) => m.id === inboxId && m.status === "NEW");
+  const mailFiles = fromMail?.attachments.filter((a) => a.status === "PENDING").map((a) => a.id) ?? [];
 
   const recentPartners = useMemo(() => {
     const seen = new Set<string>();
@@ -114,6 +121,14 @@ export function CreateDossierPage() {
   const create = useMutation({
     mutationFn: createDossier,
     onSuccess: async (d) => {
+      if (mailFiles.length) {
+        try {
+          await addInboxToDossier({ dossierId: d.id, attachmentIds: mailFiles });
+        } catch (e) {
+          toast({ tone: "warning", title: t.fromInboxFailed, description: errorText(e, locale) });
+        }
+        void qc.invalidateQueries({ queryKey: inboxKeys.all });
+      }
       await qc.invalidateQueries({ queryKey: dossierKeys.all });
       toast({ tone: "success", title: t.created, description: fill(t.createdNext, { code: d.code }) });
       router.push(`/dossiers/${d.id}?step=upload`);
@@ -161,6 +176,10 @@ export function CreateDossierPage() {
         title={t.title}
         description={t.description}
       />
+
+      {fromMail && mailFiles.length > 0 && (
+        <Alert tone="info" title={t.fromInboxTitle}>{fill(t.fromInboxBody, { subject: fromMail.subject, from: fromMail.fromName, n: mailFiles.length })}</Alert>
+      )}
 
       <form onSubmit={submit} noValidate>
         <Grid cols={{ base: 1, lg: 3 }} gap="lg">

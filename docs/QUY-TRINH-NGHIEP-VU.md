@@ -135,6 +135,12 @@ Mã hồ sơ tự sinh `HS-{NK|XK}-{YYMM}-{NNN}`. Tạo hồ sơ tính vào hạ
 - Loại chứng từ: Invoice, Packing List, B/L, AWB, C/O, Hợp đồng, Arrival Notice, Hóa đơn cước, Khác.
 - Trạng thái chứng từ: UPLOADING → QUEUED → READING → DONE / ERROR (đọc lại được khi ERROR). Xóa chứng từ → gộp lại dữ liệu lô hàng.
 
+**Lấy chứng từ từ email (Hộp thư chứng từ, `/inbox` – ADR 0007).**
+- Kết nối hộp thư ở Cài đặt › Tài khoản & tích hợp: Gmail hoặc Outlook qua OAuth, chỉ quyền đọc; token lưu mã hóa. Mọi vai trò trừ Người xem kết nối được; gỡ kết nối: người đã kết nối hoặc Quản trị / Chủ sở hữu.
+- Bấm **Lấy chứng từ mới** → lấy email từ lần trước (lần đầu 30 ngày) có file PDF/PNG/JPG/ZIP và từ khóa chứng từ (invoice, packing, B/L, AWB, C/O, hóa đơn, chứng từ…); email đã lấy không lấy lại. Token bị thu hồi → hộp thư báo "Cần kết nối lại".
+- File nằm ở hộp thư chứng từ, **chưa thuộc hồ sơ và chưa chạy AI**. Hệ thống gợi ý hồ sơ đang mở: trùng mã hồ sơ / số vận đơn trong tiêu đề hoặc tên file, hoặc cùng đối tác với người gửi.
+- **Thêm vào hồ sơ**: chọn file + hồ sơ → file đi luồng tải chứng từ như trên (kiểm tra, quota, AI đọc). Hoặc **Tạo hồ sơ mới từ email**: mở trang tạo hồ sơ, tạo xong thì file chờ của email tự vào hồ sơ mới. Email hết file chờ → "Đã xếp"; email không liên quan → "Bỏ qua" (khôi phục được).
+
 ## 6. Bước 3 – OCR & kiểm tra
 
 ### 6.1 Đọc chứng từ
@@ -408,6 +414,7 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 | Hàng LCL qua kho CFS | Hai văn bản hướng dẫn khác nhau (TT39: mã 3; CV 6376: mã 2) – cần chốt |
 | Đọc chứng từ | Chưa đọc lớp chữ PDF / XML hóa đơn điện tử; mọi chứng từ gửi AI |
 | Tài khoản | Xác thực email chưa bắt buộc khi đăng nhập; chưa có trang xác thực email / đặt lại mật khẩu / nhận lời mời; người bị từ chối tham gia chỉ nhận email (chưa có màn báo trạng thái), chuyển quyền sở hữu chưa ghi nhật ký kiểm toán riêng; tra cứu MST là giả lập |
+| Hộp thư chứng từ | Chưa tự lấy định kỳ; chưa nhận XML hóa đơn điện tử; chưa tự tạo hồ sơ từ email; gmail.readonly cần Google verification + CASA khi mở công khai (Testing tối đa 100 người dùng) |
 | Danh mục hàng hóa | Chưa dùng danh mục khi dựng tờ khai (khớp hàng → lấy HS, bỏ qua HSCodePro); mặt hàng tự thêm khi duyệt chưa có số tờ khai (số chỉ có sau khi truyền); duyệt lại tờ khai đã mở lại sẽ tăng số lần khai thêm lần nữa |
 | Chi phí | HSCodePro và Customs Hub ghi theo đơn giá cấu hình (mặc định 0 – chưa có giá hợp đồng); chưa có lịch sử giá theo thời gian (đổi đơn giá không tính lại sự kiện cũ) |
 | Khác | Hủy tờ khai (Mẫu 06), tách vận đơn (Mẫu 12), khai danh sách container qua HYS, đóng chung container nhiều tờ khai xuất (Mẫu 15); đại lý khai hộ nhiều doanh nghiệp; app mobile |

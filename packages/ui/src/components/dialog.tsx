@@ -195,7 +195,8 @@ export function DialogContent({
       >
         <FocusScope asChild trapped={isModal} loop>
         <div ref={setPanelBody} className="flex min-h-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-border px-5 py-3">
+        {/* div, không phải <header>: hai dialog chồng nhau (panel chi tiết + cửa sổ con) sẽ thành hai landmark banner. */}
+        <div className="flex items-center gap-3 border-b border-border px-5 py-3">
           {icon && <span aria-hidden="true" className="text-fg-muted">{icon}</span>}
           <div className="flex min-w-0 flex-1 flex-col">
             <DialogPrimitive.Title className="truncate text-base font-semibold">{title}</DialogPrimitive.Title>
@@ -214,7 +215,7 @@ export function DialogContent({
           <DialogPrimitive.Close aria-label={l.close} className={iconBtn}>
             <CloseIcon />
           </DialogPrimitive.Close>
-        </header>
+        </div>
         {/*
           Nội dung thường bọc trong <form>: cho form cũng là cột giãn hết chiều cao để DialogFooter (mt-auto) nằm sát đáy.
           Thiếu dòng này thì ở dạng panel bên phải nhóm nút lơ lửng giữa panel, bên dưới thừa một khoảng trắng.

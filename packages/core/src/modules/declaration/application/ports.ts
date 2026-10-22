@@ -39,7 +39,9 @@ export type ProfileRow = { id: string; orgId: string; direction: "NK" | "XK"; va
 /** Mặt hàng trong danh mục hàng hóa của doanh nghiệp (bảng product_catalog). */
 export type ProductRow = {
   id: string; orgId: string; key: string; nameKey: string; code: string | null; name: string; hsCode: string; unit: string | null; origin: string | null;
-  tariffSchedule: string | null; importDutyRate: string | null; vatRate: string | null; note: string | null;
+  tariffSchedule: string | null; importDutyRate: string | null; vatRate: string | null;
+  envTaxRate: string | null; exciseRate: string | null; safeguardRate: string | null; antiDiscriminationRate: string | null;
+  description: string | null; unit2: string | null; unitPrice: string | null; currency: string | null; partner: string | null; note: string | null;
   source: "IMPORT" | "MANUAL" | "DECLARATION"; timesDeclared: number; lastDeclarationNo: string | null; lastDeclarationDate: string | null;
   lastTypeCode: string | null; raw: Record<string, string> | null; updatedBy: string | null; createdAt: Date; updatedAt: Date;
 };

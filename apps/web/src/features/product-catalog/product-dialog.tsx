@@ -12,11 +12,15 @@ import { PRODUCT_DIALOG_MESSAGES } from "./product-catalog.messages";
 type Form = Record<keyof ProductCatalogInput, string>;
 type FieldKey = keyof Form;
 
-const EMPTY: Form = { code: "", name: "", hsCode: "", unit: "", origin: "", tariffSchedule: "", importDutyRate: "", vatRate: "", note: "" };
+const EMPTY: Form = {
+  code: "", name: "", hsCode: "", description: "", unit: "", unit2: "", origin: "", unitPrice: "", currency: "", partner: "", tariffSchedule: "",
+  importDutyRate: "", vatRate: "", envTaxRate: "", exciseRate: "", safeguardRate: "", antiDiscriminationRate: "", note: "",
+};
 const toForm = (p: ProductCatalogItem): Form => ({
-  code: p.code ?? "", name: p.name, hsCode: formatHs(p.hsCode), unit: p.unit ?? "", origin: p.origin ?? "", tariffSchedule: p.tariffSchedule ?? "",
-  importDutyRate: p.importDutyRate ?? "", vatRate: p.vatRate ?? "", note: p.note ?? "",
+  ...(Object.fromEntries(Object.keys(EMPTY).map((k) => [k, p[k as FieldKey] ?? ""])) as Form),
+  hsCode: formatHs(p.hsCode),
 });
+const RATE_FIELDS = ["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate"] as const;
 
 /** Thêm (product = null) hoặc sửa một mặt hàng. Kiểm tra bằng schema dùng chung, báo lỗi theo ngôn ngữ đang chọn. */
 export function ProductDialog({ open, product, onOpenChange }: { open: boolean; product: ProductCatalogItem | null; onOpenChange: (o: boolean) => void }) {
@@ -40,7 +44,12 @@ export function ProductDialog({ open, product, onOpenChange }: { open: boolean; 
     },
   });
 
-  const ERROR_TEXT: Partial<Record<FieldKey, string>> = { name: t.errName, hsCode: t.errHs, origin: t.errOrigin, importDutyRate: t.errRate, vatRate: t.errRate };
+  const ERROR_TEXT: Partial<Record<FieldKey, string>> = {
+    name: t.errName, hsCode: t.errHs, origin: t.errOrigin, unitPrice: t.errNumber, currency: t.errCurrency, ...Object.fromEntries(RATE_FIELDS.map((k) => [k, t.errRate])),
+  };
+  const RATE_LABEL: Record<(typeof RATE_FIELDS)[number], string> = {
+    importDutyRate: t.importDuty, vatRate: t.vat, envTaxRate: t.envTax, exciseRate: t.excise, safeguardRate: t.safeguard, antiDiscriminationRate: t.antiDiscrimination,
+  };
   const submit = () => {
     const parsed = ProductCatalogInputSchema.safeParse(form);
     if (!parsed.success) {
@@ -76,22 +85,38 @@ export function ProductDialog({ open, product, onOpenChange }: { open: boolean; 
             <Field label={t.name} required {...err("name")}>
               <Textarea value={form.name} onChange={set("name")} rows={3} />
             </Field>
+            <Field label={t.description} hint={t.descriptionHint}>
+              <Textarea value={form.description} onChange={set("description")} rows={3} />
+            </Field>
             <Grid cols={{ base: 2, md: 3 }} gap="md">
               <Field label={t.unit}>
                 <Input value={form.unit} onChange={set("unit")} className="font-mono" autoComplete="off" />
               </Field>
+              <Field label={t.unit2}>
+                <Input value={form.unit2} onChange={set("unit2")} className="font-mono" autoComplete="off" />
+              </Field>
               <Field label={t.origin} hint={t.originHint} {...err("origin")}>
                 <Input value={form.origin} onChange={set("origin")} className="font-mono" maxLength={2} autoComplete="off" />
+              </Field>
+              <Field label={t.unitPrice} {...err("unitPrice")}>
+                <Input value={form.unitPrice} onChange={set("unitPrice")} inputMode="decimal" autoComplete="off" />
+              </Field>
+              <Field label={t.currency} hint={t.currencyHint} {...err("currency")}>
+                <Input value={form.currency} onChange={set("currency")} className="font-mono" maxLength={3} autoComplete="off" />
               </Field>
               <Field label={t.schedule}>
                 <Input value={form.tariffSchedule} onChange={set("tariffSchedule")} className="font-mono" autoComplete="off" />
               </Field>
-              <Field label={t.importDuty} {...err("importDutyRate")}>
-                <Input value={form.importDutyRate} onChange={set("importDutyRate")} inputMode="decimal" autoComplete="off" />
-              </Field>
-              <Field label={t.vat} {...err("vatRate")}>
-                <Input value={form.vatRate} onChange={set("vatRate")} inputMode="decimal" autoComplete="off" />
-              </Field>
+            </Grid>
+            <Field label={t.partner}>
+              <Input value={form.partner} onChange={set("partner")} autoComplete="off" />
+            </Field>
+            <Grid cols={{ base: 2, md: 3 }} gap="md">
+              {RATE_FIELDS.map((k) => (
+                <Field key={k} label={RATE_LABEL[k]} {...err(k)}>
+                  <Input value={form[k]} onChange={set(k)} inputMode="decimal" autoComplete="off" />
+                </Field>
+              ))}
             </Grid>
             <Field label={t.note}>
               <Textarea value={form.note} onChange={set("note")} rows={2} />

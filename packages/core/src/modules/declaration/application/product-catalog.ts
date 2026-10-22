@@ -13,7 +13,8 @@ const canEdit = (ctx: Ctx) => requireRole(ctx, "DECLARANT", "ADMIN");
 export function toProductItem(r: ProductRow): ProductCatalogItem {
   return {
     id: r.id, code: r.code, name: r.name, hsCode: r.hsCode, unit: r.unit, origin: r.origin, tariffSchedule: r.tariffSchedule,
-    importDutyRate: r.importDutyRate, vatRate: r.vatRate, note: r.note, source: r.source, timesDeclared: r.timesDeclared,
+    importDutyRate: r.importDutyRate, vatRate: r.vatRate, envTaxRate: r.envTaxRate, exciseRate: r.exciseRate, safeguardRate: r.safeguardRate,
+    antiDiscriminationRate: r.antiDiscriminationRate, description: r.description, unit2: r.unit2, unitPrice: r.unitPrice, currency: r.currency, partner: r.partner, note: r.note, source: r.source, timesDeclared: r.timesDeclared,
     lastDeclarationNo: r.lastDeclarationNo, lastDeclarationDate: r.lastDeclarationDate, lastTypeCode: r.lastTypeCode, raw: r.raw,
     createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   };
@@ -92,7 +93,9 @@ export async function importProducts(deps: DeclarationDeps, ctx: Ctx, input: Imp
       const pick = <K extends keyof typeof it & keyof ProductRow>(k: K) => (newer ? (it[k] ?? cur[k]) : (cur[k] ?? it[k])) as ProductRow[K];
       await r.products.update({
         ...cur, code: pick("code"), name: newer ? it.name : cur.name, nameKey: normalizeProductName(newer ? it.name : cur.name), hsCode: newer ? it.hsCode : cur.hsCode, unit: pick("unit"), origin: pick("origin"),
-        tariffSchedule: pick("tariffSchedule"), importDutyRate: pick("importDutyRate"), vatRate: pick("vatRate"), note: pick("note"),
+        tariffSchedule: pick("tariffSchedule"), importDutyRate: pick("importDutyRate"), vatRate: pick("vatRate"), envTaxRate: pick("envTaxRate"), exciseRate: pick("exciseRate"),
+        safeguardRate: pick("safeguardRate"), antiDiscriminationRate: pick("antiDiscriminationRate"), description: pick("description"), unit2: pick("unit2"),
+        unitPrice: pick("unitPrice"), currency: pick("currency"), partner: pick("partner"), note: pick("note"),
         timesDeclared: Math.max(cur.timesDeclared, it.timesDeclared), lastDeclarationNo: pick("lastDeclarationNo"), lastDeclarationDate: pick("lastDeclarationDate"),
         lastTypeCode: pick("lastTypeCode"), raw: pick("raw"), updatedBy: ctx.userId, updatedAt: now,
       });
@@ -113,6 +116,11 @@ export async function recordApprovedProducts(r: DeclarationRepos, idGen: Declara
   if (!confirmed.length) return;
   const date = now.toISOString().slice(0, 10);
   const typeCode = Object.values(decl.fields).find((f) => f.no === "1.4" || f.no === "2.4")?.value || null;
+  const currency = decl.fields.MA_TT?.value || null;
+  // Đối tác: tờ khai nhập → người xuất khẩu; tờ khai xuất → người nhập khẩu.
+  const partnerNo = decl.kind === "EDA" ? "2.19" : "1.20";
+  const partner = Object.values(decl.fields).find((f) => f.no === partnerNo)?.value.trim().slice(0, 255) || null;
+  const latest = (i: LineItemRow) => ({ unitPrice: i.unitPrice || null, currency, partner });
   // Dòng hàng không có mã hàng → tra theo tên chuẩn hóa (khớp cả mặt hàng đã có mã hàng trong danh mục).
   const byName = new Map(confirmed.map((i) => [normalizeProductName(i.description), i]));
   const existing = new Map((await r.products.byNameKeys(decl.orgId, [...byName.keys()])).map((p) => [p.nameKey, p]));
@@ -120,12 +128,17 @@ export async function recordApprovedProducts(r: DeclarationRepos, idGen: Declara
   for (const [nameKey, i] of byName) {
     const cur = existing.get(nameKey);
     if (cur) {
-      await r.products.update({ ...cur, timesDeclared: cur.timesDeclared + 1, lastDeclarationNo: null, lastDeclarationDate: date, lastTypeCode: typeCode ?? cur.lastTypeCode, updatedAt: now });
+      const l = latest(i);
+      await r.products.update({
+        ...cur, timesDeclared: cur.timesDeclared + 1, lastDeclarationNo: null, lastDeclarationDate: date, lastTypeCode: typeCode ?? cur.lastTypeCode,
+        unitPrice: l.unitPrice ?? cur.unitPrice, currency: l.unitPrice ? (l.currency ?? cur.currency) : cur.currency, partner: l.partner ?? cur.partner, updatedAt: now,
+      });
       continue;
     }
     inserts.push({
       id: idGen.next("prd"), orgId: decl.orgId, key: productKey(null, i.description), nameKey, code: null, name: i.description.trim(), hsCode: i.hsConfirmed!.replace(/\D/g, ""),
-      unit: i.unit || null, origin: i.origin || null, tariffSchedule: null, importDutyRate: i.importDutyRate, vatRate: i.vatRate, note: null,
+      unit: i.unit || null, origin: i.origin || null, tariffSchedule: null, importDutyRate: i.importDutyRate, vatRate: i.vatRate,
+      envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, description: null, unit2: null, ...latest(i), note: null,
       source: "DECLARATION", timesDeclared: 1, lastDeclarationNo: null, lastDeclarationDate: date, lastTypeCode: typeCode, raw: null,
       updatedBy: userId, createdAt: now, updatedAt: now,
     });

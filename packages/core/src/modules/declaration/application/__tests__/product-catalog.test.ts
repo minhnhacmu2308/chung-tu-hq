@@ -1,4 +1,4 @@
-import type { ProductImportItem } from "@kb/contracts";
+import type { ProductCatalogInput, ProductImportItem } from "@kb/contracts";
 import { ProductCatalogInputSchema } from "@kb/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock } from "../../../../shared/clock.js";
@@ -13,11 +13,13 @@ import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, Record
 import { InMemoryDeclarationUow } from "../test/in-memory-uow.js";
 
 const ctx = (role: Ctx["role"], org = "org_a"): Ctx => ({ orgId: asOrgId(org), userId: asUserId(`usr_${role}`), role });
-const values = (v: Partial<Parameters<typeof ProductCatalogInputSchema.parse>[0]> = {}) =>
-  ProductCatalogInputSchema.parse({ code: "", name: "Nước hoa YSL Libre EDP 90ml", hsCode: "3303.00.00", unit: "UNA", origin: "fr", tariffSchedule: "B01", importDutyRate: "18%", vatRate: "", note: "", ...v });
+const input = (v: Partial<ProductCatalogInput> = {}): ProductCatalogInput => ({ code: "", name: "Nước hoa YSL Libre EDP 90ml", hsCode: "3303.00.00", unit: "UNA", origin: "fr", tariffSchedule: "B01", importDutyRate: "18%", vatRate: "",
+    envTaxRate: "", exciseRate: "", safeguardRate: "", antiDiscriminationRate: "", description: "", unit2: "", unitPrice: "", currency: "", partner: "", note: "", ...v });
+const values = (v: Partial<ProductCatalogInput> = {}) => ProductCatalogInputSchema.parse(input(v));
 const imp = (v: Partial<ProductImportItem> = {}): ProductImportItem => ({
   code: "145612", name: "Nước hoa YSL Libre EDP 90ml, 145612. Hàng mới 100%", hsCode: "33030000", unit: "UNA", origin: "FR", tariffSchedule: "B01",
-  importDutyRate: "18", vatRate: null, note: null, timesDeclared: 2, lastDeclarationNo: "108091566221", lastDeclarationDate: "2026-03-27", lastTypeCode: "A44",
+  importDutyRate: "18", vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, description: null, unit2: "UNA",
+  unitPrice: "46.46", currency: "USD", partner: "DFASS SINGAPORE PTE. LTD", note: null, timesDeclared: 2, lastDeclarationNo: "108091566221", lastDeclarationDate: "2026-03-27", lastTypeCode: "A44",
   raw: { "Số TK": "108091566221" }, ...v,
 });
 
@@ -34,7 +36,10 @@ beforeEach(() => {
 describe("danh mục hàng hóa", () => {
   it("thêm tay: chuẩn hóa HS/thuế suất/xuất xứ; trùng tên (không phân biệt hoa thường, đuôi 'Hàng mới 100%') → DUPLICATE", async () => {
     const p = unwrap(await createProduct(deps, ctx("DECLARANT"), values()));
-    expect(p).toMatchObject({ code: null, hsCode: "33030000", origin: "FR", importDutyRate: "18", vatRate: null, source: "MANUAL", timesDeclared: 0 });
+    expect(p).toMatchObject({ code: null, hsCode: "33030000", origin: "FR", importDutyRate: "18", vatRate: null, source: "MANUAL", timesDeclared: 0, unitPrice: null, currency: null });
+    const priced = unwrap(await createProduct(deps, ctx("DECLARANT"), values({ code: "P1", unitPrice: "1 234,5", currency: "usd", exciseRate: "65%", description: "Mô tả", partner: "ABC" })));
+    expect(priced).toMatchObject({ unitPrice: "1234.5", currency: "USD", exciseRate: "65", description: "Mô tả", partner: "ABC" });
+    expect(ProductCatalogInputSchema.safeParse(input({ currency: "US" })).success).toBe(false);
     const dup = await createProduct(deps, ctx("ADMIN"), values({ name: "NƯỚC HOA YSL LIBRE EDP 90ML. Hàng mới 100%" }));
     expect(errCode(dup)).toBe("DUPLICATE");
     expect(!dup.ok && dup.error.reason).toBe("PRODUCT_NAME_EXISTS");
@@ -68,9 +73,11 @@ describe("danh mục hàng hóa", () => {
     let ysl = unwrap(await listProducts(deps, ctx("VIEWER"))).find((p) => p.code === "145612")!;
     expect(ysl).toMatchObject({ source: "IMPORT", timesDeclared: 2, hsCode: "33030000", lastDeclarationDate: "2026-03-27", raw: { "Số TK": "108091566221" } });
 
-    unwrap(await importProducts(deps, ctx("DECLARANT"), { items: [imp({ hsCode: "33049990", lastDeclarationDate: "2026-05-19", timesDeclared: 3, vatRate: "8" })] }));
+    expect(ysl).toMatchObject({ unit2: "UNA", unitPrice: "46.46", currency: "USD", partner: "DFASS SINGAPORE PTE. LTD", envTaxRate: null });
+
+    unwrap(await importProducts(deps, ctx("DECLARANT"), { items: [imp({ hsCode: "33049990", lastDeclarationDate: "2026-05-19", timesDeclared: 3, vatRate: "8", unitPrice: "50", envTaxRate: "0", description: "Nước hoa nữ, chai thủy tinh 90ml" })] }));
     ysl = unwrap(await listProducts(deps, ctx("VIEWER"))).find((p) => p.code === "145612")!;
-    expect(ysl).toMatchObject({ hsCode: "33049990", lastDeclarationDate: "2026-05-19", timesDeclared: 3, vatRate: "8" });
+    expect(ysl).toMatchObject({ hsCode: "33049990", lastDeclarationDate: "2026-05-19", timesDeclared: 3, vatRate: "8", unitPrice: "50", envTaxRate: "0", description: "Nước hoa nữ, chai thủy tinh 90ml" });
 
     unwrap(await importProducts(deps, ctx("DECLARANT"), { items: [imp({ hsCode: "11111111", lastDeclarationDate: "2025-01-01", timesDeclared: 1, note: "cũ" })] }));
     ysl = unwrap(await listProducts(deps, ctx("VIEWER"))).find((p) => p.code === "145612")!;
@@ -90,15 +97,19 @@ describe("danh mục hàng hóa", () => {
       invoiceHsCode: null, hsSuggested: null, hsConfidence: null, hsConfirmed, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: "18", vatRate: "8", policyNote: null,
       hsJobId: null, hsItemId: null, hsStatus: "completed" as const, hsQuestion: null, hsError: null, hsDetail: null, createdAt: now, updatedAt: now,
     });
-    const decl = { id: "dec_1", orgId: "org_a", fields: { TK_ICB: { no: "1.4", label: "", section: "GENERAL" as const, value: "A11", source: "USER" as const } } } as unknown as Parameters<typeof recordApprovedProducts>[2];
+    const f = (no: string, value: string) => ({ no, label: "", section: "GENERAL" as const, value, source: "USER" as const });
+    const decl = { id: "dec_1", orgId: "org_a", kind: "IDA", fields: { TK_ICB: f("1.4", "A11"), MA_TT: f("1.44", "EUR"), NXK_TEN: f("1.20", " L'OREAL SA ") } } as unknown as Parameters<typeof recordApprovedProducts>[2];
     await uow.asOrg(ctx("APPROVER"), (r) => recordApprovedProducts(r, deps.idGen, decl, [
       line(1, "  NƯỚC HOA YSL LIBRE EDP 90ML, 145612 ", "9999.99.99"),
       line(2, "Mặt hàng mới", "8482.10.00"),
       line(3, "Chưa xác nhận", null),
     ], now, "usr_x"));
     const list = unwrap(await listProducts(deps, ctx("VIEWER")));
-    expect(list.find((p) => p.code === "145612")).toMatchObject({ hsCode: "33030000", timesDeclared: 3, lastDeclarationDate: "2026-10-22", lastTypeCode: "A11" });
-    expect(list.find((p) => p.name === "Mặt hàng mới")).toMatchObject({ source: "DECLARATION", hsCode: "84821000", timesDeclared: 1 });
+    // Đơn giá / mã tiền / đối tác theo lần khai mới nhất; ĐVT SL2 (chỉ có ở file import) giữ nguyên
+    expect(list.find((p) => p.code === "145612")).toMatchObject({
+      hsCode: "33030000", timesDeclared: 3, lastDeclarationDate: "2026-10-22", lastTypeCode: "A11", unitPrice: "1", currency: "EUR", partner: "L'OREAL SA", unit2: "UNA",
+    });
+    expect(list.find((p) => p.name === "Mặt hàng mới")).toMatchObject({ source: "DECLARATION", hsCode: "84821000", timesDeclared: 1, unitPrice: "1", currency: "EUR", partner: "L'OREAL SA", description: null });
     expect(list).toHaveLength(2);
   });
 

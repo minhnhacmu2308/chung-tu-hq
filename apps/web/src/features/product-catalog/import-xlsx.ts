@@ -6,20 +6,31 @@ import type ExcelJS from "exceljs";
 
 /** Trường cần lấy → các tên cột chấp nhận (so sánh sau khi bỏ dấu, chữ thường, bỏ ký tự đặc biệt). */
 const COLUMNS = {
-  name: ["ten hang", "ten hang hoa", "mo ta hang hoa", "description"],
+  name: ["ten hang", "ten hang hoa", "product name"],
+  // Tên hàng khai trên VNACCS chính là "Mô tả hàng hóa": file chỉ có cột này thì dùng làm tên hàng; có cả hai thì đây là mô tả chi tiết.
+  description: ["mo ta hang hoa", "mo ta", "mo ta chi tiet", "description"],
   hsCode: ["ma hs", "hs code", "ma so hang hoa"],
   code: ["ma hang", "ma san pham", "sku"],
   unit: ["dvt sl1", "dvt", "don vi tinh", "unit"],
+  unit2: ["dvt sl2", "don vi tinh 2"],
+  unitPrice: ["don gia hoa don", "don gia", "unit price"],
+  currency: ["ng te hoa don", "nguyen te", "ngoai te", "ma tien te", "ma tien", "currency"],
+  partner: ["ten doi tac", "doi tac", "nha cung cap", "supplier"],
   origin: ["xuat xu", "nuoc xuat xu", "origin"],
   tariffSchedule: ["bieu thue nhap khau", "ma bieu thue", "bieu thue"],
   importDutyRate: ["thue suat nk", "thue suat nhap khau"],
   vatRate: ["thue suat vat", "thue suat gtgt"],
+  envTaxRate: ["thue suat mt", "thue suat bvmt"],
+  exciseRate: ["thue suat ttdb"],
+  safeguardRate: ["thue suat tv"],
+  antiDiscriminationRate: ["thue suat pbdx"],
   declarationNo: ["so tk", "so to khai"],
   declarationDate: ["ngay dk", "ngay dang ky"],
   typeCode: ["ma loai hinh"],
 } as const;
 type Column = keyof typeof COLUMNS;
 const REQUIRED: Column[] = ["name", "hsCode"];
+const RATES = ["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate"] as const;
 
 export type ImportIssue = { row: number; reason: "missingName" | "invalidHs" };
 export type ParsedCatalog = {
@@ -70,9 +81,9 @@ function isoDate(s: string): string | null {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
-/** "18%" | "18" | "7,5" → "18" / "7.5"; rỗng hoặc sai → null. */
-function rate(s: string): string | null {
-  const t = s.replace(/%/g, "").replace(",", ".").trim();
+/** "18%" | "18" | "7,5" | "46.46" → "18" / "7.5" / "46.46"; rỗng hoặc sai → null. */
+function decimal(s: string): string | null {
+  const t = s.replace(/%/g, "").replace(/\s/g, "").replace(",", ".");
   return /^\d+(\.\d+)?$/.test(t) ? String(Number(t)) : null;
 }
 
@@ -116,6 +127,10 @@ function parseSheet(ws: ExcelJS.Worksheet): ParsedCatalog {
       headerRow = r;
     }
   }
+  if (index.name === undefined && index.description !== undefined) {
+    index.name = index.description;
+    delete index.description;
+  }
   const missingColumns = REQUIRED.filter((c) => index[c] === undefined);
   if (missingColumns.length) return { items: [], rows: 0, issues: [], conflicts: [], missingColumns };
 
@@ -148,6 +163,9 @@ function parseSheet(ws: ExcelJS.Worksheet): ParsedCatalog {
       if (h) raw[h.slice(0, 100)] = cellText(row.getCell(col)).slice(0, 2000);
     });
     const origin = get("origin").trim().toUpperCase();
+    const unitPrice = decimal(get("unitPrice"));
+    const currency = get("currency").trim().toUpperCase();
+    const description = get("description").trim();
     const item: ProductImportItem = {
       code,
       name: name.slice(0, 1000),
@@ -155,8 +173,12 @@ function parseSheet(ws: ExcelJS.Worksheet): ParsedCatalog {
       unit: nullIfEmpty(get("unit"), 10),
       origin: /^[A-Z]{2}$/.test(origin) ? origin : null,
       tariffSchedule: nullIfEmpty(get("tariffSchedule"), 10),
-      importDutyRate: rate(get("importDutyRate")),
-      vatRate: rate(get("vatRate")),
+      ...(Object.fromEntries(RATES.map((k) => [k, decimal(get(k))])) as Record<(typeof RATES)[number], string | null>),
+      description: description && description !== name ? description.slice(0, 2000) : null,
+      unit2: nullIfEmpty(get("unit2"), 10),
+      unitPrice,
+      currency: unitPrice && /^[A-Z]{3}$/.test(currency) ? currency : null,
+      partner: nullIfEmpty(get("partner"), 255),
       note: null,
       timesDeclared: 1,
       lastDeclarationNo: nullIfEmpty(get("declarationNo"), 20),

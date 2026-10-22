@@ -4,9 +4,11 @@ import { getDb, resetDb } from "@/mocks/db";
 import { createProduct, deleteProducts, importProducts, listProducts, recordApprovedProducts, updateProduct } from "./products";
 
 const code = async (p: Promise<unknown>) => p.then(() => "OK", (e: { code?: string; reason?: string }) => e.reason ?? e.code);
-const input = (v: Record<string, string> = {}) => ({ code: "", name: "Nước hoa YSL Libre EDP 90ml", hsCode: "3303.00.00", unit: "UNA", origin: "fr", tariffSchedule: "B01", importDutyRate: "18%", vatRate: "", note: "", ...v });
+const input = (v: Record<string, string> = {}) => ({ code: "", name: "Nước hoa YSL Libre EDP 90ml", hsCode: "3303.00.00", unit: "UNA", origin: "fr", tariffSchedule: "B01", importDutyRate: "18%", vatRate: "",
+  envTaxRate: "", exciseRate: "", safeguardRate: "", antiDiscriminationRate: "", description: "", unit2: "", unitPrice: "", currency: "", partner: "", note: "", ...v });
 const imp = (v: Partial<ProductImportItem> = {}): ProductImportItem => ({
-  code: "145612", name: "Nước hoa YSL, 145612. Hàng mới 100%", hsCode: "33030000", unit: "UNA", origin: "FR", tariffSchedule: "B01", importDutyRate: "18", vatRate: null, note: null,
+  code: "145612", name: "Nước hoa YSL, 145612. Hàng mới 100%", hsCode: "33030000", unit: "UNA", origin: "FR", tariffSchedule: "B01", importDutyRate: "18", vatRate: null,
+  envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, description: null, unit2: null, unitPrice: "46.46", currency: "USD", partner: "DFASS", note: null,
   timesDeclared: 2, lastDeclarationNo: "108091566221", lastDeclarationDate: "2026-03-27", lastTypeCode: "A44", raw: null, ...v,
 });
 const actAsRole = (role: string) => {
@@ -34,7 +36,7 @@ describe("danh mục hàng hóa (mock)", () => {
     expect(await importProducts({ items: [imp()] })).toEqual({ created: 1, updated: 0 });
     expect(await importProducts({ items: [imp()] })).toEqual({ created: 0, updated: 1 });
     await importProducts({ items: [imp({ hsCode: "33049990", lastDeclarationDate: "2026-05-19", timesDeclared: 3 })] });
-    expect((await listProducts()).find((p) => p.code === "145612")).toMatchObject({ hsCode: "33049990", timesDeclared: 3, source: "IMPORT" });
+    expect((await listProducts()).find((p) => p.code === "145612")).toMatchObject({ hsCode: "33049990", timesDeclared: 3, source: "IMPORT", unitPrice: "46.46", currency: "USD", partner: "DFASS" });
   });
 
   it("Người xem không thêm / import / xóa được", async () => {
@@ -52,9 +54,9 @@ describe("danh mục hàng hóa (mock)", () => {
       { ...base, id: "a", lineNo: 1, description: "Mặt hàng hoàn toàn mới", hsConfirmed: "8482.10.00" },
       { ...base, id: "b", lineNo: 2, description: existing.name, hsConfirmed: "9999.99.99" },
       { ...base, id: "c", lineNo: 3, description: "Chưa xác nhận HS" },
-    ], "A11");
-    expect(db.products.find((p) => p.name === "Mặt hàng hoàn toàn mới")).toMatchObject({ source: "DECLARATION", hsCode: "84821000", timesDeclared: 1, lastTypeCode: "A11" });
-    expect(db.products.find((p) => p.id === existing.id)).toMatchObject({ hsCode: existing.hsCode, timesDeclared: existing.timesDeclared + 1 });
+    ], { typeCode: "A11", currency: "EUR", partner: "SKF GMBH" });
+    expect(db.products.find((p) => p.name === "Mặt hàng hoàn toàn mới")).toMatchObject({ source: "DECLARATION", hsCode: "84821000", timesDeclared: 1, lastTypeCode: "A11", unitPrice: "1", currency: "EUR", partner: "SKF GMBH" });
+    expect(db.products.find((p) => p.id === existing.id)).toMatchObject({ hsCode: existing.hsCode, timesDeclared: existing.timesDeclared + 1, unitPrice: "1", currency: "EUR", partner: "SKF GMBH", description: existing.description });
     expect(db.products.some((p) => p.name === "Chưa xác nhận HS")).toBe(false);
   });
 });

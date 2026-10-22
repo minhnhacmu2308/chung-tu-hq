@@ -46,6 +46,28 @@ describe("đọc bảng kê dòng hàng (Excel) → mặt hàng", () => {
     expect(parsed.items.find((i) => i.name === "Cà phê")?.hsCode).toBe("09011100");
   });
 
+  it("cột thêm của bảng kê: đối tác, ĐVT SL2, đơn giá + mã tiền, thuế suất BVMT/TTĐB/TV/PBDX, mô tả hàng hóa", async () => {
+    const headers = [
+      "Số TK", "Ngày ĐK", "Tên đối tác", "Ng.Tệ hóa đơn", "Mã HS", "Tên hàng", "Mô tả hàng hóa", "ĐVT SL1", "Đơn giá hóa đơn", "Đơn giá tính thuế", "ĐVT SL2",
+      "Thuế suất TV(%)", "Thuế suất PBDX(%)", "Thuế suất TTĐB(%)", "Thuế suất MT(%)", "Thuế suất VAT(%)",
+    ];
+    const parsed = await parseCatalogWorkbook(await book([
+      ["1", "27/03/2026", "DFASS SINGAPORE PTE. LTD", "usd", "22083090", "Rượu Jack Daniels 1L", "Rượu whisky, 40% cồn, chai thủy tinh 1 lít", "UNA", 46.46, 1211909.1, "LTR", "", "", "65%", "0%", "8%"],
+      ["2", "28/03/2026", "", "", "33030000", "Nước hoa YSL", "Nước hoa YSL", "UNA", "", 1, "", "", "", "", "", ""],
+    ], { headers }));
+    expect(parsed.items[0]).toMatchObject({
+      partner: "DFASS SINGAPORE PTE. LTD", currency: "USD", unitPrice: "46.46", unit2: "LTR", exciseRate: "65", envTaxRate: "0", vatRate: "8",
+      safeguardRate: null, antiDiscriminationRate: null, description: "Rượu whisky, 40% cồn, chai thủy tinh 1 lít",
+    });
+    // Mô tả trùng tên → không lưu lặp; không có đơn giá → không lưu mã tiền
+    expect(parsed.items[1]).toMatchObject({ description: null, unitPrice: null, currency: null, partner: null });
+  });
+
+  it("file chỉ có cột “Mô tả hàng hóa” (tên gọi trên VNACCS) → dùng làm tên hàng", async () => {
+    const parsed = await parseCatalogWorkbook(await book([["33030000", "Nước hoa YSL"]], { headers: ["Mã HS", "Mô tả hàng hóa"] }));
+    expect(parsed).toMatchObject({ missingColumns: [], items: [{ name: "Nước hoa YSL", description: null }] });
+  });
+
   it("thiếu cột bắt buộc → báo cột thiếu, không đọc", async () => {
     const parsed = await parseCatalogWorkbook(await book([["a", "b"]], { headers: ["Số TK", "Tên hàng"] }));
     expect(parsed).toMatchObject({ items: [], missingColumns: ["hsCode"] });

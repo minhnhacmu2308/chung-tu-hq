@@ -42,6 +42,20 @@ export const ProductCatalogItemSchema = z.object({
   tariffSchedule: z.string().nullable(),
   importDutyRate: DecimalStringSchema.nullable(),
   vatRate: DecimalStringSchema.nullable(),
+  /** Thuế suất bảo vệ môi trường / tiêu thụ đặc biệt / tự vệ / chống phân biệt đối xử (%) – phần lớn mặt hàng không có. */
+  envTaxRate: DecimalStringSchema.nullable(),
+  exciseRate: DecimalStringSchema.nullable(),
+  safeguardRate: DecimalStringSchema.nullable(),
+  antiDiscriminationRate: DecimalStringSchema.nullable(),
+  /** Mô tả chi tiết (thành phần, công dụng, chất liệu…) – ngoài tên hàng đã khai; giúp phân loại HS. */
+  description: z.string().nullable(),
+  /** Đơn vị tính thứ hai (ĐVT SL2). */
+  unit2: z.string().nullable(),
+  /** Đơn giá hóa đơn của lần khai gần nhất + mã tiền. */
+  unitPrice: DecimalStringSchema.nullable(),
+  currency: z.string().nullable(),
+  /** Đối tác (người xuất khẩu / người nhập khẩu) của lần khai gần nhất. */
+  partner: z.string().nullable(),
   note: z.string().nullable(),
   source: ProductSourceSchema,
   /** Số lần mặt hàng đã được khai (theo dữ liệu import + tờ khai được duyệt). */
@@ -72,6 +86,25 @@ export const ProductCatalogInputSchema = z.object({
   tariffSchedule: optText(10),
   importDutyRate: RatePercentSchema,
   vatRate: RatePercentSchema,
+  envTaxRate: RatePercentSchema,
+  exciseRate: RatePercentSchema,
+  safeguardRate: RatePercentSchema,
+  antiDiscriminationRate: RatePercentSchema,
+  description: optText(2000),
+  unit2: optText(10),
+  unitPrice: z
+    .string()
+    .trim()
+    .transform((s) => s.replace(/\s/g, "").replace(",", "."))
+    .pipe(z.union([z.literal(""), DecimalStringSchema]))
+    .transform((s) => (s === "" ? null : s)),
+  currency: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .pipe(z.union([z.literal(""), z.string().regex(/^[A-Z]{3}$/, "Mã tiền 3 chữ (vd USD)")]))
+    .transform((s) => (s === "" ? null : s)),
+  partner: optText(255),
   note: optText(1000),
 });
 export type ProductCatalogInput = z.input<typeof ProductCatalogInputSchema>;
@@ -87,6 +120,15 @@ export const ProductImportItemSchema = z.object({
   tariffSchedule: z.string().trim().max(10).nullable(),
   importDutyRate: DecimalStringSchema.nullable(),
   vatRate: DecimalStringSchema.nullable(),
+  envTaxRate: DecimalStringSchema.nullable(),
+  exciseRate: DecimalStringSchema.nullable(),
+  safeguardRate: DecimalStringSchema.nullable(),
+  antiDiscriminationRate: DecimalStringSchema.nullable(),
+  description: z.string().trim().max(2000).nullable(),
+  unit2: z.string().trim().max(10).nullable(),
+  unitPrice: DecimalStringSchema.nullable(),
+  currency: z.string().trim().max(3).nullable(),
+  partner: z.string().trim().max(255).nullable(),
   note: z.string().trim().max(1000).nullable(),
   timesDeclared: z.number().int().positive(),
   lastDeclarationNo: z.string().max(20).nullable(),

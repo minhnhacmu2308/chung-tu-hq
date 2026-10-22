@@ -116,7 +116,7 @@ function repos(tx: Tx): DeclarationRepos {
       byKeys: async (orgId, keys) => (keys.length ? (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.key, keys)))).map(toProduct) : []),
       byNameKeys: async (orgId, nameKeys) => (nameKeys.length ? (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.nameKey, nameKeys)))).map(toProduct) : []),
       insert: async (rows) => {
-        // Chia lô: một câu INSERT tối đa ~65k tham số (21 cột/dòng).
+        // Chia lô: một câu INSERT tối đa ~65k tham số (30 cột/dòng).
         for (let i = 0; i < rows.length; i += 500) await tx.insert(productCatalog).values(rows.slice(i, i + 500));
       },
       update: async (row) => {

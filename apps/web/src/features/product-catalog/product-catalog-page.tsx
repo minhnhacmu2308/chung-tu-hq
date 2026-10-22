@@ -1,7 +1,7 @@
 "use client";
 import type { ProductCatalogItem, ProductSource } from "@kb/contracts";
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, fill, Grid, PageHeader, RowActions,
+  Alert, Badge, Button, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, Dialog, DialogClose, DialogContent, DialogFooter, fill, Grid, PageHeader, RowActions,
   SkeletonStats, Stack, StatCard, toast, useMessages,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { deleteProducts, listProducts, productKeys } from "@/api/products";
 import { getSession, sessionKeys } from "@/api/session";
 import { LoadError } from "@/components/common/load-error";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { formatHs } from "./format";
 import { ImportDialog } from "./import-dialog";
@@ -22,19 +22,50 @@ type Row = ProductCatalogItem & { sourceLabel: string; lastSort: string };
 
 const SOURCE_TONE: Record<ProductSource, "info" | "neutral" | "success"> = { IMPORT: "info", MANUAL: "neutral", DECLARATION: "success" };
 const EDITORS = new Set(["OWNER", "ADMIN", "DECLARANT"]);
+type RateKey = "importDutyRate" | "vatRate" | "envTaxRate" | "exciseRate" | "safeguardRate" | "antiDiscriminationRate";
 const col = createDataTableColumnHelper<Row>();
+// Cột chỉ có ở một số file/mặt hàng: ẩn sẵn khi cả danh mục không có dữ liệu (vẫn bật lại được ở nút "Cột").
+const SPARSE = ["unit2", "unitPrice", "partner", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate"] as const satisfies readonly (keyof ProductCatalogItem)[];
 
 function buildColumns(t: Messages) {
-  const pct = (v: string | null) => (v == null ? <span className="text-fg-subtle">—</span> : fill(t.percent, { n: v }));
+  const dash = <span className="text-fg-subtle">—</span>;
+  const pct = (v: string | null) => (v == null ? dash : fill(t.percent, { n: v }));
+  const rateCol = (id: RateKey, header: string, size = 100) =>
+    col.accessor((r) => Number(r[id] ?? -1), { id, header, size, meta: { align: "end" }, cell: (c) => pct(c.row.original[id]) });
   return col.columns([
     col.accessor((r) => r.code ?? "", { id: "code", header: t.colCode, size: 120, meta: { filter: "text" }, cell: (c) => (c.getValue() ? <span className="font-mono">{c.getValue()}</span> : <span className="text-fg-subtle">—</span>) }),
-    col.accessor("name", { header: t.colName, size: 380, minSize: 220, meta: { filter: "text", wrap: true, hideable: false }, cell: (c) => <span className="line-clamp-2 text-fg">{c.getValue()}</span> }),
+    col.accessor((r) => (r.description ? `${r.name} ${r.description}` : r.name), {
+      id: "name",
+      header: t.colName,
+      size: 380,
+      minSize: 220,
+      meta: { filter: "text", wrap: true, hideable: false },
+      cell: (c) => (
+        <div className="flex min-w-0 flex-col">
+          <span className="line-clamp-2 text-fg">{c.row.original.name}</span>
+          {c.row.original.description && <span className="line-clamp-1 text-xs text-fg-muted" title={c.row.original.description}>{c.row.original.description}</span>}
+        </div>
+      ),
+    }),
     col.accessor((r) => formatHs(r.hsCode), { id: "hsCode", header: t.colHs, size: 120, meta: { filter: "text" }, cell: (c) => <span className="font-mono font-medium text-fg">{c.getValue()}</span> }),
     col.accessor((r) => r.unit ?? "", { id: "unit", header: t.colUnit, size: 80, meta: { filter: "select" } }),
+    col.accessor((r) => r.unit2 ?? "", { id: "unit2", header: t.colUnit2, size: 80, meta: { filter: "select" } }),
     col.accessor((r) => r.origin ?? "", { id: "origin", header: t.colOrigin, size: 90, meta: { filter: "select" } }),
     col.accessor((r) => r.tariffSchedule ?? "", { id: "tariffSchedule", header: t.colSchedule, size: 100 }),
-    col.accessor((r) => Number(r.importDutyRate ?? -1), { id: "importDutyRate", header: t.colImportDuty, size: 100, meta: { align: "end" }, cell: (c) => pct(c.row.original.importDutyRate) }),
-    col.accessor((r) => Number(r.vatRate ?? -1), { id: "vatRate", header: t.colVat, size: 80, meta: { align: "end" }, cell: (c) => pct(c.row.original.vatRate) }),
+    rateCol("importDutyRate", t.colImportDuty),
+    rateCol("vatRate", t.colVat, 80),
+    rateCol("envTaxRate", t.colEnvTax),
+    rateCol("exciseRate", t.colExcise),
+    rateCol("safeguardRate", t.colSafeguard),
+    rateCol("antiDiscriminationRate", t.colAntiDiscrimination, 110),
+    col.accessor((r) => Number(r.unitPrice ?? -1), {
+      id: "unitPrice",
+      header: t.colUnitPrice,
+      size: 140,
+      meta: { align: "end" },
+      cell: (c) => (c.row.original.unitPrice == null ? dash : <span className="tabular-nums">{formatMoney(c.row.original.unitPrice, c.row.original.currency ?? undefined)}</span>),
+    }),
+    col.accessor((r) => r.partner ?? "", { id: "partner", header: t.colPartner, size: 200, meta: { filter: "select", wrap: true }, cell: (c) => (c.getValue() ? <span className="line-clamp-2">{c.getValue()}</span> : dash) }),
     col.accessor("timesDeclared", { header: t.colTimes, size: 110, meta: { align: "end" } }),
     col.accessor("lastSort", {
       header: t.colLast,
@@ -66,6 +97,11 @@ export function ProductCatalogPage() {
   const [toDelete, setToDelete] = useState<ProductCatalogItem[] | null>(null);
 
   const columns = useMemo(() => buildColumns(t), [t]);
+  const [visibility, setVisibility] = useState<DataTableColumnVisibility | null>(null);
+  const autoVisibility = useMemo(() => {
+    const list = products.data ?? [];
+    return { tariffSchedule: false, ...Object.fromEntries(SPARSE.map((k) => [k, list.some((p) => p[k] != null)])) };
+  }, [products.data]);
   const rows = useMemo<Row[]>(
     () => (products.data ?? []).map((p) => ({ ...p, sourceLabel: t[`source${p.source}`], lastSort: p.lastDeclarationDate ?? "" })),
     [products.data, t],
@@ -127,7 +163,8 @@ export function ProductCatalogPage() {
         selectable={canEdit}
         onSelectionChange={setSelected}
         initialSorting={[{ id: "lastSort", desc: true }]}
-        columnVisibility={{ tariffSchedule: false }}
+        columnVisibility={visibility ?? autoVisibility}
+        onColumnVisibilityChange={setVisibility}
         pagination={{ initialPageSize: 20, pageSizeOptions: [20, 50, 100] }}
         {...(canEdit ? { onRowClick: (r: Row) => setEditing({ product: byId.get(r.id) ?? r }) } : {})}
         toolbarActions={

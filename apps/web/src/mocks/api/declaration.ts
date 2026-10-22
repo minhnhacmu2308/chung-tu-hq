@@ -315,7 +315,13 @@ export const approveDeclaration = (dossierId: string) =>
     assertNoGaps(db, decl, "phê duyệt");
     Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
     // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp.
-    recordApprovedProducts(db, db.lineItems.filter((i) => i.dossierId === dossierId), decl.fields.find((f) => f.no === "1.4" || f.no === "2.4")?.value || null);
+    const fieldValue = (no: string) => decl.fields.find((f) => f.no === no)?.value.trim() || null;
+    recordApprovedProducts(db, db.lineItems.filter((i) => i.dossierId === dossierId), {
+      typeCode: fieldValue("1.4") ?? fieldValue("2.4"),
+      currency: decl.fields.find((f) => f.code === "MA_TT")?.value || null,
+      // Đối tác: tờ khai nhập → người xuất khẩu (1.20); tờ khai xuất → người nhập khẩu (2.19).
+      partner: fieldValue(decl.kind === "EDA" ? "2.19" : "1.20")?.slice(0, 255) ?? null,
+    });
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     Object.assign(dossier, { status: "APPROVED", step: "submit", suspectFields: 0, updatedAt: nowIso() });
     return decl;

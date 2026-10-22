@@ -14,7 +14,8 @@ const B = { orgId: asOrgId("org_khac"), userId: asUserId("usr_khac") };
 const at = new Date("2026-10-22T03:00:00Z");
 const row = (orgId: string, n: number, v: Partial<ProductRow> = {}): ProductRow => ({
   id: `prd_${orgId}_${n}`, orgId, key: `code:${n}`, nameKey: `mặt hàng ${n}`, code: String(n), name: `Mặt hàng ${n}`, hsCode: "33030000", unit: "UNA", origin: "FR", tariffSchedule: "B01",
-  importDutyRate: "18", vatRate: null, note: null, source: "IMPORT", timesDeclared: 1, lastDeclarationNo: "108091566221", lastDeclarationDate: "2026-03-27",
+  importDutyRate: "18", vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, description: null, unit2: null,
+  unitPrice: "46.46", currency: "USD", partner: null, note: null, source: "IMPORT", timesDeclared: 1, lastDeclarationNo: "108091566221", lastDeclarationDate: "2026-03-27",
   lastTypeCode: "A44", raw: { "Số TK": "108091566221", "Tên hàng": `Mặt hàng ${n}` }, updatedBy: "usr_chau", createdAt: at, updatedAt: at, ...v,
 });
 

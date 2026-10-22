@@ -78,7 +78,10 @@ export const importProducts = (input: ImportProductCatalogInput) =>
         continue;
       }
       const newer = (it.lastDeclarationDate ?? "") >= (cur.lastDeclarationDate ?? "");
-      const fields = ["code", "unit", "origin", "tariffSchedule", "importDutyRate", "vatRate", "note", "lastDeclarationNo", "lastDeclarationDate", "lastTypeCode", "raw"] as const;
+      const fields = [
+        "code", "unit", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate",
+        "description", "unit2", "unitPrice", "currency", "partner", "note", "lastDeclarationNo", "lastDeclarationDate", "lastTypeCode", "raw",
+      ] as const;
       for (const f of fields) (cur as Record<string, unknown>)[f] = newer ? (it[f] ?? cur[f]) : (cur[f] ?? it[f]);
       if (newer) Object.assign(cur, { name: it.name, hsCode: it.hsCode });
       Object.assign(cur, { timesDeclared: Math.max(cur.timesDeclared, it.timesDeclared), updatedAt: now });
@@ -87,8 +90,11 @@ export const importProducts = (input: ImportProductCatalogInput) =>
     return { created, updated };
   });
 
+/** Thông tin của tờ khai vừa duyệt ghi vào danh mục (lần khai gần nhất). */
+export type ApprovedDeclarationInfo = { typeCode: string | null; currency: string | null; partner: string | null };
+
 /** Tờ khai được duyệt → mặt hàng có HS đã xác nhận vào danh mục (mặt hàng đã có: tăng số lần khai, giữ mã HS). */
-export function recordApprovedProducts(db: MockDb, items: LineItem[], typeCode: string | null) {
+export function recordApprovedProducts(db: MockDb, items: LineItem[], { typeCode, currency, partner }: ApprovedDeclarationInfo) {
   const now = nowIso();
   const date = now.slice(0, 10);
   // Tra theo tên chuẩn hóa: khớp cả mặt hàng đã có mã hàng trong danh mục.
@@ -96,12 +102,16 @@ export function recordApprovedProducts(db: MockDb, items: LineItem[], typeCode: 
   for (const [nameKey, i] of byName) {
     const cur = db.products.find((p) => normalizeProductName(p.name) === nameKey);
     if (cur) {
-      Object.assign(cur, { timesDeclared: cur.timesDeclared + 1, lastDeclarationNo: null, lastDeclarationDate: date, lastTypeCode: typeCode ?? cur.lastTypeCode, updatedAt: now });
+      Object.assign(cur, {
+        timesDeclared: cur.timesDeclared + 1, lastDeclarationNo: null, lastDeclarationDate: date, lastTypeCode: typeCode ?? cur.lastTypeCode,
+        unitPrice: i.unitPrice || cur.unitPrice, currency: i.unitPrice ? (currency ?? cur.currency) : cur.currency, partner: partner ?? cur.partner, updatedAt: now,
+      });
       continue;
     }
     db.products.push({
       id: newId("prd"), code: null, name: i.description.trim(), hsCode: i.hsConfirmed!.replace(/\D/g, ""), unit: i.unit || null, origin: i.origin || null,
-      tariffSchedule: null, importDutyRate: i.importDutyRate ?? null, vatRate: i.vatRate ?? null, note: null, source: "DECLARATION", timesDeclared: 1,
+      tariffSchedule: null, importDutyRate: i.importDutyRate ?? null, vatRate: i.vatRate ?? null, envTaxRate: null, exciseRate: null, safeguardRate: null,
+      antiDiscriminationRate: null, description: null, unit2: null, unitPrice: i.unitPrice || null, currency, partner, note: null, source: "DECLARATION", timesDeclared: 1,
       lastDeclarationNo: null, lastDeclarationDate: date, lastTypeCode: typeCode, raw: null, createdAt: now, updatedAt: now,
     });
   }

@@ -19,9 +19,14 @@ describe("danh mục hàng hóa – khóa mặt hàng", () => {
     expect(codeFromProductName("Túi nhựa LBL001, kích thước 44cm x 62cm, hàng mới 100%")).toBeNull();
   });
   it("form: HS nhận dạng có dấu chấm, thuế suất có %, xuất xứ chữ thường; sai định dạng bị từ chối", () => {
-    expect(ProductCatalogInputSchema.parse({ code: "", name: " A ", hsCode: "3303.00.00", unit: "", origin: "fr", tariffSchedule: "", importDutyRate: "18%", vatRate: "7,5", note: "" }))
-      .toEqual({ code: null, name: "A", hsCode: "33030000", unit: null, origin: "FR", tariffSchedule: null, importDutyRate: "18", vatRate: "7.5", note: null });
-    const base = { code: "", name: "A", hsCode: "33030000", unit: "", origin: "", tariffSchedule: "", importDutyRate: "", vatRate: "", note: "" };
+    const extra = { envTaxRate: "", exciseRate: "", safeguardRate: "", antiDiscriminationRate: "", description: "", unit2: "", unitPrice: "", currency: "", partner: "" };
+    const extraNull = Object.fromEntries(Object.keys(extra).map((k) => [k, null]));
+    expect(ProductCatalogInputSchema.parse({ code: "", name: " A ", hsCode: "3303.00.00", unit: "", origin: "fr", tariffSchedule: "", importDutyRate: "18%", vatRate: "7,5", note: "", ...extra }))
+      .toEqual({ code: null, name: "A", hsCode: "33030000", unit: null, origin: "FR", tariffSchedule: null, importDutyRate: "18", vatRate: "7.5", note: null, ...extraNull });
+    const base = { code: "", name: "A", hsCode: "33030000", unit: "", origin: "", tariffSchedule: "", importDutyRate: "", vatRate: "", note: "", ...extra };
+    expect(ProductCatalogInputSchema.parse({ ...base, unitPrice: " 1 234,5 ", currency: "usd", exciseRate: "65%" })).toMatchObject({ unitPrice: "1234.5", currency: "USD", exciseRate: "65" });
+    expect(ProductCatalogInputSchema.safeParse({ ...base, currency: "US" }).success).toBe(false);
+    expect(ProductCatalogInputSchema.safeParse({ ...base, unitPrice: "abc" }).success).toBe(false);
     expect(ProductCatalogInputSchema.safeParse({ ...base, hsCode: "3303" }).success).toBe(false);
     expect(ProductCatalogInputSchema.safeParse({ ...base, origin: "FRA" }).success).toBe(false);
     expect(ProductCatalogInputSchema.safeParse({ ...base, importDutyRate: "abc" }).success).toBe(false);

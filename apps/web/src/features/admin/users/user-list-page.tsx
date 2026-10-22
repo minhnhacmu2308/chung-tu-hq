@@ -1,6 +1,6 @@
 "use client";
 import type { AdminUser } from "@kb/contracts";
-import { Alert, fill, PageHeader, SegmentedControl, Stack, useMessages } from "@kb/ui";
+import { Alert, PageHeader, SegmentedControl, Stack, useMessages } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
@@ -30,6 +30,7 @@ function ListInner() {
   const view: View = VIEWS.includes(raw as View) ? (raw as View) : "all";
   const users = useQuery({ queryKey: adminKeys.users(), queryFn: () => listAdminUsers() });
   const rows = useMemo(() => (users.data ?? []).filter(MATCH[view]), [users.data, view]);
+  const setView = (v: View) => router.replace(v === "all" ? pathname : `${pathname}?view=${v}`, { scroll: false });
 
   return (
     <Stack gap="lg">
@@ -44,7 +45,7 @@ function ListInner() {
           hideLabel
           className="justify-start"
           value={view}
-          onChange={(v) => router.replace(v === "all" ? pathname : `${pathname}?view=${v}`, { scroll: false })}
+          onChange={setView}
           options={VIEWS.map((v) => ({ value: v, label: users.data ? `${LABEL[v]} (${users.data.filter(MATCH[v]).length})` : LABEL[v] }))}
         />
         {view === "pending" && (
@@ -56,7 +57,9 @@ function ListInner() {
           users={rows}
           loading={users.isLoading}
           showJoinRequested={view === "pending"}
-          emptyTitle={view === "all" ? t.emptyAll : fill(t.emptyView, { view: LABEL[view] })}
+          emptyTitle={t.emptyAll}
+          filtered={view !== "all"}
+          onClearFilters={() => setView("all")}
         />
       </Stack>
     </Stack>

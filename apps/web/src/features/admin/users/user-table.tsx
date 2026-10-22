@@ -76,12 +76,15 @@ const makeColumns = (t: TableMessages) => col.columns([
  * Bảng tài khoản + panel chi tiết + hộp xác nhận thao tác. Dùng ở màn Người dùng (mọi doanh nghiệp)
  * và ở tab Thành viên của trang doanh nghiệp (`showOrg={false}`).
  */
-export function UserTable({ users, loading, showOrg = true, showJoinRequested = false, emptyTitle }: {
+export function UserTable({ users, loading, showOrg = true, showJoinRequested = false, emptyTitle, filtered = false, onClearFilters }: {
   users: readonly AdminUser[];
   loading: boolean;
   showOrg?: boolean;
   showJoinRequested?: boolean;
   emptyTitle: string;
+  /** Danh sách đã lọc theo nhóm bên ngoài bảng → bảng trống hiện "Không có kết quả phù hợp". */
+  filtered?: boolean;
+  onClearFilters?: () => void;
 }) {
   const t = useMessages(USER_TABLE_MESSAGES);
   const roleLabels = useMessages(ROLE_LABELS);
@@ -116,6 +119,8 @@ export function UserTable({ users, loading, showOrg = true, showJoinRequested = 
         pagination={{ initialPageSize: 10, pageSizeOptions: [10, 20, 50] }}
         onRowClick={(r) => setOpenId(r.id)}
         emptyTitle={emptyTitle}
+        filtered={filtered}
+        {...(onClearFilters ? { onClearFilters } : {})}
         rowActions={(r) => (
           <RowActions
             rowLabel={r.name}

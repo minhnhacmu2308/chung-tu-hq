@@ -1,10 +1,10 @@
-// Hình minh họa trang trí cho trạng thái trống / không tìm thấy / lỗi. SVG thuần, màu lấy từ token
+// Hình minh họa trang trí cho trạng thái trống / không tìm thấy / lỗi / máy chủ lỗi (500) / mất kết nối máy chủ (502). SVG thuần, màu lấy từ token
 // (tự đổi theo sáng/tối và màu thương hiệu), luôn aria-hidden – ý nghĩa nằm ở tiêu đề đi kèm.
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ReactElement } from "react";
 import { cn } from "../lib/cn.js";
 
-export const ILLUSTRATIONS = ["empty", "no-results", "not-found", "error"] as const;
+export const ILLUSTRATIONS = ["empty", "no-results", "not-found", "error", "server-error", "bad-gateway"] as const;
 export type IllustrationName = (typeof ILLUSTRATIONS)[number];
 
 const illustrationVariants = cva("block h-auto shrink-0 select-none", {
@@ -131,11 +131,99 @@ function ErrorArt() {
   );
 }
 
+/** Mã lỗi lớn phía trên (cùng kiểu với 404). */
+function Code({ value }: { value: string }) {
+  return (
+    <text x="100" y="58" textAnchor="middle" fontSize="50" fontWeight="800" letterSpacing="-2" className="fill-primary" opacity="0.9">
+      {value}
+    </text>
+  );
+}
+
+/** "500" + máy chủ báo động – "máy chủ gặp lỗi". */
+function ServerError() {
+  return (
+    <>
+      <Ground />
+      <Code value="500" />
+      <g strokeWidth="2" strokeLinejoin="round" className="stroke-border-strong">
+        <rect x="68" y="68" width="64" height="26" rx="4" className="fill-surface" />
+        <rect x="68" y="96" width="64" height="26" rx="4" className="fill-surface" />
+      </g>
+      <g strokeLinecap="round" strokeWidth="3" className="stroke-border">
+        <path d="M78 81 H104" />
+        <path d="M78 109 H104" />
+      </g>
+      <circle cx="120" cy="81" r="3.5" className="fill-danger" />
+      <circle cx="120" cy="109" r="3.5" className="fill-warning" />
+      <g transform="translate(140 66)">
+        <path d="M0 -12 L12 9 H-12 Z" strokeWidth="2" strokeLinejoin="round" className="fill-warning stroke-warning" />
+        <path d="M0 -4 V2" strokeWidth="2.5" strokeLinecap="round" className="stroke-warning-fg" />
+        <circle cx="0" cy="5.5" r="1.4" className="fill-warning-fg" />
+      </g>
+      <g className="fill-primary">
+        <path d="M36 30 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5z" opacity="0.7" />
+        <circle cx="44" cy="96" r="2" opacity="0.4" />
+      </g>
+    </>
+  );
+}
+
+/** "502" + dây nối giữa trình duyệt và máy chủ bị đứt – "cổng nối máy chủ không phản hồi". */
+function BadGateway() {
+  return (
+    <>
+      <Ground />
+      <Code value="502" />
+      {/* Trình duyệt */}
+      <g strokeWidth="2" strokeLinejoin="round" className="stroke-border-strong">
+        <rect x="26" y="76" width="44" height="34" rx="4" className="fill-surface" />
+        <path d="M26 84 H70" />
+        <path d="M40 118 H56 M48 110 V118" strokeLinecap="round" />
+      </g>
+      <g className="fill-border-strong">
+        <circle cx="31" cy="80" r="1.3" />
+        <circle cx="35" cy="80" r="1.3" />
+      </g>
+      <g strokeLinecap="round" strokeWidth="3" className="stroke-border">
+        <path d="M33 92 H58" />
+        <path d="M33 100 H50" />
+      </g>
+      {/* Máy chủ */}
+      <g strokeWidth="2" strokeLinejoin="round" className="stroke-border-strong">
+        <rect x="134" y="70" width="40" height="22" rx="4" className="fill-surface" />
+        <rect x="134" y="94" width="40" height="22" rx="4" className="fill-surface" />
+      </g>
+      <g strokeLinecap="round" strokeWidth="3" className="stroke-border">
+        <path d="M142 81 H156" />
+        <path d="M142 105 H156" />
+      </g>
+      <circle cx="165" cy="81" r="3" className="fill-fg-subtle" />
+      <circle cx="165" cy="105" r="3" className="fill-fg-subtle" />
+      {/* Dây đứt + tia lửa */}
+      <g strokeWidth="2.5" strokeLinecap="round" fill="none" className="stroke-primary">
+        <path d="M70 94 Q80 94 84 100 T92 104" />
+        <path d="M134 94 Q122 94 118 88 T108 84" />
+      </g>
+      <g className="fill-primary">
+        <rect x="90" y="100" width="7" height="8" rx="1.5" transform="rotate(20 93 104)" />
+        <rect x="103" y="80" width="7" height="8" rx="1.5" transform="rotate(20 106 84)" />
+      </g>
+      <path d="M100 86 L96 94 H101 L98 102 L106 91 H101 L104 86 Z" strokeWidth="1.5" strokeLinejoin="round" className="fill-warning stroke-warning" />
+      <g className="fill-primary">
+        <path d="M166 22 l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8z" opacity="0.5" />
+      </g>
+    </>
+  );
+}
+
 const ART: Record<IllustrationName, () => ReactElement> = {
   empty: Empty,
   "no-results": NoResults,
   "not-found": NotFound,
   error: ErrorArt,
+  "server-error": ServerError,
+  "bad-gateway": BadGateway,
 };
 
 export function Illustration({ name, size, className }: IllustrationProps) {

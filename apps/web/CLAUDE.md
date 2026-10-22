@@ -31,6 +31,8 @@ src/components/common/  thành phần riêng của app, chỉ ghép từ @kb/ui
 - Chạy: `pnpm dev` ở gốc (compose + migrate + web + worker) hoặc `pnpm dev:web` (cổng 3100, chỉ web). Dùng webpack (`--webpack`) vì `@kb/ui` import kiểu `./x.js` mà Turbopack chưa hỗ trợ.
 - `/api/health` kiểm tra Postgres + Redis.
 - PWA (cài thành ứng dụng máy tính): `src/app/manifest.ts` + `public/icons/` (icon 192/512/maskable dựng từ `app/icon.svg`); `src/features/pwa/` bắt `beforeinstallprompt` ở cấp module (`useInstallApp`). Thêm file tĩnh mới ở gốc → thêm vào `matcher` của `src/proxy.ts` để không bị chặn khi chưa đăng nhập.
+- Trang lỗi: `components/common/error-screen.tsx` (404 / 500 / 502 / lỗi màn hình; `errorKindOf(error)` phân loại theo `ApiError.status`, mất mạng → 502, lỗi dựng ở máy chủ có `digest` → 500 kèm mã tham chiếu) dùng trong `app/not-found.tsx`, `app/error.tsx`, `app/global-error.tsx`, `(app)/error.tsx`, `(admin)/error.tsx`. Khi web không chạy, reverse proxy trả trang tĩnh `public/errors/502.html` (tự đủ, tự thử lại sau 20 giây) – Caddy: `handle_errors 502 503 504 { root * /srv/errors; rewrite * /502.html; file_server }` với thư mục `public/errors` gắn vào `/srv/errors`.
+- Bảng lọc từ ngoài (tab/nút nhóm, khoảng ngày): truyền `filtered` + `onClearFilters` cho `DataTable` để bảng rỗng hiện "Không có kết quả phù hợp" thay cho "chưa có dữ liệu".
 - Đăng nhập thật (chế độ http): tài khoản seed `chau.le@anphat-demo.vn / demo1234`. Email dev in ra log (`MAIL=console`) hoặc Mailpit `localhost:8025` (`MAIL=smtp`).
 
 ## Khu Quản trị hệ thống (`/admin`)

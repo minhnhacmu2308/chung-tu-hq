@@ -310,6 +310,23 @@ describe("DataTable – lọc theo cột", () => {
     expect(vnCodes()).toHaveLength(4);
   });
 
+  it("lọc từ ngoài bảng (filtered) mà hết dòng → 'Không có kết quả phù hợp'; 'Xóa bộ lọc' gọi onClearFilters", async () => {
+    const onClearFilters = vi.fn();
+    const { rerender } = render(
+      <DataTable aria-label="Hồ sơ khai báo" columns={COLUMNS} data={[]} getRowId={(r) => r.id} emptyTitle="Chưa có hồ sơ" filtered onClearFilters={onClearFilters} />,
+    );
+    expect(screen.getByText("Không có kết quả phù hợp")).toBeInTheDocument();
+    expect(screen.queryByText("Chưa có hồ sơ")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Xóa bộ lọc" }));
+    expect(onClearFilters).toHaveBeenCalledOnce();
+    // Không lọc → vẫn là "chưa có dữ liệu"; lọc mà không có cách xóa → không hiện nút
+    rerender(<DataTable aria-label="Hồ sơ khai báo" columns={COLUMNS} data={[]} getRowId={(r) => r.id} emptyTitle="Chưa có hồ sơ" />);
+    expect(screen.getByText("Chưa có hồ sơ")).toBeInTheDocument();
+    rerender(<DataTable aria-label="Hồ sơ khai báo" columns={COLUMNS} data={[]} getRowId={(r) => r.id} filtered />);
+    expect(screen.getByText("Không có kết quả phù hợp")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Xóa bộ lọc" })).not.toBeInTheDocument();
+  });
+
   it("phân trang theo số dòng đã lọc và quay về trang đầu khi đổi bộ lọc", async () => {
     const many: HoSoVn[] = Array.from({ length: 25 }, (_, i) => ({
       id: `r${i}`,

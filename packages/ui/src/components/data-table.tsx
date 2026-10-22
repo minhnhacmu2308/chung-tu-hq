@@ -242,6 +242,13 @@ export type DataTableProps<TData extends RowData> = {
   emptyTitle?: ReactNode;
   emptyDescription?: ReactNode;
   emptyAction?: ReactNode;
+  /**
+   * Dữ liệu đã bị lọc từ NGOÀI bảng (tab/nút chọn nhóm, khoảng ngày…). Khi true và không còn dòng nào,
+   * bảng hiện "Không có kết quả phù hợp" thay cho trạng thái "chưa có dữ liệu".
+   */
+  filtered?: boolean;
+  /** Bỏ bộ lọc bên ngoài – gọi khi bấm "Xóa bộ lọc" (cùng với xóa ô tìm kiếm/lọc cột của bảng). */
+  onClearFilters?: () => void;
   initialSorting?: SortingState;
   pagination?: DataTablePagination;
   stickyHeader?: boolean;
@@ -396,6 +403,8 @@ export function DataTable<TData extends RowData>({
   emptyTitle,
   emptyDescription,
   emptyAction,
+  filtered: filteredOutside = false,
+  onClearFilters,
   initialSorting = [],
   pagination = { mode: "client" },
   stickyHeader = true,
@@ -546,6 +555,18 @@ export function DataTable<TData extends RowData>({
   }, [selectedKey]);
 
   const rows = table.getRowModel().rows;
+  // Bề rộng phần nhìn thấy của khung cuộn: ô trống/không kết quả bám theo nó (dính trái) để không bị cắt
+  // giữa bảng rộng hơn màn hình (mobile, nhiều cột).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [viewWidth, setViewWidth] = useState<number>();
+  const isEmpty = !loading && rows.length === 0;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !isEmpty || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setViewWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isEmpty]);
   const leafColumns = table.getVisibleLeafColumns();
   const colCount = leafColumns.length;
   const filteredCount = table.getFilteredRowModel().rows.length;
@@ -564,7 +585,12 @@ export function DataTable<TData extends RowData>({
     setGlobalFilter("");
     setColumnFilters([]);
     toFirstPage();
+    onClearFilters?.();
   };
+  // Hết dòng vì bộ lọc (trong bảng, hoặc bên ngoài) chứ không phải vì chưa có dữ liệu.
+  const noResults = (isFiltered && data.length > 0) || filteredOutside;
+  // Nút "Xóa bộ lọc" trong ô trống chỉ có ý nghĩa khi xóa được thứ gì đó.
+  const canClear = isFiltered || !!onClearFilters;
   const hideableColumns = table.getAllLeafColumns().filter((c) => !c.id.startsWith("__"));
 
   // Giá trị cho ô lọc "select": options truyền vào, hoặc các giá trị khác nhau của cột
@@ -645,7 +671,7 @@ export function DataTable<TData extends RowData>({
         </div>
       )}
 
-      <div className={cn("overflow-auto rounded-lg border border-border bg-surface", className)}>
+      <div ref={scrollRef} className={cn("overflow-auto rounded-lg border border-border bg-surface", className)}>
         <table
           className={cn("border-collapse text-sm", resizable ? "min-w-full table-fixed" : "w-full")}
           style={resizable ? { width: table.getTotalSize() } : undefined}
@@ -760,12 +786,14 @@ export function DataTable<TData extends RowData>({
               ))
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={colCount}>
-                  {isFiltered && data.length > 0 ? (
-                    <EmptyState illustration="no-results" illustrationSize="sm" title={t.noResultsTitle} description={t.noResultsDescription} action={clearButton} />
-                  ) : (
-                    <EmptyState illustration="empty" illustrationSize="sm" title={emptyTitle ?? t.emptyTitle} description={emptyDescription} action={emptyAction} />
-                  )}
+                <td colSpan={colCount} className="p-0">
+                  <div className="sticky left-0" style={viewWidth ? { width: viewWidth } : undefined}>
+                    {noResults ? (
+                      <EmptyState illustration="no-results" illustrationSize="sm" title={t.noResultsTitle} description={t.noResultsDescription} action={canClear ? clearButton : undefined} />
+                    ) : (
+                      <EmptyState illustration="empty" illustrationSize="sm" title={emptyTitle ?? t.emptyTitle} description={emptyDescription} action={emptyAction} />
+                    )}
+                  </div>
                 </td>
               </tr>
             ) : (

@@ -178,6 +178,8 @@ function ListInner() {
               onRowClick={(r) => router.push(`/dossiers/${r.id}`)}
               emptyTitle={t.emptyTitle}
               emptyDescription={t.emptyDescription}
+              filtered={scope !== "ALL"}
+              onClearFilters={() => setScope("ALL")}
               emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">{t.create}</Link></Button>}
               rowActions={(r) => (
                 <RowActions

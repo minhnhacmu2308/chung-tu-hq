@@ -138,6 +138,8 @@ function ListInner() {
           onRowClick={(r) => router.push(`/admin/orgs/${r.id}`)}
           emptyTitle={t.emptyTitle}
           emptyDescription={t.emptyDescription}
+          filtered={view !== "all"}
+          onClearFilters={() => setView("all")}
           rowActions={(r) => (
             <RowActions
               rowLabel={r.name}

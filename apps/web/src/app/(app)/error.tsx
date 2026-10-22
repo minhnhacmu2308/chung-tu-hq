@@ -1,24 +1,13 @@
 "use client";
-import { Button, EmptyState, useMessages } from "@kb/ui";
-import Link from "next/link";
-import { APP_ERROR_MESSAGES } from "@/app/app-pages.messages";
+import { useRouter } from "next/navigation";
+import { startTransition } from "react";
+import { ErrorScreen, errorKindOf, HomeButton, RetryButton } from "@/components/common/error-screen";
 
 // Lỗi không lường trước ở một màn: giữ nguyên menu, cho thử lại ngay tại chỗ.
-export default function AppError({ reset }: { error: Error; reset: () => void }) {
-  const t = useMessages(APP_ERROR_MESSAGES);
-  return (
-    <EmptyState
-      illustration="error"
-      title={t.title}
-      description={t.description}
-      action={
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={reset}>{t.retry}</Button>
-          <Button asChild variant="secondary">
-            <Link href="/">{t.home}</Link>
-          </Button>
-        </div>
-      }
-    />
-  );
+// Máy chủ không phản hồi (502/503/504, mất mạng) và máy chủ lỗi (500) có hình + lời riêng.
+export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  const router = useRouter();
+  // Lỗi dựng ở máy chủ: phải refresh để lấy lại dữ liệu trang, reset riêng chỉ dựng lại phía trình duyệt.
+  const retry = () => startTransition(() => { router.refresh(); reset(); });
+  return <ErrorScreen kind={errorKindOf(error)} reference={error.digest} actions={<><RetryButton onClick={retry} /><HomeButton /></>} />;
 }

@@ -37,7 +37,7 @@ function AuditInner() {
       <Field label={t.dateRange} className="max-w-md">
         <DateRangePicker value={range} onChange={setRange} />
       </Field>
-      <AuditTable from={range.from} to={range.to} />
+      <AuditTable from={range.from} to={range.to} onClearRange={() => setRange({ from: null, to: null })} />
     </Stack>
   );
 }

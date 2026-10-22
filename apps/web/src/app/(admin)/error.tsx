@@ -1,24 +1,22 @@
 "use client";
-import { Button, EmptyState, useMessages } from "@kb/ui";
-import Link from "next/link";
+import { useMessages } from "@kb/ui";
+import { useRouter } from "next/navigation";
+import { startTransition } from "react";
+import { ErrorScreen, errorKindOf, HomeButton, RetryButton } from "@/components/common/error-screen";
 import { ADMIN_ERROR_MESSAGES } from "./error.messages";
 
 // Lỗi không lường trước ở một màn quản trị: giữ nguyên menu, cho thử lại ngay tại chỗ.
-export default function AdminError({ reset }: { error: Error; reset: () => void }) {
+export default function AdminError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const t = useMessages(ADMIN_ERROR_MESSAGES);
+  const router = useRouter();
+  const retry = () => startTransition(() => { router.refresh(); reset(); });
+  const kind = errorKindOf(error);
   return (
-    <EmptyState
-      illustration="error"
-      title={t.title}
-      description={t.description}
-      action={
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={reset}>{t.retry}</Button>
-          <Button asChild variant="secondary">
-            <Link href="/admin">{t.back}</Link>
-          </Button>
-        </div>
-      }
+    <ErrorScreen
+      kind={kind}
+      {...(kind === "screen" ? { title: t.title, description: t.description } : {})}
+      reference={error.digest}
+      actions={<><RetryButton onClick={retry} /><HomeButton href="/admin" label={t.back} /></>}
     />
   );
 }

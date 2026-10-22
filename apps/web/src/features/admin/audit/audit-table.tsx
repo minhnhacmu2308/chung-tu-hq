@@ -52,7 +52,14 @@ const makeColumns = (t: Record<keyof (typeof AUDIT_MESSAGES)["vi"], string>, tar
  * Nhật ký quản trị (append-only – không có thao tác sửa/xóa). `orgId` → chỉ dòng của một doanh nghiệp;
  * `from`/`to` (YYYY-MM-DD, theo giờ máy người xem) → lọc theo khoảng ngày.
  */
-export function AuditTable({ orgId, from, to, toolbar }: { orgId?: string; from?: string | null; to?: string | null; toolbar?: ReactNode }) {
+export function AuditTable({ orgId, from, to, toolbar, onClearRange }: {
+  orgId?: string;
+  from?: string | null;
+  to?: string | null;
+  toolbar?: ReactNode;
+  /** Bỏ khoảng ngày đang lọc (nút "Xóa bộ lọc" khi khoảng ngày không có bản ghi nào). */
+  onClearRange?: () => void;
+}) {
   const t = useMessages(AUDIT_MESSAGES);
   const targetLabels = useMessages(TARGET_TYPE_LABELS);
   const actionLabels = useMessages(ACTION_LABELS);
@@ -86,7 +93,9 @@ export function AuditTable({ orgId, from, to, toolbar }: { orgId?: string; from?
       columnVisibility={hidden}
       pagination={{ initialPageSize: 20, pageSizeOptions: [20, 50, 100] }}
       emptyTitle={t.empty}
-      emptyDescription={orgId ? t.emptyOrg : t.emptyRange}
+      emptyDescription={orgId ? t.emptyOrg : t.emptyAll}
+      filtered={!!(from || to)}
+      {...(onClearRange ? { onClearFilters: onClearRange } : {})}
       {...(toolbar ? { toolbarActions: toolbar } : {})}
     />
   );

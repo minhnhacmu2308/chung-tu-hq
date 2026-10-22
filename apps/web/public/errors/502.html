@@ -1,0 +1,137 @@
+<!doctype html>
+<!--
+  Trang 502/503/504 TĨNH cho reverse proxy (Caddy) trả về khi tiến trình web không phản hồi (đang deploy, sập, quá tải).
+  Lúc đó Next.js không chạy nên trang phải tự đủ: không font/script/ảnh ngoài, màu viết cứng theo token @kb/ui
+  (primary #0F6B55, xám slate). Ngôn ngữ theo lựa chọn đã lưu (kb-appearance) hoặc ngôn ngữ trình duyệt.
+  Tự thử lại sau 20 giây. Bản xem trước khi web đang chạy: /errors/502.html
+-->
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Máy chủ tạm thời không phản hồi · KhaiBáo AI</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='57.6' fill='%230F6B55'/%3E%3Cg transform='translate(1.05 15.36) scale(0.894)' fill='%23fff'%3E%3Cpath fill-rule='evenodd' d='M68 48h60l68 68v96a20 20 0 0 1-20 20H68a20 20 0 0 1-20-20V68a20 20 0 0 1 20-20zM76 148v44h92v-44z'/%3E%3Cpath d='M152 20h72a12 12 0 0 1 12 12v72z'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light dark;
+    --primary: #0F6B55; --primary-fg: #FFFFFF; --primary-subtle: #E2EDEB;
+    --bg: #F8FAFC; --surface: #FFFFFF; --surface-muted: #F1F5F9;
+    --border: #E2E8F0; --border-strong: #CBD5E1;
+    --fg: #0F172A; --fg-muted: #475569; --fg-subtle: #475569; --warning: #A1520B;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --primary: #498F7E; --primary-fg: #0B0F0D; --primary-subtle: #22302F;
+      --bg: #020617; --surface: #0F172A; --surface-muted: #1E293B;
+      --border: #334155; --border-strong: #475569;
+      --fg: #F8FAFC; --fg-muted: #CBD5E1; --fg-subtle: #94A3B8; --warning: #D9902F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --primary: #498F7E; --primary-fg: #0B0F0D; --primary-subtle: #22302F;
+    --bg: #020617; --surface: #0F172A; --surface-muted: #1E293B;
+    --border: #334155; --border-strong: #475569;
+    --fg: #F8FAFC; --fg-muted: #CBD5E1; --fg-subtle: #94A3B8; --warning: #D9902F;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px;
+    padding: 24px 16px; background: var(--bg); color: var(--fg);
+    font: 400 14px/1.5 "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--fg); text-decoration: none; }
+  .brand svg { width: 36px; height: 36px; }
+  .card { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 30rem; text-align: center; }
+  .art { width: 256px; max-width: 100%; height: auto; margin-bottom: 8px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  p { margin: 0; color: var(--fg-muted); }
+  .hint { font-size: 12px; color: var(--fg-subtle); }
+  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+  button {
+    display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid transparent;
+    font: inherit; font-weight: 500; cursor: pointer; background: var(--primary); color: var(--primary-fg);
+  }
+  button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (prefers-reduced-motion: no-preference) { .art { animation: fade .4s ease-out both; } }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } }
+</style>
+</head>
+<body>
+  <a class="brand" href="/">
+    <svg viewBox="0 0 256 256" aria-hidden="true"><rect width="256" height="256" rx="57.6" fill="var(--primary)"/><g transform="translate(1.05 15.36) scale(0.894)" fill="var(--primary-fg)"><path fill-rule="evenodd" d="M68 48h60l68 68v96a20 20 0 0 1-20 20H68a20 20 0 0 1-20-20V68a20 20 0 0 1 20-20zM76 148v44h92v-44z"/><path d="M152 20h72a12 12 0 0 1 12 12v72z"/></g></svg>
+    KhaiBáo AI
+  </a>
+  <main class="card">
+    <!-- Cùng hình "bad-gateway" của @kb/ui (illustration.tsx) -->
+    <svg class="art" viewBox="0 0 200 140" aria-hidden="true" focusable="false">
+      <circle cx="100" cy="66" r="56" fill="var(--primary-subtle)" opacity="0.6"/>
+      <ellipse cx="100" cy="128" rx="58" ry="6" fill="var(--surface-muted)"/>
+      <text x="100" y="58" text-anchor="middle" font-size="50" font-weight="800" letter-spacing="-2" fill="var(--primary)" opacity="0.9" font-family="system-ui, sans-serif">502</text>
+      <g stroke-width="2" stroke-linejoin="round" stroke="var(--border-strong)">
+        <rect x="26" y="76" width="44" height="34" rx="4" fill="var(--surface)"/>
+        <path d="M26 84 H70" fill="none"/>
+        <path d="M40 118 H56 M48 110 V118" stroke-linecap="round" fill="none"/>
+      </g>
+      <g fill="var(--border-strong)"><circle cx="31" cy="80" r="1.3"/><circle cx="35" cy="80" r="1.3"/></g>
+      <g stroke-linecap="round" stroke-width="3" stroke="var(--border)"><path d="M33 92 H58"/><path d="M33 100 H50"/></g>
+      <g stroke-width="2" stroke-linejoin="round" stroke="var(--border-strong)" fill="var(--surface)">
+        <rect x="134" y="70" width="40" height="22" rx="4"/>
+        <rect x="134" y="94" width="40" height="22" rx="4"/>
+      </g>
+      <g stroke-linecap="round" stroke-width="3" stroke="var(--border)"><path d="M142 81 H156"/><path d="M142 105 H156"/></g>
+      <g fill="var(--fg-subtle)"><circle cx="165" cy="81" r="3"/><circle cx="165" cy="105" r="3"/></g>
+      <g stroke-width="2.5" stroke-linecap="round" fill="none" stroke="var(--primary)">
+        <path d="M70 94 Q80 94 84 100 T92 104"/>
+        <path d="M134 94 Q122 94 118 88 T108 84"/>
+      </g>
+      <g fill="var(--primary)">
+        <rect x="90" y="100" width="7" height="8" rx="1.5" transform="rotate(20 93 104)"/>
+        <rect x="103" y="80" width="7" height="8" rx="1.5" transform="rotate(20 106 84)"/>
+      </g>
+      <path d="M100 86 L96 94 H101 L98 102 L106 91 H101 L104 86 Z" stroke-width="1.5" stroke-linejoin="round" fill="var(--warning)" stroke="var(--warning)"/>
+      <path d="M166 22 l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8z" fill="var(--primary)" opacity="0.5"/>
+    </svg>
+    <h1 data-i18n="title">Máy chủ tạm thời không phản hồi</h1>
+    <p><span class="sr-only" data-i18n="code">Lỗi 502.</span> <span data-i18n="desc">Hệ thống có thể đang cập nhật hoặc quá tải. Dữ liệu đã lưu không bị ảnh hưởng – đợi một lát rồi thử lại.</span></p>
+    <div class="actions">
+      <button type="button" id="retry">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+        <span data-i18n="retry">Thử lại</span>
+      </button>
+    </div>
+    <p class="hint" id="countdown" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    (function () {
+      var T = {
+        vi: { doc: "Máy chủ tạm thời không phản hồi · KhaiBáo AI", title: "Máy chủ tạm thời không phản hồi", code: "Lỗi 502.", desc: "Hệ thống có thể đang cập nhật hoặc quá tải. Dữ liệu đã lưu không bị ảnh hưởng – đợi một lát rồi thử lại.", retry: "Thử lại", auto: "Tự thử lại sau {n} giây" },
+        en: { doc: "The server is not responding · KhaiBáo AI", title: "The server is not responding right now", code: "Error 502.", desc: "The system may be updating or overloaded. Your saved data is not affected – wait a moment and try again.", retry: "Try again", auto: "Retrying automatically in {n} s" },
+        zh: { doc: "服务器暂时无响应 · KhaiBáo AI", title: "服务器暂时无响应", code: "错误 502。", desc: "系统可能正在更新或负载过高。已保存的数据不受影响——请稍候再试。", retry: "重试", auto: "{n} 秒后自动重试" }
+      };
+      var locale = "vi", theme = "";
+      try {
+        var saved = JSON.parse(localStorage.getItem("kb-appearance") || "{}");
+        if (T[saved.locale]) locale = saved.locale;
+        else { var nav = (navigator.language || "").slice(0, 2); if (T[nav]) locale = nav; }
+        if (saved.mode === "light" || saved.mode === "dark") theme = saved.mode;
+      } catch (e) { /* localStorage bị chặn: giữ mặc định */ }
+      if (theme) document.documentElement.setAttribute("data-theme", theme);
+      var t = T[locale];
+      document.documentElement.lang = locale;
+      document.title = t.doc;
+      document.querySelectorAll("[data-i18n]").forEach(function (el) { el.textContent = t[el.getAttribute("data-i18n")]; });
+      var retry = function () { location.reload(); };
+      document.getElementById("retry").addEventListener("click", retry);
+      var n = 20, out = document.getElementById("countdown");
+      var tick = function () {
+        out.textContent = t.auto.replace("{n}", n);
+        if (n-- <= 0) retry(); else setTimeout(tick, 1000);
+      };
+      tick();
+    })();
+  </script>
+</body>
+</html>

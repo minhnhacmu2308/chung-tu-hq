@@ -13,7 +13,6 @@ export const USER_LIST_MESSAGES = defineMessages({
     viewDisabled: "Đã khóa",
     pendingInfo: "Những người đã đăng ký theo MST của một doanh nghiệp đã có trên hệ thống và đang chờ chủ doanh nghiệp duyệt. Đội vận hành không duyệt thay.",
     emptyAll: "Chưa có người dùng",
-    emptyView: "Không có tài khoản nào ở nhóm “{view}”",
   },
   en: {
     title: "Users",
@@ -26,7 +25,6 @@ export const USER_LIST_MESSAGES = defineMessages({
     viewDisabled: "Disabled",
     pendingInfo: "People who registered under the tax code (MST) of an organization already on the system and are waiting for the organization owner's approval. The operations team does not approve on their behalf.",
     emptyAll: "No users yet",
-    emptyView: "No accounts in the “{view}” group",
   },
   zh: {
     title: "用户",
@@ -39,7 +37,6 @@ export const USER_LIST_MESSAGES = defineMessages({
     viewDisabled: "已停用",
     pendingInfo: "这些人按系统中已有企业的税号（MST）注册，正在等待企业所有者审批。运营团队不代为审批。",
     emptyAll: "暂无用户",
-    emptyView: "“{view}”分组中没有账户",
   },
 });
 

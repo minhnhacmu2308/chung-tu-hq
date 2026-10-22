@@ -54,7 +54,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger, Popover, PopoverContent, PopoverTrigger,
 } from "./menu.js";
 import { Pagination } from "./pagination.js";
 
@@ -182,7 +182,7 @@ export type DataTableColumnMeta = {
   wrap?: boolean;
   /** Tên cột dùng cho menu "Cột", nhãn ô lọc, nhãn tay kéo. Mặc định = `header` nếu là chuỗi, ngược lại = id. */
   label?: string;
-  /** Bật ô lọc dưới tiêu đề: "text" = chứa chuỗi (không dấu), "select" = bằng một giá trị. */
+  /** Bật lọc theo cột (trong hộp lọc mở từ nút phễu cạnh ô tìm kiếm): "text" = chứa chuỗi (không dấu), "select" = bằng một giá trị. */
   filter?: "text" | "select";
   /** Lựa chọn cho `filter: "select"`. Mặc định lấy các giá trị khác nhau của cột. */
   filterOptions?: readonly { value: string; label: string }[];
@@ -483,7 +483,7 @@ export function DataTable<TData extends RowData>({
 }: DataTableProps<TData>) {
   const t = useMessages(MESSAGES, labels);
   const [viewState, setViewState] = useControllable(viewProp, onViewChange, defaultView);
-  // Dạng thẻ: thanh lọc theo cột thu gọn sau nút "Bộ lọc" (không có hàng lọc dưới tiêu đề như dạng bảng).
+  // Hộp lọc theo cột (nút phễu cạnh ô tìm kiếm) – dùng chung cho dạng bảng và thẻ.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const view: DataTableView = renderCard ? viewState : "table";
   const storageKey = viewStorageKey ? `kb-table-view:${viewStorageKey}` : null;
@@ -711,7 +711,7 @@ export function DataTable<TData extends RowData>({
     actions: rowActions ? rowActions(row.original) : null,
   });
 
-  // Ô lọc của một cột – dưới tiêu đề (dạng bảng) hoặc trên thanh lọc (dạng thẻ, có nhãn hiện ra).
+  // Ô lọc của một cột – trong hộp lọc mở từ nút phễu cạnh ô tìm kiếm (dùng chung cho dạng bảng và thẻ).
   const filterControl = (column: (typeof leafColumns)[number], withLabel: boolean) => {
     const kind = column.columnDef.meta?.filter;
     const label = fill(t.filterBy, { label: columnLabel(column) });
@@ -787,22 +787,31 @@ export function DataTable<TData extends RowData>({
               />
             </div>
           )}
+          {hasFilterRow && (
+            <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={columnFilters.length ? "primary" : "secondary"}
+                  size={columnFilters.length ? "sm" : "icon"}
+                  aria-label={columnFilters.length ? fill(t.filtersActive, { n: columnFilters.length }) : t.filters}
+                  title={t.filters}
+                  className={columnFilters.length ? "h-9" : "h-9 w-9"}
+                  leftIcon={columnFilters.length ? <Filter aria-hidden="true" className="h-4 w-4" /> : undefined}
+                >
+                  {columnFilters.length ? columnFilters.length : <Filter aria-hidden="true" className="h-4 w-4" />}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" aria-label={t.filters} className="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3">
+                <p className="text-sm font-semibold">{t.filters}</p>
+                <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">{filterColumns.map((c) => filterControl(c, true))}</div>
+              </PopoverContent>
+            </Popover>
+          )}
           {isFiltered && clearButton}
           <p role="status" className="text-sm text-fg-muted">
             {isFiltered && !loading ? fill(t.filteredCount, { shown: filteredCount, total: data.length }) : null}
           </p>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {view === "cards" && hasFilterRow && (
-              <Button
-                variant={columnFilters.length ? "primary" : "secondary"}
-                size="sm"
-                aria-expanded={filtersOpen}
-                leftIcon={<Filter aria-hidden="true" className="h-4 w-4" />}
-                onClick={() => setFiltersOpen((o) => !o)}
-              >
-                {columnFilters.length ? fill(t.filtersActive, { n: columnFilters.length }) : t.filters}
-              </Button>
-            )}
             {view === "cards" && sortableColumns.length > 0 && sortControls}
             {/* Menu không modal: bảng vẫn truy cập được (cả với trình đọc màn hình) trong lúc bật/tắt cột */}
             {columnToggle && view === "table" && (
@@ -846,10 +855,6 @@ export function DataTable<TData extends RowData>({
             {toolbarActions}
           </div>
         </div>
-      )}
-
-      {view === "cards" && hasFilterRow && filtersOpen && (
-        <div className="grid grid-cols-2 gap-2 cq-md:grid-cols-4">{filterColumns.map((c) => filterControl(c, true))}</div>
       )}
 
       {view === "cards" ? (
@@ -973,15 +978,6 @@ export function DataTable<TData extends RowData>({
                 })}
               </tr>
             ))}
-            {hasFilterRow && (
-              <tr>
-                {leafColumns.map((column) => (
-                  <td key={column.id} className={cn("border-b border-border bg-surface px-2 py-2", stickyCell(column.columnDef.meta?.sticky, "z-[1]"))}>
-                    {filterControl(column, false)}
-                  </td>
-                ))}
-              </tr>
-            )}
           </thead>
           <tbody>
             {loading ? (

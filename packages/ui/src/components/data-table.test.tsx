@@ -259,15 +259,30 @@ describe("DataTable – tìm kiếm toàn bảng", () => {
   });
 });
 
+/** Ô lọc theo cột nằm trong hộp lọc mở từ nút phễu cạnh ô tìm kiếm. */
+const openFilters = (name: RegExp = /^Bộ lọc/) => userEvent.click(screen.getByRole("button", { name }));
+
 describe("DataTable – lọc theo cột", () => {
+  it("không có hàng ô lọc dưới tiêu đề; nút phễu mở hộp lọc, đếm số bộ lọc đang bật; không vi phạm a11y", async () => {
+    setupVn();
+    expect(screen.queryByRole("combobox", { name: "Lọc theo Trạng thái" })).not.toBeInTheDocument();
+    await openFilters();
+    const dialog = screen.getByRole("dialog", { name: "Bộ lọc" });
+    await userEvent.selectOptions(within(dialog).getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Đã duyệt");
+    expect(screen.getByRole("button", { name: "Bộ lọc (1)" })).toBeInTheDocument();
+    await expectNoA11yViolations(document.body);
+  });
+
   it("ô lọc chữ: chứa chuỗi, không phân biệt dấu", async () => {
     setupVn();
+    await openFilters();
     await userEvent.type(screen.getByRole("searchbox", { name: "Lọc theo Đối tác" }), "hung thinh");
     expect(vnCodes()).toEqual(["HS-004"]);
   });
 
   it("ô lọc chọn: lấy các giá trị khác nhau của cột, lọc đúng bằng", async () => {
     setupVn();
+    await openFilters();
     const select = screen.getByRole("combobox", { name: "Lọc theo Trạng thái" });
     expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Tất cả", "Chờ duyệt", "Đã duyệt", "Nháp"]);
     await userEvent.selectOptions(select, "Đã duyệt");
@@ -285,6 +300,7 @@ describe("DataTable – lọc theo cột", () => {
       }),
     ]);
     setupVn({ columns });
+    await openFilters();
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Bản nháp");
     expect(vnCodes()).toEqual(["HS-004"]);
   });
@@ -293,11 +309,13 @@ describe("DataTable – lọc theo cột", () => {
     setupVn({ searchable: true });
     const search = screen.getByRole("searchbox", { name: "Tìm trong bảng" });
     await userEvent.type(search, "hai");
+    await openFilters();
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Chờ duyệt");
     expect(vnCodes()).toEqual(["HS-002"]);
     await userEvent.click(screen.getByRole("button", { name: "Xóa bộ lọc" }));
     expect(vnCodes()).toHaveLength(4);
     expect(search).toHaveValue("");
+    if (!screen.queryByRole("dialog", { name: "Bộ lọc" })) await openFilters();
     expect(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" })).toHaveValue("");
     expect(screen.queryByRole("button", { name: "Xóa bộ lọc" })).not.toBeInTheDocument();
   });
@@ -473,8 +491,10 @@ describe("DataTable – tính năng mở rộng: tiếng Anh & a11y", () => {
       </UiLocaleProvider>,
     );
     expect(screen.getByRole("button", { name: "Columns" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Filter by Trạng thái" })).toBeInTheDocument();
     expect(screen.getByRole("separator", { name: "Resize column Đối tác" })).toBeInTheDocument();
+    await openFilters(/^Filters/);
+    expect(screen.getByRole("combobox", { name: "Filter by Trạng thái" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
     await userEvent.type(screen.getByRole("searchbox", { name: "Search table" }), "artemide");
     expect(screen.getByRole("status")).toHaveTextContent("Showing 1 of 4 rows");
     await userEvent.type(screen.getByRole("searchbox", { name: "Search table" }), "xyz");

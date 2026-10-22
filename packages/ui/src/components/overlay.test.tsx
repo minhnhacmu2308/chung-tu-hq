@@ -168,6 +168,30 @@ describe("Dialog", () => {
     expect(document.body.style.paddingInlineEnd).toBe("");
   });
 
+  it("drawer kéo co giãn được: phím ← rộng ra, nhớ độ rộng, nhấp đúp về mặc định; dạng cửa sổ không có tay nắm", async () => {
+    window.localStorage.removeItem("kb-drawer-width:md");
+    const { unmount } = render(
+      <Dialog defaultOpen defaultPresentation="panel">
+        <DialogContent title="Panel">x</DialogContent>
+      </Dialog>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Panel" });
+    const handle = within(dialog).getByRole("separator", { name: /Kéo để đổi độ rộng/ });
+    await expectNoA11yViolations(dialog);
+    handle.focus();
+    await userEvent.keyboard("{Home}");
+    expect(dialog.style.width).toBe("320px");
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(dialog.style.width).toBe("352px");
+    expect(window.localStorage.getItem("kb-drawer-width:md")).toBe("352");
+    await userEvent.dblClick(handle);
+    expect(dialog.style.width).toBe("");
+    expect(window.localStorage.getItem("kb-drawer-width:md")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng cửa sổ" }));
+    expect(within(dialog).queryByRole("separator")).toBeNull();
+    unmount();
+  });
+
   it("dạng cửa sổ: phủ nền, bấm lớp phủ thì đóng", async () => {
     setup();
     await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));

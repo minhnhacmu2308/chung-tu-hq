@@ -1,14 +1,14 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { FocusScope } from "@radix-ui/react-focus-scope";
-import { createContext, useContext, useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ComponentProps, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
 const MESSAGES = {
-  vi: { close: "Đóng", modal: "Hiển thị dạng cửa sổ", panel: "Hiển thị dạng panel bên phải" },
-  en: { close: "Close", modal: "Show as window", panel: "Show as side panel" },
-  zh: { close: "关闭", modal: "以窗口显示", panel: "以右侧面板显示" },
-} satisfies Messages<"close" | "modal" | "panel">;
+  vi: { close: "Đóng", modal: "Hiển thị dạng cửa sổ", panel: "Hiển thị dạng panel bên phải", resize: "Kéo để đổi độ rộng (nhấp đúp để về mặc định)" },
+  en: { close: "Close", modal: "Show as window", panel: "Show as side panel", resize: "Drag to resize (double-click to reset)" },
+  zh: { close: "关闭", modal: "以窗口显示", panel: "以右侧面板显示", resize: "拖动调整宽度（双击恢复默认）" },
+} satisfies Messages<"close" | "modal" | "panel" | "resize">;
 
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
@@ -65,7 +65,7 @@ export type DialogContentProps = Omit<ComponentProps<typeof DialogPrimitive.Cont
   /** Hiện nút chuyển cửa sổ ↔ panel trên header. */
   allowPresentationToggle?: boolean;
   /** Nhãn – đổi khi có đa ngôn ngữ. */
-  labels?: { close?: string; modal?: string; panel?: string };
+  labels?: { close?: string; modal?: string; panel?: string; resize?: string };
 };
 
 const iconBtn =
@@ -116,6 +116,91 @@ function ModalOverlay() {
   return <div aria-hidden="true" data-slot="dialog-overlay" className="fixed inset-0 z-40 bg-overlay backdrop-blur-xs motion-safe:animate-fade-in" />;
 }
 
+/** Drawer hẹp nhất / phần trang chừa lại bên trái tối thiểu khi kéo rộng. */
+const DRAWER_MIN_PX = 320;
+const DRAWER_EDGE_PX = 48;
+const DRAWER_STEP_PX = 32;
+const clampDrawer = (w: number) => Math.round(Math.max(DRAWER_MIN_PX, Math.min(w, window.innerWidth - DRAWER_EDGE_PX)));
+
+/**
+ * Độ rộng drawer do người dùng kéo; nhớ theo `size` (localStorage `kb-drawer-width:<size>`) để lần mở sau giữ nguyên.
+ * null = mặc định theo `size`. Đọc sau khi mount (SSR không có localStorage).
+ */
+function useDrawerWidth(size: string) {
+  const key = `kb-drawer-width:${size}`;
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    try {
+      const v = Number(window.localStorage.getItem(key));
+      if (v > 0) setWidth(v);
+    } catch {
+      // Trình duyệt chặn lưu trữ → dùng độ rộng mặc định.
+    }
+  }, [key]);
+  const save = (w: number | null) => {
+    setWidth(w);
+    try {
+      if (w === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, String(w));
+    } catch {
+      // Không lưu được thì chỉ giữ trong phiên.
+    }
+  };
+  return [width, save] as const;
+}
+
+/** Tay nắm ở mép trái drawer: kéo chuột / chạm để đổi độ rộng, phím ← → (Shift = bước lớn), Home/End, nhấp đúp về mặc định. */
+function DrawerResizeHandle({ label, width, onChange }: { label: string; width: () => number; onChange: (w: number | null) => void }) {
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.setPointerCapture?.(e.pointerId);
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    const move = (ev: PointerEvent) => onChange(clampDrawer(window.innerWidth - ev.clientX));
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      document.body.style.userSelect = prevSelect;
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? DRAWER_STEP_PX * 4 : DRAWER_STEP_PX;
+    const next =
+      e.key === "ArrowLeft" ? width() + step
+      : e.key === "ArrowRight" ? width() - step
+      : e.key === "Home" ? DRAWER_MIN_PX
+      : e.key === "End" ? window.innerWidth
+      : null;
+    if (next === null) return;
+    e.preventDefault();
+    onChange(clampDrawer(next));
+  };
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      title={label}
+      aria-valuemin={DRAWER_MIN_PX}
+      aria-valuenow={Math.round(width())}
+      tabIndex={0}
+      data-slot="drawer-resize"
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+      onDoubleClick={() => onChange(null)}
+      className="group/resize absolute inset-y-0 -left-1.5 z-10 flex w-3 cursor-col-resize touch-none justify-center focus-visible:outline-none max-sm:hidden"
+    >
+      <span aria-hidden="true" className="h-full w-0.5 bg-transparent transition-colors group-hover/resize:bg-primary group-focus-visible/resize:bg-focus group-active/resize:bg-primary" />
+    </div>
+  );
+}
+
 export function DialogContent({
   title,
   icon,
@@ -124,6 +209,7 @@ export function DialogContent({
   allowPresentationToggle = true,
   labels,
   className,
+  style,
   children,
   ...props
 }: DialogContentProps) {
@@ -134,6 +220,8 @@ export function DialogContent({
     if (mode === "panel") e.preventDefault();
   };
   const isModal = mode === "modal";
+  const [drawerWidth, setDrawerWidth] = useDrawerWidth(size);
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
 
   return (
     <DialogPrimitive.Portal>
@@ -149,12 +237,16 @@ export function DialogContent({
             : cn("inset-y-0 right-0 border-l shadow-lg motion-safe:animate-slide-in-right", PANEL_SIZE[size]),
           className,
         )}
+        style={!isModal && drawerWidth !== null ? { ...style, width: drawerWidth, maxWidth: `calc(100vw - ${DRAWER_EDGE_PX}px)` } : style}
         {...(description ? {} : { "aria-describedby": undefined })}
         onInteractOutside={keepOpen}
         {...props}
       >
+        {!isModal && (
+          <DrawerResizeHandle label={l.resize} width={() => drawerWidth ?? contentEl?.offsetWidth ?? DRAWER_MIN_PX} onChange={setDrawerWidth} />
+        )}
         <FocusScope asChild trapped={isModal} loop>
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div ref={setContentEl} className="flex min-h-0 flex-1 flex-col">
         {/* div, không phải <header>: hai dialog chồng nhau (panel chi tiết + cửa sổ con) sẽ thành hai landmark banner. */}
         <div className="flex items-center gap-3 border-b border-border px-5 py-3">
           {icon && <span aria-hidden="true" className="text-fg-muted">{icon}</span>}

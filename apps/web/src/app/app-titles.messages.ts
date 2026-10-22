@@ -4,7 +4,7 @@
 import type { UiLocale } from "@kb/ui";
 
 type TitleKey =
-  | "brand" | "template" | "description" | "overview" | "dossiers" | "newDossier" | "customs" | "skills" | "settings"
+  | "brand" | "template" | "description" | "overview" | "dossiers" | "newDossier" | "customs" | "products" | "skills" | "settings"
   | "declarationSample" | "login" | "register" | "notFound";
 
 export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
@@ -16,6 +16,7 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     dossiers: "Hồ sơ khai báo",
     newDossier: "Tạo hồ sơ",
     customs: "Khai báo Hải quan",
+    products: "Danh mục hàng hóa",
     skills: "Cấu hình Skill AI",
     settings: "Tài khoản & tích hợp",
     declarationSample: "Bản mẫu tờ khai đầy đủ",
@@ -31,6 +32,7 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     dossiers: "Dossiers",
     newDossier: "New dossier",
     customs: "Customs filing",
+    products: "Product catalog",
     skills: "AI Skill setup",
     settings: "Account & integrations",
     declarationSample: "Full declaration sample",
@@ -46,6 +48,7 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     dossiers: "申报档案",
     newDossier: "新建档案",
     customs: "海关申报",
+    products: "商品目录",
     skills: "AI Skill 配置",
     settings: "账户与集成",
     declarationSample: "完整报关单样本",
@@ -67,6 +70,7 @@ export function titleKeyForPath(pathname: string): AppTitleKey | undefined {
     "/dossiers": "dossiers",
     "/dossiers/new": "newDossier",
     "/customs": "customs",
+    "/products": "products",
     "/skills": "skills",
     "/settings": "settings",
     "/ban-mau/to-khai": "declarationSample",

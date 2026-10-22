@@ -119,6 +119,40 @@ export const declarationProfiles = pgTable(
   (t) => [uniqueIndex("declaration_profiles_org_direction_uq").on(t.orgId, t.direction), orgRls("declaration_profiles_rls")],
 ).enableRLS();
 
+/**
+ * Danh mục hàng hóa của doanh nghiệp: mặt hàng đã khai trước đây (import bảng kê dòng hàng, thêm tay, hoặc tự thêm
+ * khi tờ khai được duyệt). Mỗi mặt hàng một dòng theo `key` (mã hàng, không có thì tên chuẩn hóa – productKey).
+ * `raw` = dòng gốc của lần khai gần nhất trong file import (tên cột → giá trị).
+ */
+export const productCatalog = pgTable(
+  "product_catalog",
+  {
+    id: id(),
+    orgId: orgId(),
+    key: text("key").notNull(),
+    /** Tên chuẩn hóa (normalizeProductName) – tra mặt hàng theo tên kể cả khi khóa là mã hàng. */
+    nameKey: text("name_key").notNull(),
+    code: text("code"),
+    name: text("name").notNull(),
+    hsCode: text("hs_code").notNull(),
+    unit: text("unit"),
+    origin: text("origin"),
+    tariffSchedule: text("tariff_schedule"),
+    importDutyRate: text("import_duty_rate"),
+    vatRate: text("vat_rate"),
+    note: text("note"),
+    source: text("source").notNull(),
+    timesDeclared: integer("times_declared").notNull().default(0),
+    lastDeclarationNo: text("last_declaration_no"),
+    lastDeclarationDate: date("last_declaration_date", { mode: "string" }),
+    lastTypeCode: text("last_type_code"),
+    raw: jsonb("raw"),
+    updatedBy: text("updated_by"),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex("product_catalog_org_key_uq").on(t.orgId, t.key), index("product_catalog_org_name_idx").on(t.orgId, t.nameKey), index("product_catalog_org_hs_idx").on(t.orgId, t.hsCode), orgRls("product_catalog_rls")],
+).enableRLS();
+
 /** Lần chạy AI Agent (HS → ánh xạ → dựng tờ khai → số hóa). `tasks` = AgentRun.tasks; `log` = dòng nhật ký. */
 export const agentRuns = pgTable(
   "agent_runs",

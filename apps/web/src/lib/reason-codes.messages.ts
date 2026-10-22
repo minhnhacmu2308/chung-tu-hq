@@ -51,6 +51,9 @@ export const REASON_MESSAGES = defineMessages({
     AMENDMENT_NOT_APPROVED: "Bản khai bổ sung chưa được phê duyệt",
     AMENDMENT_NOT_TRANSMITTABLE: "Bản khai bổ sung chưa gửi được: {blockers}",
     CERTIFICATE_REQUIRED: "Chọn chứng thư số để ký",
+    PRODUCT_CODE_EXISTS: "Danh mục đã có mặt hàng mã {code}",
+    PRODUCT_NAME_EXISTS: "Danh mục đã có mặt hàng cùng tên",
+    PRODUCT_NOT_FOUND: "Không tìm thấy mặt hàng trong danh mục",
   },
   en: {
     OPERATION_PENDING: "Waiting for a response to {ops}",
@@ -98,6 +101,9 @@ export const REASON_MESSAGES = defineMessages({
     AMENDMENT_NOT_APPROVED: "The amendment has not been approved",
     AMENDMENT_NOT_TRANSMITTABLE: "The amendment cannot be sent yet: {blockers}",
     CERTIFICATE_REQUIRED: "Choose a digital certificate to sign with",
+    PRODUCT_CODE_EXISTS: "The catalog already has a product with code {code}",
+    PRODUCT_NAME_EXISTS: "The catalog already has a product with the same name",
+    PRODUCT_NOT_FOUND: "Product not found in the catalog",
   },
   zh: {
     OPERATION_PENDING: "正在等待 {ops} 的回复",
@@ -145,6 +151,9 @@ export const REASON_MESSAGES = defineMessages({
     AMENDMENT_NOT_APPROVED: "补充申报尚未审批",
     AMENDMENT_NOT_TRANSMITTABLE: "补充申报暂无法发送：{blockers}",
     CERTIFICATE_REQUIRED: "请选择用于签名的数字证书",
+    PRODUCT_CODE_EXISTS: "目录中已有编码为 {code} 的商品",
+    PRODUCT_NAME_EXISTS: "目录中已有同名商品",
+    PRODUCT_NOT_FOUND: "目录中未找到该商品",
   },
 });
 

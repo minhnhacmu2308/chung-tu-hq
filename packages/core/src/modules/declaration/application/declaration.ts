@@ -8,6 +8,7 @@ import { allocateCustomsValue } from "../domain/valuation.js";
 import { mappingsFor } from "../domain/mapping/registry.js";
 import { loadDossier, toDeclaration, toLineItem, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow } from "./ports.js";
+import { recordApprovedProducts } from "./product-catalog.js";
 
 async function approvedName(deps: DeclarationDeps, orgId: string, d: DeclarationRow | null) {
   if (!d?.approvedBy) return null;
@@ -98,6 +99,8 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
     if (!guard.ok) return guard;
     const patch = { status: "APPROVED" as const, approvedBy: ctx.userId, approvedAt: now, updatedAt: now };
     await r.declarations.update(decl!.id, patch);
+    // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp (lần sau tra lại, khỏi gọi phân loại).
+    await recordApprovedProducts(r, deps.idGen, decl!, items, now, ctx.userId);
     return ok({ ...decl!, ...patch });
   });
   if (!r0.ok) return r0;

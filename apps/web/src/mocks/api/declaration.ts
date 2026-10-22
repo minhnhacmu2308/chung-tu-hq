@@ -9,6 +9,7 @@ import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
 import type { ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
 import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
+import { recordApprovedProducts } from "./products";
 
 export const declarationKeys = {
   agentRun: (id: string) => ["declaration", "agent-run", id] as const,
@@ -313,6 +314,8 @@ export const approveDeclaration = (dossierId: string) =>
     if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw reasonApiError("FORBIDDEN", "FOUR_EYES");
     assertNoGaps(db, decl, "phê duyệt");
     Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
+    // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp.
+    recordApprovedProducts(db, db.lineItems.filter((i) => i.dossierId === dossierId), decl.fields.find((f) => f.no === "1.4" || f.no === "2.4")?.value || null);
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     Object.assign(dossier, { status: "APPROVED", step: "submit", suspectFields: 0, updatedAt: nowIso() });
     return decl;

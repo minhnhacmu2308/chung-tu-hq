@@ -36,6 +36,14 @@ export type AgentRunRow = { id: string; orgId: string; dossierId: string; mode: 
 
 export type ProfileRow = { id: string; orgId: string; direction: "NK" | "XK"; values: Record<string, string>; overrides: Record<string, FieldOverride>; updatedBy: string | null; updatedAt: Date };
 
+/** Mặt hàng trong danh mục hàng hóa của doanh nghiệp (bảng product_catalog). */
+export type ProductRow = {
+  id: string; orgId: string; key: string; nameKey: string; code: string | null; name: string; hsCode: string; unit: string | null; origin: string | null;
+  tariffSchedule: string | null; importDutyRate: string | null; vatRate: string | null; note: string | null;
+  source: "IMPORT" | "MANUAL" | "DECLARATION"; timesDeclared: number; lastDeclarationNo: string | null; lastDeclarationDate: string | null;
+  lastTypeCode: string | null; raw: Record<string, string> | null; updatedBy: string | null; createdAt: Date; updatedAt: Date;
+};
+
 export interface DeclarationRepos {
   lineItems: {
     list(orgId: string, dossierId: string): Promise<LineItemRow[]>;
@@ -78,6 +86,17 @@ export interface DeclarationRepos {
     get(orgId: string, direction: "NK" | "XK"): Promise<ProfileRow | null>;
     /** Ghi đè theo (org, chiều). */
     upsert(row: ProfileRow): Promise<void>;
+  };
+  products: {
+    list(orgId: string): Promise<ProductRow[]>;
+    get(orgId: string, id: string): Promise<ProductRow | null>;
+    byKeys(orgId: string, keys: string[]): Promise<ProductRow[]>;
+    /** Mặt hàng có tên chuẩn hóa thuộc danh sách (kể cả mặt hàng khóa theo mã hàng). */
+    byNameKeys(orgId: string, nameKeys: string[]): Promise<ProductRow[]>;
+    insert(rows: ProductRow[]): Promise<void>;
+    update(row: ProductRow): Promise<void>;
+    /** Xóa theo id trong org; trả số dòng đã xóa. */
+    remove(orgId: string, ids: string[]): Promise<number>;
   };
   exchangeRates: {
     /** Tỷ giá gần nhất ≤ ngày (VND / 1 đơn vị). */

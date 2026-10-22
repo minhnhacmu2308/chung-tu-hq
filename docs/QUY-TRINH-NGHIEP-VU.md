@@ -308,6 +308,12 @@ Menu **Tài khoản & tích hợp**:
 
 **Ứng dụng máy tính (PWA)**: web có manifest (`app/manifest.ts`, icon `public/icons/`) nên Chrome/Edge cài được thành ứng dụng (cửa sổ riêng, icon trên màn hình/thanh tác vụ, tự cập nhật theo bản web); Safari: Tệp → Thêm vào Dock. Lối vào: menu người dùng → "Cài đặt ứng dụng" và thẻ "Ứng dụng trên máy tính" ở tab Ngưỡng & giao diện. Chưa có service worker – không chạy ngoại tuyến.
 
+**Danh mục hàng hóa** (menu riêng, `/products`): mặt hàng doanh nghiệp đã khai kèm mã HS – để tra lại HS cho hàng đã khai thay vì gọi HSCodePro (phần khớp hàng khi dựng tờ khai: làm sau).
+- Mỗi mặt hàng một dòng, khóa theo **mã hàng** (không phân biệt hoa thường); không có mã hàng thì theo **tên chuẩn hóa** (chữ thường, gộp khoảng trắng, bỏ "(Hàng) mới 100%" ở cuối). Lưu: mã hàng, tên, mã HS 8 số, ĐVT, xuất xứ, biểu thuế, thuế suất NK/VAT, ghi chú, số lần khai, tờ khai gần nhất (số, ngày, mã loại hình), nguồn (Import / Thêm tay / Từ tờ khai), dòng gốc trong file import.
+- **Import Excel**: bảng kê dòng hàng đã khai (mỗi dòng một dòng hàng của tờ khai; cần cột "Tên hàng", "Mã HS"; nhận cột theo tên, không phân biệt dấu). Trình duyệt đọc + gộp theo mặt hàng, xem trước (số mặt hàng, dòng bị bỏ qua, mặt hàng khai với nhiều mã HS) rồi gửi từng lô 500. Cột mã hàng trống → lấy dãy số ngay trước "(Hàng) mới 100%" trong tên (vd `…, 145612. Hàng mới 100%`). Mặt hàng đã có: bản import có tờ khai mới hơn thì ghi đè, cũ hơn chỉ điền ô trống; số lần khai lấy giá trị lớn nhất (import lại cùng file không cộng dồn).
+- **Tự thêm khi tờ khai được duyệt**: dòng hàng có HS đã xác nhận → mặt hàng mới thêm vào (nguồn "Từ tờ khai"); mặt hàng đã có (khớp theo tên chuẩn hóa, kể cả mặt hàng có mã hàng) tăng số lần khai + cập nhật lần khai gần nhất, **giữ nguyên mã HS trong danh mục**.
+- Quyền: Người khai / Quản trị / Chủ sở hữu thêm, sửa, xóa (cả xóa nhiều), import; Người duyệt / Người xem chỉ xem.
+
 **Cấu hình Skill AI**: mỗi Skill là cách đọc một loại chứng từ (DOCUMENT) hoặc một nhà cung cấp (SUPPLIER).
 - Trường chuẩn bật/tắt (không xóa được), tối đa 20 trường bổ sung do doanh nghiệp định nghĩa (AI đọc thật).
 - Mỗi lần sửa trường tạo phiên bản mới.
@@ -402,5 +408,6 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 | Hàng LCL qua kho CFS | Hai văn bản hướng dẫn khác nhau (TT39: mã 3; CV 6376: mã 2) – cần chốt |
 | Đọc chứng từ | Chưa đọc lớp chữ PDF / XML hóa đơn điện tử; mọi chứng từ gửi AI |
 | Tài khoản | Xác thực email chưa bắt buộc khi đăng nhập; chưa có trang xác thực email / đặt lại mật khẩu / nhận lời mời; người bị từ chối tham gia chỉ nhận email (chưa có màn báo trạng thái), chuyển quyền sở hữu chưa ghi nhật ký kiểm toán riêng; tra cứu MST là giả lập |
+| Danh mục hàng hóa | Chưa dùng danh mục khi dựng tờ khai (khớp hàng → lấy HS, bỏ qua HSCodePro); mặt hàng tự thêm khi duyệt chưa có số tờ khai (số chỉ có sau khi truyền); duyệt lại tờ khai đã mở lại sẽ tăng số lần khai thêm lần nữa |
 | Chi phí | HSCodePro và Customs Hub ghi theo đơn giá cấu hình (mặc định 0 – chưa có giá hợp đồng); chưa có lịch sử giá theo thời gian (đổi đơn giá không tính lại sự kiện cũ) |
 | Khác | Hủy tờ khai (Mẫu 06), tách vận đơn (Mẫu 12), khai danh sách container qua HYS, đóng chung container nhiều tờ khai xuất (Mẫu 15); đại lý khai hộ nhiều doanh nghiệp; app mobile |

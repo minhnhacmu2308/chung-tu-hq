@@ -210,7 +210,7 @@ describe("Dialog – dạng panel dùng hết chiều cao", () => {
     const form = screen.getByRole("textbox", { name: "Mã trường" }).closest("form")!;
     const body = form.parentElement!;
     expect(body).toHaveClass("flex-1", "overflow-y-auto", "[&>form]:flex-1", "[&>form]:flex-col");
-    expect(screen.getByRole("button", { name: "Thêm" }).parentElement).toHaveClass("mt-auto", "sticky", "bottom-0");
+    expect(screen.getByRole("button", { name: "Thêm" }).parentElement).toHaveClass("mt-auto", "sticky", "-bottom-4");
     expect(screen.getByRole("dialog")).toHaveAttribute("data-presentation", "panel");
   });
 });

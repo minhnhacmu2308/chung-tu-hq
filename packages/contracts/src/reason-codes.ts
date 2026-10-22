@@ -55,6 +55,11 @@ export const REASON_TEXT_VI = {
   AMENDMENT_NOT_APPROVED: "Bản khai bổ sung chưa được phê duyệt",
   AMENDMENT_NOT_TRANSMITTABLE: "Bản khai bổ sung chưa gửi được: {blockers}",
   CERTIFICATE_REQUIRED: "Chọn chứng thư số để ký",
+
+  // ── Danh mục hàng hóa của doanh nghiệp ──
+  PRODUCT_CODE_EXISTS: "Danh mục đã có mặt hàng mã {code}",
+  PRODUCT_NAME_EXISTS: "Danh mục đã có mặt hàng cùng tên",
+  PRODUCT_NOT_FOUND: "Không tìm thấy mặt hàng trong danh mục",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

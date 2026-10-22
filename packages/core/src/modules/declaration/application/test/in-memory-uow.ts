@@ -1,11 +1,11 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProfileRow } from "../ports.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProductRow, ProfileRow } from "../ports.js";
 
 /** Fake mô phỏng RLS theo org; catalog_hs/exchange_rates là bảng chung (mọi org đọc). */
 export class InMemoryDeclarationUow implements DeclarationUow {
   readonly data = {
     lineItems: [] as LineItemRow[], hsJobs: [] as HsJobRow[], suggestions: [] as HsSuggestionRow[], declarations: [] as DeclarationRow[], agentRuns: [] as AgentRunRow[],
-    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string; source?: "VCB" | "MANUAL" | "SEED"; snapshotAt?: Date | null }[], profiles: [] as ProfileRow[],
+    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string; source?: "VCB" | "MANUAL" | "SEED"; snapshotAt?: Date | null }[], profiles: [] as ProfileRow[], products: [] as ProductRow[],
   };
 
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: DeclarationRepos) => Promise<T>): Promise<T> {
@@ -100,6 +100,28 @@ export class InMemoryDeclarationUow implements DeclarationUow {
         upsert: async (row) => {
           if (row.orgId !== org) deny("declaration_profiles");
           d.profiles = [...d.profiles.filter((x) => !(x.orgId === row.orgId && x.direction === row.direction)), clone(row)];
+        },
+      },
+      products: {
+        list: async (orgId) => clone(d.products.filter((x) => x.orgId === org && x.orgId === orgId).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())),
+        get: async (orgId, id) => clone(d.products.find((x) => x.orgId === org && x.orgId === orgId && x.id === id) ?? null),
+        byKeys: async (orgId, keys) => clone(d.products.filter((x) => x.orgId === org && x.orgId === orgId && keys.includes(x.key))),
+        byNameKeys: async (orgId, nameKeys) => clone(d.products.filter((x) => x.orgId === org && x.orgId === orgId && nameKeys.includes(x.nameKey))),
+        insert: async (rows) => {
+          for (const row of rows) {
+            if (row.orgId !== org) deny("product_catalog");
+            if (d.products.some((x) => x.orgId === row.orgId && x.key === row.key)) throw new Error("duplicate key value violates unique constraint \"product_catalog_org_key_uq\"");
+          }
+          d.products = [...d.products, ...rows.map(clone)];
+        },
+        update: async (row) => {
+          if (row.orgId !== org) deny("product_catalog");
+          d.products = d.products.map((x) => (x.orgId === org && x.id === row.id ? clone(row) : x));
+        },
+        remove: async (orgId, ids) => {
+          const before = d.products.length;
+          d.products = d.products.filter((x) => !(x.orgId === org && x.orgId === orgId && ids.includes(x.id)));
+          return before - d.products.length;
         },
       },
       exchangeRates: {

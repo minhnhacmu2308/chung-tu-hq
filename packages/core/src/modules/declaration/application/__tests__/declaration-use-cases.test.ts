@@ -233,6 +233,11 @@ describe("HS và tờ khai", () => {
     unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
     unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));
     unwrap(await approveDeclaration(deps, approver, D));
+    // Duyệt xong → mặt hàng đã xác nhận HS vào danh mục hàng hóa của doanh nghiệp (nguồn "Từ tờ khai").
+    const items = unwrap(await listLineItems(deps, declarant, D));
+    const catalog = uow.data.products;
+    expect(catalog.length).toBe(new Set(items.map((i) => i.description.trim().toLowerCase())).size);
+    expect(catalog[0]).toMatchObject({ source: "DECLARATION", hsCode: "84821000", timesDeclared: 1, lastDeclarationDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
     (deps.shipments as FakeShipments).byDossier[D]!.items[0]!.unit.value = "SET";
     unwrap(await refreshFromShipment(deps, declarant, D));
     expect(unwrap(await listLineItems(deps, declarant, D))[0]?.unit).not.toBe("SET");

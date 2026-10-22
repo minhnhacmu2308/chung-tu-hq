@@ -181,11 +181,6 @@
   ::selection { background: var(--kb-color-selection); }
   /* Thanh cuộn mảnh trong các khung cuộn bên trong trang (bảng, panel, danh sách). */
   :where(body *) { scrollbar-width: thin; }
-  /* Dialog dạng panel đang mở: trang chính chừa lề phải bằng bề rộng panel (components/dialog.tsx, PanelDock). */
-  body {
-    padding-inline-end: var(--kb-dialog-dock, 0px);
-    @media (prefers-reduced-motion: no-preference) { transition: padding-inline-end 200ms ease; }
-  }
 
   /*
    * Mọi phần tử tương tác đổi trạng thái (hover, focus, chọn) mượt thay vì giật.

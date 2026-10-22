@@ -15,8 +15,8 @@ export const DialogClose = DialogPrimitive.Close;
 
 /**
  * modal = cửa sổ giữa màn hình, phủ nền, giữ focus trong dialog.
- * panel = neo bên phải, KHÔNG chặn trang phía sau (thao tác song song được, như panel trợ lý AI). Màn đủ rộng thì
- * trang chính lùi vào nhường chỗ (không bị panel đè); màn hẹp thì panel nằm đè lên trang.
+ * panel = drawer trượt từ phải vào, cao hết màn hình, nằm ĐÈ lên trang (trang không bị đẩy/co lại) và KHÔNG chặn
+ * trang phía sau (thao tác song song được, vd bấm ô khác trên bản in khi đang sửa).
  */
 export type DialogPresentation = "modal" | "panel";
 
@@ -116,45 +116,6 @@ function ModalOverlay() {
   return <div aria-hidden="true" data-slot="dialog-overlay" className="fixed inset-0 z-40 bg-overlay backdrop-blur-xs motion-safe:animate-fade-in" />;
 }
 
-/** Khoảng cách panel tới mép phải màn hình (right-2) + khe giữa panel và trang chính. */
-const DOCK_GAP_PX = 16;
-/** Trang chính còn hẹp hơn mức này thì thôi lùi vào – panel nằm đè như trên điện thoại. */
-const DOCK_MIN_MAIN_PX = 640;
-const dockedPanels = new Map<HTMLElement, number>();
-
-/** Ghi bề rộng panel vào `--kb-dialog-dock` trên <html>; `body` dùng biến này làm lề phải (styles/index.css). */
-function syncDockInset() {
-  const width = Math.max(0, ...dockedPanels.values());
-  const fits = width > 0 && window.innerWidth - width >= DOCK_MIN_MAIN_PX;
-  document.documentElement.style.setProperty("--kb-dialog-dock", fits ? `${width}px` : "0px");
-}
-
-/**
- * Đẩy trang chính vào khi panel đang mở. Giống ModalOverlay: nằm trong Portal nên chỉ chạy lúc dialog mở.
- * Đo offsetWidth (không tính transform) để hiệu ứng trượt vào không làm trang giật theo.
- */
-function PanelDock({ inner }: { inner: HTMLElement | null }) {
-  useEffect(() => {
-    const panel = inner?.closest<HTMLElement>("[data-presentation]");
-    if (!panel) return;
-    const measure = () => {
-      dockedPanels.set(panel, panel.offsetWidth + DOCK_GAP_PX);
-      syncDockInset();
-    };
-    measure();
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
-    observer?.observe(panel);
-    window.addEventListener("resize", syncDockInset);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", syncDockInset);
-      dockedPanels.delete(panel);
-      syncDockInset();
-    };
-  }, [inner]);
-  return null;
-}
-
 export function DialogContent({
   title,
   icon,
@@ -173,20 +134,19 @@ export function DialogContent({
     if (mode === "panel") e.preventDefault();
   };
   const isModal = mode === "modal";
-  const [panelBody, setPanelBody] = useState<HTMLElement | null>(null);
 
   return (
     <DialogPrimitive.Portal>
       {/* Lớp phủ tự làm (Overlay của Radix chỉ có ở chế độ modal). Bấm vào = bấm ngoài → Radix đóng dialog. */}
-      {isModal ? <ModalOverlay /> : <PanelDock inner={panelBody} />}
+      {isModal && <ModalOverlay />}
       <DialogPrimitive.Content
         data-presentation={mode}
         aria-modal={isModal || undefined}
         className={cn(
-          "fixed z-50 flex w-full flex-col border border-border bg-surface text-fg shadow-lg focus-visible:outline-none",
+          "fixed z-50 flex w-full flex-col border-border bg-surface text-fg focus-visible:outline-none",
           mode === "modal"
-            ? cn("left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg motion-safe:animate-pop-in", MODAL_SIZE[size])
-            : cn("inset-y-2 right-2 w-[calc(100%-1rem)] rounded-lg motion-safe:animate-slide-in-right", PANEL_SIZE[size]),
+            ? cn("left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border shadow-lg motion-safe:animate-pop-in", MODAL_SIZE[size])
+            : cn("inset-y-0 right-0 border-l shadow-lg motion-safe:animate-slide-in-right", PANEL_SIZE[size]),
           className,
         )}
         {...(description ? {} : { "aria-describedby": undefined })}
@@ -194,7 +154,7 @@ export function DialogContent({
         {...props}
       >
         <FocusScope asChild trapped={isModal} loop>
-        <div ref={setPanelBody} className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
         {/* div, không phải <header>: hai dialog chồng nhau (panel chi tiết + cửa sổ con) sẽ thành hai landmark banner. */}
         <div className="flex items-center gap-3 border-b border-border px-5 py-3">
           {icon && <span aria-hidden="true" className="text-fg-muted">{icon}</span>}
@@ -218,7 +178,7 @@ export function DialogContent({
         </div>
         {/*
           Nội dung thường bọc trong <form>: cho form cũng là cột giãn hết chiều cao để DialogFooter (mt-auto) nằm sát đáy.
-          Thiếu dòng này thì ở dạng panel bên phải nhóm nút lơ lửng giữa panel, bên dưới thừa một khoảng trắng.
+          Thiếu dòng này thì ở dạng drawer bên phải nhóm nút lơ lửng giữa panel, bên dưới thừa một khoảng trắng.
         */}
         <div className="@container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 [&>form]:flex [&>form]:flex-1 [&>form]:flex-col [&>form]:gap-4">{children}</div>
         </div>

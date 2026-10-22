@@ -1,13 +1,15 @@
 "use client";
-// Bảng email chứng từ (một trạng thái): sắp theo thời gian nhận, tìm / lọc / phân trang; bấm dòng → chi tiết.
+// Danh sách email chứng từ (một trạng thái), dạng bảng hoặc thẻ: sắp theo thời gian nhận, tìm / lọc / phân trang; bấm dòng / thẻ → chi tiết.
 import type { InboxMessage, InboxMessageStatus } from "@kb/contracts";
-import { Badge, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, fill, RowActions, useMessages, type RowAction } from "@kb/ui";
-import { Eye, EyeOff, FilePlus2, FolderInput, Info, Paperclip, RotateCcw } from "lucide-react";
+import {
+  Badge, Button, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, fill, IconTile, RecordCard, RowActions, StatusBadge, useMessages, type RowAction, type Tone,
+} from "@kb/ui";
+import { Eye, EyeOff, FilePlus2, FolderInput, Info, Mail, MailCheck, MailX, Paperclip, RotateCcw, type LucideIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { DOC_KIND_LABELS } from "@/mocks/types";
 import { pendingAttachments } from "./add-to-dossier";
-import { openAttachment, type InboxActions } from "./inbox-message-detail";
+import { openAttachment, STATUS, type InboxActions } from "./inbox-message-detail";
 import { INBOX_MESSAGES } from "./inbox.messages";
 
 type Messages = Record<keyof (typeof INBOX_MESSAGES)["vi"], string>;
@@ -16,6 +18,13 @@ type Kinds = Record<keyof (typeof DOC_KIND_LABELS)["vi"], string>;
 type Row = InboxMessage & { files: string; suggestionText: string; added: number };
 
 const col = createDataTableColumnHelper<Row>();
+
+/** Đầu thẻ theo trạng thái (chỉ trang trí – trạng thái đã có chữ trên thẻ). Email mới có gợi ý hồ sơ thì nổi bật hơn. */
+const CARD_LOOK: Record<InboxMessageStatus, { tone: Tone; pattern: "dots" | "grid" | "diagonal"; icon: LucideIcon }> = {
+  NEW: { tone: "info", pattern: "dots", icon: Mail },
+  DONE: { tone: "success", pattern: "grid", icon: MailCheck },
+  IGNORED: { tone: "neutral", pattern: "diagonal", icon: MailX },
+};
 
 function buildColumns(t: Messages, kinds: Kinds) {
   const dash = <span className="text-fg-subtle">—</span>;
@@ -152,6 +161,69 @@ export function InboxTable({
       emptyDescription={emptyDescription}
       {...(emptyAction ? { emptyAction } : {})}
       labels={{ searchPlaceholder: t.searchPlaceholder }}
+      viewStorageKey="inbox"
+      renderCard={(m, parts) => {
+        const look = CARD_LOOK[m.status];
+        const tone: Tone = m.status === "NEW" && m.suggestion ? "primary" : look.tone;
+        const Icon = look.icon;
+        const kindsShown = [...new Set(m.attachments.map((a) => kinds[a.kindGuess]))];
+        const canQuickAdd = actions.canUse && m.status === "NEW" && !!m.suggestion && pendingAttachments(m).length > 0;
+        return (
+          <RecordCard
+            title={<span className="line-clamp-2">{m.subject}</span>}
+            subtitle={<span className="line-clamp-1" title={m.fromEmail}>{m.fromName}</span>}
+            tone={tone}
+            pattern={look.pattern}
+            leading={<IconTile icon={<Icon />} tone={tone} size="md" className="bg-surface" />}
+            art={<Icon />}
+            status={<StatusBadge status={STATUS[m.status]} />}
+            actions={parts.actions}
+            fields={[
+              {
+                label: t.colReceived,
+                value: <time dateTime={m.receivedAt} title={formatDateTime(m.receivedAt)}>{formatRelative(m.receivedAt)}</time>,
+              },
+              {
+                label: t.colFiles,
+                value: (
+                  <span className="flex flex-col">
+                    <span className="inline-flex items-center gap-1">
+                      <Paperclip className="h-3.5 w-3.5 shrink-0 text-fg-subtle" aria-hidden="true" />
+                      {fill(t.filesCount, { n: m.attachments.length })}
+                    </span>
+                    <span className="line-clamp-1 text-xs text-fg-muted" title={m.files}>{kindsShown.join(", ")}</span>
+                  </span>
+                ),
+              },
+              ...(m.status === "NEW"
+                ? [{
+                    label: t.colSuggestion,
+                    wide: true,
+                    value: m.suggestion ? (
+                      <span className="inline-flex flex-wrap items-center gap-1.5">
+                        <span className="font-mono">{m.suggestion.dossierCode}</span>
+                        <Badge tone="primary" size="sm">{t[`reason${m.suggestion.reason}`]}</Badge>
+                      </span>
+                    ) : (
+                      <span className="text-fg-subtle">—</span>
+                    ),
+                  }]
+                : []),
+            ]}
+            footer={
+              canQuickAdd && m.suggestion ? (
+                <Button size="sm" variant="secondary" leftIcon={<FolderInput className="h-4 w-4" />} loading={actions.addingId === m.id} onClick={() => actions.onAddToSuggested(m)}>
+                  {fill(t.addToCode, { code: m.suggestion.dossierCode })}
+                </Button>
+              ) : (
+                <span className="line-clamp-1">{`${t.colMailbox}: ${m.mailbox}`}</span>
+              )
+            }
+          >
+            {m.snippet && <p className="line-clamp-2 text-sm text-fg-muted">{m.snippet}</p>}
+          </RecordCard>
+        );
+      }}
     />
   );
 }

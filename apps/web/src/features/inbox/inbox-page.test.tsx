@@ -25,6 +25,7 @@ const actAsRole = (role: string) => {
 
 beforeEach(() => {
   resetDb();
+  window.localStorage.removeItem("kb-table-view:inbox");
   search = new URLSearchParams();
   push.mockReset();
   replace.mockReset();
@@ -57,6 +58,21 @@ describe("Hộp thư chứng từ", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Thêm vào hồ sơ này" }));
     await waitFor(() => expect(screen.getByRole("tab", { name: "Mới (3)" })).toBeTruthy(), T);
     expect(getDb().documents.filter((d) => d.dossierId === "dos_027").map((d) => d.fileName)).toContain("HBL_OOLU2741199012.pdf");
+    expect(getDb().inboxMessages.find((m) => m.id === "imsg_seed_1")?.status).toBe("DONE");
+  }, 20_000);
+
+  it("dạng thẻ: mỗi email một thẻ (tiêu đề, người gửi, file, gợi ý); nút thêm nhanh vào hồ sơ gợi ý; nhớ lựa chọn; không vi phạm a11y", async () => {
+    const { container } = renderWithProviders(<InboxPage />);
+    await screen.findByRole("table", { name: "Danh sách email chứng từ" }, T);
+    await userEvent.click(screen.getByRole("radio", { name: /Thẻ/ }));
+    const list = await screen.findByRole("list", { name: "Danh sách email chứng từ" }, T);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
+    expect(window.localStorage.getItem("kb-table-view:inbox")).toBe("cards");
+    await expectNoA11yViolations(container);
+    const card = within(list).getByText(/Dongguan Changli/).closest("li")!;
+    expect(within(card).getByText("Trùng mã hồ sơ")).toBeTruthy();
+    await userEvent.click(await within(card).findByRole("button", { name: "Thêm vào hồ sơ HS-NK-2610-027" }, T));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Mới (3)" })).toBeTruthy(), T);
     expect(getDb().inboxMessages.find((m) => m.id === "imsg_seed_1")?.status).toBe("DONE");
   }, 20_000);
 

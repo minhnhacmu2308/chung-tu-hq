@@ -6,3 +6,4 @@ export * from "./skill.js";
 export * from "./declaration.js";
 export * from "./customs.js";
 export * from "./product-catalog.js";
+export * from "./mailbox.js";

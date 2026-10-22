@@ -60,6 +60,14 @@ export const REASON_TEXT_VI = {
   PRODUCT_CODE_EXISTS: "Danh mục đã có mặt hàng mã {code}",
   PRODUCT_NAME_EXISTS: "Danh mục đã có mặt hàng cùng tên",
   PRODUCT_NOT_FOUND: "Không tìm thấy mặt hàng trong danh mục",
+  MAILBOX_NOT_CONFIGURED: "Máy chủ chưa cấu hình kết nối {provider}",
+  MAILBOX_AUTH_FAILED: "Không kết nối được hộp thư – đăng nhập hoặc cấp quyền không thành công",
+  MAILBOX_STATE_INVALID: "Phiên kết nối hộp thư đã hết hạn, hãy bấm kết nối lại",
+  MAILBOX_REAUTH_REQUIRED: "Hộp thư {email} đã thu hồi quyền hoặc hết hạn – hãy kết nối lại",
+  MAILBOX_SYNC_FAILED: "Lấy thư không thành công, thử lại sau",
+  MAILBOX_NOT_FOUND: "Không tìm thấy hộp thư đã kết nối",
+  INBOX_MESSAGE_NOT_FOUND: "Không tìm thấy email trong hộp thư chứng từ",
+  INBOX_ATTACHMENT_ADDED: "File đã được thêm vào hồ sơ {code}",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

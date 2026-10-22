@@ -1,4 +1,4 @@
-export const QUEUE_NAMES = ["health", "extract-document", "run-agent", "customs-send", "customs-poll", "skill-evaluate", "skill-sample-read", "cert-expiry", "hs-poll", "hs-answer", "hs-reclassify", "exchange-rate-weekly"] as const;
+export const QUEUE_NAMES = ["health", "extract-document", "run-agent", "customs-send", "customs-poll", "skill-evaluate", "skill-sample-read", "cert-expiry", "hs-poll", "hs-answer", "hs-reclassify", "exchange-rate-weekly", "mailbox-sync"] as const;
 export type QueueName = (typeof QUEUE_NAMES)[number];
 
 /** Port đẩy job nền; hiện thực BullMQ nằm ở composition root của apps. `jobId` dùng để chống trùng; adapter BullMQ thay ":" bằng "_" (BullMQ cấm). */

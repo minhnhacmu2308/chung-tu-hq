@@ -11,6 +11,13 @@ const base = {
 };
 
 describe("loadEnv", () => {
+  it("APP_MASTER_KEYS: vòng khóa v<n>:<base64>; sai định dạng / trùng phiên bản / không đủ 32 byte → lỗi nêu rõ", () => {
+    const k2 = Buffer.alloc(32, 2).toString("base64");
+    expect(loadEnv({ ...base, APP_MASTER_KEYS: `v2:${k2}, v3:${Buffer.alloc(32, 3).toString("base64")}` }).APP_MASTER_KEYS).toContain("v2:");
+    expect(() => loadEnv({ ...base, APP_MASTER_KEYS: "khong-dung" })).toThrow(/v<số>:<base64 32 byte>/);
+    expect(() => loadEnv({ ...base, APP_MASTER_KEYS: `v2:${k2},v2:${k2}` })).toThrow(/trùng phiên bản v2/);
+    expect(() => loadEnv({ ...base, APP_MASTER_KEYS: `v2:${Buffer.alloc(8).toString("base64")}` })).toThrow(/v2 phải là base64 của 32 byte/);
+  });
   it("mặc định: adapter fake, mail console, S3 path-style", () => {
     const env = loadEnv(base);
     expect(env.AI_PROVIDER).toBe("fake");

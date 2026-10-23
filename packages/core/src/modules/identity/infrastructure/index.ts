@@ -29,6 +29,6 @@ export function createIdentityInfrastructure(opts: { db: Db; redis?: Redis; env:
     clock,
     idGen: ulidIdGen,
     appUrl: opts.env.APP_URL,
-    secrets: new AesSecretStore(opts.env.APP_MASTER_KEY),
+    secrets: AesSecretStore.fromEnv(opts.env),
   };
 }

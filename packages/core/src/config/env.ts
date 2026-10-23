@@ -29,6 +29,12 @@ export const EnvSchema = z
     AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
     AZURE_STORAGE_CONTAINER: z.string().regex(/^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$/, "Tên container Azure: 3–63 ký tự a-z, 0-9, dấu - (không đứng đầu/cuối, không liền nhau)").default("khaibao-documents"),
     APP_MASTER_KEY: base64Key32,
+    /**
+     * Vòng khóa để xoay khóa mã hóa bí mật: `v2:<base64 32 byte>,v1:<base64 32 byte>`. Mã hóa mới dùng phiên bản lớn nhất;
+     * giải mã theo `key_version` của từng dòng. Thiếu → chỉ APP_MASTER_KEY (phiên bản 1). Sau khi thêm khóa mới chạy
+     * `pnpm --filter @kb/core secrets:rotate` để mã hóa lại dữ liệu cũ, rồi mới bỏ khóa cũ khỏi vòng.
+     */
+    APP_MASTER_KEYS: z.string().optional(),
     APP_URL: z.url(),
     AI_PROVIDER: z.enum(["fake", "claude"]).default("fake"),
     ANTHROPIC_API_KEY: z.string().optional(),
@@ -93,7 +99,36 @@ export const EnvSchema = z
     need(e.HS_CLASSIFIER === "hscodepro" && !e.HSCODEPRO_URL, "HSCODEPRO_URL", "HS_CLASSIFIER=hscodepro");
     need(e.HS_CLASSIFIER === "hscodepro" && !e.HSCODEPRO_INTERNAL_KEY, "HSCODEPRO_INTERNAL_KEY", "HS_CLASSIFIER=hscodepro");
     need(e.MAIL === "smtp" && !e.SMTP_URL, "SMTP_URL", "MAIL=smtp");
+    if (e.APP_MASTER_KEYS !== undefined) {
+      const bad = parseKeyRing(e.APP_MASTER_KEYS).error;
+      if (bad) ctx.addIssue({ code: "custom", path: ["APP_MASTER_KEYS"], message: bad });
+    }
   });
+
+export type MasterKeyRing = { current: number; keys: Map<number, string> };
+
+/** "v2:xxx,v1:yyy" → { current: 2, keys } ; lỗi định dạng → `error`. */
+export function parseKeyRing(raw: string): { ring?: MasterKeyRing; error?: string } {
+  const keys = new Map<number, string>();
+  for (const part of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const m = /^v(\d{1,4}):(.+)$/.exec(part);
+    if (!m) return { error: `APP_MASTER_KEYS: mục "${part.slice(0, 12)}…" phải dạng v<số>:<base64 32 byte>` };
+    const version = Number(m[1]);
+    if (keys.has(version)) return { error: `APP_MASTER_KEYS: trùng phiên bản v${version}` };
+    if (!base64Key32.safeParse(m[2]).success) return { error: `APP_MASTER_KEYS: khóa v${version} phải là base64 của 32 byte` };
+    keys.set(version, m[2]!);
+  }
+  if (keys.size === 0) return { error: "APP_MASTER_KEYS rỗng" };
+  return { ring: { current: Math.max(...keys.keys()), keys } };
+}
+
+/** Vòng khóa hiệu lực: APP_MASTER_KEYS (nếu có) + APP_MASTER_KEY làm phiên bản 1 khi vòng chưa có v1 (dữ liệu cũ vẫn giải mã được). */
+export function masterKeyRing(env: Pick<Env, "APP_MASTER_KEY" | "APP_MASTER_KEYS">): MasterKeyRing {
+  const ring = env.APP_MASTER_KEYS ? parseKeyRing(env.APP_MASTER_KEYS).ring : undefined;
+  if (!ring) return { current: 1, keys: new Map([[1, env.APP_MASTER_KEY]]) };
+  if (!ring.keys.has(1)) ring.keys.set(1, env.APP_MASTER_KEY);
+  return ring;
+}
 
 export type Env = z.infer<typeof EnvSchema>;
 

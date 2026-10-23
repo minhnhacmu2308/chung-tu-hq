@@ -35,6 +35,8 @@ export type Container = {
   redis: Redis;
   queue: JobQueue;
   pingDb: () => Promise<void>;
+  /** Số worker đang nghe hàng đợi (health readiness – chỉ để thông tin). */
+  workerCount: () => Promise<number>;
   identity: IdentityDeps;
   secrets: SecretStore;
   integration: IntegrationDeps;
@@ -307,6 +309,7 @@ function build(): Container {
     mailbox,
     admin,
     resetDemo: () => runSeed(env.DATABASE_ADMIN_URL),
+    workerCount: () => jobs.workerCount(),
   };
 }
 

@@ -51,6 +51,8 @@ export const EnvSchema = z
     AI_DAILY_COST_CAP_VND: z.string().regex(/^\d+(\.\d+)?$/, "Số VND không âm").default("0"),
     /** Số lời gọi AI tối đa mỗi phút trên toàn worker (limiter BullMQ của queue extract-document). */
     AI_RATE_PER_MINUTE: z.coerce.number().int().positive().default(30),
+    /** Cổng HTTP health của worker (/health/live, /health/ready); bỏ trống = không mở. */
+    WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65535).optional(),
     /** Số job đọc chứng từ / chạy agent đồng thời tối đa của MỘT doanh nghiệp – khách lớn không chiếm hết worker. */
     WORKER_MAX_PER_ORG: z.coerce.number().int().positive().default(2),
     CUSTOMS_GATEWAY: z.enum(["fake", "fpt"]).default("fake"),

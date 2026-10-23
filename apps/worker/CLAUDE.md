@@ -11,4 +11,5 @@
 - `src/container.ts` là composition root (env, db, redis). Handler trong `src/jobs/<queue>.ts` nhận `job.data` dạng `unknown`, parse bằng `parsePayload(schema, raw, queue)` (`src/jobs/_payload.ts`): payload sai → `UnrecoverableError`, BullMQ không thử lại vô ích.
 - Log bằng `createLogger({ name: "worker" })` từ `@kb/core/shared` (JSON một dòng, tự che khóa/mật khẩu) – không `console.*`. Kèm `queue`, `jobId`, `orgId`, `dossierId` để tra được.
 - Job hết số lần thử → `onFinalFailure` trong `src/index.ts` phải đánh dấu bản ghi liên quan (chứng từ ERROR, outbox FAILED, agent run ERROR…). Thêm queue mới = thêm nhánh ở đó, không để bản ghi kẹt "đang xử lý".
+- Health HTTP (tùy chọn, `WORKER_HEALTH_PORT`): `/health/live`, `/health/ready` (Redis + đang nghe hàng đợi) – `src/health-server.ts`.
 - Tắt êm: SIGTERM → ngừng nhận job, chờ job đang chạy tối đa 30 s rồi thoát; `unhandledRejection`/`uncaughtException` → log rồi thoát để orchestrator khởi động lại.

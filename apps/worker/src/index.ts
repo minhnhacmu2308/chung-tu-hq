@@ -17,6 +17,7 @@ import { runAgentJob } from "./jobs/run-agent.js";
 import { skillEvaluateJob, skillSampleReadJob } from "./jobs/skill.js";
 import { stuckSweeperJob } from "./jobs/stuck-sweeper.js";
 import { perOrgLimit } from "./jobs/_per-org.js";
+import { startHealthServer } from "./health-server.js";
 
 const log = createLogger({ name: "worker" });
 const c = buildContainer();
@@ -87,6 +88,9 @@ for (const w of workers) {
   w.on("stalled", (jobId) => log.warn("job bị coi là treo (stalled) – sẽ chạy lại", { queue: w.name, jobId }));
 }
 
+let shuttingDown = false;
+const health = c.env.WORKER_HEALTH_PORT ? startHealthServer({ port: c.env.WORKER_HEALTH_PORT, redis: c.redis, queues: () => workers.map((w) => w.name), isShuttingDown: () => shuttingDown }) : null;
+
 registerSchedulers()
   .then(() => log.info("worker sẵn sàng", { queues: workers.map((w) => w.name), ai: c.env.AI_PROVIDER, hs: c.env.HS_CLASSIFIER, mail: c.env.MAILBOX_PROVIDER }))
   .catch((e) => {
@@ -96,7 +100,6 @@ registerSchedulers()
 
 /** Tắt êm: ngừng nhận job, chờ job đang chạy tối đa SHUTDOWN_GRACE_MS rồi thoát (job dở sẽ được BullMQ chạy lại khi hết lock). */
 const SHUTDOWN_GRACE_MS = 30_000;
-let shuttingDown = false;
 async function shutdown(signal: string, code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -107,6 +110,7 @@ async function shutdown(signal: string, code = 0) {
   }, SHUTDOWN_GRACE_MS);
   forceExit.unref();
   try {
+    health?.close();
     await Promise.all([...workers.map((w) => w.close()), certQueue.close(), rateQueue.close(), sweeperQueue.close()]);
     await c.close();
   } catch (e) {

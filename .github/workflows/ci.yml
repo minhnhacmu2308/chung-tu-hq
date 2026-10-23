@@ -35,6 +35,9 @@ jobs:
           HS_CLASSIFIER=fake
           MAIL=console
           EOF
+      # Lỗ hổng mức high/critical trong dependency: báo đỏ nhưng chưa chặn merge (bật chặn khi đã dọn hết tồn đọng).
+      - run: pnpm audit --audit-level=high
+        continue-on-error: true
       - run: pnpm typecheck
       - run: pnpm lint          # design tokens + depcruise ranh giới module
       - run: pnpm test          # vitest (unit + integration với Testcontainers – runner ubuntu có sẵn Docker)

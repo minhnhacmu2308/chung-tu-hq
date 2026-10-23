@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, index, integer, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { plans } from "./plans.js";
 import { appRole, currentOrg, currentUser, id, noContext, orgId, orgPolicyUsing, orgRls, timestamps } from "./shared.js";
 
@@ -93,6 +93,28 @@ export const memberships = pgTable(
       using: sql`${orgPolicyUsing} OR (coalesce(${currentOrg}, '') = '' AND user_id = ${currentUser})`,
       withCheck: sql`${orgPolicyUsing} OR (${noContext})`,
     }),
+  ],
+).enableRLS();
+
+/** Nhật ký hoạt động của doanh nghiệp – append-only (chỉ insert/select), xem shared/audit.ts. */
+export const orgAudit = pgTable(
+  "org_audit",
+  {
+    id: id(),
+    orgId: orgId(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    actorId: text("actor_id").notNull(),
+    actorName: text("actor_name").notNull(),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    targetLabel: text("target_label").notNull(),
+    detail: jsonb("detail"),
+  },
+  (t) => [
+    index("org_audit_org_at_idx").on(t.orgId, t.at),
+    pgPolicy("org_audit_select", { for: "select", to: appRole, using: orgPolicyUsing }),
+    pgPolicy("org_audit_insert", { for: "insert", to: appRole, withCheck: orgPolicyUsing }),
   ],
 ).enableRLS();
 

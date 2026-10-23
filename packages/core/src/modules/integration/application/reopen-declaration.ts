@@ -18,11 +18,13 @@ export async function reopenDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   const editingStage = !!result && EDITING_STAGES.has(stageOf(result));
   if (dossier.status === "APPROVED" && editingStage) {
     await deps.declarations.markDraft(ctx, dossierId);
+    await deps.orgAudit?.record(ctx, { action: "DECLARATION_REOPENED", targetType: "dossier", targetId: dossierId, targetLabel: dossier.code, detail: { stage: stageOf(result!) } });
     return ok(undefined);
   }
   if (dossier.status === "APPROVED" || (dossier.status === "SUBMITTED" && rejectedBeforeNumber)) {
     await deps.declarations.markDraft(ctx, dossierId);
     if (result) await deps.uow.asOrg(ctx, (r) => r.results.upsert({ ...result, state: "APPROVED", raw: { ...(result.raw ?? {}), stage: "NOT_SENT" }, updatedAt: deps.clock.now() }));
+    await deps.orgAudit?.record(ctx, { action: "DECLARATION_REOPENED", targetType: "dossier", targetId: dossierId, targetLabel: dossier.code, ...(rejectedBeforeNumber ? { detail: { reason: "SEND_FAILED" } } : {}) });
     return ok(undefined);
   }
   if (dossier.status === "SUBMITTED" || dossier.status === "CLEARED") return err(domainError("DOSSIER_LOCKED", "Hải quan đã ghi nhận tờ khai – không mở lại được, dùng nghiệp vụ gọi sửa (IDB/IDD) hoặc sửa sau thông quan (AMA)"));
@@ -36,7 +38,7 @@ export async function markOutboxFailed(deps: CustomsDeps, input: { orgId: string
     if (!ob || ob.status !== "PENDING") return;
     const now = deps.clock.now();
     await r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, operation: ob.operation, direction: "IN", result: "ERROR", summary: `Không gửi được sau nhiều lần thử: ${input.reason} – bấm Gửi lại`, payloadMasked: { error: input.reason }, externalRef: null, at: now });
-    await r.outbox.update(ob.id, { status: "FAILED", lastError: input.reason, updatedAt: now });
+    await r.outbox.update(ob.orgId, ob.id, { status: "FAILED", lastError: input.reason, updatedAt: now });
     const result = await r.results.get(input.orgId, ob.dossierId);
     if (result) await r.results.upsert({ ...result, state: coarseState(stageOf(result), true), updatedAt: now });
   });

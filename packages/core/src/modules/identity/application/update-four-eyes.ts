@@ -10,5 +10,6 @@ export async function updateFourEyes(deps: IdentityDeps, ctx: Ctx, enabled: bool
   const allowed = canManageOrg(ctx.role);
   if (!allowed.ok) return allowed;
   await deps.uow.asOrg(ctx, (r) => r.orgs.update(ctx.orgId, { fourEyes: enabled }));
+  await deps.audit?.record(ctx, { action: enabled ? "ORG_FOUR_EYES_ON" : "ORG_FOUR_EYES_OFF", targetType: "organization", targetId: ctx.orgId, targetLabel: "four_eyes" });
   return getOrganization(deps, ctx);
 }

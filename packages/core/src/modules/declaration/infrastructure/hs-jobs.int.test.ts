@@ -28,7 +28,7 @@ beforeAll(async () => {
   await admin.execute(sql`INSERT INTO dossiers (id, org_id, code, direction, type_code, partner, customs_office_code, due_date, owner_id) VALUES ('dos_hs', 'org_anphat', 'HS-1', 'NK', 'A11', 'X', '02CI', '2026-10-20', 'usr_chau')`);
   db = createDb(t.appUrl, { max: 2 });
   uow = new DrizzleDeclarationUow(db);
-  await uow.asOrg(A, (r) => r.lineItems.upsertForDossier("dos_hs", [item(1), item(2)]));
+  await uow.asOrg(A, (r) => r.lineItems.upsertForDossier("org_anphat", "dos_hs", [item(1), item(2)]));
 });
 afterAll(async () => {
   await db?.close();
@@ -40,8 +40,8 @@ describe("hs_jobs + trạng thái HS dòng hàng", () => {
   it("ghi lượt + trạng thái need_info kèm câu hỏi; đọc lại đúng; tìm dòng theo hs_item_id", async () => {
     await uow.asOrg(A, async (r) => {
       await r.hsJobs.insert({ id: "hsj_1", orgId: "org_anphat", dossierId: "dos_hs", externalId: "ext-1", status: "processing", polls: 0, createdAt: NOW, updatedAt: NOW });
-      await r.lineItems.update("itm_hs_1", { hsJobId: "hsj_1", hsItemId: "ext-it-1", hsStatus: "need_info", hsQuestion: { id: "q1", questions: [{ id: "use", question: "Dùng cho máy nào?" }] }, updatedAt: NOW });
-      await r.hsJobs.update("hsj_1", { status: "need_info", polls: 3, updatedAt: NOW });
+      await r.lineItems.update("org_anphat", "itm_hs_1", { hsJobId: "hsj_1", hsItemId: "ext-it-1", hsStatus: "need_info", hsQuestion: { id: "q1", questions: [{ id: "use", question: "Dùng cho máy nào?" }] }, updatedAt: NOW });
+      await r.hsJobs.update("org_anphat", "hsj_1", { status: "need_info", polls: 3, updatedAt: NOW });
     });
     const got = await uow.asOrg(A, async (r) => ({ job: await r.hsJobs.get("org_anphat", "hsj_1"), open: await r.hsJobs.openForDossier("org_anphat", "dos_hs"), it: await r.lineItems.get("org_anphat", "itm_hs_1"), byExt: await r.lineItems.findByHsItem("org_anphat", "ext-it-1") }));
     expect(got.job).toMatchObject({ externalId: "ext-1", status: "need_info", polls: 3 });
@@ -50,8 +50,8 @@ describe("hs_jobs + trạng thái HS dòng hàng", () => {
     expect(got.byExt?.id).toBe("itm_hs_1");
   });
   it("gợi ý lưu why_not + thuế trong rates", async () => {
-    await uow.asOrg(A, (r) => r.suggestions.replaceForItem("itm_hs_2", [{ id: "sug_1", orgId: "org_anphat", lineItemId: "itm_hs_2", code: "8466.93.90", description: "Loại khác", confidence: 0.12, rates: { importRate: "0", basis: "MFN", agreement: null, vatRate: "10" }, whyNot: "Chỉ đúng khi…", source: "hscodepro", createdAt: NOW }]));
-    expect((await uow.asOrg(A, (r) => r.suggestions.listForItems(["itm_hs_2"])))[0]).toMatchObject({ whyNot: "Chỉ đúng khi…", rates: { importRate: "0", vatRate: "10" } });
+    await uow.asOrg(A, (r) => r.suggestions.replaceForItem("org_anphat", "itm_hs_2", [{ id: "sug_1", orgId: "org_anphat", lineItemId: "itm_hs_2", code: "8466.93.90", description: "Loại khác", confidence: 0.12, rates: { importRate: "0", basis: "MFN", agreement: null, vatRate: "10" }, whyNot: "Chỉ đúng khi…", source: "hscodepro", createdAt: NOW }]));
+    expect((await uow.asOrg(A, (r) => r.suggestions.listForItems("org_anphat", ["itm_hs_2"])))[0]).toMatchObject({ whyNot: "Chỉ đúng khi…", rates: { importRate: "0", vatRate: "10" } });
   });
   it("org khác không thấy lượt, không ghi hộ được", async () => {
     expect(await uow.asOrg(B, (r) => r.hsJobs.get("org_anphat", "hsj_1"))).toBeNull();

@@ -61,7 +61,7 @@ export async function runEvaluation(deps: SkillDeps, input: { orgId: string; use
   };
   await deps.uow.asOrg(ctx, async (r) => {
     await r.evaluations.insert(row);
-    await r.skills.update(input.skillId, { accuracy: row.accuracy, updatedAt: now });
+    await r.skills.update(input.orgId, input.skillId, { accuracy: row.accuracy, updatedAt: now });
   });
   return ok(toEvaluation(row));
 }

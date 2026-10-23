@@ -1,3 +1,4 @@
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
 import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
@@ -26,7 +27,7 @@ export interface CustomsRepos {
     /** Dòng PENDING chưa từng được xử lý (attempts = 0) tạo trước `before` – job customs-send có thể đã mất (job quét định kỳ). */
     listUnsentBefore(orgId: string, before: Date): Promise<OutboxRow[]>;
     insert(row: OutboxRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<OutboxRow, "status" | "attempts" | "lastError" | "nextAttemptAt" | "updatedAt">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<OutboxRow, "status" | "attempts" | "lastError" | "nextAttemptAt" | "updatedAt">>): Promise<void>;
   };
   messages: {
     list(orgId: string, dossierId: string): Promise<MessageRow[]>;
@@ -109,6 +110,8 @@ export type CustomsDeps = {
   validation: ValidationReader;
   certificates: CertificateReader;
   audit: CustomsAuditWriter;
+  /** Nhật ký hoạt động doanh nghiệp (mở lại tờ khai); container nối từ identity. */
+  orgAudit?: OrgAuditWriter;
   /** Cấu hình doanh nghiệp: nguyên tắc 4 mắt khi phê duyệt bản khai bổ sung. */
   org: { fourEyes(orgId: string): Promise<boolean> };
   /** Khoảng cách giữa hai lần hỏi trạng thái (ms); gateway giả dùng ngắn để demo. */

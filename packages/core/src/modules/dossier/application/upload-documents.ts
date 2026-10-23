@@ -57,8 +57,8 @@ export async function uploadDocuments(deps: DossierDeps, ctx: Ctx, dossierId: st
       await r.documents.insert(row);
       rows.push(row);
     }
-    if (d.status === "DRAFT") await r.dossiers.update(dossierId, { status: "PROCESSING", updatedAt: now });
-    else await r.dossiers.update(dossierId, { updatedAt: now });
+    if (d.status === "DRAFT") await r.dossiers.update(ctx.orgId, dossierId, { status: "PROCESSING", updatedAt: now });
+    else await r.dossiers.update(ctx.orgId, dossierId, { updatedAt: now });
     return ok(rows);
   });
   if (!created.ok) return created;

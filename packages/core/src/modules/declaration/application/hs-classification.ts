@@ -39,21 +39,21 @@ async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string,
     if (it.status === "completed" && it.result) {
       if (row.hsStatus !== "completed") fresh++;
       const cands = candidatesFromResult(it.result);
-      await r.lineItems.update(row.id, {
+      await r.lineItems.update(row.orgId, row.id, {
         hsStatus: "completed", hsSuggested: cands[0]!.code, hsConfidence: cands[0]!.confidence, hsQuestion: null, hsError: null,
         hsDetail: { reasoning: it.result.reasoning, legalBasis: it.result.legal_basis, warnings: it.result.warnings }, updatedAt: now,
       });
-      await r.suggestions.replaceForItem(row.id, cands.map((c) => ({
+      await r.suggestions.replaceForItem(row.orgId, row.id, cands.map((c) => ({
         id: deps.idGen.next("sug"), orgId, lineItemId: row.id, code: c.code, description: c.description, confidence: c.confidence, whyNot: c.whyNot,
         rates: { importRate: c.importRate, basis: c.basis, agreement: c.agreement, vatRate: c.vatRate }, source: deps.hs.name, createdAt: now,
       })));
     } else if (it.status === "completed" || it.status === "failed" || it.status === "cancelled") {
       const error = it.error ?? { code: "NO_RESULT", message: "HSCodePro không trả kết quả" };
-      await r.lineItems.update(row.id, { hsStatus: it.status === "cancelled" ? "cancelled" : "failed", hsQuestion: null, hsError: error, updatedAt: now });
+      await r.lineItems.update(row.orgId, row.id, { hsStatus: it.status === "cancelled" ? "cancelled" : "failed", hsQuestion: null, hsError: error, updatedAt: now });
     } else if (it.status === "need_info") {
-      await r.lineItems.update(row.id, { hsStatus: "need_info", hsQuestion: it.question, hsError: null, updatedAt: now });
+      await r.lineItems.update(row.orgId, row.id, { hsStatus: "need_info", hsQuestion: it.question, hsError: null, updatedAt: now });
     } else {
-      await r.lineItems.update(row.id, { hsStatus: it.status, hsQuestion: null, hsError: null, updatedAt: now });
+      await r.lineItems.update(row.orgId, row.id, { hsStatus: it.status, hsQuestion: null, hsError: null, updatedAt: now });
     }
   }
   return fresh;
@@ -101,7 +101,7 @@ export async function startHsClassification(
       if (j.externalId) await deps.hs.cancel(j.externalId).catch((e: unknown) => {
         if (!(e instanceof HsApiError)) throw e;
       });
-      await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(j.id, { status: "cancelled", updatedAt: now }));
+      await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(j.orgId, j.id, { status: "cancelled", updatedAt: now }));
     }
   }
 
@@ -115,14 +115,14 @@ export async function startHsClassification(
     },
   );
   await deps.uow.asOrg(ctx, async (r) => {
-    for (const s of skipped) await r.lineItems.update(byLine.get(s.lineNo)!.id, { hsStatus: "skipped", hsError: { code: s.code, message: s.message }, hsQuestion: null, hsJobId: null, hsItemId: null, updatedAt: now });
+    for (const s of skipped) await r.lineItems.update(c.orgId, byLine.get(s.lineNo)!.id, { hsStatus: "skipped", hsError: { code: s.code, message: s.message }, hsQuestion: null, hsJobId: null, hsItemId: null, updatedAt: now });
   });
 
   const jobIds: string[] = [];
   let pending = false;
-  const markLines = (lineNos: number[], patch: Parameters<DeclarationRepos["lineItems"]["update"]>[1]) =>
+  const markLines = (lineNos: number[], patch: Parameters<DeclarationRepos["lineItems"]["update"]>[2]) =>
     deps.uow.asOrg(ctx, async (r) => {
-      for (const n of lineNos) await r.lineItems.update(byLine.get(n)!.id, { ...patch, hsJobId: null, hsItemId: null, updatedAt: now });
+      for (const n of lineNos) await r.lineItems.update(c.orgId, byLine.get(n)!.id, { ...patch, hsJobId: null, hsItemId: null, updatedAt: now });
     });
   /** Tạo lượt; 400 có details → bỏ dòng sai (kèm lý do) rồi gửi lại phần còn lại; lỗi không tạm khác → dòng thành failed. Lỗi tạm → ném để BullMQ thử lại. */
   const createSafely = async (part: typeof items, externalRef: string): Promise<HsJob | null> => {
@@ -156,12 +156,12 @@ export async function startHsClassification(
     const job: HsJobRow = reused ?? { id: deps.idGen.next("hsj"), orgId: c.orgId, dossierId, externalId: "", status: "pending", polls: 0, createdAt: now, updatedAt: now };
     await deps.uow.asOrg(ctx, async (r) => {
       if (!reused) await r.hsJobs.insert(job);
-      for (const id of partIds) await r.lineItems.update(id, { hsJobId: job.id, hsItemId: null, hsStatus: "queued", hsQuestion: null, hsError: null, updatedAt: now });
+      for (const id of partIds) await r.lineItems.update(c.orgId, id, { hsJobId: job.id, hsItemId: null, hsStatus: "queued", hsQuestion: null, hsError: null, updatedAt: now });
     });
     // 2. Gọi HSCodePro. Lỗi tạm ném ra (job giữ pending, dòng giữ queued); lỗi dữ liệu → createSafely đã đánh dấu dòng, hủy lượt.
     const api = await createSafely(part.map((it) => ({ ...it })), `${dossier.code}#${job.id}`.slice(0, 100));
     if (!api) {
-      await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(job.id, { status: "cancelled", updatedAt: now }));
+      await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(job.orgId, job.id, { status: "cancelled", updatedAt: now }));
       continue;
     }
     // 3. HSCodePro đã nhận → ghi chi phí theo số dòng gửi, khóa theo job.id nội bộ: chạy lại (timeout rồi thành công) không tính hai lần cho khách.
@@ -172,10 +172,10 @@ export async function startHsClassification(
     job.externalId = api.id;
     job.status = localStatus(api);
     await deps.uow.asOrg(ctx, async (r) => {
-      await r.hsJobs.update(job.id, { externalId: api.id, status: job.status, updatedAt: now });
+      await r.hsJobs.update(job.orgId, job.id, { externalId: api.id, status: job.status, updatedAt: now });
       for (const it of api.items) {
         const row = byLine.get(it.line_no);
-        if (row) await r.lineItems.update(row.id, { hsJobId: job.id, hsItemId: it.id, hsStatus: it.status, hsQuestion: null, hsError: null, hsDetail: null, hsSuggested: null, hsConfidence: null, updatedAt: now });
+        if (row) await r.lineItems.update(row.orgId, row.id, { hsJobId: job.id, hsItemId: it.id, hsStatus: it.status, hsQuestion: null, hsError: null, hsDetail: null, hsSuggested: null, hsConfidence: null, updatedAt: now });
       }
       await ingest(deps, r, c.orgId, job, api);
     });
@@ -208,7 +208,7 @@ async function resumeAgentIfWaiting(deps: DeclarationDeps, c: SysCtx, dossierId:
   const at = deps.clock.now().toISOString();
   const tasks = run.tasks.map((t) => (t.id === "HS_LOOKUP" ? { ...t, status: "DONE" as const, progress: 100, message: `Đã tra ${rows.length}/${rows.length} dòng hàng` } : t));
   const log = [...run.log, ...hsSummaryLogs(rows, at)];
-  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.id, { tasks, log }));
+  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.orgId, run.id, { tasks, log }));
   await deps.dossiers.publish(c.orgId, dossierId, { type: "agent.task", taskId: "HS_LOOKUP", status: "DONE", progress: 100, message: tasks.find((t) => t.id === "HS_LOOKUP")!.message });
   await deps.queue.enqueue("run-agent", { orgId: c.orgId, userId: run.startedBy, dossierId, agentRunId: run.id }, { jobId: `run-agent:${run.id}:hs` });
 }
@@ -228,7 +228,7 @@ export async function pollHsJob(deps: DeclarationDeps, input: SysCtx & { dossier
 
   const busy = busyApi(api);
   if (busy && polls < HS_MAX_POLLS) {
-    await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(job.id, { polls, status: "processing", updatedAt: now }));
+    await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(job.orgId, job.id, { polls, status: "processing", updatedAt: now }));
     await deps.queue.enqueue("hs-poll", { orgId: input.orgId, userId: input.userId, dossierId: input.dossierId, hsJobId: job.id }, { delayMs: HS_POLL_MS });
     await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
     return ok({ again: true });
@@ -237,10 +237,10 @@ export async function pollHsJob(deps: DeclarationDeps, input: SysCtx & { dossier
     if (busy) {
       // Quá thời gian chờ: dòng chưa xong → lỗi TIMEOUT, người khai bấm "Phân loại lại".
       for (const row of await r.lineItems.list(input.orgId, input.dossierId)) {
-        if (row.hsJobId === job.id && (row.hsStatus === "queued" || row.hsStatus === "processing")) await r.lineItems.update(row.id, { hsStatus: "failed", hsError: { code: "TIMEOUT", message: "Phân loại quá 15 phút chưa xong" }, updatedAt: now });
+        if (row.hsJobId === job.id && (row.hsStatus === "queued" || row.hsStatus === "processing")) await r.lineItems.update(row.orgId, row.id, { hsStatus: "failed", hsError: { code: "TIMEOUT", message: "Phân loại quá 15 phút chưa xong" }, updatedAt: now });
       }
     }
-    await r.hsJobs.update(job.id, { polls, status: busy ? "completed" : localStatus(api), updatedAt: now });
+    await r.hsJobs.update(job.orgId, job.id, { polls, status: busy ? "completed" : localStatus(api), updatedAt: now });
   });
   await resumeAgentIfWaiting(deps, input, input.dossierId);
   await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
@@ -254,7 +254,7 @@ async function loadItem(deps: DeclarationDeps, ctx: Ctx, lineItemId: string) {
 async function view(deps: DeclarationDeps, ctx: Ctx, lineItemId: string): Promise<LineItem> {
   return deps.uow.asOrg(ctx, async (r) => {
     const row = (await r.lineItems.get(ctx.orgId, lineItemId))!;
-    return toLineItem(row, await r.suggestions.listForItems([row.id]));
+    return toLineItem(row, await r.suggestions.listForItems(row.orgId, [row.id]));
   });
 }
 
@@ -268,7 +268,7 @@ export async function answerHsQuestion(deps: DeclarationDeps, ctx: Ctx, lineItem
   if (it.hsStatus !== "need_info" || it.hsQuestion?.id !== input.questionId) return err(domainError("INVALID_STATE", "Câu hỏi đã được trả lời hoặc không còn hiệu lực – tải lại bảng"));
   const ids = new Set(it.hsQuestion.questions.map((q) => q.id));
   if (input.answers.length !== ids.size || input.answers.some((a) => !ids.has(a.id))) return err(domainError("VALIDATION", "Cần trả lời đủ từng câu hỏi"));
-  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(it.id, { hsStatus: "answering", updatedAt: deps.clock.now() }));
+  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(it.orgId, it.id, { hsStatus: "answering", updatedAt: deps.clock.now() }));
   await deps.queue.enqueue("hs-answer", { orgId: ctx.orgId, userId: ctx.userId, dossierId: it.dossierId, lineItemId: it.id, questionId: input.questionId, answers: input.answers }, { jobId: `hs-answer:${it.id}:${deps.idGen.next("job")}` });
   await deps.dossiers.publish(ctx.orgId, it.dossierId, { type: "dossier.updated" });
   return ok(await view(deps, ctx, it.id));
@@ -296,12 +296,12 @@ export async function sendHsAnswer(
   } catch (e) {
     if (!(e instanceof HsApiError) || e.transient) throw e;
     if (e.code !== "INVALID_STATE") {
-      await deps.uow.asOrg(ctx, (r) => r.lineItems.update(found.row.id, { hsStatus: "need_info", hsError: { code: e.code, message: e.message }, updatedAt: now }));
+      await deps.uow.asOrg(ctx, (r) => r.lineItems.update(found.row.orgId, found.row.id, { hsStatus: "need_info", hsError: { code: e.code, message: e.message }, updatedAt: now }));
       await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
       return ok(undefined);
     }
   }
-  await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(found.job.id, { status: "processing", polls: 0, updatedAt: now }));
+  await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(found.job.orgId, found.job.id, { status: "processing", polls: 0, updatedAt: now }));
   await deps.queue.enqueue("hs-poll", { orgId: input.orgId, userId: input.userId, dossierId: input.dossierId, hsJobId: found.job.id }, { delayMs: HS_POLL_MS });
   return ok(undefined);
 }
@@ -319,7 +319,7 @@ export async function reclassifyHs(deps: DeclarationDeps, ctx: Ctx, lineItemId: 
   if (LOCKED.includes(dossier.status)) return err(domainError("DOSSIER_LOCKED", "Tờ khai đã duyệt/truyền – mở lại tờ khai trước"));
   // Gỡ dòng khỏi lượt cũ ngay (kết quả cũ về muộn không ghi đè), rồi để worker tạo lượt mới.
   const originChanged = !!input.origin && input.origin !== it.origin;
-  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(it.id, { ...(originChanged ? { origin: input.origin! } : {}), hsStatus: "queued", hsError: null, hsQuestion: null, hsJobId: null, hsItemId: null, updatedAt: deps.clock.now() }));
+  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(it.orgId, it.id, { ...(originChanged ? { origin: input.origin! } : {}), hsStatus: "queued", hsError: null, hsQuestion: null, hsJobId: null, hsItemId: null, updatedAt: deps.clock.now() }));
   if (originChanged) {
     // Xuất xứ là dữ liệu tờ khai: ghi field_audit (bất biến 6) và dựng lại tờ khai nháp.
     await deps.audit.append(ctx, { dossierId: it.dossierId, key: `origin:${it.lineNo}`, oldValue: it.origin, newValue: input.origin!, source: "DECL_EDIT" });
@@ -349,10 +349,10 @@ export async function failHsWork(deps: DeclarationDeps, input: SysCtx & { dossie
     const rows = await r.lineItems.list(input.orgId, input.dossierId);
     const line = input.lineItemId ? rows.find((x) => x.id === input.lineItemId) : undefined;
     const jobId = input.hsJobId ?? line?.hsJobId ?? null;
-    if (jobId) await r.hsJobs.update(jobId, { status: "completed", updatedAt: now });
+    if (jobId) await r.hsJobs.update(input.orgId, jobId, { status: "completed", updatedAt: now });
     for (const row of rows) {
       const hit = (jobId && row.hsJobId === jobId) || row.id === input.lineItemId;
-      if (hit && busy.includes(row.hsStatus)) await r.lineItems.update(row.id, { hsStatus: "failed", hsError: { code: "POLL_FAILED", message: `Không nhận được kết quả từ HSCodePro (${input.error.slice(0, 160)})` }, updatedAt: now });
+      if (hit && busy.includes(row.hsStatus)) await r.lineItems.update(row.orgId, row.id, { hsStatus: "failed", hsError: { code: "POLL_FAILED", message: `Không nhận được kết quả từ HSCodePro (${input.error.slice(0, 160)})` }, updatedAt: now });
     }
   });
   await resumeAgentIfWaiting(deps, input, input.dossierId);

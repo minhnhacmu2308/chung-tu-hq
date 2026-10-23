@@ -13,7 +13,7 @@ export async function finishReading(deps: ExtractionDeps, ctx: Ctx, dossierId: s
   const docs = await deps.documents.listForDossier(ctx.orgId, dossierId);
   if (docs.some((d) => d.status === "QUEUED" || d.status === "READING" || d.status === "UPLOADING")) return err(domainError("NOT_READY", "Còn chứng từ đang đọc"));
   const org = await deps.documents.orgInfo(ctx.orgId);
-  const fields = await deps.uow.asOrg(ctx, (r) => r.fields.list(dossierId));
+  const fields = await deps.uow.asOrg(ctx, (r) => r.fields.list(ctx.orgId, dossierId));
   await deps.documents.finishReading(ctx.orgId, dossierId, countSuspect(fields, org.suspectThreshold));
   await deps.documents.publish(ctx.orgId, dossierId, { type: "dossier.updated" });
   return ok(undefined);

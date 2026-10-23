@@ -22,7 +22,7 @@ export async function requeueStuckDocuments(deps: DossierDeps, input: { orgId: s
       { jobId: `extract:${doc.id}:${doc.sha256}:sweep:${doc.updatedAt.getTime()}` },
     );
     // Làm mới mốc cập nhật (status giữ QUEUED) để lần quét sau không đẩy trùng ngay.
-    await deps.uow.asOrg(ctx, (r) => r.documents.update(doc.id, { status: "QUEUED" }));
+    await deps.uow.asOrg(ctx, (r) => r.documents.update(input.orgId, doc.id, { status: "QUEUED" }));
     requeued.push(doc.id);
   }
   return { requeued };

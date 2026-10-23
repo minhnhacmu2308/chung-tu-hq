@@ -49,7 +49,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     // Hết số lần thử (lỗi tạm kéo dài): không để PENDING mãi – FAILED để người dùng Gửi lại.
     await deps.uow.asOrg(ctx, async (r) => {
       await msg(r, { operation: ob.operation, direction: "IN", result: "ERROR", summary: `Không gửi được sau ${ob.attempts} lần thử: ${ob.lastError ?? "lỗi kết nối"} – bấm Gửi lại`, payloadMasked: { error: ob.lastError }, externalRef: result.externalId });
-      await r.outbox.update(ob.id, { status: "FAILED", updatedAt: now() });
+      await r.outbox.update(ob.orgId, ob.id, { status: "FAILED", updatedAt: now() });
       await r.results.upsert({ ...result, state: coarseState(stage, true), updatedAt: now() });
     });
     await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
@@ -60,9 +60,9 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   if (ob.attempts === 0) {
     await deps.uow.asOrg(ctx, async (r) => {
       await msg(r, { operation: ob.operation, direction: "OUT", result: "OK", summary: outSummary(ob.operation), payloadMasked: maskPayload(payload.request ?? { files: payload.files }), externalRef: result.externalId });
-      await r.outbox.update(ob.id, { attempts: 1, updatedAt: now() });
+      await r.outbox.update(ob.orgId, ob.id, { attempts: 1, updatedAt: now() });
     });
-  } else await deps.uow.asOrg(ctx, (r) => r.outbox.update(ob.id, { attempts: ob.attempts + 1, updatedAt: now() }));
+  } else await deps.uow.asOrg(ctx, (r) => r.outbox.update(ob.orgId, ob.id, { attempts: ob.attempts + 1, updatedAt: now() }));
 
   const op = ob.operation;
   const b = baseOp(op);
@@ -129,7 +129,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       const message = e instanceof Error ? e.message : String(e);
       await deps.uow.asOrg(ctx, async (r) => {
         await msg(r, { operation: op, direction: "IN", result: "ERROR", summary: `Lỗi tạm thời khi gửi: ${message} – sẽ thử lại`, payloadMasked: { error: message }, externalRef: result.externalId });
-        await r.outbox.update(ob.id, { lastError: message, nextAttemptAt: new Date(now().getTime() + 30_000), updatedAt: now() });
+        await r.outbox.update(ob.orgId, ob.id, { lastError: message, nextAttemptAt: new Date(now().getTime() + 30_000), updatedAt: now() });
       });
       throw e;
     }
@@ -153,10 +153,10 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   await deps.uow.asOrg(ctx, async (r) => {
     if (failed) {
       await msg(r, { operation: op, direction: "IN", result: "ERROR", summary: `${OPERATION_LABELS[op]} bị từ chối: ${fmtErrors(outcome.errors!)}`, payloadMasked: { errorList: outcome.errors }, externalRef: result.externalId });
-      await r.outbox.update(ob.id, { status: "FAILED", lastError: fmtErrors(outcome.errors!), updatedAt: now() });
+      await r.outbox.update(ob.orgId, ob.id, { status: "FAILED", lastError: fmtErrors(outcome.errors!), updatedAt: now() });
     } else {
       await msg(r, { operation: op, direction: "IN", result: "OK", summary: outcome.summary, payloadMasked: maskPayload(outcome.payload), externalRef: patch.externalId ?? result.externalId });
-      await r.outbox.update(ob.id, { status: "SENT", lastError: null, updatedAt: now() });
+      await r.outbox.update(ob.orgId, ob.id, { status: "SENT", lastError: null, updatedAt: now() });
     }
     // Sau thông quan: AMA/AMB/AMC đổi trạng thái bản khai bổ sung (tờ khai gốc giữ nguyên).
     if (!failed && (op === "AMA" || op === "AMB" || op === "AMC")) await applyPostAmendmentResult(r, input.orgId, ob.dossierId, op, now(), { receiptNo: outcome.receiptNo });

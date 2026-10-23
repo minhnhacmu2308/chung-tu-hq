@@ -14,35 +14,40 @@ export class InMemoryExtractionUow implements ExtractionUow {
       throw new Error(`new row violates row-level security policy (${w})`);
     };
     const clone = <X>(x: X): X => structuredClone(x);
+    // orgId truyền vào phải trùng ngữ cảnh – bắt lỗi quên/đưa nhầm orgId ngay ở unit test.
+    const own = (orgId: string) => {
+      if (orgId !== org) deny(`orgId ${orgId} khác ngữ cảnh ${org}`);
+      return org;
+    };
     return fn({
-      lockDossier: async () => {},
+      lockDossier: async (orgId) => void own(orgId),
       extractions: {
-        findByKey: async (k) => clone(d.extractions.find((x) => x.idempotencyKey === k && x.orgId === org) ?? null),
-        listDone: async (dossierId, ids) => clone(d.extractions.filter((x) => x.orgId === org && ids.includes(x.documentId) && x.status === "DONE")),
+        findByKey: async (orgId, k) => clone(d.extractions.find((x) => x.idempotencyKey === k && x.orgId === own(orgId)) ?? null),
+        listDone: async (orgId, dossierId, ids) => clone(d.extractions.filter((x) => x.orgId === own(orgId) && ids.includes(x.documentId) && x.status === "DONE")),
         insert: async (row) => {
           if (row.orgId !== org) deny("extractions");
           if (d.extractions.some((x) => x.idempotencyKey === row.idempotencyKey)) throw new Error("duplicate key value violates unique constraint extractions_idem_uq");
           d.extractions.push(clone(row));
         },
-        deleteForDocument: async (id) => void (d.extractions = d.extractions.filter((x) => !(x.documentId === id && x.orgId === org))),
+        deleteForDocument: async (orgId, id) => void (d.extractions = d.extractions.filter((x) => !(x.documentId === id && x.orgId === own(orgId)))),
       },
       shipments: {
-        latest: async (dossierId) => clone(d.shipments.filter((x) => x.orgId === org && x.dossierId === dossierId).sort((a, b) => b.version - a.version)[0] ?? null),
+        latest: async (orgId, dossierId) => clone(d.shipments.filter((x) => x.orgId === own(orgId) && x.dossierId === dossierId).sort((a, b) => b.version - a.version)[0] ?? null),
         insert: async (row) => void (row.orgId === org ? d.shipments.push(clone(row)) : deny("shipments")),
-        updateData: async (id, data) => {
-          const s = d.shipments.find((x) => x.id === id && x.orgId === org);
+        updateData: async (orgId, id, data) => {
+          const s = d.shipments.find((x) => x.id === id && x.orgId === own(orgId));
           if (s) s.data = clone(data);
         },
       },
       fields: {
-        list: async (dossierId) => clone(d.fields.filter((x) => x.orgId === org && x.dossierId === dossierId)),
-        get: async (id) => clone(d.fields.find((x) => x.id === id && x.orgId === org) ?? null),
-        replaceForDossier: async (dossierId, rows) => {
-          if (rows.some((r) => r.orgId !== org)) deny("extracted_fields");
+        list: async (orgId, dossierId) => clone(d.fields.filter((x) => x.orgId === own(orgId) && x.dossierId === dossierId)),
+        get: async (orgId, id) => clone(d.fields.find((x) => x.id === id && x.orgId === own(orgId)) ?? null),
+        replaceForDossier: async (orgId, dossierId, rows) => {
+          if (rows.some((r) => r.orgId !== own(orgId))) deny("extracted_fields");
           d.fields = d.fields.filter((x) => !(x.dossierId === dossierId && x.orgId === org)).concat(rows.map(clone));
         },
-        update: async (id, patch) => {
-          const f = d.fields.find((x) => x.id === id && x.orgId === org);
+        update: async (orgId, id, patch) => {
+          const f = d.fields.find((x) => x.id === id && x.orgId === own(orgId));
           if (f) Object.assign(f, patch);
         },
       },

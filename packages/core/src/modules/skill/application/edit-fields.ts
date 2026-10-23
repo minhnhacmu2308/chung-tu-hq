@@ -12,7 +12,7 @@ async function commitVersion(deps: SkillDeps, ctx: Ctx, r: SkillRepos, skill: Sk
   const version = skill.currentVersion + 1;
   const row: SkillVersionRow = { id: deps.idGen.next("sk"), orgId: ctx.orgId, skillId: skill.id, version, fields, promptNotes: null, createdBy: ctx.userId, createdAt: now };
   await r.versions.insert(row);
-  await r.skills.update(skill.id, { currentVersion: version, updatedAt: now });
+  await r.skills.update(skill.orgId, skill.id, { currentVersion: version, updatedAt: now });
   return toSkill({ ...skill, currentVersion: version, updatedAt: now }, row);
 }
 

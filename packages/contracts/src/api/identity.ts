@@ -1,5 +1,12 @@
 // Input/output của nhóm API auth / org / notifications. Dùng ở route handler (parse) và FE (parse response).
 import { z } from "zod";
+
+/** Một dòng nhật ký hoạt động của doanh nghiệp (org_audit) – `action` là mã ổn định, giao diện dịch. */
+export const OrgAuditEntrySchema = z.object({
+  id: z.string(), at: z.string(), actorId: z.string(), actorName: z.string(), action: z.string(), targetType: z.string(), targetId: z.string(), targetLabel: z.string(),
+  detail: z.record(z.string(), z.unknown()).nullable(),
+});
+export type OrgAuditEntryDto = z.infer<typeof OrgAuditEntrySchema>;
 import { IsoDateSchema, IsoDateTimeSchema, RoleSchema } from "../common.js";
 import { MemberSchema, OrganizationSchema } from "../dto/index.js";
 

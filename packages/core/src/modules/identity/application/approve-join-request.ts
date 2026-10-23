@@ -25,5 +25,6 @@ export async function approveJoinRequest(deps: IdentityDeps, ctx: Ctx, requestId
   if (!res.ok) return res;
   const user = await deps.uow.system((r) => r.users.findById(res.value.userId));
   if (user) await deps.mailer.send({ to: user.email, ...joinApprovedMail(deps.appUrl, res.value.orgName) });
+  await deps.audit?.record(ctx, { action: "JOIN_REQUEST_APPROVED", targetType: "member", targetId: res.value.userId, targetLabel: user?.email ?? res.value.userId });
   return ok(toMember(user!, res.value.membership));
 }

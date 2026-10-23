@@ -9,7 +9,7 @@ import type { ExtractionDeps } from "./ports.js";
 export async function documentSheets(deps: ExtractionDeps, ctx: Ctx, dossierId: string): Promise<Result<DocumentSheet[]>> {
   const docs = (await deps.documents.listForDossier(ctx.orgId, dossierId)).filter((d) => d.status === "DONE");
   if (!docs.length) return ok([]);
-  const rows = await deps.uow.asOrg(ctx, (r) => r.extractions.listDone(dossierId, docs.map((d) => d.id)));
+  const rows = await deps.uow.asOrg(ctx, (r) => r.extractions.listDone(ctx.orgId, dossierId, docs.map((d) => d.id)));
   const labels = new Map<DocKind, Record<string, string>>();
   const out: DocumentSheet[] = [];
   for (const d of docs) {

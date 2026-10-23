@@ -9,12 +9,12 @@ import type { ValidationRepos, ValidationRow, ValidationUow } from "../applicati
 function repos(tx: Tx): ValidationRepos {
   return {
     validations: {
-      replaceForDossier: async (dossierId, rows) => {
-        await tx.delete(validations).where(eq(validations.dossierId, dossierId));
+      replaceForDossier: async (orgId, dossierId, rows) => {
+        await tx.delete(validations).where(and(eq(validations.orgId, orgId), eq(validations.dossierId, dossierId)));
         if (rows.length) await tx.insert(validations).values(rows);
       },
-      listLatest: async (dossierId) =>
-        (await tx.select().from(validations).where(and(eq(validations.dossierId, dossierId))).orderBy(validations.createdAt, validations.id)).map((r) => ({
+      listLatest: async (orgId, dossierId) =>
+        (await tx.select().from(validations).where(and(eq(validations.orgId, orgId), eq(validations.dossierId, dossierId))).orderBy(validations.createdAt, validations.id)).map((r) => ({
           ...r, result: r.result as RuleResult, severity: r.severity as RuleSeverity, documentKinds: r.documentKinds as DocKind[],
         })),
     },

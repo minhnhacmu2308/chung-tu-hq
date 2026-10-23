@@ -9,7 +9,7 @@ function fakeDeps(profiles: Record<string, { orgId: string; profile: DossierProf
   const store = new Map<string, ValidationRow[]>();
   let n = 0;
   const deps: ValidationDeps = {
-    uow: { asOrg: (ctx, fn) => fn({ validations: { replaceForDossier: async (dossierId, rows) => void store.set(`${ctx.orgId}:${dossierId}`, rows), listLatest: async (dossierId) => store.get(`${ctx.orgId}:${dossierId}`) ?? [] } }) },
+    uow: { asOrg: (ctx, fn) => fn({ validations: { replaceForDossier: async (orgId, dossierId, rows) => void store.set(`${orgId}:${dossierId}`, rows), listLatest: async (orgId, dossierId) => store.get(`${orgId}:${dossierId}`) ?? [] } }) },
     idGen: { next: () => `chk_${++n}` },
     clock: { now: () => new Date("2026-10-15T00:00:00Z") },
     ...(profiles ? { dossiers: { profile: async (orgId: string, dossierId: string) => (profiles[dossierId]?.orgId === orgId ? profiles[dossierId]!.profile : null) } } : {}),

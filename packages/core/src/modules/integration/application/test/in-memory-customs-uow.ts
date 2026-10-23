@@ -22,7 +22,8 @@ export class InMemoryCustomsUow implements CustomsUow {
           if (d.outbox.some((x) => x.idempotencyKey === row.idempotencyKey)) throw new Error("duplicate key value violates unique constraint customs_outbox_key_uq");
           d.outbox.push(clone(row));
         },
-        update: async (id, patch) => {
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`customs_outbox update orgId ${orgId} khác ngữ cảnh`);
           const x = d.outbox.find((y) => y.id === id && y.orgId === org);
           if (x) Object.assign(x, clone(patch));
         },

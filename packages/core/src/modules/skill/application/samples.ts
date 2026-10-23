@@ -64,7 +64,7 @@ export async function uploadSamples(deps: SkillDeps, ctx: Ctx, skillId: string, 
       await r.samples.insert(row);
       rows.push(row);
     }
-    await r.skills.update(skillId, { updatedAt: now });
+    await r.skills.update(ctx.orgId, skillId, { updatedAt: now });
     return ok(rows);
   });
   if (!created.ok) return created;
@@ -93,7 +93,7 @@ export async function readSample(deps: SkillDeps, input: { orgId: string; userId
   // Khóa theo (mẫu, phiên bản skill): job đọc mẫu chạy lại không tính tiền hai lần.
   await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens, dedupeKey: `ai:sample:${sample.id}:${version.version}` });
   const expected = projectResult(skill.docKind, version.fields, res.result);
-  await deps.uow.asOrg(ctx, (r) => r.samples.update(sample.id, { expected, updatedAt: deps.clock.now() }));
+  await deps.uow.asOrg(ctx, (r) => r.samples.update(sample.orgId, sample.id, { expected, updatedAt: deps.clock.now() }));
   return ok(undefined);
 }
 
@@ -108,8 +108,8 @@ export async function labelSample(deps: SkillDeps, ctx: Ctx, sampleId: string, e
     const l = await loadSkill(r, ctx.orgId, s.skillId);
     if (!l.ok) return l;
     const patch = { status: "LABELED" as const, expected, labeledBy: ctx.userId, labeledAt: now, updatedAt: now };
-    await r.samples.update(sampleId, patch);
-    if (s.status !== "LABELED") await r.skills.update(s.skillId, { labeledSamples: l.value.skill.labeledSamples + 1, updatedAt: now });
+    await r.samples.update(ctx.orgId, sampleId, patch);
+    if (s.status !== "LABELED") await r.skills.update(s.orgId, s.skillId, { labeledSamples: l.value.skill.labeledSamples + 1, updatedAt: now });
     const names = await deps.users.names(ctx.orgId, [ctx.userId]);
     return ok(toSample({ ...s, ...patch }, names));
   });
@@ -128,8 +128,8 @@ export async function confirmPendingSamples(deps: SkillDeps, ctx: Ctx, skillId: 
     if (!l.ok) return l;
     const pending = (await r.samples.list(ctx.orgId, skillId)).filter((s) => s.status === "PENDING");
     const ready = pending.filter((s) => s.expected !== null);
-    for (const s of ready) await r.samples.update(s.id, { status: "LABELED", labeledBy: ctx.userId, labeledAt: now, updatedAt: now });
-    if (ready.length) await r.skills.update(skillId, { labeledSamples: l.value.skill.labeledSamples + ready.length, updatedAt: now });
+    for (const s of ready) await r.samples.update(s.orgId, s.id, { status: "LABELED", labeledBy: ctx.userId, labeledAt: now, updatedAt: now });
+    if (ready.length) await r.skills.update(ctx.orgId, skillId, { labeledSamples: l.value.skill.labeledSamples + ready.length, updatedAt: now });
     return ok({ confirmed: ready.length, unread: pending.filter((s) => s.expected === null).map((s) => s.id) });
   });
   if (!r.ok) return r;

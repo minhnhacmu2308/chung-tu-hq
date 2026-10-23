@@ -17,10 +17,10 @@ const sys = (orgId: string) => ({ orgId: asOrgId(orgId), userId: asUserId("") })
 /** Shipment + raw trích xuất từ module extraction (qua uow của nó). */
 export function createShipmentReader(extraction: ExtractionDeps, dossier: DossierDeps): ShipmentReader {
   return {
-    latest: async (orgId, dossierId) => (await extraction.uow.asOrg(sys(orgId), (r) => r.shipments.latest(dossierId)))?.data ?? null,
+    latest: async (orgId, dossierId) => (await extraction.uow.asOrg(sys(orgId), (r) => r.shipments.latest(orgId, dossierId)))?.data ?? null,
     extractions: async (orgId, dossierId) => {
       const docs = await dossier.uow.asOrg(sys(orgId), (r) => r.documents.list(orgId, dossierId));
-      const rows = await extraction.uow.asOrg(sys(orgId), (r) => r.extractions.listDone(dossierId, docs.map((d) => d.id)));
+      const rows = await extraction.uow.asOrg(sys(orgId), (r) => r.extractions.listDone(orgId, dossierId, docs.map((d) => d.id)));
       return rows.map((e) => ({ documentId: e.documentId, kind: e.kind, raw: e.raw }));
     },
   };
@@ -36,7 +36,7 @@ export function createDossierAdapter(dossier: DossierDeps): DossierPort {
         ownerId: d.ownerId, invoiceValue: d.invoiceValue, currency: d.currency, incoterm: d.incoterm, transportMode: d.transportMode, partyClass: d.partyClass, billNo: d.billNo, declarationNo: d.declarationNo, note: d.note,
       };
     },
-    update: (orgId, dossierId, patch) => dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.update(dossierId, { ...patch, updatedAt: dossier.clock.now() })),
+    update: (orgId, dossierId, patch) => dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.update(orgId, dossierId, { ...patch, updatedAt: dossier.clock.now() })),
     documents: async (orgId, dossierId) => (await dossier.uow.asOrg(sys(orgId), (r) => r.documents.list(orgId, dossierId))).map((d) => ({ id: d.id, kind: d.kind, fileName: d.fileName })),
     publish: (orgId, dossierId, event) => dossier.publisher.publish(orgId, dossierId, event),
     putFile: (key, body, mime) => dossier.storage.put(key, body, mime),
@@ -44,7 +44,7 @@ export function createDossierAdapter(dossier: DossierDeps): DossierPort {
 }
 
 export function createValidationReader(validation: ValidationDeps): ValidationReader {
-  return { blockerFails: async (orgId, dossierId) => (await validation.uow.asOrg(sys(orgId), (r) => r.validations.listLatest(dossierId))).filter((v) => v.severity === "BLOCKER" && v.result === "FAIL").length };
+  return { blockerFails: async (orgId, dossierId) => (await validation.uow.asOrg(sys(orgId), (r) => r.validations.listLatest(orgId, dossierId))).filter((v) => v.severity === "BLOCKER" && v.result === "FAIL").length };
 }
 
 /** field_audit thuộc extraction: ghi qua uow của extraction. */

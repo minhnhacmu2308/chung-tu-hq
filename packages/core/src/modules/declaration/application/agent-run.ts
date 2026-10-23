@@ -24,7 +24,7 @@ export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: 
   const run = await deps.uow.asOrg(ctx, async (r) => {
     await syncLineItems(deps, r, ctx.orgId, dossierId, shipment);
     const prev = await r.agentRuns.latest(ctx.orgId, dossierId);
-    if (prev?.status === "RUNNING") await r.agentRuns.update(prev.id, { status: "CANCELLED", finishedAt: now });
+    if (prev?.status === "RUNNING") await r.agentRuns.update(prev.orgId, prev.id, { status: "CANCELLED", finishedAt: now });
     const row: AgentRunRow = {
       id: deps.idGen.next("run"), orgId: ctx.orgId, dossierId, mode, status: "RUNNING", startedBy: ctx.userId, startedAt: now, finishedAt: null,
       tasks: TASKS_BY_MODE[mode].map((id) => ({ id, status: "PENDING", progress: 0, message: "Đang chờ" })), log: [],
@@ -81,7 +81,7 @@ export async function failAgentRun(deps: DeclarationDeps, input: RunAgentInput &
   const now = deps.clock.now();
   const tasks: AgentTask[] = run.tasks.map((t) => (t.status === "RUNNING" || t.status === "PENDING" ? { ...t, status: "ERROR", message: "Dừng vì lỗi" } : t));
   const log: AgentLog[] = [...run.log, { at: now.toISOString(), text: `Dừng sau nhiều lần thử: ${input.error.slice(0, 300)}`, tone: "warning" }];
-  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.id, { status: "ERROR", tasks, log, finishedAt: now }));
+  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.orgId, run.id, { status: "ERROR", tasks, log, finishedAt: now }));
   const dossier = await deps.dossiers.get(input.orgId, input.dossierId);
   if (dossier?.status === "PROCESSING" && dossier.step === "agent") await deps.dossiers.update(input.orgId, input.dossierId, { status: "NEEDS_REVIEW" });
   await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
@@ -109,7 +109,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
   const log: AgentLog[] = [...run.log];
   const at = () => deps.clock.now().toISOString();
   const say = (text: string, tone: AgentLog["tone"] = "info") => void log.push({ at: at(), text, tone });
-  const save = (id: string) => deps.uow.asOrg(ctx, (r) => r.agentRuns.update(id, { tasks, log }));
+  const save = (id: string) => deps.uow.asOrg(ctx, (r) => r.agentRuns.update(ctx.orgId, id, { tasks, log }));
   const task = (id: AgentTaskId) => tasks.find((t) => t.id === id)!;
   const setTask = async (id: AgentTaskId, status: AgentTask["status"], progress: number, message: string) => {
     Object.assign(task(id), { status, progress, message });
@@ -196,7 +196,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
 
   const finishedAt = deps.clock.now();
   const done: AgentRunRow = { ...run, tasks, log, status: "DONE", finishedAt };
-  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.id, { status: "DONE", tasks, log, finishedAt }));
+  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.orgId, run.id, { status: "DONE", tasks, log, finishedAt }));
   if (dossier.status === "PROCESSING" && dossier.step === "agent") await deps.dossiers.update(input.orgId, input.dossierId, { status: "NEEDS_REVIEW" });
   await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
   await deps.notify?.notify(input.orgId, { dossierOwnerOf: input.dossierId }, { title: `AI Agent đã xử lý xong ${dossier.code}`, body: run.mode === "DIGITIZE" ? "Dữ liệu số hóa đã sẵn sàng." : "Tờ khai nháp đã dựng – xác nhận mã HS rồi chuyển Review.", href: `/dossiers/${input.dossierId}?step=agent` });

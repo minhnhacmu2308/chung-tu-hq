@@ -9,5 +9,6 @@ export async function updateSuspectThreshold(deps: IdentityDeps, ctx: Ctx, thres
   const allowed = canManageOrg(ctx.role);
   if (!allowed.ok) return allowed;
   await deps.uow.asOrg(ctx, (r) => r.orgs.update(ctx.orgId, { suspectThreshold: threshold }));
+  await deps.audit?.record(ctx, { action: "ORG_SUSPECT_THRESHOLD_CHANGED", targetType: "organization", targetId: ctx.orgId, targetLabel: "suspect_threshold", detail: { threshold } });
   return getOrganization(deps, ctx);
 }

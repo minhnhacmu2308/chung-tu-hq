@@ -1,3 +1,4 @@
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { DocKind, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -24,7 +25,7 @@ export interface DossierRepos {
     get(orgId: string, id: string): Promise<DossierRow | null>;
     codesInMonth(orgId: string, direction: string, prefix: string): Promise<string[]>;
     insert(row: DossierRow): Promise<void>;
-    update(id: string, patch: Partial<Omit<DossierRow, "id" | "orgId" | "createdAt">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Omit<DossierRow, "id" | "orgId" | "createdAt">>): Promise<void>;
     /** Số hồ sơ tạo trong [from, to) và tổng trang chứng từ của chúng (mức dùng theo gói). */
     statsInRange(orgId: string, from: Date, to: Date): Promise<{ dossiers: number; pages: number }>;
   };
@@ -32,8 +33,8 @@ export interface DossierRepos {
     list(orgId: string, dossierId: string): Promise<DocumentRow[]>;
     get(orgId: string, id: string): Promise<DocumentRow | null>;
     insert(row: DocumentRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<DocumentRow, "kind" | "kindSource" | "status" | "error" | "pages">>): Promise<void>;
-    delete(id: string): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<DocumentRow, "kind" | "kindSource" | "status" | "error" | "pages">>): Promise<void>;
+    delete(orgId: string, id: string): Promise<void>;
     /** Chứng từ QUEUED không được cập nhật từ trước `before` – job có thể đã mất (job quét định kỳ). */
     listStuckQueued(orgId: string, before: Date): Promise<DocumentRow[]>;
   };
@@ -89,6 +90,8 @@ export type DossierDeps = {
   pdf: PdfInspector;
   unzipper: Unzipper;
   quota: QuotaChecker;
+  /** Nhật ký hoạt động doanh nghiệp (hủy hồ sơ); container nối từ identity. */
+  audit?: OrgAuditWriter;
   clock: Clock;
   idGen: IdGen;
 };

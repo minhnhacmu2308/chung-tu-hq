@@ -123,6 +123,12 @@ export function buildContainer() {
   customs.usage = serviceUsage;
   // Hộp thư chứng từ: lấy thư Gmail / Outlook, file lưu cùng kho chứng từ.
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
+  // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
+  mailbox.audit = identity.audit;
+  dossier.audit = identity.audit;
+  declaration.orgAudit = identity.audit;
+  customs.orgAudit = identity.audit;
+  skill.audit = identity.audit;
   // Tỷ giá tính thuế: bảng nền tảng, ghi bằng role kb_platform (ADR 0006).
   const rates = createRateDeps(platformDbUrl(env));
   return {

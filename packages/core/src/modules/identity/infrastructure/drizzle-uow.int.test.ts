@@ -3,6 +3,8 @@ import { createDb, type Db } from "../../../db/client.js";
 import { runSeed } from "../../../db/seed/index.js";
 import { startTestDb, type TestDb } from "../../../db/test-db.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
+import { systemClock } from "../../../shared/clock.js";
+import { DrizzleOrgAudit } from "./drizzle-org-audit.js";
 import { DrizzlePlansReader } from "./drizzle-plans-reader.js";
 import { DrizzleIdentityUow } from "./drizzle-uow.js";
 
@@ -113,5 +115,16 @@ describe("DrizzleIdentityUow", () => {
     expect((await uow.system((r) => r.joinRequests.findPendingByUser("usr_khac"))).length).toBe(1);
     await uow.asOrg(ANPHAT, (r) => r.joinRequests.decide("jr_1", "APPROVED", "usr_chau", new Date()));
     expect(await uow.asOrg(ANPHAT, (r) => r.joinRequests.listPending("org_anphat"))).toEqual([]);
+  });
+  it("org_audit: ghi kèm tên người thao tác, liệt kê mới nhất trước + đếm; org khác không thấy (RLS)", async () => {
+    const audit = new DrizzleOrgAudit(uow, systemClock);
+    await audit.record(ANPHAT, { action: "MEMBER_INVITED", targetType: "member", targetId: "usr_x", targetLabel: "x@anphat-demo.vn", detail: { role: "VIEWER" } });
+    await audit.record(ANPHAT, { action: "ORG_FOUR_EYES_ON", targetType: "organization", targetId: "org_anphat", targetLabel: "four_eyes" });
+    const rows = await uow.asOrg(ANPHAT, (r) => r.audit.list("org_anphat", { limit: 10, offset: 0 }));
+    expect(rows.map((r) => r.action)).toEqual(["ORG_FOUR_EYES_ON", "MEMBER_INVITED"]);
+    expect(rows[1]).toMatchObject({ actorId: "usr_chau", actorName: "Lê Minh Châu", detail: { role: "VIEWER" } });
+    expect(await uow.asOrg(ANPHAT, (r) => r.audit.count("org_anphat"))).toBe(2);
+    expect(await uow.asOrg(OTHER, (r) => r.audit.list("org_anphat", { limit: 10, offset: 0 }))).toEqual([]);
+    await expect(uow.asOrg(OTHER, (r) => r.audit.insert({ id: "aud_x", orgId: "org_anphat", at: new Date(), actorId: "usr_khac", actorName: "K", action: "X", targetType: "t", targetId: "1", targetLabel: "1", detail: null }))).rejects.toThrow();
   });
 });

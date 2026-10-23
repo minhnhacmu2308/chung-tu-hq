@@ -236,6 +236,12 @@ function build(): Container {
   // Sửa chỉ tiêu tờ khai theo giai đoạn truyền (chưa khai / sửa đổi bổ sung / đã thông quan).
   declaration.customsStage = async (orgId, dossierId) => stageOf(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.get(orgId, dossierId)));
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
+  // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
+  mailbox.audit = identity.audit;
+  dossier.audit = identity.audit;
+  declaration.orgAudit = identity.audit;
+  customs.orgAudit = identity.audit;
+  skill.audit = identity.audit;
   const jobs = new BullMqJobMonitor(redis);
   const system: SystemProbe = {
     async services(now) {

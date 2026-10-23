@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { RecordingOrgAudit } from "../../../../shared/audit.js";
+import { listOrgAudit } from "../list-org-audit.js";
 import { fixedClock, type Clock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
-import { unwrap } from "../../../../shared/result.js";
+import { errCode, unwrap } from "../../../../shared/result.js";
 import { addCertificate } from "../add-certificate.js";
 import { approveJoinRequest } from "../approve-join-request.js";
 import { changeMemberRole } from "../change-member-role.js";
@@ -76,6 +78,29 @@ beforeEach(() => {
   mailer = new RecordingMailer();
   clock = fixedClock(T0);
   deps = { uow, plans: uow, hasher: new FakeHasher(), rateLimiter: new InMemoryRateLimiter(clock), mailer, taxRegistry: new FakeTaxRegistry(), clock, idGen: sequentialIdGen(), appUrl: "http://localhost:3100", random: (n) => Buffer.alloc(n, 7) };
+});
+
+describe("nhật ký hoạt động doanh nghiệp (org_audit)", () => {
+  it("đổi vai trò / khóa / mời → ghi sự kiện kèm người thao tác, đối tượng, chi tiết; listOrgAudit chỉ Quản trị/Chủ sở hữu, mới nhất trước, có tổng", async () => {
+    const audit = new RecordingOrgAudit();
+    deps.audit = audit;
+    unwrap(await changeMemberRole(deps, ctx("OWNER"), "usr_ha", "APPROVER"));
+    unwrap(await setMemberDisabled(deps, ctx("OWNER"), "usr_ha", true));
+    unwrap(await inviteMember(deps, ctx("OWNER"), { email: "moi@anphat-demo.vn", role: "VIEWER" }));
+    expect(audit.entries.map((e) => e.action)).toEqual(["MEMBER_ROLE_CHANGED", "MEMBER_DISABLED", "MEMBER_INVITED"]);
+    expect(audit.entries[0]).toMatchObject({ orgId: "org_a", userId: "usr_chau", targetType: "member", targetId: "usr_ha", detail: { from: "DECLARANT", to: "APPROVER" } });
+    // Thất bại → không ghi.
+    expect((await changeMemberRole(deps, ctx("VIEWER"), "usr_ha", "ADMIN")).ok).toBe(false);
+    expect(audit.entries).toHaveLength(3);
+    // Đọc nhật ký qua repo (in-memory) – ghi vài dòng rồi liệt kê.
+    for (const e of audit.entries) await uow.asOrg({ orgId: asOrgId(e.orgId), userId: asUserId(e.userId) }, (r) => r.audit.insert({ id: `aud_${e.action}`, orgId: e.orgId, at: clock.now(), actorId: e.userId, actorName: "Châu", action: e.action, targetType: e.targetType, targetId: e.targetId, targetLabel: e.targetLabel, detail: e.detail ?? null }));
+    const page = unwrap(await listOrgAudit(deps, ctx("ADMIN"), { limit: 2, offset: 0 }));
+    expect(page).toMatchObject({ total: 3, limit: 2, offset: 0 });
+    expect(page.items).toHaveLength(2);
+    expect(page.items[0]).toMatchObject({ actorName: "Châu", action: expect.any(String), at: expect.any(String) });
+    expect(errCode(await listOrgAudit(deps, ctx("DECLARANT"), { limit: 10, offset: 0 }))).toBe("FORBIDDEN");
+    expect(unwrap(await listOrgAudit(deps, ctx("OWNER", "usr_b", "org_b"), { limit: 10, offset: 0 })).total).toBe(0);
+  });
 });
 
 describe("thành viên", () => {

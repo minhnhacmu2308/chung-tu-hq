@@ -48,5 +48,6 @@ export async function transferOwnership(deps: IdentityDeps, ctx: Ctx, targetUser
   if (!res.ok) return res;
   const { owner, previousOwner, orgName } = res.value;
   await deps.mailer.send({ to: owner.email, ...ownershipTransferredMail(deps.appUrl, orgName, me.name) });
+  await deps.audit?.record(ctx, { action: "OWNERSHIP_TRANSFERRED", targetType: "member", targetId: owner.id, targetLabel: owner.email, detail: { from: previousOwner.email } });
   return ok({ owner, previousOwner });
 }

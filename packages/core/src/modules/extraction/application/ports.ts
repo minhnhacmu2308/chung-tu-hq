@@ -10,25 +10,26 @@ export type ShipmentRow = { id: string; orgId: string; dossierId: string; versio
 export type FieldRow = { id: string; orgId: string; dossierId: string; documentId: string; group: FieldGroup; key: string; label: string; value: string; originalValue: string; status: FieldStatus; region: Region | null; note: string | null; shipmentPath: string | null; confirmedBy: string | null; confirmedAt: Date | null };
 export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT"; at: Date };
 
+/** Mọi phương thức nhận `orgId` tường minh (bất biến 1) – RLS là lớp thứ hai; fake in-memory từ chối orgId khác ngữ cảnh. */
 export interface ExtractionRepos {
   /** Khóa theo hồ sơ trong transaction (advisory lock) để hai job không gộp cùng lúc. */
-  lockDossier(dossierId: string): Promise<void>;
+  lockDossier(orgId: string, dossierId: string): Promise<void>;
   extractions: {
-    findByKey(key: string): Promise<ExtractionRow | null>;
-    listDone(dossierId: string, documentIds: string[]): Promise<ExtractionRow[]>;
+    findByKey(orgId: string, key: string): Promise<ExtractionRow | null>;
+    listDone(orgId: string, dossierId: string, documentIds: string[]): Promise<ExtractionRow[]>;
     insert(row: ExtractionRow): Promise<void>;
-    deleteForDocument(documentId: string): Promise<void>;
+    deleteForDocument(orgId: string, documentId: string): Promise<void>;
   };
   shipments: {
-    latest(dossierId: string): Promise<ShipmentRow | null>;
+    latest(orgId: string, dossierId: string): Promise<ShipmentRow | null>;
     insert(row: ShipmentRow): Promise<void>;
-    updateData(id: string, data: Shipment): Promise<void>;
+    updateData(orgId: string, id: string, data: Shipment): Promise<void>;
   };
   fields: {
-    list(dossierId: string): Promise<FieldRow[]>;
-    get(id: string): Promise<FieldRow | null>;
-    replaceForDossier(dossierId: string, rows: FieldRow[]): Promise<void>;
-    update(id: string, patch: Partial<Pick<FieldRow, "value" | "status" | "note" | "confirmedBy" | "confirmedAt">>): Promise<void>;
+    list(orgId: string, dossierId: string): Promise<FieldRow[]>;
+    get(orgId: string, id: string): Promise<FieldRow | null>;
+    replaceForDossier(orgId: string, dossierId: string, rows: FieldRow[]): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<FieldRow, "value" | "status" | "note" | "confirmedBy" | "confirmedAt">>): Promise<void>;
   };
   audit: { insert(row: AuditRow): Promise<void> };
 }

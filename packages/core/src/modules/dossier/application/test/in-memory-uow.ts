@@ -26,7 +26,8 @@ export class InMemoryDossierUow implements DossierUow {
         get: async (orgId, id) => clone(d.dossiers.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
         codesInMonth: async (orgId, direction, prefix) => d.dossiers.filter((x) => x.orgId === org && x.orgId === orgId && x.direction === direction && x.code.startsWith(prefix)).map((x) => x.code),
         insert: async (row) => void (row.orgId === org ? d.dossiers.push(clone(row)) : deny("dossiers insert")),
-        update: async (id, patch) => {
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`dossiers update orgId ${orgId} khác ngữ cảnh`);
           const x = d.dossiers.find((y) => y.id === id && y.orgId === org);
           if (x) Object.assign(x, patch);
         },
@@ -40,12 +41,16 @@ export class InMemoryDossierUow implements DossierUow {
         list: async (orgId, dossierId) => clone(d.documents.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId)),
         get: async (orgId, id) => clone(d.documents.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
         insert: async (row) => void (row.orgId === org ? d.documents.push(clone(row)) : deny("documents insert")),
-        update: async (id, patch) => {
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`documents update orgId ${orgId} khác ngữ cảnh`);
           const x = d.documents.find((y) => y.id === id && y.orgId === org);
           // Như adapter Drizzle: mỗi lần cập nhật làm mới updated_at.
           if (x) Object.assign(x, patch, { updatedAt: new Date() });
         },
-        delete: async (id) => void (d.documents = d.documents.filter((x) => !(x.id === id && x.orgId === org))),
+        delete: async (orgId, id) => {
+          if (orgId !== org) deny(`documents delete orgId ${orgId} khác ngữ cảnh`);
+          d.documents = d.documents.filter((x) => !(x.id === id && x.orgId === org));
+        },
         listStuckQueued: async (orgId, before) => clone(d.documents.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "QUEUED" && x.updatedAt < before)),
       },
       progress: {

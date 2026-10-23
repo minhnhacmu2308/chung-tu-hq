@@ -1,3 +1,4 @@
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { AgentMode, CustomsStage, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
@@ -52,8 +53,8 @@ export interface DeclarationRepos {
     list(orgId: string, dossierId: string): Promise<LineItemRow[]>;
     get(orgId: string, id: string): Promise<LineItemRow | null>;
     /** Ghi dòng hàng theo (dossier, lineNo): dòng đã có giữ HS đã xác nhận; dòng thừa bị xóa. */
-    upsertForDossier(dossierId: string, rows: LineItemRow[]): Promise<LineItemRow[]>;
-    update(id: string, patch: HsLinePatch): Promise<void>;
+    upsertForDossier(orgId: string, dossierId: string, rows: LineItemRow[]): Promise<LineItemRow[]>;
+    update(orgId: string, id: string, patch: HsLinePatch): Promise<void>;
     findByHsItem(orgId: string, hsItemId: string): Promise<LineItemRow | null>;
   };
   hsJobs: {
@@ -61,18 +62,18 @@ export interface DeclarationRepos {
     get(orgId: string, id: string): Promise<HsJobRow | null>;
     /** Lượt chưa xong (pending/processing/need_info) của hồ sơ. */
     openForDossier(orgId: string, dossierId: string): Promise<HsJobRow[]>;
-    update(id: string, patch: Partial<Pick<HsJobRow, "status" | "polls" | "updatedAt" | "externalId">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<HsJobRow, "status" | "polls" | "updatedAt" | "externalId">>): Promise<void>;
   };
   suggestions: {
-    listForItems(lineItemIds: string[]): Promise<HsSuggestionRow[]>;
-    replaceForItem(lineItemId: string, rows: HsSuggestionRow[]): Promise<void>;
+    listForItems(orgId: string, lineItemIds: string[]): Promise<HsSuggestionRow[]>;
+    replaceForItem(orgId: string, lineItemId: string, rows: HsSuggestionRow[]): Promise<void>;
   };
   declarations: {
     latest(orgId: string, dossierId: string): Promise<DeclarationRow | null>;
     /** Tờ khai mới nhất của mỗi hồ sơ có status trong danh sách (màn Khai báo Hải quan). */
     listLatestByStatus(orgId: string, statuses: DeclarationStatus[]): Promise<DeclarationRow[]>;
     insert(row: DeclarationRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<DeclarationRow, "status" | "fields" | "approvedBy" | "approvedAt" | "updatedAt" | "exchangeRate" | "exchangeRateDate" | "customsValueVnd" | "valueAdjustments" | "estImportDutyVnd" | "estVatVnd">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<DeclarationRow, "status" | "fields" | "approvedBy" | "approvedAt" | "updatedAt" | "exchangeRate" | "exchangeRateDate" | "customsValueVnd" | "valueAdjustments" | "estImportDutyVnd" | "estVatVnd">>): Promise<void>;
   };
   agentRuns: {
     latest(orgId: string, dossierId: string): Promise<AgentRunRow | null>;
@@ -80,7 +81,7 @@ export interface DeclarationRepos {
     listRunningBefore(orgId: string, before: Date): Promise<AgentRunRow[]>;
     get(orgId: string, id: string): Promise<AgentRunRow | null>;
     insert(row: AgentRunRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<AgentRunRow, "status" | "tasks" | "log" | "finishedAt">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<AgentRunRow, "status" | "tasks" | "log" | "finishedAt">>): Promise<void>;
   };
   catalogHs: {
     search(q: string | undefined, limit: number): Promise<HsCatalogRow[]>;
@@ -175,6 +176,8 @@ export type DeclarationDeps = {
   validation: ValidationReader;
   org: OrgReader;
   audit: AuditWriter;
+  /** Nhật ký hoạt động doanh nghiệp (duyệt tờ khai, danh mục hàng hóa); container nối từ identity. */
+  orgAudit?: OrgAuditWriter;
   users: UserNames;
   /** Thông báo trong app (tùy chọn; container nối). */
   notify?: Notifier;

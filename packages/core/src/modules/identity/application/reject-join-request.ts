@@ -23,5 +23,6 @@ export async function rejectJoinRequest(deps: IdentityDeps, ctx: Ctx, requestId:
   });
   if (!res.ok) return res;
   if (res.value.email) await deps.mailer.send({ to: res.value.email, ...joinRejectedMail(res.value.orgName, input.reason) });
+  await deps.audit?.record(ctx, { action: "JOIN_REQUEST_REJECTED", targetType: "join_request", targetId: requestId, targetLabel: res.value.email ?? requestId, ...(input.reason ? { detail: { reason: input.reason } } : {}) });
   return ok({ ok: true as const });
 }

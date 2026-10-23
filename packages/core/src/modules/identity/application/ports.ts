@@ -1,4 +1,5 @@
 import type { Organization, Role } from "@kb/contracts";
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { AuthTokenKind } from "../domain/token.js";
@@ -21,6 +22,7 @@ export type CertificateRow = { id: string; orgId: string; subject: string; issue
 export type NotificationRow = { id: string; orgId: string; userId: string; title: string; body: string; href: string | null; readAt: Date | null; createdAt: Date };
 /** Bí mật đã mã hóa của doanh nghiệp (org_secrets); `kind` duy nhất trong một org. */
 export type OrgSecretRow = { id: string; orgId: string; kind: string; ciphertext: string; keyVersion: number; updatedAt: Date };
+export type OrgAuditRow = { id: string; orgId: string; at: Date; actorId: string; actorName: string; action: string; targetType: string; targetId: string; targetLabel: string; detail: Record<string, unknown> | null };
 export type PlanRow = { code: string; name: string; dossiersPerMonth: number; pagesPerDossier: number };
 
 export interface IdentityRepos {
@@ -85,6 +87,12 @@ export interface IdentityRepos {
     insert(row: NotificationRow): Promise<void>;
     markAllRead(orgId: string, userId: string, at: Date): Promise<void>;
   };
+  audit: {
+    insert(row: OrgAuditRow): Promise<void>;
+    /** Mới nhất trước. */
+    list(orgId: string, page: { limit: number; offset: number }): Promise<OrgAuditRow[]>;
+    count(orgId: string): Promise<number>;
+  };
 }
 
 /** Đơn vị công việc: mỗi lời gọi là một transaction với ngữ cảnh RLS tương ứng. */
@@ -120,6 +128,8 @@ export interface PlansReader {
 }
 
 export type IdentityDeps = {
+  /** Nhật ký hoạt động doanh nghiệp (org_audit); không nối → không ghi. */
+  audit?: OrgAuditWriter;
   uow: IdentityUow;
   plans: PlansReader;
   hasher: PasswordHasher;

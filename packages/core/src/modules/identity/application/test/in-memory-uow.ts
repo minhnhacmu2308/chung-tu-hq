@@ -1,7 +1,7 @@
 // Fake cho test use case: giữ dữ liệu trong mảng, mô phỏng RLS bằng cách lọc theo org/user của ngữ cảnh.
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type {
-  AuthTokenRow, CertificateRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgRow, OrgSecretRow,
+  AuthTokenRow, CertificateRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgAuditRow, OrgRow, OrgSecretRow,
   PlanRow, PlansReader, SessionRow, UserRow,
 } from "../ports.js";
 
@@ -14,6 +14,7 @@ export type MemoryData = {
   joinRequests: JoinRequestRow[];
   certificates: CertificateRow[];
   notifications: NotificationRow[];
+  audit: OrgAuditRow[];
   secrets: OrgSecretRow[];
   plans: PlanRow[];
 };
@@ -21,7 +22,7 @@ export type MemoryData = {
 type Scope = { kind: "system" } | { kind: "user"; userId: string } | { kind: "org"; orgId: string; userId: string };
 
 export class InMemoryIdentityUow implements IdentityUow, PlansReader {
-  readonly data: MemoryData = { users: [], orgs: [], memberships: [], sessions: [], authTokens: [], joinRequests: [], certificates: [], notifications: [], secrets: [], plans: [] };
+  readonly data: MemoryData = { users: [], orgs: [], memberships: [], sessions: [], authTokens: [], joinRequests: [], certificates: [], notifications: [], audit: [], secrets: [], plans: [] };
 
   seed(partial: Partial<MemoryData>) {
     for (const k of Object.keys(partial) as (keyof MemoryData)[]) (this.data[k] as unknown[]).push(...(partial[k] as unknown[]));
@@ -149,6 +150,11 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
         markAllRead: async (orgId, userId, at) => {
           for (const n of d.notifications) if (n.orgId === orgId && n.userId === userId && orgOk(orgId) && userOk(userId)) n.readAt = at;
         },
+      },
+      audit: {
+        insert: async (row) => void (orgOk(row.orgId) ? d.audit.push(clone(row)) : deny("org_audit insert")),
+        list: async (orgId, page) => clone(d.audit.filter((x) => x.orgId === orgId && orgOk(orgId)).sort((a, b) => b.at.getTime() - a.at.getTime()).slice(page.offset, page.offset + page.limit)),
+        count: async (orgId) => d.audit.filter((x) => x.orgId === orgId && orgOk(orgId)).length,
       },
     };
   }

@@ -31,7 +31,7 @@ function repos(tx: Tx): DossierRepos {
       },
       codesInMonth: async (orgId, direction, prefix) => (await tx.select({ code: dossiers.code }).from(dossiers).where(and(eq(dossiers.orgId, orgId), eq(dossiers.direction, direction), like(dossiers.code, `${prefix}%`)))).map((r) => r.code),
       insert: async (row) => void (await tx.insert(dossiers).values(row)),
-      update: async (id, patch) => void (await tx.update(dossiers).set(patch).where(eq(dossiers.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(dossiers).set(patch).where(and(eq(dossiers.orgId, orgId), eq(dossiers.id, id)))),
       statsInRange: async (orgId, from, to) => {
         const [row] = await tx
           .select({ dossiers: sql<number>`count(distinct ${dossiers.id})::int`, pages: sql<number>`coalesce(sum(${documents.pages}), 0)::int` })
@@ -48,8 +48,8 @@ function repos(tx: Tx): DossierRepos {
         return d ? toDocument(d) : null;
       },
       insert: async (row) => void (await tx.insert(documents).values(row)),
-      update: async (id, patch) => void (await tx.update(documents).set({ ...patch, updatedAt: new Date() }).where(eq(documents.id, id))),
-      delete: async (id) => void (await tx.delete(documents).where(eq(documents.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(documents).set({ ...patch, updatedAt: new Date() }).where(and(eq(documents.orgId, orgId), eq(documents.id, id)))),
+      delete: async (orgId, id) => void (await tx.delete(documents).where(and(eq(documents.orgId, orgId), eq(documents.id, id)))),
       listStuckQueued: async (orgId, before) => (await tx.select().from(documents).where(and(eq(documents.orgId, orgId), eq(documents.status, "QUEUED"), lt(documents.updatedAt, before))).orderBy(documents.updatedAt).limit(200)).map(toDocument),
     },
     progress: {

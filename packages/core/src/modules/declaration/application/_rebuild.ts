@@ -82,7 +82,7 @@ export async function rebuildDraft(deps: DeclarationDeps, ctx: RebuildCtx, dossi
       fields: mergeUserEdits(built.fields, current.fields, built.hidden, built.kind), updatedAt: now, exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date,
       customsValueVnd: built.valuation.customsValueVnd, valueAdjustments: built.adjustments, estImportDutyVnd: built.taxes.importDutyVnd, estVatVnd: built.taxes.vatVnd,
     };
-    await r.declarations.update(current.id, patch);
+    await r.declarations.update(current.orgId, current.id, patch);
     return ok({ ...current, ...patch });
   });
 }

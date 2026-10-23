@@ -1,3 +1,4 @@
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { DocKind, InboxMessageStatus, MailConnectionStatus, MailProvider } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Ctx } from "../../../shared/ctx.js";
@@ -115,6 +116,8 @@ export interface DossierIntake {
 
 export type MailboxDeps = {
   uow: MailboxUow;
+  /** Nhật ký hoạt động doanh nghiệp (kết nối/gỡ hộp thư); container nối từ identity. */
+  audit?: OrgAuditWriter;
   providers: Record<MailProvider, MailProviderAdapter>;
   /** null khi máy chủ thiếu APP_MASTER_KEY → không kết nối được. */
   cipher: Cipher | null;

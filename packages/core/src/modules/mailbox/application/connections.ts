@@ -78,6 +78,7 @@ export async function completeMailConnect(deps: MailboxDeps, ctx: Ctx, input: { 
     await r.connections.insert(created);
     return created;
   });
+  await deps.audit?.record(ctx, { action: "MAILBOX_CONNECTED", targetType: "mailbox", targetId: row.id, targetLabel: `${st.provider} ${email}` });
   return ok(toDto(row, await deps.members.names(ctx.orgId, [row.connectedBy])));
 }
 
@@ -85,13 +86,16 @@ export async function completeMailConnect(deps: MailboxDeps, ctx: Ctx, input: { 
 export async function disconnectMailbox(deps: MailboxDeps, ctx: Ctx, id: string): Promise<Result<{ removed: true }>> {
   const allowed = canUse(ctx);
   if (!allowed.ok) return allowed;
-  return deps.uow.asOrg(ctx, async (r) => {
+  const res = await deps.uow.asOrg(ctx, async (r) => {
     const cur = await r.connections.get(ctx.orgId, id);
     if (!cur) return err(reasonError("NOT_FOUND", "MAILBOX_NOT_FOUND"));
     if (cur.connectedBy !== ctx.userId && ctx.role !== "ADMIN" && ctx.role !== "OWNER") return err(reasonError("FORBIDDEN", "MAILBOX_NOT_FOUND"));
     await r.connections.remove(ctx.orgId, id);
-    return ok({ removed: true as const });
+    return ok(`${cur.provider} ${cur.email}`);
   });
+  if (!res.ok) return res;
+  await deps.audit?.record(ctx, { action: "MAILBOX_DISCONNECTED", targetType: "mailbox", targetId: id, targetLabel: res.value });
+  return ok({ removed: true as const });
 }
 
 /** Nút "Lấy chứng từ mới": xếp lịch lấy thư cho mọi hộp thư (hoặc một hộp thư) còn dùng được. */

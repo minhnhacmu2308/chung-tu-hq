@@ -71,7 +71,7 @@ export async function updateDeclarationField(deps: DeclarationDeps, ctx: Ctx, do
     const editable = canEditField(decl.kind, code, value, f);
     if (!editable.ok) return editable;
     const fields = { ...decl.fields, [code]: { no: f.no, label: f.label, section: f.section, value, source: "USER" as const, ...(f.blocking ? { blocking: true as const } : {}) } };
-    await r.declarations.update(decl.id, { fields, updatedAt: now });
+    await r.declarations.update(decl.orgId, decl.id, { fields, updatedAt: now });
     return ok({ old: f.value, decl: { ...decl, fields, updatedAt: now } });
   });
   if (!r0.ok) return r0;
@@ -98,7 +98,7 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
     });
     if (!guard.ok) return guard;
     const patch = { status: "APPROVED" as const, approvedBy: ctx.userId, approvedAt: now, updatedAt: now };
-    await r.declarations.update(decl!.id, patch);
+    await r.declarations.update(decl!.orgId, decl!.id, patch);
     // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp (lần sau tra lại, khỏi gọi phân loại).
     await recordApprovedProducts(r, deps.idGen, decl!, items, now, ctx.userId);
     return ok({ ...decl!, ...patch });
@@ -107,6 +107,7 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
   await deps.dossiers.update(ctx.orgId, dossierId, { status: "APPROVED", step: "submit", suspectFields: 0 });
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "dossier.updated" });
   const name = await approvedName(deps, ctx.orgId, r0.value);
+  await deps.orgAudit?.record(ctx, { action: "DECLARATION_APPROVED", targetType: "dossier", targetId: dossierId, targetLabel: d.value.code, detail: { kind: r0.value.kind, version: r0.value.version } });
   await deps.notify?.notify(ctx.orgId, { dossierOwnerOf: dossierId }, { title: `Tờ khai ${d.value.code} đã được phê duyệt`, body: `${name ?? "Người duyệt"} đã duyệt – có thể truyền Hải quan.`, href: `/dossiers/${dossierId}?step=submit` });
   return ok(toDeclaration(r0.value, name));
 }

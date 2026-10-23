@@ -1,7 +1,7 @@
 // Hiện thực IdentityUow bằng Drizzle: mỗi lời gọi là một transaction với ngữ cảnh RLS (withSystem/withUser/withCtx).
-import { and, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { authTokens, digitalCertificates, joinRequests, memberships, notifications, organizations, orgSecrets, sessions, users } from "../../../db/schema/identity.js";
+import { authTokens, digitalCertificates, joinRequests, memberships, notifications, organizations, orgAudit, orgSecrets, sessions, users } from "../../../db/schema/identity.js";
 import { withCtx, withSystem, withUser } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import type { IdentityRepos, IdentityUow, JoinRequestStatus, MembershipRow, MembershipStatus } from "../application/ports.js";
@@ -88,6 +88,11 @@ function repos(tx: Tx): IdentityRepos {
       list: async (orgId, userId) => tx.select().from(notifications).where(and(eq(notifications.orgId, orgId), eq(notifications.userId, userId))).orderBy(desc(notifications.createdAt)).limit(50),
       insert: async (row) => void (await tx.insert(notifications).values(row)),
       markAllRead: async (orgId, userId, at) => void (await tx.update(notifications).set({ readAt: at }).where(and(eq(notifications.orgId, orgId), eq(notifications.userId, userId), isNull(notifications.readAt)))),
+    },
+    audit: {
+      insert: async (row) => void (await tx.insert(orgAudit).values(row)),
+      list: async (orgId, page) => (await tx.select().from(orgAudit).where(eq(orgAudit.orgId, orgId)).orderBy(desc(orgAudit.at), desc(orgAudit.id)).limit(page.limit).offset(page.offset)).map((r) => ({ ...r, detail: (r.detail as Record<string, unknown> | null) ?? null })),
+      count: async (orgId) => Number((await tx.select({ n: count() }).from(orgAudit).where(eq(orgAudit.orgId, orgId)))[0]?.n ?? 0),
     },
   };
 }

@@ -39,5 +39,6 @@ export async function inviteMember(deps: IdentityDeps, ctx: Ctx, input: InviteMe
     r.authTokens.insert({ id: deps.idGen.next("tok"), userId: user.id, orgId: ctx.orgId, kind: "INVITE", tokenHash: t.hash, expiresAt: new Date(now.getTime() + TOKEN_TTL_MS.INVITE), usedAt: null }),
   );
   await deps.mailer.send({ to: user.email, ...inviteMail(deps.appUrl, t.raw, result.value.orgName, result.value.inviterName) });
+  await deps.audit?.record(ctx, { action: "MEMBER_INVITED", targetType: "member", targetId: user.id, targetLabel: user.email, detail: { role: input.role } });
   return ok(toMember(user, result.value.membership));
 }

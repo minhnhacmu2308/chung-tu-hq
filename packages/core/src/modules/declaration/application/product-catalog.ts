@@ -61,6 +61,7 @@ export async function deleteProducts(deps: DeclarationDeps, ctx: Ctx, ids: strin
   if (!allowed.ok) return allowed;
   const deleted = await deps.uow.asOrg(ctx, (r) => r.products.remove(ctx.orgId, [...new Set(ids)]));
   if (!deleted) return err(reasonError("NOT_FOUND", "PRODUCT_NOT_FOUND"));
+  await deps.orgAudit?.record(ctx, { action: "PRODUCTS_DELETED", targetType: "product", targetId: ids.length === 1 ? ids[0]! : "*", targetLabel: `${deleted} mặt hàng`, detail: { count: deleted } });
   return ok({ deleted });
 }
 
@@ -103,6 +104,9 @@ export async function importProducts(deps: DeclarationDeps, ctx: Ctx, input: Imp
     }
     await r.products.insert(inserts);
     return ok({ created: inserts.length, updated });
+  }).then(async (res) => {
+    if (res.ok) await deps.orgAudit?.record(ctx, { action: "PRODUCTS_IMPORTED", targetType: "product", targetId: "*", targetLabel: `${res.value.created + res.value.updated} mặt hàng`, detail: res.value });
+    return res;
   });
 }
 

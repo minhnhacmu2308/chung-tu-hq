@@ -18,11 +18,11 @@ export async function editField(
   if (!allowed.ok) return allowed;
   const now = deps.clock.now();
   const org = await deps.documents.orgInfo(ctx.orgId);
-  const pre = await deps.uow.asOrg(ctx, (r) => r.fields.get(fieldId));
+  const pre = await deps.uow.asOrg(ctx, (r) => r.fields.get(ctx.orgId, fieldId));
   if (!pre) return err(domainError("NOT_FOUND", "Không tìm thấy trường"));
   if (isReadLocked(await deps.documents.dossierStatus(ctx.orgId, pre.dossierId))) return err(domainError("DOSSIER_LOCKED", "Hồ sơ đã duyệt/truyền – mở lại tờ khai trước khi sửa dữ liệu"));
   const res = await deps.uow.asOrg(ctx, async (r) => {
-    const f = await r.fields.get(fieldId);
+    const f = await r.fields.get(ctx.orgId, fieldId);
     if (!f) return err(domainError("NOT_FOUND", "Không tìm thấy trường"));
     const next = change(f);
     if (next.source === "USER_EDIT") {
@@ -32,13 +32,13 @@ export async function editField(
     }
     const confirmed = next.status === "USER_CONFIRMED";
     await r.audit.insert({ id: deps.idGen.next("job"), orgId: ctx.orgId, dossierId: f.dossierId, fieldId: f.id, documentId: f.documentId, key: f.key, oldValue: f.value, newValue: next.value, userId: ctx.userId, source: next.source, at: now });
-    await r.fields.update(f.id, { value: next.value, status: next.status, note: null, confirmedBy: confirmed ? ctx.userId : null, confirmedAt: confirmed ? now : null });
-    const latest = await r.shipments.latest(f.dossierId);
+    await r.fields.update(ctx.orgId, f.id, { value: next.value, status: next.status, note: null, confirmedBy: confirmed ? ctx.userId : null, confirmedAt: confirmed ? now : null });
+    const latest = await r.shipments.latest(ctx.orgId, f.dossierId);
     if (latest && f.shipmentPath) {
       setSourced(latest.data, f.shipmentPath, { value: next.value, status: next.status });
-      await r.shipments.updateData(latest.id, latest.data);
+      await r.shipments.updateData(ctx.orgId, latest.id, latest.data);
     }
-    const all = await r.fields.list(f.dossierId);
+    const all = await r.fields.list(ctx.orgId, f.dossierId);
     return ok({ field: { ...f, value: next.value, status: next.status, note: null }, dossierId: f.dossierId, shipment: latest, suspect: countSuspect(all, org.suspectThreshold) });
   });
   if (!res.ok) return res;

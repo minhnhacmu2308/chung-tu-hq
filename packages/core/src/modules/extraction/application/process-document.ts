@@ -49,7 +49,7 @@ export async function processDocument(deps: ExtractionDeps, input: ProcessDocume
     const skill = await deps.skills.resolve(orgId, kind, supplierHint);
     const key = createHash("sha256").update([doc.id, doc.sha256, kind, PROMPT_VERSION, String(EXTRACTION_SCHEMA_VERSION), PIPELINE_VERSION, skill.skillVersionId ?? ""].join("|")).digest("hex");
     const ctx = { orgId: asOrgId(orgId), userId: asUserId("") };
-    const existing = await deps.uow.asOrg(ctx, (r) => r.extractions.findByKey(key));
+    const existing = await deps.uow.asOrg(ctx, (r) => r.extractions.findByKey(orgId, key));
     if (!existing) {
       // Trường bổ sung riêng của doanh nghiệp (skill) được thêm vào schema để AI đọc thật.
       const schema = withCustomFields(extractionSchemaFor(kind), skill.customFields);

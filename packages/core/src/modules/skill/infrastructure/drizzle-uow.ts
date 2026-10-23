@@ -19,7 +19,7 @@ function repos(tx: Tx): SkillRepos {
       },
       listTemplates: async () => (await tx.select().from(skills).where(and(eq(skills.isTemplate, true), eq(skills.published, true))).orderBy(skills.code)).map(toSkill),
       insert: async (row) => void (await tx.insert(skills).values(row)),
-      update: async (id, patch) => void (await tx.update(skills).set(patch).where(eq(skills.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(skills).set(patch).where(and(eq(skills.orgId, orgId), eq(skills.id, id)))),
     },
     versions: {
       get: async (skillId, version) => {
@@ -35,7 +35,7 @@ function repos(tx: Tx): SkillRepos {
         return s ? toSample(s) : null;
       },
       insert: async (row) => void (await tx.insert(skillSamples).values(row)),
-      update: async (id, patch) => void (await tx.update(skillSamples).set(patch).where(eq(skillSamples.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(skillSamples).set(patch).where(and(eq(skillSamples.orgId, orgId), eq(skillSamples.id, id)))),
     },
     evaluations: {
       latest: async (orgId, skillId) => {

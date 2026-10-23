@@ -18,8 +18,8 @@ export async function changeDocumentKind(deps: DossierDeps, ctx: Ctx, documentId
     if (!d) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
     const m = canModify(d.status);
     if (!m.ok) return m;
-    await r.documents.update(doc.id, { kind, kindSource: "USER", status: "QUEUED", error: null });
-    await r.dossiers.update(d.id, { status: "PROCESSING", updatedAt: now });
+    await r.documents.update(ctx.orgId, doc.id, { kind, kindSource: "USER", status: "QUEUED", error: null });
+    await r.dossiers.update(ctx.orgId, d.id, { status: "PROCESSING", updatedAt: now });
     return ok({ ...doc, kind, kindSource: "USER" as const, status: "QUEUED" as const, error: null });
   });
   if (!res.ok) return res;

@@ -19,7 +19,7 @@ function repos(tx: Tx): DeclarationRepos {
         const r = (await tx.select().from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.id, id))).limit(1))[0];
         return r ? toItem(r) : null;
       },
-      upsertForDossier: async (dossierId, rows) => {
+      upsertForDossier: async (orgId, dossierId, rows) => {
         const out: LineItemRow[] = [];
         for (const r of rows) {
           const [saved] = await tx
@@ -33,11 +33,11 @@ function repos(tx: Tx): DeclarationRepos {
           if (saved) out.push(toItem(saved));
         }
         const keep = rows.map((r) => r.lineNo);
-        const stale = (await tx.select({ id: lineItems.id, lineNo: lineItems.lineNo }).from(lineItems).where(eq(lineItems.dossierId, dossierId))).filter((x) => !keep.includes(x.lineNo));
+        const stale = (await tx.select({ id: lineItems.id, lineNo: lineItems.lineNo }).from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.dossierId, dossierId)))).filter((x) => !keep.includes(x.lineNo));
         if (stale.length) await tx.delete(lineItems).where(inArray(lineItems.id, stale.map((s) => s.id)));
         return out.sort((a, b) => a.lineNo - b.lineNo);
       },
-      update: async (id, patch) => void (await tx.update(lineItems).set(patch).where(eq(lineItems.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(lineItems).set(patch).where(and(eq(lineItems.orgId, orgId), eq(lineItems.id, id)))),
       findByHsItem: async (orgId, hsItemId) => {
         const r = (await tx.select().from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.hsItemId, hsItemId))).limit(1))[0];
         return r ? toItem(r) : null;
@@ -50,12 +50,12 @@ function repos(tx: Tx): DeclarationRepos {
         return r ? toJob(r) : null;
       },
       openForDossier: async (orgId, dossierId) => (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.dossierId, dossierId), inArray(hsJobs.status, ["pending", "processing", "need_info"]))).orderBy(hsJobs.createdAt)).map(toJob),
-      update: async (id, patch) => void (await tx.update(hsJobs).set(patch).where(eq(hsJobs.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(hsJobs).set(patch).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.id, id)))),
     },
     suggestions: {
-      listForItems: async (ids) => (ids.length ? (await tx.select().from(hsSuggestions).where(inArray(hsSuggestions.lineItemId, ids)).orderBy(desc(hsSuggestions.confidence))).map(toSug) : []),
-      replaceForItem: async (itemId, rows) => {
-        await tx.delete(hsSuggestions).where(eq(hsSuggestions.lineItemId, itemId));
+      listForItems: async (orgId, ids) => (ids.length ? (await tx.select().from(hsSuggestions).where(and(eq(hsSuggestions.orgId, orgId), inArray(hsSuggestions.lineItemId, ids))).orderBy(desc(hsSuggestions.confidence))).map(toSug) : []),
+      replaceForItem: async (orgId, itemId, rows) => {
+        await tx.delete(hsSuggestions).where(and(eq(hsSuggestions.orgId, orgId), eq(hsSuggestions.lineItemId, itemId)));
         if (rows.length) await tx.insert(hsSuggestions).values(rows);
       },
     },
@@ -71,7 +71,7 @@ function repos(tx: Tx): DeclarationRepos {
           .filter((r) => statuses.includes(r.status))
           .sort((a, b) => (b.approvedAt?.getTime() ?? 0) - (a.approvedAt?.getTime() ?? 0)),
       insert: async (row) => void (await tx.insert(declarations).values(row)),
-      update: async (id, patch) => void (await tx.update(declarations).set(patch).where(eq(declarations.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(declarations).set(patch).where(and(eq(declarations.orgId, orgId), eq(declarations.id, id)))),
     },
     agentRuns: {
       latest: async (orgId, dossierId) => {
@@ -84,7 +84,7 @@ function repos(tx: Tx): DeclarationRepos {
       },
       listRunningBefore: async (orgId, before) => (await tx.select().from(agentRuns).where(and(eq(agentRuns.orgId, orgId), eq(agentRuns.status, "RUNNING"), lt(agentRuns.startedAt, before))).orderBy(agentRuns.startedAt).limit(200)).map(toRun),
       insert: async (row) => void (await tx.insert(agentRuns).values(row)),
-      update: async (id, patch) => void (await tx.update(agentRuns).set(patch).where(eq(agentRuns.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(agentRuns).set(patch).where(and(eq(agentRuns.orgId, orgId), eq(agentRuns.id, id)))),
     },
     catalogHs: {
       search: async (q, limit) => {

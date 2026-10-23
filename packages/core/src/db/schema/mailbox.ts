@@ -1,4 +1,5 @@
-import { index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { id, orgId, orgRls, timestamps } from "./shared.js";
 
 /**
@@ -21,7 +22,7 @@ export const mailConnections = pgTable(
     connectedBy: text("connected_by").notNull(),
     ...timestamps(),
   },
-  (t) => [uniqueIndex("mail_connections_org_provider_email_uq").on(t.orgId, t.provider, t.email), orgRls("mail_connections_rls")],
+  (t) => [uniqueIndex("mail_connections_org_provider_email_uq").on(t.orgId, t.provider, t.email), check("mail_connections_status_chk", sql`status in ('ACTIVE', 'SYNCING', 'ERROR', 'REAUTH')`), check("mail_connections_provider_chk", sql`provider in ('GMAIL', 'OUTLOOK')`), orgRls("mail_connections_rls")],
 ).enableRLS();
 
 /**

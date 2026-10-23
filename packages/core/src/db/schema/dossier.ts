@@ -1,4 +1,5 @@
-import { date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { organizations } from "./identity.js";
 import { id, money, orgId, orgRls, timestamps } from "./shared.js";
 
@@ -34,6 +35,10 @@ export const dossiers = pgTable(
   (t) => [
     uniqueIndex("dossiers_org_code_uq").on(t.orgId, t.code),
     index("dossiers_org_status_idx").on(t.orgId, t.status),
+    // Giá trị trạng thái/bước/chiều khớp enum @kb/contracts – DB chặn dữ liệu lạ (CHECK, không dùng pgEnum để đổi danh sách bằng migration nhẹ).
+    check("dossiers_status_chk", sql`status in ('DRAFT', 'PROCESSING', 'NEEDS_REVIEW', 'APPROVED', 'SUBMITTED', 'CLEARED', 'CANCELLED')`),
+    check("dossiers_step_chk", sql`step in ('create', 'upload', 'ocr', 'agent', 'review', 'submit')`),
+    check("dossiers_direction_chk", sql`direction in ('NK', 'XK')`),
     index("dossiers_org_updated_idx").on(t.orgId, t.updatedAt),
     orgRls("dossiers_rls"),
   ],
@@ -61,7 +66,7 @@ export const documents = pgTable(
     uploadedBy: text("uploaded_by").notNull(),
     ...timestamps(),
   },
-  (t) => [index("documents_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("documents_rls")],
+  (t) => [index("documents_org_dossier_idx").on(t.orgId, t.dossierId), check("documents_status_chk", sql`status in ('UPLOADING', 'QUEUED', 'READING', 'DONE', 'ERROR')`), orgRls("documents_rls")],
 ).enableRLS();
 
 export const documentPages = pgTable(
@@ -74,7 +79,7 @@ export const documentPages = pgTable(
       .references(() => documents.id, { onDelete: "cascade" }),
     pageNo: integer("page_no").notNull(),
     kindDetected: text("kind_detected"),
-    isDuplicate: integer("is_duplicate").notNull().default(0),
+    isDuplicate: boolean("is_duplicate").notNull().default(false),
     previewKey: text("preview_key"),
   },
   (t) => [uniqueIndex("document_pages_doc_page_uq").on(t.documentId, t.pageNo), orgRls("document_pages_rls")],

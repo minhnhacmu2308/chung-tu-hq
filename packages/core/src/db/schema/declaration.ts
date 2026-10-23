@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, index, integer, jsonb, pgPolicy, pgTable, real, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, numeric, pgPolicy, pgTable, real, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { dossiers } from "./dossier.js";
 import { appRole, id, money, orgId, orgRls, timestamps } from "./shared.js";
 
@@ -82,7 +82,7 @@ export const hsJobs = pgTable(
     polls: integer("polls").notNull().default(0),
     ...timestamps(),
   },
-  (t) => [index("hs_jobs_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("hs_jobs_rls")],
+  (t) => [index("hs_jobs_org_dossier_idx").on(t.orgId, t.dossierId), check("hs_jobs_status_chk", sql`status in ('pending', 'processing', 'need_info', 'completed', 'cancelled')`), orgRls("hs_jobs_rls")],
 ).enableRLS();
 
 /** Tờ khai nháp/duyệt; `fields` = Record<chỉ tiêu, { value, source, suspect?, note? }>. Mỗi lần dựng lại = version mới. */
@@ -108,7 +108,7 @@ export const declarations = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     ...timestamps(),
   },
-  (t) => [uniqueIndex("declarations_dossier_version_uq").on(t.dossierId, t.version), index("declarations_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("declarations_rls")],
+  (t) => [uniqueIndex("declarations_dossier_version_uq").on(t.dossierId, t.version), index("declarations_org_dossier_idx").on(t.orgId, t.dossierId), check("declarations_status_chk", sql`status in ('DRAFT', 'APPROVED', 'SUBMITTED')`), check("declarations_kind_chk", sql`kind in ('IDA', 'EDA')`), orgRls("declarations_rls")],
 ).enableRLS();
 
 /** Mặc định khai báo + ghi đè nguồn chỉ tiêu của doanh nghiệp, theo chiều NK/XK (spec 2026-10-15 §5.2). */
@@ -131,6 +131,9 @@ export const declarationProfiles = pgTable(
  * khi tờ khai được duyệt). Mỗi mặt hàng một dòng theo `key` (mã hàng, không có thì tên chuẩn hóa – productKey).
  * `raw` = dòng gốc của lần khai gần nhất trong file import (tên cột → giá trị).
  */
+/** Thuế suất phần trăm: tối đa 999999.9999. */
+const rate = (name: string) => numeric(name, { precision: 10, scale: 4 });
+
 export const productCatalog = pgTable(
   "product_catalog",
   {
@@ -145,15 +148,16 @@ export const productCatalog = pgTable(
     unit: text("unit"),
     origin: text("origin"),
     tariffSchedule: text("tariff_schedule"),
-    importDutyRate: text("import_duty_rate"),
-    vatRate: text("vat_rate"),
-    envTaxRate: text("env_tax_rate"),
-    exciseRate: text("excise_rate"),
-    safeguardRate: text("safeguard_rate"),
-    antiDiscriminationRate: text("anti_discrimination_rate"),
+    // Thuế suất (%) và đơn giá là số: numeric, đọc/ghi dạng chuỗi Decimal (bất biến 3).
+    importDutyRate: rate("import_duty_rate"),
+    vatRate: rate("vat_rate"),
+    envTaxRate: rate("env_tax_rate"),
+    exciseRate: rate("excise_rate"),
+    safeguardRate: rate("safeguard_rate"),
+    antiDiscriminationRate: rate("anti_discrimination_rate"),
     description: text("description"),
     unit2: text("unit2"),
-    unitPrice: text("unit_price"),
+    unitPrice: money("unit_price"),
     currency: text("currency"),
     partner: text("partner"),
     note: text("note"),
@@ -186,7 +190,7 @@ export const agentRuns = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
-  (t) => [index("agent_runs_org_dossier_idx").on(t.orgId, t.dossierId, t.startedAt), orgRls("agent_runs_rls")],
+  (t) => [index("agent_runs_org_dossier_idx").on(t.orgId, t.dossierId, t.startedAt), check("agent_runs_status_chk", sql`status in ('RUNNING', 'DONE', 'ERROR', 'CANCELLED')`), orgRls("agent_runs_rls")],
 ).enableRLS();
 
 /** Biểu thuế tối thiểu (D1 BACKEND-TODO) – không theo org, mọi org đọc; chỉ admin/seed ghi. */

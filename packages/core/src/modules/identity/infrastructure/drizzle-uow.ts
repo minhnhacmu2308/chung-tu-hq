@@ -72,7 +72,9 @@ function repos(tx: Tx): IdentityRepos {
       list: async (orgId) => tx.select().from(digitalCertificates).where(eq(digitalCertificates.orgId, orgId)).orderBy(digitalCertificates.createdAt, digitalCertificates.id),
       insert: async (row) => void (await tx.insert(digitalCertificates).values(row)),
       setDefault: async (orgId, id) => {
-        await tx.update(digitalCertificates).set({ isDefault: sql`(${digitalCertificates.id} = ${id})`, updatedAt: new Date() }).where(eq(digitalCertificates.orgId, orgId));
+        // Hai bước (bỏ mặc định cũ rồi đặt mới) để không vi phạm unique partial "một mặc định / doanh nghiệp" giữa chừng một câu UPDATE.
+        await tx.update(digitalCertificates).set({ isDefault: false, updatedAt: new Date() }).where(and(eq(digitalCertificates.orgId, orgId), eq(digitalCertificates.isDefault, true)));
+        await tx.update(digitalCertificates).set({ isDefault: true, updatedAt: new Date() }).where(and(eq(digitalCertificates.orgId, orgId), eq(digitalCertificates.id, id)));
       },
       delete: async (orgId, id) => void (await tx.delete(digitalCertificates).where(and(eq(digitalCertificates.orgId, orgId), eq(digitalCertificates.id, id)))),
     },

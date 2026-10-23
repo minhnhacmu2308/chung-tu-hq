@@ -26,7 +26,8 @@ function repos(tx: Tx): MailboxRepos {
       remove: async (orgId, id) => void (await tx.delete(mailConnections).where(and(eq(mailConnections.orgId, orgId), eq(mailConnections.id, id)))),
     },
     messages: {
-      list: async (orgId) => (await tx.select().from(inboxMessages).where(eq(inboxMessages.orgId, orgId)).orderBy(desc(inboxMessages.receivedAt))).map(toMsg),
+      // Chặn trên: hộp thư là danh sách lọc phía client; email cũ hơn vẫn nằm trong DB (phân trang server: BACKEND-TODO R6b).
+      list: async (orgId) => (await tx.select().from(inboxMessages).where(eq(inboxMessages.orgId, orgId)).orderBy(desc(inboxMessages.receivedAt)).limit(500)).map(toMsg),
       get: async (orgId, id) => {
         const r = (await tx.select().from(inboxMessages).where(and(eq(inboxMessages.orgId, orgId), eq(inboxMessages.id, id))).limit(1))[0];
         return r ? toMsg(r) : null;

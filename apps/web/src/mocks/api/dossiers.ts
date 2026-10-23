@@ -9,14 +9,20 @@ export const dossierKeys = {
   documents: (id: string) => ["dossiers", "documents", id] as const,
 };
 
-export type DossierFilter = { direction?: Direction; status?: DossierStatus; step?: StepId };
+export type DossierFilter = { direction?: Direction; status?: DossierStatus; step?: StepId; q?: string };
 
-export const listDossiers = (f: DossierFilter = {}) =>
-  query((db) =>
-    db.dossiers.filter(
-      (d) => (!f.direction || d.direction === f.direction) && (!f.status || d.status === f.status) && (!f.step || d.step === f.step),
-    ),
-  );
+const matches = (f: DossierFilter) => (d: Dossier) => {
+  const q = f.q?.trim().toLowerCase();
+  return (!f.direction || d.direction === f.direction) && (!f.status || d.status === f.status) && (!f.step || d.step === f.step) && (!q || [d.code, d.partner, d.billNo].some((v) => v.toLowerCase().includes(q)));
+};
+
+export const listDossiers = (f: DossierFilter = {}) => query((db) => db.dossiers.filter(matches(f)));
+/** Cùng hình dạng với API phân trang server: {items,total,limit,offset}. */
+export const listDossiersPage = (f: DossierFilter, page: { limit: number; offset: number }) =>
+  query((db) => {
+    const all = db.dossiers.filter(matches(f));
+    return { items: all.slice(page.offset, page.offset + page.limit), total: all.length, limit: page.limit, offset: page.offset };
+  });
 
 export const getDossier = (id: string) =>
   query((db) => {

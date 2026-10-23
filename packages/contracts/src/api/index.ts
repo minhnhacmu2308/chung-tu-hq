@@ -7,3 +7,4 @@ export * from "./declaration.js";
 export * from "./customs.js";
 export * from "./product-catalog.js";
 export * from "./mailbox.js";
+export * from "./page.js";

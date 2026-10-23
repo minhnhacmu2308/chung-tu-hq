@@ -64,12 +64,12 @@ function repos(tx: Tx): DeclarationRepos {
         const r = (await tx.select().from(declarations).where(and(eq(declarations.orgId, orgId), eq(declarations.dossierId, dossierId))).orderBy(desc(declarations.version)).limit(1))[0];
         return r ? toDecl(r) : null;
       },
-      listLatestByStatus: async (orgId, statuses) => {
-        const rows = (await tx.select().from(declarations).where(eq(declarations.orgId, orgId)).orderBy(desc(declarations.version))).map(toDecl);
-        const latest = new Map<string, DeclarationRow>();
-        for (const r of rows) if (!latest.has(r.dossierId)) latest.set(r.dossierId, r);
-        return [...latest.values()].filter((r) => statuses.includes(r.status));
-      },
+      // Bản mới nhất của mỗi hồ sơ lấy bằng DISTINCT ON trong DB (không kéo mọi phiên bản về); chặn trên 2.000 hồ sơ.
+      listLatestByStatus: async (orgId, statuses) =>
+        (await tx.selectDistinctOn([declarations.dossierId]).from(declarations).where(eq(declarations.orgId, orgId)).orderBy(declarations.dossierId, desc(declarations.version)).limit(2000))
+          .map(toDecl)
+          .filter((r) => statuses.includes(r.status))
+          .sort((a, b) => (b.approvedAt?.getTime() ?? 0) - (a.approvedAt?.getTime() ?? 0)),
       insert: async (row) => void (await tx.insert(declarations).values(row)),
       update: async (id, patch) => void (await tx.update(declarations).set(patch).where(eq(declarations.id, id))),
     },
@@ -109,7 +109,8 @@ function repos(tx: Tx): DeclarationRepos {
       },
     },
     products: {
-      list: async (orgId) => (await tx.select().from(productCatalog).where(eq(productCatalog.orgId, orgId)).orderBy(desc(productCatalog.updatedAt))).map(toProduct),
+      // Chặn trên 2.000 mặt hàng cho màn danh mục (lọc phía client); vượt → phân trang server (BACKEND-TODO R6b).
+      list: async (orgId) => (await tx.select().from(productCatalog).where(eq(productCatalog.orgId, orgId)).orderBy(desc(productCatalog.updatedAt)).limit(2000)).map(toProduct),
       get: async (orgId, id) => {
         const r = (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), eq(productCatalog.id, id))).limit(1))[0];
         return r ? toProduct(r) : null;

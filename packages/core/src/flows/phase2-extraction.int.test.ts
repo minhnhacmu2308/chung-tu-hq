@@ -74,7 +74,7 @@ describe("luồng đọc chứng từ trên Postgres", () => {
   });
   it("org khác không thấy trường/luật", async () => {
     const other: Ctx = { orgId: asOrgId("org_khac"), userId: asUserId("usr_x"), role: "OWNER" };
-    const d = (await dossier.uow.asOrg(ctx, (r) => r.dossiers.list(ctx.orgId, {})))[0]!;
+    const d = (await dossier.uow.asOrg(ctx, (r) => r.dossiers.list(ctx.orgId, {}, { limit: 1, offset: 0 })))[0]!;
     expect(unwrap(await listFields(extraction, other, d.id))).toEqual([]);
     expect(unwrap(await listChecks(validationDepsOf(), other, d.id))).toEqual([]);
   });

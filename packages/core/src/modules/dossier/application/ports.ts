@@ -13,11 +13,14 @@ export type DocumentRow = {
   id: string; orgId: string; dossierId: string; kind: DocKind; kindSource: "AI" | "USER" | "FILENAME"; fileName: string; mime: string; sizeBytes: number;
   pages: number; status: DocumentStatus; error: string | null; storageKey: string; sha256: string; uploadedBy: string; createdAt: Date; updatedAt: Date;
 };
+export type DossierListFilter = { direction?: string | undefined; status?: string | undefined; step?: string | undefined; q?: string | undefined };
 export type ProgressRow = { id: string; orgId: string; dossierId: string; jobKind: string; jobId: string; status: string; progress: number; message: string; updatedAt: Date };
 
 export interface DossierRepos {
   dossiers: {
-    list(orgId: string, f: { direction?: string | undefined; status?: string | undefined; step?: string | undefined }): Promise<DossierRow[]>;
+    /** Mới nhất trước; `page` bắt buộc để không bao giờ kéo cả bảng. */
+    list(orgId: string, f: DossierListFilter, page: { limit: number; offset: number }): Promise<DossierRow[]>;
+    count(orgId: string, f: DossierListFilter): Promise<number>;
     get(orgId: string, id: string): Promise<DossierRow | null>;
     codesInMonth(orgId: string, direction: string, prefix: string): Promise<string[]>;
     insert(row: DossierRow): Promise<void>;

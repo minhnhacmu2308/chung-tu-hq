@@ -1,23 +1,30 @@
-import { and, desc, eq, gte, like, lt, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, like, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { documents, dossiers, jobProgress } from "../../../db/schema/dossier.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { DocumentRow, DossierRepos, DossierRow, DossierUow } from "../application/ports.js";
+import type { DocumentRow, DossierListFilter, DossierRepos, DossierRow, DossierUow } from "../application/ports.js";
+
+/** Điều kiện lọc danh sách hồ sơ (dùng chung cho list + count). `q`: mã hồ sơ / đối tác / số vận đơn, không phân biệt hoa thường; ký tự % _ của LIKE được thoát. */
+function dossierWhere(orgId: string, f: DossierListFilter) {
+  const q = f.q?.trim();
+  const pattern = q ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+  return and(
+    eq(dossiers.orgId, orgId),
+    ...(f.direction ? [eq(dossiers.direction, f.direction)] : []),
+    ...(f.status ? [eq(dossiers.status, f.status)] : []),
+    ...(f.step ? [eq(dossiers.step, f.step)] : []),
+    ...(pattern ? [or(ilike(dossiers.code, pattern), ilike(dossiers.partner, pattern), ilike(dossiers.billNo, pattern))!] : []),
+  );
+}
 
 function repos(tx: Tx): DossierRepos {
   const toDossier = (d: typeof dossiers.$inferSelect): DossierRow => ({ ...d, direction: d.direction as DossierRow["direction"], status: d.status as DossierRow["status"], step: d.step as DossierRow["step"], transportMode: d.transportMode as DossierRow["transportMode"], partyClass: d.partyClass as DossierRow["partyClass"] });
   const toDocument = (d: typeof documents.$inferSelect): DocumentRow => ({ ...d, kind: d.kind as DocumentRow["kind"], kindSource: d.kindSource as DocumentRow["kindSource"], status: d.status as DocumentRow["status"] });
   return {
     dossiers: {
-      list: async (orgId, f) =>
-        (
-          await tx
-            .select()
-            .from(dossiers)
-            .where(and(eq(dossiers.orgId, orgId), ...(f.direction ? [eq(dossiers.direction, f.direction)] : []), ...(f.status ? [eq(dossiers.status, f.status)] : []), ...(f.step ? [eq(dossiers.step, f.step)] : [])))
-            .orderBy(desc(dossiers.updatedAt))
-        ).map(toDossier),
+      list: async (orgId, f, page) => (await tx.select().from(dossiers).where(dossierWhere(orgId, f)).orderBy(desc(dossiers.updatedAt), desc(dossiers.id)).limit(page.limit).offset(page.offset)).map(toDossier),
+      count: async (orgId, f) => Number((await tx.select({ n: count() }).from(dossiers).where(dossierWhere(orgId, f)))[0]?.n ?? 0),
       get: async (orgId, id) => {
         const d = (await tx.select().from(dossiers).where(and(eq(dossiers.orgId, orgId), eq(dossiers.id, id))).limit(1))[0];
         return d ? toDossier(d) : null;

@@ -1,3 +1,4 @@
+import { UNPAGED_LIST_CAP } from "@kb/contracts";
 import type { MailProvider } from "@kb/contracts";
 import type { Env } from "../../../config/env.js";
 import type { Db } from "../../../db/client.js";
@@ -36,7 +37,7 @@ export function createMailboxInfrastructure(opts: {
   const sys = (orgId: string) => ({ orgId: asOrgId(orgId), userId: asUserId("") });
   const dossiers: DossierIntake = {
     list: async (orgId) =>
-      (await opts.dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.list(orgId, {}))).map((d) => ({ id: d.id, code: d.code, partner: d.partner, billNo: d.billNo, status: d.status, updatedAt: d.updatedAt })),
+      (await opts.dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.list(orgId, {}, { limit: UNPAGED_LIST_CAP, offset: 0 }))).map((d) => ({ id: d.id, code: d.code, partner: d.partner, billNo: d.billNo, status: d.status, updatedAt: d.updatedAt })),
     addFiles: async (ctx, dossierId, files) => {
       const r = await uploadDocuments(opts.dossier, ctx, dossierId, files);
       return r.ok ? ok({ added: r.value.length }) : r;

@@ -10,7 +10,7 @@ import { createDossier } from "../create-dossier.js";
 import { deleteDocument } from "../delete-document.js";
 import { getDossier } from "../get-dossier.js";
 import { listDocuments } from "../list-documents.js";
-import { listDossiers } from "../list-dossiers.js";
+import { listDossiers, listDossiersPage } from "../list-dossiers.js";
 import type { DossierDeps } from "../ports.js";
 import { requeueStuckDocuments } from "../requeue-stuck-documents.js";
 import { retryDocument } from "../retry-document.js";
@@ -65,11 +65,24 @@ describe("createDossier / list / get", () => {
     expect(unwrap(await listDossiers(deps, ctx("OWNER", "org_b", "usr_b"), {}))).toEqual([]);
     expect((await getDossier(deps, ctx("OWNER", "org_b", "usr_b"), d.id)).ok).toBe(false);
   });
-  it("lọc theo direction/status", async () => {
+  it("lọc theo direction/status; tìm q theo mã / đối tác / số vận đơn không phân biệt hoa thường", async () => {
     unwrap(await createDossier(deps, ctx(), INPUT));
-    unwrap(await createDossier(deps, ctx(), { ...INPUT, direction: "XK" }));
+    unwrap(await createDossier(deps, ctx(), { ...INPUT, direction: "XK", partner: "SAMSUNG" }));
     expect(unwrap(await listDossiers(deps, ctx(), { direction: "XK" }))).toHaveLength(1);
     expect(unwrap(await listDossiers(deps, ctx(), { status: "CLEARED" }))).toHaveLength(0);
+    expect(unwrap(await listDossiers(deps, ctx(), { q: "samsung" })).map((d) => d.partner)).toEqual(["SAMSUNG"]);
+    expect(unwrap(await listDossiers(deps, ctx(), { q: "hs-xk" }))).toHaveLength(1);
+    expect(unwrap(await listDossiers(deps, ctx(), { q: "khong-co" }))).toEqual([]);
+  });
+  it("listDossiersPage: đúng trang + tổng khớp bộ lọc; org khác tổng 0", async () => {
+    for (let i = 0; i < 5; i++) unwrap(await createDossier(deps, ctx(), INPUT));
+    const p1 = unwrap(await listDossiersPage(deps, ctx(), {}, { limit: 2, offset: 0 }));
+    const p3 = unwrap(await listDossiersPage(deps, ctx(), {}, { limit: 2, offset: 4 }));
+    expect(p1).toMatchObject({ total: 5, limit: 2, offset: 0 });
+    expect(p1.items).toHaveLength(2);
+    expect(p3.items).toHaveLength(1);
+    expect(new Set([...p1.items, ...p3.items].map((d) => d.id)).size).toBe(3);
+    expect(unwrap(await listDossiersPage(deps, ctx("OWNER", "org_b", "usr_b"), {}, { limit: 2, offset: 0 }))).toEqual({ items: [], total: 0, limit: 2, offset: 0 });
   });
 });
 

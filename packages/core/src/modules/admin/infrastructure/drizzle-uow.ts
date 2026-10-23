@@ -79,7 +79,7 @@ function repos(tx: Tx): AdminRepos {
     },
     orgs: {
       // Bỏ doanh nghiệp hệ thống (chỉ giữ skill mẫu) – không phải khách hàng.
-      list: async () => (await tx.select().from(organizations).where(ne(organizations.id, SYSTEM_ORG_ID)).orderBy(desc(organizations.createdAt))).map(toOrg),
+      list: async () => (await tx.select().from(organizations).where(ne(organizations.id, SYSTEM_ORG_ID)).orderBy(desc(organizations.createdAt)).limit(1000)).map(toOrg),
       get: async (id) => {
         const o = (await tx.select().from(organizations).where(eq(organizations.id, id)).limit(1))[0];
         return o ? toOrg(o) : null;

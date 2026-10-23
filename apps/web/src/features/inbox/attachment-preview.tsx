@@ -65,7 +65,7 @@ export function AttachmentPreviewDialog({ attachment, onOpenChange }: { attachme
           description={`${kinds[a.kindGuess]} · ${formatBytes(a.size, locale)}`}
           size="xl"
         >
-          <div className="flex h-160 max-h-full min-h-80 flex-col overflow-hidden rounded-md border border-border bg-surface-muted">
+          <div className="flex min-h-80 flex-auto basis-160 flex-col overflow-hidden rounded-md border border-border bg-surface-muted">
             {kind === "other" ? (
               <EmptyState icon={<FileText />} title={t.previewUnsupportedTitle} description={t.previewUnsupported} className="m-auto" />
             ) : file.status === "loading" ? (

@@ -37,8 +37,8 @@ export {
   type NavItem, type SidebarPosition, type SidebarProps, type SidebarFooterButtonProps, type SidebarUserProps,
 } from "./components/sidebar.js";
 export {
-  Stepper, WorkflowDiagram, layoutWorkflow,
-  type StepperProps, type StepperStep, type WorkflowDiagramProps, type FlowNode, type FlowEdge, type FlowNodeKind, type FlowNodeStatus,
+  Stepper, StepProgress, WorkflowDiagram, layoutWorkflow,
+  type StepperProps, type StepperStep, type StepProgressProps, type WorkflowDiagramProps, type FlowNode, type FlowEdge, type FlowNodeKind, type FlowNodeStatus,
 } from "./components/workflow.js";
 export { UiLocaleProvider, useUiLocale, useMessages, defineMessages, pickMessages, fill, intlLocale, UI_LOCALES, type UiLocale, type Messages } from "./lib/i18n.js";
 export {

@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
-import { layoutWorkflow, Stepper, WorkflowDiagram, type FlowEdge, type FlowNode } from "./workflow.js";
+import { layoutWorkflow, Stepper, StepProgress, WorkflowDiagram, type FlowEdge, type FlowNode } from "./workflow.js";
 
 const NODES: FlowNode[] = [
   { id: "start", kind: "start", title: "Bắt đầu", status: "done" },
@@ -224,5 +224,30 @@ describe("Stepper – cuộn tới bước đang xem", () => {
       client.mockRestore();
       setLeft.mockRestore();
     }
+  });
+});
+
+describe("StepProgress", () => {
+  const STEPS = [
+    { id: "create", label: "Tạo hồ sơ" },
+    { id: "upload", label: "Upload chứng từ" },
+    { id: "ocr", label: "OCR & kiểm tra" },
+    { id: "agent", label: "AI Agent xử lý" },
+  ];
+
+  it("hiện tên bước hiện tại, số thứ tự và trạng thái", async () => {
+    const { container, rerender } = render(<StepProgress steps={STEPS} currentId="ocr" />);
+    expect(screen.getByText("OCR & kiểm tra")).toBeInTheDocument();
+    expect(screen.getByText("Bước 3/4")).toBeInTheDocument();
+    expect(screen.getByText("3/4")).toBeInTheDocument();
+    await expectNoA11yViolations(container);
+
+    rerender(<StepProgress steps={STEPS} currentId="agent" state="complete" />);
+    expect(screen.getByText("Đã hoàn tất")).toBeInTheDocument();
+    expect(screen.queryByText("AI Agent xử lý")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-slot="step-progress"]')).toHaveAttribute("data-state", "complete");
+
+    rerender(<StepProgress steps={STEPS} currentId="upload" state="stopped" />);
+    expect(screen.getByText("Đã dừng")).toBeInTheDocument();
   });
 });

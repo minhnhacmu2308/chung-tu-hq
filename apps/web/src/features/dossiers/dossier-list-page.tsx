@@ -1,6 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, fill, IconTile, PageHeader, RecordCard, SegmentedControl, Stack, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
+  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, fill, IconTile, PageHeader, RecordCard, SegmentedControl, Stack, StepProgress, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Container, Download, FolderOpen, Package, Plane, Plus, Ship, TrainFront, Truck, XCircle, type LucideIcon } from "lucide-react";
@@ -24,6 +24,14 @@ const TRANSPORT_ICON: Record<Dossier["transportMode"], LucideIcon> = {
 type Row = Dossier & { stepLabel: string; statusLabel: string; ownerName: string };
 
 type Scope = "ALL" | Direction;
+
+/** Hồ sơ đã thông quan → tô xong cả quy trình; đã hủy → thanh xám. */
+const stepState = (status: DossierStatus) => (status === "CLEARED" ? "complete" : status === "CANCELLED" ? "stopped" : "active");
+
+function DossierStep({ dossier, stepLabels }: { dossier: Dossier; stepLabels: Record<Dossier["step"], string> }) {
+  const steps = STEP_ORDER.map((id) => ({ id, label: stepLabels[id] }));
+  return <StepProgress steps={steps} currentId={dossier.step} state={stepState(dossier.status)} />;
+}
 
 type ListMessages = Record<keyof (typeof DOSSIER_LIST_MESSAGES)["vi"], string>;
 
@@ -59,10 +67,11 @@ const buildColumns = (t: ListMessages, stepLabels: Record<Dossier["step"], strin
   col.accessor("dueDate", { header: t.colDue, size: 135, minSize: 120, cell: (c) => <DueBadge dossier={c.row.original} /> }),
   col.accessor("stepLabel", {
     header: t.colStep,
-    size: 150,
-    minSize: 140,
+    size: 190,
+    minSize: 160,
     sortFn: (a, b) => STEP_ORDER.indexOf(a.original.step) - STEP_ORDER.indexOf(b.original.step),
     meta: { filter: "select", filterOptions: STEP_ORDER.map((s) => ({ value: stepLabels[s], label: stepLabels[s] })) },
+    cell: (c) => <DossierStep dossier={c.row.original} stepLabels={stepLabels} />,
   }),
   col.accessor("statusLabel", {
     header: t.colStatus,
@@ -206,6 +215,7 @@ function ListInner() {
                   select={parts.select}
                   actions={parts.actions}
                   fields={[
+                    { label: t.colStep, value: <DossierStep dossier={r} stepLabels={stepLabels} />, wide: true },
                     {
                       label: t.colType,
                       value: (
@@ -216,10 +226,9 @@ function ListInner() {
                       ),
                     },
                     { label: t.colValue, value: <span className="tabular-nums">{formatMoney(r.invoiceValue, r.currency)}</span> },
-                    { label: t.colStep, value: r.stepLabel },
                     { label: t.colDue, value: <DueBadge dossier={r} /> },
+                    { label: t.colOwner, value: r.ownerName },
                   ]}
-                  footer={`${t.colOwner}: ${r.ownerName}`}
                 />
                 );
               }}

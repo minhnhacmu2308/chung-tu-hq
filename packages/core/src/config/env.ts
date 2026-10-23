@@ -36,6 +36,11 @@ export const EnvSchema = z
      */
     APP_MASTER_KEYS: z.string().optional(),
     APP_URL: z.url(),
+    /**
+     * Số reverse proxy tin cậy đứng trước web (Caddy/nginx/Cloudflare…): IP khách lấy ở vị trí thứ N từ cuối chuỗi X-Forwarded-For
+     * (proxy ghi thêm vào cuối; phần đầu do khách gửi có thể giả). 0 = không có proxy → bỏ qua X-Forwarded-For.
+     */
+    TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
     AI_PROVIDER: z.enum(["fake", "claude"]).default("fake"),
     ANTHROPIC_API_KEY: z.string().optional(),
     AI_MODEL: z.string().default("claude-sonnet-5-5"),

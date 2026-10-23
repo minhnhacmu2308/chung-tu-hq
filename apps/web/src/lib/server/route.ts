@@ -82,8 +82,17 @@ export async function parseBody<T>(req: NextRequest, schema: ZodType<T>): Promis
   return schema.parse(await json(req));
 }
 
-export function clientIp(req: NextRequest): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "0.0.0.0";
+/**
+ * IP khách sau `trustedHops` reverse proxy: proxy tin cậy ghi IP thật vào CUỐI X-Forwarded-For, phần đầu do khách gửi có thể giả
+ * (lách giới hạn đăng nhập/đăng ký). `trustedHops` = 0 → không tin X-Forwarded-For. Không có gì → "unknown" (gom một nhóm, vẫn bị giới hạn).
+ */
+export function clientIp(req: NextRequest, trustedHops = 1): string {
+  const chain = (req.headers.get("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (trustedHops > 0 && chain.length > 0) {
+    const fromRight = Math.min(trustedHops, chain.length);
+    return chain[chain.length - fromRight]!;
+  }
+  return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 /** Thân JSON của lỗi: {code, message} + mã lý do và tham số khi có. */

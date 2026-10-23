@@ -24,6 +24,8 @@ import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure
 import { createCustomsInfrastructure, createIntegrationInfrastructure, createVnaccsCredentialsReader, envVnaccsCredentials } from "@kb/core/modules/integration/infrastructure";
 import { asOrgId, asUserId, dec, QUEUE_NAMES, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
 import { Queue } from "bullmq";
+import type { NextRequest } from "next/server";
+import { clientIp } from "@/lib/server/route";
 import { sql } from "drizzle-orm";
 import { Redis } from "ioredis";
 
@@ -300,6 +302,11 @@ function build(): Container {
     admin,
     resetDemo: () => runSeed(env.DATABASE_ADMIN_URL),
   };
+}
+
+/** IP khách theo số proxy tin cậy (TRUSTED_PROXY_HOPS) – dùng cho giới hạn tần suất đăng nhập/đăng ký/tra MST. */
+export function clientIpOf(req: NextRequest): string {
+  return clientIp(req, getContainer().env.TRUSTED_PROXY_HOPS);
 }
 
 /** Kiểm cấu hình môi trường lúc khởi động (instrumentation.ts) – ném Error liệt kê biến sai, không mở kết nối. */

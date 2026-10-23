@@ -17,6 +17,12 @@ describe("check-design-tokens", () => {
     assert.deepEqual(rules("apps/web/a.tsx", `className="text-white"`), ["tw-palette"]);
   });
 
+  it("chặn bo góc ngoài thang (không theo cấu hình giao diện)", () => {
+    assert.deepEqual(rules("packages/ui/src/c.tsx", `className="rounded-xl border"`), ["radius-off-scale"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `className="hover:rounded-t-2xl"`), ["radius-off-scale"]);
+    assert.deepEqual(rules("packages/ui/src/c.tsx", `className="rounded-lg rounded-t-md rounded-full rounded-sm"`), []);
+  });
+
   it("chặn giá trị màu tùy ý, dark:, màu trong style inline", () => {
     assert.ok(rules("packages/ui/src/c.tsx", `className="bg-[#fff]"`).includes("arbitrary-color"));
     assert.ok(rules("packages/ui/src/c.tsx", `className="bg-[var(--kb-color-primary)]"`).includes("arbitrary-color"));

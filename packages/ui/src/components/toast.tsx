@@ -125,7 +125,7 @@ function ToastCard({ item, closeLabel }: { item: ToastItem; closeLabel: string }
       // Chỉ tính hiệu ứng đóng của chính toast, không tính thanh đếm ngược bên trong.
       onAnimationEnd={(e) => (e.target === e.currentTarget && !item.open ? removeToast(item.id) : undefined)}
       className={cn(
-        "group/toast pointer-events-auto relative isolate flex w-full items-start gap-3 overflow-hidden rounded-xl border border-border bg-surface p-3.5 pr-11 text-fg shadow-lg",
+        "group/toast pointer-events-auto relative isolate flex w-full items-start gap-3 overflow-hidden rounded-lg border border-border bg-surface p-3.5 pr-11 text-fg shadow-lg",
         "motion-safe:data-[state=open]:animate-toast-in motion-safe:data-[state=closed]:animate-toast-out",
         "data-[swipe=move]:translate-x-(--radix-toast-swipe-move-x) data-[swipe=cancel]:translate-x-0 motion-safe:data-[swipe=cancel]:transition-transform",
       )}
@@ -134,7 +134,7 @@ function ToastCard({ item, closeLabel }: { item: ToastItem; closeLabel: string }
       <span
         aria-hidden="true"
         className={cn(
-          "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-current/15 [&>svg]:h-4.5 [&>svg]:w-4.5",
+          "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md ring-1 ring-current/15 [&>svg]:h-4.5 [&>svg]:w-4.5",
           "motion-safe:animate-pop-in",
           look.tile,
         )}

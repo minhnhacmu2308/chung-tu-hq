@@ -25,6 +25,7 @@ export const RULES = [
   { id: "tw-palette", scope: "all", test: new RegExp(`(?<![\\w-])(?:[\\w-]+:)*(?:${UTIL})-(?:(?:${PALETTE})-\\d{2,3}|white|black)(?![\\w-])`), msg: "Màu mặc định của Tailwind (đã bị tắt). Dùng token ngữ nghĩa: text-danger-subtle-fg, bg-surface-muted…" },
   { id: "arbitrary-color", scope: "all", test: /-\[(#|rgb|hsl|oklch|oklab|color-mix|var\(--kb-)/, msg: "Giá trị màu tùy ý trong class. Dùng utility token (bg-primary…)." },
   { id: "dark-variant", scope: "all", test: /(?<![\w-])dark:[\w[-]/, msg: "Không dùng `dark:`. Token tự đổi theo sáng/tối (light-dark())." },
+  { id: "radius-off-scale", scope: "all", test: /(?<![\w-])(?:[\w-]+:)*rounded(?:-(?:[trblse]|tl|tr|bl|br|ss|se|es|ee))?-(?:xs|xl|2xl|3xl|4xl)(?![\w-])/, msg: "Bo góc ngoài thang. Chỉ có rounded-sm/md/lg/full – theo cấu hình giao diện (Bo góc) của doanh nghiệp; xl/2xl… không có giá trị nên mất bo góc." },
   { id: "inline-color", scope: "all", test: /style=\{\{[^}]*\b(color|background|backgroundColor|borderColor|fill|stroke|boxShadow)\s*:/, msg: "Màu trong style inline. Dùng class token." },
   { id: "apps-arbitrary-value", scope: "apps", test: /(?<![\w-])(?:[\w-]+:)*[a-z][\w-]*-\[[^\]\s]+\]/, msg: "Giá trị tùy ý trong app. Dùng thang spacing/size chuẩn hoặc thêm vào @kb/ui." },
   { id: "apps-inline-style", scope: "apps", test: /style=\{\{/, msg: "Style inline trong app. Dùng class token / component @kb/ui." },

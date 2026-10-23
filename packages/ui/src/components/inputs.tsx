@@ -203,7 +203,7 @@ export function Select({ className, options, placeholder, value, defaultValue, o
           data-slot="select-content"
           className={cn(
             "z-50 max-h-[min(20rem,var(--radix-popover-content-available-height))] min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)]",
-            "overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface p-1 text-fg shadow-lg outline-none motion-safe:animate-pop-in",
+            "overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface p-1 text-fg shadow-lg outline-none motion-safe:animate-pop-in",
           )}
         >
           {items.map((o, i) => {

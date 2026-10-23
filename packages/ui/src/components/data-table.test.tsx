@@ -7,6 +7,7 @@ import { Button } from "./button.js";
 import { UiLocaleProvider } from "../lib/i18n.js";
 import { createDataTableColumnHelper, DataTable, type DataTableProps } from "./data-table.js";
 import { RecordCard } from "./record-card.js";
+import { chooseOption } from "../../test/select.js";
 
 type HoSo = { id: string; code: string; partner: string; value: number };
 const col = createDataTableColumnHelper<HoSo>();
@@ -297,7 +298,7 @@ describe("DataTable – lọc theo cột", () => {
     expect(screen.queryByRole("combobox", { name: "Lọc theo Trạng thái" })).not.toBeInTheDocument();
     await openFilters();
     const dialog = screen.getByRole("dialog", { name: "Bộ lọc" });
-    await userEvent.selectOptions(within(dialog).getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Đã duyệt");
+    await chooseOption(within(dialog).getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Đã duyệt");
     expect(screen.getByRole("button", { name: "Bộ lọc (1)" })).toBeInTheDocument();
     await expectNoA11yViolations(document.body);
   });
@@ -313,10 +314,12 @@ describe("DataTable – lọc theo cột", () => {
     setupVn();
     await openFilters();
     const select = screen.getByRole("combobox", { name: "Lọc theo Trạng thái" });
-    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Tất cả", "Chờ duyệt", "Đã duyệt", "Nháp"]);
-    await userEvent.selectOptions(select, "Đã duyệt");
+    await userEvent.click(select);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Tất cả", "Chờ duyệt", "Đã duyệt", "Nháp"]);
+    await userEvent.click(screen.getByRole("option", { name: "Đã duyệt" }));
     expect(vnCodes()).toEqual(["HS-001", "HS-003"]);
-    await userEvent.selectOptions(select, "Tất cả");
+    expect(select).toHaveTextContent("Đã duyệt");
+    await chooseOption(select, "Tất cả");
     expect(vnCodes()).toHaveLength(4);
   });
 
@@ -330,7 +333,7 @@ describe("DataTable – lọc theo cột", () => {
     ]);
     setupVn({ columns });
     await openFilters();
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Bản nháp");
+    await chooseOption(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Bản nháp");
     expect(vnCodes()).toEqual(["HS-004"]);
   });
 
@@ -339,13 +342,13 @@ describe("DataTable – lọc theo cột", () => {
     const search = screen.getByRole("searchbox", { name: "Tìm trong bảng" });
     await userEvent.type(search, "hai");
     await openFilters();
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Chờ duyệt");
+    await chooseOption(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Chờ duyệt");
     expect(vnCodes()).toEqual(["HS-002"]);
     await userEvent.click(screen.getByRole("button", { name: "Xóa bộ lọc" }));
     expect(vnCodes()).toHaveLength(4);
     expect(search).toHaveValue("");
     if (!screen.queryByRole("dialog", { name: "Bộ lọc" })) await openFilters();
-    expect(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" })).toHaveTextContent("Tất cả");
     expect(screen.queryByRole("button", { name: "Xóa bộ lọc" })).not.toBeInTheDocument();
   });
 
@@ -578,13 +581,13 @@ describe("DataTable – dạng thẻ", () => {
   it("dạng thẻ: sắp xếp bằng chọn cột + đổi chiều; ô lọc theo cột thu gọn sau nút Bộ lọc (đếm bộ lọc đang bật)", async () => {
     render(<DataTable aria-label="Hồ sơ khai báo" columns={FILTER_COLUMNS} data={DATA} getRowId={(r) => r.id} renderCard={card} defaultView="cards" pagination={false} />);
     expect(cardTitles()).toEqual(["HS-002", "HS-001", "HS-003"]);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Sắp xếp theo" }), "code");
+    await chooseOption(screen.getByRole("combobox", { name: "Sắp xếp theo" }), "Mã hồ sơ");
     expect(cardTitles()).toEqual(["HS-001", "HS-002", "HS-003"]);
     await userEvent.click(screen.getByRole("button", { name: /Đổi chiều sắp xếp/ }));
     expect(cardTitles()).toEqual(["HS-003", "HS-002", "HS-001"]);
     expect(screen.queryByRole("combobox", { name: "Lọc theo Đối tác" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" }));
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Lọc theo Đối tác" }), "Artemide");
+    await chooseOption(screen.getByRole("combobox", { name: "Lọc theo Đối tác" }), "Artemide");
     expect(cardTitles()).toEqual(["HS-001"]);
     expect(screen.getByRole("button", { name: "Bộ lọc (1)" })).toHaveAttribute("aria-expanded", "true");
   });

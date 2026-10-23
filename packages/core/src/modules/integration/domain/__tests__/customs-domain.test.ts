@@ -81,6 +81,16 @@ describe("declaration-to-fpt", () => {
       expect((b.request as { objVN_IDA_VANDON: Record<string, unknown> }).objVN_IDA_VANDON["vD_COC"], ptvc).toBeUndefined();
     }
   });
+  it("số không hợp lệ (dấu phẩy, chữ) → issues nêu ô, không âm thầm gửi 0; trống → bỏ ô; số quá 15 chữ số → cảnh báo", () => {
+    const bad = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, TONG_TG: { value: "1,250.00" } }, items: [{ ...PAYLOAD.items[0]!, amount: "N/A" }] });
+    expect(bad.issues.filter((i) => /không hợp lệ/.test(i))).toEqual([expect.stringContaining('TK_IP4: giá trị số không hợp lệ "1,250.00"'), expect.stringContaining("HAG_BPR: giá trị số không hợp lệ \"N/A\"")]);
+    expect((bad.request as { objVN_IDA: Record<string, unknown> }).objVN_IDA["tK_IP4"]).toBeUndefined();
+    expect(JSON.stringify(bad.request)).not.toContain('"haG_BPR":0');
+    const big = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, TONG_TG: { value: "12345678901234567.89" } } });
+    expect(big.warnings.join(" ")).toMatch(/TK_IP4.*15 chữ số/);
+    expect(buildFptRequest(PAYLOAD).issues).toEqual([]);
+  });
+
   it("thiếu mã địa điểm lưu kho (bắt buộc VD_ST) → issues; EDA dùng buyer + container CON_C01", () => {
     const noKho = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, KHO: { value: "" } } });
     expect(noKho.issues.join(" ")).toMatch(/vD_ST/);

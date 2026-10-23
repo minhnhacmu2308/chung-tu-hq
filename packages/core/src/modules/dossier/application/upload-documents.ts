@@ -4,7 +4,7 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, type DomainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { canModify } from "../domain/status.js";
-import { classifyByFileName, validateUpload } from "../domain/upload-rules.js";
+import { classifyByFileName, extensionOf, sniffMime, validateUpload } from "../domain/upload-rules.js";
 import { toDocument } from "./_dto.js";
 import { expandZips } from "./_unzip.js";
 import type { DocumentRow, DossierDeps, UploadFile } from "./ports.js";
@@ -19,9 +19,12 @@ export async function uploadDocuments(deps: DossierDeps, ctx: Ctx, dossierId: st
   const expanded = await expandZips(files, deps.unzipper);
   if (expanded.length === 0) return err(domainError("FILE_INVALID", "Không có file PDF/ảnh nào để tải lên"));
 
-  // Kiểm tra file trước khi chạm DB.
-  const inspected: { f: UploadFile; pages: number; sha256: string }[] = [];
-  for (const f of expanded) {
+  // Kiểm tra file trước khi chạm DB. Loại file lấy theo byte đầu, không tin Content-Type của trình duyệt.
+  const inspected: { f: UploadFile; pages: number; sha256: string; ext: string }[] = [];
+  for (const raw of expanded) {
+    const actual = sniffMime(raw.bytes);
+    if (actual === null || actual === "application/zip") return err(domainError("FILE_INVALID", `${raw.name}: nội dung không phải PDF hoặc ảnh PNG/JPG`));
+    const f: UploadFile = { ...raw, mime: actual };
     let info: { pages: number; encrypted: boolean };
     try {
       info = await deps.pdf.inspect(f.bytes, f.mime);
@@ -31,7 +34,7 @@ export async function uploadDocuments(deps: DossierDeps, ctx: Ctx, dossierId: st
     }
     const v = validateUpload({ name: f.name, mime: f.mime, sizeBytes: f.bytes.length, pages: info.pages, encrypted: info.encrypted }, { maxPagesPerFile: MAX_PAGES_PER_FILE });
     if (!v.ok) return v;
-    inspected.push({ f, pages: info.pages, sha256: createHash("sha256").update(f.bytes).digest("hex") });
+    inspected.push({ f, pages: info.pages, sha256: createHash("sha256").update(f.bytes).digest("hex"), ext: extensionOf(actual) });
   }
 
   const created = await deps.uow.asOrg(ctx, async (r) => {
@@ -43,9 +46,8 @@ export async function uploadDocuments(deps: DossierDeps, ctx: Ctx, dossierId: st
     const totalPages = existing.reduce((n, x) => n + x.pages, 0) + inspected.reduce((n, x) => n + x.pages, 0);
     if (!(await deps.quota.check(ctx.orgId, "PAGES", totalPages))) return err(domainError("QUOTA_EXCEEDED", "Vượt số trang cho một hồ sơ theo gói dịch vụ"));
     const rows: DocumentRow[] = [];
-    for (const { f, pages, sha256 } of inspected) {
+    for (const { f, pages, sha256, ext } of inspected) {
       const id = deps.idGen.next("doc");
-      const ext = f.name.toLowerCase().split(".").pop() ?? "bin";
       const storageKey = `orgs/${ctx.orgId}/dossiers/${dossierId}/${id}/${sha256}.${ext}`;
       await deps.storage.put(storageKey, f.bytes, f.mime);
       const row: DocumentRow = {

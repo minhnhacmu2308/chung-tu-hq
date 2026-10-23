@@ -23,6 +23,7 @@ Quy tắc nào máy kiểm tra được thì đã cấu hình trong lint/depcrui
 - Dữ liệu từ ngoài (HTTP, form, AI, file, queue) **luôn** parse bằng Zod ở biên trước khi dùng.
 - Lỗi nghiệp vụ dự kiến trả `Result<T, DomainError>` (không throw). Chỉ throw cho lỗi lập trình/hạ tầng. `DomainError` có `code` cố định để UI dịch sang tiếng Việt.
 - Không import sâu: `import { x } from "@kb/core/modules/dossier"` (đúng), không `.../dossier/infrastructure/repo` (sai).
+- Log phía server bằng `createLogger` (`@kb/core/shared`): JSON một dòng, kèm `requestId`/`jobId`/`orgId`/`dossierId`; không `console.*` trong route handler và worker; không bao giờ log khóa, token, mật khẩu (logger tự che theo tên khóa nhưng đừng dựa vào đó).
 - Đặt tên: file `kebab-case.ts`, kiểu/Component `PascalCase`, hàm/biến `camelCase`, hằng `SCREAMING_SNAKE`. Use case đặt bằng động từ: `uploadDocuments`, `runValidation`.
 - Thuật ngữ nghiệp vụ trong code dùng tiếng Anh thống nhất (xem bảng dưới); UI hiển thị tiếng Việt.
 

@@ -6,7 +6,7 @@ import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { RecordingNotifier } from "../../../../shared/notifier.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
 import { DOSSIER, hansol, ORG } from "../../domain/test/shipment.js";
-import { getAgentRun, runAgent, startAgentRun } from "../agent-run.js";
+import { failAgentRun, getAgentRun, runAgent, startAgentRun } from "../agent-run.js";
 import { getDeclarationSnapshot, listDeclarationsForCustoms, markDeclarationDraft, markDeclarationSubmitted } from "../customs-bridge.js";
 import type { DeclarationDeps } from "../ports.js";
 import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit, ScriptedHs } from "../test/fakes.js";
@@ -208,6 +208,23 @@ describe("agent run – nhánh biên", () => {
     expect(v.run.tasks.find((t) => t.id === "DIGITIZE")).toMatchObject({ status: "DONE", message: "Đã số hóa 0 chứng từ" });
     expect(dossiers.rows[0]!.status).toBe("PROCESSING");
     expect(notifier.sent[0]?.draft.body).toBe("Dữ liệu số hóa đã sẵn sàng.");
+  });
+
+  it("failAgentRun (hết lượt thử): run ERROR + nhật ký lỗi, task dở → ERROR, hồ sơ về NEEDS_REVIEW, báo chủ hồ sơ; gọi lại → không đổi", async () => {
+    unwrap(await startAgentRun(deps, declarant, D, "DECLARATION"));
+    const { agentRunId } = lastJob();
+    unwrap(await failAgentRun(deps, { orgId: ORG_ID, userId: "usr_chau", dossierId: D, agentRunId, error: "HSCodePro 503 Service Unavailable" }));
+    const run = uow.data.agentRuns.find((r) => r.id === agentRunId)!;
+    expect(run.status).toBe("ERROR");
+    expect(run.finishedAt).not.toBeNull();
+    expect(run.tasks.every((t) => t.status === "ERROR")).toBe(true);
+    expect(run.log.at(-1)).toMatchObject({ tone: "warning", text: expect.stringContaining("HSCodePro 503") });
+    expect(dossiers.rows[0]!.status).toBe("NEEDS_REVIEW");
+    expect(notifier.sent.at(-1)?.draft.title).toContain("AI Agent dừng");
+    const sentBefore = notifier.sent.length;
+    unwrap(await failAgentRun(deps, { orgId: ORG_ID, userId: "usr_chau", dossierId: D, agentRunId, error: "lại lỗi" }));
+    expect(notifier.sent).toHaveLength(sentBefore);
+    expect(errCode(await failAgentRun(deps, { orgId: ORG_ID, userId: "usr_chau", dossierId: D, agentRunId: "run_khong_co", error: "x" }))).toBe("NOT_FOUND");
   });
 
   it("không có notifier → vẫn hoàn tất; lỗi không phải Error → ghi nhật ký rồi ném lại", async () => {

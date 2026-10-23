@@ -302,6 +302,11 @@ function build(): Container {
   };
 }
 
+/** Kiểm cấu hình môi trường lúc khởi động (instrumentation.ts) – ném Error liệt kê biến sai, không mở kết nối. */
+export function assertEnv(): void {
+  loadEnv();
+}
+
 // Next dev tải lại module nhiều lần → giữ một instance trên globalThis để không rò kết nối.
 const g = globalThis as unknown as { __kbContainer?: Container };
 export function getContainer(): Container {

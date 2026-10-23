@@ -37,7 +37,14 @@ export const lineItems = pgTable(
     hsDetail: jsonb("hs_detail"),
     ...timestamps(),
   },
-  (t) => [uniqueIndex("line_items_dossier_line_uq").on(t.dossierId, t.lineNo), index("line_items_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("line_items_rls")],
+  (t) => [
+    uniqueIndex("line_items_dossier_line_uq").on(t.dossierId, t.lineNo),
+    index("line_items_org_dossier_idx").on(t.orgId, t.dossierId),
+    // hs-poll / hs-answer tra dòng theo lượt và mục HSCodePro.
+    index("line_items_hs_job_idx").on(t.orgId, t.hsJobId),
+    index("line_items_hs_item_idx").on(t.orgId, t.hsItemId),
+    orgRls("line_items_rls"),
+  ],
 ).enableRLS();
 
 /** Gợi ý HS từ classifier cho một dòng hàng (nhiều ứng viên). */

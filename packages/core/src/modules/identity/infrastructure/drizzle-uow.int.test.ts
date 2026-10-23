@@ -94,7 +94,9 @@ describe("DrizzleIdentityUow", () => {
     await uow.system((r) => r.authTokens.insert({ id: "tok_old", userId: "usr_chau", orgId: null, kind: "VERIFY_EMAIL", tokenHash: "old", expiresAt: past, usedAt: null }));
     expect((await uow.system((r) => r.authTokens.findValid("VERIFY_EMAIL", "ok", new Date())))?.id).toBe("tok_ok");
     expect(await uow.system((r) => r.authTokens.findValid("VERIFY_EMAIL", "old", new Date()))).toBeNull();
-    await uow.system((r) => r.authTokens.markUsed("tok_ok", new Date()));
+    // consume nguyên tử: lần đầu true, lần hai false (token đã dùng).
+    expect(await uow.system((r) => r.authTokens.consume("tok_ok", new Date()))).toBe(true);
+    expect(await uow.system((r) => r.authTokens.consume("tok_ok", new Date()))).toBe(false);
     expect(await uow.system((r) => r.authTokens.findValid("VERIFY_EMAIL", "ok", new Date()))).toBeNull();
   });
   it("notifications: list theo user, markAllRead chỉ ảnh hưởng user đó", async () => {

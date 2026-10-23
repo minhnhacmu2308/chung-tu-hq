@@ -220,6 +220,29 @@ describe("token một lần", () => {
     expect((await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META)).ok).toBe(false);
     expect((await login(deps, { email: "chau.le@anphat-demo.vn", password: "matkhaumoi1" }, META)).ok).toBe(true);
   });
+  it("đặt lại mật khẩu: hủy mọi phiên đang đăng nhập của người đó; token dùng lần 2 → TOKEN_INVALID", async () => {
+    // random mặc định trả cùng một chuỗi → mọi token trùng nhau; ở đây cần phiên phân biệt được.
+    let seq = 0;
+    deps.random = (n) => Buffer.alloc(n, ++seq);
+    const { sessionToken: s1 } = unwrap(await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META));
+    const { sessionToken: s2 } = unwrap(await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META));
+    const { sessionToken: other } = unwrap(await login(deps, { email: "b@b.vn", password: "demo1234" }, META));
+    unwrap(await requestPasswordReset(deps, "chau.le@anphat-demo.vn", META));
+    const token = mailer.sent[0]!.text.match(/token=([A-Za-z0-9_-]+)/)![1]!;
+    unwrap(await resetPassword(deps, { token, password: "matkhaumoi1" }));
+    expect((await getSession(deps, s1)).ok).toBe(false);
+    expect((await getSession(deps, s2)).ok).toBe(false);
+    expect((await getSession(deps, other)).ok).toBe(true);
+    expect(errCode(await resetPassword(deps, { token, password: "matkhaukhac2" }))).toBe("TOKEN_INVALID");
+    expect((await login(deps, { email: "chau.le@anphat-demo.vn", password: "matkhaumoi1" }, META)).ok).toBe(true);
+  });
+  it("hai request cùng một token đặt lại mật khẩu chạy song song: chỉ một bên thành công", async () => {
+    unwrap(await requestPasswordReset(deps, "chau.le@anphat-demo.vn", META));
+    const token = mailer.sent[0]!.text.match(/token=([A-Za-z0-9_-]+)/)![1]!;
+    const results = await Promise.all([resetPassword(deps, { token, password: "matkhau-a1" }), resetPassword(deps, { token, password: "matkhau-b2" })]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok).map(errCode)).toEqual(["TOKEN_INVALID"]);
+  });
   it("acceptInvite: membership INVITED → ACTIVE + session; token hết hạn → TOKEN_INVALID", async () => {
     uow.seed({
       users: [{ id: "usr_linh", email: "linh@anphat-demo.vn", passwordHash: "h:tam", name: "Linh", emailVerifiedAt: null, createdAt: day(0) }],

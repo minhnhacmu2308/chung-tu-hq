@@ -17,9 +17,9 @@ export async function acceptInvite(deps: IdentityDeps, input: AcceptInviteInput)
   return deps.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId(t.userId) }, async (r) => {
     const membership = await r.memberships.find(orgId, t.userId);
     if (!membership) return err(domainError("TOKEN_INVALID", "Lời mời không còn hiệu lực"));
+    if (!(await r.authTokens.consume(t.id, now))) return err(domainError("TOKEN_INVALID", "Lời mời không hợp lệ hoặc đã hết hạn"));
     await r.users.update(t.userId, { name: input.name, passwordHash, emailVerifiedAt: now });
     if (membership.status === "INVITED") await r.memberships.update(membership.id, { status: "ACTIVE" });
-    await r.authTokens.markUsed(t.id, now);
     const sessionToken = await createSession(deps, r, t.userId, orgId);
     return ok({ sessionToken });
   });

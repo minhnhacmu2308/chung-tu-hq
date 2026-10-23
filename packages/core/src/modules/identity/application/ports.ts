@@ -51,12 +51,15 @@ export interface IdentityRepos {
     insert(row: SessionRow): Promise<void>;
     touch(id: string, lastSeenAt: Date, expiresAt: Date): Promise<void>;
     delete(id: string): Promise<void>;
+    /** Hủy mọi phiên của một người (đổi mật khẩu, khóa tài khoản). Trả số phiên đã xóa. */
+    deleteByUser(userId: string): Promise<number>;
     lastSeenByUsers(userIds: string[]): Promise<Record<string, Date>>;
   };
   authTokens: {
     findValid(kind: AuthTokenKind, hash: string, now: Date): Promise<AuthTokenRow | null>;
     insert(row: AuthTokenRow): Promise<void>;
-    markUsed(id: string, at: Date): Promise<void>;
+    /** Đánh dấu đã dùng – nguyên tử: chỉ thành công khi token chưa dùng (hai request cùng lúc chỉ một bên được). */
+    consume(id: string, at: Date): Promise<boolean>;
   };
   joinRequests: {
     listPending(orgId: string): Promise<JoinRequestRow[]>;
@@ -94,6 +97,8 @@ export interface IdentityUow {
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
   verify(hash: string, password: string): Promise<boolean>;
+  /** Hash hợp lệ của một mật khẩu không ai dùng: đăng nhập với email lạ vẫn so sánh để thời gian phản hồi không lộ email có tồn tại hay không. */
+  readonly dummyHash: string;
 }
 export interface RateLimiter {
   hit(key: string, limit: number, windowSec: number): Promise<{ allowed: boolean; remaining: number }>;

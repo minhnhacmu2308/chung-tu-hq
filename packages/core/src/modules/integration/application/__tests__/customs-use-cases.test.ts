@@ -181,6 +181,18 @@ describe("submitDeclaration", () => {
     expect(errCode(await submitDeclaration(deps, declarant, D, "cert_1"))).toBe("ALREADY_SUBMITTED");
     expect(uow.data.outbox).toHaveLength(1);
   });
+  it("lần trước crash sau khi đánh dấu SUBMITTED mà chưa đẩy job (outbox PENDING, attempts 0) → bấm truyền lại đẩy lại đúng job đó", async () => {
+    const r = unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    queue.jobs.length = 0; // mô phỏng job chưa từng được đẩy
+    expect(errCode(await submitDeclaration(deps, declarant, D, "cert_1"))).toBe("ALREADY_SUBMITTED");
+    expect(queue.jobs).toEqual([{ name: "customs-send", payload: { orgId: ORG, userId: "usr_chau", outboxId: r.outboxId }, jobId: `customs-send:${r.outboxId}` }]);
+    expect(uow.data.outbox).toHaveLength(1);
+    // Job đã chạy (attempts > 0) thì không đẩy lại.
+    uow.data.outbox[0]!.attempts = 1;
+    queue.jobs.length = 0;
+    expect(errCode(await submitDeclaration(deps, declarant, D, "cert_1"))).toBe("ALREADY_SUBMITTED");
+    expect(queue.jobs).toHaveLength(0);
+  });
 });
 
 describe("customs-send / poll", () => {

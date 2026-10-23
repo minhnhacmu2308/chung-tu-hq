@@ -51,7 +51,11 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const base = outbox.filter((o) => o.operation === op);
   const last = base.at(-1);
   if (!last) return err(domainError("INVALID_STATE", `Chưa gửi ${op} lần nào`));
-  if (last.status === "PENDING" && last.attempts < MAX_ATTEMPTS) return ok({ resent: false, message: `${OPERATION_LABELS[op]} đang được gửi` });
+  if (last.status === "PENDING" && last.attempts < MAX_ATTEMPTS) {
+    // attempts = 0: có thể lần trước ghi outbox xong nhưng chưa kịp đẩy job → đẩy lại (jobId trùng là idempotent) thay vì báo "đang gửi" mãi.
+    if (last.attempts === 0) await deps.queue.enqueue("customs-send", { orgId: ctx.orgId, userId: ctx.userId, outboxId: last.id }, { jobId: `customs-send:${last.id}` });
+    return ok({ resent: false, message: `${OPERATION_LABELS[op]} đang được gửi` });
+  }
   if (last.status === "SENT") return err(domainError("INVALID_STATE", `${OPERATION_LABELS[op]} đã thành công – không gửi lại`));
   if (last.status === "PENDING") await deps.uow.asOrg(ctx, (r) => r.outbox.update(last.id, { status: "FAILED", updatedAt: now() }));
   const version = Number(/:v(\d+)/.exec(last.idempotencyKey)?.[1] ?? "1");

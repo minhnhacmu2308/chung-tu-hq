@@ -1,5 +1,5 @@
 // Wrapper cho route handler: parse input, map lỗi nghiệp vụ → HTTP, không lộ chi tiết lỗi hạ tầng.
-import type { DomainError, DomainErrorCode, Result } from "@kb/core/shared";
+import { createLogger, type DomainError, type DomainErrorCode, type Logger, type Result } from "@kb/core/shared";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError, type ZodType } from "zod";
 
@@ -50,6 +50,8 @@ const STATUS_BY_CODE: Partial<Record<DomainErrorCode, number>> = {
   HS_UNCONFIRMED: 409,
   BLOCKER_FAILED: 409,
   NOT_APPROVED: 409,
+  RATE_WEEK_CHANGED: 409,
+  SKILL_IN_USE: 409,
   INVALID_HS: 400,
   NOT_SUPPORTED: 422,
   NOT_ENOUGH_SAMPLES: 409,
@@ -87,25 +89,69 @@ export function clientIp(req: NextRequest): string {
 /** Thân JSON của lỗi: {code, message} + mã lý do và tham số khi có. */
 export const errorBody = (e: HttpError) => ({ code: e.code, message: e.message, ...(e.reason ? { reason: e.reason } : {}), ...(e.params ? { params: e.params } : {}) });
 
+export const REQUEST_ID_HEADER = "x-request-id";
+const REQUEST_ID_OK = /^[A-Za-z0-9._-]{8,128}$/;
+
+/** Mã định danh request: nhận từ reverse proxy (nếu hợp lệ) hoặc tự sinh; trả lại trong header để người dùng báo lỗi kèm mã. */
+export function requestIdOf(req: NextRequest): string {
+  const given = req.headers.get(REQUEST_ID_HEADER);
+  return given && REQUEST_ID_OK.test(given) ? given : crypto.randomUUID();
+}
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+/**
+ * Chống CSRF lớp hai (lớp một là cookie SameSite=Lax): request ghi (POST/PUT/PATCH/DELETE) gửi kèm `Origin` thì Origin phải
+ * cùng host với trang (host sau reverse proxy lấy từ `x-forwarded-host`). Trình duyệt luôn gửi Origin cho request cross-site
+ * và cho fetch cùng site; request không có Origin (curl, script nội bộ, test) được cho qua vì không mang cookie trình duyệt.
+ */
+export function crossSiteOrigin(req: NextRequest): boolean {
+  if (SAFE_METHODS.has(req.method)) return false;
+  if (req.headers.get("sec-fetch-site") === "cross-site") return true;
+  const origin = req.headers.get("origin");
+  if (!origin || origin === "null") return origin === "null";
+  const host = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || req.headers.get("host") || req.nextUrl.host;
+  try {
+    return new URL(origin).host !== host;
+  } catch {
+    return true;
+  }
+}
+
 type Params = Record<string, string>;
 type Handler = (req: NextRequest, params: Params) => Promise<Response | unknown>;
 
-/** Bọc handler: kết quả object → JSON 200; Response trả nguyên; lỗi → JSON {code,message,reason?,params?}. */
+let logger: Logger | undefined;
+const log = () => (logger ??= createLogger({ name: "web" }));
+/** Chỉ test: thay logger. */
+export const setRouteLogger = (l: Logger | undefined) => void (logger = l);
+
+/**
+ * Bọc handler: kết quả object → JSON 200; Response trả nguyên; lỗi → JSON {code,message,reason?,params?}.
+ * Mọi phản hồi mang `x-request-id`; lỗi 500 trả thêm `requestId` để đối chiếu log (không lộ message/stack).
+ */
 export function route(handler: Handler) {
   return async (req: NextRequest, ctx: { params: Promise<Params> }): Promise<Response> => {
+    const requestId = requestIdOf(req);
+    const startedAt = Date.now();
+    const finish = (res: Response) => {
+      res.headers.set(REQUEST_ID_HEADER, requestId);
+      return res;
+    };
     try {
+      if (crossSiteOrigin(req)) throw new HttpError(403, "CSRF", "Request không đến từ ứng dụng");
       const params = await ctx.params;
       const out = await handler(req, params);
-      if (out instanceof Response) return out;
-      if (out === undefined) return new NextResponse(null, { status: 204 });
-      return NextResponse.json(out);
+      if (out instanceof Response) return finish(out);
+      if (out === undefined) return finish(new NextResponse(null, { status: 204 }));
+      return finish(NextResponse.json(out));
     } catch (e) {
-      if (e instanceof HttpError) return NextResponse.json(errorBody(e), { status: e.status });
+      if (e instanceof HttpError) return finish(NextResponse.json(errorBody(e), { status: e.status }));
       if (e instanceof ZodError) {
-        return NextResponse.json({ code: "VALIDATION", message: "Dữ liệu không hợp lệ", issues: e.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, { status: 400 });
+        return finish(NextResponse.json({ code: "VALIDATION", message: "Dữ liệu không hợp lệ", issues: e.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, { status: 400 }));
       }
-      console.error(`[api] ${req.method} ${req.nextUrl.pathname}:`, e);
-      return NextResponse.json({ code: "INTERNAL", message: "Lỗi máy chủ, thử lại sau" }, { status: 500 });
+      log().error("lỗi không xử lý được trong route", { requestId, method: req.method, path: req.nextUrl.pathname, durationMs: Date.now() - startedAt, err: e });
+      return finish(NextResponse.json({ code: "INTERNAL", message: "Lỗi máy chủ, thử lại sau", requestId }, { status: 500 }));
     }
   };
 }

@@ -73,5 +73,5 @@ export const inboxAttachments = pgTable(
     addedAt: timestamp("added_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("inbox_attachments_org_message_idx").on(t.orgId, t.messageId), orgRls("inbox_attachments_rls")],
+  (t) => [index("inbox_attachments_org_message_idx").on(t.orgId, t.messageId), index("inbox_attachments_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("inbox_attachments_rls")],
 ).enableRLS();

@@ -51,6 +51,8 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 | Sửa prompt, schema trích xuất, đổi model AI | `changing-extraction-prompt-or-model` |
 | Thêm/sửa ánh xạ sang chỉ tiêu tờ khai | `mapping-declaration-fields` |
 
+Agent review (`.claude/agents/`): `hq-review-code` – review diff theo bất biến dự án, chỉ đọc và báo cáo (gọi khi được yêu cầu review hoặc trước khi mở PR).
+
 ## Trước khi báo "xong"
 
 `pnpm typecheck && pnpm lint && pnpm test` phải xanh. Đổi gì liên quan trích xuất → chạy `pnpm eval` và ghi kết quả vào PR.

@@ -7,3 +7,4 @@ export * from "./result.js";
 export * from "./queue.js";
 export * from "./notifier.js";
 export * from "./usage.js";
+export * from "./log.js";

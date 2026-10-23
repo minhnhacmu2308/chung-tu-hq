@@ -72,8 +72,13 @@ export class FakeDocuments implements DocumentsPort {
     const d = this.docs.find((x) => x.id === id && x.orgId === orgId);
     if (d) Object.assign(d, { status }, patch ?? {});
   }
-  async afterMerge(_o: string, dossierId: string, info: unknown) {
+  /** Hồ sơ đã báo "đọc xong" – mô phỏng adapter thật: chỉ lần gộp đầu tiên đủ điều kiện mới trả finishedNow. */
+  readonly finished = new Set<string>();
+  async afterMerge(_o: string, dossierId: string, info: { allDone: boolean }) {
     this.dossierUpdates.push({ dossierId, ...(info as object) });
+    if (!info.allDone || this.finished.has(dossierId)) return { finishedNow: false };
+    this.finished.add(dossierId);
+    return { finishedNow: true };
   }
   async finishReading(_o: string, dossierId: string, suspectFields: number) {
     this.dossierUpdates.push({ dossierId, finished: true, suspectFields });

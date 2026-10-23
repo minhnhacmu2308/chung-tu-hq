@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyByFileName, validateUpload } from "../upload-rules.js";
+import { classifyByFileName, extensionOf, sniffMime, validateUpload } from "../upload-rules.js";
 import { nextDossierCode } from "../code.js";
 import { canCancel, canChangeStep, isLocked } from "../status.js";
 
@@ -8,6 +8,22 @@ describe("nextDossierCode", () => {
     const now = new Date("2026-10-14T00:00:00Z");
     expect(nextDossierCode("NK", now, [])).toBe("HS-NK-2610-001");
     expect(nextDossierCode("XK", now, ["HS-XK-2610-007", "HS-XK-2609-120", "HS-NK-2610-050"])).toBe("HS-XK-2610-008");
+  });
+});
+
+describe("sniffMime – nhận diện loại file theo byte đầu", () => {
+  it("PDF/PNG/JPEG/ZIP theo magic bytes; PDF cho phép rác trước %PDF-; khác → null", () => {
+    expect(sniffMime(Buffer.from("%PDF-1.7\n%âãÏÓ"))).toBe("application/pdf");
+    expect(sniffMime(Buffer.concat([Buffer.alloc(100, 0x20), Buffer.from("%PDF-1.4")]))).toBe("application/pdf");
+    expect(sniffMime(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe("image/png");
+    expect(sniffMime(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]))).toBe("image/jpeg");
+    expect(sniffMime(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]))).toBe("application/zip");
+    expect(sniffMime(Buffer.from("MZ\u0090\u0000 chuong trinh .exe doi ten"))).toBeNull();
+    expect(sniffMime(Buffer.from("<html>"))).toBeNull();
+    expect(sniffMime(Buffer.from([0x25]))).toBeNull();
+  });
+  it("extensionOf: đuôi lưu trữ theo loại thật", () => {
+    expect(["application/pdf", "image/png", "image/jpeg", "application/zip"].map((m) => extensionOf(m as never))).toEqual(["pdf", "png", "jpg", "zip"]);
   });
 });
 

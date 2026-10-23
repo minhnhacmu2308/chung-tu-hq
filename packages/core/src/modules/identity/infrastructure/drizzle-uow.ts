@@ -40,6 +40,7 @@ function repos(tx: Tx): IdentityRepos {
       insert: async (row) => void (await tx.insert(sessions).values(row)),
       touch: async (id, lastSeenAt, expiresAt) => void (await tx.update(sessions).set({ lastSeenAt, expiresAt }).where(eq(sessions.id, id))),
       delete: async (id) => void (await tx.delete(sessions).where(eq(sessions.id, id))),
+      deleteByUser: async (userId) => (await tx.delete(sessions).where(eq(sessions.userId, userId)).returning({ id: sessions.id })).length,
       lastSeenByUsers: async (ids) => {
         if (!ids.length) return {};
         // Bảng sessions chỉ lộ dòng của chính user trong ngữ cảnh org → dùng hàm SECURITY DEFINER? Không: chấp nhận chỉ biết "lần hoạt động" của người đang đăng nhập; phần còn lại lấy từ users.updated_at (xem ghi chú BACKEND-TODO).
@@ -55,7 +56,7 @@ function repos(tx: Tx): IdentityRepos {
           | (typeof authTokens.$inferSelect & { kind: AuthTokenKind })
           | undefined) ?? null,
       insert: async (row) => void (await tx.insert(authTokens).values(row)),
-      markUsed: async (id, at) => void (await tx.update(authTokens).set({ usedAt: at }).where(eq(authTokens.id, id))),
+      consume: async (id, at) => (await tx.update(authTokens).set({ usedAt: at }).where(and(eq(authTokens.id, id), isNull(authTokens.usedAt))).returning({ id: authTokens.id })).length === 1,
     },
     joinRequests: {
       listPending: async (orgId) => (await tx.select().from(joinRequests).where(and(eq(joinRequests.orgId, orgId), eq(joinRequests.status, "PENDING"))).orderBy(joinRequests.createdAt)).map(toJoin),

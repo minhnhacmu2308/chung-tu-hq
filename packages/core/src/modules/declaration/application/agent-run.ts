@@ -48,6 +48,26 @@ export async function getAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: st
 export type RunAgentInput = { orgId: string; userId: string; dossierId: string; agentRunId: string };
 
 /**
+ * Worker gọi khi job run-agent hết số lần thử (hoặc lỗi không thử lại): lần chạy không được treo RUNNING mãi.
+ * Run → FAILED kèm dòng nhật ký; hồ sơ đang ở bước agent → về NEEDS_REVIEW để người khai chạy lại; báo chủ hồ sơ.
+ */
+export async function failAgentRun(deps: DeclarationDeps, input: RunAgentInput & { error: string }): Promise<Result<void>> {
+  const ctx = { orgId: asOrgId(input.orgId), userId: asUserId(input.userId) };
+  const run = await deps.uow.asOrg(ctx, (r) => r.agentRuns.get(input.orgId, input.agentRunId));
+  if (!run) return err(domainError("NOT_FOUND", "Không tìm thấy lần chạy"));
+  if (run.status !== "RUNNING") return ok(undefined);
+  const now = deps.clock.now();
+  const tasks: AgentTask[] = run.tasks.map((t) => (t.status === "RUNNING" || t.status === "PENDING" ? { ...t, status: "ERROR", message: "Dừng vì lỗi" } : t));
+  const log: AgentLog[] = [...run.log, { at: now.toISOString(), text: `Dừng sau nhiều lần thử: ${input.error.slice(0, 300)}`, tone: "warning" }];
+  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.id, { status: "ERROR", tasks, log, finishedAt: now }));
+  const dossier = await deps.dossiers.get(input.orgId, input.dossierId);
+  if (dossier?.status === "PROCESSING" && dossier.step === "agent") await deps.dossiers.update(input.orgId, input.dossierId, { status: "NEEDS_REVIEW" });
+  await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
+  await deps.notify?.notify(input.orgId, { dossierOwnerOf: input.dossierId }, { title: `AI Agent dừng ở hồ sơ ${dossier?.code ?? input.dossierId}`, body: "Lỗi lặp lại nhiều lần – xem nhật ký ở bước AI Agent rồi bấm chạy lại.", href: `/dossiers/${input.dossierId}?step=agent` });
+  return ok(undefined);
+}
+
+/**
  * Worker. Idempotent: task đã DONE không chạy lại; run không còn RUNNING → bỏ qua.
  * Tra HS qua HSCodePro: dòng cần hỏi lại / lỗi không chặn; lỗi tạm (5xx, 429) ném ra để BullMQ retry.
  * Lượt còn processing → dừng ở HS_LOOKUP (RUNNING); hs-poll đánh dấu xong và đẩy lại run-agent.

@@ -42,7 +42,7 @@ export const adminAudit = pgTable(
     reason: text("reason").notNull(),
     detail: text("detail"),
   },
-  (t) => [index("admin_audit_at_idx").on(t.at), index("admin_audit_org_at_idx").on(t.orgId, t.at)],
+  (t) => [index("admin_audit_at_idx").on(t.at), index("admin_audit_org_at_idx").on(t.orgId, t.at), index("admin_audit_target_idx").on(t.targetType, t.targetId, t.at)],
 ).enableRLS();
 
 /** Thông báo hệ thống gửi tới nhiều doanh nghiệp; bản sao trong `notifications` mang announcement_id để thu hồi. */

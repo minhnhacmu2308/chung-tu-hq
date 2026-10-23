@@ -9,6 +9,15 @@ describe("FflateUnzipper", () => {
     expect(entries.map((e) => e.name).sort()).toEqual(["INV.pdf", "sub/PL.pdf"]);
     expect(entries.find((e) => e.name === "INV.pdf")?.bytes.length).toBe(2);
   });
+  it("chống zip bom: bỏ mục giải nén quá 25 MB, dừng khi quá 50 mục", async () => {
+    const big = new Uint8Array(26 * 1024 * 1024); // nén còn vài chục KB nhưng originalSize 26 MB
+    const many = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`f${i}.pdf`, new Uint8Array([1])]));
+    const zip = Buffer.from(zipSync({ "bomb.pdf": big, "ok.pdf": new Uint8Array([1, 2, 3]), ...many }));
+    const entries = await new FflateUnzipper().entries(zip);
+    expect(entries.some((e) => e.name === "bomb.pdf")).toBe(false);
+    expect(entries.some((e) => e.name === "ok.pdf")).toBe(true);
+    expect(entries.length).toBeLessThanOrEqual(50);
+  });
   it("zip hỏng → ném DomainError FILE_INVALID", async () => {
     await expect(new FflateUnzipper().entries(Buffer.from("xx"))).rejects.toMatchObject({ code: "FILE_INVALID" });
   });

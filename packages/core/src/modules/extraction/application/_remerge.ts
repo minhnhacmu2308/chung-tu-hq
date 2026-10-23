@@ -56,13 +56,14 @@ export async function remergeDossier(deps: ExtractionDeps, orgId: string, dossie
   });
   await deps.validation.run(orgId, dossierId, result.shipment, result.version, { taxCode: org.taxCode, name: org.name });
   const inv = result.shipment.invoice;
-  await deps.documents.afterMerge(orgId, dossierId, {
+  const { finishedNow } = await deps.documents.afterMerge(orgId, dossierId, {
     suspectFields: result.suspect,
     ...(inv.totalAmount.value ? { invoiceValue: inv.totalAmount.value } : {}),
     ...(inv.currency.value ? { currency: inv.currency.value } : {}),
     ...(result.shipment.transport.billNo.value ? { billNo: result.shipment.transport.billNo.value } : {}),
     allDone: docsAll.every((d) => d.status === "DONE" || d.status === "ERROR"),
   });
-  if (docsAll.every((d) => d.status === "DONE" || d.status === "ERROR")) await deps.notify?.notify(orgId, { dossierOwnerOf: dossierId }, { title: "Đã đọc xong bộ chứng từ", body: `${result.suspect} trường cần kiểm tra – vào bước OCR & kiểm tra để xác nhận.`, href: `/dossiers/${dossierId}?step=ocr` });
+  // Chỉ báo một lần khi hồ sơ vừa đọc xong; chạy lại job / gộp lại sau khi xóa chứng từ không báo nữa.
+  if (finishedNow) await deps.notify?.notify(orgId, { dossierOwnerOf: dossierId }, { title: "Đã đọc xong bộ chứng từ", body: `${result.suspect} trường cần kiểm tra – vào bước OCR & kiểm tra để xác nhận.`, href: `/dossiers/${dossierId}?step=ocr` });
   await deps.documents.publish(orgId, dossierId, { type: "fields.updated" });
 }

@@ -21,7 +21,7 @@ export function createDocumentsAdapter(dossier: DossierDeps, orgInfo: OrgInfoRea
     afterMerge: (orgId, dossierId, info) =>
       dossier.uow.asOrg(ctx(orgId), async (r) => {
         const d = await r.dossiers.get(orgId, dossierId);
-        if (!d) return;
+        if (!d) return { finishedNow: false };
         const now = dossier.clock.now();
         const stillProcessing = d.status === "PROCESSING" || d.status === "DRAFT";
         await r.dossiers.update(dossierId, {
@@ -32,6 +32,7 @@ export function createDocumentsAdapter(dossier: DossierDeps, orgInfo: OrgInfoRea
           ...(info.allDone && stillProcessing ? { status: "NEEDS_REVIEW", step: "ocr" } : {}),
           updatedAt: now,
         });
+        return { finishedNow: info.allDone && stillProcessing };
       }),
     finishReading: (orgId, dossierId, suspectFields) => dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.update(dossierId, { suspectFields, step: "ocr", status: "NEEDS_REVIEW", updatedAt: dossier.clock.now() })),
     readFile: (key) => dossier.storage.get(key),

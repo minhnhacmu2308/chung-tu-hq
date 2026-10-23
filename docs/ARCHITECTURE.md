@@ -65,6 +65,14 @@ apps/*  ──►  module/index.ts  ──►  application  ──►  domain
 
 Tiến trình realtime: worker ghi `job_progress` → web đẩy SSE cho UI.
 
+### Biên HTTP, log và vận hành
+
+- Route handler bọc bằng `route()` (`apps/web/src/lib/server/route.ts`): parse Zod → use case → map `DomainError.code` → HTTP. Mọi phản hồi có `x-request-id`; lỗi 500 trả `requestId`, chi tiết chỉ nằm trong log. Request ghi (POST/PUT/PATCH/DELETE) có `Origin` khác host → 403 `CSRF` (lớp hai sau cookie `SameSite=Lax`). Header bảo mật đặt ở `next.config.ts`.
+- Log: `createLogger` trong `@kb/core/shared` – JSON một dòng (`t, level, name, msg, …fields`), tự che khóa có tên nhạy cảm, logger con mang `jobId/orgId/dossierId`. Không dùng `console.*` trong web (route) và worker. Mức ghi qua `LOG_LEVEL`.
+- Cấu hình: `loadEnv()` (Zod) chạy lúc khởi động web (`instrumentation.ts`, khi `NEXT_PUBLIC_DATA_SOURCE=http`) và worker – thiếu biến thì dừng ngay.
+- Worker: payload job parse bằng `parsePayload` → sai hình dạng là `UnrecoverableError` (không retry); job hết số lần thử → `onFinalFailure` đánh dấu bản ghi liên quan (chứng từ ERROR, outbox FAILED, agent run ERROR); tắt êm tối đa 30 s. Chi tiết `apps/worker/CLAUDE.md`.
+- Việc còn lại theo ưu tiên: `docs/BACKEND-TODO.md` mục "Rà soát kiến trúc backend".
+
 ### AI chỉ dùng để ĐỌC
 
 | Việc | Ai làm |

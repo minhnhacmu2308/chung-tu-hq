@@ -8,4 +8,7 @@
 - Ghi tiến trình qua `dossier.reportProgress` để web đẩy SSE.
 - Không tự gọi SDK AI ở đây; đi qua use case của module `extraction`.
 - Chạy: `pnpm dev:worker` (tsx watch, đọc `.env` gốc). Đăng ký `Worker` cho từng queue trong `src/index.ts`; tên queue lấy từ `QUEUE_NAMES` (`@kb/core/shared`).
-- `src/container.ts` là composition root (env, db, redis). Handler trong `src/jobs/<queue>.ts` nhận `job.data` dạng `unknown`, parse Zod trước.
+- `src/container.ts` là composition root (env, db, redis). Handler trong `src/jobs/<queue>.ts` nhận `job.data` dạng `unknown`, parse bằng `parsePayload(schema, raw, queue)` (`src/jobs/_payload.ts`): payload sai → `UnrecoverableError`, BullMQ không thử lại vô ích.
+- Log bằng `createLogger({ name: "worker" })` từ `@kb/core/shared` (JSON một dòng, tự che khóa/mật khẩu) – không `console.*`. Kèm `queue`, `jobId`, `orgId`, `dossierId` để tra được.
+- Job hết số lần thử → `onFinalFailure` trong `src/index.ts` phải đánh dấu bản ghi liên quan (chứng từ ERROR, outbox FAILED, agent run ERROR…). Thêm queue mới = thêm nhánh ở đó, không để bản ghi kẹt "đang xử lý".
+- Tắt êm: SIGTERM → ngừng nhận job, chờ job đang chạy tối đa 30 s rồi thoát; `unhandledRejection`/`uncaughtException` → log rồi thoát để orchestrator khởi động lại.

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock } from "../../../../shared/clock.js";
 import { sequentialIdGen } from "../../../../shared/ids.js";
 import { unwrap } from "../../../../shared/result.js";
-import type { ExtractionDeps, ExtractionUow } from "../ports.js";
+import { AiDataError, type ExtractionDeps, type ExtractionUow } from "../ports.js";
 import { processDocument } from "../process-document.js";
 import { FakeDocuments, InMemoryExtractionUow, NoSkills, NoValidation, RecordingUsage, ScriptedAi } from "../test/fakes.js";
 
@@ -71,6 +71,16 @@ describe("processDocument – trích xuất", () => {
     expect(docs.docs[0]).toMatchObject({ status: "ERROR", error: expect.stringMatching(/không đúng cấu trúc \(packages\)/) });
     expect(usage.events).toHaveLength(1);
     expect(uow.data.extractions).toHaveLength(0);
+  });
+
+  it("model từ chối / cắt vì max_tokens (AiDataError kèm usage) → chứng từ ERROR nhưng token vẫn được ghi usage_events (bất biến 8)", async () => {
+    addDoc("doc_1", "PACKING_LIST", "FILENAME");
+    const tokens = { model: "claude-sonnet-5-5", inputTokens: 4321, outputTokens: 12 };
+    deps.ai = { name: "claude", classifyPages: async () => { throw new AiDataError("Model từ chối đọc chứng từ (safety)", tokens); }, extract: async () => { throw new Error("không tới đây"); } };
+    unwrap(await process());
+    expect(docs.docs[0]).toMatchObject({ status: "ERROR", error: expect.stringContaining("từ chối") });
+    expect(usage.events).toHaveLength(1);
+    expect(usage.events[0]).toMatchObject({ kind: "AI_CLASSIFY", provider: "claude", model: "claude-sonnet-5-5", inputTokens: 4321, outputTokens: 12 });
   });
 
   it("hai job song song: insert trùng khóa → bỏ qua, chứng từ vẫn DONE", async () => {

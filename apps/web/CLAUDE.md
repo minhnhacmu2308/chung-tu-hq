@@ -48,6 +48,7 @@ Back-office của đội vận hành KhaiBáo AI – nhìn xuyên doanh nghiệp
 ## Route handler (backend)
 
 - Mỗi route trong `src/app/api/**/route.ts`: `requireSession()` → parse input bằng schema `@kb/contracts` → gọi use case qua `@kb/core/modules/<m>` → trả JSON; `DomainError.code` map sang HTTP (`NOT_FOUND` 404, `FORBIDDEN` 403, `RATE_LIMITED` 429, còn lại 409/422); trả `{code, message, reason?, params?}` (`reason` = mã lý do để giao diện dịch); lỗi Zod → 400 `{code:"VALIDATION", issues}`.
+- `route()` tự gắn `x-request-id` cho mọi phản hồi (lỗi 500 trả `requestId`), chặn request ghi có `Origin` khác host (403 `CSRF`) và ghi log JSON qua `createLogger` – không `console.*` trong route. Header bảo mật đặt ở `next.config.ts`; `src/instrumentation.ts` kiểm env lúc khởi động (chế độ http).
 - Không nghiệp vụ trong route. Gọi ngoài (AI, FPT) luôn qua job (`container.queue`).
 - Form: react-hook-form + `zodResolver(schema từ @kb/contracts)`.
 

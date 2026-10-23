@@ -142,6 +142,7 @@ export const authTokens = pgTable(
   },
   (t) => [
     uniqueIndex("auth_tokens_hash_uq").on(t.tokenHash),
+    index("auth_tokens_user_idx").on(t.userId),
     pgPolicy("auth_tokens_rw", {
       for: "all",
       to: appRole,
@@ -167,6 +168,7 @@ export const joinRequests = pgTable(
   },
   (t) => [
     index("join_requests_org_idx").on(t.orgId),
+    index("join_requests_user_idx").on(t.userId),
     pgPolicy("join_requests_read", { for: "select", to: appRole, using: sql`${orgPolicyUsing} OR user_id = ${currentUser} OR (${noContext})` }),
     pgPolicy("join_requests_insert", { for: "insert", to: appRole, withCheck: sql`(${noContext}) OR user_id = ${currentUser}` }),
     pgPolicy("join_requests_update", { for: "update", to: appRole, using: orgPolicyUsing, withCheck: orgPolicyUsing }),
@@ -222,6 +224,8 @@ export const notifications = pgTable(
   },
   (t) => [
     index("notifications_org_user_idx").on(t.orgId, t.userId, t.createdAt),
+    // Đếm/đánh dấu "chưa đọc" – chỉ số nhỏ, bỏ qua dòng đã đọc.
+    index("notifications_unread_idx").on(t.orgId, t.userId).where(sql`read_at is null`),
     pgPolicy("notifications_rls", {
       for: "all",
       to: appRole,

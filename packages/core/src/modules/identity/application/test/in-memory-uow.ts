@@ -93,6 +93,11 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
           Object.assign(s, { lastSeenAt, expiresAt });
         },
         delete: async (id) => void (d.sessions = d.sessions.filter((s) => !(s.id === id && (isSystem || userOk(s.userId))))),
+        deleteByUser: async (userId) => {
+          const before = d.sessions.length;
+          d.sessions = d.sessions.filter((s) => !(s.userId === userId && (isSystem || userOk(userId))));
+          return before - d.sessions.length;
+        },
         lastSeenByUsers: async (ids) => {
           const out: Record<string, Date> = {};
           for (const s of d.sessions) if (ids.includes(s.userId) && (isSystem || userOk(s.userId)) && (!out[s.userId] || out[s.userId]! < s.lastSeenAt)) out[s.userId] = s.lastSeenAt;
@@ -102,10 +107,11 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
       authTokens: {
         findValid: async (kind, hash, now) => clone(d.authTokens.find((t) => t.kind === kind && t.tokenHash === hash && t.usedAt === null && t.expiresAt > now && (isSystem || userOk(t.userId))) ?? null),
         insert: async (row) => void (isSystem || userOk(row.userId) ? d.authTokens.push(clone(row)) : deny("auth_tokens insert")),
-        markUsed: async (id, at) => {
+        consume: async (id, at) => {
           const t = d.authTokens.find((x) => x.id === id);
-          if (!t || !(isSystem || userOk(t.userId))) return;
+          if (!t || !(isSystem || userOk(t.userId)) || t.usedAt !== null) return false;
           t.usedAt = at;
+          return true;
         },
       },
       joinRequests: {

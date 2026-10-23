@@ -44,7 +44,8 @@ export interface DocumentsPort {
   listForDossier(orgId: string, dossierId: string): Promise<DocumentInfo[]>;
   setStatus(orgId: string, documentId: string, status: DocumentStatus, patch?: { error?: string | null; kind?: DocKind; kindSource?: "AI" | "USER" | "FILENAME"; pages?: number }): Promise<void>;
   /** Sau khi gộp: số trường nghi ngờ; nếu mọi chứng từ đã DONE/ERROR → status NEEDS_REVIEW, step ocr. */
-  afterMerge(orgId: string, dossierId: string, info: { suspectFields: number; invoiceValue?: string; currency?: string; billNo?: string; allDone: boolean }): Promise<void>;
+  /** Cập nhật hồ sơ sau khi gộp; `finishedNow` = lần gộp này đưa hồ sơ từ đang đọc sang đã đọc xong (để chỉ thông báo một lần). */
+  afterMerge(orgId: string, dossierId: string, info: { suspectFields: number; invoiceValue?: string; currency?: string; billNo?: string; allDone: boolean }): Promise<{ finishedNow: boolean }>;
   /** Hoàn tất đọc: step ocr / status NEEDS_REVIEW + suspectFields. */
   finishReading(orgId: string, dossierId: string, suspectFields: number): Promise<void>;
   readFile(storageKey: string): Promise<Buffer>;
@@ -67,9 +68,12 @@ export interface AiProvider {
   extract(file: AiFile, pages: number[], schema: ZodType, prompt: ExtractPrompt): Promise<{ result: unknown; regions: Record<string, Region> | null; usage: AiUsage }>;
 }
 
-/** Lỗi dữ liệu (file hỏng, model trả rác không parse được) – không retry; lỗi tạm (429/5xx/timeout) → throw Error thường. */
+/**
+ * Lỗi dữ liệu (file hỏng, model trả rác không parse được) – không retry; lỗi tạm (429/5xx/timeout) → throw Error thường.
+ * `usage`: token đã tốn trước khi phát hiện lỗi (model từ chối, cắt vì max_tokens, JSON hỏng) – pipeline vẫn ghi usage_events (bất biến 8).
+ */
 export class AiDataError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly usage?: AiUsage) {
     super(message);
     this.name = "AiDataError";
   }

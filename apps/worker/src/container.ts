@@ -13,16 +13,18 @@ import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skil
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { runRules } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
-import { asOrgId, asUserId, dec, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
+import { asOrgId, asUserId, createLogger, dec, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
+
+const log = createLogger({ name: "worker" });
 
 /** Composition root của worker: nối hạ tầng vào use case. Cùng cách nối với apps/web/src/container.ts. */
 export function buildContainer() {
   const env = loadEnv();
   const db = createDb(env.DATABASE_URL, { max: 5 });
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
-  redis.on("error", (e) => console.error("[redis]", e.message));
+  redis.on("error", (e) => log.error("redis lỗi kết nối", { err: e }));
   const queues = new Map<QueueName, Queue>();
   const queue: JobQueue = {
     async enqueue(name, payload, opts) {

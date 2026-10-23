@@ -3,7 +3,7 @@ import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
-import { unwrap } from "../../../../shared/result.js";
+import { errCode, unwrap } from "../../../../shared/result.js";
 import { cancelDossier } from "../cancel-dossier.js";
 import { changeDocumentKind } from "../change-document-kind.js";
 import { createDossier } from "../create-dossier.js";
@@ -112,6 +112,17 @@ describe("uploadDocuments", () => {
     else throw new Error("phải lỗi");
     uow.data.dossiers[0]!.status = "SUBMITTED";
     expect((await uploadDocuments(deps, ctx(), d.id, [pdf("c.pdf")])).ok).toBe(false);
+  });
+  it("không tin Content-Type trình duyệt: nội dung không phải PDF/ảnh → FILE_INVALID; mime và đuôi lưu trữ lấy theo byte đầu", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const exe = await uploadDocuments(deps, ctx(), d.id, [{ name: "virus.pdf", mime: "application/pdf", bytes: Buffer.from("MZ\u0090\u0000\u0003 not a pdf at all") }]);
+    expect(errCode(exe)).toBe("FILE_INVALID");
+    expect(uow.data.documents).toHaveLength(0);
+    // Khai là ảnh, tên có "../" nhưng nội dung là PDF → lưu như PDF, key không chứa phần tên người dùng gửi.
+    unwrap(await uploadDocuments(deps, ctx(), d.id, [{ name: "../../x.png", mime: "image/png", bytes: Buffer.from("%PDF-fake-inv-1") }]));
+    expect(uow.data.documents[0]!.mime).toBe("application/pdf");
+    expect(uow.data.documents[0]!.storageKey).toMatch(/\/[0-9a-f]{64}\.pdf$/);
+    expect(uow.data.documents[0]!.storageKey).not.toContain("..");
   });
   it("zip được bung thành các file bên trong", async () => {
     const d = unwrap(await createDossier(deps, ctx(), INPUT));

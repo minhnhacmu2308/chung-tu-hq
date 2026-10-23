@@ -23,7 +23,8 @@ export type HsDetail = { reasoning: string; legalBasis: string[]; warnings: stri
 /** Thuế của một ứng viên (chuỗi thập phân); null khi HSCodePro chưa tra được. */
 export type HsSuggestionRates = { importRate: string | null; basis: "MFN" | "FTA" | null; agreement: string | null; vatRate: string | null };
 export type HsSuggestionRow = { id: string; orgId: string; lineItemId: string; code: string; description: string; confidence: number; rates: HsSuggestionRates | null; whyNot: string | null; source: string; createdAt: Date };
-export type HsJobRow = { id: string; orgId: string; dossierId: string; externalId: string; status: "processing" | "need_info" | "completed" | "cancelled"; polls: number; createdAt: Date; updatedAt: Date };
+/** `pending`: đã ghi DB, chưa (hoặc chưa biết đã) tạo được lượt ở HSCodePro – `externalId` rỗng; chạy lại sẽ dùng lại dòng này (chi phí ghi một lần theo `id`). */
+export type HsJobRow = { id: string; orgId: string; dossierId: string; externalId: string; status: "pending" | "processing" | "need_info" | "completed" | "cancelled"; polls: number; createdAt: Date; updatedAt: Date };
 export type HsLinePatch = Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "hsJobId" | "hsItemId" | "hsStatus" | "hsQuestion" | "hsError" | "hsDetail" | "description" | "origin" | "updatedAt">>;
 export type DeclarationRow = {
   id: string; orgId: string; dossierId: string; kind: "IDA" | "EDA"; version: number; status: DeclarationStatus; fields: Record<string, StoredField>;
@@ -58,9 +59,9 @@ export interface DeclarationRepos {
   hsJobs: {
     insert(row: HsJobRow): Promise<void>;
     get(orgId: string, id: string): Promise<HsJobRow | null>;
-    /** Lượt chưa xong (processing/need_info) của hồ sơ. */
+    /** Lượt chưa xong (pending/processing/need_info) của hồ sơ. */
     openForDossier(orgId: string, dossierId: string): Promise<HsJobRow[]>;
-    update(id: string, patch: Partial<Pick<HsJobRow, "status" | "polls" | "updatedAt">>): Promise<void>;
+    update(id: string, patch: Partial<Pick<HsJobRow, "status" | "polls" | "updatedAt" | "externalId">>): Promise<void>;
   };
   suggestions: {
     listForItems(lineItemIds: string[]): Promise<HsSuggestionRow[]>;

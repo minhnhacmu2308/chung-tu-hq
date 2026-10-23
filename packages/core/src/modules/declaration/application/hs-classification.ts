@@ -97,7 +97,8 @@ export async function startHsClassification(
   if (!opts.lineItemIds) {
     const open = await deps.uow.asOrg(ctx, (r) => r.hsJobs.openForDossier(c.orgId, dossierId));
     for (const j of open) {
-      await deps.hs.cancel(j.externalId).catch((e: unknown) => {
+      // Lượt pending chưa có mã ngoài (có thể chưa từng tới HSCodePro) → chỉ hủy ở ta.
+      if (j.externalId) await deps.hs.cancel(j.externalId).catch((e: unknown) => {
         if (!(e instanceof HsApiError)) throw e;
       });
       await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(j.id, { status: "cancelled", updatedAt: now }));
@@ -124,9 +125,9 @@ export async function startHsClassification(
       for (const n of lineNos) await r.lineItems.update(byLine.get(n)!.id, { ...patch, hsJobId: null, hsItemId: null, updatedAt: now });
     });
   /** Tạo lượt; 400 có details → bỏ dòng sai (kèm lý do) rồi gửi lại phần còn lại; lỗi không tạm khác → dòng thành failed. Lỗi tạm → ném để BullMQ thử lại. */
-  const createSafely = async (part: typeof items): Promise<HsJob | null> => {
+  const createSafely = async (part: typeof items, externalRef: string): Promise<HsJob | null> => {
     try {
-      return await deps.hs.create({ external_ref: dossier.code.slice(0, 100), import_date: vnDate(now), items: part });
+      return await deps.hs.create({ external_ref: externalRef, import_date: vnDate(now), items: part });
     } catch (e) {
       if (!(e instanceof HsApiError) || e.transient) throw e;
       const bad = new Map<number, string>();
@@ -137,27 +138,41 @@ export async function startHsClassification(
       if (e.status === 400 && bad.size > 0) {
         for (const [n, msg] of bad) await markLines([n], { hsStatus: "skipped", hsError: { code: e.code, message: `HSCodePro không nhận dòng này: ${msg} – sửa rồi phân loại lại` }, hsQuestion: null });
         const rest = part.filter((x) => !bad.has(x.line_no));
-        return rest.length ? createSafely(rest) : null;
+        return rest.length ? createSafely(rest, externalRef) : null;
       }
       await markLines(part.map((x) => x.line_no), { hsStatus: "failed", hsError: { code: e.code, message: `HSCodePro từ chối: ${e.message}` }, hsQuestion: null });
       return null;
     }
   };
-  // Gỡ dòng khỏi lượt cũ trước khi gửi: lỗi giữa chừng → lần chạy lại nhận ra dòng chưa gửi (hsJobId null + queued).
-  await deps.uow.asOrg(ctx, async (r) => {
-    for (const it of items) await r.lineItems.update(byLine.get(it.line_no)!.id, { hsJobId: null, hsItemId: null, hsStatus: "queued", hsQuestion: null, hsError: null, updatedAt: now });
-  });
+  // Lượt pending của lần chạy trước (ghi DB rồi mà chưa biết HSCodePro đã nhận chưa): dùng lại đúng dòng đó cho cùng tập dòng hàng
+  // để chi phí ghi một lần theo job.id và external_ref không đổi (đối chiếu được với HSCodePro nếu lượt cũ thật ra đã tạo).
+  const pendingJobs = (await deps.uow.asOrg(ctx, (r) => r.hsJobs.openForDossier(c.orgId, dossierId))).filter((j) => j.status === "pending");
+  const lineIdsOf = (jobId: string) => rows.filter((x) => x.hsJobId === jobId).map((x) => x.id).sort().join(",");
   for (const part of chunk(items, CHUNK)) {
-    const api = await createSafely(part);
-    if (!api) continue;
-    // HSCodePro đã nhận lượt → ghi chi phí theo số dòng gửi (khóa theo mã lượt ngoài: ghi lại không nhân đôi).
+    const partIds = part.map((it) => byLine.get(it.line_no)!.id);
+    const partKey = [...partIds].sort().join(",");
+    const reused = pendingJobs.find((j) => lineIdsOf(j.id) === partKey);
+    // 1. Ghi "đang gửi" TRƯỚC khi gọi API (gọi ngoài có tính phí): crash/timeout sau đó không tạo bản ghi mồ côi, chạy lại biết dòng nào đang dở.
+    const job: HsJobRow = reused ?? { id: deps.idGen.next("hsj"), orgId: c.orgId, dossierId, externalId: "", status: "pending", polls: 0, createdAt: now, updatedAt: now };
+    await deps.uow.asOrg(ctx, async (r) => {
+      if (!reused) await r.hsJobs.insert(job);
+      for (const id of partIds) await r.lineItems.update(id, { hsJobId: job.id, hsItemId: null, hsStatus: "queued", hsQuestion: null, hsError: null, updatedAt: now });
+    });
+    // 2. Gọi HSCodePro. Lỗi tạm ném ra (job giữ pending, dòng giữ queued); lỗi dữ liệu → createSafely đã đánh dấu dòng, hủy lượt.
+    const api = await createSafely(part.map((it) => ({ ...it })), `${dossier.code}#${job.id}`.slice(0, 100));
+    if (!api) {
+      await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(job.id, { status: "cancelled", updatedAt: now }));
+      continue;
+    }
+    // 3. HSCodePro đã nhận → ghi chi phí theo số dòng gửi, khóa theo job.id nội bộ: chạy lại (timeout rồi thành công) không tính hai lần cho khách.
     await meterSafely(deps.usage, {
       orgId: c.orgId, dossierId, provider: "HSCODEPRO", kind: "HS_CLASSIFY", operation: opts.operation ?? "CLASSIFY", quantity: api.items.length,
-      dedupeKey: `hscodepro:create:${api.id}`, meta: { externalJobId: api.id },
+      dedupeKey: `hscodepro:create:${job.id}`, meta: { externalJobId: api.id },
     });
-    const job: HsJobRow = { id: deps.idGen.next("hsj"), orgId: c.orgId, dossierId, externalId: api.id, status: localStatus(api), polls: 0, createdAt: now, updatedAt: now };
+    job.externalId = api.id;
+    job.status = localStatus(api);
     await deps.uow.asOrg(ctx, async (r) => {
-      await r.hsJobs.insert(job);
+      await r.hsJobs.update(job.id, { externalId: api.id, status: job.status, updatedAt: now });
       for (const it of api.items) {
         const row = byLine.get(it.line_no);
         if (row) await r.lineItems.update(row.id, { hsJobId: job.id, hsItemId: it.id, hsStatus: it.status, hsQuestion: null, hsError: null, hsDetail: null, hsSuggested: null, hsConfidence: null, updatedAt: now });
@@ -172,6 +187,13 @@ export async function startHsClassification(
   }
   await deps.dossiers.publish(c.orgId, dossierId, { type: "dossier.updated" });
   return ok({ jobIds, skipped: skipped.length, pending });
+}
+
+/** Dòng hàng chưa gửi được tới HSCodePro: chưa gắn lượt, hoặc gắn lượt còn `pending` (lần trước lỗi/timeout trước khi có mã lượt). */
+export async function unsentHsLineIds(deps: DeclarationDeps, c: SysCtx, dossierId: string, rows: LineItemRow[]): Promise<string[]> {
+  const open = await deps.uow.asOrg(asCtx(c), (r) => r.hsJobs.openForDossier(c.orgId, dossierId));
+  const pending = new Set(open.filter((j) => j.status === "pending").map((j) => j.id));
+  return rows.filter((it) => !it.hsConfirmed && it.hsStatus === "queued" && (it.hsJobId === null || pending.has(it.hsJobId))).map((it) => it.id);
 }
 
 /** Lượt hết processing và agent đang chờ ở bước tra HS → đánh dấu xong + đẩy lại run-agent. */

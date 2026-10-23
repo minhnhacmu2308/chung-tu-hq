@@ -8,7 +8,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { computeBuilt, currenciesOf, exchangeFor, invoiceRate, mergeUserEdits } from "./_rebuild.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { loadDossier, syncLineItems, TASKS_BY_MODE, toAgentRunView } from "./_dto.js";
-import { hsSummaryLogs, startHsClassification } from "./hs-classification.js";
+import { hsSummaryLogs, startHsClassification, unsentHsLineIds } from "./hs-classification.js";
 import type { AgentLog, AgentRunRow, AgentTask, DeclarationDeps } from "./ports.js";
 
 export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: string, mode: AgentMode): Promise<Result<AgentRunView>> {
@@ -105,7 +105,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
         let started: Result<{ pending: boolean }>;
         if (t.status === "RUNNING") {
           // Chạy lại (BullMQ thử lại / hs-poll đẩy lại): gửi nốt dòng chưa có lượt (lỗi giữa chừng lần trước); còn lượt đang chạy → chờ hs-poll.
-          const unsent = items.filter((it) => !it.hsConfirmed && it.hsJobId === null && it.hsStatus === "queued").map((it) => it.id);
+          const unsent = await unsentHsLineIds(deps, ctx, input.dossierId, items);
           started = unsent.length ? await startHsClassification(deps, ctx, input.dossierId, { lineItemIds: unsent }) : ok({ pending: false });
         } else {
           const todo = items.filter((it) => !it.hsConfirmed);

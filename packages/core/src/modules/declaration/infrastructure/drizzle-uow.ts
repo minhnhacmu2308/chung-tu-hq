@@ -49,7 +49,7 @@ function repos(tx: Tx): DeclarationRepos {
         const r = (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.id, id))).limit(1))[0];
         return r ? toJob(r) : null;
       },
-      openForDossier: async (orgId, dossierId) => (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.dossierId, dossierId), inArray(hsJobs.status, ["processing", "need_info"]))).orderBy(hsJobs.createdAt)).map(toJob),
+      openForDossier: async (orgId, dossierId) => (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.dossierId, dossierId), inArray(hsJobs.status, ["pending", "processing", "need_info"]))).orderBy(hsJobs.createdAt)).map(toJob),
       update: async (id, patch) => void (await tx.update(hsJobs).set(patch).where(eq(hsJobs.id, id))),
     },
     suggestions: {

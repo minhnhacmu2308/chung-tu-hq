@@ -48,7 +48,7 @@ export class InMemoryDeclarationUow implements DeclarationUow {
           d.hsJobs.push(clone(row));
         },
         get: async (orgId, id) => clone(d.hsJobs.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
-        openForDossier: async (orgId, dossierId) => clone(d.hsJobs.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId && (x.status === "processing" || x.status === "need_info"))),
+        openForDossier: async (orgId, dossierId) => clone(d.hsJobs.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId && (x.status === "pending" || x.status === "processing" || x.status === "need_info"))),
         update: async (id, patch) => {
           const x = d.hsJobs.find((y) => y.id === id && y.orgId === org);
           if (x) Object.assign(x, clone(patch));

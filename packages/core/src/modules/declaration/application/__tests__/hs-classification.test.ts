@@ -9,7 +9,7 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import { RecordingUsageMeter } from "../../../../shared/usage.js";
 import { DOSSIER, hansol, ORG } from "../../domain/test/shipment.js";
 import { runAgent, startAgentRun } from "../agent-run.js";
-import { answerHsQuestion, failHsWork, pollHsJob, reclassifyHs, runHsReclassify, sendHsAnswer, startHsClassification } from "../hs-classification.js";
+import { answerHsQuestion, failHsWork, pollHsJob, reclassifyHs, runHsReclassify, sendHsAnswer, startHsClassification, unsentHsLineIds } from "../hs-classification.js";
 import { confirmHs, listLineItems } from "../line-items.js";
 import { HsApiError, type DeclarationDeps } from "../ports.js";
 import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit, ScriptedHs } from "../test/fakes.js";
@@ -68,7 +68,8 @@ describe("startHsClassification", () => {
     await items(); // đồng bộ dòng hàng
     unwrap(await startHsClassification(deps, sys, D));
     expect(hs.created).toHaveLength(1);
-    expect(hs.created[0]).toMatchObject({ external_ref: DOSSIER.code, import_date: "2026-10-14" });
+    // external_ref = mã hồ sơ + mã lượt nội bộ → đối chiếu được từng lượt với HSCodePro.
+    expect(hs.created[0]).toMatchObject({ external_ref: `${DOSSIER.code}#${uow.data.hsJobs[0]!.id}`, import_date: "2026-10-14" });
     expect(hs.created[0]!.items.map((i) => i.line_no)).toEqual([1, 2, 4, 5, 6, 7]);
     expect(hs.created[0]!.items[0]).toMatchObject({ origin_country: "KR", co_form: "AK", value_usd: 3700, invoice_hs: "8482.10.1000" });
     const l3 = (await items()).find((i) => i.lineNo === 3)!;
@@ -296,9 +297,40 @@ describe("sửa sau review", () => {
     unwrap(await startAgentRun(deps, declarant, D, "DECLARATION"));
     const runId = (jobsNamed("run-agent").at(-1)!.payload as { agentRunId: string }).agentRunId;
     await expect(runAgent(deps, { ...sys, agentRunId: runId })).rejects.toThrow(/lỗi hệ thống/);
+    // Lô 2 lỗi tạm: dòng "đang gửi" đã ghi trước khi gọi API, giữ pending (không có mã ngoài), 10 dòng của lô vẫn queued và gắn vào nó.
+    const pending = uow.data.hsJobs.find((j) => j.status === "pending")!;
+    expect(pending.externalId).toBe("");
+    expect(uow.data.lineItems.filter((l) => l.hsJobId === pending.id && l.hsStatus === "queued")).toHaveLength(10);
     unwrap(await runAgent(deps, { ...sys, agentRunId: runId }));
     expect(n).toBe(3);
     expect(uow.data.lineItems.every((l) => l.hsJobId !== null)).toBe(true);
+    // Chạy lại dùng lại đúng dòng pending (không tạo bản ghi mồ côi), nay đã có mã ngoài; external_ref lần 2 giống lần 1.
+    expect(uow.data.hsJobs.filter((j) => j.status === "pending")).toHaveLength(0);
+    expect(uow.data.hsJobs.find((j) => j.id === pending.id)!.externalId).not.toBe("");
+    expect(hs.created.at(-1)!.external_ref).toBe(`${DOSSIER.code}#${pending.id}`);
+  });
+
+  it("#4b timeout khi tạo lượt rồi chạy lại thành công → chi phí HS_CLASSIFY ghi một lần (khóa theo lượt nội bộ, không theo mã HSCodePro)", async () => {
+    const meter = new RecordingUsageMeter();
+    deps.usage = meter;
+    await items();
+    const create = hs.create.bind(hs);
+    let n = 0;
+    hs.create = async (req) => {
+      n++;
+      const job = await create(req); // HSCodePro thật ra đã nhận lượt…
+      if (n === 1) throw new HsApiError(504, "HTTP_504", "timeout"); // …nhưng ta không nhận được phản hồi
+      return job;
+    };
+    await expect(startHsClassification(deps, sys, D)).rejects.toThrow(/timeout/);
+    expect(meter.events).toHaveLength(0);
+    const unsent = await unsentHsLineIds(deps, sys, D, uow.data.lineItems);
+    expect(unsent.length).toBeGreaterThan(0);
+    unwrap(await startHsClassification(deps, sys, D, { lineItemIds: unsent }));
+    expect(n).toBe(2);
+    expect(meter.events.filter((e) => e.kind === "HS_CLASSIFY")).toHaveLength(1);
+    expect(meter.events[0]!.dedupeKey).toBe(`hscodepro:create:${uow.data.hsJobs[0]!.id}`);
+    expect(uow.data.hsJobs).toHaveLength(1);
   });
 
   it("#5 HSCodePro trả 400 có details cho một dòng → dòng đó bỏ qua kèm lý do, các dòng còn lại vẫn gửi", async () => {

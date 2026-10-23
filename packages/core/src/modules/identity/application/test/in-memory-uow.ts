@@ -77,7 +77,8 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
         listByOrg: async (orgId) => clone(d.memberships.filter((m) => m.orgId === orgId && canSeeMembership(m))),
         listByUser: async (userId) => clone(d.memberships.filter((m) => m.userId === userId && canSeeMembership(m))),
         find: async (orgId, userId) => clone(d.memberships.find((m) => m.orgId === orgId && m.userId === userId && canSeeMembership(m)) ?? null),
-        insert: async (row) => void (orgOk(row.orgId) ? d.memberships.push(clone(row)) : deny("memberships insert")),
+        // Như policy thật: org đang đặt, hoặc không ngữ cảnh (đăng ký tạo OWNER cùng transaction với org).
+        insert: async (row) => void (orgOk(row.orgId) || isSystem ? d.memberships.push(clone(row)) : deny("memberships insert")),
         update: async (id, patch) => {
           const m = d.memberships.find((x) => x.id === id);
           if (!m || !orgOk(m.orgId)) return deny("memberships update");

@@ -86,11 +86,12 @@ export const memberships = pgTable(
     uniqueIndex("memberships_org_user_uq").on(t.orgId, t.userId),
     index("memberships_user_idx").on(t.userId),
     // Đọc/ghi dòng của org đang đặt; riêng khi CHƯA có org (withUser) được đọc dòng của chính mình để liệt kê org sau đăng nhập.
+    // Ghi khi không có ngữ cảnh (withSystem): chỉ đăng ký – tạo doanh nghiệp + membership OWNER trong CÙNG transaction (không để org mồ côi).
     pgPolicy("memberships_rls", {
       for: "all",
       to: appRole,
       using: sql`${orgPolicyUsing} OR (coalesce(${currentOrg}, '') = '' AND user_id = ${currentUser})`,
-      withCheck: orgPolicyUsing,
+      withCheck: sql`${orgPolicyUsing} OR (${noContext})`,
     }),
   ],
 ).enableRLS();

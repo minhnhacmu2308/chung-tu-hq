@@ -1,6 +1,7 @@
 import type { RegisterInput } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
+import { createLogger } from "../../../shared/log.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { newToken, TOKEN_TTL_MS } from "../domain/token.js";
 import { joinRequestMail, verifyEmailMail } from "./_mail-templates.js";
@@ -9,13 +10,19 @@ import type { IdentityDeps } from "./ports.js";
 
 export type RegisterOutput = { sessionToken: string; mode: "CREATED_ORG" | "JOIN_REQUESTED" };
 
-/** Đăng ký: tài khoản mới + (doanh nghiệp mới theo MST | yêu cầu tham gia doanh nghiệp đã có). */
+const log = createLogger({ name: "core" });
+
+/**
+ * Đăng ký: tài khoản mới + (doanh nghiệp mới theo MST | yêu cầu tham gia doanh nghiệp đã có).
+ * Mọi dòng (user, org, token, membership OWNER, phiên) ghi trong MỘT transaction – lỗi giữa chừng không để lại doanh nghiệp không có chủ
+ * hay MST đã bị chiếm. Email chỉ gửi SAU khi commit (gửi mail không giữ transaction, mail lỗi không làm hỏng đăng ký).
+ */
 export async function register(deps: IdentityDeps, input: RegisterInput, meta: { ip: string }): Promise<Result<RegisterOutput>> {
   const rl = await deps.rateLimiter.hit(`register:${meta.ip}`, 5, 3600);
   if (!rl.allowed) return err(domainError("RATE_LIMITED", "Bạn đăng ký quá nhiều lần, thử lại sau 1 giờ"));
   const now = deps.clock.now();
 
-  const step1 = await deps.uow.system(async (r) => {
+  const created = await deps.uow.system(async (r) => {
     if (await r.users.findByEmail(input.email)) return err(domainError("EMAIL_TAKEN", "Email này đã có tài khoản"));
     const existing = await r.orgs.findByTaxCode(input.taxCode);
     if (existing && !input.joinExisting) return err(domainError("TAX_CODE_EXISTS", "Doanh nghiệp đã có trên hệ thống, hãy gửi yêu cầu tham gia"));
@@ -26,7 +33,7 @@ export async function register(deps: IdentityDeps, input: RegisterInput, meta: {
 
     if (existing) {
       await r.joinRequests.insert({ id: deps.idGen.next("job"), orgId: existing.id, userId, status: "PENDING", createdAt: now });
-      return ok({ sessionToken: "", mode: "JOIN_REQUESTED" as const, existingOrgId: existing.id, userId });
+      return ok({ mode: "JOIN_REQUESTED" as const, existingOrgId: existing.id, userId });
     }
 
     const registry = await deps.taxRegistry.lookup(input.taxCode);
@@ -37,12 +44,12 @@ export async function register(deps: IdentityDeps, input: RegisterInput, meta: {
     });
     const t = newToken(deps.random);
     await r.authTokens.insert({ id: deps.idGen.next("tok"), userId, orgId, kind: "VERIFY_EMAIL", tokenHash: t.hash, expiresAt: new Date(now.getTime() + TOKEN_TTL_MS.VERIFY_EMAIL), usedAt: null });
-    await deps.mailer.send({ to: input.email, ...verifyEmailMail(deps.appUrl, t.raw) });
-
-    return ok({ sessionToken: "", mode: "CREATED_ORG" as const, userId, orgId });
+    await r.memberships.insert({ id: deps.idGen.next("mem"), orgId, userId, role: "OWNER", status: "ACTIVE", invitedBy: null });
+    const sessionToken = await createSession(deps, r, userId, orgId);
+    return ok({ mode: "CREATED_ORG" as const, userId, orgId, sessionToken, verifyToken: t.raw });
   });
-  if (!step1.ok) return step1;
-  const v = step1.value;
+  if (!created.ok) return created;
+  const v = created.value;
 
   if (v.mode === "JOIN_REQUESTED") {
     // Ngữ cảnh org của doanh nghiệp đã có (RLS memberships/notifications cần org): báo cho OWNER/ADMIN.
@@ -64,17 +71,13 @@ export async function register(deps: IdentityDeps, input: RegisterInput, meta: {
     return ok({ sessionToken: "", mode: "JOIN_REQUESTED" as const });
   }
 
-  // Membership OWNER và phiên: cần ngữ cảnh org mới (withCheck org_id).
-  const sessionToken = await deps.uow.asOrg({ orgId: asOrgId(v.orgId), userId: asUserId(v.userId) }, async (r) => {
-    await r.memberships.insert({ id: deps.idGen.next("mem"), orgId: v.orgId, userId: v.userId, role: "OWNER", status: "ACTIVE", invitedBy: null });
-    return createSession(deps, r, v.userId, v.orgId);
-  });
+  await deps.mailer.send({ to: input.email, ...verifyEmailMail(deps.appUrl, v.verifyToken) });
   if (deps.onOrgCreated) {
     try {
       await deps.onOrgCreated({ orgId: v.orgId, userId: v.userId });
     } catch (e) {
-      console.error(`[identity] onOrgCreated ${v.orgId}:`, e instanceof Error ? e.message : e);
+      log.error("onOrgCreated lỗi – doanh nghiệp vẫn tạo xong, skill mẫu sẽ thiếu", { orgId: v.orgId, err: e });
     }
   }
-  return ok({ sessionToken, mode: "CREATED_ORG" as const });
+  return ok({ sessionToken: v.sessionToken, mode: "CREATED_ORG" as const });
 }

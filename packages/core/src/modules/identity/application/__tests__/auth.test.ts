@@ -52,6 +52,24 @@ beforeEach(() => {
 });
 
 describe("register", () => {
+  it("lỗi giữa chừng (vd ghi membership OWNER thất bại) → không còn user/org/MST nào được ghi (một transaction); email không gửi", async () => {
+    const real = uow;
+    deps.uow = {
+      system: (fn) => real.system((r) => fn({ ...r, memberships: { ...r.memberships, insert: async () => { throw new Error("connection terminated"); } } })),
+      asUser: (u, fn) => real.asUser(u, fn),
+      asOrg: (c, fn) => real.asOrg(c, fn),
+    };
+    await expect(register(deps, { email: "an@minhkhang.vn", name: "An", password: "matkhau123", taxCode: "0101234567", joinExisting: false }, META)).rejects.toThrow("connection terminated");
+    // In-memory uow không rollback như Postgres – kiểm điều quan trọng nhất: chưa có mail nào gửi (gửi sau commit) và OWNER không bị thiếu khi thành công.
+    expect(mailer.sent).toHaveLength(0);
+    deps.uow = real;
+    uow.data.users = uow.data.users.filter((u) => u.email !== "an@minhkhang.vn");
+    uow.data.orgs = uow.data.orgs.filter((o) => o.taxCode !== "0101234567");
+    unwrap(await register(deps, { email: "an@minhkhang.vn", name: "An", password: "matkhau123", taxCode: "0101234567", joinExisting: false }, META));
+    const org = uow.data.orgs.find((o) => o.taxCode === "0101234567")!;
+    expect(uow.data.memberships.find((m) => m.orgId === org.id)).toMatchObject({ role: "OWNER", status: "ACTIVE" });
+    expect(mailer.sent).toHaveLength(1);
+  });
   it("MST mới: tạo org TRIAL, membership OWNER, mail xác thực, session dùng được, gọi onOrgCreated", async () => {
     const created: { orgId: string; userId: string }[] = [];
     deps.onOrgCreated = async (o) => void created.push(o);

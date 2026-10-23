@@ -130,7 +130,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Số lượng kiện: ô 1 tổng số kiện, không thập phân, hàng không thể hiện bằng kiện, thùng nhập \"1\" (VD_NO); ô 2 mã loại kiện theo bảng \"Mã loại kiện\", ví dụ CS thùng, BX hộp (VD_NOT).",
   }),
   f("1.28", "TRANSPORT", "Tổng trọng lượng hàng (Gross)", "decimal", "C", {
-    maxLen: 10, codeTable: "UNIT", fptField: "VN_IDA_VANDON.VD_GW",
+    maxLen: 10, codeTable: "GROSS_UNIT", fptField: "VN_IDA_VANDON.VD_GW",
     legalNote: "Ô 1 tổng trọng lượng gross (VD_GW): đường không 8+1 số, khác 6+3 số; ô 2 mã đơn vị KGM/TNE/LBR (VD_GWT), LBR tự quy đổi KGM. Không nhập khi PTVC mã 9.",
   }),
   f("1.29", "TRANSPORT", "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", "code", "M", {
@@ -163,7 +163,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Hệ thống tự xuất nếu đã đăng ký. Không nhập khi đường không, phương thức không dùng container, hàng đóng chung container từ kho CFS. Danh sách container (số hiệu, ký hiệu, số seal) khai bằng nghiệp vụ HYS, file Excel theo định dạng của cơ quan Hải quan.",
   }),
   f("1.36", "TRANSPORT", "Mã kết quả kiểm tra nội dung", "code", "O", {
-    maxLen: 1, fptField: "VN_IDA.TK_N4", manual: true,
+    maxLen: 1, codeTable: "INSPECTION_RESULT", fptField: "VN_IDA.TK_N4", manual: true,
     legalNote: "Khi xem hàng trước khai: A không bất thường, B có bất thường, C cần tham vấn ý kiến cơ quan Hải quan.",
   }),
 

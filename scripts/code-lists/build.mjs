@@ -36,7 +36,21 @@ function sheet(prefix) {
   used.add(name);
   return parseCsv(readFileSync(join(csvDir, name), "utf8"));
 }
-const sourceOf = (prefix) => files.find((f) => f.startsWith(prefix))?.replace(/__\d+_.*$/, "");
+const sourceOf = (prefix) => files.find((f) => f.startsWith(prefix))?.replace(/__(\d+_.*|docx\.xml)$/, "");
+/** Bảng trong văn bản .docx (export-csv.ps1 chép word/document.xml): [{ heading, rows }] – heading là chữ ngay trước bảng, ô gồm các đoạn nối bằng dấu cách. */
+function docxTables(prefix) {
+  const name = files.find((f) => f.startsWith(prefix) && f.endsWith("__docx.xml"));
+  if (!name) throw new Error(`Không thấy văn bản .docx bắt đầu bằng "${prefix}"`);
+  used.add(name);
+  const xml = readFileSync(join(csvDir, name), "utf8");
+  const text = (s) => s.replace(/<w:tab\/>/g, " ").replace(/<\/w:p>/g, "\n").replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  const cell = (s) => text(s).split("\n").map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean).join(" ");
+  return [...xml.matchAll(/<w:tbl>[\s\S]*?<\/w:tbl>/g)].map((t) => ({
+    heading: text(xml.slice(Math.max(0, t.index - 2000), t.index)).replace(/\s+/g, " ").trim(),
+    rows: [...t[0].matchAll(/<w:tr[ >][\s\S]*?<\/w:tr>/g)].map((r) => [...r[0].matchAll(/<w:tc[ >][\s\S]*?<\/w:tc>/g)].map((c) => cell(c[0]))),
+  }));
+}
 
 /* ---------- Chuẩn hóa ---------- */
 const clip = (s, n = 120) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
@@ -130,13 +144,21 @@ const OLD_TO_NEW = new Map();
 add("PACKAGE_KIND", "Loại kiện", [sourceOf("14.DM_MA_LOAIKIEN")], sheet("14.DM_MA_LOAIKIEN").slice(1).map((r) => entry(r[0], r[2] || r[1], { note: r[1], inactive: r[3] === "0" })));
 add("UNIT", "Đơn vị tính", [sourceOf("15.DM_DVT")], sheet("15.DM_DVT").slice(1).map((r) => entry(r[0], r[1])));
 add("CURRENCY", "Mã tiền tệ", [sourceOf("16.DM_TIENTE")], sheet("16.DM_TIENTE").slice(1).map((r) => entry(r[0], r[1], { inactive: r[2] === "False" })));
-{ // TYPE_CODE – mã loại hình theo QĐ 1357/QĐ-TCHQ (mã cha NK / XK)
-  let dir = "NK";
-  const rows = sheet("Bang ma loai hinh XNK").map((r) => {
-    if (/^II\./.test(r[0])) dir = "XK";
-    return /^[A-Z]\d{2}$/.test(r[1]) ? entry(r[1], r[2], { parent: dir, note: r[3] }) : null;
+{ // TYPE_CODE – mã loại hình (mã cha NK / XK). Văn bản QĐ 1357/QĐ-TCHQ là nguồn chính: tên, hướng dẫn, khai kết hợp, ghi chú.
+  // Bảng Excel tổng hợp chỉ bổ sung ghi chú chưa có trong văn bản (mã mới theo QĐ 1357, CV 4032/TCHQ-GSQL…).
+  const extra = new Map();
+  for (const r of sheet("Bang ma loai hinh XNK")) if (/^[A-Z]\d{2}$/.test(r[1]) && r[5]) extra.set(r[1], r[5]);
+  const rows = docxTables("1357_QD-TCHQ").flatMap(({ heading, rows }) => {
+    const dir = /NHẬP KHẨU$/.test(heading) ? "NK" : "XK";
+    // Cột: TT | Mã LH | Khai kết hợp | Tên | Hướng dẫn sử dụng | Ghi chú
+    return rows.filter((r) => /^[A-Z]\d{2}$/.test(r[1] ?? "")).map(([, code, combined, name, guide, remark]) => {
+      const more = extra.get(code);
+      const note = [guide, remark && `Ghi chú: ${remark}`, more && !remark?.includes(more) && `Ghi chú: ${more}`, combined === "X" && "Khai kết hợp: có (QĐ 1357)"]
+        .filter(Boolean).map((s) => (/[.;:]$/.test(s) ? s : `${s}.`)).join(" ");
+      return entry(code, name, { parent: dir, note });
+    });
   });
-  add("TYPE_CODE", "Mã loại hình", [sourceOf("Bang ma loai hinh XNK")], rows, { parentLabel: "Nhập / xuất", superseded: [sourceOf("8.LOAIHINH_NHAPKHAU"), sourceOf("9.LOAIHINH_XUATKHAU")] });
+  add("TYPE_CODE", "Mã loại hình", [sourceOf("1357_QD-TCHQ"), sourceOf("Bang ma loai hinh XNK")], rows, { parentLabel: "Nhập / xuất", superseded: [sourceOf("8.LOAIHINH_NHAPKHAU"), sourceOf("9.LOAIHINH_XUATKHAU")] });
 }
 add("A520", "Mã miễn / giảm / không chịu thuế", [sourceOf("23.DM_MAMIENGIAM")], sheet("23.DM_MAMIENGIAM").slice(1).map((r) => entry(r[0], r[1], { inactive: r[2] === "0" })));
 add("OTHER_TAX", "Mã áp dụng thuế suất / mức thuế và thu khác", [sourceOf("24.DM_MA_MGTHUETHUKHAC")], sheet("24.DM_MA_MGTHUETHUKHAC").slice(1).map((r) => entry(r[0], r[1], { inactive: r[2] === "False" })));
@@ -157,16 +179,18 @@ for (const [id, title, n] of [
   ["INVOICE_KIND", "Phân loại hình thức hóa đơn", 6], ["PRICE_KIND", "Mã phân loại giá hóa đơn", 7], ["PAYMENT", "Phương thức thanh toán", 8], ["INCOTERM", "Điều kiện giao hàng", 9],
   ["VALUATION_METHOD", "Mã phân loại khai trị giá", 10], ["FREIGHT_CLASS", "Phân loại phí vận chuyển", 11], ["INSURANCE_CLASS", "Phân loại phí bảo hiểm", 12],
   ["ADJUSTMENT_CODE", "Mã tên khoản điều chỉnh", 13], ["TAX_PAYER", "Người nộp thuế", 14], ["DUE_DATE", "Mã xác định thời hạn nộp thuế", 15],
+  ["GROSS_UNIT", "Đơn vị tính trọng lượng (Gross)", 4], ["INSPECTION_RESULT", "Mã kết quả kiểm tra nội dung", 5], ["BP_REASON", "Mã lý do đề nghị giải phóng hàng (bảo lãnh)", 16],
 ]) add(id, title, [sourceOf("29.DM_GANCODE")], textList(sheet(`29.DM_GANCODE__${n}_`)));
-// Danh mục chưa gắn vào ô nào trên tờ khai – giữ sẵn để tra cứu sau.
+// Hải quan trả về (HQTV) trên dòng hàng: mã loại thuế suất thuế nhập khẩu (ô "Thuế suất") và mã sắc thuế.
+add("IMPORT_TAX_RATE_KIND", "Mã thuế suất thuế nhập khẩu", [sourceOf("27.Mathuesuat")], sheet("27.Mathuesuat").filter((r) => /^[A-Z]$/.test(r[1])).map((r) => entry(r[1], r[2])));
+add("TAX_KIND", "Mã sắc thuế", [sourceOf("28.Sacthue")], sheet("28.Sacthue").slice(5).map((r) => /^[A-Z]$/.test(r[0]) && entry(r[0], r[1].replace(/^-\s*/, ""))));
+// Danh mục không thuộc tờ khai – giữ sẵn để tra cứu sau. Hãng hàng không / tàu biển / tàu hỏa dùng cho manifest.
 add("AIRLINE", "Hãng hàng không", [sourceOf("17.DM_HANG_HANGKHONG")], sheet("17.DM_HANG_HANGKHONG").slice(1).map((r) => entry(r[0], r[1])), { unassigned: true });
 add("SHIPPING_LINE", "Hãng tàu biển", [sourceOf("18.DM_HANG_TAUBIEN")], sheet("18.DM_HANG_TAUBIEN").slice(1).map((r) => entry(r[0], r[1])), { unassigned: true });
 add("RAIL_CARRIER", "Hãng tàu hỏa", [sourceOf("19.DM_HANGTAUHOA")], sheet("19.DM_HANGTAUHOA").slice(1).map((r) => entry(r[0], r[1])), { unassigned: true });
 add("VEHICLE_KIND", "Phương tiện vận chuyển (ít dùng)", [sourceOf("5.DM_PTVC")], sheet("5.DM_PTVC").slice(1).map((r) => entry(r[0], r[1], { inactive: r[2] === "False" })), { unassigned: true });
 add("LICENSING_BODY", "Đơn vị cấp phép (Một cửa)", [sourceOf("7.DONVICAPPHEP")], sheet("7.DONVICAPPHEP").slice(1).map((r) => entry(r[0], r[1], { inactive: r[2] === "0" })), { unassigned: true });
 add("CANCEL_REASON", "Lý do hủy tờ khai", [sourceOf("21.DM_LYDOHUYTK")], sheet("21.DM_LYDOHUYTK").slice(1).map(([l]) => { const m = /^(H\d+)\s*:\s*(.+)$/.exec(l ?? ""); return m && entry(m[1], m[2]); }), { unassigned: true });
-add("IMPORT_TAX_RATE_KIND", "Mã thuế suất thuế nhập khẩu", [sourceOf("27.Mathuesuat")], sheet("27.Mathuesuat").filter((r) => /^[A-Z]$/.test(r[1])).map((r) => entry(r[1], r[2])), { unassigned: true });
-add("TAX_KIND", "Mã sắc thuế", [sourceOf("28.Sacthue")], sheet("28.Sacthue").slice(5).map((r) => /^[A-Z]$/.test(r[0]) && entry(r[0], r[1].replace(/^-\s*/, ""))), { unassigned: true });
 
 /* ---------- Ghi ra ---------- */
 const skipped = [

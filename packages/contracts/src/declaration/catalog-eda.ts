@@ -121,7 +121,7 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Số lượng kiện: ô 1 tổng số kiện, không thập phân, hàng không thể hiện bằng kiện, thùng nhập \"1\" (TK_NO); ô 2 mã loại kiện theo bảng \"Mã loại kiện\", ví dụ CS thùng, BX hộp; nhiều loại kiện thì nhập 1 mã đại diện (TK_NOT).",
   }),
   f("2.26", "TRANSPORT", "Tổng trọng lượng hàng (Gross)", "decimal", "M", {
-    maxLen: 10, codeTable: "UNIT", fptField: "VN_EDA.TK_GW",
+    maxLen: 10, codeTable: "GROSS_UNIT", fptField: "VN_EDA.TK_GW",
     legalNote: "Ô 1 tổng trọng lượng gross (TK_GW): đường không 8+1 số, vượt 1 số thập phân thì ghi trọng lượng chính xác ở Phần ghi chú 2.57; phương thức khác 6+3 số; ô 2 mã đơn vị KGM/TNE/LBR (TK_GWT), LBR tự quy đổi KGM.",
   }),
   f("2.27", "TRANSPORT", "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", "code", "M", {

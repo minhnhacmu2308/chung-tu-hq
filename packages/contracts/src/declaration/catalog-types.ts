@@ -12,9 +12,10 @@ export const CodeTableSchema = z.enum([
   "LAW_CODE", "TYPE_CODE", "TAX_TABLE",
   // Bảng mã ghi ngay trong Phụ lục II (dữ liệu ở code-tables.ts, tra qua CODE_TABLES).
   "PACKAGE_KIND", "CARGO_CLASS", "PARTY_CLASS", "VALUATION_METHOD", "FREIGHT_CLASS", "INSURANCE_CLASS",
-  "ADJUSTMENT_CODE", "ADJUSTMENT_KIND", "TAX_PAYER", "BP_REASON", "DUE_DATE", "AMA_REASON",
-  // Chỉ có trong danh mục VNACCS đầy đủ (code-lists): ngân hàng, mã áp dụng thuế suất thu khác, mã áp dụng mức thuế tuyệt đối.
-  "BANK", "OTHER_TAX", "ABS_TAX",
+  "ADJUSTMENT_CODE", "ADJUSTMENT_KIND", "TAX_PAYER", "BP_REASON", "DUE_DATE", "AMA_REASON", "GROSS_UNIT", "INSPECTION_RESULT",
+  // Chỉ có trong danh mục VNACCS đầy đủ (code-lists): ngân hàng, mã áp dụng thuế suất thu khác, mã áp dụng mức thuế tuyệt đối,
+  // mã thuế suất thuế nhập khẩu và mã sắc thuế (Hải quan trả về trên dòng hàng).
+  "BANK", "OTHER_TAX", "ABS_TAX", "IMPORT_TAX_RATE_KIND", "TAX_KIND",
 ]);
 
 export const DeclarationFieldDefSchema = z.object({

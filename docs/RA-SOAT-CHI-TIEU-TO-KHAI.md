@@ -123,7 +123,7 @@ Cột "App":
 |---|---|---|---|---|
 | 1.63 | Số đính kèm khai báo điện tử (tối đa 3: mã phân loại + số HYS) | ĐK | Đã khai HYS trước IDA (bảng kê hóa đơn, tờ khai trị giá A01…) | ❌ App chỉ có HYS **sau** khi có số tờ khai |
 | 1.68 | Phần ghi chú (≤ 100 ký tự) | Tùy chọn / ĐK | C/O kèm ngày cấp, #&số tờ khai chuyển tiêu thụ nội địa… (TT121) | ✅ |
-| 1.69 | Số quản lý nội bộ doanh nghiệp | Tùy chọn / ĐK | TT121 quy định cú pháp `#&NKTC#&…`, `#&GCPTQ`, `#&1…#&9` cho một số tình huống | ⚠️ Luôn điền mã hồ sơ, sẽ **đè lên cú pháp bắt buộc** khi rơi vào các tình huống đó |
+| 1.69 | Số quản lý nội bộ doanh nghiệp | Tùy chọn / ĐK | TT121 quy định cú pháp `#&NKTC#&…`, `#&GCPTQ`, `#&1…#&9` cho một số tình huống. QĐ 1357 (ghi chú E42, E52, E54, E62): XNK tại chỗ / vào DNCX phải khai số quản lý nội bộ (2.58 phía xuất) | ⚠️ Luôn điền mã hồ sơ, sẽ **đè lên cú pháp bắt buộc** khi rơi vào các tình huống đó |
 | 1.70–1.73 | Chỉ thị của Hải quan (phân loại, ngày, tên, nội dung; tối đa 10 lần) | **HQ** | Sau khi công chức ra chỉ thị | ❌ `GatewayStatus.directives` đã có kiểu dữ liệu nhưng chưa hiện lên màn hình |
 
 ### 3.7 Chi tiết dòng hàng (1.74–1.96)

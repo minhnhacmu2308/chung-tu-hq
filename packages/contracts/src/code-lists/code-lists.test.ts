@@ -44,7 +44,17 @@ describe("danh mục VNACCS (02_DANHMUC_VNACCS → code-lists)", () => {
     expect(codeListFor("BANK")).toBe("BANK");
     expect(codeListFor("OTHER_TAX")).toBe("OTHER_TAX");
     expect(codeListFor("A501")).toBe("UNIT");
-    expect(codeListFor("BP_REASON")).toBeUndefined();
+    expect(codeListFor("AMA_REASON")).toBeUndefined();
+  });
+
+  it("1.53 lý do BP, 1.28/2.26 đơn vị Gross, 1.36 kết quả kiểm tra, mã thuế suất và sắc thuế Hải quan trả về có danh mục", () => {
+    const ida = (k: string) => layoutFields(LAYOUT_IDA).find((x) => x.key === k);
+    expect(codeListFor("BP_REASON")).toBe("BP_REASON");
+    expect(ida("VD_GWT")).toMatchObject({ codeTable: "GROSS_UNIT" });
+    expect(layoutFields(LAYOUT_EDA).find((x) => x.key === "TK_GWT")).toMatchObject({ codeTable: "GROSS_UNIT" });
+    expect(ida("TK_N4")).toMatchObject({ input: "code", codeTable: "INSPECTION_RESULT" });
+    expect(ida("HAG_B42")).toMatchObject({ origin: "CUSTOMS", codeTable: "IMPORT_TAX_RATE_KIND" });
+    for (const t of ["GROSS_UNIT", "INSPECTION_RESULT", "IMPORT_TAX_RATE_KIND", "TAX_KIND"] as const) expect(codeListFor(t)).toBe(t);
   });
 
   it("ô ngân hàng (trả thuế thay, bảo lãnh), mã áp dụng thuế suất thu khác, mã áp dụng mức thuế tuyệt đối có bảng mã", () => {

@@ -29,4 +29,14 @@ try {
 } finally {
   $excel.Quit(); [void][Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
 }
+# Văn bản .docx (vd QĐ 1357 bảng mã loại hình): chép nguyên word/document.xml, build.mjs đọc bảng trong đó.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+Get-ChildItem $Out -Filter *.xml | Remove-Item -Confirm:$false
+foreach ($f in Get-ChildItem $Source -File -Filter *.docx | Where-Object { -not $_.Name.StartsWith("~$") }) {
+  $zip = [IO.Compression.ZipFile]::OpenRead($f.FullName)
+  try {
+    $doc = $zip.GetEntry("word/document.xml")
+    if ($doc) { [IO.Compression.ZipFileExtensions]::ExtractToFile($doc, (Join-Path $Out "$($f.BaseName)__docx.xml"), $true); Write-Host "  $($f.Name)" }
+  } finally { $zip.Dispose() }
+}
 Write-Host "CSV: $Out"

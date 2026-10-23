@@ -2,7 +2,7 @@ import { loadEnv } from "@kb/core/config";
 import { activeQuotaBonus } from "@kb/core/modules/admin";
 import { createRateDeps } from "@kb/core/modules/admin/infrastructure";
 import { createDb, platformDbUrl } from "@kb/core/db";
-import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
+import { createAiBudget, createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
@@ -102,6 +102,8 @@ export function buildContainer() {
     usage, ai: skillBase.ai, skills: createSkillResolver(skillBase),
   });
   extraction.notify = notify;
+  // Trần chi phí AI/ngày theo doanh nghiệp (AI_DAILY_COST_CAP_VND; 0 = không giới hạn).
+  extraction.aiBudget = createAiBudget({ capVnd: env.AI_DAILY_COST_CAP_VND, spentToday: (orgId, now) => usageRecorder.dailyAiCostVnd(orgId, now), clock: systemClock });
   const skill = skillBase;
   identity.onOrgCreated = async (o) => void (await cloneTemplatesForOrg(skill, o));
   const declaration = createDeclarationInfrastructure({

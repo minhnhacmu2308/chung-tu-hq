@@ -23,6 +23,9 @@ export async function processDocument(deps: ExtractionDeps, input: ProcessDocume
   // Bước AI đang chạy – để khi model trả lỗi dữ liệu kèm usage vẫn ghi đúng loại (bất biến 8).
   let aiStage: "AI_CLASSIFY" | "AI_EXTRACT" = "AI_CLASSIFY";
   try {
+    // Trần chi phí AI/ngày của doanh nghiệp: vượt → không gọi AI, chứng từ báo lỗi rõ để Quản trị nới trần hoặc đợi ngày mai (lỗi dữ liệu, không retry).
+    const budget = await deps.aiBudget?.check(orgId);
+    if (budget && !budget.allowed) throw new AiDataError(`Đã dùng hết trần chi phí AI trong ngày (${budget.spentVnd}/${budget.capVnd} VND) – chứng từ sẽ được đọc lại khi được nới trần hoặc sang ngày mới`);
     const bytes = await deps.documents.readFile(doc.storageKey);
     const file = { bytes, mime: doc.mime, pages: doc.pages, fileName: doc.fileName };
     let kind: DocKind = doc.kind;

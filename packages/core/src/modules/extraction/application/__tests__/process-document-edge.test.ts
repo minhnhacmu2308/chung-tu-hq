@@ -73,6 +73,21 @@ describe("processDocument – trích xuất", () => {
     expect(uow.data.extractions).toHaveLength(0);
   });
 
+  it("vượt trần chi phí AI/ngày → chứng từ ERROR nêu số đã dùng/trần, KHÔNG gọi AI; còn trần → gọi bình thường", async () => {
+    addDoc("doc_1", "PACKING_LIST");
+    const ai = withAi({ PACKING_LIST: PACKING });
+    deps.aiBudget = { check: async () => ({ allowed: false, spentVnd: "520000", capVnd: "500000" }) };
+    unwrap(await process());
+    expect(docs.docs[0]).toMatchObject({ status: "ERROR", error: expect.stringContaining("520000/500000 VND") });
+    expect(ai.calls.extract).toBe(0);
+    expect(usage.events).toHaveLength(0);
+    deps.aiBudget = { check: async () => ({ allowed: true, spentVnd: "1000", capVnd: "500000" }) };
+    docs.docs[0]!.status = "QUEUED";
+    unwrap(await process());
+    expect(docs.docs[0]?.status).toBe("DONE");
+    expect(ai.calls.extract).toBe(1);
+  });
+
   it("model từ chối / cắt vì max_tokens (AiDataError kèm usage) → chứng từ ERROR nhưng token vẫn được ghi usage_events (bất biến 8)", async () => {
     addDoc("doc_1", "PACKING_LIST", "FILENAME");
     const tokens = { model: "claude-sonnet-5-5", inputTokens: 4321, outputTokens: 12 };

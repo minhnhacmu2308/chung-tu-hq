@@ -6,6 +6,7 @@ import type { BillingDeps, OrgPlanReader } from "../application/ports.js";
 import { DrizzlePlansRepo } from "./drizzle-plan-repo.js";
 import { DrizzleServiceUsageMeter, DrizzleUsageRecorder } from "./drizzle-usage.js";
 
+export { createAiBudget } from "./ai-budget.js";
 export { DrizzlePlansRepo, DrizzleServiceUsageMeter, DrizzleUsageRecorder };
 export { costUsd, MODEL_PRICING_USD_PER_MTOK, usageIdFor } from "./drizzle-usage.js";
 

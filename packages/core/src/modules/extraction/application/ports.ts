@@ -79,6 +79,11 @@ export class AiDataError extends Error {
   }
 }
 
+/** Kiểm trước khi gọi AI: đã tiêu bao nhiêu hôm nay so với trần. */
+export interface AiBudget {
+  check(orgId: string): Promise<{ allowed: boolean; spentVnd: string; capVnd: string }>;
+}
+
 export interface UsageRecorder {
   /** `dedupeKey`: cùng khóa chỉ ghi một lần (id suy từ khóa) – job chạy lại sau khi AI đã trả lời không tính tiền khách hai lần. */
   record(e: { orgId: string; dossierId: string | null; documentId: string | null; kind: "AI_CLASSIFY" | "AI_EXTRACT"; provider: string; model: string; inputTokens: number; outputTokens: number; dedupeKey?: string }): Promise<string>;
@@ -97,6 +102,8 @@ export type ExtractionDeps = {
   usage: UsageRecorder;
   skills: SkillResolver;
   notify?: Notifier;
+  /** Trần chi phí AI theo doanh nghiệp (ngày); không có = không giới hạn. */
+  aiBudget?: AiBudget;
   /** Người dùng sửa dữ liệu chứng từ (OCR) → tờ khai nháp cập nhật dòng hàng và dựng lại (module declaration; container nối). */
   onShipmentEdited?: (orgId: string, dossierId: string) => Promise<void>;
   clock: Clock;

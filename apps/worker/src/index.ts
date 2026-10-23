@@ -16,6 +16,7 @@ import { mailboxSyncJob } from "./jobs/mailbox-sync.js";
 import { runAgentJob } from "./jobs/run-agent.js";
 import { skillEvaluateJob, skillSampleReadJob } from "./jobs/skill.js";
 import { stuckSweeperJob } from "./jobs/stuck-sweeper.js";
+import { perOrgLimit } from "./jobs/_per-org.js";
 
 const log = createLogger({ name: "worker" });
 const c = buildContainer();
@@ -27,13 +28,16 @@ const jobFields = (job: Job | undefined) => {
   return { jobId: job?.id, attempt: job?.attemptsMade, ...pick("orgId"), ...pick("dossierId"), ...pick("documentId"), ...pick("outboxId"), ...pick("agentRunId") };
 };
 
-// Mỗi queue một Worker; handler MỎNG (xem apps/worker/CLAUDE.md). Giới hạn đồng thời theo org: GĐ sau (BACKEND-TODO K2).
+// Mỗi queue một Worker; handler MỎNG (xem apps/worker/CLAUDE.md).
+// Queue gọi AI / HSCodePro: mỗi doanh nghiệp tối đa WORKER_MAX_PER_ORG job cùng lúc (perOrgLimit) để một khách lớn không chiếm hết worker;
+// extract-document thêm limiter toàn cục AI_RATE_PER_MINUTE lời gọi/phút (giới hạn của nhà cung cấp AI).
+const perOrg = <T>(queue: string, handler: (job: Job) => Promise<T>) => perOrgLimit(c.redis, queue, c.env.WORKER_MAX_PER_ORG, handler);
 const workers = [
   new Worker("health", async (job) => healthJob(job.data), { connection: c.redis, concurrency: 2 }),
-  new Worker("extract-document", async (job) => extractDocumentJob(c.extraction, job.data), { connection: c.redis, concurrency: 3 }),
-  new Worker("skill-sample-read", async (job) => skillSampleReadJob(c.skill, job.data), { connection: c.redis, concurrency: 2 }),
-  new Worker("skill-evaluate", async (job) => skillEvaluateJob(c.skill, job.data), { connection: c.redis, concurrency: 1 }),
-  new Worker("run-agent", async (job) => runAgentJob(c.declaration, job.data), { connection: c.redis, concurrency: 2 }),
+  new Worker("extract-document", perOrg("extract-document", (job) => extractDocumentJob(c.extraction, job.data)), { connection: c.redis, concurrency: 3, limiter: { max: c.env.AI_RATE_PER_MINUTE, duration: 60_000 } }),
+  new Worker("skill-sample-read", perOrg("skill-sample-read", (job) => skillSampleReadJob(c.skill, job.data)), { connection: c.redis, concurrency: 2 }),
+  new Worker("skill-evaluate", perOrg("skill-evaluate", (job) => skillEvaluateJob(c.skill, job.data)), { connection: c.redis, concurrency: 1 }),
+  new Worker("run-agent", perOrg("run-agent", (job) => runAgentJob(c.declaration, job.data)), { connection: c.redis, concurrency: 2 }),
   new Worker("hs-poll", async (job) => hsPollJob(c.declaration, job.data), { connection: c.redis, concurrency: 4 }),
   new Worker("hs-answer", async (job) => hsAnswerJob(c.declaration, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("hs-reclassify", async (job) => hsReclassifyJob(c.declaration, job.data), { connection: c.redis, concurrency: 2 }),

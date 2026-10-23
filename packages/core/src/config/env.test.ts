@@ -20,6 +20,11 @@ describe("loadEnv", () => {
   });
   it("mặc định: adapter fake, mail console, S3 path-style", () => {
     const env = loadEnv(base);
+    expect(env.AI_TIMEOUT_MS).toBe(180_000);
+    expect(env.AI_DAILY_COST_CAP_VND).toBe("0");
+    expect(env.AI_RATE_PER_MINUTE).toBe(30);
+    expect(env.WORKER_MAX_PER_ORG).toBe(2);
+    expect(() => loadEnv({ ...base, AI_DAILY_COST_CAP_VND: "năm trăm" })).toThrow(/AI_DAILY_COST_CAP_VND/);
     expect(env.AI_PROVIDER).toBe("fake");
     expect(env.CUSTOMS_GATEWAY).toBe("fake");
     expect(env.MAIL).toBe("console");

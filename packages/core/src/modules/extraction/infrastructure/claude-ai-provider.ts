@@ -34,9 +34,9 @@ function fileBlock(file: AiFile): Anthropic.ContentBlockParam {
 export class ClaudeAiProvider implements AiProvider {
   readonly name = "claude";
   private client: Anthropic;
-  /** `clientOptions` chỉ để test (fetch giả). */
-  constructor(apiKey: string, private model: string, clientOptions: { fetch?: typeof fetch; maxRetries?: number } = {}) {
-    this.client = new Anthropic({ apiKey, ...clientOptions });
+  /** `timeout`/`maxRetries`: mặc định 180 s và thử lại 1 lần (BullMQ đã thử lại job); `fetch` chỉ để test. */
+  constructor(apiKey: string, private model: string, clientOptions: { fetch?: typeof fetch; maxRetries?: number; timeout?: number } = {}) {
+    this.client = new Anthropic({ apiKey, timeout: 180_000, maxRetries: 1, ...clientOptions });
   }
 
   private async callStructured(file: AiFile, schema: ZodType, instruction: string): Promise<{ input: unknown; usage: AiUsage }> {

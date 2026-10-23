@@ -40,6 +40,14 @@ export const EnvSchema = z
     ANTHROPIC_API_KEY: z.string().optional(),
     AI_MODEL: z.string().default("claude-sonnet-5-5"),
     AI_USD_VND_RATE: z.coerce.number().positive().default(25400),
+    /** Timeout một lời gọi AI (ms). SDK chỉ thử lại 1 lần – BullMQ đã thử lại job 5 lần. */
+    AI_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
+    /** Trần chi phí AI (VND) mỗi doanh nghiệp mỗi ngày (giờ VN); "0" = không giới hạn. Vượt → chứng từ báo lỗi, không gọi AI. */
+    AI_DAILY_COST_CAP_VND: z.string().regex(/^\d+(\.\d+)?$/, "Số VND không âm").default("0"),
+    /** Số lời gọi AI tối đa mỗi phút trên toàn worker (limiter BullMQ của queue extract-document). */
+    AI_RATE_PER_MINUTE: z.coerce.number().int().positive().default(30),
+    /** Số job đọc chứng từ / chạy agent đồng thời tối đa của MỘT doanh nghiệp – khách lớn không chiếm hết worker. */
+    WORKER_MAX_PER_ORG: z.coerce.number().int().positive().default(2),
     CUSTOMS_GATEWAY: z.enum(["fake", "fpt"]).default("fake"),
     /** Gốc API FPT.VNACCS. Dev/test: apps/fpt-mock (http://localhost:7070) – KHÔNG dùng cổng thật (production). */
     FPT_API_BASE_URL: z.url().optional(),

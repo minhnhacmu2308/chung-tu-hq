@@ -42,6 +42,15 @@ export class DrizzleUsageRecorder {
     );
     return id;
   }
+  /** Chi phí AI (VND) từ 00:00 giờ VN của ngày chứa `now` – cho trần chi phí/ngày. */
+  async dailyAiCostVnd(orgId: string, now: Date): Promise<string> {
+    const vn = new Date(now.getTime() + 7 * 3_600_000);
+    const start = new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3_600_000);
+    const row = await withCtx(this.db, { orgId: asOrgId(orgId), userId: asUserId("") }, async (tx) =>
+      (await tx.select({ ai: sql<string>`coalesce(sum(${usageEvents.costVnd}), 0)::text` }).from(usageEvents).where(and(eq(usageEvents.orgId, orgId), gte(usageEvents.at, start), sql`${usageEvents.kind} like 'AI_%'`)))[0],
+    );
+    return toDecimalString(dec(String(row?.ai ?? "0")), 0);
+  }
   /** Tổng chi phí tháng chứa `now` (VND), tách theo nhà cung cấp theo tiền tố `kind`: AI_* (đọc chứng từ), HS_* (HSCodePro), CUSTOMS_* (Customs Hub). */
   async monthlyTotals(orgId: string, now: Date): Promise<{ aiCostVnd: string; hsCostVnd: string; customsCostVnd: string; events: number }> {
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

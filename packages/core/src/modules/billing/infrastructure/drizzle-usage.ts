@@ -27,14 +27,18 @@ export function costUsd(model: string, inputTokens: number, outputTokens: number
 
 export class DrizzleUsageRecorder {
   constructor(private db: Db, private usdVnd: Decimal) {}
-  async record(e: { orgId: string; dossierId: string | null; documentId: string | null; kind: string; provider: string; model: string; inputTokens: number; outputTokens: number }): Promise<string> {
-    const id = ulidIdGen.next("use");
+  async record(e: { orgId: string; dossierId: string | null; documentId: string | null; kind: string; provider: string; model: string; inputTokens: number; outputTokens: number; dedupeKey?: string }): Promise<string> {
+    // Có dedupeKey → id suy từ khóa, trùng thì bỏ qua (ràng buộc khóa chính): retry sau khi AI đã trả lời không ghi hai lần.
+    const id = e.dedupeKey ? usageIdFor(e.dedupeKey) : ulidIdGen.next("use");
     const usd = costUsd(e.model, e.inputTokens, e.outputTokens);
     await withCtx(this.db, { orgId: asOrgId(e.orgId), userId: asUserId("") }, (tx) =>
-      tx.insert(usageEvents).values({
-        id, orgId: e.orgId, dossierId: e.dossierId, documentId: e.documentId, kind: e.kind, provider: e.provider, model: e.model, inputTokens: e.inputTokens, outputTokens: e.outputTokens,
-        costUsd: toDecimalString(usd, 6), costVnd: toDecimalString(usd.mul(this.usdVnd), 2),
-      }),
+      tx
+        .insert(usageEvents)
+        .values({
+          id, orgId: e.orgId, dossierId: e.dossierId, documentId: e.documentId, kind: e.kind, provider: e.provider, model: e.model, inputTokens: e.inputTokens, outputTokens: e.outputTokens,
+          costUsd: toDecimalString(usd, 6), costVnd: toDecimalString(usd.mul(this.usdVnd), 2), ...(e.dedupeKey ? { meta: { dedupeKey: e.dedupeKey } } : {}),
+        })
+        .onConflictDoNothing({ target: usageEvents.id }),
     );
     return id;
   }

@@ -80,7 +80,8 @@ export class AiDataError extends Error {
 }
 
 export interface UsageRecorder {
-  record(e: { orgId: string; dossierId: string | null; documentId: string | null; kind: "AI_CLASSIFY" | "AI_EXTRACT"; provider: string; model: string; inputTokens: number; outputTokens: number }): Promise<string>;
+  /** `dedupeKey`: cùng khóa chỉ ghi một lần (id suy từ khóa) – job chạy lại sau khi AI đã trả lời không tính tiền khách hai lần. */
+  record(e: { orgId: string; dossierId: string | null; documentId: string | null; kind: "AI_CLASSIFY" | "AI_EXTRACT"; provider: string; model: string; inputTokens: number; outputTokens: number; dedupeKey?: string }): Promise<string>;
 }
 
 export interface SkillResolver {

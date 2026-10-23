@@ -49,7 +49,8 @@ export async function runEvaluation(deps: SkillDeps, input: { orgId: string; use
     const mime = sampleMime(s.fileName, bytes);
     const pages = Array.from({ length: Math.max(1, s.pages) }, (_, i) => i + 1);
     const res = await deps.ai.extract({ bytes, mime, pages: s.pages, fileName: s.fileName }, pages, withCustomFields(extractionSchemaFor(docKind), customFieldsOf(docKind, version.fields)), { kind: docKind, skillHints: fieldHints(docKind, version.fields), examples: [], supplierHint: skill.supplier });
-    await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens });
+    // Khóa theo (skill, phiên bản, mẫu): job đánh giá chạy lại giữa chừng không tính tiền lại các mẫu đã đọc.
+    await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens, dedupeKey: `ai:eval:${input.skillId}:${version.version}:${s.id}` });
     scores.push(scoreSample(version.fields, s.expected!, projectResult(docKind, version.fields, res.result)));
   }
   const sum = summarize(version.fields, scores);

@@ -90,7 +90,8 @@ export async function readSample(deps: SkillDeps, input: { orgId: string; userId
   const mime = sampleMime(sample.fileName, bytes);
   const pages = Array.from({ length: Math.max(1, sample.pages) }, (_, i) => i + 1);
   const res = await deps.ai.extract({ bytes, mime, pages: sample.pages, fileName: sample.fileName }, pages, withCustomFields(extractionSchemaFor(skill.docKind), customFieldsOf(skill.docKind, version.fields)), { kind: skill.docKind, skillHints: fieldHints(skill.docKind, version.fields), examples: [], supplierHint: skill.supplier });
-  await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens });
+  // Khóa theo (mẫu, phiên bản skill): job đọc mẫu chạy lại không tính tiền hai lần.
+  await deps.usage.record({ orgId: input.orgId, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens, dedupeKey: `ai:sample:${sample.id}:${version.version}` });
   const expected = projectResult(skill.docKind, version.fields, res.result);
   await deps.uow.asOrg(ctx, (r) => r.samples.update(sample.id, { expected, updatedAt: deps.clock.now() }));
   return ok(undefined);

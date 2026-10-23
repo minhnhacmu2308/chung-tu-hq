@@ -51,9 +51,10 @@ describe("DrizzleServiceUsageMeter", () => {
     expect(await withCtx(app, ctx("org_khac"), (tx) => tx.select().from(usageEvents))).toEqual([]);
   });
 
-  it("tổng tháng tách AI / HSCodePro / Customs Hub (màn Gói & sử dụng)", async () => {
+  it("tổng tháng tách AI / HSCodePro / Customs Hub (màn Gói & sử dụng); usage AI cùng dedupeKey chỉ ghi một lần", async () => {
     const ai = new DrizzleUsageRecorder(app, dec("25000"));
-    await ai.record({ orgId: ORG, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: "claude", model: "claude-sonnet-5-5", inputTokens: 1_000_000, outputTokens: 0 });
+    await ai.record({ orgId: ORG, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: "claude", model: "claude-sonnet-5-5", inputTokens: 1_000_000, outputTokens: 0, dedupeKey: "ai:extract:k1" });
+    await ai.record({ orgId: ORG, dossierId: null, documentId: null, kind: "AI_EXTRACT", provider: "claude", model: "claude-sonnet-5-5", inputTokens: 1_000_000, outputTokens: 0, dedupeKey: "ai:extract:k1" });
     const t1 = await ai.monthlyTotals(ORG, new Date());
     // AI: 2 USD × 25.000; HSCodePro: 4 × 1.500,5 = 6.002; Customs Hub: 2 × 2.200 = 4.400 (làm tròn VND).
     expect(t1).toMatchObject({ aiCostVnd: "50000", hsCostVnd: "6002", customsCostVnd: "4400" });

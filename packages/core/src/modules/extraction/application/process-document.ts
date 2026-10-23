@@ -32,7 +32,8 @@ export async function processDocument(deps: ExtractionDeps, input: ProcessDocume
     if (doc.kindSource === "FILENAME") {
       aiStage = "AI_CLASSIFY";
       const c = await deps.ai.classifyPages(file);
-      await deps.usage.record({ orgId, dossierId, documentId: doc.id, kind: "AI_CLASSIFY", provider: deps.ai.name, model: c.usage.model, inputTokens: c.usage.inputTokens, outputTokens: c.usage.outputTokens });
+      // Khóa theo (chứng từ, nội dung): retry sau khi đã phân loại nhưng chưa kịp lưu kindSource không tính tiền hai lần.
+      await deps.usage.record({ orgId, dossierId, documentId: doc.id, kind: "AI_CLASSIFY", provider: deps.ai.name, model: c.usage.model, inputTokens: c.usage.inputTokens, outputTokens: c.usage.outputTokens, dedupeKey: `ai:classify:${doc.id}:${doc.sha256}` });
       const main = c.result.documents.find((d) => !d.isDuplicateCopy) ?? c.result.documents[0];
       if (main) {
         kind = main.kind;
@@ -53,7 +54,8 @@ export async function processDocument(deps: ExtractionDeps, input: ProcessDocume
       aiStage = "AI_EXTRACT";
       const res = await deps.ai.extract(file, pages, schema, { kind, skillHints: skill.fieldHints, examples: skill.examples, supplierHint });
       // Token đã tốn dù model trả sai cấu trúc → ghi usage trước khi parse (bất biến 8).
-      const usageEventId = await deps.usage.record({ orgId, dossierId, documentId: doc.id, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens });
+      // Khóa = khóa idempotency của extraction: retry giữa lúc AI trả lời và lúc lưu extraction không tính tiền hai lần.
+      const usageEventId = await deps.usage.record({ orgId, dossierId, documentId: doc.id, kind: "AI_EXTRACT", provider: deps.ai.name, model: res.usage.model, inputTokens: res.usage.inputTokens, outputTokens: res.usage.outputTokens, dedupeKey: `ai:extract:${key}` });
       // Kết quả/fixture theo schema cũ thiếu trường mới (nullable) → coi như null.
       const parsed = schema.safeParse(fillMissingNullable(schema, res.result));
       if (!parsed.success) throw new AiDataError(`Model trả dữ liệu không đúng cấu trúc (${parsed.error.issues[0]?.path.join(".") ?? "?"})`);

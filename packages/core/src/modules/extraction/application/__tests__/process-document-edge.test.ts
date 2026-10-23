@@ -93,11 +93,19 @@ describe("processDocument – trích xuất", () => {
     expect(docs.docs[0]?.status).toBe("DONE");
   });
 
-  it("insert lỗi DB khác → coi là lỗi tạm: chứng từ QUEUED, ném lại", async () => {
-    addDoc("doc_1", "PACKING_LIST");
-    deps.uow = { asOrg: (ctx, fn) => uow.asOrg(ctx, (r) => fn({ ...r, extractions: { ...r.extractions, insert: async () => { throw new Error("connection terminated"); } } })) };
+  it("insert lỗi DB khác → coi là lỗi tạm: chứng từ QUEUED, ném lại; chạy lại thành công → AI gọi lần 2 nhưng usage chỉ ghi một lần (khóa theo extraction)", async () => {
+    addDoc("doc_1", "PACKING_LIST", "FILENAME");
+    const ai = withAi({ PACKING_LIST: PACKING });
+    const realUow = uow;
+    deps.uow = { asOrg: (ctx, fn) => realUow.asOrg(ctx, (r) => fn({ ...r, extractions: { ...r.extractions, insert: async () => { throw new Error("connection terminated"); } } })) };
     await expect(process()).rejects.toThrow("connection terminated");
     expect(docs.docs[0]?.status).toBe("QUEUED");
+    expect(usage.events.map((e) => e.kind)).toEqual(["AI_CLASSIFY", "AI_EXTRACT"]);
+    deps.uow = realUow;
+    unwrap(await process());
+    expect(ai.calls.extract).toBe(2); // AI thật sự bị gọi lại (chưa có extraction lưu)…
+    expect(usage.events.map((e) => e.kind)).toEqual(["AI_CLASSIFY", "AI_EXTRACT"]); // …nhưng khách chỉ bị tính một lần
+    expect(usage.events[1]!.dedupeKey).toMatch(/^ai:extract:/);
   });
 });
 

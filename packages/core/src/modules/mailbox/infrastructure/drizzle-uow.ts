@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { inboxAttachments, inboxMessages, mailConnections } from "../../../db/schema/mailbox.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -21,6 +21,7 @@ function repos(tx: Tx): MailboxRepos {
         return r ? toConn(r) : null;
       },
       insert: async (row) => void (await tx.insert(mailConnections).values(row)),
+      listSyncingBefore: async (orgId, before) => (await tx.select().from(mailConnections).where(and(eq(mailConnections.orgId, orgId), eq(mailConnections.status, "SYNCING"), lt(mailConnections.updatedAt, before)))).map(toConn),
       update: async (row) => void (await tx.update(mailConnections).set(row).where(and(eq(mailConnections.orgId, row.orgId), eq(mailConnections.id, row.id)))),
       remove: async (orgId, id) => void (await tx.delete(mailConnections).where(and(eq(mailConnections.orgId, orgId), eq(mailConnections.id, id)))),
     },

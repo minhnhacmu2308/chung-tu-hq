@@ -12,6 +12,7 @@ import { getDossier } from "../get-dossier.js";
 import { listDocuments } from "../list-documents.js";
 import { listDossiers } from "../list-dossiers.js";
 import type { DossierDeps } from "../ports.js";
+import { requeueStuckDocuments } from "../requeue-stuck-documents.js";
 import { retryDocument } from "../retry-document.js";
 import { FakePdfInspector, FakeUnzipper, InMemoryStorage, RecordingPublisher } from "../test/fakes.js";
 import { InMemoryDossierUow } from "../test/in-memory-uow.js";
@@ -154,5 +155,24 @@ describe("changeDocumentKind / delete / retry", () => {
     expect(storage.keys()).toEqual([]);
     expect(queue.jobs.at(-1)?.payload).toMatchObject({ mode: "MERGE_ONLY" });
     expect(unwrap(await listDocuments(deps, ctx(), d.id))).toEqual([]);
+  });
+});
+
+describe("requeueStuckDocuments – job quét chứng từ kẹt QUEUED", () => {
+  it("QUEUED quá 10 phút → đẩy lại job (jobId theo mốc kẹt), làm mới mốc; QUEUED mới / đang đọc / org khác không đụng", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("a.pdf"), pdf("b.pdf")]));
+    queue.jobs.length = 0;
+    const [a, b] = uow.data.documents;
+    const old = new Date(deps.clock.now().getTime() - 15 * 60_000);
+    a!.updatedAt = old;
+    b!.updatedAt = old;
+    b!.status = "READING";
+    const r = await requeueStuckDocuments(deps, { orgId: "org_a" });
+    expect(r.requeued).toEqual([a!.id]);
+    expect(queue.jobs).toEqual([expect.objectContaining({ name: "extract-document", jobId: `extract:${a!.id}:${a!.sha256}:sweep:${old.getTime()}`, payload: expect.objectContaining({ documentId: a!.id, mode: "FULL" }) })]);
+    // Quét lại ngay → mốc đã làm mới, chưa tới hạn → không đẩy trùng.
+    expect((await requeueStuckDocuments(deps, { orgId: "org_a" })).requeued).toEqual([]);
+    expect((await requeueStuckDocuments(deps, { orgId: "org_b" })).requeued).toEqual([]);
   });
 });

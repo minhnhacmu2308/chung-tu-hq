@@ -4,7 +4,7 @@ import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
-import { completeMailConnect, disconnectMailbox, failMailSync, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, syncMailConnection } from "../connections.js";
+import { completeMailConnect, disconnectMailbox, failMailSync, failStaleMailSyncs, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, syncMailConnection } from "../connections.js";
 import { addInboxToDossier, getInboxAttachmentFile, listInbox, setInboxMessageStatus } from "../inbox.js";
 import type { MailboxDeps } from "../ports.js";
 import { FakeDossierIntake, FakeMailProvider, FakeStateSigner, fakeCipher, MemoryBlobStore } from "../test/fakes.js";
@@ -160,6 +160,17 @@ describe("lấy chứng từ mới", () => {
     uow.data.connections[0]!.status = "REAUTH";
     await failMailSync(deps, { orgId: "org_a", connectionId: c.id });
     expect(uow.data.connections[0]!.status).toBe("REAUTH");
+  });
+
+  it("job quét: SYNCING quá 30 phút (job mất) → ERROR để bấm lấy lại được; SYNCING mới → giữ", async () => {
+    const c = await connect();
+    await requestMailSync(deps, ctx("DECLARANT"));
+    expect((await failStaleMailSyncs(deps, { orgId: "org_a" })).failed).toEqual([]);
+    uow.data.connections[0]!.updatedAt = new Date(deps.clock.now().getTime() - 45 * 60_000);
+    expect((await failStaleMailSyncs(deps, { orgId: "org_a" })).failed).toEqual([c.id]);
+    expect(uow.data.connections[0]).toMatchObject({ status: "ERROR", lastError: "MAILBOX_SYNC_FAILED" });
+    // Người dùng bấm lấy lại được.
+    expect(unwrap(await requestMailSync(deps, ctx("DECLARANT"))).queued).toBe(1);
   });
 });
 

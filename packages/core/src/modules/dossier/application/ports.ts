@@ -31,6 +31,8 @@ export interface DossierRepos {
     insert(row: DocumentRow): Promise<void>;
     update(id: string, patch: Partial<Pick<DocumentRow, "kind" | "kindSource" | "status" | "error" | "pages">>): Promise<void>;
     delete(id: string): Promise<void>;
+    /** Chứng từ QUEUED không được cập nhật từ trước `before` – job có thể đã mất (job quét định kỳ). */
+    listStuckQueued(orgId: string, before: Date): Promise<DocumentRow[]>;
   };
   progress: {
     upsert(row: ProgressRow): Promise<void>;

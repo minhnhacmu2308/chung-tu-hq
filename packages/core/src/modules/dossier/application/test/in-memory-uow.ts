@@ -39,9 +39,11 @@ export class InMemoryDossierUow implements DossierUow {
         insert: async (row) => void (row.orgId === org ? d.documents.push(clone(row)) : deny("documents insert")),
         update: async (id, patch) => {
           const x = d.documents.find((y) => y.id === id && y.orgId === org);
-          if (x) Object.assign(x, patch);
+          // Như adapter Drizzle: mỗi lần cập nhật làm mới updated_at.
+          if (x) Object.assign(x, patch, { updatedAt: new Date() });
         },
         delete: async (id) => void (d.documents = d.documents.filter((x) => !(x.id === id && x.orgId === org))),
+        listStuckQueued: async (orgId, before) => clone(d.documents.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "QUEUED" && x.updatedAt < before)),
       },
       progress: {
         upsert: async (row) => {

@@ -31,3 +31,4 @@ export { markAllNotificationsRead } from "./application/mark-all-notifications-r
 export { hashToken } from "./domain/token.js";
 export { provisionStaffAccount, resendVerificationEmail } from "./application/staff-account.js";
 export { notifyExpiringCertificates, CERT_EXPIRY_DAYS } from "./application/notify-expiring-certificates.js";
+export { listActiveOrganizationIds } from "./application/list-organization-ids.js";

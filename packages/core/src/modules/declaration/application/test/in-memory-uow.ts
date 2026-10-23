@@ -81,6 +81,7 @@ export class InMemoryDeclarationUow implements DeclarationUow {
       agentRuns: {
         latest: async (orgId, dossierId) => clone(d.agentRuns.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId).sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0] ?? null),
         get: async (orgId, id) => clone(d.agentRuns.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
+        listRunningBefore: async (orgId, before) => clone(d.agentRuns.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "RUNNING" && x.startedAt < before)),
         insert: async (row) => void (row.orgId === org ? d.agentRuns.push(clone(row)) : deny("agent_runs")),
         update: async (id, patch) => {
           const x = d.agentRuns.find((y) => y.id === id && y.orgId === org);

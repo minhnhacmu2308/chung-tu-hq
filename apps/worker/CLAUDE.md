@@ -1,7 +1,7 @@
 # apps/worker – BullMQ
 
 - Mỗi queue một file trong `src/jobs/`. Handler MỎNG: parse payload bằng Zod → gọi use case của `@kb/core` → ghi tiến trình.
-- Payload job bắt buộc có `orgId` (+ `dossierId`, `idempotencyKey` với job hồ sơ). Queue hiện có: `extract-document`, `skill-sample-read` (AI đọc mẫu → nhãn nháp), `skill-evaluate` (đo độ chính xác skill), `run-agent` (HS → ánh xạ → dựng tờ khai → số hóa; task DONE không chạy lại), `customs-send` (một dòng outbox → gateway; OUT ghi một lần), `customs-poll` (hỏi IEX lặp theo delay tới thông quan).
+- Payload job bắt buộc có `orgId` (+ `dossierId`, `idempotencyKey` với job hồ sơ). Queue hiện có: `extract-document`, `skill-sample-read` (AI đọc mẫu → nhãn nháp), `skill-evaluate` (đo độ chính xác skill), `run-agent` (HS → ánh xạ → dựng tờ khai → số hóa; task DONE không chạy lại), `customs-send` (một dòng outbox → gateway; OUT ghi một lần), `customs-poll` (hỏi IEX lặp theo delay tới thông quan), `stuck-sweeper` (mỗi 5 phút: gỡ bản ghi kẹt vì job mất – chứng từ QUEUED, outbox chưa gửi, agent treo, hộp thư treo SYNCING; `jobs/stuck-sweeper.ts`).
 - Handler phải idempotent: chạy lại không tạo bản ghi trùng (kiểm tra theo `idempotencyKey` trước khi ghi).
 - Lỗi tạm thời (429, 5xx, timeout) → throw để BullMQ retry với backoff. Lỗi dữ liệu (file hỏng, PDF có mật khẩu) → đánh dấu chứng từ `FAILED` kèm lý do, KHÔNG retry.
 - Giới hạn đồng thời theo org để một khách không chiếm hết worker.

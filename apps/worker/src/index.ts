@@ -15,6 +15,7 @@ import { hsAnswerJob, hsPollJob, hsReclassifyJob } from "./jobs/hs.js";
 import { mailboxSyncJob } from "./jobs/mailbox-sync.js";
 import { runAgentJob } from "./jobs/run-agent.js";
 import { skillEvaluateJob, skillSampleReadJob } from "./jobs/skill.js";
+import { stuckSweeperJob } from "./jobs/stuck-sweeper.js";
 
 const log = createLogger({ name: "worker" });
 const c = buildContainer();
@@ -41,6 +42,7 @@ const workers = [
   new Worker("cert-expiry", async () => certExpiryJob(c.identity), { connection: c.redis, concurrency: 1 }),
   new Worker("exchange-rate-weekly", async () => exchangeRateJob(c.rates), { connection: c.redis, concurrency: 1 }),
   new Worker("mailbox-sync", async (job) => mailboxSyncJob(c.mailbox, job.data), { connection: c.redis, concurrency: 2 }),
+  new Worker("stuck-sweeper", async () => JSON.stringify(await stuckSweeperJob(c)), { connection: c.redis, concurrency: 1 }),
 ];
 
 // Lịch hằng ngày 01:00 UTC (08:00 VN) – BullMQ job scheduler; upsert theo id nên khởi động lại không nhân đôi. Lỗi thử lại 3 lần cách 10 phút.
@@ -48,7 +50,10 @@ const certQueue = new Queue("cert-expiry", { connection: c.redis });
 // Tỷ giá tính thuế: thứ Năm 16:30 UTC (= 23:30 giờ VN, "cuối ngày"); lỗi → thử lại mỗi 30 phút, 16 lần (tới ~07:00 VN thứ Sáu,
 // trước khi Vietcombank đổi bảng ngày mới). Hết lượt → ghi FAILED, khu Quản trị báo "Cần chú ý".
 const rateQueue = new Queue("exchange-rate-weekly", { connection: c.redis });
+// Quét bản ghi kẹt (job mất giữa ghi DB và đẩy job) mỗi 5 phút – xem jobs/stuck-sweeper.ts. Không retry: lần quét sau làm tiếp.
+const sweeperQueue = new Queue("stuck-sweeper", { connection: c.redis });
 async function registerSchedulers() {
+  await sweeperQueue.upsertJobScheduler("stuck-sweeper-5m", { pattern: "*/5 * * * *", tz: "UTC" }, { name: "stuck-sweeper", data: {}, opts: { attempts: 1, removeOnComplete: 20, removeOnFail: 20 } });
   await certQueue.upsertJobScheduler("cert-expiry-daily", { pattern: "0 1 * * *", tz: "UTC" }, { name: "cert-expiry", data: {}, opts: { attempts: 3, backoff: { type: "fixed", delay: 10 * 60_000 }, removeOnComplete: 10, removeOnFail: 10 } });
   await rateQueue.upsertJobScheduler("exchange-rate-weekly", { pattern: RATE_JOB_CRON, tz: "UTC" }, { name: "exchange-rate-weekly", data: {}, opts: { attempts: 16, backoff: { type: "fixed", delay: 30 * 60_000 }, removeOnComplete: 20, removeOnFail: 20 } });
 }
@@ -98,7 +103,7 @@ async function shutdown(signal: string, code = 0) {
   }, SHUTDOWN_GRACE_MS);
   forceExit.unref();
   try {
-    await Promise.all([...workers.map((w) => w.close()), certQueue.close(), rateQueue.close()]);
+    await Promise.all([...workers.map((w) => w.close()), certQueue.close(), rateQueue.close(), sweeperQueue.close()]);
     await c.close();
   } catch (e) {
     log.error("lỗi khi tắt", { err: e });

@@ -47,6 +47,28 @@ export async function getAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: st
 
 export type RunAgentInput = { orgId: string; userId: string; dossierId: string; agentRunId: string };
 
+/** Lần chạy RUNNING quá lâu (mặc định 2 giờ) mà không còn lượt HS nào đang mở coi như job run-agent đã mất. */
+export const STALE_AGENT_RUN_MS = 2 * 60 * 60_000;
+
+/**
+ * Job quét định kỳ: run-agent mất job (Redis lỗi, tiến trình chết) → lần chạy treo RUNNING, hồ sơ treo PROCESSING. Chỉ dừng lần chạy
+ * không còn lượt HSCodePro nào mở – đang chờ HSCodePro trả lời hoặc chờ người khai trả lời câu hỏi (need_info) thì không phải kẹt.
+ */
+export async function failStaleAgentRuns(deps: DeclarationDeps, input: { orgId: string; now?: Date; olderThanMs?: number }): Promise<{ failed: string[] }> {
+  const now = input.now ?? deps.clock.now();
+  const before = new Date(now.getTime() - (input.olderThanMs ?? STALE_AGENT_RUN_MS));
+  const ctx = { orgId: asOrgId(input.orgId), userId: asUserId("") };
+  const runs = await deps.uow.asOrg(ctx, (r) => r.agentRuns.listRunningBefore(input.orgId, before));
+  const failed: string[] = [];
+  for (const run of runs) {
+    const open = await deps.uow.asOrg(ctx, (r) => r.hsJobs.openForDossier(input.orgId, run.dossierId));
+    if (open.length > 0) continue;
+    const r = await failAgentRun(deps, { orgId: input.orgId, userId: run.startedBy, dossierId: run.dossierId, agentRunId: run.id, error: `Không có tiến triển sau ${Math.round((now.getTime() - run.startedAt.getTime()) / 60_000)} phút – job có thể đã mất` });
+    if (r.ok) failed.push(run.id);
+  }
+  return { failed };
+}
+
 /**
  * Worker gọi khi job run-agent hết số lần thử (hoặc lỗi không thử lại): lần chạy không được treo RUNNING mãi.
  * Run → FAILED kèm dòng nhật ký; hồ sơ đang ở bước agent → về NEEDS_REVIEW để người khai chạy lại; báo chủ hồ sơ.

@@ -184,6 +184,21 @@ export async function syncMailConnection(deps: MailboxDeps, input: MailboxSyncPa
 }
 
 /** Job lấy thư hết lượt thử vì lỗi hạ tầng (ngoài syncMailConnection) → không để hộp thư kẹt "Đang lấy thư". */
+/** Kết nối SYNCING quá lâu (mặc định 30 phút) coi như job lấy thư đã mất. */
+export const STALE_MAIL_SYNC_MS = 30 * 60_000;
+
+/**
+ * Job quét định kỳ: job mailbox-sync mất → kết nối treo SYNCING, mà requestMailSync bỏ qua kết nối SYNCING nên người dùng không tự
+ * lấy lại được. Đưa về ERROR (MAILBOX_SYNC_FAILED) để nút "Lấy chứng từ mới" dùng lại được.
+ */
+export async function failStaleMailSyncs(deps: MailboxDeps, input: { orgId: string; now?: Date; olderThanMs?: number }): Promise<{ failed: string[] }> {
+  const now = input.now ?? deps.clock.now();
+  const before = new Date(now.getTime() - (input.olderThanMs ?? STALE_MAIL_SYNC_MS));
+  const stale = await deps.uow.asOrg(sysCtx(input.orgId), (r) => r.connections.listSyncingBefore(input.orgId, before));
+  for (const c of stale) await failMailSync(deps, { orgId: input.orgId, connectionId: c.id });
+  return { failed: stale.map((c) => c.id) };
+}
+
 export async function failMailSync(deps: MailboxDeps, input: MailboxSyncPayload): Promise<void> {
   const ctx = sysCtx(input.orgId);
   await deps.uow.asOrg(ctx, async (r) => {

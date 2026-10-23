@@ -32,6 +32,8 @@ export type MailboxRepos = {
     insert(row: MailConnectionRow): Promise<void>;
     update(row: MailConnectionRow): Promise<void>;
     remove(orgId: string, id: string): Promise<void>;
+    /** Kết nối SYNCING không được cập nhật từ trước `before` – job lấy thư có thể đã mất (job quét định kỳ). */
+    listSyncingBefore(orgId: string, before: Date): Promise<MailConnectionRow[]>;
   };
   messages: {
     list(orgId: string): Promise<InboxMessageRow[]>;

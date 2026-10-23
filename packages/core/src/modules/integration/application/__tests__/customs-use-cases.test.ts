@@ -17,6 +17,7 @@ import { MAX_POLLS, pollStatus } from "../poll-status.js";
 import { MAX_ATTEMPTS, processOutbox } from "../process-outbox.js";
 import { resendOperation } from "../resend-operation.js";
 import { submitDeclaration } from "../submit-declaration.js";
+import { requeueStuckOutbox } from "../requeue-stuck-outbox.js";
 import { performOperation, startPostAmendment } from "../perform-operation.js";
 import { addPostAmendmentLines, approvePostAmendment, getPostAmendmentView, updatePostAmendmentField } from "../post-amendment.js";
 import { FakeCustomsGateway, hashId } from "../test/fake-customs-gateway.js";
@@ -1049,5 +1050,19 @@ describe("ghi chi phí Customs Hub (usage_events)", () => {
     expect(queries()).toEqual(["IID"]);
     meter.fail = true;
     expect(unwrap(await perform("IID")).sent).toBe(false);
+  });
+});
+
+describe("requeueStuckOutbox – job quét outbox kẹt", () => {
+  it("PENDING attempts 0 quá 10 phút → đẩy lại đúng job customs-send:<id>; đã có lần xử lý / còn mới / org khác → không", async () => {
+    const r = unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    queue.jobs.length = 0;
+    expect((await requeueStuckOutbox(deps, { orgId: ORG })).requeued).toEqual([]); // vừa tạo
+    uow.data.outbox[0]!.createdAt = new Date(deps.clock.now().getTime() - 15 * 60_000);
+    expect((await requeueStuckOutbox(deps, { orgId: ORG })).requeued).toEqual([r.outboxId]);
+    expect(queue.jobs).toEqual([{ name: "customs-send", payload: { orgId: ORG, userId: "", outboxId: r.outboxId }, jobId: `customs-send:${r.outboxId}` }]);
+    uow.data.outbox[0]!.attempts = 1;
+    expect((await requeueStuckOutbox(deps, { orgId: ORG })).requeued).toEqual([]);
+    expect((await requeueStuckOutbox(deps, { orgId: "org_b" })).requeued).toEqual([]);
   });
 });

@@ -25,6 +25,7 @@ export class InMemoryMailboxUow implements MailboxUow {
         insert: async (row) => (guard(row, "mail_connections"), void d.connections.push(clone(row))),
         update: async (row) => (guard(row, "mail_connections"), replace(d.connections, row)),
         remove: async (orgId, id) => void (d.connections = d.connections.filter((x) => !(mine(x, orgId) && x.id === id))),
+        listSyncingBefore: async (orgId, before) => clone(d.connections.filter((x) => mine(x, orgId) && x.status === "SYNCING" && x.updatedAt < before)),
       },
       messages: {
         list: async (orgId) => clone(d.messages.filter((x) => mine(x, orgId))),

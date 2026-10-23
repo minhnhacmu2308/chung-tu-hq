@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, lte, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, lt, lte, or } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems, productCatalog } from "../../../db/schema/declaration.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -82,6 +82,7 @@ function repos(tx: Tx): DeclarationRepos {
         const r = (await tx.select().from(agentRuns).where(and(eq(agentRuns.orgId, orgId), eq(agentRuns.id, id))).limit(1))[0];
         return r ? toRun(r) : null;
       },
+      listRunningBefore: async (orgId, before) => (await tx.select().from(agentRuns).where(and(eq(agentRuns.orgId, orgId), eq(agentRuns.status, "RUNNING"), lt(agentRuns.startedAt, before))).orderBy(agentRuns.startedAt).limit(200)).map(toRun),
       insert: async (row) => void (await tx.insert(agentRuns).values(row)),
       update: async (id, patch) => void (await tx.update(agentRuns).set(patch).where(eq(agentRuns.id, id))),
     },

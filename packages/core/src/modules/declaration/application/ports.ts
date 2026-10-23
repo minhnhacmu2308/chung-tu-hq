@@ -76,6 +76,8 @@ export interface DeclarationRepos {
   };
   agentRuns: {
     latest(orgId: string, dossierId: string): Promise<AgentRunRow | null>;
+    /** Lần chạy còn RUNNING bắt đầu trước `before` (job quét định kỳ). */
+    listRunningBefore(orgId: string, before: Date): Promise<AgentRunRow[]>;
     get(orgId: string, id: string): Promise<AgentRunRow | null>;
     insert(row: AgentRunRow): Promise<void>;
     update(id: string, patch: Partial<Pick<AgentRunRow, "status" | "tasks" | "log" | "finishedAt">>): Promise<void>;

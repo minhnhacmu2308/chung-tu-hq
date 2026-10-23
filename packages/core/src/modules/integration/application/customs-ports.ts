@@ -23,6 +23,8 @@ export interface CustomsRepos {
     get(orgId: string, id: string): Promise<OutboxRow | null>;
     findByKey(orgId: string, key: string): Promise<OutboxRow | null>;
     listForDossier(orgId: string, dossierId: string): Promise<OutboxRow[]>;
+    /** Dòng PENDING chưa từng được xử lý (attempts = 0) tạo trước `before` – job customs-send có thể đã mất (job quét định kỳ). */
+    listUnsentBefore(orgId: string, before: Date): Promise<OutboxRow[]>;
     insert(row: OutboxRow): Promise<void>;
     update(id: string, patch: Partial<Pick<OutboxRow, "status" | "attempts" | "lastError" | "nextAttemptAt" | "updatedAt">>): Promise<void>;
   };

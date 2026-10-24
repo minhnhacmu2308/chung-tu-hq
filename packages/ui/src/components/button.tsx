@@ -61,15 +61,18 @@ export function Button({
   ...props
 }: ButtonProps) {
   const classes = cn(buttonVariants({ variant, size, fullWidth }), className);
+  // Tùy chọn "Kính mờ" (data-surface="glass"): nút chính/phụ thành kính – CSS trong tokens.css đọc thuộc tính này.
+  const glass = variant === "secondary" || variant === "primary" || variant == null ? { "data-glass-button": variant ?? "primary" } : {};
   if (asChild) {
     return (
-      <Slot className={classes} aria-disabled={disabled || loading || undefined} {...props}>
+      <Slot {...glass} className={classes} aria-disabled={disabled || loading || undefined} {...props}>
         {children}
       </Slot>
     );
   }
   return (
     <button
+      {...glass}
       type={type ?? "button"}
       className={classes}
       disabled={disabled || loading}

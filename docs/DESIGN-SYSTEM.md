@@ -47,7 +47,7 @@ Bảng màu mặc định của Tailwind (`blue-500`, `gray-100`…) **đã bị
 | Mật độ Gọn / Chuẩn / Thoáng | `data-density` → `--spacing` | Người dùng |
 | Dải xám Slate / Gray | `data-gray` → `--kb-gray-*` | Doanh nghiệp (có thể khóa) |
 | Màu chính (thương hiệu) | `brandThemeCss()` trong `appearanceCss()` | Doanh nghiệp (có thể khóa) |
-| Chất liệu khung Đặc / Kính mờ | `data-surface` → CSS lên `[data-glass]` (Card, Dialog + DialogFooter, AssistantPanel, DropdownMenu, Popover) và menu chính kiểu Mặc định: nền bề mặt ~55% + `backdrop-filter: blur`. Bảng, ô nhập giữ nền đặc. Tự về nền đặc khi trình duyệt không hỗ trợ hoặc hệ điều hành bật giảm trong suốt / tăng tương phản. Component khung mới nên gắn `data-glass` | Người dùng |
+| Chất liệu khung Đặc / Kính mờ | `data-surface` → CSS lên `[data-glass]` (Card, Dialog + DialogFooter, AssistantPanel, DropdownMenu, Popover) và menu chính kiểu Mặc định: nền bề mặt ~55% + `backdrop-filter: blur`. Nút chính và nút phụ (`Button`, `data-glass-button`) cũng thành kính; nút xóa và bảng, ô nhập giữ nền đặc. Tự về nền đặc khi trình duyệt không hỗ trợ hoặc hệ điều hành bật giảm trong suốt / tăng tương phản. Component khung mới nên gắn `data-glass` | Người dùng |
 | Màu phụ | `--kb-color-accent` trong `appearanceCss()`; chỉ để pha nền, không dùng cho chữ | Doanh nghiệp (có thể khóa) |
 | Bo góc Vuông / Mặc định / Bo tròn | `data-radius` | Doanh nghiệp (có thể khóa) |
 | Cỡ chữ Nhỏ / Vừa / Lớn | `data-font-size` | Người dùng |

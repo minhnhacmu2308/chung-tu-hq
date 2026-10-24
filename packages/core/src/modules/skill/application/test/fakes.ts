@@ -37,8 +37,13 @@ export class ScriptedAi implements AiProvider {
 }
 
 export class RecordingUsage implements UsageRecorder {
-  readonly events: unknown[] = [];
-  async record(e: unknown) {
+  readonly events: { dedupeKey?: string; [k: string]: unknown }[] = [];
+  /** Như DrizzleUsageRecorder: cùng dedupeKey chỉ ghi một lần. */
+  async record(e: { dedupeKey?: string; [k: string]: unknown }) {
+    if (e.dedupeKey) {
+      const i = this.events.findIndex((x) => x.dedupeKey === e.dedupeKey);
+      if (i >= 0) return `use_${i + 1}`;
+    }
     this.events.push(e);
     return `use_${this.events.length}`;
   }

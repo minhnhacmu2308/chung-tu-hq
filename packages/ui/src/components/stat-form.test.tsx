@@ -1,5 +1,7 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import * as React from "react";
+import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { Field } from "./field.js";
 import { FormSection } from "./form-section.js";
@@ -46,22 +48,101 @@ describe("FormSection", () => {
     expect(screen.getByRole("heading", { name: "Ghi chú", level: 3 })).toBeInTheDocument();
     await expectNoA11yViolations(container);
   });
+
+  it("Select: bàn phím (↓ mở, ↑↓ di chuyển bỏ qua mục khoá, Enter chọn, Esc đóng, gõ chữ để nhảy) + onChange(e) như thẻ gốc", async () => {
+    const onChange = vi.fn((e: React.ChangeEvent<HTMLSelectElement>) => e.target.value);
+    function Controlled() {
+      const [v, setV] = React.useState("A11");
+      return (
+        <Select
+          aria-label="Loại hình"
+          value={v}
+          onChange={(e) => { onChange(e); setV(e.target.value); }}
+          options={[{ value: "A11", label: "A11 Nhập kinh doanh" }, { value: "A12", label: "A12 Khoá", disabled: true }, { value: "E21", label: "E21 Gia công" }, { value: "B11", label: "B11 Xuất kinh doanh" }]}
+        />
+      );
+    }
+    render(<Controlled />);
+    const select = screen.getByRole("combobox", { name: "Loại hình" });
+    select.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(select).toHaveAttribute("aria-expanded", "true");
+    expect(select.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option", { name: "A11 Nhập kinh doanh" }).id);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(select.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option", { name: "E21 Gia công" }).id);
+    await userEvent.keyboard("{Enter}");
+    expect(select).toHaveAttribute("aria-expanded", "false");
+    expect(select).toHaveTextContent("E21 Gia công");
+    expect(onChange).toHaveReturnedWith("E21");
+    expect(document.activeElement).toBe(select);
+    await userEvent.keyboard("{ArrowDown}{Escape}");
+    expect(select).toHaveAttribute("aria-expanded", "false");
+    expect(select).toHaveTextContent("E21 Gia công");
+    // Đóng mà gõ chữ: chọn luôn mục bắt đầu bằng chữ đó, như select gốc.
+    await userEvent.keyboard("b");
+    expect(select).toHaveTextContent("B11 Xuất kinh doanh");
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("Select / Checkbox tự vẽ", () => {
-  it("vẫn là control gốc của trình duyệt (bàn phím, trình đọc màn hình dùng như cũ)", async () => {
+  it("Select: nút combobox có nhãn theo Field, danh sách tự vẽ đánh dấu mục đang chọn; Checkbox vẫn là ô gốc", async () => {
     const { container } = render(
-      <>
-        <Field label="Điều kiện giao hàng"><Select options={[{ value: "CIF", label: "CIF" }, { value: "FOB", label: "FOB" }]} defaultValue="CIF" /></Field>
+      <form aria-label="Giao hàng">
+        <Field label="Điều kiện giao hàng"><Select name="incoterm" options={[{ value: "CIF", label: "CIF" }, { value: "FOB", label: "FOB" }]} defaultValue="CIF" /></Field>
         <Checkbox label="Ghi nhớ đăng nhập" defaultChecked />
-      </>,
+      </form>,
     );
     const select = screen.getByRole("combobox", { name: "Điều kiện giao hàng" });
-    expect(select.tagName).toBe("SELECT");
-    expect(select).toHaveValue("CIF");
+    expect(select.tagName).toBe("BUTTON");
+    expect(select).toHaveTextContent("CIF");
+    await userEvent.click(select);
+    expect(select).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("listbox", { name: "Điều kiện giao hàng" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "CIF" })).toHaveAttribute("aria-selected", "true");
+    await expectNoA11yViolations(document.body);
+    await userEvent.click(screen.getByRole("option", { name: "FOB" }));
+    expect(select).toHaveTextContent("FOB");
+    // Giá trị vẫn đi theo form như thẻ select gốc.
+    expect(new FormData(container.querySelector("form")!).get("incoterm")).toBe("FOB");
     const box = screen.getByRole("checkbox", { name: "Ghi nhớ đăng nhập" });
     expect(box).toBeChecked();
     expect(box).toHaveClass("kb-checkbox");
     await expectNoA11yViolations(container);
+  });
+
+  it("Select: bàn phím (↓ mở, ↑↓ di chuyển bỏ qua mục khoá, Enter chọn, Esc đóng, gõ chữ để nhảy) + onChange(e) như thẻ gốc", async () => {
+    const onChange = vi.fn((e: React.ChangeEvent<HTMLSelectElement>) => e.target.value);
+    function Controlled() {
+      const [v, setV] = React.useState("A11");
+      return (
+        <Select
+          aria-label="Loại hình"
+          value={v}
+          onChange={(e) => { onChange(e); setV(e.target.value); }}
+          options={[{ value: "A11", label: "A11 Nhập kinh doanh" }, { value: "A12", label: "A12 Khoá", disabled: true }, { value: "E21", label: "E21 Gia công" }, { value: "B11", label: "B11 Xuất kinh doanh" }]}
+        />
+      );
+    }
+    render(<Controlled />);
+    const select = screen.getByRole("combobox", { name: "Loại hình" });
+    select.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(select).toHaveAttribute("aria-expanded", "true");
+    expect(select.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option", { name: "A11 Nhập kinh doanh" }).id);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(select.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option", { name: "E21 Gia công" }).id);
+    await userEvent.keyboard("{Enter}");
+    expect(select).toHaveAttribute("aria-expanded", "false");
+    expect(select).toHaveTextContent("E21 Gia công");
+    expect(onChange).toHaveReturnedWith("E21");
+    expect(document.activeElement).toBe(select);
+    await userEvent.keyboard("{ArrowDown}{Escape}");
+    expect(select).toHaveAttribute("aria-expanded", "false");
+    expect(select).toHaveTextContent("E21 Gia công");
+    // Đóng mà gõ chữ: chọn luôn mục bắt đầu bằng chữ đó, như select gốc.
+    await userEvent.keyboard("b");
+    expect(select).toHaveTextContent("B11 Xuất kinh doanh");
+    expect(onChange).toHaveBeenCalledTimes(2);
   });
 });

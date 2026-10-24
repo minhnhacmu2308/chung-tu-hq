@@ -44,7 +44,7 @@ export async function markDeclarationSubmitted(deps: DeclarationDeps, ctx: { org
     if (!decl) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
     if (decl.status === "SUBMITTED") return ok(undefined);
     if (decl.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Tờ khai chưa được phê duyệt"));
-    await r.declarations.update(decl.id, { status: "SUBMITTED", updatedAt: deps.clock.now() });
+    await r.declarations.update(decl.orgId, decl.id, { status: "SUBMITTED", updatedAt: deps.clock.now() });
     return ok(undefined);
   });
 }
@@ -55,7 +55,7 @@ export async function markDeclarationDraft(deps: DeclarationDeps, ctx: { orgId: 
     const decl = await r.declarations.latest(ctx.orgId, dossierId);
     if (!decl) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
     if (decl.status === "DRAFT") return ok(undefined);
-    await r.declarations.update(decl.id, { status: "DRAFT", approvedBy: null, approvedAt: null, updatedAt: deps.clock.now() });
+    await r.declarations.update(decl.orgId, decl.id, { status: "DRAFT", approvedBy: null, approvedAt: null, updatedAt: deps.clock.now() });
     return ok(undefined);
   });
   if (!r0.ok) return r0;

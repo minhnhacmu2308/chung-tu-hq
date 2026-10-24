@@ -103,7 +103,7 @@ describe("luồng tờ khai trên Postgres thật", () => {
   });
 
   it("xác nhận HS (thuế suất, field_audit) → review → duyệt bị chặn vì BLOCKER FAIL (trọng lượng PL ≠ B/L); sửa chỉ tiêu tay giữ qua dựng lại", async () => {
-    const id = (await dossier.uow.asOrg(chau, (r) => r.dossiers.list(chau.orgId, {})))[0]!.id;
+    const id = (await dossier.uow.asOrg(chau, (r) => r.dossiers.list(chau.orgId, {}, { limit: 1, offset: 0 })))[0]!.id;
     const items = unwrap(await listLineItems(declaration, chau, id));
     for (const it of items) unwrap(await confirmHs(declaration, chau, it.id, it.hsSuggested ?? "8482.10.00"));
     const audits = await withCtx(db, chau, (tx) => tx.execute(sql`select key, new_value, source from field_audit where dossier_id = ${id} and source = 'HS_CONFIRM' order by at`));

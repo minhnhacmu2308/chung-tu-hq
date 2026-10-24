@@ -26,11 +26,13 @@ export async function getSkill(deps: SkillDeps, ctx: Ctx, id: string): Promise<R
 export async function setSkillEnabled(deps: SkillDeps, ctx: Ctx, id: string, enabled: boolean): Promise<Result<Skill>> {
   const allowed = requireRole(ctx, "ADMIN");
   if (!allowed.ok) return allowed;
-  return deps.uow.asOrg(ctx, async (r) => {
+  const res = await deps.uow.asOrg(ctx, async (r) => {
     const l = await loadSkill(r, ctx.orgId, id);
     if (!l.ok) return l;
     const now = deps.clock.now();
-    await r.skills.update(id, { enabled, updatedAt: now });
+    await r.skills.update(ctx.orgId, id, { enabled, updatedAt: now });
     return ok(toSkill({ ...l.value.skill, enabled, updatedAt: now }, l.value.version));
   });
+  if (res.ok) await deps.audit?.record(ctx, { action: enabled ? "SKILL_ENABLED" : "SKILL_DISABLED", targetType: "skill", targetId: id, targetLabel: res.value.name });
+  return res;
 }

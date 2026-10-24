@@ -52,6 +52,24 @@ beforeEach(() => {
 });
 
 describe("register", () => {
+  it("lỗi giữa chừng (vd ghi membership OWNER thất bại) → không còn user/org/MST nào được ghi (một transaction); email không gửi", async () => {
+    const real = uow;
+    deps.uow = {
+      system: (fn) => real.system((r) => fn({ ...r, memberships: { ...r.memberships, insert: async () => { throw new Error("connection terminated"); } } })),
+      asUser: (u, fn) => real.asUser(u, fn),
+      asOrg: (c, fn) => real.asOrg(c, fn),
+    };
+    await expect(register(deps, { email: "an@minhkhang.vn", name: "An", password: "matkhau123", taxCode: "0101234567", joinExisting: false }, META)).rejects.toThrow("connection terminated");
+    // In-memory uow không rollback như Postgres – kiểm điều quan trọng nhất: chưa có mail nào gửi (gửi sau commit) và OWNER không bị thiếu khi thành công.
+    expect(mailer.sent).toHaveLength(0);
+    deps.uow = real;
+    uow.data.users = uow.data.users.filter((u) => u.email !== "an@minhkhang.vn");
+    uow.data.orgs = uow.data.orgs.filter((o) => o.taxCode !== "0101234567");
+    unwrap(await register(deps, { email: "an@minhkhang.vn", name: "An", password: "matkhau123", taxCode: "0101234567", joinExisting: false }, META));
+    const org = uow.data.orgs.find((o) => o.taxCode === "0101234567")!;
+    expect(uow.data.memberships.find((m) => m.orgId === org.id)).toMatchObject({ role: "OWNER", status: "ACTIVE" });
+    expect(mailer.sent).toHaveLength(1);
+  });
   it("MST mới: tạo org TRIAL, membership OWNER, mail xác thực, session dùng được, gọi onOrgCreated", async () => {
     const created: { orgId: string; userId: string }[] = [];
     deps.onOrgCreated = async (o) => void created.push(o);
@@ -219,6 +237,29 @@ describe("token một lần", () => {
     unwrap(await resetPassword(deps, { token, password: "matkhaumoi1" }));
     expect((await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META)).ok).toBe(false);
     expect((await login(deps, { email: "chau.le@anphat-demo.vn", password: "matkhaumoi1" }, META)).ok).toBe(true);
+  });
+  it("đặt lại mật khẩu: hủy mọi phiên đang đăng nhập của người đó; token dùng lần 2 → TOKEN_INVALID", async () => {
+    // random mặc định trả cùng một chuỗi → mọi token trùng nhau; ở đây cần phiên phân biệt được.
+    let seq = 0;
+    deps.random = (n) => Buffer.alloc(n, ++seq);
+    const { sessionToken: s1 } = unwrap(await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META));
+    const { sessionToken: s2 } = unwrap(await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META));
+    const { sessionToken: other } = unwrap(await login(deps, { email: "b@b.vn", password: "demo1234" }, META));
+    unwrap(await requestPasswordReset(deps, "chau.le@anphat-demo.vn", META));
+    const token = mailer.sent[0]!.text.match(/token=([A-Za-z0-9_-]+)/)![1]!;
+    unwrap(await resetPassword(deps, { token, password: "matkhaumoi1" }));
+    expect((await getSession(deps, s1)).ok).toBe(false);
+    expect((await getSession(deps, s2)).ok).toBe(false);
+    expect((await getSession(deps, other)).ok).toBe(true);
+    expect(errCode(await resetPassword(deps, { token, password: "matkhaukhac2" }))).toBe("TOKEN_INVALID");
+    expect((await login(deps, { email: "chau.le@anphat-demo.vn", password: "matkhaumoi1" }, META)).ok).toBe(true);
+  });
+  it("hai request cùng một token đặt lại mật khẩu chạy song song: chỉ một bên thành công", async () => {
+    unwrap(await requestPasswordReset(deps, "chau.le@anphat-demo.vn", META));
+    const token = mailer.sent[0]!.text.match(/token=([A-Za-z0-9_-]+)/)![1]!;
+    const results = await Promise.all([resetPassword(deps, { token, password: "matkhau-a1" }), resetPassword(deps, { token, password: "matkhau-b2" })]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.filter((r) => !r.ok).map(errCode)).toEqual(["TOKEN_INVALID"]);
   });
   it("acceptInvite: membership INVITED → ACTIVE + session; token hết hạn → TOKEN_INVALID", async () => {
     uow.seed({

@@ -2,7 +2,7 @@ import { useId, type CSSProperties, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
-const MESSAGES = { vi: { custom: "Màu khác" }, en: { custom: "Custom color" } } satisfies Messages<"custom">;
+const MESSAGES = { vi: { custom: "Màu khác" }, en: { custom: "Custom color" }, zh: { custom: "自定义颜色" } } satisfies Messages<"custom">;
 
 /* ---------------- SegmentedControl ---------------- */
 // Nhóm radio gốc của trình duyệt (bàn phím mũi tên, trình đọc màn hình hoạt động sẵn), chỉ đổi giao diện.
@@ -31,9 +31,11 @@ export function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   const name = useId();
   return (
-    <fieldset disabled={disabled} className={cn("flex items-center justify-between gap-3 disabled:opacity-60", className)}>
+    // min-w-0: fieldset mặc định không co hẹp hơn nội dung → nhiều lựa chọn sẽ tràn ngang trên mobile.
+    <fieldset disabled={disabled} className={cn("flex min-w-0 items-center justify-between gap-3 disabled:opacity-60", className)}>
       <legend className={cn("float-left text-sm text-fg", hideLabel && "sr-only")}>{label}</legend>
-      <div className="inline-flex rounded-md border border-border bg-surface-muted p-0.5">
+      {/* Hẹp quá thì các lựa chọn xuống dòng trong khung, không đẩy trang tràn ngang. */}
+      <div className="inline-flex max-w-full flex-wrap gap-0.5 rounded-md border border-border bg-surface-muted p-0.5">
         {options.map((o) => (
           <label
             key={o.value}

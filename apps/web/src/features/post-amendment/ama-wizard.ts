@@ -5,15 +5,17 @@ import {
   type AmaTaxColumn, type CustomsOperation, type CustomsRejection, type CustomsStage, type LayoutBlock, type LayoutField, type LayoutItem, type PostAmendment, type PostAmendmentLine,
   type PostAmendmentValues,
 } from "@kb/contracts";
+import { pickMessages, type UiLocale } from "@kb/ui";
+import { AMA_MESSAGES } from "./ama.messages";
 
 export type AmaSubStep = "pick" | "edit" | "reason" | "declare";
-export const AMA_SUB_STEPS: readonly { id: AmaSubStep; label: string }[] = [
-  { id: "pick", label: "Chọn dòng" },
-  { id: "edit", label: "Sửa nội dung" },
-  { id: "reason", label: "Lý do & phê duyệt" },
-  { id: "declare", label: "Khai Hải quan" },
-];
-const ORDER = AMA_SUB_STEPS.map((s) => s.id);
+const ORDER: readonly AmaSubStep[] = ["pick", "edit", "reason", "declare"];
+const SUB_LABEL = { pick: "subPick", edit: "subEdit", reason: "subReason", declare: "subDeclare" } as const;
+/** 4 bước nhỏ kèm nhãn theo ngôn ngữ giao diện. */
+export const amaSubSteps = (locale: UiLocale): { id: AmaSubStep; label: string }[] => {
+  const t = pickMessages(AMA_MESSAGES, locale);
+  return ORDER.map((id) => ({ id, label: t[SUB_LABEL[id]] }));
+};
 
 /** Bước 7 chỉ có khi tờ khai đã thông quan hoặc đang sửa sau thông quan. */
 export const postStepVisible = (stage: CustomsStage | undefined) => stage === "CLEARED" || Boolean(stage?.startsWith("POST_"));
@@ -46,12 +48,13 @@ export const subStepEditable = (a: PostAmendment, s: AmaSubStep, canEdit: boolea
 /** Một hàng so sánh: cột thuế của @kb/contracts (khóa Trước/Sau, kiểu ô, danh mục) + ô tiền thuế tự tính. */
 export type CompareRow = AmaTaxColumn & { computed?: boolean };
 
-const IMPORT_LABEL: Record<string, string> = { HAG_MKA: "Tiền thuế NK/XK" };
-export const IMPORT_COMPARE_ROWS: CompareRow[] = AMA_IMPORT_TAX_COLUMNS.map((c) => ({
-  ...c,
-  label: IMPORT_LABEL[c.before] ?? c.label,
-  ...(c.after === "HAG_AKA" ? { computed: true } : {}),
-}));
+/** Hàng so sánh thuế NK/XK; ô tiền thuế đổi nhãn ngắn theo ngôn ngữ giao diện, các ô khác giữ tên chỉ tiêu của @kb/contracts. */
+export const importCompareRows = (locale: UiLocale): CompareRow[] =>
+  AMA_IMPORT_TAX_COLUMNS.map((c) => ({
+    ...c,
+    label: c.before === "HAG_MKA" ? pickMessages(AMA_MESSAGES, locale).importTaxLabel : c.label,
+    ...(c.after === "HAG_AKA" ? { computed: true } : {}),
+  }));
 export const otherCompareRows = (n: number): CompareRow[] =>
   amaOtherTaxColumns(n).map((c) => ({ ...c, ...(c.after === `HAG_AA${n}` ? { computed: true } : {}) }));
 
@@ -122,19 +125,21 @@ export function amaChangeSummary(a: PostAmendment): { lines: number; changed: nu
   return { lines: a.lines.length, changed, taxBefore: formatDec(before), taxAfter: formatDec(after), taxDelta: formatDec(delta) };
 }
 
-export function approveBlockers(a: PostAmendment, o: { pendingEdits: number; fourEyes: boolean }): string[] {
+export function approveBlockers(a: PostAmendment, o: { pendingEdits: number; fourEyes: boolean }, locale: UiLocale): string[] {
+  const t = pickMessages(AMA_MESSAGES, locale);
   return [
-    !a.lines.length && "Chưa có dòng hàng",
-    !a.header["TK_REC"]?.trim() && "Chưa nhập mã lý do khai bổ sung",
-    o.pendingEdits > 0 && "Còn thay đổi chưa lưu",
-    o.fourEyes && "Nguyên tắc 4 mắt: nhờ Người duyệt khác phê duyệt",
+    !a.lines.length && t.blkNoLines,
+    !a.header["TK_REC"]?.trim() && t.blkNoReason,
+    o.pendingEdits > 0 && t.blkPending,
+    o.fourEyes && t.blkFourEyes,
   ].filter((x): x is string => Boolean(x));
 }
 
-export function amaPrimaryAction(a: PostAmendment, o: { stage: CustomsStage; sending: boolean }): { op: "AMA" | "AMC"; label: string } | null {
+export function amaPrimaryAction(a: PostAmendment, o: { stage: CustomsStage; sending: boolean }, locale: UiLocale): { op: "AMA" | "AMC"; label: string } | null {
   if (o.sending) return null;
-  if (a.status === "APPROVED" && (o.stage === "POST_EDITING" || o.stage === "POST_RECALLED")) return { op: "AMA", label: "Ký số & khai tạm AMA" };
-  if (a.status === "PRE_DECLARED" && o.stage === "POST_PRE_DECLARED") return { op: "AMC", label: "Khai chính thức AMC" };
+  const t = pickMessages(AMA_MESSAGES, locale);
+  if (a.status === "APPROVED" && (o.stage === "POST_EDITING" || o.stage === "POST_RECALLED")) return { op: "AMA", label: t.primaryAma };
+  if (a.status === "PRE_DECLARED" && o.stage === "POST_PRE_DECLARED") return { op: "AMC", label: t.primaryAmc };
   return null;
 }
 
@@ -147,9 +152,9 @@ const MAIN_KEYS = ["TK_REC", "TK_NTA"];
 const keep = (f: LayoutField) => !amaHeaderLocked(f.key) && !MAIN_KEYS.includes(f.key) && f.origin !== "CUSTOMS";
 
 /** Bước ③: hiện sẵn Mã lý do + Ghi chú sau; các ô sửa được còn lại của đầu bản khai vào "Thông tin khác" (bỏ ô khóa theo tờ khai gốc). */
-export function reasonLayout(): { main: LayoutBlock; other: LayoutBlock[] } {
+export function reasonLayout(locale: UiLocale): { main: LayoutBlock; other: LayoutBlock[] } {
   const fields = AMA_HEADER_LAYOUT.flatMap((b) => b.items).filter((i): i is LayoutField => i.kind === "field");
-  const main: LayoutBlock = { id: "ama-ly-do-chinh", title: "Lý do khai bổ sung", items: MAIN_KEYS.map((k) => fields.find((f) => f.key === k)!) };
+  const main: LayoutBlock = { id: "ama-ly-do-chinh", title: pickMessages(AMA_MESSAGES, locale).reasonBlock, items: MAIN_KEYS.map((k) => fields.find((f) => f.key === k)!) };
   const other = AMA_HEADER_LAYOUT.map((b) => ({
     ...b,
     items: b.items.flatMap((i): LayoutItem[] => {
@@ -163,7 +168,8 @@ export function reasonLayout(): { main: LayoutBlock; other: LayoutBlock[] } {
 
 /** Ô bắt buộc của "Thông tin khác" còn trống – có thì khối tự mở và báo. */
 export function missingOther(header: PostAmendmentValues): LayoutField[] {
-  return reasonLayout()
+  // Chỉ xét ô (không dùng tiêu đề khối) → ngôn ngữ nào cũng như nhau.
+  return reasonLayout("vi")
     .other.flatMap((b) => b.items.flatMap((i) => (i.kind === "field" ? [i] : i.fields)))
     .filter((f) => f.required && !header[f.key]?.trim());
 }

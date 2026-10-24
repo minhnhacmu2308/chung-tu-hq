@@ -17,14 +17,14 @@ export function createDocumentsAdapter(dossier: DossierDeps, orgInfo: OrgInfoRea
       return d ? toInfo(d) : null;
     },
     listForDossier: async (orgId, dossierId) => (await dossier.uow.asOrg(ctx(orgId), (r) => r.documents.list(orgId, dossierId))).map(toInfo),
-    setStatus: (orgId, id, status, patch) => dossier.uow.asOrg(ctx(orgId), (r) => r.documents.update(id, { status, ...(patch ?? {}) })),
+    setStatus: (orgId, id, status, patch) => dossier.uow.asOrg(ctx(orgId), (r) => r.documents.update(orgId, id, { status, ...(patch ?? {}) })),
     afterMerge: (orgId, dossierId, info) =>
       dossier.uow.asOrg(ctx(orgId), async (r) => {
         const d = await r.dossiers.get(orgId, dossierId);
-        if (!d) return;
+        if (!d) return { finishedNow: false };
         const now = dossier.clock.now();
         const stillProcessing = d.status === "PROCESSING" || d.status === "DRAFT";
-        await r.dossiers.update(dossierId, {
+        await r.dossiers.update(orgId, dossierId, {
           suspectFields: info.suspectFields,
           ...(info.invoiceValue ? { invoiceValue: info.invoiceValue } : {}),
           ...(info.currency ? { currency: info.currency } : {}),
@@ -32,8 +32,9 @@ export function createDocumentsAdapter(dossier: DossierDeps, orgInfo: OrgInfoRea
           ...(info.allDone && stillProcessing ? { status: "NEEDS_REVIEW", step: "ocr" } : {}),
           updatedAt: now,
         });
+        return { finishedNow: info.allDone && stillProcessing };
       }),
-    finishReading: (orgId, dossierId, suspectFields) => dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.update(dossierId, { suspectFields, step: "ocr", status: "NEEDS_REVIEW", updatedAt: dossier.clock.now() })),
+    finishReading: (orgId, dossierId, suspectFields) => dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.update(orgId, dossierId, { suspectFields, step: "ocr", status: "NEEDS_REVIEW", updatedAt: dossier.clock.now() })),
     readFile: (key) => dossier.storage.get(key),
     dossierStatus: async (orgId, dossierId) => (await dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.get(orgId, dossierId)))?.status ?? null,
     publish: (orgId, dossierId, event) => dossier.publisher.publish(orgId, dossierId, event),

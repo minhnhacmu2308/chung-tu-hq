@@ -2,26 +2,29 @@ import { loadEnv } from "@kb/core/config";
 import { activeQuotaBonus } from "@kb/core/modules/admin";
 import { createRateDeps } from "@kb/core/modules/admin/infrastructure";
 import { createDb, platformDbUrl } from "@kb/core/db";
-import { createBillingInfrastructure, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
+import { createAiBudget, createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { createCustomsInfrastructure } from "@kb/core/modules/integration/infrastructure";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
+import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { runRules } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
-import { asOrgId, asUserId, dec, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
+import { asOrgId, asUserId, createLogger, dec, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
+
+const log = createLogger({ name: "worker" });
 
 /** Composition root của worker: nối hạ tầng vào use case. Cùng cách nối với apps/web/src/container.ts. */
 export function buildContainer() {
   const env = loadEnv();
   const db = createDb(env.DATABASE_URL, { max: 5 });
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
-  redis.on("error", (e) => console.error("[redis]", e.message));
+  redis.on("error", (e) => log.error("redis lỗi kết nối", { err: e }));
   const queues = new Map<QueueName, Queue>();
   const queue: JobQueue = {
     async enqueue(name, payload, opts) {
@@ -37,12 +40,19 @@ export function buildContainer() {
   const identity = createIdentityInfrastructure({ db, redis, env, clock: systemClock });
   const orgPlan = { get: (orgId: string) => identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId)) };
   const usageRecorder = new DrizzleUsageRecorder(db, dec(String(env.AI_USD_VND_RATE)));
+  // Chi phí HSCodePro / Customs Hub (đơn giá từ env, mặc định 0) – nối vào declaration và customs bên dưới.
+  const serviceUsage = createServiceUsageMeter(db, env);
   // Mức dùng tháng: số hồ sơ + trang từ module dossier (nối lazy vì dossier tạo sau), chi phí AI từ usage_events.
   const monthRange = (now: Date) => ({ from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)) });
   let dossierStats: (orgId: string, now: Date) => Promise<{ dossiers: number; pages: number }> = async () => ({ dossiers: 0, pages: 0 });
   const billing = createBillingInfrastructure({
     db, orgPlan, clock: systemClock,
-    usage: { thisMonth: async (orgId, now) => ({ ...(await dossierStats(orgId, now)), aiCostVnd: (await usageRecorder.monthlyTotals(orgId, now)).aiCostVnd }) },
+    usage: {
+      thisMonth: async (orgId, now) => {
+        const { aiCostVnd, hsCostVnd, customsCostVnd } = await usageRecorder.monthlyTotals(orgId, now);
+        return { ...(await dossierStats(orgId, now)), aiCostVnd, hsCostVnd, customsCostVnd };
+      },
+    },
   });
   const quota = {
     check: async (orgId: string, kind: "DOSSIER" | "PAGES", amount: number) => {
@@ -62,7 +72,7 @@ export function buildContainer() {
   };
   identity.usage = async (orgId) => {
     const u = await billing.usage.thisMonth(orgId, systemClock.now());
-    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd };
+    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd, hsCostVnd: u.hsCostVnd, customsCostVnd: u.customsCostVnd };
   };
   const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
   // Luật đối chiếu cần biết hồ sơ nhập/xuất + phương thức vận chuyển: nối từ module dossier tại đây (validation không import dossier).
@@ -92,6 +102,8 @@ export function buildContainer() {
     usage, ai: skillBase.ai, skills: createSkillResolver(skillBase),
   });
   extraction.notify = notify;
+  // Trần chi phí AI/ngày theo doanh nghiệp (AI_DAILY_COST_CAP_VND; 0 = không giới hạn).
+  extraction.aiBudget = createAiBudget({ capVnd: env.AI_DAILY_COST_CAP_VND, spentToday: (orgId, now) => usageRecorder.dailyAiCostVnd(orgId, now), clock: systemClock });
   const skill = skillBase;
   identity.onOrgCreated = async (o) => void (await cloneTemplatesForOrg(skill, o));
   const declaration = createDeclarationInfrastructure({
@@ -99,18 +111,28 @@ export function buildContainer() {
     org: {
       get: async (orgId) => {
         const o = await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId));
-        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", fourEyes: o?.fourEyes ?? false };
+        return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", address: o?.address ?? "", phone: o?.phone ?? "", postalCode: o?.postalCode ?? "", fourEyes: o?.fourEyes ?? false };
       },
     },
     users: skillBase.users,
   });
   declaration.notify = notify;
+  declaration.usage = serviceUsage;
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
   customs.notify = notify;
+  customs.usage = serviceUsage;
+  // Hộp thư chứng từ: lấy thư Gmail / Outlook, file lưu cùng kho chứng từ.
+  const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
+  // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
+  mailbox.audit = identity.audit;
+  dossier.audit = identity.audit;
+  declaration.orgAudit = identity.audit;
+  customs.orgAudit = identity.audit;
+  skill.audit = identity.audit;
   // Tỷ giá tính thuế: bảng nền tảng, ghi bằng role kb_platform (ADR 0006).
   const rates = createRateDeps(platformDbUrl(env));
   return {
-    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs, rates,
+    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs, mailbox, rates,
     async close() {
       await Promise.all([...queues.values()].map((q) => q.close()));
       await rates.db.close();

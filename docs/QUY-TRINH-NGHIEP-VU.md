@@ -48,13 +48,17 @@ flowchart LR
 flowchart TD
   R[Đăng ký: email + mật khẩu + MST] --> Q{MST đã có<br/>trong hệ thống?}
   Q -- Chưa --> N[Tạo doanh nghiệp<br/>gói TRIAL, người đăng ký = OWNER<br/>sao chép Skill mẫu] --> L[Đăng nhập ngay<br/>+ gửi email xác thực]
-  Q -- Có --> J[Gửi yêu cầu tham gia<br/>PENDING] --> O[OWNER/ADMIN duyệt] --> M[Thành viên vai trò DECLARANT]
+  Q -- Có --> J[Gửi yêu cầu tham gia<br/>PENDING] --> O{OWNER/ADMIN}
+  O -- Duyệt --> M[Thành viên vai trò DECLARANT<br/>+ thông báo + email]
+  O -- Từ chối --> X[REJECTED<br/>email kèm lý do nếu có]
 ```
 
 - MST 10 hoặc 13 số; tên/địa chỉ điền sẵn từ tra cứu đăng ký thuế (hiện là adapter giả).
 - Đăng ký tối đa 5 lần/IP/giờ. Đăng nhập: khóa 15 phút sau 10 lần sai (theo email + IP). Phiên 30 ngày, tự gia hạn khi còn < 15 ngày.
 - Quên mật khẩu: tối đa 3 yêu cầu/email/giờ, luôn trả "đã gửi" (không lộ email có tồn tại).
 - Mời thành viên: mọi vai trò trừ OWNER; lời mời hạn 7 ngày; người được mời đặt tên + mật khẩu là vào được.
+- Yêu cầu tham gia (Cài đặt → Thành viên, chỉ OWNER/ADMIN thấy): **Duyệt** hoặc **Từ chối** (lý do không bắt buộc, ≤ 500 ký tự, gửi kèm email cho người xin). Chỉ xử lý được yêu cầu đang PENDING; bị từ chối thì đăng nhập báo "chưa thuộc doanh nghiệp nào".
+- Chuyển quyền sở hữu: chỉ OWNER, cho thành viên **đang hoạt động** khác mình; phải nhập lại mật khẩu (sai 5 lần/15 phút → tạm khóa thao tác). Trong một transaction: người nhận → OWNER, chủ cũ → ADMIN (luôn đúng một OWNER); người nhận có thông báo + email. Phiên không phải đăng nhập lại – vai trò đọc lại ở mỗi request.
 
 ### 2.2 Vai trò
 
@@ -131,6 +135,12 @@ Mã hồ sơ tự sinh `HS-{NK|XK}-{YYMM}-{NNN}`. Tạo hồ sơ tính vào hạ
 - Loại chứng từ: Invoice, Packing List, B/L, AWB, C/O, Hợp đồng, Arrival Notice, Hóa đơn cước, Khác.
 - Trạng thái chứng từ: UPLOADING → QUEUED → READING → DONE / ERROR (đọc lại được khi ERROR). Xóa chứng từ → gộp lại dữ liệu lô hàng.
 
+**Lấy chứng từ từ email (Hộp thư chứng từ, `/inbox` – ADR 0007).**
+- Kết nối hộp thư ở Cài đặt › Tài khoản & tích hợp: Gmail hoặc Outlook qua OAuth, chỉ quyền đọc; token lưu mã hóa. Mọi vai trò trừ Người xem kết nối được; gỡ kết nối: người đã kết nối hoặc Quản trị / Chủ sở hữu.
+- Bấm **Lấy chứng từ mới** → lấy email từ lần trước (lần đầu 30 ngày) có file PDF/PNG/JPG/ZIP và từ khóa chứng từ (invoice, packing, B/L, AWB, C/O, hóa đơn, chứng từ…); email đã lấy không lấy lại. Token bị thu hồi → hộp thư báo "Cần kết nối lại".
+- File nằm ở hộp thư chứng từ, **chưa thuộc hồ sơ và chưa chạy AI**. Hệ thống gợi ý hồ sơ đang mở: trùng mã hồ sơ / số vận đơn trong tiêu đề hoặc tên file, hoặc cùng đối tác với người gửi.
+- **Thêm vào hồ sơ**: chọn file + hồ sơ → file đi luồng tải chứng từ như trên (kiểm tra, quota, AI đọc). Hoặc **Tạo hồ sơ mới từ email**: mở trang tạo hồ sơ, tạo xong thì file chờ của email tự vào hồ sơ mới. Email hết file chờ → "Đã xếp"; email không liên quan → "Bỏ qua" (khôi phục được).
+
 ## 6. Bước 3 – OCR & kiểm tra
 
 ### 6.1 Đọc chứng từ
@@ -205,6 +215,9 @@ Người khai chọn **Tạo tờ khai** / **Số hóa chứng từ** / **Cả h
 | 1.37 Văn bản pháp quy | Hàng chương 84/85: **không tự điền**; để trống, chặn phê duyệt đến khi người khai chọn MO (mới) hoặc CU (đã qua sử dụng) |
 | 1.39/2.34 Hình thức hóa đơn | 1 hóa đơn → A; nhiều hóa đơn / không có → B (kèm hướng dẫn bảng kê) |
 | 1.43/2.38 Phương thức thanh toán | T/T, chuyển khoản → **KC** (ghi phương thức thực tế); TTR chỉ dùng cho chuyển tiền bồi hoàn; O/A → OA |
+| 1.40/2.35 Số tiếp nhận hóa đơn điện tử | Chỉ có khi 1.39/2.34 = **D** (xét trên giá trị tờ khai): khi đó bắt buộc; đổi 1.39 sang mã khác → không gửi, không chặn, bỏ khi dựng lại |
+| 1.53–1.62 / 2.44–2.52 Nộp thuế, hạn mức, bảo lãnh | Người khai nhập; 1.58/2.48 luôn hiện (tùy chọn). Hạn mức (1.54–1.57) và bảo lãnh (1.59–1.62) **khai cả nhóm**: nhập một ô thì các ô còn lại bắt buộc |
+| 1.17–1.19, 1.24 / 2.16–2.18 Ủy thác, tại chỗ; 1.64; 1.65–1.67 / 2.54–2.56 | Người khai nhập, tùy chọn, không tự suy (hồ sơ không cho biết ủy thác/tại chỗ/kho ngoại quan/vận chuyển kết hợp); chỉ gửi FPT khi có giá trị |
 | 1.44/2.39 Điều kiện giá | Chỉ lấy mã (bỏ địa danh); C&F/CNF chuẩn hóa; tờ khai xuất không có DPU |
 | 1.44 ô 1 / 2.39 ô 4 Phân loại giá | Có dòng trị giá 0 (FOC) → C; toàn bộ FOC → B; không có hóa đơn → D (nhập) / không khai (xuất) |
 | 1.48 Phí bảo hiểm | Điều kiện đã gồm bảo hiểm (CIF, CIP, C&I, DDU, DDP, DAP, DAF, DAT) → không cộng |
@@ -299,6 +312,14 @@ Menu **Tài khoản & tích hợp**:
 | Khai báo | **Mặc định khai báo** theo NK/XK (loại hình, chi cục, kho, PTTT…), **ghi đè nguồn** từng chỉ tiêu trong phạm vi cho phép; **tài khoản VNACCS** (lưu mã hóa, không bao giờ trả mật khẩu về trình duyệt) | OWNER/ADMIN |
 | Ngưỡng & giao diện | Ngưỡng nghi ngờ, nguyên tắc 4 mắt, giao diện | OWNER/ADMIN |
 
+**Ứng dụng máy tính (PWA)**: web có manifest (`app/manifest.ts`, icon `public/icons/`) nên Chrome/Edge cài được thành ứng dụng (cửa sổ riêng, icon trên màn hình/thanh tác vụ, tự cập nhật theo bản web); Safari: Tệp → Thêm vào Dock. Lối vào: menu người dùng → "Cài đặt ứng dụng" và thẻ "Ứng dụng trên máy tính" ở tab Ngưỡng & giao diện. Chưa có service worker – không chạy ngoại tuyến.
+
+**Danh mục hàng hóa** (menu riêng, `/products`): mặt hàng doanh nghiệp đã khai kèm mã HS – để tra lại HS cho hàng đã khai thay vì gọi HSCodePro (phần khớp hàng khi dựng tờ khai: làm sau).
+- Mỗi mặt hàng một dòng, khóa theo **mã hàng** (không phân biệt hoa thường); không có mã hàng thì theo **tên chuẩn hóa** (chữ thường, gộp khoảng trắng, bỏ "(Hàng) mới 100%" ở cuối). Lưu: mã hàng, tên, mô tả hàng hóa (chi tiết, giúp phân loại HS), mã HS 8 số, ĐVT + ĐVT 2, xuất xứ, biểu thuế, thuế suất NK/VAT/BVMT/TTĐB/tự vệ/PBĐX, đơn giá + mã tiền và đối tác của lần khai gần nhất, ghi chú, số lần khai, tờ khai gần nhất (số, ngày, mã loại hình), nguồn (Import / Thêm tay / Từ tờ khai), dòng gốc trong file import.
+- **Import Excel**: bảng kê dòng hàng đã khai (mỗi dòng một dòng hàng của tờ khai; cần cột "Tên hàng", "Mã HS"; nhận cột theo tên, không phân biệt dấu; file chỉ có "Mô tả hàng hóa" thì dùng cột đó làm tên, có cả hai thì cột mô tả thành mô tả chi tiết). Bảng tự ẩn cột ĐVT 2 / đơn giá / đối tác / thuế suất phụ khi cả danh mục không có dữ liệu (bật lại ở nút "Cột"). Trình duyệt đọc + gộp theo mặt hàng, xem trước (số mặt hàng, dòng bị bỏ qua, mặt hàng khai với nhiều mã HS) rồi gửi từng lô 500. Cột mã hàng trống → lấy dãy số ngay trước "(Hàng) mới 100%" trong tên (vd `…, 145612. Hàng mới 100%`). Mặt hàng đã có: bản import có tờ khai mới hơn thì ghi đè, cũ hơn chỉ điền ô trống; số lần khai lấy giá trị lớn nhất (import lại cùng file không cộng dồn).
+- **Tự thêm khi tờ khai được duyệt**: dòng hàng có HS đã xác nhận → mặt hàng mới thêm vào (nguồn "Từ tờ khai"); mặt hàng đã có (khớp theo tên chuẩn hóa, kể cả mặt hàng có mã hàng) tăng số lần khai + cập nhật lần khai gần nhất (đơn giá, mã tiền, đối tác), **giữ nguyên mã HS trong danh mục**.
+- Quyền: Người khai / Quản trị / Chủ sở hữu thêm, sửa, xóa (cả xóa nhiều), import; Người duyệt / Người xem chỉ xem.
+
 **Cấu hình Skill AI**: mỗi Skill là cách đọc một loại chứng từ (DOCUMENT) hoặc một nhà cung cấp (SUPPLIER).
 - Trường chuẩn bật/tắt (không xóa được), tối đa 20 trường bổ sung do doanh nghiệp định nghĩa (AI đọc thật).
 - Mỗi lần sửa trường tạo phiên bản mới.
@@ -315,7 +336,21 @@ Menu **Tài khoản & tích hợp**:
 | ENTERPRISE | 1.000 | 100 | Theo hợp đồng |
 
 - Tạo hồ sơ vượt số hồ sơ/tháng (gồm cả phần thưởng thêm trong tháng do đội vận hành cấp) hoặc upload vượt số trang/hồ sơ → `QUOTA_EXCEEDED`.
-- Kỳ tính theo tháng dương lịch. Mọi lần gọi AI ghi `usage_events` (token, chi phí USD và VND) theo doanh nghiệp.
+- Kỳ tính theo tháng dương lịch. Mọi lần gọi dịch vụ trả phí ghi `usage_events` theo doanh nghiệp (cột `provider`, `kind`; số lượng + nghiệp vụ + đơn giá trong `meta`):
+
+| Nhà cung cấp | `kind` | Khi nào ghi | Chi phí |
+|---|---|---|---|
+| AI (đọc chứng từ) | `AI_CLASSIFY`, `AI_EXTRACT` | Mỗi lần gọi model | Token × giá model (USD) × tỷ giá `AI_USD_VND_RATE` |
+| HSCodePro | `HS_CLASSIFY` | Tạo lượt phân loại / phân loại lại được HSCodePro nhận (số dòng gửi) | `HSCODEPRO_PRICE_PER_ITEM_VND` × số dòng |
+| HSCodePro | `HS_ANSWER` | Gửi câu trả lời cho một dòng thành công (409 "đã gửi" khi job chạy lại không ghi) | `HSCODEPRO_PRICE_PER_ITEM_VND` × 1 |
+| HSCodePro | `HS_RESULT` | Lượt hỏi kết quả có dòng vừa có kết quả (hỏi 3 giây/lần mà chưa xong thì không ghi) | 0 – dòng đã tính lúc gửi |
+| Customs Hub | `CUSTOMS_SEND` | Mỗi nghiệp vụ (IDA, IDC, HYS, IDB…) được cổng trả lời, kể cả bị Hải quan từ chối | `CUSTOMS_HUB_PRICE_PER_MESSAGE_VND` × 1 |
+| Customs Hub | `CUSTOMS_QUERY` | Mỗi lần hỏi trạng thái IID/IEX (job `customs-poll`, nút Tra cứu, tra trước khi Gửi lại) | `CUSTOMS_HUB_PRICE_PER_MESSAGE_VND` × 1 |
+
+- Đơn giá HSCodePro / Customs Hub đặt trong biến môi trường (chuỗi thập phân VND; chưa có giá hợp đồng → để trống = 0). Tiền tính bằng Decimal.
+- Không tính trùng: `CUSTOMS_SEND` khóa theo `idempotencyKey` của outbox (job chạy lại sau crash gửi lại cùng thông điệp chỉ ghi một lần; "Gửi lại" tạo outbox mới = thông điệp mới); lỗi tạm (mạng/5xx) và nghiệp vụ cổng chưa hỗ trợ (chưa gửi được) không ghi. `HS_CLASSIFY` khóa theo mã lượt HSCodePro.
+- Ghi chi phí là "cố gắng hết sức": ghi lỗi chỉ log `[usage]`, không làm hỏng nghiệp vụ đã gửi.
+- Tab **Gói & sử dụng** hiện chi phí tháng tách AI / HSCodePro / Customs Hub (tất cả do KhaiBáo AI chịu theo gói). Báo cáo **Sử dụng & chi phí** của đội vận hành tách giá vốn theo nhà cung cấp, kèm số lệnh gọi AI, số dòng gửi HSCodePro, số thông điệp Customs Hub.
 
 ## 12. Khu Quản trị hệ thống (đội vận hành)
 
@@ -337,8 +372,8 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 |---|---|
 | `extract-document` | Đọc một chứng từ (hoặc chỉ gộp lại) |
 | `run-agent` | Chạy các việc của AI Agent |
-| `hs-poll`, `hs-answer`, `hs-reclassify` | Theo dõi / trả lời / phân loại lại mã HS với HSCodePro (hỏi mỗi 3 giây, tối đa 15 phút) |
-| `customs-send`, `customs-poll` | Gửi một nghiệp vụ Hải quan; hỏi trạng thái tới khi thông quan |
+| `hs-poll`, `hs-answer`, `hs-reclassify` | Theo dõi / trả lời / phân loại lại mã HS với HSCodePro (hỏi mỗi 3 giây, tối đa 15 phút); ghi chi phí HSCodePro (§11) |
+| `customs-send`, `customs-poll` | Gửi một nghiệp vụ Hải quan; hỏi trạng thái tới khi thông quan; ghi chi phí Customs Hub mỗi thông điệp thật sự gửi (§11) |
 | `skill-sample-read`, `skill-evaluate` | Đọc nháp nhãn mẫu; đánh giá độ chính xác Skill |
 | `cert-expiry` | Hằng ngày: nhắc chứng thư số sắp hết hạn |
 | `exchange-rate-weekly` | Thứ Năm 23:30 giờ VN: lấy tỷ giá Vietcombank (thử lại mỗi 30 phút) |
@@ -364,7 +399,7 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 5. AI chỉ đọc chứng từ và gợi ý HS; đối chiếu, ánh xạ, thuế, chặn truyền là code thuần có test.
 6. Người dùng sửa trường → ghi `field_audit` append-only.
 7. Không truyền tờ khai khi còn BLOCKER FAIL hoặc HS chưa xác nhận.
-8. Mọi lần gọi AI ghi `usage_events`.
+8. Mọi lần gọi AI, HSCodePro, Customs Hub ghi `usage_events`.
 9. Dữ liệu từ ngoài (HTTP, form, AI, file, queue) kiểm bằng Zod trước khi dùng.
 
 ## 15. Chưa làm / hạn chế hiện tại
@@ -378,6 +413,8 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 | Số quản lý hàng hóa (tờ khai xuất, Mẫu 14) | Chưa lấy tự động; người khai nhập tay |
 | Hàng LCL qua kho CFS | Hai văn bản hướng dẫn khác nhau (TT39: mã 3; CV 6376: mã 2) – cần chốt |
 | Đọc chứng từ | Chưa đọc lớp chữ PDF / XML hóa đơn điện tử; mọi chứng từ gửi AI |
-| Tài khoản | Xác thực email chưa bắt buộc khi đăng nhập; chưa có trang xác thực email / đặt lại mật khẩu / nhận lời mời; chưa chuyển quyền sở hữu, chưa từ chối yêu cầu tham gia; tra cứu MST là giả lập |
-| Chi phí | Chỉ ghi chi phí AI; chưa ghi chi phí HSCodePro và Customs Hub |
+| Tài khoản | Xác thực email chưa bắt buộc khi đăng nhập; chưa có trang xác thực email / đặt lại mật khẩu / nhận lời mời; người bị từ chối tham gia chỉ nhận email (chưa có màn báo trạng thái), chuyển quyền sở hữu chưa ghi nhật ký kiểm toán riêng; tra cứu MST là giả lập |
+| Hộp thư chứng từ | Chưa tự lấy định kỳ; chưa nhận XML hóa đơn điện tử; chưa tự tạo hồ sơ từ email; gmail.readonly cần Google verification + CASA khi mở công khai (Testing tối đa 100 người dùng) |
+| Danh mục hàng hóa | Chưa dùng danh mục khi dựng tờ khai (khớp hàng → lấy HS, bỏ qua HSCodePro); mặt hàng tự thêm khi duyệt chưa có số tờ khai (số chỉ có sau khi truyền); duyệt lại tờ khai đã mở lại sẽ tăng số lần khai thêm lần nữa |
+| Chi phí | HSCodePro và Customs Hub ghi theo đơn giá cấu hình (mặc định 0 – chưa có giá hợp đồng); chưa có lịch sử giá theo thời gian (đổi đơn giá không tính lại sự kiện cũ) |
 | Khác | Hủy tờ khai (Mẫu 06), tách vận đơn (Mẫu 12), khai danh sách container qua HYS, đóng chung container nhiều tờ khai xuất (Mẫu 15); đại lý khai hộ nhiều doanh nghiệp; app mobile |

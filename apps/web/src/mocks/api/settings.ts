@@ -1,12 +1,17 @@
 // Tài khoản doanh nghiệp, thành viên, tích hợp, chứng thư số (mock).
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import { DeclarationProfileInputSchema, PROFILE_FIELD_CODES, VnaccsAccountInputSchema, type DeclarationDirection, type DeclarationProfile, type DeclarationProfileInput, type RuleOptionView, type VnaccsAccount, type VnaccsAccountInput } from "@kb/contracts";
+import {
+  RejectJoinRequestInputSchema, TransferOwnershipInputSchema, type RejectJoinRequestInput, type TransferOwnershipInput, type TransferOwnershipResult,
+} from "@kb/contracts";
+import type { MockDb } from "@/mocks/db";
 import { mockRules } from "@/mocks/seed/declaration-rules";
 import type { DigitalCertificate, Integration, Member, Organization, Role } from "@/mocks/types";
 
 export const settingsKeys = {
   org: ["settings", "org"] as const,
   members: ["settings", "members"] as const,
+  joinRequests: ["settings", "join-requests"] as const,
   integrations: ["settings", "integrations"] as const,
   certificates: ["settings", "certificates"] as const,
   vnaccs: ["settings", "vnaccs-account"] as const,
@@ -16,12 +21,15 @@ export const settingsKeys = {
 
 export const getOrganization = () => query((db) => db.org);
 
-import type { OrgProfileInput } from "@kb/contracts";
+import { OrgProfileInputSchema, type OrgProfileInput } from "@kb/contracts";
 export type { OrgProfileInput };
+/** Giống backend: parse Zod (tên bắt buộc, mã bưu chính 6 số); không gửi mã bưu chính → giữ nguyên. */
 export const updateOrganization = (input: OrgProfileInput) =>
   mutate((db) => {
-    if (!input.name.trim()) throw new ApiError("VALIDATION", "Tên doanh nghiệp không được để trống");
-    Object.assign(db.org, { name: input.name.trim(), address: input.address.trim(), phone: input.phone.trim() });
+    const parsed = OrgProfileInputSchema.safeParse(input);
+    if (!parsed.success) throw new ApiError("VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
+    const { name, address, phone, postalCode } = parsed.data;
+    Object.assign(db.org, { name, address, phone, ...(postalCode !== undefined ? { postalCode } : {}) });
     return db.org;
   });
 
@@ -73,6 +81,57 @@ export const setMemberDisabled = (id: string, disabled: boolean) =>
     m.status = disabled ? "DISABLED" : "ACTIVE";
     return m;
   });
+
+/**
+ * Chuyển quyền sở hữu – cùng luật với backend: chỉ OWNER, người nhận ACTIVE khác mình; người nhận → OWNER, chủ cũ → ADMIN.
+ * Mock không có mật khẩu thật: chấp nhận mật khẩu ≥ 6 ký tự như đăng nhập mock.
+ */
+export const transferOwnership = (id: string, input: TransferOwnershipInput) =>
+  mutate((db): TransferOwnershipResult => {
+    const me = db.members.find((m) => m.id === db.currentUserId);
+    if (me?.role !== "OWNER") throw new ApiError("FORBIDDEN", "Chỉ Chủ sở hữu được chuyển quyền sở hữu");
+    if (id === me.id) throw new ApiError("FORBIDDEN", "Không thể chuyển quyền sở hữu cho chính mình");
+    const target = db.members.find((m) => m.id === id);
+    if (!target) throw new ApiError("NOT_FOUND", "Không tìm thấy thành viên");
+    if (target.status !== "ACTIVE") throw new ApiError("INVALID_STATE", "Chỉ chuyển được cho thành viên đang hoạt động");
+    const parsed = TransferOwnershipInputSchema.safeParse(input);
+    if (!parsed.success || parsed.data.password.length < 6) throw new ApiError("INVALID_CREDENTIALS", "Mật khẩu không đúng");
+    target.role = "OWNER";
+    me.role = "ADMIN";
+    return { owner: target, previousOwner: me };
+  });
+
+export const listJoinRequests = () =>
+  query((db) => {
+    requireManager(db);
+    return db.joinRequests;
+  });
+
+const pendingRequest = (db: MockDb, id: string) => {
+  requireManager(db);
+  const jr = db.joinRequests.find((x) => x.id === id);
+  if (!jr) throw new ApiError("NOT_FOUND", "Không tìm thấy yêu cầu đang chờ");
+  db.joinRequests = db.joinRequests.filter((x) => x.id !== id);
+  return jr;
+};
+
+/** Duyệt → thành viên DECLARANT đang hoạt động (như backend). */
+export const approveJoinRequest = (id: string) =>
+  mutate((db): Member => {
+    const jr = pendingRequest(db, id);
+    const m: Member = { id: jr.userId, name: jr.name, email: jr.email, role: "DECLARANT", status: "ACTIVE" };
+    db.members.push(m);
+    return m;
+  });
+
+/** Từ chối (lý do tùy chọn ≤ 500 ký tự) → bỏ khỏi danh sách chờ; backend gửi email cho người xin. */
+export const rejectJoinRequest = async (id: string, input: RejectJoinRequestInput) => {
+  await mutate((db) => {
+    const parsed = RejectJoinRequestInputSchema.safeParse(input);
+    if (!parsed.success) throw new ApiError("VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
+    pendingRequest(db, id);
+  });
+};
 
 export const listIntegrations = () => query((db) => db.integrations);
 

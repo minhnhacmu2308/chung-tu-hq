@@ -1,5 +1,5 @@
 // Dựng (lại) tờ khai nháp từ dữ liệu hiện tại. Dùng bởi agent (BUILD_DECLARATION) và sau khi xác nhận HS / bỏ xác nhận.
-import type { Shipment } from "@kb/contracts";
+import { inapplicableExtraCodes, type Shipment } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -36,9 +36,19 @@ export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier:
   return buildDeclaration({ shipment, dossier, org, items: lines, now: deps.clock.now(), exchange, ...cfg });
 }
 
-/** Giữ giá trị người dùng đã sửa (source USER) khi dựng lại. */
-export function mergeUserEdits(fresh: Record<string, StoredField>, old: Record<string, StoredField> | undefined, hidden: readonly string[] = []): Record<string, StoredField> {
+/**
+ * Giữ giá trị người dùng đã sửa (source USER) khi dựng lại. `kind`: bỏ thêm ô bổ sung (mã = tên trường VNACCS) theo tình huống không còn áp dụng
+ * với giá trị tờ khai sau khi gộp (vd 1.40 khi 1.39 không còn là D) – giống chỉ tiêu app có `when` (`hidden`).
+ */
+export function mergeUserEdits(fresh: Record<string, StoredField>, old: Record<string, StoredField> | undefined, hidden: readonly string[] = [], kind?: "IDA" | "EDA"): Record<string, StoredField> {
   if (!old) return fresh;
+  const out = mergeKept(fresh, old, hidden);
+  if (!kind) return out;
+  for (const code of inapplicableExtraCodes(kind, Object.entries(out).map(([c, f]) => ({ code: c, value: f.value })))) delete out[code];
+  return out;
+}
+
+function mergeKept(fresh: Record<string, StoredField>, old: Record<string, StoredField>, hidden: readonly string[]): Record<string, StoredField> {
   const out = { ...fresh };
   // Giống editDeclarationField: ô sửa tay không mang nguồn gốc/ghi chú của quy tắc (tránh hiện sai nguồn cho người duyệt).
   for (const [code, f] of Object.entries(old)) {
@@ -69,10 +79,10 @@ export async function rebuildDraft(deps: DeclarationDeps, ctx: RebuildCtx, dossi
     const exchange = await exchangeFor(r, currenciesOf(shipment, dossier), vnDate(now));
     const built = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, ctx.orgId, dossier.direction));
     const patch = {
-      fields: mergeUserEdits(built.fields, current.fields, built.hidden), updatedAt: now, exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date,
+      fields: mergeUserEdits(built.fields, current.fields, built.hidden, built.kind), updatedAt: now, exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date,
       customsValueVnd: built.valuation.customsValueVnd, valueAdjustments: built.adjustments, estImportDutyVnd: built.taxes.importDutyVnd, estVatVnd: built.taxes.vatVnd,
     };
-    await r.declarations.update(current.id, patch);
+    await r.declarations.update(current.orgId, current.id, patch);
     return ok({ ...current, ...patch });
   });
 }

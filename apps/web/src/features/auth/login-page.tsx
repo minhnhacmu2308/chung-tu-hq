@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Button, Checkbox, Field, Input, Stack, toast } from "@kb/ui";
+import { Alert, Button, Checkbox, Field, Input, Stack, toast, useMessages, useUiLocale } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -7,18 +7,21 @@ import { useState, type FormEvent } from "react";
 import { adminKeys, getAdminSession } from "@/api/admin";
 import { login } from "@/api/session";
 import { AuthFrame } from "./auth-frame";
+import { LOGIN_MESSAGES } from "./auth.messages";
 import { loginErrorMessage } from "./login-error";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Tài khoản mẫu của đội vận hành – mỗi vai trò nội bộ một người, để thử phân quyền khu Quản trị hệ thống. */
 const OPERATOR_DEMO_ACCOUNTS = [
-  { email: "bao.hoang@khaibao-demo.vn", label: "Quản trị cấp cao" },
-  { email: "trang.mai@khaibao-demo.vn", label: "Hỗ trợ" },
-  { email: "viet.dinh@khaibao-demo.vn", label: "Chỉ xem" },
-];
+  { email: "bao.hoang@khaibao-demo.vn", label: "opSuperAdmin" },
+  { email: "trang.mai@khaibao-demo.vn", label: "opSupport" },
+  { email: "viet.dinh@khaibao-demo.vn", label: "opViewer" },
+] as const;
 
 export function LoginPage() {
+  const t = useMessages(LOGIN_MESSAGES);
+  const locale = useUiLocale();
   const router = useRouter();
   const qc = useQueryClient();
   const [email, setEmail] = useState("chau.le@anphat-demo.vn");
@@ -39,8 +42,8 @@ export function LoginPage() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next: typeof errors = {};
-    if (!EMAIL_RE.test(email.trim())) next.email = "Email không hợp lệ";
-    if (password.length < 6) next.password = "Mật khẩu ít nhất 6 ký tự";
+    if (!EMAIL_RE.test(email.trim())) next.email = t.invalidEmail;
+    if (password.length < 6) next.password = t.passwordMin;
     setErrors(next);
     if (Object.keys(next).length === 0) mutation.mutate();
   };
@@ -51,48 +54,48 @@ export function LoginPage() {
   return (
     <AuthFrame robot={robot}>
       <Stack gap="xs">
-        <h1 className="text-2xl font-semibold text-fg">Đăng nhập</h1>
-        <p className="text-sm text-fg-muted">Dùng email công việc mà doanh nghiệp đã mời bạn.</p>
+        <h1 className="text-2xl font-semibold text-fg">{t.title}</h1>
+        <p className="text-sm text-fg-muted">{t.subtitle}</p>
       </Stack>
 
       <form onSubmit={submit} onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} noValidate>
         <Stack gap="md">
-          {mutation.isError && <Alert tone="danger" title="Không đăng nhập được">{loginErrorMessage(mutation.error)}</Alert>}
-          <Field label="Email" required {...(errors.email ? { error: errors.email } : {})}>
-            <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ten@congty.vn" />
+          {mutation.isError && <Alert tone="danger" title={t.failed}>{loginErrorMessage(mutation.error, locale)}</Alert>}
+          <Field label={t.email} required {...(errors.email ? { error: errors.email } : {})}>
+            <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t.emailExample} />
           </Field>
-          <Field label="Mật khẩu" required {...(errors.password ? { error: errors.password } : {})}>
+          <Field label={t.password} required {...(errors.password ? { error: errors.password } : {})}>
             <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Checkbox label="Ghi nhớ đăng nhập" defaultChecked />
+            <Checkbox label={t.remember} defaultChecked />
             <Button
               type="button"
               variant="link"
-              onClick={() => toast({ tone: "info", title: "Đã gửi liên kết đặt lại mật khẩu", description: "Kiểm tra hộp thư email của bạn (bản demo – không gửi thật)." })}
+              onClick={() => toast({ tone: "info", title: t.resetSent, description: t.resetSentDesc })}
             >
-              Quên mật khẩu?
+              {t.forgot}
             </Button>
           </div>
-          <Button type="submit" fullWidth loading={mutation.isPending}>Đăng nhập</Button>
+          <Button type="submit" fullWidth loading={mutation.isPending}>{t.submit}</Button>
         </Stack>
       </form>
 
-      <Alert tone="info" title="Bản demo">
-        <p>Mật khẩu bất kỳ từ 6 ký tự. Dữ liệu là dữ liệu mẫu.</p>
-        <p className="mt-2">Tài khoản đội vận hành (vào khu Quản trị hệ thống):</p>
+      <Alert tone="info" title={t.demo}>
+        <p>{t.demoPassword}</p>
+        <p className="mt-2">{t.demoOperators}</p>
         <ul className="flex flex-col">
           {OPERATOR_DEMO_ACCOUNTS.map((a) => (
             <li key={a.email}>
-              <Button type="button" variant="link" size="sm" onClick={() => setEmail(a.email)}>{a.label} – {a.email}</Button>
+              <Button type="button" variant="link" size="sm" onClick={() => setEmail(a.email)}>{t[a.label]} – {a.email}</Button>
             </li>
           ))}
         </ul>
       </Alert>
 
       <p className="text-center text-sm text-fg-muted">
-        Doanh nghiệp chưa dùng KhaiBáo AI?{" "}
-        <Link href="/register" className="font-medium text-primary hover:underline">Đăng ký theo MST</Link>
+        {t.noAccount}{" "}
+        <Link href="/register" className="font-medium text-primary hover:underline">{t.register}</Link>
       </p>
     </AuthFrame>
   );

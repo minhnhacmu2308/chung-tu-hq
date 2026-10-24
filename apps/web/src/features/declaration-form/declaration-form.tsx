@@ -2,7 +2,7 @@
 // Bản mẫu tờ khai đầy đủ chỉ tiêu (docs/superpowers/specs/2026-10-17-to-khai-day-du-ban-mau-design.md): 3 tab theo luồng làm việc,
 // dữ liệu giả theo ảnh mẫu, sửa chỉ trên màn hình (không lưu). Đầu trang gọn (phương án A): Loại / Giai đoạn cạnh tiêu đề, mô tả trong nút ⓘ,
 // thanh tóm tắt một dòng.
-import { Badge, Button, PageHeader, Popover, PopoverContent, PopoverTrigger, SegmentedControl, Stack, Tabs, TabsContent, TabsList, TabsTrigger } from "@kb/ui";
+import { Badge, Button, fill, PageHeader, Popover, PopoverContent, PopoverTrigger, SegmentedControl, Stack, Tabs, TabsContent, TabsList, TabsTrigger, useMessages } from "@kb/ui";
 import { Info } from "lucide-react";
 import { layoutFor } from "@kb/contracts";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -11,20 +11,17 @@ import { CustomsTab } from "./customs-tab";
 import { DeclarantTab } from "./declarant-tab";
 import { displayValue } from "./display";
 import { fixtureFor, valuesAt, type Stage } from "./fixtures";
+import { FORM_MESSAGES } from "./form.messages";
 import type { FormValues } from "./form-state";
 import { OperationsTab } from "./operations-tab";
 import { changedCount, declarantEditable, summaryAt } from "./stage-rules";
 import { ViewPrefsProvider } from "./view-prefs";
 import { parseView, toQuery, type Tab, type ViewState } from "./view-state";
 
-const STAGE_OPTIONS = [
-  { value: "nhap", label: "Nháp" },
-  { value: "da-khai", label: "Đã khai" },
-  { value: "thong-quan", label: "Đã thông quan" },
-] as const;
 
 /** Giá trị đang sửa trên màn hình, khởi tạo lại khi đổi loại tờ khai hoặc giai đoạn. */
 function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<ViewState>) => void }) {
+  const t = useMessages(FORM_MESSAGES);
   const layout = layoutFor(view.kind);
   const fixture = fixtureFor(view.kind);
   const initial = useMemo(() => valuesAt(fixture, view.stage), [fixture, view.stage]);
@@ -40,7 +37,7 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
     }
     setAmending(on);
   };
-  const missing = <span className="text-fg-subtle">Chưa có</span>;
+  const missing = <span className="text-fg-subtle">{t.notYet}</span>;
   return (
     <Stack gap="md">
       <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
@@ -52,12 +49,12 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
         ))}
       </dl>
       <Tabs value={view.tab} onValueChange={(t) => go({ tab: t as Tab })}>
-        <TabsList aria-label="Phần của tờ khai">
-          <TabsTrigger value="khai">Người khai nhập</TabsTrigger>
+        <TabsList aria-label={t.partsAria}>
+          <TabsTrigger value="khai">{t.tabDeclarant}</TabsTrigger>
           <TabsTrigger value="hai-quan">
-            Hải quan trả về {view.stage === "nhap" && <Badge tone="neutral" size="sm">chưa có</Badge>}
+            {t.tabCustoms} {view.stage === "nhap" && <Badge tone="neutral" size="sm">{t.notYetBadge}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="nghiep-vu">Theo dõi & nghiệp vụ</TabsTrigger>
+          <TabsTrigger value="nghiep-vu">{t.tabOps}</TabsTrigger>
         </TabsList>
         <TabsContent value="khai" className="pt-3">
           <DeclarantTab
@@ -79,9 +76,15 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
 }
 
 export function DeclarationFormPrototype() {
+  const t = useMessages(FORM_MESSAGES);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const stageOptions = [
+    { value: "nhap", label: t.stageDraft },
+    { value: "da-khai", label: t.stageDeclared },
+    { value: "thong-quan", label: t.stageCleared },
+  ] as const;
   const view = parseView(params);
   const go = (patch: Partial<ViewState>) => {
     const next = { ...view, ...patch };
@@ -95,23 +98,23 @@ export function DeclarationFormPrototype() {
         <PageHeader
           title={
             <span className="inline-flex items-center gap-1">
-              Bản mẫu tờ khai {view.kind === "IDA" ? "nhập khẩu (IDA)" : "xuất khẩu (EDA)"}
+              {view.kind === "IDA" ? t.protoTitleImport : t.protoTitleExport}
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-8 w-8 text-fg-muted" aria-label="Về bản mẫu">
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-fg-muted" aria-label={t.aboutAria}>
                     <Info className="h-4 w-4" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="max-w-sm text-sm" showClose>
-                  Đủ chỉ tiêu theo Phụ lục II (TT39/2018, sửa đổi TT121/2025) – dữ liệu mẫu {fixture.code}, sửa chỉ trên màn hình, không lưu.
+                  {fill(t.aboutBody, { code: fixture.code })}
                 </PopoverContent>
               </Popover>
             </span>
           }
           actions={
             <>
-              <SegmentedControl label="Loại" value={view.kind} onChange={(k) => go({ kind: k })} options={[{ value: "IDA", label: "Nhập khẩu" }, { value: "EDA", label: "Xuất khẩu" }]} />
-              <SegmentedControl label="Giai đoạn" value={view.stage} onChange={(s: Stage) => go({ stage: s })} options={STAGE_OPTIONS} />
+              <SegmentedControl label={t.kindLabel} value={view.kind} onChange={(k) => go({ kind: k })} options={[{ value: "IDA", label: t.kindImport }, { value: "EDA", label: t.kindExport }]} />
+              <SegmentedControl label={t.stageLabel} value={view.stage} onChange={(s: Stage) => go({ stage: s })} options={stageOptions} />
             </>
           }
         />

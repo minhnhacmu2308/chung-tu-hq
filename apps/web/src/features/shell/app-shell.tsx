@@ -3,24 +3,32 @@
 import {
   AppearancePanel, AssistantLauncher, AssistantPanel, Badge, BrandDot, BrandMark, Dialog, DialogContent, DropdownMenu,
   DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, Sidebar, SidebarFooterButton,
-  SidebarMobileTrigger, SidebarUser, toast, type AssistantMode, type NavItem,
+  SidebarMobileTrigger, SidebarUser, toast, useMessages, type AssistantMode, type NavItem,
 } from "@kb/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, FolderOpen, LayoutDashboard, LogOut, RotateCcw, Send, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
+import { Bell, FolderOpen, Inbox, LayoutDashboard, LogOut, Package, RotateCcw, Send, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { adminKeys, getAdminSession } from "@/api/admin";
 import { dossierKeys, listDossiers } from "@/api/dossiers";
+import { inboxKeys, listInbox } from "@/api/mailbox";
 import { getSession, listNotifications, logout, resetMockData, sessionKeys } from "@/api/session";
+import { APP_TITLES } from "@/app/app-titles.messages";
+import { LanguageMenuSub } from "@/features/appearance/language-switcher";
+import { InstallAppMenuItem } from "@/features/pwa/install-app";
 import { useAppearance } from "@/features/appearance/use-appearance";
 import { useAssistantChat } from "@/features/assistant/use-assistant-chat";
 import { NotificationsPanel } from "./notifications-panel";
+import { SHELL_MESSAGES } from "./shell.messages";
+import { usePageTitle } from "./use-page-title";
 import { ROLE_LABELS } from "@/mocks/types";
 
 const COLLAPSE_KEY = "kb-sidebar-collapsed";
+const BRAND = APP_TITLES.vi.brand;
 
 function useNav(): { items: NavItem[]; activeId: string | undefined } {
+  const t = useMessages(SHELL_MESSAGES);
   const pathname = usePathname();
   const params = useSearchParams();
   const { data: dossiers } = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
@@ -28,22 +36,27 @@ function useNav(): { items: NavItem[]; activeId: string | undefined } {
   const badge = (n: number) => (n > 0 ? <Badge tone="warning">{n}</Badge> : undefined);
   const nk = badge(needsReview("NK"));
   const xk = badge(needsReview("XK"));
+  const { data: inbox } = useQuery({ queryKey: inboxKeys.list, queryFn: listInbox });
+  const newMail = inbox?.filter((m) => m.status === "NEW").length ?? 0;
+  const mail = newMail > 0 ? <Badge tone="info">{newMail}</Badge> : undefined;
 
   const items: NavItem[] = [
-    { id: "overview", label: "Tổng quan", icon: <LayoutDashboard />, href: "/" },
+    { id: "overview", label: t.navOverview, icon: <LayoutDashboard />, href: "/" },
     {
       id: "dossiers",
-      label: "Hồ sơ khai báo",
+      label: t.navDossiers,
       icon: <FolderOpen />,
       children: [
-        { id: "dossiers-NK", label: "Nhập khẩu", href: "/dossiers?direction=NK", ...(nk ? { badge: nk } : {}) },
-        { id: "dossiers-XK", label: "Xuất khẩu", href: "/dossiers?direction=XK", ...(xk ? { badge: xk } : {}) },
-        { id: "dossiers-all", label: "Tất cả", href: "/dossiers" },
+        { id: "dossiers-NK", label: t.navImport, href: "/dossiers?direction=NK", ...(nk ? { badge: nk } : {}) },
+        { id: "dossiers-XK", label: t.navExport, href: "/dossiers?direction=XK", ...(xk ? { badge: xk } : {}) },
+        { id: "dossiers-all", label: t.navAll, href: "/dossiers" },
       ],
     },
-    { id: "customs", label: "Khai báo Hải quan", icon: <Send />, href: "/customs" },
-    { id: "skills", label: "Cấu hình Skill AI", icon: <Sparkles />, href: "/skills" },
-    { id: "settings", label: "Tài khoản & tích hợp", icon: <Settings2 />, href: "/settings" },
+    { id: "inbox", label: t.navInbox, icon: <Inbox />, href: "/inbox", ...(mail ? { badge: mail } : {}) },
+    { id: "customs", label: t.navCustoms, icon: <Send />, href: "/customs" },
+    { id: "products", label: t.navProducts, icon: <Package />, href: "/products" },
+    { id: "skills", label: t.navSkills, icon: <Sparkles />, href: "/skills" },
+    { id: "settings", label: t.navSettings, icon: <Settings2 />, href: "/settings" },
   ];
 
   let activeId: string | undefined;
@@ -58,6 +71,9 @@ function useNav(): { items: NavItem[]; activeId: string | undefined } {
 }
 
 function ShellInner({ children }: { children: ReactNode }) {
+  const t = useMessages(SHELL_MESSAGES);
+  const roleLabels = useMessages(ROLE_LABELS);
+  usePageTitle();
   const router = useRouter();
   const qc = useQueryClient();
   const { appearance, setAppearance, adjustments } = useAppearance();
@@ -102,7 +118,7 @@ function ShellInner({ children }: { children: ReactNode }) {
   const reset = async () => {
     await resetMockData();
     await qc.invalidateQueries();
-    toast({ tone: "success", title: "Đã khôi phục dữ liệu mẫu" });
+    toast({ tone: "success", title: t.resetDone });
   };
 
   // Vị trí menu do người dùng chọn trong "Giao diện": cột trái / cột phải / thanh ngang trên đầu.
@@ -128,7 +144,7 @@ function ShellInner({ children }: { children: ReactNode }) {
         onOpenChange={setAiOpen}
         mode={aiMode}
         onModeChange={setAiMode}
-        name="Trợ lý KhaiBáo"
+        name={t.assistantName}
         tag="AI"
         composer={chat.composer}
       >
@@ -142,7 +158,7 @@ function ShellInner({ children }: { children: ReactNode }) {
       <Sidebar
         position={menu}
         {...(menuOnTop ? {} : { className: "sticky top-0" })}
-        brand={{ logo: <BrandMark small decorative className="h-6 w-6" />, name: "KhaiBáo AI", href: "/" }}
+        brand={{ logo: <BrandMark small decorative className="h-6 w-6" />, name: BRAND, href: "/" }}
         items={items}
         activeId={activeId}
         collapsed={collapsed}
@@ -154,21 +170,27 @@ function ShellInner({ children }: { children: ReactNode }) {
           <>
             <SidebarFooterButton
               icon={<Bell />}
-              label="Thông báo"
+              label={t.notifications}
               {...(unread > 0 ? { trailing: <Badge tone="danger" variant="solid">{unread}</Badge> } : {})}
               onClick={() => setNotifOpen(true)}
             />
-            <SidebarFooterButton icon={<SunMoon />} label="Giao diện" trailing={<BrandDot />} onClick={() => setAppearanceOpen(true)} />
+            <SidebarFooterButton icon={<SunMoon />} label={t.appearance} trailing={<BrandDot />} onClick={() => setAppearanceOpen(true)} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarUser name={session?.user.name ?? "…"} role={session ? ROLE_LABELS[session.user.role] : ""} />
+                <SidebarUser name={session?.user.name ?? "…"} role={session ? roleLabels[session.user.role] : ""} />
               </DropdownMenuTrigger>
               <DropdownMenuContent side={menuOnTop ? "bottom" : menu === "right" ? "left" : "right"} align="end">
                 <DropdownMenuItem icon={<UserRound className="h-4 w-4" />} onSelect={() => router.push("/settings")}>
-                  Tài khoản & tích hợp
+                  {t.navSettings}
                 </DropdownMenuItem>
+                <DropdownMenuItem icon={<SunMoon className="h-4 w-4" />} onSelect={() => setAppearanceOpen(true)}>
+                  {t.appearanceTitle}
+                </DropdownMenuItem>
+                <LanguageMenuSub />
+                <InstallAppMenuItem />
+                <DropdownMenuSeparator />
                 <DropdownMenuItem icon={<RotateCcw className="h-4 w-4" />} onSelect={reset}>
-                  Khôi phục dữ liệu mẫu
+                  {t.resetData}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -181,7 +203,7 @@ function ShellInner({ children }: { children: ReactNode }) {
                     });
                   }}
                 >
-                  Đăng xuất
+                  {t.logout}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -190,13 +212,13 @@ function ShellInner({ children }: { children: ReactNode }) {
       />
 
       <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="panel">
-        <DialogContent title="Cấu hình giao diện" size="sm">
+        <DialogContent title={t.appearanceTitle} icon={<SunMoon className="h-4 w-4" />} size="sm">
           <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={notifOpen} onOpenChange={setNotifOpen} defaultPresentation="panel">
-        <DialogContent title="Thông báo" size="sm" icon={<Bell className="h-4 w-4" />}>
+        <DialogContent title={t.notifications} size="sm" icon={<Bell className="h-4 w-4" />}>
           <NotificationsPanel onNavigate={() => setNotifOpen(false)} />
         </DialogContent>
       </Dialog>

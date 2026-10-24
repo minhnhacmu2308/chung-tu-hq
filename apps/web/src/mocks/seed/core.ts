@@ -1,6 +1,6 @@
 // Dữ liệu mẫu cốt lõi: doanh nghiệp, thành viên, hồ sơ, chứng từ, thông báo.
 // Toàn bộ tên công ty/MST là GIẢ. Ngày tính theo hôm nay để màn hình luôn "sống" (sắp hạn, quá hạn…).
-import { DEFAULT_PARTY_CLASS } from "@kb/contracts";
+import { DEFAULT_PARTY_CLASS, type JoinRequest } from "@kb/contracts";
 import type { DocKind, Dossier, DossierDocument, DossierStatus, Member, Notification, Organization, StepId } from "../types";
 
 export const DAY = 86_400_000;
@@ -16,8 +16,9 @@ const ORG: Organization = {
   taxCode: "0316789012",
   address: "Lô B4, KCN Tràng Duệ, xã Lê Lợi, huyện An Dương, TP. Hải Phòng",
   phone: "0225 3 888 123",
+  postalCode: "180000",
   plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, renewsAt: isoDay(19) },
-  usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "96500" },
+  usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "69500", hsCostVnd: "19300", customsCostVnd: "7700" },
   suspectThreshold: "BALANCED",
   fourEyes: false,
 };
@@ -29,6 +30,12 @@ const MEMBERS: Member[] = [
   { id: "usr_tuan", name: "Phạm Anh Tuấn", email: "tuan.pham@anphat-demo.vn", role: "APPROVER", status: "ACTIVE", lastActiveAt: isoTime(-5) },
   { id: "usr_linh", name: "Đỗ Khánh Linh", email: "linh.do@anphat-demo.vn", role: "DECLARANT", status: "INVITED" },
   { id: "usr_quang", name: "Vũ Đức Quang", email: "quang.vu@anphat-demo.vn", role: "VIEWER", status: "DISABLED", lastActiveAt: isoTime(-24 * 40) },
+];
+
+/** Yêu cầu tham gia đang chờ (người đăng ký trùng MST doanh nghiệp) – khớp người "Mẫn Đức Thịnh" ở seed quản trị. */
+const JOIN_REQUESTS: JoinRequest[] = [
+  { id: "jr_thinh", userId: "usr_pending_3", name: "Mẫn Đức Thịnh", email: "thinh.man@anphat-demo.vn", requestedAt: isoTime(-20) },
+  { id: "jr_ngoc", userId: "usr_pending_4", name: "Lương Bảo Ngọc", email: "ngoc.luong@gmail-demo.vn", requestedAt: isoTime(-3) },
 ];
 
 type DossierSeed = {
@@ -156,6 +163,7 @@ export function seedCore() {
     currentUserId: "usr_chau",
     org: ORG,
     members: MEMBERS,
+    joinRequests: JOIN_REQUESTS,
     dossiers,
     documents: dossiers.flatMap(docsFor),
     notifications: notificationsFor(dossiers),

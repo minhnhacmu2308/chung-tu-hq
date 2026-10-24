@@ -1,7 +1,7 @@
 "use client";
 // Tờ khai dạng bản in VNACCS (bước 5 Review): giá trị người khai (dossier-adapter) + Hải quan trả về (customs-adapter) + số ứng dụng ước tính
 // cho ô Hải quan còn trống; trạng thái ô (lỗi Hải quan, còn thiếu, ước tính, đã sửa). Bấm ô → panel sửa ô; thanh công cụ: trang, ô cần xử lý, in.
-import { Alert, Button, Stack } from "@kb/ui";
+import { Alert, Button, fill, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { otherFieldKeys, parseItemFieldCode, printTitle, type Declaration, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -16,6 +16,7 @@ import {
 import { codeScope } from "../declaration-form/code-scope";
 import { useCodeName } from "../declaration-form/use-code-list";
 import { PrintToolbar } from "./print-toolbar";
+import { PRINT_MESSAGES } from "./print.messages";
 import { formatDateTime } from "@/lib/format";
 import { errorPlace } from "../dossier-detail/steps/customs-errors";
 
@@ -83,6 +84,8 @@ function printModel(data: PrintData, decl: Declaration, items: LineItem[], submi
 }
 
 export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submission, leaveGuard }: Props) {
+  const t = useMessages(PRINT_MESSAGES);
+  const locale = useUiLocale();
   const [selected, setSelected] = useState<PrintTarget | null>(null);
   // Ổn định qua các lần vẽ: PrintCell (memo) không vẽ lại khi chọn ô khác.
   const select = useCallback((key: string, line?: number) => setSelected(line === undefined ? { key } : { key, line }), []);
@@ -99,7 +102,7 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
   // Tên địa điểm lưu kho: Hải quan trả theo mã; trước đó tra danh mục A202 (trong phạm vi chi cục) để hiện ước tính.
   const storage = LOOKUP_NAME_CELLS[base.kind][0]!;
   const office = base.values["TK_CH"] ?? "";
-  const scope = useMemo(() => codeScope("A202", storage.code, base.kind, { TK_CH: office }), [storage.code, base.kind, office]);
+  const scope = useMemo(() => codeScope("A202", storage.code, base.kind, { TK_CH: office }, "vi"), [storage.code, base.kind, office]);
   const storageName = useCodeName("A202", base.values[storage.code] ?? "", scope);
   const data = useMemo(() => withLookupNames(base, { [storage.name]: storageName }), [base, storage.name, storageName]);
   const model = useMemo(() => printModel(data, decl, items, submission, mode, canEdit), [data, decl, items, submission, mode, canEdit]);
@@ -122,11 +125,11 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
     <Stack gap="md">
       {model.unplaced.length > 0 && submission?.rejection && (
         <div id={UNPLACED_DOM_ID}>
-          <Alert tone="danger" title={`Hải quan từ chối ${submission.rejection.operation} lúc ${formatDateTime(submission.rejection.at)} – ${model.unplaced.length} lỗi không gắn được vào ô`}>
+          <Alert tone="danger" title={fill(t.rejected, { op: submission.rejection.operation, at: formatDateTime(submission.rejection.at), n: model.unplaced.length })}>
             <ul className="flex flex-col gap-1">
               {model.unplaced.map((e, i) => (
                 <li key={i}>
-                  <span className="font-medium">{errorPlace(e)}:</span> {e.message}
+                  <span className="font-medium">{errorPlace(e, locale)}:</span> {e.message}
                   {e.solution ? ` → ${e.solution}` : ""}
                 </li>
               ))}
@@ -143,10 +146,10 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
       {model.directives > 0 && (
         <Alert
           tone="warning"
-          title={`Hải quan có ${model.directives} chỉ thị`}
+          title={fill(t.directives, { n: model.directives })}
           action={
             <Button size="sm" variant="secondary" leftIcon={<ArrowDown className="h-4 w-4" />} onClick={scrollToDirectives}>
-              Xem chỉ thị
+              {t.viewDirectives}
             </Button>
           }
         />

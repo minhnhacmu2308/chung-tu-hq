@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { Direction } from "./common.js";
 import type { CustomsOperation } from "./dto/customs.js";
+import { reasonVi, type ReasonCode, type ReasonParams } from "./reason-codes.js";
 
 /** Giai đoạn vòng đời tờ khai sau khi đã duyệt. Lưu ở kết quả truyền (raw.stage). */
 export const CustomsStageSchema = z.enum([
@@ -125,41 +126,54 @@ export type OperationAvailabilityInput = {
   /** Nghiệp vụ đã thành công ít nhất một lần (để gợi ý việc tiếp theo cho nghiệp vụ phụ). */
   done: CustomsOperation[];
 };
-export type OperationAvailability = { op: CustomsOperation; enabled: boolean; action: CustomsAction; reason?: string };
+/**
+ * `reason`: câu tiếng Việt (giữ cho tương thích ngược). `reasonCode` + `reasonParams`: mã ổn định để giao diện dịch (reason-codes.ts).
+ * Có `reason` thì luôn có `reasonCode`.
+ */
+export type OperationAvailability = {
+  op: CustomsOperation; enabled: boolean; action: CustomsAction;
+  reason?: string; reasonCode?: ReasonCode; reasonParams?: ReasonParams;
+};
 
-const EDIT_HINT = "Sửa chỉ tiêu ở bước Review tờ khai và phê duyệt lại";
+type Reason = { code: ReasonCode; params?: ReasonParams };
+const why = (code: ReasonCode, params?: ReasonParams): Reason => (params ? { code, params } : { code });
+const withReason = (r: Reason) => ({ reason: reasonVi(r.code, r.params), reasonCode: r.code, ...(r.params ? { reasonParams: r.params } : {}) });
 
 /** Từng nghiệp vụ có bấm được ở giai đoạn hiện tại không, bấm thì làm gì, và lý do khi bị khóa. */
 export function operationAvailability(i: OperationAvailabilityInput): OperationAvailability[] {
-  const busy = i.pending.length ? `Đang chờ phản hồi ${i.pending.join(", ")}` : null;
+  const busy = i.pending.length ? why("OPERATION_PENDING", { ops: i.pending.join(", ") }) : null;
   const editing = EDITING_STAGES.has(i.stage);
-  const row = (op: CustomsOperation, ok: boolean, reason: string, action: CustomsAction = "SEND"): OperationAvailability =>
-    ok && !busy ? { op, enabled: true, action } : { op, enabled: false, action, reason: busy ?? reason };
+  // `reason` null: chỉ dùng khi `ok` (đang chờ phản hồi thì lý do là busy).
+  const row = (op: CustomsOperation, ok: boolean, reason: Reason | null, action: CustomsAction = "SEND"): OperationAvailability => {
+    if (ok && !busy) return { op, enabled: true, action };
+    const r = busy ?? reason;
+    return r ? { op, enabled: false, action, ...withReason(r) } : { op, enabled: false, action };
+  };
   // Nghiệp vụ gửi nội dung ở giai đoạn sửa: chưa duyệt lại → nút đưa sang Review.
-  const content = (op: CustomsOperation, stages: CustomsStage[], lockedReason: string): OperationAvailability => {
+  const content = (op: CustomsOperation, stages: CustomsStage[], lockedReason: Reason | null): OperationAvailability => {
     if (!stages.includes(i.stage)) return row(op, false, lockedReason);
-    if (editing && !i.approved) return busy ? row(op, false, "") : { op, enabled: true, action: "EDIT", reason: EDIT_HINT };
-    return row(op, true, "");
+    if (editing && !i.approved) return busy ? row(op, false, null) : { op, enabled: true, action: "EDIT", ...withReason(why("EDIT_DECLARATION_FIRST")) };
+    return row(op, true, null);
   };
   const o = (b: CustomsOperation) => opFor(i.direction, b);
-  const rejected = i.stage === "REJECTED" ? "Tờ khai đã bị Hải quan từ chối/hủy" : null;
+  const rejected = i.stage === "REJECTED" ? why("DECLARATION_REJECTED") : null;
   const out: OperationAvailability[] = [
-    content(o("IDA"), ["NOT_SENT", "RECALLED"], i.stage === "NOT_SENT" ? "" : "Đã khai tạm – muốn sửa thì gọi sửa đổi tờ khai tạm trước"),
-    row(o("IDB"), i.stage === "PRE_DECLARED", "Chỉ gọi sửa khi đã khai tạm và chưa khai chính thức"),
-    row(o("IDC"), i.stage === "PRE_DECLARED", i.stage === "NOT_SENT" || i.stage === "RECALLED" ? "Khai tạm trước để nhận số tờ khai" : "Đã khai chính thức"),
-    row(o("IDD"), i.stage === "DECLARED" || i.stage === "AMEND_PRE_DECLARED", isChanneled(i.stage) && i.stage !== "AMEND_RECALLED" ? "Chỉ sửa đổi bổ sung trước khi thông quan" : "Sau khi khai chính thức và có phân luồng"),
-    content(o("IDA01"), ["AMEND_RECALLED"], "Gọi tờ khai đã phân luồng về sửa trước"),
-    row(o("IDE"), i.stage === "AMEND_PRE_DECLARED", "Khai tạm sửa đổi bổ sung trước"),
+    content(o("IDA"), ["NOT_SENT", "RECALLED"], i.stage === "NOT_SENT" ? null : why("IDA_ALREADY_PRE_DECLARED")),
+    row(o("IDB"), i.stage === "PRE_DECLARED", why("IDB_REQUIRES_PRE_DECLARED")),
+    row(o("IDC"), i.stage === "PRE_DECLARED", why(i.stage === "NOT_SENT" || i.stage === "RECALLED" ? "IDC_REQUIRES_PRE_DECLARED" : "IDC_ALREADY_DECLARED")),
+    row(o("IDD"), i.stage === "DECLARED" || i.stage === "AMEND_PRE_DECLARED", why(isChanneled(i.stage) && i.stage !== "AMEND_RECALLED" ? "IDD_ONLY_BEFORE_CLEARANCE" : "IDD_REQUIRES_CHANNEL")),
+    content(o("IDA01"), ["AMEND_RECALLED"], why("IDA01_REQUIRES_RECALL")),
+    row(o("IDE"), i.stage === "AMEND_PRE_DECLARED", why("IDE_REQUIRES_IDA01")),
     i.stage === "CLEARED"
-      ? busy ? row("AMA", false, "") : { op: "AMA", enabled: true, action: "START_POST_EDIT" }
-      : content("AMA", ["POST_EDITING", "POST_RECALLED"], "Chỉ khai sửa đổi sau khi tờ khai đã thông quan"),
-    row("AMB", i.stage === "POST_PRE_DECLARED", "Sau khi đã khai tạm AMA"),
-    row("AMC", i.stage === "POST_PRE_DECLARED", "Sau khi đã khai tạm AMA"),
-    row("HYS", hasDeclarationNumber(i.stage), "Cần có số tờ khai (khai tạm trước)"),
-    row("CONT", i.hasContainers && isChanneled(i.stage), i.hasContainers ? "Sau khi tờ khai đã phân luồng" : "Lô hàng không có container"),
-    row("PORT_FEE", hasDeclarationNumber(i.stage), "Cần có số tờ khai (khai tạm trước)"),
+      ? busy ? row("AMA", false, null) : { op: "AMA", enabled: true, action: "START_POST_EDIT" }
+      : content("AMA", ["POST_EDITING", "POST_RECALLED"], why("AMA_REQUIRES_CLEARANCE")),
+    row("AMB", i.stage === "POST_PRE_DECLARED", why("AMA_NOT_PRE_DECLARED")),
+    row("AMC", i.stage === "POST_PRE_DECLARED", why("AMA_NOT_PRE_DECLARED")),
+    row("HYS", hasDeclarationNumber(i.stage), why("DECLARATION_NUMBER_REQUIRED")),
+    row("CONT", i.hasContainers && isChanneled(i.stage), why(i.hasContainers ? "CONT_REQUIRES_CHANNEL" : "NO_CONTAINERS")),
+    row("PORT_FEE", hasDeclarationNumber(i.stage), why("DECLARATION_NUMBER_REQUIRED")),
   ];
-  return rejected ? out.map((r) => ({ op: r.op, enabled: false, action: r.action, reason: rejected })) : out;
+  return rejected ? out.map((r) => ({ op: r.op, enabled: false, action: r.action, ...withReason(rejected) })) : out;
 }
 
 /** Việc tiếp theo nên làm (nổi bật trên màn); null khi chỉ còn chờ Hải quan. */

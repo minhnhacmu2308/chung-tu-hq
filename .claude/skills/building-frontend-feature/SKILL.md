@@ -26,6 +26,7 @@ apps/web/src/
 6. **State**: tab/filter/trang lưu trên URL (`searchParams`); server state qua RSC/TanStack Query; còn lại `useState`.
 7. **Giao diện chỉ ghép từ `@kb/ui`** (Button, Field/Input/Select, Card, Grid/Stack, PageHeader, StatusBadge, Alert, Dialog, Tabs, EmptyState, Skeleton…) + utility token (`bg-surface`, `text-fg-muted`, `gap-4`). Thiếu thứ gì → **REQUIRED SUB-SKILL:** `adding-ui-component`, không tự vá. `pnpm lint` chặn mã màu, màu Tailwind mặc định, `dark:`, giá trị tùy ý, `<button>` thô.
    Số/tiền/ngày qua `lib/format`; trạng thái nghiệp vụ qua `StatusBadge`; mỗi trang mở đầu bằng `PageHeader`.
+7b. **3 ngôn ngữ (BẮT BUỘC)**: mọi chữ hiển thị đặt trong `*.messages.ts` cạnh component, đủ `vi`/`en`/`zh` và dịch thật – kể cả nút, placeholder, `aria-label`, toast, lỗi. Đổi ngôn ngữ trên trình duyệt để xem màn ở English và 中文. Chi tiết: `.claude/rules/ho-tro-3-ngon-ngu.md`.
 8. **A11y**: control có label; dùng được bằng bàn phím; không truyền nghĩa chỉ bằng màu.
 8b. **Chọn component theo bảng "Cần gì → dùng gì" bên dưới** trước khi viết JSX. Tự dựng lại thứ đã có là lỗi review.
 8c. **Xem bằng trình duyệt thật** trước khi báo xong (sáng + tối, 1366px + 390px): test xanh không bắt được bố cục vỡ. Cách chạy: mục "Kiểm tra bằng trình duyệt" trong skill `adding-ui-component`.
@@ -42,6 +43,7 @@ apps/web/src/
 | Chọn một trong nhiều lựa chọn có nhãn dài / mô tả (câu hỏi, phương án) | `RadioGroup` (dọc; ít lựa chọn ngắn → `SegmentedControl`) | Nhiều `Button` giả radio; `<input type="radio">` thô |
 | Thao tác trên một dòng bảng/danh sách | `RowActions` (icon hiện khi rê chuột + nút "…" đủ thao tác); DataTable: truyền qua `rowActions` | Tự dựng `DropdownMenu` + `MoreHorizontal` (lint `apps-row-menu` chặn) |
 | Bảng danh sách | `DataTable`; cột định danh `meta: { sticky: true }`; thao tác dòng (`rowActions`) không chiếm cột – cụm nút nổi đè cuối dòng khi rê chuột/Tab, cảm ứng chỉ hiện "…" | `<table>` tự viết |
+| Danh sách xem được cả dạng thẻ (bấm qua lại Bảng ↔ Thẻ) | `DataTable` + `renderCard={(r, parts) => <RecordCard … select={parts.select} actions={parts.actions} />}` + `viewStorageKey` (mẫu: `features/dossiers/dossier-list-page.tsx`) | Tự dựng lưới `Card` + ô tìm kiếm / phân trang riêng |
 | Đang tải – đã biết dáng nội dung | `PageLoading` (cả trang) / `SkeletonStats` / `SkeletonCard` / `SkeletonTable` / `SkeletonForm` / `SkeletonList` | `<Skeleton className="h-80" />` cho cả khối (lint `apps-big-skeleton` chặn) |
 | Đang tải – chưa biết dáng (chờ AI, chờ Hải quan) | `LoadingState` với tiêu đề nói rõ đang làm gì | Spinner trơ giữa trang |
 | Đang lưu / tải lại trên nội dung đã có | `LoadingOverlay` | Xóa nội dung cũ rồi hiện skeleton |

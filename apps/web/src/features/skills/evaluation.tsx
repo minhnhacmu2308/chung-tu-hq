@@ -1,18 +1,19 @@
 "use client";
 // "Đánh giá lại": chạy skill trên toàn bộ mẫu đã gắn nhãn, so với nhãn → độ chính xác chung + từng trường.
-import { Alert, Badge, Button, Dialog, DialogContent, DialogFooter, Progress, Stack, toast } from "@kb/ui";
+import { Alert, Badge, Button, Dialog, DialogContent, DialogFooter, Progress, Stack, toast, fill, useMessages } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, FlaskConical } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { evaluateSkill, MIN_SAMPLES_FOR_ACCURACY, skillKeys, type EvaluationResult } from "@/api/skills";
 import type { Skill } from "@/mocks/types";
 import { accuracyTone, formatPercent } from "./skill-display";
+import { EVALUATION_MESSAGES } from "./skills.messages";
 
-const PHASES = ["Chuẩn bị bộ mẫu đã gắn nhãn", "AI đọc lại từng mẫu bằng cấu hình hiện tại", "So sánh từng trường với nhãn", "Tổng hợp độ chính xác"];
 const DURATION = 4200;
 
 /** Bảng độ chính xác từng trường, sắp trường kém nhất lên đầu. */
 export function FieldAccuracyList({ fields }: { fields: EvaluationResult["fields"] }) {
+  const t = useMessages(EVALUATION_MESSAGES);
   const sorted = [...fields].sort((a, b) => a.accuracy - b.accuracy);
   return (
     <ul className="divide-y divide-border rounded-md border border-border">
@@ -22,10 +23,10 @@ export function FieldAccuracyList({ fields }: { fields: EvaluationResult["fields
             <p className="text-sm font-medium text-fg">{f.label}</p>
             <p className="font-mono text-xs text-fg-subtle">{f.key}</p>
           </div>
-          <Progress className="cq-sm:col-span-5" value={Math.round(f.accuracy * 100)} tone={accuracyTone(f.accuracy)} aria-label={`Độ chính xác ${f.label}`} />
+          <Progress className="cq-sm:col-span-5" value={Math.round(f.accuracy * 100)} tone={accuracyTone(f.accuracy)} aria-label={fill(t.accuracyAria, { label: f.label })} />
           <div className="flex items-center gap-2 cq-sm:col-span-3 cq-sm:justify-end">
             <Badge tone={accuracyTone(f.accuracy)}>{formatPercent(f.accuracy)}</Badge>
-            <span className="text-xs text-fg-subtle">{f.errors} lỗi</span>
+            <span className="text-xs text-fg-subtle">{fill(t.errors, { n: f.errors })}</span>
           </div>
         </li>
       ))}
@@ -34,6 +35,8 @@ export function FieldAccuracyList({ fields }: { fields: EvaluationResult["fields
 }
 
 export function EvaluateButton({ skill, onDone }: { skill: Skill; onDone?: (r: EvaluationResult) => void }) {
+  const t = useMessages(EVALUATION_MESSAGES);
+  const PHASES = [t.phase1, t.phase2, t.phase3, t.phase4];
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -47,7 +50,7 @@ export function EvaluateButton({ skill, onDone }: { skill: Skill; onDone?: (r: E
       setResult(r);
       onDone?.(r);
       void qc.invalidateQueries({ queryKey: skillKeys.all });
-      toast({ tone: "success", title: `Đã đánh giá ${skill.code} v${r.version}`, description: `Độ chính xác ${formatPercent(r.accuracy)}` });
+      toast({ tone: "success", title: fill(t.doneTitle, { code: skill.code, version: r.version }), description: fill(t.doneDesc, { value: formatPercent(r.accuracy) }) });
     },
   });
 
@@ -86,23 +89,23 @@ export function EvaluateButton({ skill, onDone }: { skill: Skill; onDone?: (r: E
         leftIcon={<FlaskConical className="h-4 w-4" />}
         onClick={start}
         disabled={!enough}
-        title={enough ? undefined : `Cần ít nhất ${MIN_SAMPLES_FOR_ACCURACY} mẫu đã gắn nhãn`}
+        title={enough ? undefined : fill(t.needSamples, { n: MIN_SAMPLES_FOR_ACCURACY })}
       >
-        Đánh giá lại
+        {t.reevaluate}
       </Button>
       <Dialog open={open} onOpenChange={close}>
         <DialogContent
-          title={`Đánh giá lại ${skill.code}`}
+          title={fill(t.dialogTitle, { code: skill.code })}
           icon={<FlaskConical className="h-4 w-4" />}
-          description={`Chạy trên ${skill.labeledSamples} mẫu đã gắn nhãn. Không phải huấn luyện lại model – chỉ đo cấu hình hiện tại đọc đúng bao nhiêu.`}
+          description={fill(t.dialogDesc, { n: skill.labeledSamples })}
           size="md"
         >
           {run.isError ? (
-            <Alert tone="danger" title="Đánh giá thất bại">{run.error.message}</Alert>
+            <Alert tone="danger" title={t.failed}>{run.error.message}</Alert>
           ) : !result ? (
             <Stack gap="sm">
               <Progress value={progress} label={phase} showValue />
-              <p className="text-xs text-fg-subtle">Bản thật chạy nền, có thể đóng cửa sổ – kết quả báo qua thông báo.</p>
+              <p className="text-xs text-fg-subtle">{t.background}</p>
             </Stack>
           ) : (
             <Stack gap="md">
@@ -110,7 +113,7 @@ export function EvaluateButton({ skill, onDone }: { skill: Skill; onDone?: (r: E
                 {result.previousAccuracy !== undefined && (
                   <>
                     <span className="text-2xl font-semibold text-fg-muted">{formatPercent(result.previousAccuracy)}</span>
-                    <ArrowRight className="h-5 w-5 text-fg-subtle" aria-label="thành" />
+                    <ArrowRight className="h-5 w-5 text-fg-subtle" aria-label={t.arrow} />
                   </>
                 )}
                 <span className="text-2xl font-semibold text-fg">{formatPercent(result.accuracy)}</span>
@@ -120,13 +123,13 @@ export function EvaluateButton({ skill, onDone }: { skill: Skill; onDone?: (r: E
                     {formatPercent(Math.abs(delta))}
                   </Badge>
                 )}
-                <span className="text-sm text-fg-muted">phiên bản v{result.version} · {result.samples} mẫu</span>
+                <span className="text-sm text-fg-muted">{fill(t.versionSamples, { version: result.version, n: result.samples })}</span>
               </div>
               <FieldAccuracyList fields={result.fields} />
             </Stack>
           )}
           <DialogFooter>
-            <Button variant={result ? "primary" : "ghost"} onClick={() => close(false)}>{result ? "Xong" : "Hủy"}</Button>
+            <Button variant={result ? "primary" : "ghost"} onClick={() => close(false)}>{result ? t.done : t.cancel}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

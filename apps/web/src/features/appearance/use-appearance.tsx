@@ -55,6 +55,6 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
 export function useAppearance() {
   const ctx = useContext(AppearanceContext);
-  if (!ctx) throw new Error("useAppearance phải nằm trong AppearanceProvider");
+  if (!ctx) throw new Error("useAppearance must be used inside AppearanceProvider");
   return ctx;
 }

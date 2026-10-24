@@ -1,6 +1,6 @@
 // Tờ khai (chỉ tiêu theo mnemonic `code`) → object FPT.VNACCS (objVN_IDA/HANG/VANDON/KTG, objVN_EDA/HANG/CON).
 // Cắt độ dài theo đặc tả (ghi cảnh báo), ngày → dd/MM/yyyy, số → number. Thuần; kiểm tra bằng Zod của @kb/contracts/fpt.
-import { DECLARATION_CONDITIONS, EdaRequestSchema, extraFieldFpt, fptKey, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
+import { DECLARATION_CONDITIONS, EdaRequestSchema, extraFieldFpt, fptKey, inapplicableExtraCodes, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
 
 /** Dữ liệu tờ khai đủ để dựng payload – không phụ thuộc kiểu của module declaration. */
 export type DeclarationPayload = {
@@ -32,8 +32,25 @@ const firstToken = (v: string) => v.split(/\s*[–-]\s*/)[0]!.trim();
 /** Hô hiệu (1.31/2.30 ô 1) chỉ có khi đường biển/sông – đổi phương thức sau khi dựng thì giá trị cũ không gửi. */
 const callSign = (p: DeclarationPayload) => (DECLARATION_CONDITIONS.BY_WATER.test({ typeCode: "", transportCode: firstToken(val(p, "PTVC")), incoterm: "", hasInvoice: true }) ? val(p, "HO_HIEU") : "");
 const ddmmyyyy = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso);
-const num = (v: string) => (/^-?\d+(\.\d+)?$/.test(v) ? Number(v) : 0);
-const numPart = (v: string) => num(v.split(" ")[0] ?? "");
+/**
+ * Số gửi FPT (đặc tả nhận số JSON). Giá trị trong app là chuỗi Decimal; chỉ đổi sang number ở đây, lúc serialize.
+ * Chuỗi không phải số hợp lệ ("1,250.00", "12 345", "N/A") → ghi `issues` (chặn truyền) và bỏ trống, KHÔNG âm thầm gửi 0.
+ * Quá 15 chữ số có nghĩa (double mất chính xác) → cảnh báo.
+ */
+type Num = (v: string, name: string) => number | undefined;
+function numeric(issues: string[], warnings: string[]): Num {
+  return (v, name) => {
+    const s = v.trim().replace(/^\+/, "");
+    if (s === "") return undefined;
+    if (!/^-?\d+(\.\d+)?$/.test(s)) {
+      issues.push(`${name}: giá trị số không hợp lệ "${v}" – chỉ nhận chữ số và dấu chấm thập phân`);
+      return undefined;
+    }
+    if (s.replace(/[-.]/g, "").replace(/^0+/, "").length > 15) warnings.push(`${name}: số ${s} quá 15 chữ số có nghĩa – có thể mất chính xác khi gửi`);
+    return Number(s);
+  };
+}
+const numPartOf = (num: Num) => (v: string, name: string) => num(v.split(" ")[0] ?? "", name);
 const unitPart = (v: string, fallback: string) => v.split(" ")[1] ?? fallback;
 const hs8 = (code: string | null) => (code ?? "").replace(/\D/g, "").slice(0, 8);
 /** Mô tả hàng xuất khẩu phải kết thúc bằng “#&” + mã nước xuất xứ (TT121, chỉ tiêu 2.69). */
@@ -82,18 +99,20 @@ function splitAddress(addr: string, names: string[], set: ReturnType<typeof sett
 /**
  * Ô bổ sung người khai nhập trên form đầy đủ (mã chỉ tiêu = tên trường VNACCS: TK_CCC, TK_ICC, VD_BL2, KTG_IN4…) → đúng object FPT, đổi kiểu theo đặc tả.
  * Gọi sau các ô suy từ chỉ tiêu app nên ghi đè giá trị mặc định (TK_CHB, TK_IMY). Ô APP_* chỉ lưu trong app, không gửi.
+ * Ô theo tình huống không áp dụng với giá trị tờ khai (1.40 / 2.35 khi 1.39 / 2.34 khác D) → không gửi, kể cả khi người khai đã nhập trước đó.
  */
-function applyExtras(p: DeclarationPayload, targets: Partial<Record<FptObjectName, ReturnType<typeof setter>>>) {
+function applyExtras(p: DeclarationPayload, targets: Partial<Record<FptObjectName, ReturnType<typeof setter>>>, num: Num) {
+  const skip = new Set(inapplicableExtraCodes(p.kind, Object.entries(p.fields).map(([code, f]) => ({ code, value: f.value ?? "" }))));
   for (const [code, f] of Object.entries(p.fields)) {
     const spec = extraFieldFpt(p.kind, code);
     const v = f.value?.trim() ?? "";
     const set = spec ? targets[spec.object] : undefined;
-    if (!spec || !v || !set) continue;
-    set(code, spec.field.type === "date" ? ddmmyyyy(v) : spec.field.type === "decimal" || spec.field.type === "long" ? num(v) : v);
+    if (!spec || !v || !set || skip.has(code)) continue;
+    set(code, spec.field.type === "date" ? ddmmyyyy(v) : spec.field.type === "decimal" || spec.field.type === "long" ? num(v, code) : v);
   }
 }
 
-function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
+function items(p: DeclarationPayload, warnings: string[], blockers: string[], num: Num) {
   const sizes = p.kind === "IDA" ? SIZE_IDA : SIZE_EDA;
   const lineNos = p.items.map((it) => it.lineNo);
   return p.items.map((it, i) => {
@@ -106,13 +125,13 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
     set("HAG_CMD", hs8(it.hsConfirmed));
     if (p.kind === "EDA" && !it.origin) blockers.push(`Dòng ${it.lineNo}: chưa có mã nước xuất xứ – mô tả hàng xuất khẩu phải ghi “mô tả#&mã nước” (chỉ tiêu 2.69)`);
     set("HAG_CMN", p.kind === "EDA" ? withOrigin(it.description, it.origin) : it.description);
-    set("HAG_QN1", num(it.quantity));
+    set("HAG_QN1", num(it.quantity, `Dòng ${it.lineNo} HAG_QN1`));
     set("HAG_QT1", it.unit || "PCE");
-    set("HAG_BPR", num(it.amount));
-    set("HAG_UPR", num(it.unitPrice));
+    set("HAG_BPR", num(it.amount, `Dòng ${it.lineNo} HAG_BPR`));
+    set("HAG_UPR", num(it.unitPrice, `Dòng ${it.lineNo} HAG_UPR`));
     if (p.kind === "IDA") {
       set("HAG_OR", it.origin);
-      if (it.importDutyRate !== null) set("HAG_TXA", num(it.importDutyRate));
+      if (it.importDutyRate !== null) set("HAG_TXA", num(it.importDutyRate, `Dòng ${it.lineNo} HAG_TXA`));
       const table = taxTable(it.policyNote);
       if (!own["HAG_ORS"] && !table.code) blockers.push(`Dòng ${it.lineNo}: chưa có mã Biểu thuế nhập khẩu cho ${table.fta} – nhập chỉ tiêu 1.80 trên tờ khai (tra Bảng mã Biểu thuế trên website Cục Hải quan)`);
     }
@@ -121,7 +140,7 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
     for (const [key, v] of Object.entries({ ...auto, ...own })) {
       const spec = itemFieldFpt(p.kind, key);
       if (!spec || !v) continue;
-      set(key, spec.type === "date" ? ddmmyyyy(v) : spec.type === "decimal" || spec.type === "long" ? num(v) : v);
+      set(key, spec.type === "date" ? ddmmyyyy(v) : spec.type === "decimal" || spec.type === "long" ? num(v, `Dòng ${it.lineNo} ${key}`) : v);
     }
     return h;
   });
@@ -130,18 +149,23 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[]) {
 export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const warnings: string[] = [];
   const blockers: string[] = [];
+  const issues: string[] = [];
+  const num = numeric(issues, warnings);
+  const numPart = numPartOf(num);
   if (p.kind === "IDA") {
     const tk: Record<string, unknown> = {};
     const set = setter(tk, warnings, SIZE_IDA);
     set("TK_ICB", val(p, "MA_LH"));
     // Chỉ tiêu theo tình huống: chỉ có trên tờ khai khi loại hình phù hợp (mapping `when`).
-    if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""))); // 1.3
+    if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""), "TK_TDN")); // 1.3
     set("TK_RED", ddmmyyyy(val(p, "HAN_TX"))); // 1.10
     set("TK_CH", firstToken(val(p, "CQHQ")));
     set("TK_CHB", "00"); // đội thủ tục mặc định (format.json) – đổi khi có danh mục A038 chi tiết (D3); người khai nhập 1.9 thì ghi đè (applyExtras)
+    // 1.14 mã bưu chính: tờ khai đã điền từ Tài khoản (mapping TK_IMY), người khai sửa thì giá trị sửa thắng – gửi qua applyExtras.
+    // Đặc tả VNACCS_IDA bắt buộc TK_IMY: chỉ khi vẫn trống mới gửi "000000".
     if (!val(p, "TK_IMY")) {
-      set("TK_IMY", "000000"); // mã bưu chính: người khai chưa nhập 1.14, org chưa lưu → mặc định
-      warnings.push("TK_IMY: mã bưu chính người nhập khẩu chưa có trong tài khoản – gửi 000000");
+      set("TK_IMY", "000000");
+      warnings.push("TK_IMY: chưa có mã bưu chính người nhập khẩu (1.14) – gửi 000000; cập nhật ở Tài khoản → Doanh nghiệp");
     }
     set("TK_TPM", firstToken(val(p, "NGUOI_NT")) || "1");
     set("TK_MTC", firstToken(val(p, "PTVC")));
@@ -167,16 +191,16 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     set("TK_IP1", firstToken(val(p, "GIA_PL")) || "A");
     set("TK_IP2", val(p, "DK_GIA"));
     set("TK_IP3", val(p, "MA_TT") || p.currency);
-    set("TK_IP4", num(val(p, "TONG_TG")));
+    set("TK_IP4", num(val(p, "TONG_TG"), "TK_IP4"));
     set("TK_NT2", val(p, "GHI_CHU"));
     set("TK_REF", val(p, "SO_QLNB"));
 
     const vd: Record<string, unknown> = {};
     const setVd = setter(vd, warnings, SIZE_IDA);
     setVd("VD_BL1", val(p, "SO_VD"));
-    setVd("VD_NO", Math.round(numPart(val(p, "SO_KIEN"))));
+    setVd("VD_NO", Math.round(numPart(val(p, "SO_KIEN"), "VD_NO") ?? 0));
     setVd("VD_NOT", unitPart(val(p, "SO_KIEN"), "PK"));
-    setVd("VD_GW", num(val(p, "TRONG_LUONG")));
+    setVd("VD_GW", num(val(p, "TRONG_LUONG"), "VD_GW"));
     setVd("VD_GWT", "KGM");
     setVd("VD_ST", firstToken(val(p, "KHO")));
     const pod = split(val(p, "CANG_DO"));
@@ -191,7 +215,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     // 1.35: không nhập số lượng container khi đường hàng không (1) hoặc hàng đóng chung container vào kho CFS khai mã 3 (TT39 PL II).
     const mode = firstToken(val(p, "PTVC"));
     // Người khai sửa 1.35 trên tờ khai → dùng số đã sửa.
-    const contCount = val(p, "SL_CONT") ? Math.round(num(val(p, "SL_CONT"))) : p.containers.length;
+    const contCount = val(p, "SL_CONT") ? Math.round(num(val(p, "SL_CONT"), "VD_COC") ?? 0) : p.containers.length;
     if (contCount && mode !== "1" && mode !== "3") setVd("VD_COC", contCount);
 
     const ktg: Record<string, unknown> = {};
@@ -202,27 +226,27 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     if (freight) {
       setKtg("KTG_FR1", "A");
       setKtg("KTG_FR2", freight.currency);
-      setKtg("KTG_FR3", num(freight.amount));
+      setKtg("KTG_FR3", num(freight.amount, "KTG_FR3"));
     }
     const ins = p.adjustments.find((a) => a.label.startsWith("Phí bảo hiểm"));
     if (ins) {
       setKtg("KTG_IN1", "A");
       setKtg("KTG_IN2", ins.currency);
-      setKtg("KTG_IN3", num(ins.amount));
+      setKtg("KTG_IN3", num(ins.amount, "KTG_IN3"));
     }
     // Khoản điều chỉnh khác (1.49, KTG_VR/VI/VC/VP) chưa ánh xạ được mã khoản → không gửi thì Hải quan tính thiếu trị giá: chặn truyền.
     const others = p.adjustments.filter((a) => !a.label.startsWith("Cước") && !a.label.startsWith("Phí bảo hiểm"));
     if (others.length) blockers.push(`Khoản điều chỉnh cộng vào trị giá chưa được khai ở chỉ tiêu 1.49: ${others.map((a) => `${a.label} ${a.amount} ${a.currency}`).join("; ")} – khai trên phần mềm khai báo`);
-    applyExtras(p, { objVN_IDA: set, objVN_IDA_VANDON: setVd, objVN_IDA_KTG: setKtg });
-    const request = { objVN_IDA: tk, objVN_IDA_HANG: items(p, warnings, blockers), objVN_IDA_VANDON: vd, objVN_IDA_KTG: ktg };
+    applyExtras(p, { objVN_IDA: set, objVN_IDA_VANDON: setVd, objVN_IDA_KTG: setKtg }, num);
+    const request = { objVN_IDA: tk, objVN_IDA_HANG: items(p, warnings, blockers, num), objVN_IDA_VANDON: vd, objVN_IDA_KTG: ktg };
     const parsed = IdaRequestSchema.safeParse(request);
-    return { request: (parsed.success ? parsed.data : request) as IdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), blockers };
+    return { request: (parsed.success ? parsed.data : request) as IdaRequest, warnings, issues: [...issues, ...(parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`))], blockers };
   }
 
   const tk: Record<string, unknown> = {};
   const set = setter(tk, warnings, SIZE_EDA);
   set("TK_ECB", val(p, "MA_LH"));
-  if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""))); // 2.3
+  if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""), "TK_TDN")); // 2.3
   set("TK_RID", ddmmyyyy(val(p, "HAN_TN"))); // 2.7
   set("TK_CH", firstToken(val(p, "CQHQ")));
   set("TK_CHB", "00"); // bắt buộc (sheet VN_EDA); đội thủ tục mặc định như IDA – đổi khi có danh mục A038 chi tiết (D3)
@@ -236,9 +260,9 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   splitAddress(val(p, "NNK_DC"), ["TK_CGA", "TK_CAT", "TK_CAC", "TK_CAS"], set);
   set("TK_CGK", val(p, "MA_NUOC"));
   set("TK_EKN", val(p, "SO_VD"));
-  set("TK_NO", Math.round(numPart(val(p, "SO_KIEN"))));
+  set("TK_NO", Math.round(numPart(val(p, "SO_KIEN"), "TK_NO") ?? 0));
   set("TK_NOT", unitPart(val(p, "SO_KIEN"), "PK"));
-  set("TK_GW", num(val(p, "TRONG_LUONG")));
+  set("TK_GW", num(val(p, "TRONG_LUONG"), "TK_GW"));
   set("TK_GWT", "KGM");
   set("TK_ST", firstToken(val(p, "KHO")));
   const dst = split(val(p, "CANG_DO"));
@@ -257,11 +281,11 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_IP1", firstToken(val(p, "GIA_PL")) || "A");
   set("TK_IP2", val(p, "DK_GIA"));
   set("TK_IP3", val(p, "MA_TT") || p.currency);
-  set("TK_IP4", num(val(p, "TONG_TG")));
+  set("TK_IP4", num(val(p, "TONG_TG"), "TK_IP4"));
   // 2.40 trị giá tính thuế dạng "19660 USD" → TK_FKK + TK_FCD; điều kiện FOB/DAP/DAF không khai (ô trống).
   const fkk = val(p, "TG_TT");
   if (fkk) {
-    set("TK_FKK", numPart(fkk));
+    set("TK_FKK", numPart(fkk, "TK_FKK"));
     set("TK_FCD", unitPart(fkk, p.currency));
   }
   set("TK_TPM", firstToken(val(p, "NGUOI_NT"))); // 2.43
@@ -274,8 +298,8 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   const containers = val(p, "SO_CONT") ? val(p, "SO_CONT").split(/[\s,;]+/).filter(Boolean) : p.containers;
   containers.slice(0, 50).forEach((c, i) => setCon(`CON_C${String(i + 1).padStart(2, "0")}`, c));
   if (containers.length > 50) warnings.push(`Có ${containers.length} container – chỉ tiêu 2.60 nhận 50, khai phần còn lại qua HYS`);
-  applyExtras(p, { objVN_EDA: set, objVN_EDA_CON: setCon });
-  const request = { objVN_EDA: tk, objVN_EDA_CON: Object.keys(con).length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers) };
+  applyExtras(p, { objVN_EDA: set, objVN_EDA_CON: setCon }, num);
+  const request = { objVN_EDA: tk, objVN_EDA_CON: Object.keys(con).length ? con : null, objVN_EDA_HANG: items(p, warnings, blockers, num) };
   const parsed = EdaRequestSchema.safeParse(request);
-  return { request: (parsed.success ? parsed.data : request) as EdaRequest, warnings, issues: parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`), blockers };
+  return { request: (parsed.success ? parsed.data : request) as EdaRequest, warnings, issues: [...issues, ...(parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`))], blockers };
 }

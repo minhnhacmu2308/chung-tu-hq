@@ -3,7 +3,7 @@
 // `target` = ô người dùng vừa chọn; panel hiện `shown`. Còn thay đổi chưa lưu mà chọn ô khác / đóng / Tab sang ô khác / sang bước OCR
 // → hỏi Lưu · Bỏ thay đổi · Ở lại (Ở lại trả lựa chọn và focus về ô đang sửa). Đang lưu → chờ lưu xong mới chuyển ô (không hỏi / lưu lặp).
 // Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
-import { Button, Dialog, DialogContent, DialogFooter } from "@kb/ui";
+import { Button, Dialog, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
 import { fieldRole, type Declaration, type DeclarationEditMode, type LineItem } from "@kb/contracts";
 import { PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -19,6 +19,7 @@ import { useSaveDeclarationEdits } from "../declaration-form/use-save-edits";
 import { PanelDetails } from "./panel-details";
 import { fieldLocator, nextTarget, type PrintTarget } from "./print-state";
 import { UnsavedDialog } from "./unsaved-dialog";
+import { PRINT_MESSAGES } from "./print.messages";
 
 /** Hỏi trước khi rời bản in (đổi tab): true = còn thay đổi chưa lưu, đã mở hộp hỏi (Lưu / Bỏ → chuyển tới href); false = rời ngay. */
 export type LeaveGuard = RefObject<((href: string) => boolean) | null>;
@@ -45,15 +46,17 @@ const INPUTS = "input:not([disabled]), textarea:not([disabled]), select:not([dis
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
 export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdit, values, itemRows, errors, order, target, onTarget, leaveGuard }: Props) {
+  const t = useMessages(PRINT_MESSAGES);
+  const locale = useUiLocale();
   const kind = decl.kind;
   const mode: DeclarationEditMode = canEdit ? stageMode : "LOCKED";
-  const readOnlyReason = !canEdit ? "Bạn không có quyền sửa tờ khai." : mode === "LOCKED" ? "Tờ khai đã phê duyệt / đã truyền hoặc đã thông quan – không sửa ở giai đoạn này." : null;
+  const readOnlyReason = !canEdit ? t.noPermission : mode === "LOCKED" ? t.lockedReason : null;
   const save = useSaveDeclarationEdits(dossierId);
   const router = useRouter();
   const pathname = usePathname();
   const original = useMemo(() => declarationValues(kind, decl.fields), [kind, decl.fields]);
   const editable = useMemo(() => editableKeys(kind, decl.fields, mode), [kind, decl.fields, mode]);
-  const lockOf = useMemo(() => declarationLockOf(kind, mode, original, editable), [kind, mode, original, editable]);
+  const lockOf = useMemo(() => declarationLockOf(kind, mode, original, editable, locale), [kind, mode, original, editable, locale]);
 
   const [shown, setShown] = useState<PrintTarget | null>(target);
   const [changes, setChanges] = useState<FormValues>({});
@@ -165,8 +168,8 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
   const title = field ? fieldTitle(no, field.label) : "";
   const role = field && spot ? fieldRole(kind, field, spot.parentNo) : undefined;
   // Vai trò cạnh tiêu đề (dòng mô tả của header), không nằm trong tên trợ năng của panel và không bị cắt.
-  const roleNode = role === "REQUIRED" ? "Bắt buộc" : role === "CONDITIONAL" || role === "REFERENCE" ? <RoleMark role={role} /> : null;
-  const description = item || roleNode ? <>{item ? `Dòng hàng ${item.lineNo}` : null}{item && roleNode ? " · " : null}{roleNode}</> : null;
+  const roleNode = role === "REQUIRED" ? t.required : role === "CONDITIONAL" || role === "REFERENCE" ? <RoleMark role={role} /> : null;
+  const description = item || roleNode ? <>{item ? fill(t.lineN, { n: item.lineNo }) : null}{item && roleNode ? " · " : null}{roleNode}</> : null;
   const cellErrors = !field ? [] : item ? errors.filter((e) => e.no !== undefined && e.no === no && e.line === item.lineNo) : errorsForField(errors, no);
 
   return (
@@ -196,12 +199,12 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
               />
               <DialogFooter>
                 {readOnlyReason ? (
-                  <Button type="button" variant="ghost" onClick={() => onTarget(null)}>Đóng</Button>
+                  <Button type="button" variant="ghost" onClick={() => onTarget(null)}>{t.close}</Button>
                 ) : (
                   <>
-                    <Button type="button" variant="ghost" disabled={save.isPending} onClick={() => { setChanges({}); onTarget(null); }}>Hủy</Button>
+                    <Button type="button" variant="ghost" disabled={save.isPending} onClick={() => { setChanges({}); onTarget(null); }}>{t.cancel}</Button>
                     <Button type="button" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty} onClick={() => save.mutate(edits, { onSuccess: () => setChanges({}) })}>
-                      {dirty ? `Lưu ${formatNumber(edits.length)} thay đổi` : "Lưu"}
+                      {dirty ? fill(t.saveN, { n: formatNumber(edits.length) }) : t.save}
                     </Button>
                   </>
                 )}

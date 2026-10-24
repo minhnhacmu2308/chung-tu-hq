@@ -37,7 +37,7 @@ export function createCustomsDossierPort(dossier: DossierDeps): CustomsDossierPo
       const d = await dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.get(orgId, dossierId));
       return d ? { id: d.id, code: d.code, direction: d.direction, typeCode: d.typeCode, partner: d.partner, status: d.status, step: d.step, declarationNo: d.declarationNo, updatedAt: d.updatedAt, ownerId: d.ownerId } : null;
     },
-    update: (orgId, dossierId, patch) => dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.update(dossierId, { ...patch, updatedAt: dossier.clock.now() })),
+    update: (orgId, dossierId, patch) => dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.update(orgId, dossierId, { ...patch, updatedAt: dossier.clock.now() })),
     documents: async (orgId, dossierId) => (await dossier.uow.asOrg(sys(orgId), (r) => r.documents.list(orgId, dossierId))).filter((d) => d.status === "DONE").map((d) => ({ id: d.id, kind: d.kind, fileName: d.fileName, storageKey: d.storageKey })),
     readFile: (key) => dossier.storage.get(key),
     publish: (orgId, dossierId, event) => dossier.publisher.publish(orgId, dossierId, event),
@@ -45,7 +45,7 @@ export function createCustomsDossierPort(dossier: DossierDeps): CustomsDossierPo
 }
 
 export function createCustomsValidationReader(validation: ValidationDeps): ValidationReader {
-  return { blockerFails: async (orgId, dossierId) => (await validation.uow.asOrg(sys(orgId), (r) => r.validations.listLatest(dossierId))).filter((v) => v.severity === "BLOCKER" && v.result === "FAIL").length };
+  return { blockerFails: async (orgId, dossierId) => (await validation.uow.asOrg(sys(orgId), (r) => r.validations.listLatest(orgId, dossierId))).filter((v) => v.severity === "BLOCKER" && v.result === "FAIL").length };
 }
 
 export function createCertificateReader(identity: IdentityDeps): CertificateReader {

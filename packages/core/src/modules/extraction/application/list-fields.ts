@@ -5,6 +5,6 @@ import { toField } from "./_dto.js";
 import type { ExtractionDeps } from "./ports.js";
 
 export async function listFields(deps: ExtractionDeps, ctx: Ctx, dossierId: string): Promise<Result<ExtractedField[]>> {
-  const rows = await deps.uow.asOrg(ctx, (r) => r.fields.list(dossierId));
+  const rows = await deps.uow.asOrg(ctx, (r) => r.fields.list(ctx.orgId, dossierId));
   return ok(rows.map(toField));
 }

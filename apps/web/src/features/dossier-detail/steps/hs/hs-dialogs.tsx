@@ -1,6 +1,6 @@
 "use client";
 // Hộp "Trả lời AI" (câu hỏi của HSCodePro, tài liệu §6) và "Phân loại lại" một dòng hàng.
-import { Button, Checkbox, Dialog, DialogContent, DialogFooter, Field, Input, RadioGroup, Stack, Textarea, toast } from "@kb/ui";
+import { Button, Checkbox, Dialog, DialogContent, DialogFooter, Field, Input, RadioGroup, Stack, Textarea, toast, fill, useMessages } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageCircleQuestion, RotateCcw } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api-error";
 import type { LineItem } from "@/mocks/types";
 import { errorMessage } from "../declaration-parts";
 import { buildAnswers, emptyAnswerState, isAnswerComplete, type AnswerState } from "./hs-answer";
+import { HS_MESSAGES } from "./hs.messages";
 
 const useInvalidateItems = (dossierId: string) => {
   const qc = useQueryClient();
@@ -19,10 +20,11 @@ const useInvalidateItems = (dossierId: string) => {
 };
 
 export function HsAnswerDialog({ item, onClose, dossierId }: { item: LineItem | null; onClose: () => void; dossierId: string }) {
+  const t = useMessages(HS_MESSAGES);
   const q = item?.hs?.question ?? null;
   return (
     <Dialog open={item !== null && q !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={`AI cần bổ sung – dòng ${item?.lineNo ?? ""}`} icon={<MessageCircleQuestion className="h-4 w-4" />} description={item?.description} size="md">
+      <DialogContent title={fill(t.answerTitle, { line: item?.lineNo ?? "" })} icon={<MessageCircleQuestion className="h-4 w-4" />} description={item?.description} size="md">
         {item && q && <AnswerForm key={q.id} item={item} onDone={onClose} dossierId={dossierId} />}
       </DialogContent>
     </Dialog>
@@ -30,13 +32,14 @@ export function HsAnswerDialog({ item, onClose, dossierId }: { item: LineItem | 
 }
 
 function AnswerForm({ item, onDone, dossierId }: { item: LineItem; onDone: () => void; dossierId: string }) {
+  const t = useMessages(HS_MESSAGES);
   const q = item.hs!.question!;
   const [state, setState] = useState<AnswerState>(() => emptyAnswerState(q));
   const invalidate = useInvalidateItems(dossierId);
   const send = useMutation({
     mutationFn: () => answerHs(item.id, buildAnswers(q, state)),
     onSuccess: () => {
-      toast({ tone: "success", title: `Đã gửi câu trả lời cho dòng ${item.lineNo}`, description: "AI đang phân loại lại, kết quả sẽ tự hiện." });
+      toast({ tone: "success", title: fill(t.answerSent, { line: item.lineNo }), description: t.answerSentDesc });
       invalidate();
       onDone();
     },
@@ -92,8 +95,8 @@ function AnswerForm({ item, onDone, dossierId }: { item: LineItem; onDone: () =>
               ) : (
                 <p className="text-sm font-medium text-fg">{title}</p>
               )}
-              <Field label={x.options?.length ? "Trả lời khác" : "Câu trả lời"} {...(!x.options?.length && x.detail ? { hint: x.detail } : {})}>
-                <Textarea rows={2} value={s.custom} onChange={(ev) => set(x.id, { custom: ev.target.value })} placeholder="Mô tả thêm công dụng, vật liệu, kích thước…" />
+              <Field label={x.options?.length ? t.otherAnswer : t.answer} {...(!x.options?.length && x.detail ? { hint: x.detail } : {})}>
+                <Textarea rows={2} value={s.custom} onChange={(ev) => set(x.id, { custom: ev.target.value })} placeholder={t.answerPlaceholder} />
               </Field>
             </Stack>
           );
@@ -101,10 +104,10 @@ function AnswerForm({ item, onDone, dossierId }: { item: LineItem; onDone: () =>
       </Stack>
       <DialogFooter>
         <Button variant="ghost" type="button" onClick={onDone}>
-          Để sau
+          {t.later}
         </Button>
         <Button type="submit" disabled={!isAnswerComplete(q, state)} loading={send.isPending}>
-          Gửi câu trả lời
+          {t.sendAnswer}
         </Button>
       </DialogFooter>
     </form>
@@ -112,9 +115,10 @@ function AnswerForm({ item, onDone, dossierId }: { item: LineItem; onDone: () =>
 }
 
 export function ReclassifyDialog({ item, onClose, dossierId }: { item: LineItem | null; onClose: () => void; dossierId: string }) {
+  const t = useMessages(HS_MESSAGES);
   return (
     <Dialog open={item !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={`Phân loại lại – dòng ${item?.lineNo ?? ""}`} icon={<RotateCcw className="h-4 w-4" />} description={item?.description} size="md">
+      <DialogContent title={fill(t.reclassifyTitle, { line: item?.lineNo ?? "" })} icon={<RotateCcw className="h-4 w-4" />} description={item?.description} size="md">
         {item && <ReclassifyForm key={item.id} item={item} onDone={onClose} dossierId={dossierId} />}
       </DialogContent>
     </Dialog>
@@ -122,6 +126,7 @@ export function ReclassifyDialog({ item, onClose, dossierId }: { item: LineItem 
 }
 
 function ReclassifyForm({ item, onDone, dossierId }: { item: LineItem; onDone: () => void; dossierId: string }) {
+  const t = useMessages(HS_MESSAGES);
   const needsOrigin = item.hs?.error?.code === "NO_ORIGIN" || !/^[A-Z]{2}$/.test(item.origin);
   const [extra, setExtra] = useState("");
   const [origin, setOrigin] = useState(/^[A-Z]{2}$/.test(item.origin) ? item.origin : "");
@@ -130,7 +135,7 @@ function ReclassifyForm({ item, onDone, dossierId }: { item: LineItem; onDone: (
   const run = useMutation({
     mutationFn: () => reclassifyHs(item.id, { ...(extra.trim() ? { extraDescription: extra.trim() } : {}), ...(originOk && origin !== item.origin ? { origin } : {}) }),
     onSuccess: () => {
-      toast({ tone: "success", title: `Đang phân loại lại dòng ${item.lineNo}` });
+      toast({ tone: "success", title: fill(t.reclassifying, { line: item.lineNo }) });
       invalidate();
       onDone();
     },
@@ -144,20 +149,20 @@ function ReclassifyForm({ item, onDone, dossierId }: { item: LineItem; onDone: (
       }}
     >
       <Stack gap="md">
-        {item.hs?.error && <p className="text-sm text-fg-muted">Lần trước: {item.hs.error.message}</p>}
-        <Field label="Xuất xứ (mã nước 2 chữ)" hint="Vd CN, TW, KR, JP" {...(needsOrigin && !originOk && origin ? { error: "Nhập 2 chữ in hoa" } : {})}>
+        {item.hs?.error && <p className="text-sm text-fg-muted">{fill(t.lastError, { msg: item.hs.error.message })}</p>}
+        <Field label={t.originLabel} hint={t.originHint} {...(needsOrigin && !originOk && origin ? { error: t.originError } : {})}>
           <Input className="cq-sm:max-w-32" value={origin} maxLength={2} onChange={(e) => setOrigin(e.target.value.toUpperCase())} required={needsOrigin} />
         </Field>
-        <Field label="Bổ sung mô tả cho AI" hint="Tên hàng, model, vật liệu, công dụng, kích thước – càng rõ AI càng ít phải hỏi lại">
+        <Field label={t.extraLabel} hint={t.extraHint}>
           <Textarea rows={3} value={extra} maxLength={500} onChange={(e) => setExtra(e.target.value)} />
         </Field>
       </Stack>
       <DialogFooter>
         <Button variant="ghost" type="button" onClick={onDone}>
-          Hủy
+          {t.cancel}
         </Button>
         <Button type="submit" disabled={needsOrigin && !originOk} loading={run.isPending}>
-          Phân loại lại
+          {t.reclassify}
         </Button>
       </DialogFooter>
     </form>

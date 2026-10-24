@@ -16,12 +16,14 @@ export class InMemoryCustomsUow implements CustomsUow {
         get: async (orgId, id) => clone(d.outbox.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
         findByKey: async (orgId, key) => clone(d.outbox.find((x) => x.idempotencyKey === key && x.orgId === org && x.orgId === orgId) ?? null),
         listForDossier: async (orgId, dossierId) => clone(d.outbox.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())),
+        listUnsentBefore: async (orgId, before) => clone(d.outbox.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "PENDING" && x.attempts === 0 && x.createdAt < before)),
         insert: async (row) => {
           if (row.orgId !== org) deny("customs_outbox");
           if (d.outbox.some((x) => x.idempotencyKey === row.idempotencyKey)) throw new Error("duplicate key value violates unique constraint customs_outbox_key_uq");
           d.outbox.push(clone(row));
         },
-        update: async (id, patch) => {
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`customs_outbox update orgId ${orgId} khác ngữ cảnh`);
           const x = d.outbox.find((y) => y.id === id && y.orgId === org);
           if (x) Object.assign(x, clone(patch));
         },

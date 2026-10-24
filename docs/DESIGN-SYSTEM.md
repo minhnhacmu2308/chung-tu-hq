@@ -37,7 +37,7 @@ Bảng màu mặc định của Tailwind (`blue-500`, `gray-100`…) **đã bị
 
 | Tùy chọn | Cơ chế | Ai đặt |
 |---|---|---|
-| Ngôn ngữ | `lang` | Người dùng |
+| Ngôn ngữ Tiếng Việt / English / 中文 (`vi`/`en`/`zh`) | `lang` + `<UiLocaleProvider>` (xem §4b) | Người dùng |
 | Giao diện Sáng / Tối / Theo hệ thống | `data-theme` + `light-dark()` | Người dùng |
 | Hiệu ứng con trỏ | `data-cursor-effect` (app tự xử lý, tôn trọng `prefers-reduced-motion`) | Người dùng |
 | Mô tả trang | `data-page-description` → ẩn `[data-slot=page-description]` | Người dùng |
@@ -78,7 +78,7 @@ export default async function RootLayout({ children }) {
 | Component | Dùng cho |
 |---|---|
 | `Button` (`primary/secondary/ghost/danger/link`, `sm/md/lg/icon/icon-sm`, `loading`, `asChild`) | Mọi nút. `asChild` để bọc `<Link>` |
-| `Field` + `Input` / `Textarea` / `Select` / `Checkbox` | Mọi ô nhập. Field tự gắn nhãn, gợi ý, lỗi, `aria-*`. `Select` và `Checkbox` vẫn là control gốc của trình duyệt nhưng tự vẽ mũi tên / ô đánh dấu (utility `kb-checkbox`) để đồng bộ giữa các hệ điều hành. `orientation="horizontal"`: nhãn bên trái (2/5), ô bên phải khi vùng nội dung từ mốc `cq-md` – cho form dày ô như tờ khai. `framed`: khung viền, nhãn nằm trên đường viền (ô đứng riêng của form tờ khai), `labelAction` đặt nút (ⓘ hướng dẫn, `Button size="icon-sm"`) trên đường viền sau nhãn. `FieldFrame legend` (+ `legendAction`): cùng kiểu khung cho nhóm ô / nhóm lặp – mọi khung của form một kiểu |
+| `Field` + `Input` / `Textarea` / `Select` / `Checkbox` | Mọi ô nhập. Field tự gắn nhãn, gợi ý, lỗi, `aria-*`. `Select` và `Checkbox` vẫn là control gốc của trình duyệt nhưng tự vẽ mũi tên / ô đánh dấu (utility `kb-checkbox`) để đồng bộ giữa các hệ điều hành. `orientation="horizontal"`: nhãn bên trái (2/5), ô bên phải khi vùng nội dung từ mốc `cq-md` – cho form dày ô như tờ khai. `framed`: khung **nền dịu, không viền**, nhãn nhỏ trên cùng (ô đứng riêng của form tờ khai – ô nhập bên trong đã có viền, không bọc thêm viền thành hai lớp), `labelAction` đặt nút (ⓘ hướng dẫn, `Button size="icon-sm"`) ngay sau nhãn. `FieldFrame legend` (+ `legendAction`): khung viền, tên trên đường viền cho **nhóm nhiều ô** / nhóm lặp; `variant="panel"` = khung nền như `framed` cho một ô đứng riêng |
 | `Card` (`Header/Title/Description/Content/Footer`) | Khối nội dung |
 | `Grid` (`cols={{ base:1, md:2, lg:4 }}`), `Stack` | Bố cục. Không tự viết `grid-cols-*` rời rạc. Mốc cột của `Grid` đo theo **vùng nội dung** (container query, biến thể `cq-sm/md/lg/xl`), không theo màn hình: panel neo bên phải hay popup hẹp thì thẻ tự xuống hàng. Cần tổ tiên `@container` – đã có ở `<main>` các shell, trang đăng nhập và thân `DialogContent` |
 | `PageHeader` | Tiêu đề + mô tả + hành động của mỗi trang |
@@ -88,7 +88,8 @@ export default async function RootLayout({ children }) {
 | `StatCard` (`label`, `value`, `hint`, `hintTone`, `icon`, `tone`, `loading`) | Thẻ chỉ số (KPI) dùng thống nhất ở mọi màn tổng quan. `value` là `number` → chạy đếm; chuỗi đã định dạng → hiển thị nguyên văn. Không tự dựng KPI bằng `Card` |
 | `IconTile` (`icon`, `tone`, `size` sm/md/lg) | Ô vuông nền dịu chứa icon ở đầu thẻ, đầu dòng danh sách (StatCard dùng bên trong). Chỉ trang trí (`aria-hidden`) – nghĩa nằm ở chữ bên cạnh. Không tự ghép `span` + `bg-*-subtle` |
 | `FormSection` (`title`, `description`) | Một nhóm trường của form dài: màn rộng tiêu đề/mô tả bên trái, ô nhập bên phải; tự kẻ đường ngăn giữa các nhóm. Form từ ~5 trường trở lên nên chia nhóm |
-| `Skeleton`, `Spinner`, `EmptyState` | Trạng thái tải / trống |
+| `Skeleton`, `Spinner`, `EmptyState` | Trạng thái tải / trống. `EmptyState` không có `icon` tự hiện hình minh họa "trống"; `illustration="no-results" \| "not-found" \| "error"` cho không có kết quả / 404 / lỗi. `DataTable` trống tự có hình |
+| `Illustration` | Hình minh họa SVG theo token (`empty`, `no-results`, `not-found`, `error`; `size` sm/md/lg), luôn `aria-hidden` |
 | **Loading – chọn theo tình huống** | |
 | `Spinner` (`sm/md/lg`) | Chỗ nhỏ: trong nút, cạnh một dòng chữ |
 | `Loader` (`sm/md/lg`) | Biểu tượng tải mang thương hiệu (logo + vòng xoay): tải cả khối / cả màn |
@@ -102,16 +103,18 @@ export default async function RootLayout({ children }) {
 | `CountUp` (`value`, `duration`) | Số ĐẾM nguyên chạy từ 0 lên (KPI). **Không dùng cho tiền/trị giá** (Decimal hiển thị nguyên văn). Trình đọc màn hình nhận giá trị cuối |
 | `AiBackdrop`, `AiScanCard` (`title`, `fields`) | Trang trí "AI" cho màn đăng nhập/giới thiệu: nền mạng tín hiệu + minh họa tia quét đọc chứng từ. `aria-hidden`, màu theo token, tắt khi giảm chuyển động |
 | `Tabs` | Tab |
-| `Dialog` (`presentation` / `defaultPresentation` / `onPresentationChange`) + `DialogContent` (`icon`, `size`, nút chuyển trên header) + `DialogFooter` | Popup. Cửa sổ = phủ nền, giữ focus, khóa cuộn. Panel bên phải = thẻ neo cạnh phải, **không chặn trang** (thao tác song song); màn đủ rộng thì trang chính **lùi vào nhường chỗ** (lề phải `body` = `--kb-dialog-dock`), màn hẹp thì panel nằm đè. Đổi qua lại **không mất dữ liệu đang nhập** |
+| `Dialog` (`presentation` / `defaultPresentation` / `onPresentationChange`) + `DialogContent` (`icon`, `size`, nút chuyển trên header) + `DialogFooter` | Popup. Cửa sổ = phủ nền, giữ focus, khóa cuộn. Panel bên phải = **drawer** trượt từ phải vào, cao hết màn hình, **nằm đè lên trang** (trang không bị đẩy/co lại), **không chặn trang** (thao tác song song); **kéo mép trái để đổi độ rộng** (phím ←/→, nhấp đúp về mặc định; nhớ theo `size` ở localStorage `kb-drawer-width:<size>`). Đổi qua lại **không mất dữ liệu đang nhập** |
 | `AssistantPanel` (`floating/docked/fullscreen`), `AssistantLauncher` (`state`), `AssistantWelcome`, `SuggestionChips`, `ChatMessage`, `ChatComposer` | Trợ lý AI. Nút mở là linh vật `RobotAvatar`; app truyền `state="thinking"` khi trợ lý đang trả lời |
 | `RobotAvatar` (`state`: idle/thinking/searching/listening/speaking/working/happy/error/sleeping, `size`, `interactive`, `antenna`) | Đầu robot hoạt hình (thư viện `robot-heads`, canvas). Màu vỏ/màn hình/viền đọc từ token `primary`/`primary-fg`/`primary-subtle` nên tự đổi theo theme và màu thương hiệu; chỉ vẽ phía client, `aria-hidden` |
-| `RadioGroup` | Chọn một trong danh sách lựa chọn **dọc**, nhãn dài, có mô tả từng lựa chọn (vd câu hỏi của AI phân loại HS). `fieldset` + radio gốc (phím mũi tên tự đúng), utility `kb-radio`. `orientation="horizontal"`: lựa chọn ngắn xếp một hàng, tự xuống dòng khi hẹp (vd Nhóm loại hình trong form tờ khai – có thể chưa chọn). `framed`: khung viền như `FieldFrame` (+ `legendAction`). Lựa chọn ngắn, ít (2–4), luôn có giá trị, đặt cạnh nhãn (thanh cài đặt) → `SegmentedControl` |
+| `RadioGroup` | Chọn một trong danh sách lựa chọn **dọc**, nhãn dài, có mô tả từng lựa chọn (vd câu hỏi của AI phân loại HS). `fieldset` + radio gốc (phím mũi tên tự đúng), utility `kb-radio`. `orientation="horizontal"`: lựa chọn ngắn xếp một hàng, tự xuống dòng khi hẹp (vd Nhóm loại hình trong form tờ khai – có thể chưa chọn). `framed`: khung nền như `Field framed` (+ `legendAction`). Lựa chọn ngắn, ít (2–4), luôn có giá trị, đặt cạnh nhãn (thanh cài đặt) → `SegmentedControl` |
 | `SegmentedControl`, `ColorSwatchPicker`, `AppearancePanel` | Tùy chọn dạng phân đoạn / chọn màu / bảng cấu hình giao diện. Trong `AppearancePanel` mỗi lựa chọn là một thẻ có **hình mô phỏng** (sáng/tối, vị trí menu, mật độ, cỡ chữ, bo góc, nền, dải xám…); thêm tùy chọn mới thì thêm cả hình mô phỏng |
 | `Sidebar` (`position`: left/right/top, `items` có nhóm con, `collapsed` / `onCollapsedChange`, `linkAs={Link}`, `mobileOpen` / `onMobileOpenChange`), `SidebarMobileTrigger`, `SidebarFooterButton`, `SidebarUser`, `BrandDot` | Menu chính co giãn: mở rộng ↔ thu gọn (cột icon + tooltip). `position="top"` = thanh ngang dính đầu trang (nhóm con thành menu xổ, chân menu thành cụm icon; phần tử dính trong trang dùng `top-shell` để nằm dưới thanh). Màn nhỏ: ngăn kéo mở bằng nút ☰. `SidebarUser`/`SidebarFooterButton` làm trigger được cho `DropdownMenu`/`Popover` (asChild) |
 | `Stepper` (`steps`, `currentId`, `viewingId`, `onStepClick`, `action`) | Thanh các bước của hồ sơ; bước đã qua bấm được để xem lại; `viewingId` = bước đang xem lại (bước hiện tại khi đó bấm được để quay về); `action` để đặt nút "Xem cây quy trình". Màn nhỏ gọn thành "Bước 3/6 · …" |
+| `StepProgress` (`steps`, `currentId`, `state`: `active`/`complete`/`stopped`) | Tiến độ bước gọn cho ô bảng và thẻ: tên bước + "3/6" + thanh chia đoạn (bước hiện tại tô nửa). `complete` → "Đã hoàn tất" màu xanh; `stopped` (hồ sơ hủy) → xám. Dùng ở danh sách hồ sơ |
 | `WorkflowDiagram` (`nodes`: start/end/step/decision + `status`; `edges` có `label`) | Sơ đồ cây quy trình: tự bố cục (dagre), nhánh tách làn, đường đã đi tô màu, bước hiện tại gắn nhãn, phóng to/thu nhỏ. Thường đặt trong `DialogContent size="lg"` |
 | `DocumentViewer` (`label`, `pages`, `regions` {id, page, x/y/w/h theo %, `label`, `content`}, `highlightId`, `onRegionClick`, `page`/`onPageChange`) | Xem chứng từ gốc: chuyển trang, phóng to/thu nhỏ/vừa khung, tô vùng của một trường (tự sang trang chứa vùng, cuộn tới). Vị trí vùng truyền qua biến CSS cục bộ. `content` để in chữ vào vùng khi dựng lại trang từ dữ liệu (prototype chưa có ảnh PDF) |
-| `DataTable` (`columns` qua `createDataTableColumnHelper`, `selectable`, `rowActions`, `onRowClick`, `pagination`, `loading`, `empty*`, `searchable`, `columnToggle`, `resizable`, `toolbarActions`; điều khiển được: `columnVisibility`, `columnSizing`; `meta: { align, wrap, filter: "text"|"select", filterOptions, label, hideable, resizable }`; độ rộng qua `size`/`minSize`/`maxSize` của cột) | Mọi bảng danh sách. Sắp xếp, chọn dòng, phân trang client/server, header dính. Tìm toàn bảng + lọc theo cột **không dấu**; ẩn/hiện cột; kéo đổi độ rộng (chuột, mũi tên ←/→, nhấp đúp để về mặc định). Mặc định không xuống dòng + cuộn ngang; cột dài bật `meta.wrap`. Lưu ý: tìm/lọc chạy trên dữ liệu đã tải (phân trang server chưa gửi bộ lọc lên server); tìm theo giá trị gốc, không theo nhãn hiển thị |
+| `DataTable` (`columns` qua `createDataTableColumnHelper`, `selectable`, `rowActions`, `onRowClick`, `pagination`, `loading`, `empty*`, `searchable`, `columnToggle`, `resizable`, `toolbarActions`, `selectionActions` (thanh thao tác hàng loạt nổi giữa đáy màn hình khi chọn ≥ 1 dòng: "Đã chọn n" + nút + Bỏ chọn), `renderCard` (+ `view`/`defaultView`/`onViewChange`, `viewStorageKey`); điều khiển được: `columnVisibility`, `columnSizing`; `meta: { align, wrap, filter: "text"|"select", filterOptions, label, hideable, resizable }`; độ rộng qua `size`/`minSize`/`maxSize` của cột) | Mọi bảng danh sách. Sắp xếp, chọn dòng, phân trang client/server, header dính. Tìm toàn bảng + lọc theo cột **không dấu** (ô lọc nằm trong hộp mở từ **nút phễu cạnh ô tìm kiếm**, nút hiện số bộ lọc đang bật – không có hàng ô lọc dưới tiêu đề); ẩn/hiện cột; kéo đổi độ rộng (chuột, mũi tên ←/→, nhấp đúp để về mặc định). Mặc định không xuống dòng + cuộn ngang; cột dài bật `meta.wrap`. Lưu ý: tìm/lọc chạy trên dữ liệu đã tải (phân trang server chưa gửi bộ lọc lên server); tìm theo giá trị gốc, không theo nhãn hiển thị. **Dạng thẻ**: truyền `renderCard(row, parts)` (thường trả `RecordCard` với `parts.select` + `parts.actions`) → thanh công cụ có nút Bảng ↔ Thẻ; thẻ dùng chung tìm kiếm, lọc cột (cùng nút phễu), sắp xếp (chọn cột + đổi chiều), chọn, phân trang; `viewStorageKey` nhớ lựa chọn trong trình duyệt |
+| `RecordCard` (`title`, `subtitle`, `leading`, `status`, `fields: {label, value, wide?}[]`, `footer`, `select`, `actions`, `children`, `tone`, `pattern: dots\|grid\|diagonal`, `art`) | Thẻ một bản ghi cho danh sách dạng thẻ (đầu thẻ · lưới nhãn–giá trị · chân thẻ). Có `tone` → đầu thẻ nền dịu + họa tiết mờ dần + `art` (icon lớn chìm, vd phương thức vận chuyển) – chỉ trang trí. Lưới thẻ: 1 / 2 / 3 cột theo bề rộng vùng nội dung. Dùng trong `DataTable renderCard`; viền đổi theo rê chuột / đang chọn của thẻ bao |
 | `Pagination` | Phân trang dùng riêng (DataTable đã tích hợp sẵn) |
 | `Toaster` (đặt 1 lần ở gốc) + `toast({ tone, title, description, action })` | Thông báo nổi sau thao tác: lưu, gửi, lỗi mạng. danger/warning đọc ngay cho trình đọc màn hình |
 | `Tooltip` | Gợi ý ngắn cho nút icon. Không đặt thao tác trong tooltip |
@@ -126,13 +129,42 @@ export default async function RootLayout({ children }) {
 | `PaperStack` / `PaperSheet` (`page`, `total`, `header`, `watermark`, `id`) / `PaperColumns` / `PaperField` (`label`, `value`, `state`, `compareTo`, `selected`, `onSelect`, `ariaLabel`, `span`, `align`, `ref` + thuộc tính DOM) | Trang giấy A4 mô phỏng bản in tờ khai VNACCS. `PaperSheet` là container `paper`: `PaperColumns` (hai vùng cạnh nhau của mẫu) chia hai cột theo bề rộng trang (`paper-wide`), một cột khi trang hẹp, luôn hai cột khi in. `PaperField` nhận `ref` và thuộc tính DOM (làm đích `Tooltip asChild` được); `compareTo` đọc kèm tiền tố "ước tính". `PaperStack` là gốc in (`data-print-root`); `PaperSheet` là vùng có tên "Trang n / tổng", watermark `aria-hidden`; `PaperField` là ô (có `onSelect` thì là nút, `aria-pressed`) với trạng thái `error`/`missing`/`estimate`/`edited` + số cũ `compareTo` – các dấu hiệu trạng thái (`data-paper-mark`) bị ẩn khi in. Token `bg-paper` / `text-paper-fg` / `border-paper-rule`; khi in luôn đen trên trắng và theo đúng kiểu bản in VNACCS: không khung ô, nhãn và giá trị cùng dòng (giá trị chữ đơn cách, ô rộng ≥ 6 cột canh giá trị theo cột), chỉ kẻ ngang giữa các khối của trang (`data-paper-body`) và kẻ dọc giữa hai cột `PaperColumns`; trên màn hình giữ khung ô để bấm sửa. `label`/`value` chỉ là nội dung dòng chữ (phrasing content), không chứa phần tử tương tác (Abbreviation/button/link) vì ô có thể là `<button>`; `ariaLabel` là tên ô, đọc trước giá trị và trạng thái |
 | `Abbreviation` (`short`, `full`) | Chữ viết tắt cho nhãn dài làm vỡ lưới form (vd "Mã PLHH"): gạch chân chấm, bấm / Enter mở khung tên đầy đủ. Đặt được trong nhãn `Field` – tên truy cập của ô nhập vẫn có tên đầy đủ (chữ ẩn trong nút) |
 | `Combobox` (`options`, `multiple`, `clearable`, `expandable` (nút Mở rộng: khung tới 36rem, nhãn/mô tả xuống dòng đọc hết), `maxResults` (mặc định 100), `onSearchChange` + `loading` cho tìm phía server); hàm `buildSearchIndex`/`searchOptions`/`foldVietnamese` | Chọn có tìm kiếm; **lọc không dấu tiếng Việt** ("hai phong" → Hải Phòng). Danh sách dài (đã thử 20.000 mục, lọc < 1 ms): chỉ hiện `maxResults` kết quả đầu + dòng "còn n kết quả – gõ thêm để thu hẹp"; không cuộn ảo. Trên ~100.000 mục → tìm phía server |
-| `DatePicker`, `DateRangePicker` (giá trị ISO `YYYY-MM-DD`, `min`/`max`) | Ngày nghiệp vụ; hiển thị dd/MM/yyyy (vi) hoặc MM/dd/yyyy (en); không lệch múi giờ. Cả hai **gõ tay được**; DateRangePicker có 2 ô Từ/Đến, báo lỗi sai định dạng, ngoài `min`/`max`, Từ > Đến; đồng bộ hai chiều với lịch. Trong `Field`, cả hai ô đều đọc kèm nhãn Field |
+| `DatePicker`, `DateRangePicker` (giá trị ISO `YYYY-MM-DD`, `min`/`max`) | Ngày nghiệp vụ; hiển thị dd/MM/yyyy (vi), MM/dd/yyyy (en) hoặc yyyy/MM/dd (zh, gõ được cả `2024年12月5日`); tuần bắt đầu thứ Hai (vi, zh) / Chủ nhật (en); không lệch múi giờ. Cả hai **gõ tay được**; DateRangePicker có 2 ô Từ/Đến, báo lỗi sai định dạng, ngoài `min`/`max`, Từ > Đến; đồng bộ hai chiều với lịch. Trong `Field`, cả hai ô đều đọc kèm nhãn Field |
 
-## 4b. Đa ngôn ngữ (VI/EN)
+## 4b. Đa ngôn ngữ (VI / EN / ZH)
 
-- Bọc gốc app bằng `<UiLocaleProvider locale={appearance.locale}>`. Mọi nhãn của `@kb/ui` (nút Đóng, aria-label, placeholder, trạng thái…) tự đổi theo ngôn ngữ; prop `labels` vẫn ghi đè từng nhãn.
-- Component mới khai báo nhãn bằng `useMessages({ vi: {...}, en: {...} }, labels)` – đủ cả hai ngôn ngữ.
-- Nội dung nghiệp vụ của app (tên menu, dữ liệu) do app tự dịch (next-intl), không nằm trong `@kb/ui`.
+Giao diện có 3 ngôn ngữ: **tiếng Việt** (`vi`, mặc định), **tiếng Anh** (`en`), **tiếng Trung giản thể** (`zh`). Danh sách nằm ở `UI_LOCALES` (`packages/ui/src/lib/i18n.tsx`); thêm ngôn ngữ thứ tư → thêm vào đó, TypeScript chỉ ra mọi bộ nhãn còn thiếu.
+
+- Bọc gốc app bằng `<UiLocaleProvider locale={appearance.locale}>`. Mọi nhãn của `@kb/ui` (nút Đóng, aria-label, placeholder, `StatusBadge`, định dạng ngày của `DatePicker`…) tự đổi theo ngôn ngữ; prop `labels` vẫn ghi đè từng nhãn. Đổi ngôn ngữ thì app dựng lại cả cây (key theo locale).
+- Ô chọn Ngôn ngữ trong `AppearancePanel` ghi tên mỗi ngôn ngữ bằng chính ngôn ngữ đó ("Tiếng Việt", "English", "中文") – không dịch, để người không đọc được ngôn ngữ đang hiện vẫn tìm ra.
+
+| API | Dùng khi |
+|---|---|
+| `defineMessages({ vi: {...}, en: {...}, zh: {...} })` | Khai báo bộ nhãn. Khóa suy từ chính bộ nhãn; thiếu ngôn ngữ hoặc thiếu khóa ở một ngôn ngữ là **lỗi TypeScript**. Trong `@kb/ui` dùng `{...} satisfies Messages<K>` cũng được |
+| `useMessages(catalog, overrides?)` | Trong component: `const t = useMessages(M, labels)` → `t.save` |
+| `fill(template, vars)` | Điền tham số: `fill(t.sent, { n })` với `"Đã gửi {n} nghiệp vụ"`. Không ghép chuỗi bằng `+` – thứ tự từ mỗi ngôn ngữ khác nhau |
+| `pickMessages(catalog, locale)` | Hàm thuần (không phải component): nhận `locale: UiLocale`, nơi gọi truyền `useUiLocale()` |
+| `useUiLocale()`, `intlLocale(locale)` | Lấy ngôn ngữ hiện tại; locale BCP-47 cho `Intl` (`vi-VN`/`en-US`/`zh-CN`) |
+| `statusLabel(status, locale)` | Nhãn `StatusBadge` ngoài component (bộ lọc bảng, xuất file). `STATUS_META[s].label` chỉ là bản tiếng Việt |
+
+```ts
+// submit-step.messages.ts
+import { defineMessages } from "@kb/ui";
+export const SUBMIT_MESSAGES = defineMessages({
+  vi: { title: "Khai báo Hải quan", sent: "Đã gửi {n} nghiệp vụ" },
+  en: { title: "Customs filing", sent: "Sent {n} operations" },
+  zh: { title: "海关申报", sent: "已发送 {n} 项业务" },
+});
+// submit-step.tsx
+const t = useMessages(SUBMIT_MESSAGES);
+<h2>{t.title}</h2> <p>{fill(t.sent, { n })}</p>
+```
+
+**Quy ước file trong app:**
+- `*.messages.ts` cạnh component (vd `submit-step.messages.ts`) hoặc `messages.ts` cho cả thư mục – chứa bộ nhãn `defineMessages`.
+- `*.vi.ts` – nội dung **chỉ có tiếng Việt vì pháp lý** (nhãn trên bản in tờ khai VNACCS, chuỗi gửi Hải quan, regex khớp chữ trên chứng từ). Không dịch.
+- Không dịch: dữ liệu nghiệp vụ, lỗi backend trả về, mã kỹ thuật (IDA, AMA, VNACCS, HS…). Comment code giữ tiếng Việt.
+- Luật lint `apps-hardcoded-text` (§5) bắt chữ tiếng Việt có dấu viết cứng trong code app; dòng lẻ bắt buộc tiếng Việt thì đặt `// kb-allow-raw: <lý do>` ngay trên.
 
 ## 5. Quy tắc (máy kiểm tra – `pnpm lint`)
 
@@ -154,6 +186,7 @@ export default async function RootLayout({ children }) {
 | `apps-svg-selector` | `[&>svg]:…` tự chỉnh icon – dùng `leftIcon`/`rightIcon`, `IconTile`, `Badge icon` | `apps/*` |
 | `apps-icon-tile` | Tự ghép ô icon `justify-center` + `bg-*-subtle` – dùng `IconTile` | `apps/*` |
 | `apps-big-skeleton` | `<Skeleton className="h-64…">` nguyên khối – dùng `PageLoading` / `Skeleton*` đúng dáng | `apps/*` |
+| `apps-hardcoded-text` | Chữ tiếng Việt có dấu viết cứng trong code (không tính comment) – đưa vào bộ nhãn `defineMessages` trong `*.messages.ts`, dùng `useMessages` (§4b) | `apps/web/src/{features,components,app,lib}` trừ `*.messages.ts`, `*.vi.ts`, test, `app/api`, `lib/server` |
 
 Thoát hiểm (rất hiếm, reviewer phải đồng ý): comment `kb-allow-raw: <lý do cụ thể>` trên cùng dòng hoặc dòng ngay trên.
 

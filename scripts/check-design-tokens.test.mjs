@@ -17,6 +17,12 @@ describe("check-design-tokens", () => {
     assert.deepEqual(rules("apps/web/a.tsx", `className="text-white"`), ["tw-palette"]);
   });
 
+  it("chặn bo góc ngoài thang (không theo cấu hình giao diện)", () => {
+    assert.deepEqual(rules("packages/ui/src/c.tsx", `className="rounded-xl border"`), ["radius-off-scale"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `className="hover:rounded-t-2xl"`), ["radius-off-scale"]);
+    assert.deepEqual(rules("packages/ui/src/c.tsx", `className="rounded-lg rounded-t-md rounded-full rounded-sm"`), []);
+  });
+
   it("chặn giá trị màu tùy ý, dark:, màu trong style inline", () => {
     assert.ok(rules("packages/ui/src/c.tsx", `className="bg-[#fff]"`).includes("arbitrary-color"));
     assert.ok(rules("packages/ui/src/c.tsx", `className="bg-[var(--kb-color-primary)]"`).includes("arbitrary-color"));
@@ -70,6 +76,38 @@ describe("check-design-tokens", () => {
   it("thoát hiểm bằng comment có lý do (cùng dòng hoặc dòng trên)", () => {
     assert.deepEqual(rules("apps/web/a.tsx", `// kb-allow-raw: logo đối tác bắt buộc màu gốc\n<img className="bg-[#ffcc00]" />`), []);
     assert.ok(rules("apps/web/a.tsx", `<img className="bg-[#ffcc00]" /> // kb-allow-raw:`).length > 0, "thiếu lý do thì không được miễn");
+  });
+
+  it("apps/web: chặn chữ tiếng Việt viết cứng; cho qua bộ nhãn, nội dung pháp lý *.vi.ts, comment, test, route API", () => {
+    const f = "apps/web/src/features/x/a.tsx";
+    assert.deepEqual(rules(f, `<Button>Lưu hồ sơ</Button>`), ["apps-hardcoded-text"]);
+    assert.deepEqual(rules(f, `toast.error("Không tải được");`), ["apps-hardcoded-text"]);
+    assert.deepEqual(rules(f, `<Button>{t.save}</Button> // nút Lưu`), []);
+    assert.deepEqual(rules(f, `  // Đổi ngôn ngữ → dựng lại`), []);
+    assert.deepEqual(rules(f, `   * Hàm này trả nhãn`), []);
+    assert.deepEqual(rules(f, `{/* Khối chú thích */}<Card />`), []);
+    assert.deepEqual(rules(f, `const url = "https://vnaccs.example/đi";`), ["apps-hardcoded-text"], "// trong URL không phải comment");
+    assert.deepEqual(rules("apps/web/src/features/x/a.messages.ts", `vi: { save: "Lưu" },`), []);
+    assert.deepEqual(rules("apps/web/src/features/x/print.vi.ts", `title: "TỜ KHAI HÀNG HÓA NHẬP KHẨU"`), []);
+    assert.deepEqual(rules("apps/web/src/features/x/a.test.tsx", `getByText("Lưu")`), []);
+    assert.deepEqual(rules("apps/web/src/app/api/x/route.ts", `throw new HttpError(404, "X", "Không thấy")`), []);
+    assert.deepEqual(rules("apps/web/src/mocks/seed/a.ts", `name: "Công ty An Phát"`), [], "dữ liệu mẫu không phải nhãn giao diện");
+  });
+
+  it("apps/web: chặn chữ không dấu viết cứng trong JSX và prop hiển thị; cho qua biểu thức, kiểu generic, bộ nhãn, test", () => {
+    const f = "apps/web/src/features/x/a.tsx";
+    assert.deepEqual(rules(f, `<Button>Open EDI</Button>`), ["apps-hardcoded-latin-text"]);
+    assert.deepEqual(rules(f, `<span>MST <span className="font-mono">{x}</span></span>`), ["apps-hardcoded-latin-text"]);
+    assert.deepEqual(rules(f, `<Field label="Email" required>`), ["apps-hardcoded-latin-text"]);
+    assert.deepEqual(rules(f, `<Input placeholder="name@company.com" />`), ["apps-hardcoded-latin-text"]);
+    assert.deepEqual(rules(f, `<Field label={t.email}><Input placeholder={t.emailExample} /></Field>`), []);
+    assert.deepEqual(rules(f, `{a ? <Spinner /> : b.isError ? <LoadError /> : null}`), []);
+    assert.deepEqual(rules(f, `const rows = items.filter((a) => at >= start && at <= end);`), []);
+    assert.deepEqual(rules(f, `function f(t: Record<K, string>, labels: Record<K, string>) {}`), []);
+    assert.deepEqual(rules(f, `<Badge>{n}</Badge><Icon className="h-4 w-4" />`), []);
+    assert.deepEqual(rules(f, `{/* kb-allow-raw: ví dụ định dạng mã */}\n<Input placeholder="BI820001" />`), []);
+    assert.deepEqual(rules("apps/web/src/features/x/a.test.tsx", `<Button>Save</Button>`), []);
+    assert.deepEqual(rules("apps/web/src/features/x/a.messages.ts", `en: { save: "Save" },`), []);
   });
 
   it("toàn repo hiện tại sạch", () => {

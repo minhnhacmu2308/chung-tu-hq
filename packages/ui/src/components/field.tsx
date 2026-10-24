@@ -46,7 +46,7 @@ export type FieldProps = {
   required?: boolean;
   /** horizontal: nhãn bên trái (2/5), ô bên phải (3/5) khi vùng nội dung từ mốc md – form dày ô (tờ khai). Hẹp hơn vẫn xếp dọc. */
   orientation?: "vertical" | "horizontal";
-  /** Khung viền như nhóm ô, nhãn nằm trên đường viền (FieldFrame) – ô đứng riêng của form dày ô (tờ khai). Bỏ qua `orientation`. */
+  /** Khung nền dịu không viền, nhãn nhỏ trên cùng (FieldFrame `variant="panel"`) – ô đứng riêng của form dày ô (tờ khai). Bỏ qua `orientation`. */
   framed?: boolean;
   /** Với `framed`: nút đặt trên đường viền sau nhãn (vd ⓘ hướng dẫn). */
   labelAction?: ReactNode;
@@ -71,7 +71,7 @@ export function Field({ label, hint, error, required = false, orientation = "ver
     const star = required && <span className="ml-0.5 text-danger" aria-hidden="true">*</span>;
     return (
       <FieldContext.Provider value={value}>
-        <FieldFrame legend={<label htmlFor={id} id={`${id}-label`}>{label}{star}</label>} legendAction={labelAction} className={className}>
+        <FieldFrame variant="panel" legend={<label htmlFor={id} id={`${id}-label`}>{label}{star}</label>} legendAction={labelAction} className={className}>
           {children}
           {hint && <p id={hintId} className="text-xs text-fg-subtle">{hint}</p>}
           {error && <p id={errorId} className="text-sm text-danger-subtle-fg" role="alert">{error}</p>}
@@ -106,9 +106,15 @@ export function Field({ label, hint, error, required = false, orientation = "ver
   );
 }
 
-/** Lớp của khung: dùng chung cho FieldFrame và RadioGroup `framed`. */
+/** Lớp của khung viền (nhóm nhiều ô): tên nằm trên đường viền. */
 export const FRAME_CLASS = "min-w-0 rounded-md border border-border px-3 pb-3 pt-1";
 export const FRAME_LEGEND_CLASS = "px-1 text-xs font-medium text-fg-muted";
+/**
+ * Khung nền (một ô đứng riêng – Field `framed`, RadioGroup `framed`): nền dịu, KHÔNG viền – ô nhập bên trong đã có viền,
+ * khung viền bọc ngoài thành hai lớp viền. Tên là dòng chữ nhỏ trên cùng (legend float → thành phần tử thường, không cắt viền).
+ */
+export const PANEL_CLASS = "min-w-0 rounded-md bg-surface-muted px-3 pb-3 pt-2";
+export const PANEL_LEGEND_CLASS = "float-left mb-1.5 w-full text-xs font-medium text-fg-muted";
 
 export type FieldFrameProps = Omit<ComponentProps<"fieldset">, "children"> & {
   /** Tên nằm trên đường viền. */
@@ -117,15 +123,18 @@ export type FieldFrameProps = Omit<ComponentProps<"fieldset">, "children"> & {
   legendAction?: ReactNode;
   /** Ẩn tên (vẫn đọc được bằng trình đọc màn hình) – khung chỉ có một ô chọn tự mang chữ. */
   hideLegend?: boolean;
+  /** outline (mặc định) = viền, tên trên đường viền – nhóm nhiều ô. panel = nền dịu không viền – một ô đứng riêng (tránh hai lớp viền). */
+  variant?: "outline" | "panel";
   children: ReactNode;
 };
 
 /** Khung viền, tên nằm trên đường viền (fieldset + legend): nhóm ô, nhóm lặp, ô đứng riêng của form dày ô (tờ khai) – một kiểu cho mọi khung. */
-export function FieldFrame({ legend, legendAction, hideLegend = false, className, children, ...props }: FieldFrameProps) {
+export function FieldFrame({ legend, legendAction, hideLegend = false, variant = "outline", className, children, ...props }: FieldFrameProps) {
   const nameId = useId();
+  const panel = variant === "panel";
   return (
-    <fieldset data-frame="" aria-labelledby={legendAction ? nameId : undefined} className={cn("flex flex-col gap-1.5", FRAME_CLASS, className)} {...props}>
-      <legend className={cn(FRAME_LEGEND_CLASS, hideLegend && "sr-only")}>
+    <fieldset data-frame={variant} aria-labelledby={legendAction ? nameId : undefined} className={cn("flex flex-col gap-1.5", panel ? PANEL_CLASS : FRAME_CLASS, className)} {...props}>
+      <legend className={cn(panel ? cn(PANEL_LEGEND_CLASS, "mb-0") : FRAME_LEGEND_CLASS, hideLegend && "sr-only")}>
         <FrameLegend nameId={nameId} legend={legend} action={legendAction} />
       </legend>
       {children}

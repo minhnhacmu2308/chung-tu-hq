@@ -6,6 +6,7 @@ import { cn } from "../lib/cn.js";
 const MESSAGES = {
   vi: { more: "và {n} người khác" },
   en: { more: "and {n} more" },
+  zh: { more: "等另外 {n} 人" },
 } satisfies Messages<"more">;
 
 const avatarVariants = cva(

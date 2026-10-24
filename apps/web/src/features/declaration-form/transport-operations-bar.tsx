@@ -1,12 +1,13 @@
 "use client";
 // Hai nút nghiệp vụ ở đầu nhóm "Vận đơn & vận chuyển": Chia tách vận đơn (chỉ nhập khẩu), Khai báo định danh. Mỗi nút mở panel đủ chỉ tiêu
 // theo đặc tả FPT, điền sẵn từ tờ khai; phần kết quả Hải quan trả về chỉ đọc. Bản mẫu: gửi / hỏi kết quả chỉ báo "chưa kết nối".
-import { Button, Dialog, DialogContent, DialogFooter, Stack, toast } from "@kb/ui";
+import { Button, Dialog, DialogContent, DialogFooter, fill, Stack, toast, useMessages } from "@kb/ui";
 import type { TransportOperationForm } from "@kb/contracts";
 import { QrCode, Split } from "lucide-react";
 import { useState } from "react";
 import { BlockView } from "./block-view";
 import type { Stage } from "./fixtures";
+import { FORM_MESSAGES } from "./form.messages";
 import { conditionContext, type FormValues } from "./form-state";
 import { operationValues, operationsFor } from "./transport-operations";
 
@@ -14,16 +15,17 @@ type Kind = "IDA" | "EDA";
 const ICON: Record<TransportOperationForm["id"], typeof Split> = { "tach-van-don": Split, "dinh-danh": QrCode };
 
 function OperationDialog({ form, kind, header, stage, showInapplicable, onClose }: { form: TransportOperationForm; kind: Kind; header: FormValues; stage: Stage; showInapplicable: boolean; onClose: () => void }) {
+  const t = useMessages(FORM_MESSAGES);
   const [values, setValues] = useState<FormValues>(() => operationValues(form, kind, header, stage));
   const ctx = conditionContext(kind, values);
   const Icon = ICON[form.id];
-  const notConnected = (what: string) => toast({ tone: "info", title: "Bản mẫu – chưa kết nối", description: `${what} (${form.api.request} / ${form.api.response})` });
+  const notConnected = (what: string) => toast({ tone: "info", title: t.prototypeNotConnected, description: `${what} (${form.api.request} / ${form.api.response})` });
   return (
     <DialogContent title={form.title} icon={<Icon className="h-4 w-4" />} description={form.description} size="lg">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          notConnected(`Gửi ${form.title.toLowerCase()}`);
+          notConnected(fill(t.sendWhat, { what: form.title.toLowerCase() }));
         }}
       >
         <Stack gap="md">
@@ -35,9 +37,9 @@ function OperationDialog({ form, kind, header, stage, showInapplicable, onClose 
           ))}
         </Stack>
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>Đóng</Button>
-          <Button type="button" variant="secondary" onClick={() => notConnected("Hỏi kết quả")}>Hỏi kết quả</Button>
-          <Button type="submit">Gửi khai báo</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t.close}</Button>
+          <Button type="button" variant="secondary" onClick={() => notConnected(t.askResult)}>{t.askResult}</Button>
+          <Button type="submit">{t.sendDecl}</Button>
         </DialogFooter>
       </form>
     </DialogContent>

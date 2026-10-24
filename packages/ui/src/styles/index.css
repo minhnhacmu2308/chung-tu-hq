@@ -100,6 +100,11 @@
   --animate-pop-in: kb-pop-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-slide-in-right: kb-slide-in-right 240ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-slide-up: kb-slide-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* Toast: vào từ phải, ra mờ dần sang phải; thanh đếm ngược tự đóng; vạch chạy khi đang xử lý. */
+  --animate-toast-in: kb-toast-in 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-toast-out: kb-toast-out 180ms ease-in forwards;
+  --animate-countdown: kb-countdown linear forwards;
+  --animate-indeterminate: kb-indeterminate 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 
   /* Trang trí "AI" (màn đăng nhập/đăng ký) và trạng thái tải. */
   --animate-orb-a: kb-orb-a 16s ease-in-out infinite alternate;
@@ -161,6 +166,19 @@
   @keyframes kb-slide-up {
     from { opacity: 0; transform: translateY(0.5rem); }
   }
+  @keyframes kb-toast-in {
+    from { opacity: 0; transform: translateX(calc(100% + 1rem)) scale(0.96); }
+  }
+  @keyframes kb-toast-out {
+    to { opacity: 0; transform: translateX(var(--radix-toast-swipe-end-x, 2rem)) scale(0.96); }
+  }
+  @keyframes kb-countdown {
+    to { transform: scaleX(0); }
+  }
+  @keyframes kb-indeterminate {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(250%); }
+  }
 }
 
 @layer base {
@@ -181,11 +199,6 @@
   ::selection { background: var(--kb-color-selection); }
   /* Thanh cuộn mảnh trong các khung cuộn bên trong trang (bảng, panel, danh sách). */
   :where(body *) { scrollbar-width: thin; }
-  /* Dialog dạng panel đang mở: trang chính chừa lề phải bằng bề rộng panel (components/dialog.tsx, PanelDock). */
-  body {
-    padding-inline-end: var(--kb-dialog-dock, 0px);
-    @media (prefers-reduced-motion: no-preference) { transition: padding-inline-end 200ms ease; }
-  }
 
   /*
    * Mọi phần tử tương tác đổi trạng thái (hover, focus, chọn) mượt thay vì giật.

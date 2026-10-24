@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, index, integer, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { plans } from "./plans.js";
 import { appRole, currentOrg, currentUser, id, noContext, orgId, orgPolicyUsing, orgRls, timestamps } from "./shared.js";
 
@@ -11,6 +11,8 @@ export const organizations = pgTable(
     name: text("name").notNull(),
     address: text("address").notNull().default(""),
     phone: text("phone").notNull().default(""),
+    /** Mã bưu chính của doanh nghiệp (6 số VN) – chỉ tiêu 1.14 IDA (TK_IMY) / 2.13 EDA (TK_EPP); "" = chưa khai. */
+    postalCode: text("postal_code").notNull().default(""),
     planCode: text("plan_code")
       .notNull()
       .references(() => plans.code),
@@ -31,6 +33,7 @@ export const organizations = pgTable(
   },
   (t) => [
     uniqueIndex("organizations_tax_code_uq").on(t.taxCode),
+    check("organizations_status_chk", sql`status in ('ACTIVE', 'SUSPENDED')`),
     // Đọc: org đang đặt, hoặc org mình là thành viên (withUser), hoặc không ngữ cảnh (identity tra MST khi đăng ký).
     pgPolicy("organizations_read", {
       for: "select",
@@ -82,14 +85,39 @@ export const memberships = pgTable(
   },
   (t) => [
     uniqueIndex("memberships_org_user_uq").on(t.orgId, t.userId),
+    check("memberships_role_chk", sql`role in ('OWNER', 'ADMIN', 'DECLARANT', 'APPROVER', 'VIEWER')`),
+    check("memberships_status_chk", sql`status in ('ACTIVE', 'INVITED', 'DISABLED')`),
     index("memberships_user_idx").on(t.userId),
     // Đọc/ghi dòng của org đang đặt; riêng khi CHƯA có org (withUser) được đọc dòng của chính mình để liệt kê org sau đăng nhập.
+    // Ghi khi không có ngữ cảnh (withSystem): chỉ đăng ký – tạo doanh nghiệp + membership OWNER trong CÙNG transaction (không để org mồ côi).
     pgPolicy("memberships_rls", {
       for: "all",
       to: appRole,
       using: sql`${orgPolicyUsing} OR (coalesce(${currentOrg}, '') = '' AND user_id = ${currentUser})`,
-      withCheck: orgPolicyUsing,
+      withCheck: sql`${orgPolicyUsing} OR (${noContext})`,
     }),
+  ],
+).enableRLS();
+
+/** Nhật ký hoạt động của doanh nghiệp – append-only (chỉ insert/select), xem shared/audit.ts. */
+export const orgAudit = pgTable(
+  "org_audit",
+  {
+    id: id(),
+    orgId: orgId(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    actorId: text("actor_id").notNull(),
+    actorName: text("actor_name").notNull(),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    targetLabel: text("target_label").notNull(),
+    detail: jsonb("detail"),
+  },
+  (t) => [
+    index("org_audit_org_at_idx").on(t.orgId, t.at),
+    pgPolicy("org_audit_select", { for: "select", to: appRole, using: orgPolicyUsing }),
+    pgPolicy("org_audit_insert", { for: "insert", to: appRole, withCheck: orgPolicyUsing }),
   ],
 ).enableRLS();
 
@@ -140,6 +168,7 @@ export const authTokens = pgTable(
   },
   (t) => [
     uniqueIndex("auth_tokens_hash_uq").on(t.tokenHash),
+    index("auth_tokens_user_idx").on(t.userId),
     pgPolicy("auth_tokens_rw", {
       for: "all",
       to: appRole,
@@ -165,6 +194,10 @@ export const joinRequests = pgTable(
   },
   (t) => [
     index("join_requests_org_idx").on(t.orgId),
+    check("join_requests_status_chk", sql`status in ('PENDING', 'APPROVED', 'REJECTED')`),
+    // Mỗi người chỉ một yêu cầu đang chờ cho một doanh nghiệp.
+    uniqueIndex("join_requests_pending_uq").on(t.orgId, t.userId).where(sql`status = 'PENDING'`),
+    index("join_requests_user_idx").on(t.userId),
     pgPolicy("join_requests_read", { for: "select", to: appRole, using: sql`${orgPolicyUsing} OR user_id = ${currentUser} OR (${noContext})` }),
     pgPolicy("join_requests_insert", { for: "insert", to: appRole, withCheck: sql`(${noContext}) OR user_id = ${currentUser}` }),
     pgPolicy("join_requests_update", { for: "update", to: appRole, using: orgPolicyUsing, withCheck: orgPolicyUsing }),
@@ -184,7 +217,12 @@ export const digitalCertificates = pgTable(
     isDefault: boolean("is_default").notNull().default(false),
     ...timestamps(),
   },
-  (t) => [index("digital_certificates_org_idx").on(t.orgId), orgRls("digital_certificates_rls")],
+  (t) => [
+    index("digital_certificates_org_idx").on(t.orgId),
+    // Mỗi doanh nghiệp tối đa một chứng thư mặc định.
+    uniqueIndex("digital_certificates_org_default_uq").on(t.orgId).where(sql`is_default`),
+    orgRls("digital_certificates_rls"),
+  ],
 ).enableRLS();
 
 /** Bí mật của doanh nghiệp (tài khoản VNACCS, khóa API…) mã hóa AES-256-GCM; không bao giờ trả về API. */
@@ -220,6 +258,8 @@ export const notifications = pgTable(
   },
   (t) => [
     index("notifications_org_user_idx").on(t.orgId, t.userId, t.createdAt),
+    // Đếm/đánh dấu "chưa đọc" – chỉ số nhỏ, bỏ qua dòng đã đọc.
+    index("notifications_unread_idx").on(t.orgId, t.userId).where(sql`read_at is null`),
     pgPolicy("notifications_rls", {
       for: "all",
       to: appRole,

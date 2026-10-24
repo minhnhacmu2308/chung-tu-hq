@@ -1,7 +1,7 @@
 "use client";
 // Mẫu chứng từ đã gắn nhãn: làm ví dụ cho AI và làm bộ đo khi "Đánh giá lại".
 import {
-  Alert, Badge, Button, Card, CardContent, EmptyState, FileDropzone, Skeleton, Stack, toast, SkeletonList,
+  Alert, Badge, Button, Card, CardContent, EmptyState, FileDropzone, Skeleton, Stack, toast, SkeletonList, fill, useMessages,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Pencil, RefreshCw, Tags } from "lucide-react";
@@ -10,8 +10,10 @@ import { confirmPendingSamples, listSamples, MIN_SAMPLES_FOR_ACCURACY, skillKeys
 import { formatBytesVi, formatRelative } from "@/lib/format";
 import type { Skill } from "@/mocks/types";
 import { SampleLabelDialog } from "./sample-label-dialog";
+import { SAMPLES_MESSAGES } from "./skills.messages";
 
 export function SkillSamples({ skill }: { skill: Skill }) {
+  const t = useMessages(SAMPLES_MESSAGES);
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: skillKeys.samples(skill.id), queryFn: () => listSamples(skill.id) });
   const invalidate = () => qc.invalidateQueries({ queryKey: skillKeys.all });
@@ -21,14 +23,14 @@ export function SkillSamples({ skill }: { skill: Skill }) {
     mutationFn: (files: File[]) => uploadSamples(skill.id, files),
     onSuccess: (added) => {
       void invalidate();
-      toast({ tone: "success", title: `Đã tải lên ${added.length} mẫu`, description: "Gắn nhãn xong mẫu mới được tính vào bộ đo." });
+      toast({ tone: "success", title: fill(t.uploaded, { n: added.length }), description: t.uploadedDesc });
     },
   });
   const confirm = useMutation({
     mutationFn: () => confirmPendingSamples(skill.id),
     onSuccess: (n) => {
       void invalidate();
-      toast({ tone: "success", title: `Đã gắn nhãn ${n} mẫu`, description: "Bấm Đánh giá lại để đo độ chính xác mới." });
+      toast({ tone: "success", title: fill(t.confirmed, { n }), description: t.confirmedDesc });
     },
   });
 
@@ -38,8 +40,8 @@ export function SkillSamples({ skill }: { skill: Skill }) {
   return (
     <Stack gap="md">
       {skill.labeledSamples < MIN_SAMPLES_FOR_ACCURACY && (
-        <Alert tone="warning" title="Chưa đủ mẫu để đo độ chính xác">
-          Cần ít nhất {MIN_SAMPLES_FOR_ACCURACY} mẫu đã gắn nhãn (hiện có {skill.labeledSamples}). Tải thêm chứng từ thật của doanh nghiệp, kiểm tra kết quả đọc rồi xác nhận.
+        <Alert tone="warning" title={t.notEnoughTitle}>
+          {fill(t.notEnoughBody, { min: MIN_SAMPLES_FOR_ACCURACY, n: skill.labeledSamples })}
         </Alert>
       )}
       <FileDropzone
@@ -48,23 +50,23 @@ export function SkillSamples({ skill }: { skill: Skill }) {
         maxSize={20 * 1024 * 1024}
         disabled={upload.isPending}
         onFiles={(files) => upload.mutate(files)}
-        onReject={(r) => toast({ tone: "warning", title: `${r.length} tệp không hợp lệ`, description: "Chỉ nhận PDF/ảnh, tối đa 20 MB mỗi tệp." })}
+        onReject={(r) => toast({ tone: "warning", title: fill(t.rejected, { n: r.length }), description: t.rejectedDesc })}
       />
       {pending > 0 && (
         <Alert
           tone="info"
-          title={`${pending} mẫu đang chờ gắn nhãn`}
-          action={<Button size="sm" leftIcon={<Tags className="h-4 w-4" />} loading={confirm.isPending} onClick={() => confirm.mutate()}>Gắn nhãn xong</Button>}
+          title={fill(t.pendingTitle, { n: pending })}
+          action={<Button size="sm" leftIcon={<Tags className="h-4 w-4" />} loading={confirm.isPending} onClick={() => confirm.mutate()}>{t.labelAll}</Button>}
         >
-          Mở từng mẫu để kiểm tra và sửa giá trị cho đúng, hoặc bấm “Gắn nhãn xong” để nhận nguyên kết quả AI đọc.
+          {t.pendingBody}
         </Alert>
       )}
       {isError ? (
-        <Alert tone="danger" title="Không tải được danh sách mẫu" action={<Button size="sm" variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => refetch()}>Thử lại</Button>} />
+        <Alert tone="danger" title={t.loadError} action={<Button size="sm" variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} onClick={() => refetch()}>{t.retry}</Button>} />
       ) : isLoading || !data ? (
         <SkeletonList rows={3} />
       ) : data.length === 0 ? (
-        <EmptyState icon={<FileText className="h-6 w-6" />} title="Chưa có mẫu nào" description="Kéo thả chứng từ thật của doanh nghiệp vào ô phía trên để bắt đầu." />
+        <EmptyState icon={<FileText className="h-6 w-6" />} title={t.emptyTitle} description={t.emptyDesc} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -75,17 +77,17 @@ export function SkillSamples({ skill }: { skill: Skill }) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-fg">{s.fileName}</p>
                     <p className="text-xs text-fg-subtle">
-                      {s.pages} trang · {formatBytesVi(s.sizeBytes)} · {s.labeledBy} · {formatRelative(s.labeledAt)}
+                      {fill(t.pages, { n: s.pages })} · {formatBytesVi(s.sizeBytes)} · {s.labeledBy} · {formatRelative(s.labeledAt)}
                     </p>
                   </div>
-                  {s.status === "LABELED" ? <Badge tone="success">Đã gắn nhãn</Badge> : <Badge tone="warning">Chờ gắn nhãn</Badge>}
-                  <Button size="sm" variant="ghost" leftIcon={<Pencil className="h-3.5 w-3.5" />} aria-label={`${s.status === "LABELED" ? "Sửa nhãn" : "Gắn nhãn"} ${s.fileName}`} onClick={() => setLabeling(s)}>
-                    {s.status === "LABELED" ? "Sửa nhãn" : "Gắn nhãn"}
+                  {s.status === "LABELED" ? <Badge tone="success">{t.labeled}</Badge> : <Badge tone="warning">{t.pending}</Badge>}
+                  <Button size="sm" variant="ghost" leftIcon={<Pencil className="h-3.5 w-3.5" />} aria-label={`${s.status === "LABELED" ? t.editLabel : t.addLabel} ${s.fileName}`} onClick={() => setLabeling(s)}>
+                    {s.status === "LABELED" ? t.editLabel : t.addLabel}
                   </Button>
                 </li>
               ))}
             </ul>
-            {hidden > 0 && <p className="border-t border-border px-4 py-3 text-sm text-fg-muted">… và {hidden} mẫu cũ hơn</p>}
+            {hidden > 0 && <p className="border-t border-border px-4 py-3 text-sm text-fg-muted">{fill(t.older, { n: hidden })}</p>}
           </CardContent>
         </Card>
       )}

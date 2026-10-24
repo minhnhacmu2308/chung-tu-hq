@@ -23,6 +23,7 @@ Quy tắc nào máy kiểm tra được thì đã cấu hình trong lint/depcrui
 - Dữ liệu từ ngoài (HTTP, form, AI, file, queue) **luôn** parse bằng Zod ở biên trước khi dùng.
 - Lỗi nghiệp vụ dự kiến trả `Result<T, DomainError>` (không throw). Chỉ throw cho lỗi lập trình/hạ tầng. `DomainError` có `code` cố định để UI dịch sang tiếng Việt.
 - Không import sâu: `import { x } from "@kb/core/modules/dossier"` (đúng), không `.../dossier/infrastructure/repo` (sai).
+- Log phía server bằng `createLogger` (`@kb/core/shared`): JSON một dòng, kèm `requestId`/`jobId`/`orgId`/`dossierId`; không `console.*` trong route handler và worker; không bao giờ log khóa, token, mật khẩu (logger tự che theo tên khóa nhưng đừng dựa vào đó).
 - Đặt tên: file `kebab-case.ts`, kiểu/Component `PascalCase`, hàm/biến `camelCase`, hằng `SCREAMING_SNAKE`. Use case đặt bằng động từ: `uploadDocuments`, `runValidation`.
 - Thuật ngữ nghiệp vụ trong code dùng tiếng Anh thống nhất (xem bảng dưới); UI hiển thị tiếng Việt.
 
@@ -46,6 +47,7 @@ Quy tắc nào máy kiểm tra được thì đã cấu hình trong lint/depcrui
 - Số, tiền, ngày chỉ format qua `lib/format`. Không tự `toLocaleString` rải rác.
 - Không nhân bản schema: form dùng schema Zod từ `@kb/contracts`.
 - Chỉ dùng component `@kb/ui` + utility token (docs/DESIGN-SYSTEM.md). Thiếu thì thêm vào `@kb/ui`. Máy chặn bằng `pnpm lint` (`scripts/check-design-tokens.mjs` + depcruise).
+- **3 ngôn ngữ (vi / en / zh) là bắt buộc** cho mọi chữ hiển thị mới – thiếu bản dịch là chưa xong. Nhãn trong `*.messages.ts` (`defineMessages` + `useMessages`). Xem `.claude/rules/ho-tro-3-ngon-ngu.md`.
 - Test theo `docs/TESTING.md`.
 - Truy cập bằng bàn phím được trên màn ocr-review và declaration-review.
 

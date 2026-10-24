@@ -1,5 +1,5 @@
 "use client";
-import { PageHeader, Stack, Tabs, TabsContent, TabsList, TabsTrigger } from "@kb/ui";
+import { PageHeader, Stack, Tabs, TabsContent, TabsList, TabsTrigger, useMessages } from "@kb/ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { CertificatesTab } from "./certificates-tab";
@@ -9,30 +9,33 @@ import { MembersTab } from "./members-tab";
 import { OrgTab } from "./org-tab";
 import { PlanTab } from "./plan-tab";
 import { PreferencesTab } from "./preferences-tab";
+import { SETTINGS_PAGE_MESSAGES } from "./settings-page.messages";
 
-const TABS: { id: string; label: string; render: () => ReactNode }[] = [
-  { id: "org", label: "Doanh nghiệp", render: () => <OrgTab /> },
-  { id: "plan", label: "Gói dịch vụ & sử dụng", render: () => <PlanTab /> },
-  { id: "members", label: "Thành viên & vai trò", render: () => <MembersTab /> },
-  { id: "integrations", label: "Kết nối hệ thống", render: () => <IntegrationsTab /> },
-  { id: "certificates", label: "Chứng thư số", render: () => <CertificatesTab /> },
-  { id: "declaration", label: "Khai báo", render: () => <DeclarationTab /> },
-  { id: "preferences", label: "Ngưỡng & giao diện", render: () => <PreferencesTab /> },
+type TabId = "org" | "plan" | "members" | "integrations" | "certificates" | "declaration" | "preferences";
+const TABS: { id: TabId; render: () => ReactNode }[] = [
+  { id: "org", render: () => <OrgTab /> },
+  { id: "plan", render: () => <PlanTab /> },
+  { id: "members", render: () => <MembersTab /> },
+  { id: "integrations", render: () => <IntegrationsTab /> },
+  { id: "certificates", render: () => <CertificatesTab /> },
+  { id: "declaration", render: () => <DeclarationTab /> },
+  { id: "preferences", render: () => <PreferencesTab /> },
 ];
 
 function SettingsInner() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const m = useMessages(SETTINGS_PAGE_MESSAGES);
   const tab = TABS.some((t) => t.id === params.get("tab")) ? params.get("tab")! : "org";
 
   return (
     <Stack gap="lg">
-      <PageHeader title="Tài khoản & tích hợp" description="Thông tin doanh nghiệp, gói dịch vụ, thành viên, kết nối hệ thống bên ngoài và chứng thư số." />
+      <PageHeader title={m.title} description={m.description} />
       <Tabs value={tab} onValueChange={(t) => router.replace(`${pathname}?tab=${t}`, { scroll: false })}>
-        <TabsList aria-label="Mục thiết lập">
+        <TabsList aria-label={m.tabsLabel}>
           {TABS.map((t) => (
-            <TabsTrigger key={t.id} value={t.id}>{t.label}</TabsTrigger>
+            <TabsTrigger key={t.id} value={t.id}>{m[t.id]}</TabsTrigger>
           ))}
         </TabsList>
         {TABS.map((t) => (

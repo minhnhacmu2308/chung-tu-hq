@@ -62,12 +62,12 @@ describe("groupGuideReason – 'Có vì' của nhóm và ô con nằm trong hư�
     { kind: "field", key: "VD_VSN", label: "Tên phương tiện / chuyến", input: "text" },
   ] };
   it("ô con theo tình huống đang áp dụng → tên ô + lý do; không áp dụng → không có", () => {
-    expect(groupGuideReason(g, conditionContext("IDA", { TK_MTC: "2" }))).toBe(`Hô hiệu (call sign) – Có vì: ${DECLARATION_CONDITIONS.BY_WATER.label}`);
-    expect(groupGuideReason(g, conditionContext("IDA", { TK_MTC: "1" }))).toBeUndefined();
+    expect(groupGuideReason(g, conditionContext("IDA", { TK_MTC: "2" }), "vi")).toBe(`Hô hiệu (call sign) – Có vì: ${DECLARATION_CONDITIONS.BY_WATER.label}`);
+    expect(groupGuideReason(g, conditionContext("IDA", { TK_MTC: "1" }), "vi")).toBeUndefined();
   });
   it("nhóm có điều kiện → lý do của nhóm đứng đầu", () => {
     const air = conditionContext("IDA", { TK_MTC: "2", APP_DD_PT: "HANG_KHONG" });
-    expect(groupGuideReason({ ...g, condition: "AIR_IDENT" }, air)?.startsWith(`Có vì: ${DECLARATION_CONDITIONS.AIR_IDENT.label} · Hô hiệu`)).toBe(true);
+    expect(groupGuideReason({ ...g, condition: "AIR_IDENT" }, air, "vi")?.startsWith(`Có vì: ${DECLARATION_CONDITIONS.AIR_IDENT.label} · Hô hiệu`)).toBe(true);
   });
 });
 

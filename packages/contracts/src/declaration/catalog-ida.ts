@@ -70,7 +70,7 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
   }),
   f("1.14", "PARTIES", "Mã bưu chính", "text", "O", {
     maxLen: 7, fptField: "VN_IDA.TK_IMY",
-    legalNote: "Mã bưu chính của người nhập khẩu (nếu có).",
+    legalNote: "Mã bưu chính của người nhập khẩu (nếu có). Phần mềm điền theo mã bưu chính ở Tài khoản; đặc tả FPT bắt buộc TK_IMY nên còn trống thì gửi 000000.",
   }),
   f("1.15", "PARTIES", "Địa chỉ người nhập khẩu", "text", "O", {
     assist: true,

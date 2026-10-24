@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, index, integer, jsonb, pgPolicy, pgTable, real, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, numeric, pgPolicy, pgTable, real, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { dossiers } from "./dossier.js";
 import { appRole, id, money, orgId, orgRls, timestamps } from "./shared.js";
 
@@ -37,7 +37,14 @@ export const lineItems = pgTable(
     hsDetail: jsonb("hs_detail"),
     ...timestamps(),
   },
-  (t) => [uniqueIndex("line_items_dossier_line_uq").on(t.dossierId, t.lineNo), index("line_items_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("line_items_rls")],
+  (t) => [
+    uniqueIndex("line_items_dossier_line_uq").on(t.dossierId, t.lineNo),
+    index("line_items_org_dossier_idx").on(t.orgId, t.dossierId),
+    // hs-poll / hs-answer tra dòng theo lượt và mục HSCodePro.
+    index("line_items_hs_job_idx").on(t.orgId, t.hsJobId),
+    index("line_items_hs_item_idx").on(t.orgId, t.hsItemId),
+    orgRls("line_items_rls"),
+  ],
 ).enableRLS();
 
 /** Gợi ý HS từ classifier cho một dòng hàng (nhiều ứng viên). */
@@ -75,7 +82,7 @@ export const hsJobs = pgTable(
     polls: integer("polls").notNull().default(0),
     ...timestamps(),
   },
-  (t) => [index("hs_jobs_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("hs_jobs_rls")],
+  (t) => [index("hs_jobs_org_dossier_idx").on(t.orgId, t.dossierId), check("hs_jobs_status_chk", sql`status in ('pending', 'processing', 'need_info', 'completed', 'cancelled')`), orgRls("hs_jobs_rls")],
 ).enableRLS();
 
 /** Tờ khai nháp/duyệt; `fields` = Record<chỉ tiêu, { value, source, suspect?, note? }>. Mỗi lần dựng lại = version mới. */
@@ -101,7 +108,7 @@ export const declarations = pgTable(
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     ...timestamps(),
   },
-  (t) => [uniqueIndex("declarations_dossier_version_uq").on(t.dossierId, t.version), index("declarations_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("declarations_rls")],
+  (t) => [uniqueIndex("declarations_dossier_version_uq").on(t.dossierId, t.version), index("declarations_org_dossier_idx").on(t.orgId, t.dossierId), check("declarations_status_chk", sql`status in ('DRAFT', 'APPROVED', 'SUBMITTED')`), check("declarations_kind_chk", sql`kind in ('IDA', 'EDA')`), orgRls("declarations_rls")],
 ).enableRLS();
 
 /** Mặc định khai báo + ghi đè nguồn chỉ tiêu của doanh nghiệp, theo chiều NK/XK (spec 2026-10-15 §5.2). */
@@ -117,6 +124,53 @@ export const declarationProfiles = pgTable(
     ...timestamps(),
   },
   (t) => [uniqueIndex("declaration_profiles_org_direction_uq").on(t.orgId, t.direction), orgRls("declaration_profiles_rls")],
+).enableRLS();
+
+/**
+ * Danh mục hàng hóa của doanh nghiệp: mặt hàng đã khai trước đây (import bảng kê dòng hàng, thêm tay, hoặc tự thêm
+ * khi tờ khai được duyệt). Mỗi mặt hàng một dòng theo `key` (mã hàng, không có thì tên chuẩn hóa – productKey).
+ * `raw` = dòng gốc của lần khai gần nhất trong file import (tên cột → giá trị).
+ */
+/** Thuế suất phần trăm: tối đa 999999.9999. */
+const rate = (name: string) => numeric(name, { precision: 10, scale: 4 });
+
+export const productCatalog = pgTable(
+  "product_catalog",
+  {
+    id: id(),
+    orgId: orgId(),
+    key: text("key").notNull(),
+    /** Tên chuẩn hóa (normalizeProductName) – tra mặt hàng theo tên kể cả khi khóa là mã hàng. */
+    nameKey: text("name_key").notNull(),
+    code: text("code"),
+    name: text("name").notNull(),
+    hsCode: text("hs_code").notNull(),
+    unit: text("unit"),
+    origin: text("origin"),
+    tariffSchedule: text("tariff_schedule"),
+    // Thuế suất (%) và đơn giá là số: numeric, đọc/ghi dạng chuỗi Decimal (bất biến 3).
+    importDutyRate: rate("import_duty_rate"),
+    vatRate: rate("vat_rate"),
+    envTaxRate: rate("env_tax_rate"),
+    exciseRate: rate("excise_rate"),
+    safeguardRate: rate("safeguard_rate"),
+    antiDiscriminationRate: rate("anti_discrimination_rate"),
+    description: text("description"),
+    unit2: text("unit2"),
+    unitPrice: money("unit_price"),
+    currency: text("currency"),
+    partner: text("partner"),
+    note: text("note"),
+    source: text("source").notNull(),
+    timesDeclared: integer("times_declared").notNull().default(0),
+    lastDeclarationNo: text("last_declaration_no"),
+    lastDeclarationDate: date("last_declaration_date", { mode: "string" }),
+    lastTypeCode: text("last_type_code"),
+    raw: jsonb("raw"),
+    updatedBy: text("updated_by"),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex("product_catalog_org_key_uq").on(t.orgId, t.key), index("product_catalog_org_name_idx").on(t.orgId, t.nameKey), index("product_catalog_org_hs_idx").on(t.orgId, t.hsCode), orgRls("product_catalog_rls")],
 ).enableRLS();
 
 /** Lần chạy AI Agent (HS → ánh xạ → dựng tờ khai → số hóa). `tasks` = AgentRun.tasks; `log` = dòng nhật ký. */
@@ -136,7 +190,7 @@ export const agentRuns = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
-  (t) => [index("agent_runs_org_dossier_idx").on(t.orgId, t.dossierId, t.startedAt), orgRls("agent_runs_rls")],
+  (t) => [index("agent_runs_org_dossier_idx").on(t.orgId, t.dossierId, t.startedAt), check("agent_runs_status_chk", sql`status in ('RUNNING', 'DONE', 'ERROR', 'CANCELLED')`), orgRls("agent_runs_rls")],
 ).enableRLS();
 
 /** Biểu thuế tối thiểu (D1 BACKEND-TODO) – không theo org, mọi org đọc; chỉ admin/seed ghi. */

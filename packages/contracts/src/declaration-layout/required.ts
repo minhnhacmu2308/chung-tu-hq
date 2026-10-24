@@ -24,6 +24,7 @@ export function conditionContext(kind: Kind, v: Values): ConditionContext {
     hawbIssued: v["APP_HAWB_CO"] === "CO",
     splitCargo: v["TVD_LOAIHANG"] ?? "",
     manualValue: v["APP_TGTT_TAY"] === "1",
+    invoiceKind: v["TK_IV1"] ?? "",
   };
 }
 
@@ -68,9 +69,28 @@ function itemGaps(kind: Kind, item: LayoutItem, v: Values, ctx: ConditionContext
     .map((f) => gap(f, item.no, f.label ? `${item.label} – ${f.label}` : item.label));
 }
 
+/**
+ * Khối "khai cả nhóm" (`fill: "all"` – hạn mức ngân hàng trả thuế thay, bảo lãnh): đã nhập một ô thì các ô còn trống của khối là thiếu.
+ * Chưa nhập ô nào, hoặc khối không áp dụng → không thiếu. Chỉ xét ô đơn và ô con của nhóm (khối loại này không có nhóm lặp).
+ */
+export function allOrNoneGaps(b: LayoutBlock, v: Values, ctx: ConditionContext): Omit<RequiredGap, "line">[] {
+  if (b.fill !== "all" || !isApplicable(b, ctx)) return [];
+  const fields = b.items.flatMap((it) =>
+    it.kind === "field" ? [{ f: it, no: it.no }] : it.kind === "group" && isApplicable(it, ctx) ? it.fields.map((f) => ({ f, no: f.no ?? it.no })) : [],
+  ).filter(({ f }) => f.origin !== "CUSTOMS" && isApplicable(f, ctx));
+  if (!fields.some(({ f }) => has(v, f.key))) return [];
+  return fields.filter(({ f }) => !has(v, f.key)).map(({ f, no }) => {
+    const label = `${f.label} (khai cả nhóm “${b.title}”)`;
+    return no ? { key: f.key, label, no } : { key: f.key, label };
+  });
+}
+
 const blockGaps = (kind: Kind, blocks: LayoutBlock[], v: Values) => {
   const ctx = conditionContext(kind, v);
-  return blocks.flatMap((b) => b.items.flatMap((it) => itemGaps(kind, it, v, ctx, b.condition)));
+  return blocks.flatMap((b) => {
+    const gaps = b.items.flatMap((it) => itemGaps(kind, it, v, ctx, b.condition));
+    return [...gaps, ...allOrNoneGaps(b, v, ctx).filter((g) => !gaps.some((x) => x.key === g.key))];
+  });
 };
 
 /**

@@ -3,8 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
+import { Button } from "./button.js";
 import { UiLocaleProvider } from "../lib/i18n.js";
 import { createDataTableColumnHelper, DataTable, type DataTableProps } from "./data-table.js";
+import { RecordCard } from "./record-card.js";
+import { chooseOption } from "../../test/select.js";
 
 type HoSo = { id: string; code: string; partner: string; value: number };
 const col = createDataTableColumnHelper<HoSo>();
@@ -258,20 +261,65 @@ describe("DataTable – tìm kiếm toàn bảng", () => {
   });
 });
 
+/** Ô lọc theo cột nằm trong hộp lọc mở từ nút phễu cạnh ô tìm kiếm. */
+const openFilters = (name: RegExp = /^Bộ lọc/) => userEvent.click(screen.getByRole("button", { name }));
+
+describe("DataTable – thao tác hàng loạt", () => {
+  it("chọn dòng → thanh nổi giữa đáy màn hình: đếm số dòng, nút thao tác nhận các dòng đã chọn, Bỏ chọn ẩn thanh; không vi phạm a11y", async () => {
+    const onBulk = vi.fn();
+    setupVn({ selectable: true, rowLabel: (r) => r.code, selectionActions: (rows) => <Button onClick={() => onBulk(rows.map((r) => r.code))}>Xuất</Button> });
+    expect(screen.queryByRole("toolbar", { name: "Thao tác với các dòng đã chọn" })).toBeNull();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng HS-001" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng HS-003" }));
+    const bar = screen.getByRole("toolbar", { name: "Thao tác với các dòng đã chọn" });
+    expect(bar.parentElement).toBe(document.body);
+    expect(bar).toHaveTextContent("Đã chọn 2");
+    await userEvent.click(within(bar).getByRole("button", { name: "Xuất" }));
+    expect(onBulk).toHaveBeenCalledWith(["HS-001", "HS-003"]);
+    await expectNoA11yViolations(document.body);
+    await userEvent.click(within(bar).getByRole("button", { name: "Bỏ chọn" }));
+    expect(screen.queryByRole("toolbar", { name: "Thao tác với các dòng đã chọn" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Chọn dòng HS-001" })).not.toBeChecked();
+  });
+
+  it("dòng đã chọn bị xóa khỏi dữ liệu → không còn tính, hết dòng thì thanh ẩn", async () => {
+    const actions = () => <Button>Xóa</Button>;
+    const { rerender } = setupVn({ selectable: true, rowLabel: (r) => r.code, selectionActions: actions });
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng HS-002" }));
+    expect(screen.getByRole("toolbar")).toHaveTextContent("Đã chọn 1");
+    rerender(<DataTable aria-label="Danh sách hồ sơ" columns={VN_COLUMNS} data={VN_DATA.filter((r) => r.id !== "b")} getRowId={(r) => r.id} pagination={false} selectable rowLabel={(r) => r.code} selectionActions={actions} />);
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+});
+
 describe("DataTable – lọc theo cột", () => {
+  it("không có hàng ô lọc dưới tiêu đề; nút phễu mở hộp lọc, đếm số bộ lọc đang bật; không vi phạm a11y", async () => {
+    setupVn();
+    expect(screen.queryByRole("combobox", { name: "Lọc theo Trạng thái" })).not.toBeInTheDocument();
+    await openFilters();
+    const dialog = screen.getByRole("dialog", { name: "Bộ lọc" });
+    await chooseOption(within(dialog).getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Đã duyệt");
+    expect(screen.getByRole("button", { name: "Bộ lọc (1)" })).toBeInTheDocument();
+    await expectNoA11yViolations(document.body);
+  });
+
   it("ô lọc chữ: chứa chuỗi, không phân biệt dấu", async () => {
     setupVn();
+    await openFilters();
     await userEvent.type(screen.getByRole("searchbox", { name: "Lọc theo Đối tác" }), "hung thinh");
     expect(vnCodes()).toEqual(["HS-004"]);
   });
 
   it("ô lọc chọn: lấy các giá trị khác nhau của cột, lọc đúng bằng", async () => {
     setupVn();
+    await openFilters();
     const select = screen.getByRole("combobox", { name: "Lọc theo Trạng thái" });
-    expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual(["Tất cả", "Chờ duyệt", "Đã duyệt", "Nháp"]);
-    await userEvent.selectOptions(select, "Đã duyệt");
+    await userEvent.click(select);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Tất cả", "Chờ duyệt", "Đã duyệt", "Nháp"]);
+    await userEvent.click(screen.getByRole("option", { name: "Đã duyệt" }));
     expect(vnCodes()).toEqual(["HS-001", "HS-003"]);
-    await userEvent.selectOptions(select, "Tất cả");
+    expect(select).toHaveTextContent("Đã duyệt");
+    await chooseOption(select, "Tất cả");
     expect(vnCodes()).toHaveLength(4);
   });
 
@@ -284,7 +332,8 @@ describe("DataTable – lọc theo cột", () => {
       }),
     ]);
     setupVn({ columns });
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Bản nháp");
+    await openFilters();
+    await chooseOption(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Bản nháp");
     expect(vnCodes()).toEqual(["HS-004"]);
   });
 
@@ -292,12 +341,14 @@ describe("DataTable – lọc theo cột", () => {
     setupVn({ searchable: true });
     const search = screen.getByRole("searchbox", { name: "Tìm trong bảng" });
     await userEvent.type(search, "hai");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Chờ duyệt");
+    await openFilters();
+    await chooseOption(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Chờ duyệt");
     expect(vnCodes()).toEqual(["HS-002"]);
     await userEvent.click(screen.getByRole("button", { name: "Xóa bộ lọc" }));
     expect(vnCodes()).toHaveLength(4);
     expect(search).toHaveValue("");
-    expect(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" })).toHaveValue("");
+    if (!screen.queryByRole("dialog", { name: "Bộ lọc" })) await openFilters();
+    expect(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" })).toHaveTextContent("Tất cả");
     expect(screen.queryByRole("button", { name: "Xóa bộ lọc" })).not.toBeInTheDocument();
   });
 
@@ -308,6 +359,23 @@ describe("DataTable – lọc theo cột", () => {
     expect(screen.queryByText("Chưa có hồ sơ")).not.toBeInTheDocument();
     await userEvent.click(within(vnTable()).getByRole("button", { name: "Xóa bộ lọc" }));
     expect(vnCodes()).toHaveLength(4);
+  });
+
+  it("lọc từ ngoài bảng (filtered) mà hết dòng → 'Không có kết quả phù hợp'; 'Xóa bộ lọc' gọi onClearFilters", async () => {
+    const onClearFilters = vi.fn();
+    const { rerender } = render(
+      <DataTable aria-label="Hồ sơ khai báo" columns={COLUMNS} data={[]} getRowId={(r) => r.id} emptyTitle="Chưa có hồ sơ" filtered onClearFilters={onClearFilters} />,
+    );
+    expect(screen.getByText("Không có kết quả phù hợp")).toBeInTheDocument();
+    expect(screen.queryByText("Chưa có hồ sơ")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Xóa bộ lọc" }));
+    expect(onClearFilters).toHaveBeenCalledOnce();
+    // Không lọc → vẫn là "chưa có dữ liệu"; lọc mà không có cách xóa → không hiện nút
+    rerender(<DataTable aria-label="Hồ sơ khai báo" columns={COLUMNS} data={[]} getRowId={(r) => r.id} emptyTitle="Chưa có hồ sơ" />);
+    expect(screen.getByText("Chưa có hồ sơ")).toBeInTheDocument();
+    rerender(<DataTable aria-label="Hồ sơ khai báo" columns={COLUMNS} data={[]} getRowId={(r) => r.id} filtered />);
+    expect(screen.getByText("Không có kết quả phù hợp")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Xóa bộ lọc" })).not.toBeInTheDocument();
   });
 
   it("phân trang theo số dòng đã lọc và quay về trang đầu khi đổi bộ lọc", async () => {
@@ -455,8 +523,10 @@ describe("DataTable – tính năng mở rộng: tiếng Anh & a11y", () => {
       </UiLocaleProvider>,
     );
     expect(screen.getByRole("button", { name: "Columns" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Filter by Trạng thái" })).toBeInTheDocument();
     expect(screen.getByRole("separator", { name: "Resize column Đối tác" })).toBeInTheDocument();
+    await openFilters(/^Filters/);
+    expect(screen.getByRole("combobox", { name: "Filter by Trạng thái" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
     await userEvent.type(screen.getByRole("searchbox", { name: "Search table" }), "artemide");
     expect(screen.getByRole("status")).toHaveTextContent("Showing 1 of 4 rows");
     await userEvent.type(screen.getByRole("searchbox", { name: "Search table" }), "xyz");
@@ -475,5 +545,97 @@ describe("DataTable – tính năng mở rộng: tiếng Anh & a11y", () => {
     });
     await userEvent.type(screen.getByRole("searchbox", { name: "Tìm trong bảng" }), "hai");
     await expectNoA11yViolations(container);
+  });
+});
+
+describe("DataTable – dạng thẻ", () => {
+  const FILTER_COLUMNS = col.columns([
+    col.accessor("code", { header: "Mã hồ sơ" }),
+    col.accessor("partner", { header: "Đối tác", meta: { filter: "select" } }),
+    col.accessor("value", { header: "Trị giá" }),
+  ]);
+  const card = (r: HoSo, parts: { select: React.ReactNode; actions: React.ReactNode }) => (
+    <RecordCard title={r.code} subtitle={r.partner} select={parts.select} actions={parts.actions} fields={[{ label: "Trị giá", value: r.value }]} />
+  );
+  const cardTitles = () => within(screen.getByRole("list", { name: "Hồ sơ khai báo" })).getAllByRole("listitem").map((li) => li.querySelector("[data-slot=record-card] .font-semibold")!.textContent);
+
+  it("không có renderCard → không có nút chuyển kiểu hiển thị", () => {
+    setup();
+    expect(screen.queryByRole("radio", { name: /Thẻ/ })).toBeNull();
+  });
+
+  it("chuyển Bảng ↔ Thẻ; thẻ dùng chung tìm kiếm, phân trang; không vi phạm a11y", async () => {
+    const { container } = setup({ renderCard: card, searchable: true, pagination: { initialPageSize: 2 } });
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /Thẻ/ }));
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(cardTitles()).toHaveLength(2);
+    expect(screen.getByRole("navigation")).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("searchbox", { name: "Tìm trong bảng" }), "slamp");
+    expect(cardTitles()).toEqual(["HS-003"]);
+    await expectNoA11yViolations(container);
+    await userEvent.click(screen.getByRole("radio", { name: /Bảng/ }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("dạng thẻ: sắp xếp bằng chọn cột + đổi chiều; ô lọc theo cột thu gọn sau nút Bộ lọc (đếm bộ lọc đang bật)", async () => {
+    render(<DataTable aria-label="Hồ sơ khai báo" columns={FILTER_COLUMNS} data={DATA} getRowId={(r) => r.id} renderCard={card} defaultView="cards" pagination={false} />);
+    expect(cardTitles()).toEqual(["HS-002", "HS-001", "HS-003"]);
+    await chooseOption(screen.getByRole("combobox", { name: "Sắp xếp theo" }), "Mã hồ sơ");
+    expect(cardTitles()).toEqual(["HS-001", "HS-002", "HS-003"]);
+    await userEvent.click(screen.getByRole("button", { name: /Đổi chiều sắp xếp/ }));
+    expect(cardTitles()).toEqual(["HS-003", "HS-002", "HS-001"]);
+    expect(screen.queryByRole("combobox", { name: "Lọc theo Đối tác" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" }));
+    await chooseOption(screen.getByRole("combobox", { name: "Lọc theo Đối tác" }), "Artemide");
+    expect(cardTitles()).toEqual(["HS-001"]);
+    expect(screen.getByRole("button", { name: "Bộ lọc (1)" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("dạng thẻ: bấm / Enter trên thẻ gọi onRowClick; ô chọn và thao tác không kích hoạt thẻ", async () => {
+    const onRowClick = vi.fn();
+    const onSelectionChange = vi.fn();
+    setup({
+      renderCard: card, defaultView: "cards", pagination: false, selectable: true, onRowClick, onSelectionChange,
+      rowLabel: (r) => r.code, rowActions: (r) => <button type="button">Mở {r.code}</button>,
+    });
+    await userEvent.click(screen.getByText("Korea Bearing"));
+    expect(onRowClick).toHaveBeenCalledWith(DATA[0]);
+    screen.getByRole("listitem", { name: "HS-001" }).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onRowClick).toHaveBeenLastCalledWith(DATA[1]);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng HS-003" }));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(["c"]);
+    expect(screen.getByRole("listitem", { name: "HS-003" })).toHaveAttribute("data-selected");
+    await userEvent.click(screen.getByRole("button", { name: "Mở HS-002" }));
+    expect(onRowClick).toHaveBeenCalledTimes(2);
+  });
+
+  it("nhớ kiểu hiển thị theo viewStorageKey", async () => {
+    window.localStorage.removeItem("kb-table-view:test");
+    const { unmount } = setup({ renderCard: card, viewStorageKey: "test" });
+    await userEvent.click(screen.getByRole("radio", { name: /Thẻ/ }));
+    expect(window.localStorage.getItem("kb-table-view:test")).toBe("cards");
+    unmount();
+    setup({ renderCard: card, viewStorageKey: "test" });
+    expect(await screen.findByRole("list", { name: "Hồ sơ khai báo" })).toBeInTheDocument();
+    window.localStorage.removeItem("kb-table-view:test");
+  });
+
+  it("dạng thẻ: rỗng → trạng thái trống; đang tải → khung xương", () => {
+    const { rerender } = setup({ renderCard: card, defaultView: "cards", data: [], emptyTitle: "Chưa có hồ sơ" });
+    expect(screen.getByText("Chưa có hồ sơ")).toBeInTheDocument();
+    rerender(<DataTable aria-label="Hồ sơ khai báo" columns={COLUMNS} data={[]} getRowId={(r) => r.id} renderCard={card} defaultView="cards" loading />);
+    expect(screen.getByRole("list", { name: "Hồ sơ khai báo" })).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("nhãn tiếng Anh", () => {
+    render(
+      <UiLocaleProvider locale="en">
+        <DataTable aria-label="Dossiers" columns={COLUMNS} data={DATA} getRowId={(r) => r.id} renderCard={card} />
+      </UiLocaleProvider>,
+    );
+    expect(screen.getByRole("radio", { name: /Cards/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Table/ })).toBeInTheDocument();
   });
 });

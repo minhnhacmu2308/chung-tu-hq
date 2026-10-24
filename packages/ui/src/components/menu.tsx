@@ -99,7 +99,7 @@ export const PopoverTrigger = PopoverPrimitive.Trigger;
 export const PopoverAnchor = PopoverPrimitive.Anchor;
 export const PopoverClose = PopoverPrimitive.Close;
 
-const POPOVER_MESSAGES = { vi: { close: "Đóng" }, en: { close: "Close" } } satisfies Messages<"close">;
+const POPOVER_MESSAGES = { vi: { close: "Đóng" }, en: { close: "Close" }, zh: { close: "关闭" } } satisfies Messages<"close">;
 
 export type PopoverContentProps = ComponentProps<typeof PopoverPrimitive.Content> & {
   /** Hiện nút đóng ở góc. */

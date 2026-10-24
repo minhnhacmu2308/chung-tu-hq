@@ -19,6 +19,7 @@ import { Tooltip } from "./tooltip.js";
 const MESSAGES = {
   vi: { nav: "Điều hướng chính", collapse: "Thu gọn menu", expand: "Mở rộng menu", openMenu: "Mở menu", closeMenu: "Đóng menu" },
   en: { nav: "Main navigation", collapse: "Collapse menu", expand: "Expand menu", openMenu: "Open menu", closeMenu: "Close menu" },
+  zh: { nav: "主导航", collapse: "收起菜单", expand: "展开菜单", openMenu: "打开菜单", closeMenu: "关闭菜单" },
 } satisfies Messages<"nav" | "collapse" | "expand" | "openMenu" | "closeMenu">;
 
 export type NavItem = {

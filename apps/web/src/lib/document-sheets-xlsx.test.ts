@@ -16,6 +16,15 @@ describe("document-sheets-xlsx", () => {
     expect(ws.getCell("C3").value).toBe("SHENZHEN APTUS\nSHENZHEN, CHINA");
     expect(ws.getCell("C3").alignment?.wrapText).toBe(true);
   });
+  it("tiêu đề cột theo ngôn ngữ giao diện (zh/en); tên trường/giá trị giữ nguyên", async () => {
+    for (const [locale, headers] of [["zh", ["序号", "字段名称", "值"]], ["en", ["NO.", "FIELD NAME", "VALUE"]]] as const) {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(await buildDocumentSheetsWorkbook([sheet("a.pdf", [["Số hóa đơn", "X1"]])], locale));
+      const ws = wb.worksheets[0]!;
+      expect([ws.getCell("A1").value, ws.getCell("B1").value, ws.getCell("C1").value]).toEqual(headers);
+      expect(ws.getCell("B2").value).toBe("Số hóa đơn");
+    }
+  });
   it("tên sheet hợp lệ Excel: bỏ đuôi, bỏ ký tự cấm, ≤ 31 ký tự, không trùng", () => {
     const used = new Set<string>();
     expect(sheetNameFor("CO E253984866440001.pdf", used)).toBe("CO E253984866440001");

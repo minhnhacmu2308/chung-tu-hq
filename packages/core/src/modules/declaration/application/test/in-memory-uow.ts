@@ -1,11 +1,11 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProfileRow } from "../ports.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProductRow, ProfileRow } from "../ports.js";
 
 /** Fake mô phỏng RLS theo org; catalog_hs/exchange_rates là bảng chung (mọi org đọc). */
 export class InMemoryDeclarationUow implements DeclarationUow {
   readonly data = {
     lineItems: [] as LineItemRow[], hsJobs: [] as HsJobRow[], suggestions: [] as HsSuggestionRow[], declarations: [] as DeclarationRow[], agentRuns: [] as AgentRunRow[],
-    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string; source?: "VCB" | "MANUAL" | "SEED"; snapshotAt?: Date | null }[], profiles: [] as ProfileRow[],
+    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string; source?: "VCB" | "MANUAL" | "SEED"; snapshotAt?: Date | null }[], profiles: [] as ProfileRow[], products: [] as ProductRow[],
   };
 
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: DeclarationRepos) => Promise<T>): Promise<T> {
@@ -15,12 +15,16 @@ export class InMemoryDeclarationUow implements DeclarationUow {
       throw new Error(`new row violates row-level security policy (${w})`);
     };
     const clone = <X>(x: X): X => structuredClone(x);
+    const own = (orgId: string) => {
+      if (orgId !== org) deny(`orgId ${orgId} khác ngữ cảnh ${org}`);
+      return org;
+    };
     const repos: DeclarationRepos = {
       lineItems: {
         list: async (orgId, dossierId) => clone(d.lineItems.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId).sort((a, b) => a.lineNo - b.lineNo)),
         get: async (orgId, id) => clone(d.lineItems.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
-        upsertForDossier: async (dossierId, rows) => {
-          if (rows.some((r) => r.orgId !== org)) deny("line_items");
+        upsertForDossier: async (orgId, dossierId, rows) => {
+          if (rows.some((r) => r.orgId !== own(orgId))) deny("line_items");
           const out: LineItemRow[] = [];
           for (const r of rows) {
             const ex = d.lineItems.find((x) => x.orgId === org && x.dossierId === dossierId && x.lineNo === r.lineNo);
@@ -36,8 +40,8 @@ export class InMemoryDeclarationUow implements DeclarationUow {
           d.lineItems = d.lineItems.filter((x) => !(x.orgId === org && x.dossierId === dossierId && !keep.has(x.lineNo)));
           return out.sort((a, b) => a.lineNo - b.lineNo);
         },
-        update: async (id, patch) => {
-          const x = d.lineItems.find((y) => y.id === id && y.orgId === org);
+        update: async (orgId, id, patch) => {
+          const x = d.lineItems.find((y) => y.id === id && y.orgId === own(orgId));
           if (x) Object.assign(x, clone(patch));
         },
         findByHsItem: async (orgId, hsItemId) => clone(d.lineItems.find((x) => x.hsItemId === hsItemId && x.orgId === org && x.orgId === orgId) ?? null),
@@ -48,16 +52,16 @@ export class InMemoryDeclarationUow implements DeclarationUow {
           d.hsJobs.push(clone(row));
         },
         get: async (orgId, id) => clone(d.hsJobs.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
-        openForDossier: async (orgId, dossierId) => clone(d.hsJobs.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId && (x.status === "processing" || x.status === "need_info"))),
-        update: async (id, patch) => {
-          const x = d.hsJobs.find((y) => y.id === id && y.orgId === org);
+        openForDossier: async (orgId, dossierId) => clone(d.hsJobs.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId && (x.status === "pending" || x.status === "processing" || x.status === "need_info"))),
+        update: async (orgId, id, patch) => {
+          const x = d.hsJobs.find((y) => y.id === id && y.orgId === own(orgId));
           if (x) Object.assign(x, clone(patch));
         },
       },
       suggestions: {
-        listForItems: async (ids) => clone(d.suggestions.filter((s) => s.orgId === org && ids.includes(s.lineItemId)).sort((a, b) => b.confidence - a.confidence)),
-        replaceForItem: async (itemId, rows) => {
-          if (rows.some((r) => r.orgId !== org)) deny("hs_suggestions");
+        listForItems: async (orgId, ids) => clone(d.suggestions.filter((s) => s.orgId === own(orgId) && ids.includes(s.lineItemId)).sort((a, b) => b.confidence - a.confidence)),
+        replaceForItem: async (orgId, itemId, rows) => {
+          if (rows.some((r) => r.orgId !== own(orgId))) deny("hs_suggestions");
           d.suggestions = d.suggestions.filter((s) => !(s.lineItemId === itemId && s.orgId === org)).concat(rows.map(clone));
         },
       },
@@ -73,17 +77,18 @@ export class InMemoryDeclarationUow implements DeclarationUow {
           if (d.declarations.some((x) => x.dossierId === row.dossierId && x.version === row.version)) throw new Error("duplicate key value violates unique constraint declarations_dossier_version_uq");
           d.declarations.push(clone(row));
         },
-        update: async (id, patch) => {
-          const x = d.declarations.find((y) => y.id === id && y.orgId === org);
+        update: async (orgId, id, patch) => {
+          const x = d.declarations.find((y) => y.id === id && y.orgId === own(orgId));
           if (x) Object.assign(x, clone(patch));
         },
       },
       agentRuns: {
         latest: async (orgId, dossierId) => clone(d.agentRuns.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId).sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0] ?? null),
         get: async (orgId, id) => clone(d.agentRuns.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
+        listRunningBefore: async (orgId, before) => clone(d.agentRuns.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "RUNNING" && x.startedAt < before)),
         insert: async (row) => void (row.orgId === org ? d.agentRuns.push(clone(row)) : deny("agent_runs")),
-        update: async (id, patch) => {
-          const x = d.agentRuns.find((y) => y.id === id && y.orgId === org);
+        update: async (orgId, id, patch) => {
+          const x = d.agentRuns.find((y) => y.id === id && y.orgId === own(orgId));
           if (x) Object.assign(x, clone(patch));
         },
       },
@@ -100,6 +105,28 @@ export class InMemoryDeclarationUow implements DeclarationUow {
         upsert: async (row) => {
           if (row.orgId !== org) deny("declaration_profiles");
           d.profiles = [...d.profiles.filter((x) => !(x.orgId === row.orgId && x.direction === row.direction)), clone(row)];
+        },
+      },
+      products: {
+        list: async (orgId) => clone(d.products.filter((x) => x.orgId === org && x.orgId === orgId).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())),
+        get: async (orgId, id) => clone(d.products.find((x) => x.orgId === org && x.orgId === orgId && x.id === id) ?? null),
+        byKeys: async (orgId, keys) => clone(d.products.filter((x) => x.orgId === org && x.orgId === orgId && keys.includes(x.key))),
+        byNameKeys: async (orgId, nameKeys) => clone(d.products.filter((x) => x.orgId === org && x.orgId === orgId && nameKeys.includes(x.nameKey))),
+        insert: async (rows) => {
+          for (const row of rows) {
+            if (row.orgId !== org) deny("product_catalog");
+            if (d.products.some((x) => x.orgId === row.orgId && x.key === row.key)) throw new Error("duplicate key value violates unique constraint \"product_catalog_org_key_uq\"");
+          }
+          d.products = [...d.products, ...rows.map(clone)];
+        },
+        update: async (row) => {
+          if (row.orgId !== org) deny("product_catalog");
+          d.products = d.products.map((x) => (x.orgId === org && x.id === row.id ? clone(row) : x));
+        },
+        remove: async (orgId, ids) => {
+          const before = d.products.length;
+          d.products = d.products.filter((x) => !(x.orgId === org && x.orgId === orgId && ids.includes(x.id)));
+          return before - d.products.length;
         },
       },
       exchangeRates: {

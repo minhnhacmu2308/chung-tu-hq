@@ -2,7 +2,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
-const MESSAGES = { vi: { loading: "Đang tải" }, en: { loading: "Loading" } } satisfies Messages<"loading">;
+const MESSAGES = { vi: { loading: "Đang tải" }, en: { loading: "Loading" }, zh: { loading: "加载中" } } satisfies Messages<"loading">;
 
 const spinnerVariants = cva("inline-block animate-spin rounded-full border-2 border-current border-r-transparent", {
   variants: { size: { sm: "h-4 w-4", md: "h-6 w-6", lg: "h-8 w-8" } },

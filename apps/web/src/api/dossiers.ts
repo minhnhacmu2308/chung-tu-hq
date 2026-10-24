@@ -8,6 +8,7 @@ export type { CreateDossierInput, DossierFilter } from "@kb/contracts";
 export type { Dossier, DossierDocument } from "@kb/contracts";
 
 export const listDossiers = pick(mock.listDossiers, http.listDossiers);
+export const listDossiersPage = pick(mock.listDossiersPage, http.listDossiersPage);
 export const getDossier = pick(mock.getDossier, http.getDossier);
 export const listDocuments = pick(mock.listDocuments, http.listDocuments);
 export const createDossier = pick(mock.createDossier, http.createDossier);

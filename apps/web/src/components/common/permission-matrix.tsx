@@ -1,7 +1,8 @@
 "use client";
-import { createDataTableColumnHelper, DataTable } from "@kb/ui";
+import { createDataTableColumnHelper, DataTable, useMessages } from "@kb/ui";
 import { Check, Minus } from "lucide-react";
 import { useMemo } from "react";
+import { PERMISSION_MATRIX_MESSAGES } from "./common.messages";
 
 type Row = { id: string; label: string };
 
@@ -15,10 +16,11 @@ export function PermissionMatrix({ ariaLabel, permissions, roles, allowed }: {
   roles: readonly Row[];
   allowed: (permissionId: string, roleId: string) => boolean;
 }) {
+  const t = useMessages(PERMISSION_MATRIX_MESSAGES);
   const columns = useMemo(() => {
     const col = createDataTableColumnHelper<Row>();
     return col.columns([
-      col.accessor("label", { header: "Quyền", size: 360, meta: { hideable: false, wrap: true }, enableSorting: false }),
+      col.accessor("label", { header: t.permission, size: 360, meta: { hideable: false, wrap: true }, enableSorting: false }),
       ...roles.map((r) =>
         col.display({
           id: r.id,
@@ -27,13 +29,13 @@ export function PermissionMatrix({ ariaLabel, permissions, roles, allowed }: {
           meta: { align: "center", label: r.label },
           cell: (c) =>
             allowed(c.row.original.id, r.id) ? (
-              <Check className="mx-auto h-4 w-4 text-success" aria-label="Có" />
+              <Check className="mx-auto h-4 w-4 text-success" aria-label={t.yes} />
             ) : (
-              <Minus className="mx-auto h-4 w-4 text-fg-subtle" aria-label="Không" />
+              <Minus className="mx-auto h-4 w-4 text-fg-subtle" aria-label={t.no} />
             ),
         }),
       ),
     ]);
-  }, [roles, allowed]);
+  }, [roles, allowed, t.permission, t.yes, t.no]);
   return <DataTable aria-label={ariaLabel} columns={columns} data={permissions} getRowId={(r) => r.id} pagination={false} />;
 }

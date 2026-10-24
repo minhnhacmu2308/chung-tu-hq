@@ -15,7 +15,7 @@ export { ClaudeAiProvider, createDocumentsAdapter, DrizzleExtractionUow, FakeAiP
 export { FAKE_BY_KIND } from "./fake-ai-provider.js";
 
 export function createAiProvider(env: Env, fixturesDir = path.resolve(process.cwd(), "evals/fixtures")): AiProvider {
-  if (env.AI_PROVIDER === "claude" && env.ANTHROPIC_API_KEY) return new ClaudeAiProvider(env.ANTHROPIC_API_KEY, env.AI_MODEL);
+  if (env.AI_PROVIDER === "claude" && env.ANTHROPIC_API_KEY) return new ClaudeAiProvider(env.ANTHROPIC_API_KEY, env.AI_MODEL, { timeout: env.AI_TIMEOUT_MS, maxRetries: 1 });
   return new FakeAiProvider(fixturesDir);
 }
 

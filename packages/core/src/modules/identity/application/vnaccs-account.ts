@@ -36,6 +36,8 @@ export async function saveVnaccsAccount(deps: IdentityDeps, ctx: Ctx, input: Vna
   const { ciphertext, keyVersion } = deps.secrets.encrypt(JSON.stringify(parsed.data));
   const row: OrgSecretRow = { id: deps.idGen.next("sec"), orgId: ctx.orgId, kind: VNACCS_SECRET_KIND, ciphertext, keyVersion, updatedAt: deps.clock.now() };
   await deps.uow.asOrg(ctx, (r) => r.secrets.upsert(row));
+  // Không ghi mật khẩu/khóa vào nhật ký – chỉ userId VNACCS.
+  await deps.audit?.record(ctx, { action: "VNACCS_ACCOUNT_SAVED", targetType: "vnaccs_account", targetId: VNACCS_SECRET_KIND, targetLabel: parsed.data.userId });
   return ok(toDto(deps.secrets, row));
 }
 
@@ -45,6 +47,7 @@ export async function removeVnaccsAccount(deps: IdentityDeps, ctx: Ctx): Promise
   if (!allowed.ok) return allowed;
   if (!deps.secrets) return notConfigured();
   await deps.uow.asOrg(ctx, (r) => r.secrets.delete(ctx.orgId, VNACCS_SECRET_KIND));
+  await deps.audit?.record(ctx, { action: "VNACCS_ACCOUNT_REMOVED", targetType: "vnaccs_account", targetId: VNACCS_SECRET_KIND, targetLabel: VNACCS_SECRET_KIND });
   return ok(toDto(deps.secrets, null));
 }
 

@@ -7,6 +7,7 @@ import { Select } from "./inputs.js";
 const MESSAGES = {
   vi: { nav: "Phân trang", prev: "Trang trước", next: "Trang sau", page: "Trang {n}", pageSize: "Số dòng mỗi trang", perPage: "{n} / trang" },
   en: { nav: "Pagination", prev: "Previous page", next: "Next page", page: "Page {n}", pageSize: "Rows per page", perPage: "{n} / page" },
+  zh: { nav: "分页", prev: "上一页", next: "下一页", page: "第 {n} 页", pageSize: "每页行数", perPage: "{n} 条/页" },
 } satisfies Messages<"nav" | "prev" | "next" | "page" | "pageSize" | "perPage">;
 
 export type PageItem = number | "ellipsis-start" | "ellipsis-end";

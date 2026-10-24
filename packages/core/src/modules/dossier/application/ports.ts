@@ -1,3 +1,4 @@
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { DocKind, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -13,15 +14,18 @@ export type DocumentRow = {
   id: string; orgId: string; dossierId: string; kind: DocKind; kindSource: "AI" | "USER" | "FILENAME"; fileName: string; mime: string; sizeBytes: number;
   pages: number; status: DocumentStatus; error: string | null; storageKey: string; sha256: string; uploadedBy: string; createdAt: Date; updatedAt: Date;
 };
+export type DossierListFilter = { direction?: string | undefined; status?: string | undefined; step?: string | undefined; q?: string | undefined };
 export type ProgressRow = { id: string; orgId: string; dossierId: string; jobKind: string; jobId: string; status: string; progress: number; message: string; updatedAt: Date };
 
 export interface DossierRepos {
   dossiers: {
-    list(orgId: string, f: { direction?: string | undefined; status?: string | undefined; step?: string | undefined }): Promise<DossierRow[]>;
+    /** Mới nhất trước; `page` bắt buộc để không bao giờ kéo cả bảng. */
+    list(orgId: string, f: DossierListFilter, page: { limit: number; offset: number }): Promise<DossierRow[]>;
+    count(orgId: string, f: DossierListFilter): Promise<number>;
     get(orgId: string, id: string): Promise<DossierRow | null>;
     codesInMonth(orgId: string, direction: string, prefix: string): Promise<string[]>;
     insert(row: DossierRow): Promise<void>;
-    update(id: string, patch: Partial<Omit<DossierRow, "id" | "orgId" | "createdAt">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Omit<DossierRow, "id" | "orgId" | "createdAt">>): Promise<void>;
     /** Số hồ sơ tạo trong [from, to) và tổng trang chứng từ của chúng (mức dùng theo gói). */
     statsInRange(orgId: string, from: Date, to: Date): Promise<{ dossiers: number; pages: number }>;
   };
@@ -29,8 +33,10 @@ export interface DossierRepos {
     list(orgId: string, dossierId: string): Promise<DocumentRow[]>;
     get(orgId: string, id: string): Promise<DocumentRow | null>;
     insert(row: DocumentRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<DocumentRow, "kind" | "kindSource" | "status" | "error" | "pages">>): Promise<void>;
-    delete(id: string): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<DocumentRow, "kind" | "kindSource" | "status" | "error" | "pages">>): Promise<void>;
+    delete(orgId: string, id: string): Promise<void>;
+    /** Chứng từ QUEUED không được cập nhật từ trước `before` – job có thể đã mất (job quét định kỳ). */
+    listStuckQueued(orgId: string, before: Date): Promise<DocumentRow[]>;
   };
   progress: {
     upsert(row: ProgressRow): Promise<void>;
@@ -84,6 +90,8 @@ export type DossierDeps = {
   pdf: PdfInspector;
   unzipper: Unzipper;
   quota: QuotaChecker;
+  /** Nhật ký hoạt động doanh nghiệp (hủy hồ sơ); container nối từ identity. */
+  audit?: OrgAuditWriter;
   clock: Clock;
   idGen: IdGen;
 };

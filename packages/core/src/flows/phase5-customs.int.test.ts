@@ -116,6 +116,7 @@ describe("luồng truyền Hải quan trên Postgres thật", () => {
     await drain();
     expect(unwrap(await getSubmission(customs, chau, id))).toMatchObject({ stage: "PRE_DECLARED", nextOp: "IDC" });
     unwrap(await performOperation(customs, chau, id, "IDC"));
+    await drain(); // HYS chỉ gửi được khi đã có phản hồi IDC
     unwrap(await performOperation(customs, chau, id, "HYS"));
     await drain();
     const v = unwrap(await getSubmission(customs, chau, id));

@@ -19,7 +19,7 @@ export async function updateDossier(deps: DossierDeps, ctx: Ctx, id: string, pat
       if (!c.ok) return c;
     }
     const next = { ...d, ...(patch.note !== undefined ? { note: patch.note || null } : {}), ...(patch.step ? { step: patch.step } : {}), updatedAt: deps.clock.now() };
-    await r.dossiers.update(id, { note: next.note, step: next.step, updatedAt: next.updatedAt });
+    await r.dossiers.update(ctx.orgId, id, { note: next.note, step: next.step, updatedAt: next.updatedAt });
     return ok(toDossier(next));
   });
 }

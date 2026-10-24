@@ -106,6 +106,62 @@
       "when": 1792423742888,
       "tag": "0014_post_amendments",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792595765816,
+      "tag": "0015_org_postal_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792644147731,
+      "tag": "0016_product_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792651625459,
+      "tag": "0017_product_catalog_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792655933497,
+      "tag": "0018_mailbox_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792756960988,
+      "tag": "0019_plans_rls_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792763957268,
+      "tag": "0020_register_atomic_membership",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792764211080,
+      "tag": "0021_org_audit",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792765041130,
+      "tag": "0022_checks_numeric_uniques",
+      "breakpoints": true
     }
   ]
 }

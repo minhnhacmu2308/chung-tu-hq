@@ -271,6 +271,9 @@ function Demo() {
                 <TabsContent value="empty">
                   <Grid cols={{ base: 1, md: 2 }}>
                     <EmptyState title="Chưa có hồ sơ" description="Tạo hồ sơ đầu tiên để AI đọc bộ chứng từ." action={<Button size="sm">Tạo hồ sơ</Button>} />
+                    <EmptyState illustration="no-results" title="Không có kết quả" description="Thử bỏ bớt bộ lọc." />
+                    <EmptyState illustration="not-found" illustrationSize="lg" title="Không tìm thấy trang" />
+                    <EmptyState illustration="error" title="Màn hình này gặp lỗi" description="Thử tải lại." />
                     <Stack gap="sm">
                       <Skeleton className="h-4 w-2/3" />
                       <Skeleton className="h-4 w-1/2" />

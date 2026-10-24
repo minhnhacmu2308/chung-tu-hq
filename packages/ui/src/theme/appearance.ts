@@ -3,7 +3,7 @@ import { z } from "zod";
 import { brandThemeCss, createBrandTheme, type BrandAdjustment } from "./brand-theme.js";
 
 export const APPEARANCE_OPTIONS = {
-  locale: ["vi", "en"],
+  locale: ["vi", "en", "zh"],
   mode: ["light", "dark", "system"],
   density: ["compact", "comfortable", "spacious"],
   fontSize: ["sm", "md", "lg"],
@@ -16,14 +16,14 @@ export const APPEARANCE_OPTIONS = {
 
 /** Màu thương hiệu gợi ý. Admin vẫn có thể nhập mã màu riêng (được kiểm tra tương phản). */
 export const BRAND_PRESETS = [
-  { id: "khaibao", label: "KhaiBáo", labelEn: "KhaiBáo", hex: "#0F6B55" },
-  { id: "blue", label: "Xanh dương", labelEn: "Blue", hex: "#2563EB" },
-  { id: "green", label: "Xanh lá", labelEn: "Green", hex: "#2F7D4F" },
-  { id: "indigo", label: "Chàm", labelEn: "Indigo", hex: "#5B4BDB" },
-  { id: "teal", label: "Ngọc", labelEn: "Teal", hex: "#0E7C74" },
-  { id: "rose", label: "Hồng", labelEn: "Rose", hex: "#E11D48" },
-  { id: "orange", label: "Cam", labelEn: "Orange", hex: "#EA580C" },
-  { id: "slate", label: "Xám đá", labelEn: "Slate", hex: "#475569" },
+  { id: "khaibao", label: "KhaiBáo", labelEn: "KhaiBáo", labelZh: "KhaiBáo", hex: "#0F6B55" },
+  { id: "blue", label: "Xanh dương", labelEn: "Blue", labelZh: "蓝色", hex: "#2563EB" },
+  { id: "green", label: "Xanh lá", labelEn: "Green", labelZh: "绿色", hex: "#2F7D4F" },
+  { id: "indigo", label: "Chàm", labelEn: "Indigo", labelZh: "靛蓝", hex: "#5B4BDB" },
+  { id: "teal", label: "Ngọc", labelEn: "Teal", labelZh: "青绿", hex: "#0E7C74" },
+  { id: "rose", label: "Hồng", labelEn: "Rose", labelZh: "玫红", hex: "#E11D48" },
+  { id: "orange", label: "Cam", labelEn: "Orange", labelZh: "橙色", hex: "#EA580C" },
+  { id: "slate", label: "Xám đá", labelEn: "Slate", labelZh: "石板灰", hex: "#475569" },
 ] as const;
 
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Màu phải có dạng #RRGGBB");

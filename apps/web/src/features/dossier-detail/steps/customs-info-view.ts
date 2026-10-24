@@ -1,14 +1,12 @@
 // Diễn giải thông tin Hải quan trả về cho người khai (thuần): ý nghĩa mã phân loại kiểm tra, chênh lệch so với số ứng dụng ước tính.
+import { pickMessages, type UiLocale } from "@kb/ui";
 import { fromMinor, toMinor } from "@/lib/decimal";
+import { INSPECTION_MESSAGES } from "./customs-info-view.messages";
 
 /** Mã phân loại kiểm tra (TK_A06 / TK_K07): 1 xanh, 2 vàng, 3 đỏ. */
-export function inspectionLabel(code: string | undefined): string | null {
+export function inspectionLabel(code: string | undefined, locale: UiLocale = "vi"): string | null {
   if (!code) return null;
-  const meaning: Record<string, string> = {
-    "1": "Luồng xanh – miễn kiểm tra hồ sơ và thực tế hàng",
-    "2": "Luồng vàng – kiểm tra hồ sơ",
-    "3": "Luồng đỏ – kiểm tra hồ sơ và thực tế hàng",
-  };
+  const meaning: Record<string, string> = pickMessages(INSPECTION_MESSAGES, locale);
   return meaning[code] ? `${code} · ${meaning[code]}` : code;
 }
 

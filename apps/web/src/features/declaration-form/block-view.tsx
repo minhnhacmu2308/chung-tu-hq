@@ -1,7 +1,7 @@
 "use client";
 // Một khối của bố cục (Vận đơn, Hóa đơn, Đăng ký…): tiêu đề + lưới ô / nhóm ô con / nhóm lặp. Khối Hải quan chưa có dữ liệu → câu "Có sau khi …".
 // Gọn diện tích: lưới tới 4 cột (D; 2 cột khi nhãn bên trái – F), lọc “Ô cần nhập” và khối trống ít dùng đóng sẵn (E).
-import { Button, Card, CardContent, CardHeader, CardTitle, cn, Grid, toast } from "@kb/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, cn, fill, Grid, toast, useMessages } from "@kb/ui";
 import { DECLARATION_CONDITIONS, itemFields, type ConditionContext, type LayoutBlock } from "@kb/contracts";
 import { ChevronDown, ChevronUp, Copy, Landmark } from "lucide-react";
 import { useId, useState } from "react";
@@ -9,6 +9,7 @@ import { blockCollapsedByDefault, itemVisible } from "./compact-rules";
 import { FormField } from "./field";
 import { FormFieldGroup } from "./field-group";
 import { FormFieldRepeat } from "./field-repeat";
+import { FORM_MESSAGES } from "./form.messages";
 import { isApplicable, type FormValues } from "./form-state";
 import { useViewPrefs } from "./view-prefs";
 import { blockHasData } from "./view-state";
@@ -29,6 +30,7 @@ type Props = {
 
 export function BlockView({ kind, block, values, onChange, ctx, showInapplicable, showActions = true, compactable = false }: Props) {
   const { mode, labelsLeft } = useViewPrefs();
+  const t = useMessages(FORM_MESSAGES);
   const [open, setOpen] = useState(() => !(compactable && blockCollapsedByDefault(kind, block, values, ctx)));
   const bodyId = useId();
   const applicable = isApplicable(block, ctx);
@@ -41,7 +43,7 @@ export function BlockView({ kind, block, values, onChange, ctx, showInapplicable
   // Lưới đo theo cột form (@container ở DeclarantTab): 4 cột từ 56rem (ô ≥ ~200px, nhãn một dòng), 3 cột từ 42rem.
   const toggle = compactable && empty && (
     <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={bodyId} rightIcon={open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />} onClick={() => setOpen((o) => !o)}>
-      {open ? "Thu gọn" : onChange ? "Mở để nhập" : "Mở"}
+      {open ? t.collapse : onChange ? t.openToEnter : t.open}
     </Button>
   );
   return (
@@ -51,15 +53,15 @@ export function BlockView({ kind, block, values, onChange, ctx, showInapplicable
           <CardTitle as="h3" className="flex flex-wrap items-center gap-2 text-base">
             {customs && <Landmark aria-hidden="true" className="h-4 w-4 text-info" />}
             {block.title}
-            {compactable && empty && !open && <span className="text-xs font-normal text-fg-subtle">chưa có dữ liệu</span>}
+            {compactable && empty && !open && <span className="text-xs font-normal text-fg-subtle">{t.noData}</span>}
           </CardTitle>
           {toggle}
         </div>
-        {open && condition && <p className="text-xs text-fg-subtle">{applicable ? `Có vì: ${condition}` : `Không áp dụng vì: ${condition}`}</p>}
+        {open && condition && <p className="text-xs text-fg-subtle">{fill(applicable ? t.presentBecause : t.notApplicableBecause, { c: condition })}</p>}
         {open && onChange && showActions && block.actions?.length ? (
           <div className="flex flex-wrap gap-2 pt-1">
             {block.actions.map((a) => (
-              <Button key={a.id} size="sm" variant="secondary" leftIcon={<Copy className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: "Bản mẫu – chưa kết nối", description: a.label })}>
+              <Button key={a.id} size="sm" variant="secondary" leftIcon={<Copy className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: t.prototypeNotConnected, description: a.label })}>
                 {a.label}
               </Button>
             ))}

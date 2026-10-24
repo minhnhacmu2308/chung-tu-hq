@@ -1,33 +1,29 @@
 "use client";
 // Tab 3 – Theo dõi & nghiệp vụ (≈ tab "Quản lý tờ khai" của phần mềm): thông điệp Hải quan, thông tin thuế tờ khai + Ghi/Open EDI,
 // nghiệp vụ bổ sung, tra cứu, số hóa chứng từ. Nháp: chỉ nghiệp vụ dùng được khi chưa có số tờ khai. Bản mẫu: nút chỉ báo "chưa kết nối".
-import { Button, Card, CardContent, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, EmptyState, Field, Grid, Stack, Textarea, toast } from "@kb/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, EmptyState, Field, fill, Grid, Stack, Textarea, toast, useMessages, useUiLocale } from "@kb/ui";
 import { FileDown, FileStack, FileUp, Receipt, Save, Search } from "lucide-react";
+import { useMemo } from "react";
 import { formatDateTime } from "@/lib/format";
+import { FORM_MESSAGES } from "./form.messages";
 import type { PrototypeFixture, Stage } from "./fixtures";
 import type { FormValues } from "./form-state";
 import { lookupsAt, operationsAt, taxAmount, taxSummary } from "./stage-rules";
 
 type Message = PrototypeFixture["messages"][number];
 const col = createDataTableColumnHelper<Message>();
-const columns = col.columns([
-  col.accessor("code", { header: "Mã thông điệp", cell: (c) => <span className="font-mono">{c.getValue()}</span> }),
-  col.accessor("name", { header: "Tên thông điệp", meta: { wrap: true } }),
-  col.accessor("at", { header: "Thời gian", cell: (c) => formatDateTime(c.getValue()) }),
-]);
 
-const notConnected = (name: string) => () => toast({ tone: "info", title: "Bản mẫu – chưa kết nối", description: name });
-
-const CANCEL = "Cập nhật trạng thái tờ khai hủy";
+const notConnected = (title: string, name: string) => () => toast({ tone: "info", title, description: name });
 
 /** `edi`: nút Ghi / Open EDI (bản mẫu – chưa kết nối). */
 export function TaxCard({ kind, values, edi = true }: { kind: "IDA" | "EDA"; values: FormValues; edi?: boolean }) {
-  const tax = taxSummary(kind, values);
-  const rows = tax ? [...(tax.rate ? [{ label: `Tỷ giá tính thuế (${tax.rate.currency})`, value: taxAmount(tax.rate.value) }] : []), ...tax.lines.map((l) => ({ label: l.label, value: taxAmount(l.value) })), ...(tax.total ? [{ label: "Tổng tiền thuế (VND)", value: taxAmount(tax.total) }] : [])] : [];
+  const t = useMessages(FORM_MESSAGES);
+  const tax = taxSummary(kind, values, useUiLocale());
+  const rows = tax ? [...(tax.rate ? [{ label: fill(t.taxRate, { c: tax.rate.currency }), value: taxAmount(tax.rate.value) }] : []), ...tax.lines.map((l) => ({ label: l.label, value: taxAmount(l.value) })), ...(tax.total ? [{ label: t.totalTax, value: taxAmount(tax.total) }] : [])] : [];
   return (
     <Card>
       <CardHeader>
-        <CardTitle as="h2">Thông tin thuế tờ khai</CardTitle>
+        <CardTitle as="h2">{t.taxTitle}</CardTitle>
       </CardHeader>
       <CardContent>
         <Stack gap="md">
@@ -41,11 +37,11 @@ export function TaxCard({ kind, values, edi = true }: { kind: "IDA" | "EDA"; val
               ))}
             </dl>
           ) : (
-            <EmptyState icon={<Receipt />} title="Chưa có số thuế" description={edi ? "Tỷ giá và tiền thuế có sau khi Hải quan tiếp nhận tờ khai. Bản mẫu chưa tạm tính thuế." : "Tỷ giá và tiền thuế chính thức có sau khi Hải quan tiếp nhận tờ khai (khai tạm)."} />
+            <EmptyState icon={<Receipt />} title={t.noTax} description={edi ? t.noTaxProto : t.noTaxReal} />
           )}
           {edi && <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" leftIcon={<Save className="h-4 w-4" />} onClick={notConnected("Ghi EDI")}>Ghi EDI</Button>
-            <Button variant="secondary" leftIcon={<FileDown className="h-4 w-4" />} onClick={notConnected("Open EDI")}>Open EDI</Button>
+            <Button variant="secondary" leftIcon={<Save className="h-4 w-4" />} onClick={notConnected(t.prototypeNotConnected, t.saveEdi)}>{t.saveEdi}</Button>
+            <Button variant="secondary" leftIcon={<FileDown className="h-4 w-4" />} onClick={notConnected(t.prototypeNotConnected, t.openEdi)}>{t.openEdi}</Button>
           </div>}
         </Stack>
       </CardContent>
@@ -55,19 +51,29 @@ export function TaxCard({ kind, values, edi = true }: { kind: "IDA" | "EDA"; val
 
 export function OperationsTab({ kind, fixture, stage, values }: { kind: "IDA" | "EDA"; fixture: PrototypeFixture; stage: Stage; values: FormValues }) {
   const messages = stage === "nhap" ? [] : stage === "da-khai" ? fixture.messages.slice(0, 2) : fixture.messages;
-  const operations = operationsAt(stage);
-  const lookups = lookupsAt(stage);
+  const t = useMessages(FORM_MESSAGES);
+  const locale = useUiLocale();
+  const operations = operationsAt(stage, locale);
+  const lookups = lookupsAt(stage, locale);
+  const columns = useMemo(
+    () => col.columns([
+      col.accessor("code", { header: t.colMsgCode, cell: (c) => <span className="font-mono">{c.getValue()}</span> }),
+      col.accessor("name", { header: t.colMsgName, meta: { wrap: true } }),
+      col.accessor("at", { header: t.colTime, cell: (c) => formatDateTime(c.getValue()) }),
+    ]),
+    [t],
+  );
   return (
     <Stack gap="lg">
       <Card>
         <CardHeader>
-          <CardTitle as="h2">Thông điệp Hải quan</CardTitle>
+          <CardTitle as="h2">{t.msgTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           {messages.length ? (
-            <DataTable aria-label="Thông điệp Hải quan" columns={columns} data={messages} getRowId={(m) => m.code + m.at} />
+            <DataTable aria-label={t.msgTitle} columns={columns} data={messages} getRowId={(m) => m.code + m.at} />
           ) : (
-            <EmptyState icon={<FileStack />} title="Chưa có thông điệp" description="Thông điệp gửi/nhận với Hải quan hiện ở đây sau khi khai báo." />
+            <EmptyState icon={<FileStack />} title={t.noMsg} description={t.noMsgDesc} />
           )}
         </CardContent>
       </Card>
@@ -75,18 +81,18 @@ export function OperationsTab({ kind, fixture, stage, values }: { kind: "IDA" | 
       <Grid cols={{ base: 1, lg: lookups.length ? 2 : 1 }} gap="lg">
         <Card>
           <CardHeader>
-            <CardTitle as="h2">Nghiệp vụ bổ sung</CardTitle>
+            <CardTitle as="h2">{t.extraOps}</CardTitle>
           </CardHeader>
           <CardContent>
             <Stack gap="sm">
               {operations.map((o) => (
-                <Button key={o} variant="secondary" className="justify-start" leftIcon={<FileUp className="h-4 w-4" />} onClick={notConnected(o)}>
+                <Button key={o} variant="secondary" className="justify-start" leftIcon={<FileUp className="h-4 w-4" />} onClick={notConnected(t.prototypeNotConnected, o)}>
                   {o}
                 </Button>
               ))}
-              {operations.includes(CANCEL) && (
-                <Field label="Lý do hủy tờ khai">
-                  <Textarea rows={2} placeholder="Nhập khi cập nhật hủy tờ khai" />
+              {operations.includes(t.opCancel) && (
+                <Field label={t.cancelReason}>
+                  <Textarea rows={2} placeholder={t.cancelPh} />
                 </Field>
               )}
             </Stack>
@@ -95,12 +101,12 @@ export function OperationsTab({ kind, fixture, stage, values }: { kind: "IDA" | 
         {lookups.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle as="h2">Tra cứu tờ khai</CardTitle>
+              <CardTitle as="h2">{t.lookupsTitle}</CardTitle>
             </CardHeader>
             <CardContent>
               <Stack gap="sm">
                 {lookups.map((o) => (
-                  <Button key={o} variant="secondary" className="justify-start" leftIcon={<Search className="h-4 w-4" />} onClick={notConnected(o)}>
+                  <Button key={o} variant="secondary" className="justify-start" leftIcon={<Search className="h-4 w-4" />} onClick={notConnected(t.prototypeNotConnected, o)}>
                     {o}
                   </Button>
                 ))}
@@ -111,10 +117,10 @@ export function OperationsTab({ kind, fixture, stage, values }: { kind: "IDA" | 
       </Grid>
       <Card>
         <CardHeader>
-          <CardTitle as="h2">Số hóa chứng từ</CardTitle>
+          <CardTitle as="h2">{t.digitize}</CardTitle>
         </CardHeader>
         <CardContent>
-          <EmptyState icon={<FileStack />} title="Chưa có chứng từ số hóa" description="Chứng từ đính kèm gửi Hải quan (HYS) hiện ở đây." action={<Button variant="secondary" onClick={notConnected("Số hóa chứng từ")}>Thêm chứng từ</Button>} />
+          <EmptyState icon={<FileStack />} title={t.noDigitized} description={t.noDigitizedDesc} action={<Button variant="secondary" onClick={notConnected(t.prototypeNotConnected, t.digitize)}>{t.addDoc}</Button>} />
         </CardContent>
       </Card>
     </Stack>

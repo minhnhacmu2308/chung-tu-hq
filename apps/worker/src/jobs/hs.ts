@@ -1,6 +1,10 @@
 import { HsApiError, pollHsJob, runHsReclassify, sendHsAnswer, type DeclarationDeps } from "@kb/core/modules/declaration";
 import { UnrecoverableError } from "bullmq";
+import { createLogger } from "@kb/core/shared";
 import { z } from "zod";
+import { parsePayload } from "./_payload.js";
+
+const log = createLogger({ name: "worker" });
 
 const Base = { orgId: z.string().min(1), userId: z.string().min(1), dossierId: z.string().min(1) };
 export const HsPollPayload = z.object({ ...Base, hsJobId: z.string().min(1) });
@@ -22,22 +26,24 @@ export const HsReclassifyPayload = z.object({ ...Base, lineItemId: z.string().mi
 
 /** Hỏi trạng thái một lượt HSCodePro; còn processing thì use case tự hẹn lần sau. Lỗi tạm (5xx/429/mạng) ném ra để BullMQ retry. */
 export async function hsPollJob(deps: DeclarationDeps, raw: unknown) {
-  const p = HsPollPayload.parse(raw);
+  const p = parsePayload(HsPollPayload, raw, "hs-poll");
   const r = await noUselessRetry(() => pollHsJob(deps, p));
-  if (!r.ok) console.warn(`[hs-poll] ${p.hsJobId}: ${r.error.code} ${r.error.message ?? ""}`);
+  if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "hs-poll", hsJobId: p.hsJobId, dossierId: p.dossierId, orgId: p.orgId, code: r.error.code, message: r.error.message });
   return r.ok ? (r.value.again ? "again" : "done") : r.error.code;
 }
 
 /** Gửi câu trả lời của người khai tới HSCodePro rồi poll lại. */
 export async function hsAnswerJob(deps: DeclarationDeps, raw: unknown) {
-  const p = HsAnswerPayload.parse(raw);
+  const p = parsePayload(HsAnswerPayload, raw, "hs-answer");
   const r = await noUselessRetry(() => sendHsAnswer(deps, p));
+  if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "hs-answer", lineItemId: p.lineItemId, dossierId: p.dossierId, orgId: p.orgId, code: r.error.code, message: r.error.message });
   return r.ok ? "sent" : r.error.code;
 }
 
 /** Phân loại lại một dòng (lượt mới 1 dòng). */
 export async function hsReclassifyJob(deps: DeclarationDeps, raw: unknown) {
-  const { extraDescription, ...p } = HsReclassifyPayload.parse(raw);
+  const { extraDescription, ...p } = parsePayload(HsReclassifyPayload, raw, "hs-reclassify");
   const r = await noUselessRetry(() => runHsReclassify(deps, { ...p, ...(extraDescription ? { extraDescription } : {}) }));
+  if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "hs-reclassify", lineItemId: p.lineItemId, dossierId: p.dossierId, orgId: p.orgId, code: r.error.code, message: r.error.message });
   return r.ok ? (r.value.pending ? "pending" : "done") : r.error.code;
 }

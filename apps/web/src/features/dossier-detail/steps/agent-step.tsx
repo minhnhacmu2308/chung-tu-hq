@@ -2,7 +2,7 @@
 // Bước 4 – AI Agent xử lý: chọn việc → điều phối (tiến trình realtime) → xác nhận mã HS → sang Review.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Combobox, createDataTableColumnHelper,
-  DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Progress, RadioGroup, SegmentedControl, Spinner, Stack, StatusBadge, toast, IconTile
+  DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Progress, RadioGroup, SegmentedControl, Spinner, Stack, StatusBadge, toast, IconTile, fill, useMessages,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Play, RotateCcw, Search, Workflow, XCircle } from "lucide-react";
@@ -19,48 +19,25 @@ import { HsSuggestionCell } from "./hs/hs-cell";
 import { HsAnswerDialog, ReclassifyDialog } from "./hs/hs-dialogs";
 import { formatRates, formatTax, hsBusy, normalizeHsInput } from "./hs/hs-format";
 import type { StepProps } from "./types";
+import { AGENT_MESSAGES } from "./agent-step.messages";
 
-const TASK_META: Record<AgentTaskId, { title: string; who: string; whoTone: "primary" | "neutral" | "info"; icon: ReactNode; description: string }> = {
-  HS_LOOKUP: {
-    title: "Tra cứu mã HS",
-    who: "hscodepro",
-    whoTone: "primary",
-    icon: <Search className="h-4 w-4" />,
-    description: "Gợi ý mã HS 8 số, thuế NK (MFN/FTA), VAT, chính sách quản lý cho từng dòng hàng",
-  },
-  MAPPING: {
-    title: "Ánh xạ dữ liệu",
-    who: "Code + cấu hình, không dùng AI",
-    whoTone: "neutral",
-    icon: <Workflow className="h-4 w-4" />,
-    description: "Đưa dữ liệu lô hàng vào chỉ tiêu tờ khai theo skill ánh xạ (SK-MAP-IDA / SK-MAP-EDA)",
-  },
-  BUILD_DECLARATION: {
-    title: "Dựng tờ khai",
-    who: "Code",
-    whoTone: "neutral",
-    icon: <Cpu className="h-4 w-4" />,
-    description: "Tạo tờ khai nháp, tính trị giá tính thuế và thuế dự kiến",
-  },
-  DIGITIZE: {
-    title: "Số hóa chứng từ",
-    who: "Code",
-    whoTone: "neutral",
-    icon: <FileStack className="h-4 w-4" />,
-    description: "Tạo bản dữ liệu số (JSON/XML) của từng chứng từ để lưu và đính kèm HYS",
-  },
-};
+type Tm = Record<keyof (typeof AGENT_MESSAGES)["vi"], string>;
+type TaskMeta = { title: string; who: string; whoTone: "primary" | "neutral" | "info"; icon: ReactNode; description: string };
 
-const MODE_OPTIONS: { value: AgentMode; label: string }[] = [
-  { value: "DECLARATION", label: "Tạo tờ khai" },
-  { value: "DIGITIZE", label: "Số hóa chứng từ" },
-  { value: "BOTH", label: "Cả hai" },
+const taskMeta = (t: Tm): Record<AgentTaskId, TaskMeta> => ({
+  HS_LOOKUP: { title: t.taskHsTitle, who: "hscodepro", whoTone: "primary", icon: <Search className="h-4 w-4" />, description: t.taskHsDesc },
+  MAPPING: { title: t.taskMapTitle, who: t.taskMapWho, whoTone: "neutral", icon: <Workflow className="h-4 w-4" />, description: t.taskMapDesc },
+  BUILD_DECLARATION: { title: t.taskBuildTitle, who: t.whoCode, whoTone: "neutral", icon: <Cpu className="h-4 w-4" />, description: t.taskBuildDesc },
+  DIGITIZE: { title: t.taskDigitizeTitle, who: t.whoCode, whoTone: "neutral", icon: <FileStack className="h-4 w-4" />, description: t.taskDigitizeDesc },
+});
+const TASK_IDS: AgentTaskId[] = ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION", "DIGITIZE"];
+
+const modeOptions = (t: Tm): { value: AgentMode; label: string }[] => [
+  { value: "DECLARATION", label: t.modeDeclaration },
+  { value: "DIGITIZE", label: t.modeDigitize },
+  { value: "BOTH", label: t.modeBoth },
 ];
-const MODE_HINT: Record<AgentMode, string> = {
-  DECLARATION: "Tra HS → ánh xạ → dựng tờ khai nháp. Dùng khi cần khai báo ngay.",
-  DIGITIZE: "Chỉ tạo dữ liệu số hóa chứng từ để lưu trữ / đính kèm HYS. Không tạo tờ khai.",
-  BOTH: "Làm cả hai. Khuyến nghị cho lô hàng sẽ truyền Hải quan qua Customs Hub.",
-};
+const modeHint = (t: Tm): Record<AgentMode, string> => ({ DECLARATION: t.hintDeclaration, DIGITIZE: t.hintDigitize, BOTH: t.hintBoth });
 
 function TaskIcon({ status }: { status: AgentTaskStatus }) {
   if (status === "DONE") return <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-success" />;
@@ -70,28 +47,30 @@ function TaskIcon({ status }: { status: AgentTaskStatus }) {
   return <Circle aria-hidden="true" className="h-5 w-5 text-fg-subtle" />;
 }
 
-const STATUS_TEXT: Record<AgentTaskStatus, string> = { PENDING: "Đang chờ", RUNNING: "Đang chạy", DONE: "Hoàn tất", ERROR: "Lỗi", SKIPPED: "Không chạy" };
+const statusText = (t: Tm): Record<AgentTaskStatus, string> => ({ PENDING: t.statusPending, RUNNING: t.statusRunning, DONE: t.statusDone, ERROR: t.statusError, SKIPPED: t.statusSkipped });
 
 /* ---------- Hộp thoại chọn việc ---------- */
 
 function ModeDialog({ open, onOpenChange, onStart, pending }: { open: boolean; onOpenChange: (o: boolean) => void; onStart: (m: AgentMode) => void; pending: boolean }) {
+  const t = useMessages(AGENT_MESSAGES);
+  const meta = taskMeta(t);
   const [mode, setMode] = useState<AgentMode>("BOTH");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="Chạy AI Agent" icon={<Bot className="h-4 w-4" />} description="Chọn việc agent cần làm cho hồ sơ này." size="md">
+      <DialogContent title={t.dialogTitle} icon={<Bot className="h-4 w-4" />} description={t.dialogDesc} size="md">
         <Stack gap="md">
-          <SegmentedControl label="Việc cần làm" hideLabel value={mode} onChange={setMode} options={MODE_OPTIONS} className="w-full" />
-          <p className="text-sm text-fg-muted">{MODE_HINT[mode]}</p>
+          <SegmentedControl label={t.modeLabel} hideLabel value={mode} onChange={setMode} options={modeOptions(t)} className="w-full" />
+          <p className="text-sm text-fg-muted">{modeHint(t)[mode]}</p>
           <ul className="flex flex-col gap-2">
-            {(Object.keys(TASK_META) as AgentTaskId[]).map((id) => {
+            {TASK_IDS.map((id) => {
               const on = mode === "BOTH" || (mode === "DIGITIZE" ? id === "DIGITIZE" : id !== "DIGITIZE");
-              const m = TASK_META[id];
+              const m = meta[id];
               return (
                 <li key={id} className={on ? "flex items-start gap-3 rounded-md border border-border p-3" : "flex items-start gap-3 rounded-md border border-border p-3 opacity-50"}>
                   <IconTile icon={m.icon} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-fg">
-                      {m.title} {!on && <span className="font-normal text-fg-subtle">– không chạy</span>}
+                      {m.title} {!on && <span className="font-normal text-fg-subtle">{t.notRun}</span>}
                     </p>
                     <p className="text-sm text-fg-muted">{m.description}</p>
                   </div>
@@ -100,14 +79,14 @@ function ModeDialog({ open, onOpenChange, onStart, pending }: { open: boolean; o
               );
             })}
           </ul>
-          <p className="text-xs text-fg-subtle">Chỉ bước tra HS gọi dịch vụ AI. Ánh xạ, dựng tờ khai, tính thuế là code thuần có kiểm thử.</p>
+          <p className="text-xs text-fg-subtle">{t.aiNote}</p>
         </Stack>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Hủy
+            {t.cancel}
           </Button>
           <Button leftIcon={<Play className="h-4 w-4" />} loading={pending} onClick={() => onStart(mode)}>
-            Bắt đầu
+            {t.start}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -118,6 +97,9 @@ function ModeDialog({ open, onOpenChange, onStart, pending }: { open: boolean; o
 /* ---------- Điều phối agent ---------- */
 
 function Orchestration({ view, onRerun }: { view: AgentRunView; onRerun: () => void }) {
+  const t = useMessages(AGENT_MESSAGES);
+  const meta = taskMeta(t);
+  const status = statusText(t);
   const running = !view.finished;
   return (
     <Card>
@@ -125,56 +107,56 @@ function Orchestration({ view, onRerun }: { view: AgentRunView; onRerun: () => v
         <div>
           <CardTitle className="flex items-center gap-2">
             <Bot aria-hidden="true" className="h-5 w-5 text-primary" />
-            Điều phối agent
+            {t.orchTitle}
           </CardTitle>
           <CardDescription>
             {running
-              ? `Đang chạy${view.current ? ` – ${TASK_META[view.current].title.toLowerCase()}` : ""}… Bạn có thể rời màn hình, agent vẫn chạy nền.`
-              : `Hoàn tất · bắt đầu ${formatDateTime(view.run.startedAt)}`}
+              ? fill(t.runningDesc, { task: view.current ? fill(t.runningTask, { title: meta[view.current].title.toLowerCase() }) : "" })
+              : fill(t.doneDesc, { at: formatDateTime(view.run.startedAt) })}
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
-          {running ? <Badge tone="info">Đang chạy</Badge> : <Badge tone="success">Hoàn tất</Badge>}
+          {running ? <Badge tone="info">{t.badgeRunning}</Badge> : <Badge tone="success">{t.badgeDone}</Badge>}
           <Button size="sm" variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} disabled={running} onClick={onRerun}>
-            Chạy lại
+            {t.rerun}
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         <Grid cols={{ base: 1, lg: 2 }} gap="lg">
-          <ol className="flex flex-col gap-3" aria-label="Các việc của agent">
-            {view.run.tasks.map((t) => {
-              const m = TASK_META[t.id];
+          <ol className="flex flex-col gap-3" aria-label={t.tasksAria}>
+            {view.run.tasks.map((task) => {
+              const m = meta[task.id];
               return (
-                <li key={t.id} className="rounded-md border border-border p-3" aria-busy={t.status === "RUNNING"}>
+                <li key={task.id} className="rounded-md border border-border p-3" aria-busy={task.status === "RUNNING"}>
                   <div className="flex items-start gap-3">
-                    <TaskIcon status={t.status} />
+                    <TaskIcon status={task.status} />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-sm font-medium text-fg">{m.title}</p>
                         <Badge tone={m.whoTone}>{m.who}</Badge>
                       </div>
                       <p className="mt-0.5 text-sm text-fg-muted">
-                        <span className="sr-only">{STATUS_TEXT[t.status]}: </span>
-                        {t.message}
+                        <span className="sr-only">{status[task.status]}: </span>
+                        {task.message}
                       </p>
                     </div>
                   </div>
-                  {t.status !== "SKIPPED" && (
+                  {task.status !== "SKIPPED" && (
                     <Progress
                       className="mt-3"
                       size="sm"
-                      value={t.progress}
-                      tone={t.status === "DONE" ? "success" : "primary"}
-                      aria-label={`${m.title}: ${t.progress}%`}
+                      value={task.progress}
+                      tone={task.status === "DONE" ? "success" : "primary"}
+                      aria-label={`${m.title}: ${task.progress}%`}
                     />
                   )}
                 </li>
               );
             })}
           </ol>
-          <section aria-label="Nhật ký agent" className="flex min-h-48 flex-col rounded-md border border-border bg-surface-muted">
-            <p className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-fg-subtle">Nhật ký</p>
+          <section aria-label={t.logAria} className="flex min-h-48 flex-col rounded-md border border-border bg-surface-muted">
+            <p className="border-b border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-fg-subtle">{t.logTitle}</p>
             <ol className="max-h-80 flex-1 overflow-auto px-3 py-2 font-mono text-xs leading-relaxed" aria-live="polite">
               {view.logs.map((l, i) => (
                 <li key={i} className={l.tone === "warning" ? "text-warning-subtle-fg" : l.tone === "success" ? "text-success-subtle-fg" : "text-fg-muted"}>
@@ -200,9 +182,10 @@ const sixDigits = (code: string) => {
 
 /** Chọn / xác nhận mã HS cho một dòng – dùng ở bước AI Agent và panel dòng hàng của tờ khai đầy đủ. */
 export function ChangeHsDialog({ item, onClose, dossierId }: { item: LineItem | null; onClose: () => void; dossierId: string }) {
+  const t = useMessages(AGENT_MESSAGES);
   return (
     <Dialog open={item !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={`Chọn mã HS – dòng ${item?.lineNo ?? ""}`} icon={<Search className="h-4 w-4" />} description={item?.description} size="md">
+      <DialogContent title={fill(t.changeHsTitle, { line: item?.lineNo ?? "" })} icon={<Search className="h-4 w-4" />} description={item?.description} size="md">
         {item && <ChangeHsForm key={item.id} item={item} onDone={onClose} dossierId={dossierId} />}
       </DialogContent>
     </Dialog>
@@ -210,6 +193,7 @@ export function ChangeHsDialog({ item, onClose, dossierId }: { item: LineItem | 
 }
 
 function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () => void; dossierId: string }) {
+  const t = useMessages(AGENT_MESSAGES);
   const qc = useQueryClient();
   const catalog = useQuery({ queryKey: declarationKeys.hsCatalog, queryFn: listHsCatalog, staleTime: Infinity });
   const candidates = item.hs?.candidates ?? [];
@@ -222,7 +206,7 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
   const save = useMutation({
     mutationFn: () => confirmHs(item.id, code!),
     onSuccess: () => {
-      toast({ tone: "success", title: `Đã xác nhận ${code} cho dòng ${item.lineNo}` });
+      toast({ tone: "success", title: fill(t.toastConfirmed, { code: code ?? "", line: item.lineNo }) });
       void qc.invalidateQueries({ queryKey: declarationKeys.items(dossierId) });
       void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
       onDone();
@@ -243,49 +227,49 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
       <Stack gap="md">
         {candidates.length > 0 && (
           <RadioGroup
-            label="Gợi ý của hscodepro"
-            description="Mã chính và các mã thay thế, kèm thuế NK · VAT theo C/O của lô hàng"
+            label={t.suggestLabel}
+            description={t.suggestDesc}
             value={manual.trim() ? null : picked}
             onChange={(v) => (setPicked(v), setManual(""))}
             options={candidates.map((c, i) => ({
               value: c.code,
-              label: `${c.code} · ${Math.round(c.confidence * 100)}% · ${formatTax(c)}${i === 0 ? " · gợi ý chính" : ""}`,
-              description: c.whyNot ? `${c.description} – Vì sao không chọn: ${c.whyNot}` : c.description,
+              label: `${c.code} · ${Math.round(c.confidence * 100)}% · ${formatTax(c)}${i === 0 ? t.mainSuggestion : ""}`,
+              description: c.whyNot ? fill(t.whyNot, { desc: c.description, why: c.whyNot }) : c.description,
             }))}
           />
         )}
         {catalogOptions.length > 0 && (
-          <Field label="Hoặc chọn từ biểu thuế" hint="Gõ mã hoặc mô tả, không cần dấu: “o bi”, “8483”">
-            <Combobox options={catalogOptions} value={catalogOptions.some((o) => o.value === picked) ? picked : null} onChange={(v) => (setPicked(v), setManual(""))} placeholder="Chọn mã HS" />
+          <Field label={t.catalogLabel} hint={t.catalogHint}>
+            <Combobox options={catalogOptions} value={catalogOptions.some((o) => o.value === picked) ? picked : null} onChange={(v) => (setPicked(v), setManual(""))} placeholder={t.catalogPlaceholder} />
           </Field>
         )}
-        <Field label="Hoặc nhập tay mã 8 số" hint="Mã ngoài gợi ý/biểu thuế: tờ khai chưa có thuế suất cho dòng này – kiểm tra biểu thuế trước khi khai" {...(manual.trim() && !manualCode ? { error: "Cần đủ 8 chữ số, vd 8483.40.90" } : {})}>
+        <Field label={t.manualLabel} hint={t.manualHint} {...(manual.trim() && !manualCode ? { error: t.manualError } : {})}>
           <Input className="cq-sm:max-w-48 font-mono" value={manual} onChange={(e) => setManual(e.target.value)} placeholder="8483.40.90" />
         </Field>
         {(cand || entry) && (
           <div className="rounded-md border border-border bg-surface-muted p-3 text-sm">
             <p className="font-medium text-fg">{cand?.description ?? entry?.description}</p>
-            <p className="mt-1 text-fg-muted">{cand ? `Thuế NK · VAT: ${formatTax(cand)}` : entry ? `Thuế NK MFN ${entry.mfn}% · VAT ${entry.vat}%` : null}</p>
+            <p className="mt-1 text-fg-muted">{cand ? fill(t.taxCandidate, { tax: formatTax(cand) }) : entry ? fill(t.taxEntry, { mfn: entry.mfn, vat: entry.vat }) : null}</p>
             {entry?.policy && <p className="mt-1 text-warning-subtle-fg">{entry.policy}</p>}
           </div>
         )}
         {item.hs?.reasoning && (
           <div className="text-sm">
-            <p className="font-medium text-fg">Lý do AI chọn {item.hsSuggested}</p>
+            <p className="font-medium text-fg">{fill(t.reasonTitle, { code: item.hsSuggested ?? "" })}</p>
             <p className="mt-1 text-fg-muted">{item.hs.reasoning}</p>
-            {item.hs.legalBasis.length > 0 && <p className="mt-1 text-xs text-fg-subtle">Căn cứ: {item.hs.legalBasis.join("; ")}</p>}
+            {item.hs.legalBasis.length > 0 && <p className="mt-1 text-xs text-fg-subtle">{fill(t.legalBasis, { list: item.hs.legalBasis.join("; ") })}</p>}
           </div>
         )}
         {item.hsSuggested && code && code !== item.hsSuggested && (
-          <Alert tone="info">Khác gợi ý hscodepro ({item.hsSuggested}). Lựa chọn của bạn được ghi vào nhật ký sửa.</Alert>
+          <Alert tone="info">{fill(t.differs, { code: item.hsSuggested })}</Alert>
         )}
       </Stack>
       <DialogFooter>
         <Button variant="ghost" type="button" onClick={onDone}>
-          Hủy
+          {t.cancel}
         </Button>
         <Button type="submit" disabled={!code} loading={save.isPending}>
-          Xác nhận mã này
+          {t.confirmThis}
         </Button>
       </DialogFooter>
     </form>
@@ -295,6 +279,7 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
 const col = createDataTableColumnHelper<LineItem>();
 
 function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId: string; currency: string }) {
+  const t = useMessages(AGENT_MESSAGES);
   const qc = useQueryClient();
   const [editing, setEditing] = useState<LineItem | null>(null);
   const [answering, setAnswering] = useState<LineItem | null>(null);
@@ -306,7 +291,7 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
   const confirm = useMutation({
     mutationFn: (it: LineItem) => confirmHs(it.id, it.hsSuggested!),
     onSuccess: (it) => {
-      toast({ tone: "success", title: `Đã xác nhận ${it.hsConfirmed} cho dòng ${it.lineNo}` });
+      toast({ tone: "success", title: fill(t.toastConfirmed, { code: it.hsConfirmed ?? "", line: it.lineNo }) });
       invalidate();
     },
     onError: (e) => toast({ tone: "danger", title: errorMessage(e) }),
@@ -316,25 +301,25 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
   const columns = col.columns([
     col.accessor("lineNo", { header: "#", size: 48, meta: { align: "center" } }),
     col.accessor("description", {
-      header: "Mô tả hàng",
+      header: t.colDescription,
       size: 260,
       meta: { wrap: true },
       cell: (c) => (
         <div>
           <p className="text-fg">{c.getValue()}</p>
           <p className="text-xs text-fg-subtle">
-            {formatNumber(c.row.original.quantity)} {c.row.original.unit} · xuất xứ {c.row.original.origin}
+            {fill(t.qtyOrigin, { qty: formatNumber(c.row.original.quantity), unit: c.row.original.unit, origin: c.row.original.origin })}
           </p>
         </div>
       ),
     }),
-    col.accessor("amount", { header: `Trị giá (${currency})`, meta: { align: "end" }, cell: (c) => formatMoney(c.getValue()) }),
+    col.accessor("amount", { header: fill(t.colAmount, { currency }), meta: { align: "end" }, cell: (c) => formatMoney(c.getValue()) }),
     col.accessor("invoiceHsCode", {
-      header: "HS trên invoice",
+      header: t.colInvoiceHs,
       cell: (c) => {
         const v = c.getValue();
         return v ? (
-          <span className="font-mono text-xs text-fg-muted" title={`Mã gốc ${v} – chỉ tham khảo 6 số đầu`}>
+          <span className="font-mono text-xs text-fg-muted" title={fill(t.invoiceHsTitle, { code: v })}>
             {sixDigits(v)}
           </span>
         ) : (
@@ -343,13 +328,13 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
       },
     }),
     col.accessor("hsSuggested", {
-      header: "Gợi ý hscodepro",
+      header: t.colSuggest,
       size: 220,
       meta: { wrap: true },
       cell: (c) => <HsSuggestionCell item={c.row.original} onAnswer={setAnswering} onReclassify={setReclassifying} />,
     }),
     col.accessor("importDutyRate", {
-      header: "Thuế NK · VAT",
+      header: t.colTax,
       cell: (c) => {
         const it = c.row.original;
         return it.hsConfirmed ? (
@@ -358,16 +343,16 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
             {it.policyNote && <p className="max-w-56 whitespace-normal text-xs text-fg-muted">{it.policyNote}</p>}
           </div>
         ) : it.hs?.candidates[0] ? (
-          <p className="tabular-nums text-fg-muted" title="Theo gợi ý – áp dụng khi bạn xác nhận mã">
+          <p className="tabular-nums text-fg-muted" title={t.taxPreviewTitle}>
             {formatTax(it.hs.candidates[0])}
           </p>
         ) : (
-          <span className="text-xs text-fg-subtle">Sau khi xác nhận</span>
+          <span className="text-xs text-fg-subtle">{t.afterConfirm}</span>
         );
       },
     }),
     col.accessor("hsConfirmed", {
-      header: "Xác nhận",
+      header: t.colConfirm,
       size: 260,
       cell: (c) => {
         const it = c.row.original;
@@ -375,11 +360,11 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
           return (
             <div className="flex items-center gap-2 whitespace-nowrap">
               <StatusBadge status="USER_CONFIRMED" label={it.hsConfirmed} />
-              <Button size="sm" variant="ghost" onClick={() => setEditing(it)} aria-label={`Đổi mã HS dòng ${it.lineNo}`}>
-                Đổi
+              <Button size="sm" variant="ghost" onClick={() => setEditing(it)} aria-label={fill(t.changeAria, { line: it.lineNo })}>
+                {t.change}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => undo.mutate(it)} aria-label={`Bỏ xác nhận dòng ${it.lineNo}`}>
-                Bỏ
+              <Button size="sm" variant="ghost" onClick={() => undo.mutate(it)} aria-label={fill(t.unconfirmAria, { line: it.lineNo })}>
+                {t.unconfirm}
               </Button>
             </div>
           );
@@ -391,12 +376,12 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
               disabled={!it.hsSuggested}
               loading={confirm.isPending && confirm.variables?.id === it.id}
               onClick={() => confirm.mutate(it)}
-              aria-label={`Xác nhận mã ${it.hsSuggested ?? ""} cho dòng ${it.lineNo}`}
+              aria-label={fill(t.confirmAria, { code: it.hsSuggested ?? "", line: it.lineNo })}
             >
-              Xác nhận
+              {t.confirm}
             </Button>
             <Button size="sm" variant="secondary" disabled={!!it.hs && hsBusy(it.hs.status)} onClick={() => setEditing(it)}>
-              Chọn mã khác
+              {t.pickOther}
             </Button>
           </div>
         );
@@ -406,7 +391,7 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
 
   return (
     <>
-      <DataTable aria-label="Xác nhận mã HS từng dòng hàng" columns={columns} data={items} getRowId={(r) => r.id} />
+      <DataTable aria-label={t.tableAria} columns={columns} data={items} getRowId={(r) => r.id} />
       <ChangeHsDialog item={editing} onClose={() => setEditing(null)} dossierId={dossierId} />
       <HsAnswerDialog item={answering} onClose={() => setAnswering(null)} dossierId={dossierId} />
       <ReclassifyDialog item={reclassifying} onClose={() => setReclassifying(null)} dossierId={dossierId} />
@@ -417,6 +402,8 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
 /* ---------- Bước 4 ---------- */
 
 export function AgentStep({ dossier, goTo }: StepProps) {
+  const t = useMessages(AGENT_MESSAGES);
+  const meta = taskMeta(t);
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -475,37 +462,35 @@ export function AgentStep({ dossier, goTo }: StepProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Bot aria-hidden="true" className="h-5 w-5 text-primary" />
-              AI Agent xử lý
+              {t.introTitle}
             </CardTitle>
-            <CardDescription>
-              Dữ liệu đã xác nhận ở bước OCR ({items.length} dòng hàng) sẵn sàng. Agent sẽ tra mã HS, ánh xạ vào chỉ tiêu tờ khai và dựng tờ khai nháp.
-            </CardDescription>
+            <CardDescription>{fill(t.introDesc, { n: items.length })}</CardDescription>
           </CardHeader>
           <CardContent>
             <Grid cols={{ base: 1, md: 2, xl: 4 }} gap="sm">
-              {(Object.keys(TASK_META) as AgentTaskId[]).map((id) => (
+              {TASK_IDS.map((id) => (
                 <div key={id} className="rounded-md border border-border p-3">
                   <div className="flex items-center gap-2 text-fg">
-                    <span className="text-primary">{TASK_META[id].icon}</span>
-                    <p className="text-sm font-medium">{TASK_META[id].title}</p>
+                    <span className="text-primary">{meta[id].icon}</span>
+                    <p className="text-sm font-medium">{meta[id].title}</p>
                   </div>
-                  <p className="mt-1 text-sm text-fg-muted">{TASK_META[id].description}</p>
-                  <Badge tone={TASK_META[id].whoTone} className="mt-2">{TASK_META[id].who}</Badge>
+                  <p className="mt-1 text-sm text-fg-muted">{meta[id].description}</p>
+                  <Badge tone={meta[id].whoTone} className="mt-2">{meta[id].who}</Badge>
                 </div>
               ))}
             </Grid>
             {items.length === 0 && (
-              <Alert tone="warning" className="mt-4" title="Chưa có dòng hàng">
-                Hoàn tất bước OCR & kiểm tra trước khi chạy agent.
+              <Alert tone="warning" className="mt-4" title={t.noItemsTitle}>
+                {t.noItemsBody}
               </Alert>
             )}
           </CardContent>
           <CardFooter>
             <Button variant="ghost" onClick={() => goTo("ocr")}>
-              Quay lại OCR
+              {t.backToOcr}
             </Button>
             <Button leftIcon={<Play className="h-4 w-4" />} disabled={items.length === 0} onClick={() => setDialogOpen(true)}>
-              Chạy AI Agent
+              {t.runAgent}
             </Button>
           </CardFooter>
         </Card>
@@ -516,17 +501,15 @@ export function AgentStep({ dossier, goTo }: StepProps) {
       {view && makesDeclaration && (
         <Card>
           <CardHeader>
-            <CardTitle>Xác nhận mã HS</CardTitle>
-            <CardDescription>
-              Mã HS 8 số theo biểu Việt Nam luôn cần người xác nhận. Mã 8–10 số trên invoice nước ngoài chỉ dùng 6 số đầu làm tham khảo.
-            </CardDescription>
+            <CardTitle>{t.hsTitle}</CardTitle>
+            <CardDescription>{t.hsDesc}</CardDescription>
           </CardHeader>
           <CardContent>
             {lookupDone ? (
               <HsTable items={items} dossierId={dossier.id} currency={dossier.currency} />
             ) : (
               <div className="flex items-center gap-3 rounded-md border border-dashed border-border p-6 text-sm text-fg-muted">
-                <Spinner className="h-4 w-4" /> hscodepro đang tra {items.length} dòng hàng – kết quả hiện ở đây khi xong.
+                <Spinner className="h-4 w-4" /> {fill(t.lookingUp, { n: items.length })}
               </div>
             )}
           </CardContent>
@@ -536,14 +519,14 @@ export function AgentStep({ dossier, goTo }: StepProps) {
       {view && !makesDeclaration && view.finished && (
         <Alert
           tone="info"
-          title="Đã số hóa chứng từ – chưa tạo tờ khai"
+          title={t.digitizedTitle}
           action={
             <Button size="sm" variant="secondary" onClick={() => setDialogOpen(true)}>
-              Chạy lại với “Tạo tờ khai”
+              {t.rerunDeclaration}
             </Button>
           }
         >
-          Lần chạy này chỉ số hóa chứng từ. Để khai báo, chạy agent với lựa chọn có tạo tờ khai.
+          {t.digitizedBody}
         </Alert>
       )}
 
@@ -551,21 +534,21 @@ export function AgentStep({ dossier, goTo }: StepProps) {
         <StickyActionBar>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-fg">
-              Đã xác nhận {confirmed}/{items.length} mã HS
+              {fill(t.confirmedCount, { done: confirmed, total: items.length })}
             </p>
             <Progress
               value={items.length ? Math.round((confirmed / items.length) * 100) : 0}
               size="sm"
               tone={confirmed === items.length && items.length > 0 ? "success" : "primary"}
-              aria-label={`Đã xác nhận ${confirmed} trên ${items.length} mã HS`}
+              aria-label={fill(t.confirmedAria, { done: confirmed, total: items.length })}
               className="mt-1 max-w-sm"
             />
           </div>
           <Button variant="ghost" onClick={() => goTo("ocr")}>
-            Quay lại OCR
+            {t.backToOcr}
           </Button>
           <Button disabled={!canProceed} loading={next.isPending} onClick={() => next.mutate()}>
-            Sang Review tờ khai
+            {t.toReview}
           </Button>
         </StickyActionBar>
       )}

@@ -8,6 +8,7 @@ import { useMessages, type Messages } from "../lib/i18n.js";
 const STEPPER_MESSAGES = {
   vi: { nav: "Các bước xử lý hồ sơ", done: "(đã xong)", current: "(đang thực hiện)", todo: "(chưa tới)", viewing: "(đang xem)", stepOf: "Bước {n}/{total}" },
   en: { nav: "Dossier steps", done: "(done)", current: "(in progress)", todo: "(upcoming)", viewing: "(viewing)", stepOf: "Step {n} of {total}" },
+  zh: { nav: "档案处理步骤", done: "（已完成）", current: "（进行中）", todo: "（未开始）", viewing: "（正在查看）", stepOf: "第 {n}/{total} 步" },
 } satisfies Messages<"nav" | "done" | "current" | "todo" | "viewing" | "stepOf">;
 
 const DIAGRAM_MESSAGES = {
@@ -15,6 +16,8 @@ const DIAGRAM_MESSAGES = {
     done: "đã xong", current: "đang thực hiện", pending: "chưa tới", skipped: "không đi qua", error: "có lỗi" },
   en: { zoomIn: "Zoom in", zoomOut: "Zoom out", fit: "Fit", currentBadge: "You are here",
     done: "done", current: "in progress", pending: "upcoming", skipped: "not taken", error: "error" },
+  zh: { zoomIn: "放大", zoomOut: "缩小", fit: "适合窗口", currentBadge: "当前步骤",
+    done: "已完成", current: "进行中", pending: "未开始", skipped: "未经过", error: "有错误" },
 } satisfies Messages<"zoomIn" | "zoomOut" | "fit" | "currentBadge" | "done" | "current" | "pending" | "skipped" | "error">;
 
 /* ===================== Stepper ===================== */
@@ -96,6 +99,73 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
         </ol>
       </nav>
       {action}
+    </div>
+  );
+}
+
+/* ===================== StepProgress ===================== */
+
+const STEP_PROGRESS_MESSAGES = {
+  vi: { stepOf: "Bước {n}/{total}", complete: "Đã hoàn tất", stopped: "Đã dừng" },
+  en: { stepOf: "Step {n} of {total}", complete: "Completed", stopped: "Stopped" },
+  zh: { stepOf: "第 {n}/{total} 步", complete: "已完成", stopped: "已终止" },
+} satisfies Messages<"stepOf" | "complete" | "stopped">;
+
+export type StepProgressProps = {
+  steps: readonly StepperStep[];
+  currentId: string;
+  /** `active` (mặc định): đang ở bước `currentId`; `complete`: đã xong cả quy trình (tô xanh); `stopped`: hồ sơ dừng/hủy (xám). */
+  state?: "active" | "complete" | "stopped";
+  className?: string;
+};
+
+/** Tiến độ các bước, gọn cho ô bảng và thẻ: tên bước + "3/6" và thanh chia đoạn (mỗi đoạn một bước). */
+export function StepProgress({ steps, currentId, state = "active", className }: StepProgressProps) {
+  const t = useMessages(STEP_PROGRESS_MESSAGES);
+  const total = steps.length;
+  const index = Math.max(0, steps.findIndex((s) => s.id === currentId));
+  // Xong cả quy trình: nhãn chính là "Đã hoàn tất" (tên bước cuối không còn ý nghĩa), số đếm "6/6".
+  const label = state === "complete" ? t.complete : (steps[index]?.label ?? "");
+  const counter = state === "complete" ? `${total}/${total}` : state === "stopped" ? t.stopped : `${index + 1}/${total}`;
+  return (
+    <div data-slot="step-progress" data-state={state} className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <div className="flex min-w-0 items-baseline justify-between gap-2 text-xs">
+        <span
+          className={cn("min-w-0 truncate text-sm font-medium", state === "stopped" ? "text-fg-muted" : state === "complete" ? "text-success-subtle-fg" : "text-fg")}
+          title={label}
+        >
+          {label}
+        </span>
+        <span
+          aria-hidden={state !== "stopped" || undefined}
+          className={cn(
+            "shrink-0 tabular-nums font-medium",
+            state === "complete" ? "text-success-subtle-fg" : state === "stopped" ? "text-fg-subtle" : "text-primary-subtle-fg",
+          )}
+        >
+          {counter}
+        </span>
+      </div>
+      <span className="sr-only">{t.stepOf.replace("{n}", String(index + 1)).replace("{total}", String(total))}</span>
+      <div aria-hidden="true" className="flex gap-0.5">
+        {steps.map((s, i) => {
+          const seg =
+            state === "complete" ? "done" : i < index ? "done" : i === index ? "current" : "todo";
+          return (
+            <span
+              key={s.id}
+              className={cn(
+                "relative h-1.5 min-w-1 flex-1 overflow-hidden rounded-full",
+                seg === "todo" && "bg-border",
+                seg === "done" && (state === "complete" ? "bg-success" : state === "stopped" ? "bg-border-strong" : "bg-primary"),
+                seg === "current" && (state === "stopped" ? "bg-border-strong" : "bg-primary-subtle ring-1 ring-inset ring-primary"),
+              )}
+            >
+              {seg === "current" && state === "active" && <span className="absolute inset-y-0 left-0 w-1/2 bg-primary" />}
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -1,23 +1,13 @@
 "use client";
-import { Button, EmptyState } from "@kb/ui";
-import { TriangleAlert } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { startTransition } from "react";
+import { ErrorScreen, errorKindOf, HomeButton, RetryButton } from "@/components/common/error-screen";
 
 // Lỗi không lường trước ở một màn: giữ nguyên menu, cho thử lại ngay tại chỗ.
-export default function AppError({ reset }: { error: Error; reset: () => void }) {
-  return (
-    <EmptyState
-      icon={<TriangleAlert />}
-      title="Màn hình này gặp lỗi"
-      description="Dữ liệu của bạn không bị ảnh hưởng. Thử tải lại màn hình; nếu vẫn lỗi, quay về trang tổng quan."
-      action={
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={reset}>Thử lại</Button>
-          <Button asChild variant="secondary">
-            <Link href="/">Về trang tổng quan</Link>
-          </Button>
-        </div>
-      }
-    />
-  );
+// Máy chủ không phản hồi (502/503/504, mất mạng) và máy chủ lỗi (500) có hình + lời riêng.
+export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  const router = useRouter();
+  // Lỗi dựng ở máy chủ: phải refresh để lấy lại dữ liệu trang, reset riêng chỉ dựng lại phía trình duyệt.
+  const retry = () => startTransition(() => { router.refresh(); reset(); });
+  return <ErrorScreen kind={errorKindOf(error)} reference={error.digest} actions={<><RetryButton onClick={retry} /><HomeButton /></>} />;
 }

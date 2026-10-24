@@ -36,10 +36,10 @@ describe("blockHasData – tab Hải quan trả về không để trống trơn"
 
 describe("navSections – mục lục tab Người khai nhập", () => {
   it.each([LAYOUT_IDA, LAYOUT_EDA])("đủ nhóm, Danh sách hàng đứng trước Đính kèm & ghi chú, tên nhóm theo yêu cầu ($kind)", (layout) => {
-    expect(navSections(layout).map((n) => n.title)).toEqual([
+    expect(navSections(layout, "vi").map((n) => n.title)).toEqual([
       "1. Thông tin chung", "2. Đơn vị xuất nhập khẩu", "3. Vận đơn & vận chuyển", "4. Văn bản & giấy phép",
       "5. Hóa đơn, hợp đồng & trị giá", "6. Thuế & bảo lãnh", "7. Danh sách hàng", "8. Đính kèm & ghi chú",
     ]);
-    expect(navSections(layout)[6]!.id).toBe(ITEMS_SECTION);
+    expect(navSections(layout, "vi")[6]!.id).toBe(ITEMS_SECTION);
   });
 });

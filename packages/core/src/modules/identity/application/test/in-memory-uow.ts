@@ -1,7 +1,7 @@
 // Fake cho test use case: giữ dữ liệu trong mảng, mô phỏng RLS bằng cách lọc theo org/user của ngữ cảnh.
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type {
-  AuthTokenRow, CertificateRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgRow, OrgSecretRow,
+  AuthTokenRow, CertificateRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgAuditRow, OrgRow, OrgSecretRow,
   PlanRow, PlansReader, SessionRow, UserRow,
 } from "../ports.js";
 
@@ -14,6 +14,7 @@ export type MemoryData = {
   joinRequests: JoinRequestRow[];
   certificates: CertificateRow[];
   notifications: NotificationRow[];
+  audit: OrgAuditRow[];
   secrets: OrgSecretRow[];
   plans: PlanRow[];
 };
@@ -21,7 +22,7 @@ export type MemoryData = {
 type Scope = { kind: "system" } | { kind: "user"; userId: string } | { kind: "org"; orgId: string; userId: string };
 
 export class InMemoryIdentityUow implements IdentityUow, PlansReader {
-  readonly data: MemoryData = { users: [], orgs: [], memberships: [], sessions: [], authTokens: [], joinRequests: [], certificates: [], notifications: [], secrets: [], plans: [] };
+  readonly data: MemoryData = { users: [], orgs: [], memberships: [], sessions: [], authTokens: [], joinRequests: [], certificates: [], notifications: [], audit: [], secrets: [], plans: [] };
 
   seed(partial: Partial<MemoryData>) {
     for (const k of Object.keys(partial) as (keyof MemoryData)[]) (this.data[k] as unknown[]).push(...(partial[k] as unknown[]));
@@ -77,7 +78,8 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
         listByOrg: async (orgId) => clone(d.memberships.filter((m) => m.orgId === orgId && canSeeMembership(m))),
         listByUser: async (userId) => clone(d.memberships.filter((m) => m.userId === userId && canSeeMembership(m))),
         find: async (orgId, userId) => clone(d.memberships.find((m) => m.orgId === orgId && m.userId === userId && canSeeMembership(m)) ?? null),
-        insert: async (row) => void (orgOk(row.orgId) ? d.memberships.push(clone(row)) : deny("memberships insert")),
+        // Như policy thật: org đang đặt, hoặc không ngữ cảnh (đăng ký tạo OWNER cùng transaction với org).
+        insert: async (row) => void (orgOk(row.orgId) || isSystem ? d.memberships.push(clone(row)) : deny("memberships insert")),
         update: async (id, patch) => {
           const m = d.memberships.find((x) => x.id === id);
           if (!m || !orgOk(m.orgId)) return deny("memberships update");
@@ -93,6 +95,11 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
           Object.assign(s, { lastSeenAt, expiresAt });
         },
         delete: async (id) => void (d.sessions = d.sessions.filter((s) => !(s.id === id && (isSystem || userOk(s.userId))))),
+        deleteByUser: async (userId) => {
+          const before = d.sessions.length;
+          d.sessions = d.sessions.filter((s) => !(s.userId === userId && (isSystem || userOk(userId))));
+          return before - d.sessions.length;
+        },
         lastSeenByUsers: async (ids) => {
           const out: Record<string, Date> = {};
           for (const s of d.sessions) if (ids.includes(s.userId) && (isSystem || userOk(s.userId)) && (!out[s.userId] || out[s.userId]! < s.lastSeenAt)) out[s.userId] = s.lastSeenAt;
@@ -102,10 +109,11 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
       authTokens: {
         findValid: async (kind, hash, now) => clone(d.authTokens.find((t) => t.kind === kind && t.tokenHash === hash && t.usedAt === null && t.expiresAt > now && (isSystem || userOk(t.userId))) ?? null),
         insert: async (row) => void (isSystem || userOk(row.userId) ? d.authTokens.push(clone(row)) : deny("auth_tokens insert")),
-        markUsed: async (id, at) => {
+        consume: async (id, at) => {
           const t = d.authTokens.find((x) => x.id === id);
-          if (!t || !(isSystem || userOk(t.userId))) return;
+          if (!t || !(isSystem || userOk(t.userId)) || t.usedAt !== null) return false;
           t.usedAt = at;
+          return true;
         },
       },
       joinRequests: {
@@ -142,6 +150,11 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
         markAllRead: async (orgId, userId, at) => {
           for (const n of d.notifications) if (n.orgId === orgId && n.userId === userId && orgOk(orgId) && userOk(userId)) n.readAt = at;
         },
+      },
+      audit: {
+        insert: async (row) => void (orgOk(row.orgId) ? d.audit.push(clone(row)) : deny("org_audit insert")),
+        list: async (orgId, page) => clone(d.audit.filter((x) => x.orgId === orgId && orgOk(orgId)).sort((a, b) => b.at.getTime() - a.at.getTime()).slice(page.offset, page.offset + page.limit)),
+        count: async (orgId) => d.audit.filter((x) => x.orgId === orgId && orgOk(orgId)).length,
       },
     };
   }

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock } from "../../../../shared/clock.js";
 import { sequentialIdGen } from "../../../../shared/ids.js";
+import { RecordingNotifier } from "../../../../shared/notifier.js";
 import { unwrap } from "../../../../shared/result.js";
 import { AiDataError, type ExtractionDeps } from "../ports.js";
 import { processDocument } from "../process-document.js";
@@ -78,13 +79,18 @@ describe("processDocument", () => {
     expect(ai.calls.classify).toBe(0);
     expect(ai.calls.extract).toBe(2);
   });
-  it("chạy lại cùng job → không gọi AI lần nữa, không trùng extraction, shipment version tăng, trường không nhân đôi", async () => {
+  it("chạy lại cùng job → không gọi AI lần nữa, không trùng extraction, shipment version tăng, trường không nhân đôi; thông báo 'đọc xong' chỉ một lần", async () => {
+    const notifier = new RecordingNotifier();
+    deps.notify = notifier;
     addDoc("doc_inv", "INVOICE", "USER");
     unwrap(await processDocument(deps, { orgId: ORG, dossierId: "dos_1", documentId: "doc_inv", mode: "FULL" }));
     unwrap(await processDocument(deps, { orgId: ORG, dossierId: "dos_1", documentId: "doc_inv", mode: "FULL" }));
+    unwrap(await processDocument(deps, { orgId: ORG, dossierId: "dos_1", documentId: "doc_inv", mode: "MERGE_ONLY" }));
+    expect(notifier.sent.filter((n) => n.draft.title === "Đã đọc xong bộ chứng từ")).toHaveLength(1);
     expect(ai.calls.extract).toBe(1);
     expect(uow.data.extractions).toHaveLength(1);
-    expect(uow.data.shipments.map((s) => s.version)).toEqual([1, 2]);
+    // Mỗi lần gộp (kể cả MERGE_ONLY) là một phiên bản lô hàng mới.
+    expect(uow.data.shipments.map((s) => s.version)).toEqual([1, 2, 3]);
     expect(uow.data.fields.filter((f) => f.key === "invoice_no")).toHaveLength(1);
   });
   it("hai chứng từ: trọng lượng lệch → CONFLICT; trường USER_CONFIRMED được giữ khi gộp lại", async () => {

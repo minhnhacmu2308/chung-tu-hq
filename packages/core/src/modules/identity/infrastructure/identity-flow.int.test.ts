@@ -18,6 +18,8 @@ import { login } from "../application/login.js";
 import { logout } from "../application/logout.js";
 import type { IdentityDeps } from "../application/ports.js";
 import { register } from "../application/register.js";
+import { rejectJoinRequest } from "../application/reject-join-request.js";
+import { transferOwnership } from "../application/transfer-ownership.js";
 import { requestPasswordReset } from "../application/request-password-reset.js";
 import { resetPassword } from "../application/reset-password.js";
 import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../application/test/fakes.js";
@@ -92,6 +94,36 @@ describe("luồng identity trên Postgres thật", () => {
     // logout
     unwrap(await logout(deps, sessionToken));
     expect((await getSession(deps, sessionToken)).ok).toBe(false);
+  });
+  it("từ chối yêu cầu tham gia + chuyển quyền sở hữu trên RLS thật; org khác bị từ chối", async () => {
+    const reg = unwrap(await register(deps, { email: "chu@tanviet.vn", name: "Đặng Chủ", password: "matkhau123", taxCode: "0109876543", joinExisting: false }, META));
+    const { ctx: owner } = unwrap(await getSession(deps, reg.sessionToken));
+    const other = unwrap(await getSession(deps, unwrap(await login(deps, { email: "an@minhkhang.vn", password: "matkhau123" }, META)).sessionToken)).ctx;
+
+    // xin tham gia → org khác không từ chối được → chủ từ chối kèm lý do → không đăng nhập được, không còn trong danh sách chờ
+    unwrap(await register(deps, { email: "la@tanviet.vn", name: "Người Lạ", password: "matkhau789", joinExisting: true, taxCode: "0109876543" }, META));
+    const [jr] = unwrap(await listJoinRequests(deps, owner));
+    expect((await rejectJoinRequest(deps, other, jr!.id, {})).ok).toBe(false);
+    unwrap(await rejectJoinRequest(deps, owner, jr!.id, { reason: "Không phải nhân viên" }));
+    expect(mailer.sent.filter((m) => m.to === "la@tanviet.vn").at(-1)?.text).toContain("Lý do: Không phải nhân viên");
+    expect(unwrap(await listJoinRequests(deps, owner))).toHaveLength(0);
+    const rejectedLogin = await login(deps, { email: "la@tanviet.vn", password: "matkhau789" }, META);
+    expect(rejectedLogin.ok ? "OK" : rejectedLogin.error.code).toBe("NO_ORGANIZATION");
+
+    // mời + nhận lời mời → chuyển quyền sở hữu (sai mật khẩu bị chặn; org khác không thấy người nhận)
+    unwrap(await inviteMember(deps, owner, { email: "ke@tanviet.vn", role: "DECLARANT" }));
+    const acc = unwrap(await acceptInvite(deps, { token: tokenFrom(mailer.sent.find((m) => m.to === "ke@tanviet.vn")!.text), name: "Người Kế", password: "matkhau456" }));
+    const heir = unwrap(await getSession(deps, acc.sessionToken)).ctx;
+    expect((await transferOwnership(deps, owner, heir.userId, { password: "sai-mat-khau" })).ok).toBe(false);
+    const otherTry = await transferOwnership(deps, other, heir.userId, { password: "matkhau123" });
+    expect(otherTry.ok ? "OK" : otherTry.error.code).toBe("NOT_FOUND");
+    const res = unwrap(await transferOwnership(deps, owner, heir.userId, { password: "matkhau123" }));
+    expect([res.owner.role, res.previousOwner.role]).toEqual(["OWNER", "ADMIN"]);
+    expect(unwrap(await getSession(deps, acc.sessionToken)).ctx.role).toBe("OWNER");
+    expect(unwrap(await getSession(deps, reg.sessionToken)).ctx.role).toBe("ADMIN");
+    const roles = unwrap(await listMembers(deps, heir)).map((m) => `${m.email}:${m.role}`).sort();
+    expect(roles).toEqual(["chu@tanviet.vn:ADMIN", "ke@tanviet.vn:OWNER"]);
+    expect(unwrap(await listNotifications(deps, heir)).some((n) => n.title.includes("Chủ sở hữu mới"))).toBe(true);
   });
   it("org demo seed không bị org mới nhìn thấy", async () => {
     const { sessionToken } = unwrap(await login(deps, { email: "an@minhkhang.vn", password: "matkhau123" }, META));

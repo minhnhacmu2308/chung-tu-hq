@@ -1,6 +1,6 @@
 import type { FormValues } from "../form-state";
-import { EDA_B13 } from "./eda-b13";
-import { IDA_A44 } from "./ida-a44";
+import { EDA_B13 } from "./eda-b13.vi";
+import { IDA_A44 } from "./ida-a44.vi";
 import type { PrototypeFixture, Stage } from "./types";
 
 export type { PrototypeFixture, Stage } from "./types";

@@ -1,7 +1,7 @@
 // Điều kiện chuyển bước/duyệt/truyền (bất biến 7: không truyền khi còn BLOCKER FAIL hoặc HS chưa xác nhận). Thuần.
 import { CATALOG_EDA, CATALOG_IDA, extraFieldIssue, requiredGapsText, type RequiredGap, isDeclarationFieldEditable, itemFieldIssue, parseItemFieldCode, type DeclarationFieldDef, type DeclarationStatus, type Role } from "@kb/contracts";
 import { dec } from "../../../shared/decimal.js";
-import { domainError } from "../../../shared/errors.js";
+import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { lengthIssue } from "./field-length.js";
 import { mappingsFor } from "./mapping/registry.js";
@@ -15,8 +15,8 @@ export const missingBlockingFields = (fields: Record<string, StoredField>) => Ob
 
 export function canMoveToReview(items: ItemHs[], hasDeclaration: boolean): Result<void> {
   const n = unconfirmed(items);
-  if (n > 0) return err(domainError("HS_UNCONFIRMED", `Còn ${n} mã HS chưa xác nhận`));
-  if (!hasDeclaration) return err(domainError("NO_DECLARATION", "Chưa dựng tờ khai – chạy agent với lựa chọn có “Tạo tờ khai”"));
+  if (n > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n }));
+  if (!hasDeclaration) return err(reasonError("NO_DECLARATION", "DECLARATION_NOT_BUILT"));
   return ok(undefined);
 }
 
@@ -32,31 +32,31 @@ export function canApprove(p: {
   /** Ô bắt buộc còn trống trên tờ khai đầy đủ (@kb/contracts declarationRequiredGaps) – cùng quy tắc nút Phê duyệt ở giao diện. */
   requiredGaps?: RequiredGap[]; lineNos?: number[];
 }): Result<void> {
-  if (p.role !== "APPROVER" && p.role !== "OWNER") return err(domainError("FORBIDDEN", "Chỉ Người duyệt hoặc Chủ sở hữu được phê duyệt tờ khai"));
-  if (p.status !== "DRAFT") return err(domainError("INVALID_STATE", p.status === "NOT_CREATED" ? "Chưa có tờ khai" : "Tờ khai đã được duyệt"));
-  if (p.blockerFails > 0) return err(domainError("BLOCKER_FAILED", `Còn ${p.blockerFails} luật lỗi chặn truyền – xử lý ở bước OCR & kiểm tra`));
+  if (p.role !== "APPROVER" && p.role !== "OWNER") return err(reasonError("FORBIDDEN", "APPROVER_ROLE_REQUIRED"));
+  if (p.status !== "DRAFT") return err(reasonError("INVALID_STATE", p.status === "NOT_CREATED" ? "DECLARATION_NOT_CREATED" : "DECLARATION_ALREADY_APPROVED"));
+  if (p.blockerFails > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED_FIX_IN_OCR", { n: p.blockerFails }));
   const n = unconfirmed(p.items);
-  if (n > 0) return err(domainError("HS_UNCONFIRMED", `Còn ${n} mã HS chưa xác nhận`));
-  if (p.exchangeRate !== undefined && dec(p.exchangeRate).isZero()) return err(domainError("INVALID_STATE", "Chưa có tỷ giá tính thuế – nhập tỷ giá rồi chạy lại agent"));
+  if (n > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n }));
+  if (p.exchangeRate !== undefined && dec(p.exchangeRate).isZero()) return err(reasonError("INVALID_STATE", "EXCHANGE_RATE_MISSING"));
   // Nguyên tắc 4 mắt (cấu hình org): người duyệt khác người tạo hồ sơ; Chủ sở hữu được miễn.
-  if (p.fourEyes && p.role !== "OWNER" && p.userId === p.ownerId) return err(domainError("FORBIDDEN", "Người duyệt phải khác người tạo hồ sơ (nguyên tắc 4 mắt)"));
+  if (p.fourEyes && p.role !== "OWNER" && p.userId === p.ownerId) return err(reasonError("FORBIDDEN", "FOUR_EYES"));
   // Sau kiểm quyền: người không được duyệt nhận FORBIDDEN, không phải danh sách chỉ tiêu.
   const blocking = p.fields ? missingBlockingFields(p.fields) : [];
-  if (blocking.length) return err(domainError("BLOCKER_FAILED", `Chưa khai chỉ tiêu bắt buộc: ${blocking.map((f) => `${f.label}${f.no ? ` (${f.no})` : ""}${f.note ? ` – ${f.note}` : ""}`).join("; ")}`));
+  if (blocking.length) return err(reasonError("BLOCKER_FAILED", "BLOCKING_FIELDS_MISSING", { fields: blocking.map((f) => `${f.label}${f.no ? ` (${f.no})` : ""}${f.note ? ` – ${f.note}` : ""}`).join("; ") }));
   if (p.missingFields?.length) {
     const names = p.missingFields.map((f) => f.label);
-    return err(domainError("VALIDATION", `Còn ${names.length} chỉ tiêu bắt buộc chưa nhập: ${names.join(", ")} – bấm Sửa ở từng chỉ tiêu rồi duyệt lại`, { missingFields: p.missingFields }));
+    return err(reasonError("VALIDATION", "REQUIRED_FIELDS_MISSING_EDIT", { n: names.length, fields: names.join(", ") }, { missingFields: p.missingFields }));
   }
   if (p.requiredGaps?.length) {
-    return err(domainError("VALIDATION", `Còn ${p.requiredGaps.length} chỉ tiêu bắt buộc chưa nhập: ${requiredGapsText(p.requiredGaps, p.lineNos)} – nhập trên tờ khai rồi duyệt lại`, { requiredGaps: p.requiredGaps }));
+    return err(reasonError("VALIDATION", "REQUIRED_FIELDS_MISSING_APPROVE", { n: p.requiredGaps.length, fields: requiredGapsText(p.requiredGaps, p.lineNos) }, { requiredGaps: p.requiredGaps }));
   }
   return ok(undefined);
 }
 
 export function canSubmit(p: { status: DeclarationStatus; blockerFails: number }): Result<void> {
-  if (p.status === "SUBMITTED") return err(domainError("ALREADY_SUBMITTED", "Tờ khai đã truyền"));
-  if (p.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Tờ khai chưa được phê duyệt"));
-  if (p.blockerFails > 0) return err(domainError("BLOCKER_FAILED", `Còn ${p.blockerFails} luật lỗi chặn truyền`));
+  if (p.status === "SUBMITTED") return err(reasonError("ALREADY_SUBMITTED", "DECLARATION_SUBMITTED"));
+  if (p.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_APPROVED"));
+  if (p.blockerFails > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: p.blockerFails }));
   return ok(undefined);
 }
 

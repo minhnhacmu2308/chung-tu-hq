@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { UiLocaleProvider } from "../lib/i18n.js";
 import { getPageItems, Pagination } from "./pagination.js";
+import { chooseOption } from "../../test/select.js";
 
 describe("getPageItems", () => {
   it("ít trang: hiện hết, không có dấu …", () => {
@@ -57,7 +58,7 @@ describe("Pagination", () => {
   it("chọn số dòng mỗi trang", async () => {
     const onPageSizeChange = vi.fn();
     render(<Pagination pageIndex={0} pageSize={20} rowCount={300} onPageChange={() => {}} onPageSizeChange={onPageSizeChange} />);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Số dòng mỗi trang" }), "50");
+    await chooseOption(screen.getByRole("combobox", { name: "Số dòng mỗi trang" }), "50 / trang");
     expect(onPageSizeChange).toHaveBeenCalledWith(50);
   });
 
@@ -88,6 +89,6 @@ describe("Pagination – số dòng mỗi trang", () => {
   it("giá trị hiện tại không nằm trong danh sách vẫn được hiển thị đúng", async () => {
     const { Pagination } = await import("./pagination.js");
     render(<Pagination pageIndex={0} pageSize={8} rowCount={37} onPageChange={() => {}} onPageSizeChange={() => {}} />);
-    expect(screen.getByRole("combobox")).toHaveValue("8");
+    expect(screen.getByRole("combobox")).toHaveTextContent("8 / trang");
   });
 });

@@ -37,6 +37,7 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 9. Dữ liệu từ ngoài (HTTP, form, AI, file, queue) parse bằng Zod trước khi dùng.
 10. Giao diện chỉ dùng component `@kb/ui` + utility token. Không mã màu, không màu Tailwind mặc định, không `dark:`, không giá trị tùy ý trong app. Thiếu gì thêm vào `@kb/ui`. Chi tiết và các lỗi hay gặp: `.claude/rules/dung-component-chung.md`.
 11. Test theo `docs/TESTING.md`; component có test a11y (axe).
+12. Giao diện 3 ngôn ngữ (vi/en/zh): **tính năng mới chưa có đủ 3 bản dịch là chưa xong**. Không viết cứng chữ hiển thị (kể cả tiếng Anh/viết tắt) – dùng `defineMessages` + `useMessages`. Chi tiết, những gì không dịch và checklist: `.claude/rules/ho-tro-3-ngon-ngu.md`. Máy chặn: lint `apps-hardcoded-text` + `apps-hardcoded-latin-text`, test `apps/web/src/lib/i18n-catalogs.test.ts`.
 
 ## Skill dự án (`.claude/skills/`)
 
@@ -49,6 +50,8 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 | Thiếu component/biến thể/token, sửa @kb/ui hoặc tùy chọn giao diện | `adding-ui-component` |
 | Sửa prompt, schema trích xuất, đổi model AI | `changing-extraction-prompt-or-model` |
 | Thêm/sửa ánh xạ sang chỉ tiêu tờ khai | `mapping-declaration-fields` |
+
+Agent review (`.claude/agents/`): `hq-review-code` – review diff theo bất biến dự án, chỉ đọc và báo cáo (gọi khi được yêu cầu review hoặc trước khi mở PR).
 
 ## Trước khi báo "xong"
 

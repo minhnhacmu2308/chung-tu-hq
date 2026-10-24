@@ -1,7 +1,7 @@
 // Hiện thực IdentityUow bằng Drizzle: mỗi lời gọi là một transaction với ngữ cảnh RLS (withSystem/withUser/withCtx).
-import { and, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { authTokens, digitalCertificates, joinRequests, memberships, notifications, organizations, orgSecrets, sessions, users } from "../../../db/schema/identity.js";
+import { authTokens, digitalCertificates, joinRequests, memberships, notifications, organizations, orgAudit, orgSecrets, sessions, users } from "../../../db/schema/identity.js";
 import { withCtx, withSystem, withUser } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import type { IdentityRepos, IdentityUow, JoinRequestStatus, MembershipRow, MembershipStatus } from "../application/ports.js";
@@ -40,6 +40,7 @@ function repos(tx: Tx): IdentityRepos {
       insert: async (row) => void (await tx.insert(sessions).values(row)),
       touch: async (id, lastSeenAt, expiresAt) => void (await tx.update(sessions).set({ lastSeenAt, expiresAt }).where(eq(sessions.id, id))),
       delete: async (id) => void (await tx.delete(sessions).where(eq(sessions.id, id))),
+      deleteByUser: async (userId) => (await tx.delete(sessions).where(eq(sessions.userId, userId)).returning({ id: sessions.id })).length,
       lastSeenByUsers: async (ids) => {
         if (!ids.length) return {};
         // Bảng sessions chỉ lộ dòng của chính user trong ngữ cảnh org → dùng hàm SECURITY DEFINER? Không: chấp nhận chỉ biết "lần hoạt động" của người đang đăng nhập; phần còn lại lấy từ users.updated_at (xem ghi chú BACKEND-TODO).
@@ -55,7 +56,7 @@ function repos(tx: Tx): IdentityRepos {
           | (typeof authTokens.$inferSelect & { kind: AuthTokenKind })
           | undefined) ?? null,
       insert: async (row) => void (await tx.insert(authTokens).values(row)),
-      markUsed: async (id, at) => void (await tx.update(authTokens).set({ usedAt: at }).where(eq(authTokens.id, id))),
+      consume: async (id, at) => (await tx.update(authTokens).set({ usedAt: at }).where(and(eq(authTokens.id, id), isNull(authTokens.usedAt))).returning({ id: authTokens.id })).length === 1,
     },
     joinRequests: {
       listPending: async (orgId) => (await tx.select().from(joinRequests).where(and(eq(joinRequests.orgId, orgId), eq(joinRequests.status, "PENDING"))).orderBy(joinRequests.createdAt)).map(toJoin),
@@ -71,7 +72,9 @@ function repos(tx: Tx): IdentityRepos {
       list: async (orgId) => tx.select().from(digitalCertificates).where(eq(digitalCertificates.orgId, orgId)).orderBy(digitalCertificates.createdAt, digitalCertificates.id),
       insert: async (row) => void (await tx.insert(digitalCertificates).values(row)),
       setDefault: async (orgId, id) => {
-        await tx.update(digitalCertificates).set({ isDefault: sql`(${digitalCertificates.id} = ${id})`, updatedAt: new Date() }).where(eq(digitalCertificates.orgId, orgId));
+        // Hai bước (bỏ mặc định cũ rồi đặt mới) để không vi phạm unique partial "một mặc định / doanh nghiệp" giữa chừng một câu UPDATE.
+        await tx.update(digitalCertificates).set({ isDefault: false, updatedAt: new Date() }).where(and(eq(digitalCertificates.orgId, orgId), eq(digitalCertificates.isDefault, true)));
+        await tx.update(digitalCertificates).set({ isDefault: true, updatedAt: new Date() }).where(and(eq(digitalCertificates.orgId, orgId), eq(digitalCertificates.id, id)));
       },
       delete: async (orgId, id) => void (await tx.delete(digitalCertificates).where(and(eq(digitalCertificates.orgId, orgId), eq(digitalCertificates.id, id)))),
     },
@@ -87,6 +90,11 @@ function repos(tx: Tx): IdentityRepos {
       list: async (orgId, userId) => tx.select().from(notifications).where(and(eq(notifications.orgId, orgId), eq(notifications.userId, userId))).orderBy(desc(notifications.createdAt)).limit(50),
       insert: async (row) => void (await tx.insert(notifications).values(row)),
       markAllRead: async (orgId, userId, at) => void (await tx.update(notifications).set({ readAt: at }).where(and(eq(notifications.orgId, orgId), eq(notifications.userId, userId), isNull(notifications.readAt)))),
+    },
+    audit: {
+      insert: async (row) => void (await tx.insert(orgAudit).values(row)),
+      list: async (orgId, page) => (await tx.select().from(orgAudit).where(eq(orgAudit.orgId, orgId)).orderBy(desc(orgAudit.at), desc(orgAudit.id)).limit(page.limit).offset(page.offset)).map((r) => ({ ...r, detail: (r.detail as Record<string, unknown> | null) ?? null })),
+      count: async (orgId) => Number((await tx.select({ n: count() }).from(orgAudit).where(eq(orgAudit.orgId, orgId)))[0]?.n ?? 0),
     },
   };
 }

@@ -10,25 +10,26 @@ export type ShipmentRow = { id: string; orgId: string; dossierId: string; versio
 export type FieldRow = { id: string; orgId: string; dossierId: string; documentId: string; group: FieldGroup; key: string; label: string; value: string; originalValue: string; status: FieldStatus; region: Region | null; note: string | null; shipmentPath: string | null; confirmedBy: string | null; confirmedAt: Date | null };
 export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT"; at: Date };
 
+/** Mọi phương thức nhận `orgId` tường minh (bất biến 1) – RLS là lớp thứ hai; fake in-memory từ chối orgId khác ngữ cảnh. */
 export interface ExtractionRepos {
   /** Khóa theo hồ sơ trong transaction (advisory lock) để hai job không gộp cùng lúc. */
-  lockDossier(dossierId: string): Promise<void>;
+  lockDossier(orgId: string, dossierId: string): Promise<void>;
   extractions: {
-    findByKey(key: string): Promise<ExtractionRow | null>;
-    listDone(dossierId: string, documentIds: string[]): Promise<ExtractionRow[]>;
+    findByKey(orgId: string, key: string): Promise<ExtractionRow | null>;
+    listDone(orgId: string, dossierId: string, documentIds: string[]): Promise<ExtractionRow[]>;
     insert(row: ExtractionRow): Promise<void>;
-    deleteForDocument(documentId: string): Promise<void>;
+    deleteForDocument(orgId: string, documentId: string): Promise<void>;
   };
   shipments: {
-    latest(dossierId: string): Promise<ShipmentRow | null>;
+    latest(orgId: string, dossierId: string): Promise<ShipmentRow | null>;
     insert(row: ShipmentRow): Promise<void>;
-    updateData(id: string, data: Shipment): Promise<void>;
+    updateData(orgId: string, id: string, data: Shipment): Promise<void>;
   };
   fields: {
-    list(dossierId: string): Promise<FieldRow[]>;
-    get(id: string): Promise<FieldRow | null>;
-    replaceForDossier(dossierId: string, rows: FieldRow[]): Promise<void>;
-    update(id: string, patch: Partial<Pick<FieldRow, "value" | "status" | "note" | "confirmedBy" | "confirmedAt">>): Promise<void>;
+    list(orgId: string, dossierId: string): Promise<FieldRow[]>;
+    get(orgId: string, id: string): Promise<FieldRow | null>;
+    replaceForDossier(orgId: string, dossierId: string, rows: FieldRow[]): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<FieldRow, "value" | "status" | "note" | "confirmedBy" | "confirmedAt">>): Promise<void>;
   };
   audit: { insert(row: AuditRow): Promise<void> };
 }
@@ -44,7 +45,8 @@ export interface DocumentsPort {
   listForDossier(orgId: string, dossierId: string): Promise<DocumentInfo[]>;
   setStatus(orgId: string, documentId: string, status: DocumentStatus, patch?: { error?: string | null; kind?: DocKind; kindSource?: "AI" | "USER" | "FILENAME"; pages?: number }): Promise<void>;
   /** Sau khi gộp: số trường nghi ngờ; nếu mọi chứng từ đã DONE/ERROR → status NEEDS_REVIEW, step ocr. */
-  afterMerge(orgId: string, dossierId: string, info: { suspectFields: number; invoiceValue?: string; currency?: string; billNo?: string; allDone: boolean }): Promise<void>;
+  /** Cập nhật hồ sơ sau khi gộp; `finishedNow` = lần gộp này đưa hồ sơ từ đang đọc sang đã đọc xong (để chỉ thông báo một lần). */
+  afterMerge(orgId: string, dossierId: string, info: { suspectFields: number; invoiceValue?: string; currency?: string; billNo?: string; allDone: boolean }): Promise<{ finishedNow: boolean }>;
   /** Hoàn tất đọc: step ocr / status NEEDS_REVIEW + suspectFields. */
   finishReading(orgId: string, dossierId: string, suspectFields: number): Promise<void>;
   readFile(storageKey: string): Promise<Buffer>;
@@ -67,16 +69,25 @@ export interface AiProvider {
   extract(file: AiFile, pages: number[], schema: ZodType, prompt: ExtractPrompt): Promise<{ result: unknown; regions: Record<string, Region> | null; usage: AiUsage }>;
 }
 
-/** Lỗi dữ liệu (file hỏng, model trả rác không parse được) – không retry; lỗi tạm (429/5xx/timeout) → throw Error thường. */
+/**
+ * Lỗi dữ liệu (file hỏng, model trả rác không parse được) – không retry; lỗi tạm (429/5xx/timeout) → throw Error thường.
+ * `usage`: token đã tốn trước khi phát hiện lỗi (model từ chối, cắt vì max_tokens, JSON hỏng) – pipeline vẫn ghi usage_events (bất biến 8).
+ */
 export class AiDataError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly usage?: AiUsage) {
     super(message);
     this.name = "AiDataError";
   }
 }
 
+/** Kiểm trước khi gọi AI: đã tiêu bao nhiêu hôm nay so với trần. */
+export interface AiBudget {
+  check(orgId: string): Promise<{ allowed: boolean; spentVnd: string; capVnd: string }>;
+}
+
 export interface UsageRecorder {
-  record(e: { orgId: string; dossierId: string | null; documentId: string | null; kind: "AI_CLASSIFY" | "AI_EXTRACT"; provider: string; model: string; inputTokens: number; outputTokens: number }): Promise<string>;
+  /** `dedupeKey`: cùng khóa chỉ ghi một lần (id suy từ khóa) – job chạy lại sau khi AI đã trả lời không tính tiền khách hai lần. */
+  record(e: { orgId: string; dossierId: string | null; documentId: string | null; kind: "AI_CLASSIFY" | "AI_EXTRACT"; provider: string; model: string; inputTokens: number; outputTokens: number; dedupeKey?: string }): Promise<string>;
 }
 
 export interface SkillResolver {
@@ -92,6 +103,8 @@ export type ExtractionDeps = {
   usage: UsageRecorder;
   skills: SkillResolver;
   notify?: Notifier;
+  /** Trần chi phí AI theo doanh nghiệp (ngày); không có = không giới hạn. */
+  aiBudget?: AiBudget;
   /** Người dùng sửa dữ liệu chứng từ (OCR) → tờ khai nháp cập nhật dòng hàng và dựng lại (module declaration; container nối). */
   onShipmentEdited?: (orgId: string, dossierId: string) => Promise<void>;
   clock: Clock;

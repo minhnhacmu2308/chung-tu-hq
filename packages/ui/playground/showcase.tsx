@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Abbreviation, Avatar, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-  Field, FileDropzone, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
+  Field, FileDropzone, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
 } from "../src/index.js";
 
@@ -116,6 +116,18 @@ export function Showcase() {
             rowLabel={(r) => r.code}
             onRowClick={(r) => toast({ tone: "info", title: `Mở hồ sơ ${r.code}` })}
             pagination={{ initialPageSize: 8 }}
+            viewStorageKey="playground"
+            renderCard={(r, parts) => (
+              <RecordCard
+                title={<span className="font-mono">{r.code}</span>}
+                subtitle={r.partner}
+                leading={<Badge tone={r.type === "NK" ? "info" : "primary"} variant="outline">{r.type}</Badge>}
+                status={<StatusBadge status={r.status} />}
+                select={parts.select}
+                actions={parts.actions}
+                fields={[{ label: "Trị giá", value: r.value.toLocaleString("vi-VN") }, { label: "Hạn", value: r.due }]}
+              />
+            )}
             rowActions={(r) => (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

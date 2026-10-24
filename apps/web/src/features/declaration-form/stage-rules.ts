@@ -1,7 +1,9 @@
 // Quy tắc hiển thị theo giai đoạn tờ khai (thuần). Căn cứ: màn hình tạo mới của phần mềm khai báo (CHITIEU_NHAPKHAU_TAOMOI / CHITIEU_XUATKHAU_TAOMOI)
 // – nháp chỉ có ô người khai nhập, chưa có kết quả Hải quan; sau khi đăng ký, phần người khai chỉ đọc, sửa qua khai sửa đổi bổ sung.
 import type { DeclarationLayout, LayoutField } from "@kb/contracts";
+import { pickMessages, type UiLocale } from "@kb/ui";
 import { formatNumber } from "@/lib/format";
+import { FORM_MESSAGES } from "./form.messages";
 import type { Stage } from "./fixtures";
 import type { FormValues } from "./form-state";
 
@@ -11,18 +13,26 @@ export const declarantEditable = (stage: Stage, amending: boolean) => stage === 
 /** Đầu trang: nháp chỉ còn ô số tờ khai (chưa có); phân luồng, thông quan, ngày đăng ký chỉ có sau khi khai. */
 export const summaryAt = (layout: DeclarationLayout, stage: Stage): LayoutField[] => (stage === "nhap" ? layout.summary.slice(0, 1) : layout.summary);
 
-const OPERATIONS = ["Đăng ký bổ sung file đính kèm (HYS)", "Khai sửa đổi bổ sung sau thông quan (AMA)", "Khai báo danh sách container", "Lấy danh sách container", "Chứng từ bổ sung", "Cập nhật trạng thái tờ khai hủy"];
+type Msg = keyof (typeof FORM_MESSAGES)["vi"];
+const OPERATIONS: Msg[] = ["opHys", "opAma", "opContainerDecl", "opContainerGet", "opExtraDocs", "opCancel"];
 /** Nghiệp vụ cần tờ khai đã có số. */
-const AFTER_DECLARED = new Set(["Khai sửa đổi bổ sung sau thông quan (AMA)", "Lấy danh sách container", "Cập nhật trạng thái tờ khai hủy"]);
-const LOOKUPS = ["Tra cứu trạng thái tờ khai VNACCS", "Tra cứu nợ thuế", "Tra cứu nộp thuế", "In mã vạch qua KVGS", "Lấy phản hồi phân luồng thông quan"];
+const AFTER_DECLARED = new Set<Msg>(["opAma", "opContainerGet", "opCancel"]);
+const LOOKUPS: Msg[] = ["lkStatus", "lkTaxDebt", "lkTaxPaid", "lkBarcode", "lkChannel"];
 
-export const operationsAt = (stage: Stage): string[] => (stage === "nhap" ? OPERATIONS.filter((o) => !AFTER_DECLARED.has(o)) : OPERATIONS);
-export const lookupsAt = (stage: Stage): string[] => (stage === "nhap" ? [] : LOOKUPS);
+/** Nhãn nghiệp vụ bổ sung theo giai đoạn (theo ngôn ngữ giao diện). */
+export const operationsAt = (stage: Stage, locale: UiLocale): string[] => {
+  const t = pickMessages(FORM_MESSAGES, locale);
+  return (stage === "nhap" ? OPERATIONS.filter((o) => !AFTER_DECLARED.has(o)) : OPERATIONS).map((k) => t[k]);
+};
+export const lookupsAt = (stage: Stage, locale: UiLocale): string[] => {
+  const t = pickMessages(FORM_MESSAGES, locale);
+  return stage === "nhap" ? [] : LOOKUPS.map((k) => t[k]);
+};
 
 export type TaxSummary = { rate: { currency: string; value: string } | null; lines: { label: string; value: string }[]; total: string | null };
 
 /** Thông tin thuế tờ khai (tab Quản lý tờ khai của phần mềm) – chỉ từ số liệu Hải quan đã trả; chưa có → null, không tự đặt số. */
-export function taxSummary(kind: "IDA" | "EDA", v: FormValues): TaxSummary | null {
+export function taxSummary(kind: "IDA" | "EDA", v: FormValues, locale: UiLocale): TaxSummary | null {
   const val = (k: string) => v[k]?.trim() ?? "";
   if (kind === "IDA") {
     const lines = [1, 2, 3, 4, 5, 6].filter((n) => val(`THUE_KH${n}`)).map((n) => ({ label: val(`THUE_KG${n}`) || val(`THUE_KF${n}`), value: val(`THUE_KH${n}`) }));
@@ -30,7 +40,7 @@ export function taxSummary(kind: "IDA" | "EDA", v: FormValues): TaxSummary | nul
     return { rate: val("THUE_KK1") ? { currency: val("THUE_KJ1"), value: val("THUE_KK1") } : null, lines, total: val("THUE_B02") || null };
   }
   if (!val("TK_ETA")) return null;
-  return { rate: val("TK_RD1") ? { currency: val("TK_RC1"), value: val("TK_RD1") } : null, lines: [{ label: "Thuế xuất khẩu", value: val("TK_ETA") }], total: null };
+  return { rate: val("TK_RD1") ? { currency: val("TK_RC1"), value: val("TK_RD1") } : null, lines: [{ label: pickMessages(FORM_MESSAGES, locale).exportTax, value: val("TK_ETA") }], total: null };
 }
 
 type Snapshot = { header: FormValues; items: FormValues[] };

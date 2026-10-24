@@ -14,6 +14,7 @@
     "db:seed": "pnpm --filter @kb/core db:seed",
     "db:reset": "pnpm --filter @kb/core db:reset",
     "typecheck": "pnpm -r typecheck",
+    "build": "pnpm --filter @kb/web build",
     "test": "pnpm -r test && node --test scripts/*.test.mjs",
     "lint": "pnpm lint:tokens && pnpm lint:deps",
     "lint:tokens": "node scripts/check-design-tokens.mjs",

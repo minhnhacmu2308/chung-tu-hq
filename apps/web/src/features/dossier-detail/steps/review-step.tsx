@@ -4,7 +4,7 @@
 // Sau thông quan: tờ khai gốc chỉ đọc – sửa bằng bản khai bổ sung AMA ở bước 7 "Sửa sau thông quan".
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
-  Dialog, DialogContent, DialogFooter, EmptyState, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast,
+  Dialog, DialogContent, DialogFooter, EmptyState, fill, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, useMessages, useUiLocale,
 } from "@kb/ui";
 import { canEditDeclaration, declarationEditMode, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,6 +25,7 @@ import { CustomsInfoPanel } from "./customs-info-panel";
 import { errorPlace, fieldErrors } from "./customs-errors";
 import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
+import { REVIEW_MESSAGES } from "./review-step.messages";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
@@ -34,26 +35,28 @@ import { declarationGapsOf, printIssuesOf } from "../../declaration-print/print-
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { LoadError } from "@/components/common/load-error";
 
-const exportTaxText = (status: Declaration["status"]) =>
-  status === "SUBMITTED" ? "Xem số thuế Hải quan trả về ở bước Khai báo Hải quan" : "Hải quan tính sau khi khai tạm EDA";
+const exportTaxText = (status: Declaration["status"], t: Record<"exportTaxSubmitted" | "exportTaxPending", string>) =>
+  status === "SUBMITTED" ? t.exportTaxSubmitted : t.exportTaxPending;
 
 function DocumentsTab({ dossierId }: { dossierId: string }) {
+  const t = useMessages(REVIEW_MESSAGES);
+  const kinds = useMessages(DOC_KIND_LABELS);
   const docs = useQuery({ queryKey: dossierKeys.documents(dossierId), queryFn: () => listDocuments(dossierId) });
   if (docs.isLoading) return <StepLoading />;
   if (docs.isError) return <StepError error={docs.error} onRetry={() => void docs.refetch()} />;
-  if (!docs.data?.length) return <EmptyState icon={<Paperclip />} title="Chưa có chứng từ đính kèm" description="Chứng từ upload ở bước 2 sẽ được đính kèm khi gửi HYS." />;
+  if (!docs.data?.length) return <EmptyState icon={<Paperclip />} title={t.noDocsTitle} description={t.noDocsDesc} />;
   return (
     <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
       {docs.data.map((d) => (
         <li key={d.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
           <FileText aria-hidden="true" className="h-5 w-5 text-fg-subtle" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-fg">{DOC_KIND_LABELS[d.kind]}</p>
+            <p className="truncate text-sm font-medium text-fg">{kinds[d.kind]}</p>
             <p className="truncate text-xs text-fg-muted">
-              {d.fileName} · {d.pages} trang · {formatBytesVi(d.sizeBytes)}
+              {d.fileName} · {fill(t.pages, { n: d.pages })} · {formatBytesVi(d.sizeBytes)}
             </p>
           </div>
-          <Badge tone="info">Đính kèm HYS</Badge>
+          <Badge tone="info">{t.attachHys}</Badge>
         </li>
       ))}
     </ul>
@@ -64,12 +67,13 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
 function AttentionBadge({ decl, items, submission, mode, canEdit, hasErrors }: {
   decl: Declaration; items: LineItem[]; submission: SubmissionView | undefined; mode: DeclarationEditMode; canEdit: boolean; hasErrors: boolean;
 }) {
+  const t = useMessages(REVIEW_MESSAGES);
   const n = useMemo(() => printIssuesOf(decl, items, submission, mode, canEdit).count, [decl, items, submission, mode, canEdit]);
   if (n === 0) return null;
   return (
     <Badge tone={hasErrors ? "danger" : "warning"}>
       {formatNumber(n)}
-      <span className="sr-only"> ô cần xử lý</span>
+      <span className="sr-only">{t.cellsToFix}</span>
     </Badge>
   );
 }
@@ -80,6 +84,8 @@ type Tab = (typeof LEGACY_TABS)[number];
 const PRINT_TABS: readonly Tab[] = ["full", "docs", "ops"];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
+  const t = useMessages(REVIEW_MESSAGES);
+  const locale = useUiLocale();
   const qc = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -114,11 +120,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     mutationFn: () => reopenDeclaration(dossier.id),
     onSuccess: () => {
       setReopenOpen(false);
-      toast({ tone: "success", title: "Đã mở lại tờ khai", description: "Sửa xong cần phê duyệt lại trước khi truyền Hải quan." });
+      toast({ tone: "success", title: t.reopenedTitle, description: t.reopenedDesc });
       void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id) });
       void qc.invalidateQueries({ queryKey: dossierKeys.all });
     },
-    onError: toastMutationError("Không mở lại được tờ khai"),
+    onError: toastMutationError(t.reopenFailed),
   });
   const viewQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const subQ = useQuery({ queryKey: customsKeys.submission(dossier.id), queryFn: () => getSubmission(dossier.id) });
@@ -144,12 +150,12 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     mutationFn: () => approveDeclaration(dossier.id),
     onSuccess: () => {
       setConfirmOpen(false);
-      toast({ tone: "success", title: "Đã phê duyệt tờ khai", description: "Sẵn sàng ký số và truyền Hải quan." });
+      toast({ tone: "success", title: t.approvedToastTitle, description: t.approvedToastDesc });
       void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id) });
       void qc.invalidateQueries({ queryKey: dossierKeys.all });
       goTo("submit");
     },
-    onError: (e) => toast({ tone: "danger", title: errorMessage(e) }),
+    onError: (e) => toast({ tone: "danger", title: errorMessage(e, locale) }),
   });
 
   if (viewQ.isLoading) return <StepLoading />;
@@ -162,9 +168,9 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         <CardContent className="pt-5">
           <EmptyState
             icon={<FileCheck2 />}
-            title="Chưa có tờ khai nháp"
-            description="Chạy AI Agent với lựa chọn “Tạo tờ khai” để dựng tờ khai từ dữ liệu đã xác nhận."
-            action={<Button onClick={() => goTo("agent")}>Sang AI Agent</Button>}
+            title={t.noDraftTitle}
+            description={t.noDraftDesc}
+            action={<Button onClick={() => goTo("agent")}>{t.toAgent}</Button>}
           />
         </CardContent>
       </Card>
@@ -177,7 +183,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const isDraft = decl.status === "DRAFT";
   // Giai đoạn truyền chưa tải xong → chỉ đọc (tránh mở ô rồi khóa lại); không đọc được → coi như chưa khai, backend vẫn chặn theo giai đoạn thật.
   const editMode = subQ.isPending ? "LOCKED" : declarationEditMode(decl.status, subQ.data?.stage ?? "NOT_SENT");
-  const kindLabel = decl.kind === "IDA" ? "Tờ khai nhập khẩu (IDA)" : "Tờ khai xuất khẩu (EDA)";
+  const kindLabel = decl.kind === "IDA" ? t.kindImport : t.kindExport;
   // Ô bắt buộc còn trống → khóa Phê duyệt (backend chặn lần nữa khi duyệt và khi khai).
   const required = isDraft ? declarationGapsOf(decl, items, subQ.data) : { gaps: [], lineNos: [] };
   const goToGap = () => {
@@ -197,27 +203,27 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               <span className="font-mono text-sm font-normal text-fg-muted">{dossier.typeCode}</span>
             </CardTitle>
             <CardDescription>
-              {dossier.partner} · {formatMoney(decl.fields.find((f) => f.code === "TONG_TG")?.value ?? "0", dossier.currency)} · {items.length} dòng hàng
+              {dossier.partner} · {formatMoney(decl.fields.find((f) => f.code === "TONG_TG")?.value ?? "0", dossier.currency)} · {fill(t.lines, { n: items.length })}
             </CardDescription>
           </div>
           {isDraft ? (
-            <Badge tone="warning">Bản nháp, chờ duyệt</Badge>
+            <Badge tone="warning">{t.draftBadge}</Badge>
           ) : decl.status === "APPROVED" ? (
-            <Badge tone="success">Đã phê duyệt</Badge>
+            <Badge tone="success">{t.approvedBadge}</Badge>
           ) : (
-            <Badge tone="info">Đã truyền Hải quan</Badge>
+            <Badge tone="info">{t.submittedBadge}</Badge>
           )}
         </CardHeader>
         <CardContent>
           <Stack gap="sm">
             {/* Bản in: lỗi Hải quan hiện trên ô + "Chỉ ô cần xử lý" ở thanh công cụ – không cần khung tổng hợp. */}
             {legacy && rejection && errs.length > 0 && (
-              <Alert tone="danger" title={`Hải quan từ chối ${rejection.operation} lúc ${formatDateTime(rejection.at)} – ${errs.length} lỗi`}>
-                <p>{isDraft ? "Sửa các chỉ tiêu báo lỗi dưới đây ở tab Tờ khai đầy đủ (lỗi theo dòng hàng: sửa ở bước OCR/AI Agent), phê duyệt lại rồi khai lại." : "Mở lại tờ khai để sửa các chỉ tiêu báo lỗi dưới đây, phê duyệt lại rồi khai lại."}</p>
+              <Alert tone="danger" title={fill(t.rejectedTitle, { op: rejection.operation, at: formatDateTime(rejection.at), n: errs.length })}>
+                <p>{isDraft ? t.rejectedDraft : t.rejectedLocked}</p>
                 <ul className="mt-1 flex flex-col gap-1">
                   {errs.map((e, i) => (
                     <li key={i}>
-                      <span className="font-medium">{errorPlace(e)}:</span> {e.message}
+                      <span className="font-medium">{errorPlace(e, locale)}:</span> {e.message}
                       {e.solution ? ` → ${e.solution}` : ""}
                     </li>
                   ))}
@@ -225,58 +231,58 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               </Alert>
             )}
             {!isDraft && decl.approvedBy && (
-              <Alert tone="success" title="Đã phê duyệt">
-                {decl.approvedBy} phê duyệt lúc {decl.approvedAt ? formatDateTime(decl.approvedAt) : "—"}.
+              <Alert tone="success" title={t.approvedTitle}>
+                {fill(t.approvedBy, { who: decl.approvedBy, at: decl.approvedAt ? formatDateTime(decl.approvedAt) : "—" })}
               </Alert>
             )}
             {isDraft && suspect.length > 0 && (
-              <Alert tone="warning" title={`${suspect.length} chỉ tiêu cần kiểm tra`}>
-                Kiểm tra ở tab {legacy ? "Tờ khai đầy đủ" : "Tờ khai"}: {suspect.map((f) => fieldTitle(f)).join(", ")}.
+              <Alert tone="warning" title={fill(t.suspectTitle, { n: suspect.length })}>
+                {fill(t.suspectBody, { tab: legacy ? t.tabFullLegacy : t.tabFull, fields: suspect.map((f) => fieldTitle(f)).join(", ") })}
               </Alert>
             )}
             {isDraft && blockedByFourEyes && (
-              <Alert tone="info" title="Cần người khác phê duyệt">
-                Doanh nghiệp bật nguyên tắc 4 mắt: bạn là người tạo hồ sơ này nên không tự phê duyệt được. Nhờ một Người duyệt khác hoặc Chủ sở hữu.
+              <Alert tone="info" title={t.fourEyesTitle}>
+                {t.fourEyesBody}
               </Alert>
             )}
             {!legacy && (
-              <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel="Đến ô cần xử lý" onAction={goToGap}>
-                Thiếu các ô này Hải quan sẽ từ chối tờ khai. Nhập đủ rồi mới phê duyệt được.
+              <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel={t.goToGap} onAction={goToGap}>
+                {t.gapsBody}
               </RequiredGapsAlert>
             )}
             {unconfirmedHs > 0 && (
               <Alert
                 tone="danger"
-                title={`Còn ${unconfirmedHs} mã HS chưa xác nhận`}
+                title={fill(t.hsTitle, { n: unconfirmedHs })}
                 action={
                   <Button size="sm" variant="secondary" onClick={() => goStep("agent")}>
-                    Xác nhận HS
+                    {t.confirmHs}
                   </Button>
                 }
               >
-                Không thể phê duyệt khi còn mã HS chưa được người xác nhận.
+                {t.hsBody}
               </Alert>
             )}
           </Stack>
 
           <Tabs value={tab} onValueChange={setTab} className="mt-4">
-            <TabsList aria-label="Nhóm chỉ tiêu tờ khai">
+            <TabsList aria-label={t.tabsAria}>
               {legacy ? (
                 <TabsTrigger value="full">
-                  Tờ khai đầy đủ {errs.length > 0 && <Badge tone="danger">{errs.length} lỗi</Badge>}
+                  {t.tabFullLegacy} {errs.length > 0 && <Badge tone="danger">{fill(t.errorsBadge, { n: errs.length })}</Badge>}
                 </TabsTrigger>
               ) : (
                 <TabsTrigger value="full">
-                  Tờ khai {subQ.isSuccess && <AttentionBadge decl={decl} items={items} submission={subQ.data} mode={editMode} canEdit={canEdit} hasErrors={errs.length > 0} />}
+                  {t.tabFull} {subQ.isSuccess && <AttentionBadge decl={decl} items={items} submission={subQ.data} mode={editMode} canEdit={canEdit} hasErrors={errs.length > 0} />}
                 </TabsTrigger>
               )}
-              <TabsTrigger value="docs">Chứng từ đính kèm</TabsTrigger>
+              <TabsTrigger value="docs">{t.tabDocs}</TabsTrigger>
               {legacy && (
                 <TabsTrigger value="customs">
-                  Hải quan trả về {customsInfo ? customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge> : <Badge tone="neutral">chưa có</Badge>}
+                  {t.tabCustoms} {customsInfo ? customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge> : <Badge tone="neutral">{t.notYet}</Badge>}
                 </TabsTrigger>
               )}
-              <TabsTrigger value="ops">Theo dõi & nghiệp vụ</TabsTrigger>
+              <TabsTrigger value="ops">{t.tabOps}</TabsTrigger>
             </TabsList>
             <TabsContent value="full">
               {legacy ? (
@@ -320,18 +326,18 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
       <StickyActionBar>
         {decl.kind === "IDA" ? (
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-fg-muted">Tổng thuế phải nộp dự kiến (ước tính)</p>
+            <p className="text-xs text-fg-muted">{t.totalTaxLabel}</p>
             <p className="text-lg font-semibold tabular-nums text-fg">{formatVnd(totalTax)}</p>
-            {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">Không phát sinh thuế (miễn thuế hoặc thuế suất 0%)</p>}
+            {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">{t.noTax}</p>}
           </div>
         ) : (
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-fg-muted">Thuế xuất khẩu</p>
-            <p className="text-sm font-medium text-fg">{exportTaxText(decl.status)}</p>
+            <p className="text-xs text-fg-muted">{t.exportTax}</p>
+            <p className="text-sm font-medium text-fg">{exportTaxText(decl.status, t)}</p>
           </div>
         )}
         <Button variant="ghost" onClick={() => goStep("ocr")}>
-          Quay lại OCR
+          {t.backToOcr}
         </Button>
         {isDraft ? (
           <Button
@@ -345,59 +351,59 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               })
             }
           >
-            Phê duyệt tờ khai
+            {t.approveDecl}
           </Button>
         ) : (
           <>
             {decl.status === "APPROVED" && canEdit && (
               <Button variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setReopenOpen(true)}>
-                Mở lại để sửa
+                {t.reopenEdit}
               </Button>
             )}
-            <Button onClick={() => goStep("submit")}>Sang khai báo Hải quan</Button>
+            <Button onClick={() => goStep("submit")}>{t.toSubmit}</Button>
           </>
         )}
       </StickyActionBar>
 
 
       <Dialog open={reopenOpen} onOpenChange={setReopenOpen}>
-        <DialogContent title="Mở lại tờ khai để sửa" icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
-          <p className="text-sm text-fg-muted">Tờ khai quay về bản nháp và phê duyệt hiện tại bị hủy. Sau khi sửa, người duyệt phải phê duyệt lại thì mới truyền Hải quan được.</p>
+        <DialogContent title={t.reopenDialogTitle} icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
+          <p className="text-sm text-fg-muted">{t.reopenDialogBody}</p>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setReopenOpen(false)}>
-              Hủy
+              {t.cancel}
             </Button>
             <Button loading={reopen.isPending} onClick={() => reopen.mutate()}>
-              Mở lại tờ khai
+              {t.reopenAction}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent title="Phê duyệt tờ khai" icon={<ShieldCheck className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
+        <DialogContent title={t.approveDecl} icon={<ShieldCheck className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
           <Stack gap="md">
             <div className="divide-y divide-border rounded-md border border-border px-3">
-              <KeyValue label="Đối tác" value={dossier.partner} />
-              <KeyValue label="Trị giá tính thuế (ước tính)" value={formatVnd(decl.customsValueVnd)} />
-              {decl.kind === "IDA" && <KeyValue strong label="Thuế dự kiến (ước tính)" value={formatVnd(totalTax)} />}
+              <KeyValue label={t.partner} value={dossier.partner} />
+              <KeyValue label={t.valueEstimate} value={formatVnd(decl.customsValueVnd)} />
+              {decl.kind === "IDA" && <KeyValue strong label={t.taxEstimate} value={formatVnd(totalTax)} />}
             </div>
             {suspect.length > 0 && (
               <>
                 <Alert tone="warning">
-                  Còn {suspect.length} chỉ tiêu được đánh dấu nghi ngờ. Các chỉ tiêu này vẫn được ghi chú trên tờ khai.
+                  {fill(t.suspectWarn, { n: suspect.length })}
                 </Alert>
-                <Checkbox label="Tôi đã kiểm tra các chỉ tiêu được đánh dấu" checked={checked} onChange={(e) => setChecked(e.currentTarget.checked)} />
+                <Checkbox label={t.suspectCheck} checked={checked} onChange={(e) => setChecked(e.currentTarget.checked)} />
               </>
             )}
-            <p className="text-xs text-fg-subtle">Sau khi phê duyệt, tờ khai được khóa để ký số và truyền qua Customs Hub. Mọi chỉnh sửa sau đó cần phê duyệt lại.</p>
+            <p className="text-xs text-fg-subtle">{t.approveNote}</p>
           </Stack>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-              Hủy
+              {t.cancel}
             </Button>
             <Button loading={approve.isPending} disabled={suspect.length > 0 && !checked} onClick={() => approve.mutate()}>
-              Phê duyệt
+              {t.approve}
             </Button>
           </DialogFooter>
         </DialogContent>

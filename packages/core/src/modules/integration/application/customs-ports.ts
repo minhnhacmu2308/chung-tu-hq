@@ -1,9 +1,11 @@
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
 import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
+import type { ServiceUsageMeter } from "../../../shared/usage.js";
 import type { ProgressEvent } from "../../dossier/index.js";
 import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import type { ResultRaw } from "../domain/state-machine.js";
@@ -22,8 +24,10 @@ export interface CustomsRepos {
     get(orgId: string, id: string): Promise<OutboxRow | null>;
     findByKey(orgId: string, key: string): Promise<OutboxRow | null>;
     listForDossier(orgId: string, dossierId: string): Promise<OutboxRow[]>;
+    /** Dòng PENDING chưa từng được xử lý (attempts = 0) tạo trước `before` – job customs-send có thể đã mất (job quét định kỳ). */
+    listUnsentBefore(orgId: string, before: Date): Promise<OutboxRow[]>;
     insert(row: OutboxRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<OutboxRow, "status" | "attempts" | "lastError" | "nextAttemptAt" | "updatedAt">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<OutboxRow, "status" | "attempts" | "lastError" | "nextAttemptAt" | "updatedAt">>): Promise<void>;
   };
   messages: {
     list(orgId: string, dossierId: string): Promise<MessageRow[]>;
@@ -106,11 +110,15 @@ export type CustomsDeps = {
   validation: ValidationReader;
   certificates: CertificateReader;
   audit: CustomsAuditWriter;
+  /** Nhật ký hoạt động doanh nghiệp (mở lại tờ khai); container nối từ identity. */
+  orgAudit?: OrgAuditWriter;
   /** Cấu hình doanh nghiệp: nguyên tắc 4 mắt khi phê duyệt bản khai bổ sung. */
   org: { fourEyes(orgId: string): Promise<boolean> };
   /** Khoảng cách giữa hai lần hỏi trạng thái (ms); gateway giả dùng ngắn để demo. */
   pollDelayMs: number;
   notify?: Notifier;
+  /** Ghi chi phí Customs Hub vào usage_events (module billing; container nối). Không nối → không ghi. */
+  usage?: ServiceUsageMeter;
   clock: Clock;
   idGen: IdGen;
 };

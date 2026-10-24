@@ -6,8 +6,8 @@ export type ValidationRow = { id: string; orgId: string; dossierId: string; ship
 
 export interface ValidationRepos {
   validations: {
-    replaceForDossier(dossierId: string, rows: ValidationRow[]): Promise<void>;
-    listLatest(dossierId: string): Promise<ValidationRow[]>;
+    replaceForDossier(orgId: string, dossierId: string, rows: ValidationRow[]): Promise<void>;
+    listLatest(orgId: string, dossierId: string): Promise<ValidationRow[]>;
   };
 }
 export interface ValidationUow {

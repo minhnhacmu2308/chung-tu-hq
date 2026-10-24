@@ -49,6 +49,21 @@ const MESSAGES = {
     menuPosition: "Menu position", menuLeft: "Left", menuTop: "Top", menuRight: "Right",
     tabs: "Setting groups", tabGeneral: "General", tabLayout: "Layout & type", tabColor: "Colors",
   },
+  zh: {
+    panel: "外观设置", title: "外观", reset: "恢复默认", locked: "（企业已锁定）",
+    language: "语言", mode: "主题", light: "浅色", dark: "深色", system: "跟随系统",
+    cursor: "光标效果", on: "开", off: "关", description: "页面说明", shown: "显示", hidden: "隐藏",
+    backdrop: "页面背景", flat: "纯色", aurora: "极光",
+    density: "密度", compact: "紧凑", comfortable: "标准", spacious: "宽松",
+    gray: "灰阶", brand: "品牌色",
+    radius: "圆角", square: "直角", default: "默认", rounded: "圆润",
+    fontSize: "字号", small: "小", medium: "中", large: "大",
+    font: "字体", sfPro: "SF Pro（Apple 设备）", systemFont: "系统字体",
+    adjustLight: "浅色主题：{from} → {to}（满足 {ratio}:1 对比度）",
+    adjustDark: "深色主题：{from} → {to}（满足 {ratio}:1 对比度）",
+    menuPosition: "菜单位置", menuLeft: "左侧", menuTop: "顶部", menuRight: "右侧",
+    tabs: "设置分组", tabGeneral: "通用", tabLayout: "布局与文字", tabColor: "颜色",
+  },
 } satisfies Messages<Key>;
 
 /* ---------------- Hình mô phỏng cho từng tùy chọn ---------------- */
@@ -226,7 +241,7 @@ export function AppearancePanel({
 }: AppearancePanelProps) {
   const t = useMessages(MESSAGES, labels);
   const locale = useUiLocale();
-  const swatches = BRAND_PRESETS.map((p) => ({ id: p.id, hex: p.hex, label: locale === "en" ? p.labelEn : p.label }));
+  const swatches = BRAND_PRESETS.map((p) => ({ id: p.id, hex: p.hex, label: locale === "en" ? p.labelEn : locale === "zh" ? p.labelZh : p.label }));
   const set = <K extends keyof Appearance>(key: K) => (v: Appearance[K]) => onChange({ ...value, [key]: v });
   const isLocked = (f: OrgField) => locked.includes(f);
   const fontName = useId();
@@ -283,8 +298,10 @@ export function AppearancePanel({
         <TabsContent value="general" forceMount className="flex flex-col gap-4 data-[state=inactive]:hidden">
       <PreviewChoice label={t.language} value={value.locale} onChange={set("locale")}
         options={[
-          { value: "vi", label: "VI", preview: <TextPreview className="text-xs">Xin chào</TextPreview> },
-          { value: "en", label: "EN", preview: <TextPreview className="text-xs">Hello</TextPreview> },
+          // Tên ngôn ngữ luôn viết bằng chính ngôn ngữ đó (không dịch) để người không đọc được ngôn ngữ hiện tại vẫn tìm thấy.
+          { value: "vi", label: "Tiếng Việt", preview: <TextPreview className="text-xs">Xin chào</TextPreview> },
+          { value: "en", label: "English", preview: <TextPreview className="text-xs">Hello</TextPreview> },
+          { value: "zh", label: "中文", preview: <TextPreview className="text-xs">你好</TextPreview> },
         ]} />
       <PreviewChoice label={t.mode} value={value.mode} onChange={set("mode")}
         options={(["light", "dark", "system"] as const).map((m) => ({ value: m, label: t[m], preview: <ModePreview mode={m} /> }))} />

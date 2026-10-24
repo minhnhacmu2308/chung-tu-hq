@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { customsMessages, customsOutbox, customsResults, postAmendments } from "../../../db/schema/integration.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -28,8 +28,9 @@ function repos(tx: Tx): CustomsRepos {
         return r ? toOutbox(r) : null;
       },
       listForDossier: async (orgId, dossierId) => (await tx.select().from(customsOutbox).where(and(eq(customsOutbox.orgId, orgId), eq(customsOutbox.dossierId, dossierId))).orderBy(customsOutbox.createdAt, customsOutbox.id)).map(toOutbox),
+      listUnsentBefore: async (orgId, before) => (await tx.select().from(customsOutbox).where(and(eq(customsOutbox.orgId, orgId), eq(customsOutbox.status, "PENDING"), eq(customsOutbox.attempts, 0), lt(customsOutbox.createdAt, before))).orderBy(customsOutbox.createdAt).limit(200)).map(toOutbox),
       insert: async (row) => void (await tx.insert(customsOutbox).values(row)),
-      update: async (id, patch) => void (await tx.update(customsOutbox).set(patch).where(eq(customsOutbox.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(customsOutbox).set(patch).where(and(eq(customsOutbox.orgId, orgId), eq(customsOutbox.id, id)))),
     },
     messages: {
       list: async (orgId, dossierId) => (await tx.select().from(customsMessages).where(and(eq(customsMessages.orgId, orgId), eq(customsMessages.dossierId, dossierId))).orderBy(customsMessages.at, customsMessages.id)).map(toMsg),

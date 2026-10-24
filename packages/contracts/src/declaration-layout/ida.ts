@@ -121,6 +121,8 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
             fld("TK_IMA", "Địa chỉ", "textarea", { no: "1.15", width: "full" }),
           ],
         },
+        // 1.17–1.19, 1.24 (ủy thác, nhập khẩu tại chỗ – TT39 PL II, sửa đổi TT121): ô bổ sung người khai nhập, không gắn điều kiện – hồ sơ không cho biết
+        // lô hàng là ủy thác / tại chỗ và bảng mã loại hình trong repo chưa đối chiếu (code-tables.ts `unverified`) nên không suy theo loại hình; luôn tùy chọn.
         { id: "uy-thac-nk", title: "Người ủy thác nhập khẩu", items: [fld("TK_NMC", "Mã người ủy thác nhập khẩu", "text", { no: "1.17", width: "sm" }), fld("TK_NMN", "Tên người ủy thác nhập khẩu", "text", { no: "1.18", width: "lg" })] },
         {
           id: "nguoi-xuat-khau", title: "Người xuất khẩu", items: [
@@ -162,6 +164,8 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
             grp("Phương tiện vận chuyển", "1.31", [fld("VD_VSC", "Hô hiệu (call sign)", "text", { width: "sm", condition: "BY_WATER" }), fld("VD_VSN", "Tên phương tiện / chuyến", "text", { width: "md" })]),
             fld("VD_ARR", "Ngày hàng đến", "date", { no: "1.32", width: "sm" }),
             fld("TK_N4", "Mã kết quả kiểm tra nội dung", "code", { no: "1.36", codeTable: "INSPECTION_RESULT", width: "xs" }),
+            // 1.64: Phụ lục II gắn với kho ngoại quan / loại hình A41, nhưng mã loại hình trong repo chưa đối chiếu (A41 ở code-tables.ts là "quyền nhập khẩu")
+            // → không gắn điều kiện, người khai nhập khi có (tùy chọn).
             fld("VD_ISD", "Ngày được phép nhập kho đầu tiên", "date", { no: "1.64", width: "sm" }),
           ],
         },

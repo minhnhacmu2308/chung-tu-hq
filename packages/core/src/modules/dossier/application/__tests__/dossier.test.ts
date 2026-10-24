@@ -3,15 +3,16 @@ import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
-import { unwrap } from "../../../../shared/result.js";
+import { errCode, unwrap } from "../../../../shared/result.js";
 import { cancelDossier } from "../cancel-dossier.js";
 import { changeDocumentKind } from "../change-document-kind.js";
 import { createDossier } from "../create-dossier.js";
 import { deleteDocument } from "../delete-document.js";
 import { getDossier } from "../get-dossier.js";
 import { listDocuments } from "../list-documents.js";
-import { listDossiers } from "../list-dossiers.js";
+import { listDossiers, listDossiersPage } from "../list-dossiers.js";
 import type { DossierDeps } from "../ports.js";
+import { requeueStuckDocuments } from "../requeue-stuck-documents.js";
 import { retryDocument } from "../retry-document.js";
 import { FakePdfInspector, FakeUnzipper, InMemoryStorage, RecordingPublisher } from "../test/fakes.js";
 import { InMemoryDossierUow } from "../test/in-memory-uow.js";
@@ -64,11 +65,24 @@ describe("createDossier / list / get", () => {
     expect(unwrap(await listDossiers(deps, ctx("OWNER", "org_b", "usr_b"), {}))).toEqual([]);
     expect((await getDossier(deps, ctx("OWNER", "org_b", "usr_b"), d.id)).ok).toBe(false);
   });
-  it("lọc theo direction/status", async () => {
+  it("lọc theo direction/status; tìm q theo mã / đối tác / số vận đơn không phân biệt hoa thường", async () => {
     unwrap(await createDossier(deps, ctx(), INPUT));
-    unwrap(await createDossier(deps, ctx(), { ...INPUT, direction: "XK" }));
+    unwrap(await createDossier(deps, ctx(), { ...INPUT, direction: "XK", partner: "SAMSUNG" }));
     expect(unwrap(await listDossiers(deps, ctx(), { direction: "XK" }))).toHaveLength(1);
     expect(unwrap(await listDossiers(deps, ctx(), { status: "CLEARED" }))).toHaveLength(0);
+    expect(unwrap(await listDossiers(deps, ctx(), { q: "samsung" })).map((d) => d.partner)).toEqual(["SAMSUNG"]);
+    expect(unwrap(await listDossiers(deps, ctx(), { q: "hs-xk" }))).toHaveLength(1);
+    expect(unwrap(await listDossiers(deps, ctx(), { q: "khong-co" }))).toEqual([]);
+  });
+  it("listDossiersPage: đúng trang + tổng khớp bộ lọc; org khác tổng 0", async () => {
+    for (let i = 0; i < 5; i++) unwrap(await createDossier(deps, ctx(), INPUT));
+    const p1 = unwrap(await listDossiersPage(deps, ctx(), {}, { limit: 2, offset: 0 }));
+    const p3 = unwrap(await listDossiersPage(deps, ctx(), {}, { limit: 2, offset: 4 }));
+    expect(p1).toMatchObject({ total: 5, limit: 2, offset: 0 });
+    expect(p1.items).toHaveLength(2);
+    expect(p3.items).toHaveLength(1);
+    expect(new Set([...p1.items, ...p3.items].map((d) => d.id)).size).toBe(3);
+    expect(unwrap(await listDossiersPage(deps, ctx("OWNER", "org_b", "usr_b"), {}, { limit: 2, offset: 0 }))).toEqual({ items: [], total: 0, limit: 2, offset: 0 });
   });
 });
 
@@ -113,6 +127,17 @@ describe("uploadDocuments", () => {
     uow.data.dossiers[0]!.status = "SUBMITTED";
     expect((await uploadDocuments(deps, ctx(), d.id, [pdf("c.pdf")])).ok).toBe(false);
   });
+  it("không tin Content-Type trình duyệt: nội dung không phải PDF/ảnh → FILE_INVALID; mime và đuôi lưu trữ lấy theo byte đầu", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const exe = await uploadDocuments(deps, ctx(), d.id, [{ name: "virus.pdf", mime: "application/pdf", bytes: Buffer.from("MZ\u0090\u0000\u0003 not a pdf at all") }]);
+    expect(errCode(exe)).toBe("FILE_INVALID");
+    expect(uow.data.documents).toHaveLength(0);
+    // Khai là ảnh, tên có "../" nhưng nội dung là PDF → lưu như PDF, key không chứa phần tên người dùng gửi.
+    unwrap(await uploadDocuments(deps, ctx(), d.id, [{ name: "../../x.png", mime: "image/png", bytes: Buffer.from("%PDF-fake-inv-1") }]));
+    expect(uow.data.documents[0]!.mime).toBe("application/pdf");
+    expect(uow.data.documents[0]!.storageKey).toMatch(/\/[0-9a-f]{64}\.pdf$/);
+    expect(uow.data.documents[0]!.storageKey).not.toContain("..");
+  });
   it("zip được bung thành các file bên trong", async () => {
     const d = unwrap(await createDossier(deps, ctx(), INPUT));
     const docs = unwrap(await uploadDocuments(deps, ctx(), d.id, [{ name: "bo-chung-tu.zip", mime: "application/zip", bytes: InMemoryStorage.fakeZip(["INV.pdf", "PL.pdf"]) }]));
@@ -143,5 +168,24 @@ describe("changeDocumentKind / delete / retry", () => {
     expect(storage.keys()).toEqual([]);
     expect(queue.jobs.at(-1)?.payload).toMatchObject({ mode: "MERGE_ONLY" });
     expect(unwrap(await listDocuments(deps, ctx(), d.id))).toEqual([]);
+  });
+});
+
+describe("requeueStuckDocuments – job quét chứng từ kẹt QUEUED", () => {
+  it("QUEUED quá 10 phút → đẩy lại job (jobId theo mốc kẹt), làm mới mốc; QUEUED mới / đang đọc / org khác không đụng", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("a.pdf"), pdf("b.pdf")]));
+    queue.jobs.length = 0;
+    const [a, b] = uow.data.documents;
+    const old = new Date(deps.clock.now().getTime() - 15 * 60_000);
+    a!.updatedAt = old;
+    b!.updatedAt = old;
+    b!.status = "READING";
+    const r = await requeueStuckDocuments(deps, { orgId: "org_a" });
+    expect(r.requeued).toEqual([a!.id]);
+    expect(queue.jobs).toEqual([expect.objectContaining({ name: "extract-document", jobId: `extract:${a!.id}:${a!.sha256}:sweep:${old.getTime()}`, payload: expect.objectContaining({ documentId: a!.id, mode: "FULL" }) })]);
+    // Quét lại ngay → mốc đã làm mới, chưa tới hạn → không đẩy trùng.
+    expect((await requeueStuckDocuments(deps, { orgId: "org_a" })).requeued).toEqual([]);
+    expect((await requeueStuckDocuments(deps, { orgId: "org_b" })).requeued).toEqual([]);
   });
 });

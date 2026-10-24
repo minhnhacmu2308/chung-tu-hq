@@ -82,6 +82,6 @@ export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, 
     hsSuggested: null, hsConfidence: null, hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null,
     hsJobId: null, hsItemId: null, hsStatus: "idle", hsQuestion: null, hsError: null, hsDetail: null, createdAt: now, updatedAt: now,
   }));
-  return r.lineItems.upsertForDossier(dossierId, rows);
+  return r.lineItems.upsertForDossier(orgId, dossierId, rows);
 }
 

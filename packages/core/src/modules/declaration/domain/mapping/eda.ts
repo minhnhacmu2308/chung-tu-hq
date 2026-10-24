@@ -46,6 +46,8 @@ export const EDA_MAPPINGS: FieldMapping[] = [
 
   { code: "NXK_MST", no: N.NXK_MST, section: "PARTIES", label: "Mã số thuế người xuất khẩu", required: true, from: (i) => ({ value: i.org.taxCode, source: "ACCOUNT" }) },
   { code: "NXK_TEN", no: N.NXK_TEN, section: "PARTIES", label: "Tên người xuất khẩu", required: true, from: (i) => ({ value: i.org.name, source: "ACCOUNT" }) },
+  // 2.13 mã bưu chính người xuất khẩu (tùy chọn – đặc tả FPT không bắt buộc TK_EPP): lấy từ Tài khoản; mã chỉ tiêu = tên ô VNACCS như IDA 1.14.
+  { code: "TK_EPP", no: "2.13", section: "PARTIES", label: "Mã bưu chính", required: false, from: (i) => ({ value: i.org.postalCode || null, source: "ACCOUNT" }) },
   { code: "NXK_DC", no: N.NXK_DC, section: "PARTIES", label: "Địa chỉ người xuất khẩu", required: true, from: (i) => ({ value: i.org.address || null, source: "ACCOUNT", ...(i.org.address ? {} : { suspect: true, note: "Cập nhật địa chỉ doanh nghiệp ở Tài khoản" }) }) },
   { code: "NXK_DT", no: N.NXK_DT, section: "PARTIES", label: "Số điện thoại người xuất khẩu", required: false, from: (i) => ({ value: i.org.phone || null, source: "ACCOUNT" }) },
   { code: "NNK_TEN", no: N.NNK_TEN, section: "PARTIES", label: "Tên người nhập khẩu", required: true, from: (i) => fromSourced(i.shipment.parties.buyer.name, "INVOICE") },

@@ -1,15 +1,18 @@
 "use client";
 import type { OrgUsageRow } from "@kb/contracts";
-import { Badge, createDataTableColumnHelper, DataTable, Field, Grid, PageHeader, Select, SkeletonStats, Stack, StatCard, type DataTableColumnVisibility } from "@kb/ui";
+import { Badge, createDataTableColumnHelper, DataTable, Field, fill, Grid, PageHeader, Select, SkeletonStats, Stack, StatCard, useMessages, useUiLocale, type DataTableColumnVisibility } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Coins, FileText, FolderOpen, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { adminKeys, getUsageReport, listUsageMonths } from "@/api/admin";
 import { LoadError } from "@/components/common/load-error";
 import { formatNumber, formatVnd } from "@/lib/format";
 import { monthLabel, PLAN_TONE } from "../common/admin-display";
+import { USAGE_MESSAGES } from "./usage-page.messages";
+
+type UsageMessages = (typeof USAGE_MESSAGES)["vi"];
 
 const money = (key: keyof OrgUsageRow, header: string, size = 150) =>
   col.accessor((r) => Number(r[key]), {
@@ -21,33 +24,35 @@ const money = (key: keyof OrgUsageRow, header: string, size = 150) =>
   });
 
 const col = createDataTableColumnHelper<OrgUsageRow>();
-const COLUMNS = col.columns([
+const makeColumns = (m: UsageMessages) => col.columns([
   col.accessor("orgName", {
-    header: "Doanh nghiệp",
+    header: m.colOrg,
     size: 280,
     minSize: 220,
     meta: { hideable: false, wrap: true },
     cell: (c) => <Link href={`/admin/orgs/${c.row.original.orgId}?tab=plan`} className="block min-w-48 font-medium text-primary hover:underline">{c.getValue()}</Link>,
   }),
-  col.accessor("planName", { header: "Gói", size: 140, meta: { filter: "select" }, cell: (c) => <Badge tone={PLAN_TONE[c.row.original.planCode]}>{c.getValue()}</Badge> }),
-  col.accessor("dossiers", { header: "Hồ sơ", size: 100, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
-  col.accessor("pages", { header: "Trang đã đọc", size: 130, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
-  col.accessor("aiCalls", { header: "Lệnh gọi trả phí", size: 150, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
-  money("readCostVnd", "Đọc chứng từ"),
-  money("hsCostVnd", "Gợi ý mã HS"),
-  money("customsCostVnd", "Customs Hub"),
-  money("totalCostVnd", "Giá vốn"),
-  money("planPriceVnd", "Giá gói"),
+  col.accessor("planName", { header: m.colPlan, size: 140, meta: { filter: "select" }, cell: (c) => <Badge tone={PLAN_TONE[c.row.original.planCode]}>{c.getValue()}</Badge> }),
+  col.accessor("dossiers", { header: m.colDossiers, size: 100, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
+  col.accessor("pages", { header: m.colPages, size: 130, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
+  col.accessor("aiCalls", { header: m.colAiCalls, size: 150, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
+  col.accessor("hsItems", { header: m.colHsItems, size: 170, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
+  col.accessor("customsMessages", { header: m.colCustomsMessages, size: 190, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
+  money("readCostVnd", m.colReadCost),
+  money("hsCostVnd", m.colHsCost),
+  money("customsCostVnd", m.colCustomsCost),
+  money("totalCostVnd", m.colTotalCost),
+  money("planPriceVnd", m.colPlanPrice),
   col.accessor((r) => Number(r.marginVnd), {
     id: "marginVnd",
-    header: "Biên ước tính",
+    header: m.colMargin,
     size: 170,
-    meta: { align: "end", label: "Biên ước tính" },
+    meta: { align: "end", label: m.colMargin },
     // Âm = đang lỗ: có chữ "Lỗ" đi kèm, không chỉ dựa vào màu.
     cell: (c) =>
       c.getValue() < 0 ? (
         <span className="inline-flex items-center justify-end gap-2">
-          <Badge tone="danger" size="sm">Lỗ</Badge>
+          <Badge tone="danger" size="sm">{m.loss}</Badge>
           <span className="tabular-nums text-danger-subtle-fg">{formatVnd(c.row.original.marginVnd)}</span>
         </span>
       ) : (
@@ -57,6 +62,9 @@ const COLUMNS = col.columns([
 ]);
 
 function UsageInner() {
+  const m = useMessages(USAGE_MESSAGES);
+  const locale = useUiLocale();
+  const columns = useMemo(() => makeColumns(m), [m]);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -64,8 +72,8 @@ function UsageInner() {
   const requested = params.get("month");
   const month = months.data?.includes(requested ?? "") ? requested! : months.data?.[0];
   const report = useQuery({ queryKey: adminKeys.usage(month ?? ""), queryFn: () => getUsageReport(month!), enabled: !!month });
-  // Mặc định gọn: ẩn phần tách giá vốn theo loại lệnh gọi; bật lại qua nút "Cột".
-  const [columnVisibility, setColumnVisibility] = useState<DataTableColumnVisibility>({ readCostVnd: false, hsCostVnd: false, customsCostVnd: false, aiCalls: false });
+  // Mặc định gọn: ẩn phần tách giá vốn/số lượng theo nhà cung cấp (AI, HSCodePro, Customs Hub); bật lại qua nút "Cột".
+  const [columnVisibility, setColumnVisibility] = useState<DataTableColumnVisibility>({ readCostVnd: false, hsCostVnd: false, customsCostVnd: false, aiCalls: false, hsItems: false, customsMessages: false });
 
   const t = report.data?.totals;
   const failed = months.isError || report.isError;
@@ -73,34 +81,34 @@ function UsageInner() {
   return (
     <Stack gap="lg">
       <PageHeader
-        title="Sử dụng & chi phí"
-        description="Mức dùng và giá vốn (AI + API trả phí của bên thứ ba) theo từng doanh nghiệp, tính từ usage_events. Biên ước tính = giá gói − giá vốn, chưa gồm chi phí vận hành khác."
+        title={m.title}
+        description={m.description}
         actions={
-          <Field label="Kỳ báo cáo" className="w-48">
+          <Field label={m.period} className="w-48">
             <Select
               value={month ?? ""}
               disabled={!months.data}
               onChange={(e) => router.replace(`${pathname}?month=${e.target.value}`, { scroll: false })}
-              options={(months.data ?? []).map((m, i) => ({ value: m, label: i === 0 ? `${monthLabel(m)} (đang chạy)` : monthLabel(m) }))}
+              options={(months.data ?? []).map((mo, i) => ({ value: mo, label: i === 0 ? fill(m.running, { month: monthLabel(mo, locale) }) : monthLabel(mo, locale) }))}
             />
           </Field>
         }
       />
 
-      {failed && <LoadError onRetry={() => void (months.isError ? months.refetch() : report.refetch())} title="Không tải được báo cáo sử dụng" />}
+      {failed && <LoadError onRetry={() => void (months.isError ? months.refetch() : report.refetch())} title={m.loadError} />}
 
       {!failed &&
         (t ? (
           <Grid cols={{ base: 2, xl: 4 }} stagger>
-            <StatCard icon={<FolderOpen />} label="Hồ sơ" value={t.dossiers} hint={`${formatNumber(report.data!.rows.length)} doanh nghiệp có số liệu`} />
-            <StatCard icon={<FileText />} tone="info" label="Trang đã đọc" value={t.pages} hint={`${formatNumber(t.aiCalls)} lệnh gọi trả phí`} />
-            <StatCard icon={<Coins />} tone="warning" label="Giá vốn" value={formatVnd(t.totalCostVnd)} hint={t.dossiers > 0 ? `≈ ${formatVnd(String(Math.round(Number(t.totalCostVnd) / t.dossiers)))} / hồ sơ` : "chưa có hồ sơ"} />
+            <StatCard icon={<FolderOpen />} label={m.statDossiers} value={t.dossiers} hint={fill(m.statDossiersHint, { n: formatNumber(report.data!.rows.length) })} />
+            <StatCard icon={<FileText />} tone="info" label={m.statPages} value={t.pages} hint={fill(m.statPagesHint, { n: formatNumber(t.aiCalls) })} />
+            <StatCard icon={<Coins />} tone="warning" label={m.statCost} value={formatVnd(t.totalCostVnd)} hint={t.dossiers > 0 ? fill(m.perDossier, { amount: formatVnd(String(Math.round(Number(t.totalCostVnd) / t.dossiers))) }) : m.noDossiers} />
             <StatCard
               icon={<TrendingUp />}
               tone={Number(t.marginVnd) < 0 ? "danger" : "success"}
-              label="Biên ước tính"
+              label={m.statMargin}
               value={formatVnd(t.marginVnd)}
-              hint={`Doanh thu gói ${formatVnd(t.revenueVnd)}`}
+              hint={fill(m.revenue, { amount: formatVnd(t.revenueVnd) })}
               hintTone={Number(t.marginVnd) < 0 ? "danger" : "default"}
             />
           </Grid>
@@ -110,8 +118,8 @@ function UsageInner() {
 
       {!failed && (
         <DataTable
-          aria-label={month ? `Sử dụng theo doanh nghiệp – ${monthLabel(month)}` : "Sử dụng theo doanh nghiệp"}
-          columns={COLUMNS}
+          aria-label={month ? fill(m.tableLabelMonth, { month: monthLabel(month, locale) }) : m.tableLabel}
+          columns={columns}
           data={report.data?.rows ?? []}
           getRowId={(r) => r.orgId}
           rowLabel={(r) => r.orgName}
@@ -122,7 +130,7 @@ function UsageInner() {
           onColumnVisibilityChange={setColumnVisibility}
           initialSorting={[{ id: "totalCostVnd", desc: true }]}
           pagination={{ initialPageSize: 20, pageSizeOptions: [20, 50] }}
-          emptyTitle="Chưa có số liệu cho kỳ này"
+          emptyTitle={m.empty}
         />
       )}
     </Stack>

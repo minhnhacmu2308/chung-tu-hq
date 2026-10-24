@@ -14,7 +14,10 @@ export async function createDossier(deps: DossierDeps, ctx: Ctx, input: CreateDo
     const ym = `${String(now.getUTCFullYear()).slice(2)}${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
     const monthPrefix = `HS-${input.direction}-${ym}-`;
     const existing = await r.dossiers.codesInMonth(ctx.orgId, input.direction, monthPrefix);
-    const allThisMonth = (await r.dossiers.list(ctx.orgId, {})).filter((d) => d.createdAt.getUTCFullYear() === now.getUTCFullYear() && d.createdAt.getUTCMonth() === now.getUTCMonth()).length;
+    // Đếm trong DB thay vì kéo cả danh sách về rồi lọc.
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const allThisMonth = (await r.dossiers.statsInRange(ctx.orgId, monthStart, monthEnd)).dossiers;
     if (!(await deps.quota.check(ctx.orgId, "DOSSIER", allThisMonth + 1))) return err(domainError("QUOTA_EXCEEDED", "Đã hết số hồ sơ trong tháng của gói dịch vụ"));
     const office = splitCustomsOffice(input.customsOffice);
     const row: DossierRow = {

@@ -6,6 +6,7 @@ import { cn } from "../lib/cn.js";
 const MESSAGES = {
   vi: { nav: "Đường dẫn", collapsed: "Các mục bị ẩn" },
   en: { nav: "Breadcrumb", collapsed: "Hidden items" },
+  zh: { nav: "路径导航", collapsed: "已隐藏的项目" },
 } satisfies Messages<"nav" | "collapsed">;
 
 export type BreadcrumbItem = { label: string; href?: string };

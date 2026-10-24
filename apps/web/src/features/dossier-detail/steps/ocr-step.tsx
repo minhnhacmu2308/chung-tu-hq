@@ -4,7 +4,7 @@
 // ?dong=<số dòng> (từ panel dòng hàng của tờ khai đầy đủ): mở chứng từ có dòng đó và đưa con trỏ tới ô mô tả của dòng.
 import {
   Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, SegmentedControl,
-  Skeleton, Stack, Tabs, TabsContent, TabsList, TabsTrigger,
+  Skeleton, Stack, Tabs, TabsContent, TabsList, TabsTrigger, fill, useMessages,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight } from "lucide-react";
@@ -20,11 +20,14 @@ import { ItemsTable } from "../ocr/items-table";
 import { useFieldMutations } from "../ocr/use-field-mutations";
 import { useAdvanceDossier } from "../use-advance";
 import type { StepProps } from "./types";
+import { OCR_STEP_MESSAGES } from "./ocr-step.messages";
 
-const GROUPS = Object.keys(FIELD_GROUP_LABELS) as ExtractedField["group"][];
+const GROUPS = Object.keys(FIELD_GROUP_LABELS.vi) as ExtractedField["group"][];
 type Filter = "all" | "suspect";
 
 function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined }) {
+  const t = useMessages(OCR_STEP_MESSAGES);
+  const groupLabels = useMessages(FIELD_GROUP_LABELS);
   const [active, setActive] = useState<string | null>(null);
   const m = useFieldMutations(dossierId);
   const save = (id: string, value: string) => m.update.mutate({ id, value });
@@ -60,7 +63,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
       />
       <Stack gap="md" className="min-w-0">
         {visible.length === 0 && !showItems ? (
-          <EmptyState title="Không còn trường cần xem" description="Mọi trường trên chứng từ này đã khớp hoặc đã được xác nhận." />
+          <EmptyState title={t.nothingToReview} description={t.nothingToReviewDesc} />
         ) : null}
         {GROUPS.filter((g) => g !== "ITEMS").map((g) => {
           const list = visible.filter((f) => f.group === g);
@@ -68,7 +71,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
           return (
             <section key={g} aria-labelledby={`grp-${doc.id}-${g}`} className="flex flex-col gap-1">
               <h3 id={`grp-${doc.id}-${g}`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                {FIELD_GROUP_LABELS[g]}
+                {groupLabels[g]}
               </h3>
               {list.map((f) => (
                 <FieldRow key={f.id} field={f} active={active === f.id} onActivate={setActive} onSave={save} onConfirm={confirm} onRevert={revert} />
@@ -79,7 +82,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
         {showItems && (
           <section aria-labelledby={`grp-${doc.id}-items`} className="flex flex-col gap-2">
             <h3 id={`grp-${doc.id}-items`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-              {FIELD_GROUP_LABELS.ITEMS}
+              {groupLabels.ITEMS}
             </h3>
             <ItemsTable fields={items} activeId={active} onActivate={setActive} onSave={save} onConfirm={confirm} />
           </section>
@@ -90,6 +93,8 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
 }
 
 export function OcrStep({ dossier, goTo }: StepProps) {
+  const t = useMessages(OCR_STEP_MESSAGES);
+  const kindLabels = useMessages(DOC_KIND_LABELS);
   const docsQuery = useQuery({ queryKey: ocrKeys.documents(dossier.id), queryFn: () => listDossierDocuments(dossier.id) });
   const fieldsQuery = useQuery({ queryKey: ocrKeys.fields(dossier.id), queryFn: () => listFields(dossier.id) });
   const checksQuery = useQuery({ queryKey: ocrKeys.checks(dossier.id), queryFn: () => listChecks(dossier.id) });
@@ -121,23 +126,23 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   return (
     <Stack gap="lg">
       {line && fieldsQuery.isSuccess && !focus && (
-        <Alert tone="info" title={`Kết quả đọc chứng từ không có dòng hàng ${line}`}>
-          Dòng hàng này không lấy từ bảng hàng của chứng từ đã đọc. Kiểm tra lại chứng từ (tải bản rõ hơn) hoặc sửa ở bước AI Agent.
+        <Alert tone="info" title={fill(t.lineMissingTitle, { line })}>
+          {t.lineMissingBody}
         </Alert>
       )}
       <CrossCheckPanel checks={checksQuery.data} loading={checksQuery.isLoading} />
 
       <Card>
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
-          <CardTitle>Kết quả đọc chứng từ</CardTitle>
+          <CardTitle>{t.title}</CardTitle>
           <SegmentedControl<Filter>
-            label="Hiển thị"
+            label={t.show}
             hideLabel
             value={filter}
             onChange={setFilter}
             options={[
-              { value: "all", label: "Tất cả trường" },
-              { value: "suspect", label: `Cần xem (${suspectTotal})` },
+              { value: "all", label: t.allFields },
+              { value: "suspect", label: fill(t.needsReview, { n: suspectTotal }) },
             ]}
           />
         </CardHeader>
@@ -155,29 +160,29 @@ export function OcrStep({ dossier, goTo }: StepProps) {
           ) : failed ? (
             <Alert
               tone="danger"
-              title="Không tải được kết quả đọc"
+              title={t.loadFailed}
               action={
                 <Button size="sm" variant="secondary" onClick={() => void fieldsQuery.refetch()}>
-                  Thử lại
+                  {t.retry}
                 </Button>
               }
             />
           ) : docs.length === 0 ? (
             <EmptyState
-              title="Chưa có chứng từ đã đọc"
-              description="Upload chứng từ và chờ AI đọc xong để xem kết quả."
-              action={<Button onClick={() => goTo("upload")}>Về bước Upload</Button>}
+              title={t.noDocsTitle}
+              description={t.noDocsDesc}
+              action={<Button onClick={() => goTo("upload")}>{t.backToUpload}</Button>}
             />
           ) : (
             <Tabs value={currentTab ?? ""} onValueChange={setTab}>
-              <TabsList aria-label="Chứng từ trong hồ sơ">
+              <TabsList aria-label={t.docsAria}>
                 {docs.map((d) => {
                   const n = suspectOf(d.id);
                   return (
                     <TabsTrigger key={d.id} value={d.id}>
-                      {DOC_KIND_LABELS[d.kind]}
+                      {kindLabels[d.kind]}
                       {n > 0 ? (
-                        <Badge tone="warning" aria-label={`${n} trường cần xem`}>
+                        <Badge tone="warning" aria-label={fill(t.suspectAria, { n })}>
                           {n}
                         </Badge>
                       ) : null}
@@ -202,26 +207,28 @@ export function OcrStep({ dossier, goTo }: StepProps) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <p className="min-w-0 basis-full text-sm text-fg-muted cq-sm:flex-1 cq-sm:basis-auto" aria-live="polite">
             {loading ? (
-              "Đang tải kết quả đọc…"
+              t.loading
             ) : suspectTotal > 0 ? (
               <>
-                Còn <span className="font-semibold text-warning-subtle-fg">{suspectTotal} trường nghi ngờ</span> trên {suspectDocs} chứng từ
+                {t.remainingPrefix}
+                <span className="font-semibold text-warning-subtle-fg">{fill(t.remainingSuspect, { n: suspectTotal })}</span>
+                {fill(t.remainingSuffix, { docs: suspectDocs })}
               </>
             ) : (
-              <span className="font-medium text-success-subtle-fg">Mọi trường đã khớp hoặc đã xác nhận</span>
+              <span className="font-medium text-success-subtle-fg">{t.allClear}</span>
             )}
-            {blockers > 0 && <span className="text-danger-subtle-fg"> · {blockers} lỗi chặn truyền</span>}
+            {blockers > 0 && <span className="text-danger-subtle-fg">{fill(t.blockers, { n: blockers })}</span>}
           </p>
           <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => goTo("upload")}>
-            <span className="cq-max-sm:sr-only">Chứng từ</span>
+            <span className="cq-max-sm:sr-only">{t.documents}</span>
           </Button>
           {alreadyPast ? (
             <Button rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => goTo("agent")}>
-              Sang AI Agent
+              {t.toAgent}
             </Button>
           ) : (
             <Button className="cq-max-sm:flex-1" rightIcon={<ArrowRight className="h-4 w-4" />} loading={advance.isPending} disabled={docs.length === 0} onClick={onConfirmData}>
-              Xác nhận dữ liệu
+              {t.confirmData}
             </Button>
           )}
         </div>
@@ -229,17 +236,17 @@ export function OcrStep({ dossier, goTo }: StepProps) {
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent
-          title="Vẫn xác nhận dữ liệu?"
-          description="Bạn có thể đi tiếp; các trường chưa xác nhận sẽ được đánh dấu trên tờ khai để người duyệt kiểm tra."
+          title={t.confirmTitle}
+          description={t.confirmDesc}
           size="sm"
         >
           <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-fg-muted">
-            {suspectTotal > 0 && <li>{suspectTotal} trường nghi ngờ chưa xác nhận</li>}
-            {blockers > 0 && <li>{blockers} luật lỗi chặn truyền – phải xử lý trước khi khai Hải quan</li>}
+            {suspectTotal > 0 && <li>{fill(t.confirmSuspect, { n: suspectTotal })}</li>}
+            {blockers > 0 && <li>{fill(t.confirmBlockers, { n: blockers })}</li>}
           </ul>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-              Xem lại
+              {t.reviewAgain}
             </Button>
             <Button
               loading={advance.isPending}
@@ -248,7 +255,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
                 proceed();
               }}
             >
-              Vẫn tiếp tục
+              {t.continueAnyway}
             </Button>
           </DialogFooter>
         </DialogContent>

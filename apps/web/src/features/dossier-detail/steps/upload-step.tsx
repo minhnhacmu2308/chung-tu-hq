@@ -6,7 +6,7 @@
 // (lô thật hay thiếu Packing List) – các trường liên quan được đánh dấu để bổ sung ở bước sau.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, FileDropzone, Grid, Progress,
-  Select, Skeleton, Spinner, Stack, toast, type Tone,
+  Select, Skeleton, Spinner, Stack, fill, toast, useMessages, useUiLocale, type Tone,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, CheckCircle2, CircleAlert, CircleDashed, FileText, Trash2 } from "lucide-react";
@@ -18,30 +18,35 @@ import { toastMutationError } from "@/lib/mutation-error";
 import { DOC_KIND_LABELS, STEP_ORDER, type DocKind, type DossierDocument } from "@/mocks/types";
 import type { StepProps } from "./types";
 import { addableKinds, buildSlots, missingRequired, suggestedKinds, type DocSlot } from "./upload-slots";
+import { UPLOAD_STEP_MESSAGES } from "./upload-step.messages";
 
-const STATUS: Record<DossierDocument["status"], { label: string; tone: Tone }> = {
-  UPLOADING: { label: "Đang tải lên", tone: "info" },
-  QUEUED: { label: "Chờ đọc", tone: "neutral" },
-  READING: { label: "AI đang đọc", tone: "info" },
-  DONE: { label: "Đã đọc", tone: "success" },
-  ERROR: { label: "Lỗi", tone: "danger" },
-};
+type Tm = Record<keyof (typeof UPLOAD_STEP_MESSAGES)["vi"], string>;
 
-const KIND_OPTIONS = (Object.keys(DOC_KIND_LABELS) as DocKind[]).map((k) => ({ value: k, label: DOC_KIND_LABELS[k] }));
+const status = (t: Tm): Record<DossierDocument["status"], { label: string; tone: Tone }> => ({
+  UPLOADING: { label: t.statusUploading, tone: "info" },
+  QUEUED: { label: t.statusQueued, tone: "neutral" },
+  READING: { label: t.statusReading, tone: "info" },
+  DONE: { label: t.statusDone, tone: "success" },
+  ERROR: { label: t.statusError, tone: "danger" },
+});
+
+const KINDS = Object.keys(DOC_KIND_LABELS.vi) as DocKind[];
 
 const ACCEPT_BULK = ".pdf,.jpg,.jpeg,.png,.zip";
 // Ô của một loại không nhận .zip: zip thường chứa nhiều loại, thả vào ô sẽ ép tất cả thành một loại.
 const ACCEPT_SLOT = ".pdf,.jpg,.jpeg,.png";
 const MAX_SIZE = 30 * 1024 * 1024;
 
-const SLOT_BADGE: Record<DocSlot["need"], { label: string; tone: Tone } | null> = {
-  required: { label: "Cần có", tone: "info" },
-  optional: { label: "Tùy lô", tone: "neutral" },
+const slotBadge = (t: Tm): Record<DocSlot["need"], { label: string; tone: Tone } | null> => ({
+  required: { label: t.needRequired, tone: "info" },
+  optional: { label: t.needOptional, tone: "neutral" },
   extra: null,
   other: null,
-};
+});
 
 function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: string }) {
+  const t = useMessages(UPLOAD_STEP_MESSAGES);
+  const kindLabels = useMessages(DOC_KIND_LABELS);
   const qc = useQueryClient();
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ocrKeys.documents(dossierId) });
@@ -52,32 +57,32 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
     mutationFn: (k: DocKind) => changeDocumentKind(doc.id, k),
     onSuccess: (d) => {
       invalidate();
-      toast({ tone: "success", title: `Đã chuyển sang ${DOC_KIND_LABELS[d.kind]}`, description: doc.fileName });
+      toast({ tone: "success", title: fill(t.movedTo, { kind: kindLabels[d.kind] }), description: doc.fileName });
     },
-    onError: toastMutationError("Không đổi được loại chứng từ"),
+    onError: toastMutationError(t.changeKindFailed),
   });
   const remove = useMutation({
     mutationFn: () => deleteDocument(doc.id),
     onSuccess: () => {
       invalidate();
-      toast({ tone: "info", title: "Đã xóa chứng từ", description: doc.fileName });
+      toast({ tone: "info", title: t.deleted, description: doc.fileName });
     },
-    onError: toastMutationError("Không xóa được chứng từ"),
+    onError: toastMutationError(t.deleteFailed),
   });
-  const s = STATUS[doc.status];
+  const s = status(t)[doc.status];
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 cq-sm:flex-nowrap">
       <FileText aria-hidden="true" className="h-5 w-5 shrink-0 text-fg-subtle" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-fg" title={doc.fileName}>{doc.fileName}</p>
         <p className="text-xs text-fg-subtle">
-          {formatBytesVi(doc.sizeBytes)} · {doc.pages} trang
+          {fill(t.pages, { size: formatBytesVi(doc.sizeBytes), n: doc.pages })}
         </p>
       </div>
       <Select
-        aria-label={`Loại chứng từ của ${doc.fileName}`}
+        aria-label={fill(t.kindAria, { file: doc.fileName })}
         className="order-last h-8 w-full text-sm cq-sm:order-none cq-sm:w-48"
-        options={KIND_OPTIONS}
+        options={KINDS.map((k) => ({ value: k, label: kindLabels[k] }))}
         value={doc.kind}
         disabled={kind.isPending}
         onChange={(e) => kind.mutate(e.target.value as DocKind)}
@@ -86,7 +91,7 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
         {doc.status === "READING" ? <Spinner size="sm" label={null} /> : doc.status === "DONE" ? <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" /> : null}
         {s.label}
       </Badge>
-      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label={`Xóa ${doc.fileName}`} loading={remove.isPending} onClick={() => remove.mutate()}>
+      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label={fill(t.deleteAria, { file: doc.fileName })} loading={remove.isPending} onClick={() => remove.mutate()}>
         {!remove.isPending && <Trash2 className="h-4 w-4" />}
       </Button>
     </li>
@@ -95,11 +100,13 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
 
 /** Ô của một loại chứng từ: tình trạng, file đã có, vùng thả/chọn file vào thẳng loại này. */
 function DocKindSlot({ slot, dossierId, disabled, onFiles }: { slot: DocSlot; dossierId: string; disabled: boolean; onFiles: (files: File[], kind: DocKind) => void }) {
+  const t = useMessages(UPLOAD_STEP_MESSAGES);
+  const kindLabels = useMessages(DOC_KIND_LABELS);
   const titleId = useId();
   const has = slot.docs.length > 0;
   const isOther = slot.need === "other";
-  const label = isOther ? "Khác / chưa nhận ra loại" : DOC_KIND_LABELS[slot.kind];
-  const badge = SLOT_BADGE[slot.need];
+  const label = isOther ? t.otherSlot : kindLabels[slot.kind];
+  const badge = slotBadge(t)[slot.need];
   return (
     // @container: dòng file co theo bề rộng của ô, không theo cả trang.
     <section aria-labelledby={titleId} data-kind={slot.kind} className="@container flex flex-col gap-3 rounded-lg border border-border p-4">
@@ -114,16 +121,16 @@ function DocKindSlot({ slot, dossierId, disabled, onFiles }: { slot: DocSlot; do
         <div className="min-w-0 flex-1">
           <h4 id={titleId} className="text-sm font-semibold text-fg">
             {label}
-            <span className="sr-only">{has ? ` – ${slot.docs.length} file` : " – chưa có"}</span>
+            <span className="sr-only">{has ? fill(t.hasFiles, { n: slot.docs.length }) : t.noFiles}</span>
           </h4>
           <p className="text-sm text-fg-muted">
-            {isOther ? "Chọn đúng loại cho từng file; để “Khác” nếu là chứng từ phụ." : (slot.reason ?? "Loại bạn thêm cho hồ sơ này.")}
+            {isOther ? t.otherHelp : (slot.reason ?? t.addedKindHelp)}
           </p>
         </div>
         {badge && <Badge tone={badge.tone} className="shrink-0">{badge.label}</Badge>}
       </div>
       {has && (
-        <ul aria-label={`File ${label}`} className="divide-y divide-border rounded-md border border-border">
+        <ul aria-label={fill(t.filesAria, { label })} className="divide-y divide-border rounded-md border border-border">
           {slot.docs.map((d) => (
             <DocumentRow key={d.id} doc={d} dossierId={dossierId} />
           ))}
@@ -135,15 +142,18 @@ function DocKindSlot({ slot, dossierId, disabled, onFiles }: { slot: DocSlot; do
         maxSize={MAX_SIZE}
         maxFiles={10}
         disabled={disabled}
-        labels={{ title: has ? `Thêm file ${label}` : `Thả hoặc chọn file ${label}`, browse: "" }}
+        labels={{ title: fill(has ? t.addFiles : t.dropFiles, { label }), browse: "" }}
         onFiles={(files) => onFiles(files, slot.kind)}
-        onReject={(rejected) => toast({ tone: "danger", title: `${rejected.length} file không hợp lệ`, description: "Ô này nhận PDF, JPG, PNG tối đa 30 MB. File .zip thả vào vùng upload cả bộ ở trên." })}
+        onReject={(rejected) => toast({ tone: "danger", title: fill(t.invalidFiles, { n: rejected.length }), description: t.slotRejectDesc })}
       />
     </section>
   );
 }
 
 export function UploadStep({ dossier, goTo }: StepProps) {
+  const t = useMessages(UPLOAD_STEP_MESSAGES);
+  const kindLabels = useMessages(DOC_KIND_LABELS);
+  const locale = useUiLocale();
   const qc = useQueryClient();
   const docsQuery = useQuery({
     queryKey: ocrKeys.documents(dossier.id),
@@ -164,11 +174,11 @@ export function UploadStep({ dossier, goTo }: StepProps) {
       void qc.invalidateQueries({ queryKey: ocrKeys.documents(dossier.id) });
       void qc.invalidateQueries({ queryKey: dossierKeys.all });
       const unknown = created.filter((d) => d.kind === "OTHER").length;
-      if (kind) toast({ tone: "success", title: `Đã thêm ${created.length} file vào ${DOC_KIND_LABELS[kind]}`, description: "AI đang đọc." });
-      else if (unknown > 0) toast({ tone: "warning", title: `Đã nhận ${created.length} chứng từ`, description: `${unknown} file chưa nhận ra loại – chọn loại ở ô “Khác / chưa nhận ra loại”.` });
-      else toast({ tone: "success", title: `Đã nhận ${created.length} chứng từ`, description: "Đã tự xếp vào đúng loại. AI đang đọc." });
+      if (kind) toast({ tone: "success", title: fill(t.addedToKind, { n: created.length, kind: kindLabels[kind] }), description: t.aiReading });
+      else if (unknown > 0) toast({ tone: "warning", title: fill(t.received, { n: created.length }), description: fill(t.unknownDesc, { n: unknown }) });
+      else toast({ tone: "success", title: fill(t.received, { n: created.length }), description: t.sortedDesc });
     },
-    onError: toastMutationError("Không tải lên được chứng từ"),
+    onError: toastMutationError(t.uploadFailed),
   });
 
   const finish = useMutation({
@@ -180,7 +190,7 @@ export function UploadStep({ dossier, goTo }: StepProps) {
       void qc.invalidateQueries({ queryKey: ocrKeys.checks(dossier.id) });
       goTo("ocr");
     },
-    onError: toastMutationError("Không chuyển sang bước đọc được"),
+    onError: toastMutationError(t.finishFailed),
   });
 
   const uploading = docs.filter((d) => d.status === "UPLOADING");
@@ -201,11 +211,11 @@ export function UploadStep({ dossier, goTo }: StepProps) {
     if (pastUpload) return goTo("ocr");
     if (pending.length === 0) return finish.mutate();
     setWaiting(true);
-    toast({ tone: "info", title: "Đang đọc chứng từ", description: "Tự chuyển sang bước OCR & kiểm tra khi đọc xong." });
+    toast({ tone: "info", title: t.readingTitle, description: t.readingDesc });
   };
 
   const [addedKinds, setAddedKinds] = useState<DocKind[]>([]);
-  const slots = buildSlots(suggestedKinds(dossier), docs, addedKinds);
+  const slots = buildSlots(suggestedKinds(dossier, locale), docs, addedKinds);
   const missing = missingRequired(slots);
   const addable = addableKinds(slots);
   const required = slots.filter((s) => s.need === "required");
@@ -216,10 +226,8 @@ export function UploadStep({ dossier, goTo }: StepProps) {
       <Stack gap="md" className="cq-lg:col-span-2">
         <Card>
           <CardHeader>
-            <CardTitle>Upload cả bộ chứng từ</CardTitle>
-            <CardDescription>
-              Kéo thả nhiều PDF/ảnh hoặc một file .zip. Hệ thống tự tách trang, bỏ bản trùng (Original/Copy), nhận diện loại và xếp vào đúng ô bên dưới.
-            </CardDescription>
+            <CardTitle>{t.bulkTitle}</CardTitle>
+            <CardDescription>{t.bulkDesc}</CardDescription>
           </CardHeader>
           <CardContent>
             <FileDropzone
@@ -228,18 +236,22 @@ export function UploadStep({ dossier, goTo }: StepProps) {
               maxFiles={20}
               disabled={upload.isPending}
               onFiles={(files) => upload.mutate({ files })}
-              onReject={(rejected) => toast({ tone: "danger", title: `${rejected.length} file không hợp lệ`, description: "Chỉ nhận PDF, JPG, PNG, ZIP tối đa 30 MB." })}
+              onReject={(rejected) => toast({ tone: "danger", title: fill(t.invalidFiles, { n: rejected.length }), description: t.bulkRejectDesc })}
             />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle as="h3">Chứng từ theo loại</CardTitle>
+            <CardTitle as="h3">{t.byKindTitle}</CardTitle>
             <CardDescription>
               {docs.length === 0
-                ? `Theo ${dossier.direction === "NK" ? "hồ sơ nhập khẩu" : "hồ sơ xuất khẩu"} ${dossier.typeCode}${dossier.incoterm ? ` · ${dossier.incoterm}` : ""}. Có thể thả file thẳng vào từng ô.`
-                : `${docs.length} chứng từ · ${docs.reduce((n, d) => n + d.pages, 0)} trang · đã đọc ${done}/${docs.length}. Nhận sai loại thì đổi loại ngay trên dòng.`}
+                ? fill(t.byKindEmpty, {
+                    dossier: dossier.direction === "NK" ? t.importDossier : t.exportDossier,
+                    type: dossier.typeCode,
+                    incoterm: dossier.incoterm ? ` · ${dossier.incoterm}` : "",
+                  })
+                : fill(t.byKindSummary, { n: docs.length, pages: docs.reduce((n, d) => n + d.pages, 0), done })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -251,7 +263,7 @@ export function UploadStep({ dossier, goTo }: StepProps) {
                 <Skeleton className="h-32" />
               </Grid>
             ) : docsQuery.isError ? (
-              <Alert tone="danger" title="Không tải được danh sách chứng từ" action={<Button size="sm" variant="secondary" onClick={() => void docsQuery.refetch()}>Thử lại</Button>} />
+              <Alert tone="danger" title={t.listFailed} action={<Button size="sm" variant="secondary" onClick={() => void docsQuery.refetch()}>{t.retry}</Button>} />
             ) : (
               <Stack gap="md">
                 <Grid cols={{ base: 1, md: 2 }} className="items-start">
@@ -261,10 +273,10 @@ export function UploadStep({ dossier, goTo }: StepProps) {
                 </Grid>
                 {addable.length > 0 && (
                   <Select
-                    aria-label="Thêm ô cho loại chứng từ khác"
+                    aria-label={t.addKindAria}
                     className="cq-sm:max-w-xs"
-                    placeholder="+ Thêm loại chứng từ khác…"
-                    options={addable.map((k) => ({ value: k, label: k === "OTHER" ? "Khác" : DOC_KIND_LABELS[k] }))}
+                    placeholder={t.addKindPlaceholder}
+                    options={addable.map((k) => ({ value: k, label: kindLabels[k] }))}
                     value=""
                     onChange={(e) => {
                       const k = e.target.value as DocKind;
@@ -281,25 +293,25 @@ export function UploadStep({ dossier, goTo }: StepProps) {
       <Stack gap="md">
         <Card>
           <CardHeader>
-            <CardTitle as="h3">Tình trạng bộ chứng từ</CardTitle>
+            <CardTitle as="h3">{t.statusTitle}</CardTitle>
             <CardDescription>
-              Đã có {required.length - missing.length}/{required.length} chứng từ cần có
-              {uploading.length > 0 ? ` · đang tải lên ${uploading.length} file` : ""}.
+              {fill(t.requiredCount, { have: required.length - missing.length, total: required.length })}
+              {uploading.length > 0 ? fill(t.uploadingCount, { n: uploading.length }) : ""}.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Stack gap="md">
               {docs.length > 0 && missing.length > 0 && (
-                <Alert tone="warning" title={`Còn thiếu ${missing.length} chứng từ`}>
-                  {missing.map((m) => DOC_KIND_LABELS[m.kind]).join(", ")}. Bạn vẫn có thể đọc tiếp – các trường liên quan sẽ được đánh dấu để bổ sung.
+                <Alert tone="warning" title={fill(t.missingTitle, { n: missing.length })}>
+                  {fill(t.missingBody, { list: missing.map((m) => kindLabels[m.kind]).join(", ") })}
                 </Alert>
               )}
               {pending.length > 0 && (
                 <>
                   <p className="flex items-center gap-2 text-sm text-fg-muted">
-                    <Spinner size="sm" label={null} /> AI đang đọc {done}/{docs.length} chứng từ…
+                    <Spinner size="sm" label={null} /> {fill(t.readingProgress, { done, n: docs.length })}
                   </p>
-                  <Progress value={docs.length ? Math.round((done / docs.length) * 100) : 0} aria-label="Tiến độ đọc chứng từ" />
+                  <Progress value={docs.length ? Math.round((done / docs.length) * 100) : 0} aria-label={t.progressAria} />
                 </>
               )}
               <Button
@@ -309,9 +321,9 @@ export function UploadStep({ dossier, goTo }: StepProps) {
                 loading={finish.isPending || isWaiting}
                 onClick={start}
               >
-                {pastUpload ? "Xem kết quả đọc" : pending.length > 0 ? "Bắt đầu đọc chứng từ" : "Xem kết quả đọc"}
+                {pastUpload ? t.viewResults : pending.length > 0 ? t.startReading : t.viewResults}
               </Button>
-              {docs.length === 0 && <p className="text-center text-xs text-fg-subtle">Upload ít nhất 1 chứng từ để tiếp tục.</p>}
+              {docs.length === 0 && <p className="text-center text-xs text-fg-subtle">{t.needOne}</p>}
             </Stack>
           </CardContent>
         </Card>

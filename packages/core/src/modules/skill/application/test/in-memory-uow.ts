@@ -23,7 +23,8 @@ export class InMemorySkillUow implements SkillUow {
           if (d.skills.some((s) => s.orgId === row.orgId && s.code === row.code)) throw new Error("duplicate key value violates unique constraint skills_org_code_uq");
           d.skills.push(clone(row));
         },
-        update: async (id, patch) => {
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`skills update orgId ${orgId} khác ngữ cảnh`);
           const s = d.skills.find((x) => x.id === id && x.orgId === org);
           if (s) Object.assign(s, patch);
         },
@@ -44,7 +45,8 @@ export class InMemorySkillUow implements SkillUow {
         list: async (orgId, skillId) => clone(d.samples.filter((s) => s.orgId === org && s.orgId === orgId && s.skillId === skillId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())),
         get: async (orgId, id) => clone(d.samples.find((s) => s.id === id && s.orgId === org && s.orgId === orgId) ?? null),
         insert: async (row) => void (row.orgId === org ? d.samples.push(clone(row)) : deny("skill_samples insert")),
-        update: async (id, patch) => {
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`skill_samples update orgId ${orgId} khác ngữ cảnh`);
           const s = d.samples.find((x) => x.id === id && x.orgId === org);
           if (s) Object.assign(s, clone(patch));
         },

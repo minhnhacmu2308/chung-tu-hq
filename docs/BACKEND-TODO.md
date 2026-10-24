@@ -70,6 +70,57 @@ Chi tiết và giới hạn: `docs/superpowers/specs/2026-10-14-admin-backoffice
 | A2 | Khóa API dùng chung | Lưu mã hóa ở `platform_integrations` nhưng adapter vẫn đọc biến môi trường – chờ chốt một khóa chung hay mỗi doanh nghiệp một khóa |
 | A3 | Hải quan từ chối tờ khai (IEX) | Kết quả truyền hiện "Hải quan từ chối"; hồ sơ chưa đổi trạng thái và chưa gửi thông báo – cần chốt luồng xử lý tiếp (mở lại / khai sửa) |
 
+## Rà soát kiến trúc backend (2026-10-23)
+
+Khảo sát toàn bộ core / API / worker / DB-hạ tầng. Nền tảng tốt (module hóa, RLS + UoW theo org, outbox Hải quan, Zod ở biên, RBAC trong use case). Những gì đã sửa ngay và việc còn lại theo thứ tự ưu tiên.
+
+### Đã sửa
+
+| Mảng | Sửa gì |
+|---|---|
+| CI | `.env.example` không còn trong git → CI tự sinh `.env`; thêm script `build` gốc (`next build`). |
+| Đăng nhập | Email lạ vẫn so hash giả (không dò email qua thời gian phản hồi); thêm giới hạn theo riêng email (30 lần/15 phút) không phụ thuộc IP. |
+| Token một lần | `authTokens.consume` nguyên tử (`UPDATE … WHERE used_at IS NULL`): hai request cùng token chỉ một bên được. Đặt lại mật khẩu hủy mọi phiên của người đó. |
+| CSRF / header | `route()` chặn request ghi có `Origin` khác host (403 `CSRF`); `next.config.ts` đặt X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, HSTS (khi https). Chưa có CSP (cần liệt kê nguồn storage theo môi trường, làm riêng ở chế độ report-only). |
+| Request id | Mọi phản hồi API có `x-request-id` (nhận từ proxy nếu hợp lệ); lỗi 500 trả `requestId` để đối chiếu log. |
+| Log | `createLogger` (`@kb/core/shared/log`): JSON một dòng, che khóa/mật khẩu, logger con theo job. Web (`route()`) và worker đã dùng; health route còn `console.error` (chấp nhận). |
+| Env | `apps/web/src/instrumentation.ts` gọi `loadEnv()` lúc khởi động khi `NEXT_PUBLIC_DATA_SOURCE=http` – thiếu biến thì dừng ngay, không đợi request đầu. |
+| DB | Migration `0019`: `plans` bật RLS chỉ đọc với `kb_app` (trước đây role app sửa được giá gói); index `auth_tokens.user_id`, `join_requests.user_id`, `notifications` chưa đọc (partial), `line_items(org, hs_job_id / hs_item_id)`, `admin_audit(target)`, `inbox_attachments(org, dossier)`. |
+| Upload | Loại file lấy theo byte đầu (`sniffMime`), không tin Content-Type trình duyệt; đuôi key storage theo loại thật (không lấy từ tên người gửi). ZIP: bỏ mục > 25 MB, dừng ở 200 MB tổng / 50 mục, kiểm `originalSize` trước khi giải nén (chống zip bom). |
+| Bất biến 8 | `AiDataError` mang `usage`; model từ chối / cắt max_tokens / JSON hỏng vẫn ghi `usage_events`. |
+| Thông báo trùng | `afterMerge` trả `finishedNow`; "Đã đọc xong bộ chứng từ" chỉ gửi một lần (chạy lại job / MERGE_ONLY không gửi nữa). |
+| Khe crash khi truyền | `submitDeclaration` / `resendOperation`: outbox PENDING với attempts 0 (ghi DB xong nhưng chưa kịp đẩy job) → đẩy lại job khi người dùng bấm lại, không kẹt "đã truyền" mà không bao giờ gửi. |
+| run-agent hết lượt thử | `failAgentRun`: run → ERROR kèm nhật ký, hồ sơ về NEEDS_REVIEW, báo chủ hồ sơ (trước đây treo RUNNING/PROCESSING mãi). |
+| Worker | `parsePayload` → `UnrecoverableError` khi payload sai (không retry 5 lần vô ích); `unhandledRejection`/`uncaughtException` → log + thoát; scheduler được `await`; `cert-expiry` đặt `tz: UTC` + 3 lần thử; tắt êm có giới hạn 30 s. |
+
+### Còn lại – ưu tiên cao (ảnh hưởng tiền/pháp lý hoặc mất dữ liệu)
+
+| # | Việc | Vì sao | Gợi ý |
+|---|---|---|---|
+| R1 | **Gửi trùng tới Hải quan khi timeout.** `FptVnaccsGateway` bỏ qua `idempotencyKey`; IDA chỉ kiểm "đã nhận chưa" khi đã có `externalId`; IDC/HYS/AMA không kiểm trước khi gửi lại | Timeout sau khi FPT đã nhận → thông điệp đi hai lần (ADR 0005 cấm) | Trước mỗi lần gửi lại (attempts > 0) tra IID/IEX theo số tờ khai/`dossier.code`; chỉ gửi khi chắc chưa ghi nhận. Cần mẫu phản hồi FPT (T1) |
+| R2 | ~~HSCodePro tạo lượt trước khi ghi DB~~ – **xong 2026-10-23**: `hs_jobs` ghi `pending` trước khi gọi API, chạy lại dùng lại lượt, chi phí ghi theo `job.id`, `external_ref` kèm mã lượt | | |
+| R3 | ~~Ghi DB rồi mới đẩy job, không có sweeper~~ – **xong 2026-10-23**: queue `stuck-sweeper` 5 phút/lần (`apps/worker/src/jobs/stuck-sweeper.ts`): chứng từ QUEUED > 10 phút, outbox chưa gửi > 10 phút → đẩy lại; agent RUNNING > 2 giờ không còn lượt HS → ERROR; hộp thư SYNCING > 30 phút → ERROR | | |
+| R4 | ~~Usage AI ghi trùng khi retry~~ – **xong 2026-10-23**: `UsageRecorder.record` có `dedupeKey` (phân loại/trích xuất/đọc mẫu/đánh giá). Còn lại: `skill-evaluate` vẫn gọi AI lại cho mẫu đã đọc khi job chạy lại (chỉ không tính tiền khách) – lưu kết quả từng mẫu nếu cần | | |
+| R5 | ~~Tiền dạng `number` trong `declaration-to-fpt.ts`~~ – **xong 2026-10-23**: chuỗi không phải số → `issues` chặn truyền, không gửi 0; > 15 chữ số → cảnh báo | | |
+| R6 | ~~Phân trang server~~ – **một phần 2026-10-23**: `GET dossiers?limit&offset&q` trả `{items,total}`; mọi danh sách không phân trang bị chặn trên (hồ sơ 500, hộp thư 500, danh mục 2.000, admin orgs 1.000). **R6b còn lại:** màn Danh sách hồ sơ / Hộp thư / Danh mục / Admin vẫn lọc-tìm-sắp xếp phía client trên danh sách bị chặn – chuyển sang server cần DataTable nhận tìm kiếm/sắp xếp/lọc cột điều khiển từ ngoài (`manualFiltering/manualSorting`) + tham số `sort`, lọc cột trên API; làm riêng kèm spec UX | | |
+| R7 | ~~Xoay khóa mã hóa bí mật~~ – **xong 2026-10-23**: `APP_MASTER_KEYS=v2:…,v1:…` (vòng khóa; `APP_MASTER_KEY` là v1), mã hóa bằng bản mới nhất, giải mã theo `key_version`; `pnpm --filter @kb/core secrets:rotate [--dry-run]` mã hóa lại org_secrets, mail_connections, platform_integrations, TOTP. Quy trình: thêm khóa mới → deploy web+worker → chạy rotate → gỡ khóa cũ | | |
+
+### Còn lại – trung bình
+
+| # | Việc |
+|---|---|
+| R8 | ~~Giới hạn job theo org, limiter AI, trần chi phí, timeout SDK~~ – **xong 2026-10-23**: `perOrgLimit` (`WORKER_MAX_PER_ORG`), `limiter` `AI_RATE_PER_MINUTE`, `AI_DAILY_COST_CAP_VND` (chứng từ ERROR khi vượt), `AI_TIMEOUT_MS` + SDK maxRetries 1 |
+| R9 | ~~`register` hai transaction; email trong transaction~~ – **xong 2026-10-23**: đăng ký một transaction (migration 0020 cho phép ghi membership ở ngữ cảnh hệ thống); email xác thực / đặt lại mật khẩu / mời quản trị gửi sau commit. Còn lại: admin `sendPasswordReset`/`resendVerification` gửi mail trong tx của audit (chấp nhận: audit chỉ ghi khi gửi được) |
+| R10 | ~~Audit hành động của khách~~ – **xong 2026-10-23 (backend)**: bảng `org_audit` (migration 0021, RLS append-only), port `OrgAuditWriter` (`shared/audit.ts`), ghi ở identity (mời/vai trò/khóa/duyệt-từ chối tham gia/chuyển chủ/hồ sơ DN/4 mắt/ngưỡng/chứng thư/VNACCS), hộp thư, duyệt & mở lại tờ khai, hủy hồ sơ, danh mục hàng hóa, bật/tắt skill; `GET /api/org/audit?limit&offset` (Quản trị/Chủ sở hữu). **R10b:** màn Cài đặt → "Nhật ký hoạt động" (3 ngôn ngữ, dịch `action`) chưa làm |
+| R11 | ~~Repo bỏ lọc `orgId`~~ – **xong 2026-10-23**: extraction (toàn bộ), validation, dossier `update/delete`, declaration `update/upsert/suggestions`, skill `skills/samples.update`, outbox `update` nhận `orgId` tường minh; fake in-memory từ chối orgId khác ngữ cảnh; int test outbox org khác. Giữ nguyên: `skill.versions.*` (đọc skill mẫu xuyên org theo policy), identity (ngữ cảnh system/user riêng) |
+| R12 | ~~`clientIp` tin XFF đầu; tra MST công khai~~ – **xong 2026-10-23**: `TRUSTED_PROXY_HOPS` (IP ở vị trí proxy tin cậy từ cuối XFF); `lookup-tax-code` 30 lần/15 phút mỗi IP |
+| R13 | SSE mỗi client một kết nối Redis `duplicate()`: dùng một subscriber chung + fan-out trong process; giới hạn số luồng/người. |
+| R14 | ~~Enum/CHECK ở DB~~ – **xong 2026-10-23** (migration 0022): CHECK cho status/step/direction/role/kind/provider ở dossiers, documents, memberships, organizations, join_requests, declarations, agent_runs, hs_jobs, customs_outbox, mail_connections; `product_catalog` thuế suất/đơn giá → numeric; `is_duplicate` → boolean; unique partial: một chứng thư mặc định / doanh nghiệp, một yêu cầu tham gia PENDING / (org, user). Lưu ý: numeric trả "5.0000" thay vì "5" – giao diện định dạng qua lib/format |
+| R15 | ~~Vận hành~~ – **một phần 2026-10-23**: `/api/health` tách liveness (`?probe=live`) / readiness (+ kho lưu file, timeout 3 s); worker có health HTTP (`WORKER_HEALTH_PORT`); CI chạy `pnpm audit --audit-level=high` (chưa chặn merge); `renovate.json`. **Dockerfile, compose production, backup/restore Postgres, Caddy, deploy.yml, docs/DEPLOY.md đang được làm riêng trên nhánh main** (không trùng ở đây). Còn lại: pin tag ảnh MinIO/Mailpit trong compose dev; bật chặn merge khi audit đỏ |
+| R16 | OpenTelemetry (trace web → job) + Sentry; metrics queue (độ sâu, thời gian, tỷ lệ lỗi) thay `getCompleted(0,999)`. |
+| R17 | CSP report-only; PKCE cho OAuth hộp thư; nonce `state` lưu một lần (hiện replay được trong 10 phút). |
+| R18 | `markDocumentFailed`/`customs-poll` hết `MAX_POLLS` chưa báo người dùng; `skill-sample-read`/`skill-evaluate` hết lượt chưa đánh dấu. |
+
 ## Lỗi đã sửa khi tăng độ phủ test (2026-10-14)
 
 Incoterm kèm địa danh ("FOB BUSAN") không được cộng cước; CIF có dòng "Ocean freight" bị cộng cước hai lần; "SHANGHAI"/"CHANGI" khớp nhầm sân bay Nội Bài (alias "HAN"); EDA thay im lặng cảng xếp không tra được mã bằng Hải Phòng; thông báo chứng thư sắp hết hạn gửi trùng mỗi lần chạy job; tra cứu IEX ghi đè trạng thái "bị từ chối"; IDC được chấp nhận nhưng không có phân luồng bị ghi là gửi thành công; mẫu skill không có đuôi tên tệp bị đọc như ảnh JPEG; màn Truyền hiện tờ khai bị từ chối thành "Đang kiểm tra"; bộ giới hạn đăng nhập đếm cả lần đăng nhập đúng.

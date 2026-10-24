@@ -3,7 +3,7 @@
 // quản trị mới thấy menu này, tài khoản khác bị đưa về ứng dụng. Không có trợ lý AI, không có thông báo hồ sơ.
 import {
   Alert, AppearancePanel, Badge, BrandDot, BrandMark, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger, PageLoading, Sidebar, SidebarFooterButton, SidebarMobileTrigger, SidebarUser, toast, type NavItem,
+  DropdownMenuSeparator, DropdownMenuTrigger, PageLoading, Sidebar, SidebarFooterButton, SidebarMobileTrigger, SidebarUser, toast, useMessages, type NavItem,
 } from "@kb/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Building2, LayoutDashboard, LogOut, RotateCcw, ShieldCheck, SunMoon, WalletCards } from "lucide-react";
@@ -14,6 +14,7 @@ import { adminKeys, getSystemHealth } from "@/api/admin";
 import { logout, resetMockData } from "@/api/session";
 import { useAppearance } from "@/features/appearance/use-appearance";
 import { STAFF_ROLE_LABELS } from "../common/admin-display";
+import { ADMIN_SHELL_MESSAGES } from "./admin-shell.messages";
 import { MfaGate } from "./mfa-gate";
 import { useAdminSession } from "./use-admin-session";
 
@@ -38,46 +39,47 @@ function useNav(enabled: boolean): { items: NavItem[]; activeId: string | undefi
   const pathname = usePathname();
   const { data: health } = useQuery({ queryKey: adminKeys.system, queryFn: getSystemHealth, enabled });
   const failed = health?.failedJobs.length ?? 0;
+  const t = useMessages(ADMIN_SHELL_MESSAGES);
 
   const items: NavItem[] = [
-    { id: "overview", label: "Tổng quan", icon: <LayoutDashboard />, href: "/admin" },
+    { id: "overview", label: t.overview, icon: <LayoutDashboard />, href: "/admin" },
     {
       id: "customers",
-      label: "Khách hàng",
+      label: t.customers,
       icon: <Building2 />,
       children: [
-        { id: "orgs", label: "Doanh nghiệp", href: "/admin/orgs" },
-        { id: "users", label: "Người dùng", href: "/admin/users" },
+        { id: "orgs", label: t.orgs, href: "/admin/orgs" },
+        { id: "users", label: t.users, href: "/admin/users" },
       ],
     },
     {
       id: "billing",
-      label: "Gói & chi phí",
+      label: t.billing,
       icon: <WalletCards />,
       children: [
-        { id: "plans", label: "Gói dịch vụ", href: "/admin/plans" },
-        { id: "usage", label: "Sử dụng & chi phí", href: "/admin/usage" },
+        { id: "plans", label: t.plans, href: "/admin/plans" },
+        { id: "usage", label: t.usage, href: "/admin/usage" },
       ],
     },
     {
       id: "operations",
-      label: "Vận hành",
+      label: t.operations,
       icon: <Activity />,
       children: [
-        { id: "integrations", label: "Tích hợp dùng chung", href: "/admin/integrations" },
-        { id: "exchange-rates", label: "Tỷ giá tính thuế", href: "/admin/exchange-rates" },
-        { id: "system", label: "Sức khỏe hệ thống", href: "/admin/system", ...(failed > 0 ? { badge: <Badge tone="warning">{failed}</Badge> } : {}) },
-        { id: "skill-templates", label: "Skill mẫu", href: "/admin/skill-templates" },
+        { id: "integrations", label: t.integrations, href: "/admin/integrations" },
+        { id: "exchange-rates", label: t.exchangeRates, href: "/admin/exchange-rates" },
+        { id: "system", label: t.system, href: "/admin/system", ...(failed > 0 ? { badge: <Badge tone="warning">{failed}</Badge> } : {}) },
+        { id: "skill-templates", label: t.skillTemplates, href: "/admin/skill-templates" },
       ],
     },
     {
       id: "control",
-      label: "Kiểm soát",
+      label: t.control,
       icon: <ShieldCheck />,
       children: [
-        { id: "staff", label: "Quản trị viên", href: "/admin/staff" },
-        { id: "audit", label: "Nhật ký quản trị", href: "/admin/audit" },
-        { id: "announcements", label: "Thông báo hệ thống", href: "/admin/announcements" },
+        { id: "staff", label: t.staff, href: "/admin/staff" },
+        { id: "audit", label: t.audit, href: "/admin/audit" },
+        { id: "announcements", label: t.announcements, href: "/admin/announcements" },
       ],
     },
   ];
@@ -89,6 +91,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const qc = useQueryClient();
+  const t = useMessages(ADMIN_SHELL_MESSAGES);
+  const roleLabels = useMessages(STAFF_ROLE_LABELS);
   const { appearance, setAppearance, adjustments } = useAppearance();
   const { staff, mfa, isSignedOut } = useAdminSession();
   const { items, activeId } = useNav(!!staff && mfa.verified);
@@ -127,7 +131,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const reset = async () => {
     await resetMockData();
     await qc.invalidateQueries();
-    toast({ tone: "success", title: "Đã khôi phục dữ liệu mẫu", description: "Phiên đăng nhập cũng được đặt lại – đăng nhập lại để tiếp tục." });
+    toast({ tone: "success", title: t.resetDone, description: t.resetDoneDescription });
   };
 
   const menu = appearance.menuPosition;
@@ -143,7 +147,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
           // Nhãn "Quản trị" luôn hiện cạnh tên để không nhầm với ứng dụng của khách.
           name: (
             <span className="flex items-center gap-2">
-              KhaiBáo AI <Badge tone="warning" size="sm">Quản trị</Badge>
+              {/* kb-allow-raw: tên thương hiệu KhaiBáo AI, không dịch */}
+              KhaiBáo AI <Badge tone="warning" size="sm">{t.adminBadge}</Badge>
             </span>
           ),
           href: "/admin",
@@ -155,21 +160,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
         linkAs={Link}
         mobileOpen={mobileNav}
         onMobileOpenChange={setMobileNav}
-        labels={{ nav: "Điều hướng quản trị" }}
+        labels={{ nav: t.navLabel }}
         footer={
           <>
-            <SidebarFooterButton icon={<SunMoon />} label="Giao diện" trailing={<BrandDot />} onClick={() => setAppearanceOpen(true)} />
+            <SidebarFooterButton icon={<SunMoon />} label={t.appearance} trailing={<BrandDot />} onClick={() => setAppearanceOpen(true)} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarUser name={staff?.name ?? "…"} role={staff ? STAFF_ROLE_LABELS[staff.role] : ""} />
+                <SidebarUser name={staff?.name ?? "…"} role={staff ? roleLabels[staff.role] : ""} />
               </DropdownMenuTrigger>
               <DropdownMenuContent side={menuOnTop ? "bottom" : menu === "right" ? "left" : "right"} align="end">
                 <DropdownMenuItem icon={<RotateCcw className="h-4 w-4" />} onSelect={reset}>
-                  Khôi phục dữ liệu mẫu
+                  {t.resetData}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem icon={<LogOut className="h-4 w-4" />} tone="danger" onSelect={signOut}>
-                  Đăng xuất
+                  {t.signOut}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -178,7 +183,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       />
 
       <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="panel">
-        <DialogContent title="Cấu hình giao diện" size="sm">
+        <DialogContent title={t.appearanceTitle} size="sm">
           <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} />
         </DialogContent>
       </Dialog>
@@ -197,7 +202,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             {children}
           </div>
         ) : (
-          <PageLoading label="Đang kiểm tra quyền quản trị" />
+          <PageLoading label={t.checkingAccess} />
         )}
       </main>
     </div>

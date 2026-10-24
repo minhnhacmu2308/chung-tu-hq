@@ -2,7 +2,7 @@
 // Chỉ gửi khai tạm; khai chính thức (IDC/EDC) và các nghiệp vụ sau do người khai bấm (performOperation).
 import { declarationRequiredGaps, requiredGapsText, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
-import { domainError } from "../../../shared/errors.js";
+import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { stageOf } from "../domain/state-machine.js";
@@ -11,29 +11,46 @@ import { performOperation } from "./perform-operation.js";
 
 export const outboxKey = (dossierId: string, op: string, version: number, retry = 0) => `${dossierId}:${op}:v${version}${retry ? `:retry${retry}` : ""}`;
 
+/**
+ * Lần truyền trước crash sau khi đã ghi outbox/đánh dấu SUBMITTED nhưng chưa kịp đẩy job (ghi DB và đẩy job không cùng transaction):
+ * dòng outbox còn PENDING với attempts = 0 → đẩy lại job (jobId trùng là idempotent) để tờ khai không kẹt "đã truyền" mà không bao giờ gửi.
+ */
+async function reenqueueStuckOutbox(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<void> {
+  const rows = await deps.uow.asOrg(ctx, (r) => r.outbox.listForDossier(ctx.orgId, dossierId));
+  for (const row of rows.filter((o) => o.status === "PENDING" && o.attempts === 0)) {
+    await deps.queue.enqueue("customs-send", { orgId: ctx.orgId, userId: ctx.userId, outboxId: row.id }, { jobId: `customs-send:${row.id}` });
+  }
+}
+
 export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: string, certificateId: string): Promise<Result<{ outboxId: string }>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
-  if (dossier.status === "CANCELLED") return err(domainError("INVALID_STATE", "Hồ sơ đã hủy"));
-  if (dossier.status === "SUBMITTED" || dossier.status === "CLEARED") return err(domainError("ALREADY_SUBMITTED", "Hồ sơ đã truyền"));
-  if (dossier.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Hồ sơ chưa ở trạng thái đã duyệt"));
+  if (dossier.status === "CANCELLED") return err(reasonError("INVALID_STATE", "DOSSIER_CANCELLED"));
+  if (dossier.status === "SUBMITTED" || dossier.status === "CLEARED") {
+    await reenqueueStuckOutbox(deps, ctx, dossierId);
+    return err(reasonError("ALREADY_SUBMITTED", "DOSSIER_ALREADY_SUBMITTED"));
+  }
+  if (dossier.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "DOSSIER_NOT_APPROVED"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   if (!snap) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
-  if (snap.status === "SUBMITTED") return err(domainError("ALREADY_SUBMITTED", "Tờ khai đã được truyền – không gửi trùng"));
-  if (snap.status !== "APPROVED") return err(domainError("NOT_APPROVED", "Tờ khai chưa được phê duyệt"));
-  if (snap.unconfirmedHs > 0) return err(domainError("HS_UNCONFIRMED", `Còn ${snap.unconfirmedHs} mã HS chưa xác nhận`));
+  if (snap.status === "SUBMITTED") {
+    await reenqueueStuckOutbox(deps, ctx, dossierId);
+    return err(reasonError("ALREADY_SUBMITTED", "DECLARATION_ALREADY_SUBMITTED"));
+  }
+  if (snap.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_APPROVED"));
+  if (snap.unconfirmedHs > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs }));
   // Tỷ giá tính thuế áp theo tuần đăng ký tờ khai (thứ Hai → Chủ nhật, giờ VN): dựng tuần trước mà truyền tuần này → sai thuế.
   if (!sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
-    return err(domainError("RATE_WEEK_CHANGED", `Tờ khai dùng tỷ giá tuần ${weekStart(snap.exchangeRateDate)} – đã sang tuần tỷ giá mới. Mở lại tờ khai để dựng lại với tỷ giá tuần này rồi duyệt lại`));
+    return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REOPEN", { week: weekStart(snap.exchangeRateDate) }));
   const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
-  if (blockers > 0) return err(domainError("BLOCKER_FAILED", `Còn ${blockers} luật lỗi chặn truyền`));
+  if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
   // Dữ liệu có thể đổi sau khi duyệt: kiểm lại ô bắt buộc trước khi tạo thông điệp (cùng quy tắc nút Ký số ở giao diện).
   const items = [...snap.payload.items].sort((a, b) => a.lineNo - b.lineNo);
   const gaps = declarationRequiredGaps(snap.payload.kind, Object.entries(snap.payload.fields).map(([code, f]) => ({ code, value: f.value })), items);
-  if (gaps.length) return err(domainError("VALIDATION", `Còn ${gaps.length} chỉ tiêu bắt buộc chưa nhập: ${requiredGapsText(gaps, items.map((i) => i.lineNo))} – mở lại tờ khai để nhập rồi duyệt lại`, { requiredGaps: gaps }));
-  if (!certificateId || !(await deps.certificates.exists(ctx.orgId, certificateId))) return err(domainError("NO_CERT", "Chọn chứng thư số để ký"));
+  if (gaps.length) return err(reasonError("VALIDATION", "REQUIRED_FIELDS_MISSING_SUBMIT", { n: gaps.length, fields: requiredGapsText(gaps, items.map((i) => i.lineNo)) }, { requiredGaps: gaps }));
+  if (!certificateId || !(await deps.certificates.exists(ctx.orgId, certificateId))) return err(reasonError("NO_CERT", "CERTIFICATE_REQUIRED"));
 
   const op = snap.payload.kind === "IDA" ? "IDA" : "EDA";
   // Đã có số tờ khai (gọi về sửa rồi duyệt lại) → khai tạm lại theo luồng, không tạo kết quả truyền mới.
@@ -43,9 +60,9 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
     return sent.ok ? ok({ outboxId: "" }) : sent;
   }
   const built = buildFptRequest(snap.payload);
-  if (built.blockers.length) return err(domainError("BLOCKER_FAILED", `Tờ khai chưa truyền được: ${built.blockers.join("; ")}`));
+  if (built.blockers.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: built.blockers.join("; ") }));
   // Sai đặc tả FPT (thiếu ô Required, sai kiểu/độ dài) → Hải quan/FPT từ chối: chặn trước khi đánh dấu đã khai thay vì để cổng gửi báo lỗi sau.
-  if (built.issues.length) return err(domainError("VALIDATION", `Tờ khai chưa đúng đặc tả truyền Hải quan: ${built.issues.join("; ")}`, { issues: built.issues }));
+  if (built.issues.length) return err(reasonError("VALIDATION", "DECLARATION_SPEC_INVALID", { issues: built.issues.join("; ") }, { issues: built.issues }));
   const now = deps.clock.now();
   const key = outboxKey(dossierId, op, snap.version);
   const created = await deps.uow.asOrg(ctx, async (r) => {

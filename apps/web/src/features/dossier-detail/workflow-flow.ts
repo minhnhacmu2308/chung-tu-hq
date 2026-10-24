@@ -1,8 +1,10 @@
 // Cây quy trình của một hồ sơ: trạng thái từng nút suy ra từ bước đang dở + số trường nghi ngờ + phân luồng.
-import type { FlowEdge, FlowNode, FlowNodeStatus } from "@kb/ui";
+import { fill, pickMessages, type FlowEdge, type FlowNode, type FlowNodeStatus, type UiLocale } from "@kb/ui";
 import { STEP_ORDER, type Dossier, type StepId } from "@/mocks/types";
+import { WORKFLOW_FLOW_MESSAGES } from "./dossier-detail.messages";
 
-export function buildFlow(d: Dossier): { nodes: FlowNode[]; edges: FlowEdge[]; stepOf: Record<string, StepId> } {
+export function buildFlow(d: Dossier, locale: UiLocale = "vi"): { nodes: FlowNode[]; edges: FlowEdge[]; stepOf: Record<string, StepId> } {
+  const t = pickMessages(WORKFLOW_FLOW_MESSAGES, locale);
   const at = STEP_ORDER.indexOf(d.step);
   const finished = d.status === "CLEARED";
   const st = (step: StepId): FlowNodeStatus => {
@@ -16,44 +18,44 @@ export function buildFlow(d: Dossier): { nodes: FlowNode[]; edges: FlowEdge[]; s
   const channel = d.channel;
 
   const nodes: FlowNode[] = [
-    { id: "start", kind: "start", title: "Bắt đầu", status: "done" },
-    { id: "create", kind: "step", title: "Tạo hồ sơ", description: `${d.typeCode} · ${d.partner}`, status: st("create") },
-    { id: "upload", kind: "step", title: "Upload chứng từ", description: "Tách trang, phân loại, bỏ bản trùng", status: st("upload") },
-    { id: "ocr", kind: "step", title: "OCR & kiểm tra", description: "AI đọc + đối chiếu chéo", status: ocr === "current" && needFix ? "done" : ocr },
-    { id: "blocker", kind: "decision", title: "Còn trường nghi ngờ?", status: ocr === "pending" ? "pending" : "done" },
+    { id: "start", kind: "start", title: t.start, status: "done" },
+    { id: "create", kind: "step", title: t.create, description: `${d.typeCode} · ${d.partner}`, status: st("create") },
+    { id: "upload", kind: "step", title: t.upload, description: t.uploadDesc, status: st("upload") },
+    { id: "ocr", kind: "step", title: t.ocr, description: t.ocrDesc, status: ocr === "current" && needFix ? "done" : ocr },
+    { id: "blocker", kind: "decision", title: t.blocker, status: ocr === "pending" ? "pending" : "done" },
     {
       id: "fix",
       kind: "step",
-      title: "Sửa & xác nhận dữ liệu",
-      description: needFix ? `${d.suspectFields} trường nghi ngờ` : "Người dùng xác nhận",
+      title: t.fix,
+      description: needFix ? fill(t.fixSuspect, { n: d.suspectFields }) : t.fixConfirm,
       status: ocr === "current" ? (needFix ? "current" : "skipped") : ocr === "done" ? "done" : "pending",
     },
-    { id: "agent", kind: "step", title: "AI Agent xử lý", description: "Tra HS · ánh xạ · số hóa", status: st("agent") },
-    { id: "review", kind: "step", title: "Review tờ khai", description: "Người duyệt phê duyệt", status: st("review") },
-    { id: "submit", kind: "step", title: "Khai báo Hải quan", description: `${d.direction === "NK" ? "IDA → IDC" : "EDA → EDC"} → HYS qua Customs Hub`, status: submitted ? "done" : st("submit") },
-    { id: "channel", kind: "decision", title: "Phân luồng", status: channel ? "done" : "pending" },
+    { id: "agent", kind: "step", title: t.agent, description: t.agentDesc, status: st("agent") },
+    { id: "review", kind: "step", title: t.review, description: t.reviewDesc, status: st("review") },
+    { id: "submit", kind: "step", title: t.submit, description: fill(t.submitDesc, { ops: d.direction === "NK" ? "IDA → IDC" : "EDA → EDC" }), status: submitted ? "done" : st("submit") },
+    { id: "channel", kind: "decision", title: t.channel, status: channel ? "done" : "pending" },
     {
       id: "inspect",
       kind: "step",
-      title: "Kiểm tra hồ sơ / hàng",
-      description: "Luồng vàng hoặc đỏ",
+      title: t.inspect,
+      description: t.inspectDesc,
       status: !channel ? "pending" : channel === "GREEN" ? "skipped" : finished ? "done" : "current",
     },
-    { id: "end", kind: "end", title: "Thông quan", status: finished ? "done" : "pending" },
+    { id: "end", kind: "end", title: t.end, status: finished ? "done" : "pending" },
   ];
   const edges: FlowEdge[] = [
     { from: "start", to: "create" },
     { from: "create", to: "upload" },
     { from: "upload", to: "ocr" },
     { from: "ocr", to: "blocker" },
-    { from: "blocker", to: "fix", label: "Có" },
-    { from: "blocker", to: "agent", label: "Không" },
+    { from: "blocker", to: "fix", label: t.yes },
+    { from: "blocker", to: "agent", label: t.no },
     { from: "fix", to: "agent" },
     { from: "agent", to: "review" },
     { from: "review", to: "submit" },
     { from: "submit", to: "channel" },
-    { from: "channel", to: "inspect", label: "Vàng / Đỏ" },
-    { from: "channel", to: "end", label: "Xanh" },
+    { from: "channel", to: "inspect", label: t.yellowRed },
+    { from: "channel", to: "end", label: t.green },
     { from: "inspect", to: "end" },
   ];
   return { nodes, edges, stepOf: { create: "create", upload: "upload", ocr: "ocr", fix: "ocr", agent: "agent", review: "review", submit: "submit" } };

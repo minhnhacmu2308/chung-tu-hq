@@ -1,3 +1,4 @@
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { DocKind, SkillField, SkillKind } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -29,7 +30,7 @@ export interface SkillRepos {
     /** Skill mẫu đã phát hành (khu Quản trị hệ thống bật/tắt) – bản sao cấp cho doanh nghiệp mới. */
     listTemplates(): Promise<SkillRow[]>;
     insert(row: SkillRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<SkillRow, "name" | "enabled" | "currentVersion" | "labeledSamples" | "accuracy" | "updatedAt">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<SkillRow, "name" | "enabled" | "currentVersion" | "labeledSamples" | "accuracy" | "updatedAt">>): Promise<void>;
   };
   versions: {
     get(skillId: string, version: number): Promise<SkillVersionRow | null>;
@@ -39,7 +40,7 @@ export interface SkillRepos {
     list(orgId: string, skillId: string): Promise<SampleRow[]>;
     get(orgId: string, id: string): Promise<SampleRow | null>;
     insert(row: SampleRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<SampleRow, "status" | "expected" | "labeledBy" | "labeledAt" | "pages" | "updatedAt">>): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<SampleRow, "status" | "expected" | "labeledBy" | "labeledAt" | "pages" | "updatedAt">>): Promise<void>;
   };
   evaluations: {
     latest(orgId: string, skillId: string): Promise<EvaluationRow | null>;
@@ -62,6 +63,8 @@ export interface SampleFileInspector {
 
 export type SkillDeps = {
   uow: SkillUow;
+  /** Nhật ký hoạt động doanh nghiệp (bật/tắt skill); container nối từ identity. */
+  audit?: OrgAuditWriter;
   storage: ObjectStorage;
   queue: JobQueue;
   ai: AiProvider;

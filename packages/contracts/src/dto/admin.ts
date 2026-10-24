@@ -142,8 +142,13 @@ export const OrgUsageRowSchema = z.object({
   planName: z.string(),
   dossiers: z.number().int().nonnegative(),
   pages: z.number().int().nonnegative(),
+  /** Số lần gọi AI đọc chứng từ (usage_events kind AI_*). */
   aiCalls: z.number().int().nonnegative(),
-  /** Giá vốn theo loại lệnh gọi trả phí (từ usage_events). */
+  /** Số dòng hàng gửi HSCodePro phân loại (tạo lượt, phân loại lại, trả lời câu hỏi). */
+  hsItems: z.number().int().nonnegative(),
+  /** Số thông điệp gửi Customs Hub (nghiệp vụ + hỏi trạng thái). */
+  customsMessages: z.number().int().nonnegative(),
+  /** Giá vốn theo nhà cung cấp (từ usage_events): AI đọc chứng từ, HSCodePro, Customs Hub. */
   readCostVnd: DecimalStringSchema,
   hsCostVnd: DecimalStringSchema,
   customsCostVnd: DecimalStringSchema,
@@ -161,6 +166,11 @@ export const UsageReportSchema = z.object({
     dossiers: z.number().int().nonnegative(),
     pages: z.number().int().nonnegative(),
     aiCalls: z.number().int().nonnegative(),
+    hsItems: z.number().int().nonnegative(),
+    customsMessages: z.number().int().nonnegative(),
+    readCostVnd: DecimalStringSchema,
+    hsCostVnd: DecimalStringSchema,
+    customsCostVnd: DecimalStringSchema,
     totalCostVnd: DecimalStringSchema,
     revenueVnd: DecimalStringSchema,
     marginVnd: DecimalStringSchema,

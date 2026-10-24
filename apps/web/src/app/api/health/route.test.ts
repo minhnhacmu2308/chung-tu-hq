@@ -10,6 +10,30 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("GET /api/health", () => {
+  it("?probe=live: trả ok ngay, không chạm hạ tầng, không cần cấu hình", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DATA_SOURCE", "http");
+    const { GET } = await import("./route");
+    const { NextRequest } = await import("next/server");
+    const res = await GET(new NextRequest("http://localhost/api/health?probe=live"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, probe: "live" });
+    expect(getContainer).not.toHaveBeenCalled();
+  });
+  it("readiness: kho lưu file lỗi → 503 checks.storage = 'error'; worker đếm được thì trả kèm", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DATA_SOURCE", "http");
+    getContainer.mockReturnValue({
+      pingDb: () => Promise.resolve(),
+      redis: { ping: () => Promise.resolve("PONG") },
+      dossier: { storage: { put: () => Promise.reject(new Error("AccessDenied secret-bucket")), delete: () => Promise.resolve() } },
+      workerCount: () => Promise.resolve(2),
+    });
+    const { GET } = await import("./route");
+    const res = await GET();
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body).toEqual({ ok: false, dataSource: "http", checks: { postgres: "ok", redis: "ok", storage: "error" }, workers: 2 });
+    expect(JSON.stringify(body)).not.toContain("secret");
+  });
   it("chế độ mock: trả ok, không chạm hạ tầng (bản demo Vercel không có .env)", async () => {
     vi.stubEnv("NEXT_PUBLIC_DATA_SOURCE", "");
     const { GET } = await import("./route");

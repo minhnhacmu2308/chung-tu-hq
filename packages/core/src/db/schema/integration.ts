@@ -1,4 +1,5 @@
-import { index, integer, jsonb, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, index, integer, jsonb, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { organizations } from "./identity.js";
 import { appRole, id, money, orgId, orgPolicyUsing, orgRls, timestamps } from "./shared.js";
 
@@ -34,7 +35,7 @@ export const customsOutbox = pgTable(
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     ...timestamps(),
   },
-  (t) => [uniqueIndex("customs_outbox_key_uq").on(t.idempotencyKey), index("customs_outbox_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("customs_outbox_rls")],
+  (t) => [uniqueIndex("customs_outbox_key_uq").on(t.idempotencyKey), index("customs_outbox_org_dossier_idx").on(t.orgId, t.dossierId), check("customs_outbox_status_chk", sql`status in ('PENDING', 'SENT', 'FAILED')`), orgRls("customs_outbox_rls")],
 ).enableRLS();
 
 /** Nhật ký thông điệp đi/đến với Hải quan – append-only (không có policy UPDATE/DELETE), payload đã che bí mật. */

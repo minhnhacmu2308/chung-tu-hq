@@ -5,6 +5,7 @@ import { expectNoA11yViolations } from "../../test/a11y.js";
 import { Field, FieldFrame } from "./field.js";
 import { Checkbox, Input, Select, Textarea } from "./inputs.js";
 import { Button } from "./button.js";
+import { chooseOption } from "../../test/select.js";
 
 describe("Field + control", () => {
   it("gắn nhãn với ô nhập (tìm được bằng label)", () => {
@@ -51,8 +52,9 @@ describe("Field + control", () => {
         <Select placeholder="Chọn…" onChange={onChange} options={[{ value: "A11", label: "A11" }, { value: "E21", label: "E21" }]} />
       </Field>,
     );
-    await userEvent.selectOptions(screen.getByLabelText("Loại hình"), "E21");
-    expect(screen.getByLabelText("Loại hình")).toHaveValue("E21");
+    expect(screen.getByLabelText("Loại hình")).toHaveTextContent("Chọn…");
+    await chooseOption(screen.getByLabelText("Loại hình"), "E21");
+    expect(screen.getByLabelText("Loại hình")).toHaveTextContent("E21");
     expect(onChange).toHaveBeenCalled();
   });
 

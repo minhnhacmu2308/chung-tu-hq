@@ -149,14 +149,14 @@ describe("Dialog", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Mở panel" }));
     expect(screen.getByRole("dialog", { name: "Panel" })).toHaveAttribute("data-presentation", "panel");
-    expect(document.querySelector("[data-slot=dialog-overlay]")).toBeNull();
+    expect(document.querySelector("[data-slot=dialog-overlay]")).toHaveClass("hidden");
+    expect(document.body.style.overflow).toBe("");
     await userEvent.click(screen.getByRole("button", { name: "Nút trên trang" }));
     expect(onOutside).toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Panel" })).toBeInTheDocument();
   });
 
-  it("dạng panel đẩy trang chính vào (lề phải = bề rộng panel); đổi sang cửa sổ hoặc đóng thì trả lại", async () => {
-    const dock = () => document.documentElement.style.getPropertyValue("--kb-dialog-dock");
+  it("dạng panel là drawer đè lên trang: không đẩy trang chính (không chừa lề phải)", async () => {
     render(
       <Dialog defaultPresentation="panel">
         <DialogTrigger asChild><Button>Mở panel</Button></DialogTrigger>
@@ -164,13 +164,50 @@ describe("Dialog", () => {
       </Dialog>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Mở panel" }));
-    expect(dock()).not.toBe("0px");
+    expect(screen.getByRole("dialog", { name: "Panel" })).toHaveClass("inset-y-0", "right-0");
+    expect(document.documentElement.style.getPropertyValue("--kb-dialog-dock")).toBe("");
+    expect(document.body.style.paddingInlineEnd).toBe("");
+  });
+
+  it("drawer kéo co giãn được: phím ← rộng ra, nhớ độ rộng, nhấp đúp về mặc định; dạng cửa sổ không có tay nắm", async () => {
+    window.localStorage.removeItem("kb-drawer-width:md");
+    const { unmount } = render(
+      <Dialog defaultOpen defaultPresentation="panel">
+        <DialogContent title="Panel">x</DialogContent>
+      </Dialog>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Panel" });
+    const handle = within(dialog).getByRole("separator", { name: /Kéo để đổi độ rộng/ });
+    await expectNoA11yViolations(dialog);
+    handle.focus();
+    await userEvent.keyboard("{Home}");
+    expect(dialog.style.width).toBe("320px");
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(dialog.style.width).toBe("352px");
+    expect(window.localStorage.getItem("kb-drawer-width:md")).toBe("352");
+    await userEvent.dblClick(handle);
+    expect(dialog.style.width).toBe("");
+    expect(window.localStorage.getItem("kb-drawer-width:md")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng cửa sổ" }));
-    expect(dock()).toBe("0px");
+    expect(within(dialog).queryByRole("separator")).toBeNull();
+    unmount();
+  });
+
+  it("chuyển drawer → cửa sổ: lớp phủ nằm TRƯỚC cửa sổ (không phủ mờ chính nó), khóa cuộn; về drawer thì mở khóa", async () => {
+    render(
+      <Dialog defaultOpen defaultPresentation="panel">
+        <DialogContent title="Panel">x</DialogContent>
+      </Dialog>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Panel" });
+    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng cửa sổ" }));
+    const overlay = document.querySelector("[data-slot=dialog-overlay]")!;
+    expect(overlay).not.toHaveClass("hidden");
+    expect(overlay.compareDocumentPosition(dialog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.body.style.overflow).toBe("hidden");
     await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng panel bên phải" }));
-    expect(dock()).not.toBe("0px");
-    await userEvent.click(screen.getByRole("button", { name: "Đóng" }));
-    expect(dock()).toBe("0px");
+    expect(overlay).toHaveClass("hidden");
+    expect(document.body.style.overflow).toBe("");
   });
 
   it("dạng cửa sổ: phủ nền, bấm lớp phủ thì đóng", async () => {
@@ -210,7 +247,7 @@ describe("Dialog – dạng panel dùng hết chiều cao", () => {
     const form = screen.getByRole("textbox", { name: "Mã trường" }).closest("form")!;
     const body = form.parentElement!;
     expect(body).toHaveClass("flex-1", "overflow-y-auto", "[&>form]:flex-1", "[&>form]:flex-col");
-    expect(screen.getByRole("button", { name: "Thêm" }).parentElement).toHaveClass("mt-auto", "sticky", "bottom-0");
+    expect(screen.getByRole("button", { name: "Thêm" }).parentElement).toHaveClass("mt-auto", "sticky", "-bottom-4");
     expect(screen.getByRole("dialog")).toHaveAttribute("data-presentation", "panel");
   });
 });

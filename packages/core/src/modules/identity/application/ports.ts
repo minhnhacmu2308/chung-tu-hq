@@ -1,4 +1,5 @@
-import type { Role } from "@kb/contracts";
+import type { Organization, Role } from "@kb/contracts";
+import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { AuthTokenKind } from "../domain/token.js";
@@ -6,6 +7,8 @@ import type { AuthTokenKind } from "../domain/token.js";
 export type UserRow = { id: string; email: string; passwordHash: string; name: string; emailVerifiedAt: Date | null; createdAt: Date };
 export type OrgRow = {
   id: string; taxCode: string; name: string; address: string; phone: string; planCode: string; suspectThreshold: string; fourEyes: boolean; createdAt: Date;
+  /** Mã bưu chính (6 số) – chỉ tiêu 1.14 IDA / 2.13 EDA; thiếu = mặc định của DB (""). */
+  postalCode?: string;
   /** Do khu Quản trị hệ thống đặt (module admin); thiếu = mặc định của DB. */
   status?: string; quotaBonus?: number; quotaBonusMonth?: string | null; planStartedAt?: Date | null; trialEndsAt?: Date | null;
 };
@@ -19,6 +22,7 @@ export type CertificateRow = { id: string; orgId: string; subject: string; issue
 export type NotificationRow = { id: string; orgId: string; userId: string; title: string; body: string; href: string | null; readAt: Date | null; createdAt: Date };
 /** Bí mật đã mã hóa của doanh nghiệp (org_secrets); `kind` duy nhất trong một org. */
 export type OrgSecretRow = { id: string; orgId: string; kind: string; ciphertext: string; keyVersion: number; updatedAt: Date };
+export type OrgAuditRow = { id: string; orgId: string; at: Date; actorId: string; actorName: string; action: string; targetType: string; targetId: string; targetLabel: string; detail: Record<string, unknown> | null };
 export type PlanRow = { code: string; name: string; dossiersPerMonth: number; pagesPerDossier: number };
 
 export interface IdentityRepos {
@@ -35,7 +39,7 @@ export interface IdentityRepos {
     /** Mọi org (chỉ dùng trong ngữ cảnh hệ thống: job định kỳ). */
     listAll(): Promise<OrgRow[]>;
     insert(row: OrgRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "suspectThreshold" | "fourEyes" | "planCode">>): Promise<void>;
+    update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "postalCode" | "suspectThreshold" | "fourEyes" | "planCode">>): Promise<void>;
   };
   memberships: {
     listByOrg(orgId: string): Promise<MembershipRow[]>;
@@ -49,12 +53,15 @@ export interface IdentityRepos {
     insert(row: SessionRow): Promise<void>;
     touch(id: string, lastSeenAt: Date, expiresAt: Date): Promise<void>;
     delete(id: string): Promise<void>;
+    /** Hủy mọi phiên của một người (đổi mật khẩu, khóa tài khoản). Trả số phiên đã xóa. */
+    deleteByUser(userId: string): Promise<number>;
     lastSeenByUsers(userIds: string[]): Promise<Record<string, Date>>;
   };
   authTokens: {
     findValid(kind: AuthTokenKind, hash: string, now: Date): Promise<AuthTokenRow | null>;
     insert(row: AuthTokenRow): Promise<void>;
-    markUsed(id: string, at: Date): Promise<void>;
+    /** Đánh dấu đã dùng – nguyên tử: chỉ thành công khi token chưa dùng (hai request cùng lúc chỉ một bên được). */
+    consume(id: string, at: Date): Promise<boolean>;
   };
   joinRequests: {
     listPending(orgId: string): Promise<JoinRequestRow[]>;
@@ -80,6 +87,12 @@ export interface IdentityRepos {
     insert(row: NotificationRow): Promise<void>;
     markAllRead(orgId: string, userId: string, at: Date): Promise<void>;
   };
+  audit: {
+    insert(row: OrgAuditRow): Promise<void>;
+    /** Mới nhất trước. */
+    list(orgId: string, page: { limit: number; offset: number }): Promise<OrgAuditRow[]>;
+    count(orgId: string): Promise<number>;
+  };
 }
 
 /** Đơn vị công việc: mỗi lời gọi là một transaction với ngữ cảnh RLS tương ứng. */
@@ -92,6 +105,8 @@ export interface IdentityUow {
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
   verify(hash: string, password: string): Promise<boolean>;
+  /** Hash hợp lệ của một mật khẩu không ai dùng: đăng nhập với email lạ vẫn so sánh để thời gian phản hồi không lộ email có tồn tại hay không. */
+  readonly dummyHash: string;
 }
 export interface RateLimiter {
   hit(key: string, limit: number, windowSec: number): Promise<{ allowed: boolean; remaining: number }>;
@@ -113,6 +128,8 @@ export interface PlansReader {
 }
 
 export type IdentityDeps = {
+  /** Nhật ký hoạt động doanh nghiệp (org_audit); không nối → không ghi. */
+  audit?: OrgAuditWriter;
   uow: IdentityUow;
   plans: PlansReader;
   hasher: PasswordHasher;
@@ -130,5 +147,5 @@ export type IdentityDeps = {
   /** Tài khoản có quyền quản trị hệ thống không (module admin cung cấp qua container, ADR 0006); thiếu → không ai là quản trị viên. */
   platformStaff?: (userId: string) => Promise<{ status: "ACTIVE" | "INVITED" | "DISABLED" } | null>;
   /** Mức dùng tháng của org (billing cung cấp qua container); thiếu → 0. */
-  usage?: (orgId: string) => Promise<{ dossiersThisMonth: number; pagesThisMonth: number; aiCostVnd: string }>;
+  usage?: (orgId: string) => Promise<Organization["usage"]>;
 };

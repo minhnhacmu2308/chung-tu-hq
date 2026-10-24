@@ -1,7 +1,7 @@
 "use client";
 // Bước ② Sửa nội dung: mỗi dòng đã chọn là một khối thu gọn; trong khối, bảng so sánh Trước (tờ khai gốc, chỉ đọc) | Sau (sửa được) theo từng chỉ tiêu.
 // Tiền thuế Sau tự tính lại (applyAmaLineEdit); ô Sau khác Trước được đánh dấu "đã đổi". Mô tả/xuất xứ và thuế – thu khác nằm trong khối thu gọn.
-import { Badge, Button, Card, CardContent, Disclosure, Grid, Input, Stack, toast } from "@kb/ui";
+import { Badge, Button, Card, CardContent, Disclosure, fill, Grid, Input, Stack, toast, useMessages, useUiLocale } from "@kb/ui";
 import {
   AMA_COMPUTED_KEYS, AMA_LINE_LAYOUT, AMA_OTHER_TAX_SLOTS, amaLineDelta, amaLineLocked, LINE_LOCK_REASON, parseDec, type PostAmendmentLine,
 } from "@kb/contracts";
@@ -18,7 +18,8 @@ import { conditionContext } from "../declaration-form/form-state";
 import { ViewPrefsProvider } from "../declaration-form/view-prefs";
 import { StickyActionBar } from "../dossier-detail/steps/declaration-parts";
 import type { AmaStepCtx } from "./ama-context";
-import { amaChangeSummary, applyEdits, changedKeys, IMPORT_COMPARE_ROWS, lineSaves, otherCompareRows, otherSlotsInUse, type CompareRow } from "./ama-wizard";
+import { AMA_MESSAGES } from "./ama.messages";
+import { amaChangeSummary, applyEdits, changedKeys, importCompareRows, lineSaves, otherCompareRows, otherSlotsInUse, type CompareRow } from "./ama-wizard";
 
 type Edits = Record<string, Record<string, string>>;
 
@@ -34,6 +35,7 @@ const signed = (v: string | null) => (v === null ? null : `${v.startsWith("-") ?
 export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChange: (n: number) => void }) {
   const { a, editable } = ctx;
   const qc = useQueryClient();
+  const t = useMessages(AMA_MESSAGES);
   const [edits, setEdits] = useState<Edits>({});
   const dirty = Object.values(edits).reduce((n, e) => n + Object.keys(e).length, 0);
   useEffect(() => {
@@ -54,20 +56,20 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
       return saves.length;
     },
     onSuccess: (n) => {
-      toast({ tone: "success", title: `Đã lưu ${formatNumber(n)} thay đổi` });
+      toast({ tone: "success", title: fill(t.savedChanges, { n: formatNumber(n) }) });
       setEdits({});
     },
-    onError: toastMutationError("Không lưu được dòng hàng"),
+    onError: toastMutationError(t.saveLinesFailed),
     onSettled: ctx.refresh,
   });
   const remove = useMutation({
     mutationFn: (lineId: string) => removePostAmendmentLine(ctx.dossierId, lineId),
     onSuccess: (_d, lineId) => {
       setEdits(({ [lineId]: _, ...rest }) => rest);
-      toast({ tone: "success", title: "Đã bỏ dòng khỏi bản khai bổ sung" });
+      toast({ tone: "success", title: t.removed });
       ctx.refresh();
     },
-    onError: toastMutationError("Không bỏ được dòng hàng"),
+    onError: toastMutationError(t.removeFailed),
   });
 
   return (
@@ -88,7 +90,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
         <Card>
           <CardContent className="flex flex-wrap items-baseline justify-between gap-2 pt-5">
             <p className="text-sm text-fg-muted">
-              Tổng thuế: {formatMoney(summary.taxBefore, "VND", 0)} → <span className="font-medium text-fg">{formatMoney(summary.taxAfter, "VND", 0)}</span>
+              {t.totalTaxLabel} {formatMoney(summary.taxBefore, "VND", 0)} → <span className="font-medium text-fg">{formatMoney(summary.taxAfter, "VND", 0)}</span>
             </p>
             <p className="text-sm font-semibold tabular-nums text-fg">{signed(summary.taxDelta)} VND</p>
           </CardContent>
@@ -97,27 +99,27 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
 
       <StickyActionBar>
         <div className="min-w-0 flex-1 basis-48">
-          <p className="text-xs text-fg-muted">{formatNumber(summary.lines)} dòng · {formatNumber(summary.changed)} chỉ tiêu đã đổi</p>
-          {dirty > 0 && <p className="text-sm font-medium text-warning-subtle-fg">{formatNumber(dirty)} thay đổi chưa lưu</p>}
+          <p className="text-xs text-fg-muted">{fill(t.linesChanged, { l: formatNumber(summary.lines), c: formatNumber(summary.changed) })}</p>
+          {dirty > 0 && <p className="text-sm font-medium text-warning-subtle-fg">{fill(t.unsavedN, { n: formatNumber(dirty) })}</p>}
         </div>
         {dirty > 0 ? (
           <>
             <Button variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => setEdits({})}>
-              Hoàn tác
+              {t.undo}
             </Button>
             <Button leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={() => save.mutate()}>
-              Lưu {formatNumber(dirty)} thay đổi
+              {fill(t.saveN, { n: formatNumber(dirty) })}
             </Button>
           </>
         ) : (
           <>
             {editable && (
               <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub("pick")}>
-                Chọn thêm dòng
+                {t.pickMore}
               </Button>
             )}
             <Button rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => ctx.goSub("reason")}>
-              Tiếp: lý do & phê duyệt
+              {t.nextReason}
             </Button>
           </>
         )}
@@ -137,6 +139,8 @@ type LineCardProps = {
 };
 
 function LineCard({ kind, line, defaultOpen, editable, onChange, onRemove, removing }: LineCardProps) {
+  const t = useMessages(AMA_MESSAGES);
+  const locale = useUiLocale();
   const v = line.values;
   const changed = new Set(changedKeys(line));
   const delta = amaLineDelta(v);
@@ -157,16 +161,16 @@ function LineCard({ kind, line, defaultOpen, editable, onChange, onRemove, remov
       defaultOpen={defaultOpen}
       title={
         <span className="flex min-w-0 flex-col">
-          <span>Dòng {ran}</span>
+          <span>{fill(t.lineN, { n: ran })}</span>
           {desc && <span className="truncate text-xs font-normal text-fg-muted">{desc}</span>}
         </span>
       }
-      meta={changed.size > 0 ? <Badge tone="info">{formatNumber(changed.size)} ô đã đổi</Badge> : <Badge tone="neutral">Chưa đổi</Badge>}
+      meta={changed.size > 0 ? <Badge tone="info">{fill(t.cellsChanged, { n: formatNumber(changed.size) })}</Badge> : <Badge tone="neutral">{t.unchanged}</Badge>}
       {...(editable
         ? {
             actions: (
-              <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-4 w-4" />} loading={removing} onClick={onRemove} aria-label={`Bỏ dòng ${ran} khỏi bản khai`}>
-                <span className="cq-max-sm:sr-only">Bỏ dòng</span>
+              <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-4 w-4" />} loading={removing} onClick={onRemove} aria-label={fill(t.removeLineAria, { n: ran })}>
+                <span className="cq-max-sm:sr-only">{t.removeLine}</span>
               </Button>
             ),
           }
@@ -175,14 +179,14 @@ function LineCard({ kind, line, defaultOpen, editable, onChange, onRemove, remov
       <Stack gap="md">
         <div className="@container">
           <Grid cols={{ base: 1, md: 3 }} gap="sm" aria-hidden="true" className="hidden border-b border-border pb-2 text-xs font-medium text-fg-muted cq-md:grid">
-            <span>Chỉ tiêu</span>
-            <span>Trước (tờ khai gốc)</span>
-            <span>Sau (khai bổ sung)</span>
+            <span>{t.colField}</span>
+            <span>{t.colBefore}</span>
+            <span>{t.colAfter}</span>
           </Grid>
-          {rows(IMPORT_COMPARE_ROWS, () => signed(delta.importTax))}
+          {rows(importCompareRows(locale), () => signed(delta.importTax))}
         </div>
 
-        <Disclosure title="Mô tả, xuất xứ, mã hàng" defaultOpen={descChanged} {...(descChanged ? { meta: <Badge tone="info">đã đổi</Badge> } : {})}>
+        <Disclosure title={t.descGroup} defaultOpen={descChanged} {...(descChanged ? { meta: <Badge tone="info">{t.changedBadge}</Badge> } : {})}>
           <AmendLockProvider kind={kind} values={v} active={false} override={lock}>
             {AMA_LINE_LAYOUT.map((b) => (
               <BlockView key={b.id} kind={kind} block={b} values={v} onChange={editable ? onChange : undefined} ctx={conditionContext(kind, v)} showInapplicable={false} showActions={false} />
@@ -190,18 +194,18 @@ function LineCard({ kind, line, defaultOpen, editable, onChange, onRemove, remov
           </AmendLockProvider>
         </Disclosure>
 
-        <Disclosure title="Thuế và thu khác" meta={slots.length ? <Badge tone="neutral">{formatNumber(slots.length)} loại</Badge> : <span>chưa có</span>} defaultOpen={slots.some((n) => otherCompareRows(n).some((r) => changed.has(r.after)))}>
+        <Disclosure title={t.taxGroup} meta={slots.length ? <Badge tone="neutral">{fill(t.kindsN, { n: formatNumber(slots.length) })}</Badge> : <span>{t.none}</span>} defaultOpen={slots.some((n) => otherCompareRows(n).some((r) => changed.has(r.after)))}>
           <Stack gap="md">
             {slots.map((n) => (
               <div key={n} className="@container">
-                <p className="mb-1 text-sm font-medium text-fg">Thuế và thu khác {n}</p>
+                <p className="mb-1 text-sm font-medium text-fg">{fill(t.taxGroupN, { n })}</p>
                 {rows(otherCompareRows(n), () => signed(delta.other.find((o) => o.slot === n)?.amount ?? null))}
               </div>
             ))}
             {editable && slots.length < AMA_OTHER_TAX_SLOTS.length && (
               <div>
                 <Button size="sm" variant="ghost" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setExtraSlots((s) => s + 1)}>
-                  Thêm thuế và thu khác
+                  {t.addTax}
                 </Button>
               </div>
             )}
@@ -224,10 +228,11 @@ type RowProps = {
 
 /** Một hàng: tên chỉ tiêu · Trước · Sau. Màn hẹp xếp dọc: tên, "Trước: …", rồi ô Sau. */
 function CompareRowView({ kind, row, line, changed, delta, editable, onChange }: RowProps) {
+  const t = useMessages(AMA_MESSAGES);
   const v = line.values;
   const value = v[row.after] ?? "";
   const manual = row.computed && line.manual.includes(row.after) && AMA_COMPUTED_KEYS.has(row.after);
-  const aria = `${row.label} (Sau)`;
+  const aria = fill(t.afterAria, { label: row.label });
   const control = !editable ? (
     <p className="text-sm font-medium text-fg">{shown(value, row.numeric)}</p>
   ) : row.codeTable ? (
@@ -239,21 +244,21 @@ function CompareRowView({ kind, row, line, changed, delta, editable, onChange }:
     <Grid cols={{ base: 1, md: 3 }} gap="sm" className="items-start border-b border-border py-2 last:border-b-0">
       <p className="text-sm font-medium text-fg">{row.label}</p>
       <p className="text-sm text-fg-muted">
-        <span className="cq-md:hidden">Trước: </span>
+        <span className="cq-md:hidden">{t.beforePrefix}</span>
         {shown(v[row.before], row.numeric)}
       </p>
       <div className="flex min-w-0 flex-col gap-1">
         {control}
         {(changed || row.computed) && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-            {changed && <Badge tone="info">đã đổi</Badge>}
-            {row.computed && !manual && <span>Tự tính</span>}
+            {changed && <Badge tone="info">{t.changedBadge}</Badge>}
+            {row.computed && !manual && <span>{t.autoCalc}</span>}
             {manual && (
               <>
-                <span>Sửa tay</span>
+                <span>{t.manual}</span>
                 {editable && (
                   <Button size="sm" variant="ghost" leftIcon={<Calculator className="h-4 w-4" />} onClick={() => onChange(row.after, "")}>
-                    Tự tính lại
+                    {t.recalc}
                   </Button>
                 )}
               </>

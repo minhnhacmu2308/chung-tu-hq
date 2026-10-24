@@ -51,7 +51,7 @@ export async function listUsageMonths(deps: AdminDeps, actor: StaffActor): Promi
 }
 
 /**
- * Báo cáo một tháng: mỗi doanh nghiệp đã đăng ký trước cuối tháng. Giá vốn theo loại lệnh gọi trả phí; doanh thu = giá gói hiện tại
+ * Báo cáo một tháng: mỗi doanh nghiệp đã đăng ký trước cuối tháng. Giá vốn tách theo nhà cung cấp (AI đọc chứng từ, HSCodePro, Customs Hub); doanh thu = giá gói hiện tại
  * (chưa có lịch sử giá/hóa đơn – xấp xỉ cho tháng cũ). Biên = giá gói − giá vốn, âm là đang lỗ.
  */
 export async function getUsageReport(deps: AdminDeps, actor: StaffActor, month: string): Promise<Result<UsageReport>> {
@@ -74,7 +74,7 @@ export async function getUsageReport(deps: AdminDeps, actor: StaffActor, month: 
           const price = money(plan?.priceVnd ?? "0");
           return {
             orgId: o.id, orgName: o.name, planCode: o.planCode as OrgUsageRow["planCode"], planName: plan?.name ?? o.planCode,
-            dossiers: u?.dossiers ?? 0, pages: u?.pages ?? 0, aiCalls: u?.aiCalls ?? 0,
+            dossiers: u?.dossiers ?? 0, pages: u?.pages ?? 0, aiCalls: u?.aiCalls ?? 0, hsItems: u?.hsItems ?? 0, customsMessages: u?.customsMessages ?? 0,
             readCostVnd: read, hsCostVnd: hs, customsCostVnd: customs, totalCostVnd: total, planPriceVnd: price,
             marginVnd: toDecimalString(dec(price).minus(dec(total)), 0),
           };
@@ -89,6 +89,11 @@ export async function getUsageReport(deps: AdminDeps, actor: StaffActor, month: 
           dossiers: rows.reduce((n, x) => n + x.dossiers, 0),
           pages: rows.reduce((n, x) => n + x.pages, 0),
           aiCalls: rows.reduce((n, x) => n + x.aiCalls, 0),
+          hsItems: rows.reduce((n, x) => n + x.hsItems, 0),
+          customsMessages: rows.reduce((n, x) => n + x.customsMessages, 0),
+          readCostVnd: sumMoney(rows.map((x) => x.readCostVnd)),
+          hsCostVnd: sumMoney(rows.map((x) => x.hsCostVnd)),
+          customsCostVnd: sumMoney(rows.map((x) => x.customsCostVnd)),
           totalCostVnd: toDecimalString(cost, 0),
           revenueVnd: toDecimalString(revenue, 0),
           marginVnd: toDecimalString(revenue.minus(cost), 0),

@@ -34,9 +34,9 @@ function fileBlock(file: AiFile): Anthropic.ContentBlockParam {
 export class ClaudeAiProvider implements AiProvider {
   readonly name = "claude";
   private client: Anthropic;
-  /** `clientOptions` chỉ để test (fetch giả). */
-  constructor(apiKey: string, private model: string, clientOptions: { fetch?: typeof fetch; maxRetries?: number } = {}) {
-    this.client = new Anthropic({ apiKey, ...clientOptions });
+  /** `timeout`/`maxRetries`: mặc định 180 s và thử lại 1 lần (BullMQ đã thử lại job); `fetch` chỉ để test. */
+  constructor(apiKey: string, private model: string, clientOptions: { fetch?: typeof fetch; maxRetries?: number; timeout?: number } = {}) {
+    this.client = new Anthropic({ apiKey, timeout: 180_000, maxRetries: 1, ...clientOptions });
   }
 
   private async callStructured(file: AiFile, schema: ZodType, instruction: string): Promise<{ input: unknown; usage: AiUsage }> {
@@ -52,22 +52,24 @@ export class ClaudeAiProvider implements AiProvider {
       fallbacks: "default",
       messages: [{ role: "user", content: [fileBlock(file), { type: "text", text: instruction }] }],
     });
-    if (res.stop_reason === "refusal") throw new AiDataError(`Model từ chối đọc chứng từ${res.stop_details?.category ? ` (${res.stop_details.category})` : ""}`);
-    if (res.stop_reason === "max_tokens") throw new AiDataError("Chứng từ quá dài – kết quả bị cắt, tách file rồi thử lại");
+    // Token đã tốn dù kết quả không dùng được → đính kèm usage vào lỗi để pipeline vẫn ghi usage_events.
+    const usage: AiUsage = { model: res.model, inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
+    if (res.stop_reason === "refusal") throw new AiDataError(`Model từ chối đọc chứng từ${res.stop_details?.category ? ` (${res.stop_details.category})` : ""}`, usage);
+    if (res.stop_reason === "max_tokens") throw new AiDataError("Chứng từ quá dài – kết quả bị cắt, tách file rồi thử lại", usage);
     const text = res.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join("");
     let input: unknown;
     try {
       input = fromAiOutput(schema, JSON.parse(text));
     } catch {
-      throw new AiDataError("Model không trả dữ liệu có cấu trúc");
+      throw new AiDataError("Model không trả dữ liệu có cấu trúc", usage);
     }
-    return { input, usage: { model: res.model, inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens } };
+    return { input, usage };
   }
 
   async classifyPages(file: AiFile) {
     const { input, usage } = await this.callStructured(file, ClassifyResultSchema, `File "${file.fileName}" có ${file.pages} trang. Phân loại từng trang thành các chứng từ (một file có thể chứa nhiều chứng từ; trang Duplicate/Triplicate/Copy đánh dấu isDuplicateCopy). Nếu nhận ra tên nhà cung cấp/hãng tàu, ghi vào supplierHint.`);
     const parsed = ClassifyResultSchema.safeParse(input);
-    if (!parsed.success) throw new AiDataError("Kết quả phân loại không đúng cấu trúc");
+    if (!parsed.success) throw new AiDataError("Kết quả phân loại không đúng cấu trúc", usage);
     return { result: parsed.data as ClassifyResult, usage };
   }
 

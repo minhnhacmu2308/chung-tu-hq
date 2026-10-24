@@ -7,6 +7,7 @@ import { cn } from "../lib/cn.js";
 const MESSAGES = {
   vi: { loading: "Đang xử lý" },
   en: { loading: "In progress" },
+  zh: { loading: "处理中" },
 } satisfies Messages<"loading">;
 
 const trackVariants = cva("relative w-full overflow-hidden rounded-full bg-surface-muted", {

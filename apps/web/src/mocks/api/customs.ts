@@ -15,6 +15,7 @@ import {
 } from "@/mocks/customs-sim";
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
+import { reasonApiError } from "@/mocks/reason-error";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
 import type { CustomsMessage, CustomsOperation, CustomsResult, Declaration, DigitalCertificate, Dossier } from "@/mocks/types";
 
@@ -183,15 +184,16 @@ function settle(db: MockDb, now: number) {
 /** Bản khai bổ sung gửi được: đã duyệt, có ít nhất một dòng hàng, đủ ô bắt buộc. */
 function assertAmendmentSendable(db: MockDb, c: Ctx) {
   const a = openAmendment(db, c.dossier.id);
-  if (!a || a.status !== "APPROVED") throw new ApiError("NOT_APPROVED", "Bản khai bổ sung chưa được phê duyệt");
+  if (!a || a.status !== "APPROVED") throw reasonApiError("NOT_APPROVED", "AMENDMENT_NOT_APPROVED");
   if (!a.lines.length) throw new ApiError("NO_LINES", "Bản khai bổ sung chưa có dòng hàng");
   if (!a.header["TK_REC"]?.trim()) throw new ApiError("MISSING_FIELD", "Chưa nhập mã lý do khai bổ sung");
 }
 
 function assertSendable(db: MockDb, c: Ctx) {
   if (!c.decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
-  if (c.decl.status !== "APPROVED") throw new ApiError("NOT_APPROVED", "Tờ khai chưa được phê duyệt");
-  if (db.lineItems.some((i) => i.dossierId === c.dossier.id && !i.hsConfirmed)) throw new ApiError("HS_UNCONFIRMED", "Còn mã HS chưa xác nhận");
+  if (c.decl.status !== "APPROVED") throw reasonApiError("NOT_APPROVED", "DECLARATION_NOT_APPROVED");
+  const unconfirmed = db.lineItems.filter((i) => i.dossierId === c.dossier.id && !i.hsConfirmed).length;
+  if (unconfirmed) throw reasonApiError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: unconfirmed });
   // Dữ liệu có thể đổi sau khi duyệt – kiểm lại trước khi gửi.
   assertNoGaps(db, c.decl, "khai");
 }
@@ -335,9 +337,9 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   if (CUSTOMS_OPERATIONS[op].kind === "query") throw new ApiError("INVALID_OPERATION", "Tờ khai nhập tra cứu bằng IID, tờ khai xuất bằng IEX");
   const a = operationAvailability(availabilityInput(db, c)).find((x) => x.op === op);
   if (!a) throw new ApiError("INVALID_OPERATION", `Nghiệp vụ ${op} không dùng cho tờ khai ${c.dossier.direction === "NK" ? "nhập" : "xuất"} khẩu`);
-  if (!a.enabled) throw new ApiError("OPERATION_LOCKED", a.reason || "Nghiệp vụ chưa thực hiện được ở giai đoạn này");
-  if (a.action === "EDIT") throw new ApiError("NOT_APPROVED", a.reason ?? "Sửa tờ khai và phê duyệt lại trước");
-  if (a.action === "START_POST_EDIT") throw new ApiError("POST_EDIT_REQUIRED", "Lập bản khai bổ sung ở bước 7 “Sửa sau thông quan” trước khi khai AMA");
+  if (!a.enabled) throw new ApiError("OPERATION_LOCKED", a.reason || "Nghiệp vụ chưa thực hiện được ở giai đoạn này", 400, { reason: a.reasonCode, params: a.reasonParams });
+  if (a.action === "EDIT") throw new ApiError("NOT_APPROVED", a.reason ?? "Sửa tờ khai và phê duyệt lại trước", 400, { reason: a.reasonCode, params: a.reasonParams });
+  if (a.action === "START_POST_EDIT") throw reasonApiError("POST_EDIT_REQUIRED", "START_POST_EDIT_FIRST", undefined, "Lập bản khai bổ sung ở bước 7 “Sửa sau thông quan” trước khi khai AMA");
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
   send(db, c, op, now);
@@ -350,7 +352,7 @@ export const performOperation = (dossierId: string, op: CustomsOperation) => mut
 /** Ký số và khai tạm lần đầu (IDA/EDA). Khai chính thức (IDC/EDC) là thao tác riêng của người khai. */
 export const submitDeclaration = (dossierId: string, certificateId: string) =>
   mutate((db) => {
-    if (!certificateId) throw new ApiError("NO_CERT", "Chọn chứng thư số để ký");
+    if (!certificateId) throw reasonApiError("NO_CERT", "CERTIFICATE_REQUIRED");
     const dossier = db.dossiers.find((d) => d.id === dossierId);
     if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
     settle(db, Date.now());
@@ -365,7 +367,7 @@ export const startPostAmendment = (dossierId: string) =>
     settle(db, Date.now());
     const c = load(db, dossierId);
     const a = operationAvailability(availabilityInput(db, c)).find((x) => x.op === "AMA");
-    if (!a || a.action !== "START_POST_EDIT" || !a.enabled) throw new ApiError("INVALID_STATE", a?.reason || "Chỉ sửa sau thông quan khi tờ khai đã thông quan");
+    if (!a || a.action !== "START_POST_EDIT" || !a.enabled) throw new ApiError("INVALID_STATE", a?.reason || "Chỉ sửa sau thông quan khi tờ khai đã thông quan", 400, { reason: a?.reasonCode, params: a?.reasonParams });
     if (!c.decl || !c.result) throw new ApiError("NOT_FOUND", "Chưa có tờ khai đã thông quan");
     // AMA là bản khai riêng: tờ khai gốc giữ nguyên (khóa), lập bản khai bổ sung điền sẵn từ tờ khai gốc + số Hải quan trả về.
     const seen = db.customsMessages.filter((m) => m.dossierId === dossierId && Date.parse(m.at) <= Date.now()).sort((a, b) => a.at.localeCompare(b.at));
@@ -504,6 +506,8 @@ function view(db: MockDb, dossierId: string, now: number): SubmissionView {
       enabled: a.enabled,
       action: a.action,
       ...(a.reason ? { reason: a.reason } : {}),
+      ...(a.reasonCode ? { reasonCode: a.reasonCode } : {}),
+      ...(a.reasonParams ? { reasonParams: a.reasonParams } : {}),
       ...(last ? { at: last.at, summary: last.summary } : {}),
     };
   });

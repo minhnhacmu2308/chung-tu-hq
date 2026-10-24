@@ -1,5 +1,12 @@
 // Input/output của nhóm API auth / org / notifications. Dùng ở route handler (parse) và FE (parse response).
 import { z } from "zod";
+
+/** Một dòng nhật ký hoạt động của doanh nghiệp (org_audit) – `action` là mã ổn định, giao diện dịch. */
+export const OrgAuditEntrySchema = z.object({
+  id: z.string(), at: z.string(), actorId: z.string(), actorName: z.string(), action: z.string(), targetType: z.string(), targetId: z.string(), targetLabel: z.string(),
+  detail: z.record(z.string(), z.unknown()).nullable(),
+});
+export type OrgAuditEntryDto = z.infer<typeof OrgAuditEntrySchema>;
 import { IsoDateSchema, IsoDateTimeSchema, RoleSchema } from "../common.js";
 import { MemberSchema, OrganizationSchema } from "../dto/index.js";
 
@@ -40,10 +47,17 @@ export const ResetPasswordInputSchema = z.object({ token: z.string().min(16), pa
 export const AcceptInviteInputSchema = z.object({ token: z.string().min(16), name: z.string().trim().min(2, "Nhập họ tên"), password: PasswordSchema });
 export type AcceptInviteInput = z.infer<typeof AcceptInviteInputSchema>;
 
+/**
+ * Mã bưu chính doanh nghiệp: 5 chữ số (mã bưu chính quốc gia từ 2018) hoặc 6 chữ số (mã cũ, VNACCS nhận tối đa 7 ký tự) (ô TK_IMY/TK_EPP, chỉ tiêu 1.14 IDA / 2.13 EDA); "" = xóa (khi truyền IDA gửi "000000").
+ */
+export const PostalCodeSchema = z.string().trim().regex(/^(\d{5,6})?$/, "Mã bưu chính gồm 5 hoặc 6 chữ số");
+
 export const OrgProfileInputSchema = z.object({
   name: z.string().trim().min(1, "Tên doanh nghiệp không được để trống"),
   address: z.string().trim(),
   phone: z.string().trim(),
+  /** Không gửi = giữ nguyên. */
+  postalCode: PostalCodeSchema.optional(),
 });
 export type OrgProfileInput = z.infer<typeof OrgProfileInputSchema>;
 
@@ -67,3 +81,21 @@ export const JoinRequestSchema = z.object({ id: z.string(), userId: z.string(), 
 export type JoinRequest = z.infer<typeof JoinRequestSchema>;
 
 export const OkSchema = z.object({ ok: z.literal(true) });
+
+/** Từ chối yêu cầu tham gia: lý do tùy chọn, gửi kèm email cho người xin. Chuỗi rỗng = không có lý do. */
+export const RejectJoinRequestInputSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(500, "Lý do tối đa 500 ký tự")
+    .optional()
+    .transform((s) => (s ? s : undefined)),
+});
+export type RejectJoinRequestInput = z.input<typeof RejectJoinRequestInputSchema>;
+
+/** Chuyển quyền sở hữu: nhập lại mật khẩu của Chủ sở hữu hiện tại để xác nhận. */
+export const TransferOwnershipInputSchema = z.object({ password: z.string().min(1, "Nhập mật khẩu để xác nhận").max(128) });
+export type TransferOwnershipInput = z.infer<typeof TransferOwnershipInputSchema>;
+/** Kết quả: người nhận thành OWNER, chủ cũ thành ADMIN. */
+export const TransferOwnershipResultSchema = z.object({ owner: MemberSchema, previousOwner: MemberSchema });
+export type TransferOwnershipResult = z.infer<typeof TransferOwnershipResultSchema>;

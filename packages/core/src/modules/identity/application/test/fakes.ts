@@ -3,6 +3,7 @@ import type { Clock } from "../../../../shared/clock.js";
 import type { Mailer, PasswordHasher, RateLimiter, SecretStore, TaxRegistryLookup } from "../ports.js";
 
 export class FakeHasher implements PasswordHasher {
+  readonly dummyHash = "h:__khong-ai-dung__";
   async hash(p: string) {
     return `h:${p}`;
   }

@@ -81,6 +81,16 @@ describe("declaration-to-fpt", () => {
       expect((b.request as { objVN_IDA_VANDON: Record<string, unknown> }).objVN_IDA_VANDON["vD_COC"], ptvc).toBeUndefined();
     }
   });
+  it("số không hợp lệ (dấu phẩy, chữ) → issues nêu ô, không âm thầm gửi 0; trống → bỏ ô; số quá 15 chữ số → cảnh báo", () => {
+    const bad = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, TONG_TG: { value: "1,250.00" } }, items: [{ ...PAYLOAD.items[0]!, amount: "N/A" }] });
+    expect(bad.issues.filter((i) => /không hợp lệ/.test(i))).toEqual([expect.stringContaining('TK_IP4: giá trị số không hợp lệ "1,250.00"'), expect.stringContaining("HAG_BPR: giá trị số không hợp lệ \"N/A\"")]);
+    expect((bad.request as { objVN_IDA: Record<string, unknown> }).objVN_IDA["tK_IP4"]).toBeUndefined();
+    expect(JSON.stringify(bad.request)).not.toContain('"haG_BPR":0');
+    const big = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, TONG_TG: { value: "12345678901234567.89" } } });
+    expect(big.warnings.join(" ")).toMatch(/TK_IP4.*15 chữ số/);
+    expect(buildFptRequest(PAYLOAD).issues).toEqual([]);
+  });
+
   it("thiếu mã địa điểm lưu kho (bắt buộc VD_ST) → issues; EDA dùng buyer + container CON_C01", () => {
     const noKho = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, KHO: { value: "" } } });
     expect(noKho.issues.join(" ")).toMatch(/vD_ST/);
@@ -209,11 +219,77 @@ describe("declaration-to-fpt – ô bổ sung người khai nhập trên form đ
     expect(b.warnings.some((w) => w.startsWith("TK_IMY"))).toBe(false);
     expect(b.issues).toEqual([]);
   });
+  it("1.14 mã bưu chính (TK_IMY – tờ khai điền từ Tài khoản): có → gửi giá trị thật; trống/thiếu → 000000 kèm cảnh báo", () => {
+    const sent = (fields: Record<string, { value: string }>) => buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, ...fields } });
+    expect((sent({ TK_IMY: { value: "180000" } }).request as Req).objVN_IDA["tK_IMY"]).toBe("180000");
+    for (const b of [sent({ TK_IMY: { value: "" } }), sent({})]) {
+      expect((b.request as Req).objVN_IDA["tK_IMY"]).toBe("000000");
+      expect(b.warnings.find((w) => w.startsWith("TK_IMY"))).toMatch(/1\.14.*000000/);
+    }
+  });
+  it("EDA 2.13 mã bưu chính người xuất khẩu (TK_EPP) từ tờ khai → objVN_EDA; trống → không gửi, không cảnh báo", () => {
+    const eda = (v: string) => buildFptRequest({ ...PAYLOAD, kind: "EDA", direction: "XK", fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, TK_EPP: { value: v } } });
+    expect((eda("180000").request as Req).objVN_EDA?.["tK_EPP"]).toBe("180000");
+    expect((eda("").request as Req).objVN_EDA?.["tK_EPP"]).toBeUndefined();
+    expect(eda("").warnings.some((w) => w.startsWith("TK_EPP"))).toBe(false);
+  });
   it("EDA: ô địa điểm xếp hàng lên container (2.60) gửi object CON kể cả khi chưa có số container", () => {
     const b = buildFptRequest({ ...PAYLOAD, kind: "EDA", direction: "XK", containers: [], fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, VBPQ: { value: "" }, TK_CGC: { value: "KR123" }, CON_VN: { value: "KHO A" } } });
     const r = b.request as Req;
     expect(r.objVN_EDA?.["tK_CGC"]).toBe("KR123");
     expect(r.objVN_EDA_CON?.[fptKey("CON_VN")]).toBe("KHO A");
+  });
+});
+
+describe("declaration-to-fpt – Đợt 5: chỉ tiêu theo tình huống người khai nhập (ô bổ sung)", () => {
+  type Obj = Record<string, unknown>;
+  type Req = { objVN_IDA: Obj; objVN_IDA_VANDON: Obj; objVN_EDA?: Obj };
+  const EDA: DeclarationPayload = { ...PAYLOAD, kind: "EDA", direction: "XK", fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, NXK_DT: { value: "0225 3 888 123" }, NGAY_DI: { value: "2026-10-20" }, VBPQ: { value: "" } } };
+  const withFields = (p: DeclarationPayload, extra: Record<string, string>) => buildFptRequest({ ...p, fields: { ...p.fields, ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, { value: v }])) } });
+
+  it.each([["IDA", PAYLOAD, "objVN_IDA"], ["EDA", EDA, "objVN_EDA"]] as const)("%s 1.40/2.35 → TK_IV2 (số) chỉ khi 1.39/2.34 = D; mã khác thì không gửi dù đã nhập", (_k, base, obj) => {
+    const d = withFields(base, { HD_PL: "D – Hóa đơn điện tử (đăng ký trên VNACCS)", TK_IV2: "100000012345" });
+    expect((d.request as unknown as Record<string, Obj>)[obj]).toMatchObject({ tK_IV1: "D", tK_IV2: 100000012345 });
+    expect(d.issues).toEqual([]);
+    const a = withFields(base, { HD_PL: "A – Hóa đơn thương mại", TK_IV2: "100000012345" });
+    expect((a.request as unknown as Record<string, Obj>)[obj]!["tK_IV2"]).toBeUndefined();
+  });
+
+  it("IDA: ủy thác / tại chỗ (1.17–1.19, 1.24), nộp thuế – hạn mức – bảo lãnh (1.53–1.62), kho ngoại quan (1.64), vận chuyển kết hợp (1.65–1.67) → đúng trường FPT, đúng kiểu", () => {
+    const b = withFields(PAYLOAD, {
+      TK_NMC: "0101234567", TK_NMN: "CÔNG TY ỦY THÁC", TK_EPC: "0309876543", TK_ENM: "FOREIGN NOMINATOR LTD",
+      TK_BP: "A", TK_BRC: "01201001", TK_BYA: "2026", TK_BCM: "HM", TK_BCN: "0001", TK_ENC: "C", TK_SBC: "79202001", TK_RYA: "2026", TK_SCM: "BL", TK_SCN: "0002",
+      VD_ISD: "2026-10-16", TK_DPD: "2026-10-17", TK_ST1: "02CIS01", TK_AD1: "2026-10-18", TK_SD1: "2026-10-19", TK_ARP: "03CCS01", TK_ADT: "2026-10-20",
+    });
+    const r = b.request as Req;
+    expect(r.objVN_IDA).toMatchObject({
+      tK_NMC: "0101234567", tK_NMN: "CÔNG TY ỦY THÁC", tK_EPC: "0309876543", tK_ENM: "FOREIGN NOMINATOR LTD",
+      tK_BP: "A", tK_BRC: "01201001", tK_BYA: 2026, tK_BCM: "HM", tK_BCN: "0001", tK_ENC: "C", tK_SBC: "79202001", tK_RYA: 2026, tK_SCM: "BL", tK_SCN: "0002",
+      tK_DPD: "17/10/2026", tK_ST1: "02CIS01", tK_AD1: "18/10/2026", tK_SD1: "19/10/2026", tK_ARP: "03CCS01", tK_ADT: "20/10/2026",
+    });
+    expect(r.objVN_IDA_VANDON["vD_ISD"]).toBe("16/10/2026");
+    expect(b.issues).toEqual([]);
+  });
+
+  it("EDA: ủy thác / tại chỗ (2.16–2.18), hạn mức – thời hạn nộp thuế – bảo lãnh (2.44–2.52), vận chuyển kết hợp (2.54–2.56)", () => {
+    const b = withFields(EDA, {
+      TK_EXC: "0101234567", TK_EXN: "CÔNG TY ỦY THÁC XK", TK_CGC: "0309876543",
+      TK_BRC: "01201001", TK_BYA: "2026", TK_BCM: "HM", TK_BCN: "0001", TK_ENC: "D", TK_SBC: "79202001", TK_RYA: "2026", TK_SCM: "BL", TK_SCN: "0002",
+      TK_DPD: "2026-10-17", TK_ST1: "02CIS01", TK_ARP: "03CCS01", TK_ADT: "2026-10-20",
+    });
+    expect((b.request as Req).objVN_EDA).toMatchObject({
+      tK_EXC: "0101234567", tK_EXN: "CÔNG TY ỦY THÁC XK", tK_CGC: "0309876543",
+      tK_BRC: "01201001", tK_BYA: 2026, tK_BCM: "HM", tK_BCN: "0001", tK_ENC: "D", tK_SBC: "79202001", tK_RYA: 2026, tK_SCM: "BL", tK_SCN: "0002",
+      tK_DPD: "17/10/2026", tK_ST1: "02CIS01", tK_ARP: "03CCS01", tK_ADT: "20/10/2026",
+    });
+    expect(b.issues).toEqual([]);
+  });
+
+  it("chưa nhập (hoặc chỉ khoảng trắng) → không gửi trường nào", () => {
+    const keys = ["TK_NMC", "TK_EPC", "TK_ENM", "TK_BP", "TK_BRC", "TK_BYA", "TK_ENC", "TK_SBC", "TK_DPD", "TK_ST1", "TK_ARP", "TK_IV2"];
+    const r = withFields(PAYLOAD, { TK_ENC: " ", TK_BYA: "" }).request as Req;
+    for (const k of keys) expect(r.objVN_IDA[fptKey(k)], k).toBeUndefined();
+    expect(r.objVN_IDA_VANDON["vD_ISD"]).toBeUndefined();
   });
 });
 

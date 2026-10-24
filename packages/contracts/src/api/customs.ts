@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DecimalStringSchema, DirectionSchema, IsoDateTimeSchema } from "../common.js";
 import { CustomsActionSchema, CustomsPhaseSchema, CustomsStageSchema } from "../customs-flow.js";
+import { ReasonCodeSchema, ReasonParamsSchema } from "../reason-codes.js";
 import { CustomsInfoSchema, CustomsRejectionSchema, CustomsMessageSchema, CustomsOperationSchema, CustomsResultSchema } from "../dto/customs.js";
 import { DeclarationStatusSchema } from "../dto/declaration.js";
 
@@ -22,8 +23,11 @@ export const PipelineRowSchema = z.object({
   /** Bấm được ở giai đoạn hiện tại. */
   enabled: z.boolean().default(false),
   action: CustomsActionSchema.default("SEND"),
-  /** Lý do bị khóa / hướng dẫn khi phải sửa tờ khai trước. */
+  /** Lý do bị khóa / hướng dẫn khi phải sửa tờ khai trước (câu tiếng Việt – giữ cho tương thích ngược). */
   reason: z.string().optional(),
+  /** Mã lý do ổn định (reason-codes.ts) + tham số – giao diện dịch theo ngôn ngữ, mã lạ thì hiện `reason`. */
+  reasonCode: ReasonCodeSchema.optional(),
+  reasonParams: ReasonParamsSchema.optional(),
 });
 export type PipelineRow = z.infer<typeof PipelineRowSchema>;
 

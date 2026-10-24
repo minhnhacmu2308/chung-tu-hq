@@ -52,3 +52,13 @@ describe("buildSlots", () => {
     expect(addableKinds(slots)).toContain("OTHER");
   });
 });
+
+describe("suggestedKinds – nhãn theo ngôn ngữ", () => {
+  it("mặc định tiếng Việt; locale en/zh trả lý do đã dịch, thứ tự ô không đổi", () => {
+    const d = { transportMode: "SEA_CONTAINER", incoterm: "FOB", direction: "NK" } as const;
+    expect(suggestedKinds(d)[0]?.reason).toBe("Trị giá, người bán/mua, dòng hàng");
+    expect(suggestedKinds(d, "en").find((k) => k.kind === "FREIGHT_INVOICE")?.reason).toContain("Incoterm FOB");
+    expect(suggestedKinds(d, "zh")[0]?.reason).toBe("金额、买卖方、货物行");
+    expect(suggestedKinds(d, "zh").map((k) => k.kind)).toEqual(suggestedKinds(d).map((k) => k.kind));
+  });
+});

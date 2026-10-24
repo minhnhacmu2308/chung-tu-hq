@@ -1,40 +1,25 @@
 "use client";
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, Progress, Skeleton, Stack, toast, SkeletonCard,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, Progress, Skeleton, Stack, toast, SkeletonCard, fill, useMessages,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { getOrganization, settingsKeys } from "@/api/settings";
+import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { formatDate, formatNumber, formatVnd } from "@/lib/format";
 import type { Organization } from "@/mocks/types";
 import { LoadError } from "@/components/common/load-error";
+import { PLAN_TAB_MESSAGES } from "./plan-tab.messages";
 
 type PlanCode = Organization["plan"]["code"];
-const PLANS: { code: PlanCode; name: string; price: string; dossiers: string; features: string[] }[] = [
-  {
-    code: "BASIC",
-    name: "Cơ bản",
-    price: "1.490.000 đ/tháng",
-    dossiers: "50 hồ sơ/tháng · 20 trang/hồ sơ",
-    features: ["AI đọc + đối chiếu chéo", "Màn kiểm tra & xác nhận", "Xuất JSON / Excel", "3 thành viên"],
-  },
-  {
-    code: "PRO",
-    name: "Chuyên nghiệp",
-    price: "3.990.000 đ/tháng",
-    dossiers: "150 hồ sơ/tháng · 40 trang/hồ sơ",
-    features: ["Mọi thứ của gói Cơ bản", "Skill riêng theo nhà cung cấp", "Gợi ý mã HS (hscodepro)", "Dựng tờ khai IDA/EDA", "Lịch sử & nhật ký sửa", "10 thành viên"],
-  },
-  {
-    code: "ENTERPRISE",
-    name: "Doanh nghiệp",
-    price: "Liên hệ",
-    dossiers: "Theo hợp đồng",
-    features: ["Mọi thứ của gói Chuyên nghiệp", "Truyền Hải quan qua Customs Hub", "Kết nối API / ERP", "SLA & hỗ trợ riêng", "Không giới hạn thành viên"],
-  },
+const PLANS: { code: PlanCode; key: "basic" | "pro" | "enterprise" }[] = [
+  { code: "BASIC", key: "basic" },
+  { code: "PRO", key: "pro" },
+  { code: "ENTERPRISE", key: "enterprise" },
 ];
 
 function Meter({ label, used, total, unit }: { label: string; used: number; total: number; unit: string }) {
+  const m = useMessages(PLAN_TAB_MESSAGES);
   const pct = Math.round((used / total) * 100);
   return (
     <Stack gap="xs">
@@ -44,17 +29,25 @@ function Meter({ label, used, total, unit }: { label: string; used: number; tota
           {formatNumber(used)} / {formatNumber(total)} {unit}
         </span>
       </div>
-      <Progress value={pct} tone={pct >= 90 ? "danger" : pct >= 75 ? "warning" : "primary"} aria-label={`${label}: đã dùng ${pct}%`} />
+      <Progress value={pct} tone={pct >= 90 ? "danger" : pct >= 75 ? "warning" : "primary"} aria-label={fill(m.meterAria, { label, pct })} />
     </Stack>
   );
 }
 
 export function PlanTab() {
+  const m = useMessages(PLAN_TAB_MESSAGES);
   const { data: org, isLoading, isError, refetch } = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
   if (isError) return <LoadError onRetry={() => void refetch()} />;
   if (isLoading || !org) return <SkeletonCard lines={6} />;
   const { plan, usage } = org;
-  const avgCost = usage.dossiersThisMonth ? Math.round(Number(usage.aiCostVnd) / usage.dossiersThisMonth) : 0;
+  // Chi phí tháng tách theo nhà cung cấp; cộng theo đơn vị nhỏ nhất (VND nguyên) để không sai số thập phân.
+  const costs = [
+    { key: "ai", label: m.costAi, value: usage.aiCostVnd },
+    { key: "hs", label: m.costHs, value: usage.hsCostVnd },
+    { key: "customs", label: m.costCustoms, value: usage.customsCostVnd },
+  ];
+  const totalCost = sumMinor(costs.map((c) => toMinor(c.value, 0)));
+  const avgCost = usage.dossiersThisMonth ? Math.round(totalCost / usage.dossiersThisMonth) : 0;
 
   return (
     <Stack gap="lg">
@@ -62,49 +55,60 @@ export function PlanTab() {
         <Card className="cq-lg:col-span-2">
           <CardHeader>
             <CardTitle>
-              Gói {plan.name} <Badge tone="primary">Đang dùng</Badge>
+              {fill(m.planTitle, { name: plan.name })} <Badge tone="primary">{m.inUse}</Badge>
             </CardTitle>
-            <CardDescription>Gia hạn ngày {formatDate(plan.renewsAt)} · hạn mức tính theo tháng, đặt lại khi gia hạn.</CardDescription>
+            <CardDescription>{fill(m.renews, { date: formatDate(plan.renewsAt) })}</CardDescription>
           </CardHeader>
           <CardContent>
             <Stack gap="md">
-              <Meter label="Hồ sơ tháng này" used={usage.dossiersThisMonth} total={plan.dossiersPerMonth} unit="hồ sơ" />
-              <Meter label="Trang đã đọc" used={usage.pagesThisMonth} total={plan.dossiersPerMonth * 8} unit="trang (ước tính 8 trang/hồ sơ)" />
+              <Meter label={m.dossiersMonth} used={usage.dossiersThisMonth} total={plan.dossiersPerMonth} unit={m.dossiersUnit} />
+              <Meter label={m.pagesRead} used={usage.pagesThisMonth} total={plan.dossiersPerMonth * 8} unit={m.pagesUnit} />
               <p className="text-xs text-fg-subtle">
-                Mỗi hồ sơ tối đa {plan.pagesPerDossier} trang. Vượt hạn mức vẫn dùng được, tính thêm theo hồ sơ ở kỳ thanh toán sau.
+                {fill(m.pagesNote, { n: plan.pagesPerDossier })}
               </p>
             </Stack>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>Chi phí AI tháng này</CardDescription>
-            <CardTitle as="h3" className="text-2xl">{formatVnd(usage.aiCostVnd)}</CardTitle>
-            <p className="text-xs text-fg-subtle">≈ {formatVnd(String(avgCost))} / hồ sơ · đã gồm trong giá gói</p>
+            <CardDescription>{m.serviceCost}</CardDescription>
+            <CardTitle as="h3" className="text-2xl">{formatVnd(fromMinor(totalCost, 0))}</CardTitle>
+            <p className="text-xs text-fg-subtle">{fill(m.avgCost, { cost: formatVnd(String(avgCost)) })}</p>
           </CardHeader>
           <CardContent>
-            <Alert tone="info">Chi phí đọc chứng từ do KhaiBáo AI chịu theo gói. Số liệu chỉ để doanh nghiệp theo dõi.</Alert>
+            <Stack gap="md">
+              <dl className="space-y-1 text-sm">
+                {costs.map((c) => (
+                  <div key={c.key} className="flex items-baseline justify-between gap-2">
+                    <dt className="text-fg-muted">{c.label}</dt>
+                    <dd className="font-medium tabular-nums text-fg">{formatVnd(c.value)}</dd>
+                  </div>
+                ))}
+              </dl>
+              <Alert tone="info">{m.aiCostNote}</Alert>
+            </Stack>
           </CardContent>
         </Card>
       </Grid>
 
       <Stack gap="sm">
-        <h2 className="text-base font-semibold text-fg">So sánh gói</h2>
+        <h2 className="text-base font-semibold text-fg">{m.compare}</h2>
         <Grid cols={{ base: 1, md: 3 }}>
           {PLANS.map((p) => {
             const current = p.code === plan.code;
+            const features = m[`${p.key}Features`].split("\n");
             return (
               <Card key={p.code} className={current ? "flex flex-col border-primary ring-1 ring-primary" : "flex flex-col"}>
                 <CardHeader>
                   <CardTitle>
-                    {p.name} {current && <Badge tone="primary">Gói hiện tại</Badge>}
+                    {m[`${p.key}Name`]} {current && <Badge tone="primary">{m.currentPlan}</Badge>}
                   </CardTitle>
-                  <p className="text-xl font-semibold text-fg">{p.price}</p>
-                  <CardDescription>{p.dossiers}</CardDescription>
+                  <p className="text-xl font-semibold text-fg">{m[`${p.key}Price`]}</p>
+                  <CardDescription>{m[`${p.key}Dossiers`]}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1">
                   <ul className="space-y-2">
-                    {p.features.map((f) => (
+                    {features.map((f) => (
                       <li key={f} className="flex gap-2 text-sm text-fg-muted">
                         <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
                         {f}
@@ -114,14 +118,14 @@ export function PlanTab() {
                 </CardContent>
                 <CardFooter>
                   {current ? (
-                    <Button variant="secondary" fullWidth disabled>Đang dùng</Button>
+                    <Button variant="secondary" fullWidth disabled>{m.inUse}</Button>
                   ) : (
                     <Button
                       variant={p.code === "ENTERPRISE" ? "primary" : "secondary"}
                       fullWidth
-                      onClick={() => toast({ tone: "info", title: "Đã gửi yêu cầu đổi gói", description: "Bộ phận kinh doanh sẽ liên hệ trong 1 ngày làm việc." })}
+                      onClick={() => toast({ tone: "info", title: m.requestSent, description: m.requestSentDesc })}
                     >
-                      {p.code === "ENTERPRISE" ? "Liên hệ tư vấn" : "Chuyển sang gói này"}
+                      {p.code === "ENTERPRISE" ? m.contactSales : m.switchPlan}
                     </Button>
                   )}
                 </CardFooter>

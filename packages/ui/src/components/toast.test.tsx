@@ -123,6 +123,17 @@ describe("Toast – giới hạn, gộp trùng, theo tiến trình", () => {
     expect(screen.getByText("Mất kết nối").closest("li")).toHaveAttribute("data-tone", "danger");
   });
 
+  it("thanh đếm ngược theo thời gian tự đóng; toast đang xử lý không có đếm ngược", () => {
+    render(<Toaster />);
+    act(() => {
+      toast({ tone: "danger", title: "Lỗi mạng" });
+      toast({ tone: "loading", title: "Đang gửi…" });
+    });
+    const bar = screen.getByText("Lỗi mạng").closest("li")!.querySelector<HTMLElement>("[data-slot=toast-countdown]")!;
+    expect(bar.style.animationDuration).toBe("8000ms");
+    expect(screen.getByText("Đang gửi…").closest("li")!.querySelector("[data-slot=toast-countdown]")).toBeNull();
+  });
+
   it("updateToast đổi nội dung toast đang mở", () => {
     render(<Toaster />);
     let id = 0;

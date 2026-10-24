@@ -11,11 +11,25 @@ const base = {
 };
 
 describe("loadEnv", () => {
+  it("APP_MASTER_KEYS: vòng khóa v<n>:<base64>; sai định dạng / trùng phiên bản / không đủ 32 byte → lỗi nêu rõ", () => {
+    const k2 = Buffer.alloc(32, 2).toString("base64");
+    expect(loadEnv({ ...base, APP_MASTER_KEYS: `v2:${k2}, v3:${Buffer.alloc(32, 3).toString("base64")}` }).APP_MASTER_KEYS).toContain("v2:");
+    expect(() => loadEnv({ ...base, APP_MASTER_KEYS: "khong-dung" })).toThrow(/v<số>:<base64 32 byte>/);
+    expect(() => loadEnv({ ...base, APP_MASTER_KEYS: `v2:${k2},v2:${k2}` })).toThrow(/trùng phiên bản v2/);
+    expect(() => loadEnv({ ...base, APP_MASTER_KEYS: `v2:${Buffer.alloc(8).toString("base64")}` })).toThrow(/v2 phải là base64 của 32 byte/);
+  });
   it("mặc định: adapter fake, mail console, S3 path-style", () => {
     const env = loadEnv(base);
+    expect(env.AI_TIMEOUT_MS).toBe(180_000);
+    expect(env.AI_DAILY_COST_CAP_VND).toBe("0");
+    expect(env.AI_RATE_PER_MINUTE).toBe(30);
+    expect(env.WORKER_MAX_PER_ORG).toBe(2);
+    expect(() => loadEnv({ ...base, AI_DAILY_COST_CAP_VND: "năm trăm" })).toThrow(/AI_DAILY_COST_CAP_VND/);
     expect(env.AI_PROVIDER).toBe("fake");
     expect(env.CUSTOMS_GATEWAY).toBe("fake");
     expect(env.MAIL).toBe("console");
+    expect(env.MAILBOX_PROVIDER).toBe("fake");
+    expect(env.MICROSOFT_OAUTH_TENANT).toBe("common");
     expect(env.S3_FORCE_PATH_STYLE).toBe(true);
   });
   it("STORAGE: mặc định s3 (cần S3_*); azure cần AZURE_STORAGE_CONNECTION_STRING, không cần S3_*", () => {
@@ -33,6 +47,12 @@ describe("loadEnv", () => {
   it("HS_CLASSIFIER=hscodepro cần HSCODEPRO_URL và HSCODEPRO_INTERNAL_KEY", () => {
     expect(() => loadEnv({ ...base, HS_CLASSIFIER: "hscodepro", HSCODEPRO_URL: "https://dev.aixuatnhapkhau.cloud" })).toThrow(/HSCODEPRO_INTERNAL_KEY/);
     expect(loadEnv({ ...base, HS_CLASSIFIER: "hscodepro", HSCODEPRO_URL: "https://dev.aixuatnhapkhau.cloud", HSCODEPRO_INTERNAL_KEY: "k" }).HSCODEPRO_INTERNAL_KEY).toBe("k");
+  });
+  it("đơn giá HSCodePro / Customs Hub: mặc định 0, nhận chuỗi thập phân, từ chối số âm/chữ", () => {
+    expect(loadEnv(base)).toMatchObject({ HSCODEPRO_PRICE_PER_ITEM_VND: "0", CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: "0" });
+    expect(loadEnv({ ...base, HSCODEPRO_PRICE_PER_ITEM_VND: "1500.5", CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: "2200" })).toMatchObject({ HSCODEPRO_PRICE_PER_ITEM_VND: "1500.5", CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: "2200" });
+    expect(() => loadEnv({ ...base, CUSTOMS_HUB_PRICE_PER_MESSAGE_VND: "-1" })).toThrow(/CUSTOMS_HUB_PRICE_PER_MESSAGE_VND/);
+    expect(() => loadEnv({ ...base, HSCODEPRO_PRICE_PER_ITEM_VND: "abc" })).toThrow(/HSCODEPRO_PRICE_PER_ITEM_VND/);
   });
   it("AI_PROVIDER=claude mà thiếu ANTHROPIC_API_KEY thì ném lỗi nêu tên biến", () => {
     expect(() => loadEnv({ ...base, AI_PROVIDER: "claude" })).toThrow(/ANTHROPIC_API_KEY/);

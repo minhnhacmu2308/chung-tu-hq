@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   baseOp, CUSTOMS_OPERATIONS, nextCustomsOperation, opFor, operationAvailability, operationsFor, queryOpFor, stageAfter, stageFromLegacy,
-  type CustomsStage, type OperationAvailabilityInput,
+  CustomsStageSchema, type CustomsStage, type OperationAvailabilityInput,
 } from "./customs-flow.js";
+import { fillReason, REASON_CODES, REASON_TEXT_VI, reasonVi } from "./reason-codes.js";
 import type { CustomsOperation } from "./dto/customs.js";
 
 const base: OperationAvailabilityInput = { direction: "NK", stage: "NOT_SENT", approved: true, channel: null, hasContainers: true, pending: [], done: [] };
@@ -96,4 +97,45 @@ describe("nextCustomsOperation – việc tiếp theo", () => {
   ] as const)("%s (luồng %s, đã làm %j) → %s", (stage, channel, done, expected) =>
     expect(nextCustomsOperation({ ...base, stage, channel, done: [...done] })).toBe(expected));
   it("đang chờ phản hồi → không gợi ý", () => expect(nextCustomsOperation({ ...base, pending: ["IDA"] })).toBeNull());
+});
+
+describe("mã lý do (reasonCode) – giao diện dịch theo mã, câu tiếng Việt giữ nguyên", () => {
+  const combos: OperationAvailabilityInput[] = CustomsStageSchema.options.flatMap((stage) =>
+    (["NK", "XK"] as const).flatMap((direction) =>
+      [true, false].flatMap((approved) =>
+        [true, false].flatMap((hasContainers) =>
+          ([[], ["IDC"], ["IDA", "HYS"]] as CustomsOperation[][]).map((pending) => ({ ...base, stage, direction, approved, hasContainers, pending }))))));
+
+  it("mọi dòng bị khóa / có lý do đều có mã, và câu = câu chuẩn của mã (reasonVi)", () => {
+    for (const input of combos) {
+      for (const r of operationAvailability(input)) {
+        const where = `${input.direction} ${input.stage} ${r.op} pending=${input.pending.join(",")}`;
+        if (!r.enabled) expect(r.reason, where).toBeTruthy();
+        if (r.reason === undefined) {
+          expect(r.reasonCode, where).toBeUndefined();
+          continue;
+        }
+        expect(REASON_CODES, where).toContain(r.reasonCode);
+        expect(r.reason, where).toBe(reasonVi(r.reasonCode!, r.reasonParams));
+        expect(r.reason, where).not.toMatch(/\{\w+\}/);
+      }
+    }
+  });
+  it("giữ nguyên chữ tiếng Việt cũ", () => {
+    expect(avail({ stage: "NOT_SENT" })["IDB"]).toMatchObject({ reasonCode: "IDB_REQUIRES_PRE_DECLARED", reason: "Chỉ gọi sửa khi đã khai tạm và chưa khai chính thức" });
+    expect(avail({ stage: "PRE_DECLARED", pending: ["IDC", "HYS"] })["IDB"]).toMatchObject({
+      reasonCode: "OPERATION_PENDING", reasonParams: { ops: "IDC, HYS" }, reason: "Đang chờ phản hồi IDC, HYS",
+    });
+    expect(avail({ stage: "RECALLED", approved: false })["IDA"]).toMatchObject({
+      enabled: true, action: "EDIT", reasonCode: "EDIT_DECLARATION_FIRST", reason: "Sửa chỉ tiêu ở bước Review tờ khai và phê duyệt lại",
+    });
+    expect(avail({ stage: "REJECTED" })["HYS"]).toMatchObject({ reasonCode: "DECLARATION_REJECTED", reason: "Tờ khai đã bị Hải quan từ chối/hủy" });
+    expect(avail({ stage: "DECLARED", hasContainers: false })["CONT"]).toMatchObject({ reasonCode: "NO_CONTAINERS", reason: "Lô hàng không có container" });
+    expect(avail({ stage: "NOT_SENT" })["IDA"]).toEqual({ op: "IDA", enabled: true, action: "SEND" });
+  });
+  it("mọi mã đều có câu tiếng Việt; điền tham số", () => {
+    for (const code of REASON_CODES) expect(REASON_TEXT_VI[code].trim()).not.toBe("");
+    expect(reasonVi("HS_UNCONFIRMED", { n: 3 })).toBe("Còn 3 mã HS chưa xác nhận");
+    expect(fillReason("Còn {n} {x}", { n: 1 })).toBe("Còn 1 {x}");
+  });
 });

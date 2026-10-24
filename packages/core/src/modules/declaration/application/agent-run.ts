@@ -8,7 +8,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { computeBuilt, currenciesOf, exchangeFor, invoiceRate, mergeUserEdits } from "./_rebuild.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { loadDossier, syncLineItems, TASKS_BY_MODE, toAgentRunView } from "./_dto.js";
-import { hsSummaryLogs, startHsClassification } from "./hs-classification.js";
+import { hsSummaryLogs, startHsClassification, unsentHsLineIds } from "./hs-classification.js";
 import type { AgentLog, AgentRunRow, AgentTask, DeclarationDeps } from "./ports.js";
 
 export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: string, mode: AgentMode): Promise<Result<AgentRunView>> {
@@ -24,7 +24,7 @@ export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: 
   const run = await deps.uow.asOrg(ctx, async (r) => {
     await syncLineItems(deps, r, ctx.orgId, dossierId, shipment);
     const prev = await r.agentRuns.latest(ctx.orgId, dossierId);
-    if (prev?.status === "RUNNING") await r.agentRuns.update(prev.id, { status: "CANCELLED", finishedAt: now });
+    if (prev?.status === "RUNNING") await r.agentRuns.update(prev.orgId, prev.id, { status: "CANCELLED", finishedAt: now });
     const row: AgentRunRow = {
       id: deps.idGen.next("run"), orgId: ctx.orgId, dossierId, mode, status: "RUNNING", startedBy: ctx.userId, startedAt: now, finishedAt: null,
       tasks: TASKS_BY_MODE[mode].map((id) => ({ id, status: "PENDING", progress: 0, message: "Đang chờ" })), log: [],
@@ -47,6 +47,48 @@ export async function getAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: st
 
 export type RunAgentInput = { orgId: string; userId: string; dossierId: string; agentRunId: string };
 
+/** Lần chạy RUNNING quá lâu (mặc định 2 giờ) mà không còn lượt HS nào đang mở coi như job run-agent đã mất. */
+export const STALE_AGENT_RUN_MS = 2 * 60 * 60_000;
+
+/**
+ * Job quét định kỳ: run-agent mất job (Redis lỗi, tiến trình chết) → lần chạy treo RUNNING, hồ sơ treo PROCESSING. Chỉ dừng lần chạy
+ * không còn lượt HSCodePro nào mở – đang chờ HSCodePro trả lời hoặc chờ người khai trả lời câu hỏi (need_info) thì không phải kẹt.
+ */
+export async function failStaleAgentRuns(deps: DeclarationDeps, input: { orgId: string; now?: Date; olderThanMs?: number }): Promise<{ failed: string[] }> {
+  const now = input.now ?? deps.clock.now();
+  const before = new Date(now.getTime() - (input.olderThanMs ?? STALE_AGENT_RUN_MS));
+  const ctx = { orgId: asOrgId(input.orgId), userId: asUserId("") };
+  const runs = await deps.uow.asOrg(ctx, (r) => r.agentRuns.listRunningBefore(input.orgId, before));
+  const failed: string[] = [];
+  for (const run of runs) {
+    const open = await deps.uow.asOrg(ctx, (r) => r.hsJobs.openForDossier(input.orgId, run.dossierId));
+    if (open.length > 0) continue;
+    const r = await failAgentRun(deps, { orgId: input.orgId, userId: run.startedBy, dossierId: run.dossierId, agentRunId: run.id, error: `Không có tiến triển sau ${Math.round((now.getTime() - run.startedAt.getTime()) / 60_000)} phút – job có thể đã mất` });
+    if (r.ok) failed.push(run.id);
+  }
+  return { failed };
+}
+
+/**
+ * Worker gọi khi job run-agent hết số lần thử (hoặc lỗi không thử lại): lần chạy không được treo RUNNING mãi.
+ * Run → FAILED kèm dòng nhật ký; hồ sơ đang ở bước agent → về NEEDS_REVIEW để người khai chạy lại; báo chủ hồ sơ.
+ */
+export async function failAgentRun(deps: DeclarationDeps, input: RunAgentInput & { error: string }): Promise<Result<void>> {
+  const ctx = { orgId: asOrgId(input.orgId), userId: asUserId(input.userId) };
+  const run = await deps.uow.asOrg(ctx, (r) => r.agentRuns.get(input.orgId, input.agentRunId));
+  if (!run) return err(domainError("NOT_FOUND", "Không tìm thấy lần chạy"));
+  if (run.status !== "RUNNING") return ok(undefined);
+  const now = deps.clock.now();
+  const tasks: AgentTask[] = run.tasks.map((t) => (t.status === "RUNNING" || t.status === "PENDING" ? { ...t, status: "ERROR", message: "Dừng vì lỗi" } : t));
+  const log: AgentLog[] = [...run.log, { at: now.toISOString(), text: `Dừng sau nhiều lần thử: ${input.error.slice(0, 300)}`, tone: "warning" }];
+  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.orgId, run.id, { status: "ERROR", tasks, log, finishedAt: now }));
+  const dossier = await deps.dossiers.get(input.orgId, input.dossierId);
+  if (dossier?.status === "PROCESSING" && dossier.step === "agent") await deps.dossiers.update(input.orgId, input.dossierId, { status: "NEEDS_REVIEW" });
+  await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
+  await deps.notify?.notify(input.orgId, { dossierOwnerOf: input.dossierId }, { title: `AI Agent dừng ở hồ sơ ${dossier?.code ?? input.dossierId}`, body: "Lỗi lặp lại nhiều lần – xem nhật ký ở bước AI Agent rồi bấm chạy lại.", href: `/dossiers/${input.dossierId}?step=agent` });
+  return ok(undefined);
+}
+
 /**
  * Worker. Idempotent: task đã DONE không chạy lại; run không còn RUNNING → bỏ qua.
  * Tra HS qua HSCodePro: dòng cần hỏi lại / lỗi không chặn; lỗi tạm (5xx, 429) ném ra để BullMQ retry.
@@ -67,7 +109,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
   const log: AgentLog[] = [...run.log];
   const at = () => deps.clock.now().toISOString();
   const say = (text: string, tone: AgentLog["tone"] = "info") => void log.push({ at: at(), text, tone });
-  const save = (id: string) => deps.uow.asOrg(ctx, (r) => r.agentRuns.update(id, { tasks, log }));
+  const save = (id: string) => deps.uow.asOrg(ctx, (r) => r.agentRuns.update(ctx.orgId, id, { tasks, log }));
   const task = (id: AgentTaskId) => tasks.find((t) => t.id === id)!;
   const setTask = async (id: AgentTaskId, status: AgentTask["status"], progress: number, message: string) => {
     Object.assign(task(id), { status, progress, message });
@@ -85,7 +127,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
         let started: Result<{ pending: boolean }>;
         if (t.status === "RUNNING") {
           // Chạy lại (BullMQ thử lại / hs-poll đẩy lại): gửi nốt dòng chưa có lượt (lỗi giữa chừng lần trước); còn lượt đang chạy → chờ hs-poll.
-          const unsent = items.filter((it) => !it.hsConfirmed && it.hsJobId === null && it.hsStatus === "queued").map((it) => it.id);
+          const unsent = await unsentHsLineIds(deps, ctx, input.dossierId, items);
           started = unsent.length ? await startHsClassification(deps, ctx, input.dossierId, { lineItemIds: unsent }) : ok({ pending: false });
         } else {
           const todo = items.filter((it) => !it.hsConfirmed);
@@ -120,7 +162,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
           const now = deps.clock.now();
           await r.declarations.insert({
             id: deps.idGen.next("dec"), orgId: input.orgId, dossierId: input.dossierId, kind: b.kind, version: (prev?.version ?? 0) + 1, status: "DRAFT",
-            fields: mergeUserEdits(b.fields, prev?.fields, b.hidden), exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date, customsValueVnd: b.valuation.customsValueVnd,
+            fields: mergeUserEdits(b.fields, prev?.fields, b.hidden, b.kind), exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date, customsValueVnd: b.valuation.customsValueVnd,
             valueAdjustments: b.adjustments, estImportDutyVnd: b.taxes.importDutyVnd, estVatVnd: b.taxes.vatVnd, approvedBy: null, approvedAt: null, createdAt: now, updatedAt: now,
           });
           return { b, skipped: false as const, exchange };
@@ -154,7 +196,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
 
   const finishedAt = deps.clock.now();
   const done: AgentRunRow = { ...run, tasks, log, status: "DONE", finishedAt };
-  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.id, { status: "DONE", tasks, log, finishedAt }));
+  await deps.uow.asOrg(ctx, (r) => r.agentRuns.update(run.orgId, run.id, { status: "DONE", tasks, log, finishedAt }));
   if (dossier.status === "PROCESSING" && dossier.step === "agent") await deps.dossiers.update(input.orgId, input.dossierId, { status: "NEEDS_REVIEW" });
   await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
   await deps.notify?.notify(input.orgId, { dossierOwnerOf: input.dossierId }, { title: `AI Agent đã xử lý xong ${dossier.code}`, body: run.mode === "DIGITIZE" ? "Dữ liệu số hóa đã sẵn sàng." : "Tờ khai nháp đã dựng – xác nhận mã HS rồi chuyển Review.", href: `/dossiers/${input.dossierId}?step=agent` });

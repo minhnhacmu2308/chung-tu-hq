@@ -10,6 +10,9 @@ import { declarationValues, itemValues } from "../declaration-form/dossier-adapt
 import { fieldErrors, type FieldError } from "../dossier-detail/steps/customs-errors";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { codeLabel, displayValue } from "../declaration-form/display";
+import { NOT_ISSUED } from "./print.vi";
+
+export { NOT_ISSUED };
 
 type Kind = "IDA" | "EDA";
 
@@ -289,8 +292,6 @@ export function printIssuesOf(decl: Declaration, items: LineItem[], submission: 
   return printIssues(printData(decl, items, submission), mode, canEdit);
 }
 
-/** Số tờ khai chưa có (chưa đăng ký) – in thay cho ô trống (spec §3.1). */
-export const NOT_ISSUED = "Chưa cấp";
 const DECLARATION_NO = new Set(["TK_ICN", "TK_ECN"]);
 
 /**
@@ -302,7 +303,8 @@ export function printValue(field: Pick<LayoutField, "key" | "input" | "options" 
   if (!v) return field && DECLARATION_NO.has(field.key) ? NOT_ISSUED : field?.input === "date" ? "/ /" : "";
   if (!field) return v;
   const name = codeLabel(field.codeTable, v);
-  return name ? `${v}\u00a0 ${name}` : displayValue(field, v);
+  // Trang giấy là văn bản pháp lý tiếng Việt: ngày/số định dạng kiểu Việt Nam ở mọi ngôn ngữ giao diện.
+  return name ? `${v}\u00a0 ${name}` : displayValue(field, v, "vi");
 }
 
 /**
@@ -313,7 +315,7 @@ export function printCode(field: Pick<LayoutField, "key" | "input" | "options" |
   const v = (raw ?? "").trim();
   if (!v || !field) return null;
   if (codeLabel(field.codeTable, v) || field.options?.some((o) => o.value === v)) return v;
-  return displayValue(field, v).startsWith(`${v} · `) ? v : null;
+  return displayValue(field, v, "vi").startsWith(`${v} · `) ? v : null;
 }
 
 /**

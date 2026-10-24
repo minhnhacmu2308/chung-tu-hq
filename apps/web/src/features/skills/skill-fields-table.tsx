@@ -1,7 +1,7 @@
 "use client";
 // Bảng trường của skill: khách tự chọn trường nào AI trích xuất, trường nào hiện trên màn kiểm tra.
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Stack, Switch, toast, RowActions,
+  Alert, Badge, Button, createDataTableColumnHelper, DataTable, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Stack, Switch, toast, RowActions, fill, pickMessages, useMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -11,19 +11,23 @@ import { removeSkillField, skillKeys, updateSkillField, type SkillFieldPatch } f
 import type { Skill, SkillField } from "@/mocks/types";
 import { FieldDialog } from "./field-dialog";
 import { FIELD_TYPE_LABELS } from "./skill-display";
+import { FIELDS_TABLE_MESSAGES } from "./skills.messages";
 
 const col = createDataTableColumnHelper<SkillField>();
 
 function useFieldMutation(skill: Skill) {
+  const t = useMessages(FIELDS_TABLE_MESSAGES);
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ key, patch }: { key: string; patch: SkillFieldPatch }) => updateSkillField(skill.id, key, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: skillKeys.all }),
-    onError: (e: Error) => toast({ tone: "danger", title: "Không lưu được", description: e.message }),
+    onError: (e: Error) => toast({ tone: "danger", title: t.saveError, description: e.message }),
   });
 }
 
 export function SkillFieldsTable({ skill }: { skill: Skill }) {
+  const locale = useUiLocale();
+  const t = useMessages(FIELDS_TABLE_MESSAGES);
   const qc = useQueryClient();
   // Trường thuộc danh mục chuẩn của loại chứng từ không xóa được; trường còn lại là trường bổ sung riêng (AI đọc vào `custom`).
   const isStandard = (f: SkillField) => !!skill.docKind && resolveSkillFieldKey(skill.docKind, f.key).standard;
@@ -34,7 +38,7 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
     mutationFn: (key: string) => removeSkillField(skill.id, key),
     onSuccess: (_s, key) => {
       void qc.invalidateQueries({ queryKey: skillKeys.all });
-      toast({ tone: "success", title: `Đã xóa trường ${key}` });
+      toast({ tone: "success", title: fill(t.removed, { key }) });
     },
   });
 
@@ -44,18 +48,20 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
   };
 
   const columns = useMemo(() => {
+    const t = pickMessages(FIELDS_TABLE_MESSAGES, locale);
+    const types = pickMessages(FIELD_TYPE_LABELS, locale);
     const actions = col.display({
       id: "actions",
-      header: () => <span className="sr-only">Thao tác</span>,
+      header: () => <span className="sr-only">{t.actions}</span>,
       meta: { align: "end", sticky: "end" },
       cell: (c) => (
         <RowActions
           rowLabel={c.row.original.key}
           actions={[
-            { id: "edit", label: "Sửa", icon: <Pencil />, onSelect: () => openDialog(c.row.original) },
+            { id: "edit", label: t.edit, icon: <Pencil />, onSelect: () => openDialog(c.row.original) },
             {
               id: "remove",
-              label: isStandard(c.row.original) ? "Trường chuẩn – tắt Trích xuất thay vì xóa" : "Xóa",
+              label: isStandard(c.row.original) ? t.removeStandard : t.remove,
               icon: <Trash2 />,
               tone: "danger",
               disabled: isStandard(c.row.original),
@@ -66,30 +72,30 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
       ),
     });
     const code = col.accessor("key", {
-      header: "Mã trường",
+      header: t.colKey,
       meta: { hideable: false },
       cell: (c) => <span className="font-mono text-xs">{c.getValue()}</span>,
     });
-    const label = col.accessor("label", { header: "Tên hiển thị", meta: { wrap: true } });
-    const group = col.accessor((f) => (isStandard(f) ? "Chuẩn" : "Bổ sung"), {
+    const label = col.accessor("label", { header: t.colLabel, meta: { wrap: true } });
+    const group = col.accessor((f) => (isStandard(f) ? t.standardBadge : t.customBadge), {
       id: "group",
-      header: "Nhóm",
-      cell: (c) => (c.getValue() === "Chuẩn" ? <Badge tone="neutral">Trường chuẩn</Badge> : <Badge tone="primary">Trường bổ sung</Badge>),
+      header: t.colGroup,
+      cell: (c) => (isStandard(c.row.original) ? <Badge tone="neutral">{t.standardBadge}</Badge> : <Badge tone="primary">{t.customBadge}</Badge>),
     });
     const required = col.accessor("required", {
-      header: "Bắt buộc",
-      cell: (c) => (c.getValue() ? <Badge tone="warning">Bắt buộc</Badge> : <span className="text-fg-subtle">Không</span>),
+      header: t.colRequired,
+      cell: (c) => (c.getValue() ? <Badge tone="warning">{t.required}</Badge> : <span className="text-fg-subtle">{t.no}</span>),
     });
 
     return col.columns([
       code,
       label,
       group,
-      col.accessor((f) => FIELD_TYPE_LABELS[f.type], { id: "type", header: "Kiểu" }),
+      col.accessor((f) => types[f.type], { id: "type", header: t.colType }),
       required,
       col.accessor((f) => f.aliases.join(" "), {
         id: "aliases",
-        header: "Nhãn thường gặp (alias)",
+        header: t.colAliases,
         meta: { wrap: true },
         cell: (c) => (
           <div className="flex min-w-56 flex-wrap gap-1">
@@ -99,12 +105,12 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
       }),
       col.accessor((f) => f.declarationField ?? "", {
         id: "decl",
-        header: "Ánh xạ tờ khai",
+        header: t.colDecl,
         meta: { wrap: true },
-        cell: (c) => (c.getValue() ? <span className="text-fg">{c.getValue()}</span> : <span className="text-fg-subtle">Chỉ đối chiếu</span>),
+        cell: (c) => (c.getValue() ? <span className="text-fg">{c.getValue()}</span> : <span className="text-fg-subtle">{t.crossCheckOnly}</span>),
       }),
       col.accessor("extract", {
-        header: "Trích xuất",
+        header: t.colExtract,
         enableSorting: false,
         cell: (c) => {
           const f = c.row.original;
@@ -113,13 +119,13 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
               checked={f.extract}
               disabled={f.required || update.isPending}
               onCheckedChange={(v) => update.mutate({ key: f.key, patch: { extract: v } })}
-              aria-label={`Trích xuất ${f.label}`}
+              aria-label={fill(t.extractAria, { label: f.label })}
             />
           );
         },
       }),
       col.accessor("display", {
-        header: "Hiển thị",
+        header: t.colDisplay,
         enableSorting: false,
         cell: (c) => {
           const f = c.row.original;
@@ -128,7 +134,7 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
               checked={f.display}
               disabled={!f.extract || update.isPending}
               onCheckedChange={(v) => update.mutate({ key: f.key, patch: { display: v } })}
-              aria-label={`Hiển thị ${f.label}`}
+              aria-label={fill(t.displayAria, { label: f.label })}
             />
           );
         },
@@ -136,18 +142,18 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
       actions,
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skill.docKind, update.isPending]);
+  }, [skill.docKind, update.isPending, locale]);
 
   const extracted = skill.fields.filter((f) => f.extract).length;
   const shown = skill.fields.filter((f) => f.display).length;
 
   return (
     <Stack gap="md">
-      <Alert tone="info" title="Trường chuẩn + trường bổ sung riêng">
-        <b>Trường chuẩn</b> giống nhau cho mọi khách hàng (bảng đọc chứng từ, dựng tờ khai) – chỉ sửa nhãn thường gặp và bật/tắt. <b>Trường bổ sung</b> do doanh nghiệp thêm (tối đa 20), AI đọc thật và hiện ở màn kiểm tra, bảng đọc chứng từ. Tắt <b>Trích xuất</b>: AI không đọc trường đó; tắt <b>Hiển thị</b>: vẫn đọc để đối chiếu nhưng ẩn khỏi màn kiểm tra.
+      <Alert tone="info" title={t.infoTitle}>
+        <b>{t.infoStandard}</b>{t.infoStandardBody}<b>{t.infoCustom}</b>{t.infoCustomBody}<b>{t.infoExtract}</b>{t.infoExtractBody}<b>{t.infoDisplay}</b>{t.infoDisplayBody}
       </Alert>
       <DataTable
-        aria-label="Trường dữ liệu"
+        aria-label={t.tableAria}
         columns={columns}
         data={skill.fields}
         getRowId={(f) => f.key}
@@ -156,14 +162,14 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
         pagination={false}
         toolbarActions={
           <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => openDialog()}>
-            Thêm trường bổ sung
+            {t.addCustom}
           </Button>
         }
-        emptyTitle="Chưa có trường"
-        emptyDescription="Thêm trường đầu tiên để AI biết cần đọc gì."
+        emptyTitle={t.emptyTitle}
+        emptyDescription={t.emptyDescription}
       />
       <p className="text-sm text-fg-muted">
-        {skill.fields.length} trường · {extracted} được trích xuất · {shown} hiển thị trên màn kiểm tra
+        {fill(t.summary, { total: skill.fields.length, extracted, shown })}
       </p>
       <FieldDialog
         skill={skill}

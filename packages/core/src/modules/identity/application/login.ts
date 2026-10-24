@@ -7,16 +7,24 @@ import type { IdentityDeps } from "./ports.js";
 
 const INVALID = () => err(domainError("INVALID_CREDENTIALS", "Sai email hoặc mật khẩu"));
 
+/** Giới hạn theo (email, IP): 10 lần sai / 15 phút. */
+const PER_IP = { limit: 10, windowSec: 900 };
+/** Giới hạn theo riêng email, không phụ thuộc IP: kẻ đổi IP (giả X-Forwarded-For) vẫn bị chặn sau 30 lần sai / 15 phút. */
+const PER_EMAIL = { limit: 30, windowSec: 900 };
+const RATE_LIMITED = () => err(domainError("RATE_LIMITED", "Đăng nhập sai quá nhiều lần, thử lại sau 15 phút"));
+
 export async function login(deps: IdentityDeps, input: LoginInput, meta: { ip: string }): Promise<Result<{ sessionToken: string }>> {
-  const rlKey = `login:${input.email}:${meta.ip}`;
-  const rl = await deps.rateLimiter.hit(rlKey, 10, 900);
-  if (!rl.allowed) return err(domainError("RATE_LIMITED", "Đăng nhập sai quá nhiều lần, thử lại sau 15 phút"));
+  const ipKey = `login:${input.email}:${meta.ip}`;
+  const emailKey = `login-email:${input.email}`;
+  if (!(await deps.rateLimiter.hit(ipKey, PER_IP.limit, PER_IP.windowSec)).allowed) return RATE_LIMITED();
+  if (!(await deps.rateLimiter.hit(emailKey, PER_EMAIL.limit, PER_EMAIL.windowSec)).allowed) return RATE_LIMITED();
 
   const user = await deps.uow.system((r) => r.users.findByEmail(input.email));
-  if (!user) return INVALID();
-  if (!(await deps.hasher.verify(user.passwordHash, input.password))) return INVALID();
+  // Email lạ vẫn so sánh với hash giả để thời gian trả lời như email có thật (không dò được email qua timing).
+  const passwordOk = await deps.hasher.verify(user?.passwordHash ?? deps.hasher.dummyHash, input.password);
+  if (!user || !passwordOk) return INVALID();
   // Mật khẩu đúng → bỏ đếm: chỉ các lần sai liên tiếp mới bị khóa, người đăng nhập/đăng xuất nhiều lần không bị chặn nhầm.
-  await deps.rateLimiter.reset(rlKey);
+  await Promise.all([deps.rateLimiter.reset(ipKey), deps.rateLimiter.reset(emailKey)]);
 
   // Quản trị viên hệ thống không cần thuộc doanh nghiệp nào: phiên không có org, chỉ vào được khu /admin.
   const staff = await deps.platformStaff?.(user.id);

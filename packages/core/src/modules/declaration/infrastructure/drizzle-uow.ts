@@ -1,9 +1,9 @@
-import { and, desc, eq, ilike, inArray, lte, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, lt, lte, or } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems } from "../../../db/schema/declaration.js";
+import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems, productCatalog } from "../../../db/schema/declaration.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProfileRow } from "../application/ports.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProductRow, ProfileRow } from "../application/ports.js";
 
 function repos(tx: Tx): DeclarationRepos {
   const toItem = (r: typeof lineItems.$inferSelect): LineItemRow => ({ ...r, hsStatus: r.hsStatus as LineItemRow["hsStatus"], hsQuestion: r.hsQuestion as LineItemRow["hsQuestion"], hsError: r.hsError as LineItemRow["hsError"], hsDetail: r.hsDetail as LineItemRow["hsDetail"] });
@@ -19,7 +19,7 @@ function repos(tx: Tx): DeclarationRepos {
         const r = (await tx.select().from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.id, id))).limit(1))[0];
         return r ? toItem(r) : null;
       },
-      upsertForDossier: async (dossierId, rows) => {
+      upsertForDossier: async (orgId, dossierId, rows) => {
         const out: LineItemRow[] = [];
         for (const r of rows) {
           const [saved] = await tx
@@ -33,11 +33,11 @@ function repos(tx: Tx): DeclarationRepos {
           if (saved) out.push(toItem(saved));
         }
         const keep = rows.map((r) => r.lineNo);
-        const stale = (await tx.select({ id: lineItems.id, lineNo: lineItems.lineNo }).from(lineItems).where(eq(lineItems.dossierId, dossierId))).filter((x) => !keep.includes(x.lineNo));
+        const stale = (await tx.select({ id: lineItems.id, lineNo: lineItems.lineNo }).from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.dossierId, dossierId)))).filter((x) => !keep.includes(x.lineNo));
         if (stale.length) await tx.delete(lineItems).where(inArray(lineItems.id, stale.map((s) => s.id)));
         return out.sort((a, b) => a.lineNo - b.lineNo);
       },
-      update: async (id, patch) => void (await tx.update(lineItems).set(patch).where(eq(lineItems.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(lineItems).set(patch).where(and(eq(lineItems.orgId, orgId), eq(lineItems.id, id)))),
       findByHsItem: async (orgId, hsItemId) => {
         const r = (await tx.select().from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.hsItemId, hsItemId))).limit(1))[0];
         return r ? toItem(r) : null;
@@ -49,13 +49,13 @@ function repos(tx: Tx): DeclarationRepos {
         const r = (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.id, id))).limit(1))[0];
         return r ? toJob(r) : null;
       },
-      openForDossier: async (orgId, dossierId) => (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.dossierId, dossierId), inArray(hsJobs.status, ["processing", "need_info"]))).orderBy(hsJobs.createdAt)).map(toJob),
-      update: async (id, patch) => void (await tx.update(hsJobs).set(patch).where(eq(hsJobs.id, id))),
+      openForDossier: async (orgId, dossierId) => (await tx.select().from(hsJobs).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.dossierId, dossierId), inArray(hsJobs.status, ["pending", "processing", "need_info"]))).orderBy(hsJobs.createdAt)).map(toJob),
+      update: async (orgId, id, patch) => void (await tx.update(hsJobs).set(patch).where(and(eq(hsJobs.orgId, orgId), eq(hsJobs.id, id)))),
     },
     suggestions: {
-      listForItems: async (ids) => (ids.length ? (await tx.select().from(hsSuggestions).where(inArray(hsSuggestions.lineItemId, ids)).orderBy(desc(hsSuggestions.confidence))).map(toSug) : []),
-      replaceForItem: async (itemId, rows) => {
-        await tx.delete(hsSuggestions).where(eq(hsSuggestions.lineItemId, itemId));
+      listForItems: async (orgId, ids) => (ids.length ? (await tx.select().from(hsSuggestions).where(and(eq(hsSuggestions.orgId, orgId), inArray(hsSuggestions.lineItemId, ids))).orderBy(desc(hsSuggestions.confidence))).map(toSug) : []),
+      replaceForItem: async (orgId, itemId, rows) => {
+        await tx.delete(hsSuggestions).where(and(eq(hsSuggestions.orgId, orgId), eq(hsSuggestions.lineItemId, itemId)));
         if (rows.length) await tx.insert(hsSuggestions).values(rows);
       },
     },
@@ -64,14 +64,14 @@ function repos(tx: Tx): DeclarationRepos {
         const r = (await tx.select().from(declarations).where(and(eq(declarations.orgId, orgId), eq(declarations.dossierId, dossierId))).orderBy(desc(declarations.version)).limit(1))[0];
         return r ? toDecl(r) : null;
       },
-      listLatestByStatus: async (orgId, statuses) => {
-        const rows = (await tx.select().from(declarations).where(eq(declarations.orgId, orgId)).orderBy(desc(declarations.version))).map(toDecl);
-        const latest = new Map<string, DeclarationRow>();
-        for (const r of rows) if (!latest.has(r.dossierId)) latest.set(r.dossierId, r);
-        return [...latest.values()].filter((r) => statuses.includes(r.status));
-      },
+      // Bản mới nhất của mỗi hồ sơ lấy bằng DISTINCT ON trong DB (không kéo mọi phiên bản về); chặn trên 2.000 hồ sơ.
+      listLatestByStatus: async (orgId, statuses) =>
+        (await tx.selectDistinctOn([declarations.dossierId]).from(declarations).where(eq(declarations.orgId, orgId)).orderBy(declarations.dossierId, desc(declarations.version)).limit(2000))
+          .map(toDecl)
+          .filter((r) => statuses.includes(r.status))
+          .sort((a, b) => (b.approvedAt?.getTime() ?? 0) - (a.approvedAt?.getTime() ?? 0)),
       insert: async (row) => void (await tx.insert(declarations).values(row)),
-      update: async (id, patch) => void (await tx.update(declarations).set(patch).where(eq(declarations.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(declarations).set(patch).where(and(eq(declarations.orgId, orgId), eq(declarations.id, id)))),
     },
     agentRuns: {
       latest: async (orgId, dossierId) => {
@@ -82,8 +82,9 @@ function repos(tx: Tx): DeclarationRepos {
         const r = (await tx.select().from(agentRuns).where(and(eq(agentRuns.orgId, orgId), eq(agentRuns.id, id))).limit(1))[0];
         return r ? toRun(r) : null;
       },
+      listRunningBefore: async (orgId, before) => (await tx.select().from(agentRuns).where(and(eq(agentRuns.orgId, orgId), eq(agentRuns.status, "RUNNING"), lt(agentRuns.startedAt, before))).orderBy(agentRuns.startedAt).limit(200)).map(toRun),
       insert: async (row) => void (await tx.insert(agentRuns).values(row)),
-      update: async (id, patch) => void (await tx.update(agentRuns).set(patch).where(eq(agentRuns.id, id))),
+      update: async (orgId, id, patch) => void (await tx.update(agentRuns).set(patch).where(and(eq(agentRuns.orgId, orgId), eq(agentRuns.id, id)))),
     },
     catalogHs: {
       search: async (q, limit) => {
@@ -107,6 +108,25 @@ function repos(tx: Tx): DeclarationRepos {
           .onConflictDoUpdate({ target: [declarationProfiles.orgId, declarationProfiles.direction], set: { values: row.values, overrides: row.overrides, updatedBy: row.updatedBy, updatedAt: row.updatedAt } });
       },
     },
+    products: {
+      // Chặn trên 2.000 mặt hàng cho màn danh mục (lọc phía client); vượt → phân trang server (BACKEND-TODO R6b).
+      list: async (orgId) => (await tx.select().from(productCatalog).where(eq(productCatalog.orgId, orgId)).orderBy(desc(productCatalog.updatedAt)).limit(2000)).map(toProduct),
+      get: async (orgId, id) => {
+        const r = (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), eq(productCatalog.id, id))).limit(1))[0];
+        return r ? toProduct(r) : null;
+      },
+      byKeys: async (orgId, keys) => (keys.length ? (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.key, keys)))).map(toProduct) : []),
+      byNameKeys: async (orgId, nameKeys) => (nameKeys.length ? (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.nameKey, nameKeys)))).map(toProduct) : []),
+      insert: async (rows) => {
+        // Chia lô: một câu INSERT tối đa ~65k tham số (30 cột/dòng).
+        for (let i = 0; i < rows.length; i += 500) await tx.insert(productCatalog).values(rows.slice(i, i + 500));
+      },
+      update: async (row) => {
+        const { id, orgId, createdAt: _c, ...rest } = row;
+        await tx.update(productCatalog).set(rest).where(and(eq(productCatalog.orgId, orgId), eq(productCatalog.id, id)));
+      },
+      remove: async (orgId, ids) => (await tx.delete(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.id, ids))).returning({ id: productCatalog.id })).length,
+    },
     exchangeRates: {
       latest: async (currency, date) => {
         const r = (await tx.select().from(exchangeRates).where(and(eq(exchangeRates.currency, currency), eq(exchangeRates.active, true), lte(exchangeRates.date, date))).orderBy(desc(exchangeRates.date)).limit(1))[0];
@@ -114,6 +134,10 @@ function repos(tx: Tx): DeclarationRepos {
       },
     },
   };
+}
+
+function toProduct(r: typeof productCatalog.$inferSelect): ProductRow {
+  return { ...r, source: r.source as ProductRow["source"], raw: (r.raw as ProductRow["raw"]) ?? null };
 }
 
 export class DrizzleDeclarationUow implements DeclarationUow {

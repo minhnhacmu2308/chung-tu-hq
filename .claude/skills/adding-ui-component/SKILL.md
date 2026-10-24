@@ -21,12 +21,12 @@ App không được tự vá giao diện. Thiếu gì → thêm vào `packages/u
 
 1. File `packages/ui/src/components/<ten>.tsx`. Chỉ dùng utility token (`bg-surface`, `text-fg-muted`, `bg-primary`, `rounded-md`…). Biến thể bằng `cva`. Gộp class bằng `cn()`.
 2. Dựa trên phần tử gốc có ngữ nghĩa (button, fieldset/radio, dialog của Radix). Không dựng lại hành vi bàn phím bằng `div`.
-3. Chuỗi hiển thị (nhãn nút, aria-label) nhận qua props `labels`, có mặc định tiếng Việt.
+3. Chuỗi hiển thị (nhãn nút, aria-label) nhận qua props `labels`, có mặc định đủ 3 ngôn ngữ `vi`/`en`/`zh` (bộ `MESSAGES` + `useMessages(MESSAGES, labels)`) – bắt buộc, xem `.claude/rules/ho-tro-3-ngon-ngu.md`.
 4. Màu đến từ dữ liệu người dùng (vd mã màu thương hiệu) → truyền qua biến CSS cục bộ `style={{ "--x": value }}` + `bg-[var(--x)]`, không hard-code.
 5. Không dùng `dark:` – token đã tự đổi.
 6. Test `<ten>.test.tsx` theo checklist `docs/TESTING.md` §3 (hiển thị, biến thể, chuột + bàn phím, axe, props).
-7. Nhãn đủ `vi` + `en` qua `useMessages`. Export trong `src/index.ts`; thêm vào playground; thêm dòng vào bảng component trong `docs/DESIGN-SYSTEM.md`.
-8. Chạy: `pnpm --filter @kb/ui typecheck && pnpm --filter @kb/ui test && pnpm lint && pnpm --filter @kb/ui test:visual`. Mở playground, xem ở **sáng + tối + 2 màu thương hiệu + mật độ Gọn + mobile + EN**. Ảnh chụp đỏ mà thay đổi là cố ý → `test:visual:update` và ghi lý do vào PR.
+7. Nhãn đủ `vi` + `en` + `zh` qua `useMessages`. Export trong `src/index.ts`; thêm vào playground; thêm dòng vào bảng component trong `docs/DESIGN-SYSTEM.md`.
+8. Chạy: `pnpm --filter @kb/ui typecheck && pnpm --filter @kb/ui test && pnpm lint && pnpm --filter @kb/ui test:visual`. Mở playground, xem ở **sáng + tối + 2 màu thương hiệu + mật độ Gọn + mobile + EN + 中文**. Ảnh chụp đỏ mà thay đổi là cố ý → `test:visual:update` và ghi lý do vào PR.
 
 ## Quy ước bổ sung (rút từ lỗi thật)
 

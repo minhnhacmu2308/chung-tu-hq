@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { RecordingOrgAudit } from "../../../../shared/audit.js";
+import { listOrgAudit } from "../list-org-audit.js";
 import { fixedClock, type Clock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
-import { unwrap } from "../../../../shared/result.js";
+import { errCode, unwrap } from "../../../../shared/result.js";
 import { addCertificate } from "../add-certificate.js";
 import { approveJoinRequest } from "../approve-join-request.js";
 import { changeMemberRole } from "../change-member-role.js";
@@ -14,7 +16,9 @@ import { listMembers } from "../list-members.js";
 import { listNotifications } from "../list-notifications.js";
 import { markAllNotificationsRead } from "../mark-all-notifications-read.js";
 import type { IdentityDeps } from "../ports.js";
+import { rejectJoinRequest } from "../reject-join-request.js";
 import { removeCertificate } from "../remove-certificate.js";
+import { transferOwnership } from "../transfer-ownership.js";
 import { setDefaultCertificate } from "../set-default-certificate.js";
 import { setMemberDisabled } from "../set-member-disabled.js";
 import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../test/fakes.js";
@@ -76,6 +80,29 @@ beforeEach(() => {
   deps = { uow, plans: uow, hasher: new FakeHasher(), rateLimiter: new InMemoryRateLimiter(clock), mailer, taxRegistry: new FakeTaxRegistry(), clock, idGen: sequentialIdGen(), appUrl: "http://localhost:3100", random: (n) => Buffer.alloc(n, 7) };
 });
 
+describe("nhật ký hoạt động doanh nghiệp (org_audit)", () => {
+  it("đổi vai trò / khóa / mời → ghi sự kiện kèm người thao tác, đối tượng, chi tiết; listOrgAudit chỉ Quản trị/Chủ sở hữu, mới nhất trước, có tổng", async () => {
+    const audit = new RecordingOrgAudit();
+    deps.audit = audit;
+    unwrap(await changeMemberRole(deps, ctx("OWNER"), "usr_ha", "APPROVER"));
+    unwrap(await setMemberDisabled(deps, ctx("OWNER"), "usr_ha", true));
+    unwrap(await inviteMember(deps, ctx("OWNER"), { email: "moi@anphat-demo.vn", role: "VIEWER" }));
+    expect(audit.entries.map((e) => e.action)).toEqual(["MEMBER_ROLE_CHANGED", "MEMBER_DISABLED", "MEMBER_INVITED"]);
+    expect(audit.entries[0]).toMatchObject({ orgId: "org_a", userId: "usr_chau", targetType: "member", targetId: "usr_ha", detail: { from: "DECLARANT", to: "APPROVER" } });
+    // Thất bại → không ghi.
+    expect((await changeMemberRole(deps, ctx("VIEWER"), "usr_ha", "ADMIN")).ok).toBe(false);
+    expect(audit.entries).toHaveLength(3);
+    // Đọc nhật ký qua repo (in-memory) – ghi vài dòng rồi liệt kê.
+    for (const e of audit.entries) await uow.asOrg({ orgId: asOrgId(e.orgId), userId: asUserId(e.userId) }, (r) => r.audit.insert({ id: `aud_${e.action}`, orgId: e.orgId, at: clock.now(), actorId: e.userId, actorName: "Châu", action: e.action, targetType: e.targetType, targetId: e.targetId, targetLabel: e.targetLabel, detail: e.detail ?? null }));
+    const page = unwrap(await listOrgAudit(deps, ctx("ADMIN"), { limit: 2, offset: 0 }));
+    expect(page).toMatchObject({ total: 3, limit: 2, offset: 0 });
+    expect(page.items).toHaveLength(2);
+    expect(page.items[0]).toMatchObject({ actorName: "Châu", action: expect.any(String), at: expect.any(String) });
+    expect(errCode(await listOrgAudit(deps, ctx("DECLARANT"), { limit: 10, offset: 0 }))).toBe("FORBIDDEN");
+    expect(unwrap(await listOrgAudit(deps, ctx("OWNER", "usr_b", "org_b"), { limit: 10, offset: 0 })).total).toBe(0);
+  });
+});
+
 describe("thành viên", () => {
   it("listMembers: đủ 4 người org A với trạng thái và lastActiveAt từ session", async () => {
     const list = unwrap(await listMembers(deps, ctx("VIEWER")));
@@ -124,12 +151,99 @@ describe("thành viên", () => {
   });
 });
 
+describe("từ chối yêu cầu tham gia", () => {
+  it("ADMIN từ chối → REJECTED, ghi người quyết định, email kèm lý do; không tạo membership; từ chối lần 2 / duyệt sau đó → NOT_FOUND", async () => {
+    unwrap(await rejectJoinRequest(deps, ctx("ADMIN"), "jr_1", { reason: "Không phải nhân viên công ty" }));
+    expect(uow.data.joinRequests[0]?.status).toBe("REJECTED");
+    expect(uow.data.memberships.some((m) => m.userId === "usr_p")).toBe(false);
+    const mail = mailer.sent.find((x) => x.to === "p@x.vn")!;
+    expect(mail.subject).toContain("AN PHÁT");
+    expect(mail.text).toContain("Lý do: Không phải nhân viên công ty");
+    expect(unwrap(await listJoinRequests(deps, ctx("ADMIN")))).toHaveLength(0);
+    expectErr(await rejectJoinRequest(deps, ctx("ADMIN"), "jr_1", {}), "NOT_FOUND");
+    expectErr(await approveJoinRequest(deps, ctx("ADMIN"), "jr_1"), "NOT_FOUND");
+  });
+  it("không có lý do → email không có dòng Lý do", async () => {
+    unwrap(await rejectJoinRequest(deps, ctx("OWNER", "usr_phong"), "jr_1", {}));
+    expect(mailer.sent.find((x) => x.to === "p@x.vn")!.text).not.toContain("Lý do");
+  });
+  it("vai trò khác OWNER/ADMIN → FORBIDDEN, yêu cầu vẫn PENDING", async () => {
+    expectErr(await rejectJoinRequest(deps, ctx("DECLARANT", "usr_ha"), "jr_1", {}), "FORBIDDEN");
+    expectErr(await rejectJoinRequest(deps, ctx("APPROVER", "usr_ha"), "jr_1", {}), "FORBIDDEN");
+    expect(uow.data.joinRequests[0]?.status).toBe("PENDING");
+    expect(mailer.sent).toHaveLength(0);
+  });
+  it("org khác không từ chối được yêu cầu của org A → NOT_FOUND", async () => {
+    expectErr(await rejectJoinRequest(deps, ctx("OWNER", "usr_b", "org_b"), "jr_1", {}), "NOT_FOUND");
+    expect(uow.data.joinRequests[0]?.status).toBe("PENDING");
+  });
+});
+
+describe("chuyển quyền sở hữu", () => {
+  const OWNER = () => ctx("OWNER", "usr_phong");
+  beforeEach(() => {
+    uow.data.users.find((u) => u.id === "usr_phong")!.passwordHash = "h:matkhau-dung";
+  });
+  const roleOf = (userId: string, orgId = "org_a") => uow.data.memberships.find((m) => m.orgId === orgId && m.userId === userId)?.role;
+
+  it("OWNER chuyển cho thành viên đang hoạt động → người nhận OWNER, chủ cũ ADMIN; thông báo + email cho người nhận", async () => {
+    const res = unwrap(await transferOwnership(deps, OWNER(), "usr_ha", { password: "matkhau-dung" }));
+    expect(res.owner).toMatchObject({ id: "usr_ha", role: "OWNER" });
+    expect(res.previousOwner).toMatchObject({ id: "usr_phong", role: "ADMIN" });
+    expect(roleOf("usr_ha")).toBe("OWNER");
+    expect(roleOf("usr_phong")).toBe("ADMIN");
+    expect(uow.data.memberships.filter((m) => m.orgId === "org_a" && m.role === "OWNER")).toHaveLength(1);
+    expect(uow.data.notifications.some((n) => n.userId === "usr_ha" && n.title.includes("Chủ sở hữu"))).toBe(true);
+    expect(mailer.sent.find((m) => m.to === "ha@anphat-demo.vn")?.text).toContain("Trần Văn Phong");
+    // chủ cũ (nay là ADMIN, phiên cũ còn ghi OWNER) không chuyển tiếp được nữa
+    expectErr(await transferOwnership(deps, OWNER(), "usr_chau", { password: "matkhau-dung" }), "FORBIDDEN");
+  });
+  it("sai mật khẩu → INVALID_CREDENTIALS, không đổi gì; sai quá 5 lần → RATE_LIMITED", async () => {
+    expectErr(await transferOwnership(deps, OWNER(), "usr_ha", { password: "sai" }), "INVALID_CREDENTIALS");
+    expect(roleOf("usr_ha")).toBe("DECLARANT");
+    expect(roleOf("usr_phong")).toBe("OWNER");
+    for (let i = 0; i < 4; i++) await transferOwnership(deps, OWNER(), "usr_ha", { password: "sai" });
+    expectErr(await transferOwnership(deps, OWNER(), "usr_ha", { password: "matkhau-dung" }), "RATE_LIMITED");
+  });
+  it("ADMIN/vai trò khác → FORBIDDEN; chuyển cho chính mình → FORBIDDEN", async () => {
+    expectErr(await transferOwnership(deps, ctx("ADMIN"), "usr_ha", { password: "h" }), "FORBIDDEN");
+    expectErr(await transferOwnership(deps, ctx("DECLARANT", "usr_ha"), "usr_chau", { password: "h" }), "FORBIDDEN");
+    expectErr(await transferOwnership(deps, OWNER(), "usr_phong", { password: "matkhau-dung" }), "FORBIDDEN");
+    expect(roleOf("usr_phong")).toBe("OWNER");
+  });
+  it("người nhận đã khóa hoặc chưa nhận lời mời → INVALID_STATE", async () => {
+    expectErr(await transferOwnership(deps, OWNER(), "usr_quang", { password: "matkhau-dung" }), "INVALID_STATE");
+    uow.data.memberships.find((m) => m.id === "mem_ha")!.status = "INVITED";
+    expectErr(await transferOwnership(deps, OWNER(), "usr_ha", { password: "matkhau-dung" }), "INVALID_STATE");
+    expect(roleOf("usr_phong")).toBe("OWNER");
+  });
+  it("org khác: OWNER org B không chuyển được cho thành viên org A → NOT_FOUND; org A không đổi", async () => {
+    uow.data.users.find((u) => u.id === "usr_b")!.passwordHash = "h:b-pass";
+    expectErr(await transferOwnership(deps, ctx("OWNER", "usr_b", "org_b"), "usr_ha", { password: "b-pass" }), "NOT_FOUND");
+    expect(roleOf("usr_ha")).toBe("DECLARANT");
+    expect(roleOf("usr_b", "org_b")).toBe("OWNER");
+  });
+});
+
 describe("doanh nghiệp", () => {
   it("getOrganization trả DTO đúng gói; updateOrganization ADMIN ok, VIEWER → FORBIDDEN", async () => {
     expect(unwrap(await getOrganization(deps, ctx("VIEWER")))).toMatchObject({ name: "AN PHÁT", plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150 } });
     const o = unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT MỚI", address: "HP 2", phone: "0225 3 888" }));
     expect(o.name).toBe("AN PHÁT MỚI");
     expectErr(await updateOrganization(deps, ctx("VIEWER", "usr_quang"), { name: "X", address: "", phone: "" }), "FORBIDDEN");
+  });
+  it("updateOrganization: lưu mã bưu chính (1.14/2.13); không gửi → giữ nguyên, \"\" → xóa; org khác không đọc/ghi được của org A", async () => {
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).postalCode).toBe("");
+    const o = unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT", address: "HP", phone: "0225", postalCode: "180000" }));
+    expect(o.postalCode).toBe("180000");
+    expect(unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT 2", address: "HP", phone: "0225" })).postalCode).toBe("180000");
+    expectErr(await updateOrganization(deps, ctx("DECLARANT", "usr_ha"), { name: "X", address: "", phone: "", postalCode: "999999" }), "FORBIDDEN");
+    // Chủ org B chỉ sửa được org B (ctx.orgId) – org A không đổi.
+    const b = unwrap(await updateOrganization(deps, ctx("OWNER", "usr_b", "org_b"), { name: "B", address: "", phone: "", postalCode: "100000" }));
+    expect(b).toMatchObject({ id: "org_b", postalCode: "100000" });
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).postalCode).toBe("180000");
+    expect(uow.data.orgs.find((x) => x.id === "org_a")?.postalCode).toBe("180000");
+    expect(unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT", address: "HP", phone: "0225", postalCode: "" })).postalCode).toBe("");
   });
   it("updateFourEyes: mặc định tắt; ADMIN/OWNER bật tắt được; vai trò khác → FORBIDDEN và không đổi", async () => {
     expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).fourEyes).toBe(false);

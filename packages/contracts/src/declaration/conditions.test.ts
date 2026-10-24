@@ -46,4 +46,9 @@ describe("DECLARATION_CONDITIONS – chỉ tiêu theo tình huống", () => {
     expect(C.MANUAL_VALUE.test(ctx({ manualValue: false }))).toBe(false);
     expect(C.MANUAL_VALUE.test(ctx({}))).toBe(false);
   });
+  it("E_INVOICE (1.40 / 2.35): chỉ khi phân loại hình thức hóa đơn là D (kể cả dạng “D – …”, chữ thường)", () => {
+    for (const k of ["D", " d", "D – Hóa đơn điện tử", "D - HDDT"]) expect(C.E_INVOICE.test(ctx({ invoiceKind: k }))).toBe(true);
+    for (const k of ["A", "B – Bảng kê", "", "DA"]) expect(C.E_INVOICE.test(ctx({ invoiceKind: k }))).toBe(false);
+    expect(C.E_INVOICE.test(ctx({}))).toBe(false);
+  });
 });

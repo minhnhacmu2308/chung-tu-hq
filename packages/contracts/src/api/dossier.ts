@@ -16,7 +16,13 @@ export const CreateDossierInputSchema = z.object({
 });
 export type CreateDossierInput = z.infer<typeof CreateDossierInputSchema>;
 
-export const DossierFilterSchema = z.object({ direction: DirectionSchema.optional(), status: DossierStatusSchema.optional(), step: StepIdSchema.optional() });
+export const DossierFilterSchema = z.object({
+  direction: DirectionSchema.optional(),
+  status: DossierStatusSchema.optional(),
+  step: StepIdSchema.optional(),
+  /** Tìm theo mã hồ sơ / đối tác / số vận đơn (không phân biệt hoa thường). */
+  q: z.string().trim().min(1).max(100).optional(),
+});
 export type DossierFilter = z.infer<typeof DossierFilterSchema>;
 
 export const UpdateDossierInputSchema = z.object({ note: z.string().trim().optional(), step: StepIdSchema.optional() });

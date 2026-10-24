@@ -15,8 +15,8 @@ export async function deleteDocument(deps: DossierDeps, ctx: Ctx, documentId: st
     if (!d) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
     const m = canModify(d.status);
     if (!m.ok) return m;
-    await r.documents.delete(doc.id);
-    await r.dossiers.update(d.id, { updatedAt: deps.clock.now() });
+    await r.documents.delete(ctx.orgId, doc.id);
+    await r.dossiers.update(ctx.orgId, d.id, { updatedAt: deps.clock.now() });
     return ok(doc);
   });
   if (!res.ok) return res;

@@ -12,11 +12,13 @@ export type PaperFieldState = "none" | "error" | "missing" | "estimate" | "edite
 const SHEET_MESSAGES = {
   vi: { page: "Trang {n} / {total}" },
   en: { page: "Page {n} / {total}" },
+  zh: { page: "第 {n} / {total} 页" },
 } satisfies Messages<"page">;
 
 const FIELD_MESSAGES = {
   vi: { missing: "Còn thiếu", estimate: "ƯT", edited: "Đã sửa", error: "Có lỗi", compare: "ước tính" },
   en: { missing: "Missing", estimate: "Est.", edited: "Edited", error: "Error", compare: "estimate" },
+  zh: { missing: "缺失", estimate: "估", edited: "已修改", error: "有错误", compare: "估计值" },
 } satisfies Messages<"missing" | "estimate" | "edited" | "error" | "compare">;
 
 export function PaperStack({ children, className }: { children: ReactNode; className?: string }) {

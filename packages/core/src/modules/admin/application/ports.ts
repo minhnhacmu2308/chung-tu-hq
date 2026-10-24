@@ -25,7 +25,7 @@ export type MemberRow = {
 export type JoinRow = { userId: string; orgId: string; name: string; email: string; emailVerified: boolean; createdAt: Date; requestedAt: Date };
 export type SessionInfo = { id: string; userId: string; orgId: string | null; ip: string | null; userAgent: string | null; lastSeenAt: Date };
 /** Số liệu một doanh nghiệp trong một khoảng thời gian. Tiền là chuỗi thập phân (Decimal). */
-export type OrgUsage = { orgId: string; dossiers: number; pages: number; aiCalls: number; readCostVnd: string; hsCostVnd: string; customsCostVnd: string };
+export type OrgUsage = { orgId: string; dossiers: number; pages: number; aiCalls: number; hsItems: number; customsMessages: number; readCostVnd: string; hsCostVnd: string; customsCostVnd: string };
 export type PlatformIntegrationRow = {
   id: IntegrationId; environment: "SANDBOX" | "PRODUCTION"; ciphertext: string | null; keyVersion: number; keyLast4: string | null; keyUpdatedAt: Date | null;
   status: "CONNECTED" | "ERROR" | "NOT_CONFIGURED"; detail: string | null; lastCheckedAt: Date | null;

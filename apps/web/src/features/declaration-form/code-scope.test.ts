@@ -6,22 +6,22 @@ const e = (code: string, name: string, parent?: string, inactive?: boolean): Cod
 
 describe("codeScope – phạm vi lọc danh mục theo tờ khai", () => {
   it("bộ phận xử lý: theo cơ quan Hải quan đang khai, bắt buộc lọc", () => {
-    expect(codeScope("A014", "TK_CHB", "IDA", { TK_CH: "06B1" })).toMatchObject({ parents: ["06B1"], optional: false });
-    expect(codeScope("A014", "TK_CHB", "IDA", {})).toBeNull();
+    expect(codeScope("A014", "TK_CHB", "IDA", { TK_CH: "06B1" }, "vi")).toMatchObject({ parents: ["06B1"], optional: false });
+    expect(codeScope("A014", "TK_CHB", "IDA", {}, "vi")).toBeNull();
   });
   it("địa điểm lưu kho: theo cơ quan Hải quan gồm cả mã chi cục cũ, bỏ lọc được", () => {
-    const s = codeScope("A202", "VD_ST", "IDA", { TK_CH: "06B1" })!;
+    const s = codeScope("A202", "VD_ST", "IDA", { TK_CH: "06B1" }, "vi")!;
     expect(s.parents).toEqual(expect.arrayContaining(["06B1", "02B1"]));
     expect(s.optional).toBe(true);
   });
   it("mã loại hình: nhập khẩu chỉ mã NK, xuất khẩu chỉ mã XK", () => {
-    expect(codeScope("TYPE_CODE", "TK_ICB", "IDA", {})).toMatchObject({ parents: ["NK"], optional: false });
-    expect(codeScope("TYPE_CODE", "TK_ECB", "EDA", {})).toMatchObject({ parents: ["XK"], optional: false });
+    expect(codeScope("TYPE_CODE", "TK_ICB", "IDA", {}, "vi")).toMatchObject({ parents: ["NK"], optional: false });
+    expect(codeScope("TYPE_CODE", "TK_ECB", "EDA", {}, "vi")).toMatchObject({ parents: ["XK"], optional: false });
   });
   it("địa điểm dỡ hàng (nhập) / xếp hàng (xuất): ưu tiên địa điểm Việt Nam; cảng nước ngoài không lọc", () => {
-    expect(codeScope("A016", "VD_DST", "IDA", {})).toMatchObject({ parents: ["VN"], optional: true });
-    expect(codeScope("A016", "TK_PSC", "EDA", {})).toMatchObject({ parents: ["VN"], optional: true });
-    expect(codeScope("A016", "VD_PSC", "IDA", {})).toBeNull();
+    expect(codeScope("A016", "VD_DST", "IDA", {}, "vi")).toMatchObject({ parents: ["VN"], optional: true });
+    expect(codeScope("A016", "TK_PSC", "EDA", {}, "vi")).toMatchObject({ parents: ["VN"], optional: true });
+    expect(codeScope("A016", "VD_PSC", "IDA", {}, "vi")).toBeNull();
   });
 });
 

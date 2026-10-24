@@ -15,6 +15,6 @@ export async function runRules(deps: ValidationDeps, orgId: string, dossierId: s
   const rows: ValidationRow[] = runAllRules(shipment, ctx).map((o) => ({
     id: deps.idGen.next("chk"), orgId, dossierId, shipmentVersion: String(version), ruleCode: o.code, title: o.title, detail: o.detail, result: o.result, severity: o.severity, documentKinds: o.docKinds, fields: o.fields, createdAt: now,
   }));
-  await deps.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.validations.replaceForDossier(dossierId, rows));
+  await deps.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.validations.replaceForDossier(orgId, dossierId, rows));
   return rows.map(toCrossCheck);
 }

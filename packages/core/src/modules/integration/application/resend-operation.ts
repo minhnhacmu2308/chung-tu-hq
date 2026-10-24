@@ -4,6 +4,7 @@ import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { meterSafely } from "../../../shared/usage.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps } from "./customs-ports.js";
@@ -28,6 +29,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
 
   await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: qop, direction: "OUT", result: "OK", summary: "Tra cứu trạng thái trước khi gửi lại", payloadMasked: { nghiepVu: qop, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
   const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId);
+  await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: qop, quantity: 1, meta: { beforeResend: op } });
   const stage = stageOf(result);
   const b = baseOp(op);
   // Chỉ nhận biết chắc được: số tờ khai của lần khai đầu, phân luồng của khai chính thức, số tiếp nhận HYS.
@@ -49,9 +51,13 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const base = outbox.filter((o) => o.operation === op);
   const last = base.at(-1);
   if (!last) return err(domainError("INVALID_STATE", `Chưa gửi ${op} lần nào`));
-  if (last.status === "PENDING" && last.attempts < MAX_ATTEMPTS) return ok({ resent: false, message: `${OPERATION_LABELS[op]} đang được gửi` });
+  if (last.status === "PENDING" && last.attempts < MAX_ATTEMPTS) {
+    // attempts = 0: có thể lần trước ghi outbox xong nhưng chưa kịp đẩy job → đẩy lại (jobId trùng là idempotent) thay vì báo "đang gửi" mãi.
+    if (last.attempts === 0) await deps.queue.enqueue("customs-send", { orgId: ctx.orgId, userId: ctx.userId, outboxId: last.id }, { jobId: `customs-send:${last.id}` });
+    return ok({ resent: false, message: `${OPERATION_LABELS[op]} đang được gửi` });
+  }
   if (last.status === "SENT") return err(domainError("INVALID_STATE", `${OPERATION_LABELS[op]} đã thành công – không gửi lại`));
-  if (last.status === "PENDING") await deps.uow.asOrg(ctx, (r) => r.outbox.update(last.id, { status: "FAILED", updatedAt: now() }));
+  if (last.status === "PENDING") await deps.uow.asOrg(ctx, (r) => r.outbox.update(last.orgId, last.id, { status: "FAILED", updatedAt: now() }));
   const version = Number(/:v(\d+)/.exec(last.idempotencyKey)?.[1] ?? "1");
   const key = /:n\d+$/.test(last.idempotencyKey) ? `${last.idempotencyKey}:retry${base.length}` : outboxKey(dossierId, op, version, base.length);
   const row = { ...last, id: deps.idGen.next("msg"), idempotencyKey: key, status: "PENDING" as const, attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now(), updatedAt: now() };

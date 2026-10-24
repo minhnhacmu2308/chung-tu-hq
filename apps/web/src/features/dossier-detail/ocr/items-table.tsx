@@ -1,23 +1,24 @@
 "use client";
 // Danh sách hàng hóa trên chứng từ: mỗi dòng mô tả, số lượng, ĐVT, đơn giá, thành tiền, xuất xứ – sửa trực tiếp như trường thường
 // (ô nào chứng từ không có thì để trống). Sửa xong, dòng hàng của tờ khai nháp cập nhật theo.
-import { Button, cn, Input, Tooltip } from "@kb/ui";
+import { Button, cn, fill, Input, Tooltip, useMessages } from "@kb/ui";
 import { Check, CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { isSuspect } from "@/api/ocr";
 import { formatMoney } from "@/lib/format";
 import type { ExtractedField } from "@/mocks/types";
 import { fieldDomId } from "./field-row";
+import { ITEMS_TABLE_MESSAGES } from "./ocr.messages";
 
 type Cell = "description" | "quantity" | "unit" | "unit_price" | "amount" | "origin";
 // Bề rộng tối thiểu đặt trên ô nhập (trình duyệt bỏ qua min-width của ô bảng): khung hẹp thì bảng cuộn ngang, không cắt mất giá trị.
-const COLS: { key: Cell; label: string; input: string; numeric?: boolean }[] = [
-  { key: "description", label: "Mô tả hàng hóa", input: "min-w-36" },
-  { key: "quantity", label: "Số lượng", input: "min-w-20" },
-  { key: "unit", label: "ĐVT", input: "min-w-14" },
-  { key: "unit_price", label: "Đơn giá", input: "min-w-20", numeric: true },
-  { key: "amount", label: "Thành tiền", input: "min-w-24", numeric: true },
-  { key: "origin", label: "Xuất xứ", input: "min-w-12" },
+const COLS: { key: Cell; label: "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin"; input: string; numeric?: boolean }[] = [
+  { key: "description", label: "description", input: "min-w-36" },
+  { key: "quantity", label: "quantity", input: "min-w-20" },
+  { key: "unit", label: "unit", input: "min-w-14" },
+  { key: "unit_price", label: "unitPrice", input: "min-w-20", numeric: true },
+  { key: "amount", label: "amount", input: "min-w-24", numeric: true },
+  { key: "origin", label: "origin", input: "min-w-12" },
 ];
 const AMOUNT_COL = COLS.findIndex((c) => c.key === "amount");
 
@@ -66,23 +67,24 @@ export function ItemsTable({
   const get = (n: number, c: Cell) => fields.find((f) => f.key === `item.${n}.${c}`);
   const total = lines.reduce((sum, n) => sum + Number(get(n, "amount")?.value ?? 0), 0);
   const notes = fields.filter((f) => isSuspect(f.status) && f.note);
+  const t = useMessages(ITEMS_TABLE_MESSAGES);
 
   return (
     <div className="flex flex-col gap-2">
       <div className="relative overflow-x-auto rounded-md border border-border">
         {/* kb-allow-raw: lưới sửa trực tiếp từng ô + tô vị trí trên chứng từ khi rê vào ô; DataTable chưa hỗ trợ ô sửa được */}
         <table className="w-full text-sm">
-          <caption className="sr-only">Danh sách hàng hóa</caption>
+          <caption className="sr-only">{t.caption}</caption>
           <thead className="bg-surface-muted text-left text-xs text-fg-muted">
             <tr>
               <th scope="col" className="w-10 px-2 py-2 font-medium">#</th>
               {COLS.map((c) => (
                 <th key={c.key} scope="col" className={cn("px-2 py-2 font-medium", c.numeric && "text-right")}>
-                  {c.label}
+                  {t[c.label]}
                 </th>
               ))}
               <th scope="col" className="w-12 px-2 py-2 font-medium">
-                <span className="sr-only">Trạng thái</span>
+                <span className="sr-only">{t.status}</span>
               </th>
             </tr>
           </thead>
@@ -106,15 +108,15 @@ export function ItemsTable({
                   ))}
                   <td className="px-2 py-1.5">
                     {suspectCell ? (
-                      <Tooltip content="Xác nhận dòng này đúng">
-                        <Button size="icon" variant="secondary" className="h-8 w-8" aria-label={`Xác nhận dòng ${n} đúng`} onClick={() => onConfirm(suspectCell.id)}>
+                      <Tooltip content={t.confirmRow}>
+                        <Button size="icon" variant="secondary" className="h-8 w-8" aria-label={fill(t.confirmRowN, { n })} onClick={() => onConfirm(suspectCell.id)}>
                           <Check className="h-4 w-4" />
                         </Button>
                       </Tooltip>
                     ) : (
-                      <span className="flex justify-center text-success-subtle-fg" title={cells.some((f) => f?.status === "USER_CONFIRMED") ? "Đã xác nhận" : "Đã đối chiếu"}>
+                      <span className="flex justify-center text-success-subtle-fg" title={cells.some((f) => f?.status === "USER_CONFIRMED") ? t.confirmed : t.checked}>
                         <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
-                        <span className="sr-only">{cells.some((f) => f?.status === "USER_CONFIRMED") ? "Đã xác nhận" : "Đã đối chiếu"}</span>
+                        <span className="sr-only">{cells.some((f) => f?.status === "USER_CONFIRMED") ? t.confirmed : t.checked}</span>
                       </span>
                     )}
                   </td>
@@ -125,7 +127,7 @@ export function ItemsTable({
           <tfoot>
             <tr className="border-t border-border-strong">
               <td colSpan={AMOUNT_COL + 1} className="px-2 py-2 text-right text-xs text-fg-muted">
-                Cộng {lines.length} dòng
+                {fill(t.total, { n: lines.length })}
               </td>
               <td className="px-2 py-2 text-right font-semibold tabular-nums">{formatMoney(String(total))}</td>
               <td colSpan={COLS.length - AMOUNT_COL} />

@@ -2,9 +2,10 @@
 // Dựng lại trang chứng từ gốc từ kết quả trích xuất (prototype chưa có ảnh PDF thật).
 // Mỗi trường in đúng vào vùng (region) của nó → rê chuột vào trường bên phải sẽ tô đúng chỗ trên trang.
 // Có backend: thay `pages` bằng ảnh trang PDF đã render, giữ nguyên regions.
-import { DocumentViewer, type DocumentRegion } from "@kb/ui";
+import { DocumentViewer, fill, useMessages, type DocumentRegion } from "@kb/ui";
 import { useMemo } from "react";
 import { DOC_KIND_LABELS, type DocKind, type DossierDocument, type ExtractedField } from "@/mocks/types";
+import { DOCUMENT_PREVIEW_MESSAGES } from "./common.messages";
 
 const TITLES: Record<DocKind, string> = {
   INVOICE: "COMMERCIAL INVOICE",
@@ -14,6 +15,7 @@ const TITLES: Record<DocKind, string> = {
   CERT_OF_ORIGIN: "CERTIFICATE OF ORIGIN",
   SALES_CONTRACT: "SALES CONTRACT",
   ARRIVAL_NOTICE: "ARRIVAL NOTICE",
+  // kb-allow-raw: tiêu đề in trên bản dựng lại hóa đơn GTGT Việt Nam (nội dung chứng từ, không phải giao diện)
   FREIGHT_INVOICE: "HÓA ĐƠN GIÁ TRỊ GIA TĂNG",
   OTHER: "DOCUMENT",
 };
@@ -22,6 +24,7 @@ const SUBTITLES: Partial<Record<DocKind, string>> = {
   INVOICE: "ORIGINAL",
   BILL_OF_LADING: "NON-NEGOTIABLE COPY · PORT-TO-PORT OR COMBINED TRANSPORT",
   CERT_OF_ORIGIN: "ASEAN-KOREA FREE TRADE AREA PREFERENTIAL TARIFF",
+  // kb-allow-raw: dòng in trên bản dựng lại hóa đơn GTGT Việt Nam (nội dung chứng từ)
   FREIGHT_INVOICE: "(Bản thể hiện của hóa đơn điện tử)",
 };
 
@@ -148,6 +151,7 @@ function buildRegions(doc: DossierDocument, fields: ExtractedField[]): DocumentR
         y: 88,
         w: 36,
         h: 6,
+        // kb-allow-raw: chữ ký in trên bản dựng lại hóa đơn GTGT Việt Nam (nội dung chứng từ)
         content: <span className="block border-t border-border-strong pt-1 text-center text-fg-subtle">{vi ? "Người bán hàng (ký số)" : "Authorized signature"}</span>,
       });
     }
@@ -166,10 +170,12 @@ export type DocumentPreviewProps = {
 export function DocumentPreview({ document, fields, highlightFieldId = null, onFieldClick, className }: DocumentPreviewProps) {
   const regions = useMemo(() => buildRegions(document, fields), [document, fields]);
   const pages = useMemo(() => Array.from({ length: Math.max(1, document.pages) }, () => null), [document.pages]);
+  const t = useMessages(DOCUMENT_PREVIEW_MESSAGES);
+  const kindLabels = useMessages(DOC_KIND_LABELS);
   return (
     <DocumentViewer
       key={document.id}
-      label={`Chứng từ gốc: ${DOC_KIND_LABELS[document.kind]} – ${document.fileName}`}
+      label={fill(t.originalLabel, { kind: kindLabels[document.kind], file: document.fileName })}
       pages={pages}
       regions={regions}
       highlightId={highlightFieldId}

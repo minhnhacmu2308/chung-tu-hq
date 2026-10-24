@@ -1,7 +1,7 @@
 "use client";
 // Panel bên phải của một tài khoản: thông tin, phiên đăng nhập, thao tác hỗ trợ. Mọi thao tác đều hỏi lý do.
 import type { AdminUser } from "@kb/contracts";
-import { Alert, Avatar, Badge, Button, EmptyState, Stack, StatusBadge } from "@kb/ui";
+import { Alert, Avatar, Badge, Button, EmptyState, fill, Stack, StatusBadge, useMessages } from "@kb/ui";
 import { KeyRound, Lock, LockOpen, LogOut, MailCheck, MonitorSmartphone } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
@@ -13,17 +13,32 @@ import { ReasonDialog } from "../common/reason-dialog";
 import { useAdminMutation } from "../common/use-admin-mutation";
 import { useAdminSession } from "../shell/use-admin-session";
 import { availableUserActions, type UserAction } from "./user-actions";
+import { USER_PANEL_MESSAGES } from "./users.messages";
 
-export const USER_ACTION_META: Record<UserAction, { label: string; icon: ReactNode; danger?: boolean }> = {
-  reset: { label: "Gửi email đặt lại mật khẩu", icon: <KeyRound className="h-4 w-4" /> },
-  verify: { label: "Gửi lại email xác thực", icon: <MailCheck className="h-4 w-4" /> },
-  revoke: { label: "Đăng xuất mọi phiên", icon: <LogOut className="h-4 w-4" /> },
-  disable: { label: "Khóa tài khoản", icon: <Lock className="h-4 w-4" />, danger: true },
-  enable: { label: "Mở khóa tài khoản", icon: <LockOpen className="h-4 w-4" /> },
+type UserActionMeta = { label: string; icon: ReactNode; danger?: boolean };
+
+const USER_ACTION_ICONS: Record<UserAction, Omit<UserActionMeta, "label">> = {
+  reset: { icon: <KeyRound className="h-4 w-4" /> },
+  verify: { icon: <MailCheck className="h-4 w-4" /> },
+  revoke: { icon: <LogOut className="h-4 w-4" /> },
+  disable: { icon: <Lock className="h-4 w-4" />, danger: true },
+  enable: { icon: <LockOpen className="h-4 w-4" /> },
 };
+
+const ACTION_LABEL_KEY = { reset: "actionReset", verify: "actionVerify", revoke: "actionRevoke", disable: "actionDisable", enable: "actionEnable" } as const;
+
+/** Nhãn + icon của các thao tác trên tài khoản theo ngôn ngữ hiện tại. */
+export function useUserActionMeta(): Record<UserAction, UserActionMeta> {
+  const t = useMessages(USER_PANEL_MESSAGES);
+  const out = {} as Record<UserAction, UserActionMeta>;
+  for (const a of Object.keys(USER_ACTION_ICONS) as UserAction[]) out[a] = { ...USER_ACTION_ICONS[a], label: t[ACTION_LABEL_KEY[a]] };
+  return out;
+}
 
 /** Hộp xác nhận (kèm lý do) cho một thao tác trên tài khoản. Dùng chung cho bảng và panel. */
 export function UserActionDialog({ user, action, onClose }: { user: AdminUser; action: UserAction | null; onClose: () => void }) {
+  const t = useMessages(USER_PANEL_MESSAGES);
+  const actionMeta = useUserActionMeta();
   const run = useAdminMutation({
     mutationFn: ({ action: a, reason }: { action: UserAction; reason: string }) => {
       const input = { reason };
@@ -34,16 +49,16 @@ export function UserActionDialog({ user, action, onClose }: { user: AdminUser; a
     },
     success: (_u, v) =>
       ({
-        reset: `Đã gửi email đặt lại mật khẩu tới ${user.email}`,
-        verify: `Đã gửi lại email xác thực tới ${user.email}`,
-        revoke: `Đã đăng xuất mọi phiên của ${user.name}`,
-        disable: `Đã khóa ${user.name}`,
-        enable: `Đã mở khóa ${user.name}`,
+        reset: fill(t.doneReset, { email: user.email }),
+        verify: fill(t.doneVerify, { email: user.email }),
+        revoke: fill(t.doneRevoke, { name: user.name }),
+        disable: fill(t.doneDisable, { name: user.name }),
+        enable: fill(t.doneEnable, { name: user.name }),
       })[v.action],
-    errorTitle: "Không thực hiện được",
+    errorTitle: t.errorTitle,
     onSuccess: onClose,
   });
-  const meta = action ? USER_ACTION_META[action] : null;
+  const meta = action ? actionMeta[action] : null;
   return (
     <ReasonDialog
       open={action !== null}
@@ -56,8 +71,8 @@ export function UserActionDialog({ user, action, onClose }: { user: AdminUser; a
       pending={run.isPending}
       onConfirm={(reason) => action && run.mutate({ action, reason })}
     >
-      {action === "disable" && <Alert tone="warning">Tài khoản bị đăng xuất ngay và không đăng nhập lại được cho tới khi mở khóa. Hồ sơ người này phụ trách vẫn giữ nguyên.</Alert>}
-      {action === "reset" && <Alert tone="info">Người dùng tự đặt mật khẩu mới qua liên kết trong email. Đội vận hành không xem hay đặt mật khẩu thay.</Alert>}
+      {action === "disable" && <Alert tone="warning">{t.disableWarn}</Alert>}
+      {action === "reset" && <Alert tone="info">{t.resetInfo}</Alert>}
     </ReasonDialog>
   );
 }
@@ -72,6 +87,9 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function UserPanel({ user }: { user: AdminUser }) {
+  const t = useMessages(USER_PANEL_MESSAGES);
+  const roleLabels = useMessages(ROLE_LABELS);
+  const USER_ACTION_META = useUserActionMeta();
   const { can } = useAdminSession();
   const [action, setAction] = useState<UserAction | null>(null);
   const actions = can("SUPPORT") ? availableUserActions(user) : [];
@@ -87,31 +105,31 @@ export function UserPanel({ user }: { user: AdminUser }) {
       </div>
 
       <dl className="grid grid-cols-2 gap-4 rounded-md bg-surface-muted p-4">
-        <Row label="Trạng thái"><StatusBadge status={ACCOUNT_STATUS[user.status]} /></Row>
-        <Row label="Email">
-          <Badge tone={user.emailVerified ? "success" : "warning"}>{user.emailVerified ? "Đã xác thực" : "Chưa xác thực"}</Badge>
+        <Row label={t.status}><StatusBadge status={ACCOUNT_STATUS[user.status]} /></Row>
+        <Row label={t.email}>
+          <Badge tone={user.emailVerified ? "success" : "warning"}>{user.emailVerified ? t.verified : t.unverified}</Badge>
         </Row>
         <div className="col-span-2">
-          <Row label="Doanh nghiệp">
+          <Row label={t.org}>
             <Link href={`/admin/orgs/${user.orgId}`} className="text-primary hover:underline">{user.orgName}</Link>
           </Row>
         </div>
-        <Row label="Vai trò trong doanh nghiệp">{user.status === "PENDING_JOIN" ? "Chưa có – chờ chủ doanh nghiệp duyệt" : ROLE_LABELS[user.role]}</Row>
-        <Row label="Tạo tài khoản">{formatDateTime(user.createdAt)}</Row>
-        <Row label="Hoạt động gần nhất">{user.lastActiveAt ? formatRelative(user.lastActiveAt) : "Chưa đăng nhập"}</Row>
-        {user.joinRequestedAt && <Row label="Xin tham gia từ">{formatRelative(user.joinRequestedAt)}</Row>}
+        <Row label={t.orgRole}>{user.status === "PENDING_JOIN" ? t.noRolePending : roleLabels[user.role]}</Row>
+        <Row label={t.createdAt}>{formatDateTime(user.createdAt)}</Row>
+        <Row label={t.lastActive}>{user.lastActiveAt ? formatRelative(user.lastActiveAt) : t.neverSignedIn}</Row>
+        {user.joinRequestedAt && <Row label={t.joinRequestedSince}>{formatRelative(user.joinRequestedAt)}</Row>}
       </dl>
 
       {user.status === "PENDING_JOIN" && (
-        <Alert tone="info" title="Việc duyệt thuộc về chủ doanh nghiệp">
-          Đội vận hành không duyệt thay. Nếu yêu cầu treo lâu, liên hệ chủ doanh nghiệp để họ duyệt hoặc từ chối trong màn Thành viên.
+        <Alert tone="info" title={t.pendingTitle}>
+          {t.pendingBody}
         </Alert>
       )}
 
       <Stack gap="sm">
-        <h3 className="text-sm font-semibold text-fg">Phiên đăng nhập ({user.sessions.length})</h3>
+        <h3 className="text-sm font-semibold text-fg">{fill(t.sessions, { n: user.sessions.length })}</h3>
         {user.sessions.length === 0 ? (
-          <EmptyState className="py-6" icon={<MonitorSmartphone />} title="Không có phiên nào đang mở" />
+          <EmptyState className="py-6" icon={<MonitorSmartphone />} title={t.noSessions} />
         ) : (
           <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
             {user.sessions.map((s) => (
@@ -131,7 +149,7 @@ export function UserPanel({ user }: { user: AdminUser }) {
 
       {actions.length > 0 && (
         <Stack gap="sm">
-          <h3 className="text-sm font-semibold text-fg">Thao tác hỗ trợ</h3>
+          <h3 className="text-sm font-semibold text-fg">{t.supportActions}</h3>
           <div className="flex flex-col gap-2">
             {actions.map((a) => (
               <Button key={a} variant={USER_ACTION_META[a].danger ? "danger" : "secondary"} className="justify-start" leftIcon={USER_ACTION_META[a].icon} onClick={() => setAction(a)}>

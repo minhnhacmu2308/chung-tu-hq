@@ -2,13 +2,14 @@
 // Tab 1 – Người khai nhập: mục lục nhóm (đếm đã nhập / tổng, ô bắt buộc còn thiếu) dính khi cuộn, các khối của nhóm đang chọn,
 // nút "Đến ô còn thiếu", "Hiển thị" (chế độ ô / nhãn bên trái / mật độ), "Nhóm trước / Nhóm tiếp" ở cuối nhóm.
 // Tờ khai đã đăng ký: phần người khai chỉ đọc; đã khai (chưa thông quan) mở sửa qua khai sửa đổi bổ sung.
-import { Alert, Badge, Button, cn, Grid, Select, Stack, toast } from "@kb/ui";
+import { Alert, Badge, Button, cn, fill, Grid, Select, Stack, toast, useMessages, useUiLocale } from "@kb/ui";
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, CircleAlert, FileCheck2, Pencil, Send, Undo2 } from "lucide-react";
 import type { DeclarationLayout } from "@kb/contracts";
 import { useRef, useState, type ReactNode } from "react";
 import { AmendLockProvider, type FieldLockLookup } from "./amend-context";
 import { BlockView } from "./block-view";
 import { neighborSections } from "./compact-rules";
+import { FORM_MESSAGES } from "./form.messages";
 import { conditionContext, itemProgress, sectionProgress, type FormValues } from "./form-state";
 import { ItemsSection } from "./items";
 import type { Stage } from "./fixtures";
@@ -46,45 +47,46 @@ type NoticeProps = { kind: "IDA" | "EDA"; stage: Stage; amending: boolean; onAme
 /** Thông báo giai đoạn gọn (phương án A): tiêu đề + nút thao tác; giải thích dài mở bằng "Chi tiết". */
 function StageNotice({ kind, stage, amending, onAmend, changed }: NoticeProps) {
   const [details, setDetails] = useState(false);
+  const t = useMessages(FORM_MESSAGES);
   const [recall, code, register] = kind === "IDA" ? ["IDD", "IDA01", "IDE"] : ["EDD", "EDA01", "EDE"];
-  const notConnected = (what: string) => () => toast({ tone: "info", title: "Bản mẫu – chưa kết nối", description: what });
+  const notConnected = (what: string) => () => toast({ tone: "info", title: t.prototypeNotConnected, description: what });
   if (stage === "nhap") return null;
   const more = (
     <Button size="sm" variant="ghost" aria-expanded={details} rightIcon={details ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />} onClick={() => setDetails((d) => !d)}>
-      {details ? "Ẩn chi tiết" : "Chi tiết"}
+      {details ? t.hideDetails : t.details}
     </Button>
   );
   const row = (buttons: ReactNode) => <div className="flex flex-wrap items-center gap-2 pt-1">{buttons}{more}</div>;
   if (stage === "thong-quan") {
     return (
-      <Alert tone="info" title="Tờ khai đã thông quan – thông tin người khai chỉ đọc">
-        {details && <p>Sửa sau thông quan dùng “Khai sửa đổi bổ sung sau thông quan (AMA)” ở tab Theo dõi & nghiệp vụ.</p>}
+      <Alert tone="info" title={t.clearedTitle}>
+        {details && <p>{t.clearedDetail}</p>}
         {row(null)}
       </Alert>
     );
   }
   if (!amending) {
     return (
-      <Alert tone="info" title="Tờ khai đã đăng ký – thông tin người khai chỉ đọc">
-        {details && <p>Cần sửa trước khi thông quan: gọi tờ khai về sửa ({recall}) rồi khai sửa đổi bổ sung ({code}).</p>}
-        {row(<Button size="sm" variant="secondary" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => onAmend(true)}>Khai sửa đổi bổ sung ({code})</Button>)}
+      <Alert tone="info" title={t.registeredTitle}>
+        {details && <p>{fill(t.registeredDetail, { recall, code })}</p>}
+        {row(<Button size="sm" variant="secondary" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => onAmend(true)}>{fill(t.amendButton, { code })}</Button>)}
       </Alert>
     );
   }
   return (
-    <Alert tone="warning" title={`Khai sửa đổi bổ sung trong thông quan (${code}) – ${changed ? `đã sửa ${changed} ô` : "chưa sửa ô nào"}`}>
+    <Alert tone="warning" title={fill(t.amendingTitle, { code, state: changed ? fill(t.changedCells, { n: changed }) : t.noChanges })}>
       {details && (
         <>
-          <p>Quy trình: gọi tờ khai về sửa ({recall}) → khai tạm sửa đổi ({code}) → khai chính thức sửa đổi ({register}).</p>
-          <p>Ô có biểu tượng khóa không được sửa (mục 3 Phụ lục II TT39) hoặc Hệ thống không hỗ trợ sửa – khi đó ghi nội dung đúng vào ô Ký hiệu và số hiệu.</p>
-          <p>Tờ khai đã phân luồng nên khai bổ sung lúc này bị xử lý theo quy định (Điều 20 TT38, sửa đổi TT121/2025).</p>
+          <p>{fill(t.amendStep1, { recall, code, register })}</p>
+          <p>{t.amendStep2}</p>
+          <p>{t.amendStep3}</p>
         </>
       )}
       {row(
         <>
-          <Button size="sm" leftIcon={<Send className="h-4 w-4" />} disabled={!changed} onClick={notConnected(`Khai tạm sửa đổi (${code})`)}>Khai tạm sửa đổi ({code})</Button>
-          <Button size="sm" variant="secondary" leftIcon={<FileCheck2 className="h-4 w-4" />} disabled={!changed} onClick={notConnected(`Khai chính thức sửa đổi (${register})`)}>Khai chính thức ({register})</Button>
-          <Button size="sm" variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} onClick={() => onAmend(false)}>Hủy sửa đổi</Button>
+          <Button size="sm" leftIcon={<Send className="h-4 w-4" />} disabled={!changed} onClick={notConnected(fill(t.provisionalAmend, { code }))}>{fill(t.provisionalAmend, { code })}</Button>
+          <Button size="sm" variant="secondary" leftIcon={<FileCheck2 className="h-4 w-4" />} disabled={!changed} onClick={notConnected(fill(t.officialAmend, { register }))}>{fill(t.officialShort, { register })}</Button>
+          <Button size="sm" variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} onClick={() => onAmend(false)}>{t.cancelAmend}</Button>
         </>,
       )}
     </Alert>
@@ -102,12 +104,14 @@ function goToMissing() {
 
 export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, itemActions, amending, onAmend, changed, lockOf, prototypeActions = true, showMissing = true }: Props) {
   const { mode } = useViewPrefs();
+  const t = useMessages(FORM_MESSAGES);
+  const locale = useUiLocale();
   const showInapplicable = mode === "tat-ca";
   const headingRef = useRef<HTMLHeadingElement>(null);
   const kind = layout.kind;
   const ctx = conditionContext(kind, values);
   const itemsMissing = items.reduce((n, it) => n + itemProgress(kind, layout, it).missing, 0);
-  const nav = navSections(layout).map((n) => {
+  const nav = navSections(layout, locale).map((n) => {
     const s = layout.declarant.find((x) => x.id === n.id);
     const p = s ? sectionProgress(kind, s, values) : { filled: items.length, total: items.length, missingRequired: itemsMissing };
     return { ...n, p: showMissing ? p : { ...p, missingRequired: 0 } };
@@ -122,7 +126,7 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
   };
   const missingButton = missingHere > 0 && (
     <Button size="sm" variant="secondary" leftIcon={<CircleAlert className="h-4 w-4" />} onClick={goToMissing}>
-      Đến ô còn thiếu ({missingHere})
+      {fill(t.goMissing, { n: missingHere })}
     </Button>
   );
   return (
@@ -130,9 +134,9 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
       <StageNotice kind={kind} stage={stage} amending={amending} onAmend={onAmend} changed={changed} />
       <Grid cols={{ base: 1, lg: 4 }} gap="lg">
         {/* Mục lục dính khi cuộn (G): mobile là thanh chọn nhóm sát mép trên, màn rộng là danh sách bên trái. */}
-        <nav aria-label="Nhóm chỉ tiêu" className="sticky top-shell-flush z-10 min-w-0 self-start bg-bg py-2 cq-lg:top-shell cq-lg:py-0">
+        <nav aria-label={t.navAria} className="sticky top-shell-flush z-10 min-w-0 self-start bg-bg py-2 cq-lg:top-shell cq-lg:py-0">
           <div className="flex items-center gap-2 cq-lg:hidden">
-            <Select className="min-w-0 flex-1" aria-label="Chọn nhóm chỉ tiêu" value={section} onChange={(e) => go(e.currentTarget.value)} options={nav.map((n) => ({ value: n.id, label: `${n.title} (${n.p.filled}/${n.p.total}${n.p.missingRequired ? ` · thiếu ${n.p.missingRequired}` : ""})` }))} />
+            <Select className="min-w-0 flex-1" aria-label={t.pickGroup} value={section} onChange={(e) => go(e.currentTarget.value)} options={nav.map((n) => ({ value: n.id, label: `${n.title} (${n.p.filled}/${n.p.total}${n.p.missingRequired ? ` · ${fill(t.missingN, { n: n.p.missingRequired })}` : ""})` }))} />
           </div>
           <ul className="hidden flex-col gap-1 cq-lg:flex">
             {nav.map((n) => (
@@ -140,8 +144,8 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
                 <Button variant={n.id === section ? "secondary" : "ghost"} fullWidth className="h-auto justify-between py-2 text-left" aria-current={n.id === section ? "true" : undefined} onClick={() => go(n.id)}>
                   <span className="min-w-0 flex-1 whitespace-normal break-words">{n.title}</span>
                   <span className="flex shrink-0 items-center gap-1">
-                    {n.p.missingRequired > 0 && <Badge tone="warning" size="sm">thiếu {n.p.missingRequired}</Badge>}
-                    <span className="text-xs tabular-nums text-fg-subtle">{n.id === ITEMS_SECTION ? `${n.p.total} dòng` : `${n.p.filled}/${n.p.total}`}</span>
+                    {n.p.missingRequired > 0 && <Badge tone="warning" size="sm">{fill(t.missingN, { n: n.p.missingRequired })}</Badge>}
+                    <span className="text-xs tabular-nums text-fg-subtle">{n.id === ITEMS_SECTION ? fill(t.linesN, { n: n.p.total }) : `${n.p.filled}/${n.p.total}`}</span>
                   </span>
                 </Button>
               </li>

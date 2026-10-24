@@ -31,7 +31,13 @@ export type DeclarationItemView = z.infer<typeof DeclarationItemViewSchema>;
 /** Tỷ giá đã dùng khi dựng tờ khai + nguồn (màn Review): tuần hiệu lực (thứ Hai), VCB tự động / nhập tay / dữ liệu mẫu. */
 export const ExchangeRateInfoSchema = z.object({ currency: z.string(), rate: DecimalStringSchema, effectiveFrom: z.string(), source: z.enum(["VCB", "MANUAL", "SEED"]), snapshotAt: IsoDateTimeSchema.nullable() });
 export type ExchangeRateInfo = z.infer<typeof ExchangeRateInfoSchema>;
-export const DeclarationViewSchema = z.object({ declaration: DeclarationSchema.nullable(), items: z.array(DeclarationItemViewSchema), unconfirmedHs: z.number().int().nonnegative(), exchangeRateInfo: ExchangeRateInfoSchema.nullable().optional() });
+/** Tổng một tờ khai nhánh (tối đa 50 dòng/tờ): trị giá hóa đơn (nguyên tệ), trị giá tính thuế và thuế dự tính (VND). */
+export const DeclarationBranchSchema = z.object({
+  no: z.number().int(), of: z.number().int(), lineFrom: z.number().int(), lineTo: z.number().int(),
+  invoiceValue: DecimalStringSchema, customsValueVnd: DecimalStringSchema, estImportDutyVnd: DecimalStringSchema, estVatVnd: DecimalStringSchema,
+});
+export type DeclarationBranch = z.infer<typeof DeclarationBranchSchema>;
+export const DeclarationViewSchema = z.object({ declaration: DeclarationSchema.nullable(), items: z.array(DeclarationItemViewSchema), branches: z.array(DeclarationBranchSchema).default([]), unconfirmedHs: z.number().int().nonnegative(), exchangeRateInfo: ExchangeRateInfoSchema.nullable().optional() });
 export type DeclarationView = z.infer<typeof DeclarationViewSchema>;
 
 /** Người khai trả lời câu hỏi của AI phân loại HS (mỗi câu con một phần tử). */

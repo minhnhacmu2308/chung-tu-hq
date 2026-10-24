@@ -7,7 +7,7 @@ import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEn
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
-import type { ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
+import type { DeclarationBranch, ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
 import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
 import { recordApprovedProducts } from "./products";
 
@@ -278,7 +278,7 @@ export const unconfirmHs = (itemId: string) =>
   });
 
 export type DeclarationItemView = LineItem & Omit<ItemTax, "itemId">;
-export type DeclarationView = { declaration: Declaration | null; items: DeclarationItemView[]; unconfirmedHs: number; exchangeRateInfo?: ExchangeRateInfo | null };
+export type DeclarationView = { declaration: Declaration | null; items: DeclarationItemView[]; unconfirmedHs: number; exchangeRateInfo?: ExchangeRateInfo | null; branches: DeclarationBranch[] };
 
 export const getDeclarationView = (dossierId: string) =>
   query((db): DeclarationView => {
@@ -294,6 +294,7 @@ export const getDeclarationView = (dossierId: string) =>
     return {
       declaration,
       exchangeRateInfo,
+      branches: [], // Task 10 tính tổng nhánh cho mock
       unconfirmedHs: items.filter((i) => !i.hsConfirmed).length,
       items: items.map((i) => {
         const t = taxes.find((x) => x.itemId === i.id);

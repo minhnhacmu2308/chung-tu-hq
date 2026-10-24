@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { Decimal } from "../../../../shared/decimal.js";
 import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
@@ -283,5 +284,34 @@ describe("HS và tờ khai", () => {
     expect(errCode(await confirmHs(deps, declarant, (unwrap(await listLineItems(deps, declarant, D)))[0]!.id, "8482.10.00"))).toBe("DOSSIER_LOCKED");
     expect(errCode(await moveToReview(deps, declarant, D))).toBe("DOSSIER_LOCKED");
     expect(errCode(await getDeclarationView(deps, other, D))).toBe("NOT_FOUND");
+  });
+});
+
+describe("tổng theo tờ khai nhánh (>50 dòng)", () => {
+  const manyItems = (n: number) => (s: ReturnType<typeof hansol>) => {
+    const base = s.items[0]!;
+    s.items = Array.from({ length: n }, (_, i) => ({ ...base, lineNo: i + 1, amount: { ...base.amount, value: String(100 + i) }, hsOnInvoice: { ...base.hsOnInvoice, value: null } }));
+  };
+  const withItems = async (n: number) => {
+    deps = { ...deps, shipments: new FakeShipments({ [D]: hansol(manyItems(n)) }, { [D]: [{ documentId: "doc_invoice", kind: "INVOICE", raw: { invoiceNo: "HSP-2610-0457" } }] }) };
+    await runFull("DECLARATION");
+    return unwrap(await getDeclarationView(deps, declarant, D));
+  };
+  const sum = (xs: string[]) => xs.reduce((a, x) => a.plus(x), new Decimal(0)).toFixed();
+
+  it("120 dòng → 3 nhánh, tờ 3 = dòng 101..120, tổng các nhánh = tổng tờ khai", async () => {
+    const v = await withItems(120);
+    expect(v.branches!).toHaveLength(3);
+    expect(v.branches![2]).toMatchObject({ no: 3, of: 3, lineFrom: 101, lineTo: 120 });
+    expect(sum(v.branches!.map((b) => b.customsValueVnd))).toBe(v.declaration!.customsValueVnd);
+    expect(sum(v.branches!.map((b) => b.estImportDutyVnd))).toBe(v.declaration!.estimatedImportDutyVnd);
+    expect(sum(v.branches!.map((b) => b.estVatVnd))).toBe(v.declaration!.estimatedVatVnd);
+    expect(v.branches![0]!.invoiceValue).toBe(sum(v.items.slice(0, 50).map((i) => i.amount)));
+  });
+
+  it("10 dòng → 1 nhánh khớp tổng", async () => {
+    const v = await withItems(10);
+    expect(v.branches!).toHaveLength(1);
+    expect(v.branches![0]).toMatchObject({ no: 1, of: 1, lineFrom: 1, lineTo: 10, customsValueVnd: v.declaration!.customsValueVnd });
   });
 });

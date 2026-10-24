@@ -6,7 +6,7 @@ import { canApprove, canEditField, canMoveToReview, missingRequiredFields } from
 import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
 import { mappingsFor } from "../domain/mapping/registry.js";
-import { loadDossier, toDeclaration, toLineItem, unconfirmedCount } from "./_dto.js";
+import { loadDossier, toBranches, toDeclaration, toLineItem, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow } from "./ports.js";
 import { recordApprovedProducts } from "./product-catalog.js";
 
@@ -28,16 +28,18 @@ export async function getDeclarationView(deps: DeclarationDeps, ctx: Ctx, dossie
   });
   const valuation = decl ? allocateCustomsValue({ items: items.map((i) => ({ id: i.id, amount: i.amount })), adjustments: decl.valueAdjustments, currency, rates: { [currency]: decl.exchangeRate } }) : null;
   const taxes = valuation ? computeTaxes(valuation.perItem.map((p) => ({ id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: items.find((i) => i.id === p.id)?.importDutyRate ?? null, vatRate: items.find((i) => i.id === p.id)?.vatRate ?? null }))) : null;
+  const viewItems = items.map((i) => ({
+    ...toLineItem(i),
+    customsValueVnd: valuation?.perItem.find((p) => p.id === i.id)?.customsValueVnd ?? "0",
+    importDutyVnd: taxes?.perItem.find((p) => p.id === i.id)?.importDutyVnd ?? "0",
+    vatVnd: taxes?.perItem.find((p) => p.id === i.id)?.vatVnd ?? "0",
+  }));
   return ok({
     declaration: decl ? toDeclaration(decl, await approvedName(deps, ctx.orgId, decl)) : null,
     unconfirmedHs: unconfirmedCount(items),
+    branches: toBranches(viewItems),
     exchangeRateInfo: decl && fx ? { currency, rate: decl.exchangeRate, effectiveFrom: fx.date, source: fx.source, snapshotAt: fx.snapshotAt?.toISOString() ?? null } : null,
-    items: items.map((i) => ({
-      ...toLineItem(i),
-      customsValueVnd: valuation?.perItem.find((p) => p.id === i.id)?.customsValueVnd ?? "0",
-      importDutyVnd: taxes?.perItem.find((p) => p.id === i.id)?.importDutyVnd ?? "0",
-      vatVnd: taxes?.perItem.find((p) => p.id === i.id)?.vatVnd ?? "0",
-    })),
+    items: viewItems,
   });
 }
 

@@ -1,6 +1,7 @@
-import type { AgentRunView, AgentTaskId, Declaration, DeclarationField, HsEntry, LineItem, LineItemHs } from "@kb/contracts";
+import { branchRanges, type AgentRunView, type AgentTaskId, type Declaration, type DeclarationBranch, type DeclarationField, type DeclarationItemView, type HsEntry, type LineItem, type LineItemHs } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { Decimal } from "../../../shared/decimal.js";
 import { mappingsFor } from "../domain/build.js";
 import type { Shipment } from "@kb/contracts";
 import type { AgentRunRow, DeclarationRepos, DeclarationRow, DossierInfo, HsCatalogRow, HsSuggestionRow, LineItemRow } from "./ports.js";
@@ -85,3 +86,13 @@ export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, 
   return r.lineItems.upsertForDossier(orgId, dossierId, rows);
 }
 
+
+/** Tổng trị giá/thuế từng tờ khai nhánh (50 dòng/tờ theo lineNo), cộng bằng Decimal; không có dòng → một nhánh 0. */
+export function toBranches(items: DeclarationItemView[]): DeclarationBranch[] {
+  const sorted = [...items].sort((a, b) => a.lineNo - b.lineNo);
+  const sum = (xs: DeclarationItemView[], pick: (i: DeclarationItemView) => string) => xs.reduce((a, i) => a.plus(pick(i)), new Decimal(0)).toFixed();
+  return branchRanges(sorted.map((i) => i.lineNo)).map((r) => {
+    const part = sorted.slice(r.index[0], r.index[1]);
+    return { no: r.no, of: r.of, lineFrom: r.lineFrom, lineTo: r.lineTo, invoiceValue: sum(part, (i) => i.amount), customsValueVnd: sum(part, (i) => i.customsValueVnd), estImportDutyVnd: sum(part, (i) => i.importDutyVnd), estVatVnd: sum(part, (i) => i.vatVnd) };
+  });
+}

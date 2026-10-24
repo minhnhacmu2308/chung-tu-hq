@@ -19,4 +19,6 @@ export interface DossierProfileReader {
 }
 /** Chi phí người khai nhập (module declaration) – composition root nối; vắng = luật chỉ theo chứng từ. */
 export type ChargesReader = (orgId: string, dossierId: string) => Promise<ValueCharges | null>;
-export type ValidationDeps = { uow: ValidationUow; idGen: { next(prefix: "chk"): string }; clock: { now(): Date }; dossiers?: DossierProfileReader; charges?: ChargesReader };
+/** Số tờ khai nhánh đã có số tờ khai (module integration) – composition root nối; vắng = 0 (luật R-BRANCH-COUNT-LOCKED SKIPPED). */
+export type BranchesReader = (orgId: string, dossierId: string) => Promise<number>;
+export type ValidationDeps = { uow: ValidationUow; idGen: { next(prefix: "chk"): string }; clock: { now(): Date }; dossiers?: DossierProfileReader; charges?: ChargesReader; branches?: BranchesReader };

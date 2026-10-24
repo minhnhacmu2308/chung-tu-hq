@@ -7,7 +7,11 @@ export type DossierProfile = { direction: Direction; typeCode: string; transport
 export type RuleOutcome = { result: RuleResult; detail: string; fields: string[] };
 /** `dossier` vắng khi chưa biết hồ sơ (luật cần nó trả SKIPPED). */
 /** `charges`: chi phí người khai nhập ở bước OCR & kiểm tra (cước nhập tay / lý do chưa có số) – vắng = chỉ theo chứng từ. */
-export type RuleContext = { org: { taxCode: string; name: string }; dossier?: DossierProfile; charges?: ValueCharges };
+export type RuleContext = {
+  org: { taxCode: string; name: string }; dossier?: DossierProfile; charges?: ValueCharges;
+  /** Số tờ khai nhánh đã được Hải quan cấp số (module integration) – vắng/0 = chưa có tờ nào. */
+  issuedBranches?: number;
+};
 export type Rule = {
   code: string; title: string; severity: RuleSeverity; docKinds: DocKind[];
   /** Chỉ áp dụng cho các chiều này (vắng = cả nhập lẫn xuất). */

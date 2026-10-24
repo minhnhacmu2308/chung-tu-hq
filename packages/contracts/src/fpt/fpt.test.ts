@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
@@ -42,7 +42,11 @@ import {
  * `"objVN_EDA_HANG": [ {…}` thiếu `]`. Cách trích: tìm `"<key>":`, lấy từ dấu `{`/`[` kế tiếp tới dấu
  * đóng cân bằng (bỏ qua ký tự trong chuỗi JSON), rồi `JSON.parse` đoạn đó.
  */
-const FORMAT_JSON = readFileSync(fileURLToPath(new URL("../../../../business/format.json", import.meta.url)), "utf8");
+const FORMAT_PATH = fileURLToPath(new URL("../../../../business/format.json", import.meta.url));
+// File mẫu của FPT không nằm trong git – máy không có thì bỏ qua các test so với mẫu (các test đặc tả khác vẫn chạy).
+const HAS_FORMAT = existsSync(FORMAT_PATH);
+const FORMAT_JSON = HAS_FORMAT ? readFileSync(FORMAT_PATH, "utf8") : "";
+const itFormat = it.skipIf(!HAS_FORMAT);
 
 function extractJson(text: string, key: string, open: "{" | "[" = "{"): unknown {
   const at = text.indexOf(`"${key}":`);
@@ -100,7 +104,7 @@ describe("fptKey – quy ước key JSON của FPT (camelCase .NET)", () => {
     expectTypeOf(fptKey("CTHQ_D01")).toEqualTypeOf<"cthQ_D01">();
   });
 
-  it("mọi key trong objVN_EDA/CON/CTHQ của format.json đều là fptKey của một trường trong sheet", () => {
+  itFormat("mọi key trong objVN_EDA/CON/CTHQ của format.json đều là fptKey của một trường trong sheet", () => {
     const cases: [string, FptFieldMeta[]][] = [
       ["objVN_EDA", VN_EDA_FIELDS],
       ["objVN_EDA_CON", VN_EDA_CON_FIELDS],
@@ -115,7 +119,7 @@ describe("fptKey – quy ước key JSON của FPT (camelCase .NET)", () => {
 });
 
 describe("format.json – mẫu EDA", () => {
-  it("objVN_EDA parse qua VnEdaSchema", () => {
+  itFormat("objVN_EDA parse qua VnEdaSchema", () => {
     const res = VnEdaSchema.safeParse(extractJson(FORMAT_JSON, "objVN_EDA"));
     expect(res.error?.issues ?? []).toEqual([]);
     const eda: VnEda = res.data as VnEda;
@@ -128,19 +132,19 @@ describe("format.json – mẫu EDA", () => {
     expectTypeOf<VnEda["tK_MRK"]>().toEqualTypeOf<string | null | undefined>();
   });
 
-  it("objVN_EDA_CON và objVN_EDA_CTHQ parse được", () => {
+  itFormat("objVN_EDA_CON và objVN_EDA_CTHQ parse được", () => {
     expect(VnEdaConSchema.safeParse(extractJson(FORMAT_JSON, "objVN_EDA_CON")).success).toBe(true);
     expect(VnEdaCthqSchema.safeParse(extractJson(FORMAT_JSON, "objVN_EDA_CTHQ")).success).toBe(true);
   });
 
-  it("dòng hàng mẫu LỆCH đặc tả: thiếu các trường sheet đánh Required", () => {
+  itFormat("dòng hàng mẫu LỆCH đặc tả: thiếu các trường sheet đánh Required", () => {
     const res = VnEdaHangSchema.safeParse(firstEdaHang());
     expect(res.success).toBe(false);
     const paths = (res.error?.issues ?? []).map((i) => i.path.join(".")).sort();
     expect(paths).toEqual(["haG_BPR", "haG_UPC", "haG_UPR"]);
   });
 
-  it("EdaRequestSchema ghép đúng object", () => {
+  itFormat("EdaRequestSchema ghép đúng object", () => {
     const hang = { ...(firstEdaHang() as Record<string, unknown>), haG_BPR: 400.4, haG_UPR: 200.2, haG_UPC: "USD", haG_XX: "A" };
     const res = EdaRequestSchema.safeParse({
       objVN_EDA: extractJson(FORMAT_JSON, "objVN_EDA"),
@@ -162,7 +166,7 @@ describe("kiểm tra kiểu", () => {
     expect(VnIdaVandonSchema.safeParse(vandon).success).toBe(true);
   });
 
-  it("từ chối số gửi dạng chuỗi", () => {
+  itFormat("từ chối số gửi dạng chuỗi", () => {
     // VN_IDA không có TK_GW (trọng lượng nằm ở VN_IDA_VANDON.VD_GW); dùng TK_IP4 và VD_GW.
     expect(VnIdaSchema.safeParse({ ...ida, tK_IP4: "5543.17" }).success).toBe(false);
     expect(VnIdaVandonSchema.safeParse({ ...vandon, vD_GW: "600" }).success).toBe(false);

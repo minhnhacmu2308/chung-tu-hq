@@ -1,6 +1,6 @@
 // Kết nối hộp thư Gmail / Outlook (OAuth 2.0, chỉ quyền đọc) và lấy thư theo yêu cầu.
 // Token lưu mã hóa (AES-256-GCM) trong mail_connections; không bao giờ trả ra API.
-import { INBOX_FIRST_SYNC_DAYS, inboxFileAccepted, type MailboxOverview, type MailConnection, type MailProvider, type MailSyncResult, type StartMailConnectResult } from "@kb/contracts";
+import { INBOX_FIRST_SYNC_DAYS, inboxFileAccepted, normalizeMailFilters, type MailboxOverview, type MailConnection, type MailProvider, type MailSyncResult, type StartMailConnectResult, type UpdateMailFiltersInput } from "@kb/contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
@@ -22,6 +22,7 @@ function toDto(r: MailConnectionRow, names: Record<string, string>): MailConnect
   return {
     id: r.id, provider: r.provider, email: r.email, status: r.status, lastSyncedAt: r.lastSyncedAt?.toISOString() ?? null, lastSyncCount: r.lastSyncCount,
     lastError: r.lastError, connectedBy: r.connectedBy, connectedByName: names[r.connectedBy] ?? "—", createdAt: r.createdAt.toISOString(),
+    filters: normalizeMailFilters(r.filters),
   };
 }
 
@@ -73,7 +74,7 @@ export async function completeMailConnect(deps: MailboxDeps, ctx: Ctx, input: { 
     }
     const created: MailConnectionRow = {
       id: deps.idGen.next("mcn"), orgId: ctx.orgId, provider: st.provider, email, ...sealed, status: "ACTIVE", lastSyncedAt: null, lastSyncCount: 0, lastError: null,
-      connectedBy: ctx.userId, createdAt: now, updatedAt: now,
+      connectedBy: ctx.userId, createdAt: now, updatedAt: now, filters: null,
     };
     await r.connections.insert(created);
     return created;
@@ -96,6 +97,28 @@ export async function disconnectMailbox(deps: MailboxDeps, ctx: Ctx, id: string)
   if (!res.ok) return res;
   await deps.audit?.record(ctx, { action: "MAILBOX_DISCONNECTED", targetType: "mailbox", targetId: id, targetLabel: res.value });
   return ok({ removed: true as const });
+}
+
+/**
+ * Lưu bộ lọc của một hộp thư (người đã kết nối hoặc Quản trị / Chủ sở hữu). Có hiệu lực từ lần lấy thư tới;
+ * `rescan` → lần tới quét lại INBOX_FIRST_SYNC_DAYS ngày gần nhất theo bộ lọc mới (email đã lấy không bị lấy trùng).
+ */
+export async function updateMailFilters(deps: MailboxDeps, ctx: Ctx, id: string, input: UpdateMailFiltersInput): Promise<Result<MailConnection>> {
+  const allowed = canUse(ctx);
+  if (!allowed.ok) return allowed;
+  const res = await deps.uow.asOrg(ctx, async (r) => {
+    const cur = await r.connections.get(ctx.orgId, id);
+    if (!cur) return err(reasonError("NOT_FOUND", "MAILBOX_NOT_FOUND"));
+    if (cur.connectedBy !== ctx.userId && ctx.role !== "ADMIN" && ctx.role !== "OWNER") return err(reasonError("FORBIDDEN", "MAILBOX_NOT_FOUND"));
+    const next: MailConnectionRow = {
+      ...cur, filters: normalizeMailFilters(input.filters), ...(input.rescan ? { lastSyncedAt: null } : {}), updatedAt: deps.clock.now(),
+    };
+    await r.connections.update(next);
+    return ok(next);
+  });
+  if (!res.ok) return res;
+  await deps.audit?.record(ctx, { action: "MAILBOX_FILTERS_UPDATED", targetType: "mailbox", targetId: id, targetLabel: `${res.value.provider} ${res.value.email}` });
+  return ok(toDto(res.value, await deps.members.names(ctx.orgId, [res.value.connectedBy])));
 }
 
 /** Nút "Lấy chứng từ mới": xếp lịch lấy thư cho mọi hộp thư (hoặc một hộp thư) còn dùng được. */
@@ -144,18 +167,19 @@ export async function syncMailConnection(deps: MailboxDeps, input: MailboxSyncPa
       await finish(sealed);
     }
     const since = conn.lastSyncedAt ?? new Date(startedAt.getTime() - INBOX_FIRST_SYNC_DAYS * 86_400_000);
-    const remote = await adapter.listMessages(tokens, since, SYNC_BATCH);
+    const filters = normalizeMailFilters(conn.filters);
+    const remote = await adapter.listMessages(tokens, since, SYNC_BATCH, filters);
     const known = await deps.uow.asOrg(ctx, (r) => r.messages.existingProviderIds(input.orgId, conn.id, remote.map((m) => m.id)));
     let added = 0;
     for (const m of remote) {
       if (known.has(m.id)) continue;
-      const files = m.attachments.filter((a) => inboxFileAccepted(a.fileName, a.size));
+      const files = m.attachments.filter((a) => inboxFileAccepted(a.fileName, a.size, filters.extensions));
       if (!files.length) continue;
       const messageId = deps.idGen.next("imsg");
       const attachments: InboxAttachmentRow[] = [];
       for (const a of files) {
         const bytes = await adapter.getAttachment(tokens, m.id, a.id);
-        if (!inboxFileAccepted(a.fileName, bytes.length)) continue;
+        if (!inboxFileAccepted(a.fileName, bytes.length, filters.extensions)) continue;
         const sha256 = createHash("sha256").update(bytes).digest("hex");
         const id = deps.idGen.next("iatt");
         const ext = a.fileName.toLowerCase().split(".").pop()!;

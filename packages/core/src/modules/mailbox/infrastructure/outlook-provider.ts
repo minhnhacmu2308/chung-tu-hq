@@ -1,7 +1,8 @@
 // Outlook / Microsoft 365 qua Microsoft Graph – OAuth 2.0 (Microsoft identity platform v2) quyền Mail.Read. Gọi bằng fetch.
+import { DEFAULT_MAIL_FILTERS, type MailFilters } from "@kb/contracts";
 import { z } from "zod";
 import { systemClock, type Clock } from "../../../shared/clock.js";
-import { matchesInboxKeywords } from "../domain/keywords.js";
+import { matchesMailFilters } from "../domain/filters.js";
 import { MailAuthError, type MailProviderAdapter, type MailTokens, type RemoteMessage } from "../application/ports.js";
 import { MailHttp, toTokens, type HttpOpts } from "./oauth-http.js";
 
@@ -74,9 +75,9 @@ export class OutlookProvider implements MailProviderAdapter {
 
   /**
    * Graph lọc sẵn theo mốc + có file đính kèm, cũ nhất trước (thuộc tính trong $orderby phải đứng đầu $filter);
-   * từ khóa chứng từ lọc phía mình trên tiêu đề + xem trước nội dung + tên file (Graph không cho $search cùng $filter).
+   * bộ lọc (người gửi, từ khóa, từ loại trừ) kiểm phía mình trên tiêu đề + xem trước nội dung + tên file (Graph không cho $search cùng $filter).
    */
-  async listMessages(tokens: MailTokens, since: Date, limit: number): Promise<RemoteMessage[]> {
+  async listMessages(tokens: MailTokens, since: Date, limit: number, filters: MailFilters = DEFAULT_MAIL_FILTERS): Promise<RemoteMessage[]> {
     const params = [
       ["$filter", `receivedDateTime ge ${isoSeconds(since)} and hasAttachments eq true`],
       ["$orderby", "receivedDateTime asc"],
@@ -97,8 +98,8 @@ export class OutlookProvider implements MailProviderAdapter {
         if (!attachments.length) continue;
         const subject = m.subject ?? "";
         const snippet = m.bodyPreview ?? "";
-        if (!matchesInboxKeywords(subject, snippet, ...attachments.map((a) => a.fileName))) continue;
         const address = (m.from?.emailAddress.address ?? "").toLowerCase();
+        if (!matchesMailFilters({ fromEmail: address, subject, snippet, fileNames: attachments.map((a) => a.fileName) }, filters)) continue;
         out.push({ id: m.id, fromName: m.from?.emailAddress.name || address, fromEmail: address, subject, snippet, receivedAt, attachments });
       }
       url = res["@odata.nextLink"];

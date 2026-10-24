@@ -9,6 +9,7 @@ export const inboxKeys = mock.inboxKeys;
 export const getMailboxOverview = pick(mock.getMailboxOverview, http.getMailboxOverview);
 export const startMailConnect = pick(mock.startMailConnect, http.startMailConnect);
 export const disconnectMailbox = pick(mock.disconnectMailbox, http.disconnectMailbox);
+export const updateMailFilters = pick(mock.updateMailFilters, http.updateMailFilters);
 export const requestMailSync = pick(mock.requestMailSync, http.requestMailSync);
 
 export const listInbox = pick(mock.listInbox, http.listInbox);

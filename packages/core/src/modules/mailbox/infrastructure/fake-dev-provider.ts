@@ -1,9 +1,10 @@
 // Hộp thư giả lập cho dev/demo (MAILBOX_PROVIDER=fake): không gọi Google/Microsoft. Bấm "Kết nối" → chuyển thẳng về callback
 // của mình; lần lấy đầu trả vài email chứng từ mẫu (file PDF thật, đọc được), lần sau không có gì mới (chống trùng theo mã email).
-import type { MailProvider } from "@kb/contracts";
+import { DEFAULT_MAIL_FILTERS, type MailFilters, type MailProvider } from "@kb/contracts";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { systemClock, type Clock } from "../../../shared/clock.js";
 import type { MailProviderAdapter, MailTokens, RemoteMessage } from "../application/ports.js";
+import { matchesMailFilters } from "../domain/filters.js";
 
 type Sample = Omit<RemoteMessage, "id" | "receivedAt"> & { key: string; hoursAgo: number; lines: Record<string, string[]> };
 
@@ -72,9 +73,9 @@ export class FakeDevMailProvider implements MailProviderAdapter {
     return { accessToken: "fake-access", refreshToken: "fake-refresh", expiresAt: new Date(this.clock.now().getTime() + 3600_000).toISOString() };
   }
 
-  async listMessages(_tokens: MailTokens, since: Date, limit: number): Promise<RemoteMessage[]> {
+  async listMessages(_tokens: MailTokens, since: Date, limit: number, filters: MailFilters = DEFAULT_MAIL_FILTERS): Promise<RemoteMessage[]> {
     return SAMPLES.map(({ key, hoursAgo, lines: _l, ...m }) => ({ ...m, id: `fake-${this.provider.toLowerCase()}-${key}`, receivedAt: new Date(this.anchor.getTime() - hoursAgo * 3600_000) }))
-      .filter((m) => m.receivedAt >= since)
+      .filter((m) => m.receivedAt >= since && matchesMailFilters({ ...m, fileNames: m.attachments.map((a) => a.fileName) }, filters))
       .sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime())
       .slice(0, limit);
   }

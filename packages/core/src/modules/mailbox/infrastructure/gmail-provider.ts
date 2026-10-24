@@ -1,7 +1,8 @@
 // Gmail API (REST) – OAuth 2.0 quyền gmail.readonly. Không dùng SDK: chỉ vài endpoint, gọi bằng fetch.
-import { INBOX_FILE_EXTENSIONS, INBOX_KEYWORDS } from "@kb/contracts";
+import { DEFAULT_MAIL_FILTERS, type MailFilters } from "@kb/contracts";
 import { z } from "zod";
 import { systemClock, type Clock } from "../../../shared/clock.js";
+import { effectiveKeywords, matchesMailFilters } from "../domain/filters.js";
 import { MailAuthError, type MailProviderAdapter, type MailTokens, type RemoteAttachment, type RemoteMessage } from "../application/ports.js";
 import { mapLimit, MailHttp, toTokens, type HttpOpts } from "./oauth-http.js";
 
@@ -28,10 +29,19 @@ const PartSchema: z.ZodType<Part> = z.lazy(() =>
 const MessageResponse = z.object({ id: z.string(), snippet: z.string().optional(), internalDate: z.string().optional(), payload: PartSchema });
 const AttachmentResponse = z.object({ data: z.string() });
 
-/** Câu truy vấn Gmail: có file đính kèm, sau mốc, khớp một trong các từ khóa, có file đúng loại. */
-export function gmailQuery(since: Date): string {
-  const kw = INBOX_KEYWORDS.map((k) => (/[\s/]/.test(k) ? `"${k}"` : k)).join(" ");
-  return `has:attachment after:${Math.floor(since.getTime() / 1000)} {${kw}} filename:(${INBOX_FILE_EXTENSIONS.join(" OR ")})`;
+const quote = (k: string) => (/[\s/@"]/.test(k) ? `"${k.replace(/"/g, "")}"` : k);
+
+/**
+ * Câu truy vấn Gmail: có file đính kèm, sau mốc, từ người gửi trong danh sách, khớp một trong các từ khóa (Gmail tìm cả nội dung),
+ * có file đúng loại. Phạm vi "chỉ tiêu đề + tên file" và từ loại trừ kiểm lại phía mình (matchesMailFilters).
+ */
+export function gmailQuery(since: Date, filters: MailFilters = DEFAULT_MAIL_FILTERS): string {
+  const parts = [`has:attachment after:${Math.floor(since.getTime() / 1000)}`];
+  if (filters.senders.length) parts.push(`from:(${filters.senders.map((s) => quote(s.replace(/^@/, ""))).join(" OR ")})`);
+  const kw = effectiveKeywords(filters);
+  if (kw?.length) parts.push(`{${[...new Set(kw)].map(quote).join(" ")}}`);
+  parts.push(`filename:(${filters.extensions.join(" OR ")})`);
+  return parts.join(" ");
 }
 
 /** "Tên <a@b.c>" → tên + email (tên bỏ ngoặc kép). */
@@ -87,11 +97,11 @@ export class GmailProvider implements MailProviderAdapter {
     return toTokens(t, this.clock.now(), tokens.refreshToken);
   }
 
-  async listMessages(tokens: MailTokens, since: Date, limit: number): Promise<RemoteMessage[]> {
+  async listMessages(tokens: MailTokens, since: Date, limit: number, filters: MailFilters = DEFAULT_MAIL_FILTERS): Promise<RemoteMessage[]> {
     const ids: string[] = [];
     let pageToken: string | undefined;
     do {
-      const q = new URLSearchParams({ q: gmailQuery(since), maxResults: "100", ...(pageToken ? { pageToken } : {}) });
+      const q = new URLSearchParams({ q: gmailQuery(since, filters), maxResults: "100", ...(pageToken ? { pageToken } : {}) });
       const page = await this.http.get(`${API}/messages?${q.toString()}`, tokens.accessToken, ListResponse, "gmail list");
       ids.push(...(page.messages ?? []).map((m) => m.id));
       pageToken = page.nextPageToken;
@@ -101,7 +111,11 @@ export class GmailProvider implements MailProviderAdapter {
     const out: RemoteMessage[] = [];
     for (let i = 0; i < ordered.length && out.length < limit; i += 10) {
       const batch = await mapLimit(ordered.slice(i, i + 10), 5, (id) => this.getMessage(tokens, id));
-      for (const m of batch) if (m && m.receivedAt >= since && m.attachments.length) out.push(m);
+      for (const m of batch) {
+        if (!m || m.receivedAt < since || !m.attachments.length) continue;
+        const fileNames = m.attachments.map((a) => a.fileName);
+        if (matchesMailFilters({ ...m, fileNames }, filters, { fullTextMatched: true })) out.push(m);
+      }
     }
     return out.sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime()).slice(0, limit);
   }

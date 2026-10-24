@@ -1,4 +1,4 @@
-import type { DocKind, MailProvider } from "@kb/contracts";
+import type { DocKind, MailFilters, MailProvider } from "@kb/contracts";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { domainError } from "../../../../shared/errors.js";
 import { err, ok, type Result } from "../../../../shared/result.js";
@@ -11,7 +11,7 @@ export class FakeMailProvider implements MailProviderAdapter {
   revoked = false;
   failList = false;
   refreshed = 0;
-  calls: { since: Date; limit: number }[] = [];
+  calls: { since: Date; limit: number; filters: MailFilters }[] = [];
   constructor(readonly provider: MailProvider, readonly configured = true, private email = "ops@anphat.vn") {}
   authorizeUrl(state: string, redirectUri: string) {
     return `https://auth.example/${this.provider}?state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
@@ -25,10 +25,10 @@ export class FakeMailProvider implements MailProviderAdapter {
     this.refreshed++;
     return { ...t, accessToken: `${t.accessToken}+`, expiresAt: "2026-10-22T05:00:00.000Z" };
   }
-  async listMessages(_t: MailTokens, since: Date, limit: number) {
+  async listMessages(_t: MailTokens, since: Date, limit: number, filters: MailFilters) {
     if (this.revoked) throw new MailAuthError();
     if (this.failList) throw new Error("503");
-    this.calls.push({ since, limit });
+    this.calls.push({ since, limit, filters });
     return this.messages.filter((m) => m.receivedAt >= since).sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime()).slice(0, limit);
   }
   async getAttachment(_t: MailTokens, messageId: string, attachmentId: string) {

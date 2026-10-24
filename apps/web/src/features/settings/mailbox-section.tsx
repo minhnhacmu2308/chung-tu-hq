@@ -7,7 +7,7 @@ import {
   IconTile, SkeletonList, Stack, StatusBadge, toast, useMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Inbox, Mail, MailPlus, PlugZap, RefreshCw, Unplug } from "lucide-react";
+import { Filter, Inbox, Mail, MailPlus, PlugZap, RefreshCw, Unplug } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -17,6 +17,8 @@ import { useMailboxOverview, useMailboxSession } from "@/features/inbox/use-mail
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { reasonText } from "@/lib/reason-codes";
+import { MAIL_FILTERS_MESSAGES } from "./mail-filters-dialog.messages";
+import { MailFiltersDialog, useFiltersSummary } from "./mail-filters-dialog";
 import { MAILBOX_SECTION_MESSAGES } from "./mailbox-section.messages";
 
 // kb-allow-raw: tên sản phẩm của Google / Microsoft (tên riêng, không dịch)
@@ -52,18 +54,21 @@ function useConnectCallbackToast() {
   }, [result]);
 }
 
-function ConnectionRow({ c, onSync, onConnect, onDisconnect, syncPending, canUse, canDisconnect }: {
+function ConnectionRow({ c, onSync, onConnect, onDisconnect, onFilters, syncPending, canUse, canDisconnect }: {
   c: MailConnection;
   onSync: () => void;
   onConnect: () => void;
   onDisconnect: () => void;
+  onFilters: () => void;
   syncPending: boolean;
   canUse: boolean;
   canDisconnect: boolean;
 }) {
   const t = useMessages(MAILBOX_SECTION_MESSAGES);
+  const tf = useMessages(MAIL_FILTERS_MESSAGES);
   const locale = useUiLocale();
   const broken = c.status === "REAUTH" || c.status === "ERROR";
+  const summary = useFiltersSummary(c.filters);
   return (
     <li className="flex flex-col gap-3 rounded-md border border-border p-3">
       <div className="flex items-start gap-3">
@@ -83,6 +88,7 @@ function ConnectionRow({ c, onSync, onConnect, onDisconnect, syncPending, canUse
             <span aria-hidden="true"> · </span>
             {fill(t.connectedBy, { name: c.connectedByName })}
           </p>
+          {summary && <p className="text-xs text-fg-muted">{fill(tf.sumLabel, { summary })}</p>}
         </div>
       </div>
       {broken && c.lastError && <Alert tone={c.status === "REAUTH" ? "warning" : "danger"}>{reasonText(c.lastError, { email: c.email }, undefined, locale)}</Alert>}
@@ -92,6 +98,7 @@ function ConnectionRow({ c, onSync, onConnect, onDisconnect, syncPending, canUse
             <Button size="sm" variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} loading={c.status === "SYNCING" || syncPending} onClick={onSync}>{t.sync}</Button>
           )}
           {broken && <Button size="sm" leftIcon={<PlugZap className="h-4 w-4" />} onClick={onConnect}>{t.reconnect}</Button>}
+          {canDisconnect && <Button size="sm" variant="ghost" leftIcon={<Filter className="h-4 w-4" />} onClick={onFilters}>{tf.open}</Button>}
           {canDisconnect && <Button size="sm" variant="ghost" leftIcon={<Unplug className="h-4 w-4" />} onClick={onDisconnect}>{t.disconnect}</Button>}
         </div>
       )}
@@ -106,6 +113,7 @@ export function MailboxSection() {
   const { canUse, canDisconnect } = useMailboxSession();
   const overview = useMailboxOverview();
   const [removing, setRemoving] = useState<MailConnection | null>(null);
+  const [filtering, setFiltering] = useState<MailConnection | null>(null);
 
   const connect = useMutation({
     mutationFn: (provider: MailProvider) => startMailConnect(provider),
@@ -152,6 +160,7 @@ export function MailboxSection() {
             <li>{t.pointReadOnly}</li>
             <li>{t.pointFilter}</li>
             <li>{t.pointSince}</li>
+            <li>{t.pointCustomize}</li>
           </ul>
 
           {overview.isError ? (
@@ -196,6 +205,7 @@ export function MailboxSection() {
                       onSync={() => sync.mutate(c)}
                       onConnect={() => connect.mutate(c.provider)}
                       onDisconnect={() => setRemoving(c)}
+                      onFilters={() => setFiltering(c)}
                     />
                   ))}
                 </ul>
@@ -217,6 +227,8 @@ export function MailboxSection() {
           )}
         </Stack>
       </CardContent>
+
+      <MailFiltersDialog connection={filtering} onOpenChange={(o) => !o && setFiltering(null)} />
 
       <Dialog open={removing !== null} onOpenChange={(o) => !o && setRemoving(null)}>
         <DialogContent title={t.disconnectTitle} size="sm" icon={<Unplug className="h-4 w-4" />}>

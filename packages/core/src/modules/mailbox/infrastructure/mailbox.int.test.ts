@@ -14,7 +14,7 @@ const B = { orgId: asOrgId("org_khac"), userId: asUserId("usr_khac") };
 const at = new Date("2026-10-22T03:00:00Z");
 const conn = (orgId: string, id: string, v: Partial<MailConnectionRow> = {}): MailConnectionRow => ({
   id, orgId, provider: "GMAIL", email: "chungtu@anphat.vn", ciphertext: "enc", keyVersion: 1, status: "ACTIVE", lastSyncedAt: null, lastSyncCount: 0, lastError: null,
-  connectedBy: "usr_chau", createdAt: at, updatedAt: at, ...v,
+  connectedBy: "usr_chau", createdAt: at, updatedAt: at, filters: null, ...v,
 });
 const msg = (orgId: string, id: string, providerMessageId: string, receivedAt: Date): InboxMessageRow => ({
   id, orgId, connectionId: "mcn_1", provider: "GMAIL", mailbox: "chungtu@anphat.vn", providerMessageId, fromName: "Forwarder", fromEmail: "ops@fwd.vn",
@@ -44,8 +44,9 @@ describe("mail_connections / inbox (RLS)", () => {
     await uow.asOrg(A, (r) => r.connections.insert(conn("org_anphat", "mcn_2", { provider: "OUTLOOK", createdAt: new Date(at.getTime() + 1000) })));
     const found = await uow.asOrg(A, (r) => r.connections.find("org_anphat", "GMAIL", "chungtu@anphat.vn"));
     expect(found).toMatchObject({ id: "mcn_1", provider: "GMAIL" });
-    await uow.asOrg(A, (r) => r.connections.update({ ...found!, status: "SYNCING", lastSyncCount: 3 }));
-    expect(await uow.asOrg(A, (r) => r.connections.get("org_anphat", "mcn_1"))).toMatchObject({ status: "SYNCING", lastSyncCount: 3 });
+    const filters = { senders: ["@fwd.vn"], keywordMode: "CUSTOM" as const, keywords: ["PO"], keywordScope: "SUBJECT" as const, excludeKeywords: [], extensions: ["pdf" as const] };
+    await uow.asOrg(A, (r) => r.connections.update({ ...found!, status: "SYNCING", lastSyncCount: 3, filters }));
+    expect(await uow.asOrg(A, (r) => r.connections.get("org_anphat", "mcn_1"))).toMatchObject({ status: "SYNCING", lastSyncCount: 3, filters });
     expect((await uow.asOrg(A, (r) => r.connections.list("org_anphat"))).map((c) => c.id)).toEqual(["mcn_1", "mcn_2"]);
 
     expect(await uow.asOrg(B, (r) => r.connections.list("org_anphat"))).toEqual([]);

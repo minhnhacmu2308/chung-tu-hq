@@ -1,3 +1,4 @@
+import { DEFAULT_MAIL_FILTERS } from "@kb/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fixedClock } from "../../../shared/clock.js";
 import { MailAuthError, type MailTokens } from "../application/ports.js";
@@ -62,6 +63,13 @@ describe("GmailProvider", () => {
     expect(q).toContain('"bill of lading"');
     expect(q).toContain('"b/l"');
     expect(q).toContain("filename:(pdf OR png OR jpg OR jpeg OR zip)");
+  });
+
+  it("câu truy vấn theo bộ lọc: người gửi / tên miền, chỉ từ khóa riêng, không lọc từ khóa, loại file", () => {
+    const since = new Date("2026-10-01T00:00:00Z");
+    const custom = gmailQuery(since, { ...DEFAULT_MAIL_FILTERS, senders: ["ops@hansol.co.kr", "@samsung.com"], keywordMode: "CUSTOM", keywords: ["PO", "lệnh giao hàng"], extensions: ["pdf"] });
+    expect(custom).toBe('has:attachment after:1790812800 from:("ops@hansol.co.kr" OR samsung.com) {PO "lệnh giao hàng"} filename:(pdf)');
+    expect(gmailQuery(since, { ...DEFAULT_MAIL_FILTERS, keywordMode: "OFF" })).toBe("has:attachment after:1790812800 filename:(pdf OR png OR jpg OR jpeg OR zip)");
   });
 
   it("lấy email: phân trang mã, đọc chi tiết, chỉ file đính kèm thật, bỏ email trước mốc, cũ nhất trước, cắt theo limit", async () => {

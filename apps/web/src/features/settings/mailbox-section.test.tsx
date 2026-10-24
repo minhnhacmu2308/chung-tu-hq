@@ -54,6 +54,29 @@ describe("Tài khoản & tích hợp → Hộp thư chứng từ", () => {
     expect(getDb().mailConnections).toHaveLength(0);
   }, 20_000);
 
+  it("bộ lọc: lưu người gửi + chỉ từ khóa riêng + loại file, hiện tóm tắt; nhập sai báo lỗi tại ô", async () => {
+    renderWithProviders(<MailboxSection />);
+    const list = await screen.findByRole("list", { name: "Hộp thư đã kết nối" }, T);
+    await userEvent.click(await within(list).findByRole("button", { name: "Bộ lọc" }, T));
+    const dialog = await screen.findByRole("dialog", { name: "Bộ lọc email chứng từ" });
+    await expectNoA11yViolations(dialog);
+    const senders = within(dialog).getByRole("textbox", { name: "Chỉ lấy email từ" });
+    await userEvent.type(senders, "không hợp lệ");
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Chỉ từ khóa của doanh nghiệp/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Lưu bộ lọc" }));
+
+    expect(await within(dialog).findByText(/"không hợp lệ" không phải email hoặc tên miền hợp lệ/)).toBeTruthy();
+    expect(within(dialog).getByText("Nhập ít nhất một từ khóa, hoặc chọn kiểu lọc khác.")).toBeTruthy();
+
+    await userEvent.clear(senders);
+    await userEvent.type(senders, "ops@saovietlogistics.vn{enter}@hansol.co.kr");
+    await userEvent.type(within(dialog).getByRole("textbox", { name: /Từ khóa của doanh nghiệp/ }), "PO");
+    await userEvent.click(within(dialog).getByRole("checkbox", { name: "ZIP" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Lưu bộ lọc" }));
+    expect(await within(list).findByText("Bộ lọc: 2 người gửi · 1 từ khóa riêng · PDF, PNG, JPG, JPEG", undefined, T)).toBeTruthy();
+    expect(getDb().mailConnections[0]!.filters).toMatchObject({ senders: ["ops@saovietlogistics.vn", "@hansol.co.kr"], keywordMode: "CUSTOM", keywords: ["PO"], extensions: ["pdf", "png", "jpg", "jpeg"] });
+  }, 30_000);
+
   it("callback OAuth: báo kết quả rồi xóa tham số khỏi URL", async () => {
     search = new URLSearchParams("tab=integrations&mailbox=error&reason=MAILBOX_STATE_INVALID");
     renderWithProviders(<MailboxSection />);

@@ -2,8 +2,8 @@
 // Không có OAuth thật: "Kết nối" thêm (hoặc kích hoạt lại) hộp thư mẫu rồi trả về đúng URL mà callback OAuth thật chuyển về.
 // "Lấy thư" mô phỏng bằng thời gian: hộp thư ở SYNCING vài giây; lần đầu nhận lô email mẫu, các lần sau không có email mới.
 import {
-  AddInboxToDossierInputSchema, type AddInboxToDossierInput, type AddInboxToDossierResult, type InboxMessage, type InboxMessageStatus,
-  type MailboxOverview, type MailProvider, type MailSyncResult, type StartMailConnectResult,
+  AddInboxToDossierInputSchema, DEFAULT_MAIL_FILTERS, normalizeMailFilters, UpdateMailFiltersInputSchema, type AddInboxToDossierInput, type AddInboxToDossierResult, type InboxMessage, type InboxMessageStatus,
+  type MailboxOverview, type MailConnection, type MailProvider, type MailSyncResult, type StartMailConnectResult, type UpdateMailFiltersInput,
 } from "@kb/contracts";
 import { ApiError, mutate, nowIso } from "@/lib/mock-request";
 import { getDb, type MockDb } from "@/mocks/db";
@@ -43,7 +43,8 @@ function advance(db: MockDb, now = Date.now()) {
 
 const toConnectionDto = (db: MockDb, c: MockMailConnection) => {
   const { syncStartedAt: _, ...rest } = c;
-  return { ...rest, connectedByName: db.members.find((m) => m.id === c.connectedBy)?.name ?? "—" };
+  // normalize: dữ liệu mock cũ trong localStorage chưa có bộ lọc.
+  return { ...rest, filters: normalizeMailFilters(c.filters), connectedByName: db.members.find((m) => m.id === c.connectedBy)?.name ?? "—" };
 };
 
 export const getMailboxOverview = () =>
@@ -67,7 +68,7 @@ export const startMailConnect = (provider: MailProvider) =>
     else {
       db.mailConnections.push({
         id: `mcn_${provider.toLowerCase()}_${db.mailConnections.length + 1}`, provider, email, status: "ACTIVE", lastSyncedAt: null, lastSyncCount: 0, lastError: null,
-        connectedBy: db.currentUserId, createdAt: now, syncStartedAt: null,
+        connectedBy: db.currentUserId, createdAt: now, syncStartedAt: null, filters: DEFAULT_MAIL_FILTERS,
       });
     }
     const connected = cur?.email ?? email;
@@ -84,6 +85,24 @@ export const disconnectMailbox = (id: string) =>
     if (cur.connectedBy !== db.currentUserId && role !== "ADMIN" && role !== "OWNER") throw reasonApiError("FORBIDDEN", "MAILBOX_NOT_FOUND");
     db.mailConnections = db.mailConnections.filter((c) => c.id !== id);
     return { removed: true as const };
+  });
+
+/**
+ * Lưu bộ lọc: người đã kết nối hoặc Quản trị / Chủ sở hữu. Mock chỉ lưu (lô email mẫu không lọc theo bộ lọc);
+ * `rescan` → mốc lấy thư về trống như backend.
+ */
+export const updateMailFilters = (id: string, input: UpdateMailFiltersInput) =>
+  mutate((db): MailConnection => {
+    assertCanUse(db);
+    const parsed = UpdateMailFiltersInputSchema.safeParse(input);
+    if (!parsed.success) throw new ApiError("VALIDATION", parsed.error.issues[0]?.message ?? "Bộ lọc không hợp lệ", 400);
+    const cur = db.mailConnections.find((c) => c.id === id);
+    if (!cur) throw reasonApiError("NOT_FOUND", "MAILBOX_NOT_FOUND");
+    const role = roleOf(db);
+    if (cur.connectedBy !== db.currentUserId && role !== "ADMIN" && role !== "OWNER") throw reasonApiError("FORBIDDEN", "MAILBOX_NOT_FOUND");
+    cur.filters = parsed.data.filters;
+    if (parsed.data.rescan) cur.lastSyncedAt = null;
+    return toConnectionDto(db, cur);
   });
 
 /** "Lấy chứng từ mới": mọi hộp thư (hoặc một hộp thư) còn dùng được chuyển sang đang lấy thư. */

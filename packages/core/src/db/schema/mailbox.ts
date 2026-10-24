@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import type { MailFilters } from "@kb/contracts";
+import { check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { id, orgId, orgRls, timestamps } from "./shared.js";
 
 /**
@@ -20,6 +21,8 @@ export const mailConnections = pgTable(
     lastSyncCount: integer("last_sync_count").notNull().default(0),
     lastError: text("last_error"),
     connectedBy: text("connected_by").notNull(),
+    /** Bộ lọc riêng (người gửi, từ khóa, loại file…); null = mặc định. Đọc qua normalizeMailFilters. */
+    filters: jsonb("filters").$type<MailFilters>(),
     ...timestamps(),
   },
   (t) => [uniqueIndex("mail_connections_org_provider_email_uq").on(t.orgId, t.provider, t.email), check("mail_connections_status_chk", sql`status in ('ACTIVE', 'SYNCING', 'ERROR', 'REAUTH')`), check("mail_connections_provider_chk", sql`provider in ('GMAIL', 'OUTLOOK')`), orgRls("mail_connections_rls")],

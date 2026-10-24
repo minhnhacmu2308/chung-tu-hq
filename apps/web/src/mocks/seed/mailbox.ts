@@ -1,7 +1,7 @@
 // Hộp thư chứng từ mẫu: một hộp Gmail đã kết nối + vài email chứng từ của forwarder / nhà cung cấp.
 // Tên công ty, địa chỉ email, số chứng từ đều GIẢ. Email trỏ tới hồ sơ mẫu qua mã hồ sơ / số vận đơn / tên đối tác
 // để màn Hộp thư chứng từ hiện gợi ý hồ sơ.
-import type { DocKind, InboxAttachment, InboxMessage, MailConnection } from "@kb/contracts";
+import { DEFAULT_MAIL_FILTERS, type DocKind, type InboxAttachment, type InboxMessage, type MailConnection } from "@kb/contracts";
 import type { Dossier } from "../types";
 import { isoTime } from "./core";
 
@@ -52,6 +52,7 @@ export function seedMailbox(dossiers: Dossier[]) {
     connectedBy: "usr_ha",
     createdAt: isoTime(-24 * 12),
     syncStartedAt: null,
+    filters: DEFAULT_MAIL_FILTERS,
   };
   const messages: MockInboxMessage[] = [
     // Forwarder gửi bộ chứng từ, tiêu đề có mã hồ sơ → gợi ý "Trùng mã hồ sơ".

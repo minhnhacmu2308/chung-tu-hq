@@ -1,10 +1,11 @@
+import { DEFAULT_MAIL_FILTERS } from "@kb/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
-import { completeMailConnect, disconnectMailbox, failMailSync, failStaleMailSyncs, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, syncMailConnection } from "../connections.js";
+import { completeMailConnect, disconnectMailbox, failMailSync, failStaleMailSyncs, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, syncMailConnection, updateMailFilters } from "../connections.js";
 import { addInboxToDossier, getInboxAttachmentFile, listInbox, setInboxMessageStatus } from "../inbox.js";
 import type { MailboxDeps } from "../ports.js";
 import { FakeDossierIntake, FakeMailProvider, FakeStateSigner, fakeCipher, MemoryBlobStore } from "../test/fakes.js";
@@ -171,6 +172,41 @@ describe("lấy chứng từ mới", () => {
     expect(uow.data.connections[0]).toMatchObject({ status: "ERROR", lastError: "MAILBOX_SYNC_FAILED" });
     // Người dùng bấm lấy lại được.
     expect(unwrap(await requestMailSync(deps, ctx("DECLARANT"))).queued).toBe(1);
+  });
+});
+
+describe("bộ lọc của hộp thư", () => {
+  const filters = { ...DEFAULT_MAIL_FILTERS, senders: ["@hansol.co.kr"], extensions: ["pdf" as const] };
+
+  it("chưa cấu hình → mặc định; lưu bộ lọc → trả về + lần lấy sau dùng bộ lọc + loại file theo bộ lọc", async () => {
+    const c = await connect();
+    expect(c.filters).toEqual(DEFAULT_MAIL_FILTERS);
+    const saved = unwrap(await updateMailFilters(deps, ctx("DECLARANT"), c.id, { filters, rescan: false }));
+    expect(saved.filters).toEqual(filters);
+    gmail.messages = [{
+      id: "m1", fromName: "Hansol", fromEmail: "export@hansol.co.kr", subject: "Invoice", snippet: "", receivedAt: new Date("2026-10-21T01:00:00Z"),
+      attachments: [{ id: "a1", fileName: "INV.pdf", mime: "application/pdf", size: 100 }, { id: "a2", fileName: "INV.jpg", mime: "image/jpeg", size: 100 }],
+    }];
+    await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id });
+    expect(gmail.calls[0]!.filters).toEqual(filters);
+    expect(uow.data.attachments.map((a) => a.fileName)).toEqual(["INV.pdf"]);
+  });
+
+  it("rescan → lần tới quét lại 30 ngày; không rescan → giữ mốc", async () => {
+    const c = await connect();
+    await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id });
+    unwrap(await updateMailFilters(deps, ctx("DECLARANT"), c.id, { filters, rescan: false }));
+    expect(uow.data.connections[0]!.lastSyncedAt).toEqual(new Date(NOW));
+    unwrap(await updateMailFilters(deps, ctx("DECLARANT"), c.id, { filters, rescan: true }));
+    expect(uow.data.connections[0]!.lastSyncedAt).toBeNull();
+  });
+
+  it("quyền: người kết nối / Quản trị sửa được; người khác, Người xem, org khác thì không", async () => {
+    const c = await connect();
+    expect(unwrap(await updateMailFilters(deps, ctx("ADMIN"), c.id, { filters, rescan: false })).filters.senders).toEqual(["@hansol.co.kr"]);
+    expect(errCode(await updateMailFilters(deps, ctx("DECLARANT", "usr_other"), c.id, { filters, rescan: false }))).toBe("FORBIDDEN");
+    expect(errCode(await updateMailFilters(deps, ctx("VIEWER"), c.id, { filters, rescan: false }))).toBe("FORBIDDEN");
+    expect(errCode(await updateMailFilters(deps, ctx("ADMIN", "usr_x", "org_b"), c.id, { filters, rescan: false }))).toBe("NOT_FOUND");
   });
 });
 

@@ -1,5 +1,5 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
-import type { DocKind, InboxMessageStatus, MailConnectionStatus, MailProvider } from "@kb/contracts";
+import type { DocKind, InboxMessageStatus, MailConnectionStatus, MailFilters, MailProvider } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Ctx } from "../../../shared/ctx.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -15,6 +15,8 @@ export type MailConnectionRow = {
   ciphertext: string; keyVersion: number;
   status: MailConnectionStatus; lastSyncedAt: Date | null; lastSyncCount: number; lastError: string | null;
   connectedBy: string; createdAt: Date; updatedAt: Date;
+  /** Bộ lọc riêng của hộp thư; null = mặc định (DEFAULT_MAIL_FILTERS). */
+  filters: MailFilters | null;
 };
 export type InboxMessageRow = {
   id: string; orgId: string; connectionId: string; provider: MailProvider; mailbox: string; providerMessageId: string;
@@ -79,11 +81,11 @@ export interface MailProviderAdapter {
   /** Làm mới access token; refresh token bị thu hồi → MailAuthError. */
   refresh(tokens: MailTokens): Promise<MailTokens>;
   /**
-   * Email nhận từ `since` (tính cả mốc) có file đính kèm và khớp từ khóa chứng từ (INBOX_KEYWORDS), CŨ NHẤT TRƯỚC, tối đa `limit`
-   * (lần sau lấy tiếp từ email mới nhất của lô).
-   * Chỉ trả file đính kèm thật (không ảnh nhúng trong nội dung). 401 → MailAuthError.
+   * Email nhận từ `since` (tính cả mốc) có file đính kèm và qua bộ lọc của hộp thư (người gửi, từ khóa, từ loại trừ –
+   * domain/filters.ts), CŨ NHẤT TRƯỚC, tối đa `limit` (lần sau lấy tiếp từ email mới nhất của lô).
+   * Chỉ trả file đính kèm thật (không ảnh nhúng trong nội dung). Loại / cỡ file do use case lọc. 401 → MailAuthError.
    */
-  listMessages(tokens: MailTokens, since: Date, limit: number): Promise<RemoteMessage[]>;
+  listMessages(tokens: MailTokens, since: Date, limit: number, filters: MailFilters): Promise<RemoteMessage[]>;
   getAttachment(tokens: MailTokens, messageId: string, attachmentId: string): Promise<Buffer>;
 }
 

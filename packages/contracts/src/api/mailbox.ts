@@ -11,6 +11,69 @@ export type MailProvider = z.infer<typeof MailProviderSchema>;
 export const MailConnectionStatusSchema = z.enum(["ACTIVE", "SYNCING", "ERROR", "REAUTH"]);
 export type MailConnectionStatus = z.infer<typeof MailConnectionStatusSchema>;
 
+/* ---------------- Bộ lọc của từng hộp thư: chỉ lấy đúng email chứng từ ---------------- */
+
+/**
+ * DEFAULT: bộ từ khóa chứng từ có sẵn (INBOX_KEYWORDS) + từ khóa thêm của doanh nghiệp; CUSTOM: chỉ từ khóa của doanh nghiệp;
+ * OFF: không lọc từ khóa (dùng khi đã giới hạn người gửi).
+ */
+export const MailKeywordModeSchema = z.enum(["DEFAULT", "CUSTOM", "OFF"]);
+export type MailKeywordMode = z.infer<typeof MailKeywordModeSchema>;
+/** SUBJECT: tìm trong tiêu đề + tên file; ALL: cả nội dung email. */
+export const MailKeywordScopeSchema = z.enum(["SUBJECT", "ALL"]);
+export type MailKeywordScope = z.infer<typeof MailKeywordScopeSchema>;
+
+const term = z.string().trim().min(2).max(80);
+/** Người gửi: email đầy đủ (a@congty.vn) hoặc cả tên miền (@congty.vn / congty.vn). */
+const sender = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^(?:[^\s@]+@[^\s@]+\.[^\s@]+|@?[a-z0-9-]+(?:\.[a-z0-9-]+)+)$/, "Email hoặc tên miền không hợp lệ");
+
+export const MailFiltersSchema = z
+  .object({
+    /** Chỉ lấy email từ những người gửi / tên miền này; rỗng = mọi người gửi. */
+    senders: z.array(sender).max(50),
+    keywordMode: MailKeywordModeSchema,
+    /** Từ khóa của doanh nghiệp (DEFAULT: thêm vào bộ có sẵn; CUSTOM: chỉ dùng các từ này). */
+    keywords: z.array(term).max(50),
+    keywordScope: MailKeywordScopeSchema,
+    /** Bỏ qua email có tiêu đề / tên file chứa một trong các từ này (quảng cáo, bản tin…). */
+    excludeKeywords: z.array(term).max(50),
+    /** Loại file nhận (tập con của INBOX_FILE_EXTENSIONS). */
+    extensions: z.array(z.enum(["pdf", "png", "jpg", "jpeg", "zip"])).min(1),
+  })
+  .superRefine((f, ctx) => {
+    if (f.keywordMode === "CUSTOM" && f.keywords.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["keywords"], message: "Chế độ chỉ dùng từ khóa riêng cần ít nhất 1 từ khóa" });
+    }
+  });
+export type MailFilters = z.infer<typeof MailFiltersSchema>;
+
+/** Hành vi khi chưa cấu hình – đúng như trước khi có bộ lọc. */
+export const DEFAULT_MAIL_FILTERS: MailFilters = {
+  senders: [],
+  keywordMode: "DEFAULT",
+  keywords: [],
+  keywordScope: "ALL",
+  excludeKeywords: [],
+  extensions: ["pdf", "png", "jpg", "jpeg", "zip"],
+};
+
+/** Bộ lọc đọc từ DB (có thể thiếu trường / dữ liệu cũ) → luôn đủ trường hợp lệ. */
+export function normalizeMailFilters(raw: unknown): MailFilters {
+  const r = MailFiltersSchema.safeParse({ ...DEFAULT_MAIL_FILTERS, ...(raw && typeof raw === "object" ? raw : {}) });
+  return r.success ? r.data : DEFAULT_MAIL_FILTERS;
+}
+
+export const UpdateMailFiltersInputSchema = z.object({
+  filters: MailFiltersSchema,
+  /** Quét lại email trong INBOX_FIRST_SYNC_DAYS ngày gần nhất theo bộ lọc mới ở lần lấy tới (không lấy trùng). */
+  rescan: z.boolean().default(false),
+});
+export type UpdateMailFiltersInput = z.infer<typeof UpdateMailFiltersInputSchema>;
+
 export const MailConnectionSchema = z.object({
   id: z.string(),
   provider: MailProviderSchema,
@@ -24,6 +87,7 @@ export const MailConnectionSchema = z.object({
   connectedBy: z.string(),
   connectedByName: z.string(),
   createdAt: IsoDateTimeSchema,
+  filters: MailFiltersSchema,
 });
 export type MailConnection = z.infer<typeof MailConnectionSchema>;
 
@@ -118,7 +182,8 @@ export const INBOX_KEYWORDS = [
 /** Lần kết nối đầu tiên lấy thư bao nhiêu ngày gần nhất. */
 export const INBOX_FIRST_SYNC_DAYS = 30;
 
-export function inboxFileAccepted(fileName: string, size: number): boolean {
+/** File nhận được không: đúng loại (theo `extensions` của bộ lọc, mặc định mọi loại cho phép) và 0 < cỡ ≤ 25 MB. */
+export function inboxFileAccepted(fileName: string, size: number, extensions: readonly string[] = INBOX_FILE_EXTENSIONS): boolean {
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
-  return (INBOX_FILE_EXTENSIONS as readonly string[]).includes(ext) && size > 0 && size <= INBOX_MAX_FILE_BYTES;
+  return (INBOX_FILE_EXTENSIONS as readonly string[]).includes(ext) && extensions.includes(ext) && size > 0 && size <= INBOX_MAX_FILE_BYTES;
 }

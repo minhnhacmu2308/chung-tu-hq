@@ -82,7 +82,7 @@ Thay đổi redirect URI có thể mất vài phút tới vài giờ mới có h
    - Email không khớp từ khóa → không được kéo về.
 4. Gắn file từ Hộp thư chứng từ vào một hồ sơ, kiểm tra chứng từ xuất hiện ở bước Tải lên.
 
-Bộ lọc khi đồng bộ (`packages/contracts/src/api/mailbox.ts`):
+Bộ lọc mặc định khi đồng bộ (`packages/contracts/src/api/mailbox.ts`):
 
 | Điều kiện | Giá trị |
 |---|---|
@@ -90,6 +90,17 @@ Bộ lọc khi đồng bộ (`packages/contracts/src/api/mailbox.ts`):
 | Loại file | `pdf`, `png`, `jpg`, `jpeg`, `zip` (`INBOX_FILE_EXTENSIONS`) |
 | Kích thước | ≤ 25 MB (`INBOX_MAX_FILE_BYTES`) |
 | Từ khóa trong tiêu đề / nội dung / tên file | `invoice`, `hóa đơn`, `packing`, `bill of lading`, `b/l`, `awb`, `c/o`, `chứng từ`, `contract`, `shipment`… (`INBOX_KEYWORDS`) |
+
+Mỗi hộp thư chỉnh được bộ lọc riêng ở **Tài khoản & tích hợp → Hộp thư chứng từ → Bộ lọc**:
+
+| Tùy chọn | Ý nghĩa |
+|---|---|
+| Chỉ lấy email từ | Danh sách email (`ops@forwarder.vn`) hoặc tên miền (`@forwarder.vn`, gồm cả tên miền con). Trống = mọi người gửi |
+| Từ khóa chứng từ | *Bộ có sẵn* (+ từ khóa thêm) · *Chỉ từ khóa của doanh nghiệp* · *Không lọc từ khóa* (nên kèm danh sách người gửi) |
+| Tìm từ khóa trong | *Tiêu đề và tên file* (chặt, ít lấy nhầm) hoặc *Cả nội dung email* (mặc định) |
+| Bỏ qua email có chữ | Tiêu đề / tên file chứa một trong các từ này thì bỏ (quảng cáo, bản tin…) |
+| Loại file nhận | Tập con của `pdf`, `png`, `jpg`, `jpeg`, `zip` |
+| Quét lại 30 ngày | Lần lấy tới quét lại theo bộ lọc mới; email đã lấy không bị lấy trùng |
 
 Đồng bộ hiện chỉ chạy khi người dùng bấm **Lấy thư** (chưa có lịch tự quét). Kết nối treo `SYNCING` > 30 phút do job mất sẽ được `stuck-sweeper` chuyển sang ERROR để bấm lại được.
 
@@ -103,7 +114,8 @@ Bộ lọc khi đồng bộ (`packages/contracts/src/api/mailbox.ts`):
 | `AADSTS50020` / tài khoản cá nhân bị từ chối | Đăng ký chọn *organizational directory only* nhưng tenant để `common` | Đổi Supported account types, hoặc đặt tenant id đúng |
 | `AADSTS65001` / cần admin consent | Tenant công ty yêu cầu admin duyệt quyền | Admin bấm **Grant admin consent** ở API permissions |
 | Nút Kết nối mờ | Thiếu id/secret của provider, hoặc `MAILBOX_PROVIDER` chưa `live`, hoặc chưa khởi động lại | Kiểm tra `.env`, chạy lại `pnpm dev` |
-| Kết nối ACTIVE nhưng không có thư | Email không khớp từ khóa / loại file / quá 30 ngày | Xem bảng bộ lọc ở mục 4 |
+| Kết nối ACTIVE nhưng không có thư | Email không khớp từ khóa / người gửi / loại file của bộ lọc, hoặc quá 30 ngày | Xem bộ lọc của hộp thư (mục 4); nới bộ lọc rồi chọn *Quét lại 30 ngày* |
+| Vẫn lấy nhiều email không phải chứng từ | Bộ từ khóa có sẵn rộng (có `bill`, `contract`, `shipment`) và tìm cả nội dung | Bộ lọc: thêm danh sách người gửi, chọn *Tiêu đề và tên file*, hoặc *Chỉ từ khóa của doanh nghiệp* |
 
 Khi báo lỗi để điều tra: gửi thông báo trên màn hình kèm `x-request-id`, và dòng log JSON của worker có `queue: "mailbox-sync"`. **Không gửi client secret hay token.**
 

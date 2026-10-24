@@ -40,7 +40,7 @@ Cột "App":
 | STT | Chỉ tiêu | Loại | Khi nào cần | App |
 |---|---|---|---|---|
 | 1.1 | Số tờ khai | **HQ** | Hải quan cấp sau IDA | ✅ nhưng **đặt sai chỗ**: đang là ô "Chưa cấp…" trong nhóm Thông tin chung |
-| 1.2 | Số tờ khai đầu tiên / số nhánh / tổng số tờ khai | ĐK | Lô hàng > 50 dòng, hoặc phải tách tờ khai | ❌ Luật `max-50-lines` chặn được nhưng app chưa tự tách tờ khai |
+| 1.2 | Số tờ khai đầu tiên / số nhánh / tổng số tờ khai | ĐK | Lô hàng > 50 dòng, hoặc phải tách tờ khai | ✅ App tự tách tờ khai nhánh khi lô > 50 dòng (TK_FIC/TK_BNO/TK_DNO) |
 | 1.3 | Số tờ khai TN-TX tương ứng | ĐK | Tái nhập hàng tạm xuất, chuyển tiêu thụ nội địa hàng tạm nhập | ❌ |
 | 1.4 | Mã loại hình | K | Luôn luôn | ✅ (khóa, sửa ở hồ sơ) |
 | 1.5 | Mã phân loại hàng hóa | ĐK | Hàng quà biếu, an ninh quốc phòng, cứu trợ, viện trợ, chuyển phát nhanh… | ❌ |
@@ -160,7 +160,8 @@ Chỉ ghi các điểm **khác** Mẫu 01. Các chỉ tiêu có cùng bản ch�
 | STT | Chỉ tiêu | Loại | Khi nào cần | App |
 |---|---|---|---|---|
 | 2.1 | Số tờ khai | **HQ** | — | ✅ (đặt sai chỗ, giống 1.1) |
-| 2.2, 2.3, 2.5, 2.7 | Tách tờ khai, tờ khai TN-TX, phân loại hàng, thời hạn tái nhập | ĐK | > 50 dòng, tạm xuất/tái xuất, hàng đặc thù | ❌ |
+| 2.2 | Tách tờ khai (> 50 dòng) | ĐK | > 50 dòng | ✅ |
+| 2.3, 2.5, 2.7 | Tờ khai TN-TX, phân loại hàng, thời hạn tái nhập | ĐK | > 50 dòng, tạm xuất/tái xuất, hàng đặc thù | ❌ |
 | 2.9 | Đội thủ tục | HT | — | ⚠️ gửi cứng `"00"` |
 | 2.16–2.18 | Người ủy thác xuất khẩu; mã người nhập khẩu (TT121: xuất khẩu tại chỗ bắt buộc MST người nhận) | ĐK | — | ✅ người khai nhập, tùy chọn (đợt 5) |
 | 2.23 | Mã đại lý hải quan | HT / ĐK | — | ❌ |
@@ -228,7 +229,7 @@ Tất cả phản hồi lỗi (`errorList`) đều có `indexCode`/`nameCode` (c
 - 1.94 Các khoản thu khác (TTĐB, BVMT, chống bán phá giá) và mã VAT hiển thị được.
 - 1.58 Mã xác định thời hạn nộp thuế; 2.43 Người nộp thuế cho EDA.
 - 1.70–1.73 / 2.61–2.64 Chỉ thị Hải quan và **thuế chính thức theo sắc thuế** trong phần phản hồi.
-- 1.2 / 2.2 Tách tờ khai khi > 50 dòng: hiện mới chặn, chưa hỗ trợ.
+- 1.2 / 2.2 Tách tờ khai khi > 50 dòng: app tự tách nhánh (đã hỗ trợ).
 
 ### Thiếu, ưu tiên trung bình (theo tình huống)
 1.3/1.10/1.89 (tạm nhập – tái xuất); 1.5; 1.17–1.19, 1.24 (ủy thác, nhập khẩu tại chỗ); 1.25 (đại lý); ~~hô hiệu tàu 1.31/2.30~~ (xong 2026-10-21); 1.35/2.60 hiển thị container; 1.36; 1.40; 1.47–1.49 hiện đủ mã phân loại và đủ 5 khoản điều chỉnh; 1.51; 1.53–1.62 (bảo lãnh, hạn mức); 1.63; 1.64–1.67 (kho ngoại quan, vận chuyển kết hợp); 1.75, 1.77, 1.81, 1.82, 1.88, 1.90–1.93, 1.95–1.96; 2.59 vanning.
@@ -288,7 +289,7 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 | Điều kiện | Chỉ tiêu bật lên |
 |---|---|
 | Loại hình tạm nhập (G1x…) / tái nhập / tái xuất | 1.3, 1.10, 1.89 · 2.3, 2.7, 2.77 |
-| Lô > 50 dòng | 1.2 / 2.2 (tách tờ khai) |
+| Lô > 50 dòng | 1.2 / 2.2 (tách tờ khai, app tự điền) |
 | Loại hình gia công / SXXK / chế xuất | 1.38 (số tiếp nhận HĐGC), 1.69 cú pháp `#&GCPTQ`… |
 | Nhập/xuất khẩu tại chỗ | 1.19, 1.24, 1.69 `#&NKTC` · 2.18 |
 | Có người ủy thác | 1.17–1.18 · 2.16–2.17 |

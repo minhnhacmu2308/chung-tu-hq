@@ -16,8 +16,8 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
     legalNote: "Không nhập, hệ thống tự cấp. 11 ký tự đầu là số tờ khai, ký tự thứ 12 là số lần khai bổ sung.",
   }),
   f("1.2", "GENERAL", "Số tờ khai đầu tiên", "text", "C", {
-    maxLen: 12, fptField: "VN_IDA.TK_FIC", manual: true,
-    legalNote: "Chỉ khai khi lô hàng > 50 dòng hoặc phải tách tờ khai: ô 1 tờ đầu nhập \"F\", tờ sau nhập số tờ khai đầu tiên; ô 2 số thứ tự (TK_BNO); ô 3 tổng số tờ khai (TK_DNO).",
+    maxLen: 12, fptField: "VN_IDA.TK_FIC",
+    legalNote: "Chỉ khai khi lô hàng > 50 dòng hoặc phải tách tờ khai: ô 1 tờ đầu nhập \"F\", tờ sau nhập số tờ khai đầu tiên; ô 2 số thứ tự (TK_BNO); ô 3 tổng số tờ khai (TK_DNO). App tự điền khi lô > 50 dòng: tờ 1 \"F\", tờ sau số tờ khai của tờ 1; số nhánh; tổng số tờ.",
   }),
   f("1.3", "GENERAL", "Số tờ khai TN-TX tương ứng", "text", "C", {
     maxLen: 12, fptField: "VN_IDA.TK_TDN", manual: true,

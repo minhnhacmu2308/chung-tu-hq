@@ -2,11 +2,25 @@ import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { silentLogger } from "@kb/core/shared";
-import { clientIp, crossSiteOrigin, fromResult, HttpError, parseBody, REQUEST_ID_HEADER, route, setRouteLogger } from "./route";
+import { clientIp, crossSiteOrigin, fromResult, HttpError, parseBody, parseQuery, REQUEST_ID_HEADER, route, setRouteLogger } from "./route";
 
 const req = (body?: unknown) =>
   new NextRequest("http://localhost/api/x", { method: "POST", ...(body !== undefined ? { body: JSON.stringify(body), headers: { "content-type": "application/json" } } : {}) });
 const ctx = { params: Promise.resolve({}) };
+
+describe("parseQuery", () => {
+  const q = (search: string) => new NextRequest(`http://localhost/api/x${search}`);
+  const S = z.object({ branch: z.coerce.number().int().min(1).default(1) });
+  it("query → object rồi parse Zod: ép số, vắng → mặc định", () => {
+    expect(parseQuery(q("?branch=2"), S)).toEqual({ branch: 2 });
+    expect(parseQuery(q(""), S)).toEqual({ branch: 1 });
+  });
+  it("sai → route trả 400 VALIDATION", async () => {
+    const res = await route(async (r) => parseQuery(r, S))(q("?branch=0"), ctx);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe("VALIDATION");
+  });
+});
 
 describe("route()", () => {
   it("handler trả object → 200 JSON", async () => {

@@ -42,6 +42,8 @@ export interface CustomsRepos {
     /** Số nhánh đã có số tờ khai (declaration_no khác null). */
     issuedCount(orgId: string, dossierId: string): Promise<number>;
     listForOrg(orgId: string): Promise<ResultRow[]>;
+    /** Mọi nhánh của các hồ sơ (danh sách hồ sơ: tóm tắt "Thông quan k/N" một truy vấn cho cả trang). */
+    listForDossiers(orgId: string, dossierIds: string[]): Promise<ResultRow[]>;
     /** Xóa kết quả nhánh > `branch` chưa từng khai (giai đoạn NOT_SENT, chưa có số tờ khai) – số tờ giảm giữa hai lần truyền. Trả số dòng đã xóa. */
     deleteUnsentAbove(orgId: string, dossierId: string, branch: number): Promise<number>;
     upsert(row: ResultRow): Promise<void>;

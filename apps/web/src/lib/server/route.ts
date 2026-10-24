@@ -82,6 +82,11 @@ export async function parseBody<T>(req: NextRequest, schema: ZodType<T>): Promis
   return schema.parse(await json(req));
 }
 
+/** Query string (giá trị đầu của mỗi khóa) → parse Zod (bất biến 9); sai → ZodError → 400 VALIDATION. */
+export function parseQuery<T>(req: NextRequest, schema: ZodType<T>): T {
+  return schema.parse(Object.fromEntries(req.nextUrl.searchParams));
+}
+
 /**
  * IP khách sau `trustedHops` reverse proxy: proxy tin cậy ghi IP thật vào CUỐI X-Forwarded-For, phần đầu do khách gửi có thể giả
  * (lách giới hạn đăng nhập/đăng ký). `trustedHops` = 0 → không tin X-Forwarded-For. Không có gì → "unknown" (gom một nhóm, vẫn bị giới hạn).

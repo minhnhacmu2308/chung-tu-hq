@@ -1,5 +1,5 @@
 export { dossierChannel } from "./application/ports.js";
-export type { DocumentRow, DossierDeps, DossierRepos, DossierRow, DossierUow, ObjectStorage, PdfInspector, ProgressEvent, ProgressPublisher, QuotaChecker, Unzipper, UploadFile } from "./application/ports.js";
+export type { DocumentRow, DossierCustomsReader, DossierDeps, DossierRepos, DossierRow, DossierUow, ObjectStorage, PdfInspector, ProgressEvent, ProgressPublisher, QuotaChecker, Unzipper, UploadFile } from "./application/ports.js";
 export { listDossiers, listDossiersPage } from "./application/list-dossiers.js";
 export { getDossier } from "./application/get-dossier.js";
 export { createDossier } from "./application/create-dossier.js";

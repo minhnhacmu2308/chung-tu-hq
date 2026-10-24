@@ -1,18 +1,24 @@
 import { z } from "zod";
-import { DecimalStringSchema, DirectionSchema, IsoDateTimeSchema } from "../common.js";
+import { CustomsChannelSchema, DecimalStringSchema, DirectionSchema, IsoDateTimeSchema } from "../common.js";
 import { CustomsActionSchema, CustomsPhaseSchema, CustomsStageSchema } from "../customs-flow.js";
 import { ReasonCodeSchema, ReasonParamsSchema } from "../reason-codes.js";
 import { CustomsInfoSchema, CustomsRejectionSchema, CustomsMessageSchema, CustomsOperationSchema, CustomsResultSchema } from "../dto/customs.js";
 import { DeclarationStatusSchema } from "../dto/declaration.js";
+import { CustomsSummarySchema } from "../dto/dossier.js";
 
 /** Trạng thái truyền của một tờ khai (ADR 0005): lỗi gửi giữ bước, chỉ bước kế tiếp mới tiến. */
 export const SubmissionStateSchema = z.enum(["APPROVED", "PRE_DECLARED", "DECLARED", "DOCS_SENT", "CLEARED", "INSPECTION", "REJECTED", "SEND_FAILED"]);
 export type SubmissionState = z.infer<typeof SubmissionStateSchema>;
 
 export const SubmitDeclarationInputSchema = z.object({ certificateId: z.string().min(1, "Chọn chứng thư số để ký") });
-export const ResendOperationInputSchema = z.object({ operation: CustomsOperationSchema });
-/** Thực hiện một nghiệp vụ trên tờ khai đã truyền (IDB, IDC, IDD, IDA01, IDE, AMA, AMB, AMC, HYS, CONT, PORT_FEE, IID/IEX, khai tạm lại IDA). */
-export const PerformOperationInputSchema = z.object({ operation: CustomsOperationSchema });
+/** Tờ khai nhánh (lô > 50 dòng tách nhiều tờ – spec tách tờ khai §7): số nguyên ≥ 1, vắng = tờ 1. Ép từ chuỗi để dùng cho query `?branch=`. */
+export const BranchParamSchema = z.coerce.number().int().min(1).default(1);
+/** Thân / query chỉ mang `branch` (bắt đầu sửa sau thông quan, xem / duyệt / bỏ dòng AMA). */
+export const BranchQuerySchema = z.object({ branch: BranchParamSchema });
+export type BranchQuery = z.infer<typeof BranchQuerySchema>;
+export const ResendOperationInputSchema = z.object({ operation: CustomsOperationSchema, branch: BranchParamSchema });
+/** Thực hiện một nghiệp vụ trên tờ khai đã truyền (IDB, IDC, IDD, IDA01, IDE, AMA, AMB, AMC, HYS, CONT, PORT_FEE, IID/IEX, khai tạm lại IDA) – trên tờ `branch`. */
+export const PerformOperationInputSchema = z.object({ operation: CustomsOperationSchema, branch: BranchParamSchema });
 
 export const PipelineStatusSchema = z.enum(["NOT_SENT", "WAITING", "SENDING", "OK", "ERROR"]);
 export type PipelineStatus = z.infer<typeof PipelineStatusSchema>;
@@ -31,6 +37,33 @@ export const PipelineRowSchema = z.object({
 });
 export type PipelineRow = z.infer<typeof PipelineRowSchema>;
 
+/** Trạng thái truyền của một tờ khai nhánh: vòng đời riêng (số tờ khai, phân luồng, thông quan, nghiệp vụ, AMA). */
+export const BranchSubmissionSchema = z.object({
+  /** Tờ thứ mấy (từ 1) / tổng số tờ của lô. */
+  no: z.number().int().min(1),
+  of: z.number().int().min(1),
+  stage: CustomsStageSchema,
+  state: SubmissionStateSchema.default("APPROVED"),
+  declarationNo: z.string().nullable(),
+  channel: CustomsChannelSchema.nullable().default(null),
+  pipeline: z.array(PipelineRowSchema),
+  nextOp: CustomsOperationSchema.nullable(),
+  queryOp: CustomsOperationSchema,
+  amendments: z.number().int().nonnegative(),
+  postAmendments: z.number().int().nonnegative(),
+  /** Thông điệp của tờ, mới nhất trước. */
+  messages: z.array(CustomsMessageSchema),
+  result: CustomsResultSchema.partial().nullable(),
+  customsInfo: CustomsInfoSchema.nullable(),
+  rejection: CustomsRejectionSchema.nullable(),
+  /** Đang chờ gửi / phản hồi / hỏi trạng thái của tờ. */
+  inProgress: z.boolean(),
+  /** Tờ đã từng gửi (outbox hoặc thông điệp gửi đi) – lỗi "chưa khai tạm tự động" ghi trên tờ chưa gửi không tính. */
+  started: z.boolean(),
+});
+export type BranchSubmission = z.infer<typeof BranchSubmissionSchema>;
+
+/** Trường cấp hồ sơ (declarationStatus…rejection) giữ cho tương thích = tờ 1; `branches` mọi tờ theo thứ tự. */
 export const SubmissionViewSchema = z.object({
   declarationStatus: DeclarationStatusSchema,
   hsUnconfirmed: z.number().int().nonnegative(),
@@ -54,12 +87,18 @@ export const SubmissionViewSchema = z.object({
   customsInfo: CustomsInfoSchema.nullable().default(null),
   /** Lỗi Hải quan của lần gửi bị từ chối gần nhất – màn Review gắn vào đúng ô chỉ tiêu. */
   rejection: CustomsRejectionSchema.nullable().default(null),
+  /** Mọi tờ khai nhánh (lô 1 tờ → 1 phần tử); JSON cũ không có → []. */
+  branches: z.array(BranchSubmissionSchema).default([]),
+  summary: CustomsSummarySchema.default({ of: 1, cleared: 0, problems: [] }),
 });
 export type SubmissionView = z.infer<typeof SubmissionViewSchema>;
 
 export const CustomsRowSchema = z.object({
   dossierId: z.string(),
   dossierCode: z.string(),
+  /** Tờ khai nhánh của dòng (mỗi tờ một dòng) / tổng số tờ của lô. */
+  branch: z.number().int().min(1).default(1),
+  of: z.number().int().min(1).default(1),
   direction: DirectionSchema,
   partner: z.string(),
   typeCode: z.string(),

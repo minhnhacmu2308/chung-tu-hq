@@ -2,7 +2,7 @@
 // Lập bản khai: customs.startPostAmendment. Khai AMA/AMB/AMC: customs.performOperation. Quy tắc thuần: @kb/contracts post-amendment.
 import {
   amaFieldIssue, amaHeaderLocked, amaLineLocked, applyAmaLineEdit, canEditDeclaration, declarationFormValues, isAmaHeaderKey, isAmaLineKey,
-  postAmendmentEditable, type PostAmendment, type PostAmendmentView, type ProcessingContract,
+  postAmendmentEditable, type CopyPostAmendmentHeader, type CopyPostAmendmentHeaderResult, type PostAmendment, type PostAmendmentView, type ProcessingContract,
 } from "@kb/contracts";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
@@ -34,7 +34,8 @@ function processingContracts(db: MockDb): ProcessingContract[] {
   return [...seen.values()];
 }
 
-export const getPostAmendmentView = (dossierId: string) =>
+// `_branch`: tờ khai nhánh – mock chỉ có một tờ, bỏ qua (Task 10 mô phỏng nhiều tờ).
+export const getPostAmendmentView = (dossierId: string, _branch = 1) =>
   query((db): PostAmendmentView => {
     settleCustoms(db);
     const { dossier, decl } = ctx(db, dossierId);
@@ -70,7 +71,7 @@ function touch(a: PostAmendment) {
   a.updatedAt = nowIso();
 }
 
-export const updatePostAmendmentField = (dossierId: string, input: { lineId?: string; key: string; value: string }) =>
+export const updatePostAmendmentField = (dossierId: string, input: { lineId?: string; key: string; value: string }, _branch = 1) =>
   mutate((db): PostAmendment => {
     const a = editable(db, dossierId);
     const issue = amaFieldIssue(input.key, input.value);
@@ -89,7 +90,7 @@ export const updatePostAmendmentField = (dossierId: string, input: { lineId?: st
   });
 
 /** Thêm một hoặc nhiều dòng của tờ khai gốc vào bản khai: Trước = tờ khai gốc + số Hải quan tính, Sau = bằng Trước. */
-export const addPostAmendmentLines = (dossierId: string, lineNos: number[]) =>
+export const addPostAmendmentLines = (dossierId: string, lineNos: number[], _branch = 1) =>
   mutate((db): PostAmendment => {
     const a = editable(db, dossierId);
     const wanted = [...new Set(lineNos)];
@@ -105,7 +106,7 @@ export const addPostAmendmentLines = (dossierId: string, lineNos: number[]) =>
     return a;
   });
 
-export const removePostAmendmentLine = (dossierId: string, lineId: string) =>
+export const removePostAmendmentLine = (dossierId: string, lineId: string, _branch = 1) =>
   mutate((db): PostAmendment => {
     const a = editable(db, dossierId);
     a.lines = a.lines.filter((l) => l.id !== lineId);
@@ -114,7 +115,7 @@ export const removePostAmendmentLine = (dossierId: string, lineId: string) =>
   });
 
 /** Phê duyệt bản khai bổ sung (người duyệt, nguyên tắc 4 mắt như tờ khai). */
-export const approvePostAmendment = (dossierId: string) =>
+export const approvePostAmendment = (dossierId: string, _branch = 1) =>
   mutate((db): PostAmendment => {
     const a = editable(db, dossierId);
     if (!a.lines.length) throw new ApiError("NO_LINES", "Chọn ít nhất một dòng hàng cần khai bổ sung");
@@ -127,3 +128,6 @@ export const approvePostAmendment = (dossierId: string) =>
     Object.assign(dossier, { step: "submit", updatedAt: nowIso() });
     return a;
   });
+
+/** Nhân bản sửa chỉ tiêu chung sang các tờ khác: mock chỉ có một tờ → không có tờ nào để nhân bản (Task 10 mô phỏng nhiều tờ). */
+export const copyPostAmendmentHeader = (_dossierId: string, _input: CopyPostAmendmentHeader) => query((): CopyPostAmendmentHeaderResult => ({ applied: [], skipped: [] }));

@@ -4,7 +4,7 @@
 // Lô nhiều tờ (spec tách tờ khai §6.6): mỗi tờ khai nhánh một chuỗi bản khai riêng (`branch`, mặc định 1; seq đếm riêng từng tờ),
 // tham chiếu số tờ khai + customsInfo của tờ, dòng hàng của tờ đánh số 1..50; nhân bản sửa chỉ tiêu chung sang các tờ đã thông quan khác.
 import {
-  amaFieldIssue, amaHeaderFrom, amaHeaderLocked, amaLineFrom, amaLineLocked, applyAmaLineEdit, declarationFormValues, isAmaHeaderKey, isAmaLineKey,
+  amaFieldIssue, amaHeaderFrom, branchCount, amaHeaderLocked, amaLineFrom, amaLineLocked, applyAmaLineEdit, declarationFormValues, isAmaHeaderKey, isAmaLineKey,
   postAmendmentEditable, type CopyPostAmendmentHeader, type CopyPostAmendmentHeaderResult, type CustomsOperation, type PostAmendment, type PostAmendmentView,
   type PostAmendmentValues, type ProcessingContract, type UpdatePostAmendmentField,
 } from "@kb/contracts";
@@ -19,14 +19,18 @@ export const toPostAmendment = (r: PostAmendmentRow): PostAmendment => {
   const { orgId: _o, approvedAt, createdAt, updatedAt, ...rest } = r;
   return { ...rest, ...(approvedAt ? { approvedAt: approvedAt.toISOString() } : {}), createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString() };
 };
-const openOf = (list: PostAmendmentRow[]) => list.find((a) => a.status !== "REGISTERED") ?? null;
+/** Bản khai đang mở (chưa AMC) trong danh sách bản khai của một tờ. */
+export const openAmendmentOf = (list: PostAmendmentRow[]) => list.find((a) => a.status !== "REGISTERED") ?? null;
+const openOf = openAmendmentOf;
 /** Khóa field_audit của bản khai: tờ 1 giữ dạng cũ `ama:<seq>`; tờ ≥ 2 `ama:b<no>:<seq>`. */
 const auditPrefix = (a: Pick<PostAmendmentRow, "branch" | "seq">) => (a.branch > 1 ? `ama:b${a.branch}:${a.seq}` : `ama:${a.seq}`);
 /** Ô đầu bản khai gốc của tờ (điền sẵn khi lập): tờ khai gốc của tờ + số tờ khai, customsInfo Hải quan trả về cho tờ. */
 const sourceHeader = (snap: DeclarationSnapshot, result: ResultRow | null): PostAmendmentValues =>
   amaHeaderFrom(amaSource(amaBranchPayload(snap.payload, result?.branch ?? 1), result?.raw?.customsInfo ?? null, result?.declarationNo ?? "", snap.payload.fields["TY_GIA"]?.value.trim() || undefined));
-/** Ô đầu sửa được (chỉ tiêu chung – không phải ô dòng hàng, không phải ô theo tờ khai gốc). */
-const commonKey = (key: string) => isAmaHeaderKey(key) && !amaHeaderLocked(key);
+/** Ô đầu điền từ thông tin Hải quan trả về cho từng tờ (TK_CHB – đội thủ tục): sửa được nhưng riêng từng tờ, không là chỉ tiêu chung. */
+const SHEET_HEADER_KEYS: ReadonlySet<string> = new Set(["TK_CHB"]);
+/** Ô đầu sửa được dùng chung mọi tờ (chỉ tiêu chung – không phải ô dòng hàng, ô theo tờ khai gốc hay ô theo tờ). */
+const commonKey = (key: string) => isAmaHeaderKey(key) && !amaHeaderLocked(key) && !SHEET_HEADER_KEYS.has(key);
 
 /** Lập bản khai bổ sung (khi bắt đầu sửa sau thông quan): đầu bản khai điền sẵn từ tờ khai gốc + số Hải quan trả về, chưa có dòng hàng. */
 export async function createPostAmendment(deps: CustomsDeps, r: CustomsRepos, ctx: Ctx, dossierId: string, result: ResultRow): Promise<PostAmendmentRow> {
@@ -212,12 +216,16 @@ export async function copyPostAmendmentHeader(deps: CustomsDeps, ctx: Ctx, dossi
   if (bad.length) return err(domainError("VALIDATION", `Không phải chỉ tiêu chung sửa được của bản khai bổ sung: ${bad.join(", ")}`));
   const loaded = await deps.uow.asOrg(ctx, async (r) => ({ source: await openPostAmendment(r, ctx.orgId, dossierId, input.fromBranch), results: await r.results.listForDossier(ctx.orgId, dossierId) }));
   if (!loaded.source) return err(domainError("NOT_FOUND", `Tờ ${input.fromBranch}: chưa lập bản khai bổ sung`));
+  const snap = await deps.declarations.get(ctx.orgId, dossierId);
+  // Chỉ các tờ của lô hiện tại (kết quả nhánh thừa sau khi số tờ giảm không nhận bản sửa).
+  const of = snap ? branchCount(snap.payload.items.length) : 1;
   const values = Object.fromEntries(keys.map((k) => [k, (loaded.source!.header[k] ?? "").trim()]));
   const applied: number[] = [];
   const skipped: CopyPostAmendmentHeaderResult["skipped"] = [];
-  const audits: { key: string; oldValue: string; newValue: string }[] = [];
+  let created = false;
   for (const target of [...loaded.results].sort((a, b) => a.branch - b.branch)) {
-    if (target.branch === input.fromBranch) continue;
+    if (target.branch === input.fromBranch || target.branch > of) continue;
+    const audits: { key: string; oldValue: string; newValue: string }[] = [];
     const outcome = await deps.uow.asOrg(ctx, async (r): Promise<CopyPostAmendmentHeaderResult["skipped"][number]["reason"] | null> => {
       const result = await r.results.get(ctx.orgId, dossierId, target.branch);
       if (!result) return "NOT_CLEARED";
@@ -228,6 +236,7 @@ export async function copyPostAmendmentHeader(deps: CustomsDeps, ctx: Ctx, dossi
         // Như startPostAmendment: đang chờ phản hồi một nghiệp vụ khác của tờ → không lập.
         if ((await r.outbox.listForDossier(ctx.orgId, dossierId)).some((o) => o.branch === target.branch && o.status === "PENDING")) return "BUSY";
         a = await beginPostAmendment(deps, r, ctx, dossierId, result);
+        created = true;
       } else if (a.status !== "DRAFT" && a.status !== "RECALLED") return "OPEN_NOT_DRAFT";
       const header = { ...a.header };
       for (const k of keys) {
@@ -238,11 +247,16 @@ export async function copyPostAmendmentHeader(deps: CustomsDeps, ctx: Ctx, dossi
       await r.amendments.update({ ...a, header, updatedAt: deps.clock.now() });
       return null;
     });
-    if (outcome) skipped.push({ no: target.branch, reason: outcome });
-    else applied.push(target.branch);
+    if (outcome) {
+      skipped.push({ no: target.branch, reason: outcome });
+      continue;
+    }
+    applied.push(target.branch);
+    // Bất biến 6: người dùng sửa trường → field_audit append-only (mỗi ô của tờ, ngay sau khi tờ đó lưu – lỗi ở tờ sau không làm mất audit tờ trước).
+    for (const row of audits) await deps.audit.append(ctx, { dossierId, ...row, source: "AMA_EDIT" });
   }
-  // Bất biến 6: người dùng sửa trường → field_audit append-only (mỗi ô của mỗi tờ).
-  for (const row of audits) await deps.audit.append(ctx, { dossierId, ...row, source: "AMA_EDIT" });
+  // Như startPostAmendment: lập bản khai mới → hồ sơ về bước Review (sửa / duyệt bản khai).
+  if (created) await deps.dossiers.update(ctx.orgId, dossierId, { step: "review" });
   if (applied.length) await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });
   return ok({ applied, skipped });
 }

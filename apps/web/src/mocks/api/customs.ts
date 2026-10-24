@@ -347,7 +347,8 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
 }
 
 /** Thực hiện một nghiệp vụ theo quy tắc chung (operationAvailability); bị khóa → lỗi kèm lý do. */
-export const performOperation = (dossierId: string, op: CustomsOperation) => mutate((db) => perform(db, dossierId, op, Date.now()));
+// `_branch`: tờ khai nhánh – mock chỉ có một tờ, bỏ qua (Task 10 mô phỏng nhiều tờ).
+export const performOperation = (dossierId: string, op: CustomsOperation, _branch = 1) => mutate((db) => perform(db, dossierId, op, Date.now()));
 
 /** Ký số và khai tạm lần đầu (IDA/EDA). Khai chính thức (IDC/EDC) là thao tác riêng của người khai. */
 export const submitDeclaration = (dossierId: string, certificateId: string) =>
@@ -362,7 +363,7 @@ export const submitDeclaration = (dossierId: string, certificateId: string) =>
   });
 
 /** Bắt đầu sửa đổi sau thông quan: CLEARED → POST_EDITING, lập bản khai bổ sung AMA (tờ khai gốc không mở lại). */
-export const startPostAmendment = (dossierId: string) =>
+export const startPostAmendment = (dossierId: string, _branch = 1) =>
   mutate((db) => {
     settle(db, Date.now());
     const c = load(db, dossierId);
@@ -390,7 +391,7 @@ export const settleCustoms = (db: MockDb) => settle(db, Date.now());
  * Gửi lại một nghiệp vụ bị lỗi. Nguyên tắc chống gửi trùng (ADR 0005): luôn tra cứu (IID/IEX) trước,
  * chỉ gửi lại khi Hải quan chưa ghi nhận.
  */
-export const resendOperation = (dossierId: string, op: CustomsOperation) =>
+export const resendOperation = (dossierId: string, op: CustomsOperation, _branch = 1) =>
   mutate((db): ResendResult => {
     const now = Date.now();
     settle(db, now);
@@ -540,6 +541,9 @@ function view(db: MockDb, dossierId: string, now: number): SubmissionView {
     result,
     customsInfo: customsInfoOf(db, c, stage, seen),
     rejection: c.flow.rejection ?? null,
+    // Mock một tờ: chưa dựng mục theo tờ (Task 10).
+    branches: [],
+    summary: { of: 1, cleared: result?.clearanceStatus === "CLEARED" ? 1 : 0, problems: [] },
   };
 }
 
@@ -568,6 +572,8 @@ export const listCustomsDeclarations = () =>
         return [{
           dossierId: d.id,
           dossierCode: d.code,
+          branch: 1,
+          of: 1,
           direction: d.direction,
           partner: d.partner,
           typeCode: d.typeCode,

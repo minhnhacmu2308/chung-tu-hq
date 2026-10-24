@@ -86,6 +86,27 @@ describe("createDossier / list / get", () => {
   });
 });
 
+describe("tóm tắt Hải quan theo tờ khai nhánh (Thông quan k/N)", () => {
+  it("list / page / get điền customs từ cổng (một lần gọi cho cả trang, đúng org); hồ sơ chưa truyền vắng; không nối cổng → vắng", async () => {
+    const a = unwrap(await createDossier(deps, ctx(), INPUT));
+    const b = unwrap(await createDossier(deps, ctx(), INPUT));
+    const calls: { orgId: string; ids: string[] }[] = [];
+    const summary = { of: 3, cleared: 1, problems: [{ no: 2, kind: "REJECTED" as const }] };
+    deps.customs = { summaries: async (c, ids) => { calls.push({ orgId: c.orgId, ids }); return new Map(ids.filter((id) => id === a.id).map((id) => [id, summary])); } };
+    const list = unwrap(await listDossiers(deps, ctx(), {}));
+    expect(list.find((d) => d.id === a.id)?.customs).toEqual(summary);
+    expect(list.find((d) => d.id === b.id)).not.toHaveProperty("customs");
+    expect(calls).toEqual([{ orgId: "org_a", ids: list.map((d) => d.id) }]);
+    expect(unwrap(await listDossiersPage(deps, ctx(), {}, { limit: 10, offset: 0 })).items.find((d) => d.id === a.id)?.customs).toEqual(summary);
+    expect(unwrap(await getDossier(deps, ctx(), a.id)).customs).toEqual(summary);
+    calls.length = 0;
+    expect(unwrap(await listDossiers(deps, ctx("OWNER", "org_b", "usr_b"), {}))).toEqual([]);
+    expect(calls).toEqual([]);
+    delete deps.customs;
+    expect(unwrap(await getDossier(deps, ctx(), a.id))).not.toHaveProperty("customs");
+  });
+});
+
 describe("updateDossier / cancel", () => {
   it("đổi note; đổi step tới submit khi chưa APPROVED → INVALID_STATE; hủy hồ sơ DRAFT ok, đã truyền → DOSSIER_LOCKED", async () => {
     const d = unwrap(await createDossier(deps, ctx(), INPUT));

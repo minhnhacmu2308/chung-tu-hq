@@ -9,7 +9,7 @@ export { MAX_ATTEMPTS as CUSTOMS_MAX_ATTEMPTS, processOutbox, type ProcessOutbox
 export { pollStatus, syncDossierClearance, type PollStatusInput } from "./application/poll-status.js";
 export { resendOperation } from "./application/resend-operation.js";
 export { requeueStuckOutbox, STUCK_OUTBOX_MS } from "./application/requeue-stuck-outbox.js";
-export { getSubmission, listCustomsDeclarations } from "./application/get-submission.js";
+export { dossierCustomsSummaries, getSubmission, listCustomsDeclarations } from "./application/get-submission.js";
 export { markOutboxFailed, reopenDeclaration } from "./application/reopen-declaration.js";
 export { OPERATION_LABELS } from "./application/_customs-view.js";
 export { buildFptRequest, type DeclarationPayload, type FptBuild } from "./domain/declaration-to-fpt.js";

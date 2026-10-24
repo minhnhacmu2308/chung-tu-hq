@@ -66,6 +66,10 @@ describe("DrizzleCustomsUow – trạng thái theo nhánh tờ khai", () => {
     expect((await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_br")))?.branch).toBe(1);
     expect((await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_br", 2)))?.declarationNo).toBe("30000000002");
     expect(await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_br", 3))).toBeNull();
+    // listForDossiers: một truy vấn cho nhiều hồ sơ, sắp theo nhánh; danh sách rỗng → []; org khác không thấy.
+    expect((await uow.asOrg(A, (r) => r.results.listForDossiers("org_anphat", ["dos_br", "dos_khong_co"]))).map((x) => [x.dossierId, x.branch])).toEqual([["dos_br", 1], ["dos_br", 2]]);
+    expect(await uow.asOrg(A, (r) => r.results.listForDossiers("org_anphat", []))).toEqual([]);
+    expect(await uow.asOrg(B, (r) => r.results.listForDossiers("org_anphat", ["dos_br"]))).toEqual([]);
   });
 
   it("deleteUnsentAbove: chỉ xóa nhánh > N chưa khai (NOT_SENT, chưa có số) của đúng hồ sơ; org khác không xóa được", async () => {

@@ -61,7 +61,7 @@ describe("customs-bridge", () => {
     await runFull();
     const s = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
     expect(s).toMatchObject({ version: 1, status: "DRAFT", kind: "IDA", direction: "NK", currency: "USD", containers: ["SITU2246781"], unconfirmedHs: 7 });
-    expect(s.fields["NNK_MST"]).toEqual({ value: "0316789012" });
+    expect(s.fields["NNK_MST"]).toEqual({ value: "0316789012", source: "ACCOUNT" });
     expect(s.items).toHaveLength(7);
     expect(s.items[0]).toMatchObject({ lineNo: 1, amount: "3700", hsConfirmed: null });
     expect(s.adjustments).toEqual([{ label: "Cước vận chuyển quốc tế", amount: "1150", currency: "USD", kind: "ADD" }]);

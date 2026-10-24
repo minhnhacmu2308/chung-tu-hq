@@ -13,6 +13,7 @@ export { getSubmission, listCustomsDeclarations } from "./application/get-submis
 export { markOutboxFailed, reopenDeclaration } from "./application/reopen-declaration.js";
 export { OPERATION_LABELS } from "./application/_customs-view.js";
 export { buildFptRequest, type DeclarationPayload, type FptBuild } from "./domain/declaration-to-fpt.js";
+export { branchPayload, invoiceTotal } from "./domain/branches.js";
 export { maskPayload } from "./domain/mask.js";
 export { buildAmaRequest, type AmaBuild } from "./domain/post-amendment.js";
 export { coarseState, rowState, stageOf, type ResultRaw } from "./domain/state-machine.js";

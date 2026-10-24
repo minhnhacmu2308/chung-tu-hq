@@ -12,7 +12,7 @@ import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
 
 export type DeclarationSnapshot = {
   declarationId: string; version: number; status: DeclarationStatus; kind: "IDA" | "EDA"; direction: "NK" | "XK"; currency: string;
-  fields: Record<string, { value: string }>; items: Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
+  fields: Record<string, { value: string; source?: string }>; items: Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
   adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
 };
 
@@ -27,7 +27,7 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
   const taxes = computeTaxes(valuation.perItem.map((p) => ({ id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: items.find((i) => i.id === p.id)?.importDutyRate ?? null, vatRate: items.find((i) => i.id === p.id)?.vatRate ?? null })));
   return {
     declarationId: decl.id, version: decl.version, status: decl.status, kind: decl.kind, direction: dossier.direction, currency: dossier.currency,
-    fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value }])),
+    fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value, source: f.source }])),
     items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, policyNote: i.policyNote })),
     adjustments: decl.valueAdjustments.map((a) => ({ label: a.label, amount: a.amount, currency: a.currency, kind: a.kind, ...(a.code ? { code: a.code } : {}), ...(a.allocate === false ? { allocate: false } : {}) })),
     containers: shipment?.transport.containers.map((c) => c.no) ?? [],

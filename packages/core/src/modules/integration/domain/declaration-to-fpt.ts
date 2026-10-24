@@ -6,7 +6,7 @@ import { NO_INSURANCE_VALUE, DECLARATION_CONDITIONS, EdaRequestSchema, extraFiel
 export type DeclarationPayload = {
   kind: "IDA" | "EDA";
   direction: "NK" | "XK";
-  fields: Record<string, { value: string }>;
+  fields: Record<string, { value: string; /** Nguồn giá trị (USER = người khai nhập) – không bắt buộc. */ source?: string }>;
   /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền. */
   items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; policyNote: string | null }[];
   /** `kind`/`code`: chiều và mã tên khoản điều chỉnh 1.49 (khoản người khai lập); không có = dữ liệu cũ / phí đọc từ chứng từ. */
@@ -251,6 +251,8 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     // Khoản chưa có mã tên (phí khác đọc từ chứng từ) → không gửi thì Hải quan tính thiếu trị giá: chặn truyền.
     const uncoded = others.filter((a) => !a.code);
     if (uncoded.length) blockers.push(`Khoản điều chỉnh chưa có mã tên ở chỉ tiêu 1.49: ${uncoded.map((a) => `${a.label} ${a.amount} ${a.currency}`).join("; ")} – lập danh sách khoản điều chỉnh ở bước OCR & kiểm tra`);
+    // Tờ khai nhánh (1.2 TK_DNO > 1): ô 5 của 1.49 "Tổng hệ số phân bổ" = 1.51 cho mỗi khoản đã ghi mã. Lô một tờ không điền.
+    if (Number(val(p, "TK_DNO")) > 1 && val(p, "TK_TP")) others.filter((a) => a.code).slice(0, 5).forEach((_, i) => setKtg(`KTG_VT${i + 1}`, num(val(p, "TK_TP"), `KTG_VT${i + 1}`)));
     applyExtras(p, { objVN_IDA: set, objVN_IDA_VANDON: setVd, objVN_IDA_KTG: setKtg }, num);
     const request = { objVN_IDA: tk, objVN_IDA_HANG: items(p, warnings, blockers, num), objVN_IDA_VANDON: vd, objVN_IDA_KTG: ktg };
     const parsed = IdaRequestSchema.safeParse(request);

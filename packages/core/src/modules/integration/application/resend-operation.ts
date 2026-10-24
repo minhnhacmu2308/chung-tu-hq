@@ -1,5 +1,5 @@
 // "Gửi lại" một nghiệp vụ bị lỗi: LUÔN tra trạng thái trước (ADR 0005); Hải quan đã ghi nhận → không gửi; chưa → outbox mới (…:retryN) và job.
-import { baseOp, CUSTOMS_OPERATIONS, queryOpFor, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
+import { baseOp, CUSTOMS_OPERATIONS, isContentOperation, queryOpFor, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
@@ -10,9 +10,9 @@ import { OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
 import { MAX_ATTEMPTS } from "./process-outbox.js";
-import { outboxKey, outboxVersion } from "./submit-declaration.js";
+import { outboxKey, stalePinReason } from "./branch-send.js";
 
-/** `branch`: tờ khai nhánh (mặc định 1). Gửi lại IDA/EDA nhánh k thành công → worker khai tạm nối tiếp nhánh k+1. */
+/** `branch`: tờ khai nhánh (mặc định 1). Gửi lại nội dung tờ k (lần truyền có ghim) thành công → worker nối tiếp tờ sau. */
 export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<ResendResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
@@ -22,7 +22,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   if (!result || !result.externalId) return err(domainError("NOT_FOUND", "Hồ sơ chưa truyền"));
   // Tra cứu: dùng chung với nút IID/IEX.
   if (CUSTOMS_OPERATIONS[op].kind === "query") {
-    const q = await performOperation(deps, ctx, dossierId, op);
+    const q = await performOperation(deps, ctx, dossierId, op, branch);
     return q.ok ? ok({ resent: false, message: q.value.message }) : q;
   }
   const now = () => deps.clock.now();
@@ -58,12 +58,10 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
     return ok({ resent: false, message: `${OPERATION_LABELS[op]} đang được gửi` });
   }
   if (last.status === "SENT") return err(domainError("INVALID_STATE", `${OPERATION_LABELS[op]} đã thành công – không gửi lại`));
-  // Khai tạm tờ 2..N gửi lại nguyên thông điệp đã dựng: chỉ khi tờ khai còn SUBMITTED đúng phiên bản đó (không gửi nội dung cũ sau khi mở lại/duyệt lại).
-  if (b === "IDA" && branch > 1) {
-    const snap = await deps.declarations.get(ctx.orgId, dossierId);
-    if (!snap || snap.status !== "SUBMITTED" || snap.version !== outboxVersion(last.idempotencyKey))
-      return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ khai đã mở lại hoặc đổi phiên bản – không gửi lại nội dung cũ; duyệt lại rồi truyền lại`));
-  }
+  // Gửi lại nguyên thông điệp nội dung đã dựng: outbox có ghim (tờ 2..N / lô nhiều tờ) chỉ gửi khi tờ khai còn SUBMITTED đúng phiên bản + lần duyệt đó
+  // (không gửi nội dung cũ sau khi mở lại/duyệt lại). Khóa theo lượt không phiên bản (`:n<k>`) → guard thường như tờ 1.
+  if (isContentOperation(op) && op !== "AMA" && stalePinReason(await deps.declarations.get(ctx.orgId, dossierId), last))
+    return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ khai đã mở lại hoặc đổi phiên bản – không gửi lại nội dung cũ; duyệt lại rồi truyền lại`));
   if (last.status === "PENDING") await deps.uow.asOrg(ctx, (r) => r.outbox.update(last.orgId, last.id, { status: "FAILED", updatedAt: now() }));
   const version = Number(/:v(\d+)/.exec(last.idempotencyKey)?.[1] ?? "1");
   // Khóa nhánh ≥ 2 kết thúc bằng :b<no> – lần gửi lại giữ hậu tố nhánh ở cuối (nhánh 1 giữ dạng cũ).

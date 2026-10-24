@@ -5,15 +5,20 @@ import { domainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { Decimal } from "../../../shared/decimal.js";
 import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
-import { syncLineItems, unconfirmedCount } from "./_dto.js";
+import { syncLineItems, toBranches, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
 
 export type DeclarationSnapshot = {
   declarationId: string; version: number; status: DeclarationStatus; kind: "IDA" | "EDA"; direction: "NK" | "XK"; currency: string;
   fields: Record<string, { value: string; source?: string }>; items: Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
   adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
+  /** Thuế dự tính (thuế NK + VAT, VND) từng tờ khai nhánh – cùng cách tính với DeclarationView.branches. */
+  branchTaxVnd: string[];
+  /** Lần phê duyệt hiện tại (ISO); mở lại → null, duyệt lại → đổi (phiên bản tờ khai giữ nguyên). */
+  approvedAt: string | null;
 };
 
 export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: string, dossierId: string): Promise<DeclarationSnapshot | null> {
@@ -34,6 +39,11 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
     unconfirmedHs: unconfirmedCount(items),
     estimatedTaxVnd: String(BigInt(taxes.importDutyVnd) + BigInt(taxes.vatVnd)),
     exchangeRateDate: decl.exchangeRateDate,
+    branchTaxVnd: toBranches(items.map((i) => {
+      const tax = taxes.perItem.find((p) => p.id === i.id);
+      return { lineNo: i.lineNo, amount: i.amount, customsValueVnd: valuation.perItem.find((p) => p.id === i.id)?.customsValueVnd ?? "0", importDutyVnd: tax?.importDutyVnd ?? "0", vatVnd: tax?.vatVnd ?? "0" };
+    })).map((b) => new Decimal(b.estImportDutyVnd).plus(b.estVatVnd).toFixed(0)),
+    approvedAt: decl.approvedAt?.toISOString() ?? null,
   };
 }
 

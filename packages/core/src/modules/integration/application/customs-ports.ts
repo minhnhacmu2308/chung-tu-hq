@@ -85,7 +85,10 @@ export interface CustomsGateway {
 export type GatewaySendResult = { channel?: "GREEN" | "YELLOW" | "RED"; receiptNo?: string; customsTaxVnd?: string; note?: string; errors?: GatewayError[] };
 
 /** Tờ khai + dòng hàng từ module declaration (composition root nối). */
-export type DeclarationSnapshot = { declarationId: string; version: number; status: DeclarationStatus; payload: DeclarationPayload; unconfirmedHs: number; estimatedTaxVnd: string; /** Ngày (giờ VN) tra tỷ giá tính thuế khi dựng tờ khai. */ exchangeRateDate: string };
+export type DeclarationSnapshot = { declarationId: string; version: number; status: DeclarationStatus; payload: DeclarationPayload; unconfirmedHs: number; estimatedTaxVnd: string; /** Ngày (giờ VN) tra tỷ giá tính thuế khi dựng tờ khai. */ exchangeRateDate: string;
+  /** Thuế dự tính (VND) từng tờ khai nhánh (phần tử i = tờ i+1). */ branchTaxVnd?: string[];
+  /** Lần phê duyệt hiện tại (ISO) – duyệt lại sau khi mở lại đổi giá trị dù phiên bản giữ nguyên; ghim nội dung đã truyền (pinOf). */ approvedAt?: string | null;
+};
 export interface DeclarationReader {
   get(orgId: string, dossierId: string): Promise<DeclarationSnapshot | null>;
   markSubmitted(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;

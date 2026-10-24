@@ -88,9 +88,10 @@ export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, 
 
 
 /** Tổng trị giá/thuế từng tờ khai nhánh (50 dòng/tờ theo lineNo), cộng bằng Decimal; không có dòng → một nhánh 0. */
-export function toBranches(items: DeclarationItemView[]): DeclarationBranch[] {
+type BranchItem = Pick<DeclarationItemView, "lineNo" | "amount" | "customsValueVnd" | "importDutyVnd" | "vatVnd">;
+export function toBranches(items: BranchItem[]): DeclarationBranch[] {
   const sorted = [...items].sort((a, b) => a.lineNo - b.lineNo);
-  const sum = (xs: DeclarationItemView[], pick: (i: DeclarationItemView) => string) => xs.reduce((a, i) => a.plus(pick(i)), new Decimal(0)).toFixed();
+  const sum = (xs: BranchItem[], pick: (i: BranchItem) => string) => xs.reduce((a, i) => a.plus(pick(i)), new Decimal(0)).toFixed();
   return branchRanges(sorted.map((i) => i.lineNo)).map((r) => {
     const part = sorted.slice(r.index[0], r.index[1]);
     return { no: r.no, of: r.of, lineFrom: r.lineFrom, lineTo: r.lineTo, invoiceValue: sum(part, (i) => i.amount), customsValueVnd: sum(part, (i) => i.customsValueVnd), estImportDutyVnd: sum(part, (i) => i.importDutyVnd), estVatVnd: sum(part, (i) => i.vatVnd) };

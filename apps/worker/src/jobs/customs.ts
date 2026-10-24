@@ -6,7 +6,8 @@ import { parsePayload } from "./_payload.js";
 const log = createLogger({ name: "worker" });
 
 export const CustomsSendPayload = z.object({ orgId: z.string().min(1), userId: z.string().min(1), outboxId: z.string().min(1) });
-export const CustomsPollPayload = z.object({ orgId: z.string().min(1), userId: z.string().min(1), dossierId: z.string().min(1), attempt: z.number().int().positive() });
+/** `branch`: tờ khai nhánh (lô > 50 dòng); job tạo trước khi tách tờ khai không có → nhánh 1. */
+export const CustomsPollPayload = z.object({ orgId: z.string().min(1), userId: z.string().min(1), dossierId: z.string().min(1), attempt: z.number().int().positive(), branch: z.number().int().positive().optional() });
 
 /** Gửi một dòng outbox tới Hải quan (IDA/IDC/HYS…). Lỗi tạm ném ra để BullMQ retry; lỗi FPT ghi nhật ký, không retry. */
 export async function customsSendJob(deps: CustomsDeps, raw: unknown) {

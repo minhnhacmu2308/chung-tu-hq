@@ -27,7 +27,9 @@ export type PostAmendmentLine = z.infer<typeof PostAmendmentLineSchema>;
 export const PostAmendmentSchema = z.object({
   id: z.string(),
   dossierId: z.string(),
-  /** Lần khai bổ sung thứ mấy của hồ sơ (1, 2…). */
+  /** Tờ khai nhánh (lô > 50 dòng: tờ 1..N); vắng = tờ 1. */
+  branch: z.number().int().positive().optional(),
+  /** Lần khai bổ sung thứ mấy của tờ khai (đếm riêng từng tờ khai nhánh: 1, 2…). */
   seq: z.number().int().positive(),
   status: PostAmendmentStatusSchema,
   header: PostAmendmentValuesSchema,
@@ -56,6 +58,8 @@ export const PostAmendmentViewSchema = z.object({
   history: z.array(PostAmendmentSchema),
   sourceLines: z.array(PostAmendmentSourceLineSchema),
   contracts: z.array(ProcessingContractSchema),
+  /** Chỉ tiêu chung (ô đầu VN_AMA) bản đang mở đã khác bản gốc của tờ – lô nhiều tờ: cảnh báo các tờ khác còn giá trị cũ. */
+  commonEdits: z.array(z.string()),
 });
 export type PostAmendmentView = z.infer<typeof PostAmendmentViewSchema>;
 
@@ -64,3 +68,13 @@ export const UpdatePostAmendmentFieldSchema = z.object({ lineId: z.string().opti
 export type UpdatePostAmendmentField = z.infer<typeof UpdatePostAmendmentFieldSchema>;
 /** Thêm một hoặc nhiều dòng của tờ khai gốc (chọn nhiều dòng cùng lúc). */
 export const AddPostAmendmentLinesSchema = z.object({ lineNos: z.array(z.number().int().positive()).min(1).max(999) });
+/** Nhân bản sửa chỉ tiêu chung (ô đầu VN_AMA) từ AMA của tờ `fromBranch` sang AMA của các tờ đã thông quan khác. */
+export const CopyPostAmendmentHeaderSchema = z.object({ fromBranch: z.number().int().min(1), keys: z.array(z.string().min(1)).min(1).max(100) });
+export type CopyPostAmendmentHeader = z.infer<typeof CopyPostAmendmentHeaderSchema>;
+/** Tờ bỏ qua: chưa thông quan · AMA đang mở đã duyệt / đã khai (không đè) · đang chờ phản hồi một nghiệp vụ khác. */
+export const CopyPostAmendmentSkipReasonSchema = z.enum(["NOT_CLEARED", "OPEN_NOT_DRAFT", "BUSY"]);
+export const CopyPostAmendmentHeaderResultSchema = z.object({
+  applied: z.array(z.number().int().positive()),
+  skipped: z.array(z.object({ no: z.number().int().positive(), reason: CopyPostAmendmentSkipReasonSchema })),
+});
+export type CopyPostAmendmentHeaderResult = z.infer<typeof CopyPostAmendmentHeaderResultSchema>;

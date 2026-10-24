@@ -44,6 +44,8 @@ export const getPostAmendmentView = (dossierId: string) =>
       history: all.filter((a) => a.status === "REGISTERED").sort((a, b) => b.seq - a.seq),
       sourceLines: sourceLines(db, dossier, decl, null).map((l) => ({ lineNo: l.lineNo, description: l.values["HAG_CMN"] ?? "", hsCode: l.values["HAG_CMD"] ?? "" })),
       contracts: processingContracts(db),
+      // Mock một tờ khai: không có tờ khác để cảnh báo chỉ tiêu chung.
+      commonEdits: [],
     };
   });
 

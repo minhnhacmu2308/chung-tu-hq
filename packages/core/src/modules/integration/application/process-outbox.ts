@@ -184,7 +184,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       await r.outbox.update(ob.orgId, ob.id, { status: "SENT", lastError: null, updatedAt: now() });
     }
     // Sau thông quan: AMA/AMB/AMC đổi trạng thái bản khai bổ sung (tờ khai gốc giữ nguyên).
-    if (!failed && (op === "AMA" || op === "AMB" || op === "AMC")) await applyPostAmendmentResult(r, input.orgId, ob.dossierId, op, now(), { receiptNo: outcome.receiptNo });
+    if (!failed && (op === "AMA" || op === "AMB" || op === "AMC")) await applyPostAmendmentResult(r, input.orgId, ob.dossierId, op, now(), { receiptNo: outcome.receiptNo }, ob.branch);
     await r.results.upsert({
       ...result, ...patch, raw, state: coarseState(nextStage, failed),
       ...(!failed && op === "AMC" ? { clearanceStatus: "CLEARED" as const } : {}),

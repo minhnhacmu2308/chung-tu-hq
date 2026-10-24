@@ -19,7 +19,7 @@ import { resendOperation } from "../resend-operation.js";
 import { enqueueBranchPreDeclare, outboxKey, submitDeclaration } from "../submit-declaration.js";
 import { requeueStuckOutbox } from "../requeue-stuck-outbox.js";
 import { performOperation, startPostAmendment } from "../perform-operation.js";
-import { addPostAmendmentLines, approvePostAmendment, getPostAmendmentView, updatePostAmendmentField } from "../post-amendment.js";
+import { addPostAmendmentLines, approvePostAmendment, copyPostAmendmentHeader, getPostAmendmentView, updatePostAmendmentField } from "../post-amendment.js";
 import { FakeCustomsGateway, hashId } from "../test/fake-customs-gateway.js";
 import { InMemoryCustomsUow } from "../test/in-memory-customs-uow.js";
 
@@ -1674,4 +1674,113 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { reason: "SHEETS_RECALL_FIRST", params: { sheets: "1, 2, 3" } } });
   });
 
+});
+
+describe("AMA theo tờ khai nhánh (spec §6.6)", () => {
+  const info = (p: Record<string, unknown> = {}) => ({ receivedAt: "2026-10-14T02:00:00.000Z", exchangeRates: [], taxes: [], items: [], directives: [], ...p });
+  const cleared = (branch: number, raw: Record<string, unknown> = {}) =>
+    seedBranch(branch, { state: "CLEARED", clearanceStatus: "CLEARED", raw: { stage: "CLEARED", certificateId: "cert_1", ...raw } });
+  const amaView = (branch: number, ctx: Ctx = declarant) => getPostAmendmentView(deps, ctx, D, branch);
+  const readyToSend = async (branch: number) => {
+    const pa = unwrap(await addPostAmendmentLines(deps, declarant, D, [1], branch));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "2" }, branch));
+    unwrap(await approvePostAmendment(deps, approver, D, branch));
+    return pa;
+  };
+
+  beforeEach(() => {
+    decls.items = lines(120);
+    decls.status = "SUBMITTED";
+    dossiers.rows[0]!.status = "SUBMITTED";
+  });
+
+  it("chỉ tờ đã thông quan bắt đầu được AMA; tờ khác ở giai đoạn nào (kể cả đang chờ phản hồi) không chặn; AMA tờ 1 truyền được với khóa cũ", async () => {
+    cleared(1);
+    seedBranch(2);
+    seedBranch(3, { state: "PRE_DECLARED", raw: { stage: "PRE_DECLARED", certificateId: "cert_1" } });
+    seedOutbox({ branch: 2, operation: "IDC", idempotencyKey: `${D}:IDC:n1:b2` });
+    expect(errCode(await startPostAmendment(deps, declarant, D, 2))).toBe("INVALID_STATE");
+    expect(errCode(await startPostAmendment(deps, declarant, D, 3))).toBe("INVALID_STATE");
+    unwrap(await startPostAmendment(deps, declarant, D, 1));
+    expect(stages()).toEqual([[1, "POST_EDITING", "104000000001"], [2, "DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+    expect(uow.data.amendments).toEqual([expect.objectContaining({ branch: 1, seq: 1, header: expect.objectContaining({ TK_ICN: "104000000001" }) })]);
+    await readyToSend(1);
+    // Lô nhiều tờ, tờ khai SUBMITTED, tờ 2 chưa thông quan: guard nội dung (R3 / đã gửi ở lần truyền này) không áp cho AMA.
+    unwrap(await performOperation(deps, declarant, D, "AMA", 1));
+    expect(keysOf("AMA", 1)).toEqual([`${D}:AMA:n1`]);
+    await sendAll();
+    expect(stages()[0]).toEqual([1, "POST_PRE_DECLARED", "104000000001"]);
+    expect(unwrap(await amaView(1)).current).toMatchObject({ status: "PRE_DECLARED", result: { TK_A25: "1" } });
+  });
+
+  it("AMA tờ 2: số tờ khai + thông tin Hải quan của tờ 2, dòng nguồn 51–100 đánh số 1..50, seq riêng từng tờ; field_audit ama:b2:…; phản hồi chỉ đổi bản khai của tờ 2", async () => {
+    cleared(1);
+    cleared(2, { customsInfo: info({ subsection: "02" }) });
+    unwrap(await startPostAmendment(deps, declarant, D, 1));
+    unwrap(await startPostAmendment(deps, declarant, D, 2));
+    const v2 = unwrap(await amaView(2));
+    expect(v2.current).toMatchObject({ branch: 2, seq: 1, status: "DRAFT", header: { TK_ICN: "104000000002", TK_CHB: "02" }, lines: [] });
+    expect(v2.sourceLines).toHaveLength(50);
+    expect(v2.sourceLines[0]).toMatchObject({ lineNo: 1, description: "Vòng bi 51" });
+    expect(v2.sourceLines[49]).toMatchObject({ lineNo: 50, description: "Vòng bi 100" });
+    expect(unwrap(await amaView(1)).current).toMatchObject({ seq: 1, header: { TK_ICN: "104000000001" } });
+    expect(unwrap(await amaView(1)).sourceLines[0]).toMatchObject({ lineNo: 1, description: "Vòng bi 1" });
+
+    expect(errCode(await addPostAmendmentLines(deps, declarant, D, [51], 2))).toBe("NOT_FOUND");
+    const pa = unwrap(await addPostAmendmentLines(deps, declarant, D, [1], 2));
+    expect(pa.lines[0]!.values).toMatchObject({ HAG_RAN: "01", HAG_CMB: "Vòng bi 51" });
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { lineId: pa.lines[0]!.id, key: "HAG_AKB", value: "100" }, 2));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "2" }, 2));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "6" }, 1));
+    expect(audits.map((a) => a.key)).toEqual(["ama:b2:1:1:HAG_AKB", "ama:b2:1:TK_REC", "ama:1:TK_REC"]);
+    expect(unwrap(await amaView(1)).current!.lines).toEqual([]);
+
+    unwrap(await approvePostAmendment(deps, approver, D, 2));
+    expect(unwrap(await amaView(1)).current!.status).toBe("DRAFT");
+    expect(errCode(await performOperation(deps, declarant, D, "AMA", 1))).toBe("INVALID_STATE");
+    unwrap(await performOperation(deps, declarant, D, "AMA", 2));
+    expect(keysOf("AMA", 2)).toEqual([`${D}:AMA:n1:b2`]);
+    await sendAll();
+    expect(unwrap(await amaView(2)).current!.status).toBe("PRE_DECLARED");
+    expect(unwrap(await amaView(1)).current!.status).toBe("DRAFT");
+    expect(stages()).toEqual([[1, "POST_EDITING", "104000000001"], [2, "POST_PRE_DECLARED", "104000000002"]]);
+  });
+
+  it("sửa chỉ tiêu chung ở tờ 1 → commonEdits; nhân bản sang tờ đã thông quan (lập AMA nháp), bỏ qua tờ chưa thông quan / AMA đã duyệt; ghi audit", async () => {
+    cleared(1);
+    cleared(2);
+    seedBranch(3);
+    unwrap(await startPostAmendment(deps, declarant, D, 1));
+    expect(unwrap(await amaView(1)).commonEdits).toEqual([]);
+    const old = unwrap(await amaView(1)).current!.header["TK_REF"] ?? "";
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REF", value: "REF-MOI" }, 1));
+    expect(unwrap(await amaView(1)).commonEdits).toEqual(["TK_REF"]);
+    expect(unwrap(await amaView(2))).toMatchObject({ current: null, commonEdits: [] });
+
+    expect(errCode(await copyPostAmendmentHeader(deps, viewer, D, { fromBranch: 1, keys: ["TK_REF"] }))).toBe("FORBIDDEN");
+    expect(errCode(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_ICN"] }))).toBe("VALIDATION");
+    expect(errCode(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["HAG_AKB"] }))).toBe("VALIDATION");
+    expect(errCode(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 3, keys: ["TK_REF"] }))).toBe("NOT_FOUND");
+    expect(errCode(await copyPostAmendmentHeader(deps, other, D, { fromBranch: 1, keys: ["TK_REF"] }))).toBe("NOT_FOUND");
+    audits.length = 0;
+
+    expect(unwrap(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_REF"] }))).toEqual({ applied: [2], skipped: [{ no: 3, reason: "NOT_CLEARED" }] });
+    const v2 = unwrap(await amaView(2));
+    expect(v2.current).toMatchObject({ branch: 2, seq: 1, status: "DRAFT", header: { TK_REF: "REF-MOI", TK_ICN: "104000000002" } });
+    expect(v2.commonEdits).toEqual(["TK_REF"]);
+    expect(stages()).toEqual([[1, "POST_EDITING", "104000000001"], [2, "POST_EDITING", "104000000002"], [3, "DECLARED", "104000000003"]]);
+    expect(audits).toEqual([expect.objectContaining({ dossierId: D, key: "ama:b2:1:TK_REF", oldValue: old, newValue: "REF-MOI" })]);
+    expect(uow.data.amendments.filter((a) => a.branch === 3)).toEqual([]);
+
+    // Tờ 2 đã duyệt → không đè (bỏ duyệt ngầm); tờ 1 đang nháp nhận bản sửa từ tờ 2 (khóa audit dạng cũ).
+    await readyToSend(2);
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_IMT", value: "0225999" }, 2));
+    unwrap(await approvePostAmendment(deps, approver, D, 2));
+    audits.length = 0;
+    expect(unwrap(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_REF"] }))).toEqual({ applied: [], skipped: [{ no: 2, reason: "OPEN_NOT_DRAFT" }, { no: 3, reason: "NOT_CLEARED" }] });
+    expect(unwrap(await amaView(2)).current!.status).toBe("APPROVED");
+    expect(unwrap(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 2, keys: ["TK_IMT"] }))).toEqual({ applied: [1], skipped: [{ no: 3, reason: "NOT_CLEARED" }] });
+    expect(unwrap(await amaView(1)).current!.header["TK_IMT"]).toBe("0225999");
+    expect(audits.map((a) => a.key)).toEqual(["ama:1:TK_IMT"]);
+  });
 });

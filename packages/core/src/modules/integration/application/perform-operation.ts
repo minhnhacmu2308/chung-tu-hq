@@ -17,7 +17,7 @@ import { coarseState, stageOf } from "../domain/state-machine.js";
 import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { syncDossierClearance } from "./poll-status.js";
-import { createPostAmendment, isPostStage, openPostAmendment } from "./post-amendment.js";
+import { beginPostAmendment, isPostStage, openPostAmendment } from "./post-amendment.js";
 import { contentKey, enqueueBranchPreDeclare, pinOf, pinOfOutbox, recallFirstError } from "./branch-send.js";
 
 export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<OperationResult>> {
@@ -27,7 +27,7 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   if (!snap) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
-  const { result, first, all, amendment } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId, branch), first: branch > 1 ? await r.results.get(ctx.orgId, dossierId, 1) : null, all: await r.outbox.listForDossier(ctx.orgId, dossierId), amendment: await openPostAmendment(r, ctx.orgId, dossierId) }));
+  const { result, first, all, amendment } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId, branch), first: branch > 1 ? await r.results.get(ctx.orgId, dossierId, 1) : null, all: await r.outbox.listForDossier(ctx.orgId, dossierId), amendment: await openPostAmendment(r, ctx.orgId, dossierId, branch) }));
   if (!result) return err(reasonError("INVALID_STATE", "NOT_SUBMITTED_YET"));
   if (op === queryOpFor(dossier.direction) || CUSTOMS_OPERATIONS[op].kind === "query") return queryNow(deps, ctx, dossierId, dossier.direction, result);
   // Giai đoạn, nghiệp vụ đang chờ… theo tờ khai nhánh.
@@ -165,19 +165,19 @@ async function queryNow(deps: CustomsDeps, ctx: Ctx, dossierId: string, directio
   return ok({ sent: false, message: `Trạng thái tờ khai: ${st.status}` });
 }
 
-/** Đã thông quan → lập bản khai bổ sung AMA (giai đoạn POST_EDITING). Tờ khai gốc giữ nguyên – không mở lại. */
-export async function startPostAmendment(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<void>> {
+/**
+ * Đã thông quan → lập bản khai bổ sung AMA (giai đoạn POST_EDITING). Tờ khai gốc giữ nguyên – không mở lại.
+ * Lô nhiều tờ: theo tờ `branch` – chỉ cần tờ đó thông quan (tờ khác ở giai đoạn nào cũng được, spec §6.6).
+ */
+export async function startPostAmendment(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch = 1): Promise<Result<void>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
-  const { result, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
+  const { result, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId, branch), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
   if (!result || stageOf(result) !== "CLEARED") return err(domainError("INVALID_STATE", "Chỉ sửa đổi sau thông quan khi tờ khai đã thông quan"));
-  if (outbox.some((o) => o.status === "PENDING")) return err(domainError("INVALID_STATE", "Đang chờ phản hồi một nghiệp vụ khác"));
-  await deps.uow.asOrg(ctx, async (r) => {
-    await createPostAmendment(deps, r, ctx, dossierId, result);
-    await r.results.upsert({ ...result, state: coarseState("POST_EDITING"), raw: { ...(result.raw ?? {}), stage: "POST_EDITING" }, updatedAt: deps.clock.now() });
-  });
+  if (outbox.some((o) => o.branch === branch && o.status === "PENDING")) return err(domainError("INVALID_STATE", "Đang chờ phản hồi một nghiệp vụ khác"));
+  await deps.uow.asOrg(ctx, (r) => beginPostAmendment(deps, r, ctx, dossierId, result));
   await deps.dossiers.update(ctx.orgId, dossierId, { step: "review" });
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });
   return ok(undefined);

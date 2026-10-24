@@ -5,10 +5,21 @@ import {
   type AmaRequest, type AmaSource, type AmaSourceLine, type CustomsInfo, type FptFieldRow, type PostAmendment,
 } from "@kb/contracts";
 import { Decimal, toDecimalString } from "../../../shared/decimal.js";
+import { branchPayload } from "./branches.js";
 import type { DeclarationPayload } from "./declaration-to-fpt.js";
 
 const fieldsOf = (p: DeclarationPayload) => Object.entries(p.fields).map(([code, f]) => ({ code, value: f.value }));
 const isNum = (v: string | null | undefined): v is string => /^-?\d+(\.\d+)?$/.test((v ?? "").trim());
+
+/**
+ * Tờ khai gốc của AMA tờ `branch`: lô một tờ = nguyên tờ khai (như trước); lô nhiều tờ = dòng hàng của tờ, đánh số lại 1..50
+ * (như thông điệp FPT của tờ và số dòng Hải quan trả về trong customsInfo của tờ). Ô đầu VN_AMA không dùng TK_FIC nên không cần số tờ 1.
+ */
+export function amaBranchPayload(p: DeclarationPayload, branch: number): DeclarationPayload {
+  const sheet = branchPayload(p, branch, null);
+  if (sheet.range.of === 1 && branch === 1) return p;
+  return { ...sheet.payload, items: sheet.payload.items.map((it, i) => ({ ...it, lineNo: i + 1 })) };
+}
 
 /** Đầu bản khai: ô tờ khai gốc theo tên trường VNACCS + thông tin Hải quan trả về. */
 export function amaSource(p: DeclarationPayload, customs: CustomsInfo | null, declarationNo: string, exchangeRate?: string): AmaSource {

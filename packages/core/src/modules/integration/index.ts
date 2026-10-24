@@ -4,7 +4,7 @@ export { testIntegration } from "./application/test-integration.js";
 export type { CertificateReader, CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsRepos, CustomsUow, DeclarationReader, DeclarationSnapshot, DossierBrief, GatewayError, GatewaySendResult, GatewayStatus, MessageRow, OutboxRow, PostAmendmentRow, ResultRow, ValidationReader as CustomsValidationReader } from "./application/customs-ports.js";
 export { submitDeclaration, outboxKey } from "./application/submit-declaration.js";
 export { performOperation, startPostAmendment } from "./application/perform-operation.js";
-export { addPostAmendmentLines, approvePostAmendment, getPostAmendmentView, removePostAmendmentLine, updatePostAmendmentField } from "./application/post-amendment.js";
+export { addPostAmendmentLines, approvePostAmendment, copyPostAmendmentHeader, getPostAmendmentView, removePostAmendmentLine, updatePostAmendmentField } from "./application/post-amendment.js";
 export { MAX_ATTEMPTS as CUSTOMS_MAX_ATTEMPTS, processOutbox, type ProcessOutboxInput } from "./application/process-outbox.js";
 export { pollStatus, syncDossierClearance, type PollStatusInput } from "./application/poll-status.js";
 export { resendOperation } from "./application/resend-operation.js";

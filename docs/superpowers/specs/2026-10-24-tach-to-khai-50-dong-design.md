@@ -9,11 +9,11 @@ Mỗi tờ khai VNACCS nhận tối đa 50 dòng hàng (TT39 PL II). Hiện app 
 Thành công khi:
 - Lô 120 dòng → app tự dựng 3 tờ khai (50/50/20), người duyệt xem từng tờ, duyệt một lần, bấm truyền một lần.
 - Chỉ tiêu chung giống hệt nhau trên mọi tờ; chỉ phần dòng hàng và ô 1.2/2.2 khác nhau.
-- Mỗi tờ có số tờ khai, phân luồng, thông quan, nghiệp vụ riêng; hồ sơ thông quan khi đủ mọi tờ.
+- Mỗi tờ có vòng đời riêng: số tờ khai, phân luồng, **thông quan**, nghiệp vụ và **khai bổ sung sau thông quan (AMA)** riêng. Hồ sơ hiện trạng thái gộp ("Thông quan 2/3").
 - Tổng trị giá tính thuế và thuế dự tính các tờ cộng lại khớp đúng cả lô.
 - Lô ≤ 50 dòng: hành vi và thông điệp FPT không đổi.
 
-Ngoài phạm vi: khai bổ sung sau thông quan (AMA) cho hồ sơ nhiều tờ (khóa kèm lý do, làm đợt sau); chia dòng theo tiêu chí (biểu thuế, C/O…); chuyển dòng giữa các tờ bằng tay; tách vì lý do khác ngoài số dòng (TN-TX, container > giới hạn 2.60).
+Ngoài phạm vi: chia dòng theo tiêu chí (biểu thuế, C/O…); chuyển dòng giữa các tờ bằng tay; tách vì lý do khác ngoài số dòng (TN-TX, container > giới hạn 2.60).
 
 ## 2. Quyết định đã chốt
 
@@ -25,6 +25,8 @@ Ngoài phạm vi: khai bổ sung sau thông quan (AMA) cho hồ sơ nhiều tờ
 | Q4 | **Mọi chỉ tiêu ngoài thông tin dòng hàng giống hệt nhau trên các tờ** (kể cả 1.44 tổng trị giá hóa đơn, cước, bảo hiểm, khoản điều chỉnh – khai đủ số tiền cả lô). Ngoại lệ bắt buộc: ô 1.2/2.2. |
 | Q5 | **Phương án A**: một bản ghi tờ khai gốc (chỉ tiêu chung + toàn bộ dòng hàng); các tờ là **nhánh suy ra** khi hiển thị và khi dựng thông điệp. Chỉ trạng thái truyền lưu theo nhánh. |
 | Q6 | Khi `of > 1`: điền 1.49 ô 5 (KTG_VT) = 1.51 trên mọi tờ để VNACCS phân bổ khoản điều chỉnh đúng tỷ lệ; lô 1 tờ giữ như hiện nay (để trống). |
+| Q7 | **Thông quan theo từng tờ.** Trạng thái hồ sơ là gộp, suy ra từ các tờ: `CLEARED` khi mọi tờ thông quan; trước đó giữ `SUBMITTED`, hiển thị "Thông quan k/N". Không thêm giá trị trạng thái hồ sơ mới. |
+| Q8 | **AMA theo từng tờ**, bật ngay khi tờ đó thông quan. Sửa chỉ tiêu chung trên AMA của một tờ → app cảnh báo các tờ khác còn giá trị cũ và có nút "Tạo AMA cùng nội dung cho các tờ đã thông quan khác"; không bắt buộc đồng bộ. |
 
 Phương án bị loại: B (N bản ghi `declarations`, chép chỉ tiêu chung rồi đồng bộ khi sửa – mọi chỗ sửa/dựng lại/duyệt phải nhân N, dễ lệch giữa các tờ); C (bảng cha "bộ tờ khai" + bảng con – đập lại `declarations` và gần như mọi use case khai báo, lợi ích không tương xứng).
 
@@ -54,6 +56,7 @@ Migration:
 - `customs_results`: thêm `branch integer not null default 1`; bỏ unique `customs_results_dossier_uq (dossier_id)`, thay bằng unique `(dossier_id, branch)`.
 - `customs_outbox`: thêm `branch integer not null default 1`.
 - `customs_messages`: thêm `branch integer not null default 1` (append-only giữ nguyên policy).
+- `post_amendments`: thêm `branch integer not null default 1`; unique `(dossier_id, branch, seq)` (xem 6.6).
 - Khóa idempotency outbox: nhánh 1 giữ dạng cũ (`<dossier>:<op>:…`) để dữ liệu đang chạy không bị gửi trùng; nhánh ≥ 2 thêm `:b<no>`.
 - Dữ liệu cũ tự thành nhánh 1, không cần chuyển đổi. Mọi truy vấn vẫn có `orgId` + RLS.
 
@@ -81,19 +84,33 @@ Mọi nghiệp vụ (`performOperation`, gửi lại, tra cứu IID/IEX, HYS, CO
 ### 6.4 Sửa sau khi đã truyền (trước thông quan)
 Chỉ tiêu chung dùng chung → mở lại là **mở cả bộ** → sửa → duyệt lại cả bộ → gửi lại nội dung cho từng nhánh đã có số theo giai đoạn của nhánh (IDA01 / IDE…), nối tiếp như 6.2. Nhánh chưa gửi lần nào gửi IDA lần đầu.
 
-### 6.5 Trạng thái hồ sơ
-- `SUBMITTED` khi nhánh 1 đã tạo outbox.
-- `CLEARED` chỉ khi **mọi** nhánh `CLEARED`.
-- `rowState` / màn Khai báo Hải quan: mỗi nhánh một dòng.
+### 6.5 Trạng thái (Q7)
+Mỗi nhánh có vòng đời riêng đến thông quan và sau thông quan; nhánh thông quan trước làm tiếp nghiệp vụ sau thông quan ngay, không chờ nhánh khác.
 
-### 6.6 AMA
-Khi `of > 1`: "Sửa đổi sau thông quan" bị khóa kèm lý do (reason code mới, đủ 3 ngôn ngữ). Lô 1 tờ giữ AMA như hiện tại.
+Trạng thái hồ sơ gộp, tính từ các nhánh (hàm thuần `dossierCustomsSummary(branches)`), không thêm giá trị vào `dossiers_status_chk`:
+
+| Tình huống | `dossiers.status` | Hiển thị |
+|---|---|---|
+| Chưa nhánh nào thông quan | `SUBMITTED` | "Đã truyền" |
+| Một số nhánh thông quan | `SUBMITTED` | "Thông quan k/N" |
+| Mọi nhánh thông quan | `CLEARED` | "Đã thông quan" |
+| Có nhánh bị từ chối / lỗi gửi | giữ nguyên | kèm cảnh báo "Tờ k: bị từ chối / lỗi gửi" |
+
+Lý do giữ `CLEARED` cho "đủ mọi tờ": `CLEARED` đang là điều kiện "lô đã xong" ở danh sách, thống kê, khóa sửa hồ sơ. Lô 1 tờ không đổi. `SUBMITTED` khi nhánh 1 đã tạo outbox. Tra cứu / hỏi trạng thái làm nhánh k `CLEARED` → tính lại trạng thái gộp.
+
+### 6.6 AMA theo nhánh (Q8)
+- `post_amendments` thêm `branch integer not null default 1`; unique `(dossier_id, branch, seq)` thay cho `(dossier_id, seq)`; `seq` đếm riêng từng nhánh.
+- `startPostAmendment(dossierId, branch)` khi nhánh đó `CLEARED`; bản AMA tham chiếu số tờ khai và `customsInfo` của nhánh, chỉ gồm dòng hàng của nhánh (đánh số 1..50 theo tờ). Sửa, thêm dòng, duyệt, truyền AMA đều theo nhánh. Giai đoạn `POST_*` thuộc kết quả của nhánh.
+- `field_audit`: khóa có nhánh `ama:b<no>:<seq>:…` (nhánh 1 giữ dạng cũ `ama:<seq>:…`).
+- Sửa chỉ tiêu chung (phần header VN_AMA, không phải dòng hàng) trên AMA của nhánh k → cảnh báo "Chỉ tiêu chung – tờ … vẫn giữ giá trị cũ" và nút "Tạo AMA cùng nội dung cho các tờ đã thông quan khác": lập (hoặc cập nhật bản nháp đang mở) AMA cho từng nhánh `CLEARED` khác với cùng giá trị header đã sửa; mỗi bản vẫn duyệt và truyền riêng. Nhánh chưa thông quan không lập được AMA – liệt kê trong cảnh báo.
 
 ## 7. Contracts và API
 
 - `DeclarationView` thêm `branches: { no, of, lineFrom, lineTo, invoiceValue, customsValueVnd, estImportDutyVnd, estVatVnd }[]` (lô 1 tờ → 1 phần tử). Tiền là chuỗi Decimal.
 - `SubmissionView` thêm `branches: BranchSubmission[]` (no, of, stage, declarationNo, channel, pipeline, nextOp, queryOp, result, customsInfo, rejection, messages). Các trường cấp hồ sơ cũ giữ, lấy từ nhánh 1, trong lúc chuyển giao diện.
-- Input nghiệp vụ / gửi lại / tra cứu thêm `branch` tùy chọn (Zod, số nguyên ≥ 1, mặc định 1).
+- Input nghiệp vụ / gửi lại / tra cứu / AMA (bắt đầu, sửa ô, thêm dòng, duyệt) thêm `branch` tùy chọn (Zod, số nguyên ≥ 1, mặc định 1).
+- `PostAmendmentView` theo nhánh; thêm thao tác "nhân bản sửa chỉ tiêu chung sang các tờ khác" (input: nhánh nguồn, danh sách khóa header).
+- Tóm tắt hồ sơ (danh sách hồ sơ, đầu hồ sơ) thêm `customs: { cleared, of, problems }` để hiện "Thông quan k/N".
 - `CustomsRow` thêm `branch`, `of`.
 - `CustomsInfo.branch` điền từ phản hồi (đã có chỗ, `TK_BNO`/`TK_DNO`).
 
@@ -103,14 +120,16 @@ Chỉ `@kb/ui` + token; đủ vi/en/zh (`defineMessages`). Thiếu component →
 
 - **Bước Duyệt (bản in tờ khai):** khi `of > 1`, thanh chọn tờ "Tờ 1/3 · dòng 1–50" ở đầu. Chỉ tiêu chung giống nhau ở mọi tờ, ghi chú "Áp dụng cho cả 3 tờ khai" cạnh khối chỉ tiêu chung; sửa ở tờ nào cũng là sửa chung. Dòng hàng, tổng trị giá/thuế, ô 1.2 hiển thị theo tờ đang chọn. Bản in theo tờ đang chọn. Một nút duyệt cả bộ.
 - **Bước Truyền:** một nút "Ký số & truyền" lần đầu; danh sách N thẻ nhánh, mỗi thẻ: số tờ khai, giai đoạn, phân luồng, nút nghiệp vụ, nhật ký thông điệp của nhánh. Nhánh chờ nhánh trước hiện trạng thái "Chờ tờ k".
-- **Màn Khai báo Hải quan:** mỗi nhánh một dòng, cột ghi "2/3".
+- **Màn Khai báo Hải quan:** mỗi nhánh một dòng, cột ghi "2/3", trạng thái và phân luồng riêng.
+- **Danh sách hồ sơ / đầu hồ sơ:** nhãn gộp "Thông quan k/N", cảnh báo nếu có tờ bị từ chối.
+- **AMA (bước 7):** nút "Sửa đổi sau thông quan" trên thẻ từng tờ; màn AMA ghi rõ "Tờ k/N – số tờ khai …"; cảnh báo chỉ tiêu chung + nút nhân bản sang các tờ khác.
 - Mock web (`apps/web/src/mocks`) và `apps/fpt-mock` nhận ô 1.2, cấp số tờ khai riêng cho từng tờ.
 
 ## 9. Kiểm thử (`docs/TESTING.md`)
 
 - Thuần: `splitBranches` / `branchRanges` với 0, 1, 50, 51, 100, 101, 120 dòng; ô 1.2 tờ 1 / tờ sau / chưa có số; 1.51 tự tính và giữ sửa tay; KTG_VT; tổng trị giá và thuế các tờ = cả lô; lô 1 tờ cho thông điệp FPT giống hệt ảnh chụp trước.
-- Use case: chuỗi IDA nối tiếp 3 tờ; nhánh 2 lỗi → dừng → gửi lại → chạy tiếp nhánh 3; job chạy lại không trùng outbox; guard chặn khi một nhánh thiếu ô bắt buộc; BLOCKER đổi số tờ sau khi có số; nghiệp vụ theo nhánh; CLEARED chỉ khi đủ nhánh; AMA khóa khi nhiều tờ; dữ liệu cũ (không cột branch) vẫn chạy như nhánh 1.
-- Repo / migration: test tích hợp Postgres cho unique `(dossier_id, branch)`, RLS theo `orgId`.
+- Use case: chuỗi IDA nối tiếp 3 tờ; nhánh 2 lỗi → dừng → gửi lại → chạy tiếp nhánh 3; job chạy lại không trùng outbox; guard chặn khi một nhánh thiếu ô bắt buộc; BLOCKER đổi số tờ sau khi có số; nghiệp vụ theo nhánh; nhánh 1 thông quan → AMA nhánh 1 làm được khi nhánh 2 chưa thông quan; hồ sơ `CLEARED` chỉ khi đủ nhánh, "k/N" đúng; AMA theo nhánh (seq riêng, chỉ dòng của nhánh, audit có nhánh); nhân bản sửa chỉ tiêu chung chỉ sang nhánh đã thông quan; dữ liệu cũ (không cột branch) vẫn chạy như nhánh 1.
+- Repo / migration: test tích hợp Postgres cho unique `(dossier_id, branch)` ở `customs_results` và `(dossier_id, branch, seq)` ở `post_amendments`, RLS theo `orgId`.
 - Component: test + axe cho thanh chọn tờ và thẻ nhánh; `i18n-catalogs.test.ts`.
-- Trình duyệt thật với hồ sơ 120 dòng: sáng/tối, desktop/mobile – bước Duyệt, bước Truyền, màn Khai báo Hải quan.
+- Trình duyệt thật với hồ sơ 120 dòng: sáng/tối, desktop/mobile – bước Duyệt, bước Truyền, AMA một tờ, màn Khai báo Hải quan, danh sách hồ sơ "Thông quan k/N".
 - `pnpm typecheck && pnpm lint && pnpm test` xanh. Không đổi trích xuất → không cần `pnpm eval`.

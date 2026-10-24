@@ -3,19 +3,28 @@ import {
   Alert, Badge, Button, Card, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, Grid, PageHeader, Skeleton, Stack, StatCard, Switch, Tabs, TabsContent, TabsList, TabsTrigger, toast, SkeletonStats, fill, pickMessages, useMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FilePlus2, RefreshCw, Sparkles, Tags, Target } from "lucide-react";
+import { FilePlus2, Plus, RefreshCw, Sparkles, Tags, Target } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { getSession, sessionKeys } from "@/api/session";
 import { listSkills, setSkillEnabled, skillKeys } from "@/api/skills";
 import { formatNumber, formatRelative } from "@/lib/format";
 import { DOC_KIND_LABELS, type DocKind, type Skill, type SkillKind } from "@/mocks/types";
+import { CreateSkillDialog } from "./create-skill-dialog";
 import { AccuracyBadge, formatPercent, SKILL_KIND_LABELS } from "./skill-display";
-import { KIND_HINT, LIST_MESSAGES } from "./skills.messages";
+import { CREATE_SKILL_MESSAGES, KIND_HINT, LIST_MESSAGES } from "./skills.messages";
 
 type ListT = (typeof LIST_MESSAGES)["vi"];
 
 const KINDS: SkillKind[] = ["DOCUMENT", "SUPPLIER"];
+
+/** Tạo skill: OWNER/ADMIN (backend kiểm lại quyền). */
+function useCanManage() {
+  const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
+  const role = session.data?.user.role;
+  return role === "OWNER" || role === "ADMIN";
+}
 
 function EnabledSwitch({ skill }: { skill: Skill }) {
   const t = useMessages(LIST_MESSAGES);
@@ -93,8 +102,11 @@ function Kpis({ skills }: { skills: Skill[] }) {
 
 function SkillListInner() {
   const t = useMessages(LIST_MESSAGES);
+  const tc = useMessages(CREATE_SKILL_MESSAGES);
   const kindLabels = useMessages(SKILL_KIND_LABELS);
   const kindHints = useMessages(KIND_HINT);
+  const canManage = useCanManage();
+  const [creating, setCreating] = useState(false);
   const locale = useUiLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -111,7 +123,17 @@ function SkillListInner() {
       <PageHeader
         title={t.title}
         description={t.description}
+        {...(canManage
+          ? {
+              actions: (
+                <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)} disabled={!data}>
+                  {tc.open}
+                </Button>
+              ),
+            }
+          : {})}
       />
+      {canManage && data && <CreateSkillDialog skills={data} defaultKind={kind} open={creating} onOpenChange={setCreating} />}
       {isError ? (
         <Alert
           tone="danger"

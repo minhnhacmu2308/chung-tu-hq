@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InvoiceExtractionSchema } from "../extraction/index.js";
-import { customFieldsOf, resolveSkillFieldKey, withCustomFields } from "./index.js";
+import { CreateSkillInputSchema } from "../api/skill.js";
+import { catalogSkillFields, customFieldsOf, nextSkillCode, resolveSkillFieldKey, withCustomFields } from "./index.js";
 
 const field = (key: string, type: "string" | "decimal" | "date" | "code" | "party" | "items" = "string", extract = true) => ({ key, label: key, type, required: false, aliases: [`${key} label`], extract, display: true });
 
@@ -31,5 +32,31 @@ describe("customFieldsOf + withCustomFields", () => {
     expect(shape["custom"]!.safeParse({ lc_no: "LC-1", lc_amount: "x" }).success).toBe(false);
     expect(shape["custom"]!.safeParse({ lc_no: null, lc_amount: null }).success).toBe(true);
     expect(withCustomFields(InvoiceExtractionSchema, [])).toBe(InvoiceExtractionSchema);
+  });
+});
+
+describe("tạo skill mới", () => {
+  it("catalogSkillFields: trường chuẩn + danh sách lặp, đổi kiểu danh mục sang kiểu trường skill, đều là trường chuẩn", () => {
+    const fields = catalogSkillFields("INVOICE");
+    expect(fields[0]).toEqual({ key: "invoiceNo", label: "Số hóa đơn", type: "code", required: false, aliases: ["Inv. No", "Invoice No", "Invoice Number", "PI No", "Proforma Invoice No"], extract: true, display: true });
+    expect(fields.find((f) => f.key === "totalAmount")?.type).toBe("decimal");
+    expect(fields.find((f) => f.key === "paymentTerms")?.type).toBe("string");
+    expect(fields.at(-1)).toMatchObject({ key: "items", type: "items" });
+    expect(fields.every((f) => resolveSkillFieldKey("INVOICE", f.key).standard)).toBe(true);
+    expect(catalogSkillFields("OTHER").map((f) => f.key)).toEqual(["title", "summary"]);
+  });
+  it("nextSkillCode: số nhỏ nhất chưa dùng, từ 2", () => {
+    expect(nextSkillCode("INVOICE", ["SK-INV-GEN"])).toBe("SK-INV-2");
+    expect(nextSkillCode("INVOICE", ["SK-INV-2", "SK-INV-4"])).toBe("SK-INV-3");
+    expect(nextSkillCode("CERT_OF_ORIGIN", [])).toBe("SK-CO-2");
+  });
+  it("CreateSkillInputSchema: chuẩn hóa mặc định; nhà cung cấp theo loại; mã SK-…; parse lại bản đã chuẩn hóa ra chính nó", () => {
+    const out = CreateSkillInputSchema.parse({ name: "  Invoice mới ", kind: "DOCUMENT", docKind: "INVOICE", code: "sk-inv-x" });
+    expect(out).toEqual({ name: "Invoice mới", kind: "DOCUMENT", docKind: "INVOICE", supplier: null, language: "Đa ngôn ngữ", code: "SK-INV-X", copyFromSkillId: null });
+    expect(CreateSkillInputSchema.parse(out)).toEqual(out);
+    expect(CreateSkillInputSchema.safeParse({ name: "Inv", kind: "SUPPLIER", docKind: "INVOICE" }).success).toBe(false);
+    expect(CreateSkillInputSchema.safeParse({ name: "Inv", kind: "DOCUMENT", docKind: "INVOICE", supplier: "HANSOL" }).success).toBe(false);
+    expect(CreateSkillInputSchema.safeParse({ name: "Inv", kind: "DOCUMENT", docKind: "INVOICE", code: "INV-1" }).success).toBe(false);
+    expect(CreateSkillInputSchema.safeParse({ name: "Inv", kind: "DOCUMENT", docKind: "INVOICE", code: "SK--X" }).success).toBe(false);
   });
 });

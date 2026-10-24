@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
+import { RecordingOrgAudit } from "../../../../shared/audit.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
 import { addSkillField, removeSkillField, updateSkillField } from "../edit-fields.js";
 import { cloneTemplatesForOrg } from "../clone-templates.js";
+import { createSkill } from "../create-skill.js";
 import { evaluateSkill, getEvaluation, runEvaluation } from "../evaluate.js";
 import { getSkill, listSkills, setSkillEnabled } from "../query-skills.js";
 import { createSkillResolver } from "../resolve-skill.js";
@@ -167,5 +169,67 @@ describe("chọn skill cho trích xuất", () => {
     unwrap(await setSkillEnabled(deps, admin, hansol.id, false));
     expect((await resolver.resolve(ORG, "INVOICE", "HANSOL")).skillVersionId).toBe(gen.skillVersionId);
     expect(await resolver.resolve("org_b", "INVOICE", null)).toEqual({ skillVersionId: null, fieldHints: [], examples: [], customFields: [] });
+  });
+});
+
+describe("tạo skill mới", () => {
+  const declarant: Ctx = { orgId: asOrgId(ORG), userId: asUserId("usr_3"), role: "DECLARANT" };
+  it("ADMIN tạo từ trường chuẩn của danh mục: version 1, mã tự sinh, ghi nhật ký SKILL_CREATED", async () => {
+    const audit = new RecordingOrgAudit();
+    deps.audit = audit;
+    const s = unwrap(await createSkill(deps, admin, { name: "Packing List – Kho Bắc Ninh", kind: "DOCUMENT", docKind: "PACKING_LIST" }));
+    expect(s).toMatchObject({ code: "SK-PL-2", kind: "DOCUMENT", docKind: "PACKING_LIST", language: "Đa ngôn ngữ", version: 1, labeledSamples: 0, enabled: true });
+    expect(s.accuracy).toBeUndefined();
+    expect(s.supplier).toBeUndefined();
+    expect(s.fields.map((f) => f.key)).toEqual(["invoiceNo", "date", "packages", "packageUnit", "grossWeightKg", "netWeightKg", "volumeCbm", "marks", "items"]);
+    expect(s.fields.find((f) => f.key === "grossWeightKg")).toMatchObject({ type: "decimal", required: false, extract: true, display: true, aliases: expect.arrayContaining(["Gross Weight"]) });
+    expect(s.fields.find((f) => f.key === "items")?.type).toBe("items");
+    expect(unwrap(await getSkill(deps, admin, s.id))).toEqual(s);
+    const row = uow.data.skills.find((x) => x.id === s.id)!;
+    expect(row).toMatchObject({ orgId: ORG, isTemplate: false, templateId: null, currentVersion: 1 });
+    expect(uow.data.versions.find((v) => v.skillId === s.id)).toMatchObject({ version: 1, createdBy: "usr_1", promptNotes: null });
+    expect(audit.entries).toEqual([expect.objectContaining({ action: "SKILL_CREATED", targetType: "skill", targetId: s.id, targetLabel: "Packing List – Kho Bắc Ninh" })]);
+  });
+  it("mã tự sinh tăng dần, bỏ qua mã đã dùng; mã nhập tay được chuẩn hóa in hoa", async () => {
+    const mk = (name: string, code?: string) => createSkill(deps, admin, { name, kind: "DOCUMENT", docKind: "INVOICE", ...(code ? { code } : {}) });
+    expect(unwrap(await mk("Invoice A")).code).toBe("SK-INV-2");
+    expect(unwrap(await mk("Invoice B", "sk-inv-4")).code).toBe("SK-INV-4");
+    expect(unwrap(await mk("Invoice C")).code).toBe("SK-INV-3");
+    expect(unwrap(await mk("Invoice D")).code).toBe("SK-INV-5");
+  });
+  it("sao chép trường + ghi chú từ skill của org; từ skill mẫu thì lưu templateId", async () => {
+    const src = unwrap(await listSkills(deps, admin)).find((s) => s.code === "SK-INV-GEN")!;
+    uow.data.versions.find((v) => v.skillId === src.id)!.promptNotes = "Số HĐ nằm góc phải";
+    const copy = unwrap(await createSkill(deps, admin, { name: "Invoice – KAIDA", kind: "SUPPLIER", docKind: "INVOICE", supplier: "KAIDA CO., LTD.", copyFromSkillId: src.id }));
+    expect(copy).toMatchObject({ kind: "SUPPLIER", supplier: "KAIDA CO., LTD.", version: 1 });
+    expect(copy.fields).toEqual(src.fields);
+    expect(uow.data.versions.find((v) => v.skillId === copy.id)?.promptNotes).toBe("Số HĐ nằm góc phải");
+    expect(uow.data.skills.find((x) => x.id === copy.id)?.templateId).toBeNull();
+
+    const fromTpl = unwrap(await createSkill(deps, admin, { name: "Invoice – HANSOL 2", kind: "SUPPLIER", docKind: "INVOICE", supplier: "HANSOL", copyFromSkillId: "sk_tpl_hansol" }));
+    expect(fromTpl.fields.map((f) => f.key)).toEqual(["invoice_no", "model_no"]);
+    expect(uow.data.skills.find((x) => x.id === fromTpl.id)?.templateId).toBe("sk_tpl_hansol");
+
+    expect(errCode(await createSkill(deps, admin, { name: "X skill", kind: "DOCUMENT", docKind: "INVOICE", copyFromSkillId: "sk_nope" }))).toBe("NOT_FOUND");
+    expect(errCode(await createSkill(deps, admin, { name: "X skill", kind: "DOCUMENT", docKind: "PACKING_LIST", copyFromSkillId: src.id }))).toBe("VALIDATION");
+    // Skill của org khác không dùng làm nguồn được.
+    const foreign = unwrap(await createSkill(deps, other, { name: "Skill org B", kind: "DOCUMENT", docKind: "INVOICE" }));
+    expect(errCode(await createSkill(deps, admin, { name: "X skill", kind: "DOCUMENT", docKind: "INVOICE", copyFromSkillId: foreign.id }))).toBe("NOT_FOUND");
+  });
+  it("trùng mã → DUPLICATE (kể cả mã của skill sao chép từ mẫu)", async () => {
+    expect(errCode(await createSkill(deps, admin, { name: "Invoice chung 2", kind: "DOCUMENT", docKind: "INVOICE", code: "SK-INV-GEN" }))).toBe("DUPLICATE");
+    unwrap(await createSkill(deps, admin, { name: "Invoice X", kind: "DOCUMENT", docKind: "INVOICE", code: "SK-INV-X" }));
+    expect(errCode(await createSkill(deps, admin, { name: "Invoice Y", kind: "DOCUMENT", docKind: "INVOICE", code: "SK-INV-X" }))).toBe("DUPLICATE");
+  });
+  it("VIEWER/DECLARANT → FORBIDDEN; dữ liệu sai → VALIDATION", async () => {
+    const input = { name: "Invoice mới", kind: "DOCUMENT" as const, docKind: "INVOICE" as const };
+    expect(errCode(await createSkill(deps, viewer, input))).toBe("FORBIDDEN");
+    expect(errCode(await createSkill(deps, declarant, input))).toBe("FORBIDDEN");
+    expect(errCode(await createSkill(deps, admin, { ...input, kind: "SUPPLIER" }))).toBe("VALIDATION");
+    expect(errCode(await createSkill(deps, admin, { ...input, kind: "SUPPLIER", supplier: " " }))).toBe("VALIDATION");
+    expect(errCode(await createSkill(deps, admin, { ...input, supplier: "HANSOL" }))).toBe("VALIDATION");
+    expect(errCode(await createSkill(deps, admin, { ...input, name: "A" }))).toBe("VALIDATION");
+    expect(errCode(await createSkill(deps, admin, { ...input, code: "INV-1" }))).toBe("VALIDATION");
+    expect(unwrap(await listSkills(deps, admin))).toHaveLength(2);
   });
 });

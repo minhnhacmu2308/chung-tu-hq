@@ -1,11 +1,12 @@
 // Cấu hình Skill AI – gọi backend thật. Cùng chữ ký với src/mocks/api/skills.ts.
-import { EvaluationResultSchema, LabeledSampleSchema, SampleLabelSchema, SkillSchema, type EvaluationResult, type SkillField, type SkillFieldPatch, type SkillKind } from "@kb/contracts";
+import { EvaluationResultSchema, type CreateSkillInput, LabeledSampleSchema, SampleLabelSchema, SkillSchema, type EvaluationResult, type SkillField, type SkillFieldPatch, type SkillKind } from "@kb/contracts";
 import { z } from "zod";
 import { ApiError } from "@/lib/api-error";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/http";
 
 export const listSkills = (kind?: SkillKind) => apiGet(`skills${kind ? `?kind=${kind}` : ""}`, z.array(SkillSchema));
 export const getSkillById = (id: string) => apiGet(`skills/${id}`, SkillSchema);
+export const createSkill = (input: CreateSkillInput) => apiPost("skills", input, SkillSchema);
 export const setSkillEnabled = (id: string, enabled: boolean) => apiPatch(`skills/${id}/enabled`, { enabled }, SkillSchema);
 export const updateSkillField = (skillId: string, key: string, patch: SkillFieldPatch) => apiPatch(`skills/${skillId}/fields/${encodeURIComponent(key)}`, patch, SkillSchema);
 export const addSkillField = (skillId: string, field: SkillField) => apiPost(`skills/${skillId}/fields`, field, SkillSchema);

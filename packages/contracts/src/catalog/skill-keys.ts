@@ -5,6 +5,7 @@ import type { DocKind } from "../common.js";
 import type { SkillField } from "../dto/skill.js";
 import { nDate, nNum, nStr } from "../extraction/common.js";
 import { DOC_CATALOG } from "./documents.js";
+import type { DocFieldType } from "./types.js";
 
 /** Tên cũ của skill mẫu không suy ra được bằng snake→camel. */
 const LEGACY: Record<string, string> = {
@@ -40,4 +41,34 @@ export function withCustomFields(schema: ZodType, defs: CustomFieldDef[]): ZodTy
   const describe = (d: CustomFieldDef) => (d.aliases.length ? `${d.label} – nhãn thường gặp: ${d.aliases.join(" | ")}` : d.label);
   const shape = Object.fromEntries(defs.map((d) => [d.key, d.type === "number" ? nNum(describe(d)) : d.type === "date" ? nDate(describe(d)) : nStr(describe(d))]));
   return schema.extend({ custom: z.object(shape).describe("Trường bổ sung riêng của doanh nghiệp") });
+}
+
+// ---- Tạo skill mới cho doanh nghiệp ----
+
+const FIELD_TYPE_FROM_CATALOG: Record<DocFieldType, SkillField["type"]> = { text: "string", number: "decimal", date: "date", code: "code", party: "party", boolean: "string" };
+
+/**
+ * Trường mặc định của skill mới = trường chuẩn trong danh mục của loại chứng từ (+ danh sách lặp nếu có).
+ * Không bắt buộc trường nào (bắt buộc thì không tắt Đọc được) – doanh nghiệp tự chỉnh sau khi tạo.
+ */
+export function catalogSkillFields(kind: DocKind): SkillField[] {
+  const c = DOC_CATALOG[kind];
+  const head = c.fields.map((d): SkillField => ({ key: d.key, label: d.label, type: FIELD_TYPE_FROM_CATALOG[d.type], required: false, aliases: [...d.aliases], extract: true, display: true }));
+  const items: SkillField[] = c.items ? [{ key: c.items.key, label: c.items.label, type: "items", required: false, aliases: [], extract: true, display: true }] : [];
+  return [...head, ...items];
+}
+
+/** Tiền tố mã skill theo loại chứng từ (khớp mã skill mẫu: SK-INV-GEN, SK-PL-GEN, SK-CO-E…). */
+export const SKILL_CODE_PREFIX: Record<DocKind, string> = {
+  INVOICE: "INV", PACKING_LIST: "PL", BILL_OF_LADING: "BL", AIR_WAYBILL: "AWB", CERT_OF_ORIGIN: "CO",
+  SALES_CONTRACT: "SC", ARRIVAL_NOTICE: "AN", FREIGHT_INVOICE: "FRT", OTHER: "DOC",
+};
+
+/** Mã tự sinh khi người dùng không nhập: SK-INV-2, SK-INV-3… – số nhỏ nhất chưa dùng trong org. */
+export function nextSkillCode(kind: DocKind, existingCodes: Iterable<string>): string {
+  const used = new Set(existingCodes);
+  for (let n = 2; ; n++) {
+    const code = `SK-${SKILL_CODE_PREFIX[kind]}-${n}`;
+    if (!used.has(code)) return code;
+  }
 }

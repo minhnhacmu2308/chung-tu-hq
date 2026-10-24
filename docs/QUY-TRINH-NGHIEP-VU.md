@@ -321,6 +321,7 @@ Menu **Tài khoản & tích hợp**:
 - Quyền: Người khai / Quản trị / Chủ sở hữu thêm, sửa, xóa (cả xóa nhiều), import; Người duyệt / Người xem chỉ xem.
 
 **Cấu hình Skill AI**: mỗi Skill là cách đọc một loại chứng từ (DOCUMENT) hoặc một nhà cung cấp (SUPPLIER).
+- Doanh nghiệp mới nhận bản sao bộ Skill mẫu; Quản trị / Chủ sở hữu tự **thêm skill** (nút "Thêm skill", `POST /api/skills`): bắt đầu từ trường chuẩn của loại chứng từ hoặc sao chép skill có sẵn cùng loại; mã bỏ trống thì tự sinh (`SK-INV-2`…), trùng mã → 409. Ghi nhật ký `SKILL_CREATED`.
 - Trường chuẩn bật/tắt (không xóa được), tối đa 20 trường bổ sung do doanh nghiệp định nghĩa (AI đọc thật).
 - Mỗi lần sửa trường tạo phiên bản mới.
 - Chứng từ mẫu: AI đọc nháp nhãn → người xác nhận.

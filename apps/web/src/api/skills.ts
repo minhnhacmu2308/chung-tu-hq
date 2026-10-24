@@ -5,10 +5,11 @@ import * as http from "./http/skills";
 
 export const skillKeys = mock.skillKeys;
 export const MIN_SAMPLES_FOR_ACCURACY = mock.MIN_SAMPLES_FOR_ACCURACY;
-export type { EvaluationResult, LabeledSample, SkillFieldPatch } from "@kb/contracts";
+export type { CreateSkillInput, EvaluationResult, LabeledSample, SkillFieldPatch } from "@kb/contracts";
 
 export const listSkills = pick(mock.listSkills, http.listSkills);
 export const getSkillById = pick(mock.getSkillById, http.getSkillById);
+export const createSkill = pick(mock.createSkill, http.createSkill);
 export const setSkillEnabled = pick(mock.setSkillEnabled, http.setSkillEnabled);
 export const updateSkillField = pick(mock.updateSkillField, http.updateSkillField);
 export const addSkillField = pick(mock.addSkillField, http.addSkillField);

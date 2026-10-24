@@ -1,5 +1,5 @@
 // Cấu hình Skill AI (mock). Có backend → thay thân hàm, giữ chữ ký.
-import { resolveSkillFieldKey } from "@kb/contracts";
+import { catalogSkillFields, CreateSkillInputSchema, nextSkillCode, resolveSkillFieldKey, type CreateSkillInput } from "@kb/contracts";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { Skill, SkillField, SkillFieldPatch, SkillKind } from "@/mocks/types";
 
@@ -25,6 +25,32 @@ const getSkill = (skills: Skill[], id: string) => {
 export const listSkills = (kind?: SkillKind) => query((db) => db.skills.filter((s) => !kind || s.kind === kind));
 
 export const getSkillById = (id: string) => query((db) => getSkill(db.skills, id));
+
+/** Tạo skill mới (cùng luật với core createSkill): trùng mã → DUPLICATE, bỏ trống mã → tự sinh SK-INV-2…; mock không có skill mẫu riêng nên chỉ sao chép từ skill trong danh sách. */
+export const createSkill = (input: CreateSkillInput) =>
+  mutate((db) => {
+    const role = db.members.find((m) => m.id === db.currentUserId)?.role;
+    if (role !== "OWNER" && role !== "ADMIN") throw new ApiError("FORBIDDEN", "Cần vai trò ADMIN");
+    const parsed = CreateSkillInputSchema.safeParse(input);
+    if (!parsed.success) throw new ApiError("VALIDATION", parsed.error.issues[0]?.message ?? "Dữ liệu skill không hợp lệ");
+    const cmd = parsed.data;
+    const codes = db.skills.map((s) => s.code);
+    if (cmd.code && codes.includes(cmd.code)) throw new ApiError("DUPLICATE", `Mã skill ${cmd.code} đã tồn tại`);
+    let fields: SkillField[] = catalogSkillFields(cmd.docKind);
+    if (cmd.copyFromSkillId) {
+      const src = db.skills.find((s) => s.id === cmd.copyFromSkillId);
+      if (!src) throw new ApiError("NOT_FOUND", "Không tìm thấy skill nguồn để sao chép");
+      if (src.docKind !== cmd.docKind) throw new ApiError("VALIDATION", "Skill nguồn khác loại chứng từ");
+      fields = structuredClone(src.fields);
+    }
+    const skill: Skill = {
+      id: newId("sk"), code: cmd.code ?? nextSkillCode(cmd.docKind, codes), name: cmd.name, kind: cmd.kind, docKind: cmd.docKind,
+      ...(cmd.supplier ? { supplier: cmd.supplier } : {}),
+      language: cmd.language, version: 1, labeledSamples: 0, updatedAt: nowIso(), enabled: true, fields,
+    };
+    db.skills.push(skill);
+    return skill;
+  });
 
 export const setSkillEnabled = (id: string, enabled: boolean) =>
   mutate((db) => {

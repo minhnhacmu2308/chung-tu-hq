@@ -1611,6 +1611,26 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     expect(keysOf("IDA01", 1)).toEqual([`${D}:IDA01:v2`, `${D}:IDA01:v2:n2`]);
   });
 
+  it("thứ tự truyền lại: mọi tờ có số đã gọi về, duyệt lại → bấm IDA tờ 3 chưa có số bị chặn (tờ 1, 2 chưa gửi lại nội dung); không đánh dấu SUBMITTED; truyền lại từ tờ 1 vẫn chạy", async () => {
+    deps.gateway = branchGateway((bno, n) => bno === 3 && n === 1, { queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    unwrap(await performOperation(deps, declarant, D, "IDB", 1));
+    unwrap(await performOperation(deps, declarant, D, "IDB", 2));
+    await sendAll();
+    expect(uow.data.results.map((r) => r.raw?.stage)).toEqual(["RECALLED", "RECALLED", "NOT_SENT"]);
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    dossiers.rows[0]!.status = "APPROVED";
+    const before = uow.data.outbox.length;
+    expect(await performOperation(deps, declarant, D, "IDA", 3)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", message: expect.stringContaining("truyền lại từ tờ 1") } });
+    expect(uow.data.outbox.length).toBe(before);
+    expect(decls.status).toBe("APPROVED");
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
   it("R5: tờ 1 bị từ chối trước khi có số → mở lại → duyệt lại cùng phiên bản → truyền lại: khóa mới :n2 (không kẹt ALREADY_SUBMITTED), nối các tờ", async () => {
     deps.gateway = branchGateway((bno, n) => bno === 1 && n === 1);
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));

@@ -97,6 +97,9 @@ async function preDeclareBranch(deps: CustomsDeps, ctx: Ctx, dossierId: string, 
   if (!first?.declarationNo) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ 1 chưa có số tờ khai – khai tạm tờ 1 trước`));
   const prev = await deps.uow.asOrg(ctx, (r) => r.results.get(ctx.orgId, dossierId, branch - 1));
   if (!prev || stageOf(prev) === "NOT_SENT" || !prev.declarationNo) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ ${branch - 1} chưa khai tạm – khai tạm lần lượt từng tờ`));
+  // Tờ 1 / tờ trước đang gọi về sửa: nội dung mới chưa gửi lại → không khai tạm tờ này trước (TK_FIC, thứ tự §6.4); truyền lại bắt đầu từ tờ 1.
+  const recalled = [first, prev].find((r) => stageOf(r) === "RECALLED" || stageOf(r) === "AMEND_RECALLED");
+  if (recalled) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ ${recalled.branch} chưa khai tạm lại sau khi gọi về sửa – truyền lại từ tờ 1`));
   if (snap.status !== "APPROVED" && snap.status !== "SUBMITTED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
   // (Đã gửi ở lần truyền này → performOperation đã chặn, dùng Gửi lại.)
   const res = await enqueueBranchPreDeclare(deps, ctx, dossierId, branch, snap.status === "APPROVED" ? { by: "user" } : { by: "chain", version: snap.version, pin: pinOf(snap) });

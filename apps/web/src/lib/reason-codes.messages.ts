@@ -107,7 +107,7 @@ export const REASON_MESSAGES = defineMessages({
     REQUIRED_FIELDS_MISSING_SUBMIT: "{n} required fields are empty: {fields} – reopen the declaration to fill them in, then approve again",
     DECLARATION_NOT_TRANSMITTABLE: "The declaration cannot be filed yet: {blockers}",
     DECLARATION_SPEC_INVALID: "The declaration does not match the Customs transmission spec: {issues}",
-    SHEETS_RECALL_FIRST: "Sheet {sheets}: recall for amendment (IDB/IDD) first",
+    SHEETS_RECALL_FIRST: "Sheet(s) {sheets}: recall for amendment (IDB/IDD) first",
     AMENDMENT_NOT_APPROVED: "The amendment has not been approved",
     AMENDMENT_NOT_TRANSMITTABLE: "The amendment cannot be sent yet: {blockers}",
     CERTIFICATE_REQUIRED: "Choose a digital certificate to sign with",

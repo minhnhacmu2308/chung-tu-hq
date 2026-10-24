@@ -13,7 +13,9 @@ export const invoiceTotal = (p: DeclarationPayload): string => p.items.reduce((s
 export function branchPayload(p: DeclarationPayload, no: number, firstDeclarationNo: string | null): { payload: DeclarationPayload; range: BranchRange; blockers: string[] } {
   const sorted = [...p.items].sort((a, b) => a.lineNo - b.lineNo);
   const ranges = branchRanges(sorted.map((i) => i.lineNo));
-  const range = ranges.find((r) => r.no === no) ?? ranges[0]!;
+  const range = ranges.find((r) => r.no === no);
+  // `no` ngoài 1..of (0, NaN, vượt số tờ): không lùi về tờ 1 (tránh gửi "tờ 1" hai lần) – chặn, không có dữ liệu dùng được.
+  if (!range) return { payload: { ...p, items: [] }, range: { ...ranges[0]!, no, index: [0, 0] }, blockers: [`Tờ ${no}: không có trong lô (${ranges.length} tờ)`] };
   if (range.of === 1) return { payload: p, range, blockers: [] };
   const blockers = range.no > 1 && !firstDeclarationNo ? [`Tờ ${range.no}/${range.of}: chưa có số tờ khai đầu tiên (tờ 1)`] : [];
   const tp = p.fields.TK_TP;

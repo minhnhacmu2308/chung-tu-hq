@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Decimal } from "../../../../shared/decimal.js";
 import { buildFptRequest, type DeclarationPayload } from "../declaration-to-fpt.js";
 import { branchPayload, invoiceTotal } from "../branches.js";
 
@@ -70,7 +71,15 @@ describe("branchPayload", () => {
   });
 
   it("tổng amount các nhánh = invoiceTotal", () => {
-    const sum = [1, 2, 3].map((n) => invoiceTotal(branchPayload(p, n, "104000000001").payload)).reduce((a, b) => (Number(a) + Number(b)).toString());
-    expect(Number(sum)).toBe(Number(invoiceTotal(p)));
+    const sum = [1, 2, 3].map((n) => invoiceTotal(branchPayload(p, n, "104000000001").payload)).reduce((a, b) => new Decimal(a).plus(b), new Decimal(0)).toFixed();
+    expect(sum).toBe(invoiceTotal(p));
+  });
+});
+
+describe("branchPayload – số tờ không hợp lệ", () => {
+  it.each([[120, 0], [120, 4], [120, Number.NaN], [40, 2]])("lô %i dòng, no=%s → chặn, không có dòng", (n, no) => {
+    const b = branchPayload(mk(n), no, "104000000001");
+    expect(b.blockers).toEqual([`Tờ ${no}: không có trong lô (${n === 120 ? 3 : 1} tờ)`]);
+    expect(b.payload.items).toEqual([]);
   });
 });

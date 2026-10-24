@@ -57,7 +57,7 @@ describe("AppearancePanel", () => {
   it("trường doanh nghiệp đã khóa: không đổi được, có ghi chú", async () => {
     const spy = vi.fn();
     render(<Harness locked={["brand"]} onSpy={spy} />);
-    expect(screen.getByRole("group", { name: /Màu thương hiệu.*đã khóa/ })).toBeDisabled();
+    expect(screen.getByRole("group", { name: /Màu chính.*đã khóa/ })).toBeDisabled();
     await userEvent.click(screen.getByRole("radio", { name: "Xanh dương" }));
     expect(spy).not.toHaveBeenCalled();
   });

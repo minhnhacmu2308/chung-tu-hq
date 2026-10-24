@@ -18,6 +18,7 @@ export {
   DEFAULT_APPEARANCE,
   ORG_FIELDS,
   resolveAppearance,
+  ACCENT_PRESETS,
   appearanceAttributes,
   appearanceCss,
   type ResolvedAppearance,

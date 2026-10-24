@@ -1,10 +1,11 @@
 "use client";
 // Cấu hình giao diện của người dùng: lưu localStorage (prototype). Có backend → lưu theo user + org (resolveAppearance).
+import { CursorEffect } from "@kb/ui";
 import { Appearance as AppearanceSchema, appearanceAttributes, appearanceCss, DEFAULT_APPEARANCE, type Appearance } from "@kb/ui/theme";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 const KEY = "kb-appearance";
-const ATTRS = ["data-theme", "data-density", "data-font-size", "data-font", "data-gray", "data-backdrop", "data-radius", "data-menu-position", "data-cursor-effect", "data-page-description"];
+const ATTRS = ["data-theme", "data-density", "data-font-size", "data-font", "data-gray", "data-backdrop", "data-radius", "data-menu-position", "data-menu-style", "data-menu-pattern", "data-cursor-effect", "data-page-description"];
 
 type Ctx = { appearance: Appearance; setAppearance: (a: Appearance) => void; adjustments: ReturnType<typeof appearanceCss>["adjustments"] };
 const AppearanceContext = createContext<Ctx | null>(null);
@@ -50,7 +51,12 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  return <AppearanceContext.Provider value={{ appearance, setAppearance, adjustments }}>{children}</AppearanceContext.Provider>;
+  return (
+    <AppearanceContext.Provider value={{ appearance, setAppearance, adjustments }}>
+      {children}
+      {appearance.cursorEffect && <CursorEffect />}
+    </AppearanceContext.Provider>
+  );
 }
 
 export function useAppearance() {

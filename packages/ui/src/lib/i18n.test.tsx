@@ -61,7 +61,7 @@ describe("Đa ngôn ngữ (EN)", () => {
     en(<AppearancePanel value={DEFAULT_APPEARANCE} onChange={() => {}} locked={["brand"]} labels={{ reset: "Restore" }} />);
     expect(screen.getByRole("group", { name: "Density" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Blue" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: /Brand color.*locked by organization/ })).toBeDisabled();
+    expect(screen.getByRole("group", { name: /Primary color.*locked by organization/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
     await userEvent.click(screen.getByText("Dark"));
   });

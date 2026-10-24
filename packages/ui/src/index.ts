@@ -32,6 +32,7 @@ export {
   type SegmentOption, type SegmentedControlProps, type Swatch, type ColorSwatchPickerProps,
 } from "./components/choice.js";
 export { AppearancePanel, type AppearancePanelProps } from "./components/appearance-panel.js";
+export { CursorEffect } from "./components/cursor-effect.js";
 export {
   Sidebar, SidebarFooterButton, SidebarUser, SidebarMobileTrigger, BrandDot, useSidebar,
   type NavItem, type SidebarPosition, type SidebarProps, type SidebarFooterButtonProps, type SidebarUserProps,

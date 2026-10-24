@@ -169,6 +169,7 @@ export function Sidebar({
         {!mobile && (
           <button
             type="button"
+            data-slot="sidebar-collapse"
             onClick={() => onCollapsedChange(!c)}
             aria-label={c ? l.expand : l.collapse}
             aria-expanded={!c}
@@ -237,7 +238,7 @@ export function Sidebar({
           className={cn("fixed inset-y-0 z-50 w-72 max-w-[85vw] shadow-lg focus-visible:outline-none md:hidden", right ? "right-0" : "left-0")}
         >
           <DialogPrimitive.Title className="sr-only">{l.nav}</DialogPrimitive.Title>
-          <aside data-mobile="true" className={cn(asideBase, "w-full")}>
+          <aside data-slot="app-menu" data-mobile="true" className={cn(asideBase, "w-full")}>
             {renderBody(false, true)}
           </aside>
         </DialogPrimitive.Content>
@@ -249,7 +250,7 @@ export function Sidebar({
     const topItem = "inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
     return (
       <>
-        <header data-position="top" className={cn("sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:px-4", className)}>
+        <header data-slot="app-menu" data-position="top" className={cn("sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:px-4", className)}>
           {hasMobile && <SidebarMobileTrigger onClick={() => onMobileOpenChange?.(true)} expanded={mobileOpen} label={l.openMenu} />}
           <div className="flex shrink-0 items-center gap-2.5 pr-2">
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-fg">{brand.logo}</span>
@@ -333,6 +334,7 @@ export function Sidebar({
   return (
     <>
       <aside
+        data-slot="app-menu"
         data-collapsed={collapsed}
         data-position={position}
         className={cn(

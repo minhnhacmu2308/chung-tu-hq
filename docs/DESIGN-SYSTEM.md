@@ -39,13 +39,15 @@ Bảng màu mặc định của Tailwind (`blue-500`, `gray-100`…) **đã bị
 |---|---|---|
 | Ngôn ngữ Tiếng Việt / English / 中文 (`vi`/`en`/`zh`) | `lang` + `<UiLocaleProvider>` (xem §4b) | Người dùng |
 | Giao diện Sáng / Tối / Theo hệ thống | `data-theme` + `light-dark()` | Người dùng |
-| Hiệu ứng con trỏ | `data-cursor-effect` (app tự xử lý, tôn trọng `prefers-reduced-motion`) | Người dùng |
+| Hiệu ứng con trỏ | `data-cursor-effect` + component `<CursorEffect />` (app gắn khi bật; chỉ chuột thật, tắt khi `prefers-reduced-motion`) | Người dùng |
 | Mô tả trang | `data-page-description` → ẩn `[data-slot=page-description]` | Người dùng |
-| Nền trang Phẳng / Aurora | `data-backdrop` | Doanh nghiệp (có thể khóa) |
+| Nền trang Phẳng / Aurora / Chuyển màu / Loang màu | `data-backdrop` – pha màu chính với màu phụ | Doanh nghiệp (có thể khóa) |
+| Nền menu Mặc định / Pha nhạt / Pha đậm / Hình nền | `data-menu-style` + `data-menu-pattern` (Sóng / Chấm / Lưới / ảnh tải lên) → CSS trên `[data-slot=app-menu]` của `Sidebar`. Pha đậm đổi token chữ trong menu sang trắng; hình nền có lớp phủ bề mặt (họa tiết 70%, ảnh tải lên 80%) để chữ đủ tương phản | Người dùng |
 | Vị trí menu Trái / Trên / Phải | `data-menu-position` → `--kb-shell-top`; app truyền `position` cho `Sidebar`. Ô chọn có hình mô phỏng bố cục | Người dùng |
 | Mật độ Gọn / Chuẩn / Thoáng | `data-density` → `--spacing` | Người dùng |
 | Dải xám Slate / Gray | `data-gray` → `--kb-gray-*` | Doanh nghiệp (có thể khóa) |
-| Màu thương hiệu | `brandThemeCss()` – **CSS động duy nhất** | Doanh nghiệp (có thể khóa) |
+| Màu chính (thương hiệu) | `brandThemeCss()` trong `appearanceCss()` | Doanh nghiệp (có thể khóa) |
+| Màu phụ | `--kb-color-accent` trong `appearanceCss()`; chỉ để pha nền, không dùng cho chữ | Doanh nghiệp (có thể khóa) |
 | Bo góc Vuông / Mặc định / Bo tròn | `data-radius` | Doanh nghiệp (có thể khóa) |
 | Cỡ chữ Nhỏ / Vừa / Lớn | `data-font-size` | Người dùng |
 | Font chữ | `data-font` (app tải webfont qua `next/font`) | Doanh nghiệp (có thể khóa) |

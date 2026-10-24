@@ -4,7 +4,7 @@ import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../src/styles/index.css";
 import {
-  Alert, AppearancePanel, AssistantLauncher, RobotAvatar, AssistantPanel, AssistantWelcome, Badge, Button, Card, CardContent,
+  Alert, AppearancePanel, AssistantLauncher, CursorEffect, RobotAvatar, AssistantPanel, AssistantWelcome, Badge, Button, Card, CardContent,
   CardDescription, CardFooter, CardHeader, CardTitle, ChatComposer, ChatMessage, Checkbox, Dialog, DialogContent, RadioGroup,
   DialogFooter, DialogTrigger, EmptyState, Field, FieldFrame, Grid, Input, PageHeader, Select, Skeleton, Spinner, Stack,
   StatusBadge, SuggestionChips, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, type AssistantMode,
@@ -68,7 +68,7 @@ function readCollapsed() {
 }
 import { Appearance as AppearanceSchema, appearanceAttributes, appearanceCss, DEFAULT_APPEARANCE, type Appearance } from "../src/theme/index.js";
 
-const ATTRS = ["data-theme", "data-density", "data-font-size", "data-font", "data-gray", "data-backdrop", "data-radius", "data-cursor-effect", "data-page-description"];
+const ATTRS = ["data-theme", "data-density", "data-font-size", "data-font", "data-gray", "data-backdrop", "data-radius", "data-menu-position", "data-menu-style", "data-menu-pattern", "data-cursor-effect", "data-page-description"];
 
 /** Áp dụng cấu hình lên <html> – app thật làm việc này ở layout gốc (server-side để không nháy). */
 function useApplyAppearance(a: Appearance) {
@@ -96,7 +96,7 @@ function Demo() {
     for (const [k, def] of Object.entries(DEFAULT_APPEARANCE)) {
       const v = q.get(k);
       if (v === null) continue;
-      fromUrl[k] = typeof def === "boolean" ? v === "1" || v === "true" : k === "brand" ? `#${v.replace(/^#/, "")}` : v;
+      fromUrl[k] = typeof def === "boolean" ? v === "1" || v === "true" : k === "brand" || k === "accent" ? `#${v.replace(/^#/, "")}` : v;
     }
     const parsed = AppearanceSchema.safeParse({ ...DEFAULT_APPEARANCE, ...fromUrl });
     return parsed.success ? parsed.data : DEFAULT_APPEARANCE;
@@ -110,7 +110,9 @@ function Demo() {
     try { localStorage.setItem("kb-sidebar-collapsed", c ? "1" : "0"); } catch { /* bỏ qua */ }
   };
   const [activeId, setActiveId] = useState("dossier-import");
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  // ?appearance=general|layout|color → mở sẵn bảng cấu hình ở nhóm đó (dùng cho test chụp ảnh).
+  const initialTab = new URLSearchParams(location.search).get("appearance");
+  const [appearanceOpen, setAppearanceOpen] = useState(() => initialTab !== null);
   const [mobileNav, setMobileNav] = useState(false);
   const [machineUse, setMachineUse] = useState<string | null>("cnc");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
@@ -123,6 +125,7 @@ function Demo() {
   return (
     <UiLocaleProvider locale={appearance.locale}>
     <Toaster />
+    {appearance.cursorEffect && <CursorEffect />}
     <div className={appearance.menuPosition === "top" ? "flex min-h-dvh flex-col" : "flex min-h-dvh"}>
       <Sidebar
         position={appearance.menuPosition}
@@ -153,7 +156,7 @@ function Demo() {
       />
       <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="panel">
         <DialogContent title="Cấu hình giao diện" size="sm">
-          <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} />
+          <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} defaultTab={initialTab === "layout" || initialTab === "color" ? initialTab : "general"} />
         </DialogContent>
       </Dialog>
       <main className="@container min-w-0 flex-1 p-6">

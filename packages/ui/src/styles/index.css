@@ -59,6 +59,7 @@
   --color-primary-subtle: var(--kb-color-primary-subtle);
   --color-primary-subtle-fg: var(--kb-color-primary-subtle-fg);
   --color-focus: var(--kb-color-focus);
+  --color-accent: var(--kb-color-accent);
 
   --color-success: var(--kb-color-success);
   --color-success-fg: var(--kb-color-success-fg);

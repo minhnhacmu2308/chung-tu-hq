@@ -83,7 +83,7 @@ export const EnvSchema = z
      * Hộp thư chứng từ (kết nối Gmail / Outlook): `fake` = hộp thư giả lập (dev/demo, không gọi Google/Microsoft);
      * `live` = OAuth thật – nhà cung cấp nào có đủ client id + secret thì nút kết nối mới bật.
      * Redirect URI phải khai báo ở Google Cloud Console (OAuth client "Web application") và Azure App registrations (Web):
-     * `${APP_URL}/api/mailbox/oauth/callback`.
+     * `${APP_URL}/api/mailbox/oauth/callback`. Hướng dẫn từng bước: `docs/MAILBOX-SETUP.md`.
      */
     MAILBOX_PROVIDER: z.enum(["fake", "live"]).default("fake"),
     /**

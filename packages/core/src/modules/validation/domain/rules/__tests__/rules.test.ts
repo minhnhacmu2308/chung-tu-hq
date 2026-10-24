@@ -109,6 +109,14 @@ describe("R-INCOTERM-FREIGHT (BLOCKER)", () => {
   });
   it("PASS: CIF không cần cước riêng", () => expect(run("R-INCOTERM-FREIGHT", (s) => { s.invoice.incoterm.value = "CIF"; s.charges.freight.value = null; }).result).toBe("PASS"));
   it("SKIPPED khi không có incoterm", () => expect(run("R-INCOTERM-FREIGHT", (s) => (s.invoice.incoterm.value = null)).result).toBe("SKIPPED"));
+  it("FOB không có cước trên chứng từ: người khai nhập số → PASS; chỉ ghi lý do → WARN (không chặn)", () => {
+    const fob = hansol((s) => { s.invoice.incoterm.value = "FOB"; s.charges.freight.value = null; });
+    const rule = ruleByCode("R-INCOTERM-FREIGHT")!;
+    const manual = rule.run(fob, { org: ORG, charges: { freight: { amount: "900", currency: "USD", reason: "FORWARDER_NOTICE", note: "" }, insurance: null, adjustments: null } });
+    expect(manual).toMatchObject({ result: "PASS", detail: expect.stringMatching(/người khai nhập/) });
+    const reason = rule.run(fob, { org: ORG, charges: { freight: { amount: null, currency: null, reason: "INVOICE_LATER", note: "" }, insurance: null, adjustments: null } });
+    expect(reason).toMatchObject({ result: "WARN", detail: expect.stringMatching(/Hóa đơn cước bổ sung sau/) });
+  });
 });
 
 describe("R-ORIGIN-CO (WARNING)", () => {

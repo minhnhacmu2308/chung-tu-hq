@@ -13,7 +13,7 @@ import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
 export type DeclarationSnapshot = {
   declarationId: string; version: number; status: DeclarationStatus; kind: "IDA" | "EDA"; direction: "NK" | "XK"; currency: string;
   fields: Record<string, { value: string }>; items: Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
-  adjustments: { label: string; amount: string; currency: string }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
+  adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
 };
 
 export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: string, dossierId: string): Promise<DeclarationSnapshot | null> {
@@ -29,7 +29,7 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
     declarationId: decl.id, version: decl.version, status: decl.status, kind: decl.kind, direction: dossier.direction, currency: dossier.currency,
     fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value }])),
     items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, policyNote: i.policyNote })),
-    adjustments: decl.valueAdjustments.map((a) => ({ label: a.label, amount: a.amount, currency: a.currency })),
+    adjustments: decl.valueAdjustments.map((a) => ({ label: a.label, amount: a.amount, currency: a.currency, kind: a.kind, ...(a.code ? { code: a.code } : {}), ...(a.allocate === false ? { allocate: false } : {}) })),
     containers: shipment?.transport.containers.map((c) => c.no) ?? [],
     unconfirmedHs: unconfirmedCount(items),
     estimatedTaxVnd: String(BigInt(taxes.importDutyVnd) + BigInt(taxes.vatVnd)),

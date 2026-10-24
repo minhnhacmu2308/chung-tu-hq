@@ -1,5 +1,5 @@
 // Dựng tờ khai nháp từ shipment + hồ sơ + tài khoản + dòng hàng (thuần): ánh xạ chỉ tiêu, khoản điều chỉnh, trị giá, thuế.
-import type { Shipment } from "@kb/contracts";
+import { EMPTY_VALUE_CHARGES, type Shipment, type ValueCharges } from "@kb/contracts";
 import type { DossierInfo, OrgInfo, StoredField } from "./types.js";
 import { planAdjustmentsFor } from "./adjustments.js";
 import { lengthIssue } from "./field-length.js";
@@ -16,6 +16,8 @@ export type BuildInput = {
   /** Mặc định khai báo (theo chiều NK/XK) và ghi đè của doanh nghiệp. */
   profile?: Record<string, string>;
   overrides?: Record<string, FieldOverride>;
+  /** Chi phí người khai nhập (bước OCR & kiểm tra); không có = chỉ theo chứng từ. */
+  charges?: ValueCharges;
 };
 
 export { fieldDef, lengthIssue } from "./field-length.js";
@@ -26,7 +28,8 @@ export { mappingsFor } from "./mapping/registry.js";
 
 export function buildDeclaration(input: BuildInput): BuiltDeclaration {
   const kind = input.dossier.direction === "NK" ? "IDA" : "EDA";
-  const plan = planAdjustmentsFor(kind, input.shipment);
+  const charges = input.charges ?? EMPTY_VALUE_CHARGES;
+  const plan = planAdjustmentsFor(kind, input.shipment, charges);
   const currency = input.shipment.invoice.currency.value ?? input.dossier.currency;
   const valuation = allocateCustomsValue({ items: input.items.map((i) => ({ id: i.id, amount: i.amount })), adjustments: plan.adjustments, currency, rates: input.exchange.rates });
   const taxes = computeTaxes(valuation.perItem.map((p) => {
@@ -35,7 +38,7 @@ export function buildDeclaration(input: BuildInput): BuiltDeclaration {
     return kind === "IDA" ? { id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: it.importDutyRate, vatRate: it.vatRate } : { id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: null, vatRate: null };
   }));
   const lines = input.items.flatMap((it) => (it.lineNo === undefined ? [] : [{ lineNo: it.lineNo, hsConfirmed: it.hsConfirmed ?? null }]));
-  const ctx: MappingInput = { shipment: input.shipment, dossier: input.dossier, org: input.org, now: input.now, adjustments: valuation.adjustments, valuation, exchange: input.exchange, profile: input.profile ?? {}, overrides: input.overrides ?? {}, lines };
+  const ctx: MappingInput = { shipment: input.shipment, dossier: input.dossier, org: input.org, now: input.now, adjustments: valuation.adjustments, valuation, exchange: input.exchange, profile: input.profile ?? {}, overrides: input.overrides ?? {}, lines, charges };
   const fields: Record<string, StoredField> = {};
   const hidden: string[] = [];
   for (const m of mappingsFor(kind)) {

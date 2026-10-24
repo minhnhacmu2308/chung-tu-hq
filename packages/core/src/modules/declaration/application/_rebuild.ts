@@ -1,5 +1,5 @@
 // Dựng (lại) tờ khai nháp từ dữ liệu hiện tại. Dùng bởi agent (BUILD_DECLARATION) và sau khi xác nhận HS / bỏ xác nhận.
-import { inapplicableExtraCodes, type Shipment } from "@kb/contracts";
+import { EMPTY_VALUE_CHARGES, inapplicableExtraCodes, type Shipment, type ValueCharges } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -24,16 +24,19 @@ export async function exchangeFor(r: DeclarationRepos, currencies: string[], dat
   return { date, rates, missing };
 }
 
-/** Các tiền tệ một lô hàng cần tỷ giá: tiền tệ hóa đơn + tiền tệ của từng khoản điều chỉnh. */
-export function currenciesOf(shipment: Shipment, dossier: DossierInfo): string[] {
+/** Các tiền tệ một lô hàng cần tỷ giá: tiền tệ hóa đơn + tiền tệ của từng khoản điều chỉnh (kể cả khoản người khai nhập). */
+export function currenciesOf(shipment: Shipment, dossier: DossierInfo, charges: ValueCharges = EMPTY_VALUE_CHARGES): string[] {
   const invoiceCurrency = shipment.invoice.currency.value ?? dossier.currency;
-  return [invoiceCurrency, ...planAdjustmentsFor(dossier.direction === "NK" ? "IDA" : "EDA", shipment).adjustments.map((a) => a.currency)];
+  return [invoiceCurrency, ...planAdjustmentsFor(dossier.direction === "NK" ? "IDA" : "EDA", shipment, charges).adjustments.map((a) => a.currency)];
 }
 
-/** `cfg` = Mặc định khai báo + ghi đè của doanh nghiệp (profileFor). */
-export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier: DossierInfo, org: OrgInfo, items: LineItemRow[], exchange: ExchangeInfo, cfg: { profile: Record<string, string>; overrides: Record<string, FieldOverride> } = { profile: {}, overrides: {} }): BuiltDeclaration {
+/** Chi phí người khai nhập ở bước OCR & kiểm tra; chưa nhập → chỉ theo chứng từ. */
+export const chargesFor = async (r: DeclarationRepos, orgId: string, dossierId: string): Promise<ValueCharges> => (await r.valueCharges.get(orgId, dossierId))?.data ?? EMPTY_VALUE_CHARGES;
+
+/** `cfg` = Mặc định khai báo + ghi đè của doanh nghiệp (profileFor); `charges` = chi phí người khai nhập (chargesFor). */
+export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier: DossierInfo, org: OrgInfo, items: LineItemRow[], exchange: ExchangeInfo, cfg: { profile: Record<string, string>; overrides: Record<string, FieldOverride> } = { profile: {}, overrides: {} }, charges: ValueCharges = EMPTY_VALUE_CHARGES): BuiltDeclaration {
   const lines = items.map((i) => ({ id: i.id, lineNo: i.lineNo, amount: i.amount, importDutyRate: i.importDutyRate, vatRate: i.vatRate, hsConfirmed: i.hsConfirmed }));
-  return buildDeclaration({ shipment, dossier, org, items: lines, now: deps.clock.now(), exchange, ...cfg });
+  return buildDeclaration({ shipment, dossier, org, items: lines, now: deps.clock.now(), exchange, ...cfg, charges });
 }
 
 /**
@@ -76,8 +79,9 @@ export async function rebuildDraft(deps: DeclarationDeps, ctx: RebuildCtx, dossi
     const current = await r.declarations.latest(ctx.orgId, dossierId);
     if (!current || current.status !== "DRAFT") return ok(current);
     const items = await r.lineItems.list(ctx.orgId, dossierId);
-    const exchange = await exchangeFor(r, currenciesOf(shipment, dossier), vnDate(now));
-    const built = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, ctx.orgId, dossier.direction));
+    const charges = await chargesFor(r, ctx.orgId, dossierId);
+    const exchange = await exchangeFor(r, currenciesOf(shipment, dossier, charges), vnDate(now));
+    const built = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, ctx.orgId, dossier.direction), charges);
     const patch = {
       fields: mergeUserEdits(built.fields, current.fields, built.hidden, built.kind), updatedAt: now, exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date,
       customsValueVnd: built.valuation.customsValueVnd, valueAdjustments: built.adjustments, estImportDutyVnd: built.taxes.importDutyVnd, estVatVnd: built.taxes.vatVnd,

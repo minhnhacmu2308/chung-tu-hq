@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { appFieldMeta, declarationEditMode, declarationFormValues, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, isExtraFieldKey, pendingFormEdits, splitAddressLines } from "./index.js";
+import { allocatedAdjustmentNos, NO_INSURANCE_VALUE } from "../dto/value-charges.js";
+import { itemFormValues, appFieldMeta, declarationEditMode, declarationFormValues, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, isExtraFieldKey, pendingFormEdits, splitAddressLines } from "./index.js";
 
 const f = (code: string, value: string) => ({ code, value });
 const FIELDS = [f("MA_LH", "A11"), f("PTVC", "1"), f("CQHQ", "02B1"), f("NNK_MST", "0101234567"), f("NNK_TEN", "CONG TY A"), f("NXK_TEN", "SAMSUNG"), f("SO_HD", "INV-1"), f("SO_VD", "MAWB1"), f("CANG_DO", "VNHPH – CANG HAI PHONG"), f("GHI_CHU", "")];
@@ -130,5 +131,21 @@ describe("appFieldMeta – chỉ tiêu app chưa có trên tờ khai", () => {
   it("lấy nhãn, số, nhóm theo ô trên form", () => {
     expect(appFieldMeta("IDA", "NNK_DT")).toMatchObject({ no: "1.16", section: "PARTIES" });
     expect(appFieldMeta("IDA", "NOPE")).toBeNull();
+  });
+});
+
+describe("chi phí trị giá (1.47–1.49) → ô KTG và 1.88 dòng hàng", () => {
+  it("cước / bảo hiểm → mã phân loại A + mã tiền + số tiền; không mua bảo hiểm → D; khoản điều chỉnh → từng dòng + Phân bổ phí", () => {
+    const v = declarationFormValues("IDA", [f("PHI_VC", "1150 USD"), f("PHI_BH", NO_INSURANCE_VALUE), f("KHOAN_DC", "A AD 100 USD; G SB 20.5 USD KPB")]);
+    expect(v).toMatchObject({ KTG_FR1: "A", KTG_FR2: "USD", KTG_FR3: "1150", KTG_IN1: "D", KTG_VR1: "A", KTG_VI1: "AD", KTG_VP1: "100", APP_PB1: "1", KTG_VR2: "G", KTG_VI2: "SB", KTG_VP2: "20.5" });
+    expect(v["APP_PB2"]).toBeUndefined();
+    expect(v["KTG_IN3"]).toBeUndefined();
+  });
+  it("1.88 mỗi dòng = số thứ tự các khoản được phân bổ; không có khoản → trống", () => {
+    const items = [{ id: "li1", description: "X", quantity: "1", unit: "PCE", unitPrice: "1", amount: "1", origin: "CN" }, { id: "li2", description: "Y", quantity: "1", unit: "PCE", unitPrice: "1", amount: "1", origin: "CN" }];
+    const rows = itemFormValues("IDA", items, { currency: "USD", fields: [f("KHOAN_DC", "A AD 100 USD; G SB 20 USD KPB; E AD 5 USD")] });
+    expect(rows.map((r) => [r["HAG_VN1"], r["HAG_VN2"], r["HAG_VN3"]])).toEqual([["1", "3", undefined], ["1", "3", undefined]]);
+    expect(allocatedAdjustmentNos("")).toEqual([]);
+    expect(itemFormValues("IDA", items, { currency: "USD", fields: [] })[0]?.["HAG_VN1"]).toBeUndefined();
   });
 });

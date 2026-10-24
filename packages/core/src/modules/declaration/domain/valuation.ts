@@ -2,7 +2,7 @@
 import type { ValueSource } from "@kb/contracts";
 import { Decimal, dec } from "../../../shared/decimal.js";
 
-export type Adjustment = { label: string; amount: string; currency: string; source: ValueSource; kind: "ADD" | "SUBTRACT"; /** VND / 1 đơn vị tiền tệ đã dùng khi dựng (để xem lại không cần tra tỷ giá). */ rate?: string };
+export type Adjustment = { label: string; amount: string; currency: string; source: ValueSource; kind: "ADD" | "SUBTRACT"; /** Mã tên khoản điều chỉnh 1.49 (A…N) khi người khai đã chọn. */ code?: string; /** Phân bổ phí: false = không tự điền vào 1.88 của các dòng hàng. */ allocate?: boolean; /** VND / 1 đơn vị tiền tệ đã dùng khi dựng (để xem lại không cần tra tỷ giá). */ rate?: string };
 /** `rates`: VND cho 1 đơn vị từng tiền tệ (VND → "1"); thiếu tiền tệ của khoản điều chỉnh → bỏ qua kèm cảnh báo. */
 export type ValuationInput = { items: { id: string; amount: string }[]; adjustments: Adjustment[]; currency: string; rates: Record<string, string> };
 export type Valuation = {

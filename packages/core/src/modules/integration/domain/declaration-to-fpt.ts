@@ -1,6 +1,6 @@
 // Tờ khai (chỉ tiêu theo mnemonic `code`) → object FPT.VNACCS (objVN_IDA/HANG/VANDON/KTG, objVN_EDA/HANG/CON).
 // Cắt độ dài theo đặc tả (ghi cảnh báo), ngày → dd/MM/yyyy, số → number. Thuần; kiểm tra bằng Zod của @kb/contracts/fpt.
-import { DECLARATION_CONDITIONS, EdaRequestSchema, extraFieldFpt, fptKey, inapplicableExtraCodes, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
+import { NO_INSURANCE_VALUE, DECLARATION_CONDITIONS, EdaRequestSchema, extraFieldFpt, fptKey, inapplicableExtraCodes, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
 
 /** Dữ liệu tờ khai đủ để dựng payload – không phụ thuộc kiểu của module declaration. */
 export type DeclarationPayload = {
@@ -9,7 +9,8 @@ export type DeclarationPayload = {
   fields: Record<string, { value: string }>;
   /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền. */
   items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; policyNote: string | null }[];
-  adjustments: { label: string; amount: string; currency: string }[];
+  /** `kind`/`code`: chiều và mã tên khoản điều chỉnh 1.49 (khoản người khai lập); không có = dữ liệu cũ / phí đọc từ chứng từ. */
+  adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[];
   containers: string[];
   currency: string;
   note?: string | undefined;
@@ -115,12 +116,15 @@ function applyExtras(p: DeclarationPayload, targets: Partial<Record<FptObjectNam
 function items(p: DeclarationPayload, warnings: string[], blockers: string[], num: Num) {
   const sizes = p.kind === "IDA" ? SIZE_IDA : SIZE_EDA;
   const lineNos = p.items.map((it) => it.lineNo);
+  // 1.88: số thứ tự (theo KTG_VR1..5) các khoản điều chỉnh có mã người khai xác nhận phân bổ cho mọi dòng hàng.
+  const coded = p.adjustments.filter((a) => a.code && !a.label.startsWith("Cước") && !a.label.startsWith("Phí bảo hiểm")).slice(0, 5);
+  const adjustmentNos = coded.flatMap((a, i) => (a.allocate === false ? [] : [i + 1]));
   return p.items.map((it, i) => {
     const h: Record<string, unknown> = {};
     const set = setter(h, warnings, sizes);
     // Ô người khai nhập / sửa đè trên form đầy đủ (theo id dòng) thắng giá trị tự điền.
     const own = it.id ? itemOverrides(Object.entries(p.fields).map(([code, f]) => ({ code, value: f.value })), it.id) : {};
-    const auto = itemDefaults(p.kind, it, { currency: p.currency, vbpq: val(p, "VBPQ"), lineNos });
+    const auto = itemDefaults(p.kind, it, { currency: p.currency, vbpq: val(p, "VBPQ"), lineNos, adjustmentNos });
     set(p.kind === "IDA" ? "HAG_B25" : "HAG_R01", String(i + 1).padStart(2, "0"));
     set("HAG_CMD", hs8(it.hsConfirmed));
     if (p.kind === "EDA" && !it.origin) blockers.push(`Dòng ${it.lineNo}: chưa có mã nước xuất xứ – mô tả hàng xuất khẩu phải ghi “mô tả#&mã nước” (chỉ tiêu 2.69)`);
@@ -233,10 +237,20 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
       setKtg("KTG_IN1", "A");
       setKtg("KTG_IN2", ins.currency);
       setKtg("KTG_IN3", num(ins.amount, "KTG_IN3"));
-    }
-    // Khoản điều chỉnh khác (1.49, KTG_VR/VI/VC/VP) chưa ánh xạ được mã khoản → không gửi thì Hải quan tính thiếu trị giá: chặn truyền.
+    } else if (val(p, "PHI_BH") === NO_INSURANCE_VALUE) setKtg("KTG_IN1", "D"); // 1.48 ô 1: D không bảo hiểm
+    // 1.49 (tối đa 5): mã tên, AD/SB, mã tiền, trị giá. Ô 5 "Tổng hệ số phân bổ" chỉ dùng khi lô hàng tách nhiều tờ khai (> 50 dòng) –
+    // tờ khai thường để trống, VNACCS phân bổ theo 1.88 của từng dòng hàng (tự điền khi người khai xác nhận phân bổ phí).
     const others = p.adjustments.filter((a) => !a.label.startsWith("Cước") && !a.label.startsWith("Phí bảo hiểm"));
-    if (others.length) blockers.push(`Khoản điều chỉnh cộng vào trị giá chưa được khai ở chỉ tiêu 1.49: ${others.map((a) => `${a.label} ${a.amount} ${a.currency}`).join("; ")} – khai trên phần mềm khai báo`);
+    others.filter((a) => a.code).slice(0, 5).forEach((a, i) => {
+      const n = i + 1;
+      setKtg(`KTG_VR${n}`, a.code);
+      setKtg(`KTG_VI${n}`, a.kind === "SUBTRACT" ? "SB" : "AD");
+      setKtg(`KTG_VC${n}`, a.currency);
+      setKtg(`KTG_VP${n}`, num(a.amount, `KTG_VP${n}`));
+    });
+    // Khoản chưa có mã tên (phí khác đọc từ chứng từ) → không gửi thì Hải quan tính thiếu trị giá: chặn truyền.
+    const uncoded = others.filter((a) => !a.code);
+    if (uncoded.length) blockers.push(`Khoản điều chỉnh chưa có mã tên ở chỉ tiêu 1.49: ${uncoded.map((a) => `${a.label} ${a.amount} ${a.currency}`).join("; ")} – lập danh sách khoản điều chỉnh ở bước OCR & kiểm tra`);
     applyExtras(p, { objVN_IDA: set, objVN_IDA_VANDON: setVd, objVN_IDA_KTG: setKtg }, num);
     const request = { objVN_IDA: tk, objVN_IDA_HANG: items(p, warnings, blockers, num), objVN_IDA_VANDON: vd, objVN_IDA_KTG: ktg };
     const parsed = IdaRequestSchema.safeParse(request);

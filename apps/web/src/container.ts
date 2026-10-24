@@ -227,6 +227,14 @@ function build(): Container {
   });
   declaration.notify = notify;
   declaration.usage = serviceUsage;
+  // Chi phí người khai nhập ở bước OCR (module declaration) → luật đối chiếu đọc được (R-INCOTERM-FREIGHT); lưu xong chạy lại luật.
+  validation.charges = async (orgId, dossierId) => (await declaration.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.valueCharges.get(orgId, dossierId)))?.data ?? null;
+  declaration.onChargesSaved = async (orgId, dossierId) => {
+    const s = await extraction.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.shipments.latest(orgId, dossierId));
+    if (!s) return;
+    const o = await extraction.documents.orgInfo(orgId);
+    await runRules(validation, orgId, dossierId, s.data, s.version, { taxCode: o.taxCode, name: o.name });
+  };
   // Sửa dữ liệu chứng từ ở OCR → dòng hàng + tờ khai nháp cập nhật theo (lỗi không chặn việc lưu trường; ghi log).
   extraction.onShipmentEdited = async (orgId, dossierId) => {
     const r = await refreshFromShipment(declaration, { orgId: asOrgId(orgId), userId: asUserId("") }, dossierId);

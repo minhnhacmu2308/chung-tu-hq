@@ -4,6 +4,7 @@
 // - Ô người khai nhập chưa có mã app (mã phân loại hàng hóa, ủy thác, bảo lãnh, trung chuyển…) lưu trên tờ khai với mã = tên trường VNACCS ("ô bổ sung").
 import type { CustomsStage } from "../customs-flow.js";
 import { isDeclarationFieldEditable, type DeclarationSection, type DeclarationStatus } from "../dto/declaration.js";
+import { NO_INSURANCE_VALUE, parseAdjustmentField } from "../dto/value-charges.js";
 import type { FptFieldMeta } from "../fpt/common.js";
 import { VN_EDA_CON_FIELDS, VN_EDA_FIELDS } from "../fpt/eda.js";
 import { VN_IDA_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "../fpt/ida.js";
@@ -89,6 +90,24 @@ const permits: Rule = {
   from: (v) => range(5).map((i) => [get(v, `TK_SS${i}`), get(v, `TK_SN${i}`)].filter(Boolean).join(" ")).filter(Boolean).join("; "),
 };
 
+/** 1.47 / 1.48 "1150 USD" → mã phân loại A + mã tiền + số tiền; 1.48 không mua bảo hiểm → mã D. Chỉ đọc (sửa ở bước OCR – Chi phí và điều chỉnh trị giá). */
+const charge = (code: string, [cls, cur, amt]: [string, string, string]): Rule => ({
+  code, keys: [cls, cur, amt],
+  to: (v) => {
+    if (v === NO_INSURANCE_VALUE) return { [cls]: "D" };
+    const m = /^(\d+(?:\.\d+)?) ([A-Z]{3})$/.exec(v.trim());
+    return m ? { [cls]: "A", [cur]: m[2]!, [amt]: m[1]! } : {};
+  },
+});
+/** 1.49 "A AD 100 USD; G SB 20 USD KPB" → KTG_VR/VI/VC/VP{n} + Phân bổ phí (APP_PB{n}). Chỉ đọc. */
+const adjustments: Rule = {
+  code: "KHOAN_DC",
+  keys: range(5).flatMap((i) => [`KTG_VR${i}`, `KTG_VI${i}`, `KTG_VC${i}`, `KTG_VP${i}`, `APP_PB${i}`]),
+  to: (v) => Object.fromEntries(parseAdjustmentField(v).slice(0, 5).flatMap((a, i) => [
+    [`KTG_VR${i + 1}`, a.code], [`KTG_VI${i + 1}`, a.kind], [`KTG_VC${i + 1}`, a.currency], [`KTG_VP${i + 1}`, a.amount], [`APP_PB${i + 1}`, a.allocate === false ? "" : "1"],
+  ])),
+};
+
 const COMMON_INVOICE = (): Rule[] => [
   token("HD_PL", "TK_IV1"), direct("SO_HD", "TK_IV3"), direct("NGAY_HD", "TK_IVD"), token("PT_TT", "TK_IVP"),
   token("GIA_PL", "TK_IP1"), direct("DK_GIA", "TK_IP2"), direct("MA_TT", "TK_IP3"), direct("TONG_TG", "TK_IP4"),
@@ -103,6 +122,7 @@ const RULES: Record<Kind, Rule[]> = {
     direct("SO_VD", "VD_BL1"), qty("SO_KIEN", ["VD_NO", "VD_NOT"]), weight("TRONG_LUONG", ["VD_GW", "VD_GWT"]), token("KHO", "VD_ST"),
     codeName("CANG_DO", ["VD_DST", "VD_DSN"]), codeName("CANG_XEP", ["VD_PSC", "VD_PSN"]), direct("HO_HIEU", "VD_VSC"), direct("PTVC_TEN", "VD_VSN"), direct("NGAY_DEN", "VD_ARR"), direct("SL_CONT", "VD_COC"),
     token("KHAI_TG", "KTG_VD1"), direct("CT_TG", "KTG_VLD"),
+    charge("PHI_VC", ["KTG_FR1", "KTG_FR2", "KTG_FR3"]), charge("PHI_BH", ["KTG_IN1", "KTG_IN2", "KTG_IN3"]), adjustments,
     ...COMMON_INVOICE(),
   ],
   EDA: [

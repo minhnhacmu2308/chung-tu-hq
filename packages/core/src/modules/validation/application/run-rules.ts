@@ -11,7 +11,8 @@ export async function runRules(deps: ValidationDeps, orgId: string, dossierId: s
   const now = deps.clock.now();
   // Có hồ sơ → luật biết nhập/xuất và phương thức vận chuyển; không có port/hồ sơ → chạy như cũ (luật cần hồ sơ trả SKIPPED).
   const dossier = deps.dossiers ? await deps.dossiers.profile(orgId, dossierId) : null;
-  const ctx: RuleContext = dossier ? { org, dossier } : { org };
+  const charges = deps.charges ? await deps.charges(orgId, dossierId) : null;
+  const ctx: RuleContext = { org, ...(dossier ? { dossier } : {}), ...(charges ? { charges } : {}) };
   const rows: ValidationRow[] = runAllRules(shipment, ctx).map((o) => ({
     id: deps.idGen.next("chk"), orgId, dossierId, shipmentVersion: String(version), ruleCode: o.code, title: o.title, detail: o.detail, result: o.result, severity: o.severity, documentKinds: o.docKinds, fields: o.fields, createdAt: now,
   }));

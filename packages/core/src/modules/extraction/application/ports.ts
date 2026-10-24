@@ -8,7 +8,7 @@ import type { ProgressEvent } from "../../dossier/index.js";
 export type ExtractionRow = { id: string; orgId: string; documentId: string; kind: DocKind; skillVersionId: string | null; promptVersion: string; schemaVersion: string; pipelineVersion: string; model: string; idempotencyKey: string; raw: unknown; regions: Record<string, Region> | null; status: "DONE" | "ERROR"; error: string | null; usageEventId: string | null; createdAt: Date };
 export type ShipmentRow = { id: string; orgId: string; dossierId: string; version: number; data: Shipment; schemaVersion: string; createdAt: Date };
 export type FieldRow = { id: string; orgId: string; dossierId: string; documentId: string; group: FieldGroup; key: string; label: string; value: string; originalValue: string; status: FieldStatus; region: Region | null; note: string | null; shipmentPath: string | null; confirmedBy: string | null; confirmedAt: Date | null };
-export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT"; at: Date };
+export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT"; at: Date };
 
 /** Mọi phương thức nhận `orgId` tường minh (bất biến 1) – RLS là lớp thứ hai; fake in-memory từ chối orgId khác ngữ cảnh. */
 export interface ExtractionRepos {

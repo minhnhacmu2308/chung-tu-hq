@@ -2,6 +2,7 @@
 // mock API và backend (approve, submit). Bắt buộc = vai trò REQUIRED (Phụ lục II + ô FPT bắt buộc – role.ts) hoặc "theo tình huống" có điều kiện đang áp dụng.
 import { DECLARATION_CONDITIONS, type ConditionContext, type ConditionId } from "../declaration/conditions.js";
 import { expandRepeat } from "./expand.js";
+import { allocatedAdjustmentNos } from "../dto/value-charges.js";
 import { itemDefaults, itemOverrides } from "./item-fields.js";
 import { declarationFormValues } from "./app-fields.js";
 import { layoutFor } from "./layout-for.js";
@@ -121,9 +122,10 @@ export type ItemFormInput = {
  */
 export function itemFormValues(kind: Kind, items: ItemFormInput[], ctx: { fields?: { code: string; value: string }[]; currency?: string; vbpq?: string } = {}): Values[] {
   const lineNos = items.map((it, i) => it.lineNo ?? i + 1);
+  const adjustmentNos = allocatedAdjustmentNos(ctx.fields?.find((f) => f.code === "KHOAN_DC")?.value ?? "");
   return items.map((it, i) => {
     const v: Values = {
-      ...(ctx.currency ? itemDefaults(kind, { ...it, lineNo: lineNos[i]! }, { currency: ctx.currency, lineNos, ...(ctx.vbpq ? { vbpq: ctx.vbpq } : {}) }) : {}),
+      ...(ctx.currency ? itemDefaults(kind, { ...it, lineNo: lineNos[i]! }, { currency: ctx.currency, lineNos, adjustmentNos, ...(ctx.vbpq ? { vbpq: ctx.vbpq } : {}) }) : {}),
       HAG_CMD: it.hsConfirmed ?? it.hsSuggested ?? "", HAG_CMN: it.description, HAG_QN1: it.quantity, HAG_QT1: it.unit,
       HAG_UPR: it.unitPrice, HAG_BPR: it.amount,
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fptKey } from "@kb/contracts";
+import { fptKey, NO_INSURANCE_VALUE } from "@kb/contracts";
 import { buildFptRequest, lawCodesByLine, parsePermits, type DeclarationPayload } from "../declaration-to-fpt.js";
 import { maskPayload } from "../mask.js";
 import { coarseState, rowState, stageOf } from "../state-machine.js";
@@ -73,6 +73,22 @@ describe("declaration-to-fpt", () => {
   it("khoản điều chỉnh khác (1.49) chưa gửi được → chặn truyền nêu khoản; cước/bảo hiểm không chặn", () => {
     const b = buildFptRequest({ ...PAYLOAD, adjustments: [...PAYLOAD.adjustments, { label: "Royalty", amount: "500", currency: "USD" }] });
     expect(b.blockers.join(" ")).toMatch(/1\.49: Royalty 500 USD/);
+  });
+
+  it("1.49 có mã tên → KTG_VR/VI/VC/VP, không chặn; tờ khai thường không gửi tổng hệ số phân bổ; 1.88 mỗi dòng = khoản được phân bổ; 1.48 không mua bảo hiểm → KTG_IN1 = D", () => {
+    const b = buildFptRequest({
+      ...PAYLOAD,
+      fields: { ...PAYLOAD.fields, PHI_BH: { value: NO_INSURANCE_VALUE } },
+      adjustments: [...PAYLOAD.adjustments, { label: "Phí bản quyền, phí giấy phép", amount: "500", currency: "USD", kind: "ADD", code: "E" }, { label: "Khoản giảm giá", amount: "100", currency: "USD", kind: "SUBTRACT", code: "G", allocate: false }],
+    });
+    const ktg = (b.request as { objVN_IDA_KTG: Record<string, unknown> }).objVN_IDA_KTG;
+    expect(b.blockers.join(" ")).not.toMatch(/1\.49/);
+    expect([ktg[fptKey("KTG_VR1")], ktg[fptKey("KTG_VI1")], ktg[fptKey("KTG_VC1")], ktg[fptKey("KTG_VP1")], ktg[fptKey("KTG_VT1")]]).toEqual(["E", "AD", "USD", 500, undefined]);
+    const hang = (b.request as { objVN_IDA_HANG: Record<string, unknown>[] }).objVN_IDA_HANG;
+    expect(hang.map((h) => [h[fptKey("HAG_VN1")], h[fptKey("HAG_VN2")]])).toEqual([[1, undefined], [1, undefined]]); // khoản 2 không phân bổ
+    expect([ktg[fptKey("KTG_VR2")], ktg[fptKey("KTG_VI2")], ktg[fptKey("KTG_VP2")]]).toEqual(["G", "SB", 100]);
+    expect(ktg[fptKey("KTG_IN1")]).toBe("D");
+    expect(ktg[fptKey("KTG_IN3")]).toBeUndefined();
   });
 
   it("1.35: đường hàng không hoặc hàng CFS khai mã 3 → không gửi số lượng container", () => {

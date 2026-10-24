@@ -101,9 +101,9 @@ Cột "App":
 | 1.44 | Tổng trị giá hóa đơn: 4 ô (phân loại giá · điều kiện giá · mã tiền · tổng) | K | TT121 thêm DPU | ✅ (4 ô hiện riêng) |
 | 1.45 | Mã phân loại khai trị giá | K | — | ✅ |
 | 1.46 | Số tiếp nhận tờ khai trị giá tổng hợp | — | Chưa sử dụng | ❌ (đúng, không cần) |
-| 1.47 | Phí vận chuyển (mã A–F · tiền tệ · số tiền) | ĐK | Điều kiện giá nhóm E/F, hoặc cước vượt | ✅ (chưa hiện mã A–F) |
-| 1.48 | Phí bảo hiểm (mã A/D · tiền tệ · số tiền) | ĐK | Không nhập được với CIF/CIP… | ✅ (chưa hiện mã A/D) |
-| 1.49 | Khoản điều chỉnh (tối đa 5 × [mã · AD/SB · tiền tệ · trị giá · hệ số]) | ĐK | Hoa hồng, phí bản quyền, khoản giảm giá… | ✅ nhưng gộp thành **một ô "Khoản điều chỉnh khác"**, không hiện đủ 5 dòng có mã |
+| 1.47 | Phí vận chuyển (mã A–F · tiền tệ · số tiền) | ĐK | Điều kiện giá nhóm E/F, hoặc cước vượt | ✅ Chứng từ hoặc người khai nhập (kèm lý do) ở bước OCR; thiếu cả hai → chặn duyệt (2026-10-23). Mã A–F gửi cố định A |
+| 1.48 | Phí bảo hiểm (mã A/D · tiền tệ · số tiền) | ĐK | Không nhập được với CIF/CIP… | ✅ Chứng từ / nhập tay / "Không mua bảo hiểm" → mã D (2026-10-23) |
+| 1.49 | Khoản điều chỉnh (tối đa 5 × [mã · AD/SB · tiền tệ · trị giá · hệ số]) | ĐK | Hoa hồng, phí bản quyền, khoản giảm giá… | ✅ Người khai lập danh sách có mã ở bước OCR → gửi đủ KTG_VR/VI/VC/VP/VT (hệ số phân bổ = tổng trị giá hóa đơn) (2026-10-23). Phí khác chưa có mã → chặn truyền |
 | 1.50 | Chi tiết khai trị giá (≤ 280 ký tự) | ĐK (thực tế gần như luôn có) | Ngày vận đơn `DDMMYYYY#&`, số hợp đồng, giá tạm tính, DPU, hàng FOC, tham vấn (TT121) | ❌ **Không gửi `KTG_VLD`, không hiển thị** |
 | 1.51 | Tổng hệ số phân bổ trị giá | HT / ĐK | Bắt buộc khi 1 hóa đơn khai nhiều tờ khai | ❌ |
 

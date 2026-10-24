@@ -64,7 +64,7 @@ describe("customs-bridge", () => {
     expect(s.fields["NNK_MST"]).toEqual({ value: "0316789012" });
     expect(s.items).toHaveLength(7);
     expect(s.items[0]).toMatchObject({ lineNo: 1, amount: "3700", hsConfirmed: null });
-    expect(s.adjustments).toEqual([{ label: "Cước vận chuyển quốc tế", amount: "1150", currency: "USD" }]);
+    expect(s.adjustments).toEqual([{ label: "Cước vận chuyển quốc tế", amount: "1150", currency: "USD", kind: "ADD" }]);
     expect(s.estimatedTaxVnd).toMatch(/^\d+$/);
   });
 

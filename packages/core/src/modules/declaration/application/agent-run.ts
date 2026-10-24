@@ -5,7 +5,7 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { computeBuilt, currenciesOf, exchangeFor, invoiceRate, mergeUserEdits } from "./_rebuild.js";
+import { chargesFor, computeBuilt, currenciesOf, exchangeFor, invoiceRate, mergeUserEdits } from "./_rebuild.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { loadDossier, syncLineItems, TASKS_BY_MODE, toAgentRunView } from "./_dto.js";
 import { hsSummaryLogs, startHsClassification, unsentHsLineIds } from "./hs-classification.js";
@@ -155,8 +155,9 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
         say("Tính trị giá tính thuế, cộng khoản điều chỉnh theo Incoterm");
         const built = await deps.uow.asOrg(ctx, async (r) => {
           const items = await r.lineItems.list(input.orgId, input.dossierId);
-          const exchange = await exchangeFor(r, currenciesOf(shipment, dossier), vnDate(deps.clock.now()));
-          const b = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, input.orgId, dossier.direction));
+          const charges = await chargesFor(r, input.orgId, input.dossierId);
+          const exchange = await exchangeFor(r, currenciesOf(shipment, dossier, charges), vnDate(deps.clock.now()));
+          const b = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, input.orgId, dossier.direction), charges);
           const prev = await r.declarations.latest(input.orgId, input.dossierId);
           if (prev && prev.status !== "DRAFT") return { b, skipped: true as const, exchange };
           const now = deps.clock.now();

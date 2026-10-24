@@ -1,4 +1,4 @@
-import type { DocKind, RuleResult, RuleSeverity, Shipment, Sourced, TransportMode } from "@kb/contracts";
+import type { DocKind, RuleResult, RuleSeverity, Shipment, Sourced, TransportMode, ValueCharges } from "@kb/contracts";
 import { Decimal, dec } from "../../../shared/decimal.js";
 
 export type Direction = "NK" | "XK";
@@ -6,7 +6,8 @@ export type Direction = "NK" | "XK";
 export type DossierProfile = { direction: Direction; typeCode: string; transportMode: TransportMode };
 export type RuleOutcome = { result: RuleResult; detail: string; fields: string[] };
 /** `dossier` vắng khi chưa biết hồ sơ (luật cần nó trả SKIPPED). */
-export type RuleContext = { org: { taxCode: string; name: string }; dossier?: DossierProfile };
+/** `charges`: chi phí người khai nhập ở bước OCR & kiểm tra (cước nhập tay / lý do chưa có số) – vắng = chỉ theo chứng từ. */
+export type RuleContext = { org: { taxCode: string; name: string }; dossier?: DossierProfile; charges?: ValueCharges };
 export type Rule = {
   code: string; title: string; severity: RuleSeverity; docKinds: DocKind[];
   /** Chỉ áp dụng cho các chiều này (vắng = cả nhập lẫn xuất). */

@@ -408,7 +408,8 @@ export function AppearancePanel({
   ];
 
   return (
-    <section aria-label={t.panel} className={cn("flex w-full max-w-sm flex-col gap-4 text-fg", className)}>
+    // @container: bảng tự dãn theo chỗ đặt – popup/panel hẹp xếp 1 cột, thẻ rộng (trang Thiết lập) xếp 2 cột cho cân.
+    <section aria-label={t.panel} className={cn("@container flex w-full flex-col gap-4 text-fg", className)}>
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">{t.title}</h2>
         <button
@@ -433,7 +434,7 @@ export function AppearancePanel({
           <TabsTrigger value="layout">{t.tabLayout}</TabsTrigger>
           <TabsTrigger value="color">{t.tabColor}</TabsTrigger>
         </TabsList>
-        <TabsContent value="general" forceMount className="flex flex-col gap-4 data-[state=inactive]:hidden">
+        <TabsContent value="general" forceMount className="grid items-start gap-4 cq-lg:grid-cols-2 cq-lg:gap-x-8 data-[state=inactive]:hidden">
       <PreviewChoice label={t.language} value={value.locale} onChange={set("locale")}
         options={[
           // Tên ngôn ngữ luôn viết bằng chính ngôn ngữ đó (không dịch) để người không đọc được ngôn ngữ hiện tại vẫn tìm thấy.
@@ -460,7 +461,7 @@ export function AppearancePanel({
           { value: "off", label: t.off, preview: <CursorPreview on={false} /> },
         ]} />
         </TabsContent>
-        <TabsContent value="layout" forceMount className="flex flex-col gap-4 data-[state=inactive]:hidden">
+        <TabsContent value="layout" forceMount className="grid items-start gap-4 cq-lg:grid-cols-2 cq-lg:gap-x-8 data-[state=inactive]:hidden">
       <PreviewChoice label={t.density} value={value.density} onChange={set("density")}
         options={(["compact", "comfortable", "spacious"] as const).map((d) => ({ value: d, label: t[d], preview: <DensityPreview density={d} /> }))} />
       <PreviewChoice label={t.fontSize} value={value.fontSize} onChange={set("fontSize")}
@@ -489,7 +490,9 @@ export function AppearancePanel({
         ))}
       </fieldset>
         </TabsContent>
-        <TabsContent value="color" forceMount className="flex flex-col gap-4 data-[state=inactive]:hidden">
+        <TabsContent value="color" forceMount className="grid items-start gap-4 cq-lg:grid-cols-2 cq-lg:gap-x-8 data-[state=inactive]:hidden">
+      {/* Màu chính + ghi chú điều chỉnh tương phản là một ô lưới. */}
+      <div className="flex flex-col gap-2">
       <ColorSwatchPicker
         label={withLock(t.brand, "brand")}
         value={value.brand}
@@ -499,7 +502,7 @@ export function AppearancePanel({
         disabled={isLocked("brand")}
       />
       {brandAdjustments.length > 0 && (
-        <ul className="-mt-2 flex flex-col gap-0.5 text-xs text-fg-subtle">
+        <ul className="flex flex-col gap-0.5 text-xs text-fg-subtle">
           {brandAdjustments.map((a) => (
             <li key={a.mode}>
               {(a.mode === "light" ? t.adjustLight : t.adjustDark)
@@ -510,6 +513,7 @@ export function AppearancePanel({
           ))}
         </ul>
       )}
+      </div>
 
       {/* Màu phụ chỉ để pha nền (không dùng cho chữ) nên ai cũng được nhập mã màu riêng. */}
       <ColorSwatchPicker

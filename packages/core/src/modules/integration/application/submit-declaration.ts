@@ -15,6 +15,18 @@ import { performOperation } from "./perform-operation.js";
 /** Khóa idempotency outbox. Nhánh 1 giữ đúng dạng cũ (dữ liệu đang chạy không bị gửi trùng); nhánh ≥ 2 thêm `:b<no>`. */
 export const outboxKey = (dossierId: string, op: string, version: number, retry = 0, branch = 1) => `${dossierId}:${op}:v${version}${retry ? `:retry${retry}` : ""}${branch > 1 ? `:b${branch}` : ""}`;
 
+/** Phiên bản tờ khai trong khóa outbox (`:v<n>`); khóa theo số lần gửi (`:n<k>`) không có → null. */
+export const outboxVersion = (key: string): number | null => {
+  const m = /:v(\d+)(?::|$)/.exec(key);
+  return m ? Number(m[1]) : null;
+};
+
+/**
+ * Ai xếp khai tạm nhánh: worker nối tiếp – tờ khai phải còn SUBMITTED đúng phiên bản đã truyền ở các tờ trước (không trộn nội dung hai phiên bản);
+ * người dùng (gửi lại sau mở lại, duyệt lại) – tờ khai APPROVED.
+ */
+export type PreDeclareMode = { by: "chain"; version: number } | { by: "user" };
+
 /** Số tờ khai giả CHỈ để kiểm tờ 2..N lúc truyền lần đầu (số tờ 1 chưa có) – thông điệp dựng với số này bị bỏ, không bao giờ gửi. */
 const CHECK_ONLY_FIRST_NO = "000000000000";
 
@@ -124,6 +136,8 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
       const result: ResultRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: s.no, externalId: null, declarationNo: null, channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: of === 1 ? snap.estimatedTaxVnd : null, state: "APPROVED", pollCount: 0, raw: { stage: "NOT_SENT", certificateId }, updatedAt: now };
       await r.results.upsert(result);
     }
+    // Số tờ giảm giữa hai lần truyền (vd bị từ chối trước khi có số, sửa 120 → 90 dòng): bỏ kết quả nhánh thừa chưa từng khai.
+    await r.results.deleteUnsentAbove(ctx.orgId, dossierId, of);
     return ok(row);
   });
   if (!created.ok) return created;
@@ -139,10 +153,12 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
  * Giữ bất biến 7 (tờ khai đã duyệt, HS đủ, không BLOCKER, đúng tuần tỷ giá) + guard của tờ; tờ 2..N dùng số tờ khai của tờ 1 (TK_FIC).
  * Idempotent: khóa outbox theo nhánh + phiên bản; đã có (job chạy lại / hai job song song – unique) → không tạo thêm, chỉ đẩy lại job nếu chưa từng xử lý.
  */
-export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, dossierId: string, branch: number): Promise<Result<void>> {
+export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, dossierId: string, branch: number, mode: PreDeclareMode): Promise<Result<void>> {
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   if (!snap) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
-  if (snap.status !== "APPROVED" && snap.status !== "SUBMITTED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
+  if (mode.by === "chain" && (snap.status !== "SUBMITTED" || snap.version !== mode.version))
+    return err(domainError("INVALID_STATE", `Tờ khai đã mở lại hoặc đổi phiên bản sau khi truyền (đã truyền v${mode.version}, hiện v${snap.version}) – không khai tạm tự động; duyệt lại rồi truyền lại`));
+  if (mode.by === "user" && snap.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
   if (snap.unconfirmedHs > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs }));
   if (!sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
     return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));

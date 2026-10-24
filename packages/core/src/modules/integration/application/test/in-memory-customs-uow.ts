@@ -37,6 +37,12 @@ export class InMemoryCustomsUow implements CustomsUow {
         listForOrg: async (orgId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId)),
         listForDossier: async (orgId, dossierId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId).sort((a, b) => a.branch - b.branch)),
         issuedCount: async (orgId, dossierId) => d.results.filter((r) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId && r.declarationNo !== null).length,
+        deleteUnsentAbove: async (orgId, dossierId, branch) => {
+          const drop = (r: ResultRow) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId && r.branch > branch && r.declarationNo === null && r.raw?.stage === "NOT_SENT";
+          const n = d.results.filter(drop).length;
+          d.results = d.results.filter((r) => !drop(r));
+          return n;
+        },
         upsert: async (row) => {
           if (row.orgId !== org) deny("customs_results");
           const i = d.results.findIndex((r) => r.dossierId === row.dossierId && r.branch === row.branch);

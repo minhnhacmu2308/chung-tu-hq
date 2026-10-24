@@ -68,6 +68,17 @@ describe("DrizzleCustomsUow – trạng thái theo nhánh tờ khai", () => {
     expect(await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_br", 3))).toBeNull();
   });
 
+  it("deleteUnsentAbove: chỉ xóa nhánh > N chưa khai (NOT_SENT, chưa có số) của đúng hồ sơ; org khác không xóa được", async () => {
+    const d = (id: string, branch: number, patch: Partial<ResultRow> = {}) => ({ ...res(id, branch, patch), dossierId: "dos_del" });
+    await uow.asOrg(A, async (r) => {
+      for (const x of [d("del_1", 1, { raw: { stage: "NOT_SENT" } }), d("del_2", 2, { raw: { stage: "NOT_SENT" } }), d("del_3", 3, { raw: { stage: "NOT_SENT" } }), d("del_4", 4, { raw: { stage: "NOT_SENT" }, declarationNo: "30000000004" }), d("del_5", 5, { raw: { stage: "PRE_DECLARED" } })]) await r.results.upsert(x);
+    });
+    expect(await uow.asOrg(B, (r) => r.results.deleteUnsentAbove("org_anphat", "dos_del", 1))).toBe(0);
+    expect(await uow.asOrg(A, (r) => r.results.deleteUnsentAbove("org_anphat", "dos_del", 2))).toBe(1);
+    expect((await uow.asOrg(A, (r) => r.results.listForDossier("org_anphat", "dos_del"))).map((x) => x.branch)).toEqual([1, 2, 4, 5]);
+    expect((await uow.asOrg(A, (r) => r.results.listForDossier("org_anphat", "dos_br"))).length).toBeGreaterThan(0);
+  });
+
   it("issuedCount đếm nhánh đã có số tờ khai, theo org; org khác không thấy", async () => {
     expect(await uow.asOrg(A, (r) => r.results.issuedCount("org_anphat", "dos_br"))).toBe(1);
     await uow.asOrg(A, (r) => r.results.upsert(res("res_b1y", 1, { declarationNo: "30000000001" })));

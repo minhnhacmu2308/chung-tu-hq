@@ -2,7 +2,7 @@
 // Không tự gửi nghiệp vụ kế tiếp: người khai điều khiển luồng (IDA → IDC…). Khai chính thức thành công → hỏi trạng thái định kỳ.
 // NGOẠI LỆ DUY NHẤT (spec tách tờ khai §6.2): khai tạm IDA/EDA lần đầu của tờ khai nhánh k thành công → tự tạo outbox IDA/EDA nhánh k+1
 // (TK_FIC = số tờ khai nhánh 1) khi nhánh k+1 còn NOT_SENT và chưa có outbox IDA/EDA; khóa theo nhánh + unique chặn tạo trùng (chainNextBranch).
-import { baseOp, CUSTOMS_OPERATIONS, isRecallOperation, queryOpFor, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
+import { baseOp, branchCount, CUSTOMS_OPERATIONS, isRecallOperation, queryOpFor, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
 import { domainError, type DomainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -13,7 +13,7 @@ import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js
 import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
 import { applyPostAmendmentResult } from "./post-amendment.js";
-import { enqueueBranchPreDeclare } from "./submit-declaration.js";
+import { enqueueBranchPreDeclare, outboxVersion } from "./submit-declaration.js";
 
 export type ProcessOutboxInput = { orgId: string; userId: string; outboxId: string };
 /** Quá số lần thử (= attempts của BullMQ) → outbox FAILED, người dùng "Gửi lại". */
@@ -61,6 +61,21 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     });
     await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
     return ok({ status: "FAILED", next: null });
+  }
+
+  // Khai tạm tờ 2..N chỉ gửi khi tờ khai còn SUBMITTED đúng phiên bản đã xếp gửi: đã gọi về sửa / duyệt lại phiên bản mới → không gửi nội dung cũ.
+  if (ob.branch > 1 && (ob.operation === "IDA" || ob.operation === "EDA")) {
+    const snap = await deps.declarations.get(input.orgId, ob.dossierId);
+    const version = outboxVersion(ob.idempotencyKey);
+    if (!snap || snap.status !== "SUBMITTED" || snap.version !== version) {
+      const reason = `Tờ ${ob.branch}: không gửi khai tạm – tờ khai đã mở lại hoặc đổi phiên bản sau khi xếp gửi (v${version ?? "?"}, hiện ${snap ? `v${snap.version}` : "không còn tờ khai"}); duyệt lại rồi truyền lại`;
+      await deps.uow.asOrg(ctx, async (r) => {
+        await msg(r, { operation: ob.operation, direction: "IN", result: "ERROR", summary: reason, payloadMasked: { error: reason }, externalRef: result.externalId });
+        await r.outbox.update(ob.orgId, ob.id, { status: "FAILED", lastError: reason, updatedAt: now() });
+      });
+      await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
+      return ok({ status: "FAILED", next: null });
+    }
   }
 
   // Thông điệp OUT ghi đúng một lần (job chạy lại sau crash không nhân đôi).
@@ -213,11 +228,19 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
  */
 async function chainNextBranch(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<{ branch: number; of: number; error: DomainError } | null> {
   if (ob.operation !== "IDA" && ob.operation !== "EDA") return null;
+  // Phiên bản đã truyền ở tờ k (khóa `:v<n>`); khóa không có phiên bản (gửi theo lượt `:n<k>`) → không nối tự động.
+  const version = outboxVersion(ob.idempotencyKey);
+  if (version === null) return null;
   const branch = ob.branch + 1;
-  const { results, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, ob.dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, ob.dossierId) }));
-  const next = results.find((x) => x.branch === branch);
+  const snap = await deps.declarations.get(ctx.orgId, ob.dossierId);
+  if (!snap) return null;
+  // Dừng ở số tờ hiện tại của tờ khai (không theo số kết quả đã lưu).
+  const of = branchCount(snap.payload.items.length);
+  if (branch > of) return null;
+  const { next, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ next: await r.results.get(ctx.orgId, ob.dossierId, branch), outbox: await r.outbox.listForDossier(ctx.orgId, ob.dossierId) }));
   if (!next || stageOf(next) !== "NOT_SENT") return null;
-  if (outbox.some((o) => o.branch === branch && o.operation === ob.operation)) return null;
-  const res = await enqueueBranchPreDeclare(deps, ctx, ob.dossierId, branch);
-  return res.ok ? null : { branch, of: results.length, error: res.error };
+  // Đã xếp (đang chờ, hoặc đã gửi/bị từ chối ở cùng phiên bản → người dùng Gửi lại nhánh đó) → không tạo thêm.
+  if (outbox.some((o) => o.branch === branch && o.operation === ob.operation && (o.status === "PENDING" || outboxVersion(o.idempotencyKey) === version))) return null;
+  const res = await enqueueBranchPreDeclare(deps, ctx, ob.dossierId, branch, { by: "chain", version });
+  return res.ok ? null : { branch, of, error: res.error };
 }

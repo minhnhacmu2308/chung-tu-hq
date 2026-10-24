@@ -10,7 +10,7 @@ import { OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
 import { MAX_ATTEMPTS } from "./process-outbox.js";
-import { outboxKey } from "./submit-declaration.js";
+import { outboxKey, outboxVersion } from "./submit-declaration.js";
 
 /** `branch`: tờ khai nhánh (mặc định 1). Gửi lại IDA/EDA nhánh k thành công → worker khai tạm nối tiếp nhánh k+1. */
 export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<ResendResult>> {
@@ -58,6 +58,12 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
     return ok({ resent: false, message: `${OPERATION_LABELS[op]} đang được gửi` });
   }
   if (last.status === "SENT") return err(domainError("INVALID_STATE", `${OPERATION_LABELS[op]} đã thành công – không gửi lại`));
+  // Khai tạm tờ 2..N gửi lại nguyên thông điệp đã dựng: chỉ khi tờ khai còn SUBMITTED đúng phiên bản đó (không gửi nội dung cũ sau khi mở lại/duyệt lại).
+  if (b === "IDA" && branch > 1) {
+    const snap = await deps.declarations.get(ctx.orgId, dossierId);
+    if (!snap || snap.status !== "SUBMITTED" || snap.version !== outboxVersion(last.idempotencyKey))
+      return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ khai đã mở lại hoặc đổi phiên bản – không gửi lại nội dung cũ; duyệt lại rồi truyền lại`));
+  }
   if (last.status === "PENDING") await deps.uow.asOrg(ctx, (r) => r.outbox.update(last.orgId, last.id, { status: "FAILED", updatedAt: now() }));
   const version = Number(/:v(\d+)/.exec(last.idempotencyKey)?.[1] ?? "1");
   // Khóa nhánh ≥ 2 kết thúc bằng :b<no> – lần gửi lại giữ hậu tố nhánh ở cuối (nhánh 1 giữ dạng cũ).

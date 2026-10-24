@@ -39,7 +39,7 @@ export async function markOutboxFailed(deps: CustomsDeps, input: { orgId: string
     const now = deps.clock.now();
     await r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, branch: ob.branch, operation: ob.operation, direction: "IN", result: "ERROR", summary: `Không gửi được sau nhiều lần thử: ${input.reason} – bấm Gửi lại`, payloadMasked: { error: input.reason }, externalRef: null, at: now });
     await r.outbox.update(ob.orgId, ob.id, { status: "FAILED", lastError: input.reason, updatedAt: now });
-    const result = await r.results.get(input.orgId, ob.dossierId);
+    const result = await r.results.get(input.orgId, ob.dossierId, ob.branch);
     if (result) await r.results.upsert({ ...result, state: coarseState(stageOf(result), true), updatedAt: now });
   });
   return ok(undefined);

@@ -70,8 +70,10 @@ export async function enqueue(
   p: { dossierId: string; declarationId: string; op: CustomsOperation; payload: unknown; result: ResultRow; outbox: OutboxRow[]; content: boolean },
 ): Promise<Result<OperationResult>> {
   const now = deps.clock.now();
-  const n = p.outbox.filter((o) => o.operation === p.op).length + 1;
-  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId: p.dossierId, branch: 1, declarationId: p.declarationId, operation: p.op, idempotencyKey: `${p.dossierId}:${p.op}:n${n}`, payload: p.payload, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+  // Đếm lần gửi theo nhánh; nhánh ≥ 2 thêm :b<no> (nhánh 1 giữ khóa cũ).
+  const branch = p.result.branch;
+  const n = p.outbox.filter((o) => o.operation === p.op && o.branch === branch).length + 1;
+  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId: p.dossierId, branch, declarationId: p.declarationId, operation: p.op, idempotencyKey: `${p.dossierId}:${p.op}:n${n}${branch > 1 ? `:b${branch}` : ""}`, payload: p.payload, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
   const created = await deps.uow.asOrg(ctx, async (r) => {
     try {
       await r.outbox.insert(row);

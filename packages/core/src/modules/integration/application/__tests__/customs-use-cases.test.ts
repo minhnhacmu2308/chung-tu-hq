@@ -7,7 +7,7 @@ import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { RecordingNotifier } from "../../../../shared/notifier.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
 import type { ProgressEvent } from "../../../dossier/index.js";
-import type { DeclarationPayload } from "../../domain/declaration-to-fpt.js";
+import { buildFptRequest, type DeclarationPayload } from "../../domain/declaration-to-fpt.js";
 import type { CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsUow, DeclarationReader, DossierBrief, OutboxRow, ResultRow } from "../customs-ports.js";
 import { getSubmission, listCustomsDeclarations } from "../get-submission.js";
 import { markOutboxFailed, reopenDeclaration } from "../reopen-declaration.js";
@@ -16,7 +16,7 @@ import { RecordingUsageMeter } from "../../../../shared/usage.js";
 import { MAX_POLLS, pollStatus } from "../poll-status.js";
 import { MAX_ATTEMPTS, processOutbox } from "../process-outbox.js";
 import { resendOperation } from "../resend-operation.js";
-import { submitDeclaration } from "../submit-declaration.js";
+import { enqueueBranchPreDeclare, outboxKey, submitDeclaration } from "../submit-declaration.js";
 import { requeueStuckOutbox } from "../requeue-stuck-outbox.js";
 import { performOperation, startPostAmendment } from "../perform-operation.js";
 import { addPostAmendmentLines, approvePostAmendment, getPostAmendmentView, updatePostAmendmentField } from "../post-amendment.js";
@@ -44,11 +44,13 @@ class FakeDeclarations implements DeclarationReader {
   rateDate = "2026-10-14";
   /** Ghi đè chỉ tiêu của payload (giá trị rỗng = người khai xóa ô sau khi duyệt). */
   fields: Record<string, { value: string }> = {};
+  /** Ghi đè dòng hàng (lô > 50 dòng → nhiều tờ khai nhánh). */
+  items: DeclarationPayload["items"] | null = null;
   readonly submitted: string[] = [];
   async get(_orgId: string, dossierId: string) {
     if (dossierId === "dos_none") return null;
     const p = payload(this.kind);
-    return { declarationId: "dec_1", version: 2, status: this.status, payload: { ...p, fields: { ...p.fields, ...this.fields } }, unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate };
+    return { declarationId: "dec_1", version: 2, status: this.status, payload: { ...p, fields: { ...p.fields, ...this.fields }, ...(this.items ? { items: structuredClone(this.items) } : {}) }, unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate };
   }
   async markSubmitted(_ctx: { orgId: string }, dossierId: string) {
     this.submitted.push(dossierId);
@@ -1064,5 +1066,147 @@ describe("requeueStuckOutbox – job quét outbox kẹt", () => {
     uow.data.outbox[0]!.attempts = 1;
     expect((await requeueStuckOutbox(deps, { orgId: ORG })).requeued).toEqual([]);
     expect((await requeueStuckOutbox(deps, { orgId: "org_b" })).requeued).toEqual([]);
+  });
+});
+
+// ───────────────────────── Tờ khai nhánh (lô > 50 dòng): truyền lần đầu + khai tạm nối tiếp ─────────────────────────
+
+const lines = (n: number): DeclarationPayload["items"] => Array.from({ length: n }, (_, i) => ({ ...payload().items[0]!, lineNo: i + 1, description: `Vòng bi ${i + 1}` }));
+type IdaReq = { objVN_IDA: Record<string, unknown> };
+const idaOf = (o: OutboxRow) => (o.payload as { request: IdaReq }).request.objVN_IDA;
+const idaOutbox = (branch: number) => uow.data.outbox.filter((o) => o.branch === branch && o.operation === "IDA");
+const stages = () => uow.data.results.map((r) => [r.branch, r.raw?.stage, r.declarationNo]);
+/** Cổng giả cấp số tờ khai theo số tờ (tK_BNO): tờ k → 10400000000k; `reject(tờ, lần gọi)` → Hải quan từ chối. */
+const branchGateway = (reject: (bno: number, call: number) => boolean = () => false, o: Partial<CustomsGateway> = {}) => {
+  const calls = new Map<number, number>();
+  return gw({
+    preDeclare: async (_org, msg) => {
+      const bno = Number((msg.request as IdaReq).objVN_IDA["tK_BNO"] ?? 1);
+      const n = (calls.get(bno) ?? 0) + 1;
+      calls.set(bno, n);
+      return reject(bno, n) ? { externalId: `fpt-b${bno}`, errors: [{ code: "E-X", message: "Từ chối" }] } : { externalId: `fpt-b${bno}`, declarationNo: `10400000000${bno}` };
+    },
+    ...o,
+  });
+};
+
+describe("tờ khai nhánh – truyền lần đầu + khai tạm nối tiếp", () => {
+  beforeEach(() => {
+    decls.items = lines(120);
+  });
+
+  it("outboxKey: nhánh 1 giữ dạng cũ; nhánh ≥ 2 thêm :b<no>", () => {
+    expect(outboxKey(D, "IDA", 2)).toBe(`${D}:IDA:v2`);
+    expect(outboxKey(D, "IDA", 2, 1)).toBe(`${D}:IDA:v2:retry1`);
+    expect(outboxKey(D, "IDA", 2, 0, 1)).toBe(`${D}:IDA:v2`);
+    expect(outboxKey(D, "IDA", 2, 0, 2)).toBe(`${D}:IDA:v2:b2`);
+    expect(outboxKey(D, "EDA", 3, 1, 3)).toBe(`${D}:EDA:v3:retry1:b3`);
+  });
+
+  it("lô 120 dòng: 3 kết quả NOT_SENT, chỉ 1 outbox IDA nhánh 1 khóa cũ (tờ 1/3, TK_FIC F); hồ sơ SUBMITTED", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(uow.data.results.map((r) => [r.branch, r.raw?.stage, r.raw?.certificateId])).toEqual([[1, "NOT_SENT", "cert_1"], [2, "NOT_SENT", "cert_1"], [3, "NOT_SENT", "cert_1"]]);
+    expect(uow.data.outbox).toHaveLength(1);
+    expect(uow.data.outbox[0]).toMatchObject({ branch: 1, operation: "IDA", idempotencyKey: `${D}:IDA:v2`, status: "PENDING" });
+    expect(idaOf(uow.data.outbox[0]!)).toMatchObject({ tK_FIC: "F", tK_BNO: 1, tK_DNO: 3 });
+    expect(queue.jobs).toHaveLength(1);
+    expect(decls.submitted).toEqual([D]);
+    expect(dossiers.rows[0]).toMatchObject({ status: "SUBMITTED", step: "submit" });
+  });
+
+  it("dòng 75 (tờ 2) thiếu ô bắt buộc → REQUIRED_FIELDS_MISSING_SUBMIT nêu tờ và dòng gốc, không tạo outbox/kết quả nào", async () => {
+    decls.items![74]!.description = "";
+    const r = await submitDeclaration(deps, declarant, D, "cert_1");
+    expect(r).toMatchObject({ ok: false, error: { code: "VALIDATION", reason: "REQUIRED_FIELDS_MISSING_SUBMIT", message: expect.stringContaining("Tờ 2/3: Dòng hàng 75") } });
+    expect(uow.data.outbox).toHaveLength(0);
+    expect(uow.data.results).toHaveLength(0);
+    expect(decls.submitted).toEqual([]);
+    expect(dossiers.rows[0]!.status).toBe("APPROVED");
+  });
+
+  it("IDA nhánh 1 thành công → tự khai tạm nhánh 2 (TK_FIC = số tờ 1); nhánh 2 xong → nhánh 3; nhánh 3 xong → dừng", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain(1);
+    expect(idaOutbox(2)).toHaveLength(1);
+    expect(idaOutbox(2)[0]).toMatchObject({ idempotencyKey: `${D}:IDA:v2:b2`, status: "PENDING", declarationId: "dec_1" });
+    expect(idaOf(idaOutbox(2)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2, tK_DNO: 3 });
+    expect(idaOutbox(3)).toHaveLength(0);
+    await drain(1);
+    expect(idaOutbox(3)).toHaveLength(1);
+    expect(idaOf(idaOutbox(3)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 3, tK_DNO: 3 });
+    await drain(1);
+    expect(queue.jobs).toHaveLength(0);
+    expect(uow.data.outbox.map((o) => [o.branch, o.operation, o.status])).toEqual([[1, "IDA", "SENT"], [2, "IDA", "SENT"], [3, "IDA", "SENT"]]);
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+    // Số tờ khai của hồ sơ là số tờ 1; nhật ký ghi đúng nhánh.
+    expect(dossiers.rows[0]!.declarationNo).toBe("104000000001");
+    expect(uow.data.messages.filter((m) => m.branch === 2).map((m) => [m.operation, m.direction, m.result])).toEqual([["IDA", "OUT", "OK"], ["IDA", "IN", "OK"]]);
+  });
+
+  it("chạy lại job nhánh 1 đã SENT → vẫn đúng 1 outbox nhánh 2; crash trước khi nối → chạy lại thì nối; tạo trùng song song → bỏ qua", async () => {
+    deps.gateway = branchGateway();
+    const { outboxId } = unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain(1);
+    await send(outboxId);
+    await send(outboxId);
+    expect(idaOutbox(2)).toHaveLength(1);
+    expect(queue.jobs).toHaveLength(1);
+    // Crash sau khi ghi SENT nhánh 1 mà chưa kịp tạo outbox nhánh 2 → BullMQ chạy lại job → nối tiếp.
+    uow.data.outbox.splice(uow.data.outbox.findIndex((o) => o.branch === 2), 1);
+    queue.jobs.length = 0;
+    await send(outboxId);
+    expect(idaOutbox(2)).toHaveLength(1);
+    expect(queue.jobs).toEqual([expect.objectContaining({ name: "customs-send", payload: expect.objectContaining({ outboxId: idaOutbox(2)[0]!.id }) })]);
+    // Hai job cùng nối nhánh 2 → khóa unique: lần thứ hai không tạo thêm.
+    unwrap(await enqueueBranchPreDeclare(deps, declarant, D, 2));
+    expect(idaOutbox(2)).toHaveLength(1);
+  });
+
+  it("IDA nhánh 2 bị từ chối → dừng, nhánh 3 giữ NOT_SENT; Gửi lại IDA nhánh 2 thành công → nối nhánh 3", async () => {
+    deps.gateway = branchGateway((bno, n) => bno === 2 && n === 1, { queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    expect(idaOutbox(2)[0]).toMatchObject({ status: "FAILED" });
+    expect(idaOutbox(3)).toHaveLength(0);
+    expect(uow.data.results.map((r) => [r.branch, r.state, r.raw?.stage])).toEqual([[1, "PRE_DECLARED", "PRE_DECLARED"], [2, "SEND_FAILED", "NOT_SENT"], [3, "APPROVED", "NOT_SENT"]]);
+    expect(unwrap(await resendOperation(deps, declarant, D, "IDA", 2))).toMatchObject({ resent: true });
+    expect(idaOutbox(2).map((o) => o.idempotencyKey)).toEqual([`${D}:IDA:v2:b2`, `${D}:IDA:v2:retry1:b2`]);
+    expect(uow.data.messages.filter((m) => m.operation === "IID").every((m) => m.branch === 2)).toBe(true);
+    await drain();
+    expect(idaOutbox(1)).toHaveLength(1);
+    expect(idaOutbox(3)).toHaveLength(1);
+    expect(idaOf(idaOutbox(3)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 3 });
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("tờ khai bị mở lại (DRAFT) trước khi nối → không khai tạm nhánh 2 (bất biến 7), ghi lỗi trên nhánh 2", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    decls.status = "DRAFT";
+    await drain();
+    expect(idaOutbox(2)).toHaveLength(0);
+    expect(uow.data.results.find((r) => r.branch === 2)?.raw?.stage).toBe("NOT_SENT");
+    expect(uow.data.messages.filter((m) => m.branch === 2)).toEqual([expect.objectContaining({ operation: "IDA", direction: "IN", result: "ERROR", summary: expect.stringContaining("Tờ 2/3") })]);
+  });
+
+  it("lô 40 dòng: một tờ – outbox/khóa/thông điệp như trước, không nối tiếp", async () => {
+    decls.items = lines(40);
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    const snap = (await decls.get(ORG, D))!;
+    expect(uow.data.outbox[0]).toMatchObject({ branch: 1, idempotencyKey: `${D}:IDA:v2` });
+    expect((uow.data.outbox[0]!.payload as { request: unknown }).request).toEqual(buildFptRequest(snap.payload).request);
+    expect(idaOf(uow.data.outbox[0]!)["tK_FIC"]).toBeUndefined();
+    await drain();
+    expect(uow.data.outbox).toHaveLength(1);
+    expect(uow.data.results).toHaveLength(1);
+  });
+
+  it("outbox cũ PENDING tạo trước migration (nhánh 1, khóa cũ) → truyền lại báo ALREADY_SUBMITTED, không tạo trùng", async () => {
+    const ob = seedOutbox();
+    expect(errCode(await submitDeclaration(deps, declarant, D, "cert_1"))).toBe("ALREADY_SUBMITTED");
+    expect(uow.data.outbox.map((o) => o.id)).toEqual([ob.id]);
+    expect(uow.data.results).toHaveLength(0);
+    expect(queue.jobs).toEqual([expect.objectContaining({ payload: expect.objectContaining({ outboxId: ob.id }) })]);
   });
 });

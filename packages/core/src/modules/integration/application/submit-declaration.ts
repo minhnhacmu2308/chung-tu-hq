@@ -1,15 +1,50 @@
-// Ký số & khai tạm lần đầu (ADR 0005 outbox): guard → outbox IDA/EDA (idempotency_key) → declaration SUBMITTED → dossier SUBMITTED → job customs-send.
+// Ký số & khai tạm lần đầu (ADR 0005 outbox): guard từng tờ khai nhánh → kết quả NOT_SENT mọi nhánh + outbox IDA/EDA nhánh 1 (idempotency_key)
+// → declaration SUBMITTED → dossier SUBMITTED → job customs-send. Nhánh 2..N do worker khai tạm nối tiếp (enqueueBranchPreDeclare, spec §6.2).
 // Chỉ gửi khai tạm; khai chính thức (IDC/EDC) và các nghiệp vụ sau do người khai bấm (performOperation).
-import { declarationRequiredGaps, requiredGapsText, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
+import { branchCount, declarationRequiredGaps, requiredGapsText, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
-import { domainError, reasonError } from "../../../shared/errors.js";
+import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
+import type { OrgId, UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { buildFptRequest } from "../domain/declaration-to-fpt.js";
+import { branchPayload } from "../domain/branches.js";
+import { buildFptRequest, type DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import { stageOf } from "../domain/state-machine.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
 
-export const outboxKey = (dossierId: string, op: string, version: number, retry = 0) => `${dossierId}:${op}:v${version}${retry ? `:retry${retry}` : ""}`;
+/** Khóa idempotency outbox. Nhánh 1 giữ đúng dạng cũ (dữ liệu đang chạy không bị gửi trùng); nhánh ≥ 2 thêm `:b<no>`. */
+export const outboxKey = (dossierId: string, op: string, version: number, retry = 0, branch = 1) => `${dossierId}:${op}:v${version}${retry ? `:retry${retry}` : ""}${branch > 1 ? `:b${branch}` : ""}`;
+
+/** Số tờ khai giả CHỈ để kiểm tờ 2..N lúc truyền lần đầu (số tờ 1 chưa có) – thông điệp dựng với số này bị bỏ, không bao giờ gửi. */
+const CHECK_ONLY_FIRST_NO = "000000000000";
+
+type Sheet = { no: number; of: number; payload: DeclarationPayload; /** Vị trí dòng đầu của tờ trong dòng hàng cả lô (đã sắp theo lineNo). */ offset: number; blockers: string[] };
+const sheetOf = (p: DeclarationPayload, no: number, firstNo: string | null): Sheet => {
+  const b = branchPayload(p, no, firstNo);
+  return { no, of: b.range.of, payload: b.payload, offset: b.range.index[0], blockers: b.blockers };
+};
+/** Lô nhiều tờ: thông báo lỗi nêu số tờ; lô một tờ giữ nguyên câu cũ. */
+const tag = (s: Sheet, text: string) => (s.of > 1 ? `Tờ ${s.no}/${s.of}: ${text}` : text);
+const sheetParam = (s: Sheet) => (s.of > 1 ? { sheet: `${s.no}/${s.of}` } : {});
+
+/** Ô bắt buộc trống trên dòng hàng của tờ (cùng quy tắc nút Ký số ở giao diện). Chỉ số dòng trong chi tiết theo cả lô. */
+function gapsError(s: Sheet): DomainError | null {
+  const items = [...s.payload.items].sort((a, b) => a.lineNo - b.lineNo);
+  const gaps = declarationRequiredGaps(s.payload.kind, Object.entries(s.payload.fields).map(([code, f]) => ({ code, value: f.value })), items);
+  if (!gaps.length) return null;
+  const requiredGaps = gaps.map((g) => (g.line === undefined ? g : { ...g, line: g.line + s.offset }));
+  return reasonError("VALIDATION", "REQUIRED_FIELDS_MISSING_SUBMIT", { n: gaps.length, fields: tag(s, requiredGapsText(gaps, items.map((i) => i.lineNo))), ...sheetParam(s) }, { requiredGaps });
+}
+
+/** Dựng thông điệp FPT của tờ; blocker (kể cả của tách tờ) hoặc sai đặc tả FPT → lỗi nêu số tờ. */
+function buildSheet(s: Sheet): Result<ReturnType<typeof buildFptRequest>> {
+  const built = buildFptRequest(s.payload);
+  const blockers = [...s.blockers, ...built.blockers];
+  if (blockers.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: tag(s, blockers.join("; ")), ...sheetParam(s) }));
+  // Sai đặc tả FPT (thiếu ô Required, sai kiểu/độ dài) → Hải quan/FPT từ chối: chặn trước khi đánh dấu đã khai thay vì để cổng gửi báo lỗi sau.
+  if (built.issues.length) return err(reasonError("VALIDATION", "DECLARATION_SPEC_INVALID", { issues: tag(s, built.issues.join("; ")), ...sheetParam(s) }, { issues: built.issues }));
+  return ok(built);
+}
 
 /**
  * Lần truyền trước crash sau khi đã ghi outbox/đánh dấu SUBMITTED nhưng chưa kịp đẩy job (ghi DB và đẩy job không cùng transaction):
@@ -46,10 +81,14 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
     return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REOPEN", { week: weekStart(snap.exchangeRateDate) }));
   const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
   if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
-  // Dữ liệu có thể đổi sau khi duyệt: kiểm lại ô bắt buộc trước khi tạo thông điệp (cùng quy tắc nút Ký số ở giao diện).
-  const items = [...snap.payload.items].sort((a, b) => a.lineNo - b.lineNo);
-  const gaps = declarationRequiredGaps(snap.payload.kind, Object.entries(snap.payload.fields).map(([code, f]) => ({ code, value: f.value })), items);
-  if (gaps.length) return err(reasonError("VALIDATION", "REQUIRED_FIELDS_MISSING_SUBMIT", { n: gaps.length, fields: requiredGapsText(gaps, items.map((i) => i.lineNo)) }, { requiredGaps: gaps }));
+  // Guard trên TỪNG tờ trước khi gửi bất kỳ tờ nào (spec §6.1). Tờ 2..N kiểm với số tờ 1 giả (chưa có) – chỉ để kiểm, không gửi.
+  const of = branchCount(snap.payload.items.length);
+  const sheets = Array.from({ length: of }, (_, i) => sheetOf(snap.payload, i + 1, i === 0 ? null : CHECK_ONLY_FIRST_NO));
+  // Dữ liệu có thể đổi sau khi duyệt: kiểm lại ô bắt buộc trước khi tạo thông điệp.
+  for (const s of sheets) {
+    const gaps = gapsError(s);
+    if (gaps) return err(gaps);
+  }
   if (!certificateId || !(await deps.certificates.exists(ctx.orgId, certificateId))) return err(reasonError("NO_CERT", "CERTIFICATE_REQUIRED"));
 
   const op = snap.payload.kind === "IDA" ? "IDA" : "EDA";
@@ -59,10 +98,10 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
     const sent = await performOperation(deps, ctx, dossierId, op);
     return sent.ok ? ok({ outboxId: "" }) : sent;
   }
-  const built = buildFptRequest(snap.payload);
-  if (built.blockers.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: built.blockers.join("; ") }));
-  // Sai đặc tả FPT (thiếu ô Required, sai kiểu/độ dài) → Hải quan/FPT từ chối: chặn trước khi đánh dấu đã khai thay vì để cổng gửi báo lỗi sau.
-  if (built.issues.length) return err(reasonError("VALIDATION", "DECLARATION_SPEC_INVALID", { issues: built.issues.join("; ") }, { issues: built.issues }));
+  const builds = sheets.map(buildSheet);
+  const failed = builds.find((b) => !b.ok);
+  if (failed && !failed.ok) return failed;
+  const built = (builds[0] as { ok: true; value: ReturnType<typeof buildFptRequest> }).value;
   const now = deps.clock.now();
   const key = outboxKey(dossierId, op, snap.version);
   const created = await deps.uow.asOrg(ctx, async (r) => {
@@ -80,8 +119,11 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
       if (/duplicate key|unique/i.test(e instanceof Error ? e.message : String(e))) return err(domainError("ALREADY_SUBMITTED", "Tờ khai đã được truyền – không gửi trùng"));
       throw e;
     }
-    const result: ResultRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, externalId: null, declarationNo: null, channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: snap.estimatedTaxVnd, state: "APPROVED", pollCount: 0, raw: { stage: "NOT_SENT", certificateId }, updatedAt: now };
-    await r.results.upsert(result);
+    // Mọi nhánh có kết quả NOT_SENT ngay (cùng transaction với outbox nhánh 1); thuế dự tính cả lô chỉ gắn khi lô một tờ.
+    for (const s of sheets) {
+      const result: ResultRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: s.no, externalId: null, declarationNo: null, channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: of === 1 ? snap.estimatedTaxVnd : null, state: "APPROVED", pollCount: 0, raw: { stage: "NOT_SENT", certificateId }, updatedAt: now };
+      await r.results.upsert(result);
+    }
     return ok(row);
   });
   if (!created.ok) return created;
@@ -90,4 +132,48 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   await deps.queue.enqueue("customs-send", { orgId: ctx.orgId, userId: ctx.userId, outboxId: created.value.id }, { jobId: `customs-send:${created.value.id}` });
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });
   return ok({ outboxId: created.value.id });
+}
+
+/**
+ * Khai tạm (IDA/EDA) tờ khai nhánh `branch` từ tờ khai hiện tại – dùng cho chuỗi khai tạm nối tiếp (worker) và gửi lại sau mở lại.
+ * Giữ bất biến 7 (tờ khai đã duyệt, HS đủ, không BLOCKER, đúng tuần tỷ giá) + guard của tờ; tờ 2..N dùng số tờ khai của tờ 1 (TK_FIC).
+ * Idempotent: khóa outbox theo nhánh + phiên bản; đã có (job chạy lại / hai job song song – unique) → không tạo thêm, chỉ đẩy lại job nếu chưa từng xử lý.
+ */
+export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, dossierId: string, branch: number): Promise<Result<void>> {
+  const snap = await deps.declarations.get(ctx.orgId, dossierId);
+  if (!snap) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
+  if (snap.status !== "APPROVED" && snap.status !== "SUBMITTED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
+  if (snap.unconfirmedHs > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs }));
+  if (!sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
+    return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
+  const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
+  if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
+  const { first, target } = await deps.uow.asOrg(ctx, async (r) => ({ first: await r.results.get(ctx.orgId, dossierId, 1), target: await r.results.get(ctx.orgId, dossierId, branch) }));
+  if (!target) return err(reasonError("INVALID_STATE", "NOT_SUBMITTED_YET"));
+  const s = sheetOf(snap.payload, branch, branch === 1 ? null : first?.declarationNo ?? null);
+  const gaps = gapsError(s);
+  if (gaps) return err(gaps);
+  const built = buildSheet(s);
+  if (!built.ok) return built;
+
+  const op = snap.payload.kind === "IDA" ? "IDA" : "EDA";
+  const now = deps.clock.now();
+  const key = outboxKey(dossierId, op, snap.version, 0, branch);
+  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: target.raw?.certificateId }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+  const toSend = await deps.uow.asOrg(ctx, async (r): Promise<OutboxRow | null> => {
+    const existing = await r.outbox.findByKey(ctx.orgId, key);
+    if (existing) return existing.status === "PENDING" && existing.attempts === 0 ? existing : null;
+    try {
+      await r.outbox.insert(row);
+    } catch (e) {
+      // Job khác vừa tạo cùng khóa → đã được xếp gửi, không tạo trùng.
+      if (/duplicate key|unique/i.test(e instanceof Error ? e.message : String(e))) return null;
+      throw e;
+    }
+    return row;
+  });
+  if (!toSend) return ok(undefined);
+  await deps.queue.enqueue("customs-send", { orgId: ctx.orgId, userId: ctx.userId, outboxId: toSend.id }, { jobId: `customs-send:${toSend.id}` });
+  await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });
+  return ok(undefined);
 }

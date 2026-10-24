@@ -213,7 +213,7 @@ export function Combobox(props: ComboboxProps) {
       }}
     >
       <PopoverPrimitive.Anchor asChild>
-        <div className={cn(shell, disabled && "cursor-not-allowed opacity-50", className)}>
+        <div data-glass-input="" className={cn(shell, disabled && "cursor-not-allowed opacity-50", className)}>
           {props.multiple && selectedOptions.length > 0 && (
             <ul className="flex flex-wrap items-center gap-1 py-1">
               {selectedOptions.map((o) => (
@@ -273,6 +273,7 @@ export function Combobox(props: ComboboxProps) {
           collisionPadding={16}
           aria-label={t.list}
           data-expanded={expandable ? String(expanded) : undefined}
+          data-glass=""
           className={cn(
             "z-50 min-w-56 rounded-lg border border-border bg-surface text-fg shadow-lg motion-safe:animate-pop-in",
             // Mở rộng: tới 36rem nhưng không vượt màn hình (chừa 1rem mỗi bên).

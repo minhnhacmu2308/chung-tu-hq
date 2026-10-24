@@ -16,12 +16,12 @@ const control = [
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   const a11y = useFieldControl(props);
-  return <input className={cn(control, "h-10 px-3", className)} {...props} {...a11y} />;
+  return <input data-glass-input="" className={cn(control, "h-10 px-3", className)} {...props} {...a11y} />;
 }
 
 export function Textarea({ className, rows = 3, ...props }: ComponentProps<"textarea">) {
   const a11y = useFieldControl(props);
-  return <textarea rows={rows} className={cn(control, "px-3 py-2", className)} {...props} {...a11y} />;
+  return <textarea data-glass-input="" rows={rows} className={cn(control, "px-3 py-2", className)} {...props} {...a11y} />;
 }
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
@@ -149,6 +149,7 @@ export function Select({ className, options, placeholder, value, defaultValue, o
             // Space kích hoạt nút lúc nhả phím – chặn để không đóng lại ngay danh sách vừa mở bằng keydown.
             onKeyUp={(e) => e.key === " " && e.preventDefault()}
             data-slot="select-trigger"
+            data-glass-input=""
             className={cn(
               control,
               "group/select flex h-10 cursor-pointer items-center pl-3 pr-9 text-left data-[state=open]:border-focus data-[state=open]:ring-3 data-[state=open]:ring-focus/25",
@@ -201,6 +202,7 @@ export function Select({ className, options, placeholder, value, defaultValue, o
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
           data-slot="select-content"
+          data-glass=""
           className={cn(
             "z-50 max-h-[min(20rem,var(--radix-popover-content-available-height))] min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)]",
             "overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface p-1 text-fg shadow-lg outline-none motion-safe:animate-pop-in",

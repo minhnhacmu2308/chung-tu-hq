@@ -238,6 +238,7 @@ export function DialogContent({
       {/* Lớp phủ tự làm (Overlay của Radix chỉ có ở chế độ modal). Bấm vào = bấm ngoài → Radix đóng dialog. */}
       <ModalOverlay active={isModal} />
       <DialogPrimitive.Content
+        data-glass=""
         data-presentation={mode}
         aria-modal={isModal || undefined}
         className={cn(
@@ -293,5 +294,5 @@ export function DialogContent({
 /** Đặt cuối nội dung dialog; luôn nằm dưới cùng, không cuộn theo nội dung. */
 export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
   // -bottom-4 = bù phần đệm dưới (py-4) của thân popup: dính sát đáy, nội dung cuộn không lộ ra bên dưới thanh nút.
-  return <div className={cn("sticky -bottom-4 -mx-5 -mb-4 mt-auto flex justify-end gap-2 border-t border-border bg-surface px-5 py-3", className)} {...props} />;
+  return <div data-glass="" className={cn("sticky -bottom-4 -mx-5 -mb-4 mt-auto flex justify-end gap-2 border-t border-border bg-surface px-5 py-3", className)} {...props} />;
 }

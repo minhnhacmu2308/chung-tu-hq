@@ -92,6 +92,7 @@ export function AssistantPanel({
     <aside
       aria-label={typeof name === "string" ? name : l.assistant}
       data-mode={mode}
+      data-glass=""
       className={cn("flex flex-col border-border bg-surface text-fg", PANEL_MODE[mode], className)}
     >
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">

@@ -17,6 +17,8 @@ export const APPEARANCE_OPTIONS = {
   menuStyle: ["default", "tint", "bold", "image"],
   /** Hình nền menu: 3 họa tiết dựng bằng CSS theo màu chính/phụ, hoặc ảnh người dùng tải lên. */
   menuPattern: ["waves", "dots", "grid", "custom"],
+  /** Chất liệu khung (menu, thẻ, popup, panel): đặc hoặc kính mờ. Bảng dữ liệu, ô nhập luôn đặc. */
+  surface: ["solid", "glass"],
 } as const;
 
 /** Màu thương hiệu gợi ý. Admin vẫn có thể nhập mã màu riêng (được kiểm tra tương phản). */
@@ -66,6 +68,7 @@ export const Appearance = z.object({
   menuStyle: z.enum(APPEARANCE_OPTIONS.menuStyle),
   menuPattern: z.enum(APPEARANCE_OPTIONS.menuPattern),
   menuImage: menuImage.nullable(),
+  surface: z.enum(APPEARANCE_OPTIONS.surface),
   cursorEffect: z.boolean(),
   showPageDescription: z.boolean(),
 });
@@ -86,6 +89,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   menuStyle: "default",
   menuPattern: "waves",
   menuImage: null,
+  surface: "solid",
   cursorEffect: false,
   showPageDescription: true,
 };
@@ -134,6 +138,7 @@ export function appearanceAttributes(a: Appearance): Record<string, string> {
     "data-menu-style": a.menuStyle,
     // Chọn "ảnh của bạn" mà chưa tải ảnh → dùng họa tiết sóng.
     "data-menu-pattern": a.menuPattern === "custom" && !a.menuImage ? "waves" : a.menuPattern,
+    "data-surface": a.surface,
     "data-cursor-effect": a.cursorEffect ? "on" : "off",
     "data-page-description": a.showPageDescription ? "shown" : "hidden",
   };

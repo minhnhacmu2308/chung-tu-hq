@@ -23,7 +23,7 @@ export const DropdownMenuRadioGroup = MenuPrimitive.RadioGroup;
 export function DropdownMenuContent({ className, sideOffset = 4, ...props }: ComponentProps<typeof MenuPrimitive.Content>) {
   return (
     <MenuPrimitive.Portal>
-      <MenuPrimitive.Content sideOffset={sideOffset} className={cn(surface, className)} {...props} />
+      <MenuPrimitive.Content data-glass="" sideOffset={sideOffset} className={cn(surface, className)} {...props} />
     </MenuPrimitive.Portal>
   );
 }
@@ -87,7 +87,7 @@ export function DropdownMenuSubTrigger({ className, children, icon, ...props }: 
 export function DropdownMenuSubContent({ className, ...props }: ComponentProps<typeof MenuPrimitive.SubContent>) {
   return (
     <MenuPrimitive.Portal>
-      <MenuPrimitive.SubContent className={cn(surface, className)} {...props} />
+      <MenuPrimitive.SubContent data-glass="" className={cn(surface, className)} {...props} />
     </MenuPrimitive.Portal>
   );
 }
@@ -113,6 +113,7 @@ export function PopoverContent({ className, sideOffset = 6, showClose = false, s
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
+        data-glass=""
         sideOffset={sideOffset}
         className={cn("z-50 w-72 rounded-lg border border-border bg-surface p-4 text-fg shadow-lg focus-visible:outline-none motion-safe:animate-pop-in", showClose && "pr-10", className)}
         {...props}

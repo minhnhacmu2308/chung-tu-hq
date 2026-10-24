@@ -238,6 +238,36 @@
   --kb-menu-scrim-amount: 80%;
 }
 
+/*
+ * ---------- Chất liệu bề mặt (data-surface="glass") – kính mờ kiểu Apple ----------
+ * Chỉ khung bao: [data-glass] (Card, popup/panel, footer popup, panel trợ lý, menu thả xuống, popover) và menu chính
+ * kiểu "Mặc định". Bảng dữ liệu, ô nhập, tờ khai có nền bg-surface riêng nên vẫn đặc → số liệu luôn rõ.
+ * Trình duyệt không có backdrop-filter → giữ nền đặc. [data-glass-preview] = hình mô phỏng trong bảng cấu hình.
+ */
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  :root[data-surface="glass"] [data-glass],
+  :root[data-surface="glass"][data-menu-style="default"] [data-slot="app-menu"],
+  [data-glass-preview] {
+    background-color: light-dark(
+      color-mix(in oklab, var(--kb-color-surface) 56%, transparent),
+      color-mix(in oklab, var(--kb-color-surface) 55%, transparent));
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    backdrop-filter: blur(20px) saturate(1.6);
+    border-color: color-mix(in oklab, var(--kb-color-border) 60%, transparent);
+  }
+  /* Kính lồng trong kính (footer trong popup) chỉ cần trong mờ, không làm mờ lần nữa. */
+  :root[data-surface="glass"] [data-glass] [data-glass] { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+/* Người dùng bật "Giảm độ trong suốt" / "Tăng tương phản" trong hệ điều hành → luôn nền đặc. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root[data-surface="glass"] [data-glass],
+  :root[data-surface="glass"][data-menu-style="default"] [data-slot="app-menu"] {
+    background-color: var(--kb-color-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 /* ---------- Hiệu ứng con trỏ (CursorEffect, chỉ hiện khi data-cursor-effect="on") ---------- */
 :root:not([data-cursor-effect="on"]) [data-slot="cursor-effect"] { display: none; }
 

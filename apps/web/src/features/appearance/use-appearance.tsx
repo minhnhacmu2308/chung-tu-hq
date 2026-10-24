@@ -5,7 +5,7 @@ import { Appearance as AppearanceSchema, appearanceAttributes, appearanceCss, DE
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 const KEY = "kb-appearance";
-const ATTRS = ["data-theme", "data-density", "data-font-size", "data-font", "data-gray", "data-backdrop", "data-radius", "data-menu-position", "data-menu-style", "data-menu-pattern", "data-cursor-effect", "data-page-description"];
+const ATTRS = ["data-theme", "data-density", "data-font-size", "data-font", "data-gray", "data-backdrop", "data-radius", "data-menu-position", "data-menu-style", "data-menu-pattern", "data-surface", "data-cursor-effect", "data-page-description"];
 
 type Ctx = { appearance: Appearance; setAppearance: (a: Appearance) => void; adjustments: ReturnType<typeof appearanceCss>["adjustments"] };
 const AppearanceContext = createContext<Ctx | null>(null);

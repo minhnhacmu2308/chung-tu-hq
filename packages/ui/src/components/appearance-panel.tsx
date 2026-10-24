@@ -19,6 +19,7 @@ const KEYS = [
   "accent", "gradient", "mesh",
   "menuStyle", "menuDefault", "menuTint", "menuBold", "menuImage",
   "pattern", "waves", "dots", "grid", "custom", "upload", "replace", "remove", "imageHint", "imageInvalid",
+  "surface", "solid", "glass", "glassFlatHint", "glassUseMesh",
 ] as const;
 type Key = (typeof KEYS)[number];
 
@@ -42,6 +43,9 @@ const MESSAGES = {
     upload: "Tải ảnh lên", replace: "Đổi ảnh", remove: "Xóa ảnh",
     imageHint: "PNG, JPG hoặc WebP. Ảnh được thu nhỏ và chỉ lưu trên trình duyệt này.",
     imageInvalid: "Không đọc được ảnh này. Chọn ảnh PNG, JPG hoặc WebP khác.",
+    surface: "Chất liệu khung", solid: "Đặc", glass: "Kính mờ",
+    glassFlatHint: "Nền trang đang Phẳng nên kính mờ gần như không thấy khác. Chọn nền có màu để thấy hiệu ứng.",
+    glassUseMesh: "Dùng nền Loang màu",
   },
   en: {
     panel: "Appearance settings", title: "Appearance", reset: "Reset to default", locked: " (locked by organization)",
@@ -62,6 +66,9 @@ const MESSAGES = {
     upload: "Upload image", replace: "Change image", remove: "Remove image",
     imageHint: "PNG, JPG or WebP. The image is resized and stored only in this browser.",
     imageInvalid: "This image could not be read. Choose another PNG, JPG or WebP image.",
+    surface: "Surface material", solid: "Solid", glass: "Frosted glass",
+    glassFlatHint: "The page background is Flat, so frosted glass looks almost the same. Pick a colored background to see the effect.",
+    glassUseMesh: "Use Mesh background",
   },
   zh: {
     panel: "外观设置", title: "外观", reset: "恢复默认", locked: "（企业已锁定）",
@@ -82,6 +89,9 @@ const MESSAGES = {
     upload: "上传图片", replace: "更换图片", remove: "移除图片",
     imageHint: "支持 PNG、JPG、WebP。图片会被缩小，仅保存在此浏览器中。",
     imageInvalid: "无法读取该图片，请换一张 PNG、JPG 或 WebP 图片。",
+    surface: "界面材质", solid: "实色", glass: "毛玻璃",
+    glassFlatHint: "页面背景为纯色，毛玻璃效果几乎看不出。请选择带颜色的背景以查看效果。",
+    glassUseMesh: "使用晕染背景",
   },
 } satisfies Messages<Key>;
 
@@ -136,6 +146,23 @@ function BackdropPreview({ backdrop }: { backdrop: Appearance["backdrop"] }) {
   return (
     <span data-backdrop-preview={backdrop} className={FRAME}>
       <MiniPage className="bg-transparent" />
+    </span>
+  );
+}
+
+/** Chất liệu khung: nền loang màu phía sau, một thẻ đặc hoặc kính mờ đè lên (kính mờ dùng [data-glass-preview]). */
+function SurfacePreview({ glass }: { glass: boolean }) {
+  return (
+    <span data-backdrop-preview="mesh" className={cn(FRAME, "relative items-center justify-center p-1.5")}>
+      <span className="absolute left-[18%] top-1 h-7 w-7 rounded-full bg-primary" />
+      <span className="absolute bottom-0.5 right-[18%] h-6 w-6 rounded-full bg-accent" />
+      <span
+        data-glass-preview={glass ? "" : undefined}
+        className="relative flex h-full w-3/5 flex-col justify-center gap-1 rounded-sm border border-border bg-surface px-1.5 shadow-sm"
+      >
+        <span className="h-1.5 w-1/2 rounded-full bg-fg-muted" />
+        <span className="h-1 w-4/5 rounded-full bg-border-strong" />
+      </span>
     </span>
   );
 }
@@ -534,6 +561,23 @@ export function AppearancePanel({
           { value: "image", label: t.menuImage, preview: <MenuStylePreview style="image" pattern={value.menuPattern === "custom" && !value.menuImage ? "waves" : value.menuPattern} /> },
         ]} />
       {value.menuStyle === "image" && <MenuImagePicker value={value} onChange={onChange} t={t} />}
+      <div className="flex flex-col gap-2">
+        <PreviewChoice label={t.surface} value={value.surface} onChange={set("surface")}
+          options={[
+            { value: "solid", label: t.solid, preview: <SurfacePreview glass={false} /> },
+            { value: "glass", label: t.glass, preview: <SurfacePreview glass /> },
+          ]} />
+        {value.surface === "glass" && value.backdrop === "flat" && (
+          <div className="flex flex-col items-start gap-1.5 text-xs text-fg-subtle">
+            <p>{t.glassFlatHint}</p>
+            {!isLocked("backdrop") && (
+              <Button type="button" variant="secondary" size="sm" onClick={() => onChange({ ...value, backdrop: "mesh" })}>
+                {t.glassUseMesh}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
       <PreviewChoice label={withLock(t.gray, "gray")} value={value.gray} onChange={set("gray")} disabled={isLocked("gray")}
         options={[
           { value: "slate", label: "Slate", preview: <GrayPreview gray="slate" /> },

@@ -42,6 +42,7 @@ describe("appearanceAttributes", () => {
       gray: "gray",
       showPageDescription: false,
       cursorEffect: true,
+      surface: "glass",
     });
     expect(attrs).toMatchObject({
       "data-theme": "dark",
@@ -49,6 +50,7 @@ describe("appearanceAttributes", () => {
       "data-gray": "gray",
       "data-page-description": "hidden",
       "data-cursor-effect": "on",
+      "data-surface": "glass",
     });
   });
 });

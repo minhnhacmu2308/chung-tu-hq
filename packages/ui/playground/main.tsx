@@ -68,7 +68,7 @@ function readCollapsed() {
 }
 import { Appearance as AppearanceSchema, appearanceAttributes, appearanceCss, DEFAULT_APPEARANCE, type Appearance } from "../src/theme/index.js";
 
-const ATTRS = ["data-theme", "data-density", "data-font-size", "data-font", "data-gray", "data-backdrop", "data-radius", "data-menu-position", "data-menu-style", "data-menu-pattern", "data-cursor-effect", "data-page-description"];
+const ATTRS = ["data-theme", "data-density", "data-font-size", "data-font", "data-gray", "data-backdrop", "data-radius", "data-menu-position", "data-menu-style", "data-menu-pattern", "data-surface", "data-cursor-effect", "data-page-description"];
 
 /** Áp dụng cấu hình lên <html> – app thật làm việc này ở layout gốc (server-side để không nháy). */
 function useApplyAppearance(a: Appearance) {

@@ -4,7 +4,8 @@ import { cn } from "../lib/cn.js";
 /* ---------------- Card ---------------- */
 
 export function Card({ className, ...props }: ComponentProps<"section">) {
-  return <section className={cn("rounded-lg border border-border bg-surface text-fg shadow-sm", className)} {...props} />;
+  // data-glass: tùy chọn "Kính mờ" (data-surface="glass") làm bề mặt này trong mờ – xem tokens.css.
+  return <section data-glass="" className={cn("rounded-lg border border-border bg-surface text-fg shadow-sm", className)} {...props} />;
 }
 export function CardHeader({ className, ...props }: ComponentProps<"div">) {
   return <div className={cn("flex flex-col gap-1 p-5 pb-3", className)} {...props} />;

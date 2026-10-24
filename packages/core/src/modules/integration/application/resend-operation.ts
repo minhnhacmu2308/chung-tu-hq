@@ -27,7 +27,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const now = () => deps.clock.now();
   const qop = queryOpFor(dossier.direction);
 
-  await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: qop, direction: "OUT", result: "OK", summary: "Tra cứu trạng thái trước khi gửi lại", payloadMasked: { nghiepVu: qop, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
+  await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, operation: qop, direction: "OUT", result: "OK", summary: "Tra cứu trạng thái trước khi gửi lại", payloadMasked: { nghiepVu: qop, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
   const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId);
   await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: qop, quantity: 1, meta: { beforeResend: op } });
   const stage = stageOf(result);
@@ -36,7 +36,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const recorded = b === "IDA" ? stage === "NOT_SENT" && !!st.declarationNo : b === "IDC" ? stage === "PRE_DECLARED" && !!st.channel : op === "HYS" ? !!result.raw?.receiptNo && result.raw?.done?.includes("HYS") === true : false;
 
   if (recorded) {
-    await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: qop, direction: "IN", result: "OK", summary: `Hải quan đã ghi nhận ${op} – không gửi lại (trạng thái: ${st.status})`, payloadMasked: { nghiepVu: qop, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now() }));
+    await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, operation: qop, direction: "IN", result: "OK", summary: `Hải quan đã ghi nhận ${op} – không gửi lại (trạng thái: ${st.status})`, payloadMasked: { nghiepVu: qop, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now() }));
     await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });
     return ok({ resent: false, message: `Hải quan đã ghi nhận ${op}, không cần gửi lại – bấm Tra cứu để cập nhật` });
   }
@@ -62,7 +62,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const key = /:n\d+$/.test(last.idempotencyKey) ? `${last.idempotencyKey}:retry${base.length}` : outboxKey(dossierId, op, version, base.length);
   const row = { ...last, id: deps.idGen.next("msg"), idempotencyKey: key, status: "PENDING" as const, attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now(), updatedAt: now() };
   await deps.uow.asOrg(ctx, async (r) => {
-    await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: qop, direction: "IN", result: "OK", summary: `Chưa ghi nhận ${op} – được phép gửi lại (trạng thái: ${st.status})`, payloadMasked: { nghiepVu: qop, trangThai: st.status }, externalRef: result.externalId, at: now() });
+    await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, operation: qop, direction: "IN", result: "OK", summary: `Chưa ghi nhận ${op} – được phép gửi lại (trạng thái: ${st.status})`, payloadMasked: { nghiepVu: qop, trangThai: st.status }, externalRef: result.externalId, at: now() });
     await r.outbox.insert(row);
     if (result.state === "SEND_FAILED") await r.results.upsert({ ...result, state: coarseState(stage), updatedAt: now() });
   });

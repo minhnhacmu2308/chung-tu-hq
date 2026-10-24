@@ -26,7 +26,7 @@ export async function createPostAmendment(deps: CustomsDeps, r: CustomsRepos, ct
   const now = deps.clock.now();
   const rate = snap.payload.fields["TY_GIA"]?.value.trim();
   const row: PostAmendmentRow = {
-    id: deps.idGen.next("pam"), orgId: ctx.orgId, dossierId, seq: all.length + 1, status: "DRAFT",
+    id: deps.idGen.next("pam"), orgId: ctx.orgId, dossierId, branch: result.branch, seq: all.length + 1, status: "DRAFT",
     header: amaHeaderFrom(amaSource(snap.payload, result.raw?.customsInfo ?? null, result.declarationNo ?? "", rate || undefined)),
     lines: [], approvedAt: null, createdAt: now, updatedAt: now,
   };

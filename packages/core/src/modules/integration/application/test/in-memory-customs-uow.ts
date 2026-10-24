@@ -29,24 +29,26 @@ export class InMemoryCustomsUow implements CustomsUow {
         },
       },
       messages: {
-        list: async (orgId, dossierId) => clone(d.messages.filter((m) => m.orgId === org && m.orgId === orgId && m.dossierId === dossierId).sort((a, b) => a.at.getTime() - b.at.getTime() || a.id.localeCompare(b.id))),
+        list: async (orgId, dossierId, branch) => clone(d.messages.filter((m) => m.orgId === org && m.orgId === orgId && m.dossierId === dossierId && (branch === undefined || m.branch === branch)).sort((a, b) => a.at.getTime() - b.at.getTime() || a.id.localeCompare(b.id))),
         insert: async (row) => void (row.orgId === org ? d.messages.push(clone(row)) : deny("customs_messages")),
       },
       results: {
-        get: async (orgId, dossierId) => clone(d.results.find((r) => r.dossierId === dossierId && r.orgId === org && r.orgId === orgId) ?? null),
+        get: async (orgId, dossierId, branch = 1) => clone(d.results.find((r) => r.dossierId === dossierId && r.branch === branch && r.orgId === org && r.orgId === orgId) ?? null),
         listForOrg: async (orgId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId)),
+        listForDossier: async (orgId, dossierId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId).sort((a, b) => a.branch - b.branch)),
+        issuedCount: async (orgId, dossierId) => d.results.filter((r) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId && r.declarationNo !== null).length,
         upsert: async (row) => {
           if (row.orgId !== org) deny("customs_results");
-          const i = d.results.findIndex((r) => r.dossierId === row.dossierId);
+          const i = d.results.findIndex((r) => r.dossierId === row.dossierId && r.branch === row.branch);
           if (i >= 0) d.results[i] = clone(row);
           else d.results.push(clone(row));
         },
       },
       amendments: {
-        listForDossier: async (orgId, dossierId) => clone(d.amendments.filter((a) => a.orgId === org && a.orgId === orgId && a.dossierId === dossierId).sort((a, b) => a.seq - b.seq)),
+        listForDossier: async (orgId, dossierId, branch) => clone(d.amendments.filter((a) => a.orgId === org && a.orgId === orgId && a.dossierId === dossierId && (branch === undefined || a.branch === branch)).sort((a, b) => a.branch - b.branch || a.seq - b.seq)),
         insert: async (row) => {
           if (row.orgId !== org) deny("post_amendments");
-          if (d.amendments.some((a) => a.dossierId === row.dossierId && a.seq === row.seq)) throw new Error("duplicate key value violates unique constraint post_amendments_dossier_seq_uq");
+          if (d.amendments.some((a) => a.dossierId === row.dossierId && a.branch === row.branch && a.seq === row.seq)) throw new Error("duplicate key value violates unique constraint post_amendments_dossier_branch_seq_uq");
           d.amendments.push(clone(row));
         },
         update: async (row) => {

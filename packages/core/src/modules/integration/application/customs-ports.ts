@@ -10,10 +10,10 @@ import type { ProgressEvent } from "../../dossier/index.js";
 import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import type { ResultRaw } from "../domain/state-machine.js";
 
-export type OutboxRow = { id: string; orgId: string; dossierId: string; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
-export type MessageRow = { id: string; orgId: string; dossierId: string; operation: CustomsOperation; direction: "OUT" | "IN"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
+export type OutboxRow = { id: string; orgId: string; dossierId: string; /** Nhánh tờ khai (≥ 1). */ branch: number; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
+export type MessageRow = { id: string; orgId: string; dossierId: string; branch: number; operation: CustomsOperation; direction: "OUT" | "IN"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
 export type ResultRow = {
-  id: string; orgId: string; dossierId: string; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
+  id: string; orgId: string; dossierId: string; branch: number; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
   clearanceStatus: "WAITING" | "INSPECTING" | "CLEARED" | "REJECTED"; customsTaxVnd: string | null; state: SubmissionState; pollCount: number;
   /** Giai đoạn vòng đời + dữ liệu phụ (xem ResultRaw). */
   raw: ResultRaw | null; updatedAt: Date;
@@ -30,24 +30,31 @@ export interface CustomsRepos {
     update(orgId: string, id: string, patch: Partial<Pick<OutboxRow, "status" | "attempts" | "lastError" | "nextAttemptAt" | "updatedAt">>): Promise<void>;
   };
   messages: {
-    list(orgId: string, dossierId: string): Promise<MessageRow[]>;
+    /** `branch` vắng = mọi nhánh. */
+    list(orgId: string, dossierId: string, branch?: number): Promise<MessageRow[]>;
     insert(row: MessageRow): Promise<void>;
   };
   results: {
-    get(orgId: string, dossierId: string): Promise<ResultRow | null>;
+    /** `branch` vắng = nhánh 1. */
+    get(orgId: string, dossierId: string, branch?: number): Promise<ResultRow | null>;
+    /** Mọi nhánh của hồ sơ, sắp theo nhánh. */
+    listForDossier(orgId: string, dossierId: string): Promise<ResultRow[]>;
+    /** Số nhánh đã có số tờ khai (declaration_no khác null). */
+    issuedCount(orgId: string, dossierId: string): Promise<number>;
     listForOrg(orgId: string): Promise<ResultRow[]>;
     upsert(row: ResultRow): Promise<void>;
   };
   /** Bản khai bổ sung sau thông quan (AMA) – bản riêng, tờ khai gốc không đổi. */
   amendments: {
-    listForDossier(orgId: string, dossierId: string): Promise<PostAmendmentRow[]>;
+    /** `branch` vắng = mọi nhánh. */
+    listForDossier(orgId: string, dossierId: string, branch?: number): Promise<PostAmendmentRow[]>;
     insert(row: PostAmendmentRow): Promise<void>;
     update(row: PostAmendmentRow): Promise<void>;
   };
 }
 
 /** Bản khai bổ sung trong DB (thời điểm là Date; DTO `PostAmendment` dùng chuỗi ISO). */
-export type PostAmendmentRow = Omit<PostAmendment, "approvedAt" | "createdAt" | "updatedAt"> & { orgId: string; approvedAt: Date | null; createdAt: Date; updatedAt: Date };
+export type PostAmendmentRow = Omit<PostAmendment, "approvedAt" | "createdAt" | "updatedAt"> & { orgId: string; branch: number; approvedAt: Date | null; createdAt: Date; updatedAt: Date };
 
 /** field_audit (append-only, bất biến 6) – composition root nối sang bảng của extraction. */
 export interface CustomsAuditWriter {

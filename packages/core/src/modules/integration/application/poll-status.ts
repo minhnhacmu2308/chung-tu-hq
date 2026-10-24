@@ -27,7 +27,7 @@ export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Pro
   const changed = st.status !== result.raw?.lastStatus;
   await deps.uow.asOrg(ctx, async (r) => {
     if (changed) {
-      await r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: input.dossierId, operation: op, direction: "IN", result: "OK", summary: `Trạng thái tờ khai: ${st.status}`, payloadMasked: { nghiepVu: op, soToKhai: st.declarationNo ?? result.declarationNo, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now });
+      await r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: input.dossierId, branch: 1, operation: op, direction: "IN", result: "OK", summary: `Trạng thái tờ khai: ${st.status}`, payloadMasked: { nghiepVu: op, soToKhai: st.declarationNo ?? result.declarationNo, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now });
     }
     await r.results.upsert({
       ...result, state: coarseState(nextStage, result.state === "SEND_FAILED" && nextStage === stage), pollCount: result.pollCount + 1,

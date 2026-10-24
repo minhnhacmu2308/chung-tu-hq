@@ -346,12 +346,12 @@ describe("customs-send / poll", () => {
 
 const T = new Date("2026-10-14T03:00:00.000Z");
 const seedResult = (p: Partial<ResultRow> = {}): ResultRow => {
-  const row: ResultRow = { id: "res_1", orgId: ORG, dossierId: D, externalId: "fpt-1", declarationNo: "107000000001", channel: "YELLOW", channelNote: null, clearanceStatus: "INSPECTING", customsTaxVnd: null, state: "DOCS_SENT", pollCount: 0, raw: { progress: "DOCS_SENT" }, updatedAt: T, ...p };
+  const row: ResultRow = { id: "res_1", orgId: ORG, dossierId: D, branch: 1, externalId: "fpt-1", declarationNo: "107000000001", channel: "YELLOW", channelNote: null, clearanceStatus: "INSPECTING", customsTaxVnd: null, state: "DOCS_SENT", pollCount: 0, raw: { progress: "DOCS_SENT" }, updatedAt: T, ...p };
   uow.data.results.push(row);
   return row;
 };
 const seedOutbox = (p: Partial<OutboxRow> = {}): OutboxRow => {
-  const row: OutboxRow = { id: `ob_${uow.data.outbox.length + 1}`, orgId: ORG, dossierId: D, declarationId: "dec_1", operation: "IDA", idempotencyKey: `${D}:IDA:v2`, payload: { request: null }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: T, updatedAt: T, ...p };
+  const row: OutboxRow = { id: `ob_${uow.data.outbox.length + 1}`, orgId: ORG, dossierId: D, branch: 1, declarationId: "dec_1", operation: "IDA", idempotencyKey: `${D}:IDA:v2`, payload: { request: null }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: T, updatedAt: T, ...p };
   uow.data.outbox.push(row);
   return row;
 };
@@ -473,7 +473,7 @@ describe("getSubmission / listCustomsDeclarations – nhánh biên", () => {
     dossiers.rows.push({ ...dossiers.rows[0]!, id: "dos_2", code: "HS-NK-2610-022" });
     decls.listForCustoms = async () => [{ dossierId: D, status: "SUBMITTED", approvedAt: T }, { dossierId: "dos_2", status: "APPROVED", approvedAt: new Date("2026-10-15T00:00:00.000Z") }];
     seedResult({ customsTaxVnd: "58449312" });
-    uow.data.messages.push({ id: "m1", orgId: ORG, dossierId: D, operation: "HYS", direction: "IN", result: "OK", summary: "ok", payloadMasked: {}, externalRef: null, at: T });
+    uow.data.messages.push({ id: "m1", orgId: ORG, dossierId: D, branch: 1, operation: "HYS", direction: "IN", result: "OK", summary: "ok", payloadMasked: {}, externalRef: null, at: T });
     const rows = unwrap(await listCustomsDeclarations(deps, declarant));
     expect(rows.map((r) => r.dossierId)).toEqual(["dos_2", D]);
     expect(rows[1]).toMatchObject({ state: "INSPECTING", lastOperation: "HYS", declarationNo: "107000000001", channel: "YELLOW", channelNote: expect.stringMatching(/^Luồng vàng/), customsTaxVnd: "58449312" });

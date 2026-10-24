@@ -169,6 +169,13 @@
       "when": 1792816296448,
       "tag": "0023_value_charges",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792878672475,
+      "tag": "0024_customs_branches",
+      "breakpoints": true
     }
   ]
 }

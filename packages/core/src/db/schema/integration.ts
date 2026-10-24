@@ -25,6 +25,8 @@ export const customsOutbox = pgTable(
     id: id(),
     orgId: orgId(),
     dossierId: text("dossier_id").notNull(),
+    /** Nhánh (tờ khai ≤ 50 dòng) của hồ sơ; hồ sơ 1 tờ = nhánh 1. */
+    branch: integer("branch").notNull().default(1),
     declarationId: text("declaration_id").notNull(),
     operation: text("operation").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -35,7 +37,7 @@ export const customsOutbox = pgTable(
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     ...timestamps(),
   },
-  (t) => [uniqueIndex("customs_outbox_key_uq").on(t.idempotencyKey), index("customs_outbox_org_dossier_idx").on(t.orgId, t.dossierId), check("customs_outbox_status_chk", sql`status in ('PENDING', 'SENT', 'FAILED')`), orgRls("customs_outbox_rls")],
+  (t) => [uniqueIndex("customs_outbox_key_uq").on(t.idempotencyKey), index("customs_outbox_org_dossier_idx").on(t.orgId, t.dossierId, t.branch), check("customs_outbox_status_chk", sql`status in ('PENDING', 'SENT', 'FAILED')`), orgRls("customs_outbox_rls")],
 ).enableRLS();
 
 /** Nhật ký thông điệp đi/đến với Hải quan – append-only (không có policy UPDATE/DELETE), payload đã che bí mật. */
@@ -45,6 +47,8 @@ export const customsMessages = pgTable(
     id: id(),
     orgId: orgId(),
     dossierId: text("dossier_id").notNull(),
+    /** Nhánh (tờ khai ≤ 50 dòng) của hồ sơ; hồ sơ 1 tờ = nhánh 1. */
+    branch: integer("branch").notNull().default(1),
     operation: text("operation").notNull(),
     direction: text("direction").notNull(),
     result: text("result").notNull(),
@@ -54,7 +58,7 @@ export const customsMessages = pgTable(
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("customs_messages_org_dossier_idx").on(t.orgId, t.dossierId, t.at),
+    index("customs_messages_org_dossier_idx").on(t.orgId, t.dossierId, t.branch, t.at),
     pgPolicy("customs_messages_read", { for: "select", to: appRole, using: orgPolicyUsing }),
     pgPolicy("customs_messages_insert", { for: "insert", to: appRole, withCheck: orgPolicyUsing }),
   ],
@@ -67,6 +71,8 @@ export const customsResults = pgTable(
     id: id(),
     orgId: orgId(),
     dossierId: text("dossier_id").notNull(),
+    /** Nhánh (tờ khai ≤ 50 dòng) của hồ sơ; hồ sơ 1 tờ = nhánh 1. */
+    branch: integer("branch").notNull().default(1),
     externalId: text("external_id"),
     declarationNo: text("declaration_no"),
     channel: text("channel"),
@@ -78,7 +84,7 @@ export const customsResults = pgTable(
     raw: jsonb("raw"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("customs_results_dossier_uq").on(t.dossierId), index("customs_results_org_idx").on(t.orgId, t.updatedAt), orgRls("customs_results_rls")],
+  (t) => [uniqueIndex("customs_results_dossier_branch_uq").on(t.dossierId, t.branch), index("customs_results_org_idx").on(t.orgId, t.updatedAt), orgRls("customs_results_rls")],
 ).enableRLS();
 
 /**
@@ -91,6 +97,8 @@ export const postAmendments = pgTable(
     id: id(),
     orgId: orgId(),
     dossierId: text("dossier_id").notNull(),
+    /** Nhánh (tờ khai ≤ 50 dòng) của hồ sơ; hồ sơ 1 tờ = nhánh 1. */
+    branch: integer("branch").notNull().default(1),
     seq: integer("seq").notNull(),
     status: text("status").notNull().default("DRAFT"),
     header: jsonb("header").notNull(),
@@ -100,5 +108,5 @@ export const postAmendments = pgTable(
     result: jsonb("result"),
     ...timestamps(),
   },
-  (t) => [uniqueIndex("post_amendments_dossier_seq_uq").on(t.dossierId, t.seq), index("post_amendments_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("post_amendments_rls")],
+  (t) => [uniqueIndex("post_amendments_dossier_branch_seq_uq").on(t.dossierId, t.branch, t.seq), index("post_amendments_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("post_amendments_rls")],
 ).enableRLS();

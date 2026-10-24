@@ -241,6 +241,7 @@ function build(): Container {
     if (!r.ok) console.error("[extraction→declaration]", r.error.code, r.error.message);
   };
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
+  validation.branches = (orgId, dossierId) => customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.issuedCount(orgId, dossierId));
   customs.notify = notify;
   customs.usage = serviceUsage;
   // Sửa chỉ tiêu tờ khai theo giai đoạn truyền (chưa khai / sửa đổi bổ sung / đã thông quan).

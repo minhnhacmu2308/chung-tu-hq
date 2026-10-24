@@ -71,7 +71,7 @@ export async function enqueue(
 ): Promise<Result<OperationResult>> {
   const now = deps.clock.now();
   const n = p.outbox.filter((o) => o.operation === p.op).length + 1;
-  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId: p.dossierId, declarationId: p.declarationId, operation: p.op, idempotencyKey: `${p.dossierId}:${p.op}:n${n}`, payload: p.payload, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId: p.dossierId, branch: 1, declarationId: p.declarationId, operation: p.op, idempotencyKey: `${p.dossierId}:${p.op}:n${n}`, payload: p.payload, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
   const created = await deps.uow.asOrg(ctx, async (r) => {
     try {
       await r.outbox.insert(row);
@@ -98,14 +98,14 @@ async function queryNow(deps: CustomsDeps, ctx: Ctx, dossierId: string, directio
   if (!result.externalId) return err(domainError("INVALID_STATE", "Chưa có số tờ khai để tra cứu"));
   const op = queryOpFor(direction);
   const now = () => deps.clock.now();
-  await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: op, direction: "OUT", result: "OK", summary: `Tra cứu trạng thái tờ khai (${op})`, payloadMasked: { nghiepVu: op, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
+  await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, operation: op, direction: "OUT", result: "OK", summary: `Tra cứu trạng thái tờ khai (${op})`, payloadMasked: { nghiepVu: op, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
   const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId);
   await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: op, quantity: 1 });
   const stage = stageOf(result);
   const cleared = st.cleared && (stage === "DECLARED" || stage === "AMEND_PRE_DECLARED" || stage === "AMEND_RECALLED");
   const nextStage = st.rejected ? "REJECTED" : cleared ? "CLEARED" : stage;
   await deps.uow.asOrg(ctx, async (r) => {
-    await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, operation: op, direction: "IN", result: "OK", summary: `Trạng thái tờ khai: ${st.status}`, payloadMasked: { nghiepVu: op, soToKhai: st.declarationNo ?? result.declarationNo, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now() });
+    await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, operation: op, direction: "IN", result: "OK", summary: `Trạng thái tờ khai: ${st.status}`, payloadMasked: { nghiepVu: op, soToKhai: st.declarationNo ?? result.declarationNo, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now() });
     await r.results.upsert({
       ...result, state: coarseState(nextStage, result.state === "SEND_FAILED" && nextStage === stage),
       ...(stage !== "NOT_SENT" && stage !== "PRE_DECLARED" && stage !== "RECALLED" ? { clearanceStatus: st.rejected ? "REJECTED" as const : st.cleared ? "CLEARED" as const : "INSPECTING" as const } : {}),

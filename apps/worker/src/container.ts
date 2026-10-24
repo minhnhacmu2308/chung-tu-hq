@@ -127,6 +127,7 @@ export function buildContainer() {
     await runRules(validation, orgId, dossierId, s.data, s.version, { taxCode: o.taxCode, name: o.name });
   };
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
+  validation.branches = (orgId, dossierId) => customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.issuedCount(orgId, dossierId));
   customs.notify = notify;
   customs.usage = serviceUsage;
   // Hộp thư chứng từ: lấy thư Gmail / Outlook, file lưu cùng kho chứng từ.

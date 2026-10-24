@@ -4,7 +4,7 @@ import { createDb, type Db } from "../../../db/client.js";
 import { runSeed } from "../../../db/seed/index.js";
 import { startTestDb, type TestDb } from "../../../db/test-db.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
-import type { OutboxRow } from "../application/customs-ports.js";
+import type { MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
 import { DrizzleCustomsUow } from "./drizzle-customs-uow.js";
 
 let t: TestDb;
@@ -13,7 +13,7 @@ let uow: DrizzleCustomsUow;
 const A = { orgId: asOrgId("org_anphat"), userId: asUserId("usr_chau") };
 const B = { orgId: asOrgId("org_khac"), userId: asUserId("usr_khac") };
 const now = new Date("2026-10-23T00:00:00Z");
-const row = (id: string, orgId: string): OutboxRow => ({ id, orgId, dossierId: "dos_x", declarationId: "dec_x", operation: "IDA", idempotencyKey: `${id}:key`, payload: {}, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now });
+const row = (id: string, orgId: string): OutboxRow => ({ id, orgId, dossierId: "dos_x", branch: 1, declarationId: "dec_x", operation: "IDA", idempotencyKey: `${id}:key`, payload: {}, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now });
 
 beforeAll(async () => {
   t = await startTestDb();
@@ -48,5 +48,60 @@ describe("DrizzleCustomsUow – outbox cô lập theo doanh nghiệp", () => {
     expect((await uow.asOrg(A, (r) => r.outbox.get("org_anphat", "msg_a1")))?.status).toBe("SENT");
     expect((await uow.asOrg(A, (r) => r.outbox.listUnsentBefore("org_anphat", new Date(now.getTime() + 1)))).length).toBe(0);
     await expect(uow.asOrg(B, (r) => r.outbox.insert(row("msg_b1", "org_anphat")))).rejects.toThrow();
+  });
+});
+
+describe("DrizzleCustomsUow – trạng thái theo nhánh tờ khai", () => {
+  const res = (id: string, branch: number, patch: Partial<ResultRow> = {}): ResultRow => ({ id, orgId: "org_anphat", dossierId: "dos_br", branch, externalId: null, declarationNo: null, channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: null, state: "APPROVED", pollCount: 0, raw: null, updatedAt: now, ...patch });
+  const ama = (id: string, branch: number, seq: number): PostAmendmentRow => ({ id, orgId: "org_anphat", dossierId: "dos_br", branch, seq, status: "DRAFT", header: {} as PostAmendmentRow["header"], lines: [] as PostAmendmentRow["lines"], approvedAt: null, createdAt: now, updatedAt: now });
+
+  it("hai result cùng dossier nhánh 1 và 2 cùng tồn tại; upsert trùng (dossier, branch) thì cập nhật, không đụng nhánh khác", async () => {
+    await uow.asOrg(A, async (r) => {
+      await r.results.upsert(res("res_b1", 1));
+      await r.results.upsert(res("res_b2", 2));
+      await r.results.upsert(res("res_b2x", 2, { declarationNo: "30000000002", pollCount: 3 }));
+    });
+    const list = await uow.asOrg(A, (r) => r.results.listForDossier("org_anphat", "dos_br"));
+    expect(list.map((x) => [x.branch, x.declarationNo, x.pollCount])).toEqual([[1, null, 0], [2, "30000000002", 3]]);
+    expect((await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_br")))?.branch).toBe(1);
+    expect((await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_br", 2)))?.declarationNo).toBe("30000000002");
+    expect(await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_br", 3))).toBeNull();
+  });
+
+  it("issuedCount đếm nhánh đã có số tờ khai, theo org; org khác không thấy", async () => {
+    expect(await uow.asOrg(A, (r) => r.results.issuedCount("org_anphat", "dos_br"))).toBe(1);
+    await uow.asOrg(A, (r) => r.results.upsert(res("res_b1y", 1, { declarationNo: "30000000001" })));
+    expect(await uow.asOrg(A, (r) => r.results.issuedCount("org_anphat", "dos_br"))).toBe(2);
+    expect(await uow.asOrg(B, (r) => r.results.issuedCount("org_anphat", "dos_br"))).toBe(0);
+    expect(await uow.asOrg(B, (r) => r.results.listForDossier("org_anphat", "dos_br"))).toEqual([]);
+  });
+
+  it("post_amendments: seq 1 của nhánh 1 và nhánh 2 cùng tồn tại; trùng (dossier, branch, seq) bị chặn; lọc theo nhánh", async () => {
+    await uow.asOrg(A, async (r) => {
+      await r.amendments.insert(ama("ama_1", 1, 1));
+      await r.amendments.insert(ama("ama_2", 2, 1));
+    });
+    await expect(uow.asOrg(A, (r) => r.amendments.insert(ama("ama_3", 2, 1)))).rejects.toThrow();
+    expect((await uow.asOrg(A, (r) => r.amendments.listForDossier("org_anphat", "dos_br"))).map((a) => [a.branch, a.seq])).toEqual([[1, 1], [2, 1]]);
+    expect((await uow.asOrg(A, (r) => r.amendments.listForDossier("org_anphat", "dos_br", 2))).map((a) => a.id)).toEqual(["ama_2"]);
+  });
+
+  it("messages.list lọc theo nhánh, vắng nhánh = mọi nhánh", async () => {
+    const m = (id: string, branch: number): MessageRow => ({ id, orgId: "org_anphat", dossierId: "dos_br", branch, operation: "IDA", direction: "OUT", result: "OK", summary: "s", payloadMasked: {}, externalRef: null, at: new Date(now.getTime() + branch) });
+    await uow.asOrg(A, async (r) => {
+      await r.messages.insert(m("m1", 1));
+      await r.messages.insert(m("m2", 2));
+    });
+    expect((await uow.asOrg(A, (r) => r.messages.list("org_anphat", "dos_br"))).map((x) => x.id)).toEqual(["m1", "m2"]);
+    expect((await uow.asOrg(A, (r) => r.messages.list("org_anphat", "dos_br", 2))).map((x) => x.id)).toEqual(["m2"]);
+  });
+
+  it("dòng chèn không có cột branch (dữ liệu cũ) đọc ra branch = 1", async () => {
+    const admin = createDb(t.adminUrl, { max: 1 });
+    await admin.execute(sql`INSERT INTO customs_results (id, org_id, dossier_id) VALUES ('res_old', 'org_anphat', 'dos_old')`);
+    await admin.execute(sql`INSERT INTO customs_outbox (id, org_id, dossier_id, declaration_id, operation, idempotency_key, payload) VALUES ('ob_old', 'org_anphat', 'dos_old', 'dec_old', 'IDA', 'ob_old:key', '{}')`);
+    await admin.close();
+    expect((await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_old")))?.branch).toBe(1);
+    expect((await uow.asOrg(A, (r) => r.outbox.get("org_anphat", "ob_old")))?.branch).toBe(1);
   });
 });

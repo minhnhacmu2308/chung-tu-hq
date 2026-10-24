@@ -42,7 +42,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   const dossier = await deps.dossiers.get(input.orgId, ob.dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const now = () => deps.clock.now();
-  const msg = (r: CustomsRepos, m: Omit<MessageRow, "id" | "orgId" | "dossierId" | "at">) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, at: now(), ...m });
+  const msg = (r: CustomsRepos, m: Omit<MessageRow, "id" | "orgId" | "dossierId" | "branch" | "at">) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, branch: ob.branch, at: now(), ...m });
   const payload = (ob.payload ?? {}) as { request?: unknown; warnings?: string[]; issues?: string[]; files?: { name: string; storageKey: string }[] };
   const stage = stageOf(result);
   if (ob.attempts >= MAX_ATTEMPTS) {

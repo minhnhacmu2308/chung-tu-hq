@@ -7,7 +7,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { branchPayload } from "../domain/branches.js";
 import { buildFptRequest, type DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
-import type { CustomsDeps, DeclarationSnapshot, OutboxRow } from "./customs-ports.js";
+import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 
 /** Khóa idempotency outbox. Nhánh 1 giữ đúng dạng cũ (dữ liệu đang chạy không bị gửi trùng); nhánh ≥ 2 thêm `:b<no>`. */
 export const outboxKey = (dossierId: string, op: string, version: number, retry = 0, branch = 1) => `${dossierId}:${op}:v${version}${retry ? `:retry${retry}` : ""}${branch > 1 ? `:b${branch}` : ""}`;
@@ -23,7 +23,7 @@ export const outboxVersion = (key: string): number | null => {
  * (payload.pin) không còn khớp – không gửi nội dung cũ. Lô một tờ không ghim (giữ hành vi cũ).
  */
 export const pinOf = (snap: Pick<DeclarationSnapshot, "version" | "approvedAt">) => `v${snap.version}@${snap.approvedAt ?? ""}`;
-const pinOfOutbox = (o: Pick<OutboxRow, "payload">): string | undefined => (o.payload as { pin?: unknown } | null)?.pin as string | undefined;
+export const pinOfOutbox = (o: Pick<OutboxRow, "payload">): string | undefined => (o.payload as { pin?: unknown } | null)?.pin as string | undefined;
 
 /**
  * Outbox nội dung đã ghim (khóa `:v<n>` ở tờ ≥ 2, hoặc payload.pin) mà tờ khai không còn SUBMITTED đúng phiên bản/lần duyệt đó → lý do không gửi.
@@ -44,6 +44,16 @@ export function contentOpFor(stage: CustomsStage, kind: "IDA" | "EDA"): CustomsO
   if (stage === "NOT_SENT" || stage === "RECALLED") return opFor(direction, "IDA");
   if (stage === "AMEND_RECALLED") return opFor(direction, "IDA01");
   return null;
+}
+
+/**
+ * Truyền lại nội dung / mở lại lô nhiều tờ (spec §6.4, quyết định R3): chỉ tiêu chung dùng chung mọi tờ, nên MỌI tờ đã có số tờ khai phải đang
+ * được gọi về sửa (RECALLED / AMEND_RECALLED) – nếu không, Hải quan giữ giá trị cũ trên tờ đó. Tờ chưa có số không tính. Worker không tự gọi về (IDB/IDD).
+ */
+export function recallFirstError(results: Pick<ResultRow, "branch" | "declarationNo" | "state" | "raw">[]): DomainError | null {
+  if (results.length <= 1) return null;
+  const notRecalled = results.filter((r) => r.declarationNo && stageOf(r) !== "RECALLED" && stageOf(r) !== "AMEND_RECALLED").map((r) => r.branch);
+  return notRecalled.length ? reasonError("INVALID_STATE", "SHEETS_RECALL_FIRST", { sheets: notRecalled.join(", ") }) : null;
 }
 
 /**

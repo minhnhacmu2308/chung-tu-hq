@@ -18,7 +18,7 @@ import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { createPostAmendment, isPostStage, openPostAmendment } from "./post-amendment.js";
-import { contentKey, enqueueBranchPreDeclare, pinOf } from "./branch-send.js";
+import { contentKey, enqueueBranchPreDeclare, pinOf, pinOfOutbox, recallFirstError } from "./branch-send.js";
 
 export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -43,7 +43,18 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
   if (!a.enabled) return err(a.reasonCode ? reasonError("INVALID_STATE", a.reasonCode, a.reasonParams) : domainError("INVALID_STATE", `Chưa thực hiện được ${op}`));
   if (a.action === "EDIT") return err(reasonError("INVALID_STATE", a.reasonCode ?? "EDIT_DECLARATION_FIRST", a.reasonParams));
   if (a.action === "START_POST_EDIT") return err(reasonError("INVALID_STATE", "START_POST_EDIT_FIRST"));
-  if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first, all);
+  if (of > 1 && isContentOperation(op) && op !== "AMA") {
+    // Lần truyền mới (tờ khai vừa duyệt lại): mọi tờ đã có số phải đang gọi về sửa (R3).
+    if (snap.status === "APPROVED") {
+      const recall = recallFirstError(await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId)));
+      if (recall) return err(recall);
+    }
+    // Tiếp lần truyền đang chạy: tờ đã có outbox nghiệp vụ này ở lần truyền này (bị từ chối / hết lượt – có thể Hải quan đã nhận)
+    // → không gửi mới, dùng Gửi lại (luôn tra trạng thái trước, ADR 0005).
+    if (snap.status === "SUBMITTED" && outbox.some((o) => o.operation === op && pinOfOutbox(o) === pinOf(snap)))
+      return err(domainError("INVALID_STATE", `Tờ ${branch}: ${OPERATION_LABELS[op]} đã gửi ở lần truyền này – dùng Gửi lại`));
+  }
+  if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
 
   let payload: Record<string, unknown> = { request: { soToKhai: result.declarationNo }, certificateId: result.raw?.certificateId };
   if (op === "AMA") {
@@ -82,17 +93,13 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
  * tờ trước đã khai tạm. Tờ khai APPROVED → lần truyền mới của người khai; SUBMITTED → tiếp lần truyền đang chạy (cùng phiên bản + ghim,
  * cùng khóa với chuỗi của worker nên hai bên không tạo trùng). Đã gửi/bị từ chối ở lần truyền này → dùng Gửi lại.
  */
-async function preDeclareBranch(
-  deps: CustomsDeps, ctx: Ctx, dossierId: string, branch: number, op: CustomsOperation, snap: DeclarationSnapshot, first: ResultRow | null, all: OutboxRow[],
-): Promise<Result<OperationResult>> {
+async function preDeclareBranch(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch: number, op: CustomsOperation, snap: DeclarationSnapshot, first: ResultRow | null): Promise<Result<OperationResult>> {
   if (!first?.declarationNo) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ 1 chưa có số tờ khai – khai tạm tờ 1 trước`));
   const prev = await deps.uow.asOrg(ctx, (r) => r.results.get(ctx.orgId, dossierId, branch - 1));
   if (!prev || stageOf(prev) === "NOT_SENT" || !prev.declarationNo) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ ${branch - 1} chưa khai tạm – khai tạm lần lượt từng tờ`));
   if (snap.status !== "APPROVED" && snap.status !== "SUBMITTED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
-  const pin = pinOf(snap);
-  if (snap.status === "SUBMITTED" && all.some((o) => o.branch === branch && o.operation === op && (o.payload as { pin?: unknown } | null)?.pin === pin))
-    return err(domainError("INVALID_STATE", `Tờ ${branch}: ${OPERATION_LABELS[op]} đã gửi ở lần truyền này – dùng Gửi lại`));
-  const res = await enqueueBranchPreDeclare(deps, ctx, dossierId, branch, snap.status === "APPROVED" ? { by: "user" } : { by: "chain", version: snap.version, pin });
+  // (Đã gửi ở lần truyền này → performOperation đã chặn, dùng Gửi lại.)
+  const res = await enqueueBranchPreDeclare(deps, ctx, dossierId, branch, snap.status === "APPROVED" ? { by: "user" } : { by: "chain", version: snap.version, pin: pinOf(snap) });
   if (!res.ok) return res;
   return ok({ sent: true, message: `Đang gửi ${OPERATION_LABELS[op].toLowerCase()} (${op}) – tờ ${branch}` });
 }

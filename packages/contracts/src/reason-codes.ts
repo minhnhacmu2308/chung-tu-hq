@@ -52,6 +52,7 @@ export const REASON_TEXT_VI = {
   REQUIRED_FIELDS_MISSING_SUBMIT: "Còn {n} chỉ tiêu bắt buộc chưa nhập: {fields} – mở lại tờ khai để nhập rồi duyệt lại",
   DECLARATION_NOT_TRANSMITTABLE: "Tờ khai chưa truyền được: {blockers}",
   DECLARATION_SPEC_INVALID: "Tờ khai chưa đúng đặc tả truyền Hải quan: {issues}",
+  SHEETS_RECALL_FIRST: "Tờ {sheets}: gọi về sửa (IDB/IDD) trước",
   AMENDMENT_NOT_APPROVED: "Bản khai bổ sung chưa được phê duyệt",
   AMENDMENT_NOT_TRANSMITTABLE: "Bản khai bổ sung chưa gửi được: {blockers}",
   CERTIFICATE_REQUIRED: "Chọn chứng thư số để ký",

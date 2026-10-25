@@ -23,3 +23,8 @@ apps/web/test-results/
 evals/private/
 lo mẫu/
 LÔ FANS25040166/
+
+# Cấu hình Claude Code / MCP riêng của từng máy
+.claude/settings.json
+.claude/settings.local.json
+.mcp.json

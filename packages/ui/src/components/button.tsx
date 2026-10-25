@@ -31,6 +31,8 @@ export const buttonVariants = cva(
         "icon-sm": "h-6 w-6 p-0",
       },
       fullWidth: { true: "w-full" },
+      /** Nhãn dài (vd nút trong Alert trên mobile): cho xuống dòng, cao theo nội dung thay vì tràn khung. Đặt sau size để thắng h-*. */
+      wrap: { true: "h-auto min-h-8 whitespace-normal py-1.5 text-left" },
     },
     defaultVariants: { variant: "primary", size: "md" },
   },
@@ -51,6 +53,7 @@ export function Button({
   variant,
   size,
   fullWidth,
+  wrap,
   asChild = false,
   loading = false,
   leftIcon,
@@ -60,7 +63,7 @@ export function Button({
   type,
   ...props
 }: ButtonProps) {
-  const classes = cn(buttonVariants({ variant, size, fullWidth }), className);
+  const classes = cn(buttonVariants({ variant, size, fullWidth, wrap }), className);
   if (asChild) {
     return (
       <Slot className={classes} aria-disabled={disabled || loading || undefined} {...props}>

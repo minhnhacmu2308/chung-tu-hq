@@ -42,6 +42,13 @@ describe("DataTable – hiển thị", () => {
     expect(screen.getByRole("table", { name: "Danh sách hồ sơ" })).toBeInTheDocument();
     expect(screen.getByText("Danh sách hồ sơ")).toHaveClass("sr-only");
   });
+
+  it("vùng cuộn ngang là khối chứa của phần tử định vị tuyệt đối trong ô (sr-only, tay nắm kéo cột) – không làm trang tràn ngang trên mobile", () => {
+    setup({ pagination: false });
+    const scroller = screen.getByRole("table").parentElement!;
+    expect(scroller).toHaveClass("overflow-auto");
+    expect(scroller).toHaveClass("relative");
+  });
 });
 
 describe("DataTable – sắp xếp", () => {

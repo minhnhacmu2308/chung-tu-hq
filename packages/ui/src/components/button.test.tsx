@@ -5,6 +5,13 @@ import { expectNoA11yViolations } from "../../test/a11y.js";
 import { Button } from "./button.js";
 
 describe("Button", () => {
+  it("wrap: nhãn dài được xuống dòng, chiều cao theo nội dung (không tràn khung hẹp)", () => {
+    render(<Button size="sm" wrap>Tạo bản khai bổ sung cùng nội dung cho các tờ khác</Button>);
+    const btn = screen.getByRole("button");
+    expect(btn).toHaveClass("whitespace-normal", "h-auto");
+    expect(btn).not.toHaveClass("whitespace-nowrap", "h-8");
+  });
+
   it("mặc định là type=button (không vô tình submit form)", () => {
     render(<Button>Lưu</Button>);
     expect(screen.getByRole("button", { name: "Lưu" })).toHaveAttribute("type", "button");

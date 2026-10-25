@@ -50,6 +50,13 @@ describe("Badge / StatusBadge", () => {
 });
 
 describe("Alert / EmptyState / Skeleton", () => {
+  it("Alert có action: nội dung và action cùng một hàng xuống dòng được – khung hẹp thì action xuống dưới nội dung, không ép chữ", () => {
+    render(<Alert tone="warning" title="Chỉ tiêu chung" action={<button type="button">Tạo bản khai cho các tờ khác</button>}>Nội dung</Alert>);
+    const row = screen.getByRole("button", { name: "Tạo bản khai cho các tờ khác" }).parentElement!;
+    expect(row).toHaveClass("flex-wrap");
+    expect(row).toContainElement(screen.getByText("Chỉ tiêu chung"));
+  });
+
   it("Alert lỗi dùng role=alert, thông tin dùng role=status", () => {
     render(<><Alert tone="danger" title="Thiếu cước" /><Alert tone="info" title="Đang xử lý" /></>);
     expect(screen.getByRole("alert")).toHaveTextContent("Thiếu cước");

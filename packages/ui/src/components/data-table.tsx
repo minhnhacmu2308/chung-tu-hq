@@ -933,7 +933,8 @@ export function DataTable<TData extends RowData>({
         </div>
       ) : (
 
-      <div ref={scrollRef} className={cn("overflow-auto rounded-lg border border-border bg-surface", className)}>
+      <div ref={scrollRef} className={cn("relative overflow-auto rounded-lg border border-border bg-surface", className)}>
+        {/* relative: vùng cuộn là khối chứa của phần tử absolute trong ô (sr-only…) – không thì chúng thoát ra, làm trang tràn ngang. */}
         <table
           className={cn("border-collapse text-sm", resizable ? "min-w-full table-fixed" : "w-full")}
           style={resizable ? { width: table.getTotalSize() } : undefined}

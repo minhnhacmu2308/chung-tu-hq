@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb, saveDb } from "@/mocks/db";
-import { approveDeclaration } from "./declaration";
+import { EMPTY_VALUE_CHARGES } from "@kb/contracts";
+import { newId } from "@/lib/mock-request";
+import { answerHs, approveDeclaration, confirmHs, reclassifyHs, startAgentRun, unconfirmHs, updateDeclarationField } from "./declaration";
+import { changeDocumentKind, confirmField, deleteDocument, finishReading, retryDocument, revertField, updateFieldValue, uploadDocuments } from "./ocr";
+import { saveValueCharges } from "./value-charges";
 import { declareAllSheets, getSubmission, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
 import { addPostAmendmentLines, approvePostAmendment, updatePostAmendmentField } from "./post-amendment";
 
@@ -360,6 +364,39 @@ describe("tờ khai nhánh: gọi về sửa và truyền lại", () => {
     line.description = `${line.description} (sửa)`;
     await approveDeclaration(BIG);
     expect(decl(BIG).status).toBe("APPROVED");
+  });
+
+  it("phạm vi sửa (cùng editBlockFor với backend): chỉ gọi về tờ 2 → chỉ tiêu chung / chi phí / dựng lại / chứng từ → COMMON_LOCKED_SHEETS; dòng tờ 1 → LINE_SHEET_LOCKED; dòng tờ 2 sửa được", async () => {
+    await recallSheet2();
+    Object.assign(dossier(BIG), { status: "NEEDS_REVIEW", step: "review" }); // như backend tự mở lại sau gọi về
+    const lines = getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo);
+    const [line10, line60] = [lines[9]!, lines[59]!];
+    const common = { code: "INVALID_STATE", reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 3" } };
+    const sheet1 = { code: "INVALID_STATE", reason: "LINE_SHEET_LOCKED", params: { sheet: 1 } };
+    await expect(updateDeclarationField(BIG, "CQHQ", "01AB")).rejects.toMatchObject(common);
+    await updateDeclarationField(BIG, `HANG.${line60.id}.HAG_RE`, "XN210");
+    await expect(updateDeclarationField(BIG, `HANG.${line10.id}.HAG_RE`, "XN210")).rejects.toMatchObject(sheet1);
+    await expect(saveValueCharges(BIG, EMPTY_VALUE_CHARGES)).rejects.toMatchObject(common);
+    await expect(startAgentRun(BIG, "DECLARATION")).rejects.toMatchObject(common);
+    await expect(confirmHs(line10.id, "8482.10.00")).rejects.toMatchObject(sheet1);
+    await expect(unconfirmHs(line10.id)).rejects.toMatchObject(sheet1);
+    await expect(reclassifyHs(line10.id, {})).rejects.toMatchObject(sheet1);
+    await expect(answerHs(line10.id, { questionId: "q", answers: [] })).rejects.toMatchObject(sheet1);
+    await unconfirmHs(line60.id);
+    await confirmHs(line60.id, "8482.10.00");
+    await expect(uploadDocuments(BIG, [new File(["x"], "more.pdf")])).rejects.toMatchObject(common);
+    await expect(finishReading(BIG)).rejects.toMatchObject(common);
+    const doc = getDb().documents.find((d) => d.dossierId === BIG)!;
+    for (const op of [changeDocumentKind(doc.id, "OTHER"), deleteDocument(doc.id), retryDocument(doc.id)]) await expect(op).rejects.toMatchObject(common);
+    const docFields = getDb().fields.filter((f) => f.documentId === doc.id);
+    const header = docFields.find((f) => !f.key.startsWith("item."))!;
+    await expect(updateFieldValue(header.id, "x")).rejects.toMatchObject(common);
+    await expect(confirmField(header.id)).rejects.toMatchObject(common);
+    await expect(revertField(header.id)).rejects.toMatchObject(common);
+    const item = (n: number) => ({ id: newId("fld"), documentId: doc.id, group: "ITEMS", key: `item.${n}.description`, label: "Mô tả", value: "x", originalValue: "x", status: "USER_CONFIRMED" }) satisfies (typeof docFields)[number];
+    getDb().fields.push(item(line10.lineNo), item(line60.lineNo));
+    await expect(updateFieldValue(getDb().fields.at(-2)!.id, "y")).rejects.toMatchObject(sheet1);
+    await updateFieldValue(getDb().fields.at(-1)!.id, "y");
   });
 
   it("gọi về đủ mọi tờ → mở lại → duyệt lại → truyền lại lần lượt tờ 1 → 2 → 3", async () => {

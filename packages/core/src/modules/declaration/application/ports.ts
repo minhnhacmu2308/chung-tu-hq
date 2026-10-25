@@ -1,6 +1,6 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { DomainError } from "../../../shared/errors.js";
-import type { ValueCharges, AgentMode, CustomsStage, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
+import type { ValueCharges, AgentMode, EditSheet, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -189,8 +189,11 @@ export type DeclarationDeps = {
   users: UserNames;
   /** Thông báo trong app (tùy chọn; container nối). */
   notify?: Notifier;
-  /** Giai đoạn truyền Hải quan của hồ sơ (module integration; container nối) – chặn sửa chỉ tiêu theo giai đoạn. Không nối → coi như chưa khai. */
-  customsStage?: (orgId: string, dossierId: string) => Promise<CustomsStage>;
+  /**
+   * Các tờ khai nhánh đã lập ở Hải quan (số tờ, giai đoạn, số tờ khai – module integration; container nối): phạm vi sửa theo giai đoạn và tờ đã gọi về
+   * (declarationEditScope). Không nối / chưa truyền → [] (coi như chưa khai).
+   */
+  customsSheets?: (orgId: string, dossierId: string) => Promise<EditSheet[]>;
   /**
    * Lô nhiều tờ: tờ chưa gọi về (còn hiệu lực ở Hải quan) mà nội dung tờ khai hiện tại khác nội dung đã gửi → lỗi SENT_SHEETS_CHANGED, chặn duyệt
    * (module integration; container nối – spec tách tờ khai §2.5). Không nối → không kiểm.

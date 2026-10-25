@@ -1,11 +1,12 @@
-import { declarationEditMode, declarationRequiredGaps, extraFieldMeta, fieldEditBlock, itemFieldMeta, type Declaration, type DeclarationView } from "@kb/contracts";
+import { declarationEditScope, declarationRequiredGaps, editBlockFor, extraFieldMeta, fieldEditBlock, itemFieldMeta, parseItemFieldCode, type Declaration, type DeclarationView } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
-import { domainError } from "../../../shared/errors.js";
+import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { canApprove, canEditField, canMoveToReview, missingRequiredFields } from "../domain/guards.js";
 import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
 import { mappingsFor } from "../domain/mapping/registry.js";
+import { toEditTarget } from "./_edit-scope.js";
 import { loadDossier, toBranches, toDeclaration, toLineItem, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow } from "./ports.js";
 import { recordApprovedProducts } from "./product-catalog.js";
@@ -50,20 +51,28 @@ export async function updateDeclarationField(deps: DeclarationDeps, ctx: Ctx, do
   const d = await loadDossier(deps, ctx.orgId, dossierId);
   if (!d.ok) return d;
   const now = deps.clock.now();
-  const stage = deps.customsStage ? await deps.customsStage(ctx.orgId, dossierId) : "NOT_SENT";
+  const sheets = deps.customsSheets ? await deps.customsSheets(ctx.orgId, dossierId) : [];
   const r0 = await deps.uow.asOrg(ctx, async (r) => {
     const decl = await r.declarations.latest(ctx.orgId, dossierId);
     if (!decl) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
     if (decl.status !== "DRAFT") return err(domainError("INVALID_STATE", "Tờ khai đã duyệt – không sửa"));
-    // Theo giai đoạn: đã phân luồng + gọi IDD → khóa theo Phụ lục II; đã thông quan → khóa toàn bộ (cùng quy tắc với form ở FE).
-    const block = fieldEditBlock(decl.kind, code, declarationEditMode(decl.status, stage), Object.entries(decl.fields).map(([c, x]) => ({ code: c, value: x.value })));
+    // Phạm vi sửa (cùng quy tắc với form ở FE): lô nhiều tờ còn tờ chưa gọi về → khóa chỉ tiêu chung và dòng hàng của tờ đó;
+    // theo giai đoạn: đã phân luồng + gọi IDD → khóa theo Phụ lục II; đã thông quan → khóa toàn bộ.
+    const items = await r.lineItems.list(ctx.orgId, dossierId);
+    const scope = declarationEditScope(decl.status, sheets);
+    const lineNo = items.find((i) => i.id === parseItemFieldCode(code)?.itemId)?.lineNo;
+    const target = toEditTarget(lineNo !== undefined ? { kind: "LINE_NO", lineNo } : { kind: "COMMON" }, items.map((i) => i.lineNo));
+    const locked = editBlockFor(scope, target);
+    if (locked && locked.reasonCode !== "DECLARATION_LOCKED") return err(reasonError("INVALID_STATE", locked.reasonCode, locked.params));
+    const mode = target.kind === "LINE" ? (scope.lines[target.sheet] ?? scope.common) : scope.common;
+    const block = fieldEditBlock(decl.kind, code, mode, Object.entries(decl.fields).map(([c, x]) => ({ code: c, value: x.value })));
     if (block) return err(domainError("INVALID_STATE", block));
     // Chỉ tiêu chưa có trên tờ khai, người khai nhập lần đầu: chỉ tiêu app (theo mapping) hoặc ô bổ sung (mã = tên trường VNACCS) → thêm vào tờ khai.
     // Ô dòng hàng người khai nhập (HANG.<id dòng>.<ô>): dòng phải thuộc hồ sơ; nhãn ghi số dòng để nhật ký sửa đọc được.
     const mapping = decl.fields[code] ? undefined : mappingsFor(decl.kind).find((m) => m.code === code);
     const extra = decl.fields[code] || mapping ? null : extraFieldMeta(decl.kind, code);
     const itemMeta = decl.fields[code] || mapping || extra ? null : itemFieldMeta(decl.kind, code);
-    const line = itemMeta ? (await r.lineItems.list(ctx.orgId, dossierId)).find((i) => i.id === itemMeta.itemId) : undefined;
+    const line = itemMeta ? items.find((i) => i.id === itemMeta.itemId) : undefined;
     const meta = mapping ? { no: mapping.no ?? "", label: mapping.label, section: mapping.section }
       : extra ? { no: extra.no ?? "", label: extra.label, section: extra.section }
       : itemMeta && line ? { no: itemMeta.no ?? "", label: `Dòng ${line.lineNo} – ${itemMeta.label}`, section: "VALUE" as const }

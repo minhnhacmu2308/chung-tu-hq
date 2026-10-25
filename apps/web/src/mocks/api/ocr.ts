@@ -4,6 +4,7 @@
 import type { DocumentSheet } from "@kb/contracts";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
+import { editScopeMockError } from "./customs";
 import { refreshDeclaration } from "./declaration";
 import { generateChecks, generateFieldsForDocument, SUSPECT_STATUSES } from "@/mocks/seed/ocr";
 import type { CrossCheck, DocKind, DossierDocument, ExtractedField, FieldStatus } from "@/mocks/types";
@@ -113,6 +114,9 @@ export const uploadDocuments = (dossierId: string, uploaded: File[]) =>
 export function addDocumentFiles(db: MockDb, dossierId: string, files: { name: string; size: number }[]): DossierDocument[] {
   const dossier = db.dossiers.find((d) => d.id === dossierId);
   if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
+  // Thêm chứng từ đổi dòng hàng + chỉ tiêu chung → lô nhiều tờ còn tờ chưa gọi về: chặn (cùng quy tắc backend).
+  const scoped = editScopeMockError(db, dossierId, { kind: "ADD_REMOVE_LINES" });
+  if (scoped) throw scoped;
   const entries = files.flatMap((f) => {
     if (!f.name.toLowerCase().endsWith(".zip")) return [f];
     const base = f.name.replace(/\.zip$/i, "");
@@ -142,6 +146,8 @@ export const changeDocumentKind = (documentId: string, kind: DocKind) =>
   mutate((db) => {
     const doc = db.documents.find((d) => d.id === documentId);
     if (!doc) throw new ApiError("NOT_FOUND", "Không tìm thấy chứng từ");
+    const scoped = editScopeMockError(db, doc.dossierId, { kind: "ADD_REMOVE_LINES" });
+    if (scoped) throw scoped;
     doc.kind = kind;
     // Đổi loại → đọc lại theo skill của loại mới
     db.fields = db.fields.filter((f) => f.documentId !== documentId);
@@ -153,6 +159,8 @@ export const deleteDocument = (documentId: string) =>
   mutate((db) => {
     const doc = db.documents.find((d) => d.id === documentId);
     if (!doc) return;
+    const scoped = editScopeMockError(db, doc.dossierId, { kind: "ADD_REMOVE_LINES" });
+    if (scoped) throw scoped;
     db.documents = db.documents.filter((d) => d.id !== documentId);
     db.fields = db.fields.filter((f) => f.documentId !== documentId);
     startedAt.delete(documentId);
@@ -164,6 +172,8 @@ export const retryDocument = (documentId: string) =>
   mutate((db) => {
     const doc = db.documents.find((d) => d.id === documentId);
     if (!doc) return;
+    const scoped = editScopeMockError(db, doc.dossierId, { kind: "ADD_REMOVE_LINES" });
+    if (scoped) throw scoped;
     doc.status = "QUEUED";
     delete doc.error;
     startedAt.delete(documentId);
@@ -226,10 +236,22 @@ function syncLineItem(db: MockDb, f: ExtractedField) {
   refreshDeclaration(db, doc.dossierId);
 }
 
+/** Ô dòng hàng (`item.<lineNo>.<ô>`) theo tờ của dòng; trường header / không xác định được dòng → chỉ tiêu chung (cùng quy tắc backend). */
+function fieldScopeError(db: MockDb, f: ExtractedField): ApiError | null {
+  const doc = db.documents.find((d) => d.id === f.documentId);
+  if (!doc) return null;
+  const m = /^item\.(\d+)\./.exec(f.key);
+  const lineNo = m ? Number(m[1]) : NaN;
+  const known = db.lineItems.some((i) => i.dossierId === doc.dossierId && i.lineNo === lineNo);
+  return editScopeMockError(db, doc.dossierId, known ? { kind: "LINE_NO", lineNo } : { kind: "COMMON" });
+}
+
 export const updateFieldValue = (fieldId: string, value: string) =>
   mutate((db): ExtractedField => {
     const f = db.fields.find((x) => x.id === fieldId);
     if (!f) throw new ApiError("NOT_FOUND", "Không tìm thấy trường");
+    const scoped = fieldScopeError(db, f);
+    if (scoped) throw scoped;
     f.value = value.trim();
     f.status = "USER_CONFIRMED";
     syncSuspectCount(db, f.documentId);
@@ -242,6 +264,8 @@ export const confirmField = (fieldId: string) =>
   mutate((db): ExtractedField => {
     const f = db.fields.find((x) => x.id === fieldId);
     if (!f) throw new ApiError("NOT_FOUND", "Không tìm thấy trường");
+    const scoped = fieldScopeError(db, f);
+    if (scoped) throw scoped;
     f.status = "USER_CONFIRMED";
     syncSuspectCount(db, f.documentId);
     return f;
@@ -252,6 +276,8 @@ export const revertField = (fieldId: string) =>
   mutate((db): ExtractedField => {
     const f = db.fields.find((x) => x.id === fieldId);
     if (!f) throw new ApiError("NOT_FOUND", "Không tìm thấy trường");
+    const scoped = fieldScopeError(db, f);
+    if (scoped) throw scoped;
     f.value = f.originalValue;
     f.status = "MODEL_UNSURE";
     syncSuspectCount(db, f.documentId);
@@ -264,6 +290,8 @@ export const finishReading = (dossierId: string) =>
   mutate((db) => {
     const d = db.dossiers.find((x) => x.id === dossierId);
     if (!d) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
+    const scoped = editScopeMockError(db, dossierId, { kind: "COMMON" });
+    if (scoped) throw scoped;
     const docs = db.documents.filter((x) => x.dossierId === dossierId);
     if (docs.some((x) => x.status !== "DONE" && x.status !== "ERROR")) throw new ApiError("NOT_READY", "Còn chứng từ đang đọc");
     const ids = new Set(docs.map((x) => x.id));

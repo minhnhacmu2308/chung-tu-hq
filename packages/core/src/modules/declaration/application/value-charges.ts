@@ -5,6 +5,7 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { freightRequired, INSURANCE_INCLUDED, incotermCode } from "../domain/adjustments.js";
+import { sheetScopeError } from "./_edit-scope.js";
 import { rebuildDraft } from "./_rebuild.js";
 import type { DeclarationDeps, DossierInfo, ValueChargesRow } from "./ports.js";
 
@@ -51,6 +52,9 @@ export async function saveValueCharges(deps: DeclarationDeps, ctx: Ctx, dossierI
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   if (LOCKED.has(dossier.status)) return err(domainError("DOSSIER_LOCKED", "Hồ sơ đã duyệt/truyền – mở lại tờ khai trước khi sửa chi phí"));
+  // Cước / bảo hiểm / khoản điều chỉnh là chỉ tiêu chung: lô nhiều tờ còn tờ chưa gọi về → khóa.
+  const blocked = await sheetScopeError(deps, ctx, dossierId, { kind: "COMMON" });
+  if (blocked) return err(blocked);
   // Xuất khẩu không có chỉ tiêu 1.49 – bỏ danh sách khoản điều chỉnh nếu gửi kèm.
   const data: ValueCharges = dossier.direction === "XK" ? { ...input, adjustments: null } : input;
   const now = deps.clock.now();

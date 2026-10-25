@@ -4,6 +4,7 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { isReadLocked, normalizeEdit } from "../domain/edit-normalize.js";
+import { sheetScopeError } from "./_edit-scope.js";
 import { toField } from "./_dto.js";
 import { countSuspect, setSourced } from "./_remerge.js";
 import type { AuditRow, ExtractionDeps, FieldRow } from "./ports.js";
@@ -21,6 +22,8 @@ export async function editField(
   const pre = await deps.uow.asOrg(ctx, (r) => r.fields.get(ctx.orgId, fieldId));
   if (!pre) return err(domainError("NOT_FOUND", "Không tìm thấy trường"));
   if (isReadLocked(await deps.documents.dossierStatus(ctx.orgId, pre.dossierId))) return err(domainError("DOSSIER_LOCKED", "Hồ sơ đã duyệt/truyền – mở lại tờ khai trước khi sửa dữ liệu"));
+  const blocked = await sheetScopeError(deps, ctx, pre.dossierId, pre.key);
+  if (blocked) return err(blocked);
   const res = await deps.uow.asOrg(ctx, async (r) => {
     const f = await r.fields.get(ctx.orgId, fieldId);
     if (!f) return err(domainError("NOT_FOUND", "Không tìm thấy trường"));

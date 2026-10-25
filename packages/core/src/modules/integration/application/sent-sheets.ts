@@ -1,6 +1,6 @@
 // Guard tờ chưa gọi về không được đổi (spec tách tờ khai IDC/gọi về §2.5): nội dung hiện tại của tờ khai so với ảnh chụp đã gửi (raw.sent) của
 // từng tờ còn hiệu lực ở Hải quan. Dùng chung duyệt (port declaration.sentSheetsGuard), truyền (submit / perform / chuỗi nối tiếp) và màn Truyền.
-import { SentSnapshotSchema, type SentSnapshot } from "@kb/contracts";
+import { SentSnapshotSchema, type EditSheet, type SentSnapshot } from "@kb/contracts";
 import type { DomainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { sentSheetsError, type SentSheet } from "../domain/branches.js";
@@ -29,4 +29,10 @@ export async function checkSentSheets(deps: Pick<CustomsDeps, "declarations" | "
   if (results.length <= 1) return null;
   const snap = await deps.declarations.get(orgId, dossierId);
   return snap ? resultsSentError(snap.payload, results) : null;
+}
+
+/** Port `customsSheets` của declaration / extraction / dossier (container nối): các tờ đã lập ở Hải quan (số, giai đoạn, số tờ khai) – phạm vi sửa theo tờ đã gọi về. */
+export async function customsEditSheets(deps: Pick<CustomsDeps, "uow">, orgId: string, dossierId: string): Promise<EditSheet[]> {
+  const results = await deps.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.listForDossier(orgId, dossierId));
+  return results.map((r) => ({ no: r.branch, stage: stageOf(r), declarationNo: r.declarationNo })).sort((a, b) => a.no - b.no);
 }

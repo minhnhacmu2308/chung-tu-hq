@@ -1,5 +1,5 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
-import type { CustomsSummary, DocKind, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
+import type { CustomsSummary, DocKind, EditSheet, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
@@ -100,6 +100,8 @@ export type DossierDeps = {
   audit?: OrgAuditWriter;
   /** Không nối → hồ sơ không có `customs`. */
   customs?: DossierCustomsReader;
+  /** Các tờ khai nhánh đã lập ở Hải quan (module integration; container nối) – chặn đổi bộ chứng từ khi lô nhiều tờ còn tờ chưa gọi về. Không nối → không kiểm. */
+  customsSheets?: (orgId: string, dossierId: string) => Promise<EditSheet[]>;
   clock: Clock;
   idGen: IdGen;
 };

@@ -4,7 +4,7 @@
 import {
   baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
   awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, recallExempt, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, sheetApproved, sheetOrderWait, stageAfter,
-  type SentSnapshot,
+  declarationEditScope, editBlockFor, sheetOfLine, type DeclarationEditScope, type EditSheet, type EditTarget, type SentSnapshot,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
   type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
@@ -67,8 +67,37 @@ function flowOf(db: MockDb, dossierId: string, no = 1): CustomsFlow {
   return f;
 }
 
-/** Giai đoạn truyền của hồ sơ (= tờ 1) – API sửa chỉ tiêu dùng để chặn sửa theo giai đoạn (giống backend). */
-export const customsStageOf = (db: MockDb, dossierId: string): CustomsStage => flowOf(db, dossierId).stage;
+/**
+ * Các tờ khai nhánh để tính phạm vi sửa (EditSheet – như port customsSheets của backend). Mock không lưu số tờ khai riêng cho mọi tờ:
+ * giai đoạn đã có số (hasDeclarationNumber) mà chưa có kết quả → dùng số tờ làm số giả để tờ được tính là còn hiệu lực.
+ */
+export const editSheetsOf = (db: MockDb, dossierId: string): EditSheet[] =>
+  branchesOf(db.lineItems.filter((i) => i.dossierId === dossierId)).map((sh) => {
+    const stage = flowOf(db, dossierId, sh.no).stage;
+    return { no: sh.no, stage, declarationNo: hasDeclarationNumber(stage) ? (resultOf(db, dossierId, sh.no)?.declarationNo ?? String(sh.no)) : null };
+  });
+
+/** Phạm vi sửa tờ khai của hồ sơ (cùng declarationEditScope với backend + FE). */
+export function editScopeOf(db: MockDb, dossierId: string): DeclarationEditScope {
+  const decl = db.declarations.find((d) => d.dossierId === dossierId);
+  return declarationEditScope(decl?.status ?? "DRAFT", editSheetsOf(db, dossierId));
+}
+
+/** Đích sửa; `LINE_NO` = ô dòng hàng của dòng có lineNo (tờ theo danh sách dòng hiện tại). */
+export type MockEditTarget = Exclude<EditTarget, { kind: "LINE" }> | { kind: "LINE_NO"; lineNo: number };
+export function toEditTargetMock(db: MockDb, dossierId: string, t: MockEditTarget): EditTarget {
+  return t.kind === "LINE_NO" ? { kind: "LINE", sheet: sheetOfLine(db.lineItems.filter((i) => i.dossierId === dossierId).map((i) => i.lineNo), t.lineNo) } : t;
+}
+
+/**
+ * Lô nhiều tờ còn tờ chưa gọi về → lỗi COMMON_LOCKED_SHEETS / LINE_SHEET_LOCKED (cùng editBlockFor với backend); lô một tờ / khóa theo trạng thái tờ khai
+ * (DECLARATION_LOCKED) → null để kiểm sẵn có của từng API báo như cũ.
+ */
+export function editScopeMockError(db: MockDb, dossierId: string, target: MockEditTarget): ApiError | null {
+  if (branchCountOf(db, dossierId) <= 1) return null;
+  const b = editBlockFor(editScopeOf(db, dossierId), toEditTargetMock(db, dossierId, target));
+  return b && b.reasonCode !== "DECLARATION_LOCKED" ? reasonApiError("INVALID_STATE", b.reasonCode, b.params) : null;
+}
 
 function load(db: MockDb, dossierId: string, branch = 1): Ctx {
   const dossier = db.dossiers.find((d) => d.id === dossierId);

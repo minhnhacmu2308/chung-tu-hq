@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { CustomsStage } from "@kb/contracts";
 import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
@@ -189,6 +190,27 @@ describe("changeDocumentKind / delete / retry", () => {
     expect(storage.keys()).toEqual([]);
     expect(queue.jobs.at(-1)?.payload).toMatchObject({ mode: "MERGE_ONLY" });
     expect(unwrap(await listDocuments(deps, ctx(), d.id))).toEqual([]);
+  });
+});
+
+describe("bộ chứng từ khi lô nhiều tờ chỉ gọi về một phần (port customsSheets)", () => {
+  it("tải lên / đổi loại / đọc lại / xóa chứng từ (đổi dòng hàng và chỉ tiêu chung) → COMMON_LOCKED_SHEETS; gọi về hết → như cũ", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const [doc] = unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("scan.pdf")]));
+    uow.data.documents[0]!.status = "ERROR";
+    let stages: CustomsStage[] = ["PRE_DECLARED", "RECALLED", "PRE_DECLARED"];
+    deps.customsSheets = async () => stages.map((stage, i) => ({ no: i + 1, stage, declarationNo: `10400000000${i + 1}` }));
+    const locked = { ok: false, error: { code: "INVALID_STATE", reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 3" } } };
+    expect(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")])).toMatchObject(locked);
+    expect(await changeDocumentKind(deps, ctx(), doc!.id, "CERT_OF_ORIGIN")).toMatchObject(locked);
+    expect(await retryDocument(deps, ctx(), doc!.id)).toMatchObject(locked);
+    expect(await deleteDocument(deps, ctx(), doc!.id)).toMatchObject(locked);
+    expect(uow.data.documents).toHaveLength(1);
+    stages = ["RECALLED", "RECALLED", "RECALLED"];
+    unwrap(await retryDocument(deps, ctx(), doc!.id));
+    unwrap(await changeDocumentKind(deps, ctx(), doc!.id, "CERT_OF_ORIGIN"));
+    unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")]));
+    unwrap(await deleteDocument(deps, ctx(), doc!.id));
   });
 });
 

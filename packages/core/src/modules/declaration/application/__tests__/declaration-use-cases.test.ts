@@ -13,6 +13,9 @@ import { getDeclarationSnapshot, markDeclarationDraft, refreshFromShipment } fro
 import { sentSheetsError, sheetSnapshot } from "../../../integration/index.js";
 import { approveDeclaration, getDeclarationView, moveToReview, updateDeclarationField } from "../declaration.js";
 import { confirmHs, listHsCatalog, listLineItems, unconfirmHs } from "../line-items.js";
+import { answerHsQuestion, reclassifyHs } from "../hs-classification.js";
+import { saveValueCharges } from "../value-charges.js";
+import { EMPTY_VALUE_CHARGES, type CustomsStage } from "@kb/contracts";
 import type { DeclarationDeps } from "../ports.js";
 import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit, ScriptedHs } from "../test/fakes.js";
 import { InMemoryDeclarationUow } from "../test/in-memory-uow.js";
@@ -196,13 +199,13 @@ describe("HS và tờ khai", () => {
     unwrap(await confirmHs(deps, declarant, items[0]!.id, "8482.10.00")); // dựng lại – giữ ô bổ sung
     expect(unwrap(await getDeclarationView(deps, declarant, D)).declaration!.fields.find((f) => f.code === "TK_CCC")?.value).toBe("B");
 
-    deps.customsStage = async () => "AMEND_RECALLED";
+    deps.customsSheets = async () => [{ no: 1, stage: "AMEND_RECALLED", declarationNo: "104000000001" }];
     expect(errCode(await updateDeclarationField(deps, declarant, D, "PTVC", "1"))).toBe("INVALID_STATE");
     expect(errCode(await updateDeclarationField(deps, declarant, D, "TK_CCC", "A"))).toBe("INVALID_STATE");
     unwrap(await updateDeclarationField(deps, declarant, D, "SO_HD", "INV-AMEND"));
-    deps.customsStage = async () => "POST_EDITING";
+    deps.customsSheets = async () => [{ no: 1, stage: "POST_EDITING", declarationNo: "104000000001" }];
     expect(errCode(await updateDeclarationField(deps, declarant, D, "SO_HD", "INV-POST"))).toBe("INVALID_STATE");
-    delete deps.customsStage;
+    delete deps.customsSheets;
   });
 
   it("updateDeclarationField ô dòng hàng (HANG.<id>.<ô>): ô chỉ có trên tờ khai lưu theo id dòng, nhãn ghi số dòng; số liệu chứng từ / dòng lạ → NOT_FOUND", async () => {
@@ -349,6 +352,43 @@ describe("tổng theo tờ khai nhánh (>50 dòng)", () => {
     unwrap(await markDeclarationDraft(deps, declarant, D));
     unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS02 – Kho khác"));
     expect(await approveDeclaration(deps, approver, D)).toMatchObject({ ok: false, error: { reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } } });
+  });
+
+  it("phạm vi sửa theo tờ đã gọi về (chỉ tờ 2 gọi về): chỉ tiêu chung / chi phí / dựng lại → COMMON_LOCKED_SHEETS; dòng tờ 1 → LINE_SHEET_LOCKED; dòng tờ 2 sửa được; gọi về hết → như cũ", async () => {
+    await withItems(120);
+    for (const it of unwrap(await listLineItems(deps, declarant, D))) unwrap(await confirmHs(deps, declarant, it.id, "8482.10.00"));
+    unwrap(await moveToReview(deps, declarant, D));
+    let stages: CustomsStage[] = ["PRE_DECLARED", "RECALLED", "PRE_DECLARED"];
+    deps = { ...deps, customsSheets: async () => stages.map((stage, i) => ({ no: i + 1, stage, declarationNo: `10400000000${i + 1}` })) };
+    const lines = unwrap(await listLineItems(deps, declarant, D));
+    const line10 = lines.find((i) => i.lineNo === 10)!;
+    const line60 = lines.find((i) => i.lineNo === 60)!;
+    const common = { ok: false, error: { code: "INVALID_STATE", reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 3" } } };
+    const sheet1 = { ok: false, error: { code: "INVALID_STATE", reason: "LINE_SHEET_LOCKED", params: { sheet: 1 } } };
+    expect(await updateDeclarationField(deps, declarant, D, "CQHQ", "02CI")).toMatchObject(common);
+    expect(await updateDeclarationField(deps, declarant, D, "TK_CCC", "B")).toMatchObject(common);
+    unwrap(await updateDeclarationField(deps, declarant, D, `HANG.${line60.id}.HAG_RE`, "XN210"));
+    expect(await updateDeclarationField(deps, declarant, D, `HANG.${line10.id}.HAG_RE`, "XN210")).toMatchObject(sheet1);
+    expect(await saveValueCharges(deps, declarant, D, EMPTY_VALUE_CHARGES)).toMatchObject(common);
+    expect(await startAgentRun(deps, declarant, D, "DECLARATION")).toMatchObject(common);
+    expect(await startAgentRun(deps, declarant, D, "DIGITIZE")).toMatchObject(common);
+    expect(await unconfirmHs(deps, declarant, line10.id)).toMatchObject(sheet1);
+    expect(await confirmHs(deps, declarant, line10.id, "8482.20.00")).toMatchObject(sheet1);
+    expect(await reclassifyHs(deps, declarant, line10.id, {})).toMatchObject(sheet1);
+    expect(await answerHsQuestion(deps, declarant, line10.id, { questionId: "q1", answers: [] })).toMatchObject(sheet1);
+    unwrap(await unconfirmHs(deps, declarant, line60.id));
+    unwrap(await reclassifyHs(deps, declarant, line60.id, {}));
+    const row60 = uow.data.lineItems.find((i) => i.id === line60.id)!;
+    Object.assign(row60, { hsStatus: "need_info", hsQuestion: { id: "q1", questions: [{ id: "use", question: "Dùng cho máy nào?" }] } });
+    unwrap(await answerHsQuestion(deps, declarant, line60.id, { questionId: "q1", answers: [{ id: "use", selected: [], custom: "Máy tiện" }] }));
+    Object.assign(row60, { hsStatus: "completed", hsQuestion: null });
+    unwrap(await confirmHs(deps, declarant, line60.id, "8482.10.00"));
+    // Gọi về hết → sửa như trước.
+    stages = ["RECALLED", "RECALLED", "RECALLED"];
+    unwrap(await updateDeclarationField(deps, declarant, D, "CQHQ", "02CI"));
+    unwrap(await updateDeclarationField(deps, declarant, D, `HANG.${line10.id}.HAG_RE`, "XN210"));
+    unwrap(await saveValueCharges(deps, declarant, D, EMPTY_VALUE_CHARGES));
+    unwrap(await startAgentRun(deps, declarant, D, "DECLARATION"));
   });
 
   it("120 dòng → 3 nhánh, tờ 3 = dòng 101..120, tổng các nhánh = tổng tờ khai", async () => {

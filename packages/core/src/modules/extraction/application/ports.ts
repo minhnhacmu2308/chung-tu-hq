@@ -1,4 +1,4 @@
-import type { CustomFieldDef, ClassifyResult, CrossCheck, DocKind, DocumentStatus, DossierStatus, FieldGroup, FieldStatus, Region, Shipment } from "@kb/contracts";
+import type { CustomFieldDef, ClassifyResult, CrossCheck, DocKind, DocumentStatus, DossierStatus, EditSheet, FieldGroup, FieldStatus, Region, Shipment } from "@kb/contracts";
 import type { ZodType } from "zod";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
@@ -107,6 +107,8 @@ export type ExtractionDeps = {
   aiBudget?: AiBudget;
   /** Người dùng sửa dữ liệu chứng từ (OCR) → tờ khai nháp cập nhật dòng hàng và dựng lại (module declaration; container nối). */
   onShipmentEdited?: (orgId: string, dossierId: string) => Promise<void>;
+  /** Các tờ khai nhánh đã lập ở Hải quan (module integration; container nối) – phạm vi sửa theo tờ đã gọi về. Không nối → không kiểm. */
+  customsSheets?: (orgId: string, dossierId: string) => Promise<EditSheet[]>;
   clock: Clock;
   idGen: IdGen;
 };

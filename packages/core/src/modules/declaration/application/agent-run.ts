@@ -8,6 +8,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { chargesFor, computeBuilt, currenciesOf, exchangeFor, invoiceRate, mergeUserEdits } from "./_rebuild.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { loadDossier, syncLineItems, TASKS_BY_MODE, toAgentRunView } from "./_dto.js";
+import { sheetScopeError } from "./_edit-scope.js";
 import { hsSummaryLogs, startHsClassification, unsentHsLineIds } from "./hs-classification.js";
 import type { AgentLog, AgentRunRow, AgentTask, DeclarationDeps } from "./ports.js";
 
@@ -18,6 +19,9 @@ export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: 
   if (!d.ok) return d;
   if (d.value.status === "SUBMITTED" || d.value.status === "CLEARED" || d.value.status === "CANCELLED") return err(domainError("DOSSIER_LOCKED", "Hồ sơ đã truyền hoặc đã hủy"));
   if (d.value.status === "APPROVED") return err(domainError("DOSSIER_LOCKED", "Tờ khai đã được duyệt – mở lại tờ khai trước khi chạy lại agent"));
+  // Chạy lại agent đồng bộ lại dòng hàng từ chứng từ và (trừ số hóa) dựng lại tờ khai → lô nhiều tờ còn tờ chưa gọi về: chặn mọi chế độ.
+  const blocked = await sheetScopeError(deps, ctx, dossierId, { kind: "REBUILD" });
+  if (blocked) return err(blocked);
   const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
   if (!shipment || shipment.items.length === 0) return err(domainError("NO_ITEMS", "Chưa có dòng hàng – hoàn tất bước OCR & kiểm tra trước"));
   const now = deps.clock.now();

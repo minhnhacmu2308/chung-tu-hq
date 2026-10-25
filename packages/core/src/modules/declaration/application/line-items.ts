@@ -5,6 +5,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { formatHs, ratesFromCandidate } from "../domain/hscodepro-map.js";
 import { ratesFor } from "../domain/rates.js";
 import { rebuildDraft } from "./_rebuild.js";
+import { sheetScopeError } from "./_edit-scope.js";
 import { loadDossier, syncLineItems, toHsEntry, toLineItem } from "./_dto.js";
 import type { DeclarationDeps } from "./ports.js";
 
@@ -47,6 +48,8 @@ export async function confirmHs(deps: DeclarationDeps, ctx: Ctx, itemId: string,
   const dossier = await loadDossier(deps, ctx.orgId, item.dossierId);
   if (!dossier.ok) return dossier;
   if (dossier.value.status === "APPROVED" || dossier.value.status === "SUBMITTED" || dossier.value.status === "CLEARED" || dossier.value.status === "CANCELLED") return err(domainError("DOSSIER_LOCKED", "Tờ khai đã duyệt/truyền – mở lại tờ khai trước khi đổi mã HS"));
+  const blocked = await sheetScopeError(deps, ctx, item.dossierId, { kind: "LINE_NO", lineNo: item.lineNo });
+  if (blocked) return err(blocked);
   const p = { direction: dossier.value.direction, typeCode: dossier.value.typeCode };
   let rates: { importDutyRate: string | null; vatRate: string | null; policyNote: string | null };
   if (sug) rates = ratesFromCandidate({ code: sug.code, description: sug.description, confidence: sug.confidence, whyNot: sug.whyNot, importRate: sug.rates?.importRate ?? null, basis: sug.rates?.basis ?? null, agreement: sug.rates?.agreement ?? null, vatRate: sug.rates?.vatRate ?? null }, p);
@@ -76,6 +79,8 @@ export async function unconfirmHs(deps: DeclarationDeps, ctx: Ctx, itemId: strin
   const dossier = await loadDossier(deps, ctx.orgId, item.dossierId);
   if (!dossier.ok) return dossier;
   if (dossier.value.status === "APPROVED" || dossier.value.status === "SUBMITTED" || dossier.value.status === "CLEARED") return err(domainError("DOSSIER_LOCKED", "Tờ khai đã duyệt/truyền – không bỏ xác nhận HS"));
+  const blocked = await sheetScopeError(deps, ctx, item.dossierId, { kind: "LINE_NO", lineNo: item.lineNo });
+  if (blocked) return err(blocked);
   const patch = { hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null, updatedAt: now };
   await deps.uow.asOrg(ctx, (r) => r.lineItems.update(item.orgId, item.id, patch));
   if (item.hsConfirmed) await deps.audit.append(ctx, { dossierId: item.dossierId, key: `hs:${item.lineNo}`, oldValue: item.hsConfirmed, newValue: "", source: "HS_CONFIRM" });

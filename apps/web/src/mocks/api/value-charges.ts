@@ -5,6 +5,7 @@ import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import { computeTaxes, shipmentOf } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
 import type { Declaration, Dossier } from "@/mocks/types";
+import { editScopeMockError } from "./customs";
 
 export const valueChargesKeys = { detail: (dossierId: string) => ["value-charges", dossierId] as const };
 
@@ -72,6 +73,8 @@ export const saveValueCharges = (dossierId: string, input: ValueCharges) =>
     const role = db.members.find((m) => m.id === db.currentUserId)?.role;
     if (!role || !canEditDeclaration(role)) throw new ApiError("FORBIDDEN", "Vai trò của bạn không được sửa chi phí", 403);
     if (LOCKED.has(d.status)) throw new ApiError("DOSSIER_LOCKED", "Hồ sơ đã duyệt/truyền – mở lại tờ khai trước khi sửa chi phí", 409);
+    const scoped = editScopeMockError(db, d.id, { kind: "COMMON" });
+    if (scoped) throw scoped;
     const parsed = ValueChargesSchema.parse(input);
     const data: ValueCharges = d.direction === "XK" ? { ...parsed, adjustments: null } : parsed;
     db.valueCharges[d.id] = { data, updatedAt: nowIso(), updatedBy: db.currentUserId };

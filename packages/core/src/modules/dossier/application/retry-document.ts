@@ -1,12 +1,15 @@
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { documentScopeError } from "./_edit-scope.js";
 import type { DossierDeps } from "./ports.js";
 
 /** Đọc lại chứng từ lỗi. */
 export async function retryDocument(deps: DossierDeps, ctx: Ctx, documentId: string): Promise<Result<void>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
+  const blocked = await documentScopeError(deps, ctx, documentId);
+  if (blocked) return err(blocked);
   const res = await deps.uow.asOrg(ctx, async (r) => {
     const doc = await r.documents.get(ctx.orgId, documentId);
     if (!doc) return err(domainError("NOT_FOUND", "Không tìm thấy chứng từ"));

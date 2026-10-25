@@ -10,7 +10,7 @@ import type { ProgressEvent } from "../../../dossier/index.js";
 import { lockedSheetCount } from "@kb/contracts";
 import { buildFptRequest, type DeclarationPayload } from "../../domain/declaration-to-fpt.js";
 import { sheetSnapshot } from "../../domain/branches.js";
-import { checkSentSheets } from "../sent-sheets.js";
+import { checkSentSheets, customsEditSheets } from "../sent-sheets.js";
 import type { CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsUow, DeclarationReader, DossierBrief, MessageRow, OutboxRow, ResultRow } from "../customs-ports.js";
 import { dossierCustomsSummaries, getSubmission, listCustomsDeclarations } from "../get-submission.js";
 import { markOutboxFailed, reopenDeclaration } from "../reopen-declaration.js";
@@ -2022,6 +2022,14 @@ describe("tờ khai nhánh – sửa sau review toàn nhánh", () => {
     expect(await checkSentSheets(deps, ORG, D)).toMatchObject({ reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: "4" } });
     uow.data.results.find((r) => r.branch === 4)!.raw = { stage: "DECLARED", sent: sheetSnapshot((await decls.get(ORG, D))!.payload, 4) };
     expect(await checkSentSheets(deps, ORG, D)).toBeNull();
+  });
+
+  it("customsEditSheets (port customsSheets của declaration/extraction/dossier): các tờ đã lập theo thứ tự, giai đoạn + số tờ khai; org khác / chưa truyền → []", async () => {
+    expect(await customsEditSheets(deps, ORG, D)).toEqual([]);
+    seedBranch(2, { raw: { stage: "RECALLED" } });
+    seedBranch(1, { raw: { stage: "PRE_DECLARED" } });
+    expect(await customsEditSheets(deps, ORG, D)).toEqual([{ no: 1, stage: "PRE_DECLARED", declarationNo: "104000000001" }, { no: 2, stage: "RECALLED", declarationNo: "104000000002" }]);
+    expect(await customsEditSheets(deps, "org_khac", D)).toEqual([]);
   });
 
   it("I3: IDA tờ 2 hết lượt thử, chưa có externalId → Gửi lại dựng lại từ thông điệp đã ghim (khóa :retry1), nối tiếp tờ 3; bấm IDA vẫn chặn (dùng Gửi lại)", async () => {

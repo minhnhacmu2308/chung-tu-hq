@@ -3,6 +3,8 @@
 // - Bảng chuyển mã tách ô giống lúc truyền FPT (packages/core integration/domain/declaration-to-fpt.ts); sửa ô con thì ghép lại đúng định dạng chỉ tiêu.
 // - Ô người khai nhập chưa có mã app (mã phân loại hàng hóa, ủy thác, bảo lãnh, trung chuyển…) lưu trên tờ khai với mã = tên trường VNACCS ("ô bổ sung").
 import type { CustomsStage } from "../customs-flow.js";
+import { awaitingContent, recallExempt } from "../customs-summary.js";
+import { branchRanges } from "../declaration/branches.js";
 import { isDeclarationFieldEditable, type DeclarationSection, type DeclarationStatus } from "../dto/declaration.js";
 import { NO_INSURANCE_VALUE, parseAdjustmentField } from "../dto/value-charges.js";
 import type { FptFieldMeta } from "../fpt/common.js";
@@ -256,6 +258,64 @@ export function declarationEditMode(status: DeclarationStatus, stage: CustomsSta
   if (stage === "NOT_SENT" || stage === "RECALLED") return "FULL";
   if (stage === "AMEND_RECALLED") return "AMEND";
   return "LOCKED";
+}
+
+/** Tờ khai nhánh để tính phạm vi sửa: số tờ, giai đoạn Hải quan, số tờ khai (null = chưa được cấp). */
+export type EditSheet = { no: number; stage: CustomsStage; declarationNo: string | null };
+/**
+ * Phạm vi sửa tờ khai theo tờ đã gọi về (spec tách tờ khai IDC/gọi về §2.4): `common` – mọi chỉ tiêu chung (header, vận đơn, trị giá/khoản điều chỉnh…);
+ * `lines[n]` – ô dòng hàng của tờ n; `addRemoveLines` – thêm/xóa/đổi thứ tự dòng (làm dịch dòng giữa các tờ); `lockedSheets` – tờ còn hiệu lực ở Hải quan (lý do khóa).
+ */
+export type DeclarationEditScope = { common: DeclarationEditMode; lines: Record<number, DeclarationEditMode>; addRemoveLines: boolean; lockedSheets: number[] };
+
+/** Tờ còn hiệu lực ở Hải quan: có số tờ khai, không miễn (thông quan / sau thông quan / từ chối), không đang chờ gửi nội dung. */
+const activeAtCustoms = (s: EditSheet) => !!s.declarationNo && !recallExempt(s.stage) && !awaitingContent(s.stage);
+
+/**
+ * Lô một tờ: như `declarationEditMode` (không đổi hành vi). Lô nhiều tờ: tờ khai không nháp → khóa hết; còn tờ còn hiệu lực → khóa chỉ tiêu chung và thêm/xóa dòng;
+ * không còn → chung AMEND nếu có tờ (sửa được) gọi về sửa đổi bổ sung, ngược lại FULL. Dòng: NOT_SENT / RECALLED → FULL, AMEND_RECALLED → AMEND, còn lại khóa.
+ */
+export function declarationEditScope(status: DeclarationStatus, sheets: EditSheet[]): DeclarationEditScope {
+  if (sheets.length <= 1) {
+    const mode = declarationEditMode(status, sheets[0]?.stage ?? "NOT_SENT");
+    return { common: mode, lines: { 1: mode }, addRemoveLines: mode !== "LOCKED", lockedSheets: [] };
+  }
+  const sorted = [...sheets].sort((a, b) => a.no - b.no);
+  if (status !== "DRAFT") return { common: "LOCKED", lines: Object.fromEntries(sorted.map((s) => [s.no, "LOCKED" as const])), addRemoveLines: false, lockedSheets: [] };
+  const lines: Record<number, DeclarationEditMode> = Object.fromEntries(sorted.map((s) => [s.no, activeAtCustoms(s) ? "LOCKED" : declarationEditMode(status, s.stage)]));
+  const lockedSheets = sorted.filter(activeAtCustoms).map((s) => s.no);
+  if (lockedSheets.length) return { common: "LOCKED", lines, addRemoveLines: false, lockedSheets };
+  const common: DeclarationEditMode = Object.values(lines).includes("AMEND") ? "AMEND" : "FULL";
+  return { common, lines, addRemoveLines: true, lockedSheets };
+}
+
+/** Đích một lần sửa: chỉ tiêu chung / ô dòng hàng của dòng thuộc tờ `sheet` / thêm–xóa dòng / dựng lại tờ khai. */
+export type EditTarget = { kind: "COMMON" } | { kind: "LINE"; sheet: number } | { kind: "ADD_REMOVE_LINES" } | { kind: "REBUILD" };
+export type EditBlock = { reasonCode: "COMMON_LOCKED_SHEETS" | "LINE_SHEET_LOCKED" | "DECLARATION_LOCKED"; params: Record<string, string | number> };
+
+/**
+ * Một quy tắc cho mọi đường sửa (backend + mock + FE): null = được sửa (AMEND vẫn kiểm Phụ lục II bằng `fieldEditBlock`).
+ * Bị khóa vì tờ chưa gọi về → COMMON_LOCKED_SHEETS { sheets } / LINE_SHEET_LOCKED { sheet }; khóa vì giai đoạn tờ khai (không nháp, lô một tờ đã khai) → DECLARATION_LOCKED.
+ * Tờ không có trong phạm vi (dòng vượt số tờ đã lập) → theo chỉ tiêu chung.
+ */
+export function editBlockFor(scope: DeclarationEditScope, target: EditTarget): EditBlock | null {
+  const sheets = scope.lockedSheets.join(", ");
+  if (target.kind === "LINE") {
+    if ((scope.lines[target.sheet] ?? scope.common) !== "LOCKED") return null;
+    const partial = scope.lockedSheets.length > 0 || Object.values(scope.lines).some((m) => m !== "LOCKED");
+    return partial ? { reasonCode: "LINE_SHEET_LOCKED", params: { sheet: target.sheet } } : { reasonCode: "DECLARATION_LOCKED", params: {} };
+  }
+  const open = target.kind === "COMMON" ? scope.common !== "LOCKED" : scope.common !== "LOCKED" && scope.addRemoveLines;
+  if (open) return null;
+  return scope.lockedSheets.length ? { reasonCode: "COMMON_LOCKED_SHEETS", params: { sheets } } : { reasonCode: "DECLARATION_LOCKED", params: {} };
+}
+
+/** Tờ (từ 1) chứa dòng `lineNo` trong danh sách dòng hiện tại (50 dòng/tờ theo thứ tự lineNo – branchRanges). Không có dòng → tờ 1. */
+export function sheetOfLine(lineNos: number[], lineNo: number): number {
+  const sorted = [...lineNos].sort((a, b) => a - b);
+  const at = sorted.indexOf(lineNo);
+  if (at < 0) return 1;
+  return branchRanges(sorted).find((r) => at >= r.index[0] && at < r.index[1])?.no ?? 1;
 }
 
 /** Khóa ô tính từ chứng từ (không ghi lý do dưới ô – lời nhắc đầu form đã giải thích). */

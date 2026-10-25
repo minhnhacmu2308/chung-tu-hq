@@ -10,7 +10,7 @@ import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
 import { SubmitStep } from "./submit-step";
 
-const api = vi.hoisted(() => ({ current: null as SubmissionView | null, perform: vi.fn(), resend: vi.fn(), declareAll: vi.fn() }));
+const api = vi.hoisted(() => ({ current: null as SubmissionView | null, perform: vi.fn(), resend: vi.fn(), declareAll: vi.fn(), recallAll: vi.fn() }));
 vi.mock("@/api/customs", async (orig) => {
   const real = await orig<typeof import("@/api/customs")>();
   return {
@@ -19,6 +19,7 @@ vi.mock("@/api/customs", async (orig) => {
     performOperation: (...a: unknown[]) => api.perform(...a),
     resendOperation: (...a: unknown[]) => api.resend(...a),
     declareAllSheets: (...a: unknown[]) => api.declareAll(...a),
+    recallAllSheets: (...a: unknown[]) => api.recallAll(...a),
   };
 });
 vi.mock("next/navigation", () => ({
@@ -36,6 +37,7 @@ beforeEach(() => {
   api.perform.mockReset().mockResolvedValue({ sent: true, message: "ok" });
   api.resend.mockReset().mockResolvedValue({ resent: true, message: "ok" });
   api.declareAll.mockReset().mockResolvedValue({ sent: true, message: "ok" });
+  api.recallAll.mockReset().mockResolvedValue({ sent: true, message: "ok", sheets: [1, 2, 3] });
 });
 
 describe("Bước Khai báo – lô 3 tờ", () => {
@@ -190,5 +192,90 @@ describe("Bước Khai báo – khai chính thức tất cả", () => {
     renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
     await screen.findAllByRole("button", { name: /Khai chính thức \(IDC\)/ }, T);
     expect(screen.queryByRole("button", { name: /Khai chính thức tất cả/ })).toBeNull();
+  }, 20_000);
+});
+
+describe("Bước Khai báo – gọi về (hai lựa chọn, tiến độ, tự về Review)", () => {
+  const idb = (enabled: boolean, status: "NOT_SENT" | "SENDING" = "NOT_SENT") =>
+    ({ op: "IDB" as const, label: "Gọi sửa đổi tờ khai tạm", status, phase: "DECLARE" as const, enabled, action: "SEND" as const });
+  const lot = () => submissionOf([
+    branch(1, 3, "PRE_DECLARED", { nextOp: "IDB", pipeline: [...pipelineFor("PRE_DECLARED"), idb(true)] }),
+    branch(2, 3, "PRE_DECLARED", { nextOp: "IDB", pipeline: [...pipelineFor("PRE_DECLARED"), idb(true)] }),
+    branch(3, 3, "PRE_DECLARED", { nextOp: "IDB", pipeline: [...pipelineFor("PRE_DECLARED"), idb(true)] }),
+  ]);
+  const openDialog = async () => {
+    const c2 = await screen.findByRole("region", { name: /^Tờ 2\/3/ }, T);
+    await userEvent.click(within(c2).getAllByRole("button", { name: /Gọi về sửa \(IDB\)/ })[0]!);
+    return screen.findByRole("dialog");
+  };
+
+  it("lô 3 tờ: hộp có hai lựa chọn, mặc định 'Gọi về tất cả tờ' → gọi recall-all; a11y", async () => {
+    api.current = lot();
+    const { container } = renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    const dialog = await openDialog();
+    expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
+    expect((within(dialog).getByRole("radio", { name: /Gọi về tất cả tờ/ }) as HTMLInputElement).checked).toBe(true);
+    expect(within(dialog).getByText("Chỉ gọi về tờ 2")).toBeTruthy();
+    await expectNoA11yViolations(container);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Gọi về tất cả tờ" }));
+    expect(api.recallAll).toHaveBeenCalledWith("dos_028");
+    expect(api.perform).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it("chọn 'Chỉ gọi về tờ 2' → gọi operations IDB tờ 2", async () => {
+    api.current = lot();
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Chỉ gọi về tờ 2/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Gọi về sửa (IDB)" }));
+    expect(api.perform).toHaveBeenCalledWith("dos_028", "IDB", 2);
+    expect(api.recallAll).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it("lô một tờ → hộp cũ, không radio", async () => {
+    api.current = submissionOf([branch(1, 1, "PRE_DECLARED", { nextOp: "IDB", pipeline: [...pipelineFor("PRE_DECLARED"), idb(true)] })]);
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await userEvent.click((await screen.findAllByRole("button", { name: /Gọi về sửa \(IDB\)/ }, T))[0]!);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("radio")).toBeNull();
+  }, 20_000);
+
+  it("đang gọi về: hiện 'Đang gọi về 1/2 tờ'", async () => {
+    api.current = submissionOf([
+      branch(1, 3, "RECALLED"),
+      branch(2, 3, "PRE_DECLARED", { inProgress: true, pipeline: [...pipelineFor("PRE_DECLARED"), idb(false, "SENDING")] }),
+      branch(3, 3, "CLEARED"),
+    ]);
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    expect(await screen.findByText("Đang gọi về 1/2 tờ", {}, T)).toBeTruthy();
+  }, 20_000);
+
+  it("gọi về tất cả xong, tờ khai mở lại (DRAFT) → tự sang Review kèm số tờ; chỉ tờ 2 → danh sách tờ", async () => {
+    api.current = lot();
+    const goTo = vi.fn();
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={goTo} />);
+    const dialog = await openDialog();
+    api.current = { ...lot(), declarationStatus: "DRAFT" }; // sau khi gửi lệnh, lần tải lại thấy tờ khai đã mở lại
+    await userEvent.click(within(dialog).getByRole("button", { name: "Gọi về tất cả tờ" }));
+    await vi.waitFor(() => expect(goTo).toHaveBeenCalledWith("review", { recalled: "all:3" }), T);
+  }, 20_000);
+
+  it("chỉ gọi về tờ 2, tờ khai mở lại → tự sang Review với danh sách tờ 2", async () => {
+    api.current = lot();
+    const goTo = vi.fn();
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={goTo} />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Chỉ gọi về tờ 2/ }));
+    api.current = { ...lot(), declarationStatus: "DRAFT" };
+    await userEvent.click(within(dialog).getByRole("button", { name: "Gọi về sửa (IDB)" }));
+    await vi.waitFor(() => expect(goTo).toHaveBeenCalledWith("review", { recalled: "2" }), T);
+  }, 20_000);
+
+  it("không tự chuyển khi người dùng chưa gọi về trong phiên này", async () => {
+    api.current = { ...lot(), declarationStatus: "DRAFT" };
+    const goTo = vi.fn();
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={goTo} />);
+    await screen.findByRole("region", { name: /^Tờ 2\/3/ }, T);
+    expect(goTo).not.toHaveBeenCalled();
   }, 20_000);
 });

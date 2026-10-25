@@ -100,3 +100,34 @@ export function canDeclareAll(sheets: BranchSubmission[]): { ok: boolean; pendin
   const ok = sheets.length >= 2 && pending >= 1 && !sheets.some((b) => awaitingContent(b.stage) || b.pipeline.some((r) => r.status === "SENDING"));
   return { ok, pending };
 }
+
+const RECALL_OPS: ReadonlySet<string> = new Set(["IDB", "IDD", "EDB", "EDD"]);
+const RECALLED_STAGES: ReadonlySet<string> = new Set(["RECALLED", "AMEND_RECALLED"]);
+const inFlight = (b: BranchSubmission) => b.pipeline.some((r) => RECALL_OPS.has(r.op) && (r.status === "WAITING" || r.status === "SENDING"));
+
+/**
+ * Tiến độ chuỗi gọi về (spec §2.2): có tờ nào đang có lệnh gọi về chờ / đang gửi (IDB/IDD/EDB/EDD) thì trả `{ done, total }`; ngược lại null.
+ * done = tờ đã gọi về xong (RECALLED / AMEND_RECALLED); total = done + tờ còn có lệnh gọi về đang chạy hoặc bấm được. Xấp xỉ phía client
+ * (không biết chính xác tờ nào thuộc lượt chạy).
+ */
+export function recallProgress(sheets: BranchSubmission[]): { done: number; total: number } | null {
+  if (!sheets.some(inFlight)) return null;
+  const done = sheets.filter((b) => RECALLED_STAGES.has(b.stage) && !inFlight(b)).length;
+  const active = sheets.filter((b) => inFlight(b) || (!RECALLED_STAGES.has(b.stage) && b.pipeline.some((r) => RECALL_OPS.has(r.op) && r.enabled))).length;
+  return { done, total: done + active };
+}
+
+/** Thông báo "đã gọi về" truyền qua `?recalled=` để còn hiện ở bước Review: "all:<số tờ>" (gọi về tất cả) hoặc danh sách tờ "2,3". */
+export type RecalledNotice = { scope: "all"; count: number } | { scope: "sheets"; sheets: number[] };
+export function encodeRecalled(n: RecalledNotice): string {
+  return n.scope === "all" ? `all:${n.count}` : [...n.sheets].sort((a, b) => a - b).join(",");
+}
+export function parseRecalled(raw: string | null): RecalledNotice | null {
+  if (!raw) return null;
+  if (raw.startsWith("all:")) {
+    const count = Number(raw.slice(4));
+    return Number.isInteger(count) && count > 0 ? { scope: "all", count } : null;
+  }
+  const sheets = raw.split(",").map(Number);
+  return sheets.every((x) => Number.isInteger(x) && x > 0) ? { scope: "sheets", sheets } : null;
+}

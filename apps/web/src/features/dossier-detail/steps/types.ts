@@ -7,5 +7,5 @@ export type ViewStep = StepId | "post";
 export type StepProps = {
   dossier: Dossier;
   /** Chuyển sang bước khác (cập nhật URL ?step=, kèm ?branch= khi mở bước 7 cho một tờ khai nhánh). Bước tự gọi updateDossier nếu cần đổi bước đang dở của hồ sơ. */
-  goTo: (step: ViewStep, opts?: { branch?: number }) => void;
+  goTo: (step: ViewStep, opts?: { branch?: number; recalled?: string }) => void;
 };

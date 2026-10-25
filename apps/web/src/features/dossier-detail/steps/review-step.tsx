@@ -26,6 +26,7 @@ import { errorPlace, fieldErrors } from "./customs-errors";
 import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { REVIEW_MESSAGES } from "./review-step.messages";
+import { parseRecalled } from "./branch-sheets";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
@@ -94,6 +95,8 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const pathname = usePathname();
   const params = useSearchParams();
   const tabParam = params.get("tab");
+  // Vừa gọi về từ bước Khai báo (?recalled=): nhắc phạm vi sửa.
+  const recalled = parseRecalled(params.get("recalled"));
   // Rời tab bản in khi panel còn thay đổi chưa lưu → panel hỏi Lưu / Bỏ / Ở lại, tự chuyển tab khi Lưu hoặc Bỏ.
   const leaveGuard: LeaveGuard = useRef(null);
   /** Rời bản in (sang bước khác, mở hộp phê duyệt): còn thay đổi chưa lưu → panel hỏi trước; Lưu / Bỏ thì đi tới `href`. */
@@ -248,6 +251,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         </CardHeader>
         <CardContent>
           <Stack gap="sm">
+            {recalled && (
+              <Alert tone="info">
+                {recalled.scope === "all" ? fill(t.recalledAllNotice, { n: recalled.count }) : fill(t.recalledSheetsNotice, { list: recalled.sheets.join(", ") })}
+              </Alert>
+            )}
             {/* Bản in: lỗi Hải quan hiện trên ô + "Chỉ ô cần xử lý" ở thanh công cụ – không cần khung tổng hợp. */}
             {legacy && rejection && errs.length > 0 && (
               <Alert tone="danger" title={fill(t.rejectedTitle, { op: rejection.operation, at: formatDateTime(rejection.at), n: errs.length })}>

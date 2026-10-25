@@ -176,8 +176,8 @@ function DetailInner({ id }: { id: string }) {
   const fallback: ViewStep = postEditing ? "post" : hasPost ? "submit" : dossier.step;
   const viewing: ViewStep =
     requested === "post" && hasPost ? "post" : isStep(requested) && STEP_ORDER.indexOf(requested) <= progressIndex ? requested : fallback;
-  const goTo = (step: ViewStep, opts?: { branch?: number }) =>
-    router.replace(`${pathname}?step=${step}${opts?.branch ? `&branch=${opts.branch}` : ""}`, { scroll: false });
+  const goTo = (step: ViewStep, opts?: { branch?: number; recalled?: string }) =>
+    router.replace(`${pathname}?step=${step}${opts?.branch ? `&branch=${opts.branch}` : ""}${opts?.recalled ? `&recalled=${encodeURIComponent(opts.recalled)}` : ""}`, { scroll: false });
   const StepView = STEP_COMPONENTS[viewing];
   const flow = buildFlow(dossier, locale);
   const steps = STEP_ORDER.map((sid) => ({ id: sid, label: stepLabels[sid] }));

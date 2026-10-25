@@ -3,7 +3,7 @@
 // Sửa sau thông quan (AMA/AMB/AMC) làm ở bước 7 – ở đây chỉ còn thẻ lối vào. Quy tắc bấm được / việc tiếp theo do backend (hoặc mock)
 // tính bằng @kb/contracts customs-flow – màn chỉ hiển thị.
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Field,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Field, RadioGroup,
   fill, Grid, IconTile, pickMessages, Select, Spinner, Stack, StatusBadge, toast, toastPromise, useMessages, useUiLocale, type Tone, type UiLocale,
 } from "@kb/ui";
 import { baseOp, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage } from "@kb/contracts";
@@ -14,7 +14,7 @@ import {
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
 import {
-  customsKeys, declareAllSheets, getSubmission, listCertificates, performOperation, resendOperation, submitDeclaration,
+  customsKeys, declareAllSheets, getSubmission, listCertificates, performOperation, recallAllSheets, resendOperation, submitDeclaration,
   type BranchSubmission, type PipelineRow, type PipelineStatus, type SubmissionView,
 } from "@/api/customs";
 import { declarationKeys, getDeclarationView } from "@/api/declaration";
@@ -32,7 +32,7 @@ import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
-import { anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, orderLocked, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
+import { anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -301,8 +301,12 @@ function MessageList({ messages }: { messages: SubmissionView["messages"] }) {
 /** Nghiệp vụ cần xác nhận: gọi về sửa (IDB/IDD mở lại tờ khai) trên tờ `branch`. AMB (gọi về bản khai bổ sung) làm ở bước 7. */
 type Confirm = { row: PipelineRow; branch: number };
 
-function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { confirm: Confirm | null; onClose: () => void; onConfirm: (c: Confirm) => void; pending: boolean; code: string }) {
+type RecallScope = "all" | "one";
+
+/** Gọi về sửa: lô một tờ giữ hộp cũ; lô nhiều tờ chọn gọi về tất cả tờ (mặc định) hoặc chỉ tờ vừa bấm. */
+function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code, multi, scope, onScope }: { confirm: Confirm | null; onClose: () => void; onConfirm: (c: Confirm, scope: RecallScope) => void; pending: boolean; code: string; multi: boolean; scope: RecallScope; onScope: (s: RecallScope) => void }) {
   const t = useMessages(SUBMIT_MESSAGES);
+  const sh = useMessages(SHEET_MESSAGES);
   const ops = useMessages(OPERATION_MESSAGES);
   return (
     <Dialog open={confirm !== null} onOpenChange={(o) => !o && onClose()}>
@@ -310,10 +314,21 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (confirm) onConfirm(confirm);
+            if (confirm) onConfirm(confirm, multi ? scope : "one");
           }}
         >
           <Stack gap="sm">
+            {multi && confirm && (
+              <RadioGroup
+                label={sh.recallScope}
+                value={scope}
+                onChange={onScope}
+                options={[
+                  { value: "all", label: sh.recallAllOption, description: sh.recallAllDesc },
+                  { value: "one", label: fill(sh.recallOneOption, { sheet: confirm.branch }), description: fill(sh.recallOneDesc, { sheet: confirm.branch }) },
+                ]}
+              />
+            )}
             <p className="text-sm text-fg-muted">
               {t.recallBody}
             </p>
@@ -323,7 +338,7 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
               {t.cancel}
             </Button>
             <Button type="submit" loading={pending} leftIcon={<RotateCcw className="h-4 w-4" />}>
-              {fill(t.recallAction, { op: confirm?.row.op ?? "" })}
+              {multi && scope === "all" ? sh.recallAllAction : fill(t.recallAction, { op: confirm?.row.op ?? "" })}
             </Button>
           </DialogFooter>
         </form>
@@ -397,6 +412,9 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const [busy, setBusy] = useState<Busy | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [declareAllOpen, setDeclareAllOpen] = useState(false);
+  const [recallScope, setRecallScope] = useState<RecallScope>("all");
+  // Gọi về do người dùng bấm trong phiên này (lô nhiều tờ): khi tờ khai được mở lại thì tự về Review kèm thông báo.
+  const [recalled, setRecalled] = useState<RecalledNotice | null>(null);
 
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
@@ -411,6 +429,13 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   useEffect(() => {
     if (stageKey) void qc.invalidateQueries({ queryKey: dossierKeys.all });
   }, [stageKey, qc]);
+  const reopened = Boolean(subQ.data && sheetsOf(subQ.data).length > 1 && (subQ.data.declarationStatus === "DRAFT" || dossier.step === "review"));
+  useEffect(() => {
+    if (!recalled || !reopened) return;
+    setRecalled(null);
+    goTo("review", { recalled: encodeRecalled(recalled) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recalled, reopened]);
   const certQ = useQuery({ queryKey: customsKeys.certificates, queryFn: listCertificates });
   const certs = certQ.data ?? [];
   const selectedId = certId || certs.find((c) => c.isDefault)?.id || certs[0]?.id || "";
@@ -438,13 +463,24 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       setBusy(b);
       return performOperation(dossier.id, b.op, b.branch);
     },
-    onSuccess: (r) => {
+    onSuccess: (r, b) => {
       setConfirm(null);
+      if (isRecall(b.op) && !AMA_OPS.has(b.op)) setRecalled({ scope: "sheets", sheets: [b.branch] });
       toast({ tone: r.sent ? "info" : "success", title: r.message });
       invalidate();
     },
     onError: toastMutationError(t.performFailed),
     onSettled: () => setBusy(null),
+  });
+  const recallAll = useMutation({
+    mutationFn: () => recallAllSheets(dossier.id),
+    onSuccess: (r) => {
+      setConfirm(null);
+      setRecalled({ scope: "all", count: r.sheets.length });
+      toast({ tone: r.sent ? "info" : "success", title: r.message });
+      invalidate();
+    },
+    onError: toastMutationError(t.performFailed),
   });
   const declareAll = useMutation({
     mutationFn: () => declareAllSheets(dossier.id),
@@ -482,7 +518,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const certExpired = selected ? selected.validTo < new Date().toISOString().slice(0, 10) : false;
   const sending = s.pipeline.find((r) => r.status === "SENDING");
   const anySending = sheets.some((b) => b.pipeline.some((r) => r.status === "SENDING"));
-  const anyBusy = anySending || perform.isPending || resend.isPending || submit.isPending;
+  const anyBusy = anySending || perform.isPending || recallAll.isPending || resend.isPending || submit.isPending;
   const hasNumber = Boolean(s.result?.declarationNo);
   // AMA/AMB/AMC thuộc bước 7 – không hiện ở danh sách nghiệp vụ / việc tiếp theo của bước này.
   const pipeline = s.pipeline.filter((r) => !AMA_OPS.has(r.op));
@@ -497,7 +533,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     canResend: !anyBusy,
     onAction: (r) => {
       if (r.action === "EDIT") return goTo("review");
-      if (isRecall(r.op)) return setConfirm({ row: r, branch });
+      if (isRecall(r.op)) {
+        setRecallScope("all");
+        return setConfirm({ row: r, branch });
+      }
       if (firstSend && branch === 1 && baseOp(r.op) === "IDA") return submit.mutate();
       perform.mutate({ op: r.op, branch });
     },
@@ -574,9 +613,12 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       <ConfirmReopenDialog
         confirm={confirm}
         code={confirm && multi ? `${dossier.code} · ${fill(sh.sheetTitle, { no: confirm.branch, of: sheets.length })}` : `${dossier.code} · ${dossier.partner}`}
-        pending={perform.isPending}
+        pending={perform.isPending || recallAll.isPending}
+        multi={multi}
+        scope={recallScope}
+        onScope={setRecallScope}
         onClose={() => setConfirm(null)}
-        onConfirm={(c) => perform.mutate({ op: c.row.op, branch: c.branch })}
+        onConfirm={(c, scope) => (scope === "all" ? recallAll.mutate() : perform.mutate({ op: c.row.op, branch: c.branch }))}
       />
     </>
   );
@@ -585,9 +627,11 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   if (multi) {
     const kind = dossier.direction === "NK" ? "IDA" : "EDA";
     const clearedResend = clearedWhileResending(sheets);
+    const progress = recallProgress(sheets);
     return (
       <Stack gap="lg">
         {alerts}
+        {progress && <Alert tone="info">{fill(sh.recallProgress, progress)}</Alert>}
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-2">

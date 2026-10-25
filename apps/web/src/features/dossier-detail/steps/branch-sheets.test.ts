@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
-import { anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
+import { recallProgress, anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
 
 describe("sheetsOf", () => {
   it("JSON cũ không có branches → một tờ từ trường cấp hồ sơ", () => {
@@ -165,5 +165,36 @@ describe("canDeclareAll", () => {
   it("có tờ đang gửi → không ok", () => {
     const sending = pipelineFor("PRE_DECLARED").map((r) => (r.op === "IDC" ? { ...r, status: "SENDING" as const } : r));
     expect(canDeclareAll([pre(1, 2), branch(2, 2, "PRE_DECLARED", { pipeline: sending })]).ok).toBe(false);
+  });
+});
+
+describe("recallProgress", () => {
+  const recallRow = (op: "IDB" | "IDD", status: "WAITING" | "SENDING" | "NOT_SENT", enabled = false) =>
+    ({ op, label: "Gọi về", status, phase: "DECLARE" as const, enabled, action: "SEND" as const });
+  it("không có lệnh gọi về đang chạy → null", () => {
+    expect(recallProgress([branch(1, 2, "PRE_DECLARED"), branch(2, 2, "PRE_DECLARED")])).toBeNull();
+    expect(recallProgress([branch(1, 2, "RECALLED"), branch(2, 2, "RECALLED")])).toBeNull();
+  });
+  it("tờ 1 đã gọi về, tờ 2 đang gửi IDB → 1/2", () => {
+    const sending = [...pipelineFor("PRE_DECLARED"), recallRow("IDB", "SENDING")];
+    expect(recallProgress([branch(1, 3, "RECALLED"), branch(2, 3, "PRE_DECLARED", { pipeline: sending }), branch(3, 3, "CLEARED")])).toEqual({ done: 1, total: 2 });
+  });
+  it("tờ sau còn bấm được gọi về (chờ nối tiếp) tính vào total; IDD cũng tính", () => {
+    const sending = [...pipelineFor("AMEND_PRE_DECLARED"), recallRow("IDD", "WAITING")];
+    const pending = [...pipelineFor("PRE_DECLARED"), recallRow("IDB", "NOT_SENT", true)];
+    expect(recallProgress([branch(1, 3, "AMEND_PRE_DECLARED", { pipeline: sending }), branch(2, 3, "PRE_DECLARED", { pipeline: pending }), branch(3, 3, "AMEND_RECALLED")])).toEqual({ done: 1, total: 3 });
+  });
+});
+
+describe("recalled notice", () => {
+  it("mã hóa / giải mã tất cả và danh sách tờ", async () => {
+    const { encodeRecalled, parseRecalled } = await import("./branch-sheets");
+    expect(encodeRecalled({ scope: "all", count: 3 })).toBe("all:3");
+    expect(encodeRecalled({ scope: "sheets", sheets: [3, 2] })).toBe("2,3");
+    expect(parseRecalled("all:3")).toEqual({ scope: "all", count: 3 });
+    expect(parseRecalled("2,3")).toEqual({ scope: "sheets", sheets: [2, 3] });
+    expect(parseRecalled(null)).toBeNull();
+    expect(parseRecalled("x")).toBeNull();
+    expect(parseRecalled("all:0")).toBeNull();
   });
 });

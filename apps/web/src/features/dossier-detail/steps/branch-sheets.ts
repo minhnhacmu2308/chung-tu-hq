@@ -1,5 +1,6 @@
 // Tờ khai nhánh (lô > 50 dòng → N tờ, spec tách tờ khai §6.5/§8) trên bước Khai báo / Sửa sau thông quan – logic thuần, test bằng vitest.
 // SubmissionView: trường cấp hồ sơ = tờ 1 (tương thích), `branches` mọi tờ; JSON cũ không có `branches` → coi như lô 1 tờ.
+import { awaitingContent, isContentOperation, reasonVi, sheetOrderWait, type PipelineRow } from "@kb/contracts";
 import type { BranchSubmission, SubmissionView } from "@/api/customs";
 import { postStepVisible } from "../../post-amendment/ama-wizard";
 
@@ -24,22 +25,29 @@ export function sheetView(s: SubmissionView, no: number): SubmissionView {
   };
 }
 
-/** Giai đoạn tờ còn chờ gửi nội dung tờ khai (lần đầu / sau gọi về / sau gọi sửa đổi). */
-const AWAITING_CONTENT: ReadonlySet<string> = new Set(["NOT_SENT", "RECALLED", "AMEND_RECALLED"]);
-
 /**
  * Tờ đang chờ tờ nào (nhãn "Chờ tờ j"), tờ không đang gửi:
  * - khai tạm nối tiếp (§6.2): tờ chưa gửi mà tờ ngay trước chưa có số tờ khai → chờ tờ đó;
- * - truyền lại sau gọi về (§6.4, tờ khai SUBMITTED – lần truyền đang chạy): tờ còn chờ gửi nội dung chờ tờ trước gần nhất cũng còn chờ gửi
- *   (worker gửi lần lượt; tờ đã thông quan / bị từ chối không chờ).
+ * - truyền lại sau gọi về (§6.4, tờ khai đã duyệt lại – APPROVED – hoặc lần truyền đang chạy – SUBMITTED): tờ còn chờ gửi nội dung chờ tờ trước
+ *   gần nhất cũng còn chờ gửi – cùng quy tắc thứ tự tờ với backend (sheetOrderWait; tờ đã thông quan / bị từ chối không chờ). Luôn truyền theo thứ tự tờ.
  */
 export function waitingOn(sheets: BranchSubmission[], no: number, declarationStatus?: string): number | null {
   const b = sheets[no - 1];
   const prev = sheets[no - 2];
   if (!b || !prev || b.pipeline.some((r) => r.status === "SENDING")) return null;
   if (b.stage === "NOT_SENT" && !prev.declarationNo) return prev.no;
-  if (declarationStatus !== "SUBMITTED" || !AWAITING_CONTENT.has(b.stage)) return null;
-  return sheets.slice(0, no - 1).reverse().find((x) => AWAITING_CONTENT.has(x.stage))?.no ?? null;
+  if ((declarationStatus !== "SUBMITTED" && declarationStatus !== "APPROVED") || !awaitingContent(b.stage)) return null;
+  return sheetOrderWait(sheets, no);
+}
+
+/**
+ * Tờ đang chờ tờ trước (waitingOn) → nút gửi nội dung (IDA/IDA01/EDA/EDA01) của tờ khóa, lý do SHEET_ORDER – backend cũng từ chối (truyền theo thứ tự tờ).
+ * Không chờ → giữ nguyên mảng.
+ */
+export function orderLocked(rows: PipelineRow[], no: number, waiting: number | null): PipelineRow[] {
+  if (waiting === null) return rows;
+  const reasonParams = { sheet: no, waitFor: waiting };
+  return rows.map((r) => (r.enabled && isContentOperation(r.op) && r.op !== "AMA" ? { ...r, enabled: false, reason: reasonVi("SHEET_ORDER", reasonParams), reasonCode: "SHEET_ORDER", reasonParams } : r));
 }
 
 /**

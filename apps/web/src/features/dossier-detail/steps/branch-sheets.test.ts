@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
-import { anyInProgress, clearedWhileResending, postSheet, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
+import { anyInProgress, clearedWhileResending, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
 
 describe("sheetsOf", () => {
   it("JSON cũ không có branches → một tờ từ trường cấp hồ sơ", () => {
@@ -53,11 +53,40 @@ describe("waitingOn – truyền lại sau gọi về (tờ khai SUBMITTED)", ()
     // Tờ trước đã thông quan (miễn gọi về) → không chờ tờ đó.
     expect(waitingOn([branch(1, 2, "CLEARED"), branch(2, 2, "AMEND_RECALLED")], 2, "SUBMITTED")).toBeNull();
   });
-  it("chưa truyền lại (tờ khai đã duyệt / đang sửa) → không ghi chờ cho tờ đã gọi về", () => {
+  it("tờ khai đang sửa / không rõ → không ghi chờ cho tờ đã gọi về", () => {
     const sheets = [branch(1, 2, "RECALLED"), branch(2, 2, "RECALLED")];
-    expect(waitingOn(sheets, 2, "APPROVED")).toBeNull();
     expect(waitingOn(sheets, 2, "DRAFT")).toBeNull();
     expect(waitingOn(sheets, 2)).toBeNull();
+  });
+});
+
+describe("waitingOn – tờ khai đã duyệt lại, chưa truyền lại (APPROVED): cùng quy tắc thứ tự tờ với backend (sheetOrderWait)", () => {
+  it("mọi tờ đã gọi về → tờ 1 không chờ, tờ 2 chờ tờ 1, tờ 3 chờ tờ 2", () => {
+    const sheets = [branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "AMEND_RECALLED")];
+    expect(waitingOn(sheets, 1, "APPROVED")).toBeNull();
+    expect(waitingOn(sheets, 2, "APPROVED")).toBe(1);
+    expect(waitingOn(sheets, 3, "APPROVED")).toBe(2);
+  });
+  it("R7: tờ trước đã thông quan không chờ; tờ giữa thông quan → tờ sau chờ tờ trước gần nhất còn chờ gửi", () => {
+    expect(waitingOn([branch(1, 3, "CLEARED"), branch(2, 3, "AMEND_RECALLED"), branch(3, 3, "AMEND_RECALLED")], 2, "APPROVED")).toBeNull();
+    expect(waitingOn([branch(1, 3, "CLEARED"), branch(2, 3, "AMEND_RECALLED"), branch(3, 3, "AMEND_RECALLED")], 3, "APPROVED")).toBe(2);
+    expect(waitingOn([branch(1, 3, "AMEND_RECALLED"), branch(2, 3, "CLEARED"), branch(3, 3, "AMEND_RECALLED")], 3, "APPROVED")).toBe(1);
+  });
+  it("tờ chưa có số chờ tờ trước đã gọi về; tờ trước đã gửi lại xong → không chờ", () => {
+    expect(waitingOn([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "NOT_SENT")], 3, "APPROVED")).toBe(2);
+    expect(waitingOn([branch(1, 3, "PRE_DECLARED"), branch(2, 3, "PRE_DECLARED"), branch(3, 3, "RECALLED")], 3, "APPROVED")).toBeNull();
+    // Tờ không cần gửi nội dung (chưa gọi về) không ghi chờ – vẫn thấy nút gọi về của nó.
+    expect(waitingOn([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED")], 3, "APPROVED")).toBeNull();
+  });
+});
+
+describe("orderLocked – khóa nút gửi nội dung của tờ đang chờ tờ trước", () => {
+  it("tờ chờ → IDA/IDA01 bấm được thành khóa với lý do SHEET_ORDER; nghiệp vụ khác giữ nguyên; không chờ → giữ nguyên", () => {
+    const rows = pipelineFor("RECALLED", ["IDA", "IDC"]);
+    const locked = orderLocked(rows, 3, 2);
+    expect(locked.find((r) => r.op === "IDA")).toMatchObject({ enabled: false, reasonCode: "SHEET_ORDER", reasonParams: { sheet: 3, waitFor: 2 }, reason: "Tờ 3: chờ tờ 2 khai tạm trước – truyền theo thứ tự tờ khai" });
+    expect(locked.find((r) => r.op === "IDC")).toEqual(rows.find((r) => r.op === "IDC"));
+    expect(orderLocked(rows, 3, null)).toBe(rows);
   });
 });
 

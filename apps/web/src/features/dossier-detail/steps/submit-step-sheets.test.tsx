@@ -124,6 +124,32 @@ describe("Bước Khai báo – lô 3 tờ", () => {
   }, 20_000);
 });
 
+describe("Bước Khai báo – lô 3 tờ, tờ khai đã duyệt lại sau gọi về (APPROVED)", () => {
+  it("tờ 2, 3 chờ tờ trước (truyền theo thứ tự tờ): nhãn 'Chờ tờ j', không có nút gửi chính, nút khai tạm trong nghiệp vụ khóa kèm lý do; tờ 1 gửi được; a11y", async () => {
+    api.current = submissionOf([
+      branch(1, 3, "RECALLED", { nextOp: "IDA", pipeline: pipelineFor("RECALLED", ["IDA"]) }),
+      branch(2, 3, "RECALLED", { nextOp: "IDA", pipeline: pipelineFor("RECALLED", ["IDA"]) }),
+      branch(3, 3, "RECALLED", { nextOp: "IDA", pipeline: pipelineFor("RECALLED", ["IDA"]) }),
+    ], { declarationStatus: "APPROVED" });
+    const { container } = renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByRole("region", { name: /^Tờ 1\/3/ }, T);
+    const c1 = card(/^Tờ 1\/3/);
+    const c2 = card(/^Tờ 2\/3/);
+    const c3 = card(/^Tờ 3\/3/);
+    expect(within(c1).queryByText(/Chờ tờ/)).toBeNull();
+    expect(within(c2).getAllByText("Chờ tờ 1").length).toBeGreaterThan(0);
+    expect(within(c3).getAllByText("Chờ tờ 2").length).toBeGreaterThan(0);
+    expect(within(c3).getByText("Tờ này tự gửi lại nội dung tờ khai sau khi tờ 2 gửi lại xong.")).toBeTruthy();
+    await userEvent.click(within(c3).getByRole("button", { name: /Nghiệp vụ của tờ/ }));
+    expect(within(c3).getByText("Tờ 3: chờ tờ 2 khai tạm trước – truyền theo thứ tự tờ khai")).toBeTruthy();
+    // Dòng khóa không có nút; tờ 1 vẫn có nút khai tạm.
+    expect(within(c3).queryByRole("button", { name: /\(IDA\)/ })).toBeNull();
+    expect(within(c2).queryByRole("button", { name: /\(IDA\)/ })).toBeNull();
+    expect(within(c1).getAllByRole("button", { name: /\(IDA\)/ }).length).toBeGreaterThan(0);
+    await expectNoA11yViolations(container);
+  }, 20_000);
+});
+
 describe("Bước Khai báo – lô 1 tờ", () => {
   it("giao diện như cũ: không có thẻ 'Tờ 1/1', tiêu đề tờ khai + số", async () => {
     api.current = submissionOf([branch(1, 1, "PRE_DECLARED", { nextOp: "IDC", pipeline: pipelineFor("PRE_DECLARED", ["IDC"]) })]);

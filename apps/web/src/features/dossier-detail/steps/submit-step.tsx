@@ -32,7 +32,7 @@ import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
-import { anyInProgress, clearedWhileResending, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
+import { anyInProgress, clearedWhileResending, orderLocked, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -694,7 +694,8 @@ function SheetCard({
   const sh = useMessages(SHEET_MESSAGES);
   const stages = useMessages(STAGE_MESSAGES);
   const titleId = useId();
-  const pipeline = b.pipeline.filter((r) => !AMA_OPS.has(r.op));
+  // Tờ chờ tờ trước (truyền theo thứ tự tờ): nút gửi nội dung khóa, lý do SHEET_ORDER – như backend.
+  const pipeline = orderLocked(b.pipeline.filter((r) => !AMA_OPS.has(r.op)), b.no, waiting);
   const next = b.nextOp && !AMA_OPS.has(b.nextOp) ? pipeline.find((r) => r.op === b.nextOp) : undefined;
   const sending = pipeline.find((r) => r.status === "SENDING");
   const rejection = b.rejection && !AMA_OPS.has(b.rejection.operation) ? b.rejection : null;
@@ -765,7 +766,7 @@ function SheetCard({
           )}
           {waiting ? (
             <Alert tone="info" title={fill(sh.waitingSheet, { no: waiting })}>
-              {fill(b.stage === "NOT_SENT" ? sh.waitingSheetBody : sh.waitingResendBody, { no: waiting })}
+              {fill(b.stage === "NOT_SENT" && !sheetsOf(s)[waiting - 1]?.declarationNo ? sh.waitingSheetBody : sh.waitingResendBody, { no: waiting })}
             </Alert>
           ) : hideNext ? null : (
             <NextStep s={s} next={next} sending={sending} firstSend={false} h={h} certPicker={null} certNote={null} />

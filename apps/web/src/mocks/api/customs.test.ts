@@ -330,7 +330,7 @@ describe("tờ khai nhánh: gọi về sửa và truyền lại (R3)", () => {
     expect(dossier(BIG)).toMatchObject({ step: "review", status: "NEEDS_REVIEW" });
     await approveDeclaration(BIG);
     // Tờ sau không khai tạm lại trước khi tờ 1 / tờ trước xong.
-    await expect(performOperation(BIG, "IDA", 3)).rejects.toMatchObject({ message: expect.stringContaining("truyền lại từ tờ 1") });
+    await expect(performOperation(BIG, "IDA", 3)).rejects.toMatchObject({ reason: "SHEET_ORDER", params: { sheet: 3, waitFor: 2 } });
     await submitDeclaration(BIG, CERT);
     wait(9_000);
     const s = await getSubmission(BIG);
@@ -367,5 +367,60 @@ describe("tờ khai nhánh: tờ đã thông quan không phải gọi về (R7),
     wait(9_000);
     expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_PRE_DECLARED", "PRE_DECLARED"]);
     expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && (m.branch ?? 1) === 1).length).toBe(before);
+  });
+});
+
+describe("tờ khai nhánh: luôn truyền theo thứ tự tờ (như backend – sheetOrderWait)", () => {
+  const order = (sheet: number, waitFor: number) => ({ code: "INVALID_STATE", reason: "SHEET_ORDER", params: { sheet, waitFor } });
+  const outs = (op: string) => getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === op && m.direction === "OUT");
+
+  it("3 tờ đã gọi về, duyệt lại → IDA tờ 2 / tờ 3 bị chặn (không gửi, tờ khai vẫn APPROVED); IDA tờ 1 → nối 1 → 2 → 3", async () => {
+    await preDeclareAll(BIG);
+    for (const b of [1, 2, 3]) await runB(BIG, "IDB", b);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["RECALLED", "RECALLED", "RECALLED"]); // phản hồi IDB đến → mở lại tờ khai
+    expect(decl(BIG).status).toBe("DRAFT");
+    await approveDeclaration(BIG);
+    const before = outs("IDA").length;
+    await expect(performOperation(BIG, "IDA", 2)).rejects.toMatchObject(order(2, 1));
+    await expect(performOperation(BIG, "IDA", 3)).rejects.toMatchObject(order(3, 2));
+    expect(outs("IDA").length).toBe(before);
+    expect(decl(BIG).status).toBe("APPROVED");
+    await performOperation(BIG, "IDA", 1);
+    // Đang gửi tờ 1: tờ 3 vẫn chờ.
+    await expect(performOperation(BIG, "IDA", 3)).rejects.toMatchObject(order(3, 2));
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(outs("IDA").slice(before).map((m) => m.branch ?? 1)).toEqual([1, 2, 3]);
+  });
+
+  it("R7: tờ 1 thông quan, tờ 2, 3 gọi sửa đổi → IDA01 tờ 3 bị chặn (chờ tờ 2); IDA01 tờ 2 được, nối tờ 3", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    for (const b of [2, 3]) {
+      await runB(BIG, "IDC", b);
+      await runB(BIG, "IDD", b);
+    }
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_RECALLED", "AMEND_RECALLED"]);
+    await approveDeclaration(BIG);
+    await expect(performOperation(BIG, "IDA01", 3)).rejects.toMatchObject(order(3, 2));
+    await performOperation(BIG, "IDA01", 2);
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_PRE_DECLARED", "AMEND_PRE_DECLARED"]);
+  });
+
+  it("chuỗi nối tiếp bỏ qua tờ giữa đã thông quan: tờ 1, 3 gọi sửa đổi, tờ 2 thông quan → IDA01 tờ 3 chặn (chờ tờ 1); IDA01 tờ 1 → nối thẳng tờ 3", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 2);
+    for (const b of [1, 3]) {
+      await runB(BIG, "IDC", b);
+      await runB(BIG, "IDD", b);
+    }
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["AMEND_RECALLED", "CLEARED", "AMEND_RECALLED"]);
+    await approveDeclaration(BIG);
+    await expect(performOperation(BIG, "IDA01", 3)).rejects.toMatchObject(order(3, 1));
+    await performOperation(BIG, "IDA01", 1);
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["AMEND_PRE_DECLARED", "CLEARED", "AMEND_PRE_DECLARED"]);
+    expect(outs("IDA01").map((m) => m.branch ?? 1)).toEqual([1, 3]);
   });
 });

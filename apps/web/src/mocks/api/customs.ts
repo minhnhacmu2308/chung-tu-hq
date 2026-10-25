@@ -3,7 +3,7 @@
 // Khi phản hồi đã đến, settle() áp stageAfter + tác dụng phụ (số tờ khai, phân luồng, mở lại tờ khai, thông quan…).
 import {
   baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
-  operationAvailability, operationsFor, queryOpFor, recallExempt, sheetApproved, stageAfter,
+  operationAvailability, operationsFor, queryOpFor, recallExempt, sheetApproved, sheetOrderWait, stageAfter,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
   type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
@@ -210,11 +210,13 @@ function apply(db: MockDb, c: Ctx) {
     // Lô nhiều tờ: chỉ mở lại tờ khai khi mọi tờ đã có số còn nhận nội dung đều đang gọi về sửa (R3/R7; lô một tờ: như trước).
     if (recallableSheets(db, c.dossier.id).every((x) => isEditingStage(x.stage))) reopen(db, c.dossier.id);
   }
-  // Lô nhiều tờ: tờ k khai tạm (lần đầu, hoặc truyền lại sau gọi về) xong → tờ k+1 nối tiếp theo giai đoạn của nó (chưa có số / RECALLED → IDA, AMEND_RECALLED → IDA01).
+  // Lô nhiều tờ: tờ k khai tạm (lần đầu, hoặc truyền lại sau gọi về) xong → tờ kế tiếp cần gửi nội dung nối tiếp theo giai đoạn của nó
+  // (chưa có số / RECALLED → IDA, AMEND_RECALLED → IDA01), bỏ qua tờ không cần gửi (đã thông quan…) – như chainNextBranch của backend.
   if ((b === "IDA" || b === "IDA01") && c.branch < c.of) {
-    const next = load(db, c.dossier.id, c.branch + 1);
-    const nextOp = contentOpFor(next.flow.stage, c.dossier.direction);
-    if (nextOp && !next.flow.pending) send(db, next, nextOp, at);
+    const no = Array.from({ length: c.of - c.branch }, (_, i) => c.branch + 1 + i).find((k) => contentOpFor(flowOf(db, c.dossier.id, k).stage, c.dossier.direction));
+    const next = no ? load(db, c.dossier.id, no) : null;
+    const nextOp = next ? contentOpFor(next.flow.stage, c.dossier.direction) : null;
+    if (next && nextOp && !next.flow.pending) send(db, next, nextOp, at);
   }
 }
 
@@ -431,13 +433,12 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
       if (recall) throw recall;
     }
     if (c.branch > 1) {
-      // Thứ tự §6.4: tờ 1 phải có số (ô 1.2 của tờ k mang số tờ 1), tờ 1 và tờ trước không còn đang gọi về sửa chưa khai tạm lại.
-      const first = flowOf(db, dossierId, 1).stage;
-      const prev = flowOf(db, dossierId, c.branch - 1).stage;
-      if (!hasDeclarationNumber(first)) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ 1 chưa có số tờ khai – khai tạm tờ 1 trước`);
-      if (c.flow.stage === "NOT_SENT" && !hasDeclarationNumber(prev)) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ ${c.branch - 1} chưa khai tạm – khai tạm lần lượt từng tờ`);
-      const recalled = [1, c.branch - 1].find((j) => isEditingStage(flowOf(db, dossierId, j).stage));
-      if (recalled) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ ${recalled} chưa khai tạm lại sau khi gọi về sửa – truyền lại từ tờ 1`);
+      // Tờ 1 phải có số (ô 1.2 của tờ k mang số tờ 1).
+      if (!hasDeclarationNumber(flowOf(db, dossierId, 1).stage)) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ 1 chưa có số tờ khai – khai tạm tờ 1 trước`);
+      // Luôn truyền theo thứ tự tờ (§6.2/§6.4, cùng quy tắc backend): tờ trước còn chờ gửi nội dung (chưa gửi / gọi về chưa gửi lại; miễn tờ đã thông quan – R7) → chờ.
+      const waitFor = sheetOrderWait(Array.from({ length: c.of }, (_, i) => ({ no: i + 1, stage: flowOf(db, dossierId, i + 1).stage })), c.branch);
+      if (waitFor !== null) throw reasonApiError("INVALID_STATE", "SHEET_ORDER", { sheet: c.branch, waitFor });
+      if (c.flow.stage === "NOT_SENT" && !hasDeclarationNumber(flowOf(db, dossierId, c.branch - 1).stage)) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ ${c.branch - 1} chưa khai tạm – khai tạm lần lượt từng tờ`);
     }
   }
   if (op === "AMA") assertAmendmentSendable(db, c);

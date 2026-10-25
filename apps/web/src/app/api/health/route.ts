@@ -13,9 +13,9 @@ const withTimeout = <T>(p: Promise<T>) => Promise.race([p, new Promise<never>((_
  * Mặc định – readiness: Postgres, Redis, kho lưu file (ghi/xóa một khóa nhỏ); 503 khi một trong ba lỗi. `worker` chỉ để thông tin
  * (0 worker không làm web mất sẵn sàng). Không trả thông điệp lỗi gốc (có thể chứa chuỗi kết nối); chi tiết ghi log phía máy chủ.
  */
-export async function GET(req?: NextRequest) {
+export async function GET(req: NextRequest) {
   const source = dataSource();
-  if (req?.nextUrl.searchParams.get("probe") === "live") return NextResponse.json({ ok: true, probe: "live", uptimeSec: Math.round(process.uptime()) });
+  if (req.nextUrl.searchParams.get("probe") === "live") return NextResponse.json({ ok: true, probe: "live", uptimeSec: Math.round(process.uptime()) });
   if (source === "mock") return NextResponse.json({ ok: true, dataSource: source, checks: {} });
 
   let c: ReturnType<typeof getContainer>;

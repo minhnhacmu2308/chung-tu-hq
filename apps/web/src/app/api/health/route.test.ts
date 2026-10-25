@@ -28,7 +28,7 @@ describe("GET /api/health", () => {
       workerCount: () => Promise.resolve(2),
     });
     const { GET } = await import("./route");
-    const res = await GET();
+    const res = await GET(new (await import("next/server")).NextRequest("http://localhost/api/health"));
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body).toEqual({ ok: false, dataSource: "http", checks: { postgres: "ok", redis: "ok", storage: "error" }, workers: 2 });
@@ -37,7 +37,7 @@ describe("GET /api/health", () => {
   it("chế độ mock: trả ok, không chạm hạ tầng (bản demo Vercel không có .env)", async () => {
     vi.stubEnv("NEXT_PUBLIC_DATA_SOURCE", "");
     const { GET } = await import("./route");
-    const res = await GET();
+    const res = await GET(new (await import("next/server")).NextRequest("http://localhost/api/health"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, dataSource: "mock", checks: {} });
     expect(getContainer).not.toHaveBeenCalled();
@@ -48,7 +48,7 @@ describe("GET /api/health", () => {
       throw new Error("DATABASE_URL: thiếu postgres://kb_app:secret@db");
     });
     const { GET } = await import("./route");
-    const res = await GET();
+    const res = await GET(new (await import("next/server")).NextRequest("http://localhost/api/health"));
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body).toEqual({ ok: false, dataSource: "http", checks: { config: "error" } });
@@ -61,7 +61,7 @@ describe("GET /api/health", () => {
       redis: { ping: () => Promise.resolve("PONG") },
     });
     const { GET } = await import("./route");
-    const res = await GET();
+    const res = await GET(new (await import("next/server")).NextRequest("http://localhost/api/health"));
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ ok: false, dataSource: "http", checks: { postgres: "error", redis: "ok" } });
   });

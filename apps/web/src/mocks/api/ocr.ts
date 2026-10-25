@@ -80,6 +80,9 @@ function rerunChecks(db: MockDb, dossierId: string) {
 /* ---------------- Chứng từ ---------------- */
 
 /** Danh sách chứng từ của hồ sơ, đã cập nhật tiến trình mô phỏng. */
+/** File gốc của chứng từ. Mock: không có kho file → null, khung xem dựng lại trang từ các trường đọc được. */
+export const documentFileUrl = (_documentId: string): string | null => null;
+
 export const listDossierDocuments = (dossierId: string) =>
   mutate((db) => {
     advance(db, dossierId);

@@ -1,9 +1,12 @@
 "use client";
-// Dựng lại trang chứng từ gốc từ kết quả trích xuất (prototype chưa có ảnh PDF thật).
-// Mỗi trường in đúng vào vùng (region) của nó → rê chuột vào trường bên phải sẽ tô đúng chỗ trên trang.
-// Có backend: thay `pages` bằng ảnh trang PDF đã render, giữ nguyên regions.
-import { DocumentViewer, fill, useMessages, type DocumentRegion } from "@kb/ui";
+// Chứng từ gốc bên trái bước OCR.
+// - Có file thật (`fileUrl`, backend): hiện đúng file đã upload – PDF qua trình xem PDF của trình duyệt, ảnh vừa khung.
+// - Không có (mock): dựng lại trang từ kết quả trích xuất; mỗi trường in đúng vào vùng (region) của nó → rê chuột vào
+//   trường bên phải sẽ tô đúng chỗ trên trang.
+import { Button, cn, DocumentViewer, EmptyState, fill, Spinner, useMessages, type DocumentRegion } from "@kb/ui";
+import { ExternalLink, FileText } from "lucide-react";
 import { useMemo } from "react";
+import { fileKindOf, fileMimeOf, useFileBlob } from "@/lib/use-file-blob";
 import { DOC_KIND_LABELS, type DocKind, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { DOCUMENT_PREVIEW_MESSAGES } from "./common.messages";
 
@@ -161,13 +164,56 @@ function buildRegions(doc: DossierDocument, fields: ExtractedField[]): DocumentR
 
 export type DocumentPreviewProps = {
   document: DossierDocument;
+  /** Đường dẫn file gốc; null/không truyền → dựng lại trang từ dữ liệu. */
+  fileUrl?: string | null;
   fields: ExtractedField[];
   highlightFieldId?: string | null;
   onFieldClick?: (fieldId: string) => void;
   className?: string;
 };
 
-export function DocumentPreview({ document, fields, highlightFieldId = null, onFieldClick, className }: DocumentPreviewProps) {
+function OriginalFile({ document, src, className }: { document: DossierDocument; src: string; className?: string | undefined }) {
+  const t = useMessages(DOCUMENT_PREVIEW_MESSAGES);
+  const kindLabels = useMessages(DOC_KIND_LABELS);
+  const kind = fileKindOf(document.fileName);
+  const file = useFileBlob(kind === "other" ? null : src, fileMimeOf(document.fileName));
+  const label = fill(t.originalLabel, { kind: kindLabels[document.kind], file: document.fileName });
+  return (
+    <section aria-label={label} className={cn("flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-muted", className)}>
+      <div className="flex items-center gap-2 border-b border-border bg-surface py-1 pl-3 pr-1">
+        <FileText className="h-4 w-4 shrink-0 text-fg-subtle" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate text-xs text-fg-muted" title={document.fileName}>{document.fileName}</span>
+        <Button variant="ghost" size="sm" asChild>
+          <a href={file.status === "ready" ? file.url : src} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            {t.openNewTab}
+          </a>
+        </Button>
+      </div>
+      {kind === "other" ? (
+        <EmptyState icon={<FileText />} title={t.unsupported} description={t.unsupportedHint} className="m-auto" />
+      ) : file.status === "loading" ? (
+        <div className="m-auto"><Spinner label={t.loading} /></div>
+      ) : file.status === "error" ? (
+        <EmptyState illustration="error" illustrationSize="sm" title={t.error} description={t.errorHint} className="m-auto" />
+      ) : kind === "pdf" ? (
+        // #navpanes=0&view=FitH: ẩn cột ảnh thu nhỏ, trang vừa chiều ngang khung.
+        <iframe title={label} src={`${file.url}#navpanes=0&view=FitH`} className="min-h-0 w-full flex-1 border-0 bg-surface" data-slot="original-file" />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto p-3">
+          <img src={file.url} alt={label} className="mx-auto h-auto max-w-full rounded-sm border border-border bg-surface shadow-md" data-slot="original-file" />
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function DocumentPreview({ document, fileUrl = null, fields, highlightFieldId = null, onFieldClick, className }: DocumentPreviewProps) {
+  if (fileUrl) return <OriginalFile key={document.id} document={document} src={fileUrl} className={className} />;
+  return <ReconstructedPreview document={document} fields={fields} highlightFieldId={highlightFieldId} {...(onFieldClick ? { onFieldClick } : {})} {...(className ? { className } : {})} />;
+}
+
+function ReconstructedPreview({ document, fields, highlightFieldId = null, onFieldClick, className }: Omit<DocumentPreviewProps, "fileUrl">) {
   const regions = useMemo(() => buildRegions(document, fields), [document, fields]);
   const pages = useMemo(() => Array.from({ length: Math.max(1, document.pages) }, () => null), [document.pages]);
   const t = useMessages(DOCUMENT_PREVIEW_MESSAGES);

@@ -7,6 +7,7 @@ export const ocrKeys = mock.ocrKeys;
 export const isSuspect = mock.isSuspect;
 export const classifyByFileName = mock.classifyByFileName;
 
+export const documentFileUrl = pick(mock.documentFileUrl, http.documentFileUrl);
 export const listDossierDocuments = pick(mock.listDossierDocuments, http.listDossierDocuments);
 export const uploadDocuments = pick(mock.uploadDocuments, http.uploadDocuments);
 export const changeDocumentKind = pick(mock.changeDocumentKind, http.changeDocumentKind);

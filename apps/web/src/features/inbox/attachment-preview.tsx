@@ -1,61 +1,25 @@
 "use client";
 // Xem trước file đính kèm email ngay trên trang (popup), không mở tab mới: PDF qua trình xem PDF của trình duyệt, ảnh vừa khung.
-// Tải file về thành blob rồi mới hiển thị: header của route file (CSP sandbox, nosniff) giữ nguyên an toàn khi mở trực tiếp,
-// còn trong popup thì trình xem PDF không bị chặn bởi sandbox.
+// Tải file về thành blob rồi mới hiển thị (xem useFileBlob).
 import type { InboxAttachment } from "@kb/contracts";
 import { Button, Dialog, DialogContent, DialogFooter, EmptyState, formatBytes, Spinner, useMessages, useUiLocale } from "@kb/ui";
 import { Download, ExternalLink, FileText } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { inboxAttachmentUrl } from "@/api/mailbox";
+import { fileKindOf, fileMimeOf, useFileBlob } from "@/lib/use-file-blob";
 import { DOC_KIND_LABELS } from "@/mocks/types";
 import { INBOX_MESSAGES } from "./inbox.messages";
-
-type Kind = "pdf" | "image" | "other";
-const kindOf = (fileName: string): Kind => {
-  const ext = fileName.toLowerCase().split(".").pop() ?? "";
-  return ext === "pdf" ? "pdf" : ext === "png" || ext === "jpg" || ext === "jpeg" ? "image" : "other";
-};
-
-type Loaded = { status: "loading" } | { status: "error" } | { status: "ready"; url: string };
-
-/** Lấy file thành object URL (mock trả sẵn blob URL); thu hồi khi đóng / đổi file. */
-function useAttachmentBlob(id: string | null): Loaded {
-  const [state, setState] = useState<Loaded>({ status: "loading" });
-  useEffect(() => {
-    if (!id) return;
-    let url: string | null = null;
-    let cancelled = false;
-    setState({ status: "loading" });
-    const src = inboxAttachmentUrl(id);
-    const load = src.startsWith("blob:")
-      ? Promise.resolve(src)
-      : fetch(src, { credentials: "same-origin" }).then(async (r) => {
-          if (!r.ok) throw new Error(String(r.status));
-          return URL.createObjectURL(await r.blob());
-        });
-    load.then(
-      (u) => {
-        url = u;
-        if (cancelled) URL.revokeObjectURL(u);
-        else setState({ status: "ready", url: u });
-      },
-      () => !cancelled && setState({ status: "error" }),
-    );
-    return () => {
-      cancelled = true;
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [id]);
-  return state;
-}
 
 export function AttachmentPreviewDialog({ attachment, onOpenChange }: { attachment: InboxAttachment | null; onOpenChange: (open: boolean) => void }) {
   const t = useMessages(INBOX_MESSAGES);
   const kinds = useMessages(DOC_KIND_LABELS);
   const locale = useUiLocale();
   const a = attachment;
-  const kind = a ? kindOf(a.fileName) : "other";
-  const file = useAttachmentBlob(a && kind !== "other" ? a.id : null);
+  const kind = a ? fileKindOf(a.fileName) : "other";
+  const fileId = a && kind !== "other" ? a.id : null;
+  // Mock dựng blob URL mới mỗi lần gọi → chỉ tính lại khi đổi file.
+  const src = useMemo(() => (fileId ? inboxAttachmentUrl(fileId) : null), [fileId]);
+  const file = useFileBlob(src, a ? fileMimeOf(a.fileName) : undefined);
   return (
     <Dialog open={a !== null} onOpenChange={onOpenChange}>
       {a && (

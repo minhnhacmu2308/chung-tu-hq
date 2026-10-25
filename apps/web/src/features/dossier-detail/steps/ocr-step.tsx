@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { isSuspect, listChecks, listDossierDocuments, listFields, ocrKeys } from "@/api/ocr";
+import { documentFileUrl, isSuspect, listChecks, listDossierDocuments, listFields, ocrKeys } from "@/api/ocr";
 import { DocumentPreview } from "@/components/common/document-preview";
 import { DOC_KIND_LABELS, FIELD_GROUP_LABELS, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { CrossCheckPanel } from "../ocr/cross-check-panel";
@@ -56,6 +56,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
     <div className="grid grid-cols-1 gap-4 cq-lg:grid-cols-2">
       <DocumentPreview
         document={doc}
+        fileUrl={documentFileUrl(doc.id)}
         fields={fields}
         highlightFieldId={active}
         onFieldClick={jumpTo}

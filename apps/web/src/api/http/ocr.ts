@@ -3,6 +3,9 @@ import { CrossCheckSchema, DossierDocumentSchema, DossierSchema, ExtractedFieldS
 import { z } from "zod";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/http";
 
+/** File gốc của chứng từ (route chuyển hướng sang presigned URL của kho file). */
+export const documentFileUrl = (documentId: string): string | null => `/api/documents/${encodeURIComponent(documentId)}/file`;
+
 export const listDossierDocuments = (dossierId: string) => apiGet(`dossiers/${dossierId}/documents`, z.array(DossierDocumentSchema));
 
 /** Upload nhiều file (multipart). Backend tự đoán loại theo tên file rồi AI phân loại lại. */

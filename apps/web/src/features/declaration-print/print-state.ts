@@ -288,14 +288,14 @@ export function printStateFor<T extends { lineNo: number }>(view: { items: T[]; 
  * `total` = common + tổng phần riêng (huy hiệu tab). Lô 1 tờ: total = printIssuesOf(...).count.
  */
 export function sheetIssueCounts(
-  decl: Declaration, items: LineItem[], branches: DeclarationBranch[] | undefined, submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean,
+  decl: Declaration, items: LineItem[], branches: DeclarationBranch[] | undefined, submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean, lineModes?: Record<number, DeclarationEditMode>,
 ): { common: number; sheets: number[]; total: number } {
   const view = { items, ...(branches ? { branches } : {}) };
   const of = printStateFor(view, 1).of;
   let common = 0;
   const sheets = Array.from({ length: of }, (_, k) => {
     const st = printStateFor(view, k + 1, submission);
-    const is = printIssues(printData(decl, st.items, st.submission, st), mode, canEdit);
+    const is = printIssues(printData(decl, st.items, st.submission, st), mode, canEdit, lineModes?.[k + 1] ?? mode);
     const shared = is.cells.filter((c) => c.line === undefined && c.reason === "MISSING").length;
     if (k === 0) common = shared;
     return is.count - shared;
@@ -332,9 +332,10 @@ export function withLookupNames(data: PrintData, names: Record<string, string | 
 }
 
 /** Ô cần xử lý của bản in. Tờ khai chỉ đọc (LOCKED / không có quyền sửa): bỏ ô còn thiếu (không làm gì được), giữ ô lỗi Hải quan. */
-export function printAttention(data: PrintData, mode: DeclarationEditMode, canEdit: boolean): AttentionCell[] {
+export function printAttention(data: PrintData, mode: DeclarationEditMode, canEdit: boolean, lineMode: DeclarationEditMode = mode): AttentionCell[] {
   const cells = attentionCells(data.kind, data.values, data.itemRows, data.errors, data.lineNos);
-  return mode === "LOCKED" || !canEdit ? cells.filter((c) => c.reason !== "MISSING") : cells;
+  // Ô tờ khai theo `mode` (chỉ tiêu chung), ô dòng hàng theo `lineMode` (tờ đang xem – lô chỉ gọi về một số tờ).
+  return !canEdit ? cells.filter((c) => c.reason !== "MISSING") : cells.filter((c) => c.reason !== "MISSING" || (c.line === undefined ? mode : lineMode) !== "LOCKED");
 }
 
 /** Lỗi Hải quan không gắn được vào ô nào (không có số chỉ tiêu, dòng hàng không có, chỉ tiêu không có trên bản in) – liệt kê riêng. */
@@ -346,8 +347,8 @@ export function unplacedErrors(kind: Kind, errors: FieldError[], lineNos: number
 /** Việc cần xử lý của bản in: ô (lỗi → còn thiếu) + lỗi không gắn được vào ô. `count` = huy hiệu tab và số trên thanh công cụ. */
 export type PrintIssues = { cells: AttentionCell[]; unplaced: FieldError[]; count: number };
 
-export function printIssues(data: PrintData, mode: DeclarationEditMode, canEdit: boolean): PrintIssues {
-  const cells = printAttention(data, mode, canEdit);
+export function printIssues(data: PrintData, mode: DeclarationEditMode, canEdit: boolean, lineMode: DeclarationEditMode = mode): PrintIssues {
+  const cells = printAttention(data, mode, canEdit, lineMode);
   const unplaced = unplacedErrors(data.kind, data.errors, data.lineNos);
   return { cells, unplaced, count: cells.length + unplaced.length };
 }

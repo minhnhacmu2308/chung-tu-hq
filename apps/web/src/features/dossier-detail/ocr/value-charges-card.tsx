@@ -1,7 +1,7 @@
 "use client";
 // Khối "Chi phí và điều chỉnh trị giá" ở bước OCR & kiểm tra: cước (1.47), bảo hiểm (1.48), khoản điều chỉnh (1.49); xuất khẩu theo 2.40.
 // Chứng từ là nguồn chính; người khai nhập số / ghi lý do khi chứng từ không có. Tờ khai đọc lại từ đây (ô 1.47–1.49 chỉ đọc).
-import { ADJUSTMENT_CODES, CURRENCIES, FreightReasonSchema, type FreightReason, type ValueChargesView } from "@kb/contracts";
+import { ADJUSTMENT_CODES, CURRENCIES, editBlockFor, FreightReasonSchema, type FreightReason, type ValueChargesView } from "@kb/contracts";
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog, DialogContent, DialogFooter, Field, FormSection, Input, RadioGroup,
   Select, SkeletonList, Stack, fill, toast, useMessages, useUiLocale,
@@ -9,7 +9,9 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Receipt, Sparkles, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { declarationKeys } from "@/api/declaration";
+import { customsKeys, getSubmission } from "@/api/customs";
+import { declarationKeys, getDeclarationView } from "@/api/declaration";
+import { editScopeOf } from "../steps/edit-scope";
 import { getSession, sessionKeys } from "@/api/session";
 import { getValueCharges, saveValueCharges, valueChargesKeys } from "@/api/value-charges";
 import { LoadError } from "@/components/common/load-error";
@@ -220,6 +222,12 @@ export function ValueChargesCard({ dossierId, currency }: { dossierId: string; c
   const q = useQuery({ queryKey: valueChargesKeys.detail(dossierId), queryFn: () => getValueCharges(dossierId) });
   const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
   const canEdit = session.data?.user.role !== "VIEWER";
+  // Lô nhiều tờ chỉ gọi về một số tờ: chi phí / điều chỉnh là chỉ tiêu chung → khóa (backend từ chối lưu).
+  const viewQ = useQuery({ queryKey: declarationKeys.view(dossierId), queryFn: () => getDeclarationView(dossierId) });
+  const subQ = useQuery({ queryKey: customsKeys.submission(dossierId), queryFn: () => getSubmission(dossierId) });
+  const status = viewQ.data?.declaration?.status;
+  const block = status && subQ.data ? editBlockFor(editScopeOf(status, subQ.data, false), { kind: "COMMON" }) : null;
+  const sheetsLocked = block?.reasonCode === "COMMON_LOCKED_SHEETS" ? String(block.params.sheets) : null;
 
   return (
     <Card>
@@ -234,7 +242,7 @@ export function ValueChargesCard({ dossierId, currency }: { dossierId: string; c
             {q.data?.updatedAt && fill(t.cardUpdated, { when: formatRelative(q.data.updatedAt) })}
           </CardDescription>
         </div>
-        {q.data && canEdit && !q.data.locked && (
+        {q.data && canEdit && !q.data.locked && !sheetsLocked && (
           <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
             {t.edit}
           </Button>
@@ -248,6 +256,7 @@ export function ValueChargesCard({ dossierId, currency }: { dossierId: string; c
         ) : (
           <Stack gap="sm">
             {q.data.locked && <Alert tone="info">{t.locked}</Alert>}
+            {!q.data.locked && sheetsLocked && <Alert tone="info">{fill(t.sheetsLocked, { sheets: sheetsLocked })}</Alert>}
             <ul className="flex flex-col divide-y divide-border" aria-label={t.title}>
               {summarize(q.data, locale).map((r) => (
                 <li key={r.key} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-2">

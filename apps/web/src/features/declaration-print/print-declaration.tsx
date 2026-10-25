@@ -50,13 +50,13 @@ const slotId = (key: string, line?: number) => `${line ?? ""}:${key}`;
 /** Khung liệt kê lỗi Hải quan không gắn được vào ô ("Chỉ ô cần xử lý" cuộn tới khi không còn ô). */
 const UNPLACED_DOM_ID = "print-unplaced-errors";
 
-function printModel(data: PrintData, decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean) {
+function printModel(data: PrintData, decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean, lineMode: DeclarationEditMode) {
   const { kind, values, itemRows, errors, lineNos, customs, estimate, estimated } = data;
   const info = submission?.customsInfo ?? null;
 
   const errorIds = new Set(errorSlots(kind, errors, lineNos).map((s) => slotId(s.key, s.line)));
   // Cùng hàm với huy hiệu tab ở review-step: chỉ đọc → không có ô "còn thiếu".
-  const issues = printIssues(data, mode, canEdit);
+  const issues = printIssues(data, mode, canEdit, lineMode);
   const attention = issues.cells;
   const missingIds = new Set(attention.filter((c) => c.reason === "MISSING").map((c) => slotId(c.key, c.line)));
   const editedDecl = editedKeys(kind, decl.fields);
@@ -100,8 +100,8 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope
   const { items, submission } = view;
   // Việc cần xử lý riêng của từng tờ (lỗi Hải quan của nhánh, ô dòng hàng) – huy hiệu trên thanh chọn tờ; lô 1 tờ không cần.
   const sheetIssues = useMemo(
-    () => (view.of > 1 ? sheetIssueCounts(decl, allItems, branches, lotSubmission, mode, canEdit).sheets : undefined),
-    [view.of, decl, allItems, branches, lotSubmission, mode, canEdit],
+    () => (view.of > 1 ? sheetIssueCounts(decl, allItems, branches, lotSubmission, mode, canEdit, editScope?.lines).sheets : undefined),
+    [view.of, decl, allItems, branches, lotSubmission, mode, canEdit, editScope],
   );
   const [selected, setSelected] = useState<PrintTarget | null>(null);
   // Đổi tờ: ô đang chọn (chỉ số dòng của tờ cũ) không còn đúng → bỏ chọn; panel vẽ lại theo tờ mới (key).
@@ -129,8 +129,10 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope
   const storageName = useCodeName("A202", base.values[storage.code] ?? "", scope);
   const data = useMemo(() => withLookupNames(base, { [storage.name]: storageName }), [base, storage.name, storageName]);
   // Lô nhiều tờ: tờ đang xem chưa gọi về / đã thông quan → dòng hàng chỉ đọc, nói rõ trên trang.
-  const lineBlock = editScope && view.of > 1 && canEdit && editScope.lines[view.no] === "LOCKED" ? editBlockFor(editScope, { kind: "LINE", sheet: view.no }) : null;
-  const model = useMemo(() => printModel(data, decl, items, submission, mode, canEdit), [data, decl, items, submission, mode, canEdit]);
+  const block = editScope && view.of > 1 && canEdit && editScope.lines[view.no] === "LOCKED" ? editBlockFor(editScope, { kind: "LINE", sheet: view.no }) : null;
+  const lineBlock = block?.reasonCode === "LINE_SHEET_LOCKED" || block?.reasonCode === "LINE_SHEET_CLOSED" ? block : null;
+  const lineMode: DeclarationEditMode = editScope ? editScope.lines[view.no] ?? editScope.common : mode;
+  const model = useMemo(() => printModel(data, decl, items, submission, mode, canEdit, lineMode), [data, decl, items, submission, mode, canEdit, lineMode]);
   // Cùng số với huy hiệu tab: ô cần xử lý + lỗi Hải quan không gắn được vào ô.
   const attentionCount = model.issueCount;
 

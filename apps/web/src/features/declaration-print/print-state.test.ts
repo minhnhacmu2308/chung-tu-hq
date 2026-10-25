@@ -262,6 +262,14 @@ describe("printAttention (Fix round 1)", () => {
     }
     expect(printAttention(data(), "LOCKED", true)).toEqual([]);
   });
+  it("chung LOCKED nhưng dòng sửa được (tờ đã gọi về) → ô dòng còn thiếu vẫn tính, ô tờ khai không; tờ khóa thì không", () => {
+    const d = data();
+    const open = printAttention(d, "LOCKED", true, "FULL");
+    expect(open.some((c) => c.line === 0 && c.reason === "MISSING")).toBe(true);
+    expect(open.some((c) => c.line === undefined && c.reason === "MISSING")).toBe(false);
+    expect(printAttention(d, "LOCKED", true, "LOCKED")).toEqual([]);
+    expect(printAttention(d, "LOCKED", false, "FULL")).toEqual([]);
+  });
 });
 
 describe("printCode", () => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Bước Review theo phạm vi sửa (lô 3 tờ, chỉ gọi về một số tờ): chỉ tiêu chung khóa + nút gọi về các tờ còn lại, dòng tờ chưa gọi về chỉ đọc,
 // cảnh báo 1.51 đổi so với tờ đã khai; gọi về tất cả → form đầy đủ như cũ.
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubmissionView } from "@kb/contracts";
@@ -22,8 +22,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(nav.query),
 }));
 
-const T = { timeout: 40_000 };
+const T = { timeout: 30_000 };
 const dossier = () => getDb().dossiers.find((d) => d.id === "dos_028")!;
+// Truy vấn theo role trên cả trang in 120 dòng rất chậm → tìm hộp thoại / nút bằng DOM, thu hẹp bằng within.
+const dialog = () => waitFor(() => { const d = document.querySelector<HTMLElement>("[role=dialog]"); if (!d) throw new Error("no dialog"); return d; }, T);
 const cell = (id: string) => document.querySelector<HTMLElement>(`[data-print-cell="${id}"]`)!;
 const partial = (over: Partial<SubmissionView> = {}) =>
   submissionOf([branch(1, 3, "PRE_DECLARED"), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED")], { declarationStatus: "DRAFT", ...over });
@@ -40,67 +42,88 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     api.current = partial();
     const { container } = renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     expect(await screen.findByText("Thông tin chung: tờ 1, 3 chưa gọi về", {}, T)).toBeTruthy();
-    await userEvent.click(await screen.findByRole("button", { name: "Gọi về các tờ còn lại để sửa thông tin chung" }, T));
-    const dlg = await screen.findByRole("dialog");
+    await userEvent.click((await screen.findByText("Gọi về các tờ còn lại để sửa thông tin chung", {}, T)).closest("button")!);
+    const dlg = await dialog();
     expect(api.recallAll).not.toHaveBeenCalled();
     await userEvent.click(within(dlg).getByRole("button", { name: "Gọi về tất cả tờ" }));
     expect(api.recallAll).toHaveBeenCalledWith("dos_028");
     await expectNoA11yViolations(container);
-  }, 120_000);
+  }, 60_000);
 
   it("dòng tờ 1 chỉ đọc kèm 'Tờ 1 – chưa gọi về'; dòng tờ 2 sửa được; ô chung chỉ đọc", async () => {
     api.current = partial();
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     await screen.findByText("Thông tin chung: tờ 1, 3 chưa gọi về", {}, T);
-    await screen.findByRole("radio", { name: /^Tờ 1\/3/ }, T);
+    await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
     // Tờ 1 (đang chọn): ghi chú dòng hàng chỉ đọc + panel dòng chỉ đọc.
     expect(screen.getByText("Tờ 1 – chưa gọi về: dòng hàng của tờ này chỉ đọc.")).toBeTruthy();
     await userEvent.click(cell("0:HAG_CMD"));
-    let panel = await screen.findByRole("dialog");
+    let panel = await dialog();
     expect(within(panel).getByText("Tờ 1 – chưa gọi về")).toBeTruthy();
     expect(within(panel).queryByRole("button", { name: /^Lưu/ })).toBeNull();
     await userEvent.keyboard("{Escape}");
     // Ô chung (1.x) cũng chỉ đọc, lý do chỉ tiêu chung.
     await userEvent.click(cell(":TK_TP"));
-    panel = await screen.findByRole("dialog");
+    panel = await dialog();
     expect(within(panel).getByText("Thông tin chung: tờ 1, 3 chưa gọi về – gọi về tất cả tờ để sửa")).toBeTruthy();
     await userEvent.keyboard("{Escape}");
-  }, 120_000);
+  }, 60_000);
 
   it("tờ 2 (?sheet=2) đã gọi về: không ghi chú khóa, dòng sửa được", async () => {
     nav.query = "step=review&sheet=2";
     api.current = partial();
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     await screen.findByText("Thông tin chung: tờ 1, 3 chưa gọi về", {}, T);
-    await screen.findByRole("radio", { name: /^Tờ 2\/3/ }, T);
+    await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
     expect(screen.queryByText(/Tờ 2 – chưa gọi về/)).toBeNull();
     await userEvent.click(cell("0:HAG_CMD"));
-    const panel = await screen.findByRole("dialog");
+    const panel = await dialog();
     expect(within(panel).queryByText(/chưa gọi về/)).toBeNull();
     expect(within(panel).getByRole("button", { name: /^Lưu/ })).toBeTruthy();
-  }, 120_000);
+  }, 60_000);
 
   it("sentChanges tờ 1 đổi 1.51 → cảnh báo phải gọi về tất cả tờ; chỉ tiêu chung khác → cảnh báo chung", async () => {
     api.current = submissionOf([branch(1, 3, "PRE_DECLARED", { sentChanges: { common: ["TK_TP"], lines: false } }), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED", { sentChanges: { common: ["TK_CN"], lines: false } })], { declarationStatus: "DRAFT" });
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     expect(await screen.findByText("1.51 đã đổi so với tờ đã khai – phải gọi về tất cả tờ", {}, T)).toBeTruthy();
     expect(screen.getByText(/Chỉ tiêu chung đã đổi so với tờ đã khai \(TK_CN\)/)).toBeTruthy();
-  }, 120_000);
+  }, 60_000);
 
   it("mọi tờ RECALLED → không banner khóa, ô chung sửa được như cũ", async () => {
     api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "RECALLED")], { declarationStatus: "DRAFT" });
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
-    await screen.findByRole("radio", { name: /^Tờ 1\/3/ }, T);
+    await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
     expect(screen.queryByText(/chưa gọi về/)).toBeNull();
     await userEvent.click(cell("0:HAG_CMD"));
-    const panel = await screen.findByRole("dialog");
+    const panel = await dialog();
     expect(within(panel).getByRole("button", { name: /^Lưu/ })).toBeTruthy();
-  }, 120_000);
+  }, 60_000);
 
   it("tiếng Anh", async () => {
     api.current = partial();
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />, "en");
     expect(await screen.findByText("General information: sheets 1, 3 have not been recalled", {}, T)).toBeTruthy();
     expect(await screen.findByText("Recall the remaining sheets to edit general information", {}, T)).toBeTruthy();
-  }, 120_000);
+  }, 60_000);
+
+  it("tờ khai đã duyệt (lô 3 tờ): không có ghi chú 'chưa gọi về' sai", async () => {
+    getDb().declarations.find((x) => x.dossierId === "dos_028")!.status = "APPROVED";
+    api.current = submissionOf([branch(1, 3, "PRE_DECLARED"), branch(2, 3, "PRE_DECLARED"), branch(3, 3, "PRE_DECLARED")]);
+    renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
+    expect(screen.queryByText(/chưa gọi về/)).toBeNull();
+  }, 60_000);
+
+  it("chỉ tờ 2 gọi về: việc cần xử lý (ô dòng hàng còn thiếu) tính ở tờ 2, không tính ở tờ 1", async () => {
+    // Thiếu thành tiền (ô bắt buộc) ở một dòng tờ 1 và một dòng tờ 2: chỉ tờ 2 (đã gọi về) tính là việc cần xử lý.
+    const lines = getDb().lineItems.filter((l) => l.dossierId === "dos_028").sort((a, b) => a.lineNo - b.lineNo);
+    lines[5]!.amount = "";
+    lines[55]!.amount = "";
+    api.current = partial();
+    renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
+    const labels = () => [...document.querySelectorAll<HTMLInputElement>("input[type=radio]")].map((r) => r.closest("label")!.textContent ?? "");
+    expect(labels()[0]).not.toMatch(/việc cần xử lý/);
+    expect(labels()[1]).toMatch(/\d+ việc cần xử lý/);
+  }, 60_000);
 });

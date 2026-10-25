@@ -69,11 +69,11 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
  * Huy hiệu tab "Tờ khai": số ô cần xử lý + lỗi Hải quan không gắn được vào ô – cùng hàm với thanh công cụ của bản in (tab không cần gắn bản in).
  * Lô nhiều tờ: cộng mọi tờ (lỗi Hải quan của từng nhánh), chỉ tiêu chung còn thiếu đếm một lần.
  */
-function AttentionBadge({ decl, items, branches, submission, mode, canEdit, hasErrors }: {
-  decl: Declaration; items: LineItem[]; branches: DeclarationBranch[]; submission: SubmissionView | undefined; mode: DeclarationEditMode; canEdit: boolean; hasErrors: boolean;
+function AttentionBadge({ decl, items, branches, submission, mode, lineModes, canEdit, hasErrors }: {
+  decl: Declaration; items: LineItem[]; branches: DeclarationBranch[]; submission: SubmissionView | undefined; mode: DeclarationEditMode; lineModes: Record<number, DeclarationEditMode>; canEdit: boolean; hasErrors: boolean;
 }) {
   const t = useMessages(REVIEW_MESSAGES);
-  const n = useMemo(() => sheetIssueCounts(decl, items, branches, submission, mode, canEdit).total, [decl, items, branches, submission, mode, canEdit]);
+  const n = useMemo(() => sheetIssueCounts(decl, items, branches, submission, mode, canEdit, lineModes).total, [decl, items, branches, submission, mode, lineModes, canEdit]);
   if (n === 0) return null;
   return (
     <Badge tone={hasErrors ? "danger" : "warning"}>
@@ -347,7 +347,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 </TabsTrigger>
               ) : (
                 <TabsTrigger value="full">
-                  {t.tabFull} {subQ.isSuccess && <AttentionBadge decl={decl} items={items} branches={branches} submission={subQ.data} mode={editMode} canEdit={canEdit} hasErrors={errs.length > 0} />}
+                  {t.tabFull} {subQ.isSuccess && <AttentionBadge decl={decl} items={items} branches={branches} submission={subQ.data} mode={editMode} lineModes={scope.lines} canEdit={canEdit} hasErrors={errs.length > 0} />}
                 </TabsTrigger>
               )}
               <TabsTrigger value="docs">{t.tabDocs}</TabsTrigger>

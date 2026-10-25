@@ -251,7 +251,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         </CardHeader>
         <CardContent>
           <Stack gap="sm">
-            {recalled && (
+            {recalled && isDraft && (
               <Alert tone="info">
                 {recalled.scope === "all" ? fill(t.recalledAllNotice, { n: recalled.count }) : fill(t.recalledSheetsNotice, { list: recalled.sheets.join(", ") })}
               </Alert>

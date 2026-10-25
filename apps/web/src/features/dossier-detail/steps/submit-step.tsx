@@ -11,7 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
 } from "lucide-react";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
 import {
   customsKeys, declareAllSheets, getSubmission, listCertificates, performOperation, recallAllSheets, resendOperation, submitDeclaration,
@@ -415,6 +415,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const [recallScope, setRecallScope] = useState<RecallScope>("all");
   // Gọi về do người dùng bấm trong phiên này (lô nhiều tờ): khi tờ khai được mở lại thì tự về Review kèm thông báo.
   const [recalled, setRecalled] = useState<RecalledNotice | null>(null);
+  // Tờ khai đã mở sẵn (DRAFT / bước Review) lúc bấm gọi về: người dùng đang sửa rồi → KHÔNG tự chuyển bước (không có thời điểm "vừa mở lại" để bắt).
+  const openAtClick = useRef(false);
 
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
@@ -465,7 +467,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     },
     onSuccess: (r, b) => {
       setConfirm(null);
-      if (isRecall(b.op) && !AMA_OPS.has(b.op)) setRecalled({ scope: "sheets", sheets: [b.branch] });
+      if (isRecall(b.op) && !AMA_OPS.has(b.op) && !openAtClick.current) setRecalled({ scope: "sheets", sheets: [b.branch] });
       toast({ tone: r.sent ? "info" : "success", title: r.message });
       invalidate();
     },
@@ -476,7 +478,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     mutationFn: () => recallAllSheets(dossier.id),
     onSuccess: (r) => {
       setConfirm(null);
-      setRecalled({ scope: "all", count: r.sheets.length });
+      if (!openAtClick.current) setRecalled({ scope: "all", count: r.sheets.length });
       toast({ tone: r.sent ? "info" : "success", title: r.message });
       invalidate();
     },
@@ -535,6 +537,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       if (r.action === "EDIT") return goTo("review");
       if (isRecall(r.op)) {
         setRecallScope("all");
+        openAtClick.current = reopened;
         return setConfirm({ row: r, branch });
       }
       if (firstSend && branch === 1 && baseOp(r.op) === "IDA") return submit.mutate();

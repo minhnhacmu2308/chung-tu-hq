@@ -216,6 +216,7 @@ describe("Bước Khai báo – gọi về (hai lựa chọn, tiến độ, tự
     expect(within(dialog).getAllByRole("radio")).toHaveLength(2);
     expect((within(dialog).getByRole("radio", { name: /Gọi về tất cả tờ/ }) as HTMLInputElement).checked).toBe(true);
     expect(within(dialog).getByText("Chỉ gọi về tờ 2")).toBeTruthy();
+    await expectNoA11yViolations(dialog); // Dialog portal ra document.body – kiểm đúng hộp đang mở
     await expectNoA11yViolations(container);
     await userEvent.click(within(dialog).getByRole("button", { name: "Gọi về tất cả tờ" }));
     expect(api.recallAll).toHaveBeenCalledWith("dos_028");
@@ -277,5 +278,33 @@ describe("Bước Khai báo – gọi về (hai lựa chọn, tiến độ, tự
     renderWithProviders(<SubmitStep dossier={dossier()} goTo={goTo} />);
     await screen.findByRole("region", { name: /^Tờ 2\/3/ }, T);
     expect(goTo).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it("tờ khai đã DRAFT sẵn lúc bấm gọi về (đang sửa) → KHÔNG tự chuyển bước", async () => {
+    api.current = { ...lot(), declarationStatus: "DRAFT" };
+    const goTo = vi.fn();
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={goTo} />);
+    const dialog = await openDialog();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Gọi về tất cả tờ" }));
+    await vi.waitFor(() => expect(api.recallAll).toHaveBeenCalled(), T);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(goTo).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it.each([
+    ["IDD", "AMEND_PRE_DECLARED"],
+    ["EDB", "PRE_DECLARED"],
+    ["EDD", "AMEND_PRE_DECLARED"],
+  ] as const)("'Chỉ gọi về tờ 2' gửi đúng nghiệp vụ %s của tờ bấm", async (op, stage) => {
+    const row = { op, label: "Gọi về", status: "NOT_SENT" as const, phase: "DECLARE" as const, enabled: true, action: "SEND" as const };
+    const mk = (no: number) => branch(no, 3, stage, { nextOp: op, pipeline: [...pipelineFor(stage), row] });
+    api.current = submissionOf([mk(1), mk(2), mk(3)]);
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    const c2 = await screen.findByRole("region", { name: /^Tờ 2\/3/ }, T);
+    await userEvent.click(within(c2).getAllByRole("button", { name: `Gọi về sửa (${op})` })[0]!);
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Chỉ gọi về tờ 2/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: `Gọi về sửa (${op})` }));
+    expect(api.perform).toHaveBeenCalledWith("dos_028", op, 2);
   }, 20_000);
 });

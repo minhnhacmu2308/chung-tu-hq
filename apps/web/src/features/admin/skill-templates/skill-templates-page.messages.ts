@@ -15,7 +15,7 @@ export const SKILL_TEMPLATES_MESSAGES = defineMessages({
     unpublished: "Đã ngừng phát hành {code}",
     errorTitle: "Không đổi được trạng thái phát hành",
     title: "Skill mẫu",
-    description: "Bộ skill do hệ thống cung cấp. Skill đã phát hành được cấp sẵn cho doanh nghiệp mới đăng ký; doanh nghiệp tự chỉnh bản của mình trong màn Cấu hình Skill AI.",
+    description: "Bộ skill do hệ thống cung cấp. Skill đã phát hành được cấp sẵn cho doanh nghiệp mới đăng ký; doanh nghiệp tự chỉnh bản của mình trong màn Cách đọc chứng từ.",
     scopeInfo: "Màn này quyết định skill nào được phát hành. Soạn nội dung skill mẫu (trường, nhãn thay thế, chứng từ mẫu) chưa nằm trong phạm vi bản này.",
     loadError: "Không tải được danh sách skill mẫu",
     tableLabel: "Skill mẫu",

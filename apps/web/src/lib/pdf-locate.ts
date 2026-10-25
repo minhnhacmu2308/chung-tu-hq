@@ -124,3 +124,67 @@ export function createLocator(pages: readonly PageText[]) {
     return null;
   };
 }
+
+type Rect = { x: number; y: number; w: number; h: number };
+
+/** Phần chữ của một mẩu nằm trong khoảng ngang [x0, x1] (cắt theo tỉ lệ ký tự – mẩu chữ thường dài hơn vùng chọn). */
+function sliceBox(b: TextBox, x0: number, x1: number): string {
+  const len = b.str.length;
+  if (!len || b.w <= 0) return b.str;
+  const from = Math.max(0, Math.floor(((x0 - b.x) / b.w) * len));
+  const to = Math.min(len, Math.ceil(((x1 - b.x) / b.w) * len));
+  return b.str.slice(from, Math.max(from, to));
+}
+
+const vOverlap = (b: TextBox, r: Rect) => Math.max(0, Math.min(b.y + b.h, r.y + r.h) - Math.max(b.y, r.y)) / Math.max(b.h, 0.01);
+
+/** Chữ trong vùng người dùng kéo chọn trên trang (theo dòng, trái → phải). Vùng rất nhỏ (bấm chuột) = lấy trọn mẩu chữ dưới con trỏ. */
+export function textIn(page: PageText, r: Rect): string {
+  const click = r.w < 0.8 && r.h < 0.8;
+  const hit = page.boxes.filter((b) => (click ? r.x >= b.x && r.x <= b.x + b.w && r.y >= b.y && r.y <= b.y + b.h : vOverlap(b, r) >= 0.5 && b.x < r.x + r.w && b.x + b.w > r.x));
+  const parts = hit.map((b) => ({ b, s: click ? b.str : sliceBox(b, r.x, r.x + r.w) })).filter((p) => p.s.trim());
+  // Cùng dòng khi lệch dưới nửa chiều cao chữ.
+  parts.sort((a, c) => (Math.abs(a.b.y - c.b.y) < Math.min(a.b.h, c.b.h) / 2 ? a.b.x - c.b.x : a.b.y - c.b.y));
+  return parts.map((p) => p.s.trim()).join(" ").replace(/\s+/g, " ").trim();
+}
+
+const hasLetters = (s: string) => (s.match(/\p{L}/gu) ?? []).length >= 2;
+const cleanLabel = (s: string) => {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length >= 2 && t.length <= 60 && hasLetters(t) ? t : null;
+};
+
+/**
+ * Nhãn in cạnh giá trị trên chứng từ (vd "Invoice No.:" bên trái hoặc ngay phía trên ô giá trị) → để gợi ý alias cho skill.
+ * Thứ tự: chữ đứng trước giá trị trong cùng mẩu chữ → mẩu gần nhất bên trái cùng dòng → mẩu ngay phía trên. Không thấy → null.
+ */
+export function labelNear(page: PageText, r: Rect, value: string): string | null {
+  const v = fold(value).replace(/[^A-Z0-9]/g, "");
+  const notValue = (s: string) => fold(s).replace(/[^A-Z0-9]/g, "") !== v;
+  const sameLine = page.boxes.filter((b) => vOverlap(b, r) >= 0.5);
+  // 1) "Invoice No.: ABC123" trong một mẩu.
+  for (const b of sameLine) {
+    if (b.x < r.x - 0.3 && b.x + b.w > r.x) {
+      // Cắt theo vị trí giá trị trong chuỗi (người dùng kéo lệch vài ký tự vẫn đúng); không thấy thì theo tọa độ.
+      const at = b.str.toUpperCase().indexOf(value.trim().toUpperCase());
+      const before = cleanLabel(at > 0 ? b.str.slice(0, at) : sliceBox(b, b.x, r.x));
+      if (before && notValue(before)) return before;
+    }
+  }
+  // 2) Mẩu gần nhất bên trái cùng dòng (cách không quá 1/4 trang).
+  const left = sameLine.filter((b) => b.x + b.w <= r.x + 0.3 && r.x - (b.x + b.w) < 25).sort((a, b) => b.x + b.w - (a.x + a.w));
+  for (const b of left) {
+    const l = cleanLabel(b.str);
+    if (l && notValue(l)) return l;
+    if (l === null && hasLetters(b.str)) break;
+  }
+  // 3) Ngay phía trên (ô có tiêu đề), chồng lên theo chiều ngang.
+  const above = page.boxes
+    .filter((b) => b.y + b.h <= r.y + 0.3 && r.y - (b.y + b.h) < 4 && b.x < r.x + r.w && b.x + b.w > r.x - 2)
+    .sort((a, b) => b.y + b.h - (a.y + a.h) || a.x - b.x);
+  for (const b of above) {
+    const l = cleanLabel(b.str);
+    if (l && notValue(l)) return l;
+  }
+  return null;
+}

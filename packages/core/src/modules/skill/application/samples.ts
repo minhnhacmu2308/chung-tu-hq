@@ -60,7 +60,7 @@ export async function uploadSamples(deps: SkillDeps, ctx: Ctx, skillId: string, 
       const id = deps.idGen.next("smp");
       const storageKey = `orgs/${ctx.orgId}/skills/${skillId}/samples/${id}.${sampleExt(sampleMime(f.name, f.bytes))}`;
       await deps.storage.put(storageKey, f.bytes, f.mime);
-      const row: SampleRow = { id, orgId: ctx.orgId, skillId, documentId: null, storageKey, fileName: f.name, pages, sizeBytes: f.bytes.length, status: "PENDING", expected: null, labeledBy: ctx.userId, labeledAt: null, createdAt: now, updatedAt: now };
+      const row: SampleRow = { id, orgId: ctx.orgId, skillId, documentId: null, storageKey, fileName: f.name, pages, sizeBytes: f.bytes.length, status: "PENDING", source: "UPLOAD", supplier: null, expected: null, labeledBy: ctx.userId, labeledAt: null, createdAt: now, updatedAt: now };
       await r.samples.insert(row);
       rows.push(row);
     }

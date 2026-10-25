@@ -4,7 +4,8 @@ import type { DocKind, FieldGroup } from "@kb/contracts";
 import { countryCode, normalizeTaxCode, packageUnitCode, parseDate, parseNumber, unitCode } from "./normalize.js";
 
 export type Normalizer = (raw: unknown) => string | null;
-export type Getter = (data: Record<string, unknown>) => unknown;
+/** `rawPath`: đường dẫn trong dữ liệu model ("invoiceNo", "seller.name") – để ghi ngược giá trị người dùng sửa vào bản đọc (mẫu tự học). */
+export type Getter = ((data: Record<string, unknown>) => unknown) & { rawPath?: string };
 
 export type FieldSpec = {
   /** Đường dẫn JSON trong Shipment (vd /invoice/no). */
@@ -27,9 +28,10 @@ const country: Normalizer = (v) => countryCode(v as string | null);
 const unit: Normalizer = (v) => unitCode(v as string | null) ?? upper(v);
 const pkgUnit: Normalizer = (v) => packageUnitCode(v as string | null) ?? upper(v);
 const tax: Normalizer = (v) => normalizeTaxCode(v as string | null);
-const party = (p: string) => (d: Record<string, unknown>) => (d[p] as Record<string, unknown> | null)?.["name"];
-const partyField = (p: string, f: string) => (d: Record<string, unknown>) => (d[p] as Record<string, unknown> | null)?.[f];
-const g = (k: string): Getter => (d) => d[k];
+const at = (rawPath: string, get: (d: Record<string, unknown>) => unknown): Getter => Object.assign(get, { rawPath });
+const party = (p: string) => at(`${p}.name`, (d) => (d[p] as Record<string, unknown> | null)?.["name"]);
+const partyField = (p: string, f: string) => at(`${p}.${f}`, (d) => (d[p] as Record<string, unknown> | null)?.[f]);
+const g = (k: string): Getter => at(k, (d) => d[k]);
 
 export const SHIPMENT_FIELDS: FieldSpec[] = [
   { path: "/invoice/no", key: "invoice_no", label: "Số hóa đơn", group: "GENERAL", normalize: str, sources: [{ kind: "INVOICE", get: g("invoiceNo"), regionKey: "invoiceNo" }, { kind: "PACKING_LIST", get: g("invoiceNo"), regionKey: "invoiceNo" }, { kind: "CERT_OF_ORIGIN", get: g("invoiceNo"), regionKey: "invoiceNo" }] },
@@ -72,13 +74,13 @@ export const SHIPMENT_FIELDS: FieldSpec[] = [
   { path: "/origin/coInvoiceNo", key: "co_invoice_no", label: "Số invoice trên C/O", group: "COMMERCIAL", normalize: str, sources: [{ kind: "CERT_OF_ORIGIN", get: g("invoiceNo") }] },
 ];
 
-export const ITEM_SPECS: { field: "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsOnInvoice" | "partNo"; key: string; label: string; normalize: Normalizer; get: (item: Record<string, unknown>) => unknown }[] = [
+export const ITEM_SPECS: { field: "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsOnInvoice" | "partNo"; key: string; label: string; normalize: Normalizer; get: (item: Record<string, unknown>) => unknown; raw?: string }[] = [
   { field: "description", key: "description", label: "Mô tả", normalize: str, get: (i) => i["description"] },
   { field: "quantity", key: "quantity", label: "Số lượng", normalize: num, get: (i) => i["quantity"] },
   { field: "unit", key: "unit", label: "Đơn vị", normalize: unit, get: (i) => i["unit"] },
   { field: "unitPrice", key: "unit_price", label: "Đơn giá", normalize: num, get: (i) => i["unitPrice"] },
   { field: "amount", key: "amount", label: "Thành tiền", normalize: num, get: (i) => i["amount"] },
   { field: "origin", key: "origin", label: "Xuất xứ", normalize: country, get: (i) => i["origin"] },
-  { field: "hsOnInvoice", key: "hs_on_invoice", label: "HS trên invoice", normalize: str, get: (i) => i["hsCodeOnInvoice"] },
+  { field: "hsOnInvoice", key: "hs_on_invoice", label: "HS trên invoice", normalize: str, get: (i) => i["hsCodeOnInvoice"], raw: "hsCodeOnInvoice" },
   { field: "partNo", key: "part_no", label: "Mã hàng (Part No)", normalize: str, get: (i) => i["partNo"] },
 ];

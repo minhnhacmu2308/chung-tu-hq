@@ -14,6 +14,7 @@ import { listDocuments } from "../list-documents.js";
 import { listDossiers, listDossiersPage } from "../list-dossiers.js";
 import type { DossierDeps } from "../ports.js";
 import { requeueStuckDocuments } from "../requeue-stuck-documents.js";
+import { listOpenDocuments, rereadDocuments } from "../reread-documents.js";
 import { retryDocument } from "../retry-document.js";
 import { FakePdfInspector, FakeUnzipper, InMemoryStorage, RecordingPublisher } from "../test/fakes.js";
 import { InMemoryDossierUow } from "../test/in-memory-uow.js";
@@ -190,6 +191,34 @@ describe("changeDocumentKind / delete / retry", () => {
     expect(storage.keys()).toEqual([]);
     expect(queue.jobs.at(-1)?.payload).toMatchObject({ mode: "MERGE_ONLY" });
     expect(unwrap(await listDocuments(deps, ctx(), d.id))).toEqual([]);
+  });
+});
+
+describe("đọc lại chứng từ bằng cấu hình skill mới", () => {
+  it("chỉ hồ sơ còn ở bước tải lên/kiểm tra: liệt kê chứng từ đã đọc, đọc lại → QUEUED + job FULL; hồ sơ đã qua bước kiểm tra giữ nguyên", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const past = unwrap(await createDossier(deps, ctx(), INPUT));
+    unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("a.pdf")]));
+    unwrap(await uploadDocuments(deps, ctx(), past.id, [pdf("b.pdf")]));
+    for (const doc of uow.data.documents) doc.status = "DONE";
+    const dd = uow.data.dossiers.find((x) => x.id === d.id)!;
+    dd.step = "ocr";
+    dd.status = "NEEDS_REVIEW";
+    const pd = uow.data.dossiers.find((x) => x.id === past.id)!;
+    pd.step = "agent";
+    pd.status = "NEEDS_REVIEW";
+    queue.jobs.length = 0;
+    const open = await listOpenDocuments(deps, "org_a");
+    expect(open).toEqual([expect.objectContaining({ dossierId: d.id, dossierCode: d.code, fileName: "a.pdf" })]);
+    expect(await listOpenDocuments(deps, "org_b")).toEqual([]);
+    const all = uow.data.documents.map((x) => x.id);
+    expect(unwrap(await rereadDocuments(deps, ctx(), all))).toBe(1);
+    expect(uow.data.documents.find((x) => x.dossierId === d.id)?.status).toBe("QUEUED");
+    expect(uow.data.documents.find((x) => x.dossierId === past.id)?.status).toBe("DONE");
+    expect(dd.status).toBe("PROCESSING");
+    expect(queue.jobs).toEqual([expect.objectContaining({ name: "extract-document", payload: expect.objectContaining({ mode: "FULL" }) })]);
+    expect(unwrap(await rereadDocuments(deps, ctx("DECLARANT", "org_b"), all))).toBe(0);
+    expect((await rereadDocuments(deps, ctx("VIEWER"), all)).ok).toBe(false);
   });
 });
 

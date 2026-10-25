@@ -54,7 +54,7 @@ let seq = 0;
 const seedSample = async (p: Partial<SampleRow> = {}): Promise<SampleRow> => {
   const id = p.id ?? `smp_seed_${++seq}`;
   const row: SampleRow = {
-    id, orgId: ORG, skillId: invId, documentId: null, storageKey: `k/${id}`, fileName: "a.pdf", pages: 1, sizeBytes: 10, status: "LABELED",
+    id, orgId: ORG, skillId: invId, documentId: null, storageKey: `k/${id}`, fileName: "a.pdf", pages: 1, sizeBytes: 10, status: "LABELED", source: "UPLOAD", supplier: null,
     expected: { invoice_no: "A-1", total_amount: 100, po_no: "PO-1" }, labeledBy: "usr_1", labeledAt: NOW, createdAt: NOW, updatedAt: NOW, ...p,
   };
   uow.data.samples.push(row);

@@ -7,7 +7,7 @@ import { loadSkill, toSkill } from "./_dto.js";
 import type { SkillDeps, SkillRepos, SkillRow, SkillVersionRow } from "./ports.js";
 
 /** Mỗi lần đổi cấu hình trường = một phiên bản mới (append-only), skill trỏ sang phiên bản đó. */
-async function commitVersion(deps: SkillDeps, ctx: Ctx, r: SkillRepos, skill: SkillRow, fields: SkillField[]): Promise<Skill> {
+export async function commitVersion(deps: SkillDeps, ctx: Ctx, r: SkillRepos, skill: SkillRow, fields: SkillField[]): Promise<Skill> {
   const now = deps.clock.now();
   const version = skill.currentVersion + 1;
   const row: SkillVersionRow = { id: deps.idGen.next("sk"), orgId: ctx.orgId, skillId: skill.id, version, fields, promptNotes: null, createdBy: ctx.userId, createdAt: now };

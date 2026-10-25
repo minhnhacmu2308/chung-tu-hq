@@ -10,6 +10,7 @@ import { listFields } from "../list-fields.js";
 import type { ExtractionDeps } from "../ports.js";
 import { processDocument } from "../process-document.js";
 import { revertField } from "../revert-field.js";
+import { fieldSource, reviewedDocuments } from "../reviewed-documents.js";
 import { FakeDocuments, InMemoryExtractionUow, NoSkills, NoValidation, RecordingUsage, ScriptedAi } from "../test/fakes.js";
 import { updateFieldValue } from "../update-field-value.js";
 
@@ -99,6 +100,28 @@ describe("trường trích xuất", () => {
     docs.docs[1]!.status = "ERROR";
     unwrap(await finishReading(deps, ctx(), "dos_1"));
     expect(docs.dossierUpdates.at(-1)).toMatchObject({ finished: true, suspectFields: 2 });
+  });
+});
+
+describe("tự học từ bước kiểm tra", () => {
+  it("reviewedDocuments: bản đọc đã ghi đè giá trị người dùng sửa + danh sách sửa + nhà cung cấp; org khác không thấy", async () => {
+    const no = unwrap(await listFields(deps, ctx(), "dos_1")).find((x) => x.key === "invoice_no")!;
+    unwrap(await updateFieldValue(deps, ctx(), no.id, "HSP-2610-0458"));
+    const [d] = unwrap(await reviewedDocuments(deps, ctx(), "dos_1"));
+    expect(d).toMatchObject({ documentId: "doc_inv", kind: "INVOICE", storageKey: "k", supplier: "HANSOL", corrections: [{ key: "invoice_no", rawPath: "invoiceNo", from: "HSP-2610-0457", to: "HSP-2610-0458" }] });
+    expect(d!.data["invoiceNo"]).toBe("HSP-2610-0458");
+    expect(d!.data["totalAmount"]).toBe(20850);
+    const src = unwrap(await fieldSource(deps, ctx(), no.id));
+    expect(src).toEqual({ documentId: "doc_inv", kind: "INVOICE", rawPath: "invoiceNo", supplier: "HANSOL" });
+    expect(unwrap(await reviewedDocuments(deps, ctx("DECLARANT", "org_b"), "dos_1"))).toEqual([]);
+    expect((await fieldSource(deps, ctx("DECLARANT", "org_b"), no.id)).ok).toBe(false);
+  });
+
+  it("đọc lại không phân loại lại → nhà cung cấp lấy từ lần đọc trước để chọn skill riêng", async () => {
+    const hints: (string | null)[] = [];
+    deps.skills = { resolve: async (_o, _k, hint) => (hints.push(hint), { skillVersionId: "skv_2", fieldHints: [], examples: [], customFields: [] }) };
+    unwrap(await processDocument(deps, { orgId: "org_a", dossierId: "dos_1", documentId: "doc_inv", mode: "FULL" }));
+    expect(hints).toEqual(["HANSOL"]);
   });
 });
 

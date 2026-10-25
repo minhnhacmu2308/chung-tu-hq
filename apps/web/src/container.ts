@@ -8,9 +8,9 @@ import { createAdminInfrastructure, platformStaffOf, type DrizzleAdminUow } from
 import type { BillingDeps } from "@kb/core/modules/billing";
 import { refreshFromShipment, type DeclarationDeps } from "@kb/core/modules/declaration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
-import type { DossierDeps } from "@kb/core/modules/dossier";
+import { listOpenDocuments, rereadDocuments, type DossierDeps } from "@kb/core/modules/dossier";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
-import type { ExtractionDeps } from "@kb/core/modules/extraction";
+import { latestReads, type ExtractionDeps } from "@kb/core/modules/extraction";
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
@@ -216,6 +216,21 @@ function build(): Container {
     usage, ai: skill.ai, skills: createSkillResolver(skill),
   });
   extraction.notify = notify;
+  // Skill đổi → gợi ý đọc lại chứng từ trong hồ sơ còn ở bước kiểm tra (dossier liệt kê, extraction cho biết lần đọc gần nhất).
+  skill.reads = {
+    open: async (orgId) => {
+      const docs = await listOpenDocuments(dossier, orgId);
+      const reads = new Map((await latestReads(extraction, orgId, docs)).map((r) => [r.documentId, r]));
+      return docs.flatMap((d) => {
+        const r = reads.get(d.documentId);
+        return r ? [{ ...d, skillVersionId: r.skillVersionId, supplier: r.supplier }] : [];
+      });
+    },
+    reread: async (ctx, ids) => {
+      const r = await rereadDocuments(dossier, ctx, ids);
+      return r.ok ? r.value : 0;
+    },
+  };
   const declaration = createDeclarationInfrastructure({
     db, env, queue, dossier, extraction, validation,
     org: {

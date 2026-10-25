@@ -8,7 +8,9 @@ import { Alert, Button, DocumentFileViewer, DocumentViewer, Skeleton, fill, useM
 import { useMemo } from "react";
 import { DOC_KIND_LABELS, type DocKind, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { DOCUMENT_PREVIEW_MESSAGES } from "./common.messages";
-import { OriginalDocumentViewer } from "./original-document-viewer";
+import { OriginalDocumentViewer, type DocumentTextApi, type PickResult } from "./original-document-viewer";
+
+export type { DocumentTextApi, PickResult };
 
 const TITLES: Record<DocKind, string> = {
   INVOICE: "COMMERCIAL INVOICE",
@@ -183,9 +185,13 @@ export type DocumentPreviewProps = {
   highlightFieldId?: string | null;
   onFieldClick?: (fieldId: string) => void;
   className?: string;
+  /** Chỉ trên file (chỉ khi có file thật): xem OriginalDocumentViewer. */
+  picking?: boolean;
+  onPick?: (r: PickResult) => void;
+  onTextReady?: (api: DocumentTextApi | null) => void;
 };
 
-export function DocumentPreview({ document, file = { status: "none" }, fields, highlightFieldId = null, onFieldClick, className }: DocumentPreviewProps) {
+export function DocumentPreview({ document, file = { status: "none" }, fields, highlightFieldId = null, onFieldClick, className, picking, onPick, onTextReady }: DocumentPreviewProps) {
   const t = useMessages(DOCUMENT_PREVIEW_MESSAGES);
   const regions = useMemo(() => buildRegions(document, fields, t.emptyPage), [document, fields, t.emptyPage]);
   const pages = useMemo(() => Array.from({ length: Math.max(1, document.pages) }, () => null), [document.pages]);
@@ -222,6 +228,9 @@ export function DocumentPreview({ document, file = { status: "none" }, fields, h
         fields={fields}
         highlightFieldId={highlightFieldId}
         {...(onFieldClick ? { onFieldClick } : {})}
+        {...(picking !== undefined ? { picking } : {})}
+        {...(onPick ? { onPick } : {})}
+        {...(onTextReady ? { onTextReady } : {})}
         fallback={<DocumentFileViewer label={label} src={file.url} type={type} fileName={document.fileName} {...(className ? { className } : {})} />}
         {...(className ? { className } : {})}
       />

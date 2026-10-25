@@ -16,6 +16,7 @@ import { seedProducts } from "./seed/products";
 import { seedMailbox, type MockInboxMessage, type MockMailConnection } from "./seed/mailbox";
 import type { AdminDb } from "./admin/types";
 import type { BranchMessage, CustomsFlow } from "./customs-sim";
+import type { SkillSuggestion } from "@kb/contracts";
 
 export type MockDb = {
   version: number;
@@ -40,6 +41,10 @@ export type MockDb = {
   /** Bản khai bổ sung sau thông quan (AMA) – bản riêng, không sửa tờ khai gốc. */
   postAmendments: PostAmendment[];
   skills: Skill[];
+  /** Gợi ý thêm nhãn cho trường của skill (sinh khi người dùng chỉ/sửa giá trị trên file). */
+  skillSuggestions: SkillSuggestion[];
+  /** Skill đã đổi cấu hình sau lần đọc gần nhất của chứng từ đang mở → gợi ý đọc lại. */
+  staleSkills: string[];
   /** Danh mục hàng hóa của doanh nghiệp (mặt hàng đã khai). */
   products: ProductCatalogItem[];
   integrations: Integration[];
@@ -62,7 +67,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 26;
+const DB_VERSION = 27;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {

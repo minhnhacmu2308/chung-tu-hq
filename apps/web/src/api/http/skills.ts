@@ -1,5 +1,5 @@
 // Cấu hình Skill AI – gọi backend thật. Cùng chữ ký với src/mocks/api/skills.ts.
-import { EvaluationResultSchema, type CreateSkillInput, LabeledSampleSchema, SampleLabelSchema, SkillSchema, type EvaluationResult, type SkillField, type SkillFieldPatch, type SkillKind } from "@kb/contracts";
+import { AcceptSuggestionResultSchema, EvaluationResultSchema, LearnSummarySchema, SkillSuggestionSchema, StaleReadsSchema, type CreateSkillInput, LabeledSampleSchema, SampleLabelSchema, SkillSchema, type EvaluationResult, type SkillField, type SkillFieldPatch, type SkillKind } from "@kb/contracts";
 import { z } from "zod";
 import { ApiError } from "@/lib/api-error";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/http";
@@ -37,4 +37,25 @@ export async function evaluateSkill(skillId: string): Promise<EvaluationResult> 
     if (now && now.finishedAt !== before?.finishedAt) return now;
   }
   throw new ApiError("TIMEOUT", "Đánh giá đang chạy nền lâu hơn dự kiến. Mở lại trang sau ít phút để xem kết quả.", 504);
+}
+
+// ---- Tự học từ bước kiểm tra, gợi ý nhãn, đọc lại ----
+
+export const learnFromReview = (dossierId: string) => apiPost(`dossiers/${dossierId}/learn`, {}, LearnSummarySchema);
+export const listSuggestions = (skillId?: string) => apiGet(`skill-suggestions${skillId ? `?skillId=${encodeURIComponent(skillId)}` : ""}`, z.array(SkillSuggestionSchema));
+export const suggestAlias = async (fieldId: string, label: string) => (await apiPost("skill-suggestions", { fieldId, label }, z.object({ suggestion: SkillSuggestionSchema.nullable() }))).suggestion;
+export const acceptSuggestion = (id: string) => apiPost(`skill-suggestions/${id}/accept`, {}, AcceptSuggestionResultSchema);
+export const dismissSuggestion = async (id: string) => void (await apiPost(`skill-suggestions/${id}/dismiss`, {}, z.object({ ok: z.literal(true) })));
+export const getStaleReads = (skillId: string) => apiGet(`skills/${skillId}/stale-reads`, StaleReadsSchema);
+export const rereadStale = async (skillId: string) => (await apiPost(`skills/${skillId}/reread`, {}, z.object({ queued: z.number().int() }))).queued;
+
+/** Chờ lần đánh giá mới hơn `since` (job chạy nền sau khi đồng ý gợi ý) – null nếu quá 3 phút. */
+export async function waitForEvaluation(skillId: string, since: string | undefined): Promise<EvaluationResult | null> {
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    await sleep(2000);
+    const now = await getEvaluation(skillId);
+    if (now && now.finishedAt !== since) return now;
+  }
+  return null;
 }

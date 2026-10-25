@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ok = (value: unknown) => ({ ok: true, value });
 const uc = vi.hoisted(() => ({
-  performOperation: vi.fn(), resendOperation: vi.fn(), startPostAmendment: vi.fn(), getPostAmendmentView: vi.fn(), updatePostAmendmentField: vi.fn(),
+  performOperation: vi.fn(), declareAllSheets: vi.fn(), resendOperation: vi.fn(), startPostAmendment: vi.fn(), getPostAmendmentView: vi.fn(), updatePostAmendmentField: vi.fn(),
   addPostAmendmentLines: vi.fn(), removePostAmendmentLine: vi.fn(), approvePostAmendment: vi.fn(), copyPostAmendmentHeader: vi.fn(),
 }));
 const customs = { tag: "customs" };
@@ -35,6 +35,12 @@ describe("route Hải quan theo tờ khai nhánh", () => {
     expect(uc.performOperation).toHaveBeenCalledTimes(2);
     await call(import("./submission/resend/route"), "POST", "/submission/resend", { operation: "IDA", branch: 2 });
     expect(uc.resendOperation).toHaveBeenLastCalledWith(customs, session.ctx, D, "IDA", 2);
+  });
+
+  it("khai chính thức cả lô: không body, gọi declareAllSheets(ctx, hồ sơ)", async () => {
+    const res = await call(import("./submission/declare-all/route"), "POST", "/submission/declare-all");
+    expect(res.status).toBe(200);
+    expect(uc.declareAllSheets).toHaveBeenCalledWith(customs, session.ctx, D);
   });
 
   it("bắt đầu sửa sau thông quan: branch trong thân (thân rỗng {} → tờ 1)", async () => {

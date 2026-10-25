@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb, saveDb } from "@/mocks/db";
 import { approveDeclaration } from "./declaration";
-import { getSubmission, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
+import { declareAllSheets, getSubmission, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
 import { addPostAmendmentLines, approvePostAmendment, updatePostAmendmentField } from "./post-amendment";
 
 // Bỏ độ trễ mạng giả để test nhanh; thời gian nghiệp vụ điều khiển bằng đồng hồ giả (chỉ Date).
@@ -440,5 +440,36 @@ describe("tờ khai nhánh: khai chính thức (IDC) tờ k chờ mọi tờ tr�
     await clearSheet(BIG, 1);
     await runB(BIG, "IDC", 3);
     expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([2, 1, 3]);
+  });
+});
+
+describe("tờ khai nhánh: khai chính thức cả lô (declareAllSheets)", () => {
+  const outs = (op: string) => getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === op && m.direction === "OUT");
+
+  it("3 tờ đã khai tạm: một lần bấm → IDC tờ 1, rồi tự nối tờ 2, tờ 3", async () => {
+    await preDeclareAll(BIG);
+    await declareAllSheets(BIG);
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1]);
+    // Đang gửi → bấm lần nữa bị chặn, không gửi thêm.
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE" });
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "DECLARED", "DECLARED"]); // luồng xanh: tờ 1 đã đủ thời gian tự thông quan
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1, 2, 3]);
+    // Không còn tờ nào chờ khai chính thức.
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", message: "Không còn tờ nào chờ khai chính thức" });
+  });
+  it("tờ 1 đã thông quan → bắt đầu từ tờ 2", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    await declareAllSheets(BIG);
+    wait(9_000);
+    await sheets(BIG); // áp phản hồi đã đến (settle)
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1, 2, 3]); // 1 = IDC thông quan tờ 1 (clearSheet)
+  });
+  it("còn tờ chờ gửi nội dung → SHEET_ORDER_DECLARE; lô một tờ → VALIDATION", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 1);
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "SHEET_ORDER_DECLARE" });
+    await expect(declareAllSheets(NEW)).rejects.toMatchObject({ code: "VALIDATION" });
   });
 });

@@ -46,6 +46,14 @@ export function contentOpFor(stage: CustomsStage, kind: "IDA" | "EDA"): CustomsO
   return null;
 }
 
+/** Nghiệp vụ khai chính thức cho tờ ở giai đoạn này (khai chính thức cả lô): PRE_DECLARED → IDC/EDC, AMEND_PRE_DECLARED → IDE/EDE; khác null. */
+export function declareOpFor(stage: CustomsStage, kind: "IDA" | "EDA"): CustomsOperation | null {
+  const direction = kind === "IDA" ? "NK" : "XK";
+  if (stage === "PRE_DECLARED") return opFor(direction, "IDC");
+  if (stage === "AMEND_PRE_DECLARED") return opFor(direction, "IDE");
+  return null;
+}
+
 /**
  * Truyền lại nội dung / mở lại lô nhiều tờ (spec §6.4, quyết định R3): chỉ tiêu chung dùng chung mọi tờ, nên mọi tờ đã có số tờ khai còn nhận nội dung
  * phải đang được gọi về sửa (RECALLED / AMEND_RECALLED) – nếu không, Hải quan giữ giá trị cũ trên tờ đó. Tờ chưa có số không tính. Worker không tự gọi về (IDB/IDD).

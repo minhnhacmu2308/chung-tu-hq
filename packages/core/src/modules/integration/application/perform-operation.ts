@@ -20,9 +20,22 @@ import { syncDossierClearance } from "./poll-status.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
 import { buildSheet, contentKey, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
 
-export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<OperationResult>> {
+/** Người gọi không cần vai trò (worker nối tiếp chạy không có phiên người dùng). */
+export type ActorCtx = Pick<Ctx, "orgId" | "userId">;
+/** `chain`: ghi vào payload outbox để worker nối tiếp tờ kế tiếp sau khi gửi xong (processOutbox.chainNextBranch). Vắng = hành vi cũ. */
+export type OperationOpts = { chain?: "declare" | "recall" };
+
+export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1, opts?: OperationOpts): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
+  return performOperationChecked(deps, ctx, dossierId, op, branch, opts);
+}
+
+/**
+ * Thân performOperation sau khi đã kiểm vai trò: dùng bởi performOperation (sau requireRole) và chuỗi nối tiếp của worker (không có phiên).
+ * Mọi guard khác (thứ tự tờ, BLOCKER, HS, ghim, trùng) giữ nguyên.
+ */
+export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, op: CustomsOperation, branch = 1, opts?: OperationOpts): Promise<Result<OperationResult>> {
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
@@ -71,7 +84,7 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
   }
   if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
 
-  let payload: Record<string, unknown> = { request: { soToKhai: result.declarationNo }, certificateId: result.raw?.certificateId };
+  let payload: Record<string, unknown> = { request: { soToKhai: result.declarationNo }, certificateId: result.raw?.certificateId, ...(opts?.chain ? { chain: opts.chain } : {}) };
   if (op === "AMA") {
     // Bản khai bổ sung riêng: đã duyệt, đủ dòng hàng + mã lý do; tờ khai gốc không gửi lại, không đổi trạng thái.
     if (amendment?.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "AMENDMENT_NOT_APPROVED"));
@@ -118,7 +131,7 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
  * tờ trước đã khai tạm (thứ tự tờ – sheetOrderError – kiểm chung ở performOperation). Tờ khai APPROVED → lần truyền mới của người khai; SUBMITTED → tiếp lần truyền đang chạy (cùng phiên bản + ghim,
  * cùng khóa với chuỗi của worker nên hai bên không tạo trùng). Đã gửi/bị từ chối ở lần truyền này → dùng Gửi lại.
  */
-async function preDeclareBranch(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch: number, op: CustomsOperation, snap: DeclarationSnapshot, first: ResultRow | null): Promise<Result<OperationResult>> {
+async function preDeclareBranch(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, branch: number, op: CustomsOperation, snap: DeclarationSnapshot, first: ResultRow | null): Promise<Result<OperationResult>> {
   if (!first?.declarationNo) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ 1 chưa có số tờ khai – khai tạm tờ 1 trước`));
   const prev = await deps.uow.asOrg(ctx, (r) => r.results.get(ctx.orgId, dossierId, branch - 1));
   // (Tờ trước còn chờ gửi nội dung – chưa gửi / gọi về chưa gửi lại – đã chặn ở performOperation: sheetOrderError.) Tờ trước bị từ chối trước khi có số → chưa khai tạm.
@@ -132,7 +145,7 @@ async function preDeclareBranch(deps: CustomsDeps, ctx: Ctx, dossierId: string, 
 
 /** Tạo outbox + job. Khóa idempotency theo số lần gửi nghiệp vụ (hai yêu cầu song song cùng khóa → unique, chỉ một lần gửi). */
 export async function enqueue(
-  deps: CustomsDeps, ctx: Ctx,
+  deps: CustomsDeps, ctx: ActorCtx,
   p: {
     dossierId: string; declarationId: string; op: CustomsOperation; payload: unknown; result: ResultRow; outbox: OutboxRow[]; content: boolean;
     /** Lô nhiều tờ, nghiệp vụ nội dung: khóa ghim phiên bản (contentKey) để worker kiểm ghim và nối tiếp tờ sau. */ version?: number;
@@ -165,7 +178,7 @@ export async function enqueue(
 }
 
 /** Tra cứu trạng thái tờ khai (IID nhập / IEX xuất) – trả lời ngay, ghi nhật ký OUT/IN. */
-async function queryNow(deps: CustomsDeps, ctx: Ctx, dossierId: string, direction: "NK" | "XK", result: ResultRow): Promise<Result<OperationResult>> {
+async function queryNow(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, direction: "NK" | "XK", result: ResultRow): Promise<Result<OperationResult>> {
   if (!result.externalId) return err(domainError("INVALID_STATE", "Chưa có số tờ khai để tra cứu"));
   const op = queryOpFor(direction);
   const now = () => deps.clock.now();

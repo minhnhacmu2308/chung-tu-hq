@@ -12,6 +12,7 @@ export const submitDeclaration = async (dossierId: string, certificateId: string
 };
 export const resendOperation = (dossierId: string, op: CustomsOperation, branch = 1) => apiPost(`dossiers/${dossierId}/submission/resend`, { operation: op, branch }, ResendResultSchema);
 export const performOperation = (dossierId: string, op: CustomsOperation, branch = 1) => apiPost(`dossiers/${dossierId}/submission/operations`, { operation: op, branch }, OperationResultSchema);
+export const declareAllSheets = (dossierId: string) => apiPost(`dossiers/${dossierId}/submission/declare-all`, {}, OperationResultSchema);
 export const startPostAmendment = async (dossierId: string, branch = 1) => {
   await apiPost(`dossiers/${dossierId}/submission/post-amendment`, { branch }, z.object({ ok: z.literal(true) }));
 };

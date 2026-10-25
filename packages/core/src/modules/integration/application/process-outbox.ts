@@ -15,8 +15,12 @@ import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
 import { applyPostAmendmentResult } from "./post-amendment.js";
 import { syncDossierClearance } from "./poll-status.js";
-import { contentOpFor, enqueueBranchPreDeclare, outboxVersion, stalePinReason } from "./branch-send.js";
+import { contentOpFor, declareOpFor, enqueueBranchPreDeclare, outboxVersion, stalePinReason } from "./branch-send.js";
+import { declareBlockError } from "./declare-all.js";
+import { performOperationChecked } from "./perform-operation.js";
 
+/** Chuỗi nối tiếp dừng ở tờ `branch` vì guard (declare = chuỗi khai chính thức cả lô). */
+type ChainStop = { branch: number; of: number; error: DomainError; declare?: boolean };
 export type ProcessOutboxInput = { orgId: string; userId: string; outboxId: string };
 /** Quá số lần thử (= attempts của BullMQ) → outbox FAILED, người dùng "Gửi lại". */
 export const MAX_ATTEMPTS = 5;
@@ -208,9 +212,10 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     const chained = await chainNextBranch(deps, ctx, ob);
     if (chained) {
       // Không khai tạm được tờ kế tiếp (tờ khai bị mở lại, HS/BLOCKER, đổi tuần tỷ giá…): ghi lỗi trên nhánh đó, báo chủ hồ sơ; nhánh giữ NOT_SENT.
-      const summary = `Tờ ${chained.branch}/${chained.of}: chưa khai tạm tự động – ${chained.error.message ?? chained.error.code}`;
+      const what = chained.declare ? "khai chính thức" : "khai tạm";
+      const summary = `Tờ ${chained.branch}/${chained.of}: chưa ${what} tự động – ${chained.error.message ?? chained.error.code}`;
       await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, branch: chained.branch, operation: ob.operation, direction: "IN", result: "ERROR", summary, payloadMasked: { error: chained.error.message ?? chained.error.code }, externalRef: null, at: now() }));
-      await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, { title: `${dossier.code}: chưa khai tạm tờ ${chained.branch}/${chained.of}`, body: summary.slice(0, 300), href: `/dossiers/${ob.dossierId}?step=submit` });
+      await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, { title: `${dossier.code}: chưa ${what} tờ ${chained.branch}/${chained.of}`, body: summary.slice(0, 300), href: `/dossiers/${ob.dossierId}?step=submit` });
     }
   }
   await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
@@ -232,7 +237,9 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
  * → gửi nội dung tờ kế tiếp cần gửi theo giai đoạn của tờ (bỏ qua tờ không cần gửi), cùng phiên bản + ghim. Tờ đó đã có outbox cùng lần truyền
  * → enqueueBranchPreDeclare không tạo thêm (dừng; bị từ chối → người khai Gửi lại, thành công thì nối tiếp). Trả lỗi guard (không tạo gì) hoặc null.
  */
-async function chainNextBranch(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<{ branch: number; of: number; error: DomainError } | null> {
+async function chainNextBranch(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<ChainStop | null> {
+  // Khai chính thức cả lô: IDC/IDE/EDC/EDE của tờ k đã SENT (outbox mang chain = "declare") → khai chính thức tờ kế tiếp đang khai tạm. Lỗi guard → báo như chuỗi khai tạm.
+  if ((ob.payload as { chain?: unknown } | null)?.chain === "declare") return chainDeclare(deps, ctx, ob);
   if (!isContentOperation(ob.operation) || ob.operation === "AMA") return null;
   // Phiên bản đã truyền ở tờ k (khóa `:v<n>`); khóa không có phiên bản (gửi theo lượt `:n<k>`, lô một tờ) → không nối tự động.
   const version = outboxVersion(ob.idempotencyKey);
@@ -247,4 +254,23 @@ async function chainNextBranch(deps: CustomsDeps, ctx: { orgId: OrgId; userId: U
   if (!next) return null;
   const res = await enqueueBranchPreDeclare(deps, ctx, ob.dossierId, next.branch, { by: "chain", version, ...(typeof pin === "string" ? { pin } : {}) });
   return res.ok ? null : { branch: next.branch, of, error: res.error };
+}
+
+/**
+ * Chuỗi khai chính thức cả lô: tờ k vừa khai chính thức xong → tờ kế tiếp (branch lớn hơn, trong số tờ hiện tại) có declareOpFor khác null thì gửi IDC/IDE tiếp,
+ * qua performOperationChecked (cùng guard với người khai bấm, trừ kiểm vai trò – worker không có phiên). Tờ kế tiếp đã có outbox đang chờ → performOperation chặn (không tạo trùng).
+ * Bị từ chối thì không tới đây (chỉ nối khi SENT) – người khai xử lý tờ đó rồi khai chính thức cả lô lại.
+ */
+async function chainDeclare(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<ChainStop | null> {
+  const snap = await deps.declarations.get(ctx.orgId, ob.dossierId);
+  if (!snap) return null;
+  const of = branchCount(snap.payload.items.length);
+  const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, ob.dossierId));
+  const next = results.filter((r) => r.branch > ob.branch && r.branch <= of).sort((a, b) => a.branch - b.branch).find((r) => declareOpFor(stageOf(r), snap.payload.kind));
+  if (!next) return null;
+  const op = declareOpFor(stageOf(next), snap.payload.kind)!;
+  const blocked = await declareBlockError(deps, ctx, ob.dossierId, snap);
+  if (blocked) return { branch: next.branch, of, error: blocked, declare: true };
+  const res = await performOperationChecked(deps, ctx, ob.dossierId, op, next.branch, { chain: "declare" });
+  return res.ok ? null : { branch: next.branch, of, error: res.error, declare: true };
 }

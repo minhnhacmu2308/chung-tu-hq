@@ -175,7 +175,7 @@ export const REASON_MESSAGES = defineMessages({
     SHEETS_RECALL_FIRST: "第 {sheets} 张：请先调回修改（IDB/IDD）",
     SHEET_COUNT_CHANGED: "已申报 {planned} 份报关单（已获编号），但货物现需 {now} 份 – 不予传输；请先撤销多余报关单或重新申报",
     SHEET_ORDER: "第 {sheet} 张：请等待第 {waitFor} 张先发送内容 – 按报关单顺序传输",
-    SHEET_ORDER_DECLARE: "第{sheet}页：需等待第{waitFor}页完成临时申报后才能正式申报",
+    SHEET_ORDER_DECLARE: "第 {sheet} 张：请等待第 {waitFor} 张先完成临时申报，再正式申报",
     AMENDMENT_NOT_APPROVED: "补充申报尚未审批",
     AMENDMENT_NOT_TRANSMITTABLE: "补充申报暂无法发送：{blockers}",
     CERTIFICATE_REQUIRED: "请选择用于签名的数字证书",

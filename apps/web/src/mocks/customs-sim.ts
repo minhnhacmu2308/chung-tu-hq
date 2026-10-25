@@ -19,7 +19,7 @@ export const CHANNEL_VI: Record<CustomsChannel, string> = { GREEN: "xanh", YELLO
  */
 export type CustomsFlow = {
   stage: CustomsStage;
-  pending: { op: CustomsOperation; outcome: "OK" | "ERROR"; doneAt: string; errors?: CustomsError[] } | null;
+  pending: { op: CustomsOperation; outcome: "OK" | "ERROR"; doneAt: string; errors?: CustomsError[]; /** Chuỗi nối tiếp của lần gửi (khai chính thức cả lô): sau khi xong, khai tờ kế tiếp. */ chain?: "declare" | "recall" } | null;
   /** Lần gửi bị từ chối gần nhất (giống results.raw.rejection ở backend). */
   rejection?: CustomsRejection;
   /** Số lần sửa đổi bổ sung (IDE/EDE) và sửa sau thông quan (AMC) thành công. */

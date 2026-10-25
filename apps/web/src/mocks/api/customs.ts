@@ -3,7 +3,7 @@
 // Khi phản hồi đã đến, settle() áp stageAfter + tác dụng phụ (số tờ khai, phân luồng, mở lại tờ khai, thông quan…).
 import {
   baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
-  operationAvailability, operationsFor, orderedOperation, queryOpFor, recallExempt, sheetApproved, sheetOrderWait, stageAfter,
+  awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, recallExempt, sheetApproved, sheetOrderWait, stageAfter,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
   type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
@@ -218,6 +218,30 @@ function apply(db: MockDb, c: Ctx) {
     const nextOp = next ? contentOpFor(next.flow.stage, c.dossier.direction) : null;
     if (next && nextOp && !next.flow.pending) send(db, next, nextOp, at);
   }
+  // Khai chính thức cả lô: tờ k xong (IDC/IDE) → khai chính thức tờ kế tiếp đang khai tạm – như chainDeclare của backend. Lỗi guard → ghi lỗi trên tờ đó, dừng chuỗi.
+  if (p.chain === "declare" && c.branch < c.of) chainDeclare(db, c, at);
+}
+
+/** Nghiệp vụ khai chính thức cho tờ ở giai đoạn này (declareOpFor của backend); null = tờ không chờ khai chính thức. */
+function declareOpFor(stage: CustomsStage, direction: Dossier["direction"]): CustomsOperation | null {
+  if (stage === "PRE_DECLARED") return opFor(direction, "IDC");
+  if (stage === "AMEND_PRE_DECLARED") return opFor(direction, "IDE");
+  return null;
+}
+
+function chainDeclare(db: MockDb, c: Ctx, at: number) {
+  const no = Array.from({ length: c.of - c.branch }, (_, i) => c.branch + 1 + i).find((k) => declareOpFor(flowOf(db, c.dossier.id, k).stage, c.dossier.direction));
+  if (!no) return;
+  const next = load(db, c.dossier.id, no);
+  const op = declareOpFor(next.flow.stage, c.dossier.direction)!;
+  try {
+    if (next.flow.pending) return;
+    if (next.items.some((i) => !i.hsConfirmed)) throw reasonApiError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: next.items.filter((i) => !i.hsConfirmed).length });
+    send(db, next, op, at, "declare");
+  } catch (e) {
+    const text = e instanceof ApiError ? e.message : String(e);
+    db.customsMessages.push(message(c.dossier.id, op, "IN", "ERROR", `Tờ ${no}/${c.of}: chưa khai chính thức tự động – ${text}`, at, { error: text }, no));
+  }
 }
 
 /** Thông quan mô phỏng: hỏi trạng thái định kỳ (IID/IEX) trả "Đã thông quan". */
@@ -370,7 +394,7 @@ function rejectionErrors(c: Ctx, op: CustomsOperation): CustomsError[] {
 }
 
 /** Gửi một nghiệp vụ: OUT ngay, IN sau LIVE_REPLY_MS; giai đoạn đổi khi IN đã đến. */
-function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number) {
+function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number, chain?: "declare" | "recall") {
   if (!c.result) {
     if (!c.decl) throw new ApiError("NOT_FOUND", "Chưa có tờ khai");
     const channel = channelFor(c.dossier, c.branch);
@@ -393,11 +417,11 @@ function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number) {
     // Hải quan (mô phỏng) từ chối khai tạm: nhật ký ghi lỗi, màn Review gắn lỗi vào đúng ô chỉ tiêu.
     const summary = `${CUSTOMS_OPERATIONS[op].label} bị từ chối: ${errors.map((e) => `${e.code} (${e.field}): ${e.message}`).join("; ")}`;
     db.customsMessages.push(message(c.dossier.id, op, "OUT", "OK", t.out, now, t.payload, c.branch), message(c.dossier.id, op, "IN", "ERROR", summary, doneAt, { errorList: errors }, c.branch));
-    c.flow.pending = { op, outcome: "ERROR", doneAt: new Date(doneAt).toISOString(), errors };
+    c.flow.pending = { op, outcome: "ERROR", doneAt: new Date(doneAt).toISOString(), errors, ...(chain ? { chain } : {}) };
     return;
   }
   db.customsMessages.push(message(c.dossier.id, op, "OUT", "OK", t.out, now, t.payload, c.branch), message(c.dossier.id, op, "IN", "OK", t.in, doneAt, { ...t.payload, ketQua: "Thành công" }, c.branch));
-  c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString() };
+  c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString(), ...(chain ? { chain } : {}) };
   if (isContentOperation(op) && op !== "AMA" && c.decl) {
     c.decl.status = "SUBMITTED";
     Object.assign(c.dossier, { status: "SUBMITTED", step: "submit", updatedAt: nowIso() });
@@ -416,7 +440,7 @@ function answerQuery(db: MockDb, c: Ctx, now: number): OperationResult {
   return { sent: false, message: `Trạng thái tờ khai: ${text}` };
 }
 
-function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: number, branch = 1): OperationResult {
+function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: number, branch = 1, chain?: "declare" | "recall"): OperationResult {
   settle(db, now);
   const c = load(db, dossierId, branch);
   if (op === queryOpFor(c.dossier.direction)) return answerQuery(db, c, now);
@@ -448,7 +472,7 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   }
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
-  send(db, c, op, now);
+  send(db, c, op, now, chain);
   return { sent: true, message: `Đã gửi ${op} – ${CUSTOMS_OPERATIONS[op].label.toLowerCase()}. Chờ Hải quan phản hồi.` };
 }
 
@@ -753,4 +777,24 @@ export const listCustomsDeclarations = () =>
       });
     const latest = (g: CustomsRow[]) => g.map((r) => r.updatedAt).sort().at(-1)!;
     return groups.sort((a, b) => latest(b).localeCompare(latest(a))).flat();
+  });
+
+/**
+ * Khai chính thức cả lô (như declareAllSheets của backend): IDC/IDE tờ đầu tiên đang khai tạm, các tờ sau nối tiếp khi tờ trước xong (apply → chainDeclare).
+ * Lô một tờ / còn nghiệp vụ đang chạy / còn tờ chờ gửi nội dung / không còn tờ chờ → lỗi như backend.
+ */
+export const declareAllSheets = (dossierId: string) =>
+  mutate((db): OperationResult => {
+    settle(db, Date.now());
+    const c = load(db, dossierId);
+    if (c.of <= 1) throw new ApiError("VALIDATION", "Khai chính thức cả lô chỉ dùng cho lô nhiều tờ");
+    const sheets = Array.from({ length: c.of }, (_, i) => ({ no: i + 1, stage: flowOf(db, dossierId, i + 1).stage }));
+    if (sheets.some((s) => flowOf(db, dossierId, s.no).pending)) throw new ApiError("INVALID_STATE", "Đang gửi nghiệp vụ khác – chờ xong rồi khai chính thức cả lô");
+    const waiting = sheets.find((s) => awaitingContent(s.stage));
+    if (waiting) throw reasonApiError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: Math.min(waiting.no + 1, c.of), waitFor: waiting.no });
+    const target = sheets.find((s) => declareOpFor(s.stage, c.dossier.direction));
+    if (!target) throw new ApiError("INVALID_STATE", "Không còn tờ nào chờ khai chính thức");
+    const unconfirmed = c.items.filter((i) => !i.hsConfirmed).length;
+    if (unconfirmed) throw reasonApiError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: unconfirmed });
+    return perform(db, dossierId, declareOpFor(target.stage, c.dossier.direction)!, Date.now(), target.no, "declare");
   });

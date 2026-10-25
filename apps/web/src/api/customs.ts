@@ -12,5 +12,6 @@ export const getSubmission = pick(mock.getSubmission, http.getSubmission);
 export const submitDeclaration = pick(mock.submitDeclaration, http.submitDeclaration);
 export const resendOperation = pick(mock.resendOperation, http.resendOperation);
 export const performOperation = pick(mock.performOperation, http.performOperation);
+export const declareAllSheets = pick(mock.declareAllSheets, http.declareAllSheets);
 export const startPostAmendment = pick(mock.startPostAmendment, http.startPostAmendment);
 export const listCustomsDeclarations = pick(mock.listCustomsDeclarations, http.listCustomsDeclarations);

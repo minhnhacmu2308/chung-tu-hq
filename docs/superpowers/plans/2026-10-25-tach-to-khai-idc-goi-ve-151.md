@@ -1,10 +1,10 @@
-# Tách tờ khai – khai chính thức cả lô, gọi về sửa theo phạm vi, 1.51 – Implementation Plan
+# Tách tờ khai – khai chính thức cả lô, gọi về sửa theo phạm vi – Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Lô nhiều tờ: khai chính thức (IDC/EDC, IDE/EDE) đúng thứ tự và có nút khai cả lô; gọi về sửa "tất cả" hoặc "một tờ" (khóa chỉ tiêu chung), tự về màn khai sửa; 1.51/2.42 = tổng trị giá mọi khoản của cả lô, giống nhau mọi tờ.
+**Goal:** Lô nhiều tờ: khai chính thức (IDC/EDC, IDE/EDE) đúng thứ tự và có nút khai cả lô; gọi về sửa "tất cả" hoặc "một tờ" (khóa chỉ tiêu chung), tự về màn khai sửa. 1.51/2.42 giữ như hiện nay (tổng trị giá hóa đơn cả lô) – không đổi code.
 
-**Architecture:** Quy tắc thuần ở `@kb/contracts` (thứ tự tờ, phạm vi sửa) dùng chung backend, web, mock. Chuỗi nối tiếp của worker (`chainNextBranch`) mở rộng cho chuỗi khai chính thức và chuỗi gọi về (đánh dấu `chain` trong payload outbox). Lưới an toàn: ảnh chụp nội dung đã gửi của từng tờ (`raw.sent`) + guard `sentSheetsError` chặn duyệt/truyền khi tờ chưa gọi về bị đổi. 1.51 tính ở module declaration (nơi có tỷ giá) và lưu thành chỉ tiêu `TK_TP`.
+**Architecture:** Quy tắc thuần ở `@kb/contracts` (thứ tự tờ, phạm vi sửa) dùng chung backend, web, mock. Chuỗi nối tiếp của worker (`chainNextBranch`) mở rộng cho chuỗi khai chính thức và chuỗi gọi về (đánh dấu `chain` trong payload outbox). Lưới an toàn: ảnh chụp nội dung đã gửi của từng tờ (`raw.sent`) + guard `sentSheetsError` chặn duyệt/truyền khi tờ chưa gọi về bị đổi.
 
 **Tech Stack:** TypeScript, pnpm monorepo, Zod, Decimal.js, Drizzle/Postgres, BullMQ, Next.js, vitest, @kb/ui.
 
@@ -17,56 +17,26 @@
 - Mọi chữ hiển thị mới có vi/en/zh qua `defineMessages` + `useMessages`; reason code mới thêm vào `apps/web/src/lib/reason-codes.messages.ts`.
 - Lô một tờ (`of = 1`): hành vi, thông điệp FPT, luồng gọi về/mở lại **giống hệt trước**.
 - Khóa idempotency: nhánh 1 giữ khóa cũ, nhánh ≥ 2 thêm `:b<no>` (giữ quy ước hiện có).
-- 1.51/2.42: làm tròn `ROUND_HALF_UP` 4 chữ số thập phân (đặc tả FPT: IDA `TK_TP` decimal 20.4, EDA 28.4), bỏ số 0 thừa.
+- 1.51/2.42 (`TK_TP`) **không đổi**: tổng trị giá hóa đơn cả lô (`invoiceTotal` trong `branchPayload`), giữ USER, KTG_VT = 1.51 – người dùng chốt lại 2026-10-25.
 - Commit kết thúc bằng `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Không `git add` `.claude/settings.json`, `.mcp.json`, `docs/danhmuc/`, `docs/tailieuchitieukhaibao/`.
 - Trước khi báo xong: `pnpm typecheck && pnpm lint && pnpm test` xanh; đổi giao diện → kiểm bằng trình duyệt thật (sáng + tối, desktop + mobile).
 
 ## Rulings so với spec (đã cân nhắc, ghi để reviewer biết)
 
 - **R-SENT-SHEETS-UNCHANGED là guard của integration, không phải luật validation**: luật validation chạy trên dữ liệu chứng từ (`s.items`), không thấy chỉ tiêu người khai sửa trên tờ khai. Guard `sentSheetsError` gọi ở duyệt (port của declaration) và ở mọi điểm gửi nội dung; reason code `SENT_SHEETS_CHANGED`. Hành vi người dùng như spec (chặn duyệt + truyền, liệt kê chỉ tiêu đổi).
-- **R-ALLOC-TOTAL-MISMATCH là cảnh báo của bản dựng FPT + ghi chú chỉ tiêu**, cùng lý do: `branchPayload` trả `warnings` → hiện ở cảnh báo truyền của tờ; Review hiện ghi chú dưới 1.51.
 - **Sửa chỉ tiêu chứng từ (extraction) khi `common = LOCKED`**: chỉ cho sửa ô thuộc dòng hàng (dòng thuộc tờ sửa được); ô header chứng từ từ chối. Không xác định được dòng của ô → từ chối (an toàn; lưới 2.5 vẫn chặn).
 
 ## Review Focus
 
-1. Gọi về tất cả mà một tờ đang có lệnh PENDING (vừa bấm IDC) → phải từ chối cả lần, không gửi tờ nào (Task 7 test).
-2. Chỉ gọi về tờ 2, người khai sửa số tiền một dòng tờ 2 → 1.51 đổi → duyệt bị chặn với "1.51" trong danh sách chỉ tiêu đổi (Task 5 test).
-3. Tờ 1 đã thông quan, tờ 2–3 PRE_DECLARED → "Khai chính thức tất cả" gửi tờ 2 rồi 3, không chờ tờ 1 (Task 3 test).
-4. Khoản phí bằng EUR trên hóa đơn USD, thiếu tỷ giá EUR → 1.51 trống, truyền bị chặn với thông báo nêu EUR (Task 1 test).
-5. Gọi về một tờ rồi bấm "Gọi về các tờ còn lại" khi tờ khai đang DRAFT → các tờ còn lại gọi về, phạm vi thành FULL, không tự "mở lại" lần nữa (Task 7 test).
+1. Gọi về tất cả mà một tờ đang có lệnh PENDING (vừa bấm IDC) → phải từ chối cả lần, không gửi tờ nào (Task 6 test).
+2. Chỉ gọi về tờ 2, người khai sửa số tiền một dòng tờ 2 → 1.51 đổi → duyệt bị chặn với "1.51" trong danh sách chỉ tiêu đổi (Task 4 test).
+3. Tờ 1 đã thông quan, tờ 2–3 PRE_DECLARED → "Khai chính thức tất cả" gửi tờ 2 rồi 3, không chờ tờ 1 (Task 2 test).
+4. Lô 120 dòng chỉ gọi về tờ 3, người khai xóa dòng 120 → dòng dịch, số tờ không đổi nhưng thêm/xóa dòng phải bị chặn ngay ở Review và ở API (Task 5 test: thêm/xóa dòng → lỗi).
+5. Gọi về một tờ rồi bấm "Gọi về các tờ còn lại" khi tờ khai đang DRAFT → các tờ còn lại gọi về, phạm vi thành FULL, không tự "mở lại" lần nữa (Task 6 test).
 
 ---
 
-### Task 1: 1.51 / 2.42 – tổng hệ số phân bổ của cả lô
-
-**Files:**
-- Modify: `packages/core/src/modules/declaration/domain/valuation.ts` (thêm hàm thuần)
-- Modify: `packages/core/src/modules/declaration/domain/mapping/ida.ts`, `.../mapping/eda.ts` (chỉ tiêu `TK_TP`)
-- Modify: `packages/core/src/modules/integration/domain/branches.ts` (`branchPayload` dùng `TK_TP` lưu sẵn, thêm `warnings`)
-- Modify: các nơi gọi `branchPayload` để nhận `warnings` (`branch-send.ts` `buildSheet`/`sheetOf`, `perform-operation.ts`)
-- Test: `packages/core/src/modules/declaration/domain/__tests__/money.test.ts` (hoặc file mới `alloc-total.test.ts` cùng thư mục), `packages/core/src/modules/integration/domain/__tests__/branches.test.ts`, `.../declaration/domain/__tests__/mapping.test.ts`
-
-**Interfaces:**
-- Produces: `allocationTotal(input: ValuationInput): { value: string | null; note: string; missingRates: string[] }` (`valuation.ts`).
-- Produces: `branchPayload(...)` trả thêm `warnings: string[]`.
-
-- [ ] **Step 1: Test thuần `allocationTotal`**
-  - Hóa đơn USD 1000 (2 dòng 600 + 400), cước 100 USD ADD, BH 10 USD ADD, khoản "G" 50 USD SUBTRACT → `value === "1060"`.
-  - Cước 100 EUR, rates `{ USD: "25000", EUR: "27500" }` → cước quy đổi 110 USD → `value === "1110"` với hóa đơn 1000 USD.
-  - Khoản 25000 VND, rates `{ USD: "25000" }`, hóa đơn 1000 USD → `value === "1001"`.
-  - Thiếu tỷ giá EUR → `value === null`, `missingRates` chứa `"EUR"`, `note` nêu "EUR".
-  - Kết quả lẻ: hóa đơn 1000 USD, cước 100 EUR, rates `{ USD: "3", EUR: "1" }` → `value === "1033.3333"`; kết quả chẵn không có số 0 thừa (`"1060"`, không phải `"1060.0000"`).
-  - Ưu tiên `Adjustment.rate` (tỷ giá đã dùng khi dựng) hơn `rates`.
-- [ ] **Step 2: Chạy** `pnpm --filter @kb/core test -- valuation` (hoặc tên file) → FAIL.
-- [ ] **Step 3: Viết `allocationTotal`** – Decimal; tỷ giá khoản = `a.rate ?? rateOf(rates, a.currency)`, tỷ giá hóa đơn = `rateOf(rates, currency)`; quy đổi `amount × rateKhoản / rateHĐ`; ADD cộng, SUBTRACT trừ; `toDecimalPlaces(4, ROUND_HALF_UP)`. `note`: "Hàng {x} + cước {y} + BH {z} ± điều chỉnh {w} {cur}, quy đổi theo tỷ giá tờ khai" (phần nào 0 thì bỏ).
-- [ ] **Step 4: Test mapping**: lô 120 dòng IDA → chỉ tiêu `TK_TP` có `value` = `allocationTotal`, `source: "SYSTEM"`, `no: "1.51"`, note diễn giải; lô 50 dòng → không có `TK_TP` (hoặc `value` null không điền). EDA lô 51 dòng → `TK_TP` `no: "2.42"`. Người khai đã sửa `TK_TP` (USER) → dựng lại giữ giá trị USER (theo cơ chế giữ USER hiện có của rebuild).
-- [ ] **Step 5: Thêm chỉ tiêu `TK_TP` vào mapping IDA/EDA**, mã chỉ tiêu `"TK_TP"` (trùng mã ô bổ sung hiện có trên layout `declaration-layout/ida.ts`/`eda.ts` – kiểm tra `extraFields`/`RULES` trong `contracts/src/declaration-layout/app-fields.ts` không bị hai định nghĩa; nếu `TK_TP` đang là ô bổ sung thì mapping ghi đè giá trị SYSTEM, ô vẫn sửa được). Chỉ điền khi `branchCount(items.length) > 1`.
-- [ ] **Step 6: Test `branchPayload`** (`branches.test.ts`): payload of > 1 có `fields.TK_TP = { value: "1110" }` → mọi tờ `TK_TP.value === "1110"`; không có `TK_TP` → `blockers` chứa "1.51"; `TK_TP` USER khác giá trị tính → giữ USER + `warnings` chứa "1.51" và giá trị tính (giá trị tính lấy từ `fields.TK_TP_CALC` nếu mapping lưu, hoặc bỏ qua cảnh báo nếu không có – xem step 7); KTG_VT ô 5 vẫn = TK_TP (test sẵn có còn xanh).
-- [ ] **Step 7: Sửa `branchPayload`**: bỏ tự tính `invoiceTotal`; `TK_TP` rỗng → blocker "1.51 (Tổng hệ số phân bổ trị giá) chưa có giá trị – kiểm tra tỷ giá các khoản phí rồi dựng lại tờ khai". Cảnh báo USER-khác-tính: mapping lưu thêm giá trị tính vào trường ẩn `TK_TP_CALC` (không lên FPT, không hiện trên form) khi giá trị hiển thị là USER; `branchPayload` so sánh và thêm warning "1.51 người khai nhập {u} khác giá trị tính {c}". Giữ export `invoiceTotal` nếu nơi khác còn dùng, không thì xóa.
-- [ ] **Step 8: Chạy** `pnpm --filter @kb/core test` → PASS; `pnpm --filter @kb/contracts test` → PASS.
-- [ ] **Step 9: Commit** `feat(declaration): 1.51/2.42 tổng hệ số phân bổ = hàng + cước + BH ± điều chỉnh cả lô (quy đổi nguyên tệ hóa đơn)`.
-
-### Task 2: Thứ tự khai chính thức (IDC/EDC, IDE/EDE)
+### Task 1: Thứ tự khai chính thức (IDC/EDC, IDE/EDE)
 
 **Files:**
 - Modify: `packages/contracts/src/customs-summary.ts` (doc + helper), `packages/contracts/src/reason-codes.ts`
@@ -93,7 +63,7 @@
 - [ ] **Step 7: Chạy** `pnpm --filter @kb/contracts test`, `pnpm --filter @kb/core test`, `pnpm --filter @kb/web test` → PASS.
 - [ ] **Step 8: Commit** `feat(integration): khai chính thức tờ k chờ mọi tờ trước khai tạm xong (SHEET_ORDER_DECLARE)`.
 
-### Task 3: Khai chính thức cả lô (backend + mock)
+### Task 2: Khai chính thức cả lô (backend + mock)
 
 **Files:**
 - Create: `packages/core/src/modules/integration/application/declare-all.ts`
@@ -122,14 +92,14 @@
 - [ ] **Step 6: Chạy** core + web test → PASS.
 - [ ] **Step 7: Commit** `feat(integration): khai chính thức cả lô – nối tiếp IDC/IDE tờ 1 → N`.
 
-### Task 4: Web – nút "Khai chính thức tất cả"
+### Task 3: Web – nút "Khai chính thức tất cả"
 
 **Files:**
 - Modify: `apps/web/src/features/dossier-detail/steps/submit-step.tsx`, `submit-step.messages.ts`, `branch-sheets.ts`
 - Test: `apps/web/src/features/dossier-detail/steps/submit-step-sheets.test.tsx`, `branch-sheets.test.ts`
 
 **Interfaces:**
-- Consumes: route `POST /api/dossiers/[id]/submission/declare-all` (Task 3).
+- Consumes: route `POST /api/dossiers/[id]/submission/declare-all` (Task 2).
 - Produces: `canDeclareAll(sheets: BranchSubmission[]): { ok: boolean; pending: number }` trong `branch-sheets.ts` (cùng điều kiện spec 1.2: không tờ `awaitingContent`, ≥ 1 tờ PRE_DECLARED/AMEND_PRE_DECLARED, không tờ SENDING).
 
 - [ ] **Step 1: Test**: lô 3 tờ PRE_DECLARED → nút "Khai chính thức tất cả (3 tờ)" hiện; bấm → hộp xác nhận → xác nhận gọi đúng route; tờ 1 RECALLED → nút ẩn; lô một tờ → nút ẩn; axe không lỗi.
@@ -138,7 +108,7 @@
 - [ ] **Step 4: Chạy** `pnpm --filter @kb/web test` → PASS.
 - [ ] **Step 5: Commit** `feat(web): nút khai chính thức tất cả tờ`.
 
-### Task 5: Ảnh chụp nội dung đã gửi + guard tờ chưa gọi về không được đổi
+### Task 4: Ảnh chụp nội dung đã gửi + guard tờ chưa gọi về không được đổi
 
 **Files:**
 - Modify: `packages/core/src/modules/integration/domain/branches.ts` (hàm thuần)
@@ -149,7 +119,7 @@
 
 **Interfaces:**
 - Produces: `type SentSnapshot = { common: Record<string, string>; lines: string }`.
-- Produces: `sheetSnapshot(p: DeclarationPayload, no: number): SentSnapshot` – `common`: mọi `fields` trừ `TK_FIC`, `TK_BNO`, `TK_TP_CALC` và mã bắt đầu `HANG.`; cộng khóa `@ADJ` (JSON ổn định của `adjustments`), `@CONT` (containers), `@CUR` (currency). `lines`: JSON ổn định của các dòng thuộc tờ (đủ thuộc tính item) + các `fields` `HANG.<id>.*` của dòng đó.
+- Produces: `sheetSnapshot(p: DeclarationPayload, no: number): SentSnapshot` – `common`: mọi `fields` trừ `TK_FIC`, `TK_BNO` và mã bắt đầu `HANG.`; cộng khóa `@ADJ` (JSON ổn định của `adjustments`), `@CONT` (containers), `@CUR` (currency). `lines`: JSON ổn định của các dòng thuộc tờ (đủ thuộc tính item) + các `fields` `HANG.<id>.*` của dòng đó.
 - Produces: `sentSheetsDiff(p: DeclarationPayload, sheets: { no: number; stage: CustomsStage; declarationNo: string | null; sent: SentSnapshot | null }[]): { no: number; common: string[]; lines: boolean }[]` – chỉ tờ còn hiệu lực (có số, không `recallExempt`, không `awaitingContent`) có `sent`; `common` = mã chỉ tiêu khác nhau.
 - Produces: `sentSheetsError(p, sheets): DomainError | null` – reason code `SENT_SHEETS_CHANGED` params `{ sheets: "2, 3", fields: "1.51, …" }` (số chỉ tiêu nếu tra được từ catalog, không thì mã).
 - Produces: port `declaration.sentSheetsGuard?: (orgId: string, dossierId: string) => Promise<DomainError | null>`.
@@ -169,7 +139,7 @@
 - [ ] **Step 7: Chạy** `pnpm --filter @kb/core test`, `pnpm --filter @kb/web test` → PASS.
 - [ ] **Step 8: Commit** `feat(integration): ảnh chụp nội dung đã gửi từng tờ – chặn duyệt/truyền khi tờ chưa gọi về bị đổi (thay R3)`.
 
-### Task 6: Phạm vi sửa tờ khai theo tờ đã gọi về
+### Task 5: Phạm vi sửa tờ khai theo tờ đã gọi về
 
 **Files:**
 - Modify: `packages/contracts/src/declaration-layout/app-fields.ts` (+ export `index.ts`)
@@ -213,7 +183,7 @@
 - [ ] **Step 6: Chạy** contracts + core + web test → PASS.
 - [ ] **Step 7: Commit** `feat(declaration): phạm vi sửa theo tờ đã gọi về – khóa chỉ tiêu chung khi chỉ gọi về một phần`.
 
-### Task 7: Gọi về tất cả + tự mở lại khi xong
+### Task 6: Gọi về tất cả + tự mở lại khi xong
 
 **Files:**
 - Create: `packages/core/src/modules/integration/application/recall-all.ts`
@@ -225,7 +195,7 @@
 **Interfaces:**
 - Produces: `recallAllSheets(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<OperationResult & { sheets: number[] }>>`.
 - Produces: `recallOpFor(row availability)` – chọn nghiệp vụ gọi về đang `enabled` trong `operationAvailability` của tờ (IDB/EDB hoặc IDD/EDD).
-- Consumes: `chain` opts của `performOperation` (Task 3).
+- Consumes: `chain` opts của `performOperation` (Task 2).
 
 - [ ] **Step 1: Test**:
   - tờ 1 PRE_DECLARED, tờ 2 DECLARED, tờ 3 CLEARED → `recallAllSheets` tạo IDB tờ 1 (`chain: "recall"`), trả `sheets [1, 2]`; tờ 1 SENT → IDD tờ 2; tờ 2 SENT → hết chuỗi.
@@ -241,7 +211,7 @@
 - [ ] **Step 5: Chạy** core + web test → PASS.
 - [ ] **Step 6: Commit** `feat(integration): gọi về tất cả tờ (IDB/IDD theo giai đoạn, nối tiếp) – tự mở lại khi lệnh cuối xong`.
 
-### Task 8: Web – hộp gọi về hai lựa chọn, tiến độ, tự về Review
+### Task 7: Web – hộp gọi về hai lựa chọn, tiến độ, tự về Review
 
 **Files:**
 - Modify: `apps/web/src/features/dossier-detail/steps/submit-step.tsx`, `submit-step.messages.ts`, `branch-sheets.ts`
@@ -249,7 +219,7 @@
 - Test: `submit-step-sheets.test.tsx`, `branch-sheets.test.ts`
 
 **Interfaces:**
-- Consumes: `POST /submission/recall-all` (Task 7), `POST /submission/operations` (gọi về một tờ).
+- Consumes: `POST /submission/recall-all` (Task 6), `POST /submission/operations` (gọi về một tờ).
 - Produces: `recallProgress(sheets: BranchSubmission[]): { done: number; total: number } | null` (đang có chuỗi gọi về: tờ có lệnh gọi về WAITING/SENDING).
 
 - [ ] **Step 1: Test**: lô 3 tờ, bấm IDB tờ 2 → hộp có 2 lựa chọn (RadioGroup `@kb/ui`), mặc định "Gọi về tất cả tờ"; xác nhận mặc định → gọi `recall-all`; chọn "Chỉ gọi về tờ 2" → gọi `operations` `{ operation: "IDB", branch: 2 }`; lô một tờ → hộp cũ (không radio); khi đang gọi về hiện "Đang gọi về 1/2 tờ"; hồ sơ chuyển `review` → điều hướng sang Review và hiện thông báo đúng kiểu (tất cả / tờ 2); axe sạch.
@@ -258,14 +228,14 @@
 - [ ] **Step 4: Chạy** `pnpm --filter @kb/web test` → PASS.
 - [ ] **Step 5: Commit** `feat(web): gọi về tất cả / một tờ, tiến độ gọi về, tự về bước Review`.
 
-### Task 9: Web – bước Review theo phạm vi sửa
+### Task 8: Web – bước Review theo phạm vi sửa
 
 **Files:**
 - Modify: `apps/web/src/features/dossier-detail/steps/review-step.tsx`, `review-step.messages.ts`, `apps/web/src/features/declaration-form/dossier-declaration-form.tsx`, bảng dòng hàng của bước Review (nơi sửa dòng/HS), khu chi phí/khoản điều chỉnh
 - Test: test của review-step / declaration-form tương ứng (tạo `review-step-scope.test.tsx` nếu chưa có)
 
 **Interfaces:**
-- Consumes: `declarationEditScope`, `editBlockFor` (Task 6), `SubmissionView.branches[].sentChanges` (Task 5), `recall-all` (Task 7).
+- Consumes: `declarationEditScope`, `editBlockFor` (Task 5), `SubmissionView.branches[].sentChanges` (Task 4), `recall-all` (Task 6).
 
 - [ ] **Step 1: Test** (chỉ tờ 2 RECALLED, DRAFT): form chỉ tiêu chung chỉ đọc; banner "Thông tin chung: tờ 1, 3 chưa gọi về…" có nút "Gọi về các tờ còn lại để sửa thông tin chung" → gọi `recall-all`; dòng tờ 1/3 chỉ đọc kèm nhãn "Tờ n – chưa gọi về", dòng tờ 2 sửa được; không có nút thêm/xóa dòng; `sentChanges` tờ 1 `common: ["TK_TP"]` → cảnh báo "1.51 đã đổi so với tờ đã khai – phải gọi về tất cả tờ"; mọi tờ RECALLED → form đầy đủ như cũ; axe sạch.
 - [ ] **Step 2: Chạy** → FAIL.
@@ -273,12 +243,12 @@
 - [ ] **Step 4: Chạy** `pnpm --filter @kb/web test`, `pnpm lint` → PASS.
 - [ ] **Step 5: Commit** `feat(web): bước Review khóa chỉ tiêu chung và dòng tờ chưa gọi về`.
 
-### Task 10: Tài liệu, kiểm trình duyệt, cổng chất lượng
+### Task 9: Tài liệu, kiểm trình duyệt, cổng chất lượng
 
 **Files:**
 - Modify: `docs/QUY-TRINH-NGHIEP-VU.md` §9.3, `docs/PRODUCT.md`
 
-- [ ] **Step 1:** Cập nhật §9.3: thứ tự khai chính thức (D2), khai chính thức cả lô, gọi về tất cả/một tờ + phạm vi sửa, tự mở lại, guard `SENT_SHEETS_CHANGED` (thay R3), công thức 1.51. `PRODUCT.md`: mô tả ngắn hai nút mới.
+- [ ] **Step 1:** Cập nhật §9.3: thứ tự khai chính thức (D2), khai chính thức cả lô, gọi về tất cả/một tờ + phạm vi sửa, tự mở lại, guard `SENT_SHEETS_CHANGED` (thay R3); 1.51 ghi rõ = tổng trị giá hóa đơn cả lô. `PRODUCT.md`: mô tả ngắn hai nút mới.
 - [ ] **Step 2:** `pnpm typecheck && pnpm lint && pnpm test` → xanh (chạy từng package nếu thiếu bộ nhớ: `pnpm --filter <pkg> test`).
 - [ ] **Step 3:** Build + chạy web chế độ mock, trên `dos_028`: truyền 3 tờ → "Khai chính thức tất cả" → gọi về một tờ → Review khóa đúng → sửa dòng tờ đó → duyệt → truyền chỉ tờ đó; gọi về tất cả → Review đầy đủ; kiểm 1.51 trên bản in/xem trước các tờ bằng nhau. Chụp sáng + tối, desktop + mobile.
-- [ ] **Step 4: Commit** `docs: quy trình tách tờ khai – khai chính thức cả lô, gọi về theo phạm vi, 1.51`.
+- [ ] **Step 4: Commit** `docs: quy trình tách tờ khai – khai chính thức cả lô, gọi về theo phạm vi`.

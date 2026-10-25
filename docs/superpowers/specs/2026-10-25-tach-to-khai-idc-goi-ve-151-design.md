@@ -1,4 +1,4 @@
-# Tách tờ khai – khai chính thức cả lô, gọi về sửa theo phạm vi, 1.51 tổng hệ số phân bổ
+# Tách tờ khai – khai chính thức cả lô, gọi về sửa theo phạm vi
 
 Bổ sung cho `2026-10-24-tach-to-khai-50-dong-design.md` (lô > 50 dòng, các tờ khai nhánh). Nhánh: `feat/tach-to-khai-50-dong`.
 
@@ -10,8 +10,7 @@ Bổ sung cho `2026-10-24-tach-to-khai-50-dong-design.md` (lô > 50 dòng, các 
 | D2 | Điều kiện khai chính thức tờ k | Mọi tờ trước tờ k **đã khai tạm xong, đang chờ khai chính thức** (hoặc đã qua bước đó). Không bắt tờ trước đã IDC. |
 | D3 | Gọi về sửa (IDB/EDB, IDD/EDD) | Gọi về xong → **tự về màn hình khai sửa**. Sửa thông tin chung → phải gọi về **tất cả** tờ cùng lúc. |
 | D4 | Gọi về một tờ | **Có**: chỉ gọi về tờ k thì **khóa toàn bộ chỉ tiêu chung**, chỉ sửa thông tin dòng hàng của tờ đã gọi về. |
-| D5 | 1.51 / 2.42 | = tổng trị giá mọi loại phí trên tờ khai của cả lô: hàng hóa + bảo hiểm + vận chuyển + khoản điều chỉnh cộng − khoản điều chỉnh trừ; **giống hệt trên mọi tờ** để Hải quan phân bổ phí cho từng tờ. Căn cứ: nghiệp vụ người dùng xác nhận 2026-10-25. |
-| D6 | Tiền tệ khác hóa đơn | Quy đổi về nguyên tệ hóa đơn theo tỷ giá trên tờ khai rồi cộng. |
+| D5 | 1.51 / 2.42 | = **tổng trị giá hóa đơn** của cả lô, giống hệt trên mọi tờ; không cộng cước, bảo hiểm, khoản điều chỉnh (người dùng chốt lại 2026-10-25 – giữ cách tính hiện có). |
 
 Thuật ngữ trong tài liệu này:
 - **Tờ còn hiệu lực ở Hải quan**: tờ có số tờ khai, không miễn (không CLEARED / POST_* / REJECTED – `recallExempt`), không đang chờ gửi nội dung (`awaitingContent` = NOT_SENT / RECALLED / AMEND_RECALLED).
@@ -84,29 +83,22 @@ Guard ở 2.4 có thể sót một đường sửa (vd dựng lại tự động
 - Khi Hải quan nhận nội dung một tờ (IDA/IDA01/EDA/EDA01 thành công), lưu vào kết quả tờ (`raw.sent`): ảnh chụp chỉ tiêu chung đã gửi (chỉ tiêu của `branchPayload` trừ TK_FIC/TK_BNO, cộng khoản điều chỉnh, container, tiền tệ) và dấu vân tay các dòng hàng của tờ (lineNo + mọi giá trị gửi đi).
 - Luật mới **R-SENT-SHEETS-UNCHANGED** (BLOCKER, lô nhiều tờ): với mỗi tờ còn hiệu lực, chỉ tiêu chung hiện tại phải bằng ảnh chụp đã gửi **và** dòng hàng hiện tại của tờ phải trùng dấu vân tay. Lệch → FAIL, liệt kê chỉ tiêu chung đã đổi (mã + số chỉ tiêu) hoặc "dòng hàng tờ n đã đổi", hướng dẫn "gọi về tờ {list} hoặc hoàn tác".
 - Luật chặn duyệt và truyền (bất biến 7). Tờ chưa từng gửi (không có `raw.sent`) bỏ qua.
-- Hệ quả cần nêu cho người khai: 1.51 (mục 3) là chỉ tiêu chung tính từ trị giá cả lô → sửa trị giá/số lượng dòng làm đổi tổng trị giá sẽ đổi 1.51 → luật FAIL, phải gọi về tất cả. Form Review ở chế độ gọi về một tờ hiện cảnh báo ngay khi 1.51 tính lại khác giá trị đã khai.
+- Hệ quả cần nêu cho người khai: 1.51 (mục 3) là chỉ tiêu chung = tổng trị giá hóa đơn cả lô → sửa trị giá dòng làm đổi tổng trị giá hóa đơn sẽ đổi 1.51 → luật FAIL, phải gọi về tất cả. Form Review ở chế độ gọi về một tờ hiện cảnh báo ngay khi 1.51 tính lại khác giá trị đã khai.
 
 ### 2.6 Truyền lại sau khi sửa
 - Thay quyết định R3 (bắt gọi về mọi tờ đã có số trước khi mở lại / truyền lại): cho phép gọi về một phần; tính đúng đắn do 2.4 + 2.5 bảo đảm. `recallFirstError` bỏ khỏi `reopenDeclaration`, còn ở `performOperation`/`submitDeclaration` thì thay bằng kết quả luật R-SENT-SHEETS-UNCHANGED.
 - Duyệt lại một lần, bấm truyền một lần: chuỗi hiện có gửi lần lượt các tờ `awaitingContent` (RECALLED → IDA/EDA, AMEND_RECALLED → IDA01/EDA01) theo thứ tự tờ; tờ còn hiệu lực giữ nguyên, không gửi.
 - TK_FIC tờ ≥ 2 vẫn là số tờ khai tờ 1 (kể cả khi chỉ gọi về tờ 2).
 
-## 3. Chỉ tiêu 1.51 / 2.42 – Tổng hệ số phân bổ trị giá (D5, D6)
+## 3. Chỉ tiêu 1.51 / 2.42 – Tổng hệ số phân bổ trị giá (D5)
 
-- Chỉ áp dụng lô nhiều tờ (`of > 1`); lô một tờ để trống như hiện nay.
-- Công thức (Decimal, nguyên tệ hóa đơn):
-  `1.51 = Σ trị giá dòng hàng cả lô + Σ_k (± số tiền khoản k × tỷ giá(tiền khoản k) / tỷ giá(tiền hóa đơn))`
-  với khoản k là mọi khoản trên tờ khai: cước vận chuyển, phí bảo hiểm, khoản điều chỉnh 1.49 (AD cộng, SB trừ) – cùng danh sách khoản mà `allocateCustomsValue` dùng. Tỷ giá: tỷ giá đã dùng khi dựng (`Adjustment.rate`), không có thì bảng tỷ giá của tờ khai. Làm tròn ROUND_HALF_UP về số chữ số thập phân FPT cho phép ở TK_TP (kế hoạch tra đặc tả trường; mặc định 4), bỏ số 0 thừa.
-- Tính **một lần ở module declaration** khi dựng tờ khai (nơi có tỷ giá), lưu thành chỉ tiêu `TK_TP` nguồn SYSTEM kèm ghi chú diễn giải ("Hàng … + cước … + BH … ± điều chỉnh …, quy đổi theo tỷ giá …"). Mọi tờ đọc cùng giá trị → giống hệt nhau.
-- Thiếu tỷ giá của một khoản → không tính, BLOCKER "1.51: chưa có tỷ giá {tiền} của khoản {tên}".
-- Người khai sửa tay (USER) → giữ giá trị người khai; luật mới **R-ALLOC-TOTAL-MISMATCH** (WARNING): giá trị USER khác giá trị tính.
-- `branchPayload` dùng `TK_TP` lưu trên tờ khai; không còn tự tính bằng `invoiceTotal` (tờ khai cũ chưa có `TK_TP` → BLOCKER "dựng lại tờ khai để tính 1.51"). 1.49 ô 5 `KTG_VT` = 1.51 như cũ.
-- Áp dụng cả EDA 2.42 (cùng công thức; tờ khai xuất thường không có khoản điều chỉnh → bằng tổng trị giá hàng).
+- **Giữ như hiện nay, không đổi code**: lô nhiều tờ, 1.51/2.42 (`TK_TP`) = tổng trị giá hóa đơn của cả lô (cộng trị giá các dòng hàng, `invoiceTotal`), không cộng cước, bảo hiểm hay khoản điều chỉnh; giống hệt trên mọi tờ; người khai sửa tay (USER) thì giữ; 1.49 ô 5 `KTG_VT` = 1.51; lô một tờ để trống.
+- Liên quan mục 2.5: 1.51 là chỉ tiêu chung tính từ trị giá cả lô → sửa trị giá dòng hàng làm đổi tổng trị giá hóa đơn sẽ đổi 1.51.
 
 ## 4. Ba ngôn ngữ, tài liệu, mock
-- Mọi chữ mới (nút, hộp xác nhận, banner, "Đang gọi về k/n tờ", reason code `SHEET_ORDER_DECLARE`, câu `SHEET_ORDER` sửa, hai luật mới) có vi/en/zh.
+- Mọi chữ mới (nút, hộp xác nhận, banner, "Đang gọi về k/n tờ", reason code `SHEET_ORDER_DECLARE`, câu `SHEET_ORDER` sửa, guard nội dung đã gửi) có vi/en/zh.
 - Mock (`mocks/customs-sim.ts`, `mocks/api/*`) chạy cùng quy tắc (dùng hàm contracts chung): chuỗi khai chính thức, gọi về tất cả, tự mở lại, phạm vi sửa.
-- Cập nhật `docs/QUY-TRINH-NGHIEP-VU.md` §9.3 (thứ tự IDC, gọi về theo phạm vi, 1.51, hai luật mới) và `docs/PRODUCT.md`.
+- Cập nhật `docs/QUY-TRINH-NGHIEP-VU.md` §9.3 (thứ tự IDC, gọi về theo phạm vi, guard nội dung đã gửi) và `docs/PRODUCT.md`.
 
 ## 5. Kiểm thử
 - Contracts (thuần): `sheetOrderWait` cho IDC/IDE (tờ trước NOT_SENT/RECALLED/AMEND_RECALLED chờ; PRE_DECLARED/DECLARED/CLEARED/REJECTED không chờ); `declarationEditScope` đủ ma trận (lô 1 tờ = như cũ; gọi về tờ 2/3; gọi về tất cả; trộn RECALLED + AMEND_RECALLED; tờ 1 đã thông quan).
@@ -117,7 +109,7 @@ Guard ở 2.4 có thể sót một đường sửa (vd dựng lại tự động
   - Tự mở lại sau lệnh gọi về cuối cùng; không mở lại khi còn lệnh đang chờ.
   - Guard sửa: sửa chỉ tiêu chung khi chỉ gọi về tờ 2 → từ chối; sửa ô dòng tờ 2 → được; sửa ô dòng tờ 1 → từ chối; thêm/xóa dòng → từ chối; saveValueCharges → từ chối.
   - R-SENT-SHEETS-UNCHANGED: đổi chỉ tiêu chung/dòng tờ còn hiệu lực qua đường không có guard → FAIL, chặn truyền; đổi trị giá dòng tờ 2 làm đổi 1.51 → FAIL.
-  - 1.51: hàng + cước + BH + AD − SB, khác tiền tệ quy đổi đúng; thiếu tỷ giá → BLOCKER; USER giữ + WARNING; mọi tờ cùng giá trị; KTG_VT = 1.51; lô 1 tờ không điền.
+  - 1.51: không đổi – test hiện có (tổng trị giá hóa đơn cả lô, giữ USER, KTG_VT = 1.51, lô 1 tờ không điền) phải còn xanh.
   - Lô một tờ: thông điệp FPT và luồng gọi về/mở lại giống hệt trước.
 - Web: hộp gọi về hai lựa chọn; chuyển về Review sau gọi về; form khóa chỉ tiêu chung + dòng tờ khóa; nút "Khai chính thức tất cả"; "Chờ tờ j" ở IDC; axe a11y. Kiểm bằng trình duyệt thật trên `dos_028` (sáng + tối, desktop + mobile).
 - Integration (testcontainers): cột/JSON `raw.sent` lưu và đọc đúng theo nhánh.

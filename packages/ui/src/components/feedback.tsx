@@ -228,11 +228,14 @@ export function Alert({ tone = "info", title, children, action, className }: Ale
       className={cn("flex items-start gap-3 rounded-md border px-4 py-3 text-sm", ALERT_TONE[tone], className)}
     >
       <Icon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        {title && <p className="font-semibold">{title}</p>}
-        {children && <div>{children}</div>}
+      {/* Nội dung + action một hàng xuống dòng được: khung hẹp (mobile) thì action xuống dưới nội dung thay vì ép chữ thành cột hẹp. */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-60 flex-col gap-0.5">
+          {title && <p className="font-semibold">{title}</p>}
+          {children && <div>{children}</div>}
+        </div>
+        {action}
       </div>
-      {action}
     </div>
   );
 }

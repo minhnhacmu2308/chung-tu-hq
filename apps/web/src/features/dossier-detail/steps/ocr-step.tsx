@@ -19,6 +19,7 @@ import { DocumentSheetsCard } from "../ocr/document-sheets";
 import { FieldRow, fieldDomId } from "../ocr/field-row";
 import { ItemsTable } from "../ocr/items-table";
 import { useFieldMutations } from "../ocr/use-field-mutations";
+import { ValueChargesCard } from "../ocr/value-charges-card";
 import { useAdvanceDossier } from "../use-advance";
 import type { StepProps } from "./types";
 import { OCR_STEP_MESSAGES } from "./ocr-step.messages";
@@ -218,6 +219,8 @@ export function OcrStep({ dossier, goTo }: StepProps) {
           )}
         </CardContent>
       </Card>
+
+      <ValueChargesCard dossierId={dossier.id} currency={dossier.currency} />
 
       <DocumentSheetsCard dossierId={dossier.id} dossierCode={dossier.code} />
 

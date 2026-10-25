@@ -14,6 +14,7 @@ export const CUSTOMS_PAGE_MESSAGES = defineMessages({
     openSubmit: "Mở bước khai báo", openDossier: "Mở hồ sơ", updatedAgo: "Cập nhật {time}",
     tableLabel: "Tờ khai Hải quan", emptyTitle: "Chưa có tờ khai nào được phê duyệt",
     emptyDescription: "Tờ khai xuất hiện ở đây sau khi Người duyệt phê duyệt ở bước Review tờ khai.", viewDossiers: "Xem hồ sơ",
+    colSheet: "Tờ", rowLabelSheet: "{code} · tờ {no}/{of}",
   },
   en: {
     colDossier: "Dossier", colType: "Declaration type", colLastOp: "Latest operation", colDeclNo: "Declaration no.", notIssued: "Not issued",
@@ -28,6 +29,7 @@ export const CUSTOMS_PAGE_MESSAGES = defineMessages({
     openSubmit: "Open filing step", openDossier: "Open dossier", updatedAgo: "Updated {time}",
     tableLabel: "Customs declarations", emptyTitle: "No approved declarations yet",
     emptyDescription: "Declarations appear here after the Approver approves them in the Review declaration step.", viewDossiers: "View dossiers",
+    colSheet: "Sheet", rowLabelSheet: "{code} · sheet {no}/{of}",
   },
   zh: {
     colDossier: "档案", colType: "申报类型", colLastOp: "最近业务", colDeclNo: "报关单号", notIssued: "未签发",
@@ -42,5 +44,6 @@ export const CUSTOMS_PAGE_MESSAGES = defineMessages({
     openSubmit: "打开申报步骤", openDossier: "打开档案", updatedAgo: "更新于 {time}",
     tableLabel: "海关报关单", emptyTitle: "暂无已批准的报关单",
     emptyDescription: "审批人在“审核报关单”步骤批准后，报关单将显示在此处。", viewDossiers: "查看档案",
+    colSheet: "分单", rowLabelSheet: "{code} · 第 {no}/{of} 份",
   },
 });

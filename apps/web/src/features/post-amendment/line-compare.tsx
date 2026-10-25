@@ -50,7 +50,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
     mutationFn: async () => {
       // Gửi giá trị người khai nhập ("" = bỏ sửa tay) – máy chủ tự tính lại như ở đây.
       const saves = lineSaves(edits, a.lines.map((l) => l.id));
-      for (const { lineId, key, value } of saves) await updatePostAmendmentField(ctx.dossierId, { lineId, key, value });
+      for (const { lineId, key, value } of saves) await updatePostAmendmentField(ctx.dossierId, { lineId, key, value }, ctx.branch);
       // Chờ dữ liệu mới về rồi mới bỏ nháp – không thì ô vừa lưu chớp về giá trị cũ một nhịp.
       await qc.refetchQueries({ queryKey: postAmendmentKeys.view(ctx.dossierId) });
       return saves.length;
@@ -63,7 +63,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
     onSettled: ctx.refresh,
   });
   const remove = useMutation({
-    mutationFn: (lineId: string) => removePostAmendmentLine(ctx.dossierId, lineId),
+    mutationFn: (lineId: string) => removePostAmendmentLine(ctx.dossierId, lineId, ctx.branch),
     onSuccess: (_d, lineId) => {
       setEdits(({ [lineId]: _, ...rest }) => rest);
       toast({ tone: "success", title: t.removed });

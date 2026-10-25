@@ -139,6 +139,7 @@
       "id": "TYPE_CODE",
       "title": "Mã loại hình",
       "sources": [
+        "1357_QD-TCHQ-MA_LOAI_HINH",
         "Bang ma loai hinh XNK - QD 1357-TCHQ"
       ],
       "parentLabel": "Nhập / xuất",
@@ -367,6 +368,56 @@
       "hasParent": false
     },
     {
+      "id": "GROSS_UNIT",
+      "title": "Đơn vị tính trọng lượng (Gross)",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 3,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "INSPECTION_RESULT",
+      "title": "Mã kết quả kiểm tra nội dung",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 3,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "BP_REASON",
+      "title": "Mã lý do đề nghị giải phóng hàng (bảo lãnh)",
+      "sources": [
+        "29.DM_GANCODE"
+      ],
+      "count": 3,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "IMPORT_TAX_RATE_KIND",
+      "title": "Mã thuế suất thuế nhập khẩu",
+      "sources": [
+        "27.MathuesuatthueNK_HQTV"
+      ],
+      "count": 7,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "TAX_KIND",
+      "title": "Mã sắc thuế",
+      "sources": [
+        "28.Sacthue_ma_mien_giam_HQTV"
+      ],
+      "count": 11,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
       "id": "AIRLINE",
       "title": "Hãng hàng không",
       "sources": [
@@ -429,28 +480,6 @@
       ],
       "unassigned": true,
       "count": 9,
-      "inactive": 0,
-      "hasParent": false
-    },
-    {
-      "id": "IMPORT_TAX_RATE_KIND",
-      "title": "Mã thuế suất thuế nhập khẩu",
-      "sources": [
-        "27.MathuesuatthueNK_HQTV"
-      ],
-      "unassigned": true,
-      "count": 7,
-      "inactive": 0,
-      "hasParent": false
-    },
-    {
-      "id": "TAX_KIND",
-      "title": "Mã sắc thuế",
-      "sources": [
-        "28.Sacthue_ma_mien_giam_HQTV"
-      ],
-      "unassigned": true,
-      "count": 11,
       "inactive": 0,
       "hasParent": false
     }

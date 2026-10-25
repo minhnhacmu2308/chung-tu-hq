@@ -1,11 +1,11 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProductRow, ProfileRow } from "../ports.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProductRow, ProfileRow, ValueChargesRow } from "../ports.js";
 
 /** Fake mô phỏng RLS theo org; catalog_hs/exchange_rates là bảng chung (mọi org đọc). */
 export class InMemoryDeclarationUow implements DeclarationUow {
   readonly data = {
     lineItems: [] as LineItemRow[], hsJobs: [] as HsJobRow[], suggestions: [] as HsSuggestionRow[], declarations: [] as DeclarationRow[], agentRuns: [] as AgentRunRow[],
-    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string; source?: "VCB" | "MANUAL" | "SEED"; snapshotAt?: Date | null }[], profiles: [] as ProfileRow[], products: [] as ProductRow[],
+    catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string; source?: "VCB" | "MANUAL" | "SEED"; snapshotAt?: Date | null }[], profiles: [] as ProfileRow[], products: [] as ProductRow[], valueCharges: [] as ValueChargesRow[],
   };
 
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: DeclarationRepos) => Promise<T>): Promise<T> {
@@ -127,6 +127,13 @@ export class InMemoryDeclarationUow implements DeclarationUow {
           const before = d.products.length;
           d.products = d.products.filter((x) => !(x.orgId === org && x.orgId === orgId && ids.includes(x.id)));
           return before - d.products.length;
+          },
+        },
+      valueCharges: {
+        get: async (orgId, dossierId) => clone(d.valueCharges.find((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId) ?? null),
+        upsert: async (row) => {
+          if (row.orgId !== org) deny("value_charges");
+          d.valueCharges = [...d.valueCharges.filter((x) => !(x.orgId === row.orgId && x.dossierId === row.dossierId)), clone(row)];
         },
       },
       exchangeRates: {

@@ -6,6 +6,7 @@ import {
 } from "@kb/ui";
 import type { CustomsInfo, CustomsInfoItem } from "@kb/contracts";
 import { Landmark } from "lucide-react";
+import { useId } from "react";
 import { formatDate, formatMoney, formatNumber, formatRelative, formatVnd } from "@/lib/format";
 import { KeyValue } from "./declaration-parts";
 import { inspectionLabel, vndDiff } from "./customs-info-view";
@@ -50,8 +51,10 @@ function ItemsTable({ kind, items }: { kind: "IDA" | "EDA"; items: CustomsInfoIt
   return <DataTable aria-label={t.itemsAria} columns={columns} data={items} getRowId={(r) => String(r.lineNo)} />;
 }
 
-export function CustomsInfoPanel({ kind, info, estimate }: { kind: "IDA" | "EDA"; info: CustomsInfo; estimate?: CustomsEstimate | undefined }) {
+/** `sheet`: lô nhiều tờ – tên tờ ghi sau tiêu đề (mỗi tờ một khối, id tiêu đề con riêng từng khối). */
+export function CustomsInfoPanel({ kind, info, estimate, sheet }: { kind: "IDA" | "EDA"; info: CustomsInfo; estimate?: CustomsEstimate | undefined; sheet?: string }) {
   const t = useMessages(CUSTOMS_INFO_MESSAGES);
+  const uid = useId();
   const locale = useUiLocale();
   const inspection = inspectionLabel(info.inspectionCode, locale);
   const registered = info.registeredDate ? `${formatDate(info.registeredDate)}${info.registeredTime ? ` ${info.registeredTime}` : ""}` : null;
@@ -62,6 +65,7 @@ export function CustomsInfoPanel({ kind, info, estimate }: { kind: "IDA" | "EDA"
         <CardTitle className="flex flex-wrap items-center gap-2">
           <Landmark aria-hidden="true" className="h-5 w-5 text-primary" />
           {t.title}
+          {sheet && <span className="text-fg-muted">· {sheet}</span>}
           <Badge tone="success" size="sm">{t.notEntered}</Badge>
         </CardTitle>
         <CardDescription>{fill(t.description, { when: formatRelative(info.receivedAt) })}</CardDescription>
@@ -92,8 +96,8 @@ export function CustomsInfoPanel({ kind, info, estimate }: { kind: "IDA" | "EDA"
           )}
 
           <Grid cols={{ base: 1, lg: 2 }} gap="lg">
-            <section aria-labelledby="hq-reg">
-              <h3 id="hq-reg" className="text-sm font-semibold text-fg">{t.registration}</h3>
+            <section aria-labelledby={`${uid}-hq-reg`}>
+              <h3 id={`${uid}-hq-reg`} className="text-sm font-semibold text-fg">{t.registration}</h3>
               <div className="divide-y divide-border">
                 <KeyValue
                   label={t.declNo}
@@ -111,8 +115,8 @@ export function CustomsInfoPanel({ kind, info, estimate }: { kind: "IDA" | "EDA"
               </div>
             </section>
 
-            <section aria-labelledby="hq-tax">
-              <h3 id="hq-tax" className="text-sm font-semibold text-fg">{t.taxTitle}</h3>
+            <section aria-labelledby={`${uid}-hq-tax`}>
+              <h3 id={`${uid}-hq-tax`} className="text-sm font-semibold text-fg">{t.taxTitle}</h3>
               <div className="divide-y divide-border">
                 {info.totalCustomsValue && (
                   <KeyValue
@@ -144,8 +148,8 @@ export function CustomsInfoPanel({ kind, info, estimate }: { kind: "IDA" | "EDA"
           </Grid>
 
           {info.items.length > 0 && (
-            <section aria-labelledby="hq-items">
-              <h3 id="hq-items" className="mb-2 text-sm font-semibold text-fg">{t.itemsTitle}</h3>
+            <section aria-labelledby={`${uid}-hq-items`}>
+              <h3 id={`${uid}-hq-items`} className="mb-2 text-sm font-semibold text-fg">{t.itemsTitle}</h3>
               <ItemsTable kind={kind} items={info.items} />
             </section>
           )}

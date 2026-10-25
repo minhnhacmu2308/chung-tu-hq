@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { appFieldMeta, declarationEditMode, declarationFormValues, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, isExtraFieldKey, pendingFormEdits, splitAddressLines } from "./index.js";
+import { allocatedAdjustmentNos, NO_INSURANCE_VALUE } from "../dto/value-charges.js";
+import { itemFormValues, appFieldMeta, declarationEditMode, declarationEditScope, declarationFormValues, editableFormKeys, editBlockFor, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, isExtraFieldKey, pendingFormEdits, sheetOfLine, splitAddressLines } from "./index.js";
+import type { CustomsStage } from "../customs-flow.js";
 
 const f = (code: string, value: string) => ({ code, value });
 const FIELDS = [f("MA_LH", "A11"), f("PTVC", "1"), f("CQHQ", "02B1"), f("NNK_MST", "0101234567"), f("NNK_TEN", "CONG TY A"), f("NXK_TEN", "SAMSUNG"), f("SO_HD", "INV-1"), f("SO_VD", "MAWB1"), f("CANG_DO", "VNHPH – CANG HAI PHONG"), f("GHI_CHU", "")];
@@ -130,5 +132,90 @@ describe("appFieldMeta – chỉ tiêu app chưa có trên tờ khai", () => {
   it("lấy nhãn, số, nhóm theo ô trên form", () => {
     expect(appFieldMeta("IDA", "NNK_DT")).toMatchObject({ no: "1.16", section: "PARTIES" });
     expect(appFieldMeta("IDA", "NOPE")).toBeNull();
+  });
+});
+
+describe("chi phí trị giá (1.47–1.49) → ô KTG và 1.88 dòng hàng", () => {
+  it("cước / bảo hiểm → mã phân loại A + mã tiền + số tiền; không mua bảo hiểm → D; khoản điều chỉnh → từng dòng + Phân bổ phí", () => {
+    const v = declarationFormValues("IDA", [f("PHI_VC", "1150 USD"), f("PHI_BH", NO_INSURANCE_VALUE), f("KHOAN_DC", "A AD 100 USD; G SB 20.5 USD KPB")]);
+    expect(v).toMatchObject({ KTG_FR1: "A", KTG_FR2: "USD", KTG_FR3: "1150", KTG_IN1: "D", KTG_VR1: "A", KTG_VI1: "AD", KTG_VP1: "100", APP_PB1: "1", KTG_VR2: "G", KTG_VI2: "SB", KTG_VP2: "20.5" });
+    expect(v["APP_PB2"]).toBeUndefined();
+    expect(v["KTG_IN3"]).toBeUndefined();
+  });
+  it("1.88 mỗi dòng = số thứ tự các khoản được phân bổ; không có khoản → trống", () => {
+    const items = [{ id: "li1", description: "X", quantity: "1", unit: "PCE", unitPrice: "1", amount: "1", origin: "CN" }, { id: "li2", description: "Y", quantity: "1", unit: "PCE", unitPrice: "1", amount: "1", origin: "CN" }];
+    const rows = itemFormValues("IDA", items, { currency: "USD", fields: [f("KHOAN_DC", "A AD 100 USD; G SB 20 USD KPB; E AD 5 USD")] });
+    expect(rows.map((r) => [r["HAG_VN1"], r["HAG_VN2"], r["HAG_VN3"]])).toEqual([["1", "3", undefined], ["1", "3", undefined]]);
+    expect(allocatedAdjustmentNos("")).toEqual([]);
+    expect(itemFormValues("IDA", items, { currency: "USD", fields: [] })[0]?.["HAG_VN1"]).toBeUndefined();
+  });
+});
+
+describe("declarationEditScope / editBlockFor / sheetOfLine – phạm vi sửa theo tờ đã gọi về (lô nhiều tờ)", () => {
+  const sh = (no: number, stage: CustomsStage, declarationNo: string | null = "10001") => ({ no, stage, declarationNo });
+  it("chỉ tờ 2 gọi về, tờ 1, 3 còn hiệu lực → khóa chỉ tiêu chung, chỉ sửa dòng tờ 2, không thêm/xóa dòng", () => {
+    expect(declarationEditScope("DRAFT", [sh(1, "PRE_DECLARED"), sh(2, "RECALLED"), sh(3, "PRE_DECLARED")])).toEqual({
+      common: "LOCKED", lines: { 1: "LOCKED", 2: "FULL", 3: "LOCKED" }, addRemoveLines: false, lockedSheets: [1, 3], closedSheets: [],
+    });
+  });
+  it("gọi về tất cả → sửa toàn bộ như cũ", () => {
+    expect(declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "RECALLED"), sh(3, "RECALLED")])).toEqual({
+      common: "FULL", lines: { 1: "FULL", 2: "FULL", 3: "FULL" }, addRemoveLines: true, lockedSheets: [], closedSheets: [],
+    });
+  });
+  it("tờ 2 gọi về sửa đổi bổ sung, tờ 3 đã thông quan → chung AMEND (chặt nhất); dòng tờ 3 khóa; không tờ nào còn hiệu lực", () => {
+    const s = declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "AMEND_RECALLED"), sh(3, "CLEARED")]);
+    expect(s).toMatchObject({ common: "AMEND", lines: { 1: "FULL", 2: "AMEND", 3: "LOCKED" }, lockedSheets: [], closedSheets: [3] });
+  });
+  it("tờ chưa từng gửi → sửa được như tờ đã gọi về", () => {
+    const s = declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "RECALLED"), sh(3, "NOT_SENT", null)]);
+    expect(s.common).toBe("FULL");
+    expect(s.lines[3]).toBe("FULL");
+  });
+  it("tờ khai không còn nháp → khóa mọi thứ", () => {
+    expect(declarationEditScope("APPROVED", [sh(1, "RECALLED"), sh(2, "RECALLED")])).toEqual({
+      common: "LOCKED", lines: { 1: "LOCKED", 2: "LOCKED" }, addRemoveLines: false, lockedSheets: [], closedSheets: [],
+    });
+  });
+  it("lô một tờ: đúng declarationEditMode như cũ", () => {
+    expect(declarationEditScope("DRAFT", [sh(1, "RECALLED")])).toEqual({ common: "FULL", lines: { 1: "FULL" }, addRemoveLines: true, lockedSheets: [], closedSheets: [] });
+    expect(declarationEditScope("DRAFT", [sh(1, "AMEND_RECALLED")]).common).toBe("AMEND");
+    expect(declarationEditScope("DRAFT", [sh(1, "PRE_DECLARED")])).toEqual({ common: "LOCKED", lines: { 1: "LOCKED" }, addRemoveLines: false, lockedSheets: [], closedSheets: [] });
+    expect(declarationEditScope("DRAFT", []).common).toBe("FULL");
+  });
+  it("editBlockFor: lý do theo từng đích sửa", () => {
+    const partial = declarationEditScope("DRAFT", [sh(1, "PRE_DECLARED"), sh(2, "RECALLED"), sh(3, "PRE_DECLARED")]);
+    const common = { reasonCode: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 3" } };
+    expect(editBlockFor(partial, { kind: "COMMON" })).toEqual(common);
+    expect(editBlockFor(partial, { kind: "REBUILD" })).toEqual(common);
+    expect(editBlockFor(partial, { kind: "ADD_REMOVE_LINES" })).toEqual(common);
+    expect(editBlockFor(partial, { kind: "LINE", sheet: 2 })).toBeNull();
+    expect(editBlockFor(partial, { kind: "LINE", sheet: 1 })).toEqual({ reasonCode: "LINE_SHEET_LOCKED", params: { sheet: 1 } });
+    const cleared = declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "CLEARED")]);
+    // Tờ đã thông quan / bị từ chối / sửa sau thông quan không gọi về được → lý do riêng (sửa bằng AMA).
+    expect(editBlockFor(cleared, { kind: "LINE", sheet: 2 })).toEqual({ reasonCode: "LINE_SHEET_CLOSED", params: { sheet: 2 } });
+    for (const st of ["REJECTED", "POST_EDITING"] as const) expect(editBlockFor(declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, st)]), { kind: "LINE", sheet: 2 })).toEqual({ reasonCode: "LINE_SHEET_CLOSED", params: { sheet: 2 } });
+    const mixed = declarationEditScope("DRAFT", [sh(1, "CLEARED"), sh(2, "RECALLED"), sh(3, "PRE_DECLARED")]);
+    expect(mixed).toMatchObject({ lockedSheets: [3], closedSheets: [1] });
+    expect(editBlockFor(mixed, { kind: "LINE", sheet: 1 })).toEqual({ reasonCode: "LINE_SHEET_CLOSED", params: { sheet: 1 } });
+    expect(editBlockFor(mixed, { kind: "LINE", sheet: 3 })).toEqual({ reasonCode: "LINE_SHEET_LOCKED", params: { sheet: 3 } });
+    expect(editBlockFor(cleared, { kind: "COMMON" })).toBeNull();
+    const all = declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "RECALLED")]);
+    for (const t of [{ kind: "COMMON" }, { kind: "REBUILD" }, { kind: "ADD_REMOVE_LINES" }, { kind: "LINE", sheet: 2 }] as const) expect(editBlockFor(all, t)).toBeNull();
+    const approved = declarationEditScope("APPROVED", [sh(1, "RECALLED"), sh(2, "RECALLED")]);
+    expect(editBlockFor(approved, { kind: "COMMON" })).toEqual({ reasonCode: "DECLARATION_LOCKED", params: {} });
+    expect(editBlockFor(approved, { kind: "LINE", sheet: 1 })).toEqual({ reasonCode: "DECLARATION_LOCKED", params: {} });
+    const single = declarationEditScope("DRAFT", [sh(1, "PRE_DECLARED")]);
+    expect(editBlockFor(single, { kind: "LINE", sheet: 1 })).toEqual({ reasonCode: "DECLARATION_LOCKED", params: {} });
+    // Tờ không có trong danh sách (vd dòng thứ 51 của lô một tờ cũ) → theo chỉ tiêu chung.
+    expect(editBlockFor(declarationEditScope("DRAFT", [sh(1, "RECALLED")]), { kind: "LINE", sheet: 2 })).toBeNull();
+  });
+  it("sheetOfLine: tờ của dòng theo thứ tự lineNo, 50 dòng một tờ", () => {
+    const lineNos = Array.from({ length: 120 }, (_, i) => 120 - i);
+    expect(sheetOfLine(lineNos, 1)).toBe(1);
+    expect(sheetOfLine(lineNos, 50)).toBe(1);
+    expect(sheetOfLine(lineNos, 51)).toBe(2);
+    expect(sheetOfLine(lineNos, 120)).toBe(3);
+    expect(sheetOfLine([10, 20, 30], 999)).toBe(1);
   });
 });

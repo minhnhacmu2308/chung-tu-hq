@@ -1,7 +1,8 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA). Người nhập khẩu lấy theo tài khoản (MST), KHÔNG lấy tên tiếng Anh trên invoice (PRODUCT §7.4).
-import { DEFAULT_PARTY_CLASS, PARTY_CLASS_LABELS } from "@kb/contracts";
+import { DEFAULT_PARTY_CLASS, formatAdjustmentField, NO_INSURANCE_VALUE, PARTY_CLASS_LABELS, type Sourced } from "@kb/contracts";
 import { resolveDischargePort, resolvePort, transportModeCode } from "../catalog-resolve.js";
-import { FREIGHT_NOT_INCLUDED, incotermCode } from "../adjustments.js";
+import { FREIGHT_ADJUSTMENT_LABEL, FREIGHT_NOT_INCLUDED, freightReasonText, INSURANCE_ADJUSTMENT_LABEL, INSURANCE_INCLUDED, incotermCode } from "../adjustments.js";
+import type { Adjustment } from "../valuation.js";
 import { IDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
 import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
@@ -31,12 +32,61 @@ const valuationDetail = (i: MappingInput): MappedValue => {
   return { ...src, value: `${date}${notes.join("; ")}` };
 };
 
-const charge = (i: MappingInput, label: string): MappedValue => {
-  const a = i.adjustments.find((x) => x.label.startsWith(label));
-  if (a) return { value: `${a.amount} ${a.currency}`, source: a.source, ...(a.rate ? {} : { suspect: true, note: `Chưa có tỷ giá cho ${a.currency}` }) };
+/** Cước / bảo hiểm đã vào trị giá: nhập tay thì ghi lý do; lệch số trên chứng từ hoặc thiếu tỷ giá → nghi ngờ. */
+const chargeValue = (a: Adjustment, doc: { amount: Sourced<string>; currency: Sourced<string> | undefined }, invoiceCurrency: string, reason?: string): MappedValue => {
+  const notes: string[] = [];
+  if (!a.rate) notes.push(`Chưa có tỷ giá cho ${a.currency}`);
+  let differs = false;
+  if (a.source === "USER") {
+    notes.push(reason ? `Người khai nhập – ${reason}` : "Người khai nhập");
+    const docCur = doc.currency?.value ?? invoiceCurrency;
+    if (doc.amount.value !== null && (!dec(doc.amount.value).eq(a.amount) || docCur !== a.currency)) {
+      differs = true;
+      notes.push(`Khác số trên chứng từ: ${plainNumber(doc.amount.value)} ${docCur}`);
+    }
+  }
+  return { value: `${a.amount} ${a.currency}`, source: a.source, ...(!a.rate || differs ? { suspect: true } : {}), ...(notes.length ? { note: notes.join(". ") } : {}) };
+};
+
+/** 1.47: EXW/FCA/FAS/FOB phải có cước. Không có số và không có lý do → chặn duyệt; có lý do → cho duyệt kèm cảnh báo. */
+const freight = (i: MappingInput): MappedValue => {
+  const c = i.shipment.charges;
+  const invoiceCurrency = i.shipment.invoice.currency.value ?? i.dossier.currency;
+  const a = i.adjustments.find((x) => x.label === FREIGHT_ADJUSTMENT_LABEL);
+  if (a) return chargeValue(a, { amount: c.freight, currency: c.freightCurrency }, invoiceCurrency, i.charges.freight ? freightReasonText(i.charges.freight) : undefined);
   const incoterm = incotermCode(i.shipment.invoice.incoterm.value);
-  if (label.startsWith("Cước") && FREIGHT_NOT_INCLUDED.has(incoterm)) return missing("SYSTEM", `${incoterm}: cần cước vận chuyển quốc tế – chưa có hóa đơn cước / Arrival Notice`);
-  return { value: null, source: "SYSTEM", note: "Đã gồm trong giá hóa đơn" };
+  if (!FREIGHT_NOT_INCLUDED.has(incoterm)) return { value: null, source: "SYSTEM", note: "Đã gồm trong giá hóa đơn" };
+  if (i.charges.freight) return { value: null, source: "USER", suspect: true, note: `${incoterm}: chưa có số cước – ${freightReasonText(i.charges.freight)}. Bổ sung số cước trước khi truyền` };
+  return { value: null, source: "SYSTEM", suspect: true, blocking: true, note: `${incoterm}: cần cước vận chuyển quốc tế – nhập số cước hoặc lý do chưa có ở bước OCR & kiểm tra` };
+};
+
+/** 1.48: CIF/CIP… không khai; người khai xác nhận không mua bảo hiểm → mã D. */
+const insurance = (i: MappingInput): MappedValue => {
+  const c = i.shipment.charges;
+  const invoiceCurrency = i.shipment.invoice.currency.value ?? i.dossier.currency;
+  if (INSURANCE_INCLUDED.has(incotermCode(i.shipment.invoice.incoterm.value))) return { value: null, source: "SYSTEM", note: "Đã gồm trong giá hóa đơn" };
+  const a = i.adjustments.find((x) => x.label === INSURANCE_ADJUSTMENT_LABEL);
+  if (a) return chargeValue(a, { amount: c.insurance, currency: c.insuranceCurrency }, invoiceCurrency);
+  if (i.charges.insurance?.mode === "NONE") return { value: NO_INSURANCE_VALUE, source: "USER", note: "Người khai xác nhận không mua bảo hiểm" };
+  return { value: null, source: "SYSTEM", note: "Không có chứng từ bảo hiểm – xác nhận “Không mua bảo hiểm” ở bước OCR & kiểm tra nếu đúng" };
+};
+
+/** 1.49: mỗi khoản một dòng (mã tên, AD/SB, mã tiền, trị giá). Phí khác đọc từ chứng từ chưa có mã → nghi ngờ (FPT chặn truyền). */
+const otherAdjustments = (i: MappingInput): MappedValue => {
+  const others = i.adjustments.filter((a) => a.label !== FREIGHT_ADJUSTMENT_LABEL && a.label !== INSURANCE_ADJUSTMENT_LABEL);
+  if (!others.length) return { value: null, source: i.charges.adjustments ? "USER" : "SYSTEM" };
+  const uncoded = others.filter((a) => !a.code);
+  if (uncoded.length) {
+    return {
+      value: others.map((a) => `${a.code ? `${a.code} ` : ""}${a.label}: ${a.amount} ${a.currency}`).join("; "), source: uncoded[0]!.source, suspect: true,
+      note: "Phí khác đọc từ chứng từ chưa có mã tên khoản điều chỉnh – lập danh sách khoản điều chỉnh ở bước OCR & kiểm tra",
+    };
+  }
+  const noRate = others.filter((a) => !a.rate).map((a) => a.currency);
+  return {
+    value: formatAdjustmentField(others.map((a) => ({ code: a.code!, kind: a.kind === "SUBTRACT" ? "SB" : "AD", amount: a.amount, currency: a.currency, ...(a.allocate === false ? { allocate: false } : {}) }))), source: "USER",
+    ...(noRate.length ? { suspect: true, note: `Chưa có tỷ giá cho ${[...new Set(noRate)].join(", ")}` } : {}),
+  };
 };
 
 export const IDA_MAPPINGS: FieldMapping[] = [
@@ -126,12 +176,9 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   { code: "KHAI_TG", no: N.KHAI_TG, section: "VALUE", label: "Mã phân loại khai trị giá", required: true, options: { sources: [profileSource("KHAI_TG")], allowFixed: true }, from: (i) => profileOr(i, "KHAI_TG", fixed("6 – Áp dụng phương pháp trị giá giao dịch")) },
   { code: "GP", no: N.GP, section: "VALUE", label: "Giấy phép nhập khẩu", required: false, from: (i) => permitsField(i, "IDA") },
   { code: "CT_TG", no: N.CT_TG, section: "VALUE", label: "Chi tiết khai trị giá", required: false, from: valuationDetail },
-  { code: "PHI_VC", no: N.PHI_VC, section: "VALUE", label: "Phí vận chuyển", required: false, from: (i) => charge(i, "Cước") },
-  { code: "PHI_BH", no: N.PHI_BH, section: "VALUE", label: "Phí bảo hiểm", required: false, from: (i) => charge(i, "Phí bảo hiểm") },
-  { code: "KHOAN_DC", no: N.KHOAN_DC, section: "VALUE", label: "Khoản điều chỉnh khác", required: false, from: (i) => {
-    const others = i.adjustments.filter((a) => !a.label.startsWith("Cước") && !a.label.startsWith("Phí bảo hiểm"));
-    return others.length ? { value: others.map((a) => `${a.label}: ${a.amount} ${a.currency}`).join("; "), source: others[0]!.source } : { value: null, source: "SYSTEM" };
-  } },
+  { code: "PHI_VC", no: N.PHI_VC, section: "VALUE", label: "Phí vận chuyển", required: false, from: freight },
+  { code: "PHI_BH", no: N.PHI_BH, section: "VALUE", label: "Phí bảo hiểm", required: false, from: insurance },
+  { code: "KHOAN_DC", no: N.KHOAN_DC, section: "VALUE", label: "Khoản điều chỉnh khác", required: false, from: otherAdjustments },
   { code: "TY_GIA", no: null, section: "VALUE", label: "Tỷ giá tính thuế", required: false, from: (i) => {
     const cur = i.shipment.invoice.currency.value ?? i.dossier.currency;
     const rate = i.exchange.rates[cur];

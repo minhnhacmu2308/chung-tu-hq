@@ -81,7 +81,7 @@ const buildColumns = (t: ListMessages, stepLabels: Record<Dossier["step"], strin
       filter: "select",
       filterOptions: (Object.keys(statusDisplay) as DossierStatus[]).map((s) => ({ value: statusDisplay[s].label, label: statusDisplay[s].label })),
     },
-    cell: (c) => <DossierStatusBadge status={c.row.original.status} />,
+    cell: (c) => <DossierStatusBadge status={c.row.original.status} customs={c.row.original.customs} />,
   }),
   col.accessor("ownerName", { header: t.colOwner, size: 160, minSize: 120, meta: { filter: "select" } }),
 ]);
@@ -211,7 +211,7 @@ function ListInner() {
                   pattern={r.direction === "NK" ? "dots" : "diagonal"}
                   leading={<IconTile icon={<Transport />} tone={r.direction === "NK" ? "info" : "primary"} size="md" className="bg-surface" />}
                   art={<Transport />}
-                  status={<DossierStatusBadge status={r.status} />}
+                  status={<DossierStatusBadge status={r.status} customs={r.customs} />}
                   select={parts.select}
                   actions={parts.actions}
                   fields={[

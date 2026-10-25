@@ -3,7 +3,7 @@
 // Sửa sau thông quan (AMA/AMB/AMC) làm ở bước 7 – ở đây chỉ còn thẻ lối vào. Quy tắc bấm được / việc tiếp theo do backend (hoặc mock)
 // tính bằng @kb/contracts customs-flow – màn chỉ hiển thị.
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, Field,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Field, RadioGroup,
   fill, Grid, IconTile, pickMessages, Select, Spinner, Stack, StatusBadge, toast, toastPromise, useMessages, useUiLocale, type Tone, type UiLocale,
 } from "@kb/ui";
 import { baseOp, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage } from "@kb/contracts";
@@ -11,14 +11,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
 import {
-  customsKeys, getSubmission, listCertificates, performOperation, resendOperation, submitDeclaration,
-  type PipelineRow, type PipelineStatus, type SubmissionView,
+  customsKeys, declareAllSheets, getSubmission, listCertificates, performOperation, recallAllSheets, resendOperation, submitDeclaration,
+  type BranchSubmission, type PipelineRow, type PipelineStatus, type SubmissionView,
 } from "@/api/customs";
 import { declarationKeys, getDeclarationView } from "@/api/declaration";
 import { getPostAmendmentView, postAmendmentKeys } from "@/api/post-amendment";
+import { fromMinor, toMinor } from "@/lib/decimal";
 import { formatDate, formatDateTime, formatRelative, formatTime, formatVnd } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { rowReason } from "@/lib/reason-codes";
@@ -30,7 +31,8 @@ import { AMA_STATUS } from "../../post-amendment/ama-context";
 import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
-import { OPERATION_MESSAGES, PHASE_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
+import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
+import { anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -163,11 +165,13 @@ function PhaseSection({ index, phase, rows, h }: { index: number; phase: (typeof
   const phases = useMessages(PHASE_MESSAGES);
   const title = phases[phase.id];
   const st = phaseState(t, rows, h.stage, phase.id);
+  // Lô nhiều tờ: mỗi thẻ tờ có bộ giai đoạn riêng → id tiêu đề riêng từng thẻ.
+  const headingId = `${useId()}-phase-${phase.id}`;
   return (
-    <section aria-labelledby={`phase-${phase.id}`} className="rounded-md border border-border">
+    <section aria-labelledby={headingId} className="rounded-md border border-border">
       <header className="flex flex-wrap items-start justify-between gap-2 border-b border-border bg-surface-muted px-3 py-2.5">
         <div className="min-w-0 flex-1">
-          <h3 id={`phase-${phase.id}`} className="text-sm font-semibold text-fg">
+          <h3 id={headingId} className="text-sm font-semibold text-fg">
             {index}. {title}
           </h3>
           <p className="text-xs text-fg-muted">{phases[`${phase.id}_hint`]}</p>
@@ -251,6 +255,17 @@ export function MessageLog({ messages }: { messages: SubmissionView["messages"] 
         <CardDescription>{t.logDesc}</CardDescription>
       </CardHeader>
       <CardContent>
+        <MessageList messages={messages} />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Danh sách thông điệp gửi/nhận (thẻ nhật ký của hồ sơ, hoặc khối nhật ký trong thẻ từng tờ). */
+function MessageList({ messages }: { messages: SubmissionView["messages"] }) {
+  const t = useMessages(SUBMIT_MESSAGES);
+  return (
+    <>
         {messages.length === 0 ? (
           <EmptyState title={t.logEmptyTitle} description={t.logEmptyDesc} />
         ) : (
@@ -279,16 +294,19 @@ export function MessageLog({ messages }: { messages: SubmissionView["messages"] 
             ))}
           </ul>
         )}
-      </CardContent>
-    </Card>
+    </>
   );
 }
 
-/** Nghiệp vụ cần xác nhận: gọi về sửa (IDB/IDD mở lại tờ khai). AMB (gọi về bản khai bổ sung) làm ở bước 7. */
-type Confirm = { row: PipelineRow };
+/** Nghiệp vụ cần xác nhận: gọi về sửa (IDB/IDD mở lại tờ khai) trên tờ `branch`. AMB (gọi về bản khai bổ sung) làm ở bước 7. */
+type Confirm = { row: PipelineRow; branch: number };
 
-function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { confirm: Confirm | null; onClose: () => void; onConfirm: (c: Confirm) => void; pending: boolean; code: string }) {
+type RecallScope = "all" | "one";
+
+/** Gọi về sửa: lô một tờ giữ hộp cũ; lô nhiều tờ chọn gọi về tất cả tờ (mặc định) hoặc chỉ tờ vừa bấm. */
+function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code, multi, scope, onScope }: { confirm: Confirm | null; onClose: () => void; onConfirm: (c: Confirm, scope: RecallScope) => void; pending: boolean; code: string; multi: boolean; scope: RecallScope; onScope: (s: RecallScope) => void }) {
   const t = useMessages(SUBMIT_MESSAGES);
+  const sh = useMessages(SHEET_MESSAGES);
   const ops = useMessages(OPERATION_MESSAGES);
   return (
     <Dialog open={confirm !== null} onOpenChange={(o) => !o && onClose()}>
@@ -296,10 +314,21 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (confirm) onConfirm(confirm);
+            if (confirm) onConfirm(confirm, multi ? scope : "one");
           }}
         >
           <Stack gap="sm">
+            {multi && confirm && (
+              <RadioGroup
+                label={sh.recallScope}
+                value={scope}
+                onChange={onScope}
+                options={[
+                  { value: "all", label: sh.recallAllOption, description: sh.recallAllDesc },
+                  { value: "one", label: fill(sh.recallOneOption, { sheet: confirm.branch }), description: fill(sh.recallOneDesc, { sheet: confirm.branch }) },
+                ]}
+              />
+            )}
             <p className="text-sm text-fg-muted">
               {t.recallBody}
             </p>
@@ -309,7 +338,37 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
               {t.cancel}
             </Button>
             <Button type="submit" loading={pending} leftIcon={<RotateCcw className="h-4 w-4" />}>
-              {fill(t.recallAction, { op: confirm?.row.op ?? "" })}
+              {multi && scope === "all" ? sh.recallAllAction : fill(t.recallAction, { op: confirm?.row.op ?? "" })}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Hộp xác nhận "Khai chính thức tất cả": gửi khai chính thức lần lượt các tờ theo thứ tự (dừng ở tờ lỗi). */
+function ConfirmDeclareAllDialog({ open, count, onClose, onConfirm, pending, code }: { open: boolean; count: number; onClose: () => void; onConfirm: () => void; pending: boolean; code: string }) {
+  const t = useMessages(SUBMIT_MESSAGES);
+  const sh = useMessages(SHEET_MESSAGES);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent title={sh.declareAllTitle} icon={<Send className="h-4 w-4" />} description={code} size="sm">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConfirm();
+          }}
+        >
+          <Stack gap="sm">
+            <p className="text-sm text-fg-muted">{fill(sh.declareAllBody, { n: count })}</p>
+          </Stack>
+          <DialogFooter>
+            <Button variant="ghost" type="button" onClick={onClose}>
+              {t.cancel}
+            </Button>
+            <Button type="submit" loading={pending} leftIcon={<Send className="h-4 w-4" />}>
+              {sh.declareAllTitle}
             </Button>
           </DialogFooter>
         </form>
@@ -328,28 +387,62 @@ function estimateOf(decl: Declaration | null | undefined): CustomsEstimate | und
   };
 }
 
+type DeclBranch = NonNullable<Awaited<ReturnType<typeof getDeclarationView>>>["branches"][number];
+/** Ước tính của một tờ (lô nhiều tờ): trị giá tính thuế và thuế của các dòng thuộc tờ – cộng số nguyên VND, không cộng số thực. */
+function sheetEstimateOf(decl: Declaration | null | undefined, b: DeclBranch | undefined): CustomsEstimate | undefined {
+  if (!decl || !b) return undefined;
+  return {
+    customsValueVnd: b.customsValueVnd,
+    exchangeRate: decl.exchangeRate,
+    ...(decl.kind === "IDA" ? { taxVnd: fromMinor(toMinor(b.estImportDutyVnd, 0) + toMinor(b.estVatVnd, 0), 0) } : {}),
+  };
+}
+
+/** Nghiệp vụ đang bấm: mã + tờ (nút quay của đúng thẻ). */
+type Busy = { op: CustomsOperation; branch: number };
+
 export function SubmitStep({ dossier, goTo }: StepProps) {
   const t = useMessages(SUBMIT_MESSAGES);
+  const sh = useMessages(SHEET_MESSAGES);
   const stages = useMessages(STAGE_MESSAGES);
   const locale = useUiLocale();
   const declQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const qc = useQueryClient();
   const [certId, setCertId] = useState<string>("");
-  const [busyOp, setBusyOp] = useState<CustomsOperation | null>(null);
+  const [busy, setBusy] = useState<Busy | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [declareAllOpen, setDeclareAllOpen] = useState(false);
+  const [recallScope, setRecallScope] = useState<RecallScope>("all");
+  // Gọi về do người dùng bấm trong phiên này (lô nhiều tờ): khi tờ khai được mở lại thì tự về Review kèm thông báo.
+  const [recalled, setRecalled] = useState<RecalledNotice | null>(null);
+  // Tờ khai đã mở sẵn (DRAFT / bước Review) lúc bấm gọi về: người dùng đang sửa rồi → KHÔNG tự chuyển bước (không có thời điểm "vừa mở lại" để bắt).
+  const openAtClick = useRef(false);
 
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
     queryFn: () => getSubmission(dossier.id),
-    refetchInterval: (q) => (q.state.data?.inProgress ? 1000 : false),
+    // Lô nhiều tờ: còn tờ nào đang chờ phản hồi / hỏi trạng thái thì hỏi lại.
+    refetchInterval: (q) => (q.state.data && anyInProgress(q.state.data) ? 1000 : false),
     // Quay lại từ Review (sửa + duyệt lại) → khả năng bấm đã đổi; không dùng bản cache cũ.
     refetchOnMount: "always",
   });
-  // Giai đoạn đổi do phản hồi Hải quan (poll) → làm mới đầu trang hồ sơ (trạng thái, số tờ khai, luồng).
-  const stage = subQ.data?.stage;
+  // Giai đoạn (của bất kỳ tờ nào) đổi do phản hồi Hải quan (poll) → làm mới đầu trang hồ sơ (trạng thái, số tờ khai, luồng).
+  const stageKey = subQ.data ? [subQ.data.stage, ...subQ.data.branches.map((b) => b.stage)].join(",") : undefined;
   useEffect(() => {
-    if (stage) void qc.invalidateQueries({ queryKey: dossierKeys.all });
-  }, [stage, qc]);
+    if (stageKey) void qc.invalidateQueries({ queryKey: dossierKeys.all });
+  }, [stageKey, qc]);
+  const reopened = Boolean(subQ.data && sheetsOf(subQ.data).length > 1 && (subQ.data.declarationStatus === "DRAFT" || dossier.step === "review"));
+  useEffect(() => {
+    if (!recalled || !reopened) return;
+    setRecalled(null);
+    // Bước Review đọc tờ khai (nay là bản nháp), bản truyền và hồ sơ – bỏ bản cache cũ (còn "đã duyệt") trước khi chuyển.
+    // refetchType "all": tải lại ngay cả truy vấn chưa gắn (tờ khai) để Review mở ra là có dữ liệu mới.
+    void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id), refetchType: "all" });
+    void qc.invalidateQueries({ queryKey: customsKeys.submission(dossier.id), refetchType: "all" });
+    void qc.invalidateQueries({ queryKey: dossierKeys.all });
+    goTo("review", { recalled: encodeRecalled(recalled) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recalled, reopened]);
   const certQ = useQuery({ queryKey: customsKeys.certificates, queryFn: listCertificates });
   const certs = certQ.data ?? [];
   const selectedId = certId || certs.find((c) => c.isDefault)?.id || certs[0]?.id || "";
@@ -373,34 +466,56 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     onError: () => undefined,
   });
   const perform = useMutation({
-    mutationFn: (op: CustomsOperation) => {
-      setBusyOp(op);
-      return performOperation(dossier.id, op);
+    mutationFn: (b: Busy) => {
+      setBusy(b);
+      return performOperation(dossier.id, b.op, b.branch);
     },
-    onSuccess: (r) => {
+    onSuccess: (r, b) => {
       setConfirm(null);
+      if (isRecall(b.op) && !AMA_OPS.has(b.op) && !openAtClick.current) setRecalled({ scope: "sheets", sheets: [b.branch] });
       toast({ tone: r.sent ? "info" : "success", title: r.message });
       invalidate();
     },
     onError: toastMutationError(t.performFailed),
-    onSettled: () => setBusyOp(null),
+    onSettled: () => setBusy(null),
+  });
+  const recallAll = useMutation({
+    mutationFn: () => recallAllSheets(dossier.id),
+    onSuccess: (r) => {
+      setConfirm(null);
+      if (!openAtClick.current) setRecalled({ scope: "all", count: r.sheets.length });
+      toast({ tone: r.sent ? "info" : "success", title: r.message });
+      invalidate();
+    },
+    onError: toastMutationError(t.performFailed),
+  });
+  const declareAll = useMutation({
+    mutationFn: () => declareAllSheets(dossier.id),
+    onSuccess: (r) => {
+      setDeclareAllOpen(false);
+      toast({ tone: r.sent ? "info" : "success", title: r.message });
+      invalidate();
+    },
+    onError: toastMutationError(t.performFailed),
   });
   const resend = useMutation({
-    mutationFn: (r: PipelineRow) => {
-      setBusyOp(r.op);
-      return resendOperation(dossier.id, r.op);
+    mutationFn: ({ r, branch }: { r: PipelineRow; branch: number }) => {
+      setBusy({ op: r.op, branch });
+      return resendOperation(dossier.id, r.op, branch);
     },
-    onSuccess: (res, r) => {
+    onSuccess: (res, { r }) => {
       toast({ tone: "info", title: res.resent ? fill(t.resending, { op: r.op }) : res.message, description: t.resendDesc });
       invalidate();
     },
     onError: toastMutationError(t.resendFailed),
-    onSettled: () => setBusyOp(null),
+    onSettled: () => setBusy(null),
   });
 
   if (subQ.isLoading) return <StepLoading />;
   if (subQ.isError) return <StepError error={subQ.error} onRetry={() => void subQ.refetch()} />;
   const s = subQ.data!;
+  const sheets = sheetsOf(s);
+  const multi = sheets.length > 1;
   const firstSend = s.stage === "NOT_SENT";
   const notApproved = s.declarationStatus === "NOT_CREATED" || (firstSend && s.declarationStatus === "DRAFT");
   // Lần khai đầu: kiểm lại ô bắt buộc (dữ liệu có thể đổi sau khi duyệt) – backend chặn lần nữa trước khi đánh dấu đã khai.
@@ -409,23 +524,64 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const blocked = notApproved || s.hsUnconfirmed > 0 || required.gaps.length > 0;
   const certExpired = selected ? selected.validTo < new Date().toISOString().slice(0, 10) : false;
   const sending = s.pipeline.find((r) => r.status === "SENDING");
-  const anyBusy = Boolean(sending) || perform.isPending || resend.isPending || submit.isPending;
+  const anySending = sheets.some((b) => b.pipeline.some((r) => r.status === "SENDING"));
+  const anyBusy = anySending || perform.isPending || recallAll.isPending || resend.isPending || submit.isPending;
   const hasNumber = Boolean(s.result?.declarationNo);
   // AMA/AMB/AMC thuộc bước 7 – không hiện ở danh sách nghiệp vụ / việc tiếp theo của bước này.
   const pipeline = s.pipeline.filter((r) => !AMA_OPS.has(r.op));
   const next = s.nextOp && !AMA_OPS.has(s.nextOp) ? pipeline.find((r) => r.op === s.nextOp) : undefined;
   const rejection = s.rejection && !AMA_OPS.has(s.rejection.operation) ? s.rejection : null;
 
-  const onAction = (r: PipelineRow) => {
-    if (r.action === "EDIT") return goTo("review");
-    if (isRecall(r.op)) return setConfirm({ row: r });
-    if (firstSend && baseOp(r.op) === "IDA") return submit.mutate();
-    perform.mutate(r.op);
-  };
-  const h: RowHandlers = { stage: s.stage, nextOp: s.nextOp, busyOp, canResend: !anyBusy, onAction, onResend: (r) => resend.mutate(r) };
+  /** Bộ xử lý nút của tờ `branch` (lô 1 tờ: tờ 1). */
+  const handlersFor = (branch: number, stage: CustomsStage, nextOp: CustomsOperation | null): RowHandlers => ({
+    stage,
+    nextOp,
+    busyOp: busy?.branch === branch ? busy.op : null,
+    canResend: !anyBusy,
+    onAction: (r) => {
+      if (r.action === "EDIT") return goTo("review");
+      if (isRecall(r.op)) {
+        setRecallScope("all");
+        openAtClick.current = reopened;
+        return setConfirm({ row: r, branch });
+      }
+      if (firstSend && branch === 1 && baseOp(r.op) === "IDA") return submit.mutate();
+      perform.mutate({ op: r.op, branch });
+    },
+    onResend: (r) => resend.mutate({ r, branch }),
+  });
+  const h = handlersFor(1, s.stage, s.nextOp);
 
-  return (
-    <Stack gap="lg">
+  const certPicker =
+    firstSend && next && baseOp(next.op) === "IDA" ? (
+      <div className="flex flex-col gap-3 cq-md:flex-row cq-md:items-end">
+        <Field label={t.certLabel} className="flex-1">
+          <Select
+            value={selectedId}
+            onChange={(e) => setCertId(e.currentTarget.value)}
+            disabled={certQ.isLoading || blocked}
+            options={certs.map((c) => ({ value: c.id, label: fill(t.certOption, { subject: c.subject, issuer: c.issuer, date: monthYear(c.validTo, locale) }) }))}
+          />
+        </Field>
+        <Button
+          leftIcon={<KeyRound className="h-4 w-4" />}
+          disabled={blocked || !selectedId || certExpired || anyBusy}
+          loading={submit.isPending}
+          onClick={() => submit.mutate()}
+        >
+          {fill(t.signSend, { op: next.op })}
+        </Button>
+      </div>
+    ) : null;
+  const certNote =
+    firstSend && selected ? (
+      <p className="text-xs text-fg-subtle">
+        {fill(t.certNote, { serial: selected.serial.slice(0, 14), date: formatDate(selected.validTo) })}
+      </p>
+    ) : null;
+
+  const alerts = (
+    <>
       {notApproved && (
         <Alert
           tone="danger"
@@ -449,6 +605,115 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel={t.openReview} onAction={() => goTo("review")}>
         {t.gapsBody}
       </RequiredGapsAlert>
+    </>
+  );
+  const declareAllState = canDeclareAll(sheets);
+  const confirmDialog = (
+    <>
+      <ConfirmDeclareAllDialog
+        open={declareAllOpen}
+        count={declareAllState.pending}
+        code={`${dossier.code} · ${dossier.partner}`}
+        pending={declareAll.isPending}
+        onClose={() => setDeclareAllOpen(false)}
+        onConfirm={() => declareAll.mutate()}
+      />
+      <ConfirmReopenDialog
+        confirm={confirm}
+        code={confirm && multi ? `${dossier.code} · ${fill(sh.sheetTitle, { no: confirm.branch, of: sheets.length })}` : `${dossier.code} · ${dossier.partner}`}
+        pending={perform.isPending || recallAll.isPending}
+        multi={multi}
+        scope={recallScope}
+        onScope={setRecallScope}
+        onClose={() => setConfirm(null)}
+        onConfirm={(c, scope) => (scope === "all" ? recallAll.mutate() : perform.mutate({ op: c.row.op, branch: c.branch }))}
+      />
+    </>
+  );
+
+  // Lô nhiều tờ (> 50 dòng): thẻ chung (ký số & truyền lần đầu, tổng thông quan k/N) + mỗi tờ một thẻ có vòng đời riêng.
+  if (multi) {
+    const kind = dossier.direction === "NK" ? "IDA" : "EDA";
+    const clearedResend = clearedWhileResending(sheets);
+    const progress = recallProgress(sheets);
+    return (
+      <Stack gap="lg">
+        {alerts}
+        {progress && <Alert tone="info">{fill(sh.recallProgress, progress)}</Alert>}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2">
+              <Send aria-hidden="true" className="h-5 w-5 text-primary" />
+              {t.filingTitle}
+              <Badge tone={s.summary.cleared === sheets.length ? "success" : "neutral"}>{fill(sh.clearedOf, { cleared: s.summary.cleared, of: sheets.length })}</Badge>
+              {s.summary.problems.map((p) => (
+                <Badge key={p.no} tone="danger" icon={<XCircle />}>
+                  {fill(p.kind === "REJECTED" ? sh.problemREJECTED : sh.problemSEND_FAILED, { no: p.no })}
+                </Badge>
+              ))}
+            </CardTitle>
+            <CardDescription>{fill(sh.sheetsDesc, { of: sheets.length })}</CardDescription>
+          </CardHeader>
+          {clearedResend.length > 0 && (
+            <CardContent>
+              <Alert tone="info">{fill(sh.clearedAmaNote, { sheets: clearedResend.join(", ") })}</Alert>
+            </CardContent>
+          )}
+          {firstSend && (
+            <CardContent>
+              <Stack gap="md">
+                <NextStep s={s} next={next} sending={sending} firstSend={firstSend} h={h} certPicker={certPicker} certNote={certNote} />
+                {certExpired && <Alert tone="warning">{t.certExpired}</Alert>}
+              </Stack>
+            </CardContent>
+          )}
+        </Card>
+
+        {declareAllState.ok && (
+          <div>
+            <Button leftIcon={<Send className="h-4 w-4" />} disabled={anyBusy} onClick={() => setDeclareAllOpen(true)}>
+              {fill(sh.declareAll, { n: declareAllState.pending })}
+            </Button>
+          </div>
+        )}
+
+        {sheets.map((b) => (
+          <SheetCard
+            key={b.no}
+            b={b}
+            of={sheets.length}
+            s={sheetView(s, b.no)}
+            waiting={waitingOn(sheets, b.no, s.declarationStatus)}
+            declareWaiting={declareWaitingOn(sheets, b.no)}
+            problem={problemOf(s, b.no)}
+            h={handlersFor(b.no, b.stage, b.nextOp)}
+            anyBusy={anyBusy}
+            hideNext={firstSend && b.no === 1}
+            onQuery={() => perform.mutate({ op: b.queryOp, branch: b.no })}
+            onViewErrors={() => goTo("review")}
+            onPost={() => goTo("post", { branch: b.no })}
+          />
+        ))}
+
+        {sheets.map((b) =>
+          b.customsInfo ? (
+            <CustomsInfoPanel
+              key={b.no}
+              kind={kind}
+              info={b.customsInfo}
+              sheet={fill(sh.sheetTitle, { no: b.no, of: sheets.length })}
+              estimate={sheetEstimateOf(declQ.data?.declaration, declQ.data?.branches.find((x) => x.no === b.no))}
+            />
+          ) : null,
+        )}
+        {confirmDialog}
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack gap="lg">
+      {alerts}
 
       {postStepVisible(s.stage) && <PostAmendmentEntry dossierId={dossier.id} onOpen={() => goTo("post")} />}
 
@@ -469,7 +734,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       <Grid cols={{ base: 1, lg: 3 }} gap="lg">
         <Card className="cq-lg:col-span-2">
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 basis-60">
               <CardTitle className="flex flex-wrap items-center gap-2">
                 <Send aria-hidden="true" className="h-5 w-5 text-primary" />
                 {hasNumber ? (
@@ -488,50 +753,15 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
               variant="secondary"
               leftIcon={<Search className="h-4 w-4" />}
               disabled={!hasNumber || anyBusy}
-              loading={busyOp === s.queryOp}
-              onClick={() => perform.mutate(s.queryOp)}
+              loading={h.busyOp === s.queryOp}
+              onClick={() => perform.mutate({ op: s.queryOp, branch: 1 })}
             >
               {fill(t.query, { op: s.queryOp })}
             </Button>
           </CardHeader>
           <CardContent>
             <Stack gap="md">
-              <NextStep
-                s={s}
-                next={next}
-                sending={sending}
-                firstSend={firstSend}
-                h={h}
-                certPicker={
-                  firstSend && next && baseOp(next.op) === "IDA" ? (
-                    <div className="flex flex-col gap-3 cq-md:flex-row cq-md:items-end">
-                      <Field label={t.certLabel} className="flex-1">
-                        <Select
-                          value={selectedId}
-                          onChange={(e) => setCertId(e.currentTarget.value)}
-                          disabled={certQ.isLoading || blocked}
-                          options={certs.map((c) => ({ value: c.id, label: fill(t.certOption, { subject: c.subject, issuer: c.issuer, date: monthYear(c.validTo, locale) }) }))}
-                        />
-                      </Field>
-                      <Button
-                        leftIcon={<KeyRound className="h-4 w-4" />}
-                        disabled={blocked || !selectedId || certExpired || anyBusy}
-                        loading={submit.isPending}
-                        onClick={() => submit.mutate()}
-                      >
-                        {fill(t.signSend, { op: next.op })}
-                      </Button>
-                    </div>
-                  ) : null
-                }
-                certNote={
-                  firstSend && selected ? (
-                    <p className="text-xs text-fg-subtle">
-                      {fill(t.certNote, { serial: selected.serial.slice(0, 14), date: formatDate(selected.validTo) })}
-                    </p>
-                  ) : null
-                }
-              />
+              <NextStep s={s} next={next} sending={sending} firstSend={firstSend} h={h} certPicker={certPicker} certNote={certNote} />
               {firstSend && certExpired && <Alert tone="warning">{t.certExpired}</Alert>}
 
               {CUSTOMS_PHASES.filter((p) => pipeline.some((r) => r.phase === p.id)).map((p, i) => (
@@ -548,14 +778,127 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
 
       <MessageLog messages={s.messages} />
 
-      <ConfirmReopenDialog
-        confirm={confirm}
-        code={`${dossier.code} · ${dossier.partner}`}
-        pending={perform.isPending}
-        onClose={() => setConfirm(null)}
-        onConfirm={(c) => perform.mutate(c.row.op)}
-      />
+      {confirmDialog}
     </Stack>
+  );
+}
+
+/**
+ * Thẻ một tờ khai nhánh: "Tờ k/N – số tờ khai", giai đoạn, phân luồng, tờ lỗi (chữ, không chỉ màu), "Chờ tờ j", việc tiếp theo,
+ * nghiệp vụ theo giai đoạn và nhật ký của tờ; tờ đã thông quan có nút sang bước 7 (AMA của tờ).
+ */
+function SheetCard({
+  b, of, s, waiting, declareWaiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost,
+}: {
+  b: BranchSubmission;
+  of: number;
+  s: SubmissionView;
+  waiting: number | null;
+  /** Chờ tờ trước khai tạm xong trước khi khai chính thức (IDC/IDE). */
+  declareWaiting: number | null;
+  problem: "REJECTED" | "SEND_FAILED" | null;
+  h: RowHandlers;
+  anyBusy: boolean;
+  hideNext: boolean;
+  onQuery: () => void;
+  onViewErrors: () => void;
+  onPost: () => void;
+}) {
+  const t = useMessages(SUBMIT_MESSAGES);
+  const sh = useMessages(SHEET_MESSAGES);
+  const stages = useMessages(STAGE_MESSAGES);
+  const titleId = useId();
+  // Tờ chờ tờ trước (truyền theo thứ tự tờ): nút gửi nội dung khóa, lý do SHEET_ORDER – như backend.
+  const pipeline = orderLocked(b.pipeline.filter((r) => !AMA_OPS.has(r.op)), b.no, waiting, declareWaiting);
+  const shownWaiting = waiting ?? declareWaiting;
+  const next = b.nextOp && !AMA_OPS.has(b.nextOp) ? pipeline.find((r) => r.op === b.nextOp) : undefined;
+  const sending = pipeline.find((r) => r.status === "SENDING");
+  const rejection = b.rejection && !AMA_OPS.has(b.rejection.operation) ? b.rejection : null;
+  const channel = b.channel ?? b.result?.channel ?? null;
+  // Khối nghiệp vụ mở sẵn khi tờ có lỗi – cả khi lỗi đến sau (tờ đang gửi → bị từ chối / lỗi gửi), không chỉ lúc gắn.
+  const [opsOpen, setOpsOpen] = useState(problem !== null);
+  useEffect(() => {
+    if (problem) setOpsOpen(true);
+  }, [problem]);
+  return (
+    <Card aria-labelledby={titleId}>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 basis-60">
+          <CardTitle as="h3" id={titleId} className="flex flex-wrap items-center gap-2">
+            <span>
+              {b.declarationNo ? fill(sh.sheetTitleNo, { no: b.no, of, decl: b.declarationNo }) : fill(sh.sheetTitle, { no: b.no, of })}
+            </span>
+            {channel && <StatusBadge status={CHANNEL_STATUS[channel]} />}
+            {problem && (
+              <Badge tone="danger" icon={<XCircle />}>
+                {sh[problem]}
+              </Badge>
+            )}
+            {shownWaiting && (
+              <Badge tone="neutral" icon={<Clock3 />}>
+                {fill(sh.waitingSheet, { no: shownWaiting })}
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            {stages[b.stage]}
+            {!b.declarationNo && <> · {sh.noNumber}</>}
+          </CardDescription>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {postStepVisible(b.stage) && (
+            <Button size="sm" variant="secondary" leftIcon={<FilePen className="h-4 w-4" />} onClick={onPost}>
+              {sh.postAmend}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            leftIcon={<Search className="h-4 w-4" />}
+            disabled={!b.declarationNo || anyBusy}
+            loading={h.busyOp === b.queryOp}
+            onClick={onQuery}
+            aria-label={fill(sh.queryAria, { no: b.no, op: b.queryOp })}
+          >
+            {fill(t.query, { op: b.queryOp })}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Stack gap="md">
+          {rejection && (
+            <Alert
+              tone="danger"
+              title={fill(t.rejectedTitle, { op: rejection.operation, n: rejection.errors.length })}
+              action={
+                <Button size="sm" variant="secondary" onClick={onViewErrors}>
+                  {t.viewErrors}
+                </Button>
+              }
+            >
+              {fill(t.rejectedBody, { op: rejection.operation })}
+            </Alert>
+          )}
+          {waiting ? (
+            <Alert tone="info" title={fill(sh.waitingSheet, { no: waiting })}>
+              {fill(b.stage === "NOT_SENT" && !sheetsOf(s)[waiting - 1]?.declarationNo ? sh.waitingSheetBody : sh.waitingResendBody, { no: waiting })}
+            </Alert>
+          ) : hideNext ? null : (
+            <NextStep s={s} next={next} sending={sending} firstSend={false} h={h} certPicker={null} certNote={null} />
+          )}
+          <Disclosure title={sh.opsTitle} open={opsOpen} onOpenChange={setOpsOpen}>
+            <Stack gap="md">
+              {CUSTOMS_PHASES.filter((p) => pipeline.some((r) => r.phase === p.id)).map((p, i) => (
+                <PhaseSection key={p.id} index={i + 1} phase={p} rows={pipeline.filter((r) => r.phase === p.id)} h={h} />
+              ))}
+            </Stack>
+          </Disclosure>
+          <Disclosure title={sh.sheetLog} meta={<Badge tone="neutral">{b.messages.length}</Badge>}>
+            <MessageList messages={b.messages} />
+          </Disclosure>
+        </Stack>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -619,7 +962,7 @@ function NextStep({
     <div className="flex flex-col gap-3 rounded-md border border-primary bg-primary-subtle p-4">
       <div className="flex flex-wrap items-start gap-3">
         <IconTile icon={<Sparkles />} tone="primary" size="md" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <p className="text-xs font-medium uppercase tracking-wide text-primary-subtle-fg">{t.nextStep}</p>
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
             <Badge tone="primary" variant="outline" className="font-mono">

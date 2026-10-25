@@ -24,7 +24,15 @@ describe("runRules", () => {
     const checks = await runRules(deps, "org_a", "dos_1", anphatExport(), 1, ORG);
     expect(result(checks, "R-POD-TRANSSHIP").detail).toBe("Không áp dụng cho tờ khai xuất khẩu");
     expect(result(checks, "R-CONTAINER-LIST").result).toBe("PASS");
-    expect(store.get("org_a:dos_1")).toHaveLength(26);
+    expect(store.get("org_a:dos_1")).toHaveLength(27);
+  });
+  it("có reader branches: số tờ đã khai lệch số tờ hiện tại → R-BRANCH-COUNT-LOCKED FAIL; không có reader → SKIPPED", async () => {
+    const { deps } = fakeDeps(null);
+    const lệch = await runRules({ ...deps, branches: async () => 3 }, "org_a", "dos_1", hansol(), 1, ORG);
+    expect(result(lệch, "R-BRANCH-COUNT-LOCKED").result).toBe("FAIL");
+    const khớp = await runRules({ ...deps, branches: async () => 1 }, "org_a", "dos_1", hansol(), 1, ORG);
+    expect(result(khớp, "R-BRANCH-COUNT-LOCKED").result).toBe("PASS");
+    expect(result(await runRules(deps, "org_a", "dos_1", hansol(), 1, ORG), "R-BRANCH-COUNT-LOCKED").result).toBe("SKIPPED");
   });
   it("không có port: chạy như cũ, luật cần hồ sơ SKIPPED", async () => {
     const { deps } = fakeDeps(null);
@@ -38,6 +46,6 @@ describe("runRules", () => {
     expect(result(checks, "R-POD-TRANSSHIP").result).toBe("WARN");
     expect(result(checks, "R-CONTAINER-LIST").result).toBe("SKIPPED");
     expect(store.has("org_a:dos_1")).toBe(false);
-    expect(store.get("org_b:dos_1")).toHaveLength(26);
+    expect(store.get("org_b:dos_1")).toHaveLength(27);
   });
 });

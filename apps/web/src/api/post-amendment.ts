@@ -11,3 +11,4 @@ export const updatePostAmendmentField = pick(mock.updatePostAmendmentField, http
 export const addPostAmendmentLines = pick(mock.addPostAmendmentLines, http.addPostAmendmentLines);
 export const removePostAmendmentLine = pick(mock.removePostAmendmentLine, http.removePostAmendmentLine);
 export const approvePostAmendment = pick(mock.approvePostAmendment, http.approvePostAmendment);
+export const copyPostAmendmentHeader = pick(mock.copyPostAmendmentHeader, http.copyPostAmendmentHeader);

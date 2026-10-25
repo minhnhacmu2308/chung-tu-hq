@@ -50,9 +50,19 @@ const OperationCell = ({ r }: { r: CustomsRow }) =>
     <span className="text-fg-subtle">—</span>
   );
 
+/** Lô nhiều tờ khai: mỗi tờ một dòng – định danh dòng / nhãn đọc màn hình kèm số tờ (lô 1 tờ giữ như cũ). */
+const rowId = (r: CustomsRow) => (r.of > 1 ? `${r.dossierId}:${r.branch}` : r.dossierId);
+const rowName = (r: CustomsRow, t: CustomsText) => (r.of > 1 ? fill(t.rowLabelSheet, { code: r.dossierCode, no: r.branch, of: r.of }) : r.dossierCode);
+type CustomsText = Record<keyof (typeof CUSTOMS_PAGE_MESSAGES)["vi"], string>;
+
+/** Cột "Tờ": "2/3" (lô 1 tờ để trống). */
+const SheetCell = ({ r }: { r: CustomsRow }) => (r.of > 1 ? <span className="tabular-nums">{r.branch}/{r.of}</span> : <span className="text-fg-subtle">—</span>);
+
 const col = createDataTableColumnHelper<CustomsRow>();
-const buildColumns = (locale: UiLocale) => {
+/** `sheets`: có lô nhiều tờ khai trong danh sách → thêm cột "Tờ" (không có thì bảng giữ như cũ). */
+const buildColumns = (locale: UiLocale, sheets: boolean) => {
   const t = pickMessages(CUSTOMS_PAGE_MESSAGES, locale);
+  const sheetCol = col.accessor("branch", { header: t.colSheet, size: 80, minSize: 70, cell: (c) => <SheetCell r={c.row.original} /> });
   return col.columns([
   col.accessor("dossierCode", {
     header: t.colDossier,
@@ -67,6 +77,7 @@ const buildColumns = (locale: UiLocale) => {
       </div>
     ),
   }),
+  ...(sheets ? [sheetCol] : []),
   col.accessor("typeCode", {
     header: t.colType,
     size: 125,
@@ -118,13 +129,15 @@ export function CustomsPage() {
   const router = useRouter();
   const locale = useUiLocale();
   const t = pickMessages(CUSTOMS_PAGE_MESSAGES, locale);
-  const columns = useMemo(() => buildColumns(locale), [locale]);
+
   const q = useQuery({
     queryKey: customsKeys.list,
     queryFn: listCustomsDeclarations,
     refetchInterval: (query) => (query.state.data?.some((r) => r.state === "SENDING") ? 2000 : false),
   });
   const rows = q.data ?? [];
+  const sheets = rows.some((r) => r.of > 1);
+  const columns = useMemo(() => buildColumns(locale, sheets), [locale, sheets]);
   const withChannel = rows.filter((r) => r.channel);
   const green = withChannel.filter((r) => r.channel === "GREEN").length;
   const count = (s: CustomsRow["state"]) => rows.filter((r) => r.state === s).length;
@@ -161,8 +174,8 @@ export function CustomsPage() {
           aria-label={t.tableLabel}
           columns={columns}
           data={rows}
-          getRowId={(r) => r.dossierId}
-          rowLabel={(r) => r.dossierCode}
+          getRowId={rowId}
+          rowLabel={(r) => rowName(r, t)}
           loading={q.isLoading}
           searchable
           columnToggle
@@ -179,7 +192,7 @@ export function CustomsPage() {
           viewStorageKey="customs"
           rowActions={(r) => (
             <RowActions
-              rowLabel={r.dossierCode}
+              rowLabel={rowName(r, t)}
               actions={[
                 { id: "submit", label: t.openSubmit, icon: <Send />, onSelect: () => router.push(submitHref(r)) },
                 { id: "dossier", label: t.openDossier, icon: <FolderOpen />, onSelect: () => router.push(`/dossiers/${r.dossierId}`) },
@@ -201,6 +214,7 @@ export function CustomsPage() {
                 select={parts.select}
                 actions={parts.actions}
                 fields={[
+                  ...(r.of > 1 ? [{ label: t.colSheet, value: <SheetCell r={r} /> }] : []),
                   { label: t.colType, value: <TypeCell r={r} /> },
                   { label: t.colDeclNo, value: r.declarationNo ? <span className="font-mono">{r.declarationNo}</span> : <span className="text-fg-subtle">{t.notIssued}</span> },
                   { label: t.colChannel, value: <ChannelCell r={r} /> },

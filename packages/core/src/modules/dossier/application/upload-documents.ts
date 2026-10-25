@@ -5,6 +5,7 @@ import { domainError, type DomainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { canModify } from "../domain/status.js";
 import { classifyByFileName, extensionOf, sniffMime, validateUpload } from "../domain/upload-rules.js";
+import { documentSetScopeError } from "./_edit-scope.js";
 import { toDocument } from "./_dto.js";
 import { expandZips } from "./_unzip.js";
 import type { DocumentRow, DossierDeps, UploadFile } from "./ports.js";
@@ -15,6 +16,8 @@ export const MAX_PAGES_PER_FILE = 60;
 export async function uploadDocuments(deps: DossierDeps, ctx: Ctx, dossierId: string, files: UploadFile[]): Promise<Result<DossierDocument[]>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
+  const blocked = await documentSetScopeError(deps, ctx, dossierId);
+  if (blocked) return err(blocked);
   const now = deps.clock.now();
   const expanded = await expandZips(files, deps.unzipper);
   if (expanded.length === 0) return err(domainError("FILE_INVALID", "Không có file PDF/ảnh nào để tải lên"));

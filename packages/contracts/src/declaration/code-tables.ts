@@ -273,37 +273,52 @@ export const CUSTOMS_OFFICES: CodeEntry[] = [
   { code: "51CB", label: "Hải quan CK cảng Cái Mép (Bà Rịa – Vũng Tàu)", unverified: true },
 ];
 
-/** Mã loại hình nhập khẩu (VN_A_ICB) hay gặp. Không có bảng mã trong business/ – đồng bộ lại từ danh mục VNACCS. */
+/** Mã loại hình nhập khẩu (VN_A_ICB) – đủ 24 mã theo QĐ 1357/QĐ-TCHQ (danh mục đầy đủ kèm hướng dẫn: code-lists TYPE_CODE). */
 export const TYPE_CODES_NK: CodeEntry[] = [
-  { code: "A11", label: "Nhập kinh doanh tiêu dùng", unverified: true },
-  { code: "A12", label: "Nhập kinh doanh sản xuất", unverified: true },
-  { code: "A21", label: "Chuyển tiêu thụ nội địa từ nguồn tạm nhập", unverified: true },
-  { code: "A31", label: "Nhập khẩu hàng xuất khẩu bị trả lại", unverified: true },
-  { code: "A41", label: "Nhập kinh doanh của doanh nghiệp thực hiện quyền nhập khẩu", unverified: true },
-  { code: "A42", label: "Chuyển tiêu thụ nội địa khác", unverified: true },
-  { code: "E11", label: "Nhập nguyên liệu của doanh nghiệp chế xuất từ nước ngoài", unverified: true },
-  { code: "E21", label: "Nhập nguyên liệu, vật tư để gia công cho thương nhân nước ngoài", unverified: true },
-  { code: "E31", label: "Nhập nguyên liệu sản xuất xuất khẩu", unverified: true },
-  { code: "G11", label: "Tạm nhập hàng kinh doanh tạm nhập tái xuất", unverified: true },
-  { code: "G12", label: "Tạm nhập máy móc, thiết bị phục vụ dự án có thời hạn", unverified: true },
-  { code: "G13", label: "Tạm nhập miễn thuế", unverified: true },
-  { code: "G51", label: "Tái nhập hàng hóa đã tạm xuất", unverified: true },
-  { code: "H11", label: "Hàng nhập khẩu khác", unverified: true },
+  { code: "A11", label: "Nhập kinh doanh tiêu dùng" },
+  { code: "A12", label: "Nhập kinh doanh sản xuất" },
+  { code: "A21", label: "Chuyển tiêu thụ nội địa từ nguồn tạm nhập" },
+  { code: "A31", label: "Nhập khẩu hàng hóa đã xuất khẩu" },
+  { code: "A41", label: "Nhập kinh doanh của doanh nghiệp thực hiện quyền nhập khẩu" },
+  { code: "A42", label: "Thay đổi mục đích sử dụng hoặc chuyển tiêu thụ nội địa từ các loại hình khác, trừ tạm nhập" },
+  { code: "A43", label: "Nhập khẩu hàng hóa thuộc Chương trình ưu đãi thuế" },
+  { code: "A44", label: "Tạm nhập hàng hóa bán tại cửa hàng miễn thuế" },
+  { code: "E11", label: "Nhập nguyên liệu của DNCX từ nước ngoài" },
+  { code: "E13", label: "Nhập hàng hóa khác vào DNCX" },
+  { code: "E15", label: "Nhập nguyên liệu, vật tư của DNCX từ nội địa" },
+  { code: "E21", label: "Nhập nguyên liệu, vật tư để gia công cho thương nhân nước ngoài" },
+  { code: "E23", label: "Nhập nguyên liệu, vật tư gia công từ hợp đồng khác chuyển sang" },
+  { code: "E31", label: "Nhập nguyên liệu sản xuất xuất khẩu" },
+  { code: "E33", label: "Nhập nguyên liệu, vật tư vào kho bảo thuế" },
+  { code: "E41", label: "Nhập sản phẩm thuê gia công ở nước ngoài" },
+  { code: "G11", label: "Tạm nhập hàng kinh doanh tạm nhập tái xuất" },
+  { code: "G12", label: "Tạm nhập máy móc, thiết bị phục vụ dự án có thời hạn" },
+  { code: "G13", label: "Tạm nhập miễn thuế" },
+  { code: "G14", label: "Tạm nhập khác" },
+  { code: "G51", label: "Tái nhập hàng hóa đã tạm xuất" },
+  { code: "C11", label: "Hàng nước ngoài gửi kho ngoại quan" },
+  { code: "C21", label: "Hàng đưa vào khu phi thuế quan" },
+  { code: "H11", label: "Hàng nhập khẩu khác" },
 ];
 
-/** Mã loại hình xuất khẩu (VN_A_ECB) hay gặp. Không có bảng mã trong business/ – đồng bộ lại từ danh mục VNACCS. */
+/** Mã loại hình xuất khẩu (VN_A_ECB) – đủ 16 mã theo QĐ 1357/QĐ-TCHQ (danh mục đầy đủ kèm hướng dẫn: code-lists TYPE_CODE). */
 export const TYPE_CODES_XK: CodeEntry[] = [
-  { code: "B11", label: "Xuất kinh doanh, xuất khẩu của doanh nghiệp đầu tư", unverified: true },
-  { code: "B12", label: "Xuất sau khi đã tạm xuất", unverified: true },
-  { code: "B13", label: "Xuất trả hàng đã nhập khẩu", unverified: true },
-  { code: "E42", label: "Xuất khẩu sản phẩm của doanh nghiệp chế xuất", unverified: true },
-  { code: "E52", label: "Xuất sản phẩm gia công cho thương nhân nước ngoài", unverified: true },
-  { code: "E62", label: "Xuất sản phẩm sản xuất xuất khẩu", unverified: true },
-  { code: "G21", label: "Tái xuất hàng kinh doanh tạm nhập tái xuất", unverified: true },
-  { code: "G22", label: "Tái xuất máy móc, thiết bị đã tạm nhập phục vụ dự án có thời hạn", unverified: true },
-  { code: "G23", label: "Tái xuất miễn thuế hàng tạm nhập", unverified: true },
-  { code: "G61", label: "Tạm xuất hàng hóa", unverified: true },
-  { code: "H21", label: "Xuất khẩu hàng khác", unverified: true },
+  { code: "B11", label: "Xuất kinh doanh" },
+  { code: "B12", label: "Xuất sau khi đã tạm xuất" },
+  { code: "B13", label: "Xuất khẩu hàng đã nhập khẩu" },
+  { code: "E42", label: "Xuất khẩu sản phẩm của DNCX" },
+  { code: "E52", label: "Xuất sản phẩm gia công cho thương nhân nước ngoài" },
+  { code: "E54", label: "Xuất nguyên liệu gia công từ hợp đồng này sang hợp đồng khác" },
+  { code: "E62", label: "Xuất sản phẩm sản xuất xuất khẩu" },
+  { code: "E82", label: "Xuất nguyên liệu, vật tư thuê gia công ở nước ngoài" },
+  { code: "G21", label: "Tái xuất hàng kinh doanh tạm nhập tái xuất" },
+  { code: "G22", label: "Tái xuất máy móc, thiết bị đã tạm nhập để phục vụ dự án có thời hạn" },
+  { code: "G23", label: "Tái xuất hàng tạm nhập miễn thuế" },
+  { code: "G24", label: "Tái xuất khác" },
+  { code: "G61", label: "Tạm xuất hàng hóa" },
+  { code: "C12", label: "Hàng hóa từ kho ngoại quan xuất đi nước ngoài" },
+  { code: "C22", label: "Hàng đưa ra khu phi thuế quan" },
+  { code: "H21", label: "Xuất khẩu hàng khác" },
 ];
 
 /** Chỉ tiêu 1.5 / 2.5 – Mã phân loại hàng hóa (TT39 Mẫu 01, Mẫu 02). Chỉ dùng "J" khi Chính phủ có văn bản riêng. */
@@ -411,6 +426,20 @@ export const BP_REASONS: CodeEntry[] = [
   { code: "C", label: "Trường hợp khác" },
 ];
 
+/** Chỉ tiêu 1.28 / 2.26 ô 2 – Đơn vị tính trọng lượng Gross (danh mục VNACCS 29.DM_GANCODE, sheet DM_DVT_GROSS). */
+export const GROSS_UNITS: CodeEntry[] = [
+  { code: "KGM", label: "Kilogram" },
+  { code: "TNE", label: "Tấn" },
+  { code: "LBR", label: "Pound" },
+];
+
+/** Chỉ tiêu 1.36 – Mã kết quả kiểm tra nội dung khi xem hàng trước khai (danh mục VNACCS 29.DM_GANCODE, sheet DM_MA_PLKT). */
+export const INSPECTION_RESULTS: CodeEntry[] = [
+  { code: "A", label: "Không có bất thường" },
+  { code: "B", label: "Có bất thường" },
+  { code: "C", label: "Cần tham vấn ý kiến cơ quan Hải quan" },
+];
+
 /** Chỉ tiêu 1.58 / 2.48 – Mã xác định thời hạn nộp thuế (TT39 Mẫu 01, Mẫu 02). */
 export const DUE_DATE_CODES: CodeEntry[] = [
   { code: "A", label: "Áp dụng thời hạn nộp thuế do sử dụng bảo lãnh riêng" },
@@ -491,6 +520,8 @@ export const CODE_TABLES: Readonly<Partial<Record<CodeTable, readonly CodeEntry[
   BP_REASON: BP_REASONS,
   DUE_DATE: DUE_DATE_CODES,
   AMA_REASON: AMA_REASONS,
+  GROSS_UNIT: GROSS_UNITS,
+  INSPECTION_RESULT: INSPECTION_RESULTS,
 };
 
 /**
@@ -499,6 +530,7 @@ export const CODE_TABLES: Readonly<Partial<Record<CodeTable, readonly CodeEntry[
  */
 export const VNACCS_SYNCED_CODE_TABLES: readonly CodeTable[] = [
   "A014", "A016", "A202", "A519", "A520", "A528", "A546", "A601", "A620", "LAW_CODE", "BANK", "OTHER_TAX", "ABS_TAX",
+  "IMPORT_TAX_RATE_KIND", "TAX_KIND",
 ];
 
 /** Bảng mã theo tên; `undefined` khi bảng phải đồng bộ từ VNACCS (VNACCS_SYNCED_CODE_TABLES). */

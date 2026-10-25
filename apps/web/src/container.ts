@@ -1,5 +1,6 @@
 // Composition root của web: nơi DUY NHẤT nối hạ tầng (DB, Redis, queue) vào use case của @kb/core.
 // Route handler chỉ gọi getContainer(); không import drizzle/postgres/bullmq ở nơi khác (depcruise chặn).
+import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv, type Env } from "@kb/core/config";
 import { createDb, platformDbUrl, runSeed, type Db } from "@kb/core/db";
 import { activeQuotaBonus, type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
@@ -18,7 +19,7 @@ import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificat
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import type { MailboxDeps } from "@kb/core/modules/mailbox";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
-import { stageOf, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
+import { checkSentSheets, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { createCustomsInfrastructure, createIntegrationInfrastructure, createVnaccsCredentialsReader, envVnaccsCredentials } from "@kb/core/modules/integration/infrastructure";
@@ -227,16 +228,39 @@ function build(): Container {
   });
   declaration.notify = notify;
   declaration.usage = serviceUsage;
+  // Chi phí người khai nhập ở bước OCR (module declaration) → luật đối chiếu đọc được (R-INCOTERM-FREIGHT); lưu xong chạy lại luật.
+  validation.charges = async (orgId, dossierId) => (await declaration.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.valueCharges.get(orgId, dossierId)))?.data ?? null;
+  declaration.onChargesSaved = async (orgId, dossierId) => {
+    const s = await extraction.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.shipments.latest(orgId, dossierId));
+    if (!s) return;
+    const o = await extraction.documents.orgInfo(orgId);
+    await runRules(validation, orgId, dossierId, s.data, s.version, { taxCode: o.taxCode, name: o.name });
+  };
   // Sửa dữ liệu chứng từ ở OCR → dòng hàng + tờ khai nháp cập nhật theo (lỗi không chặn việc lưu trường; ghi log).
   extraction.onShipmentEdited = async (orgId, dossierId) => {
     const r = await refreshFromShipment(declaration, { orgId: asOrgId(orgId), userId: asUserId("") }, dossierId);
     if (!r.ok) console.error("[extraction→declaration]", r.error.code, r.error.message);
   };
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
+  // Luật R-BRANCH-COUNT-LOCKED: số tờ đã khai (đã lập kết quả các tờ) khi đã có tờ được cấp số – chuỗi dừng giữa chừng vẫn đủ N tờ.
+  validation.branches = async (orgId, dossierId) => lockedSheetCount(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.listForDossier(orgId, dossierId)));
   customs.notify = notify;
+  // Danh sách / đầu hồ sơ: tóm tắt "Thông quan k/N" từ kết quả các tờ khai nhánh (dossier không import integration).
+  dossier.customs = {
+    summaries: async (ctx, ids) => {
+      const r = await dossierCustomsSummaries(customs, ctx, ids);
+      if (!r.ok) console.error("[dossier→customs summaries]", r.error.code, r.error.message);
+      return r.ok ? r.value : new Map();
+    },
+  };
   customs.usage = serviceUsage;
-  // Sửa chỉ tiêu tờ khai theo giai đoạn truyền (chưa khai / sửa đổi bổ sung / đã thông quan).
-  declaration.customsStage = async (orgId, dossierId) => stageOf(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.get(orgId, dossierId)));
+  // Phạm vi sửa theo giai đoạn truyền và tờ đã gọi về (chưa khai / sửa đổi bổ sung / đã thông quan; lô nhiều tờ chỉ gọi về một phần → khóa chỉ tiêu chung).
+  const customsSheets = (orgId: string, dossierId: string) => customsEditSheets(customs, orgId, dossierId);
+  declaration.customsSheets = customsSheets;
+  extraction.customsSheets = customsSheets;
+  dossier.customsSheets = customsSheets;
+  // Duyệt tờ khai lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi Hải quan (SENT_SHEETS_CHANGED).
+  declaration.sentSheetsGuard = (orgId, dossierId) => checkSentSheets(customs, orgId, dossierId);
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
   // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
   mailbox.audit = identity.audit;

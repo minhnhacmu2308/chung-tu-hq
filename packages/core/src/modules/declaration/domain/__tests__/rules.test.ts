@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Shipment, Sourced } from "@kb/contracts";
+import { EMPTY_VALUE_CHARGES, type Shipment, type Sourced } from "@kb/contracts";
 import { buildDeclaration, type BuildInput } from "../build.js";
 import { EDA_MAPPINGS } from "../mapping/eda.js";
 import { evaluateMapping, ruleOptionsView, validateOverrides } from "../mapping/evaluate.js";
@@ -16,7 +16,7 @@ const build = (over: Partial<BuildInput> & { tweak?: (s: Shipment) => void } = {
   buildDeclaration({ shipment: hansol(over.tweak), dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: EXCHANGE, ...over });
 const input = (s: Shipment = hansol(), extra: Partial<MappingInput> = {}): MappingInput => {
   const valuation = allocateCustomsValue({ items: ITEMS, adjustments: [], currency: "USD", rates: EXCHANGE.rates });
-  return { shipment: s, dossier: DOSSIER, org: ORG, now: NOW, adjustments: [], valuation, exchange: EXCHANGE, profile: {}, overrides: {}, lines: [], ...extra };
+  return { shipment: s, dossier: DOSSIER, org: ORG, now: NOW, adjustments: [], valuation, exchange: EXCHANGE, profile: {}, overrides: {}, lines: [], charges: EMPTY_VALUE_CHARGES, ...extra };
 };
 const omitProv = ({ provenance: _p, ...rest }: ReturnType<typeof evaluateMapping>) => rest;
 const KHO = IDA_MAPPINGS.find((m) => m.code === "KHO")!;

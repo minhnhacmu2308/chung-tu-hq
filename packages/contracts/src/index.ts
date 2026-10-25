@@ -5,6 +5,8 @@ export * from "./extraction/index.js";
 export * from "./catalog/index.js";
 export * from "./shipment.js";
 export * from "./customs-flow.js";
+export * from "./customs-summary.js";
+export * from "./sent-sheets.js";
 export * from "./reason-codes.js";
 export * from "./declaration/index.js";
 export * from "./fpt/index.js";

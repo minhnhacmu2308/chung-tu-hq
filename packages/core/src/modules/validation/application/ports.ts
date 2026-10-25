@@ -1,4 +1,4 @@
-import type { DocKind, RuleResult, RuleSeverity } from "@kb/contracts";
+import type { DocKind, RuleResult, RuleSeverity, ValueCharges } from "@kb/contracts";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import type { DossierProfile } from "../domain/helpers.js";
 
@@ -17,4 +17,8 @@ export interface ValidationUow {
 export interface DossierProfileReader {
   profile(orgId: string, dossierId: string): Promise<DossierProfile | null>;
 }
-export type ValidationDeps = { uow: ValidationUow; idGen: { next(prefix: "chk"): string }; clock: { now(): Date }; dossiers?: DossierProfileReader };
+/** Chi phí người khai nhập (module declaration) – composition root nối; vắng = luật chỉ theo chứng từ. */
+export type ChargesReader = (orgId: string, dossierId: string) => Promise<ValueCharges | null>;
+/** Số tờ đã khai khi đã có tờ được cấp số (module integration, lockedSheetCount; chưa có số → 0) – composition root nối; vắng = 0 (luật R-BRANCH-COUNT-LOCKED SKIPPED). */
+export type BranchesReader = (orgId: string, dossierId: string) => Promise<number>;
+export type ValidationDeps = { uow: ValidationUow; idGen: { next(prefix: "chk"): string }; clock: { now(): Date }; dossiers?: DossierProfileReader; charges?: ChargesReader; branches?: BranchesReader };

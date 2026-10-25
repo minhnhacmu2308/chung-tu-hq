@@ -176,6 +176,14 @@ export function operationAvailability(i: OperationAvailabilityInput): OperationA
   return rejected ? out.map((r) => ({ op: r.op, enabled: false, action: r.action, ...withReason(rejected) })) : out;
 }
 
+/**
+ * Nghiệp vụ gọi về (sửa trước thông quan) đang bật của một tờ theo operationAvailability: IDB/EDB khi khai tạm, IDD/EDD khi đã phân luồng.
+ * AMB (gọi bản khai bổ sung sau thông quan) không tính. null = tờ chưa gọi về được lúc này (đang chờ phản hồi, giai đoạn không cho phép).
+ */
+export function recallOpFor(rows: OperationAvailability[]): CustomsOperation | null {
+  return rows.find((r) => r.enabled && r.op !== "AMB" && isRecallOperation(r.op))?.op ?? null;
+}
+
 /** Việc tiếp theo nên làm (nổi bật trên màn); null khi chỉ còn chờ Hải quan. */
 export function nextCustomsOperation(i: OperationAvailabilityInput): CustomsOperation | null {
   if (i.pending.length) return null;

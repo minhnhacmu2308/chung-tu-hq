@@ -15,3 +15,4 @@ export { catalogFieldRole, declarationFieldRole, findDeclarationFieldDef, type D
 export { fieldDefForFptIndex } from "./fpt-index.js";
 export { DECLARATION_CONDITIONS, type ConditionContext, type ConditionId } from "./conditions.js";
 export * from "./code-tables.js";
+export * from "./branches.js";

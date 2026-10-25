@@ -1,6 +1,14 @@
 // Hồ sơ khai báo (mock). Thay thân hàm bằng fetch tới backend khi có API – giữ nguyên chữ ký.
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { Direction, Dossier, DossierDocument, DossierStatus, StepId } from "@/mocks/types";
+import type { MockDb } from "@/mocks/db";
+import { customsSummaryOf } from "./customs";
+
+/** Kèm trạng thái Hải quan gộp từ các tờ khai nhánh (như backend withCustoms) – vắng khi chưa truyền. */
+const withCustoms = (db: MockDb, d: Dossier): Dossier => {
+  const customs = customsSummaryOf(db, d.id);
+  return customs ? { ...d, customs } : d;
+};
 
 export const dossierKeys = {
   all: ["dossiers"] as const,
@@ -16,19 +24,19 @@ const matches = (f: DossierFilter) => (d: Dossier) => {
   return (!f.direction || d.direction === f.direction) && (!f.status || d.status === f.status) && (!f.step || d.step === f.step) && (!q || [d.code, d.partner, d.billNo].some((v) => v.toLowerCase().includes(q)));
 };
 
-export const listDossiers = (f: DossierFilter = {}) => query((db) => db.dossiers.filter(matches(f)));
+export const listDossiers = (f: DossierFilter = {}) => query((db) => db.dossiers.filter(matches(f)).map((d) => withCustoms(db, d)));
 /** Cùng hình dạng với API phân trang server: {items,total,limit,offset}. */
 export const listDossiersPage = (f: DossierFilter, page: { limit: number; offset: number }) =>
   query((db) => {
     const all = db.dossiers.filter(matches(f));
-    return { items: all.slice(page.offset, page.offset + page.limit), total: all.length, limit: page.limit, offset: page.offset };
+    return { items: all.slice(page.offset, page.offset + page.limit).map((d) => withCustoms(db, d)), total: all.length, limit: page.limit, offset: page.offset };
   });
 
 export const getDossier = (id: string) =>
   query((db) => {
     const d = db.dossiers.find((x) => x.id === id);
     if (!d) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
-    return d;
+    return withCustoms(db, d);
   });
 
 export const listDocuments = (dossierId: string) => query((db) => db.documents.filter((d) => d.dossierId === dossierId));

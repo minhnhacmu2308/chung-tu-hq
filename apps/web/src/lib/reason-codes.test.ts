@@ -44,6 +44,38 @@ describe("reasonText", () => {
     expect(rowReason({ reason: "Lô hàng không có container", reasonCode: "NO_CONTAINERS" }, "zh")).toBe("该批货物没有集装箱");
     expect(rowReason({ reason: "Lý do cũ (backend chưa gửi mã)" }, "en")).toBe("Lý do cũ (backend chưa gửi mã)");
   });
+  it("SENT_SHEETS_CHANGED: linesOnly = 1 → `fields` dịch thành dòng hàng / line items / 商品行; = 0 → giữ số chỉ tiêu", () => {
+    const lines = { sheets: "1, 3", fields: "dòng hàng", linesOnly: "1" };
+    expect(reasonText("SENT_SHEETS_CHANGED", lines, undefined, "vi")).toBe(reasonVi("SENT_SHEETS_CHANGED", lines));
+    expect(reasonText("SENT_SHEETS_CHANGED", lines, undefined, "en")).toBe("Sheets 1, 3 were not recalled but their declared content changed (line items) – recall these sheets or undo the change");
+    expect(reasonText("SENT_SHEETS_CHANGED", lines, undefined, "zh")).toBe("第1, 3页未召回，但已申报内容已更改（商品行）——请召回这些页或撤销更改");
+    expect(reasonText("SENT_SHEETS_CHANGED", { sheets: "2", fields: "1.51", linesOnly: "0" }, undefined, "en")).toContain("(1.51)");
+  });
+  it("SENT_SHEETS_CHANGED đổi cả chỉ tiêu chung lẫn dòng: fields ghép lại theo ngôn ngữ từ numbers + lineSheets; vi trùng câu backend", () => {
+    const p = { sheets: "1, 3", fields: "1.51; dòng hàng tờ 3", numbers: "1.51", lineSheets: "3", linesOnly: "0" };
+    expect(reasonText("SENT_SHEETS_CHANGED", p, undefined, "vi")).toBe(reasonVi("SENT_SHEETS_CHANGED", p));
+    expect(reasonText("SENT_SHEETS_CHANGED", p, undefined, "en")).toBe("Sheets 1, 3 were not recalled but their declared content changed (1.51; line items of sheet(s) 3) – recall these sheets or undo the change");
+    expect(reasonText("SENT_SHEETS_CHANGED", p, undefined, "zh")).toBe("第1, 3页未召回，但已申报内容已更改（1.51；第3页商品行）——请召回这些页或撤销更改");
+  });
+  it("SENT_SHEETS_UNVERIFIED (tờ khai trước khi lưu nội dung đã gửi) có đủ 3 ngôn ngữ", () => {
+    const p = { sheets: "1, 3" };
+    expect(reasonText("SENT_SHEETS_UNVERIFIED", p, undefined, "vi")).toBe("Tờ 1, 3 khai trước khi hệ thống lưu nội dung đã gửi – không kiểm tra được, gọi về các tờ này trước khi sửa");
+    expect(reasonText("SENT_SHEETS_UNVERIFIED", p, undefined, "en")).toBe("Sheets 1, 3 were declared before the system recorded sent content – cannot be verified; recall these sheets before editing");
+    expect(reasonText("SENT_SHEETS_UNVERIFIED", p, undefined, "zh")).toBe("第 1, 3 张在系统记录已发送内容之前申报——无法核对，请先召回这些页再修改");
+  });
+  it("khai chính thức cả lô (DECLARE_ALL_*) có đủ 3 ngôn ngữ", () => {
+    const cases: [string, Record<string, string | number> | undefined, string, string, string][] = [
+      ["DECLARE_ALL_SINGLE_SHEET", undefined, "Khai chính thức cả lô chỉ dùng cho lô nhiều tờ", "Declare all applies only to multi-sheet lots", "全部正式申报仅适用于多页报关单"],
+      ["DECLARE_ALL_PENDING", undefined, "Đang gửi nghiệp vụ khác – chờ xong rồi khai chính thức cả lô", "Another operation is being sent – wait for it to finish before declaring all", "正在发送其他业务——请等待完成后再全部正式申报"],
+      ["DECLARE_ALL_NOT_PRE_DECLARED", { sheet: 3 }, "Tờ 3: chưa khai tạm xong – khai tạm trước khi khai chính thức cả lô", "Sheet 3: pre-declaration not finished – pre-declare before declaring all", "第 3 张：临时申报未完成——请先临时申报再全部正式申报"],
+      ["DECLARE_ALL_NONE", undefined, "Không còn tờ nào chờ khai chính thức", "No sheet left awaiting official declaration", "没有等待正式申报的页"],
+    ];
+    for (const [code, p, vi, en, zh] of cases) {
+      expect(reasonText(code, p, undefined, "vi")).toBe(vi);
+      expect(reasonText(code, p, undefined, "en")).toBe(en);
+      expect(reasonText(code, p, undefined, "zh")).toBe(zh);
+    }
+  });
 });
 
 describe("errorText", () => {

@@ -4,12 +4,15 @@ import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { canModify } from "../domain/status.js";
 import { toDocument } from "./_dto.js";
+import { documentScopeError } from "./_edit-scope.js";
 import type { DossierDeps } from "./ports.js";
 
 /** Người dùng đặt loại → đọc lại theo skill của loại mới (job mới có hậu tố loại để không trùng khóa cũ). Trường cũ do pipeline extraction thay khi đọc lại; xóa chứng từ thì DB cascade. */
 export async function changeDocumentKind(deps: DossierDeps, ctx: Ctx, documentId: string, kind: DocKind): Promise<Result<DossierDocument>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
+  const blocked = await documentScopeError(deps, ctx, documentId);
+  if (blocked) return err(blocked);
   const now = deps.clock.now();
   const res = await deps.uow.asOrg(ctx, async (r) => {
     const doc = await r.documents.get(ctx.orgId, documentId);

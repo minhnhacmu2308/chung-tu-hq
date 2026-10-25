@@ -5,15 +5,20 @@ import { domainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { Decimal } from "../../../shared/decimal.js";
 import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
-import { syncLineItems, unconfirmedCount } from "./_dto.js";
+import { syncLineItems, toBranches, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
 
 export type DeclarationSnapshot = {
   declarationId: string; version: number; status: DeclarationStatus; kind: "IDA" | "EDA"; direction: "NK" | "XK"; currency: string;
-  fields: Record<string, { value: string }>; items: Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
-  adjustments: { label: string; amount: string; currency: string }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
+  fields: Record<string, { value: string; source?: string }>; items: Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
+  adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
+  /** Thuế dự tính (thuế NK + VAT, VND) từng tờ khai nhánh – cùng cách tính với DeclarationView.branches. */
+  branchTaxVnd: string[];
+  /** Lần phê duyệt hiện tại (ISO); mở lại → null, duyệt lại → đổi (phiên bản tờ khai giữ nguyên). */
+  approvedAt: string | null;
 };
 
 export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: string, dossierId: string): Promise<DeclarationSnapshot | null> {
@@ -27,13 +32,18 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
   const taxes = computeTaxes(valuation.perItem.map((p) => ({ id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: items.find((i) => i.id === p.id)?.importDutyRate ?? null, vatRate: items.find((i) => i.id === p.id)?.vatRate ?? null })));
   return {
     declarationId: decl.id, version: decl.version, status: decl.status, kind: decl.kind, direction: dossier.direction, currency: dossier.currency,
-    fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value }])),
+    fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value, source: f.source }])),
     items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, policyNote: i.policyNote })),
-    adjustments: decl.valueAdjustments.map((a) => ({ label: a.label, amount: a.amount, currency: a.currency })),
+    adjustments: decl.valueAdjustments.map((a) => ({ label: a.label, amount: a.amount, currency: a.currency, kind: a.kind, ...(a.code ? { code: a.code } : {}), ...(a.allocate === false ? { allocate: false } : {}) })),
     containers: shipment?.transport.containers.map((c) => c.no) ?? [],
     unconfirmedHs: unconfirmedCount(items),
     estimatedTaxVnd: String(BigInt(taxes.importDutyVnd) + BigInt(taxes.vatVnd)),
     exchangeRateDate: decl.exchangeRateDate,
+    branchTaxVnd: toBranches(items.map((i) => {
+      const tax = taxes.perItem.find((p) => p.id === i.id);
+      return { lineNo: i.lineNo, amount: i.amount, customsValueVnd: valuation.perItem.find((p) => p.id === i.id)?.customsValueVnd ?? "0", importDutyVnd: tax?.importDutyVnd ?? "0", vatVnd: tax?.vatVnd ?? "0" };
+    })).map((b) => new Decimal(b.estImportDutyVnd).plus(b.estVatVnd).toFixed(0)),
+    approvedAt: decl.approvedAt?.toISOString() ?? null,
   };
 }
 

@@ -5,7 +5,7 @@
 // Dòng hàng: số liệu chứng từ sửa ở bước OCR (nút mở đúng dòng), mã HS qua hộp chọn mã HS; ô chỉ có trên tờ khai (mã biểu thuế, miễn giảm…) sửa trực tiếp,
 // lưu theo id dòng (HANG.<id>.<ô>). Lưu bằng API sửa chỉ tiêu (backend kiểm tra lại cùng quy tắc, ghi field_audit).
 import { Alert, Button, fill, Stack, useMessages, useUiLocale } from "@kb/ui";
-import { layoutFor, type Declaration, type DeclarationEditMode, type LineItem } from "@kb/contracts";
+import { layoutFor, sheetOfLine, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem } from "@kb/contracts";
 import { FileSearch, Save, Search, Undo2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -26,13 +26,15 @@ type Props = {
   items: LineItem[];
   /** Chế độ sửa theo giai đoạn tờ khai (declarationEditMode). */
   mode: DeclarationEditMode;
+  /** Phạm vi sửa theo tờ đã gọi về (lô nhiều tờ): dòng của tờ chưa gọi về chỉ đọc; không truyền → `mode` cho mọi dòng. */
+  scope?: DeclarationEditScope;
   /** Vai trò được sửa tờ khai (VIEWER chỉ xem). */
   canEdit: boolean;
   /** Tờ khai đã thông quan: không sửa tờ khai gốc, sửa qua bản khai bổ sung AMA. */
   cleared?: boolean;
 };
 
-export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode, canEdit, cleared = false }: Props) {
+export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode, scope, canEdit, cleared = false }: Props) {
   const t = useMessages(FORM_MESSAGES);
   const locale = useUiLocale();
   const mode: DeclarationEditMode = canEdit ? stageMode : "LOCKED";
@@ -66,12 +68,20 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   const originalKey = JSON.stringify(original);
   useEffect(() => setDraft(original), [originalKey]);
   const lockOf: FieldLockLookup = declarationLockOf(kind, mode, original, editable, locale);
-  const edits = [...pendingEdits(kind, original, draft, editable), ...(mode === "LOCKED" ? [] : pendingItemEdits(kind, items.map((it) => it.id), itemRows, itemDraft))];
+  // Dòng sửa được: theo tờ chứa dòng (lô nhiều tờ chỉ gọi về một số tờ), không có phạm vi → theo chế độ chung.
+  const lineNos = items.map((it) => it.lineNo);
+  const lineEditable = (i: number) => canEdit && (scope ? scope.lines[sheetOfLine(lineNos, items[i]?.lineNo ?? 0)] ?? scope.common : stageMode) !== "LOCKED";
+  const editableLines = items.map((_, i) => i).filter(lineEditable);
+  const anyLineEditable = editableLines.length > 0;
+  const edits = [
+    ...pendingEdits(kind, original, draft, editable),
+    ...pendingItemEdits(kind, editableLines.map((i) => items[i]!.id), editableLines.map((i) => itemRows[i]!), editableLines.map((i) => itemDraft[i]!)),
+  ];
   const editableCount = new Set(editable.values()).size;
   const goOcr = (lineNo: number) => router.replace(`${pathname}?step=ocr&dong=${lineNo}`, { scroll: false });
   const itemActions = (index: number) => {
     const it = items[index];
-    if (!it || mode === "LOCKED") return null;
+    if (!it || !lineEditable(index)) return null;
     return (
       <Stack gap="sm">
         {/* Panel dòng hàng che thông báo đầu form → lưu ngay trong panel. */}
@@ -140,7 +150,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
           section={section}
           onSection={setSection}
           onChange={editable.size ? (key, value) => setDraft((v) => ({ ...v, [key]: value })) : undefined}
-          onItemChange={mode === "LOCKED" ? undefined : (i, key, value) => setItemDraft((rows) => rows.map((r, j) => (j === i ? { ...r, [key]: value } : r)))}
+          onItemChange={anyLineEditable ? (i, key, value) => lineEditable(i) && setItemDraft((rows) => rows.map((r, j) => (j === i ? { ...r, [key]: value } : r))) : undefined}
           itemActions={itemActions}
           amending={false}
           onAmend={() => {}}

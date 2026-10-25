@@ -3,7 +3,10 @@
 // - Bảng chuyển mã tách ô giống lúc truyền FPT (packages/core integration/domain/declaration-to-fpt.ts); sửa ô con thì ghép lại đúng định dạng chỉ tiêu.
 // - Ô người khai nhập chưa có mã app (mã phân loại hàng hóa, ủy thác, bảo lãnh, trung chuyển…) lưu trên tờ khai với mã = tên trường VNACCS ("ô bổ sung").
 import type { CustomsStage } from "../customs-flow.js";
+import { awaitingContent, recallExempt } from "../customs-summary.js";
+import { branchRanges } from "../declaration/branches.js";
 import { isDeclarationFieldEditable, type DeclarationSection, type DeclarationStatus } from "../dto/declaration.js";
+import { NO_INSURANCE_VALUE, parseAdjustmentField } from "../dto/value-charges.js";
 import type { FptFieldMeta } from "../fpt/common.js";
 import { VN_EDA_CON_FIELDS, VN_EDA_FIELDS } from "../fpt/eda.js";
 import { VN_IDA_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "../fpt/ida.js";
@@ -89,6 +92,24 @@ const permits: Rule = {
   from: (v) => range(5).map((i) => [get(v, `TK_SS${i}`), get(v, `TK_SN${i}`)].filter(Boolean).join(" ")).filter(Boolean).join("; "),
 };
 
+/** 1.47 / 1.48 "1150 USD" → mã phân loại A + mã tiền + số tiền; 1.48 không mua bảo hiểm → mã D. Chỉ đọc (sửa ở bước OCR – Chi phí và điều chỉnh trị giá). */
+const charge = (code: string, [cls, cur, amt]: [string, string, string]): Rule => ({
+  code, keys: [cls, cur, amt],
+  to: (v) => {
+    if (v === NO_INSURANCE_VALUE) return { [cls]: "D" };
+    const m = /^(\d+(?:\.\d+)?) ([A-Z]{3})$/.exec(v.trim());
+    return m ? { [cls]: "A", [cur]: m[2]!, [amt]: m[1]! } : {};
+  },
+});
+/** 1.49 "A AD 100 USD; G SB 20 USD KPB" → KTG_VR/VI/VC/VP{n} + Phân bổ phí (APP_PB{n}). Chỉ đọc. */
+const adjustments: Rule = {
+  code: "KHOAN_DC",
+  keys: range(5).flatMap((i) => [`KTG_VR${i}`, `KTG_VI${i}`, `KTG_VC${i}`, `KTG_VP${i}`, `APP_PB${i}`]),
+  to: (v) => Object.fromEntries(parseAdjustmentField(v).slice(0, 5).flatMap((a, i) => [
+    [`KTG_VR${i + 1}`, a.code], [`KTG_VI${i + 1}`, a.kind], [`KTG_VC${i + 1}`, a.currency], [`KTG_VP${i + 1}`, a.amount], [`APP_PB${i + 1}`, a.allocate === false ? "" : "1"],
+  ])),
+};
+
 const COMMON_INVOICE = (): Rule[] => [
   token("HD_PL", "TK_IV1"), direct("SO_HD", "TK_IV3"), direct("NGAY_HD", "TK_IVD"), token("PT_TT", "TK_IVP"),
   token("GIA_PL", "TK_IP1"), direct("DK_GIA", "TK_IP2"), direct("MA_TT", "TK_IP3"), direct("TONG_TG", "TK_IP4"),
@@ -103,6 +124,7 @@ const RULES: Record<Kind, Rule[]> = {
     direct("SO_VD", "VD_BL1"), qty("SO_KIEN", ["VD_NO", "VD_NOT"]), weight("TRONG_LUONG", ["VD_GW", "VD_GWT"]), token("KHO", "VD_ST"),
     codeName("CANG_DO", ["VD_DST", "VD_DSN"]), codeName("CANG_XEP", ["VD_PSC", "VD_PSN"]), direct("HO_HIEU", "VD_VSC"), direct("PTVC_TEN", "VD_VSN"), direct("NGAY_DEN", "VD_ARR"), direct("SL_CONT", "VD_COC"),
     token("KHAI_TG", "KTG_VD1"), direct("CT_TG", "KTG_VLD"),
+    charge("PHI_VC", ["KTG_FR1", "KTG_FR2", "KTG_FR3"]), charge("PHI_BH", ["KTG_IN1", "KTG_IN2", "KTG_IN3"]), adjustments,
     ...COMMON_INVOICE(),
   ],
   EDA: [
@@ -236,6 +258,67 @@ export function declarationEditMode(status: DeclarationStatus, stage: CustomsSta
   if (stage === "NOT_SENT" || stage === "RECALLED") return "FULL";
   if (stage === "AMEND_RECALLED") return "AMEND";
   return "LOCKED";
+}
+
+/** Tờ khai nhánh để tính phạm vi sửa: số tờ, giai đoạn Hải quan, số tờ khai (null = chưa được cấp). */
+export type EditSheet = { no: number; stage: CustomsStage; declarationNo: string | null };
+/**
+ * Phạm vi sửa tờ khai theo tờ đã gọi về (spec tách tờ khai IDC/gọi về §2.4): `common` – mọi chỉ tiêu chung (header, vận đơn, trị giá/khoản điều chỉnh…);
+ * `lines[n]` – ô dòng hàng của tờ n; `addRemoveLines` – thêm/xóa/đổi thứ tự dòng (làm dịch dòng giữa các tờ); `lockedSheets` – tờ còn hiệu lực ở Hải quan (lý do khóa);
+ * `closedSheets` – tờ miễn gọi về (thông quan / sau thông quan / bị từ chối): dòng khóa hẳn, sửa bằng AMA.
+ */
+export type DeclarationEditScope = { common: DeclarationEditMode; lines: Record<number, DeclarationEditMode>; addRemoveLines: boolean; lockedSheets: number[]; closedSheets: number[] };
+
+/** Tờ còn hiệu lực ở Hải quan: có số tờ khai, không miễn (thông quan / sau thông quan / từ chối), không đang chờ gửi nội dung. */
+const activeAtCustoms = (s: EditSheet) => !!s.declarationNo && !recallExempt(s.stage) && !awaitingContent(s.stage);
+
+/**
+ * Lô một tờ: như `declarationEditMode` (không đổi hành vi). Lô nhiều tờ: tờ khai không nháp → khóa hết; còn tờ còn hiệu lực → khóa chỉ tiêu chung và thêm/xóa dòng;
+ * không còn → chung AMEND nếu có tờ (sửa được) gọi về sửa đổi bổ sung, ngược lại FULL. Dòng: NOT_SENT / RECALLED → FULL, AMEND_RECALLED → AMEND, còn lại khóa.
+ */
+export function declarationEditScope(status: DeclarationStatus, sheets: EditSheet[]): DeclarationEditScope {
+  if (sheets.length <= 1) {
+    const mode = declarationEditMode(status, sheets[0]?.stage ?? "NOT_SENT");
+    return { common: mode, lines: { 1: mode }, addRemoveLines: mode !== "LOCKED", lockedSheets: [], closedSheets: [] };
+  }
+  const sorted = [...sheets].sort((a, b) => a.no - b.no);
+  if (status !== "DRAFT") return { common: "LOCKED", lines: Object.fromEntries(sorted.map((s) => [s.no, "LOCKED" as const])), addRemoveLines: false, lockedSheets: [], closedSheets: [] };
+  const lines: Record<number, DeclarationEditMode> = Object.fromEntries(sorted.map((s) => [s.no, activeAtCustoms(s) ? "LOCKED" : declarationEditMode(status, s.stage)]));
+  const lockedSheets = sorted.filter(activeAtCustoms).map((s) => s.no);
+  const closedSheets = sorted.filter((s) => recallExempt(s.stage)).map((s) => s.no);
+  if (lockedSheets.length) return { common: "LOCKED", lines, addRemoveLines: false, lockedSheets, closedSheets };
+  const common: DeclarationEditMode = Object.values(lines).includes("AMEND") ? "AMEND" : "FULL";
+  return { common, lines, addRemoveLines: true, lockedSheets, closedSheets };
+}
+
+/** Đích một lần sửa: chỉ tiêu chung / ô dòng hàng của dòng thuộc tờ `sheet` / thêm–xóa dòng / dựng lại tờ khai. */
+export type EditTarget = { kind: "COMMON" } | { kind: "LINE"; sheet: number } | { kind: "ADD_REMOVE_LINES" } | { kind: "REBUILD" };
+export type EditBlock = { reasonCode: "COMMON_LOCKED_SHEETS" | "LINE_SHEET_LOCKED" | "LINE_SHEET_CLOSED" | "DECLARATION_LOCKED"; params: Record<string, string | number> };
+
+/**
+ * Một quy tắc cho mọi đường sửa (backend + mock + FE): null = được sửa (AMEND vẫn kiểm Phụ lục II bằng `fieldEditBlock`).
+ * Bị khóa vì tờ chưa gọi về → COMMON_LOCKED_SHEETS { sheets } / LINE_SHEET_LOCKED { sheet } (tờ đã thông quan / bị từ chối → LINE_SHEET_CLOSED { sheet }); khóa vì giai đoạn tờ khai (không nháp, lô một tờ đã khai) → DECLARATION_LOCKED.
+ * Tờ không có trong phạm vi (dòng vượt số tờ đã lập) → theo chỉ tiêu chung.
+ */
+export function editBlockFor(scope: DeclarationEditScope, target: EditTarget): EditBlock | null {
+  const sheets = scope.lockedSheets.join(", ");
+  if (target.kind === "LINE") {
+    if ((scope.lines[target.sheet] ?? scope.common) !== "LOCKED") return null;
+    const partial = scope.lockedSheets.length > 0 || Object.values(scope.lines).some((m) => m !== "LOCKED");
+    if (partial && scope.closedSheets.includes(target.sheet)) return { reasonCode: "LINE_SHEET_CLOSED", params: { sheet: target.sheet } };
+    return partial ? { reasonCode: "LINE_SHEET_LOCKED", params: { sheet: target.sheet } } : { reasonCode: "DECLARATION_LOCKED", params: {} };
+  }
+  const open = target.kind === "COMMON" ? scope.common !== "LOCKED" : scope.common !== "LOCKED" && scope.addRemoveLines;
+  if (open) return null;
+  return scope.lockedSheets.length ? { reasonCode: "COMMON_LOCKED_SHEETS", params: { sheets } } : { reasonCode: "DECLARATION_LOCKED", params: {} };
+}
+
+/** Tờ (từ 1) chứa dòng `lineNo` trong danh sách dòng hiện tại (50 dòng/tờ theo thứ tự lineNo – branchRanges). Không có dòng → tờ 1. */
+export function sheetOfLine(lineNos: number[], lineNo: number): number {
+  const sorted = [...lineNos].sort((a, b) => a - b);
+  const at = sorted.indexOf(lineNo);
+  if (at < 0) return 1;
+  return branchRanges(sorted).find((r) => at >= r.index[0] && at < r.index[1])?.no ?? 1;
 }
 
 /** Khóa ô tính từ chứng từ (không ghi lý do dưới ô – lời nhắc đầu form đã giải thích). */

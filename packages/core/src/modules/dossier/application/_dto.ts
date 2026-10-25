@@ -1,5 +1,6 @@
 import type { Dossier, DossierDocument } from "@kb/contracts";
-import type { DocumentRow, DossierRow } from "./ports.js";
+import type { Ctx } from "../../../shared/ctx.js";
+import type { DocumentRow, DossierDeps, DossierRow } from "./ports.js";
 
 export function toDossier(r: DossierRow): Dossier {
   return {
@@ -12,6 +13,16 @@ export function toDossier(r: DossierRow): Dossier {
     ...(r.declarationNo ? { declarationNo: r.declarationNo } : {}),
     ...(r.channel ? { channel: r.channel as Dossier["channel"] } : {}),
   };
+}
+
+/** Gắn tóm tắt Hải quan ("Thông quan k/N") – một lần gọi cổng cho cả danh sách. */
+export async function withCustoms(deps: Pick<DossierDeps, "customs">, ctx: Ctx, list: Dossier[]): Promise<Dossier[]> {
+  if (!deps.customs || !list.length) return list;
+  const map = await deps.customs.summaries(ctx, list.map((d) => d.id));
+  return list.map((d) => {
+    const customs = map.get(d.id);
+    return customs ? { ...d, customs } : d;
+  });
 }
 
 export function toDocument(r: DocumentRow): DossierDocument {

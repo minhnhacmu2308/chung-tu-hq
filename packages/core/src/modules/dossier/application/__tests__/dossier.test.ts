@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { CustomsStage } from "@kb/contracts";
 import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
@@ -86,6 +87,27 @@ describe("createDossier / list / get", () => {
   });
 });
 
+describe("tóm tắt Hải quan theo tờ khai nhánh (Thông quan k/N)", () => {
+  it("list / page / get điền customs từ cổng (một lần gọi cho cả trang, đúng org); hồ sơ chưa truyền vắng; không nối cổng → vắng", async () => {
+    const a = unwrap(await createDossier(deps, ctx(), INPUT));
+    const b = unwrap(await createDossier(deps, ctx(), INPUT));
+    const calls: { orgId: string; ids: string[] }[] = [];
+    const summary = { of: 3, cleared: 1, problems: [{ no: 2, kind: "REJECTED" as const }] };
+    deps.customs = { summaries: async (c, ids) => { calls.push({ orgId: c.orgId, ids }); return new Map(ids.filter((id) => id === a.id).map((id) => [id, summary])); } };
+    const list = unwrap(await listDossiers(deps, ctx(), {}));
+    expect(list.find((d) => d.id === a.id)?.customs).toEqual(summary);
+    expect(list.find((d) => d.id === b.id)).not.toHaveProperty("customs");
+    expect(calls).toEqual([{ orgId: "org_a", ids: list.map((d) => d.id) }]);
+    expect(unwrap(await listDossiersPage(deps, ctx(), {}, { limit: 10, offset: 0 })).items.find((d) => d.id === a.id)?.customs).toEqual(summary);
+    expect(unwrap(await getDossier(deps, ctx(), a.id)).customs).toEqual(summary);
+    calls.length = 0;
+    expect(unwrap(await listDossiers(deps, ctx("OWNER", "org_b", "usr_b"), {}))).toEqual([]);
+    expect(calls).toEqual([]);
+    delete deps.customs;
+    expect(unwrap(await getDossier(deps, ctx(), a.id))).not.toHaveProperty("customs");
+  });
+});
+
 describe("updateDossier / cancel", () => {
   it("đổi note; đổi step tới submit khi chưa APPROVED → INVALID_STATE; hủy hồ sơ DRAFT ok, đã truyền → DOSSIER_LOCKED", async () => {
     const d = unwrap(await createDossier(deps, ctx(), INPUT));
@@ -168,6 +190,47 @@ describe("changeDocumentKind / delete / retry", () => {
     expect(storage.keys()).toEqual([]);
     expect(queue.jobs.at(-1)?.payload).toMatchObject({ mode: "MERGE_ONLY" });
     expect(unwrap(await listDocuments(deps, ctx(), d.id))).toEqual([]);
+  });
+});
+
+describe("bộ chứng từ khi lô nhiều tờ chỉ gọi về một phần (port customsSheets)", () => {
+  it("tải lên / đổi loại / đọc lại / xóa chứng từ (đổi dòng hàng và chỉ tiêu chung) → COMMON_LOCKED_SHEETS; gọi về hết → như cũ", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const [doc] = unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("scan.pdf")]));
+    uow.data.documents[0]!.status = "ERROR";
+    let stages: CustomsStage[] = ["PRE_DECLARED", "RECALLED", "PRE_DECLARED"];
+    deps.customsSheets = async () => stages.map((stage, i) => ({ no: i + 1, stage, declarationNo: `10400000000${i + 1}` }));
+    const locked = { ok: false, error: { code: "INVALID_STATE", reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 3" } } };
+    expect(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")])).toMatchObject(locked);
+    expect(await changeDocumentKind(deps, ctx(), doc!.id, "CERT_OF_ORIGIN")).toMatchObject(locked);
+    expect(await retryDocument(deps, ctx(), doc!.id)).toMatchObject(locked);
+    expect(await deleteDocument(deps, ctx(), doc!.id)).toMatchObject(locked);
+    expect(uow.data.documents).toHaveLength(1);
+    stages = ["RECALLED", "RECALLED", "RECALLED"];
+    unwrap(await retryDocument(deps, ctx(), doc!.id));
+    unwrap(await changeDocumentKind(deps, ctx(), doc!.id, "CERT_OF_ORIGIN"));
+    unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")]));
+    unwrap(await deleteDocument(deps, ctx(), doc!.id));
+  });
+  it("hồ sơ đã truyền / đã hủy (tờ chưa từng gọi về) → lỗi cũ của hồ sơ (DOSSIER_LOCKED / Hồ sơ đã hủy), không phải lý do phạm vi sửa; đã duyệt còn tờ hiệu lực → COMMON_LOCKED_SHEETS", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const [doc] = unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("scan.pdf")]));
+    uow.data.documents[0]!.status = "ERROR";
+    deps.customsSheets = async () => [1, 2, 3].map((no) => ({ no, stage: "PRE_DECLARED" as const, declarationNo: `10400000000${no}` }));
+    uow.data.dossiers[0]!.status = "SUBMITTED";
+    const locked = { ok: false, error: { code: "DOSSIER_LOCKED", message: "Hồ sơ đã truyền, không sửa được" } };
+    expect(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")])).toMatchObject(locked);
+    expect(await changeDocumentKind(deps, ctx(), doc!.id, "CERT_OF_ORIGIN")).toMatchObject(locked);
+    expect(await deleteDocument(deps, ctx(), doc!.id)).toMatchObject(locked);
+    // Đọc lại chứng từ lỗi vốn không kiểm khóa hồ sơ – giữ nguyên hành vi cũ (không thành lý do phạm vi sửa).
+    unwrap(await retryDocument(deps, ctx(), doc!.id));
+    uow.data.dossiers[0]!.status = "CANCELLED";
+    const cancelled = { ok: false, error: { code: "INVALID_STATE", message: "Hồ sơ đã hủy" } };
+    expect(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")])).toMatchObject(cancelled);
+    expect(await deleteDocument(deps, ctx(), doc!.id)).toMatchObject(cancelled);
+    expect(await changeDocumentKind(deps, ctx(), doc!.id, "CERT_OF_ORIGIN")).toMatchObject(cancelled);
+    uow.data.dossiers[0]!.status = "APPROVED";
+    expect(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")])).toMatchObject({ ok: false, error: { reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 2, 3" } } });
   });
 });
 

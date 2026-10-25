@@ -1,5 +1,5 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
-import type { DocKind, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
+import type { CustomsSummary, DocKind, EditSheet, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
@@ -84,6 +84,12 @@ export interface Unzipper {
   entries(bytes: Buffer): Promise<{ name: string; bytes: Buffer }[]>;
 }
 
+/** Tóm tắt Hải quan theo tờ khai nhánh ("Thông quan k/N") – composition root nối sang module integration (dossier không import integration). */
+export interface DossierCustomsReader {
+  /** Một lần gọi cho cả trang; hồ sơ chưa truyền không có mục. */
+  summaries(ctx: { orgId: OrgId; userId: UserId }, dossierIds: string[]): Promise<Map<string, CustomsSummary>>;
+}
+
 export type DossierDeps = {
   uow: DossierUow;
   queue: JobQueue;
@@ -94,6 +100,10 @@ export type DossierDeps = {
   quota: QuotaChecker;
   /** Nhật ký hoạt động doanh nghiệp (hủy hồ sơ); container nối từ identity. */
   audit?: OrgAuditWriter;
+  /** Không nối → hồ sơ không có `customs`. */
+  customs?: DossierCustomsReader;
+  /** Các tờ khai nhánh đã lập ở Hải quan (module integration; container nối) – chặn đổi bộ chứng từ khi lô nhiều tờ còn tờ chưa gọi về. Không nối → không kiểm. */
+  customsSheets?: (orgId: string, dossierId: string) => Promise<EditSheet[]>;
   clock: Clock;
   idGen: IdGen;
 };

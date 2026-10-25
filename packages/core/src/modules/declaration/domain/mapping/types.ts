@@ -1,5 +1,5 @@
 // Ánh xạ dữ liệu lô hàng → chỉ tiêu tờ khai (skill mapping-declaration-fields). Code thuần, cùng dữ liệu luôn ra cùng kết quả.
-import type { DocKind, Shipment, Sourced, ValueSource } from "@kb/contracts";
+import type { DocKind, Shipment, Sourced, ValueCharges, ValueSource } from "@kb/contracts";
 import type { Adjustment, Valuation } from "../valuation.js";
 import type { DossierInfo, OrgInfo } from "../types.js";
 
@@ -22,6 +22,8 @@ export type MappingInput = {
   /** Ghi đè của doanh nghiệp theo mã chỉ tiêu. */
   overrides: Record<string, FieldOverride>;
   lines: MappingLine[];
+  /** Chi phí người khai nhập ở bước OCR & kiểm tra (cước, bảo hiểm, khoản điều chỉnh). */
+  charges: ValueCharges;
 };
 /** Nguồn thay thế được phép cho một chỉ tiêu: hàm đọc thuần; null/value null = nguồn không có giá trị. */
 export type SourceOption = { id: string; label: string; read: (i: MappingInput) => MappedValue | null };

@@ -15,7 +15,7 @@ export function createDeclarationReader(declaration: DeclarationDeps): Declarati
       const s = await getDeclarationSnapshot(declaration, orgId, dossierId);
       if (!s) return null;
       return {
-        declarationId: s.declarationId, version: s.version, status: s.status, unconfirmedHs: s.unconfirmedHs, estimatedTaxVnd: s.estimatedTaxVnd, exchangeRateDate: s.exchangeRateDate,
+        declarationId: s.declarationId, version: s.version, status: s.status, unconfirmedHs: s.unconfirmedHs, estimatedTaxVnd: s.estimatedTaxVnd, exchangeRateDate: s.exchangeRateDate, branchTaxVnd: s.branchTaxVnd, approvedAt: s.approvedAt,
         payload: { kind: s.kind, direction: s.direction, currency: s.currency, fields: s.fields, items: s.items, adjustments: s.adjustments, containers: s.containers },
       };
     },

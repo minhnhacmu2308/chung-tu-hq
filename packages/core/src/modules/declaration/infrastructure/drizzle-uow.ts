@@ -1,6 +1,7 @@
 import { and, desc, eq, ilike, inArray, lt, lte, or } from "drizzle-orm";
+import { ValueChargesSchema } from "@kb/contracts";
 import type { Db, Tx } from "../../../db/client.js";
-import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems, productCatalog } from "../../../db/schema/declaration.js";
+import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems, productCatalog, valueCharges } from "../../../db/schema/declaration.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProductRow, ProfileRow } from "../application/ports.js";
@@ -124,6 +125,16 @@ function repos(tx: Tx): DeclarationRepos {
         await tx.update(productCatalog).set(rest).where(and(eq(productCatalog.orgId, orgId), eq(productCatalog.id, id)));
       },
       remove: async (orgId, ids) => (await tx.delete(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.id, ids))).returning({ id: productCatalog.id })).length,
+      },
+    valueCharges: {
+      get: async (orgId, dossierId) => {
+        const r = (await tx.select().from(valueCharges).where(and(eq(valueCharges.orgId, orgId), eq(valueCharges.dossierId, dossierId))).limit(1))[0];
+        return r ? { id: r.id, orgId: r.orgId, dossierId: r.dossierId, data: ValueChargesSchema.parse(r.data), updatedBy: r.updatedBy, updatedAt: r.updatedAt } : null;
+      },
+      upsert: async (row) => {
+        await tx.insert(valueCharges).values({ id: row.id, orgId: row.orgId, dossierId: row.dossierId, data: row.data, updatedBy: row.updatedBy, updatedAt: row.updatedAt })
+          .onConflictDoUpdate({ target: [valueCharges.orgId, valueCharges.dossierId], set: { data: row.data, updatedBy: row.updatedBy, updatedAt: row.updatedAt } });
+      },
     },
     exchangeRates: {
       latest: async (currency, date) => {

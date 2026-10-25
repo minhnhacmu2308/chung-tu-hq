@@ -2,7 +2,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetDb } from "@/mocks/db";
+import { getDb, resetDb } from "@/mocks/db";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { CustomsPage } from "./customs-page";
 
@@ -52,5 +52,19 @@ describe("Khai báo Hải quan", () => {
     expect(within(card).getByText("Luồng vàng")).toBeTruthy();
     expect(within(card).getByText("107624410320")).toBeTruthy();
     expect(window.localStorage.getItem("kb-table-view:customs")).toBe("cards");
+  }, 20_000);
+});
+
+describe("Khai báo Hải quan – lô nhiều tờ khai", () => {
+  it("mỗi tờ một dòng, cột Tờ ghi \"2/3\"; a11y", async () => {
+    const code = getDb().dossiers.find((d) => d.id === "dos_028")!.code;
+    const { container } = renderWithProviders(<CustomsPage />);
+    const table = await screen.findByRole("table", { name: "Tờ khai Hải quan" }, T);
+    await userEvent.type(screen.getByRole("searchbox"), code);
+    const rows = (await within(table).findAllByText(code, {}, T)).map((el) => el.closest("tr")!);
+    expect(rows).toHaveLength(3);
+    expect(within(table).getAllByRole("columnheader").some((h) => h.textContent?.trim() === "Tờ")).toBe(true);
+    expect(rows.map((r) => within(r).getByText(/^\d\/3$/).textContent)).toEqual(["1/3", "2/3", "3/3"]);
+    await expectNoA11yViolations(container);
   }, 20_000);
 });

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { CustomsStage } from "@kb/contracts";
 import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
@@ -98,5 +99,42 @@ describe("trường trích xuất", () => {
     docs.docs[1]!.status = "ERROR";
     unwrap(await finishReading(deps, ctx(), "dos_1"));
     expect(docs.dossierUpdates.at(-1)).toMatchObject({ finished: true, suspectFields: 2 });
+  });
+});
+
+describe("phạm vi sửa theo tờ đã gọi về (lô nhiều tờ – port customsSheets)", () => {
+  const ITEMS = Array.from({ length: 120 }, (_, i) => ({ lineNo: i + 1, description: `Item ${i + 1}`, hsCodeOnInvoice: null, quantity: 1, unit: "PCE", unitPrice: 10, amount: 10, origin: "KR" }));
+  let stages: CustomsStage[];
+  beforeEach(async () => {
+    uow = new InMemoryExtractionUow();
+    docs = new FakeDocuments();
+    stages = ["PRE_DECLARED", "RECALLED", "PRE_DECLARED"];
+    deps = {
+      uow, documents: docs, validation: new NoValidation(), ai: new ScriptedAi({ INVOICE: { ...INVOICE, items: ITEMS } }), usage: new RecordingUsage(), skills: new NoSkills(),
+      clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
+      customsSheets: async () => stages.map((stage, i) => ({ no: i + 1, stage, declarationNo: `10400000000${i + 1}` })),
+    };
+    docs.docs.push({ id: "doc_inv", orgId: "org_a", dossierId: "dos_1", kind: "INVOICE", kindSource: "USER", fileName: "inv.pdf", mime: "application/pdf", pages: 1, status: "QUEUED", storageKey: "k", sha256: "s" });
+    docs.files.set("k", Buffer.from("%PDF"));
+    unwrap(await processDocument(deps, { orgId: "org_a", dossierId: "dos_1", documentId: "doc_inv", mode: "FULL" }));
+  });
+  const field = async (key: string) => unwrap(await listFields(deps, ctx(), "dos_1")).find((x) => x.key === key)!;
+
+  it("chỉ tờ 2 gọi về: trường header → COMMON_LOCKED_SHEETS; ô dòng 60 (tờ 2) sửa được; dòng 10 (tờ 1) → LINE_SHEET_LOCKED; xác nhận dữ liệu → khóa", async () => {
+    const common = { ok: false, error: { code: "INVALID_STATE", reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 3" } } };
+    const date = await field("invoice_date");
+    expect(await updateFieldValue(deps, ctx(), date.id, "2026-10-03")).toMatchObject(common);
+    expect(await confirmField(deps, ctx(), date.id)).toMatchObject(common);
+    expect(await revertField(deps, ctx(), date.id)).toMatchObject(common);
+    expect(unwrap(await updateFieldValue(deps, ctx(), (await field("item.60.description")).id, "Item 60 sửa")).value).toBe("Item 60 sửa");
+    expect(await updateFieldValue(deps, ctx(), (await field("item.10.description")).id, "x")).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "LINE_SHEET_LOCKED", params: { sheet: 1 } } });
+    expect(await finishReading(deps, ctx(), "dos_1")).toMatchObject(common);
+  });
+
+  it("gọi về tất cả → sửa như cũ", async () => {
+    stages = ["RECALLED", "RECALLED", "RECALLED"];
+    unwrap(await updateFieldValue(deps, ctx(), (await field("invoice_date")).id, "2026-10-03"));
+    unwrap(await updateFieldValue(deps, ctx(), (await field("item.10.description")).id, "x"));
+    unwrap(await finishReading(deps, ctx(), "dos_1"));
   });
 });

@@ -2,12 +2,12 @@
 // Lập bản khai: customs.startPostAmendment. Khai AMA/AMB/AMC: customs.performOperation. Quy tắc thuần: @kb/contracts post-amendment.
 import {
   amaFieldIssue, amaHeaderLocked, amaLineLocked, applyAmaLineEdit, canEditDeclaration, declarationFormValues, isAmaHeaderKey, isAmaLineKey,
-  postAmendmentEditable, type PostAmendment, type PostAmendmentView, type ProcessingContract,
+  postAmendmentEditable, type CopyPostAmendmentHeader, type CopyPostAmendmentHeaderResult, type PostAmendment, type PostAmendmentView, type ProcessingContract,
 } from "@kb/contracts";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
-import { newLine, openAmendment, sourceLines } from "@/mocks/post-amendment-sim";
-import { customsInfoNow, settleCustoms } from "./customs";
+import { amendmentHeader, newLine, openAmendment, sourceLines } from "@/mocks/post-amendment-sim";
+import { beginAmendment, branchBusy, branchCountOf, branchDeclarationNo, branchStageOf, customsInfoNow, settleCustoms } from "./customs";
 import { reasonApiError } from "@/mocks/reason-error";
 
 export const postAmendmentKeys = { view: (dossierId: string) => ["post-amendment", dossierId] as const };
@@ -34,23 +34,40 @@ function processingContracts(db: MockDb): ProcessingContract[] {
   return [...seen.values()];
 }
 
-export const getPostAmendmentView = (dossierId: string) =>
+/** Ô đầu sửa được dùng chung mọi tờ (không phải ô theo tờ khai gốc, ô dòng hàng hay TK_CHB – đội thủ tục riêng từng tờ). */
+const commonKey = (key: string) => isAmaHeaderKey(key) && !amaHeaderLocked(key) && key !== "TK_CHB";
+
+function assertBranch(db: MockDb, dossierId: string, branch: number) {
+  if (branch < 1 || branch > branchCountOf(db, dossierId)) throw new ApiError("NOT_FOUND", `Hồ sơ không có tờ khai ${branch}`);
+}
+
+/** Xem bản khai bổ sung của tờ \`branch\` (mặc định tờ 1); dòng hàng của tờ đánh số 1..50. */
+export const getPostAmendmentView = (dossierId: string, branch = 1) =>
   query((db): PostAmendmentView => {
     settleCustoms(db);
     const { dossier, decl } = ctx(db, dossierId);
-    const all = db.postAmendments.filter((a) => a.dossierId === dossierId);
+    assertBranch(db, dossierId, branch);
+    const all = db.postAmendments.filter((a) => a.dossierId === dossierId && (a.branch ?? 1) === branch);
+    const current = openAmendment(db, dossierId, branch) ?? null;
+    // Chỉ tiêu chung đã sửa: ô đầu sửa được của bản đang mở khác bản gốc của tờ (lô nhiều tờ: các tờ khác vẫn giữ giá trị cũ).
+    const original = current ? amendmentHeader(dossier, decl, customsInfoNow(db, dossierId, branch), branchDeclarationNo(db, dossierId, branch) ?? "") : {};
+    const commonEdits = current
+      ? [...new Set([...Object.keys(current.header), ...Object.keys(original)])].filter((k) => commonKey(k) && (current.header[k] ?? "").trim() !== (original[k] ?? "").trim()).sort()
+      : [];
     return {
-      current: openAmendment(db, dossierId) ?? null,
+      current,
       history: all.filter((a) => a.status === "REGISTERED").sort((a, b) => b.seq - a.seq),
-      sourceLines: sourceLines(db, dossier, decl, null).map((l) => ({ lineNo: l.lineNo, description: l.values["HAG_CMN"] ?? "", hsCode: l.values["HAG_CMD"] ?? "" })),
+      sourceLines: sourceLines(db, dossier, decl, null, branch).map((l) => ({ lineNo: l.lineNo, description: l.values["HAG_CMN"] ?? "", hsCode: l.values["HAG_CMD"] ?? "" })),
       contracts: processingContracts(db),
+      commonEdits,
     };
   });
 
-function editable(db: MockDb, dossierId: string): PostAmendment {
+function editable(db: MockDb, dossierId: string, branch = 1): PostAmendment {
   const role = db.members.find((m) => m.id === db.currentUserId)?.role;
   if (!role || !canEditDeclaration(role)) throw new ApiError("FORBIDDEN", "Vai trò của bạn không được sửa bản khai bổ sung");
-  const a = openAmendment(db, dossierId);
+  assertBranch(db, dossierId, branch);
+  const a = openAmendment(db, dossierId, branch);
   if (!a) throw new ApiError("NOT_FOUND", "Chưa lập bản khai bổ sung – lập ở bước 7 “Sửa sau thông quan”");
   if (!postAmendmentEditable(a.status)) {
     throw new ApiError("LOCKED", a.status === "PRE_DECLARED" ? "Bản khai đã khai tạm AMA – gọi về (AMB) trước khi sửa" : "Bản khai đã khai chính thức AMC – khóa toàn bộ");
@@ -68,9 +85,9 @@ function touch(a: PostAmendment) {
   a.updatedAt = nowIso();
 }
 
-export const updatePostAmendmentField = (dossierId: string, input: { lineId?: string; key: string; value: string }) =>
+export const updatePostAmendmentField = (dossierId: string, input: { lineId?: string; key: string; value: string }, branch = 1) =>
   mutate((db): PostAmendment => {
-    const a = editable(db, dossierId);
+    const a = editable(db, dossierId, branch);
     const issue = amaFieldIssue(input.key, input.value);
     if (issue) throw new ApiError("INVALID_VALUE", issue);
     if (input.lineId) {
@@ -86,15 +103,15 @@ export const updatePostAmendmentField = (dossierId: string, input: { lineId?: st
     return a;
   });
 
-/** Thêm một hoặc nhiều dòng của tờ khai gốc vào bản khai: Trước = tờ khai gốc + số Hải quan tính, Sau = bằng Trước. */
-export const addPostAmendmentLines = (dossierId: string, lineNos: number[]) =>
+/** Thêm một hoặc nhiều dòng của tờ khai gốc (số dòng trong tờ 1..50) vào bản khai: Trước = tờ khai gốc + số Hải quan tính, Sau = bằng Trước. */
+export const addPostAmendmentLines = (dossierId: string, lineNos: number[], branch = 1) =>
   mutate((db): PostAmendment => {
-    const a = editable(db, dossierId);
+    const a = editable(db, dossierId, branch);
     const wanted = [...new Set(lineNos)];
     const dup = wanted.filter((n) => a.lines.some((l) => l.ran === n));
     if (dup.length) throw new ApiError("DUPLICATE", `Dòng ${dup.join(", ")} đã có trong bản khai`);
     const { dossier, decl } = ctx(db, dossierId);
-    const all = sourceLines(db, dossier, decl, customsInfoNow(db, dossierId));
+    const all = sourceLines(db, dossier, decl, customsInfoNow(db, dossierId, branch), branch);
     const missing = wanted.filter((n) => !all.some((l) => l.lineNo === n));
     if (missing.length) throw new ApiError("NOT_FOUND", `Tờ khai gốc không có dòng ${missing.join(", ")}`);
     const added = wanted.map((n) => newLine(all.find((l) => l.lineNo === n)!));
@@ -103,18 +120,18 @@ export const addPostAmendmentLines = (dossierId: string, lineNos: number[]) =>
     return a;
   });
 
-export const removePostAmendmentLine = (dossierId: string, lineId: string) =>
+export const removePostAmendmentLine = (dossierId: string, lineId: string, branch = 1) =>
   mutate((db): PostAmendment => {
-    const a = editable(db, dossierId);
+    const a = editable(db, dossierId, branch);
     a.lines = a.lines.filter((l) => l.id !== lineId);
     touch(a);
     return a;
   });
 
 /** Phê duyệt bản khai bổ sung (người duyệt, nguyên tắc 4 mắt như tờ khai). */
-export const approvePostAmendment = (dossierId: string) =>
+export const approvePostAmendment = (dossierId: string, branch = 1) =>
   mutate((db): PostAmendment => {
-    const a = editable(db, dossierId);
+    const a = editable(db, dossierId, branch);
     if (!a.lines.length) throw new ApiError("NO_LINES", "Chọn ít nhất một dòng hàng cần khai bổ sung");
     if (!a.header["TK_REC"]?.trim()) throw new ApiError("MISSING_FIELD", "Chưa nhập mã lý do khai bổ sung");
     const me = db.members.find((m) => m.id === db.currentUserId);
@@ -124,4 +141,37 @@ export const approvePostAmendment = (dossierId: string) =>
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     Object.assign(dossier, { step: "submit", updatedAt: nowIso() });
     return a;
+  });
+
+/**
+ * Nhân bản sửa chỉ tiêu chung (ô đầu VN_AMA) từ AMA của tờ \`fromBranch\` sang AMA của các tờ khác: tờ đã thông quan chưa lập bản khai thì lập luôn;
+ * bỏ qua tờ chưa thông quan, tờ có bản khai đã duyệt / đã khai (không đè), tờ đang chờ phản hồi một nghiệp vụ khác.
+ */
+export const copyPostAmendmentHeader = (dossierId: string, input: CopyPostAmendmentHeader) =>
+  mutate((db): CopyPostAmendmentHeaderResult => {
+    const role = db.members.find((m) => m.id === db.currentUserId)?.role;
+    if (!role || !canEditDeclaration(role)) throw new ApiError("FORBIDDEN", "Vai trò của bạn không được sửa bản khai bổ sung");
+    const keys = [...new Set(input.keys)];
+    const bad = keys.filter((k) => !commonKey(k));
+    if (bad.length) throw new ApiError("VALIDATION", `Không phải chỉ tiêu chung sửa được của bản khai bổ sung: ${bad.join(", ")}`);
+    assertBranch(db, dossierId, input.fromBranch);
+    const source = openAmendment(db, dossierId, input.fromBranch);
+    if (!source) throw new ApiError("NOT_FOUND", `Tờ ${input.fromBranch}: chưa lập bản khai bổ sung`);
+    const values = Object.fromEntries(keys.map((k) => [k, (source.header[k] ?? "").trim()]));
+    const applied: number[] = [];
+    const skipped: CopyPostAmendmentHeaderResult["skipped"] = [];
+    for (let no = 1; no <= branchCountOf(db, dossierId); no++) {
+      if (no === input.fromBranch) continue;
+      let a = openAmendment(db, dossierId, no);
+      if (!a) {
+        if (branchStageOf(db, dossierId, no) !== "CLEARED") { skipped.push({ no, reason: "NOT_CLEARED" }); continue; }
+        if (branchBusy(db, dossierId, no)) { skipped.push({ no, reason: "BUSY" }); continue; }
+        beginAmendment(db, dossierId, no);
+        a = openAmendment(db, dossierId, no)!;
+      } else if (a.status !== "DRAFT" && a.status !== "RECALLED") { skipped.push({ no, reason: "OPEN_NOT_DRAFT" }); continue; }
+      for (const k of keys) a.header[k] = values[k]!;
+      a.updatedAt = nowIso();
+      applied.push(no);
+    }
+    return { applied, skipped };
   });

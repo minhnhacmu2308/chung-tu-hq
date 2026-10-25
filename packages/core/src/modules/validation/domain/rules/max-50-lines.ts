@@ -1,18 +1,17 @@
-// Chỉ tiêu 1.2/2.2 – TT39 PL II: lô hàng nhiều hơn 50 dòng hàng phải tách tờ khai (tờ đầu "F", tờ sau khai số tờ khai đầu tiên).
-import { fail, pass, skipped, type Rule } from "../helpers.js";
-
-const MAX_LINES = 50;
+// Chỉ tiêu 1.2/2.2 – TT39 PL II: lô hàng nhiều hơn 50 dòng được hệ thống tự tách tờ khai nhánh (tờ đầu "F", tờ sau khai số tờ khai đầu tiên) → chỉ thông báo.
+import { BRANCH_MAX_LINES, branchRanges } from "@kb/contracts";
+import { pass, skipped, type Rule } from "../helpers.js";
 
 export const max50Lines: Rule = {
   code: "R-MAX-50-LINES",
   title: "Tối đa 50 dòng hàng mỗi tờ khai",
-  severity: "BLOCKER",
+  severity: "INFO",
   docKinds: ["INVOICE"],
   run(s) {
     const n = s.items.length;
     if (!n) return skipped("Chưa có dòng hàng");
-    if (n <= MAX_LINES) return pass(`${n} dòng hàng – trong giới hạn ${MAX_LINES} dòng/tờ khai`, ["/items"]);
-    const sheets = Math.ceil(n / MAX_LINES);
-    return fail(`Lô hàng có ${n} dòng hàng – mỗi tờ khai tối đa ${MAX_LINES} dòng: tách ${sheets} tờ khai (tờ đầu khai "F" ở chỉ tiêu 1.2/2.2, tờ sau khai số tờ khai đầu tiên)`, ["/items"]);
+    if (n <= BRANCH_MAX_LINES) return pass(`${n} dòng hàng – trong giới hạn ${BRANCH_MAX_LINES} dòng/tờ khai`, ["/items"]);
+    const ranges = branchRanges(s.items.map((_, k) => k + 1));
+    return pass(`Lô hàng có ${n} dòng hàng – sẽ khai ${ranges.length} tờ khai (${ranges.map((r) => r.index[1] - r.index[0]).join("/")})`, ["/items"]);
   },
 };

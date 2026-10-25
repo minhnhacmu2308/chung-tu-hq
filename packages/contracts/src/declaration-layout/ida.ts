@@ -55,7 +55,7 @@ const ITEM_CUSTOMS: LayoutBlock[] = [
       grp("Trị giá tính thuế", undefined, [hq("HAG_B36", "Trị giá tính thuế (S)", "number"), hq("HAG_B50", "Mã tiền", "text", { width: "xs" }), hq("HAG_B51", "Trị giá tính thuế (M)", "number")]),
       grp("Số lượng tính thuế", undefined, [hq("HAG_B37", "Số lượng", "number"), hq("HAG_B38", "Đơn vị tính", "text", { width: "xs" })]),
       grp("Đơn giá tính thuế", undefined, [hq("HAG_KKT", "Đơn giá", "number"), hq("HAG_KKS", "Mã tiền", "text", { width: "xs" })]),
-      grp("Thuế suất", undefined, [hq("HAG_B42", "Mã phân loại thuế suất", "text", { width: "xs" }), hq("HAG_B43", "Thuế suất", "text", { width: "sm" }), hq("HAG_SKB", "Phân loại nhập thuế suất", "text", { width: "xs" })]),
+      grp("Thuế suất", undefined, [hq("HAG_B42", "Mã phân loại thuế suất", "text", { codeTable: "IMPORT_TAX_RATE_KIND", width: "xs" }), hq("HAG_B43", "Thuế suất", "text", { width: "sm" }), hq("HAG_SKB", "Phân loại nhập thuế suất", "text", { width: "xs" })]),
       hq("HAG_B47", "Số tiền thuế nhập khẩu", "number"),
       hq("HAG_B49", "Số tiền miễn giảm", "number"),
       hq("HAG_B56", "Tên nơi xuất xứ", "text"),
@@ -152,7 +152,7 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
               fld("APP_HAWB{n}", "Số HAWB", "text", { width: "md", condition: "HAS_HAWB" }),
             ]),
             grp("Số kiện", "1.27", [fld("VD_NO", "Số lượng kiện", "number", { width: "sm" }), fld("VD_NOT", "Loại kiện", "code", { codeTable: "PACKAGE_KIND", width: "xs" })]),
-            grp("Tổng trọng lượng (Gross)", "1.28", [fld("VD_GW", "Trọng lượng", "number", { width: "sm" }), fld("VD_GWT", "Đơn vị", "code", { codeTable: "UNIT", width: "xs" })]),
+            grp("Tổng trọng lượng (Gross)", "1.28", [fld("VD_GW", "Trọng lượng", "number", { width: "sm" }), fld("VD_GWT", "Đơn vị", "code", { codeTable: "GROSS_UNIT", width: "xs" })]),
             fld("VD_MRK", "Ký hiệu và số hiệu", "textarea", { no: "1.30", width: "full" }),
           ],
         },
@@ -163,7 +163,7 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
             grp("Địa điểm xếp hàng", "1.34", [fld("VD_PSC", "Mã", "code", { codeTable: "A016", width: "sm" }), fld("VD_PSN", "Tên", "text", { width: "md" })]),
             grp("Phương tiện vận chuyển", "1.31", [fld("VD_VSC", "Hô hiệu (call sign)", "text", { width: "sm", condition: "BY_WATER" }), fld("VD_VSN", "Tên phương tiện / chuyến", "text", { width: "md" })]),
             fld("VD_ARR", "Ngày hàng đến", "date", { no: "1.32", width: "sm" }),
-            fld("TK_N4", "Mã kết quả kiểm tra nội dung", "code", { no: "1.36", width: "xs" }),
+            fld("TK_N4", "Mã kết quả kiểm tra nội dung", "code", { no: "1.36", codeTable: "INSPECTION_RESULT", width: "xs" }),
             // 1.64: Phụ lục II gắn với kho ngoại quan / loại hình A41, nhưng mã loại hình trong repo chưa đối chiếu (A41 ở code-tables.ts là "quyền nhập khẩu")
             // → không gắn điều kiện, người khai nhập khi có (tùy chọn).
             fld("VD_ISD", "Ngày được phép nhập kho đầu tiên", "date", { no: "1.64", width: "sm" }),
@@ -240,7 +240,7 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
       id: "thue", title: "Thuế tờ khai", blocks: [
         {
           id: "sac-thue", title: "Thuế theo sắc thuế", emptyNote: "Có sau khi khai tạm (IDA) – Hải quan tính thuế chính thức.", items: [
-            rep("Sắc thuế", undefined, 6, [hq("THUE_KF{n}", "Mã", "text", { width: "xs" }), hq("THUE_KG{n}", "Tên sắc thuế", "text", { width: "sm" }), hq("THUE_KH{n}", "Tổng tiền thuế (VND)", "number"), hq("THUE_KI{n}", "Số dòng", "number", { width: "xs" })]),
+            rep("Sắc thuế", undefined, 6, [hq("THUE_KF{n}", "Mã", "text", { codeTable: "TAX_KIND", width: "xs" }), hq("THUE_KG{n}", "Tên sắc thuế", "text", { width: "sm" }), hq("THUE_KH{n}", "Tổng tiền thuế (VND)", "number"), hq("THUE_KI{n}", "Số dòng", "number", { width: "xs" })]),
             hq("THUE_B02", "Tổng tiền thuế phải nộp (VND)", "number"),
             hq("THUE_B03", "Số tiền bảo lãnh (VND)", "number"),
             rep("Tỷ giá tính thuế", undefined, 3, [hq("THUE_KJ{n}", "Mã tiền", "text", { width: "xs" }), hq("THUE_KK{n}", "Tỷ giá", "number")]),
@@ -251,7 +251,7 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
         },
         {
           id: "an-han", title: "Ân hạn thuế", emptyNote: "Có khi tờ khai được ân hạn nộp thuế.", items: [
-            rep("Sắc thuế được ân hạn", undefined, 6, [hq("TK_KN{n}", "Mã", "text", { width: "xs" }), hq("TK_KO{n}", "Tên sắc thuế", "text"), hq("TK_KP{n}", "Hạn nộp sau ân hạn", "date")]),
+            rep("Sắc thuế được ân hạn", undefined, 6, [hq("TK_KN{n}", "Mã", "text", { codeTable: "TAX_KIND", width: "xs" }), hq("TK_KO{n}", "Tên sắc thuế", "text"), hq("TK_KP{n}", "Hạn nộp sau ân hạn", "date")]),
           ],
         },
       ],

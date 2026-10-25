@@ -10,10 +10,10 @@ import type { ProgressEvent } from "../../dossier/index.js";
 import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import type { ResultRaw } from "../domain/state-machine.js";
 
-export type OutboxRow = { id: string; orgId: string; dossierId: string; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
-export type MessageRow = { id: string; orgId: string; dossierId: string; operation: CustomsOperation; direction: "OUT" | "IN"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
+export type OutboxRow = { id: string; orgId: string; dossierId: string; /** Nhánh tờ khai (≥ 1). */ branch: number; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
+export type MessageRow = { id: string; orgId: string; dossierId: string; branch: number; operation: CustomsOperation; direction: "OUT" | "IN"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
 export type ResultRow = {
-  id: string; orgId: string; dossierId: string; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
+  id: string; orgId: string; dossierId: string; branch: number; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
   clearanceStatus: "WAITING" | "INSPECTING" | "CLEARED" | "REJECTED"; customsTaxVnd: string | null; state: SubmissionState; pollCount: number;
   /** Giai đoạn vòng đời + dữ liệu phụ (xem ResultRaw). */
   raw: ResultRaw | null; updatedAt: Date;
@@ -30,24 +30,33 @@ export interface CustomsRepos {
     update(orgId: string, id: string, patch: Partial<Pick<OutboxRow, "status" | "attempts" | "lastError" | "nextAttemptAt" | "updatedAt">>): Promise<void>;
   };
   messages: {
-    list(orgId: string, dossierId: string): Promise<MessageRow[]>;
+    /** `branch` vắng = mọi nhánh. */
+    list(orgId: string, dossierId: string, branch?: number): Promise<MessageRow[]>;
     insert(row: MessageRow): Promise<void>;
   };
   results: {
-    get(orgId: string, dossierId: string): Promise<ResultRow | null>;
+    /** `branch` vắng = nhánh 1. */
+    get(orgId: string, dossierId: string, branch?: number): Promise<ResultRow | null>;
+    /** Mọi nhánh của hồ sơ, sắp theo nhánh. */
+    listForDossier(orgId: string, dossierId: string): Promise<ResultRow[]>;
     listForOrg(orgId: string): Promise<ResultRow[]>;
+    /** Mọi nhánh của các hồ sơ (danh sách hồ sơ: tóm tắt "Thông quan k/N" một truy vấn cho cả trang). */
+    listForDossiers(orgId: string, dossierIds: string[]): Promise<ResultRow[]>;
+    /** Xóa kết quả nhánh > `branch` chưa từng khai (giai đoạn NOT_SENT, chưa có số tờ khai) – số tờ giảm giữa hai lần truyền. Trả số dòng đã xóa. */
+    deleteUnsentAbove(orgId: string, dossierId: string, branch: number): Promise<number>;
     upsert(row: ResultRow): Promise<void>;
   };
   /** Bản khai bổ sung sau thông quan (AMA) – bản riêng, tờ khai gốc không đổi. */
   amendments: {
-    listForDossier(orgId: string, dossierId: string): Promise<PostAmendmentRow[]>;
+    /** `branch` vắng = mọi nhánh. */
+    listForDossier(orgId: string, dossierId: string, branch?: number): Promise<PostAmendmentRow[]>;
     insert(row: PostAmendmentRow): Promise<void>;
     update(row: PostAmendmentRow): Promise<void>;
   };
 }
 
 /** Bản khai bổ sung trong DB (thời điểm là Date; DTO `PostAmendment` dùng chuỗi ISO). */
-export type PostAmendmentRow = Omit<PostAmendment, "approvedAt" | "createdAt" | "updatedAt"> & { orgId: string; approvedAt: Date | null; createdAt: Date; updatedAt: Date };
+export type PostAmendmentRow = Omit<PostAmendment, "approvedAt" | "createdAt" | "updatedAt"> & { orgId: string; branch: number; approvedAt: Date | null; createdAt: Date; updatedAt: Date };
 
 /** field_audit (append-only, bất biến 6) – composition root nối sang bảng của extraction. */
 export interface CustomsAuditWriter {
@@ -76,7 +85,10 @@ export interface CustomsGateway {
 export type GatewaySendResult = { channel?: "GREEN" | "YELLOW" | "RED"; receiptNo?: string; customsTaxVnd?: string; note?: string; errors?: GatewayError[] };
 
 /** Tờ khai + dòng hàng từ module declaration (composition root nối). */
-export type DeclarationSnapshot = { declarationId: string; version: number; status: DeclarationStatus; payload: DeclarationPayload; unconfirmedHs: number; estimatedTaxVnd: string; /** Ngày (giờ VN) tra tỷ giá tính thuế khi dựng tờ khai. */ exchangeRateDate: string };
+export type DeclarationSnapshot = { declarationId: string; version: number; status: DeclarationStatus; payload: DeclarationPayload; unconfirmedHs: number; estimatedTaxVnd: string; /** Ngày (giờ VN) tra tỷ giá tính thuế khi dựng tờ khai. */ exchangeRateDate: string;
+  /** Thuế dự tính (VND) từng tờ khai nhánh (phần tử i = tờ i+1). */ branchTaxVnd?: string[];
+  /** Lần phê duyệt hiện tại (ISO) – duyệt lại sau khi mở lại đổi giá trị dù phiên bản giữ nguyên; ghim nội dung đã truyền (pinOf). */ approvedAt?: string | null;
+};
 export interface DeclarationReader {
   get(orgId: string, dossierId: string): Promise<DeclarationSnapshot | null>;
   markSubmitted(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;

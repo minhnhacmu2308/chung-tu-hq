@@ -1,13 +1,15 @@
 // Bước 4–5: AI Agent (tra HS, ánh xạ, dựng tờ khai, số hóa) và tờ khai nháp (mock).
 // Tiến trình agent mô phỏng theo thời gian: lưu startedAt, tính tiến độ mỗi lần đọc.
-import { appFieldMeta, canEditDeclaration, declarationEditMode, extraFieldIssue, extraFieldMeta, itemFieldIssue, itemFieldMeta, parseItemFieldCode, fieldEditBlock, isDeclarationFieldEditable } from "@kb/contracts";
-import { customsStageOf } from "./customs";
+import { appFieldMeta, canEditDeclaration, editBlockFor, extraFieldIssue, extraFieldMeta, itemFieldIssue, itemFieldMeta, parseItemFieldCode, fieldEditBlock, isDeclarationFieldEditable } from "@kb/contracts";
+import { editScopeMockError, editScopeOf, sentSheetsMockError, toEditTargetMock } from "./customs";
+import { branchesOf } from "@/mocks/customs-sim";
+import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
-import type { ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
+import type { DeclarationBranch, ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
 import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
 import { recordApprovedProducts } from "./products";
 
@@ -131,6 +133,8 @@ export const startAgentRun = (dossierId: string, mode: AgentMode) =>
     const dossier = db.dossiers.find((d) => d.id === dossierId);
     if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
     if (!db.lineItems.some((i) => i.dossierId === dossierId)) throw new ApiError("NO_ITEMS", "Chưa có dòng hàng – hoàn tất bước OCR & kiểm tra trước");
+    const scoped = editScopeMockError(db, dossierId, { kind: "REBUILD" });
+    if (scoped) throw scoped;
     db.agentRuns = db.agentRuns.filter((r) => r.dossierId !== dossierId);
     db.declarations = db.declarations.filter((d) => d.dossierId !== dossierId);
     db.agentRuns.push({
@@ -202,6 +206,8 @@ export const answerHs = (itemId: string, input: HsAnswerInput) =>
   mutate((db) => {
     const item = db.lineItems.find((i) => i.id === itemId);
     if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
+    const scoped = editScopeMockError(db, item.dossierId, { kind: "LINE_NO", lineNo: item.lineNo });
+    if (scoped) throw scoped;
     if (input.questionId !== HS_QUESTION.id || hsAnsweredAt.has(itemId)) throw new ApiError("INVALID_STATE", "Câu hỏi đã được trả lời hoặc không còn hiệu lực – tải lại bảng");
     hsAnsweredAt.set(itemId, Date.now());
     return { ...item, hs: mockHs(db, item) };
@@ -212,6 +218,8 @@ export const reclassifyHs = (itemId: string, input: HsReclassifyInput) =>
   mutate((db) => {
     const item = db.lineItems.find((i) => i.id === itemId);
     if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
+    const scoped = editScopeMockError(db, item.dossierId, { kind: "LINE_NO", lineNo: item.lineNo });
+    if (scoped) throw scoped;
     if (item.hsConfirmed) throw new ApiError("INVALID_STATE", "Dòng đã xác nhận mã HS – bỏ xác nhận trước khi phân loại lại");
     if (input.origin) item.origin = input.origin;
     return { ...item, hs: mockHs(db, item) };
@@ -254,6 +262,8 @@ export const confirmHs = (itemId: string, code: string) =>
     const item = db.lineItems.find((i) => i.id === itemId);
     if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
     if (code.replace(/\D/g, "").length !== 8) throw new ApiError("INVALID_HS", "Mã HS phải đủ 8 chữ số (vd 8482.10.00)");
+    const scoped = editScopeMockError(db, item.dossierId, { kind: "LINE_NO", lineNo: item.lineNo });
+    if (scoped) throw scoped;
     const dossier = db.dossiers.find((d) => d.id === item.dossierId)!;
     const r = ratesFor(dossier, code);
     item.hsConfirmed = code;
@@ -270,6 +280,8 @@ export const unconfirmHs = (itemId: string) =>
   mutate((db) => {
     const item = db.lineItems.find((i) => i.id === itemId);
     if (!item) throw new ApiError("NOT_FOUND", "Không tìm thấy dòng hàng");
+    const scoped = editScopeMockError(db, item.dossierId, { kind: "LINE_NO", lineNo: item.lineNo });
+    if (scoped) throw scoped;
     delete item.hsConfirmed;
     delete item.importDutyRate;
     delete item.vatRate;
@@ -278,7 +290,7 @@ export const unconfirmHs = (itemId: string) =>
   });
 
 export type DeclarationItemView = LineItem & Omit<ItemTax, "itemId">;
-export type DeclarationView = { declaration: Declaration | null; items: DeclarationItemView[]; unconfirmedHs: number; exchangeRateInfo?: ExchangeRateInfo | null };
+export type DeclarationView = { declaration: Declaration | null; items: DeclarationItemView[]; unconfirmedHs: number; exchangeRateInfo?: ExchangeRateInfo | null; branches: DeclarationBranch[] };
 
 export const getDeclarationView = (dossierId: string) =>
   query((db): DeclarationView => {
@@ -294,6 +306,15 @@ export const getDeclarationView = (dossierId: string) =>
     return {
       declaration,
       exchangeRateInfo,
+      branches: branchesOf(items).map((sh): DeclarationBranch => {
+        const part = sh.items.map((i) => taxes.find((x) => x.itemId === i.id));
+        const sumVnd = (pick: (t: ItemTax) => string) => String(part.reduce((n, t) => n + (t ? BigInt(pick(t)) : 0n), 0n));
+        return {
+          no: sh.no, of: sh.of, lineFrom: sh.lineFrom, lineTo: sh.lineTo,
+          invoiceValue: fromMinor(sumMinor(sh.items.map((i) => toMinor(i.amount)))),
+          customsValueVnd: sumVnd((t) => t.customsValueVnd), estImportDutyVnd: sumVnd((t) => t.importDutyVnd), estVatVnd: sumVnd((t) => t.vatVnd),
+        };
+      }),
       unconfirmedHs: items.filter((i) => !i.hsConfirmed).length,
       items: items.map((i) => {
         const t = taxes.find((x) => x.itemId === i.id);
@@ -313,6 +334,9 @@ export const approveDeclaration = (dossierId: string) =>
     const owner = db.dossiers.find((d) => d.id === dossierId)?.ownerId;
     if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw reasonApiError("FORBIDDEN", "FOUR_EYES");
     assertNoGaps(db, decl, "phê duyệt");
+    // Lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi Hải quan (như port sentSheetsGuard của backend).
+    const changed = sentSheetsMockError(db, dossierId);
+    if (changed) throw changed;
     Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
     // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp.
     const fieldValue = (no: string) => decl.fields.find((f) => f.no === no)?.value.trim() || null;
@@ -345,7 +369,13 @@ export const updateDeclarationField = (dossierId: string, code: string, value: s
     const decl = db.declarations.find((d) => d.dossierId === dossierId);
     if (!decl) throw new ApiError("NO_DECLARATION", "Chưa có tờ khai");
     if (decl.status !== "DRAFT") throw new ApiError("INVALID_STATE", "Tờ khai đã duyệt – không sửa");
-    const block = fieldEditBlock(decl.kind, code, declarationEditMode(decl.status, customsStageOf(db, dossierId)), decl.fields);
+    // Phạm vi sửa (cùng quy tắc backend): lô nhiều tờ còn tờ chưa gọi về → khóa chỉ tiêu chung và dòng hàng của tờ đó; theo giai đoạn (AMEND: Phụ lục II).
+    const scope = editScopeOf(db, dossierId);
+    const lineNo = db.lineItems.find((i) => i.dossierId === dossierId && i.id === parseItemFieldCode(code)?.itemId)?.lineNo;
+    const target = toEditTargetMock(db, dossierId, lineNo !== undefined ? { kind: "LINE_NO", lineNo } : { kind: "COMMON" });
+    const locked = editBlockFor(scope, target);
+    if (locked && locked.reasonCode !== "DECLARATION_LOCKED") throw reasonApiError("INVALID_STATE", locked.reasonCode, locked.params);
+    const block = fieldEditBlock(decl.kind, code, target.kind === "LINE" ? (scope.lines[target.sheet] ?? scope.common) : scope.common, decl.fields);
     if (block) throw new ApiError("INVALID_STATE", block);
     const idx = decl.fields.findIndex((f) => f.code === code);
     // Chỉ tiêu chưa có trên tờ khai, người khai nhập lần đầu (chỉ tiêu app, ô bổ sung – mã = tên trường VNACCS, ô dòng hàng HANG.<id>.<ô>) → thêm vào tờ khai.

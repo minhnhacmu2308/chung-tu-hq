@@ -122,7 +122,7 @@ export const LAYOUT_EDA: DeclarationLayout = withShortLabels({
             fld("TK_MTC", "Mã phương thức vận chuyển", "code", { no: "2.6", codeTable: "TRANSPORT_MODE", width: "sm" }),
             fld("TK_EKN", "Số vận đơn / số quản lý hàng hóa", "text", { no: "2.24", width: "md" }),
             grp("Số kiện", "2.25", [fld("TK_NO", "Số lượng kiện", "number", { width: "sm" }), fld("TK_NOT", "Loại kiện", "code", { codeTable: "PACKAGE_KIND", width: "xs" })]),
-            grp("Tổng trọng lượng (Gross)", "2.26", [fld("TK_GW", "Trọng lượng", "number", { width: "sm" }), fld("TK_GWT", "Đơn vị", "code", { codeTable: "UNIT", width: "xs" })]),
+            grp("Tổng trọng lượng (Gross)", "2.26", [fld("TK_GW", "Trọng lượng", "number", { width: "sm" }), fld("TK_GWT", "Đơn vị", "code", { codeTable: "GROSS_UNIT", width: "xs" })]),
             fld("TK_MRK", "Ký hiệu và số hiệu", "textarea", { no: "2.32", width: "full" }),
           ],
         },

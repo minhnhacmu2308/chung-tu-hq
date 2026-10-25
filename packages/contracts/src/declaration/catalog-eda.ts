@@ -15,8 +15,8 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Không nhập, hệ thống tự cấp. 11 ký tự đầu là số tờ khai, ký tự thứ 12 là số lần khai bổ sung.",
   }),
   f("2.2", "GENERAL", "Số tờ khai đầu tiên", "text", "C", {
-    maxLen: 12, fptField: "VN_EDA.TK_FIC", manual: true,
-    legalNote: "Chỉ khai khi lô hàng > 50 dòng hoặc phải tách tờ khai: ô 1 tờ đầu nhập \"F\", tờ sau nhập số tờ khai đầu tiên; ô 2 số thứ tự (TK_BNO); ô 3 tổng số tờ khai (TK_DNO).",
+    maxLen: 12, fptField: "VN_EDA.TK_FIC",
+    legalNote: "Chỉ khai khi lô hàng > 50 dòng hoặc phải tách tờ khai: ô 1 tờ đầu nhập \"F\", tờ sau nhập số tờ khai đầu tiên; ô 2 số thứ tự (TK_BNO); ô 3 tổng số tờ khai (TK_DNO). App tự điền khi lô > 50 dòng: tờ 1 \"F\", tờ sau số tờ khai của tờ 1; số nhánh; tổng số tờ.",
   }),
   f("2.3", "GENERAL", "Số tờ khai tạm nhập tái xuất tương ứng", "text", "C", {
     maxLen: 12, fptField: "VN_EDA.TK_TDN", manual: true,
@@ -121,7 +121,7 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
     legalNote: "Số lượng kiện: ô 1 tổng số kiện, không thập phân, hàng không thể hiện bằng kiện, thùng nhập \"1\" (TK_NO); ô 2 mã loại kiện theo bảng \"Mã loại kiện\", ví dụ CS thùng, BX hộp; nhiều loại kiện thì nhập 1 mã đại diện (TK_NOT).",
   }),
   f("2.26", "TRANSPORT", "Tổng trọng lượng hàng (Gross)", "decimal", "M", {
-    maxLen: 10, codeTable: "UNIT", fptField: "VN_EDA.TK_GW",
+    maxLen: 10, codeTable: "GROSS_UNIT", fptField: "VN_EDA.TK_GW",
     legalNote: "Ô 1 tổng trọng lượng gross (TK_GW): đường không 8+1 số, vượt 1 số thập phân thì ghi trọng lượng chính xác ở Phần ghi chú 2.57; phương thức khác 6+3 số; ô 2 mã đơn vị KGM/TNE/LBR (TK_GWT), LBR tự quy đổi KGM.",
   }),
   f("2.27", "TRANSPORT", "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", "code", "M", {

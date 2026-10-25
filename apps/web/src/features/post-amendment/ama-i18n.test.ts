@@ -8,7 +8,7 @@ import type { PostAmendment, PostAmendmentView } from "@kb/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { SubmissionView } from "@/api/customs";
 import type { AmaStepCtx } from "./ama-context";
-import { amaPrimaryAction, amaSubSteps, approveBlockers, importCompareRows, reasonLayout } from "./ama-wizard";
+import { amaHeaderLabel, amaPrimaryAction, amaSubSteps, approveBlockers, copyResultLines, importCompareRows, reasonLayout } from "./ama-wizard";
 import { PickLines } from "./pick-lines";
 
 vi.stubGlobal("React", React);
@@ -22,7 +22,7 @@ const view = {
   sourceLines: [{ lineNo: 1, hsCode: "84713020", description: "Máy tính xách tay" }, { lineNo: 2, hsCode: "", description: "Chuột" }, { lineNo: 3, hsCode: "85044090", description: "Sạc" }],
 } as unknown as PostAmendmentView;
 const ctx: AmaStepCtx = {
-  dossierId: "dos_018", kind: "IDA", a, view, submission: {} as SubmissionView, editable: true, canEdit: true, fourEyes: false, refresh: () => {}, goSub: () => {},
+  dossierId: "dos_018", branch: 1, of: 1, kind: "IDA", a, view, submission: {} as SubmissionView, editable: true, canEdit: true, fourEyes: false, refresh: () => {}, goSub: () => {},
 };
 
 const render = (locale: UiLocale) =>
@@ -62,4 +62,23 @@ describe("hàm thuần nhận locale", () => {
     expect(zh.filter((r) => r.before !== "HAG_MKA").map((r) => r.label)).toEqual(vi.filter((r) => r.before !== "HAG_MKA").map((r) => r.label));
   });
   it("tiêu đề khối lý do", () => expect(reasonLayout("en").main.title).toBe("Amendment reason"));
+});
+
+describe("tờ khai nhánh: nhân bản sửa chỉ tiêu chung", () => {
+  const r = { applied: [1, 3], skipped: [{ no: 2, reason: "NOT_CLEARED" as const }, { no: 4, reason: "OPEN_NOT_DRAFT" as const }, { no: 5, reason: "BUSY" as const }] };
+  it("kết quả + lý do bỏ qua dịch theo ngôn ngữ", () => {
+    expect(copyResultLines(r, "vi")).toEqual([
+      "Đã áp dụng cho tờ 1, 3 – mỗi bản vẫn phê duyệt và khai riêng.",
+      "Tờ 2: chưa thông quan",
+      "Tờ 4: bản khai bổ sung đã phê duyệt hoặc đã khai – không ghi đè",
+      "Tờ 5: đang chờ phản hồi một nghiệp vụ khác",
+    ]);
+    expect(copyResultLines(r, "en")[1]).toBe("Sheet 2: not cleared yet");
+    expect(copyResultLines(r, "zh")[3]).toBe("第 5 份：正在等待另一项业务的回执");
+    expect(copyResultLines({ applied: [], skipped: [] }, "en")).toEqual(["Not applied to any sheet."]);
+  });
+  it("tên chỉ tiêu đầu bản khai theo @kb/contracts; khóa lạ giữ khóa", () => {
+    expect(amaHeaderLabel("TK_IMT")).toBe("Số điện thoại");
+    expect(amaHeaderLabel("XX_UNKNOWN")).toBe("XX_UNKNOWN");
+  });
 });

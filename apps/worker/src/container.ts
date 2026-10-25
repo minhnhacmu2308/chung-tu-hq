@@ -1,3 +1,4 @@
+import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv } from "@kb/core/config";
 import { activeQuotaBonus } from "@kb/core/modules/admin";
 import { createRateDeps } from "@kb/core/modules/admin/infrastructure";
@@ -7,6 +8,7 @@ import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastruc
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { createCustomsInfrastructure } from "@kb/core/modules/integration/infrastructure";
+import { checkSentSheets, customsEditSheets } from "@kb/core/modules/integration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skill";
@@ -118,9 +120,26 @@ export function buildContainer() {
   });
   declaration.notify = notify;
   declaration.usage = serviceUsage;
+  // Chi phí người khai nhập ở bước OCR (module declaration) → luật đối chiếu đọc được (R-INCOTERM-FREIGHT); lưu xong chạy lại luật.
+  validation.charges = async (orgId, dossierId) => (await declaration.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.valueCharges.get(orgId, dossierId)))?.data ?? null;
+  declaration.onChargesSaved = async (orgId, dossierId) => {
+    const s = await extraction.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.shipments.latest(orgId, dossierId));
+    if (!s) return;
+    const o = await extraction.documents.orgInfo(orgId);
+    await runRules(validation, orgId, dossierId, s.data, s.version, { taxCode: o.taxCode, name: o.name });
+  };
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
+  // Luật R-BRANCH-COUNT-LOCKED: số tờ đã khai (đã lập kết quả các tờ) khi đã có tờ được cấp số – chuỗi dừng giữa chừng vẫn đủ N tờ.
+  validation.branches = async (orgId, dossierId) => lockedSheetCount(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.listForDossier(orgId, dossierId)));
   customs.notify = notify;
   customs.usage = serviceUsage;
+  // Duyệt tờ khai lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi Hải quan (SENT_SHEETS_CHANGED).
+  declaration.sentSheetsGuard = (orgId, dossierId) => checkSentSheets(customs, orgId, dossierId);
+  // Phạm vi sửa theo giai đoạn truyền và tờ đã gọi về (chưa khai / sửa đổi bổ sung / đã thông quan; lô nhiều tờ chỉ gọi về một phần → khóa chỉ tiêu chung).
+  const customsSheets = (orgId: string, dossierId: string) => customsEditSheets(customs, orgId, dossierId);
+  declaration.customsSheets = customsSheets;
+  extraction.customsSheets = customsSheets;
+  dossier.customsSheets = customsSheets;
   // Hộp thư chứng từ: lấy thư Gmail / Outlook, file lưu cùng kho chứng từ.
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
   // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.

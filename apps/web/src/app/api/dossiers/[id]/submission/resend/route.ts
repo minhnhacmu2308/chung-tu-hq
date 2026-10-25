@@ -7,6 +7,6 @@ import { fromResult, parseBody, route } from "@/lib/server/route";
 /** Gửi lại một nghiệp vụ: luôn tra IEX trước, chỉ gửi khi Hải quan chưa ghi nhận. */
 export const POST = route(async (req, params) => {
   const { ctx } = await requireSession();
-  const { operation } = await parseBody(req, ResendOperationInputSchema);
-  return fromResult(await resendOperation(getContainer().customs, ctx, params.id!, operation));
+  const { operation, branch } = await parseBody(req, ResendOperationInputSchema);
+  return fromResult(await resendOperation(getContainer().customs, ctx, params.id!, operation, branch));
 });

@@ -1,8 +1,8 @@
 // Trình diễn các component dữ liệu / nhập liệu / phản hồi của @kb/ui.
-import { Filter, MoreHorizontal } from "lucide-react";
+import { Copy, Filter, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import {
-  Abbreviation, Avatar, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
+  Abbreviation, Alert, Avatar, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   Field, FileDropzone, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
@@ -220,6 +220,16 @@ export function Showcase() {
                 <Button size="sm" onClick={() => toast({ tone: "success", title: "Đã lưu nháp", description: "Tờ khai HS-NK-2609-021" })}>Toast thành công</Button>
                 <Button size="sm" variant="danger" onClick={() => toast({ tone: "danger", title: "Truyền tờ khai lỗi", description: "Customs Hub không phản hồi", action: { label: "Thử lại", onClick: () => {} } })}>Toast lỗi</Button>
               </Stack>
+              {/* Button wrap: nhãn dài trong khung hẹp (vd action của Alert trên mobile) xuống dòng thay vì tràn; Alert đẩy action xuống dưới nội dung. */}
+              <div className="max-w-xs">
+                <Alert
+                  tone="warning"
+                  title="Chỉ tiêu chung – tờ 2, 3 vẫn giữ giá trị cũ"
+                  action={<Button size="sm" variant="secondary" wrap leftIcon={<Copy className="h-4 w-4 shrink-0" />}>Tạo AMA cùng nội dung cho các tờ đã thông quan khác</Button>}
+                >
+                  Đã sửa chỉ tiêu chung ở bản khai bổ sung của tờ 1.
+                </Alert>
+              </div>
             </Stack>
           </Grid>
         </CardContent>

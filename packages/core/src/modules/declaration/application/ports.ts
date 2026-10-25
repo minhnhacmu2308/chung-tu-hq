@@ -1,5 +1,6 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
-import type { AgentMode, CustomsStage, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
+import type { DomainError } from "../../../shared/errors.js";
+import type { ValueCharges, AgentMode, EditSheet, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -35,6 +36,8 @@ export type DeclarationRow = {
 export type AgentTask = { id: AgentTaskId; status: AgentTaskStatus; progress: number; message: string };
 export type AgentLog = { at: string; text: string; tone: "info" | "success" | "warning" };
 export type AgentRunRow = { id: string; orgId: string; dossierId: string; mode: AgentMode; status: "RUNNING" | "DONE" | "ERROR" | "CANCELLED"; tasks: AgentTask[]; log: AgentLog[]; startedBy: string; startedAt: Date; finishedAt: Date | null };
+
+export type ValueChargesRow = { id: string; orgId: string; dossierId: string; data: ValueCharges; updatedBy: string; updatedAt: Date };
 
 export type ProfileRow = { id: string; orgId: string; direction: "NK" | "XK"; values: Record<string, string>; overrides: Record<string, FieldOverride>; updatedBy: string | null; updatedAt: Date };
 
@@ -105,6 +108,11 @@ export interface DeclarationRepos {
     /** Xóa theo id trong org; trả số dòng đã xóa. */
     remove(orgId: string, ids: string[]): Promise<number>;
   };
+  valueCharges: {
+    get(orgId: string, dossierId: string): Promise<ValueChargesRow | null>;
+    /** Ghi đè theo (org, hồ sơ). */
+    upsert(row: ValueChargesRow): Promise<void>;
+  };
   exchangeRates: {
     /** Tỷ giá gần nhất ≤ ngày (VND / 1 đơn vị). */
     latest(currency: string, date: string): Promise<{ rate: string; date: string; source: "VCB" | "MANUAL" | "SEED"; snapshotAt: Date | null } | null>;
@@ -161,7 +169,7 @@ export interface OrgReader {
 
 /** field_audit (bảng của extraction) – append-only. */
 export interface AuditWriter {
-  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" }): Promise<void>;
+  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" }): Promise<void>;
 }
 
 export interface UserNames {
@@ -182,10 +190,20 @@ export type DeclarationDeps = {
   users: UserNames;
   /** Thông báo trong app (tùy chọn; container nối). */
   notify?: Notifier;
-  /** Giai đoạn truyền Hải quan của hồ sơ (module integration; container nối) – chặn sửa chỉ tiêu theo giai đoạn. Không nối → coi như chưa khai. */
-  customsStage?: (orgId: string, dossierId: string) => Promise<CustomsStage>;
+  /**
+   * Các tờ khai nhánh đã lập ở Hải quan (số tờ, giai đoạn, số tờ khai – module integration; container nối): phạm vi sửa theo giai đoạn và tờ đã gọi về
+   * (declarationEditScope). Không nối / chưa truyền → [] (coi như chưa khai).
+   */
+  customsSheets?: (orgId: string, dossierId: string) => Promise<EditSheet[]>;
+  /**
+   * Lô nhiều tờ: tờ chưa gọi về (còn hiệu lực ở Hải quan) mà nội dung tờ khai hiện tại khác nội dung đã gửi → lỗi SENT_SHEETS_CHANGED, chặn duyệt
+   * (module integration; container nối – spec tách tờ khai §2.5). Không nối → không kiểm.
+   */
+  sentSheetsGuard?: (orgId: string, dossierId: string) => Promise<DomainError | null>;
   /** Ghi chi phí HSCodePro vào usage_events (module billing; container nối). Không nối → không ghi. */
   usage?: ServiceUsageMeter;
+  /** Sau khi lưu chi phí người khai nhập: chạy lại luật đối chiếu (container nối với module validation). */
+  onChargesSaved?: (orgId: string, dossierId: string) => Promise<void>;
   clock: Clock;
   idGen: IdGen;
 };

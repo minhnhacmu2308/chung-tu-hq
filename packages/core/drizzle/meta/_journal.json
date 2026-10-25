@@ -169,6 +169,20 @@
       "when": 1792865652230,
       "tag": "0023_mail_connection_filters",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792870000000,
+      "tag": "0024_value_charges",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792878672475,
+      "tag": "0025_customs_branches",
+      "breakpoints": true
     }
   ]
 }

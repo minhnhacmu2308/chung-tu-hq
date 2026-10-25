@@ -61,11 +61,27 @@ describe("customs-bridge", () => {
     await runFull();
     const s = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
     expect(s).toMatchObject({ version: 1, status: "DRAFT", kind: "IDA", direction: "NK", currency: "USD", containers: ["SITU2246781"], unconfirmedHs: 7 });
-    expect(s.fields["NNK_MST"]).toEqual({ value: "0316789012" });
+    expect(s.fields["NNK_MST"]).toEqual({ value: "0316789012", source: "ACCOUNT" });
     expect(s.items).toHaveLength(7);
     expect(s.items[0]).toMatchObject({ lineNo: 1, amount: "3700", hsConfirmed: null });
-    expect(s.adjustments).toEqual([{ label: "Cước vận chuyển quốc tế", amount: "1150", currency: "USD" }]);
+    expect(s.adjustments).toEqual([{ label: "Cước vận chuyển quốc tế", amount: "1150", currency: "USD", kind: "ADD" }]);
     expect(s.estimatedTaxVnd).toMatch(/^\d+$/);
+  });
+
+  it("snapshot: thuế dự tính từng tờ khai nhánh (50 dòng/tờ) cộng lại bằng thuế cả lô; lần duyệt hiện tại", async () => {
+    await runFull();
+    expect((await getDeclarationSnapshot(deps, ORG_ID, D))!.branchTaxVnd).toHaveLength(1);
+    // 7 dòng → 60 dòng có thuế suất: tờ 1 dòng 1–50, tờ 2 dòng 51–60.
+    const base = uow.data.lineItems[0]!;
+    for (const it of uow.data.lineItems) Object.assign(it, { importDutyRate: "3", vatRate: "8" });
+    for (let n = 8; n <= 60; n++) uow.data.lineItems.push({ ...base, id: `itm_x${n}`, lineNo: n, amount: "100", importDutyRate: "3", vatRate: "8" });
+    const s = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
+    expect(s.branchTaxVnd).toHaveLength(2);
+    expect(s.branchTaxVnd!.every((t) => /^\d+$/.test(t) && t !== "0")).toBe(true);
+    expect(String(BigInt(s.branchTaxVnd![0]!) + BigInt(s.branchTaxVnd![1]!))).toBe(s.estimatedTaxVnd);
+    expect(s.approvedAt).toBeNull();
+    uow.data.declarations[0]!.approvedAt = new Date("2026-10-14T05:00:00.000Z");
+    expect((await getDeclarationSnapshot(deps, ORG_ID, D))!.approvedAt).toBe("2026-10-14T05:00:00.000Z");
   });
 
   it("snapshot: lô hàng không còn → không có container", async () => {

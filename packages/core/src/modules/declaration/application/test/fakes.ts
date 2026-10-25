@@ -88,7 +88,7 @@ export class FakeDossiers implements DossierPort {
 
 export class RecordingAudit implements AuditWriter {
   readonly rows: { orgId: string; dossierId: string; key: string; oldValue: string; newValue: string; source: string }[] = [];
-  async append(ctx: { orgId: string }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" }) {
+  async append(ctx: { orgId: string }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" }) {
     this.rows.push({ orgId: ctx.orgId, ...row });
   }
 }

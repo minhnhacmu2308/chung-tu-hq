@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb, saveDb } from "@/mocks/db";
-import { approveDeclaration } from "./declaration";
-import { getSubmission, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
+import { EMPTY_VALUE_CHARGES } from "@kb/contracts";
+import { newId } from "@/lib/mock-request";
+import { answerHs, approveDeclaration, confirmHs, reclassifyHs, startAgentRun, unconfirmHs, updateDeclarationField } from "./declaration";
+import { changeDocumentKind, confirmField, deleteDocument, finishReading, retryDocument, revertField, updateFieldValue, uploadDocuments } from "./ocr";
+import { saveValueCharges } from "./value-charges";
+import { declareAllSheets, getSubmission, recallAllSheets, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
 import { addPostAmendmentLines, approvePostAmendment, updatePostAmendmentField } from "./post-amendment";
 
 // Bỏ độ trễ mạng giả để test nhanh; thời gian nghiệp vụ điều khiển bằng đồng hồ giả (chỉ Date).
@@ -204,5 +208,430 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
     wait(6_000);
     expect((await row(INSPECTING, "HYS")).status).toBe("OK");
     expect(await err(resendOperation(INSPECTING, "HYS"))).toMatchObject({ code: "NOTHING_TO_RESEND" });
+  });
+});
+
+/* ---------------- Lô lớn: tờ khai nhánh (> 50 dòng → 50 dòng/tờ) ---------------- */
+
+const BIG = "dos_028"; // NK, đã duyệt, 120 dòng → 3 tờ (50 + 50 + 20), mọi tờ luồng xanh
+const runB = async (id: string, op: Parameters<typeof performOperation>[1], branch: number) => {
+  const r = await performOperation(id, op, branch);
+  wait(3_000);
+  return r;
+};
+const sheets = async (id: string) => (await getSubmission(id)).branches;
+/** Khai tạm cả lô: tờ 1 rồi tờ 2, 3 nối tiếp. */
+const preDeclareAll = async (id: string) => {
+  await submitDeclaration(id, CERT);
+  wait(9_000);
+};
+const clearSheet = async (id: string, branch: number) => {
+  await runB(id, "IDC", branch);
+  wait(6_000);
+};
+const payloadOf = (id: string, branch: number, op: string, dir: "OUT" | "IN") => {
+  const m = getDb().customsMessages.find((x) => x.dossierId === id && (x.branch ?? 1) === branch && x.operation === op && x.direction === dir)!;
+  return JSON.parse(m.payloadPreview) as Record<string, unknown>;
+};
+
+describe("tờ khai nhánh (mock)", () => {
+  it("lô 120 dòng → 3 tờ; khai tạm tờ 1 trước, tờ 2 và 3 nối tiếp, mỗi tờ một số tờ khai", async () => {
+    let b = await sheets(BIG);
+    expect(b.map((x) => [x.no, x.of, x.stage])).toEqual([[1, 3, "NOT_SENT"], [2, 3, "NOT_SENT"], [3, 3, "NOT_SENT"]]);
+    await submitDeclaration(BIG, CERT);
+    b = await sheets(BIG);
+    expect(b[0]!.pipeline.find((r) => r.op === "IDA")!.status).toBe("SENDING");
+    expect(b[1]!.stage).toBe("NOT_SENT");
+    wait(3_000);
+    b = await sheets(BIG);
+    expect(b[0]).toMatchObject({ stage: "PRE_DECLARED" });
+    expect(b[1]!.pipeline.find((r) => r.op === "IDA")!.status).toBe("SENDING"); // tờ 2 đã được gửi nối tiếp
+    wait(6_000);
+    b = await sheets(BIG);
+    expect(b.map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    const nos = b.map((x) => x.declarationNo);
+    expect(new Set(nos).size).toBe(3);
+    expect(nos.every((n) => /^107\d{9}$/.test(n!))).toBe(true);
+    expect(dossier(BIG).declarationNo).toBe(nos[0]);
+    // 1.2: tờ 1 ghi "F", tờ k ≥ 2 ghi số tờ khai của tờ 1.
+    expect(payloadOf(BIG, 1, "IDA", "OUT")).toMatchObject({ TK_FIC: "F", TK_BNO: 1, TK_DNO: 3 });
+    expect(payloadOf(BIG, 2, "IDA", "OUT")).toMatchObject({ TK_FIC: nos[0], TK_BNO: 2, TK_DNO: 3 });
+    expect(payloadOf(BIG, 3, "IDA", "OUT")).toMatchObject({ TK_FIC: nos[0], TK_BNO: 3, TK_DNO: 3 });
+    const s = await getSubmission(BIG);
+    expect(s.stage).toBe("PRE_DECLARED");
+    expect(s.result?.declarationNo).toBe(nos[0]);
+    expect(s.branches[1]!.messages.every((m) => m.operation === "IDA")).toBe(true);
+    expect(s.summary).toEqual({ of: 3, cleared: 0, problems: [] });
+    expect(await err(performOperation(BIG, "IDC", 4))).toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("thông quan từng tờ: summary đếm số tờ; hồ sơ CLEARED chỉ khi đủ mọi tờ", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    let s = await getSubmission(BIG);
+    expect(s.branches.map((x) => x.stage)).toEqual(["CLEARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(s.summary).toEqual({ of: 3, cleared: 1, problems: [] });
+    expect(dossier(BIG).status).toBe("SUBMITTED");
+    await clearSheet(BIG, 2);
+    expect((await getSubmission(BIG)).summary.cleared).toBe(2);
+    expect(dossier(BIG).status).toBe("SUBMITTED");
+    await clearSheet(BIG, 3);
+    s = await getSubmission(BIG);
+    expect(s.summary).toEqual({ of: 3, cleared: 3, problems: [] });
+    expect(dossier(BIG).status).toBe("CLEARED");
+  });
+
+  it("nghiệp vụ và gửi lại chỉ tác động tờ được chọn; danh sách Hải quan mỗi tờ một dòng", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDC", 2);
+    const b = await sheets(BIG);
+    expect(b.map((x) => x.stage)).toEqual(["PRE_DECLARED", "DECLARED", "PRE_DECLARED"]);
+    expect(b[1]!.result).toMatchObject({ channel: "GREEN" });
+    expect(b[0]!.result?.channel).toBeUndefined();
+    expect((await performOperation(BIG, "IID", 2)).sent).toBe(false);
+    expect((await sheets(BIG))[1]!.messages[0]).toMatchObject({ operation: "IID" });
+    expect((await sheets(BIG))[0]!.messages[0]).toMatchObject({ operation: "IDA", direction: "IN" });
+    getDb().customsMessages.push({ id: "msg_b3", dossierId: BIG, branch: 3, operation: "HYS", direction: "OUT", result: "ERROR", summary: "Lỗi", at: new Date(Date.now() - 500).toISOString(), payloadPreview: "{}" });
+    expect(await err(resendOperation(BIG, "HYS", 2))).toMatchObject({ code: "NOTHING_TO_RESEND" });
+    expect(await resendOperation(BIG, "HYS", 3)).toMatchObject({ resent: true });
+    const rows = (await listCustomsDeclarations()).filter((r) => r.dossierId === BIG).sort((a, c) => a.branch - c.branch);
+    expect(rows.map((r) => [r.branch, r.of])).toEqual([[1, 3], [2, 3], [3, 3]]);
+    expect(rows.every((r) => r.declarationNo)).toBe(true);
+  });
+
+  it("sửa sau thông quan chỉ khi tờ đó đã thông quan; bản khai và số tờ khai theo tờ", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    expect(await err(startPostAmendment(BIG, 2))).toMatchObject({ code: "INVALID_STATE" });
+    await startPostAmendment(BIG, 1);
+    const b = await sheets(BIG);
+    expect(b.map((x) => x.stage)).toEqual(["POST_EDITING", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(getDb().postAmendments.filter((a) => a.dossierId === BIG).map((a) => a.branch ?? 1)).toEqual([1]);
+    expect(getDb().postAmendments[0]!.header["TK_ICN"]).toBe(b[0]!.declarationNo);
+    expect((await getSubmission(BIG)).summary.cleared).toBe(1);
+  });
+});
+
+describe("tờ khai nhánh: gọi về sửa và truyền lại", () => {
+  /** Gọi về riêng tờ 2 rồi (như backend sau mở lại) tờ khai về DRAFT để sửa. */
+  const recallSheet2 = async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 2);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
+    decl(BIG).status = "DRAFT";
+  };
+  const field = (code: string) => decl(BIG).fields.find((f) => f.code === code)!;
+
+  it("gọi về riêng tờ 2, sửa chỉ tiêu chung → duyệt / truyền bị chặn nêu tờ 1, 3 (SENT_SHEETS_CHANGED); hoàn tác → duyệt, truyền chỉ gửi tờ 2", async () => {
+    await recallSheet2();
+    expect((await getSubmission(BIG)).branches.map((b) => b.sentChanges)).toEqual([null, null, null]);
+    const old = field("CQHQ").value;
+    field("CQHQ").value = "01AB – Chi cục khác";
+    expect((await getSubmission(BIG)).branches.map((b) => b.sentChanges)).toEqual([{ common: ["CQHQ"], lines: false }, null, { common: ["CQHQ"], lines: false }]);
+    await expect(approveDeclaration(BIG)).rejects.toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", linesOnly: "0" } });
+    decl(BIG).status = "APPROVED";
+    await expect(submitDeclaration(BIG, CERT)).rejects.toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } });
+    field("CQHQ").value = old;
+    decl(BIG).status = "DRAFT";
+    await approveDeclaration(BIG);
+    await submitDeclaration(BIG, CERT);
+    wait(3_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDA" && m.direction === "OUT").map((m) => m.branch ?? 1)).toEqual([1, 2, 3, 2]);
+  });
+
+  it("gọi về riêng tờ 2, sửa chỉ tiêu chung → IDC tờ 1 bị chặn SENT_SHEETS_CHANGED, không gửi (như backend)", async () => {
+    await recallSheet2();
+    field("CQHQ").value = "01AB – Chi cục khác";
+    await expect(performOperation(BIG, "IDC", 1)).rejects.toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } });
+    expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDC")).toHaveLength(0);
+  });
+
+  it("đổi cả chỉ tiêu chung lẫn dòng tờ 1 → fields kèm \"dòng hàng tờ 1\"; ngày khai dự kiến (NGAY_DK, hệ thống) đổi → không chặn; tờ còn hiệu lực không có ảnh chụp → SENT_SHEETS_UNVERIFIED", async () => {
+    await recallSheet2();
+    const ngay = decl(BIG).fields.find((f) => f.code === "NGAY_DK");
+    if (ngay) ngay.value = "2099-01-01";
+    else decl(BIG).fields.push({ ...field("CQHQ"), code: "NGAY_DK", value: "2099-01-01" });
+    await approveDeclaration(BIG);
+    decl(BIG).status = "DRAFT";
+    field("CQHQ").value = "01AB – Chi cục khác";
+    getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo)[9]!.description = "khác";
+    await expect(approveDeclaration(BIG)).rejects.toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", lineSheets: "1", fields: expect.stringMatching(/; dòng hàng tờ 1$/) } });
+    delete getDb().customsFlows[`${BIG}:3`]!.sent;
+    await expect(approveDeclaration(BIG)).rejects.toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: "3" } });
+  });
+
+  it("sửa trị giá dòng tờ 2 → 1.51 (tổng trị giá hóa đơn) đổi → chặn duyệt nêu 1.51; sửa mô tả dòng tờ 2 → duyệt được", async () => {
+    await recallSheet2();
+    const line = getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo)[59]!;
+    const amount = line.amount;
+    line.amount = "999999";
+    await expect(approveDeclaration(BIG)).rejects.toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", fields: "1.51" } });
+    line.amount = amount;
+    line.description = `${line.description} (sửa)`;
+    await approveDeclaration(BIG);
+    expect(decl(BIG).status).toBe("APPROVED");
+  });
+
+  it("phạm vi sửa (cùng editBlockFor với backend): chỉ gọi về tờ 2 → chỉ tiêu chung / chi phí / dựng lại / chứng từ → COMMON_LOCKED_SHEETS; dòng tờ 1 → LINE_SHEET_LOCKED; dòng tờ 2 sửa được", async () => {
+    await recallSheet2();
+    Object.assign(dossier(BIG), { status: "NEEDS_REVIEW", step: "review" }); // như backend tự mở lại sau gọi về
+    const lines = getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo);
+    const [line10, line60] = [lines[9]!, lines[59]!];
+    const common = { code: "INVALID_STATE", reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 3" } };
+    const sheet1 = { code: "INVALID_STATE", reason: "LINE_SHEET_LOCKED", params: { sheet: 1 } };
+    await expect(updateDeclarationField(BIG, "CQHQ", "01AB")).rejects.toMatchObject(common);
+    await updateDeclarationField(BIG, `HANG.${line60.id}.HAG_RE`, "XN210");
+    await expect(updateDeclarationField(BIG, `HANG.${line10.id}.HAG_RE`, "XN210")).rejects.toMatchObject(sheet1);
+    await expect(saveValueCharges(BIG, EMPTY_VALUE_CHARGES)).rejects.toMatchObject(common);
+    await expect(startAgentRun(BIG, "DECLARATION")).rejects.toMatchObject(common);
+    await expect(confirmHs(line10.id, "8482.10.00")).rejects.toMatchObject(sheet1);
+    await expect(unconfirmHs(line10.id)).rejects.toMatchObject(sheet1);
+    await expect(reclassifyHs(line10.id, {})).rejects.toMatchObject(sheet1);
+    await expect(answerHs(line10.id, { questionId: "q", answers: [] })).rejects.toMatchObject(sheet1);
+    await unconfirmHs(line60.id);
+    await confirmHs(line60.id, "8482.10.00");
+    await expect(uploadDocuments(BIG, [new File(["x"], "more.pdf")])).rejects.toMatchObject(common);
+    await expect(finishReading(BIG)).rejects.toMatchObject(common);
+    const doc = getDb().documents.find((d) => d.dossierId === BIG)!;
+    for (const op of [changeDocumentKind(doc.id, "OTHER"), deleteDocument(doc.id), retryDocument(doc.id)]) await expect(op).rejects.toMatchObject(common);
+    const docFields = getDb().fields.filter((f) => f.documentId === doc.id);
+    const header = docFields.find((f) => !f.key.startsWith("item."))!;
+    await expect(updateFieldValue(header.id, "x")).rejects.toMatchObject(common);
+    await expect(confirmField(header.id)).rejects.toMatchObject(common);
+    await expect(revertField(header.id)).rejects.toMatchObject(common);
+    const item = (n: number) => ({ id: newId("fld"), documentId: doc.id, group: "ITEMS", key: `item.${n}.description`, label: "Mô tả", value: "x", originalValue: "x", status: "USER_CONFIRMED" }) satisfies (typeof docFields)[number];
+    getDb().fields.push(item(line10.lineNo), item(line60.lineNo));
+    await expect(updateFieldValue(getDb().fields.at(-2)!.id, "y")).rejects.toMatchObject(sheet1);
+    await updateFieldValue(getDb().fields.at(-1)!.id, "y");
+  });
+
+  it("chứng từ: hồ sơ đã truyền / đã hủy → lỗi cũ của hồ sơ; đã duyệt còn tờ hiệu lực → COMMON_LOCKED_SHEETS; dòng tờ đã thông quan → LINE_SHEET_CLOSED", async () => {
+    await preDeclareAll(BIG);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    const doc = getDb().documents.find((d) => d.dossierId === BIG)!;
+    dossier(BIG).status = "SUBMITTED";
+    const locked = { code: "DOSSIER_LOCKED", message: "Hồ sơ đã truyền, không sửa được" };
+    await expect(uploadDocuments(BIG, [new File(["x"], "more.pdf")])).rejects.toMatchObject(locked);
+    await expect(changeDocumentKind(doc.id, "OTHER")).rejects.toMatchObject(locked);
+    await expect(deleteDocument(doc.id)).rejects.toMatchObject(locked);
+    dossier(BIG).status = "CANCELLED";
+    await expect(uploadDocuments(BIG, [new File(["x"], "more.pdf")])).rejects.toMatchObject({ code: "INVALID_STATE", message: "Hồ sơ đã hủy" });
+    dossier(BIG).status = "APPROVED";
+    await expect(uploadDocuments(BIG, [new File(["x"], "more.pdf")])).rejects.toMatchObject({ reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 2, 3" } });
+    await clearSheet(BIG, 1);
+    await runB(BIG, "IDB", 2);
+    Object.assign(decl(BIG), { status: "DRAFT" });
+    Object.assign(dossier(BIG), { status: "NEEDS_REVIEW", step: "review" });
+    const line10 = getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo)[9]!;
+    await expect(confirmHs(line10.id, "8482.10.00")).rejects.toMatchObject({ code: "INVALID_STATE", reason: "LINE_SHEET_CLOSED", params: { sheet: 1 } });
+  });
+
+  it("gọi về một tờ → mở lại ngay (tờ khai DRAFT, hồ sơ review); tờ khác giữ nguyên", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 2);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
+    expect(decl(BIG).status).toBe("DRAFT");
+    expect(dossier(BIG)).toMatchObject({ step: "review", status: "NEEDS_REVIEW" });
+  });
+
+  it("gọi về tất cả: IDB tờ 1 → 2 → 3 nối tiếp, chỉ mở lại sau tờ cuối → duyệt lại → truyền lại lần lượt tờ 1 → 2 → 3", async () => {
+    await preDeclareAll(BIG);
+    expect(await recallAllSheets(BIG)).toMatchObject({ sent: true, sheets: [1, 2, 3] });
+    wait(3_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["RECALLED", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(decl(BIG).status).toBe("SUBMITTED"); // còn tờ 2, 3 đang gọi về
+    wait(6_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["RECALLED", "RECALLED", "RECALLED"]);
+    expect(decl(BIG).status).toBe("DRAFT");
+    expect(dossier(BIG)).toMatchObject({ step: "review", status: "NEEDS_REVIEW" });
+    await approveDeclaration(BIG);
+    // Tờ sau không khai tạm lại trước khi tờ 1 / tờ trước xong.
+    await expect(performOperation(BIG, "IDA", 3)).rejects.toMatchObject({ reason: "SHEET_ORDER", params: { sheet: 3, waitFor: 2 } });
+    await submitDeclaration(BIG, CERT);
+    wait(9_000);
+    const s = await getSubmission(BIG);
+    expect(s.branches.map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    const outs = getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDA" && m.direction === "OUT" && m.summary.includes("sau khi gọi sửa"));
+    expect(outs.map((m) => m.branch ?? 1)).toEqual([1, 2, 3]);
+    expect(outs.map((m) => m.at)).toEqual([...outs.map((m) => m.at)].sort());
+  });
+
+  it("tờ k ≥ 2 không khai tạm khi tờ 1 chưa có số; lỗi gửi của một tờ → state SEND_FAILED trong summary.problems", async () => {
+    expect(await err(performOperation(BIG, "IDA", 2))).toMatchObject({ code: "INVALID_STATE", message: expect.stringContaining("tờ 1 chưa có số tờ khai") });
+    await preDeclareAll(BIG);
+    getDb().customsMessages.push({ id: "msg_e3", dossierId: BIG, branch: 3, operation: "HYS", direction: "OUT", result: "ERROR", summary: "Lỗi", at: new Date(Date.now() - 500).toISOString(), payloadPreview: "{}" });
+    const s = await getSubmission(BIG);
+    expect(s.branches.map((x) => x.state)).toEqual(["APPROVED", "APPROVED", "SEND_FAILED"]);
+    expect(s.summary.problems).toEqual([{ no: 3, kind: "SEND_FAILED" }]);
+  });
+});
+
+describe("tờ khai nhánh: tờ đã thông quan không phải gọi về (R7), 'đã duyệt' khi đang truyền lại", () => {
+  it("tờ 1 thông quan, tờ 3 gọi về, tờ 2 gọi sửa đổi (IDD) → mở lại; duyệt lại → truyền lại tờ 2 (IDA01) rồi tờ 3, tờ 1 giữ nguyên", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    await runB(BIG, "IDB", 3);
+    await runB(BIG, "IDC", 2);
+    await runB(BIG, "IDD", 2);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_RECALLED", "RECALLED"]);
+    expect(decl(BIG).status).toBe("DRAFT");
+    await approveDeclaration(BIG);
+    const before = getDb().customsMessages.filter((m) => m.dossierId === BIG && (m.branch ?? 1) === 1).length;
+    await submitDeclaration(BIG, CERT);
+    // Đang truyền lại tờ 2: tờ 3 (đã gọi về) vẫn là đã duyệt – IDA không trỏ về Review.
+    expect((await sheets(BIG))[2]!.pipeline.find((r) => r.op === "IDA")!.action).not.toBe("EDIT");
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_PRE_DECLARED", "PRE_DECLARED"]);
+    expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && (m.branch ?? 1) === 1).length).toBe(before);
+  });
+});
+
+describe("tờ khai nhánh: luôn truyền theo thứ tự tờ (như backend – sheetOrderWait)", () => {
+  const order = (sheet: number, waitFor: number) => ({ code: "INVALID_STATE", reason: "SHEET_ORDER", params: { sheet, waitFor } });
+  const outs = (op: string) => getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === op && m.direction === "OUT");
+
+  it("3 tờ đã gọi về, duyệt lại → IDA tờ 2 / tờ 3 bị chặn (không gửi, tờ khai vẫn APPROVED); IDA tờ 1 → nối 1 → 2 → 3", async () => {
+    await preDeclareAll(BIG);
+    for (const b of [1, 2, 3]) await runB(BIG, "IDB", b);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["RECALLED", "RECALLED", "RECALLED"]); // phản hồi IDB đến → mở lại tờ khai
+    expect(decl(BIG).status).toBe("DRAFT");
+    await approveDeclaration(BIG);
+    const before = outs("IDA").length;
+    await expect(performOperation(BIG, "IDA", 2)).rejects.toMatchObject(order(2, 1));
+    await expect(performOperation(BIG, "IDA", 3)).rejects.toMatchObject(order(3, 2));
+    expect(outs("IDA").length).toBe(before);
+    expect(decl(BIG).status).toBe("APPROVED");
+    await performOperation(BIG, "IDA", 1);
+    // Đang gửi tờ 1: tờ 3 vẫn chờ.
+    await expect(performOperation(BIG, "IDA", 3)).rejects.toMatchObject(order(3, 2));
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(outs("IDA").slice(before).map((m) => m.branch ?? 1)).toEqual([1, 2, 3]);
+  });
+
+  it("R7: tờ 1 thông quan, tờ 2, 3 gọi sửa đổi → IDA01 tờ 3 bị chặn (chờ tờ 2); IDA01 tờ 2 được, nối tờ 3", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    // Khai chính thức cả hai tờ trước, rồi mới gọi sửa đổi (tờ trước đã gọi sửa đổi thì tờ sau chờ khai chính thức – SHEET_ORDER_DECLARE).
+    for (const b of [2, 3]) await runB(BIG, "IDC", b);
+    for (const b of [2, 3]) await runB(BIG, "IDD", b);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_RECALLED", "AMEND_RECALLED"]);
+    await approveDeclaration(BIG);
+    await expect(performOperation(BIG, "IDA01", 3)).rejects.toMatchObject(order(3, 2));
+    await performOperation(BIG, "IDA01", 2);
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_PRE_DECLARED", "AMEND_PRE_DECLARED"]);
+  });
+
+  it("chuỗi nối tiếp bỏ qua tờ giữa đã thông quan: tờ 1, 3 gọi sửa đổi, tờ 2 thông quan → IDA01 tờ 3 chặn (chờ tờ 1); IDA01 tờ 1 → nối thẳng tờ 3", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 2);
+    for (const b of [1, 3]) await runB(BIG, "IDC", b);
+    for (const b of [1, 3]) await runB(BIG, "IDD", b);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["AMEND_RECALLED", "CLEARED", "AMEND_RECALLED"]);
+    await approveDeclaration(BIG);
+    await expect(performOperation(BIG, "IDA01", 3)).rejects.toMatchObject(order(3, 1));
+    await performOperation(BIG, "IDA01", 1);
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["AMEND_PRE_DECLARED", "CLEARED", "AMEND_PRE_DECLARED"]);
+    expect(outs("IDA01").map((m) => m.branch ?? 1)).toEqual([1, 3]);
+  });
+});
+
+describe("tờ khai nhánh: khai chính thức (IDC) tờ k chờ mọi tờ trước khai tạm xong (SHEET_ORDER_DECLARE)", () => {
+  const outs = (op: string) => getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === op && m.direction === "OUT");
+
+  it("tờ 1 gọi về (RECALLED), tờ 2 đã khai tạm → IDC tờ 2 bị chặn (chờ tờ 1), không gửi", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 1);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["RECALLED", "PRE_DECLARED", "PRE_DECLARED"]);
+    const before = outs("IDC").length;
+    await expect(performOperation(BIG, "IDC", 2)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "SHEET_ORDER_DECLARE", params: { sheet: 2, waitFor: 1 } });
+    expect(outs("IDC").length).toBe(before);
+  });
+  it("tờ 1 đã khai tạm (chưa khai chính thức) → IDC tờ 2 gửi được; tờ 1 đã thông quan → IDC tờ 2 gửi được", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDC", 2);
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([2]);
+    await clearSheet(BIG, 1);
+    await runB(BIG, "IDC", 3);
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([2, 1, 3]);
+  });
+});
+
+describe("tờ khai nhánh: gọi về tất cả (recallAllSheets)", () => {
+  it("tờ 1 thông quan, tờ 2 khai tạm, tờ 3 đã phân luồng → IDB tờ 2 rồi IDD tờ 3; tờ khai đã nháp (gọi về một tờ trước) → không mở lại lần nữa", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    await runB(BIG, "IDC", 3);
+    expect(await recallAllSheets(BIG)).toMatchObject({ sheets: [2, 3] });
+    wait(6_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "RECALLED", "AMEND_RECALLED"]);
+    expect(decl(BIG).status).toBe("DRAFT");
+    await expect(recallAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "RECALL_ALL_NONE", message: "Không còn tờ nào cần gọi về" });
+  });
+  it("đã gọi về tờ 2 (tờ khai DRAFT) → gọi về tất cả gửi tờ 1, 3; hồ sơ giữ bước review", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 2);
+    await sheets(BIG); // phản hồi IDB đến → mở lại
+    expect(decl(BIG).status).toBe("DRAFT");
+    expect(await recallAllSheets(BIG)).toMatchObject({ sheets: [1, 3] });
+    wait(6_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["RECALLED", "RECALLED", "RECALLED"]);
+    expect(decl(BIG).status).toBe("DRAFT");
+    expect(dossier(BIG).step).toBe("review");
+  });
+  it("tờ đích đang chờ phản hồi → RECALL_ALL_BLOCKED, không gửi; lô một tờ → VALIDATION", async () => {
+    await preDeclareAll(BIG);
+    await performOperation(BIG, "PORT_FEE", 2);
+    await expect(recallAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "RECALL_ALL_BLOCKED", params: { sheets: "2" } });
+    expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDB")).toHaveLength(0);
+    await expect(recallAllSheets(NEW)).rejects.toMatchObject({ code: "VALIDATION", reason: "RECALL_ALL_SINGLE_SHEET" });
+  });
+});
+
+describe("tờ khai nhánh: khai chính thức cả lô (declareAllSheets)", () => {
+  const outs = (op: string) => getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === op && m.direction === "OUT");
+
+  it("3 tờ đã khai tạm: một lần bấm → IDC tờ 1, rồi tự nối tờ 2, tờ 3", async () => {
+    await preDeclareAll(BIG);
+    await declareAllSheets(BIG);
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1]);
+    // Đang gửi → bấm lần nữa bị chặn, không gửi thêm.
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_PENDING" });
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "DECLARED", "DECLARED"]); // luồng xanh: tờ 1 đã đủ thời gian tự thông quan
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1, 2, 3]);
+    // Không còn tờ nào chờ khai chính thức.
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_NONE", message: "Không còn tờ nào chờ khai chính thức" });
+  });
+  it("tờ 1 đã thông quan → bắt đầu từ tờ 2", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    await declareAllSheets(BIG);
+    wait(9_000);
+    await sheets(BIG); // áp phản hồi đã đến (settle)
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1, 2, 3]); // 1 = IDC thông quan tờ 1 (clearSheet)
+  });
+  it("tờ chờ gửi nội dung là tờ cuối → câu thường, không 'tờ 3 chờ tờ 3'", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 3);
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_NOT_PRE_DECLARED", params: { sheet: 3 }, message: expect.stringMatching(/^Tờ 3: chưa khai tạm xong/) });
+  });
+  it("còn tờ chờ gửi nội dung → SHEET_ORDER_DECLARE; lô một tờ → VALIDATION", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 1);
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "SHEET_ORDER_DECLARE", params: { sheet: 2, waitFor: 1 } });
+    await expect(declareAllSheets(NEW)).rejects.toMatchObject({ code: "VALIDATION", reason: "DECLARE_ALL_SINGLE_SHEET" });
+  });
+  it("tờ khai bị mở lại (DRAFT) giữa chuỗi → dừng, không khai chính thức tờ kế, ghi lỗi trên tờ đó", async () => {
+    await preDeclareAll(BIG);
+    await declareAllSheets(BIG);
+    decl(BIG).status = "DRAFT";
+    wait(9_000);
+    await sheets(BIG);
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1]);
+    expect(getDb().customsMessages.some((m) => m.dossierId === BIG && (m.branch ?? 1) === 2 && m.result === "ERROR" && /chưa khai chính thức tự động/.test(m.summary))).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { customsMessages, customsOutbox, customsResults, postAmendments } from "../../../db/schema/integration.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -33,25 +33,30 @@ function repos(tx: Tx): CustomsRepos {
       update: async (orgId, id, patch) => void (await tx.update(customsOutbox).set(patch).where(and(eq(customsOutbox.orgId, orgId), eq(customsOutbox.id, id)))),
     },
     messages: {
-      list: async (orgId, dossierId) => (await tx.select().from(customsMessages).where(and(eq(customsMessages.orgId, orgId), eq(customsMessages.dossierId, dossierId))).orderBy(customsMessages.at, customsMessages.id)).map(toMsg),
+      list: async (orgId, dossierId, branch) => (await tx.select().from(customsMessages).where(and(eq(customsMessages.orgId, orgId), eq(customsMessages.dossierId, dossierId), branch === undefined ? undefined : eq(customsMessages.branch, branch))).orderBy(customsMessages.at, customsMessages.id)).map(toMsg),
       insert: async (row) => void (await tx.insert(customsMessages).values(row)),
     },
     results: {
-      get: async (orgId, dossierId) => {
-        const r = (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId))).limit(1))[0];
+      get: async (orgId, dossierId, branch = 1) => {
+        const r = (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId), eq(customsResults.branch, branch))).limit(1))[0];
         return r ? toResult(r) : null;
       },
+      listForDossier: async (orgId, dossierId) => (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId))).orderBy(customsResults.branch)).map(toResult),
+      listForDossiers: async (orgId, dossierIds) =>
+        dossierIds.length ? (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), inArray(customsResults.dossierId, dossierIds))).orderBy(customsResults.dossierId, customsResults.branch)).map(toResult) : [],
       listForOrg: async (orgId) => (await tx.select().from(customsResults).where(eq(customsResults.orgId, orgId)).orderBy(desc(customsResults.updatedAt))).map(toResult),
+      deleteUnsentAbove: async (orgId, dossierId, branch) =>
+        (await tx.delete(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId), gt(customsResults.branch, branch), isNull(customsResults.declarationNo), sql`${customsResults.raw}->>'stage' = 'NOT_SENT'`)).returning({ id: customsResults.id })).length,
       upsert: async (row) => {
         await tx
           .insert(customsResults)
           .values(row)
-          .onConflictDoUpdate({ target: customsResults.dossierId, set: { externalId: row.externalId, declarationNo: row.declarationNo, channel: row.channel, channelNote: row.channelNote, clearanceStatus: row.clearanceStatus, customsTaxVnd: row.customsTaxVnd, state: row.state, pollCount: row.pollCount, raw: row.raw, updatedAt: row.updatedAt } });
+          .onConflictDoUpdate({ target: [customsResults.dossierId, customsResults.branch], set: { externalId: row.externalId, declarationNo: row.declarationNo, channel: row.channel, channelNote: row.channelNote, clearanceStatus: row.clearanceStatus, customsTaxVnd: row.customsTaxVnd, state: row.state, pollCount: row.pollCount, raw: row.raw, updatedAt: row.updatedAt } });
       },
     },
     amendments: {
-      listForDossier: async (orgId, dossierId) => (await tx.select().from(postAmendments).where(and(eq(postAmendments.orgId, orgId), eq(postAmendments.dossierId, dossierId))).orderBy(postAmendments.seq)).map(toAmendment),
-      insert: async (row) => void (await tx.insert(postAmendments).values({ id: row.id, orgId: row.orgId, dossierId: row.dossierId, seq: row.seq, createdAt: row.createdAt, ...amendmentCols(row) })),
+      listForDossier: async (orgId, dossierId, branch) => (await tx.select().from(postAmendments).where(and(eq(postAmendments.orgId, orgId), eq(postAmendments.dossierId, dossierId), branch === undefined ? undefined : eq(postAmendments.branch, branch))).orderBy(postAmendments.branch, postAmendments.seq)).map(toAmendment),
+      insert: async (row) => void (await tx.insert(postAmendments).values({ id: row.id, orgId: row.orgId, dossierId: row.dossierId, branch: row.branch, seq: row.seq, createdAt: row.createdAt, ...amendmentCols(row) })),
       update: async (row) => void (await tx.update(postAmendments).set(amendmentCols(row)).where(and(eq(postAmendments.orgId, row.orgId), eq(postAmendments.id, row.id)))),
     },
   };

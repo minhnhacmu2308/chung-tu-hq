@@ -128,15 +128,17 @@ export function lawCodesByLine(value: string, lineNos: number[]): Map<number, st
 export type ItemDefaultsInput = { lineNo: number; quantity: string; unit: string; vatRate?: string | null | undefined; policyNote?: string | null | undefined };
 /**
  * Ô dòng hàng phần mềm tự điền khi truyền: số lượng (2) = số lượng (1) (chưa có bảng quy đổi ĐVT biểu thuế – D3), mã tiền đơn giá = nguyên tệ,
- * đơn vị đơn giá = ĐVT; IDA: mã biểu thuế từ ghi chú FTA, mã GTGT từ thuế suất; EDA: mã văn bản pháp luật theo dòng từ chỉ tiêu VBPQ.
+ * đơn vị đơn giá = ĐVT; IDA: mã biểu thuế từ ghi chú FTA, mã GTGT từ thuế suất, 1.88 từ khoản điều chỉnh được phân bổ; EDA: mã văn bản pháp luật theo dòng từ chỉ tiêu VBPQ.
  */
-export function itemDefaults(kind: Kind, it: ItemDefaultsInput, ctx: { currency: string; vbpq?: string; lineNos?: number[] }): Values {
+export function itemDefaults(kind: Kind, it: ItemDefaultsInput, ctx: { currency: string; vbpq?: string; lineNos?: number[]; adjustmentNos?: number[] }): Values {
   const unit = it.unit || "PCE";
   const out: Values = { HAG_QN2: it.quantity, HAG_QT2: unit, HAG_UPC: ctx.currency, HAG_TSC: unit };
   if (kind === "IDA") {
     const t = taxTable(it.policyNote);
     if (t.code) out["HAG_ORS"] = t.code;
     out["HAG_TX5"] = vatCode(it.vatRate);
+    // 1.88: số thứ tự khoản điều chỉnh 1.49 người khai đã xác nhận phân bổ cho mọi dòng hàng.
+    (ctx.adjustmentNos ?? []).slice(0, 5).forEach((n, k) => (out[`HAG_VN${k + 1}`] = String(n)));
   } else {
     const codes = lawCodesByLine(ctx.vbpq ?? "", ctx.lineNos ?? [it.lineNo]).get(it.lineNo) ?? [];
     codes.slice(0, 5).forEach((c, k) => (out[`HAG_OL${k + 1}`] = c));

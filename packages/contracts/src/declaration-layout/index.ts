@@ -7,8 +7,8 @@ export { layoutFor } from "./layout-for.js";
 export { BILL_SPLIT_FORM, EXPORT_IDENTIFIER_FORM, IDENTIFIER_FORM, type TransportOperationForm } from "./transport-operations.js";
 export { amendLock, type AmendLock, type AmendLockBasis } from "./amend.js";
 export {
-  appFieldMeta, declarationEditMode, declarationFormValues, DERIVED_LOCK, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, formKeysOf, isExtraFieldKey, mappedAppCodes, pendingFormEdits, splitAddressLines,
-  type DeclarationEditMode, type ExtraFieldMeta, type FptObjectName,
+  appFieldMeta, declarationEditMode, declarationEditScope, declarationFormValues, editBlockFor, sheetOfLine, DERIVED_LOCK, editableFormKeys, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, formKeysOf, isExtraFieldKey, mappedAppCodes, pendingFormEdits, splitAddressLines,
+  type DeclarationEditMode, type DeclarationEditScope, type EditBlock, type EditSheet, type EditTarget, type ExtraFieldMeta, type FptObjectName,
 } from "./app-fields.js";
 export {
   isItemFieldKey, itemDefaults, itemFieldClass, itemFieldCode, itemFieldFpt, itemFieldIssue, itemFieldMeta, itemInputKeys, itemOverrides, lawCodesByLine, parseItemFieldCode, taxTable, vatCode,

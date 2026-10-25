@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  baseOp, CUSTOMS_OPERATIONS, nextCustomsOperation, opFor, operationAvailability, operationsFor, queryOpFor, stageAfter, stageFromLegacy,
+  baseOp, CUSTOMS_OPERATIONS, nextCustomsOperation, opFor, operationAvailability, operationsFor, queryOpFor, recallOpFor, stageAfter, stageFromLegacy,
   CustomsStageSchema, type CustomsStage, type OperationAvailabilityInput,
 } from "./customs-flow.js";
 import { fillReason, REASON_CODES, REASON_TEXT_VI, reasonVi } from "./reason-codes.js";
@@ -86,6 +86,20 @@ describe("operationAvailability – nút nào bấm được", () => {
   });
   it("tờ khai xuất dùng mã E…", () => {
     expect(enabled({ direction: "XK", stage: "PRE_DECLARED" })).toEqual(["EDB", "EDC", "HYS", "PORT_FEE"]);
+  });
+});
+
+describe("recallOpFor – nghiệp vụ gọi về đang bật của tờ", () => {
+  const pick = (over: Partial<OperationAvailabilityInput>) => recallOpFor(operationAvailability({ ...base, ...over }));
+  it("PRE_DECLARED → IDB/EDB; DECLARED, AMEND_PRE_DECLARED → IDD/EDD (kể cả khi tờ khai đang nháp)", () => {
+    expect(pick({ stage: "PRE_DECLARED" })).toBe("IDB");
+    expect(pick({ stage: "PRE_DECLARED", direction: "XK" })).toBe("EDB");
+    expect(pick({ stage: "DECLARED", approved: false })).toBe("IDD");
+    expect(pick({ stage: "AMEND_PRE_DECLARED", direction: "XK" })).toBe("EDD");
+  });
+  it("đang chờ phản hồi / giai đoạn không gọi về được → null (không bao giờ AMB)", () => {
+    expect(pick({ stage: "PRE_DECLARED", pending: ["PORT_FEE"] })).toBeNull();
+    for (const stage of ["NOT_SENT", "RECALLED", "AMEND_RECALLED", "CLEARED", "REJECTED", "POST_PRE_DECLARED"] as const) expect(pick({ stage })).toBeNull();
   });
 });
 

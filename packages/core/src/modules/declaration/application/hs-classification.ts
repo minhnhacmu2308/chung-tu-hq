@@ -9,6 +9,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
 import { candidatesFromResult, chunk, groupSameGoods, toHsRequestItems } from "../domain/hscodepro-map.js";
 import { vnDate } from "../domain/mapping/types.js";
+import { sheetScopeError } from "./_edit-scope.js";
 import { rebuildDraft } from "./_rebuild.js";
 import { toLineItem } from "./_dto.js";
 import { HsApiError, type AgentLog, type DeclarationDeps, type DeclarationRepos, type HsJobRow, type LineItemRow } from "./ports.js";
@@ -279,6 +280,8 @@ export async function answerHsQuestion(deps: DeclarationDeps, ctx: Ctx, lineItem
   const row = await loadItem(deps, ctx, lineItemId);
   if (!row.ok) return row;
   const it = row.value;
+  const blocked = await sheetScopeError(deps, ctx, it.dossierId, { kind: "LINE_NO", lineNo: it.lineNo });
+  if (blocked) return err(blocked);
   if (it.hsStatus !== "need_info" || it.hsQuestion?.id !== input.questionId) return err(domainError("INVALID_STATE", "Câu hỏi đã được trả lời hoặc không còn hiệu lực – tải lại bảng"));
   const ids = new Set(it.hsQuestion.questions.map((q) => q.id));
   if (input.answers.length !== ids.size || input.answers.some((a) => !ids.has(a.id))) return err(domainError("VALIDATION", "Cần trả lời đủ từng câu hỏi"));
@@ -332,6 +335,8 @@ export async function reclassifyHs(deps: DeclarationDeps, ctx: Ctx, lineItemId: 
   const row = await loadItem(deps, ctx, lineItemId);
   if (!row.ok) return row;
   const it = row.value;
+  const blocked = await sheetScopeError(deps, ctx, it.dossierId, { kind: "LINE_NO", lineNo: it.lineNo });
+  if (blocked) return err(blocked);
   if (it.hsConfirmed) return err(domainError("INVALID_STATE", "Dòng đã xác nhận mã HS – bỏ xác nhận trước khi phân loại lại"));
   const dossier = await deps.dossiers.get(ctx.orgId, it.dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));

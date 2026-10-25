@@ -1,6 +1,7 @@
 import type { Rule } from "../helpers.js";
 import { amountSum } from "./amount-sum.js";
 import { awbLength } from "./awb-length.js";
+import { branchCountLocked } from "./branch-count-locked.js";
 import { buyerMst } from "./buyer-mst.js";
 import { containerList } from "./container-list.js";
 import { countryCode } from "./country-code.js";
@@ -29,10 +30,10 @@ import { weightPlBl } from "./weight-pl-bl.js";
 /** Thứ tự hiển thị trên màn OCR: BLOCKER trước (trị giá/dòng hàng → trọng lượng/kiện → điều kiện giao hàng → vận đơn/container → đối tác), rồi WARNING, INFO. */
 export const RULES: Rule[] = [
   // BLOCKER
-  amountSum, max50Lines, lineValueDigits, weightPlBl, grossWeightDigits, qtyPlInv, packagesInteger, incotermFreight, incotermCode, awbLength, containerList, countryCode, lawMoCu,
+  amountSum, branchCountLocked, lineValueDigits, weightPlBl, grossWeightDigits, qtyPlInv, packagesInteger, incotermFreight, incotermCode, awbLength, containerList, countryCode, lawMoCu,
   // WARNING
   invoiceRef, lineAmount, qtyDecimals, descriptionLength, originCo, insuranceIncoterm, podTransship, dateOrder, partyNameLength, sharedContainer, warehouseCode,
   // INFO
-  buyerMst, hs6,
+  buyerMst, hs6, max50Lines,
 ];
 export const ruleByCode = (code: string) => RULES.find((r) => r.code === code);

@@ -7,19 +7,22 @@ import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { RecordingNotifier } from "../../../../shared/notifier.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
 import type { ProgressEvent } from "../../../dossier/index.js";
-import type { DeclarationPayload } from "../../domain/declaration-to-fpt.js";
-import type { CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsUow, DeclarationReader, DossierBrief, OutboxRow, ResultRow } from "../customs-ports.js";
-import { getSubmission, listCustomsDeclarations } from "../get-submission.js";
+import { lockedSheetCount } from "@kb/contracts";
+import { buildFptRequest, type DeclarationPayload } from "../../domain/declaration-to-fpt.js";
+import { sheetSnapshot } from "../../domain/branches.js";
+import { checkSentSheets, customsEditSheets } from "../sent-sheets.js";
+import type { CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsUow, DeclarationReader, DossierBrief, MessageRow, OutboxRow, ResultRow } from "../customs-ports.js";
+import { dossierCustomsSummaries, getSubmission, listCustomsDeclarations } from "../get-submission.js";
 import { markOutboxFailed, reopenDeclaration } from "../reopen-declaration.js";
 import { domainError } from "../../../../shared/errors.js";
 import { RecordingUsageMeter } from "../../../../shared/usage.js";
 import { MAX_POLLS, pollStatus } from "../poll-status.js";
 import { MAX_ATTEMPTS, processOutbox } from "../process-outbox.js";
 import { resendOperation } from "../resend-operation.js";
-import { submitDeclaration } from "../submit-declaration.js";
+import { enqueueBranchPreDeclare, outboxKey, submitDeclaration } from "../submit-declaration.js";
 import { requeueStuckOutbox } from "../requeue-stuck-outbox.js";
 import { performOperation, startPostAmendment } from "../perform-operation.js";
-import { addPostAmendmentLines, approvePostAmendment, getPostAmendmentView, updatePostAmendmentField } from "../post-amendment.js";
+import { addPostAmendmentLines, approvePostAmendment, copyPostAmendmentHeader, getPostAmendmentView, updatePostAmendmentField } from "../post-amendment.js";
 import { FakeCustomsGateway, hashId } from "../test/fake-customs-gateway.js";
 import { InMemoryCustomsUow } from "../test/in-memory-customs-uow.js";
 
@@ -42,13 +45,21 @@ class FakeDeclarations implements DeclarationReader {
   constructor(public status: DeclarationStatus = "APPROVED", public unconfirmedHs = 0, public kind: "IDA" | "EDA" = "IDA") {}
   /** Ngày tra tỷ giá khi dựng tờ khai (giờ VN). */
   rateDate = "2026-10-14";
+  /** Phiên bản tờ khai (duyệt lại sau khi sửa → tăng). */
+  version = 2;
   /** Ghi đè chỉ tiêu của payload (giá trị rỗng = người khai xóa ô sau khi duyệt). */
   fields: Record<string, { value: string }> = {};
+  /** Ghi đè dòng hàng (lô > 50 dòng → nhiều tờ khai nhánh). */
+  items: DeclarationPayload["items"] | null = null;
+  /** Lần phê duyệt hiện tại (duyệt lại sau khi mở lại → đổi; phiên bản giữ nguyên). */
+  approvedAt: string | null = null;
+  /** Thuế dự tính từng tờ khai nhánh (lô nhiều tờ). */
+  branchTaxVnd: string[] | undefined = undefined;
   readonly submitted: string[] = [];
   async get(_orgId: string, dossierId: string) {
     if (dossierId === "dos_none") return null;
     const p = payload(this.kind);
-    return { declarationId: "dec_1", version: 2, status: this.status, payload: { ...p, fields: { ...p.fields, ...this.fields } }, unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate };
+    return { declarationId: "dec_1", version: this.version, status: this.status, payload: { ...p, fields: { ...p.fields, ...this.fields }, ...(this.items ? { items: structuredClone(this.items) } : {}) }, unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate, approvedAt: this.approvedAt, ...(this.branchTaxVnd ? { branchTaxVnd: this.branchTaxVnd } : {}) };
   }
   async markSubmitted(_ctx: { orgId: string }, dossierId: string) {
     this.submitted.push(dossierId);
@@ -346,12 +357,12 @@ describe("customs-send / poll", () => {
 
 const T = new Date("2026-10-14T03:00:00.000Z");
 const seedResult = (p: Partial<ResultRow> = {}): ResultRow => {
-  const row: ResultRow = { id: "res_1", orgId: ORG, dossierId: D, externalId: "fpt-1", declarationNo: "107000000001", channel: "YELLOW", channelNote: null, clearanceStatus: "INSPECTING", customsTaxVnd: null, state: "DOCS_SENT", pollCount: 0, raw: { progress: "DOCS_SENT" }, updatedAt: T, ...p };
+  const row: ResultRow = { id: "res_1", orgId: ORG, dossierId: D, branch: 1, externalId: "fpt-1", declarationNo: "107000000001", channel: "YELLOW", channelNote: null, clearanceStatus: "INSPECTING", customsTaxVnd: null, state: "DOCS_SENT", pollCount: 0, raw: { progress: "DOCS_SENT" }, updatedAt: T, ...p };
   uow.data.results.push(row);
   return row;
 };
 const seedOutbox = (p: Partial<OutboxRow> = {}): OutboxRow => {
-  const row: OutboxRow = { id: `ob_${uow.data.outbox.length + 1}`, orgId: ORG, dossierId: D, declarationId: "dec_1", operation: "IDA", idempotencyKey: `${D}:IDA:v2`, payload: { request: null }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: T, updatedAt: T, ...p };
+  const row: OutboxRow = { id: `ob_${uow.data.outbox.length + 1}`, orgId: ORG, dossierId: D, branch: 1, declarationId: "dec_1", operation: "IDA", idempotencyKey: `${D}:IDA:v2`, payload: { request: null }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: T, updatedAt: T, ...p };
   uow.data.outbox.push(row);
   return row;
 };
@@ -463,7 +474,7 @@ describe("getSubmission / listCustomsDeclarations – nhánh biên", () => {
   });
 
   it("danh sách: chưa truyền → READY, thời điểm = ngày duyệt; không có ngày duyệt → ngày cập nhật hồ sơ", async () => {
-    expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]).toEqual({ dossierId: D, dossierCode: "HS-NK-2610-021", direction: "NK", partner: "HANSOL", typeCode: "A11", state: "READY", stage: "NOT_SENT", updatedAt: "2026-10-14T02:00:00.000Z" });
+    expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]).toEqual({ dossierId: D, dossierCode: "HS-NK-2610-021", branch: 1, of: 1, direction: "NK", partner: "HANSOL", typeCode: "A11", state: "READY", stage: "NOT_SENT", updatedAt: "2026-10-14T02:00:00.000Z" });
     (decls as DeclarationReader).listForCustoms = async () => [{ dossierId: D, status: "APPROVED", approvedAt: null }];
     dossiers.rows[0]!.updatedAt = new Date("2026-10-10T00:00:00.000Z");
     expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]?.updatedAt).toBe("2026-10-10T00:00:00.000Z");
@@ -473,7 +484,7 @@ describe("getSubmission / listCustomsDeclarations – nhánh biên", () => {
     dossiers.rows.push({ ...dossiers.rows[0]!, id: "dos_2", code: "HS-NK-2610-022" });
     decls.listForCustoms = async () => [{ dossierId: D, status: "SUBMITTED", approvedAt: T }, { dossierId: "dos_2", status: "APPROVED", approvedAt: new Date("2026-10-15T00:00:00.000Z") }];
     seedResult({ customsTaxVnd: "58449312" });
-    uow.data.messages.push({ id: "m1", orgId: ORG, dossierId: D, operation: "HYS", direction: "IN", result: "OK", summary: "ok", payloadMasked: {}, externalRef: null, at: T });
+    uow.data.messages.push({ id: "m1", orgId: ORG, dossierId: D, branch: 1, operation: "HYS", direction: "IN", result: "OK", summary: "ok", payloadMasked: {}, externalRef: null, at: T });
     const rows = unwrap(await listCustomsDeclarations(deps, declarant));
     expect(rows.map((r) => r.dossierId)).toEqual(["dos_2", D]);
     expect(rows[1]).toMatchObject({ state: "INSPECTING", lastOperation: "HYS", declarationNo: "107000000001", channel: "YELLOW", channelNote: expect.stringMatching(/^Luồng vàng/), customsTaxVnd: "58449312" });
@@ -1064,5 +1075,1108 @@ describe("requeueStuckOutbox – job quét outbox kẹt", () => {
     uow.data.outbox[0]!.attempts = 1;
     expect((await requeueStuckOutbox(deps, { orgId: ORG })).requeued).toEqual([]);
     expect((await requeueStuckOutbox(deps, { orgId: "org_b" })).requeued).toEqual([]);
+  });
+});
+
+// ───────────────────────── Tờ khai nhánh (lô > 50 dòng): truyền lần đầu + khai tạm nối tiếp ─────────────────────────
+
+const lines = (n: number): DeclarationPayload["items"] => Array.from({ length: n }, (_, i) => ({ ...payload().items[0]!, lineNo: i + 1, description: `Vòng bi ${i + 1}` }));
+type IdaReq = { objVN_IDA: Record<string, unknown> };
+const idaOf = (o: OutboxRow) => (o.payload as { request: IdaReq }).request.objVN_IDA;
+const idaOutbox = (branch: number) => uow.data.outbox.filter((o) => o.branch === branch && o.operation === "IDA");
+const stages = () => uow.data.results.map((r) => [r.branch, r.raw?.stage, r.declarationNo]);
+/** Cổng giả cấp số tờ khai theo số tờ (tK_BNO): tờ k → 10400000000k; `reject(tờ, lần gọi)` → Hải quan từ chối. */
+/** Số tờ (tK_BNO) của từng lần gọi preDeclare. */
+let preDeclared: number[] = [];
+const branchGateway = (reject: (bno: number, call: number) => boolean = () => false, o: Partial<CustomsGateway> = {}) => {
+  const calls = new Map<number, number>();
+  preDeclared = [];
+  return gw({
+    preDeclare: async (_org, msg) => {
+      const bno = Number((msg.request as IdaReq).objVN_IDA["tK_BNO"] ?? 1);
+      const n = (calls.get(bno) ?? 0) + 1;
+      calls.set(bno, n);
+      preDeclared.push(bno);
+      return reject(bno, n) ? { externalId: `fpt-b${bno}`, errors: [{ code: "E-X", message: "Từ chối" }] } : { externalId: `fpt-b${bno}`, declarationNo: `10400000000${bno}` };
+    },
+    ...o,
+  });
+};
+
+describe("tờ khai nhánh – truyền lần đầu + khai tạm nối tiếp", () => {
+  beforeEach(() => {
+    decls.items = lines(120);
+  });
+
+  it("outboxKey: nhánh 1 giữ dạng cũ; nhánh ≥ 2 thêm :b<no>", () => {
+    expect(outboxKey(D, "IDA", 2)).toBe(`${D}:IDA:v2`);
+    expect(outboxKey(D, "IDA", 2, 1)).toBe(`${D}:IDA:v2:retry1`);
+    expect(outboxKey(D, "IDA", 2, 0, 1)).toBe(`${D}:IDA:v2`);
+    expect(outboxKey(D, "IDA", 2, 0, 2)).toBe(`${D}:IDA:v2:b2`);
+    expect(outboxKey(D, "EDA", 3, 1, 3)).toBe(`${D}:EDA:v3:retry1:b3`);
+  });
+
+  it("lô 120 dòng: 3 kết quả NOT_SENT, chỉ 1 outbox IDA nhánh 1 khóa cũ (tờ 1/3, TK_FIC F); hồ sơ SUBMITTED", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(uow.data.results.map((r) => [r.branch, r.raw?.stage, r.raw?.certificateId])).toEqual([[1, "NOT_SENT", "cert_1"], [2, "NOT_SENT", "cert_1"], [3, "NOT_SENT", "cert_1"]]);
+    expect(uow.data.outbox).toHaveLength(1);
+    expect(uow.data.outbox[0]).toMatchObject({ branch: 1, operation: "IDA", idempotencyKey: `${D}:IDA:v2`, status: "PENDING" });
+    expect(idaOf(uow.data.outbox[0]!)).toMatchObject({ tK_FIC: "F", tK_BNO: 1, tK_DNO: 3 });
+    expect(queue.jobs).toHaveLength(1);
+    expect(decls.submitted).toEqual([D]);
+    expect(dossiers.rows[0]).toMatchObject({ status: "SUBMITTED", step: "submit" });
+  });
+
+  it("dòng 75 (tờ 2) thiếu ô bắt buộc → REQUIRED_FIELDS_MISSING_SUBMIT nêu tờ và dòng gốc, không tạo outbox/kết quả nào", async () => {
+    decls.items![74]!.description = "";
+    const r = await submitDeclaration(deps, declarant, D, "cert_1");
+    expect(r).toMatchObject({ ok: false, error: { code: "VALIDATION", reason: "REQUIRED_FIELDS_MISSING_SUBMIT", message: expect.stringContaining("Tờ 2/3: Dòng hàng 75") } });
+    expect(uow.data.outbox).toHaveLength(0);
+    expect(uow.data.results).toHaveLength(0);
+    expect(decls.submitted).toEqual([]);
+    expect(dossiers.rows[0]!.status).toBe("APPROVED");
+  });
+
+  it("IDA nhánh 1 thành công → tự khai tạm nhánh 2 (TK_FIC = số tờ 1); nhánh 2 xong → nhánh 3; nhánh 3 xong → dừng", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain(1);
+    expect(idaOutbox(2)).toHaveLength(1);
+    expect(idaOutbox(2)[0]).toMatchObject({ idempotencyKey: `${D}:IDA:v2:b2`, status: "PENDING", declarationId: "dec_1" });
+    expect(idaOf(idaOutbox(2)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2, tK_DNO: 3 });
+    expect(idaOutbox(3)).toHaveLength(0);
+    await drain(1);
+    expect(idaOutbox(3)).toHaveLength(1);
+    expect(idaOf(idaOutbox(3)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 3, tK_DNO: 3 });
+    await drain(1);
+    expect(queue.jobs).toHaveLength(0);
+    expect(uow.data.outbox.map((o) => [o.branch, o.operation, o.status])).toEqual([[1, "IDA", "SENT"], [2, "IDA", "SENT"], [3, "IDA", "SENT"]]);
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+    // Số tờ khai của hồ sơ là số tờ 1; nhật ký ghi đúng nhánh.
+    expect(dossiers.rows[0]!.declarationNo).toBe("104000000001");
+    expect(uow.data.messages.filter((m) => m.branch === 2).map((m) => [m.operation, m.direction, m.result])).toEqual([["IDA", "OUT", "OK"], ["IDA", "IN", "OK"]]);
+  });
+
+  it("chạy lại job nhánh 1 đã SENT → vẫn đúng 1 outbox nhánh 2; crash trước khi nối → chạy lại thì nối; tạo trùng song song → bỏ qua", async () => {
+    deps.gateway = branchGateway();
+    const { outboxId } = unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain(1);
+    await send(outboxId);
+    await send(outboxId);
+    expect(idaOutbox(2)).toHaveLength(1);
+    expect(queue.jobs).toHaveLength(1);
+    // Crash sau khi ghi SENT nhánh 1 mà chưa kịp tạo outbox nhánh 2 → BullMQ chạy lại job → nối tiếp.
+    uow.data.outbox.splice(uow.data.outbox.findIndex((o) => o.branch === 2), 1);
+    queue.jobs.length = 0;
+    await send(outboxId);
+    expect(idaOutbox(2)).toHaveLength(1);
+    expect(queue.jobs).toEqual([expect.objectContaining({ name: "customs-send", payload: expect.objectContaining({ outboxId: idaOutbox(2)[0]!.id }) })]);
+    // Hai job cùng nối nhánh 2 → khóa unique: lần thứ hai không tạo thêm.
+    unwrap(await enqueueBranchPreDeclare(deps, declarant, D, 2, { by: "chain", version: 2 }));
+    expect(idaOutbox(2)).toHaveLength(1);
+  });
+
+  it("IDA nhánh 2 bị từ chối → dừng, nhánh 3 giữ NOT_SENT; Gửi lại IDA nhánh 2 thành công → nối nhánh 3", async () => {
+    deps.gateway = branchGateway((bno, n) => bno === 2 && n === 1, { queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    expect(idaOutbox(2)[0]).toMatchObject({ status: "FAILED" });
+    expect(idaOutbox(3)).toHaveLength(0);
+    expect(uow.data.results.map((r) => [r.branch, r.state, r.raw?.stage])).toEqual([[1, "PRE_DECLARED", "PRE_DECLARED"], [2, "SEND_FAILED", "NOT_SENT"], [3, "APPROVED", "NOT_SENT"]]);
+    expect(unwrap(await resendOperation(deps, declarant, D, "IDA", 2))).toMatchObject({ resent: true });
+    expect(idaOutbox(2).map((o) => o.idempotencyKey)).toEqual([`${D}:IDA:v2:b2`, `${D}:IDA:v2:retry1:b2`]);
+    expect(uow.data.messages.filter((m) => m.operation === "IID").every((m) => m.branch === 2)).toBe(true);
+    await drain();
+    expect(idaOutbox(1)).toHaveLength(1);
+    expect(idaOutbox(3)).toHaveLength(1);
+    expect(idaOf(idaOutbox(3)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 3 });
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("tờ khai bị mở lại (DRAFT) trước khi nối → không khai tạm nhánh 2 (bất biến 7), ghi lỗi trên nhánh 2", async () => {
+    // Mở lại trong lúc tờ 1 đang gửi (sau bước kiểm ghim của tờ 1).
+    const base = branchGateway();
+    deps.gateway = { ...base, preDeclare: async (o, m, k) => { decls.status = "DRAFT"; return base.preDeclare(o, m, k); } };
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    expect(preDeclared).toEqual([1]);
+    expect(idaOutbox(2)).toHaveLength(0);
+    expect(uow.data.results.find((r) => r.branch === 2)?.raw?.stage).toBe("NOT_SENT");
+    expect(uow.data.messages.filter((m) => m.branch === 2)).toEqual([expect.objectContaining({ operation: "IDA", direction: "IN", result: "ERROR", summary: expect.stringContaining("Tờ 2/3") })]);
+  });
+
+  it("outbox tờ 1 (lô nhiều tờ) cũng ghim lần duyệt: tờ khai mở lại trước khi gửi → không gửi tờ 1, tờ 1 SEND_FAILED", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(idaOutbox(1)[0]!.payload).toMatchObject({ pin: "v2@" });
+    decls.status = "DRAFT";
+    await drain();
+    expect(preDeclared).toEqual([]);
+    expect(idaOutbox(1)[0]).toMatchObject({ status: "FAILED", lastError: expect.stringContaining("Tờ 1: không gửi khai tạm") });
+    expect(uow.data.results.find((r) => r.branch === 1)!.state).toBe("SEND_FAILED");
+  });
+
+  it("lô 40 dòng: một tờ – outbox/khóa/thông điệp như trước, không nối tiếp", async () => {
+    decls.items = lines(40);
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    const snap = (await decls.get(ORG, D))!;
+    expect(uow.data.outbox[0]).toMatchObject({ branch: 1, idempotencyKey: `${D}:IDA:v2` });
+    expect((uow.data.outbox[0]!.payload as { request: unknown }).request).toEqual(buildFptRequest(snap.payload).request);
+    expect(idaOf(uow.data.outbox[0]!)["tK_FIC"]).toBeUndefined();
+    await drain();
+    expect(uow.data.outbox).toHaveLength(1);
+    expect(uow.data.results).toHaveLength(1);
+  });
+
+  it("outbox cũ PENDING tạo trước migration (nhánh 1, khóa cũ) → truyền lại báo ALREADY_SUBMITTED, không tạo trùng", async () => {
+    const ob = seedOutbox();
+    expect(errCode(await submitDeclaration(deps, declarant, D, "cert_1"))).toBe("ALREADY_SUBMITTED");
+    expect(uow.data.outbox.map((o) => o.id)).toEqual([ob.id]);
+    expect(uow.data.results).toHaveLength(0);
+    expect(queue.jobs).toEqual([expect.objectContaining({ payload: expect.objectContaining({ outboxId: ob.id }) })]);
+  });
+
+  it("thông điệp tờ 2/3 chỉ chứa đúng lát dòng của tờ (50 dòng 51–100, 20 dòng 101–120), đánh số lại từ 01", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    const hang = (b: number) => ((idaOutbox(b)[0]!.payload as { request: { objVN_IDA_HANG: Record<string, unknown>[] } }).request.objVN_IDA_HANG);
+    const desc = (h: Record<string, unknown>) => Object.values(h).find((v) => typeof v === "string" && v.startsWith("Vòng bi"));
+    expect([1, 2, 3].map((b) => hang(b).length)).toEqual([50, 50, 20]);
+    expect([hang(2)[0]!["haG_B25"], desc(hang(2)[0]!), desc(hang(2).at(-1)!)]).toEqual(["01", "Vòng bi 51", "Vòng bi 100"]);
+    expect([hang(3)[0]!["haG_B25"], desc(hang(3)[0]!), desc(hang(3).at(-1)!)]).toEqual(["01", "Vòng bi 101", "Vòng bi 120"]);
+  });
+
+  it("outbox nhánh 2 đã xếp nhưng tờ khai bị gọi về sửa (DRAFT) / duyệt lại phiên bản mới → không gửi nội dung cũ: FAILED + lỗi, không nối nhánh 3", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain(1);
+    expect(idaOutbox(2)[0]).toMatchObject({ status: "PENDING" });
+    decls.status = "DRAFT";
+    await drain(1);
+    expect(preDeclared).toEqual([1]);
+    expect(idaOutbox(2)[0]).toMatchObject({ status: "FAILED", lastError: expect.stringContaining("Tờ 2: không gửi khai tạm") });
+    expect(uow.data.messages.filter((m) => m.branch === 2)).toEqual([expect.objectContaining({ operation: "IDA", direction: "IN", result: "ERROR" })]);
+    expect(idaOutbox(3)).toHaveLength(0);
+    // Duyệt lại phiên bản mới (APPROVED v3): worker không nối bằng nội dung v3 sau các tờ đã gửi v2.
+    decls.status = "APPROVED";
+    decls.version = 3;
+    expect(errCode(await enqueueBranchPreDeclare(deps, declarant, D, 3, { by: "chain", version: 2 }))).toBe("INVALID_STATE");
+    expect(idaOutbox(3)).toHaveLength(0);
+  });
+
+  it("nhánh 2 bị từ chối, gửi lại đang chờ; tờ khai sang phiên bản mới → bản gửi lại không gửi, Gửi lại tiếp bị chặn, nhánh 3 không được nối", async () => {
+    deps.gateway = branchGateway((bno, n) => bno === 2 && n === 1, { queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    unwrap(await resendOperation(deps, declarant, D, "IDA", 2));
+    decls.version = 3; // gọi về sửa → duyệt lại → truyền lại (SUBMITTED v3)
+    await drain();
+    expect(preDeclared).toEqual([1, 2]);
+    expect(idaOutbox(2).map((o) => o.status)).toEqual(["FAILED", "FAILED"]);
+    expect(idaOutbox(2)[1]!.lastError).toContain("v2, hiện v3");
+    expect(errCode(await resendOperation(deps, declarant, D, "IDA", 2))).toBe("INVALID_STATE");
+    expect(idaOutbox(3)).toHaveLength(0);
+    expect(errCode(await enqueueBranchPreDeclare(deps, declarant, D, 3, { by: "chain", version: 2 }))).toBe("INVALID_STATE");
+    // Người dùng (Task 7) chỉ khai khi tờ khai đã duyệt lại.
+    expect(errCode(await enqueueBranchPreDeclare(deps, declarant, D, 3, { by: "user" }))).toBe("NOT_APPROVED");
+  });
+
+  it("enqueueBranchPreDeclare: insert vi phạm unique (job song song) → ok, không đẩy job; lỗi DB khác → ném ra", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    // Tờ 1 đã khai tạm với đúng nội dung hiện tại (ảnh chụp đã gửi – guard SENT_SHEETS_CHANGED).
+    Object.assign(uow.data.results.find((r) => r.branch === 1)!, { declarationNo: "104000000001", raw: { stage: "PRE_DECLARED", certificateId: "cert_1", sent: sheetSnapshot((await decls.get(ORG, D))!.payload, 1) } });
+    queue.jobs.length = 0;
+    const withInsert = (insert: (row: OutboxRow) => Promise<void>): CustomsUow => ({ asOrg: (c, fn) => uow.asOrg(c, (r) => fn({ ...r, outbox: { ...r.outbox, findByKey: async () => null, insert } })) });
+    deps.uow = withInsert(async () => { throw new Error("duplicate key value violates unique constraint customs_outbox_key_uq"); });
+    unwrap(await enqueueBranchPreDeclare(deps, declarant, D, 2, { by: "chain", version: 2 }));
+    expect(queue.jobs).toHaveLength(0);
+    deps.uow = withInsert(async () => { throw "connection reset"; });
+    await expect(enqueueBranchPreDeclare(deps, declarant, D, 2, { by: "chain", version: 2 })).rejects.toBe("connection reset");
+  });
+
+  it("markOutboxFailed (hết lượt thử) đánh SEND_FAILED đúng nhánh của outbox, nhánh 1 giữ nguyên", async () => {
+    seedResult({ branch: 1, state: "PRE_DECLARED", raw: { stage: "PRE_DECLARED" } });
+    seedResult({ id: "res_2", branch: 2, externalId: null, declarationNo: null, state: "APPROVED", raw: { stage: "NOT_SENT" } });
+    const ob = seedOutbox({ branch: 2, idempotencyKey: `${D}:IDA:v2:b2`, attempts: 5 });
+    unwrap(await markOutboxFailed(deps, { orgId: ORG, outboxId: ob.id, reason: "timeout" }));
+    expect(uow.data.results.map((r) => [r.branch, r.state])).toEqual([[1, "PRE_DECLARED"], [2, "SEND_FAILED"]]);
+    expect(uow.data.messages).toEqual([expect.objectContaining({ branch: 2, result: "ERROR" })]);
+  });
+
+  it("số tờ giảm giữa hai lần truyền (120 → 90 dòng sau khi tờ 1 bị từ chối trước khi có số) → bỏ kết quả nhánh 3, chuỗi dừng ở tờ 2", async () => {
+    deps.gateway = branchGateway((bno, n) => bno === 1 && n === 1);
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await drain();
+    expect(uow.data.results.map((r) => r.branch)).toEqual([1, 2, 3]);
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    decls.items = lines(90);
+    decls.version = 3;
+    decls.status = "APPROVED";
+    dossiers.rows[0]!.status = "APPROVED";
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(uow.data.results.map((r) => r.branch).sort()).toEqual([1, 2]);
+    await drain();
+    expect(uow.data.outbox.filter((o) => o.idempotencyKey.includes(":v3")).map((o) => [o.branch, o.status])).toEqual([[1, "SENT"], [2, "SENT"]]);
+    // Kết quả thừa còn sót (dữ liệu cũ) không kéo chuỗi sang tờ 3: dừng theo số tờ của tờ khai.
+    seedResult({ id: "res_3", branch: 3, externalId: null, declarationNo: null, state: "APPROVED", raw: { stage: "NOT_SENT" } });
+    await send(idaOutbox(2).at(-1)!.id);
+    expect(idaOutbox(3)).toHaveLength(0);
+    expect(uow.data.messages.filter((m) => m.branch === 3)).toEqual([]);
+  });
+});
+
+// ───────────────────────── Task 7: nghiệp vụ, hỏi trạng thái, mở lại và trạng thái hồ sơ theo nhánh ─────────────────────────
+
+/** Chỉ chạy job customs-send (job hỏi trạng thái để nguyên trong hàng đợi). */
+async function sendAll(max = 30) {
+  for (let i = 0; i < max; i++) {
+    const at = queue.jobs.findIndex((j) => j.name === "customs-send");
+    if (at < 0) return;
+    const [job] = queue.jobs.splice(at, 1);
+    await send(String((job!.payload as Record<string, unknown>)["outboxId"]));
+  }
+}
+const seedBranch = (branch: number, p: Partial<ResultRow> = {}) =>
+  seedResult({ id: `res_${branch}`, branch, externalId: `fpt-b${branch}`, declarationNo: `10400000000${branch}`, state: "DECLARED", raw: { stage: "DECLARED", certificateId: "cert_1" }, ...p });
+const pollB = (branch: number, attempt = 1) => pollStatus(deps, { orgId: ORG, userId: "usr_chau", dossierId: D, attempt, branch });
+const keysOf = (op: string, branch: number) => uow.data.outbox.filter((o) => o.operation === op && o.branch === branch).map((o) => o.idempotencyKey);
+
+describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại theo nhánh", () => {
+  beforeEach(() => {
+    decls.items = lines(120);
+  });
+
+  it("IDC nhánh 2 dùng externalId/số tờ khai của nhánh 2; IDC nhánh 3 còn NOT_SENT → INVALID_STATE; phân luồng nhánh 2 không ghi đè hồ sơ; hỏi trạng thái theo nhánh 2", async () => {
+    const declares: string[] = [];
+    deps.gateway = branchGateway((bno) => bno === 3, { declare: async (_o, msg) => (declares.push(msg.externalId), { accepted: true, channel: "RED" as const }) });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "NOT_SENT", null]]);
+    expect(errCode(await performOperation(deps, declarant, D, "IDC", 3))).toBe("INVALID_STATE");
+    unwrap(await performOperation(deps, declarant, D, "IDC", 2));
+    expect(uow.data.outbox.filter((o) => o.operation === "IDC")).toEqual([expect.objectContaining({ branch: 2, idempotencyKey: `${D}:IDC:n1:b2`, payload: expect.objectContaining({ request: { soToKhai: "104000000002" } }) })]);
+    await sendAll();
+    expect(declares).toEqual(["fpt-b2"]);
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "DECLARED", "104000000002"], [3, "NOT_SENT", null]]);
+    expect(uow.data.results.find((r) => r.branch === 2)!.channel).toBe("RED");
+    expect(dossiers.patches).not.toContainEqual(expect.objectContaining({ channel: "RED" }));
+    expect(queue.jobs).toEqual([expect.objectContaining({ name: "customs-poll", payload: expect.objectContaining({ dossierId: D, branch: 2, attempt: 1 }) })]);
+  });
+
+  it("hỏi trạng thái theo nhánh: nhánh 1 thông quan → hồ sơ vẫn SUBMITTED; nhánh 2, 3 thông quan → CLEARED; báo “đã thông quan” mỗi tờ một lần kèm Tờ k/N", async () => {
+    dossiers.rows[0]!.status = "SUBMITTED";
+    [1, 2, 3].forEach((b) => seedBranch(b));
+    const cleared = new Set<string>();
+    const asked: string[] = [];
+    deps.gateway = gw({ queryStatus: async (_o, ext) => (asked.push(ext), { status: cleared.has(ext) ? "Đã thông quan" : "Chờ kiểm tra", cleared: cleared.has(ext) }) });
+    cleared.add("fpt-b1");
+    expect(unwrap(await pollB(1))).toEqual({ done: true, cleared: true });
+    expect(dossiers.rows[0]!.status).toBe("SUBMITTED");
+    expect(unwrap(await pollB(2))).toEqual({ done: false, cleared: false });
+    expect(queue.jobs.at(-1)).toMatchObject({ name: "customs-poll", payload: { dossierId: D, branch: 2, attempt: 2 }, jobId: expect.stringMatching(/:b2$/) });
+    cleared.add("fpt-b2");
+    cleared.add("fpt-b3");
+    unwrap(await pollB(2, 2));
+    expect(dossiers.rows[0]!.status).toBe("SUBMITTED");
+    unwrap(await pollB(3));
+    expect(dossiers.rows[0]!.status).toBe("CLEARED");
+    expect(unwrap(await pollB(1))).toEqual({ done: true, cleared: true });
+    expect(asked).toEqual(["fpt-b1", "fpt-b2", "fpt-b2", "fpt-b3"]);
+    expect(uow.data.results.map((r) => [r.branch, r.raw?.stage, r.clearanceStatus])).toEqual([[1, "CLEARED", "CLEARED"], [2, "CLEARED", "CLEARED"], [3, "CLEARED", "CLEARED"]]);
+    expect(notifier.sent.map((n) => n.draft.title)).toEqual(["HS-NK-2610-021 – Tờ 1/3 đã thông quan", "HS-NK-2610-021 – Tờ 2/3 đã thông quan", "HS-NK-2610-021 – Tờ 3/3 đã thông quan"]);
+    expect(dossiers.patches.filter((p) => (p as { status?: string }).status === "CLEARED")).toHaveLength(1);
+    expect(new Set(uow.data.messages.map((m) => m.branch))).toEqual(new Set([1, 2, 3]));
+  });
+
+  it("tra cứu IID nhánh 2 (nút tra cứu và lối tắt của Gửi lại) dùng externalId nhánh 2, ghi nhật ký nhánh 2; đủ nhánh thông quan → CLEARED", async () => {
+    dossiers.rows[0]!.status = "SUBMITTED";
+    seedBranch(1);
+    seedBranch(2);
+    const asked: string[] = [];
+    deps.gateway = gw({ queryStatus: async (_o, ext) => (asked.push(ext), { status: "Đã thông quan", cleared: true }) });
+    unwrap(await performOperation(deps, declarant, D, "IID", 2));
+    expect(unwrap(await resendOperation(deps, declarant, D, "IID", 2))).toMatchObject({ resent: false });
+    expect(asked).toEqual(["fpt-b2", "fpt-b2"]);
+    expect(uow.data.messages.every((m) => m.branch === 2)).toBe(true);
+    expect(stages()).toEqual([[1, "DECLARED", "104000000001"], [2, "CLEARED", "104000000002"]]);
+    expect(dossiers.rows[0]!.status).toBe("SUBMITTED");
+    unwrap(await performOperation(deps, declarant, D, "IID"));
+    expect(dossiers.rows[0]!.status).toBe("CLEARED");
+  });
+
+  it("chuỗi dừng vì guard → người khai bấm IDA trên tờ đó: khai tạm theo phiên bản đang truyền (khóa như chuỗi), tờ trước chưa khai tạm → chặn; không gửi trùng", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    blockers = 1;
+    await sendAll();
+    expect(idaOutbox(2)).toHaveLength(0);
+    expect(uow.data.messages.filter((m) => m.branch === 2)).toEqual([expect.objectContaining({ result: "ERROR", summary: expect.stringContaining("Tờ 2/3: chưa khai tạm tự động") })]);
+    blockers = 0;
+    expect(errCode(await performOperation(deps, declarant, D, "IDA", 3))).toBe("INVALID_STATE");
+    expect(errCode(await performOperation(deps, viewer, D, "IDA", 2))).toBe("FORBIDDEN");
+    expect(unwrap(await performOperation(deps, declarant, D, "IDA", 2))).toMatchObject({ sent: true });
+    expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`]);
+    expect(idaOf(idaOutbox(2)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2 });
+    expect(errCode(await performOperation(deps, declarant, D, "IDA", 2))).toBe("INVALID_STATE");
+    expect(idaOutbox(2)).toHaveLength(1);
+    await sendAll();
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+    // Đã khai tạm → IDA nhánh 2 không còn bấm được.
+    expect(errCode(await performOperation(deps, declarant, D, "IDA", 2))).toBe("INVALID_STATE");
+  });
+
+  it("người khai bấm IDA và worker nối tiếp cùng một tờ → cùng khóa xác định, chỉ một outbox (cả hai thứ tự và khi chạy song song)", async () => {
+    deps.gateway = branchGateway();
+    const { outboxId } = unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    // Worker nối trước → người khai bấm sau: đang chờ gửi, không tạo thêm.
+    await sendAll(1);
+    expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`]);
+    expect(errCode(await performOperation(deps, declarant, D, "IDA", 2))).toBe("INVALID_STATE");
+    expect(idaOutbox(2)).toHaveLength(1);
+    // Người khai bấm trước → job nhánh 1 chạy lại (nối tiếp) không tạo thêm.
+    uow.data.outbox = uow.data.outbox.filter((o) => o.branch !== 2);
+    queue.jobs.length = 0;
+    unwrap(await performOperation(deps, declarant, D, "IDA", 2));
+    await send(outboxId);
+    expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`]);
+    // Song song: cả hai cùng qua bước kiểm tra trước khi ghi → cùng khóa, unique chặn bản thứ hai.
+    uow.data.outbox = uow.data.outbox.filter((o) => o.branch !== 2);
+    const tried: string[] = [];
+    const real = deps.uow;
+    const racing = (hideBranch2: boolean): CustomsUow => ({
+      asOrg: (c, fn) => real.asOrg(c, (r) => fn({
+        ...r,
+        outbox: {
+          ...r.outbox, findByKey: async () => null,
+          listForDossier: async (o, d) => (await r.outbox.listForDossier(o, d)).filter((x) => !hideBranch2 || x.branch !== 2),
+          insert: async (row) => { tried.push(row.idempotencyKey); await r.outbox.insert(row); },
+        },
+      })),
+    });
+    deps.uow = racing(false);
+    unwrap(await enqueueBranchPreDeclare(deps, declarant, D, 2, { by: "chain", version: 2 }));
+    deps.uow = racing(true);
+    unwrap(await performOperation(deps, declarant, D, "IDA", 2));
+    expect(tried).toEqual([`${D}:IDA:v2:b2`, `${D}:IDA:v2:b2`]);
+    expect(idaOutbox(2)).toHaveLength(1);
+  });
+
+  it("outbox tờ 2 bị chặn trước khi gửi (tờ khai đã mở lại) → kết quả tờ 2 SEND_FAILED để giao diện hiện lỗi; tờ 1 giữ nguyên", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll(1);
+    decls.status = "DRAFT";
+    await sendAll(1);
+    expect(idaOutbox(2)[0]).toMatchObject({ status: "FAILED" });
+    expect(uow.data.results.map((r) => [r.branch, r.state, r.raw?.stage])).toEqual([[1, "PRE_DECLARED", "PRE_DECLARED"], [2, "SEND_FAILED", "NOT_SENT"], [3, "APPROVED", "NOT_SENT"]]);
+  });
+
+  it("duyệt lại (cùng phiên bản) sau khi gọi về sửa → outbox tờ 2 của lần truyền trước không được gửi (ghim theo lần duyệt)", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll(1);
+    decls.approvedAt = "2026-10-14T05:00:00.000Z"; // gọi về sửa → duyệt lại → truyền lại: vẫn v2, SUBMITTED
+    await sendAll(1);
+    expect(preDeclared).toEqual([1]);
+    expect(idaOutbox(2)[0]).toMatchObject({ status: "FAILED" });
+    expect(uow.data.results.find((r) => r.branch === 2)!.state).toBe("SEND_FAILED");
+  });
+
+  it("Gửi lại outbox nội dung tờ ≥ 2 có khóa theo lượt (:n<k>, không phiên bản) → áp guard thường, gửi lại được", async () => {
+    decls.status = "SUBMITTED";
+    seedBranch(1, { state: "PRE_DECLARED", raw: { stage: "PRE_DECLARED" } });
+    seedBranch(2, { state: "SEND_FAILED", raw: { stage: "RECALLED", certificateId: "cert_1" } });
+    seedOutbox({ branch: 2, operation: "IDA", idempotencyKey: `${D}:IDA:n1:b2`, status: "FAILED", payload: { request: { x: 1 } } });
+    deps.gateway = gw({ queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    expect(unwrap(await resendOperation(deps, declarant, D, "IDA", 2))).toMatchObject({ resent: true });
+    expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:n1:b2`, `${D}:IDA:n1:retry1:b2`]);
+  });
+
+  it("thuế dự tính trên kết quả từng tờ (lô nhiều tờ) lấy theo tờ khai nhánh", async () => {
+    decls.branchTaxVnd = ["1000", "2000", "300"];
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(uow.data.results.map((r) => [r.branch, r.customsTaxVnd])).toEqual([[1, "1000"], [2, "2000"], [3, "300"]]);
+  });
+
+  it("gọi về sửa nhiều tờ → mở lại cả bộ một lần → duyệt lại → gửi nội dung theo giai đoạn từng tờ, nối tiếp: tờ 1 IDA01, tờ 2 IDA (đã gọi về), tờ 3 chưa có số → IDA lần đầu", async () => {
+    const sends: string[] = [];
+    deps.gateway = branchGateway((bno, n) => bno === 3 && n === 1, {
+      queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }),
+      declare: async () => ({ accepted: true, channel: "YELLOW" as const }),
+      send: async (_o, msg) => (sends.push(`${msg.op}:${msg.externalId}`), { note: "ok" }),
+    });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    unwrap(await performOperation(deps, declarant, D, "IDC", 1));
+    await sendAll();
+    unwrap(await performOperation(deps, declarant, D, "IDD", 1));
+    await sendAll();
+    unwrap(await performOperation(deps, declarant, D, "IDB", 2));
+    await sendAll();
+    expect(uow.data.results.map((r) => [r.branch, r.raw?.stage])).toEqual([[1, "AMEND_RECALLED"], [2, "RECALLED"], [3, "NOT_SENT"]]);
+    expect(decls.status).toBe("DRAFT");
+    // Duyệt lại rồi mở lại cả bộ một lần (giữ giai đoạn các tờ).
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    dossiers.rows[0]!.status = "APPROVED";
+    const before = decls.reopened.length;
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    expect(decls.reopened.length - before).toBe(1);
+    expect(decls.status).toBe("DRAFT");
+    expect(uow.data.results.map((r) => [r.branch, r.raw?.stage])).toEqual([[1, "AMEND_RECALLED"], [2, "RECALLED"], [3, "NOT_SENT"]]);
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T06:00:00.000Z";
+    // Truyền lại: tờ đầu tiên cần gửi nội dung là tờ 1 (IDA01).
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(keysOf("IDA01", 1)).toEqual([`${D}:IDA01:v2`]);
+    expect(decls.status).toBe("SUBMITTED");
+    expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`]);
+    await sendAll();
+    expect(sends).toContain("IDA01:fpt-b1");
+    expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`, `${D}:IDA:v2:n2:b2`]);
+    expect(keysOf("IDA", 3)).toEqual([`${D}:IDA:v2:b3`, `${D}:IDA:v2:n2:b3`]);
+    expect(idaOf(idaOutbox(3).at(-1)!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 3 });
+    expect(preDeclared).toEqual([1, 2, 3, 2, 3]);
+    expect(uow.data.results.map((r) => [r.branch, r.raw?.stage, r.declarationNo])).toEqual([[1, "AMEND_PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+    unwrap(await performOperation(deps, declarant, D, "IDE", 1));
+  });
+
+  it("tờ 2 bị từ chối trước khi có số, tờ 1 đã có số → mở lại bị chặn (Hải quan đã ghi nhận – gọi về trước); gọi về tờ 1 → duyệt lại → truyền lại: tờ 1 IDA, tờ 2 IDA lần đầu, tờ 3", async () => {
+    deps.gateway = branchGateway((bno, n) => bno === 2 && n === 1);
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    expect(uow.data.results.map((r) => [r.branch, r.state, r.raw?.stage])).toEqual([[1, "PRE_DECLARED", "PRE_DECLARED"], [2, "SEND_FAILED", "NOT_SENT"], [3, "APPROVED", "NOT_SENT"]]);
+    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "DOSSIER_LOCKED" } });
+    expect(decls.status).toBe("SUBMITTED");
+    unwrap(await performOperation(deps, declarant, D, "IDB", 1));
+    await sendAll();
+    expect(decls.status).toBe("DRAFT");
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    dossiers.rows[0]!.status = "APPROVED";
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(keysOf("IDA", 1)).toEqual([`${D}:IDA:v2`, `${D}:IDA:v2:n2`]);
+    expect(decls.status).toBe("SUBMITTED");
+    await sendAll();
+    expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`, `${D}:IDA:v2:n2:b2`]);
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("bỏ R3: chỉ gọi về tờ 2 (tờ 1, 3 đã có số, chưa gọi về) – sửa chỉ tiêu chung → truyền / IDA tờ 2 bị chặn nêu tờ 1, 3 (SENT_SHEETS_CHANGED); hoàn tác → truyền lại chỉ tờ 2; worker không tự gọi về", async () => {
+    deps.gateway = branchGateway(() => false, { queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    unwrap(await performOperation(deps, declarant, D, "IDB", 2));
+    await sendAll();
+    expect(uow.data.results.map((r) => r.raw?.stage)).toEqual(["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    dossiers.rows[0]!.status = "APPROVED";
+    const before = uow.data.outbox.length;
+    decls.fields = { CQHQ: { value: "01AB – Chi cục khác" } };
+    const refused = { ok: false, error: { code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", linesOnly: "0" } } };
+    expect(await submitDeclaration(deps, declarant, D, "cert_1")).toMatchObject(refused);
+    expect(await performOperation(deps, declarant, D, "IDA", 2)).toMatchObject(refused);
+    await sendAll();
+    expect(uow.data.outbox.length).toBe(before);
+    expect(uow.data.outbox.filter((o) => o.operation === "IDB").map((o) => o.branch)).toEqual([2]);
+    expect(decls.status).toBe("APPROVED");
+    // Hoàn tác → tờ 1, 3 đúng nội dung Hải quan giữ: truyền lại chỉ gửi tờ 2 (TK_FIC = số tờ 1).
+    decls.fields = {};
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(uow.data.outbox.slice(before).map((o) => [o.branch, o.operation])).toEqual([[2, "IDA"]]);
+    expect(idaOf(uow.data.outbox.at(-1)!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2 });
+  });
+
+  it("CRITICAL: IDA tờ 1 (lô nhiều tờ) hết lượt thử → bấm IDA lại bị chặn, phải Gửi lại (chưa có externalId: gửi lại thông điệp đã ghim; có externalId: tra trạng thái trước)", async () => {
+    deps.gateway = branchGateway(() => false, { queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    uow.data.outbox[0]!.attempts = 5;
+    await sendAll();
+    expect(uow.data.results.find((r) => r.branch === 1)).toMatchObject({ state: "SEND_FAILED", raw: expect.objectContaining({ stage: "NOT_SENT" }) });
+    expect(uow.data.results.find((r) => r.branch === 1)?.externalId).toBeNull();
+    expect(await performOperation(deps, declarant, D, "IDA", 1)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", message: expect.stringContaining("dùng Gửi lại") } });
+    expect(keysOf("IDA", 1)).toEqual([`${D}:IDA:v2`]);
+    expect(unwrap(await resendOperation(deps, declarant, D, "IDA", 1))).toMatchObject({ resent: true });
+    expect(keysOf("IDA", 1)).toEqual([`${D}:IDA:v2`, `${D}:IDA:v2:retry1`]);
+    // Chưa có externalId → không có gì để tra; thông điệp gửi lại là bản đã ghim.
+    expect(uow.data.messages.some((m) => m.operation === "IID")).toBe(false);
+    expect(uow.data.outbox.at(-1)!.payload).toEqual(uow.data.outbox[0]!.payload);
+  });
+
+  it("CRITICAL: IDA01 (AMEND_RECALLED) / IDA (RECALLED) đã gửi lỗi ở lần truyền này → bấm lại bị chặn; outbox của lần truyền trước (ghim khác) không chặn", async () => {
+    decls.status = "SUBMITTED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    const pin = "v2@2026-10-14T05:00:00.000Z";
+    seedBranch(1, { state: "SEND_FAILED", raw: { stage: "AMEND_RECALLED", certificateId: "cert_1" } });
+    seedBranch(2, { state: "SEND_FAILED", raw: { stage: "RECALLED", certificateId: "cert_1" } });
+    seedBranch(3, { externalId: null, declarationNo: null, state: "APPROVED", raw: { stage: "NOT_SENT", certificateId: "cert_1" } }); // 120 dòng = 3 tờ đã khai
+    seedOutbox({ branch: 1, operation: "IDA01", idempotencyKey: `${D}:IDA01:v2`, status: "FAILED", payload: { request: {}, pin } });
+    seedOutbox({ branch: 2, operation: "IDA", idempotencyKey: `${D}:IDA:v2:n2:b2`, status: "FAILED", payload: { request: {}, pin } });
+    expect(await performOperation(deps, declarant, D, "IDA01", 1)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", message: expect.stringContaining("dùng Gửi lại") } });
+    expect(await performOperation(deps, declarant, D, "IDA", 2)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", message: expect.stringContaining("dùng Gửi lại") } });
+    expect(uow.data.outbox).toHaveLength(2);
+    // Outbox lỗi thuộc lần duyệt trước → nội dung lần này chưa gửi tờ 1 → được gửi.
+    uow.data.outbox[0]!.payload = { request: {}, pin: "v2@" };
+    unwrap(await performOperation(deps, declarant, D, "IDA01", 1));
+    expect(keysOf("IDA01", 1)).toEqual([`${D}:IDA01:v2`, `${D}:IDA01:v2:n2`]);
+  });
+
+  it("thứ tự truyền lại: mọi tờ có số đã gọi về, duyệt lại → bấm IDA tờ 3 chưa có số bị chặn (tờ 1, 2 chưa gửi lại nội dung); không đánh dấu SUBMITTED; truyền lại từ tờ 1 vẫn chạy", async () => {
+    deps.gateway = branchGateway((bno, n) => bno === 3 && n === 1, { queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    unwrap(await performOperation(deps, declarant, D, "IDB", 1));
+    unwrap(await performOperation(deps, declarant, D, "IDB", 2));
+    await sendAll();
+    expect(uow.data.results.map((r) => r.raw?.stage)).toEqual(["RECALLED", "RECALLED", "NOT_SENT"]);
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    dossiers.rows[0]!.status = "APPROVED";
+    const before = uow.data.outbox.length;
+    expect(await performOperation(deps, declarant, D, "IDA", 3)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "SHEET_ORDER", params: { sheet: 3, waitFor: 2 } } });
+    expect(uow.data.outbox.length).toBe(before);
+    expect(decls.status).toBe("APPROVED");
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("R5: tờ 1 bị từ chối trước khi có số → mở lại → duyệt lại cùng phiên bản → truyền lại: khóa mới :n2 (không kẹt ALREADY_SUBMITTED), nối các tờ", async () => {
+    deps.gateway = branchGateway((bno, n) => bno === 1 && n === 1);
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    dossiers.rows[0]!.status = "APPROVED";
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(keysOf("IDA", 1)).toEqual([`${D}:IDA:v2`, `${D}:IDA:v2:n2`]);
+    // Bấm truyền lần nữa ở cùng lần duyệt → không tạo thêm.
+    decls.status = "APPROVED";
+    dossiers.rows[0]!.status = "APPROVED";
+    expect(errCode(await submitDeclaration(deps, declarant, D, "cert_1"))).toBe("ALREADY_SUBMITTED");
+    expect(keysOf("IDA", 1)).toHaveLength(2);
+    decls.status = "SUBMITTED";
+    await sendAll();
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("số tờ đổi giữa hai lần truyền (luật R-BRANCH-COUNT-LOCKED qua blockerFails) → truyền lại bị chặn, không tạo outbox", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    for (const b of [1, 2, 3]) unwrap(await performOperation(deps, declarant, D, "IDB", b));
+    await sendAll();
+    decls.items = lines(95); // 3 tờ đã có số → nay chỉ 2 tờ
+    decls.status = "APPROVED";
+    dossiers.rows[0]!.status = "APPROVED";
+    blockers = 1; // R-BRANCH-COUNT-LOCKED FAIL (luật kiểm ở module validation, test riêng ở line-items.test.ts)
+    const before = uow.data.outbox.length;
+    expect(await submitDeclaration(deps, declarant, D, "cert_1")).toMatchObject({ ok: false, error: { code: "BLOCKER_FAILED", reason: "BLOCKER_RULES_FAILED" } });
+    expect(await performOperation(deps, declarant, D, "IDA", 1)).toMatchObject({ ok: false, error: { code: "BLOCKER_FAILED" } });
+    expect(uow.data.outbox.length).toBe(before);
+  });
+
+  it("mọi tờ đã có số, không tờ nào gọi về → mở lại bị chặn (Hải quan đã ghi nhận – dùng gọi về)", async () => {
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "DOSSIER_LOCKED" } });
+  });
+
+});
+
+describe("AMA theo tờ khai nhánh (spec §6.6)", () => {
+  const info = (p: Record<string, unknown> = {}) => ({ receivedAt: "2026-10-14T02:00:00.000Z", exchangeRates: [], taxes: [], items: [], directives: [], ...p });
+  const cleared = (branch: number, raw: Record<string, unknown> = {}) =>
+    seedBranch(branch, { state: "CLEARED", clearanceStatus: "CLEARED", raw: { stage: "CLEARED", certificateId: "cert_1", ...raw } });
+  const amaView = (branch: number, ctx: Ctx = declarant) => getPostAmendmentView(deps, ctx, D, branch);
+  const readyToSend = async (branch: number) => {
+    const pa = unwrap(await addPostAmendmentLines(deps, declarant, D, [1], branch));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "2" }, branch));
+    unwrap(await approvePostAmendment(deps, approver, D, branch));
+    return pa;
+  };
+
+  beforeEach(() => {
+    decls.items = lines(120);
+    decls.status = "SUBMITTED";
+    dossiers.rows[0]!.status = "SUBMITTED";
+  });
+
+  it("chỉ tờ đã thông quan bắt đầu được AMA; tờ khác ở giai đoạn nào (kể cả đang chờ phản hồi) không chặn; AMA tờ 1 truyền được với khóa cũ", async () => {
+    cleared(1);
+    seedBranch(2);
+    seedBranch(3, { state: "PRE_DECLARED", raw: { stage: "PRE_DECLARED", certificateId: "cert_1" } });
+    seedOutbox({ branch: 2, operation: "IDC", idempotencyKey: `${D}:IDC:n1:b2` });
+    expect(errCode(await startPostAmendment(deps, declarant, D, 2))).toBe("INVALID_STATE");
+    expect(errCode(await startPostAmendment(deps, declarant, D, 3))).toBe("INVALID_STATE");
+    unwrap(await startPostAmendment(deps, declarant, D, 1));
+    expect(stages()).toEqual([[1, "POST_EDITING", "104000000001"], [2, "DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+    expect(uow.data.amendments).toEqual([expect.objectContaining({ branch: 1, seq: 1, header: expect.objectContaining({ TK_ICN: "104000000001" }) })]);
+    await readyToSend(1);
+    // Lô nhiều tờ, tờ khai SUBMITTED, tờ 2 chưa thông quan: guard nội dung (R3 / đã gửi ở lần truyền này) không áp cho AMA.
+    unwrap(await performOperation(deps, declarant, D, "AMA", 1));
+    expect(keysOf("AMA", 1)).toEqual([`${D}:AMA:n1`]);
+    await sendAll();
+    expect(stages()[0]).toEqual([1, "POST_PRE_DECLARED", "104000000001"]);
+    expect(unwrap(await amaView(1)).current).toMatchObject({ status: "PRE_DECLARED", result: { TK_A25: "1" } });
+  });
+
+  it("AMA tờ 2: số tờ khai + thông tin Hải quan của tờ 2, dòng nguồn 51–100 đánh số 1..50, seq riêng từng tờ; field_audit ama:b2:…; phản hồi chỉ đổi bản khai của tờ 2", async () => {
+    cleared(1);
+    cleared(2, { customsInfo: info({ subsection: "02" }) });
+    unwrap(await startPostAmendment(deps, declarant, D, 1));
+    unwrap(await startPostAmendment(deps, declarant, D, 2));
+    const v2 = unwrap(await amaView(2));
+    expect(v2.current).toMatchObject({ branch: 2, seq: 1, status: "DRAFT", header: { TK_ICN: "104000000002", TK_CHB: "02" }, lines: [] });
+    expect(v2.sourceLines).toHaveLength(50);
+    expect(v2.sourceLines[0]).toMatchObject({ lineNo: 1, description: "Vòng bi 51" });
+    expect(v2.sourceLines[49]).toMatchObject({ lineNo: 50, description: "Vòng bi 100" });
+    expect(unwrap(await amaView(1)).current).toMatchObject({ seq: 1, header: { TK_ICN: "104000000001" } });
+    expect(unwrap(await amaView(1)).sourceLines[0]).toMatchObject({ lineNo: 1, description: "Vòng bi 1" });
+
+    expect(errCode(await addPostAmendmentLines(deps, declarant, D, [51], 2))).toBe("NOT_FOUND");
+    const pa = unwrap(await addPostAmendmentLines(deps, declarant, D, [1], 2));
+    expect(pa.lines[0]!.values).toMatchObject({ HAG_RAN: "01", HAG_CMB: "Vòng bi 51" });
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { lineId: pa.lines[0]!.id, key: "HAG_AKB", value: "100" }, 2));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "2" }, 2));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "6" }, 1));
+    expect(audits.map((a) => a.key)).toEqual(["ama:b2:1:1:HAG_AKB", "ama:b2:1:TK_REC", "ama:1:TK_REC"]);
+    expect(unwrap(await amaView(1)).current!.lines).toEqual([]);
+
+    unwrap(await approvePostAmendment(deps, approver, D, 2));
+    expect(unwrap(await amaView(1)).current!.status).toBe("DRAFT");
+    expect(errCode(await performOperation(deps, declarant, D, "AMA", 1))).toBe("INVALID_STATE");
+    unwrap(await performOperation(deps, declarant, D, "AMA", 2));
+    expect(keysOf("AMA", 2)).toEqual([`${D}:AMA:n1:b2`]);
+    await sendAll();
+    expect(unwrap(await amaView(2)).current!.status).toBe("PRE_DECLARED");
+    expect(unwrap(await amaView(1)).current!.status).toBe("DRAFT");
+    expect(stages()).toEqual([[1, "POST_EDITING", "104000000001"], [2, "POST_PRE_DECLARED", "104000000002"]]);
+  });
+
+  it("sửa chỉ tiêu chung ở tờ 1 → commonEdits; nhân bản sang tờ đã thông quan (lập AMA nháp), bỏ qua tờ chưa thông quan / AMA đã duyệt; ghi audit", async () => {
+    cleared(1);
+    cleared(2);
+    seedBranch(3);
+    unwrap(await startPostAmendment(deps, declarant, D, 1));
+    expect(unwrap(await amaView(1)).commonEdits).toEqual([]);
+    const old = unwrap(await amaView(1)).current!.header["TK_REF"] ?? "";
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REF", value: "REF-MOI" }, 1));
+    expect(unwrap(await amaView(1)).commonEdits).toEqual(["TK_REF"]);
+    expect(unwrap(await amaView(2))).toMatchObject({ current: null, commonEdits: [] });
+
+    expect(errCode(await copyPostAmendmentHeader(deps, viewer, D, { fromBranch: 1, keys: ["TK_REF"] }))).toBe("FORBIDDEN");
+    expect(errCode(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_ICN"] }))).toBe("VALIDATION");
+    expect(errCode(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["HAG_AKB"] }))).toBe("VALIDATION");
+    expect(errCode(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 3, keys: ["TK_REF"] }))).toBe("NOT_FOUND");
+    expect(errCode(await copyPostAmendmentHeader(deps, other, D, { fromBranch: 1, keys: ["TK_REF"] }))).toBe("NOT_FOUND");
+    audits.length = 0;
+
+    expect(unwrap(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_REF"] }))).toEqual({ applied: [2], skipped: [{ no: 3, reason: "NOT_CLEARED" }] });
+    const v2 = unwrap(await amaView(2));
+    expect(v2.current).toMatchObject({ branch: 2, seq: 1, status: "DRAFT", header: { TK_REF: "REF-MOI", TK_ICN: "104000000002" } });
+    expect(v2.commonEdits).toEqual(["TK_REF"]);
+    expect(stages()).toEqual([[1, "POST_EDITING", "104000000001"], [2, "POST_EDITING", "104000000002"], [3, "DECLARED", "104000000003"]]);
+    expect(audits).toEqual([expect.objectContaining({ dossierId: D, key: "ama:b2:1:TK_REF", oldValue: old, newValue: "REF-MOI" })]);
+    expect(uow.data.amendments.filter((a) => a.branch === 3)).toEqual([]);
+
+    // Tờ 2 đã duyệt → không đè (bỏ duyệt ngầm); tờ 1 đang nháp nhận bản sửa từ tờ 2 (khóa audit dạng cũ).
+    await readyToSend(2);
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_IMT", value: "0225999" }, 2));
+    unwrap(await approvePostAmendment(deps, approver, D, 2));
+    audits.length = 0;
+    expect(unwrap(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_REF"] }))).toEqual({ applied: [], skipped: [{ no: 2, reason: "OPEN_NOT_DRAFT" }, { no: 3, reason: "NOT_CLEARED" }] });
+    expect(unwrap(await amaView(2)).current!.status).toBe("APPROVED");
+    expect(unwrap(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 2, keys: ["TK_IMT"] }))).toEqual({ applied: [1], skipped: [{ no: 3, reason: "NOT_CLEARED" }] });
+    expect(unwrap(await amaView(1)).current!.header["TK_IMT"]).toBe("0225999");
+    expect(audits.map((a) => a.key)).toEqual(["ama:1:TK_IMT"]);
+  });
+});
+
+describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
+  const msg = (branch: number, p: Partial<MessageRow> = {}): MessageRow => ({ id: `m_${uow.data.messages.length + 1}`, orgId: ORG, dossierId: D, branch, operation: "IDA", direction: "OUT", result: "OK", summary: "s", payloadMasked: {}, externalRef: null, at: new Date(T.getTime() + uow.data.messages.length * 1000), ...p });
+  /** Tờ 1 thông quan, tờ 2 đã khai chính thức (đang gửi HYS), tờ 3 chưa gửi – nối tiếp bị chặn (thông điệp IDA IN/ERROR ghi trên tờ 3). */
+  const seedThree = () => {
+    seedBranch(1, { state: "CLEARED", clearanceStatus: "CLEARED", channel: "GREEN", raw: { stage: "CLEARED", certificateId: "cert_1" } });
+    seedBranch(2, { channel: "RED" });
+    seedBranch(3, { declarationNo: null, externalId: null, channel: null, state: "APPROVED", raw: { stage: "NOT_SENT", certificateId: "cert_1" } });
+    uow.data.messages.push(msg(1));
+    uow.data.messages.push(msg(1, { direction: "IN" }));
+    uow.data.messages.push(msg(2));
+    uow.data.messages.push(msg(2, { direction: "IN" }));
+    uow.data.messages.push(msg(2, { operation: "HYS" }));
+    uow.data.messages.push(msg(3, { direction: "IN", result: "ERROR", summary: "Tờ 3/3: chưa khai tạm tự động – Tờ khai chưa phê duyệt" }));
+    seedOutbox({ branch: 1, status: "SENT" });
+    seedOutbox({ branch: 2, operation: "HYS", idempotencyKey: `${D}:HYS:n1:b2`, status: "PENDING" });
+  };
+
+  beforeEach(() => {
+    decls.items = lines(120);
+    decls.status = "SUBMITTED";
+  });
+
+  it("getSubmission: mỗi tờ một mục với pipeline / thông điệp / kết quả riêng; trường cấp hồ sơ = tờ 1; summary k/N", async () => {
+    seedThree();
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.branches.map((b) => [b.no, b.of, b.stage, b.declarationNo, b.channel, b.started, b.inProgress])).toEqual([
+      [1, 3, "CLEARED", "104000000001", "GREEN", true, false],
+      [2, 3, "DECLARED", "104000000002", "RED", true, true],
+      [3, 3, "NOT_SENT", null, null, false, false],
+    ]);
+    expect(v.branches[1]!.messages.map((m) => m.operation)).toEqual(["HYS", "IDA", "IDA"]);
+    expect(v.branches[1]!.pipeline.find((p) => p.op === "HYS")?.status).toBe("SENDING");
+    expect(v.branches[0]!.pipeline.find((p) => p.op === "HYS")?.status).toBe("NOT_SENT");
+    expect(v.branches[0]!.result).toMatchObject({ declarationNo: "104000000001", clearanceStatus: "CLEARED" });
+    // Trường cấp hồ sơ = tờ 1 (tương thích): thông điệp, giai đoạn, kết quả của tờ 1.
+    expect(v).toMatchObject({ stage: "CLEARED", started: true, inProgress: false, result: { declarationNo: "104000000001" } });
+    expect(v.messages).toHaveLength(2);
+    expect(v.summary).toEqual({ of: 3, cleared: 1, problems: [] });
+  });
+
+  it("getSubmission: thông điệp từ chối nối tiếp (IDA IN/ERROR) trên tờ chưa gửi không tính là lần gửi – started/inProgress false, IDA hiện lỗi kèm lý do", async () => {
+    seedThree();
+    const b3 = unwrap(await getSubmission(deps, declarant, D)).branches[2]!;
+    expect(b3).toMatchObject({ stage: "NOT_SENT", started: false, inProgress: false, result: null });
+    expect(b3.pipeline.find((p) => p.op === "IDA")).toMatchObject({ status: "ERROR", summary: expect.stringContaining("chưa khai tạm tự động") });
+    expect(b3.messages).toHaveLength(1);
+    const row3 = unwrap(await listCustomsDeclarations(deps, declarant)).find((r) => r.branch === 3)!;
+    expect(row3).toMatchObject({ state: "READY", stage: "NOT_SENT", lastOperation: "IDA" });
+  });
+
+  it("getSubmission: 'đã duyệt' của AMA theo bản khai đang mở của từng tờ", async () => {
+    seedBranch(1, { state: "CLEARED", clearanceStatus: "CLEARED", raw: { stage: "POST_EDITING", certificateId: "cert_1" } });
+    seedBranch(2, { state: "CLEARED", clearanceStatus: "CLEARED", raw: { stage: "POST_EDITING", certificateId: "cert_1" } });
+    seedBranch(3, { state: "CLEARED", clearanceStatus: "CLEARED", raw: { stage: "CLEARED", certificateId: "cert_1" } });
+    const ama = (branch: number, status: "DRAFT" | "APPROVED") => uow.data.amendments.push({ id: `pam_${branch}`, orgId: ORG, dossierId: D, branch, seq: 1, status, header: {}, lines: [], approvedAt: null, createdAt: T, updatedAt: T });
+    ama(1, "DRAFT");
+    ama(2, "APPROVED");
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    const amaRow = (i: number) => v.branches[i]!.pipeline.find((p) => p.op === "AMA")!;
+    expect(amaRow(0)).toMatchObject({ action: "EDIT" });
+    expect(amaRow(1)).toMatchObject({ enabled: true, action: "SEND" });
+    expect(v.branches[1]!.nextOp).toBe("AMA");
+    expect(v.summary).toEqual({ of: 3, cleared: 3, problems: [] });
+  });
+
+  it("getSubmission: chưa truyền → số tờ theo dòng hàng (120 dòng → 3 tờ NOT_SENT); lô 1 tờ → 1 mục", async () => {
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.branches.map((b) => [b.no, b.of, b.stage, b.started])).toEqual([[1, 3, "NOT_SENT", false], [2, 3, "NOT_SENT", false], [3, 3, "NOT_SENT", false]]);
+    decls.items = null;
+    expect(unwrap(await getSubmission(deps, declarant, D)).branches.map((b) => [b.no, b.of])).toEqual([[1, 1]]);
+  });
+
+  it("listCustomsDeclarations: hồ sơ 3 tờ → 3 dòng of 3, mỗi dòng số tờ khai / luồng / thao tác cuối của tờ; các dòng cùng hồ sơ liền nhau", async () => {
+    seedThree();
+    const rows = unwrap(await listCustomsDeclarations(deps, declarant));
+    expect(rows.map((r) => [r.dossierId, r.branch, r.of, r.declarationNo, r.channel, r.state, r.lastOperation])).toEqual([
+      [D, 1, 3, "104000000001", "GREEN", "CLEARED", "IDA"],
+      [D, 2, 3, "104000000002", "RED", "SENDING", "HYS"],
+      [D, 3, 3, undefined, undefined, "READY", "IDA"],
+    ]);
+  });
+
+  it("listCustomsDeclarations: chưa truyền lô 120 dòng → 3 dòng READY", async () => {
+    const rows = unwrap(await listCustomsDeclarations(deps, declarant));
+    expect(rows.map((r) => [r.branch, r.of, r.state])).toEqual([[1, 3, "READY"], [2, 3, "READY"], [3, 3, "READY"]]);
+  });
+
+  it("dossierCustomsSummaries: tóm tắt k/N + tờ lỗi theo hồ sơ; hồ sơ chưa truyền vắng; org khác không thấy", async () => {
+    seedThree();
+    uow.data.results.find((r) => r.branch === 2)!.state = "SEND_FAILED";
+    const map = unwrap(await dossierCustomsSummaries(deps, declarant, [D, "dos_khac"]));
+    expect([...map.entries()]).toEqual([[D, { of: 3, cleared: 1, problems: [{ no: 2, kind: "SEND_FAILED" }] }]]);
+    expect(unwrap(await dossierCustomsSummaries(deps, declarant, []))).toEqual(new Map());
+    expect(unwrap(await dossierCustomsSummaries(deps, other, [D]))).toEqual(new Map());
+  });
+});
+
+describe("nhân bản chỉ tiêu chung AMA – bổ sung (Task 9)", () => {
+  const cleared = (branch: number) => seedBranch(branch, { state: "CLEARED", clearanceStatus: "CLEARED", raw: { stage: "CLEARED", certificateId: "cert_1" } });
+  beforeEach(() => {
+    decls.items = lines(120);
+    decls.status = "SUBMITTED";
+    dossiers.rows[0]!.status = "SUBMITTED";
+  });
+
+  it("TK_CHB (đội thủ tục Hải quan xác định theo từng tờ) không là chỉ tiêu chung: không vào commonEdits, không nhân bản được", async () => {
+    cleared(1);
+    cleared(2);
+    unwrap(await startPostAmendment(deps, declarant, D, 1));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_CHB", value: "09" }, 1));
+    expect(unwrap(await getPostAmendmentView(deps, declarant, D, 1)).commonEdits).toEqual([]);
+    expect(errCode(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_CHB"] }))).toBe("VALIDATION");
+  });
+
+  it("ghi field_audit từng tờ ngay sau khi tờ đó lưu; bản khai lập do nhân bản → hồ sơ về bước review; bỏ qua tờ vượt số tờ hiện tại", async () => {
+    cleared(1);
+    cleared(2);
+    cleared(3);
+    cleared(4); // tờ thừa (số tờ hiện tại 3) – không nhân bản sang
+    unwrap(await startPostAmendment(deps, declarant, D, 1));
+    unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REF", value: "REF-MOI" }, 1));
+    dossiers.rows[0]!.step = "submit";
+    dossiers.patches.length = 0;
+    audits.length = 0;
+    // Lúc ghi audit của tờ 2, bản khai tờ 3 chưa được lập (audit không dồn tới cuối vòng lặp).
+    const seen: number[] = [];
+    deps.audit = { append: async (_c, row) => { audits.push(row); seen.push(uow.data.amendments.filter((a) => a.branch === 3).length); } };
+    expect(unwrap(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_REF"] }))).toEqual({ applied: [2, 3], skipped: [] });
+    expect(audits.map((a) => a.key)).toEqual(["ama:b2:1:TK_REF", "ama:b3:1:TK_REF"]);
+    expect(seen).toEqual([0, 1]);
+    expect(uow.data.amendments.filter((a) => a.branch === 4)).toEqual([]);
+    expect(dossiers.rows[0]!.step).toBe("review");
+    expect(dossiers.patches).toContainEqual({ step: "review" });
+  });
+});
+
+// ───────────────────────── Sửa sau review toàn nhánh: khóa số tờ, miễn gọi về tờ đã thông quan, gửi lại tờ chưa có số, "đã duyệt" chung ─────────────────────────
+
+describe("tờ khai nhánh – sửa sau review toàn nhánh", () => {
+  const reapprove = (at: string) => {
+    decls.status = "APPROVED";
+    decls.approvedAt = at;
+    dossiers.rows[0]!.status = "APPROVED";
+  };
+
+  it("C1: chuỗi dừng giữa chừng (tờ 1 có số, tờ 2 bị từ chối chưa có số, tờ 3 chưa gửi) → đã khai 3 tờ; gọi về tờ 1, sửa, duyệt lại → truyền lại không bị chặn vì số tờ", async () => {
+    decls.items = lines(120);
+    deps.gateway = branchGateway((bno, n) => bno === 2 && n === 1);
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    expect(uow.data.results.map((r) => [r.branch, r.declarationNo])).toEqual([[1, "104000000001"], [2, null], [3, null]]);
+    // Reader luật R-BRANCH-COUNT-LOCKED: 3 tờ đã khai (không phải 1 tờ có số).
+    expect(lockedSheetCount(uow.data.results)).toBe(3);
+    unwrap(await performOperation(deps, declarant, D, "IDB", 1));
+    await sendAll();
+    reapprove("2026-10-14T05:00:00.000Z");
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    decls.items = lines(140); // sửa dòng hàng nhưng vẫn 3 tờ
+    reapprove("2026-10-14T06:00:00.000Z");
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("C1: lô 50 dòng đã có số tờ 1, gọi về sửa, tăng lên 51 dòng (2 tờ) → truyền lại / IDA / khai tạm tờ 2 bị chặn (không gửi tờ 1 với TK_DNO = 2), không tạo outbox", async () => {
+    decls.items = lines(50);
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    unwrap(await performOperation(deps, declarant, D, "IDB", 1));
+    await sendAll();
+    decls.items = lines(51);
+    reapprove("2026-10-14T05:00:00.000Z");
+    const before = uow.data.outbox.length;
+    const refused = { ok: false, error: { code: "BLOCKER_FAILED", reason: "SHEET_COUNT_CHANGED", params: { planned: 1, now: 2 } } };
+    expect(await submitDeclaration(deps, declarant, D, "cert_1")).toMatchObject(refused);
+    expect(await performOperation(deps, declarant, D, "IDA", 1)).toMatchObject(refused);
+    expect(await enqueueBranchPreDeclare(deps, declarant, D, 2, { by: "user" })).toMatchObject(refused);
+    expect(uow.data.outbox.length).toBe(before);
+    expect(decls.status).toBe("APPROVED");
+  });
+
+  it("C1: số tờ giảm sau khi có số (120 → 95 dòng, 3 tờ đã khai) → chặn ở mã nguồn kể cả khi luật chưa chạy lại", async () => {
+    decls.items = lines(120);
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    for (const b of [1, 2, 3]) unwrap(await performOperation(deps, declarant, D, "IDB", b));
+    await sendAll();
+    decls.items = lines(95);
+    reapprove("2026-10-14T05:00:00.000Z");
+    expect(await submitDeclaration(deps, declarant, D, "cert_1")).toMatchObject({ ok: false, error: { reason: "SHEET_COUNT_CHANGED", params: { planned: 3, now: 2 } } });
+  });
+
+  it("C2/R7: tờ 1 đã thông quan, tờ 2 luồng đỏ gọi sửa đổi (IDD) → sửa, duyệt lại → truyền lại tờ 2 (IDA01) được; tờ 1 không bị bắt gọi về, không gửi gì", async () => {
+    decls.items = lines(100);
+    decls.status = "SUBMITTED";
+    dossiers.rows[0]!.status = "SUBMITTED";
+    seedBranch(1, { state: "CLEARED", channel: "GREEN", clearanceStatus: "CLEARED", raw: { stage: "CLEARED", certificateId: "cert_1" } });
+    seedBranch(2, { channel: "RED", raw: { stage: "DECLARED", certificateId: "cert_1" } });
+    deps.gateway = branchGateway(() => false, { send: async () => ({ note: "ok" }), queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    unwrap(await performOperation(deps, declarant, D, "IDD", 2));
+    await sendAll();
+    expect(stages()).toEqual([[1, "CLEARED", "104000000001"], [2, "AMEND_RECALLED", "104000000002"]]);
+    expect(decls.status).toBe("DRAFT");
+    reapprove("2026-10-14T05:00:00.000Z");
+    // Mở lại (đang sửa ở tờ 2) không bị chặn bởi tờ 1 đã thông quan.
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    reapprove("2026-10-14T06:00:00.000Z");
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(keysOf("IDA01", 2)).toEqual([`${D}:IDA01:v2:b2`]);
+    expect(uow.data.outbox.filter((o) => o.branch === 1)).toEqual([]);
+    await sendAll();
+    expect(stages()).toEqual([[1, "CLEARED", "104000000001"], [2, "AMEND_PRE_DECLARED", "104000000002"]]);
+    expect(dossiers.rows[0]!.status).toBe("SUBMITTED");
+  });
+
+  it("C2/R7: guard nội dung đã gửi bỏ qua tờ đã thông quan / sửa sau thông quan / bị từ chối; tờ còn hiệu lực không có ảnh chụp (dữ liệu cũ) phải gọi về", async () => {
+    decls.items = lines(200);
+    seedBranch(1, { state: "CLEARED", raw: { stage: "CLEARED" } });
+    seedBranch(2, { state: "CLEARED", raw: { stage: "POST_EDITING" } });
+    seedBranch(3, { state: "REJECTED", raw: { stage: "REJECTED" } });
+    seedBranch(4, { raw: { stage: "DECLARED" } });
+    expect(await checkSentSheets(deps, ORG, D)).toMatchObject({ reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: "4" } });
+    uow.data.results.find((r) => r.branch === 4)!.raw = { stage: "DECLARED", sent: sheetSnapshot((await decls.get(ORG, D))!.payload, 4) };
+    expect(await checkSentSheets(deps, ORG, D)).toBeNull();
+  });
+
+  it("customsEditSheets (port customsSheets của declaration/extraction/dossier): các tờ đã lập theo thứ tự, giai đoạn + số tờ khai; org khác / chưa truyền → []", async () => {
+    expect(await customsEditSheets(deps, ORG, D)).toEqual([]);
+    seedBranch(2, { raw: { stage: "RECALLED" } });
+    seedBranch(1, { raw: { stage: "PRE_DECLARED" } });
+    expect(await customsEditSheets(deps, ORG, D)).toEqual([{ no: 1, stage: "PRE_DECLARED", declarationNo: "104000000001" }, { no: 2, stage: "RECALLED", declarationNo: "104000000002" }]);
+    expect(await customsEditSheets(deps, "org_khac", D)).toEqual([]);
+  });
+
+  it("I3: IDA tờ 2 hết lượt thử, chưa có externalId → Gửi lại dựng lại từ thông điệp đã ghim (khóa :retry1), nối tiếp tờ 3; bấm IDA vẫn chặn (dùng Gửi lại)", async () => {
+    decls.items = lines(120);
+    deps.gateway = branchGateway(() => false, { queryStatus: async () => { throw new Error("không có externalId để tra"); } });
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll(1); // chỉ tờ 1 → xếp tờ 2
+    const b2 = idaOutbox(2)[0]!;
+    b2.attempts = MAX_ATTEMPTS;
+    await sendAll();
+    expect(uow.data.results.find((r) => r.branch === 2)).toMatchObject({ state: "SEND_FAILED", externalId: null, raw: expect.objectContaining({ stage: "NOT_SENT" }) });
+    expect(idaOutbox(3)).toHaveLength(0);
+    expect(await performOperation(deps, declarant, D, "IDA", 2)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", message: expect.stringContaining("dùng Gửi lại") } });
+    expect(unwrap(await resendOperation(deps, declarant, D, "IDA", 2))).toMatchObject({ resent: true });
+    expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`, `${D}:IDA:v2:retry1:b2`]);
+    expect(idaOutbox(2)[1]!.payload).toEqual(b2.payload);
+    expect(uow.data.results.find((r) => r.branch === 2)?.state).toBe("APPROVED");
+    await sendAll();
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("I3: Gửi lại tờ chưa có externalId vẫn kiểm ghim – tờ khai đã mở lại/duyệt lại → không gửi nội dung cũ", async () => {
+    decls.items = lines(120);
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll(1);
+    idaOutbox(2)[0]!.attempts = MAX_ATTEMPTS;
+    await sendAll();
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    expect(await resendOperation(deps, declarant, D, "IDA", 2)).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
+    expect(keysOf("IDA", 2)).toHaveLength(1);
+  });
+
+  it("I3 (R8): lô một tờ chưa có externalId → Gửi lại giữ như trước (NOT_FOUND)", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    uow.data.outbox[0]!.attempts = MAX_ATTEMPTS;
+    await sendAll();
+    expect(errCode(await resendOperation(deps, declarant, D, "IDA"))).toBe("NOT_FOUND");
+  });
+
+  it("I4: lần truyền lại đang chạy (tờ khai SUBMITTED) – tờ 2, 3 đã gọi về: màn Truyền và thực hiện nghiệp vụ cùng coi là đã duyệt (IDA không phải EDIT)", async () => {
+    decls.items = lines(120);
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    for (const b of [1, 2, 3]) unwrap(await performOperation(deps, declarant, D, "IDB", b));
+    await sendAll();
+    reapprove("2026-10-14T05:00:00.000Z");
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(decls.status).toBe("SUBMITTED");
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    for (const b of [v.branches[1]!, v.branches[2]!]) {
+      expect(b.stage).toBe("RECALLED");
+      expect(b.pipeline.find((p) => p.op === "IDA")?.action).not.toBe("EDIT");
+    }
+  });
+
+  it("minor: IDA người khai bấm trên tờ đã gọi về chạy guard của tờ (ô bắt buộc trống ở dòng của tờ) như chuỗi nối tiếp", async () => {
+    decls.items = lines(120);
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    for (const b of [1, 2, 3]) unwrap(await performOperation(deps, declarant, D, "IDB", b));
+    await sendAll();
+    decls.items = lines(120).map((i) => (i.lineNo === 25 ? { ...i, description: "" } : i));
+    reapprove("2026-10-14T05:00:00.000Z");
+    const before = uow.data.outbox.length;
+    expect(await performOperation(deps, declarant, D, "IDA", 1)).toMatchObject({ ok: false, error: { reason: "REQUIRED_FIELDS_MISSING_SUBMIT", message: expect.stringContaining("Tờ 1/3") } });
+    expect(uow.data.outbox.length).toBe(before);
+  });
+});
+
+describe("tờ khai nhánh – luôn truyền theo thứ tự tờ (người khai bấm IDA/IDA01 trên tờ sau)", () => {
+  const reapprove = (at: string) => {
+    decls.status = "APPROVED";
+    decls.approvedAt = at;
+    dossiers.rows[0]!.status = "APPROVED";
+  };
+  const order = (sheet: number, waitFor: number) => ({ ok: false, error: { code: "INVALID_STATE", reason: "SHEET_ORDER", params: { sheet, waitFor }, message: `Tờ ${sheet}: chờ tờ ${waitFor} gửi nội dung trước – truyền theo thứ tự tờ khai` } });
+
+  it("3 tờ có số đã gọi về, duyệt lại → IDA tờ 2 / tờ 3 bị chặn (không outbox, tờ khai vẫn APPROVED); IDA tờ 1 → nối 1 → 2 → 3; đang truyền tờ 1 → tờ 3 vẫn chặn", async () => {
+    decls.items = lines(120);
+    deps.gateway = branchGateway();
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    await sendAll();
+    for (const b of [1, 2, 3]) unwrap(await performOperation(deps, declarant, D, "IDB", b));
+    await sendAll();
+    expect(uow.data.results.map((r) => r.raw?.stage)).toEqual(["RECALLED", "RECALLED", "RECALLED"]);
+    reapprove("2026-10-14T05:00:00.000Z");
+    const before = uow.data.outbox.length;
+    expect(await performOperation(deps, declarant, D, "IDA", 2)).toMatchObject(order(2, 1));
+    expect(await performOperation(deps, declarant, D, "IDA", 3)).toMatchObject(order(3, 2));
+    expect(uow.data.outbox.length).toBe(before);
+    expect(decls.status).toBe("APPROVED");
+    expect(dossiers.rows[0]!.status).toBe("APPROVED");
+    preDeclared = [];
+    unwrap(await performOperation(deps, declarant, D, "IDA", 1));
+    expect(decls.status).toBe("SUBMITTED");
+    // Lần truyền đang chạy (SUBMITTED, tờ 1 chưa có phản hồi): tờ sau vẫn chờ.
+    expect(await performOperation(deps, declarant, D, "IDA", 3)).toMatchObject(order(3, 2));
+    expect(await performOperation(deps, declarant, D, "IDA", 2)).toMatchObject(order(2, 1));
+    await sendAll();
+    expect(preDeclared).toEqual([1, 2, 3]);
+    expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("R7: tờ 1 đã thông quan, tờ 2, 3 gọi sửa đổi → IDA01 tờ 3 bị chặn (chờ tờ 2); IDA01 tờ 2 được, nối tờ 3; tờ 1 không gửi gì", async () => {
+    decls.items = lines(150);
+    reapprove("2026-10-14T05:00:00.000Z");
+    seedBranch(1, { state: "CLEARED", channel: "GREEN", clearanceStatus: "CLEARED", raw: { stage: "CLEARED", certificateId: "cert_1" } });
+    seedBranch(2, { raw: { stage: "AMEND_RECALLED", certificateId: "cert_1" } });
+    seedBranch(3, { raw: { stage: "AMEND_RECALLED", certificateId: "cert_1" } });
+    deps.gateway = branchGateway(() => false, { send: async () => ({ note: "ok" }), queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    expect(await performOperation(deps, declarant, D, "IDA01", 3)).toMatchObject(order(3, 2));
+    expect(uow.data.outbox).toEqual([]);
+    expect(decls.status).toBe("APPROVED");
+    unwrap(await performOperation(deps, declarant, D, "IDA01", 2));
+    await sendAll();
+    expect(keysOf("IDA01", 3)).toHaveLength(1);
+    expect(uow.data.outbox.filter((o) => o.branch === 1)).toEqual([]);
+    expect(stages()).toEqual([[1, "CLEARED", "104000000001"], [2, "AMEND_PRE_DECLARED", "104000000002"], [3, "AMEND_PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("chuỗi nối tiếp bỏ qua tờ giữa đã thông quan: tờ 1, 3 gọi sửa đổi, tờ 2 thông quan → IDA01 tờ 3 chặn (chờ tờ 1); IDA01 tờ 1 → nối thẳng tờ 3", async () => {
+    decls.items = lines(150);
+    reapprove("2026-10-14T05:00:00.000Z");
+    seedBranch(1, { raw: { stage: "AMEND_RECALLED", certificateId: "cert_1" } });
+    seedBranch(2, { state: "CLEARED", channel: "GREEN", clearanceStatus: "CLEARED", raw: { stage: "CLEARED", certificateId: "cert_1" } });
+    seedBranch(3, { raw: { stage: "AMEND_RECALLED", certificateId: "cert_1" } });
+    deps.gateway = branchGateway(() => false, { send: async () => ({ note: "ok" }), queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
+    expect(await performOperation(deps, declarant, D, "IDA01", 3)).toMatchObject(order(3, 1));
+    expect(uow.data.outbox).toEqual([]);
+    unwrap(await performOperation(deps, declarant, D, "IDA01", 1));
+    await sendAll();
+    expect(uow.data.outbox.filter((o) => o.branch === 2)).toEqual([]);
+    expect(keysOf("IDA01", 3)).toHaveLength(1);
+    expect(stages()).toEqual([[1, "AMEND_PRE_DECLARED", "104000000001"], [2, "CLEARED", "104000000002"], [3, "AMEND_PRE_DECLARED", "104000000003"]]);
+  });
+
+  it("enqueueBranchPreDeclare (chuỗi / người khai) cũng giữ thứ tự: tờ trước còn chờ gửi nội dung → chặn, không tạo outbox", async () => {
+    decls.items = lines(120);
+    reapprove("2026-10-14T05:00:00.000Z");
+    seedBranch(1, { raw: { stage: "RECALLED", certificateId: "cert_1" } });
+    seedBranch(2, { raw: { stage: "RECALLED", certificateId: "cert_1" } });
+    seedBranch(3, { raw: { stage: "RECALLED", certificateId: "cert_1" } });
+    expect(await enqueueBranchPreDeclare(deps, declarant, D, 3, { by: "user" })).toMatchObject(order(3, 2));
+    expect(uow.data.outbox).toEqual([]);
   });
 });

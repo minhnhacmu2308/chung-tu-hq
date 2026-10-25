@@ -3,9 +3,9 @@
 import {
   addDec, AMA_HEADER_LAYOUT, AMA_IMPORT_TAX_COLUMNS, AMA_OTHER_TAX_SLOTS, amaHeaderLocked, amaLineDelta, applyAmaLineEdit, amaOtherTaxColumns, DEC_ZERO, formatDec, parseDec,
   type AmaTaxColumn, type CustomsOperation, type CustomsRejection, type CustomsStage, type LayoutBlock, type LayoutField, type LayoutItem, type PostAmendment, type PostAmendmentLine,
-  type PostAmendmentValues,
+  type PostAmendmentValues, type CopyPostAmendmentHeaderResult,
 } from "@kb/contracts";
-import { pickMessages, type UiLocale } from "@kb/ui";
+import { fill, pickMessages, type UiLocale } from "@kb/ui";
 import { AMA_MESSAGES } from "./ama.messages";
 
 export type AmaSubStep = "pick" | "edit" | "reason" | "declare";
@@ -195,3 +195,24 @@ export const lineSaves = (edits: Record<string, Record<string, string>>, lineIds
 
 /** Bước ④ → xem lại: đã duyệt thì về ③ (còn sửa được), đã khai thì xem nội dung sửa (chỉ đọc). */
 export const reviewTarget = (a: PostAmendment): AmaSubStep => (a.status === "APPROVED" ? "reason" : "edit");
+
+/** Tên chỉ tiêu ô đầu bản khai (tên pháp lý theo @kb/contracts – không dịch); khóa không có trong bố cục → giữ khóa. */
+export function amaHeaderLabel(key: string): string {
+  for (const b of AMA_HEADER_LAYOUT) {
+    for (const i of b.items) {
+      const f = (i.kind === "field" ? [i] : i.fields).find((x) => x.key === key);
+      if (f) return f.label;
+    }
+  }
+  return key;
+}
+
+/** Kết quả "Tạo AMA cùng nội dung cho các tờ đã thông quan khác" thành các dòng chữ theo ngôn ngữ: tờ đã áp dụng, rồi từng tờ bỏ qua kèm lý do. */
+export function copyResultLines(r: CopyPostAmendmentHeaderResult, locale: UiLocale): string[] {
+  const t = pickMessages(AMA_MESSAGES, locale);
+  const skip = { NOT_CLEARED: t.skipNOT_CLEARED, OPEN_NOT_DRAFT: t.skipOPEN_NOT_DRAFT, BUSY: t.skipBUSY } as const;
+  return [
+    r.applied.length ? fill(t.copyApplied, { sheets: r.applied.join(", ") }) : t.copyNone,
+    ...r.skipped.map((s) => fill(t.copySkipped, { no: s.no, reason: skip[s.reason] })),
+  ];
+}

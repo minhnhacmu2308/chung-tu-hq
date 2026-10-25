@@ -1,6 +1,6 @@
 // Trạng thái truyền tờ khai (ADR 0005) theo giai đoạn vòng đời dùng chung `@kb/contracts/customs-flow` (stageAfter, operationAvailability).
 // Giai đoạn chi tiết lưu ở results.raw.stage; cột `state` giữ nghĩa thô cho màn danh sách và dữ liệu cũ. Thuần.
-import { stageFromLegacy, type CustomsInfo, type CustomsRejection, type CustomsOperation, type CustomsStage, type SubmissionState } from "@kb/contracts";
+import { stageFromLegacy, type CustomsInfo, type CustomsRejection, type CustomsOperation, type CustomsStage, type SentSnapshot, type SubmissionState } from "@kb/contracts";
 
 /** Phần phụ của kết quả truyền (jsonb). `progress` là trường cũ (trước khi có `stage`) – chỉ đọc. */
 export type ResultRaw = {
@@ -21,6 +21,8 @@ export type ResultRaw = {
   customsInfo?: CustomsInfo;
   /** Lần gửi bị Hải quan/FPT từ chối gần nhất; xóa khi chính nghiệp vụ đó gửi lại thành công. */
   rejection?: CustomsRejection;
+  /** Lô nhiều tờ: nội dung tờ Hải quan đang giữ (ảnh chụp lần gửi nội dung IDA/IDA01/EDA/EDA01 thành công gần nhất) – guard tờ chưa gọi về (spec §2.5). Đọc qua sentOf (Zod). */
+  sent?: SentSnapshot;
 };
 
 export const stageOf = (r: { state: SubmissionState; raw: ResultRaw | null } | null): CustomsStage =>

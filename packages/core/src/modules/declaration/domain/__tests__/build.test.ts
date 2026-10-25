@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { Shipment } from "@kb/contracts";
+import { EMPTY_VALUE_CHARGES, NO_INSURANCE_VALUE, type Shipment, type ValueCharges } from "@kb/contracts";
 import { planAdjustments } from "../adjustments.js";
-import { buildDeclaration } from "../build.js";
-import { missingRequiredFields } from "../guards.js";
+import { buildDeclaration, type BuildInput } from "../build.js";
+import { missingBlockingFields, missingRequiredFields } from "../guards.js";
 import { ratesFor } from "../rates.js";
 import { DOSSIER, hansol, ORG } from "../test/shipment.js";
 
@@ -21,6 +21,41 @@ describe("adjustments", () => {
     expect(cif.notes[0]).toMatch(/đã gồm/);
     const noFreight = planAdjustments(hansol((s) => void (s.charges.freight = { value: null, sources: [], status: "SINGLE_SOURCE" })));
     expect(noFreight.notes[0]).toMatch(/cần cước vận chuyển/);
+  });
+
+  const noDocFreight = (s: Shipment) => void (s.charges.freight = { value: null, sources: [], status: "SINGLE_SOURCE" });
+  const charges = (c: Partial<ValueCharges>): ValueCharges => ({ ...EMPTY_VALUE_CHARGES, ...c });
+
+  it("cước nhập tay: có số → cộng (nguồn USER, thắng hóa đơn cước); chỉ có lý do → không cộng, ghi chú lý do", () => {
+    const manual = planAdjustments(hansol(noDocFreight), charges({ freight: { amount: "900", currency: "USD", reason: "FORWARDER_NOTICE", note: "" } }));
+    expect(manual.adjustments).toEqual([{ label: "Cước vận chuyển quốc tế", amount: "900", currency: "USD", source: "USER", kind: "ADD" }]);
+    const overDoc = planAdjustments(hansol(), charges({ freight: { amount: "1200", currency: "USD", reason: "CONTRACT", note: "" } }));
+    expect(overDoc.adjustments).toEqual([expect.objectContaining({ amount: "1200", source: "USER" })]);
+    const reasonOnly = planAdjustments(hansol(noDocFreight), charges({ freight: { amount: null, currency: null, reason: "OTHER", note: "chờ forwarder" } }));
+    expect(reasonOnly.adjustments).toEqual([]);
+    expect(reasonOnly.notes[0]).toMatch(/chưa có số cước.*Khác: chờ forwarder/);
+    // CIF: giá đã gồm cước – cước nhập tay không cộng.
+    expect(planAdjustments(hansol((s) => void (s.invoice.incoterm.value = "CIF")), charges({ freight: { amount: "900", currency: "USD", reason: "CONTRACT", note: "" } })).adjustments).toEqual([]);
+  });
+
+  it("bảo hiểm: không mua → không cộng dù chứng từ có; nhập tay → cộng; CIF → không cộng, ghi chú", () => {
+    const withDocIns = (s: Shipment) => void (s.charges.insurance = { value: "30", sources: [], status: "SINGLE_SOURCE" });
+    expect(planAdjustments(hansol(withDocIns), charges({ insurance: { mode: "NONE" } })).adjustments.map((a) => a.label)).toEqual(["Cước vận chuyển quốc tế"]);
+    expect(planAdjustments(hansol(), charges({ insurance: { mode: "AMOUNT", amount: "25", currency: "USD" } })).adjustments[1]).toEqual({ label: "Phí bảo hiểm", amount: "25", currency: "USD", source: "USER", kind: "ADD" });
+    const cif = planAdjustments(hansol((s) => void (s.invoice.incoterm.value = "CIF")), charges({ insurance: { mode: "AMOUNT", amount: "25", currency: "USD" } }));
+    expect(cif.adjustments).toEqual([]);
+    expect(cif.notes.join(" ")).toMatch(/đã gồm bảo hiểm/);
+  });
+
+  it("danh sách khoản điều chỉnh nhập tay thay phí khác đọc từ chứng từ; SB → trừ, giữ mã tên", () => {
+    const withOther = (s: Shipment) => void (s.charges.other = [{ label: "Packing charge", amount: "50", currency: "USD", sourceKind: "INVOICE" }]);
+    expect(planAdjustments(hansol(withOther)).adjustments.map((a) => a.label)).toContain("Packing charge");
+    const manual = planAdjustments(hansol(withOther), charges({ adjustments: [{ code: "C", kind: "AD", amount: "50", currency: "USD", note: "", allocate: true }, { code: "G", kind: "SB", amount: "20", currency: "USD", note: "", allocate: true }] }));
+    expect(manual.adjustments.slice(1)).toEqual([
+      expect.objectContaining({ code: "C", kind: "ADD", amount: "50", source: "USER", label: "Chi phí đóng gói hàng hóa" }),
+      expect.objectContaining({ code: "G", kind: "SUBTRACT", amount: "20", label: "Khoản giảm giá" }),
+    ]);
+    expect(planAdjustments(hansol(withOther), charges({ adjustments: [] })).adjustments.map((a) => a.label)).toEqual(["Cước vận chuyển quốc tế"]);
   });
 });
 
@@ -106,7 +141,7 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
 describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)", () => {
   const EX = { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] };
   const XK = { ...DOSSIER, direction: "XK" as const, typeCode: "B11" };
-  const build = (shipment = hansol(), dossier = DOSSIER, items = ITEMS) => buildDeclaration({ shipment, dossier, org: ORG, items, now: NOW, exchange: EX });
+  const build = (shipment = hansol(), dossier = DOSSIER, items = ITEMS, extra: Partial<BuildInput> = {}) => buildDeclaration({ shipment, dossier, org: ORG, items, now: NOW, exchange: EX, ...extra });
   const withDate = (s: Shipment) => void (s.transport.departureDate = { value: "2026-10-05", sources: [{ documentId: "doc_bl", kind: "BILL_OF_LADING", page: 1, raw: "05 OCT 2026", normalized: "2026-10-05" }], status: "SINGLE_SOURCE" });
 
   it("1.50 mở đầu bằng ngày vận đơn DDMMYYYY#&, ghi dòng hàng FOC; thiếu ngày vận đơn → nghi ngờ, không tự điền", () => {
@@ -140,16 +175,45 @@ describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)",
     expect(cif.fields["TG_TT"]?.suspect).toBeUndefined();
   });
 
-  it("EDA CFR chưa có số cước → không trừ bừa, 2.40 nghi ngờ kèm hướng dẫn; FOB → không khai 2.40", () => {
-    const cfr = build(hansol((s) => {
+  it("EDA CFR chưa có số cước → không trừ bừa: không lý do thì 2.40 để trống và chặn duyệt, có lý do thì cảnh báo; FOB → không khai 2.40", () => {
+    const tweak = (s: Shipment) => {
       s.invoice.incoterm = { value: "CFR", sources: [], status: "SINGLE_SOURCE" };
       s.charges.freight = { value: null, sources: [], status: "SINGLE_SOURCE" };
-    }), XK);
+    };
+    const cfr = build(hansol(tweak), XK);
     expect(cfr.adjustments).toEqual([]);
-    expect(cfr.fields["TG_TT"]).toMatchObject({ value: "20850 USD", suspect: true, note: expect.stringMatching(/cần số cước/) });
+    expect(cfr.fields["TG_TT"]).toMatchObject({ value: "", suspect: true, blocking: true, note: expect.stringMatching(/cần số cước/) });
+    const withReason = build(hansol(tweak), XK, ITEMS, { charges: { ...EMPTY_VALUE_CHARGES, freight: { amount: null, currency: null, reason: "INVOICE_LATER", note: "" } } });
+    expect(withReason.fields["TG_TT"]).toMatchObject({ value: "20850 USD", suspect: true, note: expect.stringMatching(/Hóa đơn cước bổ sung sau/) });
+    expect(withReason.fields["TG_TT"]?.blocking).toBeUndefined();
     const fob = build(hansol((s) => void (s.invoice.incoterm = { value: "FOB", sources: [], status: "SINGLE_SOURCE" })), XK);
     expect(fob.fields["TG_TT"]).toBeUndefined(); // FOB: chỉ tiêu 2.40 không áp dụng → không có ô
     expect(fob.hidden).toContain("TG_TT");
+  });
+
+  it("1.47 FOB không có cước: không lý do → chặn duyệt; có lý do → cảnh báo, không chặn; nhập tay lệch chứng từ → nghi ngờ", () => {
+    const fob = (s: Shipment) => {
+      s.invoice.incoterm = { value: "FOB", sources: [], status: "SINGLE_SOURCE" };
+      s.charges.freight = { value: null, sources: [], status: "SINGLE_SOURCE" };
+    };
+    const blocked = build(hansol(fob));
+    expect(blocked.fields["PHI_VC"]).toMatchObject({ value: "", blocking: true, suspect: true });
+    expect(missingBlockingFields(blocked.fields).map((f) => f.no)).toContain("1.47");
+    const reason = build(hansol(fob), DOSSIER, ITEMS, { charges: { ...EMPTY_VALUE_CHARGES, freight: { amount: null, currency: null, reason: "INVOICE_LATER", note: "" } } });
+    expect(reason.fields["PHI_VC"]).toMatchObject({ value: "", source: "USER", suspect: true, note: expect.stringMatching(/Hóa đơn cước bổ sung sau/) });
+    expect(missingBlockingFields(reason.fields).map((f) => f.no)).not.toContain("1.47");
+    const differs = build(hansol((s) => void (s.invoice.incoterm.value = "FOB")), DOSSIER, ITEMS, { charges: { ...EMPTY_VALUE_CHARGES, freight: { amount: "1300", currency: "USD", reason: "CONTRACT", note: "" } } });
+    expect(differs.fields["PHI_VC"]).toMatchObject({ value: "1300 USD", source: "USER", suspect: true, note: expect.stringMatching(/Khác số trên chứng từ: 1150 USD/) });
+  });
+
+  it("1.48 không mua bảo hiểm → mã D; 1.49 khoản điều chỉnh có mã → từng khoản dạng mã AD/SB trị giá mã tiền", () => {
+    const c: ValueCharges = { freight: null, insurance: { mode: "NONE" }, adjustments: [{ code: "A", kind: "AD", amount: "100", currency: "USD", note: "", allocate: true }, { code: "G", kind: "SB", amount: "20", currency: "USD", note: "", allocate: true }] };
+    const b = build(hansol(), DOSSIER, ITEMS, { charges: c });
+    expect(b.fields["PHI_BH"]).toMatchObject({ value: NO_INSURANCE_VALUE, source: "USER" });
+    expect(b.fields["KHOAN_DC"]).toMatchObject({ value: "A AD 100 USD; G SB 20 USD", source: "USER" });
+    expect(b.fields["KHOAN_DC"]?.suspect).toBeUndefined();
+    const ocrOther = build(hansol((s) => void (s.charges.other = [{ label: "Royalty", amount: "40", currency: "USD", sourceKind: "INVOICE" }])));
+    expect(ocrOther.fields["KHOAN_DC"]).toMatchObject({ suspect: true, note: expect.stringMatching(/chưa có mã tên khoản điều chỉnh/) });
   });
 
   it("EDA 2.43 người nộp thuế mặc định 1, theo Mặc định khai báo nếu có; 2.80 để người khai nhập", () => {

@@ -8,13 +8,13 @@ const run = (code: string, mutate: Parameters<typeof hansol>[0] = () => {}) => r
 const SEVERITY_ORDER = { BLOCKER: 0, WARNING: 1, INFO: 2 } as const;
 
 describe("bộ luật", () => {
-  it("đăng ký đủ 26 luật, mã duy nhất, có severity", () => {
+  it("đăng ký đủ 27 luật, mã duy nhất, có severity", () => {
     expect(RULES.map((r) => r.code).sort()).toEqual([
-      "R-AMOUNT-SUM", "R-AWB-LENGTH", "R-BUYER-MST", "R-CONTAINER-LIST", "R-COUNTRY-CODE", "R-DATE-ORDER", "R-DESCRIPTION-LENGTH", "R-GROSS-WEIGHT-DIGITS", "R-HS-6",
+      "R-AMOUNT-SUM", "R-AWB-LENGTH", "R-BRANCH-COUNT-LOCKED", "R-BUYER-MST", "R-CONTAINER-LIST", "R-COUNTRY-CODE", "R-DATE-ORDER", "R-DESCRIPTION-LENGTH", "R-GROSS-WEIGHT-DIGITS", "R-HS-6",
       "R-INCOTERM-CODE", "R-INCOTERM-FREIGHT", "R-INSURANCE-INCOTERM", "R-INVOICE-REF", "R-LAW-MO-CU", "R-LINE-AMOUNT", "R-LINE-VALUE-DIGITS", "R-MAX-50-LINES", "R-ORIGIN-CO",
       "R-PACKAGES-INTEGER", "R-PARTY-NAME-LENGTH", "R-POD-TRANSSHIP", "R-QTY-DECIMALS", "R-QTY-PL-INV", "R-SHARED-CONTAINER", "R-WAREHOUSE-CODE", "R-WEIGHT-PL-BL",
     ]);
-    expect(new Set(RULES.map((r) => r.code)).size).toBe(26);
+    expect(new Set(RULES.map((r) => r.code)).size).toBe(27);
   });
   it("thứ tự hiển thị: BLOCKER trước, rồi WARNING, INFO", () => {
     const ranks = RULES.map((r) => SEVERITY_ORDER[r.severity]);
@@ -26,7 +26,7 @@ describe("bộ luật", () => {
   });
   it("runAllRules với hồ sơ HANSOL: không FAIL BLOCKER; mọi luật đều có detail tiếng Việt", () => {
     const out = runAllRules(hansol(), { org: ORG });
-    expect(out).toHaveLength(26);
+    expect(out).toHaveLength(27);
     expect(out.filter((o) => o.severity === "BLOCKER" && o.result === "FAIL")).toEqual([]);
     expect(out.every((o) => o.detail.length > 0)).toBe(true);
   });
@@ -109,6 +109,14 @@ describe("R-INCOTERM-FREIGHT (BLOCKER)", () => {
   });
   it("PASS: CIF không cần cước riêng", () => expect(run("R-INCOTERM-FREIGHT", (s) => { s.invoice.incoterm.value = "CIF"; s.charges.freight.value = null; }).result).toBe("PASS"));
   it("SKIPPED khi không có incoterm", () => expect(run("R-INCOTERM-FREIGHT", (s) => (s.invoice.incoterm.value = null)).result).toBe("SKIPPED"));
+  it("FOB không có cước trên chứng từ: người khai nhập số → PASS; chỉ ghi lý do → WARN (không chặn)", () => {
+    const fob = hansol((s) => { s.invoice.incoterm.value = "FOB"; s.charges.freight.value = null; });
+    const rule = ruleByCode("R-INCOTERM-FREIGHT")!;
+    const manual = rule.run(fob, { org: ORG, charges: { freight: { amount: "900", currency: "USD", reason: "FORWARDER_NOTICE", note: "" }, insurance: null, adjustments: null } });
+    expect(manual).toMatchObject({ result: "PASS", detail: expect.stringMatching(/người khai nhập/) });
+    const reason = rule.run(fob, { org: ORG, charges: { freight: { amount: null, currency: null, reason: "INVOICE_LATER", note: "" }, insurance: null, adjustments: null } });
+    expect(reason).toMatchObject({ result: "WARN", detail: expect.stringMatching(/Hóa đơn cước bổ sung sau/) });
+  });
 });
 
 describe("R-ORIGIN-CO (WARNING)", () => {

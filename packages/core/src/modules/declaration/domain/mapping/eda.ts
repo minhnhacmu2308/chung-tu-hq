@@ -2,7 +2,7 @@
 import { PORTS, resolvePort, transportModeCode } from "../catalog-resolve.js";
 import { EDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
-import { incotermCode, planExportAdjustments } from "../adjustments.js";
+import { freightRequired, incotermCode, planExportAdjustments } from "../adjustments.js";
 import { incotermField, invoiceKind, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { BY_WATER, EXPORT_VALUE, IN_CONTAINER, RE_EXPORT, TEMP_EXPORT } from "./conditions.js";
 import { profileSource, SRC } from "./sources.js";
@@ -22,13 +22,17 @@ const exportCustomsValue = (i: MappingInput): MappedValue => {
     return { value: null, source: "SYSTEM", note: `${incoterm}: không khai chỉ tiêu 2.40 – Hải quan lấy trị giá hóa đơn làm trị giá tính thuế` };
   }
   const cur = i.shipment.invoice.currency.value ?? i.dossier.currency;
-  const notes = planExportAdjustments(i.shipment).notes;
+  const notes = planExportAdjustments(i.shipment, i.charges).notes;
+  // Giá đã gồm cước mà không có số cước, cũng không có lý do người khai ghi nhận → chặn duyệt (trị giá tính thuế sai).
+  const noFreight = freightRequired("EDA", incoterm) && !i.adjustments.some((a) => a.label.startsWith("Cước")) && !i.charges.freight;
   const same = i.adjustments.every((a) => a.currency === cur);
   const value = same
     ? `${plainNumber(i.adjustments.reduce((s, a) => (a.kind === "SUBTRACT" ? s.minus(a.amount) : s.plus(a.amount)), dec(i.valuation.invoiceTotal)).toFixed())} ${cur}`
     : `${i.valuation.customsValueVnd} VND`;
   const deducted = i.adjustments.filter((a) => a.kind === "SUBTRACT").map((a) => a.label.toLowerCase());
   const note = [deducted.length ? `Đã trừ ${deducted.join(", ")} khỏi giá hóa đơn ${incoterm}` : null, ...notes].filter(Boolean).join(". ");
+  // Chặn duyệt = để trống (canApprove chỉ chặn chỉ tiêu blocking chưa có giá trị) – không khai trị giá chưa trừ cước.
+  if (noFreight) return { value: null, source: "SYSTEM", suspect: true, blocking: true, note: `${note}. Nhập số cước hoặc lý do chưa có ở bước OCR & kiểm tra` };
   return { value, source: "SYSTEM", ...(notes.length ? { suspect: true } : {}), ...(note ? { note } : {}) };
 };
 

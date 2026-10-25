@@ -173,6 +173,22 @@ export const productCatalog = pgTable(
   (t) => [uniqueIndex("product_catalog_org_key_uq").on(t.orgId, t.key), index("product_catalog_org_name_idx").on(t.orgId, t.nameKey), index("product_catalog_org_hs_idx").on(t.orgId, t.hsCode), orgRls("product_catalog_rls")],
 ).enableRLS();
 
+/** Chi phí và điều chỉnh trị giá người khai nhập ở bước OCR & kiểm tra (ValueCharges) – một dòng mỗi hồ sơ, đọc lại chứng từ không ghi đè. */
+export const valueCharges = pgTable(
+  "value_charges",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id")
+      .notNull()
+      .references(() => dossiers.id, { onDelete: "cascade" }),
+    data: jsonb("data").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex("value_charges_org_dossier_uq").on(t.orgId, t.dossierId), orgRls("value_charges_rls")],
+).enableRLS();
+
 /** Lần chạy AI Agent (HS → ánh xạ → dựng tờ khai → số hóa). `tasks` = AgentRun.tasks; `log` = dòng nhật ký. */
 export const agentRuns = pgTable(
   "agent_runs",

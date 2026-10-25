@@ -176,3 +176,26 @@ describe("fpt-mock: IDA tờ khai nhánh (TK_FIC / TK_BNO / TK_DNO)", () => {
     expect((await call(token, {}, "c2")).errorList).toBeNull();
   });
 });
+
+describe("fpt-mock: EDA tờ khai nhánh", () => {
+  const eda = (branch: Record<string, unknown>, tkId: string) => {
+    const req = clone(edaRequest) as typeof edaRequest & { objVN_EDA: Record<string, unknown> };
+    Object.assign(req.objVN_EDA, { tK_ID: tkId, ...branch });
+    return req;
+  };
+  type Res = { errorList: { errorCode: string; indexCode: string }[] | null; objEDA: { objMsgResult: { decNumber: string } }[] | null };
+  it("EDA nhánh: tờ 1 số mới, tờ 2 tham chiếu tờ 1 khác số; BNO > DNO hoặc FIC lạ → lỗi", async () => {
+    let n = 0;
+    await new Promise<void>((r) => server.close(() => r()));
+    await start({ nextDeclarationNo: () => `30000000000${++n}` });
+    const token = await login();
+    const call = async (b: Record<string, unknown>, id: string) => (await (await post("/api/EDA", eda(b, id), token)).json()) as Res;
+    const a = await call({ tK_FIC: "F", tK_BNO: 1, tK_DNO: 2 }, "e1");
+    const no1 = a.objEDA![0]!.objMsgResult.decNumber;
+    const b = await call({ tK_FIC: no1, tK_BNO: 2, tK_DNO: 2 }, "e2");
+    expect(b.errorList).toBeNull();
+    expect(b.objEDA![0]!.objMsgResult.decNumber).not.toBe(no1);
+    expect((await call({ tK_FIC: "399999999999", tK_BNO: 2, tK_DNO: 2 }, "e3")).errorList![0]).toMatchObject({ indexCode: "FIC" });
+    expect((await call({ tK_FIC: no1, tK_BNO: 3, tK_DNO: 2 }, "e4")).errorList![0]).toMatchObject({ indexCode: "BNO" });
+  });
+});

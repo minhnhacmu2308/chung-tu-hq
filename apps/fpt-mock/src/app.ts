@@ -84,6 +84,8 @@ export function createFptMock(opts: MockOptions = {}) {
   /** Tờ khai nhánh (TK_FIC/TK_BNO/TK_DNO): tờ 1 ghi "F" (hoặc bỏ trống) và nhận số mới; tờ k ≥ 2 phải tham chiếu số tờ khai đầu tiên mock này đã cấp. */
   const branchErrors = (kind: Kind, head: Record<string, unknown>): FptError[] => {
     const bno = Number(head["tK_BNO"] ?? head["TK_BNO"] ?? 1) || 1;
+    const dno = Number(head["tK_DNO"] ?? head["TK_DNO"] ?? 0) || 0;
+    if (dno > 0 && bno > dno) return [mockError("MOCK-REQ", "BNO", "Branch Number", `Số nhánh (tK_BNO ${bno}) lớn hơn tổng số tờ khai (tK_DNO ${dno}).`)];
     if (bno < 2) return [];
     const fic = String(head["tK_FIC"] ?? head["TK_FIC"] ?? "").trim();
     const first = byNo.get(fic);

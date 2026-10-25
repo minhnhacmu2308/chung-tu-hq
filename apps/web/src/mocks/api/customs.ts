@@ -2,7 +2,7 @@
 // Mỗi nghiệp vụ gửi đi: thông điệp OUT ngay, thông điệp IN "đến" sau ~2,5 giây (màn hình chỉ thấy thông điệp có at <= bây giờ → poll).
 // Khi phản hồi đã đến, settle() áp stageAfter + tác dụng phụ (số tờ khai, phân luồng, mở lại tờ khai, thông quan…).
 import {
-  baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
+  baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
   operationAvailability, operationsFor, queryOpFor, stageAfter,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
   type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
@@ -103,6 +103,26 @@ function syncDossierCleared(db: MockDb, dossier: Dossier, force = false) {
   else if (dossier.status === "SUBMITTED" || dossier.status === "APPROVED") Object.assign(dossier, { status: "CLEARED", updatedAt: nowIso() });
 }
 
+const isEditingStage = (st: CustomsStage) => st === "RECALLED" || st === "AMEND_RECALLED";
+
+/** Tờ đã có số tờ khai (khác NOT_SENT) của lô. */
+const numberedSheets = (db: MockDb, dossierId: string) =>
+  branchesOf(db.lineItems.filter((i) => i.dossierId === dossierId)).map((sh) => ({ no: sh.no, stage: flowOf(db, dossierId, sh.no).stage })).filter((x) => hasDeclarationNumber(x.stage));
+
+/** R3: lô nhiều tờ – chỉ tiêu chung dùng chung mọi tờ, nên mọi tờ đã có số phải đang gọi về sửa (RECALLED / AMEND_RECALLED) trước khi truyền lại / mở lại. */
+function recallFirstError(db: MockDb, dossierId: string): ApiError | null {
+  if (branchCountOf(db, dossierId) <= 1) return null;
+  const not = numberedSheets(db, dossierId).filter((x) => !isEditingStage(x.stage)).map((x) => x.no);
+  return not.length ? reasonApiError("INVALID_STATE", "SHEETS_RECALL_FIRST", { sheets: not.join(", ") }) : null;
+}
+
+/** Nghiệp vụ gửi nội dung tờ theo giai đoạn khi truyền lại (IDA/EDA lần đầu hoặc sau gọi về, IDA01/EDA01 sau gọi sửa đổi); null = tờ không cần gửi. */
+function contentOpFor(stage: CustomsStage, direction: Dossier["direction"]): CustomsOperation | null {
+  if (stage === "NOT_SENT" || stage === "RECALLED") return opFor(direction, "IDA");
+  if (stage === "AMEND_RECALLED") return opFor(direction, "IDA01");
+  return null;
+}
+
 /** Thông điệp đã đến của tờ, cũ trước. */
 const seenOf = (db: MockDb, c: Ctx, now: number): BranchMessage[] =>
   db.customsMessages.filter((m) => m.dossierId === c.dossier.id && (m.branch ?? 1) === c.branch && Date.parse(m.at) <= now).sort((a, b) => a.at.localeCompare(b.at));
@@ -182,11 +202,15 @@ function apply(db: MockDb, c: Ctx) {
   }
   if (b === "IDD") c.flow.clearAt = null;
   if (p.op === "AMA" || p.op === "AMB" || p.op === "AMC") applyPostOperation(db, c.dossier.id, c.branch, p.op, p.doneAt, r?.declarationNo ?? "");
-  else if (isRecallOperation(p.op)) reopen(db, c.dossier.id);
-  // Lô nhiều tờ: tờ k được cấp số → khai tạm nối tiếp tờ k+1 (tờ 1 đứng đầu vì các tờ sau mang số tờ 1 ở ô 1.2).
-  if (b === "IDA" && c.branch < c.of) {
+  else if (isRecallOperation(p.op)) {
+    // Lô nhiều tờ: chỉ mở lại tờ khai khi mọi tờ đã có số đều đang gọi về sửa (lô một tờ: như trước).
+    if (numberedSheets(db, c.dossier.id).every((x) => isEditingStage(x.stage))) reopen(db, c.dossier.id);
+  }
+  // Lô nhiều tờ: tờ k khai tạm (lần đầu, hoặc truyền lại sau gọi về) xong → tờ k+1 nối tiếp theo giai đoạn của nó (chưa có số / RECALLED → IDA, AMEND_RECALLED → IDA01).
+  if ((b === "IDA" || b === "IDA01") && c.branch < c.of) {
     const next = load(db, c.dossier.id, c.branch + 1);
-    if (next.flow.stage === "NOT_SENT" && !next.flow.pending) send(db, next, c.dossier.direction === "NK" ? "IDA" : "EDA", at);
+    const nextOp = contentOpFor(next.flow.stage, c.dossier.direction);
+    if (nextOp && !next.flow.pending) send(db, next, nextOp, at);
   }
 }
 
@@ -396,6 +420,22 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   if (!a.enabled) throw new ApiError("OPERATION_LOCKED", a.reason || "Nghiệp vụ chưa thực hiện được ở giai đoạn này", 400, { reason: a.reasonCode, params: a.reasonParams });
   if (a.action === "EDIT") throw new ApiError("NOT_APPROVED", a.reason ?? "Sửa tờ khai và phê duyệt lại trước", 400, { reason: a.reasonCode, params: a.reasonParams });
   if (a.action === "START_POST_EDIT") throw reasonApiError("POST_EDIT_REQUIRED", "START_POST_EDIT_FIRST", undefined, "Lập bản khai bổ sung ở bước 7 “Sửa sau thông quan” trước khi khai AMA");
+  if (c.of > 1 && isContentOperation(op) && op !== "AMA") {
+    // Lần truyền mới (tờ khai vừa duyệt lại): mọi tờ đã có số phải đang gọi về sửa (R3).
+    if (c.decl?.status === "APPROVED") {
+      const recall = recallFirstError(db, dossierId);
+      if (recall) throw recall;
+    }
+    if (c.branch > 1) {
+      // Thứ tự §6.4: tờ 1 phải có số (ô 1.2 của tờ k mang số tờ 1), tờ 1 và tờ trước không còn đang gọi về sửa chưa khai tạm lại.
+      const first = flowOf(db, dossierId, 1).stage;
+      const prev = flowOf(db, dossierId, c.branch - 1).stage;
+      if (!hasDeclarationNumber(first)) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ 1 chưa có số tờ khai – khai tạm tờ 1 trước`);
+      if (c.flow.stage === "NOT_SENT" && !hasDeclarationNumber(prev)) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ ${c.branch - 1} chưa khai tạm – khai tạm lần lượt từng tờ`);
+      const recalled = [1, c.branch - 1].find((j) => isEditingStage(flowOf(db, dossierId, j).stage));
+      if (recalled) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ ${recalled} chưa khai tạm lại sau khi gọi về sửa – truyền lại từ tờ 1`);
+    }
+  }
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
   send(db, c, op, now);
@@ -414,8 +454,12 @@ export const submitDeclaration = (dossierId: string, certificateId: string) =>
     if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
     settle(db, Date.now());
     const c = load(db, dossierId);
-    if (c.flow.stage !== "NOT_SENT" && c.flow.stage !== "RECALLED") throw new ApiError("ALREADY_SUBMITTED", "Tờ khai đã được khai tạm – không gửi trùng");
-    perform(db, dossierId, dossier.direction === "NK" ? "IDA" : "EDA", Date.now());
+    // Lô nhiều tờ: truyền lại / gửi mới chỉ khi mọi tờ đã có số đang gọi về sửa; tờ 1 đang chờ sửa đổi (AMEND_RECALLED) gửi IDA01.
+    const recall = recallFirstError(db, dossierId);
+    if (recall) throw recall;
+    const op = c.of > 1 ? contentOpFor(c.flow.stage, dossier.direction) : c.flow.stage === "NOT_SENT" || c.flow.stage === "RECALLED" ? opFor(dossier.direction, "IDA") : null;
+    if (!op) throw new ApiError("ALREADY_SUBMITTED", "Tờ khai đã được khai tạm – không gửi trùng");
+    perform(db, dossierId, op, Date.now());
   });
 
 /** Bắt đầu sửa đổi sau thông quan: CLEARED → POST_EDITING, lập bản khai bổ sung AMA (tờ khai gốc không mở lại). */
@@ -606,7 +650,8 @@ function branchView(db: MockDb, c: Ctx, now: number): BranchSubmission {
     no: c.branch,
     of: c.of,
     stage,
-    state: "APPROVED",
+    // Gửi lỗi: thông điệp mới nhất của tờ là lỗi (gửi lại / gửi tiếp thành công thì hết).
+    state: seen.at(-1)?.result === "ERROR" ? "SEND_FAILED" : "APPROVED",
     declarationNo: result?.declarationNo ?? null,
     channel: result?.channel ?? null,
     started: all.length > 0,

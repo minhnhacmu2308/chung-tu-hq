@@ -307,3 +307,45 @@ describe("tờ khai nhánh (mock)", () => {
     expect((await getSubmission(BIG)).summary.cleared).toBe(1);
   });
 });
+
+describe("tờ khai nhánh: gọi về sửa và truyền lại (R3)", () => {
+  it("gọi về sửa riêng tờ 2 → chưa mở lại tờ khai, truyền lại bị chặn: phải gọi về các tờ 1, 3", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 2);
+    const b = await sheets(BIG);
+    expect(b.map((x) => x.stage)).toEqual(["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
+    expect(decl(BIG).status).toBe("SUBMITTED");
+    await expect(submitDeclaration(BIG, CERT)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "SHEETS_RECALL_FIRST", params: { sheets: "1, 3" } });
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
+  });
+
+  it("gọi về đủ mọi tờ → mở lại → duyệt lại → truyền lại lần lượt tờ 1 → 2 → 3", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 1);
+    await runB(BIG, "IDB", 2);
+    expect(decl(BIG).status).toBe("SUBMITTED"); // còn tờ 3 chưa gọi về
+    await runB(BIG, "IDB", 3);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["RECALLED", "RECALLED", "RECALLED"]);
+    expect(decl(BIG).status).toBe("DRAFT");
+    expect(dossier(BIG)).toMatchObject({ step: "review", status: "NEEDS_REVIEW" });
+    await approveDeclaration(BIG);
+    // Tờ sau không khai tạm lại trước khi tờ 1 / tờ trước xong.
+    await expect(performOperation(BIG, "IDA", 3)).rejects.toMatchObject({ message: expect.stringContaining("truyền lại từ tờ 1") });
+    await submitDeclaration(BIG, CERT);
+    wait(9_000);
+    const s = await getSubmission(BIG);
+    expect(s.branches.map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    const outs = getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDA" && m.direction === "OUT" && m.summary.includes("sau khi gọi sửa"));
+    expect(outs.map((m) => m.branch ?? 1)).toEqual([1, 2, 3]);
+    expect(outs.map((m) => m.at)).toEqual([...outs.map((m) => m.at)].sort());
+  });
+
+  it("tờ k ≥ 2 không khai tạm khi tờ 1 chưa có số; lỗi gửi của một tờ → state SEND_FAILED trong summary.problems", async () => {
+    expect(await err(performOperation(BIG, "IDA", 2))).toMatchObject({ code: "INVALID_STATE", message: expect.stringContaining("tờ 1 chưa có số tờ khai") });
+    await preDeclareAll(BIG);
+    getDb().customsMessages.push({ id: "msg_e3", dossierId: BIG, branch: 3, operation: "HYS", direction: "OUT", result: "ERROR", summary: "Lỗi", at: new Date(Date.now() - 500).toISOString(), payloadPreview: "{}" });
+    const s = await getSubmission(BIG);
+    expect(s.branches.map((x) => x.state)).toEqual(["APPROVED", "APPROVED", "SEND_FAILED"]);
+    expect(s.summary.problems).toEqual([{ no: 3, kind: "SEND_FAILED" }]);
+  });
+});

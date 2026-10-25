@@ -53,6 +53,7 @@ export const REASON_TEXT_VI = {
   DECLARATION_NOT_TRANSMITTABLE: "Tờ khai chưa truyền được: {blockers}",
   DECLARATION_SPEC_INVALID: "Tờ khai chưa đúng đặc tả truyền Hải quan: {issues}",
   SENT_SHEETS_CHANGED: "Tờ {sheets} chưa gọi về nhưng nội dung đã khai bị đổi ({fields}) – gọi về các tờ này hoặc hoàn tác",
+  SENT_SHEETS_UNVERIFIED: "Tờ {sheets} khai trước khi hệ thống lưu nội dung đã gửi – không kiểm tra được, gọi về các tờ này trước khi sửa",
   SHEET_COUNT_CHANGED: "Đã khai {planned} tờ khai (đã được cấp số) mà lô hàng nay cần {now} tờ – không truyền; hủy tờ khai thừa hoặc khai lại trước",
   SHEET_ORDER: "Tờ {sheet}: chờ tờ {waitFor} gửi nội dung trước – truyền theo thứ tự tờ khai",
   SHEET_ORDER_DECLARE: "Tờ {sheet}: chờ tờ {waitFor} khai tạm xong trước khi khai chính thức",

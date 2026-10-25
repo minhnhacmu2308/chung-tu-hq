@@ -138,15 +138,15 @@ const sentSheetsOf = (db: MockDb, dossierId: string) =>
   });
 
 /**
- * Lô nhiều tờ (thay R3, như backend sentSheetsError): tờ chưa gọi về (còn hiệu lực ở Hải quan) phải giữ đúng nội dung đã gửi; lệch / không có ảnh chụp
- * → SENT_SHEETS_CHANGED (chặn duyệt + truyền). Lô một tờ → null.
+ * Lô nhiều tờ (thay R3, như backend sentSheetsError): tờ chưa gọi về (còn hiệu lực ở Hải quan) phải giữ đúng nội dung đã gửi; lệch → SENT_SHEETS_CHANGED,
+ * không có ảnh chụp → SENT_SHEETS_UNVERIFIED (chặn duyệt + truyền). Lô một tờ → null.
  */
 export function sentSheetsMockError(db: MockDb, dossierId: string): ApiError | null {
   if (branchCountOf(db, dossierId) <= 1) return null;
   const decl = db.declarations.find((d) => d.dossierId === dossierId);
   if (!decl) return null;
-  const params = sentSheetsReason(decl.kind, sentSheetsCheck(sentSheetsOf(db, dossierId)));
-  return params ? reasonApiError("BLOCKER_FAILED", "SENT_SHEETS_CHANGED", params) : null;
+  const r = sentSheetsReason(decl.kind, sentSheetsCheck(sentSheetsOf(db, dossierId)));
+  return r ? reasonApiError("BLOCKER_FAILED", r.reason, r.params) : null;
 }
 
 /** Nghiệp vụ gửi nội dung tờ theo giai đoạn khi truyền lại (IDA/EDA lần đầu hoặc sau gọi về, IDA01/EDA01 sau gọi sửa đổi); null = tờ không cần gửi. */

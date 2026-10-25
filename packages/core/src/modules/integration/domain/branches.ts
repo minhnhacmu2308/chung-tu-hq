@@ -53,11 +53,11 @@ export function sentSheetsDiff(p: DeclarationPayload, sheets: SentSheet[]): { no
 
 /**
  * Lô nhiều tờ: tờ còn hiệu lực ở Hải quan mà nội dung hiện tại khác nội dung đã gửi → SENT_SHEETS_CHANGED (chặn duyệt + truyền, bất biến 7).
- * Tờ còn hiệu lực KHÔNG có ảnh chụp (gửi trước khi có tính năng) không kiểm được → cũng liệt kê (phải gọi về). Lô một tờ: null.
+ * Tờ còn hiệu lực KHÔNG có ảnh chụp (gửi trước khi có tính năng) không kiểm được → SENT_SHEETS_UNVERIFIED (ưu tiên, phải gọi về). Lô một tờ: null.
  */
 export function sentSheetsError(p: DeclarationPayload, sheets: SentSheet[]): DomainError | null {
   if (sheets.length <= 1) return null;
   const check = sentSheetsCheck(sheets.map((s) => ({ ...s, current: sheetSnapshot(p, s.no) })));
-  const params = sentSheetsReason(p.kind, check);
-  return params ? reasonError("BLOCKER_FAILED", "SENT_SHEETS_CHANGED", params, { changed: check.changed, unverified: check.unverified }) : null;
+  const r = sentSheetsReason(p.kind, check);
+  return r ? reasonError("BLOCKER_FAILED", r.reason, r.params, { changed: check.changed, unverified: check.unverified }) : null;
 }

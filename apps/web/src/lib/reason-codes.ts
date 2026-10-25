@@ -12,10 +12,19 @@ const REASONS: Record<UiLocale, Record<ReasonCode, string>> = REASON_MESSAGES;
 /** Mã có trong bộ nhãn của giao diện. */
 export const isKnownReason = (code: string | undefined): code is ReasonCode => code !== undefined && has(REASONS.vi, code);
 
-/** Tham số cần dịch theo ngôn ngữ (server gửi chữ tiếng Việt kèm cờ): SENT_SHEETS_CHANGED chỉ dòng hàng đổi → `fields` = "dòng hàng" theo ngôn ngữ. */
+/**
+ * Tham số cần dịch theo ngôn ngữ (server gửi chữ vi kèm thành phần): SENT_SHEETS_CHANGED → `fields` ghép lại từ `numbers` (số chỉ tiêu) + `lineSheets`
+ * (tờ có dòng hàng đổi) theo nhãn ngôn ngữ; params cũ chỉ có `linesOnly` = "1" → "dòng hàng" theo ngôn ngữ.
+ */
 function localizedParams(code: ReasonCode, params: ReasonParams | undefined, locale: UiLocale): ReasonParams {
-  if (code === "SENT_SHEETS_CHANGED" && String(params?.linesOnly) === "1") return { ...params, fields: REASON_PARAM_MESSAGES[locale].linesOnly };
-  return params ?? {};
+  if (code !== "SENT_SHEETS_CHANGED" || !params) return params ?? {};
+  const t = REASON_PARAM_MESSAGES[locale];
+  if (typeof params.numbers === "string") {
+    const numbers = params.numbers;
+    const lineSheets = typeof params.lineSheets === "string" ? params.lineSheets : "";
+    return { ...params, fields: !numbers ? t.lines : lineSheets ? `${numbers}${t.separator}${fill(t.linesOf, { sheets: lineSheets })}` : numbers };
+  }
+  return String(params.linesOnly) === "1" ? { ...params, fields: t.lines } : params;
 }
 
 /**

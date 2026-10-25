@@ -105,7 +105,7 @@ describe("guard tờ chưa gọi về (SENT_SHEETS_CHANGED, thay R3)", () => {
     seedOf(h, 1, "PRE_DECLARED");
     seedOf(h, 2, "RECALLED");
     seedOf(h, 3, "PRE_DECLARED", { sent: false });
-    expect(await guard()).toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "3" } });
+    expect(await guard()).toMatchObject({ reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: "3" } });
   });
   it("tờ đã thông quan / RECALLED không xét", async () => {
     lot("CLEARED", "RECALLED", "RECALLED");

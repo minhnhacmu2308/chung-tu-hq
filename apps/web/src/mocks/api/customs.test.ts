@@ -336,6 +336,20 @@ describe("tờ khai nhánh: gọi về sửa và truyền lại", () => {
     expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDA" && m.direction === "OUT").map((m) => m.branch ?? 1)).toEqual([1, 2, 3, 2]);
   });
 
+  it("đổi cả chỉ tiêu chung lẫn dòng tờ 1 → fields kèm \"dòng hàng tờ 1\"; ngày khai dự kiến (NGAY_DK, hệ thống) đổi → không chặn; tờ còn hiệu lực không có ảnh chụp → SENT_SHEETS_UNVERIFIED", async () => {
+    await recallSheet2();
+    const ngay = decl(BIG).fields.find((f) => f.code === "NGAY_DK");
+    if (ngay) ngay.value = "2099-01-01";
+    else decl(BIG).fields.push({ ...field("CQHQ"), code: "NGAY_DK", value: "2099-01-01" });
+    await approveDeclaration(BIG);
+    decl(BIG).status = "DRAFT";
+    field("CQHQ").value = "01AB – Chi cục khác";
+    getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo)[9]!.description = "khác";
+    await expect(approveDeclaration(BIG)).rejects.toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", lineSheets: "1", fields: expect.stringMatching(/; dòng hàng tờ 1$/) } });
+    delete getDb().customsFlows[`${BIG}:3`]!.sent;
+    await expect(approveDeclaration(BIG)).rejects.toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: "3" } });
+  });
+
   it("sửa trị giá dòng tờ 2 → 1.51 (tổng trị giá hóa đơn) đổi → chặn duyệt nêu 1.51; sửa mô tả dòng tờ 2 → duyệt được", async () => {
     await recallSheet2();
     const line = getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo)[59]!;

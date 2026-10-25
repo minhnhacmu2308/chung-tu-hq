@@ -9,7 +9,8 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import { reasonError } from "../../../../shared/errors.js";
 import { DOSSIER, hansol, ORG } from "../../domain/test/shipment.js";
 import { getAgentRun, runAgent, startAgentRun } from "../agent-run.js";
-import { refreshFromShipment } from "../customs-bridge.js";
+import { getDeclarationSnapshot, markDeclarationDraft, refreshFromShipment } from "../customs-bridge.js";
+import { sentSheetsError, sheetSnapshot } from "../../../integration/index.js";
 import { approveDeclaration, getDeclarationView, moveToReview, updateDeclarationField } from "../declaration.js";
 import { confirmHs, listHsCatalog, listLineItems, unconfirmHs } from "../line-items.js";
 import type { DeclarationDeps } from "../ports.js";
@@ -316,6 +317,39 @@ describe("tổng theo tờ khai nhánh (>50 dòng)", () => {
     return unwrap(await getDeclarationView(deps, declarant, D));
   };
   const sum = (xs: string[]) => xs.reduce((a, x) => a.plus(x), new Decimal(0)).toFixed();
+
+  it("guard nội dung đã gửi qua dựng lại thật: khai ngày D, gọi về tờ 2, hôm sau xác nhận lại HS dòng tờ 2 (rebuildDraft – NGAY_DK đổi) → duyệt được; sửa chỉ tiêu chung thật → chặn", async () => {
+    await withItems(120);
+    for (const it of unwrap(await listLineItems(deps, declarant, D))) unwrap(await confirmHs(deps, declarant, it.id, "8482.10.00"));
+    unwrap(await moveToReview(deps, declarant, D));
+    unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
+    unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));
+    unwrap(await approveDeclaration(deps, approver, D));
+    // Ngày D: Hải quan nhận đủ 3 tờ – ảnh chụp đã gửi = nội dung lúc đó (như raw.sent sau IDA). Rồi gọi về tờ 2 (tờ 1, 3 còn hiệu lực).
+    // Payload như cổng DeclarationReader của container (integration/infrastructure/customs-adapters).
+    const payloadNow = async () => {
+      const x = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
+      return { kind: x.kind, direction: x.direction, currency: x.currency, fields: x.fields, items: x.items, adjustments: x.adjustments, containers: x.containers };
+    };
+    const sentPayload = await payloadNow();
+    const sent = [1, 2, 3].map((no) => sheetSnapshot(sentPayload, no));
+    const stages = ["PRE_DECLARED", "RECALLED", "PRE_DECLARED"] as const;
+    deps = { ...deps, sentSheetsGuard: async () => sentSheetsError(await payloadNow(), stages.map((stage, i) => ({ no: i + 1, stage, declarationNo: `10400000000${i + 1}`, sent: sent[i]! }))) };
+    // Hôm sau (cùng tuần tỷ giá): mở lại, bỏ xác nhận rồi xác nhận lại HS dòng 60 (tờ 2) → dựng lại nháp với đồng hồ mới.
+    deps = { ...deps, clock: fixedClock("2026-10-15T03:00:00.000Z") };
+    unwrap(await markDeclarationDraft(deps, declarant, D));
+    const line60 = unwrap(await listLineItems(deps, declarant, D)).find((i) => i.lineNo === 60)!;
+    unwrap(await unconfirmHs(deps, declarant, line60.id));
+    unwrap(await confirmHs(deps, declarant, line60.id, "8482.10.00"));
+    const now = await payloadNow();
+    expect(now.fields.NGAY_DK?.value).toBe("2026-10-15");
+    expect(sentPayload.fields.NGAY_DK?.value).toBe("2026-10-14");
+    expect(unwrap(await approveDeclaration(deps, approver, D))).toMatchObject({ status: "APPROVED" });
+    // Sửa chỉ tiêu chung thật (mã kho) → tờ 1, 3 lệch nội dung Hải quan giữ → chặn duyệt.
+    unwrap(await markDeclarationDraft(deps, declarant, D));
+    unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS02 – Kho khác"));
+    expect(await approveDeclaration(deps, approver, D)).toMatchObject({ ok: false, error: { reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } } });
+  });
 
   it("120 dòng → 3 nhánh, tờ 3 = dòng 101..120, tổng các nhánh = tổng tờ khai", async () => {
     const v = await withItems(120);

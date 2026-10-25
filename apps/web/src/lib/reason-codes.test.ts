@@ -51,6 +51,18 @@ describe("reasonText", () => {
     expect(reasonText("SENT_SHEETS_CHANGED", lines, undefined, "zh")).toBe("第1, 3页未召回，但已申报内容已更改（商品行）——请召回这些页或撤销更改");
     expect(reasonText("SENT_SHEETS_CHANGED", { sheets: "2", fields: "1.51", linesOnly: "0" }, undefined, "en")).toContain("(1.51)");
   });
+  it("SENT_SHEETS_CHANGED đổi cả chỉ tiêu chung lẫn dòng: fields ghép lại theo ngôn ngữ từ numbers + lineSheets; vi trùng câu backend", () => {
+    const p = { sheets: "1, 3", fields: "1.51; dòng hàng tờ 3", numbers: "1.51", lineSheets: "3", linesOnly: "0" };
+    expect(reasonText("SENT_SHEETS_CHANGED", p, undefined, "vi")).toBe(reasonVi("SENT_SHEETS_CHANGED", p));
+    expect(reasonText("SENT_SHEETS_CHANGED", p, undefined, "en")).toBe("Sheets 1, 3 were not recalled but their declared content changed (1.51; line items of sheet(s) 3) – recall these sheets or undo the change");
+    expect(reasonText("SENT_SHEETS_CHANGED", p, undefined, "zh")).toBe("第1, 3页未召回，但已申报内容已更改（1.51；第3页商品行）——请召回这些页或撤销更改");
+  });
+  it("SENT_SHEETS_UNVERIFIED (tờ khai trước khi lưu nội dung đã gửi) có đủ 3 ngôn ngữ", () => {
+    const p = { sheets: "1, 3" };
+    expect(reasonText("SENT_SHEETS_UNVERIFIED", p, undefined, "vi")).toBe("Tờ 1, 3 khai trước khi hệ thống lưu nội dung đã gửi – không kiểm tra được, gọi về các tờ này trước khi sửa");
+    expect(reasonText("SENT_SHEETS_UNVERIFIED", p, undefined, "en")).toBe("Sheets 1, 3 were declared before the system recorded sent content – cannot be verified; recall these sheets before editing");
+    expect(reasonText("SENT_SHEETS_UNVERIFIED", p, undefined, "zh")).toBe("第 1, 3 张在系统记录已发送内容之前申报——无法核对，请先召回这些页再修改");
+  });
 });
 
 describe("errorText", () => {

@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { CustomsStage } from "./customs-flow.js";
 import { awaitingContent, recallExempt } from "./customs-summary.js";
 import { appFieldMeta, extraFieldMeta } from "./declaration-layout/index.js";
+import { fillReason, type ReasonCode } from "./reason-codes.js";
 
 /** `common`: chỉ tiêu chung đã gửi (mã → giá trị, cộng `@ADJ`/`@CONT`/`@CUR`); `lines`: JSON ổn định các dòng hàng của tờ (kèm ô HANG.<id>.*). */
 export const SentSnapshotSchema = z.object({ common: z.record(z.string(), z.string()), lines: z.string() });
@@ -18,6 +19,12 @@ export function stableJson(v: unknown): string {
 
 /** Chỉ tiêu riêng từng tờ (1.2: số tờ khai đầu tiên, số nhánh) – khác nhau giữa các tờ, không thuộc nội dung chung. */
 const PER_SHEET = new Set(["TK_FIC", "TK_BNO"]);
+/**
+ * Chỉ tiêu hệ thống tự tính theo đồng hồ mỗi lần dựng tờ khai (không từ chứng từ / mặc định / người khai) – không so: dựng lại hôm sau tự đổi,
+ * Hải quan tự ghi ngày đăng ký của mình. Đã rà mapping IDA/EDA: chỉ NGAY_DK (1.11/2.10, vnDate(now)). Tỷ giá KHÔNG thuộc đây (đổi tuần → RATE_WEEK_CHANGED).
+ */
+export const SNAPSHOT_VOLATILE_FIELDS: readonly string[] = ["NGAY_DK"];
+const VOLATILE = new Set(SNAPSHOT_VOLATILE_FIELDS);
 const ITEM_PREFIX = "HANG.";
 
 /** Nội dung một tờ khai nhánh như được gửi: `fields` đã gồm chỉ tiêu tính cho tờ (TK_DNO, TK_TP…), `items` = dòng hàng của tờ. */
@@ -31,7 +38,7 @@ export type SentSheetInput = {
 
 export function sentSnapshotOf(p: SentSheetInput): SentSnapshot {
   const common: Record<string, string> = {};
-  for (const [code, value] of Object.entries(p.fields)) if (!PER_SHEET.has(code) && !code.startsWith(ITEM_PREFIX)) common[code] = value;
+  for (const [code, value] of Object.entries(p.fields)) if (!PER_SHEET.has(code) && !VOLATILE.has(code) && !code.startsWith(ITEM_PREFIX)) common[code] = value;
   common["@ADJ"] = stableJson(p.adjustments);
   common["@CONT"] = stableJson(p.containers);
   common["@CUR"] = p.currency;
@@ -46,7 +53,7 @@ export function sentSnapshotOf(p: SentSheetInput): SentSnapshot {
 
 /** Mã chỉ tiêu chung khác nhau (ô vắng = ô rỗng) và dòng hàng có khác không. */
 export function sentSnapshotDiff(now: SentSnapshot, sent: SentSnapshot): { common: string[]; lines: boolean } {
-  const keys = [...new Set([...Object.keys(now.common), ...Object.keys(sent.common)])];
+  const keys = [...new Set([...Object.keys(now.common), ...Object.keys(sent.common)])].filter((k) => !VOLATILE.has(k));
   return { common: keys.filter((k) => (now.common[k] ?? "") !== (sent.common[k] ?? "")).sort(), lines: now.lines !== sent.lines };
 }
 
@@ -82,16 +89,32 @@ export function declarationFieldNo(kind: "IDA" | "EDA", code: string): string {
   return SPECIAL_NO[code]?.[kind] ?? appFieldMeta(kind, code)?.no ?? extraFieldMeta(kind, code)?.no ?? code;
 }
 
-/** Chữ tiếng Việt của tham số `fields` khi chỉ dòng hàng đổi (giao diện dịch theo `linesOnly`). */
-export const SENT_LINES_ONLY_VI = "dòng hàng";
+/** Nhãn ghép tham số `fields` của SENT_SHEETS_CHANGED (bản vi; giao diện truyền nhãn theo ngôn ngữ). */
+export const SENT_FIELDS_VI = { lines: "dòng hàng", linesOf: "dòng hàng tờ {sheets}" };
 
 /**
- * Tham số lý do SENT_SHEETS_CHANGED: `sheets` – tờ đổi + tờ không kiểm được (tăng dần); `fields` – số chỉ tiêu chung đã đổi (sắp theo số),
- * hoặc "dòng hàng" khi không chỉ tiêu chung nào đổi (`linesOnly` = "1"). Không có gì → null.
+ * Chữ `fields`: số chỉ tiêu chung đã đổi; đổi cả dòng hàng → thêm "dòng hàng tờ n"; chỉ dòng hàng → "dòng hàng" (tờ đã nêu ở {sheets}).
+ * Backend ghép bản vi; giao diện ghép lại theo ngôn ngữ từ `numbers` + `lineSheets`.
  */
-export function sentSheetsReason(kind: "IDA" | "EDA", c: SentSheetsCheck): { sheets: string; fields: string; linesOnly: "0" | "1" } | null {
-  const nos = [...new Set([...c.changed.map((x) => x.no), ...c.unverified])].sort((a, b) => a - b);
-  if (!nos.length) return null;
-  const numbers = [...new Set(c.changed.flatMap((x) => x.common).map((code) => declarationFieldNo(kind, code)))].sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
-  return { sheets: nos.join(", "), fields: numbers.length ? numbers.join(", ") : SENT_LINES_ONLY_VI, linesOnly: numbers.length ? "0" : "1" };
+export function sentFieldsText(numbers: string, lineSheets: string, labels: { lines: string; linesOf: string } = SENT_FIELDS_VI): string {
+  if (!numbers) return labels.lines;
+  return lineSheets ? `${numbers}; ${fillReason(labels.linesOf, { sheets: lineSheets })}` : numbers;
+}
+
+export type SentSheetsReason =
+  | { reason: Extract<ReasonCode, "SENT_SHEETS_UNVERIFIED">; params: { sheets: string } }
+  | { reason: Extract<ReasonCode, "SENT_SHEETS_CHANGED">; params: { sheets: string; fields: string; numbers: string; lineSheets: string; linesOnly: "0" | "1" } };
+
+/**
+ * Lý do chặn: còn tờ còn hiệu lực không có ảnh chụp (khai trước khi có tính năng) → SENT_SHEETS_UNVERIFIED nêu các tờ đó (ưu tiên – phải gọi về,
+ * không kiểm được); không thì tờ có nội dung đổi → SENT_SHEETS_CHANGED: `sheets` (tăng dần), `numbers` – số chỉ tiêu chung đã đổi (sắp theo số),
+ * `lineSheets` – tờ có dòng hàng đổi, `fields` – chữ vi ghép (sentFieldsText), `linesOnly` = "1" khi không chỉ tiêu chung nào đổi. Không có gì → null.
+ */
+export function sentSheetsReason(kind: "IDA" | "EDA", c: SentSheetsCheck): SentSheetsReason | null {
+  if (c.unverified.length) return { reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: [...c.unverified].sort((a, b) => a - b).join(", ") } };
+  if (!c.changed.length) return null;
+  const nos = [...new Set(c.changed.map((x) => x.no))].sort((a, b) => a - b);
+  const numbers = [...new Set(c.changed.flatMap((x) => x.common).map((code) => declarationFieldNo(kind, code)))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })).join(", ");
+  const lineSheets = c.changed.filter((x) => x.lines).map((x) => x.no).sort((a, b) => a - b).join(", ");
+  return { reason: "SENT_SHEETS_CHANGED", params: { sheets: nos.join(", "), fields: sentFieldsText(numbers, lineSheets), numbers, lineSheets, linesOnly: numbers ? "0" : "1" } };
 }

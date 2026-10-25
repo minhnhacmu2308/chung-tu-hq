@@ -2019,7 +2019,7 @@ describe("tờ khai nhánh – sửa sau review toàn nhánh", () => {
     seedBranch(2, { state: "CLEARED", raw: { stage: "POST_EDITING" } });
     seedBranch(3, { state: "REJECTED", raw: { stage: "REJECTED" } });
     seedBranch(4, { raw: { stage: "DECLARED" } });
-    expect(await checkSentSheets(deps, ORG, D)).toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "4" } });
+    expect(await checkSentSheets(deps, ORG, D)).toMatchObject({ reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: "4" } });
     uow.data.results.find((r) => r.branch === 4)!.raw = { stage: "DECLARED", sent: sheetSnapshot((await decls.get(ORG, D))!.payload, 4) };
     expect(await checkSentSheets(deps, ORG, D)).toBeNull();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { declarationFieldNo, isActiveSheet, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, SentSnapshotSchema, stableJson } from "./sent-sheets.js";
+import { declarationFieldNo, isActiveSheet, sentFieldsText, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, SentSnapshotSchema, SNAPSHOT_VOLATILE_FIELDS, stableJson } from "./sent-sheets.js";
 
 const base = () => ({
   fields: { CQHQ: "03CE", TK_FIC: "F", TK_BNO: "1", TK_DNO: "3", TK_TP: "100", "HANG.it1.X": "a" } as Record<string, string>,
@@ -40,6 +40,18 @@ describe("sentSnapshotOf / sentSnapshotDiff", () => {
     b4.items[0]!.amount = "6";
     expect(sentSnapshotDiff(sentSnapshotOf(b4), sent)).toEqual({ common: [], lines: true });
   });
+  it("ô do hệ thống tính theo đồng hồ (NGAY_DK – ngày khai dự kiến) không thuộc nội dung so sánh: dựng lại ngày khác không làm khác", () => {
+    expect(SNAPSHOT_VOLATILE_FIELDS).toContain("NGAY_DK");
+    const b0 = base();
+    b0.fields.NGAY_DK = "2026-10-14";
+    const sent = sentSnapshotOf(b0);
+    expect(sent.common.NGAY_DK).toBeUndefined();
+    const b1 = base();
+    b1.fields.NGAY_DK = "2026-10-15";
+    expect(sentSnapshotDiff(sentSnapshotOf(b1), sent)).toEqual({ common: [], lines: false });
+    // Ảnh chụp cũ còn mang NGAY_DK cũng không làm khác.
+    expect(sentSnapshotDiff(sentSnapshotOf(b1), { ...sent, common: { ...sent.common, NGAY_DK: "2026-10-14" } }).common).toEqual([]);
+  });
   it("ô vắng và ô rỗng coi như nhau", () => {
     const sent = sentSnapshotOf(base());
     const b = base();
@@ -70,11 +82,21 @@ describe("isActiveSheet / sentSheetsCheck / sentSheetsReason", () => {
     ]);
     expect(r).toEqual({ changed: [{ no: 1, common: ["CQHQ"], lines: false }], unverified: [3] });
   });
-  it("lý do: tờ đổi + tờ không kiểm được; số chỉ tiêu từ catalog; chỉ dòng hàng → linesOnly", () => {
+  it("lý do: số chỉ tiêu từ catalog; đổi cả chỉ tiêu chung lẫn dòng → kèm \"dòng hàng tờ n\"; chỉ dòng hàng → linesOnly", () => {
     expect(sentSheetsReason("IDA", { changed: [], unverified: [] })).toBeNull();
     expect(sentSheetsReason("IDA", { changed: [{ no: 3, common: ["TK_TP"], lines: true }, { no: 1, common: ["TK_TP", "@ADJ"], lines: false }], unverified: [] }))
-      .toEqual({ sheets: "1, 3", fields: "1.49, 1.51", linesOnly: "0" });
-    expect(sentSheetsReason("IDA", { changed: [{ no: 2, common: [], lines: true }], unverified: [4] })).toEqual({ sheets: "2, 4", fields: "dòng hàng", linesOnly: "1" });
+      .toEqual({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", fields: "1.49, 1.51; dòng hàng tờ 3", numbers: "1.49, 1.51", lineSheets: "3", linesOnly: "0" } });
+    expect(sentSheetsReason("IDA", { changed: [{ no: 2, common: [], lines: true }], unverified: [] }))
+      .toEqual({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "2", fields: "dòng hàng", numbers: "", lineSheets: "2", linesOnly: "1" } });
+  });
+  it("lý do: tờ còn hiệu lực không có ảnh chụp (dữ liệu cũ) → SENT_SHEETS_UNVERIFIED nêu đúng các tờ đó (ưu tiên – phải gọi về trước)", () => {
+    expect(sentSheetsReason("IDA", { changed: [{ no: 2, common: ["CQHQ"], lines: false }], unverified: [4, 1] })).toEqual({ reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: "1, 4" } });
+  });
+  it("sentFieldsText: ghép số chỉ tiêu + dòng hàng tờ n theo nhãn (giao diện truyền nhãn theo ngôn ngữ)", () => {
+    expect(sentFieldsText("1.51", "")).toBe("1.51");
+    expect(sentFieldsText("", "2")).toBe("dòng hàng");
+    expect(sentFieldsText("1.51", "2, 3")).toBe("1.51; dòng hàng tờ 2, 3");
+    expect(sentFieldsText("1.51", "2", { lines: "line items", linesOf: "line items of sheet(s) {sheets}" })).toBe("1.51; line items of sheet(s) 2");
   });
   it("số chỉ tiêu: TK_TP → 1.51 (IDA) / 2.42 (EDA); mã lạ → giữ mã", () => {
     expect(declarationFieldNo("IDA", "TK_TP")).toBe("1.51");

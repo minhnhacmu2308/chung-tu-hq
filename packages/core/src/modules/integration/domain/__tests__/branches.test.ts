@@ -124,9 +124,15 @@ describe("sheetSnapshot / sentSheetsDiff / sentSheetsError (nội dung đã gử
   it("sentSheetsError: liệt kê tờ đổi + tờ còn hiệu lực không có sent (dữ liệu cũ); số chỉ tiêu 1.51", () => {
     const p = edit((x) => { x.items.find((i) => i.lineNo === 60)!.amount = "99"; });
     const s = sheets(sent, ["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
-    expect(sentSheetsError(p, s)).toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", fields: "1.51", linesOnly: "0" } });
+    expect(sentSheetsError(p, s)).toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", fields: "1.51", numbers: "1.51", lineSheets: "", linesOnly: "0" } });
     expect(sentSheetsError(sent, s)).toBeNull();
     const legacy = s.map((x) => (x.no === 3 ? { ...x, sent: null } : x));
-    expect(sentSheetsError(sent, legacy)).toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "3", linesOnly: "1" } });
+    expect(sentSheetsError(sent, legacy)).toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_UNVERIFIED", params: { sheets: "3" }, message: "Tờ 3 khai trước khi hệ thống lưu nội dung đã gửi – không kiểm tra được, gọi về các tờ này trước khi sửa" });
+  });
+  it("sentSheetsError: đổi cả chỉ tiêu chung lẫn dòng của tờ còn hiệu lực → fields kèm \"dòng hàng tờ n\"; NGAY_DK (ngày khai dự kiến, hệ thống) đổi → không khác", () => {
+    const p = edit((x) => { x.fields.CQHQ = { value: "01AB" }; x.items.find((i) => i.lineNo === 10)!.description = "khác"; x.fields.NGAY_DK = { value: "2026-12-31" }; });
+    const e = sentSheetsError(p, sheets(sent, ["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]));
+    expect(e).toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", lineSheets: "1", fields: expect.stringMatching(/; dòng hàng tờ 1$/) } });
+    expect(sentSheetsError(edit((x) => { x.fields.NGAY_DK = { value: "2026-12-31" }; }), sheets(sent))).toBeNull();
   });
 });

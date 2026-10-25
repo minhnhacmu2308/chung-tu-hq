@@ -49,6 +49,7 @@ export const REASON_MESSAGES = defineMessages({
     DECLARATION_NOT_TRANSMITTABLE: "Tờ khai chưa truyền được: {blockers}",
     DECLARATION_SPEC_INVALID: "Tờ khai chưa đúng đặc tả truyền Hải quan: {issues}",
     SENT_SHEETS_CHANGED: "Tờ {sheets} chưa gọi về nhưng nội dung đã khai bị đổi ({fields}) – gọi về các tờ này hoặc hoàn tác",
+    SENT_SHEETS_UNVERIFIED: "Tờ {sheets} khai trước khi hệ thống lưu nội dung đã gửi – không kiểm tra được, gọi về các tờ này trước khi sửa",
     SHEET_COUNT_CHANGED: "Đã khai {planned} tờ khai (đã được cấp số) mà lô hàng nay cần {now} tờ – không truyền; hủy tờ khai thừa hoặc khai lại trước",
     SHEET_ORDER: "Tờ {sheet}: chờ tờ {waitFor} gửi nội dung trước – truyền theo thứ tự tờ khai",
     SHEET_ORDER_DECLARE: "Tờ {sheet}: chờ tờ {waitFor} khai tạm xong trước khi khai chính thức",
@@ -111,6 +112,7 @@ export const REASON_MESSAGES = defineMessages({
     DECLARATION_NOT_TRANSMITTABLE: "The declaration cannot be filed yet: {blockers}",
     DECLARATION_SPEC_INVALID: "The declaration does not match the Customs transmission spec: {issues}",
     SENT_SHEETS_CHANGED: "Sheets {sheets} were not recalled but their declared content changed ({fields}) – recall these sheets or undo the change",
+    SENT_SHEETS_UNVERIFIED: "Sheets {sheets} were declared before the system recorded sent content – cannot be verified; recall these sheets before editing",
     SHEET_COUNT_CHANGED: "{planned} sheet(s) already declared (numbered) but the shipment now needs {now} – not sent; cancel the extra declaration(s) or redeclare first",
     SHEET_ORDER: "Sheet {sheet}: waiting for sheet {waitFor} to send its content first – sheets are sent in order",
     SHEET_ORDER_DECLARE: "Sheet {sheet}: waiting for sheet {waitFor} to finish pre-declaration before official declaration",
@@ -173,6 +175,7 @@ export const REASON_MESSAGES = defineMessages({
     DECLARATION_NOT_TRANSMITTABLE: "报关单暂无法传输：{blockers}",
     DECLARATION_SPEC_INVALID: "报关单不符合海关传输规范：{issues}",
     SENT_SHEETS_CHANGED: "第{sheets}页未召回，但已申报内容已更改（{fields}）——请召回这些页或撤销更改",
+    SENT_SHEETS_UNVERIFIED: "第 {sheets} 张在系统记录已发送内容之前申报——无法核对，请先召回这些页再修改",
     SHEET_COUNT_CHANGED: "已申报 {planned} 份报关单（已获编号），但货物现需 {now} 份 – 不予传输；请先撤销多余报关单或重新申报",
     SHEET_ORDER: "第 {sheet} 张：请等待第 {waitFor} 张先发送内容 – 按报关单顺序传输",
     SHEET_ORDER_DECLARE: "第 {sheet} 张：请等待第 {waitFor} 张先完成临时申报，再正式申报",
@@ -293,9 +296,12 @@ export const DOMAIN_ERROR_MESSAGES = defineMessages({
   },
 });
 
-/** Tham số dịch theo ngôn ngữ của câu lý do: SENT_SHEETS_CHANGED khi chỉ dòng hàng đổi (`linesOnly` = "1") → `fields`. Bản vi trùng SENT_LINES_ONLY_VI (@kb/contracts). */
+/**
+ * Tham số dịch theo ngôn ngữ của câu lý do SENT_SHEETS_CHANGED: `fields` ghép lại từ `numbers` + `lineSheets` (sentFieldsText, @kb/contracts).
+ * Bản vi trùng SENT_FIELDS_VI (@kb/contracts) để câu vi giống hệt câu backend.
+ */
 export const REASON_PARAM_MESSAGES = defineMessages({
-  vi: { linesOnly: "dòng hàng" },
-  en: { linesOnly: "line items" },
-  zh: { linesOnly: "商品行" },
+  vi: { lines: "dòng hàng", linesOf: "dòng hàng tờ {sheets}", separator: "; " },
+  en: { lines: "line items", linesOf: "line items of sheet(s) {sheets}", separator: "; " },
+  zh: { lines: "商品行", linesOf: "第{sheets}页商品行", separator: "；" },
 });

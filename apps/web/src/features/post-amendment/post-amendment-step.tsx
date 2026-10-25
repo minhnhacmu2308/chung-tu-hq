@@ -92,6 +92,9 @@ export function PostAmendmentStep({ dossier }: StepProps) {
     },
     onError: toastMutationError(t.copyFailed),
   });
+  // Kết quả nhân bản thuộc tờ vừa bấm – đổi tờ thì bỏ.
+  const resetCopy = copy.reset;
+  useEffect(() => resetCopy(), [branch, resetCopy]);
 
   if (subQ.isLoading || (subQ.data && q.isLoading)) return <StepLoading />;
   if (q.isError) return <StepError error={q.error} onRetry={() => void q.refetch()} />;

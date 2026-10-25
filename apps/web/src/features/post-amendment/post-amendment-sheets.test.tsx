@@ -3,6 +3,8 @@
 // + nút nhân bản sang các tờ đã thông quan khác, kết quả áp dụng / bỏ qua (lý do dịch).
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Button } from "@kb/ui";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostAmendment, PostAmendmentView, SubmissionView } from "@kb/contracts";
 import { getDb, resetDb } from "@/mocks/db";
@@ -54,6 +56,26 @@ describe("Bước 7 – lô 3 tờ", () => {
     expect(await screen.findByText("Đã áp dụng cho tờ 1 – mỗi bản vẫn phê duyệt và khai riêng.", {}, T)).toBeTruthy();
     expect(screen.getByText("Tờ 3: chưa thông quan")).toBeTruthy();
     await expectNoA11yViolations(container);
+  }, 20_000);
+
+  it("đổi tờ → kết quả nhân bản của tờ trước không còn hiện", async () => {
+    api.sub = submissionOf([branch(1, 3, "POST_EDITING"), branch(2, 3, "POST_EDITING"), branch(3, 3, "PRE_DECLARED")]);
+    // Đổi ?branch= rồi vẽ lại (router giả không tự vẽ lại): nút phụ của test bật lại khung.
+    function Harness() {
+      const [, setN] = useState(0);
+      return (
+        <>
+          <Button onClick={() => { api.search = "step=post&branch=1&sub=pick"; setN((n) => n + 1); }}>sheet-1</Button>
+          <PostAmendmentStep dossier={dossier()} goTo={vi.fn()} />
+        </>
+      );
+    }
+    renderWithProviders(<Harness />);
+    await userEvent.click(await screen.findByRole("button", { name: "Tạo AMA cùng nội dung cho các tờ đã thông quan khác" }, T));
+    expect(await screen.findByText("Đã áp dụng cho tờ 1 – mỗi bản vẫn phê duyệt và khai riêng.", {}, T)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "sheet-1" }));
+    await screen.findByText("Tờ 1/3 – số tờ khai 107624410321", {}, T);
+    expect(screen.queryByText(/Đã áp dụng cho tờ/)).toBeNull();
   }, 20_000);
 
   it("không sửa chỉ tiêu chung → không cảnh báo", async () => {

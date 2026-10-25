@@ -426,7 +426,7 @@ export const SHEET_MESSAGES = defineMessages({
     postAmend: "Sửa đổi sau thông quan",
     opsTitle: "Nghiệp vụ của tờ",
     sheetLog: "Nhật ký thông điệp của tờ",
-    queryAria: "Tra cứu trạng thái tờ {no} ({op})",
+    queryAria: "Tra cứu trạng thái ({op}) – tờ {no}",
   },
   en: {
     sheetsDesc: "This shipment is split into {of} declarations (up to 50 lines each). Sheet 1 is filed provisionally first and the following sheets are filed automatically in turn; each sheet is cleared and handled separately.",
@@ -443,7 +443,7 @@ export const SHEET_MESSAGES = defineMessages({
     postAmend: "Post-clearance amendment",
     opsTitle: "Operations for this sheet",
     sheetLog: "Message log for this sheet",
-    queryAria: "Query status of sheet {no} ({op})",
+    queryAria: "Check status ({op}) – sheet {no}",
   },
   zh: {
     sheetsDesc: "本批货物拆分为 {of} 份报关单（每份最多 50 行）。第 1 份先临时申报，后续各份自动依次临时申报；每份单独通关和办理业务。",
@@ -460,6 +460,6 @@ export const SHEET_MESSAGES = defineMessages({
     postAmend: "通关后修改",
     opsTitle: "本份报关单业务",
     sheetLog: "本份报文日志",
-    queryAria: "查询第 {no} 份状态（{op}）",
+    queryAria: "查询状态 ({op}) – 第 {no} 份",
   },
 });

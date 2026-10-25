@@ -76,6 +76,35 @@ describe("Bước Khai báo – lô 3 tờ", () => {
     await userEvent.click(within(c2).getAllByRole("button", { name: "Gửi lại IDA" })[0]!);
     expect(api.resend).toHaveBeenCalledWith("dos_028", "IDA", 2);
   }, 20_000);
+
+  it("nút tra cứu theo tờ: tên truy cập bắt đầu bằng chữ hiển thị (WCAG 2.5.3)", async () => {
+    api.current = submissionOf([branch(1, 3, "PRE_DECLARED"), branch(2, 3, "PRE_DECLARED"), branch(3, 3, "NOT_SENT")]);
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByRole("region", { name: /^Tờ 2\/3/ }, T);
+    const btn = within(card(/^Tờ 2\/3/)).getByRole("button", { name: /^Tra cứu trạng thái \(IID\)/ });
+    expect(btn.getAttribute("aria-label")).toBe("Tra cứu trạng thái (IID) – tờ 2");
+  }, 20_000);
+
+  it("tờ đang gửi rồi lỗi gửi → khối 'Nghiệp vụ của tờ' tự mở (không chỉ lúc gắn)", async () => {
+    const sending = pipelineFor("NOT_SENT").map((r) => (r.op === "IDA" ? { ...r, status: "SENDING" as const } : r));
+    const failed = pipelineFor("NOT_SENT").map((r) => (r.op === "IDA" ? { ...r, status: "ERROR" as const } : r));
+    api.current = submissionOf([
+      branch(1, 3, "PRE_DECLARED"),
+      branch(2, 3, "NOT_SENT", { pipeline: sending, started: true, inProgress: true }),
+      branch(3, 3, "NOT_SENT"),
+    ]);
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByRole("region", { name: /^Tờ 2\/3/ }, T);
+    const ops = () => within(card(/^Tờ 2\/3/)).getByRole("button", { name: /Nghiệp vụ của tờ/ });
+    expect(ops().getAttribute("aria-expanded")).toBe("false");
+    api.current = submissionOf([
+      branch(1, 3, "PRE_DECLARED"),
+      branch(2, 3, "NOT_SENT", { state: "SEND_FAILED", pipeline: failed, started: true }),
+      branch(3, 3, "NOT_SENT"),
+    ]);
+    await within(card(/^Tờ 2\/3/)).findByText("Lỗi gửi", {}, T);
+    expect(ops().getAttribute("aria-expanded")).toBe("true");
+  }, 20_000);
 });
 
 describe("Bước Khai báo – lô 1 tờ", () => {

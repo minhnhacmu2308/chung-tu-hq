@@ -693,6 +693,11 @@ function SheetCard({
   const sending = pipeline.find((r) => r.status === "SENDING");
   const rejection = b.rejection && !AMA_OPS.has(b.rejection.operation) ? b.rejection : null;
   const channel = b.channel ?? b.result?.channel ?? null;
+  // Khối nghiệp vụ mở sẵn khi tờ có lỗi – cả khi lỗi đến sau (tờ đang gửi → bị từ chối / lỗi gửi), không chỉ lúc gắn.
+  const [opsOpen, setOpsOpen] = useState(problem !== null);
+  useEffect(() => {
+    if (problem) setOpsOpen(true);
+  }, [problem]);
   return (
     <Card aria-labelledby={titleId}>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
@@ -759,7 +764,7 @@ function SheetCard({
           ) : hideNext ? null : (
             <NextStep s={s} next={next} sending={sending} firstSend={false} h={h} certPicker={null} certNote={null} />
           )}
-          <Disclosure title={sh.opsTitle} defaultOpen={problem !== null}>
+          <Disclosure title={sh.opsTitle} open={opsOpen} onOpenChange={setOpsOpen}>
             <Stack gap="md">
               {CUSTOMS_PHASES.filter((p) => pipeline.some((r) => r.phase === p.id)).map((p, i) => (
                 <PhaseSection key={p.id} index={i + 1} phase={p} rows={pipeline.filter((r) => r.phase === p.id)} h={h} />

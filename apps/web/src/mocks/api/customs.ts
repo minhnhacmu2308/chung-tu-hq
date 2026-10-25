@@ -3,7 +3,7 @@
 // Khi phản hồi đã đến, settle() áp stageAfter + tác dụng phụ (số tờ khai, phân luồng, mở lại tờ khai, thông quan…).
 import {
   baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
-  operationAvailability, operationsFor, queryOpFor, recallExempt, sheetApproved, sheetOrderWait, stageAfter,
+  operationAvailability, operationsFor, orderedOperation, queryOpFor, recallExempt, sheetApproved, sheetOrderWait, stageAfter,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
   type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
@@ -440,6 +440,11 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
       if (waitFor !== null) throw reasonApiError("INVALID_STATE", "SHEET_ORDER", { sheet: c.branch, waitFor });
       if (c.flow.stage === "NOT_SENT" && !hasDeclarationNumber(flowOf(db, dossierId, c.branch - 1).stage)) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ ${c.branch - 1} chưa khai tạm – khai tạm lần lượt từng tờ`);
     }
+  }
+  if (c.of > 1 && orderedOperation(op) === "DECLARE") {
+    // Khai chính thức tờ k: mọi tờ trước đã khai tạm xong (cùng sheetOrderWait với backend; không bắt tờ trước đã khai chính thức).
+    const waitFor = sheetOrderWait(Array.from({ length: c.of }, (_, i) => ({ no: i + 1, stage: flowOf(db, dossierId, i + 1).stage })), c.branch);
+    if (waitFor !== null) throw reasonApiError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: c.branch, waitFor });
   }
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);

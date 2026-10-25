@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { awaitingContent, dossierCustomsSummary, lockedSheetCount, recallExempt, sheetApproved, sheetCountChanged, sheetOrderWait } from "./customs-summary.js";
+import { awaitingContent, dossierCustomsSummary, lockedSheetCount, orderedOperation, recallExempt, sheetApproved, sheetCountChanged, sheetOrderWait } from "./customs-summary.js";
 
 describe("dossierCustomsSummary – trạng thái hồ sơ gộp từ các tờ khai nhánh", () => {
   it("3 nhánh [CLEARED, REJECTED, DECLARED] → 1/3 thông quan, tờ 2 bị từ chối, chưa xong", () => {
@@ -87,5 +87,18 @@ describe("sheetOrderWait – thứ tự gửi nội dung tờ khai nhánh (truy�
   });
   it("thứ tự mảng không quan trọng (theo số tờ)", () => {
     expect(sheetOrderWait([{ no: 3, stage: "RECALLED" }, { no: 1, stage: "RECALLED" }, { no: 2, stage: "PRE_DECLARED" }], 3)).toBe(1);
+  });
+});
+
+describe("orderedOperation – nghiệp vụ truyền theo thứ tự tờ", () => {
+  it("gửi nội dung → CONTENT; khai chính thức → DECLARE (theo baseOp); còn lại không theo thứ tự", () => {
+    for (const op of ["IDA", "IDA01", "EDA", "EDA01"] as const) expect(orderedOperation(op)).toBe("CONTENT");
+    for (const op of ["IDC", "IDE", "EDC", "EDE"] as const) expect(orderedOperation(op)).toBe("DECLARE");
+    for (const op of ["IDB", "IDD", "EDB", "AMA", "AMB", "AMC", "IID", "IEX", "HYS", "CONT", "PORT_FEE"] as const) expect(orderedOperation(op)).toBeNull();
+  });
+  it("khai chính thức tờ 2: tờ 1 đã khai tạm / đã khai chính thức / thông quan / bị từ chối → không chờ; tờ 1 gọi về (RECALLED) → chờ tờ 1", () => {
+    const s = (...stages: Parameters<typeof awaitingContent>[0][]) => stages.map((stage, i) => ({ no: i + 1, stage }));
+    for (const st of ["PRE_DECLARED", "DECLARED", "CLEARED", "REJECTED"] as const) expect(sheetOrderWait(s(st, "PRE_DECLARED"), 2)).toBeNull();
+    expect(sheetOrderWait(s("RECALLED", "PRE_DECLARED"), 2)).toBe(1);
   });
 });

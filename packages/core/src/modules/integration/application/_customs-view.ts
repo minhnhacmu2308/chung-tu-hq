@@ -1,5 +1,5 @@
 import {
-  CUSTOMS_OPERATIONS, dossierCustomsSummary, nextCustomsOperation, operationAvailability, operationsFor, queryOpFor,
+  CUSTOMS_OPERATIONS, dossierCustomsSummary, nextCustomsOperation, operationAvailability, operationsFor, orderedOperation, queryOpFor, reasonVi, sheetOrderWait,
   type BranchSubmission, type CustomsMessage, type CustomsOperation, type CustomsResult, type CustomsSummary, type DeclarationStatus, type PipelineRow, type SubmissionView,
 } from "@kb/contracts";
 import { stageOf } from "../domain/state-machine.js";
@@ -80,9 +80,32 @@ export function toBranchSubmission(b: BranchInput): BranchSubmission {
   };
 }
 
+/**
+ * Lô nhiều tờ: dòng gửi nội dung (IDA/IDA01/EDA/EDA01 – SHEET_ORDER) và khai chính thức (IDC/IDE/EDC/EDE – SHEET_ORDER_DECLARE) của tờ đang chờ tờ trước
+ * khai tạm xong khóa lại, cùng điều kiện với performOperation (sheetOrderWait) – màn Truyền không báo bấm được rồi mới bị từ chối.
+ */
+export function lockPipelinesByOrder(branches: BranchSubmission[]): BranchSubmission[] {
+  if (branches.length < 2) return branches;
+  const stages = branches.map((b) => ({ no: b.no, stage: b.stage }));
+  return branches.map((b) => {
+    const waitFor = sheetOrderWait(stages, b.no);
+    if (waitFor === null) return b;
+    const reasonParams = { sheet: b.no, waitFor };
+    return {
+      ...b,
+      pipeline: b.pipeline.map((r): PipelineRow => {
+        const kind = orderedOperation(r.op);
+        if (!r.enabled || !kind) return r;
+        const reasonCode = kind === "CONTENT" ? "SHEET_ORDER" : "SHEET_ORDER_DECLARE";
+        return { ...r, enabled: false, reason: reasonVi(reasonCode, reasonParams), reasonCode, reasonParams };
+      }),
+    };
+  });
+}
+
 /** Trường cấp hồ sơ (tương thích) = tờ 1; `branches` mọi tờ theo thứ tự (phần tử đầu là tờ 1). */
 export function toSubmissionView(p: { declarationStatus: DeclarationStatus; hsUnconfirmed: number; branches: BranchInput[] }): SubmissionView {
-  const branches = p.branches.map(toBranchSubmission);
+  const branches = lockPipelinesByOrder(p.branches.map(toBranchSubmission));
   const first = branches[0]!;
   const { no: _no, of: _of, state: _state, declarationNo: _dn, channel: _ch, ...legacy } = first;
   const s = dossierCustomsSummary(branches);

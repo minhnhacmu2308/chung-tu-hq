@@ -1,6 +1,6 @@
 // Gửi nội dung tờ khai theo từng tờ khai nhánh (spec tách tờ khai §6.1–6.4): khóa outbox, ghim phiên bản + lần duyệt, guard từng tờ,
 // và enqueueBranchPreDeclare (chuỗi nối tiếp của worker, người khai bấm, truyền lại sau mở lại). Dùng chung submit / perform / worker.
-import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, recallExempt, requiredGapsText, sameRateWeek, sheetCountChanged, sheetOrderWait, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
+import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, orderedOperation, recallExempt, requiredGapsText, sameRateWeek, sheetCountChanged, sheetOrderWait, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -71,10 +71,14 @@ export function sheetCountError(results: Pick<ResultRow, "branch" | "declaration
  * Thứ tự truyền (spec §6.2/§6.4 – luôn gửi Hải quan theo thứ tự tờ): tờ `branch` ≥ 2 chỉ nhận nội dung (IDA/IDA01/EDA/EDA01) khi mọi tờ trước còn nhận
  * nội dung đã được gửi ở lần truyền này (không còn NOT_SENT / RECALLED / AMEND_RECALLED; miễn tờ đã thông quan / bị từ chối – R7). Không thì Hải quan nhận
  * tờ k với TK_FIC và chỉ tiêu chung cũ của tờ trước. Dùng chung performOperation (mọi giai đoạn) và enqueueBranchPreDeclare (chuỗi + người khai).
+ * Khai chính thức (IDC/IDE/EDC/EDE, orderedOperation = DECLARE) chờ cùng điều kiện (mọi tờ trước đã khai tạm xong; KHÔNG bắt tờ trước đã khai chính thức – D2)
+ * nhưng báo SHEET_ORDER_DECLARE. Nghiệp vụ không theo thứ tự tờ → null.
  */
-export function sheetOrderError(results: Pick<ResultRow, "branch" | "state" | "raw">[], branch: number): DomainError | null {
+export function sheetOrderError(results: Pick<ResultRow, "branch" | "state" | "raw">[], branch: number, op: CustomsOperation): DomainError | null {
+  const kind = orderedOperation(op);
+  if (!kind) return null;
   const waitFor = sheetOrderWait(results.map((r) => ({ no: r.branch, stage: stageOf(r) })), branch);
-  return waitFor === null ? null : reasonError("INVALID_STATE", "SHEET_ORDER", { sheet: branch, waitFor });
+  return waitFor === null ? null : reasonError("INVALID_STATE", kind === "CONTENT" ? "SHEET_ORDER" : "SHEET_ORDER_DECLARE", { sheet: branch, waitFor });
 }
 
 /**
@@ -149,7 +153,7 @@ export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: O
   if (!target) return err(reasonError("INVALID_STATE", "NOT_SUBMITTED_YET"));
   const op = contentOpFor(stageOf(target), snap.payload.kind);
   if (!op) return err(domainError("INVALID_STATE", `Tờ ${branch}: không ở giai đoạn gửi nội dung tờ khai`));
-  const order = sheetOrderError(results, branch);
+  const order = sheetOrderError(results, branch, op);
   if (order) return err(order);
   const s = sheetOf(snap.payload, branch, branch === 1 ? null : first?.declarationNo ?? null);
   const gaps = gapsError(s);

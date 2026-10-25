@@ -141,7 +141,7 @@ describe("Bước Khai báo – lô 3 tờ, tờ khai đã duyệt lại sau g�
     expect(within(c3).getAllByText("Chờ tờ 2").length).toBeGreaterThan(0);
     expect(within(c3).getByText("Tờ này tự gửi lại nội dung tờ khai sau khi tờ 2 gửi lại xong.")).toBeTruthy();
     await userEvent.click(within(c3).getByRole("button", { name: /Nghiệp vụ của tờ/ }));
-    expect(within(c3).getByText("Tờ 3: chờ tờ 2 khai tạm trước – truyền theo thứ tự tờ khai")).toBeTruthy();
+    expect(within(c3).getByText("Tờ 3: chờ tờ 2 gửi nội dung trước – truyền theo thứ tự tờ khai")).toBeTruthy();
     // Dòng khóa không có nút; tờ 1 vẫn có nút khai tạm.
     expect(within(c3).queryByRole("button", { name: /\(IDA\)/ })).toBeNull();
     expect(within(c2).queryByRole("button", { name: /\(IDA\)/ })).toBeNull();

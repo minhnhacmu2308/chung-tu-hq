@@ -1,6 +1,6 @@
 // Tờ khai nhánh (lô > 50 dòng → N tờ, spec tách tờ khai §6.5/§8) trên bước Khai báo / Sửa sau thông quan – logic thuần, test bằng vitest.
 // SubmissionView: trường cấp hồ sơ = tờ 1 (tương thích), `branches` mọi tờ; JSON cũ không có `branches` → coi như lô 1 tờ.
-import { awaitingContent, isContentOperation, reasonVi, sheetOrderWait, type PipelineRow } from "@kb/contracts";
+import { awaitingContent, orderedOperation, reasonVi, sheetOrderWait, type PipelineRow } from "@kb/contracts";
 import type { BranchSubmission, SubmissionView } from "@/api/customs";
 import { postStepVisible } from "../../post-amendment/ama-wizard";
 
@@ -41,13 +41,29 @@ export function waitingOn(sheets: BranchSubmission[], no: number, declarationSta
 }
 
 /**
- * Tờ đang chờ tờ trước (waitingOn) → nút gửi nội dung (IDA/IDA01/EDA/EDA01) của tờ khóa, lý do SHEET_ORDER – backend cũng từ chối (truyền theo thứ tự tờ).
- * Không chờ → giữ nguyên mảng.
+ * Tờ chờ khai chính thức (IDC/IDE/EDC/EDE): tờ k chỉ khai chính thức khi mọi tờ trước đã khai tạm xong (cùng sheetOrderWait với backend; không bắt tờ trước đã
+ * khai chính thức). Chỉ tính khi tờ đang ở giai đoạn chờ khai chính thức và không đang gửi.
  */
-export function orderLocked(rows: PipelineRow[], no: number, waiting: number | null): PipelineRow[] {
-  if (waiting === null) return rows;
-  const reasonParams = { sheet: no, waitFor: waiting };
-  return rows.map((r) => (r.enabled && isContentOperation(r.op) && r.op !== "AMA" ? { ...r, enabled: false, reason: reasonVi("SHEET_ORDER", reasonParams), reasonCode: "SHEET_ORDER", reasonParams } : r));
+export function declareWaitingOn(sheets: BranchSubmission[], no: number): number | null {
+  const b = sheets[no - 1];
+  if (!b || sheets.length < 2 || (b.stage !== "PRE_DECLARED" && b.stage !== "AMEND_PRE_DECLARED") || b.pipeline.some((r) => r.status === "SENDING")) return null;
+  return sheetOrderWait(sheets, no);
+}
+
+/**
+ * Tờ đang chờ tờ trước → nút gửi nội dung (IDA/IDA01/EDA/EDA01; `waiting`, SHEET_ORDER) và nút khai chính thức (IDC/IDE/EDC/EDE; `declareWaiting`,
+ * SHEET_ORDER_DECLARE) của tờ khóa – backend cũng từ chối (truyền theo thứ tự tờ). Không chờ → giữ nguyên mảng.
+ */
+export function orderLocked(rows: PipelineRow[], no: number, waiting: number | null, declareWaiting: number | null = null): PipelineRow[] {
+  if (waiting === null && declareWaiting === null) return rows;
+  return rows.map((r) => {
+    const kind = orderedOperation(r.op);
+    const waitFor = kind === "CONTENT" ? waiting : kind === "DECLARE" ? declareWaiting : null;
+    if (!r.enabled || waitFor === null) return r;
+    const reasonCode = kind === "CONTENT" ? "SHEET_ORDER" : "SHEET_ORDER_DECLARE";
+    const reasonParams = { sheet: no, waitFor };
+    return { ...r, enabled: false, reason: reasonVi(reasonCode, reasonParams), reasonCode, reasonParams };
+  });
 }
 
 /**

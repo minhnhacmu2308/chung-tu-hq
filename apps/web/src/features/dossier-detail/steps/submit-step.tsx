@@ -32,7 +32,7 @@ import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
-import { anyInProgress, clearedWhileResending, orderLocked, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
+import { anyInProgress, clearedWhileResending, declareWaitingOn, orderLocked, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -573,6 +573,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             of={sheets.length}
             s={sheetView(s, b.no)}
             waiting={waitingOn(sheets, b.no, s.declarationStatus)}
+            declareWaiting={declareWaitingOn(sheets, b.no)}
             problem={problemOf(s, b.no)}
             h={handlersFor(b.no, b.stage, b.nextOp)}
             anyBusy={anyBusy}
@@ -676,12 +677,14 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
  * nghiệp vụ theo giai đoạn và nhật ký của tờ; tờ đã thông quan có nút sang bước 7 (AMA của tờ).
  */
 function SheetCard({
-  b, of, s, waiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost,
+  b, of, s, waiting, declareWaiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost,
 }: {
   b: BranchSubmission;
   of: number;
   s: SubmissionView;
   waiting: number | null;
+  /** Chờ tờ trước khai tạm xong trước khi khai chính thức (IDC/IDE). */
+  declareWaiting: number | null;
   problem: "REJECTED" | "SEND_FAILED" | null;
   h: RowHandlers;
   anyBusy: boolean;
@@ -695,7 +698,8 @@ function SheetCard({
   const stages = useMessages(STAGE_MESSAGES);
   const titleId = useId();
   // Tờ chờ tờ trước (truyền theo thứ tự tờ): nút gửi nội dung khóa, lý do SHEET_ORDER – như backend.
-  const pipeline = orderLocked(b.pipeline.filter((r) => !AMA_OPS.has(r.op)), b.no, waiting);
+  const pipeline = orderLocked(b.pipeline.filter((r) => !AMA_OPS.has(r.op)), b.no, waiting, declareWaiting);
+  const shownWaiting = waiting ?? declareWaiting;
   const next = b.nextOp && !AMA_OPS.has(b.nextOp) ? pipeline.find((r) => r.op === b.nextOp) : undefined;
   const sending = pipeline.find((r) => r.status === "SENDING");
   const rejection = b.rejection && !AMA_OPS.has(b.rejection.operation) ? b.rejection : null;
@@ -719,9 +723,9 @@ function SheetCard({
                 {sh[problem]}
               </Badge>
             )}
-            {waiting && (
+            {shownWaiting && (
               <Badge tone="neutral" icon={<Clock3 />}>
-                {fill(sh.waitingSheet, { no: waiting })}
+                {fill(sh.waitingSheet, { no: shownWaiting })}
               </Badge>
             )}
           </CardTitle>

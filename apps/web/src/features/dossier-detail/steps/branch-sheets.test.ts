@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
-import { anyInProgress, clearedWhileResending, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
+import { anyInProgress, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
 
 describe("sheetsOf", () => {
   it("JSON cũ không có branches → một tờ từ trường cấp hồ sơ", () => {
@@ -84,7 +84,7 @@ describe("orderLocked – khóa nút gửi nội dung của tờ đang chờ t�
   it("tờ chờ → IDA/IDA01 bấm được thành khóa với lý do SHEET_ORDER; nghiệp vụ khác giữ nguyên; không chờ → giữ nguyên", () => {
     const rows = pipelineFor("RECALLED", ["IDA", "IDC"]);
     const locked = orderLocked(rows, 3, 2);
-    expect(locked.find((r) => r.op === "IDA")).toMatchObject({ enabled: false, reasonCode: "SHEET_ORDER", reasonParams: { sheet: 3, waitFor: 2 }, reason: "Tờ 3: chờ tờ 2 khai tạm trước – truyền theo thứ tự tờ khai" });
+    expect(locked.find((r) => r.op === "IDA")).toMatchObject({ enabled: false, reasonCode: "SHEET_ORDER", reasonParams: { sheet: 3, waitFor: 2 }, reason: "Tờ 3: chờ tờ 2 gửi nội dung trước – truyền theo thứ tự tờ khai" });
     expect(locked.find((r) => r.op === "IDC")).toEqual(rows.find((r) => r.op === "IDC"));
     expect(orderLocked(rows, 3, null)).toBe(rows);
   });
@@ -119,5 +119,28 @@ describe("postSheet (tờ mở ở bước 7)", () => {
     expect(postSheet(sheets, "9")).toBe(3);
     expect(postSheet([branch(1, 2, "PRE_DECLARED"), branch(2, 2, "CLEARED")], "abc")).toBe(2);
     expect(postSheet([branch(1, 1, "PRE_DECLARED")], null)).toBe(1);
+  });
+});
+
+describe("khai chính thức (IDC/IDE) chờ tờ trước khai tạm xong", () => {
+  it("declareWaitingOn: tờ PRE_DECLARED chờ tờ trước gần nhất còn chờ gửi nội dung; tờ trước đã khai tạm / thông quan → không chờ; lô một tờ / tờ đang gửi → không chờ", () => {
+    expect(declareWaitingOn([branch(1, 3, "RECALLED"), branch(2, 3, "PRE_DECLARED"), branch(3, 3, "PRE_DECLARED")], 2)).toBe(1);
+    expect(declareWaitingOn([branch(1, 3, "RECALLED"), branch(2, 3, "PRE_DECLARED"), branch(3, 3, "PRE_DECLARED")], 3)).toBe(1);
+    expect(declareWaitingOn([branch(1, 3, "AMEND_RECALLED"), branch(2, 3, "AMEND_PRE_DECLARED"), branch(3, 3, "AMEND_PRE_DECLARED")], 2)).toBe(1);
+    expect(declareWaitingOn([branch(1, 2, "PRE_DECLARED"), branch(2, 2, "PRE_DECLARED")], 2)).toBeNull();
+    expect(declareWaitingOn([branch(1, 2, "CLEARED"), branch(2, 2, "PRE_DECLARED")], 2)).toBeNull();
+    expect(declareWaitingOn([branch(1, 1, "PRE_DECLARED")], 1)).toBeNull();
+    const sending = branch(2, 2, "PRE_DECLARED", { pipeline: pipelineFor("PRE_DECLARED", ["IDC"]).map((r) => (r.op === "IDC" ? { ...r, status: "SENDING" as const } : r)) });
+    expect(declareWaitingOn([branch(1, 2, "RECALLED"), sending], 2)).toBeNull();
+  });
+  it("orderLocked: IDC/IDE/EDC/EDE bấm được thành khóa với SHEET_ORDER_DECLARE; IDA vẫn dùng SHEET_ORDER; nghiệp vụ khác giữ nguyên", () => {
+    const rows = pipelineFor("PRE_DECLARED", ["IDC", "IDB"]);
+    const locked = orderLocked(rows, 2, null, 1);
+    expect(locked.find((r) => r.op === "IDC")).toMatchObject({ enabled: false, reasonCode: "SHEET_ORDER_DECLARE", reasonParams: { sheet: 2, waitFor: 1 }, reason: "Tờ 2: chờ tờ 1 khai tạm xong trước khi khai chính thức" });
+    expect(locked.find((r) => r.op === "IDB")).toEqual(rows.find((r) => r.op === "IDB"));
+    expect(orderLocked(rows, 2, null, null)).toBe(rows);
+    const mixed = orderLocked(pipelineFor("RECALLED", ["IDA", "IDC"]), 3, 2, 1);
+    expect(mixed.find((r) => r.op === "IDA")).toMatchObject({ reasonCode: "SHEET_ORDER", reasonParams: { sheet: 3, waitFor: 2 } });
+    expect(mixed.find((r) => r.op === "IDC")).toMatchObject({ reasonCode: "SHEET_ORDER_DECLARE", reasonParams: { sheet: 3, waitFor: 1 } });
   });
 });

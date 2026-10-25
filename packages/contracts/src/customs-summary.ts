@@ -1,5 +1,7 @@
 // Trạng thái Hải quan gộp của hồ sơ từ các tờ khai nhánh (spec tách tờ khai §6.5) – THUẦN, dùng chung backend (CLEARED khi đủ mọi tờ) và giao diện ("Thông quan k/N").
 import type { CustomsStage } from "./customs-flow.js";
+import { baseOp, isContentOperation } from "./customs-flow.js";
+import type { CustomsOperation } from "./dto/customs.js";
 import type { SubmissionState } from "./api/customs.js";
 
 export type DossierCustomsSummary = {
@@ -58,4 +60,15 @@ export const awaitingContent = (stage: CustomsStage) => stage === "NOT_SENT" || 
 export function sheetOrderWait(sheets: { no: number; stage: CustomsStage }[], no: number): number | null {
   const before = sheets.filter((s) => s.no < no && awaitingContent(s.stage)).map((s) => s.no);
   return before.length ? Math.max(...before) : null;
+}
+
+/**
+ * Nghiệp vụ truyền theo thứ tự tờ (lô nhiều tờ): CONTENT = gửi nội dung (IDA/IDA01/EDA/EDA01), DECLARE = khai chính thức (IDC/IDE/EDC/EDE, theo baseOp).
+ * Cả hai chờ cùng điều kiện sheetOrderWait (mọi tờ trước đã khai tạm xong; không bắt tờ trước đã khai chính thức). Khác (gọi về, AMA…, tra cứu) → null.
+ */
+export function orderedOperation(op: CustomsOperation): "CONTENT" | "DECLARE" | null {
+  if (op === "AMA") return null;
+  if (isContentOperation(op)) return "CONTENT";
+  const b = baseOp(op);
+  return b === "IDC" || b === "IDE" ? "DECLARE" : null;
 }

@@ -2091,7 +2091,7 @@ describe("tờ khai nhánh – luôn truyền theo thứ tự tờ (người kha
     decls.approvedAt = at;
     dossiers.rows[0]!.status = "APPROVED";
   };
-  const order = (sheet: number, waitFor: number) => ({ ok: false, error: { code: "INVALID_STATE", reason: "SHEET_ORDER", params: { sheet, waitFor }, message: `Tờ ${sheet}: chờ tờ ${waitFor} khai tạm trước – truyền theo thứ tự tờ khai` } });
+  const order = (sheet: number, waitFor: number) => ({ ok: false, error: { code: "INVALID_STATE", reason: "SHEET_ORDER", params: { sheet, waitFor }, message: `Tờ ${sheet}: chờ tờ ${waitFor} gửi nội dung trước – truyền theo thứ tự tờ khai` } });
 
   it("3 tờ có số đã gọi về, duyệt lại → IDA tờ 2 / tờ 3 bị chặn (không outbox, tờ khai vẫn APPROVED); IDA tờ 1 → nối 1 → 2 → 3; đang truyền tờ 1 → tờ 3 vẫn chặn", async () => {
     decls.items = lines(120);

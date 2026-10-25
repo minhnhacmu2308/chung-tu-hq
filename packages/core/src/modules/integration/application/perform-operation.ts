@@ -2,7 +2,7 @@
 // nghiệp vụ gửi nội dung giữ bất biến 7, tạo outbox (idempotency theo số lần gửi) → job customs-send. Tra cứu IID/IEX trả lời ngay.
 // Lô nhiều tờ: `branch` (mặc định 1) – kết quả, giai đoạn, nhật ký, outbox của tờ khai nhánh đó (spec tách tờ khai §6.3).
 import {
-  baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, operationAvailability, queryOpFor, sameRateWeek, sheetApproved, vnDateOf, weekStart,
+  baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, operationAvailability, orderedOperation, queryOpFor, sameRateWeek, sheetApproved, vnDateOf, weekStart,
   type CustomsOperation, type OperationResult,
 } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
@@ -59,9 +59,15 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
       if (snap.status === "SUBMITTED" && outbox.some((o) => o.operation === op && pinOfOutbox(o) === pinOf(snap)))
         return err(domainError("INVALID_STATE", `Tờ ${branch}: ${OPERATION_LABELS[op]} đã gửi ở lần truyền này – dùng Gửi lại`));
       // Luôn truyền theo thứ tự tờ (§6.2/§6.4): tờ trước còn chờ gửi nội dung (chưa gửi / đã gọi về chưa gửi lại) → tờ này chờ, không gửi trước (TK_FIC, chỉ tiêu chung).
-      const order = sheetOrderError(results, branch);
+      const order = sheetOrderError(results, branch, op);
       if (order) return err(order);
     }
+  }
+  // Khai chính thức (IDC/IDE/EDC/EDE) lô nhiều tờ: mọi tờ trước đã khai tạm xong (SHEET_ORDER_DECLARE; không bắt tờ trước đã khai chính thức).
+  if (of > 1 && orderedOperation(op) === "DECLARE") {
+    const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));
+    const order = sheetOrderError(results, branch, op);
+    if (order) return err(order);
   }
   if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
 

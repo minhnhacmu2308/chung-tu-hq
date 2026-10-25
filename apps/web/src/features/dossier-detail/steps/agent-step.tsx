@@ -591,7 +591,7 @@ export function AgentStep({ dossier, goTo }: StepProps) {
 
       {view && makesDeclaration && (
         <StickyActionBar>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-48">
             <p className="text-sm font-medium text-fg">
               {fill(t.confirmedCount, { done: confirmed, total: items.length })}
             </p>

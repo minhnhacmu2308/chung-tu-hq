@@ -417,13 +417,13 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
       <StickyActionBar>
         {decl.kind === "IDA" ? (
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-48">
             <p className="text-xs text-fg-muted">{t.totalTaxLabel}</p>
             <p className="text-lg font-semibold tabular-nums text-fg">{formatVnd(totalTax)}</p>
             {totalTax === "0" && <p className="hidden text-xs text-fg-subtle cq-sm:block">{t.noTax}</p>}
           </div>
         ) : (
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-48">
             <p className="text-xs text-fg-muted">{t.exportTax}</p>
             <p className="text-sm font-medium text-fg">{exportTaxText(decl.status, t)}</p>
           </div>

@@ -175,6 +175,7 @@
   - `saveValueCharges` → lỗi `COMMON_LOCKED_SHEETS`.
   - `confirmHs`/`unconfirmHs`/`reclassifyHs`/`answerHsQuestion` dòng 10 → lỗi; dòng 60 → được.
   - `startAgentRun` (dựng lại) → lỗi.
+  - Mọi đường thêm/xóa dòng hàng hiện có (tra trong module declaration/extraction, vd xóa dòng chứng từ) khi chỉ gọi về tờ 3 → lỗi; nếu không có đường nào như vậy ở API, ghi rõ trong report và chỉ kiểm `editBlockFor({ kind: "ADD_REMOVE_LINES" })`.
   - sửa chỉ tiêu chứng từ header (extraction) → lỗi; ô dòng hàng chứng từ của dòng 60 → được, dòng 10 → lỗi; `finishReading` → lỗi.
   - Khi mọi tờ RECALLED → tất cả được (như trước). Lô một tờ → hành vi cũ (test sẵn có xanh).
 - [ ] **Step 3: Chạy** → FAIL.

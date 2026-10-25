@@ -264,9 +264,10 @@ export function declarationEditMode(status: DeclarationStatus, stage: CustomsSta
 export type EditSheet = { no: number; stage: CustomsStage; declarationNo: string | null };
 /**
  * Phạm vi sửa tờ khai theo tờ đã gọi về (spec tách tờ khai IDC/gọi về §2.4): `common` – mọi chỉ tiêu chung (header, vận đơn, trị giá/khoản điều chỉnh…);
- * `lines[n]` – ô dòng hàng của tờ n; `addRemoveLines` – thêm/xóa/đổi thứ tự dòng (làm dịch dòng giữa các tờ); `lockedSheets` – tờ còn hiệu lực ở Hải quan (lý do khóa).
+ * `lines[n]` – ô dòng hàng của tờ n; `addRemoveLines` – thêm/xóa/đổi thứ tự dòng (làm dịch dòng giữa các tờ); `lockedSheets` – tờ còn hiệu lực ở Hải quan (lý do khóa);
+ * `closedSheets` – tờ miễn gọi về (thông quan / sau thông quan / bị từ chối): dòng khóa hẳn, sửa bằng AMA.
  */
-export type DeclarationEditScope = { common: DeclarationEditMode; lines: Record<number, DeclarationEditMode>; addRemoveLines: boolean; lockedSheets: number[] };
+export type DeclarationEditScope = { common: DeclarationEditMode; lines: Record<number, DeclarationEditMode>; addRemoveLines: boolean; lockedSheets: number[]; closedSheets: number[] };
 
 /** Tờ còn hiệu lực ở Hải quan: có số tờ khai, không miễn (thông quan / sau thông quan / từ chối), không đang chờ gửi nội dung. */
 const activeAtCustoms = (s: EditSheet) => !!s.declarationNo && !recallExempt(s.stage) && !awaitingContent(s.stage);
@@ -278,24 +279,25 @@ const activeAtCustoms = (s: EditSheet) => !!s.declarationNo && !recallExempt(s.s
 export function declarationEditScope(status: DeclarationStatus, sheets: EditSheet[]): DeclarationEditScope {
   if (sheets.length <= 1) {
     const mode = declarationEditMode(status, sheets[0]?.stage ?? "NOT_SENT");
-    return { common: mode, lines: { 1: mode }, addRemoveLines: mode !== "LOCKED", lockedSheets: [] };
+    return { common: mode, lines: { 1: mode }, addRemoveLines: mode !== "LOCKED", lockedSheets: [], closedSheets: [] };
   }
   const sorted = [...sheets].sort((a, b) => a.no - b.no);
-  if (status !== "DRAFT") return { common: "LOCKED", lines: Object.fromEntries(sorted.map((s) => [s.no, "LOCKED" as const])), addRemoveLines: false, lockedSheets: [] };
+  if (status !== "DRAFT") return { common: "LOCKED", lines: Object.fromEntries(sorted.map((s) => [s.no, "LOCKED" as const])), addRemoveLines: false, lockedSheets: [], closedSheets: [] };
   const lines: Record<number, DeclarationEditMode> = Object.fromEntries(sorted.map((s) => [s.no, activeAtCustoms(s) ? "LOCKED" : declarationEditMode(status, s.stage)]));
   const lockedSheets = sorted.filter(activeAtCustoms).map((s) => s.no);
-  if (lockedSheets.length) return { common: "LOCKED", lines, addRemoveLines: false, lockedSheets };
+  const closedSheets = sorted.filter((s) => recallExempt(s.stage)).map((s) => s.no);
+  if (lockedSheets.length) return { common: "LOCKED", lines, addRemoveLines: false, lockedSheets, closedSheets };
   const common: DeclarationEditMode = Object.values(lines).includes("AMEND") ? "AMEND" : "FULL";
-  return { common, lines, addRemoveLines: true, lockedSheets };
+  return { common, lines, addRemoveLines: true, lockedSheets, closedSheets };
 }
 
 /** Đích một lần sửa: chỉ tiêu chung / ô dòng hàng của dòng thuộc tờ `sheet` / thêm–xóa dòng / dựng lại tờ khai. */
 export type EditTarget = { kind: "COMMON" } | { kind: "LINE"; sheet: number } | { kind: "ADD_REMOVE_LINES" } | { kind: "REBUILD" };
-export type EditBlock = { reasonCode: "COMMON_LOCKED_SHEETS" | "LINE_SHEET_LOCKED" | "DECLARATION_LOCKED"; params: Record<string, string | number> };
+export type EditBlock = { reasonCode: "COMMON_LOCKED_SHEETS" | "LINE_SHEET_LOCKED" | "LINE_SHEET_CLOSED" | "DECLARATION_LOCKED"; params: Record<string, string | number> };
 
 /**
  * Một quy tắc cho mọi đường sửa (backend + mock + FE): null = được sửa (AMEND vẫn kiểm Phụ lục II bằng `fieldEditBlock`).
- * Bị khóa vì tờ chưa gọi về → COMMON_LOCKED_SHEETS { sheets } / LINE_SHEET_LOCKED { sheet }; khóa vì giai đoạn tờ khai (không nháp, lô một tờ đã khai) → DECLARATION_LOCKED.
+ * Bị khóa vì tờ chưa gọi về → COMMON_LOCKED_SHEETS { sheets } / LINE_SHEET_LOCKED { sheet } (tờ đã thông quan / bị từ chối → LINE_SHEET_CLOSED { sheet }); khóa vì giai đoạn tờ khai (không nháp, lô một tờ đã khai) → DECLARATION_LOCKED.
  * Tờ không có trong phạm vi (dòng vượt số tờ đã lập) → theo chỉ tiêu chung.
  */
 export function editBlockFor(scope: DeclarationEditScope, target: EditTarget): EditBlock | null {
@@ -303,6 +305,7 @@ export function editBlockFor(scope: DeclarationEditScope, target: EditTarget): E
   if (target.kind === "LINE") {
     if ((scope.lines[target.sheet] ?? scope.common) !== "LOCKED") return null;
     const partial = scope.lockedSheets.length > 0 || Object.values(scope.lines).some((m) => m !== "LOCKED");
+    if (partial && scope.closedSheets.includes(target.sheet)) return { reasonCode: "LINE_SHEET_CLOSED", params: { sheet: target.sheet } };
     return partial ? { reasonCode: "LINE_SHEET_LOCKED", params: { sheet: target.sheet } } : { reasonCode: "DECLARATION_LOCKED", params: {} };
   }
   const open = target.kind === "COMMON" ? scope.common !== "LOCKED" : scope.common !== "LOCKED" && scope.addRemoveLines;

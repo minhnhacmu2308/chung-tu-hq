@@ -155,17 +155,17 @@ describe("declarationEditScope / editBlockFor / sheetOfLine – phạm vi sửa 
   const sh = (no: number, stage: CustomsStage, declarationNo: string | null = "10001") => ({ no, stage, declarationNo });
   it("chỉ tờ 2 gọi về, tờ 1, 3 còn hiệu lực → khóa chỉ tiêu chung, chỉ sửa dòng tờ 2, không thêm/xóa dòng", () => {
     expect(declarationEditScope("DRAFT", [sh(1, "PRE_DECLARED"), sh(2, "RECALLED"), sh(3, "PRE_DECLARED")])).toEqual({
-      common: "LOCKED", lines: { 1: "LOCKED", 2: "FULL", 3: "LOCKED" }, addRemoveLines: false, lockedSheets: [1, 3],
+      common: "LOCKED", lines: { 1: "LOCKED", 2: "FULL", 3: "LOCKED" }, addRemoveLines: false, lockedSheets: [1, 3], closedSheets: [],
     });
   });
   it("gọi về tất cả → sửa toàn bộ như cũ", () => {
     expect(declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "RECALLED"), sh(3, "RECALLED")])).toEqual({
-      common: "FULL", lines: { 1: "FULL", 2: "FULL", 3: "FULL" }, addRemoveLines: true, lockedSheets: [],
+      common: "FULL", lines: { 1: "FULL", 2: "FULL", 3: "FULL" }, addRemoveLines: true, lockedSheets: [], closedSheets: [],
     });
   });
   it("tờ 2 gọi về sửa đổi bổ sung, tờ 3 đã thông quan → chung AMEND (chặt nhất); dòng tờ 3 khóa; không tờ nào còn hiệu lực", () => {
     const s = declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "AMEND_RECALLED"), sh(3, "CLEARED")]);
-    expect(s).toMatchObject({ common: "AMEND", lines: { 1: "FULL", 2: "AMEND", 3: "LOCKED" }, lockedSheets: [] });
+    expect(s).toMatchObject({ common: "AMEND", lines: { 1: "FULL", 2: "AMEND", 3: "LOCKED" }, lockedSheets: [], closedSheets: [3] });
   });
   it("tờ chưa từng gửi → sửa được như tờ đã gọi về", () => {
     const s = declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "RECALLED"), sh(3, "NOT_SENT", null)]);
@@ -174,13 +174,13 @@ describe("declarationEditScope / editBlockFor / sheetOfLine – phạm vi sửa 
   });
   it("tờ khai không còn nháp → khóa mọi thứ", () => {
     expect(declarationEditScope("APPROVED", [sh(1, "RECALLED"), sh(2, "RECALLED")])).toEqual({
-      common: "LOCKED", lines: { 1: "LOCKED", 2: "LOCKED" }, addRemoveLines: false, lockedSheets: [],
+      common: "LOCKED", lines: { 1: "LOCKED", 2: "LOCKED" }, addRemoveLines: false, lockedSheets: [], closedSheets: [],
     });
   });
   it("lô một tờ: đúng declarationEditMode như cũ", () => {
-    expect(declarationEditScope("DRAFT", [sh(1, "RECALLED")])).toEqual({ common: "FULL", lines: { 1: "FULL" }, addRemoveLines: true, lockedSheets: [] });
+    expect(declarationEditScope("DRAFT", [sh(1, "RECALLED")])).toEqual({ common: "FULL", lines: { 1: "FULL" }, addRemoveLines: true, lockedSheets: [], closedSheets: [] });
     expect(declarationEditScope("DRAFT", [sh(1, "AMEND_RECALLED")]).common).toBe("AMEND");
-    expect(declarationEditScope("DRAFT", [sh(1, "PRE_DECLARED")])).toEqual({ common: "LOCKED", lines: { 1: "LOCKED" }, addRemoveLines: false, lockedSheets: [] });
+    expect(declarationEditScope("DRAFT", [sh(1, "PRE_DECLARED")])).toEqual({ common: "LOCKED", lines: { 1: "LOCKED" }, addRemoveLines: false, lockedSheets: [], closedSheets: [] });
     expect(declarationEditScope("DRAFT", []).common).toBe("FULL");
   });
   it("editBlockFor: lý do theo từng đích sửa", () => {
@@ -192,7 +192,13 @@ describe("declarationEditScope / editBlockFor / sheetOfLine – phạm vi sửa 
     expect(editBlockFor(partial, { kind: "LINE", sheet: 2 })).toBeNull();
     expect(editBlockFor(partial, { kind: "LINE", sheet: 1 })).toEqual({ reasonCode: "LINE_SHEET_LOCKED", params: { sheet: 1 } });
     const cleared = declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "CLEARED")]);
-    expect(editBlockFor(cleared, { kind: "LINE", sheet: 2 })).toEqual({ reasonCode: "LINE_SHEET_LOCKED", params: { sheet: 2 } });
+    // Tờ đã thông quan / bị từ chối / sửa sau thông quan không gọi về được → lý do riêng (sửa bằng AMA).
+    expect(editBlockFor(cleared, { kind: "LINE", sheet: 2 })).toEqual({ reasonCode: "LINE_SHEET_CLOSED", params: { sheet: 2 } });
+    for (const st of ["REJECTED", "POST_EDITING"] as const) expect(editBlockFor(declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, st)]), { kind: "LINE", sheet: 2 })).toEqual({ reasonCode: "LINE_SHEET_CLOSED", params: { sheet: 2 } });
+    const mixed = declarationEditScope("DRAFT", [sh(1, "CLEARED"), sh(2, "RECALLED"), sh(3, "PRE_DECLARED")]);
+    expect(mixed).toMatchObject({ lockedSheets: [3], closedSheets: [1] });
+    expect(editBlockFor(mixed, { kind: "LINE", sheet: 1 })).toEqual({ reasonCode: "LINE_SHEET_CLOSED", params: { sheet: 1 } });
+    expect(editBlockFor(mixed, { kind: "LINE", sheet: 3 })).toEqual({ reasonCode: "LINE_SHEET_LOCKED", params: { sheet: 3 } });
     expect(editBlockFor(cleared, { kind: "COMMON" })).toBeNull();
     const all = declarationEditScope("DRAFT", [sh(1, "RECALLED"), sh(2, "RECALLED")]);
     for (const t of [{ kind: "COMMON" }, { kind: "REBUILD" }, { kind: "ADD_REMOVE_LINES" }, { kind: "LINE", sheet: 2 }] as const) expect(editBlockFor(all, t)).toBeNull();

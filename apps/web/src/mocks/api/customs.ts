@@ -4,7 +4,7 @@
 import {
   baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
   awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, recallExempt, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, sheetApproved, sheetOrderWait, stageAfter,
-  declarationEditScope, editBlockFor, sheetOfLine, type DeclarationEditScope, type EditSheet, type EditTarget, type SentSnapshot,
+  declarationEditScope, editBlockFor, sheetOfLine, type DeclarationEditScope, type DeclarationStatus, type EditSheet, type EditTarget, type SentSnapshot,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
   type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
@@ -78,9 +78,9 @@ export const editSheetsOf = (db: MockDb, dossierId: string): EditSheet[] =>
   });
 
 /** Phạm vi sửa tờ khai của hồ sơ (cùng declarationEditScope với backend + FE). */
-export function editScopeOf(db: MockDb, dossierId: string): DeclarationEditScope {
+export function editScopeOf(db: MockDb, dossierId: string, status?: DeclarationStatus): DeclarationEditScope {
   const decl = db.declarations.find((d) => d.dossierId === dossierId);
-  return declarationEditScope(decl?.status ?? "DRAFT", editSheetsOf(db, dossierId));
+  return declarationEditScope(status ?? decl?.status ?? "DRAFT", editSheetsOf(db, dossierId));
 }
 
 /** Đích sửa; `LINE_NO` = ô dòng hàng của dòng có lineNo (tờ theo danh sách dòng hiện tại). */
@@ -90,12 +90,25 @@ export function toEditTargetMock(db: MockDb, dossierId: string, t: MockEditTarge
 }
 
 /**
+ * Đổi bộ chứng từ (tải lên / đổi loại / đọc lại / xóa) – như backend dossier: hồ sơ đã truyền / thông quan / hủy → lỗi cũ của hồ sơ (canModify;
+ * `checkLock` = false cho đọc lại – backend vốn không kiểm khóa ở đó); còn lại lô nhiều tờ còn tờ chưa gọi về → COMMON_LOCKED_SHEETS (tính như nháp,
+ * nên hồ sơ đã duyệt còn tờ hiệu lực cũng bị chặn).
+ */
+export function documentSetMockError(db: MockDb, dossierId: string, checkLock = true): ApiError | null {
+  const d = db.dossiers.find((x) => x.id === dossierId);
+  if (!d) return null;
+  if (d.status === "SUBMITTED" || d.status === "CLEARED") return checkLock ? new ApiError("DOSSIER_LOCKED", "Hồ sơ đã truyền, không sửa được") : null;
+  if (d.status === "CANCELLED") return checkLock ? new ApiError("INVALID_STATE", "Hồ sơ đã hủy") : null;
+  return editScopeMockError(db, dossierId, { kind: "ADD_REMOVE_LINES" }, "DRAFT");
+}
+
+/**
  * Lô nhiều tờ còn tờ chưa gọi về → lỗi COMMON_LOCKED_SHEETS / LINE_SHEET_LOCKED (cùng editBlockFor với backend); lô một tờ / khóa theo trạng thái tờ khai
  * (DECLARATION_LOCKED) → null để kiểm sẵn có của từng API báo như cũ.
  */
-export function editScopeMockError(db: MockDb, dossierId: string, target: MockEditTarget): ApiError | null {
+export function editScopeMockError(db: MockDb, dossierId: string, target: MockEditTarget, status?: DeclarationStatus): ApiError | null {
   if (branchCountOf(db, dossierId) <= 1) return null;
-  const b = editBlockFor(editScopeOf(db, dossierId), toEditTargetMock(db, dossierId, target));
+  const b = editBlockFor(editScopeOf(db, dossierId, status), toEditTargetMock(db, dossierId, target));
   return b && b.reasonCode !== "DECLARATION_LOCKED" ? reasonApiError("INVALID_STATE", b.reasonCode, b.params) : null;
 }
 

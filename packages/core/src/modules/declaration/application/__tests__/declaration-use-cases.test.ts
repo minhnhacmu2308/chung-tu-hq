@@ -383,6 +383,9 @@ describe("tổng theo tờ khai nhánh (>50 dòng)", () => {
     unwrap(await answerHsQuestion(deps, declarant, line60.id, { questionId: "q1", answers: [{ id: "use", selected: [], custom: "Máy tiện" }] }));
     Object.assign(row60, { hsStatus: "completed", hsQuestion: null });
     unwrap(await confirmHs(deps, declarant, line60.id, "8482.10.00"));
+    // Tờ 1 đã thông quan (không gọi về được) → lý do riêng LINE_SHEET_CLOSED.
+    stages = ["CLEARED", "RECALLED", "PRE_DECLARED"];
+    expect(await confirmHs(deps, declarant, line10.id, "8482.20.00")).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "LINE_SHEET_CLOSED", params: { sheet: 1 } } });
     // Gọi về hết → sửa như trước.
     stages = ["RECALLED", "RECALLED", "RECALLED"];
     unwrap(await updateDeclarationField(deps, declarant, D, "CQHQ", "02CI"));

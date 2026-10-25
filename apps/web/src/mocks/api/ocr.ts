@@ -4,7 +4,7 @@
 import type { DocumentSheet } from "@kb/contracts";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
-import { editScopeMockError } from "./customs";
+import { documentSetMockError, editScopeMockError } from "./customs";
 import { refreshDeclaration } from "./declaration";
 import { generateChecks, generateFieldsForDocument, SUSPECT_STATUSES } from "@/mocks/seed/ocr";
 import type { CrossCheck, DocKind, DossierDocument, ExtractedField, FieldStatus } from "@/mocks/types";
@@ -115,7 +115,7 @@ export function addDocumentFiles(db: MockDb, dossierId: string, files: { name: s
   const dossier = db.dossiers.find((d) => d.id === dossierId);
   if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
   // Thêm chứng từ đổi dòng hàng + chỉ tiêu chung → lô nhiều tờ còn tờ chưa gọi về: chặn (cùng quy tắc backend).
-  const scoped = editScopeMockError(db, dossierId, { kind: "ADD_REMOVE_LINES" });
+  const scoped = documentSetMockError(db, dossierId);
   if (scoped) throw scoped;
   const entries = files.flatMap((f) => {
     if (!f.name.toLowerCase().endsWith(".zip")) return [f];
@@ -146,7 +146,7 @@ export const changeDocumentKind = (documentId: string, kind: DocKind) =>
   mutate((db) => {
     const doc = db.documents.find((d) => d.id === documentId);
     if (!doc) throw new ApiError("NOT_FOUND", "Không tìm thấy chứng từ");
-    const scoped = editScopeMockError(db, doc.dossierId, { kind: "ADD_REMOVE_LINES" });
+    const scoped = documentSetMockError(db, doc.dossierId);
     if (scoped) throw scoped;
     doc.kind = kind;
     // Đổi loại → đọc lại theo skill của loại mới
@@ -159,7 +159,7 @@ export const deleteDocument = (documentId: string) =>
   mutate((db) => {
     const doc = db.documents.find((d) => d.id === documentId);
     if (!doc) return;
-    const scoped = editScopeMockError(db, doc.dossierId, { kind: "ADD_REMOVE_LINES" });
+    const scoped = documentSetMockError(db, doc.dossierId);
     if (scoped) throw scoped;
     db.documents = db.documents.filter((d) => d.id !== documentId);
     db.fields = db.fields.filter((f) => f.documentId !== documentId);
@@ -172,7 +172,7 @@ export const retryDocument = (documentId: string) =>
   mutate((db) => {
     const doc = db.documents.find((d) => d.id === documentId);
     if (!doc) return;
-    const scoped = editScopeMockError(db, doc.dossierId, { kind: "ADD_REMOVE_LINES" });
+    const scoped = documentSetMockError(db, doc.dossierId, false);
     if (scoped) throw scoped;
     doc.status = "QUEUED";
     delete doc.error;

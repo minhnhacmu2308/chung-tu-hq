@@ -399,6 +399,27 @@ describe("tờ khai nhánh: gọi về sửa và truyền lại", () => {
     await updateFieldValue(getDb().fields.at(-1)!.id, "y");
   });
 
+  it("chứng từ: hồ sơ đã truyền / đã hủy → lỗi cũ của hồ sơ; đã duyệt còn tờ hiệu lực → COMMON_LOCKED_SHEETS; dòng tờ đã thông quan → LINE_SHEET_CLOSED", async () => {
+    await preDeclareAll(BIG);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    const doc = getDb().documents.find((d) => d.dossierId === BIG)!;
+    dossier(BIG).status = "SUBMITTED";
+    const locked = { code: "DOSSIER_LOCKED", message: "Hồ sơ đã truyền, không sửa được" };
+    await expect(uploadDocuments(BIG, [new File(["x"], "more.pdf")])).rejects.toMatchObject(locked);
+    await expect(changeDocumentKind(doc.id, "OTHER")).rejects.toMatchObject(locked);
+    await expect(deleteDocument(doc.id)).rejects.toMatchObject(locked);
+    dossier(BIG).status = "CANCELLED";
+    await expect(uploadDocuments(BIG, [new File(["x"], "more.pdf")])).rejects.toMatchObject({ code: "INVALID_STATE", message: "Hồ sơ đã hủy" });
+    dossier(BIG).status = "APPROVED";
+    await expect(uploadDocuments(BIG, [new File(["x"], "more.pdf")])).rejects.toMatchObject({ reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 2, 3" } });
+    await clearSheet(BIG, 1);
+    await runB(BIG, "IDB", 2);
+    Object.assign(decl(BIG), { status: "DRAFT" });
+    Object.assign(dossier(BIG), { status: "NEEDS_REVIEW", step: "review" });
+    const line10 = getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo)[9]!;
+    await expect(confirmHs(line10.id, "8482.10.00")).rejects.toMatchObject({ code: "INVALID_STATE", reason: "LINE_SHEET_CLOSED", params: { sheet: 1 } });
+  });
+
   it("gọi về đủ mọi tờ → mở lại → duyệt lại → truyền lại lần lượt tờ 1 → 2 → 3", async () => {
     await preDeclareAll(BIG);
     await runB(BIG, "IDB", 1);

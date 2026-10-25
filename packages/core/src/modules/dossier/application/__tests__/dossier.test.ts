@@ -212,6 +212,26 @@ describe("bộ chứng từ khi lô nhiều tờ chỉ gọi về một phần (
     unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")]));
     unwrap(await deleteDocument(deps, ctx(), doc!.id));
   });
+  it("hồ sơ đã truyền / đã hủy (tờ chưa từng gọi về) → lỗi cũ của hồ sơ (DOSSIER_LOCKED / Hồ sơ đã hủy), không phải lý do phạm vi sửa; đã duyệt còn tờ hiệu lực → COMMON_LOCKED_SHEETS", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const [doc] = unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("scan.pdf")]));
+    uow.data.documents[0]!.status = "ERROR";
+    deps.customsSheets = async () => [1, 2, 3].map((no) => ({ no, stage: "PRE_DECLARED" as const, declarationNo: `10400000000${no}` }));
+    uow.data.dossiers[0]!.status = "SUBMITTED";
+    const locked = { ok: false, error: { code: "DOSSIER_LOCKED", message: "Hồ sơ đã truyền, không sửa được" } };
+    expect(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")])).toMatchObject(locked);
+    expect(await changeDocumentKind(deps, ctx(), doc!.id, "CERT_OF_ORIGIN")).toMatchObject(locked);
+    expect(await deleteDocument(deps, ctx(), doc!.id)).toMatchObject(locked);
+    // Đọc lại chứng từ lỗi vốn không kiểm khóa hồ sơ – giữ nguyên hành vi cũ (không thành lý do phạm vi sửa).
+    unwrap(await retryDocument(deps, ctx(), doc!.id));
+    uow.data.dossiers[0]!.status = "CANCELLED";
+    const cancelled = { ok: false, error: { code: "INVALID_STATE", message: "Hồ sơ đã hủy" } };
+    expect(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")])).toMatchObject(cancelled);
+    expect(await deleteDocument(deps, ctx(), doc!.id)).toMatchObject(cancelled);
+    expect(await changeDocumentKind(deps, ctx(), doc!.id, "CERT_OF_ORIGIN")).toMatchObject(cancelled);
+    uow.data.dossiers[0]!.status = "APPROVED";
+    expect(await uploadDocuments(deps, ctx(), d.id, [pdf("more.pdf")])).toMatchObject({ ok: false, error: { reason: "COMMON_LOCKED_SHEETS", params: { sheets: "1, 2, 3" } } });
+  });
 });
 
 describe("requeueStuckDocuments – job quét chứng từ kẹt QUEUED", () => {

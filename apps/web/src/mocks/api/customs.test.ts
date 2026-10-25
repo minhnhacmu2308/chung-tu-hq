@@ -206,3 +206,104 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
     expect(await err(resendOperation(INSPECTING, "HYS"))).toMatchObject({ code: "NOTHING_TO_RESEND" });
   });
 });
+
+/* ---------------- Lô lớn: tờ khai nhánh (> 50 dòng → 50 dòng/tờ) ---------------- */
+
+const BIG = "dos_028"; // NK, đã duyệt, 120 dòng → 3 tờ (50 + 50 + 20), mọi tờ luồng xanh
+const runB = async (id: string, op: Parameters<typeof performOperation>[1], branch: number) => {
+  const r = await performOperation(id, op, branch);
+  wait(3_000);
+  return r;
+};
+const sheets = async (id: string) => (await getSubmission(id)).branches;
+/** Khai tạm cả lô: tờ 1 rồi tờ 2, 3 nối tiếp. */
+const preDeclareAll = async (id: string) => {
+  await submitDeclaration(id, CERT);
+  wait(9_000);
+};
+const clearSheet = async (id: string, branch: number) => {
+  await runB(id, "IDC", branch);
+  wait(6_000);
+};
+const payloadOf = (id: string, branch: number, op: string, dir: "OUT" | "IN") => {
+  const m = getDb().customsMessages.find((x) => x.dossierId === id && (x.branch ?? 1) === branch && x.operation === op && x.direction === dir)!;
+  return JSON.parse(m.payloadPreview) as Record<string, unknown>;
+};
+
+describe("tờ khai nhánh (mock)", () => {
+  it("lô 120 dòng → 3 tờ; khai tạm tờ 1 trước, tờ 2 và 3 nối tiếp, mỗi tờ một số tờ khai", async () => {
+    let b = await sheets(BIG);
+    expect(b.map((x) => [x.no, x.of, x.stage])).toEqual([[1, 3, "NOT_SENT"], [2, 3, "NOT_SENT"], [3, 3, "NOT_SENT"]]);
+    await submitDeclaration(BIG, CERT);
+    b = await sheets(BIG);
+    expect(b[0]!.pipeline.find((r) => r.op === "IDA")!.status).toBe("SENDING");
+    expect(b[1]!.stage).toBe("NOT_SENT");
+    wait(3_000);
+    b = await sheets(BIG);
+    expect(b[0]).toMatchObject({ stage: "PRE_DECLARED" });
+    expect(b[1]!.pipeline.find((r) => r.op === "IDA")!.status).toBe("SENDING"); // tờ 2 đã được gửi nối tiếp
+    wait(6_000);
+    b = await sheets(BIG);
+    expect(b.map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    const nos = b.map((x) => x.declarationNo);
+    expect(new Set(nos).size).toBe(3);
+    expect(nos.every((n) => /^107\d{9}$/.test(n!))).toBe(true);
+    expect(dossier(BIG).declarationNo).toBe(nos[0]);
+    // 1.2: tờ 1 ghi "F", tờ k ≥ 2 ghi số tờ khai của tờ 1.
+    expect(payloadOf(BIG, 1, "IDA", "OUT")).toMatchObject({ TK_FIC: "F", TK_BNO: 1, TK_DNO: 3 });
+    expect(payloadOf(BIG, 2, "IDA", "OUT")).toMatchObject({ TK_FIC: nos[0], TK_BNO: 2, TK_DNO: 3 });
+    expect(payloadOf(BIG, 3, "IDA", "OUT")).toMatchObject({ TK_FIC: nos[0], TK_BNO: 3, TK_DNO: 3 });
+    const s = await getSubmission(BIG);
+    expect(s.stage).toBe("PRE_DECLARED");
+    expect(s.result?.declarationNo).toBe(nos[0]);
+    expect(s.branches[1]!.messages.every((m) => m.operation === "IDA")).toBe(true);
+    expect(s.summary).toEqual({ of: 3, cleared: 0, problems: [] });
+    expect(await err(performOperation(BIG, "IDC", 4))).toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("thông quan từng tờ: summary đếm số tờ; hồ sơ CLEARED chỉ khi đủ mọi tờ", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    let s = await getSubmission(BIG);
+    expect(s.branches.map((x) => x.stage)).toEqual(["CLEARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(s.summary).toEqual({ of: 3, cleared: 1, problems: [] });
+    expect(dossier(BIG).status).toBe("SUBMITTED");
+    await clearSheet(BIG, 2);
+    expect((await getSubmission(BIG)).summary.cleared).toBe(2);
+    expect(dossier(BIG).status).toBe("SUBMITTED");
+    await clearSheet(BIG, 3);
+    s = await getSubmission(BIG);
+    expect(s.summary).toEqual({ of: 3, cleared: 3, problems: [] });
+    expect(dossier(BIG).status).toBe("CLEARED");
+  });
+
+  it("nghiệp vụ và gửi lại chỉ tác động tờ được chọn; danh sách Hải quan mỗi tờ một dòng", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDC", 2);
+    const b = await sheets(BIG);
+    expect(b.map((x) => x.stage)).toEqual(["PRE_DECLARED", "DECLARED", "PRE_DECLARED"]);
+    expect(b[1]!.result).toMatchObject({ channel: "GREEN" });
+    expect(b[0]!.result?.channel).toBeUndefined();
+    expect((await performOperation(BIG, "IID", 2)).sent).toBe(false);
+    expect((await sheets(BIG))[1]!.messages[0]).toMatchObject({ operation: "IID" });
+    expect((await sheets(BIG))[0]!.messages[0]).toMatchObject({ operation: "IDA", direction: "IN" });
+    getDb().customsMessages.push({ id: "msg_b3", dossierId: BIG, branch: 3, operation: "HYS", direction: "OUT", result: "ERROR", summary: "Lỗi", at: new Date(Date.now() - 500).toISOString(), payloadPreview: "{}" });
+    expect(await err(resendOperation(BIG, "HYS", 2))).toMatchObject({ code: "NOTHING_TO_RESEND" });
+    expect(await resendOperation(BIG, "HYS", 3)).toMatchObject({ resent: true });
+    const rows = (await listCustomsDeclarations()).filter((r) => r.dossierId === BIG).sort((a, c) => a.branch - c.branch);
+    expect(rows.map((r) => [r.branch, r.of])).toEqual([[1, 3], [2, 3], [3, 3]]);
+    expect(rows.every((r) => r.declarationNo)).toBe(true);
+  });
+
+  it("sửa sau thông quan chỉ khi tờ đó đã thông quan; bản khai và số tờ khai theo tờ", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    expect(await err(startPostAmendment(BIG, 2))).toMatchObject({ code: "INVALID_STATE" });
+    await startPostAmendment(BIG, 1);
+    const b = await sheets(BIG);
+    expect(b.map((x) => x.stage)).toEqual(["POST_EDITING", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(getDb().postAmendments.filter((a) => a.dossierId === BIG).map((a) => a.branch ?? 1)).toEqual([1]);
+    expect(getDb().postAmendments[0]!.header["TK_ICN"]).toBe(b[0]!.declarationNo);
+    expect((await getSubmission(BIG)).summary.cleared).toBe(1);
+  });
+});

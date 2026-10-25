@@ -128,3 +128,51 @@ describe("fpt-mock: AMA khai bổ sung sau thông quan (giả định)", () => {
     expect(bad.errorList.map((e) => e.indexCode)).toEqual(["ICN", "REC", "RAN"]);
   });
 });
+
+describe("fpt-mock: IDA tờ khai nhánh (TK_FIC / TK_BNO / TK_DNO)", () => {
+  const acc = edaRequest.objVNACCS_ACCOUNT;
+  const ida = (branch: Record<string, unknown>, tkId: string) => ({
+    objVNACCS_ACCOUNT: acc,
+    objVN_IDA: { tK_ID: tkId, tK_ICB: "A11", tK_CH: "03CE", tK_MTC: "1", tK_IMC: "0316789012", tK_IMN: "CONG TY AN PHAT", ...branch },
+    objVN_IDA_HANG: [{ haG_CMD: "84821000", haG_CMN: "Vong bi cau", haG_QN1: 10, haG_QT1: "PCE", haG_BPR: 100 }],
+  });
+  type Res = { errorList: { errorCode: string; indexCode: string }[] | null; objIDA: { objMsgResult: { decNumber: string }; objVN_IDA: Record<string, unknown> }[] | null };
+  const call = async (token: string, branch: Record<string, unknown>, tkId: string) => (await (await post("/api/IDA", ida(branch, tkId), token)).json()) as Res;
+  const startSeq = async () => {
+    let n = 0;
+    await new Promise<void>((r) => server.close(() => r()));
+    await start({ nextDeclarationNo: () => `10000000000${++n}` });
+    return login();
+  };
+
+  it("tờ 1 (F, nhánh 1/3) cấp số mới; tờ 2 và 3 tham chiếu số tờ 1 và nhận số khác nhau", async () => {
+    const token = await startSeq();
+    const first = await call(token, { tK_FIC: "F", tK_BNO: 1, tK_DNO: 3 }, "a1");
+    expect(first.errorList).toBeNull();
+    const no1 = first.objIDA![0]!.objMsgResult.decNumber;
+    expect(no1).toBe("100000000001");
+    expect(first.objIDA![0]!.objVN_IDA).toMatchObject({ tK_FIC: "F", tK_BNO: 1, tK_DNO: 3 });
+    const second = await call(token, { tK_FIC: no1, tK_BNO: 2, tK_DNO: 3 }, "a2");
+    const third = await call(token, { tK_FIC: no1, tK_BNO: 3, tK_DNO: 3 }, "a3");
+    const nos = [no1, second.objIDA![0]!.objMsgResult.decNumber, third.objIDA![0]!.objMsgResult.decNumber];
+    expect(new Set(nos).size).toBe(3);
+    expect(second.objIDA![0]!.objVN_IDA).toMatchObject({ tK_FIC: no1, tK_BNO: 2 });
+  });
+
+  it("nhánh ≥ 2 mà TK_FIC không phải số tờ khai đầu tiên đã cấp → lỗi nghiệp vụ", async () => {
+    const token = await startSeq();
+    const bad = await call(token, { tK_FIC: "199999999999", tK_BNO: 2, tK_DNO: 3 }, "b1");
+    expect(bad.objIDA).toBeNull();
+    expect(bad.errorList![0]).toMatchObject({ errorCode: "MOCK-REQ", indexCode: "FIC" });
+    const f = await call(token, { tK_FIC: "F", tK_BNO: 2, tK_DNO: 3 }, "b2");
+    expect(f.errorList![0]).toMatchObject({ indexCode: "FIC" });
+  });
+
+  it("khai lại đúng tờ (cùng tK_ID) giữ số; không khai nhánh (không TK_FIC) hành vi cũ", async () => {
+    const token = await startSeq();
+    const a = await call(token, { tK_FIC: "F", tK_BNO: 1, tK_DNO: 2 }, "c1");
+    const b = await call(token, { tK_FIC: "F", tK_BNO: 1, tK_DNO: 2 }, "c1");
+    expect(b.objIDA![0]!.objMsgResult.decNumber).toBe(a.objIDA![0]!.objMsgResult.decNumber);
+    expect((await call(token, {}, "c2")).errorList).toBeNull();
+  });
+});

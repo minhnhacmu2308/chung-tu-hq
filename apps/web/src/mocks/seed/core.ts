@@ -1,6 +1,7 @@
 // Dữ liệu mẫu cốt lõi: doanh nghiệp, thành viên, hồ sơ, chứng từ, thông báo.
 // Toàn bộ tên công ty/MST là GIẢ. Ngày tính theo hôm nay để màn hình luôn "sống" (sắp hạn, quá hạn…).
 import { DEFAULT_PARTY_CLASS, type JoinRequest } from "@kb/contracts";
+import { largeLotTotal } from "./large-lot";
 import type { DocKind, Dossier, DossierDocument, DossierStatus, Member, Notification, Organization, StepId } from "../types";
 
 export const DAY = 86_400_000;
@@ -68,6 +69,7 @@ const DOSSIERS: DossierSeed[] = [
   { n: 22, dir: "NK", type: "A11", partner: "MORINAGA BEARING TRADING", status: "PROCESSING", step: "upload", due: 3, created: -3, value: "8340.50", inc: "CIF", mode: "AIR", bill: "618-44021375", owner: "usr_ha" },
   { n: 23, dir: "NK", type: "E21", partner: "SHENZHEN KAIDA MOTOR CO., LTD.", status: "NEEDS_REVIEW", step: "review", due: 0, created: -50, value: "46215.00", inc: "FOB", mode: "SEA_CONTAINER", bill: "COSU6402215870", suspect: 2, owner: "usr_ha" },
   { n: 24, dir: "NK", type: "A12", partner: "ARTEMIDE INDUSTRIALE S.P.A.", status: "APPROVED", step: "submit", due: 2, created: -70, value: "12980.00", cur: "EUR", inc: "EXW", mode: "SEA_CONTAINER", bill: "MEDUJ1182044", owner: "usr_chau" },
+  { n: 28, dir: "NK", type: "A11", partner: "HANSOL PRECISION CO., LTD.", status: "APPROVED", step: "submit", due: 3, created: -48, value: largeLotTotal(), inc: "FCA", mode: "SEA_CONTAINER", bill: "HPSEL2610112", owner: "usr_chau", note: "Lô lớn 120 dòng – tách 3 tờ khai (50 + 50 + 20)" },
   { n: 25, dir: "XK", type: "B11", partner: "NORDIC TOOLING GROUP AB", status: "NEEDS_REVIEW", step: "ocr", due: -1, created: -40, value: "31500.00", inc: "FOB", mode: "SEA_CONTAINER", bill: "ONEYHPHA0921", suspect: 5, owner: "usr_ha" },
   { n: 26, dir: "NK", type: "A11", partner: "TAIWAN HIWIN SUPPLY CO.", status: "PROCESSING", step: "agent", due: 4, created: -20, value: "5620.00", inc: "CIF", mode: "AIR", bill: "297-11820455", owner: "usr_chau" },
   { n: 27, dir: "NK", type: "A11", partner: "DONGGUAN CHANGLI TRADING", status: "DRAFT", step: "upload", due: 6, created: -1, value: "0", inc: "CIF", mode: "SEA_CONTAINER", bill: "", owner: "usr_ha" },

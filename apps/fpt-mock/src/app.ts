@@ -81,6 +81,17 @@ export function createFptMock(opts: MockOptions = {}) {
     json(res, 200, { ...fptEnvelope(account, patch), ...extra }, headers);
   const envKey = (k: Kind) => (k === "EDA" ? "objEDA" : "objIDA");
 
+  /** Tờ khai nhánh (TK_FIC/TK_BNO/TK_DNO): tờ 1 ghi "F" (hoặc bỏ trống) và nhận số mới; tờ k ≥ 2 phải tham chiếu số tờ khai đầu tiên mock này đã cấp. */
+  const branchErrors = (kind: Kind, head: Record<string, unknown>): FptError[] => {
+    const bno = Number(head["tK_BNO"] ?? head["TK_BNO"] ?? 1) || 1;
+    if (bno < 2) return [];
+    const fic = String(head["tK_FIC"] ?? head["TK_FIC"] ?? "").trim();
+    const first = byNo.get(fic);
+    const firstBno = Number(first?.result[`objVN_${kind}`] && (first.result[`objVN_${kind}`] as Record<string, unknown>)["tK_BNO"]) || 1;
+    if (first && first.kind === kind && firstBno === 1) return [];
+    return [mockError("MOCK-REQ", "FIC", "First Declaration Number", `Tờ khai nhánh ${bno}: số tờ khai đầu tiên "${fic}" (tK_FIC) chưa được khai trước qua mock (tờ 1 ghi "F").`)];
+  };
+
   async function declaration(kind: Kind, body: unknown, res: ServerResponse) {
     const p = `objVN_${kind}`;
     const parsed = WithAccount.extend({ [p]: Rec, [`${p}_HANG`]: z.array(Rec).nullish(), [`${p}_CON`]: Rec.nullish(), [`${p}_CTHQ`]: Rec.nullish() }).safeParse(body);
@@ -91,7 +102,7 @@ export function createFptMock(opts: MockOptions = {}) {
     if (accErr.length) return reply(res, b.objVNACCS_ACCOUNT, { errorList: accErr }, {}, headers);
     const extra = Object.fromEntries(Object.entries(b).filter(([k]) => k.startsWith(`${p}_`) && ![`${p}_HANG`, `${p}_CON`, `${p}_CTHQ`].includes(k)));
     const req: DeclarationRequest = { account: b.objVNACCS_ACCOUNT, head: b[p] as Record<string, unknown>, con: (b[`${p}_CON`] ?? null) as Record<string, unknown> | null, cthq: (b[`${p}_CTHQ`] ?? null) as Record<string, unknown> | null, items: (b[`${p}_HANG`] ?? []) as Record<string, unknown>[], extra };
-    const errors = validateDeclaration(kind, req, now());
+    const errors = [...validateDeclaration(kind, req, now()), ...branchErrors(kind, req.head)];
     if (errors.length) return reply(res, b.objVNACCS_ACCOUNT, { errorList: errors }, {}, headers);
     // Gửi lại cùng tK_ID (cùng tài khoản) → giữ số tờ khai cũ, khai trước lại (giả định).
     const tkId = String(req.head["tK_ID"] ?? "");

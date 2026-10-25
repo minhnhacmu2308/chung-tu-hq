@@ -2,6 +2,8 @@
 // Tiến trình agent mô phỏng theo thời gian: lưu startedAt, tính tiến độ mỗi lần đọc.
 import { appFieldMeta, canEditDeclaration, declarationEditMode, extraFieldIssue, extraFieldMeta, itemFieldIssue, itemFieldMeta, parseItemFieldCode, fieldEditBlock, isDeclarationFieldEditable } from "@kb/contracts";
 import { customsStageOf } from "./customs";
+import { branchesOf } from "@/mocks/customs-sim";
+import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
@@ -294,7 +296,15 @@ export const getDeclarationView = (dossierId: string) =>
     return {
       declaration,
       exchangeRateInfo,
-      branches: [], // Task 10 tính tổng nhánh cho mock
+      branches: branchesOf(items).map((sh): DeclarationBranch => {
+        const part = sh.items.map((i) => taxes.find((x) => x.itemId === i.id));
+        const sumVnd = (pick: (t: ItemTax) => string) => String(part.reduce((n, t) => n + (t ? BigInt(pick(t)) : 0n), 0n));
+        return {
+          no: sh.no, of: sh.of, lineFrom: sh.lineFrom, lineTo: sh.lineTo,
+          invoiceValue: fromMinor(sumMinor(sh.items.map((i) => toMinor(i.amount)))),
+          customsValueVnd: sumVnd((t) => t.customsValueVnd), estImportDutyVnd: sumVnd((t) => t.importDutyVnd), estVatVnd: sumVnd((t) => t.vatVnd),
+        };
+      }),
       unconfirmedHs: items.filter((i) => !i.hsConfirmed).length,
       items: items.map((i) => {
         const t = taxes.find((x) => x.itemId === i.id);

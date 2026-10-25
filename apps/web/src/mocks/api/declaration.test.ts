@@ -85,3 +85,21 @@ describe("mở lại tờ khai (mock)", () => {
     expect(await code(reopenDeclaration(submitted.dossierId))).toBe("DOSSIER_LOCKED");
   });
 });
+
+describe("tổng theo tờ khai nhánh (mock)", () => {
+  const cents = (s: string) => BigInt(s.replace(".", ""));
+  const fmt = (n: bigint) => `${n / 100n}.${String(n % 100n).padStart(2, "0")}`;
+  it("lô 120 dòng → 3 tờ 50 + 50 + 20; tổng các tờ = tổng hồ sơ", async () => {
+    const v = await getDeclarationView("dos_028");
+    expect(v.items).toHaveLength(120);
+    expect(v.branches.map((b) => [b.no, b.of, b.lineFrom, b.lineTo])).toEqual([[1, 3, 1, 50], [2, 3, 51, 100], [3, 3, 101, 120]]);
+    const total = v.items.reduce((s, i) => s + cents(i.amount), 0n);
+    expect(v.branches.reduce((s, b) => s + cents(b.invoiceValue), 0n)).toBe(total);
+    expect(v.branches[0]!.invoiceValue).toBe(fmt(v.items.slice(0, 50).reduce((s, i) => s + cents(i.amount), 0n)));
+    expect(v.branches.reduce((s, b) => s + BigInt(b.customsValueVnd), 0n)).toBe(v.items.reduce((s, i) => s + BigInt(i.customsValueVnd), 0n));
+    expect(getDb().dossiers.find((d) => d.id === "dos_028")!.invoiceValue).toBe(fmt(total));
+  });
+  it("lô ≤ 50 dòng → một tờ", async () => {
+    expect((await getDeclarationView(APPROVED)).branches).toMatchObject([{ no: 1, of: 1, lineFrom: 1, lineTo: 2 }]);
+  });
+});

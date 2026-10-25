@@ -1,6 +1,7 @@
 // Dữ liệu mẫu bước 4–5: dòng hàng (HS), lần chạy agent, tờ khai.
 // Hồ sơ trình diễn dos_021 (HANSOL) và dos_026 (HIWIN) CHƯA chạy agent → PM tự bấm "Chạy AI Agent".
 import { buildDeclaration, ratesFor } from "../declaration-builder";
+import { LARGE_LOT_ID, largeLotItems } from "./large-lot";
 import type { AgentRun, Declaration, Dossier, LineItem } from "../types";
 import { seedCore } from "./core";
 
@@ -16,6 +17,7 @@ type ItemSeed = {
 };
 
 const ITEMS: Record<string, ItemSeed[]> = {
+  [LARGE_LOT_ID]: largeLotItems(),
   dos_021: [
     { desc: "Vòng bi cầu 6205-2RS, đường kính trong 25 mm", qty: "2000", unit: "PCE", price: "1.85", amount: "3700.00", invoiceHs: "8482.10.1000", hs: "8482.10.00", conf: 0.94 },
     { desc: "Vòng bi cầu 6308ZZ, đường kính trong 40 mm", qty: "800", unit: "PCE", price: "4.20", amount: "3360.00", invoiceHs: "8482.10.1000", hs: "8482.10.00", conf: 0.92 },
@@ -66,7 +68,7 @@ const ITEMS: Record<string, ItemSeed[]> = {
 };
 
 /** Hồ sơ đã chạy xong agent (HS đã xác nhận, đã có tờ khai). */
-const DONE = ["dos_023", "dos_024", "dos_018", "dos_019", "dos_020", "dos_017", "dos_016", "dos_014"];
+const DONE = [LARGE_LOT_ID, "dos_023", "dos_024", "dos_018", "dos_019", "dos_020", "dos_017", "dos_016", "dos_014"];
 
 export function seedDeclaration(dossiers: Dossier[]): { lineItems: LineItem[]; agentRuns: AgentRun[]; declarations: Declaration[] } {
   const lineItems: LineItem[] = [];

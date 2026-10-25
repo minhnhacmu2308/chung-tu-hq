@@ -1,6 +1,7 @@
 // Mô phỏng truyền nhận VNACCS qua Customs Hub: sinh thông điệp theo thời gian.
 // Dùng cho seed (lô đã truyền) và api/customs (lô truyền trong buổi demo). Quy tắc luồng: @kb/contracts customs-flow.
 import { queryOpFor, type CustomsError, type CustomsRejection, type CustomsStage } from "@kb/contracts";
+import { branchRanges } from "@kb/contracts";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import type { CustomsChannel, CustomsMessage, CustomsOperation, CustomsResult, Declaration, Dossier, ExtractedField, DossierDocument } from "./types";
 
@@ -31,6 +32,17 @@ export type CustomsFlow = {
   side: { hysNo?: string; containers?: string[]; portFeeReceipt?: string };
 };
 
+/** Thông điệp của tờ khai nhánh: `branch` vắng = tờ 1 (dữ liệu cũ và lô một tờ không đổi). */
+export type BranchMessage = CustomsMessage & { branch?: number };
+
+/** Khóa luồng/kết quả của tờ khai nhánh: tờ 1 giữ khóa cũ (id hồ sơ), tờ k ≥ 2 là `<id hồ sơ>:<k>`. */
+export const branchKey = (dossierId: string, no: number) => (no <= 1 ? dossierId : `${dossierId}:${no}`);
+/** Ngược lại của branchKey. */
+export function parseBranchKey(key: string): { dossierId: string; no: number } {
+  const i = key.lastIndexOf(":");
+  return i < 0 ? { dossierId: key, no: 1 } : { dossierId: key.slice(0, i), no: Number(key.slice(i + 1)) || 1 };
+}
+
 export const emptyFlow = (): CustomsFlow => ({ stage: "NOT_SENT", pending: null, amendments: 0, postAmendments: 0, done: [], clearAt: null, side: {} });
 
 export function hash(s: string) {
@@ -40,14 +52,14 @@ export function hash(s: string) {
 }
 
 /** Số tờ khai 12 chữ số: 10… nhập, 30… xuất. */
-export function declarationNoFor(d: Dossier): string {
-  return `${d.direction === "NK" ? "107" : "307"}${String(hash(d.id) % 1_000_000_000).padStart(9, "0")}`;
+export function declarationNoFor(d: Dossier, no = 1): string {
+  return `${d.direction === "NK" ? "107" : "307"}${String(hash(no <= 1 ? d.id : `${d.id}:b${no}`) % 1_000_000_000).padStart(9, "0")}`;
 }
 
 /** Phân luồng mô phỏng: hồ sơ ARTEMIDE (dos_024) luôn xanh để demo trọn luồng; còn lại theo hash. */
-export function channelFor(d: Dossier): CustomsChannel {
-  if (d.id === "dos_024") return "GREEN";
-  const r = hash(d.id) % 10;
+export function channelFor(d: Dossier, no = 1): CustomsChannel {
+  if (d.id === "dos_024" || d.id === "dos_028") return "GREEN";
+  const r = hash(no <= 1 ? d.id : `${d.id}:b${no}`) % 10;
   return r < 6 ? "GREEN" : r < 9 ? "YELLOW" : "RED";
 }
 
@@ -143,4 +155,10 @@ export function buildSubmission(
     },
     flow: { ...emptyFlow(), stage: clearedNow ? "CLEARED" : "DECLARED", done: [first, second, "HYS"], side: { hysNo } },
   };
+}
+
+/** Chia dòng hàng thành các tờ (50 dòng/tờ, theo lineNo). Trả các tờ 1..N; mỗi tờ kèm các dòng của tờ. */
+export function branchesOf<T extends { lineNo: number }>(items: T[]): { no: number; of: number; lineFrom: number; lineTo: number; items: T[] }[] {
+  const sorted = [...items].sort((a, b) => a.lineNo - b.lineNo);
+  return branchRanges(sorted.map((i) => i.lineNo)).map((r) => ({ no: r.no, of: r.of, lineFrom: r.lineFrom, lineTo: r.lineTo, items: sorted.slice(r.index[0], r.index[1]) }));
 }

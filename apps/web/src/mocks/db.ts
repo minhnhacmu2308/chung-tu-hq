@@ -1,7 +1,7 @@
 // "Cơ sở dữ liệu" giả trong trình duyệt: seed → bộ nhớ → lưu localStorage để F5 không mất thao tác.
 // Chỉ src/api/* được import file này. Màn hình KHÔNG import trực tiếp mocks/db.
 import type {
-  AgentRun, CrossCheck, CustomsMessage, CustomsResult, Declaration, DigitalCertificate, Dossier, DossierDocument,
+  AgentRun, CrossCheck, CustomsResult, Declaration, DigitalCertificate, Dossier, DossierDocument,
   ExtractedField, Integration, LineItem, Member, Notification, Organization, Skill,
 } from "./types";
 import type { DeclarationProfile, JoinRequest, PostAmendment, ProductCatalogItem, ValueCharges } from "@kb/contracts";
@@ -15,7 +15,7 @@ import { seedAdmin } from "./seed/admin";
 import { seedProducts } from "./seed/products";
 import { seedMailbox, type MockInboxMessage, type MockMailConnection } from "./seed/mailbox";
 import type { AdminDb } from "./admin/types";
-import type { CustomsFlow } from "./customs-sim";
+import type { BranchMessage, CustomsFlow } from "./customs-sim";
 
 export type MockDb = {
   version: number;
@@ -31,8 +31,10 @@ export type MockDb = {
   lineItems: LineItem[];
   agentRuns: AgentRun[];
   declarations: Declaration[];
-  customsMessages: CustomsMessage[];
+  customsMessages: BranchMessage[];
   customsResults: CustomsResult[];
+  /** Kết quả Hải quan của tờ khai nhánh k ≥ 2 (khóa `<id hồ sơ>:<k>`); tờ 1 nằm ở customsResults. */
+  customsBranchResults: Record<string, CustomsResult>;
   /** Giai đoạn luồng nghiệp vụ Hải quan theo hồ sơ (xem mocks/customs-sim CustomsFlow). */
   customsFlows: Record<string, CustomsFlow>;
   /** Bản khai bổ sung sau thông quan (AMA) – bản riêng, không sửa tờ khai gốc. */
@@ -60,7 +62,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 25;
+const DB_VERSION = 26;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -75,6 +77,7 @@ function createSeed(): MockDb {
     ...ocr,
     ...declaration,
     ...seedCustoms(core.dossiers),
+    customsBranchResults: {},
     postAmendments: [],
     products: seedProducts(),
     ...seedMailbox(core.dossiers),

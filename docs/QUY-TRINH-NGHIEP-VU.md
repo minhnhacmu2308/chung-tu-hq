@@ -30,7 +30,7 @@ KhaiBáo AI đưa doanh nghiệp xuất nhập khẩu **tự khai báo** đi t�
 ```mermaid
 flowchart LR
   A[Bộ chứng từ<br/>Invoice, PL, B/L, C/O…] --> B[AI đọc chứng từ]
-  B --> C[Đối chiếu chéo<br/>26 luật]
+  B --> C[Đối chiếu chéo<br/>27 luật]
   C --> D[Người khai kiểm tra/sửa]
   D --> E[Gợi ý HS<br/>người xác nhận]
   E --> F[Dựng tờ khai<br/>IDA/EDA – code thuần]
@@ -152,7 +152,7 @@ flowchart LR
   C -- Không --> SK
   AI1 --> SK[Chọn Skill:<br/>theo nhà cung cấp, không có thì theo loại chứng từ]
   SK --> AI2[AI trích xuất theo schema + trường bổ sung + ví dụ đã duyệt]
-  AI2 --> Z[Kiểm tra Zod] --> M[Gộp mọi chứng từ → Shipment<br/>phiên bản mới] --> V[Chạy 26 luật đối chiếu]
+  AI2 --> Z[Kiểm tra Zod] --> M[Gộp mọi chứng từ → Shipment<br/>phiên bản mới] --> V[Chạy 27 luật đối chiếu]
 ```
 
 - Mỗi lần gọi AI ghi `usage_events` (token, chi phí).
@@ -182,7 +182,7 @@ flowchart LR
   - **Bảo hiểm (1.48)**: theo chứng từ / **Không mua bảo hiểm** (tờ khai ghi mã D) / nhập số. CIF, CIP… không khai.
   - **Khoản điều chỉnh (1.49, chỉ nhập khẩu)**: lập danh sách tối đa 5 khoản, mỗi khoản chọn mã tên (A…N), cộng AD / trừ SB, mã tiền, trị giá – thay toàn bộ phí khác đọc từ chứng từ. Phí khác đọc từ chứng từ chưa có mã → chặn truyền.
 
-### 6.4 Luật đối chiếu chéo (26 luật)
+### 6.4 Luật đối chiếu chéo (27 luật)
 
 Luật **BLOCKER = FAIL chặn phê duyệt và truyền**. Luật có ghi "NK" chỉ áp cho tờ khai nhập (tờ khai xuất hiển thị "Không áp dụng").
 

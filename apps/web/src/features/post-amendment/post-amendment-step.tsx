@@ -87,7 +87,7 @@ export function PostAmendmentStep({ dossier }: StepProps) {
   const copy = useMutation({
     mutationFn: (keys: string[]) => copyPostAmendmentHeader(dossier.id, { fromBranch: branch, keys }),
     onSuccess: (r) => {
-      toast({ tone: r.applied.length ? "success" : "warning", title: t.copyDone });
+      toast(r.applied.length ? { tone: "success", title: t.copyDone } : { tone: "warning", title: t.copyNoneToast });
       refresh();
     },
     onError: toastMutationError(t.copyFailed),

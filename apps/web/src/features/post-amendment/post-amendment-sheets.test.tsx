@@ -12,7 +12,8 @@ import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { branch, submissionOf } from "@/test/branch-submission";
 import { PostAmendmentStep } from "./post-amendment-step";
 
-const api = vi.hoisted(() => ({ sub: null as SubmissionView | null, view: vi.fn(), copy: vi.fn(), search: "" }));
+const api = vi.hoisted(() => ({ sub: null as SubmissionView | null, view: vi.fn(), copy: vi.fn(), search: "", toast: vi.fn() }));
+vi.mock("@kb/ui", async (orig) => ({ ...(await orig<typeof import("@kb/ui")>()), toast: (...a: unknown[]) => api.toast(...a) }));
 vi.mock("@/api/customs", async (orig) => ({ ...(await orig<typeof import("@/api/customs")>()), getSubmission: async () => api.sub! }));
 vi.mock("@/api/post-amendment", async (orig) => ({
   ...(await orig<typeof import("@/api/post-amendment")>()),
@@ -39,6 +40,7 @@ beforeEach(() => {
   api.view.mockReset().mockResolvedValue(viewOf(["TK_IMT"]));
   api.copy.mockReset().mockResolvedValue({ applied: [1], skipped: [{ no: 3, reason: "NOT_CLEARED" }] });
   api.search = "step=post&branch=2&sub=pick";
+  api.toast.mockReset();
 });
 
 const dossier = () => getDb().dossiers.find((d) => d.id === "dos_028")!;
@@ -76,6 +78,15 @@ describe("Bước 7 – lô 3 tờ", () => {
     await userEvent.click(screen.getByRole("button", { name: "sheet-1" }));
     await screen.findByText("Tờ 1/3 – số tờ khai 107624410321", {}, T);
     expect(screen.queryByText(/Đã áp dụng cho tờ/)).toBeNull();
+  }, 20_000);
+
+  it("nhân bản không áp dụng được tờ nào → thông báo riêng, không báo đã nhân bản", async () => {
+    api.copy.mockResolvedValue({ applied: [], skipped: [{ no: 1, reason: "NOT_CLEARED" }, { no: 3, reason: "NOT_CLEARED" }] });
+    renderWithProviders(<PostAmendmentStep dossier={dossier()} goTo={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Tạo AMA cùng nội dung cho các tờ đã thông quan khác" }, T));
+    await screen.findByText("Chưa áp dụng được cho tờ nào.", {}, T);
+    expect(api.toast).toHaveBeenCalledWith({ tone: "warning", title: "Chưa nhân bản được sang tờ nào" });
+    expect(api.toast).not.toHaveBeenCalledWith(expect.objectContaining({ title: "Đã nhân bản sửa chỉ tiêu chung" }));
   }, 20_000);
 
   it("không sửa chỉ tiêu chung → không cảnh báo", async () => {

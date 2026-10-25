@@ -31,9 +31,15 @@ export const buttonVariants = cva(
         "icon-sm": "h-6 w-6 p-0",
       },
       fullWidth: { true: "w-full" },
-      /** Nhãn dài (vd nút trong Alert trên mobile): cho xuống dòng, cao theo nội dung thay vì tràn khung. Đặt sau size để thắng h-*. */
-      wrap: { true: "h-auto min-h-8 whitespace-normal py-1.5 text-left" },
+      /** Nhãn dài (vd nút trong Alert trên mobile): cho xuống dòng, cao theo nội dung thay vì tràn khung; cao tối thiểu theo size.
+       * Dùng với size sm/md/lg (nút chữ) – nút biểu tượng không có nhãn để xuống dòng. Đặt sau size để thắng h-*. */
+      wrap: { true: "h-auto whitespace-normal py-1.5 text-left" },
     },
+    compoundVariants: [
+      { wrap: true, size: "sm", className: "min-h-8" },
+      { wrap: true, size: "md", className: "min-h-10" },
+      { wrap: true, size: "lg", className: "min-h-12" },
+    ],
     defaultVariants: { variant: "primary", size: "md" },
   },
 );

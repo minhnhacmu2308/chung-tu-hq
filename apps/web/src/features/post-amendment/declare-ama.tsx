@@ -36,7 +36,7 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
   const messages = s.messages.filter((m) => AMA_OPS.has(m.operation));
 
   const perform = useMutation({
-    mutationFn: (op: "AMA" | "AMB" | "AMC") => performOperation(ctx.dossierId, op),
+    mutationFn: (op: "AMA" | "AMB" | "AMC") => performOperation(ctx.dossierId, op, ctx.branch),
     onSuccess: (r) => {
       setRecallOpen(false);
       toast({ tone: r.sent ? "info" : "success", title: r.message });
@@ -45,7 +45,7 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
     onError: toastMutationError(t.opFailed),
   });
   const startNew = useMutation({
-    mutationFn: () => startPostAmendment(ctx.dossierId),
+    mutationFn: () => startPostAmendment(ctx.dossierId, ctx.branch),
     onSuccess: () => {
       toast({ tone: "success", title: t.newCreated, description: t.createdDesc });
       ctx.refresh();

@@ -5,7 +5,7 @@ import * as mock from "@/mocks/api/customs";
 import * as http from "./http/customs";
 
 export const customsKeys = mock.customsKeys;
-export type { CustomsRow, OperationResult, PipelineRow, PipelineStatus, SubmissionView } from "@kb/contracts";
+export type { BranchSubmission, CustomsRow, OperationResult, PipelineRow, PipelineStatus, SubmissionView } from "@kb/contracts";
 
 export const listCertificates = pick(mock.listCertificates, http.listCertificates);
 export const getSubmission = pick(mock.getSubmission, http.getSubmission);

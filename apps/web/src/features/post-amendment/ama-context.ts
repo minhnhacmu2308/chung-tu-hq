@@ -10,9 +10,13 @@ export const AMA_STATUS: Record<PostAmendmentStatus, "AMA_DRAFT" | "AMA_APPROVED
 /** `a` là bản đang mở, hoặc bản đã AMC mới nhất (chỉ xem). */
 export type AmaStepCtx = {
   dossierId: string;
+  /** Tờ khai nhánh của bản khai (lô > 50 dòng: mỗi tờ AMA riêng) / tổng số tờ; lô 1 tờ: 1/1. */
+  branch: number;
+  of: number;
   kind: "IDA" | "EDA";
   a: PostAmendment;
   view: PostAmendmentView;
+  /** Trạng thái truyền nhìn theo tờ `branch` (stage, pipeline, thông điệp, từ chối của tờ). */
   submission: SubmissionView;
   /** Bước nhỏ đang xem sửa được không (quyền + trạng thái bản khai). */
   editable: boolean;

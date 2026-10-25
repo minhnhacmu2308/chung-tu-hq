@@ -120,3 +120,10 @@ export const CREATE_DOSSIER_MESSAGES = defineMessages({
     suggestedHint: "以上仅为建议，非必需。缺少单证时系统仅提示警告 – 许多实际货物没有 Packing List。",
   },
 });
+
+/** Trạng thái Hải quan gộp của lô nhiều tờ khai (danh sách hồ sơ, đầu hồ sơ). Lô 1 tờ không dùng. */
+export const DOSSIER_CUSTOMS_MESSAGES = defineMessages({
+  vi: { clearedPartial: "Thông quan {cleared}/{of}", REJECTED: "Tờ {no}: bị từ chối", SEND_FAILED: "Tờ {no}: lỗi gửi" },
+  en: { clearedPartial: "Cleared {cleared}/{of}", REJECTED: "Sheet {no}: rejected", SEND_FAILED: "Sheet {no}: send failed" },
+  zh: { clearedPartial: "已通关 {cleared}/{of}", REJECTED: "第 {no} 份：被拒绝", SEND_FAILED: "第 {no} 份：发送失败" },
+});

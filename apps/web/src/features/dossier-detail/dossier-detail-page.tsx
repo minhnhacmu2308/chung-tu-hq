@@ -25,6 +25,7 @@ import { UploadStep } from "./steps/upload-step";
 import { buildFlow } from "./workflow-flow";
 import { DOSSIER_DETAIL_MESSAGES } from "./dossier-detail.messages";
 import { postStepVisible } from "../post-amendment/ama-wizard";
+import { anyPostVisible } from "./steps/branch-sheets";
 import { PostAmendmentStep } from "../post-amendment/post-amendment-step";
 
 const STEP_COMPONENTS: Record<ViewStep, ComponentType<StepProps>> = {
@@ -98,7 +99,7 @@ function Header({ dossier, flowAction }: { dossier: Dossier; flowAction: ReactNo
       />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-fg-muted">
         <span className="flex flex-wrap items-center gap-2">
-          <DossierStatusBadge status={dossier.status} />
+          <DossierStatusBadge status={dossier.status} customs={dossier.customs} />
           {dossier.channel && <ChannelBadge channel={dossier.channel} />}
           <DueBadge dueDate={dossier.dueDate} done={done} />
         </span>
@@ -166,14 +167,17 @@ function DetailInner({ id }: { id: string }) {
 
   // Bước 7 theo giai đoạn Hải quan, không theo dossier.step (backend chuyển dossier.step về review/submit trong lúc AMA – thiết kế cũ).
   const stage = subQ.data?.stage;
-  const hasPost = postStepVisible(stage);
+  // Lô nhiều tờ: bước 7 mở khi bất kỳ tờ nào đã thông quan (tờ thông quan trước làm AMA ngay, không chờ tờ khác).
+  const hasPost = subQ.data ? anyPostVisible(subQ.data) : postStepVisible(stage);
+  const postEditing = Boolean(stage?.startsWith("POST_")) || Boolean(subQ.data?.branches.some((b) => b.stage.startsWith("POST_")));
   const progressIndex = hasPost ? STEP_ORDER.length - 1 : STEP_ORDER.indexOf(dossier.step);
   const requested = params.get("step");
   // Đang sửa sau thông quan → mặc định mở bước 7; đã thông quan, chưa sửa → mặc định bước Khai báo.
-  const fallback: ViewStep = stage?.startsWith("POST_") ? "post" : hasPost ? "submit" : dossier.step;
+  const fallback: ViewStep = postEditing ? "post" : hasPost ? "submit" : dossier.step;
   const viewing: ViewStep =
     requested === "post" && hasPost ? "post" : isStep(requested) && STEP_ORDER.indexOf(requested) <= progressIndex ? requested : fallback;
-  const goTo = (step: ViewStep) => router.replace(`${pathname}?step=${step}`, { scroll: false });
+  const goTo = (step: ViewStep, opts?: { branch?: number }) =>
+    router.replace(`${pathname}?step=${step}${opts?.branch ? `&branch=${opts.branch}` : ""}`, { scroll: false });
   const StepView = STEP_COMPONENTS[viewing];
   const flow = buildFlow(dossier, locale);
   const steps = STEP_ORDER.map((sid) => ({ id: sid, label: stepLabels[sid] }));

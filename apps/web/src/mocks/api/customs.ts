@@ -18,7 +18,7 @@ import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
-import type { CustomsMessage, CustomsOperation, CustomsResult, Declaration, DigitalCertificate, Dossier, LineItem } from "@/mocks/types";
+import type { CustomsMessage, CustomsOperation, CustomsSummary, CustomsResult, Declaration, DigitalCertificate, Dossier, LineItem } from "@/mocks/types";
 
 export const customsKeys = {
   all: ["customs"] as const,
@@ -495,6 +495,20 @@ export const branchStageOf = (db: MockDb, dossierId: string, branch: number): Cu
 export const branchCountOf = (db: MockDb, dossierId: string): number => branchesOf(db.lineItems.filter((i) => i.dossierId === dossierId)).length;
 /** Tờ đang chờ phản hồi một nghiệp vụ. */
 export const branchBusy = (db: MockDb, dossierId: string, branch: number): boolean => Boolean(flowOf(db, dossierId, branch).pending);
+
+/**
+ * Trạng thái Hải quan gộp của hồ sơ cho danh sách / đầu hồ sơ ("Thông quan k/N", tờ bị từ chối / lỗi gửi) – như backend (dossierCustomsSummary).
+ * Chưa tờ nào truyền → undefined (hồ sơ không có `customs`).
+ */
+export function customsSummaryOf(db: MockDb, dossierId: string): CustomsSummary | undefined {
+  const sheets = branchesOf(db.lineItems.filter((i) => i.dossierId === dossierId));
+  const flows = (sheets.length ? sheets : [{ no: 1 }]).map((sh) => ({ no: sh.no, stage: db.customsFlows?.[branchKey(dossierId, sh.no)]?.stage ?? "NOT_SENT" }));
+  const msgs = db.customsMessages.filter((m) => m.dossierId === dossierId);
+  if (!msgs.length && flows.every((f) => f.stage === "NOT_SENT")) return undefined;
+  const last = (no: number) => msgs.filter((m) => (m.branch ?? 1) === no).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
+  const s = dossierCustomsSummary(flows.map((f) => ({ stage: f.stage, state: last(f.no)?.result === "ERROR" ? ("SEND_FAILED" as const) : ("APPROVED" as const) })));
+  return { of: s.of, cleared: s.cleared, problems: s.problems };
+}
 
 /** Chốt các phản hồi đã đến (màn hình bản khai bổ sung đọc trạng thái mới nhất). */
 export const settleCustoms = (db: MockDb) => settle(db, Date.now());

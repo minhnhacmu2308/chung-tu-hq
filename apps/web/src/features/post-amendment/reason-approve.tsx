@@ -42,14 +42,14 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
 
   const save = useMutation({
     mutationFn: async (keys: string[]) => {
-      for (const key of keys) await updatePostAmendmentField(ctx.dossierId, { key, value: draft[key] ?? "" });
+      for (const key of keys) await updatePostAmendmentField(ctx.dossierId, { key, value: draft[key] ?? "" }, ctx.branch);
     },
     onSuccess: (_d, keys) => toast({ tone: "success", title: fill(t.savedFields, { n: formatNumber(keys.length) }) }),
     onError: toastMutationError(t.saveAmaFailed),
     onSettled: ctx.refresh,
   });
   const approve = useMutation({
-    mutationFn: () => approvePostAmendment(ctx.dossierId),
+    mutationFn: () => approvePostAmendment(ctx.dossierId, ctx.branch),
     onSuccess: () => {
       setApproveOpen(false);
       toast({ tone: "success", title: t.approvedToast, description: t.approvedToastDesc });

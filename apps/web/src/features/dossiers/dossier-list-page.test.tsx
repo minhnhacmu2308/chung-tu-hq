@@ -2,7 +2,8 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetDb } from "@/mocks/db";
+import { getDb, resetDb } from "@/mocks/db";
+import { branchKey, emptyFlow } from "@/mocks/customs-sim";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { DossierListPage } from "./dossier-list-page";
 
@@ -36,5 +37,27 @@ describe("Danh sách hồ sơ – bảng ↔ thẻ", () => {
     unmount();
     renderWithProviders(<DossierListPage />);
     expect(await screen.findByRole("list", { name: "Hồ sơ khai báo" }, T)).toBeTruthy();
+  }, 30_000);
+});
+
+describe("Danh sách hồ sơ – lô nhiều tờ khai", () => {
+  it("nhãn gộp \"Thông quan 1/3\" + cảnh báo tờ bị từ chối; lô 1 tờ giữ nhãn cũ; không vi phạm a11y", async () => {
+    const db = getDb();
+    db.customsFlows = {
+      ...db.customsFlows,
+      [branchKey("dos_028", 1)]: { ...emptyFlow(), stage: "CLEARED" },
+      [branchKey("dos_028", 2)]: { ...emptyFlow(), stage: "REJECTED" },
+      [branchKey("dos_028", 3)]: { ...emptyFlow(), stage: "PRE_DECLARED" },
+    };
+    const big = db.dossiers.find((d) => d.id === "dos_028")!;
+    big.status = "SUBMITTED";
+    const { container } = renderWithProviders(<DossierListPage />);
+    const table = await screen.findByRole("table", { name: "Hồ sơ khai báo" }, T);
+    await userEvent.type(screen.getByRole("searchbox"), big.code);
+    const row = (await within(table).findByText(big.code, {}, T)).closest("tr")!;
+    expect(within(row).getByText("Thông quan 1/3")).toBeTruthy();
+    expect(within(row).getByText("Tờ 2: bị từ chối")).toBeTruthy();
+    expect(within(row).queryByText("Đã truyền")).toBeNull();
+    await expectNoA11yViolations(container);
   }, 30_000);
 });

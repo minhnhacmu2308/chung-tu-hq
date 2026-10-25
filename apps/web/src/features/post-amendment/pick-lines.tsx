@@ -19,7 +19,7 @@ export function PickLines({ ctx }: { ctx: AmaStepCtx }) {
   const [picked, setPicked] = useState<number[]>([]);
   const free = view.sourceLines.filter((s) => !used.has(s.lineNo));
   const add = useMutation({
-    mutationFn: () => addPostAmendmentLines(ctx.dossierId, [...picked].sort((x, y) => x - y)),
+    mutationFn: () => addPostAmendmentLines(ctx.dossierId, [...picked].sort((x, y) => x - y), ctx.branch),
     onSuccess: () => {
       ctx.refresh();
       ctx.goSub("edit");

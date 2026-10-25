@@ -8,6 +8,8 @@ export const DOCUMENT_PREVIEW_MESSAGES = defineMessages({
     errorTitle: "Không mở được file gốc",
     retry: "Thử lại",
     emptyPage: "Trang này không có trường cần đọc.",
+    renderingFile: "Đang mở file gốc…",
+    openNewTab: "Mở ở tab mới",
   },
   en: {
     originalLabel: "Original document: {kind} – {file}",
@@ -16,6 +18,8 @@ export const DOCUMENT_PREVIEW_MESSAGES = defineMessages({
     errorTitle: "Couldn't open the original file",
     retry: "Retry",
     emptyPage: "This page has no fields to read.",
+    renderingFile: "Opening the original file…",
+    openNewTab: "Open in new tab",
   },
   zh: {
     originalLabel: "原始单证：{kind} – {file}",
@@ -24,6 +28,8 @@ export const DOCUMENT_PREVIEW_MESSAGES = defineMessages({
     errorTitle: "无法打开原始文件",
     retry: "重试",
     emptyPage: "此页没有需要读取的字段。",
+    renderingFile: "正在打开原始文件…",
+    openNewTab: "在新标签页打开",
   },
 });
 

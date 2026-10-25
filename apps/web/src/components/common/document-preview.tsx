@@ -1,12 +1,14 @@
 "use client";
 // Xem chứng từ gốc.
-//  - Có file thật trong kho (backend) → hiện CHÍNH file đó (PDF/ảnh) qua DocumentFileViewer.
+//  - Có file thật trong kho (backend) → dựng CHÍNH file đó (PDF/ảnh) thành trang và tô vùng từng trường (OriginalDocumentViewer);
+//    không dựng được thì hiện bằng trình xem PDF của trình duyệt (DocumentFileViewer, không tô vùng).
 //  - Không có file (bản mock chỉ giữ tên file) → dựng lại trang minh họa từ kết quả trích xuất: mỗi trường in đúng vùng
 //    (region) của nó, rê chuột vào trường bên phải sẽ tô đúng chỗ trên trang.
 import { Alert, Button, DocumentFileViewer, DocumentViewer, Skeleton, fill, useMessages, type DocumentRegion } from "@kb/ui";
 import { useMemo } from "react";
 import { DOC_KIND_LABELS, type DocKind, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { DOCUMENT_PREVIEW_MESSAGES } from "./common.messages";
+import { OriginalDocumentViewer } from "./original-document-viewer";
 
 const TITLES: Record<DocKind, string> = {
   INVOICE: "COMMERCIAL INVOICE",
@@ -209,13 +211,18 @@ export function DocumentPreview({ document, file = { status: "none" }, fields, h
     );
   }
   if (file.status === "ready") {
+    const type = isImage(document.fileName) ? "image" : "pdf";
     return (
-      <DocumentFileViewer
+      <OriginalDocumentViewer
         key={document.id}
-        label={label}
+        document={document}
         src={file.url}
-        type={isImage(document.fileName) ? "image" : "pdf"}
-        fileName={document.fileName}
+        kind={type}
+        label={label}
+        fields={fields}
+        highlightFieldId={highlightFieldId}
+        {...(onFieldClick ? { onFieldClick } : {})}
+        fallback={<DocumentFileViewer label={label} src={file.url} type={type} fileName={document.fileName} {...(className ? { className } : {})} />}
         {...(className ? { className } : {})}
       />
     );

@@ -25,6 +25,12 @@ export type DocumentViewerProps = {
   label: string;
   /** Nội dung từng trang (index 0 = trang 1). */
   pages: readonly ReactNode[];
+  /** Tỉ lệ rộng/cao từng trang (trang ảnh PDF thật). Không truyền → khổ A4 dọc. */
+  pageAspects?: readonly number[];
+  /** false: nội dung trang tràn sát mép (ảnh trang PDF thật) thay vì lề trong như trang dựng lại. */
+  pageInset?: boolean;
+  /** Thêm vào cuối thanh công cụ (vd tên file, nút "Mở ở tab mới"). */
+  toolbarEnd?: ReactNode;
   regions?: readonly DocumentRegion[];
   /** Vùng đang được tô (vd trường người dùng đang rê chuột). Tự chuyển tới trang chứa vùng. */
   highlightId?: string | null;
@@ -51,6 +57,9 @@ const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.roun
 export function DocumentViewer({
   label,
   pages,
+  pageAspects,
+  pageInset = true,
+  toolbarEnd,
   regions = [],
   highlightId = null,
   onRegionClick,
@@ -135,17 +144,22 @@ export function DocumentViewer({
         <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={t.fit} aria-pressed={fit} onClick={() => setFit(true)}>
           <Maximize2 className="h-4 w-4" />
         </Button>
+        {toolbarEnd && <div className="ml-auto flex min-w-0 items-center gap-1">{toolbarEnd}</div>}
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-4">
         {/* zoom CSS: phóng cả chữ lẫn vùng tô, giữ nguyên tọa độ %. */}
         <div className="mx-auto w-fit" style={{ zoom } as CSSProperties} data-slot="document-zoom">
           <div
-            className="relative aspect-[210/297] w-[640px] overflow-hidden rounded-sm border border-border bg-surface text-[11px] leading-snug text-fg shadow-md"
+            className={cn(
+              "relative w-[640px] overflow-hidden rounded-sm border border-border bg-surface text-[11px] leading-snug text-fg shadow-md",
+              pageAspects?.[page - 1] ? "aspect-[var(--page-aspect)]" : "aspect-[210/297]",
+            )}
+            style={pageAspects?.[page - 1] ? ({ "--page-aspect": String(pageAspects[page - 1]) } as CSSProperties) : undefined}
             data-slot="document-page"
             data-page={page}
           >
-            <div className="absolute inset-0 p-10">{pages[page - 1]}</div>
+            <div className={cn("absolute inset-0", pageInset && "p-10")}>{pages[page - 1]}</div>
             {pageRegions.map((r) => {
               const active = r.id === highlightId;
               const vars = { "--rx": `${r.x}%`, "--ry": `${r.y}%`, "--rw": `${r.w}%`, "--rh": `${r.h}%` } as CSSProperties;

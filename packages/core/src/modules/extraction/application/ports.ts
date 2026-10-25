@@ -112,4 +112,4 @@ export type ExtractionDeps = {
 };
 
 export const PIPELINE_VERSION = "1";
-export const PROMPT_VERSION = "2";
+export const PROMPT_VERSION = "3";

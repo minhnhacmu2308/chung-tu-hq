@@ -68,6 +68,17 @@ describe("DocumentViewer", () => {
     expect(onRegionClick).toHaveBeenCalledTimes(2);
   });
 
+  it("trang ảnh PDF thật: tỉ lệ khung theo từng trang, không lề trong; toolbarEnd ở cuối thanh công cụ", async () => {
+    render(<DocumentViewer label="Chứng từ gốc" pages={PAGES} pageAspects={[1.414, 0.707]} pageInset={false} toolbarEnd={<a href="#x">Mở file</a>} />);
+    const page = document.querySelector<HTMLElement>('[data-slot="document-page"]')!;
+    expect(page.style.getPropertyValue("--page-aspect")).toBe("1.414");
+    expect(page.className).toContain("aspect-[var(--page-aspect)]");
+    expect(page.firstElementChild!.className).not.toContain("p-10");
+    expect(screen.getByRole("link", { name: "Mở file" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Trang sau" }));
+    expect(document.querySelector<HTMLElement>('[data-slot="document-page"]')!.style.getPropertyValue("--page-aspect")).toBe("0.707");
+  });
+
   it("page điều khiển từ ngoài", () => {
     render(<DocumentViewer label="Chứng từ gốc" pages={PAGES} page={2} />);
     expect(screen.getByText("Trang hai: tổng cộng")).toBeInTheDocument();

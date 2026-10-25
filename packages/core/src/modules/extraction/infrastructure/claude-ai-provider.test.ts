@@ -2,7 +2,8 @@ import { customFieldsOf, DocKindSchema, extractionSchemaFor, withCustomFields } 
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { describe, expect, it } from "vitest";
 import { AiDataError } from "../application/ports.js";
-import { ClaudeAiProvider, MAX_AI_FILE_BYTES } from "./claude-ai-provider.js";
+import { ClaudeAiProvider, MAX_AI_FILE_BYTES, toRegions } from "./claude-ai-provider.js";
+import { scanPdf, textPdf } from "./test/pdfs.js";
 
 const FILE = { bytes: Buffer.from("%PDF-1.4 mock"), mime: "application/pdf", pages: 2, fileName: "Commercial Invoice.pdf" };
 const CLASSIFY = { documents: [{ kind: "INVOICE", pages: [1, 2], isDuplicateCopy: false, supplierHint: "HANSOL" }] };
@@ -90,5 +91,35 @@ describe("ClaudeAiProvider", () => {
     const p = provider(api.fetchFn).classifyPages(FILE);
     await expect(p).rejects.toBeInstanceOf(AiDataError);
     await expect(p).rejects.toThrow(message);
+  });
+  it("PDF chuẩn (có lớp chữ): KHÔNG xin tọa độ – không có _regions trong schema lẫn lời nhắc", async () => {
+    const api = fakeApi({ text: JSON.stringify({ invoiceNo: "INV-001" }) });
+    const r = await provider(api.fetchFn).extract({ ...FILE, bytes: await textPdf(), pages: 1 }, [1], extractionSchemaFor("INVOICE"), { kind: "INVOICE", skillHints: [], examples: [], supplierHint: null });
+    expect(r.regions).toBeNull();
+    expect(JSON.stringify(api.sent[0]!.body["output_config"])).not.toContain("_regions");
+    const text = (api.sent[0]!.body["messages"] as { content: { type: string; text?: string }[] }[])[0]!.content[1]!.text!;
+    expect(text).not.toContain("_regions");
+  });
+
+  it("PDF scan: xin _regions; kết quả tách tọa độ (thang 0–1000 → % trang), dữ liệu không lẫn _regions", async () => {
+    const reply = { invoiceNo: "INV-001", _regions: [{ key: "invoiceNo", page: 1, x0: 100, y0: 200, x1: 300, y1: 250 }, { key: "items.0.hsCodeOnInvoice", page: 1, x0: 500, y0: 600, x1: 600, y1: 620 }] };
+    const api = fakeApi({ text: JSON.stringify(reply) });
+    const r = await provider(api.fetchFn).extract({ ...FILE, bytes: await scanPdf(), pages: 1 }, [1], extractionSchemaFor("INVOICE"), { kind: "INVOICE", skillHints: [], examples: [], supplierHint: null });
+    expect(r.result).toEqual({ invoiceNo: "INV-001" });
+    expect(r.regions).toEqual({ invoiceNo: { page: 1, x: 10, y: 20, w: 20, h: 5 }, "items.0.hsOnInvoice": { page: 1, x: 50, y: 60, w: 10, h: 2 } });
+    expect(JSON.stringify(api.sent[0]!.body["output_config"])).toContain("_regions");
+  });
+
+  it("ảnh chụp: cũng xin tọa độ", async () => {
+    const api = fakeApi({ text: JSON.stringify({ invoiceNo: "X", _regions: [] }) });
+    const r = await provider(api.fetchFn).extract({ ...FILE, mime: "image/jpeg", pages: 1 }, [1], extractionSchemaFor("INVOICE"), { kind: "INVOICE", skillHints: [], examples: [], supplierHint: null });
+    expect(r.regions).toBeNull();
+    expect(JSON.stringify(api.sent[0]!.body["output_config"])).toContain("_regions");
+  });
+
+  it("toRegions bỏ khung sai trang, méo, sai cấu trúc; kẹp vào trang; trùng khóa lấy khung đầu", () => {
+    expect(toRegions("x", 1)).toBeNull();
+    expect(toRegions([{ key: "a", page: 3, x0: 0, y0: 0, x1: 10, y1: 10 }, { key: "b", page: 1, x0: 50, y0: 50, x1: 40, y1: 60 }], 2)).toBeNull();
+    expect(toRegions([{ key: "a", page: 2, x0: -20, y0: 900, x1: 100, y1: 1200 }, { key: "a", page: 1, x0: 0, y0: 0, x1: 10, y1: 10 }], 2)).toEqual({ a: { page: 2, x: 0, y: 90, w: 10, h: 10 } });
   });
 });

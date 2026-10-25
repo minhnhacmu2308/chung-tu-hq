@@ -3,7 +3,7 @@ import { fixedClock } from "../../../../shared/clock.js";
 import { sequentialIdGen } from "../../../../shared/ids.js";
 import { RecordingNotifier } from "../../../../shared/notifier.js";
 import { unwrap } from "../../../../shared/result.js";
-import { AiDataError, type ExtractionDeps } from "../ports.js";
+import { AiDataError, PROMPT_VERSION, type ExtractionDeps } from "../ports.js";
 import { processDocument } from "../process-document.js";
 import { FakeDocuments, FixedSkills, InMemoryExtractionUow, NoSkills, NoValidation, RecordingUsage, ScriptedAi } from "../test/fakes.js";
 
@@ -45,7 +45,7 @@ describe("processDocument", () => {
     expect(ai.calls).toEqual({ classify: 1, extract: 1 });
     expect(docs.docs[0]).toMatchObject({ status: "DONE", kind: "INVOICE", kindSource: "AI" });
     expect(uow.data.extractions).toHaveLength(1);
-    expect(uow.data.extractions[0]).toMatchObject({ kind: "INVOICE", status: "DONE", promptVersion: "2", usageEventId: "use_2" });
+    expect(uow.data.extractions[0]).toMatchObject({ kind: "INVOICE", status: "DONE", promptVersion: PROMPT_VERSION, usageEventId: "use_2" });
     expect(usage.events).toHaveLength(2); // classify + extract
     expect(uow.data.shipments[0]?.version).toBe(1);
     expect(uow.data.shipments[0]?.data.invoice.no.value).toBe("HSP-2610-0457");

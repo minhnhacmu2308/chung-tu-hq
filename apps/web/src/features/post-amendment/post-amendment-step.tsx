@@ -171,7 +171,7 @@ export function PostAmendmentStep({ dossier }: StepProps) {
           {...(canEdit
             ? {
                 action: (
-                  <Button size="sm" variant="secondary" leftIcon={<Copy className="h-4 w-4" />} loading={copy.isPending} onClick={() => copy.mutate(commonEdits)}>
+                  <Button size="sm" variant="secondary" wrap leftIcon={<Copy className="h-4 w-4 shrink-0" />} loading={copy.isPending} onClick={() => copy.mutate(commonEdits)}>
                     {t.copyButton}
                   </Button>
                 ),

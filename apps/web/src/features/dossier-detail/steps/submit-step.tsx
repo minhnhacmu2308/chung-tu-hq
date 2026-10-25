@@ -616,7 +616,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       <Grid cols={{ base: 1, lg: 3 }} gap="lg">
         <Card className="cq-lg:col-span-2">
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 basis-60">
               <CardTitle className="flex flex-wrap items-center gap-2">
                 <Send aria-hidden="true" className="h-5 w-5 text-primary" />
                 {hasNumber ? (
@@ -701,7 +701,7 @@ function SheetCard({
   return (
     <Card aria-labelledby={titleId}>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-60">
           <CardTitle as="h3" id={titleId} className="flex flex-wrap items-center gap-2">
             <span>
               {b.declarationNo ? fill(sh.sheetTitleNo, { no: b.no, of, decl: b.declarationNo }) : fill(sh.sheetTitle, { no: b.no, of })}
@@ -840,7 +840,7 @@ function NextStep({
     <div className="flex flex-col gap-3 rounded-md border border-primary bg-primary-subtle p-4">
       <div className="flex flex-wrap items-start gap-3">
         <IconTile icon={<Sparkles />} tone="primary" size="md" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-48">
           <p className="text-xs font-medium uppercase tracking-wide text-primary-subtle-fg">{t.nextStep}</p>
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-fg">
             <Badge tone="primary" variant="outline" className="font-mono">

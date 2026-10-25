@@ -33,10 +33,10 @@ export async function recallAllSheets(deps: CustomsDeps, ctx: Ctx, dossierId: st
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   if (!snap) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
-  if (branchCount(snap.payload.items.length) <= 1) return err(domainError("VALIDATION", "Gọi về tất cả chỉ dùng cho lô nhiều tờ"));
+  if (branchCount(snap.payload.items.length) <= 1) return err(reasonError("VALIDATION", "RECALL_ALL_SINGLE_SHEET"));
   const { results, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
   const targets = recallTargets(snap, results, outbox);
-  if (!targets.length) return err(domainError("INVALID_STATE", "Không còn tờ nào cần gọi về"));
+  if (!targets.length) return err(reasonError("INVALID_STATE", "RECALL_ALL_NONE"));
   // Kiểm trước cả lô: có tờ đích chưa gọi về được (đang chờ phản hồi nghiệp vụ khác) → từ chối cả lần, không gửi tờ nào.
   const blocked = targets.filter((t) => !t.op);
   if (blocked.length) return err(reasonError("INVALID_STATE", "RECALL_ALL_BLOCKED", { sheets: blocked.map((t) => t.branch).join(", ") }));

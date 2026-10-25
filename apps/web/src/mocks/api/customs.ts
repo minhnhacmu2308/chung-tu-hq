@@ -889,9 +889,9 @@ export const recallAllSheets = (dossierId: string) =>
   mutate((db): RecallAllResult => {
     settle(db, Date.now());
     const c = load(db, dossierId);
-    if (c.of <= 1) throw new ApiError("VALIDATION", "Gọi về tất cả chỉ dùng cho lô nhiều tờ");
+    if (c.of <= 1) throw reasonApiError("VALIDATION", "RECALL_ALL_SINGLE_SHEET");
     const targets = recallTargetsOf(db, dossierId);
-    if (!targets.length) throw new ApiError("INVALID_STATE", "Không còn tờ nào cần gọi về");
+    if (!targets.length) throw reasonApiError("INVALID_STATE", "RECALL_ALL_NONE");
     const blocked = targets.filter((t) => !t.op);
     if (blocked.length) throw reasonApiError("INVALID_STATE", "RECALL_ALL_BLOCKED", { sheets: blocked.map((t) => t.no).join(", ") });
     const first = targets[0]!;

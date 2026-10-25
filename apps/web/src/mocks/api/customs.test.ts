@@ -562,7 +562,7 @@ describe("tờ khai nhánh: gọi về tất cả (recallAllSheets)", () => {
     wait(6_000);
     expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "RECALLED", "AMEND_RECALLED"]);
     expect(decl(BIG).status).toBe("DRAFT");
-    await expect(recallAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", message: "Không còn tờ nào cần gọi về" });
+    await expect(recallAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "RECALL_ALL_NONE", message: "Không còn tờ nào cần gọi về" });
   });
   it("đã gọi về tờ 2 (tờ khai DRAFT) → gọi về tất cả gửi tờ 1, 3; hồ sơ giữ bước review", async () => {
     await preDeclareAll(BIG);
@@ -580,7 +580,7 @@ describe("tờ khai nhánh: gọi về tất cả (recallAllSheets)", () => {
     await performOperation(BIG, "PORT_FEE", 2);
     await expect(recallAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "RECALL_ALL_BLOCKED", params: { sheets: "2" } });
     expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDB")).toHaveLength(0);
-    await expect(recallAllSheets(NEW)).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(recallAllSheets(NEW)).rejects.toMatchObject({ code: "VALIDATION", reason: "RECALL_ALL_SINGLE_SHEET" });
   });
 });
 

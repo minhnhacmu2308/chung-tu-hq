@@ -61,7 +61,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     if (ob.status === "SENT") {
       const chained = await chainNextBranch(deps, ctx, ob);
       // Gọi về: crash trước khi mở lại → mở lại ở lần chạy lại (chỉ khi tờ vẫn đang gọi về và tờ khai chưa mở lại – reopenAfterRecall kiểm).
-      if (isRecallOperation(ob.operation) && ob.operation !== "AMB" && !chained.continued) await reopenAfterRecall(deps, ctx, ob);
+      if (isRecallOperation(ob.operation) && ob.operation !== "AMB" && !chained.continued) await reopenAfterRecall(deps, ctx, ob, ob.updatedAt);
     }
     return ok({ status: ob.status, next: null });
   }
@@ -232,8 +232,9 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     if (isRecallOperation(op) && op !== "AMB") {
       // Gọi về sửa: mở lại tờ khai (DRAFT, bước Review) khi không còn lệnh gọi về nào của lần này đang chờ (spec §2.3).
       recallContinues = outcome.continued;
+      // Chuỗi dừng vì guard ở tờ kế tiếp (đang chờ phản hồi) → vẫn mở lại (quyết định: người khai bấm "Gọi về tất cả" lại được khi tờ khai đang nháp).
       if (!recallContinues) {
-        const sheets = await reopenAfterRecall(deps, ctx, ob);
+        const sheets = await reopenAfterRecall(deps, ctx, ob, now());
         if (chainOfOutbox(ob) === "recall") recalledAll = sheets;
       }
     }
@@ -320,15 +321,20 @@ async function chainSheets(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserI
 /**
  * Gọi về thành công và không còn lệnh gọi về nào của lần này đang chờ → tự mở lại tờ khai (DRAFT, hồ sơ NEEDS_REVIEW/review – markDraft) để sửa
  * và duyệt lại (spec §2.3, thay bước bấm "Mở lại để sửa"). Chỉ khi tờ khai đang APPROVED/SUBMITTED (đã DRAFT → không mở lại lần nữa, không ghi audit trùng)
- * và tờ vừa gọi về vẫn ở giai đoạn đã gọi về (job chạy lại muộn không mở lại tờ khai đã duyệt/truyền lại).
+ * và tờ vừa gọi về vẫn ở giai đoạn đã gọi về. Job chạy lại sau SENT (crash/stalled) không được hủy việc người khai đã làm sau lần gọi về:
+ * tờ khai được duyệt lại sau thời điểm SENT (approvedAt > `sent` – lúc ghi SENT: now() ở lần chạy chính, ob.updatedAt khi chạy lại) hoặc đã có outbox gửi nội dung tạo sau đó → không mở lại.
  * Audit DECLARATION_REOPENED `detail.scope`: "ALL" (gọi về tất cả) hoặc danh sách tờ đang gọi về. Trả số tờ đang gọi về (thông báo).
  */
-async function reopenAfterRecall(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<number> {
+async function reopenAfterRecall(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow, sent: Date): Promise<number> {
   const snap = await deps.declarations.get(ctx.orgId, ob.dossierId);
-  const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, ob.dossierId));
+  const { results, all } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, ob.dossierId), all: await r.outbox.listForDossier(ctx.orgId, ob.dossierId) }));
   const of = snap ? branchCount(snap.payload.items.length) : 1;
   const recalled = results.filter((r) => r.branch <= of && !!r.declarationNo && (stageOf(r) === "RECALLED" || stageOf(r) === "AMEND_RECALLED")).map((r) => r.branch).sort((a, b) => a - b);
   if (!snap || (snap.status !== "APPROVED" && snap.status !== "SUBMITTED") || !recalled.includes(ob.branch)) return recalled.length;
+  const sentAt = sent.getTime();
+  const reapproved = !!snap.approvedAt && Date.parse(snap.approvedAt) > sentAt;
+  const resent = all.some((o) => o.id !== ob.id && isContentOperation(o.operation) && o.operation !== "AMA" && o.createdAt.getTime() > sentAt);
+  if (reapproved || resent) return recalled.length;
   await deps.declarations.markDraft(ctx, ob.dossierId);
   const dossier = await deps.dossiers.get(ctx.orgId, ob.dossierId);
   await deps.orgAudit?.record(ctx, { action: "DECLARATION_REOPENED", targetType: "dossier", targetId: ob.dossierId, targetLabel: dossier?.code ?? ob.dossierId, detail: { scope: chainOfOutbox(ob) === "recall" ? "ALL" : recalled } });

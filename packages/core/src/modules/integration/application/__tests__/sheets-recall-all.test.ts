@@ -3,6 +3,7 @@
 import { declarationEditScope, type CustomsOperation } from "@kb/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { RecordingOrgAudit } from "../../../../shared/audit.js";
+import { fixedClock } from "../../../../shared/clock.js";
 import type { RecordingNotifier } from "../../../../shared/notifier.js";
 import { unwrap } from "../../../../shared/result.js";
 import { stageOf } from "../../domain/state-machine.js";
@@ -161,11 +162,11 @@ describe("recallAllSheets – chuỗi gọi về tờ 1 → N", () => {
     h.decls.status = "SUBMITTED";
     seedOf(h, 1, "PRE_DECLARED");
     const e = errOf(await recallAllSheets(h.deps, declarant, D))!;
-    expect(e.code).toBe("VALIDATION");
+    expect(e).toMatchObject({ code: "VALIDATION", reason: "RECALL_ALL_SINGLE_SHEET" });
     expect(e.message).toMatch(/chỉ dùng cho lô nhiều tờ/);
     h = makeHarness();
     lot("RECALLED", "CLEARED");
-    expect(errOf(await recallAllSheets(h.deps, declarant, D))).toMatchObject({ code: "INVALID_STATE", message: "Không còn tờ nào cần gọi về" });
+    expect(errOf(await recallAllSheets(h.deps, declarant, D))).toMatchObject({ code: "INVALID_STATE", reason: "RECALL_ALL_NONE", message: "Không còn tờ nào cần gọi về" });
     h = makeHarness();
     lot("PRE_DECLARED", "PRE_DECLARED");
     expect(errOf(await recallAllSheets(h.deps, viewer, D))).toMatchObject({ code: "FORBIDDEN" });
@@ -181,5 +182,51 @@ describe("recallAllSheets – chuỗi gọi về tờ 1 → N", () => {
     await drain();
     expect(sent()).toEqual([[2, "IDC", "FAILED"], [1, "IDB", "SENT"], [2, "IDB", "SENT"]]);
     expect(stages()).toEqual(["RECALLED", "RECALLED"]);
+  });
+});
+
+describe("job gọi về chạy lại sau SENT không hủy việc người khai đã làm (ADR 0005)", () => {
+  const LATER = "2026-10-14T04:00:00.000Z";
+  /** Gọi về tờ `branch` (không chain) thành công → tự mở lại; trả id outbox gọi về. */
+  async function recallAndReopen(branch: number) {
+    unwrap(await performOperation(h.deps, declarant, D, "IDB", branch));
+    const id = h.uow.data.outbox.at(-1)!.id;
+    await drain();
+    expect(h.decls.status).toBe("DRAFT");
+    return id;
+  }
+  it("lô nhiều tờ: gọi về → mở lại → duyệt lại → job chạy lại → vẫn APPROVED, không mở lại / audit lần nữa", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED");
+    const ob = await recallAndReopen(2);
+    Object.assign(h.decls, { status: "APPROVED", approvedAt: LATER });
+    await run(ob);
+    expect(h.decls.status).toBe("APPROVED");
+    expect(h.decls.reopened).toEqual([D]);
+    expect(reopenedAudits()).toHaveLength(1);
+  });
+  it("lô một tờ: gọi về → mở lại → duyệt lại → job chạy lại → vẫn APPROVED", async () => {
+    h.decls.items = lines(10);
+    h.decls.status = "SUBMITTED";
+    seedOf(h, 1, "PRE_DECLARED");
+    const ob = await recallAndReopen(1);
+    Object.assign(h.decls, { status: "APPROVED", approvedAt: LATER });
+    await run(ob);
+    expect(h.decls.status).toBe("APPROVED");
+    expect(h.decls.reopened).toEqual([D]);
+  });
+  it("gọi về → mở lại → duyệt lại → truyền (IDA tờ 2 PENDING, tờ vẫn RECALLED) → job chạy lại → vẫn SUBMITTED, không markDraft", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED");
+    const ob = await recallAndReopen(2);
+    // Lần duyệt không mang approvedAt (dữ liệu cũ) → chặn nhờ outbox gửi nội dung tạo sau lần gọi về.
+    h.decls.status = "APPROVED";
+    h.deps.clock = fixedClock(LATER);
+    unwrap(await performOperation(h.deps, declarant, D, "IDA", 2));
+    expect(h.decls.status).toBe("SUBMITTED");
+    expect(sent().at(-1)).toEqual([2, "IDA", "PENDING"]);
+    expect(stages()[1]).toBe("RECALLED");
+    await run(ob);
+    expect(h.decls.status).toBe("SUBMITTED");
+    expect(h.decls.reopened).toEqual([D]);
+    expect(reopenedAudits()).toHaveLength(1);
   });
 });

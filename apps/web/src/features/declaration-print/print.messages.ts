@@ -3,6 +3,10 @@ import { defineMessages } from "@kb/ui";
 
 export const PRINT_MESSAGES = defineMessages({
   vi: {
+    sheetPick: "Chọn tờ khai",
+    sheetOption: "Tờ {no}/{of} · dòng {from}–{to}",
+    sharedNote: "Áp dụng cho cả {n} tờ khai",
+    sharedNoteBody: "Chỉ tiêu chung giống nhau ở mọi tờ – sửa ở tờ nào cũng là sửa chung. Dòng hàng, tổng trị giá, thuế và ô 1.2 theo tờ đang chọn; bản in chỉ in tờ đang chọn.",
     toolbarAria: "Bản in tờ khai",
     goToPage: "Đi tới trang",
     goToPagePh: "Đi tới trang…",
@@ -44,6 +48,10 @@ export const PRINT_MESSAGES = defineMessages({
     moreN: "và {n} chỉ tiêu khác",
   },
   en: {
+    sheetPick: "Select declaration sheet",
+    sheetOption: "Sheet {no}/{of} · lines {from}–{to}",
+    sharedNote: "Applies to all {n} declarations",
+    sharedNoteBody: "Common fields are identical on every sheet – editing them on any sheet changes them all. Goods lines, total value, taxes and box 1.2 follow the selected sheet; printing prints the selected sheet only.",
     toolbarAria: "Declaration printout",
     goToPage: "Go to page",
     goToPagePh: "Go to page…",
@@ -85,6 +93,10 @@ export const PRINT_MESSAGES = defineMessages({
     moreN: "and {n} more fields",
   },
   zh: {
+    sheetPick: "选择报关单分单",
+    sheetOption: "第 {no}/{of} 份 · 第 {from}–{to} 行",
+    sharedNote: "适用于全部 {n} 份报关单",
+    sharedNoteBody: "通用申报项在每份报关单上都相同——在任一份上修改即全部修改。货物行、总价值、税额和 1.2 栏按所选分单显示；打印仅打印所选分单。",
     toolbarAria: "报关单打印稿",
     goToPage: "转到页",
     goToPagePh: "转到页…",

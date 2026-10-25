@@ -1,8 +1,9 @@
 "use client";
 // Tờ khai dạng bản in VNACCS (bước 5 Review): giá trị người khai (dossier-adapter) + Hải quan trả về (customs-adapter) + số ứng dụng ước tính
 // cho ô Hải quan còn trống; trạng thái ô (lỗi Hải quan, còn thiếu, ước tính, đã sửa). Bấm ô → panel sửa ô; thanh công cụ: trang, ô cần xử lý, in.
+// Lô > 50 dòng (N tờ khai nhánh): thanh chọn tờ ở đầu; dòng hàng, tổng trị giá/thuế, ô 1.2, số Hải quan theo tờ đang chọn; in chỉ tờ đang chọn.
 import { Alert, Button, fill, Stack, useMessages, useUiLocale } from "@kb/ui";
-import { otherFieldKeys, parseItemFieldCode, printTitle, type Declaration, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
+import { otherFieldKeys, parseItemFieldCode, printTitle, type Declaration, type DeclarationBranch, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FieldEditPanel, type LeaveGuard } from "./field-edit-panel";
@@ -11,11 +12,12 @@ import { cellDomId, type CellLook } from "./print-cell";
 import { regionDomId, PrintSheets } from "./print-sheets";
 import {
   cellState, editedKeys, errorSlots, fieldLocator, LOOKUP_NAME_CELLS, otherFieldCells, pageCount, panelOrder, printData, printIssues, printValue,
-  sameNumber, withLookupNames, type PrintData, type PrintTarget,
+  printStateFor, sameNumber, withLookupNames, type PrintData, type PrintTarget,
 } from "./print-state";
 import { codeScope } from "../declaration-form/code-scope";
 import { useCodeName } from "../declaration-form/use-code-list";
 import { PrintToolbar } from "./print-toolbar";
+import { SharedFieldsNote, SheetPicker } from "./sheet-picker";
 import { PRINT_MESSAGES } from "./print.messages";
 import { formatDateTime } from "@/lib/format";
 import { errorPlace } from "../dossier-detail/steps/customs-errors";
@@ -30,6 +32,11 @@ type Props = {
   mode: DeclarationEditMode;
   canEdit: boolean;
   submission: SubmissionView | undefined;
+  /** Tổng theo tờ khai nhánh (DeclarationView.branches); [] / không có → một tờ. */
+  branches?: DeclarationBranch[];
+  /** Tờ đang chọn (1-based) do nơi gọi giữ (vd tham số URL); không truyền → giữ trong component. */
+  sheet?: number;
+  onSheetChange?: (no: number) => void;
   /**
    * Nơi gọi (review-step) hỏi trước khi rời tab "Tờ khai": gọi `current(href)` → true = panel còn thay đổi chưa lưu, đã mở hộp
    * Lưu / Bỏ thay đổi / Ở lại và sẽ tự chuyển tới `href` khi người dùng chọn Lưu hoặc Bỏ; false = rời được ngay.
@@ -83,10 +90,19 @@ function printModel(data: PrintData, decl: Declaration, items: LineItem[], submi
   return { kind, lineNos, values, itemRows, errors, attention, unplaced: issues.unplaced, issueCount: issues.count, look, order, hasOther, directives: info?.directives.length ?? 0 };
 }
 
-export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submission, leaveGuard }: Props) {
+export function PrintDeclaration({ dossierId, decl, items: allItems, mode, canEdit, submission: lotSubmission, branches, sheet, onSheetChange, leaveGuard }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   const locale = useUiLocale();
+  const [ownSheet, setOwnSheet] = useState(1);
+  const view = useMemo(() => printStateFor({ items: allItems, ...(branches ? { branches } : {}) }, sheet ?? ownSheet, lotSubmission), [allItems, branches, sheet, ownSheet, lotSubmission]);
+  const { items, submission } = view;
   const [selected, setSelected] = useState<PrintTarget | null>(null);
+  // Đổi tờ: ô đang chọn (chỉ số dòng của tờ cũ) không còn đúng → bỏ chọn; panel vẽ lại theo tờ mới (key).
+  const [seenSheet, setSeenSheet] = useState(view.no);
+  if (seenSheet !== view.no) {
+    setSeenSheet(view.no);
+    setSelected(null);
+  }
   // Ổn định qua các lần vẽ: PrintCell (memo) không vẽ lại khi chọn ô khác.
   const select = useCallback((key: string, line?: number) => setSelected(line === undefined ? { key } : { key, line }), []);
   // Cuộn tới ô sau khi vẽ (khối "Chỉ tiêu khác" có thể vừa mở ra); n để cuộn lại cùng ô.
@@ -98,7 +114,7 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
     setSelected(t);
     if (t) setScrollTo((s) => ({ id: cellDomId(t.key, t.line), n: (s?.n ?? 0) + 1 }));
   }, []);
-  const base = useMemo(() => printData(decl, items, submission), [decl, items, submission]);
+  const base = useMemo(() => printData(decl, items, submission, view), [decl, items, submission, view]);
   // Tên địa điểm lưu kho: Hải quan trả theo mã; trước đó tra danh mục A202 (trong phạm vi chi cục) để hiện ước tính.
   const storage = LOOKUP_NAME_CELLS[base.kind][0]!;
   const office = base.values["TK_CH"] ?? "";
@@ -137,6 +153,7 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
           </Alert>
         </div>
       )}
+      <SheetPicker sheets={view.sheets} value={view.no} onChange={onSheetChange ?? setOwnSheet} />
       <PrintToolbar
         pages={pageCount(model.kind, items.length)}
         otherFieldsId={model.hasOther ? OTHER_FIELDS_DOM_ID : null}
@@ -154,6 +171,7 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
           }
         />
       )}
+      <SharedFieldsNote of={view.of} />
       <PrintSheets
         kind={model.kind}
         title={printTitle(model.kind, submission?.stage)}
@@ -164,6 +182,7 @@ export function PrintDeclaration({ dossierId, decl, items, mode, canEdit, submis
       />
       <OtherFields kind={model.kind} decl={model.values} items={model.itemRows} lineNos={model.lineNos} look={model.look} selected={selected} onSelect={select} />
       <FieldEditPanel
+        key={view.no}
         dossierId={dossierId}
         decl={decl}
         items={items}

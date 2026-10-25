@@ -31,7 +31,7 @@ import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
 import type { LeaveGuard } from "../../declaration-print/field-edit-panel";
 import { cellDomId } from "../../declaration-print/print-cell";
-import { declarationGapsOf, printIssuesOf } from "../../declaration-print/print-state";
+import { declarationGapsOf, printIssuesOf, sheetTarget } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { LoadError } from "@/components/common/load-error";
 
@@ -106,6 +106,19 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     if (t !== "full" && leaveGuard.current?.(href)) return;
     router.replace(href, { scroll: false });
   };
+  // Lô > 50 dòng: tờ khai nhánh đang xem trên bản in (?sheet=k). Đổi tờ khi panel còn thay đổi chưa lưu → hỏi trước như rời tab.
+  const sheet = Math.max(1, Math.trunc(Number(params.get("sheet")) || 1));
+  const sheetHref = (no: number, tabTo?: string) => {
+    const next = new URLSearchParams(params.toString());
+    if (tabTo) next.set("tab", tabTo);
+    next.set("sheet", String(no));
+    return `${pathname}?${next.toString()}`;
+  };
+  const setSheet = (no: number) => {
+    const href = sheetHref(no);
+    if (leaveGuard.current?.(href)) return;
+    router.replace(href, { scroll: false });
+  };
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -136,16 +149,16 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const tab: Tab = (tabs as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "full";
   const rejection = subQ.data?.rejection ?? null;
   // "Đến ô cần xử lý": mở tab bản in rồi bấm vào ô (mở panel sửa ô) sau khi tab đã vẽ; n để bấm lại cùng ô.
-  const [jump, setJump] = useState<{ id: string; n: number } | null>(null);
+  const [jump, setJump] = useState<{ id: string; n: number; sheet?: number } | null>(null);
   useEffect(() => {
-    if (!jump || tab !== "full") return;
+    if (!jump || tab !== "full" || (jump.sheet !== undefined && jump.sheet !== sheet)) return;
     const frame = requestAnimationFrame(() => {
       const cell = document.querySelector<HTMLElement>(`[data-print-cell="${jump.id}"]`);
       cell?.scrollIntoView({ block: "center" });
       cell?.click();
     });
     return () => cancelAnimationFrame(frame);
-  }, [jump, tab]);
+  }, [jump, tab, sheet]);
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
     onSuccess: () => {
@@ -160,7 +173,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
   if (viewQ.isLoading) return <StepLoading />;
   if (viewQ.isError) return <StepError error={viewQ.error} onRetry={() => void viewQ.refetch()} />;
-  const { declaration: decl, items, unconfirmedHs } = viewQ.data!;
+  const { declaration: decl, items, branches, unconfirmedHs } = viewQ.data!;
 
   if (!decl) {
     return (
@@ -189,8 +202,14 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const goToGap = () => {
     const g = required.gaps[0];
     if (!g) return;
-    if (tab !== "full") setTab("full");
-    setJump((j) => ({ id: cellDomId(g.key, g.line), n: (j?.n ?? 0) + 1 }));
+    // Ô của dòng hàng: mở đúng tờ chứa dòng (chỉ số dòng trong tờ); ô tờ khai: ở tờ đang xem.
+    const at = g.line === undefined ? undefined : sheetTarget(required.lineNos, g.line);
+    if (at && at.no !== sheet) {
+      const href = sheetHref(at.no, "full");
+      if (tab === "full" && leaveGuard.current?.(href)) return;
+      router.replace(href, { scroll: false });
+    } else if (tab !== "full") setTab("full");
+    setJump((j) => ({ id: cellDomId(g.key, at?.line), n: (j?.n ?? 0) + 1, ...(at ? { sheet: at.no } : {}) }));
   };
 
   return (
@@ -290,7 +309,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
               ) : (
                 // Chưa có giai đoạn Hải quan thì chưa vẽ: tránh hiện "BẢN NHÁP" / watermark cho tờ khai đã khai.
                 subQ.isPending ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
-                  <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} submission={subQ.data} leaveGuard={leaveGuard} />
+                  <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} submission={subQ.data} branches={branches} sheet={sheet} onSheetChange={setSheet} leaveGuard={leaveGuard} />
                 )
               )}
             </TabsContent>

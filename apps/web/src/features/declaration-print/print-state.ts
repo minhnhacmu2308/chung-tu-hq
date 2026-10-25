@@ -1,7 +1,7 @@
 // Logic thuần của bản in tờ khai (Review bước 5): vị trí ô trên bố cục, số ước tính, trạng thái ô, danh sách ô cần xử lý, số trang.
 import {
-  expandRepeat, formKeysOf, itemFields, layoutFor, otherFieldKeys, printKeys, printLayoutFor, requiredGaps,
-  type ConditionContext, type ConditionId, type RequiredGap, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
+  branchRanges, expandRepeat, formKeysOf, itemFields, layoutFor, otherFieldKeys, printKeys, printLayoutFor, requiredGaps,
+  type ConditionContext, type ConditionId, type DeclarationBranch, type RequiredGap, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
 } from "@kb/contracts";
 import type { PaperFieldState } from "@kb/ui";
 import { conditionContext, isApplicable, type FormValues } from "../declaration-form/form-state";
@@ -226,25 +226,69 @@ export type PrintData = {
   customs: FormValues; estimate: FormValues; estimated: Set<string>;
 };
 
-export function printData(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined): PrintData {
+/** Phần theo tờ của printData (printStateFor): số dòng in trên tờ, ô 1.2 (TK_FIC/TK_BNO/TK_DNO), tổng trị giá/thuế của tờ. */
+export type SheetValues = { lineNos?: number[]; cover?: FormValues; totals?: DeclarationBranch | null };
+
+export function printData(decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, sheet: SheetValues = {}): PrintData {
   const kind: Kind = decl.kind;
-  const lineNos = items.map((it) => it.lineNo);
+  const lineNos = sheet.lineNos ?? items.map((it) => it.lineNo);
+  const totals = sheet.totals ?? null;
   const currency = decl.fields.find((f) => f.code === "MA_TT")?.value.trim() || "USD";
   const vbpq = decl.fields.find((f) => f.code === "VBPQ")?.value ?? "";
   const info = submission?.customsInfo ?? null;
   const customs = customsValues(kind, info, submission?.result ?? null);
   const est: Estimate = {
-    customsValueVnd: decl.customsValueVnd, currency, exchangeRate: decl.exchangeRate, lines: items.length,
+    customsValueVnd: totals?.customsValueVnd ?? decl.customsValueVnd, currency, exchangeRate: decl.exchangeRate, lines: items.length,
     // Cộng tiền bằng số nguyên đồng (lib/decimal), không cộng số thực.
-    ...(kind === "IDA" ? { taxVnd: fromMinor(sumMinor([toMinor(decl.estimatedImportDutyVnd, 0), toMinor(decl.estimatedVatVnd, 0)]), 0) } : {}),
+    ...(kind === "IDA" ? { taxVnd: fromMinor(sumMinor([toMinor(totals?.estImportDutyVnd ?? decl.estimatedImportDutyVnd, 0), toMinor(totals?.estVatVnd ?? decl.estimatedVatVnd, 0)]), 0) } : {}),
   };
   const { values: customsFilled, estimated } = estimateValues(kind, customs, est);
   const estimate = estimateValues(kind, {}, est).values;
-  const values: FormValues = { ...declarationValues(kind, decl.fields), ...customsFilled };
+  const values: FormValues = { ...declarationValues(kind, decl.fields), ...sheet.cover, ...customsFilled };
   const customsItems = customsItemValues(kind, info, lineNos);
   const itemRows = itemValues(kind, items, { fields: decl.fields, currency, vbpq }).map((v, i) => ({ ...v, ...customsItems[i] }));
   const errors = fieldErrors(kind, submission?.rejection ?? null);
   return { kind, lineNos, values, itemRows, errors, customs, estimate, estimated };
+}
+
+/** Một tờ khai nhánh trên thanh chọn tờ: số tờ / tổng số tờ, lineNo thật của dòng đầu và dòng cuối. */
+export type SheetInfo = { no: number; of: number; lineFrom: number; lineTo: number };
+
+/**
+ * Bản in theo tờ đang chọn (lô > 50 dòng tách thành N tờ, mỗi tờ tối đa 50 dòng theo lineNo – branchRanges).
+ * `items` = dòng của tờ (giữ id, lineNo thật để sửa đúng dòng); `lineNos` = số in trên tờ 1..50 như VNACCS (lô 1 tờ: lineNo thật);
+ * `cover` = ô 1.2: tờ 1 "F", tờ sau số tờ khai của tờ 1 ("—" khi chưa có), số nhánh, tổng số tờ (lô 1 tờ: không điền);
+ * `totals` = tổng trị giá/thuế của tờ (lô 1 tờ: null – dùng tổng của tờ khai); `submission` = trạng thái Hải quan của nhánh (số tờ khai, lỗi, giai đoạn).
+ */
+export type PrintSheet<T extends { lineNo: number }> = SheetInfo & {
+  items: T[]; lineNos: number[]; cover: FormValues; totals: DeclarationBranch | null; submission: SubmissionView | undefined; sheets: SheetInfo[];
+};
+
+export function printStateFor<T extends { lineNo: number }>(view: { items: T[]; branches?: DeclarationBranch[] }, branchNo: number, submission?: SubmissionView): PrintSheet<T> {
+  const sorted = [...view.items].sort((a, b) => a.lineNo - b.lineNo);
+  const ranges = branchRanges(sorted.map((it) => it.lineNo));
+  const of = ranges.length;
+  const sheets = ranges.map(({ no, lineFrom, lineTo }) => ({ no, of, lineFrom, lineTo }));
+  if (of === 1) return { ...sheets[0]!, sheets, items: view.items, lineNos: view.items.map((it) => it.lineNo), cover: {}, totals: null, submission };
+  const r = ranges[Math.min(of, Math.max(1, Math.trunc(branchNo))) - 1]!;
+  const items = sorted.slice(r.index[0], r.index[1]);
+  const first = submission?.branches.find((b) => b.no === 1)?.declarationNo;
+  const own = submission?.branches.find((b) => b.no === r.no);
+  return {
+    ...sheets[r.no - 1]!, sheets, items, lineNos: items.map((_, i) => i + 1),
+    cover: { TK_FIC: r.no === 1 ? "F" : first || "—", TK_BNO: String(r.no), TK_DNO: String(of) },
+    totals: view.branches?.find((b) => b.no === r.no) ?? null,
+    submission: submission && own ? { ...submission, stage: own.stage, result: own.result, customsInfo: own.customsInfo, rejection: own.rejection } : submission,
+  };
+}
+
+/** Chỉ số dòng (0-based, theo thứ tự `lineNos` của cả lô) → tờ chứa dòng + chỉ số dòng trong tờ (cùng cách chia của printStateFor). */
+export function sheetTarget(lineNos: number[], line: number): { no: number; line: number } {
+  const ranges = branchRanges(lineNos);
+  if (ranges.length === 1) return { no: 1, line };
+  const pos = [...lineNos].sort((a, b) => a - b).indexOf(lineNos[line]!);
+  const r = ranges.find((x) => pos >= x.index[0] && pos < x.index[1]) ?? ranges[0]!;
+  return { no: r.no, line: pos - r.index[0] };
 }
 
 /** Ô tên do Hải quan trả về theo mã người khai chọn (tên địa điểm lưu kho theo mã A202) – trước khi Hải quan trả, tra danh mục để hiện ước tính. */

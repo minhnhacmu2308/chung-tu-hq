@@ -1,6 +1,7 @@
 import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printValue, sameNumber, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printData, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -331,5 +332,80 @@ describe("withLookupNames (tên địa điểm lưu kho theo mã)", () => {
   it("không tra được tên → giữ nguyên", () => {
     const src = base({ VD_ST: "XXXXXXX" });
     expect(withLookupNames(src, { VD_A51: undefined })).toBe(src);
+  });
+});
+
+describe("printStateFor (tờ khai nhánh – 50 dòng/tờ)", () => {
+  const item = (n: number): LineItem => ({
+    id: `li_${n}`, dossierId: "dos_x", lineNo: n, description: `Hàng ${n}`, quantity: "1", unit: "PCE", unitPrice: "10", amount: "10", origin: "CN",
+  });
+  const branch = (no: number, of: number, lineFrom: number, lineTo: number, invoiceValue: string, customsValueVnd: string): DeclarationBranch => ({
+    no, of, lineFrom, lineTo, invoiceValue, customsValueVnd, estImportDutyVnd: "100", estVatVnd: "50",
+  });
+  const view120 = {
+    items: Array.from({ length: 120 }, (_, i) => item(i + 1)),
+    branches: [branch(1, 3, 1, 50, "500", "12500000"), branch(2, 3, 51, 100, "500.5", "12512500"), branch(3, 3, 101, 120, "200", "5000000")],
+  };
+  const sub = (branches: { no: number; declarationNo: string | null }[]) =>
+    ({ stage: "NOT_SENT", customsInfo: null, result: null, rejection: null, branches: branches.map((b) => ({ ...b, of: 3, stage: "SENT", result: null, customsInfo: null, rejection: null })) }) as unknown as SubmissionView;
+
+  it("tờ 2/3: 50 dòng, dòng đầu lineNo 51, số in 1..50, tổng trị giá theo tờ", () => {
+    const s = printStateFor(view120, 2);
+    expect(s.no).toBe(2);
+    expect(s.of).toBe(3);
+    expect(s.items).toHaveLength(50);
+    expect(s.items[0]!.lineNo).toBe(51);
+    expect(s.items[0]!.id).toBe("li_51");
+    expect(s.lineNos).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
+    expect(s.totals?.invoiceValue).toBe(view120.branches[1]!.invoiceValue);
+    expect(s.sheets.map((x) => [x.no, x.lineFrom, x.lineTo])).toEqual([[1, 1, 50], [2, 51, 100], [3, 101, 120]]);
+  });
+  it("ô 1.2: tờ 1 \"F\", tờ sau số tờ khai của tờ 1 (chưa có → \"—\"); số nhánh, tổng số tờ", () => {
+    expect(printStateFor(view120, 1).cover).toEqual({ TK_FIC: "F", TK_BNO: "1", TK_DNO: "3" });
+    expect(printStateFor(view120, 3, sub([{ no: 1, declarationNo: "107624410320" }, { no: 3, declarationNo: null }])).cover).toEqual({ TK_FIC: "107624410320", TK_BNO: "3", TK_DNO: "3" });
+    expect(printStateFor(view120, 2, sub([{ no: 1, declarationNo: null }])).cover.TK_FIC).toBe("—");
+    expect(printStateFor(view120, 2).cover.TK_FIC).toBe("—");
+  });
+  it("trạng thái Hải quan theo tờ đang chọn (số tờ khai, lỗi, giai đoạn của nhánh)", () => {
+    const s = printStateFor(view120, 2, sub([{ no: 1, declarationNo: "1" }, { no: 2, declarationNo: "2" }]));
+    expect(s.submission?.stage).toBe("SENT");
+    expect((s.submission?.branches[0] as { no: number } | undefined)?.no).toBe(1);
+  });
+  it("lô 1 tờ (hoặc branches rỗng): giữ nguyên dòng, số dòng thật, không điền ô 1.2, không tổng theo tờ", () => {
+    const items = [item(3), item(1), item(2)];
+    const s = printStateFor({ items, branches: [] }, 1);
+    expect(s.of).toBe(1);
+    expect(s.items).toBe(items);
+    expect(s.lineNos).toEqual([3, 1, 2]);
+    expect(s.cover).toEqual({});
+    expect(s.totals).toBeNull();
+    const sb = sub([{ no: 1, declarationNo: null }]);
+    expect(printStateFor({ items, branches: [] }, 1, sb).submission).toBe(sb);
+  });
+  it("số tờ ngoài khoảng → kẹp về 1..N", () => {
+    expect(printStateFor(view120, 9).no).toBe(3);
+    expect(printStateFor(view120, 0).no).toBe(1);
+  });
+  it("printData theo tờ: ô 1.2 điền, ước tính trị giá / thuế / số dòng theo tờ", () => {
+    const decl = {
+      dossierId: "dos_x", kind: "IDA", status: "DRAFT", fields: [], exchangeRate: "25000", exchangeRateDate: "2026-10-13",
+      customsValueVnd: "30012500", valueAdjustments: [], estimatedImportDutyVnd: "300", estimatedVatVnd: "150",
+    } as unknown as Declaration;
+    const s = printStateFor(view120, 2);
+    const d = printData(decl, s.items, s.submission, s);
+    expect(d.lineNos).toHaveLength(50);
+    expect(d.values.TK_FIC).toBe("—");
+    expect(d.values.TK_BNO).toBe("2");
+    expect(d.values.TK_DNO).toBe("3");
+    expect(d.values.TK_A86).toBe("12512500");
+    expect(d.values.THUE_B02).toBe("150");
+    expect(d.values.TK_B13).toBe("50");
+    expect(d.itemRows[0]!.HAG_CMN).toBe("Hàng 51");
+  });
+  it("sheetTarget: chỉ số dòng của cả lô → tờ chứa dòng + chỉ số dòng trong tờ", () => {
+    const lineNos = view120.items.map((i) => i.lineNo);
+    expect(sheetTarget(lineNos, 74)).toEqual({ no: 2, line: 24 });
+    expect(sheetTarget(lineNos, 0)).toEqual({ no: 1, line: 0 });
+    expect(sheetTarget([3, 1, 2], 0)).toEqual({ no: 1, line: 0 });
   });
 });

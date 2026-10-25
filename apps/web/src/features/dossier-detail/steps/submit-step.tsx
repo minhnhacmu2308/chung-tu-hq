@@ -435,6 +435,11 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   useEffect(() => {
     if (!recalled || !reopened) return;
     setRecalled(null);
+    // Bước Review đọc tờ khai (nay là bản nháp), bản truyền và hồ sơ – bỏ bản cache cũ (còn "đã duyệt") trước khi chuyển.
+    // refetchType "all": tải lại ngay cả truy vấn chưa gắn (tờ khai) để Review mở ra là có dữ liệu mới.
+    void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id), refetchType: "all" });
+    void qc.invalidateQueries({ queryKey: customsKeys.submission(dossier.id), refetchType: "all" });
+    void qc.invalidateQueries({ queryKey: dossierKeys.all });
     goTo("review", { recalled: encodeRecalled(recalled) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recalled, reopened]);

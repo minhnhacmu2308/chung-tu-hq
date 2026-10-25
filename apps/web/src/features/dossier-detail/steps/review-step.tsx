@@ -26,7 +26,7 @@ import { errorPlace, fieldErrors } from "./customs-errors";
 import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { REVIEW_MESSAGES } from "./review-step.messages";
-import { parseRecalled } from "./branch-sheets";
+import { anyInProgress, encodeRecalled, parseRecalled, recalledCount } from "./branch-sheets";
 import { editScopeOf, sentChangeWarnings } from "./edit-scope";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
@@ -147,7 +147,12 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     onError: toastMutationError(t.reopenFailed),
   });
   const viewQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
-  const subQ = useQuery({ queryKey: customsKeys.submission(dossier.id), queryFn: () => getSubmission(dossier.id) });
+  const subQ = useQuery({
+    queryKey: customsKeys.submission(dossier.id),
+    queryFn: () => getSubmission(dossier.id),
+    // Như bước Khai báo: còn tờ đang chờ phản hồi (vd gọi về các tờ còn lại đang chạy) → hỏi lại mỗi giây, phạm vi sửa tự cập nhật khi chuỗi xong.
+    refetchInterval: (q) => (q.state.data && anyInProgress(q.state.data) ? 1000 : false),
+  });
   // Lô > 50 dòng: tờ khai nhánh đang xem trên bản in (?sheet=k), kẹp về 1..N như bản in; tham số ngoài khoảng → sửa lại URL.
   const sheetParam = params.get("sheet");
   const sheetCount = viewQ.data ? branchCount(viewQ.data.items.length) : null;
@@ -182,11 +187,20 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     onSuccess: (r) => {
       setRecallOpen(false);
       toast({ tone: r.sent ? "info" : "success", title: r.message });
+      // Thông báo ?recalled= theo phạm vi mới (gọi về tất cả: tờ đã gọi về + tờ vừa gọi), không giữ "chỉ tờ k" cũ.
+      const before = subQ.data ? recalledCount(subQ.data) : 0;
+      const next = new URLSearchParams(params.toString());
+      next.set("recalled", encodeRecalled({ scope: "all", count: before + r.sheets.length }));
+      router.replace(`${pathname}?${next.toString()}`, { scroll: false });
       void qc.invalidateQueries({ queryKey: customsKeys.submission(dossier.id) });
       void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id) });
       void qc.invalidateQueries({ queryKey: dossierKeys.all });
     },
-    onError: toastMutationError(t.recallRemainingFailed),
+    onError: (e) => {
+      // Bị chặn (vd đang chờ phản hồi) → tải lại trạng thái truyền để nút / phạm vi đúng với máy chủ.
+      void qc.invalidateQueries({ queryKey: customsKeys.submission(dossier.id) });
+      toastMutationError(t.recallRemainingFailed)(e);
+    },
   });
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
@@ -228,6 +242,10 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const scope = editScopeOf(decl.status, subQ.data, subQ.isPending);
   const editMode = scope.common;
   const lockedSheets = scope.lockedSheets.join(", ");
+  // Đang gọi về (hoặc tờ nào còn chờ phản hồi) → khóa nút gọi về các tờ còn lại, tránh bấm trùng.
+  const recallBusy = recallRest.isPending || Boolean(subQ.data && anyInProgress(subQ.data));
+  // Số tờ trong thông báo "đã gọi về": theo tờ thực sự đã gọi về (chuỗi có thể dừng sớm), URL chỉ là số đã yêu cầu.
+  const recalledN = subQ.data ? recalledCount(subQ.data) : 0;
   const sentWarn = isDraft && subQ.data ? sentChangeWarnings(subQ.data) : { totalValue: false, otherCommon: [] as string[] };
   const kindLabel = decl.kind === "IDA" ? t.kindImport : t.kindExport;
   // Ô bắt buộc còn trống → khóa Phê duyệt (backend chặn lần nữa khi duyệt và khi khai).
@@ -268,9 +286,9 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         </CardHeader>
         <CardContent>
           <Stack gap="sm">
-            {recalled && isDraft && (
+            {recalled && isDraft && (recalled.scope === "all" || scope.lockedSheets.length > 0) && (
               <Alert tone="info">
-                {recalled.scope === "all" ? fill(t.recalledAllNotice, { n: recalled.count }) : fill(t.recalledSheetsNotice, { list: recalled.sheets.join(", ") })}
+                {recalled.scope === "all" ? fill(t.recalledAllNotice, { n: recalledN || recalled.count }) : fill(t.recalledSheetsNotice, { list: recalled.sheets.join(", ") })}
               </Alert>
             )}
             {isDraft && scope.lockedSheets.length > 0 && (
@@ -279,7 +297,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 title={fill(t.commonLockedTitle, { sheets: lockedSheets })}
                 action={
                   canEdit ? (
-                    <Button size="sm" variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setRecallOpen(true)}>
+                    <Button size="sm" variant="secondary" disabled={recallBusy} leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setRecallOpen(true)}>
                       {t.recallRemaining}
                     </Button>
                   ) : undefined
@@ -461,7 +479,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <Button variant="ghost" onClick={() => setRecallOpen(false)}>
               {t.cancel}
             </Button>
-            <Button loading={recallRest.isPending} leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => recallRest.mutate()}>
+            <Button loading={recallRest.isPending} disabled={recallBusy} leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => recallRest.mutate()}>
               {t.recallRemainingAction}
             </Button>
           </DialogFooter>

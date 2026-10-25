@@ -8,6 +8,10 @@ import type { SubmissionView } from "@kb/contracts";
 import { getDb, resetDb } from "@/mocks/db";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
+import { QueryClient } from "@tanstack/react-query";
+import { customsKeys } from "@/api/customs";
+import { declarationKeys } from "@/api/declaration";
+import { dossierKeys } from "@/api/dossiers";
 import { SubmitStep } from "./submit-step";
 
 const api = vi.hoisted(() => ({ current: null as SubmissionView | null, perform: vi.fn(), resend: vi.fn(), declareAll: vi.fn(), recallAll: vi.fn() }));
@@ -259,6 +263,27 @@ describe("Bước Khai báo – gọi về (hai lựa chọn, tiến độ, tự
     api.current = { ...lot(), declarationStatus: "DRAFT" }; // sau khi gửi lệnh, lần tải lại thấy tờ khai đã mở lại
     await userEvent.click(within(dialog).getByRole("button", { name: "Gọi về tất cả tờ" }));
     await vi.waitFor(() => expect(goTo).toHaveBeenCalledWith("review", { recalled: "all:3" }), T);
+  }, 20_000);
+
+  it("trước khi tự sang Review: tải lại tờ khai, bản truyền, hồ sơ (Review mở ra thấy bản nháp, không dùng cache cũ)", async () => {
+    const spy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    api.current = lot();
+    const goTo = vi.fn();
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={goTo} />);
+    const dialog = await openDialog();
+    api.current = { ...lot(), declarationStatus: "DRAFT" };
+    await userEvent.click(within(dialog).getByRole("button", { name: "Gọi về tất cả tờ" }));
+    await vi.waitFor(() => expect(goTo).toHaveBeenCalled(), T);
+    // Lần invalidate ngay trước khi chuyển bước (sau lần invalidate của mutation và các lần hỏi lại).
+    const at = goTo.mock.invocationCallOrder[0]!;
+    const before = spy.mock.calls.filter((_, i) => spy.mock.invocationCallOrder[i]! < at).map((c) => c[0]);
+    const last = before.slice(-3);
+    expect(last).toEqual([
+      { queryKey: declarationKeys.view("dos_028"), refetchType: "all" },
+      { queryKey: customsKeys.submission("dos_028"), refetchType: "all" },
+      { queryKey: dossierKeys.all },
+    ]);
+    spy.mockRestore();
   }, 20_000);
 
   it("chỉ gọi về tờ 2, tờ khai mở lại → tự sang Review với danh sách tờ 2", async () => {

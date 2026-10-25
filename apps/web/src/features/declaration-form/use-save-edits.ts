@@ -2,6 +2,7 @@
 // Lưu các chỉ tiêu đã sửa của tờ khai – dùng chung cho form đầy đủ và bản in.
 import { fill, toast, useMessages } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { customsKeys } from "@/api/customs";
 import { declarationKeys, updateDeclarationField } from "@/api/declaration";
 import { dossierKeys } from "@/api/dossiers";
 import { formatNumber } from "@/lib/format";
@@ -22,6 +23,8 @@ export function useSaveDeclarationEdits(dossierId: string) {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
       void qc.invalidateQueries({ queryKey: dossierKeys.all });
+      // Lô nhiều tờ: chỉ tiêu tờ chưa gọi về bị đổi (sentChanges / cảnh báo 1.51 ở Review) tính từ bản truyền – tải lại ngay.
+      void qc.invalidateQueries({ queryKey: customsKeys.submission(dossierId) });
     },
   });
 }

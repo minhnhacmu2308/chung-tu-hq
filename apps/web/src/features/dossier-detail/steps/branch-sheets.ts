@@ -117,6 +117,9 @@ export function recallProgress(sheets: BranchSubmission[]): { done: number; tota
   return { done, total: done + active };
 }
 
+/** Số tờ đang ở trạng thái đã gọi về (RECALLED / AMEND_RECALLED) theo bản truyền – số thật, không theo số đã yêu cầu. */
+export const recalledCount = (s: SubmissionView) => sheetsOf(s).filter((b) => RECALLED_STAGES.has(b.stage)).length;
+
 /** Thông báo "đã gọi về" truyền qua `?recalled=` để còn hiện ở bước Review: "all:<số tờ>" (gọi về tất cả) hoặc danh sách tờ "2,3". */
 export type RecalledNotice = { scope: "all"; count: number } | { scope: "sheets"; sheets: number[] };
 export function encodeRecalled(n: RecalledNotice): string {

@@ -10,14 +10,14 @@ import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { branch, submissionOf } from "@/test/branch-submission";
 import { ReviewStep } from "./review-step";
 
-const nav = vi.hoisted(() => ({ query: "step=review" }));
-const api = vi.hoisted(() => ({ current: null as SubmissionView | null, recallAll: vi.fn() }));
+const nav = vi.hoisted(() => ({ query: "step=review", replace: vi.fn() }));
+const api = vi.hoisted(() => ({ current: null as SubmissionView | null, recallAll: vi.fn(), fetches: 0 }));
 vi.mock("@/api/customs", async (orig) => {
   const real = await orig<typeof import("@/api/customs")>();
-  return { ...real, getSubmission: async () => api.current!, recallAllSheets: (...a: unknown[]) => api.recallAll(...a) };
+  return { ...real, getSubmission: async () => (api.fetches++, api.current!), recallAllSheets: (...a: unknown[]) => api.recallAll(...a) };
 });
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: nav.replace, back: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => "/dossiers/dos_028",
   useSearchParams: () => new URLSearchParams(nav.query),
 }));
@@ -33,6 +33,8 @@ const partial = (over: Partial<SubmissionView> = {}) =>
 beforeEach(() => {
   resetDb();
   nav.query = "step=review";
+  nav.replace.mockReset();
+  api.fetches = 0;
   getDb().declarations.find((x) => x.dossierId === "dos_028")!.status = "DRAFT";
   api.recallAll.mockReset().mockResolvedValue({ sent: true, message: "ok", sheets: [1, 3] });
 });
@@ -48,7 +50,8 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     await userEvent.click(within(dlg).getByRole("button", { name: "Gọi về tất cả tờ" }));
     expect(api.recallAll).toHaveBeenCalledWith("dos_028");
     await expectNoA11yViolations(container);
-  }, 60_000);
+    // axe trên cả bản in 120 dòng: ~40 s khi chạy riêng, lâu hơn nhiều khi cả bộ test chạy song song.
+  }, 300_000);
 
   it("dòng tờ 1 chỉ đọc kèm 'Tờ 1 – chưa gọi về'; dòng tờ 2 sửa được; ô chung chỉ đọc", async () => {
     api.current = partial();
@@ -123,7 +126,54 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
     const labels = () => [...document.querySelectorAll<HTMLInputElement>("input[type=radio]")].map((r) => r.closest("label")!.textContent ?? "");
+    // Số việc cần xử lý chỉ tính khi đã biết quyền sửa (phiên tải bất đồng bộ) → chờ, không khẳng định ngay sau lần vẽ đầu.
+    await waitFor(() => expect(labels()[1]).toMatch(/\d+ việc cần xử lý/), T);
     expect(labels()[0]).not.toMatch(/việc cần xử lý/);
-    expect(labels()[1]).toMatch(/\d+ việc cần xử lý/);
+  }, 60_000);
+
+  it("gọi về các tờ còn lại: đang chạy → nút khóa; chuỗi xong → phạm vi đầy đủ (hết banner khóa) không cần tải lại trang; ?recalled= thay bằng all:3", async () => {
+    nav.query = "step=review&recalled=2";
+    api.current = partial();
+    api.recallAll.mockImplementation(async () => {
+      api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED", { inProgress: true })], { declarationStatus: "DRAFT" });
+      return { sent: true, message: "ok", sheets: [1, 3] };
+    });
+    renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
+    expect(await screen.findByText("Đã gọi về tờ 2 – chỉ sửa dòng hàng của các tờ này; thông tin chung bị khóa", {}, T)).toBeTruthy();
+    await userEvent.click((await screen.findByText("Gọi về các tờ còn lại để sửa thông tin chung", {}, T)).closest("button")!);
+    await userEvent.click(within(await dialog()).getByRole("button", { name: "Gọi về tất cả tờ" }));
+    expect(nav.replace).toHaveBeenCalledWith(expect.stringContaining("recalled=all%3A3"), { scroll: false });
+    // Tờ 3 đang gọi về → nút gọi về các tờ còn lại bị khóa.
+    const recallButton = () => screen.getByText("Gọi về các tờ còn lại để sửa thông tin chung").closest("button")!;
+    await waitFor(() => expect(recallButton().disabled).toBe(true), T);
+    // Chuỗi xong (Review tự hỏi lại mỗi giây) → mọi tờ đã gọi về, phạm vi đầy đủ.
+    api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "RECALLED")], { declarationStatus: "DRAFT" });
+    await waitFor(() => expect(screen.queryByText(/chưa gọi về/)).toBeNull(), T);
+    expect(screen.queryByText(/Đã gọi về tờ 2 – chỉ sửa dòng hàng/)).toBeNull();
+  }, 60_000);
+
+  it("gọi về các tờ còn lại bị từ chối → tải lại bản truyền", async () => {
+    api.current = partial();
+    api.recallAll.mockRejectedValue(new Error("x"));
+    renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
+    await userEvent.click((await screen.findByText("Gọi về các tờ còn lại để sửa thông tin chung", {}, T)).closest("button")!);
+    const before = api.fetches;
+    await userEvent.click(within(await dialog()).getByRole("button", { name: "Gọi về tất cả tờ" }));
+    await waitFor(() => expect(api.fetches).toBeGreaterThan(before), T);
+  }, 60_000);
+
+  it("?recalled=2 nhưng không còn tờ khóa (mọi tờ đã gọi về) → không hiện thông báo phạm vi một phần", async () => {
+    nav.query = "step=review&recalled=2";
+    api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "RECALLED")], { declarationStatus: "DRAFT" });
+    renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
+    expect(screen.queryByText(/Đã gọi về tờ 2/)).toBeNull();
+  }, 60_000);
+
+  it("?recalled=all:3 nhưng chuỗi dừng sớm (2 tờ đã gọi về) → thông báo theo số tờ thật trong bản truyền", async () => {
+    nav.query = "step=review&recalled=all:3";
+    api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED")], { declarationStatus: "DRAFT" });
+    renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
+    expect(await screen.findByText("Đã gọi về 2 tờ – sửa tờ khai rồi duyệt lại", {}, T)).toBeTruthy();
   }, 60_000);
 });

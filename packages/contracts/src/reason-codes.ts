@@ -54,6 +54,7 @@ export const REASON_TEXT_VI = {
   DECLARATION_SPEC_INVALID: "Tờ khai chưa đúng đặc tả truyền Hải quan: {issues}",
   SHEETS_RECALL_FIRST: "Tờ {sheets}: gọi về sửa (IDB/IDD) trước",
   SHEET_COUNT_CHANGED: "Đã khai {planned} tờ khai (đã được cấp số) mà lô hàng nay cần {now} tờ – không truyền; hủy tờ khai thừa hoặc khai lại trước",
+  SHEET_ORDER: "Tờ {sheet}: chờ tờ {waitFor} khai tạm trước – truyền theo thứ tự tờ khai",
   AMENDMENT_NOT_APPROVED: "Bản khai bổ sung chưa được phê duyệt",
   AMENDMENT_NOT_TRANSMITTABLE: "Bản khai bổ sung chưa gửi được: {blockers}",
   CERTIFICATE_REQUIRED: "Chọn chứng thư số để ký",

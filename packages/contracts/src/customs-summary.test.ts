@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dossierCustomsSummary, lockedSheetCount, recallExempt, sheetApproved, sheetCountChanged } from "./customs-summary.js";
+import { awaitingContent, dossierCustomsSummary, lockedSheetCount, recallExempt, sheetApproved, sheetCountChanged, sheetOrderWait } from "./customs-summary.js";
 
 describe("dossierCustomsSummary – trạng thái hồ sơ gộp từ các tờ khai nhánh", () => {
   it("3 nhánh [CLEARED, REJECTED, DECLARED] → 1/3 thông quan, tờ 2 bị từ chối, chưa xong", () => {
@@ -61,5 +61,31 @@ describe("sheetApproved – 'đã duyệt' của một tờ (dùng chung view v�
     expect(sheetApproved({ stage: "POST_EDITING", of: 3, declarationStatus: "SUBMITTED", amendmentStatus: "APPROVED" })).toBe(true);
     expect(sheetApproved({ stage: "POST_EDITING", of: 1, declarationStatus: "APPROVED", amendmentStatus: "DRAFT" })).toBe(false);
     expect(sheetApproved({ stage: "POST_EDITING", of: 1, declarationStatus: "APPROVED" })).toBe(false);
+  });
+});
+
+describe("sheetOrderWait – thứ tự gửi nội dung tờ khai nhánh (truyền theo thứ tự tờ, spec §6.2/§6.4)", () => {
+  const s = (...stages: Parameters<typeof awaitingContent>[0][]) => stages.map((stage, i) => ({ no: i + 1, stage }));
+  it("còn chờ gửi nội dung: NOT_SENT, RECALLED, AMEND_RECALLED", () => {
+    for (const st of ["NOT_SENT", "RECALLED", "AMEND_RECALLED"] as const) expect(awaitingContent(st)).toBe(true);
+    for (const st of ["PRE_DECLARED", "AMEND_PRE_DECLARED", "DECLARED", "CLEARED", "REJECTED", "POST_EDITING"] as const) expect(awaitingContent(st)).toBe(false);
+  });
+  it("tờ 1 / lô một tờ không chờ; tờ k chờ tờ trước gần nhất còn chờ gửi nội dung", () => {
+    expect(sheetOrderWait(s("RECALLED"), 1)).toBeNull();
+    expect(sheetOrderWait(s("RECALLED", "RECALLED", "RECALLED"), 1)).toBeNull();
+    expect(sheetOrderWait(s("RECALLED", "RECALLED", "RECALLED"), 2)).toBe(1);
+    expect(sheetOrderWait(s("RECALLED", "RECALLED", "RECALLED"), 3)).toBe(2);
+    expect(sheetOrderWait(s("AMEND_RECALLED", "PRE_DECLARED", "RECALLED"), 3)).toBe(1);
+    expect(sheetOrderWait(s("PRE_DECLARED", "NOT_SENT", "NOT_SENT"), 3)).toBe(2);
+    expect(sheetOrderWait(s("AMEND_PRE_DECLARED", "PRE_DECLARED", "RECALLED"), 3)).toBeNull();
+  });
+  it("R7: tờ trước đã thông quan / sửa sau thông quan / bị từ chối không chờ", () => {
+    expect(sheetOrderWait(s("CLEARED", "AMEND_RECALLED", "AMEND_RECALLED"), 2)).toBeNull();
+    expect(sheetOrderWait(s("CLEARED", "AMEND_RECALLED", "AMEND_RECALLED"), 3)).toBe(2);
+    expect(sheetOrderWait(s("RECALLED", "CLEARED", "POST_EDITING", "REJECTED", "RECALLED"), 5)).toBe(1);
+    expect(sheetOrderWait(s("PRE_DECLARED", "CLEARED", "POST_EDITING", "REJECTED", "RECALLED"), 5)).toBeNull();
+  });
+  it("thứ tự mảng không quan trọng (theo số tờ)", () => {
+    expect(sheetOrderWait([{ no: 3, stage: "RECALLED" }, { no: 1, stage: "RECALLED" }, { no: 2, stage: "PRE_DECLARED" }], 3)).toBe(1);
   });
 });

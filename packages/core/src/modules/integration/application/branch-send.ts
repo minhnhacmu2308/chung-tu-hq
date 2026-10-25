@@ -1,6 +1,6 @@
 // Gửi nội dung tờ khai theo từng tờ khai nhánh (spec tách tờ khai §6.1–6.4): khóa outbox, ghim phiên bản + lần duyệt, guard từng tờ,
 // và enqueueBranchPreDeclare (chuỗi nối tiếp của worker, người khai bấm, truyền lại sau mở lại). Dùng chung submit / perform / worker.
-import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, recallExempt, requiredGapsText, sameRateWeek, sheetCountChanged, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
+import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, recallExempt, requiredGapsText, sameRateWeek, sheetCountChanged, sheetOrderWait, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -65,6 +65,16 @@ export function recallFirstError(results: Pick<ResultRow, "branch" | "declaratio
 export function sheetCountError(results: Pick<ResultRow, "branch" | "declarationNo">[], now: number): DomainError | null {
   const planned = lockedSheetCount(results);
   return sheetCountChanged(planned, now) ? reasonError("BLOCKER_FAILED", "SHEET_COUNT_CHANGED", { planned, now }) : null;
+}
+
+/**
+ * Thứ tự truyền (spec §6.2/§6.4 – luôn gửi Hải quan theo thứ tự tờ): tờ `branch` ≥ 2 chỉ nhận nội dung (IDA/IDA01/EDA/EDA01) khi mọi tờ trước còn nhận
+ * nội dung đã được gửi ở lần truyền này (không còn NOT_SENT / RECALLED / AMEND_RECALLED; miễn tờ đã thông quan / bị từ chối – R7). Không thì Hải quan nhận
+ * tờ k với TK_FIC và chỉ tiêu chung cũ của tờ trước. Dùng chung performOperation (mọi giai đoạn) và enqueueBranchPreDeclare (chuỗi + người khai).
+ */
+export function sheetOrderError(results: Pick<ResultRow, "branch" | "state" | "raw">[], branch: number): DomainError | null {
+  const waitFor = sheetOrderWait(results.map((r) => ({ no: r.branch, stage: stageOf(r) })), branch);
+  return waitFor === null ? null : reasonError("INVALID_STATE", "SHEET_ORDER", { sheet: branch, waitFor });
 }
 
 /**
@@ -139,6 +149,8 @@ export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: O
   if (!target) return err(reasonError("INVALID_STATE", "NOT_SUBMITTED_YET"));
   const op = contentOpFor(stageOf(target), snap.payload.kind);
   if (!op) return err(domainError("INVALID_STATE", `Tờ ${branch}: không ở giai đoạn gửi nội dung tờ khai`));
+  const order = sheetOrderError(results, branch);
+  if (order) return err(order);
   const s = sheetOf(snap.payload, branch, branch === 1 ? null : first?.declarationNo ?? null);
   const gaps = gapsError(s);
   if (gaps) return err(gaps);

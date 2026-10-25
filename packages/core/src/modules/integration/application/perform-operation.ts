@@ -18,7 +18,7 @@ import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
-import { buildSheet, contentKey, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf } from "./branch-send.js";
+import { buildSheet, contentKey, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
 
 export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -58,6 +58,9 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
       // → không gửi mới, dùng Gửi lại (luôn tra trạng thái trước, ADR 0005).
       if (snap.status === "SUBMITTED" && outbox.some((o) => o.operation === op && pinOfOutbox(o) === pinOf(snap)))
         return err(domainError("INVALID_STATE", `Tờ ${branch}: ${OPERATION_LABELS[op]} đã gửi ở lần truyền này – dùng Gửi lại`));
+      // Luôn truyền theo thứ tự tờ (§6.2/§6.4): tờ trước còn chờ gửi nội dung (chưa gửi / đã gọi về chưa gửi lại) → tờ này chờ, không gửi trước (TK_FIC, chỉ tiêu chung).
+      const order = sheetOrderError(results, branch);
+      if (order) return err(order);
     }
   }
   if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
@@ -106,16 +109,14 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
 
 /**
  * Khai tạm tờ 2..N còn NOT_SENT do người khai bấm (chuỗi nối tiếp dừng vì guard, hoặc truyền lại sau mở lại): tờ 1 phải có số tờ khai,
- * tờ trước đã khai tạm. Tờ khai APPROVED → lần truyền mới của người khai; SUBMITTED → tiếp lần truyền đang chạy (cùng phiên bản + ghim,
+ * tờ trước đã khai tạm (thứ tự tờ – sheetOrderError – kiểm chung ở performOperation). Tờ khai APPROVED → lần truyền mới của người khai; SUBMITTED → tiếp lần truyền đang chạy (cùng phiên bản + ghim,
  * cùng khóa với chuỗi của worker nên hai bên không tạo trùng). Đã gửi/bị từ chối ở lần truyền này → dùng Gửi lại.
  */
 async function preDeclareBranch(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch: number, op: CustomsOperation, snap: DeclarationSnapshot, first: ResultRow | null): Promise<Result<OperationResult>> {
   if (!first?.declarationNo) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ 1 chưa có số tờ khai – khai tạm tờ 1 trước`));
   const prev = await deps.uow.asOrg(ctx, (r) => r.results.get(ctx.orgId, dossierId, branch - 1));
-  if (!prev || stageOf(prev) === "NOT_SENT" || !prev.declarationNo) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ ${branch - 1} chưa khai tạm – khai tạm lần lượt từng tờ`));
-  // Tờ 1 / tờ trước đang gọi về sửa: nội dung mới chưa gửi lại → không khai tạm tờ này trước (TK_FIC, thứ tự §6.4); truyền lại bắt đầu từ tờ 1.
-  const recalled = [first, prev].find((r) => stageOf(r) === "RECALLED" || stageOf(r) === "AMEND_RECALLED");
-  if (recalled) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ ${recalled.branch} chưa khai tạm lại sau khi gọi về sửa – truyền lại từ tờ 1`));
+  // (Tờ trước còn chờ gửi nội dung – chưa gửi / gọi về chưa gửi lại – đã chặn ở performOperation: sheetOrderError.) Tờ trước bị từ chối trước khi có số → chưa khai tạm.
+  if (!prev?.declarationNo) return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ ${branch - 1} chưa khai tạm – khai tạm lần lượt từng tờ`));
   if (snap.status !== "APPROVED" && snap.status !== "SUBMITTED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
   // (Đã gửi ở lần truyền này → performOperation đã chặn, dùng Gửi lại.)
   const res = await enqueueBranchPreDeclare(deps, ctx, dossierId, branch, snap.status === "APPROVED" ? { by: "user" } : { by: "chain", version: snap.version, pin: pinOf(snap) });

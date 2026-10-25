@@ -46,3 +46,16 @@ export function sheetApproved(p: { stage: CustomsStage; of: number; declarationS
   if (p.stage.startsWith("POST_")) return p.amendmentStatus === "APPROVED";
   return p.declarationStatus === "APPROVED" || (p.of > 1 && p.declarationStatus === "SUBMITTED");
 }
+
+/** Tờ còn chờ gửi nội dung tờ khai ở lần truyền này: chưa gửi lần nào, đã gọi về (IDB), đã gọi sửa đổi (IDD). */
+export const awaitingContent = (stage: CustomsStage) => stage === "NOT_SENT" || stage === "RECALLED" || stage === "AMEND_RECALLED";
+
+/**
+ * Thứ tự truyền tờ khai nhánh (spec §6.2/§6.4 – luôn gửi Hải quan theo thứ tự tờ): tờ `no` chỉ nhận nội dung (IDA/IDA01/EDA/EDA01) khi mọi tờ
+ * trước còn nhận nội dung đã được gửi ở lần truyền này. Trả tờ trước gần nhất còn chờ gửi (awaitingContent) → tờ `no` chờ tờ đó; null = được gửi.
+ * Tờ đã thông quan / sửa sau thông quan / bị từ chối không chờ (R7 – không nhận nội dung nữa). Dùng chung backend, giao diện ("Chờ tờ j") và mock.
+ */
+export function sheetOrderWait(sheets: { no: number; stage: CustomsStage }[], no: number): number | null {
+  const before = sheets.filter((s) => s.no < no && awaitingContent(s.stage)).map((s) => s.no);
+  return before.length ? Math.max(...before) : null;
+}

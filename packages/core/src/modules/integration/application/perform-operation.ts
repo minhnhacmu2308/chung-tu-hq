@@ -80,6 +80,9 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
     const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));
     const order = sheetOrderError(results, branch, op);
     if (order) return err(order);
+    // Tờ còn hiệu lực ở Hải quan phải giữ đúng nội dung đã gửi (spec §2.5): gọi về một phần rồi sửa chỉ tiêu chung (vd 1.51) → không khai chính thức tờ khác với nội dung cũ.
+    const changed = resultsSentError(snap.payload, results);
+    if (changed) return err(changed);
     // Bất biến 7: khai chính thức lô nhiều tờ cũng không vượt HS chưa xác nhận / BLOCKER (lô một tờ giữ nguyên hành vi cũ).
     const blocked = await declareBlockError(deps, ctx, dossierId, snap);
     if (blocked) return err(blocked);

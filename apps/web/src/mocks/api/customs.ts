@@ -310,6 +310,8 @@ function chainDeclare(db: MockDb, c: Ctx, at: number) {
   const op = declareOpFor(next.flow.stage, c.dossier.direction)!;
   try {
     if (next.flow.pending) return;
+    // Tờ khai bị mở lại (DRAFT – đang sửa) → dừng chuỗi (như backend chainSheets).
+    if (db.declarations.find((d) => d.dossierId === c.dossier.id)?.status === "DRAFT") throw reasonApiError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED");
     if (next.items.some((i) => !i.hsConfirmed)) throw reasonApiError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: next.items.filter((i) => !i.hsConfirmed).length });
     send(db, next, op, at, "declare");
   } catch (e) {
@@ -562,6 +564,9 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
     // Khai chính thức tờ k: mọi tờ trước đã khai tạm xong (cùng sheetOrderWait với backend; không bắt tờ trước đã khai chính thức).
     const waitFor = sheetOrderWait(Array.from({ length: c.of }, (_, i) => ({ no: i + 1, stage: flowOf(db, dossierId, i + 1).stage })), c.branch);
     if (waitFor !== null) throw reasonApiError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: c.branch, waitFor });
+    // Tờ còn hiệu lực phải giữ đúng nội dung đã gửi (như backend): gọi về một phần rồi sửa chỉ tiêu chung → không khai chính thức tờ khác.
+    const changed = sentSheetsMockError(db, dossierId);
+    if (changed) throw changed;
   }
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
@@ -906,17 +911,17 @@ export const declareAllSheets = (dossierId: string) =>
   mutate((db): OperationResult => {
     settle(db, Date.now());
     const c = load(db, dossierId);
-    if (c.of <= 1) throw new ApiError("VALIDATION", "Khai chính thức cả lô chỉ dùng cho lô nhiều tờ");
+    if (c.of <= 1) throw reasonApiError("VALIDATION", "DECLARE_ALL_SINGLE_SHEET");
     const sheets = Array.from({ length: c.of }, (_, i) => ({ no: i + 1, stage: flowOf(db, dossierId, i + 1).stage }));
-    if (sheets.some((s) => flowOf(db, dossierId, s.no).pending)) throw new ApiError("INVALID_STATE", "Đang gửi nghiệp vụ khác – chờ xong rồi khai chính thức cả lô");
+    if (sheets.some((s) => flowOf(db, dossierId, s.no).pending)) throw reasonApiError("INVALID_STATE", "DECLARE_ALL_PENDING");
     const waiting = sheets.find((s) => awaitingContent(s.stage));
     if (waiting) {
       const blocked = sheets.find((s) => s.no > waiting.no && declareOpFor(s.stage, c.dossier.direction));
       if (blocked) throw reasonApiError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: blocked.no, waitFor: waiting.no });
-      throw new ApiError("INVALID_STATE", `Tờ ${waiting.no}: chưa khai tạm xong – khai tạm trước khi khai chính thức cả lô`);
+      throw reasonApiError("INVALID_STATE", "DECLARE_ALL_NOT_PRE_DECLARED", { sheet: waiting.no });
     }
     const target = sheets.find((s) => declareOpFor(s.stage, c.dossier.direction));
-    if (!target) throw new ApiError("INVALID_STATE", "Không còn tờ nào chờ khai chính thức");
+    if (!target) throw reasonApiError("INVALID_STATE", "DECLARE_ALL_NONE");
     const unconfirmed = c.items.filter((i) => !i.hsConfirmed).length;
     if (unconfirmed) throw reasonApiError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: unconfirmed });
     return perform(db, dossierId, declareOpFor(target.stage, c.dossier.direction)!, Date.now(), target.no, "declare");

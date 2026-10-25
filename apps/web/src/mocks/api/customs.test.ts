@@ -340,6 +340,13 @@ describe("tờ khai nhánh: gọi về sửa và truyền lại", () => {
     expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDA" && m.direction === "OUT").map((m) => m.branch ?? 1)).toEqual([1, 2, 3, 2]);
   });
 
+  it("gọi về riêng tờ 2, sửa chỉ tiêu chung → IDC tờ 1 bị chặn SENT_SHEETS_CHANGED, không gửi (như backend)", async () => {
+    await recallSheet2();
+    field("CQHQ").value = "01AB – Chi cục khác";
+    await expect(performOperation(BIG, "IDC", 1)).rejects.toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } });
+    expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDC")).toHaveLength(0);
+  });
+
   it("đổi cả chỉ tiêu chung lẫn dòng tờ 1 → fields kèm \"dòng hàng tờ 1\"; ngày khai dự kiến (NGAY_DK, hệ thống) đổi → không chặn; tờ còn hiệu lực không có ảnh chụp → SENT_SHEETS_UNVERIFIED", async () => {
     await recallSheet2();
     const ngay = decl(BIG).fields.find((f) => f.code === "NGAY_DK");
@@ -592,12 +599,12 @@ describe("tờ khai nhánh: khai chính thức cả lô (declareAllSheets)", () 
     await declareAllSheets(BIG);
     expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1]);
     // Đang gửi → bấm lần nữa bị chặn, không gửi thêm.
-    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE" });
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_PENDING" });
     wait(9_000);
     expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "DECLARED", "DECLARED"]); // luồng xanh: tờ 1 đã đủ thời gian tự thông quan
     expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1, 2, 3]);
     // Không còn tờ nào chờ khai chính thức.
-    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", message: "Không còn tờ nào chờ khai chính thức" });
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_NONE", message: "Không còn tờ nào chờ khai chính thức" });
   });
   it("tờ 1 đã thông quan → bắt đầu từ tờ 2", async () => {
     await preDeclareAll(BIG);
@@ -610,12 +617,21 @@ describe("tờ khai nhánh: khai chính thức cả lô (declareAllSheets)", () 
   it("tờ chờ gửi nội dung là tờ cuối → câu thường, không 'tờ 3 chờ tờ 3'", async () => {
     await preDeclareAll(BIG);
     await runB(BIG, "IDB", 3);
-    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", message: expect.stringMatching(/^Tờ 3: chưa khai tạm xong/) });
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_NOT_PRE_DECLARED", params: { sheet: 3 }, message: expect.stringMatching(/^Tờ 3: chưa khai tạm xong/) });
   });
   it("còn tờ chờ gửi nội dung → SHEET_ORDER_DECLARE; lô một tờ → VALIDATION", async () => {
     await preDeclareAll(BIG);
     await runB(BIG, "IDB", 1);
     await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "SHEET_ORDER_DECLARE", params: { sheet: 2, waitFor: 1 } });
-    await expect(declareAllSheets(NEW)).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(declareAllSheets(NEW)).rejects.toMatchObject({ code: "VALIDATION", reason: "DECLARE_ALL_SINGLE_SHEET" });
+  });
+  it("tờ khai bị mở lại (DRAFT) giữa chuỗi → dừng, không khai chính thức tờ kế, ghi lỗi trên tờ đó", async () => {
+    await preDeclareAll(BIG);
+    await declareAllSheets(BIG);
+    decl(BIG).status = "DRAFT";
+    wait(9_000);
+    await sheets(BIG);
+    expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1]);
+    expect(getDb().customsMessages.some((m) => m.dossierId === BIG && (m.branch ?? 1) === 2 && m.result === "ERROR" && /chưa khai chính thức tự động/.test(m.summary))).toBe(true);
   });
 });

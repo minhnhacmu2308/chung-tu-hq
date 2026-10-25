@@ -5,7 +5,8 @@
 // cùng ghim; tờ đã có outbox cùng lần truyền → không tạo thêm; khóa theo nhánh + unique chặn tạo trùng (chainNextBranch).
 // Cùng cơ chế: chuỗi người khai bấm một lần cho cả lô – khai chính thức cả lô (chain "declare"), gọi về tất cả (chain "recall", lệnh cuối xong → tự mở lại tờ khai).
 import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, isRecallOperation, queryOpFor, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
-import { domainError, type DomainError } from "../../../shared/errors.js";
+import { z } from "zod";
+import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
@@ -29,7 +30,12 @@ type ChainStop = { branch: number; of: number; error: DomainError; kind: ChainKi
 type ChainOutcome = { continued: boolean; stop?: ChainStop };
 const NO_CHAIN: ChainOutcome = { continued: false };
 const CHAIN_WHAT: Record<ChainKind, string> = { content: "khai tạm", declare: "khai chính thức", recall: "gọi về" };
-const chainOfOutbox = (o: OutboxRow) => (o.payload as { chain?: unknown } | null)?.chain;
+/** payload.chain của outbox (jsonb – dữ liệu từ ngoài, bất biến 9): sai dạng → không phải chuỗi. */
+const ChainSchema = z.enum(["declare", "recall"]).optional();
+const chainOfOutbox = (o: OutboxRow): "declare" | "recall" | undefined => {
+  const p = ChainSchema.safeParse((o.payload as { chain?: unknown } | null)?.chain);
+  return p.success ? p.data : undefined;
+};
 export type ProcessOutboxInput = { orgId: string; userId: string; outboxId: string };
 /** Quá số lần thử (= attempts của BullMQ) → outbox FAILED, người dùng "Gửi lại". */
 export const MAX_ATTEMPTS = 5;
@@ -312,6 +318,8 @@ async function chainSheets(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserI
   if (all.some((o) => o.id !== ob.id && o.branch > ob.branch && o.createdAt >= ob.createdAt && chainOfOutbox(o) === kind)) return { continued: true };
   const next = pick({ snap, of, results, all });
   if (!next) return NO_CHAIN;
+  // Khai chính thức cả lô: tờ khai bị mở lại (DRAFT – người khai đang sửa) → dừng, không khai chính thức tờ kế tiếp với nội dung đang sửa.
+  if (kind === "declare" && snap.status === "DRAFT") return { continued: false, stop: { branch: next.branch, of, error: reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"), kind } };
   if (!next.op) return { continued: false, stop: { branch: next.branch, of, error: domainError("INVALID_STATE", `đang chờ phản hồi nghiệp vụ khác của tờ ${next.branch}`), kind } };
   const res = await performOperationChecked(deps, ctx, ob.dossierId, next.op, next.branch, { chain: kind, chainFrom: ob.id });
   if (res.ok || res.error.code === "ALREADY_SUBMITTED") return { continued: true };

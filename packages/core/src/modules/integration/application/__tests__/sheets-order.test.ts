@@ -41,6 +41,10 @@ describe("khai chính thức (IDC/IDE) theo thứ tự tờ – SHEET_ORDER_DECL
     lot("CLEARED", "PRE_DECLARED");
     unwrap(await performOperation(deps, declarant, D, "IDC", 2));
     expect(uow.data.outbox).toHaveLength(1);
+    const rejected = makeHarness();
+    lotOf(rejected, "REJECTED", "PRE_DECLARED");
+    unwrap(await performOperation(rejected.deps, declarant, D, "IDC", 2));
+    expect(rejected.uow.data.outbox.map((o) => [o.branch, o.operation])).toEqual([[2, "IDC"]]);
   });
   it("lô một tờ → IDC như cũ", async () => {
     decls.items = lines(10);

@@ -26,7 +26,7 @@ async function drain(max = 20) {
 }
 const sent = () => h.uow.data.outbox.map((o) => [o.branch, o.operation, o.status] as const);
 const chainOf = (i: number) => (h.uow.data.outbox[i]!.payload as { chain?: string }).chain;
-const errOf = (r: { ok: boolean; error?: { code: string; reason?: string; message?: string } }) => (r.ok ? null : r.error!);
+const errOf = (r: { ok: boolean; error?: { code: string; reason?: string; message?: string; params?: unknown } }) => (r.ok ? null : r.error!);
 const stage = (branch: number) => stageOf(h.uow.data.results.find((r) => r.branch === branch)!);
 
 describe("declareOpFor", () => {
@@ -96,11 +96,11 @@ describe("declareAllSheets – chuỗi IDC tờ 1 → N", () => {
     expect(h.uow.data.messages.filter((m) => m.branch === 2 && m.result === "ERROR")).toHaveLength(1);
     expect(h.uow.data.messages.find((m) => m.branch === 2 && m.result === "ERROR")!.summary).toMatch(/Tờ 2\/2: chưa khai chính thức tự động/);
   });
-  it("lô một tờ → VALIDATION 'chỉ dùng cho lô nhiều tờ'", async () => {
+  it("lô một tờ → VALIDATION DECLARE_ALL_SINGLE_SHEET", async () => {
     h.decls.items = lines(10);
     h.decls.status = "SUBMITTED";
     const e = errOf(await declareAllSheets(h.deps, declarant, D))!;
-    expect(e.code).toBe("VALIDATION");
+    expect(e).toMatchObject({ code: "VALIDATION", reason: "DECLARE_ALL_SINGLE_SHEET" });
     expect(e.message).toMatch(/chỉ dùng cho lô nhiều tờ/);
   });
   it("còn tờ chờ gửi nội dung → SHEET_ORDER_DECLARE nêu tờ đầu tiên đang chờ khai chính thức sau tờ chờ", async () => {
@@ -111,19 +111,18 @@ describe("declareAllSheets – chuỗi IDC tờ 1 → N", () => {
   it("tờ chờ gửi nội dung là tờ cuối → câu thường 'Tờ 3: chưa khai tạm xong' (không 'tờ 3 chờ tờ 3')", async () => {
     lot("PRE_DECLARED", "PRE_DECLARED", "RECALLED");
     const e = errOf(await declareAllSheets(h.deps, declarant, D))!;
-    expect(e.code).toBe("INVALID_STATE");
-    expect(e.reason).toBeUndefined();
+    expect(e).toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_NOT_PRE_DECLARED", params: { sheet: 3 } });
     expect(e.message).toMatch(/^Tờ 3: chưa khai tạm xong/);
   });
   it("không tờ nào chờ khai chính thức → INVALID_STATE", async () => {
     lot("DECLARED", "CLEARED");
-    expect(errOf(await declareAllSheets(h.deps, declarant, D))).toMatchObject({ code: "INVALID_STATE", message: "Không còn tờ nào chờ khai chính thức" });
+    expect(errOf(await declareAllSheets(h.deps, declarant, D))).toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_NONE", message: "Không còn tờ nào chờ khai chính thức" });
   });
   it("có outbox PENDING của hồ sơ (tờ nào, nghiệp vụ nào) → INVALID_STATE 'đang gửi – chờ xong'", async () => {
     lot("PRE_DECLARED", "PRE_DECLARED");
     unwrap(await performOperation(h.deps, declarant, D, "IDC", 2));
     const e = errOf(await declareAllSheets(h.deps, declarant, D))!;
-    expect(e.code).toBe("INVALID_STATE");
+    expect(e).toMatchObject({ code: "INVALID_STATE", reason: "DECLARE_ALL_PENDING" });
     expect(e.message).toMatch(/Đang gửi nghiệp vụ khác/);
     expect(h.uow.data.outbox).toHaveLength(1);
   });
@@ -202,5 +201,55 @@ describe("declareAllSheets – chuỗi IDC tờ 1 → N", () => {
     expect(chainOf(0)).toBeUndefined();
     await drain();
     expect(sent()).toEqual([[1, "IDC", "SENT"]]);
+  });
+});
+
+describe("khai chính thức lô nhiều tờ – guard nội dung đã gửi và tờ khai đang sửa (F1)", () => {
+  it("gọi về một phần tờ 2 rồi sửa chỉ tiêu chung → IDC tờ 1 / tờ 3 bị chặn SENT_SHEETS_CHANGED, không tạo outbox", async () => {
+    lot("PRE_DECLARED", "RECALLED", "PRE_DECLARED");
+    // Gọi về tờ 2 → tờ khai mở lại (DRAFT), người khai sửa chỉ tiêu chung.
+    h.decls.status = "DRAFT";
+    h.decls.fields = { CQHQ: { value: "01AB – khác" } };
+    expect(errOf(await performOperation(h.deps, declarant, D, "IDC", 1))).toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } });
+    // Tờ 3 còn chờ tờ 2 khai tạm lại (thứ tự tờ kiểm trước).
+    expect(errOf(await performOperation(h.deps, declarant, D, "IDC", 3))).toMatchObject({ reason: "SHEET_ORDER_DECLARE" });
+    expect(h.uow.data.outbox).toHaveLength(0);
+  });
+  it("khai chính thức cả lô cũng bị chặn khi tờ còn hiệu lực bị đổi", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED");
+    h.decls.fields = { CQHQ: { value: "01AB – khác" } };
+    expect(errOf(await declareAllSheets(h.deps, declarant, D))).toMatchObject({ reason: "SENT_SHEETS_CHANGED" });
+    expect(h.uow.data.outbox).toHaveLength(0);
+  });
+  it("chuỗi khai chính thức dừng khi tờ khai bị mở lại (DRAFT): không tạo IDC tờ kế, ghi lỗi trên tờ đó", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED");
+    unwrap(await declareAllSheets(h.deps, declarant, D));
+    h.decls.status = "DRAFT";
+    await run(h.uow.data.outbox[0]!.id);
+    expect(sent()).toEqual([[1, "IDC", "SENT"]]);
+    const msg = h.uow.data.messages.find((m) => m.branch === 2 && m.result === "ERROR");
+    expect(msg!.summary).toMatch(/Tờ 2\/3: chưa khai chính thức tự động/);
+  });
+  it("IDC tờ 2 lô nhiều tờ còn BLOCKER (không phải HS) → BLOCKER_FAILED, không outbox", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED");
+    h.deps.validation = { blockerFails: async () => 2 };
+    expect(errOf(await performOperation(h.deps, declarant, D, "IDC", 2))).toMatchObject({ code: "BLOCKER_FAILED" });
+    expect(h.uow.data.outbox).toHaveLength(0);
+  });
+  it("payload.chain sai dạng (jsonb) → không coi là chuỗi, không nối tờ kế (Zod, bất biến 9)", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED");
+    unwrap(await performOperation(h.deps, declarant, D, "IDC", 1));
+    (h.uow.data.outbox[0]!.payload as Record<string, unknown>)["chain"] = "DECLARE";
+    await drain();
+    expect(sent()).toEqual([[1, "IDC", "SENT"]]);
+  });
+  it("lô một tờ: IDC giữ nguyên hành vi cũ (không kiểm nội dung đã gửi)", async () => {
+    const single = makeHarness();
+    single.decls.items = lines(10);
+    single.decls.status = "SUBMITTED";
+    seedOf(single, 1, "PRE_DECLARED");
+    single.decls.fields = { CQHQ: { value: "01AB – khác" } };
+    unwrap(await performOperation(single.deps, declarant, D, "IDC", 1));
+    expect(single.uow.data.outbox.map((o) => [o.branch, o.operation, o.idempotencyKey])).toEqual([[1, "IDC", `${D}:IDC:n1`]]);
   });
 });

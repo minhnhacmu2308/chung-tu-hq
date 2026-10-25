@@ -18,19 +18,19 @@ export async function declareAllSheets(deps: CustomsDeps, ctx: Ctx, dossierId: s
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   if (!snap) return err(domainError("NO_DECLARATION", "Chưa có tờ khai"));
   const of = branchCount(snap.payload.items.length);
-  if (of <= 1) return err(domainError("VALIDATION", "Khai chính thức cả lô chỉ dùng cho lô nhiều tờ"));
+  if (of <= 1) return err(reasonError("VALIDATION", "DECLARE_ALL_SINGLE_SHEET"));
   const { results, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
-  if (outbox.some((o) => o.status === "PENDING")) return err(domainError("INVALID_STATE", "Đang gửi nghiệp vụ khác – chờ xong rồi khai chính thức cả lô"));
+  if (outbox.some((o) => o.status === "PENDING")) return err(reasonError("INVALID_STATE", "DECLARE_ALL_PENDING"));
   const sheets = results.filter((r) => r.branch <= of).sort((a, b) => a.branch - b.branch);
   // Còn tờ chờ gửi nội dung (chưa khai tạm / đã gọi về chưa gửi lại) → chờ khai tạm xong cả lô (cùng lý do thứ tự tờ khai chính thức).
   const waiting = sheets.find((s) => awaitingContent(stageOf(s)));
   if (waiting) {
     // "Tờ {sheet}" = tờ đầu tiên sau tờ đang chờ mà đang chờ khai chính thức; không có → câu thường nêu tờ chưa khai tạm xong.
     const blocked = sheets.find((s) => s.branch > waiting.branch && declareOpFor(stageOf(s), snap.payload.kind));
-    return err(blocked ? reasonError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: blocked.branch, waitFor: waiting.branch }) : domainError("INVALID_STATE", `Tờ ${waiting.branch}: chưa khai tạm xong – khai tạm trước khi khai chính thức cả lô`));
+    return err(blocked ? reasonError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: blocked.branch, waitFor: waiting.branch }) : reasonError("INVALID_STATE", "DECLARE_ALL_NOT_PRE_DECLARED", { sheet: waiting.branch }));
   }
   const target = sheets.find((s) => declareOpFor(stageOf(s), snap.payload.kind));
-  if (!target) return err(domainError("INVALID_STATE", "Không còn tờ nào chờ khai chính thức"));
+  if (!target) return err(reasonError("INVALID_STATE", "DECLARE_ALL_NONE"));
   // HS / BLOCKER: performOperationChecked kiểm cho mọi khai chính thức lô nhiều tờ (bất biến 7).
   return performOperation(deps, ctx, dossierId, declareOpFor(stageOf(target), snap.payload.kind)!, target.branch, { chain: "declare" });
 }

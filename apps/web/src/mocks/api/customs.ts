@@ -791,7 +791,11 @@ export const declareAllSheets = (dossierId: string) =>
     const sheets = Array.from({ length: c.of }, (_, i) => ({ no: i + 1, stage: flowOf(db, dossierId, i + 1).stage }));
     if (sheets.some((s) => flowOf(db, dossierId, s.no).pending)) throw new ApiError("INVALID_STATE", "Đang gửi nghiệp vụ khác – chờ xong rồi khai chính thức cả lô");
     const waiting = sheets.find((s) => awaitingContent(s.stage));
-    if (waiting) throw reasonApiError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: Math.min(waiting.no + 1, c.of), waitFor: waiting.no });
+    if (waiting) {
+      const blocked = sheets.find((s) => s.no > waiting.no && declareOpFor(s.stage, c.dossier.direction));
+      if (blocked) throw reasonApiError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: blocked.no, waitFor: waiting.no });
+      throw new ApiError("INVALID_STATE", `Tờ ${waiting.no}: chưa khai tạm xong – khai tạm trước khi khai chính thức cả lô`);
+    }
     const target = sheets.find((s) => declareOpFor(s.stage, c.dossier.direction));
     if (!target) throw new ApiError("INVALID_STATE", "Không còn tờ nào chờ khai chính thức");
     const unconfirmed = c.items.filter((i) => !i.hsConfirmed).length;

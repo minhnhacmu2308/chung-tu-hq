@@ -46,6 +46,13 @@ export function contentOpFor(stage: CustomsStage, kind: "IDA" | "EDA"): CustomsO
   return null;
 }
 
+/** Bất biến 7 cho khai chính thức lô nhiều tờ: HS chưa xác nhận hoặc còn BLOCKER FAIL → không khai. */
+export async function declareBlockError(deps: CustomsDeps, ctx: { orgId: OrgId }, dossierId: string, snap: { unconfirmedHs: number }): Promise<DomainError | null> {
+  if (snap.unconfirmedHs > 0) return reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs });
+  const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
+  return blockers > 0 ? reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }) : null;
+}
+
 /** Nghiệp vụ khai chính thức cho tờ ở giai đoạn này (khai chính thức cả lô): PRE_DECLARED → IDC/EDC, AMEND_PRE_DECLARED → IDE/EDE; khác null. */
 export function declareOpFor(stage: CustomsStage, kind: "IDA" | "EDA"): CustomsOperation | null {
   const direction = kind === "IDA" ? "NK" : "XK";

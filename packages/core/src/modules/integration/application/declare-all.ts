@@ -3,19 +3,12 @@
 // Tái dùng mọi guard của performOperation cho tờ đích (không nhân bản); thêm bất biến 7 (HS đủ, không BLOCKER) như khai tạm.
 import { awaitingContent, branchCount, type OperationResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
-import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
+import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, type Result } from "../../../shared/result.js";
 import { stageOf } from "../domain/state-machine.js";
 import { declareOpFor } from "./branch-send.js";
 import type { CustomsDeps } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
-
-/** Bất biến 7 cho khai chính thức cả lô: HS chưa xác nhận hoặc còn BLOCKER FAIL → không khai (kiểm ở tờ đầu và ở mỗi tờ nối tiếp của worker). */
-export async function declareBlockError(deps: CustomsDeps, ctx: Pick<Ctx, "orgId">, dossierId: string, snap: { unconfirmedHs: number }): Promise<DomainError | null> {
-  if (snap.unconfirmedHs > 0) return reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs });
-  const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
-  return blockers > 0 ? reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }) : null;
-}
 
 export async function declareAllSheets(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -31,10 +24,13 @@ export async function declareAllSheets(deps: CustomsDeps, ctx: Ctx, dossierId: s
   const sheets = results.filter((r) => r.branch <= of).sort((a, b) => a.branch - b.branch);
   // Còn tờ chờ gửi nội dung (chưa khai tạm / đã gọi về chưa gửi lại) → chờ khai tạm xong cả lô (cùng lý do thứ tự tờ khai chính thức).
   const waiting = sheets.find((s) => awaitingContent(stageOf(s)));
-  if (waiting) return err(reasonError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: Math.min(waiting.branch + 1, of), waitFor: waiting.branch }));
+  if (waiting) {
+    // "Tờ {sheet}" = tờ đầu tiên sau tờ đang chờ mà đang chờ khai chính thức; không có → câu thường nêu tờ chưa khai tạm xong.
+    const blocked = sheets.find((s) => s.branch > waiting.branch && declareOpFor(stageOf(s), snap.payload.kind));
+    return err(blocked ? reasonError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: blocked.branch, waitFor: waiting.branch }) : domainError("INVALID_STATE", `Tờ ${waiting.branch}: chưa khai tạm xong – khai tạm trước khi khai chính thức cả lô`));
+  }
   const target = sheets.find((s) => declareOpFor(stageOf(s), snap.payload.kind));
   if (!target) return err(domainError("INVALID_STATE", "Không còn tờ nào chờ khai chính thức"));
-  const blocked = await declareBlockError(deps, ctx, dossierId, snap);
-  if (blocked) return err(blocked);
+  // HS / BLOCKER: performOperationChecked kiểm cho mọi khai chính thức lô nhiều tờ (bất biến 7).
   return performOperation(deps, ctx, dossierId, declareOpFor(stageOf(target), snap.payload.kind)!, target.branch, { chain: "declare" });
 }

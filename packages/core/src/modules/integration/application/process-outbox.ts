@@ -16,7 +16,6 @@ import type { CustomsDeps, CustomsRepos, GatewayError, MessageRow, OutboxRow, Re
 import { applyPostAmendmentResult } from "./post-amendment.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { contentOpFor, declareOpFor, enqueueBranchPreDeclare, outboxVersion, stalePinReason } from "./branch-send.js";
-import { declareBlockError } from "./declare-all.js";
 import { performOperationChecked } from "./perform-operation.js";
 
 /** Chuỗi nối tiếp dừng ở tờ `branch` vì guard (declare = chuỗi khai chính thức cả lô). */
@@ -265,12 +264,13 @@ async function chainDeclare(deps: CustomsDeps, ctx: { orgId: OrgId; userId: User
   const snap = await deps.declarations.get(ctx.orgId, ob.dossierId);
   if (!snap) return null;
   const of = branchCount(snap.payload.items.length);
-  const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, ob.dossierId));
+  const { results, all } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, ob.dossierId), all: await r.outbox.listForDossier(ctx.orgId, ob.dossierId) }));
+  // Idempotent khi job chạy lại sau SENT (ADR 0005): đã có outbox chuỗi khai chính thức ở tờ sau, tạo cùng/sau outbox này → chuỗi đã đi tiếp (hoặc đang chờ người khai Gửi lại) – không tạo thêm.
+  if (all.some((o) => o.id !== ob.id && o.branch > ob.branch && o.createdAt >= ob.createdAt && (o.payload as { chain?: unknown } | null)?.chain === "declare")) return null;
   const next = results.filter((r) => r.branch > ob.branch && r.branch <= of).sort((a, b) => a.branch - b.branch).find((r) => declareOpFor(stageOf(r), snap.payload.kind));
   if (!next) return null;
   const op = declareOpFor(stageOf(next), snap.payload.kind)!;
-  const blocked = await declareBlockError(deps, ctx, ob.dossierId, snap);
-  if (blocked) return { branch: next.branch, of, error: blocked, declare: true };
-  const res = await performOperationChecked(deps, ctx, ob.dossierId, op, next.branch, { chain: "declare" });
-  return res.ok ? null : { branch: next.branch, of, error: res.error, declare: true };
+  const res = await performOperationChecked(deps, ctx, ob.dossierId, op, next.branch, { chain: "declare", chainFrom: ob.id });
+  // Trùng khóa (bản chạy lại) = đã xếp, không phải lỗi.
+  return res.ok || res.error.code === "ALREADY_SUBMITTED" ? null : { branch: next.branch, of, error: res.error, declare: true };
 }

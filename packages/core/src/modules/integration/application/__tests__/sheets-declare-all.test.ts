@@ -4,9 +4,10 @@ import { unwrap } from "../../../../shared/result.js";
 import { stageOf } from "../../domain/state-machine.js";
 import { declareOpFor } from "../branch-send.js";
 import { declareAllSheets } from "../declare-all.js";
+import { resendOperation } from "../resend-operation.js";
 import { performOperation } from "../perform-operation.js";
 import { processOutbox } from "../process-outbox.js";
-import { approver, D, declarant, lines, lot as lotOf, makeHarness, ORG, viewer, type Harness } from "./_sheets-harness.js";
+import { approver, D, declarant, lines, lot as lotOf, makeHarness, seed as seedOf, ORG, viewer, type Harness } from "./_sheets-harness.js";
 
 let h: Harness;
 beforeEach(() => {
@@ -57,7 +58,7 @@ describe("declareAllSheets – chuỗi IDC tờ 1 → N", () => {
     lot("PRE_DECLARED", "PRE_DECLARED");
     unwrap(await declareAllSheets(h.deps, declarant, D));
     await drain();
-    expect(h.uow.data.outbox.map((o) => o.idempotencyKey)).toEqual([`${D}:IDC:n1`, `${D}:IDC:n1:b2`]);
+    expect(h.uow.data.outbox.map((o) => o.idempotencyKey)).toEqual([`${D}:IDC:n1`, `${D}:IDC:chain${h.uow.data.outbox[0]!.id}:b2`]);
   });
   it("tờ 1 CLEARED, tờ 2–3 PRE_DECLARED → outbox đầu tiên là tờ 2", async () => {
     lot("CLEARED", "PRE_DECLARED", "PRE_DECLARED");
@@ -102,10 +103,17 @@ describe("declareAllSheets – chuỗi IDC tờ 1 → N", () => {
     expect(e.code).toBe("VALIDATION");
     expect(e.message).toMatch(/chỉ dùng cho lô nhiều tờ/);
   });
-  it("còn tờ chờ gửi nội dung → SHEET_ORDER_DECLARE", async () => {
+  it("còn tờ chờ gửi nội dung → SHEET_ORDER_DECLARE nêu tờ đầu tiên đang chờ khai chính thức sau tờ chờ", async () => {
     lot("RECALLED", "PRE_DECLARED");
-    expect(errOf(await declareAllSheets(h.deps, declarant, D))).toMatchObject({ code: "INVALID_STATE", reason: "SHEET_ORDER_DECLARE" });
+    expect(errOf(await declareAllSheets(h.deps, declarant, D))).toMatchObject({ code: "INVALID_STATE", reason: "SHEET_ORDER_DECLARE", params: { sheet: 2, waitFor: 1 } });
     expect(h.uow.data.outbox).toHaveLength(0);
+  });
+  it("tờ chờ gửi nội dung là tờ cuối → câu thường 'Tờ 3: chưa khai tạm xong' (không 'tờ 3 chờ tờ 3')", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED", "RECALLED");
+    const e = errOf(await declareAllSheets(h.deps, declarant, D))!;
+    expect(e.code).toBe("INVALID_STATE");
+    expect(e.reason).toBeUndefined();
+    expect(e.message).toMatch(/^Tờ 3: chưa khai tạm xong/);
   });
   it("không tờ nào chờ khai chính thức → INVALID_STATE", async () => {
     lot("DECLARED", "CLEARED");
@@ -139,6 +147,54 @@ describe("declareAllSheets – chuỗi IDC tờ 1 → N", () => {
     expect(errOf(await declareAllSheets(h.deps, viewer, D))).toMatchObject({ code: "FORBIDDEN" });
     expect(h.uow.data.outbox).toHaveLength(0);
     unwrap(await declareAllSheets(h.deps, approver, D));
+  });
+  it("IDC tờ 2 của lô nhiều tờ với HS chưa xác nhận → từ chối, không outbox; lô một tờ giữ nguyên (không kiểm HS)", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED");
+    h.decls.unconfirmedHs = 1;
+    expect(errOf(await performOperation(h.deps, declarant, D, "IDC", 2))).toMatchObject({ code: "HS_UNCONFIRMED" });
+    expect(h.uow.data.outbox).toHaveLength(0);
+    const single = makeHarness();
+    single.decls.items = lines(10);
+    single.decls.status = "SUBMITTED";
+    single.decls.unconfirmedHs = 1;
+    seedOf(single, 1, "PRE_DECLARED");
+    unwrap(await performOperation(single.deps, declarant, D, "IDC", 1));
+  });
+  it("worker chạy lại outbox tờ 1 đã SENT: không tạo IDC tờ 2 thứ hai (bình thường, và khi IDC tờ 2 đã FAILED / tờ 2 đã DECLARED)", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED");
+    unwrap(await declareAllSheets(h.deps, declarant, D));
+    const ob1 = h.uow.data.outbox[0]!.id;
+    await run(ob1);
+    await run(ob1);
+    expect(sent()).toEqual([[1, "IDC", "SENT"], [2, "IDC", "PENDING"]]);
+    // IDC tờ 2 hết lượt / bị từ chối (FAILED), tờ 2 vẫn PRE_DECLARED → chạy lại tờ 1 không tạo IDC mới.
+    h.uow.data.outbox[1]!.status = "FAILED";
+    await run(ob1);
+    expect(sent()).toEqual([[1, "IDC", "SENT"], [2, "IDC", "FAILED"]]);
+    // Tờ 2 DECLARED (người khai xử lý) → chạy lại tờ 1 cũng không nhảy sang tờ 3.
+    const r2 = h.uow.data.results.find((r) => r.branch === 2)!;
+    r2.raw = { ...r2.raw, stage: "DECLARED" };
+    await run(ob1);
+    expect(sent()).toEqual([[1, "IDC", "SENT"], [2, "IDC", "FAILED"]]);
+  });
+  it("Gửi lại IDC tờ 2 bị từ chối giữ chain: thành công thì nối IDC tờ 3", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED");
+    const gw = h.deps.gateway;
+    const declare = gw.declare.bind(gw);
+    gw.declare = async (o, msg, key) => (msg.externalId === "fpt-b2" ? { accepted: false, errors: [{ code: "E-X", message: "từ chối" }] } : declare(o, msg, key));
+    unwrap(await declareAllSheets(h.deps, declarant, D));
+    await drain();
+    expect(sent()).toEqual([[1, "IDC", "SENT"], [2, "IDC", "FAILED"]]);
+    gw.declare = declare;
+    const query = gw.queryStatus.bind(gw);
+    gw.queryStatus = async (...a) => {
+      const { channel: _c, ...rest } = await query(...a);
+      return rest;
+    }; // Hải quan chưa ghi nhận IDC tờ 2 → được gửi lại
+    unwrap(await resendOperation(h.deps, declarant, D, "IDC", 2));
+    expect((h.uow.data.outbox[2]!.payload as { chain?: string }).chain).toBe("declare");
+    await drain();
+    expect(sent()).toEqual([[1, "IDC", "SENT"], [2, "IDC", "FAILED"], [2, "IDC", "SENT"], [3, "IDC", "SENT"]]);
   });
   it("IDC thường (không chain) của tờ 1 SENT → không nối tờ kế (hành vi cũ)", async () => {
     lot("PRE_DECLARED", "PRE_DECLARED");

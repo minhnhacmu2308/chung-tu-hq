@@ -70,6 +70,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const suffix = branch > 1 ? `:b${branch}` : "";
   const lastKey = suffix && last.idempotencyKey.endsWith(suffix) ? last.idempotencyKey.slice(0, -suffix.length) : last.idempotencyKey;
   const key = /:n\d+$/.test(lastKey) ? `${lastKey}:retry${base.length}${suffix}` : outboxKey(dossierId, op, version, base.length, branch);
+  // `...last` giữ payload.chain: Gửi lại IDC/IDE bị từ chối trong chuỗi khai chính thức cả lô thành công thì chuỗi nối tiếp tờ sau.
   const row = { ...last, id: deps.idGen.next("msg"), idempotencyKey: key, status: "PENDING" as const, attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now(), updatedAt: now() };
   await deps.uow.asOrg(ctx, async (r) => {
     if (st) await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, operation: qop, direction: "IN", result: "OK", summary: `Chưa ghi nhận ${op} – được phép gửi lại (trạng thái: ${st.status})`, payloadMasked: { nghiepVu: qop, trangThai: st.status }, externalRef: result.externalId, at: now() });

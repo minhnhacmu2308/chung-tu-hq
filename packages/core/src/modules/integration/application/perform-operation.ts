@@ -18,12 +18,12 @@ import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
-import { buildSheet, contentKey, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
+import { buildSheet, contentKey, declareBlockError, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
 
 /** Người gọi không cần vai trò (worker nối tiếp chạy không có phiên người dùng). */
 export type ActorCtx = Pick<Ctx, "orgId" | "userId">;
 /** `chain`: ghi vào payload outbox để worker nối tiếp tờ kế tiếp sau khi gửi xong (processOutbox.chainNextBranch). Vắng = hành vi cũ. */
-export type OperationOpts = { chain?: "declare" | "recall" };
+export type OperationOpts = { chain?: "declare" | "recall"; /** Outbox nguồn của chuỗi nối tiếp: khóa idempotency tất định → worker chạy lại cùng outbox không tạo bản thứ hai. */ chainFrom?: string };
 
 export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1, opts?: OperationOpts): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -81,6 +81,9 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
     const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));
     const order = sheetOrderError(results, branch, op);
     if (order) return err(order);
+    // Bất biến 7: khai chính thức lô nhiều tờ cũng không vượt HS chưa xác nhận / BLOCKER (lô một tờ giữ nguyên hành vi cũ).
+    const blocked = await declareBlockError(deps, ctx, dossierId, snap);
+    if (blocked) return err(blocked);
   }
   if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
 
@@ -123,7 +126,7 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
   } else if (op === "CONT" || op === "PORT_FEE") {
     payload = { request: { soToKhai: result.declarationNo, containers: snap.payload.containers }, certificateId: result.raw?.certificateId };
   }
-  return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: isContentOperation(op), ...(isContentOperation(op) && of > 1 ? { version: snap.version } : {}) });
+  return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: isContentOperation(op), ...(opts?.chainFrom ? { key: `${dossierId}:${op}:chain${opts.chainFrom}${branch > 1 ? `:b${branch}` : ""}` } : {}), ...(isContentOperation(op) && of > 1 ? { version: snap.version } : {}) });
 }
 
 /**
@@ -148,6 +151,7 @@ export async function enqueue(
   deps: CustomsDeps, ctx: ActorCtx,
   p: {
     dossierId: string; declarationId: string; op: CustomsOperation; payload: unknown; result: ResultRow; outbox: OutboxRow[]; content: boolean;
+    /** Khóa idempotency tất định (chuỗi nối tiếp theo outbox nguồn). */ key?: string;
     /** Lô nhiều tờ, nghiệp vụ nội dung: khóa ghim phiên bản (contentKey) để worker kiểm ghim và nối tiếp tờ sau. */ version?: number;
   },
 ): Promise<Result<OperationResult>> {
@@ -155,7 +159,7 @@ export async function enqueue(
   // Đếm lần gửi theo nhánh; nhánh ≥ 2 thêm :b<no> (nhánh 1 giữ khóa cũ).
   const branch = p.result.branch;
   const n = p.outbox.filter((o) => o.operation === p.op && o.branch === branch).length + 1;
-  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId: p.dossierId, branch, declarationId: p.declarationId, operation: p.op, idempotencyKey: p.version !== undefined ? contentKey(p.dossierId, p.op, p.version, n, branch) : `${p.dossierId}:${p.op}:n${n}${branch > 1 ? `:b${branch}` : ""}`, payload: p.payload, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId: p.dossierId, branch, declarationId: p.declarationId, operation: p.op, idempotencyKey: p.key ?? (p.version !== undefined ? contentKey(p.dossierId, p.op, p.version, n, branch) : `${p.dossierId}:${p.op}:n${n}${branch > 1 ? `:b${branch}` : ""}`), payload: p.payload, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
   const created = await deps.uow.asOrg(ctx, async (r) => {
     try {
       await r.outbox.insert(row);

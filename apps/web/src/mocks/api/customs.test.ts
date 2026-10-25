@@ -466,10 +466,15 @@ describe("tờ khai nhánh: khai chính thức cả lô (declareAllSheets)", () 
     await sheets(BIG); // áp phản hồi đã đến (settle)
     expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1, 2, 3]); // 1 = IDC thông quan tờ 1 (clearSheet)
   });
+  it("tờ chờ gửi nội dung là tờ cuối → câu thường, không 'tờ 3 chờ tờ 3'", async () => {
+    await preDeclareAll(BIG);
+    await runB(BIG, "IDB", 3);
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", message: expect.stringMatching(/^Tờ 3: chưa khai tạm xong/) });
+  });
   it("còn tờ chờ gửi nội dung → SHEET_ORDER_DECLARE; lô một tờ → VALIDATION", async () => {
     await preDeclareAll(BIG);
     await runB(BIG, "IDB", 1);
-    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "SHEET_ORDER_DECLARE" });
+    await expect(declareAllSheets(BIG)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "SHEET_ORDER_DECLARE", params: { sheet: 2, waitFor: 1 } });
     await expect(declareAllSheets(NEW)).rejects.toMatchObject({ code: "VALIDATION" });
   });
 });

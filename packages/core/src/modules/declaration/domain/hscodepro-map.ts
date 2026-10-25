@@ -31,6 +31,31 @@ const num = (v: string) => {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 };
 
+/** Khóa "cùng một mặt hàng": mô tả (bỏ hoa thường, khoảng trắng thừa, dấu câu cuối) + xuất xứ + 6 số HS trên invoice. */
+export function sameGoodsKey(l: Pick<HsLineInput, "description" | "origin" | "invoiceHsCode">): string {
+  const desc = l.description.normalize("NFC").toLowerCase().replace(/\s+/g, " ").replace(/[\s.,;:]+$/, "").trim();
+  return [desc, (l.origin ?? "").trim().toUpperCase(), (l.invoiceHsCode ?? "").replace(/\D/g, "").slice(0, 6)].join("|");
+}
+
+/**
+ * Gom dòng hàng trùng mặt hàng: chỉ dòng đầu mỗi nhóm (`reps`) gửi HSCodePro; dòng sau (`followers`, theo lineNo dòng đầu)
+ * dùng chung kết quả / câu hỏi – không tốn thêm lượt phân loại, và các dòng giống nhau luôn ra cùng một mã.
+ */
+export function groupSameGoods<T extends Pick<HsLineInput, "lineNo" | "description" | "origin" | "invoiceHsCode">>(lines: T[]): { reps: T[]; followers: Map<number, T[]> } {
+  const reps: T[] = [];
+  const followers = new Map<number, T[]>();
+  const repOf = new Map<string, T>();
+  for (const l of [...lines].sort((a, b) => a.lineNo - b.lineNo)) {
+    const key = sameGoodsKey(l);
+    const rep = repOf.get(key);
+    if (!rep) {
+      repOf.set(key, l);
+      reps.push(l);
+    } else followers.set(rep.lineNo, [...(followers.get(rep.lineNo) ?? []), l]);
+  }
+  return { reps, followers };
+}
+
 /** Dòng hàng → item gửi API. Dòng không gửi được (API sẽ trả 400 cả lượt) đưa vào `skipped`. */
 export function toHsRequestItems(lines: HsLineInput[], ctx: { invoiceCurrency: string; fallbackOrigin: string | null; coForm: string | null }): { items: HsCreateItem[]; skipped: HsSkip[] } {
   const items: HsCreateItem[] = [];

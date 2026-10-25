@@ -44,7 +44,7 @@ export class InMemoryDeclarationUow implements DeclarationUow {
           const x = d.lineItems.find((y) => y.id === id && y.orgId === own(orgId));
           if (x) Object.assign(x, clone(patch));
         },
-        findByHsItem: async (orgId, hsItemId) => clone(d.lineItems.find((x) => x.hsItemId === hsItemId && x.orgId === org && x.orgId === orgId) ?? null),
+        listByHsItem: async (orgId, hsItemId) => clone(d.lineItems.filter((x) => x.hsItemId === hsItemId && x.orgId === org && x.orgId === orgId).sort((a, b) => a.lineNo - b.lineNo)),
       },
       hsJobs: {
         insert: async (row) => {

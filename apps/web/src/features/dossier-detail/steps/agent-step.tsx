@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Play, RotateCcw, Search, Workflow, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
+import { listProducts, productKeys } from "@/api/products";
 import {
   confirmHs, declarationKeys, getAgentRun, listHsCatalog, listLineItems, moveToReview, startAgentRun, unconfirmHs,
   type AgentMode, type AgentRunView,
@@ -15,7 +16,8 @@ import {
 import { formatDateTime, formatMoney, formatNumber, formatTime } from "@/lib/format";
 import type { AgentTaskId, AgentTaskStatus, LineItem } from "@/mocks/types";
 import { errorMessage, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
-import { HsSuggestionCell } from "./hs/hs-cell";
+import { matchCatalog, type CatalogMatch } from "./hs/catalog-match";
+import { DeclaredBeforeHint, HsSuggestionCell } from "./hs/hs-cell";
 import { HsAnswerDialog, ReclassifyDialog } from "./hs/hs-dialogs";
 import { formatRates, formatTax, hsBusy, normalizeHsInput } from "./hs/hs-format";
 import type { StepProps } from "./types";
@@ -196,6 +198,16 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
   const t = useMessages(AGENT_MESSAGES);
   const qc = useQueryClient();
   const catalog = useQuery({ queryKey: declarationKeys.hsCatalog, queryFn: listHsCatalog, staleTime: Infinity });
+  const products = useQuery({ queryKey: productKeys.all, queryFn: listProducts, staleTime: 60_000 });
+  const declared = useMemo(() => matchCatalog(item.description, products.data ?? []), [item.description, products.data]);
+  const productOptions = useMemo(
+    () => (products.data ?? []).flatMap((p) => {
+      const c = normalizeHsInput(p.hsCode);
+      const meta = [p.code, p.origin].filter(Boolean).join(" · ");
+      return c ? [{ value: p.id, label: fill(t.productOption, { code: c, name: p.name }), ...(meta ? { description: meta } : {}) }] : [];
+    }),
+    [products.data, t.productOption],
+  );
   const candidates = item.hs?.candidates ?? [];
   const [picked, setPicked] = useState<string | null>(item.hsConfirmed ?? item.hsSuggested ?? candidates[0]?.code ?? null);
   const [manual, setManual] = useState("");
@@ -237,6 +249,32 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
               description: c.whyNot ? fill(t.whyNot, { desc: c.description, why: c.whyNot }) : c.description,
             }))}
           />
+        )}
+        {declared.length > 0 && (
+          <RadioGroup
+            label={t.productsLabel}
+            description={t.productsDesc}
+            value={manual.trim() ? null : (declared.find((d) => d.code === picked)?.code ?? null)}
+            onChange={(v) => (setPicked(v), setManual(""))}
+            options={declared.map((d) => ({
+              value: d.code,
+              label: fill(t.productOption, { code: d.code, name: d.product.name }),
+              description: fill(d.exact ? t.productMeta : t.productMetaSimilar, { n: d.product.timesDeclared }),
+            }))}
+          />
+        )}
+        {productOptions.length > 0 && (
+          <Field label={t.productsSearchLabel} hint={t.productsSearchHint}>
+            <Combobox
+              options={productOptions}
+              value={null}
+              onChange={(id) => {
+                const c = normalizeHsInput(products.data?.find((p) => p.id === id)?.hsCode ?? "");
+                if (c) (setPicked(c), setManual(""));
+              }}
+              placeholder={t.productsSearchPlaceholder}
+            />
+          </Field>
         )}
         {catalogOptions.length > 0 && (
           <Field label={t.catalogLabel} hint={t.catalogHint}>
@@ -288,8 +326,18 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
     void qc.invalidateQueries({ queryKey: declarationKeys.items(dossierId) });
     void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
   };
+  const products = useQuery({ queryKey: productKeys.all, queryFn: listProducts, staleTime: 60_000 });
+  /** Mặt hàng cùng tên (khớp đúng) đã khai trong danh mục, theo dòng. */
+  const declared = useMemo(() => {
+    const m = new Map<string, CatalogMatch>();
+    if (products.data?.length) for (const it of items) {
+      const hit = matchCatalog(it.description, products.data, { limit: 1 })[0];
+      if (hit?.exact) m.set(it.id, hit);
+    }
+    return m;
+  }, [items, products.data]);
   const confirm = useMutation({
-    mutationFn: (it: LineItem) => confirmHs(it.id, it.hsSuggested!),
+    mutationFn: ({ it, code }: { it: LineItem; code: string }) => confirmHs(it.id, code),
     onSuccess: (it) => {
       toast({ tone: "success", title: fill(t.toastConfirmed, { code: it.hsConfirmed ?? "", line: it.lineNo }) });
       invalidate();
@@ -331,7 +379,18 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
       header: t.colSuggest,
       size: 220,
       meta: { wrap: true },
-      cell: (c) => <HsSuggestionCell item={c.row.original} onAnswer={setAnswering} onReclassify={setReclassifying} />,
+      cell: (c) => {
+        const it = c.row.original;
+        const hit = declared.get(it.id);
+        return (
+          <>
+            <HsSuggestionCell item={it} onAnswer={setAnswering} onReclassify={setReclassifying} />
+            {hit && hit.code !== it.hsConfirmed && (
+              <DeclaredBeforeHint item={it} match={hit} busy={confirm.isPending && confirm.variables?.it.id === it.id && confirm.variables.code === hit.code} onUse={(row, code) => confirm.mutate({ it: row, code })} />
+            )}
+          </>
+        );
+      },
     }),
     col.accessor("importDutyRate", {
       header: t.colTax,
@@ -374,8 +433,8 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
             <Button
               size="sm"
               disabled={!it.hsSuggested}
-              loading={confirm.isPending && confirm.variables?.id === it.id}
-              onClick={() => confirm.mutate(it)}
+              loading={confirm.isPending && confirm.variables?.it.id === it.id && confirm.variables.code === it.hsSuggested}
+              onClick={() => confirm.mutate({ it, code: it.hsSuggested! })}
               aria-label={fill(t.confirmAria, { code: it.hsSuggested ?? "", line: it.lineNo })}
             >
               {t.confirm}

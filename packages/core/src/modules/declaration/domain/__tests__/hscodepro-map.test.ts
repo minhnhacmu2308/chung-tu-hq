@@ -1,6 +1,6 @@
 import type { HsResult } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { candidatesFromResult, chunk, coFormFor, formatHs, ratesFromCandidate, toHsRequestItems, type HsLineInput } from "../hscodepro-map.js";
+import { candidatesFromResult, chunk, coFormFor, formatHs, groupSameGoods, ratesFromCandidate, sameGoodsKey, toHsRequestItems, type HsLineInput } from "../hscodepro-map.js";
 
 const line = (over: Partial<HsLineInput> = {}): HsLineInput => ({ lineNo: 1, description: "Vít me bi SFU1605, dài 600 mm", quantity: "100", unit: "PCE", amount: "2840.50", origin: "TW", invoiceHsCode: "8483.40", ...over });
 const TAX = (rate: number, basis: "MFN" | "FTA" = "MFN", agreement: string | null = null) => ({ import: { rate, basis, agreement }, vat: { rate: 10, note: null }, source_date: "2026-10-15" });
@@ -61,5 +61,19 @@ describe("hscodepro-map", () => {
   });
   it("chunk: chia lô 50", () => {
     expect(chunk(Array.from({ length: 120 }, (_, i) => i), 50).map((c) => c.length)).toEqual([50, 50, 20]);
+  });
+});
+
+describe("groupSameGoods", () => {
+  it("cùng mô tả (bỏ hoa thường, khoảng trắng, dấu câu cuối) + xuất xứ + 6 số HS invoice → một nhóm; dòng đầu là đại diện", () => {
+    const g = groupSameGoods([
+      line({ lineNo: 4, description: "LED downlight 7W,  white." }),
+      line({ lineNo: 2, description: "LED Downlight 7W, white" }),
+      line({ lineNo: 3, description: "LED downlight 7W, white", origin: "JP" }),
+      line({ lineNo: 5, description: "LED downlight 7W, white", invoiceHsCode: "9405.42" }),
+    ]);
+    expect(g.reps.map((r) => r.lineNo)).toEqual([2, 3, 5]);
+    expect(g.followers.get(2)!.map((f) => f.lineNo)).toEqual([4]);
+    expect(sameGoodsKey(line({ invoiceHsCode: "8483.40.90" }))).toBe(sameGoodsKey(line({ invoiceHsCode: "848340" })));
   });
 });

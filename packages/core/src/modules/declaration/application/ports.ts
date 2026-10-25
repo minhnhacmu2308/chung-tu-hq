@@ -55,7 +55,8 @@ export interface DeclarationRepos {
     /** Ghi dòng hàng theo (dossier, lineNo): dòng đã có giữ HS đã xác nhận; dòng thừa bị xóa. */
     upsertForDossier(orgId: string, dossierId: string, rows: LineItemRow[]): Promise<LineItemRow[]>;
     update(orgId: string, id: string, patch: HsLinePatch): Promise<void>;
-    findByHsItem(orgId: string, hsItemId: string): Promise<LineItemRow | null>;
+    /** Các dòng gắn với một item của HSCodePro (dòng trùng mặt hàng dùng chung một item). */
+    listByHsItem(orgId: string, hsItemId: string): Promise<LineItemRow[]>;
   };
   hsJobs: {
     insert(row: HsJobRow): Promise<void>;

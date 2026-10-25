@@ -79,7 +79,7 @@ describe("startHsClassification", () => {
   it("hơn 50 dòng → chia lượt 50/50/20", async () => {
     shipments.byDossier[D] = hansol((s) => {
       const base = s.items[0]!;
-      s.items = Array.from({ length: 120 }, (_, i) => ({ ...base, lineNo: i + 1 }));
+      s.items = Array.from({ length: 120 }, (_, i) => ({ ...base, lineNo: i + 1, description: { ...base.description, value: `${base.description.value} – mẫu ${i + 1}` } }));
     });
     await items();
     unwrap(await startHsClassification(deps, sys, D));
@@ -285,7 +285,7 @@ describe("sửa sau review", () => {
   it("#4 tạo lượt lỗi giữa chừng (lô 2/2) → BullMQ chạy lại agent gửi nốt dòng chưa gửi", async () => {
     shipments.byDossier[D] = hansol((s) => {
       const base = s.items[0]!;
-      s.items = Array.from({ length: 60 }, (_, i) => ({ ...base, lineNo: i + 1 }));
+      s.items = Array.from({ length: 60 }, (_, i) => ({ ...base, lineNo: i + 1, description: { ...base.description, value: `${base.description.value} – mẫu ${i + 1}` } }));
     });
     scriptJobs([(j) => j]);
     const create = hs.create.bind(hs);
@@ -425,5 +425,55 @@ describe("ghi chi phí HSCodePro (usage_events)", () => {
     const r = unwrap(await startHsClassification(deps, sys, D));
     expect(r.jobIds).toHaveLength(1);
     expect((await items())[0]).toMatchObject({ hsSuggested: "8482.10.00" });
+  });
+});
+
+describe("dòng trùng mặt hàng", () => {
+  /** Dòng 3 cùng mô tả (khác hoa thường, khoảng trắng, dấu chấm cuối) + xuất xứ + HS invoice với dòng 1. */
+  const withDuplicate = () =>
+    (shipments.byDossier[D] = hansol((s) => {
+      const first = s.items[0]!;
+      const third = s.items[2]!;
+      s.items[2] = { ...first, lineNo: third.lineNo, quantity: third.quantity, amount: third.amount, description: { ...first.description, value: `  ${first.description.value!.toUpperCase()}.` } };
+    }));
+
+  it("chỉ gửi dòng đầu; dòng trùng nhận cùng mã, cùng gợi ý; chi phí tính theo dòng gửi đi", async () => {
+    withDuplicate();
+    const meter = new RecordingUsageMeter();
+    deps.usage = meter;
+    await items();
+    unwrap(await startHsClassification(deps, sys, D));
+    expect(hs.created[0]!.items.map((i) => i.line_no)).not.toContain(3);
+    expect(meter.events.find((e) => e.kind === "HS_CLASSIFY")!.quantity).toBe(hs.created[0]!.items.length);
+    const all = await items();
+    expect(all[2]!.hs).toMatchObject({ status: "completed" });
+    expect(all[2]!.hsSuggested).toBe(all[0]!.hsSuggested);
+    expect(all[2]!.hs!.candidates.map((c) => c.code)).toEqual(all[0]!.hs!.candidates.map((c) => c.code));
+  });
+
+  it("AI hỏi lại dòng đầu → dòng trùng cũng chờ cùng câu hỏi; trả lời ở dòng trùng → cả nhóm 'đang gửi', gửi đúng item của dòng đầu", async () => {
+    withDuplicate();
+    scriptJobs([(j) => ({ ...j, status: "need_info", items: j.items.map((i) => (i.line_no === 1 ? { ...i, status: "need_info", result: null, question: { id: "q1", questions: [{ id: "use", question: "Dùng cho máy nào?" }] } } : i)) })]);
+    await items();
+    unwrap(await startHsClassification(deps, sys, D));
+    unwrap(await pollHsJob(deps, { ...sys, hsJobId: uow.data.hsJobs[0]!.id }));
+    const [l1, , l3] = await items();
+    expect(l3!.hs).toMatchObject({ status: "need_info", question: { id: "q1" } });
+    unwrap(await answerHsQuestion(deps, declarant, l3!.id, { questionId: "q1", answers: [{ id: "use", selected: ["CNC"], custom: null }] }));
+    const after = await items();
+    expect(after[0]!.hs!.status).toBe("answering");
+    expect(after[2]!.hs!.status).toBe("answering");
+    unwrap(await sendHsAnswer(deps, jobsNamed("hs-answer").at(-1)!.payload as Parameters<typeof sendHsAnswer>[1]));
+    expect(hs.answers).toHaveLength(1);
+    expect(uow.data.lineItems.find((x) => x.id === l1!.id)!.hsItemId).toBe(hs.answers[0]!.itemId);
+  });
+
+  it("khác xuất xứ thì không gom", async () => {
+    shipments.byDossier[D] = hansol((s) => {
+      s.items[2] = { ...s.items[0]!, lineNo: s.items[2]!.lineNo, origin: { ...s.items[0]!.origin, value: "JP" } };
+    });
+    await items();
+    unwrap(await startHsClassification(deps, sys, D));
+    expect(hs.created[0]!.items.map((i) => i.line_no)).toContain(3);
   });
 });

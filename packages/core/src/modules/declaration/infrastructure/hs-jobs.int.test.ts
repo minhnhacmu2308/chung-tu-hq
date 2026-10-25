@@ -43,7 +43,7 @@ describe("hs_jobs + trạng thái HS dòng hàng", () => {
       await r.lineItems.update("org_anphat", "itm_hs_1", { hsJobId: "hsj_1", hsItemId: "ext-it-1", hsStatus: "need_info", hsQuestion: { id: "q1", questions: [{ id: "use", question: "Dùng cho máy nào?" }] }, updatedAt: NOW });
       await r.hsJobs.update("org_anphat", "hsj_1", { status: "need_info", polls: 3, updatedAt: NOW });
     });
-    const got = await uow.asOrg(A, async (r) => ({ job: await r.hsJobs.get("org_anphat", "hsj_1"), open: await r.hsJobs.openForDossier("org_anphat", "dos_hs"), it: await r.lineItems.get("org_anphat", "itm_hs_1"), byExt: await r.lineItems.findByHsItem("org_anphat", "ext-it-1") }));
+    const got = await uow.asOrg(A, async (r) => ({ job: await r.hsJobs.get("org_anphat", "hsj_1"), open: await r.hsJobs.openForDossier("org_anphat", "dos_hs"), it: await r.lineItems.get("org_anphat", "itm_hs_1"), byExt: (await r.lineItems.listByHsItem("org_anphat", "ext-it-1"))[0] ?? null }));
     expect(got.job).toMatchObject({ externalId: "ext-1", status: "need_info", polls: 3 });
     expect(got.open.map((j) => j.id)).toEqual(["hsj_1"]);
     expect(got.it).toMatchObject({ hsStatus: "need_info", hsQuestion: { id: "q1" }, hsJobId: "hsj_1" });

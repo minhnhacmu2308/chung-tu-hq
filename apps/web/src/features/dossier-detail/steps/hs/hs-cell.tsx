@@ -1,8 +1,9 @@
 "use client";
 // Ô "Gợi ý hscodepro" theo trạng thái phân loại của dòng hàng (tài liệu HSCodePro §2, §5).
 import { Badge, Button, Progress, Spinner, fill, useMessages } from "@kb/ui";
-import { AlertTriangle, MessageCircleQuestion, RotateCcw } from "lucide-react";
+import { AlertTriangle, History, MessageCircleQuestion, RotateCcw } from "lucide-react";
 import type { LineItem } from "@/mocks/types";
+import type { CatalogMatch } from "./catalog-match";
 import { hsTone } from "./hs-format";
 import { HS_MESSAGES } from "./hs.messages";
 
@@ -14,6 +15,24 @@ export function ConfidenceMeter({ value, warn = false }: { value: number; warn?:
     <div className="flex w-28 items-center gap-2">
       <Progress value={pct} size="sm" tone={tone} aria-label={fill(t.confidenceAria, { pct })} className="flex-1" />
       <span className="w-9 text-right text-xs tabular-nums text-fg-muted">{pct}%</span>
+    </div>
+  );
+}
+
+/** Mặt hàng cùng tên đã khai trong danh mục hàng hóa → mã đã dùng + nút dùng luôn (chỉ khi dòng chưa xác nhận). */
+export function DeclaredBeforeHint({ item, match, onUse, busy = false }: { item: LineItem; match: CatalogMatch; onUse: (it: LineItem, code: string) => void; busy?: boolean }) {
+  const t = useMessages(HS_MESSAGES);
+  return (
+    <div className="mt-1 flex flex-col items-start gap-1 border-t border-border pt-1.5" title={fill(t.declaredBeforeTitle, { name: match.product.name })}>
+      <span className="inline-flex items-center gap-1 text-xs text-fg-muted">
+        <History aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+        {fill(t.declaredBefore, { code: match.code, n: match.product.timesDeclared })}
+      </span>
+      {!item.hsConfirmed && (
+        <Button size="sm" variant="secondary" loading={busy} onClick={() => onUse(item, match.code)} aria-label={fill(t.useDeclaredAria, { code: match.code, line: item.lineNo })}>
+          {t.useDeclared}
+        </Button>
+      )}
     </div>
   );
 }

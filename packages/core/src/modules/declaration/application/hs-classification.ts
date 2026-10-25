@@ -1,12 +1,13 @@
 // Phân loại HS qua HSCodePro (docs/integrations/hscodepro-api-v1.md): tạo lượt → poll 3 giây → người khai trả lời câu hỏi → phân loại lại.
 // Gọi ngoài chỉ chạy trong worker (startHsClassification từ run-agent, pollHsJob từ hs-poll, sendHsAnswer từ hs-answer).
 // Web chỉ gọi answerHsQuestion / reclassifyHs: ghi DB + đẩy job.
+// Dòng trùng mặt hàng (groupSameGoods) chỉ gửi dòng đầu; các dòng sau gắn cùng item HSCodePro, nhận cùng kết quả/câu hỏi.
 import type { HsAnswerInput, HsJob, HsReclassifyInput, LineItem } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
-import { candidatesFromResult, chunk, toHsRequestItems } from "../domain/hscodepro-map.js";
+import { candidatesFromResult, chunk, groupSameGoods, toHsRequestItems } from "../domain/hscodepro-map.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { rebuildDraft } from "./_rebuild.js";
 import { toLineItem } from "./_dto.js";
@@ -30,14 +31,14 @@ const LOCKED = ["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"];
  */
 async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, job: HsJobRow, api: HsJob): Promise<number> {
   const now = deps.clock.now();
-  let fresh = 0;
-  for (const it of api.items) {
-    const row = await r.lineItems.findByHsItem(orgId, it.id);
-    if (!row || row.hsJobId !== job.id) continue;
+  // Đếm theo item HSCodePro (dòng trùng mặt hàng dùng chung item không tính thêm).
+  const fresh = new Set<string>();
+  for (const it of api.items) for (const row of await r.lineItems.listByHsItem(orgId, it.id)) {
+    if (row.hsJobId !== job.id) continue;
     // Đã trả lời nhưng HSCodePro chưa nhận (job hs-answer chưa chạy) → giữ "đang gửi".
     if (row.hsStatus === "answering" && it.status === "need_info" && it.question?.id === row.hsQuestion?.id) continue;
     if (it.status === "completed" && it.result) {
-      if (row.hsStatus !== "completed") fresh++;
+      if (row.hsStatus !== "completed") fresh.add(it.id);
       const cands = candidatesFromResult(it.result);
       await r.lineItems.update(row.orgId, row.id, {
         hsStatus: "completed", hsSuggested: cands[0]!.code, hsConfidence: cands[0]!.confidence, hsQuestion: null, hsError: null,
@@ -56,7 +57,7 @@ async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string,
       await r.lineItems.update(row.orgId, row.id, { hsStatus: it.status, hsQuestion: null, hsError: null, updatedAt: now });
     }
   }
-  return fresh;
+  return fresh.size;
 }
 
 /** Dòng nhật ký agent cho từng dòng hàng theo trạng thái phân loại. */
@@ -106,8 +107,14 @@ export async function startHsClassification(
   }
 
   const byLine = new Map(targets.map((x) => [x.lineNo, x]));
-  const { items, skipped } = toHsRequestItems(
+  // Cùng mặt hàng → chỉ gửi dòng đầu; dòng sau đi theo (cùng trạng thái, cùng item HSCodePro).
+  const { reps, followers } = groupSameGoods(
     targets.map((x) => ({ lineNo: x.lineNo, description: opts.extra?.[x.id] ? `${x.description} – ${opts.extra[x.id]}` : x.description, quantity: x.quantity, unit: x.unit, amount: x.amount, origin: x.origin, invoiceHsCode: x.invoiceHsCode })),
+  );
+  /** Id dòng của nhóm (dòng đầu + dòng trùng). */
+  const groupIds = (repLineNo: number) => [byLine.get(repLineNo)!.id, ...(followers.get(repLineNo) ?? []).map((f) => byLine.get(f.lineNo)!.id)];
+  const { items, skipped } = toHsRequestItems(
+    reps,
     {
       invoiceCurrency: shipment?.invoice.currency.value ?? dossier.currency,
       fallbackOrigin: shipment?.origin.country.value ?? shipment?.parties.seller.country.value ?? null,
@@ -115,14 +122,14 @@ export async function startHsClassification(
     },
   );
   await deps.uow.asOrg(ctx, async (r) => {
-    for (const s of skipped) await r.lineItems.update(c.orgId, byLine.get(s.lineNo)!.id, { hsStatus: "skipped", hsError: { code: s.code, message: s.message }, hsQuestion: null, hsJobId: null, hsItemId: null, updatedAt: now });
+    for (const s of skipped) for (const id of groupIds(s.lineNo)) await r.lineItems.update(c.orgId, id, { hsStatus: "skipped", hsError: { code: s.code, message: s.message }, hsQuestion: null, hsJobId: null, hsItemId: null, updatedAt: now });
   });
 
   const jobIds: string[] = [];
   let pending = false;
   const markLines = (lineNos: number[], patch: Parameters<DeclarationRepos["lineItems"]["update"]>[2]) =>
     deps.uow.asOrg(ctx, async (r) => {
-      for (const n of lineNos) await r.lineItems.update(c.orgId, byLine.get(n)!.id, { ...patch, hsJobId: null, hsItemId: null, updatedAt: now });
+      for (const n of lineNos) for (const id of groupIds(n)) await r.lineItems.update(c.orgId, id, { ...patch, hsJobId: null, hsItemId: null, updatedAt: now });
     });
   /** Tạo lượt; 400 có details → bỏ dòng sai (kèm lý do) rồi gửi lại phần còn lại; lỗi không tạm khác → dòng thành failed. Lỗi tạm → ném để BullMQ thử lại. */
   const createSafely = async (part: typeof items, externalRef: string): Promise<HsJob | null> => {
@@ -149,7 +156,7 @@ export async function startHsClassification(
   const pendingJobs = (await deps.uow.asOrg(ctx, (r) => r.hsJobs.openForDossier(c.orgId, dossierId))).filter((j) => j.status === "pending");
   const lineIdsOf = (jobId: string) => rows.filter((x) => x.hsJobId === jobId).map((x) => x.id).sort().join(",");
   for (const part of chunk(items, CHUNK)) {
-    const partIds = part.map((it) => byLine.get(it.line_no)!.id);
+    const partIds = part.flatMap((it) => groupIds(it.line_no));
     const partKey = [...partIds].sort().join(",");
     const reused = pendingJobs.find((j) => lineIdsOf(j.id) === partKey);
     // 1. Ghi "đang gửi" TRƯỚC khi gọi API (gọi ngoài có tính phí): crash/timeout sau đó không tạo bản ghi mồ côi, chạy lại biết dòng nào đang dở.
@@ -174,8 +181,8 @@ export async function startHsClassification(
     await deps.uow.asOrg(ctx, async (r) => {
       await r.hsJobs.update(job.orgId, job.id, { externalId: api.id, status: job.status, updatedAt: now });
       for (const it of api.items) {
-        const row = byLine.get(it.line_no);
-        if (row) await r.lineItems.update(row.orgId, row.id, { hsJobId: job.id, hsItemId: it.id, hsStatus: it.status, hsQuestion: null, hsError: null, hsDetail: null, hsSuggested: null, hsConfidence: null, updatedAt: now });
+        if (!byLine.has(it.line_no)) continue;
+        for (const id of groupIds(it.line_no)) await r.lineItems.update(c.orgId, id, { hsJobId: job.id, hsItemId: it.id, hsStatus: it.status, hsQuestion: null, hsError: null, hsDetail: null, hsSuggested: null, hsConfidence: null, updatedAt: now });
       }
       await ingest(deps, r, c.orgId, job, api);
     });
@@ -247,6 +254,13 @@ export async function pollHsJob(deps: DeclarationDeps, input: SysCtx & { dossier
   return ok({ again: false });
 }
 
+/** Dòng đang dùng chung item HSCodePro với `row` (gồm chính nó); dòng chưa gắn item → chỉ nó. */
+async function sameItemRows(r: DeclarationRepos, row: LineItemRow): Promise<LineItemRow[]> {
+  if (!row.hsItemId) return [row];
+  const rows = (await r.lineItems.listByHsItem(row.orgId, row.hsItemId)).filter((x) => x.hsJobId === row.hsJobId);
+  return rows.some((x) => x.id === row.id) ? rows : [row, ...rows];
+}
+
 async function loadItem(deps: DeclarationDeps, ctx: Ctx, lineItemId: string) {
   const row = await deps.uow.asOrg(ctx, (r) => r.lineItems.get(ctx.orgId, lineItemId));
   return row ? ok(row) : err(domainError("NOT_FOUND", "Không tìm thấy dòng hàng"));
@@ -268,7 +282,10 @@ export async function answerHsQuestion(deps: DeclarationDeps, ctx: Ctx, lineItem
   if (it.hsStatus !== "need_info" || it.hsQuestion?.id !== input.questionId) return err(domainError("INVALID_STATE", "Câu hỏi đã được trả lời hoặc không còn hiệu lực – tải lại bảng"));
   const ids = new Set(it.hsQuestion.questions.map((q) => q.id));
   if (input.answers.length !== ids.size || input.answers.some((a) => !ids.has(a.id))) return err(domainError("VALIDATION", "Cần trả lời đủ từng câu hỏi"));
-  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(it.orgId, it.id, { hsStatus: "answering", updatedAt: deps.clock.now() }));
+  // Dòng trùng mặt hàng dùng chung câu hỏi → trả lời một dòng là cả nhóm chuyển "đang gửi".
+  await deps.uow.asOrg(ctx, async (r) => {
+    for (const x of await sameItemRows(r, it)) await r.lineItems.update(x.orgId, x.id, { hsStatus: "answering", updatedAt: deps.clock.now() });
+  });
   await deps.queue.enqueue("hs-answer", { orgId: ctx.orgId, userId: ctx.userId, dossierId: it.dossierId, lineItemId: it.id, questionId: input.questionId, answers: input.answers }, { jobId: `hs-answer:${it.id}:${deps.idGen.next("job")}` });
   await deps.dossiers.publish(ctx.orgId, it.dossierId, { type: "dossier.updated" });
   return ok(await view(deps, ctx, it.id));
@@ -296,7 +313,9 @@ export async function sendHsAnswer(
   } catch (e) {
     if (!(e instanceof HsApiError) || e.transient) throw e;
     if (e.code !== "INVALID_STATE") {
-      await deps.uow.asOrg(ctx, (r) => r.lineItems.update(found.row.orgId, found.row.id, { hsStatus: "need_info", hsError: { code: e.code, message: e.message }, updatedAt: now }));
+      await deps.uow.asOrg(ctx, async (r) => {
+        for (const x of await sameItemRows(r, found.row)) await r.lineItems.update(x.orgId, x.id, { hsStatus: "need_info", hsError: { code: e.code, message: e.message }, updatedAt: now });
+      });
       await deps.dossiers.publish(input.orgId, input.dossierId, { type: "dossier.updated" });
       return ok(undefined);
     }

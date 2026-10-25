@@ -38,10 +38,8 @@ function repos(tx: Tx): DeclarationRepos {
         return out.sort((a, b) => a.lineNo - b.lineNo);
       },
       update: async (orgId, id, patch) => void (await tx.update(lineItems).set(patch).where(and(eq(lineItems.orgId, orgId), eq(lineItems.id, id)))),
-      findByHsItem: async (orgId, hsItemId) => {
-        const r = (await tx.select().from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.hsItemId, hsItemId))).limit(1))[0];
-        return r ? toItem(r) : null;
-      },
+      listByHsItem: async (orgId, hsItemId) =>
+        (await tx.select().from(lineItems).where(and(eq(lineItems.orgId, orgId), eq(lineItems.hsItemId, hsItemId)))).map(toItem).sort((a, b) => a.lineNo - b.lineNo),
     },
     hsJobs: {
       insert: async (row) => void (await tx.insert(hsJobs).values(row)),

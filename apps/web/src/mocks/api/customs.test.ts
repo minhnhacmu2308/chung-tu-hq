@@ -349,3 +349,23 @@ describe("tờ khai nhánh: gọi về sửa và truyền lại (R3)", () => {
     expect(s.summary.problems).toEqual([{ no: 3, kind: "SEND_FAILED" }]);
   });
 });
+
+describe("tờ khai nhánh: tờ đã thông quan không phải gọi về (R7), 'đã duyệt' khi đang truyền lại", () => {
+  it("tờ 1 thông quan, tờ 3 gọi về, tờ 2 gọi sửa đổi (IDD) → mở lại; duyệt lại → truyền lại tờ 2 (IDA01) rồi tờ 3, tờ 1 giữ nguyên", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    await runB(BIG, "IDB", 3);
+    await runB(BIG, "IDC", 2);
+    await runB(BIG, "IDD", 2);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_RECALLED", "RECALLED"]);
+    expect(decl(BIG).status).toBe("DRAFT");
+    await approveDeclaration(BIG);
+    const before = getDb().customsMessages.filter((m) => m.dossierId === BIG && (m.branch ?? 1) === 1).length;
+    await submitDeclaration(BIG, CERT);
+    // Đang truyền lại tờ 2: tờ 3 (đã gọi về) vẫn là đã duyệt – IDA không trỏ về Review.
+    expect((await sheets(BIG))[2]!.pipeline.find((r) => r.op === "IDA")!.action).not.toBe("EDIT");
+    wait(9_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "AMEND_PRE_DECLARED", "PRE_DECLARED"]);
+    expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && (m.branch ?? 1) === 1).length).toBe(before);
+  });
+});

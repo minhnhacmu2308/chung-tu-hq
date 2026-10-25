@@ -24,12 +24,31 @@ export function sheetView(s: SubmissionView, no: number): SubmissionView {
   };
 }
 
-/** Khai tạm nối tiếp (§6.2): tờ chưa gửi, không đang gửi, mà tờ ngay trước chưa có số tờ khai → đang chờ tờ đó. */
-export function waitingOn(sheets: BranchSubmission[], no: number): number | null {
+/** Giai đoạn tờ còn chờ gửi nội dung tờ khai (lần đầu / sau gọi về / sau gọi sửa đổi). */
+const AWAITING_CONTENT: ReadonlySet<string> = new Set(["NOT_SENT", "RECALLED", "AMEND_RECALLED"]);
+
+/**
+ * Tờ đang chờ tờ nào (nhãn "Chờ tờ j"), tờ không đang gửi:
+ * - khai tạm nối tiếp (§6.2): tờ chưa gửi mà tờ ngay trước chưa có số tờ khai → chờ tờ đó;
+ * - truyền lại sau gọi về (§6.4, tờ khai SUBMITTED – lần truyền đang chạy): tờ còn chờ gửi nội dung chờ tờ trước gần nhất cũng còn chờ gửi
+ *   (worker gửi lần lượt; tờ đã thông quan / bị từ chối không chờ).
+ */
+export function waitingOn(sheets: BranchSubmission[], no: number, declarationStatus?: string): number | null {
   const b = sheets[no - 1];
   const prev = sheets[no - 2];
-  if (!b || !prev || b.stage !== "NOT_SENT" || b.pipeline.some((r) => r.status === "SENDING")) return null;
-  return prev.declarationNo ? null : prev.no;
+  if (!b || !prev || b.pipeline.some((r) => r.status === "SENDING")) return null;
+  if (b.stage === "NOT_SENT" && !prev.declarationNo) return prev.no;
+  if (declarationStatus !== "SUBMITTED" || !AWAITING_CONTENT.has(b.stage)) return null;
+  return sheets.slice(0, no - 1).reverse().find((x) => AWAITING_CONTENT.has(x.stage))?.no ?? null;
+}
+
+/**
+ * Tờ đã thông quan (kể cả đang sửa sau thông quan) trong lúc có tờ khác đang gọi về / gọi sửa đổi để gửi lại nội dung (R7): tờ đó không gửi lại,
+ * chỉ tiêu chung lệch sửa qua khai bổ sung AMA – giao diện ghi chú. Không tờ nào đang gọi về → rỗng.
+ */
+export function clearedWhileResending(sheets: BranchSubmission[]): number[] {
+  if (!sheets.some((b) => b.stage === "RECALLED" || b.stage === "AMEND_RECALLED")) return [];
+  return sheets.filter((b) => b.stage === "CLEARED" || b.stage.startsWith("POST_")).map((b) => b.no);
 }
 
 /** Tờ bị từ chối / lỗi gửi (theo summary gộp của backend). */

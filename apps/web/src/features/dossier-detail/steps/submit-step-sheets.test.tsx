@@ -105,6 +105,23 @@ describe("Bước Khai báo – lô 3 tờ", () => {
     await within(card(/^Tờ 2\/3/)).findByText("Lỗi gửi", {}, T);
     expect(ops().getAttribute("aria-expanded")).toBe("true");
   }, 20_000);
+
+  it("truyền lại sau gọi sửa: tờ đã thông quan ghi chú sửa chỉ tiêu chung qua AMA; tờ đã gọi về chờ tờ trước đang gửi lại; a11y", async () => {
+    const sending = pipelineFor("AMEND_RECALLED").map((r) => (r.op === "IDA01" ? { ...r, status: "SENDING" as const } : r));
+    api.current = submissionOf([
+      branch(1, 3, "CLEARED"),
+      branch(2, 3, "AMEND_RECALLED", { pipeline: sending, inProgress: true }),
+      branch(3, 3, "RECALLED"),
+    ], { declarationStatus: "SUBMITTED" });
+    const { container } = renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByRole("region", { name: /^Tờ 1\/3/ }, T);
+    expect(screen.getByText("Tờ 1 đã thông quan – chỉ tiêu chung sửa qua khai bổ sung (AMA)")).toBeTruthy();
+    const c3 = card(/^Tờ 3\/3/);
+    expect(within(c3).getAllByText("Chờ tờ 2").length).toBeGreaterThan(0);
+    expect(within(c3).getByText("Tờ này tự gửi lại nội dung tờ khai sau khi tờ 2 gửi lại xong.")).toBeTruthy();
+    expect(within(card(/^Tờ 2\/3/)).queryByText(/Chờ tờ/)).toBeNull();
+    await expectNoA11yViolations(container);
+  }, 20_000);
 });
 
 describe("Bước Khai báo – lô 1 tờ", () => {

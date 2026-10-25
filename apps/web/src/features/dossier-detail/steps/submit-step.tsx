@@ -32,7 +32,7 @@ import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
-import { anyInProgress, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
+import { anyInProgress, clearedWhileResending, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -533,6 +533,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   // Lô nhiều tờ (> 50 dòng): thẻ chung (ký số & truyền lần đầu, tổng thông quan k/N) + mỗi tờ một thẻ có vòng đời riêng.
   if (multi) {
     const kind = dossier.direction === "NK" ? "IDA" : "EDA";
+    const clearedResend = clearedWhileResending(sheets);
     return (
       <Stack gap="lg">
         {alerts}
@@ -550,6 +551,11 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             </CardTitle>
             <CardDescription>{fill(sh.sheetsDesc, { of: sheets.length })}</CardDescription>
           </CardHeader>
+          {clearedResend.length > 0 && (
+            <CardContent>
+              <Alert tone="info">{fill(sh.clearedAmaNote, { sheets: clearedResend.join(", ") })}</Alert>
+            </CardContent>
+          )}
           {firstSend && (
             <CardContent>
               <Stack gap="md">
@@ -566,7 +572,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             b={b}
             of={sheets.length}
             s={sheetView(s, b.no)}
-            waiting={waitingOn(sheets, b.no)}
+            waiting={waitingOn(sheets, b.no, s.declarationStatus)}
             problem={problemOf(s, b.no)}
             h={handlersFor(b.no, b.stage, b.nextOp)}
             anyBusy={anyBusy}
@@ -759,7 +765,7 @@ function SheetCard({
           )}
           {waiting ? (
             <Alert tone="info" title={fill(sh.waitingSheet, { no: waiting })}>
-              {fill(sh.waitingSheetBody, { no: waiting })}
+              {fill(b.stage === "NOT_SENT" ? sh.waitingSheetBody : sh.waitingResendBody, { no: waiting })}
             </Alert>
           ) : hideNext ? null : (
             <NextStep s={s} next={next} sending={sending} firstSend={false} h={h} certPicker={null} certNote={null} />

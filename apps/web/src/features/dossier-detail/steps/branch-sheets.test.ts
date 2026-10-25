@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
-import { anyInProgress, postSheet, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
+import { anyInProgress, clearedWhileResending, postSheet, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
 
 describe("sheetsOf", () => {
   it("JSON cũ không có branches → một tờ từ trường cấp hồ sơ", () => {
@@ -37,6 +37,35 @@ describe("waitingOn", () => {
     const sending = branch(2, 2, "NOT_SENT", { pipeline: pipelineFor("NOT_SENT").map((r) => (r.op === "IDA" ? { ...r, status: "SENDING" as const } : r)) });
     expect(waitingOn([branch(1, 2, "NOT_SENT"), sending], 2)).toBeNull();
     expect(waitingOn([branch(1, 2, "NOT_SENT"), branch(2, 2, "NOT_SENT")], 2)).toBe(1);
+  });
+});
+
+describe("waitingOn – truyền lại sau gọi về (tờ khai SUBMITTED)", () => {
+  const sending = (b: ReturnType<typeof branch>, op: "IDA" | "IDA01") => ({ ...b, pipeline: b.pipeline.map((r) => (r.op === op ? { ...r, status: "SENDING" as const } : r)) });
+  it("tờ đã gọi về chờ tờ trước gần nhất còn chờ gửi lại nội dung; tờ đang gửi / tờ trước đã xong → không chờ", () => {
+    const sheets = [sending(branch(1, 3, "RECALLED"), "IDA"), branch(2, 3, "AMEND_RECALLED"), branch(3, 3, "RECALLED")];
+    expect(waitingOn(sheets, 1, "SUBMITTED")).toBeNull();
+    expect(waitingOn(sheets, 2, "SUBMITTED")).toBe(1);
+    expect(waitingOn(sheets, 3, "SUBMITTED")).toBe(2);
+    const later = [branch(1, 3, "PRE_DECLARED"), sending(branch(2, 3, "AMEND_RECALLED"), "IDA01"), branch(3, 3, "RECALLED")];
+    expect(waitingOn(later, 2, "SUBMITTED")).toBeNull();
+    expect(waitingOn(later, 3, "SUBMITTED")).toBe(2);
+    // Tờ trước đã thông quan (miễn gọi về) → không chờ tờ đó.
+    expect(waitingOn([branch(1, 2, "CLEARED"), branch(2, 2, "AMEND_RECALLED")], 2, "SUBMITTED")).toBeNull();
+  });
+  it("chưa truyền lại (tờ khai đã duyệt / đang sửa) → không ghi chờ cho tờ đã gọi về", () => {
+    const sheets = [branch(1, 2, "RECALLED"), branch(2, 2, "RECALLED")];
+    expect(waitingOn(sheets, 2, "APPROVED")).toBeNull();
+    expect(waitingOn(sheets, 2, "DRAFT")).toBeNull();
+    expect(waitingOn(sheets, 2)).toBeNull();
+  });
+});
+
+describe("clearedWhileResending", () => {
+  it("tờ đã thông quan (kể cả sửa sau thông quan) khi có tờ đang gọi về / gọi sửa đổi; không có tờ gọi về → rỗng", () => {
+    expect(clearedWhileResending([branch(1, 3, "CLEARED"), branch(2, 3, "AMEND_RECALLED"), branch(3, 3, "POST_EDITING")])).toEqual([1, 3]);
+    expect(clearedWhileResending([branch(1, 2, "CLEARED"), branch(2, 2, "DECLARED")])).toEqual([]);
+    expect(clearedWhileResending([branch(1, 2, "RECALLED"), branch(2, 2, "RECALLED")])).toEqual([]);
   });
 });
 

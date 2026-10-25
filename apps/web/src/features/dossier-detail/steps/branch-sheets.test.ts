@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
-import { anyInProgress, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
+import { anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
 
 describe("sheetsOf", () => {
   it("JSON cũ không có branches → một tờ từ trường cấp hồ sơ", () => {
@@ -142,5 +142,28 @@ describe("khai chính thức (IDC/IDE) chờ tờ trước khai tạm xong", () 
     const mixed = orderLocked(pipelineFor("RECALLED", ["IDA", "IDC"]), 3, 2, 1);
     expect(mixed.find((r) => r.op === "IDA")).toMatchObject({ reasonCode: "SHEET_ORDER", reasonParams: { sheet: 3, waitFor: 2 } });
     expect(mixed.find((r) => r.op === "IDC")).toMatchObject({ reasonCode: "SHEET_ORDER_DECLARE", reasonParams: { sheet: 3, waitFor: 1 } });
+  });
+});
+
+describe("canDeclareAll", () => {
+  const pre = (no: number, of: number) => branch(no, of, "PRE_DECLARED");
+  it("lô nhiều tờ, mọi tờ đã khai tạm → ok, pending = số tờ chờ khai chính thức", () => {
+    expect(canDeclareAll([pre(1, 3), pre(2, 3), pre(3, 3)])).toEqual({ ok: true, pending: 3 });
+    expect(canDeclareAll([branch(1, 3, "CLEARED"), pre(2, 3), branch(3, 3, "AMEND_PRE_DECLARED")])).toEqual({ ok: true, pending: 2 });
+  });
+  it("lô một tờ → không ok", () => {
+    expect(canDeclareAll([pre(1, 1)])).toEqual({ ok: false, pending: 1 });
+  });
+  it("còn tờ chờ gửi nội dung (NOT_SENT / RECALLED / AMEND_RECALLED) → không ok", () => {
+    expect(canDeclareAll([branch(1, 3, "RECALLED"), pre(2, 3), pre(3, 3)]).ok).toBe(false);
+    expect(canDeclareAll([pre(1, 3), pre(2, 3), branch(3, 3, "NOT_SENT")]).ok).toBe(false);
+    expect(canDeclareAll([pre(1, 3), pre(2, 3), branch(3, 3, "AMEND_RECALLED")]).ok).toBe(false);
+  });
+  it("không tờ nào chờ khai chính thức → không ok", () => {
+    expect(canDeclareAll([branch(1, 2, "CLEARED"), branch(2, 2, "CLEARED")])).toEqual({ ok: false, pending: 0 });
+  });
+  it("có tờ đang gửi → không ok", () => {
+    const sending = pipelineFor("PRE_DECLARED").map((r) => (r.op === "IDC" ? { ...r, status: "SENDING" as const } : r));
+    expect(canDeclareAll([pre(1, 2), branch(2, 2, "PRE_DECLARED", { pipeline: sending })]).ok).toBe(false);
   });
 });

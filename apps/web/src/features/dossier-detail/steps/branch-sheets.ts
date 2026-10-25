@@ -90,3 +90,13 @@ export function postSheet(sheets: BranchSubmission[], requested: string | null):
   if (requested && Number.isInteger(n) && n >= 1 && n <= sheets.length) return n;
   return sheets.find((b) => b.stage.startsWith("POST_"))?.no ?? sheets.find((b) => postStepVisible(b.stage))?.no ?? 1;
 }
+
+/**
+ * Nút "Khai chính thức tất cả" (spec §1.2): lô nhiều tờ, không tờ nào còn chờ gửi nội dung (awaitingContent), ít nhất một tờ chờ khai chính thức
+ * (PRE_DECLARED / AMEND_PRE_DECLARED) và không tờ nào đang gửi. `pending` = số tờ chờ khai chính thức.
+ */
+export function canDeclareAll(sheets: BranchSubmission[]): { ok: boolean; pending: number } {
+  const pending = sheets.filter((b) => b.stage === "PRE_DECLARED" || b.stage === "AMEND_PRE_DECLARED").length;
+  const ok = sheets.length >= 2 && pending >= 1 && !sheets.some((b) => awaitingContent(b.stage) || b.pipeline.some((r) => r.status === "SENDING"));
+  return { ok, pending };
+}

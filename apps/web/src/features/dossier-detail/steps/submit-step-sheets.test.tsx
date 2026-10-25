@@ -10,7 +10,7 @@ import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
 import { SubmitStep } from "./submit-step";
 
-const api = vi.hoisted(() => ({ current: null as SubmissionView | null, perform: vi.fn(), resend: vi.fn() }));
+const api = vi.hoisted(() => ({ current: null as SubmissionView | null, perform: vi.fn(), resend: vi.fn(), declareAll: vi.fn() }));
 vi.mock("@/api/customs", async (orig) => {
   const real = await orig<typeof import("@/api/customs")>();
   return {
@@ -18,6 +18,7 @@ vi.mock("@/api/customs", async (orig) => {
     getSubmission: async () => api.current!,
     performOperation: (...a: unknown[]) => api.perform(...a),
     resendOperation: (...a: unknown[]) => api.resend(...a),
+    declareAllSheets: (...a: unknown[]) => api.declareAll(...a),
   };
 });
 vi.mock("next/navigation", () => ({
@@ -34,6 +35,7 @@ beforeEach(() => {
   resetDb();
   api.perform.mockReset().mockResolvedValue({ sent: true, message: "ok" });
   api.resend.mockReset().mockResolvedValue({ resent: true, message: "ok" });
+  api.declareAll.mockReset().mockResolvedValue({ sent: true, message: "ok" });
 });
 
 describe("Bước Khai báo – lô 3 tờ", () => {
@@ -158,5 +160,35 @@ describe("Bước Khai báo – lô 1 tờ", () => {
     expect(screen.queryByText(/Tờ 1\/1/)).toBeNull();
     await userEvent.click(screen.getAllByRole("button", { name: /Khai chính thức \(IDC\)/ })[0]!);
     expect(api.perform).toHaveBeenCalledWith("dos_028", "IDC", 1);
+  }, 20_000);
+});
+
+describe("Bước Khai báo – khai chính thức tất cả", () => {
+  const openButton = () => screen.findByRole("button", { name: "Khai chính thức tất cả (3 tờ)" }, T);
+
+  it("lô 3 tờ đã khai tạm: nút hiện → hộp xác nhận → xác nhận gọi declare-all; a11y", async () => {
+    api.current = submissionOf([branch(1, 3, "PRE_DECLARED"), branch(2, 3, "PRE_DECLARED"), branch(3, 3, "PRE_DECLARED")]);
+    const { container } = renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await userEvent.click(await openButton());
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Gửi khai chính thức lần lượt 3 tờ theo thứ tự. Lỗi ở tờ nào sẽ dừng ở tờ đó.")).toBeTruthy();
+    expect(api.declareAll).not.toHaveBeenCalled();
+    await expectNoA11yViolations(container);
+    await userEvent.click(within(dialog).getByRole("button", { name: /^Khai chính thức tất cả/ }));
+    expect(api.declareAll).toHaveBeenCalledWith("dos_028");
+  }, 20_000);
+
+  it("tờ 1 đã gọi về (RECALLED) → nút ẩn", async () => {
+    api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "PRE_DECLARED"), branch(3, 3, "PRE_DECLARED")]);
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByRole("region", { name: /^Tờ 1\/3/ }, T);
+    expect(screen.queryByRole("button", { name: /Khai chính thức tất cả/ })).toBeNull();
+  }, 20_000);
+
+  it("lô một tờ → nút ẩn", async () => {
+    api.current = submissionOf([branch(1, 1, "PRE_DECLARED", { nextOp: "IDC", pipeline: pipelineFor("PRE_DECLARED", ["IDC"]) })]);
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findAllByRole("button", { name: /Khai chính thức \(IDC\)/ }, T);
+    expect(screen.queryByRole("button", { name: /Khai chính thức tất cả/ })).toBeNull();
   }, 20_000);
 });

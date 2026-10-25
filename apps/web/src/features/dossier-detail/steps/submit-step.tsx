@@ -14,7 +14,7 @@ import {
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
 import {
-  customsKeys, getSubmission, listCertificates, performOperation, resendOperation, submitDeclaration,
+  customsKeys, declareAllSheets, getSubmission, listCertificates, performOperation, resendOperation, submitDeclaration,
   type BranchSubmission, type PipelineRow, type PipelineStatus, type SubmissionView,
 } from "@/api/customs";
 import { declarationKeys, getDeclarationView } from "@/api/declaration";
@@ -32,7 +32,7 @@ import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
-import { anyInProgress, clearedWhileResending, declareWaitingOn, orderLocked, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
+import { anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, orderLocked, problemOf, sheetsOf, sheetView, waitingOn } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -332,6 +332,36 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code }: { c
   );
 }
 
+/** Hộp xác nhận "Khai chính thức tất cả": gửi khai chính thức lần lượt các tờ theo thứ tự (dừng ở tờ lỗi). */
+function ConfirmDeclareAllDialog({ open, count, onClose, onConfirm, pending, code }: { open: boolean; count: number; onClose: () => void; onConfirm: () => void; pending: boolean; code: string }) {
+  const t = useMessages(SUBMIT_MESSAGES);
+  const sh = useMessages(SHEET_MESSAGES);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent title={sh.declareAllTitle} icon={<Send className="h-4 w-4" />} description={code} size="sm">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConfirm();
+          }}
+        >
+          <Stack gap="sm">
+            <p className="text-sm text-fg-muted">{fill(sh.declareAllBody, { n: count })}</p>
+          </Stack>
+          <DialogFooter>
+            <Button variant="ghost" type="button" onClick={onClose}>
+              {t.cancel}
+            </Button>
+            <Button type="submit" loading={pending} leftIcon={<Send className="h-4 w-4" />}>
+              {sh.declareAllTitle}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Số ứng dụng ước tính lúc dựng tờ khai (tờ khai xuất chưa ước tính thuế). */
 function estimateOf(decl: Declaration | null | undefined): CustomsEstimate | undefined {
   if (!decl) return undefined;
@@ -366,6 +396,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const [certId, setCertId] = useState<string>("");
   const [busy, setBusy] = useState<Busy | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [declareAllOpen, setDeclareAllOpen] = useState(false);
 
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
@@ -414,6 +445,15 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     },
     onError: toastMutationError(t.performFailed),
     onSettled: () => setBusy(null),
+  });
+  const declareAll = useMutation({
+    mutationFn: () => declareAllSheets(dossier.id),
+    onSuccess: (r) => {
+      setDeclareAllOpen(false);
+      toast({ tone: r.sent ? "info" : "success", title: r.message });
+      invalidate();
+    },
+    onError: toastMutationError(t.performFailed),
   });
   const resend = useMutation({
     mutationFn: ({ r, branch }: { r: PipelineRow; branch: number }) => {
@@ -520,14 +560,25 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       </RequiredGapsAlert>
     </>
   );
+  const declareAllState = canDeclareAll(sheets);
   const confirmDialog = (
-    <ConfirmReopenDialog
-      confirm={confirm}
-      code={confirm && multi ? `${dossier.code} · ${fill(sh.sheetTitle, { no: confirm.branch, of: sheets.length })}` : `${dossier.code} · ${dossier.partner}`}
-      pending={perform.isPending}
-      onClose={() => setConfirm(null)}
-      onConfirm={(c) => perform.mutate({ op: c.row.op, branch: c.branch })}
-    />
+    <>
+      <ConfirmDeclareAllDialog
+        open={declareAllOpen}
+        count={declareAllState.pending}
+        code={`${dossier.code} · ${dossier.partner}`}
+        pending={declareAll.isPending}
+        onClose={() => setDeclareAllOpen(false)}
+        onConfirm={() => declareAll.mutate()}
+      />
+      <ConfirmReopenDialog
+        confirm={confirm}
+        code={confirm && multi ? `${dossier.code} · ${fill(sh.sheetTitle, { no: confirm.branch, of: sheets.length })}` : `${dossier.code} · ${dossier.partner}`}
+        pending={perform.isPending}
+        onClose={() => setConfirm(null)}
+        onConfirm={(c) => perform.mutate({ op: c.row.op, branch: c.branch })}
+      />
+    </>
   );
 
   // Lô nhiều tờ (> 50 dòng): thẻ chung (ký số & truyền lần đầu, tổng thông quan k/N) + mỗi tờ một thẻ có vòng đời riêng.
@@ -565,6 +616,14 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             </CardContent>
           )}
         </Card>
+
+        {declareAllState.ok && (
+          <div>
+            <Button leftIcon={<Send className="h-4 w-4" />} disabled={anyBusy} onClick={() => setDeclareAllOpen(true)}>
+              {fill(sh.declareAll, { n: declareAllState.pending })}
+            </Button>
+          </div>
+        )}
 
         {sheets.map((b) => (
           <SheetCard

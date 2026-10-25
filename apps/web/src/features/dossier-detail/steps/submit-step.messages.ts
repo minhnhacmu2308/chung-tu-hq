@@ -429,6 +429,9 @@ export const SHEET_MESSAGES = defineMessages({
     opsTitle: "Nghiệp vụ của tờ",
     sheetLog: "Nhật ký thông điệp của tờ",
     queryAria: "Tra cứu trạng thái ({op}) – tờ {no}",
+    declareAll: "Khai chính thức tất cả ({n} tờ)",
+    declareAllTitle: "Khai chính thức tất cả",
+    declareAllBody: "Gửi khai chính thức lần lượt {n} tờ theo thứ tự. Lỗi ở tờ nào sẽ dừng ở tờ đó.",
   },
   en: {
     sheetsDesc: "This shipment is split into {of} declarations (up to 50 lines each). Sheet 1 is filed provisionally first and the following sheets are filed automatically in turn; each sheet is cleared and handled separately.",
@@ -448,6 +451,9 @@ export const SHEET_MESSAGES = defineMessages({
     opsTitle: "Operations for this sheet",
     sheetLog: "Message log for this sheet",
     queryAria: "Check status ({op}) – sheet {no}",
+    declareAll: "Declare all sheets officially ({n} sheets)",
+    declareAllTitle: "Declare all sheets officially",
+    declareAllBody: "Official declaration will be sent for {n} sheets in order. If a sheet fails, the run stops at that sheet.",
   },
   zh: {
     sheetsDesc: "本批货物拆分为 {of} 份报关单（每份最多 50 行）。第 1 份先临时申报，后续各份自动依次临时申报；每份单独通关和办理业务。",
@@ -467,5 +473,8 @@ export const SHEET_MESSAGES = defineMessages({
     opsTitle: "本份报关单业务",
     sheetLog: "本份报文日志",
     queryAria: "查询状态 ({op}) – 第 {no} 份",
+    declareAll: "全部正式申报（{n} 份）",
+    declareAllTitle: "全部正式申报",
+    declareAllBody: "按顺序依次提交 {n} 份报关单的正式申报。某份出错时将在该份停止。",
   },
 });

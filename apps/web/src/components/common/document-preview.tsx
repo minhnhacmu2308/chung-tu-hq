@@ -1,12 +1,10 @@
 "use client";
-// Chứng từ gốc bên trái bước OCR.
-// - Có file thật (`fileUrl`, backend): hiện đúng file đã upload – PDF qua trình xem PDF của trình duyệt, ảnh vừa khung.
-// - Không có (mock): dựng lại trang từ kết quả trích xuất; mỗi trường in đúng vào vùng (region) của nó → rê chuột vào
-//   trường bên phải sẽ tô đúng chỗ trên trang.
-import { Button, cn, DocumentViewer, EmptyState, fill, Spinner, useMessages, type DocumentRegion } from "@kb/ui";
-import { ExternalLink, FileText } from "lucide-react";
+// Xem chứng từ gốc.
+//  - Có file thật trong kho (backend) → hiện CHÍNH file đó (PDF/ảnh) qua DocumentFileViewer.
+//  - Không có file (bản mock chỉ giữ tên file) → dựng lại trang minh họa từ kết quả trích xuất: mỗi trường in đúng vùng
+//    (region) của nó, rê chuột vào trường bên phải sẽ tô đúng chỗ trên trang.
+import { Alert, Button, DocumentFileViewer, DocumentViewer, Skeleton, fill, useMessages, type DocumentRegion } from "@kb/ui";
 import { useMemo } from "react";
-import { fileKindOf, fileMimeOf, useFileBlob } from "@/lib/use-file-blob";
 import { DOC_KIND_LABELS, type DocKind, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { DOCUMENT_PREVIEW_MESSAGES } from "./common.messages";
 
@@ -44,7 +42,8 @@ const PRINTED: Record<string, string> = {
   hs_codes: "HS code", eta: "ETA", ocean_freight: "Ocean freight", local_charges: "Local charges", title: "Title",
 };
 
-const TERMS = [
+/** Điều khoản in sẵn mặt sau vận đơn – chỉ dùng cho trang minh họa của B/L. */
+const BL_TERMS = [
   "1. DEFINITIONS. “Carrier” means the party on whose behalf this Bill of Lading has been signed. “Merchant” includes the Shipper, Consignee, Receiver and Holder of this Bill of Lading.",
   "2. CARRIER’S TARIFF. The terms of the Carrier’s applicable Tariff are incorporated herein. Copies of the relevant provisions are obtainable from the Carrier upon request.",
   "3. WARRANTY. The Merchant warrants that in agreeing to the terms hereof he is, or has the authority of, the person owning or entitled to the possession of the Goods.",
@@ -62,7 +61,7 @@ const ITEM_HEAD = [
   { x: 91, w: 6, text: "Origin" },
 ];
 
-function buildRegions(doc: DossierDocument, fields: ExtractedField[]): DocumentRegion[] {
+function buildRegions(doc: DossierDocument, fields: ExtractedField[], emptyPageText: string): DocumentRegion[] {
   const vi = doc.kind === "FREIGHT_INVOICE";
   const out: DocumentRegion[] = [];
   for (let page = 1; page <= Math.max(1, doc.pages); page++) {
@@ -81,7 +80,7 @@ function buildRegions(doc: DossierDocument, fields: ExtractedField[]): DocumentR
     out.push({ id: `r-${page}`, page, x: 8, y: 12.6, w: 84, h: 0.5, content: <span className="block h-px bg-border-strong" /> });
 
     if (onPage.length === 0) {
-      // Trang không có trường cần đọc (điều khoản in sẵn) – hệ thống tự bỏ qua khi đọc.
+      // Trang không có trường cần đọc – hệ thống tự bỏ qua khi đọc. B/L: mặt sau là điều khoản in sẵn.
       out.push({
         id: `terms-${page}`,
         page,
@@ -89,15 +88,18 @@ function buildRegions(doc: DossierDocument, fields: ExtractedField[]): DocumentR
         y: 15,
         w: 84,
         h: 75,
-        content: (
-          <span className="block space-y-2 text-justify text-fg-subtle">
-            {TERMS.map((p) => (
-              <span key={p} className="block">
-                {p}
-              </span>
-            ))}
-          </span>
-        ),
+        content:
+          doc.kind === "BILL_OF_LADING" ? (
+            <span className="block space-y-2 text-justify text-fg-subtle">
+              {BL_TERMS.map((p) => (
+                <span key={p} className="block">
+                  {p}
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="block text-center text-fg-subtle">{emptyPageText}</span>
+          ),
       });
     }
 
@@ -162,66 +164,66 @@ function buildRegions(doc: DossierDocument, fields: ExtractedField[]): DocumentR
   return out;
 }
 
+/** File gốc trong kho: `none` = không có file thật (bản mock) → dựng lại trang từ dữ liệu. */
+export type OriginalFile =
+  | { status: "none" }
+  | { status: "loading" }
+  | { status: "missing" }
+  | { status: "error"; retry: () => void }
+  | { status: "ready"; url: string };
+
+const isImage = (fileName: string) => /\.(jpe?g|png|webp|gif)$/i.test(fileName);
+
 export type DocumentPreviewProps = {
   document: DossierDocument;
-  /** Đường dẫn file gốc; null/không truyền → dựng lại trang từ dữ liệu. */
-  fileUrl?: string | null;
+  file?: OriginalFile;
   fields: ExtractedField[];
   highlightFieldId?: string | null;
   onFieldClick?: (fieldId: string) => void;
   className?: string;
 };
 
-function OriginalFile({ document, src, className }: { document: DossierDocument; src: string; className?: string | undefined }) {
+export function DocumentPreview({ document, file = { status: "none" }, fields, highlightFieldId = null, onFieldClick, className }: DocumentPreviewProps) {
   const t = useMessages(DOCUMENT_PREVIEW_MESSAGES);
-  const kindLabels = useMessages(DOC_KIND_LABELS);
-  const kind = fileKindOf(document.fileName);
-  const file = useFileBlob(kind === "other" ? null : src, fileMimeOf(document.fileName));
-  const label = fill(t.originalLabel, { kind: kindLabels[document.kind], file: document.fileName });
-  return (
-    <section aria-label={label} className={cn("flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-muted", className)}>
-      <div className="flex items-center gap-2 border-b border-border bg-surface py-1 pl-3 pr-1">
-        <FileText className="h-4 w-4 shrink-0 text-fg-subtle" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate text-xs text-fg-muted" title={document.fileName}>{document.fileName}</span>
-        <Button variant="ghost" size="sm" asChild>
-          <a href={file.status === "ready" ? file.url : src} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-            {t.openNewTab}
-          </a>
-        </Button>
-      </div>
-      {kind === "other" ? (
-        <EmptyState icon={<FileText />} title={t.unsupported} description={t.unsupportedHint} className="m-auto" />
-      ) : file.status === "loading" ? (
-        <div className="m-auto"><Spinner label={t.loading} /></div>
-      ) : file.status === "error" ? (
-        <EmptyState illustration="error" illustrationSize="sm" title={t.error} description={t.errorHint} className="m-auto" />
-      ) : kind === "pdf" ? (
-        // #navpanes=0&view=FitH: ẩn cột ảnh thu nhỏ, trang vừa chiều ngang khung.
-        <iframe title={label} src={`${file.url}#navpanes=0&view=FitH`} className="min-h-0 w-full flex-1 border-0 bg-surface" data-slot="original-file" />
-      ) : (
-        <div className="min-h-0 flex-1 overflow-auto p-3">
-          <img src={file.url} alt={label} className="mx-auto h-auto max-w-full rounded-sm border border-border bg-surface shadow-md" data-slot="original-file" />
-        </div>
-      )}
-    </section>
-  );
-}
-
-export function DocumentPreview({ document, fileUrl = null, fields, highlightFieldId = null, onFieldClick, className }: DocumentPreviewProps) {
-  if (fileUrl) return <OriginalFile key={document.id} document={document} src={fileUrl} className={className} />;
-  return <ReconstructedPreview document={document} fields={fields} highlightFieldId={highlightFieldId} {...(onFieldClick ? { onFieldClick } : {})} {...(className ? { className } : {})} />;
-}
-
-function ReconstructedPreview({ document, fields, highlightFieldId = null, onFieldClick, className }: Omit<DocumentPreviewProps, "fileUrl">) {
-  const regions = useMemo(() => buildRegions(document, fields), [document, fields]);
+  const regions = useMemo(() => buildRegions(document, fields, t.emptyPage), [document, fields, t.emptyPage]);
   const pages = useMemo(() => Array.from({ length: Math.max(1, document.pages) }, () => null), [document.pages]);
-  const t = useMessages(DOCUMENT_PREVIEW_MESSAGES);
   const kindLabels = useMessages(DOC_KIND_LABELS);
+  const label = fill(t.originalLabel, { kind: kindLabels[document.kind], file: document.fileName });
+  if (file.status === "loading") return <Skeleton className={className} />;
+  if (file.status === "missing") {
+    return (
+      <div className={className}>
+        <Alert tone="warning" title={t.missingTitle}>
+          {fill(t.missingDesc, { file: document.fileName })}
+        </Alert>
+      </div>
+    );
+  }
+  if (file.status === "error") {
+    return (
+      <div className={className}>
+        <Alert tone="danger" title={t.errorTitle} action={<Button size="sm" variant="secondary" onClick={file.retry}>{t.retry}</Button>}>
+          {document.fileName}
+        </Alert>
+      </div>
+    );
+  }
+  if (file.status === "ready") {
+    return (
+      <DocumentFileViewer
+        key={document.id}
+        label={label}
+        src={file.url}
+        type={isImage(document.fileName) ? "image" : "pdf"}
+        fileName={document.fileName}
+        {...(className ? { className } : {})}
+      />
+    );
+  }
   return (
     <DocumentViewer
       key={document.id}
-      label={fill(t.originalLabel, { kind: kindLabels[document.kind], file: document.fileName })}
+      label={label}
       pages={pages}
       regions={regions}
       highlightId={highlightFieldId}

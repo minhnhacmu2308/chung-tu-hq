@@ -29,16 +29,18 @@ paths:
 | Trạng thái nghiệp vụ | `StatusBadge` (thêm vào `STATUS_META` nếu thiếu) | Bảng `{ label, tone }` trong feature + `Badge` |
 | KPI | `StatCard` trong `Grid cols={{ base: 2, xl: 4 }}` | `Card` + số tự căn |
 | Lưới, bố cục co giãn (chia cột, xếp ngang/dọc, ẩn/hiện, giới hạn bề rộng) | `Grid cols={{ base, md, xl }}`; còn lại dùng mốc theo **vùng nội dung** `cq-sm/md/lg/xl:` và `cq-max-sm:` (vd `cq-md:max-w-xs`, `cq-sm:flex-row`, `cq-lg:col-span-2`). Khung/vùng cuộn mới tự có thì thêm `@container`. `sm:/md:/lg:` chỉ dành cho khung ứng dụng (`features/**/shell`) | `lg:grid-cols-3`, `md:max-w-xs`, `sm:flex-row`, `max-sm:sr-only` (đo theo màn hình → panel neo bên phải làm thẻ, form chật) |
-| Thao tác trên dòng | `RowActions` | Tự dựng menu "…" |
+| Thao tác trên dòng | `RowActions`; trong bảng truyền qua `rowActions` của `DataTable` (cụm nút nổi đè cuối dòng khi rê chuột, không chiếm cột) | Tự dựng menu "…"; cột `id: "actions"` / `sticky: "end"` |
 | Đang tải / lỗi / trống | `PageLoading`, `Skeleton*`, `LoadError`, `EmptyState` | `Skeleton className="h-80"`, để trống |
 
 ## 3. Máy kiểm tra (`pnpm lint`)
 
-`scripts/check-design-tokens.mjs` chặn trong `apps/*`: `apps-dialog-toggle-off`, `apps-raw-table`, `apps-viewport-layout`, `apps-svg-selector`, `apps-icon-tile`, cùng các luật cũ (`apps-raw-control`, `apps-row-menu`, `apps-big-skeleton`, màu thô, giá trị tùy ý…). Danh sách đầy đủ: `docs/DESIGN-SYSTEM.md` §5.
+`scripts/check-design-tokens.mjs` chặn trong `apps/*`: `apps-actions-column` (tự dựng cột thao tác – dùng `rowActions` của DataTable), `apps-status-map` (tự dựng bảng `{ label, tone }` cho trạng thái – dùng `StatusBadge`), `apps-dialog-toggle-off`, `apps-raw-table`, `apps-viewport-layout`, `apps-svg-selector`, `apps-icon-tile`, cùng các luật cũ (`apps-raw-control`, `apps-row-menu`, `apps-big-skeleton`, màu thô, giá trị tùy ý…). Danh sách đầy đủ: `docs/DESIGN-SYSTEM.md` §5.
 
 Ngoại lệ hiếm (vd lưới sửa trực tiếp từng ô ở `ocr/items-table.tsx`): comment `kb-allow-raw: <lý do cụ thể>` ngay trên dòng – reviewer phải đồng ý.
 
-Máy chưa bắt được (review phải soát): popup thiếu `icon`; popup tự dựng khung bằng `Card` nổi; một màn dùng component khác màn tương tự đã có.
+TypeScript chặn: `DialogContent` thiếu `icon` (prop bắt buộc) → không biên dịch được.
+
+Máy chưa bắt được (review phải soát): popup tự dựng khung bằng `Card` nổi; một màn dùng component khác màn tương tự đã có.
 
 ## 4. Trước khi báo xong
 

@@ -3,9 +3,6 @@ import { CrossCheckSchema, DossierDocumentSchema, DossierSchema, ExtractedFieldS
 import { z } from "zod";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "@/lib/http";
 
-/** File gốc của chứng từ (route chuyển hướng sang presigned URL của kho file). */
-export const documentFileUrl = (documentId: string): string | null => `/api/documents/${encodeURIComponent(documentId)}/file`;
-
 export const listDossierDocuments = (dossierId: string) => apiGet(`dossiers/${dossierId}/documents`, z.array(DossierDocumentSchema));
 
 /** Upload nhiều file (multipart). Backend tự đoán loại theo tên file rồi AI phân loại lại. */
@@ -14,6 +11,9 @@ export const uploadDocuments = (dossierId: string, files: File[]) => {
   for (const f of files) form.append("files", f, f.name);
   return apiUpload(`dossiers/${dossierId}/documents`, form, z.array(DossierDocumentSchema));
 };
+/** Link tải file gốc (presigned, hết hạn sau 10 phút). */
+export const getDocumentFile = (documentId: string) =>
+  apiGet(`documents/${documentId}/file?json=1`, z.object({ url: z.string().url(), expiresAt: z.string() }));
 export const changeDocumentKind = (documentId: string, kind: DocKind) => apiPatch(`documents/${documentId}/kind`, { kind }, DossierDocumentSchema);
 export const deleteDocument = async (documentId: string) => {
   await apiDelete(`documents/${documentId}`, OkSchema);

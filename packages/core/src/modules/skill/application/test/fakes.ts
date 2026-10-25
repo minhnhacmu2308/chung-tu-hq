@@ -17,6 +17,9 @@ export class MemoryStorage implements ObjectStorage {
   async presignGet(key: string) {
     return `memory://${key}`;
   }
+  async exists(key: string) {
+    return this.files.has(key);
+  }
   async delete(key: string) {
     this.files.delete(key);
   }

@@ -18,6 +18,7 @@ const ROLE_TONE: Record<DeclarationFieldRole, "primary" | "info" | "neutral" | "
 };
 const ROLES = Object.keys(ROLE_TONE) as DeclarationFieldRole[];
 
+// kb-allow-raw: vai trò của chỉ tiêu (bắt buộc/theo tình huống…), không phải trạng thái nghiệp vụ
 export type RoleInfo = { label: string; tone: "primary" | "info" | "neutral" | "success"; meaning: string };
 
 /** Nhãn, ý nghĩa và màu cho từng vai trò theo ngôn ngữ giao diện. */

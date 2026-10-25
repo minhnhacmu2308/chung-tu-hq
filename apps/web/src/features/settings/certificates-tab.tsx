@@ -13,6 +13,7 @@ import { CERTIFICATES_TAB_MESSAGES } from "./certificates-tab.messages";
 
 const ISSUERS = ["VNPT-CA", "Viettel-CA", "FPT-CA", "BKAV-CA", "MISA-CA"];
 
+// kb-allow-raw: nhãn đếm ngược "Còn N ngày" tính theo ngày hết hạn, không phải trạng thái cố định
 function expiry(c: DigitalCertificate, m: Record<"expired" | "daysLeft" | "valid", string>): { tone: "success" | "warning" | "danger"; label: string } {
   const d = daysUntil(c.validTo);
   if (d < 0) return { tone: "danger", label: m.expired };

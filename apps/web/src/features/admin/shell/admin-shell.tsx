@@ -183,7 +183,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       />
 
       <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="panel">
-        <DialogContent title={t.appearanceTitle} size="sm">
+        <DialogContent title={t.appearanceTitle} icon={<SunMoon className="h-4 w-4" />} size="sm">
           <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} />
         </DialogContent>
       </Dialog>

@@ -127,6 +127,12 @@ export const STATUS_META = {
   ANNOUNCEMENT_WITHDRAWN: { tone: "neutral", label: "Đã thu hồi" },
   TEMPLATE_PUBLISHED: { tone: "success", label: "Đã phát hành" },
   TEMPLATE_DRAFT: { tone: "neutral", label: "Chưa phát hành" },
+  // Chứng từ tải lên → AI đọc
+  DOC_UPLOADING: { tone: "info", label: "Đang tải lên" },
+  DOC_QUEUED: { tone: "neutral", label: "Chờ đọc" },
+  DOC_READING: { tone: "info", label: "AI đang đọc" },
+  DOC_DONE: { tone: "success", label: "Đã đọc" },
+  DOC_ERROR: { tone: "danger", label: "Lỗi" },
 } as const satisfies Record<string, { tone: Tone; label: string }>;
 
 export type Status = keyof typeof STATUS_META;
@@ -149,6 +155,7 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   INBOX_NEW: "Not filed", INBOX_DONE: "Filed to dossier", INBOX_IGNORED: "Ignored",
   SERVICE_UP: "Healthy", SERVICE_DEGRADED: "Degraded", SERVICE_DOWN: "Down",
   ANNOUNCEMENT_SENT: "Sent", ANNOUNCEMENT_WITHDRAWN: "Withdrawn", TEMPLATE_PUBLISHED: "Published", TEMPLATE_DRAFT: "Unpublished",
+  DOC_UPLOADING: "Uploading", DOC_QUEUED: "Queued", DOC_READING: "AI reading", DOC_DONE: "Read", DOC_ERROR: "Error",
 };
 
 /** Nhãn tiếng Trung (giản thể) tương ứng STATUS_META. */
@@ -169,6 +176,7 @@ export const STATUS_LABELS_ZH: Record<Status, string> = {
   INBOX_NEW: "未归档", INBOX_DONE: "已归入档案", INBOX_IGNORED: "已忽略",
   SERVICE_UP: "运行正常", SERVICE_DEGRADED: "性能下降", SERVICE_DOWN: "已停止",
   ANNOUNCEMENT_SENT: "已发送", ANNOUNCEMENT_WITHDRAWN: "已撤回", TEMPLATE_PUBLISHED: "已发布", TEMPLATE_DRAFT: "未发布",
+  DOC_UPLOADING: "上传中", DOC_QUEUED: "等待读取", DOC_READING: "AI 读取中", DOC_DONE: "已读取", DOC_ERROR: "错误",
 };
 
 /** Nhãn trạng thái theo ngôn ngữ – dùng cho code không phải component (bộ lọc bảng, xuất file…). */
@@ -178,13 +186,14 @@ export function statusLabel(status: Status, locale: UiLocale): string {
   return STATUS_META[status].label;
 }
 
-export type StatusBadgeProps = { status: Status; label?: string; className?: string };
+/** `icon` (tùy chọn) thay chấm màu – vd spinner khi đang chạy, dấu tích khi xong. */
+export type StatusBadgeProps = { status: Status; label?: string; className?: string; icon?: ReactNode };
 
-export function StatusBadge({ status, label, className }: StatusBadgeProps) {
+export function StatusBadge({ status, label, className, icon }: StatusBadgeProps) {
   const meta = STATUS_META[status];
   const locale = useUiLocale();
   return (
-    <Badge tone={meta.tone} dot className={className} data-status={status}>
+    <Badge tone={meta.tone} {...(icon ? { icon } : { dot: true })} className={className} data-status={status}>
       {label ?? statusLabel(status, locale)}
     </Badge>
   );

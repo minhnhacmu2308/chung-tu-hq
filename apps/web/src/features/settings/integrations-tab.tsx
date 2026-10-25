@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, IconTile, Skeleton, Stack, fill, toast, useMessages } from "@kb/ui";
+import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, IconTile, Skeleton, Stack, fill, toast, useMessages, StatusBadge, type Status } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Building2, FileSpreadsheet, KeyRound, PlugZap, Search } from "lucide-react";
 import type { ReactNode } from "react";
@@ -11,11 +11,7 @@ import { INTEGRATIONS_TAB_MESSAGES } from "./integrations-tab.messages";
 import { MailboxSection } from "./mailbox-section";
 import { VnaccsAccountSection } from "./vnaccs-account";
 
-const STATUS: Record<Integration["status"], { tone: "success" | "danger" | "neutral"; label: "connected" | "error" | "notConfigured" }> = {
-  CONNECTED: { tone: "success", label: "connected" },
-  ERROR: { tone: "danger", label: "error" },
-  NOT_CONFIGURED: { tone: "neutral", label: "notConfigured" },
-};
+const STATUS = { CONNECTED: "INTEGRATION_CONNECTED", ERROR: "INTEGRATION_ERROR", NOT_CONFIGURED: "INTEGRATION_NOT_CONFIGURED" } as const satisfies Record<Integration["status"], Status>;
 const ICON: Record<Integration["id"], ReactNode> = {
   HSCODEPRO: <Search />,
   CUSTOMS_HUB: <Building2 />,
@@ -34,7 +30,6 @@ function IntegrationCard({ it }: { it: Integration }) {
     },
     onError: (e: Error) => toast({ tone: "warning", title: it.name, description: e.message }),
   });
-  const s = STATUS[it.status];
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -43,7 +38,7 @@ function IntegrationCard({ it }: { it: Integration }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <CardTitle as="h3">{it.name}</CardTitle>
-              <Badge tone={s.tone}>{m[s.label]}</Badge>
+              <StatusBadge status={STATUS[it.status]} />
             </div>
             <CardDescription>{it.description}</CardDescription>
           </div>

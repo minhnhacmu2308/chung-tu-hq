@@ -3,11 +3,6 @@ import { defineMessages } from "@kb/ui";
 
 export const UPLOAD_STEP_MESSAGES = defineMessages({
   vi: {
-    statusUploading: "Đang tải lên",
-    statusQueued: "Chờ đọc",
-    statusReading: "AI đang đọc",
-    statusDone: "Đã đọc",
-    statusError: "Lỗi",
     needRequired: "Cần có",
     needOptional: "Tùy lô",
     movedTo: "Đã chuyển sang {kind}",
@@ -60,11 +55,6 @@ export const UPLOAD_STEP_MESSAGES = defineMessages({
     needOne: "Upload ít nhất 1 chứng từ để tiếp tục.",
   },
   en: {
-    statusUploading: "Uploading",
-    statusQueued: "Waiting to read",
-    statusReading: "AI reading",
-    statusDone: "Read",
-    statusError: "Error",
     needRequired: "Required",
     needOptional: "Depends on shipment",
     movedTo: "Moved to {kind}",
@@ -117,11 +107,6 @@ export const UPLOAD_STEP_MESSAGES = defineMessages({
     needOne: "Upload at least 1 document to continue.",
   },
   zh: {
-    statusUploading: "上传中",
-    statusQueued: "等待读取",
-    statusReading: "AI 读取中",
-    statusDone: "已读取",
-    statusError: "错误",
     needRequired: "必需",
     needOptional: "视批次而定",
     movedTo: "已移至 {kind}",

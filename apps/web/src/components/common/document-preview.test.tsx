@@ -1,38 +1,43 @@
 // @vitest-environment jsdom
-import { screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { getDb, resetDb } from "@/mocks/db";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { DocumentPreview } from "./document-preview";
 
-const T = { timeout: 5000 };
+const docNamed = (fileName: string) => {
+  resetDb();
+  return { ...getDb().documents[0]!, fileName };
+};
 
 describe("DocumentPreview", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
   it("có file gốc (backend): hiện đúng file PDF đã upload thay cho bản dựng lại; không vi phạm a11y", async () => {
-    resetDb();
-    const doc = { ...getDb().documents[0]!, fileName: "AWB_7704.pdf" };
-    const fetchMock = vi.fn(async () => new Response(new Blob(["%PDF-1.4"], { type: "application/pdf" })));
-    vi.stubGlobal("fetch", fetchMock);
-    Object.assign(URL, { createObjectURL: vi.fn(() => "blob:original"), revokeObjectURL: vi.fn() });
-    const { container } = renderWithProviders(<DocumentPreview document={doc} fileUrl={`/api/documents/${doc.id}/file`} fields={[]} />);
+    const doc = docNamed("AWB_7704.pdf");
+    const { container } = renderWithProviders(<DocumentPreview document={doc} file={{ status: "ready", url: "https://files.test/awb.pdf?sig=1" }} fields={[]} />);
     const region = screen.getByRole("region", { name: /AWB_7704\.pdf/ });
-    await waitFor(() => expect(region.querySelector("iframe")).not.toBeNull(), T);
     const frame = region.querySelector("iframe")!;
-    expect(frame.title).toMatch(/AWB_7704\.pdf/);
-    expect(frame.getAttribute("src")).toMatch(/^blob:original/);
-    expect(fetchMock).toHaveBeenCalledWith(`/api/documents/${doc.id}/file`, { credentials: "same-origin" });
-    expect(within(region).getByRole("link", { name: "Mở tab mới" }).getAttribute("href")).toBe("blob:original");
+    expect(frame.getAttribute("src")).toBe("https://files.test/awb.pdf?sig=1#navpanes=0&view=FitH");
+    expect(within(region).getByRole("link", { name: "Mở ở tab mới" }).getAttribute("href")).toBe("https://files.test/awb.pdf?sig=1");
+    expect(screen.queryByText(/CARRIER/)).toBeNull();
     await expectNoA11yViolations(container);
   });
 
-  it("tải file lỗi: báo không mở được file, vẫn có link mở tab mới", async () => {
-    resetDb();
-    const doc = { ...getDb().documents[0]!, fileName: "scan.png" };
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
-    renderWithProviders(<DocumentPreview document={doc} fileUrl="/api/documents/x/file" fields={[]} />);
-    await waitFor(() => expect(screen.getByText("Không mở được file gốc")).toBeTruthy(), T);
-    expect(screen.getByRole("link", { name: "Mở tab mới" }).getAttribute("href")).toBe("/api/documents/x/file");
+  it("file ảnh: hiện ảnh vừa khung", () => {
+    const doc = docNamed("scan.png");
+    renderWithProviders(<DocumentPreview document={doc} file={{ status: "ready", url: "https://files.test/scan.png" }} fields={[]} />);
+    expect(screen.getByRole("img", { name: /scan\.png/ }).getAttribute("src")).toBe("https://files.test/scan.png");
+  });
+
+  it("file không còn trong kho: báo rõ thay vì link chết", () => {
+    renderWithProviders(<DocumentPreview document={docNamed("INV.pdf")} file={{ status: "missing" }} fields={[]} />);
+    expect(screen.getByText("File gốc không còn trong kho lưu trữ")).toBeTruthy();
+  });
+
+  it("lỗi tải link: có nút Thử lại", async () => {
+    const retry = vi.fn();
+    renderWithProviders(<DocumentPreview document={docNamed("INV.pdf")} file={{ status: "error", retry }} fields={[]} />);
+    await userEvent.click(screen.getByRole("button", { name: "Thử lại" }));
+    expect(retry).toHaveBeenCalled();
   });
 });

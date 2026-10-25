@@ -37,6 +37,14 @@ describe("check-design-tokens", () => {
     assert.deepEqual(rules("apps/web/a.tsx", `import * as D from "@radix-ui/react-dialog";`), ["apps-radix-direct"]);
     // Thứ đã có component chuẩn thì không tự dựng lại trong app.
     assert.deepEqual(rules("apps/web/a.tsx", `import { MoreHorizontal, Plus } from "lucide-react";`), ["apps-row-menu"]);
+    // Thao tác trên dòng: truyền rowActions cho DataTable (nổi khi rê chuột), không tự dựng cột thao tác.
+    assert.deepEqual(rules("apps/web/a.tsx", `col.display({ id: "actions", cell: (c) => <RowActions rowLabel="x" actions={[]} /> })`), ["apps-actions-column"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `meta: { align: "end", sticky: "end" },`), ["apps-actions-column"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<DataTable rowActions={(r) => <RowActions rowLabel={r.code} actions={a} />} />`), []);
+    // Trạng thái nghiệp vụ: StatusBadge (thêm vào STATUS_META), không tự dựng bảng { label, tone }.
+    assert.deepEqual(rules("apps/web/a.tsx", `const STATUS: Record<Member["status"], { tone: "success" | "neutral"; label: string }> = {`), ["apps-status-map"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `const STATUS: Record<S, { label: string; tone: Tone }> = {`), ["apps-status-map"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `const STATUS = { ACTIVE: "ACCOUNT_ACTIVE" } as const satisfies Record<S, Status>;`), []);
     assert.deepEqual(rules("apps/web/a.tsx", `<Skeleton className="h-96" />`), ["apps-big-skeleton"]);
     assert.deepEqual(rules("apps/web/a.tsx", `<Skeleton className="mt-2 h-120 w-full" />`), ["apps-big-skeleton"]);
     assert.deepEqual(rules("apps/web/a.tsx", `<Skeleton className="h-10 w-64" />`), []); // khối nhỏ đúng dáng một dòng/ô thì được

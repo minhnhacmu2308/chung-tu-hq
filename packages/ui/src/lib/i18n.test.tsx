@@ -29,7 +29,7 @@ describe("Đa ngôn ngữ (EN)", () => {
   });
 
   it("Dialog: nút điều khiển tiếng Anh", () => {
-    en(<Dialog open><DialogContent title="New report">x</DialogContent></Dialog>);
+    en(<Dialog open><DialogContent icon={<span />} title="New report">x</DialogContent></Dialog>);
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show as side panel" })).toBeInTheDocument();
   });

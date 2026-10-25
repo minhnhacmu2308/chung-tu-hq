@@ -2,16 +2,28 @@ import { defineMessages } from "@kb/ui";
 
 export const DOCUMENT_PREVIEW_MESSAGES = defineMessages({
   vi: {
-    originalLabel: "Chứng từ gốc: {kind} – {file}", loading: "Đang tải file gốc…", error: "Không mở được file gốc", errorHint: "Thử lại sau hoặc mở ở tab mới.",
-    unsupported: "Không xem trước được loại file này", unsupportedHint: "Mở ở tab mới để xem.", openNewTab: "Mở tab mới",
+    originalLabel: "Chứng từ gốc: {kind} – {file}",
+    missingTitle: "File gốc không còn trong kho lưu trữ",
+    missingDesc: "{file} – kết quả đọc vẫn dùng được. Cần xem lại chứng từ thì upload lại file ở bước Upload chứng từ.",
+    errorTitle: "Không mở được file gốc",
+    retry: "Thử lại",
+    emptyPage: "Trang này không có trường cần đọc.",
   },
   en: {
-    originalLabel: "Original document: {kind} – {file}", loading: "Loading original file…", error: "Couldn't open the original file", errorHint: "Try again later or open it in a new tab.",
-    unsupported: "This file type can't be previewed", unsupportedHint: "Open it in a new tab to view.", openNewTab: "Open in new tab",
+    originalLabel: "Original document: {kind} – {file}",
+    missingTitle: "The original file is no longer in storage",
+    missingDesc: "{file} – the extracted data is still usable. To review the document, upload the file again in the Upload documents step.",
+    errorTitle: "Couldn't open the original file",
+    retry: "Retry",
+    emptyPage: "This page has no fields to read.",
   },
   zh: {
-    originalLabel: "原始单证：{kind} – {file}", loading: "正在加载原始文件…", error: "无法打开原始文件", errorHint: "请稍后重试或在新标签页中打开。",
-    unsupported: "无法预览此文件类型", unsupportedHint: "请在新标签页中打开查看。", openNewTab: "在新标签页打开",
+    originalLabel: "原始单证：{kind} – {file}",
+    missingTitle: "原始文件已不在存储中",
+    missingDesc: "{file} – 读取结果仍可使用。如需查看单证，请在“上传单证”步骤重新上传文件。",
+    errorTitle: "无法打开原始文件",
+    retry: "重试",
+    emptyPage: "此页没有需要读取的字段。",
   },
 });
 

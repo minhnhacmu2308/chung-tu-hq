@@ -1,7 +1,7 @@
 // Xem chứng từ gốc: trang giấy, phóng to/thu nhỏ, chuyển trang, tô vùng của một trường (tọa độ % theo trang).
 // Nội dung trang do app truyền vào (ảnh trang PDF đã render, hoặc bản dựng lại). Vị trí vùng đến từ dữ liệu
 // nên truyền qua biến CSS cục bộ (--rx, --ry…), không hard-code.
-import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, FileText, Maximize2, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
@@ -177,6 +177,55 @@ export function DocumentViewer({
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+/* ===================== DocumentFileViewer ===================== */
+
+const FILE_MESSAGES = {
+  vi: { open: "Mở ở tab mới" },
+  en: { open: "Open in new tab" },
+} satisfies Messages<"open">;
+
+export type DocumentFileViewerProps = {
+  /** Tên vùng xem cho trình đọc màn hình, vd "Chứng từ gốc: Commercial Invoice – INV-001.pdf". */
+  label: string;
+  /** Đường dẫn file gốc (vd presigned URL của kho lưu trữ). */
+  src: string;
+  /** pdf → trình xem PDF của trình duyệt (lật trang, phóng to, tìm chữ); image → ảnh vừa khung, cuộn khi lớn. */
+  type: "pdf" | "image";
+  fileName?: string;
+  labels?: Partial<Record<keyof (typeof FILE_MESSAGES)["vi"], string>>;
+  className?: string;
+};
+
+/**
+ * Xem FILE GỐC người dùng đã upload (khác DocumentViewer – trang dựng lại từ dữ liệu, có tô vùng trường).
+ * Dùng khi có file thật trong kho; app tự lo trạng thái đang tải/lỗi trước khi có `src`.
+ */
+export function DocumentFileViewer({ label, src, type, fileName, labels, className }: DocumentFileViewerProps) {
+  const t = useMessages(FILE_MESSAGES, labels);
+  return (
+    <section aria-label={label} className={cn("flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-muted", className)}>
+      <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-1.5">
+        <FileText aria-hidden="true" className="h-4 w-4 shrink-0 text-fg-subtle" />
+        <span className="min-w-0 flex-1 truncate text-xs text-fg-muted" title={fileName}>{fileName}</span>
+        <Button asChild size="sm" variant="ghost">
+          <a href={src} target="_blank" rel="noopener noreferrer">
+            <ExternalLink aria-hidden="true" className="h-4 w-4" />
+            {t.open}
+          </a>
+        </Button>
+      </div>
+      {type === "pdf" ? (
+        // #navpanes=0&view=FitH: trình xem PDF của trình duyệt ẩn cột ảnh thu nhỏ, trang vừa chiều ngang khung.
+        <iframe title={label} src={`${src}#navpanes=0&view=FitH`} className="min-h-0 w-full flex-1 border-0 bg-surface" data-slot="document-file" />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <img src={src} alt={label} className="mx-auto h-auto max-w-full rounded-sm border border-border bg-surface shadow-md" data-slot="document-file" />
+        </div>
+      )}
     </section>
   );
 }

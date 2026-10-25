@@ -52,6 +52,8 @@ export interface ObjectStorage {
   put(key: string, body: Buffer, mime: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   presignGet(key: string, ttlSec: number): Promise<string>;
+  /** File còn trong kho không (vd trước khi đưa link xem cho trình duyệt). */
+  exists(key: string): Promise<boolean>;
   delete(key: string): Promise<void>;
 }
 

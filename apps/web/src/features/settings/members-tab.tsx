@@ -2,7 +2,7 @@
 import {
   Alert, Avatar, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable,
   Dialog, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
-  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger, Field, Input, Select, Stack, fill, toast, useMessages,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger, Field, Input, Select, Stack, fill, toast, useMessages, StatusBadge, type Status,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 // kb-allow-raw: menu của thành viên có nhóm radio chọn vai trò – RowActions chỉ nhận thao tác bấm-là-chạy
@@ -18,11 +18,7 @@ import { MEMBERS_TAB_MESSAGES } from "./members-tab.messages";
 import { TransferOwnershipDialog } from "./transfer-ownership-dialog";
 
 const ASSIGNABLE: Role[] = ["ADMIN", "DECLARANT", "APPROVER", "VIEWER"];
-const STATUS_TONE: Record<Member["status"], "success" | "warning" | "neutral"> = {
-  ACTIVE: "success",
-  INVITED: "warning",
-  DISABLED: "neutral",
-};
+const STATUS = { ACTIVE: "ACCOUNT_ACTIVE", INVITED: "ACCOUNT_INVITED", DISABLED: "ACCOUNT_DISABLED" } as const satisfies Record<Member["status"], Status>;
 
 type PermissionId = "permView" | "permCreate" | "permAgent" | "permApprove" | "permConfig" | "permMembers" | "permBilling";
 const PERMISSIONS: { id: PermissionId; roles: Role[] }[] = [
@@ -116,6 +112,45 @@ export function MembersTab() {
   const isManager = isOwner || myRole === "ADMIN";
   const [transferTarget, setTransferTarget] = useState<Member | null>(null);
 
+  const memberMenu = (m: Member) => {
+    const locked = m.role === "OWNER" || m.id === meId;
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="icon" variant="ghost" aria-label={fill(t.actionsFor, { name: m.name })}>
+            {/* kb-allow-raw: menu có nhóm radio vai trò, xem ghi chú ở import */}
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel>{t.changeRole}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={m.role} onValueChange={(r) => role.mutate({ id: m.id, r: r as Role })}>
+            {ASSIGNABLE.map((r) => (
+              <DropdownMenuRadioItem key={r} value={r} disabled={locked}>{roleLabels[r]}</DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          {m.status === "INVITED" && (
+            <DropdownMenuItem onSelect={() => toast({ tone: "success", title: fill(t.resent, { email: m.email }) })}>{t.resend}</DropdownMenuItem>
+          )}
+          <DropdownMenuItem tone="danger" disabled={locked} onSelect={() => disable.mutate({ id: m.id, d: m.status !== "DISABLED" })}>
+            {m.status === "DISABLED" ? t.unlock : t.lock}
+          </DropdownMenuItem>
+          {/* Chỉ Chủ sở hữu thấy; người nhận phải đang hoạt động (backend kiểm lại). */}
+          {isOwner && (
+            <DropdownMenuItem
+              icon={<Crown className="h-4 w-4" />}
+              disabled={locked || m.status !== "ACTIVE"}
+              onSelect={() => setTransferTarget(m)}
+            >
+              {t.transfer}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
+
   const columns = useMemo(
     () =>
       col.columns([
@@ -137,55 +172,12 @@ export function MembersTab() {
         col.accessor((m) => roleLabels[m.role], { id: "role", header: t.role }),
         col.accessor("status", {
           header: t.status,
-          cell: (c) => <Badge tone={STATUS_TONE[c.getValue()]}>{t[c.getValue()]}</Badge>,
+          cell: (c) => <StatusBadge status={STATUS[c.getValue()]} />,
         }),
         col.accessor((m) => m.lastActiveAt ?? "", {
           id: "lastActive",
           header: t.lastActive,
           cell: (c) => <span className="text-fg-muted">{c.getValue() ? formatRelative(c.getValue()) : t.neverSignedIn}</span>,
-        }),
-        col.display({
-          id: "actions",
-          header: () => <span className="sr-only">{t.actions}</span>,
-          cell: (c) => {
-            const m = c.row.original;
-            const locked = m.role === "OWNER" || m.id === meId;
-            return (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="ghost" aria-label={fill(t.actionsFor, { name: m.name })}>
-                    {/* kb-allow-raw: menu có nhóm radio vai trò, xem ghi chú ở import */}
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>{t.changeRole}</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup value={m.role} onValueChange={(r) => role.mutate({ id: m.id, r: r as Role })}>
-                    {ASSIGNABLE.map((r) => (
-                      <DropdownMenuRadioItem key={r} value={r} disabled={locked}>{roleLabels[r]}</DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator />
-                  {m.status === "INVITED" && (
-                    <DropdownMenuItem onSelect={() => toast({ tone: "success", title: fill(t.resent, { email: m.email }) })}>{t.resend}</DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem tone="danger" disabled={locked} onSelect={() => disable.mutate({ id: m.id, d: m.status !== "DISABLED" })}>
-                    {m.status === "DISABLED" ? t.unlock : t.lock}
-                  </DropdownMenuItem>
-                  {/* Chỉ Chủ sở hữu thấy; người nhận phải đang hoạt động (backend kiểm lại). */}
-                  {isOwner && (
-                    <DropdownMenuItem
-                      icon={<Crown className="h-4 w-4" />}
-                      disabled={locked || m.status !== "ACTIVE"}
-                      onSelect={() => setTransferTarget(m)}
-                    >
-                      {t.transfer}
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            );
-          },
         }),
       ]),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,6 +197,8 @@ export function MembersTab() {
           columns={columns}
           data={data ?? []}
           getRowId={(m) => m.id}
+          rowLabel={(m) => m.name}
+          rowActions={memberMenu}
           loading={isLoading}
           searchable
           pagination={false}

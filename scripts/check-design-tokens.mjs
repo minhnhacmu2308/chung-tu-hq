@@ -32,6 +32,8 @@ export const RULES = [
   { id: "apps-raw-control", scope: "apps", test: /<(button|input|select|textarea)\b/, msg: "Phần tử điều khiển thô. Dùng Button/Input/Select/Textarea/Checkbox từ @kb/ui." },
   { id: "apps-radix-direct", scope: "apps", test: /from\s+["']@radix-ui\//, msg: "Import Radix trực tiếp. Dùng component đã bọc trong @kb/ui." },
   { id: "apps-row-menu", scope: "apps", test: /\bMoreHorizontal\b/, msg: 'Menu "…" tự dựng. Thao tác trên dòng dùng RowActions của @kb/ui (icon hiện khi rê chuột + menu đủ thao tác).' },
+  { id: "apps-actions-column", scope: "apps", test: /\bid:\s*["'](?:__)?actions["']|\bsticky:\s*["']end["']/, msg: "Tự dựng cột thao tác. Truyền rowActions cho DataTable (cụm nút nổi đè cuối dòng khi rê chuột/Tab, không chiếm cột; cảm ứng chỉ hiện \"…\")." },
+  { id: "apps-status-map", scope: "apps", test: /\{\s*(?:label:\s*string;\s*tone\b|tone:[^}]*;\s*label:\s*string)/, msg: "Tự dựng bảng { label, tone } cho trạng thái. Trạng thái nghiệp vụ dùng StatusBadge (thêm vào STATUS_META + nhãn EN của @kb/ui); nhãn phụ không phải trạng thái thì ghi kb-allow-raw kèm lý do." },
   { id: "apps-dialog-toggle-off", scope: "apps", test: /allowPresentationToggle=\{false\}/, msg: "Tắt nút chuyển cửa sổ ↔ panel của popup. Mọi popup giữ nút này để người dùng tự chọn dạng hiển thị." },
   { id: "apps-raw-table", scope: "apps", test: /<table\b/, msg: "Bảng tự viết. Danh sách dùng DataTable; ma trận vai trò × quyền dùng PermissionMatrix (components/common)." },
   {

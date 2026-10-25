@@ -114,7 +114,7 @@ function Header({ dossier, flowAction }: { dossier: Dossier; flowAction: ReactNo
       </div>
 
       <Dialog open={confirmCancel} onOpenChange={setConfirmCancel}>
-        <DialogContent title={t.cancelTitle} description={fill(t.cancelDesc, { code: dossier.code })} size="sm">
+        <DialogContent title={t.cancelTitle} icon={<XCircle className="h-4 w-4" />} description={fill(t.cancelDesc, { code: dossier.code })} size="sm">
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmCancel(false)}>
               {t.keep}

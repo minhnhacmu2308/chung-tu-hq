@@ -35,6 +35,9 @@ export class AzureBlobObjectStorage implements ObjectStorage {
   presignGet(key: string, ttlSec: number) {
     return this.container.getBlockBlobClient(key).generateSasUrl({ permissions: BlobSASPermissions.parse("r"), startsOn: new Date(Date.now() - 60_000), expiresOn: new Date(Date.now() + ttlSec * 1000) });
   }
+  exists(key: string) {
+    return this.container.getBlockBlobClient(key).exists();
+  }
   async delete(key: string) {
     await this.container.getBlockBlobClient(key).deleteIfExists();
   }

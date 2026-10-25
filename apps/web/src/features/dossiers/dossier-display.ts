@@ -16,9 +16,11 @@ export const DOSSIER_STATUS: Record<DossierStatus, Status> = {
 };
 
 /** Màu + nhãn (theo ngôn ngữ) lấy từ StatusBadge của @kb/ui – dùng cho bộ lọc, tìm kiếm, xuất Excel. */
+// kb-allow-raw: chỉ lấy lại nhãn/màu từ STATUS_META của StatusBadge cho bộ lọc + xuất Excel, không khai báo lại
 export function dossierStatusDisplay(locale: UiLocale = "vi"): Record<DossierStatus, { tone: Tone; label: string }> {
   return Object.fromEntries(
     (Object.keys(DOSSIER_STATUS) as DossierStatus[]).map((s) => [s, { tone: STATUS_META[DOSSIER_STATUS[s]].tone, label: statusLabel(DOSSIER_STATUS[s], locale) }]),
+  // kb-allow-raw: như trên – lấy lại từ STATUS_META
   ) as Record<DossierStatus, { tone: Tone; label: string }>;
 }
 

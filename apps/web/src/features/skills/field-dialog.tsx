@@ -2,6 +2,7 @@
 // Thêm / sửa một trường của skill (hoặc một quy tắc của skill ánh xạ).
 import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Select, Stack, fill, useMessages } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ListPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { addSkillField, skillKeys, updateSkillField } from "@/api/skills";
 import type { Skill, SkillField } from "@/mocks/types";
@@ -62,6 +63,7 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         title={title}
+        icon={<ListPlus className="h-4 w-4" />}
         description={t.description}
       >
         <form

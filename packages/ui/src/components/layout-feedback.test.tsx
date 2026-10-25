@@ -99,3 +99,18 @@ describe("Badge – cỡ, chấm, icon; trạng thái dùng chung", () => {
     expect(screen.getByText("Đã duyệt, chờ truyền")).toHaveAttribute("data-status", "DOSSIER_APPROVED");
   });
 });
+
+describe("StatusBadge – trạng thái chứng từ + icon", () => {
+  it("DOC_READING/DOC_DONE có nhãn tiếng Việt; icon thay chấm màu khi truyền vào", () => {
+    const { container } = render(
+      <>
+        <StatusBadge status="DOC_READING" icon={<svg data-testid="spin" />} />
+        <StatusBadge status="DOC_DONE" />
+      </>,
+    );
+    expect(screen.getByText("AI đang đọc")).toBeInTheDocument();
+    expect(screen.getByText("Đã đọc")).toBeInTheDocument();
+    expect(screen.getByTestId("spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-status="DOC_READING"]')).toBeTruthy();
+  });
+});

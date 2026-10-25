@@ -37,7 +37,7 @@ describe("Dialog", () => {
     render(
       <Dialog {...root}>
         <DialogTrigger asChild><Button>Thêm mới</Button></DialogTrigger>
-        <DialogContent title="Thêm mới báo cáo" {...props}>
+        <DialogContent icon={<span />} title="Thêm mới báo cáo" {...props}>
           <p>Nội dung</p>
           <DialogFooter><Button>Lưu</Button></DialogFooter>
         </DialogContent>
@@ -73,7 +73,7 @@ describe("Dialog", () => {
   it("đổi cửa sổ ↔ panel KHÔNG làm mất dữ liệu đang nhập", async () => {
     render(
       <Dialog defaultOpen>
-        <DialogContent title="Form">
+        <DialogContent icon={<span />} title="Form">
           <input aria-label="Ghi chú" />
         </DialogContent>
       </Dialog>,
@@ -90,7 +90,7 @@ describe("Dialog", () => {
       <>
         <button type="button">Ngoài</button>
         <Dialog defaultOpen>
-          <DialogContent title="Giữ focus"><input aria-label="Ô 1" /></DialogContent>
+          <DialogContent icon={<span />} title="Giữ focus"><input aria-label="Ô 1" /></DialogContent>
         </Dialog>
       </>,
     );
@@ -118,10 +118,10 @@ describe("Dialog", () => {
   it("cửa sổ lồng nhau: đóng cửa sổ con vẫn khóa cuộn, đóng hết mới trả lại cuộn trang", async () => {
     render(
       <Dialog defaultOpen>
-        <DialogContent title="Cha">
+        <DialogContent icon={<span />} title="Cha">
           <Dialog>
             <DialogTrigger asChild><Button>Mở con</Button></DialogTrigger>
-            <DialogContent title="Con">con</DialogContent>
+            <DialogContent icon={<span />} title="Con">con</DialogContent>
           </Dialog>
         </DialogContent>
       </Dialog>,
@@ -143,7 +143,7 @@ describe("Dialog", () => {
         <Button onClick={onOutside}>Nút trên trang</Button>
         <Dialog defaultPresentation="panel">
           <DialogTrigger asChild><Button>Mở panel</Button></DialogTrigger>
-          <DialogContent title="Panel">x</DialogContent>
+          <DialogContent icon={<span />} title="Panel">x</DialogContent>
         </Dialog>
       </>,
     );
@@ -160,7 +160,7 @@ describe("Dialog", () => {
     render(
       <Dialog defaultPresentation="panel">
         <DialogTrigger asChild><Button>Mở panel</Button></DialogTrigger>
-        <DialogContent title="Panel">x</DialogContent>
+        <DialogContent icon={<span />} title="Panel">x</DialogContent>
       </Dialog>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Mở panel" }));
@@ -236,7 +236,7 @@ describe("Dialog – dạng panel dùng hết chiều cao", () => {
   it("form trong dialog là cột giãn hết chỗ để DialogFooter nằm sát đáy panel", () => {
     render(
       <Dialog defaultOpen defaultPresentation="panel">
-        <DialogContent title="Thêm trường">
+        <DialogContent icon={<span />} title="Thêm trường">
           <form>
             <input aria-label="Mã trường" />
             <DialogFooter><Button>Thêm</Button></DialogFooter>
@@ -247,7 +247,26 @@ describe("Dialog – dạng panel dùng hết chiều cao", () => {
     const form = screen.getByRole("textbox", { name: "Mã trường" }).closest("form")!;
     const body = form.parentElement!;
     expect(body).toHaveClass("flex-1", "overflow-y-auto", "[&>form]:flex-1", "[&>form]:flex-col");
-    expect(screen.getByRole("button", { name: "Thêm" }).parentElement).toHaveClass("mt-auto", "sticky", "-bottom-4");
+    expect(screen.getByRole("button", { name: "Thêm" }).parentElement).toHaveClass("mt-auto", "sticky", "-bottom-5");
     expect(screen.getByRole("dialog")).toHaveAttribute("data-presentation", "panel");
+  });
+});
+
+describe("Dialog – khoảng thở và kích thước", () => {
+  it("cỡ sm rộng max-w-lg; nội dung đệm rộng; chân popup có lớp mờ phía trên để ô cuối không bị cắt cụt sát đường kẻ", () => {
+    render(
+      <Dialog open>
+        <DialogContent icon={<span />} title="Thêm chứng thư số" size="sm">
+          <form><input aria-label="Số serial" /><DialogFooter><Button>Thêm</Button></DialogFooter></form>
+        </DialogContent>
+      </Dialog>,
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("max-w-lg");
+    const footer = screen.getByRole("button", { name: "Thêm" }).parentElement!;
+    expect(footer.className).toContain("before:bg-gradient-to-t");
+    expect(footer.className).toContain("-bottom-5"); // bù phần đệm py-5 của vùng cuộn, không đè lên ô cuối
+    expect(footer.className).toContain("px-6");
+    expect(screen.getByLabelText("Số serial").closest("form")!.parentElement!.className).toContain("px-6");
   });
 });

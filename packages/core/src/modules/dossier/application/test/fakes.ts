@@ -18,6 +18,9 @@ export class InMemoryStorage implements ObjectStorage {
   async presignGet(key: string, ttlSec: number) {
     return `memory://${key}?ttl=${ttlSec}`;
   }
+  async exists(key: string) {
+    return this.files.has(key);
+  }
   async delete(key: string) {
     this.files.delete(key);
   }

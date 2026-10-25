@@ -13,6 +13,7 @@ export const ocrKeys = {
   fields: (dossierId: string) => ["ocr", "fields", dossierId] as const,
   checks: (dossierId: string) => ["ocr", "checks", dossierId] as const,
   sheets: (dossierId: string) => ["ocr", "document-sheets", dossierId] as const,
+  file: (documentId: string) => ["ocr", "file", documentId] as const,
 };
 
 export const isSuspect = (s: FieldStatus) => SUSPECT_STATUSES.includes(s);
@@ -80,9 +81,6 @@ function rerunChecks(db: MockDb, dossierId: string) {
 /* ---------------- Chứng từ ---------------- */
 
 /** Danh sách chứng từ của hồ sơ, đã cập nhật tiến trình mô phỏng. */
-/** File gốc của chứng từ. Mock: không có kho file → null, khung xem dựng lại trang từ các trường đọc được. */
-export const documentFileUrl = (_documentId: string): string | null => null;
-
 export const listDossierDocuments = (dossierId: string) =>
   mutate((db) => {
     advance(db, dossierId);
@@ -161,6 +159,9 @@ export const deleteDocument = (documentId: string) =>
     startedAt.delete(documentId);
     rerunChecks(db, doc.dossierId);
   });
+
+/** File gốc của chứng từ. Bản mock chỉ giữ tên + dung lượng (không có file thật) → null, màn hình dựng lại trang từ dữ liệu. */
+export const getDocumentFile = (_documentId: string) => query((): { url: string; expiresAt: string } | null => null);
 
 /** Đọc lại chứng từ lỗi. */
 export const retryDocument = (documentId: string) =>

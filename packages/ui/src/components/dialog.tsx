@@ -53,13 +53,14 @@ export function Dialog({ presentation, defaultPresentation = "modal", onPresenta
   );
 }
 
-const MODAL_SIZE = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl" } as const;
-const PANEL_SIZE = { sm: "max-w-sm", md: "max-w-xl", lg: "max-w-3xl", xl: "max-w-5xl" } as const;
+const MODAL_SIZE = { sm: "max-w-lg", md: "max-w-3xl", lg: "max-w-5xl", xl: "max-w-7xl" } as const;
+const PANEL_SIZE = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", xl: "max-w-6xl" } as const;
 
 export type DialogContentProps = Omit<ComponentProps<typeof DialogPrimitive.Content>, "title"> & {
   /** Bắt buộc – trình đọc màn hình đọc tiêu đề khi mở. */
   title: ReactNode;
-  icon?: ReactNode;
+  /** Bắt buộc: mọi popup có icon đầu (rule dùng component chung). */
+  icon: ReactNode;
   description?: ReactNode;
   size?: keyof typeof MODAL_SIZE;
   /** Hiện nút chuyển cửa sổ ↔ panel trên header. */
@@ -259,7 +260,7 @@ export function DialogContent({
         <FocusScope asChild trapped={isModal} loop>
         <div ref={setContentEl} className="flex min-h-0 flex-1 flex-col">
         {/* div, không phải <header>: hai dialog chồng nhau (panel chi tiết + cửa sổ con) sẽ thành hai landmark banner. */}
-        <div className="flex items-center gap-3 border-b border-border px-5 py-3">
+        <div className="flex items-center gap-3 border-b border-border px-6 py-4">
           {icon && <span aria-hidden="true" className="text-fg-muted">{icon}</span>}
           <div className="flex min-w-0 flex-1 flex-col">
             <DialogPrimitive.Title className="truncate text-base font-semibold">{title}</DialogPrimitive.Title>
@@ -283,7 +284,7 @@ export function DialogContent({
           Nội dung thường bọc trong <form>: cho form cũng là cột giãn hết chiều cao để DialogFooter (mt-auto) nằm sát đáy.
           Thiếu dòng này thì ở dạng drawer bên phải nhóm nút lơ lửng giữa panel, bên dưới thừa một khoảng trắng.
         */}
-        <div className="@container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4 [&>form]:flex [&>form]:flex-1 [&>form]:flex-col [&>form]:gap-4">{children}</div>
+        <div className="@container flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5 [&>form]:flex [&>form]:flex-1 [&>form]:flex-col [&>form]:gap-5">{children}</div>
         </div>
         </FocusScope>
       </DialogPrimitive.Content>
@@ -293,6 +294,19 @@ export function DialogContent({
 
 /** Đặt cuối nội dung dialog; luôn nằm dưới cùng, không cuộn theo nội dung. */
 export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
-  // -bottom-4 = bù phần đệm dưới (py-4) của thân popup: dính sát đáy, nội dung cuộn không lộ ra bên dưới thanh nút.
-  return <div data-glass="" className={cn("sticky -bottom-4 -mx-5 -mb-4 mt-auto flex justify-end gap-2 border-t border-border bg-surface px-5 py-3", className)} {...props} />;
+  return (
+    <div
+      data-glass=""
+      className={cn(
+        // sticky tính "đáy" từ mép trong phần đệm của vùng cuộn (py-5) → -bottom-5 để chân popup nằm đúng đáy,
+        // không bị đẩy lên đè khoảng cách với ô cuối (lỗi cũ: ô nhập cuối dính sát đường kẻ).
+        "sticky -bottom-5 -mx-6 -mb-5 mt-auto flex justify-end gap-2 rounded-b-lg border-t border-border bg-surface px-6 py-4",
+        // Nội dung cuộn dưới chân popup mờ dần thay vì bị cắt cụt ngay đường kẻ.
+        // Lớp mờ nằm ngay trên đường kẻ (-translate-y-px: không che border-t).
+        "before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:-translate-y-px before:bg-gradient-to-t before:from-surface before:to-transparent",
+        className,
+      )}
+      {...props}
+    />
+  );
 }

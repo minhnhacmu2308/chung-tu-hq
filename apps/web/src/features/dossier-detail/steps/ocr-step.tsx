@@ -7,11 +7,12 @@ import {
   Skeleton, Stack, Tabs, TabsContent, TabsList, TabsTrigger, fill, useMessages,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { documentFileUrl, isSuspect, listChecks, listDossierDocuments, listFields, ocrKeys } from "@/api/ocr";
-import { DocumentPreview } from "@/components/common/document-preview";
+import { getDocumentFile, isSuspect, listChecks, listDossierDocuments, listFields, ocrKeys } from "@/api/ocr";
+import { DocumentPreview, type OriginalFile } from "@/components/common/document-preview";
+import { ApiError } from "@/lib/api-error";
 import { DOC_KIND_LABELS, FIELD_GROUP_LABELS, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { CrossCheckPanel } from "../ocr/cross-check-panel";
 import { DocumentSheetsCard } from "../ocr/document-sheets";
@@ -30,6 +31,23 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
   const groupLabels = useMessages(FIELD_GROUP_LABELS);
   const [active, setActive] = useState<string | null>(null);
   const m = useFieldMutations(dossierId);
+  // Link file gốc hết hạn sau 10 phút → lấy lại sau 8 phút.
+  const fileQuery = useQuery({
+    queryKey: ocrKeys.file(doc.id),
+    queryFn: () => getDocumentFile(doc.id),
+    staleTime: 8 * 60_000,
+    refetchInterval: (q) => (q.state.data ? 8 * 60_000 : false),
+    retry: (n, e) => !(e instanceof ApiError && e.code === "FILE_MISSING") && n < 2,
+  });
+  const file: OriginalFile = fileQuery.isPending
+    ? { status: "loading" }
+    : fileQuery.error instanceof ApiError && fileQuery.error.code === "FILE_MISSING"
+      ? { status: "missing" }
+      : fileQuery.isError
+      ? { status: "error", retry: () => void fileQuery.refetch() }
+      : fileQuery.data
+        ? { status: "ready", url: fileQuery.data.url }
+        : { status: "none" };
   const save = (id: string, value: string) => m.update.mutate({ id, value });
   const confirm = (id: string) => m.confirm.mutate(id);
   const revert = (id: string) => m.revert.mutate(id);
@@ -56,7 +74,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
     <div className="grid grid-cols-1 gap-4 cq-lg:grid-cols-2">
       <DocumentPreview
         document={doc}
-        fileUrl={documentFileUrl(doc.id)}
+        file={file}
         fields={fields}
         highlightFieldId={active}
         onFieldClick={jumpTo}
@@ -238,6 +256,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent
           title={t.confirmTitle}
+          icon={<AlertTriangle className="h-4 w-4" />}
           description={t.confirmDesc}
           size="sm"
         >

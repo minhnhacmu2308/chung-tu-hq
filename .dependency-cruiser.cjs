@@ -117,7 +117,7 @@ module.exports = {
   options: {
     doNotFollow: { path: "node_modules" },
     // Thư mục build/kết quả test không phải mã nguồn.
-    exclude: { path: ["\\.next(-build)?/", "/dist/", "visual-report/", "test-results/", "playwright-report/"] },
+    exclude: { path: ["\\.next[^/]*/", "/dist/", "visual-report/", "test-results/", "playwright-report/"] },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.base.json" },
     enhancedResolveOptions: { exportsFields: ["exports"], conditionNames: ["import", "require", "node", "default"] },

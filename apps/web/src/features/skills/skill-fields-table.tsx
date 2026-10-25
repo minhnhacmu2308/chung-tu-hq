@@ -50,27 +50,6 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
   const columns = useMemo(() => {
     const t = pickMessages(FIELDS_TABLE_MESSAGES, locale);
     const types = pickMessages(FIELD_TYPE_LABELS, locale);
-    const actions = col.display({
-      id: "actions",
-      header: () => <span className="sr-only">{t.actions}</span>,
-      meta: { align: "end", sticky: "end" },
-      cell: (c) => (
-        <RowActions
-          rowLabel={c.row.original.key}
-          actions={[
-            { id: "edit", label: t.edit, icon: <Pencil />, onSelect: () => openDialog(c.row.original) },
-            {
-              id: "remove",
-              label: isStandard(c.row.original) ? t.removeStandard : t.remove,
-              icon: <Trash2 />,
-              tone: "danger",
-              disabled: isStandard(c.row.original),
-              onSelect: () => remove.mutate(c.row.original.key),
-            },
-          ]}
-        />
-      ),
-    });
     const code = col.accessor("key", {
       header: t.colKey,
       meta: { hideable: false },
@@ -139,7 +118,6 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
           );
         },
       }),
-      actions,
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skill.docKind, update.isPending, locale]);
@@ -157,6 +135,23 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
         columns={columns}
         data={skill.fields}
         getRowId={(f) => f.key}
+        rowLabel={(f) => f.key}
+        rowActions={(f) => (
+          <RowActions
+            rowLabel={f.key}
+            actions={[
+              { id: "edit", label: t.edit, icon: <Pencil />, onSelect: () => openDialog(f) },
+              {
+                id: "remove",
+                label: isStandard(f) ? t.removeStandard : t.remove,
+                icon: <Trash2 />,
+                tone: "danger",
+                disabled: isStandard(f),
+                onSelect: () => remove.mutate(f.key),
+              },
+            ]}
+          />
+        )}
         searchable
         columnToggle
         pagination={false}

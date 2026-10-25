@@ -6,7 +6,7 @@
 // (lô thật hay thiếu Packing List) – các trường liên quan được đánh dấu để bổ sung ở bước sau.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, FileDropzone, Grid, Progress,
-  Select, Skeleton, Spinner, Stack, fill, toast, useMessages, useUiLocale, type Tone,
+  Select, Skeleton, Spinner, Stack, fill, toast, useMessages, useUiLocale, type Tone, StatusBadge, type Status,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, CheckCircle2, CircleAlert, CircleDashed, FileText, Trash2 } from "lucide-react";
@@ -21,14 +21,8 @@ import { addableKinds, buildSlots, missingRequired, suggestedKinds, type DocSlot
 import { UPLOAD_STEP_MESSAGES } from "./upload-step.messages";
 
 type Tm = Record<keyof (typeof UPLOAD_STEP_MESSAGES)["vi"], string>;
+const STATUS = { UPLOADING: "DOC_UPLOADING", QUEUED: "DOC_QUEUED", READING: "DOC_READING", DONE: "DOC_DONE", ERROR: "DOC_ERROR" } as const satisfies Record<DossierDocument["status"], Status>;
 
-const status = (t: Tm): Record<DossierDocument["status"], { label: string; tone: Tone }> => ({
-  UPLOADING: { label: t.statusUploading, tone: "info" },
-  QUEUED: { label: t.statusQueued, tone: "neutral" },
-  READING: { label: t.statusReading, tone: "info" },
-  DONE: { label: t.statusDone, tone: "success" },
-  ERROR: { label: t.statusError, tone: "danger" },
-});
 
 const KINDS = Object.keys(DOC_KIND_LABELS.vi) as DocKind[];
 
@@ -37,6 +31,7 @@ const ACCEPT_BULK = ".pdf,.jpg,.jpeg,.png,.zip";
 const ACCEPT_SLOT = ".pdf,.jpg,.jpeg,.png";
 const MAX_SIZE = 30 * 1024 * 1024;
 
+// kb-allow-raw: mức cần của khe chứng từ (bắt buộc / nên có) là nhãn phụ, không phải trạng thái nghiệp vụ
 const slotBadge = (t: Tm): Record<DocSlot["need"], { label: string; tone: Tone } | null> => ({
   required: { label: t.needRequired, tone: "info" },
   optional: { label: t.needOptional, tone: "neutral" },
@@ -69,7 +64,6 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
     },
     onError: toastMutationError(t.deleteFailed),
   });
-  const s = status(t)[doc.status];
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 cq-sm:flex-nowrap">
       <FileText aria-hidden="true" className="h-5 w-5 shrink-0 text-fg-subtle" />
@@ -87,10 +81,11 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
         disabled={kind.isPending}
         onChange={(e) => kind.mutate(e.target.value as DocKind)}
       />
-      <Badge tone={s.tone} className="shrink-0">
-        {doc.status === "READING" ? <Spinner size="sm" label={null} /> : doc.status === "DONE" ? <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" /> : null}
-        {s.label}
-      </Badge>
+      <StatusBadge
+        status={STATUS[doc.status]}
+        className="shrink-0"
+        {...(doc.status === "READING" ? { icon: <Spinner size="sm" label={null} /> } : doc.status === "DONE" ? { icon: <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" /> } : {})}
+      />
       <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label={fill(t.deleteAria, { file: doc.fileName })} loading={remove.isPending} onClick={() => remove.mutate()}>
         {!remove.isPending && <Trash2 className="h-4 w-4" />}
       </Button>

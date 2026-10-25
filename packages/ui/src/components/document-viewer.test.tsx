@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
-import { DocumentViewer, type DocumentRegion } from "./document-viewer.js";
+import { DocumentFileViewer, DocumentViewer, type DocumentRegion } from "./document-viewer.js";
 
 const PAGES = [<p key="1">COMMERCIAL INVOICE trang một</p>, <p key="2">Trang hai: tổng cộng</p>];
 const REGIONS: DocumentRegion[] = [
@@ -100,5 +100,23 @@ describe("DocumentViewer – dựng lại trang từ dữ liệu", () => {
     expect(screen.getByText("COMMERCIAL INVOICE")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Số hóa đơn" })).toHaveTextContent("HPS-2610-078");
     expect(screen.queryByRole("button", { name: "title" })).toBeNull();
+  });
+});
+
+describe("DocumentFileViewer – file gốc", () => {
+  it("PDF: nhúng trình xem của trình duyệt, có nút mở tab mới", async () => {
+    render(<DocumentFileViewer label="Chứng từ gốc: Invoice – INV-1.pdf" src="https://store/inv-1.pdf?sig=x" type="pdf" fileName="INV-1.pdf" />);
+    const region = screen.getByRole("region", { name: "Chứng từ gốc: Invoice – INV-1.pdf" });
+    expect(region.querySelector("iframe")).toHaveAttribute("src", "https://store/inv-1.pdf?sig=x#navpanes=0&view=FitH");
+    expect(screen.getByRole("link", { name: "Mở ở tab mới" })).toHaveAttribute("href", "https://store/inv-1.pdf?sig=x");
+    expect(screen.getByRole("link", { name: "Mở ở tab mới" })).toHaveAttribute("target", "_blank");
+    expect(screen.getByText("INV-1.pdf")).toBeInTheDocument();
+    await expectNoA11yViolations(region);
+  });
+
+  it("ảnh: hiện ảnh có alt, không nhúng khung", () => {
+    render(<DocumentFileViewer label="Chứng từ gốc: B/L" src="https://store/bl.jpg" type="image" />);
+    expect(screen.getByRole("img", { name: "Chứng từ gốc: B/L" })).toHaveAttribute("src", "https://store/bl.jpg");
+    expect(document.querySelector("iframe")).toBeNull();
   });
 });

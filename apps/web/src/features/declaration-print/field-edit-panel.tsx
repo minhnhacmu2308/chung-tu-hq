@@ -33,6 +33,8 @@ type Props = {
   /** Giá trị đang hiện trên bản in: tờ khai (người khai + Hải quan + ước tính) và từng dòng hàng. */
   values: FormValues;
   itemRows: FormValues[];
+  /** Số dòng in trên bản in theo thứ tự `items` (tờ khai nhánh: 1..50 theo tờ) – lỗi Hải quan của dòng ghi theo số này; không có → lineNo. */
+  lineNos?: number[];
   errors: FieldError[];
   /** Thứ tự Tab giữa các ô (panelOrder, bỏ ô "Chỉ tiêu khác" không áp dụng). */
   order: PrintTarget[];
@@ -45,7 +47,7 @@ const tid = (t: PrintTarget | null) => (t ? `${t.line ?? ""}:${t.key}` : "");
 const INPUTS = "input:not([disabled]), textarea:not([disabled]), select:not([disabled])";
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
-export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdit, values, itemRows, errors, order, target, onTarget, leaveGuard }: Props) {
+export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdit, values, itemRows, lineNos, errors, order, target, onTarget, leaveGuard }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   const locale = useUiLocale();
   const kind = decl.kind;
@@ -170,7 +172,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdi
   // Vai trò cạnh tiêu đề (dòng mô tả của header), không nằm trong tên trợ năng của panel và không bị cắt.
   const roleNode = role === "REQUIRED" ? t.required : role === "CONDITIONAL" || role === "REFERENCE" ? <RoleMark role={role} /> : null;
   const description = item || roleNode ? <>{item ? fill(t.lineN, { n: item.lineNo }) : null}{item && roleNode ? " · " : null}{roleNode}</> : null;
-  const cellErrors = !field ? [] : item ? errors.filter((e) => e.no !== undefined && e.no === no && e.line === item.lineNo) : errorsForField(errors, no);
+  const cellErrors = !field ? [] : item ? errors.filter((e) => e.no !== undefined && e.no === no && e.line === (lineNos?.[line!] ?? item.lineNo)) : errorsForField(errors, no);
 
   return (
     <>

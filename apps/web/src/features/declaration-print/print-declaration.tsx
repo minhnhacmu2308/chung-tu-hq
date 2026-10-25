@@ -12,7 +12,7 @@ import { cellDomId, type CellLook } from "./print-cell";
 import { regionDomId, PrintSheets } from "./print-sheets";
 import {
   cellState, editedKeys, errorSlots, fieldLocator, LOOKUP_NAME_CELLS, otherFieldCells, pageCount, panelOrder, printData, printIssues, printValue,
-  printStateFor, sameNumber, withLookupNames, type PrintData, type PrintTarget,
+  printStateFor, sameNumber, sheetIssueCounts, withLookupNames, type PrintData, type PrintTarget,
 } from "./print-state";
 import { codeScope } from "../declaration-form/code-scope";
 import { useCodeName } from "../declaration-form/use-code-list";
@@ -96,6 +96,11 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, canEd
   const [ownSheet, setOwnSheet] = useState(1);
   const view = useMemo(() => printStateFor({ items: allItems, ...(branches ? { branches } : {}) }, sheet ?? ownSheet, lotSubmission), [allItems, branches, sheet, ownSheet, lotSubmission]);
   const { items, submission } = view;
+  // Việc cần xử lý riêng của từng tờ (lỗi Hải quan của nhánh, ô dòng hàng) – huy hiệu trên thanh chọn tờ; lô 1 tờ không cần.
+  const sheetIssues = useMemo(
+    () => (view.of > 1 ? sheetIssueCounts(decl, allItems, branches, lotSubmission, mode, canEdit).sheets : undefined),
+    [view.of, decl, allItems, branches, lotSubmission, mode, canEdit],
+  );
   const [selected, setSelected] = useState<PrintTarget | null>(null);
   // Đổi tờ: ô đang chọn (chỉ số dòng của tờ cũ) không còn đúng → bỏ chọn; panel vẽ lại theo tờ mới (key).
   const [seenSheet, setSeenSheet] = useState(view.no);
@@ -153,7 +158,7 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, canEd
           </Alert>
         </div>
       )}
-      <SheetPicker sheets={view.sheets} value={view.no} onChange={onSheetChange ?? setOwnSheet} />
+      <SheetPicker sheets={view.sheets} value={view.no} onChange={onSheetChange ?? setOwnSheet} {...(sheetIssues ? { issues: sheetIssues } : {})} />
       <PrintToolbar
         pages={pageCount(model.kind, items.length)}
         otherFieldsId={model.hasOther ? OTHER_FIELDS_DOM_ID : null}
@@ -190,6 +195,7 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, canEd
         canEdit={canEdit}
         values={model.values}
         itemRows={model.itemRows}
+        lineNos={model.lineNos}
         errors={model.errors}
         order={model.order}
         target={selected}

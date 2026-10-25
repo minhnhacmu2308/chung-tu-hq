@@ -6,7 +6,7 @@ import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
   Dialog, DialogContent, DialogFooter, EmptyState, fill, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, useMessages, useUiLocale,
 } from "@kb/ui";
-import { canEditDeclaration, declarationEditMode, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
+import { branchCount, canEditDeclaration, declarationEditMode, type DeclarationBranch, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCheck2, FileText, Paperclip, RotateCcw, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -31,7 +31,7 @@ import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
 import type { LeaveGuard } from "../../declaration-print/field-edit-panel";
 import { cellDomId } from "../../declaration-print/print-cell";
-import { declarationGapsOf, printIssuesOf, sheetTarget } from "../../declaration-print/print-state";
+import { declarationGapsOf, sheetIssueCounts, sheetTarget } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { LoadError } from "@/components/common/load-error";
 
@@ -63,12 +63,15 @@ function DocumentsTab({ dossierId }: { dossierId: string }) {
   );
 }
 
-/** Huy hiệu tab "Tờ khai": số ô cần xử lý + lỗi Hải quan không gắn được vào ô – cùng hàm với thanh công cụ của bản in (tab không cần gắn bản in). */
-function AttentionBadge({ decl, items, submission, mode, canEdit, hasErrors }: {
-  decl: Declaration; items: LineItem[]; submission: SubmissionView | undefined; mode: DeclarationEditMode; canEdit: boolean; hasErrors: boolean;
+/**
+ * Huy hiệu tab "Tờ khai": số ô cần xử lý + lỗi Hải quan không gắn được vào ô – cùng hàm với thanh công cụ của bản in (tab không cần gắn bản in).
+ * Lô nhiều tờ: cộng mọi tờ (lỗi Hải quan của từng nhánh), chỉ tiêu chung còn thiếu đếm một lần.
+ */
+function AttentionBadge({ decl, items, branches, submission, mode, canEdit, hasErrors }: {
+  decl: Declaration; items: LineItem[]; branches: DeclarationBranch[]; submission: SubmissionView | undefined; mode: DeclarationEditMode; canEdit: boolean; hasErrors: boolean;
 }) {
   const t = useMessages(REVIEW_MESSAGES);
-  const n = useMemo(() => printIssuesOf(decl, items, submission, mode, canEdit).count, [decl, items, submission, mode, canEdit]);
+  const n = useMemo(() => sheetIssueCounts(decl, items, branches, submission, mode, canEdit).total, [decl, items, branches, submission, mode, canEdit]);
   if (n === 0) return null;
   return (
     <Badge tone={hasErrors ? "danger" : "warning"}>
@@ -106,8 +109,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     if (t !== "full" && leaveGuard.current?.(href)) return;
     router.replace(href, { scroll: false });
   };
-  // Lô > 50 dòng: tờ khai nhánh đang xem trên bản in (?sheet=k). Đổi tờ khi panel còn thay đổi chưa lưu → hỏi trước như rời tab.
-  const sheet = Math.max(1, Math.trunc(Number(params.get("sheet")) || 1));
+  // Đổi tờ khai nhánh trên bản in (?sheet=k): panel còn thay đổi chưa lưu → hỏi trước như rời tab.
   const sheetHref = (no: number, tabTo?: string) => {
     const next = new URLSearchParams(params.toString());
     if (tabTo) next.set("tab", tabTo);
@@ -141,6 +143,17 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   });
   const viewQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const subQ = useQuery({ queryKey: customsKeys.submission(dossier.id), queryFn: () => getSubmission(dossier.id) });
+  // Lô > 50 dòng: tờ khai nhánh đang xem trên bản in (?sheet=k), kẹp về 1..N như bản in; tham số ngoài khoảng → sửa lại URL.
+  const sheetParam = params.get("sheet");
+  const sheetCount = viewQ.data ? branchCount(viewQ.data.items.length) : null;
+  const sheet = Math.min(sheetCount ?? Infinity, Math.max(1, Math.trunc(Number(sheetParam)) || 1));
+  useEffect(() => {
+    if (sheetCount === null || sheetParam === null || sheetParam === String(sheet)) return;
+    const next = new URLSearchParams(params.toString());
+    if (sheetCount > 1) next.set("sheet", String(sheet));
+    else next.delete("sheet");
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+  }, [sheetCount, sheetParam, sheet, params, pathname, router]);
   const customsInfo = subQ.data?.customsInfo ?? null;
   // Đang sửa sau thông quan (bản khai bổ sung AMA ở bước 7): tờ khai gốc giữ nguyên, khóa như đã thông quan.
   const stage = subQ.data?.stage;
@@ -292,7 +305,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 </TabsTrigger>
               ) : (
                 <TabsTrigger value="full">
-                  {t.tabFull} {subQ.isSuccess && <AttentionBadge decl={decl} items={items} submission={subQ.data} mode={editMode} canEdit={canEdit} hasErrors={errs.length > 0} />}
+                  {t.tabFull} {subQ.isSuccess && <AttentionBadge decl={decl} items={items} branches={branches} submission={subQ.data} mode={editMode} canEdit={canEdit} hasErrors={errs.length > 0} />}
                 </TabsTrigger>
               )}
               <TabsTrigger value="docs">{t.tabDocs}</TabsTrigger>

@@ -282,6 +282,27 @@ export function printStateFor<T extends { lineNo: number }>(view: { items: T[]; 
   };
 }
 
+/**
+ * Việc cần xử lý theo từng tờ khai nhánh (mỗi tờ với trạng thái Hải quan của nhánh – printStateFor). `common` = ô tờ khai còn thiếu
+ * (chỉ tiêu chung, giống nhau ở mọi tờ – đếm một lần); `sheets[k-1]` = phần riêng của tờ k (ô dòng hàng, lỗi Hải quan của nhánh, lỗi không gắn được);
+ * `total` = common + tổng phần riêng (huy hiệu tab). Lô 1 tờ: total = printIssuesOf(...).count.
+ */
+export function sheetIssueCounts(
+  decl: Declaration, items: LineItem[], branches: DeclarationBranch[] | undefined, submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean,
+): { common: number; sheets: number[]; total: number } {
+  const view = { items, ...(branches ? { branches } : {}) };
+  const of = printStateFor(view, 1).of;
+  let common = 0;
+  const sheets = Array.from({ length: of }, (_, k) => {
+    const st = printStateFor(view, k + 1, submission);
+    const is = printIssues(printData(decl, st.items, st.submission, st), mode, canEdit);
+    const shared = is.cells.filter((c) => c.line === undefined && c.reason === "MISSING").length;
+    if (k === 0) common = shared;
+    return is.count - shared;
+  });
+  return { common, sheets, total: common + sheets.reduce((n, x) => n + x, 0) };
+}
+
 /** Chỉ số dòng (0-based, theo thứ tự `lineNos` của cả lô) → tờ chứa dòng + chỉ số dòng trong tờ (cùng cách chia của printStateFor). */
 export function sheetTarget(lineNos: number[], line: number): { no: number; line: number } {
   const ranges = branchRanges(lineNos);

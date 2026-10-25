@@ -1,7 +1,7 @@
 import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printData, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -407,5 +407,37 @@ describe("printStateFor (tờ khai nhánh – 50 dòng/tờ)", () => {
     expect(sheetTarget(lineNos, 74)).toEqual({ no: 2, line: 24 });
     expect(sheetTarget(lineNos, 0)).toEqual({ no: 1, line: 0 });
     expect(sheetTarget([3, 1, 2], 0)).toEqual({ no: 1, line: 0 });
+  });
+});
+
+describe("sheetIssueCounts (huy hiệu tab + thanh chọn tờ)", () => {
+  const item = (n: number): LineItem => ({
+    id: `li_${n}`, dossierId: "dos_x", lineNo: n, description: `Hàng ${n}`, quantity: "1", unit: "PCE", unitPrice: "10", amount: "10", origin: "CN", hsConfirmed: "84821000",
+  });
+  const decl = {
+    dossierId: "dos_x", kind: "IDA", status: "DRAFT", fields: [], exchangeRate: "25000", exchangeRateDate: "2026-10-13",
+    customsValueVnd: "0", valueAdjustments: [], estimatedImportDutyVnd: "0", estimatedVatVnd: "0",
+  } as unknown as Declaration;
+  const items = Array.from({ length: 120 }, (_, i) => item(i + 1));
+  const rejection = { operation: "IDA", at: "2026-10-24T03:00:00Z", errors: [{ code: "E1004", field: "CMD", line: 3, message: "Mã HS sai" }] };
+  const sub = (withError: boolean) => ({
+    stage: "NOT_SENT", customsInfo: null, result: null, rejection: null,
+    branches: [1, 2, 3].map((no) => ({ no, of: 3, stage: "SENT", declarationNo: null, result: null, customsInfo: null, rejection: withError && no === 2 ? rejection : null })),
+  }) as unknown as SubmissionView;
+
+  it("lỗi Hải quan của nhánh 2 chỉ tính vào tờ 2 và vào tổng; chỉ tiêu chung còn thiếu đếm một lần", () => {
+    const clean = sheetIssueCounts(decl, items, [], sub(false), "FULL", true);
+    const bad = sheetIssueCounts(decl, items, [], sub(true), "FULL", true);
+    expect(bad.sheets[0]).toBe(clean.sheets[0]);
+    expect(bad.sheets[1]).toBe(clean.sheets[1]! + 1);
+    expect(bad.sheets[2]).toBe(clean.sheets[2]);
+    expect(bad.total).toBe(clean.total + 1);
+    expect(clean.common).toBeGreaterThan(0);
+    expect(bad.total).toBe(bad.common + bad.sheets.reduce((n, x) => n + x, 0));
+  });
+  it("lô 1 tờ: total = printIssuesOf", () => {
+    const few = items.slice(0, 10);
+    const s = sub(false);
+    expect(sheetIssueCounts(decl, few, [], s, "FULL", true).total).toBe(printIssuesOf(decl, few, s, "FULL", true).count);
   });
 });

@@ -99,3 +99,37 @@ describe("PrintDeclaration theo tờ (hồ sơ 120 dòng dos_028)", () => {
     expect(document.querySelector("[data-print-cell=\":TK_FIC\"]")!.textContent).toMatch(/ —$/);
   }, 60_000);
 });
+
+describe("Việc cần xử lý theo tờ", () => {
+  it("thanh chọn tờ: tờ có việc hiện huy hiệu số kèm chữ cho trình đọc màn hình; không vi phạm a11y", async () => {
+    const { container } = renderWithProviders(<SheetPicker sheets={SHEETS} value={1} onChange={() => {}} issues={[0, 2, 0]} />);
+    expect(screen.getByRole("radio", { name: "Tờ 2/3 · dòng 51–100 2 việc cần xử lý" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Tờ 1/3 · dòng 1–50" })).toBeTruthy();
+    await expectNoA11yViolations(container);
+  });
+
+  it("en / zh: chữ của huy hiệu đã dịch", () => {
+    renderWithProviders(<SheetPicker sheets={SHEETS} value={1} onChange={() => {}} issues={[0, 2, 0]} />, "en");
+    expect(screen.getByRole("radio", { name: "Sheet 2/3 · lines 51–100 2 items need attention" })).toBeTruthy();
+  });
+
+  it("lỗi Hải quan của tờ 2 (dòng 3 theo tờ): panel tờ 2 dòng 3 hiện lỗi, tờ 1 dòng 3 không; huy hiệu trên tờ 2", async () => {
+    const view = await getDeclarationView("dos_028");
+    const lot = await getSubmission("dos_028");
+    const rejection = { operation: "IDA" as const, at: "2026-10-24T03:00:00.000Z", errors: [{ code: "E1004", field: "CMD", line: 3, message: "Mã HS tờ hai không tồn tại", solution: "Sửa mã HS" }] };
+    const submission = { ...lot, branches: [1, 2, 3].map((no) => ({ ...(lot.branches[no - 1] ?? lot.branches[0]!), no, of: 3, rejection: no === 2 ? rejection : null })) };
+    renderWithProviders(
+      <PrintDeclaration dossierId="dos_028" decl={view.declaration!} items={view.items} branches={view.branches} mode="FULL" canEdit submission={submission} />,
+    );
+    expect(screen.getByRole("radio", { name: /^Tờ 2\/3 · dòng 51–100 \d+ việc cần xử lý$/ })).toBeTruthy();
+
+    await userEvent.click(document.querySelector<HTMLElement>('[data-print-cell="2:HAG_CMD"]')!);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.queryByText(/Mã HS tờ hai không tồn tại/)).toBeNull();
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.click(screen.getByRole("radio", { name: /^Tờ 2\/3/ }));
+    await userEvent.click(document.querySelector<HTMLElement>('[data-print-cell="2:HAG_CMD"]')!);
+    expect(await screen.findByText(/Mã HS tờ hai không tồn tại/, { selector: "[role=dialog] *" })).toBeTruthy();
+  }, 60_000);
+});

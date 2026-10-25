@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { customsMessages, customsOutbox, customsResults, postAmendments } from "../../../db/schema/integration.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -44,7 +44,6 @@ function repos(tx: Tx): CustomsRepos {
       listForDossier: async (orgId, dossierId) => (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId))).orderBy(customsResults.branch)).map(toResult),
       listForDossiers: async (orgId, dossierIds) =>
         dossierIds.length ? (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), inArray(customsResults.dossierId, dossierIds))).orderBy(customsResults.dossierId, customsResults.branch)).map(toResult) : [],
-      issuedCount: async (orgId, dossierId) => (await tx.select({ n: count() }).from(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId), isNotNull(customsResults.declarationNo))))[0]?.n ?? 0,
       listForOrg: async (orgId) => (await tx.select().from(customsResults).where(eq(customsResults.orgId, orgId)).orderBy(desc(customsResults.updatedAt))).map(toResult),
       deleteUnsentAbove: async (orgId, dossierId, branch) =>
         (await tx.delete(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId), gt(customsResults.branch, branch), isNull(customsResults.declarationNo), sql`${customsResults.raw}->>'stage' = 'NOT_SENT'`)).returning({ id: customsResults.id })).length,

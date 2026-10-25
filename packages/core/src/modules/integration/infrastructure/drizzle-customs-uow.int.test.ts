@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { lockedSheetCount } from "@kb/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../../../db/client.js";
 import { runSeed } from "../../../db/seed/index.js";
@@ -83,11 +84,12 @@ describe("DrizzleCustomsUow – trạng thái theo nhánh tờ khai", () => {
     expect((await uow.asOrg(A, (r) => r.results.listForDossier("org_anphat", "dos_br"))).length).toBeGreaterThan(0);
   });
 
-  it("issuedCount đếm nhánh đã có số tờ khai, theo org; org khác không thấy", async () => {
-    expect(await uow.asOrg(A, (r) => r.results.issuedCount("org_anphat", "dos_br"))).toBe(1);
-    await uow.asOrg(A, (r) => r.results.upsert(res("res_b1y", 1, { declarationNo: "30000000001" })));
-    expect(await uow.asOrg(A, (r) => r.results.issuedCount("org_anphat", "dos_br"))).toBe(2);
-    expect(await uow.asOrg(B, (r) => r.results.issuedCount("org_anphat", "dos_br"))).toBe(0);
+  it("số tờ đã khai (reader luật R-BRANCH-COUNT-LOCKED = lockedSheetCount(listForDossier)) theo org; org khác không thấy", async () => {
+    const locked = async (ctx: typeof A) => lockedSheetCount(await uow.asOrg(ctx, (r) => r.results.listForDossier("org_anphat", "dos_br")));
+    const before = await uow.asOrg(A, (r) => r.results.listForDossier("org_anphat", "dos_br"));
+    expect(before.some((x) => x.declarationNo)).toBe(true);
+    expect(await locked(A)).toBe(Math.max(...before.map((x) => x.branch)));
+    expect(await locked(B)).toBe(0);
     expect(await uow.asOrg(B, (r) => r.results.listForDossier("org_anphat", "dos_br"))).toEqual([]);
   });
 

@@ -7,7 +7,7 @@ import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import type { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { stageOf } from "../domain/state-machine.js";
-import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, outboxKey, pinOf, pinOfOutbox, recallFirstError, sheetOf } from "./branch-send.js";
+import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, outboxKey, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf } from "./branch-send.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
 
@@ -48,8 +48,11 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
     return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REOPEN", { week: weekStart(snap.exchangeRateDate) }));
   const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
   if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
-  // Guard trên TỪNG tờ trước khi gửi bất kỳ tờ nào (spec §6.1). Tờ 2..N kiểm với số tờ 1 giả (chưa có) – chỉ để kiểm, không gửi.
   const of = branchCount(snap.payload.items.length);
+  // Đã có tờ được cấp số mà số tờ nay khác số tờ đã khai → không gửi tờ nào (cùng điều kiện luật R-BRANCH-COUNT-LOCKED, kiểm ở mã nguồn).
+  const count = sheetCountError(await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId)), of);
+  if (count) return err(count);
+  // Guard trên TỪNG tờ trước khi gửi bất kỳ tờ nào (spec §6.1). Tờ 2..N kiểm với số tờ 1 giả (chưa có) – chỉ để kiểm, không gửi.
   const sheets = Array.from({ length: of }, (_, i) => sheetOf(snap.payload, i + 1, i === 0 ? null : CHECK_ONLY_FIRST_NO));
   // Dữ liệu có thể đổi sau khi duyệt: kiểm lại ô bắt buộc trước khi tạo thông điệp.
   for (const s of sheets) {

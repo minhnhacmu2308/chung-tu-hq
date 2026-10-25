@@ -1,3 +1,4 @@
+import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv } from "@kb/core/config";
 import { activeQuotaBonus } from "@kb/core/modules/admin";
 import { createRateDeps } from "@kb/core/modules/admin/infrastructure";
@@ -127,7 +128,8 @@ export function buildContainer() {
     await runRules(validation, orgId, dossierId, s.data, s.version, { taxCode: o.taxCode, name: o.name });
   };
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
-  validation.branches = (orgId, dossierId) => customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.issuedCount(orgId, dossierId));
+  // Luật R-BRANCH-COUNT-LOCKED: số tờ đã khai (đã lập kết quả các tờ) khi đã có tờ được cấp số – chuỗi dừng giữa chừng vẫn đủ N tờ.
+  validation.branches = async (orgId, dossierId) => lockedSheetCount(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.listForDossier(orgId, dossierId)));
   customs.notify = notify;
   customs.usage = serviceUsage;
   // Hộp thư chứng từ: lấy thư Gmail / Outlook, file lưu cùng kho chứng từ.

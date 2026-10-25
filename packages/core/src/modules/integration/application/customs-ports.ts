@@ -39,8 +39,6 @@ export interface CustomsRepos {
     get(orgId: string, dossierId: string, branch?: number): Promise<ResultRow | null>;
     /** Mọi nhánh của hồ sơ, sắp theo nhánh. */
     listForDossier(orgId: string, dossierId: string): Promise<ResultRow[]>;
-    /** Số nhánh đã có số tờ khai (declaration_no khác null). */
-    issuedCount(orgId: string, dossierId: string): Promise<number>;
     listForOrg(orgId: string): Promise<ResultRow[]>;
     /** Mọi nhánh của các hồ sơ (danh sách hồ sơ: tóm tắt "Thông quan k/N" một truy vấn cho cả trang). */
     listForDossiers(orgId: string, dossierIds: string[]): Promise<ResultRow[]>;

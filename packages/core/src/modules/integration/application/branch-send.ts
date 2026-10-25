@@ -1,6 +1,6 @@
 // Gửi nội dung tờ khai theo từng tờ khai nhánh (spec tách tờ khai §6.1–6.4): khóa outbox, ghim phiên bản + lần duyệt, guard từng tờ,
 // và enqueueBranchPreDeclare (chuỗi nối tiếp của worker, người khai bấm, truyền lại sau mở lại). Dùng chung submit / perform / worker.
-import { declarationRequiredGaps, opFor, requiredGapsText, sameRateWeek, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
+import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, recallExempt, requiredGapsText, sameRateWeek, sheetCountChanged, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -47,13 +47,24 @@ export function contentOpFor(stage: CustomsStage, kind: "IDA" | "EDA"): CustomsO
 }
 
 /**
- * Truyền lại nội dung / mở lại lô nhiều tờ (spec §6.4, quyết định R3): chỉ tiêu chung dùng chung mọi tờ, nên MỌI tờ đã có số tờ khai phải đang
- * được gọi về sửa (RECALLED / AMEND_RECALLED) – nếu không, Hải quan giữ giá trị cũ trên tờ đó. Tờ chưa có số không tính. Worker không tự gọi về (IDB/IDD).
+ * Truyền lại nội dung / mở lại lô nhiều tờ (spec §6.4, quyết định R3): chỉ tiêu chung dùng chung mọi tờ, nên mọi tờ đã có số tờ khai còn nhận nội dung
+ * phải đang được gọi về sửa (RECALLED / AMEND_RECALLED) – nếu không, Hải quan giữ giá trị cũ trên tờ đó. Tờ chưa có số không tính. Worker không tự gọi về (IDB/IDD).
+ * Miễn (R7): tờ đã thông quan / sửa sau thông quan / bị từ chối – không nhận nội dung nữa (gọi về không được); lệch chỉ tiêu chung sau thông quan sửa qua AMA (Q8).
  */
 export function recallFirstError(results: Pick<ResultRow, "branch" | "declarationNo" | "state" | "raw">[]): DomainError | null {
   if (results.length <= 1) return null;
-  const notRecalled = results.filter((r) => r.declarationNo && stageOf(r) !== "RECALLED" && stageOf(r) !== "AMEND_RECALLED").map((r) => r.branch);
+  const notRecalled = results.filter((r) => r.declarationNo && !recallExempt(stageOf(r)) && stageOf(r) !== "RECALLED" && stageOf(r) !== "AMEND_RECALLED").map((r) => r.branch);
   return notRecalled.length ? reasonError("INVALID_STATE", "SHEETS_RECALL_FIRST", { sheets: notRecalled.join(", ") }) : null;
+}
+
+/**
+ * Số tờ hiện tại (theo dòng hàng) khác số tờ đã khai sau khi có tờ được cấp số (lockedSheetCount – Hải quan đã nhận TK_DNO đó) → không gửi nội dung
+ * tờ nào (vd lô 50 dòng đã có số tăng lên 51: không gửi tờ 1 với TK_DNO = 2 mà không có tờ 2). Cùng điều kiện luật R-BRANCH-COUNT-LOCKED, kiểm ở mã nguồn
+ * để không phụ thuộc luật đã chạy lại hay chưa.
+ */
+export function sheetCountError(results: Pick<ResultRow, "branch" | "declarationNo">[], now: number): DomainError | null {
+  const planned = lockedSheetCount(results);
+  return sheetCountChanged(planned, now) ? reasonError("BLOCKER_FAILED", "SHEET_COUNT_CHANGED", { planned, now }) : null;
 }
 
 /**
@@ -120,7 +131,11 @@ export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: O
     return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
   const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
   if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
-  const { first, target, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ first: await r.results.get(ctx.orgId, dossierId, 1), target: await r.results.get(ctx.orgId, dossierId, branch), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
+  const { results, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
+  const count = sheetCountError(results, branchCount(snap.payload.items.length));
+  if (count) return err(count);
+  const first = results.find((r) => r.branch === 1) ?? null;
+  const target = results.find((r) => r.branch === branch) ?? null;
   if (!target) return err(reasonError("INVALID_STATE", "NOT_SUBMITTED_YET"));
   const op = contentOpFor(stageOf(target), snap.payload.kind);
   if (!op) return err(domainError("INVALID_STATE", `Tờ ${branch}: không ở giai đoạn gửi nội dung tờ khai`));

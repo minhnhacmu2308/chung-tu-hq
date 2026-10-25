@@ -9,8 +9,8 @@ export type RuleOutcome = { result: RuleResult; detail: string; fields: string[]
 /** `charges`: chi phí người khai nhập ở bước OCR & kiểm tra (cước nhập tay / lý do chưa có số) – vắng = chỉ theo chứng từ. */
 export type RuleContext = {
   org: { taxCode: string; name: string }; dossier?: DossierProfile; charges?: ValueCharges;
-  /** Số tờ khai nhánh đã được Hải quan cấp số (module integration) – vắng/0 = chưa có tờ nào. */
-  issuedBranches?: number;
+  /** Số tờ đã khai khi đã có tờ được Hải quan cấp số (module integration, lockedSheetCount) – vắng/0 = chưa có tờ nào có số. */
+  plannedBranches?: number;
 };
 export type Rule = {
   code: string; title: string; severity: RuleSeverity; docKinds: DocKind[];

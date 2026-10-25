@@ -27,21 +27,27 @@ describe("R-MAX-50-LINES (INFO)", () => {
 });
 
 describe("R-BRANCH-COUNT-LOCKED (BLOCKER)", () => {
-  const runB = (n: number, issuedBranches: number) => ruleByCode("R-BRANCH-COUNT-LOCKED")!.run(hansol((s) => (s.items = manyLines(n))), { org: ORG, issuedBranches });
+  // plannedBranches = số tờ đã khai (đã lập kết quả các tờ) khi có ít nhất một tờ được cấp số (lockedSheetCount) – không phải số tờ đã có số.
+  const runB = (n: number, plannedBranches: number) => ruleByCode("R-BRANCH-COUNT-LOCKED")!.run(hansol((s) => (s.items = manyLines(n))), { org: ORG, plannedBranches });
   it("là BLOCKER", () => expect(ruleByCode("R-BRANCH-COUNT-LOCKED")!.severity).toBe("BLOCKER"));
-  it("FAIL khi đã có số 3 tờ nhưng lô còn 2 tờ", () => {
+  it("FAIL khi đã khai 3 tờ nhưng lô còn 2 tờ", () => {
     const r = runB(95, 3);
     expect(r.result).toBe("FAIL");
-    expect(r.detail).toBe("Đã có số tờ khai cho 3 tờ nhưng lô hàng nay chỉ còn 2 tờ (95 dòng) – hủy tờ khai thừa trước khi truyền");
+    expect(r.detail).toBe("Đã khai 3 tờ khai (đã được cấp số) nhưng lô hàng nay chỉ còn 2 tờ (95 dòng) – hủy tờ khai thừa trước khi truyền");
   });
-  it("FAIL khi đã có số 2 tờ nhưng lô nay cần 3 tờ", () => {
+  it("FAIL khi đã khai 2 tờ nhưng lô nay cần 3 tờ", () => {
     const r = runB(120, 2);
     expect(r.result).toBe("FAIL");
-    expect(r.detail).toBe("Đã có số tờ khai cho 2 tờ nhưng lô hàng nay cần 3 tờ (120 dòng) – hủy tờ khai đã cấp số rồi khai lại trước khi truyền");
+    expect(r.detail).toBe("Đã khai 2 tờ khai (đã được cấp số) nhưng lô hàng nay cần 3 tờ (120 dòng) – hủy tờ khai đã cấp số rồi khai lại trước khi truyền");
+  });
+  it("FAIL khi lô 1 tờ đã có số tăng lên 51 dòng (2 tờ)", () => expect(runB(51, 1).result).toBe("FAIL"));
+  it("PASS khi chuỗi dừng giữa chừng: 120 dòng, chỉ tờ 1 có số (đã khai 3 tờ) → số tờ khớp", () => {
+    const r = runB(120, 3);
+    expect(r.result).toBe("PASS");
+    expect(r.detail).toBe("Đã khai 3 tờ khai – khớp số tờ của lô hàng (120 dòng)");
   });
   it("SKIPPED khi chưa có tờ nào được cấp số", () => expect(runB(120, 0).result).toBe("SKIPPED"));
-  it("SKIPPED khi không truyền issuedBranches", () => expect(ruleByCode("R-BRANCH-COUNT-LOCKED")!.run(hansol(), { org: ORG }).result).toBe("SKIPPED"));
-  it("PASS khi số tờ bằng nhau", () => expect(runB(120, 3).result).toBe("PASS"));
+  it("SKIPPED khi không truyền plannedBranches", () => expect(ruleByCode("R-BRANCH-COUNT-LOCKED")!.run(hansol(), { org: ORG }).result).toBe("SKIPPED"));
 });
 
 describe("R-LINE-AMOUNT (WARNING)", () => {

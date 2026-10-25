@@ -26,7 +26,7 @@ describe("runRules", () => {
     expect(result(checks, "R-CONTAINER-LIST").result).toBe("PASS");
     expect(store.get("org_a:dos_1")).toHaveLength(27);
   });
-  it("có reader branches: số tờ đã cấp số lệch số tờ hiện tại → R-BRANCH-COUNT-LOCKED FAIL; không có reader → SKIPPED", async () => {
+  it("có reader branches: số tờ đã khai lệch số tờ hiện tại → R-BRANCH-COUNT-LOCKED FAIL; không có reader → SKIPPED", async () => {
     const { deps } = fakeDeps(null);
     const lệch = await runRules({ ...deps, branches: async () => 3 }, "org_a", "dos_1", hansol(), 1, ORG);
     expect(result(lệch, "R-BRANCH-COUNT-LOCKED").result).toBe("FAIL");

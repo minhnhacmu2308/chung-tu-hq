@@ -2,7 +2,7 @@
 // nghiệp vụ gửi nội dung giữ bất biến 7, tạo outbox (idempotency theo số lần gửi) → job customs-send. Tra cứu IID/IEX trả lời ngay.
 // Lô nhiều tờ: `branch` (mặc định 1) – kết quả, giai đoạn, nhật ký, outbox của tờ khai nhánh đó (spec tách tờ khai §6.3).
 import {
-  baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, operationAvailability, queryOpFor, sameRateWeek, vnDateOf, weekStart,
+  baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, operationAvailability, queryOpFor, sameRateWeek, sheetApproved, vnDateOf, weekStart,
   type CustomsOperation, type OperationResult,
 } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
@@ -17,8 +17,8 @@ import { coarseState, stageOf } from "../domain/state-machine.js";
 import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { syncDossierClearance } from "./poll-status.js";
-import { beginPostAmendment, isPostStage, openPostAmendment } from "./post-amendment.js";
-import { contentKey, enqueueBranchPreDeclare, pinOf, pinOfOutbox, recallFirstError } from "./branch-send.js";
+import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
+import { buildSheet, contentKey, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf } from "./branch-send.js";
 
 export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -35,24 +35,30 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
   const of = branchCount(snap.payload.items.length);
 
   // Sau thông quan: "đã duyệt" là bản khai bổ sung AMA (tờ khai gốc giữ nguyên, không duyệt lại).
-  // Lô nhiều tờ: tờ khai SUBMITTED = nội dung đã duyệt đang được truyền lần lượt từng tờ (các tờ sau vẫn gửi đúng nội dung đó).
-  const approved = isPostStage(result) ? amendment?.status === "APPROVED" : snap.status === "APPROVED" || (of > 1 && snap.status === "SUBMITTED");
+  // Lô nhiều tờ: tờ khai SUBMITTED = nội dung đã duyệt đang được truyền lần lượt từng tờ (các tờ sau vẫn gửi đúng nội dung đó). Dùng chung màn Truyền (getSubmission).
+  const approved = sheetApproved({ stage: stageOf(result), of, declarationStatus: snap.status, amendmentStatus: amendment?.status ?? null });
   const flow = { direction: dossier.direction, approved, hasContainers: snap.payload.containers.length > 0 };
   const a = operationAvailability(availabilityInput(flow, result, outbox)).find((x) => x.op === op);
   if (!a) return err(domainError("VALIDATION", `Nghiệp vụ ${op} không thuộc luồng tờ khai ${dossier.direction === "NK" ? "nhập" : "xuất"} khẩu`));
   if (!a.enabled) return err(a.reasonCode ? reasonError("INVALID_STATE", a.reasonCode, a.reasonParams) : domainError("INVALID_STATE", `Chưa thực hiện được ${op}`));
   if (a.action === "EDIT") return err(reasonError("INVALID_STATE", a.reasonCode ?? "EDIT_DECLARATION_FIRST", a.reasonParams));
   if (a.action === "START_POST_EDIT") return err(reasonError("INVALID_STATE", "START_POST_EDIT_FIRST"));
-  if (of > 1 && isContentOperation(op) && op !== "AMA") {
-    // Lần truyền mới (tờ khai vừa duyệt lại): mọi tờ đã có số phải đang gọi về sửa (R3).
-    if (snap.status === "APPROVED") {
-      const recall = recallFirstError(await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId)));
-      if (recall) return err(recall);
+  if (isContentOperation(op) && op !== "AMA") {
+    const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));
+    // Đã có tờ được cấp số mà số tờ nay khác số tờ đã khai → không gửi (luật R-BRANCH-COUNT-LOCKED, kiểm ở mã nguồn). Lô một tờ từ đầu: không đổi.
+    const count = sheetCountError(results, of);
+    if (count) return err(count);
+    if (of > 1) {
+      // Lần truyền mới (tờ khai vừa duyệt lại): mọi tờ đã có số còn nhận nội dung phải đang gọi về sửa (R3, miễn tờ đã thông quan / bị từ chối – R7).
+      if (snap.status === "APPROVED") {
+        const recall = recallFirstError(results);
+        if (recall) return err(recall);
+      }
+      // Tiếp lần truyền đang chạy: tờ đã có outbox nghiệp vụ này ở lần truyền này (bị từ chối / hết lượt – có thể Hải quan đã nhận)
+      // → không gửi mới, dùng Gửi lại (luôn tra trạng thái trước, ADR 0005).
+      if (snap.status === "SUBMITTED" && outbox.some((o) => o.operation === op && pinOfOutbox(o) === pinOf(snap)))
+        return err(domainError("INVALID_STATE", `Tờ ${branch}: ${OPERATION_LABELS[op]} đã gửi ở lần truyền này – dùng Gửi lại`));
     }
-    // Tiếp lần truyền đang chạy: tờ đã có outbox nghiệp vụ này ở lần truyền này (bị từ chối / hết lượt – có thể Hải quan đã nhận)
-    // → không gửi mới, dùng Gửi lại (luôn tra trạng thái trước, ADR 0005).
-    if (snap.status === "SUBMITTED" && outbox.some((o) => o.operation === op && pinOfOutbox(o) === pinOf(snap)))
-      return err(domainError("INVALID_STATE", `Tờ ${branch}: ${OPERATION_LABELS[op]} đã gửi ở lần truyền này – dùng Gửi lại`));
   }
   if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
 
@@ -73,13 +79,23 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
     if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
     if (baseOp(op) === "IDA" && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
       return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
-    // Thông điệp của tờ: lô một tờ = cả tờ khai (như trước); tờ 2..N dùng số tờ khai của tờ 1 (TK_FIC).
-    const sheet = branchPayload(snap.payload, branch, branch === 1 ? null : first?.declarationNo ?? null);
-    const built = buildFptRequest(sheet.payload);
-    const blocking = [...sheet.blockers, ...built.blockers];
-    if (blocking.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: blocking.join("; ") }));
-    // Lô nhiều tờ: ghim phiên bản + lần duyệt (worker chỉ gửi khi còn khớp, rồi nối tiếp tờ sau cùng ghim).
-    payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId, ...(of > 1 ? { pin: pinOf(snap) } : {}) };
+    if (of > 1) {
+      // Lô nhiều tờ: cùng guard của tờ như chuỗi nối tiếp (ô bắt buộc trên dòng của tờ, blocker tách tờ, đặc tả FPT); tờ 2..N dùng số tờ khai của tờ 1 (TK_FIC).
+      // Ghim phiên bản + lần duyệt (worker chỉ gửi khi còn khớp, rồi nối tiếp tờ sau cùng ghim).
+      const sheet = sheetOf(snap.payload, branch, branch === 1 ? null : first?.declarationNo ?? null);
+      const gaps = gapsError(sheet);
+      if (gaps) return err(gaps);
+      const built = buildSheet(sheet);
+      if (!built.ok) return built;
+      payload = { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: result.raw?.certificateId, pin: pinOf(snap) };
+    } else {
+      // Lô một tờ: cả tờ khai (như trước).
+      const sheet = branchPayload(snap.payload, branch, null);
+      const built = buildFptRequest(sheet.payload);
+      const blocking = [...sheet.blockers, ...built.blockers];
+      if (blocking.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: blocking.join("; ") }));
+      payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
+    }
   } else if (op === "HYS") {
     payload = { files: (await deps.dossiers.documents(ctx.orgId, dossierId)).map((d) => ({ name: d.fileName, storageKey: d.storageKey })), certificateId: result.raw?.certificateId };
   } else if (op === "CONT" || op === "PORT_FEE") {

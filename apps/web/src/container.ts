@@ -1,5 +1,6 @@
 // Composition root của web: nơi DUY NHẤT nối hạ tầng (DB, Redis, queue) vào use case của @kb/core.
 // Route handler chỉ gọi getContainer(); không import drizzle/postgres/bullmq ở nơi khác (depcruise chặn).
+import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv, type Env } from "@kb/core/config";
 import { createDb, platformDbUrl, runSeed, type Db } from "@kb/core/db";
 import { activeQuotaBonus, type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
@@ -241,10 +242,17 @@ function build(): Container {
     if (!r.ok) console.error("[extraction→declaration]", r.error.code, r.error.message);
   };
   const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
-  validation.branches = (orgId, dossierId) => customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.issuedCount(orgId, dossierId));
+  // Luật R-BRANCH-COUNT-LOCKED: số tờ đã khai (đã lập kết quả các tờ) khi đã có tờ được cấp số – chuỗi dừng giữa chừng vẫn đủ N tờ.
+  validation.branches = async (orgId, dossierId) => lockedSheetCount(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.listForDossier(orgId, dossierId)));
   customs.notify = notify;
   // Danh sách / đầu hồ sơ: tóm tắt "Thông quan k/N" từ kết quả các tờ khai nhánh (dossier không import integration).
-  dossier.customs = { summaries: async (ctx, ids) => { const r = await dossierCustomsSummaries(customs, ctx, ids); return r.ok ? r.value : new Map(); } };
+  dossier.customs = {
+    summaries: async (ctx, ids) => {
+      const r = await dossierCustomsSummaries(customs, ctx, ids);
+      if (!r.ok) console.error("[dossier→customs summaries]", r.error.code, r.error.message);
+      return r.ok ? r.value : new Map();
+    },
+  };
   customs.usage = serviceUsage;
   // Sửa chỉ tiêu tờ khai theo giai đoạn truyền (chưa khai / sửa đổi bổ sung / đã thông quan).
   declaration.customsStage = async (orgId, dossierId) => stageOf(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.get(orgId, dossierId)));

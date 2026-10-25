@@ -1,11 +1,11 @@
-import { AWAITING_CLEARANCE, branchCount, dossierCustomsSummary, type CustomsRow, type CustomsSummary, type SubmissionView } from "@kb/contracts";
+import { AWAITING_CLEARANCE, branchCount, dossierCustomsSummary, sheetApproved, type CustomsRow, type CustomsSummary, type SubmissionView } from "@kb/contracts";
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { rowState, stageOf } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, startedOf, toSubmissionView, type BranchInput } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, ResultRow } from "./customs-ports.js";
-import { isPostStage, openAmendmentOf } from "./post-amendment.js";
+import { openAmendmentOf } from "./post-amendment.js";
 
 /** Số tờ hiển thị: theo dòng hàng hiện tại, nhưng không ít hơn số nhánh đã có kết quả (tờ đã có số vẫn tồn tại ở Hải quan). */
 const sheetCount = (snap: DeclarationSnapshot | null, results: ResultRow[]) => Math.max(snap ? branchCount(snap.payload.items.length) : 1, ...results.map((r) => r.branch));
@@ -25,8 +25,9 @@ export async function getSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: stri
   const branches = Array.from({ length: of }, (_, i): BranchInput => {
     const no = i + 1;
     const result = results.find((r) => r.branch === no) ?? null;
-    // Sau thông quan: "đã duyệt" là bản khai bổ sung AMA đang mở của tờ, không phải tờ khai gốc.
-    const approved = isPostStage(result) ? openAmendmentOf(amendments.filter((a) => a.branch === no))?.status === "APPROVED" : snap?.status === "APPROVED";
+    // "Đã duyệt" cùng quy tắc với thực hiện nghiệp vụ (sheetApproved): sau thông quan – bản khai bổ sung AMA đang mở của tờ;
+    // lô nhiều tờ đang truyền (tờ khai SUBMITTED) – các tờ chờ gửi lại nội dung vẫn là đã duyệt (không trỏ về Review đang khóa).
+    const approved = sheetApproved({ stage: stageOf(result), of, declarationStatus: snap?.status ?? null, amendmentStatus: openAmendmentOf(amendments.filter((a) => a.branch === no))?.status ?? null });
     return {
       no, of, flow: { direction: dossier.direction, approved, hasContainers },
       messages: messages.filter((m) => m.branch === no), outbox: outbox.filter((o) => o.branch === no), result, polling: polling(result),

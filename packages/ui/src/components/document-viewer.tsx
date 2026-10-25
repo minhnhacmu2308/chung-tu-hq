@@ -186,6 +186,7 @@ export function DocumentViewer({
 const FILE_MESSAGES = {
   vi: { open: "Mở ở tab mới" },
   en: { open: "Open in new tab" },
+  zh: { open: "在新标签页打开" },
 } satisfies Messages<"open">;
 
 export type DocumentFileViewerProps = {

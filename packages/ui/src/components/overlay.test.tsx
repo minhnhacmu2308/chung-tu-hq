@@ -173,7 +173,7 @@ describe("Dialog", () => {
     window.localStorage.removeItem("kb-drawer-width:md");
     const { unmount } = render(
       <Dialog defaultOpen defaultPresentation="panel">
-        <DialogContent title="Panel">x</DialogContent>
+        <DialogContent icon={<span />} title="Panel">x</DialogContent>
       </Dialog>,
     );
     const dialog = screen.getByRole("dialog", { name: "Panel" });
@@ -196,7 +196,7 @@ describe("Dialog", () => {
   it("chuyển drawer → cửa sổ: lớp phủ nằm TRƯỚC cửa sổ (không phủ mờ chính nó), khóa cuộn; về drawer thì mở khóa", async () => {
     render(
       <Dialog defaultOpen defaultPresentation="panel">
-        <DialogContent title="Panel">x</DialogContent>
+        <DialogContent icon={<span />} title="Panel">x</DialogContent>
       </Dialog>,
     );
     const dialog = screen.getByRole("dialog", { name: "Panel" });

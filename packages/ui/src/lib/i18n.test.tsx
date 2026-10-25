@@ -95,7 +95,7 @@ describe("Đa ngôn ngữ (ZH – tiếng Trung giản thể)", () => {
   });
 
   it("Dialog: nút điều khiển tiếng Trung", () => {
-    zh(<Dialog open><DialogContent title="新报告">x</DialogContent></Dialog>);
+    zh(<Dialog open><DialogContent icon={<span />} title="新报告">x</DialogContent></Dialog>);
     expect(screen.getByRole("button", { name: "关闭" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "以右侧面板显示" })).toBeInTheDocument();
   });

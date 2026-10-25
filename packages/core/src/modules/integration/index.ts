@@ -5,6 +5,7 @@ export type { CertificateReader, CustomsDeps, CustomsDossierPort, CustomsGateway
 export { submitDeclaration, outboxKey } from "./application/submit-declaration.js";
 export { performOperation, startPostAmendment } from "./application/perform-operation.js";
 export { declareAllSheets } from "./application/declare-all.js";
+export { recallAllSheets } from "./application/recall-all.js";
 export { addPostAmendmentLines, approvePostAmendment, copyPostAmendmentHeader, getPostAmendmentView, removePostAmendmentLine, updatePostAmendmentField } from "./application/post-amendment.js";
 export { MAX_ATTEMPTS as CUSTOMS_MAX_ATTEMPTS, processOutbox, type ProcessOutboxInput } from "./application/process-outbox.js";
 export { pollStatus, syncDossierClearance, type PollStatusInput } from "./application/poll-status.js";

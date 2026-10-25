@@ -3,6 +3,7 @@
 // NGOẠI LỆ DUY NHẤT (spec tách tờ khai §6.2/6.4): gửi nội dung tờ khai (IDA/EDA, IDA01/EDA01) của tờ khai nhánh k thành công trong một lần truyền
 // (outbox có ghim phiên bản) → tự gửi nội dung tờ kế tiếp cần gửi (NOT_SENT/RECALLED → IDA, AMEND_RECALLED → IDA01; TK_FIC = số tờ khai nhánh 1)
 // cùng ghim; tờ đã có outbox cùng lần truyền → không tạo thêm; khóa theo nhánh + unique chặn tạo trùng (chainNextBranch).
+// Cùng cơ chế: chuỗi người khai bấm một lần cho cả lô – khai chính thức cả lô (chain "declare"), gọi về tất cả (chain "recall", lệnh cuối xong → tự mở lại tờ khai).
 import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, isRecallOperation, queryOpFor, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
 import { domainError, type DomainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.js";
@@ -12,15 +13,23 @@ import { maskPayload } from "../domain/mask.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
-import type { CustomsDeps, CustomsRepos, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
+import type { CustomsDeps, CustomsRepos, DeclarationSnapshot, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
 import { applyPostAmendmentResult } from "./post-amendment.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { parseSent } from "./sent-sheets.js";
 import { contentOpFor, declareOpFor, enqueueBranchPreDeclare, outboxVersion, stalePinReason } from "./branch-send.js";
 import { performOperationChecked } from "./perform-operation.js";
+import { recallTargets } from "./recall-all.js";
 
-/** Chuỗi nối tiếp dừng ở tờ `branch` vì guard (declare = chuỗi khai chính thức cả lô). */
-type ChainStop = { branch: number; of: number; error: DomainError; declare?: boolean };
+/** Loại chuỗi nối tiếp theo tờ: content = gửi nội dung (khai tạm), declare = khai chính thức cả lô, recall = gọi về tất cả. */
+type ChainKind = "content" | "declare" | "recall";
+/** Chuỗi nối tiếp dừng ở tờ `branch` vì guard. */
+type ChainStop = { branch: number; of: number; error: DomainError; kind: ChainKind };
+/** Kết quả nối tiếp: `continued` = tờ kế tiếp đã có lệnh của chuỗi (vừa tạo, hoặc đã tạo ở lần chạy trước); `stop` = dừng vì guard. */
+type ChainOutcome = { continued: boolean; stop?: ChainStop };
+const NO_CHAIN: ChainOutcome = { continued: false };
+const CHAIN_WHAT: Record<ChainKind, string> = { content: "khai tạm", declare: "khai chính thức", recall: "gọi về" };
+const chainOfOutbox = (o: OutboxRow) => (o.payload as { chain?: unknown } | null)?.chain;
 export type ProcessOutboxInput = { orgId: string; userId: string; outboxId: string };
 /** Quá số lần thử (= attempts của BullMQ) → outbox FAILED, người dùng "Gửi lại". */
 export const MAX_ATTEMPTS = 5;
@@ -49,7 +58,11 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   const { ob, result } = prep.value;
   if (ob.status !== "PENDING") {
     // Job chạy lại sau crash giữa lúc ghi SENT và lúc nối tờ kế tiếp → nối lại (idempotent; lỗi guard đã/ sẽ được ghi ở lần chạy chính).
-    if (ob.status === "SENT") await chainNextBranch(deps, ctx, ob);
+    if (ob.status === "SENT") {
+      const chained = await chainNextBranch(deps, ctx, ob);
+      // Gọi về: crash trước khi mở lại → mở lại ở lần chạy lại (chỉ khi tờ vẫn đang gọi về và tờ khai chưa mở lại – reopenAfterRecall kiểm).
+      if (isRecallOperation(ob.operation) && ob.operation !== "AMB" && !chained.continued) await reopenAfterRecall(deps, ctx, ob);
+    }
     return ok({ status: ob.status, next: null });
   }
   const dossier = await deps.dossiers.get(input.orgId, ob.dossierId);
@@ -204,18 +217,29 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     const declarationNo = ob.branch === 1 ? patch.declarationNo : undefined;
     const channel = ob.branch === 1 ? patch.channel : undefined;
     if (declarationNo || channel) await deps.dossiers.update(input.orgId, ob.dossierId, { ...(declarationNo ? { declarationNo } : {}), ...(channel ? { channel } : {}) });
-    // Gọi về sửa: mở lại tờ khai (DRAFT, bước Review) để sửa chỉ tiêu và duyệt lại.
-    if (isRecallOperation(op) && op !== "AMB") await deps.declarations.markDraft(ctx, ob.dossierId);
     // AMC: tờ khai nhánh về CLEARED → hồ sơ CLEARED khi mọi tờ thông quan.
     if (op === "AMC") await syncDossierClearance(deps, ctx, ob.dossierId);
     // Khai chính thức / khai chính thức sửa đổi → hỏi trạng thái tới khi thông quan.
     if (b === "IDC" || b === "IDE") await deps.queue.enqueue("customs-poll", { orgId: input.orgId, userId: input.userId, dossierId: ob.dossierId, ...(ob.branch > 1 ? { branch: ob.branch } : {}), attempt: 1 }, { jobId: `customs-poll:${ob.dossierId}:${ob.id}:1`, delayMs: deps.pollDelayMs });
   }
+  /** Gọi về tất cả còn tờ kế tiếp đang gửi → chưa mở lại, chưa báo (báo một lần khi lệnh cuối xong). */
+  let recallContinues = false;
+  /** Số tờ đang gọi về sau lệnh cuối của gọi về tất cả (thông báo). */
+  let recalledAll: number | null = null;
   if (!failed) {
-    const chained = await chainNextBranch(deps, ctx, ob);
+    const outcome = await chainNextBranch(deps, ctx, ob);
+    const chained = outcome.stop;
+    if (isRecallOperation(op) && op !== "AMB") {
+      // Gọi về sửa: mở lại tờ khai (DRAFT, bước Review) khi không còn lệnh gọi về nào của lần này đang chờ (spec §2.3).
+      recallContinues = outcome.continued;
+      if (!recallContinues) {
+        const sheets = await reopenAfterRecall(deps, ctx, ob);
+        if (chainOfOutbox(ob) === "recall") recalledAll = sheets;
+      }
+    }
     if (chained) {
-      // Không khai tạm được tờ kế tiếp (tờ khai bị mở lại, HS/BLOCKER, đổi tuần tỷ giá…): ghi lỗi trên nhánh đó, báo chủ hồ sơ; nhánh giữ NOT_SENT.
-      const what = chained.declare ? "khai chính thức" : "khai tạm";
+      // Không khai tạm / khai chính thức / gọi về được tờ kế tiếp (tờ khai bị mở lại, HS/BLOCKER, đổi tuần tỷ giá, đang chờ phản hồi…): ghi lỗi trên nhánh đó, báo chủ hồ sơ.
+      const what = CHAIN_WHAT[chained.kind];
       const summary = `Tờ ${chained.branch}/${chained.of}: chưa ${what} tự động – ${chained.error.message ?? chained.error.code}`;
       await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, branch: chained.branch, operation: ob.operation, direction: "IN", result: "ERROR", summary, payloadMasked: { error: chained.error.message ?? chained.error.code }, externalRef: null, at: now() }));
       await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, { title: `${dossier.code}: chưa ${what} tờ ${chained.branch}/${chained.of}`, body: summary.slice(0, 300), href: `/dossiers/${ob.dossierId}?step=submit` });
@@ -223,13 +247,15 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   }
   await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
   if (!failed && patch.channel) await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId, roles: ["APPROVER"] }, { title: `${dossier.code}: ${CHANNEL_NOTES[patch.channel].split(" – ")[0]}`, body: `Số tờ khai ${patch.declarationNo ?? result.declarationNo ?? ""}. ${CHANNEL_NOTES[patch.channel]}.`, href: `/dossiers/${ob.dossierId}?step=submit` });
-  if (!failed && isRecallOperation(op)) {
+  if (!failed && isRecallOperation(op) && !recallContinues) {
     const amb = op === "AMB";
-    await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, {
-      title: `${dossier.code}: ${amb ? "đã gọi bản khai bổ sung về sửa" : "đã gọi tờ khai về sửa"} (${op})`,
-      body: amb ? "Sửa bản khai bổ sung ở bước Review (tab Khai bổ sung AMA), phê duyệt lại rồi khai AMA." : "Sửa chỉ tiêu ở bước Review, phê duyệt lại rồi gửi khai tạm.",
-      href: `/dossiers/${ob.dossierId}?step=review`,
-    });
+    await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, recalledAll !== null
+      ? { title: `${dossier.code}: đã gọi về ${recalledAll} tờ (gọi về tất cả)`, body: "Sửa tờ khai ở bước Review, phê duyệt lại rồi truyền lại các tờ.", href: `/dossiers/${ob.dossierId}?step=review` }
+      : {
+        title: `${dossier.code}: ${amb ? "đã gọi bản khai bổ sung về sửa" : "đã gọi tờ khai về sửa"} (${op})`,
+        body: amb ? "Sửa bản khai bổ sung ở bước Review (tab Khai bổ sung AMA), phê duyệt lại rồi khai AMA." : "Sửa chỉ tiêu ở bước Review, phê duyệt lại rồi gửi khai tạm.",
+        href: `/dossiers/${ob.dossierId}?step=review`,
+      });
   }
   if (failed) await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, { title: `${dossier.code}: ${OPERATION_LABELS[op]} bị từ chối`, body: fmtErrors(outcome.errors!).slice(0, 300), href: `/dossiers/${ob.dossierId}?step=submit` });
   return ok({ status: failed ? "FAILED" : "SENT", next: null });
@@ -238,43 +264,73 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
 /**
  * Nối tiếp (ngoại lệ duy nhất cho "không tự gửi nghiệp vụ kế tiếp"): nội dung tờ k (IDA/EDA, IDA01/EDA01) đã SENT trong một lần truyền có ghim
  * → gửi nội dung tờ kế tiếp cần gửi theo giai đoạn của tờ (bỏ qua tờ không cần gửi), cùng phiên bản + ghim. Tờ đó đã có outbox cùng lần truyền
- * → enqueueBranchPreDeclare không tạo thêm (dừng; bị từ chối → người khai Gửi lại, thành công thì nối tiếp). Trả lỗi guard (không tạo gì) hoặc null.
+ * → enqueueBranchPreDeclare không tạo thêm (dừng; bị từ chối → người khai Gửi lại, thành công thì nối tiếp). Trả lỗi guard (không tạo gì) hoặc không nối.
+ * Chuỗi người khai bấm một lần cho cả lô (outbox mang `chain`): "declare" = khai chính thức cả lô, "recall" = gọi về tất cả (chainSheets).
  */
-async function chainNextBranch(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<ChainStop | null> {
-  // Khai chính thức cả lô: IDC/IDE/EDC/EDE của tờ k đã SENT (outbox mang chain = "declare") → khai chính thức tờ kế tiếp đang khai tạm. Lỗi guard → báo như chuỗi khai tạm.
-  if ((ob.payload as { chain?: unknown } | null)?.chain === "declare") return chainDeclare(deps, ctx, ob);
-  if (!isContentOperation(ob.operation) || ob.operation === "AMA") return null;
+async function chainNextBranch(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<ChainOutcome> {
+  const chain = chainOfOutbox(ob);
+  // Khai chính thức cả lô: IDC/IDE/EDC/EDE tờ k SENT → khai chính thức tờ kế tiếp đang khai tạm.
+  if (chain === "declare") return chainSheets(deps, ctx, ob, "declare", ({ snap, of, results }) => {
+    const next = results.filter((r) => r.branch > ob.branch && r.branch <= of).sort((a, b) => a.branch - b.branch).find((r) => declareOpFor(stageOf(r), snap.payload.kind));
+    return next ? { branch: next.branch, op: declareOpFor(stageOf(next), snap.payload.kind) } : null;
+  });
+  // Gọi về tất cả: IDB/IDD/EDB/EDD tờ k SENT → gọi về tờ đích kế tiếp còn hiệu lực (nghiệp vụ theo giai đoạn của tờ đó).
+  if (chain === "recall") return chainSheets(deps, ctx, ob, "recall", ({ snap, results, all }) => recallTargets(snap, results, all).find((t) => t.branch > ob.branch) ?? null);
+  if (!isContentOperation(ob.operation) || ob.operation === "AMA") return NO_CHAIN;
   // Phiên bản đã truyền ở tờ k (khóa `:v<n>`); khóa không có phiên bản (gửi theo lượt `:n<k>`, lô một tờ) → không nối tự động.
   const version = outboxVersion(ob.idempotencyKey);
-  if (version === null) return null;
+  if (version === null) return NO_CHAIN;
   const pin = (ob.payload as { pin?: unknown } | null)?.pin;
   const snap = await deps.declarations.get(ctx.orgId, ob.dossierId);
-  if (!snap) return null;
+  if (!snap) return NO_CHAIN;
   // Dừng ở số tờ hiện tại của tờ khai (không theo số kết quả đã lưu).
   const of = branchCount(snap.payload.items.length);
   const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, ob.dossierId));
   const next = results.find((r) => r.branch > ob.branch && r.branch <= of && contentOpFor(stageOf(r), snap.payload.kind));
-  if (!next) return null;
+  if (!next) return NO_CHAIN;
   const res = await enqueueBranchPreDeclare(deps, ctx, ob.dossierId, next.branch, { by: "chain", version, ...(typeof pin === "string" ? { pin } : {}) });
-  return res.ok ? null : { branch: next.branch, of, error: res.error };
+  return res.ok ? { continued: true } : { continued: false, stop: { branch: next.branch, of, error: res.error, kind: "content" } };
+}
+
+/** Tờ kế tiếp của chuỗi và nghiệp vụ gửi cho tờ đó (op null = tờ đích chưa thực hiện được lúc này → dừng chuỗi, báo lỗi). */
+type ChainPick = (s: { snap: DeclarationSnapshot; of: number; results: ResultRow[]; all: OutboxRow[] }) => { branch: number; op: CustomsOperation | null } | null;
+
+/**
+ * Chuỗi người khai bấm một lần cho cả lô (khai chính thức cả lô, gọi về tất cả): tờ k vừa SENT → `pick` chọn tờ kế tiếp + nghiệp vụ, gửi
+ * qua performOperationChecked (cùng guard với người khai bấm, trừ kiểm vai trò – worker không có phiên). Bị từ chối thì không tới đây (chỉ nối khi SENT) –
+ * người khai xử lý tờ đó rồi bấm lại (chỉ gửi tờ còn lại).
+ * Idempotent khi job chạy lại sau SENT (ADR 0005 – không tự gửi lại thông điệp Hải quan có thể đã nhận):
+ * (1) đã có outbox cùng loại chuỗi ở tờ sau, tạo cùng/sau outbox này → chuỗi đã đi tiếp (hoặc đang chờ người khai Gửi lại) – không tạo thêm;
+ * (2) khóa tất định theo outbox nguồn (`chainFrom`) → bản chạy lại song song trùng khóa (ALREADY_SUBMITTED) = đã xếp, không phải lỗi.
+ */
+async function chainSheets(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow, kind: "declare" | "recall", pick: ChainPick): Promise<ChainOutcome> {
+  const snap = await deps.declarations.get(ctx.orgId, ob.dossierId);
+  if (!snap) return NO_CHAIN;
+  const of = branchCount(snap.payload.items.length);
+  const { results, all } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, ob.dossierId), all: await r.outbox.listForDossier(ctx.orgId, ob.dossierId) }));
+  if (all.some((o) => o.id !== ob.id && o.branch > ob.branch && o.createdAt >= ob.createdAt && chainOfOutbox(o) === kind)) return { continued: true };
+  const next = pick({ snap, of, results, all });
+  if (!next) return NO_CHAIN;
+  if (!next.op) return { continued: false, stop: { branch: next.branch, of, error: domainError("INVALID_STATE", `đang chờ phản hồi nghiệp vụ khác của tờ ${next.branch}`), kind } };
+  const res = await performOperationChecked(deps, ctx, ob.dossierId, next.op, next.branch, { chain: kind, chainFrom: ob.id });
+  if (res.ok || res.error.code === "ALREADY_SUBMITTED") return { continued: true };
+  return { continued: false, stop: { branch: next.branch, of, error: res.error, kind } };
 }
 
 /**
- * Chuỗi khai chính thức cả lô: tờ k vừa khai chính thức xong → tờ kế tiếp (branch lớn hơn, trong số tờ hiện tại) có declareOpFor khác null thì gửi IDC/IDE tiếp,
- * qua performOperationChecked (cùng guard với người khai bấm, trừ kiểm vai trò – worker không có phiên). Tờ kế tiếp đã có outbox đang chờ → performOperation chặn (không tạo trùng).
- * Bị từ chối thì không tới đây (chỉ nối khi SENT) – người khai xử lý tờ đó rồi khai chính thức cả lô lại.
+ * Gọi về thành công và không còn lệnh gọi về nào của lần này đang chờ → tự mở lại tờ khai (DRAFT, hồ sơ NEEDS_REVIEW/review – markDraft) để sửa
+ * và duyệt lại (spec §2.3, thay bước bấm "Mở lại để sửa"). Chỉ khi tờ khai đang APPROVED/SUBMITTED (đã DRAFT → không mở lại lần nữa, không ghi audit trùng)
+ * và tờ vừa gọi về vẫn ở giai đoạn đã gọi về (job chạy lại muộn không mở lại tờ khai đã duyệt/truyền lại).
+ * Audit DECLARATION_REOPENED `detail.scope`: "ALL" (gọi về tất cả) hoặc danh sách tờ đang gọi về. Trả số tờ đang gọi về (thông báo).
  */
-async function chainDeclare(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<ChainStop | null> {
+async function reopenAfterRecall(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, ob: OutboxRow): Promise<number> {
   const snap = await deps.declarations.get(ctx.orgId, ob.dossierId);
-  if (!snap) return null;
-  const of = branchCount(snap.payload.items.length);
-  const { results, all } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, ob.dossierId), all: await r.outbox.listForDossier(ctx.orgId, ob.dossierId) }));
-  // Idempotent khi job chạy lại sau SENT (ADR 0005): đã có outbox chuỗi khai chính thức ở tờ sau, tạo cùng/sau outbox này → chuỗi đã đi tiếp (hoặc đang chờ người khai Gửi lại) – không tạo thêm.
-  if (all.some((o) => o.id !== ob.id && o.branch > ob.branch && o.createdAt >= ob.createdAt && (o.payload as { chain?: unknown } | null)?.chain === "declare")) return null;
-  const next = results.filter((r) => r.branch > ob.branch && r.branch <= of).sort((a, b) => a.branch - b.branch).find((r) => declareOpFor(stageOf(r), snap.payload.kind));
-  if (!next) return null;
-  const op = declareOpFor(stageOf(next), snap.payload.kind)!;
-  const res = await performOperationChecked(deps, ctx, ob.dossierId, op, next.branch, { chain: "declare", chainFrom: ob.id });
-  // Trùng khóa (bản chạy lại) = đã xếp, không phải lỗi.
-  return res.ok || res.error.code === "ALREADY_SUBMITTED" ? null : { branch: next.branch, of, error: res.error, declare: true };
+  const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, ob.dossierId));
+  const of = snap ? branchCount(snap.payload.items.length) : 1;
+  const recalled = results.filter((r) => r.branch <= of && !!r.declarationNo && (stageOf(r) === "RECALLED" || stageOf(r) === "AMEND_RECALLED")).map((r) => r.branch).sort((a, b) => a - b);
+  if (!snap || (snap.status !== "APPROVED" && snap.status !== "SUBMITTED") || !recalled.includes(ob.branch)) return recalled.length;
+  await deps.declarations.markDraft(ctx, ob.dossierId);
+  const dossier = await deps.dossiers.get(ctx.orgId, ob.dossierId);
+  await deps.orgAudit?.record(ctx, { action: "DECLARATION_REOPENED", targetType: "dossier", targetId: ob.dossierId, targetLabel: dossier?.code ?? ob.dossierId, detail: { scope: chainOfOutbox(ob) === "recall" ? "ALL" : recalled } });
+  return recalled.length;
 }

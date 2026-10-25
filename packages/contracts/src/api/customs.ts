@@ -122,4 +122,7 @@ export const ResendResultSchema = z.object({ resent: z.boolean(), message: z.str
 /** Kết quả bấm một nghiệp vụ: đã xếp hàng gửi (sent) hoặc đã trả lời ngay (tra cứu); `message` hiện cho người dùng. */
 export const OperationResultSchema = z.object({ sent: z.boolean(), message: z.string() });
 export type OperationResult = z.infer<typeof OperationResultSchema>;
+/** Gọi về tất cả tờ: như OperationResult + các tờ sẽ gọi về (theo thứ tự gửi nối tiếp). */
+export const RecallAllResultSchema = OperationResultSchema.extend({ sheets: z.array(z.number().int().positive()) });
+export type RecallAllResult = z.infer<typeof RecallAllResultSchema>;
 export type ResendResult = z.infer<typeof ResendResultSchema>;

@@ -57,9 +57,12 @@ export class FakeDeclarations implements DeclarationReader {
     this.status = "SUBMITTED";
   }
   readonly reopened: string[] = [];
+  /** Hồ sơ giả gắn kèm: markDraft thật đưa hồ sơ về NEEDS_REVIEW/review (port DeclarationReader.markDraft). */
+  dossiers: FakeDossiers | null = null;
   async markDraft(_ctx: { orgId: string }, dossierId: string) {
     this.reopened.push(dossierId);
     this.status = "DRAFT";
+    for (const d of this.dossiers?.rows ?? []) if (d.id === dossierId) Object.assign(d, { status: "NEEDS_REVIEW", step: "review" });
   }
   async listForCustoms() {
     return [{ dossierId: "dos_1", status: this.status, approvedAt: new Date("2026-10-14T02:00:00.000Z") }];
@@ -98,6 +101,7 @@ export function makeHarness(): Harness {
   const queue = new InMemoryJobQueue();
   const decls = new FakeDeclarations();
   const dossiers = new FakeDossiers([{ id: D, orgId: ORG, code: "HS-NK-2610-021", direction: "NK", typeCode: "A11", partner: "HANSOL", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: T }]);
+  decls.dossiers = dossiers;
   const deps: CustomsDeps = {
     notify: new RecordingNotifier(), uow, queue, gateway: new FakeCustomsGateway({ clearAfterPolls: 2 }), declarations: decls, dossiers,
     validation: { blockerFails: async () => 0 }, certificates: { exists: async (_o, id) => id === "cert_1" },

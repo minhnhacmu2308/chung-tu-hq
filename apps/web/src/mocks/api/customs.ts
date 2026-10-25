@@ -3,9 +3,9 @@
 // Khi phản hồi đã đến, settle() áp stageAfter + tác dụng phụ (số tờ khai, phân luồng, mở lại tờ khai, thông quan…).
 import {
   baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
-  awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, recallExempt, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, sheetApproved, sheetOrderWait, stageAfter,
+  awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, isActiveSheet, recallOpFor, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, sheetApproved, sheetOrderWait, stageAfter,
   declarationEditScope, editBlockFor, sheetOfLine, type DeclarationEditScope, type DeclarationStatus, type EditSheet, type EditTarget, type SentSnapshot,
-  type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
+  type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type RecallAllResult, type PipelineRow, type PipelineStatus,
   type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
 import { computeTaxes } from "@/mocks/declaration-builder";
@@ -147,14 +147,9 @@ function syncDossierCleared(db: MockDb, dossier: Dossier, force = false) {
   else if (dossier.status === "SUBMITTED" || dossier.status === "APPROVED") Object.assign(dossier, { status: "CLEARED", updatedAt: nowIso() });
 }
 
-const isEditingStage = (st: CustomsStage) => st === "RECALLED" || st === "AMEND_RECALLED";
-
 /** Tờ đã có số tờ khai (khác NOT_SENT) của lô. */
 const numberedSheets = (db: MockDb, dossierId: string) =>
   branchesOf(db.lineItems.filter((i) => i.dossierId === dossierId)).map((sh) => ({ no: sh.no, stage: flowOf(db, dossierId, sh.no).stage })).filter((x) => hasDeclarationNumber(x.stage));
-
-/** Tờ có số còn nhận nội dung tờ khai (R7: tờ đã thông quan / sửa sau thông quan / bị từ chối miễn gọi về). */
-const recallableSheets = (db: MockDb, dossierId: string) => numberedSheets(db, dossierId).filter((x) => !recallExempt(x.stage));
 
 /**
  * Ảnh chụp nội dung tờ `no` như gửi Hải quan (cùng sentSnapshotOf với backend sheetSnapshot): chỉ tiêu tờ khai + TK_DNO (số tờ) + TK_TP (tổng trị giá hóa đơn
@@ -284,8 +279,10 @@ function apply(db: MockDb, c: Ctx) {
   if (b === "IDD") c.flow.clearAt = null;
   if (p.op === "AMA" || p.op === "AMB" || p.op === "AMC") applyPostOperation(db, c.dossier.id, c.branch, p.op, p.doneAt, r?.declarationNo ?? "");
   else if (isRecallOperation(p.op)) {
-    // Lô nhiều tờ: chỉ mở lại tờ khai khi mọi tờ đã có số còn nhận nội dung đều đang gọi về sửa (R3/R7; lô một tờ: như trước).
-    if (recallableSheets(db, c.dossier.id).every((x) => isEditingStage(x.stage))) reopen(db, c.dossier.id);
+    // Gọi về tất cả: còn tờ đích kế tiếp → gọi về tiếp, chưa mở lại (như chainSheets của backend). Hết chuỗi / gọi về một tờ → tự mở lại
+    // khi tờ khai còn APPROVED/SUBMITTED (đã nháp thì giữ nguyên) – như reopenAfterRecall của backend (spec §2.3).
+    const continued = p.chain === "recall" && chainRecall(db, c, at);
+    if (!continued && (c.decl?.status === "APPROVED" || c.decl?.status === "SUBMITTED")) reopen(db, c.dossier.id);
   }
   // Lô nhiều tờ: tờ k khai tạm (lần đầu, hoặc truyền lại sau gọi về) xong → tờ kế tiếp cần gửi nội dung nối tiếp theo giai đoạn của nó
   // (chưa có số / RECALLED → IDA, AMEND_RECALLED → IDA01), bỏ qua tờ không cần gửi (đã thông quan…) – như chainNextBranch của backend.
@@ -319,6 +316,26 @@ function chainDeclare(db: MockDb, c: Ctx, at: number) {
     const text = e instanceof ApiError ? e.message : String(e);
     db.customsMessages.push(message(c.dossier.id, op, "IN", "ERROR", `Tờ ${no}/${c.of}: chưa khai chính thức tự động – ${text}`, at, { error: text }, no));
   }
+}
+
+/** Tờ đích của gọi về tất cả (như recallTargets của backend): tờ còn hiệu lực ở Hải quan + nghiệp vụ gọi về đang bật (null = đang chờ phản hồi). */
+function recallTargetsOf(db: MockDb, dossierId: string) {
+  return numberedSheets(db, dossierId)
+    .filter((x) => isActiveSheet({ stage: x.stage, declarationNo: "x" }))
+    .map((x) => ({ no: x.no, op: recallOpFor(operationAvailability(availabilityInput(db, load(db, dossierId, x.no)))) }));
+}
+
+/** Gọi về tất cả: tờ k gọi về xong → gọi về tờ đích kế tiếp. Tờ đó chưa gọi về được → ghi lỗi trên tờ, dừng. Trả true khi đã gửi tiếp. */
+function chainRecall(db: MockDb, c: Ctx, at: number): boolean {
+  const next = recallTargetsOf(db, c.dossier.id).find((t) => t.no > c.branch);
+  if (!next) return false;
+  if (!next.op) {
+    const text = `đang chờ phản hồi nghiệp vụ khác của tờ ${next.no}`;
+    db.customsMessages.push(message(c.dossier.id, opFor(c.dossier.direction, "IDB"), "IN", "ERROR", `Tờ ${next.no}/${c.of}: chưa gọi về tự động – ${text}`, at, { error: text }, next.no));
+    return false;
+  }
+  send(db, load(db, c.dossier.id, next.no), next.op, at, "recall");
+  return true;
 }
 
 /** Thông quan mô phỏng: hỏi trạng thái định kỳ (IID/IEX) trả "Đã thông quan". */
@@ -862,6 +879,23 @@ export const listCustomsDeclarations = () =>
       });
     const latest = (g: CustomsRow[]) => g.map((r) => r.updatedAt).sort().at(-1)!;
     return groups.sort((a, b) => latest(b).localeCompare(latest(a))).flat();
+  });
+
+/**
+ * Gọi về tất cả tờ (như recallAllSheets của backend): gọi về tờ đích đầu tiên, các tờ sau nối tiếp khi tờ trước xong (apply → chainRecall);
+ * lệnh cuối xong → tự mở lại tờ khai. Lô một tờ / không còn tờ cần gọi về / có tờ đích đang chờ phản hồi → lỗi như backend, không gửi tờ nào.
+ */
+export const recallAllSheets = (dossierId: string) =>
+  mutate((db): RecallAllResult => {
+    settle(db, Date.now());
+    const c = load(db, dossierId);
+    if (c.of <= 1) throw new ApiError("VALIDATION", "Gọi về tất cả chỉ dùng cho lô nhiều tờ");
+    const targets = recallTargetsOf(db, dossierId);
+    if (!targets.length) throw new ApiError("INVALID_STATE", "Không còn tờ nào cần gọi về");
+    const blocked = targets.filter((t) => !t.op);
+    if (blocked.length) throw reasonApiError("INVALID_STATE", "RECALL_ALL_BLOCKED", { sheets: blocked.map((t) => t.no).join(", ") });
+    const first = targets[0]!;
+    return { ...perform(db, dossierId, first.op!, Date.now(), first.no, "recall"), sheets: targets.map((t) => t.no) };
   });
 
 /**

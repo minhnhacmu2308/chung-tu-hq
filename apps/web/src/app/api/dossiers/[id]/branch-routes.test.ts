@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ok = (value: unknown) => ({ ok: true, value });
 const uc = vi.hoisted(() => ({
-  performOperation: vi.fn(), declareAllSheets: vi.fn(), resendOperation: vi.fn(), startPostAmendment: vi.fn(), getPostAmendmentView: vi.fn(), updatePostAmendmentField: vi.fn(),
+  performOperation: vi.fn(), declareAllSheets: vi.fn(), recallAllSheets: vi.fn(), resendOperation: vi.fn(), startPostAmendment: vi.fn(), getPostAmendmentView: vi.fn(), updatePostAmendmentField: vi.fn(),
   addPostAmendmentLines: vi.fn(), removePostAmendmentLine: vi.fn(), approvePostAmendment: vi.fn(), copyPostAmendmentHeader: vi.fn(),
 }));
 const customs = { tag: "customs" };
@@ -41,6 +41,14 @@ describe("route Hải quan theo tờ khai nhánh", () => {
     const res = await call(import("./submission/declare-all/route"), "POST", "/submission/declare-all");
     expect(res.status).toBe(200);
     expect(uc.declareAllSheets).toHaveBeenCalledWith(customs, session.ctx, D);
+  });
+
+  it("gọi về tất cả: không body, gọi recallAllSheets(ctx, hồ sơ), trả sheets", async () => {
+    uc.recallAllSheets.mockResolvedValue(ok({ sent: true, message: "Đang gửi", sheets: [1, 2] }));
+    const res = await call(import("./submission/recall-all/route"), "POST", "/submission/recall-all");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sent: true, message: "Đang gửi", sheets: [1, 2] });
+    expect(uc.recallAllSheets).toHaveBeenCalledWith(customs, session.ctx, D);
   });
 
   it("bắt đầu sửa sau thông quan: branch trong thân (thân rỗng {} → tờ 1)", async () => {

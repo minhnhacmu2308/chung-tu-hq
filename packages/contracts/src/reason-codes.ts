@@ -60,6 +60,7 @@ export const REASON_TEXT_VI = {
   SHEET_COUNT_CHANGED: "Đã khai {planned} tờ khai (đã được cấp số) mà lô hàng nay cần {now} tờ – không truyền; hủy tờ khai thừa hoặc khai lại trước",
   SHEET_ORDER: "Tờ {sheet}: chờ tờ {waitFor} gửi nội dung trước – truyền theo thứ tự tờ khai",
   SHEET_ORDER_DECLARE: "Tờ {sheet}: chờ tờ {waitFor} khai tạm xong trước khi khai chính thức",
+  RECALL_ALL_BLOCKED: "Tờ {sheets} chưa gọi về được lúc này (đang chờ phản hồi nghiệp vụ khác) – chờ xong rồi gọi về tất cả",
   AMENDMENT_NOT_APPROVED: "Bản khai bổ sung chưa được phê duyệt",
   AMENDMENT_NOT_TRANSMITTABLE: "Bản khai bổ sung chưa gửi được: {blockers}",
   CERTIFICATE_REQUIRED: "Chọn chứng thư số để ký",

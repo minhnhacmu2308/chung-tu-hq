@@ -52,6 +52,7 @@ Mỗi doanh nghiệp (1 MST) là một **organization**. Đăng nhập bằng **
 | Skill AI | Cấu hình cách đọc 1 loại chứng từ: trường chuẩn theo danh mục (`DOC_CATALOG`) + **trường bổ sung riêng** của doanh nghiệp (AI đọc thật), alias nhãn, ví dụ đã duyệt | `Skill` |
 | Mặc định khai báo | Giá trị mặc định (loại hình, chi cục, kho, PTTT…) và nguồn từng chỉ tiêu trong phạm vi quy tắc cho phép – Cài đặt → Khai báo | `DeclarationProfile` |
 | Tờ khai | IDA/IDC (nhập), EDA/EDC (xuất) theo VNACCS | `Declaration` |
+| Tờ khai nhánh | Lô > 50 dòng hàng tự tách thành N tờ (50 dòng/tờ, theo thứ tự dòng): chỉ tiêu chung giống hệt nhau, chỉ khác dòng hàng và ô 1.2/2.2; mỗi tờ có số tờ khai, phân luồng, thông quan và AMA riêng | nhánh `branch` của `Declaration` (không phải bản ghi riêng) |
 | Dữ liệu số hóa | Bản dữ liệu chuẩn hóa của chứng từ (JSON/XML) để lưu trữ và đính kèm HYS | `DigitizedDocument` |
 
 **Nghiệp vụ VNACCS dùng trong sản phẩm** (gọi qua Customs Hub):
@@ -107,6 +108,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 - **Ô bắt buộc còn trống → khóa Phê duyệt**: khung "Còn N chỉ tiêu bắt buộc chưa nhập" liệt kê ô, nút **Đến ô cần xử lý** mở panel sửa ô. Bắt buộc = Phụ lục II (M, hoặc C khi tình huống áp dụng) + ô FPT.VNACCS bắt buộc người khai nhập (ô phần mềm tự điền và ô APP_* không tính). Một quy tắc (`@kb/contracts` requiredGaps) cho giao diện, mock và backend.
 - Tỷ giá tính thuế: tỷ giá mua chuyển khoản Vietcombank cuối ngày thứ Năm tuần trước, áp cho tờ khai đăng ký trong tuần (tự lấy tối thứ Năm; đội vận hành sửa/nhập tay ở khu Quản trị → Tỷ giá tính thuế). Không dùng tỷ giá trên chứng từ forwarder. Màn Review hiện tuần + nguồn tỷ giá; tờ khai dựng tuần trước bị chặn truyền khi sang tuần mới (mở lại để dựng lại).
 - Incoterm EXW/FCA/FAS/FOB: hiển thị rõ cước, bảo hiểm, phí nước ngoài được cộng vào trị giá tính thuế và nguồn của từng khoản (hóa đơn cước, Arrival Notice).
+- **Lô > 50 dòng** (vd 120 dòng → 3 tờ 50/50/20, tách lúc dựng tờ khai): thanh chọn tờ **Tờ 1/3 · dòng 1–50**; dòng hàng, tổng trị giá/thuế, ô 1.2 và bản in theo tờ đang chọn; khối chỉ tiêu chung ghi **Áp dụng cho cả 3 tờ khai** (sửa ở tờ nào cũng là sửa chung). Duyệt **cả bộ một lần**.
 
 ### Bước 6 – Khai báo Hải quan
 - Chọn **chứng thư số** dùng để ký (vd "CÔNG TY TNHH … – VNPT-CA, hết hạn 12/2027").
@@ -114,6 +116,8 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 - **Kết quả từ Hải quan**: số tờ khai, phân luồng (xanh/vàng/đỏ + diễn giải), trạng thái (vd Đã thông quan), thuế HQ tính, thời điểm cập nhật.
 - **Nhật ký thông điệp**: mỗi lần gửi/nhận một dòng (nghiệp vụ, kết quả, thời điểm), mở rộng xem chi tiết.
 - **Chặn truyền** khi còn luật BLOCKER = FAIL, HS chưa xác nhận, chưa được phê duyệt, còn ô bắt buộc trống (kiểm lại lúc Ký số & khai tạm) hoặc thông điệp sai đặc tả FPT – chặn trước khi đánh dấu đã khai.
+- **Lô nhiều tờ khai**: kiểm chặn truyền trên từng tờ (một tờ không đạt → không gửi tờ nào). Bấm **Ký số & khai tạm** một lần → **khai tạm nối tiếp**: tờ 1 có số → tự khai tạm tờ 2 (ô 1.2 = số tờ khai tờ 1) → tờ 3…; tờ lỗi thì dừng ở đó, các tờ sau ghi "Chờ tờ k", Gửi lại xong chạy tiếp. Mỗi tờ một thẻ **Tờ k/N – số tờ khai** với phân luồng, việc tiếp theo, nghiệp vụ (IDC, tra cứu, gọi sửa…) và nhật ký riêng. Sửa khi đã có số: phải **gọi về sửa (IDB/IDD) đủ mọi tờ đã có số** rồi mới mở lại / truyền lại cả bộ (thiếu tờ nào → báo "Tờ k: gọi về sửa (IDB/IDD) trước").
+- **Thông quan theo từng tờ**: hồ sơ hiện **Thông quan k/N** (danh sách hồ sơ, đầu hồ sơ) tới khi mọi tờ thông quan mới thành "Đã thông quan"; tờ bị từ chối / lỗi gửi có cảnh báo "Tờ k: …". Tờ đã thông quan làm **AMA của riêng tờ đó** ngay (nút Sửa đổi sau thông quan trên thẻ tờ); sửa chỉ tiêu chung trên AMA một tờ → cảnh báo các tờ khác còn giá trị cũ + nút **Tạo AMA cùng nội dung cho các tờ đã thông quan khác** (không bắt buộc đồng bộ; mỗi bản duyệt và khai riêng).
 
 ## 5. Màn hình
 
@@ -124,7 +128,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 | Hồ sơ khai báo | Danh sách, lọc theo trạng thái/bước/hạn; mở hồ sơ vào đúng bước đang dở |
 | Tạo hồ sơ | Bước 1 |
 | Chi tiết hồ sơ | Thanh 6 bước + màn của bước hiện tại (bước 2–6) |
-| Khai báo Hải quan | Danh sách tờ khai đã/đang truyền: hồ sơ, nghiệp vụ, số tờ khai, phân luồng, trạng thái, cập nhật |
+| Khai báo Hải quan | Danh sách tờ khai đã/đang truyền: hồ sơ, nghiệp vụ, số tờ khai, phân luồng, trạng thái, cập nhật. Lô nhiều tờ: mỗi tờ một dòng, cột **Tờ** ghi "2/3" |
 | Cấu hình Skill AI | Danh sách skill (theo chứng từ, theo nhà cung cấp) kèm **độ chính xác đo trên mẫu đã gắn nhãn**. Chi tiết skill: tên, loại chứng từ, ngôn ngữ; bảng trường (mã, tên hiển thị, kiểu, bắt buộc, ánh xạ chỉ tiêu tờ khai); chứng từ mẫu đã gắn nhãn; nút **Đánh giá lại** |
 | Tài khoản & tích hợp | Thông tin doanh nghiệp (MST khóa), gói dịch vụ, thành viên & vai trò, kết nối hệ thống (hscodepro, Customs Hub, dịch vụ AI) kèm trạng thái, chứng thư số, ngưỡng hiển thị trường nghi ngờ |
 
@@ -153,6 +157,7 @@ Nguyên tắc tích hợp (chi tiết ở ADR 0005):
 5. Cảng dỡ hàng: nếu cảng trên B/L là cảng chuyển tải ở nước ngoài, dùng điểm đến cuối tại Việt Nam.
 6. Xuất xứ ưu đãi: C/O (form E, D, AK, VK…) hoặc tự chứng nhận REX (EVFTA) phải khớp invoice; bản tra cứu REX cũ cần tra lại.
 7. Không truyền tờ khai khi còn BLOCKER hoặc chưa phê duyệt.
+8. Mỗi tờ khai tối đa 50 dòng hàng; lô lớn hơn tự tách N tờ, chỉ tiêu chung (kể cả tổng trị giá hóa đơn, cước, bảo hiểm, khoản điều chỉnh cả lô) giống hệt trên mọi tờ; tổng trị giá tính thuế và thuế dự kiến các tờ cộng lại đúng bằng cả lô. Lô ≤ 50 dòng khai như trước.
 
 ## 8. Gói dịch vụ & chi phí
 

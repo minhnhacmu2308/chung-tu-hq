@@ -1,6 +1,6 @@
 # Quy trình nghiệp vụ KhaiBáo AI
 
-> Cập nhật 2026-10-21 theo code hiện tại (nhánh `main`). Tài liệu này mô tả **hệ thống đang chạy thế nào**. Định hướng sản phẩm: `docs/PRODUCT.md`; kiến trúc: `docs/ARCHITECTURE.md`; quyết định: `docs/adr/`.
+> Cập nhật 2026-10-25 theo code hiện tại (nhánh `main`). Tài liệu này mô tả **hệ thống đang chạy thế nào**. Định hướng sản phẩm: `docs/PRODUCT.md`; kiến trúc: `docs/ARCHITECTURE.md`; quyết định: `docs/adr/`.
 > Căn cứ pháp lý chính: Phụ lục II TT39/2018/TT-BTC sửa đổi bởi TT121/2025/TT-BTC (hiệu lực 01/02/2026), CV 2061/TCHQ-GSQL.
 
 ## Mục lục
@@ -97,7 +97,7 @@ stateDiagram-v2
   APPROVED --> NEEDS_REVIEW: Mở lại tờ khai / gọi sửa
   APPROVED --> SUBMITTED: Khai tạm (IDA/EDA)
   SUBMITTED --> NEEDS_REVIEW: Gọi sửa (IDB/IDD) → sửa
-  SUBMITTED --> CLEARED: Hải quan thông quan
+  SUBMITTED --> CLEARED: Hải quan thông quan (lô nhiều tờ: mọi tờ)
   CLEARED --> NEEDS_REVIEW: Sửa sau thông quan
   DRAFT --> CANCELLED: Hủy
   NEEDS_REVIEW --> CANCELLED: Hủy
@@ -188,9 +188,9 @@ Luật **BLOCKER = FAIL chặn phê duyệt và truyền**. Luật có ghi "NK" 
 
 | Mức | Luật |
 |---|---|
-| **BLOCKER** | Tổng trị giá invoice = Σ dòng hàng · Tối đa 50 dòng/tờ khai (phải tách tờ khai) · Trị giá dòng ≤ 12 chữ số phần nguyên · Trọng lượng Packing List khớp vận đơn · Số chữ số tổng trọng lượng theo phương thức vận chuyển (không: 8+1, khác: 6+3) · Số kiện PL khớp vận đơn · Số kiện là số nguyên dương · Cước vận chuyển để cộng trị giá khi EXW/FCA/FAS/FOB (NK) · Điều kiện giao hàng có trong bảng mã (DPU chỉ tờ khai nhập) · Số AWB ≤ 20 ký tự · Danh sách container theo phương thức vận chuyển (tờ khai xuất hàng container phải có số container – TT121) · Mã nước đối tác ISO 2 ký tự · Hàng chương 84/85 khai MO/CU (CV 2061, NK) |
+| **BLOCKER** | Tổng trị giá invoice = Σ dòng hàng · Số tờ khai đổi sau khi đã có số tờ khai (sửa dòng hàng làm lô 3 tờ thành 2 hoặc ngược lại – hủy tờ thừa / khai lại trước khi truyền) · Trị giá dòng ≤ 12 chữ số phần nguyên · Trọng lượng Packing List khớp vận đơn · Số chữ số tổng trọng lượng theo phương thức vận chuyển (không: 8+1, khác: 6+3) · Số kiện PL khớp vận đơn · Số kiện là số nguyên dương · Cước vận chuyển để cộng trị giá khi EXW/FCA/FAS/FOB (NK) · Điều kiện giao hàng có trong bảng mã (DPU chỉ tờ khai nhập) · Số AWB ≤ 20 ký tự · Danh sách container theo phương thức vận chuyển (tờ khai xuất hàng container phải có số container – TT121) · Mã nước đối tác ISO 2 ký tự · Hàng chương 84/85 khai MO/CU (CV 2061, NK) |
 | **WARNING** | Số invoice trên chứng từ khác khớp · Đơn giá × số lượng = trị giá dòng (±1) · Số lượng ≤ 2 chữ số thập phân · Mô tả hàng ≤ 200 ký tự · Xuất xứ C/O khớp invoice · Phí bảo hiểm phù hợp điều kiện giao hàng (NK) · Cảng dỡ phải ở Việt Nam (NK) · Thứ tự ngày chứng từ (NK) · Tên/địa chỉ đối tác vừa ô khai · Hàng đóng chung container · Mã địa điểm lưu kho |
-| **INFO** | Người mua trên invoice là doanh nghiệp theo MST (NK) · HS trên invoice chỉ tham khảo 6 số |
+| **INFO** | Lô hàng > 50 dòng – thông báo sẽ khai N tờ khai (vd 50/50/20, xem 9.3) · Người mua trên invoice là doanh nghiệp theo MST (NK) · HS trên invoice chỉ tham khảo 6 số |
 
 ## 7. Bước 4 – AI Agent: mã HS, dựng tờ khai, số hóa
 
@@ -253,6 +253,8 @@ flowchart LR
 
 **Mở lại tờ khai**: được khi đã duyệt mà chưa truyền, hoặc truyền bị từ chối trước khi có số tờ khai. Đã có số tờ khai thì phải dùng nghiệp vụ gọi sửa ở bước 6.
 
+**Lô > 50 dòng** (xem 9.3): bản in có thanh chọn tờ **Tờ 1/3 · dòng 1–50**; dòng hàng (đánh số 1..50 theo tờ, số dòng gốc giữ trong dữ liệu), tổng trị giá/thuế và ô 1.2/2.2 hiện theo tờ đang chọn, In / Lưu PDF in tờ đang chọn. Khối chỉ tiêu chung có ghi chú **Áp dụng cho cả N tờ khai** – sửa ở tờ nào cũng là sửa chung. Số ô cần xử lý hiện trên từng tờ của thanh chọn. Một nút **Phê duyệt** duyệt cả bộ.
+
 ## 9. Bước 6 – Khai báo Hải quan (12 nghiệp vụ)
 
 Màn sắp theo **dòng đời tờ khai**: đầu trang là số tờ khai, phân luồng và nút **Tra cứu trạng thái**; khung **Việc tiếp theo** gợi ý nút chính; bên dưới là 4 giai đoạn. Nút chỉ bấm được đúng lúc, nút khóa có ghi lý do.
@@ -301,6 +303,38 @@ stateDiagram-v2
 - Kết nối FPT.VNACCS thật hiện hỗ trợ IDA/IDC/EDA/EDC, HYS, AMA (payload theo VNACCS_AMA v1.3; đường dẫn /api/AMA và vị trí số tờ khai bổ sung trong phản hồi là suy luận, cần đối chiếu) và tra cứu. Các nghiệp vụ còn lại báo "chưa kết nối FPT" cho tới khi có đặc tả API. Môi trường dev/demo dùng cổng giả lập đủ 12 nghiệp vụ.
 
 Chi tiết thiết kế: `docs/superpowers/specs/2026-10-15-luong-nghiep-vu-hai-quan-design.md`.
+
+### 9.3 Lô trên 50 dòng – tách tờ khai nhánh
+
+Mỗi tờ khai VNACCS tối đa 50 dòng hàng (TT39 PL II, chỉ tiêu 1.2/2.2). Lô nhiều hơn 50 dòng được **tách khi dựng tờ khai**, không phải làm ngoài hệ thống.
+
+```mermaid
+flowchart LR
+  A[Dựng tờ khai<br/>120 dòng] --> B[3 tờ nhánh<br/>50 / 50 / 20] --> C[Duyệt cả bộ<br/>một lần] --> D[Ký số & khai tạm<br/>một lần]
+  D --> E[Tờ 1 IDA → có số] --> F[Tờ 2 IDA<br/>1.2 = số tờ 1] --> G[Tờ 3 IDA]
+  E & F & G --> H[IDC, thông quan, AMA<br/>theo từng tờ]
+```
+
+- **Chia dòng**: `of = max(1, ⌈số dòng / 50⌉)`; tờ k gồm dòng `(k−1)·50+1 … k·50` theo thứ tự dòng hàng. Một bản ghi tờ khai (chỉ tiêu chung + mọi dòng); các tờ là **nhánh suy ra** khi hiển thị và khi dựng thông điệp. Chỉ kết quả truyền (số tờ khai, giai đoạn, phân luồng, thông điệp, AMA) lưu theo tờ.
+- **Chỉ tiêu chung giống hệt nhau trên mọi tờ** (kể cả tổng trị giá hóa đơn, cước, bảo hiểm, khoản điều chỉnh – khai đủ số tiền cả lô). Chỉ khác, và tự điền khi `of > 1`: 1.2/2.2 ô 1 `TK_FIC` = **F** ở tờ 1, tờ 2..N = số tờ khai của tờ 1; ô 2/3 = số thứ tự tờ / tổng số tờ. Cũng tự điền giống nhau trên mọi tờ: 1.51/2.42 `TK_TP` = tổng trị giá hóa đơn cả lô (người khai sửa tay thì giữ) và 1.49 ô 5 `KTG_VT` = giá trị đó để VNACCS phân bổ khoản điều chỉnh. Trị giá tính thuế và thuế dự kiến của tờ = cộng các dòng của tờ (đã phân bổ trên cả lô) → tổng các tờ đúng bằng cả lô.
+- **Lô ≤ 50 dòng**: một tờ, thông điệp FPT, khóa gửi và nhật ký sửa giống hệt trước khi có tính năng.
+- **Truyền**: guard bất biến 7, ô bắt buộc, tỷ giá đúng tuần và dựng thông điệp FPT chạy trên **từng tờ** trước khi gửi bất kỳ tờ nào; một tờ không đạt → không gửi tờ nào, lỗi nêu "Tờ k/N". Bấm **Ký số & khai tạm** một lần → hệ thống **khai tạm nối tiếp**: tờ 1 có số tờ khai thì worker tự khai tạm tờ 2 (ngoại lệ duy nhất của quy tắc "worker không tự gửi nghiệp vụ kế tiếp"), rồi tờ 3… Tờ nào bị từ chối / lỗi gửi thì chuỗi dừng ở đó, các tờ sau giữ "Chờ tờ k"; **Gửi lại** tờ đó thành công thì chuỗi chạy tiếp. Khóa idempotency tờ ≥ 2 thêm `:b<no>` (tờ 1 giữ dạng cũ).
+- **Sau khai tạm**: mỗi tờ một thẻ **Tờ k/N – số tờ khai** (giai đoạn, phân luồng, việc tiếp theo, nghiệp vụ và nhật ký thông điệp của tờ). IDC/EDC, tra cứu, gọi sửa, HYS… bấm theo từng tờ; hỏi trạng thái định kỳ chạy cho từng tờ.
+- **Sửa khi đã có số tờ khai (trước thông quan)**: chỉ tiêu chung dùng chung nên mở lại là **mở cả bộ**. Lô nhiều tờ chỉ mở lại / truyền lại được khi **mọi tờ đã có số đều đang được gọi về sửa** (IDB → RECALLED hoặc IDD → AMEND_RECALLED); còn tờ nào chưa gọi về → từ chối với lý do `SHEETS_RECALL_FIRST` "Tờ k: gọi về sửa (IDB/IDD) trước" – nếu không, Hải quan giữ giá trị cũ trên tờ đó. Worker không tự gọi về. Sửa → duyệt lại cả bộ → gửi lại nội dung từng tờ theo giai đoạn của tờ (IDA hoặc IDA01), nối tiếp như lần đầu. Tờ đã thông quan chỉ sửa qua AMA nên cũng chặn mở lại.
+- **Số tờ đổi sau khi có số tờ khai** (sửa dòng hàng làm 3 tờ thành 2 hoặc ngược lại) → luật BLOCKER chặn truyền tới khi hủy tờ thừa / khai lại.
+- **Thông quan theo từng tờ**: tờ thông quan trước làm tiếp việc sau thông quan ngay. Trạng thái hồ sơ là gộp, không thêm giá trị mới:
+
+| Tình huống | `dossiers.status` | Hiển thị (danh sách, đầu hồ sơ) |
+|---|---|---|
+| Chưa tờ nào thông quan | SUBMITTED | Đã truyền |
+| Một số tờ thông quan | SUBMITTED | **Thông quan k/N** |
+| Mọi tờ thông quan | CLEARED | Đã thông quan |
+| Có tờ bị từ chối / lỗi gửi | giữ nguyên | kèm "Tờ k: bị từ chối / lỗi gửi" |
+
+- **AMA theo từng tờ**: nút **Sửa đổi sau thông quan** trên thẻ tờ đã thông quan mở bước 7 của tờ đó (`?branch=k`), đầu bước ghi "Tờ k/N – số tờ khai …", chọn tờ khi có ≥ 2 tờ đã thông quan. Bản khai bổ sung tham chiếu số tờ khai của tờ, chỉ gồm dòng của tờ, số lần khai bổ sung đếm riêng từng tờ, `field_audit` tờ ≥ 2 có khóa `ama:b<no>:<seq>:…`. Sửa **chỉ tiêu chung** (đầu VN_AMA) trên AMA một tờ → cảnh báo "Chỉ tiêu chung – tờ … vẫn giữ giá trị cũ" và nút **Tạo AMA cùng nội dung cho các tờ đã thông quan khác** (lập hoặc cập nhật bản nháp của từng tờ đã thông quan; tờ chưa thông quan, bản khai không còn nháp hoặc tờ đang chờ phản hồi thì bỏ qua và ghi lý do). Mỗi bản vẫn duyệt và khai riêng; không bắt buộc đồng bộ.
+- **Màn Khai báo Hải quan**: mỗi tờ một dòng, cột **Tờ** ghi "2/3" (cột chỉ hiện khi danh sách có lô nhiều tờ), số tờ khai, trạng thái và phân luồng riêng.
+
+Đặc tả: `docs/superpowers/specs/2026-10-24-tach-to-khai-50-dong-design.md`.
 
 ## 10. Cấu hình doanh nghiệp
 
@@ -421,4 +455,5 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 | Hộp thư chứng từ | Chưa tự lấy định kỳ; chưa nhận XML hóa đơn điện tử; chưa tự tạo hồ sơ từ email; gmail.readonly cần Google verification + CASA khi mở công khai (Testing tối đa 100 người dùng) |
 | Danh mục hàng hóa | Chưa dùng danh mục khi dựng tờ khai (khớp hàng → lấy HS, bỏ qua HSCodePro); mặt hàng tự thêm khi duyệt chưa có số tờ khai (số chỉ có sau khi truyền); duyệt lại tờ khai đã mở lại sẽ tăng số lần khai thêm lần nữa |
 | Chi phí | HSCodePro và Customs Hub ghi theo đơn giá cấu hình (mặc định 0 – chưa có giá hợp đồng); chưa có lịch sử giá theo thời gian (đổi đơn giá không tính lại sự kiện cũ) |
+| Tách tờ khai > 50 dòng | Chỉ chia theo thứ tự dòng (không theo biểu thuế, C/O…); chưa chuyển dòng giữa các tờ bằng tay; chưa tách vì lý do khác (TN-TX, quá giới hạn container 2.60); số tờ đổi sau khi có số chỉ chặn, chưa có nghiệp vụ hủy tờ thừa |
 | Khác | Hủy tờ khai (Mẫu 06), tách vận đơn (Mẫu 12), khai danh sách container qua HYS, đóng chung container nhiều tờ khai xuất (Mẫu 15); đại lý khai hộ nhiều doanh nghiệp; app mobile |

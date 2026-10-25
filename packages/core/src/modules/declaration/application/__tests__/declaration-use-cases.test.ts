@@ -6,6 +6,7 @@ import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { RecordingNotifier } from "../../../../shared/notifier.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
+import { reasonError } from "../../../../shared/errors.js";
 import { DOSSIER, hansol, ORG } from "../../domain/test/shipment.js";
 import { getAgentRun, runAgent, startAgentRun } from "../agent-run.js";
 import { refreshFromShipment } from "../customs-bridge.js";
@@ -284,6 +285,23 @@ describe("HS và tờ khai", () => {
     expect(errCode(await confirmHs(deps, declarant, (unwrap(await listLineItems(deps, declarant, D)))[0]!.id, "8482.10.00"))).toBe("DOSSIER_LOCKED");
     expect(errCode(await moveToReview(deps, declarant, D))).toBe("DOSSIER_LOCKED");
     expect(errCode(await getDeclarationView(deps, other, D))).toBe("NOT_FOUND");
+  });
+
+  it("approve: port sentSheetsGuard (tờ chưa gọi về bị đổi – SENT_SHEETS_CHANGED) chặn duyệt sau mọi kiểm khác; null → duyệt; vai trò vẫn kiểm trước", async () => {
+    await runFull("DECLARATION");
+    for (const it of unwrap(await listLineItems(deps, declarant, D))) unwrap(await confirmHs(deps, declarant, it.id, "8482.10.00"));
+    unwrap(await moveToReview(deps, declarant, D));
+    unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
+    unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));
+    const calls: string[] = [];
+    const changed = reasonError("BLOCKER_FAILED", "SENT_SHEETS_CHANGED", { sheets: "1, 3", fields: "1.51", linesOnly: "0" });
+    deps = { ...deps, sentSheetsGuard: async (orgId, dossierId) => (calls.push(`${orgId}/${dossierId}`), changed) };
+    expect(errCode(await approveDeclaration(deps, declarant, D))).toBe("FORBIDDEN");
+    expect(await approveDeclaration(deps, approver, D)).toMatchObject({ ok: false, error: { code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } } });
+    expect(calls).toContain(`${approver.orgId}/${D}`);
+    expect(dossiers.rows[0]!.status).not.toBe("APPROVED");
+    deps = { ...deps, sentSheetsGuard: async () => null };
+    expect(unwrap(await approveDeclaration(deps, approver, D))).toMatchObject({ status: "APPROVED" });
   });
 });
 

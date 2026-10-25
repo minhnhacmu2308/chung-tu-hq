@@ -19,7 +19,7 @@ import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificat
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import type { MailboxDeps } from "@kb/core/modules/mailbox";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
-import { dossierCustomsSummaries, stageOf, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
+import { checkSentSheets, dossierCustomsSummaries, stageOf, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { createCustomsInfrastructure, createIntegrationInfrastructure, createVnaccsCredentialsReader, envVnaccsCredentials } from "@kb/core/modules/integration/infrastructure";
@@ -256,6 +256,8 @@ function build(): Container {
   customs.usage = serviceUsage;
   // Sửa chỉ tiêu tờ khai theo giai đoạn truyền (chưa khai / sửa đổi bổ sung / đã thông quan).
   declaration.customsStage = async (orgId, dossierId) => stageOf(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.get(orgId, dossierId)));
+  // Duyệt tờ khai lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi Hải quan (SENT_SHEETS_CHANGED).
+  declaration.sentSheetsGuard = (orgId, dossierId) => checkSentSheets(customs, orgId, dossierId);
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
   // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
   mailbox.audit = identity.audit;

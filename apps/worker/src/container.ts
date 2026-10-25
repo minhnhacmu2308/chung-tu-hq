@@ -8,6 +8,7 @@ import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastruc
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { createCustomsInfrastructure } from "@kb/core/modules/integration/infrastructure";
+import { checkSentSheets } from "@kb/core/modules/integration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skill";
@@ -132,6 +133,8 @@ export function buildContainer() {
   validation.branches = async (orgId, dossierId) => lockedSheetCount(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.listForDossier(orgId, dossierId)));
   customs.notify = notify;
   customs.usage = serviceUsage;
+  // Duyệt tờ khai lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi Hải quan (SENT_SHEETS_CHANGED).
+  declaration.sentSheetsGuard = (orgId, dossierId) => checkSentSheets(customs, orgId, dossierId);
   // Hộp thư chứng từ: lấy thư Gmail / Outlook, file lưu cùng kho chứng từ.
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
   // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.

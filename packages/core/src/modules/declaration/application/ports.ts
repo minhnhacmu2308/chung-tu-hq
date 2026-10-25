@@ -1,4 +1,5 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
+import type { DomainError } from "../../../shared/errors.js";
 import type { ValueCharges, AgentMode, CustomsStage, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
@@ -190,6 +191,11 @@ export type DeclarationDeps = {
   notify?: Notifier;
   /** Giai đoạn truyền Hải quan của hồ sơ (module integration; container nối) – chặn sửa chỉ tiêu theo giai đoạn. Không nối → coi như chưa khai. */
   customsStage?: (orgId: string, dossierId: string) => Promise<CustomsStage>;
+  /**
+   * Lô nhiều tờ: tờ chưa gọi về (còn hiệu lực ở Hải quan) mà nội dung tờ khai hiện tại khác nội dung đã gửi → lỗi SENT_SHEETS_CHANGED, chặn duyệt
+   * (module integration; container nối – spec tách tờ khai §2.5). Không nối → không kiểm.
+   */
+  sentSheetsGuard?: (orgId: string, dossierId: string) => Promise<DomainError | null>;
   /** Ghi chi phí HSCodePro vào usage_events (module billing; container nối). Không nối → không ghi. */
   usage?: ServiceUsageMeter;
   /** Sau khi lưu chi phí người khai nhập: chạy lại luật đối chiếu (container nối với module validation). */

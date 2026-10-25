@@ -6,6 +6,8 @@ import { rowState, stageOf } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, startedOf, toSubmissionView, type BranchInput } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, ResultRow } from "./customs-ports.js";
 import { openAmendmentOf } from "./post-amendment.js";
+import { sentSheetsDiff } from "../domain/branches.js";
+import { sentSheetsOf } from "./sent-sheets.js";
 
 /** Số tờ hiển thị: theo dòng hàng hiện tại, nhưng không ít hơn số nhánh đã có kết quả (tờ đã có số vẫn tồn tại ở Hải quan). */
 const sheetCount = (snap: DeclarationSnapshot | null, results: ResultRow[]) => Math.max(snap ? branchCount(snap.payload.items.length) : 1, ...results.map((r) => r.branch));
@@ -22,6 +24,8 @@ export async function getSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: stri
   }));
   const of = sheetCount(snap, results);
   const hasContainers = (snap?.payload.containers.length ?? 0) > 0;
+  // Lô nhiều tờ: tờ còn hiệu lực có nội dung khác nội dung đã gửi (cùng phép so với guard SENT_SHEETS_CHANGED).
+  const changes = new Map((snap && results.length > 1 ? sentSheetsDiff(snap.payload, sentSheetsOf(results)) : []).filter((d) => d.common.length || d.lines).map((d) => [d.no, { common: d.common, lines: d.lines }]));
   const branches = Array.from({ length: of }, (_, i): BranchInput => {
     const no = i + 1;
     const result = results.find((r) => r.branch === no) ?? null;
@@ -31,6 +35,7 @@ export async function getSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: stri
     return {
       no, of, flow: { direction: dossier.direction, approved, hasContainers },
       messages: messages.filter((m) => m.branch === no), outbox: outbox.filter((o) => o.branch === no), result, polling: polling(result),
+      sentChanges: changes.get(no) ?? null,
     };
   });
   return ok(toSubmissionView({ declarationStatus: snap?.status ?? "NOT_CREATED", hsUnconfirmed: snap?.unconfirmedHs ?? 0, branches }));

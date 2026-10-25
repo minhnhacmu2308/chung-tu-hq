@@ -1,6 +1,6 @@
 // Mô phỏng truyền nhận VNACCS qua Customs Hub: sinh thông điệp theo thời gian.
 // Dùng cho seed (lô đã truyền) và api/customs (lô truyền trong buổi demo). Quy tắc luồng: @kb/contracts customs-flow.
-import { queryOpFor, type CustomsError, type CustomsRejection, type CustomsStage } from "@kb/contracts";
+import { queryOpFor, type CustomsError, type CustomsRejection, type CustomsStage, type SentSnapshot } from "@kb/contracts";
 import { branchRanges } from "@kb/contracts";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import type { CustomsChannel, CustomsMessage, CustomsOperation, CustomsResult, Declaration, Dossier, ExtractedField, DossierDocument } from "./types";
@@ -19,7 +19,12 @@ export const CHANNEL_VI: Record<CustomsChannel, string> = { GREEN: "xanh", YELLO
  */
 export type CustomsFlow = {
   stage: CustomsStage;
-  pending: { op: CustomsOperation; outcome: "OK" | "ERROR"; doneAt: string; errors?: CustomsError[]; /** Chuỗi nối tiếp của lần gửi (khai chính thức cả lô): sau khi xong, khai tờ kế tiếp. */ chain?: "declare" | "recall" } | null;
+  pending: {
+    op: CustomsOperation; outcome: "OK" | "ERROR"; doneAt: string; errors?: CustomsError[]; /** Chuỗi nối tiếp của lần gửi (khai chính thức cả lô): sau khi xong, khai tờ kế tiếp. */ chain?: "declare" | "recall";
+    /** Lô nhiều tờ, gửi nội dung: ảnh chụp nội dung tờ lúc gửi (như outbox.payload.sent ở backend). */ sent?: SentSnapshot;
+  } | null;
+  /** Lô nhiều tờ: nội dung tờ Hải quan đang giữ (như results.raw.sent ở backend) – guard SENT_SHEETS_CHANGED. */
+  sent?: SentSnapshot;
   /** Lần gửi bị từ chối gần nhất (giống results.raw.rejection ở backend). */
   rejection?: CustomsRejection;
   /** Số lần sửa đổi bổ sung (IDE/EDE) và sửa sau thông quan (AMC) thành công. */

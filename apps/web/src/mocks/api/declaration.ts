@@ -1,7 +1,7 @@
 // Bước 4–5: AI Agent (tra HS, ánh xạ, dựng tờ khai, số hóa) và tờ khai nháp (mock).
 // Tiến trình agent mô phỏng theo thời gian: lưu startedAt, tính tiến độ mỗi lần đọc.
 import { appFieldMeta, canEditDeclaration, declarationEditMode, extraFieldIssue, extraFieldMeta, itemFieldIssue, itemFieldMeta, parseItemFieldCode, fieldEditBlock, isDeclarationFieldEditable } from "@kb/contracts";
-import { customsStageOf } from "./customs";
+import { customsStageOf, sentSheetsMockError } from "./customs";
 import { branchesOf } from "@/mocks/customs-sim";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
@@ -324,6 +324,9 @@ export const approveDeclaration = (dossierId: string) =>
     const owner = db.dossiers.find((d) => d.id === dossierId)?.ownerId;
     if (db.org.fourEyes && me?.role !== "OWNER" && owner === db.currentUserId) throw reasonApiError("FORBIDDEN", "FOUR_EYES");
     assertNoGaps(db, decl, "phê duyệt");
+    // Lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi Hải quan (như port sentSheetsGuard của backend).
+    const changed = sentSheetsMockError(db, dossierId);
+    if (changed) throw changed;
     Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
     // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp.
     const fieldValue = (no: string) => decl.fields.find((f) => f.no === no)?.value.trim() || null;

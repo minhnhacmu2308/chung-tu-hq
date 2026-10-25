@@ -1,13 +1,14 @@
 // Gửi nội dung tờ khai theo từng tờ khai nhánh (spec tách tờ khai §6.1–6.4): khóa outbox, ghim phiên bản + lần duyệt, guard từng tờ,
 // và enqueueBranchPreDeclare (chuỗi nối tiếp của worker, người khai bấm, truyền lại sau mở lại). Dùng chung submit / perform / worker.
-import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, orderedOperation, recallExempt, requiredGapsText, sameRateWeek, sheetCountChanged, sheetOrderWait, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
+import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, orderedOperation, requiredGapsText, sameRateWeek, sheetCountChanged, sheetOrderWait, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { branchPayload } from "../domain/branches.js";
+import { branchPayload, sheetSnapshot } from "../domain/branches.js";
 import { buildFptRequest, type DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
+import { resultsSentError } from "./sent-sheets.js";
 
 /** Khóa idempotency outbox. Nhánh 1 giữ đúng dạng cũ (dữ liệu đang chạy không bị gửi trùng); nhánh ≥ 2 thêm `:b<no>`. */
 export const outboxKey = (dossierId: string, op: string, version: number, retry = 0, branch = 1) => `${dossierId}:${op}:v${version}${retry ? `:retry${retry}` : ""}${branch > 1 ? `:b${branch}` : ""}`;
@@ -59,17 +60,6 @@ export function declareOpFor(stage: CustomsStage, kind: "IDA" | "EDA"): CustomsO
   if (stage === "PRE_DECLARED") return opFor(direction, "IDC");
   if (stage === "AMEND_PRE_DECLARED") return opFor(direction, "IDE");
   return null;
-}
-
-/**
- * Truyền lại nội dung / mở lại lô nhiều tờ (spec §6.4, quyết định R3): chỉ tiêu chung dùng chung mọi tờ, nên mọi tờ đã có số tờ khai còn nhận nội dung
- * phải đang được gọi về sửa (RECALLED / AMEND_RECALLED) – nếu không, Hải quan giữ giá trị cũ trên tờ đó. Tờ chưa có số không tính. Worker không tự gọi về (IDB/IDD).
- * Miễn (R7): tờ đã thông quan / sửa sau thông quan / bị từ chối – không nhận nội dung nữa (gọi về không được); lệch chỉ tiêu chung sau thông quan sửa qua AMA (Q8).
- */
-export function recallFirstError(results: Pick<ResultRow, "branch" | "declarationNo" | "state" | "raw">[]): DomainError | null {
-  if (results.length <= 1) return null;
-  const notRecalled = results.filter((r) => r.declarationNo && !recallExempt(stageOf(r)) && stageOf(r) !== "RECALLED" && stageOf(r) !== "AMEND_RECALLED").map((r) => r.branch);
-  return notRecalled.length ? reasonError("INVALID_STATE", "SHEETS_RECALL_FIRST", { sheets: notRecalled.join(", ") }) : null;
 }
 
 /**
@@ -170,6 +160,9 @@ export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: O
   if (!op) return err(domainError("INVALID_STATE", `Tờ ${branch}: không ở giai đoạn gửi nội dung tờ khai`));
   const order = sheetOrderError(results, branch, op);
   if (order) return err(order);
+  // Tờ chưa gọi về (còn hiệu lực ở Hải quan) phải giữ đúng nội dung đã gửi (spec §2.5) – không thì gửi tờ này làm lệch chỉ tiêu chung giữa các tờ.
+  const changed = resultsSentError(snap.payload, results);
+  if (changed) return err(changed);
   const s = sheetOf(snap.payload, branch, branch === 1 ? null : first?.declarationNo ?? null);
   const gaps = gapsError(s);
   if (gaps) return err(gaps);
@@ -183,7 +176,7 @@ export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: O
   if (same.some((o) => o.status === "PENDING" || pinOfOutbox(o) === pin)) return ok(undefined);
   const now = deps.clock.now();
   const key = contentKey(dossierId, op, snap.version, same.length + 1, branch);
-  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: target.raw?.certificateId, pin }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: target.raw?.certificateId, pin, sent: sheetSnapshot(snap.payload, branch) }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
   const toSend = await deps.uow.asOrg(ctx, async (r): Promise<OutboxRow | null> => {
     const existing = await r.outbox.findByKey(ctx.orgId, key);
     if (existing) return existing.status === "PENDING" && existing.attempts === 0 ? existing : null;

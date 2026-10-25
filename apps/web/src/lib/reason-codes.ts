@@ -2,7 +2,7 @@
 // Mã lạ (backend mới hơn giao diện) → giữ câu tiếng Việt của server.
 import type { ReasonCode, ReasonParams } from "@kb/contracts";
 import { fill, type UiLocale } from "@kb/ui";
-import { DOMAIN_ERROR_MESSAGES, REASON_MESSAGES } from "./reason-codes.messages";
+import { DOMAIN_ERROR_MESSAGES, REASON_MESSAGES, REASON_PARAM_MESSAGES } from "./reason-codes.messages";
 
 const has = <T extends object>(o: T, k: string): k is Extract<keyof T, string> => Object.prototype.hasOwnProperty.call(o, k);
 
@@ -12,12 +12,18 @@ const REASONS: Record<UiLocale, Record<ReasonCode, string>> = REASON_MESSAGES;
 /** Mã có trong bộ nhãn của giao diện. */
 export const isKnownReason = (code: string | undefined): code is ReasonCode => code !== undefined && has(REASONS.vi, code);
 
+/** Tham số cần dịch theo ngôn ngữ (server gửi chữ tiếng Việt kèm cờ): SENT_SHEETS_CHANGED chỉ dòng hàng đổi → `fields` = "dòng hàng" theo ngôn ngữ. */
+function localizedParams(code: ReasonCode, params: ReasonParams | undefined, locale: UiLocale): ReasonParams {
+  if (code === "SENT_SHEETS_CHANGED" && String(params?.linesOnly) === "1") return { ...params, fields: REASON_PARAM_MESSAGES[locale].linesOnly };
+  return params ?? {};
+}
+
 /**
  * Câu lý do theo ngôn ngữ: mã đã biết → bộ nhãn (điền `params`); mã lạ/thiếu → `fallback` (câu tiếng Việt server gửi kèm).
  * Tiếng Việt: bộ nhãn vi trùng từng chữ với câu server (có test) nên kết quả như cũ.
  */
 export function reasonText(code: string | undefined, params: ReasonParams | undefined, fallback: string | undefined, locale: UiLocale): string {
-  if (isKnownReason(code)) return fill(REASONS[locale][code], params ?? {});
+  if (isKnownReason(code)) return fill(REASONS[locale][code], localizedParams(code, params, locale));
   return fallback ?? "";
 }
 

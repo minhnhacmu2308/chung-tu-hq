@@ -44,6 +44,13 @@ describe("reasonText", () => {
     expect(rowReason({ reason: "Lô hàng không có container", reasonCode: "NO_CONTAINERS" }, "zh")).toBe("该批货物没有集装箱");
     expect(rowReason({ reason: "Lý do cũ (backend chưa gửi mã)" }, "en")).toBe("Lý do cũ (backend chưa gửi mã)");
   });
+  it("SENT_SHEETS_CHANGED: linesOnly = 1 → `fields` dịch thành dòng hàng / line items / 商品行; = 0 → giữ số chỉ tiêu", () => {
+    const lines = { sheets: "1, 3", fields: "dòng hàng", linesOnly: "1" };
+    expect(reasonText("SENT_SHEETS_CHANGED", lines, undefined, "vi")).toBe(reasonVi("SENT_SHEETS_CHANGED", lines));
+    expect(reasonText("SENT_SHEETS_CHANGED", lines, undefined, "en")).toBe("Sheets 1, 3 were not recalled but their declared content changed (line items) – recall these sheets or undo the change");
+    expect(reasonText("SENT_SHEETS_CHANGED", lines, undefined, "zh")).toBe("第1, 3页未召回，但已申报内容已更改（商品行）——请召回这些页或撤销更改");
+    expect(reasonText("SENT_SHEETS_CHANGED", { sheets: "2", fields: "1.51", linesOnly: "0" }, undefined, "en")).toContain("(1.51)");
+  });
 });
 
 describe("errorText", () => {

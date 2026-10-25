@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Decimal } from "../../../../shared/decimal.js";
 import { buildFptRequest, type DeclarationPayload } from "../declaration-to-fpt.js";
-import { branchPayload, invoiceTotal } from "../branches.js";
+import { branchPayload, invoiceTotal, sentSheetsDiff, sentSheetsError, sheetSnapshot } from "../branches.js";
 
 const mk = (n: number, extra: Partial<DeclarationPayload> = {}): DeclarationPayload => ({
   kind: "IDA", direction: "NK", currency: "USD", containers: [],
@@ -81,5 +81,52 @@ describe("branchPayload – số tờ không hợp lệ", () => {
     const b = branchPayload(mk(n), no, "104000000001");
     expect(b.blockers).toEqual([`Tờ ${no}: không có trong lô (${n === 120 ? 3 : 1} tờ)`]);
     expect(b.payload.items).toEqual([]);
+  });
+});
+
+describe("sheetSnapshot / sentSheetsDiff / sentSheetsError (nội dung đã gửi từng tờ – spec §2.5)", () => {
+  const sent = mk(120, { fields: { MA_LH: { value: "A11" }, CQHQ: { value: "03CE" }, NNK_MST: { value: "0316789012" } } });
+  const sheets = (p: DeclarationPayload, stages: string[] = ["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]) =>
+    stages.map((stage, i) => ({ no: i + 1, stage: stage as "PRE_DECLARED", declarationNo: `10400000000${i + 1}`, sent: sheetSnapshot(sent, i + 1) }));
+  const edit = (f: (p: DeclarationPayload) => void) => {
+    const p = structuredClone(sent);
+    f(p);
+    return p;
+  };
+  const byNo = (p: DeclarationPayload, st?: string[]) => sentSheetsDiff(p, sheets(sent, st));
+
+  it("không đổi gì → mọi tờ không khác", () => {
+    expect(byNo(sent)).toEqual([1, 2, 3].map((no) => ({ no, common: [], lines: false })));
+  });
+  it("đổi TK_FIC (chỉ tiêu riêng từng tờ) → không khác", () => {
+    expect(byNo(edit((p) => { p.fields.TK_FIC = { value: "X" }; })).every((d) => !d.common.length && !d.lines)).toBe(true);
+  });
+  it("đổi CQHQ → common chứa CQHQ ở mọi tờ còn hiệu lực", () => {
+    expect(byNo(edit((p) => { p.fields.CQHQ = { value: "01AB" }; })).map((d) => d.common)).toEqual([["CQHQ"], ["CQHQ"], ["CQHQ"]]);
+  });
+  it("đổi amount dòng 60 (tờ 2) → tờ 2 lines + TK_TP đổi mọi tờ; tờ 1, 3 lines false", () => {
+    const d = byNo(edit((p) => { p.items.find((i) => i.lineNo === 60)!.amount = "99"; }));
+    expect(d.map((x) => x.lines)).toEqual([false, true, false]);
+    expect(d.every((x) => x.common.includes("TK_TP"))).toBe(true);
+  });
+  it("đổi ô HANG.<id dòng 10>.X → chỉ tờ 1 lines", () => {
+    expect(byNo(edit((p) => { p.fields["HANG.i10.X"] = { value: "1" }; })).map((x) => [x.lines, x.common])).toEqual([[true, []], [false, []], [false, []]]);
+  });
+  it("đổi TK_TP (người khai nhập) → common chứa TK_TP", () => {
+    expect(byNo(edit((p) => { p.fields.TK_TP = { value: "1", source: "USER" }; }))[0]!.common).toEqual(["TK_TP"]);
+  });
+  it("tờ RECALLED / CLEARED / không sent → không xét", () => {
+    const p = edit((x) => { x.fields.CQHQ = { value: "01AB" }; });
+    const s = sheets(sent, ["RECALLED", "CLEARED", "PRE_DECLARED"]);
+    s[2] = { ...s[2]!, sent: null as never };
+    expect(sentSheetsDiff(p, s)).toEqual([]);
+  });
+  it("sentSheetsError: liệt kê tờ đổi + tờ còn hiệu lực không có sent (dữ liệu cũ); số chỉ tiêu 1.51", () => {
+    const p = edit((x) => { x.items.find((i) => i.lineNo === 60)!.amount = "99"; });
+    const s = sheets(sent, ["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
+    expect(sentSheetsError(p, s)).toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", fields: "1.51", linesOnly: "0" } });
+    expect(sentSheetsError(sent, s)).toBeNull();
+    const legacy = s.map((x) => (x.no === 3 ? { ...x, sent: null } : x));
+    expect(sentSheetsError(sent, legacy)).toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "3", linesOnly: "1" } });
   });
 });

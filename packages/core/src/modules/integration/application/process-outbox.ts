@@ -15,6 +15,7 @@ import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
 import { applyPostAmendmentResult } from "./post-amendment.js";
 import { syncDossierClearance } from "./poll-status.js";
+import { parseSent } from "./sent-sheets.js";
 import { contentOpFor, declareOpFor, enqueueBranchPreDeclare, outboxVersion, stalePinReason } from "./branch-send.js";
 import { performOperationChecked } from "./perform-operation.js";
 
@@ -165,13 +166,16 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
 
   const failed = !!outcome.errors?.length;
   const nextStage = failed ? stage : stageAfter(stage, op) ?? stage;
-  const { rejection: prevRejection, ...prevRaw } = result.raw ?? {};
+  const { rejection: prevRejection, sent: prevSent, ...prevRaw } = result.raw ?? {};
+  // Lô nhiều tờ: nội dung tờ Hải quan vừa nhận (IDA/IDA01/EDA/EDA01 thành công) = ảnh chụp ghi lúc dựng outbox (spec §2.5). Outbox không mang ảnh chụp
+  // (lô một tờ, outbox cũ) → bỏ ảnh chụp cũ (không còn đúng nội dung Hải quan giữ). Gửi khác / bị từ chối → giữ nguyên.
+  const sent = !failed && isContentOperation(op) && op !== "AMA" ? parseSent((ob.payload as { sent?: unknown } | null)?.sent) : prevSent ?? null;
   // Lỗi có nội dung từ Hải quan → lưu để màn Review gắn vào ô chỉ tiêu; gửi lại thành công cùng nghiệp vụ → xóa.
   const rejection = failed
     ? { operation: op, at: now().toISOString(), errors: outcome.errors!.map((e) => ({ code: e.code, message: e.message, ...(e.solution ? { solution: e.solution } : {}), ...(e.field ? { field: e.field } : {}), ...(e.line ? { line: e.line } : {}) })) }
     : prevRejection && prevRejection.operation !== op ? prevRejection : undefined;
   const raw: ResultRaw = {
-    ...prevRaw, ...(outcome.patch.raw ?? {}), stage: nextStage, ...(rejection ? { rejection } : {}),
+    ...prevRaw, ...(outcome.patch.raw ?? {}), stage: nextStage, ...(rejection ? { rejection } : {}), ...(sent ? { sent } : {}),
     ...(failed ? {} : { done: [...new Set([...(result.raw?.done ?? []), op])] }),
     ...(outcome.side ? { side: { ...(result.raw?.side ?? {}), [op]: outcome.side } } : {}),
     ...(!failed && (b === "IDE") ? { amendments: (result.raw?.amendments ?? 0) + 1 } : {}),

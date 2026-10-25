@@ -10,7 +10,7 @@ export function sheetsOf(s: SubmissionView): BranchSubmission[] {
   return [{
     no: 1, of: 1, stage: s.stage, state: "APPROVED", declarationNo: s.result?.declarationNo ?? null, channel: s.result?.channel ?? null,
     pipeline: s.pipeline, nextOp: s.nextOp, queryOp: s.queryOp, amendments: s.amendments, postAmendments: s.postAmendments, messages: s.messages,
-    result: s.result, customsInfo: s.customsInfo, rejection: s.rejection, inProgress: s.inProgress, started: s.started,
+    result: s.result, customsInfo: s.customsInfo, rejection: s.rejection, inProgress: s.inProgress, started: s.started, sentChanges: null,
   }];
 }
 

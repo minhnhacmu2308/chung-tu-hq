@@ -9,7 +9,7 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
-import { branchPayload } from "../domain/branches.js";
+import { branchPayload, sheetSnapshot } from "../domain/branches.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { buildAmaRequest } from "../domain/post-amendment.js";
@@ -17,8 +17,9 @@ import { coarseState, stageOf } from "../domain/state-machine.js";
 import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { syncDossierClearance } from "./poll-status.js";
+import { resultsSentError } from "./sent-sheets.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
-import { buildSheet, contentKey, declareBlockError, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
+import { buildSheet, contentKey, declareBlockError, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
 
 /** Người gọi không cần vai trò (worker nối tiếp chạy không có phiên người dùng). */
 export type ActorCtx = Pick<Ctx, "orgId" | "userId">;
@@ -62,11 +63,9 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
     const count = sheetCountError(results, of);
     if (count) return err(count);
     if (of > 1) {
-      // Lần truyền mới (tờ khai vừa duyệt lại): mọi tờ đã có số còn nhận nội dung phải đang gọi về sửa (R3, miễn tờ đã thông quan / bị từ chối – R7).
-      if (snap.status === "APPROVED") {
-        const recall = recallFirstError(results);
-        if (recall) return err(recall);
-      }
+      // Tờ chưa gọi về (còn hiệu lực ở Hải quan) phải giữ đúng nội dung đã gửi (spec §2.5, thay R3): cho gọi về một phần, nhưng tờ còn hiệu lực bị đổi → chặn.
+      const changed = resultsSentError(snap.payload, results);
+      if (changed) return err(changed);
       // Tiếp lần truyền đang chạy: tờ đã có outbox nghiệp vụ này ở lần truyền này (bị từ chối / hết lượt – có thể Hải quan đã nhận)
       // → không gửi mới, dùng Gửi lại (luôn tra trạng thái trước, ADR 0005).
       if (snap.status === "SUBMITTED" && outbox.some((o) => o.operation === op && pinOfOutbox(o) === pinOf(snap)))
@@ -112,7 +111,7 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
       if (gaps) return err(gaps);
       const built = buildSheet(sheet);
       if (!built.ok) return built;
-      payload = { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: result.raw?.certificateId, pin: pinOf(snap) };
+      payload = { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: result.raw?.certificateId, pin: pinOf(snap), sent: sheetSnapshot(snap.payload, branch) };
     } else {
       // Lô một tờ: cả tờ khai (như trước).
       const sheet = branchPayload(snap.payload, branch, null);

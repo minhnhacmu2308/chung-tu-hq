@@ -52,7 +52,7 @@ export const REASON_TEXT_VI = {
   REQUIRED_FIELDS_MISSING_SUBMIT: "Còn {n} chỉ tiêu bắt buộc chưa nhập: {fields} – mở lại tờ khai để nhập rồi duyệt lại",
   DECLARATION_NOT_TRANSMITTABLE: "Tờ khai chưa truyền được: {blockers}",
   DECLARATION_SPEC_INVALID: "Tờ khai chưa đúng đặc tả truyền Hải quan: {issues}",
-  SHEETS_RECALL_FIRST: "Tờ {sheets}: gọi về sửa (IDB/IDD) trước",
+  SENT_SHEETS_CHANGED: "Tờ {sheets} chưa gọi về nhưng nội dung đã khai bị đổi ({fields}) – gọi về các tờ này hoặc hoàn tác",
   SHEET_COUNT_CHANGED: "Đã khai {planned} tờ khai (đã được cấp số) mà lô hàng nay cần {now} tờ – không truyền; hủy tờ khai thừa hoặc khai lại trước",
   SHEET_ORDER: "Tờ {sheet}: chờ tờ {waitFor} gửi nội dung trước – truyền theo thứ tự tờ khai",
   SHEET_ORDER_DECLARE: "Tờ {sheet}: chờ tờ {waitFor} khai tạm xong trước khi khai chính thức",

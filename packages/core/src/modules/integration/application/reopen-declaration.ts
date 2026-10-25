@@ -1,10 +1,10 @@
 // Mở lại tờ khai để sửa: hồ sơ APPROVED chưa truyền, hoặc truyền bị FPT từ chối ngay bước khai trước (SEND_FAILED, chưa có số tờ khai).
 // Lô nhiều tờ: chỉ tiêu chung dùng chung → mở lại là mở CẢ BỘ (một tờ khai DRAFT); tờ đã có số giữ giai đoạn, sau duyệt lại truyền lại theo giai đoạn
-// từng tờ (submitDeclaration). Lô nhiều tờ chỉ mở lại khi MỌI tờ đã có số đang gọi về sửa (RECALLED / AMEND_RECALLED – quyết định R3).
+// từng tờ (submitDeclaration). Lô nhiều tờ mở lại được khi chỉ gọi về một phần (bỏ R3): tờ chưa gọi về được bảo vệ bởi guard nội dung đã gửi
+// (SENT_SHEETS_CHANGED lúc duyệt / truyền – spec §2.5).
 import { EDITING_STAGES } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
-import { recallFirstError } from "./branch-send.js";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -20,9 +20,6 @@ export async function reopenDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   const rejectedBeforeNumber = !!result && result.state === "SEND_FAILED" && stageOf(result) === "NOT_SENT" && !result.declarationNo;
   // Đang ở giai đoạn sửa (đã gọi về / mở sửa sau thông quan – ở bất kỳ tờ nào) mà tờ khai đã duyệt lại: mở lại để sửa tiếp, giữ giai đoạn.
   const editing = results.find((r) => EDITING_STAGES.has(stageOf(r)));
-  // Lô nhiều tờ: tờ đã có số chưa gọi về sửa → Hải quan giữ chỉ tiêu chung cũ trên tờ đó; gọi về (IDB/IDD) trước (lô một tờ: như trước).
-  const recall = recallFirstError(results);
-  if (recall && (dossier.status === "APPROVED" || dossier.status === "SUBMITTED" || dossier.status === "CLEARED")) return err(recall);
   if (dossier.status === "APPROVED" && editing) {
     await deps.declarations.markDraft(ctx, dossierId);
     await deps.orgAudit?.record(ctx, { action: "DECLARATION_REOPENED", targetType: "dossier", targetId: dossierId, targetLabel: dossier.code, detail: { stage: stageOf(editing), ...(results.length > 1 ? { branch: editing.branch } : {}) } });

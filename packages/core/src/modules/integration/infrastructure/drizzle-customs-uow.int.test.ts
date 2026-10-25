@@ -6,6 +6,7 @@ import { runSeed } from "../../../db/seed/index.js";
 import { startTestDb, type TestDb } from "../../../db/test-db.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import type { MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import { sentOf } from "../application/sent-sheets.js";
 import { DrizzleCustomsUow } from "./drizzle-customs-uow.js";
 
 let t: TestDb;
@@ -91,6 +92,17 @@ describe("DrizzleCustomsUow – trạng thái theo nhánh tờ khai", () => {
     expect(await locked(A)).toBe(Math.max(...before.map((x) => x.branch)));
     expect(await locked(B)).toBe(0);
     expect(await uow.asOrg(B, (r) => r.results.listForDossier("org_anphat", "dos_br"))).toEqual([]);
+  });
+
+  it("raw.sent (ảnh chụp nội dung đã gửi – jsonb, không cần migration) lưu/đọc lại đúng theo nhánh; nhánh khác không bị ghi; org khác không thấy", async () => {
+    const sent = { common: { CQHQ: "03CE", TK_TP: "1830", "@ADJ": "[]", "@CONT": '["C1"]', "@CUR": "USD" }, lines: '[{"fields":{},"item":{"amount":"15.25","lineNo":51}}]' };
+    await uow.asOrg(A, (r) => r.results.upsert(res("res_sent2", 2, { dossierId: "dos_sent", declarationNo: "104000000002", state: "PRE_DECLARED", raw: { stage: "PRE_DECLARED", sent } })));
+    await uow.asOrg(A, (r) => r.results.upsert(res("res_sent1", 1, { dossierId: "dos_sent", declarationNo: "104000000001", state: "PRE_DECLARED", raw: { stage: "PRE_DECLARED" } })));
+    const rows = await uow.asOrg(A, (r) => r.results.listForDossier("org_anphat", "dos_sent"));
+    expect(rows.find((x) => x.branch === 2)?.raw?.sent).toEqual(sent);
+    expect(sentOf(rows.find((x) => x.branch === 2)!)).toEqual(sent);
+    expect(rows.find((x) => x.branch === 1)?.raw?.sent).toBeUndefined();
+    expect(await uow.asOrg(B, (r) => r.results.listForDossier("org_anphat", "dos_sent"))).toEqual([]);
   });
 
   it("post_amendments: seq 1 của nhánh 1 và nhánh 2 cùng tồn tại; trùng (dossier, branch, seq) bị chặn; lọc theo nhánh", async () => {

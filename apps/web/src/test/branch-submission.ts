@@ -22,7 +22,7 @@ export function branch(no: number, of: number, stage: CustomsStage, over: Partia
     pipeline: pipelineFor(stage), nextOp: null, queryOp: "IID", amendments: 0, postAmendments: 0,
     messages: numbered ? [{ id: `m${no}`, dossierId: "dos_028", operation: "IDA", direction: "IN", result: "OK", summary: `Tờ ${no}: cấp số`, at: AT, payloadPreview: "{}" }] : [],
     result: declarationNo ? { declarationNo, ...(stage === "CLEARED" ? { channel: "GREEN" as const, clearanceStatus: "CLEARED" as const } : {}) } : null,
-    customsInfo: null, rejection: null, inProgress: false, started: numbered,
+    customsInfo: null, rejection: null, inProgress: false, started: numbered, sentChanges: null,
     ...over,
   };
 }

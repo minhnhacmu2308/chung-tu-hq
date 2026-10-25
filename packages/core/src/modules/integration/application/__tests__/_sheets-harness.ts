@@ -8,6 +8,7 @@ import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { RecordingNotifier } from "../../../../shared/notifier.js";
 import type { ProgressEvent } from "../../../dossier/index.js";
 import type { DeclarationPayload } from "../../domain/declaration-to-fpt.js";
+import { sheetSnapshot } from "../../domain/branches.js";
 import type { CustomsDeps, CustomsDossierPort, DeclarationReader, DossierBrief, ResultRow } from "../customs-ports.js";
 import { FakeCustomsGateway } from "../test/fake-customs-gateway.js";
 import { InMemoryCustomsUow } from "../test/in-memory-customs-uow.js";
@@ -42,10 +43,14 @@ export class FakeDeclarations implements DeclarationReader {
   /** Thuế dự tính từng tờ khai nhánh (lô nhiều tờ). */
   branchTaxVnd: string[] | undefined = undefined;
   readonly submitted: string[] = [];
+  /** Payload hiện tại (đồng bộ – dựng ảnh chụp nội dung đã gửi khi gieo kết quả). */
+  payloadNow(): DeclarationPayload {
+    const p = payload(this.kind);
+    return { ...p, fields: { ...p.fields, ...this.fields }, ...(this.items ? { items: structuredClone(this.items) } : {}) };
+  }
   async get(_orgId: string, dossierId: string) {
     if (dossierId === "dos_none") return null;
-    const p = payload(this.kind);
-    return { declarationId: "dec_1", version: this.version, status: this.status, payload: { ...p, fields: { ...p.fields, ...this.fields }, ...(this.items ? { items: structuredClone(this.items) } : {}) }, unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate, approvedAt: this.approvedAt, ...(this.branchTaxVnd ? { branchTaxVnd: this.branchTaxVnd } : {}) };
+    return { declarationId: "dec_1", version: this.version, status: this.status, payload: this.payloadNow(), unconfirmedHs: this.unconfirmedHs, estimatedTaxVnd: "58449312", exchangeRateDate: this.rateDate, approvedAt: this.approvedAt, ...(this.branchTaxVnd ? { branchTaxVnd: this.branchTaxVnd } : {}) };
   }
   async markSubmitted(_ctx: { orgId: string }, dossierId: string) {
     this.submitted.push(dossierId);
@@ -103,11 +108,15 @@ export function makeHarness(): Harness {
 }
 
 export const lines = (n: number): DeclarationPayload["items"] => Array.from({ length: n }, (_, i) => ({ ...payload().items[0]!, lineNo: i + 1, description: `Vòng bi ${i + 1}` }));
-/** Kết quả tờ `branch` ở giai đoạn `stage` (có số tờ khai trừ NOT_SENT). */
-export const seed = (h: Harness, branch: number, stage: string) => {
+/**
+ * Kết quả tờ `branch` ở giai đoạn `stage` (có số tờ khai trừ NOT_SENT). Tờ có số mang ảnh chụp nội dung đã gửi (raw.sent) = payload hiện tại
+ * (Hải quan giữ đúng nội dung đang có); `sent: false` = dữ liệu cũ gửi trước khi có ảnh chụp.
+ */
+export const seed = (h: Harness, branch: number, stage: string, opts: { sent?: boolean } = {}) => {
+  const sent = stage !== "NOT_SENT" && opts.sent !== false ? { sent: sheetSnapshot(h.decls.payloadNow(), branch) } : {};
   const row: ResultRow = {
     id: `res_${branch}`, orgId: ORG, dossierId: D, branch, externalId: `fpt-b${branch}`, declarationNo: `10400000000${branch}`, channel: null, channelNote: null, clearanceStatus: "WAITING",
-    customsTaxVnd: null, state: stage === "CLEARED" ? "CLEARED" : stage === "REJECTED" ? "REJECTED" : stage === "PRE_DECLARED" || stage === "RECALLED" ? "PRE_DECLARED" : "DECLARED", pollCount: 0, raw: { stage, certificateId: "cert_1" } as ResultRow["raw"], updatedAt: T,
+    customsTaxVnd: null, state: stage === "CLEARED" ? "CLEARED" : stage === "REJECTED" ? "REJECTED" : stage === "PRE_DECLARED" || stage === "RECALLED" ? "PRE_DECLARED" : "DECLARED", pollCount: 0, raw: { stage, certificateId: "cert_1", ...sent } as ResultRow["raw"], updatedAt: T,
   };
   h.uow.data.results.push(row);
 };

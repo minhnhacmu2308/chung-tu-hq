@@ -9,6 +9,8 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import type { ProgressEvent } from "../../../dossier/index.js";
 import { lockedSheetCount } from "@kb/contracts";
 import { buildFptRequest, type DeclarationPayload } from "../../domain/declaration-to-fpt.js";
+import { sheetSnapshot } from "../../domain/branches.js";
+import { checkSentSheets } from "../sent-sheets.js";
 import type { CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsUow, DeclarationReader, DossierBrief, MessageRow, OutboxRow, ResultRow } from "../customs-ports.js";
 import { dossierCustomsSummaries, getSubmission, listCustomsDeclarations } from "../get-submission.js";
 import { markOutboxFailed, reopenDeclaration } from "../reopen-declaration.js";
@@ -1282,7 +1284,8 @@ describe("tờ khai nhánh – truyền lần đầu + khai tạm nối tiếp",
 
   it("enqueueBranchPreDeclare: insert vi phạm unique (job song song) → ok, không đẩy job; lỗi DB khác → ném ra", async () => {
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
-    Object.assign(uow.data.results.find((r) => r.branch === 1)!, { declarationNo: "104000000001", raw: { stage: "PRE_DECLARED", certificateId: "cert_1" } });
+    // Tờ 1 đã khai tạm với đúng nội dung hiện tại (ảnh chụp đã gửi – guard SENT_SHEETS_CHANGED).
+    Object.assign(uow.data.results.find((r) => r.branch === 1)!, { declarationNo: "104000000001", raw: { stage: "PRE_DECLARED", certificateId: "cert_1", sent: sheetSnapshot((await decls.get(ORG, D))!.payload, 1) } });
     queue.jobs.length = 0;
     const withInsert = (insert: (row: OutboxRow) => Promise<void>): CustomsUow => ({ asOrg: (c, fn) => uow.asOrg(c, (r) => fn({ ...r, outbox: { ...r.outbox, findByKey: async () => null, insert } })) });
     deps.uow = withInsert(async () => { throw new Error("duplicate key value violates unique constraint customs_outbox_key_uq"); });
@@ -1539,12 +1542,12 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     unwrap(await performOperation(deps, declarant, D, "IDE", 1));
   });
 
-  it("tờ 2 bị từ chối trước khi có số, tờ 1 đã có số → mở lại bị chặn (tờ 1 phải gọi về trước, R3/R4); gọi về tờ 1 → duyệt lại → truyền lại: tờ 1 IDA, tờ 2 IDA lần đầu, tờ 3", async () => {
+  it("tờ 2 bị từ chối trước khi có số, tờ 1 đã có số → mở lại bị chặn (Hải quan đã ghi nhận – gọi về trước); gọi về tờ 1 → duyệt lại → truyền lại: tờ 1 IDA, tờ 2 IDA lần đầu, tờ 3", async () => {
     deps.gateway = branchGateway((bno, n) => bno === 2 && n === 1);
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     await sendAll();
     expect(uow.data.results.map((r) => [r.branch, r.state, r.raw?.stage])).toEqual([[1, "PRE_DECLARED", "PRE_DECLARED"], [2, "SEND_FAILED", "NOT_SENT"], [3, "APPROVED", "NOT_SENT"]]);
-    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "SHEETS_RECALL_FIRST", params: { sheets: "1" }, message: "Tờ 1: gọi về sửa (IDB/IDD) trước" } });
+    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "DOSSIER_LOCKED" } });
     expect(decls.status).toBe("SUBMITTED");
     unwrap(await performOperation(deps, declarant, D, "IDB", 1));
     await sendAll();
@@ -1560,7 +1563,7 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
   });
 
-  it("R3: chỉ gọi về tờ 2 (tờ 1, 3 đã có số, chưa gọi về) → truyền lại, mở lại, bấm IDA tờ 2 đều bị chặn nêu tờ 1, 3; worker không tự gọi về", async () => {
+  it("bỏ R3: chỉ gọi về tờ 2 (tờ 1, 3 đã có số, chưa gọi về) – sửa chỉ tiêu chung → truyền / IDA tờ 2 bị chặn nêu tờ 1, 3 (SENT_SHEETS_CHANGED); hoàn tác → truyền lại chỉ tờ 2; worker không tự gọi về", async () => {
     deps.gateway = branchGateway(() => false, { queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     await sendAll();
@@ -1571,14 +1574,19 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     decls.approvedAt = "2026-10-14T05:00:00.000Z";
     dossiers.rows[0]!.status = "APPROVED";
     const before = uow.data.outbox.length;
-    const refused = { ok: false, error: { code: "INVALID_STATE", reason: "SHEETS_RECALL_FIRST", params: { sheets: "1, 3" }, message: "Tờ 1, 3: gọi về sửa (IDB/IDD) trước" } };
+    decls.fields = { CQHQ: { value: "01AB – Chi cục khác" } };
+    const refused = { ok: false, error: { code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", linesOnly: "0" } } };
     expect(await submitDeclaration(deps, declarant, D, "cert_1")).toMatchObject(refused);
     expect(await performOperation(deps, declarant, D, "IDA", 2)).toMatchObject(refused);
-    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject(refused);
     await sendAll();
     expect(uow.data.outbox.length).toBe(before);
     expect(uow.data.outbox.filter((o) => o.operation === "IDB").map((o) => o.branch)).toEqual([2]);
     expect(decls.status).toBe("APPROVED");
+    // Hoàn tác → tờ 1, 3 đúng nội dung Hải quan giữ: truyền lại chỉ gửi tờ 2 (TK_FIC = số tờ 1).
+    decls.fields = {};
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    expect(uow.data.outbox.slice(before).map((o) => [o.branch, o.operation])).toEqual([[2, "IDA"]]);
+    expect(idaOf(uow.data.outbox.at(-1)!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2 });
   });
 
   it("CRITICAL: IDA tờ 1 (lô nhiều tờ) hết lượt thử → bấm IDA lại bị chặn, phải Gửi lại (chưa có externalId: gửi lại thông điệp đã ghim; có externalId: tra trạng thái trước)", async () => {
@@ -1671,11 +1679,11 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     expect(uow.data.outbox.length).toBe(before);
   });
 
-  it("mọi tờ đã có số, không tờ nào gọi về → mở lại bị chặn, nêu các tờ phải gọi về", async () => {
+  it("mọi tờ đã có số, không tờ nào gọi về → mở lại bị chặn (Hải quan đã ghi nhận – dùng gọi về)", async () => {
     deps.gateway = branchGateway();
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     await sendAll();
-    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { reason: "SHEETS_RECALL_FIRST", params: { sheets: "1, 2, 3" } } });
+    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "DOSSIER_LOCKED" } });
   });
 
 });
@@ -2005,13 +2013,15 @@ describe("tờ khai nhánh – sửa sau review toàn nhánh", () => {
     expect(dossiers.rows[0]!.status).toBe("SUBMITTED");
   });
 
-  it("C2/R7: tờ đã thông quan / sửa sau thông quan / bị từ chối không chặn; tờ có số còn nhận nội dung chưa gọi về vẫn chặn", async () => {
+  it("C2/R7: guard nội dung đã gửi bỏ qua tờ đã thông quan / sửa sau thông quan / bị từ chối; tờ còn hiệu lực không có ảnh chụp (dữ liệu cũ) phải gọi về", async () => {
     decls.items = lines(200);
     seedBranch(1, { state: "CLEARED", raw: { stage: "CLEARED" } });
     seedBranch(2, { state: "CLEARED", raw: { stage: "POST_EDITING" } });
     seedBranch(3, { state: "REJECTED", raw: { stage: "REJECTED" } });
     seedBranch(4, { raw: { stage: "DECLARED" } });
-    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { reason: "SHEETS_RECALL_FIRST", params: { sheets: "4" } } });
+    expect(await checkSentSheets(deps, ORG, D)).toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "4" } });
+    uow.data.results.find((r) => r.branch === 4)!.raw = { stage: "DECLARED", sent: sheetSnapshot((await decls.get(ORG, D))!.payload, 4) };
+    expect(await checkSentSheets(deps, ORG, D)).toBeNull();
   });
 
   it("I3: IDA tờ 2 hết lượt thử, chưa có externalId → Gửi lại dựng lại từ thông điệp đã ghim (khóa :retry1), nối tiếp tờ 3; bấm IDA vẫn chặn (dùng Gửi lại)", async () => {

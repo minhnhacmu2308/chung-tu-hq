@@ -60,6 +60,11 @@ export const BranchSubmissionSchema = z.object({
   inProgress: z.boolean(),
   /** Tờ đã từng gửi (outbox hoặc thông điệp gửi đi) – lỗi "chưa khai tạm tự động" ghi trên tờ chưa gửi không tính. */
   started: z.boolean(),
+  /**
+   * Lô nhiều tờ, tờ còn hiệu lực ở Hải quan (chưa gọi về): nội dung hiện tại khác nội dung đã gửi – mã chỉ tiêu chung đã đổi + dòng hàng của tờ có đổi
+   * (guard SENT_SHEETS_CHANGED). Không đổi / không áp dụng / tờ gửi trước khi có ảnh chụp → null. JSON cũ không có → null.
+   */
+  sentChanges: z.object({ common: z.array(z.string()), lines: z.boolean() }).nullable().default(null),
 });
 export type BranchSubmission = z.infer<typeof BranchSubmissionSchema>;
 

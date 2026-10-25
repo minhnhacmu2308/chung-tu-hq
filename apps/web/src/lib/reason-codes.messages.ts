@@ -48,7 +48,7 @@ export const REASON_MESSAGES = defineMessages({
     REQUIRED_FIELDS_MISSING_SUBMIT: "Còn {n} chỉ tiêu bắt buộc chưa nhập: {fields} – mở lại tờ khai để nhập rồi duyệt lại",
     DECLARATION_NOT_TRANSMITTABLE: "Tờ khai chưa truyền được: {blockers}",
     DECLARATION_SPEC_INVALID: "Tờ khai chưa đúng đặc tả truyền Hải quan: {issues}",
-    SHEETS_RECALL_FIRST: "Tờ {sheets}: gọi về sửa (IDB/IDD) trước",
+    SENT_SHEETS_CHANGED: "Tờ {sheets} chưa gọi về nhưng nội dung đã khai bị đổi ({fields}) – gọi về các tờ này hoặc hoàn tác",
     SHEET_COUNT_CHANGED: "Đã khai {planned} tờ khai (đã được cấp số) mà lô hàng nay cần {now} tờ – không truyền; hủy tờ khai thừa hoặc khai lại trước",
     SHEET_ORDER: "Tờ {sheet}: chờ tờ {waitFor} gửi nội dung trước – truyền theo thứ tự tờ khai",
     SHEET_ORDER_DECLARE: "Tờ {sheet}: chờ tờ {waitFor} khai tạm xong trước khi khai chính thức",
@@ -110,7 +110,7 @@ export const REASON_MESSAGES = defineMessages({
     REQUIRED_FIELDS_MISSING_SUBMIT: "{n} required fields are empty: {fields} – reopen the declaration to fill them in, then approve again",
     DECLARATION_NOT_TRANSMITTABLE: "The declaration cannot be filed yet: {blockers}",
     DECLARATION_SPEC_INVALID: "The declaration does not match the Customs transmission spec: {issues}",
-    SHEETS_RECALL_FIRST: "Sheet(s) {sheets}: recall for amendment (IDB/IDD) first",
+    SENT_SHEETS_CHANGED: "Sheets {sheets} were not recalled but their declared content changed ({fields}) – recall these sheets or undo the change",
     SHEET_COUNT_CHANGED: "{planned} sheet(s) already declared (numbered) but the shipment now needs {now} – not sent; cancel the extra declaration(s) or redeclare first",
     SHEET_ORDER: "Sheet {sheet}: waiting for sheet {waitFor} to send its content first – sheets are sent in order",
     SHEET_ORDER_DECLARE: "Sheet {sheet}: waiting for sheet {waitFor} to finish pre-declaration before official declaration",
@@ -172,7 +172,7 @@ export const REASON_MESSAGES = defineMessages({
     REQUIRED_FIELDS_MISSING_SUBMIT: "仍有 {n} 个必填项目未填写：{fields} – 请重新打开报关单填写后重新审批",
     DECLARATION_NOT_TRANSMITTABLE: "报关单暂无法传输：{blockers}",
     DECLARATION_SPEC_INVALID: "报关单不符合海关传输规范：{issues}",
-    SHEETS_RECALL_FIRST: "第 {sheets} 张：请先调回修改（IDB/IDD）",
+    SENT_SHEETS_CHANGED: "第{sheets}页未召回，但已申报内容已更改（{fields}）——请召回这些页或撤销更改",
     SHEET_COUNT_CHANGED: "已申报 {planned} 份报关单（已获编号），但货物现需 {now} 份 – 不予传输；请先撤销多余报关单或重新申报",
     SHEET_ORDER: "第 {sheet} 张：请等待第 {waitFor} 张先发送内容 – 按报关单顺序传输",
     SHEET_ORDER_DECLARE: "第 {sheet} 张：请等待第 {waitFor} 张先完成临时申报，再正式申报",
@@ -291,4 +291,11 @@ export const DOMAIN_ERROR_MESSAGES = defineMessages({
     INVALID_OPERATION: "该业务不适用于此报关单",
     INTERNAL: "服务器错误，请稍后重试",
   },
+});
+
+/** Tham số dịch theo ngôn ngữ của câu lý do: SENT_SHEETS_CHANGED khi chỉ dòng hàng đổi (`linesOnly` = "1") → `fields`. Bản vi trùng SENT_LINES_ONLY_VI (@kb/contracts). */
+export const REASON_PARAM_MESSAGES = defineMessages({
+  vi: { linesOnly: "dòng hàng" },
+  en: { linesOnly: "line items" },
+  zh: { linesOnly: "商品行" },
 });

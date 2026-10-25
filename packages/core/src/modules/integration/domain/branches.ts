@@ -1,6 +1,7 @@
 // Tờ khai > 50 dòng hàng → các tờ khai nhánh: cắt dòng theo lineNo, tự điền 1.2 (TK_FIC/TK_BNO/TK_DNO) và 1.51 (TK_TP). Thuần.
 import { Decimal } from "../../../shared/decimal.js";
-import { branchRanges, type BranchRange } from "@kb/contracts";
+import { branchRanges, isActiveSheet, sentSheetsCheck, sentSheetsReason, sentSnapshotOf, type BranchRange, type CustomsStage, type SentSnapshot } from "@kb/contracts";
+import { reasonError, type DomainError } from "../../../shared/errors.js";
 import type { DeclarationPayload } from "./declaration-to-fpt.js";
 
 /** Tổng trị giá hóa đơn cả lô (cộng `amount` các dòng) – chuỗi Decimal. */
@@ -27,4 +28,36 @@ export function branchPayload(p: DeclarationPayload, no: number, firstDeclaratio
     TK_TP: tp?.source === "USER" && tp.value.trim() ? tp : { value: invoiceTotal(p) },
   };
   return { payload: { ...p, fields, items: sorted.slice(range.index[0], range.index[1]) }, range, blockers };
+}
+
+export type { SentSnapshot };
+
+/**
+ * Ảnh chụp nội dung tờ `no` như được gửi Hải quan (spec §2.5): tính trên branchPayload (gồm TK_DNO, TK_TP tính cho tờ – đổi trị giá dòng làm đổi 1.51),
+ * `common` bỏ TK_FIC/TK_BNO và ô HANG.*, cộng @ADJ/@CONT/@CUR; `lines` = dòng hàng của tờ + ô HANG.<id>.* của dòng.
+ */
+export function sheetSnapshot(p: DeclarationPayload, no: number): SentSnapshot {
+  const b = branchPayload(p, no, null).payload;
+  return sentSnapshotOf({ fields: Object.fromEntries(Object.entries(b.fields).map(([k, f]) => [k, f.value])), items: b.items, adjustments: b.adjustments, containers: b.containers, currency: b.currency });
+}
+
+export type SentSheet = { no: number; stage: CustomsStage; declarationNo: string | null; sent: SentSnapshot | null };
+
+/** Tờ còn hiệu lực (có số, chưa gọi về, không miễn) CÓ ảnh chụp: chỉ tiêu chung khác (mã) và dòng hàng khác không. */
+export function sentSheetsDiff(p: DeclarationPayload, sheets: SentSheet[]): { no: number; common: string[]; lines: boolean }[] {
+  return sheets.filter((s) => s.sent && isActiveSheet(s)).map((s) => {
+    const c = sentSheetsCheck([{ ...s, current: sheetSnapshot(p, s.no) }]).changed[0];
+    return { no: s.no, common: c?.common ?? [], lines: c?.lines ?? false };
+  });
+}
+
+/**
+ * Lô nhiều tờ: tờ còn hiệu lực ở Hải quan mà nội dung hiện tại khác nội dung đã gửi → SENT_SHEETS_CHANGED (chặn duyệt + truyền, bất biến 7).
+ * Tờ còn hiệu lực KHÔNG có ảnh chụp (gửi trước khi có tính năng) không kiểm được → cũng liệt kê (phải gọi về). Lô một tờ: null.
+ */
+export function sentSheetsError(p: DeclarationPayload, sheets: SentSheet[]): DomainError | null {
+  if (sheets.length <= 1) return null;
+  const check = sentSheetsCheck(sheets.map((s) => ({ ...s, current: sheetSnapshot(p, s.no) })));
+  const params = sentSheetsReason(p.kind, check);
+  return params ? reasonError("BLOCKER_FAILED", "SENT_SHEETS_CHANGED", params, { changed: check.changed, unverified: check.unverified }) : null;
 }

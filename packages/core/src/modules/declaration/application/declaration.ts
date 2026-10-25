@@ -87,6 +87,8 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
   if (!d.ok) return d;
   const org = await deps.org.get(ctx.orgId);
   const blockerFails = await deps.validation.blockerFails(ctx.orgId, dossierId);
+  // Lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi (bất biến 7 – chặn duyệt); kiểm ngoài transaction, báo sau các kiểm khác.
+  const sentChanged = (await deps.sentSheetsGuard?.(ctx.orgId, dossierId)) ?? null;
   const now = deps.clock.now();
   const r0 = await deps.uow.asOrg(ctx, async (r) => {
     const decl = await r.declarations.latest(ctx.orgId, dossierId);
@@ -99,6 +101,7 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
       } : {}),
     });
     if (!guard.ok) return guard;
+    if (sentChanged) return err(sentChanged);
     const patch = { status: "APPROVED" as const, approvedBy: ctx.userId, approvedAt: now, updatedAt: now };
     await r.declarations.update(decl!.orgId, decl!.id, patch);
     // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp (lần sau tra lại, khỏi gọi phân loại).

@@ -3,12 +3,14 @@
 // Khi phản hồi đã đến, settle() áp stageAfter + tác dụng phụ (số tờ khai, phân luồng, mở lại tờ khai, thông quan…).
 import {
   baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
-  awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, recallExempt, sheetApproved, sheetOrderWait, stageAfter,
+  awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, recallExempt, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, sheetApproved, sheetOrderWait, stageAfter,
+  type SentSnapshot,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type PipelineRow, type PipelineStatus,
   type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
 import { computeTaxes } from "@/mocks/declaration-builder";
 import { formatVnd } from "@/lib/format";
+import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import {
   basePayload, branchKey, branchesOf, CHANNEL_NOTES, CHANNEL_VI, channelFor, containersFor, declarationNoFor, emptyFlow, estimatedTaxVnd, parseBranchKey,
@@ -112,11 +114,39 @@ const numberedSheets = (db: MockDb, dossierId: string) =>
 /** Tờ có số còn nhận nội dung tờ khai (R7: tờ đã thông quan / sửa sau thông quan / bị từ chối miễn gọi về). */
 const recallableSheets = (db: MockDb, dossierId: string) => numberedSheets(db, dossierId).filter((x) => !recallExempt(x.stage));
 
-/** R3: lô nhiều tờ – chỉ tiêu chung dùng chung mọi tờ, nên mọi tờ đã có số còn nhận nội dung phải đang gọi về sửa (RECALLED / AMEND_RECALLED) trước khi truyền lại / mở lại. */
-function recallFirstError(db: MockDb, dossierId: string): ApiError | null {
+/**
+ * Ảnh chụp nội dung tờ `no` như gửi Hải quan (cùng sentSnapshotOf với backend sheetSnapshot): chỉ tiêu tờ khai + TK_DNO (số tờ) + TK_TP (tổng trị giá hóa đơn
+ * cả lô, giữ nếu người khai nhập – đổi trị giá dòng làm đổi 1.51), dòng hàng của tờ, khoản điều chỉnh, container, tiền tệ.
+ */
+function sheetSnapshotOf(db: MockDb, dossierId: string, no: number): SentSnapshot | null {
+  const decl = db.declarations.find((d) => d.dossierId === dossierId);
+  const dossier = db.dossiers.find((d) => d.id === dossierId);
+  if (!decl || !dossier) return null;
+  const all = db.lineItems.filter((i) => i.dossierId === dossierId);
+  const sheets = branchesOf(all);
+  const fields = Object.fromEntries(decl.fields.map((f) => [f.code, f.value]));
+  const total = fromMinor(sumMinor(all.map((i) => toMinor(i.amount, 4))), 4);
+  const items = (sheets[no - 1]?.items ?? []).map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed ?? null, importDutyRate: i.importDutyRate ?? null, vatRate: i.vatRate ?? null, policyNote: i.policyNote ?? null }));
+  return sentSnapshotOf({ fields: { ...fields, TK_DNO: String(sheets.length), TK_TP: fields["TK_TP"]?.trim() || total }, items, adjustments: decl.valueAdjustments, containers: containersOf(db, dossier), currency: fields["MA_TT"] ?? "" });
+}
+
+/** Tờ của lô kèm ảnh chụp đã gửi và nội dung hiện tại (lô nhiều tờ). */
+const sentSheetsOf = (db: MockDb, dossierId: string) =>
+  branchesOf(db.lineItems.filter((i) => i.dossierId === dossierId)).map((sh) => {
+    const flow = flowOf(db, dossierId, sh.no);
+    return { no: sh.no, stage: flow.stage, declarationNo: hasDeclarationNumber(flow.stage) ? resultOf(db, dossierId, sh.no)?.declarationNo ?? null : null, sent: flow.sent ?? null, current: sheetSnapshotOf(db, dossierId, sh.no)! };
+  });
+
+/**
+ * Lô nhiều tờ (thay R3, như backend sentSheetsError): tờ chưa gọi về (còn hiệu lực ở Hải quan) phải giữ đúng nội dung đã gửi; lệch / không có ảnh chụp
+ * → SENT_SHEETS_CHANGED (chặn duyệt + truyền). Lô một tờ → null.
+ */
+export function sentSheetsMockError(db: MockDb, dossierId: string): ApiError | null {
   if (branchCountOf(db, dossierId) <= 1) return null;
-  const not = recallableSheets(db, dossierId).filter((x) => !isEditingStage(x.stage)).map((x) => x.no);
-  return not.length ? reasonApiError("INVALID_STATE", "SHEETS_RECALL_FIRST", { sheets: not.join(", ") }) : null;
+  const decl = db.declarations.find((d) => d.dossierId === dossierId);
+  if (!decl) return null;
+  const params = sentSheetsReason(decl.kind, sentSheetsCheck(sentSheetsOf(db, dossierId)));
+  return params ? reasonApiError("BLOCKER_FAILED", "SENT_SHEETS_CHANGED", params) : null;
 }
 
 /** Nghiệp vụ gửi nội dung tờ theo giai đoạn khi truyền lại (IDA/EDA lần đầu hoặc sau gọi về, IDA01/EDA01 sau gọi sửa đổi); null = tờ không cần gửi. */
@@ -177,6 +207,11 @@ function apply(db: MockDb, c: Ctx) {
   if (next === null) return;
   c.flow.stage = next;
   if (!c.flow.done.includes(p.op)) c.flow.done.push(p.op);
+  // Nội dung tờ Hải quan vừa nhận (như raw.sent ở backend); gửi nội dung không kèm ảnh chụp (lô một tờ) → bỏ ảnh chụp cũ.
+  if (isContentOperation(p.op) && p.op !== "AMA") {
+    if (p.sent) c.flow.sent = p.sent;
+    else delete c.flow.sent;
+  }
   const r = c.result;
   const b = baseOp(p.op);
   if (r) {
@@ -421,7 +456,8 @@ function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number, chain?: "de
     return;
   }
   db.customsMessages.push(message(c.dossier.id, op, "OUT", "OK", t.out, now, t.payload, c.branch), message(c.dossier.id, op, "IN", "OK", t.in, doneAt, { ...t.payload, ketQua: "Thành công" }, c.branch));
-  c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString(), ...(chain ? { chain } : {}) };
+  const sent = c.of > 1 && isContentOperation(op) && op !== "AMA" ? sheetSnapshotOf(db, c.dossier.id, c.branch) : null;
+  c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString(), ...(chain ? { chain } : {}), ...(sent ? { sent } : {}) };
   if (isContentOperation(op) && op !== "AMA" && c.decl) {
     c.decl.status = "SUBMITTED";
     Object.assign(c.dossier, { status: "SUBMITTED", step: "submit", updatedAt: nowIso() });
@@ -451,11 +487,9 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   if (a.action === "EDIT") throw new ApiError("NOT_APPROVED", a.reason ?? "Sửa tờ khai và phê duyệt lại trước", 400, { reason: a.reasonCode, params: a.reasonParams });
   if (a.action === "START_POST_EDIT") throw reasonApiError("POST_EDIT_REQUIRED", "START_POST_EDIT_FIRST", undefined, "Lập bản khai bổ sung ở bước 7 “Sửa sau thông quan” trước khi khai AMA");
   if (c.of > 1 && isContentOperation(op) && op !== "AMA") {
-    // Lần truyền mới (tờ khai vừa duyệt lại): mọi tờ đã có số phải đang gọi về sửa (R3).
-    if (c.decl?.status === "APPROVED") {
-      const recall = recallFirstError(db, dossierId);
-      if (recall) throw recall;
-    }
+    // Tờ chưa gọi về phải giữ đúng nội dung đã gửi (SENT_SHEETS_CHANGED – thay R3, cùng quy tắc backend).
+    const changed = sentSheetsMockError(db, dossierId);
+    if (changed) throw changed;
     if (c.branch > 1) {
       // Tờ 1 phải có số (ô 1.2 của tờ k mang số tờ 1).
       if (!hasDeclarationNumber(flowOf(db, dossierId, 1).stage)) throw new ApiError("INVALID_STATE", `Tờ ${c.branch}: tờ 1 chưa có số tờ khai – khai tạm tờ 1 trước`);
@@ -488,9 +522,9 @@ export const submitDeclaration = (dossierId: string, certificateId: string) =>
     if (!dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
     settle(db, Date.now());
     const c = load(db, dossierId);
-    // Lô nhiều tờ: truyền lại / gửi mới chỉ khi mọi tờ đã có số đang gọi về sửa; tờ 1 đang chờ sửa đổi (AMEND_RECALLED) gửi IDA01.
-    const recall = recallFirstError(db, dossierId);
-    if (recall) throw recall;
+    // Lô nhiều tờ: gọi về một phần được; tờ chưa gọi về phải giữ đúng nội dung đã gửi (SENT_SHEETS_CHANGED); tờ 1 đang chờ sửa đổi (AMEND_RECALLED) gửi IDA01.
+    const changed = sentSheetsMockError(db, dossierId);
+    if (changed) throw changed;
     // Lô nhiều tờ: tờ đầu tiên cần gửi nội dung theo giai đoạn (tờ đã thông quan bỏ qua – R7); worker (apply) nối tiếp các tờ sau.
     const target = c.of > 1 ? Array.from({ length: c.of }, (_, i) => i + 1).find((no) => contentOpFor(flowOf(db, dossierId, no).stage, dossier.direction)) ?? 1 : 1;
     const stage = target === 1 ? c.flow.stage : flowOf(db, dossierId, target).stage;
@@ -716,14 +750,23 @@ function branchView(db: MockDb, c: Ctx, now: number): BranchSubmission {
     result,
     customsInfo: customsInfoOf(db, c, stage, seen),
     rejection: c.flow.rejection ?? null,
+    sentChanges: sentChangesOf(db, c),
   };
+}
+
+/** Lô nhiều tờ, tờ còn hiệu lực có ảnh chụp: chỉ tiêu chung / dòng hàng khác nội dung đã gửi (như backend getSubmission); khác → null. */
+function sentChangesOf(db: MockDb, c: Ctx): BranchSubmission["sentChanges"] {
+  if (c.of <= 1 || !c.flow.sent) return null;
+  const s = sentSheetsOf(db, c.dossier.id).find((x) => x.no === c.branch);
+  if (!s || !sentSheetsCheck([s]).changed.length) return null;
+  return sentSnapshotDiff(s.current, c.flow.sent);
 }
 
 /** Trường cấp hồ sơ = tờ 1 (tương thích); `branches` mọi tờ theo thứ tự; `summary` gộp bằng dossierCustomsSummary (giống backend). */
 function view(db: MockDb, dossierId: string, now: number): SubmissionView {
   const first = load(db, dossierId, 1);
   const branches = Array.from({ length: first.of }, (_, i) => branchView(db, i === 0 ? first : load(db, dossierId, i + 1), now));
-  const { no: _no, of: _of, state: _state, declarationNo: _dn, channel: _ch, ...legacy } = branches[0]!;
+  const { no: _no, of: _of, state: _state, declarationNo: _dn, channel: _ch, sentChanges: _sc, ...legacy } = branches[0]!;
   const s = dossierCustomsSummary(branches);
   return {
     declarationStatus: first.decl?.status ?? "NOT_CREATED",

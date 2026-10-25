@@ -6,10 +6,12 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import type { buildFptRequest } from "../domain/declaration-to-fpt.js";
+import { sheetSnapshot } from "../domain/branches.js";
 import { stageOf } from "../domain/state-machine.js";
-import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, outboxKey, pinOf, pinOfOutbox, recallFirstError, sheetCountError, sheetOf } from "./branch-send.js";
+import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, outboxKey, pinOf, pinOfOutbox, sheetCountError, sheetOf } from "./branch-send.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
+import { resultsSentError } from "./sent-sheets.js";
 
 export { contentKey, contentOpFor, enqueueBranchPreDeclare, outboxKey, outboxVersion, pinOf, stalePinReason, type PreDeclareMode } from "./branch-send.js";
 
@@ -68,9 +70,9 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
     // Lô nhiều tờ (spec §6.4): gửi nội dung tờ đầu tiên cần gửi theo giai đoạn của tờ (IDA01 / IDA sau gọi về / IDA lần đầu); worker nối tiếp các tờ sau.
     if (of > 1) {
       const all = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));
-      // Tờ đã có số mà chưa gọi về sửa → Hải quan giữ chỉ tiêu chung cũ: chặn, người khai gọi về (IDB/IDD) trước (R3).
-      const recall = recallFirstError(all);
-      if (recall) return err(recall);
+      // Gọi về một phần được (thay R3); tờ chưa gọi về phải giữ đúng nội dung Hải quan đang có (spec §2.5) – lệch → chặn, gọi về các tờ đó hoặc hoàn tác.
+      const changed = resultsSentError(snap.payload, all);
+      if (changed) return err(changed);
       const target = all.filter((r) => r.branch <= of).map((r) => ({ branch: r.branch, op: contentOpFor(stageOf(r), snap.payload.kind) })).find((t) => t.op);
       if (target?.op) {
         const sent = await performOperation(deps, ctx, dossierId, target.op, target.branch);
@@ -96,7 +98,7 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
       if (existing.status === "PENDING" && existing.attempts === 0) await deps.queue.enqueue("customs-send", { orgId: ctx.orgId, userId: ctx.userId, outboxId: existing.id }, { jobId: `customs-send:${existing.id}` });
       return err(domainError("ALREADY_SUBMITTED", "Tờ khai đã được truyền – không gửi trùng"));
     }
-    const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.request, warnings: built.warnings, issues: built.issues, certificateId, ...(of > 1 ? { pin } : {}) }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+    const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.request, warnings: built.warnings, issues: built.issues, certificateId, ...(of > 1 ? { pin, sent: sheetSnapshot(snap.payload, 1) } : {}) }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
     try {
       await r.outbox.insert(row);
     } catch (e) {

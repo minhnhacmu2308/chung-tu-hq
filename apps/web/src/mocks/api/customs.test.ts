@@ -308,15 +308,44 @@ describe("tờ khai nhánh (mock)", () => {
   });
 });
 
-describe("tờ khai nhánh: gọi về sửa và truyền lại (R3)", () => {
-  it("gọi về sửa riêng tờ 2 → chưa mở lại tờ khai, truyền lại bị chặn: phải gọi về các tờ 1, 3", async () => {
+describe("tờ khai nhánh: gọi về sửa và truyền lại", () => {
+  /** Gọi về riêng tờ 2 rồi (như backend sau mở lại) tờ khai về DRAFT để sửa. */
+  const recallSheet2 = async () => {
     await preDeclareAll(BIG);
     await runB(BIG, "IDB", 2);
-    const b = await sheets(BIG);
-    expect(b.map((x) => x.stage)).toEqual(["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
-    expect(decl(BIG).status).toBe("SUBMITTED");
-    await expect(submitDeclaration(BIG, CERT)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "SHEETS_RECALL_FIRST", params: { sheets: "1, 3" } });
     expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "RECALLED", "PRE_DECLARED"]);
+    decl(BIG).status = "DRAFT";
+  };
+  const field = (code: string) => decl(BIG).fields.find((f) => f.code === code)!;
+
+  it("gọi về riêng tờ 2, sửa chỉ tiêu chung → duyệt / truyền bị chặn nêu tờ 1, 3 (SENT_SHEETS_CHANGED); hoàn tác → duyệt, truyền chỉ gửi tờ 2", async () => {
+    await recallSheet2();
+    expect((await getSubmission(BIG)).branches.map((b) => b.sentChanges)).toEqual([null, null, null]);
+    const old = field("CQHQ").value;
+    field("CQHQ").value = "01AB – Chi cục khác";
+    expect((await getSubmission(BIG)).branches.map((b) => b.sentChanges)).toEqual([{ common: ["CQHQ"], lines: false }, null, { common: ["CQHQ"], lines: false }]);
+    await expect(approveDeclaration(BIG)).rejects.toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", linesOnly: "0" } });
+    decl(BIG).status = "APPROVED";
+    await expect(submitDeclaration(BIG, CERT)).rejects.toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } });
+    field("CQHQ").value = old;
+    decl(BIG).status = "DRAFT";
+    await approveDeclaration(BIG);
+    await submitDeclaration(BIG, CERT);
+    wait(3_000);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(getDb().customsMessages.filter((m) => m.dossierId === BIG && m.operation === "IDA" && m.direction === "OUT").map((m) => m.branch ?? 1)).toEqual([1, 2, 3, 2]);
+  });
+
+  it("sửa trị giá dòng tờ 2 → 1.51 (tổng trị giá hóa đơn) đổi → chặn duyệt nêu 1.51; sửa mô tả dòng tờ 2 → duyệt được", async () => {
+    await recallSheet2();
+    const line = getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo)[59]!;
+    const amount = line.amount;
+    line.amount = "999999";
+    await expect(approveDeclaration(BIG)).rejects.toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", fields: "1.51" } });
+    line.amount = amount;
+    line.description = `${line.description} (sửa)`;
+    await approveDeclaration(BIG);
+    expect(decl(BIG).status).toBe("APPROVED");
   });
 
   it("gọi về đủ mọi tờ → mở lại → duyệt lại → truyền lại lần lượt tờ 1 → 2 → 3", async () => {

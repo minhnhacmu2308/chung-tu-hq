@@ -61,7 +61,7 @@ export const startedOf = (messages: MessageRow[], outbox: OutboxRow[], result: R
   outbox.length > 0 || messages.some((m) => m.direction === "OUT") || stageOf(result) !== "NOT_SENT";
 
 /** Dữ liệu một tờ khai nhánh (đã lọc theo nhánh): thông điệp, outbox, kết quả, ngữ cảnh luồng (đã duyệt theo tờ khai / AMA của tờ). */
-export type BranchInput = { no: number; of: number; flow: FlowContext; messages: MessageRow[]; outbox: OutboxRow[]; result: ResultRow | null; polling: boolean };
+export type BranchInput = { no: number; of: number; flow: FlowContext; messages: MessageRow[]; outbox: OutboxRow[]; result: ResultRow | null; polling: boolean; /** Xem BranchSubmission.sentChanges; vắng = null. */ sentChanges?: BranchSubmission["sentChanges"] };
 
 export function toBranchSubmission(b: BranchInput): BranchSubmission {
   return {
@@ -77,6 +77,7 @@ export function toBranchSubmission(b: BranchInput): BranchSubmission {
     rejection: b.result?.raw?.rejection ?? null,
     inProgress: b.outbox.some((o) => o.status === "PENDING") || b.polling,
     started: startedOf(b.messages, b.outbox, b.result),
+    sentChanges: b.sentChanges ?? null,
   };
 }
 
@@ -107,7 +108,7 @@ export function lockPipelinesByOrder(branches: BranchSubmission[]): BranchSubmis
 export function toSubmissionView(p: { declarationStatus: DeclarationStatus; hsUnconfirmed: number; branches: BranchInput[] }): SubmissionView {
   const branches = lockPipelinesByOrder(p.branches.map(toBranchSubmission));
   const first = branches[0]!;
-  const { no: _no, of: _of, state: _state, declarationNo: _dn, channel: _ch, ...legacy } = first;
+  const { no: _no, of: _of, state: _state, declarationNo: _dn, channel: _ch, sentChanges: _sc, ...legacy } = first;
   const s = dossierCustomsSummary(branches);
   const summary: CustomsSummary = { of: s.of, cleared: s.cleared, problems: s.problems };
   return { declarationStatus: p.declarationStatus, hsUnconfirmed: p.hsUnconfirmed, ...legacy, branches, summary };

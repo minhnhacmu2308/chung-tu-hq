@@ -6,7 +6,7 @@ import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
   Dialog, DialogContent, DialogFooter, EmptyState, fill, SkeletonCard, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, useMessages, useUiLocale,
 } from "@kb/ui";
-import { branchCount, canEditDeclaration, declarationEditMode, type DeclarationBranch, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
+import { branchCount, canEditDeclaration, type DeclarationBranch, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileCheck2, FileText, Paperclip, RotateCcw, ShieldCheck } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { dossierKeys, listDocuments } from "@/api/dossiers";
 import { approveDeclaration, declarationKeys, getDeclarationView, reopenDeclaration } from "@/api/declaration";
 import { getSession, sessionKeys } from "@/api/session";
-import { customsKeys, getSubmission } from "@/api/customs";
+import { customsKeys, getSubmission, recallAllSheets } from "@/api/customs";
 import { getOrganization, settingsKeys } from "@/api/settings";
 import { toastMutationError } from "@/lib/mutation-error";
 import { legacyReviewForm } from "@/lib/feature-flags";
@@ -27,6 +27,7 @@ import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { REVIEW_MESSAGES } from "./review-step.messages";
 import { parseRecalled } from "./branch-sheets";
+import { editScopeOf, sentChangeWarnings } from "./edit-scope";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
@@ -128,6 +129,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [checked, setChecked] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [recallOpen, setRecallOpen] = useState(false);
   const legacy = legacyReviewForm();
   const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
   const canEdit = session.data ? canEditDeclaration(session.data.user.role) : false;
@@ -175,6 +177,17 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     });
     return () => cancelAnimationFrame(frame);
   }, [jump, tab, sheet]);
+  const recallRest = useMutation({
+    mutationFn: () => recallAllSheets(dossier.id),
+    onSuccess: (r) => {
+      setRecallOpen(false);
+      toast({ tone: r.sent ? "info" : "success", title: r.message });
+      void qc.invalidateQueries({ queryKey: customsKeys.submission(dossier.id) });
+      void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id) });
+      void qc.invalidateQueries({ queryKey: dossierKeys.all });
+    },
+    onError: toastMutationError(t.recallRemainingFailed),
+  });
   const approve = useMutation({
     mutationFn: () => approveDeclaration(dossier.id),
     onSuccess: () => {
@@ -211,7 +224,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const totalTax = String(Number(decl.estimatedImportDutyVnd) + Number(decl.estimatedVatVnd));
   const isDraft = decl.status === "DRAFT";
   // Giai đoạn truyền chưa tải xong → chỉ đọc (tránh mở ô rồi khóa lại); không đọc được → coi như chưa khai, backend vẫn chặn theo giai đoạn thật.
-  const editMode = subQ.isPending ? "LOCKED" : declarationEditMode(decl.status, subQ.data?.stage ?? "NOT_SENT");
+  // Lô nhiều tờ chỉ gọi về một số tờ: chỉ tiêu chung khóa, dòng chỉ sửa được ở tờ đã gọi về (scope); lô một tờ: như giai đoạn tờ khai.
+  const scope = editScopeOf(decl.status, subQ.data, subQ.isPending);
+  const editMode = scope.common;
+  const lockedSheets = scope.lockedSheets.join(", ");
+  const sentWarn = isDraft && subQ.data ? sentChangeWarnings(subQ.data) : { totalValue: false, otherCommon: [] as string[] };
   const kindLabel = decl.kind === "IDA" ? t.kindImport : t.kindExport;
   // Ô bắt buộc còn trống → khóa Phê duyệt (backend chặn lần nữa khi duyệt và khi khai).
   const required = isDraft ? declarationGapsOf(decl, items, subQ.data) : { gaps: [], lineNos: [] };
@@ -256,6 +273,23 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 {recalled.scope === "all" ? fill(t.recalledAllNotice, { n: recalled.count }) : fill(t.recalledSheetsNotice, { list: recalled.sheets.join(", ") })}
               </Alert>
             )}
+            {isDraft && scope.lockedSheets.length > 0 && (
+              <Alert
+                tone="warning"
+                title={fill(t.commonLockedTitle, { sheets: lockedSheets })}
+                action={
+                  canEdit ? (
+                    <Button size="sm" variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setRecallOpen(true)}>
+                      {t.recallRemaining}
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {t.commonLockedBody}
+              </Alert>
+            )}
+            {sentWarn.totalValue && <Alert tone="warning">{t.tkTpChanged}</Alert>}
+            {sentWarn.otherCommon.length > 0 && <Alert tone="warning">{fill(t.commonChanged, { codes: sentWarn.otherCommon.join(", ") })}</Alert>}
             {/* Bản in: lỗi Hải quan hiện trên ô + "Chỉ ô cần xử lý" ở thanh công cụ – không cần khung tổng hợp. */}
             {legacy && rejection && errs.length > 0 && (
               <Alert tone="danger" title={fill(t.rejectedTitle, { op: rejection.operation, at: formatDateTime(rejection.at), n: errs.length })}>
@@ -326,11 +360,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             </TabsList>
             <TabsContent value="full">
               {legacy ? (
-                <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
+                <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} scope={scope} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
               ) : (
                 // Chưa có giai đoạn Hải quan thì chưa vẽ: tránh hiện "BẢN NHÁP" / watermark cho tờ khai đã khai.
                 subQ.isPending ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
-                  <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} canEdit={canEdit} submission={subQ.data} branches={branches} sheet={sheet} onSheetChange={setSheet} leaveGuard={leaveGuard} />
+                  <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} scope={scope} canEdit={canEdit} submission={subQ.data} branches={branches} sheet={sheet} onSheetChange={setSheet} leaveGuard={leaveGuard} />
                 )
               )}
             </TabsContent>
@@ -415,6 +449,20 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             </Button>
             <Button loading={reopen.isPending} onClick={() => reopen.mutate()}>
               {t.reopenAction}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={recallOpen} onOpenChange={setRecallOpen}>
+        <DialogContent title={t.recallRemainingTitle} icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
+          <p className="text-sm text-fg-muted">{fill(t.recallRemainingBody, { sheets: lockedSheets })}</p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRecallOpen(false)}>
+              {t.cancel}
+            </Button>
+            <Button loading={recallRest.isPending} leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => recallRest.mutate()}>
+              {t.recallRemainingAction}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -3,7 +3,7 @@
 // cho ô Hải quan còn trống; trạng thái ô (lỗi Hải quan, còn thiếu, ước tính, đã sửa). Bấm ô → panel sửa ô; thanh công cụ: trang, ô cần xử lý, in.
 // Lô > 50 dòng (N tờ khai nhánh): thanh chọn tờ ở đầu; dòng hàng, tổng trị giá/thuế, ô 1.2, số Hải quan theo tờ đang chọn; in chỉ tờ đang chọn.
 import { Alert, Button, fill, Stack, useMessages, useUiLocale } from "@kb/ui";
-import { otherFieldKeys, parseItemFieldCode, printTitle, type Declaration, type DeclarationBranch, type DeclarationEditMode, type LineItem, type SubmissionView } from "@kb/contracts";
+import { editBlockFor, otherFieldKeys, parseItemFieldCode, printTitle, type Declaration, type DeclarationBranch, type DeclarationEditMode, type DeclarationEditScope, type LineItem, type SubmissionView } from "@kb/contracts";
 import { ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FieldEditPanel, type LeaveGuard } from "./field-edit-panel";
@@ -30,6 +30,8 @@ type Props = {
   items: LineItem[];
   /** Chế độ sửa theo giai đoạn (panel sửa ô). */
   mode: DeclarationEditMode;
+  /** Phạm vi sửa theo tờ đã gọi về (lô nhiều tờ): dòng của tờ chưa gọi về chỉ đọc; không truyền → `mode` cho mọi ô. */
+  scope?: DeclarationEditScope;
   canEdit: boolean;
   submission: SubmissionView | undefined;
   /** Tổng theo tờ khai nhánh (DeclarationView.branches); [] / không có → một tờ. */
@@ -90,7 +92,7 @@ function printModel(data: PrintData, decl: Declaration, items: LineItem[], submi
   return { kind, lineNos, values, itemRows, errors, attention, unplaced: issues.unplaced, issueCount: issues.count, look, order, hasOther, directives: info?.directives.length ?? 0 };
 }
 
-export function PrintDeclaration({ dossierId, decl, items: allItems, mode, canEdit, submission: lotSubmission, branches, sheet, onSheetChange, leaveGuard }: Props) {
+export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope: editScope, canEdit, submission: lotSubmission, branches, sheet, onSheetChange, leaveGuard }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   const locale = useUiLocale();
   const [ownSheet, setOwnSheet] = useState(1);
@@ -126,6 +128,8 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, canEd
   const scope = useMemo(() => codeScope("A202", storage.code, base.kind, { TK_CH: office }, "vi"), [storage.code, base.kind, office]);
   const storageName = useCodeName("A202", base.values[storage.code] ?? "", scope);
   const data = useMemo(() => withLookupNames(base, { [storage.name]: storageName }), [base, storage.name, storageName]);
+  // Lô nhiều tờ: tờ đang xem chưa gọi về / đã thông quan → dòng hàng chỉ đọc, nói rõ trên trang.
+  const lineBlock = editScope && view.of > 1 && canEdit && editScope.lines[view.no] === "LOCKED" ? editBlockFor(editScope, { kind: "LINE", sheet: view.no }) : null;
   const model = useMemo(() => printModel(data, decl, items, submission, mode, canEdit), [data, decl, items, submission, mode, canEdit]);
   // Cùng số với huy hiệu tab: ô cần xử lý + lỗi Hải quan không gắn được vào ô.
   const attentionCount = model.issueCount;
@@ -177,6 +181,9 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, canEd
         />
       )}
       <SharedFieldsNote of={view.of} />
+      {lineBlock && (
+        <Alert tone="info">{lineBlock.reasonCode === "LINE_SHEET_CLOSED" ? fill(t.sheetClosed, { sheet: view.no }) : fill(t.sheetNotRecalledNote, { sheet: view.no })}</Alert>
+      )}
       <PrintSheets
         kind={model.kind}
         title={printTitle(model.kind, submission?.stage)}
@@ -192,6 +199,7 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, canEd
         decl={decl}
         items={items}
         mode={mode}
+        {...(editScope ? { scope: editScope, sheet: view.no } : {})}
         canEdit={canEdit}
         values={model.values}
         itemRows={model.itemRows}

@@ -47,6 +47,10 @@ export const PRINT_MESSAGES = defineMessages({
     viewDirectives: "Xem chỉ thị",
     gapsTitle: "Còn {n} chỉ tiêu bắt buộc chưa nhập",
     moreN: "và {n} chỉ tiêu khác",
+    sheetNotRecalled: "Tờ {sheet} – chưa gọi về",
+    sheetNotRecalledNote: "Tờ {sheet} – chưa gọi về: dòng hàng của tờ này chỉ đọc.",
+    sheetClosed: "Tờ {sheet} – đã thông quan / bị từ chối: dòng hàng không sửa trên tờ khai (sửa sau thông quan bằng khai bổ sung AMA)",
+    commonLocked: "Thông tin chung: tờ {sheets} chưa gọi về – gọi về tất cả tờ để sửa",
   },
   en: {
     sheetPick: "Select declaration sheet",
@@ -93,6 +97,10 @@ export const PRINT_MESSAGES = defineMessages({
     viewDirectives: "View instructions",
     gapsTitle: "{n} required fields not filled in",
     moreN: "and {n} more fields",
+    sheetNotRecalled: "Sheet {sheet} – not recalled",
+    sheetNotRecalledNote: "Sheet {sheet} – not recalled: the goods lines of this sheet are read-only.",
+    sheetClosed: "Sheet {sheet} – cleared / rejected: goods lines are not editable on the declaration (use post-clearance amendment AMA)",
+    commonLocked: "General information: sheets {sheets} have not been recalled – recall all sheets to edit",
   },
   zh: {
     sheetPick: "选择报关单分单",
@@ -139,5 +147,9 @@ export const PRINT_MESSAGES = defineMessages({
     viewDirectives: "查看指示",
     gapsTitle: "还有 {n} 个必填申报项未填写",
     moreN: "及其他 {n} 个申报项",
+    sheetNotRecalled: "第 {sheet} 份 – 尚未调回",
+    sheetNotRecalledNote: "第 {sheet} 份 – 尚未调回：该份的货物行为只读。",
+    sheetClosed: "第 {sheet} 份 – 已通关/被拒绝：不能在报关单上修改货物行（通关后修改请使用补充申报 AMA）",
+    commonLocked: "通用信息：第 {sheets} 份尚未调回 – 调回全部报关单后才能修改",
   },
 });

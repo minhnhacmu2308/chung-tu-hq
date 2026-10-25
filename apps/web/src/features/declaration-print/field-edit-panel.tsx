@@ -4,7 +4,7 @@
 // → hỏi Lưu · Bỏ thay đổi · Ở lại (Ở lại trả lựa chọn và focus về ô đang sửa). Đang lưu → chờ lưu xong mới chuyển ô (không hỏi / lưu lặp).
 // Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
 import { Button, Dialog, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
-import { fieldRole, type Declaration, type DeclarationEditMode, type LineItem } from "@kb/contracts";
+import { editBlockFor, fieldRole, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem } from "@kb/contracts";
 import { PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
@@ -28,7 +28,12 @@ type Props = {
   dossierId: string;
   decl: Declaration;
   items: LineItem[];
+  /** Chế độ sửa chỉ tiêu chung (ô tờ khai); ô dòng hàng theo `scope` của tờ `sheet` khi có. */
   mode: DeclarationEditMode;
+  /** Phạm vi sửa theo tờ đã gọi về (lô nhiều tờ); không truyền → `mode` cho mọi ô. */
+  scope?: DeclarationEditScope;
+  /** Tờ đang hiện (1-based) – tờ chứa các dòng của panel. */
+  sheet?: number;
   canEdit: boolean;
   /** Giá trị đang hiện trên bản in: tờ khai (người khai + Hải quan + ước tính) và từng dòng hàng. */
   values: FormValues;
@@ -47,20 +52,28 @@ const tid = (t: PrintTarget | null) => (t ? `${t.line ?? ""}:${t.key}` : "");
 const INPUTS = "input:not([disabled]), textarea:not([disabled]), select:not([disabled])";
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
-export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, canEdit, values, itemRows, lineNos, errors, order, target, onTarget, leaveGuard }: Props) {
+export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope, sheet = 1, canEdit, values, itemRows, lineNos, errors, order, target, onTarget, leaveGuard }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   const locale = useUiLocale();
   const kind = decl.kind;
-  const mode: DeclarationEditMode = canEdit ? stageMode : "LOCKED";
-  const readOnlyReason = !canEdit ? t.noPermission : mode === "LOCKED" ? t.lockedReason : null;
   const save = useSaveDeclarationEdits(dossierId);
   const router = useRouter();
   const pathname = usePathname();
   const original = useMemo(() => declarationValues(kind, decl.fields), [kind, decl.fields]);
-  const editable = useMemo(() => editableKeys(kind, decl.fields, mode), [kind, decl.fields, mode]);
-  const lockOf = useMemo(() => declarationLockOf(kind, mode, original, editable, locale), [kind, mode, original, editable, locale]);
 
   const [shown, setShown] = useState<PrintTarget | null>(target);
+  // Ô dòng hàng theo tờ đang hiện (tờ chưa gọi về khóa), ô chung theo chỉ tiêu chung; lý do khóa theo cùng quy tắc với backend (editBlockFor).
+  const onLine = shown?.line !== undefined;
+  const mode: DeclarationEditMode = !canEdit ? "LOCKED" : onLine && scope ? scope.lines[sheet] ?? scope.common : stageMode;
+  const block = scope ? editBlockFor(scope, onLine ? { kind: "LINE", sheet } : { kind: "COMMON" }) : null;
+  const lockedText =
+    block?.reasonCode === "COMMON_LOCKED_SHEETS" ? fill(t.commonLocked, { sheets: String(block.params.sheets) })
+    : block?.reasonCode === "LINE_SHEET_LOCKED" ? fill(t.sheetNotRecalled, { sheet })
+    : block?.reasonCode === "LINE_SHEET_CLOSED" ? fill(t.sheetClosed, { sheet })
+    : t.lockedReason;
+  const readOnlyReason = !canEdit ? t.noPermission : mode === "LOCKED" ? lockedText : null;
+  const editable = useMemo(() => editableKeys(kind, decl.fields, mode), [kind, decl.fields, mode]);
+  const lockOf = useMemo(() => declarationLockOf(kind, mode, original, editable, locale), [kind, mode, original, editable, locale]);
   const [changes, setChanges] = useState<FormValues>({});
   const [confirm, setConfirm] = useState<{ next: PrintTarget | null; href?: string } | null>(null);
   const [hsItem, setHsItem] = useState<LineItem | null>(null);

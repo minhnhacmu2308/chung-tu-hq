@@ -21,6 +21,7 @@
     "lint:deps": "depcruise --config .dependency-cruiser.cjs apps packages",
     "ui:playground": "pnpm --filter @kb/ui playground",
     "eval": "pnpm --filter @kb/core eval",
+    "code-lists:index": "pnpm --filter @kb/core exec tsx ../../scripts/code-lists/build-index.ts",
     "hscodepro:smoke": "pnpm --filter @kb/core hscodepro:smoke",
     "eval:diff": "pnpm --filter @kb/core eval:diff",
     "test:e2e": "pnpm --filter @kb/web test:e2e"

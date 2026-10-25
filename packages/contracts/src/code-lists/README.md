@@ -12,6 +12,7 @@ Bảng mã gọn `declaration/code-tables.ts` vẫn là nguồn của backend (c
 ```powershell
 powershell -File scripts/code-lists/export-csv.ps1 -Source ..\02_DANHMUC_VNACCS -Out $env:TEMP\kb-danhmuc-csv   # cần Excel (đọc .xls đời cũ); .docx chép word/document.xml
 node scripts/code-lists/build.mjs --csv $env:TEMP\kb-danhmuc-csv
+pnpm code-lists:index   # cập nhật bảng chỉ mục docs/NGUON-DU-LIEU.md
 pnpm --filter @kb/contracts test
 ```
 

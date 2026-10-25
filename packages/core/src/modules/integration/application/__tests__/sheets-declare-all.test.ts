@@ -221,6 +221,12 @@ describe("khai chính thức lô nhiều tờ – guard nội dung đã gửi v�
     expect(errOf(await declareAllSheets(h.deps, declarant, D))).toMatchObject({ reason: "SENT_SHEETS_CHANGED" });
     expect(h.uow.data.outbox).toHaveLength(0);
   });
+  it("tờ khai đang mở lại (DRAFT) → khai chính thức cả lô bị từ chối ngay, không tạo outbox", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED");
+    h.decls.status = "DRAFT";
+    expect(errOf(await declareAllSheets(h.deps, declarant, D))).toMatchObject({ code: "NOT_APPROVED", reason: "DECLARATION_NOT_REAPPROVED" });
+    expect(h.uow.data.outbox).toHaveLength(0);
+  });
   it("chuỗi khai chính thức dừng khi tờ khai bị mở lại (DRAFT): không tạo IDC tờ kế, ghi lỗi trên tờ đó", async () => {
     lot("PRE_DECLARED", "PRE_DECLARED", "PRE_DECLARED");
     unwrap(await declareAllSheets(h.deps, declarant, D));

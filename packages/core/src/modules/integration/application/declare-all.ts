@@ -29,6 +29,8 @@ export async function declareAllSheets(deps: CustomsDeps, ctx: Ctx, dossierId: s
     const blocked = sheets.find((s) => s.branch > waiting.branch && declareOpFor(stageOf(s), snap.payload.kind));
     return err(blocked ? reasonError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: blocked.branch, waitFor: waiting.branch }) : reasonError("INVALID_STATE", "DECLARE_ALL_NOT_PRE_DECLARED", { sheet: waiting.branch }));
   }
+  // Tờ khai đang mở lại để sửa (DRAFT) → không bắt đầu chuỗi (chuỗi cũng dừng ở tờ kế khi DRAFT – process-outbox.chainSheets).
+  if (snap.status === "DRAFT") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
   const target = sheets.find((s) => declareOpFor(stageOf(s), snap.payload.kind));
   if (!target) return err(reasonError("INVALID_STATE", "DECLARE_ALL_NONE"));
   // HS / BLOCKER: performOperationChecked kiểm cho mọi khai chính thức lô nhiều tờ (bất biến 7).

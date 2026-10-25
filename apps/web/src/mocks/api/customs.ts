@@ -920,6 +920,7 @@ export const declareAllSheets = (dossierId: string) =>
       if (blocked) throw reasonApiError("INVALID_STATE", "SHEET_ORDER_DECLARE", { sheet: blocked.no, waitFor: waiting.no });
       throw reasonApiError("INVALID_STATE", "DECLARE_ALL_NOT_PRE_DECLARED", { sheet: waiting.no });
     }
+    if (db.declarations.find((d) => d.dossierId === c.dossier.id)?.status === "DRAFT") throw reasonApiError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED");
     const target = sheets.find((s) => declareOpFor(s.stage, c.dossier.direction));
     if (!target) throw reasonApiError("INVALID_STATE", "DECLARE_ALL_NONE");
     const unconfirmed = c.items.filter((i) => !i.hsConfirmed).length;

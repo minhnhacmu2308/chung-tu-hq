@@ -4,7 +4,7 @@ import type { InboxMessage, InboxMessageStatus } from "@kb/contracts";
 import {
   Badge, Button, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, fill, IconTile, RecordCard, RowActions, StatusBadge, useMessages, type RowAction, type Tone,
 } from "@kb/ui";
-import { Eye, EyeOff, FilePlus2, FolderInput, Info, Mail, MailCheck, MailX, Paperclip, RotateCcw, type LucideIcon } from "lucide-react";
+import { Eye, EyeOff, FilePlus2, FolderInput, Info, Mail, MailCheck, MailX, Paperclip, RotateCcw, Trash2, type LucideIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { DOC_KIND_LABELS } from "@/mocks/types";
@@ -137,6 +137,7 @@ export function InboxTable({
       ...(actions.canUse && m.status === "NEW" ? [{ id: "ignore", label: t.ignore, icon: <EyeOff />, onSelect: () => actions.onSetStatus(m, "IGNORED"), quick: false }] : []),
       ...(actions.canUse && m.status === "IGNORED" ? [{ id: "restore", label: t.restore, icon: <RotateCcw />, onSelect: () => actions.onSetStatus(m, "NEW") }] : []),
       ...m.attachments.map((a) => ({ id: `view-${a.id}`, label: fill(t.viewFile, { name: a.fileName }), icon: <Eye />, onSelect: () => actions.onPreview(a), quick: false })),
+      ...(actions.canUse ? [{ id: "delete", label: t.delete, icon: <Trash2 />, tone: "danger" as const, onSelect: () => actions.onDelete([m]), quick: false }] : []),
     ];
     return <RowActions rowLabel={m.subject} actions={list} />;
   };
@@ -148,6 +149,12 @@ export function InboxTable({
       data={rows}
       getRowId={(r) => r.id}
       rowLabel={(r) => r.subject}
+      selectable={actions.canUse}
+      selectionActions={(picked, clear) => (
+        <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => actions.onDelete(picked, clear)}>
+          {fill(t.deleteSelected, { n: picked.length })}
+        </Button>
+      )}
       searchable
       columnToggle
       resizable
@@ -177,7 +184,9 @@ export function InboxTable({
             leading={<IconTile icon={<Icon />} tone={tone} size="md" className="bg-surface" />}
             art={<Icon />}
             status={<StatusBadge status={STATUS[m.status]} />}
+            select={parts.select}
             actions={parts.actions}
+            titleLines={2}
             fields={[
               {
                 label: t.colReceived,

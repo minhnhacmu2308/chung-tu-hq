@@ -10,7 +10,7 @@ import { asOrgId, asUserId, ulidIdGen } from "../shared/ids.js";
 import { InMemoryJobQueue } from "../shared/queue.js";
 import { errCode, unwrap } from "../shared/result.js";
 import { DrizzleUsageRecorder } from "../modules/billing/infrastructure/drizzle-usage.js";
-import { createDossier, uploadDocuments, type DossierDeps } from "../modules/dossier/index.js";
+import { createDossier, deleteDossier, uploadDocuments, type DossierDeps } from "../modules/dossier/index.js";
 import { FakePdfInspector, FakeUnzipper, InMemoryStorage, RecordingPublisher } from "../modules/dossier/application/test/fakes.js";
 import { DrizzleDossierUow } from "../modules/dossier/infrastructure/drizzle-uow.js";
 import { listChecks, runRules } from "../modules/validation/index.js";
@@ -133,5 +133,17 @@ describe("luồng tờ khai trên Postgres thật", () => {
     expect(a).toMatchObject({ status: "APPROVED", approvedBy: "Phạm Anh Tuấn" });
     const row = await dossier.uow.asOrg(chau, (r) => r.dossiers.get(chau.orgId, id));
     expect(row).toMatchObject({ status: "APPROVED", step: "submit" });
+  });
+
+  it("xóa hẳn hồ sơ đã có dữ liệu đọc, dòng hàng, tờ khai nháp: FK cascade dọn sạch, RLS – org khác không xóa được", async () => {
+    const id = await prepareDossier(["HSP-INV-2610.pdf", "HSP-PL-2610.pdf"]);
+    await runAgentFor(id);
+    expect(errCode(await deleteDossier(dossier, other, id))).toBe("NOT_FOUND");
+    expect(unwrap(await deleteDossier(dossier, tuan, id)).id).toBe(id);
+    const left = await withCtx(db, tuan, async (tx) => {
+      const n = async (table: string) => Number(((await tx.execute(sql.raw(`select count(*)::int as n from ${table} where dossier_id = '${id}'`))) as unknown as { n: number }[])[0]!.n);
+      return { dossiers: Number(((await tx.execute(sql`select count(*)::int as n from dossiers where id = ${id}`)) as unknown as { n: number }[])[0]!.n), documents: await n("documents"), fields: await n("extracted_fields"), lines: await n("line_items"), decls: await n("declarations"), shipments: await n("shipments") };
+    });
+    expect(left).toEqual({ dossiers: 0, documents: 0, fields: 0, lines: 0, decls: 0, shipments: 0 });
   });
 });

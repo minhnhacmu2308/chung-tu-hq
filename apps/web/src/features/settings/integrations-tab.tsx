@@ -1,63 +1,55 @@
 "use client";
-import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Grid, IconTile, Skeleton, Stack, fill, toast, useMessages, StatusBadge, type Status } from "@kb/ui";
+// Tab "Kết nối hệ thống" phía doanh nghiệp: chỉ những kết nối doanh nghiệp tự làm – hộp thư nhận chứng từ và tài khoản
+// khai báo VNACCS (kèm nút thử đăng nhập FPT.VNACCS bằng tài khoản đó). Dịch vụ nền tảng (AI đọc chứng từ, hscodepro,
+// hóa đơn điện tử, khóa Customs Hub) do quản trị KhaiBáo AI cấu hình ở khu Quản trị hệ thống, doanh nghiệp không thấy.
+import { Alert, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, fill, IconTile, Stack, StatusBadge, toast, useMessages, type Status } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Building2, FileSpreadsheet, KeyRound, PlugZap, Search } from "lucide-react";
-import type { ReactNode } from "react";
+import { Building2, KeyRound, PlugZap } from "lucide-react";
 import { listIntegrations, settingsKeys, testIntegration } from "@/api/settings";
 import { formatRelative } from "@/lib/format";
 import type { Integration } from "@/mocks/types";
-import { LoadError } from "@/components/common/load-error";
 import { INTEGRATIONS_TAB_MESSAGES } from "./integrations-tab.messages";
 import { MailboxSection } from "./mailbox-section";
 import { VnaccsAccountSection } from "./vnaccs-account";
 
 const STATUS = { CONNECTED: "INTEGRATION_CONNECTED", ERROR: "INTEGRATION_ERROR", NOT_CONFIGURED: "INTEGRATION_NOT_CONFIGURED" } as const satisfies Record<Integration["status"], Status>;
-const ICON: Record<Integration["id"], ReactNode> = {
-  HSCODEPRO: <Search />,
-  CUSTOMS_HUB: <Building2 />,
-  AI_PROVIDER: <Bot />,
-  EINVOICE: <FileSpreadsheet />,
-};
 
-function IntegrationCard({ it }: { it: Integration }) {
+/** Thẻ VNACCS: tài khoản của doanh nghiệp + trạng thái lần thử đăng nhập FPT.VNACCS gần nhất. */
+function VnaccsCard() {
   const qc = useQueryClient();
   const m = useMessages(INTEGRATIONS_TAB_MESSAGES);
+  const { data } = useQuery({ queryKey: settingsKeys.integrations, queryFn: listIntegrations });
+  const hub = data?.find((it) => it.id === "CUSTOMS_HUB");
   const test = useMutation({
-    mutationFn: () => testIntegration(it.id),
+    mutationFn: () => testIntegration("CUSTOMS_HUB"),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: settingsKeys.integrations });
-      toast(r.status === "CONNECTED" ? { tone: "success", title: fill(m.testOk, { name: r.name }) } : { tone: "danger", title: fill(m.testFail, { name: r.name }), description: r.detail ?? "" });
+      toast(r.status === "CONNECTED" ? { tone: "success", title: m.testOk } : { tone: "danger", title: m.testFail, description: r.detail ?? "" });
     },
-    onError: (e: Error) => toast({ tone: "warning", title: it.name, description: e.message }),
+    onError: (e: Error) => toast({ tone: "warning", title: m.vnaccsTitle, description: e.message }),
   });
   return (
     <Card className="flex flex-col">
       <CardHeader>
         <div className="flex items-start gap-3">
-          <IconTile icon={ICON[it.id]} />
+          <IconTile icon={<Building2 />} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <CardTitle as="h3">{it.name}</CardTitle>
-              <StatusBadge status={STATUS[it.status]} />
+              <CardTitle as="h3">{m.vnaccsTitle}</CardTitle>
+              {hub && <StatusBadge status={STATUS[hub.status]} />}
             </div>
-            <CardDescription>{it.description}</CardDescription>
+            <CardDescription>{m.vnaccsDesc}</CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1">
         <Stack gap="sm">
-          {it.status === "ERROR" && it.detail ? (
-            <Alert tone="danger">{it.detail}</Alert>
-          ) : it.detail ? (
-            <p className="text-sm text-fg-muted">{it.detail}</p>
-          ) : (
-            <p className="text-sm text-fg-subtle">{m.notEnabled}</p>
-          )}
-          {it.id === "CUSTOMS_HUB" && <VnaccsAccountSection />}
+          {hub?.status === "ERROR" && hub.detail ? <Alert tone="danger">{hub.detail}</Alert> : hub?.detail ? <p className="text-sm text-fg-muted">{hub.detail}</p> : null}
+          <VnaccsAccountSection />
         </Stack>
       </CardContent>
       <CardFooter className="justify-between">
-        <span className="text-xs text-fg-subtle">{it.lastCheckedAt ? fill(m.checked, { when: formatRelative(it.lastCheckedAt) }) : m.notChecked}</span>
+        <span className="text-xs text-fg-subtle">{hub?.lastCheckedAt ? fill(m.checked, { when: formatRelative(hub.lastCheckedAt) }) : m.notChecked}</span>
         <Button size="sm" variant="secondary" leftIcon={<PlugZap className="h-4 w-4" />} loading={test.isPending} onClick={() => test.mutate()}>
           {m.test}
         </Button>
@@ -68,7 +60,6 @@ function IntegrationCard({ it }: { it: Integration }) {
 
 export function IntegrationsTab() {
   const m = useMessages(INTEGRATIONS_TAB_MESSAGES);
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: settingsKeys.integrations, queryFn: listIntegrations });
   return (
     <Stack gap="md">
       <Alert tone="info" title={m.keysTitle}>
@@ -77,16 +68,8 @@ export function IntegrationsTab() {
           {m.keysBody}
         </span>
       </Alert>
-      {isError ? (
-        <LoadError onRetry={() => void refetch()} />
-      ) : isLoading || !data ? (
-        <Grid cols={{ base: 1, lg: 2 }}>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-48" />)}</Grid>
-      ) : (
-        <Grid cols={{ base: 1, lg: 2 }}>
-          {data.map((it) => <IntegrationCard key={it.id} it={it} />)}
-        </Grid>
-      )}
       <MailboxSection />
+      <VnaccsCard />
     </Stack>
   );
 }

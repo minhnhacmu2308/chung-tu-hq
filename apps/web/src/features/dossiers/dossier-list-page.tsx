@@ -1,14 +1,15 @@
 "use client";
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, Dialog, DialogClose, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, fill, IconTile, PageHeader, RecordCard, SegmentedControl, Stack, StepProgress, toast, type DataTableColumnVisibility, RowActions, pickMessages, useUiLocale,
+  Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, fill, IconTile, PageHeader, pickMessages, RecordCard, RowActions, SegmentedControl, Stack, StepProgress, toast, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Container, Download, FolderOpen, Package, Plane, Plus, Ship, TrainFront, Truck, XCircle, type LucideIcon } from "lucide-react";
+import { Container, Download, FolderOpen, Package, Plane, Plus, Ship, TrainFront, Trash2, Truck, XCircle, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
-import { cancelDossier, dossierKeys, listDossiers } from "@/api/dossiers";
-import { listMembers, memberKeys } from "@/api/session";
+import { cancelDossier, deleteDossier, dossierKeys, listDossiers } from "@/api/dossiers";
+import { getSession, listMembers, memberKeys, sessionKeys } from "@/api/session";
+import { toastMutationError } from "@/lib/mutation-error";
 import { formatMoney } from "@/lib/format";
 import { STEP_LABELS, STEP_ORDER, type Direction, type Dossier, type DossierStatus } from "@/mocks/types";
 import { DossierStatusBadge, DueBadge } from "./dossier-badges";
@@ -24,6 +25,9 @@ const TRANSPORT_ICON: Record<Dossier["transportMode"], LucideIcon> = {
 type Row = Dossier & { stepLabel: string; statusLabel: string; ownerName: string };
 
 type Scope = "ALL" | Direction;
+
+/** Hồ sơ đã truyền Hải quan (có số tờ khai / trạng thái Hải quan) giữ để đối chiếu – chỉ hủy, không xóa (backend kiểm lại). */
+const sentToCustoms = (d: Dossier) => d.status === "SUBMITTED" || d.status === "CLEARED" || !!d.declarationNo || !!d.customs;
 
 /** Hồ sơ đã thông quan → tô xong cả quy trình; đã hủy → thanh xám. */
 const stepState = (status: DossierStatus) => (status === "CLEARED" ? "complete" : status === "CANCELLED" ? "stopped" : "active");
@@ -104,6 +108,11 @@ function ListInner() {
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
   const members = useQuery({ queryKey: memberKeys.all, queryFn: listMembers });
   const [toCancel, setToCancel] = useState<Dossier | null>(null);
+  const [toDelete, setToDelete] = useState<Dossier | null>(null);
+  const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
+  const role = session.data?.user.role;
+  // Xóa hẳn: người duyệt / quản trị (backend kiểm lại quyền).
+  const canDelete = role === "OWNER" || role === "ADMIN" || role === "APPROVER";
   // Mặc định ẩn "Phụ trách" cho bảng gọn; bật lại qua nút "Cột".
   const [columnVisibility, setColumnVisibility] = useState<DataTableColumnVisibility>({ ownerName: false });
 
@@ -115,6 +124,16 @@ function ListInner() {
       setToCancel(null);
     },
     onError: () => toast({ tone: "danger", title: t.cancelFailed, description: t.tryLater }),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteDossier(id),
+    onSuccess: async (d) => {
+      await qc.invalidateQueries({ queryKey: dossierKeys.all });
+      toast({ tone: "success", title: t.deleted, description: d.code });
+      setToDelete(null);
+    },
+    onError: toastMutationError(t.deleteFailed),
   });
 
   const rows = useMemo<Row[]>(() => {
@@ -206,6 +225,7 @@ function ListInner() {
                 return (
                 <RecordCard
                   title={<span className="font-mono">{r.code}</span>}
+                  titleLines={1}
                   subtitle={r.partner}
                   tone={r.direction === "NK" ? "info" : "primary"}
                   pattern={r.direction === "NK" ? "dots" : "diagonal"}
@@ -245,28 +265,48 @@ function ListInner() {
                       disabled: r.status === "CANCELLED" || r.status === "CLEARED" || r.status === "SUBMITTED",
                       onSelect: () => setToCancel(r),
                     },
+                    ...(canDelete && !sentToCustoms(r)
+                      ? [{
+                          id: "delete",
+                          label: t.delete,
+                          icon: <Trash2 />,
+                          tone: "danger" as const,
+                          quick: false,
+                          onSelect: () => setToDelete(r),
+                        }]
+                      : []),
                   ]}
                 />
               )}
             />
       </Stack>
 
-      <Dialog open={toCancel !== null} onOpenChange={(o) => !o && setToCancel(null)}>
-        <DialogContent title={t.cancelTitle} size="sm" icon={<XCircle className="h-4 w-4" />}>
-          <p className="text-sm text-fg-muted">
-            {t.cancelBodyPrefix} <span className="font-mono text-fg">{toCancel?.code}</span> – {toCancel?.partner} {t.cancelBodySuffix}
-            {" "}{t.cancelBodyKeep}
-          </p>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="ghost">{t.keep}</Button>
-            </DialogClose>
-            <Button variant="danger" loading={cancel.isPending} onClick={() => toCancel && cancel.mutate(toCancel.id)}>
-              {t.cancel}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={toCancel !== null}
+        onOpenChange={(o) => !o && setToCancel(null)}
+        title={t.cancelTitle}
+        icon={<XCircle className="h-4 w-4" />}
+        confirmLabel={t.cancel}
+        loading={cancel.isPending}
+        onConfirm={() => toCancel && cancel.mutate(toCancel.id)}
+        labels={{ keep: t.keep }}
+      >
+        {t.cancelBodyPrefix} <span className="font-mono">{toCancel?.code}</span> – {toCancel?.partner} {t.cancelBodySuffix}
+        {" "}{t.cancelBodyKeep}
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title={t.deleteTitle}
+        icon={<Trash2 className="h-4 w-4" />}
+        irreversible
+        confirmLabel={t.deleteConfirm}
+        loading={remove.isPending}
+        onConfirm={() => toDelete && remove.mutate(toDelete.id)}
+      >
+        {fill(t.deleteBody, { code: toDelete?.code ?? "" })}
+      </ConfirmDialog>
     </Stack>
   );
 }

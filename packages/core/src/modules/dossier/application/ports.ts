@@ -28,6 +28,8 @@ export interface DossierRepos {
     update(orgId: string, id: string, patch: Partial<Omit<DossierRow, "id" | "orgId" | "createdAt">>): Promise<void>;
     /** Số hồ sơ tạo trong [from, to) và tổng trang chứng từ của chúng (mức dùng theo gói). */
     statsInRange(orgId: string, from: Date, to: Date): Promise<{ dossiers: number; pages: number }>;
+    /** Xóa hẳn hồ sơ + chứng từ, tiến trình (bảng của module khác có FK cascade theo hồ sơ / chứng từ). */
+    delete(orgId: string, id: string): Promise<void>;
   };
   documents: {
     list(orgId: string, dossierId: string): Promise<DocumentRow[]>;
@@ -104,6 +106,8 @@ export type DossierDeps = {
   customs?: DossierCustomsReader;
   /** Các tờ khai nhánh đã lập ở Hải quan (module integration; container nối) – chặn đổi bộ chứng từ khi lô nhiều tờ còn tờ chưa gọi về. Không nối → không kiểm. */
   customsSheets?: (orgId: string, dossierId: string) => Promise<EditSheet[]>;
+  /** Sau khi xóa hẳn hồ sơ (container nối: file hộp thư đã xếp vào hồ sơ trở lại "chờ xếp"). */
+  onDeleted?: (ctx: { orgId: OrgId; userId: UserId }, dossierId: string) => Promise<void>;
   clock: Clock;
   idGen: IdGen;
 };

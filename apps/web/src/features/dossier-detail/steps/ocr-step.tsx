@@ -107,9 +107,13 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
 
   const jumpTo = (id: string) => {
     setActive(id);
-    const el = document.getElementById(fieldDomId(id));
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-    document.getElementById(`${fieldDomId(id)}-input`)?.focus({ preventScroll: true });
+    // Chờ bảng hàng hóa dựng lại (có thể vừa chuyển sang trang chứa dòng đó) rồi mới cuộn tới ô.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document.getElementById(fieldDomId(id))?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById(`${fieldDomId(id)}-input`)?.focus({ preventScroll: true });
+      }),
+    );
   };
 
   // Mở từ tờ khai đầy đủ: nhảy tới dòng hàng cần sửa khi tab đã hiện.
@@ -124,11 +128,10 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
   const showItems = items.length > 0 && (filter === "all" || items.some((f) => isSuspect(f.status)));
 
   return (
-    <div className="grid grid-cols-1 gap-4 cq-lg:grid-cols-2">
+    <div className="flex flex-col gap-4">
       {pick && (
         <Alert
           tone="info"
-          className="cq-lg:col-span-2"
           title={fill(tl.pickTitle, { label: pick.label })}
           action={
             <Button size="sm" variant="secondary" onClick={() => setPick(null)}>
@@ -139,54 +142,58 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
           {tl.pickBody}
         </Alert>
       )}
-      <DocumentPreview
-        document={doc}
-        file={file}
-        fields={fields}
-        highlightFieldId={pick ? null : active}
-        onFieldClick={jumpTo}
-        picking={!!pick}
-        onPick={onPick}
-        onTextReady={setTextApi}
-        className="h-120 cq-lg:sticky cq-lg:top-shell cq-lg:h-176 cq-lg:self-start"
-      />
-      <Stack gap="md" className="min-w-0">
-        {visible.length === 0 && !showItems ? (
-          <EmptyState title={t.nothingToReview} description={t.nothingToReviewDesc} />
-        ) : null}
-        {GROUPS.filter((g) => g !== "ITEMS").map((g) => {
-          const list = visible.filter((f) => f.group === g);
-          if (!list.length) return null;
-          return (
-            <section key={g} aria-labelledby={`grp-${doc.id}-${g}`} className="flex flex-col gap-1">
-              <h3 id={`grp-${doc.id}-${g}`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-                {groupLabels[g]}
-              </h3>
-              {list.map((f) => (
-                <FieldRow
-                  key={f.id}
-                  field={f}
-                  active={active === f.id}
-                  onActivate={setActive}
-                  onSave={save}
-                  onConfirm={confirm}
-                  onRevert={revert}
-                  picking={pick?.id === f.id}
-                  {...(canPick ? { onPick: (id: string) => setPick(fields.find((x) => x.id === id) ?? null) } : {})}
-                />
-              ))}
-            </section>
-          );
-        })}
-        {showItems && (
-          <section aria-labelledby={`grp-${doc.id}-items`} className="flex flex-col gap-2">
-            <h3 id={`grp-${doc.id}-items`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-              {groupLabels.ITEMS}
-            </h3>
-            <ItemsTable fields={items} activeId={active} onActivate={setActive} onSave={save} onConfirm={confirm} />
-          </section>
-        )}
-      </Stack>
+      {/* Khung chứng từ dính khi cuộn chỉ trong lưới này – không đè lên danh sách hàng hóa bên dưới. */}
+      <div className="grid grid-cols-1 gap-4 cq-lg:grid-cols-2">
+        <DocumentPreview
+          document={doc}
+          file={file}
+          fields={fields}
+          highlightFieldId={pick ? null : active}
+          onFieldClick={jumpTo}
+          picking={!!pick}
+          onPick={onPick}
+          onTextReady={setTextApi}
+          className="h-120 cq-lg:sticky cq-lg:top-shell cq-lg:h-176 cq-lg:self-start"
+        />
+        <Stack gap="md" className="min-w-0">
+          {visible.length === 0 && !showItems ? (
+            <EmptyState title={t.nothingToReview} description={t.nothingToReviewDesc} />
+          ) : null}
+          {GROUPS.filter((g) => g !== "ITEMS").map((g) => {
+            const list = visible.filter((f) => f.group === g);
+            if (!list.length) return null;
+            return (
+              <section key={g} aria-labelledby={`grp-${doc.id}-${g}`} className="flex flex-col gap-1">
+                <h3 id={`grp-${doc.id}-${g}`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+                  {groupLabels[g]}
+                </h3>
+                {list.map((f) => (
+                  <FieldRow
+                    key={f.id}
+                    field={f}
+                    active={active === f.id}
+                    onActivate={setActive}
+                    onSave={save}
+                    onConfirm={confirm}
+                    onRevert={revert}
+                    picking={pick?.id === f.id}
+                    {...(canPick ? { onPick: (id: string) => setPick(fields.find((x) => x.id === id) ?? null) } : {})}
+                  />
+                ))}
+              </section>
+            );
+          })}
+        </Stack>
+      </div>
+      {/* Danh sách hàng hóa trải hết chiều ngang (có thể hàng trăm dòng, 7 cột): nửa phải quá hẹp, mô tả bị bóp. */}
+      {showItems && (
+        <section aria-labelledby={`grp-${doc.id}-items`} className="flex min-w-0 flex-col gap-2">
+          <h3 id={`grp-${doc.id}-items`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+            {groupLabels.ITEMS}
+          </h3>
+          <ItemsTable fields={items} activeId={active} onActivate={setActive} onSave={save} onConfirm={confirm} />
+        </section>
+      )}
     </div>
   );
 }

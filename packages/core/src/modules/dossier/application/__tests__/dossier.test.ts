@@ -8,6 +8,7 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import { cancelDossier } from "../cancel-dossier.js";
 import { changeDocumentKind } from "../change-document-kind.js";
 import { createDossier } from "../create-dossier.js";
+import { deleteDossier } from "../delete-dossier.js";
 import { deleteDocument } from "../delete-document.js";
 import { getDossier } from "../get-dossier.js";
 import { listDocuments } from "../list-documents.js";
@@ -279,5 +280,43 @@ describe("requeueStuckDocuments – job quét chứng từ kẹt QUEUED", () => 
     // Quét lại ngay → mốc đã làm mới, chưa tới hạn → không đẩy trùng.
     expect((await requeueStuckDocuments(deps, { orgId: "org_a" })).requeued).toEqual([]);
     expect((await requeueStuckDocuments(deps, { orgId: "org_b" })).requeued).toEqual([]);
+  });
+});
+
+describe("deleteDossier", () => {
+  it("xóa hẳn hồ sơ chưa truyền: chứng từ, file, tiến trình; báo onDeleted; chỉ người duyệt / quản trị; org khác không thấy", async () => {
+    const released: string[] = [];
+    deps.onDeleted = async (_c, id) => void released.push(id);
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const keep = unwrap(await createDossier(deps, ctx(), INPUT));
+    unwrap(await uploadDocuments(deps, ctx(), d.id, [pdf("a.pdf"), pdf("b.pdf")]));
+    unwrap(await uploadDocuments(deps, ctx(), keep.id, [pdf("c.pdf")]));
+    const keys = uow.data.documents.filter((x) => x.dossierId === d.id).map((x) => x.storageKey);
+    await uow.asOrg(ctx(), (r) => r.progress.upsert({ id: "p1", orgId: "org_a", dossierId: d.id, jobKind: "extract", jobId: "j1", status: "DONE", progress: 100, message: "", updatedAt: new Date() }));
+    expect(errCode(await deleteDossier(deps, ctx("DECLARANT"), d.id))).toBe("FORBIDDEN");
+    expect(errCode(await deleteDossier(deps, ctx("ADMIN", "org_b"), d.id))).toBe("NOT_FOUND");
+    expect(unwrap(await deleteDossier(deps, ctx("APPROVER"), d.id))).toEqual({ id: d.id, code: d.code });
+    expect(uow.data.dossiers.map((x) => x.id)).toEqual([keep.id]);
+    expect(uow.data.documents.map((x) => x.dossierId)).toEqual([keep.id]);
+    expect(uow.data.progress).toEqual([]);
+    for (const k of keys) expect(await storage.exists(k)).toBe(false);
+    expect(released).toEqual([d.id]);
+  });
+
+  it("hồ sơ đã truyền Hải quan (trạng thái / số tờ khai / có kết quả Hải quan) → DOSSIER_SENT_TO_CUSTOMS, giữ nguyên", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const row = uow.data.dossiers[0]!;
+    const blocked = { ok: false, error: { code: "INVALID_STATE", reason: "DOSSIER_SENT_TO_CUSTOMS" } };
+    row.status = "SUBMITTED";
+    expect(await deleteDossier(deps, ctx("ADMIN"), d.id)).toMatchObject(blocked);
+    row.status = "CANCELLED";
+    row.declarationNo = "104000000001";
+    expect(await deleteDossier(deps, ctx("ADMIN"), d.id)).toMatchObject(blocked);
+    row.declarationNo = null;
+    deps.customs = { summaries: async (_c, ids) => new Map(ids.map((id) => [id, { total: 1, cleared: 0 } as never])) };
+    expect(await deleteDossier(deps, ctx("ADMIN"), d.id)).toMatchObject(blocked);
+    delete deps.customs;
+    unwrap(await deleteDossier(deps, ctx("ADMIN"), d.id));
+    expect(uow.data.dossiers).toEqual([]);
   });
 });

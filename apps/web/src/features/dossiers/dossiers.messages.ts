@@ -26,6 +26,10 @@ export const DOSSIER_LIST_MESSAGES = defineMessages({
     open: "Mở hồ sơ", cancel: "Hủy hồ sơ", cancelTitle: "Hủy hồ sơ?",
     cancelBodyPrefix: "Hồ sơ", cancelBodySuffix: "sẽ chuyển sang trạng thái “Đã hủy”.", cancelBodyKeep: "Chứng từ và lịch sử vẫn được giữ lại để tra cứu.",
     keep: "Không hủy",
+    delete: "Xóa hồ sơ", deleteTitle: "Xóa hẳn hồ sơ?",
+    deleteBody: "Hồ sơ {code} cùng toàn bộ chứng từ, dữ liệu đã đọc và tờ khai nháp sẽ bị xóa vĩnh viễn, không khôi phục được. File lấy từ hộp thư chứng từ sẽ trở lại mục \"Mới\" để xếp lại.",
+    deleteConfirm: "Xóa vĩnh viễn",
+    deleted: "Đã xóa hồ sơ", deleteFailed: "Không xóa được hồ sơ",
   },
   en: {
     colCode: "Dossier no.", colType: "Declaration type", colPartner: "Partner", colValue: "Value", colDue: "Filing deadline", colStep: "Step", colStatus: "Status", colOwner: "Owner",
@@ -39,6 +43,10 @@ export const DOSSIER_LIST_MESSAGES = defineMessages({
     open: "Open dossier", cancel: "Cancel dossier", cancelTitle: "Cancel dossier?",
     cancelBodyPrefix: "Dossier", cancelBodySuffix: "will be marked “Cancelled”.", cancelBodyKeep: "Documents and history are kept for reference.",
     keep: "Keep",
+    delete: "Delete dossier", deleteTitle: "Delete this dossier permanently?",
+    deleteBody: "Dossier {code} and all of its documents, extracted data and draft declarations will be permanently deleted and cannot be restored. Files taken from the document inbox go back to \"New\" so they can be filed again.",
+    deleteConfirm: "Delete permanently",
+    deleted: "Dossier deleted", deleteFailed: "Couldn't delete the dossier",
   },
   zh: {
     colCode: "档案编号", colType: "申报类型", colPartner: "合作方", colValue: "金额", colDue: "申报期限", colStep: "步骤", colStatus: "状态", colOwner: "负责人",
@@ -52,6 +60,10 @@ export const DOSSIER_LIST_MESSAGES = defineMessages({
     open: "打开档案", cancel: "取消档案", cancelTitle: "取消档案？",
     cancelBodyPrefix: "档案", cancelBodySuffix: "将变为“已取消”状态。", cancelBodyKeep: "单证和历史记录仍会保留以供查询。",
     keep: "不取消",
+    delete: "删除档案", deleteTitle: "永久删除该档案？",
+    deleteBody: "档案 {code} 及其全部单证、已识别数据和申报草稿将被永久删除，且无法恢复。来自单证收件箱的文件将回到\"新\"，可重新归档。",
+    deleteConfirm: "永久删除",
+    deleted: "档案已删除", deleteFailed: "无法删除档案",
   },
 });
 

@@ -17,7 +17,7 @@ import { createValidationInfrastructure } from "@kb/core/modules/validation/infr
 import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
-import type { MailboxDeps } from "@kb/core/modules/mailbox";
+import { releaseDossierAttachments, type MailboxDeps } from "@kb/core/modules/mailbox";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { checkSentSheets, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
@@ -279,6 +279,8 @@ function build(): Container {
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
   // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
   mailbox.audit = identity.audit;
+  // Xóa hẳn hồ sơ → file hộp thư đã xếp vào hồ sơ đó trở lại "chờ xếp".
+  dossier.onDeleted = (ctx, dossierId) => releaseDossierAttachments(mailbox, ctx, dossierId);
   dossier.audit = identity.audit;
   declaration.orgAudit = identity.audit;
   customs.orgAudit = identity.audit;

@@ -47,6 +47,7 @@ function repos(tx: Tx): MailboxRepos {
       listByMessages: async (orgId, messageIds) =>
         messageIds.length ? (await tx.select().from(inboxAttachments).where(and(eq(inboxAttachments.orgId, orgId), inArray(inboxAttachments.messageId, messageIds)))).map(toAtt) : [],
       byIds: async (orgId, ids) => (ids.length ? (await tx.select().from(inboxAttachments).where(and(eq(inboxAttachments.orgId, orgId), inArray(inboxAttachments.id, ids)))).map(toAtt) : []),
+      listByDossier: async (orgId, dossierId) => (await tx.select().from(inboxAttachments).where(and(eq(inboxAttachments.orgId, orgId), eq(inboxAttachments.dossierId, dossierId)))).map(toAtt),
       insert: async (rows) => void (rows.length && (await tx.insert(inboxAttachments).values(rows))),
       update: async (row) => void (await tx.update(inboxAttachments).set(row).where(and(eq(inboxAttachments.orgId, row.orgId), eq(inboxAttachments.id, row.id)))),
     },

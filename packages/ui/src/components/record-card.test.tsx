@@ -47,4 +47,14 @@ describe("RecordCard", () => {
     expect(container.querySelector("dl")).toBeNull();
     expect(container.querySelector(".border-t")).toBeNull();
   });
+
+  it("titleLines → tiêu đề cắt theo số dòng và giữ đủ chỗ, trạng thái xuống dòng riêng (đầu thẻ trong lưới cao bằng nhau)", () => {
+    const { container } = render(<RecordCard title="Tiêu đề rất dài" titleLines={2} subtitle="Người gửi" status={<span>Chưa xếp</span>} tone="info" />);
+    const title = screen.getByText("Tiêu đề rất dài");
+    expect(title).toHaveClass("line-clamp-2", "min-h-[2lh]");
+    expect(title.parentElement!.contains(screen.getByText("Chưa xếp"))).toBe(true);
+    expect(title.contains(screen.getByText("Chưa xếp"))).toBe(false);
+    expect(screen.getByText("Người gửi")).toHaveClass("line-clamp-1");
+    expect(container.querySelector("[data-slot=record-card-head]")).not.toBeNull();
+  });
 });

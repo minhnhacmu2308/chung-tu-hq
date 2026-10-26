@@ -351,7 +351,7 @@ Menu **Tài khoản & tích hợp**:
 | Doanh nghiệp | Thông tin doanh nghiệp (MST khóa) | OWNER/ADMIN |
 | Gói & sử dụng | Gói, số hồ sơ/trang đã dùng trong tháng, chi phí AI | Xem |
 | Thành viên & vai trò | Mời, đổi vai trò, khóa; duyệt yêu cầu tham gia | OWNER/ADMIN |
-| Kết nối hệ thống | Trạng thái HSCodePro, Customs Hub, dịch vụ AI; kiểm tra kết nối | OWNER/ADMIN |
+| Kết nối hệ thống | Hộp thư nhận chứng từ (Gmail/Outlook); tài khoản VNACCS + kiểm tra đăng nhập FPT.VNACCS. Dịch vụ nền tảng (AI, HSCodePro, HĐĐT) chỉ quản trị KhaiBáo AI thấy ở khu Quản trị hệ thống | OWNER/ADMIN |
 | Chứng thư số | Thêm, đặt mặc định, xóa; nhắc trước 30 ngày khi sắp hết hạn | OWNER/ADMIN |
 | Khai báo | **Mặc định khai báo** theo NK/XK (loại hình, chi cục, kho, PTTT…), **ghi đè nguồn** từng chỉ tiêu trong phạm vi cho phép; **tài khoản VNACCS** (lưu mã hóa, không bao giờ trả mật khẩu về trình duyệt) | OWNER/ADMIN |
 | Ngưỡng & giao diện | Ngưỡng nghi ngờ, nguyên tắc 4 mắt, giao diện | OWNER/ADMIN |

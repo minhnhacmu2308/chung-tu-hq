@@ -5,6 +5,7 @@ export { getDossier } from "./application/get-dossier.js";
 export { createDossier } from "./application/create-dossier.js";
 export { updateDossier } from "./application/update-dossier.js";
 export { cancelDossier } from "./application/cancel-dossier.js";
+export { deleteDossier } from "./application/delete-dossier.js";
 export { listDocuments } from "./application/list-documents.js";
 export { uploadDocuments } from "./application/upload-documents.js";
 export { changeDocumentKind } from "./application/change-document-kind.js";

@@ -76,6 +76,8 @@ describe("mail_connections / inbox (RLS)", () => {
     await uow.asOrg(A, (r) => r.messages.update({ ...m2!, status: "DONE" }));
     expect(await uow.asOrg(A, (r) => r.attachments.byIds("org_anphat", ["iatt_3"]))).toMatchObject([{ status: "ADDED", dossierId: "dos_1", addedAt: at }]);
     expect(await uow.asOrg(A, (r) => r.messages.get("org_anphat", "imsg_2"))).toMatchObject({ status: "DONE" });
+    expect((await uow.asOrg(A, (r) => r.attachments.listByDossier("org_anphat", "dos_1"))).map((x) => x.id)).toEqual(["iatt_3"]);
+    expect(await uow.asOrg(B, (r) => r.attachments.listByDossier("org_anphat", "dos_1"))).toEqual([]);
 
     expect(await uow.asOrg(B, (r) => r.messages.list("org_anphat"))).toEqual([]);
     expect(await uow.asOrg(B, (r) => r.attachments.byIds("org_anphat", ["iatt_1"]))).toEqual([]);

@@ -49,4 +49,28 @@ describe("AgentStep – mã HS từ danh mục hàng hóa", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Xác nhận mã này" }));
     await waitFor(() => expect(getDb().lineItems.find((i) => i.id === line.id)!.hsConfirmed).toBe("9405.11.99"), T);
   }, 30_000);
+
+  it("chọn nhiều dòng → 'Bỏ xác nhận n dòng' rồi 'Xác nhận n mã gợi ý' hàng loạt; nút trên dòng là icon có tên đọc được", async () => {
+    resetDb();
+    const db = getDb();
+    const run = db.agentRuns[0]!;
+    const dossier = db.dossiers.find((d) => d.id === run.dossierId)!;
+    dossier.status = "NEEDS_REVIEW";
+    const lines = db.lineItems.filter((i) => i.dossierId === dossier.id).sort((a, b) => a.lineNo - b.lineNo).slice(0, 2);
+    for (const l of lines) l.hsConfirmed = l.hsSuggested!;
+    renderWithProviders(<AgentStep dossier={dossier} goTo={vi.fn()} />);
+    const table = await screen.findByRole("table", { name: "Xác nhận mã HS từng dòng hàng" }, T);
+    expect(within(table).getByRole("button", { name: "Đổi mã HS dòng 1" }).textContent).toBe("");
+    await userEvent.click(within(table).getByRole("checkbox", { name: "Chọn dòng Dòng 1" }));
+    await userEvent.click(within(table).getByRole("checkbox", { name: "Chọn dòng Dòng 2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Bỏ xác nhận 2 dòng" }));
+    await waitFor(() => expect(lines.map((l) => getDb().lineItems.find((i) => i.id === l.id)!.hsConfirmed ?? null)).toEqual([null, null]), T);
+    // Bảng đã tải lại (dòng 1 về chưa xác nhận) và thanh chọn đã đóng.
+    await waitFor(() => expect(within(table).queryByRole("button", { name: "Đổi mã HS dòng 1" })).toBeNull(), T);
+    await waitFor(() => expect(document.querySelector("[data-slot=selection-bar]")).toBeNull(), T);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng Dòng 1" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng Dòng 2" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Xác nhận 2 mã gợi ý" }, T));
+    await waitFor(() => expect(lines.map((l) => getDb().lineItems.find((i) => i.id === l.id)!.hsConfirmed)).toEqual(lines.map((l) => l.hsSuggested)), T);
+  }, 30_000);
 });

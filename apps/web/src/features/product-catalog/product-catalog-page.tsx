@@ -1,8 +1,7 @@
 "use client";
 import type { ProductCatalogItem, ProductSource } from "@kb/contracts";
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, Dialog, DialogClose, DialogContent, DialogFooter, fill, Grid, PageHeader, RowActions,
-  SkeletonStats, Stack, StatCard, toast, useMessages,
+  Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, fill, Grid, PageHeader, RowActions, SkeletonStats, Stack, StatCard, toast, useMessages,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileSpreadsheet, Hash, Package, Pencil, Plus, Stamp, Trash2 } from "lucide-react";
@@ -189,19 +188,19 @@ export function ProductCatalogPage() {
 
       <ProductDialog open={editing !== null} product={editing?.product ?? null} onOpenChange={(o) => !o && setEditing(null)} />
       <ImportDialog open={importOpen} onOpenChange={setImportOpen} />
-      <Dialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
-        <DialogContent title={t.deleteTitle} size="sm" icon={<Trash2 className="h-4 w-4" />}>
-          <p className="text-sm text-fg-muted">
-            {toDelete?.length === 1 ? fill(t.deleteOne, { name: toDelete[0]!.name }) : fill(t.deleteBody, { n: toDelete?.length ?? 0 })}
-          </p>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="ghost">{t.keep}</Button>
-            </DialogClose>
-            <Button variant="danger" loading={remove.isPending} onClick={() => toDelete && remove.mutate(toDelete.map((p) => p.id))}>{t.delete}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title={t.deleteTitle}
+        icon={<Trash2 className="h-4 w-4" />}
+        irreversible
+        confirmLabel={t.delete}
+        loading={remove.isPending}
+        onConfirm={() => toDelete && remove.mutate(toDelete.map((p) => p.id))}
+        labels={{ keep: t.keep }}
+      >
+        {toDelete?.length === 1 ? fill(t.deleteOne, { name: toDelete[0]!.name }) : fill(t.deleteBody, { n: toDelete?.length ?? 0 })}
+      </ConfirmDialog>
     </Stack>
   );
 }

@@ -51,6 +51,7 @@ apps/web/src/
 | Báo kết quả một thao tác | `toast({ tone, title })`; thao tác dài: `toastPromise(promise, { loading, success, error })` | `alert()`, toast riêng cho từng bước |
 | Thao tác ghi dữ liệu (`useMutation`) | LUÔN có `onError` – mặc định `toastMutationError("Không lưu được …")` từ `@/lib/mutation-error` | Mutation chỉ có `onSuccess` (thất bại trong im lặng) |
 | Popup / panel bên phải | `Dialog` + `DialogContent` (luôn có `title` + `icon`) + `DialogFooter`; giữ nút chuyển cửa sổ ↔ panel; nội dung chính cần chiếm hết chỗ (sơ đồ, khung xem) thêm class `dialog-fill` | Đặt `h-160`/`max-h-*` cứng cho nội dung trong dialog; `allowPresentationToggle={false}` (lint `apps-dialog-toggle-off` chặn) |
+| Xác nhận xóa / hủy / ngắt kết nối (thao tác khó quay lại) | `ConfirmDialog` (`icon`, `subject`, hậu quả làm `children`, `irreversible` khi xóa vĩnh viễn, `loading`) | `Dialog` + `<p className="text-fg-muted">` + nút đỏ tự ghép |
 | Icon trong nút | `leftIcon` / `rightIcon` của `Button` | Bọc icon trong `span` + `[&>svg]:…` (lint `apps-svg-selector` chặn) |
 | Ô icon nền dịu ở đầu thẻ / đầu dòng | `IconTile` (`tone`, `size`) | Tự ghép `span` + `bg-*-subtle` (lint `apps-icon-tile` chặn) |
 | Bảng vai trò × quyền | `PermissionMatrix` (`@/components/common/permission-matrix`) | `<table>` tự viết (lint `apps-raw-table` chặn) |

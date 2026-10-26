@@ -34,35 +34,32 @@ function makeDeps(overrides: Partial<IntegrationDeps> = {}): IntegrationDeps & {
 }
 
 describe("integration", () => {
-  it("listIntegrations: 4 mục cố định, trạng thái mặc định theo cấu hình (chưa kiểm tra)", async () => {
+  it("listIntegrations: doanh nghiệp chỉ thấy Customs Hub (VNACCS); dịch vụ nền tảng (AI, hscodepro, HĐĐT) ẩn", async () => {
     const deps = makeDeps();
     const list = unwrap(await listIntegrations(deps, ctx("VIEWER")));
-    expect(list.map((i) => i.id)).toEqual(["HSCODEPRO", "CUSTOMS_HUB", "AI_PROVIDER", "EINVOICE"]);
-    expect(list.find((i) => i.id === "EINVOICE")?.status).toBe("NOT_CONFIGURED");
-    expect(list.find((i) => i.id === "AI_PROVIDER")?.status).toBe("CONNECTED");
+    expect(list.map((i) => i.id)).toEqual(["CUSTOMS_HUB"]);
+    expect(list[0]?.status).toBe("CONNECTED");
   });
-  it("testIntegration: probe ok → CONNECTED + lastCheckedAt; probe lỗi → ERROR + detail; lưu lại cho lần list sau", async () => {
+  it("testIntegration: probe lỗi → ERROR + detail + lastCheckedAt; lưu lại cho lần list sau", async () => {
     const deps = makeDeps();
-    const ai = unwrap(await testIntegration(deps, ctx("ADMIN"), "AI_PROVIDER"));
-    expect(ai).toMatchObject({ status: "CONNECTED", detail: "fake", lastCheckedAt: "2026-10-13T00:00:00.000Z" });
     const hub = unwrap(await testIntegration(deps, ctx("ADMIN"), "CUSTOMS_HUB"));
-    expect(hub).toMatchObject({ status: "ERROR", detail: "Chứng thư số mặc định sắp hết hạn" });
+    expect(hub).toMatchObject({ status: "ERROR", detail: "Chứng thư số mặc định sắp hết hạn", lastCheckedAt: "2026-10-13T00:00:00.000Z" });
     const list = unwrap(await listIntegrations(deps, ctx("VIEWER")));
     expect(list.find((i) => i.id === "CUSTOMS_HUB")?.status).toBe("ERROR");
   });
-  it("EINVOICE chưa cấu hình → INTEGRATION_NOT_CONFIGURED; VIEWER → FORBIDDEN", async () => {
+  it("dịch vụ nền tảng → NOT_FOUND (doanh nghiệp không kiểm được); VIEWER → FORBIDDEN", async () => {
     const deps = makeDeps();
-    const r = await testIntegration(deps, ctx("ADMIN"), "EINVOICE");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.code).toBe("INTEGRATION_NOT_CONFIGURED");
-    const v = await testIntegration(deps, ctx("VIEWER"), "AI_PROVIDER");
-    if (!v.ok) expect(v.error.code).toBe("FORBIDDEN");
-    else throw new Error("phải bị từ chối");
+    for (const kind of ["AI_PROVIDER", "HSCODEPRO", "EINVOICE"] as const) {
+      const r = await testIntegration(deps, ctx("ADMIN"), kind);
+      expect(r.ok ? null : r.error.code).toBe("NOT_FOUND");
+    }
+    const v = await testIntegration(deps, ctx("VIEWER"), "CUSTOMS_HUB");
+    expect(v.ok ? null : v.error.code).toBe("FORBIDDEN");
   });
   it("org khác không thấy trạng thái đã kiểm tra của org A", async () => {
     const deps = makeDeps();
-    unwrap(await testIntegration(deps, ctx("ADMIN"), "AI_PROVIDER"));
+    unwrap(await testIntegration(deps, ctx("ADMIN"), "CUSTOMS_HUB"));
     const other = unwrap(await listIntegrations(deps, ctx("ADMIN", "org_b")));
-    expect(other.find((i) => i.id === "AI_PROVIDER")?.lastCheckedAt).toBeUndefined();
+    expect(other.find((i) => i.id === "CUSTOMS_HUB")?.lastCheckedAt).toBeUndefined();
   });
 });

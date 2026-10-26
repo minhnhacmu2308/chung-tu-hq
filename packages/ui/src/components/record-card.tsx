@@ -36,8 +36,15 @@ export type RecordCardProps = {
   pattern?: RecordCardPattern;
   /** Hình trang trí lớn, mờ ở góc phải đầu thẻ (vd icon lucide phương thức vận chuyển). */
   art?: ReactNode;
+  /**
+   * Số dòng tiêu đề (1 | 2): cắt bớt và giữ đủ chỗ cho chừng ấy dòng, trạng thái xuống dòng riêng → đầu thẻ trong cùng lưới cao
+   * bằng nhau dù tiêu đề dài ngắn khác nhau. Bỏ trống → tiêu đề tự xuống dòng, trạng thái cùng dòng tiêu đề.
+   */
+  titleLines?: 1 | 2;
   className?: string;
 };
+
+const TITLE_LINES = { 1: "line-clamp-1 min-h-[1lh]", 2: "line-clamp-2 min-h-[2lh]" } as const;
 
 const HEAD_TONE: Record<Tone, string> = {
   neutral: "bg-neutral-subtle text-neutral-subtle-fg",
@@ -66,19 +73,26 @@ function Pattern({ kind }: { kind: RecordCardPattern }) {
 }
 
 export function RecordCard({
-  title, subtitle, leading, status, fields, children, footer, select, actions, tone, pattern = "dots", art, className,
+  title, subtitle, leading, status, fields, children, footer, select, actions, tone, pattern = "dots", art, titleLines, className,
 }: RecordCardProps) {
   const head = (
     <div className="relative z-10 flex min-w-0 items-start gap-3">
       {select && <div className="flex shrink-0 items-center pt-0.5">{select}</div>}
       {leading && <div className="shrink-0">{leading}</div>}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        {/* Trạng thái nằm cùng dòng tiêu đề, tự xuống hàng khi hẹp – không chiếm cột riêng làm tiêu đề bị bóp. */}
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <div className="min-w-0 break-words text-sm font-semibold text-fg">{title}</div>
-          {status}
-        </div>
-        {subtitle && <div className="min-w-0 break-words text-sm text-fg-muted">{subtitle}</div>}
+        {titleLines ? (
+          <>
+            <div className={cn("min-w-0 break-words text-sm font-semibold text-fg", TITLE_LINES[titleLines])}>{title}</div>
+            {status && <div className="flex min-w-0 flex-wrap items-center gap-2">{status}</div>}
+          </>
+        ) : (
+          /* Trạng thái nằm cùng dòng tiêu đề, tự xuống hàng khi hẹp – không chiếm cột riêng làm tiêu đề bị bóp. */
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="min-w-0 break-words text-sm font-semibold text-fg">{title}</div>
+            {status}
+          </div>
+        )}
+        {subtitle && <div className={cn("min-w-0 break-words text-sm text-fg-muted", titleLines && "line-clamp-1")}>{subtitle}</div>}
       </div>
       {actions && <div className="flex shrink-0 items-start">{actions}</div>}
     </div>

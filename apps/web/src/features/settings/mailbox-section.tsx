@@ -3,8 +3,7 @@
 // Callback OAuth chuyển về /settings?tab=integrations&mailbox=connected|error… → báo kết quả rồi xóa tham số khỏi URL.
 import type { MailConnection, MailProvider } from "@kb/contracts";
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogClose, DialogContent, DialogFooter, EmptyState, fill,
-  IconTile, SkeletonList, Stack, StatusBadge, toast, useMessages, useUiLocale,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog, EmptyState, fill, IconTile, SkeletonList, Stack, StatusBadge, toast, useMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Filter, Inbox, Mail, MailPlus, PlugZap, RefreshCw, Unplug } from "lucide-react";
@@ -230,19 +229,18 @@ export function MailboxSection() {
 
       <MailFiltersDialog connection={filtering} onOpenChange={(o) => !o && setFiltering(null)} />
 
-      <Dialog open={removing !== null} onOpenChange={(o) => !o && setRemoving(null)}>
-        <DialogContent title={t.disconnectTitle} size="sm" icon={<Unplug className="h-4 w-4" />}>
-          <form onSubmit={(e) => { e.preventDefault(); if (removing) remove.mutate(removing); }}>
-            <p className="text-sm text-fg-muted">{fill(t.disconnectBody, { email: removing?.email ?? "" })}</p>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="ghost">{t.keep}</Button>
-              </DialogClose>
-              <Button type="submit" variant="danger" loading={remove.isPending}>{t.disconnect}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={t.disconnectTitle}
+        icon={<Unplug className="h-4 w-4" />}
+        confirmLabel={t.disconnect}
+        loading={remove.isPending}
+        onConfirm={() => removing && remove.mutate(removing)}
+        labels={{ keep: t.keep }}
+      >
+        {fill(t.disconnectBody, { email: removing?.email ?? "" })}
+      </ConfirmDialog>
     </Card>
   );
 }

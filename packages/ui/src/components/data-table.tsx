@@ -301,6 +301,18 @@ export type DataTableProps<TData extends RowData> = {
   rowActions?: (row: TData) => ReactNode;
   /** Bấm/Enter trên dòng. */
   onRowClick?: (row: TData) => void;
+  /**
+   * Tô nền dòng theo trạng thái: "warning" = cần kiểm tra, "active" = đang làm việc (vd đang tô vị trí trên chứng từ).
+   * Đi kèm chữ / icon trạng thái trong dòng – màu chỉ để nhấn.
+   */
+  rowTone?: (row: TData) => "warning" | "active" | undefined;
+  /** Rê chuột vào / ra khỏi dòng (null) – vd tô vị trí dòng hàng trên chứng từ gốc. */
+  onRowHover?: (row: TData | null) => void;
+  /**
+   * Id dòng cần hiện: đổi giá trị → bảng chuyển tới trang chứa dòng đó (theo tìm kiếm / lọc / sắp xếp đang áp dụng),
+   * vd khi bấm vào vị trí dòng hàng trên chứng từ. Dòng đang bị lọc ẩn thì bỏ qua.
+   */
+  revealRowId?: string | null;
   loading?: boolean;
   loadingRows?: number;
   emptyTitle?: ReactNode;
@@ -474,6 +486,9 @@ export function DataTable<TData extends RowData>({
   rowLabel,
   rowActions,
   onRowClick,
+  rowTone,
+  onRowHover,
+  revealRowId,
   loading = false,
   loadingRows = 5,
   emptyTitle,
@@ -661,6 +676,17 @@ export function DataTable<TData extends RowData>({
   }, [selectedKey]);
 
   const rows = table.getRowModel().rows;
+  useEffect(() => {
+    if (!revealRowId || pagination === false) return;
+    const index = table.getPrePaginatedRowModel().rows.findIndex((r) => r.id === revealRowId);
+    if (index < 0) return;
+    const pageIndex = Math.floor(index / pageState.pageSize);
+    if (pageIndex === pageState.pageIndex) return;
+    if (controlled) controlled.onChange({ pageIndex, pageSize: pageState.pageSize });
+    else setInnerPage((p) => ({ ...p, pageIndex }));
+    // Chỉ chạy khi đổi dòng cần hiện – người dùng tự chuyển trang sau đó thì không kéo về.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealRowId]);
   // Dòng đang chọn còn trong dữ liệu (dòng đã xóa khỏi `data` không tính) – cho thanh thao tác hàng loạt.
   const selectedRows = useMemo(
     () => (selectedKey && selectionActions ? data.filter((d) => rowSelection[getRowId(d)]) : []),
@@ -1033,9 +1059,12 @@ export function DataTable<TData extends RowData>({
                 <tr
                   key={row.id}
                   data-selected={row.getIsSelected() || undefined}
+                  data-tone={rowTone?.(row.original)}
                   aria-selected={selectable ? row.getIsSelected() : undefined}
                   tabIndex={clickable ? 0 : undefined}
                   onClick={clickable ? (e) => activate(row.original, e) : undefined}
+                  onMouseEnter={onRowHover ? () => onRowHover(row.original) : undefined}
+                  onMouseLeave={onRowHover ? () => onRowHover(null) : undefined}
                   onKeyDown={
                     clickable
                       ? (e) => {
@@ -1050,6 +1079,7 @@ export function DataTable<TData extends RowData>({
                   className={cn(
                     "group border-b border-border last:border-b-0 hover:bg-surface-muted",
                     "data-[selected]:bg-primary-subtle data-[selected]:hover:bg-primary-subtle",
+                    "data-[tone=warning]:bg-warning-subtle data-[tone=active]:bg-primary-subtle data-[tone=active]:hover:bg-primary-subtle",
                     clickable && "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus",
                   )}
                 >
@@ -1065,7 +1095,7 @@ export function DataTable<TData extends RowData>({
                           ALIGN[meta?.align ?? "start"],
                           meta?.align === "end" && "tabular-nums",
                           // Ô dính cần nền đặc (để nội dung cuộn chui xuống dưới) và phải theo màu hover/chọn của dòng.
-                          meta?.sticky && cn(stickyCell(meta.sticky, "z-[1]"), "bg-surface group-hover:bg-surface-muted group-data-[selected]:bg-primary-subtle"),
+                          meta?.sticky && cn(stickyCell(meta.sticky, "z-[1]"), "bg-surface group-hover:bg-surface-muted group-data-[selected]:bg-primary-subtle group-data-[tone=warning]:bg-warning-subtle group-data-[tone=active]:bg-primary-subtle"),
                           meta?.cellClassName,
                         )}
                       >

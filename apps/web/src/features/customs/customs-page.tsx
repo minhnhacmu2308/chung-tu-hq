@@ -205,6 +205,7 @@ export function CustomsPage() {
             return (
               <RecordCard
                 title={<span className="font-mono">{r.dossierCode}</span>}
+                titleLines={1}
                 subtitle={r.partner}
                 tone={look.tone}
                 pattern={look.pattern}

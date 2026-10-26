@@ -14,3 +14,4 @@ export const listDocuments = pick(mock.listDocuments, http.listDocuments);
 export const createDossier = pick(mock.createDossier, http.createDossier);
 export const updateDossier = pick(mock.updateDossier, http.updateDossier);
 export const cancelDossier = pick(mock.cancelDossier, http.cancelDossier);
+export const deleteDossier = pick(mock.deleteDossier, http.deleteDossier);

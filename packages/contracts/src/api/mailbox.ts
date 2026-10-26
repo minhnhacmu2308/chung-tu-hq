@@ -169,6 +169,11 @@ export type AddInboxToDossierResult = z.infer<typeof AddInboxToDossierResultSche
 export const SetInboxMessageStatusInputSchema = z.object({ status: z.enum(["NEW", "IGNORED"]) });
 export type SetInboxMessageStatusInput = z.infer<typeof SetInboxMessageStatusInputSchema>;
 
+/** Xóa email khỏi hộp thư chứng từ (một hoặc nhiều email đã chọn). */
+export const DeleteInboxMessagesInputSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(500) });
+export type DeleteInboxMessagesInput = z.infer<typeof DeleteInboxMessagesInputSchema>;
+export const DeleteInboxMessagesResultSchema = z.object({ deleted: z.number().int().nonnegative() });
+
 /* ---------------- Lọc email lấy về (dùng chung adapter + test) ---------------- */
 
 /** Đuôi file nhận vào hộp thư (cùng loại file tải chứng từ chấp nhận). */

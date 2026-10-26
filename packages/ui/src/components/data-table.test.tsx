@@ -143,6 +143,35 @@ describe("DataTable – thao tác dòng nổi khi rê chuột", () => {
   });
 });
 
+describe("DataTable – tô dòng & rê chuột", () => {
+  it("rowTone tô nền dòng (data-tone); onRowHover báo dòng khi rê vào, null khi rời", async () => {
+    const onRowHover = vi.fn();
+    setup({ rowTone: (r) => (r.id === "a" ? "warning" : r.id === "b" ? "active" : undefined), onRowHover });
+    const [a, b, c] = bodyRows();
+    expect(a).toHaveAttribute("data-tone", "warning");
+    expect(a).toHaveClass("data-[tone=warning]:bg-warning-subtle");
+    expect(b).toHaveAttribute("data-tone", "active");
+    expect(c).not.toHaveAttribute("data-tone");
+    await userEvent.hover(within(c!).getAllByRole("cell")[0]!);
+    expect(onRowHover).toHaveBeenLastCalledWith(DATA[2]);
+    await userEvent.unhover(within(c!).getAllByRole("cell")[0]!);
+    expect(onRowHover).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe("DataTable – hiện một dòng (revealRowId)", () => {
+  it("chuyển tới trang chứa dòng cần hiện; dòng không có thì giữ trang", () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({ id: `r${i + 1}`, code: `HS-${String(i + 1).padStart(3, "0")}`, partner: "P", value: i }));
+    const props = { "aria-label": "Hồ sơ khai báo", columns: COLUMNS, data: many, getRowId: (r: HoSo) => r.id, pagination: { initialPageSize: 10 } };
+    const { rerender } = render(<DataTable {...props} />);
+    expect(firstCells()[0]).toBe("HS-001");
+    rerender(<DataTable {...props} revealRowId="r23" />);
+    expect(firstCells()).toContain("HS-023");
+    rerender(<DataTable {...props} revealRowId="khong-co" />);
+    expect(firstCells()).toContain("HS-023");
+  });
+});
+
 describe("DataTable – trạng thái", () => {
   it("loading: aria-busy, dòng skeleton, thông báo cho trình đọc màn hình, ẩn phân trang", () => {
     setup({ loading: true, loadingRows: 4 });

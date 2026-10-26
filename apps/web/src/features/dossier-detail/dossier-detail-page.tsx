@@ -1,7 +1,7 @@
 "use client";
 // Chi tiết hồ sơ: đầu trang + thanh 6 bước (+ bước 7 "Sửa sau thông quan" khi đã thông quan) + màn của bước đang xem (?step=…, mặc định bước đang dở).
 import {
-  Breadcrumb, Button, Card, CardContent, Dialog, DialogContent, DialogFooter, DialogTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, EmptyState, PageHeader, Skeleton, Stack, Stepper, toast, WorkflowDiagram, PageLoading, fill, pickMessages, useMessages, useUiLocale,
+  Breadcrumb, Button, Card, CardContent, ConfirmDialog, Dialog, DialogContent, DialogTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, EmptyState, fill, PageHeader, PageLoading, pickMessages, Stack, Stepper, toast, useMessages, useUiLocale, WorkflowDiagram,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 // kb-allow-raw: menu "…" cấp TRANG ở đầu hồ sơ (không phải thao tác trên dòng bảng → không dùng RowActions)
@@ -114,18 +114,17 @@ function Header({ dossier, flowAction }: { dossier: Dossier; flowAction: ReactNo
         <span>{fill(t.dueOn, { date: formatDate(dossier.dueDate) })}</span>
       </div>
 
-      <Dialog open={confirmCancel} onOpenChange={setConfirmCancel}>
-        <DialogContent title={t.cancelTitle} icon={<XCircle className="h-4 w-4" />} description={fill(t.cancelDesc, { code: dossier.code })} size="sm">
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setConfirmCancel(false)}>
-              {t.keep}
-            </Button>
-            <Button variant="danger" loading={cancel.isPending} onClick={() => cancel.mutate()}>
-              {t.cancel}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title={t.cancelTitle}
+        icon={<XCircle className="h-4 w-4" />}
+        description={fill(t.cancelDesc, { code: dossier.code })}
+        confirmLabel={t.cancel}
+        loading={cancel.isPending}
+        onConfirm={() => cancel.mutate()}
+        labels={{ keep: t.keep }}
+      />
     </Stack>
   );
 }

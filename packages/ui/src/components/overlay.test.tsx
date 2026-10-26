@@ -57,6 +57,15 @@ describe("Dialog", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("tone danger: icon đầu nằm trong ô nền đỏ + vạch đỏ đỉnh popup; không tone thì icon trơn", async () => {
+    setup({ tone: "danger", icon: <svg data-testid="ic" /> });
+    await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));
+    const dialog = screen.getByRole("dialog", { name: "Thêm mới báo cáo" });
+    expect(dialog).toHaveClass("border-t-4", "border-t-danger", "border");
+    expect(screen.getByTestId("ic").parentElement).toHaveClass("bg-danger-subtle");
+    await expectNoA11yViolations(document.body);
+  });
+
   it("chuyển cửa sổ ↔ panel bên phải, báo ra ngoài để lưu lựa chọn", async () => {
     const onPresentationChange = vi.fn();
     setup({}, { onPresentationChange });

@@ -10,7 +10,7 @@ const FPT = process.env.E2E_CUSTOMS_GATEWAY === "fpt";
 const MOCK_URL = process.env.E2E_FPT_MOCK_URL ?? "http://localhost:7070";
 const ACCOUNT = { userId: "BI820001", password: "12345678", terminalId: "Z0000M", terminalAccessKey: "MOCKTERMINALKEY0" };
 
-/** Thẻ Customs Hub = tổ tiên gần nhất của khu tài khoản VNACCS có nút Kiểm tra kết nối. */
+/** Thẻ VNACCS = tổ tiên gần nhất của khu tài khoản VNACCS có nút Kiểm tra kết nối. */
 const customsHubCard = (page: Page) => page.getByRole("region", { name: "Tài khoản VNACCS" }).locator("xpath=ancestor::*[.//button[normalize-space()='Kiểm tra kết nối']][1]");
 
 async function enterAccount(page: Page, account = ACCOUNT) {

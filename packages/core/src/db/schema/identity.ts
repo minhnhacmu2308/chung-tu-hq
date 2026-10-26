@@ -54,6 +54,8 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     name: text("name").notNull(),
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    /** Tài khoản do quản trị KhaiBáo AI tạo hộ bằng mật khẩu tạm → bắt đổi mật khẩu ở lần đăng nhập đầu. */
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
     ...timestamps(),
   },
   (t) => [

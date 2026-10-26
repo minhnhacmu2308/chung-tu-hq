@@ -15,7 +15,7 @@ import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modul
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
 import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
-import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
+import { hashToken, provisionOrgAccount, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { releaseDossierAttachments, type MailboxDeps } from "@kb/core/modules/mailbox";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
@@ -324,6 +324,7 @@ function build(): Container {
       sendPasswordReset: (email) => requestPasswordReset(identity, email, { ip: "admin" }),
       resendVerification: (userId) => resendVerificationEmail(identity, userId),
       provisionAccount: (input) => provisionStaffAccount(identity, input),
+      provisionOrg: (input) => provisionOrgAccount(identity, input),
     },
     jobs, system, probe: integrationProbe(env), vault: identity.secrets, limiter: identity.rateLimiter, clock: systemClock,
   });

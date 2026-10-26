@@ -1,8 +1,12 @@
+import { randomBytes } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock, type Clock } from "../../../../shared/clock.js";
 import { sequentialIdGen } from "../../../../shared/ids.js";
 import { unwrap, errCode } from "../../../../shared/result.js";
 import { acceptInvite } from "../accept-invite.js";
+import { changePassword } from "../change-password.js";
+import { provisionOrgAccount } from "../provision-org-account.js";
+import { generateTempPassword } from "../../domain/password.js";
 import { getSession } from "../get-session.js";
 import { login } from "../login.js";
 import { logout } from "../logout.js";
@@ -281,5 +285,58 @@ describe("token một lần", () => {
     const e = await acceptInvite(expired, { token: "cu", name: "X Y", password: "matkhau123" });
     if (!e.ok) expect(e.error.code).toBe("TOKEN_INVALID");
     else throw new Error("phải lỗi");
+  });
+});
+
+describe("tạo hộ doanh nghiệp (mật khẩu tạm) + đổi mật khẩu", () => {
+  const INPUT = { taxCode: "0109999999", name: "CÔNG TY HỢP ĐỒNG", address: "Hà Nội", planCode: "PRO", owner: { email: "owner@hopdong.vn", name: "Trần Chủ" } };
+
+  it("tạo org (gói chọn sẵn) + Chủ sở hữu ACTIVE, email đã xác thực, bắt đổi mật khẩu; đăng nhập được bằng mật khẩu tạm; hook skill mẫu chạy", async () => {
+    const created: string[] = [];
+    deps.onOrgCreated = async (o) => void created.push(o.orgId);
+    const r = unwrap(await provisionOrgAccount(deps, INPUT));
+    expect(r.tempPassword).toHaveLength(12);
+    expect(created).toEqual([r.orgId]);
+    const org = uow.data.orgs.find((o) => o.id === r.orgId)!;
+    expect(org).toMatchObject({ taxCode: "0109999999", name: "CÔNG TY HỢP ĐỒNG", planCode: "PRO" });
+    const user = uow.data.users.find((u) => u.id === r.userId)!;
+    expect(user).toMatchObject({ email: "owner@hopdong.vn", mustChangePassword: true });
+    expect(user.emailVerifiedAt).not.toBeNull();
+    expect(uow.data.memberships.find((m) => m.userId === r.userId)).toMatchObject({ orgId: r.orgId, role: "OWNER", status: "ACTIVE" });
+    expect(mailer.sent).toHaveLength(0);
+
+    const { sessionToken } = unwrap(await login(deps, { email: "owner@hopdong.vn", password: r.tempPassword }, META));
+    expect(unwrap(await getSession(deps, sessionToken)).session.mustChangePassword).toBe(true);
+  });
+
+  it("MST hoặc email đã có → lỗi, không ghi gì", async () => {
+    expect(errCode(await provisionOrgAccount(deps, { ...INPUT, taxCode: "0316789012" }))).toBe("TAX_CODE_EXISTS");
+    expect(errCode(await provisionOrgAccount(deps, { ...INPUT, owner: { ...INPUT.owner, email: "chau.le@anphat-demo.vn" } }))).toBe("EMAIL_TAKEN");
+    expect(uow.data.orgs).toHaveLength(2);
+  });
+
+  it("changePassword: sai mật khẩu hiện tại → INVALID_CREDENTIALS; đúng → đổi hash, bỏ cờ, hủy mọi phiên cũ, trả phiên mới", async () => {
+    // Token phiên phải khác nhau (random cố định của bộ test cho mọi phiên cùng một token).
+    deps.random = randomBytes;
+    const r = unwrap(await provisionOrgAccount(deps, INPUT));
+    const a = unwrap(await login(deps, { email: INPUT.owner.email, password: r.tempPassword }, META)).sessionToken;
+    const b = unwrap(await login(deps, { email: INPUT.owner.email, password: r.tempPassword }, META)).sessionToken;
+    expect(errCode(await changePassword(deps, a, { currentPassword: "sai-roi", newPassword: "matkhaumoi123" }))).toBe("INVALID_CREDENTIALS");
+    const { sessionToken } = unwrap(await changePassword(deps, a, { currentPassword: r.tempPassword, newPassword: "matkhaumoi123" }));
+    expect(uow.data.users.find((u) => u.id === r.userId)).toMatchObject({ passwordHash: "h:matkhaumoi123", mustChangePassword: false });
+    expect(errCode(await getSession(deps, a))).toBe("UNAUTHENTICATED");
+    expect(errCode(await getSession(deps, b))).toBe("UNAUTHENTICATED");
+    expect(unwrap(await getSession(deps, sessionToken)).session.mustChangePassword).toBeUndefined();
+    expect(errCode(await login(deps, { email: INPUT.owner.email, password: r.tempPassword }, META))).toBe("INVALID_CREDENTIALS");
+  });
+
+  it("changePassword không có phiên → UNAUTHENTICATED", async () => {
+    expect(errCode(await changePassword(deps, "", { currentPassword: "x", newPassword: "matkhaumoi123" }))).toBe("UNAUTHENTICATED");
+  });
+
+  it("generateTempPassword: đúng độ dài, chỉ ký tự dễ đọc, bỏ byte lệch", () => {
+    const p = generateTempPassword((n) => Buffer.from(Array.from({ length: n }, (_, i) => (i % 2 ? 255 : i))));
+    expect(p).toHaveLength(12);
+    expect(p).toMatch(/^[A-HJ-NP-Za-km-z2-9]{12}$/);
   });
 });

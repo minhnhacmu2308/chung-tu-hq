@@ -11,6 +11,7 @@ export const listAdminOrgs = pick(mock.listAdminOrgs, http.listAdminOrgs);
 export const getAdminOrg = pick(mock.getAdminOrg, http.getAdminOrg);
 export const suspendOrg = pick(mock.suspendOrg, http.suspendOrg);
 export const reactivateOrg = pick(mock.reactivateOrg, http.reactivateOrg);
+export const createOrg = pick(mock.createOrg, http.createOrg);
 export const changeOrgPlan = pick(mock.changeOrgPlan, http.changeOrgPlan);
 export const adjustOrgQuota = pick(mock.adjustOrgQuota, http.adjustOrgQuota);
 export const extendOrgTrial = pick(mock.extendOrgTrial, http.extendOrgTrial);

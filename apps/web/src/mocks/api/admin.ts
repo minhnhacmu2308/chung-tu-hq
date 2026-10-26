@@ -2,7 +2,7 @@
 // Thay thân hàm bằng fetch tới /api/admin/** khi có backend – giữ nguyên chữ ký.
 import type {
   UpsertExchangeRateInput,
-  AdjustOrgQuotaInput, AdminReasonInput, ChangeOrgPlanInput, ChangeStaffRoleInput, ExtendOrgTrialInput, IntegrationId, InviteStaffInput,
+  AdjustOrgQuotaInput, AdminReasonInput, ChangeOrgPlanInput, ChangeStaffRoleInput, CreateOrgInput, ExtendOrgTrialInput, IntegrationId, InviteStaffInput,
   PlanCode, SendAnnouncementInput, SetTemplatePublishedInput, UpdateIntegrationKeyInput, UpdatePlanInput,
 } from "@kb/contracts";
 import { ApiError, mutate, query } from "@/lib/mock-request";
@@ -39,6 +39,7 @@ export const listAdminOrgs = () => query((db) => ops.listOrgs(db));
 export const getAdminOrg = (id: string) => query((db) => ops.getOrg(db, id));
 export const suspendOrg = (id: string, input: AdminReasonInput) => mutate((db) => ops.suspendOrg(db, id, input));
 export const reactivateOrg = (id: string, input: AdminReasonInput) => mutate((db) => ops.reactivateOrg(db, id, input));
+export const createOrg = (input: CreateOrgInput) => mutate((db) => ops.createOrg(db, input));
 export const changeOrgPlan = (id: string, input: ChangeOrgPlanInput) => mutate((db) => ops.changeOrgPlan(db, id, input));
 export const adjustOrgQuota = (id: string, input: AdjustOrgQuotaInput) => mutate((db) => ops.adjustOrgQuota(db, id, input));
 export const extendOrgTrial = (id: string, input: ExtendOrgTrialInput) => mutate((db) => ops.extendOrgTrial(db, id, input));

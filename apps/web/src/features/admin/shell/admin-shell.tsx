@@ -10,7 +10,8 @@ import { Activity, Building2, LayoutDashboard, LogOut, RotateCcw, ShieldCheck, S
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { adminKeys, getSystemHealth } from "@/api/admin";
+import { adminKeys, getAdminSession, getSystemHealth } from "@/api/admin";
+import { ChangePasswordScreen } from "@/components/common/change-password-screen";
 import { logout, resetMockData } from "@/api/session";
 import { useAppearance } from "@/features/appearance/use-appearance";
 import { STAFF_ROLE_LABELS } from "../common/admin-display";
@@ -87,7 +88,7 @@ function useNav(enabled: boolean): { items: NavItem[]; activeId: string | undefi
   return { items, activeId };
 }
 
-export function AdminShell({ children }: { children: ReactNode }) {
+function AdminShellInner({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const qc = useQueryClient();
@@ -207,4 +208,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
       </main>
     </div>
   );
+}
+
+/** Quản trị viên còn mật khẩu tạm → đổi mật khẩu trước (rồi mới tới bước 2FA), chưa dựng khung quản trị. */
+export function AdminShell({ children }: { children: ReactNode }) {
+  const { data } = useQuery({ queryKey: adminKeys.session, queryFn: getAdminSession });
+  return data?.mustChangePassword ? <ChangePasswordScreen /> : <AdminShellInner>{children}</AdminShellInner>;
 }

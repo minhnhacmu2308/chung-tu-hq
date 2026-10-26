@@ -12,6 +12,7 @@ export const markAllNotificationsRead = async () => {
 };
 export const login = (email: string, password: string) => apiPost("auth/login", { email, password }, OkSchema);
 export const logout = () => apiPost("auth/logout", {}, OkSchema);
+export const changePassword = (input: { currentPassword: string; newPassword: string }) => apiPost("auth/password/change", input, OkSchema);
 /** Dev/test: nạp lại dữ liệu mẫu trên server. */
 export const resetMockData = async () => {
   await apiPost("dev/reset-demo", {}, OkSchema);

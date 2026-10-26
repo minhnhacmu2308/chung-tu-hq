@@ -4,7 +4,11 @@ import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { AuthTokenKind } from "../domain/token.js";
 
-export type UserRow = { id: string; email: string; passwordHash: string; name: string; emailVerifiedAt: Date | null; createdAt: Date };
+export type UserRow = {
+  id: string; email: string; passwordHash: string; name: string; emailVerifiedAt: Date | null; createdAt: Date;
+  /** Tạo hộ bằng mật khẩu tạm → bắt đổi ở lần đăng nhập đầu. Thiếu = false. */
+  mustChangePassword?: boolean;
+};
 export type OrgRow = {
   id: string; taxCode: string; name: string; address: string; phone: string; planCode: string; suspectThreshold: string; fourEyes: boolean; createdAt: Date;
   /** Mã bưu chính (6 số) – chỉ tiêu 1.14 IDA / 2.13 EDA; thiếu = mặc định của DB (""). */
@@ -31,7 +35,7 @@ export interface IdentityRepos {
     findById(id: string): Promise<UserRow | null>;
     findByIds(ids: string[]): Promise<UserRow[]>;
     insert(row: UserRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<UserRow, "name" | "passwordHash" | "emailVerifiedAt">>): Promise<void>;
+    update(id: string, patch: Partial<Pick<UserRow, "name" | "passwordHash" | "emailVerifiedAt" | "mustChangePassword">>): Promise<void>;
   };
   orgs: {
     findByTaxCode(taxCode: string): Promise<OrgRow | null>;

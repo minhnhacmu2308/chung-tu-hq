@@ -1,7 +1,7 @@
 // Bảng của khu Quản trị hệ thống (ADR 0006). Bật RLS nhưng KHÔNG có policy cho kb_app → ứng dụng của khách không đọc/ghi được;
 // chỉ vai trò kb_platform (BYPASSRLS) của module admin truy cập.
-import { bigint, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import { users } from "./identity.js";
+import { bigint, date, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { organizations, users } from "./identity.js";
 import { id, timestamps } from "./shared.js";
 
 /** Tài khoản đội vận hành: một tài khoản người dùng + vai trò quản trị hệ thống (không phải vai trò trong doanh nghiệp). */
@@ -22,6 +22,22 @@ export const platformStaff = pgTable("platform_staff", {
   totpLastCounter: bigint("totp_last_counter", { mode: "number" }),
   /** Hash sha256 của các mã khôi phục chưa dùng. */
   recoveryCodes: jsonb("recovery_codes").$type<string[]>().notNull().default([]),
+  ...timestamps(),
+}).enableRLS();
+
+/**
+ * Hợp đồng ký trực tiếp với KhaiBáo AI (doanh nghiệp do quản trị tạo hộ, không tự đăng ký): số hợp đồng, hạn, ghi chú nội bộ.
+ * Chỉ khu Quản trị đọc/ghi – doanh nghiệp không thấy ghi chú.
+ */
+export const orgContracts = pgTable("org_contracts", {
+  orgId: text("org_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  contractNo: text("contract_no"),
+  /** Ngày hết hạn hợp đồng, YYYY-MM-DD. */
+  endsOn: date("ends_on", { mode: "string" }),
+  note: text("note"),
+  createdBy: text("created_by").notNull(),
   ...timestamps(),
 }).enableRLS();
 

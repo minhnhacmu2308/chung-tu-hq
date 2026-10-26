@@ -1,8 +1,8 @@
 "use client";
 import type { AdminOrg } from "@kb/contracts";
-import { Badge, createDataTableColumnHelper, DataTable, fill, PageHeader, RowActions, SegmentedControl, Stack, StatusBadge, useMessages, useUiLocale } from "@kb/ui";
+import { Badge, Button, createDataTableColumnHelper, DataTable, fill, PageHeader, RowActions, SegmentedControl, Stack, StatusBadge, useMessages, useUiLocale } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, Lock, LockOpen } from "lucide-react";
+import { Building2, Lock, LockOpen, Plus } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { adminKeys, listAdminOrgs } from "@/api/admin";
@@ -11,7 +11,8 @@ import { formatDate, formatNumber, formatRelative, formatVnd } from "@/lib/forma
 import { ORG_STATUS, PLAN_TONE, statusLabel } from "../common/admin-display";
 import { QuotaMeter } from "../common/quota-meter";
 import { useAdminSession } from "../shell/use-admin-session";
-import { ORG_LIST_MESSAGES } from "./orgs.messages";
+import { CREATE_ORG_MESSAGES, ORG_LIST_MESSAGES } from "./orgs.messages";
+import { CreateOrgDialog } from "./create-org-dialog";
 import { OrgActionDialogs, type OrgAction } from "./org-actions";
 
 /** Dòng hiển thị: thêm nhãn chữ để ô tìm kiếm/lọc khớp với điều người dùng nhìn thấy. */
@@ -77,6 +78,8 @@ const makeColumns = (t: (typeof ORG_LIST_MESSAGES)["vi"]) => col.columns([
 
 function ListInner() {
   const t = useMessages(ORG_LIST_MESSAGES);
+  const tc = useMessages(CREATE_ORG_MESSAGES);
+  const [createOpen, setCreateOpen] = useState(false);
   const locale = useUiLocale();
   const columns = useMemo(() => makeColumns(t), [t]);
   const router = useRouter();
@@ -107,6 +110,7 @@ function ListInner() {
       <PageHeader
         title={t.title}
         description={t.description}
+        actions={can("BILLING") && <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>{tc.open}</Button>}
       />
       {orgs.isError && <LoadError onRetry={() => void orgs.refetch()} title={t.loadError} />}
       <Stack gap="md">
@@ -158,6 +162,7 @@ function ListInner() {
         />
       </Stack>
       {dialog && <OrgActionDialogs org={dialog.org} action={dialog.action} onClose={() => setDialog(null)} />}
+      <CreateOrgDialog open={createOpen} onOpenChange={setCreateOpen} />
     </Stack>
   );
 }

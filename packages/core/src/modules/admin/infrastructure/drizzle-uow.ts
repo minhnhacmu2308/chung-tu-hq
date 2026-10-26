@@ -4,7 +4,7 @@ import type { IntegrationId, Role, StaffRole } from "@kb/contracts";
 import { and, desc, eq, gt, gte, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import {
-  adminAudit, announcements, digitalCertificates, documents, dossiers, exchangeRateFetches, exchangeRates, integrationStatus, joinRequests, memberships, notifications, organizations,
+  adminAudit, announcements, digitalCertificates, orgContracts, documents, dossiers, exchangeRateFetches, exchangeRates, integrationStatus, joinRequests, memberships, notifications, organizations,
   plans, platformIntegrations, platformStaff, sessions, skills, usageEvents, users,
 } from "../../../db/schema/index.js";
 import type { StaffStatus } from "../domain/staff-rules.js";
@@ -24,12 +24,13 @@ function repos(tx: Tx): AdminRepos {
     tx
       .select({
         userId: platformStaff.userId, name: users.name, email: users.email, role: platformStaff.role, status: platformStaff.status, createdAt: platformStaff.createdAt,
+        mustChangePassword: users.mustChangePassword,
         mfaEnabled: sql<boolean>`(${platformStaff.totpEnabledAt} is not null and ${platformStaff.totpCiphertext} is not null)`,
         lastActiveAt: sql<Date | null>`(select max(${sessions.lastSeenAt}) from ${sessions} where ${sessions.userId} = ${platformStaff.userId})`.mapWith((v) => (v ? new Date(v as string) : null)),
       })
       .from(platformStaff)
       .innerJoin(users, eq(users.id, platformStaff.userId));
-  const toStaff = (r: { userId: string; name: string; email: string; role: string; status: string; createdAt: Date; lastActiveAt: Date | null; mfaEnabled: boolean }): StaffRow => ({
+  const toStaff = (r: { userId: string; name: string; email: string; role: string; status: string; createdAt: Date; lastActiveAt: Date | null; mfaEnabled: boolean; mustChangePassword: boolean }): StaffRow => ({
     ...r, role: r.role as StaffRole, status: r.status as StaffStatus,
   });
   const toOrg = (o: typeof organizations.$inferSelect): AdminOrgRow => ({
@@ -85,6 +86,14 @@ function repos(tx: Tx): AdminRepos {
         return o ? toOrg(o) : null;
       },
       update: async (id, patch, at) => void (await tx.update(organizations).set({ ...patch, updatedAt: at }).where(eq(organizations.id, id))),
+    },
+    contracts: {
+      get: async (orgId) => {
+        const c = (await tx.select().from(orgContracts).where(eq(orgContracts.orgId, orgId)).limit(1))[0];
+        return c ? { orgId: c.orgId, contractNo: c.contractNo, endsOn: c.endsOn, note: c.note, createdBy: c.createdBy, at: c.createdAt } : null;
+      },
+      insert: async (row) =>
+        void (await tx.insert(orgContracts).values({ orgId: row.orgId, contractNo: row.contractNo, endsOn: row.endsOn, note: row.note, createdBy: row.createdBy, createdAt: row.at, updatedAt: row.at })),
     },
     members: {
       list: async (orgId) =>

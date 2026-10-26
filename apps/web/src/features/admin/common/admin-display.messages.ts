@@ -47,6 +47,7 @@ export const ANNOUNCEMENT_KIND_LABELS: Messages<AnnouncementKind> = defineMessag
 
 export const ACTION_LABELS: Messages<AdminAction> = defineMessages({
   vi: {
+    ORG_CREATED: "Tạo doanh nghiệp",
     ORG_SUSPENDED: "Tạm khóa doanh nghiệp",
     ORG_REACTIVATED: "Mở khóa doanh nghiệp",
     ORG_PLAN_CHANGED: "Đổi gói",
@@ -73,6 +74,7 @@ export const ACTION_LABELS: Messages<AdminAction> = defineMessages({
     EXCHANGE_RATE_UPDATED: "Sửa tỷ giá tính thuế",
   },
   en: {
+    ORG_CREATED: "Create organization",
     ORG_SUSPENDED: "Suspend organization",
     ORG_REACTIVATED: "Reactivate organization",
     ORG_PLAN_CHANGED: "Change plan",
@@ -99,6 +101,7 @@ export const ACTION_LABELS: Messages<AdminAction> = defineMessages({
     EXCHANGE_RATE_UPDATED: "Edit customs exchange rate",
   },
   zh: {
+    ORG_CREATED: "创建企业",
     ORG_SUSPENDED: "停用企业",
     ORG_REACTIVATED: "启用企业",
     ORG_PLAN_CHANGED: "更换套餐",

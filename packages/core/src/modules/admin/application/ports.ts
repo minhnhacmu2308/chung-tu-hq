@@ -6,7 +6,13 @@ import type { IdGen } from "../../../shared/ids.js";
 import type { Result } from "../../../shared/result.js";
 import type { StaffStatus } from "../domain/staff-rules.js";
 
-export type StaffRow = { userId: string; name: string; email: string; role: StaffRole; status: StaffStatus; lastActiveAt: Date | null; createdAt: Date; mfaEnabled: boolean };
+export type StaffRow = {
+  userId: string; name: string; email: string; role: StaffRole; status: StaffStatus; lastActiveAt: Date | null; createdAt: Date; mfaEnabled: boolean;
+  /** Tài khoản tạo bằng mật khẩu tạm, chưa đổi. */
+  mustChangePassword: boolean;
+};
+/** Hợp đồng ký trực tiếp của doanh nghiệp (quản trị tạo hộ). */
+export type OrgContractRow = { orgId: string; contractNo: string | null; endsOn: string | null; note: string | null; createdBy: string; at: Date };
 /** Khóa 2FA (mã hóa) của một quản trị viên. */
 export type StaffMfaRow = {
   totpCiphertext: string | null; totpPendingCiphertext: string | null; totpKeyVersion: number; totpEnabledAt: Date | null; totpLastCounter: number | null; recoveryCodes: string[];
@@ -69,6 +75,10 @@ export interface AdminRepos {
     activeRecipients(orgIds: string[]): Promise<{ orgId: string; userId: string }[]>;
   };
   joins: { listPending(orgId?: string): Promise<JoinRow[]> };
+  contracts: {
+    get(orgId: string): Promise<OrgContractRow | null>;
+    insert(row: OrgContractRow): Promise<void>;
+  };
   plans: {
     list(): Promise<PlanRow[]>;
     get(code: string): Promise<PlanRow | null>;
@@ -131,6 +141,8 @@ export interface IdentityGateway {
   sendPasswordReset(email: string): Promise<Result<void>>;
   resendVerification(userId: string): Promise<Result<void>>;
   provisionAccount(input: { email: string; name: string }): Promise<Result<{ userId: string; created: boolean }>>;
+  /** Doanh nghiệp + Chủ sở hữu (mật khẩu tạm, bắt đổi ở lần đăng nhập đầu); MST/email đã có → lỗi. */
+  provisionOrg(input: { taxCode: string; name: string; address: string; planCode: string; owner: { email: string; name: string } }): Promise<Result<{ orgId: string; userId: string; tempPassword: string }>>;
 }
 
 /** Hàng đợi BullMQ – chỉ số đếm và job lỗi (không đọc payload ngoài orgId). */

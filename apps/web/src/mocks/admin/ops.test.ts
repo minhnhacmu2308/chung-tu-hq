@@ -337,3 +337,27 @@ describe("tỷ giá tính thuế", () => {
     expect(codeOf(() => ops.upsertExchangeRate(db, { ...input, effectiveFrom: "2026-10-15" }))).toBe("VALIDATION");
   });
 });
+
+describe("tạo hộ doanh nghiệp ký hợp đồng trực tiếp", () => {
+  const INPUT = {
+    taxCode: "0108888888", name: "CÔNG TY HỢP ĐỒNG", address: "Hà Nội", planCode: "PRO", contractNo: "HĐ-15", contractEndsOn: "2027-10-31",
+    owner: { email: "chu@hopdong.vn", name: "Đỗ Chủ" }, note: "Phụ trách: Bảo",
+  };
+  it("Cấp cao tạo được: có trong danh sách, chi tiết có hợp đồng, Chủ sở hữu ACTIVE, mật khẩu tạm 12 ký tự, có nhật ký", () => {
+    as("bao.hoang");
+    const r = ops.createOrg(db, INPUT);
+    expect(r.tempPassword).toHaveLength(12);
+    expect(ops.listOrgs(db).find((o) => o.id === r.orgId)).toMatchObject({ name: "CÔNG TY HỢP ĐỒNG", plan: { code: "PRO" }, ownerEmail: "chu@hopdong.vn" });
+    expect(ops.getOrg(db, r.orgId).contract).toEqual({ contractNo: "HĐ-15", endsOn: "2027-10-31", note: "Phụ trách: Bảo" });
+    expect(db.admin.audit[0]).toMatchObject({ action: "ORG_CREATED", targetId: r.orgId });
+  });
+  it("Hỗ trợ không có quyền; MST / email trùng → lỗi; thiếu tên Chủ sở hữu → VALIDATION", () => {
+    as("trang.mai");
+    expect(codeOf(() => ops.createOrg(db, INPUT))).toBe("FORBIDDEN");
+    as("bao.hoang");
+    ops.createOrg(db, INPUT);
+    expect(codeOf(() => ops.createOrg(db, { ...INPUT, owner: { ...INPUT.owner, email: "khac@hopdong.vn" } }))).toBe("TAX_CODE_EXISTS");
+    expect(codeOf(() => ops.createOrg(db, { ...INPUT, taxCode: "0107777777" }))).toBe("EMAIL_TAKEN");
+    expect(codeOf(() => ops.createOrg(db, { ...INPUT, taxCode: "0106666666", owner: { email: "x@y.vn", name: "" } }))).toBe("VALIDATION");
+  });
+});

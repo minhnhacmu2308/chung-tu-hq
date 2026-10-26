@@ -23,6 +23,13 @@ export async function getSession(deps: IdentityDeps, sessionToken: string): Prom
     await r.sessions.touch(s.id, now, shouldExtend(s, now) ? sessionExpiry(now) : s.expiresAt);
     const plan = await deps.plans.get(org.planCode);
     const ctx: Ctx = { orgId: asOrgId(org.id), userId: asUserId(user.id), role: membership.role };
-    return ok({ ctx, session: { user: toMember(user, membership, now), org: toOrganization(org, plan, now, await deps.usage?.(org.id)) } });
+    return ok({
+      ctx,
+      session: {
+        user: toMember(user, membership, now),
+        org: toOrganization(org, plan, now, await deps.usage?.(org.id)),
+        ...(user.mustChangePassword ? { mustChangePassword: true } : {}),
+      },
+    });
   });
 }

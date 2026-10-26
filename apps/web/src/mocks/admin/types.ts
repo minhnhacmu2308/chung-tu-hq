@@ -6,7 +6,11 @@ import type {
   PlatformIntegration, QueueStat, ServiceHealth, SkillTemplate, Staff,
 } from "@kb/contracts";
 
-export type OrgMeta = { status: OrgStatus; suspendedReason?: string; quotaBonus: number; createdAt: string };
+export type OrgMeta = {
+  status: OrgStatus; suspendedReason?: string; quotaBonus: number; createdAt: string;
+  /** Doanh nghiệp quản trị tạo hộ (ký hợp đồng trực tiếp). */
+  contract?: { contractNo?: string; endsOn?: string; note?: string };
+};
 export type StoredOrg = { org: Organization; meta: OrgMeta };
 export type StoredUser = Omit<AdminUser, "orgName">;
 export type UserMeta = { emailVerified: boolean; createdAt: string; sessions: AdminUserSession[] };

@@ -1,10 +1,10 @@
 // Nghiệp vụ back-office của bản mock, viết thành hàm thuần trên "DB" để kiểm thử được (ops.test.ts).
 // mocks/api/admin.ts chỉ bọc các hàm này bằng độ trễ mạng giả. Backend thật sẽ thay toàn bộ file này.
 import {
-  AdjustOrgQuotaInputSchema, AdminReasonInputSchema, ChangeOrgPlanInputSchema, ChangeStaffRoleInputSchema, ExtendOrgTrialInputSchema,
+  AdjustOrgQuotaInputSchema, AdminReasonInputSchema, ChangeOrgPlanInputSchema, ChangeStaffRoleInputSchema, CreateOrgInputSchema, ExtendOrgTrialInputSchema,
   InviteStaffInputSchema, SendAnnouncementInputSchema, SetTemplatePublishedInputSchema, staffCan, UpdateIntegrationKeyInputSchema,
   UpdatePlanInputSchema, UpsertExchangeRateInputSchema, UsageMonthSchema,
-  type AdminAction, type ExchangeRate, type ExchangeRatesView, type AdminAuditEntry, type AdminOrg, type AdminOrgDetail, type AdminOverview, type AdminPermission, type AdminPlan,
+  type AdminAction, type CreateOrgResult, type ExchangeRate, type ExchangeRatesView, type AdminAuditEntry, type AdminOrg, type AdminOrgDetail, type AdminOverview, type AdminPermission, type AdminPlan,
   type AdminSession, type AdminTargetType, type AdminUser, type Announcement, type AttentionItem, type FailedJob, type IntegrationId,
   type Organization, type OrgUsageRow, type PlanCode, type PlatformIntegration, type SkillTemplate, type Staff, type SystemHealth,
   type UsageReport,
@@ -159,7 +159,38 @@ export function getOrg(db: AdminScope, id: string): AdminOrgDetail {
     // Doanh nghiệp mẫu khác không có dữ liệu kết nối riêng trong bản mock.
     integrations: demo ? db.integrations.map((i) => ({ id: i.id, name: i.name, status: i.status })) : [],
     certificates: demo ? db.certificates.map((c) => ({ id: c.id, issuer: c.issuer, validTo: c.validTo, isDefault: c.isDefault })) : [],
+    ...(r.meta.contract ? { contract: r.meta.contract } : {}),
   };
+}
+
+/** Mật khẩu tạm giả cho bản mock (backend thật sinh ngẫu nhiên 12 ký tự, chỉ trả một lần). */
+const mockTempPassword = () => Array.from({ length: 12 }, () => "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[Math.floor(Math.random() * 54)]).join("");
+
+/** Tạo hộ doanh nghiệp ký hợp đồng trực tiếp + Chủ sở hữu (mật khẩu tạm). Như backend: MST hoặc email đã có → lỗi. */
+export function createOrg(db: AdminScope, input: unknown): CreateOrgResult {
+  const staff = actor(db, "BILLING");
+  const v = parse(CreateOrgInputSchema, input);
+  if (orgRefs(db).some((r) => r.org.taxCode === v.taxCode)) throw new ApiError("TAX_CODE_EXISTS", "Doanh nghiệp có MST này đã có trên hệ thống", 409);
+  if (allUsers(db).some((u) => u.email === v.owner.email)) throw new ApiError("EMAIL_TAKEN", "Email này đã có tài khoản – dùng email khác cho Chủ sở hữu", 409);
+  const plan = planOf(db, v.planCode);
+  const orgId = newId("org");
+  const now = nowIso();
+  db.admin.orgs.unshift({
+    org: {
+      id: orgId, name: v.name, taxCode: v.taxCode, address: v.address, phone: "",
+      plan: { code: plan.code, name: plan.name, dossiersPerMonth: plan.dossiersPerMonth, pagesPerDossier: plan.pagesPerDossier, renewsAt: isoDay(Date.now() + 30 * DAY) },
+      usage: { dossiersThisMonth: 0, pagesThisMonth: 0, aiCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" },
+      suspectThreshold: "BALANCED", fourEyes: false,
+    },
+    meta: {
+      status: "ACTIVE", quotaBonus: 0, createdAt: now,
+      contract: { ...(v.contractNo ? { contractNo: v.contractNo } : {}), ...(v.contractEndsOn ? { endsOn: v.contractEndsOn } : {}), ...(v.note ? { note: v.note } : {}) },
+    },
+  });
+  db.admin.users.push({ id: newId("usr"), name: v.owner.name, email: v.owner.email, orgId, role: "OWNER", status: "ACTIVE", emailVerified: true, createdAt: now, sessions: [] });
+  const r = orgRef(db, orgId);
+  log(db, staff, "ORG_CREATED", orgTarget(r), "Tạo doanh nghiệp ký hợp đồng trực tiếp", [`Gói ${plan.name}`, v.contractNo ? `HĐ ${v.contractNo}` : null, `Chủ sở hữu ${v.owner.email}`].filter(Boolean).join(" · "));
+  return { orgId, orgName: v.name, ownerEmail: v.owner.email, tempPassword: mockTempPassword() };
 }
 
 const orgTarget = (r: OrgRef): Target => ({ type: "ORG", id: r.org.id, label: r.org.name, orgId: r.org.id, orgName: r.org.name });

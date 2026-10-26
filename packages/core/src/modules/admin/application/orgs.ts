@@ -1,5 +1,5 @@
 // Doanh nghiệp: danh sách, chi tiết, tạm khóa/mở, đổi gói, nới hạn mức, gia hạn dùng thử.
-import type { AdjustOrgQuotaInput, AdminOrg, AdminOrgDetail, AdminReasonInput, ChangeOrgPlanInput, ExtendOrgTrialInput, IntegrationStatus } from "@kb/contracts";
+import type { AdjustOrgQuotaInput, AdminOrg, AdminOrgDetail, AdminReasonInput, ChangeOrgPlanInput, CreateOrgInput, CreateOrgResult, ExtendOrgTrialInput, IntegrationStatus } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { extendTrial, renewsAt, vnMonth, vnMonthRange } from "../domain/period.js";
@@ -33,7 +33,7 @@ export async function getOrg(deps: AdminDeps, actor: StaffActor, orgId: string):
       const snap = await orgSnapshot(deps, r);
       const o = snap.orgs.find((x) => x.id === orgId);
       if (!o) return err(domainError("NOT_FOUND", "Không tìm thấy doanh nghiệp"));
-      const [integrations, certificates] = await Promise.all([r.orgConnections.integrations(orgId), r.orgConnections.certificates(orgId)]);
+      const [integrations, certificates, contract] = await Promise.all([r.orgConnections.integrations(orgId), r.orgConnections.certificates(orgId), r.contracts.get(orgId)]);
       return ok({
         ...snap.toDto(o),
         address: o.address,
@@ -41,9 +41,41 @@ export async function getOrg(deps: AdminDeps, actor: StaffActor, orgId: string):
         // Chỉ trạng thái kết nối – không có khóa, không có nội dung thông điệp.
         integrations: integrations.map((i) => ({ id: i.id, name: INTEGRATION_NAMES[i.id] ?? i.id, status: (["CONNECTED", "ERROR"].includes(i.status) ? i.status : "NOT_CONFIGURED") as IntegrationStatus })),
         certificates,
+        ...(contract
+          ? {
+              contract: {
+                ...(contract.contractNo ? { contractNo: contract.contractNo } : {}),
+                ...(contract.endsOn ? { endsOn: contract.endsOn } : {}),
+                ...(contract.note ? { note: contract.note } : {}),
+              },
+            }
+          : {}),
       });
     }),
   );
+}
+
+/**
+ * Tạo hộ doanh nghiệp ký hợp đồng trực tiếp: doanh nghiệp (gói chọn sẵn) + Chủ sở hữu đăng nhập bằng mật khẩu tạm (bắt đổi ở lần đầu)
+ * + hợp đồng (số, hạn, ghi chú nội bộ). Mật khẩu tạm chỉ trả về một lần trong kết quả này.
+ */
+export async function createOrg(deps: AdminDeps, actor: StaffActor, input: CreateOrgInput): Promise<Result<CreateOrgResult>> {
+  return guarded(actor, "BILLING", async () => {
+    const plan = await deps.uow.run((r) => r.plans.get(input.planCode));
+    if (!plan) return err(domainError("NOT_FOUND", "Không tìm thấy gói dịch vụ"));
+    const created = await deps.identity.provisionOrg({ taxCode: input.taxCode, name: input.name, address: input.address, planCode: input.planCode, owner: input.owner });
+    if (!created.ok) return created;
+    const { orgId, tempPassword } = created.value;
+    await deps.uow.run(async (r) => {
+      const now = deps.clock.now();
+      await r.contracts.insert({ orgId, contractNo: input.contractNo || null, endsOn: input.contractEndsOn ?? null, note: input.note || null, createdBy: actor.userId, at: now });
+      const detail = [`Gói ${plan.name}`, input.contractNo ? `HĐ ${input.contractNo}` : null, input.contractEndsOn ? `hết hạn ${input.contractEndsOn}` : null, `Chủ sở hữu ${input.owner.email}`]
+        .filter(Boolean)
+        .join(" · ");
+      await audit(deps, r, actor, "ORG_CREATED", { type: "ORG", id: orgId, label: input.name, orgId, orgName: input.name }, "Tạo doanh nghiệp ký hợp đồng trực tiếp", detail);
+    });
+    return ok({ orgId, orgName: input.name, ownerEmail: input.owner.email, tempPassword });
+  });
 }
 
 /** Khung chung cho thao tác ghi trên một doanh nghiệp: tìm org → `fn` ghi + nhật ký → trả AdminOrg mới. */

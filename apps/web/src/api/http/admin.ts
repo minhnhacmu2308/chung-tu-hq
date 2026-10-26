@@ -1,6 +1,6 @@
 // Back-office (/api/admin/**) – gọi backend thật. Cùng chữ ký với src/mocks/api/admin.ts.
 import {
-  ExchangeRateSchema, ExchangeRatesViewSchema, type UpsertExchangeRateInput,
+  ExchangeRateSchema, ExchangeRatesViewSchema, type UpsertExchangeRateInput, CreateOrgResultSchema, type CreateOrgInput,
   AdminAuditEntrySchema, AdminMfaEnabledSchema, AdminMfaSetupSchema, AdminOrgDetailSchema, AdminOrgSchema, AdminOverviewSchema, AdminPlanSchema, AdminSessionSchema, AdminUserSchema, AnnouncementSchema,
   FailedJobSchema, PlatformIntegrationSchema, SkillTemplateSchema, StaffSchema, SystemHealthSchema, UsageMonthSchema, UsageReportSchema,
   type AdjustOrgQuotaInput, type AdminReasonInput, type ChangeOrgPlanInput, type ChangeStaffRoleInput, type ExtendOrgTrialInput, type IntegrationId,
@@ -29,6 +29,7 @@ export const listAdminOrgs = () => apiGet("admin/orgs", z.array(AdminOrgSchema))
 export const getAdminOrg = (id: string) => apiGet(`admin/orgs/${enc(id)}`, AdminOrgDetailSchema);
 export const suspendOrg = (id: string, input: AdminReasonInput) => apiPost(`admin/orgs/${enc(id)}/suspend`, input, AdminOrgSchema);
 export const reactivateOrg = (id: string, input: AdminReasonInput) => apiPost(`admin/orgs/${enc(id)}/reactivate`, input, AdminOrgSchema);
+export const createOrg = (input: CreateOrgInput) => apiPost("admin/orgs", input, CreateOrgResultSchema);
 export const changeOrgPlan = (id: string, input: ChangeOrgPlanInput) => apiPost(`admin/orgs/${enc(id)}/plan`, input, AdminOrgSchema);
 export const adjustOrgQuota = (id: string, input: AdjustOrgQuotaInput) => apiPost(`admin/orgs/${enc(id)}/quota`, input, AdminOrgSchema);
 export const extendOrgTrial = (id: string, input: ExtendOrgTrialInput) => apiPost(`admin/orgs/${enc(id)}/trial`, input, AdminOrgSchema);

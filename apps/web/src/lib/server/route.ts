@@ -61,6 +61,7 @@ const STATUS_BY_CODE: Partial<Record<DomainErrorCode, number>> = {
   CONFLICT: 409,
   ORG_SUSPENDED: 403,
   MFA_REQUIRED: 403,
+  PASSWORD_CHANGE_REQUIRED: 403,
   MFA_INVALID: 400,
 };
 

@@ -29,7 +29,7 @@ export const DEPARTURE_IN_PAST: FptError = {
 };
 
 /** Lỗi do mock tự đặt (chưa có mẫu thật) – mã có tiền tố MOCK- để không nhầm với mã VNACCS. */
-export const mockError = (code: "MOCK-REQ" | "MOCK-FMT", index: string, name: string, content: string, row = 0): FptError => ({
+export const mockError = (code: "MOCK-REQ" | "MOCK-FMT" | "MOCK-REJ", index: string, name: string, content: string, row = 0): FptError => ({
   errorCode: code, indexCode: index, nameCode: name, errorContent: content,
-  proposedSolution: code === "MOCK-REQ" ? "Nhập chỉ tiêu bắt buộc." : "Kiểm tra định dạng dữ liệu.", rowPosition: String(row).padStart(4, "0"),
+  proposedSolution: code === "MOCK-REQ" ? "Nhập chỉ tiêu bắt buộc." : code === "MOCK-REJ" ? "Sửa theo lý do từ chối rồi khai lại HYS." : "Kiểm tra định dạng dữ liệu.", rowPosition: String(row).padStart(4, "0"),
 });

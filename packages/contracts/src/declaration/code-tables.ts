@@ -158,10 +158,9 @@ export const UNITS: CodeEntry[] = [
 export const PACKAGE_UNITS: CodeEntry[] = [
   { code: "CS", label: "Thùng (case)" },
   { code: "BX", label: "Hộp" },
-  { code: "PK", label: "Kiện (package)", unverified: true },
+  { code: "PK", label: "Kiện (package, pallet)" },
   { code: "CT", label: "Thùng carton", unverified: true },
   { code: "BG", label: "Bao/túi", unverified: true },
-  { code: "PX", label: "Pallet", unverified: true },
   { code: "DR", label: "Thùng phuy", unverified: true },
   { code: "RO", label: "Cuộn", unverified: true },
   { code: "BL", label: "Kiện nén (bale)", unverified: true },

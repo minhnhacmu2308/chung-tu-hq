@@ -55,9 +55,9 @@ describe("hscodepro-map", () => {
     expect(ratesFromCandidate(c!, { direction: "NK", typeCode: "A11" })).toMatchObject({ importDutyRate: "0", vatRate: "10", policyNote: expect.stringContaining("ACFTA") });
     expect(ratesFromCandidate(null, { direction: "NK", typeCode: "A11" })).toMatchObject({ importDutyRate: null, vatRate: null, policyNote: expect.stringContaining("Chưa có thuế suất") });
   });
-  it("ratesFromCandidate: có thuế NK nhưng thiếu VAT → ghi chú cảnh báo VAT (không âm thầm thành 0%)", () => {
+  it("ratesFromCandidate: có thuế NK nhưng thiếu VAT → tạm tính 10% (VB901) kèm ghi chú (không âm thầm thành 0%)", () => {
     const [c] = candidatesFromResult({ ...RESULT, tax: { ...TAX(5), vat: { rate: null, note: null } } });
-    expect(ratesFromCandidate(c!, { direction: "NK", typeCode: "A11" })).toMatchObject({ importDutyRate: "5", vatRate: null, policyNote: expect.stringContaining("VAT") });
+    expect(ratesFromCandidate(c!, { direction: "NK", typeCode: "A11" })).toMatchObject({ importDutyRate: "5", vatRate: "10", policyNote: expect.stringMatching(/GTGT.*tạm tính 10%/) });
   });
   it("chunk: chia lô 50", () => {
     expect(chunk(Array.from({ length: 120 }, (_, i) => i), 50).map((c) => c.length)).toEqual([50, 50, 20]);

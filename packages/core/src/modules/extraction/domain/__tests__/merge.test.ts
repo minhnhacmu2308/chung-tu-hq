@@ -131,6 +131,20 @@ describe("mergeExtractions – trường v2 (chuẩn trường chứng từ)", (
     expect(s.transport.departureDate.value).toBe("2025-04-22");
     expect(s.transport.placeOfIssue.value).toBeNull();
   });
+  it("cước: có hóa đơn cước thì lấy số VND trên hóa đơn cước, bỏ cước ngoại tệ trên Arrival Notice (lô FANS25040166)", () => {
+    const anFee: FileExtraction = { ...an, data: { ...an.data, charges: [{ label: "OCEAN + EXW CHARGE", amount: 239, currency: "USD" }, { label: "D/O", amount: 900000, currency: "VND" }] } };
+    const fi: FileExtraction = {
+      documentId: "doc_fi", kind: "FREIGHT_INVOICE", pages: 1,
+      data: { invoiceNo: "00001808", currency: "VND", totalAmount: 6247699, services: [{ label: "Cước vận tải quốc tế và phí làm hàng tại nước ngoài B/L: FANS25040166", amount: 6247699 }], uncertainties: [] },
+    };
+    const s = mergeExtractions([anFee, fi], opts);
+    expect(s.charges.freight.value).toBe("6247699");
+    expect(s.charges.freightCurrency?.value).toBe("VND");
+    expect(s.charges.freight.status).not.toBe("CONFLICT");
+    expect(s.charges.freight.sources.map((x) => x.kind)).toEqual(["FREIGHT_INVOICE"]);
+    // Không có hóa đơn cước → vẫn dùng cước trên Arrival Notice.
+    expect(mergeExtractions([anFee], opts).charges.freight.value).toBe("239");
+  });
   it("hàng air: chuyến bay lệch giữa HAWB và Arrival Notice → CONFLICT; HAWB vào houseBillNo, MAWB vào masterBillNo; ngày bay vào ngày đi", () => {
     const awb: FileExtraction = { documentId: "a", kind: "AIR_WAYBILL", pages: 1, data: { awbNo: "92147391621", hawbNo: "YZS24120950", flight: "O3141", flightDate: "2024-12-21", uncertainties: [] } };
     const an2: FileExtraction = { documentId: "b", kind: "ARRIVAL_NOTICE", pages: 1, data: { billNo: "YZS24120950", flightNo: "O30141", warehouseCode: "02B1A04", warehouseName: "KHO SCSC", charges: [], uncertainties: [] } };

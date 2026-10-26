@@ -36,7 +36,9 @@ describe("tra bảng mã theo tên (CODE_TABLES)", () => {
     expect(CODE_TABLES.PACKAGE_KIND).toBe(PACKAGE_UNITS);
     expect(byNo("1.27").codeTable).toBe("PACKAGE_KIND");
     expect(byNo("2.25").codeTable).toBe("PACKAGE_KIND");
-    expect(PACKAGE_UNITS.find((x) => x.code === "PK")?.unverified).toBe(true);
+    // PK có trong danh mục PACKAGE_KIND của VNACCS; danh mục không có mã pallet PX (pallet khai PK).
+    expect(PACKAGE_UNITS.find((x) => x.code === "PK")?.unverified).toBeUndefined();
+    expect(PACKAGE_UNITS.some((x) => x.code === "PX")).toBe(false);
   });
   it("chỉ tiêu có bảng mã mới gắn đúng bảng", () => {
     expect([byNo("1.5").codeTable, byNo("2.5").codeTable]).toEqual(["CARGO_CLASS", "CARGO_CLASS"]);

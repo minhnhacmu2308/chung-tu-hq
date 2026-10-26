@@ -68,7 +68,7 @@ export function packageCount(i: MappingInput, missingNote: string): MappedValue 
   const value = `${p.value.replace(/\.0+$/, "")} ${u?.code ?? "PK"}`;
   if (!u) return { ...p, value, suspect: true, note: "Chứng từ không ghi loại kiện – tạm khai PK, chọn mã loại kiện đúng" };
   if (u.guessed) return { ...p, value, suspect: true, note: `Không nhận ra loại kiện “${rawUnit}” – tạm khai PK, chọn mã loại kiện đúng` };
-  return { ...p, value };
+  return u.note ? { ...p, value, note: [p.note, u.note].filter(Boolean).join(". ") } : { ...p, value };
 }
 
 /** HS từng dòng để xét chính sách: ưu tiên mã đã xác nhận (biểu VN), chưa có thì mã trên invoice. */

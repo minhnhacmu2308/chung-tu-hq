@@ -63,7 +63,7 @@ describe("AgentStep – mã HS từ danh mục hàng hóa", () => {
     expect(within(table).getByRole("button", { name: "Đổi mã HS dòng 1" }).textContent).toBe("");
     await userEvent.click(within(table).getByRole("checkbox", { name: "Chọn dòng Dòng 1" }));
     await userEvent.click(within(table).getByRole("checkbox", { name: "Chọn dòng Dòng 2" }));
-    await userEvent.click(screen.getByRole("button", { name: "Bỏ xác nhận 2 dòng" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Bỏ xác nhận 2 dòng" }, T));
     await waitFor(() => expect(lines.map((l) => getDb().lineItems.find((i) => i.id === l.id)!.hsConfirmed ?? null)).toEqual([null, null]), T);
     // Bảng đã tải lại (dòng 1 về chưa xác nhận) và thanh chọn đã đóng.
     await waitFor(() => expect(within(table).queryByRole("button", { name: "Đổi mã HS dòng 1" })).toBeNull(), T);

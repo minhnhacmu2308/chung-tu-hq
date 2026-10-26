@@ -1,6 +1,6 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA). Người nhập khẩu lấy theo tài khoản (MST), KHÔNG lấy tên tiếng Anh trên invoice (PRODUCT §7.4).
 import { DEFAULT_PARTY_CLASS, formatAdjustmentField, NO_INSURANCE_VALUE, PARTY_CLASS_LABELS, type Sourced } from "@kb/contracts";
-import { resolveDischargePort, resolvePort, transportModeCode } from "../catalog-resolve.js";
+import { pickDischargePort, resolvePayment, resolvePort, transportModeCode } from "../catalog-resolve.js";
 import { FREIGHT_ADJUSTMENT_LABEL, FREIGHT_NOT_INCLUDED, freightReasonText, INSURANCE_ADJUSTMENT_LABEL, INSURANCE_INCLUDED, incotermCode } from "../adjustments.js";
 import type { Adjustment } from "../valuation.js";
 import { IDA_NO as N } from "./numbers.js";
@@ -8,7 +8,10 @@ import { dec } from "../../../../shared/decimal.js";
 import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { BY_WATER, IN_CONTAINER, RE_IMPORT, TEMP_IMPORT } from "./conditions.js";
 import { profileSource, SRC, warehouseFromAn } from "./sources.js";
-import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
+import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, sourceOfKind, type MappingInput } from "./types.js";
+
+/** Mô tả hàng cho biết hàng đã qua sử dụng → mã CU ở 1.37 (CV 2061/TCHQ-GSQL). */
+const USED_GOODS = /\b(used|second[\s-]?hand|refurbished|reconditioned|pre-owned)\b|đã qua sử dụng|hàng cũ/i;
 
 /** 1.68 Phần ghi chú: TT121 yêu cầu ghi số và ngày cấp C/O tại đây; các nội dung ngăn cách bằng dấu “;”. */
 const coRef = (i: MappingInput) => {
@@ -26,11 +29,21 @@ const valuationDetail = (i: MappingInput): MappedValue => {
   const d = i.shipment.transport.departureDate.value;
   const foc = i.shipment.items.filter((it) => it.amount.value !== null && dec(it.amount.value).isZero()).map((it) => it.lineNo);
   const notes = foc.length ? [`Dòng hàng ${foc.join(", ")} là hàng không thanh toán (FOC/khuyến mại)`] : [];
+  // Khai KC (Khác) ở 1.43 thì ghi phương thức thanh toán thực tế tại đây (Phụ lục II, ghi chú chỉ tiêu 1.50).
+  const pay = paymentDetail(i.shipment.invoice.paymentTerms.value);
+  if (pay) notes.push(pay);
   if (!d) return { value: notes.length ? notes.join("; ") : null, source: "BILL_OF_LADING", suspect: true, note: "Thiếu ngày vận đơn – chỉ tiêu 1.50 mở đầu bằng ngày vận đơn dạng DDMMYYYY#& (TT121)" };
   const date = `${d.slice(8, 10)}${d.slice(5, 7)}${d.slice(0, 4)}#&`;
   const src = fromSourced(i.shipment.transport.departureDate, "BILL_OF_LADING");
   return { ...src, value: `${date}${notes.join("; ")}` };
 };
+
+/** Phương thức thanh toán thực tế khi 1.43 khai KC: T/T, chuyển khoản → "PHƯƠNG THỨC THANH TOÁN TT"; mã khác không cần ghi thêm. */
+function paymentDetail(raw: string | null): string | null {
+  const r = resolvePayment(raw);
+  if (!r || r.code !== "KC" || !raw) return null;
+  return /\bT\s*\/?\s*T\b|TELEGRAPHIC|WIRE|BANK TRANSFER|REMITTANCE|CHUYỂN KHOẢN|CHUYEN KHOAN/i.test(raw) ? "PHƯƠNG THỨC THANH TOÁN TT" : `PHƯƠNG THỨC THANH TOÁN ${raw.trim().toUpperCase()}`;
+}
 
 /** Cước / bảo hiểm đã vào trị giá: nhập tay thì ghi lý do; lệch số trên chứng từ hoặc thiếu tỷ giá → nghi ngờ. */
 const chargeValue = (a: Adjustment, doc: { amount: Sourced<string>; currency: Sourced<string> | undefined }, invoiceCurrency: string, reason?: string): MappedValue => {
@@ -68,7 +81,8 @@ const insurance = (i: MappingInput): MappedValue => {
   const a = i.adjustments.find((x) => x.label === INSURANCE_ADJUSTMENT_LABEL);
   if (a) return chargeValue(a, { amount: c.insurance, currency: c.insuranceCurrency }, invoiceCurrency);
   if (i.charges.insurance?.mode === "NONE") return { value: NO_INSURANCE_VALUE, source: "USER", note: "Người khai xác nhận không mua bảo hiểm" };
-  return { value: null, source: "SYSTEM", note: "Không có chứng từ bảo hiểm – xác nhận “Không mua bảo hiểm” ở bước OCR & kiểm tra nếu đúng" };
+  // Không có chứng từ/số phí bảo hiểm và giá chưa gồm bảo hiểm → mã D (không bảo hiểm) – cách khai phổ biến; mua bảo hiểm thì nhập số phí ở bước OCR & kiểm tra.
+  return { value: NO_INSURANCE_VALUE, source: "SYSTEM", note: "Không có chứng từ bảo hiểm – khai D (không bảo hiểm); nếu có mua bảo hiểm thì nhập phí bảo hiểm ở bước OCR & kiểm tra" };
 };
 
 /** 1.49: mỗi khoản một dòng (mã tên, AD/SB, mã tiền, trị giá). Phí khác đọc từ chứng từ chưa có mã → nghi ngờ (FPT chặn truyền). */
@@ -88,6 +102,29 @@ const otherAdjustments = (i: MappingInput): MappedValue => {
     ...(noRate.length ? { suspect: true, note: `Chưa có tỷ giá cho ${[...new Set(noRate)].join(", ")}` } : {}),
   };
 };
+
+/**
+ * 1.26 đường biển/sông: số vận đơn khai theo dạng ngày phát hành vận đơn DDMMYY + số vận đơn (khớp bản lược khai hàng hóa điện tử của hãng tàu),
+ * vd 220425FANS25040166. Đã có tiền tố ngày thì giữ nguyên; thiếu ngày vận đơn → giữ số, đánh dấu để người khai bổ sung. AWB không thêm.
+ */
+function seaBillNo(i: MappingInput, v: MappedValue): MappedValue {
+  if (!BY_WATER.test(i) || v.value === null) return v;
+  const d = i.shipment.transport.departureDate.value;
+  if (!d) return { ...v, suspect: true, note: "Thiếu ngày vận đơn – số vận đơn đường biển khai dạng DDMMYY + số vận đơn" };
+  const prefix = `${d.slice(8, 10)}${d.slice(5, 7)}${d.slice(2, 4)}`;
+  return v.value.startsWith(prefix) ? v : { ...v, value: `${prefix}${v.value}` };
+}
+
+/** 1.33 cảng dỡ: xét mọi chứng từ ghi cảng dỡ (B/L, Arrival Notice…) – bến cụ thể / tên trùng danh mục A016 thắng tên thành phố chung. */
+function dischargePort(i: MappingInput): MappedValue {
+  const t = i.shipment.transport;
+  const raws = (s: typeof t.portOfDischarge) => [...new Set([s.value, ...s.sources.map((x) => x.raw)].filter((x): x is string => !!x))];
+  const pick = pickDischargePort(raws(t.portOfDischarge), raws(t.finalDestination), i.catalogs?.ports);
+  const ref = [...t.portOfDischarge.sources, ...t.finalDestination.sources].find((x) => x.raw === pick.raw);
+  const source = ref ? sourceOfKind(ref.kind) : fromSourced(t.portOfDischarge, "BILL_OF_LADING").source;
+  const base = port(pick.raw ?? t.portOfDischarge.value, pick.resolved, source);
+  return pick.note ? { ...base, suspect: true, note: pick.note } : base;
+}
 
 export const IDA_MAPPINGS: FieldMapping[] = [
   { code: "SOTK", no: N.SOTK, section: "GENERAL", label: "Số tờ khai", required: false, from: (i) => ({ value: i.dossier.declarationNo ?? "Chưa cấp – nhận sau khi truyền IDA", source: "SYSTEM" }) },
@@ -123,7 +160,7 @@ export const IDA_MAPPINGS: FieldMapping[] = [
 
   { code: "SO_VD", no: N.SO_VD, section: "TRANSPORT", label: "Số vận đơn", required: true, options: { sources: [SRC.houseBill, SRC.masterBill], allowFixed: false }, from: (i) => {
     const s = i.shipment.transport.billNo.value ? i.shipment.transport.billNo : i.shipment.transport.masterBillNo;
-    return s.value ? fromSourced(s, "BILL_OF_LADING") : missing("BILL_OF_LADING", "Chưa có vận đơn (B/L hoặc AWB)");
+    return s.value ? seaBillNo(i, fromSourced(s, "BILL_OF_LADING")) : missing("BILL_OF_LADING", "Chưa có vận đơn (B/L hoặc AWB)");
   } },
   { code: "SO_KIEN", no: N.SO_KIEN, section: "TRANSPORT", label: "Số lượng kiện", required: true, from: (i) => packageCount(i, "Chưa có số kiện trên Packing List / vận đơn") },
   { code: "TRONG_LUONG", no: N.TRONG_LUONG, section: "TRANSPORT", label: "Tổng trọng lượng hàng (Gross)", required: true, from: (i) => {
@@ -132,12 +169,7 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   } },
   { code: "KHO", no: N.KHO, section: "TRANSPORT", label: "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", required: true, options: { sources: [SRC.anWarehouse, profileSource("KHO")], allowFixed: true }, from: (i) =>
     warehouseFromAn(i) ?? profileOr(i, "KHO", missing("DOSSIER", "Chọn mã địa điểm lưu kho (kho/bãi/cảng nơi hàng chờ thông quan – CV 4613/TCHQ-VNACCS)")) },
-  { code: "CANG_DO", no: N.CANG_DO, section: "TRANSPORT", label: "Mã địa điểm dỡ hàng", required: true, from: (i) => {
-    const pod = i.shipment.transport.portOfDischarge;
-    const r = resolveDischargePort(pod.value, i.shipment.transport.finalDestination.value);
-    const base = port(pod.value, r.resolved, fromSourced(pod, "BILL_OF_LADING").source);
-    return r.note ? { ...base, suspect: true, note: r.note } : base;
-  } },
+  { code: "CANG_DO", no: N.CANG_DO, section: "TRANSPORT", label: "Mã địa điểm dỡ hàng", required: true, from: dischargePort },
   { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Mã địa điểm xếp hàng", required: true, from: (i) => {
     const pol = i.shipment.transport.portOfLoading;
     return port(pol.value, resolvePort(pol.value), fromSourced(pol, "BILL_OF_LADING").source);
@@ -192,17 +224,21 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     return { value: null, source: "CERT_OF_ORIGIN", note: "Không có C/O – áp thuế suất MFN" };
   } },
   // CV 2061/TCHQ-GSQL: tờ khai NK có hàng chương 84/85 → ô 1 chỉ tiêu 1.37 bắt buộc MO/CU, sai thì hệ thống từ chối đăng ký.
-  // Không tự điền MO: tình trạng mới/đã qua sử dụng không suy ra được từ chứng từ, người khai phải chọn.
+  // Mô tả hàng ghi đã qua sử dụng (used, second-hand, refurbished…) → CU; còn lại MO (hàng mới – trường hợp thường gặp; hàng cũ cần giấy phép riêng).
   { code: "VBPQ", no: N.VBPQ, section: "GENERAL", label: "Mã văn bản pháp quy khác", required: false, from: (i) => {
-    const n = lineHs(i).filter((h) => /^(84|85)/.test(h)).length;
-    if (!n) return { value: null, source: "SYSTEM" };
-    return { value: null, source: "DOSSIER", suspect: true, blocking: true, note: `${n} dòng chương 84/85: ô 1 khai MO (máy móc, thiết bị chưa qua sử dụng) hoặc CU (đã qua sử dụng) – thiếu/sai hệ thống từ chối đăng ký tờ khai (CV 2061/TCHQ-GSQL)` };
+    const ch = i.shipment.items.filter((_, k) => /^(84|85)/.test(lineHs(i)[k] ?? ""));
+    if (!ch.length) return { value: null, source: "SYSTEM" };
+    const used = ch.filter((it) => USED_GOODS.test(it.description.value ?? "")).map((it) => it.lineNo);
+    if (used.length === ch.length) return { value: "CU", source: "INVOICE", blocking: true, note: `Mô tả hàng ghi hàng đã qua sử dụng – CU (CV 2061/TCHQ-GSQL); kiểm tra điều kiện nhập khẩu hàng đã qua sử dụng` };
+    if (used.length) return { value: "MO", source: "INVOICE", suspect: true, blocking: true, note: `Dòng ${used.join(", ")} ghi hàng đã qua sử dụng nhưng dòng khác là hàng mới – một tờ khai chỉ khai một mã ô 1 (MO/CU): tách tờ khai` };
+    return { value: "MO", source: "SYSTEM", blocking: true, note: `${ch.length} dòng chương 84/85, mô tả không ghi đã qua sử dụng → MO (máy móc, thiết bị chưa qua sử dụng – CV 2061/TCHQ-GSQL). Hàng đã qua sử dụng thì đổi thành CU` };
   } },
   { code: "NGUOI_NT", no: N.NGUOI_NT, section: "GENERAL", label: "Người nộp thuế", required: true, options: { sources: [profileSource("NGUOI_NT")], allowFixed: true }, from: (i) => profileOr(i, "NGUOI_NT", fixed("1 – Người nhập khẩu")) },
   { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: (i) => {
     const c = i.shipment.transport.containers;
     const co = coRef(i);
-    const parts = [co, i.dossier.note, c.length ? `Container: ${c.map((x) => x.no).join(", ")}` : null].filter(Boolean);
+    // Ghi chú của hồ sơ là ghi chú nội bộ (“không gửi Hải quan”) – không đưa vào Phần ghi chú của tờ khai.
+    const parts = [co, c.length ? `Container: ${c.map((x) => x.no).join(", ")}` : null].filter(Boolean);
     const value = parts.length ? parts.join("; ") : null;
     return co ? { value, source: "DOSSIER", suspect: true, note: "Bổ sung ngày cấp C/O sau số C/O (TT121, chỉ tiêu 1.68)" } : { value, source: "DOSSIER" };
   } },

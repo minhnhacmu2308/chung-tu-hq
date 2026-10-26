@@ -125,8 +125,8 @@ describe("luồng tờ khai trên Postgres thật", () => {
     await runAgentFor(id);
     for (const it of unwrap(await listLineItems(declaration, chau, id))) unwrap(await confirmHs(declaration, chau, it.id, it.hsSuggested ?? "8482.10.00"));
     unwrap(await moveToReview(declaration, chau, id));
-    expect(errCode(await approveDeclaration(declaration, tuan, id))).toBe("BLOCKER_FAILED"); // hàng chương 84 chưa chọn MO/CU (CV 2061)
-    unwrap(await updateDeclarationField(declaration, chau, id, "VBPQ", "MO"));
+    // Hàng chương 84 (CV 2061): MO tự điền vì mô tả không ghi hàng đã qua sử dụng.
+    expect(unwrap(await getDeclarationView(declaration, chau, id)).declaration!.fields.find((f) => f.code === "VBPQ")?.value).toBe("MO");
     expect(errCode(await approveDeclaration(declaration, tuan, id))).toBe("VALIDATION"); // chỉ tiêu bắt buộc (kho, vận đơn) còn trống
     await fillManualFields(declaration, chau, id);
     const a = unwrap(await approveDeclaration(declaration, tuan, id));

@@ -5,10 +5,10 @@ import { planAdjustmentsFor } from "./adjustments.js";
 import { lengthIssue } from "./field-length.js";
 import { evaluateMapping } from "./mapping/evaluate.js";
 import { mappingsFor } from "./mapping/registry.js";
-import type { ExchangeInfo, FieldOverride, MappingInput } from "./mapping/types.js";
+import type { DeclarationCatalogs, ExchangeInfo, FieldOverride, MappingInput } from "./mapping/types.js";
 import { computeTaxes, type TaxResult } from "./tax.js";
 import { allocateCustomsValue, type Adjustment, type Valuation } from "./valuation.js";
-export type { ExchangeInfo } from "./mapping/types.js";
+export type { DeclarationCatalogs, ExchangeInfo } from "./mapping/types.js";
 
 export type BuildInput = {
   shipment: Shipment; dossier: DossierInfo; org: OrgInfo; now: Date; exchange: ExchangeInfo;
@@ -18,6 +18,8 @@ export type BuildInput = {
   overrides?: Record<string, FieldOverride>;
   /** Chi phí người khai nhập (bước OCR & kiểm tra); không có = chỉ theo chứng từ. */
   charges?: ValueCharges;
+  /** Danh mục VNACCS nạp sẵn (cảng, địa điểm lưu kho) – xem DeclarationCatalogs. */
+  catalogs?: DeclarationCatalogs;
 };
 
 export { fieldDef, lengthIssue } from "./field-length.js";
@@ -38,7 +40,7 @@ export function buildDeclaration(input: BuildInput): BuiltDeclaration {
     return kind === "IDA" ? { id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: it.importDutyRate, vatRate: it.vatRate } : { id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: null, vatRate: null };
   }));
   const lines = input.items.flatMap((it) => (it.lineNo === undefined ? [] : [{ lineNo: it.lineNo, hsConfirmed: it.hsConfirmed ?? null }]));
-  const ctx: MappingInput = { shipment: input.shipment, dossier: input.dossier, org: input.org, now: input.now, adjustments: valuation.adjustments, valuation, exchange: input.exchange, profile: input.profile ?? {}, overrides: input.overrides ?? {}, lines, charges };
+  const ctx: MappingInput = { shipment: input.shipment, dossier: input.dossier, org: input.org, now: input.now, adjustments: valuation.adjustments, valuation, exchange: input.exchange, profile: input.profile ?? {}, overrides: input.overrides ?? {}, lines, charges, ...(input.catalogs ? { catalogs: input.catalogs } : {}) };
   const fields: Record<string, StoredField> = {};
   const hidden: string[] = [];
   for (const m of mappingsFor(kind)) {

@@ -97,16 +97,22 @@ export function candidatesFromResult(r: HsResult): HsCandidate[] {
   ];
 }
 
-/** Thuế suất khi người khai xác nhận một ứng viên. XK/miễn thuế theo quy tắc phía mình; không có thuế → null + ghi chú. */
+/** Thuế suất GTGT phổ thông (Luật Thuế GTGT) – dùng tạm khi HSCodePro chưa có VAT cho mã; khai mã VB901. */
+export const DEFAULT_VAT_RATE = "10";
+
+/**
+ * Thuế suất khi người khai xác nhận một ứng viên. XK/miễn thuế theo quy tắc phía mình; không có thuế NK → null + ghi chú.
+ * Thiếu VAT → tạm tính 10% (phổ thông) kèm ghi chú: hàng thuộc nhóm 5% / 0% / không chịu thuế / giảm thuế GTGT thì người khai sửa.
+ */
 export function ratesFromCandidate(c: HsCandidate | null, p: { direction: "NK" | "XK"; typeCode: string }): { importDutyRate: string | null; vatRate: string | null; policyNote: string | null } {
   const fixed = fixedRatesFor(p);
   if (fixed) return { importDutyRate: fixed.importDutyRate, vatRate: fixed.vatRate, policyNote: fixed.policyNote };
   if (!c || c.importRate === null) return { importDutyRate: null, vatRate: c?.vatRate ?? null, policyNote: "Chưa có thuế suất cho mã này – kiểm tra biểu thuế trước khi khai" };
   const notes = [
     c.basis === "FTA" ? `Thuế ưu đãi đặc biệt ${c.agreement ?? "FTA"} – cần C/O hợp lệ và đúng quy tắc xuất xứ` : null,
-    c.vatRate === null ? "Chưa có thuế suất VAT cho mã này – kiểm tra biểu thuế trước khi khai" : null,
+    c.vatRate === null ? `Biểu thuế chưa có thuế suất GTGT cho mã này – tạm tính ${DEFAULT_VAT_RATE}% (VB901); hàng thuộc nhóm 5%, 0%, không chịu thuế hoặc được giảm thuế GTGT thì sửa lại` : null,
   ].filter(Boolean);
-  return { importDutyRate: c.importRate, vatRate: c.vatRate, policyNote: notes.length ? notes.join(". ") : null };
+  return { importDutyRate: c.importRate, vatRate: c.vatRate ?? DEFAULT_VAT_RATE, policyNote: notes.length ? notes.join(". ") : null };
 }
 
 export function chunk<T>(xs: T[], n: number): T[][] {

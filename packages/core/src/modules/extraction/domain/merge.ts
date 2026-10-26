@@ -95,8 +95,17 @@ function mergeCharges(files: FileExtraction[], s: Shipment) {
       } else other.push({ label, amount, currency, sourceKind: f.kind });
     }
   }
+  // Hóa đơn cước (hóa đơn GTGT forwarder xuất cho người NK) là chứng từ thanh toán thật – có thì chỉ lấy số trên đó.
+  // Cước trên Arrival Notice chỉ là thông báo (thường bằng ngoại tệ, cùng khoản đó) – không so lệch với hóa đơn cước, chỉ dùng khi thiếu hóa đơn cước.
+  const preferInvoice = (c: Candidate[], cur: Candidate[], src: SourceRef[]) => {
+    if (!c.some((x) => x.kind === "FREIGHT_INVOICE")) return { c, cur, src };
+    const keep = c.map((x) => x.kind === "FREIGHT_INVOICE");
+    return { c: c.filter((_, k) => keep[k]), cur: cur.filter((_, k) => keep[k]), src: src.filter((_, k) => keep[k]) };
+  };
+  const fr = preferInvoice(freight, freightCur, freightSources);
+  const ins = preferInvoice(insurance, insuranceCur, insuranceSources);
   const pick = (c: Candidate[], src: SourceRef[]): Sourced<string> => (c.length ? { value: c[0]!.normalized, sources: src, ...fieldStatusFromCandidates(c, true) } : { value: null, sources: [], status: "SINGLE_SOURCE" });
-  s.charges = { freight: pick(freight, freightSources), freightCurrency: pick(freightCur, freightSources), insurance: pick(insurance, insuranceSources), insuranceCurrency: pick(insuranceCur, insuranceSources), other };
+  s.charges = { freight: pick(fr.c, fr.src), freightCurrency: pick(fr.cur, fr.src), insurance: pick(ins.c, ins.src), insuranceCurrency: pick(ins.cur, ins.src), other };
 }
 
 /** Trường bổ sung riêng của doanh nghiệp (`data.custom`): custom[loại][key], chứng từ đầu tiên có giá trị thắng. */

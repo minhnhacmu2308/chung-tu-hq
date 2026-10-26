@@ -21,11 +21,11 @@ const ida = (o?: Opts) => build("NK", o);
 const eda = (o?: Opts) => build("XK", o);
 
 describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
-  it("số tờ khai đã cấp, tên chi cục rỗng → chỉ mã chi cục; ghi chú từ hồ sơ", () => {
+  it("số tờ khai đã cấp, tên chi cục rỗng → chỉ mã chi cục; ghi chú nội bộ của hồ sơ KHÔNG vào phần ghi chú", () => {
     const f = eda({ dossier: { declarationNo: "305123456789", customsOfficeName: "", note: "Hàng mẫu" } });
     expect(f["SOTK"]).toMatchObject({ value: "305123456789", source: "SYSTEM" });
     expect(f["CQHQ"]?.value).toBe("03CE");
-    expect(f["GHI_CHU"]).toMatchObject({ value: "Hàng mẫu", source: "DOSSIER" });
+    expect(f["GHI_CHU"]).toMatchObject({ value: "", source: "DOSSIER" });
   });
 
   it("số tờ khai chưa cấp → ghi chú nhận sau khi truyền EDA; có tên chi cục → “mã – tên”", () => {
@@ -264,12 +264,12 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
     expect(f["VBPQ"]?.suspect).toBeUndefined();
   });
 
-  it("ghi chú (1.68): C/O trước (TT121), rồi ghi chú hồ sơ, rồi container – ngăn cách bằng “;”; có C/O → nhắc bổ sung ngày cấp", () => {
+  it("ghi chú (1.68): C/O trước (TT121), rồi container – ngăn cách bằng “;”; ghi chú nội bộ của hồ sơ không gửi Hải quan; có C/O → nhắc bổ sung ngày cấp", () => {
     const noCo = (s: Shipment) => void (s.origin.coNo = nul());
-    expect(ida({ mutate: (s) => { noCo(s); s.transport.containers = []; }, dossier: { note: "Hàng mẫu" } })["GHI_CHU"]?.value).toBe("Hàng mẫu");
+    expect(ida({ mutate: (s) => { noCo(s); s.transport.containers = []; }, dossier: { note: "Hàng mẫu" } })["GHI_CHU"]?.value).toBe("");
     expect(ida({ mutate: (s) => { noCo(s); s.transport.containers = []; } })["GHI_CHU"]?.value).toBe("");
     expect(ida({ mutate: noCo })["GHI_CHU"]?.suspect).toBeUndefined();
-    expect(ida({ dossier: { note: "Hàng mẫu" } })["GHI_CHU"]).toMatchObject({ value: "C/O form AK số KR2610-0457-AK; Hàng mẫu; Container: SITU2246781", suspect: true });
+    expect(ida({ dossier: { note: "Hàng mẫu" } })["GHI_CHU"]).toMatchObject({ value: "C/O form AK số KR2610-0457-AK; Container: SITU2246781", suspect: true });
     expect(ida({ mutate: (s) => void (s.origin.rexNo = val("DEREX12345")) })["GHI_CHU"]?.value).toMatch(/^REX DEREX12345;/);
   });
 
@@ -284,8 +284,13 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
     for (const term of ["C&I", "DAT", "DDU", "DAF"]) expect(ida({ mutate: (s) => { ins(s); s.invoice.incoterm = val(term); } })["PHI_BH"]?.value, term).toBe("");
   });
 
-  it("VBPQ: hàng chương 84/85 → để trống, nghi ngờ, chặn duyệt (không tự điền MO)", () => {
-    expect(ida()["VBPQ"]).toMatchObject({ value: "", suspect: true, blocking: true, note: expect.stringMatching(/5 dòng chương 84\/85/) });
+  it("VBPQ: hàng chương 84/85 → MO (mô tả không ghi đã qua sử dụng), vẫn khóa không cho để trống; mô tả ghi used → CU; lẫn cũ và mới → nghi ngờ", () => {
+    expect(ida()["VBPQ"]).toMatchObject({ value: "MO", blocking: true, note: expect.stringMatching(/5 dòng chương 84\/85/) });
+    expect(ida()["VBPQ"]?.suspect).toBeUndefined();
+    const usedAll = ida({ mutate: (s) => s.items.forEach((it) => void (it.description = val(`${it.description.value ?? ""} (used)`))) });
+    expect(usedAll["VBPQ"]).toMatchObject({ value: "CU", blocking: true });
+    const usedOne = ida({ mutate: (s) => void (s.items[0]!.description = val("Second-hand bearing 6205")) });
+    expect(usedOne["VBPQ"]).toMatchObject({ value: "MO", suspect: true, note: expect.stringMatching(/tách tờ khai/) });
   });
 
   it("số tờ khai đã cấp → hiện số; tên chi cục rỗng → chỉ mã", () => {

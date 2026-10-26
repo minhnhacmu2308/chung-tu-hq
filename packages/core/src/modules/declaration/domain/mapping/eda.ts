@@ -124,6 +124,7 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   { code: "NGUOI_NT", no: N.NGUOI_NT, section: "GENERAL", label: "Người nộp thuế", required: false, options: { sources: [profileSource("NGUOI_NT")], allowFixed: true }, from: (i) => profileOr(i, "NGUOI_NT", fixed("1 – Người xuất khẩu")) },
   // 2.80 khai theo từng dòng hàng (HAG_OL1..5). Chứng từ không cho biết mặt hàng thuộc quản lý chuyên ngành → người khai nhập.
   { code: "VBPQ", no: N.VBPQ, section: "VALUE", label: "Mã văn bản pháp luật khác (theo dòng hàng)", required: false, from: () => ({ value: null, source: "DOSSIER", note: "Khai khi hàng xuất khẩu thuộc quản lý chuyên ngành. Mã áp cho mọi dòng ghi cách nhau dấu cách; riêng từng dòng ghi “số dòng: mã”, các phần cách nhau dấu “;” (ví dụ “XK; 2: GP KD”). Tối đa 5 mã mỗi dòng" }) },
-  { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: (i) => ({ value: i.dossier.note ?? null, source: "DOSSIER" }) },
+  // Ghi chú của hồ sơ là ghi chú nội bộ (“không gửi Hải quan”) – người khai tự nhập nội dung gửi Hải quan ở chỉ tiêu này.
+  { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: () => ({ value: null, source: "DOSSIER" }) },
   { code: "SO_QLNB", no: N.SO_QLNB, section: "GENERAL", label: "Số quản lý nội bộ doanh nghiệp", required: false, from: (i) => ({ value: i.dossier.code, source: "DOSSIER" }) },
 ];

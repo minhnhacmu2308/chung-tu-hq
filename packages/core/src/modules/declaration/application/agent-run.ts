@@ -1,5 +1,6 @@
 // AI Agent: tra HS → ánh xạ → dựng tờ khai → số hóa. Worker chạy `runAgent`; web gọi start/get.
 import type { AgentMode, AgentRunView, AgentTaskId, Shipment } from "@kb/contracts";
+import { catalogsFor } from "./_catalogs.js";
 import { profileFor } from "./declaration-profile.js";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
@@ -161,7 +162,7 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
           const items = await r.lineItems.list(input.orgId, input.dossierId);
           const charges = await chargesFor(r, input.orgId, input.dossierId);
           const exchange = await exchangeFor(r, currenciesOf(shipment, dossier, charges), vnDate(deps.clock.now()));
-          const b = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, input.orgId, dossier.direction), charges);
+          const b = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, input.orgId, dossier.direction), charges, await catalogsFor(dossier.customsOfficeCode));
           const prev = await r.declarations.latest(input.orgId, input.dossierId);
           if (prev && prev.status !== "DRAFT") return { b, skipped: true as const, exchange };
           const now = deps.clock.now();

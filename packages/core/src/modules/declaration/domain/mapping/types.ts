@@ -1,5 +1,6 @@
 // Ánh xạ dữ liệu lô hàng → chỉ tiêu tờ khai (skill mapping-declaration-fields). Code thuần, cùng dữ liệu luôn ra cùng kết quả.
 import type { DocKind, Shipment, Sourced, ValueCharges, ValueSource } from "@kb/contracts";
+import type { CatalogEntry } from "../catalog-resolve.js";
 import type { Adjustment, Valuation } from "../valuation.js";
 import type { DossierInfo, OrgInfo } from "../types.js";
 
@@ -15,6 +16,11 @@ export const vnDate = (now: Date) => new Date(now.getTime() + 7 * 3_600_000).toI
 export type MappedValue = { value: string | null; source: ValueSource; suspect?: boolean; note?: string; via?: "profile"; blocking?: true };
 /** Dòng hàng đã lưu: mã HS người dùng đã xác nhận – căn cứ chính thay cho HS trên invoice nước ngoài. */
 export type MappingLine = { lineNo: number; hsConfirmed: string | null };
+/**
+ * Danh mục VNACCS đầy đủ đã nạp sẵn cho hồ sơ (tầng application tải theo chi cục): cảng Việt Nam (A016), địa điểm lưu kho của chi cục (A202).
+ * Không có (test, eval offline) → chỉ dùng bảng gọn trong catalog-resolve.
+ */
+export type DeclarationCatalogs = { ports?: CatalogEntry[]; warehouses?: CatalogEntry[] };
 export type MappingInput = {
   shipment: Shipment; dossier: DossierInfo; org: OrgInfo; now: Date; adjustments: Adjustment[]; valuation: Valuation; exchange: ExchangeInfo;
   /** Mặc định khai báo của doanh nghiệp theo chiều NK/XK: mã chỉ tiêu → giá trị. */
@@ -24,6 +30,7 @@ export type MappingInput = {
   lines: MappingLine[];
   /** Chi phí người khai nhập ở bước OCR & kiểm tra (cước, bảo hiểm, khoản điều chỉnh). */
   charges: ValueCharges;
+  catalogs?: DeclarationCatalogs;
 };
 /** Nguồn thay thế được phép cho một chỉ tiêu: hàm đọc thuần; null/value null = nguồn không có giá trị. */
 export type SourceOption = { id: string; label: string; read: (i: MappingInput) => MappedValue | null };
@@ -52,6 +59,9 @@ const SOURCE_BY_KIND: Record<DocKind, ValueSource> = {
   INVOICE: "INVOICE", PACKING_LIST: "PACKING_LIST", BILL_OF_LADING: "BILL_OF_LADING", AIR_WAYBILL: "BILL_OF_LADING", CERT_OF_ORIGIN: "CERT_OF_ORIGIN",
   SALES_CONTRACT: "CONTRACT", ARRIVAL_NOTICE: "ARRIVAL_NOTICE", FREIGHT_INVOICE: "FREIGHT_INVOICE", OTHER: "SYSTEM",
 };
+
+/** Nhãn nguồn hiển thị của một loại chứng từ (AWB hiện như vận đơn). */
+export const sourceOfKind = (kind: DocKind): ValueSource => SOURCE_BY_KIND[kind];
 
 /** Giá trị kèm nguồn từ Sourced: nguồn = chứng từ đầu tiên; CONFLICT/MODEL_UNSURE → suspect kèm ghi chú. */
 export function fromSourced(s: Sourced<string>, fallback: ValueSource = "SYSTEM", transform?: (v: string) => string): MappedValue {

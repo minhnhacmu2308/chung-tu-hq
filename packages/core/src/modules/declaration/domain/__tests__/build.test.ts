@@ -91,10 +91,12 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(f("MA_NUOC").value).toBe("KR");
     expect(f("PTVC").value).toBe("2 – Đường biển (chứa trong container)");
     expect(f("CANG_XEP").value).toBe("KRPUS – Busan");
-    expect(f("CANG_DO")).toMatchObject({ value: "VNHPH – Cảng Hải Phòng", source: "BILL_OF_LADING" });
+    // B/L ghi cảng dỡ chung "HAIPHONG, VIETNAM", nơi giao hàng ghi bến cụ thể "TAN VU TERMINAL" → khai bến cụ thể.
+    expect(f("CANG_DO")).toMatchObject({ value: "VNTVU – Cảng Tân Vũ (Hải Phòng)", source: "BILL_OF_LADING" });
+    expect(f("CANG_DO").suspect).toBeUndefined();
     // T/T thường là KC (TTR = chuyển tiền bồi hoàn bằng điện); nghi ngờ vì model không chắc chuỗi gốc.
     expect(f("PT_TT")).toMatchObject({ value: "KC – Khác (bao gồm cả TT)", suspect: true, note: expect.stringMatching(/T\/T 30 days/) });
-    expect(f("SO_KIEN").value).toBe("48 PX");
+    expect(f("SO_KIEN").value).toBe("48 PK");
     expect(f("HD_PL").value).toBe("A – Hóa đơn thương mại");
     expect(f("GIA_PL").value).toBe("A – Giá hóa đơn cho hàng hóa phải trả tiền");
     expect(f("DK_GIA").value).toBe("FCA");
@@ -110,12 +112,17 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(f("PHI_VC")).toMatchObject({ value: "1150 USD", source: "FREIGHT_INVOICE" });
     expect(f("TY_GIA").value).toBe("25400");
     expect(f("NGAY_DK").value).toBe("2026-10-14");
-    expect(f("PHI_BH").value).toBe("");
+    // Không có chứng từ bảo hiểm, FCA chưa gồm bảo hiểm → D (không bảo hiểm), người khai mua bảo hiểm thì nhập phí.
+    expect(f("PHI_BH")).toMatchObject({ value: NO_INSURANCE_VALUE, source: "SYSTEM" });
     expect(built.valuation.customsValueVnd).toBe("558800000");
     expect(built.taxes.importDutyVnd).toBe("2974906");
     // CV 2061: không tự điền MO – để trống, nghi ngờ và chặn phê duyệt đến khi người khai chọn MO/CU.
-    expect(f("VBPQ")).toMatchObject({ no: "1.37", value: "", suspect: true, blocking: true, note: expect.stringMatching(/MO.*CU.*CV 2061/) });
-    expect(built.suspectCount).toBe(6); // TRONG_LUONG, KHO, PT_TT, VBPQ, GHI_CHU (ngày C/O), CT_TG (thiếu ngày vận đơn)
+    // Hàng chương 84/85, mô tả không ghi đã qua sử dụng → MO (CV 2061/TCHQ-GSQL); người khai đổi CU nếu hàng cũ.
+    expect(f("VBPQ")).toMatchObject({ no: "1.37", value: "MO", note: expect.stringMatching(/MO.*CV 2061.*CU/) });
+    expect(f("VBPQ").blocking).toBe(true); // vẫn không cho để trống
+    // Thiếu ngày vận đơn → số vận đơn đường biển chưa ghép được tiền tố DDMMYY.
+    expect(f("SO_VD")).toMatchObject({ suspect: true, note: expect.stringMatching(/DDMMYY/) });
+    expect(built.suspectCount).toBe(6); // TRONG_LUONG, KHO, PT_TT, SO_VD + CT_TG (thiếu ngày vận đơn), GHI_CHU (ngày C/O)
   });
   it("VBPQ xét HS đã xác nhận trước HS trên invoice: xác nhận 3926 cho mọi dòng → không cần MO/CU", () => {
     const items = ITEMS.map((it, k) => ({ ...it, lineNo: k + 1, hsConfirmed: "39269099" }));
@@ -124,17 +131,50 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(b.fields["VBPQ"]?.blocking).toBeUndefined();
   });
   it("ghi chú vượt 100 ký tự (chỉ tiêu 1.68) → nghi ngờ, hướng dẫn khai phần còn lại qua HYS", () => {
-    const b = buildDeclaration({ shipment: hansol(), dossier: { ...DOSSIER, note: "x".repeat(90) }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    const many = hansol((s) => void (s.transport.containers = Array.from({ length: 8 }, (_, k) => ({ no: `HDMU123456${k}`, sealNo: null, size: "40HC" }))));
+    const b = buildDeclaration({ shipment: many, dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
     expect(b.fields["GHI_CHU"]).toMatchObject({ suspect: true, note: expect.stringMatching(/vượt giới hạn 100 ký tự.*HYS/) });
   });
   it("POD nước ngoài → điểm đến cuối tại VN và đánh dấu nghi ngờ; EDA dùng buyer làm người nhập khẩu", () => {
-    const b2 = buildDeclaration({ shipment: hansol((s) => void (s.transport.portOfDischarge.value = "SINGAPORE")), dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    const sg = { value: "SINGAPORE", sources: [{ documentId: "doc_bl", kind: "BILL_OF_LADING" as const, page: 1, raw: "SINGAPORE", normalized: "SINGAPORE" }], status: "SINGLE_SOURCE" as const };
+    const b2 = buildDeclaration({ shipment: hansol((s) => void (s.transport.portOfDischarge = sg)), dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
     expect(b2.fields["CANG_DO"]).toMatchObject({ value: "VNTVU – Cảng Tân Vũ (Hải Phòng)", suspect: true, note: expect.stringMatching(/chuyển tải/) });
     const eda = buildDeclaration({ shipment: hansol(), dossier: { ...DOSSIER, direction: "XK", typeCode: "B11" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
     expect(eda.kind).toBe("EDA");
     expect(eda.fields["NXK_MST"]).toMatchObject({ no: "2.11", value: "0316789012", source: "ACCOUNT" });
     expect(eda.fields["NNK_TEN"]?.value).toBe("AN PHAT INDUSTRIAL EQUIPMENT CO., LTD");
     expect(eda.adjustments).toEqual([]);
+  });
+});
+
+describe("lô FANS25040166 (đối chiếu TK 107139226350)", () => {
+  const ref = (kind: "BILL_OF_LADING" | "ARRIVAL_NOTICE", raw: string) => ({ documentId: `doc_${kind}`, kind, page: 1, raw, normalized: raw });
+  const fans = hansol((s) => {
+    s.transport.portOfDischarge = { value: "HO CHI MINH, VIETNAM", sources: [ref("BILL_OF_LADING", "HO CHI MINH, VIETNAM"), ref("ARRIVAL_NOTICE", "CANG CAT LAI (HCM)")], status: "CONFLICT" };
+    s.transport.finalDestination = { value: "HO CHI MINH, VIETNAM", sources: [ref("BILL_OF_LADING", "HO CHI MINH, VIETNAM")], status: "SINGLE_SOURCE" };
+    s.transport.warehouseCode = { value: null, sources: [], status: "SINGLE_SOURCE" };
+    s.transport.warehouseName = { value: "CÁT LÁI KHO 3", sources: [ref("ARRIVAL_NOTICE", "CÁT LÁI KHO 3")], status: "SINGLE_SOURCE" };
+    s.transport.billNo = { value: "FANS25040166", sources: [ref("BILL_OF_LADING", "FANS25040166")], status: "SINGLE_SOURCE" };
+    s.transport.departureDate = { value: "2025-04-22", sources: [ref("BILL_OF_LADING", "APR.22.2025")], status: "SINGLE_SOURCE" };
+  });
+  const catalogs = {
+    ports: [{ code: "VNCLI", name: "CANG CAT LAI (HCM)", parent: "VN" }, { code: "VNSGN", name: "CANG SAI GON (HCM)", parent: "VN" }],
+    warehouses: [{ code: "02CIRCI", name: "CCHQCK CANG SG KV I", parent: "02CI", note: "Địa điểm tập kết hàng do Chi cục HQ CK Cảng Sài Gòn KV I quản lý" }],
+  };
+  const b = buildDeclaration({ shipment: fans, dossier: { ...DOSSIER, customsOfficeCode: "02CI" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] }, catalogs });
+
+  it("cảng dỡ theo Arrival Notice (VNCLI), kho = địa điểm tập kết của chi cục (02CIRCI, cần kiểm), số vận đơn DDMMYY + số", () => {
+    expect(b.fields["CANG_DO"]).toMatchObject({ value: "VNCLI – CANG CAT LAI (HCM)", source: "ARRIVAL_NOTICE" });
+    expect(b.fields["CANG_DO"]?.suspect).toBeUndefined();
+    expect(b.fields["KHO"]).toMatchObject({ value: "02CIRCI – CCHQCK CANG SG KV I", source: "ARRIVAL_NOTICE", suspect: true, note: expect.stringMatching(/CÁT LÁI KHO 3.*02CI/) });
+    expect(b.fields["SO_VD"]).toMatchObject({ value: "220425FANS25040166", source: "BILL_OF_LADING" });
+    expect(b.fields["SO_VD"]?.suspect).toBeUndefined();
+    expect(b.fields["CT_TG"]?.value).toBe("22042025#&PHƯƠNG THỨC THANH TOÁN TT");
+  });
+  it("không nạp danh mục: cảng dỡ vẫn ra bến Cát Lái theo bảng gọn, kho chỉ có tên → cần chọn mã", () => {
+    const plain = buildDeclaration({ shipment: fans, dossier: { ...DOSSIER, customsOfficeCode: "02CI" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    expect(plain.fields["CANG_DO"]?.value).toBe("VNCLI – Cảng Cát Lái (TP.HCM)");
+    expect(plain.fields["KHO"]).toMatchObject({ value: "CÁT LÁI KHO 3", suspect: true });
   });
 });
 
@@ -145,10 +185,13 @@ describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)",
   const withDate = (s: Shipment) => void (s.transport.departureDate = { value: "2026-10-05", sources: [{ documentId: "doc_bl", kind: "BILL_OF_LADING", page: 1, raw: "05 OCT 2026", normalized: "2026-10-05" }], status: "SINGLE_SOURCE" });
 
   it("1.50 mở đầu bằng ngày vận đơn DDMMYYYY#&, ghi dòng hàng FOC; thiếu ngày vận đơn → nghi ngờ, không tự điền", () => {
-    expect(build(hansol(withDate)).fields["CT_TG"]).toMatchObject({ no: "1.50", value: "05102026#&", source: "BILL_OF_LADING" });
+    // Invoice HANSOL ghi T/T → 1.43 khai KC, phương thức thực tế ghi tại 1.50.
+    expect(build(hansol(withDate)).fields["CT_TG"]).toMatchObject({ no: "1.50", value: "05102026#&PHƯƠNG THỨC THANH TOÁN TT", source: "BILL_OF_LADING" });
     const foc = build(hansol((s) => { withDate(s); s.items[2]!.amount = { value: "0", sources: [], status: "SINGLE_SOURCE" }; })).fields["CT_TG"];
-    expect(foc?.value).toBe("05102026#&Dòng hàng 3 là hàng không thanh toán (FOC/khuyến mại)");
-    expect(build().fields["CT_TG"]).toMatchObject({ value: "", suspect: true, note: expect.stringMatching(/ngày vận đơn/) });
+    expect(foc?.value).toBe("05102026#&Dòng hàng 3 là hàng không thanh toán (FOC/khuyến mại); PHƯƠNG THỨC THANH TOÁN TT");
+    const lc = build(hansol((s) => { withDate(s); s.invoice.paymentTerms = { value: "L/C at sight", sources: [], status: "SINGLE_SOURCE" }; })).fields["CT_TG"];
+    expect(lc?.value).toBe("05102026#&");
+    expect(build().fields["CT_TG"]).toMatchObject({ value: "PHƯƠNG THỨC THANH TOÁN TT", suspect: true, note: expect.stringMatching(/ngày vận đơn/) });
   });
 
   it("1.38 / 2.33 giấy phép: người khai nhập; loại hình gia công (E21, E52) → nghi ngờ, nhắc khai số tiếp nhận hợp đồng gia công", () => {

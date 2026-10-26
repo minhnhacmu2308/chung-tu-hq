@@ -3,16 +3,18 @@
 import { TRANSPORT_MODE_INFO, type TransportMode } from "@kb/contracts";
 
 export type Resolved = { code: string; name: string } | null;
+/** Một mã trong danh mục VNACCS đầy đủ (@kb/contracts code-lists) – tầng application nạp sẵn rồi truyền vào (domain không tải file). */
+export type CatalogEntry = { code: string; name: string; parent?: string; note?: string };
 
 /** Cảng/sân bay hay gặp (mã UN/LOCODE dùng trong VNACCS). Thiếu → D3. */
-export const PORTS: { code: string; name: string; aliases: string[]; country: string }[] = [
+export const PORTS: { code: string; name: string; aliases: string[]; country: string; city?: string[] }[] = [
   { code: "VNTVU", name: "Cảng Tân Vũ (Hải Phòng)", aliases: ["TAN VU"], country: "VN" },
   { code: "VNDVU", name: "Cảng Đình Vũ (Hải Phòng)", aliases: ["DINH VU"], country: "VN" },
   { code: "VNLCH", name: "Cảng Lạch Huyện (Hải Phòng)", aliases: ["LACH HUYEN", "HICT"], country: "VN" },
-  { code: "VNHPH", name: "Cảng Hải Phòng", aliases: ["HAIPHONG", "HAI PHONG", "HPH"], country: "VN" },
+  { code: "VNHPH", name: "Cảng Hải Phòng", aliases: ["HPH"], city: ["HAIPHONG", "HAI PHONG"], country: "VN" },
   { code: "VNCLI", name: "Cảng Cát Lái (TP.HCM)", aliases: ["CAT LAI", "CATLAI"], country: "VN" },
   { code: "VNCMT", name: "Cảng Cái Mép (Bà Rịa – Vũng Tàu)", aliases: ["CAI MEP", "CAIMEP"], country: "VN" },
-  { code: "VNSGN", name: "Cảng Sài Gòn (TP.HCM)", aliases: ["HO CHI MINH", "HOCHIMINH", "SAIGON", "SAI GON", "HCM", "HCMC"], country: "VN" },
+  { code: "VNSGN", name: "Cảng Sài Gòn (TP.HCM)", aliases: ["SAIGON", "SAI GON"], city: ["HO CHI MINH", "HOCHIMINH", "HCM", "HCMC"], country: "VN" },
   { code: "VNDAD", name: "Cảng Đà Nẵng", aliases: ["DA NANG", "DANANG"], country: "VN" },
   { code: "VNHAN", name: "Sân bay Nội Bài (Hà Nội)", aliases: ["NOI BAI", "NOIBAI", "HANOI", "HAN"], country: "VN" },
   // Tân Sơn Nhất: mã địa điểm VNACCS chưa đối chiếu được (mã cũ "VNSGN-A" không phải UN/LOCODE, ô VD_DST/TK_PSC chỉ 6 ký tự) → không tra, người khai chọn mã.
@@ -48,6 +50,15 @@ const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").replace
 
 /** "BUSAN, KOREA" → KRPUS; "HAIPHONG, VIETNAM" → VNHPH. Mã LOCODE 5 ký tự có sẵn trong chuỗi được ưu tiên. */
 export function resolvePort(name: string | null): Resolved {
+  const r = resolvePortDetail(name);
+  return r ? { code: r.code, name: r.name } : null;
+}
+
+/**
+ * Như resolvePort, kèm `generic` khi chỉ khớp tên thành phố ("HO CHI MINH" → VNSGN): đúng mã cảng chung nhưng không chỉ rõ bến,
+ * chứng từ khác ghi bến cụ thể (Arrival Notice "CANG CAT LAI (HCM)") thì phải ưu tiên bến đó.
+ */
+function resolvePortDetail(name: string | null): (NonNullable<Resolved> & { generic?: true }) | null {
   if (!name) return null;
   const n = norm(name);
   const direct = PORTS.find((p) => n.split(" ").includes(p.code));
@@ -55,18 +66,83 @@ export function resolvePort(name: string | null): Resolved {
   // Thứ tự trong PORTS là thứ tự ưu tiên: bến cụ thể (Tân Vũ, Đình Vũ, Cát Lái…) đứng trước cảng/thành phố chung.
   // So theo nguyên từ: alias ngắn như "HAN" (Nội Bài) không được khớp vào giữa "SHANGHAI" hay "CHANGI".
   const padded = ` ${n} `;
-  const hit = PORTS.find((p) => p.aliases.some((a) => padded.includes(` ${a} `)));
-  return hit ? { code: hit.code, name: hit.name } : null;
+  const has = (a: string) => padded.includes(` ${a} `);
+  const hit = PORTS.find((p) => p.aliases.some(has));
+  if (hit) return { code: hit.code, name: hit.name };
+  const city = PORTS.find((p) => p.city?.some(has));
+  return city ? { code: city.code, name: city.name, generic: true } : null;
+}
+
+/** Bỏ dấu tiếng Việt rồi chuẩn hóa như `norm` – so tên trên chứng từ với tên trong danh mục VNACCS (viết không dấu). */
+const plain = (s: string) => norm(s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D"));
+
+/** Tên trên chứng từ trùng nguyên văn tên một mã trong danh mục ("CANG CAT LAI (HCM)" → VNCLI), hoặc chuỗi chứa sẵn mã đó. */
+export function findInCatalog(raw: string | null, catalog: readonly CatalogEntry[] | undefined): CatalogEntry | null {
+  if (!raw || !catalog?.length) return null;
+  const n = plain(raw);
+  const tokens = new Set(n.split(" "));
+  return catalog.find((e) => plain(e.name) === n) ?? catalog.find((e) => e.code.length >= 5 && tokens.has(e.code)) ?? null;
+}
+
+export type DischargePick = { resolved: Resolved; note?: string; /** Chuỗi trên chứng từ đã cho ra mã (để ghi nguồn). */ raw: string | null; fromCatalog?: true };
+
+/**
+ * Cảng dỡ từ mọi chứng từ (B/L, Arrival Notice…) theo thứ tự ưu tiên, rồi điểm đến cuối:
+ * 1) tên trùng danh mục cảng VNACCS (A016) → mã đó; 2) bến cụ thể trong bảng gọn; 3) mã cảng chung theo tên thành phố.
+ * POD nước ngoài (chuyển tải) → điểm đến cuối tại Việt Nam (PRODUCT §7.5).
+ */
+export function pickDischargePort(pods: readonly string[], finals: readonly string[], catalog?: readonly CatalogEntry[]): DischargePick {
+  const vn = (code: string) => code.startsWith("VN");
+  const exact = (xs: readonly string[]) => {
+    for (const raw of xs) {
+      const e = findInCatalog(raw, catalog);
+      if (e && vn(e.code)) return { resolved: { code: e.code, name: e.name }, raw, fromCatalog: true as const };
+    }
+    return null;
+  };
+  const tableVn = (xs: readonly string[], generic: boolean) => {
+    for (const raw of xs) {
+      const r = resolvePortDetail(raw);
+      if (r && vn(r.code) && !!r.generic === generic) return { resolved: { code: r.code, name: r.name }, raw };
+    }
+    return null;
+  };
+  const viaPod = exact(pods) ?? tableVn(pods, false);
+  if (viaPod) return viaPod;
+  const viaFinal = exact(finals) ?? tableVn(finals, false);
+  const podGeneric = tableVn(pods, true);
+  if (podGeneric) return viaFinal && viaFinal.resolved.code !== podGeneric.resolved.code ? viaFinal : { ...podGeneric, note: `“${podGeneric.raw}” chỉ là tên thành phố – tạm khai cảng chung ${podGeneric.resolved.code}, chọn bến dỡ cụ thể nếu khác` };
+  const transshipNote = `Cảng dỡ trên vận đơn (${pods[0] ?? "—"}) là cảng chuyển tải nước ngoài – khai điểm đến cuối tại Việt Nam`;
+  if (viaFinal) return pods.length ? { ...viaFinal, note: transshipNote } : viaFinal;
+  const finalGeneric = tableVn(finals, true);
+  if (finalGeneric) return { ...finalGeneric, note: pods.length ? transshipNote : `“${finalGeneric.raw}” chỉ là tên thành phố – chọn bến dỡ cụ thể nếu khác` };
+  const p = resolvePort(pods[0] ?? null);
+  return { resolved: p, raw: pods[0] ?? null, ...(p ? { note: "Cảng dỡ không phải cảng Việt Nam – kiểm tra điểm đến cuối" } : {}) };
 }
 
 /** POD nước ngoài (chuyển tải) → điểm đến cuối tại Việt Nam (PRODUCT §7.5). */
 export function resolveDischargePort(pod: string | null, finalDestination: string | null): { resolved: Resolved; note?: string } {
-  const p = resolvePort(pod);
-  const vnPort = (r: Resolved) => r && PORTS.find((x) => x.code === r.code)?.country === "VN";
-  if (p && vnPort(p)) return { resolved: p };
-  const f = resolvePort(finalDestination);
-  if (f && vnPort(f)) return { resolved: f, note: `Cảng dỡ trên vận đơn (${pod ?? "—"}) là cảng chuyển tải nước ngoài – khai điểm đến cuối tại Việt Nam` };
-  return { resolved: p, ...(p ? { note: "Cảng dỡ không phải cảng Việt Nam – kiểm tra điểm đến cuối" } : {}) };
+  const r = pickDischargePort(pod ? [pod] : [], finalDestination ? [finalDestination] : []);
+  return { resolved: r.resolved, ...(r.note ? { note: r.note } : {}) };
+}
+
+/**
+ * Mã địa điểm lưu kho (1.29, bảng A202) của chi cục khai báo:
+ * 1) mã kho có sẵn trên Arrival Notice và thuộc chi cục; 2) tên kho trùng tên trong danh mục; 3) không xác định được kho cụ thể
+ * (AN chỉ ghi tên bãi như “CÁT LÁI KHO 3”, hàng lẻ CFS) → địa điểm tập kết hàng do chính chi cục quản lý (vd 02CIRCI), kèm nghi ngờ để người khai kiểm.
+ */
+export function resolveWarehouse(code: string | null, name: string | null, warehouses: readonly CatalogEntry[] | undefined): { entry: CatalogEntry; exact: boolean } | null {
+  if (!warehouses?.length) return null;
+  // AN đã ghi mã kho: giữ mã đó (có thể thuộc danh mục dùng mã chi cục cũ) – không thay bằng địa điểm tập kết.
+  if (code) {
+    const byCode = warehouses.find((w) => w.code === code.trim().toUpperCase());
+    return byCode ? { entry: byCode, exact: true } : null;
+  }
+  const byName = findInCatalog(name, warehouses);
+  if (byName) return { entry: byName, exact: true };
+  if (!name) return null;
+  const general = warehouses.filter((w) => /^Địa điểm tập kết hàng do (Chi cục|Đội)/.test(w.note ?? ""));
+  return general.length === 1 ? { entry: general[0]!, exact: false } : null;
 }
 
 export type ResolvedPayment = { code: string; name: string; note?: string; suspect?: true };
@@ -95,14 +171,16 @@ export function resolvePayment(raw: string | null): ResolvedPayment | null {
 }
 
 /**
- * Đơn vị kiện → mã loại kiện ô 2 chỉ tiêu 1.27 / 2.25 (UN/ECE Rec 21, cùng mã với PACKAGE_UNITS của @kb/contracts: pallet PX, cuộn RO).
+ * Đơn vị kiện → mã loại kiện ô 2 chỉ tiêu 1.27 / 2.25 (danh mục PACKAGE_KIND của VNACCS, cùng mã với PACKAGE_UNITS của @kb/contracts: cuộn RO).
+ * Danh mục VNACCS không có mã pallet (PX của UN/ECE Rec 21 bị từ chối; PL là “PAIL” – thùng xô) → pallet khai PK.
  * Không nhận ra → PK kèm `guessed` để người khai chọn lại (Phụ lục II chỉ nêu ví dụ CS, BX).
  */
-export function resolvePackageUnit(raw: string | null): (NonNullable<Resolved> & { guessed?: true }) | null {
+export function resolvePackageUnit(raw: string | null): (NonNullable<Resolved> & { guessed?: true; note?: string }) | null {
   if (!raw) return null;
   const n = norm(raw);
+  if (/^(PL|PX|PLT|PLTS|PALLET|PALLETS)$/.test(n)) return { code: "PK", name: "Package", note: "Pallet: danh mục mã loại kiện VNACCS không có mã pallet riêng – khai PK" };
   const map: [RegExp, string, string][] = [
-    [/^(PL|PX|PLT|PLTS|PALLET|PALLETS)$/, "PX", "Pallet"], [/^(CT|CTN|CTNS|CARTON|CARTONS)$/, "CT", "Carton"], [/^(PK|PKG|PKGS|PACKAGE|PACKAGES)$/, "PK", "Package"],
+    [/^(CT|CTN|CTNS|CARTON|CARTONS)$/, "CT", "Carton"], [/^(PK|PKG|PKGS|PACKAGE|PACKAGES)$/, "PK", "Package"],
     [/^(BX|BOX|BOXES)$/, "BX", "Box"], [/^(BG|BAG|BAGS)$/, "BG", "Bag"], [/^(CS|CASE|CASES)$/, "CS", "Case"], [/^(DR|DRUM|DRUMS)$/, "DR", "Drum"], [/^(RO|RL|ROLL|ROLLS)$/, "RO", "Roll"],
     [/^(CR|CRATE|CRATES)$/, "CR", "Crate"], [/^(BE|BDL|BUNDLE|BUNDLES)$/, "BE", "Bundle"], [/^(BL|BALE|BALES)$/, "BL", "Bale"], [/^(SA|SACK|SACKS)$/, "SA", "Sack"],
   ];

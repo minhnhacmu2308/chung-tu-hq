@@ -1,12 +1,22 @@
 // Nguồn thay thế dùng chung cho `options` của chỉ tiêu (doanh nghiệp chọn thứ tự nguồn ở Cài đặt → Khai báo).
+import { resolveWarehouse } from "../catalog-resolve.js";
 import { fromSourced, type MappedValue, type MappingInput, type SourceOption } from "./types.js";
 
 const has = (v: MappedValue | null): MappedValue | null => (v && v.value !== null && v.value !== "" ? v : null);
 
-/** Kho/CY trên Arrival Notice: "mã – tên"; chỉ có tên → cần chọn mã (nghi ngờ). */
+/**
+ * Kho/CY trên Arrival Notice → mã địa điểm lưu kho (A202) của chi cục khai báo: mã/tên khớp danh mục → mã đó; AN chỉ ghi tên bãi chung
+ * → địa điểm tập kết do chi cục quản lý (nghi ngờ, người khai kiểm). Chưa nạp danh mục: "mã – tên" như trên AN, chỉ có tên → cần chọn mã.
+ */
 export function warehouseFromAn(i: MappingInput): MappedValue | null {
   const code = i.shipment.transport.warehouseCode;
   const name = i.shipment.transport.warehouseName;
+  const hit = resolveWarehouse(code.value, name.value, i.catalogs?.warehouses);
+  if (hit) {
+    const base = fromSourced(code.value ? code : name, "ARRIVAL_NOTICE");
+    const value = `${hit.entry.code} – ${hit.entry.name}`;
+    return hit.exact ? { ...base, value } : { ...base, value, suspect: true, note: `Arrival Notice ghi kho “${name.value ?? code.value}” – không có trong danh mục địa điểm lưu kho của chi cục ${i.dossier.customsOfficeCode}: tạm khai địa điểm tập kết do chi cục quản lý, đổi mã nếu hàng lưu ở kho/bãi khác` };
+  }
   if (code.value) return { ...fromSourced(code, "ARRIVAL_NOTICE"), value: name.value ? `${code.value} – ${name.value}` : code.value };
   if (name.value) return { ...fromSourced(name, "ARRIVAL_NOTICE"), suspect: true, note: `Arrival Notice chỉ ghi tên kho “${name.value}” – chọn mã địa điểm lưu kho VNACCS` };
   return null;

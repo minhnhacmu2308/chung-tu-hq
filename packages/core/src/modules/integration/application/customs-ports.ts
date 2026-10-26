@@ -1,6 +1,6 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
-import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
+import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, HysFill, HysStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -18,6 +18,14 @@ export type ResultRow = {
   /** Giai đoạn vòng đời + dữ liệu phụ (xem ResultRaw). */
   raw: ResultRaw | null; updatedAt: Date;
 };
+
+/** Bộ tập tin đính kèm HYS (khai trước IDA/EDA). Ngày `registeredOn` dạng YYYY-MM-DD; thời điểm là Date (UTC). */
+export type HysSubmissionRow = {
+  id: string; orgId: string; dossierId: string; seq: number; procedureCode: string | null; customsOffice: string | null; processingUnit: string | null; phone: string | null; internalRef: string | null; note: string | null;
+  purpose: "PRE_DECLARATION" | "SUPPLEMENT" | null; status: HysStatus; attempt: number; receiptNo: string | null; registeredOn: string | null;
+  reject: { code: string; message: string; solution?: string }[] | null; fill: HysFill | null; sentBy: string | null; sentAt: Date | null; createdAt: Date; updatedAt: Date;
+};
+export type HysFileRow = { id: string; orgId: string; submissionId: string; documentId: string | null; storageKey: string; fileName: string; mime: string; sizeBytes: number; position: number; createdAt: Date };
 
 export interface CustomsRepos {
   outbox: {
@@ -52,6 +60,19 @@ export interface CustomsRepos {
     listForDossier(orgId: string, dossierId: string, branch?: number): Promise<PostAmendmentRow[]>;
     insert(row: PostAmendmentRow): Promise<void>;
     update(row: PostAmendmentRow): Promise<void>;
+  };
+  /** Bộ tập tin đính kèm HYS và file của bộ (xóa bộ cascade file). */
+  hys: {
+    list(orgId: string, dossierId: string): Promise<HysSubmissionRow[]>;
+    get(orgId: string, id: string): Promise<HysSubmissionRow | null>;
+    insert(row: HysSubmissionRow): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Omit<HysSubmissionRow, "id" | "orgId" | "dossierId" | "seq" | "createdAt">>): Promise<void>;
+    delete(orgId: string, id: string): Promise<void>;
+    files(orgId: string, submissionId: string): Promise<HysFileRow[]>;
+    filesForDossier(orgId: string, dossierId: string): Promise<HysFileRow[]>;
+    insertFile(row: HysFileRow): Promise<void>;
+    deleteFile(orgId: string, fileId: string): Promise<void>;
+    deleteFiles(orgId: string, submissionId: string): Promise<void>;
   };
 }
 

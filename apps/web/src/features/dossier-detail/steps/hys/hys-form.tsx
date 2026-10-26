@@ -79,6 +79,7 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
     () => new Set(submission.files.flatMap((f) => (f.source === "DOSSIER" && f.documentId ? [f.documentId] : []))),
   );
   const [sendOpen, setSendOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [certId, setCertId] = useState("");
 
   const uploads = submission.files.filter((f) => f.source === "UPLOAD");
@@ -279,7 +280,7 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
           <DialogFooter>
             {editable ? (
               <>
-                <Button variant="ghost" type="button" className="cq-sm:mr-auto" leftIcon={<Trash2 className="h-4 w-4" />} disabled={busy} loading={remove.isPending} onClick={() => remove.mutate()}>
+                <Button variant="ghost" type="button" className="cq-sm:mr-auto" leftIcon={<Trash2 className="h-4 w-4" />} disabled={busy} onClick={() => setDeleteOpen(true)}>
                   {t.remove}
                 </Button>
                 <Button variant="secondary" type="submit" leftIcon={<Save className="h-4 w-4" />} disabled={busy} loading={save.isPending}>
@@ -296,6 +297,27 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
             )}
           </DialogFooter>
         </form>
+
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogContent title={fill(t.deleteTitle, { seq: submission.seq })} icon={<Trash2 className="h-4 w-4" />} size="sm">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                remove.mutate(undefined, { onSettled: () => setDeleteOpen(false) });
+              }}
+            >
+              <p className="text-sm text-fg-muted">{fill(t.deleteBody, { seq: submission.seq })}</p>
+              <DialogFooter>
+                <Button variant="ghost" type="button" onClick={() => setDeleteOpen(false)}>
+                  {t.cancel}
+                </Button>
+                <Button type="submit" variant="danger" loading={remove.isPending} leftIcon={<Trash2 className="h-4 w-4" />}>
+                  {t.deleteConfirm}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={sendOpen} onOpenChange={setSendOpen}>
           <DialogContent title={t.sendTitle} icon={<KeyRound className="h-4 w-4" />} size="sm">

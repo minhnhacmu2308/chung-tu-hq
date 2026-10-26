@@ -180,7 +180,7 @@ function SubmissionRow({ s, field, onOpen }: { s: HysSubmissionView; field: stri
           )}
           {s.fill && fillKey && (
             <p className={s.fill.outcome === "FILLED" || s.fill.outcome === "ALREADY" ? "text-sm text-fg-muted" : "text-sm text-warning-subtle-fg"}>
-              {fill(t[fillKey], { field, slot: s.fill.slot ?? "" })}
+              {fill(t[fillKey], { field, slot: s.fill.slot ?? "", receipt: s.receiptNo ?? "" })}
               {s.fill.afterApproval && <> {t.afterApproval}</>}
             </p>
           )}

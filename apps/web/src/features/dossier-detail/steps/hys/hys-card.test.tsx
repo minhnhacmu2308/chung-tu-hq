@@ -9,10 +9,10 @@ import { HysCard } from "./hys-card";
 import { HysForm } from "./hys-form";
 import { HysSuggestDialog } from "./hys-suggest-dialog";
 
-const api = vi.hoisted(() => ({ overview: null as HysOverview | null, create: vi.fn() }));
+const api = vi.hoisted(() => ({ overview: null as HysOverview | null, create: vi.fn(), remove: vi.fn() }));
 vi.mock("@/api/hys", async (orig) => {
   const real = await orig<typeof import("@/api/hys")>();
-  return { ...real, getHysOverview: async () => api.overview!, createHys: (...a: unknown[]) => api.create(...a) };
+  return { ...real, getHysOverview: async () => api.overview!, createHys: (...a: unknown[]) => api.create(...a), deleteHys: (...a: unknown[]) => api.remove(...a) };
 });
 vi.mock("@/api/dossiers", async (orig) => {
   const real = await orig<typeof import("@/api/dossiers")>();
@@ -39,6 +39,7 @@ const overview = (over: Partial<HysOverview> = {}): HysOverview => ({
 beforeEach(() => {
   api.overview = overview();
   api.create.mockReset().mockResolvedValue(submission());
+  api.remove.mockReset().mockResolvedValue(undefined);
 });
 
 describe("HysCard", () => {
@@ -67,6 +68,12 @@ describe("HysCard", () => {
     expect(screen.getByText("Hải quan từ chối bộ HYS 2")).toBeTruthy();
     expect(screen.getByText("E001")).toBeTruthy();
     await expectNoA11yViolations(container);
+  }, 20_000);
+
+  it("LOCKED: nhắc gọi về tất cả tờ rồi tự nhập số tiếp nhận vào ô 1.63 (hệ thống không tự điền)", async () => {
+    api.overview = overview({ suggestions: [], submissions: [submission({ status: "ACCEPTED", receiptNo: "123456789012", registeredOn: "2026-10-26", fill: { outcome: "LOCKED" } })] });
+    renderWithProviders(<HysCard dossierId="dos_001" kind="IDA" />);
+    expect(await screen.findByText(/Gọi về tất cả tờ, rồi tự nhập số tiếp nhận 123456789012 vào ô 1.63/, {}, T)).toBeTruthy();
   }, 20_000);
 
   it("en / zh: tiêu đề, tên thủ tục và lý do gợi ý đã dịch", async () => {
@@ -102,6 +109,24 @@ describe("HysForm", () => {
     const dialog = await screen.findByRole("dialog", { name: "Bộ HYS 1" }, T);
     expect(within(dialog).getByRole("progressbar").querySelector(".bg-primary")).toBeTruthy();
     expect((within(dialog).getByRole("button", { name: "Gửi HYS" }) as HTMLButtonElement).disabled).toBe(false);
+  }, 20_000);
+});
+
+describe("HysForm – xóa bộ", () => {
+  it("'Xóa' mở hộp xác nhận, chưa xóa; 'Hủy' đóng không xóa; 'Xóa bộ HYS' mới xóa; a11y", async () => {
+    renderWithProviders(<HysForm dossierId="dos_001" kind="IDA" submission={submission()} documents={[]} open onOpenChange={vi.fn()} />);
+    const dialog = await screen.findByRole("dialog", { name: "Bộ HYS 1" }, T);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Xóa" }));
+    let confirm = await screen.findByRole("dialog", { name: "Xóa bộ HYS 1?" }, T);
+    expect(api.remove).not.toHaveBeenCalled();
+    await expectNoA11yViolations(confirm);
+    await userEvent.click(within(confirm).getByRole("button", { name: "Hủy" }));
+    expect(screen.queryByRole("dialog", { name: "Xóa bộ HYS 1?" })).toBeNull();
+    expect(api.remove).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Xóa" }));
+    confirm = await screen.findByRole("dialog", { name: "Xóa bộ HYS 1?" }, T);
+    await userEvent.click(within(confirm).getByRole("button", { name: "Xóa bộ HYS" }));
+    expect(api.remove).toHaveBeenCalledWith("dos_001", "hys_1");
   }, 20_000);
 });
 

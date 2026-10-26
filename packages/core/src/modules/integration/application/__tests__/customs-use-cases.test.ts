@@ -264,25 +264,12 @@ describe("customs-send / poll", () => {
     expect(uow.data.messages.filter((m) => m.operation === "IDA" && m.direction === "OUT")).toHaveLength(1);
     expect(uow.data.messages.filter((m) => m.operation === "IDA" && m.direction === "IN" && m.result === "OK")).toHaveLength(1);
   });
-  it("HYS lỗi lần đầu (hash%7==0) → SEND_FAILED giữ giai đoạn, dòng HYS ERROR; Gửi lại → tra IID, outbox retry1, rồi OK", async () => {
-    // Chọn id có hash % 7 == 0.
-    let id = "dos_r";
-    while (hashId(id) % 7 !== 0) id += "x";
+  // HYS (bộ hồ sơ đính kèm): hys-send.test.ts.
+  it("Gửi lại IDC khi Hải quan đã ghi nhận phân luồng → không gửi lại", async () => {
+    const id = "dos_r";
     dossiers.rows.push({ id, orgId: ORG, code: "HS-NK-2610-099", direction: "NK", typeCode: "A11", partner: "X", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: new Date() });
     unwrap(await submitDeclaration(deps, declarant, id, "cert_1"));
     await drain();
-    unwrap(await performOperation(deps, declarant, id, "HYS"));
-    await drain();
-    let v = unwrap(await getSubmission(deps, declarant, id));
-    expect(v.pipeline.find((p) => p.op === "HYS")).toMatchObject({ status: "ERROR", summary: expect.stringMatching(/E-SIG-401/) });
-    expect(uow.data.results.find((r) => r.dossierId === id)).toMatchObject({ state: "SEND_FAILED", raw: { stage: "PRE_DECLARED" } });
-    const rs = unwrap(await resendOperation(deps, declarant, id, "HYS"));
-    expect(rs.resent).toBe(true);
-    expect(uow.data.outbox.filter((o) => o.dossierId === id && o.operation === "HYS").map((o) => o.idempotencyKey)).toEqual([`${id}:HYS:n1`, `${id}:HYS:n1:retry1`]);
-    await drain();
-    v = unwrap(await getSubmission(deps, declarant, id));
-    expect(v.pipeline.find((p) => p.op === "HYS")?.status).toBe("OK");
-    expect(v.messages.some((m) => m.operation === "IID" && m.summary.includes("được phép gửi lại"))).toBe(true);
     // Khai chính thức, rồi Gửi lại IDC khi Hải quan đã ghi nhận phân luồng → không gửi.
     unwrap(await performOperation(deps, declarant, id, "IDC"));
     const ob = uow.data.outbox.find((o) => o.dossierId === id && o.operation === "IDC")!;
@@ -680,7 +667,7 @@ describe("processOutbox – nhánh biên", () => {
     expect(uow.data.messages.find((m) => m.direction === "IN")?.payloadMasked).toMatchObject({ maPhanLuong: 2, thueDuKien: "0 VND" });
   });
 
-  it.each([["IDC" as const, "PRE_DECLARED" as const], ["HYS" as const, "DECLARED" as const]])("%s: lỗi vĩnh viễn (DomainError) → FAILED + SEND_FAILED, giữ bước", async (op, progress) => {
+  it.each([["IDC" as const, "PRE_DECLARED" as const]])("%s: lỗi vĩnh viễn (DomainError) → FAILED + SEND_FAILED, giữ bước", async (op, progress) => {
     seedResult({ state: progress, raw: { progress } });
     const boom = async () => { throw domainError("INTEGRATION_NOT_CONFIGURED", "Chưa cấu hình"); };
     deps.gateway = gw({ declare: boom, attachDocuments: boom });
@@ -695,25 +682,6 @@ describe("processOutbox – nhánh biên", () => {
     const ob = seedOutbox({ operation: "IDC", idempotencyKey: `${D}:IDC:v2` });
     await expect(send(ob.id)).rejects.toBe("socket hang up");
     expect(uow.data.outbox[0]).toMatchObject({ status: "PENDING", lastError: "socket hang up" });
-  });
-
-  it("HYS không có tệp (payload rỗng) → lỗi E-HYS-000", async () => {
-    seedResult({ state: "DECLARED", raw: { progress: "DECLARED" } });
-    gateway = new FakeCustomsGateway({ flakyHys: false });
-    deps.gateway = gateway;
-    const ob = seedOutbox({ operation: "HYS", idempotencyKey: `${D}:HYS:v2`, payload: null });
-    expect(unwrap(await send(ob.id)).status).toBe("FAILED");
-    expect(uow.data.outbox[0]?.lastError).toMatch(/^E-HYS-000/);
-  });
-
-  it("HYS thành công không có số tiếp nhận → tóm tắt không kèm số; giữ giai đoạn, ghi đã làm, không xếp job hỏi", async () => {
-    seedResult({ state: "DECLARED", raw: { progress: "DECLARED" } });
-    deps.gateway = gw({ attachDocuments: async () => ({}) });
-    const ob = seedOutbox({ operation: "HYS", idempotencyKey: `${D}:HYS:v2`, payload: { files: [{ name: "inv.pdf", storageKey: "k/inv.pdf" }] } });
-    expect(unwrap(await send(ob.id))).toEqual({ status: "SENT", next: null });
-    expect(uow.data.messages.find((m) => m.direction === "IN")?.summary).toBe("Đã tiếp nhận hồ sơ chứng từ điện tử (1 tệp)");
-    expect(uow.data.results[0]?.raw).toMatchObject({ stage: "DECLARED", done: ["HYS"], side: { HYS: "Đã tiếp nhận 1 tệp" } });
-    expect(queue.jobs).toHaveLength(0);
   });
 
   it("IDC thành công → không tự tạo HYS; xếp job hỏi trạng thái", async () => {

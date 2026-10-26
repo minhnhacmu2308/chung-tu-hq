@@ -1,4 +1,4 @@
-// Luồng GĐ 5 trên Postgres thật: hồ sơ đã duyệt (từ pipeline GĐ2–4) → khai tạm IDA (outbox) → người khai bấm IDC, HYS → poll IID → CLEARED.
+// Luồng GĐ 5 trên Postgres thật: hồ sơ đã duyệt (từ pipeline GĐ2–4) → khai tạm IDA (outbox) → người khai bấm IDC → poll IID → CLEARED.
 // Adapter thật sang declaration/dossier/validation/identity; FakeCustomsGateway; RLS thật.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../db/client.js";
@@ -106,7 +106,7 @@ async function drain() {
 }
 
 describe("luồng truyền Hải quan trên Postgres thật", () => {
-  it("truyền hồ sơ đã duyệt: cần chứng thư; IDA → (người khai) IDC → HYS → hỏi IID; số tờ khai/phân luồng/thông quan; hồ sơ CLEARED; org khác không thấy; truyền lần 2 → ALREADY_SUBMITTED", async () => {
+  it("truyền hồ sơ đã duyệt: cần chứng thư; IDA → (người khai) IDC → hỏi IID; số tờ khai/phân luồng/thông quan; hồ sơ CLEARED; org khác không thấy; truyền lần 2 → ALREADY_SUBMITTED", async () => {
     const id = await approvedDossier();
     expect(errCode(await submitDeclaration(customs, chau, id, "cert_nope"))).toBe("NO_CERT");
     const cert = unwrap(await addCertificate(identity, admin, { issuer: "VNPT-CA", serial: "5404FFFEB7033FB3", validTo: "2027-12-31" }));
@@ -116,11 +116,9 @@ describe("luồng truyền Hải quan trên Postgres thật", () => {
     await drain();
     expect(unwrap(await getSubmission(customs, chau, id))).toMatchObject({ stage: "PRE_DECLARED", nextOp: "IDC" });
     unwrap(await performOperation(customs, chau, id, "IDC"));
-    await drain(); // HYS chỉ gửi được khi đã có phản hồi IDC
-    unwrap(await performOperation(customs, chau, id, "HYS"));
-    await drain();
+    await drain(); // HYS: bộ hồ sơ đính kèm (sendHysSubmission) – không còn là nghiệp vụ theo tờ
     const v = unwrap(await getSubmission(customs, chau, id));
-    expect(v.pipeline.filter((p) => p.status === "OK").map((p) => p.op)).toEqual(["IDA", "IDC", "HYS"]);
+    expect(v.pipeline.filter((p) => p.status === "OK").map((p) => p.op)).toEqual(["IDA", "IDC"]);
     expect(v.result?.declarationNo).toMatch(/^107\d{9}$/);
     expect(v.result?.clearanceStatus).toBe("CLEARED");
     expect(v.messages.every((m) => !m.payloadPreview.includes("0316789012"))).toBe(true);

@@ -1,4 +1,4 @@
-// Soạn bộ HYS (hồ sơ đính kèm điện tử) trước IDA/EDA: tạo/sửa/xóa bộ, thêm/bớt file, tổng quan + gợi ý. Gửi: use case riêng (task sau).
+// Soạn bộ HYS (hồ sơ đính kèm điện tử) trước IDA/EDA: tạo/sửa/xóa bộ, thêm/bớt file, tổng quan + gợi ý. Gửi: send-hys.ts; worker: process-hys.ts.
 import {
   checkHysSubmission, declarationFormValues, HYS_PROCEDURE_CODES, hysExtensionAllowed, isContentOperation, satisfiedHysCodes, suggestHys,
   type AttachmentValues, type CreateHysInput, type HysFileView, type HysOverview, type HysStatus, type HysSubmissionView, type UpdateHysInput,
@@ -9,10 +9,11 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { isLotEditable } from "../domain/lot-editable.js";
 import { stageOf } from "../domain/state-machine.js";
-import type { CustomsDeps, CustomsRepos, DeclarationSnapshot, HysFileRow, HysSubmissionRow } from "./customs-ports.js";
+import type { CustomsDeps, CustomsRepos, DeclarationSnapshot, HysFileRow, HysSubmissionRow, OutboxRow, ResultRow } from "./customs-ports.js";
 
 const EDITABLE: readonly HysStatus[] = ["DRAFT", "REJECTED", "SEND_FAILED"];
-const ROLES = ["DECLARANT", "APPROVER", "ADMIN"] as const;
+/** Vai trò soạn/gửi bộ HYS (như khai IDA). */
+export const HYS_ROLES = ["DECLARANT", "APPROVER", "ADMIN"] as const;
 const firstToken = (v: string): string => v.split(/\s*[–-]\s*/)[0]!.trim();
 
 /** Giá trị ô form của tờ khai (tên VNACCS) cho luật HYS; mã phân loại TK_EA* chuẩn hóa về mã ("A02 – …" → "A02"). */
@@ -46,17 +47,25 @@ function toView(row: HysSubmissionRow, files: HysFileRow[]): HysSubmissionView {
   };
 }
 
-async function viewOf(r: CustomsRepos, orgId: string, id: string): Promise<HysSubmissionView> {
+export async function viewOf(r: CustomsRepos, orgId: string, id: string): Promise<HysSubmissionView> {
   const row = (await r.hys.get(orgId, id))!;
   return toView(row, await r.hys.files(orgId, id));
 }
 
-/** Bộ thuộc hồ sơ của org (org khác / hồ sơ khác → NOT_FOUND) và còn sửa được. */
-async function editable(r: CustomsRepos, orgId: string, dossierId: string, id: string): Promise<Result<HysSubmissionRow>> {
+/** Bộ thuộc hồ sơ của org (org khác / hồ sơ khác → NOT_FOUND) và còn sửa được (cũng là điều kiện gửi: DRAFT/REJECTED/SEND_FAILED). */
+export async function editable(r: CustomsRepos, orgId: string, dossierId: string, id: string): Promise<Result<HysSubmissionRow>> {
   const row = await r.hys.get(orgId, id);
   if (!row || row.dossierId !== dossierId) return err(domainError("NOT_FOUND", "Không tìm thấy bộ HYS"));
   if (!EDITABLE.includes(row.status)) return err(reasonError("INVALID_STATE", "HYS_NOT_EDITABLE"));
   return ok(row);
+}
+
+/** Lô còn sửa được (1.63/2.53 điền được) theo tờ khai hiện hành, kết quả các tờ và outbox của hồ sơ. */
+export function lotEditableOf(snap: Pick<DeclarationSnapshot, "status"> | null, results: ResultRow[], outbox: OutboxRow[]): boolean {
+  return isLotEditable({
+    declarationStatus: snap?.status ?? null, stages: results.map(stageOf),
+    contentPending: outbox.some((o) => o.status === "PENDING" && isContentOperation(o.operation)),
+  });
 }
 
 const validProcedure = (code: string): boolean => code in HYS_PROCEDURE_CODES;
@@ -70,10 +79,7 @@ export async function getHysOverview(deps: CustomsDeps, ctx: Ctx, dossierId: str
     results: await r.results.listForDossier(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId),
   }));
   const submissions = rows.map((row) => toView(row, files.filter((f) => f.submissionId === row.id)));
-  const lotEditable = isLotEditable({
-    declarationStatus: snap?.status ?? null, stages: results.map(stageOf),
-    contentPending: outbox.some((o) => o.status === "PENDING" && isContentOperation(o.operation)),
-  });
+  const lotEditable = lotEditableOf(snap, results, outbox);
   const supplementHint = results.some((x) => stageOf(x) === "DECLARED" && (x.channel === "YELLOW" || x.channel === "RED"));
   let suggestions: HysOverview["suggestions"] = [];
   if (snap) {
@@ -86,7 +92,7 @@ export async function getHysOverview(deps: CustomsDeps, ctx: Ctx, dossierId: str
 }
 
 export async function createHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: string, input: CreateHysInput): Promise<Result<HysSubmissionView>> {
-  const allowed = requireRole(ctx, ...ROLES);
+  const allowed = requireRole(ctx, ...HYS_ROLES);
   if (!allowed.ok) return allowed;
   if (input.procedureCode !== undefined && !validProcedure(input.procedureCode)) return err(domainError("VALIDATION", `Mã thủ tục HYS không hợp lệ: ${input.procedureCode}`));
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
@@ -107,7 +113,7 @@ export async function createHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId
 }
 
 export async function updateHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: string, id: string, input: UpdateHysInput): Promise<Result<HysSubmissionView>> {
-  const allowed = requireRole(ctx, ...ROLES);
+  const allowed = requireRole(ctx, ...HYS_ROLES);
   if (!allowed.ok) return allowed;
   if (input.procedureCode !== undefined && !validProcedure(input.procedureCode)) return err(domainError("VALIDATION", `Mã thủ tục HYS không hợp lệ: ${input.procedureCode}`));
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
@@ -143,7 +149,7 @@ export async function updateHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId
 }
 
 export async function deleteHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: string, id: string): Promise<Result<void>> {
-  const allowed = requireRole(ctx, ...ROLES);
+  const allowed = requireRole(ctx, ...HYS_ROLES);
   if (!allowed.ok) return allowed;
   return deps.uow.asOrg(ctx, async (r) => {
     const cur = await editable(r, ctx.orgId, dossierId, id);
@@ -158,7 +164,7 @@ export async function deleteHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId
 const safeName = (name: string): string => name.replace(/[^A-Za-z0-9._-]/g, "_");
 
 export async function addHysUploadedFiles(deps: CustomsDeps, ctx: Ctx, dossierId: string, id: string, files: { name: string; mime: string; bytes: Buffer }[]): Promise<Result<HysSubmissionView>> {
-  const allowed = requireRole(ctx, ...ROLES);
+  const allowed = requireRole(ctx, ...HYS_ROLES);
   if (!allowed.ok) return allowed;
   const bad = files.filter((f) => !hysExtensionAllowed(f.name));
   if (bad.length) return err(domainError("VALIDATION", `Đuôi file không được HYS chấp nhận: ${bad.map((f) => f.name).join(", ")}`));
@@ -180,7 +186,7 @@ export async function addHysUploadedFiles(deps: CustomsDeps, ctx: Ctx, dossierId
 }
 
 export async function removeHysFile(deps: CustomsDeps, ctx: Ctx, dossierId: string, id: string, fileId: string): Promise<Result<HysSubmissionView>> {
-  const allowed = requireRole(ctx, ...ROLES);
+  const allowed = requireRole(ctx, ...HYS_ROLES);
   if (!allowed.ok) return allowed;
   const now = deps.clock.now();
   return deps.uow.asOrg(ctx, async (r) => {

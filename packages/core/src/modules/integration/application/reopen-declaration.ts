@@ -9,6 +9,7 @@ import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import type { CustomsDeps } from "./customs-ports.js";
+import { HysOutboxPayloadSchema } from "./process-hys.js";
 
 export async function reopenDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<void>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -39,7 +40,7 @@ export async function reopenDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   return err(domainError("INVALID_STATE", "Tờ khai chưa được duyệt"));
 }
 
-/** Worker gọi khi job customs-send hết số lần thử: outbox FAILED, trạng thái SEND_FAILED để người dùng Gửi lại. */
+/** Worker gọi khi job customs-send hết số lần thử: outbox FAILED, trạng thái SEND_FAILED để người dùng Gửi lại (HYS: bộ SEND_FAILED, không đụng kết quả truyền – K1). */
 export async function markOutboxFailed(deps: CustomsDeps, input: { orgId: string; outboxId: string; reason: string }): Promise<Result<void>> {
   await deps.uow.asOrg({ orgId: asOrgId(input.orgId), userId: asUserId("") }, async (r) => {
     const ob = await r.outbox.get(input.orgId, input.outboxId);
@@ -47,6 +48,12 @@ export async function markOutboxFailed(deps: CustomsDeps, input: { orgId: string
     const now = deps.clock.now();
     await r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, branch: ob.branch, operation: ob.operation, direction: "IN", result: "ERROR", summary: `Không gửi được sau nhiều lần thử: ${input.reason} – bấm Gửi lại`, payloadMasked: { error: input.reason }, externalRef: null, at: now });
     await r.outbox.update(ob.orgId, ob.id, { status: "FAILED", lastError: input.reason, updatedAt: now });
+    if (ob.operation === "HYS") {
+      const p = HysOutboxPayloadSchema.safeParse(ob.payload);
+      const sub = p.success ? await r.hys.get(input.orgId, p.data.submissionId) : null;
+      if (sub && sub.status === "SENDING") await r.hys.update(input.orgId, sub.id, { status: "SEND_FAILED", reject: [{ code: "E-SEND", message: input.reason }], updatedAt: now });
+      return;
+    }
     const result = await r.results.get(input.orgId, ob.dossierId, ob.branch);
     if (result) await r.results.upsert({ ...result, state: coarseState(stageOf(result), true), updatedAt: now });
   });

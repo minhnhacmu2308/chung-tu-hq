@@ -2,7 +2,8 @@
 // HYS lỗi lần đầu khi hash%7==0 (thử "Gửi lại"), trạng thái tiến dần qua các lần hỏi. Không mạng. Dùng được trong test use case
 // (đặt ở application/test) và tái xuất qua infrastructure cho container.
 import type { CustomsInfo, CustomsOperation } from "@kb/contracts";
-import type { CustomsGateway, GatewayError, GatewaySendResult } from "../customs-ports.js";
+import { systemClock, type Clock } from "../../../../shared/clock.js";
+import type { CustomsGateway, GatewayError, GatewaySendResult, HysGatewayRequest, HysGatewayResult } from "../customs-ports.js";
 
 export function hashId(s: string) {
   let h = 0;
@@ -19,8 +20,13 @@ export class FakeCustomsGateway implements CustomsGateway {
   /** Số lần hỏi trạng thái theo tờ khai (mô phỏng Hải quan xử lý dần). */
   private polls = new Map<string, number>();
   private hysAttempts = new Map<string, number>();
-  /** Số lần hỏi trước khi luồng vàng/đỏ được thông quan. */
-  constructor(private opts: { clearAfterPolls?: number; alwaysGreen?: boolean; flakyHys?: boolean } = {}) {}
+  /** Số lần gọi attachDocuments (test kiểm không gửi lại). */
+  hysCalls: HysGatewayRequest[] = [];
+  /**
+   * clearAfterPolls: số lần hỏi trước khi luồng vàng/đỏ được thông quan; flakyHys: HYS lỗi lần đầu khi hash%7==0;
+   * rejectHys: Hải quan từ chối mọi bộ HYS; clock: ngày tiếp nhận HYS (giờ VN).
+   */
+  constructor(private opts: { clearAfterPolls?: number; alwaysGreen?: boolean; flakyHys?: boolean; rejectHys?: boolean; clock?: Clock } = {}) {}
 
   channelFor(dossierId: string): "GREEN" | "YELLOW" | "RED" {
     if (this.opts.alwaysGreen) return "GREEN";
@@ -50,12 +56,16 @@ export class FakeCustomsGateway implements CustomsGateway {
       info: info({ registeredDate: "2026-10-14", registeredTime: "10:00:00", inspectionCode: INSPECTION[channel], ...(channel === "GREEN" ? {} : { directives: [{ title: "Nộp chứng từ", content: "Nộp bộ chứng từ qua HYS" }] }) }),
     };
   }
-  async attachDocuments(_orgId: string, msg: { externalId: string; dossierId: string; files: { name: string; bytes: Buffer }[] }) {
-    const n = (this.hysAttempts.get(msg.dossierId) ?? 0) + 1;
-    this.hysAttempts.set(msg.dossierId, n);
-    if ((this.opts.flakyHys ?? true) && n === 1 && hashId(msg.dossierId) % 7 === 0) return { errors: [{ code: "E-SIG-401", message: "Phiên ký số hết hạn", solution: "Ký lại bằng chứng thư số và gửi lại HYS" }] };
-    if (msg.files.length === 0) return { errors: [{ code: "E-HYS-000", message: "Không có tệp đính kèm", solution: "Tải chứng từ lên hồ sơ" }] };
-    return { receiptNo: `HYS${String(hashId(msg.dossierId + n) % 100_000_000).padStart(8, "0")}` };
+  /** HYS: số tiếp nhận 12 ký tự "3" + 11 chữ số, ngày tiếp nhận theo clock (giờ VN, YYYY-MM-DD). */
+  async attachDocuments(_orgId: string, req: HysGatewayRequest, idempotencyKey: string): Promise<HysGatewayResult> {
+    this.hysCalls.push(req);
+    const n = (this.hysAttempts.get(req.dossierId) ?? 0) + 1;
+    this.hysAttempts.set(req.dossierId, n);
+    if ((this.opts.flakyHys ?? true) && n === 1 && hashId(req.dossierId) % 7 === 0) return { errors: [{ code: "E-SIG-401", message: "Phiên ký số hết hạn", solution: "Ký lại bằng chứng thư số và gửi lại HYS" }] };
+    if (req.files.length === 0) return { errors: [{ code: "E-HYS-000", message: "Không có tệp đính kèm", solution: "Tải chứng từ lên hồ sơ" }] };
+    if (this.opts.rejectHys) return { errors: [{ code: "E-HYS-TSB", field: "TK_TSB", message: "Phân loại thủ tục không phù hợp", solution: "Chọn đúng mã thủ tục HYS" }] };
+    const vn = new Date((this.opts.clock ?? systemClock).now().getTime() + 7 * 3_600_000);
+    return { receiptNo: `3${String(hashId(`${req.dossierId}:${idempotencyKey}`) % 100_000_000_000).padStart(11, "0")}`, registeredOn: vn.toISOString().slice(0, 10) };
   }
   /** Nghiệp vụ còn lại của luồng (mô phỏng): gọi sửa, khai tạm/chính thức sửa đổi, container qua KVGS, lệ phí cảng biển (số tiền KHÔNG phải biểu phí thật). */
   async send(_orgId: string, msg: { op: CustomsOperation; externalId: string; dossierId: string; request?: unknown }): Promise<GatewaySendResult> {

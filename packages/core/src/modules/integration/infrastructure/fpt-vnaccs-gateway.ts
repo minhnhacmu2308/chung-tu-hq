@@ -2,11 +2,10 @@
 // Vỏ phản hồi theo mẫu thật (docdungapivnacss): { objVNACCS_ACCOUNT, errorList, objIDA: [...], objEDA: [...], ... };
 // mỗi phần tử objEDA/objIDA = { objMsgResult, objVN_<KIND>, objVN_<KIND>_TRANGTHAI, … }.
 // externalId = số tờ khai VNACCS (tK_ECN/tK_ICN) – EDC/IDC/IEX tra theo số này.
-import { AmaRequestSchema, EdaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, IdaRequestSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
+import { AmaRequestSchema, EdaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, IdaRequestSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
-import type { CustomsGateway, GatewayError, GatewaySendResult, GatewayStatus } from "../application/customs-ports.js";
-import { buildFptRequest, type DeclarationPayload } from "../domain/declaration-to-fpt.js";
+import type { CustomsGateway, GatewayError, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult } from "../application/customs-ports.js";
 import { parseCustomsInfo } from "../domain/customs-info.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
 
@@ -52,6 +51,11 @@ const channelOf = (luong: unknown): "GREEN" | "YELLOW" | "RED" | undefined => {
   return n === 1 ? "GREEN" : n === 2 ? "YELLOW" : n === 3 ? "RED" : undefined;
 };
 const numberField = (kind: "IDA" | "EDA") => (kind === "IDA" ? "tK_ICN" : "tK_ECN");
+/** Ngày FPT `dd/MM/yyyy` (có thể kèm giờ phía sau) → `YYYY-MM-DD`; dạng khác → không có. */
+const fptDateToIso = (v: unknown): string | undefined => {
+  const m = typeof v === "string" ? /^(\d{2})\/(\d{2})\/(\d{4})/.exec(v.trim()) : null;
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : undefined;
+};
 
 export class FptVnaccsGateway implements CustomsGateway {
   readonly name = "fpt-vnaccs";
@@ -85,17 +89,20 @@ export class FptVnaccsGateway implements CustomsGateway {
     return { accepted: true, ...(channel ? { channel } : {}), ...(result ? { info: parseCustomsInfo(result.kind, result.item, new Date()) } : {}) };
   }
 
-  async attachDocuments(orgId: string, msg: { externalId: string; files: { name: string; bytes: Buffer }[]; declaration?: DeclarationPayload }) {
-    // TK_CH bắt buộc ở HYS; lấy lại từ tờ khai (FPT trả tK_CH = null trong phản hồi EDA nên không đọc được từ đó).
-    const req = msg.declaration ? (buildFptRequest(msg.declaration).request as Obj) : {};
-    const head = sub(req, msg.declaration?.kind === "IDA" ? "objVN_IDA" : "objVN_EDA");
-    const { env, errors } = await this.call(orgId, "HYS", {
-      tK_CH: head["tK_CH"] ?? "", tK_CHB: head["tK_CHB"] ?? "", tK_TSB: "A99", tK_REF: msg.externalId,
-      lisT_FILE: msg.files.map((f) => ({ filE_NAME: f.name, filE_BASE64: f.bytes.toString("base64") })),
-    });
+  /** HYS (VNACCS_HYS v1.2): bộ → HysRequestSchema (kiểm trước khi gửi); phản hồi → HysResponseSchema (tK_JNO, tK_YMD dd/MM/yyyy → YYYY-MM-DD). */
+  async attachDocuments(orgId: string, req: HysGatewayRequest): Promise<HysGatewayResult> {
+    const body = {
+      tK_CH: req.customsOffice, tK_CHB: req.processingUnit, tK_TSB: req.procedureCode, tK_STL: req.phone ?? "", tK_REF: req.internalRef ?? "", tK_KJJ: req.note ?? "",
+      [HYS_LIST_FILE_KEY]: req.files.map((f) => ({ filE_NAME: f.name, filE_BASE64: f.bytes.toString("base64") })),
+    };
+    // Tài khoản VNACCS là chỉ tiêu bắt buộc của sheet HYS; client gửi trong objVNACCS_ACCOUNT – ở đây chỉ để kiểm đủ schema.
+    const parsed = HysRequestSchema.safeParse({ ...(await this.credsFor(orgId)), ...body });
+    if (!parsed.success) return { errors: parsed.error.issues.map(describeSchemaIssue) };
+    const { env, errors } = await this.call(orgId, "HYS", body);
     if (errors) return { errors };
-    const jno = env["tK_JNO"];
-    return jno ? { receiptNo: String(jno) } : {};
+    const res = HysResponseSchema.parse(env);
+    const registeredOn = fptDateToIso(res.tK_YMD);
+    return { ...(res.tK_JNO ? { receiptNo: String(res.tK_JNO) } : {}), ...(registeredOn ? { registeredOn } : {}) };
   }
 
   /**

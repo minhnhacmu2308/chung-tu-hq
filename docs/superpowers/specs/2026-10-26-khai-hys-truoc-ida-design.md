@@ -88,7 +88,7 @@ File upload riêng **không** vào bảng `documents` (không chạy AI, không 
 ### 2.1 Soạn (DRAFT)
 - Tạo bộ: từ thẻ HYS hoặc nút "Khai HYS" của một gợi ý (điền sẵn mã thủ tục). `customs_office`/`processing_unit` lấy từ tờ khai hiện hành, `internal_ref` = mã hồ sơ (cắt 20 ký tự).
 - Sửa/xóa được khi `DRAFT`, `REJECTED`, `SEND_FAILED`. `SENDING`/`ACCEPTED`: không sửa, không xóa (muốn đổi thì khai bộ mới).
-- Kiểm tra (code thuần, `contracts`, `checkHysSubmission`): đuôi file thuộc `HYS_ALLOWED_EXTENSIONS` = txt, doc, docx, docm, xml, xls, xlsx, xlsm, csv, jpg, jpeg, gif, tif, tiff, bmp, pdf, htm, html (không phân biệt hoa thường); tổng dung lượng ≤ 2 MB (2 × 1024 × 1024 byte); ≥ 1 file; có mã thủ tục, cơ quan Hải quan, bộ phận xử lý; độ dài theo `HYS_REQUEST_ROWS`. Khi lưu: cho lưu, trả danh sách vấn đề; khi gửi: còn vấn đề → chặn.
+- Kiểm tra (code thuần, `contracts`, `checkHysSubmission`): đuôi file thuộc `HYS_ALLOWED_EXTENSIONS` = txt, doc, docx, docm, xml, xls, xlsx, xlsm, csv, jpg, jpeg, gif, tif, tiff, bmp, pdf, htm, html (không phân biệt hoa thường); tổng dung lượng ≤ 2 MB (2 × 1024 × 1024 byte); ≥ 1 file; có mã thủ tục, cơ quan Hải quan (nhóm xử lý hồ sơ TK_CHB không bắt buộc – §10); độ dài theo `HYS_REQUEST_ROWS`. Khi lưu: cho lưu, trả danh sách vấn đề; khi gửi: còn vấn đề → chặn.
 
 ### 2.2 Gửi
 - Use case `sendHysSubmission`: quyền như khai IDA; kiểm §2.1; có chứng thư số (`certificateId` người khai chọn, như IDA); bộ ở `DRAFT`/`REJECTED`. **Không** đòi tờ khai đã duyệt / HS xác nhận / không BLOCKER.
@@ -127,7 +127,7 @@ Người khai vẫn sửa tay 1.63 như hiện nay.
 - Luồng vàng/đỏ: dòng nhắc khai HYS bổ sung.
 
 ### 3.2 Form HYS (`Dialog` `presentation="panel"`)
-- Thông tin chung: cơ quan Hải quan, bộ phận xử lý (CodeInput như tờ khai), phân loại thủ tục (chọn A546, hiện tên), số điện thoại, số quản lý nội bộ, ghi chú.
+- Thông tin chung: cơ quan Hải quan, nhóm xử lý hồ sơ (CodeInput như tờ khai, không bắt buộc), phân loại thủ tục (chọn A546, hiện tên), số điện thoại, số quản lý nội bộ, ghi chú.
 - File: danh sách chứng từ hồ sơ để tick + `FileDropzone` "Tải file lên"; `Progress` "x / 2 MB" (vượt → tone danger); ghi chú các đuôi được nhận.
 - Nút: Lưu nháp · Gửi HYS (Dialog xác nhận, chọn chứng thư số như IDA) · Xóa (DRAFT/REJECTED/SEND_FAILED).
 
@@ -210,3 +210,17 @@ Chạy **một lần cho cả lô** trên thông tin chung (`values` = `declarat
 - 1.63 riêng từng tờ (phương án B – không làm).
 - Đối chiếu khóa JSON HYS với mẫu phản hồi FPT thật (đặc tả `hys.ts` còn suy luận – cần mẫu thật trước production).
 - Điền 1.63 khi khai sửa đổi sau thông quan (AMA).
+
+## 10. Đối chiếu tài liệu VNACCS gốc (2026-10-26)
+
+Nguồn (thư mục `docs/tailieuchitieukhaibao/HYS/`, chỉ có trên máy): `6001-1_HYS_Service Specification.docx` (đặc tả nghiệp vụ 6001 HYS v1.2), `6001-2_HYS_Input_Data_Element.xlsx` (chỉ tiêu nhập), một bản lưu kết quả HYS thật (PDF "Bản lưu thông tin tờ khai phổ thông" – có dữ liệu doanh nghiệp thật, không đưa vào repo).
+
+| Điểm | Tài liệu VNACCS | Quyết định |
+|---|---|---|
+| Nhóm xử lý hồ sơ (CHB, `TK_CHB`) | **C** – có điều kiện: chỉ nhập khi được phân bộ phận khai đặc biệt / thủ tục thông quan | Không bắt buộc: bỏ lỗi `MISSING_UNIT`; vẫn điền sẵn từ tờ khai. Nhãn đổi thành "Nhóm xử lý hồ sơ" theo tài liệu |
+| Cơ quan Hải quan (`TK_CH`) | **M**; phải là đơn vị đã đăng ký nhận loại thủ tục đó; hệ thống chọn công chức nhận theo CH + loại thủ tục | Giữ bắt buộc; không kiểm được đăng ký – Hải quan từ chối thì hiện lỗi trả về |
+| Phân loại thủ tục (`TK_TSB`) | **M**, bảng mã A546 (và A559) | A546 khớp đủ 14 mã với `20.DM_KHAI_HYS_GANCODE`; A559 chưa có trong `docs/danhmuc` – chưa dùng |
+| Ghi chú | ID gốc `KIJ` (Remarks, kiểu v, 332) | Đặc tả FPT (`VNACCS_HYS v1.2.xlsx`) ghi `TK_KJJ` – giữ theo FPT vì cổng FPT là nơi nhận; cần đối chiếu khi có mẫu phản hồi thật |
+| Dung lượng | Tổng file **< 3 MB** (đặc tả 2013) | Giữ **≤ 2 MB** theo phần mềm FPT.VNACCS / đặc tả FPT (chặt hơn, an toàn) |
+| File | Phải có file, đúng định dạng quy định; hệ thống không kiểm nội dung | Như §2.1 |
+| Kết quả | Hệ thống cấp **số tiếp nhận khai báo phổ thông** (bản lưu in nhãn "Số tờ khai", 12 chữ số), kèm phân loại, tên thủ tục, cơ quan HQ, nhóm xử lý, ngày khai, tên/địa chỉ/điện thoại người khai | Khớp `TK_JNO` (12) + `TK_TNM`, `TK_YMD`, `TK_SNM`, `TK_SAD`; số này là giá trị điền vào ô 2 của 1.63/2.53 |

@@ -12,7 +12,7 @@ export const HYS_MAX_TOTAL_BYTES = 2_097_152;
 export const HYS_MAX_SLOTS = 3;
 
 export type HysIssue = {
-  code: "NO_FILE" | "BAD_EXTENSION" | "TOO_LARGE" | "MISSING_PROCEDURE" | "MISSING_OFFICE" | "MISSING_UNIT" | "TOO_LONG";
+  code: "NO_FILE" | "BAD_EXTENSION" | "TOO_LARGE" | "MISSING_PROCEDURE" | "MISSING_OFFICE" | "TOO_LONG";
   file?: string;
   field?: string;
   bytes?: number;
@@ -51,7 +51,6 @@ export function checkHysSubmission(s: HysSubmissionInput): HysIssue[] {
   if (total > HYS_MAX_TOTAL_BYTES) issues.push({ code: "TOO_LARGE", bytes: total });
   if (blank(s.procedureCode)) issues.push({ code: "MISSING_PROCEDURE" });
   if (blank(s.customsOffice)) issues.push({ code: "MISSING_OFFICE" });
-  if (blank(s.processingUnit)) issues.push({ code: "MISSING_UNIT" });
   const lengths: [string, string | null][] = [
     ["TK_STL", s.phone],
     ["TK_REF", s.internalRef],

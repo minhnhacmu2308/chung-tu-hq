@@ -195,7 +195,7 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
                   <Input value={customsOffice} disabled />
                 )}
               </Field>
-              <Field label={t.unit} required>
+              <Field label={t.unit}>
                 {editable ? (
                   <CodeInput table="A014" fieldKey="TK_CHB" kind={kind} values={values} value={processingUnit} onChange={setProcessingUnit} label={t.unit} ariaLabel={t.unit} />
                 ) : (

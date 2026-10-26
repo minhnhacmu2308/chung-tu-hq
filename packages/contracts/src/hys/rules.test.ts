@@ -25,7 +25,8 @@ describe("checkHysSubmission", () => {
     expect(checkHysSubmission({ ...base, files: [{ fileName: "a.zip", sizeBytes: 1 }] })).toContainEqual({ code: "BAD_EXTENSION", file: "a.zip" });
     expect(checkHysSubmission({ ...base, procedureCode: null })).toContainEqual({ code: "MISSING_PROCEDURE" });
     expect(checkHysSubmission({ ...base, customsOffice: " " })).toContainEqual({ code: "MISSING_OFFICE" });
-    expect(checkHysSubmission({ ...base, processingUnit: null })).toContainEqual({ code: "MISSING_UNIT" });
+    // TK_CHB (nhóm xử lý hồ sơ) là chỉ tiêu có điều kiện (6001-2_HYS_Input_Data_Element) – để trống vẫn gửi được.
+    expect(checkHysSubmission({ ...base, processingUnit: null })).toEqual([]);
     expect(checkHysSubmission({ ...base, phone: "1".repeat(21) })).toContainEqual({ code: "TOO_LONG", field: "TK_STL" });
     expect(checkHysSubmission({ ...base, phone: "1".repeat(20), note: "n".repeat(333) })).toEqual([{ code: "TOO_LONG", field: "TK_KJJ" }]);
   });

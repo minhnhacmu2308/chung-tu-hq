@@ -26,7 +26,7 @@ export const HysFileViewSchema = z.object({
 export type HysFileView = z.infer<typeof HysFileViewSchema>;
 
 export const HysIssueSchema: z.ZodType<HysIssue> = z.object({
-  code: z.enum(["NO_FILE", "BAD_EXTENSION", "TOO_LARGE", "MISSING_PROCEDURE", "MISSING_OFFICE", "MISSING_UNIT", "TOO_LONG"]),
+  code: z.enum(["NO_FILE", "BAD_EXTENSION", "TOO_LARGE", "MISSING_PROCEDURE", "MISSING_OFFICE", "TOO_LONG"]),
   file: z.string().exactOptional(),
   field: z.string().exactOptional(),
   bytes: z.number().exactOptional(),

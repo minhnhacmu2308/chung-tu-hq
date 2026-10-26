@@ -186,7 +186,7 @@ Chạy **một lần cho cả lô** trên thông tin chung (`values` = `declarat
 | Lỗi mạng / cổng | Thử lại tự động; hết lượt → `SEND_FAILED` + "Gửi lại" (đã có số thì không gửi) |
 | Thành công không có số | `ACCEPTED`, `NO_RECEIPT`, cảnh báo nhập tay |
 | 1.63 đủ 3 cặp | `FULL`, không ghi đè, cảnh báo |
-| Lô không còn sửa được (đang truyền, đã khai, gọi về một phần) | `LOCKED`, chỉ ghi lịch sử, nhắc gọi về tất cả tờ |
+| Lô không còn sửa được (đang truyền, đã khai, gọi về một phần) | `LOCKED`, chỉ ghi lịch sử, không tự điền; nhắc gọi về tất cả tờ rồi nhập tay số tiếp nhận vào 1.63/2.53 |
 | Bấm gửi hai lần | Khóa idempotency outbox → một lần gửi |
 | Người khác tổ chức | RLS + `orgId` → không thấy |
 

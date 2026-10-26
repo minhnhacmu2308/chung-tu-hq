@@ -589,7 +589,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const certPicker =
     firstSend && next && baseOp(next.op) === "IDA" ? (
       <div className="flex flex-col gap-3 cq-md:flex-row cq-md:items-end">
-        <Field label={t.certLabel} className="flex-1">
+        <Field label={t.certLabel} className="min-w-0 flex-1">
           <Select
             value={selectedId}
             onChange={(e) => setCertId(e.currentTarget.value)}
@@ -598,6 +598,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
           />
         </Field>
         <Button
+          className="shrink-0"
           leftIcon={<KeyRound className="h-4 w-4" />}
           disabled={blocked || !selectedId || certExpired || anyBusy}
           loading={submit.isPending}

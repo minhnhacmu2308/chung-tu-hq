@@ -491,6 +491,24 @@ export const MACHINERY_CONDITION_CODES: CodeEntry[] = [
 ];
 
 /**
+ * 1.63 / 2.53 ô 1 – Phân loại đính kèm khai báo điện tử (TK_EA1..3, tối đa 3 ký tự). Nguồn: VNACCS_IDA v1.2.xlsx, cột Category
+ * của TK_EA (INV, BOL, AWB, INS, CON, ALL, ETC); DM theo phần mềm FPT.VNACCS. Tên theo phần mềm FPT.
+ * Khác A546 (A01…A99) – A546 là phân loại THỦ TỤC của bản khai HYS (TK_TSB), không điền vào 1.63/2.53.
+ */
+export const ATTACH_KIND_CODES = ["INV", "BOL", "AWB", "INS", "CON", "DM", "ALL", "ETC"] as const;
+export type AttachKind = (typeof ATTACH_KIND_CODES)[number];
+export const ATTACH_KINDS: CodeEntry[] = [
+  { code: "INV", label: "Hóa đơn" },
+  { code: "BOL", label: "B/L" },
+  { code: "AWB", label: "AWB" },
+  { code: "INS", label: "Bảo hiểm" },
+  { code: "CON", label: "Hợp đồng" },
+  { code: "DM", label: "Định mức nguyên vật liệu" },
+  { code: "ALL", label: "Tất cả hồ sơ" },
+  { code: "ETC", label: "Loại khác" },
+];
+
+/**
  * Tra bảng mã theo tên `codeTable` trong catalog. Bảng chỉ có trên danh mục VNACCS (A014, A016, A202, A519, A520, A528,
  * A546…) chưa có dữ liệu trong repo – nằm ở VNACCS_SYNCED_CODE_TABLES, không có trong map này.
  */
@@ -522,6 +540,7 @@ export const CODE_TABLES: Readonly<Partial<Record<CodeTable, readonly CodeEntry[
   AMA_REASON: AMA_REASONS,
   GROSS_UNIT: GROSS_UNITS,
   INSPECTION_RESULT: INSPECTION_RESULTS,
+  ATTACH_KIND: ATTACH_KINDS,
 };
 
 /**

@@ -57,14 +57,14 @@ export class FakeDeclarations implements DeclarationReader {
     this.status = "SUBMITTED";
   }
   /** Các lần điền đính kèm HYS: ghi lại và áp fillAttachmentSlot lên `fields` để test sau kiểm tra. */
-  readonly attachments: { dossierId: string; procedureCode: string; receiptNo: string; note: string; replaceSlot?: 1 | 2 | 3 }[] = [];
-  async fillAttachment(_ctx: { orgId: string }, dossierId: string, input: { procedureCode: string; receiptNo: string; note: string; replaceSlot?: 1 | 2 | 3 }) {
+  readonly attachments: { dossierId: string; attachKind: string; receiptNo: string; note: string; replaceSlot?: 1 | 2 | 3 }[] = [];
+  async fillAttachment(_ctx: { orgId: string }, dossierId: string, input: { attachKind: string; receiptNo: string; note: string; replaceSlot?: 1 | 2 | 3 }) {
     this.attachments.push({ dossierId, ...input });
     if (this.status !== "DRAFT" && this.status !== "APPROVED") return { outcome: "LOCKED" as const, afterApproval: false };
     const cur = this.payloadNow().fields;
     const values: AttachmentValues = {};
     for (const n of [1, 2, 3] as const) { values[`TK_EA${n}`] = cur[`TK_EA${n}`]?.value ?? ""; values[`TK_EB${n}`] = cur[`TK_EB${n}`]?.value ?? ""; }
-    const fill = fillAttachmentSlot(values, input.procedureCode, input.receiptNo, input.replaceSlot);
+    const fill = fillAttachmentSlot(values, input.attachKind, input.receiptNo, input.replaceSlot);
     for (const [k, v] of Object.entries(fill.set ?? {})) this.fields[k] = { value: v };
     return { outcome: fill.outcome, ...(fill.slot ? { slot: fill.slot } : {}), ...(fill.replaced ? { replaced: fill.replaced } : {}), afterApproval: this.status === "APPROVED" };
   }

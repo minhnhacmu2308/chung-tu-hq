@@ -13,6 +13,8 @@ export const CodeTableSchema = z.enum([
   // Bảng mã ghi ngay trong Phụ lục II (dữ liệu ở code-tables.ts, tra qua CODE_TABLES).
   "PACKAGE_KIND", "CARGO_CLASS", "PARTY_CLASS", "VALUATION_METHOD", "FREIGHT_CLASS", "INSURANCE_CLASS",
   "ADJUSTMENT_CODE", "ADJUSTMENT_KIND", "TAX_PAYER", "BP_REASON", "DUE_DATE", "AMA_REASON", "GROSS_UNIT", "INSPECTION_RESULT",
+  // Phân loại đính kèm khai báo điện tử 1.63/2.53 ô 1 (TK_EA) – VNACCS_IDA cột Category + phần mềm FPT.VNACCS (khác A546 của bản khai HYS).
+  "ATTACH_KIND",
   // Chỉ có trong danh mục VNACCS đầy đủ (code-lists): ngân hàng, mã áp dụng thuế suất thu khác, mã áp dụng mức thuế tuyệt đối,
   // mã thuế suất thuế nhập khẩu và mã sắc thuế (Hải quan trả về trên dòng hàng).
   "BANK", "OTHER_TAX", "ABS_TAX", "IMPORT_TAX_RATE_KIND", "TAX_KIND",

@@ -1,6 +1,6 @@
 // Nhãn thẻ HYS, form HYS, hộp xác nhận khai IDA/EDA khi còn gợi ý HYS (bước Khai báo Hải quan).
 import { defineMessages } from "@kb/ui";
-import { HYS_PROCEDURE_CODES } from "@kb/contracts";
+import { ATTACH_KINDS, HYS_PROCEDURE_CODES, type AttachKind } from "@kb/contracts";
 
 export const HYS_MESSAGES = defineMessages({
   vi: {
@@ -52,6 +52,13 @@ export const HYS_MESSAGES = defineMessages({
     procedure: "Phân loại thủ tục",
     pickProcedure: "Chọn mã thủ tục",
     searchProcedure: "Tìm mã thủ tục",
+    attachKind: "Phân loại đính kèm (ô {field})",
+    pickAttachKind: "Chọn phân loại đính kèm",
+    searchAttachKind: "Tìm phân loại",
+    attachKindAuto: "Đề xuất theo chứng từ đã chọn – đổi được",
+    attachKindSuggested: "Đề xuất theo chứng từ đã chọn: {code}",
+    useSuggested: "Dùng đề xuất",
+    attachKindRow: "Ô {field}: {code} – {name}",
     phone: "Số điện thoại",
     internalRef: "Số quản lý nội bộ",
     note: "Ghi chú",
@@ -143,6 +150,13 @@ export const HYS_MESSAGES = defineMessages({
     procedure: "Procedure type",
     pickProcedure: "Choose a procedure code",
     searchProcedure: "Search procedure codes",
+    attachKind: "Attachment type (box {field})",
+    pickAttachKind: "Choose an attachment type",
+    searchAttachKind: "Search types",
+    attachKindAuto: "Suggested from the selected documents – you can change it",
+    attachKindSuggested: "Suggested from the selected documents: {code}",
+    useSuggested: "Use suggestion",
+    attachKindRow: "Box {field}: {code} – {name}",
     phone: "Phone number",
     internalRef: "Internal reference",
     note: "Notes",
@@ -233,6 +247,13 @@ export const HYS_MESSAGES = defineMessages({
     procedure: "手续类别",
     pickProcedure: "选择手续代码",
     searchProcedure: "搜索手续代码",
+    attachKind: "附件类别（{field} 栏）",
+    pickAttachKind: "选择附件类别",
+    searchAttachKind: "搜索类别",
+    attachKindAuto: "根据所选单证建议，可更改",
+    attachKindSuggested: "根据所选单证建议：{code}",
+    useSuggested: "使用建议",
+    attachKindRow: "{field} 栏：{code} – {name}",
     phone: "电话号码",
     internalRef: "内部管理编号",
     note: "备注",
@@ -311,5 +332,30 @@ export const HYS_PROCEDURE_MESSAGES = defineMessages({
     A22: "按指引须随附申报的联运相关信息",
     A30: "进口道路交通工具信息",
     A99: "其他",
+  },
+});
+
+/** Tên mã phân loại đính kèm 1.63/2.53 ô 1 (bảng ATTACH_KIND): vi = tên theo phần mềm FPT trong @kb/contracts, en/zh = bản dịch. */
+export const ATTACH_KIND_MESSAGES = defineMessages<AttachKind>({
+  vi: Object.fromEntries(ATTACH_KINDS.map((e) => [e.code, e.label])) as Record<AttachKind, string>,
+  en: {
+    INV: "Invoice",
+    BOL: "Bill of lading",
+    AWB: "Air waybill",
+    INS: "Insurance",
+    CON: "Contract",
+    DM: "Material consumption norms",
+    ALL: "All documents",
+    ETC: "Other",
+  },
+  zh: {
+    INV: "发票",
+    BOL: "提单",
+    AWB: "空运单",
+    INS: "保险",
+    CON: "合同",
+    DM: "原材料消耗定额",
+    ALL: "全部单证",
+    ETC: "其他",
   },
 });

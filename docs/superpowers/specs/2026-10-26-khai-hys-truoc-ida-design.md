@@ -5,7 +5,7 @@ Nhánh: `feat/khai-hys-truoc-ida` (từ `main`). Tham chiếu: màn "HYS – Kha
 ## Bối cảnh
 
 - Hiện nay HYS là nghiệp vụ "phụ" của từng tờ khai, **chỉ mở sau khi có số tờ khai** (`customs-flow.ts`: `row("HYS", hasDeclarationNumber(...))`), gửi **toàn bộ** chứng từ của hồ sơ (`perform-operation.ts`), mã thủ tục cứng `A99` (`fpt-vnaccs-gateway.ts`), không điền số tiếp nhận vào tờ khai.
-- Nghiệp vụ thật: HYS là nghiệp vụ độc lập (màn FPT không có ô số tờ khai). Người khai gửi bộ file kèm **mã phân loại thủ tục** (bảng A546: A01 tờ khai trị giá, A02 danh sách container…), Hải quan trả **số tiếp nhận** (TK_JNO, 12 ký tự) + ngày; số này được ghi vào chỉ tiêu **1.63 (IDA) / 2.53 (EDA) "Số đính kèm khai báo điện tử"** – tối đa 3 cặp (TK_EA{n} = mã phân loại, TK_EB{n} = số đính kèm) – trước khi khai IDA/EDA.
+- Nghiệp vụ thật: HYS là nghiệp vụ độc lập (màn FPT không có ô số tờ khai). Người khai gửi bộ file kèm **mã phân loại thủ tục** (bảng A546: A01 tờ khai trị giá, A02 danh sách container…), Hải quan trả **số tiếp nhận** (TK_JNO, 12 ký tự) + ngày; số này được ghi vào chỉ tiêu **1.63 (IDA) / 2.53 (EDA) "Số đính kèm khai báo điện tử"** – tối đa 3 cặp (TK_EA{n} = **phân loại đính kèm** theo bảng `ATTACH_KIND` – INV/BOL/AWB/INS/CON/DM/ALL/ETC, **không phải** mã thủ tục A546; TK_EB{n} = số đính kèm) – trước khi khai IDA/EDA. Xem §2.5.
 
 ## Quyết định với người dùng (2026-10-26)
 
@@ -21,9 +21,9 @@ Nhánh: `feat/khai-hys-truoc-ida` (từ `main`). Tham chiếu: màn "HYS – Kha
 | H8 | Luật gợi ý | G1–G5 ở §5. IDA có container → gợi ý A02 ("thường phải khai, ai bỏ qua thì bỏ qua"). Không gợi ý A06 (bảo lãnh chung), A03. |
 
 Thuật ngữ:
-- **Bộ HYS**: một lần khai HYS = một mã thủ tục + danh sách file, áp cho cả lô.
+- **Bộ HYS**: một lần khai HYS = một mã thủ tục (A546 → TK_TSB) + một phân loại đính kèm (`attachKind` → TK_EA của 1.63/2.53) + danh sách file, áp cho cả lô.
 - **Lô còn sửa được**: tờ khai hiện hành của hồ sơ ở trạng thái `DRAFT` hoặc `APPROVED`, **mọi** tờ của lô chưa có kết quả truyền hoặc đang chờ gửi lại nội dung (`awaitingContent`: NOT_SENT / RECALLED / AMEND_RECALLED), và không có outbox nội dung (`isContentOperation`) đang PENDING. Gọi về một phần (D4 của spec tách tờ) khóa thông tin chung → **không** còn sửa được.
-- **Cặp 1.63**: (TK_EA{n}, TK_EB{n}), n = 1..3 (EDA: 2.53, cùng tên trường). Lưu trong `declarations.fields` dưới tên trường VNACCS (ô bổ sung, `isExtraFieldKey`).
+- **Cặp 1.63**: (TK_EA{n} = phân loại đính kèm, TK_EB{n} = số tiếp nhận), n = 1..3 (EDA: 2.53, cùng tên trường). Lưu trong `declarations.fields` dưới tên trường VNACCS (ô bổ sung, `isExtraFieldKey`).
 
 ## Quyết định kỹ thuật (dò code 2026-10-26)
 
@@ -51,6 +51,7 @@ Thuật ngữ:
 | `dossier_id` | text FK dossiers (cascade) | |
 | `seq` | int | thứ tự trong hồ sơ; unique (`dossier_id`, `seq`) |
 | `procedure_code` | text | A546 (`HysProcedureCode`) → TK_TSB |
+| `attach_kind` | text null | phân loại đính kèm điền vào TK_EA (bảng `ATTACH_KIND`, check 8 mã; migration `0030_hys_attach_kind`); null = chưa chọn – lúc gửi lưu đề xuất (§2.5) |
 | `customs_office` | text | TK_CH – điền sẵn từ tờ khai |
 | `processing_unit` | text | TK_CHB – điền sẵn từ tờ khai |
 | `phone` | text null | TK_STL (≤ 20) |
@@ -104,10 +105,10 @@ File upload riêng **không** vào bảng `documents` (không chạy AI, không 
 - **Hải quan từ chối** (gateway trả `errors`): `REJECTED`, lưu `reject`, outbox `SENT`, message IN ERROR. Sửa rồi gửi lại.
 - **Lỗi gửi** (ngoại lệ tạm thời): BullMQ thử lại; hết lượt (`markOutboxFailed`) hoặc lỗi vĩnh viễn (DomainError, không đọc được file – nêu tên file) → `SEND_FAILED`, lưu `reject`. Gửi lại = `sendHysSubmission` (cho phép từ `SEND_FAILED`) – trước khi gửi, nếu bộ đã có `receipt_no` thì không gửi, chỉ chuyển `ACCEPTED`.
 
-### 2.4 Điền cặp 1.63 / 2.53 – `fillAttachmentSlot(values, procedureCode, receiptNo, replaceSlot?)`
+### 2.4 Điền cặp 1.63 / 2.53 – `fillAttachmentSlot(values, attachKind, receiptNo, replaceSlot?)`
 Hàm thuần (`contracts`). `values` = `{ TK_EA1..3, TK_EB1..3 }` (chuỗi, có thể rỗng). Trả `{ outcome: "FILLED" | "ALREADY" | "FULL" | "REPLACED", slot?, set?, replaced? }`:
 1. Có cặp n với TK_EB{n} = `receiptNo` → `ALREADY`, `slot = n`.
-2. Cặp trống đầu tiên (TK_EB{n} trống sau trim), n = 1 → 3 → `FILLED`, `slot = n`, `set = { TK_EA{n}: procedureCode, TK_EB{n}: receiptNo }`.
+2. Cặp trống đầu tiên (TK_EB{n} trống sau trim), n = 1 → 3 → `FILLED`, `slot = n`, `set = { TK_EA{n}: attachKind, TK_EB{n}: receiptNo }`.
 3. Hết chỗ, có `replaceSlot` (người khai chọn khi gửi) → `REPLACED`, `slot = replaceSlot`, `set` = cặp mới, `replaced = { code, receipt }` (giá trị cũ); `field_audit` nguồn `HYS_FILL` ghi cũ → mới như khi điền.
 4. Hết chỗ, không có `replaceSlot` → `FULL`; thẻ HYS báo "Ô 1.63 đã đủ 3 số đính kèm – số này chưa được điền".
 
@@ -116,6 +117,14 @@ Hàm thuần (`contracts`). `values` = `{ TK_EA1..3, TK_EB1..3 }` (chuỗi, có 
 **Đủ 3 cặp khi gửi bộ mới (bổ sung 2026-10-26)**: lô còn sửa được mà 1.63/2.53 đã đủ 3 cặp có số (HYS điền hoặc nhập tay) → `sendHysSubmission` bắt buộc `replaceSlot` (1/2/3); thiếu → `VALIDATION` reason `HYS_SLOTS_FULL` (param `field` = "1.63"/"2.53"), không tạo outbox. `replaceSlot` đi trong payload outbox `{ submissionId, certificateId, replaceSlot }` (không thêm cột DB; parse Zod `HysOutboxPayloadSchema`), worker truyền vào `DeclarationReader.fillAttachment`. Lúc nhận số mà còn cặp trống thì vẫn điền cặp trống (`replaceSlot` bỏ qua). Lô không còn sửa được (`SUPPLEMENT`/LOCKED): không hỏi, không đụng 1.63. Bộ HYS cũ có số bị thay vẫn ở danh sách (Hải quan đã ghi nhận, không xóa được), kèm ghi chú "Không còn trong ô 1.63".
 
 Người khai vẫn sửa tay 1.63 như hiện nay.
+
+### 2.5 Phân loại đính kèm (TK_EA) – bảng `ATTACH_KIND` (sửa 2026-10-26)
+- Ô 1 của 1.63/2.53 (TK_EA1..3, ≤ 3 ký tự) dùng bảng mã riêng, nguồn `VNACCS_IDA v1.2.xlsx` cột Category của TK_EA + phần mềm FPT.VNACCS (DM): **INV** Hóa đơn, **BOL** B/L, **AWB** AWB, **INS** Bảo hiểm, **CON** Hợp đồng, **DM** Định mức nguyên vật liệu, **ALL** Tất cả hồ sơ, **ETC** Loại khác (`ATTACH_KINDS` trong `declaration/code-tables.ts`, danh mục `code-lists/data/ATTACH_KIND.json` để ô mã tra cứu). A546 (A01…A99) **chỉ** là phân loại thủ tục của bản khai HYS (TK_TSB). Bản trước ghi nhầm TK_EA = mã thủ tục – đã sửa: catalog 1.63/2.53 và layout `TK_EA{n}` dùng `ATTACH_KIND`.
+- Bộ HYS có `attachKind` (View/Create/Update DTO, cột `attach_kind`), tách khỏi `procedureCode`.
+- **Đề xuất** (`suggestAttachKind`, thuần): loại chứng từ hồ sơ đã chọn trong bộ → INVOICE/FREIGHT_INVOICE → INV, BILL_OF_LADING → BOL, AIR_WAYBILL → AWB, SALES_CONTRACT → CON, còn lại → ETC. Tập mã: rỗng (chỉ file tải riêng) → ETC; đúng 1 mã → mã đó; ≥ 2 mã khác nhau → ALL. INS, DM không suy ra được – người khai tự chọn.
+- Đề xuất chỉ áp khi người khai **chưa** tự chọn: form tự cập nhật theo chứng từ được tick (lưu `attachKind = null`) cho tới khi người khai chọn tay ("Dùng đề xuất" quay lại tự động); `sendHysSubmission` gặp `attachKind` null thì lưu đề xuất. Bộ gửi trước khi có cột (null lúc nhận số) → điền ETC.
+- Điền 1.63: TK_EA{n} = `attachKind`, TK_EB{n} = số tiếp nhận (ALREADY/FILLED/REPLACED/FULL như §2.4). Hộp chọn cặp cần thay hiện "Cặp n: {phân loại} / {số}" + tên phân loại; thông điệp REPLACED nêu phân loại cũ.
+- FPT: TK_EA đi lên IDA/EDA nguyên mã 3 ký tự (`applyExtras`, không ràng buộc A546).
 
 ### 2.5 Bỏ HYS cũ
 - `customs-flow`: bỏ `row("HYS", …)` khỏi các nghiệp vụ theo tờ, bỏ gợi ý HYS ở `nextCustomsOperation`, bỏ "HYS" khỏi `operationsFor`. `CustomsOperationSchema` **giữ** "HYS" (lịch sử outbox/messages).
@@ -126,7 +135,7 @@ Người khai vẫn sửa tay 1.63 như hiện nay.
 ## 3. Màn hình (apps/web)
 
 ### 3.1 Thẻ "Hồ sơ đính kèm (HYS)" – bước Khai báo Hải quan, trên danh sách tờ / nút IDA-EDA
-- Danh sách bộ: mã + tên thủ tục, số file + dung lượng, nhãn trạng thái, số tiếp nhận + ngày, kết quả điền 1.63 (`fill`).
+- Danh sách bộ: mã + tên thủ tục, phân loại đính kèm ô 1.63 (đã chọn hoặc đề xuất) + tên, số file + dung lượng, nhãn trạng thái, số tiếp nhận + ngày, kết quả điền 1.63 (`fill`).
 - Gợi ý chưa khai (§5): mỗi gợi ý một dòng (mã, lý do) + nút "Khai HYS".
 - Bộ bị từ chối / lỗi gửi: mã lỗi, nội dung, hướng xử lý.
 - Luồng vàng/đỏ: dòng nhắc khai HYS bổ sung.
@@ -135,7 +144,7 @@ Người khai vẫn sửa tay 1.63 như hiện nay.
 - Thông tin chung: cơ quan Hải quan, nhóm xử lý hồ sơ (CodeInput như tờ khai, không bắt buộc), phân loại thủ tục (chọn A546, hiện tên), số điện thoại, số quản lý nội bộ, ghi chú.
 - File: danh sách chứng từ hồ sơ để tick + `FileDropzone` "Tải file lên"; `Progress` "x / 2 MB" (vượt → tone danger); ghi chú các đuôi được nhận.
 - Nút: Lưu nháp · Gửi HYS (Dialog xác nhận, chọn chứng thư số như IDA) · Xóa (DRAFT/REJECTED/SEND_FAILED).
-- Lô còn sửa được và 1.63/2.53 đã đủ 3 cặp: hộp xác nhận gửi hiện `Alert` cảnh báo "Ô 1.63 đã đủ 3 số đính kèm" + `RadioGroup` "Cặp n: {mã} / {số}" (kèm tên thủ tục) – bắt buộc chọn cặp sẽ bị thay, chưa chọn thì nút "Ký số và gửi" khóa. Thẻ HYS (§3.1) cảnh báo trước "khi gửi bộ mới sẽ phải chọn 1 cặp để thay"; bộ thay cặp hiện "Đã thay cặp {n} ({mã cũ} / {số cũ}) bằng số {số}"; bộ bị thay ghi "Không còn trong ô 1.63".
+- Lô còn sửa được và 1.63/2.53 đã đủ 3 cặp: hộp xác nhận gửi hiện `Alert` cảnh báo "Ô 1.63 đã đủ 3 số đính kèm" + `RadioGroup` "Cặp n: {phân loại đính kèm} / {số}" (kèm tên phân loại) – bắt buộc chọn cặp sẽ bị thay, chưa chọn thì nút "Ký số và gửi" khóa. Thẻ HYS (§3.1) cảnh báo trước "khi gửi bộ mới sẽ phải chọn 1 cặp để thay"; bộ thay cặp hiện "Đã thay cặp {n} ({mã cũ} / {số cũ}) bằng số {số}"; bộ bị thay ghi "Không còn trong ô 1.63".
 
 ### 3.3 Xác nhận khai IDA/EDA khi còn gợi ý chưa khai (H2)
 - Áp dụng: lần khai IDA/EDA đầu (`submitDeclaration`) và khai lại IDA/EDA sau gọi về (`performOperation` op IDA/EDA). Không áp dụng IDC/EDC, gọi về, IDA01/EDA01, AMA, tờ 2..N do chuỗi nối tiếp của worker.
@@ -146,7 +155,8 @@ Người khai vẫn sửa tay 1.63 như hiện nay.
 - Ô 1.63/2.53 do HYS điền: nhãn nguồn "Hệ thống" (`ValueSource SYSTEM`) + ghi chú ô "HYS <seq> – <số>"; thêm "(điền sau khi duyệt)" khi `afterApproval`.
 
 ### 3.5 Chung
-- vi/en/zh đủ 3 bản (bất biến 12) – tên mã thủ tục A01… có bản dịch.
+- vi/en/zh đủ 3 bản (bất biến 12) – tên mã thủ tục A01… và tên phân loại đính kèm INV… (`ATTACH_KIND_MESSAGES`) có bản dịch.
+- Form HYS có ô "Phân loại đính kèm (ô 1.63/2.53)" (`Combobox` 8 mã + tên), gợi ý "Đề xuất theo chứng từ đã chọn".
 - Chỉ dùng `@kb/ui`.
 - Chế độ dữ liệu mock (`NEXT_PUBLIC_DATA_SOURCE=mock`): đủ danh sách, gợi ý, form, gửi (giả lập số tiếp nhận), điền 1.63, hộp xác nhận.
 
@@ -178,7 +188,7 @@ Chạy **một lần cho cả lô** trên thông tin chung (`values` = `declarat
 | G4 | IDA (1.58), EDA (2.48) | `TK_ENC` = A (bảo lãnh riêng) | A08 – chứng thư bảo lãnh riêng |
 | G5 | IDA (1.68), EDA (2.57) | `TK_NT2` dài hơn `maxLen` của chỉ tiêu ghi chú trong catalog | A99 – phần ghi chú còn lại |
 
-- Mã được coi là **đã khai** (`satisfied`) chỉ khi số tiếp nhận thật sự đã vào 1.63/2.53: 1.63/2.53 có cặp cùng mã và TK_EB khác rỗng (HYS đã điền, hoặc khai ngoài phần mềm và nhập tay); **hoặc** có bộ HYS cùng mã ở `ACCEPTED` với kết quả điền `FILLED`/`ALREADY`/`REPLACED` **mà số tiếp nhận của bộ vẫn còn trong TK_EB1..3** (bộ có số đã bị bộ sau thay cặp thì không còn tính – mã đó được gợi ý lại). Bộ `SENDING`, hay `ACCEPTED` mà `LOCKED`/`FULL`/`NO_RECEIPT`, **chưa** tính là đã khai → vẫn hiện hộp xác nhận bỏ qua thông thường (không chặn cứng). Lý do: khai IDA khi HYS còn đang gửi thì thông điệp IDA dựng không có số tiếp nhận. G2 và G5 cùng mã A99: một A99 đã khai thỏa cả hai.
+- **Đã khai** (`hysSatisfaction` → `{ codes, rules }`, sửa 2026-10-26 theo §2.5): (a) bộ HYS có `procedureCode` = mã gợi ý, `ACCEPTED`, **số tiếp nhận của bộ đang nằm trong TK_EB1..3** → đã khai mã đó (mọi rule sinh ra mã); bộ có số đã bị bộ sau thay cặp thì không còn tính – mã đó được gợi ý lại. (b) Cặp **nhập tay** (TK_EB có số không thuộc bộ HYS nào của hồ sơ) chỉ tính khi khớp rõ: TK_EA = INV → thỏa G2 (A99 do nhiều hóa đơn); TK_EA = ALL → thỏa mọi gợi ý; phân loại khác → không thỏa (vẫn nhắc, người khai có thể "Vẫn khai"). Bộ `SENDING`/chưa có số **chưa** tính → vẫn hiện hộp xác nhận bỏ qua thông thường (không chặn cứng). G2 và G5 cùng mã A99: A99 chỉ tắt khi mọi rule sinh ra A99 đều thỏa (cặp INV chỉ thỏa G2; G5 còn thì vẫn gợi ý A99); một bộ A99 đã khai thỏa cả hai.
 - `VALUATION_CODES_WITHOUT_A01 = ["6", "7"]` là hằng số riêng (căn cứ TT39/2015 sửa đổi TT60/2019 – chưa đối chiếu văn bản; chỉ là gợi ý).
 - Không có luật cho A03, A06 và các mã khác.
 

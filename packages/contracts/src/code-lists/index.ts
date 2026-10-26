@@ -5,7 +5,7 @@ import manifest from "./manifest.json" with { type: "json" };
 
 export const CODE_LIST_IDS = [
   "A038", "A014", "A202", "A016", "COUNTRY", "PACKAGE_KIND", "UNIT", "CURRENCY", "TYPE_CODE", "A520", "OTHER_TAX", "BANK", "TAX_TABLE", "ABS_TAX",
-  "A546", "A519", "A528", "CARGO_CLASS", "TRANSPORT_MODE", "PARTY_CLASS", "INVOICE_KIND", "PRICE_KIND", "PAYMENT", "INCOTERM", "VALUATION_METHOD",
+  "A546", "ATTACH_KIND", "A519", "A528", "CARGO_CLASS", "TRANSPORT_MODE", "PARTY_CLASS", "INVOICE_KIND", "PRICE_KIND", "PAYMENT", "INCOTERM", "VALUATION_METHOD",
   "FREIGHT_CLASS", "INSURANCE_CLASS", "ADJUSTMENT_CODE", "TAX_PAYER", "DUE_DATE", "GROSS_UNIT", "INSPECTION_RESULT", "BP_REASON",
   "IMPORT_TAX_RATE_KIND", "TAX_KIND",
   // Không thuộc tờ khai – giữ sẵn để tra cứu sau (hãng hàng không / tàu biển / tàu hỏa dùng cho manifest).
@@ -55,7 +55,7 @@ export function officeCodeAliases(code: string): string[] {
 
 /** Bảng mã của ô trên tờ khai → danh mục VNACCS. Không có → ô vẫn gõ tay, tên mã (nếu có) tra ở declaration/code-tables.ts. */
 const BY_TABLE: Partial<Record<CodeTable, CodeListId>> = {
-  A038: "A038", A014: "A014", A202: "A202", A016: "A016", A519: "A519", A520: "A520", A528: "A528", A546: "A546",
+  A038: "A038", A014: "A014", A202: "A202", A016: "A016", A519: "A519", A520: "A520", A528: "A528", A546: "A546", ATTACH_KIND: "ATTACH_KIND",
   A501: "UNIT", A527: "CURRENCY", UNIT: "UNIT", CURRENCY: "CURRENCY", COUNTRY: "COUNTRY", PACKAGE_KIND: "PACKAGE_KIND", TYPE_CODE: "TYPE_CODE",
   TAX_TABLE: "TAX_TABLE", PAYMENT: "PAYMENT", INCOTERM: "INCOTERM", TRANSPORT_MODE: "TRANSPORT_MODE", INVOICE_KIND: "INVOICE_KIND", PRICE_KIND: "PRICE_KIND",
   CARGO_CLASS: "CARGO_CLASS", PARTY_CLASS: "PARTY_CLASS", VALUATION_METHOD: "VALUATION_METHOD", FREIGHT_CLASS: "FREIGHT_CLASS", INSURANCE_CLASS: "INSURANCE_CLASS",

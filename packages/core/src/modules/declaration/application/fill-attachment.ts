@@ -1,4 +1,4 @@
-// Điền cặp phân loại + số đính kèm (1.63 IDA / 2.53 EDA) bằng số tiếp nhận HYS – hệ thống gọi từ worker, không kiểm vai trò.
+// Điền cặp phân loại đính kèm (TK_EA, bảng ATTACH_KIND) + số đính kèm (TK_EB) của 1.63 IDA / 2.53 EDA bằng số tiếp nhận HYS – hệ thống gọi từ worker, không kiểm vai trò.
 // Khác updateDeclarationField: cho cả DRAFT lẫn APPROVED và KHÔNG đổi status/approvedAt/version (đính kèm HYS không làm mất bản duyệt).
 import { extraFieldMeta, fillAttachmentSlot, type AttachmentValues } from "@kb/contracts";
 import type { OrgId, UserId } from "../../../shared/ids.js";
@@ -7,7 +7,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import type { DeclarationDeps, StoredField } from "./ports.js";
 
 /** `replaceSlot`: cặp người khai chọn thay khi 1.63/2.53 đã đủ 3 cặp có số (chỉ dùng khi không còn cặp trống). */
-export type FillAttachmentInput = { procedureCode: string; receiptNo: string; note: string; replaceSlot?: 1 | 2 | 3 };
+export type FillAttachmentInput = { attachKind: string; receiptNo: string; note: string; replaceSlot?: 1 | 2 | 3 };
 export type FillAttachmentResult = {
   outcome: "FILLED" | "ALREADY" | "FULL" | "REPLACED" | "LOCKED";
   slot?: 1 | 2 | 3;
@@ -34,7 +34,7 @@ export async function fillAttachmentFromHys(
       values[`TK_EA${n}`] = decl.fields[`TK_EA${n}`]?.value ?? "";
       values[`TK_EB${n}`] = decl.fields[`TK_EB${n}`]?.value ?? "";
     }
-    const fill = fillAttachmentSlot(values, input.procedureCode, input.receiptNo, input.replaceSlot);
+    const fill = fillAttachmentSlot(values, input.attachKind, input.receiptNo, input.replaceSlot);
     const afterApproval = decl.status === "APPROVED";
     if ((fill.outcome !== "FILLED" && fill.outcome !== "REPLACED") || !fill.set) return ok({ outcome: fill.outcome, ...(fill.slot ? { slot: fill.slot } : {}), afterApproval, changes: [] });
     const fields = { ...decl.fields };

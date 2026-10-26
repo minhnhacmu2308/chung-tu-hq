@@ -1,6 +1,6 @@
 // Soạn bộ HYS (hồ sơ đính kèm điện tử) trước IDA/EDA: tạo/sửa/xóa bộ, thêm/bớt file, tổng quan + gợi ý. Gửi: send-hys.ts; worker: process-hys.ts.
 import {
-  attachmentPairs, checkHysSubmission, declarationFormValues, HYS_PROCEDURE_CODES, hysExtensionAllowed, isContentOperation, satisfiedHysCodes, suggestHys,
+  attachmentPairs, checkHysSubmission, declarationFormValues, HYS_PROCEDURE_CODES, hysExtensionAllowed, hysSatisfaction, isContentOperation, suggestHys,
   type AttachmentValues, type CreateHysInput, type HysFileView, type HysOverview, type HysStatus, type HysSubmissionView, type UpdateHysInput,
 } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
@@ -16,7 +16,7 @@ const EDITABLE: readonly HysStatus[] = ["DRAFT", "REJECTED", "SEND_FAILED"];
 export const HYS_ROLES = ["DECLARANT", "APPROVER", "ADMIN"] as const;
 const firstToken = (v: string): string => v.split(/\s*[–-]\s*/)[0]!.trim();
 
-/** Giá trị ô form của tờ khai (tên VNACCS) cho luật HYS; mã phân loại TK_EA* chuẩn hóa về mã ("A02 – …" → "A02"). */
+/** Giá trị ô form của tờ khai (tên VNACCS) cho luật HYS; phân loại đính kèm TK_EA* chuẩn hóa về mã ("INV – …" → "INV"). */
 export function hysValuesOf(snap: Pick<DeclarationSnapshot, "payload">): Record<string, string> {
   const { kind, fields } = snap.payload;
   const values: Record<string, string> = declarationFormValues(kind, Object.entries(fields).map(([code, f]) => ({ code, value: f.value })));
@@ -40,7 +40,7 @@ function officeDefaults(snap: DeclarationSnapshot | null): { customsOffice: stri
 function toView(row: HysSubmissionRow, files: HysFileRow[]): HysSubmissionView {
   const fileViews: HysFileView[] = files.map((f) => ({ id: f.id, documentId: f.documentId, fileName: f.fileName, mime: f.mime, sizeBytes: f.sizeBytes, source: f.documentId ? "DOSSIER" : "UPLOAD" }));
   return {
-    id: row.id, seq: row.seq, procedureCode: row.procedureCode, customsOffice: row.customsOffice, processingUnit: row.processingUnit, phone: row.phone ?? "", internalRef: row.internalRef ?? "", note: row.note,
+    id: row.id, seq: row.seq, procedureCode: row.procedureCode, attachKind: row.attachKind, customsOffice: row.customsOffice, processingUnit: row.processingUnit, phone: row.phone ?? "", internalRef: row.internalRef ?? "", note: row.note,
     purpose: row.purpose, status: row.status, attempt: row.attempt, receiptNo: row.receiptNo, registeredOn: row.registeredOn, reject: row.reject, fill: row.fill, files: fileViews,
     issues: checkHysSubmission({ procedureCode: row.procedureCode, customsOffice: row.customsOffice, processingUnit: row.processingUnit, phone: row.phone, internalRef: row.internalRef, note: row.note, files: files.map((f) => ({ fileName: f.fileName, sizeBytes: f.sizeBytes })) }),
     sentAt: row.sentAt ? row.sentAt.toISOString() : null,
@@ -68,11 +68,11 @@ export function lotEditableOf(snap: Pick<DeclarationSnapshot, "status"> | null, 
   });
 }
 
-/** Gợi ý HYS còn thiếu của tờ khai: số tiếp nhận đã vào 1.63/2.53 (bộ ACCEPTED điền được mà số còn trong 1.63, hoặc nhập tay đủ cặp mã + số) thì không gợi ý. Dùng chung tổng quan và guard khai IDA/EDA. */
-export function pendingHysSuggestions(snap: Pick<DeclarationSnapshot, "payload">, rows: Pick<HysSubmissionRow, "procedureCode" | "status" | "receiptNo" | "fill">[]): HysOverview["suggestions"] {
+/** Gợi ý HYS còn thiếu của tờ khai: bộ ACCEPTED có số còn trong 1.63/2.53, hoặc cặp nhập tay khớp rõ (INV → G2, ALL → mọi gợi ý) thì không gợi ý (hysSatisfaction). Dùng chung tổng quan và guard khai IDA/EDA. */
+export function pendingHysSuggestions(snap: Pick<DeclarationSnapshot, "payload">, rows: Pick<HysSubmissionRow, "procedureCode" | "status" | "receiptNo">[]): HysOverview["suggestions"] {
   const values = hysValuesOf(snap);
   const cells = Object.keys(values).filter((k) => /^CON_C\d+$/.test(k)).length;
-  const satisfied = satisfiedHysCodes(values as AttachmentValues, rows.filter((x) => x.procedureCode !== null).map((x) => ({ procedureCode: x.procedureCode!, status: x.status, receiptNo: x.receiptNo, fill: x.fill })));
+  const satisfied = hysSatisfaction(values as AttachmentValues, rows);
   return suggestHys({ kind: snap.payload.kind, values, containerCount: Math.max(snap.payload.containers.length, cells), satisfied });
 }
 
@@ -109,7 +109,7 @@ export async function createHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId
   const view = await deps.uow.asOrg(ctx, async (r) => {
     const seq = (await r.hys.list(ctx.orgId, dossierId)).reduce((m, x) => Math.max(m, x.seq), 0) + 1;
     const row: HysSubmissionRow = {
-      id: deps.idGen.next("hys"), orgId: ctx.orgId, dossierId, seq, procedureCode: input.procedureCode ?? null, ...defaults, phone: null, internalRef: dossier.code.slice(0, 20), note: null,
+      id: deps.idGen.next("hys"), orgId: ctx.orgId, dossierId, seq, procedureCode: input.procedureCode ?? null, attachKind: input.attachKind ?? null, ...defaults, phone: null, internalRef: dossier.code.slice(0, 20), note: null,
       purpose: null, status: "DRAFT", attempt: 0, receiptNo: null, registeredOn: null, reject: null, fill: null, sentBy: null, sentAt: null, createdAt: now, updatedAt: now,
     };
     await r.hys.insert(row);
@@ -135,6 +135,7 @@ export async function updateHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId
     // Patch chỉ chứa khóa có giá trị (không truyền undefined).
     const patch: Partial<HysSubmissionRow> = { updatedAt: now };
     if (input.procedureCode !== undefined) patch.procedureCode = input.procedureCode;
+    if (input.attachKind !== undefined) patch.attachKind = input.attachKind;
     if (input.customsOffice !== undefined) patch.customsOffice = input.customsOffice;
     if (input.processingUnit !== undefined) patch.processingUnit = input.processingUnit;
     if (input.phone !== undefined) patch.phone = input.phone;

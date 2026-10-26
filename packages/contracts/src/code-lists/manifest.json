@@ -203,11 +203,22 @@
     },
     {
       "id": "A546",
-      "title": "Phân loại đính kèm khai báo điện tử",
+      "title": "Phân loại thủ tục khai HYS (TK_TSB)",
       "sources": [
         "20.DM_KHAI_HYS_GANCODE"
       ],
       "count": 14,
+      "inactive": 0,
+      "hasParent": false
+    },
+    {
+      "id": "ATTACH_KIND",
+      "title": "Phân loại đính kèm khai báo điện tử (1.63 / 2.53)",
+      "sources": [
+        "VNACCS_IDA v1.2 (cột Category TK_EA)",
+        "Phần mềm FPT.VNACCS (DM)"
+      ],
+      "count": 8,
       "inactive": 0,
       "hasParent": false
     },

@@ -130,3 +130,15 @@ describe("bảng mã ghi trong Phụ lục II", () => {
     expect(TAX_TABLES.some((x) => /EVFTA|CPTPP|RCEP|UKVFTA|VKFTA/.test(x.label))).toBe(false);
   });
 });
+
+describe("ATTACH_KIND – phân loại đính kèm 1.63/2.53 ô 1 (TK_EA)", () => {
+  it("8 mã theo VNACCS_IDA cột Category + phần mềm FPT (DM), tối đa 3 ký tự", () => {
+    expect(codes(CODE_TABLES.ATTACH_KIND ?? [])).toEqual(["INV", "BOL", "AWB", "INS", "CON", "DM", "ALL", "ETC"]);
+    expect((CODE_TABLES.ATTACH_KIND ?? []).every((e) => e.code.length <= 3)).toBe(true);
+    expect(CODE_TABLES.ATTACH_KIND?.find((e) => e.code === "DM")?.label).toBe("Định mức nguyên vật liệu");
+  });
+  it("1.63 / 2.53 dùng ATTACH_KIND (A546 chỉ là phân loại thủ tục của bản khai HYS)", () => {
+    expect(byNo("1.63").codeTable).toBe("ATTACH_KIND");
+    expect(byNo("2.53").codeTable).toBe("ATTACH_KIND");
+  });
+});

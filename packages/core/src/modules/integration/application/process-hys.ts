@@ -151,7 +151,7 @@ export async function processHysOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Out
 }
 
 /**
- * Điền cặp 1.63/2.53 (spec §2.3): có số ∧ bộ khai trước tờ khai ∧ lô còn sửa được (tính lại lúc này) → fillAttachment (đủ 3 cặp → thay cặp replaceSlot);
+ * Điền cặp 1.63/2.53 (spec §2.3) – TK_EA = phân loại đính kèm của bộ, TK_EB = số tiếp nhận: có số ∧ bộ khai trước tờ khai ∧ lô còn sửa được (tính lại lúc này) → fillAttachment (đủ 3 cặp → thay cặp replaceSlot);
  * không có số → NO_RECEIPT; ngược lại → LOCKED (không sửa tờ khai – tránh đổi nội dung đã gửi). Ghi kết quả vào bộ.
  */
 async function fillDeclaration(deps: CustomsDeps, ctx: ActorCtx, sub: HysSubmissionRow, replaceSlot: 1 | 2 | 3 | undefined): Promise<void> {
@@ -161,7 +161,8 @@ async function fillDeclaration(deps: CustomsDeps, ctx: ActorCtx, sub: HysSubmiss
     const snap = await deps.declarations.get(ctx.orgId, sub.dossierId);
     const { results, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, sub.dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, sub.dossierId) }));
     if (sub.purpose === "PRE_DECLARATION" && lotEditableOf(snap, results, outbox)) {
-      const res = await deps.declarations.fillAttachment(ctx, sub.dossierId, { procedureCode: sub.procedureCode ?? "", receiptNo: sub.receiptNo, note: `HYS ${sub.seq} – ${sub.receiptNo}`, ...(replaceSlot ? { replaceSlot } : {}) });
+      // TK_EA = phân loại đính kèm (lưu lúc gửi); bộ gửi trước khi có cột attach_kind → ETC (loại khác).
+      const res = await deps.declarations.fillAttachment(ctx, sub.dossierId, { attachKind: sub.attachKind ?? "ETC", receiptNo: sub.receiptNo, note: `HYS ${sub.seq} – ${sub.receiptNo}`, ...(replaceSlot ? { replaceSlot } : {}) });
       fill = { outcome: res.outcome, ...(res.slot ? { slot: res.slot } : {}), ...(res.replaced ? { replaced: res.replaced } : {}), afterApproval: res.afterApproval };
     } else fill = { outcome: "LOCKED" };
   }

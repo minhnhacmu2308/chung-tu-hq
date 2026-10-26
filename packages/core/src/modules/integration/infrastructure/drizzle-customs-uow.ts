@@ -17,7 +17,7 @@ function repos(tx: Tx): CustomsRepos {
     };
   };
   const amendmentCols = (row: PostAmendmentRow) => ({ status: row.status, header: row.header, lines: row.lines, approvedBy: row.approvedBy ?? null, approvedAt: row.approvedAt, result: row.result ?? null, updatedAt: row.updatedAt });
-  const toHys = (r: typeof hysSubmissions.$inferSelect): HysSubmissionRow => ({ ...r, purpose: r.purpose as HysSubmissionRow["purpose"], status: r.status as HysSubmissionRow["status"], reject: r.reject as HysSubmissionRow["reject"], fill: r.fill as HysSubmissionRow["fill"] });
+  const toHys = (r: typeof hysSubmissions.$inferSelect): HysSubmissionRow => ({ ...r, attachKind: r.attachKind as HysSubmissionRow["attachKind"], purpose: r.purpose as HysSubmissionRow["purpose"], status: r.status as HysSubmissionRow["status"], reject: r.reject as HysSubmissionRow["reject"], fill: r.fill as HysSubmissionRow["fill"] });
   return {
     outbox: {
       get: async (orgId, id) => {

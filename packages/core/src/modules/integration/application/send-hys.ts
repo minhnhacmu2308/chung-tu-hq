@@ -1,6 +1,6 @@
 // Gửi bộ HYS (spec §2.2): kiểm bộ + chứng thư → một giao dịch (attempt+1, SENDING, purpose, outbox `hys:<id>:n<attempt>`) → xếp job customs-send.
 // Không đòi tờ khai đã duyệt / HS xác nhận / không BLOCKER (HYS khai trước IDA). Gửi lại sau SEND_FAILED mà bộ đã có số tiếp nhận → chỉ chuyển ACCEPTED.
-import { attachmentPairs, checkHysSubmission, HYS_MAX_SLOTS, type AttachmentValues, type HysIssue, type HysSubmissionView, type SendHysInput } from "@kb/contracts";
+import { attachmentPairs, checkHysSubmission, HYS_MAX_SLOTS, suggestAttachKind, type AttachmentValues, type HysIssue, type HysSubmissionView, type SendHysInput } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -13,6 +13,7 @@ const describeIssues = (issues: HysIssue[]): string => issues.map((i) => [i.code
 /**
  * Lô còn sửa được mà 1.63/2.53 đã đủ 3 cặp có số → bắt buộc `replaceSlot` (cặp sẽ bị thay khi Hải quan cấp số), thiếu → HYS_SLOTS_FULL.
  * `replaceSlot` đi trong payload outbox (không có cột riêng).
+ * Phân loại đính kèm (TK_EA) chưa chọn → lưu đề xuất theo chứng từ hồ sơ đã chọn trong bộ (suggestAttachKind) lúc gửi.
  */
 export async function sendHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: string, id: string, input: SendHysInput): Promise<Result<HysSubmissionView>> {
   const allowed = requireRole(ctx, ...HYS_ROLES);
@@ -40,6 +41,7 @@ export async function sendHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: 
   const { certificateId, replaceSlot } = input;
   if (!certificateId || !(await deps.certificates.exists(ctx.orgId, certificateId))) return err(reasonError("NO_CERT", "CERTIFICATE_REQUIRED"));
 
+  const docs = await deps.dossiers.documents(ctx.orgId, dossierId);
   const sent = await deps.uow.asOrg(ctx, async (r) => {
     const cur = await editable(r, ctx.orgId, dossierId, id);
     if (!cur.ok) return cur;
@@ -50,6 +52,7 @@ export async function sendHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: 
     const lotEditable = lotEditableOf(snap, await r.results.listForDossier(ctx.orgId, dossierId), await r.outbox.listForDossier(ctx.orgId, dossierId));
     const slotsFull = attachmentPairs(hysValuesOf(snap) as AttachmentValues).length >= HYS_MAX_SLOTS;
     if (lotEditable && slotsFull && !replaceSlot) return err(reasonError("VALIDATION", "HYS_SLOTS_FULL", { field: snap.payload.kind === "IDA" ? "1.63" : "2.53" }));
+    const attachKind = row.attachKind ?? suggestAttachKind(files.flatMap((f) => docs.filter((d) => d.id === f.documentId).map((d) => d.kind)));
     const attempt = row.attempt + 1;
     const outbox: OutboxRow = {
       id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, declarationId: snap.declarationId, operation: "HYS", idempotencyKey: `hys:${id}:n${attempt}`,
@@ -61,7 +64,7 @@ export async function sendHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: 
       if (/duplicate key|unique/i.test(e instanceof Error ? e.message : String(e))) return err(domainError("ALREADY_SUBMITTED", "Bộ HYS đang được gửi – không gửi trùng"));
       throw e;
     }
-    await r.hys.update(ctx.orgId, id, { attempt, status: "SENDING", purpose: lotEditable ? "PRE_DECLARATION" : "SUPPLEMENT", reject: null, fill: null, sentBy: ctx.userId, sentAt: now, updatedAt: now });
+    await r.hys.update(ctx.orgId, id, { attempt, attachKind, status: "SENDING", purpose: lotEditable ? "PRE_DECLARATION" : "SUPPLEMENT", reject: null, fill: null, sentBy: ctx.userId, sentAt: now, updatedAt: now });
     return ok({ outboxId: outbox.id, view: await viewOf(r, ctx.orgId, id) });
   });
   if (!sent.ok) return sent;

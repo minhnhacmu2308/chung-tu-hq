@@ -1,10 +1,10 @@
 "use client";
 // Thẻ "Hồ sơ đính kèm (HYS)" ở bước Khai báo Hải quan (spec §3.1): gợi ý chưa khai + nút "Khai HYS", danh sách bộ (trạng thái,
-// số tiếp nhận, kết quả điền 1.63/2.53), bộ bị từ chối / lỗi gửi, nhắc khai bổ sung khi luồng vàng/đỏ. Mở form HYS (panel).
+// phân loại đính kèm TK_EA, số tiếp nhận, kết quả điền 1.63/2.53), bộ bị từ chối / lỗi gửi, nhắc khai bổ sung khi luồng vàng/đỏ. Mở form HYS (panel).
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, fill, formatBytes, SkeletonList, Stack, StatusBadge, useMessages, useUiLocale,
 } from "@kb/ui";
-import { HYS_MAX_SLOTS, type HysProcedureCode, type HysSubmissionView } from "@kb/contracts";
+import { HYS_MAX_SLOTS, type DossierDocument, type HysProcedureCode, type HysSubmissionView } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Paperclip, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -13,9 +13,9 @@ import { createHys, getHysOverview, hysKeys } from "@/api/hys";
 import { LoadError } from "@/components/common/load-error";
 import { formatDate } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
-import { HysForm, hysEditable, putHysSubmission } from "./hys-form";
+import { HysForm, hysEditable, putHysSubmission, suggestedAttachKind } from "./hys-form";
 import { useRuleText } from "./hys-suggest-dialog";
-import { HYS_MESSAGES, HYS_PROCEDURE_MESSAGES } from "./hys.messages";
+import { ATTACH_KIND_MESSAGES, HYS_MESSAGES, HYS_PROCEDURE_MESSAGES } from "./hys.messages";
 
 const HYS_STATUS = {
   DRAFT: "HYS_DRAFT", SENDING: "HYS_SENDING", ACCEPTED: "HYS_ACCEPTED", REJECTED: "HYS_REJECTED", SEND_FAILED: "HYS_SEND_FAILED",
@@ -132,7 +132,7 @@ export function HysCard({ dossierId, kind, startCode = null, onStartHandled }: H
             ) : (
               <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
                 {q.data.submissions.map((s) => (
-                  <SubmissionRow key={s.id} s={s} field={field} inField={!s.receiptNo || receiptsInField.has(s.receiptNo)} onOpen={() => setOpenId(s.id)} />
+                  <SubmissionRow key={s.id} s={s} documents={documents} field={field} inField={!s.receiptNo || receiptsInField.has(s.receiptNo)} onOpen={() => setOpenId(s.id)} />
                 ))}
               </ul>
             )}
@@ -157,9 +157,12 @@ export function HysCard({ dossierId, kind, startCode = null, onStartHandled }: H
 }
 
 /** `inField`: số tiếp nhận của bộ còn nằm trong 1.63/2.53 (sai khi đã bị bộ sau thay cặp). */
-function SubmissionRow({ s, field, inField, onOpen }: { s: HysSubmissionView; field: string; inField: boolean; onOpen: () => void }) {
+function SubmissionRow({ s, documents, field, inField, onOpen }: { s: HysSubmissionView; documents: readonly DossierDocument[]; field: string; inField: boolean; onOpen: () => void }) {
   const t = useMessages(HYS_MESSAGES);
   const names = useMessages(HYS_PROCEDURE_MESSAGES);
+  const kindNames = useMessages(ATTACH_KIND_MESSAGES);
+  // Chưa chọn phân loại đính kèm → đề xuất theo chứng từ hồ sơ trong bộ (như lúc gửi).
+  const attachKind = s.attachKind ?? suggestedAttachKind(s.files.flatMap((f) => (f.documentId ? [f.documentId] : [])), documents);
   const locale = useUiLocale();
   const size = s.files.reduce((sum, f) => sum + f.sizeBytes, 0);
   const code = s.procedureCode as HysProcedureCode | null;
@@ -181,6 +184,7 @@ function SubmissionRow({ s, field, inField, onOpen }: { s: HysSubmissionView; fi
             <StatusBadge status={HYS_STATUS[s.status]} />
           </div>
           <p className="text-sm text-fg-muted">{fill(t.filesInfo, { n: s.files.length, size: formatBytes(size, locale) })}</p>
+          <p className="text-sm text-fg-muted">{fill(t.attachKindRow, { field, code: attachKind, name: kindNames[attachKind] })}</p>
           {s.receiptNo && (
             <p className="text-sm text-fg">
               {fill(t.receipt, { no: s.receiptNo, date: s.registeredOn ? formatDate(s.registeredOn) : "" })}

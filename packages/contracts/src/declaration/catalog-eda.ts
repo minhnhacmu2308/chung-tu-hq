@@ -236,8 +236,8 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
 
   // ── Đính kèm, vận chuyển kết hợp, ghi chú, Vanning, container ─────
   f("2.53", "GENERAL", "Số đính kèm khai báo điện tử", "code", "C", {
-    maxLen: 3, codeTable: "A546", fptField: "VN_EDA.TK_EA1", manual: true,
-    legalNote: "Tối đa 3: ô 1 mã phân loại đính kèm HYS (TK_EA1..3); ô 2 số đính kèm do HYS cấp (TK_EB1..3).",
+    maxLen: 3, codeTable: "ATTACH_KIND", fptField: "VN_EDA.TK_EA1", manual: true,
+    legalNote: "Tối đa 3 cặp: ô 1 phân loại đính kèm (TK_EA1..3: INV hóa đơn, BOL, AWB, INS bảo hiểm, CON hợp đồng, DM định mức NVL, ALL tất cả hồ sơ, ETC loại khác – không phải mã thủ tục A546); ô 2 số tiếp nhận do HYS cấp (TK_EB1..3).",
   }),
   f("2.54", "TRANSPORT", "Ngày khởi hành vận chuyển", "date", "C", {
     fptField: "VN_EDA.TK_DPD", manual: true,

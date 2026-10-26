@@ -17,8 +17,8 @@ let deps: CustomsDeps;
 beforeEach(() => {
   h = makeHarness();
   ({ deps } = h);
-  // Đã khai HYS (1.63 nhập tay) → guard HYS_SUGGESTED không chen vào các ca khai tạm.
-  h.decls.fields = { TK_EA1: { value: "A02" }, TK_EB1: { value: "300000000001" } };
+  // Đã khai HYS (1.63 nhập tay phân loại ALL – thỏa mọi gợi ý) → guard HYS_SUGGESTED không chen vào các ca khai tạm.
+  h.decls.fields = { TK_EA1: { value: "ALL" }, TK_EB1: { value: "300000000001" } };
 });
 /** Dòng hàng có id (ô HANG.<id>.*). */
 const withIds = (n: number): DeclarationPayload["items"] => lines(n).map((it) => ({ ...it, id: `it${it.lineNo}` }));

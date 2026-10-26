@@ -279,8 +279,8 @@ const CATALOG_IDA_GENERAL: DeclarationFieldDef[] = [
 
   // ── Đính kèm, vận chuyển kết hợp, ghi chú, chỉ thị HQ ──────────────
   f("1.63", "GENERAL", "Số đính kèm khai báo điện tử", "code", "C", {
-    maxLen: 3, codeTable: "A546", fptField: "VN_IDA.TK_EA1", manual: true,
-    legalNote: "Tối đa 3: ô 1 mã phân loại đính kèm khai báo điện tử HYS (TK_EA1..3); ô 2 số đính kèm do HYS cấp (TK_EB1..3).",
+    maxLen: 3, codeTable: "ATTACH_KIND", fptField: "VN_IDA.TK_EA1", manual: true,
+    legalNote: "Tối đa 3 cặp: ô 1 phân loại đính kèm (TK_EA1..3: INV hóa đơn, BOL, AWB, INS bảo hiểm, CON hợp đồng, DM định mức NVL, ALL tất cả hồ sơ, ETC loại khác – không phải mã thủ tục A546); ô 2 số tiếp nhận do HYS cấp (TK_EB1..3).",
   }),
   f("1.64", "TRANSPORT", "Ngày được phép nhập kho đầu tiên", "date", "C", {
     fptField: "VN_IDA_VANDON.VD_ISD", manual: true,

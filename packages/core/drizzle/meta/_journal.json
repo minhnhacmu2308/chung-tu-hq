@@ -211,6 +211,13 @@
       "when": 1793014038810,
       "tag": "0029_hys_submissions",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793027714327,
+      "tag": "0030_hys_attach_kind",
+      "breakpoints": true
     }
   ]
 }

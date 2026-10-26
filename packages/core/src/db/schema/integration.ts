@@ -126,6 +126,8 @@ export const hysSubmissions = pgTable(
       .references(() => dossiers.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
     procedureCode: text("procedure_code"),
+    /** Phân loại đính kèm điền vào TK_EA 1.63/2.53 (bảng ATTACH_KIND); null = chưa chọn – lúc gửi lấy đề xuất theo chứng từ. */
+    attachKind: text("attach_kind"),
     customsOffice: text("customs_office"),
     processingUnit: text("processing_unit"),
     phone: text("phone"),
@@ -147,6 +149,7 @@ export const hysSubmissions = pgTable(
     index("hys_submissions_org_dossier_idx").on(t.orgId, t.dossierId),
     check("hys_submissions_status_chk", sql`status in ('DRAFT', 'SENDING', 'ACCEPTED', 'REJECTED', 'SEND_FAILED')`),
     check("hys_submissions_purpose_chk", sql`purpose is null or purpose in ('PRE_DECLARATION', 'SUPPLEMENT')`),
+    check("hys_submissions_attach_kind_chk", sql`attach_kind is null or attach_kind in ('INV', 'BOL', 'AWB', 'INS', 'CON', 'DM', 'ALL', 'ETC')`),
     orgRls("hys_submissions_rls"),
   ],
 ).enableRLS();

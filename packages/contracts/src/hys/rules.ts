@@ -1,5 +1,7 @@
+import type { DocKind } from "../common.js";
 import { CATALOG_EDA } from "../declaration/catalog-eda.js";
 import { CATALOG_IDA } from "../declaration/catalog-ida.js";
+import type { AttachKind } from "../declaration/code-tables.js";
 import { HYS_REQUEST_ROWS, type HysProcedureCode } from "../fpt/hys.js";
 
 /** Luật thuần HYS (hồ sơ đính kèm điện tử): kiểm bộ file, điền cặp 1.63/2.53, gợi ý G1–G5. */
@@ -64,13 +66,13 @@ export function checkHysSubmission(s: HysSubmissionInput): HysIssue[] {
 
 export type AttachmentValues = Partial<Record<"TK_EA1" | "TK_EA2" | "TK_EA3" | "TK_EB1" | "TK_EB2" | "TK_EB3", string>>;
 
-/** Mã đầu chuỗi: "A08 – Bảo lãnh riêng" → "A08". */
+/** Mã đầu chuỗi: "INV – Hóa đơn" → "INV". */
 const firstToken = (v: string): string => v.split(/\s*[–-]\s*/)[0]!.trim();
 
 export type AttachmentSlot = 1 | 2 | 3;
 export type AttachmentPair = { slot: AttachmentSlot; code: string; receipt: string };
 
-/** Các cặp 1.63/2.53 đang có số tiếp nhận (TK_EB{n} khác rỗng – HYS điền hoặc nhập tay), theo thứ tự cặp; mã chuẩn hóa ("A02 – …" → "A02"). */
+/** Các cặp 1.63/2.53 đang có số tiếp nhận (TK_EB{n} khác rỗng – HYS điền hoặc nhập tay), theo thứ tự cặp; mã phân loại đính kèm chuẩn hóa ("INV – …" → "INV"). */
 export function attachmentPairs(values: AttachmentValues): AttachmentPair[] {
   const out: AttachmentPair[] = [];
   for (const n of [1, 2, 3] as const) {
@@ -81,12 +83,12 @@ export function attachmentPairs(values: AttachmentValues): AttachmentPair[] {
 }
 
 /**
- * Điền (mã thủ tục, số tiếp nhận) vào cặp 1.63/2.53 còn trống đầu tiên; đã có số này thì không điền lại.
+ * Điền (phân loại đính kèm TK_EA, số tiếp nhận TK_EB) vào cặp 1.63/2.53 còn trống đầu tiên; đã có số này thì không điền lại.
  * Hết cặp trống: có `replaceSlot` (người khai đã chọn) → thay cặp đó (REPLACED, kèm giá trị cũ); không có → FULL.
  */
 export function fillAttachmentSlot(
   values: AttachmentValues,
-  procedureCode: string,
+  attachKind: string,
   receiptNo: string,
   replaceSlot?: AttachmentSlot,
 ): {
@@ -102,7 +104,7 @@ export function fillAttachmentSlot(
   }
   for (const n of slots) {
     if (blank(values[`TK_EB${n}`])) {
-      return { outcome: "FILLED", slot: n, set: { [`TK_EA${n}`]: procedureCode, [`TK_EB${n}`]: receipt } };
+      return { outcome: "FILLED", slot: n, set: { [`TK_EA${n}`]: attachKind, [`TK_EB${n}`]: receipt } };
     }
   }
   if (replaceSlot !== undefined) {
@@ -110,7 +112,7 @@ export function fillAttachmentSlot(
     return {
       outcome: "REPLACED",
       slot: n,
-      set: { [`TK_EA${n}`]: procedureCode, [`TK_EB${n}`]: receipt },
+      set: { [`TK_EA${n}`]: attachKind, [`TK_EB${n}`]: receipt },
       replaced: { code: firstToken(values[`TK_EA${n}`] ?? ""), receipt: (values[`TK_EB${n}`] ?? "").trim() },
     };
   }
@@ -128,11 +130,17 @@ const noteMaxLen = (kind: "IDA" | "EDA"): number => {
   return (kind === "IDA" ? CATALOG_IDA : CATALOG_EDA).find((d) => d.no === no)?.maxLen ?? Number.POSITIVE_INFINITY;
 };
 
+/**
+ * Gợi ý đã được thỏa: `codes` – mã thủ tục đã khai bằng bộ HYS (tắt mọi rule của mã); `rules` – rule thỏa nhờ cặp 1.63/2.53 nhập tay
+ * (INV → G2, ALL → mọi rule). Một mã do nhiều rule sinh ra (A99: G2, G5) chỉ tắt khi mọi rule sinh ra nó đều thỏa.
+ */
+export type HysSatisfaction = { codes: ReadonlySet<string>; rules: ReadonlySet<HysRule> };
+
 export function suggestHys(input: {
   kind: "IDA" | "EDA";
   values: Record<string, string>;
   containerCount: number;
-  satisfied: ReadonlySet<string>;
+  satisfied: HysSatisfaction;
 }): HysSuggestion[] {
   const { kind, values, containerCount, satisfied } = input;
   const ida = kind === "IDA";
@@ -160,30 +168,61 @@ export function suggestHys(input: {
 
   const seen = new Set<string>();
   return all.filter((s) => {
-    if (satisfied.has(s.code) || seen.has(s.code)) return false;
+    if (satisfied.codes.has(s.code) || satisfied.rules.has(s.rule) || seen.has(s.code)) return false;
     seen.add(s.code);
     return true;
   });
 }
 
+const ALL_RULES: readonly HysRule[] = ["G1", "G2", "G3", "G4", "G5"];
+
 /**
- * Mã đã khai = số tiếp nhận thật sự đã nằm trong 1.63/2.53: cặp TK_EA{n}=mã có TK_EB{n} (HYS điền hoặc nhập tay)
- * ∪ bộ ACCEPTED đã điền được (fill FILLED/ALREADY/REPLACED) mà số tiếp nhận của bộ VẪN còn trong TK_EB1..3
- * (bị bộ sau thay cặp → không còn tính). Bộ SENDING, hay ACCEPTED mà LOCKED/FULL/NO_RECEIPT, chưa tính.
+ * Đã khai (spec §3.3):
+ * - bộ HYS ACCEPTED có số tiếp nhận đang nằm trong TK_EB1..3 → đã khai mã thủ tục của bộ (bộ bị thay cặp – số không còn – không tính);
+ * - cặp nhập tay (TK_EB có số không thuộc bộ HYS nào của hồ sơ) chỉ tính khi khớp rõ: TK_EA = INV → G2 (nhiều hóa đơn, A99);
+ *   ALL → mọi gợi ý. Phân loại khác → không thỏa (vẫn nhắc, người khai có thể "Vẫn khai").
  */
-export function satisfiedHysCodes(
+export function hysSatisfaction(
   values: AttachmentValues,
-  submissions: { procedureCode: string; status: string; receiptNo: string | null; fill: { outcome: string } | null }[],
-): Set<string> {
-  const out = new Set<string>();
+  submissions: { procedureCode: string | null; status: string; receiptNo: string | null }[],
+): HysSatisfaction {
+  const codes = new Set<string>();
+  const rules = new Set<HysRule>();
   const pairs = attachmentPairs(values);
-  const receipts = new Set(pairs.map((p) => p.receipt));
+  const inSlots = new Set(pairs.map((p) => p.receipt));
+  const ofSubmissions = new Set(submissions.flatMap((s) => (s.receiptNo ? [s.receiptNo.trim()] : [])));
   for (const s of submissions) {
-    const filled = s.fill?.outcome === "FILLED" || s.fill?.outcome === "ALREADY" || s.fill?.outcome === "REPLACED";
-    if (s.status === "ACCEPTED" && filled && s.receiptNo != null && receipts.has(s.receiptNo.trim())) out.add(s.procedureCode);
+    if (s.status === "ACCEPTED" && s.procedureCode && s.receiptNo != null && inSlots.has(s.receiptNo.trim())) codes.add(s.procedureCode);
   }
   for (const p of pairs) {
-    if (p.code !== "") out.add(p.code);
+    if (ofSubmissions.has(p.receipt)) continue;
+    if (p.code === "INV") rules.add("G2");
+    if (p.code === "ALL") for (const r of ALL_RULES) rules.add(r);
   }
-  return out;
+  return { codes, rules };
+}
+
+const ATTACH_KIND_OF_DOC: Record<DocKind, AttachKind> = {
+  INVOICE: "INV",
+  FREIGHT_INVOICE: "INV",
+  BILL_OF_LADING: "BOL",
+  AIR_WAYBILL: "AWB",
+  SALES_CONTRACT: "CON",
+  PACKING_LIST: "ETC",
+  CERT_OF_ORIGIN: "ETC",
+  ARRIVAL_NOTICE: "ETC",
+  OTHER: "ETC",
+};
+
+/** Phân loại đính kèm (1.63/2.53 ô 1) của một loại chứng từ hồ sơ. INS, DM không suy ra được từ chứng từ – người khai tự chọn. */
+export function attachKindOfDoc(kind: DocKind): AttachKind {
+  return ATTACH_KIND_OF_DOC[kind];
+}
+
+/** Đề xuất phân loại đính kèm theo chứng từ hồ sơ đã chọn trong bộ: không có (chỉ file tải riêng) → ETC; một mã → mã đó; ≥ 2 mã → ALL. */
+export function suggestAttachKind(docKinds: readonly DocKind[]): AttachKind {
+  const kinds = new Set(docKinds.map(attachKindOfDoc));
+  if (kinds.size === 0) return "ETC";
+  if (kinds.size === 1) return [...kinds][0]!;
+  return "ALL";
 }

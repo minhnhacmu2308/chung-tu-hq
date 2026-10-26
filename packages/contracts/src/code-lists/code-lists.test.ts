@@ -57,6 +57,12 @@ describe("danh mục VNACCS (02_DANHMUC_VNACCS → code-lists)", () => {
     for (const t of ["GROSS_UNIT", "INSPECTION_RESULT", "IMPORT_TAX_RATE_KIND", "TAX_KIND"] as const) expect(codeListFor(t)).toBe(t);
   });
 
+  it("1.63 / 2.53 ô 1 (TK_EA) tra danh mục ATTACH_KIND – chép đúng bảng ATTACH_KINDS (code-tables.ts)", async () => {
+    expect(codeListFor("ATTACH_KIND")).toBe("ATTACH_KIND");
+    for (const layout of [LAYOUT_IDA, LAYOUT_EDA]) expect(layoutFields(layout).find((x) => x.key === "TK_EA1")).toMatchObject({ input: "code", codeTable: "ATTACH_KIND" });
+    expect(await loadCodeList("ATTACH_KIND")).toEqual((CODE_TABLES.ATTACH_KIND ?? []).map((e) => ({ code: e.code, name: e.label })));
+  });
+
   it("ô ngân hàng (trả thuế thay, bảo lãnh), mã áp dụng thuế suất thu khác, mã áp dụng mức thuế tuyệt đối có bảng mã", () => {
     for (const layout of [LAYOUT_IDA, LAYOUT_EDA]) {
       const f = (k: string) => layoutFields(layout).find((x) => x.key === k);

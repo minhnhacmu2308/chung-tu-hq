@@ -301,6 +301,14 @@ describe("declaration-to-fpt – Đợt 5: chỉ tiêu theo tình huống ngư�
     expect(b.issues).toEqual([]);
   });
 
+  it.each([["IDA", PAYLOAD, "objVN_IDA"], ["EDA", EDA, "objVN_EDA"]] as const)("%s 1.63/2.53: phân loại đính kèm (INV, ALL, DM…) + số tiếp nhận HYS gửi nguyên mã 3 ký tự (không ràng buộc A546)", (_k, base, obj) => {
+    const d = withFields(base, { TK_EA1: "INV", TK_EB1: "300000000001", TK_EA2: "ALL", TK_EB2: "300000000002", TK_EA3: "DM", TK_EB3: "300000000003" });
+    expect((d.request as unknown as Record<string, Obj>)[obj]).toMatchObject({
+      tK_EA1: "INV", tK_EB1: 300000000001, tK_EA2: "ALL", tK_EB2: 300000000002, tK_EA3: "DM", tK_EB3: 300000000003,
+    });
+    expect(d.issues).toEqual([]);
+  });
+
   it("chưa nhập (hoặc chỉ khoảng trắng) → không gửi trường nào", () => {
     const keys = ["TK_NMC", "TK_EPC", "TK_ENM", "TK_BP", "TK_BRC", "TK_BYA", "TK_ENC", "TK_SBC", "TK_DPD", "TK_ST1", "TK_ARP", "TK_IV2"];
     const r = withFields(PAYLOAD, { TK_ENC: " ", TK_BYA: "" }).request as Req;

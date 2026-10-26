@@ -104,7 +104,7 @@ export function taxPaymentBlocks(k: Kind): LayoutBlock[] {
 export function attachmentBlocks(k: Kind): LayoutBlock[] {
   const no = n(k);
   return [
-    { id: "dinh-kem", title: "Số đính kèm khai báo điện tử", items: [rep("Đính kèm", no("1.63", "2.53"), 3, [fld("TK_EA{n}", "Phân loại đính kèm", "code", { codeTable: "A546", width: "xs" }), fld("TK_EB{n}", "Số đính kèm (HYS)", "text", { width: "md" })])] },
+    { id: "dinh-kem", title: "Số đính kèm khai báo điện tử", items: [rep("Đính kèm", no("1.63", "2.53"), 3, [fld("TK_EA{n}", "Phân loại đính kèm", "code", { codeTable: "ATTACH_KIND", width: "xs" }), fld("TK_EB{n}", "Số đính kèm (HYS)", "text", { width: "md" })])] },
     {
       id: "ghi-chu", title: "Ghi chú và quản lý nội bộ", items: [
         fld("TK_NT2", "Phần ghi chú", "textarea", { no: no("1.68", "2.57"), width: "full" }),

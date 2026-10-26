@@ -55,15 +55,21 @@ describe("khai IDA lần đầu", () => {
     const c = await createHysSubmission(h.deps, declarant, D, { procedureCode: "A02" });
     if (!c.ok) throw new Error("create");
     Object.assign(h.uow.data.hys.find((x) => x.id === c.value.id)!, { status: "ACCEPTED", receiptNo: "300000000001", fill: { outcome: "FILLED", slot: 1 } });
-    h.decls.fields = { TK_EA1: { value: "A99" }, TK_EB1: { value: "300000000009" } };
+    h.decls.fields = { TK_EA1: { value: "ETC" }, TK_EB1: { value: "300000000009" } };
     const r = await submit();
     expect(!r.ok && r.error.reason).toBe("HYS_SUGGESTED");
   });
 
-  it("1.63 nhập tay A02 + số tiếp nhận → không hỏi", async () => {
-    h.decls.fields = { TK_EA1: { value: "A02" }, TK_EB1: { value: "300000000001" } };
+  it("1.63 nhập tay ALL + số tiếp nhận → không hỏi", async () => {
+    h.decls.fields = { TK_EA1: { value: "ALL" }, TK_EB1: { value: "300000000001" } };
     expect((await submit()).ok).toBe(true);
     expect(notes()).toEqual([]);
+  });
+
+  it("1.63 nhập tay phân loại khác (BOL) + số → vẫn hỏi (không khớp rõ gợi ý A02)", async () => {
+    h.decls.fields = { TK_EA1: { value: "BOL" }, TK_EB1: { value: "300000000001" } };
+    const r = await submit();
+    expect(!r.ok && r.error.reason).toBe("HYS_SUGGESTED");
   });
 
   it("hysWaived nhưng outbox không tạo được (đã truyền – ALREADY_SUBMITTED) → không NOTE, không nhật ký", async () => {

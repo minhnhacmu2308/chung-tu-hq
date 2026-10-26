@@ -98,6 +98,15 @@ function curatedCountryNames() {
   return new Map([...block.matchAll(/code: "([A-Z]{2})", label: "([^"]+)"/g)].map((m) => [m[1], m[2]]));
 }
 
+/** Bảng mã gọn trong code-tables.ts (danh mục không có trong 02_DANHMUC_VNACCS) → mục danh mục. */
+function curatedEntries(name) {
+  const src = readFileSync(join(ROOT, "packages/contracts/src/declaration/code-tables.ts"), "utf8");
+  const start = src.indexOf(`export const ${name}:`);
+  if (start < 0) throw new Error(`Không thấy bảng ${name} trong code-tables.ts`);
+  const block = src.slice(start, src.indexOf("];", start));
+  return [...block.matchAll(/code: "([^"]+)", label: "([^"]+)"/g)].map((m) => entry(m[1], m[2]));
+}
+
 /* ---------- Từng danh mục ---------- */
 const LISTS = [];
 const add = (id, title, sources, entries, extra = {}) => LISTS.push({ id, title, sources, entries: dedupe(entries), ...extra });
@@ -165,7 +174,11 @@ add("OTHER_TAX", "Mã áp dụng thuế suất / mức thuế và thu khác", [s
 add("BANK", "Ngân hàng", [sourceOf("25.DM_NGANHANG")], sheet("25.DM_NGANHANG").slice(1).map((r) => entry(r[0], r[1], { inactive: r[2] === "False" })));
 add("TAX_TABLE", "Mã biểu thuế nhập khẩu", [sourceOf("26.DM_BIEUTHUE")], sheet("26.DM_BIEUTHUE").filter((r) => /^B\d+$/.test(r[1])).map((r) => entry(r[1], r[2], { note: r[3] })));
 add("ABS_TAX", "Mã áp dụng mức thuế tuyệt đối", [sourceOf("22.DM_THUESUATTUYETDOI")], sheet("22.DM_THUESUATTUYETDOI_GANCODE__2").filter((r) => /^\d+$/.test(r[0])).map((r) => entry(r[0], r[1], { note: r[2] ? `${r[2]} ${r[4]}/${r[3]}` : "" })));
-add("A546", "Phân loại đính kèm khai báo điện tử", [sourceOf("20.DM_KHAI_HYS")], sheet("20.DM_KHAI_HYS").filter((r) => /^A\d{2}$/.test(r[0])).map((r) => entry(r[0], r[1])));
+// A546 = phân loại THỦ TỤC của bản khai HYS (TK_TSB); ô 1 của 1.63/2.53 (TK_EA) dùng ATTACH_KIND bên dưới.
+add("A546", "Phân loại thủ tục khai HYS (TK_TSB)", [sourceOf("20.DM_KHAI_HYS")], sheet("20.DM_KHAI_HYS").filter((r) => /^A\d{2}$/.test(r[0])).map((r) => entry(r[0], r[1])));
+// ATTACH_KIND – phân loại đính kèm 1.63/2.53 ô 1 (TK_EA): không có trong 02_DANHMUC_VNACCS – chép bảng ATTACH_KINDS (code-tables.ts),
+// nguồn VNACCS_IDA v1.2.xlsx cột Category của TK_EA + phần mềm FPT.VNACCS (mã DM).
+add("ATTACH_KIND", "Phân loại đính kèm khai báo điện tử (1.63 / 2.53)", ["VNACCS_IDA v1.2 (cột Category TK_EA)", "Phần mềm FPT.VNACCS (DM)"], curatedEntries("ATTACH_KINDS"));
 { // A519 / A528 – mã văn bản pháp quy và mã phân loại giấy phép (bản cập nhật 08/05/2026 thay cho bản 19/01/2024)
   const p = "3. C"; const rows = sheet(p);
   const laws = rows.filter((r) => /^[A-Z0-9]{2}$/.test(r[5])).map((r) => entry(r[5], [r[1], r[3]].filter(Boolean).join(" – "), { note: r[6] }));

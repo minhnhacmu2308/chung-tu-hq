@@ -22,7 +22,7 @@ Bảng mã gọn của backend (chuẩn hóa trích xuất, đối chiếu) ở 
 
 <!-- BEGIN danh-muc (sinh bởi scripts/code-lists/build-index.ts – không sửa tay) -->
 
-41 danh mục, dữ liệu ở `packages/contracts/src/code-lists/data/<ID>.json` (mỗi mục `{ code, name, parent?, note?, inactive? }`). "–" = chưa gắn chỉ tiêu tờ khai (giữ để tra cứu).
+42 danh mục, dữ liệu ở `packages/contracts/src/code-lists/data/<ID>.json` (mỗi mục `{ code, name, parent?, note?, inactive? }`). "–" = chưa gắn chỉ tiêu tờ khai (giữ để tra cứu).
 
 | ID | Danh mục | File nguồn | Số mã | Chỉ tiêu tờ khai dùng | Ghi chú |
 |---|---|---|---:|---|---|
@@ -40,7 +40,8 @@ Bảng mã gọn của backend (chuẩn hóa trích xuất, đối chiếu) ở 
 | `BANK` | Ngân hàng | 25.DM_NGANHANG | 1354 | EDA 2.44, EDA 2.49, IDA 1.54, IDA 1.59 |  |
 | `TAX_TABLE` | Mã biểu thuế nhập khẩu | 26.DM_BIEUTHUE | 29 | IDA 1.80 |  |
 | `ABS_TAX` | Mã áp dụng mức thuế tuyệt đối | 22.DM_THUESUATTUYETDOI_GANCODE | 7 | IDA 1.82 |  |
-| `A546` | Phân loại đính kèm khai báo điện tử | 20.DM_KHAI_HYS_GANCODE | 14 | EDA 2.53, IDA 1.63 |  |
+| `A546` | Phân loại thủ tục khai HYS (TK_TSB) | 20.DM_KHAI_HYS_GANCODE | 14 | – |  |
+| `ATTACH_KIND` | Phân loại đính kèm khai báo điện tử (1.63 / 2.53) | VNACCS_IDA v1.2 (cột Category TK_EA), Phần mềm FPT.VNACCS (DM) | 8 | EDA 2.53, IDA 1.63 |  |
 | `A519` | Mã văn bản pháp quy | 3. CẬP NHẬT MÃ VĂN BẢN 08052026 | 130 | EDA 2.80, IDA 1.37 | thay 6.DM_VANBANPHAPQUY_PHANLOAIGIAYPHEP |
 | `A528` | Mã phân loại giấy phép | 3. CẬP NHẬT MÃ VĂN BẢN 08052026 | 140 | EDA 2.33, IDA 1.38 | thay 6.DM_VANBANPHAPQUY_PHANLOAIGIAYPHEP |
 | `CARGO_CLASS` | Mã phân loại hàng hóa | 29.DM_GANCODE | 11 | EDA 2.5, IDA 1.5 |  |
@@ -85,7 +86,7 @@ Không phải bảng mã mà là quy định / đặc tả → đã chuyển th�
 | `Phu luc 2 - Chi tieu thong tin khai hai quan_TT38.doc`, `…_TT39.doc` | Phụ lục 2 TT 38/2015, sửa bởi TT 39/2018: chỉ tiêu tờ khai, độ dài, bắt buộc, hướng dẫn khai | Catalog chỉ tiêu `packages/contracts/src/declaration/catalog-ida*.ts`, `catalog-eda.ts` (`legalNote`, `maxLen`, M/C); luật `packages/core/src/modules/validation/domain/rules/*` |
 | `121_2025_TT-BTC_SuaDoi_TT38_TT39_ThuTucHQ.docx`, `121_2025_PhuLucI_SuaDoi_ChiTieuKhaiBao_PL2.doc` | TT 121/2025 sửa đổi TT 38 / TT 39 và Phụ lục chỉ tiêu | Cập nhật catalog chỉ tiêu (xem `RA-SOAT-CHI-TIEU-TO-KHAI.md`) |
 | `2061_TCHQ-GSQL_438964.docx` | CV 2061/TCHQ-GSQL: hàng chương 84/85 khai mã văn bản MO / CU | Luật `validation/domain/rules/law-mo-cu.ts`, ánh xạ `declaration/domain/mapping/ida.ts` |
-| `VNACCS_IDA v1.2.xlsx`, `VNACCS_EDA v1.2.xlsx` | Đặc tả bản tin IDA / EDA (trường, độ dài, kiểu) | Schema FPT `packages/contracts/src/fpt/ida.ts`, `eda.ts`; `integration/domain/declaration-to-fpt.ts` |
+| `VNACCS_IDA v1.2.xlsx`, `VNACCS_EDA v1.2.xlsx` | Đặc tả bản tin IDA / EDA (trường, độ dài, kiểu) | Schema FPT `packages/contracts/src/fpt/ida.ts`, `eda.ts`; `integration/domain/declaration-to-fpt.ts`. Cột Category của `TK_EA` (VNACCS_IDA) → bảng mã `ATTACH_KIND` (`declaration/code-tables.ts`): INV, BOL, AWB, INS, CON, ALL, ETC – cộng `DM` (định mức nguyên vật liệu) theo phần mềm FPT.VNACCS; tên mã theo phần mềm FPT. Dùng cho 1.63 / 2.53 ô 1 – **khác** `A546` (A01…A99) là phân loại thủ tục của bản khai HYS (`TK_TSB`) |
 | `VNACCS_AMA v1.3.xlsx`, `TK_AMA_(chua_dang_ky / da_dang_ky / da_chap_nhan).pdf` | Đặc tả bản khai bổ sung sau thông quan AMA và mẫu in | `integration/domain/post-amendment.ts`, `contracts/src/declaration-layout/amend.ts` |
 | `VNACCS_HYS v1.2.xlsx` | Đặc tả khai hồ sơ đính kèm (HYS) của FPT | Schema `packages/contracts/src/fpt/hys.ts` |
 | `HYS/6001-1_HYS_Service Specification.docx`, `HYS/6001-2_HYS_Input_Data_Element.xlsx` | Đặc tả nghiệp vụ VNACCS 6001 HYS (đối tượng, giới hạn, chỉ tiêu nhập M/C) | Luật `packages/contracts/src/hys/rules.ts`; đối chiếu ở spec `superpowers/specs/2026-10-26-khai-hys-truoc-ida-design.md` §10 |

@@ -137,7 +137,7 @@ describe("DrizzleCustomsUow – trạng thái theo nhánh tờ khai", () => {
 
 describe("DrizzleCustomsUow – bộ HYS", () => {
   const sub = (id: string, seq: number, patch: Partial<HysSubmissionRow> = {}): HysSubmissionRow => ({
-    id, orgId: "org_anphat", dossierId: "dos_hys", seq, procedureCode: "A546", customsOffice: "03CE", processingUnit: "00", phone: null, internalRef: "HS-1", note: null, purpose: null, status: "DRAFT", attempt: 0,
+    id, orgId: "org_anphat", dossierId: "dos_hys", seq, procedureCode: "A02", attachKind: null, customsOffice: "03CE", processingUnit: "00", phone: null, internalRef: "HS-1", note: null, purpose: null, status: "DRAFT", attempt: 0,
     receiptNo: null, registeredOn: null, reject: null, fill: null, sentBy: null, sentAt: null, createdAt: now, updatedAt: now, ...patch,
   });
   const file = (id: string, submissionId: string, position: number, patch: Partial<HysFileRow> = {}): HysFileRow => ({ id, orgId: "org_anphat", submissionId, documentId: null, storageKey: `orgs/org_anphat/${id}`, fileName: `${id}.pdf`, mime: "application/pdf", sizeBytes: 100, position, createdAt: now, ...patch });
@@ -162,9 +162,9 @@ describe("DrizzleCustomsUow – bộ HYS", () => {
     const sentAt = new Date("2026-10-26T03:04:05Z");
     const reject = [{ code: "E1", message: "Lỗi", solution: "Sửa" }];
     const fill = { outcome: "FILLED", slot: 1 } as const;
-    await uow.asOrg(A, (r) => r.hys.update("org_anphat", "hys_1", { status: "ACCEPTED", attempt: 1, receiptNo: "0001234567", registeredOn: "2026-10-26", reject, fill, sentBy: "usr_chau", sentAt, purpose: "PRE_DECLARATION", updatedAt: sentAt }));
+    await uow.asOrg(A, (r) => r.hys.update("org_anphat", "hys_1", { status: "ACCEPTED", attachKind: "INV", attempt: 1, receiptNo: "0001234567", registeredOn: "2026-10-26", reject, fill, sentBy: "usr_chau", sentAt, purpose: "PRE_DECLARATION", updatedAt: sentAt }));
     const got = await uow.asOrg(A, (r) => r.hys.get("org_anphat", "hys_1"));
-    expect(got).toMatchObject({ status: "ACCEPTED", attempt: 1, receiptNo: "0001234567", registeredOn: "2026-10-26", reject, fill, sentBy: "usr_chau", purpose: "PRE_DECLARATION" });
+    expect(got).toMatchObject({ status: "ACCEPTED", attachKind: "INV", attempt: 1, receiptNo: "0001234567", registeredOn: "2026-10-26", reject, fill, sentBy: "usr_chau", purpose: "PRE_DECLARATION" });
     expect(got?.sentAt?.toISOString()).toBe(sentAt.toISOString());
     await uow.asOrg(A, (r) => r.hys.deleteFile("org_anphat", "hf_a"));
     expect((await uow.asOrg(A, (r) => r.hys.files("org_anphat", "hys_1"))).map((f) => f.id)).toEqual(["hf_b"]);
@@ -174,9 +174,11 @@ describe("DrizzleCustomsUow – bộ HYS", () => {
     expect(await uow.asOrg(A, (r) => r.hys.get("org_anphat", "hys_2"))).toBeNull();
   });
 
-  it("trùng (dossier, seq) bị chặn; trạng thái lạ bị CHECK chặn", async () => {
+  it("trùng (dossier, seq) bị chặn; trạng thái / phân loại đính kèm lạ bị CHECK chặn", async () => {
     await expect(uow.asOrg(A, (r) => r.hys.insert(sub("hys_dup", 1)))).rejects.toThrow();
     await expect(uow.asOrg(A, (r) => r.hys.insert(sub("hys_bad", 9, { status: "LA" as HysSubmissionRow["status"] })))).rejects.toThrow();
+    // Phân loại đính kèm chỉ nhận 8 mã ATTACH_KIND – mã thủ tục A546 (A02…) bị CHECK chặn.
+    await expect(uow.asOrg(A, (r) => r.hys.insert(sub("hys_bad_kind", 10, { attachKind: "A02" as HysSubmissionRow["attachKind"] })))).rejects.toThrow();
   });
 
   it("xóa bộ cascade file; xóa hồ sơ cascade bộ", async () => {

@@ -3,7 +3,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { HysOverview, HysSubmissionView } from "@kb/contracts";
+import type { DossierDocument, HysOverview, HysSubmissionView } from "@kb/contracts";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { HysCard } from "./hys-card";
 import { HysForm } from "./hys-form";
@@ -29,7 +29,7 @@ vi.mock("@/api/dossiers", async (orig) => {
 const T = { timeout: 5000 };
 
 const submission = (over: Partial<HysSubmissionView> = {}): HysSubmissionView => ({
-  id: "hys_1", seq: 1, procedureCode: "A02", customsOffice: "02CI", processingUnit: "00", phone: "", internalRef: "HS-0001", note: null,
+  id: "hys_1", seq: 1, procedureCode: "A02", attachKind: null, customsOffice: "02CI", processingUnit: "00", phone: "", internalRef: "HS-0001", note: null,
   purpose: null, status: "DRAFT", attempt: 0, receiptNo: null, registeredOn: null, reject: null, fill: null, files: [], issues: [], sentAt: null,
   ...over,
 });
@@ -123,25 +123,25 @@ describe("HysForm", () => {
 });
 
 const FULL_SLOTS: HysOverview["attachmentSlots"] = [
-  { slot: 1, code: "A01", receipt: "300000000001" },
-  { slot: 2, code: "A02", receipt: "300000000002" },
-  { slot: 3, code: "A08", receipt: "300000000003" },
+  { slot: 1, code: "INV", receipt: "300000000001" },
+  { slot: 2, code: "BOL", receipt: "300000000002" },
+  { slot: 3, code: "CON", receipt: "300000000003" },
 ];
 
 describe("HYS – 1.63 đã đủ 3 cặp", () => {
   it("thẻ: cảnh báo đủ 3 cặp; bộ bị thay ghi 'Không còn trong ô 1.63'; bộ thay cặp nêu cặp cũ", async () => {
     api.overview = overview({
       suggestions: [],
-      attachmentSlots: [FULL_SLOTS[0]!, { slot: 2, code: "A99", receipt: "300000000009" }, FULL_SLOTS[2]!],
+      attachmentSlots: [FULL_SLOTS[0]!, { slot: 2, code: "ALL", receipt: "300000000009" }, FULL_SLOTS[2]!],
       submissions: [
         submission({ status: "ACCEPTED", receiptNo: "300000000002", fill: { outcome: "FILLED", slot: 2 } }),
-        submission({ id: "hys_2", seq: 2, procedureCode: "A99", status: "ACCEPTED", receiptNo: "300000000009", fill: { outcome: "REPLACED", slot: 2, replaced: { code: "A02", receipt: "300000000002" }, afterApproval: true } }),
+        submission({ id: "hys_2", seq: 2, procedureCode: "A99", status: "ACCEPTED", receiptNo: "300000000009", fill: { outcome: "REPLACED", slot: 2, replaced: { code: "BOL", receipt: "300000000002" }, afterApproval: true } }),
       ],
     });
     const { container } = renderWithProviders(<HysCard dossierId="dos_001" kind="IDA" />);
     expect(await screen.findByText(/Ô 1\.63 đã đủ 3 số đính kèm – khi gửi bộ mới sẽ phải chọn 1 cặp để thay/, {}, T)).toBeTruthy();
     expect(screen.getAllByText("Không còn trong ô 1.63")).toHaveLength(1);
-    expect(screen.getByText(/Đã thay cặp 2 \(A02 \/ 300000000002\) bằng số 300000000009/).textContent).toContain("(điền sau khi duyệt)");
+    expect(screen.getByText(/Đã thay cặp 2 \(BOL \/ 300000000002\) bằng số 300000000009/).textContent).toContain("(điền sau khi duyệt)");
     await expectNoA11yViolations(container);
   }, 20_000);
 
@@ -165,7 +165,9 @@ describe("HYS – 1.63 đã đủ 3 cặp", () => {
     await within(dialog).findAllByText(/CTY AN PHAT/, {}, T);
     expect(confirm.disabled).toBe(true);
     await expectNoA11yViolations(dialog);
-    await userEvent.click(within(group).getByRole("radio", { name: /Cặp 2: A02 \/ 300000000002/ }));
+    // Cặp hiện mã phân loại đính kèm (TK_EA) + tên phân loại.
+    expect(within(group).getByText("B/L")).toBeTruthy();
+    await userEvent.click(within(group).getByRole("radio", { name: /Cặp 2: BOL \/ 300000000002/ }));
     expect(confirm.disabled).toBe(false);
     await userEvent.click(confirm);
     await vi.waitFor(() => expect(api.send).toHaveBeenCalledWith("dos_001", "hys_1", { certificateId: "cert_1", replaceSlot: 2 }));
@@ -181,6 +183,49 @@ describe("HYS – 1.63 đã đủ 3 cặp", () => {
     await within(dialog).findAllByText(/CTY AN PHAT/, {}, T);
     await userEvent.click(within(dialog).getByRole("button", { name: "Ký số và gửi" }));
     await vi.waitFor(() => expect(api.send).toHaveBeenCalledWith("dos_001", "hys_1", { certificateId: "cert_1" }));
+  }, 20_000);
+});
+
+const doc = (id: string, kind: DossierDocument["kind"], fileName: string): DossierDocument => ({ id, dossierId: "dos_001", kind, fileName, sizeBytes: 1000, pages: 1, status: "DONE", uploadedAt: "2026-10-26T01:00:00Z" });
+const DOCS = [doc("doc_inv", "INVOICE", "inv.pdf"), doc("doc_bl", "BILL_OF_LADING", "bl.pdf")];
+
+describe("HysForm – phân loại đính kèm (ô 1.63)", () => {
+  it("đề xuất theo chứng từ tick: chưa tick → ETC, 1 hóa đơn → INV, thêm B/L → ALL; Lưu gửi attachKind null (tự đề xuất); a11y", async () => {
+    renderWithProviders(<HysForm dossierId="dos_001" kind="IDA" submission={submission()} documents={DOCS} open onOpenChange={vi.fn()} lotEditable attachmentSlots={[]} />);
+    const dialog = await screen.findByRole("dialog", { name: "Bộ HYS 1" }, T);
+    const box = () => within(dialog).getByRole("combobox", { name: "Phân loại đính kèm (ô 1.63)" });
+    expect(box().textContent).toContain("ETC");
+    expect(within(dialog).getByText("Đề xuất theo chứng từ đã chọn – đổi được")).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole("checkbox", { name: /inv\.pdf/ }));
+    expect(box().textContent).toContain("INV");
+    await userEvent.click(within(dialog).getByRole("checkbox", { name: /bl\.pdf/ }));
+    expect(box().textContent).toContain("ALL");
+    await expectNoA11yViolations(dialog);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Lưu nháp" }));
+    await vi.waitFor(() => expect(api.update).toHaveBeenCalledWith("dos_001", "hys_1", expect.objectContaining({ attachKind: null, documentIds: ["doc_inv", "doc_bl"] })));
+  }, 20_000);
+
+  it("đã chọn tay (INS) → tick thêm không đổi; 'Dùng đề xuất' quay về đề xuất", async () => {
+    renderWithProviders(<HysForm dossierId="dos_001" kind="EDA" submission={submission({ attachKind: "INS" })} documents={DOCS} open onOpenChange={vi.fn()} lotEditable attachmentSlots={[]} />);
+    const dialog = await screen.findByRole("dialog", { name: "Bộ HYS 1" }, T);
+    const box = () => within(dialog).getByRole("combobox", { name: "Phân loại đính kèm (ô 2.53)" });
+    await userEvent.click(within(dialog).getByRole("checkbox", { name: /inv\.pdf/ }));
+    expect(box().textContent).toContain("INS");
+    expect(within(dialog).getByText("Đề xuất theo chứng từ đã chọn: INV")).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Dùng đề xuất" }));
+    expect(box().textContent).toContain("INV");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Lưu nháp" }));
+    await vi.waitFor(() => expect(api.update).toHaveBeenCalledWith("dos_001", "hys_1", expect.objectContaining({ attachKind: null })));
+  }, 20_000);
+
+  it("thẻ: mỗi bộ hiện phân loại đính kèm (đã lưu, hoặc đề xuất khi chưa chọn); en dịch tên phân loại", async () => {
+    api.overview = overview({ suggestions: [], submissions: [submission({ attachKind: "INV" }), submission({ id: "hys_2", seq: 2, attachKind: null })] });
+    const first = renderWithProviders(<HysCard dossierId="dos_001" kind="IDA" />);
+    expect(await screen.findByText("Ô 1.63: INV – Hóa đơn", {}, T)).toBeTruthy();
+    expect(screen.getByText("Ô 1.63: ETC – Loại khác")).toBeTruthy();
+    first.unmount();
+    renderWithProviders(<HysCard dossierId="dos_001" kind="EDA" />, "en");
+    expect(await screen.findByText("Box 2.53: INV – Invoice", {}, T)).toBeTruthy();
   }, 20_000);
 });
 

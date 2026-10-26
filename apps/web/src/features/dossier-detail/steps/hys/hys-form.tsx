@@ -2,13 +2,14 @@
 // Form một bộ HYS (spec §3.2): panel bên phải – thông tin chung, chọn chứng từ hồ sơ + tải file riêng, dung lượng x / 2 MB,
 // danh sách vấn đề (checkHysSubmission – cùng luật backend), Lưu nháp · Gửi HYS (xác nhận + chứng thư số như IDA) · Xóa.
 // Lô còn sửa được mà 1.63/2.53 đủ 3 cặp: hộp gửi bắt chọn 1 cặp sẽ bị thay (replaceSlot) mới gửi được.
+// Phân loại đính kèm (TK_EA – bảng ATTACH_KIND, khác mã thủ tục A546): tự đề xuất theo chứng từ đã tick cho tới khi người khai chọn tay.
 import {
   Alert, Button, Checkbox, Combobox, Dialog, DialogContent, DialogFooter, Field, FileDropzone, FileUploadList, fill, FormSection, formatBytes, Input,
   Progress, RadioGroup, Select, Stack, Textarea, toast, toastPromise, useMessages, useUiLocale,
 } from "@kb/ui";
 import {
-  checkHysSubmission, HYS_ALLOWED_EXTENSIONS, HYS_MAX_SLOTS, HYS_MAX_TOTAL_BYTES, HYS_PROCEDURE_CODES,
-  type DossierDocument, type HysIssue, type HysProcedureCode, type HysSubmissionView, type UpdateHysInput,
+  ATTACH_KIND_CODES, checkHysSubmission, HYS_ALLOWED_EXTENSIONS, HYS_MAX_SLOTS, HYS_MAX_TOTAL_BYTES, HYS_PROCEDURE_CODES, suggestAttachKind,
+  type AttachKind, type DossierDocument, type HysIssue, type HysProcedureCode, type HysSubmissionView, type UpdateHysInput,
 } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Paperclip, Save, Send, Trash2 } from "lucide-react";
@@ -21,13 +22,17 @@ import { toastMutationError } from "@/lib/mutation-error";
 import { CodeInput } from "../../../declaration-form/code-input";
 import { errorMessage } from "../declaration-parts";
 import { SUBMIT_MESSAGES } from "../submit-step.messages";
-import { HYS_MESSAGES, HYS_PROCEDURE_MESSAGES } from "./hys.messages";
+import { ATTACH_KIND_MESSAGES, HYS_MESSAGES, HYS_PROCEDURE_MESSAGES } from "./hys.messages";
 
 const EDITABLE: readonly HysSubmissionView["status"][] = ["DRAFT", "REJECTED", "SEND_FAILED"];
 export const hysEditable = (s: Pick<HysSubmissionView, "status">) => EDITABLE.includes(s.status);
 
 const ACCEPT = HYS_ALLOWED_EXTENSIONS.map((e) => `.${e}`).join(",");
 const CODES = Object.keys(HYS_PROCEDURE_CODES) as HysProcedureCode[];
+
+/** Phân loại đính kèm đề xuất theo chứng từ hồ sơ (id) đã chọn trong bộ – chứng từ không còn trong danh sách thì bỏ qua. */
+export const suggestedAttachKind = (docIds: Iterable<string>, documents: readonly DossierDocument[]): AttachKind =>
+  suggestAttachKind([...docIds].flatMap((id) => documents.filter((d) => d.id === id).map((d) => d.kind)));
 
 export type HysFormProps = {
   dossierId: string;
@@ -69,12 +74,15 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
   const t = useMessages(HYS_MESSAGES);
   const st = useMessages(SUBMIT_MESSAGES);
   const names = useMessages(HYS_PROCEDURE_MESSAGES);
+  const kindNames = useMessages(ATTACH_KIND_MESSAGES);
   const locale = useUiLocale();
   const qc = useQueryClient();
   const issueText = useIssueText();
   const editable = hysEditable(submission);
 
   const [procedureCode, setProcedureCode] = useState(submission.procedureCode ?? "");
+  // null = tự đề xuất theo chứng từ đã tick (lưu null, backend lấy đề xuất lúc gửi); chọn tay thì giữ nguyên.
+  const [attachKind, setAttachKind] = useState<AttachKind | null>(submission.attachKind);
   const [customsOffice, setCustomsOffice] = useState(submission.customsOffice ?? "");
   const [processingUnit, setProcessingUnit] = useState(submission.processingUnit ?? "");
   const [phone, setPhone] = useState(submission.phone);
@@ -99,11 +107,14 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
   });
   const files = [...pickedDocs, ...uploads.map((f) => ({ fileName: f.fileName, sizeBytes: f.sizeBytes }))];
   const total = files.reduce((sum, f) => sum + f.sizeBytes, 0);
+  const suggestedKind = suggestedAttachKind(docIds, documents);
+  const shownKind = attachKind ?? suggestedKind;
   const issues = checkHysSubmission({ procedureCode, customsOffice, processingUnit, phone, internalRef, note: note || null, files });
 
   // procedureCode rỗng: không gửi khóa – schema đòi đúng 3 ký tự.
   const body = (): UpdateHysInput => ({
     ...(procedureCode ? { procedureCode } : {}),
+    attachKind,
     customsOffice,
     processingUnit,
     phone,
@@ -197,6 +208,24 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
                   disabled={!editable}
                   className="cq-md:max-w-xs"
                 />
+              </Field>
+              <Field label={fill(t.attachKind, { field })} required hint={attachKind === null ? t.attachKindAuto : fill(t.attachKindSuggested, { code: suggestedKind })}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Combobox
+                    options={ATTACH_KIND_CODES.map((c) => ({ value: c, label: c, description: kindNames[c] }))}
+                    value={shownKind}
+                    onChange={(v) => setAttachKind((v as AttachKind | null) ?? null)}
+                    placeholder={t.pickAttachKind}
+                    labels={{ search: t.searchAttachKind }}
+                    disabled={!editable}
+                    className="cq-md:max-w-xs"
+                  />
+                  {editable && attachKind !== null && attachKind !== suggestedKind && (
+                    <Button size="sm" variant="ghost" type="button" onClick={() => setAttachKind(null)}>
+                      {t.useSuggested}
+                    </Button>
+                  )}
+                </div>
               </Field>
               <Field label={t.office} required>
                 {editable ? (
@@ -348,11 +377,11 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
                         value={replaceSlot}
                         onChange={setReplaceSlot}
                         options={attachmentSlots.map((p) => {
-                          const pc = p.code as HysProcedureCode;
+                          const k = p.code as AttachKind;
                           return {
                             value: String(p.slot) as "1" | "2" | "3",
                             label: fill(t.slotOption, { slot: p.slot, code: p.code || "–", receipt: p.receipt }),
-                            ...(pc in names ? { description: names[pc] } : {}),
+                            ...(k in kindNames ? { description: kindNames[k] } : {}),
                           };
                         })}
                       />

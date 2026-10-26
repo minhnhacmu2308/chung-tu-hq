@@ -25,6 +25,19 @@ describe("soạn bộ HYS", () => {
     expect(a.status).toBe("DRAFT");
   });
 
+  it("phân loại đính kèm: tạo kèm attachKind; sửa đổi được; null = quay về đề xuất", async () => {
+    const r = await createHysSubmission(h.deps, declarant, D, { procedureCode: "A01", attachKind: "INV" });
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    expect(r.value.attachKind).toBe("INV");
+    expect((await create("A02")).attachKind).toBeNull();
+    const u = await updateHysSubmission(h.deps, declarant, D, r.value.id, { attachKind: "DM" });
+    expect(u.ok && u.value.attachKind).toBe("DM");
+    const back = await updateHysSubmission(h.deps, declarant, D, r.value.id, { phone: "1" });
+    expect(back.ok && back.value.attachKind).toBe("DM");
+    const reset = await updateHysSubmission(h.deps, declarant, D, r.value.id, { attachKind: null });
+    expect(reset.ok && reset.value.attachKind).toBeNull();
+  });
+
   it("vai trò VIEWER không tạo được; mã thủ tục lạ → VALIDATION", async () => {
     expect((await createHysSubmission(h.deps, viewer, D, {})).ok).toBe(false);
     const r = await createHysSubmission(h.deps, approver, D, { procedureCode: "ZZZ" });
@@ -111,7 +124,7 @@ describe("soạn bộ HYS", () => {
 });
 
 describe("tổng quan HYS", () => {
-  it("IDA có container → gợi ý A02; bộ A02 SENDING / ACCEPTED+LOCKED vẫn gợi ý; ACCEPTED+FILLED → hết gợi ý", async () => {
+  it("IDA có container → gợi ý A02; bộ A02 SENDING / ACCEPTED chưa có số vẫn gợi ý; ACCEPTED có số trong 1.63 → hết gợi ý", async () => {
     const s = await create("A02");
     const o1 = await getHysOverview(h.deps, declarant, D);
     expect(o1.ok && o1.value.suggestions.map((x) => x.code)).toEqual(["A02"]);
@@ -126,23 +139,27 @@ describe("tổng quan HYS", () => {
     h.decls.fields = { TK_EB1: { value: "300000000001" } };
     expect(await codesNow()).toEqual([]);
     // Bộ sau thay mất cặp của bộ này → số không còn trong 1.63 → gợi ý lại A02.
-    h.decls.fields = { TK_EA1: { value: "A99" }, TK_EB1: { value: "300000000009" } };
+    h.decls.fields = { TK_EA1: { value: "BOL" }, TK_EB1: { value: "300000000009" } };
     expect(await codesNow()).toEqual(["A02"]);
   });
 
-  it("1.63 nhập tay A02 + số tiếp nhận → không gợi ý A02", async () => {
+  it("1.63 nhập tay: ALL + số → hết gợi ý; phân loại khác (BOL, mã thủ tục cũ A02) → vẫn gợi ý A02", async () => {
+    const codesNow = async () => { const o = await getHysOverview(h.deps, declarant, D); return o.ok && o.value.suggestions.map((x) => x.code); };
+    h.decls.fields = { TK_EA1: { value: "ALL – Tất cả hồ sơ" }, TK_EB1: { value: "123456789012" } };
+    expect(await codesNow()).toEqual([]);
+    h.decls.fields = { TK_EA1: { value: "BOL" }, TK_EB1: { value: "123456789012" } };
+    expect(await codesNow()).toEqual(["A02"]);
     h.decls.fields = { TK_EA1: { value: "A02" }, TK_EB1: { value: "123456789012" } };
-    const o = await getHysOverview(h.deps, declarant, D);
-    expect(o.ok && o.value.suggestions).toEqual([]);
+    expect(await codesNow()).toEqual(["A02"]);
   });
 
   it("attachmentSlots = các cặp 1.63 đang có số (mã chuẩn hóa)", async () => {
     const o0 = await getHysOverview(h.deps, declarant, D);
     expect(o0.ok && o0.value.attachmentSlots).toEqual([]);
-    h.decls.fields = { TK_EA1: { value: "A02 – Danh sách container" }, TK_EB1: { value: "300000000001" }, TK_EA2: { value: "A01" }, TK_EB3: { value: "300000000003" } };
+    h.decls.fields = { TK_EA1: { value: "INV – Hóa đơn" }, TK_EB1: { value: "300000000001" }, TK_EA2: { value: "BOL" }, TK_EB3: { value: "300000000003" } };
     const o1 = await getHysOverview(h.deps, declarant, D);
     expect(o1.ok && o1.value.attachmentSlots).toEqual([
-      { slot: 1, code: "A02", receipt: "300000000001" },
+      { slot: 1, code: "INV", receipt: "300000000001" },
       { slot: 3, code: "", receipt: "300000000003" },
     ]);
   });
@@ -158,7 +175,7 @@ describe("tổng quan HYS", () => {
 
   it("hysValuesOf chuẩn hóa mã phân loại TK_EA*", () => {
     const p = h.decls.payloadNow();
-    const v = hysValuesOf({ payload: { ...p, fields: { ...p.fields, TK_EA1: { value: "A02 – Danh sách container" }, TK_EB1: { value: "123" } } } });
-    expect([v["TK_EA1"], v["TK_EB1"]]).toEqual(["A02", "123"]);
+    const v = hysValuesOf({ payload: { ...p, fields: { ...p.fields, TK_EA1: { value: "INV – Hóa đơn" }, TK_EB1: { value: "123" } } } });
+    expect([v["TK_EA1"], v["TK_EB1"]]).toEqual(["INV", "123"]);
   });
 });

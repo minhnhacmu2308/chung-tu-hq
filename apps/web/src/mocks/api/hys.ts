@@ -1,6 +1,6 @@
-// HYS (mock): soạn bộ hồ sơ đính kèm, gửi (ACCEPTED ngay), điền cặp 1.63/2.53 vào tờ khai mock. Cùng luật @kb/contracts với backend.
+// HYS (mock): soạn bộ hồ sơ đính kèm, gửi (ACCEPTED ngay), điền cặp 1.63/2.53 (TK_EA = phân loại đính kèm, TK_EB = số) vào tờ khai mock. Cùng luật @kb/contracts với backend.
 import {
-  checkHysSubmission, awaitingContent, extraFieldMeta, fillAttachmentSlot, HYS_MAX_SLOTS, HYS_PROCEDURE_CODES,
+  checkHysSubmission, awaitingContent, extraFieldMeta, fillAttachmentSlot, HYS_MAX_SLOTS, HYS_PROCEDURE_CODES, suggestAttachKind,
   type AttachmentValues, type CreateHysInput, type HysOverview, type HysSubmissionView, type SendHysInput, type UpdateHysInput,
 } from "@kb/contracts";
 import { containersFor } from "@/mocks/customs-sim";
@@ -20,7 +20,8 @@ const dossierOf = (db: MockDb, id: string) => {
 
 const toView = (h: MockHys): HysSubmissionView => {
   const { dossierId: _d, ...view } = h;
-  return { ...view, issues: checkHysSubmission({ procedureCode: h.procedureCode, customsOffice: h.customsOffice, processingUnit: h.processingUnit, phone: h.phone, internalRef: h.internalRef, note: h.note, files: h.files.map((f) => ({ fileName: f.fileName, sizeBytes: f.sizeBytes })) }) };
+  // Bộ lưu trước khi có attachKind (localStorage cũ) → null.
+  return { ...view, attachKind: h.attachKind ?? null, issues: checkHysSubmission({ procedureCode: h.procedureCode, customsOffice: h.customsOffice, processingUnit: h.processingUnit, phone: h.phone, internalRef: h.internalRef, note: h.note, files: h.files.map((f) => ({ fileName: f.fileName, sizeBytes: f.sizeBytes })) }) };
 };
 
 function editable(db: MockDb, dossierId: string, id: string): MockHys {
@@ -67,7 +68,7 @@ export const createHys = (dossierId: string, input: CreateHysInput) =>
     const list = (db.hys ??= []);
     const seq = list.filter((h) => h.dossierId === dossierId).reduce((m, h) => Math.max(m, h.seq), 0) + 1;
     const h: MockHys = {
-      id: newId("hys"), dossierId, seq, procedureCode: input.procedureCode ?? null, customsOffice: dossier.customsOffice.split(" ")[0] || null, processingUnit: "00",
+      id: newId("hys"), dossierId, seq, procedureCode: input.procedureCode ?? null, attachKind: input.attachKind ?? null, customsOffice: dossier.customsOffice.split(" ")[0] || null, processingUnit: "00",
       phone: "", internalRef: dossier.code.slice(0, 20), note: null, purpose: null, status: "DRAFT", attempt: 0, receiptNo: null, registeredOn: null, reject: null, fill: null,
       files: [], issues: [], sentAt: null,
     };
@@ -81,6 +82,7 @@ export const updateHys = (dossierId: string, hysId: string, input: UpdateHysInpu
     checkProcedure(input.procedureCode);
     const h = editable(db, dossierId, hysId);
     if (input.procedureCode !== undefined) h.procedureCode = input.procedureCode;
+    if (input.attachKind !== undefined) h.attachKind = input.attachKind;
     if (input.customsOffice !== undefined) h.customsOffice = input.customsOffice;
     if (input.processingUnit !== undefined) h.processingUnit = input.processingUnit;
     if (input.phone !== undefined) h.phone = input.phone;
@@ -136,6 +138,8 @@ export const sendHys = (dossierId: string, hysId: string, input: SendHysInput) =
     if (lotEditable && attachmentSlotsOf(db, dossierId).length >= HYS_MAX_SLOTS && !input.replaceSlot) {
       throw reasonApiError("VALIDATION", "HYS_SLOTS_FULL", { field: decl.kind === "IDA" ? "1.63" : "2.53" });
     }
+    // Chưa chọn phân loại đính kèm → lưu đề xuất theo chứng từ hồ sơ đã chọn (như send-hys backend).
+    h.attachKind ??= suggestAttachKind(h.files.flatMap((f) => db.documents.filter((d) => d.id === f.documentId).map((d) => d.kind)));
     h.attempt += 1;
     h.purpose = lotEditable ? "PRE_DECLARATION" : "SUPPLEMENT";
     h.status = "ACCEPTED";
@@ -147,7 +151,7 @@ export const sendHys = (dossierId: string, hysId: string, input: SendHysInput) =
       h.fill = { outcome: "LOCKED" };
     } else {
       const cur = hysValues(db, dossierId)!;
-      const res = fillAttachmentSlot(cur.values as AttachmentValues, h.procedureCode ?? "", h.receiptNo, input.replaceSlot);
+      const res = fillAttachmentSlot(cur.values as AttachmentValues, h.attachKind, h.receiptNo, input.replaceSlot);
       const afterApproval = decl.status === "APPROVED";
       const wrote = res.outcome === "FILLED" || res.outcome === "REPLACED";
       if (wrote && res.set) {

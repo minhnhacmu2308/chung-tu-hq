@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { CATALOG_EDA } from "../declaration/catalog-eda.js";
 import { CATALOG_IDA } from "../declaration/catalog-ida.js";
-import { attachmentPairs, checkHysSubmission, fillAttachmentSlot, hysExtensionAllowed, satisfiedHysCodes, suggestHys } from "./rules.js";
+import { attachKindOfDoc, attachmentPairs, checkHysSubmission, fillAttachmentSlot, hysExtensionAllowed, hysSatisfaction, suggestAttachKind, suggestHys, type HysSatisfaction } from "./rules.js";
 
 const ok = [{ fileName: "a.pdf", sizeBytes: 100 }];
 const base = { procedureCode: "A02", customsOffice: "01B1", processingUnit: "01", phone: null, internalRef: null, note: null, files: ok };
 const maxLenOf = (no: string) => [...CATALOG_IDA, ...CATALOG_EDA].find((d) => d.no === no)?.maxLen ?? 0;
 type SuggestInput = Parameters<typeof suggestHys>[0];
+const NONE: HysSatisfaction = { codes: new Set(), rules: new Set() };
 const codes = (x: Partial<SuggestInput> & Pick<SuggestInput, "kind" | "values">) =>
-  suggestHys({ containerCount: 0, satisfied: new Set(), ...x }).map((s) => s.code);
+  suggestHys({ containerCount: 0, satisfied: NONE, ...x }).map((s) => s.code);
 const long = "x".repeat(maxLenOf("1.68") + 1);
 
 describe("checkHysSubmission", () => {
@@ -32,32 +33,32 @@ describe("checkHysSubmission", () => {
   });
 });
 
-describe("fillAttachmentSlot", () => {
+describe("fillAttachmentSlot (TK_EA = phân loại đính kèm, TK_EB = số tiếp nhận)", () => {
   it("điền cặp", () => {
-    expect(fillAttachmentSlot({}, "A02", "300000000001")).toEqual({ outcome: "FILLED", slot: 1, set: { TK_EA1: "A02", TK_EB1: "300000000001" } });
-    expect(fillAttachmentSlot({ TK_EA1: "A01", TK_EB1: "1", TK_EB2: "  " }, "A02", "2")).toMatchObject({ outcome: "FILLED", slot: 2 });
-    expect(fillAttachmentSlot({ TK_EB2: "2" }, "A02", "2")).toEqual({ outcome: "ALREADY", slot: 2 });
-    expect(fillAttachmentSlot({ TK_EB1: "1", TK_EB2: "2", TK_EB3: "3" }, "A02", "4")).toEqual({ outcome: "FULL" });
+    expect(fillAttachmentSlot({}, "INV", "300000000001")).toEqual({ outcome: "FILLED", slot: 1, set: { TK_EA1: "INV", TK_EB1: "300000000001" } });
+    expect(fillAttachmentSlot({ TK_EA1: "BOL", TK_EB1: "1", TK_EB2: "  " }, "ETC", "2")).toMatchObject({ outcome: "FILLED", slot: 2 });
+    expect(fillAttachmentSlot({ TK_EB2: "2" }, "ETC", "2")).toEqual({ outcome: "ALREADY", slot: 2 });
+    expect(fillAttachmentSlot({ TK_EB1: "1", TK_EB2: "2", TK_EB3: "3" }, "ETC", "4")).toEqual({ outcome: "FULL" });
   });
-  const full = { TK_EA1: "A01", TK_EB1: "1", TK_EA2: "A02", TK_EB2: "2", TK_EA3: "A08", TK_EB3: "3" };
+  const full = { TK_EA1: "INV", TK_EB1: "1", TK_EA2: "BOL", TK_EB2: "2", TK_EA3: "ETC", TK_EB3: "3" };
   it("đủ 3 cặp + replaceSlot → thay cặp đã chọn, trả giá trị cũ", () => {
-    expect(fillAttachmentSlot(full, "A99", " 4 ", 2)).toEqual({
+    expect(fillAttachmentSlot(full, "ALL", " 4 ", 2)).toEqual({
       outcome: "REPLACED",
       slot: 2,
-      set: { TK_EA2: "A99", TK_EB2: "4" },
-      replaced: { code: "A02", receipt: "2" },
+      set: { TK_EA2: "ALL", TK_EB2: "4" },
+      replaced: { code: "BOL", receipt: "2" },
     });
   });
   it("replaceSlot không dùng khi còn cặp trống hoặc số đã có", () => {
-    expect(fillAttachmentSlot({ TK_EB1: "1" }, "A02", "4", 1)).toMatchObject({ outcome: "FILLED", slot: 2 });
-    expect(fillAttachmentSlot(full, "A02", "3", 1)).toEqual({ outcome: "ALREADY", slot: 3 });
+    expect(fillAttachmentSlot({ TK_EB1: "1" }, "ETC", "4", 1)).toMatchObject({ outcome: "FILLED", slot: 2 });
+    expect(fillAttachmentSlot(full, "ETC", "3", 1)).toEqual({ outcome: "ALREADY", slot: 3 });
   });
 });
 
 describe("attachmentPairs", () => {
-  it("chỉ các cặp có số tiếp nhận, theo thứ tự cặp", () => {
-    expect(attachmentPairs({ TK_EA1: "A01", TK_EB1: " 1 ", TK_EA2: "A02", TK_EB2: " ", TK_EB3: "3" })).toEqual([
-      { slot: 1, code: "A01", receipt: "1" },
+  it("chỉ các cặp có số tiếp nhận, theo thứ tự cặp; mã chuẩn hóa", () => {
+    expect(attachmentPairs({ TK_EA1: "INV – Hóa đơn", TK_EB1: " 1 ", TK_EA2: "BOL", TK_EB2: " ", TK_EB3: "3" })).toEqual([
+      { slot: 1, code: "INV", receipt: "1" },
       { slot: 3, code: "", receipt: "3" },
     ]);
     expect(attachmentPairs({})).toEqual([]);
@@ -88,40 +89,63 @@ describe("suggestHys", () => {
     expect(codes({ kind: "EDA", values: { TK_NT2: "x".repeat(maxLenOf("2.57") + 1) } })).toEqual(["A99"]);
   });
   it("gộp trùng mã, giữ rule đầu", () => {
-    const out = suggestHys({ kind: "IDA", values: { TK_IV1: "B", TK_NT2: long }, containerCount: 0, satisfied: new Set() });
+    const out = suggestHys({ kind: "IDA", values: { TK_IV1: "B", TK_NT2: long }, containerCount: 0, satisfied: NONE });
     expect(out.map((s) => s.code)).toEqual(["A99"]);
     expect(out[0]?.rule).toBe("G2");
   });
-  it("bỏ mã đã khai", () => {
-    expect(codes({ kind: "IDA", values: { VD_COC: "2" }, satisfied: new Set(["A02"]) })).toEqual([]);
+  it("bỏ mã đã khai (bộ HYS) – mọi rule của mã", () => {
+    expect(codes({ kind: "IDA", values: { VD_COC: "2" }, satisfied: { codes: new Set(["A02"]), rules: new Set() } })).toEqual([]);
+    expect(codes({ kind: "IDA", values: { TK_IV1: "B", TK_NT2: long }, satisfied: { codes: new Set(["A99"]), rules: new Set() } })).toEqual([]);
+  });
+  it("A99 chỉ tắt khi mọi rule sinh ra A99 đều thỏa: cặp INV thỏa G2, G5 vẫn còn", () => {
+    const out = suggestHys({ kind: "IDA", values: { TK_IV1: "B", TK_NT2: long }, containerCount: 0, satisfied: { codes: new Set(), rules: new Set(["G2"]) } });
+    expect(out).toEqual([{ code: "A99", rule: "G5", fieldNo: "1.68" }]);
+    expect(codes({ kind: "IDA", values: { TK_IV1: "B" }, satisfied: { codes: new Set(), rules: new Set(["G2"]) } })).toEqual([]);
   });
 });
 
-describe("satisfiedHysCodes", () => {
-  it("cặp 1.63 đủ mã + số ∪ bộ ACCEPTED đã điền được (FILLED/ALREADY/REPLACED) mà số còn trong 1.63", () => {
-    expect(
-      [...satisfiedHysCodes({ TK_EA1: "A02", TK_EB1: "300000000001", TK_EA2: "A01", TK_EB2: "300000000002", TK_EB3: " 300000000003 " }, [
-        { procedureCode: "A08", status: "ACCEPTED", receiptNo: "300000000003", fill: { outcome: "FILLED" } },
-        { procedureCode: "A01", status: "ACCEPTED", receiptNo: "300000000002", fill: { outcome: "ALREADY" } },
-        { procedureCode: "A99", status: "DRAFT", receiptNo: null, fill: null },
-      ])].sort(),
-    ).toEqual(["A01", "A02", "A08"]);
+describe("attachKind – phân loại đính kèm (1.63/2.53 ô 1) theo chứng từ", () => {
+  it("map loại chứng từ → mã", () => {
+    expect(attachKindOfDoc("INVOICE")).toBe("INV");
+    expect(attachKindOfDoc("FREIGHT_INVOICE")).toBe("INV");
+    expect(attachKindOfDoc("BILL_OF_LADING")).toBe("BOL");
+    expect(attachKindOfDoc("AIR_WAYBILL")).toBe("AWB");
+    expect(attachKindOfDoc("SALES_CONTRACT")).toBe("CON");
+    for (const k of ["PACKING_LIST", "CERT_OF_ORIGIN", "ARRIVAL_NOTICE", "OTHER"] as const) expect(attachKindOfDoc(k)).toBe("ETC");
   });
-  it("bộ đã điền nhưng số bị bộ sau thay (không còn trong 1.63) → không còn tính là đã khai", () => {
-    const values = { TK_EA1: "A01", TK_EB1: "300000000001", TK_EA2: "A99", TK_EB2: "300000000009" };
-    expect(
-      [...satisfiedHysCodes(values, [
-        { procedureCode: "A02", status: "ACCEPTED", receiptNo: "300000000002", fill: { outcome: "FILLED" } },
-        { procedureCode: "A99", status: "ACCEPTED", receiptNo: "300000000009", fill: { outcome: "REPLACED" } },
-      ])].sort(),
-    ).toEqual(["A01", "A99"]);
+  it("đề xuất theo tập chứng từ hồ sơ đã chọn: rỗng → ETC; 1 mã → mã đó; ≥ 2 mã → ALL", () => {
+    expect(suggestAttachKind([])).toBe("ETC");
+    expect(suggestAttachKind(["INVOICE", "FREIGHT_INVOICE"])).toBe("INV");
+    expect(suggestAttachKind(["PACKING_LIST"])).toBe("ETC");
+    expect(suggestAttachKind(["INVOICE", "BILL_OF_LADING"])).toBe("ALL");
+    expect(suggestAttachKind(["INVOICE", "PACKING_LIST"])).toBe("ALL");
   });
-  it("bộ đang gửi chưa tính là đã khai (số chưa vào 1.63)", () => {
-    expect([...satisfiedHysCodes({}, [{ procedureCode: "A02", status: "SENDING", receiptNo: null, fill: null }])]).toEqual([]);
+});
+
+describe("hysSatisfaction – đã khai", () => {
+  const sub = (procedureCode: string, status: string, receiptNo: string | null) => ({ procedureCode, status, receiptNo });
+  it("bộ ACCEPTED có số đang nằm trong TK_EB1..3 → đã khai mã thủ tục của bộ", () => {
+    const s = hysSatisfaction({ TK_EA1: "ETC", TK_EB1: "300000000001", TK_EA2: "INV", TK_EB2: " 300000000002 " }, [
+      sub("A02", "ACCEPTED", "300000000001"),
+      sub("A99", "ACCEPTED", "300000000002"),
+      sub("A01", "ACCEPTED", "300000000005"),
+      sub("A08", "SENDING", null),
+    ]);
+    expect([...s.codes].sort()).toEqual(["A02", "A99"]);
+    // Cặp mang số của bộ HYS không phải cặp nhập tay (INV của bộ A99 không thỏa thêm rule).
+    expect([...s.rules]).toEqual([]);
   });
-  it("ACCEPTED nhưng không điền được (LOCKED/FULL/NO_RECEIPT/chưa có) chưa tính là đã khai", () => {
-    for (const fill of [{ outcome: "LOCKED" as const }, { outcome: "FULL" as const }, { outcome: "NO_RECEIPT" as const }, null]) {
-      expect([...satisfiedHysCodes({}, [{ procedureCode: "A02", status: "ACCEPTED", receiptNo: "300000000002", fill }])]).toEqual([]);
-    }
+  it("bộ chưa ACCEPTED dù số có trong 1.63 → chưa tính; bộ bị thay cặp (số không còn) → không tính", () => {
+    expect([...hysSatisfaction({ TK_EA1: "ETC", TK_EB1: "300000000001" }, [sub("A02", "SENDING", "300000000001")]).codes]).toEqual([]);
+    expect([...hysSatisfaction({ TK_EA1: "ETC", TK_EB1: "300000000009" }, [sub("A02", "ACCEPTED", "300000000001")]).codes]).toEqual([]);
+  });
+  it("cặp nhập tay: INV → thỏa G2; ALL → thỏa mọi gợi ý; mã khác → không thỏa", () => {
+    expect([...hysSatisfaction({ TK_EA1: "INV", TK_EB1: "123" }, []).rules]).toEqual(["G2"]);
+    expect([...hysSatisfaction({ TK_EA1: "ALL – Tất cả hồ sơ", TK_EB1: "123" }, []).rules].sort()).toEqual(["G1", "G2", "G3", "G4", "G5"]);
+    const other = hysSatisfaction({ TK_EA1: "BOL", TK_EB1: "123", TK_EA2: "A02", TK_EB2: "456", TK_EA3: "INV" }, []);
+    expect([...other.codes, ...other.rules]).toEqual([]);
+  });
+  it("cặp có số thuộc bộ HYS bất kỳ của hồ sơ (kể cả chưa ACCEPTED) không phải cặp nhập tay", () => {
+    expect([...hysSatisfaction({ TK_EA1: "ALL", TK_EB1: "300000000001" }, [sub("A02", "REJECTED", "300000000001")]).rules]).toEqual([]);
   });
 });

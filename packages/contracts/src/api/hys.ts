@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { IsoDateSchema, IsoDateTimeSchema } from "../common.js";
+import { ATTACH_KIND_CODES } from "../declaration/code-tables.js";
 import { HYS_PROCEDURE_CODES, type HysProcedureCode } from "../fpt/hys.js";
 import type { HysIssue, HysSuggestion } from "../hys/rules.js";
 
@@ -8,13 +9,16 @@ import type { HysIssue, HysSuggestion } from "../hys/rules.js";
 export const HysStatusSchema = z.enum(["DRAFT", "SENDING", "ACCEPTED", "REJECTED", "SEND_FAILED"]);
 export type HysStatus = z.infer<typeof HysStatusSchema>;
 
+/** Phân loại đính kèm 1.63/2.53 ô 1 (TK_EA) – bảng ATTACH_KIND, khác mã thủ tục A546 (TK_TSB). */
+export const AttachKindSchema = z.enum(ATTACH_KIND_CODES);
+
 export const AttachmentSlotSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 
 export const HysFillSchema = z.object({
   outcome: z.enum(["FILLED", "ALREADY", "FULL", "REPLACED", "LOCKED", "NO_RECEIPT"]),
   slot: AttachmentSlotSchema.optional(),
   afterApproval: z.boolean().optional(),
-  /** REPLACED: cặp cũ (mã / số tiếp nhận) bị thay bằng số mới. */
+  /** REPLACED: cặp cũ (phân loại đính kèm / số tiếp nhận) bị thay bằng số mới. */
   replaced: z.object({ code: z.string(), receipt: z.string() }).optional(),
 });
 export type HysFill = z.infer<typeof HysFillSchema>;
@@ -48,6 +52,8 @@ export const HysSubmissionViewSchema = z.object({
   id: z.string(),
   seq: z.number(),
   procedureCode: z.string().nullable(),
+  /** Phân loại đính kèm sẽ điền vào TK_EA (null = chưa chọn – lúc gửi dùng đề xuất theo chứng từ đã chọn). */
+  attachKind: AttachKindSchema.nullable(),
   customsOffice: z.string().nullable(),
   processingUnit: z.string().nullable(),
   phone: z.string(),
@@ -83,11 +89,13 @@ export const HysOverviewSchema = z.object({
 });
 export type HysOverview = z.infer<typeof HysOverviewSchema>;
 
-export const CreateHysInputSchema = z.object({ procedureCode: z.string().length(3).optional() });
+export const CreateHysInputSchema = z.object({ procedureCode: z.string().length(3).optional(), attachKind: AttachKindSchema.optional() });
 export type CreateHysInput = z.infer<typeof CreateHysInputSchema>;
 
 export const UpdateHysInputSchema = z.object({
   procedureCode: z.string().length(3).optional(),
+  /** null = bỏ chọn, quay về đề xuất theo chứng từ. */
+  attachKind: AttachKindSchema.nullable().optional(),
   customsOffice: z.string().optional(),
   processingUnit: z.string().optional(),
   phone: z.string().optional(),

@@ -1,0 +1,2 @@
+ALTER TABLE "hys_submissions" ADD COLUMN "attach_kind" text;--> statement-breakpoint
+ALTER TABLE "hys_submissions" ADD CONSTRAINT "hys_submissions_attach_kind_chk" CHECK (attach_kind is null or attach_kind in ('INV', 'BOL', 'AWB', 'INS', 'CON', 'DM', 'ALL', 'ETC'));

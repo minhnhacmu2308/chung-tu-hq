@@ -59,8 +59,9 @@ describe("gửi bộ HYS", () => {
     const s = sub(id);
     expect(s).toMatchObject({ status: "ACCEPTED", registeredOn: "2026-10-14", fill: { outcome: "FILLED", slot: 1, afterApproval: true } });
     expect(s.receiptNo).toMatch(/^3\d{11}$/);
-    expect(h.decls.attachments).toEqual([{ dossierId: D, procedureCode: "A02", receiptNo: s.receiptNo, note: `HYS 1 – ${s.receiptNo}` }]);
-    expect(h.decls.fields).toMatchObject({ TK_EA1: { value: "A02" }, TK_EB1: { value: s.receiptNo } });
+    // TK_EA = phân loại đính kèm (đề xuất INV vì bộ chỉ có hóa đơn), không phải mã thủ tục A02 (A02 đi lên TK_TSB của HYS).
+    expect(h.decls.attachments).toEqual([{ dossierId: D, attachKind: "INV", receiptNo: s.receiptNo, note: `HYS 1 – ${s.receiptNo}` }]);
+    expect(h.decls.fields).toMatchObject({ TK_EA1: { value: "INV" }, TK_EB1: { value: s.receiptNo } });
     expect(gateway.hysCalls).toEqual([expect.objectContaining({ dossierId: D, customsOffice: "03CE", procedureCode: "A02", internalRef: "HS-NK-2610-021", certificateId: "cert_1", files: [{ name: "inv.pdf", bytes: Buffer.from("%PDF") }] })]);
     expect(h.uow.data.messages.map((m) => [m.operation, m.direction, m.result])).toEqual([["HYS", "OUT", "OK"], ["HYS", "IN", "OK"]]);
     expect(h.uow.data.messages[1]!.summary).toBe(`Đã tiếp nhận HYS A02 – số tiếp nhận ${s.receiptNo}`);
@@ -109,7 +110,7 @@ describe("gửi bộ HYS", () => {
     await send(id);
     h.deps.gateway = { ...gateway, attachDocuments: async () => ({ receiptNo: "300000000001", registeredOn: "2026-10-14" }) } as unknown as FakeCustomsGateway;
     h.decls.status = "SUBMITTED";
-    h.decls.fields = { TK_EA1: { value: "A02" }, TK_EB1: { value: "300000000001" } };
+    h.decls.fields = { TK_EA1: { value: "INV" }, TK_EB1: { value: "300000000001" } };
     await run(lastOutbox().id);
     expect(sub(id)).toMatchObject({ status: "ACCEPTED", receiptNo: "300000000001", fill: { outcome: "LOCKED" } });
     expect(h.decls.attachments).toHaveLength(0);
@@ -244,7 +245,7 @@ describe("gửi bộ HYS", () => {
   });
 
   describe("1.63 đã đủ 3 cặp", () => {
-    const FULL = () => ({ TK_EA1: { value: "A01" }, TK_EB1: { value: "300000000001" }, TK_EA2: { value: "A08" }, TK_EB2: { value: "300000000002" }, TK_EA3: { value: "A99" }, TK_EB3: { value: "300000000003" } });
+    const FULL = () => ({ TK_EA1: { value: "BOL" }, TK_EB1: { value: "300000000001" }, TK_EA2: { value: "CON" }, TK_EB2: { value: "300000000002" }, TK_EA3: { value: "ETC" }, TK_EB3: { value: "300000000003" } });
 
     it("không chọn cặp → HYS_SLOTS_FULL (1.63), không outbox, bộ giữ DRAFT", async () => {
       const id = await draft();
@@ -270,9 +271,9 @@ describe("gửi bộ HYS", () => {
       expect(lastOutbox().payload).toEqual({ submissionId: id, certificateId: "cert_1", replaceSlot: 2 });
       await run(lastOutbox().id);
       const s = sub(id);
-      expect(s.fill).toEqual({ outcome: "REPLACED", slot: 2, replaced: { code: "A08", receipt: "300000000002" }, afterApproval: true });
-      expect(h.decls.attachments).toEqual([{ dossierId: D, procedureCode: "A02", receiptNo: s.receiptNo, note: `HYS 1 – ${s.receiptNo}`, replaceSlot: 2 }]);
-      expect(h.decls.fields).toMatchObject({ TK_EA1: { value: "A01" }, TK_EA2: { value: "A02" }, TK_EB2: { value: s.receiptNo }, TK_EB3: { value: "300000000003" } });
+      expect(s.fill).toEqual({ outcome: "REPLACED", slot: 2, replaced: { code: "CON", receipt: "300000000002" }, afterApproval: true });
+      expect(h.decls.attachments).toEqual([{ dossierId: D, attachKind: "INV", receiptNo: s.receiptNo, note: `HYS 1 – ${s.receiptNo}`, replaceSlot: 2 }]);
+      expect(h.decls.fields).toMatchObject({ TK_EA1: { value: "BOL" }, TK_EA2: { value: "INV" }, TK_EB2: { value: s.receiptNo }, TK_EB3: { value: "300000000003" } });
     });
 
     it("lô không còn sửa được → không đòi replaceSlot (SUPPLEMENT)", async () => {
@@ -286,7 +287,7 @@ describe("gửi bộ HYS", () => {
 
     it("còn cặp trống mà có replaceSlot → vẫn điền cặp trống (FILLED)", async () => {
       const id = await draft();
-      h.decls.fields = { TK_EA1: { value: "A01" }, TK_EB1: { value: "300000000001" } };
+      h.decls.fields = { TK_EA1: { value: "BOL" }, TK_EB1: { value: "300000000001" } };
       await sendHysSubmission(h.deps, declarant, D, id, { certificateId: "cert_1", replaceSlot: 1 });
       await run(lastOutbox().id);
       expect(sub(id).fill).toEqual({ outcome: "FILLED", slot: 2, afterApproval: true });
@@ -299,6 +300,37 @@ describe("gửi bộ HYS", () => {
       lastOutbox().payload = { submissionId: id, certificateId: "cert_1", replaceSlot: 7 };
       expect(await run(lastOutbox().id)).toEqual({ ok: true, value: { status: "FAILED", next: null } });
       expect(gateway.hysCalls).toHaveLength(0);
+    });
+  });
+
+  describe("phân loại đính kèm (TK_EA)", () => {
+    it("chưa chọn → lúc gửi lưu đề xuất theo chứng từ đã chọn (hóa đơn → INV)", async () => {
+      const id = await draft();
+      expect(sub(id).attachKind).toBeNull();
+      expect((await send(id)).attachKind).toBe("INV");
+      expect(sub(id).attachKind).toBe("INV");
+    });
+
+    it("chỉ file tải riêng (không chứng từ hồ sơ) → ETC", async () => {
+      const id = await draft(false);
+      h.uow.data.hysFiles.push({ id: "hysf_x", orgId: ORG, submissionId: id, documentId: null, storageKey: "k/rieng.pdf", fileName: "rieng.pdf", mime: "application/pdf", sizeBytes: 4, position: 1, createdAt: new Date() });
+      expect((await send(id)).attachKind).toBe("ETC");
+    });
+
+    it("người khai đã chọn (ALL) → giữ nguyên, điền TK_EA = ALL", async () => {
+      const id = await draft();
+      expect((await updateHysSubmission(h.deps, declarant, D, id, { attachKind: "ALL" })).ok).toBe(true);
+      expect((await send(id)).attachKind).toBe("ALL");
+      await run(lastOutbox().id);
+      expect(h.decls.fields).toMatchObject({ TK_EA1: { value: "ALL" }, TK_EB1: { value: sub(id).receiptNo } });
+    });
+
+    it("bộ gửi trước khi có cột attach_kind (null lúc nhận số) → điền ETC", async () => {
+      const id = await draft();
+      await send(id);
+      sub(id).attachKind = null;
+      await run(lastOutbox().id);
+      expect(h.decls.attachments).toEqual([expect.objectContaining({ attachKind: "ETC" })]);
     });
   });
 

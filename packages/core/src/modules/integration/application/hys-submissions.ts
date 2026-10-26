@@ -1,6 +1,6 @@
 // Soạn bộ HYS (hồ sơ đính kèm điện tử) trước IDA/EDA: tạo/sửa/xóa bộ, thêm/bớt file, tổng quan + gợi ý. Gửi: send-hys.ts; worker: process-hys.ts.
 import {
-  checkHysSubmission, declarationFormValues, HYS_PROCEDURE_CODES, hysExtensionAllowed, isContentOperation, satisfiedHysCodes, suggestHys,
+  attachmentPairs, checkHysSubmission, declarationFormValues, HYS_PROCEDURE_CODES, hysExtensionAllowed, isContentOperation, satisfiedHysCodes, suggestHys,
   type AttachmentValues, type CreateHysInput, type HysFileView, type HysOverview, type HysStatus, type HysSubmissionView, type UpdateHysInput,
 } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
@@ -93,7 +93,8 @@ export async function getHysOverview(deps: CustomsDeps, ctx: Ctx, dossierId: str
   if (snap) {
     suggestions = pendingHysSuggestions(snap, rows);
   }
-  return ok({ submissions, suggestions, lotEditable, supplementHint, defaults: { ...officeDefaults(snap), internalRef: dossier.code.slice(0, 20) } });
+  const attachmentSlots = snap ? attachmentPairs(hysValuesOf(snap) as AttachmentValues) : [];
+  return ok({ submissions, suggestions, lotEditable, supplementHint, attachmentSlots, defaults: { ...officeDefaults(snap), internalRef: dossier.code.slice(0, 20) } });
 }
 
 export async function createHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: string, input: CreateHysInput): Promise<Result<HysSubmissionView>> {

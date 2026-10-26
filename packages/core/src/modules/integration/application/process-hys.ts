@@ -2,7 +2,7 @@
 // outbox HYS → bộ + file (bytes từ kho) → gateway.attachDocuments → ACCEPTED (số tiếp nhận, ngày) / REJECTED / SEND_FAILED
 // → lô còn sửa được và bộ khai trước tờ khai → điền cặp 1.63/2.53 qua DeclarationReader.fillAttachment.
 // Idempotent: bộ đã ACCEPTED → không gửi lại; đã có kết quả điền → không điền lại (crash giữa ghi ACCEPTED và điền → lần chạy lại điền tiếp).
-import type { HysFill } from "@kb/contracts";
+import { AttachmentSlotSchema, type HysFill } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
@@ -13,7 +13,8 @@ import type { CustomsDeps, CustomsRepos, GatewayError, HysSubmissionRow, Message
 import { lotEditableOf } from "./hys-submissions.js";
 
 /** payload outbox HYS (jsonb – dữ liệu từ ngoài, bất biến 9). Outbox HYS kiểu cũ (payload `files`) không có `submissionId`. */
-export const HysOutboxPayloadSchema = z.object({ submissionId: z.string().min(1), certificateId: z.string().optional() });
+/** `replaceSlot`: cặp 1.63/2.53 người khai chọn thay khi đã đủ 3 cặp (không có cột riêng – đi trong payload). */
+export const HysOutboxPayloadSchema = z.object({ submissionId: z.string().min(1), certificateId: z.string().optional(), replaceSlot: AttachmentSlotSchema.optional() });
 export const HYS_LEGACY_ERROR = "HYS kiểu cũ không còn hỗ trợ – khai bộ HYS mới";
 
 type ActorCtx = { orgId: OrgId; userId: UserId };
@@ -57,7 +58,7 @@ export async function processHysOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Out
   // Đã ACCEPTED (job chạy lại sau crash / sau khi đã ghi kết quả): không gửi lại; điền 1.63 nếu lần trước chưa kịp.
   if (sub.status === "ACCEPTED") {
     if (ob.status === "PENDING") await deps.uow.asOrg(ctx, (r) => r.outbox.update(ob.orgId, ob.id, { status: "SENT", lastError: null, updatedAt: now() }));
-    if (!sub.fill) await fillDeclaration(deps, ctx, sub);
+    if (!sub.fill) await fillDeclaration(deps, ctx, sub, parsed.data.replaceSlot);
     await publish();
     return ok({ status: "SENT", next: null });
   }
@@ -144,24 +145,24 @@ export async function processHysOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Out
     await r.outbox.update(ob.orgId, ob.id, { status: "SENT", lastError: null, updatedAt: now() });
     await r.hys.update(ob.orgId, id, { status: "ACCEPTED", receiptNo, registeredOn: accepted.registeredOn, reject: null, updatedAt: now() });
   });
-  await fillDeclaration(deps, ctx, accepted);
+  await fillDeclaration(deps, ctx, accepted, parsed.data.replaceSlot);
   await publish();
   return ok({ status: "SENT", next: null });
 }
 
 /**
- * Điền cặp 1.63/2.53 (spec §2.3): có số ∧ bộ khai trước tờ khai ∧ lô còn sửa được (tính lại lúc này) → fillAttachment;
+ * Điền cặp 1.63/2.53 (spec §2.3): có số ∧ bộ khai trước tờ khai ∧ lô còn sửa được (tính lại lúc này) → fillAttachment (đủ 3 cặp → thay cặp replaceSlot);
  * không có số → NO_RECEIPT; ngược lại → LOCKED (không sửa tờ khai – tránh đổi nội dung đã gửi). Ghi kết quả vào bộ.
  */
-async function fillDeclaration(deps: CustomsDeps, ctx: ActorCtx, sub: HysSubmissionRow): Promise<void> {
+async function fillDeclaration(deps: CustomsDeps, ctx: ActorCtx, sub: HysSubmissionRow, replaceSlot: 1 | 2 | 3 | undefined): Promise<void> {
   let fill: HysFill;
   if (!sub.receiptNo) fill = { outcome: "NO_RECEIPT" };
   else {
     const snap = await deps.declarations.get(ctx.orgId, sub.dossierId);
     const { results, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, sub.dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, sub.dossierId) }));
     if (sub.purpose === "PRE_DECLARATION" && lotEditableOf(snap, results, outbox)) {
-      const res = await deps.declarations.fillAttachment(ctx, sub.dossierId, { procedureCode: sub.procedureCode ?? "", receiptNo: sub.receiptNo, note: `HYS ${sub.seq} – ${sub.receiptNo}` });
-      fill = { outcome: res.outcome, ...(res.slot ? { slot: res.slot } : {}), afterApproval: res.afterApproval };
+      const res = await deps.declarations.fillAttachment(ctx, sub.dossierId, { procedureCode: sub.procedureCode ?? "", receiptNo: sub.receiptNo, note: `HYS ${sub.seq} – ${sub.receiptNo}`, ...(replaceSlot ? { replaceSlot } : {}) });
+      fill = { outcome: res.outcome, ...(res.slot ? { slot: res.slot } : {}), ...(res.replaced ? { replaced: res.replaced } : {}), afterApproval: res.afterApproval };
     } else fill = { outcome: "LOCKED" };
   }
   await deps.uow.asOrg(ctx, (r) => r.hys.update(ctx.orgId, sub.id, { fill, updatedAt: deps.clock.now() }));

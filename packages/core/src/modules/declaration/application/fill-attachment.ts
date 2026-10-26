@@ -6,8 +6,15 @@ import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import type { DeclarationDeps, StoredField } from "./ports.js";
 
-export type FillAttachmentInput = { procedureCode: string; receiptNo: string; note: string };
-export type FillAttachmentResult = { outcome: "FILLED" | "ALREADY" | "FULL" | "LOCKED"; slot?: 1 | 2 | 3; afterApproval: boolean };
+/** `replaceSlot`: cặp người khai chọn thay khi 1.63/2.53 đã đủ 3 cặp có số (chỉ dùng khi không còn cặp trống). */
+export type FillAttachmentInput = { procedureCode: string; receiptNo: string; note: string; replaceSlot?: 1 | 2 | 3 };
+export type FillAttachmentResult = {
+  outcome: "FILLED" | "ALREADY" | "FULL" | "REPLACED" | "LOCKED";
+  slot?: 1 | 2 | 3;
+  /** REPLACED: cặp cũ bị thay. */
+  replaced?: { code: string; receipt: string };
+  afterApproval: boolean;
+};
 
 export async function fillAttachmentFromHys(
   deps: DeclarationDeps,
@@ -27,9 +34,9 @@ export async function fillAttachmentFromHys(
       values[`TK_EA${n}`] = decl.fields[`TK_EA${n}`]?.value ?? "";
       values[`TK_EB${n}`] = decl.fields[`TK_EB${n}`]?.value ?? "";
     }
-    const fill = fillAttachmentSlot(values, input.procedureCode, input.receiptNo);
+    const fill = fillAttachmentSlot(values, input.procedureCode, input.receiptNo, input.replaceSlot);
     const afterApproval = decl.status === "APPROVED";
-    if (fill.outcome !== "FILLED" || !fill.set) return ok({ outcome: fill.outcome, ...(fill.slot ? { slot: fill.slot } : {}), afterApproval, changes: [] });
+    if ((fill.outcome !== "FILLED" && fill.outcome !== "REPLACED") || !fill.set) return ok({ outcome: fill.outcome, ...(fill.slot ? { slot: fill.slot } : {}), afterApproval, changes: [] });
     const fields = { ...decl.fields };
     const changes: { key: string; oldValue: string; newValue: string }[] = [];
     for (const [code, value] of Object.entries(fill.set)) {
@@ -41,7 +48,7 @@ export async function fillAttachmentFromHys(
       changes.push({ key: `decl:${code}`, oldValue: old?.value ?? "", newValue: value });
     }
     await r.declarations.update(decl.orgId, decl.id, { fields, updatedAt: now });
-    return ok({ outcome: "FILLED" as const, slot: fill.slot!, afterApproval, changes });
+    return ok({ outcome: fill.outcome, slot: fill.slot!, ...(fill.replaced ? { replaced: fill.replaced } : {}), afterApproval, changes });
   });
   if (!done.ok) return done;
   const { changes, ...result } = done.value;

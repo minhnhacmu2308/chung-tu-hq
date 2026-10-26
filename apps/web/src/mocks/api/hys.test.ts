@@ -50,6 +50,28 @@ describe("HYS mock", () => {
     expect(after.suggestions.find((s) => s.code === "A02")).toBeUndefined();
   });
 
+  it("1.63 đủ 3 cặp: overview attachmentSlots; không chọn cặp → HYS_SLOTS_FULL; replaceSlot → thay cặp đó (REPLACED)", async () => {
+    const send = async (code: string, replaceSlot?: 1 | 2 | 3) => {
+      const h = await createHys(NEW, { procedureCode: code });
+      await uploadHysFiles(NEW, h.id, [new File(["x"], "a.pdf", { type: "application/pdf" })]);
+      return { id: h.id, run: () => sendHys(NEW, h.id, { certificateId: CERT, ...(replaceSlot ? { replaceSlot } : {}) }) };
+    };
+    const sent: string[] = [];
+    for (const code of ["A01", "A02", "A08"]) sent.push((await (await send(code)).run()).receiptNo!);
+    const o = await getHysOverview(NEW);
+    expect(o.attachmentSlots).toEqual([
+      { slot: 1, code: "A01", receipt: sent[0] },
+      { slot: 2, code: "A02", receipt: sent[1] },
+      { slot: 3, code: "A08", receipt: sent[2] },
+    ]);
+    const fourth = await send("A99");
+    expect(await err(fourth.run())).toMatchObject({ reason: "HYS_SLOTS_FULL", params: { field: "1.63" } });
+    const r = await sendHys(NEW, fourth.id, { certificateId: CERT, replaceSlot: 2 });
+    expect(r.fill).toEqual({ outcome: "REPLACED", slot: 2, replaced: { code: "A02", receipt: sent[1] }, afterApproval: true });
+    expect(decl().fields.find((f) => f.code === "TK_EA2")?.value).toBe("A99");
+    expect(decl().fields.find((f) => f.code === "TK_EB2")?.value).toBe(r.receiptNo);
+  });
+
   it("bộ chưa đủ điều kiện → HYS_INVALID; đã gửi thì không sửa/xóa", async () => {
     const h = await createHys(NEW, {});
     expect(await err(sendHys(NEW, h.id, { certificateId: CERT }))).toMatchObject({ reason: "HYS_INVALID" });

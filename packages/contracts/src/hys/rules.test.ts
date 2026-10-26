@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CATALOG_EDA } from "../declaration/catalog-eda.js";
 import { CATALOG_IDA } from "../declaration/catalog-ida.js";
-import { checkHysSubmission, fillAttachmentSlot, hysExtensionAllowed, satisfiedHysCodes, suggestHys } from "./rules.js";
+import { attachmentPairs, checkHysSubmission, fillAttachmentSlot, hysExtensionAllowed, satisfiedHysCodes, suggestHys } from "./rules.js";
 
 const ok = [{ fileName: "a.pdf", sizeBytes: 100 }];
 const base = { procedureCode: "A02", customsOffice: "01B1", processingUnit: "01", phone: null, internalRef: null, note: null, files: ok };
@@ -38,6 +38,29 @@ describe("fillAttachmentSlot", () => {
     expect(fillAttachmentSlot({ TK_EA1: "A01", TK_EB1: "1", TK_EB2: "  " }, "A02", "2")).toMatchObject({ outcome: "FILLED", slot: 2 });
     expect(fillAttachmentSlot({ TK_EB2: "2" }, "A02", "2")).toEqual({ outcome: "ALREADY", slot: 2 });
     expect(fillAttachmentSlot({ TK_EB1: "1", TK_EB2: "2", TK_EB3: "3" }, "A02", "4")).toEqual({ outcome: "FULL" });
+  });
+  const full = { TK_EA1: "A01", TK_EB1: "1", TK_EA2: "A02", TK_EB2: "2", TK_EA3: "A08", TK_EB3: "3" };
+  it("đủ 3 cặp + replaceSlot → thay cặp đã chọn, trả giá trị cũ", () => {
+    expect(fillAttachmentSlot(full, "A99", " 4 ", 2)).toEqual({
+      outcome: "REPLACED",
+      slot: 2,
+      set: { TK_EA2: "A99", TK_EB2: "4" },
+      replaced: { code: "A02", receipt: "2" },
+    });
+  });
+  it("replaceSlot không dùng khi còn cặp trống hoặc số đã có", () => {
+    expect(fillAttachmentSlot({ TK_EB1: "1" }, "A02", "4", 1)).toMatchObject({ outcome: "FILLED", slot: 2 });
+    expect(fillAttachmentSlot(full, "A02", "3", 1)).toEqual({ outcome: "ALREADY", slot: 3 });
+  });
+});
+
+describe("attachmentPairs", () => {
+  it("chỉ các cặp có số tiếp nhận, theo thứ tự cặp", () => {
+    expect(attachmentPairs({ TK_EA1: "A01", TK_EB1: " 1 ", TK_EA2: "A02", TK_EB2: " ", TK_EB3: "3" })).toEqual([
+      { slot: 1, code: "A01", receipt: "1" },
+      { slot: 3, code: "", receipt: "3" },
+    ]);
+    expect(attachmentPairs({})).toEqual([]);
   });
 });
 

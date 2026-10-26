@@ -62,7 +62,7 @@ Thuật ngữ:
 | `receipt_no` | text null | TK_JNO (string – bất biến 2) |
 | `registered_on` | date null | TK_YMD (`YYYY-MM-DD`) |
 | `reject` | jsonb null | `{ code, message, solution? }[]` của Hải quan / lỗi gửi |
-| `fill` | jsonb null | kết quả điền 1.63: `{ outcome: "FILLED" \| "ALREADY" \| "FULL" \| "LOCKED" \| "NO_RECEIPT", slot?: 1\|2\|3, afterApproval?: boolean }` |
+| `fill` | jsonb null | kết quả điền 1.63: `{ outcome: "FILLED" \| "ALREADY" \| "FULL" \| "REPLACED" \| "LOCKED" \| "NO_RECEIPT", slot?: 1\|2\|3, replaced?: { code, receipt }, afterApproval?: boolean }` (REPLACED: cặp cũ bị thay) |
 | `sent_by`, `sent_at` | text null, timestamptz null | người bấm gửi |
 | `created_at`, `updated_at` | | |
 
@@ -104,11 +104,16 @@ File upload riêng **không** vào bảng `documents` (không chạy AI, không 
 - **Hải quan từ chối** (gateway trả `errors`): `REJECTED`, lưu `reject`, outbox `SENT`, message IN ERROR. Sửa rồi gửi lại.
 - **Lỗi gửi** (ngoại lệ tạm thời): BullMQ thử lại; hết lượt (`markOutboxFailed`) hoặc lỗi vĩnh viễn (DomainError, không đọc được file – nêu tên file) → `SEND_FAILED`, lưu `reject`. Gửi lại = `sendHysSubmission` (cho phép từ `SEND_FAILED`) – trước khi gửi, nếu bộ đã có `receipt_no` thì không gửi, chỉ chuyển `ACCEPTED`.
 
-### 2.4 Điền cặp 1.63 / 2.53 – `fillAttachmentSlot(values, procedureCode, receiptNo)`
-Hàm thuần (`contracts`). `values` = `{ TK_EA1..3, TK_EB1..3 }` (chuỗi, có thể rỗng). Trả `{ outcome: "FILLED" | "ALREADY" | "FULL", slot?, set? }`:
+### 2.4 Điền cặp 1.63 / 2.53 – `fillAttachmentSlot(values, procedureCode, receiptNo, replaceSlot?)`
+Hàm thuần (`contracts`). `values` = `{ TK_EA1..3, TK_EB1..3 }` (chuỗi, có thể rỗng). Trả `{ outcome: "FILLED" | "ALREADY" | "FULL" | "REPLACED", slot?, set?, replaced? }`:
 1. Có cặp n với TK_EB{n} = `receiptNo` → `ALREADY`, `slot = n`.
 2. Cặp trống đầu tiên (TK_EB{n} trống sau trim), n = 1 → 3 → `FILLED`, `slot = n`, `set = { TK_EA{n}: procedureCode, TK_EB{n}: receiptNo }`.
-3. Hết chỗ → `FULL`; tờ khai hiện cảnh báo "1.63 đã đủ 3 số đính kèm – số HYS {receipt} ({code}) chưa được điền".
+3. Hết chỗ, có `replaceSlot` (người khai chọn khi gửi) → `REPLACED`, `slot = replaceSlot`, `set` = cặp mới, `replaced = { code, receipt }` (giá trị cũ); `field_audit` nguồn `HYS_FILL` ghi cũ → mới như khi điền.
+4. Hết chỗ, không có `replaceSlot` → `FULL`; thẻ HYS báo "Ô 1.63 đã đủ 3 số đính kèm – số này chưa được điền".
+
+`attachmentPairs(values)` (contracts) = các cặp có TK_EB khác rỗng `{ slot, code, receipt }`; `getHysOverview` trả thành `attachmentSlots`.
+
+**Đủ 3 cặp khi gửi bộ mới (bổ sung 2026-10-26)**: lô còn sửa được mà 1.63/2.53 đã đủ 3 cặp có số (HYS điền hoặc nhập tay) → `sendHysSubmission` bắt buộc `replaceSlot` (1/2/3); thiếu → `VALIDATION` reason `HYS_SLOTS_FULL` (param `field` = "1.63"/"2.53"), không tạo outbox. `replaceSlot` đi trong payload outbox `{ submissionId, certificateId, replaceSlot }` (không thêm cột DB; parse Zod `HysOutboxPayloadSchema`), worker truyền vào `DeclarationReader.fillAttachment`. Lúc nhận số mà còn cặp trống thì vẫn điền cặp trống (`replaceSlot` bỏ qua). Lô không còn sửa được (`SUPPLEMENT`/LOCKED): không hỏi, không đụng 1.63. Bộ HYS cũ có số bị thay vẫn ở danh sách (Hải quan đã ghi nhận, không xóa được), kèm ghi chú "Không còn trong ô 1.63".
 
 Người khai vẫn sửa tay 1.63 như hiện nay.
 
@@ -130,6 +135,7 @@ Người khai vẫn sửa tay 1.63 như hiện nay.
 - Thông tin chung: cơ quan Hải quan, nhóm xử lý hồ sơ (CodeInput như tờ khai, không bắt buộc), phân loại thủ tục (chọn A546, hiện tên), số điện thoại, số quản lý nội bộ, ghi chú.
 - File: danh sách chứng từ hồ sơ để tick + `FileDropzone` "Tải file lên"; `Progress` "x / 2 MB" (vượt → tone danger); ghi chú các đuôi được nhận.
 - Nút: Lưu nháp · Gửi HYS (Dialog xác nhận, chọn chứng thư số như IDA) · Xóa (DRAFT/REJECTED/SEND_FAILED).
+- Lô còn sửa được và 1.63/2.53 đã đủ 3 cặp: hộp xác nhận gửi hiện `Alert` cảnh báo "Ô 1.63 đã đủ 3 số đính kèm" + `RadioGroup` "Cặp n: {mã} / {số}" (kèm tên thủ tục) – bắt buộc chọn cặp sẽ bị thay, chưa chọn thì nút "Ký số và gửi" khóa. Thẻ HYS (§3.1) cảnh báo trước "khi gửi bộ mới sẽ phải chọn 1 cặp để thay"; bộ thay cặp hiện "Đã thay cặp {n} ({mã cũ} / {số cũ}) bằng số {số}"; bộ bị thay ghi "Không còn trong ô 1.63".
 
 ### 3.3 Xác nhận khai IDA/EDA khi còn gợi ý chưa khai (H2)
 - Áp dụng: lần khai IDA/EDA đầu (`submitDeclaration`) và khai lại IDA/EDA sau gọi về (`performOperation` op IDA/EDA). Không áp dụng IDC/EDC, gọi về, IDA01/EDA01, AMA, tờ 2..N do chuỗi nối tiếp của worker.
@@ -172,7 +178,7 @@ Chạy **một lần cho cả lô** trên thông tin chung (`values` = `declarat
 | G4 | IDA (1.58), EDA (2.48) | `TK_ENC` = A (bảo lãnh riêng) | A08 – chứng thư bảo lãnh riêng |
 | G5 | IDA (1.68), EDA (2.57) | `TK_NT2` dài hơn `maxLen` của chỉ tiêu ghi chú trong catalog | A99 – phần ghi chú còn lại |
 
-- Mã được coi là **đã khai** (`satisfied`) chỉ khi số tiếp nhận thật sự đã vào 1.63/2.53: 1.63/2.53 có cặp cùng mã và TK_EB khác rỗng (HYS đã điền, hoặc khai ngoài phần mềm và nhập tay); **hoặc** có bộ HYS cùng mã ở `ACCEPTED` với kết quả điền `FILLED`/`ALREADY`. Bộ `SENDING`, hay `ACCEPTED` mà `LOCKED`/`FULL`/`NO_RECEIPT`, **chưa** tính là đã khai → vẫn hiện hộp xác nhận bỏ qua thông thường (không chặn cứng). Lý do: khai IDA khi HYS còn đang gửi thì thông điệp IDA dựng không có số tiếp nhận. G2 và G5 cùng mã A99: một A99 đã khai thỏa cả hai.
+- Mã được coi là **đã khai** (`satisfied`) chỉ khi số tiếp nhận thật sự đã vào 1.63/2.53: 1.63/2.53 có cặp cùng mã và TK_EB khác rỗng (HYS đã điền, hoặc khai ngoài phần mềm và nhập tay); **hoặc** có bộ HYS cùng mã ở `ACCEPTED` với kết quả điền `FILLED`/`ALREADY`/`REPLACED`. Bộ `SENDING`, hay `ACCEPTED` mà `LOCKED`/`FULL`/`NO_RECEIPT`, **chưa** tính là đã khai → vẫn hiện hộp xác nhận bỏ qua thông thường (không chặn cứng). Lý do: khai IDA khi HYS còn đang gửi thì thông điệp IDA dựng không có số tiếp nhận. G2 và G5 cùng mã A99: một A99 đã khai thỏa cả hai.
 - `VALUATION_CODES_WITHOUT_A01 = ["6", "7"]` là hằng số riêng (căn cứ TT39/2015 sửa đổi TT60/2019 – chưa đối chiếu văn bản; chỉ là gợi ý).
 - Không có luật cho A03, A06 và các mã khác.
 
@@ -185,7 +191,8 @@ Chạy **một lần cho cả lô** trên thông tin chung (`values` = `declarat
 | Hải quan từ chối | `REJECTED` + mã/nội dung/hướng xử lý; sửa → gửi lại (khóa mới) |
 | Lỗi mạng / cổng | Thử lại tự động; hết lượt → `SEND_FAILED` + "Gửi lại" (đã có số thì không gửi) |
 | Thành công không có số | `ACCEPTED`, `NO_RECEIPT`, cảnh báo nhập tay |
-| 1.63 đủ 3 cặp | `FULL`, không ghi đè, cảnh báo |
+| 1.63 đủ 3 cặp, lô còn sửa được | Gửi bắt chọn cặp bị thay (thiếu → `HYS_SLOTS_FULL`, không outbox); nhận số → `REPLACED` cặp đã chọn, audit cũ → mới; bộ cũ ghi "Không còn trong ô 1.63" |
+| Nhận số mà đủ 3 cặp, không có cặp chọn trước (vd gửi khi chưa đủ) | `FULL`, không ghi đè, cảnh báo |
 | Lô không còn sửa được (đang truyền, đã khai, gọi về một phần) | `LOCKED`, chỉ ghi lịch sử, không tự điền; nhắc gọi về tất cả tờ rồi nhập tay số tiếp nhận vào 1.63/2.53 |
 | Bấm gửi hai lần | Khóa idempotency outbox → một lần gửi |
 | Người khác tổ chức | RLS + `orgId` → không thấy |

@@ -1,12 +1,12 @@
 // HYS (mock): soạn bộ hồ sơ đính kèm, gửi (ACCEPTED ngay), điền cặp 1.63/2.53 vào tờ khai mock. Cùng luật @kb/contracts với backend.
 import {
-  checkHysSubmission, awaitingContent, extraFieldMeta, fillAttachmentSlot, HYS_PROCEDURE_CODES,
+  checkHysSubmission, awaitingContent, extraFieldMeta, fillAttachmentSlot, HYS_MAX_SLOTS, HYS_PROCEDURE_CODES,
   type AttachmentValues, type CreateHysInput, type HysOverview, type HysSubmissionView, type SendHysInput, type UpdateHysInput,
 } from "@kb/contracts";
 import { containersFor } from "@/mocks/customs-sim";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
-import { hysValues, pendingSuggestions, type MockHys } from "@/mocks/hys-sim";
+import { attachmentSlotsOf, hysValues, pendingSuggestions, type MockHys } from "@/mocks/hys-sim";
 import { reasonApiError } from "@/mocks/reason-error";
 import { branchCountOf, branchStageOf } from "./customs";
 
@@ -55,6 +55,7 @@ export const getHysOverview = (dossierId: string) =>
       suggestions: pendingSuggestions(db, dossierId, containerCount(db, dossierId)),
       lotEditable: lotEditableOf(db, dossierId),
       supplementHint: stagesOf(db, dossierId).some((s) => s === "DECLARED") && (channel === "YELLOW" || channel === "RED"),
+      attachmentSlots: attachmentSlotsOf(db, dossierId),
       defaults: { customsOffice: dossier.customsOffice.split(" ")[0] || null, processingUnit: "00", internalRef: dossier.code.slice(0, 20) },
     };
   });
@@ -118,7 +119,7 @@ export const removeHysFile = (dossierId: string, hysId: string, fileId: string) 
     return toView(h);
   });
 
-/** Gửi bộ: Hải quan chấp nhận ngay (số tiếp nhận 12 chữ số); lô còn sửa được → điền cặp 1.63/2.53 vào tờ khai. */
+/** Gửi bộ: Hải quan chấp nhận ngay (số tiếp nhận 12 chữ số); lô còn sửa được → điền cặp 1.63/2.53 vào tờ khai (đủ 3 cặp → bắt chọn replaceSlot, thay cặp đó). */
 export const sendHys = (dossierId: string, hysId: string, input: SendHysInput) =>
   mutate((db) => {
     dossierOf(db, dossierId);
@@ -132,6 +133,9 @@ export const sendHys = (dossierId: string, hysId: string, input: SendHysInput) =
       throw reasonApiError("VALIDATION", "HYS_INVALID", { issues: text });
     }
     const lotEditable = lotEditableOf(db, dossierId);
+    if (lotEditable && attachmentSlotsOf(db, dossierId).length >= HYS_MAX_SLOTS && !input.replaceSlot) {
+      throw reasonApiError("VALIDATION", "HYS_SLOTS_FULL", { field: decl.kind === "IDA" ? "1.63" : "2.53" });
+    }
     h.attempt += 1;
     h.purpose = lotEditable ? "PRE_DECLARATION" : "SUPPLEMENT";
     h.status = "ACCEPTED";
@@ -143,9 +147,10 @@ export const sendHys = (dossierId: string, hysId: string, input: SendHysInput) =
       h.fill = { outcome: "LOCKED" };
     } else {
       const cur = hysValues(db, dossierId)!;
-      const res = fillAttachmentSlot(cur.values as AttachmentValues, h.procedureCode ?? "", h.receiptNo);
+      const res = fillAttachmentSlot(cur.values as AttachmentValues, h.procedureCode ?? "", h.receiptNo, input.replaceSlot);
       const afterApproval = decl.status === "APPROVED";
-      if (res.outcome === "FILLED" && res.set) {
+      const wrote = res.outcome === "FILLED" || res.outcome === "REPLACED";
+      if (wrote && res.set) {
         const note = `HYS ${h.seq} – ${h.receiptNo}`;
         for (const [code, value] of Object.entries(res.set)) {
           const meta = extraFieldMeta(decl.kind, code);
@@ -154,7 +159,7 @@ export const sendHys = (dossierId: string, hysId: string, input: SendHysInput) =
           else if (meta) decl.fields.push({ code, label: meta.label, section: meta.section, ...(meta.no ? { no: meta.no } : {}), value, source: "SYSTEM", note });
         }
       }
-      h.fill = { outcome: res.outcome, ...(res.slot ? { slot: res.slot } : {}), ...(res.outcome === "FILLED" ? { afterApproval } : {}) };
+      h.fill = { outcome: res.outcome, ...(res.slot ? { slot: res.slot } : {}), ...(res.replaced ? { replaced: res.replaced } : {}), ...(wrote ? { afterApproval } : {}) };
     }
     return toView(h);
   });

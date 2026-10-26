@@ -1,16 +1,20 @@
 // Gửi bộ HYS (spec §2.2): kiểm bộ + chứng thư → một giao dịch (attempt+1, SENDING, purpose, outbox `hys:<id>:n<attempt>`) → xếp job customs-send.
 // Không đòi tờ khai đã duyệt / HS xác nhận / không BLOCKER (HYS khai trước IDA). Gửi lại sau SEND_FAILED mà bộ đã có số tiếp nhận → chỉ chuyển ACCEPTED.
-import { checkHysSubmission, type HysIssue, type HysSubmissionView } from "@kb/contracts";
+import { attachmentPairs, checkHysSubmission, HYS_MAX_SLOTS, type AttachmentValues, type HysIssue, type HysSubmissionView, type SendHysInput } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import type { CustomsDeps, OutboxRow } from "./customs-ports.js";
-import { editable, HYS_ROLES, lotEditableOf, viewOf } from "./hys-submissions.js";
+import { editable, HYS_ROLES, hysValuesOf, lotEditableOf, viewOf } from "./hys-submissions.js";
 
 /** Vấn đề của bộ → chuỗi ngắn cho params (giao diện dịch theo reason; danh sách đầy đủ ở details). */
 const describeIssues = (issues: HysIssue[]): string => issues.map((i) => [i.code, i.file ?? i.field ?? i.bytes].filter((x) => x !== undefined).join(" ")).join(", ");
 
-export async function sendHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: string, id: string, input: { certificateId: string }): Promise<Result<HysSubmissionView>> {
+/**
+ * Lô còn sửa được mà 1.63/2.53 đã đủ 3 cặp có số → bắt buộc `replaceSlot` (cặp sẽ bị thay khi Hải quan cấp số), thiếu → HYS_SLOTS_FULL.
+ * `replaceSlot` đi trong payload outbox (không có cột riêng).
+ */
+export async function sendHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: string, id: string, input: SendHysInput): Promise<Result<HysSubmissionView>> {
   const allowed = requireRole(ctx, ...HYS_ROLES);
   if (!allowed.ok) return allowed;
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
@@ -33,7 +37,7 @@ export async function sendHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: 
 
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
   if (!snap) return err(domainError("NO_DECLARATION", "Chưa dựng tờ khai – không gửi được HYS"));
-  const { certificateId } = input;
+  const { certificateId, replaceSlot } = input;
   if (!certificateId || !(await deps.certificates.exists(ctx.orgId, certificateId))) return err(reasonError("NO_CERT", "CERTIFICATE_REQUIRED"));
 
   const sent = await deps.uow.asOrg(ctx, async (r) => {
@@ -44,10 +48,12 @@ export async function sendHysSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: 
     const issues = checkHysSubmission({ procedureCode: row.procedureCode, customsOffice: row.customsOffice, processingUnit: row.processingUnit, phone: row.phone, internalRef: row.internalRef, note: row.note, files: files.map((f) => ({ fileName: f.fileName, sizeBytes: f.sizeBytes })) });
     if (issues.length) return err(reasonError("VALIDATION", "HYS_INVALID", { issues: describeIssues(issues) }, { issues }));
     const lotEditable = lotEditableOf(snap, await r.results.listForDossier(ctx.orgId, dossierId), await r.outbox.listForDossier(ctx.orgId, dossierId));
+    const slotsFull = attachmentPairs(hysValuesOf(snap) as AttachmentValues).length >= HYS_MAX_SLOTS;
+    if (lotEditable && slotsFull && !replaceSlot) return err(reasonError("VALIDATION", "HYS_SLOTS_FULL", { field: snap.payload.kind === "IDA" ? "1.63" : "2.53" }));
     const attempt = row.attempt + 1;
     const outbox: OutboxRow = {
       id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, declarationId: snap.declarationId, operation: "HYS", idempotencyKey: `hys:${id}:n${attempt}`,
-      payload: { submissionId: id, certificateId }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now,
+      payload: { submissionId: id, certificateId, ...(lotEditable && replaceSlot ? { replaceSlot } : {}) }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now,
     };
     try {
       await r.outbox.insert(outbox);

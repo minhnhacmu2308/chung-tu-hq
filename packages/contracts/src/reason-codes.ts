@@ -14,6 +14,7 @@ export const REASON_TEXT_VI = {
   HYS_USE_SUBMISSION: "HYS khai bằng bộ hồ sơ đính kèm ở thẻ HYS",
   HYS_NOT_EDITABLE: "Bộ HYS đã gửi – không sửa/xóa được, khai bộ mới",
   HYS_INVALID: "Bộ HYS chưa đủ điều kiện gửi: {issues}",
+  HYS_SLOTS_FULL: "Ô {field} đã đủ 3 số đính kèm – chọn 1 cặp để thay bằng số HYS mới",
   IDB_REQUIRES_PRE_DECLARED: "Chỉ gọi sửa khi đã khai tạm và chưa khai chính thức",
   IDC_REQUIRES_PRE_DECLARED: "Khai tạm trước để nhận số tờ khai",
   IDC_ALREADY_DECLARED: "Đã khai chính thức",

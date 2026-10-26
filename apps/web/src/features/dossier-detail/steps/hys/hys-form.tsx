@@ -1,12 +1,13 @@
 "use client";
 // Form một bộ HYS (spec §3.2): panel bên phải – thông tin chung, chọn chứng từ hồ sơ + tải file riêng, dung lượng x / 2 MB,
 // danh sách vấn đề (checkHysSubmission – cùng luật backend), Lưu nháp · Gửi HYS (xác nhận + chứng thư số như IDA) · Xóa.
+// Lô còn sửa được mà 1.63/2.53 đủ 3 cặp: hộp gửi bắt chọn 1 cặp sẽ bị thay (replaceSlot) mới gửi được.
 import {
   Alert, Button, Checkbox, Combobox, Dialog, DialogContent, DialogFooter, Field, FileDropzone, FileUploadList, fill, FormSection, formatBytes, Input,
-  Progress, Select, Stack, Textarea, toast, toastPromise, useMessages, useUiLocale,
+  Progress, RadioGroup, Select, Stack, Textarea, toast, toastPromise, useMessages, useUiLocale,
 } from "@kb/ui";
 import {
-  checkHysSubmission, HYS_ALLOWED_EXTENSIONS, HYS_MAX_TOTAL_BYTES, HYS_PROCEDURE_CODES,
+  checkHysSubmission, HYS_ALLOWED_EXTENSIONS, HYS_MAX_SLOTS, HYS_MAX_TOTAL_BYTES, HYS_PROCEDURE_CODES,
   type DossierDocument, type HysIssue, type HysProcedureCode, type HysSubmissionView, type UpdateHysInput,
 } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,6 +37,10 @@ export type HysFormProps = {
   documents: readonly DossierDocument[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Lô còn sửa được (số tiếp nhận sẽ được điền vào 1.63/2.53). */
+  lotEditable: boolean;
+  /** Các cặp 1.63/2.53 đang có số – đủ 3 cặp (lô còn sửa được) thì phải chọn 1 cặp để thay khi gửi. */
+  attachmentSlots: HysOverview["attachmentSlots"];
 };
 
 /** Thay một bộ trong bản cache tổng quan HYS bằng bản server vừa trả. */
@@ -60,7 +65,7 @@ export function useIssueText() {
     });
 }
 
-export function HysForm({ dossierId, kind, submission, documents, open, onOpenChange }: HysFormProps) {
+export function HysForm({ dossierId, kind, submission, documents, open, onOpenChange, lotEditable, attachmentSlots }: HysFormProps) {
   const t = useMessages(HYS_MESSAGES);
   const st = useMessages(SUBMIT_MESSAGES);
   const names = useMessages(HYS_PROCEDURE_MESSAGES);
@@ -81,6 +86,9 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
   const [sendOpen, setSendOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [certId, setCertId] = useState("");
+  const [replaceSlot, setReplaceSlot] = useState<"1" | "2" | "3" | null>(null);
+  const slotsFull = lotEditable && attachmentSlots.length >= HYS_MAX_SLOTS;
+  const field = kind === "IDA" ? "1.63" : "2.53";
 
   const uploads = submission.files.filter((f) => f.source === "UPLOAD");
   // Chứng từ đã gửi kèm trước đây mà nay không còn trong danh sách (vd chưa đọc xong) vẫn tính dung lượng theo bản đã lưu.
@@ -147,7 +155,9 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
     // Lưu nội dung đang sửa rồi gửi – một toast đi suốt "đang ký số…" → kết quả.
     mutationFn: () =>
       toastPromise(
-        updateHys(dossierId, submission.id, body()).then(() => sendHys(dossierId, submission.id, { certificateId: selectedId })),
+        updateHys(dossierId, submission.id, body()).then(() =>
+          sendHys(dossierId, submission.id, { certificateId: selectedId, ...(slotsFull && replaceSlot ? { replaceSlot: Number(replaceSlot) as 1 | 2 | 3 } : {}) }),
+        ),
         { loading: { title: t.sendLoading }, success: { title: t.sentOk }, error: (e) => ({ title: errorMessage(e, locale) }) },
       ),
     onSuccess: (v) => {
@@ -329,6 +339,26 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
             >
               <Stack gap="sm">
                 <p className="text-sm text-fg-muted">{fill(t.sendBody, { seq: submission.seq, code: procedureCode, n: files.length })}</p>
+                {slotsFull && (
+                  <Alert tone="warning" title={fill(t.slotsFullTitle, { field })}>
+                    <Stack gap="sm">
+                      <p>{t.slotsFullBody}</p>
+                      <RadioGroup
+                        label={t.replaceLabel}
+                        value={replaceSlot}
+                        onChange={setReplaceSlot}
+                        options={attachmentSlots.map((p) => {
+                          const pc = p.code as HysProcedureCode;
+                          return {
+                            value: String(p.slot) as "1" | "2" | "3",
+                            label: fill(t.slotOption, { slot: p.slot, code: p.code || "–", receipt: p.receipt }),
+                            ...(pc in names ? { description: names[pc] } : {}),
+                          };
+                        })}
+                      />
+                    </Stack>
+                  </Alert>
+                )}
                 <Field label={st.certLabel}>
                   <Select
                     value={selectedId}
@@ -343,7 +373,7 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
                 <Button variant="ghost" type="button" onClick={() => setSendOpen(false)}>
                   {t.cancel}
                 </Button>
-                <Button type="submit" loading={send.isPending} disabled={!selectedId || certExpired} leftIcon={<KeyRound className="h-4 w-4" />}>
+                <Button type="submit" loading={send.isPending} disabled={!selectedId || certExpired || (slotsFull && !replaceSlot)} leftIcon={<KeyRound className="h-4 w-4" />}>
                   {t.sendConfirm}
                 </Button>
               </DialogFooter>

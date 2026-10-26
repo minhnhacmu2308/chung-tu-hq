@@ -243,6 +243,65 @@ describe("gửi bộ HYS", () => {
     expect(h.uow.data.outbox).toHaveLength(1);
   });
 
+  describe("1.63 đã đủ 3 cặp", () => {
+    const FULL = () => ({ TK_EA1: { value: "A01" }, TK_EB1: { value: "300000000001" }, TK_EA2: { value: "A08" }, TK_EB2: { value: "300000000002" }, TK_EA3: { value: "A99" }, TK_EB3: { value: "300000000003" } });
+
+    it("không chọn cặp → HYS_SLOTS_FULL (1.63), không outbox, bộ giữ DRAFT", async () => {
+      const id = await draft();
+      h.decls.fields = FULL();
+      const r = await sendHysSubmission(h.deps, declarant, D, id, { certificateId: "cert_1" });
+      expect(!r.ok && r.error).toMatchObject({ code: "VALIDATION", reason: "HYS_SLOTS_FULL", params: { field: "1.63" } });
+      expect(h.uow.data.outbox).toHaveLength(0);
+      expect(sub(id).status).toBe("DRAFT");
+    });
+
+    it("EDA → field 2.53", async () => {
+      h.decls.kind = "EDA";
+      const id = await draft();
+      h.decls.fields = FULL();
+      const r = await sendHysSubmission(h.deps, declarant, D, id, { certificateId: "cert_1" });
+      expect(!r.ok && r.error).toMatchObject({ reason: "HYS_SLOTS_FULL", params: { field: "2.53" } });
+    });
+
+    it("replaceSlot=2 → payload outbox mang replaceSlot; nhận số → cặp 2 = mã/số mới, fill REPLACED kèm cặp cũ", async () => {
+      const id = await draft();
+      h.decls.fields = FULL();
+      await sendHysSubmission(h.deps, declarant, D, id, { certificateId: "cert_1", replaceSlot: 2 });
+      expect(lastOutbox().payload).toEqual({ submissionId: id, certificateId: "cert_1", replaceSlot: 2 });
+      await run(lastOutbox().id);
+      const s = sub(id);
+      expect(s.fill).toEqual({ outcome: "REPLACED", slot: 2, replaced: { code: "A08", receipt: "300000000002" }, afterApproval: true });
+      expect(h.decls.attachments).toEqual([{ dossierId: D, procedureCode: "A02", receiptNo: s.receiptNo, note: `HYS 1 – ${s.receiptNo}`, replaceSlot: 2 }]);
+      expect(h.decls.fields).toMatchObject({ TK_EA1: { value: "A01" }, TK_EA2: { value: "A02" }, TK_EB2: { value: s.receiptNo }, TK_EB3: { value: "300000000003" } });
+    });
+
+    it("lô không còn sửa được → không đòi replaceSlot (SUPPLEMENT)", async () => {
+      const id = await draft();
+      h.decls.fields = FULL();
+      h.decls.status = "SUBMITTED";
+      seed(h, 1, "DECLARED");
+      expect((await send(id)).purpose).toBe("SUPPLEMENT");
+      expect(lastOutbox().payload).toEqual({ submissionId: id, certificateId: "cert_1" });
+    });
+
+    it("còn cặp trống mà có replaceSlot → vẫn điền cặp trống (FILLED)", async () => {
+      const id = await draft();
+      h.decls.fields = { TK_EA1: { value: "A01" }, TK_EB1: { value: "300000000001" } };
+      await sendHysSubmission(h.deps, declarant, D, id, { certificateId: "cert_1", replaceSlot: 1 });
+      await run(lastOutbox().id);
+      expect(sub(id).fill).toEqual({ outcome: "FILLED", slot: 2, afterApproval: true });
+      expect(h.decls.fields).toMatchObject({ TK_EB1: { value: "300000000001" } });
+    });
+
+    it("payload outbox replaceSlot sai → FAILED (parse Zod), không gọi cổng", async () => {
+      const id = await draft();
+      await send(id);
+      lastOutbox().payload = { submissionId: id, certificateId: "cert_1", replaceSlot: 7 };
+      expect(await run(lastOutbox().id)).toEqual({ ok: true, value: { status: "FAILED", next: null } });
+      expect(gateway.hysCalls).toHaveLength(0);
+    });
+  });
+
   it("outbox HYS kiểu cũ (payload files, không submissionId) → FAILED với hướng dẫn khai bộ mới, không gọi cổng", async () => {
     h.uow.data.outbox.push({ id: "ob_old", orgId: ORG, dossierId: D, branch: 1, declarationId: "dec_1", operation: "HYS", idempotencyKey: `${D}:HYS:n1`, payload: { files: [{ name: "inv.pdf", storageKey: "k/inv.pdf" }] }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: new Date(), updatedAt: new Date() });
     expect(await run("ob_old")).toEqual({ ok: true, value: { status: "FAILED", next: null } });

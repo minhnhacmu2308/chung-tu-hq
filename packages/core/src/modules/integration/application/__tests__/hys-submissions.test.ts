@@ -132,6 +132,17 @@ describe("tổng quan HYS", () => {
     expect(o.ok && o.value.suggestions).toEqual([]);
   });
 
+  it("attachmentSlots = các cặp 1.63 đang có số (mã chuẩn hóa)", async () => {
+    const o0 = await getHysOverview(h.deps, declarant, D);
+    expect(o0.ok && o0.value.attachmentSlots).toEqual([]);
+    h.decls.fields = { TK_EA1: { value: "A02 – Danh sách container" }, TK_EB1: { value: "300000000001" }, TK_EA2: { value: "A01" }, TK_EB3: { value: "300000000003" } };
+    const o1 = await getHysOverview(h.deps, declarant, D);
+    expect(o1.ok && o1.value.attachmentSlots).toEqual([
+      { slot: 1, code: "A02", receipt: "300000000001" },
+      { slot: 3, code: "", receipt: "300000000003" },
+    ]);
+  });
+
   it("lotEditable và supplementHint theo kết quả truyền", async () => {
     const o0 = await getHysOverview(h.deps, declarant, D);
     expect(o0.ok && [o0.value.lotEditable, o0.value.supplementHint]).toEqual([true, false]);

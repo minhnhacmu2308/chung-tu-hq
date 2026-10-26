@@ -1,5 +1,5 @@
 // HYS (mock): gợi ý còn thiếu của tờ khai hồ sơ – cùng luật suggestHys/satisfiedHysCodes với backend (hys-submissions.ts).
-import { declarationFormValues, satisfiedHysCodes, suggestHys, type AttachmentValues, type HysSubmissionView, type HysSuggestion } from "@kb/contracts";
+import { attachmentPairs, declarationFormValues, satisfiedHysCodes, suggestHys, type AttachmentPair, type AttachmentValues, type HysSubmissionView, type HysSuggestion } from "@kb/contracts";
 import type { MockDb } from "@/mocks/db";
 
 export type MockHys = HysSubmissionView & { dossierId: string };
@@ -25,4 +25,10 @@ export function pendingSuggestions(db: MockDb, dossierId: string, containerCount
   const rows = (db.hys ?? []).filter((h) => h.dossierId === dossierId && h.procedureCode !== null);
   const satisfied = satisfiedHysCodes(v.values as AttachmentValues, rows.map((h) => ({ procedureCode: h.procedureCode!, status: h.status, fill: h.fill })));
   return suggestHys({ kind: v.kind, values: v.values, containerCount, satisfied });
+}
+
+/** Các cặp 1.63/2.53 đang có số của tờ khai hồ sơ – như attachmentSlots của getHysOverview backend. */
+export function attachmentSlotsOf(db: MockDb, dossierId: string): AttachmentPair[] {
+  const v = hysValues(db, dossierId);
+  return v ? attachmentPairs(v.values as AttachmentValues) : [];
 }

@@ -8,10 +8,14 @@ import type { HysIssue, HysSuggestion } from "../hys/rules.js";
 export const HysStatusSchema = z.enum(["DRAFT", "SENDING", "ACCEPTED", "REJECTED", "SEND_FAILED"]);
 export type HysStatus = z.infer<typeof HysStatusSchema>;
 
+export const AttachmentSlotSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+
 export const HysFillSchema = z.object({
-  outcome: z.enum(["FILLED", "ALREADY", "FULL", "LOCKED", "NO_RECEIPT"]),
-  slot: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+  outcome: z.enum(["FILLED", "ALREADY", "FULL", "REPLACED", "LOCKED", "NO_RECEIPT"]),
+  slot: AttachmentSlotSchema.optional(),
   afterApproval: z.boolean().optional(),
+  /** REPLACED: cặp cũ (mã / số tiếp nhận) bị thay bằng số mới. */
+  replaced: z.object({ code: z.string(), receipt: z.string() }).optional(),
 });
 export type HysFill = z.infer<typeof HysFillSchema>;
 
@@ -69,6 +73,8 @@ export const HysOverviewSchema = z.object({
   lotEditable: z.boolean(),
   /** Gợi ý khai HYS bổ sung (đã có tờ khai nhưng thiếu hồ sơ). */
   supplementHint: z.boolean(),
+  /** Các cặp 1.63/2.53 đang có số tiếp nhận trên tờ khai hiện hành (theo thứ tự cặp). */
+  attachmentSlots: z.array(z.object({ slot: AttachmentSlotSchema, code: z.string(), receipt: z.string() })),
   defaults: z.object({
     customsOffice: z.string().nullable(),
     processingUnit: z.string().nullable(),
@@ -91,5 +97,9 @@ export const UpdateHysInputSchema = z.object({
 });
 export type UpdateHysInput = z.infer<typeof UpdateHysInputSchema>;
 
-export const SendHysInputSchema = z.object({ certificateId: z.string().min(1) });
+export const SendHysInputSchema = z.object({
+  certificateId: z.string().min(1),
+  /** Cặp 1.63/2.53 sẽ bị thay khi đã đủ 3 cặp có số (bắt buộc trong trường hợp đó, lô còn sửa được). */
+  replaceSlot: AttachmentSlotSchema.optional(),
+});
 export type SendHysInput = z.infer<typeof SendHysInputSchema>;

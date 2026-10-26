@@ -4,7 +4,7 @@
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, fill, formatBytes, SkeletonList, Stack, StatusBadge, useMessages, useUiLocale,
 } from "@kb/ui";
-import type { HysProcedureCode, HysSubmissionView } from "@kb/contracts";
+import { HYS_MAX_SLOTS, type HysProcedureCode, type HysSubmissionView } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Paperclip, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -67,6 +67,8 @@ export function HysCard({ dossierId, kind, startCode = null, onStartHandled }: H
 
   const field = attachmentFieldNo(kind);
   const open = q.data?.submissions.find((s) => s.id === openId);
+  const slotsFull = !!q.data?.lotEditable && q.data.attachmentSlots.length >= HYS_MAX_SLOTS;
+  const receiptsInField = new Set(q.data?.attachmentSlots.map((p) => p.receipt) ?? []);
 
   return (
     <Card>
@@ -89,6 +91,7 @@ export function HysCard({ dossierId, kind, startCode = null, onStartHandled }: H
           <LoadError title={t.loadError} onRetry={() => void q.refetch()} />
         ) : (
           <Stack gap="md">
+            {slotsFull && <Alert tone="warning">{fill(t.slotsFullCard, { field })}</Alert>}
             {q.data.supplementHint && (
               <Alert tone="info" title={t.supplementTitle}>
                 {t.supplementBody}
@@ -129,7 +132,7 @@ export function HysCard({ dossierId, kind, startCode = null, onStartHandled }: H
             ) : (
               <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
                 {q.data.submissions.map((s) => (
-                  <SubmissionRow key={s.id} s={s} field={field} onOpen={() => setOpenId(s.id)} />
+                  <SubmissionRow key={s.id} s={s} field={field} inField={!s.receiptNo || receiptsInField.has(s.receiptNo)} onOpen={() => setOpenId(s.id)} />
                 ))}
               </ul>
             )}
@@ -145,19 +148,24 @@ export function HysCard({ dossierId, kind, startCode = null, onStartHandled }: H
           documents={documents}
           open
           onOpenChange={(o) => !o && setOpenId(null)}
+          lotEditable={q.data?.lotEditable ?? false}
+          attachmentSlots={q.data?.attachmentSlots ?? []}
         />
       )}
     </Card>
   );
 }
 
-function SubmissionRow({ s, field, onOpen }: { s: HysSubmissionView; field: string; onOpen: () => void }) {
+/** `inField`: số tiếp nhận của bộ còn nằm trong 1.63/2.53 (sai khi đã bị bộ sau thay cặp). */
+function SubmissionRow({ s, field, inField, onOpen }: { s: HysSubmissionView; field: string; inField: boolean; onOpen: () => void }) {
   const t = useMessages(HYS_MESSAGES);
   const names = useMessages(HYS_PROCEDURE_MESSAGES);
   const locale = useUiLocale();
   const size = s.files.reduce((sum, f) => sum + f.sizeBytes, 0);
   const code = s.procedureCode as HysProcedureCode | null;
   const fillKey = s.fill ? (`fill${s.fill.outcome}` as const) : null;
+  /** Số của bộ đã vào 1.63/2.53 (điền / đã có / thay cặp). */
+  const filledIn = s.status === "ACCEPTED" && (s.fill?.outcome === "FILLED" || s.fill?.outcome === "ALREADY" || s.fill?.outcome === "REPLACED");
   return (
     <li className="flex flex-col gap-2 px-3 py-3">
       <div className="flex flex-wrap items-start gap-3">
@@ -179,11 +187,12 @@ function SubmissionRow({ s, field, onOpen }: { s: HysSubmissionView; field: stri
             </p>
           )}
           {s.fill && fillKey && (
-            <p className={s.fill.outcome === "FILLED" || s.fill.outcome === "ALREADY" ? "text-sm text-fg-muted" : "text-sm text-warning-subtle-fg"}>
-              {fill(t[fillKey], { field, slot: s.fill.slot ?? "", receipt: s.receiptNo ?? "" })}
+            <p className={filledIn ? "text-sm text-fg-muted" : "text-sm text-warning-subtle-fg"}>
+              {fill(t[fillKey], { field, slot: s.fill.slot ?? "", receipt: s.receiptNo ?? "", oldCode: s.fill.replaced?.code ?? "", oldReceipt: s.fill.replaced?.receipt ?? "" })}
               {s.fill.afterApproval && <> {t.afterApproval}</>}
             </p>
           )}
+          {filledIn && !inField && <p className="text-sm text-warning-subtle-fg">{fill(t.notInField, { field })}</p>}
         </div>
         <Button size="sm" variant="secondary" onClick={onOpen} aria-label={fill(t.openAria, { seq: s.seq })}>
           {t.open}

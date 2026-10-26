@@ -1,7 +1,7 @@
 "use client";
 // Một trường trích xuất: nhãn + trạng thái, ô sửa trực tiếp, nút "Đúng", ghi chú khi mâu thuẫn, "AI đọc: …" khi đã sửa.
 import { Button, cn, fill, Input, Label, StatusBadge, useMessages } from "@kb/ui";
-import { Check, Undo2 } from "lucide-react";
+import { Check, Crosshair, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { isSuspect } from "@/api/ocr";
 import type { ExtractedField } from "@/mocks/types";
@@ -14,12 +14,15 @@ export type FieldRowProps = {
   onSave: (id: string, value: string) => void;
   onConfirm: (id: string) => void;
   onRevert: (id: string) => void;
+  /** Chỉ vị trí giá trị trên file gốc (chỉ khi file là PDF có lớp chữ). */
+  onPick?: (id: string) => void;
+  picking?: boolean;
   busy?: boolean;
 };
 
 export const fieldDomId = (id: string) => `field-${id}`;
 
-export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, busy = false }: FieldRowProps) {
+export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false }: FieldRowProps) {
   const t = useMessages(FIELD_ROW_MESSAGES);
   const [value, setValue] = useState(field.value);
   useEffect(() => setValue(field.value), [field.value]);
@@ -63,6 +66,20 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
             if (e.key === "Escape") setValue(field.value);
           }}
         />
+        {onPick && (
+          <Button
+            size="icon"
+            variant={picking ? "secondary" : "ghost"}
+            className="h-9 w-9 shrink-0"
+            aria-label={fill(t.pickOnFile, { label: field.label })}
+            title={fill(t.pickOnFile, { label: field.label })}
+            aria-pressed={picking}
+            disabled={busy}
+            onClick={() => onPick(field.id)}
+          >
+            <Crosshair className="h-4 w-4" />
+          </Button>
+        )}
         {suspect && (
           <Button size="sm" variant="secondary" leftIcon={<Check className="h-4 w-4" />} disabled={busy} onClick={() => onConfirm(field.id)} aria-label={fill(t.confirmField, { label: field.label })}>
             {t.correct}

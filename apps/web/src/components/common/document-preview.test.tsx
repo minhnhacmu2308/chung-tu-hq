@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RenderedFile } from "@/lib/pdf-render";
@@ -50,6 +50,27 @@ describe("DocumentPreview – file gốc thật", () => {
     expect(onFieldClick).toHaveBeenCalledWith("f-no");
     expect(within(viewer).getByRole("link", { name: "Mở ở tab mới" }).getAttribute("href")).toBe("https://files.test/inv.pdf?sig=1");
     await expectNoA11yViolations(container);
+  });
+
+  it("chỉ trên file: báo lớp chữ khi dựng xong; kéo chọn vùng → chữ trong vùng + nhãn in cạnh đó", async () => {
+    const onPick = vi.fn();
+    const onTextReady = vi.fn();
+    renderWithProviders(
+      <DocumentPreview document={docNamed("INV 88.pdf")} file={{ status: "ready", url: "https://files.test/inv.pdf" }} fields={FIELDS} picking onPick={onPick} onTextReady={onTextReady} />,
+    );
+    const viewer = await screen.findByRole("region", { name: /INV 88\.pdf/ });
+    const api = onTextReady.mock.calls.at(-1)![0];
+    expect(api.hasText).toBe(true);
+    const r = api.locate("M-240315");
+    expect(api.labelAt(r, "M-240315")).toBe("Invoice No.:");
+    // Đang chọn vùng: vùng của trường tạm ẩn.
+    expect(within(viewer).queryByRole("button", { name: "Số hóa đơn" })).toBeNull();
+    const layer = viewer.querySelector<HTMLElement>('[data-slot="document-select"]')!;
+    layer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) });
+    const fire = (type: string, x: number, y: number) => act(() => void layer.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y })));
+    fire("pointerdown", r.x + 0.5, r.y + 0.5);
+    fire("pointerup", r.x + r.w - 0.5, r.y + r.h - 0.5);
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ text: "M-240315", label: "Invoice No.:" }));
   });
 
   it("ảnh/scan: dùng tọa độ AI trả về của trường", async () => {

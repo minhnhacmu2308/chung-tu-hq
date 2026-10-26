@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DocKindSchema, IsoDateTimeSchema } from "../common.js";
-import { SkillFieldSchema, SkillKindSchema } from "../dto/skill.js";
+import { SkillFieldSchema, SkillKindSchema, SkillSchema } from "../dto/skill.js";
 
 export const SkillFieldPatchSchema = SkillFieldSchema.pick({ label: true, required: true, aliases: true, declarationField: true, extract: true, display: true }).partial();
 export type SkillFieldPatch = z.infer<typeof SkillFieldPatchSchema>;
@@ -55,6 +55,9 @@ export const LabeledSampleSchema = z.object({
   labeledBy: z.string(),
   labeledAt: IsoDateTimeSchema,
   status: z.enum(["LABELED", "PENDING"]),
+  /** UPLOAD = tải lên ở trang skill; REVIEW = tự học từ chứng từ người dùng đã kiểm tra/sửa ở bước OCR. */
+  source: z.enum(["UPLOAD", "REVIEW"]).optional(),
+  supplier: z.string().optional(),
 });
 export type LabeledSample = z.infer<typeof LabeledSampleSchema>;
 /** Một mẫu kèm nhãn (giá trị đúng theo key trường skill). `expected` null khi AI chưa đọc xong mẫu. */
@@ -75,3 +78,40 @@ export const EvaluationResultSchema = z.object({
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
 
 export const MIN_SAMPLES_FOR_ACCURACY = 5;
+
+// ---- Tự học từ bước kiểm tra OCR ----
+
+/** Kết quả ghi nhớ sau khi người dùng xác nhận dữ liệu: bao nhiêu chứng từ thành mẫu, skill nào (tự tạo skill riêng cho nhà cung cấp). */
+export const LearnSummarySchema = z.object({
+  learned: z.number().int().nonnegative(),
+  skills: z.array(z.object({ id: z.string(), name: z.string(), supplier: z.string().optional(), created: z.boolean() })),
+});
+export type LearnSummary = z.infer<typeof LearnSummarySchema>;
+
+/** Gợi ý thêm nhãn in trên chứng từ cho một trường của skill – người dùng đồng ý mới áp vào. */
+export const SkillSuggestionSchema = z.object({
+  id: z.string(),
+  skillId: z.string(),
+  skillName: z.string(),
+  fieldKey: z.string(),
+  fieldLabel: z.string(),
+  alias: z.string(),
+  hits: z.number().int().positive(),
+  supplier: z.string().optional(),
+  createdAt: IsoDateTimeSchema,
+});
+export type SkillSuggestion = z.infer<typeof SkillSuggestionSchema>;
+
+/** Người dùng chỉ/sửa giá trị trên file gốc: nhãn in cạnh giá trị đó (vd "Ref. Inv#"). */
+export const SuggestAliasInputSchema = z.object({ fieldId: z.string().min(1), label: z.string().trim().min(2).max(80) });
+export type SuggestAliasInput = z.infer<typeof SuggestAliasInputSchema>;
+
+export const AcceptSuggestionResultSchema = z.object({ skill: SkillSchema, evaluationQueued: z.boolean() });
+export type AcceptSuggestionResult = z.infer<typeof AcceptSuggestionResultSchema>;
+
+/** Chứng từ trong hồ sơ còn ở bước kiểm tra đã đọc bằng cấu hình cũ của skill – có thể đọc lại bằng cấu hình mới. */
+export const StaleReadsSchema = z.object({
+  documents: z.array(z.object({ documentId: z.string(), dossierId: z.string(), dossierCode: z.string(), fileName: z.string() })),
+  dossiers: z.number().int().nonnegative(),
+});
+export type StaleReads = z.infer<typeof StaleReadsSchema>;

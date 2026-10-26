@@ -1,7 +1,7 @@
-import type { EvaluationResult, LabeledSample, Skill } from "@kb/contracts";
+import type { EvaluationResult, LabeledSample, Skill, SkillSuggestion } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import type { EvaluationRow, SampleRow, SkillRepos, SkillRow, SkillVersionRow } from "./ports.js";
+import type { EvaluationRow, SampleRow, SkillRepos, SkillRow, SkillVersionRow, SuggestionRow } from "./ports.js";
 
 export function toSkill(s: SkillRow, v: SkillVersionRow): Skill {
   return {
@@ -18,6 +18,8 @@ export function toSample(s: SampleRow, names: Map<string, string>): LabeledSampl
     id: s.id, fileName: s.fileName, pages: s.pages, sizeBytes: s.sizeBytes, status: s.status,
     labeledBy: s.labeledBy ? (names.get(s.labeledBy) ?? "") : "",
     labeledAt: (s.labeledAt ?? s.createdAt).toISOString(),
+    source: s.source,
+    ...(s.supplier ? { supplier: s.supplier } : {}),
   };
 }
 
@@ -35,4 +37,11 @@ export async function loadSkill(r: SkillRepos, orgId: string, id: string): Promi
   const version = await r.versions.get(skill.id, skill.currentVersion);
   if (!version) return err(domainError("NOT_FOUND", "Skill chưa có phiên bản"));
   return ok({ skill, version });
+}
+
+export function toSuggestion(s: SuggestionRow, skill: { name: string; fields: { key: string; label: string }[] }): SkillSuggestion {
+  return {
+    id: s.id, skillId: s.skillId, skillName: skill.name, fieldKey: s.fieldKey, fieldLabel: skill.fields.find((f) => f.key === s.fieldKey)?.label ?? s.fieldKey,
+    alias: s.alias, hits: s.hits, createdAt: s.createdAt.toISOString(), ...(s.supplier ? { supplier: s.supplier } : {}),
+  };
 }

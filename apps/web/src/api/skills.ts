@@ -5,7 +5,7 @@ import * as http from "./http/skills";
 
 export const skillKeys = mock.skillKeys;
 export const MIN_SAMPLES_FOR_ACCURACY = mock.MIN_SAMPLES_FOR_ACCURACY;
-export type { CreateSkillInput, EvaluationResult, LabeledSample, SkillFieldPatch } from "@kb/contracts";
+export type { CreateSkillInput, EvaluationResult, LabeledSample, LearnSummary, SkillFieldPatch, SkillSuggestion, StaleReads } from "@kb/contracts";
 
 export const listSkills = pick(mock.listSkills, http.listSkills);
 export const getSkillById = pick(mock.getSkillById, http.getSkillById);
@@ -21,3 +21,11 @@ export const labelSample = pick(mock.labelSample, http.labelSample);
 export const confirmPendingSamples = pick(mock.confirmPendingSamples, http.confirmPendingSamples);
 export const getEvaluation = pick(mock.getEvaluation, http.getEvaluation);
 export const evaluateSkill = pick(mock.evaluateSkill, http.evaluateSkill);
+export const learnFromReview = pick(mock.learnFromReview, http.learnFromReview);
+export const listSuggestions = pick(mock.listSuggestions, http.listSuggestions);
+export const suggestAlias = pick(mock.suggestAlias, http.suggestAlias);
+export const acceptSuggestion = pick(mock.acceptSuggestion, http.acceptSuggestion);
+export const dismissSuggestion = pick(mock.dismissSuggestion, http.dismissSuggestion);
+export const getStaleReads = pick(mock.getStaleReads, http.getStaleReads);
+export const rereadStale = pick(mock.rereadStale, http.rereadStale);
+export const waitForEvaluation = pick(mock.waitForEvaluation, http.waitForEvaluation);

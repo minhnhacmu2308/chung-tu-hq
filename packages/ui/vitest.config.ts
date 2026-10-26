@@ -7,5 +7,7 @@ export default defineConfig({
     setupFiles: ["./test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     css: false,
+    // `pnpm test` ở gốc chạy song song nhiều gói: test jsdom + axe (vd Combobox 100 option) vượt 5 s mặc định khi máy bận.
+    testTimeout: 20_000,
   },
 });

@@ -12,7 +12,10 @@ async function removeE2eFields(page: Page, skillId: string) {
 test("cấu hình skill: danh sách → chi tiết → thêm trường tạo phiên bản mới → bật/tắt skill", async ({ page }) => {
   await login(page);
   await page.goto("/skills");
-  await expect(page.getByRole("heading", { name: "Cấu hình Skill AI" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Cách đọc chứng từ" })).toBeVisible();
+  // Mã, phiên bản, cột kỹ thuật chỉ hiện ở chế độ Nâng cao (lưu theo trình duyệt).
+  const advanced = page.getByRole("switch", { name: "Nâng cao" });
+  if (!(await advanced.isChecked())) await advanced.click();
   await page.getByRole("link", { name: /SK-INV-GEN/ }).first().click();
   await expect(page.getByRole("heading", { name: "Commercial Invoice – chung" })).toBeVisible();
   const skillId = new URL(page.url()).pathname.split("/").at(-1)!;

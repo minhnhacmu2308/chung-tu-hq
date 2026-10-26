@@ -11,10 +11,11 @@ import { getEvaluation, getSkillById, MIN_SAMPLES_FOR_ACCURACY, setSkillEnabled,
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { DOC_KIND_LABELS, type Skill } from "@/mocks/types";
 import { EvaluateButton, FieldAccuracyList } from "./evaluation";
+import { AdvancedSwitch, healthText, StaleReadsBanner, SuggestionsPanel, useAdvanced, WeakFields } from "./learning";
 import { accuracyTone, formatPercent, SKILL_KIND_LABELS } from "./skill-display";
 import { SkillFieldsTable } from "./skill-fields-table";
 import { SkillSamples } from "./skill-samples";
-import { DETAIL_MESSAGES } from "./skills.messages";
+import { DETAIL_MESSAGES, LEARNING_MESSAGES } from "./skills.messages";
 
 /** Cùng quy tắc với AccuracyBadge: chưa đủ mẫu thì không hiện con số (số đo trên ít mẫu gây hiểu sai). */
 function accuracyText(skill: Skill, notEnough: string): { value: string; tone: "success" | "warning" | "danger" | "neutral" } {
@@ -69,6 +70,8 @@ function Detail({ skill }: { skill: Skill }) {
   const tab = tabs.includes(params.get("tab") ?? "") ? params.get("tab")! : "fields";
   const setTab = (t: string) => router.replace(`${pathname}?tab=${t}`, { scroll: false });
   const measured = skill.accuracy !== undefined && skill.labeledSamples >= MIN_SAMPLES_FOR_ACCURACY;
+  const [advanced, setAdvanced] = useAdvanced();
+  const tl = useMessages(LEARNING_MESSAGES);
 
   return (
     <Stack gap="lg">
@@ -78,6 +81,7 @@ function Detail({ skill }: { skill: Skill }) {
         description={t.description}
         actions={
           <div className="flex flex-wrap items-center gap-3">
+            <AdvancedSwitch value={advanced} onChange={setAdvanced} />
             <EnabledToggle skill={skill} />
             <EvaluateButton skill={skill} onDone={() => setTab("evaluation")} />
           </div>
@@ -86,8 +90,9 @@ function Detail({ skill }: { skill: Skill }) {
       {!skill.enabled && (
         <Alert tone="warning" title={t.offTitle}>{t.offBody}{skill.kind === "SUPPLIER" ? t.offSupplier : ""}.</Alert>
       )}
-      <Grid cols={{ base: 2, xl: 4 }} stagger>
-        <StatCard icon={<Hash />} tone="neutral" label={t.skillCode} value={skill.code} hint={kindLabels[skill.kind]} />
+      <StaleReadsBanner skillId={skill.id} />
+      <Grid cols={{ base: 2, xl: advanced ? 4 : 2 }} stagger>
+        {advanced && <StatCard icon={<Hash />} tone="neutral" label={t.skillCode} value={skill.code} hint={kindLabels[skill.kind]} />}
         <StatCard
           icon={<FileText />}
           tone="info"
@@ -99,11 +104,13 @@ function Detail({ skill }: { skill: Skill }) {
           icon={<Target />}
           tone={acc.tone}
           label={t.accuracy}
-          value={acc.value}
+          value={advanced ? acc.value : healthText(skill, tl)}
           hint={fill(t.labeledHint, { n: formatNumber(skill.labeledSamples) })}
         />
-        <StatCard icon={<GitCommitHorizontal />} tone="primary" label={t.version} value={`v${skill.version}`} hint={fill(t.updatedHint, { time: formatDateTime(skill.updatedAt) })} />
+        {advanced && <StatCard icon={<GitCommitHorizontal />} tone="primary" label={t.version} value={`v${skill.version}`} hint={fill(t.updatedHint, { time: formatDateTime(skill.updatedAt) })} />}
       </Grid>
+      <SuggestionsPanel skillId={skill.id} />
+      <WeakFields skill={skill} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList aria-label={t.tabsAria}>
@@ -116,7 +123,7 @@ function Detail({ skill }: { skill: Skill }) {
           <TabsTrigger value="evaluation">{t.tabEvaluation}</TabsTrigger>
         </TabsList>
         <TabsContent value="fields" className="pt-4">
-          <SkillFieldsTable skill={skill} />
+          <SkillFieldsTable skill={skill} advanced={advanced} />
         </TabsContent>
         <TabsContent value="samples" className="pt-4">
             <SkillSamples skill={skill} />

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
@@ -77,6 +77,23 @@ describe("DocumentViewer", () => {
     expect(screen.getByRole("link", { name: "Mở file" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Trang sau" }));
     expect(document.querySelector<HTMLElement>('[data-slot="document-page"]')!.style.getPropertyValue("--page-aspect")).toBe("0.707");
+  });
+
+  it("onAreaSelect: kéo chuột trên trang → vùng theo % trang; vùng của trường tạm ẩn; không vi phạm a11y", async () => {
+    const onAreaSelect = vi.fn();
+    const { container } = render(<DocumentViewer label="Chứng từ gốc" pages={PAGES} regions={REGIONS} onRegionClick={() => {}} onAreaSelect={onAreaSelect} />);
+    expect(screen.queryByRole("button", { name: "Số hóa đơn" })).toBeNull();
+    const layer = container.querySelector<HTMLElement>('[data-slot="document-select"]')!;
+    layer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 400, right: 200, bottom: 400, x: 0, y: 0, toJSON: () => ({}) });
+    // jsdom: PointerEvent không mang clientX → phát MouseEvent mang tên sự kiện pointer (React nghe theo tên).
+    const fire = (type: string, clientX: number, clientY: number) => act(() => void layer.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX, clientY })));
+    fire("pointerdown", 20, 40);
+    fire("pointermove", 120, 80);
+    expect(layer.querySelector("span")).not.toBeNull();
+    fire("pointerup", 120, 80);
+    expect(onAreaSelect).toHaveBeenCalledWith({ page: 1, x: 10, y: 10, w: 50, h: 10 });
+    expect(layer.querySelector("span")).toBeNull();
+    await expectNoA11yViolations(container);
   });
 
   it("page điều khiển từ ngoài", () => {

@@ -2,7 +2,7 @@
 // Nội dung trang do app truyền vào (ảnh trang PDF đã render, hoặc bản dựng lại). Vị trí vùng đến từ dữ liệu
 // nên truyền qua biến CSS cục bộ (--rx, --ry…), không hard-code.
 import { ChevronLeft, ChevronRight, ExternalLink, FileText, Maximize2, Minus, Plus } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 import { Button } from "./button.js";
@@ -19,6 +19,9 @@ const MESSAGES = {
  * - `content`: chữ in trong vùng – dùng khi dựng lại trang từ dữ liệu (không có ảnh gốc). Vùng chỉ có content là trang trí.
  */
 export type DocumentRegion = { id: string; page: number; x: number; y: number; w: number; h: number; label?: string; content?: ReactNode };
+
+/** Vùng người dùng kéo chọn (hoặc bấm – w/h ≈ 0) trên trang, đơn vị % như DocumentRegion. */
+export type DocumentArea = { page: number; x: number; y: number; w: number; h: number };
 
 export type DocumentViewerProps = {
   /** Tên vùng xem cho trình đọc màn hình, vd "Chứng từ gốc: Commercial Invoice". */
@@ -42,6 +45,11 @@ export type DocumentViewerProps = {
   onPageChange?: (page: number) => void;
   /** Hiện khung mờ cho mọi vùng (không chỉ vùng đang tô). */
   showRegions?: boolean;
+  /**
+   * Chế độ chọn vùng: trang nhận kéo chuột vẽ khung (con trỏ chữ thập), thả chuột → `onAreaSelect`. Vùng của trường tạm ẩn.
+   * Dùng cho "chỉ vị trí giá trị trên file"; luôn kèm cách khác bằng bàn phím (gõ giá trị) vì kéo chuột không có tương đương bàn phím.
+   */
+  onAreaSelect?: (area: DocumentArea) => void;
   labels?: Partial<Record<keyof (typeof MESSAGES)["vi"], string>>;
   className?: string;
 };
@@ -67,6 +75,7 @@ export function DocumentViewer({
   defaultPage = 1,
   onPageChange,
   showRegions = false,
+  onAreaSelect,
   labels,
   className,
 }: DocumentViewerProps) {
@@ -117,7 +126,16 @@ export function DocumentViewer({
     highlightRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "smooth" });
   }, [highlightId, page]);
 
-  const pageRegions = regions.filter((r) => r.page === page);
+  const pageRegions = onAreaSelect ? [] : regions.filter((r) => r.page === page);
+
+  // Kéo chọn vùng: tọa độ % theo khung trang (đã tính cả mức phóng).
+  const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const pointAt = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const pct = (v: number, size: number) => Math.min(100, Math.max(0, size ? (v / size) * 100 : 0));
+    return { x: pct(e.clientX - r.left, r.width), y: pct(e.clientY - r.top, r.height) };
+  };
+  const area = drag && { page, x: Math.min(drag.x0, drag.x1), y: Math.min(drag.y0, drag.y1), w: Math.abs(drag.x1 - drag.x0), h: Math.abs(drag.y1 - drag.y0) };
 
   return (
     <section aria-label={label} className={cn("flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-muted", className)}>
@@ -160,6 +178,38 @@ export function DocumentViewer({
             data-page={page}
           >
             <div className={cn("absolute inset-0", pageInset && "p-10")}>{pages[page - 1]}</div>
+            {onAreaSelect && (
+              <div
+                className="absolute inset-0 z-10 cursor-crosshair touch-none bg-primary/5"
+                data-slot="document-select"
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture?.(e.pointerId);
+                  const p = pointAt(e);
+                  setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+                }}
+                onPointerMove={(e) => {
+                  if (!drag) return;
+                  const p = pointAt(e);
+                  setDrag({ ...drag, x1: p.x, y1: p.y });
+                }}
+                onPointerUp={(e) => {
+                  if (!drag) return;
+                  // Điểm thả chuột tính luôn (không chờ pointermove cuối).
+                  const p = pointAt(e);
+                  setDrag(null);
+                  onAreaSelect({ page, x: Math.min(drag.x0, p.x), y: Math.min(drag.y0, p.y), w: Math.abs(p.x - drag.x0), h: Math.abs(p.y - drag.y0) });
+                }}
+                onPointerCancel={() => setDrag(null)}
+              >
+                {area && (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-[var(--rx)] top-[var(--ry)] h-[var(--rh)] w-[var(--rw)] rounded-sm bg-primary/15 ring-2 ring-primary"
+                    style={{ "--rx": `${area.x}%`, "--ry": `${area.y}%`, "--rw": `${area.w}%`, "--rh": `${area.h}%` } as CSSProperties}
+                  />
+                )}
+              </div>
+            )}
             {pageRegions.map((r) => {
               const active = r.id === highlightId;
               const vars = { "--rx": `${r.x}%`, "--ry": `${r.y}%`, "--rw": `${r.w}%`, "--rh": `${r.h}%` } as CSSProperties;

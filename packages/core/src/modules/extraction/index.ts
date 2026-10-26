@@ -12,3 +12,5 @@ export { countryCode, nameSimilarity, normalizeCompanyName, packageUnitCode, par
 export { isSuspect, type Threshold } from "./domain/field-status.js";
 export { mergeExtractions, type FileExtraction } from "./domain/merge.js";
 export { documentSheets } from "./application/document-sheets.js";
+export { fieldSource, latestReads, reviewedDocuments, type LatestRead, type ReviewedDocument } from "./application/reviewed-documents.js";
+export { applyCorrections, rawPathOf, supplierOf, type Correction } from "./domain/review-learning.js";

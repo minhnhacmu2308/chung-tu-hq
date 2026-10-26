@@ -1,14 +1,15 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { skillEvaluations, skillSamples, skillVersions, skills } from "../../../db/schema/skill.js";
+import { skillEvaluations, skillSamples, skillSuggestions, skillVersions, skills } from "../../../db/schema/skill.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { EvaluationRow, SampleRow, SkillRepos, SkillRow, SkillUow, SkillVersionRow } from "../application/ports.js";
+import type { EvaluationRow, SampleRow, SkillRepos, SkillRow, SkillUow, SkillVersionRow, SuggestionRow } from "../application/ports.js";
 
 function repos(tx: Tx): SkillRepos {
   const toSkill = (s: typeof skills.$inferSelect): SkillRow => ({ ...s, kind: s.kind as SkillRow["kind"], docKind: s.docKind as SkillRow["docKind"] });
   const toVersion = (v: typeof skillVersions.$inferSelect): SkillVersionRow => ({ ...v, fields: v.fields as SkillVersionRow["fields"] });
-  const toSample = (s: typeof skillSamples.$inferSelect): SampleRow => ({ ...s, status: s.status as SampleRow["status"], expected: s.expected as SampleRow["expected"] });
+  const toSample = (s: typeof skillSamples.$inferSelect): SampleRow => ({ ...s, status: s.status as SampleRow["status"], source: s.source as SampleRow["source"], expected: s.expected as SampleRow["expected"] });
+  const toSuggestion = (s: typeof skillSuggestions.$inferSelect): SuggestionRow => ({ ...s, status: s.status as SuggestionRow["status"] });
   const toEval = (e: typeof skillEvaluations.$inferSelect): EvaluationRow => ({ ...e, perField: e.perField as EvaluationRow["perField"] });
   return {
     skills: {
@@ -36,6 +37,20 @@ function repos(tx: Tx): SkillRepos {
       },
       insert: async (row) => void (await tx.insert(skillSamples).values(row)),
       update: async (orgId, id, patch) => void (await tx.update(skillSamples).set(patch).where(and(eq(skillSamples.orgId, orgId), eq(skillSamples.id, id)))),
+    },
+    suggestions: {
+      list: async (orgId, f) =>
+        (await tx.select().from(skillSuggestions).where(and(eq(skillSuggestions.orgId, orgId), ...(f.skillId ? [eq(skillSuggestions.skillId, f.skillId)] : []), ...(f.status ? [eq(skillSuggestions.status, f.status)] : []))).orderBy(desc(skillSuggestions.hits), desc(skillSuggestions.updatedAt)).limit(200)).map(toSuggestion),
+      get: async (orgId, id) => {
+        const s = (await tx.select().from(skillSuggestions).where(and(eq(skillSuggestions.orgId, orgId), eq(skillSuggestions.id, id))).limit(1))[0];
+        return s ? toSuggestion(s) : null;
+      },
+      find: async (orgId, skillId, fieldKey, alias) => {
+        const s = (await tx.select().from(skillSuggestions).where(and(eq(skillSuggestions.orgId, orgId), eq(skillSuggestions.skillId, skillId), eq(skillSuggestions.fieldKey, fieldKey), eq(skillSuggestions.alias, alias))).limit(1))[0];
+        return s ? toSuggestion(s) : null;
+      },
+      insert: async (row) => void (await tx.insert(skillSuggestions).values(row)),
+      update: async (orgId, id, patch) => void (await tx.update(skillSuggestions).set(patch).where(and(eq(skillSuggestions.orgId, orgId), eq(skillSuggestions.id, id)))),
     },
     evaluations: {
       latest: async (orgId, skillId) => {

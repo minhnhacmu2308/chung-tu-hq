@@ -10,6 +10,7 @@ export { uploadDocuments } from "./application/upload-documents.js";
 export { changeDocumentKind } from "./application/change-document-kind.js";
 export { deleteDocument } from "./application/delete-document.js";
 export { retryDocument } from "./application/retry-document.js";
+export { listOpenDocuments, rereadDocuments, type OpenDocument } from "./application/reread-documents.js";
 export { requeueStuckDocuments, STUCK_DOCUMENT_MS } from "./application/requeue-stuck-documents.js";
 export { toDossier, toDocument } from "./application/_dto.js";
 export { classifyByFileName } from "./domain/upload-rules.js";

@@ -25,7 +25,10 @@ function useFieldMutation(skill: Skill) {
   });
 }
 
-export function SkillFieldsTable({ skill }: { skill: Skill }) {
+/** Chế độ thường ẩn cột kỹ thuật (mã trường, nhóm, kiểu, chỉ tiêu tờ khai) – bật "Nâng cao" để xem. */
+const BASIC_HIDDEN = { key: false, group: false, type: false, decl: false };
+
+export function SkillFieldsTable({ skill, advanced = true }: { skill: Skill; advanced?: boolean }) {
   const locale = useUiLocale();
   const t = useMessages(FIELDS_TABLE_MESSAGES);
   const qc = useQueryClient();
@@ -127,15 +130,18 @@ export function SkillFieldsTable({ skill }: { skill: Skill }) {
 
   return (
     <Stack gap="md">
-      <Alert tone="info" title={t.infoTitle}>
-        <b>{t.infoStandard}</b>{t.infoStandardBody}<b>{t.infoCustom}</b>{t.infoCustomBody}<b>{t.infoExtract}</b>{t.infoExtractBody}<b>{t.infoDisplay}</b>{t.infoDisplayBody}
-      </Alert>
+      {advanced && (
+        <Alert tone="info" title={t.infoTitle}>
+          <b>{t.infoStandard}</b>{t.infoStandardBody}<b>{t.infoCustom}</b>{t.infoCustomBody}<b>{t.infoExtract}</b>{t.infoExtractBody}<b>{t.infoDisplay}</b>{t.infoDisplayBody}
+        </Alert>
+      )}
       <DataTable
         aria-label={t.tableAria}
         columns={columns}
         data={skill.fields}
         getRowId={(f) => f.key}
-        rowLabel={(f) => f.key}
+        rowLabel={(f) => f.label}
+        columnVisibility={advanced ? {} : BASIC_HIDDEN}
         rowActions={(f) => (
           <RowActions
             rowLabel={f.key}

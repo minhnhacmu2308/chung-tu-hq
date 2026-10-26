@@ -1,6 +1,7 @@
 // Dữ liệu mẫu Cấu hình Skill AI. Skill = cách đọc 1 loại chứng từ (trường, alias nhãn, mẫu đã gắn nhãn)
 // hoặc cách ánh xạ sang tờ khai. Skill ánh xạ (MAPPING): mỗi "field" là 1 chỉ tiêu tờ khai –
 // key = mã chỉ tiêu VNACCS, label = tên chỉ tiêu, declarationField = quy tắc lấy giá trị (nguồn ← biểu thức).
+import type { SkillSuggestion } from "@kb/contracts";
 import type { Skill, SkillField } from "../types";
 
 const t = (offsetDays: number) => new Date(Date.now() - offsetDays * 86_400_000).toISOString();
@@ -151,6 +152,12 @@ const SKILLS: Skill[] = [
   },
 ];
 
-export function seedSkills(): { skills: Skill[] } {
-  return { skills: SKILLS };
+/** Gợi ý mẫu: nhãn lạ người dùng đã chỉ trên file khi sửa invoice (để màn Cách đọc chứng từ có việc cần duyệt). */
+const SUGGESTIONS: SkillSuggestion[] = [
+  { id: "sug_1", skillId: "sk_inv_gen", skillName: "Commercial Invoice – chung", fieldKey: "invoice_no", fieldLabel: "Số hóa đơn", alias: "Ref. Inv#", hits: 3, supplier: "KAIDA ELECTRIC CO., LTD", createdAt: t(2) },
+  { id: "sug_2", skillId: "sk_inv_gen", skillName: "Commercial Invoice – chung", fieldKey: "total_amount", fieldLabel: "Tổng trị giá", alias: "TOTAL PRICE (USD)", hits: 2, createdAt: t(1) },
+];
+
+export function seedSkills(): { skills: Skill[]; skillSuggestions: SkillSuggestion[]; staleSkills: string[] } {
+  return { skills: SKILLS, skillSuggestions: SUGGESTIONS, staleSkills: [] };
 }

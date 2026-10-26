@@ -75,7 +75,7 @@ export {
   type DatePickerProps, type DateRangePickerProps, type IsoDateRange,
 } from "./components/date-picker.js";
 export {
-  DocumentFileViewer, DocumentViewer, DOCUMENT_PAGE_WIDTH, type DocumentFileViewerProps, type DocumentViewerProps, type DocumentRegion,
+  DocumentFileViewer, DocumentViewer, DOCUMENT_PAGE_WIDTH, type DocumentArea, type DocumentFileViewerProps, type DocumentViewerProps, type DocumentRegion,
 } from "./components/document-viewer.js";
 export { AiBackdrop, AiScanCard, type AiBackdropProps, type AiScanCardProps, type AiScanField } from "./components/ai-visuals.js";
 export { CountUp, type CountUpProps } from "./components/count-up.js";

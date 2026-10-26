@@ -183,6 +183,13 @@
       "when": 1792878672475,
       "tag": "0025_customs_branches",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792945586781,
+      "tag": "0026_skill_learning",
+      "breakpoints": true
     }
   ]
 }

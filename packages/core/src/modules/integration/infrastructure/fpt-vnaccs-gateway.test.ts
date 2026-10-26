@@ -117,6 +117,12 @@ describe("FptVnaccsGateway (phản hồi thật của FPT)", () => {
     expect(await g.attachDocuments("org1", hys)).toEqual({ receiptNo: "300000000123", registeredOn: "2026-10-26" });
     expect(calls.at(-1)!.body).toMatchObject({ tK_CH: "03CE", tK_CHB: "01", tK_TSB: "A02", tK_STL: "0901", tK_REF: "HS-NK-2610-021", tK_KJJ: "", lisT_FILE: [{ filE_NAME: "ds.xlsx", filE_BASE64: Buffer.from("x").toString("base64") }] });
   });
+  it("HYS: tK_JNO / tK_STL dạng số → chuỗi; phản hồi sai dạng → DomainError GATEWAY_ERROR (lỗi vĩnh viễn, không retry)", async () => {
+    const num = gateway({ "/api/HYS": () => ok({ tK_JNO: 300000000124, tK_STL: 901, tK_YMD: "26/10/2026 10:00:00" }) });
+    expect(await num.g.attachDocuments("org1", hys)).toEqual({ receiptNo: "300000000124", registeredOn: "2026-10-26" });
+    const bad = gateway({ "/api/HYS": () => ok({ tK_JNO: { so: "1" } }) });
+    await expect(bad.g.attachDocuments("org1", hys)).rejects.toMatchObject({ code: "GATEWAY_ERROR", message: expect.stringMatching(/tK_JNO/) });
+  });
   it("HYS: thiếu TK_CH → lỗi E-SCHEMA, không gọi mạng; errorList → errors", async () => {
     const { g, calls } = gateway({ "/api/HYS": () => ok({ errorList: [{ errorCode: "E1", errorContent: "Sai mã thủ tục" }] }) });
     expect((await g.attachDocuments("org1", { ...hys, customsOffice: "" })).errors?.[0]).toMatchObject({ code: "E-SCHEMA" });

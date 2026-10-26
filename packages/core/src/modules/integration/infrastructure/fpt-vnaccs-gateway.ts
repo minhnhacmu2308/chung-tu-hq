@@ -100,7 +100,11 @@ export class FptVnaccsGateway implements CustomsGateway {
     if (!parsed.success) return { errors: parsed.error.issues.map(describeSchemaIssue) };
     const { env, errors } = await this.call(orgId, "HYS", body);
     if (errors) return { errors };
-    const res = HysResponseSchema.parse(env);
+    // Chỉ tiêu vô hướng FPT trả dạng số (tK_JNO, tK_STL…) → chuỗi. Phản hồi vẫn sai dạng → lỗi VĨNH VIỄN (DomainError):
+    // Hải quan có thể đã tiếp nhận – không để worker coi là lỗi tạm và gửi lại thông điệp.
+    const response = HysResponseSchema.safeParse(Object.fromEntries(Object.entries(env).map(([k, v]) => [k, typeof v === "number" ? String(v) : v])));
+    if (!response.success) throw domainError("GATEWAY_ERROR", `Phản hồi HYS của FPT không đúng định dạng (${response.error.issues.map((i) => i.path.join(".")).join(", ")}) – tra cứu số tiếp nhận trên VNACCS rồi nhập tay vào 1.63, không gửi lại`);
+    const res = response.data;
     const registeredOn = fptDateToIso(res.tK_YMD);
     return { ...(res.tK_JNO ? { receiptNo: String(res.tK_JNO) } : {}), ...(registeredOn ? { registeredOn } : {}) };
   }

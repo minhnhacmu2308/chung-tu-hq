@@ -31,7 +31,6 @@ export function toPartialResult(r: ResultRow | null): Partial<CustomsResult> | n
 
 export type FlowContext = { direction: "NK" | "XK"; approved: boolean; hasContainers: boolean };
 
-/** Nghiệp vụ đang chờ gửi/phản hồi (outbox PENDING). */
 /** Outbox HYS thuộc bộ hồ sơ đính kèm (hys_submissions), không thuộc luồng từng tờ: không khóa, không hiện "đang chờ" của nghiệp vụ tờ khai. */
 export const isHysOutbox = (o: OutboxRow) => o.operation === "HYS";
 /** Nghiệp vụ đang chờ gửi/phản hồi (outbox PENDING), không tính HYS. */
@@ -59,10 +58,10 @@ export function buildPipeline(ctx: FlowContext, messages: MessageRow[], outbox: 
 
 /**
  * Tờ đã từng gửi: có outbox, thông điệp gửi đi, hoặc đã qua giai đoạn chưa gửi. Thông điệp chỉ có chiều về (IN) trên tờ NOT_SENT –
- * lỗi "chưa khai tạm tự động" của chuỗi nối tiếp ghi trên tờ chưa gửi (process-outbox) – không tính là lần gửi.
+ * lỗi "chưa khai tạm tự động" của chuỗi nối tiếp ghi trên tờ chưa gửi (process-outbox) – không tính là lần gửi. HYS (bộ hồ sơ đính kèm, gửi được trước IDA) không phải lần gửi của tờ.
  */
 export const startedOf = (messages: MessageRow[], outbox: OutboxRow[], result: ResultRow | null) =>
-  outbox.length > 0 || messages.some((m) => m.direction === "OUT") || stageOf(result) !== "NOT_SENT";
+  outbox.some((o) => !isHysOutbox(o)) || messages.some((m) => m.direction === "OUT" && m.operation !== "HYS") || stageOf(result) !== "NOT_SENT";
 
 /** Dữ liệu một tờ khai nhánh (đã lọc theo nhánh): thông điệp, outbox, kết quả, ngữ cảnh luồng (đã duyệt theo tờ khai / AMA của tờ). */
 export type BranchInput = { no: number; of: number; flow: FlowContext; messages: MessageRow[]; outbox: OutboxRow[]; result: ResultRow | null; polling: boolean; /** Xem BranchSubmission.sentChanges; vắng = null. */ sentChanges?: BranchSubmission["sentChanges"] };

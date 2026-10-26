@@ -1883,6 +1883,13 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
     expect(rows.map((r) => [r.branch, r.of, r.state])).toEqual([[1, 3, "READY"], [2, 3, "READY"], [3, 3, "READY"]]);
   });
 
+  it("outbox + thông điệp HYS (gửi trước IDA) không làm tờ 1 NOT_SENT thành SENDING / started", async () => {
+    seedOutbox({ operation: "HYS", idempotencyKey: "hys:sub_1:n1", payload: { submissionId: "sub_1" } });
+    uow.data.messages.push({ id: "m_hys", orgId: ORG, dossierId: D, branch: 1, operation: "HYS", direction: "OUT", result: "OK", summary: "s", payloadMasked: {}, externalRef: null, at: T });
+    expect(unwrap(await listCustomsDeclarations(deps, declarant)).map((r) => [r.branch, r.state])).toEqual([[1, "READY"], [2, "READY"], [3, "READY"]]);
+    expect(unwrap(await getSubmission(deps, declarant, D)).branches.map((b) => [b.no, b.started, b.inProgress])).toEqual([[1, false, false], [2, false, false], [3, false, false]]);
+  });
+
   it("dossierCustomsSummaries: tóm tắt k/N + tờ lỗi theo hồ sơ; hồ sơ chưa truyền vắng; org khác không thấy", async () => {
     seedThree();
     uow.data.results.find((r) => r.branch === 2)!.state = "SEND_FAILED";

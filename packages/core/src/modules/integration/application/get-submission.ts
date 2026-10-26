@@ -3,7 +3,7 @@ import type { Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { rowState, stageOf } from "../domain/state-machine.js";
-import { CHANNEL_NOTES, startedOf, toSubmissionView, type BranchInput } from "./_customs-view.js";
+import { CHANNEL_NOTES, isHysOutbox, startedOf, toSubmissionView, type BranchInput } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, ResultRow } from "./customs-ports.js";
 import { openAmendmentOf } from "./post-amendment.js";
 import { sentSheetsDiff } from "../domain/branches.js";
@@ -57,7 +57,7 @@ export async function listCustomsDeclarations(deps: CustomsDeps, ctx: Ctx): Prom
       const no = i + 1;
       const res = own.find((r) => r.branch === no) ?? null;
       const msgs = messages.filter((m) => m.branch === no);
-      const obs = outbox.filter((o) => o.branch === no);
+      const obs = outbox.filter((o) => o.branch === no && !isHysOutbox(o));
       const last = msgs.at(-1);
       const stage = stageOf(res);
       return {

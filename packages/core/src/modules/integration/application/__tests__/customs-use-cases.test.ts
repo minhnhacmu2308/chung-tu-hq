@@ -70,6 +70,9 @@ class FakeDeclarations implements DeclarationReader {
     this.reopened.push(dossierId);
     this.status = "DRAFT";
   }
+  async fillAttachment() {
+    return { outcome: "LOCKED" as const, afterApproval: false };
+  }
   async listForCustoms() {
     return [{ dossierId: "dos_1", status: this.status, approvedAt: new Date("2026-10-14T02:00:00.000Z") }];
   }

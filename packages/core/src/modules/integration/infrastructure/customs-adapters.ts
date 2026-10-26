@@ -1,6 +1,6 @@
 // Nối cổng customs với các module khác (qua public index của chúng) – chỉ composition root gọi.
 import { asOrgId, asUserId } from "../../../shared/ids.js";
-import { getDeclarationSnapshot, listDeclarationsForCustoms, markDeclarationDraft, markDeclarationSubmitted, type DeclarationDeps } from "../../declaration/index.js";
+import { fillAttachmentFromHys, getDeclarationSnapshot, listDeclarationsForCustoms, markDeclarationDraft, markDeclarationSubmitted, type DeclarationDeps } from "../../declaration/index.js";
 import type { DossierDeps } from "../../dossier/index.js";
 import { readVnaccsCredentials, type IdentityDeps } from "../../identity/index.js";
 import type { ValidationDeps } from "../../validation/index.js";
@@ -26,6 +26,10 @@ export function createDeclarationReader(declaration: DeclarationDeps): Declarati
     markDraft: async (ctx, dossierId) => {
       const r = await markDeclarationDraft(declaration, ctx, dossierId);
       if (!r.ok) throw new Error(`markDraft: ${r.error.code}`);
+    },
+    fillAttachment: async (ctx, dossierId, input) => {
+      const r = await fillAttachmentFromHys(declaration, ctx, dossierId, input);
+      return r.ok ? r.value : { outcome: "LOCKED", afterApproval: false };
     },
     listForCustoms: (orgId) => listDeclarationsForCustoms(declaration, orgId),
   };

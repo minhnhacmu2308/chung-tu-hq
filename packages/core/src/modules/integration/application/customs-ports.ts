@@ -115,6 +115,8 @@ export interface DeclarationReader {
   markSubmitted(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;
   /** Mở lại: tờ khai DRAFT, hồ sơ NEEDS_REVIEW/review. */
   markDraft(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;
+  /** Điền số tiếp nhận HYS vào cặp 1.63/2.53 trống đầu tiên (DRAFT hoặc APPROVED, giữ nguyên trạng thái duyệt). Lỗi → LOCKED. */
+  fillAttachment(ctx: { orgId: OrgId; userId: UserId }, dossierId: string, input: { procedureCode: string; receiptNo: string; note: string }): Promise<{ outcome: "FILLED" | "ALREADY" | "FULL" | "LOCKED"; slot?: 1 | 2 | 3; afterApproval: boolean }>;
   /** Hồ sơ có tờ khai APPROVED/SUBMITTED (màn Khai báo Hải quan). */
   listForCustoms(orgId: string): Promise<{ dossierId: string; status: DeclarationStatus; approvedAt: Date | null }[]>;
 }

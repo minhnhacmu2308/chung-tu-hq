@@ -1,6 +1,6 @@
 // Harness dùng chung cho test lô nhiều tờ (sheets-order, sheets-declare-all): kho in-memory, khai báo giả, hồ sơ giả, dựng lô theo giai đoạn.
 // Gốc: customs-use-cases.test.ts (file đó không export helper).
-import type { DeclarationStatus, DocKind } from "@kb/contracts";
+import { fillAttachmentSlot, type AttachmentValues, type DeclarationStatus, type DocKind } from "@kb/contracts";
 import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
@@ -55,6 +55,18 @@ export class FakeDeclarations implements DeclarationReader {
   async markSubmitted(_ctx: { orgId: string }, dossierId: string) {
     this.submitted.push(dossierId);
     this.status = "SUBMITTED";
+  }
+  /** Các lần điền đính kèm HYS: ghi lại và áp fillAttachmentSlot lên `fields` để test sau kiểm tra. */
+  readonly attachments: { dossierId: string; procedureCode: string; receiptNo: string; note: string }[] = [];
+  async fillAttachment(_ctx: { orgId: string }, dossierId: string, input: { procedureCode: string; receiptNo: string; note: string }) {
+    this.attachments.push({ dossierId, ...input });
+    if (this.status !== "DRAFT" && this.status !== "APPROVED") return { outcome: "LOCKED" as const, afterApproval: false };
+    const cur = this.payloadNow().fields;
+    const values: AttachmentValues = {};
+    for (const n of [1, 2, 3] as const) { values[`TK_EA${n}`] = cur[`TK_EA${n}`]?.value ?? ""; values[`TK_EB${n}`] = cur[`TK_EB${n}`]?.value ?? ""; }
+    const fill = fillAttachmentSlot(values, input.procedureCode, input.receiptNo);
+    for (const [k, v] of Object.entries(fill.set ?? {})) this.fields[k] = { value: v };
+    return { outcome: fill.outcome, ...(fill.slot ? { slot: fill.slot } : {}), afterApproval: this.status === "APPROVED" };
   }
   readonly reopened: string[] = [];
   /** Hồ sơ giả gắn kèm: markDraft thật đưa hồ sơ về NEEDS_REVIEW/review (port DeclarationReader.markDraft). */

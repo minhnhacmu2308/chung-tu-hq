@@ -169,7 +169,7 @@ export interface OrgReader {
 
 /** field_audit (bảng của extraction) – append-only. */
 export interface AuditWriter {
-  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" }): Promise<void>;
+  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" }): Promise<void>;
 }
 
 export interface UserNames {

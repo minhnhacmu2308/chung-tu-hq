@@ -74,9 +74,21 @@ describe("suggestHys", () => {
 });
 
 describe("satisfiedHysCodes", () => {
-  it("hợp bộ đã gửi và cặp đã có số", () => {
+  it("cặp 1.63 đủ mã + số ∪ bộ ACCEPTED đã điền được (FILLED/ALREADY)", () => {
     expect(
-      [...satisfiedHysCodes({ TK_EA1: "A02", TK_EB1: "300000000001", TK_EA2: "A01" }, [{ procedureCode: "A08", status: "ACCEPTED" }, { procedureCode: "A99", status: "DRAFT" }])].sort(),
-    ).toEqual(["A02", "A08"]);
+      [...satisfiedHysCodes({ TK_EA1: "A02", TK_EB1: "300000000001", TK_EA2: "A01" }, [
+        { procedureCode: "A08", status: "ACCEPTED", fill: { outcome: "FILLED" } },
+        { procedureCode: "A01", status: "ACCEPTED", fill: { outcome: "ALREADY" } },
+        { procedureCode: "A99", status: "DRAFT", fill: null },
+      ])].sort(),
+    ).toEqual(["A01", "A02", "A08"]);
+  });
+  it("bộ đang gửi chưa tính là đã khai (số chưa vào 1.63)", () => {
+    expect([...satisfiedHysCodes({}, [{ procedureCode: "A02", status: "SENDING", fill: null }])]).toEqual([]);
+  });
+  it("ACCEPTED nhưng không điền được (LOCKED/FULL/NO_RECEIPT/chưa có) chưa tính là đã khai", () => {
+    for (const fill of [{ outcome: "LOCKED" as const }, { outcome: "FULL" as const }, { outcome: "NO_RECEIPT" as const }, null]) {
+      expect([...satisfiedHysCodes({}, [{ procedureCode: "A02", status: "ACCEPTED", fill }])]).toEqual([]);
+    }
   });
 });

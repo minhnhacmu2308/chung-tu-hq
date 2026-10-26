@@ -34,10 +34,18 @@ describe("khai IDA lần đầu", () => {
     expect(audit.entries).toEqual([expect.objectContaining({ action: "HYS_WAIVED", targetType: "dossier", targetId: D, detail: { codes: "A02" } })]);
   });
 
-  it("có bộ A02 đang gửi → gửi bình thường, không NOTE", async () => {
+  it("bộ A02 đang gửi (số chưa vào 1.63) → vẫn bị hỏi (Ruling R8)", async () => {
     const c = await createHysSubmission(h.deps, declarant, D, { procedureCode: "A02" });
     if (!c.ok) throw new Error("create");
     h.uow.data.hys.find((x) => x.id === c.value.id)!.status = "SENDING";
+    const r = await submit();
+    expect(!r.ok && r.error.reason).toBe("HYS_SUGGESTED");
+  });
+
+  it("bộ A02 ACCEPTED đã điền 1.63 (FILLED) → gửi bình thường, không NOTE", async () => {
+    const c = await createHysSubmission(h.deps, declarant, D, { procedureCode: "A02" });
+    if (!c.ok) throw new Error("create");
+    Object.assign(h.uow.data.hys.find((x) => x.id === c.value.id)!, { status: "ACCEPTED", fill: { outcome: "FILLED", slot: 1 } });
     expect((await submit()).ok).toBe(true);
     expect(notes()).toEqual([]);
   });

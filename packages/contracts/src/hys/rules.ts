@@ -134,13 +134,18 @@ export function suggestHys(input: {
   });
 }
 
-/** Mã đã khai: có bộ HYS đang gửi/đã nhận ∪ cặp 1.63/2.53 đã có số tiếp nhận. */
+/**
+ * Mã đã khai = số tiếp nhận thật sự đã nằm trong 1.63/2.53: cặp TK_EA{n}=mã có TK_EB{n} (HYS điền hoặc nhập tay)
+ * ∪ bộ ACCEPTED đã điền được (fill FILLED/ALREADY). Bộ SENDING, hay ACCEPTED mà LOCKED/FULL/NO_RECEIPT, chưa tính.
+ */
 export function satisfiedHysCodes(
   values: AttachmentValues,
-  submissions: { procedureCode: string; status: string }[],
+  submissions: { procedureCode: string; status: string; fill: { outcome: string } | null }[],
 ): Set<string> {
   const out = new Set<string>();
-  for (const s of submissions) if (s.status === "SENDING" || s.status === "ACCEPTED") out.add(s.procedureCode);
+  for (const s of submissions) {
+    if (s.status === "ACCEPTED" && (s.fill?.outcome === "FILLED" || s.fill?.outcome === "ALREADY")) out.add(s.procedureCode);
+  }
   for (const n of [1, 2, 3] as const) {
     const code = (values[`TK_EA${n}`] ?? "").trim();
     if (code !== "" && !blank(values[`TK_EB${n}`])) out.add(code);

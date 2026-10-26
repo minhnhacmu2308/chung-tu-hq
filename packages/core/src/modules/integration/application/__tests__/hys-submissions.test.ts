@@ -111,14 +111,19 @@ describe("soạn bộ HYS", () => {
 });
 
 describe("tổng quan HYS", () => {
-  it("IDA có container → gợi ý A02; có bộ A02 SENDING → hết gợi ý", async () => {
+  it("IDA có container → gợi ý A02; bộ A02 SENDING / ACCEPTED+LOCKED vẫn gợi ý; ACCEPTED+FILLED → hết gợi ý", async () => {
     const s = await create("A02");
     const o1 = await getHysOverview(h.deps, declarant, D);
     expect(o1.ok && o1.value.suggestions.map((x) => x.code)).toEqual(["A02"]);
     expect(o1.ok && o1.value.defaults).toEqual({ customsOffice: "03CE", processingUnit: expect.anything(), internalRef: "HS-NK-2610-021" });
-    h.uow.data.hys.find((x) => x.id === s.id)!.status = "SENDING";
-    const o2 = await getHysOverview(h.deps, declarant, D);
-    expect(o2.ok && o2.value.suggestions).toEqual([]);
+    const row = h.uow.data.hys.find((x) => x.id === s.id)!;
+    const codesNow = async () => { const o = await getHysOverview(h.deps, declarant, D); return o.ok && o.value.suggestions.map((x) => x.code); };
+    row.status = "SENDING";
+    expect(await codesNow()).toEqual(["A02"]);
+    Object.assign(row, { status: "ACCEPTED", fill: { outcome: "LOCKED" } });
+    expect(await codesNow()).toEqual(["A02"]);
+    Object.assign(row, { fill: { outcome: "FILLED", slot: 1 } });
+    expect(await codesNow()).toEqual([]);
   });
 
   it("1.63 nhập tay A02 + số tiếp nhận → không gợi ý A02", async () => {

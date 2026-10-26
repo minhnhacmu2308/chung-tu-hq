@@ -172,7 +172,7 @@ Chạy **một lần cho cả lô** trên thông tin chung (`values` = `declarat
 | G4 | IDA (1.58), EDA (2.48) | `TK_ENC` = A (bảo lãnh riêng) | A08 – chứng thư bảo lãnh riêng |
 | G5 | IDA (1.68), EDA (2.57) | `TK_NT2` dài hơn `maxLen` của chỉ tiêu ghi chú trong catalog | A99 – phần ghi chú còn lại |
 
-- Mã được coi là **đã khai** (`satisfied`) khi: có bộ HYS cùng mã ở `SENDING`/`ACCEPTED`; **hoặc** 1.63/2.53 có cặp cùng mã và TK_EB khác rỗng (khai ngoài phần mềm, nhập tay). G2 và G5 cùng mã A99: một A99 đã khai thỏa cả hai.
+- Mã được coi là **đã khai** (`satisfied`) chỉ khi số tiếp nhận thật sự đã vào 1.63/2.53: 1.63/2.53 có cặp cùng mã và TK_EB khác rỗng (HYS đã điền, hoặc khai ngoài phần mềm và nhập tay); **hoặc** có bộ HYS cùng mã ở `ACCEPTED` với kết quả điền `FILLED`/`ALREADY`. Bộ `SENDING`, hay `ACCEPTED` mà `LOCKED`/`FULL`/`NO_RECEIPT`, **chưa** tính là đã khai → vẫn hiện hộp xác nhận bỏ qua thông thường (không chặn cứng). Lý do: khai IDA khi HYS còn đang gửi thì thông điệp IDA dựng không có số tiếp nhận. G2 và G5 cùng mã A99: một A99 đã khai thỏa cả hai.
 - `VALUATION_CODES_WITHOUT_A01 = ["6", "7"]` là hằng số riêng (căn cứ TT39/2015 sửa đổi TT60/2019 – chưa đối chiếu văn bản; chỉ là gợi ý).
 - Không có luật cho A03, A06 và các mã khác.
 

@@ -19,6 +19,7 @@ import {
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
+import { pendingSuggestions } from "@/mocks/hys-sim";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
 import type { CustomsMessage, CustomsOperation, CustomsSummary, CustomsResult, Declaration, DigitalCertificate, Dossier, LineItem } from "@/mocks/types";
 
@@ -528,7 +529,7 @@ function answerQuery(db: MockDb, c: Ctx, now: number): OperationResult {
   return { sent: false, message: `Trạng thái tờ khai: ${text}` };
 }
 
-function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: number, branch = 1, chain?: "declare" | "recall"): OperationResult {
+function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: number, branch = 1, chain?: "declare" | "recall", hysWaived = false): OperationResult {
   settle(db, now);
   const c = load(db, dossierId, branch);
   if (op === queryOpFor(c.dossier.direction)) return answerQuery(db, c, now);
@@ -563,16 +564,22 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   }
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
+  // Nhắc khai HYS trước IDA/EDA (cùng hys-guard backend): còn gợi ý chưa thỏa và chưa xác nhận bỏ qua → HYS_SUGGESTED.
+  if (op === "IDA" || op === "EDA") {
+    const codes = pendingSuggestions(db, dossierId, containersOf(db, c.dossier).length).map((s) => s.code).join(", ");
+    if (codes && !hysWaived) throw reasonApiError("INVALID_STATE", "HYS_SUGGESTED", { codes });
+  }
   send(db, c, op, now, chain);
   return { sent: true, message: `Đã gửi ${op} – ${CUSTOMS_OPERATIONS[op].label.toLowerCase()}. Chờ Hải quan phản hồi.` };
 }
 
 /** Thực hiện một nghiệp vụ theo quy tắc chung (operationAvailability); bị khóa → lỗi kèm lý do. */
 /** `branch`: tờ khai nhánh của lô > 50 dòng (mặc định tờ 1). */
-export const performOperation = (dossierId: string, op: CustomsOperation, branch = 1) => mutate((db) => perform(db, dossierId, op, Date.now(), branch));
+export const performOperation = (dossierId: string, op: CustomsOperation, branch = 1, opts?: { hysWaived?: boolean }) =>
+  mutate((db) => perform(db, dossierId, op, Date.now(), branch, undefined, opts?.hysWaived === true));
 
 /** Ký số và khai tạm lần đầu (IDA/EDA). Khai chính thức (IDC/EDC) là thao tác riêng của người khai. */
-export const submitDeclaration = (dossierId: string, certificateId: string) =>
+export const submitDeclaration = (dossierId: string, certificateId: string, opts?: { hysWaived?: boolean }) =>
   mutate((db) => {
     if (!certificateId) throw reasonApiError("NO_CERT", "CERTIFICATE_REQUIRED");
     const dossier = db.dossiers.find((d) => d.id === dossierId);
@@ -587,7 +594,7 @@ export const submitDeclaration = (dossierId: string, certificateId: string) =>
     const stage = target === 1 ? c.flow.stage : flowOf(db, dossierId, target).stage;
     const op = c.of > 1 ? contentOpFor(stage, dossier.direction) : stage === "NOT_SENT" || stage === "RECALLED" ? opFor(dossier.direction, "IDA") : null;
     if (!op) throw new ApiError("ALREADY_SUBMITTED", "Tờ khai đã được khai tạm – không gửi trùng");
-    perform(db, dossierId, op, Date.now(), target);
+    perform(db, dossierId, op, Date.now(), target, undefined, opts?.hysWaived === true);
   });
 
 /** Bắt đầu sửa đổi sau thông quan: CLEARED → POST_EDITING, lập bản khai bổ sung AMA (tờ khai gốc không mở lại). */

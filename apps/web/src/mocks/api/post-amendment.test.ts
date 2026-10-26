@@ -3,6 +3,9 @@ import { getDb, resetDb, saveDb } from "@/mocks/db";
 import { performOperation, startPostAmendment, submitDeclaration } from "./customs";
 import { addPostAmendmentLines, approvePostAmendment, copyPostAmendmentHeader, getPostAmendmentView, removePostAmendmentLine, updatePostAmendmentField } from "./post-amendment";
 
+// HYS có test riêng (hys.test.ts): ở đây tắt gợi ý để guard HYS_SUGGESTED không chen vào các ca khai báo.
+vi.mock("@/mocks/hys-sim", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/mocks/hys-sim")>()), pendingSuggestions: () => [] }));
+
 vi.mock("@/lib/mock-request", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/mock-request")>();
   return {

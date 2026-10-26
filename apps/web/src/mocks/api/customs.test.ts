@@ -8,6 +8,9 @@ import { saveValueCharges } from "./value-charges";
 import { declareAllSheets, getSubmission, recallAllSheets, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
 import { addPostAmendmentLines, approvePostAmendment, updatePostAmendmentField } from "./post-amendment";
 
+// HYS có test riêng (hys.test.ts): ở đây tắt gợi ý để guard HYS_SUGGESTED không chen vào các ca khai báo.
+vi.mock("@/mocks/hys-sim", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/mocks/hys-sim")>()), pendingSuggestions: () => [] }));
+
 // Bỏ độ trễ mạng giả để test nhanh; thời gian nghiệp vụ điều khiển bằng đồng hồ giả (chỉ Date).
 vi.mock("@/lib/mock-request", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/mock-request")>();

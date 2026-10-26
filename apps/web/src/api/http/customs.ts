@@ -7,11 +7,12 @@ import { listCertificates } from "./settings";
 
 export { listCertificates };
 export const getSubmission = (dossierId: string) => apiGet(`dossiers/${dossierId}/submission`, SubmissionViewSchema);
-export const submitDeclaration = async (dossierId: string, certificateId: string) => {
-  await apiPost(`dossiers/${dossierId}/submission`, { certificateId }, z.object({ outboxId: z.string() }));
+export const submitDeclaration = async (dossierId: string, certificateId: string, opts?: { hysWaived?: boolean }) => {
+  await apiPost(`dossiers/${dossierId}/submission`, { certificateId, ...(opts?.hysWaived ? { hysWaived: true } : {}) }, z.object({ outboxId: z.string() }));
 };
 export const resendOperation = (dossierId: string, op: CustomsOperation, branch = 1) => apiPost(`dossiers/${dossierId}/submission/resend`, { operation: op, branch }, ResendResultSchema);
-export const performOperation = (dossierId: string, op: CustomsOperation, branch = 1) => apiPost(`dossiers/${dossierId}/submission/operations`, { operation: op, branch }, OperationResultSchema);
+export const performOperation = (dossierId: string, op: CustomsOperation, branch = 1, opts?: { hysWaived?: boolean }) =>
+  apiPost(`dossiers/${dossierId}/submission/operations`, { operation: op, branch, ...(opts?.hysWaived ? { hysWaived: true } : {}) }, OperationResultSchema);
 export const declareAllSheets = (dossierId: string) => apiPost(`dossiers/${dossierId}/submission/declare-all`, {}, OperationResultSchema);
 export const recallAllSheets = (dossierId: string) => apiPost(`dossiers/${dossierId}/submission/recall-all`, {}, RecallAllResultSchema);
 export const startPostAmendment = async (dossierId: string, branch = 1) => {

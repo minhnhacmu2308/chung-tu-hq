@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createLocator, needlesFor, type PageText } from "./pdf-locate";
+import { createLocator, labelNear, needlesFor, textIn, type PageText } from "./pdf-locate";
 
 /** Mỗi dòng một mẩu chữ, cao 2%, rộng theo số ký tự (0,5%/ký tự). */
 const page = (n: number, lines: [string, number, number][]): PageText => ({
@@ -61,5 +61,32 @@ describe("pdf-locate", () => {
   it("needlesFor: số bỏ số 0 thừa, ngày có cả dạng tháng chữ", () => {
     expect(needlesFor("17420.00").map((n) => n.s)).toEqual(expect.arrayContaining(["1742000", "17420"]));
     expect(needlesFor("2024-12-04").map((n) => n.s)).toEqual(expect.arrayContaining(["04122024", "DEC042024", "04DEC2024"]));
+  });
+});
+
+describe("chỉ trên file", () => {
+  const p = page(1, [
+    ["Invoice No.: M-240315", 10, 12],
+    ["Doc No.", 10, 30],
+    ["ABC-77", 20, 30],
+    ["Consignee", 40, 40],
+    ["CARA LIGHTING CO", 40, 43],
+    ["1PCS", 50, 60],
+  ]);
+  const locate = createLocator([p]);
+
+  it("textIn: vùng kéo chọn lấy đúng phần chữ trong vùng; bấm chuột lấy trọn mẩu dưới con trỏ", () => {
+    const r = locate("M-240315")!;
+    expect(textIn(p, r)).toBe("M-240315");
+    expect(textIn(p, { x: 21, y: 30.5, w: 0.1, h: 0.1 })).toBe("ABC-77");
+    expect(textIn(p, { x: 0, y: 29, w: 100, h: 3 })).toBe("Doc No. ABC-77");
+    expect(textIn(p, { x: 0, y: 80, w: 10, h: 5 })).toBe("");
+  });
+
+  it("labelNear: nhãn trước giá trị trong cùng mẩu, bên trái cùng dòng, hoặc ngay phía trên", () => {
+    expect(labelNear(p, locate("M-240315")!, "M-240315")).toBe("Invoice No.:");
+    expect(labelNear(p, locate("ABC-77")!, "ABC-77")).toBe("Doc No.");
+    expect(labelNear(p, locate("CARA LIGHTING CO")!, "CARA LIGHTING CO")).toBe("Consignee");
+    expect(labelNear(p, locate("1PCS")!, "1PCS")).toBeNull();
   });
 });

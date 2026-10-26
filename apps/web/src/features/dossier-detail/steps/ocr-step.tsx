@@ -4,20 +4,22 @@
 // ?dong=<số dòng> (từ panel dòng hàng của tờ khai đầy đủ): mở chứng từ có dòng đó và đưa con trỏ tới ô mô tả của dòng.
 import {
   Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, SegmentedControl,
-  Skeleton, Stack, Tabs, TabsContent, TabsList, TabsTrigger, fill, useMessages,
+  Skeleton, Stack, Tabs, TabsContent, TabsList, TabsTrigger, fill, toast, useMessages,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, ArrowRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getDocumentFile, isSuspect, listChecks, listDossierDocuments, listFields, ocrKeys } from "@/api/ocr";
-import { DocumentPreview, type OriginalFile } from "@/components/common/document-preview";
+import { learnFromReview, suggestAlias } from "@/api/skills";
+import { DocumentPreview, type DocumentTextApi, type OriginalFile, type PickResult } from "@/components/common/document-preview";
 import { ApiError } from "@/lib/api-error";
 import { DOC_KIND_LABELS, FIELD_GROUP_LABELS, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { CrossCheckPanel } from "../ocr/cross-check-panel";
 import { DocumentSheetsCard } from "../ocr/document-sheets";
 import { FieldRow, fieldDomId } from "../ocr/field-row";
 import { ItemsTable } from "../ocr/items-table";
+import { SKILL_LEARN_MESSAGES } from "../ocr/ocr.messages";
 import { useFieldMutations } from "../ocr/use-field-mutations";
 import { ValueChargesCard } from "../ocr/value-charges-card";
 import { useAdvanceDossier } from "../use-advance";
@@ -49,9 +51,59 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
       : fileQuery.data
         ? { status: "ready", url: fileQuery.data.url }
         : { status: "none" };
-  const save = (id: string, value: string) => m.update.mutate({ id, value });
+  const tl = useMessages(SKILL_LEARN_MESSAGES);
+  // Lớp chữ của file gốc (PDF chuẩn): tìm nhãn in cạnh giá trị người dùng sửa → gợi ý alias cho skill.
+  const [textApi, setTextApi] = useState<DocumentTextApi | null>(null);
+  const textRef = useRef(textApi);
+  textRef.current = textApi;
+  const [pick, setPick] = useState<ExtractedField | null>(null);
+  const canPick = !!textApi?.hasText;
+
+  /** Ghi nhận nhãn (không chặn việc sửa; lỗi bỏ qua). `announce`: báo cho người dùng khi là gợi ý mới. */
+  const noteLabel = (fieldId: string, label: string | null, announce: boolean) => {
+    if (!label) return;
+    suggestAlias(fieldId, label)
+      .then((s) => {
+        if (s && announce && s.hits === 1) toast({ tone: "info", title: fill(tl.aliasNoted, { alias: s.alias }) });
+      })
+      .catch(() => {});
+  };
+  const save = (id: string, value: string) =>
+    m.update.mutate(
+      { id, value },
+      {
+        onSuccess: (f) => {
+          const api = textRef.current;
+          if (!api?.hasText || !f.value) return;
+          const region = api.locate(f.value);
+          if (region) noteLabel(f.id, api.labelAt(region, f.value), false);
+        },
+      },
+    );
   const confirm = (id: string) => m.confirm.mutate(id);
   const revert = (id: string) => m.revert.mutate(id);
+
+  const onPick = ({ text, label }: PickResult) => {
+    const f = pick;
+    setPick(null);
+    if (!f) return;
+    if (!text) return void toast({ tone: "warning", title: tl.pickEmpty, description: tl.pickEmptyDesc });
+    m.update.mutate(
+      { id: f.id, value: text },
+      {
+        onSuccess: (saved) => {
+          toast({ tone: "success", title: fill(tl.pickFilled, { label: f.label, value: saved.value }) });
+          noteLabel(f.id, label, true);
+        },
+      },
+    );
+  };
+  useEffect(() => {
+    if (!pick) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPick(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pick]);
 
   const jumpTo = (id: string) => {
     setActive(id);
@@ -73,12 +125,29 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
 
   return (
     <div className="grid grid-cols-1 gap-4 cq-lg:grid-cols-2">
+      {pick && (
+        <Alert
+          tone="info"
+          className="cq-lg:col-span-2"
+          title={fill(tl.pickTitle, { label: pick.label })}
+          action={
+            <Button size="sm" variant="secondary" onClick={() => setPick(null)}>
+              {tl.pickCancel}
+            </Button>
+          }
+        >
+          {tl.pickBody}
+        </Alert>
+      )}
       <DocumentPreview
         document={doc}
         file={file}
         fields={fields}
-        highlightFieldId={active}
+        highlightFieldId={pick ? null : active}
         onFieldClick={jumpTo}
+        picking={!!pick}
+        onPick={onPick}
+        onTextReady={setTextApi}
         className="h-120 cq-lg:sticky cq-lg:top-shell cq-lg:h-176 cq-lg:self-start"
       />
       <Stack gap="md" className="min-w-0">
@@ -94,7 +163,17 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
                 {groupLabels[g]}
               </h3>
               {list.map((f) => (
-                <FieldRow key={f.id} field={f} active={active === f.id} onActivate={setActive} onSave={save} onConfirm={confirm} onRevert={revert} />
+                <FieldRow
+                  key={f.id}
+                  field={f}
+                  active={active === f.id}
+                  onActivate={setActive}
+                  onSave={save}
+                  onConfirm={confirm}
+                  onRevert={revert}
+                  picking={pick?.id === f.id}
+                  {...(canPick ? { onPick: (id: string) => setPick(fields.find((x) => x.id === id) ?? null) } : {})}
+                />
               ))}
             </section>
           );
@@ -136,7 +215,22 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const firstSuspect = docs.find((d) => suspectOf(d.id) > 0)?.id ?? docs[0]?.id;
   const currentTab = tab && docs.some((d) => d.id === tab) ? tab : (focus?.documentId ?? firstSuspect);
 
-  const proceed = () => advance.mutate({ patch: { step: "agent", suspectFields: suspectTotal }, to: "agent" });
+  const tl = useMessages(SKILL_LEARN_MESSAGES);
+  // Xác nhận dữ liệu xong → chứng từ có trường bị sửa thành mẫu cho skill (tự học). Không chặn việc sang bước sau; lỗi bỏ qua.
+  const learn = () =>
+    learnFromReview(dossier.id)
+      .then((r) => {
+        if (!r.learned) return;
+        const created = r.skills.find((s) => s.created);
+        toast({ tone: "success", title: tl.learnedTitle, description: created ? fill(tl.learnedSupplier, { supplier: created.supplier ?? created.name }) : fill(tl.learnedDesc, { n: r.learned }) });
+      })
+      .catch(() => {});
+  // mutateAsync: vẫn ghi nhớ khi màn này đã chuyển sang bước sau (callback của mutate() không chạy khi component đã gỡ).
+  const proceed = () =>
+    void advance
+      .mutateAsync({ patch: { step: "agent", suspectFields: suspectTotal }, to: "agent" })
+      .then(learn)
+      .catch(() => {});
   const onConfirmData = () => (suspectTotal > 0 || blockers > 0 ? setConfirmOpen(true) : proceed());
   const alreadyPast = dossier.step !== "ocr";
 

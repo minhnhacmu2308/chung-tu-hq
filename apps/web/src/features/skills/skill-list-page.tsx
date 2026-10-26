@@ -12,10 +12,15 @@ import { listSkills, setSkillEnabled, skillKeys } from "@/api/skills";
 import { formatNumber, formatRelative } from "@/lib/format";
 import { DOC_KIND_LABELS, type DocKind, type Skill, type SkillKind } from "@/mocks/types";
 import { CreateSkillDialog } from "./create-skill-dialog";
-import { AccuracyBadge, formatPercent, SKILL_KIND_LABELS } from "./skill-display";
-import { CREATE_SKILL_MESSAGES, KIND_HINT, LIST_MESSAGES } from "./skills.messages";
+import { AdvancedSwitch, SkillStatusBadge, SuggestionsPanel, useAdvanced } from "./learning";
+import { formatPercent, SKILL_KIND_LABELS } from "./skill-display";
+import { CREATE_SKILL_MESSAGES, KIND_HINT, LEARNING_MESSAGES, LIST_MESSAGES } from "./skills.messages";
 
 type ListT = (typeof LIST_MESSAGES)["vi"];
+type LearnT = (typeof LEARNING_MESSAGES)["vi"];
+
+/** Chế độ thường ẩn cột kỹ thuật (mã, ngôn ngữ, phiên bản) – bật "Nâng cao" để xem. */
+const BASIC_HIDDEN = { code: false, language: false, version: false };
 
 const KINDS: SkillKind[] = ["DOCUMENT", "SUPPLIER"];
 
@@ -49,7 +54,7 @@ function EnabledSwitch({ skill }: { skill: Skill }) {
 
 const col = createDataTableColumnHelper<Skill>();
 
-function columnsFor(t: ListT, docKinds: Record<DocKind, string>) {
+function columnsFor(t: ListT, tl: LearnT, docKinds: Record<DocKind, string>) {
   return col.columns([
     col.accessor("code", {
       header: t.colCode,
@@ -65,7 +70,9 @@ function columnsFor(t: ListT, docKinds: Record<DocKind, string>) {
       meta: { wrap: true },
       cell: (c) => (
         <div className="min-w-48">
-          <p className="font-medium text-fg">{c.getValue()}</p>
+          <Link href={`/skills/${c.row.original.id}`} className="font-medium text-fg hover:text-primary hover:underline">
+            {c.getValue()}
+          </Link>
           {c.row.original.supplier && <p className="text-xs text-fg-subtle">{c.row.original.supplier}</p>}
         </div>
       ),
@@ -74,8 +81,8 @@ function columnsFor(t: ListT, docKinds: Record<DocKind, string>) {
     col.accessor("language", { header: t.colLanguage, meta: { wrap: true } }),
     col.accessor((s) => s.accuracy ?? -1, {
       id: "accuracy",
-      header: t.colAccuracy,
-      cell: (c) => <AccuracyBadge skill={c.row.original} />,
+      header: tl.statusCol,
+      cell: (c) => <SkillStatusBadge skill={c.row.original} />,
     }),
     col.accessor("labeledSamples", { header: t.colSamples, meta: { align: "end", label: t.colSamplesLabel }, cell: (c) => formatNumber(c.getValue()) }),
     col.accessor("version", { header: t.colVersion, meta: { align: "end", label: t.colVersionLabel }, cell: (c) => `v${c.getValue()}` }),
@@ -106,6 +113,7 @@ function SkillListInner() {
   const kindLabels = useMessages(SKILL_KIND_LABELS);
   const kindHints = useMessages(KIND_HINT);
   const canManage = useCanManage();
+  const [advanced, setAdvanced] = useAdvanced();
   const [creating, setCreating] = useState(false);
   const locale = useUiLocale();
   const router = useRouter();
@@ -114,7 +122,7 @@ function SkillListInner() {
   const raw = params.get("kind");
   const kind: SkillKind = KINDS.includes(raw as SkillKind) ? (raw as SkillKind) : "DOCUMENT";
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: skillKeys.list, queryFn: () => listSkills() });
-  const columns = useMemo(() => columnsFor(pickMessages(LIST_MESSAGES, locale), pickMessages(DOC_KIND_LABELS, locale)), [locale]);
+  const columns = useMemo(() => columnsFor(pickMessages(LIST_MESSAGES, locale), pickMessages(LEARNING_MESSAGES, locale), pickMessages(DOC_KIND_LABELS, locale)), [locale]);
 
   const setKind = (k: string) => router.replace(`${pathname}?kind=${k}`, { scroll: false });
 
@@ -123,16 +131,18 @@ function SkillListInner() {
       <PageHeader
         title={t.title}
         description={t.description}
-        {...(canManage
-          ? {
-              actions: (
-                <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)} disabled={!data}>
-                  {tc.open}
-                </Button>
-              ),
-            }
-          : {})}
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <AdvancedSwitch value={advanced} onChange={setAdvanced} />
+            {canManage && (
+              <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)} disabled={!data}>
+                {tc.open}
+              </Button>
+            )}
+          </div>
+        }
       />
+      <SuggestionsPanel showSkill />
       {canManage && data && <CreateSkillDialog skills={data} defaultKind={kind} open={creating} onOpenChange={setCreating} />}
       {isError ? (
         <Alert
@@ -164,6 +174,7 @@ function SkillListInner() {
                 columns={columns}
                 data={data?.filter((s) => s.kind === k) ?? []}
                 getRowId={(s) => s.id}
+                columnVisibility={advanced ? {} : BASIC_HIDDEN}
                 loading={isLoading}
                 searchable
                 onRowClick={(s) => router.push(`/skills/${s.id}`)}

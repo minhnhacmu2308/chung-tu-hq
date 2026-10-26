@@ -17,7 +17,7 @@ import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } fro
 import { DrizzlePlansReader } from "../modules/identity/infrastructure/drizzle-plans-reader.js";
 import { DrizzleIdentityUow } from "../modules/identity/infrastructure/drizzle-uow.js";
 import {
-  cloneTemplatesForOrg, confirmPendingSamples, createSkillResolver, evaluateSkill, getEvaluation, getSkill, listSamples, listSkills, readSample, runEvaluation, updateSkillField, uploadSamples,
+  acceptSuggestion, cloneTemplatesForOrg, confirmPendingSamples, createSkillResolver, learnFromReview, listSuggestions, suggestAlias, evaluateSkill, getEvaluation, getSkill, listSamples, listSkills, readSample, runEvaluation, updateSkillField, uploadSamples,
   type SkillDeps,
 } from "../modules/skill/index.js";
 import { DrizzleSkillUow } from "../modules/skill/infrastructure/index.js";
@@ -103,5 +103,27 @@ describe("luồng skill trên Postgres thật", () => {
     const gen = await resolver.resolve("org_anphat", "INVOICE", null);
     expect(gen.examples).toHaveLength(2);
     expect(gen.fieldHints.join(" ")).toContain("P/O No.");
+  });
+
+  it("tự học từ bước kiểm tra: mẫu REVIEW, tự tạo skill nhà cung cấp, gợi ý nhãn → đồng ý; org khác không thấy", async () => {
+    const decl: Ctx = { ...chau, role: "DECLARANT" };
+    for (const id of ["rv1", "rv2"]) await skill.storage.put(`orgs/org_anphat/docs/${id}.pdf`, Buffer.from(`%PDF-${id}`), "application/pdf");
+    const d = (id: string) => ({ documentId: id, kind: "INVOICE" as const, fileName: `${id}.pdf`, mime: "application/pdf", pages: 1, storageKey: `orgs/org_anphat/docs/${id}.pdf`, data: { invoiceNo: id, seller: { name: "ZETA TOOLS CO., LTD" } }, corrections: [{ key: "invoice_no" }], supplier: "ZETA TOOLS CO., LTD" });
+    expect(unwrap(await learnFromReview(skill, decl, [d("rv1")])).skills[0]?.created).toBe(false);
+    const second = unwrap(await learnFromReview(skill, decl, [d("rv2")]));
+    expect(second.skills[0]).toMatchObject({ created: true, supplier: "ZETA TOOLS CO., LTD" });
+    const sup = unwrap(await getSkill(skill, chau, second.skills[0]!.id));
+    expect(sup).toMatchObject({ kind: "SUPPLIER", labeledSamples: 2 });
+    expect(unwrap(await listSamples(skill, chau, sup.id)).map((s) => s.source)).toEqual(["REVIEW", "REVIEW"]);
+
+    const sug = unwrap(await suggestAlias(skill, decl, { documentId: "rv2", kind: "INVOICE", rawPath: "invoiceNo", supplier: "Zeta Tools" }, "Doc No.:"))!;
+    expect(sug).toMatchObject({ skillId: sup.id, alias: "Doc No." });
+    const other: Ctx = { orgId: asOrgId("org_khac"), userId: asUserId("usr_x"), role: "ADMIN" };
+    expect(unwrap(await listSuggestions(skill, other))).toEqual([]);
+    expect(errCode(await acceptSuggestion(skill, other, sug.id))).toBe("NOT_FOUND");
+    const acc = unwrap(await acceptSuggestion(skill, chau, sug.id));
+    expect(acc.skill.version).toBe(2);
+    expect(acc.skill.fields.find((f) => f.key === "invoice_no")?.aliases).toContain("Doc No.");
+    expect(unwrap(await listSuggestions(skill, chau))).toEqual([]);
   });
 });

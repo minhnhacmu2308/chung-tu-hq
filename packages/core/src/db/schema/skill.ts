@@ -71,12 +71,16 @@ export const skillSamples = pgTable(
     pages: integer("pages").notNull().default(1),
     sizeBytes: integer("size_bytes").notNull().default(0),
     status: text("status").notNull().default("PENDING"),
+    /** UPLOAD = người dùng tải lên trang skill; REVIEW = tự học từ chứng từ đã kiểm tra/sửa ở bước OCR. */
+    source: text("source").notNull().default("UPLOAD"),
+    /** Tên nhà cung cấp trên chứng từ (mẫu tự học) – để gom mẫu theo nhà cung cấp và tự tạo skill riêng. */
+    supplier: text("supplier"),
     expected: jsonb("expected"),
     labeledBy: text("labeled_by"),
     labeledAt: timestamp("labeled_at", { withTimezone: true }),
     ...timestamps(),
   },
-  (t) => [index("skill_samples_skill_idx").on(t.skillId), orgRls("skill_samples_rls")],
+  (t) => [index("skill_samples_skill_idx").on(t.skillId), index("skill_samples_document_idx").on(t.orgId, t.documentId), orgRls("skill_samples_rls")],
 ).enableRLS();
 
 export const skillEvaluations = pgTable(
@@ -95,4 +99,26 @@ export const skillEvaluations = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("skill_evaluations_skill_idx").on(t.skillId, t.finishedAt), orgRls("skill_evaluations_rls")],
+).enableRLS();
+
+/** Gợi ý cải thiện skill (nhãn in trên chứng từ cho một trường) – sinh khi người dùng chỉ/sửa giá trị trên file; người dùng đồng ý mới áp vào skill. */
+export const skillSuggestions = pgTable(
+  "skill_suggestions",
+  {
+    id: id(),
+    orgId: orgId(),
+    skillId: text("skill_id")
+      .notNull()
+      .references(() => skills.id, { onDelete: "cascade" }),
+    fieldKey: text("field_key").notNull(),
+    alias: text("alias").notNull(),
+    /** Số lần gặp lại cùng nhãn (nhiều lần = đáng tin hơn). */
+    hits: integer("hits").notNull().default(1),
+    /** PENDING | ACCEPTED | DISMISSED. */
+    status: text("status").notNull().default("PENDING"),
+    supplier: text("supplier"),
+    documentId: text("document_id"),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex("skill_suggestions_uq").on(t.skillId, t.fieldKey, t.alias), index("skill_suggestions_org_status_idx").on(t.orgId, t.status), orgRls("skill_suggestions_rls")],
 ).enableRLS();

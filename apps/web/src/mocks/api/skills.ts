@@ -9,10 +9,12 @@ export const skillKeys = {
   detail: (id: string) => ["skills", "detail", id] as const,
   samples: (id: string) => ["skills", "samples", id] as const,
   evaluation: (id: string) => ["skills", "evaluation", id] as const,
+  suggestions: (skillId?: string) => ["skills", "suggestions", skillId ?? "all"] as const,
+  stale: (id: string) => ["skills", "stale", id] as const,
 };
 
 export type { EvaluationResult, LabeledSample, SkillFieldPatch } from "@kb/contracts";
-import { MIN_SAMPLES_FOR_ACCURACY, type EvaluationResult, type LabeledSample, type SampleLabel } from "@kb/contracts";
+import { MIN_SAMPLES_FOR_ACCURACY, type EvaluationResult, type LabeledSample, type LearnSummary, type SampleLabel, type SkillSuggestion, type StaleReads } from "@kb/contracts";
 /** Số mẫu tối thiểu để hiện độ chính xác. */
 export { MIN_SAMPLES_FOR_ACCURACY };
 
@@ -265,3 +267,88 @@ export const evaluateSkill = (skillId: string) =>
       finishedAt: s.updatedAt,
     };
   });
+
+// ---- Tự học từ bước kiểm tra, gợi ý nhãn, đọc lại (mock: đủ để thử luồng giao diện) ----
+
+
+const docSkill = (skills: Skill[], kind: string) => skills.find((s) => s.enabled && s.kind === "DOCUMENT" && s.docKind === kind);
+
+/** Chứng từ có trường bị sửa → cộng mẫu đã gắn nhãn cho skill của loại chứng từ đó. */
+export const learnFromReview = (dossierId: string) =>
+  mutate((db): LearnSummary => {
+    const docs = db.documents.filter((d) => d.dossierId === dossierId && d.status === "DONE");
+    const touched = new Map<string, Skill>();
+    let learned = 0;
+    for (const d of docs) {
+      const edited = db.fields.some((f) => f.documentId === d.id && f.status === "USER_CONFIRMED" && f.value !== f.originalValue);
+      const s = edited ? docSkill(db.skills, d.kind) : undefined;
+      if (!s) continue;
+      s.labeledSamples += 1;
+      s.updatedAt = nowIso();
+      touched.set(s.id, s);
+      learned += 1;
+    }
+    return { learned, skills: [...touched.values()].map((s) => ({ id: s.id, name: s.name, created: false })) };
+  });
+
+export const listSuggestions = (skillId?: string) => query((db) => db.skillSuggestions.filter((s) => !skillId || s.skillId === skillId));
+
+export const suggestAlias = (fieldId: string, label: string) =>
+  mutate((db): SkillSuggestion | null => {
+    const f = db.fields.find((x) => x.id === fieldId);
+    const doc = f && db.documents.find((d) => d.id === f.documentId);
+    const s = doc && docSkill(db.skills, doc.kind);
+    const sf = s?.fields.find((x) => x.key === f!.key);
+    const alias = label.replace(/[\s:–-]+$/u, "").trim();
+    if (!s || !sf || alias.length < 2 || sf.aliases.some((a) => a.toLowerCase() === alias.toLowerCase())) return null;
+    const prev = db.skillSuggestions.find((x) => x.skillId === s.id && x.fieldKey === sf.key && x.alias === alias);
+    if (prev) {
+      prev.hits += 1;
+      return prev;
+    }
+    const sug: SkillSuggestion = { id: newId("sug"), skillId: s.id, skillName: s.name, fieldKey: sf.key, fieldLabel: sf.label, alias, hits: 1, createdAt: nowIso() };
+    db.skillSuggestions.push(sug);
+    return sug;
+  });
+
+export const acceptSuggestion = (id: string) =>
+  mutate((db) => {
+    const sug = db.skillSuggestions.find((x) => x.id === id);
+    if (!sug) throw new ApiError("NOT_FOUND", "Gợi ý không còn");
+    const s = getSkill(db.skills, sug.skillId);
+    const f = s.fields.find((x) => x.key === sug.fieldKey);
+    if (f && !f.aliases.includes(sug.alias)) f.aliases.push(sug.alias);
+    s.version += 1;
+    s.updatedAt = nowIso();
+    db.skillSuggestions = db.skillSuggestions.filter((x) => x.id !== id);
+    if (!db.staleSkills.includes(s.id)) db.staleSkills.push(s.id);
+    return { skill: s, evaluationQueued: s.labeledSamples >= MIN_SAMPLES_FOR_ACCURACY };
+  });
+
+export const dismissSuggestion = (id: string) =>
+  mutate((db) => {
+    db.skillSuggestions = db.skillSuggestions.filter((x) => x.id !== id);
+  });
+
+export const getStaleReads = (skillId: string) =>
+  query((db): StaleReads => {
+    const s = getSkill(db.skills, skillId);
+    if (!db.staleSkills.includes(skillId)) return { documents: [], dossiers: 0 };
+    const open = new Map(db.dossiers.filter((d) => d.step === "upload" || d.step === "ocr").map((d) => [d.id, d]));
+    const documents = db.documents
+      .filter((d) => d.status === "DONE" && d.kind === s.docKind && open.has(d.dossierId))
+      .map((d) => ({ documentId: d.id, dossierId: d.dossierId, dossierCode: open.get(d.dossierId)!.code, fileName: d.fileName }));
+    return { documents, dossiers: new Set(documents.map((d) => d.dossierId)).size };
+  });
+
+/** Mock không có AI: đọc lại = coi như đã đọc bằng cấu hình mới. */
+export const rereadStale = async (skillId: string) => {
+  const n = (await getStaleReads(skillId)).documents.length;
+  await mutate((db) => {
+    db.staleSkills = db.staleSkills.filter((x) => x !== skillId);
+  });
+  return n;
+};
+
+/** Mock: chạy đánh giá ngay (như "Đánh giá lại"). */
+export const waitForEvaluation = async (skillId: string, _since: string | undefined): Promise<EvaluationResult | null> => evaluateSkill(skillId);

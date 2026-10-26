@@ -1,9 +1,9 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { EvaluationRow, SampleRow, SkillRepos, SkillRow, SkillUow, SkillVersionRow } from "../ports.js";
+import type { EvaluationRow, SampleRow, SkillRepos, SkillRow, SkillUow, SkillVersionRow, SuggestionRow } from "../ports.js";
 
 /** Fake mô phỏng RLS thật: dòng của org mình + skill mẫu (is_template) đọc được; ghi chỉ org mình. */
 export class InMemorySkillUow implements SkillUow {
-  readonly data = { skills: [] as SkillRow[], versions: [] as SkillVersionRow[], samples: [] as SampleRow[], evaluations: [] as EvaluationRow[] };
+  readonly data = { skills: [] as SkillRow[], versions: [] as SkillVersionRow[], samples: [] as SampleRow[], evaluations: [] as EvaluationRow[], suggestions: [] as SuggestionRow[] };
 
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: SkillRepos) => Promise<T>): Promise<T> {
     const d = this.data;
@@ -48,6 +48,22 @@ export class InMemorySkillUow implements SkillUow {
         update: async (orgId, id, patch) => {
           if (orgId !== org) deny(`skill_samples update orgId ${orgId} khác ngữ cảnh`);
           const s = d.samples.find((x) => x.id === id && x.orgId === org);
+          if (s) Object.assign(s, clone(patch));
+        },
+      },
+      suggestions: {
+        list: async (orgId, f) =>
+          clone(d.suggestions.filter((s) => s.orgId === org && s.orgId === orgId && (!f.skillId || s.skillId === f.skillId) && (!f.status || s.status === f.status)).sort((a, b) => b.hits - a.hits || b.updatedAt.getTime() - a.updatedAt.getTime())),
+        get: async (orgId, id) => clone(d.suggestions.find((s) => s.id === id && s.orgId === org && s.orgId === orgId) ?? null),
+        find: async (orgId, skillId, fieldKey, alias) => clone(d.suggestions.find((s) => s.orgId === org && s.orgId === orgId && s.skillId === skillId && s.fieldKey === fieldKey && s.alias === alias) ?? null),
+        insert: async (row) => {
+          if (row.orgId !== org) deny("skill_suggestions insert");
+          if (d.suggestions.some((s) => s.skillId === row.skillId && s.fieldKey === row.fieldKey && s.alias === row.alias)) throw new Error("duplicate key value violates unique constraint skill_suggestions_uq");
+          d.suggestions.push(clone(row));
+        },
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`skill_suggestions update orgId ${orgId} khác ngữ cảnh`);
+          const s = d.suggestions.find((x) => x.id === id && x.orgId === org);
           if (s) Object.assign(s, clone(patch));
         },
       },

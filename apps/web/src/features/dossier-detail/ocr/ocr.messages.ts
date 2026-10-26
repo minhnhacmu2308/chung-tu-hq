@@ -70,13 +70,53 @@ export const ITEMS_TABLE_MESSAGES = defineMessages({
 });
 
 export const FIELD_ROW_MESSAGES = defineMessages({
-  vi: { confirmField: "Xác nhận {label} đúng", correct: "Đúng", aiRead: "AI đọc:", revert: "Hoàn tác" },
-  en: { confirmField: "Confirm {label} is correct", correct: "Correct", aiRead: "AI read:", revert: "Undo" },
-  zh: { confirmField: "确认{label}正确", correct: "正确", aiRead: "AI 读取：", revert: "撤销" },
+  vi: { confirmField: "Xác nhận {label} đúng", correct: "Đúng", aiRead: "AI đọc:", revert: "Hoàn tác", pickOnFile: "Chỉ vị trí {label} trên file" },
+  en: { confirmField: "Confirm {label} is correct", correct: "Correct", aiRead: "AI read:", revert: "Undo", pickOnFile: "Point to {label} on the file" },
+  zh: { confirmField: "确认{label}正确", correct: "正确", aiRead: "AI 读取：", revert: "撤销", pickOnFile: "在文件上指出{label}" },
 });
 
 export const FIELD_MUTATION_MESSAGES = defineMessages({
   vi: { saveFailed: "Không lưu được giá trị", confirmFailed: "Không xác nhận được trường", revertFailed: "Không hoàn tác được" },
   en: { saveFailed: "Couldn't save the value", confirmFailed: "Couldn't confirm the field", revertFailed: "Couldn't undo" },
   zh: { saveFailed: "无法保存值", confirmFailed: "无法确认字段", revertFailed: "无法撤销" },
+});
+
+/** Chỉ trên file + ghi nhớ cách đọc (skill tự học từ việc kiểm tra). */
+export const SKILL_LEARN_MESSAGES = defineMessages({
+  vi: {
+    pickTitle: "Chỉ vị trí “{label}” trên file",
+    pickBody: "Kéo chuột khoanh vùng chứa giá trị, hoặc bấm vào chữ. Nhấn Esc để hủy.",
+    pickCancel: "Hủy",
+    pickEmpty: "Không đọc được chữ ở vùng này",
+    pickEmptyDesc: "File scan/ảnh không có lớp chữ – hãy gõ giá trị vào ô.",
+    pickFilled: "Đã điền {label}: {value}",
+    aliasNoted: "Đã ghi nhận nhãn “{alias}” trên chứng từ. Khi được duyệt trong Cách đọc chứng từ, AI sẽ tự nhận ra nhãn này.",
+    learnedTitle: "Đã ghi nhớ cách đọc",
+    learnedDesc: "{n} chứng từ bạn vừa sửa sẽ giúp AI đọc chính xác hơn lần sau.",
+    learnedSupplier: "Đã tạo cách đọc riêng cho {supplier} – lần sau AI đọc chứng từ của nhà cung cấp này chính xác hơn.",
+  },
+  en: {
+    pickTitle: "Point to “{label}” on the file",
+    pickBody: "Drag to box the value, or click on the text. Press Esc to cancel.",
+    pickCancel: "Cancel",
+    pickEmpty: "No text found in this area",
+    pickEmptyDesc: "Scans/images have no text layer – type the value into the box.",
+    pickFilled: "Filled {label}: {value}",
+    aliasNoted: "Noted the printed label “{alias}”. Once approved in Document reading, the AI will recognize it.",
+    learnedTitle: "Reading lessons saved",
+    learnedDesc: "The {n} documents you corrected will help the AI read more accurately next time.",
+    learnedSupplier: "Created a dedicated reading setup for {supplier} – their documents will be read more accurately next time.",
+  },
+  zh: {
+    pickTitle: "在文件上指出“{label}”",
+    pickBody: "拖动鼠标框选该值，或点击文字。按 Esc 取消。",
+    pickCancel: "取消",
+    pickEmpty: "此区域未识别到文字",
+    pickEmptyDesc: "扫描件/图片没有文字层 —— 请在输入框中键入该值。",
+    pickFilled: "已填入 {label}：{value}",
+    aliasNoted: "已记录单证上的标签“{alias}”。在“单证读取方式”中通过后，AI 将自动识别该标签。",
+    learnedTitle: "已记住读取方式",
+    learnedDesc: "您刚修改的 {n} 份单证将帮助 AI 下次读得更准确。",
+    learnedSupplier: "已为 {supplier} 创建专用读取方式 —— 下次读取该供应商的单证会更准确。",
+  },
 });

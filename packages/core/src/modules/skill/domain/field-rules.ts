@@ -1,6 +1,7 @@
 import { resolveSkillFieldKey, type DocKind, type SkillField, type SkillFieldPatch } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { sameSupplier } from "./learning.js";
 
 export function applyFieldPatch(fields: SkillField[], key: string, patch: SkillFieldPatch): Result<SkillField[]> {
   const f = fields.find((x) => x.key === key);
@@ -37,14 +38,13 @@ export function canRemoveField(kind: DocKind, fields: SkillField[], key: string)
 }
 
 type Candidate = { id: string; kind: "DOCUMENT" | "SUPPLIER"; docKind: DocKind | null; supplier: string | null; enabled: boolean };
-const tok = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").split(" ").filter((w) => w.length > 2);
 
 /** Chọn skill cho (loại chứng từ, gợi ý nhà cung cấp): SUPPLIER khớp tên trước, rồi DOCUMENT; chỉ enabled. */
 export function resolveCandidates<T extends Candidate>(skills: T[], kind: DocKind, supplierHint: string | null): T | null {
   const enabled = skills.filter((s) => s.enabled && s.docKind === kind);
   if (supplierHint) {
-    const hint = new Set(tok(supplierHint));
-    const sup = enabled.find((s) => s.kind === "SUPPLIER" && s.supplier && tok(s.supplier).some((w) => hint.has(w)));
+    // So theo từ riêng của tên (bỏ "CO., LTD"…): hai công ty khác nhau cùng đuôi "LTD" không khớp nhầm.
+    const sup = enabled.find((s) => s.kind === "SUPPLIER" && sameSupplier(s.supplier, supplierHint));
     if (sup) return sup;
   }
   return enabled.find((s) => s.kind === "DOCUMENT") ?? null;

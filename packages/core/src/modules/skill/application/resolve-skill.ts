@@ -2,6 +2,7 @@ import { customFieldsOf } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import type { SkillResolver } from "../../extraction/index.js";
 import { resolveCandidates } from "../domain/field-rules.js";
+import { pickExamples } from "../domain/learning.js";
 import { fieldHints } from "../domain/schema-keys.js";
 import type { SkillDeps } from "./ports.js";
 
@@ -14,7 +15,8 @@ export function createSkillResolver(deps: SkillDeps): SkillResolver {
         if (!chosen?.docKind) return { skillVersionId: null, fieldHints: [], examples: [], customFields: [] };
         const v = await r.versions.get(chosen.id, chosen.currentVersion);
         if (!v) return { skillVersionId: null, fieldHints: [], examples: [], customFields: [] };
-        const examples = (await r.samples.list(orgId, chosen.id)).filter((s) => s.status === "LABELED" && s.expected).slice(0, 2).map((s) => s.expected);
+        // Ví dụ: ưu tiên mẫu của cùng nhà cung cấp (mẫu tự học từ bước kiểm tra mang tên nhà cung cấp).
+        const examples = pickExamples(await r.samples.list(orgId, chosen.id), supplierHint).map((s) => s.expected);
         return { skillVersionId: v.id, fieldHints: fieldHints(chosen.docKind, v.fields), examples, customFields: customFieldsOf(chosen.docKind, v.fields) };
       }),
   };

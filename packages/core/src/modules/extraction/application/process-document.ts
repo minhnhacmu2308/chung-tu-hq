@@ -4,6 +4,7 @@ import { EXTRACTION_SCHEMA_VERSION, extractionSchemaFor, fillMissingNullable, wi
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
+import { supplierOf } from "../domain/review-learning.js";
 import { remergeDossier } from "./_remerge.js";
 import { AiDataError, PIPELINE_VERSION, PROMPT_VERSION, type ExtractionDeps } from "./ports.js";
 
@@ -46,9 +47,14 @@ export async function processDocument(deps: ExtractionDeps, input: ProcessDocume
       }
     }
 
+    const ctx = { orgId: asOrgId(orgId), userId: asUserId("") };
+    // Đọc lại (không phân loại lại): nhà cung cấp lấy từ lần đọc trước → vẫn chọn đúng skill riêng của nhà cung cấp.
+    if (!supplierHint) {
+      const prev = (await deps.uow.asOrg(ctx, (r) => r.extractions.listDone(orgId, dossierId, [doc.id]))).filter((x) => x.kind === kind).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      if (prev) supplierHint = supplierOf(kind, prev.raw as Record<string, unknown>);
+    }
     const skill = await deps.skills.resolve(orgId, kind, supplierHint);
     const key = createHash("sha256").update([doc.id, doc.sha256, kind, PROMPT_VERSION, String(EXTRACTION_SCHEMA_VERSION), PIPELINE_VERSION, skill.skillVersionId ?? ""].join("|")).digest("hex");
-    const ctx = { orgId: asOrgId(orgId), userId: asUserId("") };
     const existing = await deps.uow.asOrg(ctx, (r) => r.extractions.findByKey(orgId, key));
     if (!existing) {
       // Trường bổ sung riêng của doanh nghiệp (skill) được thêm vào schema để AI đọc thật.

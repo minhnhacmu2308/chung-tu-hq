@@ -83,7 +83,7 @@ export class FakeDeclarations implements DeclarationReader {
 export class FakeDossiers implements CustomsDossierPort {
   readonly events: ProgressEvent[] = [];
   readonly patches: unknown[] = [];
-  constructor(public rows: (DossierBrief & { orgId: string })[], public docs: { id: string; kind: DocKind; fileName: string; storageKey: string }[] = [{ id: "doc_1", kind: "INVOICE", fileName: "inv.pdf", storageKey: "k/inv.pdf" }]) {}
+  constructor(public rows: (DossierBrief & { orgId: string })[], public docs: { id: string; kind: DocKind; fileName: string; storageKey: string; mime: string; sizeBytes: number }[] = [{ id: "doc_1", kind: "INVOICE", fileName: "inv.pdf", storageKey: "k/inv.pdf", mime: "application/pdf", sizeBytes: 4 }]) {}
   async get(orgId: string, id: string) {
     const d = this.rows.find((x) => x.id === id && x.orgId === orgId);
     return d ? { ...d } : null;
@@ -96,8 +96,15 @@ export class FakeDossiers implements CustomsDossierPort {
   async documents() {
     return this.docs;
   }
-  async readFile() {
-    return Buffer.from("%PDF");
+  readonly files = new Map<string, Buffer>();
+  async readFile(key?: string) {
+    return (key ? this.files.get(key) : undefined) ?? Buffer.from("%PDF");
+  }
+  async putFile(key: string, bytes: Buffer) {
+    this.files.set(key, bytes);
+  }
+  async deleteFile(key: string) {
+    this.files.delete(key);
   }
   async publish(_o: string, _d: string, e: ProgressEvent) {
     this.events.push(e);

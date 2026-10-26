@@ -125,8 +125,11 @@ export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; t
 export interface CustomsDossierPort {
   get(orgId: string, dossierId: string): Promise<DossierBrief | null>;
   update(orgId: string, dossierId: string, patch: { status?: DossierStatus; step?: StepId; declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED" }): Promise<void>;
-  documents(orgId: string, dossierId: string): Promise<{ id: string; kind: DocKind; fileName: string; storageKey: string }[]>;
+  documents(orgId: string, dossierId: string): Promise<{ id: string; kind: DocKind; fileName: string; storageKey: string; mime: string; sizeBytes: number }[]>;
   readFile(storageKey: string): Promise<Buffer>;
+  /** Ghi / xóa file riêng (file upload cho bộ HYS – không vào bảng documents). */
+  putFile(storageKey: string, bytes: Buffer, mime: string): Promise<void>;
+  deleteFile(storageKey: string): Promise<void>;
   publish(orgId: string, dossierId: string, event: ProgressEvent): Promise<void>;
 }
 export interface ValidationReader {

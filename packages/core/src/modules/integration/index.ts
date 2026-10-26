@@ -21,3 +21,5 @@ export { branchPayload, invoiceTotal, sentSheetsDiff, sentSheetsError, sheetSnap
 export { maskPayload } from "./domain/mask.js";
 export { buildAmaRequest, type AmaBuild } from "./domain/post-amendment.js";
 export { coarseState, rowState, stageOf, type ResultRaw } from "./domain/state-machine.js";
+export { addHysUploadedFiles, createHysSubmission, deleteHysSubmission, getHysOverview, hysValuesOf, removeHysFile, updateHysSubmission } from "./application/hys-submissions.js";
+export { isLotEditable } from "./domain/lot-editable.js";

@@ -42,8 +42,10 @@ export function createCustomsDossierPort(dossier: DossierDeps): CustomsDossierPo
       return d ? { id: d.id, code: d.code, direction: d.direction, typeCode: d.typeCode, partner: d.partner, status: d.status, step: d.step, declarationNo: d.declarationNo, updatedAt: d.updatedAt, ownerId: d.ownerId } : null;
     },
     update: (orgId, dossierId, patch) => dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.update(orgId, dossierId, { ...patch, updatedAt: dossier.clock.now() })),
-    documents: async (orgId, dossierId) => (await dossier.uow.asOrg(sys(orgId), (r) => r.documents.list(orgId, dossierId))).filter((d) => d.status === "DONE").map((d) => ({ id: d.id, kind: d.kind, fileName: d.fileName, storageKey: d.storageKey })),
+    documents: async (orgId, dossierId) => (await dossier.uow.asOrg(sys(orgId), (r) => r.documents.list(orgId, dossierId))).filter((d) => d.status === "DONE").map((d) => ({ id: d.id, kind: d.kind, fileName: d.fileName, storageKey: d.storageKey, mime: d.mime, sizeBytes: d.sizeBytes })),
     readFile: (key) => dossier.storage.get(key),
+    putFile: (key, bytes, mime) => dossier.storage.put(key, bytes, mime),
+    deleteFile: (key) => dossier.storage.delete(key),
     publish: (orgId, dossierId, event) => dossier.publisher.publish(orgId, dossierId, event),
   };
 }

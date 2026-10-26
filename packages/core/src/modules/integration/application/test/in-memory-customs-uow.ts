@@ -73,7 +73,7 @@ export class InMemoryCustomsUow implements CustomsUow {
         update: async (orgId, id, patch) => {
           if (orgId !== org) deny(`hys_submissions update orgId ${orgId} khác ngữ cảnh`);
           const h = d.hys.find((x) => x.id === id && x.orgId === org);
-          if (h) Object.assign(h, clone(patch));
+          if (h) Object.assign(h, clone(Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))));
         },
         delete: async (orgId, id) => {
           if (orgId !== org) return;

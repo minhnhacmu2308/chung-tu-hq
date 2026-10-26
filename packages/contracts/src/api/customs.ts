@@ -10,7 +10,11 @@ import { CustomsSummarySchema } from "../dto/dossier.js";
 export const SubmissionStateSchema = z.enum(["APPROVED", "PRE_DECLARED", "DECLARED", "DOCS_SENT", "CLEARED", "INSPECTION", "REJECTED", "SEND_FAILED"]);
 export type SubmissionState = z.infer<typeof SubmissionStateSchema>;
 
-export const SubmitDeclarationInputSchema = z.object({ certificateId: z.string().min(1, "Chọn chứng thư số để ký") });
+export const SubmitDeclarationInputSchema = z.object({
+  certificateId: z.string().min(1, "Chọn chứng thư số để ký"),
+  /** Xác nhận vẫn khai dù hệ thống gợi ý cần HYS (khai bỏ qua gợi ý). */
+  hysWaived: z.boolean().optional(),
+});
 /** Tờ khai nhánh (lô > 50 dòng tách nhiều tờ – spec tách tờ khai §7): số nguyên ≥ 1, vắng = tờ 1. Ép từ chuỗi để dùng cho query `?branch=`. */
 export const BranchParamSchema = z.coerce.number().int().min(1).default(1);
 /** Thân / query chỉ mang `branch` (bắt đầu sửa sau thông quan, xem / duyệt / bỏ dòng AMA). */
@@ -18,7 +22,7 @@ export const BranchQuerySchema = z.object({ branch: BranchParamSchema });
 export type BranchQuery = z.infer<typeof BranchQuerySchema>;
 export const ResendOperationInputSchema = z.object({ operation: CustomsOperationSchema, branch: BranchParamSchema });
 /** Thực hiện một nghiệp vụ trên tờ khai đã truyền (IDB, IDC, IDD, IDA01, IDE, AMA, AMB, AMC, HYS, CONT, PORT_FEE, IID/IEX, khai tạm lại IDA) – trên tờ `branch`. */
-export const PerformOperationInputSchema = z.object({ operation: CustomsOperationSchema, branch: BranchParamSchema });
+export const PerformOperationInputSchema = z.object({ operation: CustomsOperationSchema, branch: BranchParamSchema, hysWaived: z.boolean().optional() });
 
 export const PipelineStatusSchema = z.enum(["NOT_SENT", "WAITING", "SENDING", "OK", "ERROR"]);
 export type PipelineStatus = z.infer<typeof PipelineStatusSchema>;

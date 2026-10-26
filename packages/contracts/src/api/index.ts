@@ -8,3 +8,4 @@ export * from "./customs.js";
 export * from "./product-catalog.js";
 export * from "./mailbox.js";
 export * from "./page.js";
+export * from "./hys.js";

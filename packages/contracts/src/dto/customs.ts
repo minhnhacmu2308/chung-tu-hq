@@ -19,7 +19,7 @@ export const CustomsMessageSchema = z.object({
   id: z.string(),
   dossierId: z.string(),
   operation: CustomsOperationSchema,
-  direction: z.enum(["OUT", "IN"]),
+  direction: z.enum(["OUT", "IN", "NOTE"]),
   result: z.enum(["PENDING", "OK", "ERROR"]),
   summary: z.string(),
   at: IsoDateTimeSchema,

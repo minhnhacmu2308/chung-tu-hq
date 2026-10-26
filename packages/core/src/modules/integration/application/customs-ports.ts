@@ -11,7 +11,7 @@ import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import type { ResultRaw } from "../domain/state-machine.js";
 
 export type OutboxRow = { id: string; orgId: string; dossierId: string; /** Nhánh tờ khai (≥ 1). */ branch: number; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
-export type MessageRow = { id: string; orgId: string; dossierId: string; branch: number; operation: CustomsOperation; direction: "OUT" | "IN"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
+export type MessageRow = { id: string; orgId: string; dossierId: string; branch: number; operation: CustomsOperation; direction: "OUT" | "IN" | "NOTE"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
 export type ResultRow = {
   id: string; orgId: string; dossierId: string; branch: number; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
   clearanceStatus: "WAITING" | "INSPECTING" | "CLEARED" | "REJECTED"; customsTaxVnd: string | null; state: SubmissionState; pollCount: number;

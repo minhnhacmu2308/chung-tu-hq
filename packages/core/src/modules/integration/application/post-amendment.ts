@@ -13,6 +13,7 @@ import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { amaBranchPayload, amaSource, amaSourceLines, amendmentDeltaVnd } from "../domain/post-amendment.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
+import { hasBlockingPending } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, DeclarationSnapshot, PostAmendmentRow, ResultRow } from "./customs-ports.js";
 
 export const toPostAmendment = (r: PostAmendmentRow): PostAmendment => {
@@ -234,7 +235,7 @@ export async function copyPostAmendmentHeader(deps: CustomsDeps, ctx: Ctx, dossi
       if (!a) {
         if (stage !== "CLEARED") return "NOT_CLEARED";
         // Như startPostAmendment: đang chờ phản hồi một nghiệp vụ khác của tờ → không lập.
-        if ((await r.outbox.listForDossier(ctx.orgId, dossierId)).some((o) => o.branch === target.branch && o.status === "PENDING")) return "BUSY";
+        if (hasBlockingPending(await r.outbox.listForDossier(ctx.orgId, dossierId), target.branch)) return "BUSY";
         a = await beginPostAmendment(deps, r, ctx, dossierId, result);
         created = true;
       } else if (a.status !== "DRAFT" && a.status !== "RECALLED") return "OPEN_NOT_DRAFT";

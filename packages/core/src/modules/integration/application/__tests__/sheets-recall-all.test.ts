@@ -63,6 +63,14 @@ describe("recallAllSheets – chuỗi gọi về tờ 1 → N", () => {
     expect(stages()).toEqual(["RECALLED", "AMEND_RECALLED", "CLEARED"]);
   });
 
+  it("outbox HYS PENDING không khóa gọi về cả lô", async () => {
+    lot("PRE_DECLARED", "DECLARED");
+    h.uow.data.outbox.push({ id: "ob_hys", orgId: ORG, dossierId: D, branch: 1, declarationId: "dec_1", operation: "HYS", idempotencyKey: `hys:sub_1:n1`, payload: { submissionId: "sub_1" }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: new Date(), updatedAt: new Date() });
+    const res = unwrap(await recallAllSheets(h.deps, declarant, D));
+    expect(res.sent).toBe(true);
+    expect(sent().filter((s) => s[1] !== "HYS")).toEqual([[1, "IDB", "PENDING"]]);
+  });
+
   it("tự mở lại chỉ sau lệnh gọi về cuối: sau tờ 1 tờ khai vẫn SUBMITTED; sau tờ 2 → DRAFT, hồ sơ review, audit scope ALL, một thông báo nêu số tờ", async () => {
     lot("PRE_DECLARED", "DECLARED", "CLEARED");
     unwrap(await recallAllSheets(h.deps, declarant, D));

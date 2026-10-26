@@ -126,6 +126,12 @@ describe("declareAllSheets – chuỗi IDC tờ 1 → N", () => {
     expect(e.message).toMatch(/Đang gửi nghiệp vụ khác/);
     expect(h.uow.data.outbox).toHaveLength(1);
   });
+  it("outbox HYS PENDING (bộ hồ sơ đính kèm) không khóa khai chính thức cả lô", async () => {
+    lot("PRE_DECLARED", "PRE_DECLARED");
+    h.uow.data.outbox.push({ id: "ob_hys", orgId: ORG, dossierId: D, branch: 1, declarationId: "dec_1", operation: "HYS", idempotencyKey: `hys:sub_1:n1`, payload: { submissionId: "sub_1" }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: new Date(), updatedAt: new Date() });
+    unwrap(await declareAllSheets(h.deps, declarant, D));
+    expect(sent().filter((s) => s[1] === "IDC")).toEqual([[1, "IDC", "PENDING"]]);
+  });
   it("gọi hai lần liên tiếp → lần 2 lỗi, chỉ 1 outbox", async () => {
     lot("PRE_DECLARED", "PRE_DECLARED");
     unwrap(await declareAllSheets(h.deps, declarant, D));

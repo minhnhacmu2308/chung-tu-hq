@@ -14,7 +14,7 @@ import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { buildAmaRequest } from "../domain/post-amendment.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
-import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
+import { availabilityInput, hasBlockingPending, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { resultsSentError } from "./sent-sheets.js";
@@ -37,6 +37,8 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
  * Mọi guard khác (thứ tự tờ, BLOCKER, HS, ghim, trùng) giữ nguyên.
  */
 export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, op: CustomsOperation, branch = 1, opts?: OperationOpts): Promise<Result<OperationResult>> {
+  // HYS không còn là nghiệp vụ của từng tờ: khai bằng bộ hồ sơ đính kèm (sendHys).
+  if (op === "HYS") return err(reasonError("INVALID_STATE", "HYS_USE_SUBMISSION"));
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
@@ -123,8 +125,6 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
       if (blocking.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: blocking.join("; ") }));
       payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
     }
-  } else if (op === "HYS") {
-    payload = { files: (await deps.dossiers.documents(ctx.orgId, dossierId)).map((d) => ({ name: d.fileName, storageKey: d.storageKey })), certificateId: result.raw?.certificateId };
   } else if (op === "CONT" || op === "PORT_FEE") {
     payload = { request: { soToKhai: result.declarationNo, containers: snap.payload.containers }, certificateId: result.raw?.certificateId };
   }
@@ -218,7 +218,7 @@ export async function startPostAmendment(deps: CustomsDeps, ctx: Ctx, dossierId:
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const { result, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId, branch), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
   if (!result || stageOf(result) !== "CLEARED") return err(domainError("INVALID_STATE", "Chỉ sửa đổi sau thông quan khi tờ khai đã thông quan"));
-  if (outbox.some((o) => o.branch === branch && o.status === "PENDING")) return err(domainError("INVALID_STATE", "Đang chờ phản hồi một nghiệp vụ khác"));
+  if (hasBlockingPending(outbox, branch)) return err(domainError("INVALID_STATE", "Đang chờ phản hồi một nghiệp vụ khác"));
   await deps.uow.asOrg(ctx, (r) => beginPostAmendment(deps, r, ctx, dossierId, result));
   await deps.dossiers.update(ctx.orgId, dossierId, { step: "review" });
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });

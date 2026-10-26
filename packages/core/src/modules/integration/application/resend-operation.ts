@@ -4,7 +4,7 @@
 import { baseOp, CUSTOMS_OPERATIONS, isContentOperation, queryOpFor, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
-import { domainError } from "../../../shared/errors.js";
+import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
@@ -18,6 +18,8 @@ import { outboxKey, pinOfOutbox, stalePinReason } from "./branch-send.js";
 export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<ResendResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
+  // HYS khai bằng bộ hồ sơ đính kèm; gửi lại bộ bị lỗi là việc của bộ (khai bộ mới), không phải nghiệp vụ của tờ.
+  if (op === "HYS") return err(reasonError("INVALID_STATE", "HYS_USE_SUBMISSION"));
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const { result, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId, branch), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
@@ -38,8 +40,8 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const b = baseOp(op);
   const externalId = result.externalId;
   const st = externalId ? await queryBeforeResend(deps, ctx, dossierId, branch, op, qop, result.declarationNo, externalId) : null;
-  // Chỉ nhận biết chắc được: số tờ khai của lần khai đầu, phân luồng của khai chính thức, số tiếp nhận HYS.
-  const recorded = !st ? false : b === "IDA" ? stage === "NOT_SENT" && !!st.declarationNo : b === "IDC" ? stage === "PRE_DECLARED" && !!st.channel : op === "HYS" ? !!result.raw?.receiptNo && result.raw?.done?.includes("HYS") === true : false;
+  // Chỉ nhận biết chắc được: số tờ khai của lần khai đầu, phân luồng của khai chính thức.
+  const recorded = !st ? false : b === "IDA" ? stage === "NOT_SENT" && !!st.declarationNo : b === "IDC" ? stage === "PRE_DECLARED" && !!st.channel : false;
 
   if (recorded && st) {
     await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, operation: qop, direction: "IN", result: "OK", summary: `Hải quan đã ghi nhận ${op} – không gửi lại (trạng thái: ${st.status})`, payloadMasked: { nghiepVu: qop, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now() }));

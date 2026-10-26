@@ -342,7 +342,7 @@ describe("customs-send / poll", () => {
     unwrap(await performOperation(deps, declarant, D, "EDC"));
     await drain();
     const v = unwrap(await getSubmission(deps, declarant, D));
-    expect(v.pipeline.map((p) => p.op)).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "HYS", "CONT", "PORT_FEE"]);
+    expect(v.pipeline.map((p) => p.op)).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"]);
     expect(v.pipeline.filter((p) => p.status === "OK").map((p) => p.op)).toEqual(["EDA", "EDC"]);
     expect(v.queryOp).toBe("IEX");
     expect(uow.data.messages.some((m) => m.operation === "IEX" && m.direction === "IN")).toBe(true);
@@ -527,11 +527,16 @@ describe("resendOperation – nhánh biên", () => {
   it.each([
     ["EDA" as const, { stage: "NOT_SENT" as const }, { status: "s", cleared: false, declarationNo: "307000000001" }],
     ["EDC" as const, { stage: "PRE_DECLARED" as const }, { status: "s", cleared: false, channel: "GREEN" as const }],
-    ["HYS" as const, { stage: "DECLARED" as const, receiptNo: "HYS00000001", done: ["HYS" as const] }, { status: "s", cleared: false }],
   ])("%s đã được Hải quan ghi nhận → không gửi lại", async (op, raw, status) => {
     seedResult({ raw });
     deps.gateway = gw({ queryStatus: async () => status });
     expect(unwrap(await resendOperation(deps, declarant, D, op))).toEqual({ resent: false, message: `Hải quan đã ghi nhận ${op}, không cần gửi lại – bấm Tra cứu để cập nhật` });
+    expect(uow.data.outbox).toHaveLength(0);
+  });
+
+  it("HYS không phải nghiệp vụ gửi lại của tờ → HYS_USE_SUBMISSION", async () => {
+    seedResult();
+    expect(await resendOperation(deps, declarant, D, "HYS")).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "HYS_USE_SUBMISSION" } });
     expect(uow.data.outbox).toHaveLength(0);
   });
 
@@ -682,6 +687,22 @@ describe("processOutbox – nhánh biên", () => {
     const ob = seedOutbox({ operation: "IDC", idempotencyKey: `${D}:IDC:v2` });
     await expect(send(ob.id)).rejects.toBe("socket hang up");
     expect(uow.data.outbox[0]).toMatchObject({ status: "PENDING", lastError: "socket hang up" });
+  });
+
+  it("performOperation HYS → HYS_USE_SUBMISSION, không tạo outbox", async () => {
+    seedResult({ state: "DECLARED", raw: { stage: "DECLARED" } });
+    expect(await performOperation(deps, declarant, D, "HYS")).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "HYS_USE_SUBMISSION" } });
+    expect(uow.data.outbox).toHaveLength(0);
+  });
+
+  it("outbox HYS PENDING không làm IDA/IDC hiện OPERATION_PENDING và không tính là đang xử lý", async () => {
+    seedResult({ state: "PRE_DECLARED", channel: null, raw: { stage: "PRE_DECLARED" } });
+    seedOutbox({ operation: "HYS", idempotencyKey: "hys:sub_1:n1", payload: { submissionId: "sub_1" } });
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.inProgress).toBe(false);
+    expect(v.pipeline.find((p) => p.op === "IDC")).toMatchObject({ enabled: true });
+    expect(v.pipeline.some((p) => p.op === "HYS")).toBe(false);
+    expect((await performOperation(deps, declarant, D, "IDC")).ok).toBe(true);
   });
 
   it("IDC thành công → không tự tạo HYS; xếp job hỏi trạng thái", async () => {
@@ -1777,7 +1798,7 @@ describe("AMA theo tờ khai nhánh (spec §6.6)", () => {
 
 describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
   const msg = (branch: number, p: Partial<MessageRow> = {}): MessageRow => ({ id: `m_${uow.data.messages.length + 1}`, orgId: ORG, dossierId: D, branch, operation: "IDA", direction: "OUT", result: "OK", summary: "s", payloadMasked: {}, externalRef: null, at: new Date(T.getTime() + uow.data.messages.length * 1000), ...p });
-  /** Tờ 1 thông quan, tờ 2 đã khai chính thức (đang gửi HYS), tờ 3 chưa gửi – nối tiếp bị chặn (thông điệp IDA IN/ERROR ghi trên tờ 3). */
+  /** Tờ 1 thông quan, tờ 2 đã khai chính thức (đang gửi PORT_FEE), tờ 3 chưa gửi – nối tiếp bị chặn (thông điệp IDA IN/ERROR ghi trên tờ 3). */
   const seedThree = () => {
     seedBranch(1, { state: "CLEARED", clearanceStatus: "CLEARED", channel: "GREEN", raw: { stage: "CLEARED", certificateId: "cert_1" } });
     seedBranch(2, { channel: "RED" });
@@ -1786,10 +1807,10 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
     uow.data.messages.push(msg(1, { direction: "IN" }));
     uow.data.messages.push(msg(2));
     uow.data.messages.push(msg(2, { direction: "IN" }));
-    uow.data.messages.push(msg(2, { operation: "HYS" }));
+    uow.data.messages.push(msg(2, { operation: "PORT_FEE" }));
     uow.data.messages.push(msg(3, { direction: "IN", result: "ERROR", summary: "Tờ 3/3: chưa khai tạm tự động – Tờ khai chưa phê duyệt" }));
     seedOutbox({ branch: 1, status: "SENT" });
-    seedOutbox({ branch: 2, operation: "HYS", idempotencyKey: `${D}:HYS:n1:b2`, status: "PENDING" });
+    seedOutbox({ branch: 2, operation: "PORT_FEE", idempotencyKey: `${D}:PORT_FEE:n1:b2`, status: "PENDING" });
   };
 
   beforeEach(() => {
@@ -1805,9 +1826,9 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
       [2, 3, "DECLARED", "104000000002", "RED", true, true],
       [3, 3, "NOT_SENT", null, null, false, false],
     ]);
-    expect(v.branches[1]!.messages.map((m) => m.operation)).toEqual(["HYS", "IDA", "IDA"]);
-    expect(v.branches[1]!.pipeline.find((p) => p.op === "HYS")?.status).toBe("SENDING");
-    expect(v.branches[0]!.pipeline.find((p) => p.op === "HYS")?.status).toBe("NOT_SENT");
+    expect(v.branches[1]!.messages.map((m) => m.operation)).toEqual(["PORT_FEE", "IDA", "IDA"]);
+    expect(v.branches[1]!.pipeline.find((p) => p.op === "PORT_FEE")?.status).toBe("SENDING");
+    expect(v.branches[0]!.pipeline.find((p) => p.op === "PORT_FEE")?.status).toBe("NOT_SENT");
     expect(v.branches[0]!.result).toMatchObject({ declarationNo: "104000000001", clearanceStatus: "CLEARED" });
     // Trường cấp hồ sơ = tờ 1 (tương thích): thông điệp, giai đoạn, kết quả của tờ 1.
     expect(v).toMatchObject({ stage: "CLEARED", started: true, inProgress: false, result: { declarationNo: "104000000001" } });
@@ -1852,7 +1873,7 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
     const rows = unwrap(await listCustomsDeclarations(deps, declarant));
     expect(rows.map((r) => [r.dossierId, r.branch, r.of, r.declarationNo, r.channel, r.state, r.lastOperation])).toEqual([
       [D, 1, 3, "104000000001", "GREEN", "CLEARED", "IDA"],
-      [D, 2, 3, "104000000002", "RED", "SENDING", "HYS"],
+      [D, 2, 3, "104000000002", "RED", "SENDING", "PORT_FEE"],
       [D, 3, 3, undefined, undefined, "READY", "IDA"],
     ]);
   });

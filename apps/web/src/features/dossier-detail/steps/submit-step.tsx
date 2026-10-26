@@ -58,7 +58,7 @@ const opLabel = (ops: Record<OpKey, string>, r: Pick<PipelineRow, "op" | "label"
 /** Nhãn nút gửi theo nghiệp vụ gốc (mã nhập; mã xuất E… dùng chung). */
 const SEND_KEY: Partial<Record<CustomsOperation, keyof SubmitText>> = {
   IDA: "sendIDA", IDB: "sendRecall", IDC: "sendIDC", IDD: "sendRecall", IDA01: "sendIDA01", IDE: "sendIDE",
-  AMA: "sendAMA", AMB: "sendRecall", AMC: "sendAMC", HYS: "send", CONT: "send", PORT_FEE: "sendPortFee",
+  AMA: "sendAMA", AMB: "sendRecall", AMC: "sendAMC", CONT: "send", PORT_FEE: "sendPortFee",
 };
 const sendLabel = (t: SubmitText, r: PipelineRow, stage: CustomsStage) => {
   if (baseOp(r.op) === "IDA" && stage === "RECALLED") return t.sendIDAAgain;
@@ -68,7 +68,7 @@ const sendLabel = (t: SubmitText, r: PipelineRow, stage: CustomsStage) => {
 /** Tháng/năm hết hạn chứng thư: "10/2027" (vi, en) · "2027/10" (zh). */
 const monthYear = (iso: string, locale: UiLocale) => (locale === "zh" ? `${iso.slice(0, 4)}/${iso.slice(5, 7)}` : `${iso.slice(5, 7)}/${iso.slice(0, 4)}`);
 /** Gửi lại khi lỗi: chỉ các nghiệp vụ có kịch bản tra cứu-trước-khi-gửi-lại (ADR 0005). */
-const RESENDABLE: ReadonlySet<CustomsOperation> = new Set(["IDA", "EDA", "IDC", "EDC", "HYS"]);
+const RESENDABLE: ReadonlySet<CustomsOperation> = new Set(["IDA", "EDA", "IDC", "EDC"]);
 const isRecall = (op: CustomsOperation) => CUSTOMS_OPERATIONS[op].kind === "recall";
 
 type PhaseState = { text: string; tone: Tone };

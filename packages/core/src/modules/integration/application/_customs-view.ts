@@ -32,7 +32,11 @@ export function toPartialResult(r: ResultRow | null): Partial<CustomsResult> | n
 export type FlowContext = { direction: "NK" | "XK"; approved: boolean; hasContainers: boolean };
 
 /** Nghiệp vụ đang chờ gửi/phản hồi (outbox PENDING). */
-export const pendingOps = (outbox: OutboxRow[]) => [...new Set(outbox.filter((o) => o.status === "PENDING").map((o) => o.operation))];
+/** Outbox HYS thuộc bộ hồ sơ đính kèm (hys_submissions), không thuộc luồng từng tờ: không khóa, không hiện "đang chờ" của nghiệp vụ tờ khai. */
+export const isHysOutbox = (o: OutboxRow) => o.operation === "HYS";
+/** Nghiệp vụ đang chờ gửi/phản hồi (outbox PENDING), không tính HYS. */
+export const hasBlockingPending = (outbox: OutboxRow[], branch?: number) => outbox.some((o) => o.status === "PENDING" && !isHysOutbox(o) && (branch === undefined || o.branch === branch));
+export const pendingOps = (outbox: OutboxRow[]) => [...new Set(outbox.filter((o) => o.status === "PENDING" && !isHysOutbox(o)).map((o) => o.operation))];
 
 export function availabilityInput(ctx: FlowContext, result: ResultRow | null, outbox: OutboxRow[]) {
   return { direction: ctx.direction, stage: stageOf(result), approved: ctx.approved, channel: result?.channel ?? null, hasContainers: ctx.hasContainers, pending: pendingOps(outbox), done: result?.raw?.done ?? [] };
@@ -75,7 +79,7 @@ export function toBranchSubmission(b: BranchInput): BranchSubmission {
     result: toPartialResult(b.result),
     customsInfo: b.result?.raw?.customsInfo ?? null,
     rejection: b.result?.raw?.rejection ?? null,
-    inProgress: b.outbox.some((o) => o.status === "PENDING") || b.polling,
+    inProgress: hasBlockingPending(b.outbox) || b.polling,
     started: startedOf(b.messages, b.outbox, b.result),
     sentChanges: b.sentChanges ?? null,
   };

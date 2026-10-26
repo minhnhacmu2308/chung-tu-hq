@@ -6,6 +6,7 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, type Result } from "../../../shared/result.js";
 import { stageOf } from "../domain/state-machine.js";
+import { hasBlockingPending } from "./_customs-view.js";
 import { declareOpFor } from "./branch-send.js";
 import type { CustomsDeps } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
@@ -20,7 +21,7 @@ export async function declareAllSheets(deps: CustomsDeps, ctx: Ctx, dossierId: s
   const of = branchCount(snap.payload.items.length);
   if (of <= 1) return err(reasonError("VALIDATION", "DECLARE_ALL_SINGLE_SHEET"));
   const { results, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
-  if (outbox.some((o) => o.status === "PENDING")) return err(reasonError("INVALID_STATE", "DECLARE_ALL_PENDING"));
+  if (hasBlockingPending(outbox)) return err(reasonError("INVALID_STATE", "DECLARE_ALL_PENDING"));
   const sheets = results.filter((r) => r.branch <= of).sort((a, b) => a.branch - b.branch);
   // Còn tờ chờ gửi nội dung (chưa khai tạm / đã gọi về chưa gửi lại) → chờ khai tạm xong cả lô (cùng lý do thứ tự tờ khai chính thức).
   const waiting = sheets.find((s) => awaitingContent(stageOf(s)));

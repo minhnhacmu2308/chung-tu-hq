@@ -34,7 +34,7 @@ export type CustomsFlow = {
   done: CustomsOperation[];
   /** Thời điểm Hải quan (mô phỏng) trả "Đã thông quan" khi hỏi trạng thái sau khai chính thức. */
   clearAt: string | null;
-  side: { hysNo?: string; containers?: string[]; portFeeReceipt?: string };
+  side: { containers?: string[]; portFeeReceipt?: string };
 };
 
 /** Thông điệp của tờ khai nhánh: `branch` vắng = tờ 1 (dữ liệu cũ và lô một tờ không đổi). */
@@ -89,7 +89,7 @@ export const basePayload = (d: Dossier, taxCode: string) => ({ maLoaiHinh: d.typ
 type Step = { op: CustomsOperation; dir: "OUT" | "IN"; result: CustomsMessage["result"]; summary: string; at: number; payload: Record<string, unknown> };
 
 /**
- * Dòng thời gian của một tờ khai đã truyền xong (dữ liệu mẫu): khai tạm → khai chính thức → HYS → tra cứu.
+ * Dòng thời gian của một tờ khai đã truyền xong (dữ liệu mẫu): khai tạm → khai chính thức → (lịch sử HYS) → tra cứu.
  * `unitMs` = khoảng cách giữa hai thông điệp.
  */
 export function buildSubmission(
@@ -158,7 +158,7 @@ export function buildSubmission(
       customsTaxVnd: taxVnd,
       updatedAt: last.at,
     },
-    flow: { ...emptyFlow(), stage: clearedNow ? "CLEARED" : "DECLARED", done: [first, second, "HYS"], side: { hysNo } },
+    flow: { ...emptyFlow(), stage: clearedNow ? "CLEARED" : "DECLARED", done: [first, second], side: {} },
   };
 }
 

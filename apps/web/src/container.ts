@@ -4,20 +4,20 @@ import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv, type Env } from "@kb/core/config";
 import { createDb, platformDbUrl, runSeed, type Db } from "@kb/core/db";
 import { activeQuotaBonus, type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
-import { createAdminInfrastructure, platformStaffOf, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
+import { createAdminInfrastructure, DbPlatformMailer, platformStaffOf, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
 import type { BillingDeps } from "@kb/core/modules/billing";
 import { refreshFromShipment, type DeclarationDeps } from "@kb/core/modules/declaration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { listOpenDocuments, rereadDocuments, type DossierDeps } from "@kb/core/modules/dossier";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
 import { latestReads, type ExtractionDeps } from "@kb/core/modules/extraction";
-import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
+import { ClaudeEmailDrafter, createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
 import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
-import { hashToken, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
+import { hashToken, provisionOrgAccount, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
-import type { MailboxDeps } from "@kb/core/modules/mailbox";
+import { releaseDossierAttachments, type MailboxDeps } from "@kb/core/modules/mailbox";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { checkSentSheets, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
@@ -279,6 +279,8 @@ function build(): Container {
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
   // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
   mailbox.audit = identity.audit;
+  // Xóa hẳn hồ sơ → file hộp thư đã xếp vào hồ sơ đó trở lại "chờ xếp".
+  dossier.onDeleted = (ctx, dossierId) => releaseDossierAttachments(mailbox, ctx, dossierId);
   dossier.audit = identity.audit;
   declaration.orgAudit = identity.audit;
   customs.orgAudit = identity.audit;
@@ -322,11 +324,21 @@ function build(): Container {
       sendPasswordReset: (email) => requestPasswordReset(identity, email, { ip: "admin" }),
       resendVerification: (userId) => resendVerificationEmail(identity, userId),
       provisionAccount: (input) => provisionStaffAccount(identity, input),
+      provisionOrg: (input) => provisionOrgAccount(identity, input),
     },
     jobs, system, probe: integrationProbe(env), vault: identity.secrets, limiter: identity.rateLimiter, clock: systemClock,
   });
   // Đăng nhập: tài khoản quản trị viên không thuộc doanh nghiệp vẫn vào được khu /admin.
   identity.platformStaff = (userId) => platformStaffOf(admin.uow as DrizzleAdminUow, userId);
+  // Email: một cổng gửi cho cả hệ thống – máy chủ SMTP cấu hình ở khu Quản trị (thiếu thì .env, rồi log). Email của identity cũng qua đây.
+  const platformMailer = new DbPlatformMailer(admin.uow as DrizzleAdminUow, identity.secrets!, env);
+  identity.mailer = { send: (m) => platformMailer.send(m) };
+  admin.mail = platformMailer;
+  admin.queue = queue;
+  if (env.AI_PROVIDER === "claude" && env.ANTHROPIC_API_KEY) admin.emailAi = new ClaudeEmailDrafter(env.ANTHROPIC_API_KEY, env.AI_MODEL);
+  // AI của khu Quản trị không thuộc doanh nghiệp nào → ghi usage_events dưới doanh nghiệp hệ thống (bất biến 8).
+  admin.recordAiUsage = async (u) =>
+    void (await usageRecorder.record({ orgId: "org_system", dossierId: null, documentId: null, kind: u.kind, provider: "anthropic", model: u.model, inputTokens: u.inputTokens, outputTokens: u.outputTokens }));
   return {
     env,
     db,

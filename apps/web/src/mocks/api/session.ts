@@ -1,4 +1,5 @@
 // Phiên đăng nhập + doanh nghiệp + thông báo (mock).
+import type { Session } from "@kb/contracts";
 import { mutate, query } from "@/lib/mock-request";
 import { resetDb } from "@/mocks/db";
 import { adminLogin } from "@/mocks/admin/ops";
@@ -9,7 +10,7 @@ export const sessionKeys = {
 };
 
 export const getSession = () =>
-  query((db) => ({
+  query((db): Session => ({
     user: db.members.find((m) => m.id === db.currentUserId)!,
     org: db.org,
   }));
@@ -72,6 +73,14 @@ export const lookupTaxCode = (taxCode: string) =>
 /** Mock đăng ký: luôn thành công. */
 export const register = (_input: { email: string; name: string; password: string; taxCode: string; joinExisting: boolean }) =>
   mutate(() => ({ ok: true as const, mode: _input.joinExisting ? ("JOIN_REQUESTED" as const) : ("CREATED_ORG" as const) }));
+
+/** Mock đổi mật khẩu: không lưu mật khẩu – chỉ kiểm như backend (mới ≥ 8 ký tự, khác mật khẩu cũ). */
+export const changePassword = (input: { currentPassword: string; newPassword: string }) =>
+  mutate(() => {
+    if (!input.currentPassword) throw new Error("Mật khẩu hiện tại không đúng");
+    if (input.newPassword.length < 8 || input.newPassword === input.currentPassword) throw new Error("Mật khẩu mới không hợp lệ");
+    return { ok: true as const };
+  });
 
 /** Mock đăng xuất: không có phiên thật. */
 export const logout = () =>

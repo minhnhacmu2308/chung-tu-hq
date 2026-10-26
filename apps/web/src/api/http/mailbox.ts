@@ -1,5 +1,5 @@
 import {
-  AddInboxToDossierResultSchema, InboxMessageSchema, InboxMessageStatusSchema, MailboxOverviewSchema, MailConnectionSchema, MailSyncResultSchema, StartMailConnectResultSchema,
+  AddInboxToDossierResultSchema, DeleteInboxMessagesResultSchema, InboxMessageSchema, InboxMessageStatusSchema, MailboxOverviewSchema, MailConnectionSchema, MailSyncResultSchema, StartMailConnectResultSchema,
   type AddInboxToDossierInput, type InboxMessageStatus, type MailProvider, type UpdateMailFiltersInput,
 } from "@kb/contracts";
 import { z } from "zod";
@@ -19,4 +19,5 @@ export const listInbox = () => apiGet("org/inbox", z.array(InboxMessageSchema));
 export const addInboxToDossier = (input: AddInboxToDossierInput) => apiPost("org/inbox/add", input, AddInboxToDossierResultSchema);
 export const setInboxMessageStatus = (id: string, status: Extract<InboxMessageStatus, "NEW" | "IGNORED">) =>
   apiPut(`org/inbox/${encodeURIComponent(id)}/status`, { status }, StatusResultSchema);
+export const deleteInboxMessages = (ids: string[]) => apiPost("org/inbox/delete", { ids }, DeleteInboxMessagesResultSchema);
 export const inboxAttachmentUrl = (id: string) => `/api/org/inbox/attachments/${encodeURIComponent(id)}/file`;

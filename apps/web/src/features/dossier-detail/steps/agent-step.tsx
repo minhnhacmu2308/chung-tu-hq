@@ -2,11 +2,11 @@
 // Bước 4 – AI Agent xử lý: chọn việc → điều phối (tiến trình realtime) → xác nhận mã HS → sang Review.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Combobox, createDataTableColumnHelper,
-  DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Progress, RadioGroup, SegmentedControl, Spinner, Stack, StatusBadge, toast, IconTile, fill, useMessages,
+  DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Progress, RadioGroup, SegmentedControl, Spinner, Stack, StatusBadge, toast, Tooltip, IconTile, fill, useMessages,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Play, RotateCcw, Search, Workflow, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Bot, Check, CheckCheck, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Pencil, Play, RotateCcw, Search, Undo2, Workflow, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
 import { listProducts, productKeys } from "@/api/products";
 import {
@@ -345,6 +345,23 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
     onError: (e) => toast({ tone: "danger", title: errorMessage(e) }),
   });
   const undo = useMutation({ mutationFn: (it: LineItem) => unconfirmHs(it.id), onSuccess: invalidate, onError: (e) => toast({ tone: "danger", title: errorMessage(e) }) });
+  /** Xác nhận mã gợi ý / bỏ xác nhận nhiều dòng: gọi từng dòng theo lô nhỏ (không dồn hàng trăm request một lúc), báo dòng lỗi. */
+  const bulk = useMutation({
+    mutationFn: async ({ kind, items: list }: { kind: "confirm" | "undo"; items: LineItem[] }) => {
+      let ok = 0;
+      for (let i = 0; i < list.length; i += 6) {
+        const res = await Promise.allSettled(list.slice(i, i + 6).map((it) => (kind === "confirm" ? confirmHs(it.id, it.hsSuggested!) : unconfirmHs(it.id))));
+        ok += res.filter((r) => r.status === "fulfilled").length;
+      }
+      return { kind, ok, n: list.length };
+    },
+    onSuccess: ({ kind, ok, n }) => {
+      invalidate();
+      if (ok < n) toast({ tone: "warning", title: fill(t.toastBulkPartial, { ok, n, fail: n - ok }) });
+      else toast({ tone: "success", title: fill(kind === "confirm" ? t.toastBulkConfirmed : t.toastBulkUnconfirmed, { n }) });
+    },
+    onError: (e) => toast({ tone: "danger", title: errorMessage(e) }),
+  });
 
   const columns = col.columns([
     col.accessor("lineNo", { header: "#", size: 48, meta: { align: "center" } }),
@@ -412,36 +429,34 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
     }),
     col.accessor("hsConfirmed", {
       header: t.colConfirm,
-      size: 260,
+      size: 200,
       cell: (c) => {
         const it = c.row.original;
+        // Tooltip = chữ ngắn; aria-label đủ nghĩa (kèm số dòng) cho trình đọc màn hình.
+        const iconBtn = (tip: string, aria: string, icon: ReactNode, props: Omit<ComponentProps<typeof Button>, "children" | "aria-label">) => (
+          <Tooltip content={tip}>
+            <Button size="icon" className="h-8 w-8" {...props} aria-label={aria}>
+              {icon}
+            </Button>
+          </Tooltip>
+        );
         if (it.hsConfirmed) {
           return (
-            <div className="flex items-center gap-2 whitespace-nowrap">
+            <div className="flex items-center gap-1 whitespace-nowrap">
               <StatusBadge status="USER_CONFIRMED" label={it.hsConfirmed} />
-              <Button size="sm" variant="ghost" onClick={() => setEditing(it)} aria-label={fill(t.changeAria, { line: it.lineNo })}>
-                {t.change}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => undo.mutate(it)} aria-label={fill(t.unconfirmAria, { line: it.lineNo })}>
-                {t.unconfirm}
-              </Button>
+              {iconBtn(t.changeTip, fill(t.changeAria, { line: it.lineNo }), <Pencil className="h-4 w-4" />, { variant: "ghost", onClick: () => setEditing(it) })}
+              {iconBtn(t.unconfirmTip, fill(t.unconfirmAria, { line: it.lineNo }), <Undo2 className="h-4 w-4" />, { variant: "ghost", loading: undo.isPending && undo.variables?.id === it.id, onClick: () => undo.mutate(it) })}
             </div>
           );
         }
         return (
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <Button
-              size="sm"
-              disabled={!it.hsSuggested}
-              loading={confirm.isPending && confirm.variables?.it.id === it.id && confirm.variables.code === it.hsSuggested}
-              onClick={() => confirm.mutate({ it, code: it.hsSuggested! })}
-              aria-label={fill(t.confirmAria, { code: it.hsSuggested ?? "", line: it.lineNo })}
-            >
-              {t.confirm}
-            </Button>
-            <Button size="sm" variant="secondary" disabled={!!it.hs && hsBusy(it.hs.status)} onClick={() => setEditing(it)}>
-              {t.pickOther}
-            </Button>
+          <div className="flex items-center gap-1 whitespace-nowrap">
+            {iconBtn(fill(t.confirmTip, { code: it.hsSuggested ?? "" }), fill(t.confirmAria, { code: it.hsSuggested ?? "", line: it.lineNo }), <Check className="h-4 w-4" />, {
+              disabled: !it.hsSuggested,
+              loading: confirm.isPending && confirm.variables?.it.id === it.id && confirm.variables.code === it.hsSuggested,
+              onClick: () => confirm.mutate({ it, code: it.hsSuggested! }),
+            })}
+            {iconBtn(t.pickOther, t.pickOther, <Search className="h-4 w-4" />, { variant: "secondary", disabled: !!it.hs && hsBusy(it.hs.status), onClick: () => setEditing(it) })}
           </div>
         );
       },
@@ -450,7 +465,41 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
 
   return (
     <>
-      <DataTable aria-label={t.tableAria} columns={columns} data={items} getRowId={(r) => r.id} />
+      <DataTable
+        aria-label={t.tableAria}
+        columns={columns}
+        data={items}
+        getRowId={(r) => r.id}
+        rowLabel={(r) => fill(t.lineLabel, { line: r.lineNo })}
+        selectable
+        selectionActions={(picked, clear) => {
+          const toConfirm = picked.filter((it) => !it.hsConfirmed && it.hsSuggested && !(it.hs && hsBusy(it.hs.status)));
+          const toUndo = picked.filter((it) => it.hsConfirmed);
+          return (
+            <>
+              <Button
+                size="sm"
+                leftIcon={<CheckCheck className="h-4 w-4" />}
+                disabled={toConfirm.length === 0 || bulk.isPending}
+                loading={bulk.isPending && bulk.variables?.kind === "confirm"}
+                onClick={() => bulk.mutate({ kind: "confirm", items: toConfirm }, { onSuccess: clear })}
+              >
+                {fill(t.bulkConfirm, { n: toConfirm.length })}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon={<Undo2 className="h-4 w-4" />}
+                disabled={toUndo.length === 0 || bulk.isPending}
+                loading={bulk.isPending && bulk.variables?.kind === "undo"}
+                onClick={() => bulk.mutate({ kind: "undo", items: toUndo }, { onSuccess: clear })}
+              >
+                {fill(t.bulkUnconfirm, { n: toUndo.length })}
+              </Button>
+            </>
+          );
+        }}
+      />
       <ChangeHsDialog item={editing} onClose={() => setEditing(null)} dossierId={dossierId} />
       <HsAnswerDialog item={answering} onClose={() => setAnswering(null)} dossierId={dossierId} />
       <ReclassifyDialog item={reclassifying} onClose={() => setReclassifying(null)} dossierId={dossierId} />

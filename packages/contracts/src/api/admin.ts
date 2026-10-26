@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { DecimalStringSchema, IsoDateSchema } from "../common.js";
 import { AnnouncementAudienceSchema, AnnouncementKindSchema, isMonday, PlanCodeSchema, StaffRoleSchema } from "../dto/index.js";
-import { EmailSchema } from "./identity.js";
+import { EmailSchema, TaxCodeSchema } from "./identity.js";
 
 /** Mọi thao tác ghi ảnh hưởng tới khách hoặc cấu hình đều kèm lý do – ghi vào nhật ký quản trị. */
 export const AdminReasonSchema = z.string().trim().min(5, "Nhập lý do (ít nhất 5 ký tự)").max(500, "Lý do tối đa 500 ký tự");
@@ -15,6 +15,23 @@ export type AdminReasonInput = z.infer<typeof AdminReasonInputSchema>;
 
 export const ChangeOrgPlanInputSchema = z.object({ planCode: PlanCodeSchema, ...withReason });
 export type ChangeOrgPlanInput = z.infer<typeof ChangeOrgPlanInputSchema>;
+
+/** Quản trị tạo hộ doanh nghiệp ký hợp đồng trực tiếp + tài khoản Chủ sở hữu (mật khẩu tạm, bắt đổi ở lần đăng nhập đầu). */
+export const CreateOrgInputSchema = z.object({
+  taxCode: TaxCodeSchema,
+  name: z.string().trim().min(1, "Nhập tên doanh nghiệp").max(300),
+  address: z.string().trim().max(500),
+  planCode: PlanCodeSchema,
+  contractNo: z.string().trim().max(100).optional(),
+  /** Hạn hợp đồng YYYY-MM-DD. */
+  contractEndsOn: IsoDateSchema.optional(),
+  owner: z.object({ email: EmailSchema, name: z.string().trim().min(2, "Nhập họ tên").max(200) }),
+  note: z.string().trim().max(2000).optional(),
+});
+export type CreateOrgInput = z.infer<typeof CreateOrgInputSchema>;
+/** Mật khẩu tạm chỉ trả về MỘT lần, lúc tạo – không lưu dạng đọc được ở đâu cả. */
+export const CreateOrgResultSchema = z.object({ orgId: z.string(), orgName: z.string(), ownerEmail: z.string(), tempPassword: z.string() });
+export type CreateOrgResult = z.infer<typeof CreateOrgResultSchema>;
 
 export const AdjustOrgQuotaInputSchema = z.object({
   bonusDossiers: z.number().int("Nhập số nguyên").min(0, "Không nhỏ hơn 0").max(10_000, "Tối đa 10.000 hồ sơ"),

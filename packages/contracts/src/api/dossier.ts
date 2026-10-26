@@ -27,3 +27,7 @@ export type DossierFilter = z.infer<typeof DossierFilterSchema>;
 
 export const UpdateDossierInputSchema = z.object({ note: z.string().trim().optional(), step: StepIdSchema.optional() });
 export type UpdateDossierInput = z.infer<typeof UpdateDossierInputSchema>;
+
+/** Kết quả xóa hẳn hồ sơ (chỉ hồ sơ chưa truyền Hải quan). */
+export const DeleteDossierResultSchema = z.object({ id: z.string(), code: z.string() });
+export type DeleteDossierResult = z.infer<typeof DeleteDossierResultSchema>;

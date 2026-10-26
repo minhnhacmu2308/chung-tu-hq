@@ -14,7 +14,7 @@ export async function getAdminSession(deps: AdminDeps, sessionToken: string): Pr
   const s = await resolveStaffSession(deps, sessionToken);
   if (!s.ok) return ok(null);
   const row = await deps.uow.run((r) => r.staff.get(s.value.actor.userId));
-  return ok(row ? { staff: toStaff(row), mfa: s.value.mfa } : null);
+  return ok(row ? { staff: toStaff(row), mfa: s.value.mfa, ...(s.value.mustChangePassword ? { mustChangePassword: true } : {}) } : null);
 }
 
 export async function listStaff(deps: AdminDeps, actor: StaffActor): Promise<Result<Staff[]>> {

@@ -1,8 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { Loader, LoadingDots, LoadingOverlay, LoadingState, PageLoading, SkeletonCard, SkeletonForm, SkeletonList, SkeletonStats, SkeletonTable, SkeletonText } from "./loading.js";
+import { Dialog, DialogContent } from "./dialog.js";
 import { RowActions, type RowAction } from "./row-actions.js";
 import { TooltipProvider } from "./tooltip.js";
 
@@ -45,6 +47,26 @@ describe("RowActions", () => {
     expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Mở hồ sơ", "Hủy hồ sơ"]);
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Hủy hồ sơ" }));
     expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("thao tác trong menu mở popup (xác nhận) → popup giữ mở sau khi menu đóng và trả focus", async () => {
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <TooltipProvider>
+          <ul><li className="group"><RowActions rowLabel="HS-NK-021" actions={[{ id: "del", label: "Xóa hồ sơ", icon: <svg />, tone: "danger", quick: false, onSelect: () => setOpen(true) }]} /></li></ul>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent title="Xóa hẳn hồ sơ?" icon={<svg />}>Nội dung</DialogContent>
+          </Dialog>
+        </TooltipProvider>
+      );
+    }
+    render(<Host />);
+    await userEvent.click(screen.getByRole("button", { name: "Thao tác khác – HS-NK-021" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Xóa hồ sơ" }));
+    expect(await screen.findByRole("dialog", { name: "Xóa hẳn hồ sơ?" })).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByRole("dialog", { name: "Xóa hẳn hồ sơ?" })).toBeInTheDocument();
   });
 
   it("thao tác bị khóa không bấm được; quick=false chỉ nằm trong menu", async () => {

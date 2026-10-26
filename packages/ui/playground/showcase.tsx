@@ -1,8 +1,8 @@
 // Trình diễn các component dữ liệu / nhập liệu / phản hồi của @kb/ui.
-import { Copy, Filter, MoreHorizontal } from "lucide-react";
+import { Copy, Filter, MoreHorizontal, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import {
-  Abbreviation, Alert, Avatar, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, createDataTableColumnHelper, DataTable,
+  Abbreviation, Alert, Avatar, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   Field, FileDropzone, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
@@ -83,9 +83,72 @@ export function Showcase() {
   const [uploads, setUploads] = useState<UploadItem[]>(INITIAL_UPLOADS);
   const [autoSubmit, setAutoSubmit] = useState(false);
   const [partner, setPartner] = useState<string | null>("p15432");
+  const [confirm, setConfirm] = useState<"delete" | "cancel" | "warning" | null>(null);
+  const [blocks, setBlocks] = useState([{ id: "h", name: "Tiêu đề" }, { id: "p", name: "Đoạn văn" }, { id: "b", name: "Nút bấm" }]);
 
   return (
     <Stack gap="lg">
+      <Card>
+        <CardHeader><CardTitle>Kéo thả sắp xếp (SortableList) + xem trước HTML (HtmlPreview)</CardTitle></CardHeader>
+        <CardContent>
+          <Grid cols={{ base: 1, lg: 2 }}>
+            <SortableList
+              aria-label="Khối email"
+              items={blocks}
+              getId={(b) => b.id}
+              itemLabel={(b, i) => `Khối ${i + 1}: ${b.name}`}
+              onReorder={setBlocks}
+              renderItem={(b, parts) => (
+                <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-2 py-1.5 text-sm">
+                  {parts.handle}
+                  {b.name}
+                </div>
+              )}
+            />
+            <HtmlPreview title="Xem trước" html={`<body style="font-family:sans-serif;padding:16px">${blocks.map((b) => `<p>${b.name}</p>`).join("")}</body>`} className="h-48" />
+          </Grid>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Hộp xác nhận (ConfirmDialog)</CardTitle></CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button variant="danger" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirm("delete")}>Xóa hồ sơ</Button>
+          <Button variant="secondary" leftIcon={<XCircle className="h-4 w-4" />} onClick={() => setConfirm("cancel")}>Hủy hồ sơ</Button>
+          <Button variant="secondary" onClick={() => setConfirm("warning")}>Cảnh báo</Button>
+          <ConfirmDialog
+            open={confirm === "delete"}
+            onOpenChange={(o) => !o && setConfirm(null)}
+            title="Xóa hẳn hồ sơ?"
+            icon={<Trash2 className="h-4 w-4" />}
+            subject="HS-2026-0142 · Công ty TNHH Minh Phát"
+            irreversible
+            confirmLabel="Xóa vĩnh viễn"
+            onConfirm={() => { setConfirm(null); toast({ tone: "success", title: "Đã xóa hồ sơ" }); }}
+          >
+            Hồ sơ cùng toàn bộ chứng từ, dữ liệu đã đọc và tờ khai nháp sẽ bị xóa vĩnh viễn.
+          </ConfirmDialog>
+          <ConfirmDialog
+            open={confirm === "cancel"}
+            onOpenChange={(o) => !o && setConfirm(null)}
+            title="Hủy hồ sơ?"
+            icon={<XCircle className="h-4 w-4" />}
+            description="HS-2026-0142"
+            confirmLabel="Hủy hồ sơ"
+            labels={{ keep: "Không hủy" }}
+            onConfirm={() => setConfirm(null)}
+          />
+          <ConfirmDialog
+            open={confirm === "warning"}
+            onOpenChange={(o) => !o && setConfirm(null)}
+            tone="warning"
+            title="Rời trang khi còn thay đổi chưa lưu?"
+            confirmLabel="Rời trang"
+            onConfirm={() => setConfirm(null)}
+          >
+            3 thay đổi chưa lưu sẽ mất.
+          </ConfirmDialog>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>Danh sách hồ sơ</CardTitle>

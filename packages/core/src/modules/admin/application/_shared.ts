@@ -9,7 +9,7 @@ import type { AdminDeps, AdminOrgRow, AdminRepos, AuditRow, MemberRow, OrgUsage,
 
 export type { StaffActor };
 
-export type StaffSession = { actor: StaffActor; sessionId: string; mfa: { enrolled: boolean; verified: boolean } };
+export type StaffSession = { actor: StaffActor; sessionId: string; mfa: { enrolled: boolean; verified: boolean }; mustChangePassword: boolean };
 
 /**
  * Phiên quản trị từ cookie: phiên còn hạn + tài khoản có dòng platform_staff chưa bị khóa. Đăng nhập lần đầu → INVITED thành ACTIVE.
@@ -30,6 +30,7 @@ export async function resolveStaffSession(deps: AdminDeps, sessionToken: string)
       sessionId: s.id,
       // Phiên chỉ được tính đã xác thực khi tài khoản đang bật 2FA (đặt lại 2FA → phiên cũ hết hiệu lực vì bị xóa).
       mfa: { enrolled: staff.mfaEnabled, verified: staff.mfaEnabled && s.mfaVerifiedAt !== null },
+      mustChangePassword: staff.mustChangePassword,
     });
   });
 }
@@ -38,6 +39,8 @@ export async function resolveStaffSession(deps: AdminDeps, sessionToken: string)
 export async function resolveStaff(deps: AdminDeps, sessionToken: string): Promise<Result<StaffActor>> {
   const s = await resolveStaffSession(deps, sessionToken);
   if (!s.ok) return s;
+  // Mật khẩu tạm (tạo hộ): đổi mật khẩu trước, rồi mới tới 2FA.
+  if (s.value.mustChangePassword) return err(domainError("PASSWORD_CHANGE_REQUIRED", "Đổi mật khẩu tạm trước khi vào khu quản trị"));
   if (!s.value.mfa.verified) {
     return err(domainError("MFA_REQUIRED", s.value.mfa.enrolled ? "Nhập mã xác thực 2 lớp để tiếp tục" : "Thiết lập xác thực 2 lớp trước khi vào khu quản trị"));
   }

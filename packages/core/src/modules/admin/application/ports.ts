@@ -1,12 +1,19 @@
 // Port của module admin (khu Quản trị hệ thống, ADR 0006). Hạ tầng dùng kết nối kb_platform – đọc xuyên doanh nghiệp,
 // nên CHỈ trả số liệu tổng hợp và thông tin tài khoản; không port nào đọc nội dung hồ sơ/chứng từ/tờ khai.
+import type { JobQueue } from "../../../shared/queue.js";
 import type { IntegrationId, Role, ServiceHealth, StaffRole } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen } from "../../../shared/ids.js";
 import type { Result } from "../../../shared/result.js";
 import type { StaffStatus } from "../domain/staff-rules.js";
 
-export type StaffRow = { userId: string; name: string; email: string; role: StaffRole; status: StaffStatus; lastActiveAt: Date | null; createdAt: Date; mfaEnabled: boolean };
+export type StaffRow = {
+  userId: string; name: string; email: string; role: StaffRole; status: StaffStatus; lastActiveAt: Date | null; createdAt: Date; mfaEnabled: boolean;
+  /** Tài khoản tạo bằng mật khẩu tạm, chưa đổi. */
+  mustChangePassword: boolean;
+};
+/** Hợp đồng ký trực tiếp của doanh nghiệp (quản trị tạo hộ). */
+export type OrgContractRow = { orgId: string; contractNo: string | null; endsOn: string | null; note: string | null; createdBy: string; at: Date };
 /** Khóa 2FA (mã hóa) của một quản trị viên. */
 export type StaffMfaRow = {
   totpCiphertext: string | null; totpPendingCiphertext: string | null; totpKeyVersion: number; totpEnabledAt: Date | null; totpLastCounter: number | null; recoveryCodes: string[];
@@ -39,6 +46,20 @@ export type AnnouncementRow = {
   id: string; title: string; body: string; kind: string; audience: string; maintenanceDate: string | null; status: "SENT" | "WITHDRAWN";
   sentAt: Date; sentBy: string; sentByName: string; recipients: number;
 };
+export type EmailTemplateRow = {
+  id: string; name: string; description: string | null; subject: string; preheader: string | null; blocks: unknown[];
+  createdBy: string; updatedBy: string; updatedByName: string; createdAt: Date; updatedAt: Date;
+};
+export type EmailSignatureRow = { id: string; name: string; ownerUserId: string | null; ownerName: string | null; isDefault: boolean; blocks: unknown[]; updatedAt: Date };
+export type EmailCampaignRow = {
+  id: string; templateId: string | null; subject: string; preheader: string | null; blocks: unknown[]; signatureBlocks: unknown[]; audience: unknown; audienceLabel: string;
+  status: "QUEUED" | "SENDING" | "SENT" | "PARTIAL" | "FAILED"; total: number; sent: number; failed: number; sentBy: string; sentByName: string; createdAt: Date; finishedAt: Date | null;
+};
+export type EmailRecipientRow = { id: string; campaignId: string; email: string; name: string; orgName: string | null; status: "PENDING" | "SENT" | "FAILED"; error: string | null; sentAt: Date | null };
+export type MailSettingsRow = {
+  host: string; port: number; secure: boolean; username: string; passwordCiphertext: string | null; keyVersion: number; fromName: string; fromEmail: string; replyTo: string | null;
+  updatedBy: string; updatedAt: Date; lastTestOk: boolean | null; lastTestDetail: string | null; lastTestAt: Date | null;
+};
 
 export interface AdminRepos {
   staff: {
@@ -69,6 +90,40 @@ export interface AdminRepos {
     activeRecipients(orgIds: string[]): Promise<{ orgId: string; userId: string }[]>;
   };
   joins: { listPending(orgId?: string): Promise<JoinRow[]> };
+  contracts: {
+    get(orgId: string): Promise<OrgContractRow | null>;
+    insert(row: OrgContractRow): Promise<void>;
+  };
+  emailTemplates: {
+    list(): Promise<EmailTemplateRow[]>;
+    get(id: string): Promise<EmailTemplateRow | null>;
+    insert(row: Omit<EmailTemplateRow, "updatedByName">): Promise<void>;
+    update(id: string, patch: Pick<EmailTemplateRow, "name" | "description" | "subject" | "preheader" | "blocks" | "updatedBy" | "updatedAt">): Promise<void>;
+    delete(id: string): Promise<void>;
+  };
+  emailSignatures: {
+    list(): Promise<EmailSignatureRow[]>;
+    get(id: string): Promise<EmailSignatureRow | null>;
+    insert(row: Omit<EmailSignatureRow, "ownerName">): Promise<void>;
+    update(id: string, patch: Pick<EmailSignatureRow, "name" | "isDefault" | "blocks" | "updatedAt">): Promise<void>;
+    delete(id: string): Promise<void>;
+    /** Bỏ cờ mặc định của mọi chữ ký cùng chủ (null = chữ ký chung) – trước khi đặt mặc định mới. */
+    clearDefault(ownerUserId: string | null): Promise<void>;
+  };
+  emailCampaigns: {
+    list(limit: number): Promise<EmailCampaignRow[]>;
+    get(id: string): Promise<EmailCampaignRow | null>;
+    insert(row: EmailCampaignRow, recipients: Omit<EmailRecipientRow, "campaignId">[]): Promise<void>;
+    recipients(campaignId: string): Promise<EmailRecipientRow[]>;
+    pending(campaignId: string, limit: number): Promise<EmailRecipientRow[]>;
+    markRecipient(id: string, status: "SENT" | "FAILED", error: string | null, at: Date): Promise<void>;
+    update(id: string, patch: Partial<Pick<EmailCampaignRow, "status" | "sent" | "failed" | "finishedAt">>): Promise<void>;
+  };
+  mailSettings: {
+    get(): Promise<MailSettingsRow | null>;
+    save(row: Omit<MailSettingsRow, "lastTestOk" | "lastTestDetail" | "lastTestAt">): Promise<void>;
+    setTest(ok: boolean, detail: string | null, at: Date): Promise<void>;
+  };
   plans: {
     list(): Promise<PlanRow[]>;
     get(code: string): Promise<PlanRow | null>;
@@ -131,6 +186,8 @@ export interface IdentityGateway {
   sendPasswordReset(email: string): Promise<Result<void>>;
   resendVerification(userId: string): Promise<Result<void>>;
   provisionAccount(input: { email: string; name: string }): Promise<Result<{ userId: string; created: boolean }>>;
+  /** Doanh nghiệp + Chủ sở hữu (mật khẩu tạm, bắt đổi ở lần đăng nhập đầu); MST/email đã có → lỗi. */
+  provisionOrg(input: { taxCode: string; name: string; address: string; planCode: string; owner: { email: string; name: string } }): Promise<Result<{ orgId: string; userId: string; tempPassword: string }>>;
 }
 
 /** Hàng đợi BullMQ – chỉ số đếm và job lỗi (không đọc payload ngoài orgId). */
@@ -167,8 +224,28 @@ export interface KeyVault {
   decrypt(ciphertext: string, keyVersion: number): string;
 }
 
+/** Gửi một email qua máy chủ gửi mail đang cấu hình (khu Quản trị hoặc .env). Lỗi → ném Error có câu dễ hiểu. */
+export interface PlatformMailer {
+  send(msg: { to: string; subject: string; html?: string; text: string }): Promise<void>;
+  /** Thử kết nối + đăng nhập SMTP với cấu hình truyền vào (chưa lưu), không gửi thư. */
+  verify(settings: { host: string; port: number; secure: boolean; username: string; password: string | null }): Promise<void>;
+  /** Cấu hình vừa đổi → bỏ bộ nhớ đệm. */
+  invalidate(): void;
+}
+/** AI soạn mẫu email theo mô tả (ADR 0008) – chỉ nhận mô tả của người soạn, trả về khối để người sửa tiếp. */
+export interface EmailDraftAi {
+  draft(input: { description: string; tone: "FORMAL" | "FRIENDLY" | "SHORT"; language: "vi" | "en" | "zh" }): Promise<{ subject: string; preheader?: string; blocks: unknown[]; usage: AiCallUsage }>;
+}
+export type AiCallUsage = { model: string; inputTokens: number; outputTokens: number };
+
 export type AdminDeps = {
   uow: AdminUow;
+  /** Email (gửi thư, AI soạn mẫu, hàng đợi gửi theo đợt) – thiếu thì các chức năng email báo chưa cấu hình. */
+  mail?: PlatformMailer;
+  emailAi?: EmailDraftAi;
+  /** Ghi usage_events cho lời gọi AI của khu Quản trị (bất biến 8) – container nối tới billing. */
+  recordAiUsage?: (u: AiCallUsage & { kind: "AI_EMAIL_DRAFT" }) => Promise<void>;
+  queue?: JobQueue;
   identity: IdentityGateway;
   jobs: JobMonitor;
   system: SystemProbe;

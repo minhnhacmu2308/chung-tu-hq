@@ -47,7 +47,12 @@ export type Staff = z.infer<typeof StaffSchema>;
  */
 export const AdminMfaStateSchema = z.object({ enrolled: z.boolean(), verified: z.boolean() });
 export type AdminMfaState = z.infer<typeof AdminMfaStateSchema>;
-export const AdminSessionSchema = z.object({ staff: StaffSchema, mfa: AdminMfaStateSchema.optional() });
+export const AdminSessionSchema = z.object({
+  staff: StaffSchema,
+  mfa: AdminMfaStateSchema.optional(),
+  /** Tài khoản tạo bằng mật khẩu tạm – đổi mật khẩu trước, rồi mới tới bước 2FA. */
+  mustChangePassword: z.boolean().optional(),
+});
 export type AdminSession = z.infer<typeof AdminSessionSchema>;
 
 /* ---------------- Doanh nghiệp ---------------- */
@@ -89,6 +94,8 @@ export const AdminOrgDetailSchema = AdminOrgSchema.extend({
   /** Chỉ trạng thái kết nối – không có khóa, không có nội dung thông điệp. */
   integrations: z.array(z.object({ id: IntegrationIdSchema, name: z.string(), status: IntegrationStatusSchema })),
   certificates: z.array(z.object({ id: z.string(), issuer: z.string(), validTo: IsoDateSchema, isDefault: z.boolean() })),
+  /** Doanh nghiệp ký hợp đồng trực tiếp (quản trị tạo hộ): số hợp đồng, hạn, ghi chú nội bộ – chỉ khu Quản trị thấy. */
+  contract: z.object({ contractNo: z.string().optional(), endsOn: IsoDateSchema.optional(), note: z.string().optional() }).optional(),
 });
 export type AdminOrgDetail = z.infer<typeof AdminOrgDetailSchema>;
 
@@ -260,6 +267,7 @@ export type SkillTemplate = z.infer<typeof SkillTemplateSchema>;
 /* ---------------- Nhật ký quản trị ---------------- */
 
 export const AdminActionSchema = z.enum([
+  "ORG_CREATED",
   "ORG_SUSPENDED",
   "ORG_REACTIVATED",
   "ORG_PLAN_CHANGED",
@@ -284,10 +292,16 @@ export const AdminActionSchema = z.enum([
   "ANNOUNCEMENT_SENT",
   "ANNOUNCEMENT_WITHDRAWN",
   "EXCHANGE_RATE_UPDATED",
+  "EMAIL_SENT",
+  "EMAIL_TEMPLATE_SAVED",
+  "EMAIL_TEMPLATE_DELETED",
+  "EMAIL_SIGNATURE_SAVED",
+  "EMAIL_SIGNATURE_DELETED",
+  "MAIL_SETTINGS_UPDATED",
 ]);
 export type AdminAction = z.infer<typeof AdminActionSchema>;
 
-export const AdminTargetTypeSchema = z.enum(["ORG", "USER", "PLAN", "INTEGRATION", "JOB", "SKILL_TEMPLATE", "STAFF", "ANNOUNCEMENT", "EXCHANGE_RATE"]);
+export const AdminTargetTypeSchema = z.enum(["ORG", "USER", "PLAN", "INTEGRATION", "JOB", "SKILL_TEMPLATE", "STAFF", "ANNOUNCEMENT", "EXCHANGE_RATE", "EMAIL"]);
 export type AdminTargetType = z.infer<typeof AdminTargetTypeSchema>;
 
 /** Append-only: không có API sửa/xóa. */

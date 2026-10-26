@@ -9,6 +9,7 @@ import { DrizzleAdminUow } from "./drizzle-uow.js";
 import { HttpVcbRateSource } from "./vcb-rate-source.js";
 
 export { DrizzleAdminUow, HttpVcbRateSource };
+export { DbPlatformMailer, smtpErrorMessage } from "./platform-mailer.js";
 
 /** Cho worker: job tỷ giá tính thuế ghi bảng nền tảng qua kết nối kb_platform (pool 1). */
 export function createRateDeps(platformUrl: string, opts: { vcb?: RateDeps["vcb"]; clock?: Clock } = {}): RateDeps & { db: Db } {
@@ -26,11 +27,14 @@ export const svgQr: QrRenderer = { svg: (text) => QRCode.toString(text, { type: 
 export function createAdminInfrastructure(opts: {
   platformUrl: string; identity: IdentityGateway; jobs: JobMonitor; system: SystemProbe; probe: IntegrationProbe; vault: KeyVault; limiter: AttemptLimiter;
   qr?: QrRenderer; random?: (n: number) => Buffer; clock?: Clock;
+  /** Email (cổng gửi, AI soạn mẫu, hàng đợi, ghi usage) – nối ở composition root. */
+  email?: Pick<AdminDeps, "mail" | "emailAi" | "queue" | "recordAiUsage">;
 }): AdminDeps & { db: Db } {
   const db = createDb(opts.platformUrl, { max: 3 });
   return {
     db, uow: new DrizzleAdminUow(db), identity: opts.identity, jobs: opts.jobs, system: opts.system, probe: opts.probe, vault: opts.vault,
     qr: opts.qr ?? svgQr, limiter: opts.limiter, random: opts.random ?? randomBytes, clock: opts.clock ?? systemClock, idGen: ulidIdGen,
+    ...opts.email,
   };
 }
 

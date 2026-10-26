@@ -1,17 +1,21 @@
 // Truy vấn của khu Quản trị hệ thống trên kết nối kb_platform (BYPASSRLS – ADR 0006).
 // Quy tắc: chỉ đọc cột tài khoản/trạng thái/đếm/tổng tiền; KHÔNG đọc nội dung hồ sơ, chứng từ, tờ khai, khóa của doanh nghiệp.
 import type { IntegrationId, Role, StaffRole } from "@kb/contracts";
-import { and, desc, eq, gt, gte, inArray, isNotNull, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import {
-  adminAudit, announcements, digitalCertificates, documents, dossiers, exchangeRateFetches, exchangeRates, integrationStatus, joinRequests, memberships, notifications, organizations,
+  adminAudit, announcements, digitalCertificates, emailCampaignRecipients, emailCampaigns, emailSignatures, emailTemplates, mailSettings, orgContracts, documents, dossiers, exchangeRateFetches, exchangeRates, integrationStatus, joinRequests, memberships, notifications, organizations,
   plans, platformIntegrations, platformStaff, sessions, skills, usageEvents, users,
 } from "../../../db/schema/index.js";
 import type { StaffStatus } from "../domain/staff-rules.js";
 
+const MAIL_SETTINGS_ID = "default";
+const toCampaignRow = (c: typeof emailCampaigns.$inferSelect): EmailCampaignRow => ({ ...c, status: c.status as EmailCampaignRow["status"] });
+const toRecipientRow = (x: typeof emailCampaignRecipients.$inferSelect): EmailRecipientRow => ({ ...x, status: x.status as EmailRecipientRow["status"] });
+
 /** Doanh nghiệp hệ thống giữ skill mẫu (db/seed/skills.ts) – không hiện ở khu quản trị. */
 const SYSTEM_ORG_ID = "org_system";
-import type { AdminOrgRow, AdminRepos, AdminUow, AnnouncementRow, AuditRow, ExchangeRateRow, OrgUsage, PlatformIntegrationRow, RateFetchRow, StaffRow } from "../application/ports.js";
+import type { AdminOrgRow, AdminRepos, AdminUow, AnnouncementRow, EmailCampaignRow, EmailRecipientRow, AuditRow, ExchangeRateRow, OrgUsage, PlatformIntegrationRow, RateFetchRow, StaffRow } from "../application/ports.js";
 
 /** Phân loại giá vốn theo `usage_events.kind`: AI_* = đọc chứng từ, HS_* = HSCodePro, CUSTOMS_* = Customs Hub. */
 const costByKind = (prefix: string) => sql<string>`coalesce(sum(case when ${usageEvents.kind} like ${`${prefix}%`} then ${usageEvents.costVnd} else 0 end), 0)::text`;
@@ -24,12 +28,13 @@ function repos(tx: Tx): AdminRepos {
     tx
       .select({
         userId: platformStaff.userId, name: users.name, email: users.email, role: platformStaff.role, status: platformStaff.status, createdAt: platformStaff.createdAt,
+        mustChangePassword: users.mustChangePassword,
         mfaEnabled: sql<boolean>`(${platformStaff.totpEnabledAt} is not null and ${platformStaff.totpCiphertext} is not null)`,
         lastActiveAt: sql<Date | null>`(select max(${sessions.lastSeenAt}) from ${sessions} where ${sessions.userId} = ${platformStaff.userId})`.mapWith((v) => (v ? new Date(v as string) : null)),
       })
       .from(platformStaff)
       .innerJoin(users, eq(users.id, platformStaff.userId));
-  const toStaff = (r: { userId: string; name: string; email: string; role: string; status: string; createdAt: Date; lastActiveAt: Date | null; mfaEnabled: boolean }): StaffRow => ({
+  const toStaff = (r: { userId: string; name: string; email: string; role: string; status: string; createdAt: Date; lastActiveAt: Date | null; mfaEnabled: boolean; mustChangePassword: boolean }): StaffRow => ({
     ...r, role: r.role as StaffRole, status: r.status as StaffStatus,
   });
   const toOrg = (o: typeof organizations.$inferSelect): AdminOrgRow => ({
@@ -85,6 +90,70 @@ function repos(tx: Tx): AdminRepos {
         return o ? toOrg(o) : null;
       },
       update: async (id, patch, at) => void (await tx.update(organizations).set({ ...patch, updatedAt: at }).where(eq(organizations.id, id))),
+    },
+    emailTemplates: {
+      list: async () =>
+        (await tx.select({ t: emailTemplates, by: users.name }).from(emailTemplates).leftJoin(users, eq(users.id, emailTemplates.updatedBy)).orderBy(desc(emailTemplates.updatedAt))).map(
+          ({ t, by }) => ({ ...t, updatedByName: by ?? "" }),
+        ),
+      get: async (id) => {
+        const r = (await tx.select({ t: emailTemplates, by: users.name }).from(emailTemplates).leftJoin(users, eq(users.id, emailTemplates.updatedBy)).where(eq(emailTemplates.id, id)).limit(1))[0];
+        return r ? { ...r.t, updatedByName: r.by ?? "" } : null;
+      },
+      insert: async (row) => void (await tx.insert(emailTemplates).values(row)),
+      update: async (id, patch) => void (await tx.update(emailTemplates).set(patch).where(eq(emailTemplates.id, id))),
+      delete: async (id) => void (await tx.delete(emailTemplates).where(eq(emailTemplates.id, id))),
+    },
+    emailSignatures: {
+      list: async () =>
+        (await tx.select({ s: emailSignatures, owner: users.name }).from(emailSignatures).leftJoin(users, eq(users.id, emailSignatures.ownerUserId)).orderBy(emailSignatures.createdAt)).map(
+          ({ s, owner }) => ({ id: s.id, name: s.name, ownerUserId: s.ownerUserId, ownerName: owner, isDefault: s.isDefault, blocks: s.blocks, updatedAt: s.updatedAt }),
+        ),
+      get: async (id) => {
+        const r = (await tx.select({ s: emailSignatures, owner: users.name }).from(emailSignatures).leftJoin(users, eq(users.id, emailSignatures.ownerUserId)).where(eq(emailSignatures.id, id)).limit(1))[0];
+        return r ? { id: r.s.id, name: r.s.name, ownerUserId: r.s.ownerUserId, ownerName: r.owner, isDefault: r.s.isDefault, blocks: r.s.blocks, updatedAt: r.s.updatedAt } : null;
+      },
+      insert: async (row) => void (await tx.insert(emailSignatures).values({ ...row, createdAt: row.updatedAt })),
+      update: async (id, patch) => void (await tx.update(emailSignatures).set(patch).where(eq(emailSignatures.id, id))),
+      delete: async (id) => void (await tx.delete(emailSignatures).where(eq(emailSignatures.id, id))),
+      clearDefault: async (owner) =>
+        void (await tx.update(emailSignatures).set({ isDefault: false }).where(owner === null ? isNull(emailSignatures.ownerUserId) : eq(emailSignatures.ownerUserId, owner))),
+    },
+    emailCampaigns: {
+      list: async (limit) => (await tx.select().from(emailCampaigns).orderBy(desc(emailCampaigns.createdAt)).limit(limit)).map(toCampaignRow),
+      get: async (id) => {
+        const c = (await tx.select().from(emailCampaigns).where(eq(emailCampaigns.id, id)).limit(1))[0];
+        return c ? toCampaignRow(c) : null;
+      },
+      insert: async (row, recipients) => {
+        await tx.insert(emailCampaigns).values(row);
+        // Lô 500 dòng: danh sách lớn không vượt giới hạn tham số của Postgres.
+        for (let i = 0; i < recipients.length; i += 500) await tx.insert(emailCampaignRecipients).values(recipients.slice(i, i + 500).map((x) => ({ ...x, campaignId: row.id })));
+      },
+      recipients: async (campaignId) => (await tx.select().from(emailCampaignRecipients).where(eq(emailCampaignRecipients.campaignId, campaignId)).orderBy(emailCampaignRecipients.email)).map(toRecipientRow),
+      pending: async (campaignId, limit) =>
+        (await tx.select().from(emailCampaignRecipients).where(and(eq(emailCampaignRecipients.campaignId, campaignId), eq(emailCampaignRecipients.status, "PENDING"))).limit(limit)).map(toRecipientRow),
+      markRecipient: async (id, status, error, at) => void (await tx.update(emailCampaignRecipients).set({ status, error, sentAt: at }).where(eq(emailCampaignRecipients.id, id))),
+      update: async (id, patch) => void (await tx.update(emailCampaigns).set(patch).where(eq(emailCampaigns.id, id))),
+    },
+    mailSettings: {
+      get: async () => {
+        const m = (await tx.select().from(mailSettings).where(eq(mailSettings.id, MAIL_SETTINGS_ID)).limit(1))[0];
+        return m ? { ...m } : null;
+      },
+      save: async (row) => {
+        const values = { id: MAIL_SETTINGS_ID, ...row };
+        await tx.insert(mailSettings).values(values).onConflictDoUpdate({ target: mailSettings.id, set: { ...row } });
+      },
+      setTest: async (ok, detail, at) => void (await tx.update(mailSettings).set({ lastTestOk: ok, lastTestDetail: detail, lastTestAt: at }).where(eq(mailSettings.id, MAIL_SETTINGS_ID))),
+    },
+    contracts: {
+      get: async (orgId) => {
+        const c = (await tx.select().from(orgContracts).where(eq(orgContracts.orgId, orgId)).limit(1))[0];
+        return c ? { orgId: c.orgId, contractNo: c.contractNo, endsOn: c.endsOn, note: c.note, createdBy: c.createdBy, at: c.createdAt } : null;
+      },
+      insert: async (row) =>
+        void (await tx.insert(orgContracts).values({ orgId: row.orgId, contractNo: row.contractNo, endsOn: row.endsOn, note: row.note, createdBy: row.createdBy, createdAt: row.at, updatedAt: row.at })),
     },
     members: {
       list: async (orgId) =>

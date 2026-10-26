@@ -1,7 +1,7 @@
 // Hồ sơ khai báo – gọi backend thật. Cùng chữ ký với src/mocks/api/dossiers.ts.
-import { DossierDocumentSchema, DossierSchema, pageOf, type CreateDossierInput, type Dossier, type DossierFilter, type PageQuery } from "@kb/contracts";
+import { DeleteDossierResultSchema, DossierDocumentSchema, DossierSchema, pageOf, type CreateDossierInput, type Dossier, type DossierFilter, type PageQuery } from "@kb/contracts";
 import { z } from "zod";
-import { apiGet, apiPatch, apiPost } from "@/lib/http";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/http";
 
 export type { CreateDossierInput, DossierFilter };
 
@@ -29,3 +29,4 @@ export const createDossier = (input: CreateDossierInput) => apiPost("dossiers", 
 export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" | "step" | "suspectFields" | "note" | "declarationNo" | "channel">>) =>
   apiPatch(`dossiers/${id}`, { ...(patch.note !== undefined ? { note: patch.note } : {}), ...(patch.step ? { step: patch.step } : {}) }, DossierSchema);
 export const cancelDossier = (id: string) => apiPost(`dossiers/${id}/cancel`, {}, DossierSchema);
+export const deleteDossier = (id: string) => apiDelete(`dossiers/${id}`, DeleteDossierResultSchema);

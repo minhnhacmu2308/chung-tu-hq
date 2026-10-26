@@ -40,6 +40,11 @@ function repos(tx: Tx): DossierRepos {
           .where(and(eq(dossiers.orgId, orgId), gte(dossiers.createdAt, from), lt(dossiers.createdAt, to)));
         return { dossiers: row?.dossiers ?? 0, pages: row?.pages ?? 0 };
       },
+      delete: async (orgId, id) => {
+        await tx.delete(jobProgress).where(and(eq(jobProgress.orgId, orgId), eq(jobProgress.dossierId, id)));
+        await tx.delete(documents).where(and(eq(documents.orgId, orgId), eq(documents.dossierId, id)));
+        await tx.delete(dossiers).where(and(eq(dossiers.orgId, orgId), eq(dossiers.id, id)));
+      },
     },
     documents: {
       list: async (orgId, dossierId) => (await tx.select().from(documents).where(and(eq(documents.orgId, orgId), eq(documents.dossierId, dossierId))).orderBy(documents.createdAt, documents.id)).map(toDocument),

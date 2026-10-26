@@ -87,6 +87,7 @@ export const REASON_TEXT_VI = {
   MAILBOX_NOT_FOUND: "Không tìm thấy hộp thư đã kết nối",
   INBOX_MESSAGE_NOT_FOUND: "Không tìm thấy email trong hộp thư chứng từ",
   INBOX_ATTACHMENT_ADDED: "File đã được thêm vào hồ sơ {code}",
+  DOSSIER_SENT_TO_CUSTOMS: "Hồ sơ đã truyền Hải quan, không xóa được – hãy hủy hồ sơ",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

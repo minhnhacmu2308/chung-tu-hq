@@ -3,6 +3,7 @@ import { FocusScope } from "@radix-ui/react-focus-scope";
 import { createContext, useContext, useEffect, useState, type ComponentProps, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
+import { IconTile } from "./icon-tile.js";
 
 const MESSAGES = {
   vi: { close: "Đóng", modal: "Hiển thị dạng cửa sổ", panel: "Hiển thị dạng panel bên phải", resize: "Kéo để đổi độ rộng (nhấp đúp để về mặc định)" },
@@ -62,6 +63,11 @@ export type DialogContentProps = Omit<ComponentProps<typeof DialogPrimitive.Cont
   /** Bắt buộc: mọi popup có icon đầu (rule dùng component chung). */
   icon: ReactNode;
   description?: ReactNode;
+  /**
+   * Hộp xác nhận thao tác nguy hiểm (xóa vĩnh viễn…) / cần cân nhắc: icon đầu nằm trong ô nền theo tông + vạch màu trên đỉnh
+   * popup, nhìn là biết. Nghĩa vẫn phải nằm ở chữ (tiêu đề, `Alert` trong thân), màu chỉ để nhấn.
+   */
+  tone?: "danger" | "warning";
   size?: keyof typeof MODAL_SIZE;
   /** Hiện nút chuyển cửa sổ ↔ panel trên header. */
   allowPresentationToggle?: boolean;
@@ -216,6 +222,7 @@ export function DialogContent({
   title,
   icon,
   description,
+  tone,
   size = "md",
   allowPresentationToggle = true,
   labels,
@@ -247,6 +254,8 @@ export function DialogContent({
           mode === "modal"
             ? cn("left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border shadow-lg motion-safe:animate-pop-in", MODAL_SIZE[size])
             : cn("inset-y-0 right-0 border-l shadow-lg motion-safe:animate-slide-in-right", PANEL_SIZE[size]),
+          // Sau lớp viền của chế độ (`border` ghi đè `border-t-*` đứng trước).
+          tone && (tone === "danger" ? "border-t-4 border-t-danger" : "border-t-4 border-t-warning"),
           className,
         )}
         style={!isModal && drawerWidth !== null ? { ...style, width: drawerWidth, maxWidth: `calc(100vw - ${DRAWER_EDGE_PX}px)` } : style}
@@ -261,7 +270,7 @@ export function DialogContent({
         <div ref={setContentEl} className="flex min-h-0 flex-1 flex-col">
         {/* div, không phải <header>: hai dialog chồng nhau (panel chi tiết + cửa sổ con) sẽ thành hai landmark banner. */}
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">
-          {icon && <span aria-hidden="true" className="text-fg-muted">{icon}</span>}
+          {icon && (tone ? <IconTile icon={icon} tone={tone} size="sm" /> : <span aria-hidden="true" className="text-fg-muted">{icon}</span>)}
           <div className="flex min-w-0 flex-1 flex-col">
             <DialogPrimitive.Title className="truncate text-base font-semibold">{title}</DialogPrimitive.Title>
             {description && <DialogPrimitive.Description className="text-sm text-fg-muted">{description}</DialogPrimitive.Description>}

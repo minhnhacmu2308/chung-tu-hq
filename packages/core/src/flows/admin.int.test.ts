@@ -3,16 +3,19 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../db/client.js";
-import { runSeed } from "../db/seed/index.js";
+import { DEMO_ORG_ID, runSeed } from "../db/seed/index.js";
 import { startTestDb, type TestDb } from "../db/test-db.js";
 import { systemClock } from "../shared/clock.js";
+import { InMemoryJobQueue } from "../shared/queue.js";
 import { ulidIdGen } from "../shared/ids.js";
 import { errCode, unwrap } from "../shared/result.js";
-import { getSession, hashToken, listNotifications, login, provisionStaffAccount, register, requestPasswordReset, resendVerificationEmail, type IdentityDeps } from "../modules/identity/index.js";
+import { changePassword, getSession, hashToken, listNotifications, login, provisionOrgAccount, provisionStaffAccount, register, requestPasswordReset, resendVerificationEmail, type IdentityDeps } from "../modules/identity/index.js";
 import { FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../modules/identity/application/test/fakes.js";
 import { AesSecretStore, Argon2Hasher, DrizzleIdentityUow, DrizzlePlansReader } from "../modules/identity/infrastructure/index.js";
 import {
-  adjustOrgQuota, changeOrgPlan, changeStaffRole, extendOrgTrial, getAdminSession, getOrg, getOverview, getSystemHealth, getUsageReport, inviteStaff, listAudit, listOrgs,
+  adjustOrgQuota, changeOrgPlan, changeStaffRole, createOrg, extendOrgTrial,
+  draftEmailWithAi, getEmailCampaign, getMailSettings, listEmailSignatures, listEmailTemplates, previewEmailAudience, processEmailCampaign, saveEmailSignature,
+  saveEmailTemplate, sendEmail, updateMailSettings, getAdminSession, getOrg, getOverview, getSystemHealth, getUsageReport, inviteStaff, listAudit, listOrgs,
   listPlans, listPlatformIntegrations, listSkillTemplates, listStaff, listUsers, reactivateOrg, resolveStaff, retryFailedJob, revokeUserSessions, sendAnnouncement,
   setSkillTemplatePublished, setStaffDisabled, setUserDisabled, suspendOrg, testPlatformIntegration, updateIntegrationKey, updatePlan, withdrawAnnouncement,
   confirmMfaSetup, resetStaffMfa, resolveStaffSession, startMfaSetup, verifyMfa,
@@ -66,6 +69,7 @@ beforeAll(async () => {
       sendPasswordReset: (email) => requestPasswordReset(identity, email, META),
       resendVerification: (id) => resendVerificationEmail(identity, id),
       provisionAccount: (i) => provisionStaffAccount(identity, i),
+      provisionOrg: (i) => provisionOrgAccount(identity, i),
     },
     jobs: {
       stats: async () => [{ queue: "extract-document", waiting: 1, active: 0, failed: failed.length, completedToday: 3 }],
@@ -339,5 +343,135 @@ describe("xác thực 2 lớp (B11)", () => {
     expect(unwrap(await getAdminSession(admin, again))?.mfa).toEqual({ enrolled: false, verified: false });
     expect(unwrap(await listAudit(admin, bao))[0]).toMatchObject({ action: "STAFF_MFA_RESET", reason: "Mất điện thoại", targetLabel: "Mai Thị Thu Trang" });
     secrets.delete("trang.mai@khaibao-demo.vn");
+  });
+});
+
+describe("tạo hộ doanh nghiệp ký hợp đồng trực tiếp + mật khẩu tạm", () => {
+  it("Cấp cao tạo: org + Chủ sở hữu (bắt đổi mật khẩu) + hợp đồng + nhật ký; Hỗ trợ không có quyền; MST trùng → lỗi; đổi mật khẩu → dùng bình thường", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    const input = {
+      taxCode: "0108888888", name: "CÔNG TY HỢP ĐỒNG TRỰC TIẾP", address: "Hà Nội", planCode: "PRO" as const,
+      contractNo: "HĐ-2026/015", contractEndsOn: "2027-10-31", owner: { email: "chu@hopdong-test.vn", name: "Đỗ Chủ Sở Hữu" }, note: "Phụ trách: anh Bảo",
+    };
+    expect(errCode(await createOrg(admin, trang, input))).toBe("FORBIDDEN");
+    const r = unwrap(await createOrg(admin, bao, input));
+    expect(r).toMatchObject({ orgName: input.name, ownerEmail: input.owner.email });
+    expect(r.tempPassword).toMatch(/^[A-Za-z2-9]{12}$/);
+
+    const detail = unwrap(await getOrg(admin, bao, r.orgId));
+    expect(detail).toMatchObject({ taxCode: "0108888888", ownerEmail: "chu@hopdong-test.vn", plan: { code: "PRO" }, contract: { contractNo: "HĐ-2026/015", endsOn: "2027-10-31", note: "Phụ trách: anh Bảo" } });
+    expect(unwrap(await listAudit(admin, bao))[0]).toMatchObject({ action: "ORG_CREATED", targetId: r.orgId });
+    expect(errCode(await createOrg(admin, bao, { ...input, owner: { ...input.owner, email: "khac@hopdong-test.vn" } }))).toBe("TAX_CODE_EXISTS");
+    // Hợp đồng chỉ khu quản trị đọc được.
+    await expect(appDb.execute(sql`select * from org_contracts`)).resolves.toHaveLength(0);
+
+    const first = unwrap(await login(identity, { email: input.owner.email, password: r.tempPassword }, META)).sessionToken;
+    expect(unwrap(await getSession(identity, first)).session).toMatchObject({ mustChangePassword: true, user: { role: "OWNER" }, org: { id: r.orgId } });
+    const next = unwrap(await changePassword(identity, first, { currentPassword: r.tempPassword, newPassword: "matkhaurieng123" })).sessionToken;
+    expect(unwrap(await getSession(identity, next)).session.mustChangePassword).toBeUndefined();
+    expect(errCode(await getSession(identity, first))).toBe("UNAUTHENTICATED");
+  });
+
+  it("quản trị viên còn mật khẩu tạm → API quản trị PASSWORD_CHANGE_REQUIRED (trước cả 2FA); đổi xong thì tới bước 2FA", async () => {
+    const email = "tam.thoi@khaibao-demo.vn";
+    await admin.db.execute(sql`insert into users (id, email, name, password_hash, email_verified_at, must_change_password) values ('usr_tmp_staff', ${email}, 'Quản trị tạm', ${await new Argon2Hasher().hash("TamThoi12345")}, now(), true)`);
+    await admin.db.execute(sql`insert into platform_staff (user_id, role, status) values ('usr_tmp_staff', 'SUPER_ADMIN', 'INVITED')`);
+    const token = unwrap(await login(identity, { email, password: "TamThoi12345" }, META)).sessionToken;
+    expect(unwrap(await getAdminSession(admin, token))).toMatchObject({ mustChangePassword: true });
+    expect(errCode(await resolveStaff(admin, token))).toBe("PASSWORD_CHANGE_REQUIRED");
+    const next = unwrap(await changePassword(identity, token, { currentPassword: "TamThoi12345", newPassword: "matkhaurieng123" })).sessionToken;
+    expect(unwrap(await getAdminSession(admin, next))?.mustChangePassword).toBeUndefined();
+    expect(errCode(await resolveStaff(admin, next))).toBe("MFA_REQUIRED");
+  });
+});
+
+describe("email (ADR 0008)", () => {
+  const text = (id: string, t: string) => ({ id, type: "text" as const, text: t, align: "left" as const });
+
+  it("mẫu, chữ ký chung/riêng, chọn người nhận, gửi theo đợt qua worker: biến theo người nhận, một người lỗi không dừng đợt, chạy lại không gửi trùng", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    const outbox: { to: string; subject: string; html?: string }[] = [];
+    admin.mail = {
+      send: async (m) => {
+        if (m.to.startsWith("ha.nguyen")) throw new Error("550 Hộp thư không tồn tại");
+        outbox.push(m);
+      },
+      verify: async () => {},
+      invalidate: () => {},
+    };
+    const queue = new InMemoryJobQueue();
+    admin.queue = queue;
+
+    const tpl = unwrap(await saveEmailTemplate(admin, trang, null, { name: "Bảo trì", subject: "Bảo trì cho {{orgName}}", blocks: [text("b1", "Chào {{name}}, hệ thống bảo trì.")] }));
+    expect(unwrap(await listEmailTemplates(admin, trang)).map((x) => x.id)).toContain(tpl.id);
+
+    expect(errCode(await saveEmailSignature(admin, trang, null, { name: "Chung", personal: false, isDefault: true, blocks: [text("s0", "KhaiBáo AI")] }))).toBe("FORBIDDEN");
+    const mine = unwrap(await saveEmailSignature(admin, trang, null, { name: "Trang", personal: true, isDefault: true, blocks: [text("s1", "Trang – CSKH")] }));
+    unwrap(await saveEmailSignature(admin, bao, null, { name: "Chung", personal: false, isDefault: true, blocks: [text("s2", "KhaiBáo AI")] }));
+    expect(unwrap(await listEmailSignatures(admin, bao)).map((x) => x.id)).not.toContain(mine.id);
+
+    // Doanh nghiệp demo: Chủ sở hữu (Phong) + Người khai đang hoạt động (Hà; Linh còn INVITED → không), thêm Tuấn chọn riêng,
+    // email ngoài, và email trùng với Phong → bỏ trùng.
+    const audience = {
+      orgs: { mode: "PICK" as const, orgIds: [DEMO_ORG_ID] }, roles: ["OWNER" as const, "DECLARANT" as const], userIds: ["usr_tuan"],
+      extraEmails: ["khach@ngoai.vn", "phong.tran@anphat-demo.vn"],
+    };
+    const preview = unwrap(await previewEmailAudience(admin, trang, audience));
+    expect(preview.total).toBe(4);
+
+    const c = unwrap(await sendEmail(admin, trang, { subject: tpl.subject, blocks: tpl.blocks, signatureId: mine.id, templateId: tpl.id, audience }));
+    expect(c).toMatchObject({ status: "QUEUED", total: 4 });
+    expect(queue.jobs.map((j) => j.name)).toContain("email-campaign");
+
+    const done = unwrap(await processEmailCampaign(admin, c.id));
+    expect(done).toMatchObject({ status: "PARTIAL", sent: 3, failed: 1 });
+    const phong = outbox.find((m) => m.to === "phong.tran@anphat-demo.vn")!;
+    expect(phong.html).toContain("Chào Trần Văn Phong");
+    expect(phong.html).toContain("Trang – CSKH");
+    expect(phong.subject).toMatch(/^Bảo trì cho \S/);
+    const before = outbox.length;
+    unwrap(await processEmailCampaign(admin, c.id));
+    expect(outbox).toHaveLength(before);
+    const detail = unwrap(await getEmailCampaign(admin, bao, c.id));
+    expect(detail.recipients.find((r) => r.email.startsWith("ha."))).toMatchObject({ status: "FAILED", error: "550 Hộp thư không tồn tại" });
+    expect(unwrap(await listAudit(admin, bao))[0]).toMatchObject({ action: "EMAIL_SENT", targetId: c.id });
+  });
+
+  it("máy chủ gửi mail: chỉ quyền Nền tảng; mật khẩu lưu mã hóa, bỏ trống thì giữ; lưu xong thử đăng nhập và ghi kết quả", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const trang = await staff("trang.mai@khaibao-demo.vn");
+    const tried: (string | null)[] = [];
+    admin.mail = { send: async () => {}, invalidate: () => {}, verify: async (s) => {
+      tried.push(s.password);
+      if (s.password !== "matkhau-dung") throw new Error("Sai tên đăng nhập hoặc mật khẩu SMTP");
+    } };
+    const input = { host: "smtp.gmail.com", port: 465, secure: true, username: "ops@khaibao.ai", fromName: "KhaiBáo AI", fromEmail: "ops@khaibao.ai" };
+    expect(errCode(await updateMailSettings(admin, trang, { ...input, password: "x" }))).toBe("FORBIDDEN");
+    const bad = unwrap(await updateMailSettings(admin, bao, { ...input, password: "matkhau-sai" }));
+    expect(bad).toMatchObject({ configured: true, hasPassword: true, lastTest: { ok: false } });
+    const row = (await admin.db.execute(sql`select password_ciphertext from mail_settings`)) as unknown as { password_ciphertext: string }[];
+    expect(row[0]!.password_ciphertext).not.toContain("matkhau-sai");
+    unwrap(await updateMailSettings(admin, bao, { ...input, fromName: "KhaiBáo AI – CSKH" }));
+    expect(tried.at(-1)).toBe("matkhau-sai");
+    const good = unwrap(await updateMailSettings(admin, bao, { ...input, password: "matkhau-dung" }));
+    expect(good.lastTest?.ok).toBe(true);
+    expect(unwrap(await getMailSettings(admin, bao))).not.toHaveProperty("password");
+  });
+
+  it("AI soạn mẫu: khối được cấp id và kiểm lại bằng schema, đầu ra sai → GATEWAY_ERROR; mọi lần gọi đều ghi usage", async () => {
+    const bao = await staff("bao.hoang@khaibao-demo.vn");
+    const recorded: unknown[] = [];
+    admin.recordAiUsage = async (u) => void recorded.push(u);
+    const usage = { model: "claude-test", inputTokens: 100, outputTokens: 50 };
+    admin.emailAi = { draft: async () => ({ subject: "Tính năng mới", blocks: [{ type: "heading", text: "Chào {{name}}", level: 1, align: "left" }], usage }) };
+    const ok1 = unwrap(await draftEmailWithAi(admin, bao, { description: "Giới thiệu tính năng hộp thư chứng từ", tone: "FRIENDLY", language: "vi" }));
+    expect(ok1.blocks[0]).toMatchObject({ type: "heading", text: "Chào {{name}}" });
+    expect(ok1.blocks[0]!.id).toBeTruthy();
+    admin.emailAi = { draft: async () => ({ subject: "", blocks: [{ type: "bogus" }], usage }) };
+    expect(errCode(await draftEmailWithAi(admin, bao, { description: "Mô tả bất kỳ đủ dài", tone: "SHORT", language: "vi" }))).toBe("GATEWAY_ERROR");
+    expect(recorded).toHaveLength(2);
+    expect(recorded[0]).toMatchObject({ kind: "AI_EMAIL_DRAFT", model: "claude-test" });
   });
 });

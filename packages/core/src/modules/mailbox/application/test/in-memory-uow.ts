@@ -41,6 +41,7 @@ export class InMemoryMailboxUow implements MailboxUow {
       attachments: {
         listByMessages: async (orgId, ids) => clone(d.attachments.filter((x) => mine(x, orgId) && ids.includes(x.messageId))),
         byIds: async (orgId, ids) => clone(d.attachments.filter((x) => mine(x, orgId) && ids.includes(x.id))),
+        listByDossier: async (orgId, dossierId) => clone(d.attachments.filter((x) => mine(x, orgId) && x.dossierId === dossierId)),
         insert: async (rows) => (rows.forEach((r) => guard(r, "inbox_attachments")), void d.attachments.push(...clone(rows))),
         update: async (row) => (guard(row, "inbox_attachments"), replace(d.attachments, row)),
       },

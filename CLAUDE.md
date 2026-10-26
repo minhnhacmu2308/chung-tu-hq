@@ -30,7 +30,7 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 2. Mã định danh (MST, MAWB, HAWB, số invoice/C/O/container, HS) là `string`.
 3. Tiền/trị giá tính bằng `Decimal`, không dùng `number`.
 4. Ngày nghiệp vụ `YYYY-MM-DD`; thời điểm UTC.
-5. AI chỉ đọc chứng từ và gợi ý HS, qua port `AiProvider`. Đối chiếu, ánh xạ tờ khai, thuế, chặn truyền là code thuần có test.
+5. AI chỉ đọc chứng từ, gợi ý HS (qua port `AiProvider`) và soạn nháp email cho khu Quản trị (ADR 0008 – không dữ liệu khách trong prompt, người duyệt trước khi gửi). Đối chiếu, ánh xạ tờ khai, thuế, chặn truyền là code thuần có test.
 6. Người dùng sửa trường → ghi `field_audit` append-only.
 7. Không truyền tờ khai khi còn BLOCKER FAIL hoặc HS chưa xác nhận.
 8. Mọi lần gọi AI ghi `usage_events`.

@@ -1,7 +1,7 @@
 // Thao tác trên một dòng của bảng/danh sách: icon hiện ngay khi rê chuột (hoặc Tab tới dòng), kèm nút "…" chứa đủ mọi thao tác.
 import * as MenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 import { Tooltip } from "./tooltip.js";
@@ -44,6 +44,9 @@ const dangerBtn = "hover:bg-danger-subtle hover:text-danger-subtle-fg";
  */
 export function RowActions({ rowLabel, actions, labels, className }: RowActionsProps) {
   const t = useMessages(MESSAGES, labels);
+  const trigger = useRef<HTMLButtonElement>(null);
+  /** Thao tác vừa chọn trong menu, chờ menu đóng xong mới chạy. */
+  const picked = useRef<(() => void) | null>(null);
   const quick = actions.filter((a) => a.quick !== false);
   return (
     <div className={cn("flex items-center justify-end gap-0.5", className)}>
@@ -68,16 +71,29 @@ export function RowActions({ rowLabel, actions, labels, className }: RowActionsP
         </span>
       )}
       <MenuPrimitive.Root>
-        <MenuPrimitive.Trigger aria-label={`${t.more} – ${rowLabel}`} className={cn(iconBtn, "data-[state=open]:bg-surface data-[state=open]:text-fg data-[state=open]:shadow-sm")}>
+        <MenuPrimitive.Trigger ref={trigger} aria-label={`${t.more} – ${rowLabel}`} className={cn(iconBtn, "data-[state=open]:bg-surface data-[state=open]:text-fg data-[state=open]:shadow-sm")}>
           <MoreHorizontal aria-hidden="true" />
         </MenuPrimitive.Trigger>
         <MenuPrimitive.Portal>
-          <MenuPrimitive.Content align="end" sideOffset={4} className="z-50 min-w-44 rounded-lg border border-border bg-surface p-1.5 text-fg shadow-lg motion-safe:animate-pop-in">
+          <MenuPrimitive.Content
+            align="end"
+            sideOffset={4}
+            // Trả focus về nút "…" rồi mới chạy thao tác: thao tác mở popup (xác nhận xóa/hủy) không bị lần trả focus đến muộn
+            // coi là "focus ra ngoài" mà đóng ngay (gặp ở dạng thẻ, phụ thuộc thời gian hiệu ứng đóng menu).
+            onCloseAutoFocus={(e) => {
+              const run = picked.current;
+              if (!run) return;
+              picked.current = null;
+              e.preventDefault();
+              trigger.current?.focus();
+              run();
+            }} className="z-50 min-w-44 rounded-lg border border-border bg-surface p-1.5 text-fg shadow-lg motion-safe:animate-pop-in">
             {actions.map((a) => (
               <MenuPrimitive.Item
                 key={a.id}
                 disabled={a.disabled}
-                onSelect={a.onSelect}
+                // Chỉ ghi nhận – chạy trong onCloseAutoFocus, SAU khi menu đóng hẳn (kể cả hiệu ứng đóng) và focus đã về nút "…".
+                onSelect={() => (picked.current = a.onSelect)}
                 className={cn(
                   "flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-surface-muted",
                   a.tone === "danger" && "text-danger-subtle-fg data-[highlighted]:bg-danger-subtle",

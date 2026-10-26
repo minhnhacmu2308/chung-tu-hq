@@ -1,5 +1,6 @@
 // Hồ sơ khai báo (mock). Thay thân hàm bằng fetch tới backend khi có API – giữ nguyên chữ ký.
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
+import { reasonApiError } from "@/mocks/reason-error";
 import type { Direction, Dossier, DossierDocument, DossierStatus, StepId } from "@/mocks/types";
 import type { MockDb } from "@/mocks/db";
 import { customsSummaryOf } from "./customs";
@@ -84,5 +85,30 @@ export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" 
   });
 
 export const cancelDossier = (id: string) => updateDossier(id, { status: "CANCELLED" });
+
+/** Xóa hẳn hồ sơ chưa truyền Hải quan (như backend deleteDossier): bỏ dữ liệu kèm theo, file hộp thư đã xếp vào hồ sơ trở lại "chờ xếp". */
+export const deleteDossier = (id: string) =>
+  mutate((db) => {
+    const role = db.members.find((m) => m.id === db.currentUserId)?.role;
+    if (role !== "OWNER" && role !== "ADMIN" && role !== "APPROVER") throw new ApiError("FORBIDDEN", "Cần vai trò APPROVER/ADMIN", 403);
+    const d = db.dossiers.find((x) => x.id === id);
+    if (!d) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
+    if (d.status === "SUBMITTED" || d.status === "CLEARED" || d.declarationNo || customsSummaryOf(db, id) || db.customsFlows[id]) throw reasonApiError("INVALID_STATE", "DOSSIER_SENT_TO_CUSTOMS");
+    const docIds = new Set(db.documents.filter((x) => x.dossierId === id).map((x) => x.id));
+    db.dossiers = db.dossiers.filter((x) => x.id !== id);
+    db.documents = db.documents.filter((x) => x.dossierId !== id);
+    db.fields = db.fields.filter((x) => !docIds.has(x.documentId));
+    db.checks = db.checks.filter((x) => x.dossierId !== id);
+    db.lineItems = db.lineItems.filter((x) => x.dossierId !== id);
+    db.agentRuns = db.agentRuns.filter((x) => x.dossierId !== id);
+    db.declarations = db.declarations.filter((x) => x.dossierId !== id);
+    delete db.valueCharges[id];
+    for (const m of db.inboxMessages) {
+      let released = false;
+      for (const a of m.attachments) if (a.dossierId === id) Object.assign(a, { status: "PENDING", dossierId: null, dossierCode: null }), (released = true);
+      if (released && m.status === "DONE") m.status = "NEW";
+    }
+    return { id, code: d.code };
+  });
 
 export type { Dossier, DossierDocument };

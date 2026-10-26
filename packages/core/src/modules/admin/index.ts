@@ -3,7 +3,7 @@ export type { AdminDeps, AdminRepos, AdminUow, AttemptLimiter, IdentityGateway, 
 export { resolveStaff, resolveStaffSession, type StaffActor, type StaffSession } from "./application/_shared.js";
 export { confirmMfaSetup, resetStaffMfa, startMfaSetup, verifyMfa } from "./application/mfa.js";
 export { getAdminSession, listStaff, inviteStaff, changeStaffRole, setStaffDisabled, listAudit } from "./application/staff.js";
-export { listOrgs, getOrg, suspendOrg, reactivateOrg, changeOrgPlan, adjustOrgQuota, extendOrgTrial } from "./application/orgs.js";
+export { listOrgs, getOrg, createOrg, suspendOrg, reactivateOrg, changeOrgPlan, adjustOrgQuota, extendOrgTrial } from "./application/orgs.js";
 export { listUsers, setUserDisabled, sendPasswordReset, resendVerification, revokeUserSessions } from "./application/users.js";
 export { listPlans, updatePlan, listUsageMonths, getUsageReport } from "./application/billing.js";
 export { listPlatformIntegrations, testPlatformIntegration, updateIntegrationKey, getSystemHealth, retryFailedJob, listSkillTemplates, setSkillTemplatePublished, PLATFORM_INTEGRATIONS } from "./application/platform.js";
@@ -11,3 +11,8 @@ export { listAnnouncements, sendAnnouncement, withdrawAnnouncement } from "./app
 export { getOverview } from "./application/overview.js";
 export { activeQuotaBonus, vnMonth } from "./domain/period.js";
 export { captureWeeklyRates, listExchangeRates, recordRateFetchFailure, upsertExchangeRate, nextRateRunAt, RATE_JOB_CRON, type RateDeps, type VcbRateSource } from "./application/exchange-rates.js";
+export {
+  listEmailTemplates, saveEmailTemplate, deleteEmailTemplate, listEmailSignatures, saveEmailSignature, deleteEmailSignature, previewEmailAudience,
+  sendTestEmail, sendEmail, processEmailCampaign, listEmailCampaigns, getEmailCampaign, draftEmailWithAi, getMailSettings, updateMailSettings, testMailSettings, EMAIL_FOOTER,
+} from "./application/email.js";
+export type { PlatformMailer, EmailDraftAi, AiCallUsage } from "./application/ports.js";

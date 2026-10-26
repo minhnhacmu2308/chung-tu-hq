@@ -21,6 +21,7 @@ paths:
 | Cần | Đúng | Sai (đã gặp) |
 |---|---|---|
 | Popup / hộp xác nhận | `Dialog` + `DialogContent` có **`title` + `icon`** (+ `description` khi cần) + `<form>` + `DialogFooter`. **Giữ nút chuyển cửa sổ ↔ panel** (mặc định) | `allowPresentationToggle={false}`; popup không có icon |
+| Xác nhận xóa / hủy / ngắt kết nối | `ConfirmDialog` (`tone="danger"` mặc định, `irreversible` khi xóa vĩnh viễn) | `Dialog` + `<p>` + nút đỏ tự ghép – nhìn không ra là nguy hiểm |
 | Panel chi tiết bên phải | `Dialog defaultPresentation="panel"` | Tự dựng `aside` cố định bên phải |
 | Icon trong nút | `<Button leftIcon={<X className="h-4 w-4" />}>` | `<Button><span className="[&>svg]:h-4">…</span>…</Button>` |
 | Ô icon nền dịu (đầu thẻ, đầu dòng) | `IconTile` (`tone`, `size`) | `<span className="h-10 w-10 … justify-center bg-primary-subtle">` |

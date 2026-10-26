@@ -15,5 +15,6 @@ export const requestMailSync = pick(mock.requestMailSync, http.requestMailSync);
 export const listInbox = pick(mock.listInbox, http.listInbox);
 export const addInboxToDossier = pick(mock.addInboxToDossier, http.addInboxToDossier);
 export const setInboxMessageStatus = pick(mock.setInboxMessageStatus, http.setInboxMessageStatus);
+export const deleteInboxMessages = pick(mock.deleteInboxMessages, http.deleteInboxMessages);
 /** Đường dẫn mở / xem trước file đính kèm (tab mới). */
 export const inboxAttachmentUrl = pick(mock.inboxAttachmentUrl, http.inboxAttachmentUrl);

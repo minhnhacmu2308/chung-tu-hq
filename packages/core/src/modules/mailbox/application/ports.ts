@@ -20,7 +20,8 @@ export type MailConnectionRow = {
 };
 export type InboxMessageRow = {
   id: string; orgId: string; connectionId: string; provider: MailProvider; mailbox: string; providerMessageId: string;
-  fromName: string; fromEmail: string; subject: string; snippet: string; receivedAt: Date; status: InboxMessageStatus; createdAt: Date; updatedAt: Date;
+  /** DELETED: người dùng đã xóa – giữ hàng (không file) để lần lấy thư sau không kéo lại email đó. */
+  fromName: string; fromEmail: string; subject: string; snippet: string; receivedAt: Date; status: InboxMessageStatus | "DELETED"; createdAt: Date; updatedAt: Date;
 };
 export type InboxAttachmentRow = {
   id: string; orgId: string; messageId: string; fileName: string; mime: string; size: number; sha256: string; storageKey: string; kindGuess: DocKind;
@@ -49,6 +50,7 @@ export type MailboxRepos = {
   attachments: {
     listByMessages(orgId: string, messageIds: string[]): Promise<InboxAttachmentRow[]>;
     byIds(orgId: string, ids: string[]): Promise<InboxAttachmentRow[]>;
+    listByDossier(orgId: string, dossierId: string): Promise<InboxAttachmentRow[]>;
     insert(rows: InboxAttachmentRow[]): Promise<void>;
     update(row: InboxAttachmentRow): Promise<void>;
   };
@@ -104,6 +106,7 @@ export interface Cipher {
 export interface BlobStore {
   put(key: string, body: Buffer, mime: string): Promise<void>;
   get(key: string): Promise<Buffer>;
+  delete(key: string): Promise<void>;
 }
 
 /** Cổng sang module hồ sơ (nối ở composition root). */

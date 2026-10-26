@@ -56,16 +56,22 @@ export const ITEMS_TABLE_MESSAGES = defineMessages({
     description: "Mô tả hàng hóa", quantity: "Số lượng", unit: "ĐVT", unitPrice: "Đơn giá", amount: "Thành tiền", origin: "Xuất xứ",
     caption: "Danh sách hàng hóa", status: "Trạng thái", confirmRow: "Xác nhận dòng này đúng", confirmRowN: "Xác nhận dòng {n} đúng",
     confirmed: "Đã xác nhận", checked: "Đã đối chiếu", total: "Cộng {n} dòng",
+    lineN: "Dòng {n}", confirmLines: "Xác nhận {n} dòng đúng", empty: "Không có dòng hàng", search: "Tìm mô tả, ĐVT, xuất xứ…",
+    show: "Hiện dòng", showAll: "Tất cả ({n})", showSuspect: "Cần kiểm tra ({n})",
   },
   en: {
     description: "Goods description", quantity: "Quantity", unit: "Unit", unitPrice: "Unit price", amount: "Amount", origin: "Origin",
     caption: "Goods list", status: "Status", confirmRow: "Confirm this line is correct", confirmRowN: "Confirm line {n} is correct",
     confirmed: "Confirmed", checked: "Cross-checked", total: "Total {n} lines",
+    lineN: "Line {n}", confirmLines: "Confirm {n} lines", empty: "No goods lines", search: "Search description, unit, origin…",
+    show: "Show lines", showAll: "All ({n})", showSuspect: "To review ({n})",
   },
   zh: {
     description: "货物描述", quantity: "数量", unit: "单位", unitPrice: "单价", amount: "金额", origin: "原产地",
     caption: "货物清单", status: "状态", confirmRow: "确认此行正确", confirmRowN: "确认第 {n} 行正确",
     confirmed: "已确认", checked: "已核对", total: "合计 {n} 行",
+    lineN: "第 {n} 行", confirmLines: "确认 {n} 行正确", empty: "没有货物行", search: "搜索描述、单位、原产地…",
+    show: "显示行", showAll: "全部（{n}）", showSuspect: "待检查（{n}）",
   },
 });
 

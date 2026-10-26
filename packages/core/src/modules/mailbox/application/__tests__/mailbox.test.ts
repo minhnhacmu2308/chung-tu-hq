@@ -6,7 +6,7 @@ import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
 import { completeMailConnect, disconnectMailbox, failMailSync, failStaleMailSyncs, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, syncMailConnection, updateMailFilters } from "../connections.js";
-import { addInboxToDossier, getInboxAttachmentFile, listInbox, setInboxMessageStatus } from "../inbox.js";
+import { addInboxToDossier, deleteInboxMessages, getInboxAttachmentFile, listInbox, releaseDossierAttachments, setInboxMessageStatus } from "../inbox.js";
 import type { MailboxDeps } from "../ports.js";
 import { FakeDossierIntake, FakeMailProvider, FakeStateSigner, fakeCipher, MemoryBlobStore } from "../test/fakes.js";
 import { InMemoryMailboxUow } from "../test/in-memory-uow.js";
@@ -270,5 +270,29 @@ describe("hộp thư chứng từ", () => {
     expect(unwrap(await listInbox(deps, ctx("VIEWER")))[0]).toMatchObject({ status: "IGNORED", suggestion: null });
     unwrap(await setInboxMessageStatus(deps, ctx("DECLARANT"), list[0]!.id, "NEW"));
     expect(errCode(await setInboxMessageStatus(deps, ctx("DECLARANT"), "imsg_x", "IGNORED"))).toBe("NOT_FOUND");
+  });
+
+  it("xóa email: biến khỏi hộp thư, file đính kèm bị xóa khỏi kho, lấy thư lại không kéo về; Người xem / org khác không xóa được", async () => {
+    const list = await seeded();
+    const [news, hbl] = list;
+    const keys = uow.data.attachments.filter((a) => a.messageId === news!.id).map((a) => a.storageKey);
+    expect(errCode(await deleteInboxMessages(deps, ctx("VIEWER"), [news!.id]))).toBe("FORBIDDEN");
+    expect(unwrap(await deleteInboxMessages(deps, ctx("DECLARANT", "usr_b", "org_b"), [news!.id]))).toEqual({ deleted: 0 });
+    expect(unwrap(await deleteInboxMessages(deps, ctx("DECLARANT"), [news!.id, news!.id, "imsg_x"]))).toEqual({ deleted: 1 });
+    expect(unwrap(await listInbox(deps, ctx("VIEWER"))).map((m) => m.id)).toEqual([hbl!.id]);
+    for (const k of keys) expect(storage.objects.has(k)).toBe(false);
+    expect(errCode(await setInboxMessageStatus(deps, ctx("DECLARANT"), news!.id, "IGNORED"))).toBe("NOT_FOUND");
+    await syncMailConnection(deps, { orgId: "org_a", connectionId: uow.data.connections[0]!.id });
+    expect(unwrap(await listInbox(deps, ctx("VIEWER"))).map((m) => m.id)).toEqual([hbl!.id]);
+  });
+
+  it("hồ sơ bị xóa → file đã xếp vào hồ sơ trở lại chờ xếp, email Đã xếp về Mới", async () => {
+    const m = (await seeded())[1]!;
+    unwrap(await addInboxToDossier(deps, ctx("DECLARANT"), { dossierId: "dos_1", attachmentIds: m.attachments.map((a) => a.id) }));
+    expect(unwrap(await listInbox(deps, ctx("VIEWER"))).find((x) => x.id === m.id)!.status).toBe("DONE");
+    await releaseDossierAttachments(deps, ctx("ADMIN"), "dos_1");
+    const after = unwrap(await listInbox(deps, ctx("VIEWER"))).find((x) => x.id === m.id)!;
+    expect(after.status).toBe("NEW");
+    expect(after.attachments.map((a) => [a.status, a.dossierId])).toEqual([["PENDING", null], ["PENDING", null]]);
   });
 });

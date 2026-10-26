@@ -1,13 +1,15 @@
 "use client";
 // Hộp thư chứng từ: email có file đính kèm lấy từ Gmail / Outlook đã kết nối; xếp file vào hồ sơ (có gợi ý hồ sơ khớp) hoặc bỏ qua.
 import type { InboxAttachment, InboxMessage, InboxMessageStatus } from "@kb/contracts";
-import { Alert, Button, EmptyState, fill, PageHeader, SkeletonTable, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, useMessages } from "@kb/ui";
+import {
+  Alert, Button, ConfirmDialog, EmptyState, fill, PageHeader, SkeletonTable, Stack, Tabs, TabsContent, TabsList, TabsTrigger, toast, useMessages,
+} from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MailPlus, RefreshCw, Settings2 } from "lucide-react";
+import { MailPlus, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { inboxKeys, listInbox, mailboxKeys, requestMailSync, setInboxMessageStatus } from "@/api/mailbox";
+import { deleteInboxMessages, inboxKeys, listInbox, mailboxKeys, requestMailSync, setInboxMessageStatus } from "@/api/mailbox";
 import { LoadError } from "@/components/common/load-error";
 import { toastMutationError } from "@/lib/mutation-error";
 import { AttachmentPreviewDialog } from "./attachment-preview";
@@ -32,6 +34,7 @@ export function InboxPage() {
   // Giữ id (không giữ bản sao) để chi tiết cập nhật theo danh sách sau khi xếp file / bỏ qua.
   const [detailId, setDetailId] = useState<string | null>(null);
   const [preview, setPreview] = useState<InboxAttachment | null>(null);
+  const [toDelete, setToDelete] = useState<{ messages: InboxMessage[]; onDone?: (() => void) | undefined } | null>(null);
 
   const { canUse, session } = useMailboxSession();
   const overview = useMailboxOverview();
@@ -65,6 +68,17 @@ export function InboxPage() {
     },
     onError: toastMutationError(t.statusFailed),
   });
+  const remove = useMutation({
+    mutationFn: (ids: string[]) => deleteInboxMessages(ids),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: inboxKeys.all });
+      toast({ tone: "success", title: fill(t.deleted, { n: r.deleted }) });
+      if (detailId && toDelete?.messages.some((m) => m.id === detailId)) setDetailId(null);
+      toDelete?.onDone?.();
+      setToDelete(null);
+    },
+    onError: toastMutationError(t.deleteFailed),
+  });
   const quickAdd = useAddToDossier();
 
   const actions: InboxActions = {
@@ -75,6 +89,7 @@ export function InboxPage() {
     onCreateDossier: (m) => router.push(`/dossiers/new?inbox=${encodeURIComponent(m.id)}`),
     onSetStatus: (m, s) => setStatus.mutate({ id: m.id, status: s }),
     onPreview: setPreview,
+    onDelete: (messages, onDone) => setToDelete({ messages, onDone }),
   };
 
   const setFilter = (v: string) => {
@@ -164,6 +179,19 @@ export function InboxPage() {
       <InboxMessageDetail m={detail} actions={actions} onOpenChange={(o) => !o && setDetailId(null)} />
       <AddToDossierDialog message={dialogFor} onOpenChange={(o) => !o && setDialogFor(null)} />
       <AttachmentPreviewDialog attachment={preview} onOpenChange={(o) => !o && setPreview(null)} />
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title={toDelete && toDelete.messages.length > 1 ? fill(t.deleteTitleMany, { n: toDelete.messages.length }) : t.deleteTitle}
+        icon={<Trash2 className="h-4 w-4" />}
+        subject={toDelete?.messages.length === 1 ? toDelete.messages[0]!.subject : undefined}
+        irreversible
+        confirmLabel={t.deleteConfirm}
+        loading={remove.isPending}
+        onConfirm={() => toDelete && remove.mutate(toDelete.messages.map((m) => m.id))}
+      >
+        {t.deleteBody}
+      </ConfirmDialog>
     </Stack>
   );
 }

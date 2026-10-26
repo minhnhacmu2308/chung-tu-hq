@@ -12,6 +12,7 @@ export const listNotifications = pick(mock.listNotifications, http.listNotificat
 export const markAllNotificationsRead = pick(mock.markAllNotificationsRead, http.markAllNotificationsRead);
 export const login = pick(mock.login, http.login);
 export const logout = pick(mock.logout, http.logout);
+export const changePassword = pick(mock.changePassword, http.changePassword);
 export const resetMockData = pick(mock.resetMockData, http.resetMockData);
 export const listMembers = pick(mock.listMembers, http.listMembers);
 export const lookupTaxCode = pick(mock.lookupTaxCode, http.lookupTaxCode);

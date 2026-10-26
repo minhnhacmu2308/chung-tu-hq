@@ -5,7 +5,7 @@ import type { InboxAttachment, InboxMessage } from "@kb/contracts";
 import {
   Badge, Button, cn, Dialog, DialogContent, DialogFooter, fill, formatBytes, StatusBadge, Tooltip, useMessages, useUiLocale,
 } from "@kb/ui";
-import { Eye, EyeOff, FilePlus2, FileText, FolderInput, Lightbulb, Mail, RotateCcw } from "lucide-react";
+import { Eye, EyeOff, FilePlus2, FileText, FolderInput, Lightbulb, Mail, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -50,6 +50,8 @@ export type InboxActions = {
   onAddTo: (m: InboxMessage) => void;
   onCreateDossier: (m: InboxMessage) => void;
   onSetStatus: (m: InboxMessage, status: "NEW" | "IGNORED") => void;
+  /** Hỏi xác nhận rồi xóa email khỏi hộp thư chứng từ; `onDone` sau khi xóa xong (vd bỏ chọn). */
+  onDelete: (messages: InboxMessage[], onDone?: () => void) => void;
   /** Xem trước file đính kèm trong popup (không chuyển trang). */
   onPreview: (a: InboxAttachment) => void;
   /** Email đang được thêm vào hồ sơ gợi ý (khóa nút). */
@@ -78,6 +80,9 @@ export function InboxMessageDetail({ m, actions, onOpenChange }: { m: InboxMessa
         >
           <DetailBody m={m} actions={actions} />
           <DialogFooter>
+            {actions.canUse && (
+              <Button variant="ghost" className="mr-auto text-danger" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => actions.onDelete([m])}>{t.delete}</Button>
+            )}
             {actions.canUse && m.status === "NEW" && (
               <Button variant="ghost" leftIcon={<EyeOff className="h-4 w-4" />} onClick={() => actions.onSetStatus(m, "IGNORED")}>{t.ignore}</Button>
             )}

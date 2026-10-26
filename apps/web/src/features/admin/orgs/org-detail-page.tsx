@@ -18,7 +18,7 @@ import { INTEGRATION_STATUS, ORG_STATUS, PLAN_TONE } from "../common/admin-displ
 import { QuotaMeter } from "../common/quota-meter";
 import { useAdminSession } from "../shell/use-admin-session";
 import { UserTable } from "../users/user-table";
-import { ORG_DETAIL_MESSAGES } from "./orgs.messages";
+import { CREATE_ORG_MESSAGES, ORG_DETAIL_MESSAGES } from "./orgs.messages";
 import { OrgActionDialogs, type OrgAction } from "./org-actions";
 
 const TABS = [
@@ -41,6 +41,7 @@ function Info({ label, children }: { label: string; children: ReactNode }) {
 
 function OverviewTab({ org }: { org: AdminOrgDetail }) {
   const t = useMessages(ORG_DETAIL_MESSAGES);
+  const tc = useMessages(CREATE_ORG_MESSAGES);
   return (
     <Stack gap="lg">
       <Grid cols={{ base: 2, xl: 4 }}>
@@ -67,6 +68,25 @@ function OverviewTab({ org }: { org: AdminOrgDetail }) {
           </dl>
         </CardContent>
       </Card>
+      {org.contract && (
+        <Card className="max-w-4xl">
+          <CardHeader>
+            <CardTitle>{tc.contractTitle}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2">
+              <Info label={tc.contractNo}>{org.contract.contractNo ?? "—"}</Info>
+              <Info label={tc.contractEndsOn}>
+                {org.contract.endsOn ? formatDate(org.contract.endsOn) : "—"}
+                {org.contract.endsOn && daysUntil(org.contract.endsOn) <= 30 && (
+                  <span className="block text-xs text-warning-subtle-fg">{fill(tc.contractEndsIn, { n: Math.max(0, daysUntil(org.contract.endsOn)) })}</span>
+                )}
+              </Info>
+              {org.contract.note && <div className="cq-sm:col-span-2"><Info label={tc.note}><span className="whitespace-pre-line">{org.contract.note}</span></Info></div>}
+            </dl>
+          </CardContent>
+        </Card>
+      )}
     </Stack>
   );
 }

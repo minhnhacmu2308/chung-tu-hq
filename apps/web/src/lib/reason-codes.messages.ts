@@ -81,6 +81,7 @@ export const REASON_MESSAGES = defineMessages({
     MAILBOX_NOT_FOUND: "Không tìm thấy hộp thư đã kết nối",
     INBOX_MESSAGE_NOT_FOUND: "Không tìm thấy email trong hộp thư chứng từ",
     INBOX_ATTACHMENT_ADDED: "File đã được thêm vào hồ sơ {code}",
+    DOSSIER_SENT_TO_CUSTOMS: "Hồ sơ đã truyền Hải quan, không xóa được – hãy hủy hồ sơ",
   },
   en: {
     OPERATION_PENDING: "Waiting for a response to {ops}",
@@ -158,6 +159,7 @@ export const REASON_MESSAGES = defineMessages({
     MAILBOX_NOT_FOUND: "Connected mailbox not found",
     INBOX_MESSAGE_NOT_FOUND: "Email not found in the document inbox",
     INBOX_ATTACHMENT_ADDED: "The file has already been added to dossier {code}",
+    DOSSIER_SENT_TO_CUSTOMS: "This dossier has been sent to Customs and cannot be deleted – cancel it instead",
   },
   zh: {
     OPERATION_PENDING: "正在等待 {ops} 的回复",
@@ -235,6 +237,7 @@ export const REASON_MESSAGES = defineMessages({
     MAILBOX_NOT_FOUND: "未找到已连接的邮箱",
     INBOX_MESSAGE_NOT_FOUND: "单证收件箱中未找到该邮件",
     INBOX_ATTACHMENT_ADDED: "该文件已添加到档案 {code}",
+    DOSSIER_SENT_TO_CUSTOMS: "档案已传送海关，无法删除 – 请改为取消档案",
   },
 });
 

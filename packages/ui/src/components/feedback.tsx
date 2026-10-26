@@ -131,6 +131,11 @@ export const STATUS_META = {
   // Thông báo hệ thống, skill mẫu
   ANNOUNCEMENT_SENT: { tone: "success", label: "Đã gửi" },
   ANNOUNCEMENT_WITHDRAWN: { tone: "neutral", label: "Đã thu hồi" },
+  EMAIL_QUEUED: { tone: "neutral", label: "Chờ gửi" },
+  EMAIL_SENDING: { tone: "info", label: "Đang gửi" },
+  EMAIL_SENT: { tone: "success", label: "Đã gửi" },
+  EMAIL_PARTIAL: { tone: "warning", label: "Gửi một phần" },
+  EMAIL_FAILED: { tone: "danger", label: "Gửi lỗi" },
   TEMPLATE_PUBLISHED: { tone: "success", label: "Đã phát hành" },
   TEMPLATE_DRAFT: { tone: "neutral", label: "Chưa phát hành" },
   // Chứng từ tải lên → AI đọc
@@ -161,7 +166,8 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   MAILBOX_ACTIVE: "Connected", MAILBOX_SYNCING: "Fetching emails", MAILBOX_ERROR: "Fetch failed", MAILBOX_REAUTH: "Reconnect needed",
   INBOX_NEW: "Not filed", INBOX_DONE: "Filed to dossier", INBOX_IGNORED: "Ignored",
   SERVICE_UP: "Healthy", SERVICE_DEGRADED: "Degraded", SERVICE_DOWN: "Down",
-  ANNOUNCEMENT_SENT: "Sent", ANNOUNCEMENT_WITHDRAWN: "Withdrawn", TEMPLATE_PUBLISHED: "Published", TEMPLATE_DRAFT: "Unpublished",
+  ANNOUNCEMENT_SENT: "Sent", ANNOUNCEMENT_WITHDRAWN: "Withdrawn",
+  EMAIL_QUEUED: "Queued", EMAIL_SENDING: "Sending", EMAIL_SENT: "Sent", EMAIL_PARTIAL: "Partly sent", EMAIL_FAILED: "Failed", TEMPLATE_PUBLISHED: "Published", TEMPLATE_DRAFT: "Unpublished",
   DOC_UPLOADING: "Uploading", DOC_QUEUED: "Queued", DOC_READING: "AI reading", DOC_DONE: "Read", DOC_ERROR: "Error",
 };
 
@@ -183,7 +189,8 @@ export const STATUS_LABELS_ZH: Record<Status, string> = {
   MAILBOX_ACTIVE: "已连接", MAILBOX_SYNCING: "正在获取邮件", MAILBOX_ERROR: "获取失败", MAILBOX_REAUTH: "需重新连接",
   INBOX_NEW: "未归档", INBOX_DONE: "已归入档案", INBOX_IGNORED: "已忽略",
   SERVICE_UP: "运行正常", SERVICE_DEGRADED: "性能下降", SERVICE_DOWN: "已停止",
-  ANNOUNCEMENT_SENT: "已发送", ANNOUNCEMENT_WITHDRAWN: "已撤回", TEMPLATE_PUBLISHED: "已发布", TEMPLATE_DRAFT: "未发布",
+  ANNOUNCEMENT_SENT: "已发送", ANNOUNCEMENT_WITHDRAWN: "已撤回",
+  EMAIL_QUEUED: "待发送", EMAIL_SENDING: "发送中", EMAIL_SENT: "已发送", EMAIL_PARTIAL: "部分发送", EMAIL_FAILED: "发送失败", TEMPLATE_PUBLISHED: "已发布", TEMPLATE_DRAFT: "未发布",
   DOC_UPLOADING: "上传中", DOC_QUEUED: "等待读取", DOC_READING: "AI 读取中", DOC_DONE: "已读取", DOC_ERROR: "错误",
 };
 

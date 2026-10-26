@@ -133,12 +133,13 @@ export const rejectJoinRequest = async (id: string, input: RejectJoinRequestInpu
   });
 };
 
-export const listIntegrations = () => query((db) => db.integrations);
+/** Doanh nghiệp chỉ thấy Customs Hub (VNACCS) – như backend (`ORG_VISIBLE`). */
+export const listIntegrations = () => query((db) => db.integrations.filter((x) => x.id === "CUSTOMS_HUB"));
 
 /** Mô phỏng gọi thử: hscodepro/AI luôn OK; Customs Hub lỗi khi chứng thư mặc định còn < 30 ngày; HĐĐT chưa cấu hình. */
 export const testIntegration = (id: Integration["id"]) =>
   mutate((db) => {
-    const it = db.integrations.find((x) => x.id === id);
+    const it = id === "CUSTOMS_HUB" ? db.integrations.find((x) => x.id === id) : undefined;
     if (!it) throw new ApiError("NOT_FOUND", "Không tìm thấy kết nối");
     it.lastCheckedAt = nowIso();
     if (id === "CUSTOMS_HUB") {

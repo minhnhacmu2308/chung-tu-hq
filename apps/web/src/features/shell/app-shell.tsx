@@ -14,6 +14,7 @@ import { adminKeys, getAdminSession } from "@/api/admin";
 import { dossierKeys, listDossiers } from "@/api/dossiers";
 import { inboxKeys, listInbox } from "@/api/mailbox";
 import { getSession, listNotifications, logout, resetMockData, sessionKeys } from "@/api/session";
+import { ChangePasswordScreen } from "@/components/common/change-password-screen";
 import { APP_TITLES } from "@/app/app-titles.messages";
 import { LanguageMenuSub } from "@/features/appearance/language-switcher";
 import { InstallAppMenuItem } from "@/features/pwa/install-app";
@@ -236,11 +237,17 @@ function ShellInner({ children }: { children: ReactNode }) {
   );
 }
 
+/** Tài khoản còn mật khẩu tạm (quản trị tạo hộ) → chỉ hiện màn đổi mật khẩu, chưa dựng khung (các API khác đang bị chặn). */
+function PasswordGate({ children }: { children: ReactNode }) {
+  const { data: session } = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
+  return session?.mustChangePassword ? <ChangePasswordScreen /> : <ShellInner>{children}</ShellInner>;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   // useSearchParams cần Suspense khi build tĩnh.
   return (
     <Suspense>
-      <ShellInner>{children}</ShellInner>
+      <PasswordGate>{children}</PasswordGate>
     </Suspense>
   );
 }

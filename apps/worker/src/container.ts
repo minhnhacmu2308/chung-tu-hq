@@ -1,7 +1,7 @@
 import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv } from "@kb/core/config";
 import { activeQuotaBonus } from "@kb/core/modules/admin";
-import { createRateDeps } from "@kb/core/modules/admin/infrastructure";
+import { createRateDeps, DbPlatformMailer, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
 import { createDb, platformDbUrl } from "@kb/core/db";
 import { createAiBudget, createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
@@ -150,8 +150,12 @@ export function buildContainer() {
   skill.audit = identity.audit;
   // Tỷ giá tính thuế: bảng nền tảng, ghi bằng role kb_platform (ADR 0006).
   const rates = createRateDeps(platformDbUrl(env));
+  // Email: cùng cổng gửi với web (SMTP cấu hình ở khu Quản trị, thiếu thì .env, rồi log) – job gửi theo đợt và email hệ thống.
+  const mail = new DbPlatformMailer(rates.uow as DrizzleAdminUow, identity.secrets!, env);
+  identity.mailer = { send: (m) => mail.send(m) };
+  const email = { uow: rates.uow as DrizzleAdminUow, mail, clock: systemClock };
   return {
-    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs, mailbox, rates,
+    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs, mailbox, rates, email,
     async close() {
       await Promise.all([...queues.values()].map((q) => q.close()));
       await rates.db.close();

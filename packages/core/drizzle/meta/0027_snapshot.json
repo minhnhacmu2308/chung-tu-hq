@@ -1,5 +1,5 @@
 {
-  "id": "cc079172-1bfd-4a9c-9600-f30574136d81",
+  "id": "c390ce3c-b4d8-46ff-a667-ce1b866e008b",
   "prevId": "81935a9b-9681-4341-816f-a7dba34f87be",
   "version": "7",
   "dialect": "postgresql",
@@ -1305,6 +1305,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "must_change_password": {
+          "name": "must_change_password",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1822,347 +1829,6 @@
         }
       },
       "checkConstraints": {},
-      "isRLSEnabled": true
-    },
-    "public.hys_submission_files": {
-      "name": "hys_submission_files",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "org_id": {
-          "name": "org_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "submission_id": {
-          "name": "submission_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "document_id": {
-          "name": "document_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "storage_key": {
-          "name": "storage_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_name": {
-          "name": "file_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mime": {
-          "name": "mime",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "hys_submission_files_org_sub_idx": {
-          "name": "hys_submission_files_org_sub_idx",
-          "columns": [
-            {
-              "expression": "org_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "submission_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hys_submission_files_submission_id_hys_submissions_id_fk": {
-          "name": "hys_submission_files_submission_id_hys_submissions_id_fk",
-          "tableFrom": "hys_submission_files",
-          "tableTo": "hys_submissions",
-          "columnsFrom": [
-            "submission_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {
-        "hys_submission_files_rls": {
-          "name": "hys_submission_files_rls",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "kb_app"
-          ],
-          "using": "org_id = current_setting('app.org_id', true)",
-          "withCheck": "org_id = current_setting('app.org_id', true)"
-        }
-      },
-      "checkConstraints": {},
-      "isRLSEnabled": true
-    },
-    "public.hys_submissions": {
-      "name": "hys_submissions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "org_id": {
-          "name": "org_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dossier_id": {
-          "name": "dossier_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "seq": {
-          "name": "seq",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "procedure_code": {
-          "name": "procedure_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "customs_office": {
-          "name": "customs_office",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "processing_unit": {
-          "name": "processing_unit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "phone": {
-          "name": "phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "internal_ref": {
-          "name": "internal_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "purpose": {
-          "name": "purpose",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'DRAFT'"
-        },
-        "attempt": {
-          "name": "attempt",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "receipt_no": {
-          "name": "receipt_no",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "registered_on": {
-          "name": "registered_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reject": {
-          "name": "reject",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fill": {
-          "name": "fill",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sent_by": {
-          "name": "sent_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sent_at": {
-          "name": "sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "hys_submissions_dossier_seq_uq": {
-          "name": "hys_submissions_dossier_seq_uq",
-          "columns": [
-            {
-              "expression": "dossier_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "seq",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "hys_submissions_org_dossier_idx": {
-          "name": "hys_submissions_org_dossier_idx",
-          "columns": [
-            {
-              "expression": "org_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "dossier_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hys_submissions_dossier_id_dossiers_id_fk": {
-          "name": "hys_submissions_dossier_id_dossiers_id_fk",
-          "tableFrom": "hys_submissions",
-          "tableTo": "dossiers",
-          "columnsFrom": [
-            "dossier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {
-        "hys_submissions_rls": {
-          "name": "hys_submissions_rls",
-          "as": "PERMISSIVE",
-          "for": "ALL",
-          "to": [
-            "kb_app"
-          ],
-          "using": "org_id = current_setting('app.org_id', true)",
-          "withCheck": "org_id = current_setting('app.org_id', true)"
-        }
-      },
-      "checkConstraints": {
-        "hys_submissions_status_chk": {
-          "name": "hys_submissions_status_chk",
-          "value": "status in ('DRAFT', 'SENDING', 'ACCEPTED', 'REJECTED', 'SEND_FAILED')"
-        },
-        "hys_submissions_purpose_chk": {
-          "name": "hys_submissions_purpose_chk",
-          "value": "purpose is null or purpose in ('PRE_DECLARATION', 'SUPPLEMENT')"
-        }
-      },
       "isRLSEnabled": true
     },
     "public.integration_status": {
@@ -6656,6 +6322,77 @@
       },
       "indexes": {},
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "public.org_contracts": {
+      "name": "org_contracts",
+      "schema": "",
+      "columns": {
+        "org_id": {
+          "name": "org_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "contract_no": {
+          "name": "contract_no",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ends_on": {
+          "name": "ends_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "org_contracts_org_id_organizations_id_fk": {
+          "name": "org_contracts_org_id_organizations_id_fk",
+          "tableFrom": "org_contracts",
+          "tableTo": "organizations",
+          "columnsFrom": [
+            "org_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

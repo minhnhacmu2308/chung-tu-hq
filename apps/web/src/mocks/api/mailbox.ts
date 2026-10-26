@@ -161,6 +161,15 @@ export const setInboxMessageStatus = (id: string, status: Extract<InboxMessageSt
     return { id, status: msg.status };
   });
 
+/** Xóa email khỏi hộp thư chứng từ (file đã xếp vào hồ sơ vẫn ở hồ sơ). */
+export const deleteInboxMessages = (ids: string[]) =>
+  mutate((db) => {
+    assertCanUse(db);
+    const before = db.inboxMessages.length;
+    db.inboxMessages = db.inboxMessages.filter((m) => !ids.includes(m.id));
+    return { deleted: before - db.inboxMessages.length };
+  });
+
 /** Đường dẫn mở file đính kèm. Mock: PDF mẫu dựng tại chỗ (không có kho file thật). */
 export function inboxAttachmentUrl(id: string): string {
   const db = getDb();

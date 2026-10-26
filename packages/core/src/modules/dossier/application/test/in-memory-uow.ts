@@ -36,6 +36,13 @@ export class InMemoryDossierUow implements DossierUow {
           const ids = new Set(mine.map((x) => x.id));
           return { dossiers: mine.length, pages: d.documents.filter((x) => ids.has(x.dossierId)).reduce((n, x) => n + x.pages, 0) };
         },
+        delete: async (orgId, id) => {
+          if (orgId !== org) deny(`dossiers delete orgId ${orgId} khác ngữ cảnh`);
+          const mine = (x: { orgId: string; dossierId: string }) => x.orgId === org && x.dossierId === id;
+          d.progress = d.progress.filter((x) => !mine(x));
+          d.documents = d.documents.filter((x) => !mine(x));
+          d.dossiers = d.dossiers.filter((x) => !(x.id === id && x.orgId === org));
+        },
       },
       documents: {
         list: async (orgId, dossierId) => clone(d.documents.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId)),

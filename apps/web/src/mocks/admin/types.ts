@@ -1,12 +1,17 @@
 // Phần dữ liệu back-office trong "DB" giả. Doanh nghiệp demo (db.org + db.members) được ghép vào lúc đọc,
 // nên thao tác ở /admin (đổi gói, khóa người dùng, gửi thông báo) hiện ngay bên ứng dụng của khách.
 import type {
+  EmailCampaignDetail, EmailSignature, EmailTemplate, MailSettings,
   ExchangeRate, ExchangeRateFetch,
   AdminAuditEntry, AdminPlan, AdminUser, AdminUserSession, Announcement, FailedJob, IntegrationId, Organization, OrgStatus,
   PlatformIntegration, QueueStat, ServiceHealth, SkillTemplate, Staff,
 } from "@kb/contracts";
 
-export type OrgMeta = { status: OrgStatus; suspendedReason?: string; quotaBonus: number; createdAt: string };
+export type OrgMeta = {
+  status: OrgStatus; suspendedReason?: string; quotaBonus: number; createdAt: string;
+  /** Doanh nghiệp quản trị tạo hộ (ký hợp đồng trực tiếp). */
+  contract?: { contractNo?: string; endsOn?: string; note?: string };
+};
 export type StoredOrg = { org: Organization; meta: OrgMeta };
 export type StoredUser = Omit<AdminUser, "orgName">;
 export type UserMeta = { emailVerified: boolean; createdAt: string; sessions: AdminUserSession[] };
@@ -36,6 +41,13 @@ export type AdminDb = {
   /** Mới nhất đứng đầu. */
   audit: AdminAuditEntry[];
   announcements: Announcement[];
+  /** Email: mẫu kéo thả, chữ ký (riêng có `ownerId` = id quản trị viên), đợt gửi (mới nhất đầu), máy chủ gửi mail. */
+  email: {
+    templates: EmailTemplate[];
+    signatures: (EmailSignature & { ownerId: string | null })[];
+    campaigns: EmailCampaignDetail[];
+    settings: MailSettings;
+  };
   /** Thông báo hệ thống → thông báo đã đẩy vào panel của doanh nghiệp demo (để thu hồi). */
   announcementNotifications: Record<string, string>;
 };

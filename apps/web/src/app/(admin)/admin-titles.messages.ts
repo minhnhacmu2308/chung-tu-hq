@@ -5,7 +5,7 @@ import type { Messages } from "@kb/ui";
 
 type TitleKey =
   | "root" | "template" | "overview" | "announcements" | "audit" | "exchangeRates" | "integrations" | "orgs" | "plans"
-  | "skillTemplates" | "staff" | "system" | "usage" | "users";
+  | "skillTemplates" | "staff" | "system" | "usage" | "users" | "emailCampaigns" | "emailCompose" | "emailTemplates" | "emailSignatures" | "mailSettings";
 
 export const ADMIN_TITLE_MESSAGES: Messages<TitleKey> = {
   vi: {
@@ -23,6 +23,11 @@ export const ADMIN_TITLE_MESSAGES: Messages<TitleKey> = {
     system: "Sức khỏe hệ thống",
     usage: "Sử dụng & chi phí",
     users: "Người dùng",
+    emailCampaigns: "Gửi email",
+    emailCompose: "Soạn email",
+    emailTemplates: "Mẫu email",
+    emailSignatures: "Chữ ký email",
+    mailSettings: "Cấu hình gửi mail",
   },
   en: {
     root: "System administration",
@@ -39,6 +44,11 @@ export const ADMIN_TITLE_MESSAGES: Messages<TitleKey> = {
     system: "System health",
     usage: "Usage & cost",
     users: "Users",
+    emailCampaigns: "Send email",
+    emailCompose: "Compose email",
+    emailTemplates: "Email templates",
+    emailSignatures: "Email signatures",
+    mailSettings: "Mail server",
   },
   zh: {
     root: "系统管理",
@@ -55,6 +65,11 @@ export const ADMIN_TITLE_MESSAGES: Messages<TitleKey> = {
     system: "系统健康",
     usage: "用量与成本",
     users: "用户",
+    emailCampaigns: "发送邮件",
+    emailCompose: "撰写邮件",
+    emailTemplates: "邮件模板",
+    emailSignatures: "邮件签名",
+    mailSettings: "邮件服务器",
   },
 };
 

@@ -63,6 +63,9 @@ export class MemoryBlobStore implements BlobStore {
     if (!b) throw new Error(`missing ${key}`);
     return b;
   }
+  async delete(key: string) {
+    this.objects.delete(key);
+  }
 }
 
 export class FakeDossierIntake implements DossierIntake {

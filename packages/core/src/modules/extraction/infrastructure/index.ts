@@ -13,6 +13,7 @@ import { RecordingAiProvider } from "./recording-ai-provider.js";
 
 export { ClaudeAiProvider, createDocumentsAdapter, DrizzleExtractionUow, FakeAiProvider, RecordingAiProvider };
 export { FAKE_BY_KIND } from "./fake-ai-provider.js";
+export { ClaudeEmailDrafter, type EmailDraftInput } from "./claude-email-drafter.js";
 
 export function createAiProvider(env: Env, fixturesDir = path.resolve(process.cwd(), "evals/fixtures")): AiProvider {
   if (env.AI_PROVIDER === "claude" && env.ANTHROPIC_API_KEY) return new ClaudeAiProvider(env.ANTHROPIC_API_KEY, env.AI_MODEL, { timeout: env.AI_TIMEOUT_MS, maxRetries: 1 });

@@ -142,4 +142,38 @@ describe("Hộp thư chứng từ", () => {
     expect(await screen.findByText("Chưa kết nối hộp thư", undefined, T)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Kết nối hộp thư" }).getAttribute("href")).toBe("/settings?tab=integrations");
   }, 20_000);
+
+  it("xóa một email qua menu thao tác (hỏi xác nhận), xóa nhiều email đã chọn; Người xem không thấy nút xóa", async () => {
+    renderWithProviders(<InboxPage />);
+    const table = await screen.findByRole("table", { name: "Danh sách email chứng từ" }, T);
+    const subject = "Pre-alert MAWB 618-44021375 / NRT-HAN – revised CI & PL";
+    // Quyền xóa theo phiên đăng nhập (tải bất đồng bộ) – có ô chọn dòng là đã có quyền.
+    await within(table).findAllByRole("checkbox", undefined, T);
+    await userEvent.click(within(rowOf(table, /Pre-alert MAWB/)).getByRole("button", { name: `Thao tác khác – ${subject}` }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^Xóa/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Xóa email?" }, T);
+    expect(within(dialog).getByText(subject)).toBeTruthy();
+    await expectNoA11yViolations(dialog);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Xóa" }));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Mới (3)" })).toBeTruthy(), T);
+    expect(getDb().inboxMessages.some((m) => m.subject === subject)).toBe(false);
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /Chọn dòng Shipping documents for PO/ }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Chọn dòng Proforma invoice/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Xóa 2 email" }));
+    const many = await screen.findByRole("dialog", { name: "Xóa 2 email?" }, T);
+    await userEvent.click(within(many).getByRole("button", { name: "Xóa" }));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Mới (1)" })).toBeTruthy(), T);
+  }, 30_000);
+
+  it("Người xem: không có ô chọn và thao tác xóa", async () => {
+    actAsRole("VIEWER");
+    renderWithProviders(<InboxPage />);
+    const table = await screen.findByRole("table", { name: "Danh sách email chứng từ" }, T);
+    await screen.findByText(/vai trò Người xem/, undefined, T);
+    expect(within(table).queryAllByRole("checkbox")).toHaveLength(0);
+    await userEvent.click(within(rowOf(table, /Pre-alert MAWB/)).getByRole("button", { name: /^Thao tác khác/ }));
+    await screen.findByRole("menuitem", { name: /Xem chi tiết/ });
+    expect(screen.queryByRole("menuitem", { name: /^Xóa/ })).toBeNull();
+  }, 20_000);
 });

@@ -38,12 +38,21 @@ export const CompanyLookupSchema = z.discriminatedUnion("found", [
 ]);
 export type CompanyLookup = z.infer<typeof CompanyLookupSchema>;
 
-export const SessionSchema = z.object({ user: MemberSchema, org: OrganizationSchema });
+export const SessionSchema = z.object({
+  user: MemberSchema,
+  org: OrganizationSchema,
+  /** Tài khoản do quản trị tạo hộ bằng mật khẩu tạm – phải đổi mật khẩu trước khi dùng (API khác trả PASSWORD_CHANGE_REQUIRED). */
+  mustChangePassword: z.boolean().optional(),
+});
 export type Session = z.infer<typeof SessionSchema>;
 
 export const VerifyEmailInputSchema = z.object({ token: z.string().min(16) });
 export const ForgotPasswordInputSchema = z.object({ email: EmailSchema });
 export const ResetPasswordInputSchema = z.object({ token: z.string().min(16), password: PasswordSchema });
+export const ChangePasswordInputSchema = z
+  .object({ currentPassword: z.string().min(1, "Nhập mật khẩu hiện tại"), newPassword: PasswordSchema })
+  .refine((v) => v.newPassword !== v.currentPassword, { path: ["newPassword"], message: "Mật khẩu mới phải khác mật khẩu hiện tại" });
+export type ChangePasswordInput = z.infer<typeof ChangePasswordInputSchema>;
 export const AcceptInviteInputSchema = z.object({ token: z.string().min(16), name: z.string().trim().min(2, "Nhập họ tên"), password: PasswordSchema });
 export type AcceptInviteInput = z.infer<typeof AcceptInviteInputSchema>;
 

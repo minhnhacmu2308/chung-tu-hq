@@ -7,6 +7,6 @@ import { fromResult, parseBody, route } from "@/lib/server/route";
 /** Thực hiện một nghiệp vụ Hải quan trên tờ khai nhánh `branch` (mặc định 1) (IDB, IDC, IDD, IDA01, IDE, AMA…, HYS, CONT, PORT_FEE; tra cứu IID/IEX trả lời ngay). */
 export const POST = route(async (req, params) => {
   const { ctx } = await requireSession();
-  const { operation, branch } = await parseBody(req, PerformOperationInputSchema);
-  return fromResult(await performOperation(getContainer().customs, ctx, params.id!, operation, branch));
+  const { operation, branch, hysWaived } = await parseBody(req, PerformOperationInputSchema);
+  return fromResult(await performOperation(getContainer().customs, ctx, params.id!, operation, branch, { hysWaived: hysWaived === true }));
 });

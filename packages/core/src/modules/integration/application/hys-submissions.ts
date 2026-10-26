@@ -68,6 +68,14 @@ export function lotEditableOf(snap: Pick<DeclarationSnapshot, "status"> | null, 
   });
 }
 
+/** Gợi ý HYS còn thiếu của tờ khai: bộ đã có (hoặc 1.63 nhập tay đủ cặp mã + số) thì không gợi ý. Dùng chung tổng quan và guard khai IDA/EDA. */
+export function pendingHysSuggestions(snap: Pick<DeclarationSnapshot, "payload">, rows: Pick<HysSubmissionRow, "procedureCode" | "status">[]): HysOverview["suggestions"] {
+  const values = hysValuesOf(snap);
+  const cells = Object.keys(values).filter((k) => /^CON_C\d+$/.test(k)).length;
+  const satisfied = satisfiedHysCodes(values as AttachmentValues, rows.filter((x) => x.procedureCode !== null).map((x) => ({ procedureCode: x.procedureCode!, status: x.status })));
+  return suggestHys({ kind: snap.payload.kind, values, containerCount: Math.max(snap.payload.containers.length, cells), satisfied });
+}
+
 const validProcedure = (code: string): boolean => code in HYS_PROCEDURE_CODES;
 
 export async function getHysOverview(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<HysOverview>> {
@@ -83,10 +91,7 @@ export async function getHysOverview(deps: CustomsDeps, ctx: Ctx, dossierId: str
   const supplementHint = results.some((x) => stageOf(x) === "DECLARED" && (x.channel === "YELLOW" || x.channel === "RED"));
   let suggestions: HysOverview["suggestions"] = [];
   if (snap) {
-    const values = hysValuesOf(snap);
-    const cells = Object.keys(values).filter((k) => /^CON_C\d+$/.test(k)).length;
-    const satisfied = satisfiedHysCodes(values as AttachmentValues, rows.filter((x) => x.procedureCode !== null).map((x) => ({ procedureCode: x.procedureCode!, status: x.status })));
-    suggestions = suggestHys({ kind: snap.payload.kind, values, containerCount: Math.max(snap.payload.containers.length, cells), satisfied });
+    suggestions = pendingHysSuggestions(snap, rows);
   }
   return ok({ submissions, suggestions, lotEditable, supplementHint, defaults: { ...officeDefaults(snap), internalRef: dossier.code.slice(0, 20) } });
 }

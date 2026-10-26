@@ -10,6 +10,7 @@ import { sheetSnapshot } from "../domain/branches.js";
 import { stageOf } from "../domain/state-machine.js";
 import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, outboxKey, pinOf, pinOfOutbox, sheetCountError, sheetOf } from "./branch-send.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
+import { hysGuard } from "./hys-guard.js";
 import { performOperation } from "./perform-operation.js";
 import { resultsSentError } from "./sent-sheets.js";
 
@@ -26,7 +27,7 @@ async function reenqueueStuckOutbox(deps: CustomsDeps, ctx: Ctx, dossierId: stri
   }
 }
 
-export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: string, certificateId: string): Promise<Result<{ outboxId: string }>> {
+export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: string, certificateId: string, opts?: { hysWaived?: boolean }): Promise<Result<{ outboxId: string }>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
@@ -75,13 +76,16 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
       if (changed) return err(changed);
       const target = all.filter((r) => r.branch <= of).map((r) => ({ branch: r.branch, op: contentOpFor(stageOf(r), snap.payload.kind) })).find((t) => t.op);
       if (target?.op) {
-        const sent = await performOperation(deps, ctx, dossierId, target.op, target.branch);
+        const sent = await performOperation(deps, ctx, dossierId, target.op, target.branch, opts);
         return sent.ok ? ok({ outboxId: "" }) : sent;
       }
     }
-    const sent = await performOperation(deps, ctx, dossierId, op);
+    const sent = await performOperation(deps, ctx, dossierId, op, 1, opts);
     return sent.ok ? ok({ outboxId: "" }) : sent;
   }
+  // Nhắc khai HYS trước IDA/EDA: sau mọi guard khác, trước khi tạo outbox (lần gửi lại qua performOperation tự guard).
+  const hys = await hysGuard(deps, ctx, dossierId, snap, opts?.hysWaived === true);
+  if (!hys.ok) return hys;
   const builds = sheets.map(buildSheet);
   const failed = builds.find((b) => !b.ok);
   if (failed && !failed.ok) return failed;

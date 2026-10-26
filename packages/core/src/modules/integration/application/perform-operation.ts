@@ -16,6 +16,7 @@ import { buildAmaRequest } from "../domain/post-amendment.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { availabilityInput, hasBlockingPending, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
+import { hysGuard } from "./hys-guard.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { resultsSentError } from "./sent-sheets.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
@@ -24,7 +25,7 @@ import { buildSheet, contentKey, declareBlockError, enqueueBranchPreDeclare, gap
 /** Người gọi không cần vai trò (worker nối tiếp chạy không có phiên người dùng). */
 export type ActorCtx = Pick<Ctx, "orgId" | "userId">;
 /** `chain`: ghi vào payload outbox để worker nối tiếp tờ kế tiếp sau khi gửi xong (processOutbox.chainNextBranch). Vắng = hành vi cũ. */
-export type OperationOpts = { chain?: "declare" | "recall"; /** Outbox nguồn của chuỗi nối tiếp: khóa idempotency tất định → worker chạy lại cùng outbox không tạo bản thứ hai. */ chainFrom?: string };
+export type OperationOpts = { chain?: "declare" | "recall"; /** Outbox nguồn của chuỗi nối tiếp: khóa idempotency tất định → worker chạy lại cùng outbox không tạo bản thứ hai. */ chainFrom?: string; /** Người khai xác nhận vẫn khai IDA/EDA dù còn gợi ý HYS chưa thỏa (ghi NOTE). Chuỗi worker (chainFrom) không bị hỏi. */ hysWaived?: boolean };
 
 export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1, opts?: OperationOpts): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -106,6 +107,10 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
     if (snap.unconfirmedHs > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs }));
     const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
     if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
+    if (baseOp(op) === "IDA" && branch === 1 && !opts?.chainFrom) {
+      const hys = await hysGuard(deps, ctx, dossierId, snap, opts?.hysWaived === true);
+      if (!hys.ok) return hys;
+    }
     if (baseOp(op) === "IDA" && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
       return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
     if (of > 1) {

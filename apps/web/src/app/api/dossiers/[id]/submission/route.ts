@@ -12,6 +12,6 @@ export const GET = route(async (_req, params) => {
 /** Truyền tờ khai: outbox IDA/EDA + job customs-send (ADR 0005). */
 export const POST = route(async (req, params) => {
   const { ctx } = await requireSession();
-  const { certificateId } = await parseBody(req, SubmitDeclarationInputSchema);
-  return fromResult(await submitDeclaration(getContainer().customs, ctx, params.id!, certificateId));
+  const { certificateId, hysWaived } = await parseBody(req, SubmitDeclarationInputSchema);
+  return fromResult(await submitDeclaration(getContainer().customs, ctx, params.id!, certificateId, { hysWaived: hysWaived === true }));
 });

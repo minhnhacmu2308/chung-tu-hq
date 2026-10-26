@@ -47,6 +47,12 @@ export async function processHysOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Out
   });
   if (!loaded) return failOutbox("Không tìm thấy bộ HYS (đã xóa?) – khai bộ HYS mới");
   const { sub, files } = loaded;
+  const code = sub.procedureCode ?? "";
+  /** Báo người phụ trách hồ sơ (bị từ chối / không gửi được) – như nghiệp vụ tờ khai bị từ chối (process-outbox). */
+  const notifyOwner = async (title: string, body: string) => {
+    const dossier = await deps.dossiers.get(ob.orgId, ob.dossierId);
+    await deps.notify?.notify(ob.orgId, { dossierOwnerOf: ob.dossierId }, { title: `${dossier?.code ?? ob.dossierId}: ${title}`, body: body.slice(0, 300), href: `/dossiers/${ob.dossierId}?step=submit` });
+  };
 
   // Đã ACCEPTED (job chạy lại sau crash / sau khi đã ghi kết quả): không gửi lại; điền 1.63 nếu lần trước chưa kịp.
   if (sub.status === "ACCEPTED") {
@@ -65,6 +71,7 @@ export async function processHysOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Out
       await r.hys.update(ob.orgId, id, { status: "SEND_FAILED", reject: toReject(errors), updatedAt: now() });
     });
     await publish();
+    await notifyOwner(`HYS ${code} không gửi được`, fmtErrors(errors));
     return ok({ status: "FAILED", next: null });
   };
   if (ob.attempts >= MAX_ATTEMPTS) {
@@ -72,7 +79,6 @@ export async function processHysOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Out
     return sendFailed([{ code: "E-SEND", message: reason }], `Không gửi được HYS sau ${ob.attempts} lần thử: ${reason} – bấm Gửi lại`);
   }
 
-  const code = sub.procedureCode ?? "";
   // Thông điệp OUT ghi đúng một lần (job chạy lại sau crash không nhân đôi); không ghi nội dung file.
   if (ob.attempts === 0) {
     await deps.uow.asOrg(ctx, async (r) => {
@@ -111,6 +117,10 @@ export async function processHysOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Out
     });
     throw e;
   }
+  // Bộ không qua được kiểm schema tại chỗ (E-SCHEMA – chưa gọi cổng): lỗi dữ liệu của bộ, không phải Hải quan từ chối, không tính chi phí.
+  if (res.errors?.length && res.errors.every((e) => e.code === "E-SCHEMA")) {
+    return sendFailed(res.errors, `HYS ${code} chưa gửi Hải quan – dữ liệu bộ không hợp lệ: ${fmtErrors(res.errors)}`);
+  }
   // Chi phí Customs Hub: cổng đã xử lý thông điệp (kể cả từ chối); khóa = idempotencyKey (chạy lại không tính thêm).
   await meterSafely(deps.usage, { orgId: ob.orgId, dossierId: ob.dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_SEND", operation: "HYS", quantity: 1, dedupeKey: `customs:${ob.idempotencyKey}`, meta: { outboxId: ob.id } });
 
@@ -122,6 +132,7 @@ export async function processHysOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Out
       await r.hys.update(ob.orgId, id, { status: "REJECTED", reject: toReject(res.errors!), updatedAt: now() });
     });
     await publish();
+    await notifyOwner(`HYS ${code} bị từ chối`, fmtErrors(res.errors));
     return ok({ status: "SENT", next: null });
   }
 

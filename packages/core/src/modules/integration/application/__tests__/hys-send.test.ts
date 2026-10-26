@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock } from "../../../../shared/clock.js";
+import { RecordingNotifier } from "../../../../shared/notifier.js";
 import type { ServiceUsage } from "../../../../shared/usage.js";
 import { createHysSubmission, updateHysSubmission } from "../hys-submissions.js";
 import { processOutbox } from "../process-outbox.js";
@@ -11,12 +12,15 @@ import { D, declarant, makeHarness, ORG, other, seed, viewer, type Harness } fro
 let h: Harness;
 let gateway: FakeCustomsGateway;
 let usage: ServiceUsage[];
+let notifier: RecordingNotifier;
 beforeEach(() => {
   h = makeHarness();
   gateway = new FakeCustomsGateway({ flakyHys: false, clock: fixedClock("2026-10-14T03:00:00.000Z") });
   h.deps.gateway = gateway;
   usage = [];
   h.deps.usage = { record: async (e) => { usage.push(e); } };
+  notifier = new RecordingNotifier();
+  h.deps.notify = notifier;
 });
 
 /** Bộ A02 có 1 file chứng từ hồ sơ (inv.pdf). */
@@ -146,6 +150,26 @@ describe("gửi bộ HYS", () => {
     expect(lastOutbox().idempotencyKey).toBe(`hys:${id}:n2`);
   });
 
+  it("bị từ chối → báo người phụ trách hồ sơ, dẫn tới bước Khai báo", async () => {
+    h.deps.gateway = new FakeCustomsGateway({ flakyHys: false, rejectHys: true });
+    const id = await draft();
+    await send(id);
+    await run(lastOutbox().id);
+    expect(notifier.sent).toEqual([{ orgId: ORG, audience: { dossierOwnerOf: D }, draft: { title: expect.stringMatching(/HYS A02 bị từ chối/), body: expect.stringMatching(/E-HYS-TSB/), href: `/dossiers/${D}?step=submit` } }]);
+  });
+
+  it("lỗi kiểm schema tại chỗ (E-SCHEMA, chưa gọi cổng) → SEND_FAILED, ghi là lỗi dữ liệu, không tính chi phí", async () => {
+    const id = await draft();
+    await send(id);
+    h.deps.gateway = { ...gateway, attachDocuments: async () => ({ errors: [{ code: "E-SCHEMA", field: "tK_CH", message: "tK_CH: Required", solution: "Sửa" }] }) } as unknown as FakeCustomsGateway;
+    expect(await run(lastOutbox().id)).toEqual({ ok: true, value: { status: "FAILED", next: null } });
+    expect(sub(id)).toMatchObject({ status: "SEND_FAILED", reject: [{ code: "E-SCHEMA", message: "tK_CH: Required" }] });
+    expect(h.uow.data.messages.at(-1)!.summary).toMatch(/chưa gửi Hải quan/);
+    expect(h.uow.data.messages.at(-1)!.summary).not.toMatch(/từ chối/);
+    expect(usage).toHaveLength(0);
+    expect(notifier.sent).toHaveLength(1);
+  });
+
   it("file mất trong kho → SEND_FAILED nêu tên file, outbox FAILED, không gọi cổng", async () => {
     const id = await draft();
     await send(id);
@@ -168,6 +192,7 @@ describe("gửi bộ HYS", () => {
     expect(await run(ob.id)).toEqual({ ok: true, value: { status: "FAILED", next: null } });
     expect(sub(id)).toMatchObject({ status: "SEND_FAILED", reject: [{ code: "E-SEND", message: "FPT 503" }] });
     expect(usage).toHaveLength(0);
+    expect(notifier.sent).toEqual([{ orgId: ORG, audience: { dossierOwnerOf: D }, draft: { title: expect.stringMatching(/HYS A02 không gửi được/), body: expect.stringMatching(/FPT 503/), href: `/dossiers/${D}?step=submit` } }]);
   });
 
   it("lỗi vĩnh viễn của cổng (DomainError) → SEND_FAILED, không thử lại", async () => {

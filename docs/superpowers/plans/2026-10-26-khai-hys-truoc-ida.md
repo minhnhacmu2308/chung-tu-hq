@@ -119,7 +119,7 @@ expect([...satisfiedHysCodes({ TK_EA1: "A02", TK_EB1: "300000000001", TK_EA2: "A
 ### Task 3: Bảng, migration, repo `hysSubmissions`
 
 **Files:**
-- Modify: `packages/core/src/db/schema/integration.ts` (hai bảng, theo mẫu `postAmendments`; `date` từ `drizzle-orm/pg-core` mode string; FK dossiers cascade; check status; check nguồn file `(document_id is not null) or (storage_key is not null)`; unique (`dossier_id`, `seq`); index (`org_id`, `dossier_id`))
+- Modify: `packages/core/src/db/schema/integration.ts` (hai bảng, theo mẫu `postAmendments`; `date` từ `drizzle-orm/pg-core` mode string; FK dossiers cascade; check status; `storage_key` not null cho mọi file (file chọn từ hồ sơ chép khóa của `documents`); unique (`dossier_id`, `seq`); index (`org_id`, `dossier_id`))
 - Create: `packages/core/drizzle/0027_hys_submissions.sql` (sinh bằng `pnpm --filter @kb/core db:generate`, đổi tên, sửa `drizzle/meta/_journal.json` – `when` lớn hơn 1792945586781)
 - Modify: `packages/core/src/modules/integration/application/customs-ports.ts` (`HysSubmissionRow`, `HysFileRow`, `CustomsRepos.hys`), `infrastructure/drizzle-customs-uow.ts`, `application/test/in-memory-customs-uow.ts` (`data.hys`, `data.hysFiles`)
 - Test: `packages/core/src/modules/integration/infrastructure/drizzle-customs-uow.int.test.ts`
@@ -136,7 +136,6 @@ CustomsRepos.hys: {
   insertFile(row: HysFileRow): Promise<void>; deleteFile(orgId, fileId): Promise<void>; deleteFiles(orgId, submissionId): Promise<void>;
 }
 ```
-(`storageKey` của file chọn từ hồ sơ = khóa của `documents`, nên cột `storage_key` để not null; check nguồn thành `document_id is null or storage_key is not null` – đơn giản: `storage_key` luôn có.)
 
 - [ ] **Step 1:** Int test (Testcontainers, theo các test cùng file): insert/list/update/delete bộ + file; tổ chức khác không thấy (RLS); unique `seq` trùng → lỗi; xóa bộ cascade file.
 - [ ] **Step 2:** `pnpm --filter @kb/core exec vitest run src/modules/integration/infrastructure/drizzle-customs-uow.int.test.ts` → FAIL.

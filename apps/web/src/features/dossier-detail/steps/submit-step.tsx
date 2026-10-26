@@ -6,7 +6,7 @@ import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Field, RadioGroup,
   fill, Grid, IconTile, pickMessages, Select, Spinner, Stack, StatusBadge, toast, toastPromise, useMessages, useUiLocale, type Tone, type UiLocale,
 } from "@kb/ui";
-import { baseOp, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage } from "@kb/contracts";
+import { baseOp, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
@@ -18,7 +18,9 @@ import {
   type BranchSubmission, type PipelineRow, type PipelineStatus, type SubmissionView,
 } from "@/api/customs";
 import { declarationKeys, getDeclarationView } from "@/api/declaration";
+import { getHysOverview, hysKeys } from "@/api/hys";
 import { getPostAmendmentView, postAmendmentKeys } from "@/api/post-amendment";
+import { ApiError } from "@/lib/api-error";
 import { fromMinor, toMinor } from "@/lib/decimal";
 import { formatDate, formatDateTime, formatRelative, formatTime, formatVnd } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
@@ -32,6 +34,9 @@ import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
+import { HysCard } from "./hys/hys-card";
+import { HysSuggestDialog } from "./hys/hys-suggest-dialog";
+import { HYS_MESSAGES } from "./hys/hys.messages";
 import { anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
@@ -398,13 +403,19 @@ function sheetEstimateOf(decl: Declaration | null | undefined, b: DeclBranch | u
   };
 }
 
-/** Nghiệp vụ đang bấm: mã + tờ (nút quay của đúng thẻ). */
-type Busy = { op: CustomsOperation; branch: number };
+/** Nghiệp vụ đang bấm: mã + tờ (nút quay của đúng thẻ). `hysWaived`: người khai đã xác nhận khai IDA/EDA không cần HYS. */
+type Busy = { op: CustomsOperation; branch: number; hysWaived?: boolean };
+
+/** Backend/mock chặn IDA/EDA vì còn gợi ý HYS chưa khai (spec §3.3). */
+const isHysSuggested = (e: unknown) => e instanceof ApiError && e.reason === "HYS_SUGGESTED";
+/** Hộp xác nhận HYS đang mở: nghiệp vụ bị chặn + cách gọi lại với hysWaived. */
+type HysPrompt = { op: string; proceed: () => void };
 
 export function SubmitStep({ dossier, goTo }: StepProps) {
   const t = useMessages(SUBMIT_MESSAGES);
   const sh = useMessages(SHEET_MESSAGES);
   const stages = useMessages(STAGE_MESSAGES);
+  const hysT = useMessages(HYS_MESSAGES);
   const locale = useUiLocale();
   const declQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
   const qc = useQueryClient();
@@ -413,6 +424,14 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [declareAllOpen, setDeclareAllOpen] = useState(false);
   const [recallScope, setRecallScope] = useState<RecallScope>("all");
+  const [hysPrompt, setHysPrompt] = useState<HysPrompt | null>(null);
+  const [hysStart, setHysStart] = useState<HysProcedureCode | null>(null);
+  const hysQ = useQuery({ queryKey: hysKeys.overview(dossier.id), queryFn: () => getHysOverview(dossier.id) });
+  const askHys = (p: HysPrompt) => {
+    // Gợi ý mới nhất (người khai có thể vừa sửa tờ khai) cho danh sách trong hộp xác nhận.
+    void qc.invalidateQueries({ queryKey: hysKeys.overview(dossier.id) });
+    setHysPrompt(p);
+  };
   // Gọi về do người dùng bấm trong phiên này (lô nhiều tờ): khi tờ khai được mở lại thì tự về Review kèm thông báo.
   const [recalled, setRecalled] = useState<RecalledNotice | null>(null);
   // Tờ khai đã mở sẵn (DRAFT / bước Review) lúc bấm gọi về: người dùng đang sửa rồi → KHÔNG tự chuyển bước (không có thời điểm "vừa mở lại" để bắt).
@@ -455,28 +474,37 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   };
   const submit = useMutation({
     // Một toast đi suốt thao tác: "đang ký số…" → "đã gửi" hoặc lỗi.
-    mutationFn: () =>
-      toastPromise(submitDeclaration(dossier.id, selectedId), {
+    mutationFn: (opts: { hysWaived?: boolean } | void) =>
+      toastPromise(opts?.hysWaived ? submitDeclaration(dossier.id, selectedId, { hysWaived: true }) : submitDeclaration(dossier.id, selectedId), {
         loading: { title: t.submitLoading },
         success: { title: t.submitSuccess, description: t.submitSuccessDesc },
-        error: (e) => ({ title: errorMessage(e, locale) }),
+        error: (e) => (isHysSuggested(e) ? { tone: "warning", title: hysT.promptToast } : { title: errorMessage(e, locale) }),
       }),
-    onSuccess: invalidate,
-    // Lỗi đã hiện trong toast của toastPromise (cùng một toast với "đang ký số…").
-    onError: () => undefined,
+    onSuccess: () => {
+      setHysPrompt(null);
+      invalidate();
+    },
+    // Lỗi đã hiện trong toast của toastPromise (cùng một toast với "đang ký số…"); còn gợi ý HYS → hộp xác nhận.
+    onError: (e) => {
+      if (isHysSuggested(e)) askHys({ op: dossier.direction === "NK" ? "IDA" : "EDA", proceed: () => submit.mutate({ hysWaived: true }) });
+    },
   });
   const perform = useMutation({
     mutationFn: (b: Busy) => {
       setBusy(b);
-      return performOperation(dossier.id, b.op, b.branch);
+      return b.hysWaived ? performOperation(dossier.id, b.op, b.branch, { hysWaived: true }) : performOperation(dossier.id, b.op, b.branch);
     },
     onSuccess: (r, b) => {
       setConfirm(null);
+      setHysPrompt(null);
       if (isRecall(b.op) && !AMA_OPS.has(b.op) && !openAtClick.current) setRecalled({ scope: "sheets", sheets: [b.branch] });
       toast({ tone: r.sent ? "info" : "success", title: r.message });
       invalidate();
     },
-    onError: toastMutationError(t.performFailed),
+    onError: (e, b) => {
+      if (isHysSuggested(e)) askHys({ op: b.op, proceed: () => perform.mutate({ ...b, hysWaived: true }) });
+      else toastMutationError(t.performFailed)(e);
+    },
     onSettled: () => setBusy(null),
   });
   const recallAll = useMutation({
@@ -608,8 +636,22 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     </>
   );
   const declareAllState = canDeclareAll(sheets);
+  const kind = dossier.direction === "NK" ? "IDA" : "EDA";
+  const hysCard = s.declarationStatus !== "NOT_CREATED" ? <HysCard dossierId={dossier.id} kind={kind} startCode={hysStart} onStartHandled={() => setHysStart(null)} /> : null;
   const confirmDialog = (
     <>
+      <HysSuggestDialog
+        open={hysPrompt !== null}
+        onOpenChange={(o) => !o && setHysPrompt(null)}
+        op={hysPrompt?.op ?? kind}
+        suggestions={hysQ.data?.suggestions ?? []}
+        pending={submit.isPending || perform.isPending}
+        onDeclareHys={(code) => {
+          setHysPrompt(null);
+          setHysStart(code);
+        }}
+        onProceed={() => hysPrompt?.proceed()}
+      />
       <ConfirmDeclareAllDialog
         open={declareAllOpen}
         count={declareAllState.pending}
@@ -633,13 +675,13 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
 
   // Lô nhiều tờ (> 50 dòng): thẻ chung (ký số & truyền lần đầu, tổng thông quan k/N) + mỗi tờ một thẻ có vòng đời riêng.
   if (multi) {
-    const kind = dossier.direction === "NK" ? "IDA" : "EDA";
     const clearedResend = clearedWhileResending(sheets);
     const progress = recallProgress(sheets);
     return (
       <Stack gap="lg">
         {alerts}
         {progress && <Alert tone="info">{fill(sh.recallProgress, progress)}</Alert>}
+        {hysCard}
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-2">
@@ -731,6 +773,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         </Alert>
       )}
 
+      {hysCard}
+
       <Grid cols={{ base: 1, lg: 3 }} gap="lg">
         <Card className="cq-lg:col-span-2">
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
@@ -774,7 +818,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         <ResultCard s={s} />
       </Grid>
 
-      {s.customsInfo && <CustomsInfoPanel kind={dossier.direction === "NK" ? "IDA" : "EDA"} info={s.customsInfo} estimate={estimateOf(declQ.data?.declaration)} />}
+      {s.customsInfo && <CustomsInfoPanel kind={kind} info={s.customsInfo} estimate={estimateOf(declQ.data?.declaration)} />}
 
       <MessageLog messages={s.messages} />
 

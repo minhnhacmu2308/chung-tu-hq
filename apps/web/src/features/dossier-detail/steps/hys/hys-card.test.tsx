@@ -1,0 +1,128 @@
+// @vitest-environment jsdom
+// Thẻ HYS (gợi ý A02 + nút "Khai HYS"), form HYS (vượt 2 MB → Progress danger, khóa nút Gửi), hộp xác nhận khai IDA khi còn gợi ý; a11y; 3 ngôn ngữ.
+import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { HysOverview, HysSubmissionView } from "@kb/contracts";
+import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
+import { HysCard } from "./hys-card";
+import { HysForm } from "./hys-form";
+import { HysSuggestDialog } from "./hys-suggest-dialog";
+
+const api = vi.hoisted(() => ({ overview: null as HysOverview | null, create: vi.fn() }));
+vi.mock("@/api/hys", async (orig) => {
+  const real = await orig<typeof import("@/api/hys")>();
+  return { ...real, getHysOverview: async () => api.overview!, createHys: (...a: unknown[]) => api.create(...a) };
+});
+vi.mock("@/api/dossiers", async (orig) => {
+  const real = await orig<typeof import("@/api/dossiers")>();
+  return { ...real, listDocuments: async () => [] };
+});
+
+const T = { timeout: 5000 };
+
+const submission = (over: Partial<HysSubmissionView> = {}): HysSubmissionView => ({
+  id: "hys_1", seq: 1, procedureCode: "A02", customsOffice: "02CI", processingUnit: "00", phone: "", internalRef: "HS-0001", note: null,
+  purpose: null, status: "DRAFT", attempt: 0, receiptNo: null, registeredOn: null, reject: null, fill: null, files: [], issues: [], sentAt: null,
+  ...over,
+});
+
+const overview = (over: Partial<HysOverview> = {}): HysOverview => ({
+  submissions: [],
+  suggestions: [{ code: "A02", rule: "G1", fieldNo: "1.35" }],
+  lotEditable: true,
+  supplementHint: false,
+  defaults: { customsOffice: "02CI", processingUnit: "00", internalRef: "HS-0001" },
+  ...over,
+});
+
+beforeEach(() => {
+  api.overview = overview();
+  api.create.mockReset().mockResolvedValue(submission());
+});
+
+describe("HysCard", () => {
+  it("hiện gợi ý A02 kèm lý do và nút 'Khai HYS'; bấm → tạo bộ với mã A02 rồi mở form; a11y", async () => {
+    const { container } = renderWithProviders(<HysCard dossierId="dos_001" kind="IDA" />);
+    const btn = await screen.findByRole("button", { name: "Khai HYS A02" }, T);
+    expect(screen.getByText("Danh sách container chất lên tàu")).toBeTruthy();
+    expect(screen.getByText("Hàng đi container – ô 1.35")).toBeTruthy();
+    await expectNoA11yViolations(container);
+    await userEvent.click(btn);
+    expect(api.create).toHaveBeenCalledWith("dos_001", { procedureCode: "A02" });
+    expect(await screen.findByRole("dialog", { name: "Bộ HYS 1" }, T)).toBeTruthy();
+  }, 20_000);
+
+  it("bộ đã nhận: số tiếp nhận, kết quả điền 1.63 kèm '(điền sau khi duyệt)'; bộ bị từ chối nêu mã lỗi", async () => {
+    api.overview = overview({
+      suggestions: [],
+      submissions: [
+        submission({ status: "ACCEPTED", receiptNo: "123456789012", registeredOn: "2026-10-26", fill: { outcome: "FILLED", slot: 1, afterApproval: true } }),
+        submission({ id: "hys_2", seq: 2, status: "REJECTED", reject: [{ code: "E001", message: "Thiếu file", solution: "Bổ sung file" }] }),
+      ],
+    });
+    const { container } = renderWithProviders(<HysCard dossierId="dos_001" kind="IDA" />);
+    expect(await screen.findByText(/Số tiếp nhận 123456789012/, {}, T)).toBeTruthy();
+    expect(screen.getByText(/Đã điền vào ô 1\.63, cặp 1/).textContent).toContain("(điền sau khi duyệt)");
+    expect(screen.getByText("Hải quan từ chối bộ HYS 2")).toBeTruthy();
+    expect(screen.getByText("E001")).toBeTruthy();
+    await expectNoA11yViolations(container);
+  }, 20_000);
+
+  it("en / zh: tiêu đề, tên thủ tục và lý do gợi ý đã dịch", async () => {
+    const en = renderWithProviders(<HysCard dossierId="dos_001" kind="EDA" />, "en");
+    expect(await screen.findByText("List of containers loaded on the vessel", {}, T)).toBeTruthy();
+    expect(screen.getByText("Attachment dossier (HYS)")).toBeTruthy();
+    expect(screen.getByText("Containerised cargo - box 1.35")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "File HYS A02" })).toBeTruthy();
+    en.unmount();
+    renderWithProviders(<HysCard dossierId="dos_001" kind="IDA" />, "zh");
+    expect(await screen.findByText("装船集装箱清单", {}, T)).toBeTruthy();
+    expect(screen.getByText("电子附件档案（HYS）")).toBeTruthy();
+  }, 20_000);
+});
+
+describe("HysForm", () => {
+  it("tổng file vượt 2 MB → Progress tone danger, báo lỗi dung lượng, nút 'Gửi HYS' bị khóa; a11y", async () => {
+    const big = submission({
+      files: [{ id: "f1", documentId: null, fileName: "container-list.xlsx", mime: "application/vnd.ms-excel", sizeBytes: 3 * 1024 * 1024, source: "UPLOAD" }],
+    });
+    renderWithProviders(<HysForm dossierId="dos_001" kind="IDA" submission={big} documents={[]} open onOpenChange={vi.fn()} />);
+    const dialog = await screen.findByRole("dialog", { name: "Bộ HYS 1" }, T);
+    const bar = within(dialog).getByRole("progressbar");
+    expect(bar.querySelector(".bg-danger")).toBeTruthy();
+    expect(within(dialog).getByText(/vượt giới hạn/)).toBeTruthy();
+    expect((within(dialog).getByRole("button", { name: "Gửi HYS" }) as HTMLButtonElement).disabled).toBe(true);
+    await expectNoA11yViolations(dialog);
+  }, 20_000);
+
+  it("bộ hợp lệ dưới 2 MB → Progress tone primary, nút Gửi bấm được", async () => {
+    const ok = submission({ files: [{ id: "f1", documentId: null, fileName: "list.pdf", mime: "application/pdf", sizeBytes: 100_000, source: "UPLOAD" }] });
+    renderWithProviders(<HysForm dossierId="dos_001" kind="IDA" submission={ok} documents={[]} open onOpenChange={vi.fn()} />);
+    const dialog = await screen.findByRole("dialog", { name: "Bộ HYS 1" }, T);
+    expect(within(dialog).getByRole("progressbar").querySelector(".bg-primary")).toBeTruthy();
+    expect((within(dialog).getByRole("button", { name: "Gửi HYS" }) as HTMLButtonElement).disabled).toBe(false);
+  }, 20_000);
+});
+
+describe("HysSuggestDialog", () => {
+  it("hai nút gọi đúng callback: 'Khai HYS trước' với mã gợi ý, 'Vẫn khai' → onProceed; a11y", async () => {
+    const onDeclareHys = vi.fn();
+    const onProceed = vi.fn();
+    renderWithProviders(
+      <HysSuggestDialog open onOpenChange={vi.fn()} op="IDA" suggestions={[{ code: "A01", rule: "G3", fieldNo: "1.45" }]} onDeclareHys={onDeclareHys} onProceed={onProceed} />,
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Tờ khai này nên có hồ sơ đính kèm HYS" }, T);
+    expect(within(dialog).getByText("Tờ khai trị giá đính kèm")).toBeTruthy();
+    await expectNoA11yViolations(dialog);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Khai HYS trước" }));
+    expect(onDeclareHys).toHaveBeenCalledWith("A01");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Vẫn khai, không cần HYS" }));
+    expect(onProceed).toHaveBeenCalledTimes(1);
+  }, 20_000);
+
+  it("zh: nút đã dịch", async () => {
+    renderWithProviders(<HysSuggestDialog open onOpenChange={vi.fn()} op="EDA" suggestions={[]} onDeclareHys={vi.fn()} onProceed={vi.fn()} />, "zh");
+    expect(await screen.findByRole("button", { name: "继续申报，无需 HYS" }, T)).toBeTruthy();
+  }, 20_000);
+});

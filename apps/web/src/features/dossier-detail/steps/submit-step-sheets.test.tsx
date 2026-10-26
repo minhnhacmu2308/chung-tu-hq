@@ -189,7 +189,7 @@ describe("Bước Khai báo – lô 1 tờ", () => {
     await screen.findByText("Hồ sơ đính kèm (HYS)", {}, T);
     await userEvent.click(screen.getAllByRole("button", { name: /\(IDA\)$/ })[0]!);
     expect(api.perform).toHaveBeenCalledWith("dos_028", "IDA", 1);
-    const dialog = await screen.findByRole("dialog", { name: "Tờ khai này nên có hồ sơ đính kèm HYS" }, T);
+    const dialog = await screen.findByRole("dialog", { name: "Nên khai HYS trước" }, T);
     await expectNoA11yViolations(dialog);
     await userEvent.click(within(dialog).getByRole("button", { name: "Vẫn khai, không cần HYS" }));
     expect(api.perform).toHaveBeenLastCalledWith("dos_028", "IDA", 1, { hysWaived: true });

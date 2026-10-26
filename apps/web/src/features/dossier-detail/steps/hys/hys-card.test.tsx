@@ -137,7 +137,7 @@ describe("HysSuggestDialog", () => {
     renderWithProviders(
       <HysSuggestDialog open onOpenChange={vi.fn()} op="IDA" suggestions={[{ code: "A01", rule: "G3", fieldNo: "1.45" }]} onDeclareHys={onDeclareHys} onProceed={onProceed} />,
     );
-    const dialog = await screen.findByRole("dialog", { name: "Tờ khai này nên có hồ sơ đính kèm HYS" }, T);
+    const dialog = await screen.findByRole("dialog", { name: "Nên khai HYS trước" }, T);
     expect(within(dialog).getByText("Tờ khai trị giá đính kèm")).toBeTruthy();
     await expectNoA11yViolations(dialog);
     await userEvent.click(within(dialog).getByRole("button", { name: "Khai HYS trước" }));

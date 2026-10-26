@@ -1,12 +1,14 @@
 // Back-office của bên vận hành (mock). Nghiệp vụ nằm ở mocks/admin/ops.ts; file này chỉ thêm độ trễ mạng giả + lưu localStorage.
 // Thay thân hàm bằng fetch tới /api/admin/** khi có backend – giữ nguyên chữ ký.
 import type {
+  DraftEmailInput, EmailAudience, SaveEmailSignatureInput, SaveEmailTemplateInput, SendEmailInput, SendTestEmailInput, UpdateMailSettingsInput,
   UpsertExchangeRateInput,
   AdjustOrgQuotaInput, AdminReasonInput, ChangeOrgPlanInput, ChangeStaffRoleInput, CreateOrgInput, ExtendOrgTrialInput, IntegrationId, InviteStaffInput,
   PlanCode, SendAnnouncementInput, SetTemplatePublishedInput, UpdateIntegrationKeyInput, UpdatePlanInput,
 } from "@kb/contracts";
 import { ApiError, mutate, query } from "@/lib/mock-request";
 import * as ops from "@/mocks/admin/ops";
+import * as email from "@/mocks/admin/email-ops";
 
 export const adminKeys = {
   all: ["admin"] as const,
@@ -25,6 +27,11 @@ export const adminKeys = {
   staff: ["admin", "staff"] as const,
   audit: (f: { orgId?: string } = {}) => ["admin", "audit", f] as const,
   announcements: ["admin", "announcements"] as const,
+  emailTemplates: ["admin", "email", "templates"] as const,
+  emailSignatures: ["admin", "email", "signatures"] as const,
+  emailCampaigns: ["admin", "email", "campaigns"] as const,
+  emailCampaign: (id: string) => ["admin", "email", "campaigns", id] as const,
+  mailSettings: ["admin", "email", "settings"] as const,
 };
 
 /**
@@ -87,3 +94,20 @@ export const startAdminMfaSetup = async (): Promise<{ secret: string; otpauthUri
 export const confirmAdminMfaSetup = async (_code: string): Promise<{ recoveryCodes: string[] }> => NO_MFA();
 export const verifyAdminMfa = async (_code: string): Promise<{ recoveryCodesLeft: number }> => NO_MFA();
 export const resetStaffMfa = async (_id: string, _input: AdminReasonInput): Promise<import("@kb/contracts").Staff> => NO_MFA();
+
+/* ---------------- Email ---------------- */
+export const listEmailTemplates = () => query((db) => email.listTemplates(db));
+export const saveEmailTemplate = (id: string | null, input: SaveEmailTemplateInput) => mutate((db) => email.saveTemplate(db, id, input));
+export const deleteEmailTemplate = (id: string) => mutate((db) => email.deleteTemplate(db, id));
+export const listEmailSignatures = () => query((db) => email.listSignatures(db));
+export const saveEmailSignature = (id: string | null, input: SaveEmailSignatureInput) => mutate((db) => email.saveSignature(db, id, input));
+export const deleteEmailSignature = (id: string) => mutate((db) => email.deleteSignature(db, id));
+export const previewEmailAudience = (input: EmailAudience) => query((db) => email.previewAudience(db, input));
+export const sendTestEmail = (input: SendTestEmailInput) => mutate((db) => email.sendTest(db, input));
+export const sendEmail = (input: SendEmailInput) => mutate((db) => email.send(db, input));
+export const listEmailCampaigns = () => query((db) => email.listCampaigns(db));
+export const getEmailCampaign = (id: string) => query((db) => email.getCampaign(db, id));
+export const draftEmailWithAi = (input: DraftEmailInput) => mutate((db) => email.draft(db, input));
+export const getMailSettings = () => query((db) => email.getSettings(db));
+export const updateMailSettings = (input: UpdateMailSettingsInput) => mutate((db) => email.updateSettings(db, input));
+export const testMailSettings = () => mutate((db) => email.testSettings(db));

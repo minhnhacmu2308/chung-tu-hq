@@ -1,4 +1,5 @@
 // Dữ liệu mẫu back-office. Toàn bộ tên công ty, MST, người, email, IP là GIẢ (IP thuộc dải dành cho tài liệu).
+import { seedEmail } from "./email";
 import type { AdminUserSession, PlanCode, Role } from "@kb/contracts";
 import type { AdminDb, StoredOrg, StoredPlan, StoredUser } from "../admin/types";
 import { fromMinor, toMinor } from "@/lib/decimal";
@@ -174,6 +175,7 @@ export function seedAdmin(): { admin: AdminDb } {
         { id: "stf_yen", name: "Lý Hải Yến", email: "yen.ly@khaibao-demo.vn", role: "SUPPORT", status: "INVITED" },
       ],
       demoOrgMeta: { status: "ACTIVE", quotaBonus: 0, createdAt: isoTime(-24 * 130) },
+      email: seedEmail(),
       demoUserMeta: {
         usr_chau: { emailVerified: true, createdAt: isoTime(-24 * 128), sessions: [{ id: "ses_chau_1", device: "Chrome · Windows", ip: "198.51.100.24", lastSeenAt: isoTime(-0.2) }, { id: "ses_chau_2", device: "Safari · iPhone", ip: "198.51.100.77", lastSeenAt: isoTime(-14) }] },
         usr_phong: { emailVerified: true, createdAt: isoTime(-24 * 130), sessions: [{ id: "ses_phong_1", device: "Chrome · macOS", ip: "198.51.100.24", lastSeenAt: isoTime(-30) }] },

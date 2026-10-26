@@ -292,10 +292,16 @@ export const AdminActionSchema = z.enum([
   "ANNOUNCEMENT_SENT",
   "ANNOUNCEMENT_WITHDRAWN",
   "EXCHANGE_RATE_UPDATED",
+  "EMAIL_SENT",
+  "EMAIL_TEMPLATE_SAVED",
+  "EMAIL_TEMPLATE_DELETED",
+  "EMAIL_SIGNATURE_SAVED",
+  "EMAIL_SIGNATURE_DELETED",
+  "MAIL_SETTINGS_UPDATED",
 ]);
 export type AdminAction = z.infer<typeof AdminActionSchema>;
 
-export const AdminTargetTypeSchema = z.enum(["ORG", "USER", "PLAN", "INTEGRATION", "JOB", "SKILL_TEMPLATE", "STAFF", "ANNOUNCEMENT", "EXCHANGE_RATE"]);
+export const AdminTargetTypeSchema = z.enum(["ORG", "USER", "PLAN", "INTEGRATION", "JOB", "SKILL_TEMPLATE", "STAFF", "ANNOUNCEMENT", "EXCHANGE_RATE", "EMAIL"]);
 export type AdminTargetType = z.infer<typeof AdminTargetTypeSchema>;
 
 /** Append-only: không có API sửa/xóa. */

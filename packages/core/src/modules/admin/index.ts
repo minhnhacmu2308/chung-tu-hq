@@ -11,3 +11,8 @@ export { listAnnouncements, sendAnnouncement, withdrawAnnouncement } from "./app
 export { getOverview } from "./application/overview.js";
 export { activeQuotaBonus, vnMonth } from "./domain/period.js";
 export { captureWeeklyRates, listExchangeRates, recordRateFetchFailure, upsertExchangeRate, nextRateRunAt, RATE_JOB_CRON, type RateDeps, type VcbRateSource } from "./application/exchange-rates.js";
+export {
+  listEmailTemplates, saveEmailTemplate, deleteEmailTemplate, listEmailSignatures, saveEmailSignature, deleteEmailSignature, previewEmailAudience,
+  sendTestEmail, sendEmail, processEmailCampaign, listEmailCampaigns, getEmailCampaign, draftEmailWithAi, getMailSettings, updateMailSettings, testMailSettings, EMAIL_FOOTER,
+} from "./application/email.js";
+export type { PlatformMailer, EmailDraftAi, AiCallUsage } from "./application/ports.js";

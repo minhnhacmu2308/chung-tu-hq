@@ -35,4 +35,5 @@ export const QUEUE_LABELS: Record<string, string> = {
   "hs-answer": "Gửi trả lời cho AI phân loại HS",
   "hs-reclassify": "Phân loại lại mã HS",
   "exchange-rate-weekly": "Lấy tỷ giá tính thuế (Vietcombank)",
+  "email-campaign": "Gửi email theo đợt",
 };

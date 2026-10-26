@@ -23,6 +23,8 @@ export {
   type DialogProps, type DialogContentProps, type DialogPresentation,
 } from "./components/dialog.js";
 export { ConfirmDialog, type ConfirmDialogProps } from "./components/confirm-dialog.js";
+export { HtmlPreview, type HtmlPreviewProps } from "./components/html-preview.js";
+export { SortableList, type SortableListParts, type SortableListProps } from "./components/sortable-list.js";
 export {
   AssistantPanel, AssistantLauncher, AssistantWelcome, SuggestionChips, ChatMessage, ChatComposer,
   type AssistantPanelProps, type AssistantLauncherProps, type AssistantMode, type ChatMessageProps, type ChatComposerProps,

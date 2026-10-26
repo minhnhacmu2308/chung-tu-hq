@@ -1,5 +1,7 @@
 // Back-office (/api/admin/**) – gọi backend thật. Cùng chữ ký với src/mocks/api/admin.ts.
 import {
+  DraftEmailResultSchema, EmailAudiencePreviewSchema, EmailCampaignDetailSchema, EmailCampaignSchema, EmailSignatureSchema, EmailTemplateSchema, MailSettingsSchema,
+  type DraftEmailInput, type EmailAudience, type SaveEmailSignatureInput, type SaveEmailTemplateInput, type SendEmailInput, type SendTestEmailInput, type UpdateMailSettingsInput,
   ExchangeRateSchema, ExchangeRatesViewSchema, type UpsertExchangeRateInput, CreateOrgResultSchema, type CreateOrgInput,
   AdminAuditEntrySchema, AdminMfaEnabledSchema, AdminMfaSetupSchema, AdminOrgDetailSchema, AdminOrgSchema, AdminOverviewSchema, AdminPlanSchema, AdminSessionSchema, AdminUserSchema, AnnouncementSchema,
   FailedJobSchema, PlatformIntegrationSchema, SkillTemplateSchema, StaffSchema, SystemHealthSchema, UsageMonthSchema, UsageReportSchema,
@@ -7,7 +9,7 @@ import {
   type InviteStaffInput, type PlanCode, type SendAnnouncementInput, type SetTemplatePublishedInput, type UpdateIntegrationKeyInput, type UpdatePlanInput,
 } from "@kb/contracts";
 import { z } from "zod";
-import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/http";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/http";
 import { ApiError } from "@/lib/api-error";
 
 const enc = encodeURIComponent;
@@ -75,3 +77,22 @@ export const startAdminMfaSetup = () => apiPost("admin/mfa/setup", {}, AdminMfaS
 export const confirmAdminMfaSetup = (code: string) => apiPost("admin/mfa/confirm", { code }, AdminMfaEnabledSchema);
 export const verifyAdminMfa = (code: string) => apiPost("admin/mfa/verify", { code }, z.object({ recoveryCodesLeft: z.number().int() }));
 export const resetStaffMfa = (id: string, input: AdminReasonInput) => apiPost(`admin/staff/${enc(id)}/mfa-reset`, input, StaffSchema);
+
+/* ---------------- Email ---------------- */
+export const listEmailTemplates = () => apiGet("admin/email/templates", z.array(EmailTemplateSchema));
+export const saveEmailTemplate = (id: string | null, input: SaveEmailTemplateInput) =>
+  id ? apiPut(`admin/email/templates/${enc(id)}`, input, EmailTemplateSchema) : apiPost("admin/email/templates", input, EmailTemplateSchema);
+export const deleteEmailTemplate = (id: string) => apiDelete(`admin/email/templates/${enc(id)}`, z.object({ id: z.string() }));
+export const listEmailSignatures = () => apiGet("admin/email/signatures", z.array(EmailSignatureSchema));
+export const saveEmailSignature = (id: string | null, input: SaveEmailSignatureInput) =>
+  id ? apiPut(`admin/email/signatures/${enc(id)}`, input, EmailSignatureSchema) : apiPost("admin/email/signatures", input, EmailSignatureSchema);
+export const deleteEmailSignature = (id: string) => apiDelete(`admin/email/signatures/${enc(id)}`, z.object({ id: z.string() }));
+export const previewEmailAudience = (input: EmailAudience) => apiPost("admin/email/audience", input, EmailAudiencePreviewSchema);
+export const sendTestEmail = (input: SendTestEmailInput) => apiPost("admin/email/test", input, z.object({ to: z.string() }));
+export const sendEmail = (input: SendEmailInput) => apiPost("admin/email/campaigns", input, EmailCampaignSchema);
+export const listEmailCampaigns = () => apiGet("admin/email/campaigns", z.array(EmailCampaignSchema));
+export const getEmailCampaign = (id: string) => apiGet(`admin/email/campaigns/${enc(id)}`, EmailCampaignDetailSchema);
+export const draftEmailWithAi = (input: DraftEmailInput) => apiPost("admin/email/draft", input, DraftEmailResultSchema);
+export const getMailSettings = () => apiGet("admin/email/settings", MailSettingsSchema);
+export const updateMailSettings = (input: UpdateMailSettingsInput) => apiPut("admin/email/settings", input, MailSettingsSchema);
+export const testMailSettings = () => apiPost("admin/email/settings/test", {}, MailSettingsSchema);

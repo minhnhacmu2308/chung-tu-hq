@@ -10,6 +10,7 @@ import { markDocumentFailed } from "@kb/core/modules/extraction";
 import { markOutboxFailed } from "@kb/core/modules/integration";
 import { failMailSync } from "@kb/core/modules/mailbox";
 import { createLogger } from "@kb/core/shared";
+import { emailCampaignJob } from "./jobs/email-campaign.js";
 import { exchangeRateJob } from "./jobs/exchange-rate.js";
 import { hsAnswerJob, hsPollJob, hsReclassifyJob } from "./jobs/hs.js";
 import { mailboxSyncJob } from "./jobs/mailbox-sync.js";
@@ -47,6 +48,8 @@ const workers = [
   new Worker("cert-expiry", async () => certExpiryJob(c.identity), { connection: c.redis, concurrency: 1 }),
   new Worker("exchange-rate-weekly", async () => exchangeRateJob(c.rates), { connection: c.redis, concurrency: 1 }),
   new Worker("mailbox-sync", async (job) => mailboxSyncJob(c.mailbox, job.data), { connection: c.redis, concurrency: 2 }),
+  // Gửi email theo đợt: một đợt một lúc (máy chủ SMTP thường giới hạn số thư / phút).
+  new Worker("email-campaign", async (job) => emailCampaignJob(c.email, job.data), { connection: c.redis, concurrency: 1 }),
   new Worker("stuck-sweeper", async () => JSON.stringify(await stuckSweeperJob(c)), { connection: c.redis, concurrency: 1 }),
 ];
 

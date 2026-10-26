@@ -6,7 +6,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger, PageLoading, Sidebar, SidebarFooterButton, SidebarMobileTrigger, SidebarUser, toast, useMessages, type NavItem,
 } from "@kb/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Building2, LayoutDashboard, LogOut, RotateCcw, ShieldCheck, SunMoon, WalletCards } from "lucide-react";
+import { Activity, Building2, LayoutDashboard, LogOut, Mail, RotateCcw, ShieldCheck, SunMoon, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -34,6 +34,11 @@ const LEAVES = [
   { id: "staff", href: "/admin/staff" },
   { id: "audit", href: "/admin/audit" },
   { id: "announcements", href: "/admin/announcements" },
+  // Đường dẫn con của /admin/email xét trước "Gửi email" (/admin/email, gồm cả trang Soạn email).
+  { id: "email-templates", href: "/admin/email/templates" },
+  { id: "email-signatures", href: "/admin/email/signatures" },
+  { id: "email-settings", href: "/admin/email/settings" },
+  { id: "email-campaigns", href: "/admin/email" },
 ] as const;
 
 function useNav(enabled: boolean): { items: NavItem[]; activeId: string | undefined } {
@@ -80,7 +85,18 @@ function useNav(enabled: boolean): { items: NavItem[]; activeId: string | undefi
       children: [
         { id: "staff", label: t.staff, href: "/admin/staff" },
         { id: "audit", label: t.audit, href: "/admin/audit" },
+      ],
+    },
+    {
+      id: "messaging",
+      label: t.messaging,
+      icon: <Mail />,
+      children: [
         { id: "announcements", label: t.announcements, href: "/admin/announcements" },
+        { id: "email-campaigns", label: t.emailCampaigns, href: "/admin/email" },
+        { id: "email-templates", label: t.emailTemplates, href: "/admin/email/templates" },
+        { id: "email-signatures", label: t.emailSignatures, href: "/admin/email/signatures" },
+        { id: "email-settings", label: t.mailSettings, href: "/admin/email/settings" },
       ],
     },
   ];

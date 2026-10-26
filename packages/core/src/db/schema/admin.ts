@@ -1,6 +1,6 @@
 // Bảng của khu Quản trị hệ thống (ADR 0006). Bật RLS nhưng KHÔNG có policy cho kb_app → ứng dụng của khách không đọc/ghi được;
 // chỉ vai trò kb_platform (BYPASSRLS) của module admin truy cập.
-import { bigint, date, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, boolean, date, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { organizations, users } from "./identity.js";
 import { id, timestamps } from "./shared.js";
 
@@ -88,5 +88,88 @@ export const platformIntegrations = pgTable("platform_integrations", {
   status: text("status").notNull().default("NOT_CONFIGURED"),
   detail: text("detail"),
   lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  ...timestamps(),
+}).enableRLS();
+
+/* ---------------- Email (khu Quản trị): mẫu kéo thả, chữ ký, đợt gửi, máy chủ gửi mail ---------------- */
+
+/** Mẫu email dạng khối (JSON) – thêm mẫu mới không cần sửa code. */
+export const emailTemplates = pgTable("email_templates", {
+  id: id(),
+  name: text("name").notNull(),
+  description: text("description"),
+  subject: text("subject").notNull(),
+  preheader: text("preheader"),
+  blocks: jsonb("blocks").$type<unknown[]>().notNull(),
+  createdBy: text("created_by").notNull(),
+  updatedBy: text("updated_by").notNull(),
+  ...timestamps(),
+}).enableRLS();
+
+/** Chữ ký: `owner_user_id` null = chữ ký chung của công ty; có = chữ ký riêng của quản trị viên đó. */
+export const emailSignatures = pgTable("email_signatures", {
+  id: id(),
+  name: text("name").notNull(),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "cascade" }),
+  isDefault: boolean("is_default").notNull().default(false),
+  blocks: jsonb("blocks").$type<unknown[]>().notNull(),
+  ...timestamps(),
+}).enableRLS();
+
+/** Một đợt gửi: ảnh chụp nội dung lúc gửi (sửa mẫu sau đó không đổi email đã gửi) + đếm kết quả. */
+export const emailCampaigns = pgTable("email_campaigns", {
+  id: id(),
+  templateId: text("template_id"),
+  subject: text("subject").notNull(),
+  preheader: text("preheader"),
+  blocks: jsonb("blocks").$type<unknown[]>().notNull(),
+  signatureBlocks: jsonb("signature_blocks").$type<unknown[]>().notNull().default([]),
+  audience: jsonb("audience").notNull(),
+  audienceLabel: text("audience_label").notNull(),
+  /** QUEUED | SENDING | SENT | PARTIAL | FAILED */
+  status: text("status").notNull(),
+  total: integer("total").notNull(),
+  sent: integer("sent").notNull().default(0),
+  failed: integer("failed").notNull().default(0),
+  sentBy: text("sent_by").notNull(),
+  sentByName: text("sent_by_name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+}).enableRLS();
+
+export const emailCampaignRecipients = pgTable(
+  "email_campaign_recipients",
+  {
+    id: id(),
+    campaignId: text("campaign_id")
+      .notNull()
+      .references(() => emailCampaigns.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    name: text("name").notNull(),
+    orgName: text("org_name"),
+    /** PENDING | SENT | FAILED */
+    status: text("status").notNull().default("PENDING"),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+  },
+  (t) => [index("email_campaign_recipients_campaign_idx").on(t.campaignId, t.status)],
+).enableRLS();
+
+/** Máy chủ gửi mail (một dòng, id = 'default'). Mật khẩu mã hóa bằng APP_MASTER_KEY. */
+export const mailSettings = pgTable("mail_settings", {
+  id: text("id").primaryKey(),
+  host: text("host").notNull(),
+  port: integer("port").notNull(),
+  secure: boolean("secure").notNull(),
+  username: text("username").notNull(),
+  passwordCiphertext: text("password_ciphertext"),
+  keyVersion: integer("key_version").notNull().default(1),
+  fromName: text("from_name").notNull(),
+  fromEmail: text("from_email").notNull(),
+  replyTo: text("reply_to"),
+  updatedBy: text("updated_by").notNull(),
+  lastTestOk: boolean("last_test_ok"),
+  lastTestDetail: text("last_test_detail"),
+  lastTestAt: timestamp("last_test_at", { withTimezone: true }),
   ...timestamps(),
 }).enableRLS();

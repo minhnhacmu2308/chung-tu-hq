@@ -1,6 +1,7 @@
 // Phần dữ liệu back-office trong "DB" giả. Doanh nghiệp demo (db.org + db.members) được ghép vào lúc đọc,
 // nên thao tác ở /admin (đổi gói, khóa người dùng, gửi thông báo) hiện ngay bên ứng dụng của khách.
 import type {
+  EmailCampaignDetail, EmailSignature, EmailTemplate, MailSettings,
   ExchangeRate, ExchangeRateFetch,
   AdminAuditEntry, AdminPlan, AdminUser, AdminUserSession, Announcement, FailedJob, IntegrationId, Organization, OrgStatus,
   PlatformIntegration, QueueStat, ServiceHealth, SkillTemplate, Staff,
@@ -40,6 +41,13 @@ export type AdminDb = {
   /** Mới nhất đứng đầu. */
   audit: AdminAuditEntry[];
   announcements: Announcement[];
+  /** Email: mẫu kéo thả, chữ ký (riêng có `ownerId` = id quản trị viên), đợt gửi (mới nhất đầu), máy chủ gửi mail. */
+  email: {
+    templates: EmailTemplate[];
+    signatures: (EmailSignature & { ownerId: string | null })[];
+    campaigns: EmailCampaignDetail[];
+    settings: MailSettings;
+  };
   /** Thông báo hệ thống → thông báo đã đẩy vào panel của doanh nghiệp demo (để thu hồi). */
   announcementNotifications: Record<string, string>;
 };

@@ -25,7 +25,7 @@ const isoDay = (t: number) => new Date(t).toISOString().slice(0, 10);
 const daysUntil = (isoDate: string) => Math.round((new Date(`${isoDate}T00:00:00Z`).getTime() - new Date(`${isoDay(Date.now())}T00:00:00Z`).getTime()) / DAY);
 
 /** Dữ liệu từ form đi qua đúng schema dùng chung với backend (bất biến 9). */
-function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
+export function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
   const r = schema.safeParse(input);
   if (!r.success) throw new ApiError("VALIDATION", r.error.issues[0]?.message ?? "Dữ liệu không hợp lệ");
   return r.data;
@@ -33,16 +33,16 @@ function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
 
 /* ---------------- Phiên & quyền ---------------- */
 
-function actor(db: AdminScope, permission: AdminPermission): Staff {
+export function actor(db: AdminScope, permission: AdminPermission): Staff {
   const s = db.admin.staff.find((x) => x.id === db.admin.currentStaffId);
   if (!s || s.status !== "ACTIVE") throw new ApiError("UNAUTHENTICATED", "Phiên quản trị đã hết hạn – đăng nhập lại", 401);
   if (!staffCan(s.role, permission)) throw new ApiError("FORBIDDEN", "Vai trò của bạn không được thực hiện thao tác này", 403);
   return s;
 }
 
-type Target = { type: AdminTargetType; id: string; label: string; orgId?: string; orgName?: string };
+export type Target = { type: AdminTargetType; id: string; label: string; orgId?: string; orgName?: string };
 
-function log(db: AdminScope, staff: Staff, action: AdminAction, target: Target, reason: string, detail?: string): AdminAuditEntry {
+export function log(db: AdminScope, staff: Staff, action: AdminAction, target: Target, reason: string, detail?: string): AdminAuditEntry {
   const entry: AdminAuditEntry = {
     id: newId("aud"),
     at: nowIso(),
@@ -85,7 +85,7 @@ export function getAdminSession(db: AdminScope): AdminSession | null {
 type OrgRef = { org: Organization; meta: OrgMeta };
 
 /** Doanh nghiệp demo (đang dùng ở ứng dụng khách) + các doanh nghiệp mẫu khác. Trả về tham chiếu để ghi thẳng. */
-function orgRefs(db: AdminScope): OrgRef[] {
+export function orgRefs(db: AdminScope): OrgRef[] {
   return [{ org: db.org, meta: db.admin.demoOrgMeta }, ...db.admin.orgs];
 }
 
@@ -97,7 +97,7 @@ function orgRef(db: AdminScope, id: string): OrgRef {
 
 const DEFAULT_USER_META = (): UserMeta => ({ emailVerified: true, createdAt: nowIso(), sessions: [] });
 
-function allUsers(db: AdminScope): AdminUser[] {
+export function allUsers(db: AdminScope): AdminUser[] {
   const names = new Map(orgRefs(db).map((r) => [r.org.id, r.org.name]));
   const demo = db.members.map((m): AdminUser => {
     const meta = db.admin.demoUserMeta[m.id] ?? { ...DEFAULT_USER_META(), emailVerified: m.status !== "INVITED" };

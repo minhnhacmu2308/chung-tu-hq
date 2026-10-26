@@ -15,3 +15,4 @@ export * from "./declaration-layout/index.js";
 export * from "./code-lists/index.js";
 export * from "./post-amendment/index.js";
 export * from "./print-layout/index.js";
+export * from "./email/index.js";

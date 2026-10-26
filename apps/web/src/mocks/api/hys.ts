@@ -146,13 +146,13 @@ export const sendHys = (dossierId: string, hysId: string, input: SendHysInput) =
       const res = fillAttachmentSlot(cur.values as AttachmentValues, h.procedureCode ?? "", h.receiptNo);
       const afterApproval = decl.status === "APPROVED";
       if (res.outcome === "FILLED" && res.set) {
+        const note = `HYS ${h.seq} – ${h.receiptNo}`;
         for (const [code, value] of Object.entries(res.set)) {
           const meta = extraFieldMeta(decl.kind, code);
           const i = decl.fields.findIndex((f) => f.code === code);
-          if (i >= 0) decl.fields[i] = { ...decl.fields[i]!, value, source: "USER" };
-          else if (meta) decl.fields.push({ code, label: meta.label, section: meta.section, ...(meta.no ? { no: meta.no } : {}), value, source: "USER" });
+          if (i >= 0) decl.fields[i] = { ...decl.fields[i]!, value, source: "SYSTEM", note };
+          else if (meta) decl.fields.push({ code, label: meta.label, section: meta.section, ...(meta.no ? { no: meta.no } : {}), value, source: "SYSTEM", note });
         }
-        if (afterApproval) decl.status = "DRAFT";
       }
       h.fill = { outcome: res.outcome, ...(res.slot ? { slot: res.slot } : {}), ...(res.outcome === "FILLED" ? { afterApproval } : {}) };
     }

@@ -565,7 +565,7 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
   // Nhắc khai HYS trước IDA/EDA (cùng hys-guard backend): còn gợi ý chưa thỏa và chưa xác nhận bỏ qua → HYS_SUGGESTED.
-  if (op === "IDA" || op === "EDA") {
+  if ((op === "IDA" || op === "EDA") && c.branch === 1 && !chain) {
     const codes = pendingSuggestions(db, dossierId, containersOf(db, c.dossier).length).map((s) => s.code).join(", ");
     if (codes && !hysWaived) throw reasonApiError("INVALID_STATE", "HYS_SUGGESTED", { codes });
   }

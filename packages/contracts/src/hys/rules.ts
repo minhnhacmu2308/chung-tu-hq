@@ -64,15 +64,18 @@ export function checkHysSubmission(s: HysSubmissionInput): HysIssue[] {
 
 export type AttachmentValues = Partial<Record<"TK_EA1" | "TK_EA2" | "TK_EA3" | "TK_EB1" | "TK_EB2" | "TK_EB3", string>>;
 
+/** Mã đầu chuỗi: "A08 – Bảo lãnh riêng" → "A08". */
+const firstToken = (v: string): string => v.split(/\s*[–-]\s*/)[0]!.trim();
+
 export type AttachmentSlot = 1 | 2 | 3;
 export type AttachmentPair = { slot: AttachmentSlot; code: string; receipt: string };
 
-/** Các cặp 1.63/2.53 đang có số tiếp nhận (TK_EB{n} khác rỗng – HYS điền hoặc nhập tay), theo thứ tự cặp. */
+/** Các cặp 1.63/2.53 đang có số tiếp nhận (TK_EB{n} khác rỗng – HYS điền hoặc nhập tay), theo thứ tự cặp; mã chuẩn hóa ("A02 – …" → "A02"). */
 export function attachmentPairs(values: AttachmentValues): AttachmentPair[] {
   const out: AttachmentPair[] = [];
   for (const n of [1, 2, 3] as const) {
     if (blank(values[`TK_EB${n}`])) continue;
-    out.push({ slot: n, code: (values[`TK_EA${n}`] ?? "").trim(), receipt: (values[`TK_EB${n}`] ?? "").trim() });
+    out.push({ slot: n, code: firstToken(values[`TK_EA${n}`] ?? ""), receipt: (values[`TK_EB${n}`] ?? "").trim() });
   }
   return out;
 }
@@ -108,7 +111,7 @@ export function fillAttachmentSlot(
       outcome: "REPLACED",
       slot: n,
       set: { [`TK_EA${n}`]: procedureCode, [`TK_EB${n}`]: receipt },
-      replaced: { code: (values[`TK_EA${n}`] ?? "").trim(), receipt: (values[`TK_EB${n}`] ?? "").trim() },
+      replaced: { code: firstToken(values[`TK_EA${n}`] ?? ""), receipt: (values[`TK_EB${n}`] ?? "").trim() },
     };
   }
   return { outcome: "FULL" };
@@ -119,7 +122,6 @@ export const VALUATION_CODES_WITHOUT_A01 = ["6", "7"] as const;
 export type HysRule = "G1" | "G2" | "G3" | "G4" | "G5";
 export type HysSuggestion = { code: HysProcedureCode; rule: HysRule; fieldNo: string };
 
-const firstToken = (v: string): string => v.split(/\s*[–-]\s*/)[0]!.trim();
 const val = (values: Record<string, string>, key: string): string => (values[key] ?? "").trim();
 const noteMaxLen = (kind: "IDA" | "EDA"): number => {
   const no = kind === "IDA" ? "1.68" : "2.57";
@@ -166,17 +168,21 @@ export function suggestHys(input: {
 
 /**
  * Mã đã khai = số tiếp nhận thật sự đã nằm trong 1.63/2.53: cặp TK_EA{n}=mã có TK_EB{n} (HYS điền hoặc nhập tay)
- * ∪ bộ ACCEPTED đã điền được (fill FILLED/ALREADY/REPLACED). Bộ SENDING, hay ACCEPTED mà LOCKED/FULL/NO_RECEIPT, chưa tính.
+ * ∪ bộ ACCEPTED đã điền được (fill FILLED/ALREADY/REPLACED) mà số tiếp nhận của bộ VẪN còn trong TK_EB1..3
+ * (bị bộ sau thay cặp → không còn tính). Bộ SENDING, hay ACCEPTED mà LOCKED/FULL/NO_RECEIPT, chưa tính.
  */
 export function satisfiedHysCodes(
   values: AttachmentValues,
-  submissions: { procedureCode: string; status: string; fill: { outcome: string } | null }[],
+  submissions: { procedureCode: string; status: string; receiptNo: string | null; fill: { outcome: string } | null }[],
 ): Set<string> {
   const out = new Set<string>();
+  const pairs = attachmentPairs(values);
+  const receipts = new Set(pairs.map((p) => p.receipt));
   for (const s of submissions) {
-    if (s.status === "ACCEPTED" && (s.fill?.outcome === "FILLED" || s.fill?.outcome === "ALREADY" || s.fill?.outcome === "REPLACED")) out.add(s.procedureCode);
+    const filled = s.fill?.outcome === "FILLED" || s.fill?.outcome === "ALREADY" || s.fill?.outcome === "REPLACED";
+    if (s.status === "ACCEPTED" && filled && s.receiptNo != null && receipts.has(s.receiptNo.trim())) out.add(s.procedureCode);
   }
-  for (const p of attachmentPairs(values)) {
+  for (const p of pairs) {
     if (p.code !== "") out.add(p.code);
   }
   return out;

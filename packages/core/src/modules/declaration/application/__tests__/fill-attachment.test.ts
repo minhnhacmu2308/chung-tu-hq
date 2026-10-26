@@ -94,7 +94,7 @@ describe("fillAttachmentFromHys", () => {
 
   it("đủ 3 cặp + replaceSlot → REPLACED cặp đã chọn, audit giá trị cũ → mới", async () => {
     const f = (v: string) => ({ no: "1.63", label: "x", section: "GENERAL" as const, value: v, source: "USER" as const });
-    seed({ fields: { TK_EA1: f("A02"), TK_EB1: f("a"), TK_EA2: f("A08"), TK_EB2: f("b"), TK_EA3: f("A99"), TK_EB3: f("c") } });
+    seed({ fields: { TK_EA1: f("A02"), TK_EB1: f("a"), TK_EA2: f("A08 – Bảo lãnh riêng"), TK_EB2: f("b"), TK_EA3: f("A99"), TK_EB3: f("c") } });
     const r = unwrap(await fillAttachmentFromHys(deps, ctx, D, { ...input, replaceSlot: 2 }));
     expect(r).toEqual({ outcome: "REPLACED", slot: 2, replaced: { code: "A08", receipt: "b" }, afterApproval: false });
     expect(decl().fields.TK_EA2).toMatchObject({ value: "A01", source: "SYSTEM", note: input.note, no: "1.63" });
@@ -102,7 +102,7 @@ describe("fillAttachmentFromHys", () => {
     expect(decl().fields.TK_EB1!.value).toBe("a");
     expect(decl().fields.TK_EB3!.value).toBe("c");
     expect(audit.rows.map((x) => [x.key, x.oldValue, x.newValue, x.source])).toEqual([
-      ["decl:TK_EA2", "A08", "A01", "HYS_FILL"],
+      ["decl:TK_EA2", "A08 – Bảo lãnh riêng", "A01", "HYS_FILL"],
       ["decl:TK_EB2", "b", "HYS-0001", "HYS_FILL"],
     ]);
   });

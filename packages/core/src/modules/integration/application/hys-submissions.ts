@@ -68,11 +68,11 @@ export function lotEditableOf(snap: Pick<DeclarationSnapshot, "status"> | null, 
   });
 }
 
-/** Gợi ý HYS còn thiếu của tờ khai: số tiếp nhận đã vào 1.63/2.53 (bộ ACCEPTED điền được, hoặc nhập tay đủ cặp mã + số) thì không gợi ý. Dùng chung tổng quan và guard khai IDA/EDA. */
-export function pendingHysSuggestions(snap: Pick<DeclarationSnapshot, "payload">, rows: Pick<HysSubmissionRow, "procedureCode" | "status" | "fill">[]): HysOverview["suggestions"] {
+/** Gợi ý HYS còn thiếu của tờ khai: số tiếp nhận đã vào 1.63/2.53 (bộ ACCEPTED điền được mà số còn trong 1.63, hoặc nhập tay đủ cặp mã + số) thì không gợi ý. Dùng chung tổng quan và guard khai IDA/EDA. */
+export function pendingHysSuggestions(snap: Pick<DeclarationSnapshot, "payload">, rows: Pick<HysSubmissionRow, "procedureCode" | "status" | "receiptNo" | "fill">[]): HysOverview["suggestions"] {
   const values = hysValuesOf(snap);
   const cells = Object.keys(values).filter((k) => /^CON_C\d+$/.test(k)).length;
-  const satisfied = satisfiedHysCodes(values as AttachmentValues, rows.filter((x) => x.procedureCode !== null).map((x) => ({ procedureCode: x.procedureCode!, status: x.status, fill: x.fill })));
+  const satisfied = satisfiedHysCodes(values as AttachmentValues, rows.filter((x) => x.procedureCode !== null).map((x) => ({ procedureCode: x.procedureCode!, status: x.status, receiptNo: x.receiptNo, fill: x.fill })));
   return suggestHys({ kind: snap.payload.kind, values, containerCount: Math.max(snap.payload.containers.length, cells), satisfied });
 }
 

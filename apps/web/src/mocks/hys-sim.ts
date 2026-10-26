@@ -23,7 +23,7 @@ export function pendingSuggestions(db: MockDb, dossierId: string, containerCount
   const v = hysValues(db, dossierId);
   if (!v) return [];
   const rows = (db.hys ?? []).filter((h) => h.dossierId === dossierId && h.procedureCode !== null);
-  const satisfied = satisfiedHysCodes(v.values as AttachmentValues, rows.map((h) => ({ procedureCode: h.procedureCode!, status: h.status, fill: h.fill })));
+  const satisfied = satisfiedHysCodes(v.values as AttachmentValues, rows.map((h) => ({ procedureCode: h.procedureCode!, status: h.status, receiptNo: h.receiptNo, fill: h.fill })));
   return suggestHys({ kind: v.kind, values: v.values, containerCount, satisfied });
 }
 

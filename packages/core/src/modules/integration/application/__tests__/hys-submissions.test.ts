@@ -122,8 +122,12 @@ describe("tổng quan HYS", () => {
     expect(await codesNow()).toEqual(["A02"]);
     Object.assign(row, { status: "ACCEPTED", fill: { outcome: "LOCKED" } });
     expect(await codesNow()).toEqual(["A02"]);
-    Object.assign(row, { fill: { outcome: "FILLED", slot: 1 } });
+    Object.assign(row, { receiptNo: "300000000001", fill: { outcome: "FILLED", slot: 1 } });
+    h.decls.fields = { TK_EB1: { value: "300000000001" } };
     expect(await codesNow()).toEqual([]);
+    // Bộ sau thay mất cặp của bộ này → số không còn trong 1.63 → gợi ý lại A02.
+    h.decls.fields = { TK_EA1: { value: "A99" }, TK_EB1: { value: "300000000009" } };
+    expect(await codesNow()).toEqual(["A02"]);
   });
 
   it("1.63 nhập tay A02 + số tiếp nhận → không gợi ý A02", async () => {

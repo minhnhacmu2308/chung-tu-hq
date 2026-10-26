@@ -12,8 +12,9 @@ const enabled = (over: Partial<OperationAvailabilityInput>) => operationAvailabi
 
 describe("mã nghiệp vụ theo chiều tờ khai", () => {
   it("nhập dùng I…, xuất dùng E…; tra cứu IID/IEX; AMA và nghiệp vụ cảng dùng chung", () => {
-    expect(operationsFor("NK")).toEqual(["IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "AMA", "AMB", "AMC", "HYS", "CONT", "PORT_FEE"]);
-    expect(operationsFor("XK")).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "HYS", "CONT", "PORT_FEE"]);
+    expect(operationsFor("NK")).not.toContain("HYS");
+    expect(operationsFor("NK")).toEqual(["IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"]);
+    expect(operationsFor("XK")).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"]);
     expect([queryOpFor("NK"), queryOpFor("XK")]).toEqual(["IID", "IEX"]);
     expect([baseOp("EDA01"), baseOp("IEX"), baseOp("AMA"), opFor("XK", "HYS")]).toEqual(["IDA01", "IID", "AMA", "HYS"]);
   });
@@ -54,16 +55,16 @@ describe("stageAfter – máy chuyển giai đoạn", () => {
 });
 
 describe("operationAvailability – nút nào bấm được", () => {
-  it("chưa khai: chỉ IDA; khai tạm xong: IDB, IDC, HYS, lệ phí cảng", () => {
+  it("chưa khai: chỉ IDA; khai tạm xong: IDB, IDC, lệ phí cảng", () => {
     expect(enabled({ stage: "NOT_SENT" })).toEqual(["IDA"]);
-    expect(enabled({ stage: "PRE_DECLARED" })).toEqual(["IDB", "IDC", "HYS", "PORT_FEE"]);
+    expect(enabled({ stage: "PRE_DECLARED" })).toEqual(["IDB", "IDC", "PORT_FEE"]);
   });
   it("đã gọi sửa (RECALLED) mà chưa duyệt lại → IDA ở chế độ EDIT kèm hướng dẫn; duyệt lại → SEND", () => {
     expect(avail({ stage: "RECALLED", approved: false })["IDA"]).toMatchObject({ enabled: true, action: "EDIT", reason: expect.stringMatching(/Review/) });
     expect(avail({ stage: "RECALLED", approved: true })["IDA"]).toMatchObject({ enabled: true, action: "SEND" });
   });
   it("đã phân luồng: IDD, chứng từ, container, lệ phí; IDB/IDC khóa có lý do", () => {
-    expect(enabled({ stage: "DECLARED", channel: "YELLOW" })).toEqual(["IDD", "HYS", "CONT", "PORT_FEE"]);
+    expect(enabled({ stage: "DECLARED", channel: "YELLOW" })).toEqual(["IDD", "CONT", "PORT_FEE"]);
     expect(avail({ stage: "DECLARED" })["IDB"]).toMatchObject({ enabled: false, reason: expect.stringMatching(/chưa khai chính thức/) });
   });
   it("sửa đổi bổ sung: IDD → IDA01 (EDIT khi chưa duyệt) → IDE", () => {
@@ -85,7 +86,7 @@ describe("operationAvailability – nút nào bấm được", () => {
     expect(operationAvailability({ ...base, stage: "REJECTED" }).some((r) => r.enabled)).toBe(false);
   });
   it("tờ khai xuất dùng mã E…", () => {
-    expect(enabled({ direction: "XK", stage: "PRE_DECLARED" })).toEqual(["EDB", "EDC", "HYS", "PORT_FEE"]);
+    expect(enabled({ direction: "XK", stage: "PRE_DECLARED" })).toEqual(["EDB", "EDC", "PORT_FEE"]);
   });
 });
 
@@ -105,7 +106,7 @@ describe("recallOpFor – nghiệp vụ gọi về đang bật của tờ", () =
 
 describe("nextCustomsOperation – việc tiếp theo", () => {
   it.each([
-    ["NOT_SENT", null, [], "IDA"], ["PRE_DECLARED", null, [], "IDC"], ["DECLARED", "YELLOW", [], "HYS"], ["DECLARED", "YELLOW", ["HYS"], null], ["DECLARED", "GREEN", [], null],
+    ["NOT_SENT", null, [], "IDA"], ["PRE_DECLARED", null, [], "IDC"], ["DECLARED", "YELLOW", [], null], ["DECLARED", "GREEN", [], null],
     ["AMEND_RECALLED", "RED", [], "IDA01"], ["AMEND_PRE_DECLARED", "RED", [], "IDE"], ["POST_EDITING", "GREEN", [], "AMA"], ["POST_PRE_DECLARED", "GREEN", [], "AMC"],
     ["CLEARED", "GREEN", [], "CONT"], ["CLEARED", "GREEN", ["CONT"], null],
   ] as const)("%s (luồng %s, đã làm %j) → %s", (stage, channel, done, expected) =>
@@ -118,7 +119,7 @@ describe("mã lý do (reasonCode) – giao diện dịch theo mã, câu tiếng 
     (["NK", "XK"] as const).flatMap((direction) =>
       [true, false].flatMap((approved) =>
         [true, false].flatMap((hasContainers) =>
-          ([[], ["IDC"], ["IDA", "HYS"]] as CustomsOperation[][]).map((pending) => ({ ...base, stage, direction, approved, hasContainers, pending }))))));
+          ([[], ["IDC"], ["IDA", "PORT_FEE"]] as CustomsOperation[][]).map((pending) => ({ ...base, stage, direction, approved, hasContainers, pending }))))));
 
   it("mọi dòng bị khóa / có lý do đều có mã, và câu = câu chuẩn của mã (reasonVi)", () => {
     for (const input of combos) {
@@ -137,13 +138,13 @@ describe("mã lý do (reasonCode) – giao diện dịch theo mã, câu tiếng 
   });
   it("giữ nguyên chữ tiếng Việt cũ", () => {
     expect(avail({ stage: "NOT_SENT" })["IDB"]).toMatchObject({ reasonCode: "IDB_REQUIRES_PRE_DECLARED", reason: "Chỉ gọi sửa khi đã khai tạm và chưa khai chính thức" });
-    expect(avail({ stage: "PRE_DECLARED", pending: ["IDC", "HYS"] })["IDB"]).toMatchObject({
-      reasonCode: "OPERATION_PENDING", reasonParams: { ops: "IDC, HYS" }, reason: "Đang chờ phản hồi IDC, HYS",
+    expect(avail({ stage: "PRE_DECLARED", pending: ["IDC", "PORT_FEE"] })["IDB"]).toMatchObject({
+      reasonCode: "OPERATION_PENDING", reasonParams: { ops: "IDC, PORT_FEE" }, reason: "Đang chờ phản hồi IDC, PORT_FEE",
     });
     expect(avail({ stage: "RECALLED", approved: false })["IDA"]).toMatchObject({
       enabled: true, action: "EDIT", reasonCode: "EDIT_DECLARATION_FIRST", reason: "Sửa chỉ tiêu ở bước Review tờ khai và phê duyệt lại",
     });
-    expect(avail({ stage: "REJECTED" })["HYS"]).toMatchObject({ reasonCode: "DECLARATION_REJECTED", reason: "Tờ khai đã bị Hải quan từ chối/hủy" });
+    expect(avail({ stage: "REJECTED" })["PORT_FEE"]).toMatchObject({ reasonCode: "DECLARATION_REJECTED", reason: "Tờ khai đã bị Hải quan từ chối/hủy" });
     expect(avail({ stage: "DECLARED", hasContainers: false })["CONT"]).toMatchObject({ reasonCode: "NO_CONTAINERS", reason: "Lô hàng không có container" });
     expect(avail({ stage: "NOT_SENT" })["IDA"]).toEqual({ op: "IDA", enabled: true, action: "SEND" });
   });

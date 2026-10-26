@@ -20,6 +20,8 @@ import { syncDossierClearance } from "./poll-status.js";
 import { parseSent } from "./sent-sheets.js";
 import { contentOpFor, declareOpFor, enqueueBranchPreDeclare, outboxVersion, stalePinReason } from "./branch-send.js";
 import { performOperationChecked } from "./perform-operation.js";
+import { MAX_ATTEMPTS } from "./_outbox.js";
+import { processHysOutbox } from "./process-hys.js";
 import { recallTargets } from "./recall-all.js";
 
 /** Loại chuỗi nối tiếp theo tờ: content = gửi nội dung (khai tạm), declare = khai chính thức cả lô, recall = gọi về tất cả. */
@@ -37,8 +39,7 @@ const chainOfOutbox = (o: OutboxRow): "declare" | "recall" | undefined => {
   return p.success ? p.data : undefined;
 };
 export type ProcessOutboxInput = { orgId: string; userId: string; outboxId: string };
-/** Quá số lần thử (= attempts của BullMQ) → outbox FAILED, người dùng "Gửi lại". */
-export const MAX_ATTEMPTS = 5;
+export { MAX_ATTEMPTS };
 const isDomainError = (e: unknown): e is { code: string; message?: string } => typeof e === "object" && e !== null && "code" in e && typeof (e as { code: unknown }).code === "string";
 
 const fmtErrors = (errors: GatewayError[]) => errors.map((e) => `${e.code}${e.field ? ` (${e.field})` : ""}: ${e.message}${e.solution ? ` → ${e.solution}` : ""}`).join("; ");
@@ -56,12 +57,16 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   const prep = await deps.uow.asOrg(ctx, async (r) => {
     const ob = await r.outbox.get(input.orgId, input.outboxId);
     if (!ob) return err(domainError("NOT_FOUND", "Không tìm thấy outbox"));
+    // HYS (K1): khai trước IDA nên chưa có customs_results – nhánh riêng, không đọc/ghi kết quả truyền.
+    if (ob.operation === "HYS") return ok({ ob, result: null });
     const result = await r.results.get(input.orgId, ob.dossierId, ob.branch);
     if (!result) return err(domainError("INVALID_STATE", "Chưa có kết quả truyền"));
     return ok({ ob, result });
   });
   if (!prep.ok) return prep;
-  const { ob, result } = prep.value;
+  const { ob } = prep.value;
+  if (prep.value.result === null) return processHysOutbox(deps, ctx, ob);
+  const result = prep.value.result;
   if (ob.status !== "PENDING") {
     // Job chạy lại sau crash giữa lúc ghi SENT và lúc nối tờ kế tiếp → nối lại (idempotent; lỗi guard đã/ sẽ được ghi ở lần chạy chính).
     if (ob.status === "SENT") {
@@ -75,7 +80,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const now = () => deps.clock.now();
   const msg = (r: CustomsRepos, m: Omit<MessageRow, "id" | "orgId" | "dossierId" | "branch" | "at">) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, branch: ob.branch, at: now(), ...m });
-  const payload = (ob.payload ?? {}) as { request?: unknown; warnings?: string[]; issues?: string[]; files?: { name: string; storageKey: string }[] };
+  const payload = (ob.payload ?? {}) as { request?: unknown; warnings?: string[]; issues?: string[] };
   const stage = stageOf(result);
   if (ob.attempts >= MAX_ATTEMPTS) {
     // Hết số lần thử (lỗi tạm kéo dài): không để PENDING mãi – FAILED để người dùng Gửi lại.
@@ -107,7 +112,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   // Thông điệp OUT ghi đúng một lần (job chạy lại sau crash không nhân đôi).
   if (ob.attempts === 0) {
     await deps.uow.asOrg(ctx, async (r) => {
-      await msg(r, { operation: ob.operation, direction: "OUT", result: "OK", summary: outSummary(ob.operation), payloadMasked: maskPayload(payload.request ?? { files: payload.files }), externalRef: result.externalId });
+      await msg(r, { operation: ob.operation, direction: "OUT", result: "OK", summary: outSummary(ob.operation), payloadMasked: maskPayload(payload.request ?? {}), externalRef: result.externalId });
       await r.outbox.update(ob.orgId, ob.id, { attempts: 1, updatedAt: now() });
     });
   } else await deps.uow.asOrg(ctx, (r) => r.outbox.update(ob.orgId, ob.id, { attempts: ob.attempts + 1, updatedAt: now() }));
@@ -144,16 +149,6 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       outcome = errors?.length || !res.channel
         ? { errors: errors ?? [], summary: "", payload: null, patch: {} }
         : { summary: `Kết quả phân luồng: luồng ${channelVi(res.channel)}`, payload: { nghiepVu: op, soToKhai: result.declarationNo, maPhanLuong: res.channel === "GREEN" ? 1 : res.channel === "YELLOW" ? 2 : 3, thueDuKien: `${res.customsTaxVnd ?? result.customsTaxVnd ?? "0"} VND` }, patch: { channel: res.channel, channelNote: CHANNEL_NOTES[res.channel], ...(res.customsTaxVnd ? { customsTaxVnd: res.customsTaxVnd } : {}), ...withInfo(result.raw, res.info, now()) } };
-    } else if (op === "HYS") {
-      const docs = payload.files ?? [];
-      const files = await Promise.all(docs.map(async (f) => ({ name: f.name, bytes: await deps.dossiers.readFile(f.storageKey) })));
-      const declaration = (await deps.declarations.get(input.orgId, ob.dossierId))?.payload;
-      const res = await deps.gateway.attachDocuments(input.orgId, { externalId: result.externalId ?? "", dossierId: ob.dossierId, files, ...(declaration ? { declaration } : {}) }, ob.idempotencyKey);
-      await meterSent();
-      const side = `Đã tiếp nhận ${files.length} tệp${res.receiptNo ? ` – số tiếp nhận ${res.receiptNo}` : ""}`;
-      outcome = res.errors?.length
-        ? { errors: res.errors, summary: "", payload: null, patch: {} }
-        : { summary: `Đã tiếp nhận hồ sơ chứng từ điện tử (${files.length} tệp)${res.receiptNo ? ` – số tiếp nhận ${res.receiptNo}` : ""}`, payload: { nghiepVu: "HYS", soToKhai: result.declarationNo, soTep: files.length, soTiepNhan: res.receiptNo }, patch: res.receiptNo ? { raw: { receiptNo: res.receiptNo } } : {}, side };
     } else {
       const res = await deps.gateway.send(input.orgId, { op, externalId: result.externalId ?? "", dossierId: ob.dossierId, request: payload.request }, ob.idempotencyKey);
       await meterSent();

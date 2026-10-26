@@ -15,6 +15,7 @@ import { seedAdmin } from "./seed/admin";
 import { seedProducts } from "./seed/products";
 import { seedMailbox, type MockInboxMessage, type MockMailConnection } from "./seed/mailbox";
 import type { AdminDb } from "./admin/types";
+import type { MockHys } from "./hys-sim";
 import type { BranchMessage, CustomsFlow } from "./customs-sim";
 import type { SkillSuggestion } from "@kb/contracts";
 
@@ -62,12 +63,14 @@ export type MockDb = {
   /** Chi phí và điều chỉnh trị giá người khai nhập (bước OCR & kiểm tra) theo hồ sơ. */
   valueCharges: Record<string, { data: ValueCharges; updatedAt: string; updatedBy: string }>;
   notifications: Notification[];
+  /** Bộ HYS (hồ sơ đính kèm điện tử) theo hồ sơ. */
+  hys: MockHys[];
   /** Back-office của bên vận hành (màn /admin). */
   admin: AdminDb;
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 27;
+const DB_VERSION = 28;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -87,6 +90,7 @@ function createSeed(): MockDb {
     products: seedProducts(),
     ...seedMailbox(core.dossiers),
     valueCharges: {},
+    hys: [],
     ...seedSkills(),
     ...seedSettings(),
     ...seedAdmin(),

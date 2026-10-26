@@ -8,6 +8,9 @@ import { saveValueCharges } from "./value-charges";
 import { declareAllSheets, getSubmission, recallAllSheets, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
 import { addPostAmendmentLines, approvePostAmendment, updatePostAmendmentField } from "./post-amendment";
 
+// HYS có test riêng (hys.test.ts): ở đây tắt gợi ý để guard HYS_SUGGESTED không chen vào các ca khai báo.
+vi.mock("@/mocks/hys-sim", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/mocks/hys-sim")>()), pendingSuggestions: () => [] }));
+
 // Bỏ độ trễ mạng giả để test nhanh; thời gian nghiệp vụ điều khiển bằng đồng hồ giả (chỉ Date).
 vi.mock("@/lib/mock-request", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/mock-request")>();
@@ -177,14 +180,15 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
     expect((await getSubmission(NEW)).stage).toBe("NOT_SENT");
     kho.value = saved;
     await submitDeclaration(NEW, CERT);
-    expect(await err(performOperation(NEW, "HYS"))).toMatchObject({ code: "OPERATION_LOCKED", message: "Đang chờ phản hồi IDA" });
+    expect(await err(performOperation(NEW, "PORT_FEE"))).toMatchObject({ code: "OPERATION_LOCKED", message: "Đang chờ phản hồi IDA" });
     wait(3_000);
     expect(await err(submitDeclaration(NEW, CERT))).toMatchObject({ code: "ALREADY_SUBMITTED" });
   });
 
-  it("chứng từ & cảng: HYS số tiếp nhận, container qua KVGS, lệ phí cảng ghi rõ mô phỏng", async () => {
-    expect((await run(INSPECTING, "HYS")).sent).toBe(true);
-    expect((await getSubmission(INSPECTING)).messages[0]!.summary).toMatch(/số tiếp nhận HYS\d{6}/);
+  it("chứng từ & cảng: container qua KVGS, lệ phí cảng ghi rõ mô phỏng; HYS không còn là nghiệp vụ của tờ", async () => {
+    await expect(performOperation(INSPECTING, "HYS")).rejects.toMatchObject({ reason: "HYS_USE_SUBMISSION" });
+    await expect(resendOperation(INSPECTING, "HYS")).rejects.toMatchObject({ reason: "HYS_USE_SUBMISSION" });
+    expect((await getSubmission(INSPECTING)).pipeline.some((p) => p.op === "HYS")).toBe(false);
     await run(INSPECTING, "CONT");
     const cont = (await getSubmission(INSPECTING)).messages[0]!;
     expect(cont).toMatchObject({ operation: "CONT", direction: "IN" });
@@ -198,16 +202,16 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
   it("gửi lại nghiệp vụ lỗi: tra cứu trước rồi mới gửi lại", async () => {
     const db = getDb();
     const at = new Date(Date.now() - 1_000).toISOString();
-    db.customsMessages.push({ id: "msg_err", dossierId: INSPECTING, operation: "HYS", direction: "OUT", result: "ERROR", summary: "Lỗi ký số", at, payloadPreview: "{}" });
-    expect((await row(INSPECTING, "HYS")).status).toBe("ERROR");
-    expect(await resendOperation(INSPECTING, "HYS")).toMatchObject({ resent: true });
+    db.customsMessages.push({ id: "msg_err", dossierId: INSPECTING, operation: "PORT_FEE", direction: "OUT", result: "ERROR", summary: "Lỗi ký số", at, payloadPreview: "{}" });
+    expect((await row(INSPECTING, "PORT_FEE")).status).toBe("ERROR");
+    expect(await resendOperation(INSPECTING, "PORT_FEE")).toMatchObject({ resent: true });
     wait(1_500);
     const s = await getSubmission(INSPECTING);
     expect(s.messages.slice(0, 2).map((m) => m.operation)).toEqual(["IID", "IID"]);
-    expect(s.pipeline.find((r) => r.op === "HYS")!.status).toBe("SENDING");
+    expect(s.pipeline.find((r) => r.op === "PORT_FEE")!.status).toBe("SENDING");
     wait(6_000);
-    expect((await row(INSPECTING, "HYS")).status).toBe("OK");
-    expect(await err(resendOperation(INSPECTING, "HYS"))).toMatchObject({ code: "NOTHING_TO_RESEND" });
+    expect((await row(INSPECTING, "PORT_FEE")).status).toBe("OK");
+    expect(await err(resendOperation(INSPECTING, "PORT_FEE"))).toMatchObject({ code: "NOTHING_TO_RESEND" });
   });
 });
 
@@ -291,9 +295,9 @@ describe("tờ khai nhánh (mock)", () => {
     expect((await performOperation(BIG, "IID", 2)).sent).toBe(false);
     expect((await sheets(BIG))[1]!.messages[0]).toMatchObject({ operation: "IID" });
     expect((await sheets(BIG))[0]!.messages[0]).toMatchObject({ operation: "IDA", direction: "IN" });
-    getDb().customsMessages.push({ id: "msg_b3", dossierId: BIG, branch: 3, operation: "HYS", direction: "OUT", result: "ERROR", summary: "Lỗi", at: new Date(Date.now() - 500).toISOString(), payloadPreview: "{}" });
-    expect(await err(resendOperation(BIG, "HYS", 2))).toMatchObject({ code: "NOTHING_TO_RESEND" });
-    expect(await resendOperation(BIG, "HYS", 3)).toMatchObject({ resent: true });
+    getDb().customsMessages.push({ id: "msg_b3", dossierId: BIG, branch: 3, operation: "PORT_FEE", direction: "OUT", result: "ERROR", summary: "Lỗi", at: new Date(Date.now() - 500).toISOString(), payloadPreview: "{}" });
+    expect(await err(resendOperation(BIG, "PORT_FEE", 2))).toMatchObject({ code: "NOTHING_TO_RESEND" });
+    expect(await resendOperation(BIG, "PORT_FEE", 3)).toMatchObject({ resent: true });
     const rows = (await listCustomsDeclarations()).filter((r) => r.dossierId === BIG).sort((a, c) => a.branch - c.branch);
     expect(rows.map((r) => [r.branch, r.of])).toEqual([[1, 3], [2, 3], [3, 3]]);
     expect(rows.every((r) => r.declarationNo)).toBe(true);
@@ -460,7 +464,7 @@ describe("tờ khai nhánh: gọi về sửa và truyền lại", () => {
   it("tờ k ≥ 2 không khai tạm khi tờ 1 chưa có số; lỗi gửi của một tờ → state SEND_FAILED trong summary.problems", async () => {
     expect(await err(performOperation(BIG, "IDA", 2))).toMatchObject({ code: "INVALID_STATE", message: expect.stringContaining("tờ 1 chưa có số tờ khai") });
     await preDeclareAll(BIG);
-    getDb().customsMessages.push({ id: "msg_e3", dossierId: BIG, branch: 3, operation: "HYS", direction: "OUT", result: "ERROR", summary: "Lỗi", at: new Date(Date.now() - 500).toISOString(), payloadPreview: "{}" });
+    getDb().customsMessages.push({ id: "msg_e3", dossierId: BIG, branch: 3, operation: "PORT_FEE", direction: "OUT", result: "ERROR", summary: "Lỗi", at: new Date(Date.now() - 500).toISOString(), payloadPreview: "{}" });
     const s = await getSubmission(BIG);
     expect(s.branches.map((x) => x.state)).toEqual(["APPROVED", "APPROVED", "SEND_FAILED"]);
     expect(s.summary.problems).toEqual([{ no: 3, kind: "SEND_FAILED" }]);

@@ -14,8 +14,9 @@ import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { buildAmaRequest } from "../domain/post-amendment.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
-import { availabilityInput, OPERATION_LABELS } from "./_customs-view.js";
+import { availabilityInput, hasBlockingPending, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
+import { auditHysWaiver, hysGuard, recordHysWaiver, type HysWaiver } from "./hys-guard.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { resultsSentError } from "./sent-sheets.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
@@ -24,7 +25,7 @@ import { buildSheet, contentKey, declareBlockError, enqueueBranchPreDeclare, gap
 /** Người gọi không cần vai trò (worker nối tiếp chạy không có phiên người dùng). */
 export type ActorCtx = Pick<Ctx, "orgId" | "userId">;
 /** `chain`: ghi vào payload outbox để worker nối tiếp tờ kế tiếp sau khi gửi xong (processOutbox.chainNextBranch). Vắng = hành vi cũ. */
-export type OperationOpts = { chain?: "declare" | "recall"; /** Outbox nguồn của chuỗi nối tiếp: khóa idempotency tất định → worker chạy lại cùng outbox không tạo bản thứ hai. */ chainFrom?: string };
+export type OperationOpts = { chain?: "declare" | "recall"; /** Outbox nguồn của chuỗi nối tiếp: khóa idempotency tất định → worker chạy lại cùng outbox không tạo bản thứ hai. */ chainFrom?: string; /** Người khai xác nhận vẫn khai IDA/EDA dù còn gợi ý HYS chưa thỏa (ghi NOTE). Chuỗi worker (chainFrom) không bị hỏi. */ hysWaived?: boolean };
 
 export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1, opts?: OperationOpts): Promise<Result<OperationResult>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -37,6 +38,8 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
  * Mọi guard khác (thứ tự tờ, BLOCKER, HS, ghim, trùng) giữ nguyên.
  */
 export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, op: CustomsOperation, branch = 1, opts?: OperationOpts): Promise<Result<OperationResult>> {
+  // HYS không còn là nghiệp vụ của từng tờ: khai bằng bộ hồ sơ đính kèm (sendHys).
+  if (op === "HYS") return err(reasonError("INVALID_STATE", "HYS_USE_SUBMISSION"));
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
@@ -90,6 +93,7 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
   if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
 
   let payload: Record<string, unknown> = { request: { soToKhai: result.declarationNo }, certificateId: result.raw?.certificateId, ...(opts?.chain ? { chain: opts.chain } : {}) };
+  let waiver: HysWaiver | null = null;
   if (op === "AMA") {
     // Bản khai bổ sung riêng: đã duyệt, đủ dòng hàng + mã lý do; tờ khai gốc không gửi lại, không đổi trạng thái.
     if (amendment?.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "AMENDMENT_NOT_APPROVED"));
@@ -104,6 +108,11 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
     if (snap.unconfirmedHs > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs }));
     const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
     if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
+    if (baseOp(op) === "IDA" && branch === 1 && !opts?.chainFrom) {
+      const hys = await hysGuard(deps, ctx, dossierId, snap, opts?.hysWaived === true);
+      if (!hys.ok) return hys;
+      waiver = hys.value;
+    }
     if (baseOp(op) === "IDA" && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
       return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
     if (of > 1) {
@@ -123,12 +132,10 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
       if (blocking.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: blocking.join("; ") }));
       payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
     }
-  } else if (op === "HYS") {
-    payload = { files: (await deps.dossiers.documents(ctx.orgId, dossierId)).map((d) => ({ name: d.fileName, storageKey: d.storageKey })), certificateId: result.raw?.certificateId };
   } else if (op === "CONT" || op === "PORT_FEE") {
     payload = { request: { soToKhai: result.declarationNo, containers: snap.payload.containers }, certificateId: result.raw?.certificateId };
   }
-  return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: isContentOperation(op), ...(opts?.chainFrom ? { key: `${dossierId}:${op}:chain${opts.chainFrom}${branch > 1 ? `:b${branch}` : ""}` } : {}), ...(isContentOperation(op) && of > 1 ? { version: snap.version } : {}) });
+  return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: isContentOperation(op), waiver, ...(opts?.chainFrom ? { key: `${dossierId}:${op}:chain${opts.chainFrom}${branch > 1 ? `:b${branch}` : ""}` } : {}), ...(isContentOperation(op) && of > 1 ? { version: snap.version } : {}) });
 }
 
 /**
@@ -155,6 +162,7 @@ export async function enqueue(
     dossierId: string; declarationId: string; op: CustomsOperation; payload: unknown; result: ResultRow; outbox: OutboxRow[]; content: boolean;
     /** Khóa idempotency tất định (chuỗi nối tiếp theo outbox nguồn). */ key?: string;
     /** Lô nhiều tờ, nghiệp vụ nội dung: khóa ghim phiên bản (contentKey) để worker kiểm ghim và nối tiếp tờ sau. */ version?: number;
+    /** Người khai đã xác nhận bỏ qua gợi ý HYS: ghi NOTE cùng transaction tạo outbox. */ waiver?: HysWaiver | null;
   },
 ): Promise<Result<OperationResult>> {
   const now = deps.clock.now();
@@ -169,11 +177,13 @@ export async function enqueue(
       if (/duplicate key|unique/i.test(e instanceof Error ? e.message : String(e))) return err(domainError("ALREADY_SUBMITTED", `${OPERATION_LABELS[p.op]} đang được gửi – không gửi trùng`));
       throw e;
     }
+    if (p.waiver) await recordHysWaiver(deps, r, ctx, p.dossierId, p.waiver);
     // Gửi mới sau một lần lỗi: bỏ cờ lỗi gửi, giữ giai đoạn.
     if (p.result.state === "SEND_FAILED") await r.results.upsert({ ...p.result, state: coarseState(stageOf(p.result)), updatedAt: now });
     return ok(row);
   });
   if (!created.ok) return created;
+  if (p.waiver) await auditHysWaiver(deps, ctx, p.dossierId, p.waiver);
   if (p.content) {
     await deps.declarations.markSubmitted(ctx, p.dossierId);
     await deps.dossiers.update(ctx.orgId, p.dossierId, { status: "SUBMITTED", step: "submit" });
@@ -218,7 +228,7 @@ export async function startPostAmendment(deps: CustomsDeps, ctx: Ctx, dossierId:
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const { result, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ result: await r.results.get(ctx.orgId, dossierId, branch), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));
   if (!result || stageOf(result) !== "CLEARED") return err(domainError("INVALID_STATE", "Chỉ sửa đổi sau thông quan khi tờ khai đã thông quan"));
-  if (outbox.some((o) => o.branch === branch && o.status === "PENDING")) return err(domainError("INVALID_STATE", "Đang chờ phản hồi một nghiệp vụ khác"));
+  if (hasBlockingPending(outbox, branch)) return err(domainError("INVALID_STATE", "Đang chờ phản hồi một nghiệp vụ khác"));
   await deps.uow.asOrg(ctx, (r) => beginPostAmendment(deps, r, ctx, dossierId, result));
   await deps.dossiers.update(ctx.orgId, dossierId, { step: "review" });
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });

@@ -1,9 +1,9 @@
 import { and, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { customsMessages, customsOutbox, customsResults, postAmendments } from "../../../db/schema/integration.js";
+import { customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, postAmendments } from "../../../db/schema/integration.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { CustomsRepos, CustomsUow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import type { CustomsRepos, CustomsUow, HysFileRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
 
 function repos(tx: Tx): CustomsRepos {
   const toOutbox = (r: typeof customsOutbox.$inferSelect): OutboxRow => ({ ...r, operation: r.operation as OutboxRow["operation"], status: r.status as OutboxRow["status"] });
@@ -17,6 +17,7 @@ function repos(tx: Tx): CustomsRepos {
     };
   };
   const amendmentCols = (row: PostAmendmentRow) => ({ status: row.status, header: row.header, lines: row.lines, approvedBy: row.approvedBy ?? null, approvedAt: row.approvedAt, result: row.result ?? null, updatedAt: row.updatedAt });
+  const toHys = (r: typeof hysSubmissions.$inferSelect): HysSubmissionRow => ({ ...r, purpose: r.purpose as HysSubmissionRow["purpose"], status: r.status as HysSubmissionRow["status"], reject: r.reject as HysSubmissionRow["reject"], fill: r.fill as HysSubmissionRow["fill"] });
   return {
     outbox: {
       get: async (orgId, id) => {
@@ -58,6 +59,22 @@ function repos(tx: Tx): CustomsRepos {
       listForDossier: async (orgId, dossierId, branch) => (await tx.select().from(postAmendments).where(and(eq(postAmendments.orgId, orgId), eq(postAmendments.dossierId, dossierId), branch === undefined ? undefined : eq(postAmendments.branch, branch))).orderBy(postAmendments.branch, postAmendments.seq)).map(toAmendment),
       insert: async (row) => void (await tx.insert(postAmendments).values({ id: row.id, orgId: row.orgId, dossierId: row.dossierId, branch: row.branch, seq: row.seq, createdAt: row.createdAt, ...amendmentCols(row) })),
       update: async (row) => void (await tx.update(postAmendments).set(amendmentCols(row)).where(and(eq(postAmendments.orgId, row.orgId), eq(postAmendments.id, row.id)))),
+    },
+    hys: {
+      list: async (orgId, dossierId) => (await tx.select().from(hysSubmissions).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.dossierId, dossierId))).orderBy(hysSubmissions.seq)).map(toHys),
+      get: async (orgId, id) => {
+        const r = (await tx.select().from(hysSubmissions).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.id, id))).limit(1))[0];
+        return r ? toHys(r) : null;
+      },
+      insert: async (row) => void (await tx.insert(hysSubmissions).values(row)),
+      update: async (orgId, id, patch) => void (await tx.update(hysSubmissions).set(patch).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.id, id)))),
+      delete: async (orgId, id) => void (await tx.delete(hysSubmissions).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.id, id)))),
+      files: async (orgId, submissionId) => await tx.select().from(hysSubmissionFiles).where(and(eq(hysSubmissionFiles.orgId, orgId), eq(hysSubmissionFiles.submissionId, submissionId))).orderBy(hysSubmissionFiles.position, hysSubmissionFiles.id),
+      filesForDossier: async (orgId, dossierId) =>
+        (await tx.select({ f: hysSubmissionFiles }).from(hysSubmissionFiles).innerJoin(hysSubmissions, eq(hysSubmissions.id, hysSubmissionFiles.submissionId)).where(and(eq(hysSubmissionFiles.orgId, orgId), eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.dossierId, dossierId))).orderBy(hysSubmissions.seq, hysSubmissionFiles.position, hysSubmissionFiles.id)).map((x) => x.f),
+      insertFile: async (row) => void (await tx.insert(hysSubmissionFiles).values(row)),
+      deleteFile: async (orgId, fileId) => void (await tx.delete(hysSubmissionFiles).where(and(eq(hysSubmissionFiles.orgId, orgId), eq(hysSubmissionFiles.id, fileId)))),
+      deleteFiles: async (orgId, submissionId) => void (await tx.delete(hysSubmissionFiles).where(and(eq(hysSubmissionFiles.orgId, orgId), eq(hysSubmissionFiles.submissionId, submissionId)))),
     },
   };
 }

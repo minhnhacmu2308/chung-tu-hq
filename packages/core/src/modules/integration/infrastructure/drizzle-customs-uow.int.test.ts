@@ -5,7 +5,7 @@ import { createDb, type Db } from "../../../db/client.js";
 import { runSeed } from "../../../db/seed/index.js";
 import { startTestDb, type TestDb } from "../../../db/test-db.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
-import type { MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import type { HysFileRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
 import { sentOf } from "../application/sent-sheets.js";
 import { DrizzleCustomsUow } from "./drizzle-customs-uow.js";
 
@@ -132,5 +132,87 @@ describe("DrizzleCustomsUow – trạng thái theo nhánh tờ khai", () => {
     await admin.close();
     expect((await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_old")))?.branch).toBe(1);
     expect((await uow.asOrg(A, (r) => r.outbox.get("org_anphat", "ob_old")))?.branch).toBe(1);
+  });
+});
+
+describe("DrizzleCustomsUow – bộ HYS", () => {
+  const sub = (id: string, seq: number, patch: Partial<HysSubmissionRow> = {}): HysSubmissionRow => ({
+    id, orgId: "org_anphat", dossierId: "dos_hys", seq, procedureCode: "A546", customsOffice: "03CE", processingUnit: "00", phone: null, internalRef: "HS-1", note: null, purpose: null, status: "DRAFT", attempt: 0,
+    receiptNo: null, registeredOn: null, reject: null, fill: null, sentBy: null, sentAt: null, createdAt: now, updatedAt: now, ...patch,
+  });
+  const file = (id: string, submissionId: string, position: number, patch: Partial<HysFileRow> = {}): HysFileRow => ({ id, orgId: "org_anphat", submissionId, documentId: null, storageKey: `orgs/org_anphat/${id}`, fileName: `${id}.pdf`, mime: "application/pdf", sizeBytes: 100, position, createdAt: now, ...patch });
+
+  beforeAll(async () => {
+    const admin = createDb(t.adminUrl, { max: 1 });
+    await admin.execute(sql`INSERT INTO dossiers (id, org_id, code, direction, type_code, partner, customs_office_code, due_date, owner_id) VALUES ('dos_hys', 'org_anphat', 'HYS-001', 'NK', 'A11', 'P', '03CE', '2026-11-01', 'usr_chau')`);
+    await admin.close();
+  });
+
+  it("thêm/đọc/sửa/xóa bộ và file; ngày YYYY-MM-DD, jsonb, thời điểm UTC khứ hồi đúng", async () => {
+    await uow.asOrg(A, async (r) => {
+      await r.hys.insert(sub("hys_1", 1));
+      await r.hys.insert(sub("hys_2", 2));
+      await r.hys.insertFile(file("hf_b", "hys_1", 2, { documentId: "doc_1" }));
+      await r.hys.insertFile(file("hf_a", "hys_1", 1));
+      await r.hys.insertFile(file("hf_c", "hys_2", 1));
+    });
+    expect((await uow.asOrg(A, (r) => r.hys.list("org_anphat", "dos_hys"))).map((h) => h.id)).toEqual(["hys_1", "hys_2"]);
+    expect((await uow.asOrg(A, (r) => r.hys.files("org_anphat", "hys_1"))).map((f) => [f.id, f.documentId])).toEqual([["hf_a", null], ["hf_b", "doc_1"]]);
+    expect((await uow.asOrg(A, (r) => r.hys.filesForDossier("org_anphat", "dos_hys"))).map((f) => f.id)).toEqual(["hf_a", "hf_b", "hf_c"]);
+    const sentAt = new Date("2026-10-26T03:04:05Z");
+    const reject = [{ code: "E1", message: "Lỗi", solution: "Sửa" }];
+    const fill = { outcome: "FILLED", slot: 1 } as const;
+    await uow.asOrg(A, (r) => r.hys.update("org_anphat", "hys_1", { status: "ACCEPTED", attempt: 1, receiptNo: "0001234567", registeredOn: "2026-10-26", reject, fill, sentBy: "usr_chau", sentAt, purpose: "PRE_DECLARATION", updatedAt: sentAt }));
+    const got = await uow.asOrg(A, (r) => r.hys.get("org_anphat", "hys_1"));
+    expect(got).toMatchObject({ status: "ACCEPTED", attempt: 1, receiptNo: "0001234567", registeredOn: "2026-10-26", reject, fill, sentBy: "usr_chau", purpose: "PRE_DECLARATION" });
+    expect(got?.sentAt?.toISOString()).toBe(sentAt.toISOString());
+    await uow.asOrg(A, (r) => r.hys.deleteFile("org_anphat", "hf_a"));
+    expect((await uow.asOrg(A, (r) => r.hys.files("org_anphat", "hys_1"))).map((f) => f.id)).toEqual(["hf_b"]);
+    await uow.asOrg(A, (r) => r.hys.deleteFiles("org_anphat", "hys_1"));
+    expect(await uow.asOrg(A, (r) => r.hys.files("org_anphat", "hys_1"))).toEqual([]);
+    await uow.asOrg(A, (r) => r.hys.delete("org_anphat", "hys_2"));
+    expect(await uow.asOrg(A, (r) => r.hys.get("org_anphat", "hys_2"))).toBeNull();
+  });
+
+  it("trùng (dossier, seq) bị chặn; trạng thái lạ bị CHECK chặn", async () => {
+    await expect(uow.asOrg(A, (r) => r.hys.insert(sub("hys_dup", 1)))).rejects.toThrow();
+    await expect(uow.asOrg(A, (r) => r.hys.insert(sub("hys_bad", 9, { status: "LA" as HysSubmissionRow["status"] })))).rejects.toThrow();
+  });
+
+  it("xóa bộ cascade file; xóa hồ sơ cascade bộ", async () => {
+    await uow.asOrg(A, async (r) => {
+      await r.hys.insert(sub("hys_c", 3));
+      await r.hys.insertFile(file("hf_c1", "hys_c", 1));
+    });
+    await uow.asOrg(A, (r) => r.hys.delete("org_anphat", "hys_c"));
+    expect(await uow.asOrg(A, (r) => r.hys.files("org_anphat", "hys_c"))).toEqual([]);
+    const admin = createDb(t.adminUrl, { max: 1 });
+    await admin.execute(sql`INSERT INTO dossiers (id, org_id, code, direction, type_code, partner, customs_office_code, due_date, owner_id) VALUES ('dos_hys2', 'org_anphat', 'HYS-002', 'NK', 'A11', 'P', '03CE', '2026-11-01', 'usr_chau')`);
+    await uow.asOrg(A, (r) => r.hys.insert(sub("hys_d", 1, { dossierId: "dos_hys2" })));
+    await admin.execute(sql`DELETE FROM dossiers WHERE id = 'dos_hys2'`);
+    await admin.close();
+    expect(await uow.asOrg(A, (r) => r.hys.get("org_anphat", "hys_d"))).toBeNull();
+  });
+
+  it("org khác không đọc, không sửa, không xóa, không ghi được bộ/file của A (RLS + lọc orgId)", async () => {
+    await uow.asOrg(A, async (r) => {
+      await r.hys.insert(sub("hys_x", 5));
+      await r.hys.insertFile(file("hf_x", "hys_x", 1));
+    });
+    expect(await uow.asOrg(B, (r) => r.hys.list("org_anphat", "dos_hys"))).toEqual([]);
+    expect(await uow.asOrg(B, (r) => r.hys.get("org_anphat", "hys_x"))).toBeNull();
+    expect(await uow.asOrg(B, (r) => r.hys.files("org_anphat", "hys_x"))).toEqual([]);
+    expect(await uow.asOrg(B, (r) => r.hys.filesForDossier("org_anphat", "dos_hys"))).toEqual([]);
+    await uow.asOrg(B, (r) => r.hys.update("org_anphat", "hys_x", { status: "REJECTED" }));
+    await uow.asOrg(B, (r) => r.hys.delete("org_anphat", "hys_x"));
+    await uow.asOrg(B, (r) => r.hys.deleteFile("org_anphat", "hf_x"));
+    await uow.asOrg(B, (r) => r.hys.deleteFiles("org_anphat", "hys_x"));
+    expect((await uow.asOrg(A, (r) => r.hys.get("org_anphat", "hys_x")))?.status).toBe("DRAFT");
+    expect((await uow.asOrg(A, (r) => r.hys.files("org_anphat", "hys_x"))).length).toBe(1);
+    // Cùng org nhưng truyền nhầm orgId → lọc orgId chặn.
+    await uow.asOrg(A, (r) => r.hys.update("org_khac", "hys_x", { status: "REJECTED" }));
+    expect((await uow.asOrg(A, (r) => r.hys.get("org_anphat", "hys_x")))?.status).toBe("DRAFT");
+    await expect(uow.asOrg(B, (r) => r.hys.insert(sub("hys_b", 6)))).rejects.toThrow();
+    await expect(uow.asOrg(B, (r) => r.hys.insertFile(file("hf_b2", "hys_x", 1)))).rejects.toThrow();
   });
 });

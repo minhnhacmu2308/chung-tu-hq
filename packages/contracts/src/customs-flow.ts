@@ -1,6 +1,6 @@
 // Luồng nghiệp vụ tại bước Khai báo Hải quan – THUẦN, dùng chung backend (integration) và mock FE để hai bên cùng một quy tắc.
 // Giai đoạn: ① Khai báo (IDA → IDB → IDC) ② Sửa đổi bổ sung trước thông quan (IDD → IDA01 → IDE)
-// ③ Sau thông quan (AMA → AMB → AMC) ④ Chứng từ & cảng (HYS, container qua KVGS, lệ phí cảng biển). Tra cứu IID/IEX dùng mọi lúc.
+// ③ Sau thông quan (AMA → AMB → AMC) ④ Chứng từ & cảng (container qua KVGS, lệ phí cảng biển; HYS số hóa chứng từ là bộ riêng của hồ sơ, không thuộc luồng từng tờ). Tra cứu IID/IEX dùng mọi lúc.
 // Tờ khai xuất dùng mã E… tương ứng (EDA/EDB/EDC/EDD/EDA01/EDE) và tra cứu IEX.
 import { z } from "zod";
 import type { Direction } from "./common.js";
@@ -51,6 +51,7 @@ export const CUSTOMS_OPERATIONS: Record<CustomsOperation, OpDef> = {
   AMA: { phase: "POST", label: "Khai tạm sửa đổi sau thông quan", kind: "content" },
   AMB: { phase: "POST", label: "Gọi sửa bản khai tạm AMA", kind: "recall" },
   AMC: { phase: "POST", label: "Khai chính thức bản khai AMA", kind: "register" },
+  /** Chỉ còn cho nhãn/lịch sử: HYS là bộ riêng (hys_submissions), không nằm trong luồng từng tờ. */
   HYS: { phase: "DOCS", label: "Số hóa chứng từ", kind: "side" },
   CONT: { phase: "DOCS", label: "Container qua khu vực giám sát", kind: "side" },
   PORT_FEE: { phase: "DOCS", label: "Lệ phí cảng biển", kind: "side" },
@@ -60,7 +61,7 @@ export const CUSTOMS_PHASES: { id: CustomsPhase; title: string; hint: string }[]
   { id: "DECLARE", title: "Khai báo tờ khai", hint: "Khai tạm để nhận số tờ khai và thuế dự kiến, kiểm tra, rồi khai chính thức để phân luồng" },
   { id: "AMEND", title: "Sửa đổi bổ sung (trước thông quan)", hint: "Sau phân luồng: gọi tờ khai về, sửa chỉ tiêu, khai tạm rồi khai chính thức sửa đổi" },
   { id: "POST", title: "Sửa đổi sau thông quan", hint: "Khai bổ sung sau thông quan (trong 60 ngày – TT121 Điều 20)" },
-  { id: "DOCS", title: "Chứng từ & cảng", hint: "Số hóa chứng từ, đưa container qua khu vực giám sát, nộp lệ phí cảng biển" },
+  { id: "DOCS", title: "Chứng từ & cảng", hint: "Đưa container qua khu vực giám sát, nộp lệ phí cảng biển" },
 ];
 
 const XK: Partial<Record<CustomsOperation, CustomsOperation>> = { IDA: "EDA", IDB: "EDB", IDC: "EDC", IDD: "EDD", IDA01: "EDA01", IDE: "EDE", IID: "IEX" };
@@ -71,7 +72,7 @@ export const baseOp = (op: CustomsOperation): CustomsOperation => (Object.entrie
 export const queryOpFor = (direction: Direction): CustomsOperation => opFor(direction, "IID");
 /** Nghiệp vụ hiện trên màn theo chiều tờ khai, theo thứ tự luồng. */
 export const operationsFor = (direction: Direction): CustomsOperation[] =>
-  (["IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "AMA", "AMB", "AMC", "HYS", "CONT", "PORT_FEE"] as CustomsOperation[]).map((o) => opFor(direction, o));
+  (["IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"] as CustomsOperation[]).map((o) => opFor(direction, o));
 /** Nghiệp vụ gửi nội dung tờ khai (phải được duyệt, không còn BLOCKER, HS đủ – bất biến 7). */
 export const isContentOperation = (op: CustomsOperation) => CUSTOMS_OPERATIONS[op].kind === "content";
 /** Nghiệp vụ gọi tờ khai về sửa: thành công → mở lại tờ khai (bước Review). */
@@ -169,7 +170,6 @@ export function operationAvailability(i: OperationAvailabilityInput): OperationA
       : content("AMA", ["POST_EDITING", "POST_RECALLED"], why("AMA_REQUIRES_CLEARANCE")),
     row("AMB", i.stage === "POST_PRE_DECLARED", why("AMA_NOT_PRE_DECLARED")),
     row("AMC", i.stage === "POST_PRE_DECLARED", why("AMA_NOT_PRE_DECLARED")),
-    row("HYS", hasDeclarationNumber(i.stage), why("DECLARATION_NUMBER_REQUIRED")),
     row("CONT", i.hasContainers && isChanneled(i.stage), why(i.hasContainers ? "CONT_REQUIRES_CHANNEL" : "NO_CONTAINERS")),
     row("PORT_FEE", hasDeclarationNumber(i.stage), why("DECLARATION_NUMBER_REQUIRED")),
   ];
@@ -191,7 +191,6 @@ export function nextCustomsOperation(i: OperationAvailabilityInput): CustomsOper
   switch (i.stage) {
     case "NOT_SENT": case "RECALLED": return o("IDA");
     case "PRE_DECLARED": return o("IDC");
-    case "DECLARED": return (i.channel === "YELLOW" || i.channel === "RED") && !i.done.includes("HYS") ? "HYS" : null;
     case "AMEND_RECALLED": return o("IDA01");
     case "AMEND_PRE_DECLARED": return o("IDE");
     case "POST_EDITING": case "POST_RECALLED": return "AMA";

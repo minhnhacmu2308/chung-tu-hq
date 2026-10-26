@@ -34,7 +34,7 @@ const other: Ctx = { orgId: asOrgId("org_b"), userId: asUserId("usr_x"), role: "
 
 const payload = (kind: "IDA" | "EDA" = "IDA"): DeclarationPayload => ({
   kind, direction: kind === "IDA" ? "NK" : "XK", currency: "USD", containers: ["SITU2246781"], adjustments: [],
-  fields: { MA_LH: { value: "A11" }, CQHQ: { value: "03CE – HP" }, PTVC: { value: "2 – Biển" }, NNK_MST: { value: "0316789012" }, NNK_TEN: { value: "AN PHÁT" }, NNK_DC: { value: "Hải Phòng" }, NXK_MST: { value: "0316789012" }, NXK_TEN: { value: "HANSOL" }, NXK_DC: { value: "Changwon" }, MA_NUOC: { value: "KR" }, SO_VD: { value: "HPSEL2610078" }, SO_KIEN: { value: "48 PL" }, TRONG_LUONG: { value: "3860.5" }, KHO: { value: "03CCS01 – Kho" }, CANG_DO: { value: "VNHPH – Cảng Hải Phòng" }, CANG_XEP: { value: "KRPUS – Busan" }, PTVC_TEN: { value: "SITC" }, NGAY_DEN: { value: "2026-10-15" }, NGAY_DI: { value: "2026-10-15" }, SO_HD: { value: "HSP-1" }, NGAY_HD: { value: "2026-10-02" }, PT_TT: { value: "TTR – T/T" }, DK_GIA: { value: "FCA" }, MA_TT: { value: "USD" }, TONG_TG: { value: "20850" }, VBPQ: { value: "MO" },
+  fields: { TK_EA1: { value: "A02" }, TK_EB1: { value: "300000000001" }, MA_LH: { value: "A11" }, CQHQ: { value: "03CE – HP" }, PTVC: { value: "2 – Biển" }, NNK_MST: { value: "0316789012" }, NNK_TEN: { value: "AN PHÁT" }, NNK_DC: { value: "Hải Phòng" }, NXK_MST: { value: "0316789012" }, NXK_TEN: { value: "HANSOL" }, NXK_DC: { value: "Changwon" }, MA_NUOC: { value: "KR" }, SO_VD: { value: "HPSEL2610078" }, SO_KIEN: { value: "48 PL" }, TRONG_LUONG: { value: "3860.5" }, KHO: { value: "03CCS01 – Kho" }, CANG_DO: { value: "VNHPH – Cảng Hải Phòng" }, CANG_XEP: { value: "KRPUS – Busan" }, PTVC_TEN: { value: "SITC" }, NGAY_DEN: { value: "2026-10-15" }, NGAY_DI: { value: "2026-10-15" }, SO_HD: { value: "HSP-1" }, NGAY_HD: { value: "2026-10-02" }, PT_TT: { value: "TTR – T/T" }, DK_GIA: { value: "FCA" }, MA_TT: { value: "USD" }, TONG_TG: { value: "20850" }, VBPQ: { value: "MO" },
     // Đủ ô bắt buộc trước khi khai (@kb/contracts declarationRequiredGaps): IDA và EDA đường biển container, giá FCA.
     PL_CN: { value: "4 – Tổ chức" }, HO_HIEU: { value: "VRDK5" }, HD_PL: { value: "A – Hóa đơn thương mại" }, GIA_PL: { value: "A" }, NGUOI_NT: { value: "1" },
     NXK_DT: { value: "0225 3 888 123" }, TG_TT: { value: "20850 USD" }, SO_CONT: { value: "SITU2246781" }, CON_VC1: { value: "03CCS01" } },
@@ -70,6 +70,9 @@ class FakeDeclarations implements DeclarationReader {
     this.reopened.push(dossierId);
     this.status = "DRAFT";
   }
+  async fillAttachment() {
+    return { outcome: "LOCKED" as const, afterApproval: false };
+  }
   async listForCustoms() {
     return [{ dossierId: "dos_1", status: this.status, approvedAt: new Date("2026-10-14T02:00:00.000Z") }];
   }
@@ -77,7 +80,7 @@ class FakeDeclarations implements DeclarationReader {
 class FakeDossiers implements CustomsDossierPort {
   readonly events: ProgressEvent[] = [];
   readonly patches: unknown[] = [];
-  constructor(public rows: (DossierBrief & { orgId: string })[], public docs: { id: string; kind: DocKind; fileName: string; storageKey: string }[] = [{ id: "doc_1", kind: "INVOICE", fileName: "inv.pdf", storageKey: "k/inv.pdf" }]) {}
+  constructor(public rows: (DossierBrief & { orgId: string })[], public docs: { id: string; kind: DocKind; fileName: string; storageKey: string; mime: string; sizeBytes: number }[] = [{ id: "doc_1", kind: "INVOICE", fileName: "inv.pdf", storageKey: "k/inv.pdf", mime: "application/pdf", sizeBytes: 4 }]) {}
   async get(orgId: string, id: string) {
     const d = this.rows.find((x) => x.id === id && x.orgId === orgId);
     return d ? { ...d } : null;
@@ -90,8 +93,15 @@ class FakeDossiers implements CustomsDossierPort {
   async documents() {
     return this.docs;
   }
-  async readFile() {
-    return Buffer.from("%PDF");
+  readonly files = new Map<string, Buffer>();
+  async readFile(key?: string) {
+    return (key ? this.files.get(key) : undefined) ?? Buffer.from("%PDF");
+  }
+  async putFile(key: string, bytes: Buffer) {
+    this.files.set(key, bytes);
+  }
+  async deleteFile(key: string) {
+    this.files.delete(key);
   }
   async publish(_o: string, _d: string, e: ProgressEvent) {
     this.events.push(e);
@@ -254,25 +264,12 @@ describe("customs-send / poll", () => {
     expect(uow.data.messages.filter((m) => m.operation === "IDA" && m.direction === "OUT")).toHaveLength(1);
     expect(uow.data.messages.filter((m) => m.operation === "IDA" && m.direction === "IN" && m.result === "OK")).toHaveLength(1);
   });
-  it("HYS lỗi lần đầu (hash%7==0) → SEND_FAILED giữ giai đoạn, dòng HYS ERROR; Gửi lại → tra IID, outbox retry1, rồi OK", async () => {
-    // Chọn id có hash % 7 == 0.
-    let id = "dos_r";
-    while (hashId(id) % 7 !== 0) id += "x";
+  // HYS (bộ hồ sơ đính kèm): hys-send.test.ts.
+  it("Gửi lại IDC khi Hải quan đã ghi nhận phân luồng → không gửi lại", async () => {
+    const id = "dos_r";
     dossiers.rows.push({ id, orgId: ORG, code: "HS-NK-2610-099", direction: "NK", typeCode: "A11", partner: "X", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: new Date() });
     unwrap(await submitDeclaration(deps, declarant, id, "cert_1"));
     await drain();
-    unwrap(await performOperation(deps, declarant, id, "HYS"));
-    await drain();
-    let v = unwrap(await getSubmission(deps, declarant, id));
-    expect(v.pipeline.find((p) => p.op === "HYS")).toMatchObject({ status: "ERROR", summary: expect.stringMatching(/E-SIG-401/) });
-    expect(uow.data.results.find((r) => r.dossierId === id)).toMatchObject({ state: "SEND_FAILED", raw: { stage: "PRE_DECLARED" } });
-    const rs = unwrap(await resendOperation(deps, declarant, id, "HYS"));
-    expect(rs.resent).toBe(true);
-    expect(uow.data.outbox.filter((o) => o.dossierId === id && o.operation === "HYS").map((o) => o.idempotencyKey)).toEqual([`${id}:HYS:n1`, `${id}:HYS:n1:retry1`]);
-    await drain();
-    v = unwrap(await getSubmission(deps, declarant, id));
-    expect(v.pipeline.find((p) => p.op === "HYS")?.status).toBe("OK");
-    expect(v.messages.some((m) => m.operation === "IID" && m.summary.includes("được phép gửi lại"))).toBe(true);
     // Khai chính thức, rồi Gửi lại IDC khi Hải quan đã ghi nhận phân luồng → không gửi.
     unwrap(await performOperation(deps, declarant, id, "IDC"));
     const ob = uow.data.outbox.find((o) => o.dossierId === id && o.operation === "IDC")!;
@@ -345,7 +342,7 @@ describe("customs-send / poll", () => {
     unwrap(await performOperation(deps, declarant, D, "EDC"));
     await drain();
     const v = unwrap(await getSubmission(deps, declarant, D));
-    expect(v.pipeline.map((p) => p.op)).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "HYS", "CONT", "PORT_FEE"]);
+    expect(v.pipeline.map((p) => p.op)).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"]);
     expect(v.pipeline.filter((p) => p.status === "OK").map((p) => p.op)).toEqual(["EDA", "EDC"]);
     expect(v.queryOp).toBe("IEX");
     expect(uow.data.messages.some((m) => m.operation === "IEX" && m.direction === "IN")).toBe(true);
@@ -480,14 +477,28 @@ describe("getSubmission / listCustomsDeclarations – nhánh biên", () => {
     expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]?.updatedAt).toBe("2026-10-10T00:00:00.000Z");
   });
 
+  it("NOTE (bỏ qua HYS) và thông điệp HYS: không là nghiệp vụ gần nhất của tờ, dòng IDA không thành OK", async () => {
+    const at = new Date("2026-10-14T02:30:00.000Z");
+    const base = { orgId: ORG, dossierId: D, branch: 1, payloadMasked: {}, externalRef: null, at };
+    uow.data.messages.push(
+      { ...base, id: "msg_h", operation: "HYS", direction: "IN", result: "OK", summary: "Hải quan đã nhận HYS" },
+      { ...base, id: "msg_n", operation: "IDA", direction: "NOTE", result: "OK", summary: "Người khai xác nhận không khai HYS: A02" },
+    );
+    const row = unwrap(await listCustomsDeclarations(deps, declarant))[0]!;
+    expect(row.lastOperation).toBeUndefined();
+    expect(row.state).toBe("READY");
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.pipeline.find((p) => p.op === "IDA")!.status).toBe("NOT_SENT");
+  });
+
   it("danh sách: có kết quả + thông điệp → luồng (ghi chú mặc định), thuế, thao tác cuối; sắp xếp mới nhất trước", async () => {
     dossiers.rows.push({ ...dossiers.rows[0]!, id: "dos_2", code: "HS-NK-2610-022" });
     decls.listForCustoms = async () => [{ dossierId: D, status: "SUBMITTED", approvedAt: T }, { dossierId: "dos_2", status: "APPROVED", approvedAt: new Date("2026-10-15T00:00:00.000Z") }];
     seedResult({ customsTaxVnd: "58449312" });
-    uow.data.messages.push({ id: "m1", orgId: ORG, dossierId: D, branch: 1, operation: "HYS", direction: "IN", result: "OK", summary: "ok", payloadMasked: {}, externalRef: null, at: T });
+    uow.data.messages.push({ id: "m1", orgId: ORG, dossierId: D, branch: 1, operation: "IDC", direction: "IN", result: "OK", summary: "ok", payloadMasked: {}, externalRef: null, at: T });
     const rows = unwrap(await listCustomsDeclarations(deps, declarant));
     expect(rows.map((r) => r.dossierId)).toEqual(["dos_2", D]);
-    expect(rows[1]).toMatchObject({ state: "INSPECTING", lastOperation: "HYS", declarationNo: "107000000001", channel: "YELLOW", channelNote: expect.stringMatching(/^Luồng vàng/), customsTaxVnd: "58449312" });
+    expect(rows[1]).toMatchObject({ state: "INSPECTING", lastOperation: "IDC", declarationNo: "107000000001", channel: "YELLOW", channelNote: expect.stringMatching(/^Luồng vàng/), customsTaxVnd: "58449312" });
   });
 });
 
@@ -530,11 +541,16 @@ describe("resendOperation – nhánh biên", () => {
   it.each([
     ["EDA" as const, { stage: "NOT_SENT" as const }, { status: "s", cleared: false, declarationNo: "307000000001" }],
     ["EDC" as const, { stage: "PRE_DECLARED" as const }, { status: "s", cleared: false, channel: "GREEN" as const }],
-    ["HYS" as const, { stage: "DECLARED" as const, receiptNo: "HYS00000001", done: ["HYS" as const] }, { status: "s", cleared: false }],
   ])("%s đã được Hải quan ghi nhận → không gửi lại", async (op, raw, status) => {
     seedResult({ raw });
     deps.gateway = gw({ queryStatus: async () => status });
     expect(unwrap(await resendOperation(deps, declarant, D, op))).toEqual({ resent: false, message: `Hải quan đã ghi nhận ${op}, không cần gửi lại – bấm Tra cứu để cập nhật` });
+    expect(uow.data.outbox).toHaveLength(0);
+  });
+
+  it("HYS không phải nghiệp vụ gửi lại của tờ → HYS_USE_SUBMISSION", async () => {
+    seedResult();
+    expect(await resendOperation(deps, declarant, D, "HYS")).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "HYS_USE_SUBMISSION" } });
     expect(uow.data.outbox).toHaveLength(0);
   });
 
@@ -670,7 +686,7 @@ describe("processOutbox – nhánh biên", () => {
     expect(uow.data.messages.find((m) => m.direction === "IN")?.payloadMasked).toMatchObject({ maPhanLuong: 2, thueDuKien: "0 VND" });
   });
 
-  it.each([["IDC" as const, "PRE_DECLARED" as const], ["HYS" as const, "DECLARED" as const]])("%s: lỗi vĩnh viễn (DomainError) → FAILED + SEND_FAILED, giữ bước", async (op, progress) => {
+  it.each([["IDC" as const, "PRE_DECLARED" as const]])("%s: lỗi vĩnh viễn (DomainError) → FAILED + SEND_FAILED, giữ bước", async (op, progress) => {
     seedResult({ state: progress, raw: { progress } });
     const boom = async () => { throw domainError("INTEGRATION_NOT_CONFIGURED", "Chưa cấu hình"); };
     deps.gateway = gw({ declare: boom, attachDocuments: boom });
@@ -687,23 +703,20 @@ describe("processOutbox – nhánh biên", () => {
     expect(uow.data.outbox[0]).toMatchObject({ status: "PENDING", lastError: "socket hang up" });
   });
 
-  it("HYS không có tệp (payload rỗng) → lỗi E-HYS-000", async () => {
-    seedResult({ state: "DECLARED", raw: { progress: "DECLARED" } });
-    gateway = new FakeCustomsGateway({ flakyHys: false });
-    deps.gateway = gateway;
-    const ob = seedOutbox({ operation: "HYS", idempotencyKey: `${D}:HYS:v2`, payload: null });
-    expect(unwrap(await send(ob.id)).status).toBe("FAILED");
-    expect(uow.data.outbox[0]?.lastError).toMatch(/^E-HYS-000/);
+  it("performOperation HYS → HYS_USE_SUBMISSION, không tạo outbox", async () => {
+    seedResult({ state: "DECLARED", raw: { stage: "DECLARED" } });
+    expect(await performOperation(deps, declarant, D, "HYS")).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "HYS_USE_SUBMISSION" } });
+    expect(uow.data.outbox).toHaveLength(0);
   });
 
-  it("HYS thành công không có số tiếp nhận → tóm tắt không kèm số; giữ giai đoạn, ghi đã làm, không xếp job hỏi", async () => {
-    seedResult({ state: "DECLARED", raw: { progress: "DECLARED" } });
-    deps.gateway = gw({ attachDocuments: async () => ({}) });
-    const ob = seedOutbox({ operation: "HYS", idempotencyKey: `${D}:HYS:v2`, payload: { files: [{ name: "inv.pdf", storageKey: "k/inv.pdf" }] } });
-    expect(unwrap(await send(ob.id))).toEqual({ status: "SENT", next: null });
-    expect(uow.data.messages.find((m) => m.direction === "IN")?.summary).toBe("Đã tiếp nhận hồ sơ chứng từ điện tử (1 tệp)");
-    expect(uow.data.results[0]?.raw).toMatchObject({ stage: "DECLARED", done: ["HYS"], side: { HYS: "Đã tiếp nhận 1 tệp" } });
-    expect(queue.jobs).toHaveLength(0);
+  it("outbox HYS PENDING không làm IDA/IDC hiện OPERATION_PENDING và không tính là đang xử lý", async () => {
+    seedResult({ state: "PRE_DECLARED", channel: null, raw: { stage: "PRE_DECLARED" } });
+    seedOutbox({ operation: "HYS", idempotencyKey: "hys:sub_1:n1", payload: { submissionId: "sub_1" } });
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.inProgress).toBe(false);
+    expect(v.pipeline.find((p) => p.op === "IDC")).toMatchObject({ enabled: true });
+    expect(v.pipeline.some((p) => p.op === "HYS")).toBe(false);
+    expect((await performOperation(deps, declarant, D, "IDC")).ok).toBe(true);
   });
 
   it("IDC thành công → không tự tạo HYS; xếp job hỏi trạng thái", async () => {
@@ -1799,7 +1812,7 @@ describe("AMA theo tờ khai nhánh (spec §6.6)", () => {
 
 describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
   const msg = (branch: number, p: Partial<MessageRow> = {}): MessageRow => ({ id: `m_${uow.data.messages.length + 1}`, orgId: ORG, dossierId: D, branch, operation: "IDA", direction: "OUT", result: "OK", summary: "s", payloadMasked: {}, externalRef: null, at: new Date(T.getTime() + uow.data.messages.length * 1000), ...p });
-  /** Tờ 1 thông quan, tờ 2 đã khai chính thức (đang gửi HYS), tờ 3 chưa gửi – nối tiếp bị chặn (thông điệp IDA IN/ERROR ghi trên tờ 3). */
+  /** Tờ 1 thông quan, tờ 2 đã khai chính thức (đang gửi PORT_FEE), tờ 3 chưa gửi – nối tiếp bị chặn (thông điệp IDA IN/ERROR ghi trên tờ 3). */
   const seedThree = () => {
     seedBranch(1, { state: "CLEARED", clearanceStatus: "CLEARED", channel: "GREEN", raw: { stage: "CLEARED", certificateId: "cert_1" } });
     seedBranch(2, { channel: "RED" });
@@ -1808,10 +1821,10 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
     uow.data.messages.push(msg(1, { direction: "IN" }));
     uow.data.messages.push(msg(2));
     uow.data.messages.push(msg(2, { direction: "IN" }));
-    uow.data.messages.push(msg(2, { operation: "HYS" }));
+    uow.data.messages.push(msg(2, { operation: "PORT_FEE" }));
     uow.data.messages.push(msg(3, { direction: "IN", result: "ERROR", summary: "Tờ 3/3: chưa khai tạm tự động – Tờ khai chưa phê duyệt" }));
     seedOutbox({ branch: 1, status: "SENT" });
-    seedOutbox({ branch: 2, operation: "HYS", idempotencyKey: `${D}:HYS:n1:b2`, status: "PENDING" });
+    seedOutbox({ branch: 2, operation: "PORT_FEE", idempotencyKey: `${D}:PORT_FEE:n1:b2`, status: "PENDING" });
   };
 
   beforeEach(() => {
@@ -1827,9 +1840,9 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
       [2, 3, "DECLARED", "104000000002", "RED", true, true],
       [3, 3, "NOT_SENT", null, null, false, false],
     ]);
-    expect(v.branches[1]!.messages.map((m) => m.operation)).toEqual(["HYS", "IDA", "IDA"]);
-    expect(v.branches[1]!.pipeline.find((p) => p.op === "HYS")?.status).toBe("SENDING");
-    expect(v.branches[0]!.pipeline.find((p) => p.op === "HYS")?.status).toBe("NOT_SENT");
+    expect(v.branches[1]!.messages.map((m) => m.operation)).toEqual(["PORT_FEE", "IDA", "IDA"]);
+    expect(v.branches[1]!.pipeline.find((p) => p.op === "PORT_FEE")?.status).toBe("SENDING");
+    expect(v.branches[0]!.pipeline.find((p) => p.op === "PORT_FEE")?.status).toBe("NOT_SENT");
     expect(v.branches[0]!.result).toMatchObject({ declarationNo: "104000000001", clearanceStatus: "CLEARED" });
     // Trường cấp hồ sơ = tờ 1 (tương thích): thông điệp, giai đoạn, kết quả của tờ 1.
     expect(v).toMatchObject({ stage: "CLEARED", started: true, inProgress: false, result: { declarationNo: "104000000001" } });
@@ -1874,7 +1887,7 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
     const rows = unwrap(await listCustomsDeclarations(deps, declarant));
     expect(rows.map((r) => [r.dossierId, r.branch, r.of, r.declarationNo, r.channel, r.state, r.lastOperation])).toEqual([
       [D, 1, 3, "104000000001", "GREEN", "CLEARED", "IDA"],
-      [D, 2, 3, "104000000002", "RED", "SENDING", "HYS"],
+      [D, 2, 3, "104000000002", "RED", "SENDING", "PORT_FEE"],
       [D, 3, 3, undefined, undefined, "READY", "IDA"],
     ]);
   });
@@ -1882,6 +1895,13 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
   it("listCustomsDeclarations: chưa truyền lô 120 dòng → 3 dòng READY", async () => {
     const rows = unwrap(await listCustomsDeclarations(deps, declarant));
     expect(rows.map((r) => [r.branch, r.of, r.state])).toEqual([[1, 3, "READY"], [2, 3, "READY"], [3, 3, "READY"]]);
+  });
+
+  it("outbox + thông điệp HYS (gửi trước IDA) không làm tờ 1 NOT_SENT thành SENDING / started", async () => {
+    seedOutbox({ operation: "HYS", idempotencyKey: "hys:sub_1:n1", payload: { submissionId: "sub_1" } });
+    uow.data.messages.push({ id: "m_hys", orgId: ORG, dossierId: D, branch: 1, operation: "HYS", direction: "OUT", result: "OK", summary: "s", payloadMasked: {}, externalRef: null, at: T });
+    expect(unwrap(await listCustomsDeclarations(deps, declarant)).map((r) => [r.branch, r.state])).toEqual([[1, "READY"], [2, "READY"], [3, "READY"]]);
+    expect(unwrap(await getSubmission(deps, declarant, D)).branches.map((b) => [b.no, b.started, b.inProgress])).toEqual([[1, false, false], [2, false, false], [3, false, false]]);
   });
 
   it("dossierCustomsSummaries: tóm tắt k/N + tờ lỗi theo hồ sơ; hồ sơ chưa truyền vắng; org khác không thấy", async () => {

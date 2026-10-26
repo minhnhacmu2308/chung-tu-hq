@@ -19,6 +19,7 @@ import {
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
+import { pendingSuggestions } from "@/mocks/hys-sim";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
 import type { CustomsMessage, CustomsOperation, CustomsSummary, CustomsResult, Declaration, DigitalCertificate, Dossier, LineItem } from "@/mocks/types";
 
@@ -33,7 +34,7 @@ export const customsKeys = {
 export const LIVE_REPLY_MS = 2_500;
 /** Luồng xanh: thông quan sau khai chính thức vài giây. */
 export const GREEN_CLEAR_MS = 5_000;
-/** Luồng vàng/đỏ: thông quan vài giây sau khi đã gửi HYS (mô phỏng kiểm tra hồ sơ). */
+/** Luồng vàng/đỏ: thông quan vài giây sau khi phân luồng (mô phỏng kiểm tra hồ sơ). */
 export const INSPECTION_CLEAR_MS = 6_000;
 /** Lệ phí cảng biển mô phỏng – KHÔNG phải biểu phí thật. */
 const PORT_FEE_DEMO_VND = "250000";
@@ -227,7 +228,6 @@ function reopen(db: MockDb, dossierId: string) {
   Object.assign(dossier, { status: "NEEDS_REVIEW", step: "review", suspectFields: decl.fields.filter((f) => f.suspect).length, updatedAt: nowIso() });
 }
 
-const hysNoOf = (no: string) => `HYS${no.slice(-6)}`;
 const receiptOf = (no: string) => `BL-${no.slice(-6)}`;
 
 /** Phản hồi đã đến → áp giai đoạn mới và tác dụng phụ. */
@@ -262,11 +262,7 @@ function apply(db: MockDb, c: Ctx) {
       if (c.branch === 1) c.dossier.channel = r.channel;
       r.clearanceStatus = r.channel === "GREEN" ? "WAITING" : "INSPECTING";
       if (b === "IDE") c.flow.amendments += 1;
-      c.flow.clearAt = r.channel === "GREEN" ? new Date(at + GREEN_CLEAR_MS).toISOString() : c.flow.done.includes("HYS") ? new Date(at + INSPECTION_CLEAR_MS).toISOString() : null;
-    }
-    if (p.op === "HYS") {
-      c.flow.side.hysNo = hysNoOf(r.declarationNo);
-      if (c.flow.stage === "DECLARED" && r.channel !== "GREEN" && !c.flow.clearAt) c.flow.clearAt = new Date(at + INSPECTION_CLEAR_MS).toISOString();
+      c.flow.clearAt = r.channel === "GREEN" ? new Date(at + GREEN_CLEAR_MS).toISOString() : new Date(at + INSPECTION_CLEAR_MS).toISOString();
     }
     if (p.op === "CONT") c.flow.side.containers = containersOf(db, c.dossier);
     if (p.op === "PORT_FEE") c.flow.side.portFeeReceipt = receiptOf(r.declarationNo);
@@ -461,10 +457,6 @@ function texts(db: MockDb, c: Ctx, op: CustomsOperation, no: string): { out: str
       return { out: "Gọi sửa bản khai tạm AMA (AMB)", in: "Bản khai AMA đã gọi về – sửa bản khai bổ sung, phê duyệt lại rồi khai AMA", payload };
     case "AMC":
       return { out: "Khai chính thức bản khai AMA (AMC) – đã ký số", in: `Hải quan chấp nhận khai bổ sung sau thông quan lần ${post}`, payload: { ...payload, lanSua: post, chuKySo: "Đã ký" } };
-    case "HYS": {
-      const files = db.documents.filter((d) => d.dossierId === c.dossier.id).length || 3;
-      return { out: `Gửi hồ sơ chứng từ điện tử (${files} tệp đính kèm)`, in: `Hải quan tiếp nhận hồ sơ – số tiếp nhận ${hysNoOf(no)}`, payload: { ...payload, soTep: files, soTiepNhan: hysNoOf(no) } };
-    }
     case "CONT": {
       const list = containersOf(db, c.dossier);
       return { out: `Đăng ký container qua khu vực giám sát (${list.length} container)`, in: `Đã đăng ký qua khu vực giám sát: ${list.join(", ")}`, payload: { ...payload, soVanDon: c.dossier.billNo, container: list } };
@@ -537,10 +529,12 @@ function answerQuery(db: MockDb, c: Ctx, now: number): OperationResult {
   return { sent: false, message: `Trạng thái tờ khai: ${text}` };
 }
 
-function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: number, branch = 1, chain?: "declare" | "recall"): OperationResult {
+function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: number, branch = 1, chain?: "declare" | "recall", hysWaived = false): OperationResult {
   settle(db, now);
   const c = load(db, dossierId, branch);
   if (op === queryOpFor(c.dossier.direction)) return answerQuery(db, c, now);
+  // HYS không còn là nghiệp vụ của từng tờ: khai bằng bộ hồ sơ đính kèm.
+  if (op === "HYS") throw reasonApiError("INVALID_STATE", "HYS_USE_SUBMISSION", undefined, "HYS khai bằng bộ hồ sơ đính kèm ở thẻ HYS");
   if (CUSTOMS_OPERATIONS[op].kind === "query") throw new ApiError("INVALID_OPERATION", "Tờ khai nhập tra cứu bằng IID, tờ khai xuất bằng IEX");
   const a = operationAvailability(availabilityInput(db, c)).find((x) => x.op === op);
   if (!a) throw new ApiError("INVALID_OPERATION", `Nghiệp vụ ${op} không dùng cho tờ khai ${c.dossier.direction === "NK" ? "nhập" : "xuất"} khẩu`);
@@ -570,16 +564,22 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   }
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
+  // Nhắc khai HYS trước IDA/EDA (cùng hys-guard backend): còn gợi ý chưa thỏa và chưa xác nhận bỏ qua → HYS_SUGGESTED.
+  if ((op === "IDA" || op === "EDA") && c.branch === 1 && !chain) {
+    const codes = pendingSuggestions(db, dossierId, containersOf(db, c.dossier).length).map((s) => s.code).join(", ");
+    if (codes && !hysWaived) throw reasonApiError("INVALID_STATE", "HYS_SUGGESTED", { codes });
+  }
   send(db, c, op, now, chain);
   return { sent: true, message: `Đã gửi ${op} – ${CUSTOMS_OPERATIONS[op].label.toLowerCase()}. Chờ Hải quan phản hồi.` };
 }
 
 /** Thực hiện một nghiệp vụ theo quy tắc chung (operationAvailability); bị khóa → lỗi kèm lý do. */
 /** `branch`: tờ khai nhánh của lô > 50 dòng (mặc định tờ 1). */
-export const performOperation = (dossierId: string, op: CustomsOperation, branch = 1) => mutate((db) => perform(db, dossierId, op, Date.now(), branch));
+export const performOperation = (dossierId: string, op: CustomsOperation, branch = 1, opts?: { hysWaived?: boolean }) =>
+  mutate((db) => perform(db, dossierId, op, Date.now(), branch, undefined, opts?.hysWaived === true));
 
 /** Ký số và khai tạm lần đầu (IDA/EDA). Khai chính thức (IDC/EDC) là thao tác riêng của người khai. */
-export const submitDeclaration = (dossierId: string, certificateId: string) =>
+export const submitDeclaration = (dossierId: string, certificateId: string, opts?: { hysWaived?: boolean }) =>
   mutate((db) => {
     if (!certificateId) throw reasonApiError("NO_CERT", "CERTIFICATE_REQUIRED");
     const dossier = db.dossiers.find((d) => d.id === dossierId);
@@ -594,7 +594,7 @@ export const submitDeclaration = (dossierId: string, certificateId: string) =>
     const stage = target === 1 ? c.flow.stage : flowOf(db, dossierId, target).stage;
     const op = c.of > 1 ? contentOpFor(stage, dossier.direction) : stage === "NOT_SENT" || stage === "RECALLED" ? opFor(dossier.direction, "IDA") : null;
     if (!op) throw new ApiError("ALREADY_SUBMITTED", "Tờ khai đã được khai tạm – không gửi trùng");
-    perform(db, dossierId, op, Date.now(), target);
+    perform(db, dossierId, op, Date.now(), target, undefined, opts?.hysWaived === true);
   });
 
 /** Bắt đầu sửa đổi sau thông quan: CLEARED → POST_EDITING, lập bản khai bổ sung AMA (tờ khai gốc không mở lại). */
@@ -663,6 +663,7 @@ export const resendOperation = (dossierId: string, op: CustomsOperation, branch 
       const r = answerQuery(db, c, now);
       return { resent: false, message: r.message };
     }
+    if (op === "HYS") throw reasonApiError("INVALID_STATE", "HYS_USE_SUBMISSION", undefined, "HYS khai bằng bộ hồ sơ đính kèm ở thẻ HYS");
     if (c.flow.pending) throw new ApiError("BUSY", `Đang chờ phản hồi ${c.flow.pending.op}`);
     const last = db.customsMessages.filter((m) => m.dossierId === dossierId && (m.branch ?? 1) === branch && m.operation === op && Date.parse(m.at) <= now).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
     if (last?.result !== "ERROR") throw new ApiError("NOTHING_TO_RESEND", `${op} không có lỗi cần gửi lại`);
@@ -765,7 +766,7 @@ function branchView(db: MockDb, c: Ctx, now: number): BranchSubmission {
 
   const pipeline: PipelineRow[] = operationsFor(c.dossier.direction).map((op) => {
     const a = avail.find((x) => x.op === op)!;
-    const last = seen.filter((m) => m.operation === op).at(-1);
+    const last = seen.filter((m) => m.operation === op && m.direction !== "NOTE").at(-1);
     const status: PipelineStatus =
       c.flow.pending?.op === op ? "SENDING" : !last ? "NOT_SENT" : last.result === "ERROR" ? "ERROR" : last.result === "PENDING" ? "SENDING" : "OK";
     return {
@@ -860,7 +861,7 @@ export const listCustomsDeclarations = () =>
         if (!d) return [];
         const v = view(db, d.id, now);
         return [v.branches.map((b): CustomsRow => {
-          const last = b.messages[0];
+          const last = b.messages.find((m) => m.direction !== "NOTE" && m.operation !== "HYS");
           const pending = b.pipeline.some((p) => p.status === "SENDING");
           const state: CustomsRow["state"] =
             b.stage === "NOT_SENT" ? (pending ? "SENDING" : "READY") : pending ? "SENDING" : b.result?.clearanceStatus === "CLEARED" ? "CLEARED" : "INSPECTING";

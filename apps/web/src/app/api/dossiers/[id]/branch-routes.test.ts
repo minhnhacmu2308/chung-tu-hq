@@ -28,11 +28,13 @@ describe("route Hải quan theo tờ khai nhánh", () => {
   it("operations / resend: branch trong thân, vắng → 1; branch 0 → 400 không gọi use case", async () => {
     const ops = import("./submission/operations/route");
     expect((await call(ops, "POST", "/submission/operations", { operation: "IDC" })).status).toBe(200);
-    expect(uc.performOperation).toHaveBeenLastCalledWith(customs, session.ctx, D, "IDC", 1);
+    expect(uc.performOperation).toHaveBeenLastCalledWith(customs, session.ctx, D, "IDC", 1, { hysWaived: false });
     await call(ops, "POST", "/submission/operations", { operation: "IDC", branch: 3 });
-    expect(uc.performOperation).toHaveBeenLastCalledWith(customs, session.ctx, D, "IDC", 3);
+    expect(uc.performOperation).toHaveBeenLastCalledWith(customs, session.ctx, D, "IDC", 3, { hysWaived: false });
+    await call(ops, "POST", "/submission/operations", { operation: "IDA", hysWaived: true });
+    expect(uc.performOperation).toHaveBeenLastCalledWith(customs, session.ctx, D, "IDA", 1, { hysWaived: true });
     expect((await call(ops, "POST", "/submission/operations", { operation: "IDC", branch: 0 })).status).toBe(400);
-    expect(uc.performOperation).toHaveBeenCalledTimes(2);
+    expect(uc.performOperation).toHaveBeenCalledTimes(3);
     await call(import("./submission/resend/route"), "POST", "/submission/resend", { operation: "IDA", branch: 2 });
     expect(uc.resendOperation).toHaveBeenLastCalledWith(customs, session.ctx, D, "IDA", 2);
   });

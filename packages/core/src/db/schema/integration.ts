@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { check, date, index, integer, jsonb, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { dossiers } from "./dossier.js";
 import { organizations } from "./identity.js";
 import { appRole, id, money, orgId, orgPolicyUsing, orgRls, timestamps } from "./shared.js";
 
@@ -109,4 +110,63 @@ export const postAmendments = pgTable(
     ...timestamps(),
   },
   (t) => [uniqueIndex("post_amendments_dossier_branch_seq_uq").on(t.dossierId, t.branch, t.seq), index("post_amendments_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("post_amendments_rls")],
+).enableRLS();
+
+/**
+ * Bộ tập tin đính kèm HYS (VNACCS_HYS) – khai được trước IDA/EDA; số tiếp nhận điền vào 1.63/2.53 của tờ khai.
+ * `fill` = kết quả điền ô (xem HysFill ở @kb/contracts); một hồ sơ nhiều bộ (seq).
+ */
+export const hysSubmissions = pgTable(
+  "hys_submissions",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id")
+      .notNull()
+      .references(() => dossiers.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    procedureCode: text("procedure_code"),
+    customsOffice: text("customs_office"),
+    processingUnit: text("processing_unit"),
+    phone: text("phone"),
+    internalRef: text("internal_ref"),
+    note: text("note"),
+    purpose: text("purpose"),
+    status: text("status").notNull().default("DRAFT"),
+    attempt: integer("attempt").notNull().default(0),
+    receiptNo: text("receipt_no"),
+    registeredOn: date("registered_on", { mode: "string" }),
+    reject: jsonb("reject"),
+    fill: jsonb("fill"),
+    sentBy: text("sent_by"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("hys_submissions_dossier_seq_uq").on(t.dossierId, t.seq),
+    index("hys_submissions_org_dossier_idx").on(t.orgId, t.dossierId),
+    check("hys_submissions_status_chk", sql`status in ('DRAFT', 'SENDING', 'ACCEPTED', 'REJECTED', 'SEND_FAILED')`),
+    check("hys_submissions_purpose_chk", sql`purpose is null or purpose in ('PRE_DECLARATION', 'SUPPLEMENT')`),
+    orgRls("hys_submissions_rls"),
+  ],
+).enableRLS();
+
+/** File của một bộ HYS. File chọn từ hồ sơ chép `storage_key` của `documents`; file riêng có khóa riêng trong kho. */
+export const hysSubmissionFiles = pgTable(
+  "hys_submission_files",
+  {
+    id: id(),
+    orgId: orgId(),
+    submissionId: text("submission_id")
+      .notNull()
+      .references(() => hysSubmissions.id, { onDelete: "cascade" }),
+    documentId: text("document_id"),
+    storageKey: text("storage_key").notNull(),
+    fileName: text("file_name").notNull(),
+    mime: text("mime").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    position: integer("position").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("hys_submission_files_org_sub_idx").on(t.orgId, t.submissionId), orgRls("hys_submission_files_rls")],
 ).enableRLS();

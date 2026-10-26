@@ -111,6 +111,24 @@ describe("FptVnaccsGateway (phản hồi thật của FPT)", () => {
     const { g } = gateway({ "/api/IEX": () => ok(SUCCESS) });
     expect(await g.queryStatus("org1", "309062686130")).toMatchObject({ status: "Khai báo tạm (IDA)", cleared: false, declarationNo: "309062686130", info: { declarationNo: "309062686130" } });
   });
+  const hys = { dossierId: "dos_1", customsOffice: "03CE", processingUnit: "01", procedureCode: "A02", phone: "0901", internalRef: "HS-NK-2610-021", note: null, files: [{ name: "ds.xlsx", bytes: Buffer.from("x") }] };
+  it("HYS: request đủ chỉ tiêu sheet HYS (tK_TSB theo bộ), đọc tK_JNO + tK_YMD dd/MM/yyyy → YYYY-MM-DD", async () => {
+    const { g, calls } = gateway({ "/api/HYS": () => ok({ tK_JNO: "300000000123", tK_YMD: "26/10/2026", tK_CH: "03CE" }) });
+    expect(await g.attachDocuments("org1", hys)).toEqual({ receiptNo: "300000000123", registeredOn: "2026-10-26" });
+    expect(calls.at(-1)!.body).toMatchObject({ tK_CH: "03CE", tK_CHB: "01", tK_TSB: "A02", tK_STL: "0901", tK_REF: "HS-NK-2610-021", tK_KJJ: "", lisT_FILE: [{ filE_NAME: "ds.xlsx", filE_BASE64: Buffer.from("x").toString("base64") }] });
+  });
+  it("HYS: tK_JNO / tK_STL dạng số → chuỗi; phản hồi sai dạng → DomainError GATEWAY_ERROR (lỗi vĩnh viễn, không retry)", async () => {
+    const num = gateway({ "/api/HYS": () => ok({ tK_JNO: 300000000124, tK_STL: 901, tK_YMD: "26/10/2026 10:00:00" }) });
+    expect(await num.g.attachDocuments("org1", hys)).toEqual({ receiptNo: "300000000124", registeredOn: "2026-10-26" });
+    const bad = gateway({ "/api/HYS": () => ok({ tK_JNO: { so: "1" } }) });
+    await expect(bad.g.attachDocuments("org1", hys)).rejects.toMatchObject({ code: "GATEWAY_ERROR", message: expect.stringMatching(/tK_JNO/) });
+  });
+  it("HYS: thiếu TK_CH → lỗi E-SCHEMA, không gọi mạng; errorList → errors", async () => {
+    const { g, calls } = gateway({ "/api/HYS": () => ok({ errorList: [{ errorCode: "E1", errorContent: "Sai mã thủ tục" }] }) });
+    expect((await g.attachDocuments("org1", { ...hys, customsOffice: "" })).errors?.[0]).toMatchObject({ code: "E-SCHEMA" });
+    expect(calls).toHaveLength(0);
+    expect(await g.attachDocuments("org1", hys)).toEqual({ errors: [{ code: "E1", message: "Sai mã thủ tục" }] });
+  });
   it("chưa có tài khoản VNACCS → INTEGRATION_NOT_CONFIGURED, không gọi mạng", async () => {
     const f = fakeFetch({});
     const g = new FptVnaccsGateway(client(f.fn), { get: async () => null });

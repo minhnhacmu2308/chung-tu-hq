@@ -1,7 +1,7 @@
 export type { IntegrationDeps, IntegrationProbe, IntegrationStatusRepo, IntegrationStatusRow } from "./application/ports.js";
 export { listIntegrations } from "./application/list-integrations.js";
 export { testIntegration } from "./application/test-integration.js";
-export type { CertificateReader, CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsRepos, CustomsUow, DeclarationReader, DeclarationSnapshot, DossierBrief, GatewayError, GatewaySendResult, GatewayStatus, MessageRow, OutboxRow, PostAmendmentRow, ResultRow, ValidationReader as CustomsValidationReader } from "./application/customs-ports.js";
+export type { CertificateReader, CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsRepos, CustomsUow, DeclarationReader, DeclarationSnapshot, DossierBrief, GatewayError, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult, MessageRow, OutboxRow, PostAmendmentRow, ResultRow, ValidationReader as CustomsValidationReader } from "./application/customs-ports.js";
 export { submitDeclaration, outboxKey } from "./application/submit-declaration.js";
 export { performOperation, startPostAmendment } from "./application/perform-operation.js";
 export { declareAllSheets } from "./application/declare-all.js";
@@ -21,3 +21,6 @@ export { branchPayload, invoiceTotal, sentSheetsDiff, sentSheetsError, sheetSnap
 export { maskPayload } from "./domain/mask.js";
 export { buildAmaRequest, type AmaBuild } from "./domain/post-amendment.js";
 export { coarseState, rowState, stageOf, type ResultRaw } from "./domain/state-machine.js";
+export { addHysUploadedFiles, createHysSubmission, deleteHysSubmission, getHysOverview, hysValuesOf, removeHysFile, updateHysSubmission } from "./application/hys-submissions.js";
+export { isLotEditable } from "./domain/lot-editable.js";
+export { sendHysSubmission } from "./application/send-hys.js";

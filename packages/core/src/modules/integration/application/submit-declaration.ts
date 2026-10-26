@@ -10,6 +10,7 @@ import { sheetSnapshot } from "../domain/branches.js";
 import { stageOf } from "../domain/state-machine.js";
 import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, outboxKey, pinOf, pinOfOutbox, sheetCountError, sheetOf } from "./branch-send.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
+import { auditHysWaiver, hysGuard, recordHysWaiver } from "./hys-guard.js";
 import { performOperation } from "./perform-operation.js";
 import { resultsSentError } from "./sent-sheets.js";
 
@@ -26,7 +27,7 @@ async function reenqueueStuckOutbox(deps: CustomsDeps, ctx: Ctx, dossierId: stri
   }
 }
 
-export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: string, certificateId: string): Promise<Result<{ outboxId: string }>> {
+export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: string, certificateId: string, opts?: { hysWaived?: boolean }): Promise<Result<{ outboxId: string }>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
@@ -75,13 +76,16 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
       if (changed) return err(changed);
       const target = all.filter((r) => r.branch <= of).map((r) => ({ branch: r.branch, op: contentOpFor(stageOf(r), snap.payload.kind) })).find((t) => t.op);
       if (target?.op) {
-        const sent = await performOperation(deps, ctx, dossierId, target.op, target.branch);
+        const sent = await performOperation(deps, ctx, dossierId, target.op, target.branch, opts);
         return sent.ok ? ok({ outboxId: "" }) : sent;
       }
     }
-    const sent = await performOperation(deps, ctx, dossierId, op);
+    const sent = await performOperation(deps, ctx, dossierId, op, 1, opts);
     return sent.ok ? ok({ outboxId: "" }) : sent;
   }
+  // Nhắc khai HYS trước IDA/EDA: sau mọi guard khác, trước khi tạo outbox (lần gửi lại qua performOperation tự guard).
+  const hys = await hysGuard(deps, ctx, dossierId, snap, opts?.hysWaived === true);
+  if (!hys.ok) return hys;
   const builds = sheets.map(buildSheet);
   const failed = builds.find((b) => !b.ok);
   if (failed && !failed.ok) return failed;
@@ -106,6 +110,7 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
       if (/duplicate key|unique/i.test(e instanceof Error ? e.message : String(e))) return err(domainError("ALREADY_SUBMITTED", "Tờ khai đã được truyền – không gửi trùng"));
       throw e;
     }
+    if (hys.value) await recordHysWaiver(deps, r, ctx, dossierId, hys.value);
     // Mọi nhánh có kết quả NOT_SENT ngay (cùng transaction với outbox nhánh 1); thuế dự tính: lô một tờ – cả lô, nhiều tờ – của từng tờ.
     for (const s of sheets) {
       const result: ResultRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: s.no, externalId: null, declarationNo: null, channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: of === 1 ? snap.estimatedTaxVnd : snap.branchTaxVnd?.[s.no - 1] ?? null, state: "APPROVED", pollCount: 0, raw: { stage: "NOT_SENT", certificateId }, updatedAt: now };
@@ -116,6 +121,7 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
     return ok(row);
   });
   if (!created.ok) return created;
+  if (hys.value) await auditHysWaiver(deps, ctx, dossierId, hys.value);
   await deps.declarations.markSubmitted(ctx, dossierId);
   await deps.dossiers.update(ctx.orgId, dossierId, { status: "SUBMITTED", step: "submit" });
   await deps.queue.enqueue("customs-send", { orgId: ctx.orgId, userId: ctx.userId, outboxId: created.value.id }, { jobId: `customs-send:${created.value.id}` });

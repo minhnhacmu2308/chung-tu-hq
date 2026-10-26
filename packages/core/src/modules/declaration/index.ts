@@ -3,6 +3,7 @@ export type { AgentLog, AgentRunRow, ProductRow, AgentTask, AuditWriter, Declara
 export { failAgentRun, failStaleAgentRuns, getAgentRun, runAgent, STALE_AGENT_RUN_MS, startAgentRun, type RunAgentInput } from "./application/agent-run.js";
 export { confirmHs, listHsCatalog, listLineItems, unconfirmHs } from "./application/line-items.js";
 export { approveDeclaration, getDeclarationView, moveToReview, updateDeclarationField } from "./application/declaration.js";
+export { fillAttachmentFromHys, type FillAttachmentInput, type FillAttachmentResult } from "./application/fill-attachment.js";
 export { buildDeclaration, mappingsFor } from "./domain/build.js";
 export { allocateCustomsValue, type Adjustment } from "./domain/valuation.js";
 export { computeTaxes } from "./domain/tax.js";

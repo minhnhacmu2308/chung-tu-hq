@@ -17,6 +17,8 @@ let deps: CustomsDeps;
 beforeEach(() => {
   h = makeHarness();
   ({ deps } = h);
+  // Đã khai HYS (1.63 nhập tay) → guard HYS_SUGGESTED không chen vào các ca khai tạm.
+  h.decls.fields = { TK_EA1: { value: "A02" }, TK_EB1: { value: "300000000001" } };
 });
 /** Dòng hàng có id (ô HANG.<id>.*). */
 const withIds = (n: number): DeclarationPayload["items"] => lines(n).map((it) => ({ ...it, id: `it${it.lineNo}` }));
@@ -63,7 +65,7 @@ describe("ảnh chụp nội dung đã gửi (raw.sent)", () => {
     expect((h.uow.data.outbox[0]!.payload as { sent?: unknown }).sent).toBeUndefined();
     await sendAll();
     expect(h.uow.data.results[0]!.raw?.sent).toBeUndefined();
-    h.decls.fields = { CQHQ: { value: "01AB – khác" } };
+    h.decls.fields = { ...h.decls.fields, CQHQ: { value: "01AB – khác" } };
     expect(await guard()).toBeNull();
   });
 });
@@ -71,7 +73,7 @@ describe("ảnh chụp nội dung đã gửi (raw.sent)", () => {
 describe("guard tờ chưa gọi về (SENT_SHEETS_CHANGED, thay R3)", () => {
   it("chỉ tờ 2 RECALLED, sửa chỉ tiêu chung → lỗi nêu tờ 1, 3; không tạo outbox khi truyền", async () => {
     lot("PRE_DECLARED", "RECALLED", "PRE_DECLARED");
-    h.decls.fields = { CQHQ: { value: "01AB – khác" } };
+    h.decls.fields = { ...h.decls.fields, CQHQ: { value: "01AB – khác" } };
     expect(await guard()).toMatchObject({ code: "BLOCKER_FAILED", reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3", linesOnly: "0" } });
     reapprove();
     expect(await submitDeclaration(deps, declarant, D, "cert_1")).toMatchObject({ ok: false, error: { reason: "SENT_SHEETS_CHANGED", params: { sheets: "1, 3" } } });
@@ -97,7 +99,7 @@ describe("guard tờ chưa gọi về (SENT_SHEETS_CHANGED, thay R3)", () => {
   });
   it("sửa ô dòng hàng (HANG.<id>.*) của tờ 1 chưa gọi về → lỗi chỉ tờ 1, linesOnly", async () => {
     lot("PRE_DECLARED", "RECALLED", "PRE_DECLARED");
-    h.decls.fields = { "HANG.it10.TG_HD": { value: "1" } };
+    h.decls.fields = { ...h.decls.fields, "HANG.it10.TG_HD": { value: "1" } };
     expect(await guard()).toMatchObject({ reason: "SENT_SHEETS_CHANGED", params: { sheets: "1", fields: "dòng hàng", linesOnly: "1" } });
   });
   it("tờ còn hiệu lực không có ảnh chụp (gửi trước khi có tính năng) → không kiểm được, phải gọi về", async () => {
@@ -109,7 +111,7 @@ describe("guard tờ chưa gọi về (SENT_SHEETS_CHANGED, thay R3)", () => {
   });
   it("tờ đã thông quan / RECALLED không xét", async () => {
     lot("CLEARED", "RECALLED", "RECALLED");
-    h.decls.fields = { CQHQ: { value: "01AB – khác" } };
+    h.decls.fields = { ...h.decls.fields, CQHQ: { value: "01AB – khác" } };
     expect(await guard()).toBeNull();
   });
   it("mở lại lô nhiều tờ khi chỉ tờ 2 RECALLED → được (bỏ R3)", async () => {
@@ -126,13 +128,13 @@ describe("guard tờ chưa gọi về (SENT_SHEETS_CHANGED, thay R3)", () => {
   });
   it("getSubmission: sentChanges theo tờ (tờ còn hiệu lực bị đổi), tờ khác null", async () => {
     lot("PRE_DECLARED", "RECALLED", "PRE_DECLARED");
-    h.decls.fields = { CQHQ: { value: "01AB – khác" } };
+    h.decls.fields = { ...h.decls.fields, CQHQ: { value: "01AB – khác" } };
     const v = unwrap(await getSubmission(deps, declarant, D));
     expect(v.branches.map((b) => b.sentChanges)).toEqual([{ common: ["CQHQ"], lines: false }, null, { common: ["CQHQ"], lines: false }]);
   });
   it("org khác không đọc được kết quả → không kiểm (null)", async () => {
     lot("PRE_DECLARED", "RECALLED", "PRE_DECLARED");
-    h.decls.fields = { CQHQ: { value: "01AB – khác" } };
+    h.decls.fields = { ...h.decls.fields, CQHQ: { value: "01AB – khác" } };
     expect(await checkSentSheets(deps, "org_b", D)).toBeNull();
   });
 });

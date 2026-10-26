@@ -3,6 +3,7 @@
 // GIẢ ĐỊNH (chưa có mẫu): IDA, EDC/IDC, HYS, IEX, mã HTTP lỗi – response có header `X-Mock-Assumed: 1`.
 import { randomInt } from "node:crypto";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
+import { hysExtensionAllowed } from "@kb/contracts";
 import { z } from "zod";
 import { buildDeclarationResult, msgResult, validateDeclaration, type DeclarationRequest, type Kind } from "./declaration.js";
 import { fptEnvelope, mockError, WRONG_PASSWORD, type FptError } from "./envelope.js";
@@ -179,6 +180,9 @@ export function createFptMock(opts: MockOptions = {}) {
     if (!files.length) errors.push(mockError("MOCK-REQ", "LIST_FILE", "Attachments", "Chưa đính kèm file nào."));
     const bytes = files.reduce((s, f) => s + Buffer.from(f.filE_BASE64, "base64").length, 0);
     if (bytes >= 2 * 1024 * 1024) errors.push(mockError("MOCK-FMT", "LIST_FILE", "Attachments", `Tổng dung lượng ${bytes} byte – phải nhỏ hơn 2MB.`));
+    for (const f of files) if (!hysExtensionAllowed(f.filE_NAME)) errors.push(mockError("MOCK-FMT", "LIST_FILE", "Attachments", `Đuôi file không được phép: ${f.filE_NAME}.`));
+    // Kịch bản từ chối: tK_KJJ chứa "REJECT" → lỗi nghiệp vụ kèm cách khắc phục.
+    if (String(b["tK_KJJ"] ?? "").toUpperCase().includes("REJECT")) errors.push(mockError("MOCK-REJ", "KJJ", "Attachment Note", "Hồ sơ đính kèm bị từ chối (kịch bản mock tK_KJJ chứa REJECT)."));
     if (errors.length) return reply(res, b.objVNACCS_ACCOUNT, { errorList: errors }, {}, ASSUMED);
     const jno = `${vnDate(now()).slice(-4)}${String(++hysSeq).padStart(8, "0")}`;
     log(`HYS ${files.length} file → số tiếp nhận ${jno}`);

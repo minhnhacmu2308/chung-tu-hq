@@ -1,6 +1,6 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
-import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
+import type { CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, HysFill, HysStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -11,13 +11,21 @@ import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import type { ResultRaw } from "../domain/state-machine.js";
 
 export type OutboxRow = { id: string; orgId: string; dossierId: string; /** Nhánh tờ khai (≥ 1). */ branch: number; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
-export type MessageRow = { id: string; orgId: string; dossierId: string; branch: number; operation: CustomsOperation; direction: "OUT" | "IN"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
+export type MessageRow = { id: string; orgId: string; dossierId: string; branch: number; operation: CustomsOperation; direction: "OUT" | "IN" | "NOTE"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
 export type ResultRow = {
   id: string; orgId: string; dossierId: string; branch: number; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
   clearanceStatus: "WAITING" | "INSPECTING" | "CLEARED" | "REJECTED"; customsTaxVnd: string | null; state: SubmissionState; pollCount: number;
   /** Giai đoạn vòng đời + dữ liệu phụ (xem ResultRaw). */
   raw: ResultRaw | null; updatedAt: Date;
 };
+
+/** Bộ tập tin đính kèm HYS (khai trước IDA/EDA). Ngày `registeredOn` dạng YYYY-MM-DD; thời điểm là Date (UTC). */
+export type HysSubmissionRow = {
+  id: string; orgId: string; dossierId: string; seq: number; procedureCode: string | null; customsOffice: string | null; processingUnit: string | null; phone: string | null; internalRef: string | null; note: string | null;
+  purpose: "PRE_DECLARATION" | "SUPPLEMENT" | null; status: HysStatus; attempt: number; receiptNo: string | null; registeredOn: string | null;
+  reject: { code: string; message: string; solution?: string }[] | null; fill: HysFill | null; sentBy: string | null; sentAt: Date | null; createdAt: Date; updatedAt: Date;
+};
+export type HysFileRow = { id: string; orgId: string; submissionId: string; documentId: string | null; storageKey: string; fileName: string; mime: string; sizeBytes: number; position: number; createdAt: Date };
 
 export interface CustomsRepos {
   outbox: {
@@ -53,6 +61,19 @@ export interface CustomsRepos {
     insert(row: PostAmendmentRow): Promise<void>;
     update(row: PostAmendmentRow): Promise<void>;
   };
+  /** Bộ tập tin đính kèm HYS và file của bộ (xóa bộ cascade file). */
+  hys: {
+    list(orgId: string, dossierId: string): Promise<HysSubmissionRow[]>;
+    get(orgId: string, id: string): Promise<HysSubmissionRow | null>;
+    insert(row: HysSubmissionRow): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Omit<HysSubmissionRow, "id" | "orgId" | "dossierId" | "seq" | "createdAt">>): Promise<void>;
+    delete(orgId: string, id: string): Promise<void>;
+    files(orgId: string, submissionId: string): Promise<HysFileRow[]>;
+    filesForDossier(orgId: string, dossierId: string): Promise<HysFileRow[]>;
+    insertFile(row: HysFileRow): Promise<void>;
+    deleteFile(orgId: string, fileId: string): Promise<void>;
+    deleteFiles(orgId: string, submissionId: string): Promise<void>;
+  };
 }
 
 /** Bản khai bổ sung trong DB (thời điểm là Date; DTO `PostAmendment` dùng chuỗi ISO). */
@@ -74,7 +95,8 @@ export interface CustomsGateway {
   readonly name: string;
   preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId: string }, idempotencyKey: string): Promise<{ externalId: string; declarationNo?: string; info?: CustomsInfo; errors?: GatewayError[] }>;
   declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }, idempotencyKey: string): Promise<{ accepted: boolean; channel?: "GREEN" | "YELLOW" | "RED"; customsTaxVnd?: string; info?: CustomsInfo; errors?: GatewayError[] }>;
-  attachDocuments(orgId: string, msg: { externalId: string; dossierId: string; files: { name: string; bytes: Buffer }[]; declaration?: DeclarationPayload }, idempotencyKey: string): Promise<{ receiptNo?: string; errors?: GatewayError[] }>;
+  /** HYS (bộ tập tin đính kèm): số tiếp nhận (TK_JNO) + ngày tiếp nhận `YYYY-MM-DD` (TK_YMD), hoặc lỗi Hải quan. */
+  attachDocuments(orgId: string, req: HysGatewayRequest, idempotencyKey: string): Promise<HysGatewayResult>;
   queryStatus(orgId: string, externalId: string, dossierId: string): Promise<GatewayStatus>;
   /**
    * Nghiệp vụ còn lại của luồng: gọi sửa (IDB/IDD/AMB, EDB/EDD), khai tạm sửa đổi (IDA01/EDA01, AMA), khai chính thức sửa đổi (IDE/EDE, AMC),
@@ -82,6 +104,9 @@ export interface CustomsGateway {
    */
   send(orgId: string, msg: { op: CustomsOperation; externalId: string; dossierId: string; request?: unknown }, idempotencyKey: string): Promise<GatewaySendResult>;
 }
+/** Thông điệp HYS gửi cổng (spec §2.2): thông tin chung của bộ + file (bytes đọc từ kho). */
+export type HysGatewayRequest = { dossierId: string; customsOffice: string; processingUnit: string; procedureCode: string; phone: string | null; internalRef: string | null; note: string | null; files: { name: string; bytes: Buffer }[]; certificateId?: string };
+export type HysGatewayResult = { receiptNo?: string; registeredOn?: string; errors?: GatewayError[] };
 export type GatewaySendResult = { channel?: "GREEN" | "YELLOW" | "RED"; receiptNo?: string; customsTaxVnd?: string; note?: string; errors?: GatewayError[] };
 
 /** Tờ khai + dòng hàng từ module declaration (composition root nối). */
@@ -94,6 +119,8 @@ export interface DeclarationReader {
   markSubmitted(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;
   /** Mở lại: tờ khai DRAFT, hồ sơ NEEDS_REVIEW/review. */
   markDraft(ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<void>;
+  /** Điền số tiếp nhận HYS vào cặp 1.63/2.53 trống đầu tiên (DRAFT hoặc APPROVED, giữ nguyên trạng thái duyệt). Lỗi → LOCKED. */
+  fillAttachment(ctx: { orgId: OrgId; userId: UserId }, dossierId: string, input: { procedureCode: string; receiptNo: string; note: string }): Promise<{ outcome: "FILLED" | "ALREADY" | "FULL" | "LOCKED"; slot?: 1 | 2 | 3; afterApproval: boolean }>;
   /** Hồ sơ có tờ khai APPROVED/SUBMITTED (màn Khai báo Hải quan). */
   listForCustoms(orgId: string): Promise<{ dossierId: string; status: DeclarationStatus; approvedAt: Date | null }[]>;
 }
@@ -102,8 +129,11 @@ export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; t
 export interface CustomsDossierPort {
   get(orgId: string, dossierId: string): Promise<DossierBrief | null>;
   update(orgId: string, dossierId: string, patch: { status?: DossierStatus; step?: StepId; declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED" }): Promise<void>;
-  documents(orgId: string, dossierId: string): Promise<{ id: string; kind: DocKind; fileName: string; storageKey: string }[]>;
+  documents(orgId: string, dossierId: string): Promise<{ id: string; kind: DocKind; fileName: string; storageKey: string; mime: string; sizeBytes: number }[]>;
   readFile(storageKey: string): Promise<Buffer>;
+  /** Ghi / xóa file riêng (file upload cho bộ HYS – không vào bảng documents). */
+  putFile(storageKey: string, bytes: Buffer, mime: string): Promise<void>;
+  deleteFile(storageKey: string): Promise<void>;
   publish(orgId: string, dossierId: string, event: ProgressEvent): Promise<void>;
 }
 export interface ValidationReader {

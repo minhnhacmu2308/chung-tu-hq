@@ -1,9 +1,9 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { CustomsRepos, CustomsUow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
+import type { CustomsRepos, CustomsUow, HysFileRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
 
 /** Fake mô phỏng RLS theo org; outbox unique theo idempotency_key; messages append-only. */
 export class InMemoryCustomsUow implements CustomsUow {
-  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[] };
+  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[], hys: [] as HysSubmissionRow[], hysFiles: [] as HysFileRow[] };
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T> {
     const d = this.data;
     const org = ctx.orgId as string;
@@ -60,6 +60,43 @@ export class InMemoryCustomsUow implements CustomsUow {
         update: async (row) => {
           const i = d.amendments.findIndex((a) => a.id === row.id && a.orgId === org);
           if (i >= 0) d.amendments[i] = clone(row);
+        },
+      },
+      hys: {
+        list: async (orgId, dossierId) => clone(d.hys.filter((h) => h.orgId === org && h.orgId === orgId && h.dossierId === dossierId).sort((a, b) => a.seq - b.seq)),
+        get: async (orgId, id) => clone(d.hys.find((h) => h.id === id && h.orgId === org && h.orgId === orgId) ?? null),
+        insert: async (row) => {
+          if (row.orgId !== org) deny("hys_submissions");
+          if (d.hys.some((h) => h.dossierId === row.dossierId && h.seq === row.seq)) throw new Error("duplicate key value violates unique constraint hys_submissions_dossier_seq_uq");
+          d.hys.push(clone(row));
+        },
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`hys_submissions update orgId ${orgId} khác ngữ cảnh`);
+          const h = d.hys.find((x) => x.id === id && x.orgId === org);
+          if (h) Object.assign(h, clone(Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))));
+        },
+        delete: async (orgId, id) => {
+          if (orgId !== org) return;
+          d.hys = d.hys.filter((h) => !(h.id === id && h.orgId === org));
+          d.hysFiles = d.hysFiles.filter((f) => !(f.submissionId === id && f.orgId === org));
+        },
+        files: async (orgId, submissionId) => clone(d.hysFiles.filter((f) => f.orgId === org && f.orgId === orgId && f.submissionId === submissionId).sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))),
+        filesForDossier: async (orgId, dossierId) => {
+          const subs = d.hys.filter((h) => h.orgId === org && h.orgId === orgId && h.dossierId === dossierId);
+          const seqOf = (sid: string) => subs.find((h) => h.id === sid)?.seq ?? 0;
+          return clone(d.hysFiles.filter((f) => f.orgId === org && f.orgId === orgId && subs.some((h) => h.id === f.submissionId)).sort((a, b) => seqOf(a.submissionId) - seqOf(b.submissionId) || a.position - b.position || a.id.localeCompare(b.id)));
+        },
+        insertFile: async (row) => {
+          if (row.orgId !== org) deny("hys_submission_files");
+          d.hysFiles.push(clone(row));
+        },
+        deleteFile: async (orgId, fileId) => {
+          if (orgId !== org) return;
+          d.hysFiles = d.hysFiles.filter((f) => !(f.id === fileId && f.orgId === org));
+        },
+        deleteFiles: async (orgId, submissionId) => {
+          if (orgId !== org) return;
+          d.hysFiles = d.hysFiles.filter((f) => !(f.submissionId === submissionId && f.orgId === org));
         },
       },
     });

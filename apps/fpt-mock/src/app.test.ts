@@ -107,6 +107,21 @@ describe("fpt-mock: luồng đủ EDA → EDC → HYS → IEX", () => {
     expect(await iex()).toBe("0");
     expect(await iex()).toBe("1");
   });
+  it("HYS: đuôi file không cho phép → lỗi; tK_KJJ REJECT → lỗi nghiệp vụ có cách khắc phục; ca hợp lệ có tK_JNO 12 ký tự", async () => {
+    const token = await login();
+    const acc = edaRequest.objVNACCS_ACCOUNT;
+    const file = (name: string) => ({ filE_NAME: name, filE_BASE64: Buffer.from("x").toString("base64") });
+    const call = async (extra: Record<string, unknown>) => (await (await post("/api/HYS", { objVNACCS_ACCOUNT: acc, tK_CH: "88AB", tK_TSB: "A99", ...extra }, token)).json()) as { errorList: { errorCode: string; proposedSolution: string }[] | null; tK_JNO?: string; tK_YMD?: string };
+    const zip = await call({ lisT_FILE: [file("x.zip")] });
+    expect(zip.errorList?.[0]?.errorCode).toBe("MOCK-FMT");
+    const rej = await call({ tK_KJJ: "REJECT", lisT_FILE: [file("a.pdf")] });
+    expect(rej.errorList?.[0]?.errorCode).toBe("MOCK-REJ");
+    expect(rej.errorList?.[0]?.proposedSolution).not.toBe("");
+    const ok = await call({ lisT_FILE: [file("a.PDF")] });
+    expect(ok.errorList).toBeNull();
+    expect(ok.tK_JNO).toHaveLength(12);
+    expect(ok.tK_YMD).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+  });
   it("EDC với số tờ khai chưa khai trước → lỗi", async () => {
     const body = (await (await post("/api/EDC", { objVNACCS_ACCOUNT: edaRequest.objVNACCS_ACCOUNT, tK_ECN: 300000000099 }, await login())).json()) as { errorList: { indexCode: string }[] };
     expect(body.errorList[0]!.indexCode).toBe("ECN");

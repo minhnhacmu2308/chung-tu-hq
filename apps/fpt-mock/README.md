@@ -36,7 +36,7 @@ POST /api/auth/login {username,password}         → {token, expiration}
 POST /api/EDA | /api/IDA  (Bearer)               → objEDA[0] / objIDA[0]: số tờ khai (tK_ECN/tK_ICN), TRANGTHAI A
 Tờ khai nhánh (lô > 50 dòng): head có tK_FIC/tK_BNO/tK_DNO; tờ 1 ghi tK_FIC "F" + tK_BNO 1 → số mới; tK_BNO ≥ 2 phải có tK_FIC = số tờ 1 mock đã cấp, nếu không lỗi MOCK-REQ (FIC); mỗi tờ một số riêng.
 POST /api/EDC | /api/IDC  {tK_ECN | tK_ICN}      → TRANGTHAI C + tK_LUONG (1 xanh, 2 vàng, 3 đỏ)
-POST /api/HYS  {tK_CH, tK_TSB, lisT_FILE[]}      → tK_JNO (số tiếp nhận)
+POST /api/HYS  {tK_CH, tK_TSB, lisT_FILE[]}      → tK_JNO (số tiếp nhận); đuôi file ngoài danh sách → MOCK-FMT; tK_KJJ chứa "REJECT" → MOCK-REJ (có cách khắc phục)
 POST /api/IEX  {tK_SOTK}                         → TRANGTHAI; sau 2 lần hỏi kể từ EDC/IDC → tK_THONGQUAN "1"
 ```
 

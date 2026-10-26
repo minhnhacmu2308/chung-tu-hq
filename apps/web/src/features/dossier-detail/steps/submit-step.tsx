@@ -9,7 +9,7 @@ import {
 import { baseOp, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
+  ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, StickyNote, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
@@ -279,7 +279,9 @@ function MessageList({ messages }: { messages: SubmissionView["messages"] }) {
               <li key={m.id}>
                 <details className="group">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-3 py-2.5 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                    {m.direction === "OUT" ? (
+                    {m.direction === "NOTE" ? (
+                      <StickyNote aria-label={t.note} className="h-4 w-4 text-fg-subtle" />
+                    ) : m.direction === "OUT" ? (
                       <ArrowUpRight aria-label={t.outgoing} className="h-4 w-4 text-fg-subtle" />
                     ) : (
                       <ArrowDownLeft aria-label={t.incoming} className="h-4 w-4 text-primary" />
@@ -288,9 +290,13 @@ function MessageList({ messages }: { messages: SubmissionView["messages"] }) {
                       {m.operation}
                     </Badge>
                     <span className="min-w-0 flex-1 text-sm text-fg cq-sm:min-w-48">{m.summary}</span>
-                    <Badge tone={m.result === "OK" ? "success" : m.result === "ERROR" ? "danger" : "info"}>
-                      {m.result === "OK" ? t.pipeOk : m.result === "ERROR" ? t.pipeError : t.pipeSending}
-                    </Badge>
+                    {m.direction === "NOTE" ? (
+                      <Badge tone="neutral">{t.note}</Badge>
+                    ) : (
+                      <Badge tone={m.result === "OK" ? "success" : m.result === "ERROR" ? "danger" : "info"}>
+                        {m.result === "OK" ? t.pipeOk : m.result === "ERROR" ? t.pipeError : t.pipeSending}
+                      </Badge>
+                    )}
                     <span className="text-xs tabular-nums text-fg-subtle" title={formatDateTime(m.at)}>{isToday(m.at) ? formatTime(m.at) : formatDateTime(m.at)}</span>
                   </summary>
                   <pre className="mx-3 mb-3 overflow-x-auto rounded-md bg-surface-muted p-3 font-mono text-xs text-fg-muted">{m.payloadPreview}</pre>

@@ -58,7 +58,8 @@ export async function listCustomsDeclarations(deps: CustomsDeps, ctx: Ctx): Prom
       const res = own.find((r) => r.branch === no) ?? null;
       const msgs = messages.filter((m) => m.branch === no);
       const obs = outbox.filter((o) => o.branch === no && !isHysOutbox(o));
-      const last = msgs.at(-1);
+      // Nghiệp vụ gần nhất của tờ: bỏ NOTE (ghi chú) và HYS (bộ hồ sơ đính kèm của cả lô, không phải lần gửi của tờ).
+      const last = msgs.filter((m) => m.direction !== "NOTE" && m.operation !== "HYS").at(-1);
       const stage = stageOf(res);
       return {
         dossierId: d.dossierId, dossierCode: dossier.code, branch: no, of, direction: dossier.direction, partner: dossier.partner, typeCode: dossier.typeCode,

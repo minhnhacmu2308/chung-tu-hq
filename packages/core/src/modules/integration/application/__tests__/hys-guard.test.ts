@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { RecordingOrgAudit } from "../../../../shared/audit.js";
 import { createHysSubmission } from "../hys-submissions.js";
 import { performOperation } from "../perform-operation.js";
-import { submitDeclaration } from "../submit-declaration.js";
+import { outboxKey, submitDeclaration } from "../submit-declaration.js";
 import { D, declarant, makeHarness, seed, type Harness } from "./_sheets-harness.js";
 
 let h: Harness;
@@ -56,6 +56,15 @@ describe("khai IDA lần đầu", () => {
     expect(notes()).toEqual([]);
   });
 
+  it("hysWaived nhưng outbox không tạo được (đã truyền – ALREADY_SUBMITTED) → không NOTE, không nhật ký", async () => {
+    const at = new Date("2026-10-14T03:00:00.000Z");
+    h.uow.data.outbox.push({ id: "msg_old", orgId: "org_a", dossierId: D, branch: 1, declarationId: "dec_1", operation: "IDA", idempotencyKey: outboxKey(D, "IDA", h.decls.version), payload: {}, status: "PENDING", attempts: 1, lastError: null, nextAttemptAt: null, createdAt: at, updatedAt: at });
+    const r = await submit({ hysWaived: true });
+    expect(!r.ok && r.error.code).toBe("ALREADY_SUBMITTED");
+    expect(notes()).toEqual([]);
+    expect(audit.entries).toEqual([]);
+  });
+
   it("bộ A02 còn nháp (chưa gửi) vẫn bị hỏi", async () => {
     await createHysSubmission(h.deps, declarant, D, { procedureCode: "A02" });
     const r = await submit();
@@ -78,6 +87,16 @@ describe("gửi lại IDA qua performOperation", () => {
     expect(w.ok).toBe(true);
     expect(h.uow.data.outbox).toHaveLength(1);
     expect(notes()).toHaveLength(1);
+  });
+
+  it("hysWaived nhưng guard sau trượt (tỷ giá khác tuần) → không NOTE, không outbox", async () => {
+    recalled();
+    h.decls.rateDate = "2026-10-11";
+    const r = await performOperation(h.deps, declarant, D, "IDA", 1, { hysWaived: true });
+    expect(!r.ok && r.error.reason).toBe("RATE_WEEK_CHANGED_REBUILD");
+    expect(h.uow.data.outbox).toEqual([]);
+    expect(notes()).toEqual([]);
+    expect(audit.entries).toEqual([]);
   });
 
   it("chuỗi worker (chainFrom) không bị hỏi, không NOTE", async () => {

@@ -169,6 +169,17 @@ describe("Bước Khai báo – lô 1 tờ", () => {
     expect(api.perform).toHaveBeenCalledWith("dos_028", "IDC", 1);
   }, 20_000);
 
+  it("nhật ký: NOTE (xác nhận bỏ qua HYS) có biểu tượng và nhãn 'Ghi chú', không phải 'Nhận về' + kết quả OK", async () => {
+    const note = { id: "m_note", dossierId: "dos_028", operation: "IDA" as const, direction: "NOTE" as const, result: "OK" as const, summary: "Người khai xác nhận không khai HYS: A02", at: "2026-10-14T03:00:00.000Z", payloadPreview: "{}" };
+    const b = branch(1, 1, "NOT_SENT");
+    api.current = submissionOf([{ ...b, messages: [note] }], { messages: [note] });
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    const summary = (await screen.findByText(note.summary, {}, T)).closest("summary")!;
+    expect(within(summary).getByLabelText("Ghi chú")).toBeTruthy();
+    expect(within(summary).queryByLabelText("Nhận về")).toBeNull();
+    expect(within(summary).getByText("Ghi chú")).toBeTruthy();
+  }, 20_000);
+
   it("khai lại IDA bị chặn HYS_SUGGESTED → hộp xác nhận HYS; 'Vẫn khai, không cần HYS' gọi lại với hysWaived; a11y", async () => {
     api.current = submissionOf([branch(1, 1, "RECALLED", { nextOp: "IDA", pipeline: pipelineFor("RECALLED", ["IDA"]) })], { stage: "RECALLED", nextOp: "IDA", declarationStatus: "APPROVED" });
     api.perform.mockReset()

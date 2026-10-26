@@ -477,14 +477,28 @@ describe("getSubmission / listCustomsDeclarations – nhánh biên", () => {
     expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]?.updatedAt).toBe("2026-10-10T00:00:00.000Z");
   });
 
+  it("NOTE (bỏ qua HYS) và thông điệp HYS: không là nghiệp vụ gần nhất của tờ, dòng IDA không thành OK", async () => {
+    const at = new Date("2026-10-14T02:30:00.000Z");
+    const base = { orgId: ORG, dossierId: D, branch: 1, payloadMasked: {}, externalRef: null, at };
+    uow.data.messages.push(
+      { ...base, id: "msg_h", operation: "HYS", direction: "IN", result: "OK", summary: "Hải quan đã nhận HYS" },
+      { ...base, id: "msg_n", operation: "IDA", direction: "NOTE", result: "OK", summary: "Người khai xác nhận không khai HYS: A02" },
+    );
+    const row = unwrap(await listCustomsDeclarations(deps, declarant))[0]!;
+    expect(row.lastOperation).toBeUndefined();
+    expect(row.state).toBe("READY");
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.pipeline.find((p) => p.op === "IDA")!.status).toBe("NOT_SENT");
+  });
+
   it("danh sách: có kết quả + thông điệp → luồng (ghi chú mặc định), thuế, thao tác cuối; sắp xếp mới nhất trước", async () => {
     dossiers.rows.push({ ...dossiers.rows[0]!, id: "dos_2", code: "HS-NK-2610-022" });
     decls.listForCustoms = async () => [{ dossierId: D, status: "SUBMITTED", approvedAt: T }, { dossierId: "dos_2", status: "APPROVED", approvedAt: new Date("2026-10-15T00:00:00.000Z") }];
     seedResult({ customsTaxVnd: "58449312" });
-    uow.data.messages.push({ id: "m1", orgId: ORG, dossierId: D, branch: 1, operation: "HYS", direction: "IN", result: "OK", summary: "ok", payloadMasked: {}, externalRef: null, at: T });
+    uow.data.messages.push({ id: "m1", orgId: ORG, dossierId: D, branch: 1, operation: "IDC", direction: "IN", result: "OK", summary: "ok", payloadMasked: {}, externalRef: null, at: T });
     const rows = unwrap(await listCustomsDeclarations(deps, declarant));
     expect(rows.map((r) => r.dossierId)).toEqual(["dos_2", D]);
-    expect(rows[1]).toMatchObject({ state: "INSPECTING", lastOperation: "HYS", declarationNo: "107000000001", channel: "YELLOW", channelNote: expect.stringMatching(/^Luồng vàng/), customsTaxVnd: "58449312" });
+    expect(rows[1]).toMatchObject({ state: "INSPECTING", lastOperation: "IDC", declarationNo: "107000000001", channel: "YELLOW", channelNote: expect.stringMatching(/^Luồng vàng/), customsTaxVnd: "58449312" });
   });
 });
 

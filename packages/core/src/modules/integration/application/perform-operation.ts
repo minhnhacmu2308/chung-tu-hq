@@ -16,7 +16,7 @@ import { buildAmaRequest } from "../domain/post-amendment.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { availabilityInput, hasBlockingPending, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
-import { hysGuard } from "./hys-guard.js";
+import { auditHysWaiver, hysGuard, recordHysWaiver, type HysWaiver } from "./hys-guard.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { resultsSentError } from "./sent-sheets.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
@@ -93,6 +93,7 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
   if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
 
   let payload: Record<string, unknown> = { request: { soToKhai: result.declarationNo }, certificateId: result.raw?.certificateId, ...(opts?.chain ? { chain: opts.chain } : {}) };
+  let waiver: HysWaiver | null = null;
   if (op === "AMA") {
     // Bản khai bổ sung riêng: đã duyệt, đủ dòng hàng + mã lý do; tờ khai gốc không gửi lại, không đổi trạng thái.
     if (amendment?.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "AMENDMENT_NOT_APPROVED"));
@@ -110,6 +111,7 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
     if (baseOp(op) === "IDA" && branch === 1 && !opts?.chainFrom) {
       const hys = await hysGuard(deps, ctx, dossierId, snap, opts?.hysWaived === true);
       if (!hys.ok) return hys;
+      waiver = hys.value;
     }
     if (baseOp(op) === "IDA" && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
       return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
@@ -133,7 +135,7 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
   } else if (op === "CONT" || op === "PORT_FEE") {
     payload = { request: { soToKhai: result.declarationNo, containers: snap.payload.containers }, certificateId: result.raw?.certificateId };
   }
-  return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: isContentOperation(op), ...(opts?.chainFrom ? { key: `${dossierId}:${op}:chain${opts.chainFrom}${branch > 1 ? `:b${branch}` : ""}` } : {}), ...(isContentOperation(op) && of > 1 ? { version: snap.version } : {}) });
+  return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: isContentOperation(op), waiver, ...(opts?.chainFrom ? { key: `${dossierId}:${op}:chain${opts.chainFrom}${branch > 1 ? `:b${branch}` : ""}` } : {}), ...(isContentOperation(op) && of > 1 ? { version: snap.version } : {}) });
 }
 
 /**
@@ -160,6 +162,7 @@ export async function enqueue(
     dossierId: string; declarationId: string; op: CustomsOperation; payload: unknown; result: ResultRow; outbox: OutboxRow[]; content: boolean;
     /** Khóa idempotency tất định (chuỗi nối tiếp theo outbox nguồn). */ key?: string;
     /** Lô nhiều tờ, nghiệp vụ nội dung: khóa ghim phiên bản (contentKey) để worker kiểm ghim và nối tiếp tờ sau. */ version?: number;
+    /** Người khai đã xác nhận bỏ qua gợi ý HYS: ghi NOTE cùng transaction tạo outbox. */ waiver?: HysWaiver | null;
   },
 ): Promise<Result<OperationResult>> {
   const now = deps.clock.now();
@@ -174,11 +177,13 @@ export async function enqueue(
       if (/duplicate key|unique/i.test(e instanceof Error ? e.message : String(e))) return err(domainError("ALREADY_SUBMITTED", `${OPERATION_LABELS[p.op]} đang được gửi – không gửi trùng`));
       throw e;
     }
+    if (p.waiver) await recordHysWaiver(deps, r, ctx, p.dossierId, p.waiver);
     // Gửi mới sau một lần lỗi: bỏ cờ lỗi gửi, giữ giai đoạn.
     if (p.result.state === "SEND_FAILED") await r.results.upsert({ ...p.result, state: coarseState(stageOf(p.result)), updatedAt: now });
     return ok(row);
   });
   if (!created.ok) return created;
+  if (p.waiver) await auditHysWaiver(deps, ctx, p.dossierId, p.waiver);
   if (p.content) {
     await deps.declarations.markSubmitted(ctx, p.dossierId);
     await deps.dossiers.update(ctx.orgId, p.dossierId, { status: "SUBMITTED", step: "submit" });

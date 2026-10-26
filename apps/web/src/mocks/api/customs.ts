@@ -766,7 +766,7 @@ function branchView(db: MockDb, c: Ctx, now: number): BranchSubmission {
 
   const pipeline: PipelineRow[] = operationsFor(c.dossier.direction).map((op) => {
     const a = avail.find((x) => x.op === op)!;
-    const last = seen.filter((m) => m.operation === op).at(-1);
+    const last = seen.filter((m) => m.operation === op && m.direction !== "NOTE").at(-1);
     const status: PipelineStatus =
       c.flow.pending?.op === op ? "SENDING" : !last ? "NOT_SENT" : last.result === "ERROR" ? "ERROR" : last.result === "PENDING" ? "SENDING" : "OK";
     return {
@@ -861,7 +861,7 @@ export const listCustomsDeclarations = () =>
         if (!d) return [];
         const v = view(db, d.id, now);
         return [v.branches.map((b): CustomsRow => {
-          const last = b.messages[0];
+          const last = b.messages.find((m) => m.direction !== "NOTE" && m.operation !== "HYS");
           const pending = b.pipeline.some((p) => p.status === "SENDING");
           const state: CustomsRow["state"] =
             b.stage === "NOT_SENT" ? (pending ? "SENDING" : "READY") : pending ? "SENDING" : b.result?.clearanceStatus === "CLEARED" ? "CLEARED" : "INSPECTING";

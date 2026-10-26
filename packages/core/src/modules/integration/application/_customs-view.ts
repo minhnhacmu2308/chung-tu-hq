@@ -48,7 +48,8 @@ export function buildPipeline(ctx: FlowContext, messages: MessageRow[], outbox: 
   return operationsFor(ctx.direction).map((op) => {
     const a = avail.get(op)!;
     const base = { op, label: CUSTOMS_OPERATIONS[op].label, phase: CUSTOMS_OPERATIONS[op].phase, enabled: a.enabled, action: a.action, ...(a.reason ? { reason: a.reason } : {}), ...(a.reasonCode ? { reasonCode: a.reasonCode } : {}), ...(a.reasonParams ? { reasonParams: a.reasonParams } : {}) };
-    const last = messages.filter((m) => m.operation === op).at(-1);
+    // NOTE (vd xác nhận bỏ qua HYS) chỉ là ghi chú, không phải kết quả gửi/nhận của nghiệp vụ.
+    const last = messages.filter((m) => m.operation === op && m.direction !== "NOTE").at(-1);
     if (!last) return { ...base, status: pending.has(op) ? "SENDING" : "NOT_SENT" };
     const awaitingReply = last.direction === "OUT" && last.result !== "ERROR";
     const status: PipelineRow["status"] = pending.has(op) || awaitingReply ? "SENDING" : last.result === "ERROR" ? "ERROR" : "OK";

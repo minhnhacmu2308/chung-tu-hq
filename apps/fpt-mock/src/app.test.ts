@@ -120,7 +120,7 @@ describe("fpt-mock: luồng đủ EDA → EDC → HYS → IEX", () => {
     const ok = await call({ lisT_FILE: [file("a.PDF")] });
     expect(ok.errorList).toBeNull();
     expect(ok.tK_JNO).toHaveLength(12);
-    expect(ok.tK_YMD).toMatch(/^d{2}[/]d{2}[/]d{4}$/);
+    expect(ok.tK_YMD).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
   });
   it("EDC với số tờ khai chưa khai trước → lỗi", async () => {
     const body = (await (await post("/api/EDC", { objVNACCS_ACCOUNT: edaRequest.objVNACCS_ACCOUNT, tK_ECN: 300000000099 }, await login())).json()) as { errorList: { indexCode: string }[] };

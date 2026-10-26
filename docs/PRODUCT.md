@@ -112,7 +112,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 
 ### Bước 6 – Khai báo Hải quan
 - Chọn **chứng thư số** dùng để ký (vd "CÔNG TY TNHH … – VNPT-CA, hết hạn 12/2027").
-- Danh sách nghiệp vụ truyền nhận với trạng thái và nút **Gửi lại**: IDA/EDA → IDC/EDC → HYS → IEX.
+- Danh sách nghiệp vụ truyền nhận với trạng thái và nút **Gửi lại**: IDA/EDA → IDC/EDC → IEX; HYS là bộ hồ sơ đính kèm riêng của hồ sơ, khai được trước IDA/EDA và tự điền ô 1.63/2.53 (xem `docs/QUY-TRINH-NGHIEP-VU.md` mục 9.4).
 - **Kết quả từ Hải quan**: số tờ khai, phân luồng (xanh/vàng/đỏ + diễn giải), trạng thái (vd Đã thông quan), thuế HQ tính, thời điểm cập nhật.
 - **Nhật ký thông điệp**: mỗi lần gửi/nhận một dòng (nghiệp vụ, kết quả, thời điểm), mở rộng xem chi tiết.
 - **Chặn truyền** khi còn luật BLOCKER = FAIL, HS chưa xác nhận, chưa được phê duyệt, còn ô bắt buộc trống (kiểm lại lúc Ký số & khai tạm) hoặc thông điệp sai đặc tả FPT – chặn trước khi đánh dấu đã khai.

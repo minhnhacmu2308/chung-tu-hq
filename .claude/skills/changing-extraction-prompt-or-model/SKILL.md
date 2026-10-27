@@ -25,6 +25,7 @@ description: Use when editing an extraction prompt, extraction schema field desc
 ## Viết prompt/schema
 - Mô tả trường bằng nhãn thường gặp + điều không phải nó. Quy tắc chung (locale số, ngày, không suy đoán, ghi `uncertainties`) ở system prompt; quy tắc riêng ở `.describe()` của trường.
 - Ví dụ trong skill khách hàng chỉ lấy từ dữ liệu **người đã duyệt**.
+- **Giới hạn grammar của structured output**: schema càng lớn (nhiều trường, mảng lồng, union) càng dễ bị API trả 400 "compiled grammar is too large". File scan/ảnh còn bị thêm mảng `_regions` (khung vị trí cho màn OCR) → schema lớn chỉ hỏng với file scan, PDF có lớp chữ vẫn chạy. Luồng không có màn OCR truyền `regions: false` trong `ExtractPrompt` (vd Dạy khai báo). Thêm/đổi schema lớn: thử với **cả ảnh scan**, không chỉ PDF có chữ.
 - Không yêu cầu model tính toán nghiệp vụ (tổng trị giá, thuế). Model chép số; code tính.
 
 ## Red flags – DỪNG lại

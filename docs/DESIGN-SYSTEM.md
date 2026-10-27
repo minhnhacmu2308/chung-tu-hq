@@ -86,6 +86,7 @@ export default async function RootLayout({ children }) {
 | `Grid` (`cols={{ base:1, md:2, lg:4 }}`), `Stack` | Bố cục. Không tự viết `grid-cols-*` rời rạc. Mốc cột của `Grid` đo theo **vùng nội dung** (container query, biến thể `cq-sm/md/lg/xl`), không theo màn hình: panel neo bên phải hay popup hẹp thì thẻ tự xuống hàng. Cần tổ tiên `@container` – đã có ở `<main>` các shell, trang đăng nhập và thân `DialogContent` |
 | `PageHeader` | Tiêu đề + mô tả + hành động của mỗi trang |
 | `Badge`, `StatusBadge` | Nhãn. **Trạng thái nghiệp vụ luôn dùng `StatusBadge`** (PASS/WARN/FAIL, CROSS_CHECKED, CONFLICT…, luồng xanh/vàng/đỏ) |
+| `LookupInput` (`onLookup`, `lookupLabel`, `lookupIcon`, `tooltip`, + thuộc tính `input`) | Ô nhập có **nút tra cứu (kính lúp) nằm trong viền ô** bên phải: ô mã danh mục VNACCS (`CodeInput`), mã HS… Cùng chiều cao/viền với `Input`; nút có `aria-label` + tooltip, `type="button"`; ô `disabled` thì nút cũng tắt. `className` là bề rộng cả ô. Không ghép `Input` + `Button` kính lúp đứng rời |
 | `Alert` | Thông báo trong trang. Tự kèm icon theo tông (không truyền nghĩa chỉ bằng màu) |
 | `BrandMark` (`small`, `decorative`) | Ký hiệu logo KhaiBáo AI (tờ khai có góc giấy thành mũi tên gửi đi), vẽ bằng `currentColor`. `small` cho cỡ ≤ 24 px; `decorative` khi đứng cạnh tên viết bằng chữ. Bộ file gốc + quy tắc dùng: `docs/brand/` |
 | `StatCard` (`label`, `value`, `hint`, `hintTone`, `icon`, `tone`, `loading`) | Thẻ chỉ số (KPI) dùng thống nhất ở mọi màn tổng quan. `value` là `number` → chạy đếm; chuỗi đã định dạng → hiển thị nguyên văn. Không tự dựng KPI bằng `Card` |
@@ -211,4 +212,8 @@ Thoát hiểm (rất hiếm, reviewer phải đồng ý): comment `kb-allow-raw:
 - `useMutation` không có `onError` – thao tác thất bại trong im lặng. Mặc định dùng `toastMutationError`.
 - Khai báo bảng trạng thái `{ label, tone }` trong feature – cùng một trạng thái sẽ lệch nhãn giữa các màn. Thêm vào `STATUS_META`.
 - Chiều cao cứng cho nội dung trong `Dialog`, `top-0`/`top-4` cho phần tử dính – dùng `dialog-fill`, `top-shell` (cách mép 1rem) hoặc `top-shell-flush` (sát mép, cho thanh dính cần nền liền như thanh chọn nhóm trên mobile).
+- Ghép `Input` + `Button` kính lúp đứng rời cạnh nhau – dùng `LookupInput` (nút nằm trong viền ô).
+- Ô nhập trong panel/drawer sửa một chỉ tiêu (`FormField fill`) ngắn dài khác nhau – mọi ô (chữ, mã có tra cứu, ngày) cùng full chiều rộng panel. Bề rộng theo loại ô (`w-32`, `fieldWidthClass`) chỉ dùng trong form/lưới nhiều cột.
+- Ô nhập không có `placeholder` – luôn có chữ gợi ý lấy từ `*.messages.ts` (vd "Nhập mã", "Nhập <tên chỉ tiêu>", "Nhập số"; ô hẹp trong bảng: "Nhập…"). Ô ngày/giờ gốc của trình duyệt tự có gợi ý. Placeholder chỉ gợi ý, không thay nhãn.
+- Cặp nút chữ to (Đồng ý / Bỏ qua, Duyệt / Từ chối) lặp lại trên **mỗi dòng** danh sách – dùng nút icon tròn `Button size="icon" variant="ghost"` (✓ `text-success`, ✕ `text-fg-muted`) bọc `Tooltip`, có `aria-label` = đúng chữ của thao tác. Nhiều thao tác hơn → `RowActions`.
 - Báo "xong" một thay đổi giao diện khi chưa mở trình duyệt thật (sáng + tối, desktop + mobile). Cách đo: skill `adding-ui-component`, mục "Kiểm tra bằng trình duyệt".

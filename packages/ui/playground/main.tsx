@@ -6,7 +6,7 @@ import "../src/styles/index.css";
 import {
   Alert, AppearancePanel, AssistantLauncher, CursorEffect, RobotAvatar, AssistantPanel, AssistantWelcome, Badge, Button, Card, CardContent,
   CardDescription, CardFooter, CardHeader, CardTitle, ChatComposer, ChatMessage, Checkbox, Dialog, DialogContent, RadioGroup,
-  DialogFooter, DialogTrigger, EmptyState, Field, FieldFrame, Grid, Input, PageHeader, Select, Skeleton, Spinner, Stack,
+  DialogFooter, DialogTrigger, EmptyState, Field, FieldFrame, Grid, Input, LookupInput, PageHeader, Select, Skeleton, Spinner, Stack,
   StatusBadge, SuggestionChips, Tabs, TabsContent, TabsList, TabsTrigger, Textarea, type AssistantMode,
   BrandDot, Sidebar, SidebarFooterButton, SidebarUser, type NavItem,
   Stepper, WorkflowDiagram, type FlowEdge, type FlowNode,
@@ -191,6 +191,9 @@ function Demo() {
                       </Field>
                       <Field label="1.6 · Mã PTVC" framed required hint="Ô đứng riêng có khung – tên và nút ⓘ trên đường viền như nhóm ô" labelAction={<Button size="icon-sm" variant="ghost" aria-label="Hướng dẫn khai chỉ tiêu 1.6">i</Button>}>
                         <Input placeholder="1" />
+                      </Field>
+                      <Field label="1.33 · Mã địa điểm dỡ hàng" framed hint="LookupInput – nút tra cứu nằm trong viền ô">
+                        <LookupInput className="w-full" placeholder="Nhập mã" onLookup={() => toast({ title: "Mở popup tra cứu" })} lookupLabel="Tra cứu Mã địa điểm dỡ hàng" />
                       </Field>
                       <FieldFrame legend="1.27 · Số kiện">
                         <Field label="Số lượng kiện"><Input placeholder="1" /></Field>

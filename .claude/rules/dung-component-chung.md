@@ -31,6 +31,10 @@ paths:
 | KPI | `StatCard` trong `Grid cols={{ base: 2, xl: 4 }}` | `Card` + số tự căn |
 | Lưới, bố cục co giãn (chia cột, xếp ngang/dọc, ẩn/hiện, giới hạn bề rộng) | `Grid cols={{ base, md, xl }}`; còn lại dùng mốc theo **vùng nội dung** `cq-sm/md/lg/xl:` và `cq-max-sm:` (vd `cq-md:max-w-xs`, `cq-sm:flex-row`, `cq-lg:col-span-2`). Khung/vùng cuộn mới tự có thì thêm `@container`. `sm:/md:/lg:` chỉ dành cho khung ứng dụng (`features/**/shell`) | `lg:grid-cols-3`, `md:max-w-xs`, `sm:flex-row`, `max-sm:sr-only` (đo theo màn hình → panel neo bên phải làm thẻ, form chật) |
 | Thao tác trên dòng | `RowActions`; trong bảng truyền qua `rowActions` của `DataTable` (cụm nút nổi đè cuối dòng khi rê chuột, không chiếm cột) | Tự dựng menu "…"; cột `id: "actions"` / `sticky: "end"` |
+| Ô nhập có nút tra cứu (mã danh mục, mã HS…) | `LookupInput` (`onLookup`, `lookupLabel`, `tooltip`) – kính lúp nằm trong viền ô | `Input` + `Button size="icon"` kính lúp đứng rời cạnh ô |
+| Ô nhập trong panel sửa một chỉ tiêu | `FormField fill` – mọi ô (chữ, mã, ngày) full chiều rộng panel | Ô mã `w-32` ngắn hơn ô chữ cùng panel |
+| Chữ gợi ý trong ô nhập | `placeholder` lấy từ `*.messages.ts` ("Nhập mã", "Nhập <tên chỉ tiêu>", "Nhập số"; ô hẹp "Nhập…") | Ô trống trơn không gợi ý; placeholder viết cứng |
+| Đồng ý / Bỏ qua lặp trên mỗi dòng danh sách | Nút icon tròn `Button size="icon" variant="ghost"` + `Tooltip` + `aria-label` (✓ `text-success`, ✕ `text-fg-muted`) | Hai nút chữ `size="sm"` trên từng dòng – thô, nặng mắt |
 | Đang tải / lỗi / trống | `PageLoading`, `Skeleton*`, `LoadError`, `EmptyState` | `Skeleton className="h-80"`, để trống |
 
 ## 3. Máy kiểm tra (`pnpm lint`)
@@ -41,10 +45,11 @@ Ngoại lệ hiếm (vd lưới sửa trực tiếp từng ô ở `ocr/items-tab
 
 TypeScript chặn: `DialogContent` thiếu `icon` (prop bắt buộc) → không biên dịch được.
 
-Máy chưa bắt được (review phải soát): popup tự dựng khung bằng `Card` nổi; một màn dùng component khác màn tương tự đã có.
+Máy chưa bắt được (review phải soát): popup tự dựng khung bằng `Card` nổi; một màn dùng component khác màn tương tự đã có; `Input` + nút kính lúp rời (→ `LookupInput`); ô nhập thiếu `placeholder`; ô trong panel không full chiều rộng; nút chữ Đồng ý/Bỏ qua lặp trên từng dòng.
 
 ## 4. Trước khi báo xong
 
 - [ ] `pnpm lint` xanh, không thêm `kb-allow-raw` mới mà không có lý do.
 - [ ] Mọi popup mới: có icon, còn nút chuyển panel, nút hành động nằm trong `DialogFooter`.
+- [ ] Mọi ô nhập mới có `placeholder` (từ messages); ô có tra cứu dùng `LookupInput`.
 - [ ] Mở trình duyệt so popup / bảng mới với một màn tương tự đã có – phải cùng dáng.

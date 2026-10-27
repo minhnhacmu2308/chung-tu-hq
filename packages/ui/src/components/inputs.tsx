@@ -1,5 +1,7 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Check, ChevronDown, Search } from "lucide-react";
+import { useMessages } from "../lib/i18n.js";
+import { matchesSearch } from "./combobox.js";
 import { useEffect, useId, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useFieldControl, useFieldLabelId } from "./field.js";
@@ -60,10 +62,22 @@ export function Textarea({ className, rows = 3, ...props }: ComponentProps<"text
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
 
+const SELECT_MESSAGES = {
+  vi: { search: "Tìm kiếm…", searchAria: "Tìm trong danh sách", empty: "Không có kết quả" },
+  en: { search: "Search…", searchAria: "Search the list", empty: "No results" },
+  zh: { search: "搜索…", searchAria: "在列表中搜索", empty: "无结果" },
+};
+
+/** Từ số lựa chọn này trở lên, danh sách xổ ra tự có ô tìm kiếm (ít hơn thì nhìn là thấy hết, ô tìm chỉ thêm rối). */
+export const SELECT_SEARCH_FROM = 6;
+
 export type SelectProps = Omit<ComponentProps<"select">, "children"> & {
   options: readonly SelectOption[];
   /** Dòng gợi ý đầu tiên (giá trị rỗng). */
   placeholder?: string;
+  /** Ô tìm kiếm (không dấu) ở đầu danh sách. Mặc định bật khi có từ `SELECT_SEARCH_FROM` lựa chọn. */
+  searchable?: boolean;
+  labels?: Partial<Record<keyof (typeof SELECT_MESSAGES)["vi"], string>>;
 };
 
 // Class quyết định CHỖ ĐỨNG của control trong bố cục (bề rộng, flex, lưới) phải nằm ở khung bao ngoài;
@@ -71,13 +85,16 @@ export type SelectProps = Omit<ComponentProps<"select">, "children"> & {
 const LAYOUT_CLASS = /^(?:[a-z0-9-]+:)*(?:w-|min-w-|max-w-|flex-|grow|shrink|basis-|col-span-|self-|justify-self-|order-|m[trblxy]?-)/;
 
 /**
- * Ô chọn một giá trị trong danh sách ngắn (không cần tìm kiếm – cần thì dùng Combobox).
+ * Ô chọn một giá trị trong danh sách (≥ 6 lựa chọn tự có ô tìm kiếm không dấu; danh sách rất dài / tải từ server / chọn nhiều → Combobox).
  * Danh sách xổ ra tự vẽ (cùng dáng Combobox/menu) thay cho danh sách mặc định của trình duyệt, nhưng vẫn giữ
  * một <select> ẩn bên dưới: `value`/`onChange(e)`/`name`/`required` dùng y như thẻ select gốc, form gửi đi bình thường.
  * Bàn phím theo mẫu "select-only combobox" của WAI-ARIA: ↑↓ Home End, gõ chữ để nhảy, Enter/Space chọn, Esc đóng.
  */
-export function Select({ className, options, placeholder, value, defaultValue, onChange, disabled, ref, ...props }: SelectProps) {
+export function Select({ className, options, placeholder, value, defaultValue, onChange, disabled, ref, searchable, labels, ...props }: SelectProps) {
   const a11y = useFieldControl(props);
+  const t = useMessages(SELECT_MESSAGES, labels);
+  const withSearch = searchable ?? options.length >= SELECT_SEARCH_FROM;
+  const [query, setQuery] = useState("");
   const labelId = useFieldLabelId();
   const listId = useId();
   const nativeRef = useRef<HTMLSelectElement | null>(null);
@@ -100,14 +117,34 @@ export function Select({ className, options, placeholder, value, defaultValue, o
   const visual = classes.filter((c) => !LAYOUT_CLASS.test(c));
   const { "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby, id: _id, "aria-describedby": _d, "aria-invalid": _i, required: _r, ...rest } = props;
 
+  // Đang tìm: chỉ hiện mục khớp (bỏ dòng gợi ý rỗng); điều hướng ↑↓ chỉ đi qua mục đang hiện.
+  const matches = (o: SelectOption, q: string) => !q.trim() || ((o.value !== "" || placeholder === undefined) && matchesSearch(o, q));
+  const visible = useMemo(() => items.map((_, i) => i).filter((i) => matches(items[i]!, query)), [items, query, placeholder]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = useMemo(() => new Set(visible), [visible]);
   const enabledFrom = (start: number, step: 1 | -1) => {
-    for (let i = start; i >= 0 && i < items.length; i += step) if (!items[i]!.disabled) return i;
+    for (let i = start; i >= 0 && i < items.length; i += step) if (!items[i]!.disabled && shown.has(i)) return i;
     return -1;
   };
   const openList = () => {
     if (disabled) return;
+    setQuery("");
     setActive(selectedIndex >= 0 && !items[selectedIndex]!.disabled ? selectedIndex : enabledFrom(0, 1));
     setOpen(true);
+  };
+  const onSearch = (next: string) => {
+    setQuery(next);
+    setActive(items.findIndex((o) => !o.disabled && matches(o, next)));
+  };
+  /** Phím trong ô tìm kiếm: ↑↓ chọn mục, Enter chọn, Tab đóng (Esc do Popover đóng và trả tiêu điểm về nút). */
+  const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const i = e.key === "ArrowDown" ? enabledFrom(active + 1, 1) : enabledFrom(active - 1, -1);
+      if (i >= 0) setActive(i);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (active >= 0 && shown.has(active)) commit(active);
+    } else if (e.key === "Tab") setOpen(false);
   };
   /** Đổi giá trị qua chính <select> ẩn rồi phát sự kiện change thật → onChange(e) của nơi gọi chạy như thẻ gốc. */
   const commit = (index: number) => {
@@ -174,10 +211,10 @@ export function Select({ className, options, placeholder, value, defaultValue, o
             aria-describedby={a11y["aria-describedby"]}
             aria-invalid={a11y["aria-invalid"]}
             aria-required={a11y.required}
-            aria-haspopup="listbox"
+            aria-haspopup={withSearch ? "dialog" : "listbox"}
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
-            aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
+            aria-activedescendant={open && !withSearch && active >= 0 ? `${listId}-${active}` : undefined}
             disabled={disabled}
             onKeyDown={onKeyDown}
             // Space kích hoạt nút lúc nhả phím – chặn để không đóng lại ngay danh sách vừa mở bằng keydown.
@@ -225,24 +262,49 @@ export function Select({ className, options, placeholder, value, defaultValue, o
       </span>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          role="listbox"
-          id={listId}
+          role={withSearch ? "dialog" : "presentation"}
           align="start"
           sideOffset={6}
           collisionPadding={16}
-          aria-label={ariaLabel}
-          aria-labelledby={ariaLabel ? undefined : (ariaLabelledby ?? labelId)}
-          // Tiêu điểm ở lại trên nút (aria-activedescendant), không nhảy vào danh sách.
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          onCloseAutoFocus={(e) => e.preventDefault()}
+          {...(withSearch ? { "aria-label": ariaLabel ?? t.searchAria } : {})}
+          // Không có ô tìm: tiêu điểm ở lại trên nút (aria-activedescendant). Có ô tìm: tiêu điểm vào ô tìm, đóng thì về nút.
+          // Màn cảm ứng: không tự focus ô tìm (bàn phím ảo bật lên che danh sách) – chạm vào ô tìm khi cần.
+          onOpenAutoFocus={(e) => (!withSearch || window.matchMedia?.("(pointer: coarse)").matches) && e.preventDefault()}
+          onCloseAutoFocus={(e) => !withSearch && e.preventDefault()}
           data-slot="select-content"
           data-glass=""
           className={cn(
             "z-50 max-h-[min(20rem,var(--radix-popover-content-available-height))] min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)]",
             "overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface p-1 text-fg shadow-lg outline-none motion-safe:animate-pop-in",
+            // Mục đang trỏ cuộn vào khung không nằm khuất dưới ô tìm dính.
+            withSearch && "scroll-pt-12",
           )}
         >
-          {items.map((o, i) => {
+          {withSearch && (
+            <div className="sticky top-0 z-10 -mx-1 -mt-1 mb-1 border-b border-border bg-surface p-1.5">
+              <div className="relative">
+                <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
+                <input
+                  type="text"
+                  role="combobox"
+                  aria-label={t.searchAria}
+                  aria-expanded="true"
+                  aria-controls={listId}
+                  aria-autocomplete="list"
+                  aria-activedescendant={active >= 0 && shown.has(active) ? `${listId}-${active}` : undefined}
+                  autoComplete="off"
+                  placeholder={t.search}
+                  value={query}
+                  onChange={(e) => onSearch(e.currentTarget.value)}
+                  onKeyDown={onSearchKeyDown}
+                  className={cn(control, "h-8 pl-8 pr-2")}
+                />
+              </div>
+            </div>
+          )}
+          <div role="listbox" id={listId} aria-label={ariaLabel} aria-labelledby={ariaLabel ? undefined : (ariaLabelledby ?? labelId)}>
+          {visible.map((i) => {
+            const o = items[i]!;
             const isSelected = i === selectedIndex;
             return (
               <div
@@ -269,6 +331,8 @@ export function Select({ className, options, placeholder, value, defaultValue, o
               </div>
             );
           })}
+          </div>
+          {withSearch && !visible.length && <p role="status" className="px-2.5 py-2 text-sm text-fg-muted">{t.empty}</p>}
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>

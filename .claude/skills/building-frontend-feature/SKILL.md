@@ -53,6 +53,7 @@ apps/web/src/
 | Popup / panel bên phải | `Dialog` + `DialogContent` (luôn có `title` + `icon`) + `DialogFooter`; giữ nút chuyển cửa sổ ↔ panel; nội dung chính cần chiếm hết chỗ (sơ đồ, khung xem) thêm class `dialog-fill` | Đặt `h-160`/`max-h-*` cứng cho nội dung trong dialog; `allowPresentationToggle={false}` (lint `apps-dialog-toggle-off` chặn) |
 | Xác nhận xóa / hủy / ngắt kết nối (thao tác khó quay lại) | `ConfirmDialog` (`icon`, `subject`, hậu quả làm `children`, `irreversible` khi xóa vĩnh viễn, `loading`) | `Dialog` + `<p className="text-fg-muted">` + nút đỏ tự ghép |
 | Ô nhập có nút tra cứu (mã danh mục, mã HS…) | `LookupInput` – kính lúp trong viền ô; ô mã VNACCS dùng sẵn `CodeInput` (`features/declaration-form`) | `Input` + `Button` kính lúp rời |
+| Chọn trong danh sách | `Select` – từ 6 lựa chọn tự có ô tìm không dấu; rất dài / tải từ server / chọn nhiều → `Combobox` | Tự ghép ô lọc phía trên; tắt `searchable` không lý do |
 | Chữ gợi ý ô nhập | `placeholder` từ `*.messages.ts` ("Nhập mã", "Nhập <tên chỉ tiêu>", "Nhập số") | Ô trống không gợi ý |
 | Ô nhập trong panel sửa một chỉ tiêu | `FormField fill` – mọi loại ô full chiều rộng | Ô mã/ngày ngắn hơn ô chữ cùng panel |
 | Đồng ý / Bỏ qua trên mỗi dòng danh sách | Nút icon tròn `Button size="icon" variant="ghost"` + `Tooltip` + `aria-label` | Hai nút chữ trên từng dòng |

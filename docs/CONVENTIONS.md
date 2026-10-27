@@ -53,6 +53,7 @@ Quy tắc nào máy kiểm tra được thì đã cấu hình trong lint/depcrui
 
 ## 4. Git & PR
 
+- **Trước khi commit/push: chạy 2 agent `hq-review-backend` + `hq-review-frontend`**, cả hai PASS mới commit/push; mô tả commit/PR có khối `Review:` ghi kết quả 2 agent (`.claude/rules/review-truoc-commit.md`).
 - Nhánh: `feat/…`, `fix/…`, `chore/…`. Commit theo Conventional Commits.
 - PR nhỏ (< ~400 dòng thay đổi thực). Điền checklist trong PR template.
 - Không merge khi CI đỏ. Không tắt rule lint để cho qua; nếu rule sai, sửa rule trong PR riêng có lý do.

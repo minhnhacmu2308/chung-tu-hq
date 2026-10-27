@@ -2,6 +2,18 @@
 
 <!-- 1-3 câu -->
 
+## Review (bắt buộc – `.claude/rules/review-truoc-commit.md`)
+
+<!-- Dán "Dòng cho commit" của 2 agent; có FAIL đã sửa thì ghi kèm. Bỏ qua mục nào → Review-override: <mục> – <lý do, ai chấp nhận> -->
+- hq-review-backend: ✅ PASS / ❌ FAIL – …
+- hq-review-frontend: ✅ PASS / ❌ FAIL – …
+
+## Review (bắt buộc – `.claude/rules/review-truoc-commit.md`)
+
+<!-- Dán "Dòng cho commit" của 2 agent; có FAIL đã sửa thì ghi kèm. Bỏ qua mục nào → Review-override: <mục> – <lý do, ai chấp nhận> -->
+- hq-review-backend: ✅ PASS / ❌ FAIL – …
+- hq-review-frontend: ✅ PASS / ❌ FAIL – …
+
 ## Checklist
 
 - [ ] `pnpm typecheck && pnpm lint && pnpm test` xanh

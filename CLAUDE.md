@@ -51,7 +51,14 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 | Sửa prompt, schema trích xuất, đổi model AI | `changing-extraction-prompt-or-model` |
 | Thêm/sửa ánh xạ sang chỉ tiêu tờ khai | `mapping-declaration-fields` |
 
-Agent review (`.claude/agents/`): `hq-review-code` – review diff theo bất biến dự án, chỉ đọc và báo cáo (gọi khi được yêu cầu review hoặc trước khi mở PR).
+## Trước khi commit / push – BẮT BUỘC
+
+Mọi yêu cầu commit, push, mở PR, deploy: **chạy song song 2 agent review** (`.claude/agents/`) rồi mới `git commit`/`git push`:
+
+- `hq-review-backend` – core, contracts, worker, route `app/api`, migration: bất biến, ranh giới module, RLS, idempotency, AI/usage.
+- `hq-review-frontend` – `apps/web/src`, `packages/ui`: `@kb/ui`, rule dùng component chung, 3 ngôn ngữ, a11y, đã xem trình duyệt.
+
+Mỗi agent trả bảng PASS/FAIL từng mục và **KẾT LUẬN PASS/FAIL**. Có FAIL → không commit/push, sửa rồi chạy lại. **Mô tả commit/PR phải có khối `Review:`** gồm "Dòng cho commit" của cả 2 agent. Chi tiết: `.claude/rules/review-truoc-commit.md`.
 
 ## Trước khi báo "xong"
 

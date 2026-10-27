@@ -304,7 +304,7 @@ function Demo() {
                 <Field label="Số hóa đơn" required><Input defaultValue="KBS-INV-26-0917" /></Field>
                 <Field label="Mã số thuế người mua" error="MST phải có 10 chữ số"><Input defaultValue="02012345" /></Field>
                 <Field label="Điều kiện giao hàng" hint="Theo Incoterms 2020">
-                  <Select options={[{ value: "CIF", label: "CIF" }, { value: "FCA", label: "FCA" }, { value: "EXW", label: "EXW" }]} />
+                  <Select options={["CIF", "FCA", "EXW", "FOB", "CFR", "DAP", "DDP", "CPT"].map((v) => ({ value: v, label: v }))} />
                 </Field>
               </Grid>
               <RadioGroup

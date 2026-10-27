@@ -17,6 +17,7 @@ import { mailboxSyncJob } from "./jobs/mailbox-sync.js";
 import { runAgentJob } from "./jobs/run-agent.js";
 import { skillEvaluateJob, skillSampleReadJob } from "./jobs/skill.js";
 import { teachSampleReadJob } from "./jobs/teach.js";
+import { failTeachSample } from "@kb/core/modules/teaching";
 import { stuckSweeperJob } from "./jobs/stuck-sweeper.js";
 import { perOrgLimit } from "./jobs/_per-org.js";
 import { startHealthServer } from "./health-server.js";
@@ -78,6 +79,7 @@ async function onFinalFailure(queue: string, job: Job, e: Error) {
   } else if (queue === "run-agent" && d["orgId"] && d["userId"] && d["dossierId"] && d["agentRunId"]) await failAgentRun(c.declaration, { orgId: d["orgId"], userId: d["userId"], dossierId: d["dossierId"], agentRunId: d["agentRunId"], error: reason });
   else if (queue === "exchange-rate-weekly") await recordRateFetchFailure(c.rates, reason);
   else if (queue === "mailbox-sync" && d["orgId"] && d["connectionId"]) await failMailSync(c.mailbox, { orgId: d["orgId"], connectionId: d["connectionId"] });
+  else if (queue === "teach-sample-read" && d["orgId"] && d["sampleId"]) await failTeachSample(c.teach, { orgId: d["orgId"], sampleId: d["sampleId"], error: "AI chưa đọc được tờ khai sau nhiều lần thử – bấm Đọc lại" });
   else if (queue === "customs-send" && d["orgId"] && d["outboxId"]) await markOutboxFailed(c.customs, { orgId: d["orgId"], outboxId: d["outboxId"], reason });
 }
 

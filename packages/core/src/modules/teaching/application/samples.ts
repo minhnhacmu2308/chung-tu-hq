@@ -66,7 +66,7 @@ async function readDeclaration(ai: AiProvider, bytes: Buffer, s: TeachSampleRow)
   const mime = s.storageKey.endsWith(".png") ? "image/png" : s.storageKey.endsWith(".jpg") ? "image/jpeg" : "application/pdf";
   const pages = Array.from({ length: Math.max(1, s.pages) }, (_, i) => i + 1);
   const res = await ai.extract({ bytes, mime, pages: s.pages, fileName: s.fileName }, pages, CustomsDeclarationExtractionSchema, {
-    kind: "OTHER", title: "Đây là tờ khai hải quan đã thông quan (bản in VNACCS)", skillHints: CUSTOMS_DECLARATION_HINTS, examples: [], supplierHint: null,
+    kind: "OTHER", title: "Đây là tờ khai hải quan đã thông quan (bản in VNACCS)", skillHints: CUSTOMS_DECLARATION_HINTS, examples: [], supplierHint: null, regions: false,
   });
   const parsed = CustomsDeclarationExtractionSchema.safeParse(fillMissingNullable(CustomsDeclarationExtractionSchema, res.result));
   return { usage: res.usage, read: parsed.success ? parsed.data : null };
@@ -146,6 +146,15 @@ export async function processTeachSample(deps: TeachDeps, input: { orgId: string
     });
   });
   return ok(undefined);
+}
+
+/** Job đọc hết số lần thử (AI lỗi liên tục) → FAILED để người dùng bấm "Đọc lại", không kẹt "AI đang đọc". */
+export async function failTeachSample(deps: TeachDeps, input: { orgId: string; sampleId: string; error: string }): Promise<void> {
+  const ctx = { orgId: asOrgId(input.orgId), userId: asUserId("system") };
+  await deps.uow.asOrg(ctx, async (r) => {
+    const s = await r.samples.get(input.orgId, input.sampleId);
+    if (s && s.status !== "READ") await r.samples.update(input.orgId, s.id, { status: "FAILED", error: input.error, updatedAt: deps.clock.now() });
+  });
 }
 
 /** Đọc lại một tờ khai mẫu (sau khi hồ sơ cùng lô có tờ khai nháp mới): so và quan sát lại; bài học không bị cộng hai lần. */

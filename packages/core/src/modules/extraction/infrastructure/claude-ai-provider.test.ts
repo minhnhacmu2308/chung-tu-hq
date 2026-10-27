@@ -117,6 +117,13 @@ describe("ClaudeAiProvider", () => {
     expect(JSON.stringify(api.sent[0]!.body["output_config"])).toContain("_regions");
   });
 
+  it("regions: false (luồng không có màn OCR) → ảnh/scan cũng không xin tọa độ", async () => {
+    const api = fakeApi({ text: JSON.stringify({ invoiceNo: "X" }) });
+    const r = await provider(api.fetchFn).extract({ ...FILE, mime: "image/jpeg", pages: 1 }, [1], extractionSchemaFor("INVOICE"), { kind: "INVOICE", skillHints: [], examples: [], supplierHint: null, regions: false });
+    expect(r.result).toEqual({ invoiceNo: "X" });
+    expect(JSON.stringify(api.sent[0]!.body["output_config"])).not.toContain("_regions");
+  });
+
   it("toRegions bỏ khung sai trang, méo, sai cấu trúc; kẹp vào trang; trùng khóa lấy khung đầu", () => {
     expect(toRegions("x", 1)).toBeNull();
     expect(toRegions([{ key: "a", page: 3, x0: 0, y0: 0, x1: 10, y1: 10 }, { key: "b", page: 1, x0: 50, y0: 50, x1: 40, y1: 60 }], 2)).toBeNull();

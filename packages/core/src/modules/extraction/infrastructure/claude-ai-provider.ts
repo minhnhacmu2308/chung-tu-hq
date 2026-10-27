@@ -121,7 +121,7 @@ export class ClaudeAiProvider implements AiProvider {
     const supplier = prompt.supplierHint ? `\nNhà cung cấp: ${prompt.supplierHint}.` : "";
     const examples = prompt.examples.length ? `\nVí dụ đã duyệt (tham khảo cách đọc):\n${JSON.stringify(prompt.examples.slice(0, 2))}` : "";
     // PDF chuẩn (có lớp chữ): màn OCR tự tìm vị trí từ lớp chữ → không tốn token xin tọa độ.
-    const withRegions = await needsAiRegions(file);
+    const withRegions = prompt.regions !== false && (await needsAiRegions(file));
     const { input, regions, usage } = await this.callStructured(file, schema, `${prompt.title ?? `Đây là ${KIND_VI[prompt.kind]}`}, đọc các trang ${pages.join(", ")} của file "${file.fileName}".${hints}${supplier}${examples}`, withRegions);
     return { result: input, regions, usage };
   }

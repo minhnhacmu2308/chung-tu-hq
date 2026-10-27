@@ -8,7 +8,7 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import { MemoryStorage, RecordingUsage, ScriptedAi } from "../test/fakes.js";
 import { approveLessons, exportTeachRules, getTeachOverview, lessonsForDossier, setTeachEnabled, updateLesson } from "../lessons.js";
 import type { TeachDeps, TeachLotPort } from "../ports.js";
-import { deleteTeachSample, getTeachComparison, partNoInDescription, processTeachSample, uploadTeachSamples } from "../samples.js";
+import { deleteTeachSample, failTeachSample, getTeachComparison, partNoInDescription, processTeachSample, uploadTeachSamples } from "../samples.js";
 import { InMemoryTeachUow } from "../test/in-memory-uow.js";
 
 const ctxA: Ctx = { orgId: asOrgId("org_a"), userId: asUserId("usr_a"), role: "ADMIN" };
@@ -68,7 +68,7 @@ describe("Dạy khai báo – tờ khai mẫu", () => {
     expect(cmp.fields.find((f) => f.code === "KHO")).toMatchObject({ kind: "KNOWLEDGE", real: "02DSEA0 – KHO FEDEX" });
     expect(cmp.lines[0]).toMatchObject({ draftImportRate: "30", realImportRate: "0" });
     expect(ov.lessons.map((l) => [l.kind, l.fieldCode, l.status]).sort()).toEqual([["CLAUSE", "CT_TG", "PENDING"], ["FIELD", "KHO", "PENDING"], ["FIELD", "PT_TT", "PENDING"], ["LINE", "HS", "PENDING"]]);
-    expect((deps.ai as ScriptedAi).prompts[0]?.title).toMatch(/tờ khai hải quan/);
+    expect((deps.ai as ScriptedAi).prompts[0]).toMatchObject({ title: expect.stringMatching(/tờ khai hải quan/), regions: false });
     expect(ov.accuracy).toHaveLength(1);
   });
 
@@ -81,6 +81,16 @@ describe("Dạy khai báo – tờ khai mẫu", () => {
     const [s] = unwrap(await uploadTeachSamples(deps, ctxA, [pdf]));
     await processTeachSample(deps, { orgId: "org_a", userId: "usr_a", sampleId: s!.id });
     expect(uow.samples[0]).toMatchObject({ status: "FAILED", error: expect.stringMatching(/Không đọc ra tờ khai/) });
+  });
+
+  it("job hết số lần thử → FAILED (không kẹt \"AI đang đọc\"); tờ khai đã đọc xong thì giữ nguyên", async () => {
+    const [s] = unwrap(await uploadTeachSamples(deps, ctxA, [pdf]));
+    await uow.asOrg(ctxA, (r) => r.samples.update("org_a", s!.id, { status: "READING" }));
+    await failTeachSample(deps, { orgId: "org_a", sampleId: s!.id, error: "AI lỗi" });
+    expect(uow.samples[0]).toMatchObject({ status: "FAILED", error: "AI lỗi" });
+    const id = await upload();
+    await failTeachSample(deps, { orgId: "org_a", sampleId: id, error: "AI lỗi" });
+    expect(uow.samples.find((x) => x.id === id)).toMatchObject({ status: "READ" });
   });
 
   it("tờ khai cũ không có hồ sơ: học chỉ tiêu theo ngữ cảnh trên tờ khai + mặt hàng có mã hàng trong mô tả", async () => {

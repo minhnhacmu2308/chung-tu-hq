@@ -12,6 +12,7 @@ export const PROVENANCE_MESSAGES = defineMessages({
     fixed: "Giá trị cố định doanh nghiệp đặt",
     chosen: "Nguồn doanh nghiệp chọn: {source}",
     profileSource: "Mặc định khai báo",
+    lesson: "Bài học đã duyệt ở mục Dạy khai báo (từ tờ khai đã thông quan)",
   },
   en: {
     "an.warehouse": "Warehouse / CY on Arrival Notice",
@@ -23,6 +24,7 @@ export const PROVENANCE_MESSAGES = defineMessages({
     fixed: "Fixed value set by the organization",
     chosen: "Source chosen by the organization: {source}",
     profileSource: "Declaration defaults",
+    lesson: "Approved lesson from Declaration teaching (cleared declarations)",
   },
   zh: {
     "an.warehouse": "到货通知上的仓库 / 堆场",
@@ -34,5 +36,6 @@ export const PROVENANCE_MESSAGES = defineMessages({
     fixed: "企业设定的固定值",
     chosen: "企业选择的来源：{source}",
     profileSource: "申报默认设置",
+    lesson: "申报教学中已审核的经验（来自已通关报关单）",
   },
 });

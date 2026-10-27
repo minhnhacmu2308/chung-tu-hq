@@ -18,7 +18,7 @@ export const asSkillId = (s: string) => s as SkillId;
 export const asDeclarationId = (s: string) => s as DeclarationId;
 
 export type IdPrefix =
-  | "org" | "usr" | "mem" | "ses" | "tok" | "dos" | "doc" | "fld" | "chk" | "itm" | "dec" | "run" | "msg" | "sk" | "smp" | "ntf" | "use" | "job" | "cert" | "aud" | "ann" | "sec" | "hsj" | "sug" | "pam" | "pal" | "prd" | "mcn" | "imsg" | "iatt" | "etp" | "sig" | "ecp" | "erc" | "blk" | "hys" | "hysf";
+  | "org" | "usr" | "mem" | "ses" | "tok" | "dos" | "doc" | "fld" | "chk" | "itm" | "dec" | "run" | "msg" | "sk" | "smp" | "ntf" | "use" | "job" | "cert" | "aud" | "ann" | "sec" | "hsj" | "sug" | "pam" | "pal" | "prd" | "mcn" | "imsg" | "iatt" | "etp" | "sig" | "ecp" | "erc" | "blk" | "hys" | "hysf" | "tks" | "les";
 
 export interface IdGen {
   next(prefix: IdPrefix): string;

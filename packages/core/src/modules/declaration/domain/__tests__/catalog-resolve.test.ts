@@ -61,6 +61,15 @@ describe("catalog-resolve", () => {
       expect(pickLoadingPort([], [addr], null, WORLD).resolved).toBeNull();
       expect(pickLoadingPort(["SOMEWHERE"], [addr], "CN", WORLD)).toMatchObject({ resolved: null, raw: "SOMEWHERE" });
     });
+    it("mã sân bay IATA / mã trạm chuyển phát FedEx (IATA + 1 chữ) → mã nước + IATA; từ 3 chữ trong câu dài không bị nhầm", () => {
+      expect(resolvePort("SGNA")?.code).toBe("VNSGN");
+      expect(resolvePort("HAN")?.code).toBe("VNHAN");
+      expect(resolveWorldPort("ZUHA", "CN", WORLD)?.code).toBe("CNZUH");
+      expect(resolveWorldPort("ZUH", null, WORLD)?.code).toBe("CNZUH");
+      expect(resolvePort("VIET NAM")).toBeNull();
+      expect(pickDischargePort(["SGNA"], [], [], { air: true })).toMatchObject({ resolved: { code: "VNSGN" } });
+      expect(pickLoadingPort(["ZUHA"], [], "CN", WORLD)).toMatchObject({ resolved: { code: "CNZUH" }, raw: "ZUHA" });
+    });
     it("cảng dỡ hàng air: tên thành phố là sân bay (HO CHI MINH → VNSGN), không nhắc chọn bến", () => {
       expect(pickDischargePort(["HO CHI MINH , VIET NAM"], [], [], { air: true })).toEqual({ resolved: { code: "VNSGN", name: "Cảng Sài Gòn (TP.HCM)" }, raw: "HO CHI MINH , VIET NAM" });
       expect(pickDischargePort(["HO CHI MINH , VIET NAM"], []).note).toMatch(/tên thành phố/);

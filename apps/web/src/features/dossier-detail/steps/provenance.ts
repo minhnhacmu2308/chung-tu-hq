@@ -11,6 +11,7 @@ export function provenanceLabel(p: FieldProvenance | undefined, locale: UiLocale
   const t = pickMessages(PROVENANCE_MESSAGES, locale);
   if (p.via === "profile") return t.profile;
   if (p.via === "fixed") return t.fixed;
+  if (p.via === "lesson") return t.lesson;
   const id = p.sourceId ?? "";
   const source = id.startsWith("profile.") ? t.profileSource : SOURCE_IDS.has(id) ? t[id as SourceId] : id;
   return fill(t.chosen, { source });

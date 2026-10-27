@@ -94,7 +94,8 @@ export async function startHsClassification(
   const ctx = asCtx(c);
   const now = deps.clock.now();
   const rows = await deps.uow.asOrg(ctx, (r) => r.lineItems.list(c.orgId, dossierId));
-  const targets = rows.filter((x) => !x.hsConfirmed && (!opts.lineItemIds || opts.lineItemIds.includes(x.id)));
+  // Dòng đã có mã học từ tờ khai trước (đủ số lần) không gửi lại HSCodePro – trừ khi người khai chọn phân loại lại đúng dòng đó.
+  const targets = rows.filter((x) => !x.hsConfirmed && (opts.lineItemIds ? opts.lineItemIds.includes(x.id) : !x.hsDetail?.learned));
 
   if (!opts.lineItemIds) {
     const open = await deps.uow.asOrg(ctx, (r) => r.hsJobs.openForDossier(c.orgId, dossierId));

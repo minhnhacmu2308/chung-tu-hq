@@ -1,6 +1,6 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { DomainError } from "../../../shared/errors.js";
-import type { ValueCharges, AgentMode, EditSheet, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
+import type { DraftLessons, ValueCharges, AgentMode, EditSheet, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -21,7 +21,8 @@ export type LineItemRow = {
   hsJobId: string | null; hsItemId: string | null; hsStatus: LineItemHsStatus; hsQuestion: HsPendingQuestion | null; hsError: { code: string; message: string } | null; hsDetail: HsDetail | null;
   createdAt: Date; updatedAt: Date;
 };
-export type HsDetail = { reasoning: string; legalBasis: string[]; warnings: string[] };
+/** `learned`: mã HS lấy từ bài học (đủ số lần) – không gửi HSCodePro lại, trừ khi người khai bấm phân loại lại. */
+export type HsDetail = { reasoning: string; legalBasis: string[]; warnings: string[]; learned?: { lessonId: string; hits: number } };
 /** Thuế của một ứng viên (chuỗi thập phân); null khi HSCodePro chưa tra được. */
 export type HsSuggestionRates = { importRate: string | null; basis: "MFN" | "FTA" | null; agreement: string | null; vatRate: string | null };
 export type HsSuggestionRow = { id: string; orgId: string; lineItemId: string; code: string; description: string; confidence: number; rates: HsSuggestionRates | null; whyNot: string | null; source: string; createdAt: Date };
@@ -202,6 +203,8 @@ export type DeclarationDeps = {
   sentSheetsGuard?: (orgId: string, dossierId: string) => Promise<DomainError | null>;
   /** Ghi chi phí HSCodePro vào usage_events (module billing; container nối). Không nối → không ghi. */
   usage?: ServiceUsageMeter;
+  /** Bài học đã duyệt khớp ngữ cảnh hồ sơ (mục Dạy khai báo – module teaching, container nối). Không nối / chưa bật → null. */
+  lessons?: (orgId: string, dossierId: string) => Promise<DraftLessons | null>;
   /** Sau khi lưu chi phí người khai nhập: chạy lại luật đối chiếu (container nối với module validation). */
   onChargesSaved?: (orgId: string, dossierId: string) => Promise<void>;
   clock: Clock;

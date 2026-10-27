@@ -10,3 +10,4 @@ export * from "./admin.js";
 export * from "./declaration-profile.js";
 export * from "./exchange-rate.js";
 export * from "./value-charges.js";
+export * from "./teaching.js";

@@ -3,7 +3,8 @@ import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { Decimal } from "../../../shared/decimal.js";
 import { mappingsFor } from "../domain/build.js";
-import type { Shipment } from "@kb/contracts";
+import type { DraftLessons, Shipment } from "@kb/contracts";
+import { learnedDescription, learnedLinePlan, lineLessonFor } from "../domain/lessons-apply.js";
 import type { AgentRunRow, DeclarationRepos, DeclarationRow, DossierInfo, HsCatalogRow, HsSuggestionRow, LineItemRow } from "./ports.js";
 import type { DeclarationDeps } from "./ports.js";
 
@@ -74,16 +75,37 @@ export async function latestDraftOrNull(r: DeclarationRepos, orgId: string, doss
   return r.declarations.latest(orgId, dossierId);
 }
 
-/** Đồng bộ dòng hàng từ shipment.items (giữ HS đã xác nhận ở dòng cùng số thứ tự). */
-export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, dossierId: string, shipment: Shipment): Promise<LineItemRow[]> {
+/**
+ * Đồng bộ dòng hàng từ shipment.items (giữ HS đã xác nhận ở dòng cùng số thứ tự).
+ * `lessons` (Dạy khai báo): mặt hàng đã học đủ số lần → mô tả tiếng Việt, mã HS + thuế suất đã khai (vẫn chờ người khai xác nhận HS); ít lần hơn → gợi ý mã.
+ */
+export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, dossierId: string, shipment: Shipment, lessons?: DraftLessons | null): Promise<LineItemRow[]> {
   const now = deps.clock.now();
+  const lessonOf = (it: Shipment["items"][number]) => lineLessonFor(lessons, { partNo: it.partNo?.value ?? null, description: it.description.value });
   const rows: LineItemRow[] = shipment.items.map((it) => ({
-    id: deps.idGen.next("itm"), orgId, dossierId, lineNo: it.lineNo, description: it.description.value ?? "", quantity: it.quantity.value ?? "0", unit: it.unit.value ?? "PCE",
+    id: deps.idGen.next("itm"), orgId, dossierId, lineNo: it.lineNo, description: learnedDescription(lessonOf(it)) ?? it.description.value ?? "", quantity: it.quantity.value ?? "0", unit: it.unit.value ?? "PCE",
     unitPrice: it.unitPrice.value ?? "0", amount: it.amount.value ?? "0", origin: it.origin.value ?? "", invoiceHsCode: it.hsOnInvoice.value,
     hsSuggested: null, hsConfidence: null, hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null,
     hsJobId: null, hsItemId: null, hsStatus: "idle", hsQuestion: null, hsError: null, hsDetail: null, createdAt: now, updatedAt: now,
   }));
-  return r.lineItems.upsertForDossier(orgId, dossierId, rows);
+  const saved = await r.lineItems.upsertForDossier(orgId, dossierId, rows);
+  if (!lessons?.lines.length) return saved;
+  const out: LineItemRow[] = [];
+  for (const row of saved) {
+    const it = shipment.items.find((x) => x.lineNo === row.lineNo);
+    const plan = it ? learnedLinePlan(row, lessonOf(it)) : null;
+    if (!plan) {
+      out.push(row);
+      continue;
+    }
+    const patch = { ...plan.patch, updatedAt: now };
+    await r.lineItems.update(orgId, row.id, patch);
+    if (plan.suggestion) {
+      await r.suggestions.replaceForItem(orgId, row.id, [{ id: deps.idGen.next("sug"), orgId, lineItemId: row.id, code: plan.suggestion.code, description: plan.suggestion.description, confidence: 1, rates: plan.suggestion.rates, whyNot: null, source: "LESSON", createdAt: now }]);
+    }
+    out.push({ ...row, ...patch });
+  }
+  return out;
 }
 
 

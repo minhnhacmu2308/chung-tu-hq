@@ -1,8 +1,9 @@
 // Dựng tờ khai nháp từ shipment + hồ sơ + tài khoản + dòng hàng (thuần): ánh xạ chỉ tiêu, khoản điều chỉnh, trị giá, thuế.
-import { EMPTY_VALUE_CHARGES, type Shipment, type ValueCharges } from "@kb/contracts";
+import { EMPTY_VALUE_CHARGES, type DraftLessons, type Shipment, type ValueCharges } from "@kb/contracts";
 import type { DossierInfo, OrgInfo, StoredField } from "./types.js";
 import { planAdjustmentsFor } from "./adjustments.js";
 import { lengthIssue } from "./field-length.js";
+import { applyLessons } from "./lessons-apply.js";
 import { evaluateMapping } from "./mapping/evaluate.js";
 import { mappingsFor } from "./mapping/registry.js";
 import type { DeclarationCatalogs, ExchangeInfo, FieldOverride, MappingInput } from "./mapping/types.js";
@@ -20,6 +21,8 @@ export type BuildInput = {
   charges?: ValueCharges;
   /** Danh mục VNACCS nạp sẵn (cảng, địa điểm lưu kho) – xem DeclarationCatalogs. */
   catalogs?: DeclarationCatalogs;
+  /** Bài học đã duyệt của doanh nghiệp (mục Dạy khai báo) khớp ngữ cảnh lô; không có = dựng như chưa dạy. */
+  lessons?: DraftLessons | null;
 };
 
 export { fieldDef, lengthIssue } from "./field-length.js";
@@ -48,7 +51,7 @@ export function buildDeclaration(input: BuildInput): BuiltDeclaration {
       hidden.push(m.code);
       continue;
     }
-    const v = evaluateMapping(m, ctx.overrides[m.code], ctx);
+    const v = applyLessons(m.code, evaluateMapping(m, ctx.overrides[m.code], ctx), input.lessons ?? undefined);
     const tooLong = v.value === null ? undefined : lengthIssue(kind, m.code, v.value);
     const suspect = v.suspect === true || (m.required && v.value === null) || tooLong !== undefined;
     const note = [v.note ?? (m.required && v.value === null ? "Chỉ tiêu bắt buộc chưa có dữ liệu" : undefined), tooLong].filter(Boolean).join(". ") || undefined;

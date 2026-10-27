@@ -2,14 +2,14 @@ import { z } from "zod";
 import { nDate, nNum, nStr, PartySchema, UncertaintiesSchema } from "./common.js";
 
 export const AirWaybillExtractionSchema = z.object({
-  awbNo: nStr("Số MAWB (dạng 3 số-8 số, vd 618-44021375) – giữ nguyên dấu gạch"),
+  awbNo: nStr("Số MAWB (dạng 3 số-8 số, vd 618-44021375) – giữ nguyên dấu gạch. Vận đơn chuyển phát nhanh (FedEx, DHL, UPS…): số tracking in sau TRK# / AWB / Waybill No (vd 7704 7118 4612)"),
   hawbNo: nStr("Số HAWB nếu có"),
   date: nDate("Ngày phát hành"),
   shipper: PartySchema,
   consignee: PartySchema,
   flight: nStr("Số hiệu chuyến bay"),
-  airportOfDeparture: nStr("Sân bay đi nguyên văn"),
-  airportOfDestination: nStr("Sân bay đến nguyên văn"),
+  airportOfDeparture: nStr("Sân bay đi nguyên văn. Nhãn chuyển phát nhanh không có ô sân bay: chép mã trạm gửi, vd FedEx \"ORIGIN ID ZUHA\" → ZUHA"),
+  airportOfDestination: nStr("Sân bay đến nguyên văn. Nhãn chuyển phát nhanh: chép mã định tuyến in to cạnh mã vạch, vd FedEx \"VN SGNA\" → SGNA"),
   pieces: nNum("Số kiện (No. of pieces)"),
   grossWeightKg: nNum("Trọng lượng cả bì (kg)"),
   chargeableWeightKg: nNum("Trọng lượng tính cước (kg)"),

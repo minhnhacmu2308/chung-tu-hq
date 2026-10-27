@@ -49,7 +49,7 @@ describe("schema v2 (chuẩn trường chứng từ)", () => {
     expect(keys("BILL_OF_LADING")).toEqual(expect.arrayContaining(["placeOfIssue", "dateOfIssue"]));
     expect(keys("AIR_WAYBILL")).toEqual(expect.arrayContaining(["flightDate", "placeOfIssue"]));
     expect(keys("FREIGHT_INVOICE")).toContain("billRef");
-    expect(EXTRACTION_SCHEMA_VERSION).toBe(2);
+    expect(EXTRACTION_SCHEMA_VERSION).toBe(3);
   });
   it("trường mới là bắt buộc + nullable: thiếu key → lỗi (structured output ổn định), null → hợp lệ", () => {
     const v2 = { ...invoice, incotermPlace: null, originStatement: null, items: invoice.items.map((i) => ({ ...i, partNo: null })) };

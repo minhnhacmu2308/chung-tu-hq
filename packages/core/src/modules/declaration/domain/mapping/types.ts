@@ -36,7 +36,7 @@ export type MappingInput = {
 /** Nguồn thay thế được phép cho một chỉ tiêu: hàm đọc thuần; null/value null = nguồn không có giá trị. */
 export type SourceOption = { id: string; label: string; read: (i: MappingInput) => MappedValue | null };
 export type FieldOverride = { sources: string[] } | { fixed: string };
-export type Provenance = { rule: string; via: "default" | "source" | "fixed" | "profile"; sourceId?: string };
+export type Provenance = { rule: string; via: "default" | "source" | "fixed" | "profile" | "lesson"; sourceId?: string };
 export type FieldMapping = {
   /** Khóa ổn định (mnemonic) dùng cho FE/API. */
   code: string;

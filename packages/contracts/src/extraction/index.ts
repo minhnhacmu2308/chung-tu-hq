@@ -17,13 +17,14 @@ export * from "./bill-of-lading.js";
 export * from "./cert-of-origin.js";
 export * from "./classify.js";
 export * from "./common.js";
+export * from "./customs-declaration.js";
 export * from "./freight-invoice.js";
 export * from "./invoice.js";
 export * from "./packing-list.js";
 export * from "./sales-contract.js";
 
 /** Tăng khi đổi bất kỳ schema trích xuất nào (B10). */
-export const EXTRACTION_SCHEMA_VERSION = 2;
+export const EXTRACTION_SCHEMA_VERSION = 3;
 
 /** Chứng từ loại OTHER: chỉ lấy tiêu đề + tóm tắt để người dùng xếp loại. */
 export const OtherExtractionSchema = z.object({

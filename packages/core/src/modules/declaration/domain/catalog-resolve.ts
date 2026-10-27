@@ -58,11 +58,23 @@ export function resolvePort(name: string | null): Resolved {
  * Như resolvePort, kèm `generic` khi chỉ khớp tên thành phố ("HO CHI MINH" → VNSGN): đúng mã cảng chung nhưng không chỉ rõ bến,
  * chứng từ khác ghi bến cụ thể (Arrival Notice "CANG CAT LAI (HCM)") thì phải ưu tiên bến đó.
  */
+/**
+ * Ô sân bay chỉ ghi mã IATA 3 chữ ("SGN") hoặc mã trạm chuyển phát = IATA + 1 chữ (FedEx "SGNA", "ZUHA") → mã IATA.
+ * Chỉ nhận khi cả ô là một từ 3–4 chữ (tránh nhầm "NAM", "CITY" trong địa chỉ). UN/LOCODE sân bay thường = mã nước + IATA.
+ */
+export function iataOf(raw: string | null): string | null {
+  const t = raw ? norm(raw) : "";
+  return /^[A-Z]{3}[A-Z]?$/.test(t) ? t.slice(0, 3) : null;
+}
+
 function resolvePortDetail(name: string | null): (NonNullable<Resolved> & { generic?: true }) | null {
   if (!name) return null;
   const n = norm(name);
   const direct = PORTS.find((p) => n.split(" ").includes(p.code));
   if (direct) return { code: direct.code, name: direct.name };
+  const iata = iataOf(name);
+  const byIata = iata ? PORTS.find((p) => p.code.slice(2) === iata || p.aliases.includes(iata)) : undefined;
+  if (byIata) return { code: byIata.code, name: byIata.name };
   // Thứ tự trong PORTS là thứ tự ưu tiên: bến cụ thể (Tân Vũ, Đình Vũ, Cát Lái…) đứng trước cảng/thành phố chung.
   // So theo nguyên từ: alias ngắn như "HAN" (Nội Bài) không được khớp vào giữa "SHANGHAI" hay "CHANGI".
   const padded = ` ${n} `;
@@ -147,7 +159,10 @@ export function resolveWorldPort(raw: string | null, country: string | null, cat
   const t = resolvePort(raw);
   if (t) return t;
   const w = catalog?.length ? matchWorldPort(raw, catalog, country) : null;
-  return w ? { code: w.entry.code, name: w.entry.name } : null;
+  if (w) return { code: w.entry.code, name: w.entry.name };
+  const iata = iataOf(raw);
+  const hits = iata && catalog?.length ? catalog.filter((e) => e.code.slice(2) === iata && (!country || e.parent === country)) : [];
+  return hits.length === 1 ? { code: hits[0]!.code, name: hits[0]!.name } : null;
 }
 
 export type LoadingPick = { resolved: Resolved; raw: string | null; note?: string };

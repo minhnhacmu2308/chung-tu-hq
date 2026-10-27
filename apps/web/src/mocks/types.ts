@@ -69,9 +69,9 @@ export const FIELD_GROUP_LABELS: Messages<FieldGroup> = defineMessages({
 });
 
 export const VALUE_SOURCE_LABELS: Messages<ValueSource> = defineMessages({
-  vi: { INVOICE: "Invoice", BILL_OF_LADING: "B/L", PACKING_LIST: "Packing List", CONTRACT: "Contract", CERT_OF_ORIGIN: "C/O", FREIGHT_INVOICE: "Hóa đơn cước", ARRIVAL_NOTICE: "Arrival Notice", DOSSIER: "Hồ sơ", ACCOUNT: "Tài khoản", DEFAULT: "Mặc định", SYSTEM: "Hệ thống", USER: "Người khai sửa" },
-  en: { INVOICE: "Invoice", BILL_OF_LADING: "B/L", PACKING_LIST: "Packing List", CONTRACT: "Contract", CERT_OF_ORIGIN: "C/O", FREIGHT_INVOICE: "Freight invoice", ARRIVAL_NOTICE: "Arrival Notice", DOSSIER: "Dossier", ACCOUNT: "Account", DEFAULT: "Default", SYSTEM: "System", USER: "Edited by declarant" },
-  zh: { INVOICE: "发票", BILL_OF_LADING: "提单", PACKING_LIST: "装箱单", CONTRACT: "合同", CERT_OF_ORIGIN: "原产地证", FREIGHT_INVOICE: "运费发票", ARRIVAL_NOTICE: "到货通知", DOSSIER: "档案", ACCOUNT: "账户", DEFAULT: "默认", SYSTEM: "系统", USER: "申报人修改" },
+  vi: { INVOICE: "Invoice", BILL_OF_LADING: "B/L", PACKING_LIST: "Packing List", CONTRACT: "Contract", CERT_OF_ORIGIN: "C/O", FREIGHT_INVOICE: "Hóa đơn cước", ARRIVAL_NOTICE: "Arrival Notice", DOSSIER: "Hồ sơ", ACCOUNT: "Tài khoản", DEFAULT: "Mặc định", SYSTEM: "Hệ thống", USER: "Người khai sửa", LESSON: "Học từ tờ khai" },
+  en: { INVOICE: "Invoice", BILL_OF_LADING: "B/L", PACKING_LIST: "Packing List", CONTRACT: "Contract", CERT_OF_ORIGIN: "C/O", FREIGHT_INVOICE: "Freight invoice", ARRIVAL_NOTICE: "Arrival Notice", DOSSIER: "Dossier", ACCOUNT: "Account", DEFAULT: "Default", SYSTEM: "System", USER: "Edited by declarant", LESSON: "Learned from declarations" },
+  zh: { INVOICE: "发票", BILL_OF_LADING: "提单", PACKING_LIST: "装箱单", CONTRACT: "合同", CERT_OF_ORIGIN: "原产地证", FREIGHT_INVOICE: "运费发票", ARRIVAL_NOTICE: "到货通知", DOSSIER: "档案", ACCOUNT: "账户", DEFAULT: "默认", SYSTEM: "系统", USER: "申报人修改", LESSON: "从报关单学习" },
 });
 
 export const ROLE_LABELS: Messages<Role> = defineMessages({

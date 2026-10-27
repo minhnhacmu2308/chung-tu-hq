@@ -62,7 +62,8 @@ export interface ValidationPort {
 
 export type AiUsage = { model: string; inputTokens: number; outputTokens: number };
 export type AiFile = { bytes: Buffer; mime: string; pages: number; fileName: string };
-export type ExtractPrompt = { kind: DocKind; skillHints: string[]; examples: unknown[]; supplierHint: string | null };
+/** `title`: câu mở đầu thay cho "Đây là <loại chứng từ>" (đọc tờ khai hải quan ở mục Dạy khai báo – không phải loại chứng từ của hồ sơ). */
+export type ExtractPrompt = { kind: DocKind; skillHints: string[]; examples: unknown[]; supplierHint: string | null; title?: string };
 export interface AiProvider {
   readonly name: string;
   classifyPages(file: AiFile): Promise<{ result: ClassifyResult; usage: AiUsage }>;

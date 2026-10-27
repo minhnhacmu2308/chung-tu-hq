@@ -13,7 +13,31 @@ const fixtures = path.join(root, "evals/fixtures");
 const results = path.join(root, "evals/results");
 const args = process.argv.slice(2);
 
-if (args.includes("--lot")) {
+if (args.includes("--corpus")) {
+  // Kho dữ liệu: pnpm eval --live --corpus <thư mục chứa các lô> [--max N] – mỗi lô một thư mục (chứng từ + tờ khai thật PDF). Gọi AI thật, tốn tiền.
+  const env = loadEnv();
+  if (!args.includes("--live") || !env.ANTHROPIC_API_KEY) throw new Error("--corpus cần --live và ANTHROPIC_API_KEY");
+  const { corpusLots, runCorpusLot } = await import("../src/modules/teaching/eval/corpus-run.js");
+  const { corpusMarkdown } = await import("../src/modules/teaching/domain/corpus.js");
+  const ai = new ClaudeAiProvider(env.ANTHROPIC_API_KEY, env.AI_MODEL);
+  const root = path.resolve(process.cwd(), args[args.indexOf("--corpus") + 1] ?? ".");
+  const max = args.includes("--max") ? Number(args[args.indexOf("--max") + 1]) : Infinity;
+  const lots = [];
+  let tokens = { inputTokens: 0, outputTokens: 0 };
+  for (const dir of corpusLots(root).slice(0, max)) {
+    const r = await runCorpusLot(ai, dir);
+    tokens = { inputTokens: tokens.inputTokens + r.usage.inputTokens, outputTokens: tokens.outputTokens + r.usage.outputTokens };
+    if (r.warning) console.log(`! ${r.warning}`);
+    if (r.lot) {
+      lots.push(r.lot);
+      console.log(`${r.lot.lot}: ${r.lot.fields.filter((f) => f.kind === "MATCH").length}/${r.lot.fields.length} chỉ tiêu khớp · ${r.usage.inputTokens}+${r.usage.outputTokens} token`);
+    }
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  writeFileSync(path.join(root, `corpus-${stamp}.json`), JSON.stringify(lots.map(({ docs: _d, ...l }) => l), null, 2));
+  writeFileSync(path.join(root, `rules-${stamp}.md`), corpusMarkdown({ generatedAt: new Date(), lots }));
+  console.log(`\n${lots.length} lô · ${tokens.inputTokens}+${tokens.outputTokens} token · báo cáo: ${path.join(root, `rules-${stamp}.md`)}`);
+} else if (args.includes("--lot")) {
   // Lô thật: pnpm eval --live --lot <thư mục> [--lot <thư mục>…] – gọi AI thật, tốn tiền.
   const env = loadEnv();
   if (!args.includes("--live") || !env.ANTHROPIC_API_KEY) throw new Error("--lot cần --live và ANTHROPIC_API_KEY");

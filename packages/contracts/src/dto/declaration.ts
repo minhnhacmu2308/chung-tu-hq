@@ -49,7 +49,7 @@ export type LineItemHs = z.infer<typeof LineItemHsSchema>;
 export const DeclarationSectionSchema = z.enum(["GENERAL", "PARTIES", "TRANSPORT", "VALUE"]);
 export type DeclarationSection = z.infer<typeof DeclarationSectionSchema>;
 
-export const FieldProvenanceSchema = z.object({ rule: z.string(), via: z.enum(["default", "source", "fixed", "profile"]), sourceId: z.string().optional() });
+export const FieldProvenanceSchema = z.object({ rule: z.string(), via: z.enum(["default", "source", "fixed", "profile", "lesson"]), sourceId: z.string().optional() });
 export type FieldProvenance = z.infer<typeof FieldProvenanceSchema>;
 
 export const DeclarationFieldSchema = z.object({

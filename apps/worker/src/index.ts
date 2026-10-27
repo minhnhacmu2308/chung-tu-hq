@@ -16,6 +16,7 @@ import { hsAnswerJob, hsPollJob, hsReclassifyJob } from "./jobs/hs.js";
 import { mailboxSyncJob } from "./jobs/mailbox-sync.js";
 import { runAgentJob } from "./jobs/run-agent.js";
 import { skillEvaluateJob, skillSampleReadJob } from "./jobs/skill.js";
+import { teachSampleReadJob } from "./jobs/teach.js";
 import { stuckSweeperJob } from "./jobs/stuck-sweeper.js";
 import { perOrgLimit } from "./jobs/_per-org.js";
 import { startHealthServer } from "./health-server.js";
@@ -38,6 +39,7 @@ const workers = [
   new Worker("health", async (job) => healthJob(job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("extract-document", perOrg("extract-document", (job) => extractDocumentJob(c.extraction, job.data)), { connection: c.redis, concurrency: 3, limiter: { max: c.env.AI_RATE_PER_MINUTE, duration: 60_000 } }),
   new Worker("skill-sample-read", perOrg("skill-sample-read", (job) => skillSampleReadJob(c.skill, job.data)), { connection: c.redis, concurrency: 2 }),
+  new Worker("teach-sample-read", perOrg("teach-sample-read", (job) => teachSampleReadJob(c.teach, job.data)), { connection: c.redis, concurrency: 2 }),
   new Worker("skill-evaluate", perOrg("skill-evaluate", (job) => skillEvaluateJob(c.skill, job.data)), { connection: c.redis, concurrency: 1 }),
   new Worker("run-agent", perOrg("run-agent", (job) => runAgentJob(c.declaration, job.data)), { connection: c.redis, concurrency: 2 }),
   new Worker("hs-poll", async (job) => hsPollJob(c.declaration, job.data), { connection: c.redis, concurrency: 4 }),

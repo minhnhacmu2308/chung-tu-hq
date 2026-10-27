@@ -3,8 +3,9 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { formatHs, ratesFromCandidate } from "../domain/hscodepro-map.js";
-import { ratesFor } from "../domain/rates.js";
-import { rebuildDraft } from "./_rebuild.js";
+import { harmonizeRates, lineLessonFor } from "../domain/lessons-apply.js";
+import { fixedRatesFor, ratesFor } from "../domain/rates.js";
+import { lessonsOf, rebuildDraft } from "./_rebuild.js";
 import { sheetScopeError } from "./_edit-scope.js";
 import { loadDossier, syncLineItems, toHsEntry, toLineItem } from "./_dto.js";
 import type { DeclarationDeps } from "./ports.js";
@@ -16,7 +17,10 @@ export async function listLineItems(deps: DeclarationDeps, ctx: Ctx, dossierId: 
   let rows = await deps.uow.asOrg(ctx, (r) => r.lineItems.list(ctx.orgId, dossierId));
   if (rows.length === 0) {
     const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
-    if (shipment && shipment.items.length) rows = await deps.uow.asOrg(ctx, (r) => syncLineItems(deps, r, ctx.orgId, dossierId, shipment));
+    if (shipment && shipment.items.length) {
+      const lessons = await lessonsOf(deps, ctx.orgId, dossierId);
+      rows = await deps.uow.asOrg(ctx, (r) => syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons));
+    }
   }
   const sugs = rows.length ? await deps.uow.asOrg(ctx, (r) => r.suggestions.listForItems(ctx.orgId, rows.map((x) => x.id))) : [];
   return ok(rows.map((x) => toLineItem(x, sugs)));
@@ -57,6 +61,15 @@ export async function confirmHs(deps: DeclarationDeps, ctx: Ctx, itemId: string,
     const shipment = await deps.shipments.latest(ctx.orgId, item.dossierId);
     rates = ratesFor(hs, { ...p, coForm: shipment?.origin.coForm.value ?? null });
   } else rates = ratesFromCandidate(null, p);
+  if (dossier.value.direction === "NK" && !fixedRatesFor(p)) {
+    // Bài học mặt hàng (thuế suất đã khai trước) và dòng cùng mã, cùng xuất xứ trong hồ sơ → thuế suất thống nhất.
+    const [shipment, lessons, siblings] = await Promise.all([
+      deps.shipments.latest(ctx.orgId, item.dossierId), lessonsOf(deps, ctx.orgId, item.dossierId), deps.uow.asOrg(ctx, (r) => r.lineItems.list(ctx.orgId, item.dossierId)),
+    ]);
+    const sItem = shipment?.items.find((x) => x.lineNo === item.lineNo);
+    const lesson = lineLessonFor(lessons, { partNo: sItem?.partNo?.value ?? null, description: sItem?.description.value ?? null });
+    rates = harmonizeRates(code, rates, lesson, siblings.filter((x) => x.id !== item.id), item.origin, !!shipment?.origin.coNo.value);
+  }
   const patch = { hsConfirmed: code, hsConfirmedBy: ctx.userId, hsConfirmedAt: now, importDutyRate: rates.importDutyRate, vatRate: rates.vatRate, policyNote: rates.policyNote, updatedAt: now };
   await deps.uow.asOrg(ctx, (r) => r.lineItems.update(item.orgId, item.id, patch));
   await deps.audit.append(ctx, { dossierId: item.dossierId, key: `hs:${item.lineNo}`, oldValue: item.hsConfirmed ?? item.hsSuggested ?? "", newValue: code, source: "HS_CONFIRM" });

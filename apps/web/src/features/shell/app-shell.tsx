@@ -6,7 +6,7 @@ import {
   SidebarMobileTrigger, SidebarUser, toast, useMessages, type AssistantMode, type NavItem,
 } from "@kb/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, FolderOpen, Inbox, LayoutDashboard, LogOut, Package, RotateCcw, Send, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
+import { Bell, FolderOpen, Inbox, LayoutDashboard, LogOut, Package, RotateCcw, Send, GraduationCap, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
@@ -57,6 +57,7 @@ function useNav(): { items: NavItem[]; activeId: string | undefined } {
     { id: "customs", label: t.navCustoms, icon: <Send />, href: "/customs" },
     { id: "products", label: t.navProducts, icon: <Package />, href: "/products" },
     { id: "skills", label: t.navSkills, icon: <Sparkles />, href: "/skills" },
+    { id: "teach", label: t.navTeach, icon: <GraduationCap />, href: "/teach" },
     { id: "settings", label: t.navSettings, icon: <Settings2 />, href: "/settings" },
   ];
 

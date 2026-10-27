@@ -218,6 +218,13 @@
       "when": 1793027714327,
       "tag": "0030_hys_attach_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793070279624,
+      "tag": "0031_teaching",
+      "breakpoints": true
     }
   ]
 }

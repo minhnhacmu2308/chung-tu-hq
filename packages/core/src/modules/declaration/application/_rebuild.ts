@@ -1,5 +1,5 @@
 // Dựng (lại) tờ khai nháp từ dữ liệu hiện tại. Dùng bởi agent (BUILD_DECLARATION) và sau khi xác nhận HS / bỏ xác nhận.
-import { EMPTY_VALUE_CHARGES, inapplicableExtraCodes, type Shipment, type ValueCharges } from "@kb/contracts";
+import { EMPTY_VALUE_CHARGES, inapplicableExtraCodes, type DraftLessons, type Shipment, type ValueCharges } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -38,9 +38,9 @@ export const chargesFor = async (r: DeclarationRepos, orgId: string, dossierId: 
  * `cfg` = Mặc định khai báo + ghi đè của doanh nghiệp (profileFor); `charges` = chi phí người khai nhập (chargesFor);
  * `catalogs` = danh mục cảng / địa điểm lưu kho (catalogsFor).
  */
-export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier: DossierInfo, org: OrgInfo, items: LineItemRow[], exchange: ExchangeInfo, cfg: { profile: Record<string, string>; overrides: Record<string, FieldOverride> } = { profile: {}, overrides: {} }, charges: ValueCharges = EMPTY_VALUE_CHARGES, catalogs?: DeclarationCatalogs): BuiltDeclaration {
+export function computeBuilt(deps: DeclarationDeps, shipment: Shipment, dossier: DossierInfo, org: OrgInfo, items: LineItemRow[], exchange: ExchangeInfo, cfg: { profile: Record<string, string>; overrides: Record<string, FieldOverride> } = { profile: {}, overrides: {} }, charges: ValueCharges = EMPTY_VALUE_CHARGES, catalogs?: DeclarationCatalogs, lessons?: DraftLessons | null): BuiltDeclaration {
   const lines = items.map((i) => ({ id: i.id, lineNo: i.lineNo, amount: i.amount, importDutyRate: i.importDutyRate, vatRate: i.vatRate, hsConfirmed: i.hsConfirmed }));
-  return buildDeclaration({ shipment, dossier, org, items: lines, now: deps.clock.now(), exchange, ...cfg, charges, ...(catalogs ? { catalogs } : {}) });
+  return buildDeclaration({ shipment, dossier, org, items: lines, now: deps.clock.now(), exchange, ...cfg, charges, ...(catalogs ? { catalogs } : {}), ...(lessons ? { lessons } : {}) });
 }
 
 /**
@@ -68,6 +68,17 @@ function mergeKept(fresh: Record<string, StoredField>, old: Record<string, Store
   return out;
 }
 
+/** Bài học của doanh nghiệp cho hồ sơ (module teaching qua container); lỗi đọc bài học không được làm hỏng việc dựng tờ khai. */
+export async function lessonsOf(deps: DeclarationDeps, orgId: string, dossierId: string): Promise<DraftLessons | null> {
+  if (!deps.lessons) return null;
+  try {
+    return await deps.lessons(orgId, dossierId);
+  } catch (e) {
+    console.error("[declaration] đọc bài học lỗi", e);
+    return null;
+  }
+}
+
 /** Tỷ giá tiền tệ hóa đơn (lưu trên tờ khai); thiếu → "0". */
 export const invoiceRate = (exchange: ExchangeInfo, shipment: Shipment, dossier: DossierInfo) => exchange.rates[shipment.invoice.currency.value ?? dossier.currency] ?? "0";
 
@@ -79,13 +90,14 @@ export async function rebuildDraft(deps: DeclarationDeps, ctx: RebuildCtx, dossi
   if (!shipment) return ok(null);
   const org = await deps.org.get(ctx.orgId);
   const now = deps.clock.now();
+  const lessons = await lessonsOf(deps, ctx.orgId, dossierId);
   return deps.uow.asOrg({ orgId: asOrgId(ctx.orgId), userId: asUserId(ctx.userId) }, async (r) => {
     const current = await r.declarations.latest(ctx.orgId, dossierId);
     if (!current || current.status !== "DRAFT") return ok(current);
     const items = await r.lineItems.list(ctx.orgId, dossierId);
     const charges = await chargesFor(r, ctx.orgId, dossierId);
     const exchange = await exchangeFor(r, currenciesOf(shipment, dossier, charges), vnDate(now));
-    const built = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, ctx.orgId, dossier.direction), charges, await catalogsFor(dossier.customsOfficeCode));
+    const built = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, ctx.orgId, dossier.direction), charges, await catalogsFor(dossier.customsOfficeCode), lessons);
     const patch = {
       fields: mergeUserEdits(built.fields, current.fields, built.hidden, built.kind), updatedAt: now, exchangeRate: invoiceRate(exchange, shipment, dossier), exchangeRateDate: exchange.date,
       customsValueVnd: built.valuation.customsValueVnd, valueAdjustments: built.adjustments, estImportDutyVnd: built.taxes.importDutyVnd, estVatVnd: built.taxes.vatVnd,

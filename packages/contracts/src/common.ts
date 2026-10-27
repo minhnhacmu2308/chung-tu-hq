@@ -83,7 +83,7 @@ export type RuleResult = z.infer<typeof RuleResultSchema>;
 export const RuleSeveritySchema = z.enum(["BLOCKER", "WARNING", "INFO"]);
 export type RuleSeverity = z.infer<typeof RuleSeveritySchema>;
 
-export const ValueSourceSchema = z.enum(["INVOICE", "BILL_OF_LADING", "PACKING_LIST", "CONTRACT", "CERT_OF_ORIGIN", "FREIGHT_INVOICE", "ARRIVAL_NOTICE", "DOSSIER", "ACCOUNT", "DEFAULT", "SYSTEM", "USER"]);
+export const ValueSourceSchema = z.enum(["INVOICE", "BILL_OF_LADING", "PACKING_LIST", "CONTRACT", "CERT_OF_ORIGIN", "FREIGHT_INVOICE", "ARRIVAL_NOTICE", "DOSSIER", "ACCOUNT", "DEFAULT", "SYSTEM", "USER", "LESSON"]);
 export type ValueSource = z.infer<typeof ValueSourceSchema>;
 
 export const RoleSchema = z.enum(["OWNER", "ADMIN", "DECLARANT", "APPROVER", "VIEWER"]);

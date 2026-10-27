@@ -13,6 +13,8 @@ import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/in
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
+import { lessonsForDossier } from "@kb/core/modules/teaching";
+import { createTeachInfrastructure, createTeachLotPort } from "@kb/core/modules/teaching/infrastructure";
 import { runRules } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
 import { asOrgId, asUserId, createLogger, dec, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
@@ -120,6 +122,9 @@ export function buildContainer() {
   });
   declaration.notify = notify;
   declaration.usage = serviceUsage;
+  // Dạy khai báo: job đọc tờ khai mẫu + bài học áp vào tờ khai nháp khi agent dựng tờ khai.
+  const teach = createTeachInfrastructure({ db, queue, storage: dossier.storage, pdf: dossier.pdf, ai: skillBase.ai, usage, lots: createTeachLotPort({ dossier, extraction, declaration, identity }) });
+  declaration.lessons = (orgId, dossierId) => lessonsForDossier(teach, orgId, dossierId);
   // Chi phí người khai nhập ở bước OCR (module declaration) → luật đối chiếu đọc được (R-INCOTERM-FREIGHT); lưu xong chạy lại luật.
   validation.charges = async (orgId, dossierId) => (await declaration.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.valueCharges.get(orgId, dossierId)))?.data ?? null;
   declaration.onChargesSaved = async (orgId, dossierId) => {
@@ -155,7 +160,7 @@ export function buildContainer() {
   identity.mailer = { send: (m) => mail.send(m) };
   const email = { uow: rates.uow as DrizzleAdminUow, mail, clock: systemClock };
   return {
-    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, customs, mailbox, rates, email,
+    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, teach, customs, mailbox, rates, email,
     async close() {
       await Promise.all([...queues.values()].map((q) => q.close()));
       await rates.db.close();

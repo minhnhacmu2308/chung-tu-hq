@@ -22,6 +22,8 @@ import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastruc
 import { checkSentSheets, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
+import { lessonsForDossier, type TeachDeps } from "@kb/core/modules/teaching";
+import { createTeachInfrastructure, createTeachLotPort } from "@kb/core/modules/teaching/infrastructure";
 import { createCustomsInfrastructure, createIntegrationInfrastructure, createVnaccsCredentialsReader, envVnaccsCredentials } from "@kb/core/modules/integration/infrastructure";
 import { asOrgId, asUserId, dec, QUEUE_NAMES, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
 import { Queue } from "bullmq";
@@ -47,6 +49,8 @@ export type Container = {
   extraction: ExtractionDeps;
   skill: SkillDeps;
   declaration: DeclarationDeps;
+  /** Dạy khai báo: tờ khai đã thông quan → bài học theo doanh nghiệp. */
+  teach: TeachDeps;
   customs: CustomsDeps;
   /** Hộp thư chứng từ (kết nối Gmail / Outlook, email có file đính kèm). */
   mailbox: MailboxDeps;
@@ -243,6 +247,9 @@ function build(): Container {
   });
   declaration.notify = notify;
   declaration.usage = serviceUsage;
+  // Dạy khai báo: bài học đã duyệt điền vào tờ khai nháp (module teaching đọc hồ sơ / chứng từ / tờ khai nháp qua public index).
+  const teach = createTeachInfrastructure({ db, queue, storage: dossier.storage, pdf: dossier.pdf, ai: skill.ai, usage, lots: createTeachLotPort({ dossier, extraction, declaration, identity }) });
+  declaration.lessons = (orgId, dossierId) => lessonsForDossier(teach, orgId, dossierId);
   // Chi phí người khai nhập ở bước OCR (module declaration) → luật đối chiếu đọc được (R-INCOTERM-FREIGHT); lưu xong chạy lại luật.
   validation.charges = async (orgId, dossierId) => (await declaration.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.valueCharges.get(orgId, dossierId)))?.data ?? null;
   declaration.onChargesSaved = async (orgId, dossierId) => {
@@ -356,6 +363,7 @@ function build(): Container {
     extraction,
     skill,
     declaration,
+    teach,
     customs,
     mailbox,
     admin,

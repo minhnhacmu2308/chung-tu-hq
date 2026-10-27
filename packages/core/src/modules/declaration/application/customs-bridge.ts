@@ -1,5 +1,5 @@
 // Dữ liệu tờ khai cho module integration (truyền Hải quan): snapshot để dựng payload FPT, đánh dấu đã truyền, danh sách.
-import { rebuildDraft } from "./_rebuild.js";
+import { lessonsOf, rebuildDraft } from "./_rebuild.js";
 import type { DeclarationStatus } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
@@ -89,10 +89,11 @@ export async function listDeclarationsForCustoms(deps: DeclarationDeps, orgId: s
 export async function refreshFromShipment(deps: DeclarationDeps, ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<Result<void>> {
   const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
   if (!shipment?.items.length) return ok(undefined);
+  const lessons = await lessonsOf(deps, ctx.orgId, dossierId);
   const decl = await deps.uow.asOrg(ctx, async (r) => {
     const latest = await r.declarations.latest(ctx.orgId, dossierId);
     if (latest && latest.status !== "DRAFT") return latest;
-    if ((await r.lineItems.list(ctx.orgId, dossierId)).length) await syncLineItems(deps, r, ctx.orgId, dossierId, shipment);
+    if ((await r.lineItems.list(ctx.orgId, dossierId)).length) await syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons);
     return latest;
   });
   if (!decl || decl.status !== "DRAFT") return ok(undefined);

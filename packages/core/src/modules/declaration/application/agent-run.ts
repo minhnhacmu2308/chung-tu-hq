@@ -6,7 +6,7 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { chargesFor, computeBuilt, currenciesOf, exchangeFor, invoiceRate, mergeUserEdits } from "./_rebuild.js";
+import { chargesFor, computeBuilt, currenciesOf, exchangeFor, invoiceRate, lessonsOf, mergeUserEdits } from "./_rebuild.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { loadDossier, syncLineItems, TASKS_BY_MODE, toAgentRunView } from "./_dto.js";
 import { sheetScopeError } from "./_edit-scope.js";
@@ -26,8 +26,9 @@ export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: 
   const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
   if (!shipment || shipment.items.length === 0) return err(domainError("NO_ITEMS", "Chưa có dòng hàng – hoàn tất bước OCR & kiểm tra trước"));
   const now = deps.clock.now();
+  const lessons = await lessonsOf(deps, ctx.orgId, dossierId);
   const run = await deps.uow.asOrg(ctx, async (r) => {
-    await syncLineItems(deps, r, ctx.orgId, dossierId, shipment);
+    await syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons);
     const prev = await r.agentRuns.latest(ctx.orgId, dossierId);
     if (prev?.status === "RUNNING") await r.agentRuns.update(prev.orgId, prev.id, { status: "CANCELLED", finishedAt: now });
     const row: AgentRunRow = {
@@ -158,11 +159,13 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
       } else if (t.id === "BUILD_DECLARATION") {
         await setTask("BUILD_DECLARATION", "RUNNING", 20, "Đang tính trị giá tính thuế");
         say("Tính trị giá tính thuế, cộng khoản điều chỉnh theo Incoterm");
+        const lessons = await lessonsOf(deps, input.orgId, input.dossierId);
+        if (lessons) say(`Áp bài học đã duyệt của doanh nghiệp (Dạy khai báo): ${Object.keys(lessons.fields).length} chỉ tiêu, ${Object.values(lessons.clauses).flat().length} câu cố định, ${lessons.lines.length} mặt hàng`);
         const built = await deps.uow.asOrg(ctx, async (r) => {
           const items = await r.lineItems.list(input.orgId, input.dossierId);
           const charges = await chargesFor(r, input.orgId, input.dossierId);
           const exchange = await exchangeFor(r, currenciesOf(shipment, dossier, charges), vnDate(deps.clock.now()));
-          const b = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, input.orgId, dossier.direction), charges, await catalogsFor(dossier.customsOfficeCode));
+          const b = computeBuilt(deps, shipment, dossier, org, items, exchange, await profileFor(r, input.orgId, dossier.direction), charges, await catalogsFor(dossier.customsOfficeCode), lessons);
           const prev = await r.declarations.latest(input.orgId, input.dossierId);
           if (prev && prev.status !== "DRAFT") return { b, skipped: true as const, exchange };
           const now = deps.clock.now();

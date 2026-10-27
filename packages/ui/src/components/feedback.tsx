@@ -144,6 +144,12 @@ export const STATUS_META = {
   DOC_READING: { tone: "info", label: "AI đang đọc" },
   DOC_DONE: { tone: "success", label: "Đã đọc" },
   DOC_ERROR: { tone: "danger", label: "Lỗi" },
+  // Dạy khai báo: bài học từ tờ khai đã thông quan; ô lệch giữa tờ khai nháp và tờ khai thật
+  LESSON_PENDING: { tone: "warning", label: "Chờ duyệt" },
+  LESSON_ACTIVE: { tone: "success", label: "Đang dùng" },
+  LESSON_OFF: { tone: "neutral", label: "Đã tắt" },
+  TEACH_DOCUMENT: { tone: "warning", label: "Có trên chứng từ" },
+  TEACH_KNOWLEDGE: { tone: "info", label: "Không có trên chứng từ" },
 } as const satisfies Record<string, { tone: Tone; label: string }>;
 
 export type Status = keyof typeof STATUS_META;
@@ -169,6 +175,7 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   ANNOUNCEMENT_SENT: "Sent", ANNOUNCEMENT_WITHDRAWN: "Withdrawn",
   EMAIL_QUEUED: "Queued", EMAIL_SENDING: "Sending", EMAIL_SENT: "Sent", EMAIL_PARTIAL: "Partly sent", EMAIL_FAILED: "Failed", TEMPLATE_PUBLISHED: "Published", TEMPLATE_DRAFT: "Unpublished",
   DOC_UPLOADING: "Uploading", DOC_QUEUED: "Queued", DOC_READING: "AI reading", DOC_DONE: "Read", DOC_ERROR: "Error",
+  LESSON_PENDING: "Pending review", LESSON_ACTIVE: "In use", LESSON_OFF: "Off", TEACH_DOCUMENT: "On the documents", TEACH_KNOWLEDGE: "Not on the documents",
 };
 
 /** Nhãn tiếng Trung (giản thể) tương ứng STATUS_META. */
@@ -192,6 +199,7 @@ export const STATUS_LABELS_ZH: Record<Status, string> = {
   ANNOUNCEMENT_SENT: "已发送", ANNOUNCEMENT_WITHDRAWN: "已撤回",
   EMAIL_QUEUED: "待发送", EMAIL_SENDING: "发送中", EMAIL_SENT: "已发送", EMAIL_PARTIAL: "部分发送", EMAIL_FAILED: "发送失败", TEMPLATE_PUBLISHED: "已发布", TEMPLATE_DRAFT: "未发布",
   DOC_UPLOADING: "上传中", DOC_QUEUED: "等待读取", DOC_READING: "AI 读取中", DOC_DONE: "已读取", DOC_ERROR: "错误",
+  LESSON_PENDING: "待审核", LESSON_ACTIVE: "使用中", LESSON_OFF: "已关闭", TEACH_DOCUMENT: "单证上有", TEACH_KNOWLEDGE: "单证上没有",
 };
 
 /** Nhãn trạng thái theo ngôn ngữ – dùng cho code không phải component (bộ lọc bảng, xuất file…). */

@@ -10,3 +10,4 @@ export * from "./skill.js";
 export * from "./declaration.js";
 export * from "./admin.js";
 export * from "./mailbox.js";
+export * from "./teaching.js";

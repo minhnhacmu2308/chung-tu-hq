@@ -204,10 +204,12 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   }
 
   const inline = !compact && !listId && Boolean(name) && !spansRow(field);
+  // Ô hẹp trong nhóm lặp: chữ gợi ý ngắn; ô thường: "Nhập <tên chỉ tiêu>".
+  const placeholder = field.input === "number" ? t.enterNumber : compact ? t.enterShort : fillText(t.enterField, { label: field.label });
   const control =
     listId && field.codeTable ? <div className={cn("min-w-0", fill && "flex-1", dim)}><CodeInput table={field.codeTable} fieldKey={field.key} kind={kind} values={values} value={value} onChange={set} label={field.label} widthClass={fill ? "w-full" : compact ? fieldWidthClass(field) : "w-32"} /></div>
-    : field.input === "textarea" ? <Textarea className={cn(!compact && "min-w-0 flex-1", dim)} rows={2} value={value} onChange={(e) => set(e.currentTarget.value)} />
-    : <Input className={cn(fill ? "min-w-0 flex-1" : compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1", dim)} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} value={value} onChange={(e) => set(e.currentTarget.value)} />;
+    : field.input === "textarea" ? <Textarea className={cn(!compact && "min-w-0 flex-1", dim)} rows={2} placeholder={placeholder} value={value} onChange={(e) => set(e.currentTarget.value)} />
+    : <Input className={cn(fill ? "min-w-0 flex-1" : compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1", dim)} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} placeholder={placeholder} value={value} onChange={(e) => set(e.currentTarget.value)} />;
   // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô; nút ⓘ trên đường viền sau tên (nhãn bên trái: cuối hàng).
   const hint = [compact && !listId && name ? `→ ${name}` : null, shownReason].filter(Boolean).join(" · ") || undefined;
 

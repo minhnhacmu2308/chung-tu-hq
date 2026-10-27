@@ -61,6 +61,7 @@ function Cell({ kind, f, n, values, onChange }: { kind: "IDA" | "EDA"; f: Layout
       className={cn("h-9", f.input === "date" ? DATE_WIDTH : WIDTH[f.width ?? "sm"])}
       type={f.input === "date" ? "date" : f.input === "time" ? "time" : "text"}
       inputMode={f.input === "number" ? "decimal" : undefined}
+      placeholder={f.input === "number" ? t.enterNumber : t.enterShort}
       value={value}
       onChange={(e) => onChange(f.key, e.currentTarget.value)}
     />

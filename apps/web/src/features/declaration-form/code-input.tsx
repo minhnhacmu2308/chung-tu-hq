@@ -111,6 +111,7 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
         className={cn(widthClass, "shrink-0")}
         value={value}
         onChange={(e) => onChange(e.currentTarget.value.toUpperCase())}
+        placeholder={t.codePlaceholder}
         tooltip={name ?? (value ? t.notInList : t.typeOrLookup)}
         onLookup={() => setOpen(true)}
         lookupLabel={fill(t.lookupAria, { label })}

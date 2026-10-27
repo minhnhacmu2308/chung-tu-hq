@@ -6,7 +6,7 @@ export { Field, FieldFrame, Label, useFieldControl, type FieldFrameProps, type F
 export { Abbreviation, type AbbreviationProps } from "./components/abbreviation.js";
 export { PaperStack, PaperSheet, PaperField, PaperColumns, PaperLabel, type PaperSheetProps, type PaperFieldProps, type PaperFieldState } from "./components/paper.js";
 export { Disclosure, type DisclosureProps } from "./components/disclosure.js";
-export { Input, Textarea, Select, Checkbox, type SelectOption, type SelectProps, type CheckboxProps } from "./components/inputs.js";
+export { Input, LookupInput, Textarea, Select, Checkbox, type SelectOption, type SelectProps, type CheckboxProps, type LookupInputProps } from "./components/inputs.js";
 export { RadioGroup, type RadioGroupProps, type RadioOption } from "./components/radio-group.js";
 export {
   Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,

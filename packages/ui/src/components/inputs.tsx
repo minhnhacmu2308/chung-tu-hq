@@ -1,8 +1,9 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useFieldControl, useFieldLabelId } from "./field.js";
+import { Tooltip } from "./tooltip.js";
 
 const control = [
   "w-full rounded-md border border-border bg-surface text-fg text-sm",
@@ -17,6 +18,39 @@ const control = [
 export function Input({ className, ...props }: ComponentProps<"input">) {
   const a11y = useFieldControl(props);
   return <input data-glass-input="" className={cn(control, "h-10 px-3", className)} {...props} {...a11y} />;
+}
+
+export type LookupInputProps = Omit<ComponentProps<"input">, "className"> & {
+  /** Bề rộng/bố cục của cả ô (vd w-full, w-32) – nút tra cứu nằm trong viền ô nên không cộng thêm bề rộng. */
+  className?: string;
+  onLookup: () => void;
+  /** Tên truy cập + tooltip của nút tra cứu. */
+  lookupLabel: string;
+  /** Mặc định kính lúp. */
+  lookupIcon?: ReactNode;
+  /** Gợi ý khi rê/focus vào ô (vd tên của mã đang nhập). */
+  tooltip?: ReactNode;
+};
+
+/** Ô nhập kèm nút tra cứu nằm trong viền (bên phải) – dùng chung cho ô mã danh mục, mã HS…: cùng chiều cao/viền với Input, không lệch hàng. */
+export function LookupInput({ className, onLookup, lookupLabel, lookupIcon, tooltip, disabled, ...props }: LookupInputProps) {
+  const input = <Input className="pr-10" disabled={disabled} {...props} />;
+  return (
+    <div className={cn("relative min-w-0", className)}>
+      {tooltip ? <Tooltip content={tooltip}>{input}</Tooltip> : input}
+      <Tooltip content={lookupLabel}>
+        <button
+          type="button"
+          aria-label={lookupLabel}
+          disabled={disabled}
+          onClick={onLookup}
+          className="absolute inset-y-1 right-1 grid w-8 place-items-center rounded-sm text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:pointer-events-none disabled:opacity-50"
+        >
+          {lookupIcon ?? <Search className="h-4 w-4" aria-hidden />}
+        </button>
+      </Tooltip>
+    </div>
+  );
 }
 
 export function Textarea({ className, rows = 3, ...props }: ComponentProps<"textarea">) {

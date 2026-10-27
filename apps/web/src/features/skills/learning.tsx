@@ -162,13 +162,17 @@ export function SuggestionsPanel({ skillId, showSkill = false }: { skillId?: str
                       </p>
                     </div>
                     {canApply && (
-                      <div className="flex shrink-0 gap-2">
-                        <Button size="sm" leftIcon={<Check className="h-4 w-4" />} loading={busy && accept.isPending} disabled={busy} onClick={() => accept.mutate(s)}>
-                          {t.accept}
-                        </Button>
-                        <Button size="sm" variant="ghost" leftIcon={<X className="h-4 w-4" />} disabled={busy} onClick={() => dismiss.mutate(s)}>
-                          {t.dismiss}
-                        </Button>
+                      <div className="flex shrink-0 gap-1">
+                        <Tooltip content={t.accept}>
+                          <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full text-success hover:bg-success-subtle" aria-label={t.accept} loading={busy && accept.isPending} disabled={busy} onClick={() => accept.mutate(s)}>
+                            <Check className="h-4 w-4" />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t.dismiss}>
+                          <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full text-fg-muted" aria-label={t.dismiss} disabled={busy} onClick={() => dismiss.mutate(s)}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </Tooltip>
                       </div>
                     )}
                   </li>

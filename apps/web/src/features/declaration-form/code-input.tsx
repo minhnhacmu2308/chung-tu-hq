@@ -1,7 +1,7 @@
 "use client";
 // Ô mã có tra cứu danh mục VNACCS: màn chính chỉ hiện mã, tên mã hiện khi rê chuột / đặt con trỏ vào ô.
 // Danh mục ngắn → danh sách thả xuống có ô lọc (Combobox); danh mục dài → gõ mã trực tiếp + nút tra cứu mở popup (DataTable tìm không dấu).
-import { Alert, Button, Checkbox, cn, Combobox, createDataTableColumnHelper, DataTable, Dialog, DialogContent, fill, Input, SkeletonTable, Stack, Tooltip, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Checkbox, cn, Combobox, createDataTableColumnHelper, DataTable, Dialog, DialogContent, fill, LookupInput, SkeletonTable, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { CODE_LIST_META, codeListFor, type CodeListEntry, type CodeTable } from "@kb/contracts";
 import { Search } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -106,14 +106,18 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
     );
   }
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      <Tooltip content={name ?? (value ? t.notInList : t.typeOrLookup)}>
-        <Input className={cn(widthClass, "shrink-0")} value={value} onChange={(e) => onChange(e.currentTarget.value.toUpperCase())} aria-describedby={name ? nameId : undefined} {...(ariaLabel ? { "aria-label": ariaLabel } : {})} />
-      </Tooltip>
+    <>
+      <LookupInput
+        className={cn(widthClass, "shrink-0")}
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value.toUpperCase())}
+        tooltip={name ?? (value ? t.notInList : t.typeOrLookup)}
+        onLookup={() => setOpen(true)}
+        lookupLabel={fill(t.lookupAria, { label })}
+        aria-describedby={name ? nameId : undefined}
+        {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+      />
       {name && <span id={nameId} className="sr-only">{name}</span>}
-      <Button size="icon" variant="ghost" className="h-9 w-9 shrink-0 text-fg-muted" aria-label={fill(t.lookupAria, { label })} onClick={() => setOpen(true)}>
-        <Search className="h-4 w-4" />
-      </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         {open && (
           <LookupDialog
@@ -123,6 +127,6 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
           />
         )}
       </Dialog>
-    </div>
+    </>
   );
 }

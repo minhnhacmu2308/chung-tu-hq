@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickDischargePort, resolveDischargePort, resolvePackageUnit, resolvePayment, resolvePort, resolveWarehouse, transportModeCode, type CatalogEntry } from "../catalog-resolve.js";
+import { pickDischargePort, pickLoadingPort, resolveDischargePort, resolveWorldPort, resolvePackageUnit, resolvePayment, resolvePort, resolveWarehouse, transportModeCode, type CatalogEntry } from "../catalog-resolve.js";
 
 describe("catalog-resolve", () => {
   it("cảng: theo alias hoặc LOCODE có sẵn; không có → null", () => {
@@ -41,8 +41,30 @@ describe("catalog-resolve", () => {
     expect(resolvePackageUnit("xyz")).toMatchObject({ code: "PK", guessed: true });
     expect(resolvePackageUnit(null)).toBeNull();
   });
-  it("Tân Sơn Nhất không còn mã giả VNSGN-A (không phải UN/LOCODE) → không tra được, người khai chọn", () => {
-    expect(resolvePort("TAN SON NHAT AIRPORT")).toBeNull();
+  it("Tân Sơn Nhất → VNSGN (TK thật 106794645160 hàng FedEx khai VNSGN), không dùng mã giả VNSGN-A", () => {
+    expect(resolvePort("TAN SON NHAT AIRPORT")?.code).toBe("VNSGN");
+  });
+
+  describe("cảng/sân bay nước ngoài theo danh mục A016", () => {
+    const WORLD: CatalogEntry[] = [{ code: "CNZUH", name: "ZHUHAI", parent: "CN" }, { code: "CNJIN", name: "JINWAN", parent: "CN" }, { code: "XXVIC", name: "VICTORIA", parent: "SC" }, { code: "CAVIC", name: "VICTORIA", parent: "CA" }];
+    it("tên trên chứng từ khớp một đoạn tên trong danh mục (“ZHUHAI, CHINA” → CNZUH); trùng tên nhiều nước chỉ nhận khi biết nước", () => {
+      expect(resolveWorldPort("ZHUHAI, CHINA", "CN", WORLD)?.code).toBe("CNZUH");
+      expect(resolveWorldPort("BUSAN, KOREA", null, WORLD)?.code).toBe("KRPUS");
+      expect(resolveWorldPort("VICTORIA", null, WORLD)).toBeNull();
+      expect(resolveWorldPort("VICTORIA", "CA", WORLD)?.code).toBe("CAVIC");
+    });
+    it("cảng xếp: chứng từ ghi nơi đi → mã đó; không chứng từ nào ghi → suy từ thành phố (đoạn có CITY) trong địa chỉ người xuất khẩu, đánh dấu kiểm", () => {
+      expect(pickLoadingPort(["ZHUHAI,CHINA"], [], "CN", WORLD)).toMatchObject({ resolved: { code: "CNZUH" }, raw: "ZHUHAI,CHINA" });
+      expect(pickLoadingPort(["ZHUHAI,CHINA"], [], "CN", WORLD).note).toBeUndefined();
+      const addr = "NO.591,JIN HE ROAD, HONG QI TOWN, JINWAN DISTRICT,ZHUHAI CITY.GUANGDONG , CHINA";
+      expect(pickLoadingPort([], [addr], "CN", WORLD)).toMatchObject({ resolved: { code: "CNZUH" }, note: expect.stringMatching(/ZHUHAI.*địa chỉ người xuất khẩu/) });
+      expect(pickLoadingPort([], [addr], null, WORLD).resolved).toBeNull();
+      expect(pickLoadingPort(["SOMEWHERE"], [addr], "CN", WORLD)).toMatchObject({ resolved: null, raw: "SOMEWHERE" });
+    });
+    it("cảng dỡ hàng air: tên thành phố là sân bay (HO CHI MINH → VNSGN), không nhắc chọn bến", () => {
+      expect(pickDischargePort(["HO CHI MINH , VIET NAM"], [], [], { air: true })).toEqual({ resolved: { code: "VNSGN", name: "Cảng Sài Gòn (TP.HCM)" }, raw: "HO CHI MINH , VIET NAM" });
+      expect(pickDischargePort(["HO CHI MINH , VIET NAM"], []).note).toMatch(/tên thành phố/);
+    });
   });
 
   it.each([["AIR", "1"], ["SEA_CONTAINER", "2"], ["SEA_BULK", "3"], ["ROAD", "4"], ["RAIL", "5"], ["RIVER", "6"], ["OTHER", "9"]] as const)(

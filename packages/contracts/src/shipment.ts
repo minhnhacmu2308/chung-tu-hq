@@ -67,7 +67,7 @@ export const ShipmentSchema = z.object({
     warehouseName: str(),
     containers: z.array(z.object({ no: z.string(), sealNo: z.string().nullable(), size: z.string().nullable() })),
   }),
-  origin: z.object({ country: str(), coForm: str(), coNo: str(), rexNo: str(), coInvoiceNo: str(), criteria: z.array(z.object({ hs6: z.string().nullable(), criterion: z.string().nullable() })) }),
+  origin: z.object({ country: str(), coForm: str(), coNo: str(), rexNo: str(), coInvoiceNo: str(), /** v3: ngày cấp C/O (ghi kèm số C/O ở Phần ghi chú). */ coDate: date().optional(), criteria: z.array(z.object({ hs6: z.string().nullable(), criterion: z.string().nullable() })) }),
   charges: z.object({
     freight: dec(),
     /** Tiền tệ của cước (hóa đơn GTGT cước thường là VND, khác tiền tệ hóa đơn). Thiếu → coi như tiền tệ hóa đơn. */
@@ -96,7 +96,7 @@ export function emptyShipment(): Shipment {
       finalDestination: empty(), arrivalDate: empty(), packages: empty(), packageUnit: empty(), grossWeightKg: empty(), netWeightKg: empty(),
       houseBillNo: empty(), flightNo: empty(), departureDate: empty(), placeOfIssue: empty(), warehouseCode: empty(), warehouseName: empty(), containers: [],
     },
-    origin: { country: empty(), coForm: empty(), coNo: empty(), rexNo: empty(), coInvoiceNo: empty(), criteria: [] },
+    origin: { country: empty(), coForm: empty(), coNo: empty(), rexNo: empty(), coInvoiceNo: empty(), coDate: empty(), criteria: [] },
     charges: { freight: empty(), insurance: empty(), other: [] },
     items: [],
     documents: [],

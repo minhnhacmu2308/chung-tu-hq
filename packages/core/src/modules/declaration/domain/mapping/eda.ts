@@ -1,5 +1,5 @@
 // Mẫu 02 – tờ khai xuất khẩu (EDA). Người xuất khẩu = doanh nghiệp (tài khoản); người nhập khẩu = buyer trên invoice.
-import { PORTS, resolvePort, transportModeCode } from "../catalog-resolve.js";
+import { PORTS, resolvePort, resolveWorldPort, transportModeCode } from "../catalog-resolve.js";
 import { EDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
 import { freightRequired, incotermCode, planExportAdjustments } from "../adjustments.js";
@@ -75,9 +75,10 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   { code: "CANG_DO", no: N.CANG_DO, section: "TRANSPORT", label: "Địa điểm nhận hàng cuối cùng", required: true, from: (i) => {
     const fd = i.shipment.transport.finalDestination;
     const pod = i.shipment.transport.portOfDischarge;
-    const fdPort = resolvePort(fd.value);
+    const buyerCountry = i.shipment.parties.buyer.country.value;
+    const fdPort = resolveWorldPort(fd.value, buyerCountry, i.catalogs?.worldPorts);
     if (fdPort) return port(fd.value, fdPort, fromSourced(fd, "BILL_OF_LADING").source);
-    return port(pod.value, resolvePort(pod.value), fromSourced(pod, "BILL_OF_LADING").source);
+    return port(pod.value, resolveWorldPort(pod.value, buyerCountry, i.catalogs?.worldPorts), fromSourced(pod, "BILL_OF_LADING").source);
   } },
   // 2.29: bắt buộc (trừ PTVC mã 9), là cảng/ICD/cửa khẩu/sân bay tại Việt Nam – không tự điền mặc định.
   { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Địa điểm xếp hàng", required: true, from: (i) => {

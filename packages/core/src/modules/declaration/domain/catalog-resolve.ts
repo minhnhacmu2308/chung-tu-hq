@@ -14,10 +14,10 @@ export const PORTS: { code: string; name: string; aliases: string[]; country: st
   { code: "VNHPH", name: "Cảng Hải Phòng", aliases: ["HPH"], city: ["HAIPHONG", "HAI PHONG"], country: "VN" },
   { code: "VNCLI", name: "Cảng Cát Lái (TP.HCM)", aliases: ["CAT LAI", "CATLAI"], country: "VN" },
   { code: "VNCMT", name: "Cảng Cái Mép (Bà Rịa – Vũng Tàu)", aliases: ["CAI MEP", "CAIMEP"], country: "VN" },
-  { code: "VNSGN", name: "Cảng Sài Gòn (TP.HCM)", aliases: ["SAIGON", "SAI GON"], city: ["HO CHI MINH", "HOCHIMINH", "HCM", "HCMC"], country: "VN" },
+  // Hàng air về Tân Sơn Nhất cũng khai VNSGN (TK 106794645160 – FedEx, ô 1.33 “VNSGN HO CHI MINH”).
+  { code: "VNSGN", name: "Cảng Sài Gòn (TP.HCM)", aliases: ["SAIGON", "SAI GON", "TAN SON NHAT", "TANSONNHAT", "SGN"], city: ["HO CHI MINH", "HOCHIMINH", "HCM", "HCMC"], country: "VN" },
   { code: "VNDAD", name: "Cảng Đà Nẵng", aliases: ["DA NANG", "DANANG"], country: "VN" },
   { code: "VNHAN", name: "Sân bay Nội Bài (Hà Nội)", aliases: ["NOI BAI", "NOIBAI", "HANOI", "HAN"], country: "VN" },
-  // Tân Sơn Nhất: mã địa điểm VNACCS chưa đối chiếu được (mã cũ "VNSGN-A" không phải UN/LOCODE, ô VD_DST/TK_PSC chỉ 6 ký tự) → không tra, người khai chọn mã.
   { code: "KRPUS", name: "Busan", aliases: ["BUSAN", "PUSAN"], country: "KR" },
   { code: "KRINC", name: "Incheon", aliases: ["INCHEON", "ICN"], country: "KR" },
   { code: "CNSHA", name: "Shanghai", aliases: ["SHANGHAI"], country: "CN" },
@@ -91,7 +91,7 @@ export type DischargePick = { resolved: Resolved; note?: string; /** Chuỗi tr�
  * 1) tên trùng danh mục cảng VNACCS (A016) → mã đó; 2) bến cụ thể trong bảng gọn; 3) mã cảng chung theo tên thành phố.
  * POD nước ngoài (chuyển tải) → điểm đến cuối tại Việt Nam (PRODUCT §7.5).
  */
-export function pickDischargePort(pods: readonly string[], finals: readonly string[], catalog?: readonly CatalogEntry[]): DischargePick {
+export function pickDischargePort(pods: readonly string[], finals: readonly string[], catalog?: readonly CatalogEntry[], opts: { air?: boolean } = {}): DischargePick {
   const vn = (code: string) => code.startsWith("VN");
   const exact = (xs: readonly string[]) => {
     for (const raw of xs) {
@@ -111,6 +111,8 @@ export function pickDischargePort(pods: readonly string[], finals: readonly stri
   if (viaPod) return viaPod;
   const viaFinal = exact(finals) ?? tableVn(finals, false);
   const podGeneric = tableVn(pods, true);
+  // Hàng air: tên thành phố chính là sân bay (HO CHI MINH → VNSGN) – không có “bến” cụ thể để chọn thêm.
+  if (podGeneric && opts.air && !viaFinal) return podGeneric;
   if (podGeneric) return viaFinal && viaFinal.resolved.code !== podGeneric.resolved.code ? viaFinal : { ...podGeneric, note: `“${podGeneric.raw}” chỉ là tên thành phố – tạm khai cảng chung ${podGeneric.resolved.code}, chọn bến dỡ cụ thể nếu khác` };
   const transshipNote = `Cảng dỡ trên vận đơn (${pods[0] ?? "—"}) là cảng chuyển tải nước ngoài – khai điểm đến cuối tại Việt Nam`;
   if (viaFinal) return pods.length ? { ...viaFinal, note: transshipNote } : viaFinal;
@@ -118,6 +120,54 @@ export function pickDischargePort(pods: readonly string[], finals: readonly stri
   if (finalGeneric) return { ...finalGeneric, note: pods.length ? transshipNote : `“${finalGeneric.raw}” chỉ là tên thành phố – chọn bến dỡ cụ thể nếu khác` };
   const p = resolvePort(pods[0] ?? null);
   return { resolved: p, raw: pods[0] ?? null, ...(p ? { note: "Cảng dỡ không phải cảng Việt Nam – kiểm tra điểm đến cuối" } : {}) };
+}
+
+const PLACE_SUFFIX = /\b(CITY|PORT|AIRPORT|DISTRICT|PROVINCE|TOWN|PREFECTURE)\b/g;
+
+/** Các đoạn tên địa danh trong một chuỗi ("ZHUHAI CITY.GUANGDONG , CHINA" → "ZHUHAI", "GUANGDONG", "CHINA"); đoạn có "CITY" xét trước. */
+function placeSegments(raw: string): string[] {
+  const parts = [raw, ...raw.split(/[,;/().]+/)];
+  const ordered = [...parts.filter((x) => /CITY/i.test(x)), ...parts.filter((x) => !/CITY/i.test(x))];
+  return [...new Set(ordered.map((x) => plain(plain(x).replace(PLACE_SUFFIX, " "))).filter((x) => x.length >= 3))];
+}
+
+/** Một đoạn trùng nguyên tên mã trong danh mục cảng thế giới (A016); trùng tên ở nhiều nước → chỉ nhận khi biết nước. */
+function matchWorldPort(raw: string, catalog: readonly CatalogEntry[], country: string | null): { entry: CatalogEntry; segment: string } | null {
+  for (const seg of placeSegments(raw)) {
+    const hits = catalog.filter((e) => plain(e.name) === seg);
+    const pool = country ? hits.filter((e) => e.parent === country) : hits;
+    if (pool.length === 1) return { entry: pool[0]!, segment: seg };
+  }
+  return null;
+}
+
+/** Bảng gọn trước, rồi danh mục cảng thế giới A016 (cảng nước ngoài không có trong bảng gọn, vd ZHUHAI → CNZUH). */
+export function resolveWorldPort(raw: string | null, country: string | null, catalog?: readonly CatalogEntry[]): Resolved {
+  if (!raw) return null;
+  const t = resolvePort(raw);
+  if (t) return t;
+  const w = catalog?.length ? matchWorldPort(raw, catalog, country) : null;
+  return w ? { code: w.entry.code, name: w.entry.name } : null;
+}
+
+export type LoadingPick = { resolved: Resolved; raw: string | null; note?: string };
+
+/**
+ * 1.34 cảng/sân bay xếp hàng từ mọi chứng từ ghi nơi đi (B/L, AWB, Arrival Notice, C/O…): bảng gọn → tên trùng danh mục A016 (lọc theo nước người xuất khẩu).
+ * Không chứng từ nào ghi nơi đi (nhãn chuyển phát nhanh, invoice EXW) → suy từ thành phố trong địa chỉ người xuất khẩu, đánh dấu để người khai kiểm.
+ */
+export function pickLoadingPort(pols: readonly string[], sellerAddresses: readonly string[], country: string | null, catalog?: readonly CatalogEntry[]): LoadingPick {
+  for (const raw of pols) {
+    const r = resolveWorldPort(raw, country, catalog);
+    if (r) return { resolved: r, raw };
+  }
+  if (pols.length) return { resolved: null, raw: pols[0]! };
+  if (!catalog?.length || !country) return { resolved: null, raw: null };
+  for (const addr of sellerAddresses) {
+    const w = matchWorldPort(addr, catalog, country);
+    if (w) return { resolved: { code: w.entry.code, name: w.entry.name }, raw: addr, note: `Chứng từ không ghi nơi xếp hàng – tạm suy từ thành phố “${w.segment}” trong địa chỉ người xuất khẩu, kiểm lại cảng/sân bay đi` };
+  }
+  return { resolved: null, raw: null };
 }
 
 /** POD nước ngoài (chuyển tải) → điểm đến cuối tại Việt Nam (PRODUCT §7.5). */

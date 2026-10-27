@@ -156,6 +156,33 @@ describe("mergeExtractions – trường v2 (chuẩn trường chứng từ)", (
     expect(s.transport.arrivalDate.value).toBeNull(); // ngày bay không phải ETA – NGAY_DEN dự phòng ở bước ánh xạ
     expect(s.transport.warehouseCode.value).toBe("02B1A04");
   });
+  describe("lô chuyển phát nhanh 770471184612 (FedEx, đối chiếu TK 106794645160) – lấy thông tin từ mọi chứng từ", () => {
+    // Dữ liệu model đọc thật từ bộ chứng từ (AWB scan, C/O form E, thông báo cước FedEx).
+    const awb: FileExtraction = { documentId: "d_awb", kind: "AIR_WAYBILL", pages: 1, data: { awbNo: "7704 7118 4612", date: "2024-12-04", flight: null, pieces: 4, grossWeightKg: 13, airportOfDeparture: null, airportOfDestination: null, uncertainties: ["awbNo", "pieces"] } };
+    const co: FileExtraction = { documentId: "d_co", kind: "CERT_OF_ORIGIN", pages: 6, data: { coNo: "E247079657380002", form: "E", issueDate: "2024-12-04", departureDate: "2024-12-04", portOfLoading: null, portOfDischarge: "HO CHI MINH , VIET NAM", items: [], uncertainties: [] } };
+    const fi: FileExtraction = { documentId: "d_fi", kind: "FREIGHT_INVOICE", pages: 1, data: { date: "2024-12-06", billRef: "770471184612", currency: "VND", services: [{ label: "AWB 770471184612 freight", amount: 2188485 }], uncertainties: [] } };
+    const s = mergeExtractions([awb, co, fi], opts);
+
+    it("số AWB bỏ khoảng trắng nhóm số; hóa đơn cước ghi cùng số → đối chiếu chéo, hết “model không chắc”", () => {
+      expect(s.transport.billNo.value).toBe("770471184612");
+      expect(s.transport.billNo.status).toBe("CROSS_CHECKED");
+      expect(s.transport.billNo.sources.map((x) => x.kind)).toEqual(["AIR_WAYBILL", "FREIGHT_INVOICE"]);
+    });
+    it("cảng dỡ: AWB không ghi → lấy ô 3 C/O; ngày cấp C/O; ngày đến dự phòng = ngày thông báo cước", () => {
+      expect(s.transport.portOfDischarge.value).toBe("HO CHI MINH , VIET NAM");
+      expect(s.transport.portOfDischarge.sources.map((x) => x.kind)).toEqual(["CERT_OF_ORIGIN"]);
+      expect(s.origin.coDate?.value).toBe("2024-12-04");
+      expect(s.transport.arrivalDate).toMatchObject({ value: "2024-12-06", sources: [{ kind: "FREIGHT_INVOICE" }] });
+    });
+    it("nguồn dự phòng không so lệch với nguồn chính: B/L ghi CAT LAI, C/O ghi HO CHI MINH → không CONFLICT; có Arrival Notice thì bỏ ngày cước", () => {
+      const bl: FileExtraction = { documentId: "d_bl", kind: "BILL_OF_LADING", pages: 1, data: { billNo: "X1", portOfDischarge: "CAT LAI", containers: [], uncertainties: [] } };
+      const an3: FileExtraction = { documentId: "d_an", kind: "ARRIVAL_NOTICE", pages: 1, data: { eta: "2024-12-05", charges: [], uncertainties: [] } };
+      const s2 = mergeExtractions([bl, co, fi, an3], opts);
+      expect(s2.transport.portOfDischarge).toMatchObject({ value: "CAT LAI", status: "SINGLE_SOURCE" });
+      expect(s2.transport.arrivalDate).toMatchObject({ value: "2024-12-05", status: "SINGLE_SOURCE" });
+    });
+  });
+
   it("invoice: nơi giao hàng, Part No theo dòng; C/O: tiêu chí xuất xứ; trường bổ sung riêng vào custom", () => {
     const inv: FileExtraction = { ...invoice, data: { ...invoice.data, incotermPlace: "Shenzhen", items: [{ ...(invoice.data["items"] as Record<string, unknown>[])[0], partNo: "APSX116D" }], custom: { lcNo: "LC-001" } } };
     const co: FileExtraction = { documentId: "doc_co", kind: "CERT_OF_ORIGIN", pages: 1, data: { coNo: "E25", items: [{ description: "LCD", hs6: "852859", criterion: "PE" }], uncertainties: [] } };

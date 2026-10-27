@@ -1,6 +1,6 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA). Người nhập khẩu lấy theo tài khoản (MST), KHÔNG lấy tên tiếng Anh trên invoice (PRODUCT §7.4).
 import { DEFAULT_PARTY_CLASS, formatAdjustmentField, NO_INSURANCE_VALUE, PARTY_CLASS_LABELS, type Sourced } from "@kb/contracts";
-import { pickDischargePort, resolvePayment, resolvePort, transportModeCode } from "../catalog-resolve.js";
+import { pickDischargePort, pickLoadingPort, resolvePayment, transportModeCode } from "../catalog-resolve.js";
 import { FREIGHT_ADJUSTMENT_LABEL, FREIGHT_NOT_INCLUDED, freightReasonText, INSURANCE_ADJUSTMENT_LABEL, INSURANCE_INCLUDED, incotermCode } from "../adjustments.js";
 import type { Adjustment } from "../valuation.js";
 import { IDA_NO as N } from "./numbers.js";
@@ -14,11 +14,13 @@ import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type Field
 const USED_GOODS = /\b(used|second[\s-]?hand|refurbished|reconditioned|pre-owned)\b|đã qua sử dụng|hàng cũ/i;
 
 /** 1.68 Phần ghi chú: TT121 yêu cầu ghi số và ngày cấp C/O tại đây; các nội dung ngăn cách bằng dấu “;”. */
-const coRef = (i: MappingInput) => {
+/** Số C/O kèm ngày cấp (TT121 chỉ tiêu 1.68), vd “C/O mẫu E số: E247079657380002 (04/12/2024)”. */
+const coRef = (i: MappingInput): { text: string; dated: boolean } | null => {
   const o = i.shipment.origin;
-  if (o.rexNo.value) return `REX ${o.rexNo.value}`;
-  if (o.coNo.value) return `C/O${o.coForm.value ? ` form ${o.coForm.value}` : ""} số ${o.coNo.value}`;
-  return null;
+  if (o.rexNo.value) return { text: `REX ${o.rexNo.value}`, dated: true };
+  if (!o.coNo.value) return null;
+  const d = o.coDate?.value;
+  return { text: `C/O${o.coForm.value ? ` mẫu ${o.coForm.value}` : ""} số: ${o.coNo.value}${d ? ` (${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)})` : ""}`, dated: !!d };
 };
 
 /**
@@ -119,10 +121,23 @@ function seaBillNo(i: MappingInput, v: MappedValue): MappedValue {
 function dischargePort(i: MappingInput): MappedValue {
   const t = i.shipment.transport;
   const raws = (s: typeof t.portOfDischarge) => [...new Set([s.value, ...s.sources.map((x) => x.raw)].filter((x): x is string => !!x))];
-  const pick = pickDischargePort(raws(t.portOfDischarge), raws(t.finalDestination), i.catalogs?.ports);
+  const pick = pickDischargePort(raws(t.portOfDischarge), raws(t.finalDestination), i.catalogs?.ports, { air: i.dossier.transportMode === "AIR" });
   const ref = [...t.portOfDischarge.sources, ...t.finalDestination.sources].find((x) => x.raw === pick.raw);
   const source = ref ? sourceOfKind(ref.kind) : fromSourced(t.portOfDischarge, "BILL_OF_LADING").source;
   const base = port(pick.raw ?? t.portOfDischarge.value, pick.resolved, source);
+  return pick.note ? { ...base, suspect: true, note: pick.note } : base;
+}
+
+/** 1.34 cảng xếp: mọi chứng từ ghi nơi đi; không có → suy từ địa chỉ người xuất khẩu (đánh dấu kiểm). */
+function loadingPort(i: MappingInput): MappedValue {
+  const { portOfLoading: pol } = i.shipment.transport;
+  const seller = i.shipment.parties.seller;
+  const raws = [...new Set([pol.value, ...pol.sources.map((x) => x.raw)].filter((x): x is string => !!x))];
+  const addresses = [...new Set([seller.address.value, ...seller.address.sources.map((x) => x.raw)].filter((x): x is string => !!x))];
+  const pick = pickLoadingPort(raws, addresses, seller.country.value, i.catalogs?.worldPorts);
+  const ref = pol.sources.find((x) => x.raw === pick.raw);
+  const source = ref ? sourceOfKind(ref.kind) : pick.note ? fromSourced(seller.address, "INVOICE").source : fromSourced(pol, "BILL_OF_LADING").source;
+  const base = port(pick.raw, pick.resolved, source);
   return pick.note ? { ...base, suspect: true, note: pick.note } : base;
 }
 
@@ -170,10 +185,7 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   { code: "KHO", no: N.KHO, section: "TRANSPORT", label: "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", required: true, options: { sources: [SRC.anWarehouse, profileSource("KHO")], allowFixed: true }, from: (i) =>
     warehouseFromAn(i) ?? profileOr(i, "KHO", missing("DOSSIER", "Chọn mã địa điểm lưu kho (kho/bãi/cảng nơi hàng chờ thông quan – CV 4613/TCHQ-VNACCS)")) },
   { code: "CANG_DO", no: N.CANG_DO, section: "TRANSPORT", label: "Mã địa điểm dỡ hàng", required: true, from: dischargePort },
-  { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Mã địa điểm xếp hàng", required: true, from: (i) => {
-    const pol = i.shipment.transport.portOfLoading;
-    return port(pol.value, resolvePort(pol.value), fromSourced(pol, "BILL_OF_LADING").source);
-  } },
+  { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Mã địa điểm xếp hàng", required: true, from: loadingPort },
   { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, when: BY_WATER, from: () => ({ ...fixed("9999"), note: "Ô 1 chỉ tiêu 1.31: hô hiệu tàu – điền sẵn 9999 (tàu chưa đăng ký trên hệ thống); B/L có hô hiệu thật thì sửa lại. Phương thức khác đường biển/sông: không có ô này" }) },
   // 1.35: hệ thống tự xuất nếu đã đăng ký; không khai khi đường hàng không / hàng rời / hàng CFS (mã 3).
   { code: "SL_CONT", no: N.SL_CONT, section: "TRANSPORT", label: "Số lượng container", required: false, when: IN_CONTAINER, from: (i) => {
@@ -186,7 +198,9 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     return v.value === null ? missing("BILL_OF_LADING", "Chưa có tên tàu / chuyến bay") : { ...v, value: voy ? `${v.value} V.${voy}` : v.value };
   } },
   { code: "NGAY_DEN", no: N.NGAY_DEN, section: "TRANSPORT", label: "Ngày hàng đến", required: true, options: { sources: [SRC.arrivalDate, SRC.departureDate], allowFixed: false }, from: (i) => {
-    const d = fromSourced(i.shipment.transport.arrivalDate, "BILL_OF_LADING");
+    const arr = i.shipment.transport.arrivalDate;
+    const d = fromSourced(arr, "BILL_OF_LADING");
+    if (d.value !== null && arr.sources[0]?.kind === "FREIGHT_INVOICE") return { ...d, suspect: true, note: "Chưa có Arrival Notice: tạm lấy ngày hóa đơn/thông báo cước (thường phát hành khi hàng về) – kiểm ngày hàng đến thực tế" };
     if (d.value !== null) return d;
     // Hàng air thường không có Arrival Notice riêng: dự phòng bằng ngày bay (ngày đi) – người khai kiểm lại.
     const dep = i.shipment.transport.departureDate;
@@ -238,9 +252,9 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     const c = i.shipment.transport.containers;
     const co = coRef(i);
     // Ghi chú của hồ sơ là ghi chú nội bộ (“không gửi Hải quan”) – không đưa vào Phần ghi chú của tờ khai.
-    const parts = [co, c.length ? `Container: ${c.map((x) => x.no).join(", ")}` : null].filter(Boolean);
+    const parts = [co?.text, c.length ? `Container: ${c.map((x) => x.no).join(", ")}` : null].filter(Boolean);
     const value = parts.length ? parts.join("; ") : null;
-    return co ? { value, source: "DOSSIER", suspect: true, note: "Bổ sung ngày cấp C/O sau số C/O (TT121, chỉ tiêu 1.68)" } : { value, source: "DOSSIER" };
+    return co && !co.dated ? { value, source: "DOSSIER", suspect: true, note: "Bổ sung ngày cấp C/O sau số C/O (TT121, chỉ tiêu 1.68)" } : { value, source: "DOSSIER" };
   } },
   { code: "SO_QLNB", no: N.SO_QLNB, section: "GENERAL", label: "Số quản lý nội bộ doanh nghiệp", required: false, from: (i) => ({ value: i.dossier.code, source: "DOSSIER" }) },
 ];

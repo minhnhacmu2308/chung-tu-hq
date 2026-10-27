@@ -20,7 +20,8 @@ export type MappingLine = { lineNo: number; hsConfirmed: string | null };
  * Danh mục VNACCS đầy đủ đã nạp sẵn cho hồ sơ (tầng application tải theo chi cục): cảng Việt Nam (A016), địa điểm lưu kho của chi cục (A202).
  * Không có (test, eval offline) → chỉ dùng bảng gọn trong catalog-resolve.
  */
-export type DeclarationCatalogs = { ports?: CatalogEntry[]; warehouses?: CatalogEntry[] };
+/** `ports`: cảng Việt Nam (A016, parent VN); `worldPorts`: toàn bộ A016 – tra cảng/sân bay xếp hàng nước ngoài. */
+export type DeclarationCatalogs = { ports?: CatalogEntry[]; worldPorts?: CatalogEntry[]; warehouses?: CatalogEntry[] };
 export type MappingInput = {
   shipment: Shipment; dossier: DossierInfo; org: OrgInfo; now: Date; adjustments: Adjustment[]; valuation: Valuation; exchange: ExchangeInfo;
   /** Mặc định khai báo của doanh nghiệp theo chiều NK/XK: mã chỉ tiêu → giá trị. */

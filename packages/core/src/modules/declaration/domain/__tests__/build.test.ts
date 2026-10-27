@@ -103,7 +103,7 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(f("PTVC_TEN").value).toBe("SITC HAIPHONG V.2641S");
     expect(f("SO_VD")).toMatchObject({ value: "HPSEL2610078", source: "BILL_OF_LADING" });
     expect(f("SO_CO").value).toBe("KR2610-0457-AK (form AK)");
-    expect(f("GHI_CHU")).toMatchObject({ value: "C/O form AK số KR2610-0457-AK; Container: SITU2246781", suspect: true, note: expect.stringMatching(/ngày cấp C\/O/) });
+    expect(f("GHI_CHU")).toMatchObject({ value: "C/O mẫu AK số: KR2610-0457-AK; Container: SITU2246781", suspect: true, note: expect.stringMatching(/ngày cấp C\/O/) });
     expect(f("SO_QLNB").value).toBe("HS-NK-2610-021");
   });
   it("trọng lượng CONFLICT và kho chưa có → suspect kèm ghi chú; cước FCA là khoản điều chỉnh; trị giá/thuế đúng", () => {
@@ -175,6 +175,40 @@ describe("lô FANS25040166 (đối chiếu TK 107139226350)", () => {
     const plain = buildDeclaration({ shipment: fans, dossier: { ...DOSSIER, customsOfficeCode: "02CI" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
     expect(plain.fields["CANG_DO"]?.value).toBe("VNCLI – Cảng Cát Lái (TP.HCM)");
     expect(plain.fields["KHO"]).toMatchObject({ value: "CÁT LÁI KHO 3", suspect: true });
+  });
+});
+
+describe("lô chuyển phát nhanh 770471184612 (FedEx, đối chiếu TK 106794645160)", () => {
+  type Kind = "AIR_WAYBILL" | "CERT_OF_ORIGIN" | "FREIGHT_INVOICE" | "INVOICE";
+  const src = (kind: Kind, raw: string, status: "SINGLE_SOURCE" | "CROSS_CHECKED" = "SINGLE_SOURCE") => ({ value: raw, sources: [{ documentId: `doc_${kind}`, kind, page: 1, raw, normalized: raw }], status });
+  const none = { value: null, sources: [], status: "SINGLE_SOURCE" as const };
+  const lot = hansol((s) => {
+    s.transport.billNo = src("AIR_WAYBILL", "770471184612", "CROSS_CHECKED");
+    s.transport.portOfLoading = none;
+    s.transport.portOfDischarge = src("CERT_OF_ORIGIN", "HO CHI MINH , VIET NAM");
+    s.transport.finalDestination = none;
+    s.transport.arrivalDate = { ...src("FREIGHT_INVOICE", "06-Dec-2024"), value: "2024-12-06" };
+    s.transport.departureDate = { ...src("CERT_OF_ORIGIN", "DEC.04,2024"), value: "2024-12-04" };
+    s.transport.containers = [];
+    s.parties.seller.address = src("INVOICE", "NO.591,JIN HE ROAD, HONG QI TOWN, JINWAN DISTRICT,ZHUHAI CITY.GUANGDONG , CHINA");
+    s.parties.seller.country = src("INVOICE", "CN");
+    s.origin.coForm = src("CERT_OF_ORIGIN", "E");
+    s.origin.coNo = src("CERT_OF_ORIGIN", "E247079657380002");
+    s.origin.coDate = { ...src("CERT_OF_ORIGIN", "DEC. 04, 2024"), value: "2024-12-04" };
+  });
+  const catalogs = { ports: [], worldPorts: [{ code: "CNZUH", name: "ZHUHAI", parent: "CN" }] };
+  const b = buildDeclaration({ shipment: lot, dossier: { ...DOSSIER, transportMode: "AIR", customsOfficeCode: "02DS" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25176" }, missing: [] }, catalogs });
+
+  it("số vận đơn không khoảng trắng; cảng dỡ VNSGN theo C/O; cảng xếp CNZUH suy từ địa chỉ người xuất khẩu (cần kiểm)", () => {
+    expect(b.fields["SO_VD"]).toMatchObject({ value: "770471184612" });
+    expect(b.fields["CANG_DO"]).toMatchObject({ value: "VNSGN – Cảng Sài Gòn (TP.HCM)", source: "CERT_OF_ORIGIN" });
+    expect(b.fields["CANG_DO"]?.suspect).toBeUndefined();
+    expect(b.fields["CANG_XEP"]).toMatchObject({ value: "CNZUH – ZHUHAI", suspect: true, note: expect.stringMatching(/ZHUHAI/) });
+  });
+  it("ngày đến theo thông báo cước (cần kiểm); ghi chú có ngày cấp C/O như TK thật", () => {
+    expect(b.fields["NGAY_DEN"]).toMatchObject({ value: "2024-12-06", source: "FREIGHT_INVOICE", suspect: true });
+    expect(b.fields["GHI_CHU"]).toMatchObject({ value: "C/O mẫu E số: E247079657380002 (04/12/2024)" });
+    expect(b.fields["GHI_CHU"]?.suspect).toBeUndefined();
   });
 });
 

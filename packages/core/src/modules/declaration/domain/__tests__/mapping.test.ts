@@ -264,12 +264,16 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
     expect(f["VBPQ"]?.suspect).toBeUndefined();
   });
 
-  it("ghi chú (1.68): C/O trước (TT121), rồi container – ngăn cách bằng “;”; ghi chú nội bộ của hồ sơ không gửi Hải quan; có C/O → nhắc bổ sung ngày cấp", () => {
+  it("ghi chú (1.68): C/O trước (TT121), rồi container – ngăn cách bằng “;”; ghi chú nội bộ của hồ sơ không gửi Hải quan; có C/O chưa có ngày cấp → nhắc bổ sung", () => {
     const noCo = (s: Shipment) => void (s.origin.coNo = nul());
     expect(ida({ mutate: (s) => { noCo(s); s.transport.containers = []; }, dossier: { note: "Hàng mẫu" } })["GHI_CHU"]?.value).toBe("");
     expect(ida({ mutate: (s) => { noCo(s); s.transport.containers = []; } })["GHI_CHU"]?.value).toBe("");
     expect(ida({ mutate: noCo })["GHI_CHU"]?.suspect).toBeUndefined();
-    expect(ida({ dossier: { note: "Hàng mẫu" } })["GHI_CHU"]).toMatchObject({ value: "C/O form AK số KR2610-0457-AK; Container: SITU2246781", suspect: true });
+    expect(ida({ dossier: { note: "Hàng mẫu" } })["GHI_CHU"]).toMatchObject({ value: "C/O mẫu AK số: KR2610-0457-AK; Container: SITU2246781", suspect: true });
+    // Có ngày cấp C/O (đọc từ C/O) → ghi kèm dạng TK thật “C/O mẫu E số: … (04/12/2024)”, không còn nhắc.
+    const dated = ida({ mutate: (s) => void (s.origin.coDate = val("2024-12-04")) })["GHI_CHU"];
+    expect(dated?.value).toBe("C/O mẫu AK số: KR2610-0457-AK (04/12/2024); Container: SITU2246781");
+    expect(dated?.suspect).toBeUndefined();
     expect(ida({ mutate: (s) => void (s.origin.rexNo = val("DEREX12345")) })["GHI_CHU"]?.value).toMatch(/^REX DEREX12345;/);
   });
 

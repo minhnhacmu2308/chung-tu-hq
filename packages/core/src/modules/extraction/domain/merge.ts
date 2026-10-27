@@ -22,6 +22,7 @@ export function mergeField(spec: FieldSpec, files: FileExtraction[]): Sourced<st
   const cands: Candidate[] = [];
   const sources: SourceRef[] = [];
   for (const src of spec.sources) {
+    if (src.fallback && cands.length) break;
     for (const f of files.filter((x) => x.kind === src.kind)) {
       const rawVal = src.get(f.data);
       if (rawVal === null || rawVal === undefined || rawVal === "") continue;

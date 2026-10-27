@@ -16,6 +16,8 @@ export function fieldStatusFromCandidates(cands: Candidate[], formatValid: boole
     const others = cands.slice(1).map((c) => `${KIND_LABEL[c.kind]} ghi ${c.raw}`).join("; ");
     return { status: "CONFLICT", note: others };
   }
+  // Hai loại chứng từ độc lập ghi cùng một giá trị (AWB và hóa đơn cước cùng số vận đơn) là tín hiệu mạnh hơn việc model tự thấy không chắc.
+  if (new Set(cands.map((c) => c.kind)).size >= 2) return { status: "CROSS_CHECKED" };
   if (cands.some((c) => c.unsure)) return { status: "MODEL_UNSURE", note: "Model không chắc giá trị này" };
   return { status: cands.length >= 2 ? "CROSS_CHECKED" : "SINGLE_SOURCE" };
 }

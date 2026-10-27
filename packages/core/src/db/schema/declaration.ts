@@ -28,6 +28,8 @@ export const lineItems = pgTable(
     importDutyRate: money("import_duty_rate"),
     vatRate: money("vat_rate"),
     policyNote: text("policy_note"),
+    /** Chi tiết thuế của mã đã xác nhận (TaxDetail): mã VAT VNACCS, căn cứ/điều kiện VAT, thuế NK thông thường, cờ "thuế cần kiểm tra lại". */
+    taxDetail: jsonb("tax_detail"),
     /** Phân loại HSCodePro: lượt (hs_jobs.id), id dòng phía HSCodePro, trạng thái, câu hỏi chờ trả lời, lỗi, chi tiết (lý do, căn cứ, cảnh báo). */
     hsJobId: text("hs_job_id"),
     hsItemId: text("hs_item_id"),

@@ -2,7 +2,7 @@ import type { AdminOrg } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { errCode } from "../../../../shared/result.js";
 import { buildAttention } from "../attention.js";
-import { activeQuotaBonus, daysUntil, extendTrial, recentMonths, renewsAt, vnMonth, vnMonthRange } from "../period.js";
+import { daysUntil, extendTrial, recentMonths, renewsAt, vnMonth, vnMonthRange } from "../period.js";
 import { deviceLabel, sanitizeJobError } from "../sanitize.js";
 import { keepsASuperAdmin, requirePermission } from "../staff-rules.js";
 
@@ -31,10 +31,7 @@ describe("kỳ gói, hạn mức", () => {
     expect(extendTrial(d("2026-10-01T00:00:00Z"), NOW, 10)).toEqual(d("2026-10-24T03:00:00Z"));
   });
 
-  it("hồ sơ nới thêm chỉ có hiệu lực đúng tháng đã nới", () => {
-    expect(activeQuotaBonus({ quotaBonus: 20, quotaBonusMonth: "2026-10" }, NOW)).toBe(20);
-    expect(activeQuotaBonus({ quotaBonus: 20, quotaBonusMonth: "2026-09" }, NOW)).toBe(0);
-    expect(activeQuotaBonus({ quotaBonus: 20, quotaBonusMonth: null }, NOW)).toBe(0);
+  it("daysUntil: số ngày tới một ngày (âm = đã qua)", () => {
     expect(daysUntil(d("2026-10-21T00:00:00Z"), NOW)).toBe(7);
     expect(daysUntil(d("2026-10-10T00:00:00Z"), NOW)).toBe(-4);
   });

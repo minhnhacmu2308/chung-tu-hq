@@ -164,7 +164,7 @@ function sheetSnapshotOf(db: MockDb, dossierId: string, no: number): SentSnapsho
   const sheets = branchesOf(all);
   const fields = Object.fromEntries(decl.fields.map((f) => [f.code, f.value]));
   const total = fromMinor(sumMinor(all.map((i) => toMinor(i.amount, 4))), 4);
-  const items = (sheets[no - 1]?.items ?? []).map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed ?? null, importDutyRate: i.importDutyRate ?? null, vatRate: i.vatRate ?? null, policyNote: i.policyNote ?? null }));
+  const items = (sheets[no - 1]?.items ?? []).map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed ?? null, importDutyRate: i.importDutyRate ?? null, vatRate: i.vatRate ?? null, vatCode: i.vatCode ?? null, policyNote: i.policyNote ?? null }));
   return sentSnapshotOf({ fields: { ...fields, TK_DNO: String(sheets.length), TK_TP: fields["TK_TP"]?.trim() || total }, items, adjustments: decl.valueAdjustments, containers: containersOf(db, dossier), currency: fields["MA_TT"] ?? "" });
 }
 

@@ -113,7 +113,7 @@ export function requiredGapsText(gaps: RequiredGap[], lineNos: number[] = []): s
 
 export type ItemFormInput = {
   id?: string | undefined; lineNo?: number | undefined; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string;
-  hsSuggested?: string | null | undefined; hsConfirmed?: string | null | undefined; importDutyRate?: string | null | undefined; vatRate?: string | null | undefined; policyNote?: string | null | undefined;
+  hsSuggested?: string | null | undefined; hsConfirmed?: string | null | undefined; importDutyRate?: string | null | undefined; vatRate?: string | null | undefined; vatCode?: string | null | undefined; policyNote?: string | null | undefined;
 };
 
 /**

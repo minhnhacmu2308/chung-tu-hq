@@ -70,7 +70,7 @@ export const DOSSIER_LIST_MESSAGES = defineMessages({
 export const CREATE_DOSSIER_MESSAGES = defineMessages({
   vi: {
     errTypeCode: "Chọn mã loại hình", errPartner: "Nhập tên đối tác nước ngoài (ít nhất 3 ký tự)", errOffice: "Chọn cơ quan Hải quan", errDue: "Chọn hạn khai", errNote: "Ghi chú tối đa 500 ký tự",
-    created: "Đã tạo hồ sơ", createdNext: "{code} · bước tiếp theo: upload chứng từ", createFailed: "Không tạo được hồ sơ", createFailedHint: "Thử lại sau ít phút.",
+    created: "Đã tạo hồ sơ", createdNext: "{code} · bước tiếp theo: upload chứng từ", createFailed: "Không tạo được hồ sơ", createFailedHint: "Thử lại sau ít phút.", quotaFullTitle: "Đã dùng hết {used}/{limit} hồ sơ tháng này", quotaFullBody: "Hạn mức tháng này của gói {plan} là {limit} hồ sơ, đặt lại ngày {date}. Nâng gói để tạo thêm hồ sơ ngay.", quotaUpgrade: "Xem gói dịch vụ", codeListsFailed: "Chưa tải được danh mục loại hình / chi cục Hải quan",
     fromInboxTitle: "Tạo hồ sơ từ email chứng từ", fromInboxBody: "Email \"{subject}\" của {from}: sau khi tạo, {n} file đính kèm được thêm vào hồ sơ và AI đọc ngay.", fromInboxFailed: "Đã tạo hồ sơ nhưng chưa thêm được file từ email – thêm lại ở Hộp thư chứng từ.",
     breadcrumbList: "Hồ sơ khai báo", breadcrumbNew: "Tạo hồ sơ",
     title: "Tạo hồ sơ khai báo", description: "Bước 1/6 · Khai thông tin lô hàng. Chứng từ sẽ upload ở bước tiếp theo.",
@@ -91,7 +91,7 @@ export const CREATE_DOSSIER_MESSAGES = defineMessages({
   },
   en: {
     errTypeCode: "Select a declaration type code", errPartner: "Enter the foreign partner's name (at least 3 characters)", errOffice: "Select a customs office", errDue: "Select a filing deadline", errNote: "Note can be at most 500 characters",
-    created: "Dossier created", createdNext: "{code} · next step: upload documents", createFailed: "Couldn't create the dossier", createFailedHint: "Please try again in a few minutes.",
+    created: "Dossier created", createdNext: "{code} · next step: upload documents", createFailed: "Couldn't create the dossier", createFailedHint: "Please try again in a few minutes.", quotaFullTitle: "You have used all {used}/{limit} dossiers this month", quotaFullBody: "This month's limit on the {plan} plan is {limit} dossiers; it resets on {date}. Upgrade your plan to create more dossiers now.", quotaUpgrade: "View plans", codeListsFailed: "Couldn't load the customs type / office lists",
     fromInboxTitle: "Create a dossier from a document email", fromInboxBody: "Email \"{subject}\" from {from}: after the dossier is created, its {n} attachments are added and AI reads them right away.", fromInboxFailed: "The dossier was created but the email files were not added – add them again from the document inbox.",
     breadcrumbList: "Dossiers", breadcrumbNew: "Create dossier",
     title: "Create dossier", description: "Step 1/6 · Enter shipment details. Documents are uploaded in the next step.",
@@ -112,7 +112,7 @@ export const CREATE_DOSSIER_MESSAGES = defineMessages({
   },
   zh: {
     errTypeCode: "请选择申报类型代码", errPartner: "请输入境外合作方名称（至少 3 个字符）", errOffice: "请选择海关机构", errDue: "请选择申报期限", errNote: "备注最多 500 个字符",
-    created: "档案已创建", createdNext: "{code} · 下一步：上传单证", createFailed: "无法创建档案", createFailedHint: "请几分钟后重试。",
+    created: "档案已创建", createdNext: "{code} · 下一步：上传单证", createFailed: "无法创建档案", createFailedHint: "请几分钟后重试。", quotaFullTitle: "本月 {used}/{limit} 个档案额度已用完", quotaFullBody: "{plan}套餐本月额度为 {limit} 个档案，将于 {date} 重置。升级套餐即可立即新建更多档案。", quotaUpgrade: "查看套餐", codeListsFailed: "无法加载海关类型/海关分局目录",
     fromInboxTitle: "用单证邮件新建档案", fromInboxBody: "来自 {from} 的邮件“{subject}”：档案创建后，{n} 个附件将添加到档案，AI 会立即读取。", fromInboxFailed: "档案已创建，但邮件中的文件未能添加——请在单证收件箱中重新添加。",
     breadcrumbList: "申报档案", breadcrumbNew: "创建档案",
     title: "创建申报档案", description: "第 1/6 步 · 填写货物批次信息。单证在下一步上传。",

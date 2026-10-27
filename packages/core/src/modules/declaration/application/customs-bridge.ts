@@ -33,7 +33,7 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
   return {
     declarationId: decl.id, version: decl.version, status: decl.status, kind: decl.kind, direction: dossier.direction, currency: dossier.currency,
     fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value, source: f.source }])),
-    items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, policyNote: i.policyNote })),
+    items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, vatCode: i.taxDetail?.vatCode ?? null, policyNote: i.policyNote })),
     adjustments: decl.valueAdjustments.map((a) => ({ label: a.label, amount: a.amount, currency: a.currency, kind: a.kind, ...(a.code ? { code: a.code } : {}), ...(a.allocate === false ? { allocate: false } : {}) })),
     containers: shipment?.transport.containers.map((c) => c.no) ?? [],
     unconfirmedHs: unconfirmedCount(items),

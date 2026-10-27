@@ -1,4 +1,5 @@
 import type { Member, Organization } from "@kb/contracts";
+import { activeQuotaBonus } from "../../../shared/quota.js";
 import type { MembershipRow, OrgRow, PlanRow, UserRow } from "./ports.js";
 
 export function toMember(u: UserRow, m: MembershipRow, lastSeen?: Date): Member {
@@ -34,6 +35,7 @@ export function toOrganization(o: OrgRow, plan: PlanRow | null, now: Date, usage
       name: plan?.name ?? o.planCode,
       dossiersPerMonth: plan?.dossiersPerMonth ?? 0,
       pagesPerDossier: plan?.pagesPerDossier ?? 0,
+      bonusThisMonth: activeQuotaBonus({ quotaBonus: o.quotaBonus ?? 0, quotaBonusMonth: o.quotaBonusMonth ?? null }, now),
       renewsAt: renews.toISOString().slice(0, 10),
     },
     usage: usage ?? { dossiersThisMonth: 0, pagesThisMonth: 0, aiCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" },

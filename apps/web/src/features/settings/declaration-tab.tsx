@@ -15,7 +15,8 @@ import { LoadError } from "@/components/common/load-error";
 import { formatRelative } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { DECLARATION_TAB_MESSAGES } from "./declaration-tab.messages";
-import { initialPickedSources, profileFieldsFor, toProfileInput, validateProfileForm, type ProfileErrors, type ProfileValues } from "./declaration-profile-form";
+import { initialPickedSources, profileFieldsFor, selectFor, toProfileInput, validateProfileForm, type ProfileErrors, type ProfileValues } from "./declaration-profile-form";
+import { useCodeLists } from "@/features/declaration-form/use-code-list";
 
 const DIRECTIONS: DeclarationDirection[] = ["NK", "XK"];
 const errorProp = (e: string | undefined) => (e ? { error: e } : {});
@@ -43,7 +44,10 @@ function ProfileForm({ direction, profile, canManage }: { direction: Declaration
   const [errors, setErrors] = useState<ProfileErrors>({});
   useEffect(() => setValues(profile.values), [profile]);
   const save = useSaveProfile(direction);
-  const fields = profileFieldsFor(direction, locale);
+  // Danh mục VNACCS cho ô chọn dài; đang tải → ô chọn báo đang tải; lỗi → báo + thử lại.
+  const codeLists = useCodeLists(["A038", "PAYMENT", "TYPE_CODE"] as const);
+  const fields = profileFieldsFor(direction, locale, { offices: codeLists.lists.A038, payments: codeLists.lists.PAYMENT, typeCodes: codeLists.lists.TYPE_CODE });
+  const LIST_FIELDS = ["CQHQ", "PT_TT", "MA_LH"];
   const submit = () => {
     const e = validateProfileForm(direction, values, locale);
     setErrors(e);
@@ -56,12 +60,18 @@ function ProfileForm({ direction, profile, canManage }: { direction: Declaration
   };
   return (
     <form onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
+      {codeLists.error && <LoadError title={t.codeListsFailed} onRetry={codeLists.retry} />}
       <FormSection title={t.defaultsTitle} description={t.defaultsDesc}>
         <div className="grid gap-4 cq-lg:col-span-2 cq-md:grid-cols-2">
           {fields.map((f) => (
             <Field key={f.code} label={`${f.label} (${f.code})`} {...(f.hint ? { hint: f.hint } : {})} {...errorProp(errors[f.code])}>
               {f.options ? (
-                <Select value={values[f.code] ?? ""} onChange={set(f.code)} options={f.options} placeholder={t.selectPlaceholder} disabled={!canManage} />
+                <Select
+                  {...selectFor(f.options, values[f.code])}
+                  onChange={set(f.code)}
+                  placeholder={codeLists.loading && LIST_FIELDS.includes(f.code) ? t.codeListsLoading : t.selectPlaceholder}
+                  disabled={!canManage}
+                />
               ) : (
                 <Input value={values[f.code] ?? ""} onChange={set(f.code)} placeholder={f.placeholder} disabled={!canManage} className={f.short ? "font-mono" : undefined} />
               )}

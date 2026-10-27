@@ -43,6 +43,13 @@ describe("itemDefaults – giá trị tự điền khi truyền", () => {
     expect(itemDefaults("IDA", { lineNo: 1, quantity: "10", unit: "", vatRate: "8", policyNote: "Ưu đãi AKFTA" }, { currency: "USD" })).toEqual({ HAG_QN2: "10", HAG_QT2: "PCE", HAG_UPC: "USD", HAG_TSC: "PCE", HAG_ORS: "B06", HAG_TX5: "VB903" });
     expect(itemDefaults("IDA", { lineNo: 1, quantity: "1", unit: "KGM", policyNote: "EVFTA" }, { currency: "EUR" })).not.toHaveProperty("HAG_ORS");
   });
+  it("IDA mã GTGT (HAG_TX5): ưu tiên mã HSCodePro lưu trên dòng (VB245, VK010); không có thuế suất lẫn mã → không tự điền 10%", () => {
+    const base = { lineNo: 1, quantity: "1", unit: "PCE" };
+    expect(itemDefaults("IDA", { ...base, vatRate: "8", vatCode: "VB245" }, { currency: "USD" }).HAG_TX5).toBe("VB245");
+    expect(itemDefaults("IDA", { ...base, vatRate: null, vatCode: "VK010" }, { currency: "USD" }).HAG_TX5).toBe("VK010");
+    expect(itemDefaults("IDA", { ...base, vatRate: "10" }, { currency: "USD" }).HAG_TX5).toBe("VB901");
+    expect(itemDefaults("IDA", { ...base, vatRate: null }, { currency: "USD" })).not.toHaveProperty("HAG_TX5");
+  });
   it("EDA: mã văn bản pháp luật theo dòng từ VBPQ", () => {
     expect(itemDefaults("EDA", { lineNo: 2, quantity: "1", unit: "PCE" }, { currency: "USD", vbpq: "XK; 2: GP", lineNos: [1, 2] })).toMatchObject({ HAG_OL1: "XK", HAG_OL2: "GP" });
   });

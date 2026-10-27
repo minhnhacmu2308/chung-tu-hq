@@ -6,7 +6,7 @@ test("danh sách hồ sơ: hồ sơ mới hiện ở đầu, tìm theo đối t�
   await login(page);
   const partner = `E2E LIST ${Date.now().toString(36).toUpperCase()}`;
   const res = await page.request.post("/api/dossiers", {
-    data: { direction: "NK", typeCode: "A11", partner, customsOffice: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", skillSetId: "default", dueDate: "2026-12-31", incoterm: "FOB", transportMode: "SEA_CONTAINER" },
+    data: { direction: "NK", typeCode: "A11", partner, customsOffice: "03CE – Hải quan cửa khẩu cảng Hải Phòng khu vực 2", skillSetId: "default", dueDate: "2026-12-31", incoterm: "FOB", transportMode: "SEA_CONTAINER" },
   });
   expect(res.ok()).toBeTruthy();
   const { id, code } = (await res.json()) as { id: string; code: string };

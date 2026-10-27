@@ -3,7 +3,8 @@ import type { AdminAction, AdminAuditEntry, AdminOrg, AdminTargetType, AdminPerm
 import { sumDec, toDecimalString } from "../../../shared/decimal.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { activeQuotaBonus, renewsAt } from "../domain/period.js";
+import { activeQuotaBonus } from "../../../shared/quota.js";
+import { renewsAt } from "../domain/period.js";
 import { requirePermission, type StaffActor } from "../domain/staff-rules.js";
 import type { AdminDeps, AdminOrgRow, AdminRepos, AuditRow, MemberRow, OrgUsage, PlanRow, StaffRow } from "./ports.js";
 

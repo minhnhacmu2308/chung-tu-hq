@@ -203,7 +203,10 @@ Người khai chọn **Tạo tờ khai** / **Số hóa chứng từ** / **Cả h
 | Dựng tờ khai | Tờ khai nháp mới (giữ chỉ tiêu người dùng đã sửa), trị giá tính thuế, khoản điều chỉnh, thuế dự kiến | Code |
 | Số hóa chứng từ | Bản JSON chuẩn hóa của từng chứng từ để lưu/đính kèm | Code |
 
-**Xác nhận HS** (bắt buộc từng dòng, 8 số theo biểu Việt Nam): chọn mã gợi ý, mã thay thế, mã trong biểu hoặc nhập tay. Thuế suất theo thứ tự: kết quả HSCodePro → biểu thuế nội bộ. Quy tắc thuế suất:
+**Xác nhận HS** (bắt buộc từng dòng, 8 số theo biểu Việt Nam): chọn mã gợi ý, mã thay thế, mã trong biểu hoặc nhập tay. Thuế suất lấy từ kết quả HSCodePro cho đúng mã đã chọn; biểu thuế nội bộ (`catalog_hs`, dữ liệu demo) chỉ dùng khi KHÔNG chạy HSCodePro thật. Mã nhập tay không có trong gợi ý → thuế để trống, gắn "Cần kiểm tra thuế" và tự gửi riêng dòng đó lên HSCodePro (kèm mã đã chọn) để lấy thuế.
+- **Cùng mã ⇒ cùng thuế**: chạy lại agent / phân loại lại / có C/O mới → dòng đã xác nhận vẫn được gửi HSCodePro (giữ nguyên mã) và tính lại thuế theo đúng mã đó; mã không còn trong kết quả → thuế để trống + "Cần kiểm tra thuế" (không giữ số cũ). Đọc lại chứng từ làm đổi mô tả / HS trên invoice của dòng → bỏ xác nhận, ghi chú xác nhận lại.
+- **VAT** (hscode-api mới, trường `vat.vnaccs_code`/`certain`): lưu mã VAT VNACCS trên dòng (`line_items.tax_detail`) và điền chỉ tiêu mã áp dụng thuế suất GTGT khi truyền (VB901 10%, VB245 8%…); `vat.rate` null + mã `VK…` = không chịu thuế GTGT (tiền VAT 0, ghi chú căn cứ); `certain = false` → căn cứ VAT vào ghi chú, màn hình hiện icon cảnh báo. HSCodePro bản cũ không trả mã VAT mà thiếu thuế suất → tạm tính 10% (VB901) kèm ghi chú như trước. Không có thuế suất lẫn mã → không tự điền mã GTGT.
+Quy tắc thuế suất:
 - Tờ khai xuất: 0/0. Loại hình E11/E21/E31/E41: miễn thuế NK, không thu VAT khâu nhập.
 - Có C/O hợp lệ và biểu có thuế ưu đãi → thuế FTA, mã biểu thuế theo bảng TT39: ATIGA B04, ACFTA B05, AKFTA B06, AJCEP B09, VJEPA B10. EVFTA, VKFTA, CPTPP, RCEP chưa có mã trong văn bản đã đối chiếu → **chặn truyền** đến khi bổ sung bảng mã.
 - Còn lại: MFN, biểu B01.
@@ -392,6 +395,8 @@ Menu **Tài khoản & tích hợp**:
 | ENTERPRISE | 1.000 | 100 | Theo hợp đồng |
 
 - Tạo hồ sơ vượt số hồ sơ/tháng (gồm cả phần thưởng thêm trong tháng do đội vận hành cấp) hoặc upload vượt số trang/hồ sơ → `QUOTA_EXCEEDED`.
+  - Cách tính (`withinDossierQuota`, `packages/core/src/shared/quota.ts`): `createDossier` đếm số hồ sơ trong tháng **sau khi tạo** rồi so với hạn mức gói + phần nới thêm của tháng – chỉ đếm một lần (gói 10 hồ sơ tạo được đủ 10).
+  - Hết hạn mức → trang Tạo hồ sơ hiện cảnh báo "Đã dùng hết n/n hồ sơ tháng này" ngay khi mở (kèm ngày đặt lại, nút Xem gói dịch vụ) và khóa nút Tạo; tổ chức nhận `plan.bonusThisMonth` để giao diện tính đúng hạn mức.
 - Kỳ tính theo tháng dương lịch. Mọi lần gọi dịch vụ trả phí ghi `usage_events` theo doanh nghiệp (cột `provider`, `kind`; số lượng + nghiệp vụ + đơn giá trong `meta`):
 
 | Nhà cung cấp | `kind` | Khi nào ghi | Chi phí |

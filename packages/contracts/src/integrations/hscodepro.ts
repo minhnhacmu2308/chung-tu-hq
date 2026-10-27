@@ -3,15 +3,26 @@ import { z } from "zod";
 
 const HS8 = z.string().regex(/^\d{8}$/, "Mã HS 8 chữ số, không dấu chấm");
 
+/**
+ * Thuế của một mã. Trường mở rộng (optional) của bản hscode-api mới – HSCodePro gốc / fpt-mock không trả vẫn hợp lệ:
+ * `import.normal_rate` thuế suất thông thường (tham khảo khi áp FTA); `vat.standard_rate` thuế suất theo Luật (0/5/10);
+ * `vat.vnaccs_code` mã khai VNACCS (VB901 10%, VB245 8%, VB0xx 5%, VKxxx không chịu thuế); `vat.certain` = false khi VAT phụ thuộc
+ * điều kiện ngoài mã HS (giấy phép, mục đích nhập khẩu…) – đọc `vat.note`. `vat.rate` null + mã VK = KHÔNG CHỊU THUẾ GTGT.
+ */
 export const HsTaxSchema = z.object({
-  import: z.object({ rate: z.number(), basis: z.enum(["MFN", "FTA"]), agreement: z.string().nullable() }),
-  vat: z.object({ rate: z.number().nullable(), note: z.string().nullable() }),
+  import: z.object({ rate: z.number(), basis: z.enum(["MFN", "FTA"]), agreement: z.string().nullable(), normal_rate: z.number().nullable().optional() }),
+  vat: z.object({
+    rate: z.number().nullable(), note: z.string().nullable(),
+    standard_rate: z.number().nullable().optional(), vnaccs_code: z.string().optional(), certain: z.boolean().optional(), legal_basis: z.array(z.string()).optional(),
+  }),
   source_date: z.string(),
 });
 export const HsAlternativeSchema = z.object({ hs_code: HS8, hs_description: z.string(), confidence: z.number().min(0).max(100), why_not: z.string(), tax: HsTaxSchema.nullable() });
 export const HsResultSchema = z.object({
   hs_code: HS8, hs_description: z.string(), confidence: z.number().min(0).max(100), reasoning: z.string(),
   legal_basis: z.array(z.string()), warnings: z.array(z.string()), tax: HsTaxSchema.nullable(), alternatives: z.array(HsAlternativeSchema).max(3),
+  /** Mô tả hàng tiếng Việt AI gợi ý (bản hscode-api mới). */
+  description_vi: z.string().nullable().optional(),
 });
 export const HsQuestionSchema = z.object({
   id: z.string(), question: z.string(), header: z.string().optional(), detail: z.string().optional(),

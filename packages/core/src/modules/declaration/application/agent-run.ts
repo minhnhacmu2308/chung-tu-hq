@@ -136,10 +136,11 @@ export async function runAgent(deps: DeclarationDeps, input: RunAgentInput): Pro
           const unsent = await unsentHsLineIds(deps, ctx, input.dossierId, items);
           started = unsent.length ? await startHsClassification(deps, ctx, input.dossierId, { lineItemIds: unsent }) : ok({ pending: false });
         } else {
-          const todo = items.filter((it) => !it.hsConfirmed);
+          // Gửi cả dòng đã xác nhận: giữ nguyên mã, chỉ lấy thuế mới nhất cho đúng mã đó (C/O, xuất xứ có thể đã đổi) – cùng mã ⇒ cùng thuế.
+          const todo = items.filter((it) => !it.hsDetail?.learned);
           await setTask("HS_LOOKUP", "RUNNING", 10, `Đang gửi ${todo.length}/${items.length} dòng hàng`);
           say(`${deps.hs.name} – bắt đầu tra ${todo.length} dòng hàng`);
-          for (const it of items) if (it.hsConfirmed) say(`Dòng ${it.lineNo}: giữ mã đã xác nhận ${it.hsConfirmed}`);
+          for (const it of todo) if (it.hsConfirmed) say(`Dòng ${it.lineNo}: giữ mã đã xác nhận ${it.hsConfirmed}, cập nhật thuế suất theo kết quả mới`);
           started = todo.length ? await startHsClassification(deps, ctx, input.dossierId) : ok({ pending: false });
         }
         if (!started.ok) return started;

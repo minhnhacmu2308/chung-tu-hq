@@ -74,6 +74,7 @@ Máy đỏ → mục tương ứng FAIL; vẫn review tiếp.
 | C6 | Tab/bộ lọc cần giữ khi F5 nằm trong `searchParams`, không chỉ `useState` |
 | C7 | `features/admin` ↔ màn của khách không import lẫn nhau |
 | C8 | Có API mới → có cả mock (`src/mocks/api`) và http (`src/api/http`) cùng hành vi |
+| C9 | Danh mục mã Hải quan (chi cục, loại hình, tiền tệ, thanh toán, Incoterms…) lấy từ `@kb/contracts` (`useCodeList` / `code-tables`), không mảng mã viết cứng trong `apps/web` |
 
 ### D. 3 ngôn ngữ (bất biến 12)
 
@@ -102,7 +103,7 @@ Máy đỏ → mục tương ứng FAIL; vẫn review tiếp.
 
 ## 4. Mức độ
 
-- **FAIL** (chặn commit/push): máy kiểm tra đỏ; vi phạm A1, A2, B1–B8, C1, C3, C4, D1, D2, E1, E2, F1, F3.
+- **FAIL** (chặn commit/push): máy kiểm tra đỏ; vi phạm A1, A2, B1–B8, C1, C3, C4, C9, D1, D2, E1, E2, F1, F3.
 - Mục khác FAIL khi có tình huống lỗi cụ thể người dùng gặp (vỡ bố cục, mất dữ liệu, thao tác thất bại im lặng).
 - **Gợi ý** (không làm FAIL): đặt tên, tách component, thứ tự class.
 - Chưa chắc → "chưa xác minh: cần <bước>", không ghi PASS.

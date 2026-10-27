@@ -94,7 +94,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 
 | Bước | Làm gì | Ai làm |
 |---|---|---|
-| Tra cứu mã HS | Gửi HSCodePro theo lượt (≤ 50 dòng, chạy nền, poll 3 giây) → mã HS 8 số, độ tin cậy, lý do + căn cứ, cảnh báo, thuế NK (MFN/FTA theo C/O), VAT, tối đa 3 mã thay thế. AI có thể **hỏi lại người khai** (bảng "Xác nhận mã HS" → "Trả lời AI"); dòng lỗi/thiếu xuất xứ → "Phân loại lại". Dòng cần hỏi không chặn agent | HSCodePro (gợi ý) – **người phải xác nhận** (mã gợi ý, mã thay thế, mã trong biểu, hoặc nhập tay 8 số) |
+| Tra cứu mã HS | Gửi HSCodePro theo lượt (≤ 50 dòng, chạy nền, poll 3 giây) → mã HS 8 số, độ tin cậy, lý do + căn cứ, cảnh báo, thuế NK (MFN/FTA theo C/O), VAT, tối đa 3 mã thay thế. AI có thể **hỏi lại người khai** (bảng "Xác nhận mã HS" → "Trả lời AI"; các dòng hàng giống nhau đang chờ **cùng câu hỏi** được trả lời một lần – ô "Áp dụng cho n dòng…" bật sẵn); dòng lỗi/thiếu xuất xứ → "Phân loại lại". Dòng cần hỏi không chặn agent | HSCodePro (gợi ý) – **người phải xác nhận** (mã gợi ý, mã thay thế, mã trong biểu, hoặc nhập tay 8 số) |
 | Ánh xạ dữ liệu | Quy tắc chỉ tiêu (`declaration/domain/mapping`) + Mặc định khai báo + ghi đè nguồn của doanh nghiệp; mỗi chỉ tiêu ghi nguồn gốc (provenance) | **Code + cấu hình**, không dùng AI (ADR 0002) |
 | Dựng tờ khai | Tạo tờ khai nháp, tính trị giá tính thuế, thuế dự kiến; đề xuất thuế suất ưu đãi nếu C/O/REX hợp lệ | Code |
 | Số hóa chứng từ | Tạo bản dữ liệu số cho từng chứng từ để lưu và đính kèm HYS | Code |

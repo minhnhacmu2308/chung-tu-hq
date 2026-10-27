@@ -38,7 +38,7 @@ const details = (e: z.ZodError) => e.issues.map((i) => ({ field: fieldOf(i.path)
 function tax(rate: number, coForm: string | null | undefined, date: string, origin: string): HsTax {
   const form = coForm?.toUpperCase() ?? null;
   const fta = form && FTA[form] && !(form === "E" && origin !== "CN" && !/^(VN|TH|MY|SG|ID|PH|LA|KH|MM|BN)$/.test(origin)) ? FTA[form]! : null;
-  return { import: fta ? { rate: 0, basis: "FTA", agreement: fta } : { rate, basis: "MFN", agreement: null }, vat: { rate: 10, note: null }, source_date: date };
+  return { import: fta ? { rate: 0, basis: "FTA", agreement: fta } : { rate, basis: "MFN", agreement: null }, vat: { rate: 10, note: null, standard_rate: 10, vnaccs_code: "VB901", certain: true }, source_date: date };
 }
 
 function resultFor(it: Item, date: string): HsResult {

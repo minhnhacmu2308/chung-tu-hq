@@ -1,4 +1,5 @@
 // Bước 2 – chia chứng từ của hồ sơ thành từng ô theo loại. Logic thuần (có test), màn hình chỉ vẽ.
+import { INCOTERMS_FREIGHT_NOT_INCLUDED } from "@kb/contracts";
 import { fill, pickMessages, type UiLocale } from "@kb/ui";
 import { DOC_KIND_LABELS, type DocKind, type Dossier, type DossierDocument } from "@/mocks/types";
 import { UPLOAD_SLOT_MESSAGES } from "./upload-slots.messages";
@@ -19,7 +20,7 @@ export function suggestedKinds(d: Pick<Dossier, "transportMode" | "incoterm" | "
       ? { kind: "AIR_WAYBILL", reason: t.airWaybill }
       : { kind: "BILL_OF_LADING", reason: t.billOfLading },
   ];
-  if (["EXW", "FCA", "FAS", "FOB"].includes(d.incoterm)) {
+  if (INCOTERMS_FREIGHT_NOT_INCLUDED.includes(d.incoterm)) {
     list.push({ kind: "FREIGHT_INVOICE", reason: fill(t.freightByIncoterm, { incoterm: d.incoterm }) });
   } else if (!d.incoterm && d.direction === "NK") {
     // Hồ sơ không khai điều kiện giao hàng (lấy từ invoice khi đọc): gợi ý tùy lô; thiếu cước thì luật đối chiếu ở bước OCR báo lỗi chặn.

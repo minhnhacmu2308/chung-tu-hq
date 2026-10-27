@@ -16,19 +16,27 @@ export type { DossierInfo, HsCatalogRow, OrgInfo, StoredField };
 export type LineItemRow = {
   id: string; orgId: string; dossierId: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string;
   invoiceHsCode: string | null; hsSuggested: string | null; hsConfidence: number | null; hsConfirmed: string | null; hsConfirmedBy: string | null; hsConfirmedAt: Date | null;
-  importDutyRate: string | null; vatRate: string | null; policyNote: string | null;
+  importDutyRate: string | null; vatRate: string | null; policyNote: string | null; taxDetail: TaxDetail | null;
   /** Phân loại HSCodePro (xem LineItemHsStatus trong contracts). */
   hsJobId: string | null; hsItemId: string | null; hsStatus: LineItemHsStatus; hsQuestion: HsPendingQuestion | null; hsError: { code: string; message: string } | null; hsDetail: HsDetail | null;
   createdAt: Date; updatedAt: Date;
 };
-/** `learned`: mã HS lấy từ bài học (đủ số lần) – không gửi HSCodePro lại, trừ khi người khai bấm phân loại lại. */
-export type HsDetail = { reasoning: string; legalBasis: string[]; warnings: string[]; learned?: { lessonId: string; hits: number } };
-/** Thuế của một ứng viên (chuỗi thập phân); null khi HSCodePro chưa tra được. */
-export type HsSuggestionRates = { importRate: string | null; basis: "MFN" | "FTA" | null; agreement: string | null; vatRate: string | null };
+/**
+ * `learned`: mã HS lấy từ bài học (đủ số lần) – không gửi HSCodePro lại, trừ khi người khai bấm phân loại lại.
+ * `descriptionVi`: mô tả tiếng Việt AI gợi ý. `answered`: các câu đã trả lời AI ("câu hỏi: trả lời") – gửi kèm khi phân loại lại để AI không hỏi lại.
+ */
+export type HsDetail = { reasoning: string; legalBasis: string[]; warnings: string[]; learned?: { lessonId: string; hits: number }; descriptionVi?: string | null; answered?: string[] };
+/** Thuế của một ứng viên (chuỗi thập phân); null khi HSCodePro chưa tra được. Trường mở rộng vắng khi API cũ. */
+export type HsSuggestionRates = {
+  importRate: string | null; basis: "MFN" | "FTA" | null; agreement: string | null; vatRate: string | null;
+  vatCode?: string | null; vatNote?: string | null; vatCertain?: boolean | null; normalImportRate?: string | null;
+};
+/** Chi tiết thuế đã áp cho dòng: mã VAT VNACCS (VB…/VK…), căn cứ/điều kiện VAT, VAT chắc chắn theo mã HS?, thuế NK thông thường; `needsReview` = thuế chưa khớp kết quả phân loại mới nhất. */
+export type TaxDetail = { vatCode: string | null; vatNote: string | null; vatCertain: boolean | null; normalImportRate: string | null; needsReview?: boolean };
 export type HsSuggestionRow = { id: string; orgId: string; lineItemId: string; code: string; description: string; confidence: number; rates: HsSuggestionRates | null; whyNot: string | null; source: string; createdAt: Date };
 /** `pending`: đã ghi DB, chưa (hoặc chưa biết đã) tạo được lượt ở HSCodePro – `externalId` rỗng; chạy lại sẽ dùng lại dòng này (chi phí ghi một lần theo `id`). */
 export type HsJobRow = { id: string; orgId: string; dossierId: string; externalId: string; status: "pending" | "processing" | "need_info" | "completed" | "cancelled"; polls: number; createdAt: Date; updatedAt: Date };
-export type HsLinePatch = Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "hsJobId" | "hsItemId" | "hsStatus" | "hsQuestion" | "hsError" | "hsDetail" | "description" | "origin" | "updatedAt">>;
+export type HsLinePatch = Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "taxDetail" | "hsJobId" | "hsItemId" | "hsStatus" | "hsQuestion" | "hsError" | "hsDetail" | "description" | "origin" | "updatedAt">>;
 export type DeclarationRow = {
   id: string; orgId: string; dossierId: string; kind: "IDA" | "EDA"; version: number; status: DeclarationStatus; fields: Record<string, StoredField>;
   exchangeRate: string; exchangeRateDate: string; customsValueVnd: string; valueAdjustments: Adjustment[]; estImportDutyVnd: string; estVatVnd: string;

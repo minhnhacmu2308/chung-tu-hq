@@ -1,21 +1,8 @@
-// Danh mục dùng ở form Tạo hồ sơ (prototype: cố định; bản thật lấy từ danh mục Hải quan).
+// Danh mục dùng ở form Tạo hồ sơ. Mã loại hình lấy từ danh mục VNACCS TYPE_CODE (@kb/contracts code-lists, QĐ 1357) – không viết cứng ở FE.
+import type { CodeListEntry } from "@kb/contracts";
 import { pickMessages, type ComboboxOption, type SelectOption, type UiLocale } from "@kb/ui";
 import type { DocKind, Direction, Dossier } from "@/mocks/types";
-import { SKILL_SET_LABELS, SUGGESTED_DOC_MESSAGES, TYPE_CODE_LABELS, TYPE_GROUP_LABELS } from "./create-dossier-options.messages";
-
-type TypeCodeKey = keyof (typeof TYPE_CODE_LABELS)["vi"];
-type TypeCode = Exclude<TypeCodeKey, `${string}_desc`>;
-
-/** Mã loại hình theo chiều; nhãn lấy theo ngôn ngữ (TYPE_CODE_LABELS), mã có mô tả phụ đánh dấu `desc`. */
-const TYPE_CODES: Record<Direction, { code: TypeCode; desc?: true }[]> = {
-  NK: [
-    { code: "A11", desc: true }, { code: "A12", desc: true }, { code: "A21" }, { code: "A31" }, { code: "A41" },
-    { code: "E11" }, { code: "E21" }, { code: "E31" }, { code: "E41" }, { code: "G11" }, { code: "G12" }, { code: "G13" },
-  ],
-  XK: [
-    { code: "B11", desc: true }, { code: "B12" }, { code: "B13" }, { code: "E42" }, { code: "E52" }, { code: "E62" }, { code: "G21" }, { code: "G61" },
-  ],
-};
+import { SKILL_SET_LABELS, SUGGESTED_DOC_MESSAGES, TYPE_GROUP_LABELS } from "./create-dossier-options.messages";
 
 /** Nhóm loại hình (như ô "Nhóm loại hình" đầu khối Tờ khai – APP_NHOM_LH): lọc danh sách mã loại hình. */
 export type TypeGroup = "KD" | "SXXK" | "GC" | "CX";
@@ -26,17 +13,27 @@ export const typeGroupOptions = (locale: UiLocale): { value: TypeGroup; label: s
 };
 /** Bản tiếng Việt – giữ cho nơi gọi chưa truyền ngôn ngữ (steps/create-step). Nơi mới dùng typeGroupOptions(locale). */
 export const TYPE_GROUPS = typeGroupOptions("vi");
-const GROUP_OF: Record<string, TypeGroup> = { E11: "CX", E42: "CX", E21: "GC", E41: "GC", E52: "GC", E31: "SXXK", E62: "SXXK" };
-/** Nhóm của mã loại hình; mã không thuộc loại hình E (kinh doanh, tạm nhập tái xuất…) → Kinh doanh. */
-export const typeGroupOf = (code: string | null): TypeGroup => (code && GROUP_OF[code]) || "KD";
-export const typeCodesIn = (direction: Direction, group: TypeGroup, locale: UiLocale = "vi"): ComboboxOption[] => {
-  const t = pickMessages(TYPE_CODE_LABELS, locale);
-  return TYPE_CODES[direction]
-    .filter((o) => typeGroupOf(o.code) === group)
-    .map((o) => ({ value: o.code, label: `${o.code} – ${t[o.code]}`, ...(o.desc ? { description: t[`${o.code}_desc` as TypeCodeKey] } : {}) }));
-};
+/**
+ * Nhóm của mã loại hình theo QĐ 1357: E1x + E42 chế xuất; E2x, E41, E5x, E82 gia công; E3x, E6x sản xuất xuất khẩu;
+ * còn lại (A kinh doanh, B, C kho ngoại quan/phi thuế quan, G tạm nhập tái xuất, H khác) → Kinh doanh.
+ */
+export function typeGroupOf(code: string | null): TypeGroup {
+  if (!code || code[0] !== "E") return "KD";
+  if (/^E1\d$/.test(code) || code === "E42") return "CX";
+  if (/^E[25]\d$/.test(code) || code === "E41" || code === "E82") return "GC";
+  if (/^E[36]\d$/.test(code)) return "SXXK";
+  return "KD";
+}
 
-export { CUSTOMS_OFFICES } from "./create-dossier-options.vi";
+/** Mã loại hình của chiều + nhóm, từ danh mục TYPE_CODE (parent = NK/XK). Tên là tên pháp lý – không dịch. */
+export const typeCodesIn = (list: readonly CodeListEntry[], direction: Direction, group: TypeGroup): ComboboxOption[] =>
+  list
+    .filter((e) => e.parent === direction && !e.inactive && typeGroupOf(e.code) === group)
+    .map((e) => ({ value: e.code, label: `${e.code} – ${e.name}` }));
+
+/** Chi cục Hải quan từ danh mục A038 (@kb/contracts). Nhãn "mã – tên" được GỬI BACKEND làm `customsOffice` → tên pháp lý, không dịch. */
+export const officeOptions = (list: readonly CodeListEntry[]): ComboboxOption[] =>
+  list.filter((e) => !e.inactive).map((e) => ({ value: e.code, label: `${e.code} – ${e.name}` }));
 
 export function skillSetOptions(locale: UiLocale): SelectOption[] {
   const t = pickMessages(SKILL_SET_LABELS, locale);

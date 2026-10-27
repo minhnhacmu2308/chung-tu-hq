@@ -41,7 +41,7 @@ export function amaSourceLines(p: DeclarationPayload, customs: CustomsInfo | nul
       },
       customs: c,
       ...(vat
-        ? { otherTaxes: [{ code: vatCode(vat), rate: `${vat}%`, ...(base ? { base: toDecimalString(base), amount: toDecimalString(base.times(vat).div(100), 4) } : {}) }] }
+        ? { otherTaxes: [{ code: vatCode(vat, it.vatCode)!, rate: `${vat}%`, ...(base ? { base: toDecimalString(base), amount: toDecimalString(base.times(vat).div(100), 4) } : {}) }] }
         : {}),
     };
   });

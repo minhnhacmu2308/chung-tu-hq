@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRates, formatTax, hsBusy, hsTone, normalizeHsInput } from "./hs-format";
+import { formatRates, formatTax, hsBusy, hsTone, normalizeHsInput, trimRate } from "./hs-format";
 
 const cand = (over: Partial<Parameters<typeof formatTax>[0] & object> = {}) => ({ code: "8483.40.90", description: "", confidence: 0.83, whyNot: null, importRate: "5", basis: "MFN" as const, agreement: null, vatRate: "10", ...over });
 
@@ -29,5 +29,13 @@ describe("hs-format", () => {
     expect(formatRates("5", "10")).toBe("5% · 10%");
     expect(formatRates(undefined, "10")).toBe("— · 10%");
     expect(formatRates(undefined, undefined)).toBe("—");
+  });
+  it("thuế suất bỏ số 0 thừa của DB: 0.000000 → 0, 10.000000 → 10, 7.50 → 7.5", () => {
+    expect(trimRate("0.000000")).toBe("0");
+    expect(trimRate("10.000000")).toBe("10");
+    expect(trimRate("7.50")).toBe("7.5");
+    expect(trimRate("10")).toBe("10");
+    expect(formatRates("0.000000", "10.000000")).toBe("0% · 10%");
+    expect(formatTax(cand({ importRate: "0.000000", basis: "FTA", agreement: "ACFTA", vatRate: "10.000000" }))).toBe("0% (ACFTA) · 10%");
   });
 });

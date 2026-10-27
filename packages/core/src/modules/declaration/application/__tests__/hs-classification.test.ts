@@ -93,7 +93,7 @@ describe("startHsClassification", () => {
     expect(jobsNamed("hs-poll")).toHaveLength(0);
     const l1 = (await items())[0]!;
     expect(l1).toMatchObject({ hsSuggested: "8482.10.00", hsConfidence: 0.83 });
-    expect(l1.hs!.candidates).toEqual([
+    expect(l1.hs!.candidates).toMatchObject([
       { code: "8482.10.00", description: "Ổ bi cầu", confidence: 0.83, whyNot: null, importRate: "3", basis: "MFN", agreement: null, vatRate: "10" },
       { code: "8482.80.00", description: "", confidence: 0.1, whyNot: "Không phải ổ kết hợp", importRate: "0", basis: "MFN", agreement: null, vatRate: "10" },
     ]);

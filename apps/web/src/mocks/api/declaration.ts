@@ -167,7 +167,7 @@ function mockHs(db: MockDb, i: LineItem, now = Date.now()): LineItemHs {
     const hs = findHs(code);
     const r = ratesFor(dossier, code);
     const fta = !!hs && r.importDutyRate !== hs.mfn && dossier.direction === "NK";
-    return { code, description: hs?.description ?? "", confidence, whyNot, importRate: r.importDutyRate, basis: fta ? ("FTA" as const) : ("MFN" as const), agreement: fta ? "AKFTA" : null, vatRate: r.vatRate };
+    return { code, description: hs?.description ?? "", confidence, whyNot, importRate: r.importDutyRate, basis: fta ? ("FTA" as const) : ("MFN" as const), agreement: fta ? "AKFTA" : null, vatRate: r.vatRate, vatCode: mockVatCode(r.vatRate) ?? null, vatNote: null, vatCertain: true, normalImportRate: null };
   };
   const main = i.hsSuggested;
   const alt = HS_CATALOG.find((h) => h.code !== main && h.code.slice(0, 4) === main.slice(0, 4)) ?? HS_CATALOG.find((h) => h.code !== main)!;
@@ -256,6 +256,9 @@ function assertCanEdit(db: MockDb) {
   if (!role || !canEditDeclaration(role)) throw new ApiError("FORBIDDEN", "Vai trò của bạn không được sửa tờ khai");
 }
 
+/** Mã VAT VNACCS như hscode-api mới trả kèm thuế (mô phỏng): 10% VB901, 8% (giảm thuế) VB245. */
+const mockVatCode = (rate: string | null | undefined) => (rate === "10" ? "VB901" : rate === "8" ? "VB245" : undefined);
+
 /** Người dùng xác nhận mã HS (giữ gợi ý hoặc chọn mã khác). */
 export const confirmHs = (itemId: string, code: string) =>
   mutate((db) => {
@@ -269,6 +272,9 @@ export const confirmHs = (itemId: string, code: string) =>
     item.hsConfirmed = code;
     item.importDutyRate = r.importDutyRate;
     item.vatRate = r.vatRate;
+    const vatCode = mockVatCode(r.vatRate);
+    if (vatCode) item.vatCode = vatCode;
+    else delete item.vatCode;
     if (r.policyNote) item.policyNote = r.policyNote;
     else delete item.policyNote;
     refreshDeclaration(db, item.dossierId);
@@ -285,6 +291,7 @@ export const unconfirmHs = (itemId: string) =>
     delete item.hsConfirmed;
     delete item.importDutyRate;
     delete item.vatRate;
+    delete item.vatCode;
     delete item.policyNote;
     return item;
   });

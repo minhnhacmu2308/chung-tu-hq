@@ -7,8 +7,10 @@ import { lengthIssue } from "./field-length.js";
 import { mappingsFor } from "./mapping/registry.js";
 import type { StoredField } from "./types.js";
 
-type ItemHs = { hsConfirmed: string | null };
+type ItemHs = { hsConfirmed: string | null; taxDetail?: { needsReview?: boolean } | null };
 const unconfirmed = (items: ItemHs[]) => items.filter((i) => !i.hsConfirmed).length;
+/** Dòng đã xác nhận nhưng thuế chưa khớp kết quả HSCodePro (mã nhập tay đang tra thuế, mã không còn trong gợi ý). */
+const taxNeedsReview = (items: ItemHs[]) => items.filter((i) => i.hsConfirmed && i.taxDetail?.needsReview).length;
 
 /** Chỉ tiêu bắt buộc có điều kiện còn trống mà Hải quan chắc chắn từ chối (vd MO/CU hàng chương 84/85 – CV 2061/TCHQ-GSQL). */
 export const missingBlockingFields = (fields: Record<string, StoredField>) => Object.values(fields).filter((f) => f.blocking && f.value.trim() === "");
@@ -37,6 +39,8 @@ export function canApprove(p: {
   if (p.blockerFails > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED_FIX_IN_OCR", { n: p.blockerFails }));
   const n = unconfirmed(p.items);
   if (n > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n }));
+  const review = taxNeedsReview(p.items);
+  if (review > 0) return err(reasonError("INVALID_STATE", "TAX_NEEDS_REVIEW", { n: review }));
   if (p.exchangeRate !== undefined && dec(p.exchangeRate).isZero()) return err(reasonError("INVALID_STATE", "EXCHANGE_RATE_MISSING"));
   // Nguyên tắc 4 mắt (cấu hình org): người duyệt khác người tạo hồ sơ; Chủ sở hữu được miễn.
   if (p.fourEyes && p.role !== "OWNER" && p.userId === p.ownerId) return err(reasonError("FORBIDDEN", "FOUR_EYES"));

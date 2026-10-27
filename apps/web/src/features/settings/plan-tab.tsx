@@ -61,7 +61,7 @@ export function PlanTab() {
           </CardHeader>
           <CardContent>
             <Stack gap="md">
-              <Meter label={m.dossiersMonth} used={usage.dossiersThisMonth} total={plan.dossiersPerMonth} unit={m.dossiersUnit} />
+              <Meter label={m.dossiersMonth} used={usage.dossiersThisMonth} total={plan.dossiersPerMonth + (plan.bonusThisMonth ?? 0)} unit={m.dossiersUnit} />
               <Meter label={m.pagesRead} used={usage.pagesThisMonth} total={plan.dossiersPerMonth * 8} unit={m.pagesUnit} />
               <p className="text-xs text-fg-subtle">
                 {fill(m.pagesNote, { n: plan.pagesPerDossier })}

@@ -29,6 +29,8 @@ export const OrganizationSchema = z.object({
     name: z.string(),
     dossiersPerMonth: z.number().int().nonnegative(),
     pagesPerDossier: z.number().int().nonnegative(),
+    /** Hồ sơ đội vận hành nới thêm, chỉ tính trong tháng hiện tại. Hạn mức tháng này = dossiersPerMonth + bonusThisMonth. */
+    bonusThisMonth: z.number().int().nonnegative().optional(),
     renewsAt: IsoDateSchema,
   }),
   /** Mức dùng tháng hiện tại; chi phí (VND, từ usage_events) tách theo nhà cung cấp: AI đọc chứng từ, HSCodePro, Customs Hub. */

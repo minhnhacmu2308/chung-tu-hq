@@ -1,6 +1,6 @@
 import type { HsResult } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { candidatesFromResult, chunk, coFormFor, formatHs, groupSameGoods, ratesFromCandidate, sameGoodsKey, toHsRequestItems, type HsLineInput } from "../hscodepro-map.js";
+import { candidatesFromResult, chunk, coFormFor, formatHs, groupSameGoods, ratesFromCandidate, sameGoodsKey, toHsRequestItems, withHarmonized, type HsLineInput } from "../hscodepro-map.js";
 
 const line = (over: Partial<HsLineInput> = {}): HsLineInput => ({ lineNo: 1, description: "Vít me bi SFU1605, dài 600 mm", quantity: "100", unit: "PCE", amount: "2840.50", origin: "TW", invoiceHsCode: "8483.40", ...over });
 const TAX = (rate: number, basis: "MFN" | "FTA" = "MFN", agreement: string | null = null) => ({ import: { rate, basis, agreement }, vat: { rate: 10, note: null }, source_date: "2026-10-15" });
@@ -42,7 +42,7 @@ describe("hscodepro-map", () => {
     expect(eur.items[0]!.co_form).toBeNull();
   });
   it("candidatesFromResult: gợi ý chính rồi mã thay thế; tin cậy 0–1; thuế dạng chuỗi", () => {
-    expect(candidatesFromResult(RESULT)).toEqual([
+    expect(candidatesFromResult(RESULT)).toMatchObject([
       { code: "8483.40.90", description: "Loại khác", confidence: 0.83, whyNot: null, importRate: "5", basis: "MFN", agreement: null, vatRate: "10" },
       { code: "8466.93.90", description: "Loại khác", confidence: 0.12, whyNot: "Chỉ đúng khi là bộ phận chuyên dùng", importRate: "0", basis: "MFN", agreement: null, vatRate: "10" },
     ]);
@@ -75,5 +75,25 @@ describe("groupSameGoods", () => {
     expect(g.reps.map((r) => r.lineNo)).toEqual([2, 3, 5]);
     expect(g.followers.get(2)!.map((f) => f.lineNo)).toEqual([4]);
     expect(sameGoodsKey(line({ invoiceHsCode: "8483.40.90" }))).toBe(sameGoodsKey(line({ invoiceHsCode: "848340" })));
+  });
+  it("ratesFromCandidate – hscode-api mới: VAT số dùng thẳng kèm mã; null + VK = không chịu thuế; certain=false thêm căn cứ; API cũ không mã → 10% VB901", () => {
+    const NK = { direction: "NK" as const, typeCode: "A11" };
+    const base = { code: "9405.11.99", description: "", confidence: 0.9, whyNot: null, importRate: "0", basis: "FTA" as const, agreement: "ACFTA", vatRate: "8", vatCode: "VB245", vatNote: null, vatCertain: true, normalImportRate: "45" };
+    expect(ratesFromCandidate(base, NK)).toMatchObject({ importDutyRate: "0", vatRate: "8", taxDetail: { vatCode: "VB245", vatCertain: true, normalImportRate: "45" } });
+    const apple = { ...base, code: "0808.10.00", importRate: "8", basis: "MFN" as const, agreement: null, vatRate: null, vatCode: "VK010", vatCertain: false, vatNote: "Không chịu thuế GTGT: chưa chế biến" };
+    const a = ratesFromCandidate(apple, NK);
+    expect(a).toMatchObject({ importDutyRate: "8", vatRate: null, taxDetail: { vatCode: "VK010" } });
+    expect(a.policyNote).toContain("Không chịu thuế GTGT (VK010): Không chịu thuế GTGT: chưa chế biến");
+    expect(a.policyNote).not.toContain("Chưa có thuế suất VAT");
+    expect(a.policyNote).not.toContain("tạm tính");
+    const screw = { ...base, importRate: "12", basis: "MFN" as const, agreement: null, vatRate: "10", vatCode: "VB901", vatCertain: false, vatNote: "Đa số tờ khai đang khai 10%" };
+    expect(ratesFromCandidate(screw, NK).policyNote).toContain("Thuế GTGT cần xét điều kiện: Đa số tờ khai đang khai 10%");
+    const old = { ...base, vatRate: null, vatCode: null, vatCertain: null };
+    expect(ratesFromCandidate(old, NK)).toMatchObject({ vatRate: "10", taxDetail: { vatCode: "VB901" }, policyNote: expect.stringContaining("tạm tính 10%") });
+  });
+  it("withHarmonized: thuế suất VAT bị đổi theo bài học / dòng khác → bỏ mã VAT của ứng viên (không để VB245 đi với 10%)", () => {
+    const r = ratesFromCandidate({ code: "9405.11.99", description: "", confidence: 0.9, whyNot: null, importRate: "0", basis: "MFN", agreement: null, vatRate: "8", vatCode: "VB245" }, { direction: "NK", typeCode: "A11" });
+    expect(withHarmonized(r, { importDutyRate: "0", vatRate: "10", policyNote: "theo bài học" }).taxDetail?.vatCode).toBeNull();
+    expect(withHarmonized(r, { importDutyRate: "5", vatRate: "8", policyNote: null }).taxDetail?.vatCode).toBe("VB245");
   });
 });

@@ -33,7 +33,7 @@ export function sourceLines(db: MockDb, dossier: Dossier, decl: Declaration, cus
         ...itemOverrides(decl.fields, it.id),
       },
       customs: customs?.items.find((c) => c.lineNo === idx + 1),
-      ...(vat ? { otherTaxes: [{ code: vatCode(it.vatRate), rate: `${it.vatRate}%`, base, amount: t.vatVnd }] } : {}),
+      ...(vat ? { otherTaxes: [{ code: vatCode(it.vatRate, it.vatCode)!, rate: `${it.vatRate}%`, base, amount: t.vatVnd }] } : {}),
     };
   });
 }

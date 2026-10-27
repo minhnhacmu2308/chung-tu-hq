@@ -188,11 +188,12 @@ describe("agent run – nhánh biên", () => {
     expect(errCode(await run(id))).toBe("NOT_FOUND");
   });
 
-  it("dòng đã xác nhận HS → giữ, không gọi classifier; gợi ý tin cậy < 70% → cảnh báo cần xác nhận kỹ", async () => {
+  it("dòng đã xác nhận HS → vẫn gửi classifier để cập nhật thuế nhưng giữ nguyên mã; gợi ý tin cậy < 70% → cảnh báo cần xác nhận kỹ", async () => {
     unwrap(await startAgentRun(deps, declarant, D, "DECLARATION"));
     for (const li of uow.data.lineItems) if (li.lineNo !== 5) li.hsConfirmed = "8482.10.00";
     const v = unwrap(await run(lastJob().agentRunId));
-    expect(hs.calls).toBe(1);
+    expect(hs.calls).toBeGreaterThan(1);
+    expect(uow.data.lineItems.filter((li) => li.lineNo !== 5).every((li) => li.hsConfirmed === "8482.10.00")).toBe(true);
     expect(v.logs.filter((l) => l.text.includes("giữ mã đã xác nhận"))).toHaveLength(6);
     expect(v.logs.find((l) => l.text.startsWith("Dòng 5:"))).toMatchObject({ tone: "warning", text: expect.stringMatching(/tin cậy 61%.*cần người xác nhận kỹ/) });
   });

@@ -87,7 +87,11 @@ export function toHsRequestItems(lines: HsLineInput[], ctx: { invoiceCurrency: s
 }
 
 const rate = (n: number | null | undefined) => (n === null || n === undefined ? null : String(n));
-const fromTax = (t: HsTax | null) => ({ importRate: rate(t?.import.rate), basis: t?.import.basis ?? null, agreement: t?.import.agreement ?? null, vatRate: rate(t?.vat.rate) });
+const fromTax = (t: HsTax | null) => ({
+  importRate: rate(t?.import.rate), basis: t?.import.basis ?? null, agreement: t?.import.agreement ?? null, vatRate: rate(t?.vat.rate),
+  // Trường mở rộng của hscode-api mới – vắng (API cũ / fpt-mock) thì để null.
+  vatCode: t?.vat.vnaccs_code ?? null, vatNote: t?.vat.note ?? null, vatCertain: t?.vat.certain ?? null, normalImportRate: rate(t?.import.normal_rate),
+});
 
 /** Kết quả API → danh sách ứng viên: gợi ý chính đứng đầu, rồi mã thay thế. */
 export function candidatesFromResult(r: HsResult): HsCandidate[] {
@@ -97,22 +101,62 @@ export function candidatesFromResult(r: HsResult): HsCandidate[] {
   ];
 }
 
-/** Thuế suất GTGT phổ thông (Luật Thuế GTGT) – dùng tạm khi HSCodePro chưa có VAT cho mã; khai mã VB901. */
+/** Thuế suất GTGT phổ thông – CHỈ dùng tạm cho HSCodePro bản cũ (không trả `vnaccs_code`) khi chưa có VAT cho mã; khai mã VB901. */
 export const DEFAULT_VAT_RATE = "10";
 
+/** Mã VAT VNACCS "VK…" = hàng không chịu thuế GTGT. */
+export const isVatExempt = (code: string | null | undefined) => !!code && /^VK/i.test(code);
+
+/** Chi tiết thuế lưu trên dòng (mã VAT VNACCS, căn cứ/điều kiện VAT…) – xem TaxDetail. */
+export type CandidateTaxDetail = { vatCode: string | null; vatNote: string | null; vatCertain: boolean | null; normalImportRate: string | null; needsReview?: boolean };
+export type AppliedRates = { importDutyRate: string | null; vatRate: string | null; policyNote: string | null; taxDetail: CandidateTaxDetail | null };
+
 /**
- * Thuế suất khi người khai xác nhận một ứng viên. XK/miễn thuế theo quy tắc phía mình; không có thuế NK → null + ghi chú.
- * Thiếu VAT → tạm tính 10% (phổ thông) kèm ghi chú: hàng thuộc nhóm 5% / 0% / không chịu thuế / giảm thuế GTGT thì người khai sửa.
+ * Thuế suất khi người khai xác nhận một ứng viên (hoặc tính lại cho mã đã xác nhận). XK/miễn thuế theo quy tắc phía mình; không có thuế NK → null + ghi chú.
+ * VAT có 3 trường hợp:
+ * - `vatRate` là số → dùng (đã tính giảm thuế, vd 8% VB245);
+ * - `vatRate` null + mã `VK…` → KHÔNG CHỊU THUẾ GTGT: VAT null (tiền VAT = 0), ghi chú "Không chịu thuế GTGT (VKxxx): <căn cứ>";
+ * - `vatRate` null, không có mã VAT (HSCodePro bản cũ) → tạm tính 10% (VB901) kèm ghi chú như trước.
+ * `vatCertain === false` → thêm căn cứ/điều kiện VAT vào ghi chú để người khai tự xét.
  */
-export function ratesFromCandidate(c: HsCandidate | null, p: { direction: "NK" | "XK"; typeCode: string }): { importDutyRate: string | null; vatRate: string | null; policyNote: string | null } {
+export function ratesFromCandidate(c: HsCandidate | null, p: { direction: "NK" | "XK"; typeCode: string }): AppliedRates {
   const fixed = fixedRatesFor(p);
-  if (fixed) return { importDutyRate: fixed.importDutyRate, vatRate: fixed.vatRate, policyNote: fixed.policyNote };
-  if (!c || c.importRate === null) return { importDutyRate: null, vatRate: c?.vatRate ?? null, policyNote: "Chưa có thuế suất cho mã này – kiểm tra biểu thuế trước khi khai" };
+  if (fixed) return { importDutyRate: fixed.importDutyRate, vatRate: fixed.vatRate, policyNote: fixed.policyNote, taxDetail: null };
+  const detail: CandidateTaxDetail | null = c
+    ? { vatCode: c.vatCode ?? null, vatNote: c.vatNote ?? null, vatCertain: c.vatCertain ?? null, normalImportRate: c.normalImportRate ?? null }
+    : null;
+  const exempt = !!c && c.vatRate === null && isVatExempt(c.vatCode);
+  const oldApiNoVat = !!c && c.vatRate === null && !c.vatCode;
+  const vatNotes = [
+    exempt ? `Không chịu thuế GTGT (${c!.vatCode})${c!.vatNote ? `: ${c!.vatNote}` : ""}` : null,
+    // Điều kiện VAT ngoài mã HS (giấy phép, mục đích NK…): người khai tự xét. Không chịu thuế đã kèm căn cứ ở trên.
+    c && c.vatCertain === false && c.vatNote && !exempt ? `Thuế GTGT cần xét điều kiện: ${c.vatNote}` : null,
+  ];
+  if (!c || c.importRate === null) {
+    const notes = ["Chưa có thuế suất cho mã này – kiểm tra biểu thuế trước khi khai", ...vatNotes].filter(Boolean);
+    return { importDutyRate: null, vatRate: c?.vatRate ?? null, policyNote: notes.join(". "), taxDetail: detail };
+  }
   const notes = [
     c.basis === "FTA" ? `Thuế ưu đãi đặc biệt ${c.agreement ?? "FTA"} – cần C/O hợp lệ và đúng quy tắc xuất xứ` : null,
-    c.vatRate === null ? `Biểu thuế chưa có thuế suất GTGT cho mã này – tạm tính ${DEFAULT_VAT_RATE}% (VB901); hàng thuộc nhóm 5%, 0%, không chịu thuế hoặc được giảm thuế GTGT thì sửa lại` : null,
+    ...vatNotes,
+    oldApiNoVat ? `Biểu thuế chưa có thuế suất GTGT cho mã này – tạm tính ${DEFAULT_VAT_RATE}% (VB901); hàng thuộc nhóm 5%, 0%, không chịu thuế hoặc được giảm thuế GTGT thì sửa lại` : null,
   ].filter(Boolean);
-  return { importDutyRate: c.importRate, vatRate: c.vatRate ?? DEFAULT_VAT_RATE, policyNote: notes.length ? notes.join(". ") : null };
+  return {
+    importDutyRate: c.importRate,
+    vatRate: oldApiNoVat ? DEFAULT_VAT_RATE : c.vatRate,
+    policyNote: notes.length ? notes.join(". ") : null,
+    taxDetail: oldApiNoVat ? { ...detail!, vatCode: "VB901" } : detail,
+  };
+}
+
+/**
+ * Gộp thuế đã thống nhất (bài học tờ khai đã thông quan / dòng cùng mã – harmonizeRates) vào thuế của ứng viên.
+ * VAT bị đổi so với ứng viên → mã VAT VNACCS của ứng viên không còn khớp (vd VB245 là mã 8% mà thuế suất thành 10%, hoặc VK… không chịu thuế
+ * mà nay có VAT) → bỏ mã, để bước truyền suy mã theo thuế suất (vatCode).
+ */
+export function withHarmonized(rates: AppliedRates, h: { importDutyRate: string | null; vatRate: string | null; policyNote: string | null }): AppliedRates {
+  const vatChanged = h.vatRate !== rates.vatRate;
+  return { ...rates, ...h, taxDetail: vatChanged && rates.taxDetail ? { ...rates.taxDetail, vatCode: null } : rates.taxDetail };
 }
 
 export function chunk<T>(xs: T[], n: number): T[][] {

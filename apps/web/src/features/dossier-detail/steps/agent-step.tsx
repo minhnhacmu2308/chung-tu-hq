@@ -5,7 +5,7 @@ import {
   DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Progress, RadioGroup, SegmentedControl, Spinner, Stack, StatusBadge, toast, Tooltip, IconTile, fill, useMessages,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, CheckCheck, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Pencil, Play, RotateCcw, Search, Undo2, Workflow, XCircle } from "lucide-react";
+import { AlertTriangle, Bot, Check, CheckCheck, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Info, Pencil, Play, RotateCcw, Search, Undo2, Workflow, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
 import { listProducts, productKeys } from "@/api/products";
@@ -19,7 +19,7 @@ import { errorMessage, StepError, StepLoading, StickyActionBar } from "./declara
 import { matchCatalog, type CatalogMatch } from "./hs/catalog-match";
 import { DeclaredBeforeHint, HsSuggestionCell } from "./hs/hs-cell";
 import { HsAnswerDialog, ReclassifyDialog } from "./hs/hs-dialogs";
-import { formatRates, formatTax, hsBusy, normalizeHsInput } from "./hs/hs-format";
+import { formatRates, formatTax, hsBusy, isVatExempt, normalizeHsInput } from "./hs/hs-format";
 import type { StepProps } from "./types";
 import { AGENT_MESSAGES } from "./agent-step.messages";
 
@@ -413,14 +413,32 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
       header: t.colTax,
       cell: (c) => {
         const it = c.row.original;
+        // Ghi chú thuế (ưu đãi cần C/O, VAT tạm tính…) dài và giống nhau trên nhiều dòng → để trong tooltip, ô chỉ còn thuế suất.
+        // VAT: số % + mã khai VNACCS (VB245, VK010…); không chịu thuế → chữ thay số; VAT phụ thuộc điều kiện ngoài mã HS → icon cảnh báo kèm căn cứ.
+        const exempt = it.vatRate === undefined && isVatExempt(it.vatCode);
         return it.hsConfirmed ? (
-          <div>
-            <p className="tabular-nums text-fg">{formatRates(it.importDutyRate, it.vatRate)}</p>
-            {it.policyNote && <p className="max-w-56 whitespace-normal text-xs text-fg-muted">{it.policyNote}</p>}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="whitespace-nowrap tabular-nums text-fg">{formatRates(it.importDutyRate, it.vatRate, exempt ? t.vatExempt : undefined)}</span>
+            {it.vatCode && <Badge tone={exempt ? "info" : "neutral"} className="font-mono">{it.vatCode}</Badge>}
+            {it.vatCertain === false && it.vatNote && (
+              <Tooltip content={it.vatNote}>
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-warning" aria-label={fill(t.vatCheckAria, { line: it.lineNo })}>
+                  <AlertTriangle className="h-4 w-4" />
+                </Button>
+              </Tooltip>
+            )}
+            {it.policyNote && (
+              <Tooltip content={it.policyNote}>
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-fg-muted" aria-label={fill(t.policyNoteAria, { line: it.lineNo })}>
+                  <Info className="h-4 w-4" />
+                </Button>
+              </Tooltip>
+            )}
+            {it.taxNeedsReview && <Badge tone="warning">{t.taxNeedsReview}</Badge>}
           </div>
         ) : it.hs?.candidates[0] ? (
           <p className="tabular-nums text-fg-muted" title={t.taxPreviewTitle}>
-            {formatTax(it.hs.candidates[0])}
+            {formatTax(it.hs.candidates[0], t.vatExempt)}
           </p>
         ) : (
           <span className="text-xs text-fg-subtle">{t.afterConfirm}</span>
@@ -501,7 +519,7 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
         }}
       />
       <ChangeHsDialog item={editing} onClose={() => setEditing(null)} dossierId={dossierId} />
-      <HsAnswerDialog item={answering} onClose={() => setAnswering(null)} dossierId={dossierId} />
+      <HsAnswerDialog item={answering} items={items} onClose={() => setAnswering(null)} dossierId={dossierId} />
       <ReclassifyDialog item={reclassifying} onClose={() => setReclassifying(null)} dossierId={dossierId} />
     </>
   );

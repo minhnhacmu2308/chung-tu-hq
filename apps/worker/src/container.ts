@@ -1,6 +1,6 @@
 import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv } from "@kb/core/config";
-import { activeQuotaBonus } from "@kb/core/modules/admin";
+import { withinDossierQuota } from "@kb/core/modules/admin";
 import { createRateDeps, DbPlatformMailer, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
 import { createDb, platformDbUrl } from "@kb/core/db";
 import { createAiBudget, createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
@@ -64,9 +64,8 @@ export function buildContainer() {
       const plan = op ? await billing.plans.get(op.planCode) : null;
       if (!plan) return false;
       if (kind === "PAGES") return amount <= plan.pagesPerDossier;
-      const now = systemClock.now();
-      // Hạn mức nới thêm của đội vận hành chỉ có hiệu lực đúng tháng đã nới.
-      return (await dossierStats(orgId, now)).dossiers + amount <= plan.dossiersPerMonth + activeQuotaBonus({ quotaBonus: op?.quotaBonus ?? 0, quotaBonusMonth: op?.quotaBonusMonth ?? null }, now);
+      // amount = tổng hồ sơ trong tháng sau khi tạo (createDossier đã đếm) – không cộng số đã dùng lần nữa.
+      return withinDossierQuota(plan.dossiersPerMonth, { quotaBonus: op?.quotaBonus ?? 0, quotaBonusMonth: op?.quotaBonusMonth ?? null }, amount, systemClock.now());
     },
   };
   const dossier = createDossierInfrastructure({ db, redis, env, queue, quota, clock: systemClock });

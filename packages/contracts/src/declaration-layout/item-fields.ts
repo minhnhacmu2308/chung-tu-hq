@@ -97,8 +97,16 @@ export function itemFieldIssue(kind: Kind, key: string, value: string): string |
 /* ---------- Giá trị phần mềm tự điền khi truyền (người khai sửa đè được) ---------- */
 
 const num = (v: string) => (/^-?\d+(\.\d+)?$/.test(v) ? Number(v) : 0);
-/** Mã áp dụng thuế suất GTGT (VB9xx) theo thuế suất – CHƯA đối chiếu bảng "Thue khac - GTGT.xls" (D3). */
-export const vatCode = (rate: string | null | undefined) => ({ "10": "VB901", "8": "VB903", "5": "VB905", "0": "VB900" })[String(num(rate ?? "10"))] ?? "VB901";
+/**
+ * Mã áp dụng thuế suất GTGT cho dòng hàng. Ưu tiên mã HSCodePro trả kèm thuế (`vnaccs_code` lưu trên dòng: VB901 10%, VB245 8%, VKxxx không chịu thuế).
+ * Không có mã (HSCodePro bản cũ / nhập tay) → suy theo thuế suất – bảng suy CHƯA đối chiếu "Thue khac - GTGT.xls" (D3).
+ * Không có thuế suất lẫn mã → không tự điền (KHÔNG mặc định 10%): người khai nhập.
+ */
+export const vatCode = (rate: string | null | undefined, stored?: string | null) => {
+  if (stored) return stored;
+  if (rate === null || rate === undefined || rate === "") return undefined;
+  return ({ "10": "VB901", "8": "VB903", "5": "VB905", "0": "VB900" } as Record<string, string>)[String(num(rate))] ?? "VB901";
+};
 /**
  * Mã Biểu thuế NK (chỉ tiêu 1.80) suy từ ghi chú chính sách (dòng hàng chưa lưu mã riêng). Danh sách Phụ lục II TT39:
  * B04 ATIGA, B05 ACFTA, B06 AKFTA, B09 AJCEP, B10 VJEPA (B17 là Chương 98). FTA khác chưa có mã trong văn bản đã đối chiếu → code null (chặn truyền nếu người khai không nhập).
@@ -125,7 +133,7 @@ export function lawCodesByLine(value: string, lineNos: number[]): Map<number, st
   return new Map(lineNos.map((n) => [n, [...new Set([...all, ...(own.get(n) ?? [])])]]));
 }
 
-export type ItemDefaultsInput = { lineNo: number; quantity: string; unit: string; vatRate?: string | null | undefined; policyNote?: string | null | undefined };
+export type ItemDefaultsInput = { lineNo: number; quantity: string; unit: string; vatRate?: string | null | undefined; vatCode?: string | null | undefined; policyNote?: string | null | undefined };
 /**
  * Ô dòng hàng phần mềm tự điền khi truyền: số lượng (2) = số lượng (1) (chưa có bảng quy đổi ĐVT biểu thuế – D3), mã tiền đơn giá = nguyên tệ,
  * đơn vị đơn giá = ĐVT; IDA: mã biểu thuế từ ghi chú FTA, mã GTGT từ thuế suất, 1.88 từ khoản điều chỉnh được phân bổ; EDA: mã văn bản pháp luật theo dòng từ chỉ tiêu VBPQ.
@@ -136,7 +144,8 @@ export function itemDefaults(kind: Kind, it: ItemDefaultsInput, ctx: { currency:
   if (kind === "IDA") {
     const t = taxTable(it.policyNote);
     if (t.code) out["HAG_ORS"] = t.code;
-    out["HAG_TX5"] = vatCode(it.vatRate);
+    const vat = vatCode(it.vatRate, it.vatCode);
+    if (vat) out["HAG_TX5"] = vat;
     // 1.88: số thứ tự khoản điều chỉnh 1.49 người khai đã xác nhận phân bổ cho mọi dòng hàng.
     (ctx.adjustmentNos ?? []).slice(0, 5).forEach((n, k) => (out[`HAG_VN${k + 1}`] = String(n)));
   } else {

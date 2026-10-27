@@ -225,6 +225,13 @@
       "when": 1793070279624,
       "tag": "0031_teaching",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793124692964,
+      "tag": "0032_line_item_tax_detail",
+      "breakpoints": true
     }
   ]
 }

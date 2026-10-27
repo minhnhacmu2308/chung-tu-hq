@@ -8,7 +8,7 @@ export type DeclarationPayload = {
   direction: "NK" | "XK";
   fields: Record<string, { value: string; /** Nguồn giá trị (USER = người khai nhập) – không bắt buộc. */ source?: string }>;
   /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền. */
-  items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; policyNote: string | null }[];
+  items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; vatCode?: string | null; policyNote: string | null }[];
   /** `kind`/`code`: chiều và mã tên khoản điều chỉnh 1.49 (khoản người khai lập); không có = dữ liệu cũ / phí đọc từ chứng từ. */
   adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[];
   containers: string[];

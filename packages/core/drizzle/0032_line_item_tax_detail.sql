@@ -1,0 +1,1 @@
+ALTER TABLE "line_items" ADD COLUMN "tax_detail" jsonb;

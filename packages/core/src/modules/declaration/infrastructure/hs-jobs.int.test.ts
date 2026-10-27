@@ -17,7 +17,7 @@ const B = { orgId: asOrgId("org_khac"), userId: asUserId("usr_khac") };
 const NOW = new Date("2026-10-15T01:00:00Z");
 const item = (lineNo: number): LineItemRow => ({
   id: `itm_hs_${lineNo}`, orgId: "org_anphat", dossierId: "dos_hs", lineNo, description: "Vít me bi SFU1605", quantity: "40", unit: "PCE", unitPrice: "54.5", amount: "2180", origin: "TW",
-  invoiceHsCode: "8483.40", hsSuggested: null, hsConfidence: null, hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null,
+  invoiceHsCode: "8483.40", hsSuggested: null, hsConfidence: null, hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null, taxDetail: null,
   hsJobId: null, hsItemId: null, hsStatus: "idle", hsQuestion: null, hsError: null, hsDetail: null, createdAt: NOW, updatedAt: NOW,
 });
 
@@ -52,6 +52,12 @@ describe("hs_jobs + trạng thái HS dòng hàng", () => {
   it("gợi ý lưu why_not + thuế trong rates", async () => {
     await uow.asOrg(A, (r) => r.suggestions.replaceForItem("org_anphat", "itm_hs_2", [{ id: "sug_1", orgId: "org_anphat", lineItemId: "itm_hs_2", code: "8466.93.90", description: "Loại khác", confidence: 0.12, rates: { importRate: "0", basis: "MFN", agreement: null, vatRate: "10" }, whyNot: "Chỉ đúng khi…", source: "hscodepro", createdAt: NOW }]));
     expect((await uow.asOrg(A, (r) => r.suggestions.listForItems("org_anphat", ["itm_hs_2"])))[0]).toMatchObject({ whyNot: "Chỉ đúng khi…", rates: { importRate: "0", vatRate: "10" } });
+  });
+  it("tax_detail (jsonb): ghi mã VAT VNACCS + cờ cần kiểm tra lại, đọc lại đúng; null giữ null", async () => {
+    const detail = { vatCode: "VK010", vatNote: "Không chịu thuế GTGT", vatCertain: false, normalImportRate: "45", needsReview: true };
+    await uow.asOrg(A, (r) => r.lineItems.update("org_anphat", "itm_hs_1", { hsConfirmed: "0808.10.00", vatRate: null, taxDetail: detail, updatedAt: NOW }));
+    expect((await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_1")))?.taxDetail).toEqual(detail);
+    expect((await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_2")))?.taxDetail).toBeNull();
   });
   it("org khác không thấy lượt, không ghi hộ được", async () => {
     expect(await uow.asOrg(B, (r) => r.hsJobs.get("org_anphat", "hsj_1"))).toBeNull();

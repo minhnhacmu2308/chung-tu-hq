@@ -94,7 +94,7 @@ describe("danh mục hàng hóa", () => {
     const now = new Date("2026-10-22T03:00:00Z");
     const line = (lineNo: number, description: string, hsConfirmed: string | null) => ({
       id: `itm_${lineNo}`, orgId: "org_a", dossierId: "dos_1", lineNo, description, quantity: "1", unit: "UNA", unitPrice: "1", amount: "1", origin: "FR",
-      invoiceHsCode: null, hsSuggested: null, hsConfidence: null, hsConfirmed, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: "18", vatRate: "8", policyNote: null,
+      invoiceHsCode: null, hsSuggested: null, hsConfidence: null, hsConfirmed, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: "18", vatRate: "8", policyNote: null, taxDetail: null,
       hsJobId: null, hsItemId: null, hsStatus: "completed" as const, hsQuestion: null, hsError: null, hsDetail: null, createdAt: now, updatedAt: now,
     });
     const f = (no: string, value: string) => ({ no, label: "", section: "GENERAL" as const, value, source: "USER" as const });

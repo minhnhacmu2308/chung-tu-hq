@@ -79,10 +79,12 @@ export function HsSuggestionCell({ item, onAnswer, onReclassify }: { item: LineI
     <div className="flex flex-col gap-1">
       <span className="font-mono text-sm text-fg">{item.hsSuggested}</span>
       {item.hsConfidence !== undefined && <ConfidenceMeter value={item.hsConfidence} warn={warn} />}
+      {hs?.descriptionVi && <p className="line-clamp-2 text-xs text-fg-muted" title={hs.descriptionVi}>{fill(t.descriptionVi, { desc: hs.descriptionVi })}</p>}
       {warnings.map((w) => (
-        <p key={w} className="flex items-start gap-1 text-xs text-warning-subtle-fg">
+        // Cảnh báo quản lý chuyên ngành dài → tối đa 2 dòng, rê chuột xem đủ (dòng hàng không cao vống).
+        <p key={w} className="flex items-start gap-1 text-xs text-warning-subtle-fg" title={w}>
           <AlertTriangle aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
-          {w}
+          <span className="line-clamp-2">{w}</span>
         </p>
       ))}
     </div>

@@ -2,7 +2,7 @@
 const DAY = 86_400_000;
 const VN_OFFSET = 7 * 3_600_000;
 
-/** Tháng theo giờ Việt Nam "YYYY-MM" (hạn mức, báo cáo tính theo tháng VN). */
+/** Tháng theo giờ Việt Nam "YYYY-MM" (hạn mức, báo cáo tính theo tháng VN). Hạn mức hồ sơ (activeQuotaBonus…) ở shared/quota. */
 export const vnMonth = (at: Date) => new Date(at.getTime() + VN_OFFSET).toISOString().slice(0, 7);
 
 /** Khoảng UTC [from, to) của một tháng VN. */
@@ -36,8 +36,6 @@ export function extendTrial(current: Date, now: Date, days: number): Date {
   return new Date(Math.max(current.getTime(), now.getTime()) + days * DAY);
 }
 
-/** Hồ sơ nới thêm còn hiệu lực: chỉ đúng tháng đã nới. */
-export const activeQuotaBonus = (o: { quotaBonus: number; quotaBonusMonth: string | null }, now: Date) => (o.quotaBonusMonth === vnMonth(now) ? o.quotaBonus : 0);
 
 /** Số ngày từ hôm nay (UTC) tới ngày `d`; âm = đã qua. */
 export const daysUntil = (d: Date, now: Date) => Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / DAY);

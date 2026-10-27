@@ -7,12 +7,14 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
-import { candidatesFromResult, chunk, groupSameGoods, toHsRequestItems } from "../domain/hscodepro-map.js";
+import { candidatesFromResult, chunk, groupSameGoods, ratesFromCandidate, toHsRequestItems, withHarmonized, type HsCandidate } from "../domain/hscodepro-map.js";
+import { harmonizeRates, lineLessonFor } from "../domain/lessons-apply.js";
+import { fixedRatesFor } from "../domain/rates.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { sheetScopeError } from "./_edit-scope.js";
-import { rebuildDraft } from "./_rebuild.js";
+import { lessonsOf, rebuildDraft } from "./_rebuild.js";
 import { toLineItem } from "./_dto.js";
-import { HsApiError, type AgentLog, type DeclarationDeps, type DeclarationRepos, type HsJobRow, type LineItemRow } from "./ports.js";
+import { HsApiError, type AgentLog, type DeclarationDeps, type DeclarationRepos, type HsJobRow, type HsLinePatch, type LineItemRow } from "./ports.js";
 
 export const HS_POLL_MS = 3000;
 /** 300 × 3 giây = 15 phút (tài liệu: một lần chạy tối đa 10 phút). */
@@ -26,28 +28,92 @@ const localStatus = (api: HsJob): HsJobRow["status"] => (busyApi(api) ? "process
 const asCtx = (c: SysCtx) => c as unknown as Ctx;
 const LOCKED = ["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"];
 
+/** Ngữ cảnh tính lại thuế cho dòng đã xác nhận: loại hình (XK/miễn thuế) + bài học mặt hàng theo dòng. */
+export type RetaxCtx = { p: { direction: "NK" | "XK"; typeCode: string }; lesson: (lineNo: number) => ReturnType<typeof lineLessonFor> };
+
+/**
+ * null = KHÔNG tính lại thuế dòng đã xác nhận: hồ sơ không còn, đã khóa (duyệt/truyền/hủy) hoặc tờ khai mới nhất không còn là bản nháp –
+ * nội dung người duyệt đã xem/đã gửi Hải quan không được tự đổi (gợi ý mới vẫn ghi để tham khảo).
+ */
+export async function retaxCtxFor(deps: DeclarationDeps, orgId: string, dossierId: string): Promise<RetaxCtx | null> {
+  const d = await deps.dossiers.get(orgId, dossierId);
+  if (!d || LOCKED.includes(d.status)) return null;
+  const decl = await deps.uow.asOrg(asCtx({ orgId, userId: "system" }), (r) => r.declarations.latest(orgId, dossierId));
+  if (decl && decl.status !== "DRAFT") return null;
+  const [shipment, lessons] = await Promise.all([deps.shipments.latest(orgId, dossierId), lessonsOf(deps, orgId, dossierId)]);
+  return {
+    p: { direction: d.direction, typeCode: d.typeCode },
+    lesson: (lineNo) => {
+      const s = shipment?.items.find((x) => x.lineNo === lineNo);
+      return lineLessonFor(lessons, { partNo: s?.partNo?.value ?? null, description: s?.description.value ?? null });
+    },
+  };
+}
+
+/**
+ * Thuế của dòng ĐÃ xác nhận theo kết quả phân loại mới nhất (chạy lại agent, phân loại lại, đổi C/O/xuất xứ): mã đã xác nhận có trong
+ * gợi ý/mã thay thế → thuế theo ứng viên đó (cùng mã ⇒ cùng thuế giữa các dòng); không có → để trống + đánh dấu "thuế cần kiểm tra lại",
+ * không giữ số cũ. Không đổi `hsConfirmed`. Không lấy thuế thấp nhất của dòng khác (chỉ bài học tờ khai đã thông quan được áp).
+ */
+export function retaxConfirmed(row: Pick<LineItemRow, "hsConfirmed" | "lineNo" | "origin">, cands: HsCandidate[], t: RetaxCtx): HsLinePatch {
+  const code = row.hsConfirmed!;
+  const fixed = fixedRatesFor(t.p);
+  if (fixed) return { importDutyRate: fixed.importDutyRate, vatRate: fixed.vatRate, policyNote: fixed.policyNote, taxDetail: null };
+  const hit = cands.find((c) => c.code === code);
+  if (!hit) {
+    return {
+      importDutyRate: null, vatRate: null,
+      policyNote: `Mã đã xác nhận ${code} không có trong kết quả phân loại mới nhất – kiểm tra lại thuế suất hoặc chọn lại mã`,
+      taxDetail: { vatCode: null, vatNote: null, vatCertain: null, normalImportRate: null, needsReview: true },
+    };
+  }
+  let rates = ratesFromCandidate(hit, t.p);
+  if (t.p.direction === "NK") rates = withHarmonized(rates, harmonizeRates(code, rates, t.lesson(row.lineNo), [], row.origin, false));
+  return { importDutyRate: rates.importDutyRate, vatRate: rates.vatRate, policyNote: rates.policyNote, taxDetail: rates.taxDetail ? { ...rates.taxDetail, needsReview: false } : null };
+}
+
+/** Kết quả ghi vào dòng: số item vừa có kết quả mới (ghi chi phí), còn dòng "đang gửi câu trả lời" chưa tới HSCodePro, có dòng đã xác nhận được tính lại thuế. */
+type IngestResult = { fresh: number; answering: boolean; retaxed: boolean };
+
 /**
  * Ghi trạng thái/kết quả của một lượt vào các dòng còn thuộc lượt đó (dòng đã chuyển sang lượt khác bị bỏ qua).
- * Trả số dòng vừa có kết quả mới (trước đó chưa completed) – dùng ghi chi phí "nhận kết quả".
+ * Dòng đã xác nhận mã HS: không đổi mã, chỉ tính lại thuế theo đúng mã đó (retaxConfirmed).
  */
-async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, job: HsJobRow, api: HsJob): Promise<number> {
+async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, job: HsJobRow, api: HsJob, tax: RetaxCtx | null): Promise<IngestResult> {
   const now = deps.clock.now();
   // Đếm theo item HSCodePro (dòng trùng mặt hàng dùng chung item không tính thêm).
   const fresh = new Set<string>();
+  let answering = false;
+  let retaxed = false;
   for (const it of api.items) for (const row of await r.lineItems.listByHsItem(orgId, it.id)) {
     if (row.hsJobId !== job.id) continue;
-    // Đã trả lời nhưng HSCodePro chưa nhận (job hs-answer chưa chạy) → giữ "đang gửi".
-    if (row.hsStatus === "answering" && it.status === "need_info" && it.question?.id === row.hsQuestion?.id) continue;
+    // Đã trả lời nhưng HSCodePro chưa nhận/chưa xử lý (vẫn cùng câu hỏi) → giữ "đang gửi" và báo poll tiếp.
+    if (row.hsStatus === "answering" && it.status === "need_info" && it.question?.id === row.hsQuestion?.id) {
+      answering = true;
+      continue;
+    }
     if (it.status === "completed" && it.result) {
       if (row.hsStatus !== "completed") fresh.add(it.id);
       const cands = candidatesFromResult(it.result);
+      const retax = row.hsConfirmed && tax ? retaxConfirmed(row, cands, tax) : {};
+      // Chỉ dựng lại tờ khai khi thuế thật sự đổi (poll 3 giây/lần ghi lại item đã completed).
+      if ("importDutyRate" in retax && (retax.importDutyRate !== row.importDutyRate || retax.vatRate !== row.vatRate || JSON.stringify(retax.taxDetail ?? null) !== JSON.stringify(row.taxDetail))) retaxed = true;
       await r.lineItems.update(row.orgId, row.id, {
         hsStatus: "completed", hsSuggested: cands[0]!.code, hsConfidence: cands[0]!.confidence, hsQuestion: null, hsError: null,
-        hsDetail: { reasoning: it.result.reasoning, legalBasis: it.result.legal_basis, warnings: it.result.warnings }, updatedAt: now,
+        hsDetail: {
+          reasoning: it.result.reasoning, legalBasis: it.result.legal_basis, warnings: it.result.warnings,
+          ...(it.result.description_vi ? { descriptionVi: it.result.description_vi } : {}),
+          ...(row.hsDetail?.answered?.length ? { answered: row.hsDetail.answered } : {}),
+        },
+        ...retax, updatedAt: now,
       });
       await r.suggestions.replaceForItem(row.orgId, row.id, cands.map((c) => ({
         id: deps.idGen.next("sug"), orgId, lineItemId: row.id, code: c.code, description: c.description, confidence: c.confidence, whyNot: c.whyNot,
-        rates: { importRate: c.importRate, basis: c.basis, agreement: c.agreement, vatRate: c.vatRate }, source: deps.hs.name, createdAt: now,
+        rates: {
+          importRate: c.importRate, basis: c.basis, agreement: c.agreement, vatRate: c.vatRate,
+          vatCode: c.vatCode ?? null, vatNote: c.vatNote ?? null, vatCertain: c.vatCertain ?? null, normalImportRate: c.normalImportRate ?? null,
+        },
+        source: deps.hs.name, createdAt: now,
       })));
     } else if (it.status === "completed" || it.status === "failed" || it.status === "cancelled") {
       const error = it.error ?? { code: "NO_RESULT", message: "HSCodePro không trả kết quả" };
@@ -58,7 +124,7 @@ async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string,
       await r.lineItems.update(row.orgId, row.id, { hsStatus: it.status, hsQuestion: null, hsError: null, updatedAt: now });
     }
   }
-  return fresh.size;
+  return { fresh: fresh.size, answering, retaxed };
 }
 
 /** Dòng nhật ký agent cho từng dòng hàng theo trạng thái phân loại. */
@@ -82,7 +148,9 @@ export function hsSummaryLogs(rows: LineItemRow[], at: string): AgentLog[] {
 }
 
 /**
- * Gửi các dòng chưa xác nhận (hoặc chỉ `lineItemIds`) thành lượt ≤ 50 dòng.
+ * Gửi các dòng hàng (hoặc chỉ `lineItemIds`) thành lượt ≤ 50 dòng – GỒM CẢ dòng đã xác nhận mã HS: không đổi mã đã xác nhận,
+ * chỉ để lấy thuế mới nhất (đổi C/O, xuất xứ, biểu thuế) cho đúng mã đó; dòng đã xác nhận gửi kèm mã đó làm `invoice_hs` gợi ý.
+ * Câu đã trả lời AI trước đây gửi kèm mô tả để không bị hỏi lại.
  * Gửi lại cả hồ sơ → hủy lượt cũ còn dở. Kết quả có ngay → ghi luôn; còn processing → hẹn hs-poll.
  */
 export async function startHsClassification(
@@ -95,7 +163,10 @@ export async function startHsClassification(
   const now = deps.clock.now();
   const rows = await deps.uow.asOrg(ctx, (r) => r.lineItems.list(c.orgId, dossierId));
   // Dòng đã có mã học từ tờ khai trước (đủ số lần) không gửi lại HSCodePro – trừ khi người khai chọn phân loại lại đúng dòng đó.
-  const targets = rows.filter((x) => !x.hsConfirmed && (opts.lineItemIds ? opts.lineItemIds.includes(x.id) : !x.hsDetail?.learned));
+  const targets = rows.filter((x) => (opts.lineItemIds ? opts.lineItemIds.includes(x.id) : !x.hsDetail?.learned));
+  const tax = await retaxCtxFor(deps, c.orgId, dossierId);
+  /** Mô tả gửi đi: mô tả dòng + bổ sung của người khai + các câu đã trả lời AI (không hỏi lại câu cũ). */
+  const describe = (x: LineItemRow) => [x.description, opts.extra?.[x.id], ...(x.hsDetail?.answered ?? [])].filter((v): v is string => !!v && !!v.trim()).join(" – ");
 
   if (!opts.lineItemIds) {
     const open = await deps.uow.asOrg(ctx, (r) => r.hsJobs.openForDossier(c.orgId, dossierId));
@@ -111,7 +182,7 @@ export async function startHsClassification(
   const byLine = new Map(targets.map((x) => [x.lineNo, x]));
   // Cùng mặt hàng → chỉ gửi dòng đầu; dòng sau đi theo (cùng trạng thái, cùng item HSCodePro).
   const { reps, followers } = groupSameGoods(
-    targets.map((x) => ({ lineNo: x.lineNo, description: opts.extra?.[x.id] ? `${x.description} – ${opts.extra[x.id]}` : x.description, quantity: x.quantity, unit: x.unit, amount: x.amount, origin: x.origin, invoiceHsCode: x.invoiceHsCode })),
+    targets.map((x) => ({ lineNo: x.lineNo, description: describe(x), quantity: x.quantity, unit: x.unit, amount: x.amount, origin: x.origin, invoiceHsCode: x.hsConfirmed ? x.hsConfirmed.replace(/\D/g, "") : x.invoiceHsCode })),
   );
   /** Id dòng của nhóm (dòng đầu + dòng trùng). */
   const groupIds = (repLineNo: number) => [byLine.get(repLineNo)!.id, ...(followers.get(repLineNo) ?? []).map((f) => byLine.get(f.lineNo)!.id)];
@@ -129,6 +200,7 @@ export async function startHsClassification(
 
   const jobIds: string[] = [];
   let pending = false;
+  let retaxedAny = false;
   const markLines = (lineNos: number[], patch: Parameters<DeclarationRepos["lineItems"]["update"]>[2]) =>
     deps.uow.asOrg(ctx, async (r) => {
       for (const n of lineNos) for (const id of groupIds(n)) await r.lineItems.update(c.orgId, id, { ...patch, hsJobId: null, hsItemId: null, updatedAt: now });
@@ -184,9 +256,12 @@ export async function startHsClassification(
       await r.hsJobs.update(job.orgId, job.id, { externalId: api.id, status: job.status, updatedAt: now });
       for (const it of api.items) {
         if (!byLine.has(it.line_no)) continue;
-        for (const id of groupIds(it.line_no)) await r.lineItems.update(c.orgId, id, { hsJobId: job.id, hsItemId: it.id, hsStatus: it.status, hsQuestion: null, hsError: null, hsDetail: null, hsSuggested: null, hsConfidence: null, updatedAt: now });
+        for (const id of groupIds(it.line_no)) {
+          const prev = rows.find((x) => x.id === id)?.hsDetail?.answered;
+          await r.lineItems.update(c.orgId, id, { hsJobId: job.id, hsItemId: it.id, hsStatus: it.status, hsQuestion: null, hsError: null, hsDetail: prev?.length ? { reasoning: "", legalBasis: [], warnings: [], answered: prev } : null, hsSuggested: null, hsConfidence: null, updatedAt: now });
+        }
       }
-      await ingest(deps, r, c.orgId, job, api);
+      if ((await ingest(deps, r, c.orgId, job, api, tax)).retaxed) retaxedAny = true;
     });
     jobIds.push(job.id);
     if (busyApi(api)) {
@@ -194,6 +269,8 @@ export async function startHsClassification(
       await deps.queue.enqueue("hs-poll", { orgId: c.orgId, userId: c.userId, dossierId, hsJobId: job.id }, { delayMs: HS_POLL_MS });
     }
   }
+  // Thuế dòng đã xác nhận đổi → tờ khai nháp tính lại tiền thuế.
+  if (retaxedAny) await rebuildDraft(deps, c, dossierId);
   await deps.dossiers.publish(c.orgId, dossierId, { type: "dossier.updated" });
   return ok({ jobIds, skipped: skipped.length, pending });
 }
@@ -202,7 +279,7 @@ export async function startHsClassification(
 export async function unsentHsLineIds(deps: DeclarationDeps, c: SysCtx, dossierId: string, rows: LineItemRow[]): Promise<string[]> {
   const open = await deps.uow.asOrg(asCtx(c), (r) => r.hsJobs.openForDossier(c.orgId, dossierId));
   const pending = new Set(open.filter((j) => j.status === "pending").map((j) => j.id));
-  return rows.filter((it) => !it.hsConfirmed && it.hsStatus === "queued" && (it.hsJobId === null || pending.has(it.hsJobId))).map((it) => it.id);
+  return rows.filter((it) => it.hsStatus === "queued" && (it.hsJobId === null || pending.has(it.hsJobId))).map((it) => it.id);
 }
 
 /** Lượt hết processing và agent đang chờ ở bước tra HS → đánh dấu xong + đẩy lại run-agent. */
@@ -231,11 +308,15 @@ export async function pollHsJob(deps: DeclarationDeps, input: SysCtx & { dossier
   const api = await deps.hs.get(job.externalId);
   const polls = job.polls + 1;
   const now = deps.clock.now();
-  const fresh = await deps.uow.asOrg(ctx, (r) => ingest(deps, r, input.orgId, job, api));
+  const tax = await retaxCtxFor(deps, input.orgId, input.dossierId);
+  const got = await deps.uow.asOrg(ctx, (r) => ingest(deps, r, input.orgId, job, api, tax));
   // Chỉ lượt hỏi có kết quả mới mới ghi (hỏi 3 giây/lần mà chưa xong thì không); chạy lại job → dòng đã completed, không đếm lại.
-  if (fresh > 0) await meterSafely(deps.usage, { orgId: input.orgId, dossierId: input.dossierId, provider: "HSCODEPRO", kind: "HS_RESULT", operation: "POLL", quantity: fresh, meta: { externalJobId: job.externalId } });
+  if (got.fresh > 0) await meterSafely(deps.usage, { orgId: input.orgId, dossierId: input.dossierId, provider: "HSCODEPRO", kind: "HS_RESULT", operation: "POLL", quantity: got.fresh, meta: { externalJobId: job.externalId } });
+  if (got.retaxed) await rebuildDraft(deps, input, input.dossierId);
 
-  const busy = busyApi(api);
+  // Còn dòng "đang gửi câu trả lời" mà HSCodePro vẫn trả câu hỏi cũ → câu trả lời chưa được xử lý: poll tiếp (trong giới hạn số lần),
+  // không dừng sớm để dòng kẹt "đang gửi". Dừng khi câu hỏi đổi (ingest ghi need_info mới) hoặc dòng sang trạng thái khác.
+  const busy = busyApi(api) || got.answering;
   if (busy && polls < HS_MAX_POLLS) {
     await deps.uow.asOrg(ctx, (r) => r.hsJobs.update(job.orgId, job.id, { polls, status: "processing", updatedAt: now }));
     await deps.queue.enqueue("hs-poll", { orgId: input.orgId, userId: input.userId, dossierId: input.dossierId, hsJobId: job.id }, { delayMs: HS_POLL_MS });
@@ -246,7 +327,7 @@ export async function pollHsJob(deps: DeclarationDeps, input: SysCtx & { dossier
     if (busy) {
       // Quá thời gian chờ: dòng chưa xong → lỗi TIMEOUT, người khai bấm "Phân loại lại".
       for (const row of await r.lineItems.list(input.orgId, input.dossierId)) {
-        if (row.hsJobId === job.id && (row.hsStatus === "queued" || row.hsStatus === "processing")) await r.lineItems.update(row.orgId, row.id, { hsStatus: "failed", hsError: { code: "TIMEOUT", message: "Phân loại quá 15 phút chưa xong" }, updatedAt: now });
+        if (row.hsJobId === job.id && (row.hsStatus === "queued" || row.hsStatus === "processing" || row.hsStatus === "answering")) await r.lineItems.update(row.orgId, row.id, { hsStatus: "failed", hsError: { code: "TIMEOUT", message: "Phân loại quá 15 phút chưa xong" }, updatedAt: now });
       }
     }
     await r.hsJobs.update(job.orgId, job.id, { polls, status: busy ? "completed" : localStatus(api), updatedAt: now });
@@ -274,6 +355,15 @@ async function view(deps: DeclarationDeps, ctx: Ctx, lineItemId: string): Promis
   });
 }
 
+/** Câu trả lời → dòng chữ "Câu hỏi: lựa chọn – trả lời khác" (bỏ câu không có trả lời). */
+export function answeredLines(q: NonNullable<LineItemRow["hsQuestion"]>, input: HsAnswerInput): string[] {
+  return q.questions.flatMap((x) => {
+    const a = input.answers.find((y) => y.id === x.id);
+    const parts = [...(a?.selected ?? []), a?.custom?.trim() || null].filter(Boolean);
+    return parts.length ? [`${x.header ?? x.question}: ${parts.join(" – ")}`] : [];
+  });
+}
+
 /** Người khai trả lời câu hỏi của AI. Chỉ khi dòng đang chờ đúng câu hỏi đó; gửi đi qua job hs-answer. */
 export async function answerHsQuestion(deps: DeclarationDeps, ctx: Ctx, lineItemId: string, input: HsAnswerInput): Promise<Result<LineItem>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -286,9 +376,14 @@ export async function answerHsQuestion(deps: DeclarationDeps, ctx: Ctx, lineItem
   if (it.hsStatus !== "need_info" || it.hsQuestion?.id !== input.questionId) return err(domainError("INVALID_STATE", "Câu hỏi đã được trả lời hoặc không còn hiệu lực – tải lại bảng"));
   const ids = new Set(it.hsQuestion.questions.map((q) => q.id));
   if (input.answers.length !== ids.size || input.answers.some((a) => !ids.has(a.id))) return err(domainError("VALIDATION", "Cần trả lời đủ từng câu hỏi"));
+  // Lưu lại câu đã trả lời ("câu hỏi: trả lời") – phân loại lại / chạy lại agent gửi kèm để AI không hỏi lại câu cũ.
+  const said = answeredLines(it.hsQuestion, input);
   // Dòng trùng mặt hàng dùng chung câu hỏi → trả lời một dòng là cả nhóm chuyển "đang gửi".
   await deps.uow.asOrg(ctx, async (r) => {
-    for (const x of await sameItemRows(r, it)) await r.lineItems.update(x.orgId, x.id, { hsStatus: "answering", updatedAt: deps.clock.now() });
+    for (const x of await sameItemRows(r, it)) {
+      const answered = [...new Set([...(x.hsDetail?.answered ?? []), ...said])];
+      await r.lineItems.update(x.orgId, x.id, { hsStatus: "answering", hsDetail: { reasoning: x.hsDetail?.reasoning ?? "", legalBasis: x.hsDetail?.legalBasis ?? [], warnings: x.hsDetail?.warnings ?? [], ...(x.hsDetail?.learned ? { learned: x.hsDetail.learned } : {}), answered }, updatedAt: deps.clock.now() });
+    }
   });
   await deps.queue.enqueue("hs-answer", { orgId: ctx.orgId, userId: ctx.userId, dossierId: it.dossierId, lineItemId: it.id, questionId: input.questionId, answers: input.answers }, { jobId: `hs-answer:${it.id}:${deps.idGen.next("job")}` });
   await deps.dossiers.publish(ctx.orgId, it.dossierId, { type: "dossier.updated" });

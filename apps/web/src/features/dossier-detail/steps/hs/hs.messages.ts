@@ -35,6 +35,10 @@ export const HS_MESSAGES = defineMessages({
     originError: "Nhập 2 chữ in hoa",
     extraLabel: "Bổ sung mô tả cho AI",
     extraHint: "Tên hàng, model, vật liệu, công dụng, kích thước – càng rõ AI càng ít phải hỏi lại",
+    applySame: "Áp dụng cho {n} dòng hàng giống nhau cùng câu hỏi: dòng {lines}",
+    answerSentMany: "Đã gửi câu trả lời cho {n} dòng",
+    answerSentPartial: "Đã gửi {ok}/{n} dòng – {fail} dòng chưa gửi được, mở lại để trả lời",
+    descriptionVi: "Mô tả tiếng Việt gợi ý: {desc}",
     cancel: "Hủy",
   },
   en: {
@@ -70,6 +74,10 @@ export const HS_MESSAGES = defineMessages({
     originError: "Enter 2 uppercase letters",
     extraLabel: "Extra description for AI",
     extraHint: "Product name, model, material, use, dimensions – the clearer, the fewer follow-up questions",
+    applySame: "Apply to {n} similar lines with the same question: lines {lines}",
+    answerSentMany: "Answer sent for {n} lines",
+    answerSentPartial: "Sent {ok}/{n} lines – {fail} could not be sent, open them again to answer",
+    descriptionVi: "Suggested Vietnamese description: {desc}",
     cancel: "Cancel",
   },
   zh: {
@@ -105,6 +113,10 @@ export const HS_MESSAGES = defineMessages({
     originError: "请输入 2 个大写字母",
     extraLabel: "为 AI 补充描述",
     extraHint: "品名、型号、材质、用途、尺寸 – 越清楚，AI 追问越少",
+    applySame: "同样应用于 {n} 个问题相同的类似行：第 {lines} 行",
+    answerSentMany: "已为 {n} 行发送回答",
+    answerSentPartial: "已发送 {ok}/{n} 行 – {fail} 行未能发送，请重新打开回答",
+    descriptionVi: "建议越南语描述：{desc}",
     cancel: "取消",
   },
 });

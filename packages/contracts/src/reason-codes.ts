@@ -37,6 +37,7 @@ export const REASON_TEXT_VI = {
   DECLARATION_ALREADY_APPROVED: "Tờ khai đã được duyệt",
   BLOCKER_RULES_FAILED_FIX_IN_OCR: "Còn {n} luật lỗi chặn truyền – xử lý ở bước OCR & kiểm tra",
   HS_UNCONFIRMED: "Còn {n} mã HS chưa xác nhận",
+  TAX_NEEDS_REVIEW: "Còn {n} dòng thuế suất cần kiểm tra lại (mã HS chưa có thuế từ HSCodePro) – chờ tra thuế xong hoặc chọn lại mã",
   EXCHANGE_RATE_MISSING: "Chưa có tỷ giá tính thuế – nhập tỷ giá rồi chạy lại agent",
   FOUR_EYES: "Người duyệt phải khác người tạo hồ sơ (nguyên tắc 4 mắt)",
   BLOCKING_FIELDS_MISSING: "Chưa khai chỉ tiêu bắt buộc: {fields}",

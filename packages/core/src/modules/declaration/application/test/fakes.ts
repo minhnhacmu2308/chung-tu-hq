@@ -17,19 +17,34 @@ export class ScriptedHs implements HsClassificationService {
   jobs = new Map<string, HsJob>();
   onGet: ((job: HsJob) => HsJob) | null = null;
   private seq = 0;
-  constructor(private rules: { match: RegExp; code: string; description: string; confidence: number; importRate?: number; basis?: "MFN" | "FTA"; agreement?: string; vat?: number; alternatives?: { code: string; importRate: number; whyNot: string }[] }[]) {}
+  /**
+   * `fta`: thuế ưu đãi theo `co_form` gửi lên (vd { E: { agreement: "ACFTA", rate: 0 } }) – không có C/O hợp lệ thì MFN `importRate`.
+   * `vat` null + `vatCode` "VK…" = không chịu thuế; `vatCode`/`vatCertain`/`vatNote` mô phỏng trường mở rộng của hscode-api mới.
+   */
+  constructor(private rules: {
+    match: RegExp; code: string; description: string; confidence: number; importRate?: number; basis?: "MFN" | "FTA"; agreement?: string; vat?: number | null;
+    vatCode?: string; vatCertain?: boolean; vatNote?: string; fta?: Record<string, { agreement: string; rate: number }>; alternatives?: { code: string; importRate: number; whyNot: string }[];
+  }[]) {}
   async create(req: HsCreateRequest): Promise<HsJob> {
     this.created.push(req);
     if (this.failOn && req.items.some((i) => i.description.includes(this.failOn!))) throw new HsApiError(503, "HTTP_503", "classifier 503");
     const id = `hsjob_${++this.seq}`;
-    const tax = (rate: number, basis: "MFN" | "FTA" = "MFN", agreement: string | null = null, vat = 10) => ({ import: { rate, basis, agreement }, vat: { rate: vat, note: null }, source_date: req.import_date ?? "" });
+    const tax = (rate: number, basis: "MFN" | "FTA" = "MFN", agreement: string | null = null, vat: number | null = 10, ext: { vatCode?: string; vatCertain?: boolean; vatNote?: string } = {}) => ({
+      import: { rate, basis, agreement },
+      vat: { rate: vat, note: ext.vatNote ?? null, ...(ext.vatCode ? { vnaccs_code: ext.vatCode } : {}), ...(ext.vatCertain !== undefined ? { certain: ext.vatCertain } : {}) },
+      source_date: req.import_date ?? "",
+    });
     const items: HsJobItem[] = req.items.map((it, i) => {
       this.calls++;
       const r = this.rules.find((x) => x.match.test(it.description));
       const base = { id: `${id}_it${i + 1}`, line_no: it.line_no, question: null };
       if (!r) return { ...base, status: "failed" as const, result: null, error: { code: "NO_SUGGESTION", message: "Không có gợi ý" } };
       return { ...base, status: "completed" as const, error: null, result: {
-        hs_code: r.code.replace(/\D/g, ""), hs_description: r.description, confidence: Math.round(r.confidence * 100), reasoning: "test", legal_basis: [], warnings: [], tax: tax(r.importRate ?? 5, r.basis, r.agreement ?? null, r.vat),
+        hs_code: r.code.replace(/\D/g, ""), hs_description: r.description, confidence: Math.round(r.confidence * 100), reasoning: "test", legal_basis: [], warnings: [], tax: (() => {
+          const f = it.co_form ? r.fta?.[it.co_form] : undefined;
+          const ext = { ...(r.vatCode ? { vatCode: r.vatCode } : {}), ...(r.vatCertain !== undefined ? { vatCertain: r.vatCertain } : {}), ...(r.vatNote ? { vatNote: r.vatNote } : {}) };
+          return f ? tax(f.rate, "FTA", f.agreement, r.vat === undefined ? 10 : r.vat, ext) : tax(r.importRate ?? 5, r.basis, r.agreement ?? null, r.vat === undefined ? 10 : r.vat, ext);
+        })(),
         alternatives: (r.alternatives ?? []).map((a) => ({ hs_code: a.code.replace(/\D/g, ""), hs_description: "", confidence: 10, why_not: a.whyNot, tax: tax(a.importRate) })),
       } };
     });

@@ -10,6 +10,8 @@ Chỉ mục mọi tài liệu gốc của Hải quan mà hệ thống dựa vào
 Đã dựng thành dữ liệu máy đọc được – dev **dùng `loadCodeList(id)` / `CODE_LIST_META` từ `@kb/contracts`**, không đọc file Excel.
 Chi tiết quy tắc chuyển đổi và lưu ý về dữ liệu nguồn: `packages/contracts/src/code-lists/README.md`.
 
+Giao diện dùng thẳng các danh mục này (`useCodeList`): Tạo hồ sơ (loại hình `TYPE_CODE`, chi cục `A038`), Cài đặt › Mặc định khai báo (`TYPE_CODE`, `A038`, `PAYMENT`), Chi phí và điều chỉnh trị giá (`CURRENCY`), ô mã trên tờ khai (`CodeInput`). Không viết cứng danh sách mã ở `apps/web`.
+
 **Khi Hải quan ban hành danh mục mới:**
 
 1. Đặt file mới vào thư mục nguồn (giữ tên gốc), cập nhật kho tài liệu chung.

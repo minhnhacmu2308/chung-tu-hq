@@ -14,7 +14,7 @@ export async function login(page: Page) {
 /** Tạo hồ sơ nhập khẩu qua API (cùng cookie phiên) rồi mở trang chi tiết; trả về id. */
 export async function createDossier(page: Page) {
   const res = await page.request.post("/api/dossiers", {
-    data: { direction: "NK", typeCode: "A11", partner: "HANSOL PRECISION", customsOffice: "03CE – Chi cục HQ CK cảng Hải Phòng KV III", skillSetId: "default", dueDate: "2026-10-31", incoterm: "FCA", transportMode: "SEA_CONTAINER" },
+    data: { direction: "NK", typeCode: "A11", partner: "HANSOL PRECISION", customsOffice: "03CE – Hải quan cửa khẩu cảng Hải Phòng khu vực 2", skillSetId: "default", dueDate: "2026-10-31", incoterm: "FCA", transportMode: "SEA_CONTAINER" },
   });
   expect(res.ok()).toBeTruthy();
   const { id } = (await res.json()) as { id: string };

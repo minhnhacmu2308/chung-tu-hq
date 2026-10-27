@@ -8,7 +8,7 @@ import { answerHs, declarationKeys, reclassifyHs } from "@/api/declaration";
 import { ApiError } from "@/lib/api-error";
 import type { LineItem } from "@/mocks/types";
 import { errorMessage } from "../declaration-parts";
-import { buildAnswers, emptyAnswerState, isAnswerComplete, type AnswerState } from "./hs-answer";
+import { answersFor, buildAnswers, emptyAnswerState, isAnswerComplete, sameQuestionItems, type AnswerState } from "./hs-answer";
 import { HS_MESSAGES } from "./hs.messages";
 
 const useInvalidateItems = (dossierId: string) => {
@@ -19,27 +19,41 @@ const useInvalidateItems = (dossierId: string) => {
   };
 };
 
-export function HsAnswerDialog({ item, onClose, dossierId }: { item: LineItem | null; onClose: () => void; dossierId: string }) {
+/** `items` = mọi dòng của hồ sơ: dòng hàng giống nhau đang chờ cùng câu hỏi được trả lời luôn một lần. */
+export function HsAnswerDialog({ item, items = [], onClose, dossierId }: { item: LineItem | null; items?: readonly LineItem[]; onClose: () => void; dossierId: string }) {
   const t = useMessages(HS_MESSAGES);
   const q = item?.hs?.question ?? null;
   return (
     <Dialog open={item !== null && q !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={fill(t.answerTitle, { line: item?.lineNo ?? "" })} icon={<MessageCircleQuestion className="h-4 w-4" />} description={item?.description} size="md">
-        {item && q && <AnswerForm key={q.id} item={item} onDone={onClose} dossierId={dossierId} />}
+        {item && q && <AnswerForm key={q.id} item={item} same={sameQuestionItems(item, items)} onDone={onClose} dossierId={dossierId} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function AnswerForm({ item, onDone, dossierId }: { item: LineItem; onDone: () => void; dossierId: string }) {
+function AnswerForm({ item, same, onDone, dossierId }: { item: LineItem; same: LineItem[]; onDone: () => void; dossierId: string }) {
   const t = useMessages(HS_MESSAGES);
   const q = item.hs!.question!;
   const [state, setState] = useState<AnswerState>(() => emptyAnswerState(q));
+  // Hàng giống nhau (khác số lượng/trị giá) thường cùng câu hỏi → mặc định trả lời luôn cho các dòng đó.
+  const [applySame, setApplySame] = useState(true);
   const invalidate = useInvalidateItems(dossierId);
   const send = useMutation({
-    mutationFn: () => answerHs(item.id, buildAnswers(q, state)),
-    onSuccess: () => {
-      toast({ tone: "success", title: fill(t.answerSent, { line: item.lineNo }), description: t.answerSentDesc });
+    mutationFn: async () => {
+      await answerHs(item.id, buildAnswers(q, state));
+      const others = applySame ? same : [];
+      let ok = 1;
+      // Theo lô nhỏ như xác nhận nhiều dòng – không dồn hàng chục request một lúc; dòng lỗi để người dùng trả lời lại.
+      for (let i = 0; i < others.length; i += 6) {
+        const res = await Promise.allSettled(others.slice(i, i + 6).map((o) => answerHs(o.id, answersFor(o.hs!.question!, q, state))));
+        ok += res.filter((r) => r.status === "fulfilled").length;
+      }
+      return { ok, n: others.length + 1 };
+    },
+    onSuccess: ({ ok, n }) => {
+      if (ok < n) toast({ tone: "warning", title: fill(t.answerSentPartial, { ok, n, fail: n - ok }) });
+      else toast({ tone: "success", title: n > 1 ? fill(t.answerSentMany, { n }) : fill(t.answerSent, { line: item.lineNo }), description: t.answerSentDesc });
       invalidate();
       onDone();
     },
@@ -101,6 +115,14 @@ function AnswerForm({ item, onDone, dossierId }: { item: LineItem; onDone: () =>
             </Stack>
           );
         })}
+        {same.length > 0 && (
+          <Checkbox
+            className="rounded-md border border-border bg-surface-muted p-3"
+            label={fill(t.applySame, { n: same.length, lines: same.map((o) => o.lineNo).join(", ") })}
+            checked={applySame}
+            onChange={(ev) => setApplySame(ev.target.checked)}
+          />
+        )}
       </Stack>
       <DialogFooter>
         <Button variant="ghost" type="button" onClick={onDone}>

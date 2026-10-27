@@ -17,6 +17,29 @@ export function useCodeListState(id: CodeListId | undefined): { state: CodeListS
   return { state, retry: () => id && cache.retry(id) };
 }
 
+/**
+ * Nhiều danh mục cho một màn (vd Tạo hồ sơ: TYPE_CODE + A038): danh mục (null khi chưa có), đang tải, lỗi + thử lại.
+ * Màn dùng để báo "Đang tải…" và lỗi kèm thử lại – không để danh sách trống im lặng.
+ */
+export function useCodeLists<K extends CodeListId>(ids: readonly K[]): { lists: Record<K, CodeListEntry[] | null>; loading: boolean; error: boolean; retry: () => void } {
+  const snapshot = () => ids.map((id) => cache.get(id));
+  const key = ids.join(",");
+  // useSyncExternalStore cần ảnh chụp ổn định: ghép trạng thái từng danh mục thành chuỗi, đọc lại khi chuỗi đổi.
+  const sig = useSyncExternalStore(cache.subscribe, () => snapshot().map((s) => s?.status ?? "none").join(","), () => "");
+  useEffect(() => {
+    for (const id of ids) cache.ensure(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  const states = snapshot();
+  const lists = Object.fromEntries(ids.map((id, i) => [id, states[i]?.status === "ready" ? (states[i] as { list: CodeListEntry[] }).list : null])) as Record<K, CodeListEntry[] | null>;
+  return {
+    lists,
+    loading: sig === "" || states.some((s) => !s || s.status === "loading"),
+    error: states.some((s) => s?.status === "error"),
+    retry: () => ids.forEach((id) => cache.get(id)?.status === "error" && cache.retry(id)),
+  };
+}
+
 /** null khi đang tải, lỗi, hoặc ô không có danh mục. */
 export function useCodeList(id: CodeListId | undefined): CodeListEntry[] | null {
   const { state } = useCodeListState(id);

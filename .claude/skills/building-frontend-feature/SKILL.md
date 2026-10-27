@@ -36,6 +36,7 @@ apps/web/src/
 
 | Cần | Dùng | Không làm |
 |---|---|---|
+| Danh sách mã Hải quan (chi cục A038, loại hình TYPE_CODE, tiền tệ CURRENCY, phương thức thanh toán PAYMENT…) | `useCodeList("<ID>")` từ danh mục `@kb/contracts` code-lists (ô mã trên tờ khai: `CodeInput`) | Mảng `{ value, label }` mã viết cứng trong feature / `*.vi.ts` |
 | Thẻ chỉ số / KPI đầu trang | `StatCard` (số `number` tự chạy đếm) trong `Grid cols={{ base: 2, xl: 4 }} stagger` | Tự ghép `Card` + `CardTitle` thành KPI |
 | Form từ ~5 trường | Chia nhóm bằng `FormSection`; ô ngắn (ngày, mã, số ĐT) thêm `className="md:max-w-xs"` | Một cột trường dài hoặc lưới 2–3 cột đều nhau |
 | Trạng thái nghiệp vụ (hồ sơ, tờ khai, luồng, đối chiếu) | `StatusBadge` – thêm trạng thái mới vào `STATUS_META` (+ nhãn EN) của `@kb/ui` | Khai báo bảng `{ label, tone }` trong feature rồi dùng `Badge` |

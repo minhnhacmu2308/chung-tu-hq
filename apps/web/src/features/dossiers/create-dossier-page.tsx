@@ -14,10 +14,14 @@ import { z } from "zod";
 import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
 import { addInboxToDossier, inboxKeys, listInbox } from "@/api/mailbox";
 import { errorText } from "@/lib/reason-codes";
-import { getDeclarationProfile, settingsKeys } from "@/api/settings";
+import { getDeclarationProfile, getOrganization, settingsKeys } from "@/api/settings";
+import { formatDate } from "@/lib/format";
+import { useCodeLists } from "@/features/declaration-form/use-code-list";
+import { LoadError } from "@/components/common/load-error";
+import { dossierQuota, isQuotaError } from "./dossier-quota";
 import { prefillFromProfile } from "./profile-prefill";
 import type { Direction, Dossier } from "@/mocks/types";
-import { CUSTOMS_OFFICES, skillSetOptions, suggestedDocuments, typeCodesIn, typeGroupOf, typeGroupOptions, type TypeGroup } from "./create-dossier-options";
+import { officeOptions, skillSetOptions, suggestedDocuments, typeCodesIn, typeGroupOf, typeGroupOptions, type TypeGroup } from "./create-dossier-options";
 import { DIRECTION_LABELS, transportLabels, transportOptions } from "./dossier-display";
 import { CREATE_DOSSIER_MESSAGES } from "./dossiers.messages";
 
@@ -85,6 +89,9 @@ export function CreateDossierPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.data]);
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
+  // Hết hạn mức hồ sơ của gói → báo ngay khi mở trang, không để người dùng điền xong mới biết.
+  const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
+  const quota = org.data ? dossierQuota(org.data) : null;
   // Tạo hồ sơ từ email ở Hộp thư chứng từ (?inbox=<mã email>): tạo xong thì thêm các file chờ xếp vào hồ sơ mới.
   const inboxId = useSearchParams().get("inbox");
   const inbox = useQuery({ queryKey: inboxKeys.list, queryFn: listInbox, enabled: !!inboxId });
@@ -109,10 +116,15 @@ export function CreateDossierPage() {
   };
 
   const typeGroup = form.typeGroup ?? typeGroupOf(form.typeCode);
-  const typeOptions = typeCodesIn(form.direction, typeGroup, locale);
+  // Danh mục VNACCS (tải riêng, giữ cho cả trang): loại hình TYPE_CODE + chi cục A038 (mã sau sắp xếp 2025). Đang tải → ô chọn báo đang tải; lỗi → báo + thử lại.
+  const codeLists = useCodeLists(["TYPE_CODE", "A038"] as const);
+  const typeCodeList = codeLists.lists.TYPE_CODE;
+  const typeOptions = typeCodesIn(typeCodeList ?? [], form.direction, typeGroup);
+  const officeList = codeLists.lists.A038;
+  const offices = useMemo(() => officeOptions(officeList ?? []), [officeList]);
   // Đổi nhóm: giữ mã nếu vẫn thuộc nhóm, không thì chọn mã đầu của nhóm.
   const changeTypeGroup = (g: TypeGroup) => {
-    const codes = typeCodesIn(form.direction, g, locale);
+    const codes = typeCodesIn(typeCodeList ?? [], form.direction, g);
     const keep = codes.some((o) => o.value === form.typeCode);
     setForm((f) => ({ ...f, typeGroup: g, typeCode: keep ? f.typeCode : (codes[0]?.value ?? null) }));
     setTouched((t) => new Set(t).add("typeCode"));
@@ -133,7 +145,15 @@ export function CreateDossierPage() {
       toast({ tone: "success", title: t.created, description: fill(t.createdNext, { code: d.code }) });
       router.push(`/dossiers/${d.id}?step=upload`);
     },
-    onError: () => toast({ tone: "danger", title: t.createFailed, description: t.createFailedHint }),
+    onError: (e) => {
+      if (isQuotaError(e)) {
+        // Số trên máy có thể cũ (người khác vừa tạo) – tải lại để hiện khung hết hạn mức.
+        void qc.invalidateQueries({ queryKey: settingsKeys.org });
+        toast({ tone: "warning", title: t.createFailed, description: errorText(e, locale, t.createFailedHint) });
+        return;
+      }
+      toast({ tone: "danger", title: t.createFailed, description: errorText(e, locale, t.createFailedHint) });
+    },
   });
 
   const submit = (e: FormEvent) => {
@@ -149,7 +169,7 @@ export function CreateDossierPage() {
       return;
     }
     const v = parsed.data;
-    const office = CUSTOMS_OFFICES.find((o) => o.value === v.customsOffice)?.label ?? v.customsOffice;
+    const office = offices.find((o) => o.value === v.customsOffice)?.label ?? v.customsOffice;
     create.mutate({
       direction: v.direction,
       typeCode: v.typeCode,
@@ -180,6 +200,18 @@ export function CreateDossierPage() {
       {fromMail && mailFiles.length > 0 && (
         <Alert tone="info" title={t.fromInboxTitle}>{fill(t.fromInboxBody, { subject: fromMail.subject, from: fromMail.fromName, n: mailFiles.length })}</Alert>
       )}
+
+      {quota?.full && org.data && (
+        <Alert
+          tone="warning"
+          title={fill(t.quotaFullTitle, { used: quota.used, limit: quota.limit })}
+          action={<Button asChild size="sm" variant="secondary"><Link href="/settings?tab=plan">{t.quotaUpgrade}</Link></Button>}
+        >
+          {fill(t.quotaFullBody, { plan: org.data.plan.name, limit: quota.limit, date: formatDate(org.data.plan.renewsAt) })}
+        </Alert>
+      )}
+
+      {codeLists.error && <LoadError title={t.codeListsFailed} onRetry={codeLists.retry} />}
 
       <form onSubmit={submit} noValidate>
         <Grid cols={{ base: 1, lg: 3 }} gap="lg">
@@ -224,6 +256,7 @@ export function CreateDossierPage() {
                   <Field label={t.typeCode} required {...errorProp(errors.typeCode)}>
                     <Combobox
                       options={typeOptions}
+                      loading={codeLists.loading}
                       value={form.typeCode}
                       onChange={(v) => set("typeCode", v)}
                       placeholder={t.typeCodePlaceholder}
@@ -231,7 +264,8 @@ export function CreateDossierPage() {
                   </Field>
                   <Field label={t.office} required {...errorProp(errors.customsOffice)}>
                     <Combobox
-                      options={CUSTOMS_OFFICES}
+                      options={offices}
+                      loading={codeLists.loading}
                       value={form.customsOffice}
                       onChange={(v) => set("customsOffice", v)}
                       placeholder={t.officePlaceholder}
@@ -278,7 +312,7 @@ export function CreateDossierPage() {
               <Button asChild variant="ghost">
                 <Link href="/dossiers">{t.cancel}</Link>
               </Button>
-              <Button type="submit" loading={create.isPending}>{t.submit}</Button>
+              <Button type="submit" loading={create.isPending} disabled={!!quota?.full}>{t.submit}</Button>
             </CardFooter>
           </Card>
 

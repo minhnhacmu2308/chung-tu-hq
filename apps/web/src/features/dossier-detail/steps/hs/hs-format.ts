@@ -1,11 +1,18 @@
 // Định dạng hiển thị kết quả phân loại HS (HSCodePro) trên màn "Xác nhận mã HS".
 import type { HsCandidate, LineItemHsStatus } from "@kb/contracts";
 
-/** "5% · 10%"; FTA ghi hiệp định "0% (ACFTA) · 10%"; chưa có thuế NK → "—". */
-export function formatTax(c: HsCandidate | null | undefined): string {
+/** Thuế suất DB lưu "10.000000" → hiện "10"; "7.50" → "7.5". */
+export const trimRate = (v: string) => (v.includes(".") ? v.replace(/0+$/, "").replace(/\.$/, "") : v);
+
+/** Mã VAT VNACCS "VK…" = hàng không chịu thuế GTGT (HSCodePro trả kèm `vat.rate` null). */
+export const isVatExempt = (code: string | null | undefined) => !!code && /^VK/i.test(code);
+
+/** "5% · 10%"; FTA ghi hiệp định "0% (ACFTA) · 10%"; chưa có thuế NK → "—"; VAT null + mã VK → `exemptLabel` ("Không chịu thuế"). */
+export function formatTax(c: HsCandidate | null | undefined, exemptLabel?: string): string {
   if (!c || c.importRate === null) return "—";
-  const imp = `${c.importRate}%${c.basis === "FTA" && c.agreement ? ` (${c.agreement})` : ""}`;
-  return `${imp} · ${c.vatRate === null ? "—" : `${c.vatRate}%`}`;
+  const imp = `${trimRate(c.importRate)}%${c.basis === "FTA" && c.agreement ? ` (${c.agreement})` : ""}`;
+  const vat = c.vatRate !== null ? `${trimRate(c.vatRate)}%` : exemptLabel && isVatExempt(c.vatCode) ? exemptLabel : "—";
+  return `${imp} · ${vat}`;
 }
 
 /** Tài liệu §5: tin cậy < 60% hoặc có cảnh báo → tô màu cảnh báo. */
@@ -20,8 +27,9 @@ export function normalizeHsInput(v: string): string | null {
   return d.length === 8 ? `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}` : null;
 }
 
-/** Thuế của mã đã xác nhận (dòng hàng): mã nhập tay ngoài biểu có thể chưa có thuế suất → "—". */
-export function formatRates(importDutyRate: string | undefined, vatRate: string | undefined): string {
-  if (importDutyRate === undefined && vatRate === undefined) return "—";
-  return `${importDutyRate === undefined ? "—" : `${importDutyRate}%`} · ${vatRate === undefined ? "—" : `${vatRate}%`}`;
+/** Thuế của mã đã xác nhận (dòng hàng): mã nhập tay ngoài biểu có thể chưa có thuế suất → "—"; hàng không chịu thuế GTGT → `vatExemptLabel`. */
+export function formatRates(importDutyRate: string | undefined, vatRate: string | undefined, vatExemptLabel?: string): string {
+  if (importDutyRate === undefined && vatRate === undefined && !vatExemptLabel) return "—";
+  const vat = vatRate !== undefined ? `${trimRate(vatRate)}%` : vatExemptLabel ?? "—";
+  return `${importDutyRate === undefined ? "—" : `${trimRate(importDutyRate)}%`} · ${vat}`;
 }

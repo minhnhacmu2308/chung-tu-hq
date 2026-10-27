@@ -1,7 +1,7 @@
 "use client";
 // Khối "Chi phí và điều chỉnh trị giá" ở bước OCR & kiểm tra: cước (1.47), bảo hiểm (1.48), khoản điều chỉnh (1.49); xuất khẩu theo 2.40.
 // Chứng từ là nguồn chính; người khai nhập số / ghi lý do khi chứng từ không có. Tờ khai đọc lại từ đây (ô 1.47–1.49 chỉ đọc).
-import { ADJUSTMENT_CODES, CURRENCIES, editBlockFor, FreightReasonSchema, type FreightReason, type ValueChargesView } from "@kb/contracts";
+import { ADJUSTMENT_CODES, editBlockFor, FreightReasonSchema, type FreightReason, type ValueChargesView } from "@kb/contracts";
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog, DialogContent, DialogFooter, Field, FormSection, Input, RadioGroup,
   Select, SkeletonList, Stack, fill, toast, useMessages, useUiLocale,
@@ -15,6 +15,7 @@ import { editScopeOf } from "../steps/edit-scope";
 import { getSession, sessionKeys } from "@/api/session";
 import { getValueCharges, saveValueCharges, valueChargesKeys } from "@/api/value-charges";
 import { LoadError } from "@/components/common/load-error";
+import { useCodeList } from "@/features/declaration-form/use-code-list";
 import { formatRelative } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import {
@@ -24,7 +25,6 @@ import { VALUE_CHARGES_MESSAGES } from "./value-charges.messages";
 
 const MAX_ADJUSTMENTS = 5;
 const errorProp = (e: string | undefined) => (e ? { error: e } : {});
-const CURRENCY_OPTIONS = CURRENCIES.map((c) => ({ value: c.code, label: c.code }));
 const CODE_OPTIONS = ADJUSTMENT_CODES.map((c) => ({ value: c.code, label: `${c.code} – ${c.label}` }));
 
 function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open: boolean; onOpenChange: (o: boolean) => void; view: ValueChargesView; dossierId: string; currency: string }) {
@@ -34,6 +34,10 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open
   const reasonOptions = FreightReasonSchema.options.map((r) => ({ value: r, label: freightReasonLabel(t, r) }));
   const kindOptions = [{ value: "AD", label: t.kindAdd }, { value: "SB", label: t.kindSubtract }];
   const [form, setForm] = useState<ChargesForm>(() => formFromView(view, currency));
+  // Loại tiền theo danh mục VNACCS (CURRENCY, đủ 26 mã); mã đang dùng luôn có trong danh sách kể cả khi danh mục chưa tải xong.
+  const currencyList = useCodeList("CURRENCY");
+  const CURRENCY_OPTIONS = [...new Set([...(currencyList ?? []).filter((e) => !e.inactive).map((e) => e.code), currency, form.freightCurrency, form.insuranceCurrency, ...form.adjustments.map((a) => a.currency)].filter(Boolean))]
+    .map((c) => ({ value: c, label: c }));
   const [errors, setErrors] = useState<ChargesFormErrors>({});
   const nk = view.direction === "NK";
   const insuranceApplies = nk ? !view.insuranceIncluded : view.insuranceIncluded;

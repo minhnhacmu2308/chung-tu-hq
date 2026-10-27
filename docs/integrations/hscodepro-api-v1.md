@@ -351,6 +351,20 @@ Gợi ý hiển thị:
 - VAT là đúng số trong biểu thuế VNACCS; API **không** tự áp mức giảm VAT theo
   nghị định (vd 10% → 8%). Nếu bên bạn có quy tắc giảm VAT, áp ở phía bạn.
 
+### 5.1 Trường mở rộng (hscode-api mới – optional, hợp đồng v1 giữ nguyên)
+
+| Trường | Ý nghĩa | KhaiBáo AI dùng thế nào |
+|---|---|---|
+| `tax.import.normal_rate` | Thuế NK thông thường (tham khảo khi áp FTA) | Lưu cùng ứng viên / dòng (`tax_detail.normalImportRate`) |
+| `tax.vat.rate` | Thuế suất VAT **đã tính giảm thuế** (vd 8); `null` = không chịu thuế GTGT | Dùng thẳng; `null` + mã `VK…` → VAT trống, tiền VAT 0, ghi chú "Không chịu thuế GTGT (VKxxx): …" |
+| `tax.vat.standard_rate` | Thuế suất theo Luật (0/5/10) | Tham khảo |
+| `tax.vat.vnaccs_code` | Mã khai VNACCS: VB901 (10%), VB245 (8%), VB0xx (5%), VKxxx (không chịu thuế) | Lưu trên dòng, điền chỉ tiêu mã áp dụng thuế suất GTGT (`HAG_TX5`) khi truyền |
+| `tax.vat.certain` | `false` = VAT phụ thuộc điều kiện ngoài mã HS (giấy phép, mục đích NK…) | Thêm `vat.note` vào ghi chú; màn hình hiện icon cảnh báo, tooltip = `vat.note` |
+| `tax.vat.legal_basis` | Căn cứ VAT | Chưa hiển thị riêng |
+| `result.description_vi` | Mô tả hàng tiếng Việt AI gợi ý | Hiện dưới mã gợi ý |
+
+Thiếu các trường này (HSCodePro gốc, fpt-mock) → hành vi cũ: thiếu VAT thì tạm tính 10% (VB901) kèm ghi chú.
+
 ```ts
 const formatHs = (code: string) => `${code.slice(0, 4)}.${code.slice(4, 6)}.${code.slice(6)}`;
 // "84834090" → "8483.40.90"

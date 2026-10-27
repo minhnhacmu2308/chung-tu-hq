@@ -22,6 +22,10 @@ export function toLineItem(r: LineItemRow, sugs?: HsSuggestionRow[]): LineItem {
     ...(r.importDutyRate !== null ? { importDutyRate: r.importDutyRate } : {}),
     ...(r.vatRate !== null ? { vatRate: r.vatRate } : {}),
     ...(r.policyNote ? { policyNote: r.policyNote } : {}),
+    ...(r.taxDetail?.vatCode ? { vatCode: r.taxDetail.vatCode } : {}),
+    ...(r.taxDetail?.vatNote ? { vatNote: r.taxDetail.vatNote } : {}),
+    ...(r.taxDetail && r.taxDetail.vatCertain !== null ? { vatCertain: r.taxDetail.vatCertain } : {}),
+    ...(r.taxDetail?.needsReview ? { taxNeedsReview: true } : {}),
     ...(sugs ? { hs: toLineItemHs(r, sugs) } : {}),
   };
 }
@@ -31,7 +35,11 @@ function toLineItemHs(r: LineItemRow, sugs: HsSuggestionRow[]): LineItemHs {
   return {
     status: r.hsStatus, question: r.hsQuestion, error: r.hsError,
     reasoning: r.hsDetail?.reasoning ?? null, legalBasis: r.hsDetail?.legalBasis ?? [], warnings: r.hsDetail?.warnings ?? [],
-    candidates: mine.map((x) => ({ code: x.code, description: x.description, confidence: x.confidence, whyNot: x.whyNot, importRate: x.rates?.importRate ?? null, basis: x.rates?.basis ?? null, agreement: x.rates?.agreement ?? null, vatRate: x.rates?.vatRate ?? null })),
+    candidates: mine.map((x) => ({
+      code: x.code, description: x.description, confidence: x.confidence, whyNot: x.whyNot, importRate: x.rates?.importRate ?? null, basis: x.rates?.basis ?? null, agreement: x.rates?.agreement ?? null, vatRate: x.rates?.vatRate ?? null,
+      vatCode: x.rates?.vatCode ?? null, vatNote: x.rates?.vatNote ?? null, vatCertain: x.rates?.vatCertain ?? null, normalImportRate: x.rates?.normalImportRate ?? null,
+    })),
+    ...(r.hsDetail?.descriptionVi ? { descriptionVi: r.hsDetail.descriptionVi } : {}),
   };
 }
 
@@ -85,10 +93,34 @@ export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, 
   const rows: LineItemRow[] = shipment.items.map((it) => ({
     id: deps.idGen.next("itm"), orgId, dossierId, lineNo: it.lineNo, description: learnedDescription(lessonOf(it)) ?? it.description.value ?? "", quantity: it.quantity.value ?? "0", unit: it.unit.value ?? "PCE",
     unitPrice: it.unitPrice.value ?? "0", amount: it.amount.value ?? "0", origin: it.origin.value ?? "", invoiceHsCode: it.hsOnInvoice.value,
-    hsSuggested: null, hsConfidence: null, hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null,
+    hsSuggested: null, hsConfidence: null, hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null, taxDetail: null,
     hsJobId: null, hsItemId: null, hsStatus: "idle", hsQuestion: null, hsError: null, hsDetail: null, createdAt: now, updatedAt: now,
   }));
-  const saved = await r.lineItems.upsertForDossier(orgId, dossierId, rows);
+  // Upsert giữ mã HS/thuế đã có theo số dòng. Dòng có mô tả hoặc mã HS trên invoice đổi (đọc lại chứng từ, sửa OCR) → mã/thuế cũ không còn đúng:
+  // bỏ xác nhận + kết quả phân loại cũ, ghi chú để người khai xác nhận lại – không giữ im lặng.
+  // So với mô tả GỐC trên chứng từ: dòng chỉ đổi sang mô tả đã học (bài học mới đủ số lần) không bị coi là đổi.
+  const before = new Map((await r.lineItems.list(orgId, dossierId)).map((x) => [x.lineNo, x]));
+  const rawDesc = new Map(shipment.items.map((it) => [it.lineNo, it.description.value ?? ""]));
+  const changed = new Set(rows.filter((x) => {
+    const old = before.get(x.lineNo);
+    if (!old) return false;
+    const descChanged = old.description !== x.description && old.description !== rawDesc.get(x.lineNo);
+    return descChanged || (old.invoiceHsCode ?? "") !== (x.invoiceHsCode ?? "");
+  }).map((x) => x.lineNo));
+  let saved = await r.lineItems.upsertForDossier(orgId, dossierId, rows);
+  if (changed.size) {
+    saved = await Promise.all(saved.map(async (row) => {
+      if (!changed.has(row.lineNo)) return row;
+      const patch = {
+        hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, taxDetail: null,
+        policyNote: before.get(row.lineNo)?.hsConfirmed ? `Mô tả hoặc mã HS trên invoice của dòng đã đổi – mã ${before.get(row.lineNo)!.hsConfirmed} đã bỏ xác nhận, xác nhận lại mã HS` : null,
+        hsSuggested: null, hsConfidence: null, hsStatus: "idle" as const, hsQuestion: null, hsError: null, hsDetail: null, hsJobId: null, hsItemId: null, updatedAt: now,
+      };
+      await r.lineItems.update(orgId, row.id, patch);
+      await r.suggestions.replaceForItem(orgId, row.id, []);
+      return { ...row, ...patch };
+    }));
+  }
   if (!lessons?.lines.length) return saved;
   const out: LineItemRow[] = [];
   for (const row of saved) {

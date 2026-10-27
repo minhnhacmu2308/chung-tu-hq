@@ -68,6 +68,9 @@ describe("guards", () => {
     expect(canApprove({ ...base, fourEyes: true, userId: "u1", role: "OWNER" }).ok).toBe(true);
     expect(canApprove({ ...base, exchangeRate: "0" })).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
     expect(canApprove({ ...base, exchangeRate: "26150" }).ok).toBe(true);
+    // Dòng đã xác nhận nhưng thuế đang tra lại / không khớp HSCodePro → chưa cho duyệt.
+    const review = base.items.map((it, i) => ({ ...it, taxDetail: i === 0 ? { needsReview: true } : null }));
+    expect(canApprove({ ...base, items: review })).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "TAX_NEEDS_REVIEW", params: { n: 1 } } });
   });
   it("lỗi chặn duyệt/truyền kèm mã lý do + tham số; câu tiếng Việt giữ nguyên", () => {
     const base = { role: "APPROVER" as const, userId: "u2", ownerId: "u1", fourEyes: false, blockerFails: 0, items: items(3), status: "DRAFT" as const };

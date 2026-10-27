@@ -9,7 +9,8 @@ export { listPlans, updatePlan, listUsageMonths, getUsageReport } from "./applic
 export { listPlatformIntegrations, testPlatformIntegration, updateIntegrationKey, getSystemHealth, retryFailedJob, listSkillTemplates, setSkillTemplatePublished, PLATFORM_INTEGRATIONS } from "./application/platform.js";
 export { listAnnouncements, sendAnnouncement, withdrawAnnouncement } from "./application/announcements.js";
 export { getOverview } from "./application/overview.js";
-export { activeQuotaBonus, vnMonth } from "./domain/period.js";
+export { vnMonth } from "./domain/period.js";
+export { activeQuotaBonus, withinDossierQuota } from "../../shared/quota.js";
 export { captureWeeklyRates, listExchangeRates, recordRateFetchFailure, upsertExchangeRate, nextRateRunAt, RATE_JOB_CRON, type RateDeps, type VcbRateSource } from "./application/exchange-rates.js";
 export {
   listEmailTemplates, saveEmailTemplate, deleteEmailTemplate, listEmailSignatures, saveEmailSignature, deleteEmailSignature, previewEmailAudience,

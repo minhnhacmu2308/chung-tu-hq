@@ -18,7 +18,7 @@ export async function createDossier(deps: DossierDeps, ctx: Ctx, input: CreateDo
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const allThisMonth = (await r.dossiers.statsInRange(ctx.orgId, monthStart, monthEnd)).dossiers;
-    if (!(await deps.quota.check(ctx.orgId, "DOSSIER", allThisMonth + 1))) return err(domainError("QUOTA_EXCEEDED", "Đã hết số hồ sơ trong tháng của gói dịch vụ"));
+    if (!(await deps.quota.check(ctx.orgId, "DOSSIER", allThisMonth + 1))) return err(domainError("QUOTA_EXCEEDED", "Đã dùng hết số hồ sơ của gói trong tháng này – nâng gói hoặc chờ tới ngày gia hạn để tạo thêm"));
     const office = splitCustomsOffice(input.customsOffice);
     const row: DossierRow = {
       id: deps.idGen.next("dos"), orgId: ctx.orgId, code: nextDossierCode(input.direction, now, existing), direction: input.direction, typeCode: input.typeCode,

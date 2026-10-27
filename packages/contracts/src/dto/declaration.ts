@@ -21,6 +21,13 @@ export const LineItemSchema = z.object({
   importDutyRate: DecimalStringSchema.optional(),
   vatRate: DecimalStringSchema.optional(),
   policyNote: z.string().optional(),
+  /** Mã VAT VNACCS của thuế đã áp (VB901, VB245, VKxxx = không chịu thuế) – điền chỉ tiêu mã áp dụng thuế suất GTGT khi truyền. */
+  vatCode: z.string().optional(),
+  /** Căn cứ/điều kiện VAT (HSCodePro); `vatCertain` false = VAT phụ thuộc điều kiện ngoài mã HS, người khai tự xét. */
+  vatNote: z.string().optional(),
+  vatCertain: z.boolean().optional(),
+  /** Thuế của mã đã xác nhận chưa khớp kết quả phân loại mới nhất (mã không còn trong gợi ý, mã nhập tay chưa có thuế…) – cần kiểm tra lại. */
+  taxNeedsReview: z.boolean().optional(),
   /** Phân loại HS (HSCodePro): trạng thái dòng, câu hỏi chờ trả lời, gợi ý + mã thay thế kèm thuế. */
   hs: z.lazy(() => LineItemHsSchema).optional(),
 });
@@ -32,6 +39,8 @@ export type LineItemHsStatus = z.infer<typeof LineItemHsStatusSchema>;
 export const HsCandidateSchema = z.object({
   code: z.string(), description: z.string(), confidence: z.number().min(0).max(1), whyNot: z.string().nullable(),
   importRate: DecimalStringSchema.nullable(), basis: z.enum(["MFN", "FTA"]).nullable(), agreement: z.string().nullable(), vatRate: DecimalStringSchema.nullable(),
+  /** Mã VAT VNACCS (VB901, VB245, VKxxx…), căn cứ/điều kiện VAT, VAT chắc chắn theo mã HS hay không, thuế NK thông thường – vắng khi API cũ. */
+  vatCode: z.string().nullable().optional(), vatNote: z.string().nullable().optional(), vatCertain: z.boolean().nullable().optional(), normalImportRate: DecimalStringSchema.nullable().optional(),
 });
 export type HsCandidate = z.infer<typeof HsCandidateSchema>;
 export const LineItemHsSchema = z.object({
@@ -43,6 +52,8 @@ export const LineItemHsSchema = z.object({
   warnings: z.array(z.string()),
   /** Gợi ý chính đứng đầu, sau đó các mã thay thế. */
   candidates: z.array(HsCandidateSchema),
+  /** Mô tả hàng tiếng Việt AI gợi ý (vắng khi API cũ). */
+  descriptionVi: z.string().nullable().optional(),
 });
 export type LineItemHs = z.infer<typeof LineItemHsSchema>;
 

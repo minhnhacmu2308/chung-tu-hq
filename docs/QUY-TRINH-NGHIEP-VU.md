@@ -202,7 +202,7 @@ Người khai chọn **Tạo tờ khai** / **Số hóa chứng từ** / **Cả h
 |---|---|---|
 | Tra cứu mã HS | Gửi HSCodePro theo lượt ≤ 50 dòng; nhận HS 8 số, lý do, cảnh báo, thuế NK (MFN/FTA theo C/O), VAT, tối đa 3 mã thay thế. AI có thể **hỏi lại** người khai; dòng lỗi → **Phân loại lại** | HSCodePro gợi ý – **người phải xác nhận** |
 | Ánh xạ dữ liệu | Quy tắc chỉ tiêu Phụ lục II + Mặc định khai báo + ghi đè nguồn của doanh nghiệp; mỗi chỉ tiêu ghi nguồn gốc | Code |
-| Dựng tờ khai | Tờ khai nháp mới (giữ chỉ tiêu người dùng đã sửa), trị giá tính thuế, khoản điều chỉnh, thuế dự kiến | Code |
+| Dựng tờ khai | Tờ khai nháp mới (giữ chỉ tiêu người dùng đã sửa), trị giá tính thuế, khoản điều chỉnh, thuế dự kiến (theo đặc tả VNACCS IDA – xem 7.2) | Code |
 | Số hóa chứng từ | Bản JSON chuẩn hóa của từng chứng từ để lưu/đính kèm | Code |
 
 **Xác nhận HS** (bắt buộc từng dòng, 8 số theo biểu Việt Nam): chọn mã gợi ý, mã thay thế, mã trong biểu hoặc nhập tay. Thuế suất lấy từ kết quả HSCodePro cho đúng mã đã chọn; biểu thuế nội bộ (`catalog_hs`, dữ liệu demo) chỉ dùng khi KHÔNG chạy HSCodePro thật. Mã nhập tay không có trong gợi ý → thuế để trống, gắn "Cần kiểm tra thuế" và tự gửi riêng dòng đó lên HSCodePro (kèm mã đã chọn) để lấy thuế.
@@ -236,6 +236,16 @@ Quy tắc thuế suất:
 | 2.31 Ngày hàng đi (xuất) | Ngày B/L / ngày bay; không lấy ngày hàng đến |
 | 2.69 Mô tả hàng (xuất) | Tự thêm "#&mã nước xuất xứ" khi truyền |
 
+### 7.2 Trị giá tính thuế và thuế dự kiến (theo đặc tả VNACCS)
+
+Căn cứ: đặc tả nghiệp vụ VNACCS **1001-1 IDA** và **1013-1 EDA** (Service Specification, mục 7 – cách hệ thống Hải quan tự tính khi khai tạm; tài liệu nội bộ, không có trong repo). Chi tiết và chỗ code còn khác đặc tả: skill `mapping-declaration-fields`. Số phần mềm tính là **ước tính**; số chính thức là số Hải quan trả về.
+
+- **Quy đổi VND**: từng khoản (hóa đơn, cước, bảo hiểm, khoản điều chỉnh) × tỷ giá tính thuế của mã tiền đó, ngày khai theo giờ Việt Nam.
+- **Tổng trị giá tính thuế (NK)** = trị giá hóa đơn + cước + bảo hiểm theo điều kiện giao hàng (nhóm E/F cộng cước và bảo hiểm riêng; CFR/CPT cộng bảo hiểm; CIF/CIP/D… đã gồm) ± khoản điều chỉnh 1.49 (AD cộng / SB trừ). **Trị giá từng dòng** = tổng × trị giá hóa đơn dòng ÷ tổng trị giá hóa đơn.
+- **Thuế từng dòng** theo thứ tự: thuế NK = trị giá × thuế suất (tuyệt đối: lượng × mức thuế) → thuế bổ sung (chống bán phá giá, tự vệ…) → **TTĐB** = (trị giá + thuế NK + thuế bổ sung) × thuế suất → BVMT = lượng × mức thuế → **GTGT** = (trị giá + thuế NK + thuế bổ sung + TTĐB + BVMT) × thuế suất. Theo đặc tả, mã miễn / giảm / không chịu thuế khai trên dòng làm thuế bằng 0 / trừ số tiền giảm / không tính.
+- Theo đặc tả, tổng thuế phải nộp = NK + thuế bổ sung + TTĐB + BVMT + GTGT.
+- Phần mềm hiện tính: thuế NK theo % và GTGT (cộng TTĐB khi có thuế suất); miễn thuế theo loại hình (E11/E21/E31/E41) và không chịu GTGT theo mã VAT `VK…`. Phần còn thiếu ghi ở mục 15.
+
 ## 8. Bước 5 – Review & phê duyệt tờ khai
 
 ```mermaid
@@ -246,9 +256,14 @@ flowchart LR
 ```
 
 - Tờ khai hiện **giống bản in VNACCS** (mẫu in tờ khai nhập / xuất): các trang A4 theo đúng thứ tự vùng của mẫu, tiêu đề theo giai đoạn (bản nháp có chữ mờ "BẢN NHÁP – CHƯA KHAI HẢI QUAN"), số Hải quan trả về điền thẳng vào ô (khác số ước tính thì hiện cả hai). Chỉ tiêu không có chỗ trên mẫu nằm ở khối **Chỉ tiêu khác** dưới trang cuối.
+- **Ô Hải quan trả về chưa có dữ liệu thì không hiện**: khi Hải quan chưa trả kết quả (chưa khai tạm / chưa phản hồi), các ô do Hải quan tính còn trống (trị giá tính thuế, thuế suất, số tiền thuế từng dòng, khối "Thuế và thu khác" phần Hải quan…) được ẩn khỏi bản in và Tab bỏ qua; vẫn hiện số tờ khai ("Chưa cấp") và ô đã có số ước tính của phần mềm. Hải quan trả kết quả → hiện đủ các ô.
 - Ô lỗi Hải quan, ô bắt buộc còn trống, số ước tính và ô người khai đã sửa được đánh dấu ngay trên trang; nút **Chỉ ô cần xử lý (n)** nhảy lần lượt tới từng ô (số n cũng hiện trên tab "Tờ khai"). Lỗi Hải quan không gắn được vào ô nào hiện thành khung riêng (vị trí lỗi · nội dung → cách khắc phục) và vẫn tính vào n. Tờ khai chỉ đọc (đã khóa hoặc không có quyền sửa) không đếm ô còn thiếu, chỉ giữ ô lỗi Hải quan. **In / Lưu PDF** in đúng khổ A4 như mẫu, không lộ các dấu đánh dấu; ô mã chỉ in mã.
 - Tên địa điểm lưu kho (do Hải quan trả về) được tra trước theo danh mục A202 từ mã kho người khai chọn, đánh dấu ước tính đến khi Hải quan trả tên.
 - **Ô bắt buộc còn trống → khóa Phê duyệt**: khung "Còn N chỉ tiêu bắt buộc chưa nhập" liệt kê ô, nút **Đến ô cần xử lý** mở panel sửa ô. Bắt buộc = Phụ lục II (M, hoặc C khi tình huống áp dụng) + ô FPT.VNACCS bắt buộc mà người khai phải nhập; ô phần mềm tự điền và ô APP_* không tính. Một quy tắc chung (`@kb/contracts` `requiredGaps`) cho giao diện, mock và backend.
+- **Chỉ tiêu cần kiểm tra** (chỉ tiêu bị đánh dấu nghi ngờ khi dựng tờ khai): khung "N chỉ tiêu cần kiểm tra" liệt kê từng chỉ tiêu dạng link – bấm thì sang tab Tờ khai, nhảy đúng tờ / ô và mở panel. Panel của ô đó có khung "Cần kiểm tra" kèm lý do: giá trị đúng → **Xác nhận đúng** (nút ở cả khung cảnh báo và chân panel; lưu lại đúng giá trị → bỏ cờ nghi ngờ, ghi `field_audit`), sai → sửa rồi **Lưu** (lưu cũng xác nhận các chỉ tiêu nghi ngờ còn lại cùng ô). Chỉ tiêu không có ô trên bản in (vd tỷ giá tính thuế) chỉ liệt kê, xác nhận bằng ô tích khi Phê duyệt.
+- **Lưu / xác nhận xong panel tự đóng**, quay lại bản in. Ô mã có danh mục trong panel hiện tên kèm mã ("03CEA01 → KXD HAILINH HAIPHONG") để đối chiếu mã ↔ tên.
+- **Mã thuế dòng hàng áp cho mọi dòng**: panel ô mã thuế của một dòng (1.80 biểu thuế NK, 1.82, 1.92 / 1.95 miễn giảm, 1.94 mã áp dụng thuế suất…; xuất khẩu khối thuế XK) có ô tích **"Áp dụng mã thuế này cho N dòng hàng khác"** (mặc định chọn): lưu → mã được ghi cho mọi dòng đang khác trong tờ đang xem; bỏ chọn → chỉ dòng đang sửa (các dòng khác sửa tay từng dòng). Không áp số tiền, mã HS, xuất xứ; ô trống không áp (tránh xóa hàng loạt). Lô nhiều tờ: áp trong tờ đang xem.
+- **Điều kiện giao hàng bị sửa so với bản máy đọc** (vd FOB → CIF): khung nhắc người duyệt ghi mã máy đọc, giá trị người khai sửa, **người sửa (theo tài khoản đăng nhập) và thời điểm** (`extracted_fields.confirmed_by / confirmed_at`), kèm lý do nếu vận đơn ghi người trả cước mâu thuẫn. Dữ liệu cũ chưa ghi người sửa → câu chung "người khai sửa".
 - Bấm một ô mở **panel sửa ô** bên phải: số và tên chỉ tiêu, **nhãn nguồn** (Invoice, B/L, C/O…, Người khai nhập), lý do có trên tờ khai, **hướng dẫn khai chỉ tiêu** trích Phụ lục II, lỗi Hải quan và cách khắc phục. Panel còn thay đổi chưa lưu mà chọn ô khác, đổi tab, Quay lại OCR, Xác nhận HS, Sang khai báo Hải quan hoặc Phê duyệt → hỏi Lưu / Bỏ thay đổi / Ở lại. Ô theo chứng từ có nút sang bước OCR.
 - Sửa tay: ghi `field_audit`, giữ qua các lần dựng lại; không sửa tay được số tờ khai, mã loại hình và các chỉ tiêu trị giá/cước/tỷ giá (sửa ở bước 3 rồi dựng lại); kiểm định dạng và độ dài theo danh mục chỉ tiêu.
 - **Tỷ giá tính thuế**: tỷ giá mua chuyển khoản Vietcombank lấy tối thứ Năm, áp cho tờ khai đăng ký từ thứ Hai tuần sau. Tờ khai dựng tuần trước sẽ bị chặn khai tạm khi đã sang tuần tỷ giá mới (mở lại để dựng lại).
@@ -470,6 +485,8 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 | Mảng | Hiện trạng |
 |---|---|
 | Kết nối FPT.VNACCS | Chưa có đặc tả API cho IDB, IDD, IDA01, IDE, AMB, AMC, container qua KVGS, lệ phí cảng biển; AMA đã ánh xạ nhưng đường dẫn API và vỏ phản hồi chưa đối chiếu với FPT |
+| Thuế dự kiến (bước 4–5) | Theo đặc tả VNACCS IDA (7.2) nhưng chưa có thuế suất thuế bổ sung, TTĐB, BVMT và mức thuế tuyệt đối trên dòng hàng → ước tính mới có thuế NK theo % và GTGT (công thức GTGT đã sẵn chỗ cộng các sắc thuế đó). Làm tròn đồng từng dòng (VNACCS làm tròn 4 số lẻ, tròn đồng ở tổng – lệch ≤ 0,5 đồng/dòng/sắc thuế). Chưa tính bảo hiểm tổng hợp (mã điều kiện giá 3, 7); chưa áp mức giảm theo mã miễn / giảm 1.92, 1.95; chưa có tổng thuế bổ sung, BVMT và tổng thuế chung |
+| Người trả cước trên vận đơn | Chỉ đọc "Freight Prepaid / Collect" ở vận đơn đường biển; AWB chưa đọc → luật R-FREIGHT-TERM bỏ qua với lô hàng không. Hồ sơ đọc chứng từ trước khi có trường này → bỏ qua tới khi đọc lại vận đơn |
 | AMA – tự tính thuế "Sau" | Chỉ thuế XNK và GTGT theo %; thuế tuyệt đối, TTĐB, BVMT, chống bán phá giá người khai nhập tiền thuế |
 | Bảng mã biểu thuế | Chưa có mã cho EVFTA, VKFTA, CPTPP, RCEP (TT121 dẫn chiếu bảng mã trên website Cục Hải quan) |
 | Khoản điều chỉnh trị giá 1.49 | Chưa gửi được sang FPT (chặn truyền nếu có) |

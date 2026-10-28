@@ -46,7 +46,9 @@ describe("i18n – màn chính", () => {
     const zh = render(CreateDossierPage, "zh");
     expect(zh).toContain("创建申报档案");
     expect(zh).toContain("运输方式");
-    expect(zh).toContain("A11 – 经营性进口（消费）");
+    // Nhóm loại hình có dịch; mã loại hình tải từ danh mục VNACCS sau khi mở trang, tên là tên pháp lý tiếng Việt – không dịch
+    // (kiểm tra ở dossiers/i18n-options.test.ts).
+    expect(zh).toContain("经营");
     // Tên chi cục Hải quan là danh mục chính thức gửi backend – giữ tiếng Việt.
     const vi = render(CreateDossierPage, "vi");
     expect(vi).toContain("Tạo hồ sơ khai báo");

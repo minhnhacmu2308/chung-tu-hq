@@ -90,6 +90,13 @@ Không phải bảng mã mà là quy định / đặc tả → đã chuyển th�
 | `VNACCS_AMA v1.3.xlsx`, `TK_AMA_(chua_dang_ky / da_dang_ky / da_chap_nhan).pdf` | Đặc tả bản khai bổ sung sau thông quan AMA và mẫu in | `integration/domain/post-amendment.ts`, `contracts/src/declaration-layout/amend.ts` |
 | `VNACCS_HYS v1.2.xlsx` | Đặc tả khai hồ sơ đính kèm (HYS) của FPT | Schema `packages/contracts/src/fpt/hys.ts` |
 | `HYS/6001-1_HYS_Service Specification.docx`, `HYS/6001-2_HYS_Input_Data_Element.xlsx` | Đặc tả nghiệp vụ VNACCS 6001 HYS (đối tượng, giới hạn, chỉ tiêu nhập M/C) | Luật `packages/contracts/src/hys/rules.ts`; đối chiếu ở spec `superpowers/specs/2026-10-26-khai-hys-truoc-ida-design.md` §10 |
+
+## 3. Tài liệu tính thuế (`docs/tinhthue/`)
+
+| Tài liệu | Nội dung | Đã thành gì trong code |
+|---|---|---|
+| `1001-1_IDA_Service Specification.docx` | Đặc tả nghiệp vụ VNACCS 1001 IDA: quy đổi VND, tổng trị giá tính thuế theo mã điều kiện giá (1–8), khoản điều chỉnh AD/SB/DP, phân bổ trị giá theo dòng, thuế NK (%/tuyệt đối/hỗn hợp), thuế bổ sung, TTĐB, BVMT, GTGT, miễn/giảm/không chịu thuế, làm tròn | Trị giá `core/modules/declaration/domain/valuation.ts`, thuế ước tính `tax.ts`; quy tắc và chỗ code còn khác đặc tả ghi ở skill `mapping-declaration-fields` mục "Trị giá tính thuế & thuế ước tính" |
+| `1013-1_EDA_Service Specification.docx` | Đặc tả nghiệp vụ VNACCS 1013 EDA: trị giá xuất khẩu (ô Trị giá tính thuế hoặc trị giá hóa đơn), phân bổ theo dòng, thuế XK, lệ phí / bảo hiểm theo HS | Như trên (tờ khai xuất: app không tính thuế XK – Hải quan tính sau EDA) |
 | `HYS/Bản lưu thông tin tờ khai phổ thông_….pdf` | Bản lưu kết quả HYS thật (số tiếp nhận 12 số, A02) | Mẫu tham chiếu hiển thị kết quả – **chứa dữ liệu doanh nghiệp thật** |
 | `MAUIN_TOKHAI_NHAPKHAU.pdf`, `MAUIN_TOKHAI_XUATKHAU.pdf` | Mẫu in tờ khai nhập / xuất | Bản in tờ khai ở bước Review (`declaration-layout`) |
 | `BO SUNG CHUNG TU v1.4.xlsx`, `KHAI BAO DANH SACH CONTAINER v1.1.xlsx`, `KHAI BAO LAY MA DINH DANH v1.1.xlsx`, `TACH VAN DON.xlsx`, `In bản kê mã vạch container.pdf`, `In bản kê mã vạch hàng lẻ.pdf` | Đặc tả nghiệp vụ phụ: bổ sung chứng từ, danh sách container, lấy mã định danh, tách vận đơn, bản kê mã vạch | **Chưa làm** – nguồn cho các tính năng sau |

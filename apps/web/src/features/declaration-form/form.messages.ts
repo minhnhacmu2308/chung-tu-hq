@@ -13,6 +13,7 @@ export const FORM_MESSAGES = defineMessages({
     close: "Đóng",
     pickHs: "Chọn mã HS",
     saveN: "Lưu {n} thay đổi",
+    save1: "Lưu 1 thay đổi",
     undo: "Hoàn tác",
     // block-view
     collapse: "Thu gọn",
@@ -210,6 +211,7 @@ export const FORM_MESSAGES = defineMessages({
     close: "Close",
     pickHs: "Select HS code",
     saveN: "Save {n} changes",
+    save1: "Save 1 change",
     undo: "Undo",
     collapse: "Collapse",
     openToEnter: "Open to fill in",
@@ -390,6 +392,7 @@ export const FORM_MESSAGES = defineMessages({
     close: "关闭",
     pickHs: "选择 HS 编码",
     saveN: "保存 {n} 项修改",
+    save1: "保存 1 项修改",
     undo: "撤销",
     collapse: "收起",
     openToEnter: "展开填写",

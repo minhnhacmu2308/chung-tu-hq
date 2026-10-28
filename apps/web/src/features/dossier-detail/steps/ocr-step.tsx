@@ -6,6 +6,7 @@ import {
   Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, SegmentedControl,
   Skeleton, Stack, Tabs, TabsContent, TabsList, TabsTrigger, fill, toast, useMessages,
 } from "@kb/ui";
+import type { FreightTermNote } from "@kb/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, ArrowRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -20,6 +21,7 @@ import { DocumentSheetsCard } from "../ocr/document-sheets";
 import { FieldRow, fieldDomId } from "../ocr/field-row";
 import { ItemsTable } from "../ocr/items-table";
 import { SKILL_LEARN_MESSAGES } from "../ocr/ocr.messages";
+import { IncotermChangeDialog, incotermCodeChanged, useSaveFreightTermNote } from "../ocr/incoterm-change-dialog";
 import { useFieldMutations } from "../ocr/use-field-mutations";
 import { ValueChargesCard } from "../ocr/value-charges-card";
 import { useAdvanceDossier } from "../use-advance";
@@ -29,7 +31,7 @@ import { OCR_STEP_MESSAGES } from "./ocr-step.messages";
 const GROUPS = Object.keys(FIELD_GROUP_LABELS.vi) as ExtractedField["group"][];
 type Filter = "all" | "suspect";
 
-function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined }) {
+function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0 }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined; focusSeq?: number }) {
   const t = useMessages(OCR_STEP_MESSAGES);
   const groupLabels = useMessages(FIELD_GROUP_LABELS);
   const [active, setActive] = useState<string | null>(null);
@@ -68,7 +70,27 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
       })
       .catch(() => {});
   };
-  const save = (id: string, value: string) =>
+  // Đổi mã điều kiện giao hàng trên hóa đơn (FCA → CIF) → hỏi trước: cước đổi cách khai, có thể mâu thuẫn người trả cước trên vận đơn.
+  const [incotermChange, setIncotermChange] = useState<{ id: string; from: string; to: string } | null>(null);
+  // Hủy đổi điều kiện giao hàng → vẽ lại ô (bỏ chữ vừa gõ, về giá trị đang lưu).
+  const [cancelled, setCancelled] = useState(0);
+  const termNote = useSaveFreightTermNote(dossierId);
+  const save = (id: string, value: string) => {
+    const f = fields.find((x) => x.id === id);
+    if (f && doc.kind === "INVOICE" && f.key === "incoterm" && incotermCodeChanged(f.value, value)) return setIncotermChange({ id, from: f.value, to: value });
+    saveValue(id, value);
+  };
+  const confirmIncoterm = (note: FreightTermNote | null) => {
+    const c = incotermChange;
+    if (!c) return;
+    m.update.mutate({ id: c.id, value: c.to }, {
+      onSuccess: () => {
+        setIncotermChange(null);
+        if (note) termNote.mutate(note);
+      },
+    });
+  };
+  const saveValue = (id: string, value: string) =>
     m.update.mutate(
       { id, value },
       {
@@ -116,12 +138,12 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
     );
   };
 
-  // Mở từ tờ khai đầy đủ: nhảy tới dòng hàng cần sửa khi tab đã hiện.
+  // Mở từ tờ khai đầy đủ (dòng hàng cần sửa) hoặc từ khối chi phí (ô Điều kiện giao hàng): nhảy tới ô khi tab đã hiện; focusSeq để bấm lại cùng ô vẫn nhảy.
   useEffect(() => {
     if (!focusId) return;
     const t = requestAnimationFrame(() => jumpTo(focusId));
     return () => cancelAnimationFrame(t);
-  }, [focusId]);
+  }, [focusId, focusSeq]);
 
   const visible = filter === "suspect" ? fields.filter((f) => isSuspect(f.status)) : fields;
   const items = fields.filter((f) => f.group === "ITEMS");
@@ -129,6 +151,16 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
 
   return (
     <div className="flex flex-col gap-4">
+      <IncotermChangeDialog
+        dossierId={dossierId}
+        change={incotermChange}
+        saving={m.update.isPending}
+        onConfirm={confirmIncoterm}
+        onCancel={() => {
+          setIncotermChange(null);
+          setCancelled((n) => n + 1);
+        }}
+      />
       {pick && (
         <Alert
           tone="info"
@@ -169,7 +201,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId }: { doc: Dossier
                 </h3>
                 {list.map((f) => (
                   <FieldRow
-                    key={f.id}
+                    key={`${f.id}-${cancelled}`}
                     field={f}
                     active={active === f.id}
                     onActivate={setActive}
@@ -218,7 +250,19 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const [tab, setTab] = useState<string | undefined>(undefined);
   const params = useSearchParams();
   const line = params.get("dong");
-  const focus = line ? fields.find((f) => f.group === "ITEMS" && f.key === `item.${line}.description`) : undefined;
+  const lineFocus = line ? fields.find((f) => f.group === "ITEMS" && f.key === `item.${line}.description`) : undefined;
+  // Ô được chọn từ khối chi phí ("Đổi điều kiện giao hàng"): ô Điều kiện giao hàng của hóa đơn (không có thì của chứng từ khác).
+  const [picked, setPicked] = useState<{ id: string; seq: number } | null>(null);
+  const incotermField = [...fields].sort((a, b) => Number(docs.find((d) => d.id === b.documentId)?.kind === "INVOICE") - Number(docs.find((d) => d.id === a.documentId)?.kind === "INVOICE")).find((f) => f.key === "incoterm");
+  const pickedField = picked ? fields.find((f) => f.id === picked.id) : undefined;
+  const focus = pickedField ?? lineFocus;
+  const editIncoterm = incotermField
+    ? () => {
+        setFilter("all");
+        setTab(incotermField.documentId);
+        setPicked((p) => ({ id: incotermField.id, seq: (p?.seq ?? 0) + 1 }));
+      }
+    : undefined;
   const firstSuspect = docs.find((d) => suspectOf(d.id) > 0)?.id ?? docs[0]?.id;
   const currentTab = tab && docs.some((d) => d.id === tab) ? tab : (focus?.documentId ?? firstSuspect);
 
@@ -313,7 +357,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
               </TabsList>
               {docs.map((d) => (
                 <TabsContent key={d.id} value={d.id} className="pt-4">
-                  <DocumentTab doc={d} fields={byDoc(d.id)} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} />
+                  <DocumentTab doc={d} fields={byDoc(d.id)} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} focusSeq={picked?.seq ?? 0} />
                 </TabsContent>
               ))}
             </Tabs>
@@ -321,7 +365,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
         </CardContent>
       </Card>
 
-      <ValueChargesCard dossierId={dossier.id} currency={dossier.currency} />
+      <ValueChargesCard dossierId={dossier.id} currency={dossier.currency} {...(editIncoterm ? { onEditIncoterm: editIncoterm } : {})} />
 
       <DocumentSheetsCard dossierId={dossier.id} dossierCode={dossier.code} />
 

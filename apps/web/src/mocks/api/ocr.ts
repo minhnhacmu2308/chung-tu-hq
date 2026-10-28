@@ -1,12 +1,13 @@
 // Bước 2–3: chứng từ của hồ sơ (upload, phân loại, đọc) + kết quả trích xuất và đối chiếu chéo (mock).
 // Mô phỏng tiến trình bằng thời gian: mỗi chứng từ đi UPLOADING → QUEUED → READING → DONE tính từ lúc bắt đầu;
 // màn hình gọi lại (refetchInterval) để thấy tiến độ. Có backend → SSE/polling trạng thái job thật.
-import type { DocumentSheet } from "@kb/contracts";
+import { incotermOf, type DocumentSheet } from "@kb/contracts";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
 import { documentSetMockError, editScopeMockError } from "./customs";
 import { refreshDeclaration } from "./declaration";
 import { generateChecks, generateFieldsForDocument, SUSPECT_STATUSES } from "@/mocks/seed/ocr";
+import { syncFreightTermCheck } from "@/mocks/freight-term";
 import type { CrossCheck, DocKind, DossierDocument, ExtractedField, FieldStatus } from "@/mocks/types";
 
 export const ocrKeys = {
@@ -218,6 +219,21 @@ function syncSuspectCount(db: MockDb, documentId: string) {
   dossier.updatedAt = nowIso();
 }
 
+/**
+ * Ô Điều kiện giao hàng của hóa đơn đổi → điều kiện giao hàng của hồ sơ đổi theo (backend: shipment.invoice.incoterm), rồi tính lại luật
+ * R-FREIGHT-TERM; ô Điều kiện cước của vận đơn đổi → chỉ tính lại luật.
+ */
+function syncTerms(db: MockDb, f: ExtractedField) {
+  const doc = db.documents.find((d) => d.id === f.documentId);
+  const dossier = doc && db.dossiers.find((d) => d.id === doc.dossierId);
+  if (!dossier) return;
+  if (f.key === "incoterm" && doc.kind === "INVOICE") {
+    const code = incotermOf(f.value);
+    if (code) dossier.incoterm = code;
+  }
+  if (f.key === "incoterm" || f.key === "freight_terms" || f.key === "freight_term") syncFreightTermCheck(db, dossier.id);
+}
+
 /** Người dùng sửa giá trị → USER_CONFIRMED, giữ originalValue (bản thật ghi field_audit). */
 const ITEM_FIELD = /^item\.(\d+)\.(description|quantity|unit|unit_price|amount|origin)$/;
 /**
@@ -258,8 +274,11 @@ export const updateFieldValue = (fieldId: string, value: string) =>
     if (scoped) throw scoped;
     f.value = value.trim();
     f.status = "USER_CONFIRMED";
+    f.confirmedBy = db.currentUserId;
+    f.confirmedAt = nowIso();
     syncSuspectCount(db, f.documentId);
     syncLineItem(db, f);
+    syncTerms(db, f);
     return f;
   });
 
@@ -271,6 +290,8 @@ export const confirmField = (fieldId: string) =>
     const scoped = fieldScopeError(db, f);
     if (scoped) throw scoped;
     f.status = "USER_CONFIRMED";
+    f.confirmedBy = db.currentUserId;
+    f.confirmedAt = nowIso();
     syncSuspectCount(db, f.documentId);
     return f;
   });
@@ -284,8 +305,11 @@ export const revertField = (fieldId: string) =>
     if (scoped) throw scoped;
     f.value = f.originalValue;
     f.status = "MODEL_UNSURE";
+    delete f.confirmedBy;
+    delete f.confirmedAt;
     syncSuspectCount(db, f.documentId);
     syncLineItem(db, f);
+    syncTerms(db, f);
     return f;
   });
 

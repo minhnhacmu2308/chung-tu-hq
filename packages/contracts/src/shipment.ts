@@ -66,6 +66,8 @@ export const ShipmentSchema = z.object({
     warehouseCode: str(),
     warehouseName: str(),
     containers: z.array(z.object({ no: z.string(), sealNo: z.string().nullable(), size: z.string().nullable() })),
+    /** v4: người trả cước trên vận đơn – "PREPAID" (người gửi trả) / "COLLECT" (người nhận trả). */
+    freightTerm: str().optional(),
   }),
   origin: z.object({ country: str(), coForm: str(), coNo: str(), rexNo: str(), coInvoiceNo: str(), /** v3: ngày cấp C/O (ghi kèm số C/O ở Phần ghi chú). */ coDate: date().optional(), criteria: z.array(z.object({ hs6: z.string().nullable(), criterion: z.string().nullable() })) }),
   charges: z.object({
@@ -94,7 +96,7 @@ export function emptyShipment(): Shipment {
     transport: {
       mode: empty(), billNo: empty(), masterBillNo: empty(), vessel: empty(), voyage: empty(), portOfLoading: empty(), portOfDischarge: empty(),
       finalDestination: empty(), arrivalDate: empty(), packages: empty(), packageUnit: empty(), grossWeightKg: empty(), netWeightKg: empty(),
-      houseBillNo: empty(), flightNo: empty(), departureDate: empty(), placeOfIssue: empty(), warehouseCode: empty(), warehouseName: empty(), containers: [],
+      houseBillNo: empty(), flightNo: empty(), departureDate: empty(), placeOfIssue: empty(), warehouseCode: empty(), warehouseName: empty(), containers: [], freightTerm: empty(),
     },
     origin: { country: empty(), coForm: empty(), coNo: empty(), rexNo: empty(), coInvoiceNo: empty(), coDate: empty(), criteria: [] },
     charges: { freight: empty(), insurance: empty(), other: [] },

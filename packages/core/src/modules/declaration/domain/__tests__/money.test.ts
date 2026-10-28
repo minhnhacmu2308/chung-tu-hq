@@ -42,11 +42,19 @@ describe("tax", () => {
       { id: "li_2", customsValueVnd: "90051223", importDutyRate: "0", vatRate: "8" },
       { id: "li_3", customsValueVnd: "72362590", importDutyRate: null, vatRate: null },
     ]);
-    expect(t.perItem[0]).toEqual({ id: "li_1", importDutyVnd: "2974906", vatVnd: "8171076" });
-    expect(t.perItem[1]).toEqual({ id: "li_2", importDutyVnd: "0", vatVnd: "7204098" });
-    expect(t.perItem[2]).toEqual({ id: "li_3", importDutyVnd: "0", vatVnd: "0" });
+    expect(t.perItem[0]).toEqual({ id: "li_1", importDutyVnd: "2974906", specialConsumptionVnd: "0", vatVnd: "8171076" });
+    expect(t.perItem[1]).toEqual({ id: "li_2", importDutyVnd: "0", specialConsumptionVnd: "0", vatVnd: "7204098" });
+    expect(t.perItem[2]).toEqual({ id: "li_3", importDutyVnd: "0", specialConsumptionVnd: "0", vatVnd: "0" });
     expect(t.importDutyVnd).toBe("2974906");
     expect(t.vatVnd).toBe("15375174");
+  });
+
+  it("theo đặc tả VNACCS IDA: TTĐB = (trị giá + NK + thuế bổ sung) × TTĐB; GTGT cộng cả thuế bổ sung, TTĐB, BVMT", () => {
+    // 100.000.000 × 10% = 10.000.000 NK; bổ sung 2.000.000; TTĐB (112.000.000) × 50% = 56.000.000; BVMT 3.000.000
+    // GTGT = (100.000.000 + 10.000.000 + 2.000.000 + 56.000.000 + 3.000.000) × 10% = 17.100.000
+    const t = computeTaxes([{ id: "li_1", customsValueVnd: "100000000", importDutyRate: "10", vatRate: "10", additionalDutyVnd: "2000000", specialConsumptionRate: "50", environmentTaxVnd: "3000000" }]);
+    expect(t.perItem[0]).toEqual({ id: "li_1", importDutyVnd: "10000000", specialConsumptionVnd: "56000000", vatVnd: "17100000" });
+    expect(t.specialConsumptionVnd).toBe("56000000");
   });
 });
 

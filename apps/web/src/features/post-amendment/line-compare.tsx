@@ -108,7 +108,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
               {t.undo}
             </Button>
             <Button leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={() => save.mutate()}>
-              {fill(t.saveN, { n: formatNumber(dirty) })}
+              {dirty === 1 ? t.save1 : fill(t.saveN, { n: formatNumber(dirty) })}
             </Button>
           </>
         ) : (

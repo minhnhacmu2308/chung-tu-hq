@@ -35,6 +35,51 @@ describe("form chi phí → ValueCharges", () => {
   });
 });
 
+describe("không có phí phát sinh và ràng buộc theo chứng từ", () => {
+  it("khoản điều chỉnh: Không có phí phát sinh → danh sách rỗng, đọc lại đúng lựa chọn; lập danh sách mà không có khoản → lỗi", () => {
+    const none = { ...formFromView(VIEW, "USD"), adjustmentsMode: "NONE" as const };
+    expect(toValueCharges(none)).toEqual({ ok: true, value: { ...EMPTY_VALUE_CHARGES, adjustments: [] } });
+    expect(formFromView({ ...VIEW, charges: { ...EMPTY_VALUE_CHARGES, adjustments: [] } }, "USD").adjustmentsMode).toBe("NONE");
+    const empty = toValueCharges({ ...none, adjustmentsMode: "MANUAL" });
+    expect(empty.ok).toBe(false);
+    if (!empty.ok) expect(empty.errors.adjustments).toBe("Thêm ít nhất một khoản, hoặc chọn Không có phí phát sinh");
+  });
+
+  it("chứng từ có cước: nhập tay chỉ ghi lý do → bắt nhập số tiền; chứng từ không có cước → chỉ lý do vẫn được", () => {
+    const f = { ...formFromView(VIEW, "USD"), freightMode: "MANUAL" as const, freightReason: "CONTRACT" as const };
+    const r = toValueCharges(f, "vi", { docsFreight: true });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.freightAmount).toBe("Chứng từ có phí vận chuyển – nhập số tiền");
+    expect(toValueCharges(f, "vi", { docsFreight: false }).ok).toBe(true);
+  });
+});
+
+describe("đổi điều kiện giao hàng / người trả cước trên vận đơn", () => {
+  const CIF: ValueChargesView = { ...VIEW, incoterm: "CIF", freightRequired: false, freightTerm: "COLLECT", fromDocuments: { ...VIEW.fromDocuments, freight: { amount: "1150", currency: "USD", kind: "FREIGHT_INVOICE" } } };
+
+  it("CIF mà vận đơn ghi Collect: chưa giải trình → chặn duyệt; có lý do → cảnh báo kèm lý do", () => {
+    expect(summarize(CIF).find((r) => r.key === "freightTerm")).toMatchObject({ value: "Freight Collect", tone: "danger", source: "Chặn duyệt" });
+    const noted = summarize({ ...CIF, charges: { ...EMPTY_VALUE_CHARGES, freightTermNote: { reason: "LOCAL_CHARGES", note: "THC" } } }).find((r) => r.key === "freightTerm");
+    expect(noted).toMatchObject({ tone: "warning", source: "Người khai giải trình" });
+    expect(noted!.hint).toMatch(/phí tại cảng đến.*: THC$/);
+    expect(summarize({ ...CIF, freightTerm: "PREPAID" }).some((r) => r.key === "freightTerm")).toBe(false);
+  });
+
+  it("CIF: cước chứng từ chỉ để tham khảo; còn số nhập tay cũ → báo không còn dùng", () => {
+    expect(summarize(CIF)[0]!.hint).toMatch(/Chứng từ ghi cước 1150 USD – chỉ để tham khảo, không dùng với điều kiện CIF/);
+    const stale = summarize({ ...CIF, charges: { ...EMPTY_VALUE_CHARGES, freight: { amount: "1300", currency: "USD", reason: "CONTRACT", note: "" } } });
+    expect(stale[0]!.hint).toMatch(/Số cước nhập tay trước đây .* không còn dùng với điều kiện CIF/);
+  });
+
+  it("form: lý do giữ điều kiện giao hàng → freightTermNote; lý do Khác thiếu ghi chú → lỗi ở ô ghi chú", () => {
+    const f = { ...formFromView(CIF, "USD"), termReason: "LOCAL_CHARGES" as const, termNote: "THC" };
+    const r = toValueCharges(f);
+    expect(r.ok && r.value.freightTermNote).toEqual({ reason: "LOCAL_CHARGES", note: "THC" });
+    const other = toValueCharges({ ...f, termReason: "OTHER", termNote: "" });
+    expect(!other.ok && other.errors.termNote).toBe("Ghi rõ lý do khác");
+  });
+});
+
 describe("tóm tắt từng khoản", () => {
   it("FOB thiếu cước, không lý do → chặn duyệt; phí khác chưa có mã → cảnh báo; bảo hiểm chưa xác nhận", () => {
     const rows = summarize(VIEW);

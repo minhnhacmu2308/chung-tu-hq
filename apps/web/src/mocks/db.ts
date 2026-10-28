@@ -12,6 +12,7 @@ import { seedCustoms } from "./seed/customs";
 import { seedSkills } from "./seed/skills";
 import { seedSettings } from "./seed/settings";
 import { seedAdmin } from "./seed/admin";
+import { syncFreightTermCheck } from "./freight-term";
 import { seedProducts } from "./seed/products";
 import { seedMailbox, type MockInboxMessage, type MockMailConnection } from "./seed/mailbox";
 import type { AdminDb } from "./admin/types";
@@ -70,7 +71,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 28;
+const DB_VERSION = 29;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -79,7 +80,7 @@ function createSeed(): MockDb {
   const ocr = seedOcr(core.dossiers, core.documents, declaration.lineItems);
   // Bản sao sâu: seed dùng hằng số cấp module (doanh nghiệp, thành viên, gói…) – nếu trả thẳng tham chiếu thì
   // thao tác của người dùng sửa luôn hằng số và "Khôi phục dữ liệu mẫu" không còn về đúng dữ liệu ban đầu.
-  return structuredClone({
+  const seed: MockDb = structuredClone({
     version: DB_VERSION,
     ...core,
     ...ocr,
@@ -95,6 +96,9 @@ function createSeed(): MockDb {
     ...seedSettings(),
     ...seedAdmin(),
   });
+  // Luật R-FREIGHT-TERM tính từ ô Điều kiện cước của vận đơn (như khi chạy lại luật ở backend).
+  for (const d of seed.dossiers) syncFreightTermCheck(seed, d.id);
+  return seed;
 }
 
 let db: MockDb | null = null;

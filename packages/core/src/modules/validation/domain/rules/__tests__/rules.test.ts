@@ -8,13 +8,13 @@ const run = (code: string, mutate: Parameters<typeof hansol>[0] = () => {}) => r
 const SEVERITY_ORDER = { BLOCKER: 0, WARNING: 1, INFO: 2 } as const;
 
 describe("bộ luật", () => {
-  it("đăng ký đủ 27 luật, mã duy nhất, có severity", () => {
+  it("đăng ký đủ 28 luật, mã duy nhất, có severity", () => {
     expect(RULES.map((r) => r.code).sort()).toEqual([
-      "R-AMOUNT-SUM", "R-AWB-LENGTH", "R-BRANCH-COUNT-LOCKED", "R-BUYER-MST", "R-CONTAINER-LIST", "R-COUNTRY-CODE", "R-DATE-ORDER", "R-DESCRIPTION-LENGTH", "R-GROSS-WEIGHT-DIGITS", "R-HS-6",
+      "R-AMOUNT-SUM", "R-AWB-LENGTH", "R-BRANCH-COUNT-LOCKED", "R-BUYER-MST", "R-CONTAINER-LIST", "R-COUNTRY-CODE", "R-DATE-ORDER", "R-DESCRIPTION-LENGTH", "R-FREIGHT-TERM", "R-GROSS-WEIGHT-DIGITS", "R-HS-6",
       "R-INCOTERM-CODE", "R-INCOTERM-FREIGHT", "R-INSURANCE-INCOTERM", "R-INVOICE-REF", "R-LAW-MO-CU", "R-LINE-AMOUNT", "R-LINE-VALUE-DIGITS", "R-MAX-50-LINES", "R-ORIGIN-CO",
       "R-PACKAGES-INTEGER", "R-PARTY-NAME-LENGTH", "R-POD-TRANSSHIP", "R-QTY-DECIMALS", "R-QTY-PL-INV", "R-SHARED-CONTAINER", "R-WAREHOUSE-CODE", "R-WEIGHT-PL-BL",
     ]);
-    expect(new Set(RULES.map((r) => r.code)).size).toBe(27);
+    expect(new Set(RULES.map((r) => r.code)).size).toBe(28);
   });
   it("thứ tự hiển thị: BLOCKER trước, rồi WARNING, INFO", () => {
     const ranks = RULES.map((r) => SEVERITY_ORDER[r.severity]);
@@ -26,7 +26,7 @@ describe("bộ luật", () => {
   });
   it("runAllRules với hồ sơ HANSOL: không FAIL BLOCKER; mọi luật đều có detail tiếng Việt", () => {
     const out = runAllRules(hansol(), { org: ORG });
-    expect(out).toHaveLength(27);
+    expect(out).toHaveLength(28);
     expect(out.filter((o) => o.severity === "BLOCKER" && o.result === "FAIL")).toEqual([]);
     expect(out.every((o) => o.detail.length > 0)).toBe(true);
   });

@@ -2,6 +2,7 @@
 // Chứng từ là nguồn chính; nhập tay để bổ sung khi chứng từ không có. Lưu riêng theo hồ sơ – đọc lại chứng từ không làm mất.
 import { z } from "zod";
 import { DecimalStringSchema, DocKindSchema, IsoDateTimeSchema } from "../common.js";
+import type { ReasonCode, ReasonParams } from "../reason-codes.js";
 
 const amount = DecimalStringSchema.refine((v) => Number(v) > 0, "Số tiền phải lớn hơn 0");
 const currency = z.string().trim().regex(/^[A-Z]{3}$/, "Mã tiền 3 chữ in hoa (vd USD, VND)");
@@ -44,11 +45,30 @@ export const ManualAdjustmentSchema = z.object({
 });
 export type ManualAdjustment = z.infer<typeof ManualAdjustmentSchema>;
 
+/**
+ * Giải trình khi điều kiện giao hàng mâu thuẫn với người trả cước trên vận đơn (vd CIF mà vận đơn ghi Freight Collect):
+ * LOCAL_CHARGES = cước Collect là phí tại cảng đến (THC, D/O…), không phải cước quốc tế; PER_CONTRACT = hóa đơn / hợp đồng ghi đúng
+ * điều kiện này, cước do bên khác trả theo thỏa thuận; OTHER = ghi rõ lý do.
+ */
+export const FreightTermReasonSchema = z.enum(["LOCAL_CHARGES", "PER_CONTRACT", "OTHER"]);
+export type FreightTermReason = z.infer<typeof FreightTermReasonSchema>;
+export const FREIGHT_TERM_REASON_LABELS: Record<FreightTermReason, string> = {
+  LOCAL_CHARGES: "Cước Collect là phí tại cảng đến (THC, D/O…), không phải cước quốc tế",
+  PER_CONTRACT: "Hóa đơn / hợp đồng ghi đúng điều kiện này – cước do bên khác trả theo thỏa thuận",
+  OTHER: "Khác",
+};
+export const FreightTermNoteSchema = z
+  .object({ reason: FreightTermReasonSchema, note })
+  .refine((f) => f.reason !== "OTHER" || f.note.length > 0, { message: "Ghi rõ lý do khác", path: ["note"] });
+export type FreightTermNote = z.infer<typeof FreightTermNoteSchema>;
+
 /** null ở mỗi phần = theo chứng từ. `adjustments` khác null thay toàn bộ phí khác đọc từ chứng từ. VNACCS cho tối đa 5 khoản. */
 export const ValueChargesSchema = z.object({
   freight: ManualFreightSchema.nullable(),
   insurance: ManualInsuranceSchema.nullable(),
   adjustments: z.array(ManualAdjustmentSchema).max(5, "Tối đa 5 khoản điều chỉnh").nullable(),
+  /** Giải trình mâu thuẫn điều kiện giao hàng ↔ người trả cước (không có = chưa giải trình). */
+  freightTermNote: FreightTermNoteSchema.nullable().optional(),
 });
 export type ValueCharges = z.infer<typeof ValueChargesSchema>;
 export const EMPTY_VALUE_CHARGES: ValueCharges = { freight: null, insurance: null, adjustments: null };
@@ -86,6 +106,13 @@ export const ValueChargesViewSchema = z.object({
   incoterm: z.string(),
   /** Nhập khẩu: EXW/FCA/FAS/FOB phải cộng cước. Xuất khẩu: nhóm C/D phải trừ cước. */
   freightRequired: z.boolean(),
+  /**
+   * Cước trên chứng từ quy đổi VND theo tỷ giá tính thuế hôm nay (đặc tả VNACCS IDA (2): số tiền × tỷ giá, làm tròn đồng) – trị giá tính thuế
+   * tăng / giảm đúng chừng này khi đổi điều kiện giao hàng cộng / không cộng cước; null = không có cước hoặc chưa có tỷ giá.
+   */
+  freightVnd: DecimalStringSchema.nullable().optional(),
+  /** Người trả cước trên vận đơn (Freight Prepaid / Collect); null = vận đơn không ghi / chưa đọc được. */
+  freightTerm: z.enum(["PREPAID", "COLLECT"]).nullable().optional(),
   /** Điều kiện giá đã gồm bảo hiểm (CIF, CIP…): nhập khẩu không khai 1.48. */
   insuranceIncluded: z.boolean(),
   /** Hồ sơ đã duyệt / truyền – chỉ xem. */
@@ -94,3 +121,49 @@ export const ValueChargesViewSchema = z.object({
   updatedBy: z.string().nullable(),
 });
 export type ValueChargesView = z.infer<typeof ValueChargesViewSchema>;
+
+/**
+ * Ràng buộc theo chứng từ khi lưu chi phí (giao diện, mock, backend dùng chung): cước bắt buộc mà chứng từ có cước → nhập tay phải có số tiền;
+ * nhập khẩu, chứng từ có phí khác → không được khai "Không có phí phát sinh" (danh sách khoản điều chỉnh rỗng). null = hợp lệ.
+ */
+export function chargesConflict(
+  input: ValueCharges, ctx: Pick<ValueChargesView, "direction" | "freightRequired" | "fromDocuments">,
+): { reason: Extract<ReasonCode, "CHARGES_FREIGHT_AMOUNT_REQUIRED" | "CHARGES_ADJUSTMENTS_IN_DOCS">; params: ReasonParams } | null {
+  const docFreight = ctx.fromDocuments.freight;
+  if (ctx.freightRequired && docFreight && input.freight && input.freight.amount === null) {
+    return { reason: "CHARGES_FREIGHT_AMOUNT_REQUIRED", params: { amount: docFreight.amount, currency: docFreight.currency } };
+  }
+  const other = ctx.fromDocuments.other.length;
+  if (ctx.direction === "NK" && other > 0 && input.adjustments?.length === 0) return { reason: "CHARGES_ADJUSTMENTS_IN_DOCS", params: { n: other } };
+  return null;
+}
+
+/** Điều kiện giao hàng người bán trả cước chặng chính (nhóm C, D). */
+const SELLER_PAYS_FREIGHT = new Set(["CFR", "C&F", "CIF", "CPT", "CIP", "C&I", "DAP", "DPU", "DAT", "DDP", "DDU", "DAF", "DES", "DEQ"]);
+/** Nhóm E, F: người mua trả cước chặng chính. */
+const BUYER_PAYS_FREIGHT = new Set(["EXW", "FCA", "FAS", "FOB"]);
+
+/** Giá theo điều kiện giao hàng đã gồm cước chặng chính (nhóm C, D – người bán trả cước). */
+export const incotermIncludesFreight = (code: string): boolean => SELLER_PAYS_FREIGHT.has(code);
+
+/** Mã điều kiện giao hàng chuẩn hóa ("CIF HAIPHONG" → "CIF", "C AND F" / "CNF" → "C&F", bỏ tiền tố "Incoterms 2020"); cùng cách đọc với luật R-INCOTERM-CODE. */
+export function incotermOf(raw: string | null | undefined): string {
+  const t = (raw ?? "").trim().toUpperCase().replace(/^INCOTERMS?\s*(\d{4})?[\s:,-]*/, "");
+  if (/^(C\s*&\s*F|C\s*N\s*F|C\s+AND\s+F)(?![A-Z])/.test(t)) return "C&F";
+  if (/^(C\s*&\s*I|C\s+AND\s+I)(?![A-Z])/.test(t)) return "C&I";
+  return t.split(/[^A-Z&]+/)[0] ?? "";
+}
+
+/**
+ * Điều kiện giao hàng có khớp người trả cước trên vận đơn không (luật R-FREIGHT-TERM, giao diện, mock dùng chung):
+ * CONFLICT = nhóm C/D (người bán trả cước) mà vận đơn ghi Collect; CHECK = nhóm E/F mà vận đơn ghi Prepaid (người bán trả hộ – vẫn phải cộng cước);
+ * OK = khớp; UNKNOWN = thiếu điều kiện giao hàng hoặc vận đơn không ghi.
+ */
+export function freightTermFit(incoterm: string, freightTerm: string | null | undefined): "OK" | "CONFLICT" | "CHECK" | "UNKNOWN" {
+  const code = incotermOf(incoterm);
+  const term = (freightTerm ?? "").trim().toUpperCase();
+  if (!code || (term !== "PREPAID" && term !== "COLLECT")) return "UNKNOWN";
+  if (SELLER_PAYS_FREIGHT.has(code)) return term === "COLLECT" ? "CONFLICT" : "OK";
+  if (BUYER_PAYS_FREIGHT.has(code)) return term === "PREPAID" ? "CHECK" : "OK";
+  return "UNKNOWN";
+}

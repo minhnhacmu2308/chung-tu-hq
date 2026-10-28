@@ -1,13 +1,13 @@
 "use client";
 // Khối "Chi phí và điều chỉnh trị giá" ở bước OCR & kiểm tra: cước (1.47), bảo hiểm (1.48), khoản điều chỉnh (1.49); xuất khẩu theo 2.40.
 // Chứng từ là nguồn chính; người khai nhập số / ghi lý do khi chứng từ không có. Tờ khai đọc lại từ đây (ô 1.47–1.49 chỉ đọc).
-import { ADJUSTMENT_CODES, editBlockFor, FreightReasonSchema, type FreightReason, type ValueChargesView } from "@kb/contracts";
+import { ADJUSTMENT_CODES, editBlockFor, FreightReasonSchema, FreightTermReasonSchema, type FreightReason, type FreightTermReason, type ValueChargesView } from "@kb/contracts";
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox, Dialog, DialogContent, DialogFooter, Field, FormSection, Input, RadioGroup,
   Select, SkeletonList, Stack, fill, toast, useMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Receipt, Sparkles, Trash2 } from "lucide-react";
+import { ArrowUpRight, Plus, Receipt, Sparkles, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { customsKeys, getSubmission } from "@/api/customs";
 import { declarationKeys, getDeclarationView } from "@/api/declaration";
@@ -19,7 +19,7 @@ import { useCodeList } from "@/features/declaration-form/use-code-list";
 import { formatRelative } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import {
-  emptyAdjustmentRow, formFromView, freightReasonLabel, kindOfCode, suggestAdjustments, summarize, toValueCharges, type AdjustmentRowForm, type ChargesForm, type ChargesFormErrors,
+  emptyAdjustmentRow, formFromView, freightReasonLabel, freightTermReasonLabel, freightTermStatus, kindOfCode, suggestAdjustments, summarize, toValueCharges, type AdjustmentRowForm, type ChargesForm, type ChargesFormErrors,
 } from "./value-charges-form";
 import { VALUE_CHARGES_MESSAGES } from "./value-charges.messages";
 
@@ -27,7 +27,7 @@ const MAX_ADJUSTMENTS = 5;
 const errorProp = (e: string | undefined) => (e ? { error: e } : {});
 const CODE_OPTIONS = ADJUSTMENT_CODES.map((c) => ({ value: c.code, label: `${c.code} – ${c.label}` }));
 
-function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open: boolean; onOpenChange: (o: boolean) => void; view: ValueChargesView; dossierId: string; currency: string }) {
+function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIncoterm }: { open: boolean; onOpenChange: (o: boolean) => void; view: ValueChargesView; dossierId: string; currency: string; onEditIncoterm?: (() => void) | undefined }) {
   const qc = useQueryClient();
   const t = useMessages(VALUE_CHARGES_MESSAGES);
   const locale = useUiLocale();
@@ -40,6 +40,8 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open
     .map((c) => ({ value: c, label: c }));
   const [errors, setErrors] = useState<ChargesFormErrors>({});
   const nk = view.direction === "NK";
+  const termFit = freightTermStatus(view);
+  const termOptions = FreightTermReasonSchema.options.map((r) => ({ value: r, label: freightTermReasonLabel(t, r) }));
   const insuranceApplies = nk ? !view.insuranceIncluded : view.insuranceIncluded;
   const save = useMutation({
     mutationFn: (input: Parameters<typeof saveValueCharges>[1]) => saveValueCharges(dossierId, input),
@@ -58,9 +60,10 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open
   const setRow = (i: number, patch: Partial<AdjustmentRowForm>) => set("adjustments", form.adjustments.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const r = toValueCharges(form, locale);
+    const r = toValueCharges(form, locale, { docsFreight: Boolean(view.fromDocuments.freight) });
     if (!r.ok) return setErrors(r.errors);
-    save.mutate(r.value);
+    // Điều kiện giao hàng không cộng / trừ cước (vd vừa đổi FCA → CIF): bỏ số cước nhập tay cũ thay vì giữ ngầm.
+    save.mutate(view.freightRequired ? r.value : { ...r.value, freight: null });
   };
   const reset = (o: boolean) => {
     if (o) {
@@ -84,16 +87,40 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open
             <FormSection title={fill(t.freightTitle, { no: nk ? "1.47" : "2.40" })} description={view.freightRequired ? (nk ? t.freightAddNk : t.freightSubtractXk) : t.notNeeded}>
               {view.freightRequired ? (
                 <Stack gap="sm">
-                  <RadioGroup<ChargesForm["freightMode"]>
+                  <RadioGroup<ChargesForm["freightMode"] | "NONE">
                     label={t.freightSource}
                     hideLabel
                     value={form.freightMode}
-                    onChange={(v) => set("freightMode", v)}
+                    onChange={(v) => v !== "NONE" && set("freightMode", v)}
                     options={[
                       { value: "DOC", label: t.fromDocs, description: view.fromDocuments.freight ? fill(t.freightFromDocs, { amount: view.fromDocuments.freight.amount, currency: view.fromDocuments.freight.currency }) : t.freightNoDocs },
+                      // Cước bắt buộc theo điều kiện giao hàng (hoặc chứng từ có cước) → không khai "không có phí" được: nhập phí hoặc đổi điều kiện giao hàng.
+                      {
+                        value: "NONE", label: t.freightNone, disabled: true,
+                        description: view.fromDocuments.freight
+                          ? fill(t.freightNoneDocs, { amount: view.fromDocuments.freight.amount, currency: view.fromDocuments.freight.currency })
+                          : fill(t.freightNoneIncoterm, { incoterm: view.incoterm }),
+                      },
                       { value: "MANUAL", label: t.freightManual, description: t.freightManualHint },
                     ]}
                   />
+                  {onEditIncoterm && (
+                    <div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        leftIcon={<ArrowUpRight className="h-4 w-4" />}
+                        onClick={() => {
+                          onOpenChange(false);
+                          // Hộp thoại trả focus về nút "Sửa chi phí" ở nhịp kế tiếp sau khi đóng → nhảy tới ô sau nhịp đó.
+                          setTimeout(onEditIncoterm, 50);
+                        }}
+                      >
+                        {t.editIncoterm}
+                      </Button>
+                    </div>
+                  )}
                   {form.freightMode === "MANUAL" && (
                     <div className="grid gap-3 cq-md:grid-cols-2">
                       <Field label={t.freightAmount} hint={t.freightAmountHint} {...errorProp(errors.freightAmount)}>
@@ -111,10 +138,58 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open
                     </div>
                   )}
                 </Stack>
+              ) : view.incoterm ? (
+                // Điều kiện giao hàng không cộng / trừ cước: "Không có phí phát sinh" là lựa chọn duy nhất – hiện rõ để người khai biết 1.47 / 2.40 để trống.
+                <RadioGroup<"NONE">
+                  label={t.freightSource}
+                  hideLabel
+                  value="NONE"
+                  onChange={() => undefined}
+                  options={[{
+                    value: "NONE", label: t.freightNone,
+                    description: [
+                      nk ? t.freightIncludedNk : t.freightNotIncludedXk,
+                      view.charges.freight?.amount ? fill(t.freightManualStale, { amount: `${view.charges.freight.amount} ${view.charges.freight.currency ?? ""}`.trim(), incoterm: view.incoterm })
+                        : view.fromDocuments.freight ? fill(t.freightDocsReference, { amount: view.fromDocuments.freight.amount, currency: view.fromDocuments.freight.currency, incoterm: view.incoterm }) : "",
+                    ].filter(Boolean).join(" "),
+                  }]}
+                />
               ) : (
                 <p className="text-sm text-fg-muted">{nk ? t.freightIncludedNk : t.freightNotIncludedXk}</p>
               )}
             </FormSection>
+
+            {(termFit === "CONFLICT" || termFit === "CHECK") && (
+              <FormSection title={t.sumFreightTerm}>
+                <Stack gap="sm">
+                  <Alert tone={termFit === "CONFLICT" ? "danger" : "warning"} title={fill(termFit === "CONFLICT" ? t.termConflictTitle : t.termCheckTitle, { incoterm: view.incoterm })}>
+                    {fill(termFit === "CONFLICT" ? t.termConflictBody : t.termCheckBody, { incoterm: view.incoterm })}
+                  </Alert>
+                  {termFit === "CONFLICT" && (
+                    <>
+                      <RadioGroup<FreightTermReason>
+                        label={t.termReason}
+                        value={form.termReason || null}
+                        onChange={(v) => set("termReason", v)}
+                        options={termOptions}
+                      />
+                      {form.termReason && (
+                        <Field label={t.note} required={form.termReason === "OTHER"} {...errorProp(errors.termNote)}>
+                          <Input value={form.termNote} onChange={(e) => set("termNote", e.target.value)} maxLength={200} placeholder={t.termNotePlaceholder} />
+                        </Field>
+                      )}
+                      {onEditIncoterm && (
+                        <div>
+                          <Button type="button" size="sm" variant="secondary" leftIcon={<ArrowUpRight className="h-4 w-4" />} onClick={() => { onOpenChange(false); setTimeout(onEditIncoterm, 50); }}>
+                            {t.editIncoterm}
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </Stack>
+              </FormSection>
+            )}
 
             <FormSection title={fill(t.insuranceTitle, { no: nk ? "1.48" : "2.40" })} description={insuranceApplies ? (nk ? t.insuranceAddNk : t.insuranceSubtractXk) : t.notNeeded}>
               {insuranceApplies ? (
@@ -156,9 +231,14 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open
                     onChange={(v) => set("adjustmentsMode", v)}
                     options={[
                       { value: "DOC", label: t.fromDocs, description: view.fromDocuments.other.length ? fill(t.adjustmentsFromDocs, { n: view.fromDocuments.other.length }) : t.adjustmentsNoDocs },
+                      {
+                        value: "NONE", label: t.adjustmentsNone, disabled: view.fromDocuments.other.length > 0,
+                        description: view.fromDocuments.other.length > 0 ? fill(t.adjustmentsNoneDocs, { n: view.fromDocuments.other.length }) : t.adjustmentsNoneHint,
+                      },
                       { value: "MANUAL", label: t.adjustmentsManual, description: t.adjustmentsManualHint },
                     ]}
                   />
+                  {errors.adjustments && <Alert tone="danger">{errors.adjustments}</Alert>}
                   {form.adjustmentsMode === "MANUAL" && (
                     <Stack gap="sm">
                       {form.adjustments.length === 0 && <p className="text-sm text-fg-muted">{t.adjustmentsEmpty}</p>}
@@ -219,7 +299,8 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency }: { open
   );
 }
 
-export function ValueChargesCard({ dossierId, currency }: { dossierId: string; currency: string }) {
+/** onEditIncoterm: nhảy tới ô Điều kiện giao hàng của chứng từ (bước OCR) – lô hàng không có cước mà điều kiện bắt buộc cước. */
+export function ValueChargesCard({ dossierId, currency, onEditIncoterm }: { dossierId: string; currency: string; onEditIncoterm?: () => void }) {
   const [open, setOpen] = useState(false);
   const t = useMessages(VALUE_CHARGES_MESSAGES);
   const locale = useUiLocale();
@@ -277,7 +358,7 @@ export function ValueChargesCard({ dossierId, currency }: { dossierId: string; c
                 </li>
               ))}
             </ul>
-            <ChargesDialog open={open} onOpenChange={setOpen} view={q.data} dossierId={dossierId} currency={currency} />
+            <ChargesDialog open={open} onOpenChange={setOpen} view={q.data} dossierId={dossierId} currency={currency} onEditIncoterm={onEditIncoterm} />
           </Stack>
         )}
       </CardContent>

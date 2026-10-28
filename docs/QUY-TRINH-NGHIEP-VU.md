@@ -30,7 +30,7 @@ KhaiBáo AI đưa doanh nghiệp xuất nhập khẩu **tự khai báo** đi t�
 ```mermaid
 flowchart LR
   A[Bộ chứng từ<br/>Invoice, PL, B/L, C/O…] --> B[AI đọc chứng từ]
-  B --> C[Đối chiếu chéo<br/>27 luật]
+  B --> C[Đối chiếu chéo<br/>28 luật]
   C --> D[Người khai kiểm tra/sửa]
   D --> E[Gợi ý HS<br/>người xác nhận]
   E --> F[Dựng tờ khai<br/>IDA/EDA – code thuần]
@@ -152,7 +152,7 @@ flowchart LR
   C -- Không --> SK
   AI1 --> SK[Chọn Skill:<br/>theo nhà cung cấp, không có thì theo loại chứng từ]
   SK --> AI2[AI trích xuất theo schema + trường bổ sung + ví dụ đã duyệt]
-  AI2 --> Z[Kiểm tra Zod] --> M[Gộp mọi chứng từ → Shipment<br/>phiên bản mới] --> V[Chạy 27 luật đối chiếu]
+  AI2 --> Z[Kiểm tra Zod] --> M[Gộp mọi chứng từ → Shipment<br/>phiên bản mới] --> V[Chạy 28 luật đối chiếu]
 ```
 
 - Mỗi lần gọi AI ghi `usage_events` (token, chi phí).
@@ -177,18 +177,20 @@ flowchart LR
 - **Sửa** → USER_CONFIRMED; **Đúng** → USER_CONFIRMED; **Hoàn tác** → về giá trị AI đọc. Mỗi thao tác ghi `field_audit` (append-only), cập nhật dữ liệu lô hàng và chạy lại luật.
 - Được đi tiếp khi còn trường nghi ngờ (chúng được đánh dấu trên tờ khai). Khóa sửa khi hồ sơ đã duyệt/truyền/hủy.
 - Xuất **bảng đọc chứng từ** (Excel) theo từng chứng từ.
-- **Chi phí và điều chỉnh trị giá** (khối riêng, lưu theo hồ sơ – đọc lại chứng từ không mất; bảng `value_charges`): chứng từ là nguồn chính, người khai bổ sung khi chứng từ không có. Mỗi lần lưu ghi `field_audit` (`CHARGES.freight|insurance|adjustments`, nguồn `CHARGE_EDIT`), chạy lại luật và dựng lại tờ khai nháp.
-  - **Cước (1.47; xuất khẩu trừ ở 2.40)**: theo chứng từ, hoặc nhập tay số tiền + bắt buộc chọn lý do (thông báo forwarder, hóa đơn bổ sung sau, hợp đồng vận tải, khác – ghi rõ). Số nhập tay thắng chứng từ; lệch số chứng từ → cảnh báo. EXW/FCA/FAS/FOB không có số và không có lý do → **chặn duyệt**; có lý do mà chưa có số → cảnh báo, được duyệt, bổ sung trước khi truyền.
+- **Chi phí và điều chỉnh trị giá** (khối riêng, lưu theo hồ sơ – đọc lại chứng từ không mất; bảng `value_charges`): chứng từ là nguồn chính, người khai bổ sung khi chứng từ không có. Mỗi lần lưu ghi `field_audit` (`CHARGES.freight|insurance|adjustments|freightTermNote`, nguồn `CHARGE_EDIT`), chạy lại luật và dựng lại tờ khai nháp. Ràng buộc khi lưu (giao diện, mock, backend dùng chung `chargesConflict`): chứng từ có cước mà nhập tay chỉ ghi lý do → từ chối (`CHARGES_FREIGHT_AMOUNT_REQUIRED`); chứng từ có phí khác mà khai "Không có phí phát sinh" ở 1.49 → từ chối (`CHARGES_ADJUSTMENTS_IN_DOCS`).
+  - **Cước (1.47; xuất khẩu trừ ở 2.40)**: theo chứng từ, hoặc nhập tay số tiền + bắt buộc chọn lý do (thông báo forwarder, hóa đơn bổ sung sau, hợp đồng vận tải, khác – ghi rõ). Số nhập tay thắng chứng từ; lệch số chứng từ → cảnh báo. EXW/FCA/FAS/FOB không có số và không có lý do → **chặn duyệt**; có lý do mà chưa có số → cảnh báo, được duyệt, bổ sung trước khi truyền. Lựa chọn "Không có phí phát sinh" bị khóa khi điều kiện giao hàng bắt buộc cước hoặc chứng từ có cước (kèm nút "Đổi điều kiện giao hàng" nhảy tới ô của hóa đơn); điều kiện đã gồm cước (CIF, DAP…) → "Không có phí phát sinh", cước trên chứng từ chỉ để tham khảo.
   - **Bảo hiểm (1.48)**: theo chứng từ / **Không mua bảo hiểm** (tờ khai ghi mã D) / nhập số. CIF, CIP… không khai.
-  - **Khoản điều chỉnh (1.49, chỉ nhập khẩu)**: lập danh sách tối đa 5 khoản, mỗi khoản chọn mã tên (A…N), cộng AD / trừ SB, mã tiền, trị giá – thay toàn bộ phí khác đọc từ chứng từ. Phí khác đọc từ chứng từ chưa có mã → chặn truyền.
+  - **Người trả cước trên vận đơn** (Freight Prepaid / Collect – trường "Điều kiện cước" của B/L): CIF/CFR/DAP… mà vận đơn ghi Collect → luật R-FREIGHT-TERM chặn duyệt cho tới khi sửa điều kiện giao hàng hoặc người khai ghi lý do (phí tại cảng đến / hóa đơn–hợp đồng ghi đúng điều kiện / khác) → cảnh báo kèm lý do.
+  - **Đổi điều kiện giao hàng trên hóa đơn** (ô OCR, đổi sang mã khác): hộp thoại báo trước cước sẽ cộng / không cộng / trừ thế nào và trị giá tính thuế đổi khoảng bao nhiêu VND (cước × tỷ giá tính thuế ngày khai giờ VN); mâu thuẫn người trả cước thì bắt chọn lý do. Bước Review nhắc người duyệt: mã máy đọc → mã người khai sửa, ai sửa, lúc nào, lý do.
+  - **Khoản điều chỉnh (1.49, chỉ nhập khẩu)**: "Không có phí phát sinh" (khóa khi chứng từ có phí khác), hoặc lập danh sách tối đa 5 khoản, mỗi khoản chọn mã tên (A…N), cộng AD / trừ SB, mã tiền, trị giá – thay toàn bộ phí khác đọc từ chứng từ. Phí khác đọc từ chứng từ chưa có mã → chặn truyền.
 
-### 6.4 Luật đối chiếu chéo (27 luật)
+### 6.4 Luật đối chiếu chéo (28 luật)
 
 Luật **BLOCKER = FAIL chặn phê duyệt và truyền**. Luật có ghi "NK" chỉ áp cho tờ khai nhập (tờ khai xuất hiển thị "Không áp dụng").
 
 | Mức | Luật |
 |---|---|
-| **BLOCKER** | Tổng trị giá invoice = Σ dòng hàng · Số tờ khai đổi sau khi đã có số tờ khai (sửa dòng hàng làm lô 3 tờ thành 2 hoặc ngược lại – hủy tờ thừa / khai lại trước khi truyền) · Trị giá dòng ≤ 12 chữ số phần nguyên · Trọng lượng Packing List khớp vận đơn · Số chữ số tổng trọng lượng theo phương thức vận chuyển (không: 8+1, khác: 6+3) · Số kiện PL khớp vận đơn · Số kiện là số nguyên dương · Cước vận chuyển để cộng trị giá khi EXW/FCA/FAS/FOB (NK) · Điều kiện giao hàng có trong bảng mã (DPU chỉ tờ khai nhập) · Số AWB ≤ 20 ký tự · Danh sách container theo phương thức vận chuyển (tờ khai xuất hàng container phải có số container – TT121) · Mã nước đối tác ISO 2 ký tự · Hàng chương 84/85 khai MO/CU (CV 2061, NK) |
+| **BLOCKER** | Tổng trị giá invoice = Σ dòng hàng · Số tờ khai đổi sau khi đã có số tờ khai (sửa dòng hàng làm lô 3 tờ thành 2 hoặc ngược lại – hủy tờ thừa / khai lại trước khi truyền) · Trị giá dòng ≤ 12 chữ số phần nguyên · Trọng lượng Packing List khớp vận đơn · Số chữ số tổng trọng lượng theo phương thức vận chuyển (không: 8+1, khác: 6+3) · Số kiện PL khớp vận đơn · Số kiện là số nguyên dương · Cước vận chuyển để cộng trị giá khi EXW/FCA/FAS/FOB (NK) · Điều kiện giao hàng khớp người trả cước trên vận đơn (CIF… mà Freight Collect; có giải trình → cảnh báo) · Điều kiện giao hàng có trong bảng mã (DPU chỉ tờ khai nhập) · Số AWB ≤ 20 ký tự · Danh sách container theo phương thức vận chuyển (tờ khai xuất hàng container phải có số container – TT121) · Mã nước đối tác ISO 2 ký tự · Hàng chương 84/85 khai MO/CU (CV 2061, NK) |
 | **WARNING** | Số invoice trên chứng từ khác khớp · Đơn giá × số lượng = trị giá dòng (±1) · Số lượng ≤ 2 chữ số thập phân · Mô tả hàng ≤ 200 ký tự · Xuất xứ C/O khớp invoice · Phí bảo hiểm phù hợp điều kiện giao hàng (NK) · Cảng dỡ phải ở Việt Nam (NK) · Thứ tự ngày chứng từ (NK) · Tên/địa chỉ đối tác vừa ô khai · Hàng đóng chung container · Mã địa điểm lưu kho |
 | **INFO** | Lô hàng > 50 dòng – thông báo sẽ khai N tờ khai (vd 50/50/20, xem 9.3) · Người mua trên invoice là doanh nghiệp theo MST (NK) · HS trên invoice chỉ tham khảo 6 số |
 

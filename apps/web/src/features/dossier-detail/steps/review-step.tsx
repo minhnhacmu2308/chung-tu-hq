@@ -25,6 +25,7 @@ import { CustomsInfoPanel } from "./customs-info-panel";
 import { errorPlace, fieldErrors } from "./customs-errors";
 import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
+import { IncotermChangedNote } from "./incoterm-changed-note";
 import { REVIEW_MESSAGES } from "./review-step.messages";
 import { anyInProgress, encodeRecalled, parseRecalled, recalledCount } from "./branch-sheets";
 import { editScopeOf, sentChangeWarnings } from "./edit-scope";
@@ -33,7 +34,7 @@ import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
 import type { LeaveGuard } from "../../declaration-print/field-edit-panel";
 import { cellDomId } from "../../declaration-print/print-cell";
-import { declarationGapsOf, sheetIssueCounts, sheetTarget } from "../../declaration-print/print-state";
+import { declarationGapsOf, fieldCell, sheetIssueCounts, sheetTarget } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { LoadError } from "@/components/common/load-error";
 
@@ -252,9 +253,13 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const required = isDraft ? declarationGapsOf(decl, items, subQ.data) : { gaps: [], lineNos: [] };
   const goToGap = () => {
     const g = required.gaps[0];
-    if (!g) return;
+    if (g) goToCell(g);
+  };
+  /** Mở tab bản in, cuộn tới ô và mở panel sửa ô. `line` = chỉ số dòng hàng (0-based) trong `items`. */
+  const goToCell = (g: { key: string; line?: number | undefined }) => {
     // Ô của dòng hàng: mở đúng tờ chứa dòng (chỉ số dòng trong tờ); ô tờ khai: ở tờ đang xem.
-    const at = g.line === undefined ? undefined : sheetTarget(required.lineNos, g.line);
+    const lineNos = items.map((i) => i.lineNo);
+    const at = g.line === undefined ? undefined : sheetTarget(lineNos, g.line);
     if (at && at.no !== sheet) {
       const href = sheetHref(at.no, "full");
       if (tab === "full" && leaveGuard.current?.(href)) return;
@@ -327,9 +332,33 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 {fill(t.approvedBy, { who: decl.approvedBy, at: decl.approvedAt ? formatDateTime(decl.approvedAt) : "—" })}
               </Alert>
             )}
+            {isDraft && <IncotermChangedNote dossierId={dossier.id} />}
             {isDraft && suspect.length > 0 && (
               <Alert tone="warning" title={fill(t.suspectTitle, { n: suspect.length })}>
-                {fill(t.suspectBody, { tab: legacy ? t.tabFullLegacy : t.tabFull, fields: suspect.map((f) => fieldTitle(f)).join(", ") })}
+                {legacy ? (
+                  fill(t.suspectBody, { tab: t.tabFullLegacy, fields: suspect.map((f) => fieldTitle(f)).join(", ") })
+                ) : (
+                  <>
+                    <p>{t.suspectPick}</p>
+                    {/* Mỗi chỉ tiêu là một nút: mở tab bản in, cuộn tới ô và mở panel để kiểm tra / xác nhận. Ô không có trên bản in → chỉ ghi tên. */}
+                    <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                      {suspect.map((f) => {
+                        const cell = fieldCell(decl.kind, f.code, items);
+                        return (
+                          <li key={f.code}>
+                            {cell ? (
+                              <Button variant="link" size="sm" className="h-auto px-0 py-0 text-left" onClick={() => goToCell(cell)}>
+                                {fieldTitle(f)}
+                              </Button>
+                            ) : (
+                              fieldTitle(f)
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                )}
               </Alert>
             )}
             {isDraft && blockedByFourEyes && (

@@ -48,6 +48,7 @@ describe("chi phí và điều chỉnh trị giá", () => {
   it("xem: FCA phải có cước, giá trị đọc từ chứng từ, chưa nhập tay; người xem đọc được", async () => {
     const v = unwrap(await getValueCharges(deps, viewer, D));
     expect(v).toMatchObject({ direction: "NK", incoterm: "FCA", freightRequired: true, insuranceIncluded: false, locked: false, charges: EMPTY_VALUE_CHARGES, updatedAt: null });
+    expect(v.freightVnd).toBe("29210000"); // cước 1150 USD × tỷ giá tính thuế 25.400 – trị giá đổi chừng này khi đổi điều kiện giao hàng
     expect(v.fromDocuments.freight).toMatchObject({ amount: "1150", currency: "USD" });
   });
 
@@ -76,6 +77,23 @@ describe("chi phí và điều chỉnh trị giá", () => {
     dossiers.rows[0]!.status = "APPROVED";
     expect(errCode(await saveValueCharges(deps, declarant, D, manualFreight))).toBe("DOSSIER_LOCKED");
     expect(unwrap(await getValueCharges(deps, declarant, D)).locked).toBe(true);
+  });
+
+  it("ràng buộc theo chứng từ: có cước mà nhập tay chỉ ghi lý do → VALIDATION; có phí khác mà khai không có phí phát sinh → VALIDATION; không ghi", async () => {
+    const noAmount = await saveValueCharges(deps, declarant, D, { ...EMPTY_VALUE_CHARGES, freight: { amount: null, currency: null, reason: "CONTRACT", note: "" } });
+    expect(noAmount).toMatchObject({ ok: false, error: { code: "VALIDATION", reason: "CHARGES_FREIGHT_AMOUNT_REQUIRED", params: { amount: "1150", currency: "USD" } } });
+    const none = await saveValueCharges(deps, declarant, D, { ...EMPTY_VALUE_CHARGES, adjustments: [] });
+    expect(none).toMatchObject({ ok: false, error: { code: "VALIDATION", reason: "CHARGES_ADJUSTMENTS_IN_DOCS", params: { n: 2 } } });
+    expect(uow.data.valueCharges).toEqual([]);
+    expect(audit.rows).toEqual([]);
+  });
+
+  it("cước quy đổi VND theo tỷ giá của ngày khai giờ Việt Nam (18:00 UTC = sáng hôm sau ở VN); chưa có tỷ giá → null", async () => {
+    uow.data.exchangeRates.push({ currency: "USD", date: "2026-10-15", rate: "26000" });
+    deps.clock = fixedClock("2026-10-14T18:00:00.000Z"); // 01:00 ngày 15/10 giờ VN
+    expect(unwrap(await getValueCharges(deps, declarant, D)).freightVnd).toBe("29900000"); // 1150 × 26.000, không phải tỷ giá ngày 14
+    uow.data.exchangeRates.length = 0;
+    expect(unwrap(await getValueCharges(deps, declarant, D)).freightVnd).toBeNull();
   });
 
   it("xuất khẩu: bỏ danh sách khoản điều chỉnh (không có chỉ tiêu 1.49)", async () => {

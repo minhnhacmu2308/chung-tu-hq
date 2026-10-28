@@ -11,7 +11,7 @@ import { OTHER_FIELDS_DOM_ID, OtherFields } from "./other-fields";
 import { cellDomId, type CellLook } from "./print-cell";
 import { regionDomId, PrintSheets } from "./print-sheets";
 import {
-  cellState, editedKeys, errorSlots, fieldLocator, LOOKUP_NAME_CELLS, otherFieldCells, pageCount, panelOrder, printData, printIssues, printValue,
+  cellState, customsAnswered, editedKeys, errorSlots, fieldLocator, LOOKUP_NAME_CELLS, otherFieldCells, pageCount, panelOrder, hiddenUntilCustoms, printData, printIssues, printValue,
   printStateFor, sameNumber, sheetIssueCounts, withLookupNames, type PrintData, type PrintTarget,
 } from "./print-state";
 import { codeScope } from "../declaration-form/code-scope";
@@ -82,14 +82,16 @@ function printModel(data: PrintData, decl: Declaration, items: LineItem[], submi
     });
     return { raw, state, compareTo: line === undefined ? compareTo(key) : null };
   };
+  // Hải quan chưa trả kết quả: ô Hải quan trả về còn trống không hiện (chưa có gì để xem) – Tab cũng bỏ qua.
+  const hidden = customsAnswered(submission) ? undefined : (key: string, line?: number) => hiddenUntilCustoms(kind, key, look(key, line).raw);
   // Thứ tự Tab của panel: ô in, rồi ô "Chỉ tiêu khác" đang áp dụng (ô không áp dụng không hiện nên không nhảy tới).
   const other = otherFieldCells(kind, values, itemRows);
   const otherKeys = otherFieldKeys(kind);
-  const order = panelOrder(kind, items.length).filter((t) =>
-    t.line === undefined ? !otherKeys.decl.includes(t.key) || other.decl.includes(t.key) : !otherKeys.item.includes(t.key) || Boolean(other.items[t.line]?.includes(t.key)),
+  const order = panelOrder(kind, items.length).filter((t) => !hidden?.(t.key, t.line) && (
+    t.line === undefined ? !otherKeys.decl.includes(t.key) || other.decl.includes(t.key) : !otherKeys.item.includes(t.key) || Boolean(other.items[t.line]?.includes(t.key))),
   );
   const hasOther = other.decl.length > 0 || other.items.some((k) => k.length > 0);
-  return { kind, lineNos, values, itemRows, errors, attention, unplaced: issues.unplaced, issueCount: issues.count, look, order, hasOther, directives: info?.directives.length ?? 0 };
+  return { kind, hidden, lineNos, values, itemRows, errors, attention, unplaced: issues.unplaced, issueCount: issues.count, look, order, hasOther, directives: info?.directives.length ?? 0 };
 }
 
 export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope: editScope, canEdit, submission: lotSubmission, branches, sheet, onSheetChange, leaveGuard }: Props) {
@@ -193,6 +195,7 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope
         look={model.look}
         selected={selected}
         onSelect={select}
+        hidden={model.hidden}
       />
       <OtherFields kind={model.kind} decl={model.values} items={model.itemRows} lineNos={model.lineNos} look={model.look} selected={selected} onSelect={select} />
       <FieldEditPanel

@@ -1,10 +1,13 @@
 // Chi phí và điều chỉnh trị giá người khai nhập ở bước OCR & kiểm tra (mock). Quy tắc theo Incoterm giống backend
 // (packages/core declaration/domain/adjustments.ts); lưu xong tính lại trị giá tính thuế của tờ khai nháp.
-import { ADJUSTMENT_CODES, canEditDeclaration, EMPTY_VALUE_CHARGES, ValueChargesSchema, type DocumentCharges, type ValueCharges, type ValueChargesView } from "@kb/contracts";
+import { ADJUSTMENT_CODES, canEditDeclaration, chargesConflict, EMPTY_VALUE_CHARGES, ValueChargesSchema, type DocumentCharges, type ValueCharges, type ValueChargesView } from "@kb/contracts";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
-import { computeTaxes, shipmentOf } from "@/mocks/declaration-builder";
+import { computeTaxes, EXCHANGE_RATES, shipmentOf } from "@/mocks/declaration-builder";
+import { toMinor } from "@/lib/decimal";
 import type { MockDb } from "@/mocks/db";
 import type { Declaration, Dossier } from "@/mocks/types";
+import { freightTermOfDossier, syncFreightTermCheck } from "@/mocks/freight-term";
+import { reasonApiError } from "@/mocks/reason-error";
 import { editScopeMockError } from "./customs";
 
 export const valueChargesKeys = { detail: (dossierId: string) => ["value-charges", dossierId] as const };
@@ -28,11 +31,19 @@ function documentCharges(d: Dossier): DocumentCharges {
   };
 }
 
+/** Cước chứng từ quy đổi VND theo tỷ giá tính thuế mẫu (backend: Decimal, tỷ giá hôm nay), làm tròn đồng. */
+function freightVndOf(c: DocumentCharges): string | null {
+  const f = c.freight;
+  const rate = f ? (f.currency === "VND" ? 1 : EXCHANGE_RATES[f.currency]) : undefined;
+  return f && rate ? String(Math.round((toMinor(f.amount) * rate) / 100)) : null;
+}
+
 function view(db: MockDb, d: Dossier): ValueChargesView {
   const saved = db.valueCharges[d.id];
+  const docs = documentCharges(d);
   return {
-    charges: saved?.data ?? EMPTY_VALUE_CHARGES, fromDocuments: documentCharges(d), direction: d.direction, incoterm: d.incoterm,
-    freightRequired: freightRequired(d), insuranceIncluded: INSURANCE_INCLUDED.has(d.incoterm), locked: LOCKED.has(d.status),
+    charges: saved?.data ?? EMPTY_VALUE_CHARGES, fromDocuments: docs, freightVnd: freightVndOf(docs), direction: d.direction, incoterm: d.incoterm,
+    freightRequired: freightRequired(d), freightTerm: freightTermOfDossier(db, d.id), insuranceIncluded: INSURANCE_INCLUDED.has(d.incoterm), locked: LOCKED.has(d.status),
     updatedAt: saved?.updatedAt ?? null, updatedBy: saved?.updatedBy ?? null,
   };
 }
@@ -77,7 +88,11 @@ export const saveValueCharges = (dossierId: string, input: ValueCharges) =>
     if (scoped) throw scoped;
     const parsed = ValueChargesSchema.parse(input);
     const data: ValueCharges = d.direction === "XK" ? { ...parsed, adjustments: null } : parsed;
+    // Cùng ràng buộc theo chứng từ với backend (@kb/contracts chargesConflict).
+    const conflict = chargesConflict(data, view(db, d));
+    if (conflict) throw reasonApiError("VALIDATION", conflict.reason, conflict.params);
     db.valueCharges[d.id] = { data, updatedAt: nowIso(), updatedBy: db.currentUserId };
+    syncFreightTermCheck(db, d.id);
     const decl = db.declarations.find((x) => x.dossierId === d.id);
     if (decl?.status === "DRAFT") {
       const adjustments = adjustmentsOf(d, data);

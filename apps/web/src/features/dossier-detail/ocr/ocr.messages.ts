@@ -14,7 +14,7 @@ export const CROSS_CHECK_MESSAGES = defineMessages({
     title: "AI cross-check", rulesRun: "{n} rules run on the document set",
     passCount: "{n} matched", warnCount: "{n} warnings", failCount: "{n} errors", skippedCount: "{n} awaiting data",
     notEnough: "Not enough documents to cross-check yet.", issuesLabel: "Rules needing attention",
-    showOthers: "Show {n} other rules (matched / awaiting data)", hideOthers: "Hide {n} other rules (matched / awaiting data)",
+    showOthers: "Show {n} other rules (passed / pending)", hideOthers: "Hide {n} other rules (passed / pending)",
     passedLabel: "Rules matched or awaiting data",
   },
   zh: {

@@ -3,9 +3,11 @@
 // `target` = ô người dùng vừa chọn; panel hiện `shown`. Còn thay đổi chưa lưu mà chọn ô khác / đóng / Tab sang ô khác / sang bước OCR
 // → hỏi Lưu · Bỏ thay đổi · Ở lại (Ở lại trả lựa chọn và focus về ô đang sửa). Đang lưu → chờ lưu xong mới chuyển ô (không hỏi / lưu lặp).
 // Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
-import { Button, Dialog, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
-import { editBlockFor, fieldRole, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem } from "@kb/contracts";
-import { PenLine, Save } from "lucide-react";
+import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
+import {
+  editBlockFor, fieldRole, formKeysOf, isDeclarationFieldEditable, itemFieldCode, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
+} from "@kb/contracts";
+import { CheckCircle2, CopyCheck, PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { formatNumber } from "@/lib/format";
@@ -17,7 +19,7 @@ import { fieldTitle } from "../declaration-form/display";
 import type { FormValues } from "../declaration-form/form-state";
 import { useSaveDeclarationEdits } from "../declaration-form/use-save-edits";
 import { PanelDetails } from "./panel-details";
-import { fieldLocator, nextTarget, type PrintTarget } from "./print-state";
+import { applyToOtherLines, fieldLocator, nextTarget, taxCodeKeys, type PrintTarget } from "./print-state";
 import { UnsavedDialog } from "./unsaved-dialog";
 import { PRINT_MESSAGES } from "./print.messages";
 
@@ -77,6 +79,8 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   const [changes, setChanges] = useState<FormValues>({});
   const [confirm, setConfirm] = useState<{ next: PrintTarget | null; href?: string } | null>(null);
   const [hsItem, setHsItem] = useState<LineItem | null>(null);
+  // Mã thuế của dòng hàng: mặc định áp cho mọi dòng khác của tờ (bỏ chọn → chỉ dòng đang sửa, các dòng khác sửa tay từng dòng).
+  const [applyAll, setApplyAll] = useState(true);
 
   const spot = shown ? fieldLocator(kind).get(shown.key) : undefined;
   const line = shown?.line;
@@ -86,6 +90,17 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
     : line === undefined ? pendingEdits(kind, original, { ...original, ...changes }, editable)
     : item && row ? pendingItemEdits(kind, [item.id], [row], [{ ...row, ...changes }]) : [];
   const dirty = edits.length > 0;
+  const taxKeys = !spot || readOnlyReason || !item || !row ? [] : spot.group.map((f) => f.key).filter((k) => taxCodeKeys(kind).has(k) && !lockOf(k));
+  const spread = taxKeys.length > 0 && line !== undefined && row ? applyToOtherLines(items, itemRows, line, { ...row, ...changes }, taxKeys) : { edits: [], lines: 0 };
+  const bulk = applyAll ? spread.edits : [];
+  // Chỉ tiêu bị đánh dấu cần kiểm tra trong nhóm ô đang hiện (chỉ tiêu sửa tay được): "Xác nhận đúng" lưu lại đúng giá trị đang có
+  // → backend bỏ cờ nghi ngờ, ghi field_audit như một lần sửa. Lưu thay đổi cũng xác nhận luôn các chỉ tiêu bị đánh dấu còn lại của nhóm.
+  const suspects = !spot || readOnlyReason ? [] : decl.fields.filter((f) =>
+    f.suspect && isDeclarationFieldEditable(f.code) && spot.group.some((g) => (item ? itemFieldCode(item.id, g.key) === f.code : formKeysOf(kind, f.code).includes(g.key))));
+  const confirmations = suspects.filter((f) => !edits.some((e) => e.code === f.code)).map((f) => ({ code: f.code, value: f.value }));
+  const notes = [...new Set(suspects.flatMap((f) => (f.note ? [f.note] : [])))];
+  // Lưu / xác nhận xong → đóng panel, người dùng quay lại bản in (khỏi phải bấm Đóng).
+  const commit = () => save.mutate([...edits, ...confirmations, ...bulk], { onSuccess: () => { setChanges({}); onTarget(null); } });
 
   // Ô được chọn đổi (bấm ô, Tab, đóng, "Chỉ ô cần xử lý"): chưa lưu → hỏi; không thì chuyển ngay.
   // Đang lưu → chưa xét (giữ `seen`): lưu xong vẽ lại, phần sửa đã xóa → chuyển ngay; lưu lỗi → còn thay đổi → hỏi.
@@ -198,6 +213,21 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
         >
           {spot && (
             <div ref={body} className="flex min-h-0 flex-1 flex-col gap-4" onFocus={(e) => { lastFocus.current = e.target; }}>
+              {suspects.length > 0 && (
+                <Alert
+                  tone="warning"
+                  title={t.suspectTitle}
+                  // Nút ngay trong cảnh báo: hàng nút ở đáy panel có thể khuất (cửa sổ thấp / bị taskbar che) – vẫn xác nhận được.
+                  {...(!dirty ? { action: (
+                    <Button type="button" size="sm" variant="secondary" leftIcon={<CheckCircle2 className="h-4 w-4" />} loading={save.isPending} onClick={commit}>
+                      {t.confirmOk}
+                    </Button>
+                  ) } : {})}
+                >
+                  {notes.map((n) => <p key={n}>{n}</p>)}
+                  <p>{t.suspectBody}</p>
+                </Alert>
+              )}
               <PanelDetails
                 kind={kind}
                 spot={spot}
@@ -212,15 +242,33 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                 busy={save.isPending}
                 onHs={setHsItem}
               />
+              {spread.lines > 0 && (
+                <Checkbox
+                  label={spread.lines === 1 ? t.applyAllLines1 : fill(t.applyAllLines, { n: formatNumber(spread.lines) })}
+                  checked={applyAll}
+                  disabled={save.isPending}
+                  onChange={(e) => setApplyAll(e.target.checked)}
+                />
+              )}
               <DialogFooter>
                 {readOnlyReason ? (
                   <Button type="button" variant="ghost" onClick={() => onTarget(null)}>{t.close}</Button>
                 ) : (
                   <>
                     <Button type="button" variant="ghost" disabled={save.isPending} onClick={() => { setChanges({}); onTarget(null); }}>{t.cancel}</Button>
-                    <Button type="button" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty} onClick={() => save.mutate(edits, { onSuccess: () => setChanges({}) })}>
-                      {dirty ? fill(t.saveN, { n: formatNumber(edits.length) }) : t.save}
-                    </Button>
+                    {!dirty && suspects.length > 0 ? (
+                      <Button type="button" leftIcon={<CheckCircle2 className="h-4 w-4" />} loading={save.isPending} onClick={commit}>
+                        {t.confirmOk}
+                      </Button>
+                    ) : !dirty && bulk.length > 0 ? (
+                      <Button type="button" leftIcon={<CopyCheck className="h-4 w-4" />} loading={save.isPending} onClick={commit}>
+                        {spread.lines === 1 ? t.applyLines1 : fill(t.applyLinesN, { n: formatNumber(spread.lines) })}
+                      </Button>
+                    ) : (
+                      <Button type="button" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty} onClick={commit}>
+                        {!dirty ? t.save : edits.length + bulk.length === 1 ? t.save1 : fill(t.saveN, { n: formatNumber(edits.length + bulk.length) })}
+                      </Button>
+                    )}
                   </>
                 )}
               </DialogFooter>
@@ -231,12 +279,12 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
       <UnsavedDialog
         open={confirm !== null}
         title={title}
-        count={edits.length}
+        count={edits.length + bulk.length}
         saving={save.isPending}
         onSave={() => {
           const c = confirm;
           if (!c || save.isPending) return;
-          save.mutate(edits, { onSuccess: () => proceed(c.next, c.href), onError: stay });
+          save.mutate([...edits, ...bulk], { onSuccess: () => proceed(c.next, c.href), onError: stay });
         }}
         onDiscard={() => confirm && proceed(confirm.next, confirm.href)}
         onStay={stay}

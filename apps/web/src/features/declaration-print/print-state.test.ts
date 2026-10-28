@@ -1,7 +1,7 @@
-import { expandPrintRow, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
+import { expandPrintRow, formKeysOf, itemFieldCode, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
-import { attentionCells, cellState, editedKeys, errorSlots, estimateValues, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import { applyToOtherLines, attentionCells, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -447,5 +447,52 @@ describe("sheetIssueCounts (huy hiệu tab + thanh chọn tờ)", () => {
     const few = items.slice(0, 10);
     const s = sub(false);
     expect(sheetIssueCounts(decl, few, [], s, "FULL", true).total).toBe(printIssuesOf(decl, few, s, "FULL", true).count);
+  });
+});
+
+describe("fieldCell", () => {
+  const p = printKeys(printLayoutFor("IDA"));
+  it("chỉ tiêu chung → ô trên bản in (không có dòng)", () => {
+    const key = formKeysOf("IDA", "VBPQ").find((k) => p.decl.includes(k))!;
+    expect(fieldCell("IDA", "VBPQ", [])).toEqual({ key });
+  });
+  it("ô dòng hàng → khóa ô + chỉ số dòng trong items", () => {
+    const key = p.item[0]!;
+    expect(fieldCell("IDA", itemFieldCode("b", key), [{ id: "a" }, { id: "b" }])).toEqual({ key, line: 1 });
+  });
+  it("dòng không còn / chỉ tiêu không có ô trên bản in → null", () => {
+    expect(fieldCell("IDA", itemFieldCode("x", p.item[0]!), [{ id: "a" }])).toBeNull();
+    expect(fieldCell("IDA", "KHONG_CO", [])).toBeNull();
+  });
+});
+
+describe("taxCodeKeys / applyToOtherLines", () => {
+  it("chỉ gồm ô mã người khai nhập của khối thuế dòng hàng", () => {
+    const keys = taxCodeKeys("IDA");
+    expect(keys.has("HAG_ORS")).toBe(true);
+    expect(keys.has("HAG_TX1")).toBe(true);
+    expect(keys.has("HAG_TR5")).toBe(true);
+    expect(keys.has("HAG_TG1")).toBe(false); // số tiền
+    expect(keys.has("HAG_OR")).toBe(false); // xuất xứ – sửa ở OCR
+    expect(keys.has("HAG_B42")).toBe(false); // Hải quan tính
+    expect(taxCodeKeys("EDA").has("HAG_RE")).toBe(true);
+  });
+
+  it("áp mã của dòng đang sửa cho các dòng khác đang khác, bỏ ô trống", () => {
+    const items = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const rows = [{ HAG_ORS: "" }, { HAG_ORS: "B06" }, { HAG_ORS: "B01" }];
+    const r = applyToOtherLines(items, rows, 0, { HAG_ORS: "B06", HAG_TX1: "" }, ["HAG_ORS", "HAG_TX1"]);
+    expect(r.lines).toBe(1);
+    expect(r.edits).toEqual([{ code: itemFieldCode("c", "HAG_ORS"), value: "B06" }]);
+  });
+});
+
+describe("hiddenUntilCustoms / customsAnswered", () => {
+  it("ẩn ô Hải quan trả về còn trống, giữ số tờ khai và ô người khai", () => {
+    expect(hiddenUntilCustoms("IDA", "HAG_B47", "")).toBe(true);
+    expect(hiddenUntilCustoms("IDA", "HAG_B47", "1000")).toBe(false);
+    expect(hiddenUntilCustoms("IDA", "TK_ICN", "")).toBe(false);
+    expect(hiddenUntilCustoms("IDA", "HAG_ORS", "")).toBe(false);
+    expect(customsAnswered(undefined)).toBe(false);
   });
 });

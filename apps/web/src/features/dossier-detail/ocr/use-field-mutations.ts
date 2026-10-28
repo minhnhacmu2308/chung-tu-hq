@@ -4,6 +4,7 @@ import { useMessages } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { dossierKeys } from "@/api/dossiers";
 import { confirmField, ocrKeys, revertField, updateFieldValue } from "@/api/ocr";
+import { valueChargesKeys } from "@/api/value-charges";
 import type { ExtractedField } from "@/mocks/types";
 import { toastMutationError } from "@/lib/mutation-error";
 import { FIELD_MUTATION_MESSAGES } from "./ocr.messages";
@@ -14,6 +15,11 @@ export function useFieldMutations(dossierId: string) {
   const apply = (f: ExtractedField) => {
     qc.setQueryData<ExtractedField[]>(ocrKeys.fields(dossierId), (old) => old?.map((x) => (x.id === f.id ? f : x)));
     void qc.invalidateQueries({ queryKey: dossierKeys.all });
+    // Điều kiện giao hàng / điều kiện cước đổi → cước phải khai và luật R-FREIGHT-TERM đổi theo.
+    if (["incoterm", "freight_terms", "freight_term"].includes(f.key)) {
+      void qc.invalidateQueries({ queryKey: valueChargesKeys.detail(dossierId) });
+      void qc.invalidateQueries({ queryKey: ocrKeys.checks(dossierId) });
+    }
   };
   return {
     update: useMutation({ mutationFn: ({ id, value }: { id: string; value: string }) => updateFieldValue(id, value), onSuccess: apply, onError: toastMutationError(t.saveFailed) }),

@@ -105,7 +105,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   const actions = edits.length > 0 && (
     <div className="flex flex-wrap gap-2 pt-1">
       <Button size="sm" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={() => save.mutate(edits)}>
-        {fill(t.saveN, { n: formatNumber(edits.length) })}
+        {edits.length === 1 ? t.save1 : fill(t.saveN, { n: formatNumber(edits.length) })}
       </Button>
       <Button size="sm" variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => {
           setDraft(original);

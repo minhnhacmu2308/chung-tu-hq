@@ -211,7 +211,8 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
     : field.input === "textarea" ? <Textarea className={cn(!compact && "min-w-0 flex-1", dim)} rows={2} placeholder={placeholder} value={value} onChange={(e) => set(e.currentTarget.value)} />
     : <Input className={cn(fill ? "min-w-0 flex-1" : compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1", dim)} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} placeholder={placeholder} value={value} onChange={(e) => set(e.currentTarget.value)} />;
   // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô; nút ⓘ trên đường viền sau tên (nhãn bên trái: cuối hàng).
-  const hint = [compact && !listId && name ? `→ ${name}` : null, shownReason].filter(Boolean).join(" · ") || undefined;
+  // Panel sửa ô (fill): ô mã có danh mục hiện luôn tên theo mã dưới ô – người dùng đối chiếu mã ↔ tên (vd 1.29 mã địa điểm lưu kho → tên kho).
+  const hint = [(compact && !listId) || (fill && listId) ? (name ? `→ ${name}` : null) : null, shownReason].filter(Boolean).join(" · ") || undefined;
 
   return (
     <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", sizeClass)}>

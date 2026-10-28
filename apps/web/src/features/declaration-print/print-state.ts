@@ -1,6 +1,6 @@
 // Logic thuần của bản in tờ khai (Review bước 5): vị trí ô trên bố cục, số ước tính, trạng thái ô, danh sách ô cần xử lý, số trang.
 import {
-  branchRanges, expandRepeat, formKeysOf, itemFields, layoutFor, otherFieldKeys, printKeys, printLayoutFor, requiredGaps,
+  branchRanges, expandRepeat, formKeysOf, itemFieldClass, itemFieldCode, itemFields, layoutFor, otherFieldKeys, parseItemFieldCode, printKeys, printLayoutFor, requiredGaps,
   type ConditionContext, type ConditionId, type DeclarationBranch, type RequiredGap, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
 } from "@kb/contracts";
 import type { PaperFieldState } from "@kb/ui";
@@ -312,6 +312,21 @@ export function sheetTarget(lineNos: number[], line: number): { no: number; line
   return { no: r.no, line: pos - r.index[0] };
 }
 
+/**
+ * Ô trên bản in của một chỉ tiêu tờ khai (mã lưu trữ, vd "VBPQ" hoặc "HANG.<id dòng>.<ô>") – để đưa người dùng tới ô bị đánh dấu cần kiểm tra.
+ * `line` = chỉ số dòng (0-based) trong `items`. Chỉ tiêu không có ô trên mẫu in ("Chỉ tiêu khác") / dòng không còn → null.
+ */
+export function fieldCell(kind: Kind, code: string, items: { id: string }[]): PrintTarget | null {
+  const keys = printKeys(printLayoutFor(kind));
+  const item = parseItemFieldCode(code);
+  if (item) {
+    const line = items.findIndex((i) => i.id === item.itemId);
+    return line >= 0 && keys.item.includes(item.key) ? { key: item.key, line } : null;
+  }
+  const key = formKeysOf(kind, code).find((k) => keys.decl.includes(k));
+  return key ? { key } : null;
+}
+
 /** Ô tên do Hải quan trả về theo mã người khai chọn (tên địa điểm lưu kho theo mã A202) – trước khi Hải quan trả, tra danh mục để hiện ước tính. */
 export const LOOKUP_NAME_CELLS: Record<Kind, { code: string; name: string }[]> = {
   IDA: [{ code: "VD_ST", name: "VD_A51" }],
@@ -434,3 +449,48 @@ export function declarationGapsOf(decl: Declaration, items: LineItem[], submissi
   const data = printData(decl, items, submission);
   return { gaps: requiredGaps(data.kind, data.values, data.itemRows), lineNos: data.lineNos };
 }
+
+/** Khối thuế của dòng hàng (bố cục form): mã thuế khai giống nhau cho nhiều dòng → panel cho áp một lần cho mọi dòng. */
+const TAX_BLOCKS: Record<Kind, ReadonlySet<string>> = { IDA: new Set(["thue-nk", "thu-khac"]), EDA: new Set(["thue-xk"]) };
+const taxCodeCache = new Map<Kind, Set<string>>();
+/** Ô mã người khai nhập trong khối thuế của dòng hàng (1.80 biểu thuế, 1.92/1.95 miễn giảm, 1.94 mã áp dụng thuế suất…); không gồm số tiền, mã HS, xuất xứ. */
+export function taxCodeKeys(kind: Kind): Set<string> {
+  const hit = taxCodeCache.get(kind);
+  if (hit) return hit;
+  const out = new Set(
+    layoutFor(kind).item.declarant.filter((b) => TAX_BLOCKS[kind].has(b.id)).flatMap((b) => b.items.flatMap(itemFields))
+      .filter((f) => f.input === "code" && f.origin !== "CUSTOMS" && itemFieldClass(kind, f.key) === "INPUT").map((f) => f.key),
+  );
+  taxCodeCache.set(kind, out);
+  return out;
+}
+
+/**
+ * Áp mã thuế của dòng đang sửa cho các dòng hàng khác: với mỗi ô `keys` có giá trị (ô trống không áp – tránh xóa hàng loạt),
+ * dòng nào đang khác thì thêm một chỉ tiêu cần lưu. `lines` = số dòng được đổi.
+ */
+export function applyToOtherLines(
+  items: { id: string }[], rows: FormValues[], line: number, draft: FormValues, keys: string[],
+): { edits: { code: string; value: string }[]; lines: number } {
+  const set = keys.map((k) => [k, (draft[k] ?? "").trim()] as const).filter(([, v]) => v !== "");
+  const edits: { code: string; value: string }[] = [];
+  let lines = 0;
+  items.forEach((it, i) => {
+    if (i === line) return;
+    const diff = set.filter(([k, v]) => (rows[i]?.[k] ?? "").trim() !== v);
+    if (diff.length > 0) lines++;
+    for (const [k, v] of diff) edits.push({ code: itemFieldCode(it.id, k), value: v });
+  });
+  return { edits, lines };
+}
+
+/**
+ * Ô ẩn khỏi bản in khi Hải quan chưa trả kết quả (chưa khai / chưa phản hồi): ô Hải quan trả về còn trống – chưa có gì để xem.
+ * Vẫn hiện: số tờ khai ("Chưa cấp") và ô Hải quan đã có số ứng dụng ước tính.
+ */
+export function hiddenUntilCustoms(kind: Kind, key: string, raw: string): boolean {
+  return fieldLocator(kind).get(key)?.field.origin === "CUSTOMS" && !raw.trim() && !DECLARATION_NO.has(key);
+}
+
+/** Hải quan đã trả thông tin tờ khai (khai tạm / chính thức) – từ đó hiện đủ các ô Hải quan trả về. */
+export const customsAnswered = (submission: SubmissionView | undefined): boolean => Boolean(submission?.customsInfo || submission?.result);

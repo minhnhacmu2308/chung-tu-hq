@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DocKindSchema, FieldStatusSchema, RuleResultSchema, RuleSeveritySchema } from "../common.js";
+import { DocKindSchema, FieldStatusSchema, IsoDateTimeSchema, RuleResultSchema, RuleSeveritySchema } from "../common.js";
 
 const pct = z.number().min(0).max(100);
 /** Vùng trên trang chứng từ, tọa độ theo % trang (0–100) để tô khi rê chuột. */
@@ -22,6 +22,9 @@ export const ExtractedFieldSchema = z.object({
   region: RegionSchema.optional(),
   /** Giải thích khi CONFLICT / MODEL_UNSURE. */
   note: z.string().optional(),
+  /** Người dùng (id) sửa / xác nhận lần gần nhất và thời điểm – vắng = chưa ai sửa/xác nhận hoặc dữ liệu cũ. */
+  confirmedBy: z.string().optional(),
+  confirmedAt: IsoDateTimeSchema.optional(),
 });
 export type ExtractedField = z.infer<typeof ExtractedFieldSchema>;
 

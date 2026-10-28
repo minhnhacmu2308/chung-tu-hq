@@ -45,7 +45,7 @@ describe("ItemsTable", () => {
     // 15 × (1 + … + 30) = 6975
     expect(screen.getByText("Cộng 30 dòng").parentElement!.textContent).toMatch(/6\.975,00/);
     await expectNoA11yViolations(container);
-  });
+  }, 30_000); // dựng 30 dòng × nhiều ô – máy bận (chạy cả bộ) vượt 5 giây mặc định
 
   it("activeId ở dòng trang sau (bấm vị trí trên chứng từ) → tự sang trang chứa dòng đó", () => {
     const props = { onActivate: vi.fn(), onSave: vi.fn(), onConfirm: vi.fn() };

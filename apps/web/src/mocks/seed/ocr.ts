@@ -255,6 +255,10 @@ function genericDefs(kind: DocKind, d: Dossier): Def[] {
         { key: "shipper", label: "Người gửi hàng", value: d.partner, group: "PARTIES", wide: true },
         { key: "port_loading", label: "Nơi xếp hàng", value: portLoad, group: "TRANSPORT" },
         { key: "port_discharge", label: "Nơi dỡ hàng", value: portDis, group: "TRANSPORT" },
+        // Vận đơn đường biển ghi người trả cước: nhóm E/F người mua trả (Collect), nhóm C/D người bán trả (Prepaid).
+        ...(kind === "BILL_OF_LADING"
+          ? [{ key: "freight_terms", label: "Điều kiện cước", value: ["EXW", "FCA", "FAS", "FOB"].includes(d.incoterm) ? "FREIGHT COLLECT" : "FREIGHT PREPAID", group: "COMMERCIAL" as const }]
+          : []),
         { key: "packages", label: "Số kiện", value: "12 CARTONS", group: "TRANSPORT" },
         { key: "gross_weight", label: "Trọng lượng cả bì", value: "846.00 KGS", group: "TRANSPORT" },
       ];

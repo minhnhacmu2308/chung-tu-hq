@@ -126,7 +126,7 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
               {t.undo}
             </Button>
             <Button leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={() => save.mutate(pending)}>
-              {fill(t.saveN, { n: formatNumber(pending.length) })}
+              {pending.length === 1 ? t.save1 : fill(t.saveN, { n: formatNumber(pending.length) })}
             </Button>
           </>
         ) : (

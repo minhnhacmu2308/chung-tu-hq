@@ -84,6 +84,8 @@ export const REASON_MESSAGES = defineMessages({
     INBOX_MESSAGE_NOT_FOUND: "Không tìm thấy email trong hộp thư chứng từ",
     INBOX_ATTACHMENT_ADDED: "File đã được thêm vào hồ sơ {code}",
     DOSSIER_SENT_TO_CUSTOMS: "Hồ sơ đã truyền Hải quan, không xóa được – hãy hủy hồ sơ",
+    CHARGES_FREIGHT_AMOUNT_REQUIRED: "Chứng từ có phí vận chuyển {amount} {currency} – nhập số tiền cước hoặc chọn theo chứng từ",
+    CHARGES_ADJUSTMENTS_IN_DOCS: "Chứng từ có {n} khoản phí khác – lập danh sách khoản điều chỉnh, không khai Không có phí phát sinh",
   },
   en: {
     OPERATION_PENDING: "Waiting for a response to {ops}",
@@ -164,6 +166,8 @@ export const REASON_MESSAGES = defineMessages({
     INBOX_MESSAGE_NOT_FOUND: "Email not found in the document inbox",
     INBOX_ATTACHMENT_ADDED: "The file has already been added to dossier {code}",
     DOSSIER_SENT_TO_CUSTOMS: "This dossier has been sent to Customs and cannot be deleted – cancel it instead",
+    CHARGES_FREIGHT_AMOUNT_REQUIRED: "The documents show a freight charge of {amount} {currency} – enter the freight amount or use the documents",
+    CHARGES_ADJUSTMENTS_IN_DOCS: "The documents show {n} other charges – build the adjustment list instead of declaring no charges",
   },
   zh: {
     OPERATION_PENDING: "正在等待 {ops} 的回复",
@@ -244,6 +248,8 @@ export const REASON_MESSAGES = defineMessages({
     INBOX_MESSAGE_NOT_FOUND: "单证收件箱中未找到该邮件",
     INBOX_ATTACHMENT_ADDED: "该文件已添加到档案 {code}",
     DOSSIER_SENT_TO_CUSTOMS: "档案已传送海关，无法删除 – 请改为取消档案",
+    CHARGES_FREIGHT_AMOUNT_REQUIRED: "单证显示运费 {amount} {currency} – 请输入运费金额或按单证申报",
+    CHARGES_ADJUSTMENTS_IN_DOCS: "单证显示 {n} 项其他费用 – 请建立调整项清单，不能申报为无产生费用",
   },
 });
 

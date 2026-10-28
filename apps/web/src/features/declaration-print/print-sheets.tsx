@@ -24,11 +24,13 @@ type Props = {
   selected: PrintTarget | null;
   /** Phải ổn định (useCallback) để ô không vẽ lại khi chọn ô khác. */
   onSelect: (key: string, line?: number) => void;
+  /** Ô không vẽ (vd ô Hải quan trả về khi Hải quan chưa trả kết quả); vùng / nhóm lặp không còn ô nào thì ẩn cả tiêu đề. */
+  hidden?: ((key: string, line?: number) => boolean) | undefined;
 };
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-export function PrintSheets({ kind, title, lineNos, look, selected, onSelect }: Props) {
+export function PrintSheets({ kind, title, lineNos, look, selected, onSelect, hidden }: Props) {
   const layout = printLayoutFor(kind);
   const lines = lineNos.length;
   const total = pageCount(kind, lines);
@@ -37,7 +39,12 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect }: 
   const NBSP = String.fromCharCode(160);
   const headerOnce = (row: PrintRepeatRow) => row.count > 1 && row.cells.reduce((n, c) => n + (c.span ?? 12), 0) <= 12;
 
-  const printCell = (cell: Cell, line: number | undefined, interactive: boolean, label = cell.label) => {
+  const shows = (row: PrintRow, line: number | undefined) => !hidden || expandPrintRow(row).flat().some((c) => !hidden(c.key, line));
+  const showsRegion = (rg: PrintRegion, line: number | undefined) => rg.rows.some((row) => shows(row, line));
+
+  // inRepeat: ô của nhóm lặp vẽ đủ cả nhóm (nhãn cột in một lần phải khớp ô) – nhóm ẩn hay hiện cả nhóm; ô dòng thường ẩn riêng.
+  const printCell = (cell: Cell, line: number | undefined, interactive: boolean, label = cell.label, inRepeat = false) => {
+    if (!inRepeat && hidden?.(cell.key, line)) return null;
     const l = look(cell.key, line);
     return (
       <PrintCell
@@ -63,17 +70,18 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect }: 
    * mỗi dòng chỉ số thứ tự (nhãn của ô đầu) + giá trị. Lần lặp nhiều hàng lưới ("Thuế và thu khác") giữ nhãn từng ô như mẫu.
    */
   const rows = (list: PrintRow[], line: number | undefined, interactive = true): ReactNode =>
-    list.map((row, r) => (
+    list.map((row, r) => !shows(row, line) ? null : (
       <Fragment key={r}>
         {!Array.isArray(row) && row.label && <p data-paper-heading className="col-span-12 px-1.5 pt-1 text-xs font-semibold">{row.label}</p>}
         {!Array.isArray(row) && headerOnce(row) ? (
           <>
             {row.cells.map((c, i) => <PaperLabel key={`h${i}`} span={c.span ?? 12} {...(c.align ? { align: c.align } : {})}>{c.label}</PaperLabel>)}
-            {expandPrintRow(row).map((cells, i) => cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? String(i + 1) : NBSP)))}
+            {expandPrintRow(row).map((cells, i) => cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? String(i + 1) : NBSP, true)))}
           </>
         ) : !Array.isArray(row) && row.count > 1 ? (
           // Lần lặp nhiều hàng lưới: nhãn từng ô như mẫu, số thứ tự trước nhãn ô đầu ("1 Tên").
-          expandPrintRow(row).map((cells, i) => cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? `${i + 1} ${cell.label}` : cell.label)))
+          // Ô ẩn được bỏ riêng (mỗi ô có nhãn); số thứ tự đặt trước nhãn ô đầu còn hiện.
+          expandPrintRow(row).map((cells, i) => cells.filter((c) => !hidden?.(c.key, line)).map((cell, j) => printCell(cell, line, interactive, j === 0 ? `${i + 1} ${cell.label}` : cell.label, true)))
         ) : (
           expandPrintRow(row).flat().map((cell) => printCell(cell, line, interactive))
         )}
@@ -88,16 +96,21 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect }: 
   );
 
   const regions = (list: Region[], line: number | undefined) =>
-    list.map((rg) =>
-      Array.isArray(rg) ? (
+    list.map((pair) => {
+      // Vùng cặp còn một bên có ô → vẽ bên đó như vùng đơn.
+      const rg: Region | null = !Array.isArray(pair) ? (showsRegion(pair, line) ? pair : null)
+        : showsRegion(pair[0], line) && showsRegion(pair[1], line) ? pair
+        : showsRegion(pair[0], line) ? pair[0] : showsRegion(pair[1], line) ? pair[1] : null;
+      if (!rg) return null;
+      return Array.isArray(rg) ? (
         <PaperColumns key={`${rg[0].id}|${rg[1].id}`}>
           {region(rg[0], line)}
           {region(rg[1], line)}
         </PaperColumns>
       ) : (
         <div key={rg.id} className="col-span-12 min-w-0">{region(rg, line)}</div>
-      ),
-    );
+      );
+    });
 
   // Đầu trang lặp: bản ở trang 1 bấm được; từ trang 2 chỉ đọc và aria-hidden (vẫn hiện, vẫn in) – trình đọc màn hình không nghe lại N lần.
   const header = (page: number) => (

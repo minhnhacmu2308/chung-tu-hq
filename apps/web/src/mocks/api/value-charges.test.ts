@@ -31,4 +31,15 @@ describe("chi phí và điều chỉnh trị giá (mock)", () => {
     db.members.find((m) => m.id === db.currentUserId)!.role = "VIEWER";
     expect(await code(saveValueCharges(DRAFT, EMPTY_VALUE_CHARGES))).toBe("FORBIDDEN");
   });
+
+  it("ràng buộc theo chứng từ: có cước mà chỉ ghi lý do → lỗi có mã; không có phí khác → khai Không có phí phát sinh được", async () => {
+    await expect(saveValueCharges(DRAFT, { ...EMPTY_VALUE_CHARGES, freight: { amount: null, currency: null, reason: "CONTRACT", note: "" } }))
+      .rejects.toMatchObject({ code: "VALIDATION", reason: "CHARGES_FREIGHT_AMOUNT_REQUIRED", params: { amount: "1380.00", currency: "USD" } });
+    const v = await getValueCharges(DRAFT);
+    if (v.fromDocuments.other.length > 0) {
+      await expect(saveValueCharges(DRAFT, { ...EMPTY_VALUE_CHARGES, adjustments: [] })).rejects.toMatchObject({ reason: "CHARGES_ADJUSTMENTS_IN_DOCS" });
+    } else {
+      expect((await saveValueCharges(DRAFT, { ...EMPTY_VALUE_CHARGES, adjustments: [] })).charges.adjustments).toEqual([]);
+    }
+  });
 });

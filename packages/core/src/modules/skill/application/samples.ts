@@ -13,23 +13,23 @@ const MAX_SAMPLE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 export async function listSamples(deps: SkillDeps, ctx: Ctx, skillId: string): Promise<Result<LabeledSample[]>> {
-  return deps.uow.asOrg(ctx, async (r) => {
+  // users.names đọc qua module identity (kết nối pool khác) → gọi sau khi đóng transaction.
+  const got = await deps.uow.asOrg(ctx, async (r) => {
     const l = await loadSkill(r, ctx.orgId, skillId);
     if (!l.ok) return l;
-    const rows = await r.samples.list(ctx.orgId, skillId);
-    const names = await deps.users.names(ctx.orgId, [...new Set(rows.map((s) => s.labeledBy).filter((x): x is string => !!x))]);
-    return ok(rows.map((s) => toSample(s, names)));
+    return ok(await r.samples.list(ctx.orgId, skillId));
   });
+  if (!got.ok) return got;
+  const names = await deps.users.names(ctx.orgId, [...new Set(got.value.map((s) => s.labeledBy).filter((x): x is string => !!x))]);
+  return ok(got.value.map((s) => toSample(s, names)));
 }
 
 /** Một mẫu kèm nhãn hiện có (nháp do AI đọc hoặc đã được người sửa) – để mở màn sửa nhãn. */
 export async function getSampleLabel(deps: SkillDeps, ctx: Ctx, sampleId: string): Promise<Result<SampleLabel>> {
-  return deps.uow.asOrg(ctx, async (r) => {
-    const s = await r.samples.get(ctx.orgId, sampleId);
-    if (!s) return err(domainError("NOT_FOUND", "Không tìm thấy mẫu"));
-    const names = await deps.users.names(ctx.orgId, s.labeledBy ? [s.labeledBy] : []);
-    return ok({ sample: toSample(s, names), expected: s.expected });
-  });
+  const s = await deps.uow.asOrg(ctx, (r) => r.samples.get(ctx.orgId, sampleId));
+  if (!s) return err(domainError("NOT_FOUND", "Không tìm thấy mẫu"));
+  const names = await deps.users.names(ctx.orgId, s.labeledBy ? [s.labeledBy] : []);
+  return ok({ sample: toSample(s, names), expected: s.expected });
 }
 
 /** Tải mẫu: lưu storage `orgs/{org}/skills/{skill}/samples/{id}`, trạng thái PENDING, đẩy job đọc mẫu (AI) để có nhãn nháp. */
@@ -102,7 +102,7 @@ export async function labelSample(deps: SkillDeps, ctx: Ctx, sampleId: string, e
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
   const now = deps.clock.now();
-  return deps.uow.asOrg(ctx, async (r) => {
+  const saved = await deps.uow.asOrg(ctx, async (r) => {
     const s = await r.samples.get(ctx.orgId, sampleId);
     if (!s) return err(domainError("NOT_FOUND", "Không tìm thấy mẫu"));
     const l = await loadSkill(r, ctx.orgId, s.skillId);
@@ -110,9 +110,11 @@ export async function labelSample(deps: SkillDeps, ctx: Ctx, sampleId: string, e
     const patch = { status: "LABELED" as const, expected, labeledBy: ctx.userId, labeledAt: now, updatedAt: now };
     await r.samples.update(ctx.orgId, sampleId, patch);
     if (s.status !== "LABELED") await r.skills.update(s.orgId, s.skillId, { labeledSamples: l.value.skill.labeledSamples + 1, updatedAt: now });
-    const names = await deps.users.names(ctx.orgId, [ctx.userId]);
-    return ok(toSample({ ...s, ...patch }, names));
+    return ok({ ...s, ...patch });
   });
+  if (!saved.ok) return saved;
+  // Sau commit: transaction trên đang khóa dòng skill, gọi users.names (kết nối pool khác) bên trong dễ treo pool.
+  return ok(toSample(saved.value, await deps.users.names(ctx.orgId, [ctx.userId])));
 }
 
 /**

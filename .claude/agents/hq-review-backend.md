@@ -72,7 +72,7 @@ Depcruise bắt phần lớn B1–B5; vẫn đọc code cho chỗ máy không th
 | C1 | Use case `(deps, ctx, input) → Result<T, DomainError>`; kiểm quyền (`requireRole`) ở **đầu**; lỗi dự kiến `return err(...)`, lỗi hạ tầng `throw`; lỗi người dùng hay gặp dùng `reasonError` |
 | C2 | Idempotency: gọi dịch vụ ngoài tính phí (AI, HSCodePro, FPT) **sau** khi đã ghi bản ghi "đang gửi" có khóa; job chạy lại không tạo dòng trùng; `jobId` ổn định (không `Date.now()` trừ khi cố ý chạy lại) |
 | C3 | Trạng thái "đang xử lý" có lối thoát: queue mới có nhánh `onFinalFailure` trong `apps/worker/src/index.ts` (không để bản ghi kẹt) + tên trong `QUEUE_NAMES` + `Worker` đăng ký + `apps/worker/CLAUDE.md` |
-| C4 | Transaction: nhiều bảng cùng module → một `uow.asOrg`; side effect (mail, enqueue, publish) **sau** commit |
+| C4 | Transaction: nhiều bảng cùng module → một `uow.asOrg`; side effect (mail, enqueue, publish) **sau** commit; trong callback `uow.*` **không** gọi port module khác (`deps.quota/users/plans/usage`, `orgAudit`…), storage, HTTP/AI – chúng lấy kết nối pool khác, dễ treo pool (sự cố 28/10/2026); ghi dòng nóng (phiên, bộ đếm) trong transaction ngắn riêng |
 | C5 | Gọi ngoài (AI, FPT, HSCodePro) không chạy đồng bộ trong request – đưa vào job |
 | C6 | Không N+1 (get từng dòng trong vòng lặp), danh sách lớn có phân trang |
 | C7 | Thông báo/mail không gửi trùng khi job chạy lại |

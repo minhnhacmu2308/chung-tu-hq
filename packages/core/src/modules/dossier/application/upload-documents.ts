@@ -40,26 +40,34 @@ export async function uploadDocuments(deps: DossierDeps, ctx: Ctx, dossierId: st
     inspected.push({ f, pages: info.pages, sha256: createHash("sha256").update(f.bytes).digest("hex"), ext: extensionOf(actual) });
   }
 
-  const created = await deps.uow.asOrg(ctx, async (r) => {
+  // Transaction chỉ chạm DB của module: quota.check (kết nối pool khác) và storage.put (I/O chậm) chạy NGOÀI transaction (docs/ARCHITECTURE.md – Unit of Work).
+  const before = await deps.uow.asOrg(ctx, async (r) => {
     const d = await r.dossiers.get(ctx.orgId, dossierId);
     if (!d) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
     const m = canModify(d.status);
     if (!m.ok) return m;
-    const existing = await r.documents.list(ctx.orgId, dossierId);
-    const totalPages = existing.reduce((n, x) => n + x.pages, 0) + inspected.reduce((n, x) => n + x.pages, 0);
-    if (!(await deps.quota.check(ctx.orgId, "PAGES", totalPages))) return err(domainError("QUOTA_EXCEEDED", "Vượt số trang cho một hồ sơ theo gói dịch vụ"));
-    const rows: DocumentRow[] = [];
-    for (const { f, pages, sha256, ext } of inspected) {
-      const id = deps.idGen.next("doc");
-      const storageKey = `orgs/${ctx.orgId}/dossiers/${dossierId}/${id}/${sha256}.${ext}`;
-      await deps.storage.put(storageKey, f.bytes, f.mime);
-      const row: DocumentRow = {
-        id, orgId: ctx.orgId, dossierId, kind: classifyByFileName(f.name), kindSource: "FILENAME", fileName: f.name, mime: f.mime, sizeBytes: f.bytes.length, pages,
-        status: "QUEUED", error: null, storageKey, sha256, uploadedBy: ctx.userId, createdAt: now, updatedAt: now,
-      };
-      await r.documents.insert(row);
-      rows.push(row);
-    }
+    return ok((await r.documents.list(ctx.orgId, dossierId)).reduce((n, x) => n + x.pages, 0));
+  });
+  if (!before.ok) return before;
+  const totalPages = before.value + inspected.reduce((n, x) => n + x.pages, 0);
+  if (!(await deps.quota.check(ctx.orgId, "PAGES", totalPages))) return err(domainError("QUOTA_EXCEEDED", "Vượt số trang cho một hồ sơ theo gói dịch vụ"));
+  const rows: DocumentRow[] = [];
+  for (const { f, pages, sha256, ext } of inspected) {
+    const id = deps.idGen.next("doc");
+    const storageKey = `orgs/${ctx.orgId}/dossiers/${dossierId}/${id}/${sha256}.${ext}`;
+    await deps.storage.put(storageKey, f.bytes, f.mime);
+    rows.push({
+      id, orgId: ctx.orgId, dossierId, kind: classifyByFileName(f.name), kindSource: "FILENAME", fileName: f.name, mime: f.mime, sizeBytes: f.bytes.length, pages,
+      status: "QUEUED", error: null, storageKey, sha256, uploadedBy: ctx.userId, createdAt: now, updatedAt: now,
+    });
+  }
+  const created = await deps.uow.asOrg(ctx, async (r) => {
+    // Đọc lại trạng thái: hồ sơ có thể vừa bị khóa/hủy trong lúc lưu file.
+    const d = await r.dossiers.get(ctx.orgId, dossierId);
+    if (!d) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
+    const m = canModify(d.status);
+    if (!m.ok) return m;
+    for (const row of rows) await r.documents.insert(row);
     if (d.status === "DRAFT") await r.dossiers.update(ctx.orgId, dossierId, { status: "PROCESSING", updatedAt: now });
     else await r.dossiers.update(ctx.orgId, dossierId, { updatedAt: now });
     return ok(rows);

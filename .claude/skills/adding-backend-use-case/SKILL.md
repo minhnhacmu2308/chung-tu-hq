@@ -34,3 +34,4 @@ Mọi hành vi nghiệp vụ là một **use case** trong `packages/core/src/mod
 - Import `infrastructure` từ `apps/*` (ngoài `container.ts`) – depcruise sẽ chặn.
 - Gọi AI/HTTP ngoài đồng bộ trong request web dài > vài giây → đưa vào job.
 - Bảng mới thiếu RLS.
+- Gọi port module khác / storage / HTTP **bên trong** `uow.asOrg(...)` → transaction giữ kết nối + khóa rồi chờ kết nối pool khác; nhiều request song song là treo cả web. Đọc trong transaction, gọi port sau khi đóng; ghi dòng nóng trong transaction ngắn riêng.

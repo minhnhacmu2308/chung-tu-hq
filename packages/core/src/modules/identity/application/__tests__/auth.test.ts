@@ -119,6 +119,16 @@ describe("login / getSession / logout", () => {
     expect(s.session.org.plan.name).toBe("Chuyên nghiệp");
     expect(s.ctx.orgId).toBe("org_a");
   });
+  it("getSession chỉ ghi lần hoạt động khi đã quá 1 phút (request song song không tranh khóa dòng phiên)", async () => {
+    const { sessionToken } = unwrap(await login(deps, { email: "chau.le@anphat-demo.vn", password: "demo1234" }, META));
+    const row = () => uow.data.sessions[0]!;
+    row().lastSeenAt = new Date(new Date(T0).getTime() - 30_000);
+    await getSession(deps, sessionToken);
+    expect(row().lastSeenAt.toISOString()).toBe(new Date(new Date(T0).getTime() - 30_000).toISOString());
+    row().lastSeenAt = new Date(new Date(T0).getTime() - 120_000);
+    await getSession(deps, sessionToken);
+    expect(row().lastSeenAt.toISOString()).toBe(T0);
+  });
   it("sai mật khẩu và email không tồn tại → cùng INVALID_CREDENTIALS, cùng thông điệp", async () => {
     const a = await login(deps, { email: "chau.le@anphat-demo.vn", password: "sai-roi-1" }, META);
     const b = await login(deps, { email: "khong-co@x.vn", password: "sai-roi-1" }, META);

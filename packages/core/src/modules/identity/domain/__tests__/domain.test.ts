@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { displayNameFromEmail, normalizeEmail } from "../email.js";
 import { isPasswordAcceptable } from "../password.js";
 import { canChangeRole, canDisable, canInvite, canManageOrg, canTransferOwnership } from "../role-rules.js";
-import { SESSION_TTL_MS, sessionExpiry, shouldExtend } from "../session-policy.js";
+import { SESSION_TTL_MS, sessionExpiry, shouldExtend, shouldTouch } from "../session-policy.js";
 import { normalizeTaxCode } from "../tax-code.js";
 import { hashToken, newToken } from "../token.js";
 
@@ -44,6 +44,12 @@ describe("session-policy", () => {
   it("gia hạn khi còn < 15 ngày", () => {
     expect(shouldExtend({ expiresAt: new Date(now.getTime() + 10 * 86_400_000) }, now)).toBe(true);
     expect(shouldExtend({ expiresAt: new Date(now.getTime() + 20 * 86_400_000) }, now)).toBe(false);
+  });
+  it("ghi lần hoạt động tối đa mỗi phút, trừ khi cần gia hạn", () => {
+    const far = new Date(now.getTime() + 20 * 86_400_000);
+    expect(shouldTouch({ expiresAt: far, lastSeenAt: new Date(now.getTime() - 30_000) }, now)).toBe(false);
+    expect(shouldTouch({ expiresAt: far, lastSeenAt: new Date(now.getTime() - 60_000) }, now)).toBe(true);
+    expect(shouldTouch({ expiresAt: new Date(now.getTime() + 10 * 86_400_000), lastSeenAt: now }, now)).toBe(true);
   });
 });
 

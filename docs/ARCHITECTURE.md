@@ -124,6 +124,8 @@ PostgreSQL + Drizzle, migration trong `packages/core/drizzle/` (0000 nền → 0
 
 Cách truy cập: mỗi module có **Unit of Work** (`uow.asOrg(ctx, repos => …)`) bọc một transaction và `set_config('app.org_id')` để Row-Level Security lọc; app kết nối bằng role `kb_app` (chịu RLS), migration/seed bằng admin. Module khác chỉ đọc dữ liệu của nhau qua port + adapter nối ở composition root (`apps/web/src/container.ts`, `apps/worker/src/container.ts`), không import bảng của nhau (depcruise chặn).
 
+**Transaction không gọi ra ngoài:** callback của `uow.*` chỉ dùng repos `r` của chính nó. Port sang module khác (`deps.quota`, `deps.users`, `deps.plans`, `deps.usage`, `orgAudit`…), storage, HTTP/AI gọi **trước hoặc sau** transaction – các port này lấy kết nối pool khác; transaction đang giữ khóa dòng mà chờ kết nối pool thì khi nhiều request song song (pool 10) cả web treo (sự cố 28/10/2026: `getSession` UPDATE `sessions` rồi gọi `plans`/`usage` trong transaction). Ghi dòng "nóng" (phiên, bộ đếm) trong transaction ngắn riêng và hạn chế tần suất.
+
 Việc nền: BullMQ (`extract-document`, `run-agent`, `customs-send`, `customs-poll`, `skill-sample-read`, `skill-evaluate`, `cert-expiry` hằng ngày). Tiến trình đẩy qua Redis pub/sub → SSE `GET /api/dossiers/:id/events`. Truyền Hải quan theo outbox (ADR 0005): mỗi nghiệp vụ một dòng `customs_outbox` với `idempotency_key`, thông điệp đi/đến ghi `customs_messages` (đã che bí mật), trạng thái ở `customs_results` theo máy trạng thái `domain/state-machine.ts`.
 
 - Multi-tenant theo ADR 0004: mỗi doanh nghiệp (1 MST) là một organization; người dùng là nhân viên, đăng nhập bằng email, vai trò `OWNER / ADMIN / DECLARANT / APPROVER / VIEWER`.

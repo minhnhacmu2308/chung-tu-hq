@@ -121,6 +121,17 @@ Khảo sát toàn bộ core / API / worker / DB-hạ tầng. Nền tảng tốt 
 | R17 | CSP report-only; PKCE cho OAuth hộp thư; nonce `state` lưu một lần (hiện replay được trong 10 phút). |
 | R18 | `markDocumentFailed`/`customs-poll` hết `MAX_POLLS` chưa báo người dùng; `skill-sample-read`/`skill-evaluate` hết lượt chưa đánh dấu. |
 
+## Treo pool DB khi gọi ra ngoài trong transaction (sự cố 2026-10-28)
+
+`getSession` UPDATE dòng `sessions` rồi gọi `plans`/`usage` (kết nối pool khác) trong transaction → nhiều request song song cùng phiên treo cả web 12 phút. Đã sửa `getSession` (ghi lần hoạt động ≤ 1 lần/phút, transaction riêng), `createDossier`, `uploadDocuments`, `listSamples`/`getSampleLabel`/`labelSample`; quy tắc ghi ở ARCHITECTURE (Unit of Work). Còn lại:
+
+| # | Việc |
+|---|---|
+| P1 | `skill/application/learning.ts`: `storage.get/put` trong transaction (transaction dài). |
+| P2 | `integration/application/submit-declaration.ts`: `queue.enqueue` trong transaction – đưa ra sau commit. |
+| P3 | `identity/application/register.ts`: `taxRegistry.lookup` trong transaction – phải đưa ra ngoài trước khi nối HTTP thật. |
+| P4 | `uploadDocuments`: transaction thứ hai từ chối (hồ sơ vừa khóa/hủy) → file đã lưu storage thành mồ côi; `createDossier` hai lần tạo cùng lúc trùng mã → 500 (index unique chặn) – thêm thử lại. |
+
 ## Lỗi đã sửa khi tăng độ phủ test (2026-10-14)
 
 Incoterm kèm địa danh ("FOB BUSAN") không được cộng cước; CIF có dòng "Ocean freight" bị cộng cước hai lần; "SHANGHAI"/"CHANGI" khớp nhầm sân bay Nội Bài (alias "HAN"); EDA thay im lặng cảng xếp không tra được mã bằng Hải Phòng; thông báo chứng thư sắp hết hạn gửi trùng mỗi lần chạy job; tra cứu IEX ghi đè trạng thái "bị từ chối"; IDC được chấp nhận nhưng không có phân luồng bị ghi là gửi thành công; mẫu skill không có đuôi tên tệp bị đọc như ảnh JPEG; màn Truyền hiện tờ khai bị từ chối thành "Đang kiểm tra"; bộ giới hạn đăng nhập đếm cả lần đăng nhập đúng.

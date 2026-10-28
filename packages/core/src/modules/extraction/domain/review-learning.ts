@@ -9,15 +9,20 @@ export type Correction = { key: string; label: string; rawPath: string; from: st
 
 const ITEM_PATH = /^\/items\/(\d+)\/(\w+)$/;
 
-/** Chỗ trong dữ liệu model của loại chứng từ ứng với một trường trên màn OCR; không ghi ngược được → null. */
-export function rawPathOf(kind: DocKind, shipmentPath: string): string | null {
+/**
+ * Chỗ trong dữ liệu model của loại chứng từ ứng với một trường trên màn OCR; không ghi ngược được → null.
+ * Một loại chứng từ có thể có nhiều nguồn cho cùng trường (AWB: HAWB, không có thì số AWB) → có `data` thì lấy nguồn đang cho giá trị.
+ */
+export function rawPathOf(kind: DocKind, shipmentPath: string, data?: Record<string, unknown>): string | null {
   const item = ITEM_PATH.exec(shipmentPath);
   if (item) {
     const spec = ITEM_SPECS.find((s) => s.field === item[2]);
     return spec ? `items.${item[1]}.${spec.raw ?? spec.field}` : null;
   }
   const spec = SHIPMENT_FIELDS.find((s) => s.path === shipmentPath);
-  return spec?.sources.find((s) => s.kind === kind)?.get.rawPath ?? null;
+  const ofKind = spec?.sources.filter((s) => s.kind === kind) ?? [];
+  const filled = data ? ofKind.find((s) => { const v = s.get(data); return v !== null && v !== undefined && v !== ""; }) : undefined;
+  return (filled ?? ofKind[0])?.get.rawPath ?? null;
 }
 
 function setAt(obj: Record<string, unknown>, path: string, to: string): boolean {
@@ -46,7 +51,7 @@ export function applyCorrections(kind: DocKind, data: Record<string, unknown>, f
   const corrections: Correction[] = [];
   for (const f of fields) {
     if (f.status !== "USER_CONFIRMED" || f.value === f.originalValue || !f.shipmentPath) continue;
-    const rawPath = rawPathOf(kind, f.shipmentPath);
+    const rawPath = rawPathOf(kind, f.shipmentPath, data);
     if (rawPath && setAt(out, rawPath, f.value)) corrections.push({ key: f.key, label: f.label, rawPath, from: f.originalValue, to: f.value });
   }
   return { data: out, corrections };

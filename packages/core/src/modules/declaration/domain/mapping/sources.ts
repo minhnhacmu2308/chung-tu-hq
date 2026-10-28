@@ -32,7 +32,8 @@ export const profileSource = (code: string, label = "Mặc định khai báo"): 
 
 export const SRC = {
   anWarehouse: { id: "an.warehouse", label: "Kho / CY trên Arrival Notice", read: (i) => has(warehouseFromAn(i)) } satisfies SourceOption,
-  houseBill: { id: "transport.houseBillNo", label: "Vận đơn nhà (HB/L, HAWB)", read: (i) => has(fromSourced(i.shipment.transport.houseBillNo, "BILL_OF_LADING")) } satisfies SourceOption,
+  // Giữ id "transport.houseBillNo" (quy tắc khai đã lưu của doanh nghiệp trỏ tới id này); đọc ô Số vận đơn – vận đơn nhà nếu có, không thì vận đơn duy nhất. Shipment cũ (gộp trước 28/10/2026, còn houseBillNo) dùng houseBillNo tới khi gộp lại.
+  houseBill: { id: "transport.houseBillNo", label: "Vận đơn nhà (HB/L, HAWB)", read: (i) => has(fromSourced(i.shipment.transport.houseBillNo.value ? i.shipment.transport.houseBillNo : i.shipment.transport.billNo, "BILL_OF_LADING")) } satisfies SourceOption,
   masterBill: { id: "transport.masterBillNo", label: "Vận đơn chủ (MB/L, MAWB)", read: (i) => has(fromSourced(i.shipment.transport.masterBillNo, "BILL_OF_LADING")) } satisfies SourceOption,
   arrivalDate: { id: "transport.arrivalDate", label: "Ngày đến (ETA) trên Arrival Notice", read: (i) => has(fromSourced(i.shipment.transport.arrivalDate, "ARRIVAL_NOTICE")) } satisfies SourceOption,
   departureDate: { id: "transport.departureDate", label: "Ngày đi (ngày B/L, ngày bay)", read: (i) => has(fromSourced(i.shipment.transport.departureDate, "BILL_OF_LADING")) } satisfies SourceOption,

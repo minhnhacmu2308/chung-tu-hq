@@ -169,6 +169,8 @@ flowchart LR
 | MODEL_UNSURE | Model báo không chắc |
 | USER_CONFIRMED | Người dùng đã sửa hoặc bấm "Đúng" |
 
+**Số vận đơn trên màn đọc chứng từ** (từ 28/10/2026): hai ô – **Số vận đơn chủ (MB/L, MAWB)** và **Số vận đơn (HB/L, HAWB)**. Ô Số vận đơn = vận đơn nhà nếu có (số trên B/L, Arrival Notice, HAWB, hóa đơn cước), AWB không có HAWB (chuyển phát nhanh) thì lấy số AWB; đây là giá trị khai ở 1.26. Không còn ô "vận đơn nhà" riêng (hàng biển luôn trùng số, hiện hai lần gây hiểu nhầm); nguồn "Vận đơn nhà" trong quy tắc khai đọc ô Số vận đơn. Hồ sơ đọc trước ngày này hết ô thừa khi gộp lại (sửa trường, thêm chứng từ, đọc lại); xác nhận/sửa tay trên ô vận đơn nhà cũ không chuyển sang (lịch sử vẫn ở `field_audit`).
+
 **Ngưỡng nghi ngờ** (cấu hình doanh nghiệp): STRICT (đánh dấu cả SINGLE_SOURCE) · BALANCED (mặc định: CONFLICT, INVALID_FORMAT, MODEL_UNSURE) · RELAXED (chỉ CONFLICT, INVALID_FORMAT).
 
 ### 6.3 Người khai kiểm tra

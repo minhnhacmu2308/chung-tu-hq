@@ -36,7 +36,7 @@ Quy tắc nào máy kiểm tra được thì đã cấu hình trong lint/depcrui
 | Chỉ tiêu tờ khai | `DeclarationField` |
 | Luật đối chiếu | `ValidationRule` |
 | Doanh nghiệp | `Organization` (`orgId`) |
-| Vận đơn house/master | `houseBillNo` / `masterBillNo` |
+| Vận đơn (house nếu có, không thì vận đơn duy nhất) / master | `billNo` / `masterBillNo` (`houseBillNo` chỉ còn để đọc shipment cũ, không ghi) |
 
 ## 3. Frontend
 

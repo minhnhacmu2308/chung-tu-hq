@@ -11,6 +11,9 @@ describe("review-learning", () => {
     expect(rawPathOf("INVOICE", "/items/2/hsOnInvoice")).toBe("items.2.hsCodeOnInvoice");
     expect(rawPathOf("INVOICE", "/items/0/quantity")).toBe("items.0.quantity");
     expect(rawPathOf("INVOICE", "/transport/billNo")).toBeNull();
+    // AWB có hai nguồn cho Số vận đơn: HAWB, không có thì số AWB (chuyển phát nhanh) – ghi ngược vào đúng chỗ đang có giá trị.
+    expect(rawPathOf("AIR_WAYBILL", "/transport/billNo", { awbNo: "7704711846I2", hawbNo: null })).toBe("awbNo");
+    expect(rawPathOf("AIR_WAYBILL", "/transport/billNo", { awbNo: "92147391621", hawbNo: "YZS24120950" })).toBe("hawbNo");
   });
 
   it("applyCorrections: chỉ giá trị người dùng sửa; giữ kiểu số; tạo object bên khi model không đọc được; không đổi dữ liệu gốc", () => {
@@ -34,5 +37,15 @@ describe("review-learning", () => {
     expect(supplierOf("BILL_OF_LADING", { shipper: { name: "ZETA" } })).toBe("ZETA");
     expect(supplierOf("PACKING_LIST", { seller: { name: "PL SELLER" } })).toBe("PL SELLER");
     expect(supplierOf("INVOICE", { seller: null })).toBeNull();
+  });
+});
+
+describe("sửa Số vận đơn của AWB chuyển phát nhanh", () => {
+  it("ghi vào awbNo (không tạo hawbNo giả)", () => {
+    const r = applyCorrections("AIR_WAYBILL", { awbNo: "7704711846I2", hawbNo: null }, [
+      { key: "bill_no", label: "Số vận đơn (HB/L, HAWB)", value: "770471184612", originalValue: "7704711846I2", status: "USER_CONFIRMED", shipmentPath: "/transport/billNo" },
+    ]);
+    expect(r.data).toMatchObject({ awbNo: "770471184612", hawbNo: null });
+    expect(r.corrections).toEqual([expect.objectContaining({ rawPath: "awbNo", to: "770471184612" })]);
   });
 });

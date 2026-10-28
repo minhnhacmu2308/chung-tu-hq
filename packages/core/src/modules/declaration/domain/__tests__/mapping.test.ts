@@ -315,7 +315,7 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
 describe("giữ cả hai: quy định chỉ tiêu + cấu hình doanh nghiệp (Mặc định khai báo / ghi đè)", () => {
   it("EDA 2.24: mặc định để trống nhắc số quản lý hàng hóa; doanh nghiệp chọn nguồn vận đơn nhà → lấy số vận đơn", () => {
     expect(eda()["SO_VD"]).toMatchObject({ value: "", suspect: true, note: expect.stringMatching(/số quản lý hàng hóa/) });
-    const viaBill = eda({ mutate: (s) => void (s.transport.houseBillNo = val("HPSEL2610078")), overrides: { SO_VD: { sources: ["transport.houseBillNo"] } } })["SO_VD"];
+    const viaBill = eda({ mutate: (s) => void (s.transport.billNo = val("HPSEL2610078")), overrides: { SO_VD: { sources: ["transport.houseBillNo"] } } })["SO_VD"];
     expect(viaBill).toMatchObject({ value: "HPSEL2610078", provenance: { via: "source", sourceId: "transport.houseBillNo" } });
   });
   it("IDA 1.7: hồ sơ chọn khác 4 → theo hồ sơ; hồ sơ để mặc định 4 → Mặc định khai báo của doanh nghiệp; không có → 4", () => {

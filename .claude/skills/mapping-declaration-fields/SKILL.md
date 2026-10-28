@@ -16,7 +16,7 @@ export const IDA_TRANSPORT: FieldMapping[] = [
   {
     field: "IDA.soVanDon",                 // chỉ tiêu tờ khai
     source: "B/L",
-    from: (s) => s.transport.houseBillNo,
+    from: (s) => s.transport.billNo,     // vận đơn nhà nếu có (HB/L, HAWB), không thì vận đơn duy nhất – không dùng houseBillNo (không còn ghi)
     required: true,
   },
   {

@@ -35,7 +35,7 @@ export async function reviewedDocuments(deps: ExtractionDeps, ctx: Ctx, dossierI
   );
 }
 
-export type LatestRead = { documentId: string; skillVersionId: string | null; supplier: string | null };
+export type LatestRead = { documentId: string; skillVersionId: string | null; supplier: string | null; raw: Record<string, unknown> };
 
 /** Lần đọc mới nhất của các chứng từ (theo loại hiện tại): đọc bằng phiên bản skill nào, nhà cung cấp nào. Nội bộ – không kiểm quyền. */
 export async function latestReads(deps: ExtractionDeps, orgId: string, docs: { documentId: string; dossierId: string; kind: DocKind }[]): Promise<LatestRead[]> {
@@ -44,7 +44,7 @@ export async function latestReads(deps: ExtractionDeps, orgId: string, docs: { d
   const rows = await deps.uow.asOrg(ctx, (r) => r.extractions.listDone(orgId, "", docs.map((d) => d.documentId)));
   return docs.flatMap((d) => {
     const latest = latestOf(rows, d.documentId, d.kind);
-    return latest ? [{ documentId: d.documentId, skillVersionId: latest.skillVersionId, supplier: supplierOf(d.kind, latest.raw as Record<string, unknown>) }] : [];
+    return latest ? [{ documentId: d.documentId, skillVersionId: latest.skillVersionId, supplier: supplierOf(d.kind, latest.raw as Record<string, unknown>), raw: latest.raw as Record<string, unknown> }] : [];
   });
 }
 
@@ -55,8 +55,9 @@ export async function fieldSource(deps: ExtractionDeps, ctx: Ctx, fieldId: strin
   const f = await deps.uow.asOrg(ctx, (r) => r.fields.get(ctx.orgId, fieldId));
   if (!f) return err(domainError("NOT_FOUND", "Không tìm thấy trường"));
   const doc = await deps.documents.get(ctx.orgId, f.documentId);
-  const rawPath = doc && f.shipmentPath ? rawPathOf(doc.kind, f.shipmentPath) : null;
-  if (!doc || !rawPath) return ok(null);
+  if (!doc || !f.shipmentPath) return ok(null);
   const [read] = await latestReads(deps, ctx.orgId, [{ documentId: doc.id, dossierId: doc.dossierId, kind: doc.kind }]);
+  const rawPath = rawPathOf(doc.kind, f.shipmentPath, read?.raw);
+  if (!rawPath) return ok(null);
   return ok({ documentId: doc.id, kind: doc.kind, rawPath, supplier: read?.supplier ?? null });
 }

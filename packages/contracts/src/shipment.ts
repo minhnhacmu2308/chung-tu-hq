@@ -56,7 +56,7 @@ export const ShipmentSchema = z.object({
     packageUnit: str(),
     grossWeightKg: dec(),
     netWeightKg: dec(),
-    /** v2: vận đơn nhà (HB/L, HAWB) tách khỏi billNo để giữ tương thích. */
+    /** Không còn ghi (2026-10-28): vận đơn nhà nằm ở `billNo` ("Số vận đơn (HB/L, HAWB)"). Giữ trường để đọc được shipment đã lưu. */
     houseBillNo: str(),
     flightNo: str(),
     /** Ngày hàng đi / phát hành vận đơn. */

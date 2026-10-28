@@ -38,6 +38,8 @@ const at = (rawPath: string, get: (d: Record<string, unknown>) => unknown): Gett
 const party = (p: string) => at(`${p}.name`, (d) => (d[p] as Record<string, unknown> | null)?.["name"]);
 const partyField = (p: string, f: string) => at(`${p}.${f}`, (d) => (d[p] as Record<string, unknown> | null)?.[f]);
 const g = (k: string): Getter => at(k, (d) => d[k]);
+/** Số AWB chủ chỉ là số vận đơn khi AWB không có HAWB (chuyển phát nhanh: một AWB duy nhất). */
+const awbIfNoHouse: Getter = at("awbNo", (d) => (d["hawbNo"] ? null : d["awbNo"]));
 
 export const SHIPMENT_FIELDS: FieldSpec[] = [
   { path: "/invoice/no", key: "invoice_no", label: "Số hóa đơn", group: "GENERAL", normalize: str, sources: [{ kind: "INVOICE", get: g("invoiceNo"), regionKey: "invoiceNo" }, { kind: "PACKING_LIST", get: g("invoiceNo"), regionKey: "invoiceNo" }, { kind: "CERT_OF_ORIGIN", get: g("invoiceNo"), regionKey: "invoiceNo" }] },
@@ -55,9 +57,10 @@ export const SHIPMENT_FIELDS: FieldSpec[] = [
   { path: "/parties/buyer/address", key: "buyer_address", label: "Địa chỉ người mua", group: "PARTIES", normalize: str, sources: [{ kind: "INVOICE", get: partyField("buyer", "address") }] },
   { path: "/parties/buyer/taxCode", key: "buyer_tax_code", label: "MST người mua", group: "PARTIES", normalize: tax, sources: [{ kind: "INVOICE", get: partyField("buyer", "taxCode") }, { kind: "SALES_CONTRACT", get: partyField("buyer", "taxCode") }], valid: (v) => /^\d{10}(\d{3})?$/.test(v) },
   { path: "/parties/buyer/country", key: "buyer_country", label: "Nước người mua", group: "PARTIES", normalize: country, sources: [{ kind: "INVOICE", get: partyField("buyer", "country") }] },
-  { path: "/transport/billNo", key: "bill_no", label: "Số vận đơn", group: "TRANSPORT", normalize: ident, sources: [{ kind: "BILL_OF_LADING", get: g("billNo"), regionKey: "billNo" }, { kind: "AIR_WAYBILL", get: g("awbNo"), regionKey: "awbNo" }, { kind: "ARRIVAL_NOTICE", get: g("billNo"), regionKey: "billNo" }, { kind: "FREIGHT_INVOICE", get: g("billRef"), regionKey: "billRef" }] },
+  // Số vận đơn khai ở 1.26 = vận đơn nhà nếu có (HB/L, HAWB), không có thì vận đơn duy nhất (AWB chuyển phát nhanh). Không tách ô "vận đơn nhà"
+  // riêng: hàng biển hai ô luôn cùng một số (B/L, Arrival Notice chỉ ghi một số HBL) – hiện hai lần làm người khai tưởng có hai số khác nhau.
+  { path: "/transport/billNo", key: "bill_no", label: "Số vận đơn (HB/L, HAWB)", group: "TRANSPORT", normalize: ident, sources: [{ kind: "BILL_OF_LADING", get: g("billNo"), regionKey: "billNo" }, { kind: "AIR_WAYBILL", get: g("hawbNo"), regionKey: "hawbNo" }, { kind: "AIR_WAYBILL", get: awbIfNoHouse, regionKey: "awbNo" }, { kind: "ARRIVAL_NOTICE", get: g("billNo"), regionKey: "billNo" }, { kind: "FREIGHT_INVOICE", get: g("billRef"), regionKey: "billRef" }] },
   { path: "/transport/masterBillNo", key: "master_bill_no", label: "Số vận đơn chủ (MB/L, MAWB)", group: "TRANSPORT", normalize: ident, sources: [{ kind: "BILL_OF_LADING", get: g("masterBillNo") }, { kind: "AIR_WAYBILL", get: g("awbNo"), regionKey: "awbNo" }, { kind: "ARRIVAL_NOTICE", get: g("masterBillNo"), regionKey: "masterBillNo" }] },
-  { path: "/transport/houseBillNo", key: "house_bill_no", label: "Số vận đơn nhà (HB/L, HAWB)", group: "TRANSPORT", normalize: ident, sources: [{ kind: "BILL_OF_LADING", get: g("billNo"), regionKey: "billNo" }, { kind: "AIR_WAYBILL", get: g("hawbNo"), regionKey: "hawbNo" }, { kind: "ARRIVAL_NOTICE", get: g("billNo"), regionKey: "billNo" }] },
   { path: "/transport/flightNo", key: "flight_no", label: "Chuyến bay", group: "TRANSPORT", normalize: upper, sources: [{ kind: "AIR_WAYBILL", get: g("flight"), regionKey: "flight" }, { kind: "ARRIVAL_NOTICE", get: g("flightNo"), regionKey: "flightNo" }] },
   { path: "/transport/departureDate", key: "departure_date", label: "Ngày hàng đi", group: "TRANSPORT", normalize: date, sources: [{ kind: "BILL_OF_LADING", get: (d) => d["dateOfIssue"] ?? d["date"], regionKey: "date" }, { kind: "AIR_WAYBILL", get: g("flightDate"), regionKey: "flightDate" }, { kind: "CERT_OF_ORIGIN", get: g("departureDate"), regionKey: "departureDate" }] },
   { path: "/transport/placeOfIssue", key: "place_of_issue", label: "Nơi phát hành vận đơn", group: "TRANSPORT", normalize: str, sources: [{ kind: "BILL_OF_LADING", get: g("placeOfIssue") }, { kind: "AIR_WAYBILL", get: g("placeOfIssue") }] },

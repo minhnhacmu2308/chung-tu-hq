@@ -124,8 +124,10 @@ describe("mergeExtractions – trường v2 (chuẩn trường chứng từ)", (
   it("Arrival Notice cấp MB/L, kho; B/L v1 (thiếu placeOfIssue) vẫn gộp, ngày đi lấy ngày B/L", () => {
     const s = mergeExtractions([an, blV1], opts);
     expect(s.transport.masterBillNo.value).toBe("LLLHCM25414116");
-    expect(s.transport.houseBillNo.value).toBe("FANS25040166");
-    expect(s.transport.houseBillNo.status).toBe("CROSS_CHECKED");
+    // Một ô "Số vận đơn (HB/L, HAWB)" – không còn ô vận đơn nhà trùng số (28/10/2026).
+    expect(s.transport.billNo.value).toBe("FANS25040166");
+    expect(s.transport.billNo.status).toBe("CROSS_CHECKED");
+    expect(s.transport.houseBillNo.value).toBeNull();
     expect(s.transport.warehouseName.value).toBe("CÁT LÁI KHO 3");
     expect(s.transport.warehouseCode.value).toBeNull();
     expect(s.transport.departureDate.value).toBe("2025-04-22");
@@ -145,12 +147,12 @@ describe("mergeExtractions – trường v2 (chuẩn trường chứng từ)", (
     // Không có hóa đơn cước → vẫn dùng cước trên Arrival Notice.
     expect(mergeExtractions([anFee], opts).charges.freight.value).toBe("239");
   });
-  it("hàng air: chuyến bay lệch giữa HAWB và Arrival Notice → CONFLICT; HAWB vào houseBillNo, MAWB vào masterBillNo; ngày bay vào ngày đi", () => {
+  it("hàng air: chuyến bay lệch giữa HAWB và Arrival Notice → CONFLICT; HAWB vào số vận đơn (khớp Arrival Notice), MAWB vào masterBillNo; ngày bay vào ngày đi", () => {
     const awb: FileExtraction = { documentId: "a", kind: "AIR_WAYBILL", pages: 1, data: { awbNo: "92147391621", hawbNo: "YZS24120950", flight: "O3141", flightDate: "2024-12-21", uncertainties: [] } };
     const an2: FileExtraction = { documentId: "b", kind: "ARRIVAL_NOTICE", pages: 1, data: { billNo: "YZS24120950", flightNo: "O30141", warehouseCode: "02B1A04", warehouseName: "KHO SCSC", charges: [], uncertainties: [] } };
     const s = mergeExtractions([awb, an2], opts);
     expect(s.transport.flightNo.status).toBe("CONFLICT");
-    expect(s.transport.houseBillNo.value).toBe("YZS24120950");
+    expect(s.transport.billNo).toMatchObject({ value: "YZS24120950", status: "CROSS_CHECKED" });
     expect(s.transport.masterBillNo.value).toBe("92147391621");
     expect(s.transport.departureDate.value).toBe("2024-12-21");
     expect(s.transport.arrivalDate.value).toBeNull(); // ngày bay không phải ETA – NGAY_DEN dự phòng ở bước ánh xạ

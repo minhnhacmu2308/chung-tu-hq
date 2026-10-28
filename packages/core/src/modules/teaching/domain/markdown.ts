@@ -1,6 +1,6 @@
 // Bộ quy tắc khai báo của doanh nghiệp dạng Markdown – bản xuất từ bài học đã duyệt (nơi lưu gốc là DB, code áp dụng). Thuần.
 import { LESSON_AUTO_FILL_AFTER, type LessonContext } from "@kb/contracts";
-import { isAutoFill, type LessonRow } from "./lessons.js";
+import { isAiCommentary, isAutoFill, isLotSpecific, type LessonRow } from "./lessons.js";
 
 const CONTEXT_LABEL: Record<keyof LessonContext, string> = { supplier: "Nhà cung cấp", carrier: "Hãng vận chuyển", mode: "Phương thức", office: "Chi cục", partNo: "Mặt hàng" };
 
@@ -15,7 +15,8 @@ const trust = (r: LessonRow) => (isAutoFill(r) ? "Tự điền" : r.conflicts.le
 export function rulesMarkdown(input: { orgName: string; generatedAt: Date; lessons: LessonRow[]; labels: Record<string, string> }): string {
   const active = input.lessons.filter((r) => r.status === "ACTIVE");
   const fields = active.filter((r) => r.kind === "FIELD").sort((a, b) => a.fieldCode.localeCompare(b.fieldCode) || b.hits - a.hits);
-  const clauses = active.filter((r) => r.kind === "CLAUSE");
+  // Cùng bộ lọc với lúc áp (lessonsForDraft): câu riêng của lô / lời AI học nhầm trước đây không đưa vào bộ quy tắc.
+  const clauses = active.filter((r) => r.kind === "CLAUSE" && !isLotSpecific(r.value, []) && !isAiCommentary(r.value));
   const lines = active.filter((r) => r.kind === "LINE").sort((a, b) => partOf(a.context).localeCompare(partOf(b.context)));
   const out = [
     `# Quy tắc khai báo – ${input.orgName}`,

@@ -16,6 +16,13 @@ export function fieldDef(kind: "IDA" | "EDA", code: string): DeclarationFieldDef
  */
 const LENGTH_CHECKED = new Set(["GHI_CHU", "SO_QLNB", "NXK_TEN", "NNK_TEN", "SO_HD", "SO_VD"]);
 
+/** Độ dài tối đa của chỉ tiêu văn bản được kiểm (null: không kiểm). */
+export function maxLenOf(kind: "IDA" | "EDA", code: string): number | undefined {
+  if (!LENGTH_CHECKED.has(code)) return undefined;
+  const def = fieldDef(kind, code);
+  return def && def.type === "text" && def.maxLen ? def.maxLen : undefined;
+}
+
 /** Ô văn bản vượt độ dài tối đa của chỉ tiêu → thông báo; trong giới hạn → undefined. */
 export function lengthIssue(kind: "IDA" | "EDA", code: string, value: string): string | undefined {
   if (!LENGTH_CHECKED.has(code)) return undefined;

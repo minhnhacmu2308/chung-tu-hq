@@ -8,7 +8,7 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import { MemoryStorage, RecordingUsage, ScriptedAi } from "../test/fakes.js";
 import { approveLessons, exportTeachRules, getTeachOverview, lessonsForDossier, setTeachEnabled, updateLesson } from "../lessons.js";
 import type { TeachDeps, TeachLotPort } from "../ports.js";
-import { deleteTeachSample, failTeachSample, getTeachComparison, partNoInDescription, processTeachSample, uploadTeachSamples } from "../samples.js";
+import { declarationNoOf, deleteTeachSample, failTeachSample, getTeachComparison, partNoInDescription, processTeachSample, uploadTeachSamples } from "../samples.js";
 import { InMemoryTeachUow } from "../test/in-memory-uow.js";
 
 const ctxA: Ctx = { orgId: asOrgId("org_a"), userId: asUserId("usr_a"), role: "ADMIN" };
@@ -81,6 +81,18 @@ describe("Dạy khai báo – tờ khai mẫu", () => {
     const [s] = unwrap(await uploadTeachSamples(deps, ctxA, [pdf]));
     await processTeachSample(deps, { orgId: "org_a", userId: "usr_a", sampleId: s!.id });
     expect(uow.samples[0]).toMatchObject({ status: "FAILED", error: expect.stringMatching(/Không đọc ra tờ khai/) });
+  });
+
+  it("số tờ khai AI chép kèm nhãn / dấu gạch / khoảng trắng vẫn nhận ra 12 số", () => {
+    for (const v of ["106794645160", "1067 9464 5160", "106.794.645.160", "106-794-645-160", "Số tờ khai: 106794645160", "106794645160/1"]) expect(declarationNoOf(v)).toBe("106794645160");
+    for (const v of [null, "", "WSYH-20260502", "1067946451600", "10679464516O"]) expect(declarationNoOf(v)).toBeNull();
+  });
+
+  it("file không có số tờ khai 12 số (hợp đồng bị AI đọc thành tờ khai) → FAILED, không học", async () => {
+    make(true, new ScriptedAi({ "TK 106794645160.pdf": { ...TK, SOTK: null, GHI_CHU: "Tài liệu là Hợp đồng mua bán hàng hóa số WSYH-20260502, không phải tờ khai hải quan VNACCS" } }));
+    await upload();
+    expect(uow.samples[0]).toMatchObject({ status: "FAILED", error: expect.stringMatching(/Không thấy số tờ khai \(12 số\)/) });
+    expect(uow.lessons).toEqual([]);
   });
 
   it("job hết số lần thử → FAILED (không kẹt \"AI đang đọc\"); tờ khai đã đọc xong thì giữ nguyên", async () => {

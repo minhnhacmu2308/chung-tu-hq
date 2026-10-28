@@ -66,13 +66,26 @@ export function splitClauses(text: string): string[] {
   return body.split(/;\s*|\s+-\s+(?=\p{Lu}\p{Ll}+\s)/u).map((x) => x.trim().replace(/[,;.\s-]+$/, "")).filter((x) => x.length >= 12);
 }
 
-/** Câu chỉ đúng cho lô này (số hóa đơn, số tiền, số chứng từ của lô) → không học. */
+/** Câu chỉ đúng cho lô này (số hóa đơn, số tiền, số chứng từ, ngày, trọng lượng, chi tiết C/O của lô) → không học. */
 export function isLotSpecific(clause: string, lotIdents: string[]): boolean {
   if (/\b(HĐ|HD|INV|INVOICE|HÓA ĐƠN|HOA DON|C\/O|CO\s+SỐ|B\/L|AWB)\b/iu.test(clause)) return true;
   if (/\d[\d.,]*\s*(USD|EUR|VND|JPY|CNY|KRW)\b/i.test(clause)) return true;
-  const flat = fold(clause).replace(/[^A-Z0-9]/g, "");
+  const f = fold(clause);
+  // Ngày (2026-05-07, 07/05/2026); số lượng / trọng lượng kèm đơn vị (72000 KGS, 17 BAGS).
+  // Ngày trong câu trích văn bản pháp quy (QĐ 2711/QĐ-BKHCN (30/12/22), QCVN…) là ngày của văn bản – câu vẫn cố định.
+  const legalRef = /\b(QCVN|TCVN|QD|ND|TT|CV|CONG VAN|NGHI DINH|THONG TU|QUYET DINH|TCHQ|GSQL|PTPL|BKHCN|BTC|BCT|BYT|BNNPTNT)\b/.test(f);
+  if (!legalRef && /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b/.test(f)) return true;
+  if (/\d[\d.,]*\s*(KGS?|KGM|MTS?|TNE|TONS?|PCS|PCE|CTNS?|CARTONS?|PKGS?|PACKAGES?|BAGS?|M3|CBM|SETS?|ROLLS?|PALLETS?)\b/.test(f)) return true;
+  // Chi tiết C/O / vận chuyển của lô viết theo nhiều cách: "Form E No.", "so CO", "CO FORM E", "origin criteria", "departure date", "net weight".
+  if (/\bFORM\s+[A-Z0-9.-]{1,6}\s+NO\b|\b(SO|NO)\s+CO\b|\bCO\s+(FORM|NO|SO)\b|\bORIGIN\s+CRITERI|\bDEPARTURE\s+DATE\b|\b(NET|GROSS)\s+WEIGHT\b|\bISSUED\s+IN\b|\b(HOP\s+DONG|CONTRACT)\s+(SO|NO)\b/.test(f)) return true;
+  // Mã chứng từ: chuỗi chữ + số dài ≥ 10 (E26MA6NQNE610002, WSYH-20260502); mã tiêu chuẩn ngắn (IEC62471, ISO9001) vẫn là câu cố định – câu cố định không chứa số chứng từ.
+  if (f.split(/[^A-Z0-9-]+/).some((t) => t.length >= 10 && (t.match(/\d/g)?.length ?? 0) >= 4 && (t.match(/[A-Z]/g)?.length ?? 0) >= 2)) return true;
+  const flat = f.replace(/[^A-Z0-9]/g, "");
   return lotIdents.some((x) => x.length >= 6 && flat.includes(x));
 }
+
+/** Lời AI nhận xét về tài liệu (đọc nhầm hợp đồng/hóa đơn thành tờ khai) – không phải nội dung người khai ghi. */
+export const isAiCommentary = (clause: string) => /\b(TAI LIEU LA|KHONG PHAI TO KHAI|THIS DOCUMENT|NOT A CUSTOMS DECLARATION|KHONG DOC DUOC)\b/.test(fold(clause));
 
 /** Mã định danh của lô (số hóa đơn, vận đơn, C/O…) đọc được trên chứng từ – để nhận ra câu chỉ riêng lô này. */
 export function lotIdentifiers(docs: DocData[]): string[] {
@@ -108,7 +121,7 @@ export function observe(i: {
     const draft = words(draftBy.get(code)?.value ?? "");
     const { context, key } = pickContext(keys, i.context);
     for (const c of splitClauses(real)) {
-      if (isLotSpecific(c, idents) || (draft && draft.includes(words(c)))) continue;
+      if (isLotSpecific(c, idents) || isAiCommentary(c) || (draft && draft.includes(words(c)))) continue;
       out.push({ kind: "CLAUSE", fieldCode: code, contextKey: key, context, value: c, line: null });
     }
   }
@@ -177,7 +190,8 @@ export function lessonsForDraft(rows: LessonRow[], c: LessonContext): DraftLesso
     if (best) fields[code] = draftValue(best);
   }
   const clauses: DraftLessons["clauses"] = {};
-  for (const r of active.filter((x) => x.kind === "CLAUSE" && fits(x.context, c))) (clauses[r.fieldCode] ??= []).push(draftValue(r));
+  // Lọc lại khi áp: bài học câu cố định học trước khi bộ lọc câu riêng của lô đủ chặt (số cân, ngày, số C/O…) không còn được nối vào tờ khai mới.
+  for (const r of active.filter((x) => x.kind === "CLAUSE" && fits(x.context, c) && !isLotSpecific(x.value, []) && !isAiCommentary(x.value))) (clauses[r.fieldCode] ??= []).push(draftValue(r));
   const lines = active
     .filter((r) => r.kind === "LINE" && r.line && (!r.context.supplier || r.context.supplier === c.supplier))
     .map((r) => ({ ...draftValue(r), key: r.context.partNo ?? "", line: r.line! }));

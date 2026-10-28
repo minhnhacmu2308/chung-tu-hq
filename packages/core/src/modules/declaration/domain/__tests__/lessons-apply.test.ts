@@ -36,6 +36,16 @@ describe("áp bài học vào chỉ tiêu tờ khai", () => {
     expect(twice.note).toBeUndefined();
     expect(applyLessons("KHO", v(null), undefined).value).toBeNull();
   });
+  it("câu cố định làm ô vượt giới hạn ký tự (1.68 tối đa 100) → không nối, ghi chú nhắc khai qua HYS", () => {
+    const base = "C/O mẫu E số: E26MA6NQNE610002 (07/05/2026)";
+    const long: DraftLessons = { fields: {}, clauses: { GHI_CHU: [lesson("Hàng mới 100%", 3), lesson("Hàng nhập nằm ngoài phạm vi áp dụng QCVN 19:2019/BKHCN – thông báo kiểm tra chuyên ngành số 123", 1)] }, lines: [] };
+    const r = applyLessons("GHI_CHU", v(base), long, 100);
+    expect(r.value).toBe(`${base}; Hàng mới 100%`);
+    expect(r.value!.length).toBeLessThanOrEqual(100);
+    expect(r.suspect).toBeUndefined();
+    expect(r.note).toMatch(/Không nối 1 câu cố định.*100 ký tự.*HYS/);
+    expect(applyLessons("GHI_CHU", v(base), long).value!.length).toBeGreaterThan(100);
+  });
 });
 
 describe("bài học mặt hàng", () => {

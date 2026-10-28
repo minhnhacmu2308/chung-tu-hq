@@ -24,23 +24,41 @@ export function applyFieldLesson(code: string, v: EvaluatedValue, lessons: Draft
   return v;
 }
 
-/** Câu cố định (chi tiết khai trị giá, ghi chú): nối các câu học được còn thiếu vào sau giá trị quy tắc dựng. */
-export function applyClauseLessons(code: string, v: EvaluatedValue, lessons: DraftLessons | undefined): EvaluatedValue {
+/**
+ * Câu cố định (chi tiết khai trị giá, ghi chú): nối các câu học được còn thiếu vào sau giá trị quy tắc dựng.
+ * `maxLen` (độ dài tối đa của chỉ tiêu): câu nào nối vào làm ô vượt giới hạn thì không nối – VNACCS cắt phần thừa; ghi chú nhắc khai qua HYS.
+ */
+export function applyClauseLessons(code: string, v: EvaluatedValue, lessons: DraftLessons | undefined, maxLen?: number): EvaluatedValue {
   const cs = lessons?.clauses[code];
   if (!cs?.length || v.provenance.via === "fixed" || v.source === "USER") return v;
   const base = v.value ?? "";
   const have = words(base);
-  const add = cs.filter((c) => !have.includes(words(c.value)));
-  if (!add.length) return v;
-  const joined = add.map((c) => c.value).join("; ");
-  const value = !base ? joined : /#&$/.test(base) ? `${base}${joined}` : `${base}; ${joined}`;
+  const missing = cs.filter((c) => !have.includes(words(c.value)));
+  if (!missing.length) return v;
+  const join = (cur: string, next: string) => (!cur ? next : /#&$/.test(cur) ? `${cur}${next}` : `${cur}; ${next}`);
+  let value = base;
+  const add: typeof missing = [];
+  const skipped: typeof missing = [];
+  for (const c of missing) {
+    const next = join(value, c.value);
+    if (maxLen && next.length > maxLen) skipped.push(c);
+    else {
+      value = next;
+      add.push(c);
+    }
+  }
+  const quote = (c: (typeof missing)[number]) => `“${c.value.slice(0, 40)}${c.value.length > 40 ? "…" : ""}” (${c.hits} lần)`;
   const unsure = add.some((c) => !c.autoFill);
-  const note = [v.note, `Câu cố định học từ tờ khai trước: ${add.map((c) => `“${c.value.slice(0, 40)}${c.value.length > 40 ? "…" : ""}” (${c.hits} lần)`).join("; ")}${unsure ? " – kiểm lại" : ""}`].filter(Boolean).join(". ");
-  return { ...v, value, note, ...(unsure ? { suspect: true } : {}) };
+  const note = [
+    v.note,
+    add.length ? `Câu cố định học từ tờ khai trước: ${add.map(quote).join("; ")}${unsure ? " – kiểm lại" : ""}` : null,
+    skipped.length ? `Không nối ${skipped.length} câu cố định học được vì ô giới hạn ${maxLen} ký tự – cần thì khai qua HYS: ${skipped.map(quote).join("; ")}` : null,
+  ].filter(Boolean).join(". ");
+  return { ...v, value: value || v.value, note, ...(unsure ? { suspect: true } : {}) };
 }
 
-export function applyLessons(code: string, v: EvaluatedValue, lessons: DraftLessons | undefined): EvaluatedValue {
-  return applyClauseLessons(code, applyFieldLesson(code, v, lessons), lessons);
+export function applyLessons(code: string, v: EvaluatedValue, lessons: DraftLessons | undefined, maxLen?: number): EvaluatedValue {
+  return applyClauseLessons(code, applyFieldLesson(code, v, lessons), lessons, maxLen);
 }
 
 // ---------------------------------------------------------------- dòng hàng

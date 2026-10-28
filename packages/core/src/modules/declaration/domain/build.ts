@@ -2,7 +2,7 @@
 import { EMPTY_VALUE_CHARGES, type DraftLessons, type Shipment, type ValueCharges } from "@kb/contracts";
 import type { DossierInfo, OrgInfo, StoredField } from "./types.js";
 import { planAdjustmentsFor } from "./adjustments.js";
-import { lengthIssue } from "./field-length.js";
+import { lengthIssue, maxLenOf } from "./field-length.js";
 import { applyLessons } from "./lessons-apply.js";
 import { evaluateMapping } from "./mapping/evaluate.js";
 import { mappingsFor } from "./mapping/registry.js";
@@ -51,7 +51,7 @@ export function buildDeclaration(input: BuildInput): BuiltDeclaration {
       hidden.push(m.code);
       continue;
     }
-    const v = applyLessons(m.code, evaluateMapping(m, ctx.overrides[m.code], ctx), input.lessons ?? undefined);
+    const v = applyLessons(m.code, evaluateMapping(m, ctx.overrides[m.code], ctx), input.lessons ?? undefined, maxLenOf(kind, m.code));
     const tooLong = v.value === null ? undefined : lengthIssue(kind, m.code, v.value);
     const suspect = v.suspect === true || (m.required && v.value === null) || tooLong !== undefined;
     const note = [v.note ?? (m.required && v.value === null ? "Chỉ tiêu bắt buộc chưa có dữ liệu" : undefined), tooLong].filter(Boolean).join(". ") || undefined;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CustomsDeclarationExtraction, CustomsDeclarationLine } from "@kb/contracts";
 import { compareFields, compareLines, findInDocuments, pairLines, sameValue, score, type DocData, type DraftField, type DraftLine } from "../compare.js";
-import { applyObservation, carrierOf, isAutoFill, isLotSpecific, lessonContext, lessonsForDraft, observe, splitClauses, supplierKey, type LessonRow } from "../lessons.js";
+import { applyObservation, carrierOf, isAiCommentary, isAutoFill, isLotSpecific, lessonContext, lessonsForDraft, observe, splitClauses, supplierKey, type LessonRow } from "../lessons.js";
 import { rulesMarkdown } from "../markdown.js";
 
 // Lô 770471184612 (FedEx, Rise → CARA): chứng từ model đọc thật + TK 106794645160.
@@ -72,6 +72,22 @@ describe("bài học", () => {
     expect(cs[1]).toMatch(/QĐ - BKHCN vì phù hợp với trường hợp 3$/);
     expect(isLotSpecific("Hàng mới 100% theo C/O E247079657380002", ["E247079657380002"])).toBe(true);
   });
+  it("câu riêng của lô viết kiểu khác (số cân, ngày, chi tiết C/O, số hợp đồng) và lời AI nhận xét → không học; câu QCVN vẫn học", () => {
+    // Ô 1.68 thật của lô bột thạch anh WSYH-20260418 (ngày 28/10/2026): cả 5 câu đều là số liệu của lô trước, đã bị học nhầm thành câu cố định.
+    for (const c of [
+      "net weight 72000 KGS",
+      "origin criteria PE",
+      "departure date 2026-05-07 from Tianbao, China to Thanh Thuy, Viet Nam by truck",
+      "Form E No. E26MA6NQNE610002, issued in China, Kunming 2026-05-07",
+      "CO FORM E, so CO: E26MA6NQNE610002 ngay 07/05/2026",
+    ]) expect(isLotSpecific(c, [])).toBe(true);
+    expect(isAiCommentary("Tài liệu là Hợp đồng mua bán hàng hóa số WSYH-20260502 ngày 02/05/2026, không phải tờ khai hải quan VNACCS")).toBe(true);
+    expect(isLotSpecific("Hàng nhập nằm ngoài phạm vi áp dụng QCVN 19:2019/BKHCN", [])).toBe(false);
+    expect(isLotSpecific("Hàng mới 100%, dùng làm nguyên liệu sản xuất đá ốp lát", [])).toBe(false);
+    expect(isLotSpecific("Theo công văn 1234/TCHQ-GSQL ngày 12/03/2024", [])).toBe(false);
+    expect(isLotSpecific("Đèn đạt tiêu chuẩn an toàn quang sinh học IEC62471", [])).toBe(false);
+    expect(isAiCommentary("Hàng nhập nằm ngoài phạm vi áp dụng QCVN 19:2019/BKHCN")).toBe(false);
+  });
 
   const rl: CustomsDeclarationLine = { lineNo: 1, hsCode: "94051199", description: "Đèn down light âm trần, màu trắng", quantity: 2, unit: "PCE", unitPrice: 8.16, invoiceValue: 16.32, origin: "CN", importTaxSchedule: "B30", importRate: "0", importExemptCode: null, vatRate: "10", vatExemptCode: null };
   const dl: DraftLine = { lineNo: 1, description: "Recessed fix down light LED 7W", amount: "16.32", hs: "9405.11.99", importRate: null, vatRate: null, partNo: "2118.564-ACOT-96" };
@@ -117,6 +133,10 @@ describe("bài học", () => {
     expect(l.lines).toEqual([expect.objectContaining({ key: "P:2118564ACOT96", autoFill: true })]);
     expect(lessonsForDraft(rows, { ...ctx, carrier: "DHL" }).fields["KHO"]?.value).toBe("02CIRCI – CHUNG");
     expect(lessonsForDraft(rows, { ...ctx, supplier: "OTHER" }).lines).toEqual([]);
+    // Câu cố định học nhầm trước khi bộ lọc chặt hơn (đã duyệt) → không áp nữa.
+    const clause = (id: string, value: string): LessonRow => ({ ...mk(id, { kind: "CLAUSE", fieldCode: "GHI_CHU", contextKey: `supplier=${ctx.supplier}`, context: { supplier: ctx.supplier! }, value, line: null }, 1) });
+    const withClauses = lessonsForDraft([...rows, clause("e", "net weight 72000 KGS"), clause("f", "Hàng nhập nằm ngoài phạm vi áp dụng QCVN 19:2019/BKHCN")], ctx);
+    expect(withClauses.clauses["GHI_CHU"]?.map((x) => x.value)).toEqual(["Hàng nhập nằm ngoài phạm vi áp dụng QCVN 19:2019/BKHCN"]);
 
     const md = rulesMarkdown({ orgName: "CARA", generatedAt: now, lessons: rows, labels: { KHO: "Địa điểm lưu kho" } });
     expect(md).toContain("# Quy tắc khai báo – CARA");

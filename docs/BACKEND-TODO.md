@@ -131,6 +131,7 @@ Khảo sát toàn bộ core / API / worker / DB-hạ tầng. Nền tảng tốt 
 | P2 | `integration/application/submit-declaration.ts`: `queue.enqueue` trong transaction – đưa ra sau commit. |
 | P3 | `identity/application/register.ts`: `taxRegistry.lookup` trong transaction – phải đưa ra ngoài trước khi nối HTTP thật. |
 | P4 | `uploadDocuments`: transaction thứ hai từ chối (hồ sơ vừa khóa/hủy) → file đã lưu storage thành mồ côi; `createDossier` hai lần tạo cùng lúc trùng mã → 500 (index unique chặn) – thêm thử lại. |
+| P5 | Dạy khai báo: `TeachSample.error` và ghi chú chỉ tiêu ("Không nối … câu cố định", "Câu cố định học từ…") là chữ tiếng Việt thô – thêm mã lý do + nhãn vi/en/zh. Câu cố định của `CT_TG` (1.50) chưa giới hạn độ dài khi nối. |
 
 ## Lỗi đã sửa khi tăng độ phủ test (2026-10-14)
 

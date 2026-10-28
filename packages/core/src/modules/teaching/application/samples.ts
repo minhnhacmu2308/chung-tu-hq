@@ -62,6 +62,9 @@ export function partNoInDescription(description: string | null): string | null {
   return m ? m[1]!.replace(/[.,;]+$/, "") : null;
 }
 
+/** Số tờ khai VNACCS 12 chữ số trong giá trị AI đọc ("1067 9464 5160", "106-794-645-160", "Số tờ khai: 106794645160/1") – không có → null. */
+export const declarationNoOf = (v: string | null | undefined) => (v ?? "").replace(/[\s.-]/g, "").match(/(?<!\d)\d{12}(?!\d)/)?.[0] ?? null;
+
 async function readDeclaration(ai: AiProvider, bytes: Buffer, s: TeachSampleRow) {
   const mime = s.storageKey.endsWith(".png") ? "image/png" : s.storageKey.endsWith(".jpg") ? "image/jpeg" : "application/pdf";
   const pages = Array.from({ length: Math.max(1, s.pages) }, (_, i) => i + 1);
@@ -136,8 +139,13 @@ export async function processTeachSample(deps: TeachDeps, input: { orgId: string
     await deps.uow.asOrg(ctx, (r) => r.samples.update(input.orgId, sample.id, { status: "FAILED", error: "Không đọc ra tờ khai hải quan trong file này", updatedAt: deps.clock.now() }));
     return ok(undefined);
   }
+  // Tờ khai VNACCS đã thông quan luôn có số tờ khai 12 số. Không có → file khác (hợp đồng, hóa đơn…) bị đọc nhầm: không học, tránh học lời AI nhận xét / số liệu của chứng từ khác.
+  const declarationNo = declarationNoOf(read.SOTK);
+  if (!declarationNo) {
+    await deps.uow.asOrg(ctx, (r) => r.samples.update(input.orgId, sample.id, { status: "FAILED", error: "Không thấy số tờ khai (12 số) – file này có phải tờ khai hải quan VNACCS đã thông quan không? Tải đúng bản in tờ khai rồi đọc lại", updatedAt: deps.clock.now() }));
+    return ok(undefined);
+  }
   const a = await analyse(deps, input.orgId, read);
-  const declarationNo = read.SOTK;
   await deps.uow.asOrg(ctx, async (r) => {
     const lessons = await mergeLessons(deps, r, input.orgId, { id: sample.id, declarationNo }, a.observations);
     await r.samples.update(input.orgId, sample.id, {

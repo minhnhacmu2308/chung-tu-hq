@@ -40,3 +40,31 @@ export function parseVcbXml(xml: string): VcbBoard {
   if (!rates.some((r) => r.currency === "USD")) throw new VcbParseError("thiếu USD");
   return { boardAt, rates };
 }
+
+/**
+ * JSON tỷ giá theo ngày của Vietcombank (`/api/exchangerates?date=YYYY-MM-DD`): {"UpdatedDate":"2026-10-22T23:00:00+07:00","Data":[{"currencyCode","transfer"}]}.
+ * Dùng để lấy bù bảng cuối ngày thứ Năm đã qua (XML `pXML.aspx` chỉ có bảng hiện tại).
+ */
+export function parseVcbJson(json: string): VcbBoard {
+  let d: unknown;
+  try {
+    d = JSON.parse(json);
+  } catch {
+    throw new VcbParseError("không phải JSON");
+  }
+  const o = d as { UpdatedDate?: unknown; Data?: unknown };
+  const boardAt = typeof o.UpdatedDate === "string" ? new Date(o.UpdatedDate) : null;
+  if (!boardAt || Number.isNaN(boardAt.getTime())) throw new VcbParseError("thiếu UpdatedDate");
+  if (!Array.isArray(o.Data)) throw new VcbParseError("thiếu Data");
+  const rates: VcbBoard["rates"] = [];
+  for (const row of o.Data as { currencyCode?: unknown; transfer?: unknown }[]) {
+    const currency = typeof row?.currencyCode === "string" ? row.currencyCode.trim() : "";
+    const raw = typeof row?.transfer === "string" ? row.transfer.trim() : typeof row?.transfer === "number" ? String(row.transfer) : "";
+    if (!currency || raw === "" || raw === "-") continue;
+    const transfer = raw.replace(/,/g, "");
+    if (!/^[A-Z]{3}$/.test(currency) || !/^\d+(\.\d+)?$/.test(transfer) || Number(transfer) <= 0) throw new VcbParseError(`dòng ${currency || "?"} sai định dạng (${raw})`);
+    rates.push({ currency, transfer });
+  }
+  if (!rates.some((r) => r.currency === "USD")) throw new VcbParseError("thiếu USD");
+  return { boardAt, rates };
+}

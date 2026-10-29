@@ -2,7 +2,7 @@
 import { UpsertExchangeRateInputSchema } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { VCB_XML_2026_10_15 } from "../__fixtures__/vcb-2026-10-15.js";
-import { nextMonday, parseVcbXml, sameRateWeek, VcbParseError, vnDateOf, weekStart } from "../exchange-rate.js";
+import { nextMonday, parseVcbXml, sameRateWeek, VcbParseError, vnDateOf, weekStart, parseVcbJson } from "../exchange-rate.js";
 
 const XML = VCB_XML_2026_10_15;
 
@@ -53,5 +53,20 @@ describe("UpsertExchangeRateInputSchema", () => {
     expect(UpsertExchangeRateInputSchema.safeParse({ ...ok, effectiveFrom: "2026-10-15" }).success).toBe(false);
     expect(UpsertExchangeRateInputSchema.safeParse({ ...ok, rate: "0" }).success).toBe(false);
     expect(UpsertExchangeRateInputSchema.safeParse({ ...ok, currency: "twd" }).success).toBe(false);
+  });
+});
+
+describe("parseVcbJson (API tỷ giá theo ngày)", () => {
+  const ok = { UpdatedDate: "2026-10-22T23:00:00+07:00", Data: [{ currencyCode: "USD", transfer: "25660.00" }, { currencyCode: "JPY", transfer: 160.33 }, { currencyCode: "KWD", transfer: "-" }] };
+  it("đọc giờ bảng + cột transfer (chuỗi hoặc số), bỏ dòng '-'", () => {
+    const b = parseVcbJson(JSON.stringify(ok));
+    expect(b.boardAt.toISOString()).toBe("2026-10-22T16:00:00.000Z");
+    expect(b.rates).toEqual([{ currency: "USD", transfer: "25660.00" }, { currency: "JPY", transfer: "160.33" }]);
+  });
+  it("sai định dạng → VcbParseError", () => {
+    expect(() => parseVcbJson("<html>")).toThrow(/không phải JSON/);
+    expect(() => parseVcbJson(JSON.stringify({ ...ok, UpdatedDate: undefined }))).toThrow(/UpdatedDate/);
+    expect(() => parseVcbJson(JSON.stringify({ ...ok, Data: [{ currencyCode: "EUR", transfer: "1" }] }))).toThrow(/thiếu USD/);
+    expect(() => parseVcbJson(JSON.stringify({ ...ok, Data: [{ currencyCode: "USD", transfer: "abc" }] }))).toThrow(/sai định dạng/);
   });
 });

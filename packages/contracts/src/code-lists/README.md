@@ -1,7 +1,7 @@
 # Danh mục mã VNACCS (`code-lists`)
 
 Danh mục đầy đủ lấy từ thư mục `02_DANHMUC_VNACCS` (cạnh repo), dùng cho tra cứu mã trên tờ khai (`CodeInput` ở `apps/web/src/features/declaration-form`).
-Bảng mã gọn `declaration/code-tables.ts` vẫn là nguồn của backend (chuẩn hóa trích xuất, đối chiếu catalog) – chưa đổi sang danh mục đầy đủ.
+Backend dựng tờ khai cũng dùng danh mục đầy đủ: cảng (A016) và địa điểm lưu kho (A202) qua `declaration/application/_catalogs.ts`; mã và tên cảng chỉ lấy từ A016 (bí danh `PORT_ALIASES` chỉ trỏ tới mã, mã không có trong A016 bị bỏ qua). Bảng mã gọn `declaration/code-tables.ts` vẫn dùng cho các bảng còn lại (chuẩn hóa trích xuất, đối chiếu catalog).
 
 - `data/<ID>.json`: mỗi mục `{ code, name, parent?, note?, inactive? }`. `parent` = mã cha (cơ quan Hải quan của địa điểm / bộ phận xử lý, mã nước của cảng, `NK`/`XK` của loại hình).
 - `manifest.json`: tên, file nguồn, file đã bị thay, số mục, ánh xạ mã cơ quan Hải quan cũ → mới.

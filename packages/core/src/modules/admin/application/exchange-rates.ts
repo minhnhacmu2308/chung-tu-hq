@@ -4,7 +4,7 @@ import type { Clock } from "../../../shared/clock.js";
 import type { IdGen } from "../../../shared/ids.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { nextMonday, parseVcbXml, vnDateOf, weekStart } from "../domain/exchange-rate.js";
+import { nextMonday, parseVcbJson, parseVcbXml, vnDateOf, weekStart } from "../domain/exchange-rate.js";
 import type { RateAttentionInput } from "../domain/attention.js";
 import { audit, guarded, type StaffActor } from "./_shared.js";
 import type { AdminDeps, AdminRepos, AdminUow, ExchangeRateRow, RateFetchRow } from "./ports.js";
@@ -12,6 +12,8 @@ import type { AdminDeps, AdminRepos, AdminUow, ExchangeRateRow, RateFetchRow } f
 /** Bảng tỷ giá công khai của Vietcombank (XML). */
 export interface VcbRateSource {
   fetchBoard(): Promise<string>;
+  /** Bảng cuối ngày `date` (YYYY-MM-DD, giờ VN) – JSON, để lấy bù tuần đã qua. */
+  fetchBoardOn(date: string): Promise<string>;
 }
 export type RateDeps = { uow: AdminUow; vcb: VcbRateSource; clock: Clock; idGen: IdGen };
 
@@ -53,15 +55,48 @@ export async function captureWeeklyRates(deps: RateDeps): Promise<Result<{ effec
   return ok({ effectiveFrom, count: board.rates.length, boardAt: board.boardAt.toISOString() });
 }
 
-async function fail(deps: RateDeps, error: string): Promise<Result<never>> {
-  await recordRateFetchFailure(deps, error);
+/**
+ * Lấy bù tỷ giá của TUẦN ĐANG ÁP DỤNG khi chưa có (worker không chạy tối thứ Năm, mới cài production…): đọc bảng cuối ngày thứ Năm tuần trước
+ * qua API theo ngày của Vietcombank. Tuần đã có bảng Vietcombank → không làm gì. Tỷ giá mẫu (SEED) không tính là có.
+ * Chạy khi worker khởi động và mỗi sáng. Lỗi mạng → ném để BullMQ thử lại.
+ */
+export async function ensureCurrentWeekRates(deps: RateDeps): Promise<Result<{ effectiveFrom: string; count: number; boardAt: string } | { effectiveFrom: string; skipped: true }>> {
+  const now = deps.clock.now();
+  const effectiveFrom = weekStart(vnDateOf(now));
+  const has = await deps.uow.run((r) => r.exchangeRates.list(effectiveFrom));
+  // Đã có bảng Vietcombank của tuần → xong. Chỉ có nhập tay vài mã (vd USD) → vẫn lấy bảng để có các ngoại tệ khác (nhập tay không bị đè).
+  if (has.some((x) => x.effectiveFrom === effectiveFrom && x.source === "VCB")) return ok({ effectiveFrom, skipped: true });
+  const thursday = addDays(effectiveFrom, -4);
+  const board = parseVcbJson(await deps.vcb.fetchBoardOn(thursday));
+  // Bảng phải là của thứ Năm đó (hoặc ngày làm việc liền trước khi nghỉ lễ, tối đa 10 ngày).
+  const boardDay = vnDateOf(board.boardAt);
+  if (boardDay > thursday || boardDay < addDays(thursday, -10)) return fail(deps, `Bảng Vietcombank ngày ${boardDay} không phải bảng cuối ngày thứ Năm ${thursday} – nhập tay tỷ giá tuần ${effectiveFrom}`, effectiveFrom);
+  await deps.uow.run(async (r) => {
+    await r.exchangeRates.upsertAuto(board.rates.map((x) => ({ currency: x.currency, effectiveFrom, rate: x.transfer })), board.boardAt, now);
+    await r.rateFetches.insert({ id: deps.idGen.next("job"), ranAt: now, effectiveFrom, status: "OK", count: board.rates.length, boardAt: board.boardAt, error: null });
+  });
+  return ok({ effectiveFrom, count: board.rates.length, boardAt: board.boardAt.toISOString() });
+}
+
+async function fail(deps: RateDeps, error: string, effectiveFrom?: string): Promise<Result<never>> {
+  await recordRateFetchFailure(deps, error, effectiveFrom);
   return err(domainError("INVALID_STATE", error));
 }
 
 /** Worker hết lượt thử (tới sáng thứ Sáu): ghi FAILED → mục "Cần chú ý" của khu Quản trị; tờ khai vẫn dùng tỷ giá tuần trước kèm cảnh báo. */
-export async function recordRateFetchFailure(deps: RateDeps, error: string): Promise<void> {
+export async function recordRateFetchFailure(deps: RateDeps, error: string, effectiveFrom?: string): Promise<void> {
   const now = deps.clock.now();
-  await deps.uow.run((r) => r.rateFetches.insert({ id: deps.idGen.next("job"), ranAt: now, effectiveFrom: nextMonday(now), status: "FAILED", count: 0, boardAt: null, error: error.slice(0, 500) }));
+  await deps.uow.run((r) => r.rateFetches.insert({ id: deps.idGen.next("job"), ranAt: now, effectiveFrom: effectiveFrom ?? nextMonday(now), status: "FAILED", count: 0, boardAt: null, error: error.slice(0, 500) }));
+}
+
+/** Lấy bù hết lượt thử: ghi FAILED cho TUẦN ĐANG ÁP DỤNG (tuần lấy bù), không phải tuần sau. */
+export async function recordRateCatchUpFailure(deps: RateDeps, error: string): Promise<void> {
+  const now = deps.clock.now();
+  const effectiveFrom = weekStart(vnDateOf(now));
+  // Tuần đã có tỷ giá Vietcombank (vd job thứ Năm đã lấy) → không báo động giả.
+  const rows = await deps.uow.run((r) => r.exchangeRates.list(effectiveFrom));
+  if (rows.some((x) => x.effectiveFrom === effectiveFrom && x.source === "VCB")) return;
+  await recordRateFetchFailure(deps, error, effectiveFrom);
 }
 
 /** Dữ liệu cho mục "Cần chú ý": lần lấy gần nhất + tuần này đã có tỷ giá USD chưa. */

@@ -121,7 +121,7 @@ function seaBillNo(i: MappingInput, v: MappedValue): MappedValue {
 function dischargePort(i: MappingInput): MappedValue {
   const t = i.shipment.transport;
   const raws = (s: typeof t.portOfDischarge) => [...new Set([s.value, ...s.sources.map((x) => x.raw)].filter((x): x is string => !!x))];
-  const pick = pickDischargePort(raws(t.portOfDischarge), raws(t.finalDestination), i.catalogs?.ports, { air: i.dossier.transportMode === "AIR" });
+  const pick = pickDischargePort(raws(t.portOfDischarge), raws(t.finalDestination), i.catalogs?.ports, { air: i.dossier.transportMode === "AIR", ...(i.catalogs?.worldPorts ? { world: i.catalogs.worldPorts } : {}) });
   const ref = [...t.portOfDischarge.sources, ...t.finalDestination.sources].find((x) => x.raw === pick.raw);
   const source = ref ? sourceOfKind(ref.kind) : fromSourced(t.portOfDischarge, "BILL_OF_LADING").source;
   const base = port(pick.raw ?? t.portOfDischarge.value, pick.resolved, source);

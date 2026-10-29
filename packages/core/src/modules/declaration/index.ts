@@ -9,7 +9,7 @@ export { allocateCustomsValue, type Adjustment } from "./domain/valuation.js";
 export { computeTaxes } from "./domain/tax.js";
 export { canApprove, canMoveToReview, canSubmit } from "./domain/guards.js";
 export { ratesFor } from "./domain/rates.js";
-export { PORTS, resolvePort } from "./domain/catalog-resolve.js";
+export { PORT_ALIASES, resolvePort } from "./domain/catalog-resolve.js";
 export { getDeclarationSnapshot, listDeclarationsForCustoms, markDeclarationDraft, markDeclarationSubmitted, refreshFromShipment, type DeclarationSnapshot } from "./application/customs-bridge.js";
 export { getDeclarationProfile, listRuleOptions, saveDeclarationProfile } from "./application/declaration-profile.js";
 export { getValueCharges, saveValueCharges } from "./application/value-charges.js";

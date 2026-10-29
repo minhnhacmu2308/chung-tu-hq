@@ -26,7 +26,7 @@ const comparison: Omit<TeachComparison, "sample"> = {
   fields: [
     { code: "SO_VD", label: "Số vận đơn", draft: "770471184612", real: "770471184612", kind: "MATCH", foundIn: [] },
     { code: "KHO", label: "Mã địa điểm lưu kho hàng chờ thông quan dự kiến", draft: "", real: "02DSEA0 – KHO FEDEX", kind: "KNOWLEDGE", foundIn: [] },
-    { code: "CANG_DO", label: "Mã địa điểm dỡ hàng", draft: "VNSGN – Cảng Sài Gòn (TP.HCM)", real: "VNSGN", kind: "MATCH", foundIn: [] },
+    { code: "CANG_DO", label: "Mã địa điểm dỡ hàng", draft: "VNCLI – CANG CAT LAI (HCM)", real: "VNCLI", kind: "MATCH", foundIn: [] },
     { code: "PTVC_TEN", label: "Tên phương tiện vận chuyển", draft: "", real: "PH8090/04DEC", kind: "KNOWLEDGE", foundIn: [] },
     { code: "NGAY_DEN", label: "Ngày hàng đến", draft: "2024-12-04", real: "2024-12-06", kind: "DOCUMENT", foundIn: ["FREIGHT_INVOICE"] },
     { code: "PT_TT", label: "Phương thức thanh toán", draft: "", real: "TTR", kind: "KNOWLEDGE", foundIn: [] },

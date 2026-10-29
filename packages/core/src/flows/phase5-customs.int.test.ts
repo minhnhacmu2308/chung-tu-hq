@@ -73,7 +73,7 @@ afterAll(async () => {
 });
 
 /** Bộ HANSOL không có vận đơn/kho → người khai nhập tay các chỉ tiêu bắt buộc còn trống trước khi duyệt. */
-const MANUAL_FIELDS: Record<string, string> = { SO_VD: "HSPL261014001", KHO: "03CCS01", CANG_DO: "VNHPH – Cảng Hải Phòng", CANG_XEP: "KRPUS – BUSAN", PTVC_TEN: "HANSOL VOY 2610", NGAY_DEN: "2026-10-20" };
+const MANUAL_FIELDS: Record<string, string> = { SO_VD: "HSPL261014001", KHO: "03CCS01", CANG_DO: "VNHPH – CANG HAI PHONG", CANG_XEP: "KRPUS – BUSAN", PTVC_TEN: "HANSOL VOY 2610", NGAY_DEN: "2026-10-20" };
 async function fillManualFields(deps: DeclarationDeps, ctx: Parameters<typeof updateDeclarationField>[1], dossierId: string) {
   const fields = unwrap(await getDeclarationView(deps, ctx, dossierId)).declaration!.fields;
   for (const [code, value] of Object.entries(MANUAL_FIELDS)) if (!fields.find((f) => f.code === code)?.value.trim()) unwrap(await updateDeclarationField(deps, ctx, dossierId, code, value));

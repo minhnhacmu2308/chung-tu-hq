@@ -4,14 +4,14 @@ import { extractDocumentJob } from "./jobs/extract-document.js";
 import { healthJob } from "./jobs/health.js";
 import { certExpiryJob } from "./jobs/cert-expiry.js";
 import { customsPollJob, customsSendJob } from "./jobs/customs.js";
-import { RATE_JOB_CRON, recordRateFetchFailure } from "@kb/core/modules/admin";
+import { RATE_JOB_CRON, recordRateCatchUpFailure, recordRateFetchFailure } from "@kb/core/modules/admin";
 import { failAgentRun, failHsWork } from "@kb/core/modules/declaration";
 import { markDocumentFailed } from "@kb/core/modules/extraction";
 import { markOutboxFailed } from "@kb/core/modules/integration";
 import { failMailSync } from "@kb/core/modules/mailbox";
 import { createLogger } from "@kb/core/shared";
 import { emailCampaignJob } from "./jobs/email-campaign.js";
-import { exchangeRateJob } from "./jobs/exchange-rate.js";
+import { exchangeRateCatchUpJob, exchangeRateJob } from "./jobs/exchange-rate.js";
 import { hsAnswerJob, hsPollJob, hsReclassifyJob } from "./jobs/hs.js";
 import { mailboxSyncJob } from "./jobs/mailbox-sync.js";
 import { runAgentJob } from "./jobs/run-agent.js";
@@ -49,7 +49,7 @@ const workers = [
   new Worker("customs-send", async (job) => customsSendJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("customs-poll", async (job) => customsPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("cert-expiry", async () => certExpiryJob(c.identity), { connection: c.redis, concurrency: 1 }),
-  new Worker("exchange-rate-weekly", async () => exchangeRateJob(c.rates), { connection: c.redis, concurrency: 1 }),
+  new Worker("exchange-rate-weekly", async (job) => (job.name === "catch-up" ? exchangeRateCatchUpJob(c.rates) : exchangeRateJob(c.rates)), { connection: c.redis, concurrency: 1 }),
   new Worker("mailbox-sync", async (job) => mailboxSyncJob(c.mailbox, job.data), { connection: c.redis, concurrency: 2 }),
   // Gửi email theo đợt: một đợt một lúc (máy chủ SMTP thường giới hạn số thư / phút).
   new Worker("email-campaign", async (job) => emailCampaignJob(c.email, job.data), { connection: c.redis, concurrency: 1 }),
@@ -67,6 +67,10 @@ async function registerSchedulers() {
   await sweeperQueue.upsertJobScheduler("stuck-sweeper-5m", { pattern: "*/5 * * * *", tz: "UTC" }, { name: "stuck-sweeper", data: {}, opts: { attempts: 1, removeOnComplete: 20, removeOnFail: 20 } });
   await certQueue.upsertJobScheduler("cert-expiry-daily", { pattern: "0 1 * * *", tz: "UTC" }, { name: "cert-expiry", data: {}, opts: { attempts: 3, backoff: { type: "fixed", delay: 10 * 60_000 }, removeOnComplete: 10, removeOnFail: 10 } });
   await rateQueue.upsertJobScheduler("exchange-rate-weekly", { pattern: RATE_JOB_CRON, tz: "UTC" }, { name: "exchange-rate-weekly", data: {}, opts: { attempts: 16, backoff: { type: "fixed", delay: 30 * 60_000 }, removeOnComplete: 20, removeOnFail: 20 } });
+  // Lấy bù tỷ giá tuần đang áp dụng (chưa có thì đọc bảng thứ Năm tuần trước): mỗi sáng 07:30 VN và ngay khi worker khởi động.
+  const catchUp = { attempts: 6, backoff: { type: "fixed" as const, delay: 10 * 60_000 }, removeOnComplete: 20, removeOnFail: 20 };
+  await rateQueue.upsertJobScheduler("exchange-rate-catchup-daily", { pattern: "30 0 * * *", tz: "UTC" }, { name: "catch-up", data: {}, opts: catchUp });
+  await rateQueue.add("catch-up", {}, { ...catchUp, jobId: `catch-up-${new Date().toISOString().slice(0, 13).replace(/[^0-9]/g, "")}` });
 }
 
 /** Hết số lần thử (hoặc lỗi không thử lại): không để chứng từ/outbox/dòng HS/lần chạy agent kẹt – đánh dấu lỗi để người dùng thử lại/gửi lại. */
@@ -77,7 +81,7 @@ async function onFinalFailure(queue: string, job: Job, e: Error) {
   else if (queue.startsWith("hs-") && d["orgId"] && d["userId"] && d["dossierId"]) {
     await failHsWork(c.declaration, { orgId: d["orgId"], userId: d["userId"], dossierId: d["dossierId"], ...(d["hsJobId"] ? { hsJobId: d["hsJobId"] } : {}), ...(d["lineItemId"] ? { lineItemId: d["lineItemId"] } : {}), error: reason });
   } else if (queue === "run-agent" && d["orgId"] && d["userId"] && d["dossierId"] && d["agentRunId"]) await failAgentRun(c.declaration, { orgId: d["orgId"], userId: d["userId"], dossierId: d["dossierId"], agentRunId: d["agentRunId"], error: reason });
-  else if (queue === "exchange-rate-weekly") await recordRateFetchFailure(c.rates, reason);
+  else if (queue === "exchange-rate-weekly") await (job.name === "catch-up" ? recordRateCatchUpFailure(c.rates, reason) : recordRateFetchFailure(c.rates, reason));
   else if (queue === "mailbox-sync" && d["orgId"] && d["connectionId"]) await failMailSync(c.mailbox, { orgId: d["orgId"], connectionId: d["connectionId"] });
   else if (queue === "teach-sample-read" && d["orgId"] && d["sampleId"]) await failTeachSample(c.teach, { orgId: d["orgId"], sampleId: d["sampleId"], error: "AI chưa đọc được tờ khai sau nhiều lần thử – bấm Đọc lại" });
   else if (queue === "customs-send" && d["orgId"] && d["outboxId"]) await markOutboxFailed(c.customs, { orgId: d["orgId"], outboxId: d["outboxId"], reason });

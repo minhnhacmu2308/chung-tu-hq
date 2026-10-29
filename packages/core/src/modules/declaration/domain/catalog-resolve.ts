@@ -6,51 +6,54 @@ export type Resolved = { code: string; name: string } | null;
 /** Một mã trong danh mục VNACCS đầy đủ (@kb/contracts code-lists) – tầng application nạp sẵn rồi truyền vào (domain không tải file). */
 export type CatalogEntry = { code: string; name: string; parent?: string; note?: string };
 
-/** Cảng/sân bay hay gặp (mã UN/LOCODE dùng trong VNACCS). Thiếu → D3. */
-export const PORTS: { code: string; name: string; aliases: string[]; country: string; city?: string[] }[] = [
-  { code: "VNTVU", name: "Cảng Tân Vũ (Hải Phòng)", aliases: ["TAN VU"], country: "VN" },
-  { code: "VNDVU", name: "Cảng Đình Vũ (Hải Phòng)", aliases: ["DINH VU"], country: "VN" },
-  { code: "VNLCH", name: "Cảng Lạch Huyện (Hải Phòng)", aliases: ["LACH HUYEN", "HICT"], country: "VN" },
-  { code: "VNHPH", name: "Cảng Hải Phòng", aliases: ["HPH"], city: ["HAIPHONG", "HAI PHONG"], country: "VN" },
-  { code: "VNCLI", name: "Cảng Cát Lái (TP.HCM)", aliases: ["CAT LAI", "CATLAI"], country: "VN" },
-  { code: "VNCMT", name: "Cảng Cái Mép (Bà Rịa – Vũng Tàu)", aliases: ["CAI MEP", "CAIMEP"], country: "VN" },
-  // Hàng air về Tân Sơn Nhất cũng khai VNSGN (TK 106794645160 – FedEx, ô 1.33 “VNSGN HO CHI MINH”).
-  { code: "VNSGN", name: "Cảng Sài Gòn (TP.HCM)", aliases: ["SAIGON", "SAI GON", "TAN SON NHAT", "TANSONNHAT", "SGN"], city: ["HO CHI MINH", "HOCHIMINH", "HCM", "HCMC"], country: "VN" },
-  { code: "VNDAD", name: "Cảng Đà Nẵng", aliases: ["DA NANG", "DANANG"], country: "VN" },
-  { code: "VNHAN", name: "Sân bay Nội Bài (Hà Nội)", aliases: ["NOI BAI", "NOIBAI", "HANOI", "HAN"], country: "VN" },
-  { code: "KRPUS", name: "Busan", aliases: ["BUSAN", "PUSAN"], country: "KR" },
-  { code: "KRINC", name: "Incheon", aliases: ["INCHEON", "ICN"], country: "KR" },
-  { code: "CNSHA", name: "Shanghai", aliases: ["SHANGHAI"], country: "CN" },
-  { code: "CNYTN", name: "Yantian", aliases: ["YANTIAN"], country: "CN" },
-  { code: "CNSZX", name: "Shenzhen", aliases: ["SHENZHEN", "SHEKOU"], country: "CN" },
-  { code: "CNNGB", name: "Ningbo", aliases: ["NINGBO"], country: "CN" },
-  { code: "CNTAO", name: "Qingdao", aliases: ["QINGDAO"], country: "CN" },
-  { code: "CNXMN", name: "Xiamen", aliases: ["XIAMEN"], country: "CN" },
-  { code: "HKHKG", name: "Hong Kong", aliases: ["HONG KONG", "HONGKONG"], country: "HK" },
-  { code: "TWKHH", name: "Kaohsiung", aliases: ["KAOHSIUNG"], country: "TW" },
-  { code: "TWKEL", name: "Keelung", aliases: ["KEELUNG"], country: "TW" },
-  { code: "JPTYO", name: "Tokyo", aliases: ["TOKYO"], country: "JP" },
-  { code: "JPYOK", name: "Yokohama", aliases: ["YOKOHAMA"], country: "JP" },
-  { code: "JPUKB", name: "Kobe", aliases: ["KOBE"], country: "JP" },
-  { code: "JPOSA", name: "Osaka", aliases: ["OSAKA"], country: "JP" },
-  { code: "SGSIN", name: "Singapore", aliases: ["SINGAPORE"], country: "SG" },
-  { code: "THBKK", name: "Bangkok", aliases: ["BANGKOK"], country: "TH" },
-  { code: "THLCH", name: "Laem Chabang", aliases: ["LAEM CHABANG"], country: "TH" },
-  { code: "MYPKG", name: "Port Klang", aliases: ["PORT KLANG", "KLANG"], country: "MY" },
-  { code: "ITGOA", name: "Genova", aliases: ["GENOVA", "GENOA"], country: "IT" },
-  { code: "DEHAM", name: "Hamburg", aliases: ["HAMBURG"], country: "DE" },
-  { code: "NLRTM", name: "Rotterdam", aliases: ["ROTTERDAM"], country: "NL" },
-  { code: "BEANR", name: "Antwerp", aliases: ["ANTWERP", "ANTWERPEN"], country: "BE" },
-  { code: "USLAX", name: "Los Angeles", aliases: ["LOS ANGELES"], country: "US" },
-  { code: "USNYC", name: "New York", aliases: ["NEW YORK"], country: "US" },
-  { code: "SEGOT", name: "Gothenburg", aliases: ["GOTHENBURG", "GOTEBORG"], country: "SE" },
+/**
+ * Cách chứng từ hay ghi tên cảng → mã cảng (CHỈ bí danh để nhận ra). Mã và tên khai lấy từ danh mục A016 của @kb/contracts (code-lists):
+ * mã không có trong danh mục thì bỏ qua – không viết cứng mã/tên ở đây. Thứ tự là thứ tự ưu tiên: bến cụ thể trước cảng/thành phố chung.
+ * Sân bay (VNSGN, VNHAN…) chưa có trong A016 (README code-lists) → chưa nhận; có trong danh mục là tự dùng được.
+ */
+export const PORT_ALIASES: { code: string; aliases: string[]; city?: string[] }[] = [
+  { code: "VNHPN", aliases: ["TAN VU"] },
+  { code: "VNDVU", aliases: ["DINH VU"] },
+  { code: "VNCLH", aliases: ["LACH HUYEN", "HICT"] },
+  { code: "VNHPH", aliases: ["HPH"], city: ["HAIPHONG", "HAI PHONG"] },
+  { code: "VNCLI", aliases: ["CAT LAI", "CATLAI"] },
+  { code: "VNCMT", aliases: ["CAI MEP", "CAIMEP"] },
+  { code: "VNSGN", aliases: ["SAIGON", "SAI GON", "TAN SON NHAT", "TANSONNHAT", "SGN"], city: ["HO CHI MINH", "HOCHIMINH", "HCM", "HCMC"] },
+  { code: "VNDAN", aliases: ["DA NANG", "DANANG"] },
+  { code: "VNHAN", aliases: ["NOI BAI", "NOIBAI", "HANOI", "HAN"] },
+  { code: "KRPUS", aliases: ["BUSAN", "PUSAN"] },
+  { code: "KRINC", aliases: ["INCHEON", "ICN"] },
+  { code: "CNSHA", aliases: ["SHANGHAI"] },
+  { code: "CNYTN", aliases: ["YANTIAN"] },
+  { code: "CNSZX", aliases: ["SHENZHEN", "SHEKOU"] },
+  { code: "CNNGB", aliases: ["NINGBO"] },
+  { code: "CNTAO", aliases: ["QINGDAO"] },
+  { code: "CNXMN", aliases: ["XIAMEN"] },
+  { code: "HKHKG", aliases: ["HONG KONG", "HONGKONG"] },
+  { code: "TWKHH", aliases: ["KAOHSIUNG"] },
+  { code: "TWKEL", aliases: ["KEELUNG"] },
+  { code: "JPTYO", aliases: ["TOKYO"] },
+  { code: "JPYOK", aliases: ["YOKOHAMA"] },
+  { code: "JPUKB", aliases: ["KOBE"] },
+  { code: "JPOSA", aliases: ["OSAKA"] },
+  { code: "SGSIN", aliases: ["SINGAPORE"] },
+  { code: "THBKK", aliases: ["BANGKOK"] },
+  { code: "THLCH", aliases: ["LAEM CHABANG"] },
+  { code: "MYPKG", aliases: ["PORT KLANG", "KLANG"] },
+  { code: "ITGOA", aliases: ["GENOVA", "GENOA"] },
+  { code: "DEHAM", aliases: ["HAMBURG"] },
+  { code: "NLRTM", aliases: ["ROTTERDAM"] },
+  { code: "BEANR", aliases: ["ANTWERP", "ANTWERPEN"] },
+  { code: "USLAX", aliases: ["LOS ANGELES"] },
+  { code: "USNYC", aliases: ["NEW YORK"] },
+  { code: "SEGOT", aliases: ["GOTHENBURG", "GOTEBORG"] },
 ];
 
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 
-/** "BUSAN, KOREA" → KRPUS; "HAIPHONG, VIETNAM" → VNHPH. Mã LOCODE 5 ký tự có sẵn trong chuỗi được ưu tiên. */
-export function resolvePort(name: string | null): Resolved {
-  const r = resolvePortDetail(name);
+/** "BUSAN, KOREA" → KRPUS; "HAIPHONG, VIETNAM" → VNHPH (mã + tên theo danh mục A016). Mã LOCODE 5 ký tự có sẵn trong chuỗi được ưu tiên. */
+export function resolvePort(name: string | null, catalog: readonly CatalogEntry[] | undefined): Resolved {
+  const r = resolvePortDetail(name, catalog);
   return r ? { code: r.code, name: r.name } : null;
 }
 
@@ -67,22 +70,27 @@ export function iataOf(raw: string | null): string | null {
   return /^[A-Z]{3}[A-Z]?$/.test(t) ? t.slice(0, 3) : null;
 }
 
-function resolvePortDetail(name: string | null): (NonNullable<Resolved> & { generic?: true }) | null {
-  if (!name) return null;
+function resolvePortDetail(name: string | null, catalog: readonly CatalogEntry[] | undefined): (NonNullable<Resolved> & { generic?: true }) | null {
+  if (!name || !catalog?.length) return null;
+  const byCode = new Map(catalog.map((e) => [e.code, e]));
+  const entry = (code: string) => byCode.get(code);
+  const known = PORT_ALIASES.filter((p) => entry(p.code));
+  const out = (code: string, generic?: true) => ({ code, name: entry(code)!.name, ...(generic ? { generic } : {}) });
   const n = norm(name);
-  const direct = PORTS.find((p) => n.split(" ").includes(p.code));
-  if (direct) return { code: direct.code, name: direct.name };
+  // Mã ghi sẵn dạng giá trị chọn từ danh mục ("VNHPN – Cảng Tân Vũ" hoặc cả ô chỉ là mã). Không dò mã trong câu: A016 có ~14.700 mã,
+  // nhiều mã trùng từ tiếng Anh (GRAND, DEBIT…) sẽ bị bắt nhầm.
+  const head = /^\s*([A-Z0-9]{5,6})\s*(?:[–—-]|$)/.exec(name.toUpperCase())?.[1];
+  if (head && entry(head)) return out(head);
   const iata = iataOf(name);
-  const byIata = iata ? PORTS.find((p) => p.code.slice(2) === iata || p.aliases.includes(iata)) : undefined;
-  if (byIata) return { code: byIata.code, name: byIata.name };
-  // Thứ tự trong PORTS là thứ tự ưu tiên: bến cụ thể (Tân Vũ, Đình Vũ, Cát Lái…) đứng trước cảng/thành phố chung.
+  const byIata = iata ? known.find((p) => p.code.slice(2) === iata || p.aliases.includes(iata)) : undefined;
+  if (byIata) return out(byIata.code);
   // So theo nguyên từ: alias ngắn như "HAN" (Nội Bài) không được khớp vào giữa "SHANGHAI" hay "CHANGI".
   const padded = ` ${n} `;
   const has = (a: string) => padded.includes(` ${a} `);
-  const hit = PORTS.find((p) => p.aliases.some(has));
-  if (hit) return { code: hit.code, name: hit.name };
-  const city = PORTS.find((p) => p.city?.some(has));
-  return city ? { code: city.code, name: city.name, generic: true } : null;
+  const hit = known.find((p) => p.aliases.some(has));
+  if (hit) return out(hit.code);
+  const city = known.find((p) => p.city?.some(has));
+  return city ? out(city.code, true) : null;
 }
 
 /** Bỏ dấu tiếng Việt rồi chuẩn hóa như `norm` – so tên trên chứng từ với tên trong danh mục VNACCS (viết không dấu). */
@@ -100,10 +108,10 @@ export type DischargePick = { resolved: Resolved; note?: string; /** Chuỗi tr�
 
 /**
  * Cảng dỡ từ mọi chứng từ (B/L, Arrival Notice…) theo thứ tự ưu tiên, rồi điểm đến cuối:
- * 1) tên trùng danh mục cảng VNACCS (A016) → mã đó; 2) bến cụ thể trong bảng gọn; 3) mã cảng chung theo tên thành phố.
+ * 1) tên trùng danh mục cảng VNACCS (A016) → mã đó; 2) bến cụ thể theo bí danh (PORT_ALIASES, mã có trong A016); 3) mã cảng chung theo tên thành phố.
  * POD nước ngoài (chuyển tải) → điểm đến cuối tại Việt Nam (PRODUCT §7.5).
  */
-export function pickDischargePort(pods: readonly string[], finals: readonly string[], catalog?: readonly CatalogEntry[], opts: { air?: boolean } = {}): DischargePick {
+export function pickDischargePort(pods: readonly string[], finals: readonly string[], catalog?: readonly CatalogEntry[], opts: { air?: boolean; world?: readonly CatalogEntry[] } = {}): DischargePick {
   const vn = (code: string) => code.startsWith("VN");
   const exact = (xs: readonly string[]) => {
     for (const raw of xs) {
@@ -114,7 +122,7 @@ export function pickDischargePort(pods: readonly string[], finals: readonly stri
   };
   const tableVn = (xs: readonly string[], generic: boolean) => {
     for (const raw of xs) {
-      const r = resolvePortDetail(raw);
+      const r = resolvePortDetail(raw, catalog);
       if (r && vn(r.code) && !!r.generic === generic) return { resolved: { code: r.code, name: r.name }, raw };
     }
     return null;
@@ -130,7 +138,7 @@ export function pickDischargePort(pods: readonly string[], finals: readonly stri
   if (viaFinal) return pods.length ? { ...viaFinal, note: transshipNote } : viaFinal;
   const finalGeneric = tableVn(finals, true);
   if (finalGeneric) return { ...finalGeneric, note: pods.length ? transshipNote : `“${finalGeneric.raw}” chỉ là tên thành phố – chọn bến dỡ cụ thể nếu khác` };
-  const p = resolvePort(pods[0] ?? null);
+  const p = resolvePort(pods[0] ?? null, opts.world ?? catalog);
   return { resolved: p, raw: pods[0] ?? null, ...(p ? { note: "Cảng dỡ không phải cảng Việt Nam – kiểm tra điểm đến cuối" } : {}) };
 }
 
@@ -153,10 +161,10 @@ function matchWorldPort(raw: string, catalog: readonly CatalogEntry[], country: 
   return null;
 }
 
-/** Bảng gọn trước, rồi danh mục cảng thế giới A016 (cảng nước ngoài không có trong bảng gọn, vd ZHUHAI → CNZUH). */
+/** Bí danh hay gặp trước, rồi tên trùng danh mục cảng thế giới A016 (cảng nước ngoài không có bí danh, vd ZHUHAI → CNZUH). Mã/tên luôn theo A016. */
 export function resolveWorldPort(raw: string | null, country: string | null, catalog?: readonly CatalogEntry[]): Resolved {
   if (!raw) return null;
-  const t = resolvePort(raw);
+  const t = resolvePort(raw, catalog);
   if (t) return t;
   const w = catalog?.length ? matchWorldPort(raw, catalog, country) : null;
   if (w) return { code: w.entry.code, name: w.entry.name };
@@ -168,7 +176,7 @@ export function resolveWorldPort(raw: string | null, country: string | null, cat
 export type LoadingPick = { resolved: Resolved; raw: string | null; note?: string };
 
 /**
- * 1.34 cảng/sân bay xếp hàng từ mọi chứng từ ghi nơi đi (B/L, AWB, Arrival Notice, C/O…): bảng gọn → tên trùng danh mục A016 (lọc theo nước người xuất khẩu).
+ * 1.34 cảng/sân bay xếp hàng từ mọi chứng từ ghi nơi đi (B/L, AWB, Arrival Notice, C/O…): bí danh → tên trùng danh mục A016 (lọc theo nước người xuất khẩu).
  * Không chứng từ nào ghi nơi đi (nhãn chuyển phát nhanh, invoice EXW) → suy từ thành phố trong địa chỉ người xuất khẩu, đánh dấu để người khai kiểm.
  */
 export function pickLoadingPort(pols: readonly string[], sellerAddresses: readonly string[], country: string | null, catalog?: readonly CatalogEntry[]): LoadingPick {
@@ -186,8 +194,8 @@ export function pickLoadingPort(pols: readonly string[], sellerAddresses: readon
 }
 
 /** POD nước ngoài (chuyển tải) → điểm đến cuối tại Việt Nam (PRODUCT §7.5). */
-export function resolveDischargePort(pod: string | null, finalDestination: string | null): { resolved: Resolved; note?: string } {
-  const r = pickDischargePort(pod ? [pod] : [], finalDestination ? [finalDestination] : []);
+export function resolveDischargePort(pod: string | null, finalDestination: string | null, catalog: readonly CatalogEntry[] | undefined): { resolved: Resolved; note?: string } {
+  const r = pickDischargePort(pod ? [pod] : [], finalDestination ? [finalDestination] : [], catalog);
   return { resolved: r.resolved, ...(r.note ? { note: r.note } : {}) };
 }
 

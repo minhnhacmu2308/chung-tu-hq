@@ -11,7 +11,7 @@ export { listAnnouncements, sendAnnouncement, withdrawAnnouncement } from "./app
 export { getOverview } from "./application/overview.js";
 export { vnMonth } from "./domain/period.js";
 export { activeQuotaBonus, withinDossierQuota } from "../../shared/quota.js";
-export { captureWeeklyRates, listExchangeRates, recordRateFetchFailure, upsertExchangeRate, nextRateRunAt, RATE_JOB_CRON, type RateDeps, type VcbRateSource } from "./application/exchange-rates.js";
+export { captureWeeklyRates, ensureCurrentWeekRates, listExchangeRates, recordRateCatchUpFailure, recordRateFetchFailure, upsertExchangeRate, nextRateRunAt, RATE_JOB_CRON, type RateDeps, type VcbRateSource } from "./application/exchange-rates.js";
 export {
   listEmailTemplates, saveEmailTemplate, deleteEmailTemplate, listEmailSignatures, saveEmailSignature, deleteEmailSignature, previewEmailAudience,
   sendTestEmail, sendEmail, processEmailCampaign, listEmailCampaigns, getEmailCampaign, draftEmailWithAi, getMailSettings, updateMailSettings, testMailSettings, EMAIL_FOOTER,

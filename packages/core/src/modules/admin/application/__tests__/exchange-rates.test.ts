@@ -6,7 +6,7 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import { VCB_XML_2026_10_15 } from "../../domain/__fixtures__/vcb-2026-10-15.js";
 import { buildAttention } from "../../domain/attention.js";
 import type { StaffActor } from "../../domain/staff-rules.js";
-import { captureWeeklyRates, listExchangeRates, rateAttentionInput, recordRateFetchFailure, upsertExchangeRate, type RateDeps } from "../exchange-rates.js";
+import { captureWeeklyRates, ensureCurrentWeekRates, listExchangeRates, recordRateCatchUpFailure, rateAttentionInput, recordRateFetchFailure, upsertExchangeRate, type RateDeps } from "../exchange-rates.js";
 import type { AdminDeps, AdminRepos, AuditRow, ExchangeRateRow, RateFetchRow } from "../ports.js";
 
 const NOW = "2026-10-15T16:30:00.000Z"; // 23:30 thứ Năm giờ VN
@@ -14,6 +14,8 @@ let rates: ExchangeRateRow[];
 let fetches: RateFetchRow[];
 let audits: AuditRow[];
 let xml: string;
+let dayJson: string;
+let asked: string[];
 let deps: RateDeps & AdminDeps;
 const platform: StaffActor = { userId: "usr_bao", name: "Hoàng Bảo", email: "bao@x.vn", role: "SUPER_ADMIN", status: "ACTIVE" };
 const support: StaffActor = { ...platform, userId: "usr_trang", role: "SUPPORT" };
@@ -23,6 +25,8 @@ beforeEach(() => {
   fetches = [];
   audits = [];
   xml = VCB_XML_2026_10_15;
+  asked = [];
+  dayJson = JSON.stringify({ Date: "2026-10-22T00:00:00", UpdatedDate: "2026-10-22T23:00:00+07:00", Data: [{ currencyCode: "USD", transfer: "25660.00" }, { currencyCode: "CNY", transfer: "3813.79" }, { currencyCode: "KWD", transfer: "-" }] });
   const repos = {
     exchangeRates: {
       list: async (from: string) => rates.filter((r) => r.effectiveFrom >= from).sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom) || a.currency.localeCompare(b.currency)),
@@ -42,7 +46,7 @@ beforeEach(() => {
     rateFetches: { insert: async (r: RateFetchRow) => void fetches.push(r), latest: async () => fetches.at(-1) ?? null },
     audit: { insert: async (a: AuditRow) => void audits.push(a), list: async () => audits },
   } as unknown as AdminRepos;
-  deps = { uow: { run: (fn: (r: AdminRepos) => Promise<unknown>) => fn(repos) }, vcb: { fetchBoard: async () => xml }, clock: fixedClock(NOW), idGen: sequentialIdGen() } as unknown as RateDeps & AdminDeps;
+  deps = { uow: { run: (fn: (r: AdminRepos) => Promise<unknown>) => fn(repos) }, vcb: { fetchBoard: async () => xml, fetchBoardOn: async (d: string) => { asked.push(d); return dayJson; } }, clock: fixedClock(NOW), idGen: sequentialIdGen() } as unknown as RateDeps & AdminDeps;
 });
 
 describe("captureWeeklyRates", () => {
@@ -104,5 +108,53 @@ describe("xem / sửa tỷ giá (khu Quản trị)", () => {
     expect(v.weeks.map((w) => w.effectiveFrom)).toEqual(["2026-10-19", "2026-10-12"]);
     expect(v.lastFetch).toMatchObject({ status: "OK", count: 7 });
     expect(v.nextRunAt).toBe("2026-10-22T16:30:00.000Z");
+  });
+});
+
+describe("ensureCurrentWeekRates – lấy bù tỷ giá tuần đang áp dụng", () => {
+  const WED = "2026-10-28T03:00:00.000Z"; // thứ Tư 28/10 giờ VN → tuần 26/10, bảng thứ Năm 22/10
+  it("tuần chưa có tỷ giá → đọc bảng thứ Năm tuần trước, hiệu lực từ thứ Hai tuần này, ghi nhật ký OK", async () => {
+    deps.clock = fixedClock(WED);
+    const r = unwrap(await ensureCurrentWeekRates(deps));
+    expect(asked).toEqual(["2026-10-22"]);
+    expect(r).toMatchObject({ effectiveFrom: "2026-10-26", count: 2 });
+    expect(rates.find((x) => x.currency === "CNY")).toMatchObject({ effectiveFrom: "2026-10-26", rate: "3813.79", source: "VCB" });
+    expect(fetches.at(-1)).toMatchObject({ status: "OK", effectiveFrom: "2026-10-26" });
+  });
+  it("chỉ có tỷ giá mẫu (SEED) → vẫn lấy bù; đã có Vietcombank / nhập tay → không gọi Vietcombank", async () => {
+    deps.clock = fixedClock(WED);
+    rates.push({ currency: "USD", effectiveFrom: "2026-10-27", rate: "26150", source: "SEED", snapshotAt: null, updatedBy: null, updatedByName: null, note: null });
+    unwrap(await ensureCurrentWeekRates(deps));
+    expect(asked).toHaveLength(1);
+    expect(unwrap(await ensureCurrentWeekRates(deps))).toEqual({ effectiveFrom: "2026-10-26", skipped: true });
+    expect(asked).toHaveLength(1);
+  });
+  it("bảng trả về không phải của thứ Năm đó → không ghi tỷ giá, ghi FAILED để nhập tay", async () => {
+    deps.clock = fixedClock(WED);
+    dayJson = JSON.stringify({ UpdatedDate: "2026-10-27T23:00:00+07:00", Data: [{ currencyCode: "USD", transfer: "25700" }] });
+    expect((await ensureCurrentWeekRates(deps)).ok).toBe(false);
+    expect(rates).toEqual([]);
+    // Ghi FAILED cho tuần đang lấy bù (26/10), không phải tuần sau.
+    expect(fetches.at(-1)).toMatchObject({ status: "FAILED", effectiveFrom: "2026-10-26", error: expect.stringContaining("2026-10-22") });
+  });
+  it("hết lượt thử lấy bù → FAILED cho tuần đang áp dụng; tuần đã có bảng Vietcombank thì không báo động giả", async () => {
+    deps.clock = fixedClock(WED);
+    await recordRateCatchUpFailure(deps, "HTTP 503");
+    expect(fetches.at(-1)).toMatchObject({ status: "FAILED", effectiveFrom: "2026-10-26" });
+    rates.push({ currency: "EUR", effectiveFrom: "2026-10-26", rate: "28544", source: "VCB", snapshotAt: null, updatedBy: null, updatedByName: null, note: null });
+    await recordRateCatchUpFailure(deps, "HTTP 503");
+    expect(fetches).toHaveLength(1);
+  });
+  it("tuần chỉ có nhập tay USD → vẫn lấy bảng để có các ngoại tệ khác, không đè nhập tay", async () => {
+    deps.clock = fixedClock(WED);
+    rates.push({ currency: "USD", effectiveFrom: "2026-10-26", rate: "25700", source: "MANUAL", snapshotAt: null, updatedBy: "usr_bao", updatedByName: "Hoàng Bảo", note: "x" });
+    unwrap(await ensureCurrentWeekRates(deps));
+    expect(rates.find((x) => x.currency === "USD")).toMatchObject({ rate: "25700", source: "MANUAL" });
+    expect(rates.find((x) => x.currency === "CNY")).toMatchObject({ source: "VCB" });
+  });
+  it("Vietcombank trả HTML → ném lỗi (BullMQ thử lại)", async () => {
+    deps.clock = fixedClock(WED);
+    dayJson = "<html>bảo trì</html>";
+    await expect(ensureCurrentWeekRates(deps)).rejects.toThrow(/Vietcombank/);
   });
 });

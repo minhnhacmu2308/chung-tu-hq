@@ -24,7 +24,7 @@ const SIZE_IDA = new Map([...VN_IDA_FIELDS, ...VN_IDA_HANG_FIELDS, ...VN_IDA_VAN
 const SIZE_EDA = new Map([...VN_EDA_FIELDS, ...VN_EDA_HANG_FIELDS].map((f) => [f.name, f.size]));
 
 const val = (p: DeclarationPayload, code: string) => p.fields[code]?.value?.trim() ?? "";
-/** "VNHPH – Cảng Hải Phòng" → { code: "VNHPH", name: "Cảng Hải Phòng" }; "03CE – …" → code 03CE. */
+/** "VNHPH – CANG HAI PHONG" → { code: "VNHPH", name: "CANG HAI PHONG" }; "03CE – …" → code 03CE. */
 const split = (v: string) => {
   const m = /^([A-Z0-9-]{1,12})\s*[–-]\s*(.+)$/.exec(v);
   return m ? { code: m[1]!, name: m[2]!.trim() } : { code: v, name: v };

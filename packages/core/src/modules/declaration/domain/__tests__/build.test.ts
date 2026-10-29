@@ -5,6 +5,7 @@ import { buildDeclaration, type BuildInput } from "../build.js";
 import { missingBlockingFields, missingRequiredFields } from "../guards.js";
 import { ratesFor } from "../rates.js";
 import { DOSSIER, hansol, ORG } from "../test/shipment.js";
+import { CATALOGS } from "./a016.js";
 
 const NOW = new Date("2026-10-14T03:00:00.000Z");
 const ITEMS = ["3700", "3360", "2700", "2760", "3900", "2952", "1478"].map((amount, i) => ({ id: `li_${i + 1}`, amount, importDutyRate: i === 0 ? "3" : "0", vatRate: "8" }));
@@ -81,7 +82,7 @@ describe("rates", () => {
 });
 
 describe("buildDeclaration (IDA – HANSOL)", () => {
-  const built = buildDeclaration({ shipment: hansol(), dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+  const built = buildDeclaration({ catalogs: CATALOGS, shipment: hansol(), dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
   const f = (code: string) => built.fields[code]!;
   it("người nhập khẩu theo tài khoản (MST), người xuất khẩu theo invoice, mã địa điểm/phương thức được giải mã", () => {
     expect(built.kind).toBe("IDA");
@@ -90,9 +91,9 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
     expect(f("NXK_TEN")).toMatchObject({ value: "HANSOL PRECISION CO., LTD.", source: "INVOICE" });
     expect(f("MA_NUOC").value).toBe("KR");
     expect(f("PTVC").value).toBe("2 – Đường biển (chứa trong container)");
-    expect(f("CANG_XEP").value).toBe("KRPUS – Busan");
+    expect(f("CANG_XEP").value).toBe("KRPUS – BUSAN");
     // B/L ghi cảng dỡ chung "HAIPHONG, VIETNAM", nơi giao hàng ghi bến cụ thể "TAN VU TERMINAL" → khai bến cụ thể.
-    expect(f("CANG_DO")).toMatchObject({ value: "VNTVU – Cảng Tân Vũ (Hải Phòng)", source: "BILL_OF_LADING" });
+    expect(f("CANG_DO")).toMatchObject({ value: "VNHPN – CANG TAN VU - HP", source: "BILL_OF_LADING" });
     expect(f("CANG_DO").suspect).toBeUndefined();
     // T/T thường là KC (TTR = chuyển tiền bồi hoàn bằng điện); nghi ngờ vì model không chắc chuỗi gốc.
     expect(f("PT_TT")).toMatchObject({ value: "KC – Khác (bao gồm cả TT)", suspect: true, note: expect.stringMatching(/T\/T 30 days/) });
@@ -126,20 +127,20 @@ describe("buildDeclaration (IDA – HANSOL)", () => {
   });
   it("VBPQ xét HS đã xác nhận trước HS trên invoice: xác nhận 3926 cho mọi dòng → không cần MO/CU", () => {
     const items = ITEMS.map((it, k) => ({ ...it, lineNo: k + 1, hsConfirmed: "39269099" }));
-    const b = buildDeclaration({ shipment: hansol(), dossier: DOSSIER, org: ORG, items, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    const b = buildDeclaration({ catalogs: CATALOGS, shipment: hansol(), dossier: DOSSIER, org: ORG, items, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
     expect(b.fields["VBPQ"]).toMatchObject({ value: "", source: "SYSTEM" });
     expect(b.fields["VBPQ"]?.blocking).toBeUndefined();
   });
   it("ghi chú vượt 100 ký tự (chỉ tiêu 1.68) → nghi ngờ, hướng dẫn khai phần còn lại qua HYS", () => {
     const many = hansol((s) => void (s.transport.containers = Array.from({ length: 8 }, (_, k) => ({ no: `HDMU123456${k}`, sealNo: null, size: "40HC" }))));
-    const b = buildDeclaration({ shipment: many, dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    const b = buildDeclaration({ catalogs: CATALOGS, shipment: many, dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
     expect(b.fields["GHI_CHU"]).toMatchObject({ suspect: true, note: expect.stringMatching(/vượt giới hạn 100 ký tự.*HYS/) });
   });
   it("POD nước ngoài → điểm đến cuối tại VN và đánh dấu nghi ngờ; EDA dùng buyer làm người nhập khẩu", () => {
     const sg = { value: "SINGAPORE", sources: [{ documentId: "doc_bl", kind: "BILL_OF_LADING" as const, page: 1, raw: "SINGAPORE", normalized: "SINGAPORE" }], status: "SINGLE_SOURCE" as const };
-    const b2 = buildDeclaration({ shipment: hansol((s) => void (s.transport.portOfDischarge = sg)), dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
-    expect(b2.fields["CANG_DO"]).toMatchObject({ value: "VNTVU – Cảng Tân Vũ (Hải Phòng)", suspect: true, note: expect.stringMatching(/chuyển tải/) });
-    const eda = buildDeclaration({ shipment: hansol(), dossier: { ...DOSSIER, direction: "XK", typeCode: "B11" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    const b2 = buildDeclaration({ catalogs: CATALOGS, shipment: hansol((s) => void (s.transport.portOfDischarge = sg)), dossier: DOSSIER, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
+    expect(b2.fields["CANG_DO"]).toMatchObject({ value: "VNHPN – CANG TAN VU - HP", suspect: true, note: expect.stringMatching(/chuyển tải/) });
+    const eda = buildDeclaration({ catalogs: CATALOGS, shipment: hansol(), dossier: { ...DOSSIER, direction: "XK", typeCode: "B11" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
     expect(eda.kind).toBe("EDA");
     expect(eda.fields["NXK_MST"]).toMatchObject({ no: "2.11", value: "0316789012", source: "ACCOUNT" });
     expect(eda.fields["NNK_TEN"]?.value).toBe("AN PHAT INDUSTRIAL EQUIPMENT CO., LTD");
@@ -171,9 +172,9 @@ describe("lô FANS25040166 (đối chiếu TK 107139226350)", () => {
     expect(b.fields["SO_VD"]?.suspect).toBeUndefined();
     expect(b.fields["CT_TG"]?.value).toBe("22042025#&PHƯƠNG THỨC THANH TOÁN TT");
   });
-  it("không nạp danh mục: cảng dỡ vẫn ra bến Cát Lái theo bảng gọn, kho chỉ có tên → cần chọn mã", () => {
+  it("không nạp danh mục: không đoán mã cảng (mã/tên chỉ lấy từ A016) – giữ chữ trên chứng từ, cần chọn; kho chỉ có tên → cần chọn mã", () => {
     const plain = buildDeclaration({ shipment: fans, dossier: { ...DOSSIER, customsOfficeCode: "02CI" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] } });
-    expect(plain.fields["CANG_DO"]?.value).toBe("VNCLI – Cảng Cát Lái (TP.HCM)");
+    expect(plain.fields["CANG_DO"]).toMatchObject({ value: "HO CHI MINH, VIETNAM", suspect: true });
     expect(plain.fields["KHO"]).toMatchObject({ value: "CÁT LÁI KHO 3", suspect: true });
   });
 });
@@ -196,13 +197,12 @@ describe("lô chuyển phát nhanh 770471184612 (FedEx, đối chiếu TK 106794
     s.origin.coNo = src("CERT_OF_ORIGIN", "E247079657380002");
     s.origin.coDate = { ...src("CERT_OF_ORIGIN", "DEC. 04, 2024"), value: "2024-12-04" };
   });
-  const catalogs = { ports: [], worldPorts: [{ code: "CNZUH", name: "ZHUHAI", parent: "CN" }] };
+  const catalogs = CATALOGS;
   const b = buildDeclaration({ shipment: lot, dossier: { ...DOSSIER, transportMode: "AIR", customsOfficeCode: "02DS" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25176" }, missing: [] }, catalogs });
 
-  it("số vận đơn không khoảng trắng; cảng dỡ VNSGN theo C/O; cảng xếp CNZUH suy từ địa chỉ người xuất khẩu (cần kiểm)", () => {
+  it("số vận đơn không khoảng trắng; cảng dỡ: TK thật khai VNSGN nhưng mã này chưa có trong A016 → giữ chữ, cần chọn; cảng xếp CNZUH suy từ địa chỉ người xuất khẩu (cần kiểm)", () => {
     expect(b.fields["SO_VD"]).toMatchObject({ value: "770471184612" });
-    expect(b.fields["CANG_DO"]).toMatchObject({ value: "VNSGN – Cảng Sài Gòn (TP.HCM)", source: "CERT_OF_ORIGIN" });
-    expect(b.fields["CANG_DO"]?.suspect).toBeUndefined();
+    expect(b.fields["CANG_DO"]).toMatchObject({ value: "HO CHI MINH , VIET NAM", suspect: true });
     expect(b.fields["CANG_XEP"]).toMatchObject({ value: "CNZUH – ZHUHAI", suspect: true, note: expect.stringMatching(/ZHUHAI/) });
   });
   it("ngày đến theo thông báo cước (cần kiểm); ghi chú có ngày cấp C/O như TK thật", () => {
@@ -215,7 +215,7 @@ describe("lô chuyển phát nhanh 770471184612 (FedEx, đối chiếu TK 106794
 describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)", () => {
   const EX = { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] };
   const XK = { ...DOSSIER, direction: "XK" as const, typeCode: "B11" };
-  const build = (shipment = hansol(), dossier = DOSSIER, items = ITEMS, extra: Partial<BuildInput> = {}) => buildDeclaration({ shipment, dossier, org: ORG, items, now: NOW, exchange: EX, ...extra });
+  const build = (shipment = hansol(), dossier = DOSSIER, items = ITEMS, extra: Partial<BuildInput> = {}) => buildDeclaration({ catalogs: CATALOGS, shipment, dossier, org: ORG, items, now: NOW, exchange: EX, ...extra });
   const withDate = (s: Shipment) => void (s.transport.departureDate = { value: "2026-10-05", sources: [{ documentId: "doc_bl", kind: "BILL_OF_LADING", page: 1, raw: "05 OCT 2026", normalized: "2026-10-05" }], status: "SINGLE_SOURCE" });
 
   it("1.50 mở đầu bằng ngày vận đơn DDMMYYYY#&, ghi dòng hàng FOC; thiếu ngày vận đơn → nghi ngờ, không tự điền", () => {
@@ -295,7 +295,7 @@ describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)",
 
   it("EDA 2.43 người nộp thuế mặc định 1, theo Mặc định khai báo nếu có; 2.80 để người khai nhập", () => {
     expect(build(hansol(), XK).fields["NGUOI_NT"]).toMatchObject({ no: "2.43", value: "1 – Người xuất khẩu" });
-    const withProfile = buildDeclaration({ shipment: hansol(), dossier: XK, org: ORG, items: ITEMS, now: NOW, exchange: EX, profile: { NGUOI_NT: "2 – Đại lý hải quan" } });
+    const withProfile = buildDeclaration({ catalogs: CATALOGS, shipment: hansol(), dossier: XK, org: ORG, items: ITEMS, now: NOW, exchange: EX, profile: { NGUOI_NT: "2 – Đại lý hải quan" } });
     expect(withProfile.fields["NGUOI_NT"]?.value).toBe("2 – Đại lý hải quan");
     expect(build(hansol(), XK).fields["VBPQ"]).toMatchObject({ no: "2.80", value: "" });
   });
@@ -303,7 +303,7 @@ describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)",
 
 describe("chỉ tiêu theo tình huống (bật/tắt theo loại hình, phương thức vận chuyển, điều kiện giá)", () => {
   const EX = { date: "2026-10-14", rates: { VND: "1", USD: "25400" }, missing: [] };
-  const build = (dossier: typeof DOSSIER, shipment = hansol()) => buildDeclaration({ shipment, dossier, org: ORG, items: ITEMS, now: NOW, exchange: EX });
+  const build = (dossier: typeof DOSSIER, shipment = hansol()) => buildDeclaration({ catalogs: CATALOGS, shipment, dossier, org: ORG, items: ITEMS, now: NOW, exchange: EX });
   const codes = (b: ReturnType<typeof build>) => Object.keys(b.fields);
 
   it("A11 đường biển container: không có 1.3/1.10; có hô hiệu 1.31 (điền sẵn 9999) và số lượng container 1.35 kèm lý do hiện", () => {

@@ -2,6 +2,7 @@ import type { Shipment, Sourced } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { buildDeclaration } from "../build.js";
 import { DOSSIER, hansol, ORG } from "../test/shipment.js";
+import { CATALOGS } from "./a016.js";
 import type { FieldOverride } from "../mapping/types.js";
 import type { DossierInfo, OrgInfo } from "../types.js";
 
@@ -14,7 +15,7 @@ const val = (value: string): Sourced<string> => ({ value, sources: [], status: "
 type Opts = { mutate?: (s: Shipment) => void; dossier?: Partial<DossierInfo>; org?: Partial<OrgInfo>; rates?: Record<string, string>; profile?: Record<string, string>; overrides?: Record<string, FieldOverride> };
 const build = (direction: "NK" | "XK", o: Opts = {}) =>
   buildDeclaration({
-    shipment: hansol(o.mutate), dossier: { ...DOSSIER, direction, typeCode: direction === "NK" ? "A11" : "B11", ...o.dossier }, org: { ...ORG, ...o.org }, items: ITEMS, now: NOW,
+    catalogs: CATALOGS, shipment: hansol(o.mutate), dossier: { ...DOSSIER, direction, typeCode: direction === "NK" ? "A11" : "B11", ...o.dossier }, org: { ...ORG, ...o.org }, items: ITEMS, now: NOW,
     exchange: { date: "2026-10-14", rates: o.rates ?? RATES, missing: [] }, ...(o.profile ? { profile: o.profile } : {}), ...(o.overrides ? { overrides: o.overrides } : {}),
   }).fields;
 const ida = (o?: Opts) => build("NK", o);
@@ -71,18 +72,18 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
   });
 
   it("địa điểm nhận hàng cuối (2.28): ưu tiên điểm đến cuối; không có thì cảng dỡ; không tra được → giữ chữ, nghi ngờ; thiếu → nghi ngờ", () => {
-    expect(eda({ mutate: (s) => void (s.transport.finalDestination = val("BUSAN CY, KOREA")) })["CANG_DO"]?.value).toBe("KRPUS – Busan");
+    expect(eda({ mutate: (s) => void (s.transport.finalDestination = val("BUSAN CY, KOREA")) })["CANG_DO"]?.value).toBe("KRPUS – BUSAN");
     const noFd = (pod: ReturnType<typeof val> | ReturnType<typeof nul>) => eda({ mutate: (s) => { s.transport.finalDestination = nul(); s.transport.portOfDischarge = pod; } })["CANG_DO"];
-    expect(noFd(val("BUSAN, KOREA"))?.value).toBe("KRPUS – Busan");
+    expect(noFd(val("BUSAN, KOREA"))?.value).toBe("KRPUS – BUSAN");
     expect(noFd(val("MOMBASA, KENYA"))).toMatchObject({ value: "MOMBASA, KENYA", suspect: true, note: expect.stringMatching(/Không tìm thấy mã VNACCS/) });
     expect(noFd(nul())).toMatchObject({ value: "", suspect: true, note: "Chưa có địa điểm trên chứng từ" });
   });
 
   it("địa điểm xếp hàng (2.29): bắt buộc, không tự điền Hải Phòng; tra được cảng VN → mã; cảng nước ngoài → nghi ngờ", () => {
     expect(eda({ mutate: (s) => void (s.transport.portOfLoading = nul()) })["CANG_XEP"]).toMatchObject({ value: "", suspect: true, note: expect.stringMatching(/bắt buộc \(chỉ tiêu 2.29\)/) });
-    expect(eda({ mutate: (s) => void (s.transport.portOfLoading = val("CAT LAI, HCMC")) })["CANG_XEP"]).toMatchObject({ value: "VNCLI – Cảng Cát Lái (TP.HCM)", source: "BILL_OF_LADING" });
+    expect(eda({ mutate: (s) => void (s.transport.portOfLoading = val("CAT LAI, HCMC")) })["CANG_XEP"]).toMatchObject({ value: "VNCLI – CANG CAT LAI (HCM)", source: "BILL_OF_LADING" });
     expect(eda({ mutate: (s) => void (s.transport.portOfLoading = val("CAT LAI, HCMC")) })["CANG_XEP"]?.suspect).toBeUndefined();
-    expect(eda()["CANG_XEP"]).toMatchObject({ value: "KRPUS – Busan", suspect: true, note: expect.stringMatching(/tại Việt Nam/) });
+    expect(eda()["CANG_XEP"]).toMatchObject({ value: "KRPUS – BUSAN", suspect: true, note: expect.stringMatching(/tại Việt Nam/) });
   });
 
   it("ngày hàng đi dự kiến (2.31): không lấy ngày hàng đến – để trống, bắt buộc", () => {
@@ -201,7 +202,7 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
 
   it("cảng dỡ nước ngoài, điểm đến cuối không phải VN → giữ mã cảng nước ngoài kèm cảnh báo", () => {
     const f = ida({ mutate: (s) => { s.transport.portOfDischarge = val("SINGAPORE"); s.transport.finalDestination = val("SINGAPORE"); } });
-    expect(f["CANG_DO"]).toMatchObject({ value: "SGSIN – Singapore", suspect: true, note: expect.stringMatching(/không phải cảng Việt Nam/) });
+    expect(f["CANG_DO"]).toMatchObject({ value: "SGSIN – SINGAPORE", suspect: true, note: expect.stringMatching(/không phải cảng Việt Nam/) });
   });
 
   it("tên phương tiện: không có số chuyến → chỉ tên tàu; thiếu tên tàu → nghi ngờ", () => {
@@ -305,10 +306,11 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
 
   // Nghi lỗi (báo cáo, chưa sửa): resolvePort so khớp alias bằng `includes`, alias "HAN" của Nội Bài đứng trước Shanghai
   // → "SHANGHAI, CHINA" ra VNHAN (Sân bay Nội Bài). Ở IDA, cảng xếp Thượng Hải bị khai thành Nội Bài.
-  it("cảng xếp “SHANGHAI, CHINA” → CNSHA – Shanghai (không phải VNHAN – Nội Bài); “CHANGI” không khớp nhầm Nội Bài", () => {
-    expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("SHANGHAI, CHINA")) })["CANG_XEP"]?.value).toBe("CNSHA – Shanghai");
+  it("cảng xếp “SHANGHAI, CHINA” → CNSHA – SHANGHAI (không phải Nội Bài); “CHANGI” không khớp nhầm Nội Bài", () => {
+    expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("SHANGHAI, CHINA")) })["CANG_XEP"]?.value).toBe("CNSHA – SHANGHAI");
     expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("CHANGI AIRPORT")) })["CANG_XEP"]).toMatchObject({ value: "CHANGI AIRPORT", suspect: true });
-    expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("HAN, VIETNAM")) })["CANG_XEP"]?.value).toBe("VNHAN – Sân bay Nội Bài (Hà Nội)");
+    // VNHAN (Nội Bài) chưa có trong danh mục A016 → không tự điền mã, giữ chữ để người khai chọn.
+    expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("HAN, VIETNAM")) })["CANG_XEP"]).toMatchObject({ value: "HAN, VIETNAM", suspect: true });
   });
 });
 

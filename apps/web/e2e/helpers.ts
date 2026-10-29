@@ -50,7 +50,7 @@ export async function runAgentToReview(page: Page) {
 }
 
 /** Bộ HANSOL không có vận đơn và mã kho luôn nhập tay → điền các chỉ tiêu bắt buộc còn trống (như người khai bấm Sửa) trước khi duyệt. */
-export const MANUAL_FIELDS: Record<string, string> = { SO_VD: "HSPL261014001", KHO: "03CCS01 – Kho CFS Tân Vũ", CANG_DO: "VNHPH – Cảng Hải Phòng", CANG_XEP: "KRPUS – BUSAN", PTVC_TEN: "HANSOL VOY 2610", NGAY_DEN: "2026-10-20" };
+export const MANUAL_FIELDS: Record<string, string> = { SO_VD: "HSPL261014001", KHO: "03CCS01 – Kho CFS Tân Vũ", CANG_DO: "VNHPH – CANG HAI PHONG", CANG_XEP: "KRPUS – BUSAN", PTVC_TEN: "HANSOL VOY 2610", NGAY_DEN: "2026-10-20" };
 export async function fillManualFields(page: Page, dossierId: string) {
   const view = (await (await page.request.get(`/api/dossiers/${dossierId}/declaration`)).json()) as { declaration: { fields: { code: string; value: string }[] } };
   for (const [code, value] of Object.entries(MANUAL_FIELDS)) {

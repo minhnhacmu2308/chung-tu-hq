@@ -223,6 +223,7 @@ Quy tắc thuế suất:
 | Địa chỉ 4 dòng × 35 ký tự (vd 1.22) | Tự cắt ở khoảng trắng; người khai tự chia dòng trên form thì giữ đúng dòng đã nhập (form và dữ liệu gửi FPT dùng chung một hàm cắt) |
 | 1.31/2.30 Phương tiện vận chuyển | Ô 1 hô hiệu (call sign) chỉ có khi đường biển/sông (PTVC 2/3/6): **điền sẵn 9999** (tàu chưa đăng ký trên hệ thống), B/L có hô hiệu thật thì sửa lại. Đổi sang phương thức khác → không gửi hô hiệu cũ |
 | 1.33 Cảng dỡ | Cảng trên B/L là cảng chuyển tải nước ngoài → lấy điểm đến cuối tại Việt Nam |
+| 1.33 / 1.34 / 2.28 / 2.29 Mã cảng | Mã và tên cảng **chỉ lấy từ danh mục A016** (`@kb/contracts` code-lists): tên trên chứng từ trùng tên danh mục, hoặc bí danh hay gặp ("TAN VU" → VNHPN, "CAT LAI" → VNCLI, "BUSAN" → KRPUS – `PORT_ALIASES`, chỉ bí danh, không chứa tên). Mã không có trong A016 (sân bay VNSGN, VNHAN) → không tự điền, giữ chữ trên chứng từ để người khai chọn |
 | 1.37 Văn bản pháp quy | Hàng chương 84/85: **không tự điền**; để trống, chặn phê duyệt đến khi người khai chọn MO (mới) hoặc CU (đã qua sử dụng) |
 | 1.39/2.34 Hình thức hóa đơn | 1 hóa đơn → A; nhiều hóa đơn / không có → B (kèm hướng dẫn bảng kê) |
 | 1.43/2.38 Phương thức thanh toán | T/T, chuyển khoản → **KC** (ghi phương thức thực tế); TTR chỉ dùng cho chuyển tiền bồi hoàn; O/A → OA |
@@ -268,7 +269,7 @@ flowchart LR
 - **Điều kiện giao hàng bị sửa so với bản máy đọc** (vd FOB → CIF): khung nhắc người duyệt ghi mã máy đọc, giá trị người khai sửa, **người sửa (theo tài khoản đăng nhập) và thời điểm** (`extracted_fields.confirmed_by / confirmed_at`), kèm lý do nếu vận đơn ghi người trả cước mâu thuẫn. Dữ liệu cũ chưa ghi người sửa → câu chung "người khai sửa".
 - Bấm một ô mở **panel sửa ô** bên phải: số và tên chỉ tiêu, **nhãn nguồn** (Invoice, B/L, C/O…, Người khai nhập), lý do có trên tờ khai, **hướng dẫn khai chỉ tiêu** trích Phụ lục II, lỗi Hải quan và cách khắc phục. Panel còn thay đổi chưa lưu mà chọn ô khác, đổi tab, Quay lại OCR, Xác nhận HS, Sang khai báo Hải quan hoặc Phê duyệt → hỏi Lưu / Bỏ thay đổi / Ở lại. Ô theo chứng từ có nút sang bước OCR.
 - Sửa tay: ghi `field_audit`, giữ qua các lần dựng lại; không sửa tay được số tờ khai, mã loại hình và các chỉ tiêu trị giá/cước/tỷ giá (sửa ở bước 3 rồi dựng lại); kiểm định dạng và độ dài theo danh mục chỉ tiêu.
-- **Tỷ giá tính thuế**: tỷ giá mua chuyển khoản Vietcombank lấy tối thứ Năm, áp cho tờ khai đăng ký từ thứ Hai tuần sau. Tờ khai dựng tuần trước sẽ bị chặn khai tạm khi đã sang tuần tỷ giá mới (mở lại để dựng lại).
+- **Tỷ giá tính thuế**: tỷ giá mua chuyển khoản Vietcombank lấy tối thứ Năm, áp cho tờ khai đăng ký từ thứ Hai tuần sau. Tuần đang áp dụng chưa có tỷ giá (worker không chạy tối thứ Năm, mới cài đặt…) → worker **tự lấy bù** khi khởi động và mỗi sáng 07:30: đọc bảng cuối ngày thứ Năm tuần trước qua API theo ngày của Vietcombank. Tỷ giá mẫu (SEED, chỉ cho dev/demo) không bao giờ được dùng khi đã có tỷ giá thật. Tờ khai dựng tuần trước sẽ bị chặn khai tạm khi đã sang tuần tỷ giá mới (mở lại để dựng lại).
 - Incoterm EXW/FCA/FAS/FOB hiển thị rõ cước, bảo hiểm, phí nước ngoài cộng vào trị giá tính thuế và nguồn từng khoản; phí nội địa (THC, D/O, CFS, lưu kho) không cộng.
 
 **Điều kiện phê duyệt** (theo thứ tự): vai trò APPROVER hoặc OWNER → tờ khai đang là bản nháp → không còn luật BLOCKER = FAIL → đủ HS đã xác nhận → có tỷ giá → đúng nguyên tắc 4 mắt (nếu bật) → đã chọn MO/CU cho hàng chương 84/85 → không còn chỉ tiêu bắt buộc trống.
@@ -456,7 +457,7 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 | `customs-send`, `customs-poll` | Gửi một nghiệp vụ Hải quan; hỏi trạng thái tới khi thông quan; ghi chi phí Customs Hub mỗi thông điệp thật sự gửi (§11) |
 | `skill-sample-read`, `skill-evaluate` | Đọc nháp nhãn mẫu; đánh giá độ chính xác Skill |
 | `cert-expiry` | Hằng ngày: nhắc chứng thư số sắp hết hạn |
-| `exchange-rate-weekly` | Thứ Năm 23:30 giờ VN: lấy tỷ giá Vietcombank (thử lại mỗi 30 phút) |
+| `exchange-rate-weekly` | Thứ Năm 23:30 giờ VN: lấy tỷ giá Vietcombank (thử lại mỗi 30 phút); job `catch-up` khi worker khởi động + 07:30 mỗi sáng: tuần đang áp dụng chưa có tỷ giá thì lấy bù bảng thứ Năm tuần trước |
 
 **Thông báo trong ứng dụng:**
 

@@ -1,5 +1,5 @@
 // Mẫu 02 – tờ khai xuất khẩu (EDA). Người xuất khẩu = doanh nghiệp (tài khoản); người nhập khẩu = buyer trên invoice.
-import { PORTS, resolvePort, resolveWorldPort, transportModeCode } from "../catalog-resolve.js";
+import { resolvePort, resolveWorldPort, transportModeCode } from "../catalog-resolve.js";
 import { EDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
 import { freightRequired, incotermCode, planExportAdjustments } from "../adjustments.js";
@@ -8,7 +8,7 @@ import { BY_WATER, EXPORT_VALUE, IN_CONTAINER, RE_EXPORT, TEMP_EXPORT } from "./
 import { profileSource, SRC } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
 
-const isVn = (code: string | undefined) => PORTS.find((p) => p.code === code)?.country === "VN";
+const isVn = (code: string | undefined) => !!code?.startsWith("VN");
 
 /**
  * 2.40 Trị giá tính thuế (tổng): khai khi điều kiện giá khác FOB/DAP/DAF hoặc không có hóa đơn. Trị giá hải quan hàng xuất = giá đến
@@ -83,7 +83,7 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   // 2.29: bắt buộc (trừ PTVC mã 9), là cảng/ICD/cửa khẩu/sân bay tại Việt Nam – không tự điền mặc định.
   { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Địa điểm xếp hàng", required: true, from: (i) => {
     const pol = i.shipment.transport.portOfLoading;
-    const r = resolvePort(pol.value);
+    const r = resolvePort(pol.value, i.catalogs?.worldPorts);
     const v = pol.value ? port(pol.value, r, fromSourced(pol, "BILL_OF_LADING").source) : missing("BILL_OF_LADING", "Chọn địa điểm xếp hàng tại Việt Nam (cảng, ICD, cửa khẩu, sân bay) – bắt buộc (chỉ tiêu 2.29)");
     return r && !isVn(r.code) ? { ...v, suspect: true, note: "Địa điểm xếp hàng của tờ khai xuất phải là địa điểm tại Việt Nam" } : v;
   } },

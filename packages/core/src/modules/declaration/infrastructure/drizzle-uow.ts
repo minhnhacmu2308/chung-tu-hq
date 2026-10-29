@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { ValueChargesSchema } from "@kb/contracts";
 import type { Db, Tx } from "../../../db/client.js";
 import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems, productCatalog, valueCharges } from "../../../db/schema/declaration.js";
@@ -138,7 +138,9 @@ function repos(tx: Tx): DeclarationRepos {
     },
     exchangeRates: {
       latest: async (currency, date) => {
-        const r = (await tx.select().from(exchangeRates).where(and(eq(exchangeRates.currency, currency), eq(exchangeRates.active, true), lte(exchangeRates.date, date))).orderBy(desc(exchangeRates.date)).limit(1))[0];
+        const r = (await tx.select().from(exchangeRates).where(and(eq(exchangeRates.currency, currency), eq(exchangeRates.active, true), lte(exchangeRates.date, date)))
+          // Tỷ giá mẫu (SEED, chỉ cho dev/demo) không bao giờ thắng tỷ giá thật (Vietcombank / nhập tay), kể cả khi mới hơn.
+          .orderBy(sql`(${exchangeRates.source} = 'SEED')`, desc(exchangeRates.date)).limit(1))[0];
         return r ? { rate: r.rate, date: r.date, source: r.source as "VCB" | "MANUAL" | "SEED", snapshotAt: r.snapshotAt } : null;
       },
     },

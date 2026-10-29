@@ -73,7 +73,7 @@ async function runAgentFor(dossierId: string) {
 }
 
 /** Bộ HANSOL không có vận đơn/kho → người khai nhập tay các chỉ tiêu bắt buộc còn trống trước khi duyệt. */
-const MANUAL_FIELDS: Record<string, string> = { SO_VD: "HSPL261014001", KHO: "03CCS01", CANG_DO: "VNHPH – Cảng Hải Phòng", CANG_XEP: "KRPUS – BUSAN", PTVC_TEN: "HANSOL VOY 2610", NGAY_DEN: "2026-10-20" };
+const MANUAL_FIELDS: Record<string, string> = { SO_VD: "HSPL261014001", KHO: "03CCS01", CANG_DO: "VNHPH – CANG HAI PHONG", CANG_XEP: "KRPUS – BUSAN", PTVC_TEN: "HANSOL VOY 2610", NGAY_DEN: "2026-10-20" };
 async function fillManualFields(deps: DeclarationDeps, ctx: Parameters<typeof updateDeclarationField>[1], dossierId: string) {
   const fields = unwrap(await getDeclarationView(deps, ctx, dossierId)).declaration!.fields;
   for (const [code, value] of Object.entries(MANUAL_FIELDS)) if (!fields.find((f) => f.code === code)?.value.trim()) unwrap(await updateDeclarationField(deps, ctx, dossierId, code, value));
@@ -93,7 +93,7 @@ describe("luồng tờ khai trên Postgres thật", () => {
     expect(view.declaration).toMatchObject({ kind: "IDA", status: "DRAFT", exchangeRate: "26150.000000" });
     expect(view.declaration!.customsValueVnd).toBe("545227500.000000"); // 20.850 USD × 26.150 – FCA chưa có hóa đơn cước
     expect(view.declaration!.fields.find((f) => f.code === "PHI_VC")).toMatchObject({ suspect: true });
-    expect(view.declaration!.fields.find((f) => f.code === "CANG_XEP")?.value).toBe("KRPUS – Busan");
+    expect(view.declaration!.fields.find((f) => f.code === "CANG_XEP")?.value).toBe("KRPUS – BUSAN");
     expect(view.declaration!.fields.find((f) => f.code === "NNK_TEN")?.value).toBe(ORG.name);
     expect(view.declaration!.fields.find((f) => f.code === "TRONG_LUONG")).toMatchObject({ suspect: true }); // PL ≠ B/L
     expect((dossier.storage as InMemoryStorage).keys().filter((k) => k.includes("/digitized/"))).toHaveLength(3);

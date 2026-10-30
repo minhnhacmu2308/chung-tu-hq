@@ -241,6 +241,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                 onOcr={goOcr}
                 busy={save.isPending}
                 onHs={setHsItem}
+                amending={mode === "AMEND"}
               />
               {spread.lines > 0 && (
                 <Checkbox

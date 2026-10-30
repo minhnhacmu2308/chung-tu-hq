@@ -1,7 +1,7 @@
 import { expandPrintRow, formKeysOf, itemFieldCode, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
-import { applyToOtherLines, attentionCells, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import { applyToOtherLines, attentionCells, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -494,5 +494,20 @@ describe("hiddenUntilCustoms / customsAnswered", () => {
     expect(hiddenUntilCustoms("IDA", "TK_ICN", "")).toBe(false);
     expect(hiddenUntilCustoms("IDA", "HAG_ORS", "")).toBe(false);
     expect(customsAnswered(undefined)).toBe(false);
+  });
+});
+
+describe("isBillCell / billPanelFields – ô số vận đơn", () => {
+  it("IDA 1.26 (số / ngày vận đơn / HAWB từng dòng) → thêm ô khai định danh theo đường biển / hàng không và có HAWB", () => {
+    expect(isBillCell("IDA", "VD_BL1")).toBe(true);
+    expect(isBillCell("IDA", "APP_NGAY_VD3")).toBe(true);
+    expect(isBillCell("IDA", "APP_HAWB5")).toBe(true);
+    expect(isBillCell("IDA", "VD_GW")).toBe(false);
+    expect(billPanelFields("IDA", "VD_BL1").map((f) => f.key)).toEqual(["APP_DD_PT", "APP_HAWB_CO"]);
+    expect(billPanelFields("IDA", "VD_GW")).toEqual([]);
+  });
+  it("EDA 2.24 là ô vận đơn nhưng lựa chọn định danh nằm trong form định danh – không thêm ô", () => {
+    expect(isBillCell("EDA", "TK_EKN")).toBe(true);
+    expect(billPanelFields("EDA", "TK_EKN")).toEqual([]);
   });
 });

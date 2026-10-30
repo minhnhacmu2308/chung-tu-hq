@@ -1,18 +1,20 @@
 "use client";
 // Thân panel sửa ô: lý do ô có trên tờ khai + hướng dẫn khai, lỗi Hải quan của chỉ tiêu, căn cứ chỉ đọc, nguồn giá trị (loại chứng từ),
 // nút "Xem ở bước OCR" / "Chọn mã HS" cho ô không sửa trên tờ khai, và ô nhập (FormField) cho mọi ô cùng nhóm.
+// Ô số vận đơn: thêm ô chọn khai định danh (biển / hàng không, HAWB) trước nhóm và nút nghiệp vụ vận đơn (Chia tách vận đơn, Khai báo định danh).
 import { Alert, Button, fill, Stack, useMessages } from "@kb/ui";
 import {
   DECLARATION_CONDITIONS, DERIVED_LOCK, fieldGuideNo, fieldRole, formKeysOf, isItemFieldKey, itemFieldClass, itemFieldCode,
-  type Declaration, type LineItem,
+  type Declaration, type LayoutField, type LineItem,
 } from "@kb/contracts";
 import { FileSearch, Search } from "lucide-react";
 import { DOC_KIND_LABELS } from "@/mocks/types";
 import { AmendLockProvider, type FieldLockLookup } from "../declaration-form/amend-context";
 import { FormField, GuideButton } from "../declaration-form/field";
 import { conditionContext, type FormValues } from "../declaration-form/form-state";
+import { TransportOperationsBar } from "../declaration-form/transport-operations-bar";
 import type { FieldError } from "../dossier-detail/steps/customs-errors";
-import type { FieldSpot } from "./print-state";
+import { billPanelFields, isBillCell, type FieldSpot } from "./print-state";
 import { PRINT_MESSAGES } from "./print.messages";
 
 type Kind = "IDA" | "EDA";
@@ -36,6 +38,8 @@ type Props = {
   /** Đang lưu → khóa nút sang bước OCR (không rời trang giữa chừng). */
   busy?: boolean;
   onHs: (item: LineItem) => void;
+  /** Đang khai sửa đổi – nút nghiệp vụ của ô vận đơn (IDA chỉ còn Chia tách vận đơn). */
+  amending?: boolean;
 };
 
 /** Nguồn giá trị: chỉ tiêu tờ khai lưu kèm loại chứng từ (`DeclarationField.source`); người khai sửa tay → "Người khai nhập". */
@@ -46,11 +50,19 @@ function sourceLabel(kind: Kind, decl: Declaration, key: string, item: LineItem 
   return labels.docKinds[f.source] ?? null;
 }
 
-export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf, errors, readOnlyReason, onOcr, busy = false, onHs }: Props) {
+export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf, errors, readOnlyReason, onOcr, busy = false, onHs, amending = false }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   const docKinds = useMessages(DOC_KIND_LABELS);
   const field = spot.field;
   const ctx = conditionContext(kind, values);
+  const billCell = !item && isBillCell(kind, field.key);
+  const parent = { parentNo: spot.parentNo, parentCondition: spot.parentCondition ?? spot.blockCondition };
+  // data-panel-field: panel đặt focus vào đúng ô người dùng chọn trong nhóm.
+  const row = (f: LayoutField, extra: typeof parent | object = {}) => (
+    <div key={f.key} data-panel-field={f.key} className="contents">
+      <FormField kind={kind} field={f} values={values} onChange={onChange} ctx={ctx} showInapplicable fill {...extra} />
+    </div>
+  );
   const condition = field.condition ?? spot.parentCondition ?? spot.blockCondition;
   const lock = lockOf(field.key);
   const itemClass = isItemFieldKey(kind, field.key) ? itemFieldClass(kind, field.key) : null;
@@ -96,24 +108,12 @@ export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf,
 
       <AmendLockProvider kind={kind} values={values} active={false} override={lockOf}>
         <Stack gap="sm">
-          {spot.group.map((f) => (
-            // data-panel-field: panel đặt focus vào đúng ô người dùng chọn trong nhóm.
-            <div key={f.key} data-panel-field={f.key} className="contents">
-              <FormField
-                kind={kind}
-                field={f}
-                values={values}
-                onChange={onChange}
-                ctx={ctx}
-                showInapplicable
-                parentNo={spot.parentNo}
-                parentCondition={spot.parentCondition ?? spot.blockCondition}
-                fill
-              />
-            </div>
-          ))}
+          {billCell && billPanelFields(kind, field.key).map((f) => row(f))}
+          {spot.group.map((f) => row(f, parent))}
         </Stack>
       </AmendLockProvider>
+
+      {billCell && !readOnlyReason && <TransportOperationsBar kind={kind} header={values} stage="nhap" amending={amending} showInapplicable prototype={false} />}
     </Stack>
   );
 }

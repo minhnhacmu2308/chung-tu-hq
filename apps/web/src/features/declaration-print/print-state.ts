@@ -1,6 +1,6 @@
 // Logic thuần của bản in tờ khai (Review bước 5): vị trí ô trên bố cục, số ước tính, trạng thái ô, danh sách ô cần xử lý, số trang.
 import {
-  branchRanges, expandRepeat, formKeysOf, itemFieldClass, itemFieldCode, itemFields, layoutFor, otherFieldKeys, parseItemFieldCode, printKeys, printLayoutFor, requiredGaps,
+  billIdentFields, branchRanges, expandRepeat, formKeysOf, itemFieldClass, itemFieldCode, itemFields, layoutFor, otherFieldKeys, parseItemFieldCode, printKeys, printLayoutFor, requiredGaps,
   type ConditionContext, type ConditionId, type DeclarationBranch, type RequiredGap, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
 } from "@kb/contracts";
 import type { PaperFieldState } from "@kb/ui";
@@ -494,3 +494,13 @@ export function hiddenUntilCustoms(kind: Kind, key: string, raw: string): boolea
 
 /** Hải quan đã trả thông tin tờ khai (khai tạm / chính thức) – từ đó hiện đủ các ô Hải quan trả về. */
 export const customsAnswered = (submission: SubmissionView | undefined): boolean => Boolean(submission?.customsInfo || submission?.result);
+
+/** Ô số vận đơn: IDA 1.26 (số / ngày vận đơn / số HAWB của từng dòng), EDA 2.24. */
+const BILL_CELL: Record<Kind, RegExp> = { IDA: /^(VD_BL|APP_NGAY_VD|APP_HAWB)\d+$/, EDA: /^TK_EKN$/ };
+export const isBillCell = (kind: Kind, key: string) => BILL_CELL[kind].test(key);
+
+/**
+ * Ô chọn khai định danh đi cùng số vận đơn (không có chỗ trên mẫu in – nằm ở "Chỉ tiêu khác"): khai định danh theo đường biển / hàng không,
+ * hàng không có phát hành HAWB không. Panel ô vận đơn hiện các ô này trước để chọn ngay cạnh số vận đơn. EDA: lựa chọn nằm trong form định danh.
+ */
+export const billPanelFields = (kind: Kind, key: string): LayoutField[] => (kind === "IDA" && isBillCell(kind, key) ? billIdentFields : []);

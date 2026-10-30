@@ -52,7 +52,7 @@ describe("SheetPicker", () => {
     expect(onChange).toHaveBeenLastCalledWith(3);
     expect(screen.getByText("Áp dụng cho cả 3 tờ khai")).toBeTruthy();
     await expectNoA11yViolations(container);
-  });
+  }, 30_000); // dựng bản in lô 120 dòng + axe – máy bận vượt 5 giây mặc định
 
   it.each([
     ["en", "Sheet 2/3 · lines 51–100", "Applies to all 3 declarations"],

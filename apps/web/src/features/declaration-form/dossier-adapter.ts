@@ -1,6 +1,6 @@
 // Tờ khai của hồ sơ (chỉ tiêu theo mã app: MA_LH, PTVC, CANG_DO…) ↔ form tờ khai đầy đủ (ô theo tên trường VNACCS: TK_ICB, TK_MTC, VD_DST…).
 // Bảng chuyển mã và quy tắc ô nào sửa được theo giai đoạn ở @kb/contracts (app-fields) – backend dùng cùng quy tắc khi lưu.
-import { DERIVED_LOCK, declarationFormValues, editableFormKeys, formKeyLock, isItemFieldKey, itemFieldClass, itemFieldCode, itemFormValues, itemInputKeys, mappedAppCodes, pendingFormEdits, type AmendLock, type DeclarationEditMode, type DeclarationField, type LineItem } from "@kb/contracts";
+import { AUTO_COMPUTED_KEYS, DERIVED_LOCK, declarationFormValues, editableFormKeys, formKeyLock, isItemFieldKey, itemFieldClass, itemFieldCode, itemFormValues, itemInputKeys, mappedAppCodes, pendingFormEdits, type AmendLock, type DeclarationEditMode, type DeclarationField, type LineItem } from "@kb/contracts";
 import { UI_LOCALES, pickMessages, type UiLocale } from "@kb/ui";
 import { FORM_MESSAGES } from "./form.messages";
 import type { FormValues } from "./form-state";
@@ -46,6 +46,7 @@ export function declarationLockOf(kind: Kind, mode: DeclarationEditMode, origina
       const c = itemFieldClass(kind, key);
       return c === "INPUT" ? formKeyLock(kind, key, mode, original) : ITEM_LOCK[locale][c];
     }
+    if (AUTO_COMPUTED_KEYS.has(key)) return { basis: "SOFTWARE", reason: pickMessages(FORM_MESSAGES, locale).lockAutoSheet };
     return editable.has(key) ? null : formKeyLock(kind, key, mode, original) ?? DERIVED_LOCK;
   };
 }

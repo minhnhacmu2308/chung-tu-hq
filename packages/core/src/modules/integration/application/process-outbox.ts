@@ -150,7 +150,10 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
         ? { errors: errors ?? [], summary: "", payload: null, patch: {} }
         : { summary: `Kết quả phân luồng: luồng ${channelVi(res.channel)}`, payload: { nghiepVu: op, soToKhai: result.declarationNo, maPhanLuong: res.channel === "GREEN" ? 1 : res.channel === "YELLOW" ? 2 : 3, thueDuKien: `${res.customsTaxVnd ?? result.customsTaxVnd ?? "0"} VND` }, patch: { channel: res.channel, channelNote: CHANNEL_NOTES[res.channel], ...(res.customsTaxVnd ? { customsTaxVnd: res.customsTaxVnd } : {}), ...withInfo(result.raw, res.info, now()) } };
     } else {
-      const res = await deps.gateway.send(input.orgId, { op, externalId: result.externalId ?? "", dossierId: ob.dossierId, request: payload.request }, ob.idempotencyKey);
+      // Khai sửa IDA01/EDA01: chỉ thị Hải quan gửi lại NGUYÊN VĂN như đã nhận (không trim – VNACCS so khớp từng ký tự).
+      const cthq = (op === "IDA01" || op === "EDA01") ? result.raw?.customsInfo?.directivesRaw : undefined;
+      const request = cthq && payload.request && typeof payload.request === "object" ? { ...(payload.request as Record<string, unknown>), [`objVN_${op === "IDA01" ? "IDA" : "EDA"}_CTHQ`]: cthq } : payload.request;
+      const res = await deps.gateway.send(input.orgId, { op, externalId: result.externalId ?? "", dossierId: ob.dossierId, request }, ob.idempotencyKey);
       await meterSent();
       const detail = [res.note, res.receiptNo ? `số tiếp nhận ${res.receiptNo}` : null, res.channel ? `luồng ${channelVi(res.channel)}` : null].filter(Boolean).join(" – ");
       outcome = res.errors?.length

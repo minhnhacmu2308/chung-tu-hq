@@ -17,7 +17,7 @@ const BATCH = 100;
 const log = createLogger({ name: "core" });
 
 /** Khóa chống ghi trùng khi FPT gửi lại cùng thông điệp (không có thời điểm → thêm trạng thái để hai thông điệp khác nhau không gộp). */
-export const inboxKey = (m: GatewayMessage) => [m.kind, m.code, m.declarationNo, m.at ?? "", m.at ? "" : `${m.status?.status ?? ""}/${m.status?.channel ?? ""}`].join("|");
+export const inboxKey = (m: GatewayMessage) => [m.kind, m.code, m.declarationNo, m.at ?? "", m.msgType ?? "", m.at ? "" : `${m.status?.status ?? ""}/${m.status?.channel ?? ""}`].join("|");
 
 /** Lấy (lỗi lấy không chặn lượt hỏi trạng thái) → lưu cả lô → áp thông điệp đang chờ. Trả số thông điệp đã áp. */
 export async function pullCustomsMessages(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }): Promise<number> {
@@ -100,7 +100,8 @@ async function apply(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, r
     await r.messages.insert({
       id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId: latest.dossierId, branch: latest.branch, operation: op, direction: "IN", result: "OK",
       summary: `Hải quan gửi ${m.code}${m.name ? ` – ${m.name}` : ""}`,
-      payloadMasked: { maThongDiep: m.code, soToKhai: m.declarationNo, ...(m.at ? { thoiGian: m.at } : {}), ...(m.status ? { trangThai: m.status.status, phanLuong: m.status.channel } : {}) },
+      // EDI bản in (loại B) giữ trong customs_inbox (dòng row.id) – nhật ký chỉ ghi có/không để nhẹ.
+      payloadMasked: { maThongDiep: m.code, soToKhai: m.declarationNo, ...(m.at ? { thoiGian: m.at } : {}), ...(m.status ? { trangThai: m.status.status, phanLuong: m.status.channel } : {}), ...(m.msgType ? { loaiThongDiep: m.msgType } : {}), ...(m.ediBase64 ? { coEdi: true, hopThuId: row.id } : {}) },
       externalRef: latest.externalId, at: now,
     });
     const st = m.status;

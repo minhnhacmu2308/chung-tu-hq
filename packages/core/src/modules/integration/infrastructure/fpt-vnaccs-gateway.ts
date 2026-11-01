@@ -163,7 +163,10 @@ export class FptVnaccsGateway implements CustomsGateway {
       const parsed = (kind === "IDA" ? IdaRequestSchema : EdaRequestSchema).safeParse(msg.request);
       if (!parsed.success) return { errors: parsed.error.issues.map(describeSchemaIssue) };
       // Khai tạm sửa đổi: cùng cấu trúc IDA/EDA, đầu tờ khai mang số tờ khai đã đăng ký.
-      const body = parsed.data as Obj;
+      // Chỉ thị Hải quan (objVN_<KIND>_CTHQ) gửi lại nguyên văn như đã nhận – lấy từ request gốc, không qua schema (không trim, không đổi kiểu).
+      const cthqKey = `objVN_${kind}_CTHQ`;
+      const cthq = (msg.request as Obj | undefined)?.[cthqKey];
+      const body = { ...(parsed.data as Obj), ...(cthq && typeof cthq === "object" ? { [cthqKey]: cthq } : {}) };
       const head = { ...((body[`objVN_${kind}`] ?? {}) as Obj), [numberField(kind)]: Number(no) };
       const { errors } = await this.call(orgId, op, { ...body, [`objVN_${kind}`]: head });
       if (errors) return { errors };
@@ -209,7 +212,11 @@ export class FptVnaccsGateway implements CustomsGateway {
         const head = sub(item, `objVN_${kind}`);
         const no = String(kind === "AMA" ? head["tK_SYN"] ?? m["decNumber"] ?? "" : head[numberField(kind)] ?? m["decNumber"] ?? "");
         if (!no) continue;
-        out.push({ kind, code: String(m["code"] ?? ""), name: String(m["name"] ?? ""), declarationNo: no, ...(m["time"] ? { at: String(m["time"]) } : {}), ...(kind === "AMA" ? {} : { status: statusOf(kind, item) }) });
+        const edi = typeof m["ediBase64"] === "string" && m["ediBase64"] ? m["ediBase64"] : undefined;
+        out.push({
+          kind, code: String(m["code"] ?? ""), name: String(m["name"] ?? ""), declarationNo: no, ...(m["time"] ? { at: String(m["time"]) } : {}), ...(kind === "AMA" ? {} : { status: statusOf(kind, item) }),
+          ...(m["type"] ? { msgType: String(m["type"]) } : {}), ...(edi ? { ediBase64: edi } : {}),
+        });
       }
     }
     return out;

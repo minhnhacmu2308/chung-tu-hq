@@ -204,6 +204,7 @@ export const FORM_MESSAGES = defineMessages({
     lockDoc: "Số liệu chứng từ – sửa ở bước OCR",
     lockHs: "Theo mã HS – nút Chọn mã HS",
     lockDerived: "Theo nguyên tệ hóa đơn",
+    lockAutoSheet: "Phần mềm tự tính khi tách tờ khai – không sửa tay",
     // use-save-edits
     savedN: "Đã lưu {n} chỉ tiêu",
     saveFailed: "Không lưu được tờ khai",
@@ -393,6 +394,7 @@ export const FORM_MESSAGES = defineMessages({
     lockDoc: "Document data – edit in the OCR step",
     lockHs: "From the HS code – use Select HS code",
     lockDerived: "From the invoice currency",
+    lockAutoSheet: "Calculated automatically when the declaration is split – not editable",
     savedN: "Saved {n} fields",
     saveFailed: "Could not save the declaration",
   },
@@ -581,6 +583,7 @@ export const FORM_MESSAGES = defineMessages({
     lockDoc: "单证数据 – 在 OCR 步骤修改",
     lockHs: "取自 HS 编码 – 使用“选择 HS 编码”按钮",
     lockDerived: "取自发票原币",
+    lockAutoSheet: "拆分报关单时由软件自动计算 – 不可手动修改",
     savedN: "已保存 {n} 个申报项",
     saveFailed: "无法保存报关单",
   },

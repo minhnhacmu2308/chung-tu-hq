@@ -111,6 +111,9 @@ export const EnvSchema = z
     for (const k of ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const) need(e.STORAGE === "s3" && !e[k], k, "STORAGE=s3");
     need(e.STORAGE === "azure" && !e.AZURE_STORAGE_CONNECTION_STRING, "AZURE_STORAGE_CONNECTION_STRING", "STORAGE=azure");
     need(e.CUSTOMS_GATEWAY === "fpt" && !e.FPT_API_BASE_URL, "FPT_API_BASE_URL", "CUSTOMS_GATEWAY=fpt");
+    // Cổng FPT/Hải quan chỉ nhận HTTPS (thống nhất với đội nghiệp vụ 01/11/2026). Production: http chỉ cho máy nội bộ (localhost, tên service docker không có dấu chấm – vd fpt-mock).
+    if (e.NODE_ENV === "production" && e.CUSTOMS_GATEWAY === "fpt" && e.FPT_API_BASE_URL && !isHttpsOrInternal(e.FPT_API_BASE_URL))
+      ctx.addIssue({ code: "custom", path: ["FPT_API_BASE_URL"], message: "FPT_API_BASE_URL phải dùng https:// ở production" });
     need(e.CUSTOMS_GATEWAY === "fpt" && !e.FPT_API_USERNAME, "FPT_API_USERNAME", "CUSTOMS_GATEWAY=fpt");
     need(e.CUSTOMS_GATEWAY === "fpt" && !e.FPT_API_PASSWORD, "FPT_API_PASSWORD", "CUSTOMS_GATEWAY=fpt");
     need(e.HS_CLASSIFIER === "hscodepro" && !e.HSCODEPRO_URL, "HSCODEPRO_URL", "HS_CLASSIFIER=hscodepro");
@@ -121,6 +124,17 @@ export const EnvSchema = z
       if (bad) ctx.addIssue({ code: "custom", path: ["APP_MASTER_KEYS"], message: bad });
     }
   });
+
+/** https://…, hoặc http tới máy nội bộ (localhost/127.0.0.1/tên service docker không có dấu chấm). */
+export function isHttpsOrInternal(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol === "https:") return true;
+    return u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "127.0.0.1" || !u.hostname.includes("."));
+  } catch {
+    return false;
+  }
+}
 
 export type MasterKeyRing = { current: number; keys: Map<number, string> };
 

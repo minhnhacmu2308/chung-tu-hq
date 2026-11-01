@@ -90,6 +90,11 @@ export const CustomsInfoSchema = z.object({
   /** Phân loại chỉ thị (CTHQ_CCM): A hướng dẫn sửa đổi, B thay đổi khai báo. */
   directiveKind: z.string().optional(),
   directives: z.array(CustomsDirectiveSchema),
+  /**
+   * Chỉ thị Hải quan NGUYÊN VĂN như FPT trả (key JSON FPT: cthQ_CCM, cthQ_D01, cthQ_T01, cthQ_I01…) – khai sửa IDA01/EDA01 gửi lại y hệt,
+   * kể cả khoảng trắng (không trim – lệch một ký tự VNACCS từ chối). `directives` là bản đã làm gọn để hiển thị.
+   */
+  directivesRaw: z.record(z.string(), z.unknown()).optional(),
   permitDate: IsoDateSchema.optional(),
   permitTime: z.string().optional(),
   inspectionDoneDate: IsoDateSchema.optional(),

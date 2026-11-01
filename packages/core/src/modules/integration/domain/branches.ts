@@ -1,6 +1,6 @@
 // Tờ khai > 50 dòng hàng → các tờ khai nhánh: cắt dòng theo lineNo, tự điền 1.2 (TK_FIC/TK_BNO/TK_DNO) và 1.51 (TK_TP). Thuần.
 import { Decimal } from "../../../shared/decimal.js";
-import { branchRanges, isActiveSheet, sentSheetsCheck, sentSheetsReason, sentSnapshotOf, type BranchRange, type CustomsStage, type SentSnapshot } from "@kb/contracts";
+import { AUTO_COMPUTED_KEYS, branchRanges, isActiveSheet, sentSheetsCheck, sentSheetsReason, sentSnapshotOf, type BranchRange, type CustomsStage, type SentSnapshot } from "@kb/contracts";
 import { reasonError, type DomainError } from "../../../shared/errors.js";
 import type { DeclarationPayload } from "./declaration-to-fpt.js";
 
@@ -9,7 +9,7 @@ export const invoiceTotal = (p: DeclarationPayload): string => p.items.reduce((s
 
 /**
  * Tờ khai nhánh `no` của lô. Lô ≤ 50 dòng trả nguyên payload (không thêm chỉ tiêu).
- * Mọi chỉ tiêu khác giống hệt giữa các tờ; TK_FIC: tờ 1 = "F", tờ sau = số tờ khai của tờ 1; TK_TP = tổng trị giá hóa đơn cả lô (giữ nếu người khai đã nhập).
+ * Mọi chỉ tiêu khác giống hệt giữa các tờ; TK_FIC: tờ 1 = "F", tờ sau = số tờ khai của tờ 1; TK_TP = tổng trị giá hóa đơn cả lô – luôn tự tính, không lấy giá trị sửa tay (VNACCS phân bổ thuế theo hệ số này; AUTO_COMPUTED_KEYS).
  */
 export function branchPayload(p: DeclarationPayload, no: number, firstDeclarationNo: string | null): { payload: DeclarationPayload; range: BranchRange; blockers: string[] } {
   const sorted = [...p.items].sort((a, b) => a.lineNo - b.lineNo);
@@ -17,15 +17,18 @@ export function branchPayload(p: DeclarationPayload, no: number, firstDeclaratio
   const range = ranges.find((r) => r.no === no);
   // `no` ngoài 1..of (0, NaN, vượt số tờ): không lùi về tờ 1 (tránh gửi "tờ 1" hai lần) – chặn, không có dữ liệu dùng được.
   if (!range) return { payload: { ...p, items: [] }, range: { ...ranges[0]!, no, index: [0, 0] }, blockers: [`Tờ ${no}: không có trong lô (${ranges.length} tờ)`] };
-  if (range.of === 1) return { payload: p, range, blockers: [] };
+  // Lô một tờ: không gửi ô tách tờ (TK_FIC/TK_BNO/TK_DNO/TK_TP) – VNACCS tự tính 1.51; giá trị nhập tay cũ (trước khi khóa ô) bị bỏ, không lọt lên Hải quan.
+  if (range.of === 1) {
+    if (!Object.keys(p.fields).some((k) => AUTO_COMPUTED_KEYS.has(k))) return { payload: p, range, blockers: [] };
+    return { payload: { ...p, fields: Object.fromEntries(Object.entries(p.fields).filter(([k]) => !AUTO_COMPUTED_KEYS.has(k))) }, range, blockers: [] };
+  }
   const blockers = range.no > 1 && !firstDeclarationNo ? [`Tờ ${range.no}/${range.of}: chưa có số tờ khai đầu tiên (tờ 1)`] : [];
-  const tp = p.fields.TK_TP;
   const fields: DeclarationPayload["fields"] = {
     ...p.fields,
     TK_FIC: { value: range.no === 1 ? "F" : firstDeclarationNo ?? "" },
     TK_BNO: { value: String(range.no) },
     TK_DNO: { value: String(range.of) },
-    TK_TP: tp?.source === "USER" && tp.value.trim() ? tp : { value: invoiceTotal(p) },
+    TK_TP: { value: invoiceTotal(p) },
   };
   return { payload: { ...p, fields, items: sorted.slice(range.index[0], range.index[1]) }, range, blockers };
 }

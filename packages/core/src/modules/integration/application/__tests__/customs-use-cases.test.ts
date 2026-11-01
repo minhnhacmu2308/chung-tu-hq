@@ -894,8 +894,16 @@ describe("performOperation – luồng nghiệp vụ", () => {
     expect(decls.status).toBe("DRAFT");
     expect(errCode(await perform("IDA01"))).toBe("INVALID_STATE"); // chưa duyệt lại
     decls.status = "APPROVED";
+    // Hải quan đã gửi chỉ thị (lưu nguyên văn khi nhận) → IDA01 gửi lại y hệt, kể cả khoảng trắng.
+    const cthq = { cthQ_CCM: "A", cthQ_T01: " Bổ sung  C/O ", cthQ_I01: "Nộp  C/O " };
+    const r0 = uow.data.results[0]!;
+    uow.data.results[0] = { ...r0, raw: { ...r0.raw!, customsInfo: { receivedAt: "2026-10-14T03:00:00.000Z", exchangeRates: [], taxes: [], items: [], directives: [], directivesRaw: cthq } } };
+    const sent: unknown[] = [];
+    const send0 = deps.gateway.send.bind(deps.gateway);
+    deps.gateway.send = async (o, m, k) => (sent.push(m.request), send0(o, m, k));
     unwrap(await perform("IDA01"));
     await drain();
+    expect((sent[0] as Record<string, unknown>)["objVN_IDA_CTHQ"]).toEqual(cthq);
     expect((await view())).toMatchObject({ stage: "AMEND_PRE_DECLARED", nextOp: "IDE" });
     queue.jobs.length = 0;
     unwrap(await perform("IDE"));

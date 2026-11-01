@@ -319,5 +319,11 @@ DECISIONS = [
     ("HYS: lisT_FILE hay lisT_FILE_HYS?", "lisT_FILE (Excel)."),
     ("Có cần KyFile / chữ ký số trong payload?", "Không: Excel IDA/EDA/HYS/V5 không có trường chữ ký → không ký trong payload; KyFile để dành khi FPT yêu cầu."),
     ("VNACCSREP lấy một lần hay lấy lại được?", "Excel không mô tả → app coi là lấy một lần: lưu ngay mọi thông điệp nhận được (idempotent theo mã thông điệp + số tờ khai) và vẫn tra IID/IEX để chắc trạng thái."),
-    ("Tần suất hỏi kết quả (…Res, VNACCSREP)?", "Không có trong tài liệu → app tự đặt (lùi dần, như hỏi IEX hiện tại)."),
+    ("Tần suất hỏi kết quả (…Res, VNACCSREP)?", "Họp nghiệp vụ 01/11/2026: cách chính là nút bấm tay (người khai bấm \"Tra cứu trạng thái\" → VNACCSREP + IID/IEX); tự động chỉ là lưới an toàn 5 phút/lần, không hỏi dồn theo giây."),
+    ("Tách tờ khai > 50 dòng (TK_FIC/TK_BNO/TK_DNO, TK_TP)?", "Họp nghiệp vụ 01/11/2026: tờ 1 TK_FIC = \"F\", nhánh k/N; tờ 2..N TK_FIC = số tờ khai nhánh 1 (khai nhánh 1 có số rồi mới khai nhánh 2). Tổng trị giá hóa đơn giữ nguyên cả lô; TK_TP (tổng hệ số phân bổ) bắt buộc, phần mềm tự tính, không cho sửa tay."),
+    ("IDA01/EDA01 – chỉ thị Hải quan?", "Họp nghiệp vụ 01/11/2026: gửi lại objVN_<KIND>_CTHQ NGUYÊN VĂN như Hải quan trả (không trim khoảng trắng) – lệch một ký tự VNACCS từ chối. Postman IDA01 đang thiếu khối này."),
+    ("Thông điệp loại B / C?", "Họp nghiệp vụ 01/11/2026: B kèm ediBase64 (EDI chuẩn – lưu trữ, in tờ khai), C chỉ là thông báo. App lưu ediBase64 trong hộp thư customs_inbox."),
+    ("Mã chi cục trả về?", "Họp nghiệp vụ 01/11/2026: VNACCS trả tên viết tắt chi cục (TK_A07), không trả mã → app lưu mã chi cục gốc từ lúc tạo hồ sơ, không map ngược từ tên."),
+    ("HTTPS?", "Họp nghiệp vụ 01/11/2026: mọi endpoint VNACCS/FPT bắt buộc https:// – production chặn http (trừ máy nội bộ như fpt-mock)."),
+    ("Khai thử nghiệm?", "Họp nghiệp vụ 01/11/2026: mã chi cục test 88AB."),
 ]

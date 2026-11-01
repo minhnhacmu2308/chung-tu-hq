@@ -17,6 +17,12 @@ import type { CustomsDeps } from "./customs-ports.js";
 /** `branch`: tờ khai nhánh (vắng = 1 – job tạo trước khi tách tờ khai). */
 export type PollStatusInput = { orgId: string; userId: string; dossierId: string; attempt: number; branch?: number | undefined };
 export const MAX_POLLS = 200;
+/**
+ * Khoảng cách giữa hai lượt hỏi tự động (cổng FPT thật / mock HTTP): 5 phút – chỉ là lưới an toàn. Cách chính là người khai bấm
+ * "Tra cứu trạng thái" (lấy VNACCSREP + IID/IEX ngay); không hỏi dồn theo giây để tránh nghẽn cổng Hải quan (thống nhất với đội nghiệp vụ 01/11/2026).
+ * 200 lượt × 5 phút ≈ 16,7 giờ.
+ */
+export const CUSTOMS_POLL_DELAY_MS = 5 * 60_000;
 
 export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Promise<Result<{ done: boolean; cleared: boolean }>> {
   const ctx = { orgId: asOrgId(input.orgId), userId: asUserId(input.userId) };

@@ -129,7 +129,13 @@ export interface CustomsGateway {
 export type HysGatewayRequest = { dossierId: string; customsOffice: string; processingUnit: string; procedureCode: string; phone: string | null; internalRef: string | null; note: string | null; files: { name: string; bytes: Buffer }[]; certificateId?: string };
 export type HysGatewayResult = { receiptNo?: string; registeredOn?: string; errors?: GatewayError[] };
 /** Một thông điệp Hải quan trả về (VNACCSREP): `declarationNo` = số tờ khai (hoặc số tờ khai bổ sung với AMA). */
-export type GatewayMessage = { kind: "IDA" | "EDA" | "AMA"; code: string; name: string; declarationNo: string; at?: string; status?: GatewayStatus };
+export type GatewayMessage = {
+  kind: "IDA" | "EDA" | "AMA"; code: string; name: string; declarationNo: string; at?: string; status?: GatewayStatus;
+  /** Loại thông điệp FPT (objMsgResult.type): B = kèm EDI bản in, C = thông báo. */
+  msgType?: string;
+  /** Thông điệp loại B: EDI chuẩn Hải quan (base64) – lưu trong hộp thư để lưu trữ / in tờ khai (PrintEdiRef). */
+  ediBase64?: string;
+};
 export type GatewaySendResult = { channel?: "GREEN" | "YELLOW" | "RED"; receiptNo?: string; customsTaxVnd?: string; note?: string; errors?: GatewayError[] };
 
 /** Tờ khai + dòng hàng từ module declaration (composition root nối). */

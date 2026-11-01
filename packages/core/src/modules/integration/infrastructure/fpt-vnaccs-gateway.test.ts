@@ -161,6 +161,18 @@ describe("FptVnaccsGateway.send – gọi lại, sửa đổi, AMB/AMC (Postman 
     expect(bad.errors?.length).toBeGreaterThan(0);
     expect(r.calls).toHaveLength(0);
   });
+  it("EDA01: chỉ thị Hải quan gửi lại NGUYÊN VĂN (giữ khoảng trắng, không qua schema); đầu tờ khai mang số tờ khai", async () => {
+    const r = rec(() => ({ errorList: null, objEDA: [{ objMsgResult: { code: "VAE1LA0" } }] }));
+    const cthq = { cthQ_CCM: "A", cthQ_D01: "20/10/2026", cthQ_T01: " Bổ sung  C/O ", cthQ_I01: "Nộp bản chính C/O   form E  " };
+    const request = { objVN_EDA: REQUEST["objVN_EDA"], objVN_EDA_CON: REQUEST["objVN_EDA_CON"], objVN_EDA_HANG: REQUEST["objVN_EDA_HANG"], objVN_EDA_CTHQ: cthq };
+    expect((await r.g.send("org", { op: "EDA01", externalId: "309062686130", request })).errors).toBeUndefined();
+    expect(r.calls[0]!.body["objVN_EDA_CTHQ"]).toEqual(cthq);
+    expect((r.calls[0]!.body["objVN_EDA"] as Record<string, unknown>)["tK_ECN"]).toBe(309062686130);
+  });
+  it("VNACCSREP: thông điệp loại B giữ ediBase64 + loại", async () => {
+    const r = rec(() => ({ errorList: null, objEDA: [{ objMsgResult: { code: "VAE1LF0", name: "Thông quan", type: "B", ediBase64: "RURJ", time: "01/11/2026 10:00" }, objVN_EDA: { tK_ECN: 309062686130 } }] }));
+    expect(await r.g.pullMessages("org")).toMatchObject([{ kind: "EDA", code: "VAE1LF0", declarationNo: "309062686130", msgType: "B", ediBase64: "RURJ" }]);
+  });
   it("AMB/AMC: body tK_SYN (number); thiếu tK_SYN → lỗi, không gọi HTTP", async () => {
     const r = rec();
     expect((await r.g.send("org", { op: "AMB", request: {} })).errors?.[0]?.code).toBe("E-AMA-NO-SYN");

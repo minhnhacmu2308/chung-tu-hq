@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { allocatedAdjustmentNos, NO_INSURANCE_VALUE } from "../dto/value-charges.js";
-import { itemFormValues, appFieldMeta, declarationEditMode, declarationEditScope, declarationFormValues, editableFormKeys, editBlockFor, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, isExtraFieldKey, pendingFormEdits, sheetOfLine, splitAddressLines } from "./index.js";
+import { AUTO_COMPUTED_KEYS, itemFormValues, appFieldMeta, declarationEditMode, declarationEditScope, declarationFormValues, editableFormKeys, editBlockFor, extraFieldFpt, extraFieldIssue, extraFieldMeta, fieldEditBlock, formKeyLock, isExtraFieldKey, pendingFormEdits, sheetOfLine, splitAddressLines } from "./index.js";
 import type { CustomsStage } from "../customs-flow.js";
 
 const f = (code: string, value: string) => ({ code, value });
@@ -217,5 +217,15 @@ describe("declarationEditScope / editBlockFor / sheetOfLine – phạm vi sửa 
     expect(sheetOfLine(lineNos, 51)).toBe(2);
     expect(sheetOfLine(lineNos, 120)).toBe(3);
     expect(sheetOfLine([10, 20, 30], 999)).toBe(1);
+  });
+});
+
+describe("ô phần mềm tự tính khi tách tờ khai (TK_FIC/TK_BNO/TK_DNO/TK_TP)", () => {
+  it.each(["IDA", "EDA"] as const)("%s: không có trong ô sửa được, lưu bị chặn kèm lý do (kể cả chế độ FULL)", (kind) => {
+    const keys = editableFormKeys(kind, "FULL", {});
+    for (const k of AUTO_COMPUTED_KEYS) {
+      expect(keys.has(k)).toBe(false);
+      expect(fieldEditBlock(kind, k, "FULL", [])).toMatch(/tự tính/);
+    }
   });
 });

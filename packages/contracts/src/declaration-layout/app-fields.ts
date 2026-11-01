@@ -175,6 +175,14 @@ function declarantFields(kind: Kind): Map<string, ExtraFieldMeta> {
 
 const extraCache = new Map<Kind, Map<string, ExtraFieldMeta>>();
 /** Ô bổ sung: ô người khai nhập không thuộc chỉ tiêu app nào và không tính từ chứng từ. */
+/**
+ * Ô phần mềm tự tính khi truyền, không sửa tay (tách tờ khai nhánh – thống nhất với đội nghiệp vụ 01/11/2026):
+ * 1.2/2.2 TK_FIC/TK_BNO/TK_DNO (F / số tờ 1, số nhánh, tổng số nhánh) và 1.51/2.42 TK_TP (tổng hệ số phân bổ trị giá = tổng trị giá hóa đơn cả lô –
+ * VNACCS phân bổ thuế theo hệ số này, sửa/xóa là tính sai thuế). Lô một tờ để trống – VNACCS tự tính.
+ */
+export const AUTO_COMPUTED_KEYS: ReadonlySet<string> = new Set(["TK_FIC", "TK_BNO", "TK_DNO", "TK_TP"]);
+const AUTO_COMPUTED_REASON = "Phần mềm tự tính khi truyền (tách tờ khai nhánh) – không sửa tay";
+
 function extraFields(kind: Kind): Map<string, ExtraFieldMeta> {
   const hit = extraCache.get(kind);
   if (hit) return hit;
@@ -338,7 +346,7 @@ export function editableFormKeys(kind: Kind, mode: DeclarationEditMode, values: 
     if (!r.keys.every(open)) continue;
     for (const key of r.keys) if (!out.has(key)) out.set(key, r.code);
   }
-  for (const key of extraFields(kind).keys()) if (open(key)) out.set(key, key);
+  for (const key of extraFields(kind).keys()) if (open(key) && !AUTO_COMPUTED_KEYS.has(key)) out.set(key, key);
   return out;
 }
 
@@ -358,6 +366,7 @@ export function formKeyLock(kind: Kind, key: string, mode: DeclarationEditMode, 
 /** Kiểm tra lần cuối trước khi lưu một chỉ tiêu (backend + mock): LOCKED → lỗi; AMEND → ô bị khóa theo Phụ lục II → lỗi kèm căn cứ. */
 export function fieldEditBlock(kind: Kind, code: string, mode: DeclarationEditMode, fields: { code: string; value: string }[]): string | null {
   if (mode === "LOCKED") return "Tờ khai không ở giai đoạn được sửa (đã thông quan – sửa sau thông quan khai bằng nghiệp vụ AMA)";
+  if (AUTO_COMPUTED_KEYS.has(code)) return AUTO_COMPUTED_REASON;
   if (mode === "FULL") return null;
   const values = declarationFormValues(kind, fields);
   const lock = formKeysOf(kind, code).map((k) => amendLock(kind, k, values)).find(Boolean);

@@ -12,6 +12,8 @@ import type { ResultRaw } from "../domain/state-machine.js";
 
 export type OutboxRow = { id: string; orgId: string; dossierId: string; /** Nhánh tờ khai (≥ 1). */ branch: number; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
 export type MessageRow = { id: string; orgId: string; dossierId: string; branch: number; operation: CustomsOperation; direction: "OUT" | "IN" | "NOTE"; result: "PENDING" | "OK" | "ERROR"; summary: string; payloadMasked: unknown; externalRef: string | null; at: Date };
+/** Thông điệp VNACCSREP trong hộp thư (lưu ngay khi lấy – FPT không trả lại). */
+export type InboxRow = { id: string; orgId: string; dedupKey: string; message: GatewayMessage; status: "PENDING" | "APPLIED" | "UNMATCHED"; attempts: number; receivedAt: Date; appliedAt: Date | null };
 export type ResultRow = {
   id: string; orgId: string; dossierId: string; branch: number; externalId: string | null; declarationNo: string | null; channel: "GREEN" | "YELLOW" | "RED" | null; channelNote: string | null;
   clearanceStatus: "WAITING" | "INSPECTING" | "CLEARED" | "REJECTED"; customsTaxVnd: string | null; state: SubmissionState; pollCount: number;
@@ -48,6 +50,8 @@ export interface CustomsRepos {
     /** Mọi nhánh của hồ sơ, sắp theo nhánh. */
     listForDossier(orgId: string, dossierId: string): Promise<ResultRow[]>;
     listForOrg(orgId: string): Promise<ResultRow[]>;
+    /** Tờ khai nhánh có số tờ khai (hoặc mã tham chiếu FPT) này – áp thông điệp Hải quan trả sau. */
+    findByNumber(orgId: string, no: string): Promise<ResultRow | null>;
     /** Mọi nhánh của các hồ sơ (danh sách hồ sơ: tóm tắt "Thông quan k/N" một truy vấn cho cả trang). */
     listForDossiers(orgId: string, dossierIds: string[]): Promise<ResultRow[]>;
     /** Xóa kết quả nhánh > `branch` chưa từng khai (giai đoạn NOT_SENT, chưa có số tờ khai) – số tờ giảm giữa hai lần truyền. Trả số dòng đã xóa. */
@@ -58,8 +62,19 @@ export interface CustomsRepos {
   amendments: {
     /** `branch` vắng = mọi nhánh. */
     listForDossier(orgId: string, dossierId: string, branch?: number): Promise<PostAmendmentRow[]>;
+    /** Bản khai bổ sung mang số tờ khai bổ sung TK_SYN này (header hoặc kết quả AMA). */
+    findBySyn(orgId: string, syn: string): Promise<PostAmendmentRow | null>;
     insert(row: PostAmendmentRow): Promise<void>;
     update(row: PostAmendmentRow): Promise<void>;
+  };
+  /** Hộp thư VNACCSREP: ghi cả lô ngay khi lấy (trùng dedupKey bỏ qua), áp dần thông điệp PENDING. */
+  inbox: {
+    insertMany(rows: InboxRow[]): Promise<void>;
+    /** PENDING cũ trước, tối đa `limit`. */
+    listPending(orgId: string, limit: number): Promise<InboxRow[]>;
+    update(orgId: string, id: string, patch: Partial<Pick<InboxRow, "status" | "attempts" | "appliedAt">>): Promise<void>;
+    /** Giữ thông điệp để áp: PENDING → APPLIED có điều kiện (khóa dòng). false = job khác đã áp – bỏ qua, không ghi/báo trùng. */
+    claim(orgId: string, id: string, at: Date): Promise<boolean>;
   };
   /** Bộ tập tin đính kèm HYS và file của bộ (xóa bộ cascade file). */
   hys: {
@@ -97,7 +112,13 @@ export interface CustomsGateway {
   declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }, idempotencyKey: string): Promise<{ accepted: boolean; channel?: "GREEN" | "YELLOW" | "RED"; customsTaxVnd?: string; info?: CustomsInfo; errors?: GatewayError[] }>;
   /** HYS (bộ tập tin đính kèm): số tiếp nhận (TK_JNO) + ngày tiếp nhận `YYYY-MM-DD` (TK_YMD), hoặc lỗi Hải quan. */
   attachDocuments(orgId: string, req: HysGatewayRequest, idempotencyKey: string): Promise<HysGatewayResult>;
-  queryStatus(orgId: string, externalId: string, dossierId: string): Promise<GatewayStatus>;
+  /** Tra cứu: IID (nhập, tK_ICN) / IEX (xuất, tK_ECN). `direction` vắng → suy từ số tờ khai (3… = xuất). */
+  queryStatus(orgId: string, externalId: string, dossierId: string, direction?: "NK" | "XK"): Promise<GatewayStatus>;
+  /**
+   * Thông điệp Hải quan trả sau (loại P – phân luồng, thông quan, kiểm tra thực tế, kết quả tờ khai bổ sung…) của tài khoản VNACCS doanh nghiệp
+   * (FPT VNACCSREP). Coi là lấy một lần: người gọi lưu cả lô vào hộp thư (`inbox`) ngay, rồi mới áp. Gateway không hỗ trợ → không khai báo.
+   */
+  pullMessages?(orgId: string): Promise<GatewayMessage[]>;
   /**
    * Nghiệp vụ còn lại của luồng: gọi sửa (IDB/IDD/AMB, EDB/EDD), khai tạm sửa đổi (IDA01/EDA01, AMA), khai chính thức sửa đổi (IDE/EDE, AMC),
    * container qua khu vực giám sát (CONT), lệ phí cảng biển (PORT_FEE). Gateway chưa hỗ trợ nghiệp vụ → ném DomainError NOT_SUPPORTED.
@@ -107,6 +128,8 @@ export interface CustomsGateway {
 /** Thông điệp HYS gửi cổng (spec §2.2): thông tin chung của bộ + file (bytes đọc từ kho). */
 export type HysGatewayRequest = { dossierId: string; customsOffice: string; processingUnit: string; procedureCode: string; phone: string | null; internalRef: string | null; note: string | null; files: { name: string; bytes: Buffer }[]; certificateId?: string };
 export type HysGatewayResult = { receiptNo?: string; registeredOn?: string; errors?: GatewayError[] };
+/** Một thông điệp Hải quan trả về (VNACCSREP): `declarationNo` = số tờ khai (hoặc số tờ khai bổ sung với AMA). */
+export type GatewayMessage = { kind: "IDA" | "EDA" | "AMA"; code: string; name: string; declarationNo: string; at?: string; status?: GatewayStatus };
 export type GatewaySendResult = { channel?: "GREEN" | "YELLOW" | "RED"; receiptNo?: string; customsTaxVnd?: string; note?: string; errors?: GatewayError[] };
 
 /** Tờ khai + dòng hàng từ module declaration (composition root nối). */

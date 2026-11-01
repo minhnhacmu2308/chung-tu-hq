@@ -1,9 +1,9 @@
-import { and, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, postAmendments } from "../../../db/schema/integration.js";
+import { customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, postAmendments } from "../../../db/schema/integration.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { CustomsRepos, CustomsUow, HysFileRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import type { CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
 
 function repos(tx: Tx): CustomsRepos {
   const toOutbox = (r: typeof customsOutbox.$inferSelect): OutboxRow => ({ ...r, operation: r.operation as OutboxRow["operation"], status: r.status as OutboxRow["status"] });
@@ -46,6 +46,10 @@ function repos(tx: Tx): CustomsRepos {
       listForDossiers: async (orgId, dossierIds) =>
         dossierIds.length ? (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), inArray(customsResults.dossierId, dossierIds))).orderBy(customsResults.dossierId, customsResults.branch)).map(toResult) : [],
       listForOrg: async (orgId) => (await tx.select().from(customsResults).where(eq(customsResults.orgId, orgId)).orderBy(desc(customsResults.updatedAt))).map(toResult),
+      findByNumber: async (orgId, no) => {
+        const r = (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), or(eq(customsResults.declarationNo, no), eq(customsResults.externalId, no)))).orderBy(desc(customsResults.updatedAt)).limit(1))[0];
+        return r ? toResult(r) : null;
+      },
       deleteUnsentAbove: async (orgId, dossierId, branch) =>
         (await tx.delete(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId), gt(customsResults.branch, branch), isNull(customsResults.declarationNo), sql`${customsResults.raw}->>'stage' = 'NOT_SENT'`)).returning({ id: customsResults.id })).length,
       upsert: async (row) => {
@@ -57,8 +61,25 @@ function repos(tx: Tx): CustomsRepos {
     },
     amendments: {
       listForDossier: async (orgId, dossierId, branch) => (await tx.select().from(postAmendments).where(and(eq(postAmendments.orgId, orgId), eq(postAmendments.dossierId, dossierId), branch === undefined ? undefined : eq(postAmendments.branch, branch))).orderBy(postAmendments.branch, postAmendments.seq)).map(toAmendment),
+      findBySyn: async (orgId, syn) => {
+        const r = (await tx.select().from(postAmendments).where(and(eq(postAmendments.orgId, orgId), or(sql`${postAmendments.header}->>'TK_SYN' = ${syn}`, sql`${postAmendments.result}->>'TK_SYN' = ${syn}`))).orderBy(desc(postAmendments.updatedAt)).limit(1))[0];
+        return r ? toAmendment(r) : null;
+      },
       insert: async (row) => void (await tx.insert(postAmendments).values({ id: row.id, orgId: row.orgId, dossierId: row.dossierId, branch: row.branch, seq: row.seq, createdAt: row.createdAt, ...amendmentCols(row) })),
       update: async (row) => void (await tx.update(postAmendments).set(amendmentCols(row)).where(and(eq(postAmendments.orgId, row.orgId), eq(postAmendments.id, row.id)))),
+    },
+    inbox: {
+      insertMany: async (rows) => {
+        if (!rows.length) return;
+        await tx.insert(customsInbox).values(rows.map((r) => ({ ...r, kind: r.message.kind, code: r.message.code, declarationNo: r.message.declarationNo }))).onConflictDoNothing({ target: [customsInbox.orgId, customsInbox.dedupKey] });
+      },
+      listPending: async (orgId, limit) =>
+        (await tx.select().from(customsInbox).where(and(eq(customsInbox.orgId, orgId), eq(customsInbox.status, "PENDING"))).orderBy(asc(customsInbox.receivedAt), asc(customsInbox.id)).limit(limit)).map(
+          (r): InboxRow => ({ id: r.id, orgId: r.orgId, dedupKey: r.dedupKey, message: r.message as InboxRow["message"], status: r.status as InboxRow["status"], attempts: r.attempts, receivedAt: r.receivedAt, appliedAt: r.appliedAt }),
+        ),
+      update: async (orgId, id, patch) => void (await tx.update(customsInbox).set(patch).where(and(eq(customsInbox.orgId, orgId), eq(customsInbox.id, id), eq(customsInbox.status, "PENDING")))),
+      claim: async (orgId, id, at) =>
+        (await tx.update(customsInbox).set({ status: "APPLIED", attempts: sql`${customsInbox.attempts} + 1`, appliedAt: at }).where(and(eq(customsInbox.orgId, orgId), eq(customsInbox.id, id), eq(customsInbox.status, "PENDING"))).returning({ id: customsInbox.id })).length > 0,
     },
     hys: {
       list: async (orgId, dossierId) => (await tx.select().from(hysSubmissions).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.dossierId, dossierId))).orderBy(hysSubmissions.seq)).map(toHys),

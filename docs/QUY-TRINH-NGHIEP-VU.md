@@ -125,6 +125,11 @@ Không hỏi **điều kiện giao hàng** (lấy từ invoice ở bước OCR �
 
 Mã hồ sơ tự sinh `HS-{NK|XK}-{YYMM}-{NNN}`. Tạo hồ sơ tính vào hạn mức hồ sơ/tháng của gói.
 
+**Điền nhanh** (thẻ đầu trang, ADR 0010) – khỏi nhập lại cho lô lặp lại:
+- **Sao chép từ hồ sơ cũ**: chọn hồ sơ → điền chiều, phương thức vận tải, loại hình, chi cục, đối tác, bộ skill, ghi chú. Không chép chứng từ, tờ khai, hạn xử lý.
+- **Nhờ AI điền**: gõ yêu cầu (vd "giống hồ sơ HS-NK-2610-142 nhưng đi máy bay, hạn mai"), Enter. Model rẻ (`AI_FAST_MODEL`, mặc định Haiku 4.5) hiểu câu; code kiểm loại hình theo `TYPE_CODE` đúng chiều, chi cục phải khớp đúng một mã `A038`, ô sai bị bỏ. Mã hồ sơ gõ trong câu tự nhận; AI cũng nhận ra hồ sơ cũ theo mô tả ("lô HANSOL lần trước") trong 30 hồ sơ gần nhất của doanh nghiệp.
+- Không tạo hồ sơ – chỉ điền form, người dùng kiểm rồi bấm Tạo. Ô đã điền nhanh không bị Mặc định khai báo ghi đè. Tối đa 30 lần nhờ AI / người / giờ; mỗi lần ghi `usage_events` (`AI_DOSSIER_DRAFT`).
+
 **Chứng từ gợi ý** (chỉ gợi ý, không chặn): Invoice, Packing List, Hợp đồng (tùy chọn); B/L (biển) hoặc AWB (không); hàng nhập thêm Arrival Notice, C/O (tùy chọn) và **hóa đơn cước (tùy chọn)** – cần khi giá EXW/FCA/FAS/FOB; thiếu cước thì luật đối chiếu ở bước OCR báo BLOCKER.
 
 ## 5. Bước 2 – Upload chứng từ
@@ -323,7 +328,7 @@ stateDiagram-v2
 - Đang chờ phản hồi một nghiệp vụ thì các nút khác khóa.
 - **Không gửi trùng** (ADR 0005): mỗi nghiệp vụ một dòng outbox có khóa idempotency; **Gửi lại** luôn tra trạng thái trước, Hải quan đã ghi nhận thì không gửi.
 - Mọi thông điệp gửi/nhận lưu ở **Nhật ký thông điệp** (đã che MST, mật khẩu) làm hồ sơ pháp lý.
-- Kết nối FPT.VNACCS thật hiện hỗ trợ IDA/IDC/EDA/EDC, HYS, AMA (payload theo VNACCS_AMA v1.3; đường dẫn /api/AMA và vị trí số tờ khai bổ sung trong phản hồi là suy luận, cần đối chiếu) và tra cứu. Các nghiệp vụ còn lại báo "chưa kết nối FPT" cho tới khi có đặc tả API. Môi trường dev/demo dùng cổng giả lập đủ 12 nghiệp vụ.
+- Kết nối FPT.VNACCS (Bearer token) theo tài liệu `docs/vnaccs-api/` (Postman FPT 21/04/2026 + Excel đặc tả; lệch nhau thì phản hồi thật > Excel > Postman): IDA/IDB/IDC/IDD/IDA01/IDE, EDA/EDB/EDC/EDD/EDA01/EDE, AMA/AMB/AMC (AMB/AMC theo số tờ khai bổ sung tK_SYN), HYS (`lisT_FILE` theo Excel), tra cứu IID (nhập, `tK_ICN`) / IEX (xuất, `tK_ECN`). Sau khai chính thức, mỗi lượt hỏi trạng thái gọi **VNACCSREP** lấy thông điệp Hải quan trả sau (phân luồng, thông quan, kết quả khai bổ sung). FPT trả mỗi thông điệp một lần nên cả lô ghi ngay vào hộp thư `customs_inbox` (chống trùng theo mã thông điệp + số tờ khai + thời điểm – thiếu thời điểm thì thêm trạng thái/luồng; nếu ghi hộp thư lỗi ngay sau khi lấy thì lô đó mất – cửa sổ nhỏ, chấp nhận; hai job cùng lúc chỉ một job áp được mỗi thông điệp), rồi mới áp vào nhật ký của đúng tờ khai (AMA khớp theo tK_SYN); thông điệp chưa khớp tờ khai nào giữ lại, thử khớp ở các lượt sau (tối đa 50 lượt, sau đó đánh dấu UNMATCHED để tra). Thông điệp báo thông quan gửi thông báo cho người duyệt như khi tra IID/IEX. Sau đó vẫn tra IID/IEX. Container qua khu vực giám sát (V5ContainerReq) và lệ phí cảng chưa nối. Dev/demo: `apps/fpt-mock` giả lập đủ 35 API của FPT.
 
 Chi tiết thiết kế: `docs/superpowers/specs/2026-10-15-luong-nghiep-vu-hai-quan-design.md`.
 
@@ -477,7 +482,7 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 2. Mã định danh (MST, MAWB, HAWB, số invoice/C/O/container, HS) là chuỗi.
 3. Tiền/trị giá tính bằng `Decimal`.
 4. Ngày nghiệp vụ `YYYY-MM-DD`; thời điểm UTC.
-5. AI chỉ đọc chứng từ và gợi ý HS; đối chiếu, ánh xạ, thuế, chặn truyền là code thuần có test.
+5. AI chỉ đọc chứng từ, gợi ý HS, soạn nháp email quản trị và gợi ý form Tạo hồ sơ (ADR 0010); đối chiếu, ánh xạ, thuế, chặn truyền là code thuần có test.
 6. Người dùng sửa trường → ghi `field_audit` append-only.
 7. Không truyền tờ khai khi còn BLOCKER FAIL hoặc HS chưa xác nhận.
 8. Mọi lần gọi AI, HSCodePro, Customs Hub ghi `usage_events`.

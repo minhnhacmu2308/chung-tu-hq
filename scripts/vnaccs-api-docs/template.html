@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API FPT.VNACCS</title>
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --muted: #eef1f5; --border: #dde2e9; --fg: #17202c; --fg-muted: #566275; --fg-subtle: #8591a3;
+  --primary: #0f6b5c; --primary-subtle: #e2f3ef; --warn: #9a5b00; --warn-subtle: #fff3dc; --danger: #b42318; --danger-subtle: #fdecea;
+  --info: #1d5fae; --info-subtle: #e6effb; --code-bg: #f3f5f8; --shadow: 0 1px 2px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1319; --surface: #151c25; --muted: #1c2531; --border: #2a3542; --fg: #e6ebf1; --fg-muted: #a3afbf; --fg-subtle: #7d8a9b;
+  --primary: #4cc3a9; --primary-subtle: #12302a; --warn: #f2b453; --warn-subtle: #33270f; --danger: #ff8a7a; --danger-subtle: #3a1714;
+  --info: #7fb2f0; --info-subtle: #142338; --code-bg: #10161e; --shadow: none;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151c25; --muted: #1c2531; --border: #2a3542; --fg: #e6ebf1; --fg-muted: #a3afbf; --fg-subtle: #7d8a9b;
+  --primary: #4cc3a9; --primary-subtle: #12302a; --warn: #f2b453; --warn-subtle: #33270f; --danger: #ff8a7a; --danger-subtle: #3a1714;
+  --info: #7fb2f0; --info-subtle: #142338; --code-bg: #10161e; --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+a { color: var(--primary); text-decoration: none; } a:hover { text-decoration: underline; }
+code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.layout { display: grid; grid-template-columns: 290px 1fr; min-height: 100vh; }
+aside { background: var(--surface); border-right: 1px solid var(--border); position: sticky; top: 0; height: 100vh; overflow: auto; padding: 16px 12px 40px; }
+.brand { font-weight: 700; font-size: 16px; padding: 0 8px 4px; }
+.brand small { display: block; font-weight: 400; color: var(--fg-muted); font-size: 12px; }
+.search { width: 100%; margin: 12px 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
+.nav-group { margin-top: 14px; }
+.nav-group h4 { margin: 0 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-subtle); }
+.nav a { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 6px; color: var(--fg); }
+.nav a:hover { background: var(--muted); text-decoration: none; }
+.nav a.active { background: var(--primary-subtle); color: var(--primary); }
+.nav a .id { font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-width: 112px; font-weight: 600; }
+.nav a .t { color: var(--fg-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav a.active .t { color: inherit; }
+main { padding: 28px 36px 80px; max-width: 1240px; min-width: 0; }
+.topbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; }
+.crumb { color: var(--fg-muted); font-size: 13px; }
+.btn { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer; }
+.btn:hover { background: var(--muted); }
+h1 { font-size: 24px; margin: 0 0 6px; } h2 { font-size: 18px; margin: 32px 0 12px; } h3 { font-size: 15px; margin: 22px 0 8px; }
+.lead { color: var(--fg-muted); margin: 0 0 18px; max-width: 900px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.card h3 { margin-top: 0; }
+.badge { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--muted); color: var(--fg-muted); white-space: nowrap; }
+.badge.ok { background: var(--primary-subtle); color: var(--primary); } .badge.warn { background: var(--warn-subtle); color: var(--warn); }
+.badge.info { background: var(--info-subtle); color: var(--info); } .badge.danger { background: var(--danger-subtle); color: var(--danger); }
+.flow { margin-bottom: 14px; }
+.flow-title { font-weight: 600; margin-bottom: 8px; }
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.step { display: flex; flex-direction: column; gap: 4px; }
+.chip { display: inline-flex; flex-direction: column; border: 1px solid var(--border); background: var(--bg); border-radius: 10px; padding: 6px 10px; color: var(--fg); min-width: 110px; }
+.chip:hover { border-color: var(--primary); text-decoration: none; background: var(--primary-subtle); }
+.chip b { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.chip span { font-size: 11.5px; color: var(--fg-muted); max-width: 170px; }
+.arrow { color: var(--fg-subtle); font-size: 18px; padding: 0 2px; }
+.flow-note { color: var(--fg-muted); font-size: 13px; margin-top: 8px; }
+.endpoint { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 12px 0; }
+.method { background: var(--primary); color: var(--surface); font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 6px; }
+dl.kv { display: grid; grid-template-columns: 150px 1fr; gap: 8px 16px; margin: 0; }
+dl.kv dt { color: var(--fg-muted); } dl.kv dd { margin: 0; }
+details { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin: 10px 0; }
+details > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; list-style: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+details > summary::before { content: "▸"; color: var(--fg-subtle); transition: transform .15s; }
+details[open] > summary::before { transform: rotate(90deg); }
+details > .body { padding: 0 14px 14px; overflow: auto; }
+pre.json { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow: auto; max-height: 520px; margin: 0; white-space: pre; }
+.k { color: var(--info); } .s { color: var(--primary); } .n { color: var(--warn); } .l { color: var(--danger); }
+.tablewrap { overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { background: var(--muted); position: sticky; top: 0; font-weight: 600; white-space: nowrap; }
+td.mono { white-space: nowrap; }
+td .en { color: var(--fg-subtle); font-size: 12px; display: block; }
+tr.hit td { background: var(--warn-subtle); }
+.tick { color: var(--primary); font-weight: 700; }
+.note { white-space: pre-line; color: var(--fg-muted); font-size: 12.5px; }
+.filter { padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; width: 260px; max-width: 100%; }
+.callout { border-left: 3px solid var(--warn); background: var(--warn-subtle); padding: 10px 14px; border-radius: 8px; margin: 12px 0; }
+.callout.info { border-color: var(--info); background: var(--info-subtle); }
+.results a { display: block; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.diagram { width: 100%; height: auto; display: block; }
+.diagram text { font-family: inherit; fill: var(--fg); }
+.diagram .sub { fill: var(--fg-muted); font-size: 11px; }
+.diagram .lbl { font-size: 11.5px; font-weight: 600; fill: var(--primary); }
+.diagram .lbl.muted { fill: var(--fg-muted); font-weight: 500; }
+.diagram .box { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; }
+.diagram .box.ok { fill: var(--primary-subtle); stroke: var(--primary); }
+.diagram .box.warn { fill: var(--warn-subtle); stroke: var(--warn); }
+.diagram .box.danger { fill: var(--danger-subtle); stroke: var(--danger); }
+.diagram .box.info { fill: var(--info-subtle); stroke: var(--info); }
+.diagram .lane { fill: var(--muted); stroke: var(--border); }
+.diagram .life { stroke: var(--border); stroke-width: 2; stroke-dasharray: 4 4; }
+.diagram .edge { fill: none; stroke: var(--fg-subtle); stroke-width: 1.6; }
+.diagram .edge.p { stroke: var(--warn); stroke-dasharray: 5 4; }
+.diagram .edge.hot { stroke: var(--primary); stroke-width: 3; }
+.diagram a:hover .box { stroke: var(--primary); stroke-width: 2.5; }
+.diagram a:hover .lbl { text-decoration: underline; }
+.diagram .head { fill: var(--fg-subtle); }
+.diagram .head.p { fill: var(--warn); }
+.diagram .head.hot { fill: var(--primary); }
+.diagram .num { fill: var(--primary); }
+.diagram .num-t { fill: var(--surface); font-size: 11px; font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--fg-muted); margin-top: 8px; }
+.legend i { display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--fg-subtle); vertical-align: middle; margin-right: 6px; }
+.legend i.p { border-top: 2px dashed var(--warn); }
+.dstack { display: grid; gap: 14px; margin-top: 14px; }
+.diagram-wrap { overflow-x: auto; max-width: 100%; }
+.card, .dstack > *, main > * { min-width: 0; }
+.layout > main { overflow-x: hidden; }
+@media (max-width: 860px) { .diagram { min-width: 760px; } }
+.menu-btn { display: none; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: fixed; inset: 0 25% 0 0; z-index: 10; transform: translateX(-100%); transition: transform .2s; height: 100vh; }
+  aside.open { transform: none; box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); }
+  main { padding: 16px; }
+  .menu-btn { display: inline-block; }
+  dl.kv { grid-template-columns: 1fr; gap: 2px; } dl.kv dd { margin-bottom: 8px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside id="side">
+    <div class="brand">API FPT.VNACCS<small>Customs Hub – tài liệu tích hợp</small></div>
+    <input class="search" id="q" type="search" placeholder="Tìm nghiệp vụ, chỉ tiêu, mã thông điệp…" aria-label="Tìm kiếm">
+    <nav class="nav" id="nav"></nav>
+  </aside>
+  <main id="main"></main>
+</div>
+<script>
+const D = /*__DATA__*/null;
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const OPS = Object.fromEntries(D.ops.map((o) => [o.id, o]));
+const GROUP = Object.fromEntries(D.groups);
+const md = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+
+function hl(json) {
+  return esc(JSON.stringify(json, null, 2)).replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)(\s*:)?|\b(-?\d+(?:\.\d+)?)\b|\b(true|false|null)\b/g, (m, str, colon, num, lit) => {
+    if (str) return colon ? `<span class="k">${str}</span>${colon}` : `<span class="s">${str}</span>`;
+    if (num) return `<span class="n">${num}</span>`;
+    return `<span class="l">${lit}</span>`;
+  });
+}
+
+function nav(active, filter = "") {
+  const f = filter.trim().toLowerCase();
+  let h = `<div class="nav-group"><a href="#" class="${!active ? "active" : ""}"><span class="id">Tổng quan</span><span class="t">quy ước, luồng</span></a>
+    <a href="#rep"><span class="id">Mã thông điệp</span><span class="t">REP_VNACCS</span></a>
+    <a href="#messages"><span class="id">Thông điệp HQ</span><span class="t">khối va***</span></a>
+    <a href="#gaps"><span class="id">Lệch & quyết định</span><span class="t">Postman / Excel / code</span></a></div>`;
+  for (const [gid, gt] of D.groups) {
+    const items = D.ops.filter((o) => o.group === gid && (!f || (o.id + " " + o.title).toLowerCase().includes(f)));
+    if (!items.length) continue;
+    h += `<div class="nav-group"><h4>${esc(gt)}</h4>` + items.map((o) =>
+      `<a href="#op/${o.id}" class="${active === o.id ? "active" : ""}"><span class="id">${esc(o.id)}</span><span class="t">${esc(o.title)}</span></a>`).join("") + `</div>`;
+  }
+  $("#nav").innerHTML = h;
+}
+
+function chip(id) {
+  const o = OPS[id];
+  return `<a class="chip" href="#op/${id}"><b>${esc(id)}</b><span>${esc(o ? o.title : "")}</span></a>`;
+}
+
+/* ───────────── Hình minh họa (SVG, bấm được) ───────────── */
+const SV = (w, h, body, label) => `<div class="diagram-wrap"><svg class="diagram" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}">
+  <defs>${["", "p", "hot"].map((k) => `<marker id="ah${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head ${k}"/></marker>`).join("")}</defs>${body}</svg></div>`;
+const link = (op, inner) => (op && OPS[op] ? `<a href="#op/${op}">${inner}</a>` : inner);
+/** Ô trạng thái/nghiệp vụ: (x,y) góc trái trên. */
+const box = (x, y, w, h, title, sub = "", tone = "", op = null) => link(op, `<g><rect class="box ${tone}" x="${x}" y="${y}" width="${w}" height="${h}" rx="10"/>
+  <text x="${x + w / 2}" y="${y + (sub ? h / 2 - 3 : h / 2 + 5)}" text-anchor="middle" font-weight="700" font-size="14">${esc(title)}</text>
+  ${sub ? `<text class="sub" x="${x + w / 2}" y="${y + h / 2 + 13}" text-anchor="middle">${esc(sub)}</text>` : ""}</g>`);
+/** Mũi tên (đường cong bậc 2 qua điểm điều khiển c) có nhãn nghiệp vụ bấm được. */
+const arrow = (x1, y1, x2, y2, label = "", op = null, opts = {}) => {
+  const cx = opts.cx ?? (x1 + x2) / 2, cy = opts.cy ?? (y1 + y2) / 2;
+  const k = opts.hot ? "hot" : opts.p ? "p" : "";
+  const lx = opts.lx ?? (x1 + 2 * cx + x2) / 4, ly = opts.ly ?? (y1 + 2 * cy + y2) / 4 - 6;
+  return `<path class="edge ${k}" d="M${x1},${y1} Q${cx},${cy} ${x2},${y2}" marker-end="url(#ah${k})"/>` +
+    (label ? link(op, `<text class="lbl ${op ? "" : "muted"}" x="${lx}" y="${ly}" text-anchor="middle">${esc(label)}</text>`) : "");
+};
+
+/** 1. Tuần tự: App ↔ FPT Customs Hub ↔ Hải quan VNACCS. */
+function sequenceSvg() {
+  const X = { app: 170, fpt: 520, hq: 870 }, W = 1000;
+  const lanes = [["app", "KhaiBáo AI (app)", "worker customs-send / customs-poll"], ["fpt", "FPT Customs Hub", "{FPT_BASE_URL}/api/…"], ["hq", "Hải quan VNACCS", "cấp số, phân luồng, thông quan"]];
+  let y = 96;
+  const rows = [];
+  const step = (n, from, to, label, op, opts = {}) => {
+    const x1 = X[from] + (X[to] > X[from] ? 6 : -6), x2 = X[to] + (X[to] > X[from] ? -6 : 6);
+    if (n !== "") rows.push(`<circle class="num" cx="24" cy="${y - 4}" r="11"/><text class="num-t" x="24" y="${y}" text-anchor="middle">${n}</text>`);
+    rows.push(arrow(x1, y, x2, y, label, op, { ...opts, cy: y, ly: y - 8 }));
+    y += opts.gap ?? 44;
+  };
+  step(1, "app", "fpt", "POST /api/auth/login → token (Bearer)", "login");
+  step(2, "app", "fpt", "IDA / EDA – khai tạm (tài khoản VNACCS + tờ khai)", "IDA", { gap: 30 });
+  step("", "fpt", "hq", "chuyển thông điệp VNACCS", null, { gap: 30 });
+  step("", "hq", "fpt", "số tờ khai + thuế dự kiến (loại C)", null, { gap: 30 });
+  step("", "fpt", "app", "objIDA[0].objMsgResult.decNumber = số tờ khai", "IDA");
+  step(3, "app", "fpt", "IDC / EDC – khai chính thức", "IDC", { gap: 30 });
+  step("", "fpt", "app", "phân luồng tK_LUONG 1/2/3 (loại C)", "IDC");
+  step(4, "hq", "fpt", "phân luồng, thuế VAF8010, kiểm tra, thông quan (loại P)", null, { p: true });
+  step(5, "app", "fpt", "VNACCSREP định kỳ – lấy thông điệp P", "VNACCSREP", { gap: 30 });
+  step("", "fpt", "app", "thông điệp P: objMsgResult.code (VAE1LD0, VAE1LF0…)", "VNACCSREP", { p: true });
+  step(6, "app", "fpt", "IID / IEX – tra cứu xác nhận trạng thái", "IID", { gap: 30 });
+  step("", "fpt", "app", "tK_TRANGTHAI · tK_LUONG · tK_THONGQUAN", "IID");
+  const H = y + 10;
+  const head = lanes.map(([k, t, s]) => `<rect class="lane" x="${X[k] - 120}" y="14" width="240" height="52" rx="10"/><text x="${X[k]}" y="37" text-anchor="middle" font-weight="700" font-size="14">${esc(t)}</text><text class="sub" x="${X[k]}" y="55" text-anchor="middle">${esc(s)}</text><line class="life" x1="${X[k]}" y1="66" x2="${X[k]}" y2="${H}"/>`).join("");
+  return SV(W, H + 6, head + rows.join(""), "Sơ đồ tuần tự gọi API");
+}
+
+/** 2. Vòng trạng thái tờ khai (tK_TRANGTHAI). `dir` NK/XK đổi tên nghiệp vụ; `hot` tô sáng nghiệp vụ đang xem. */
+function stateSvg(dir = "NK", hot = null) {
+  const o = (nk) => (dir === "XK" ? ({ IDA: "EDA", IDB: "EDB", IDC: "EDC", IDD: "EDD", IDA01: "EDA01", IDE: "EDE", IID: "IEX" })[nk] ?? nk : nk);
+  const h = (op) => ({ hot: o(op) === hot });
+  const b = [
+    box(20, 150, 130, 54, "Chưa gửi", "tờ khai đã duyệt"),
+    box(220, 150, 130, 54, "A", "Khai tạm", "info"),
+    box(220, 20, 130, 54, "T", "Lưu tạm (gọi về sửa)", ""),
+    box(430, 150, 130, 54, "C", "Khai chính thức", "warn"),
+    box(430, 290, 130, 54, "TE", "Gọi sửa đổi", ""),
+    box(640, 290, 130, 54, "A01", "Khai tạm sửa đổi", "info"),
+    box(640, 150, 130, 54, "E", "Khai chính thức sửa đổi", "warn"),
+    box(845, 150, 130, 54, "Thông quan", "tK_THONGQUAN = 1", "ok"),
+    box(845, 290, 130, 54, "AMA…", "sửa sau thông quan", "", "AMA"),
+    box(845, 20, 130, 54, "R", "Hủy / từ chối", "danger"),
+  ].join("");
+  const e = [
+    arrow(150, 177, 218, 177, o("IDA"), o("IDA"), h("IDA")),
+    arrow(285, 148, 285, 76, o("IDB"), o("IDB"), { ...h("IDB"), cx: 250, cy: 112, lx: 238, ly: 116 }),
+    arrow(300, 76, 300, 148, o("IDA"), o("IDA"), { ...h("IDA"), cx: 335, cy: 112, lx: 348, ly: 116 }),
+    arrow(350, 177, 428, 177, o("IDC"), o("IDC"), h("IDC")),
+    arrow(495, 204, 495, 288, o("IDD"), o("IDD"), { ...h("IDD"), cx: 470, cy: 246, lx: 455, ly: 250 }),
+    arrow(560, 317, 638, 317, o("IDA01"), o("IDA01"), h("IDA01")),
+    arrow(705, 288, 705, 206, o("IDE"), o("IDE"), { ...h("IDE"), cx: 730, cy: 246, lx: 748, ly: 250 }),
+    arrow(690, 206, 520, 290, o("IDD"), o("IDD"), { ...h("IDD"), cx: 600, cy: 236, lx: 600, ly: 228 }),
+    arrow(560, 165, 843, 165, "Hải quan thông quan (P)", "VNACCSREP", { p: true, cy: 100, lx: 700, ly: 120 }),
+    arrow(770, 182, 843, 182, "", null, { p: true }),
+    arrow(910, 206, 910, 288, "", "AMA", {}),
+    arrow(560, 160, 843, 50, "từ chối / hủy (P)", "VNACCSREP", { p: true, cx: 650, cy: 40, lx: 690, ly: 60 }),
+  ].join("");
+  const query = `<text class="sub" x="20" y="372">Bất kỳ lúc nào đã có số tờ khai: ${link(o("IID"), `<tspan class="lbl">${o("IID")}</tspan>`)} tra cứu · ${link("VNACCSREP", `<tspan class="lbl">VNACCSREP</tspan>`)} nhận thông điệp Hải quan trả sau</text>`;
+  return SV(1000, 385, b + e + query, `Vòng trạng thái tờ khai ${dir === "XK" ? "xuất" : "nhập"} khẩu`);
+}
+
+/** 3. Sửa sau thông quan. */
+function amaSvg(hot = null) {
+  const h = (op) => ({ hot: op === hot });
+  return SV(1000, 250, [
+    box(20, 90, 140, 54, "Thông quan", "tờ khai gốc giữ nguyên", "ok"),
+    box(230, 90, 160, 54, "Khai tạm bổ sung", "VAL8000 · cấp tK_SYN", "info"),
+    box(230, 0, 160, 54, "Gọi về sửa", "VAL8010", ""),
+    box(470, 90, 160, 54, "Đã đăng ký", "VAL8020", "warn"),
+    box(720, 20, 250, 54, "Chấp nhận", "VAL8030 giảm · VAL8040 tăng · VAL8050 không đổi thuế", "ok"),
+    box(720, 170, 250, 54, "Không chấp nhận", "VAL8060", "danger"),
+    arrow(160, 117, 228, 117, "AMA", "AMA", h("AMA")),
+    arrow(300, 88, 300, 56, "AMB", "AMB", { ...h("AMB"), cx: 270, cy: 72, lx: 262, ly: 76 }),
+    arrow(320, 56, 320, 88, "AMA", "AMA", { ...h("AMA"), cx: 350, cy: 72, lx: 360, ly: 76 }),
+    arrow(390, 117, 468, 117, "AMC", "AMC", h("AMC")),
+    arrow(630, 105, 718, 50, "Hải quan (P)", "VNACCSREP", { p: true }),
+    arrow(630, 130, 718, 195, "Hải quan (P)", "VNACCSREP", { p: true }),
+    `<text class="sub" x="20" y="240">Trong 60 ngày kể từ ngày thông quan (TT121 Điều 20). AMB/AMC gửi số tờ khai bổ sung tK_SYN (number).</text>`,
+  ].join(""), "Luồng sửa đổi sau thông quan");
+}
+
+/** 4. Gửi → REF_ID → hỏi kết quả (V5, định danh, tách vận đơn, container). */
+function refSvg() {
+  return SV(1000, 260, [
+    box(20, 95, 190, 60, "…Req / V5Bill…", "gửi khai báo", "info", "V5IdentifierReq"),
+    box(280, 95, 150, 60, "REF_ID", "số tham chiếu"),
+    box(500, 95, 170, 60, "…Res / V5Response", "hỏi theo REF_ID", "", "V5Response"),
+    box(760, 0, 220, 54, "12 – Hải quan chấp nhận", "SO_TN, NGAY_TN", "ok"),
+    box(760, 70, 220, 54, "15 – Đã duyệt (định danh)", "SO_DD + QR CODE_CONTENT", "ok", "V5IdentifierRes"),
+    box(760, 140, 220, 54, "10 – Từ chối", "KET_QUA + errorList", "danger"),
+    box(760, 206, 220, 50, "11 – Chưa có phản hồi", "hỏi lại sau", "warn"),
+    arrow(210, 125, 278, 125, "", null),
+    arrow(430, 125, 498, 125, "", null),
+    arrow(670, 110, 758, 27, "", null), arrow(670, 120, 758, 97, "", null), arrow(670, 135, 758, 167, "", null), arrow(670, 145, 758, 231, "", null),
+    arrow(758, 246, 590, 157, "lặp lại", null, { p: true, cx: 700, cy: 262, lx: 660, ly: 244 }),
+  ].join(""), "Mẫu gửi rồi hỏi kết quả");
+}
+
+function diagramsHtml() {
+  return `<div class="card"><h3>1. Tuần tự gọi API – App ↔ FPT ↔ Hải quan</h3>${sequenceSvg()}
+    <div class="legend"><span><i></i>trả ngay (loại C)</span><span><i class="p"></i>Hải quan trả sau (loại P) – lấy bằng VNACCSREP</span><span>Bấm nhãn nghiệp vụ để xem chi tiết</span></div></div>
+  <div class="dstack">
+    <div class="card"><h3>2. Vòng trạng thái tờ khai nhập (tK_TRANGTHAI)</h3>${stateSvg("NK")}<p class="crumb">Tờ khai xuất giống hệt với EDA/EDB/EDC/EDD/EDA01/EDE/IEX – xem trang từng nghiệp vụ.</p></div>
+    <div class="card"><h3>3. Sửa đổi sau thông quan</h3>${amaSvg()}</div>
+    <div class="card"><h3>4. Gửi → REF_ID → hỏi kết quả</h3>${refSvg()}<p class="crumb">Dùng cho bổ sung chứng từ V5, định danh, tách vận đơn, danh sách container.</p></div>
+  </div>`;
+}
+
+function flowsHtml() {
+  return D.flows.map(([fid, title, steps, note]) => `<div class="card flow" id="${fid}">
+    <div class="flow-title">${esc(title)}</div>
+    <div class="steps">${steps.map((s) => `<div class="step">${s.map(chip).join("")}</div>`).join('<span class="arrow" aria-hidden="true">→</span>')}</div>
+    <div class="flow-note">${md(note)}</div></div>`).join("");
+}
+
+function fieldTable(t, kind, filterId) {
+  const showRR = t.hasReqRes;
+  const head = `<tr><th>Chỉ tiêu</th><th>Key JSON</th><th>Kiểu</th><th>Độ dài</th><th>Mô tả</th><th>Bắt buộc</th>${showRR ? "<th>Req</th><th>Res</th>" : ""}${t.hasLevel ? "<th>Cấp</th>" : ""}<th>Ghi chú</th></tr>`;
+  const rows = t.fields.map((f) => `<tr data-s="${esc((f.name + " " + f.json + " " + f.desc + " " + f.descEn + " " + f.note).toLowerCase())}">
+    <td class="mono">${esc(f.name)}</td><td class="mono">${esc(f.json)}</td><td>${esc(f.type)}</td><td>${esc(f.size)}</td>
+    <td>${esc(f.desc)}${f.descEn ? `<span class="en">${esc(f.descEn)}</span>` : ""}</td>
+    <td>${f.required ? '<span class="tick">✓</span>' : ""}</td>${showRR ? `<td>${f.req ? '<span class="tick">✓</span>' : ""}</td><td>${f.res ? '<span class="tick">✓</span>' : ""}</td>` : ""}
+    ${t.hasLevel ? `<td>${esc(f.level)}</td>` : ""}<td class="note">${esc(f.note)}</td></tr>`).join("");
+  const extra = t.extra.length ? `<h4>Danh mục / ghi chú kèm theo</h4><div class="tablewrap"><table>${t.extra.map((r) => `<tr>${r.map((c) => `<td class="note">${esc(c)}</td>`).join("")}</tr>`).join("")}</table></div>` : "";
+  return `<div class="tablewrap"><table data-filter="${filterId}">${head}${rows}</table></div>${extra}
+    <p class="crumb">Nguồn: ${esc(t.file)} / ${esc(t.sheet)} · ${t.fields.length} trường</p>`;
+}
+
+function repTable(rows) {
+  if (!rows.length) return "";
+  return `<div class="tablewrap"><table><tr><th>Nghiệp vụ</th><th>Mã thông điệp</th><th>Tên</th><th>Loại</th><th>Khối phản hồi</th></tr>${rows.map((r) =>
+    `<tr><td class="mono">${r.op && OPS[r.op === "HYS" ? "hys" : r.op] ? `<a href="#op/${r.op === "HYS" ? "hys" : r.op}">${esc(r.op)}</a>` : esc(r.op || "")}</td><td class="mono">${esc(r.code)}</td><td>${esc(r.name)}</td>
+    <td><span class="badge ${r.type === "C" ? "info" : "warn"}">${r.type === "C" ? "C – trả ngay" : "P – trả sau"}</span></td><td class="mono">${esc(r.response)}</td></tr>`).join("")}</table></div>`;
+}
+
+function home() {
+  nav(null, $("#q").value);
+  const n = D.ops.length, inPm = D.ops.filter((o) => o.inPostman).length;
+  $("#main").innerHTML = `
+  <div class="topbar"><div><button class="btn menu-btn" data-menu>☰ Menu</button></div><button class="btn" data-theme-toggle>Sáng / tối</button></div>
+  <h1>API FPT.VNACCS (Customs Hub)</h1>
+  <div class="callout info"><b>Nguồn ưu tiên khi lệch nhau:</b> ${esc(D.priority)} Xem <a href="#gaps">quyết định</a>.</div>
+  <p class="lead">Tài liệu gọi khai báo hải quan qua cổng FPT: ${n} nghiệp vụ (${inPm} có body mẫu trong Postman, còn lại theo Excel đặc tả). Bấm vào ô nghiệp vụ trong sơ đồ để xem endpoint, body, bảng trường, phản hồi và mã thông điệp.
+  Nguồn: <code>${esc(D.generatedFrom.postman)}</code> + ${D.generatedFrom.xlsx.length} file Excel FPT + mẫu phản hồi thật.</p>
+
+  <h2>Quy ước chung</h2>
+  <div class="grid">
+    <div class="card"><h3>Gọi API</h3><p><code>POST {FPT_BASE_URL}/api/&lt;NGHIỆP VỤ&gt;</code>, body JSON. Postman dùng host test <code>http://tsst.fcs.vn</code> – production chỉ đổi URL.</p></div>
+    <div class="card"><h3>Xác thực</h3><p><b>Bearer token</b> cho mọi API: <a href="#op/login">đăng nhập</a> <code>POST /api/auth/login {username, password}</code> → <code>{token, expiration}</code>, gửi <code>Authorization: Bearer &lt;token&gt;</code>; hết hạn → 401, đăng nhập lại. Postman còn ghi HTTP Basic – đã cũ.</p></div>
+    <div class="card"><h3>Tài khoản VNACCS</h3><p>Các API VNACCS (IDx/EDx/AMx/HYS/VNACCSREP) gửi trong body <code>objVNACCS_ACCOUNT {useR_ID, password, terminaL_ID, terminaL_ACCESS_KEY}</code> – tài khoản của từng doanh nghiệp.</p></div>
+    <div class="card"><h3>Tên key</h3><p>Tên chỉ tiêu Excel → camelCase .NET: <code>TK_ECN</code>→<code>tK_ECN</code>, <code>USER_ID</code>→<code>useR_ID</code>. V5Bill, KVGS trong Postman viết HOA nguyên tên.</p></div>
+    <div class="card"><h3>Kiểu dữ liệu</h3><p>Ngày <code>dd/MM/yyyy</code>; số tờ khai <code>tK_ICN/tK_ECN/tK_SYN</code> là <b>number</b> 12 số; file base64 (HYS &lt; 2MB/file).</p></div>
+    <div class="card"><h3>Lỗi</h3><p>Lỗi nghiệp vụ: <b>HTTP 200</b> + <code>errorList[]</code> {errorCode, indexCode, nameCode, errorContent, proposedSolution, rowPosition}. Sai tài khoản API/token: 401.</p></div>
+    <div class="card"><h3>Phản hồi VNACCS</h3><p>Envelope: <code>${esc(D.envelopeKeys.join(", "))}</code>. Phần tử objIDA/objEDA/objAMA có <code>objMsgResult {function, code, name, decNumber, time, type, ediBase64}</code>.</p></div>
+    <div class="card"><h3>Thông điệp C / P</h3><p><span class="badge info">C</span> trả ngay cho lệnh vừa gửi. <span class="badge warn">P</span> Hải quan trả sau (phân luồng, thuế, kiểm tra, thông quan) → lấy bằng <a href="#op/VNACCSREP">VNACCSREP</a>. Xem <a href="#rep">bảng mã</a>.</p></div>
+  </div>
+
+  <h2>Hình minh họa luồng</h2>
+  ${diagramsHtml()}
+  <h2>Sơ đồ luồng – bấm vào nghiệp vụ để xem chi tiết</h2>
+  ${flowsHtml()}
+  <div class="grid">
+    <div class="card"><h3>In</h3><div class="steps">${["PrintObjectRefIDA", "PrintObjectRef", "PrintEdiRef", "PrintXPS"].map(chip).join("")}</div></div>
+    <div class="card"><h3>Danh mục & xác thực</h3><div class="steps">${["login", "SyncCategory"].map(chip).join("")}</div></div>
+  </div>
+  <h2>Lỗi mẫu (phản hồi thật)</h2>
+  ${D.errors.map((e) => `<details><summary>${esc(e.title)}</summary><div class="body"><pre class="json">${hl(e.errorList)}</pre></div></details>`).join("")}`;
+  window.scrollTo(0, 0);
+}
+
+function opPage(id) {
+  const o = OPS[id];
+  if (!o) return home();
+  nav(id, $("#q").value);
+  const e = o.endpoint;
+  const fid = "f-" + id;
+  const badges = [o.inPostman ? '<span class="badge ok">có trong Postman</span>' : '<span class="badge warn">chỉ có trong Excel – chưa có body mẫu</span>',
+    o.hasAccount ? '<span class="badge info">gửi objVNACCS_ACCOUNT</span>' : "", o.realResponse ? '<span class="badge ok">có phản hồi thật</span>' : '<span class="badge">chưa có phản hồi mẫu</span>'].join(" ");
+  $("#main").innerHTML = `
+  <div class="topbar"><div class="crumb"><button class="btn menu-btn" data-menu>☰</button> <a href="#">Tổng quan</a> › ${esc(GROUP[o.group])}</div><button class="btn" data-theme-toggle>Sáng / tối</button></div>
+  <h1>${esc(o.id)} – ${esc(o.title)}</h1>
+  <div>${badges}</div>
+  <div class="endpoint"><span class="method">${esc(e.method)}</span><code>${esc(e.base + e.path)}</code><span class="badge">Xác thực: ${esc(e.auth)}</span>${e.postmanUrl ? `<span class="crumb">Postman: ${esc(e.postmanUrl)}</span>` : ""}</div>
+  <div class="card"><dl class="kv">
+    <dt>Mục đích</dt><dd>${md(o.purpose || "")}</dd>
+    ${o.when ? `<dt>Khi nào gọi</dt><dd>${md(o.when)}</dd>` : ""}
+    ${o.next?.length ? `<dt>Bước tiếp theo</dt><dd><div class="steps">${o.next.map(chip).join("")}</div></dd>` : ""}
+    ${o.body_note ? `<dt>Body</dt><dd>${md(o.body_note)}</dd>` : ""}
+    ${o.response_obj ? `<dt>Phản hồi</dt><dd>Envelope VNACCS, dữ liệu ở <code>${esc(o.response_obj)}</code>${o.response_obj.startsWith("obj") ? "[0] (objMsgResult + object tờ khai)" : ""}. Lỗi ở <code>errorList</code>.</dd>` : ""}
+    ${o.response_note ? `<dt>Ghi chú phản hồi</dt><dd>${md(o.response_note)}</dd>` : ""}
+  </dl></div>
+  ${o.group === "import" || o.group === "export" ? `<h2>Vị trí trong luồng</h2><div class="card">${stateSvg(o.group === "export" ? "XK" : "NK", o.id)}</div>` : ""}
+  ${o.group === "post" ? `<h2>Vị trí trong luồng</h2><div class="card">${amaSvg(o.id)}</div>` : ""}
+  ${["V5Response", "V5IdentifierReq", "V5IdentifierRes", "TachVanDonReq", "TachVanDonRes", "ContainerReq", "ContainerRes", "V5ContainerReq", "V5ContainerRes"].includes(o.id) || o.id.startsWith("V5") ? `<h2>Cách hỏi kết quả</h2><div class="card">${refSvg()}</div>` : ""}
+  ${o.repCodes.length ? `<h2>Mã thông điệp trả về</h2>${repTable(o.repCodes)}` : ""}
+  ${o.sample !== null ? `<h2>Body mẫu</h2><details open><summary>Request (Postman – đã che mật khẩu/terminal key, cắt base64)</summary><div class="body"><pre class="json">${hl(o.sample)}</pre><p class="crumb">Đầy đủ: <code>docs/vnaccs-api/samples/${esc(o.id)}.request.json</code></p></div></details>` : ""}
+  ${o.realResponse ? `<h2>Phản hồi thật</h2><details><summary>Response (đã che, cắt bớt mảng)</summary><div class="body"><pre class="json">${hl(o.realResponse)}</pre></div></details>` : ""}
+  ${o.fieldGroups.length ? `<h2>Bảng trường <input class="filter" data-for="${fid}" type="search" placeholder="Lọc chỉ tiêu trong nghiệp vụ này…" aria-label="Lọc chỉ tiêu"></h2>
+    ${o.fieldGroups.map((g, i) => { const t = D.tables[g.table]; return `<details ${i === 0 ? "open" : ""}><summary>${esc(g.label)} <span class="badge">${t.fields.length} trường</span>
+      <span class="badge ${g.kind === "req" ? "info" : g.kind === "res" ? "warn" : "ok"}">${g.kind === "req" ? "gửi đi" : g.kind === "res" ? "chỉ phản hồi" : "gửi + phản hồi"}</span></summary>
+      <div class="body">${fieldTable(t, g.kind, fid)}</div></details>`; }).join("")}` : ""}`;
+  window.scrollTo(0, 0);
+}
+
+function repPage() {
+  nav(null, $("#q").value);
+  $("#main").innerHTML = `<div class="topbar"><div class="crumb"><button class="btn menu-btn" data-menu>☰</button> <a href="#">Tổng quan</a> › Mã thông điệp</div><button class="btn" data-theme-toggle>Sáng / tối</button></div>
+  <h1>Mã thông điệp phản hồi (REP_VNACCS V1.1)</h1>
+  <p class="lead">Giá trị <code>objMsgResult.code</code> trong phản hồi. Loại C trả ngay cho lệnh vừa gửi; loại P Hải quan trả sau – lấy qua <a href="#op/VNACCSREP">VNACCSREP</a>. Lưu ý: file REP chỉ có nhóm xuất khẩu, AMA, HYS – chưa có mã cho nhóm nhập khẩu (IDA…IID).</p>
+  ${repTable(D.rep)}`;
+}
+
+function messagesPage() {
+  nav(null, $("#q").value);
+  $("#main").innerHTML = `<div class="topbar"><div class="crumb"><button class="btn menu-btn" data-menu>☰</button> <a href="#">Tổng quan</a> › Thông điệp Hải quan</div><button class="btn" data-theme-toggle>Sáng / tối</button></div>
+  <h1>Thông điệp Hải quan trả về (khối va*** trong envelope)</h1>
+  <p class="lead">Thuế phải thu, lệ phí, chỉ thị, yêu cầu / hủy kiểm tra thực tế hàng, kết quả tờ khai bổ sung.</p>
+  ${D.messageTables.map((m) => { const t = D.tables[m.table]; return `<details><summary><code>${esc(m.key)}</code> ${esc(m.title)} <span class="badge">${t.fields.length} trường</span></summary><div class="body">${fieldTable(t, "res", "m")}</div></details>`; }).join("")}`;
+}
+
+function gapsPage() {
+  nav(null, $("#q").value);
+  $("#main").innerHTML = `<div class="topbar"><div class="crumb"><button class="btn menu-btn" data-menu>☰</button> <a href="#">Tổng quan</a> › Lệch với code</div><button class="btn" data-theme-toggle>Sáng / tối</button></div>
+  <h1>Tình trạng tích hợp trong app (chung-tu-hq)</h1>
+  <div class="tablewrap"><table><tr><th>Hạng mục</th><th>Tình trạng</th><th>Còn lại</th></tr>${D.gaps.map(([a, b, c]) => `<tr><td><b>${esc(a)}</b></td><td>${md(b)}</td><td>${md(c)}</td></tr>`).join("")}</table></div>
+  <h2>Postman lệch Excel – quyết định</h2><div class="callout info">${esc(D.priority)}</div>
+  <div class="tablewrap"><table><tr><th>Hạng mục</th><th>Postman</th><th>Excel</th><th>Quyết định</th></tr>${D.conflicts.map(([a, b, c, e]) => `<tr><td><b>${esc(a)}</b></td><td>${md(b)}</td><td>${md(c)}</td><td>${md(e)}</td></tr>`).join("")}</table></div>
+  <h2>Câu hỏi đã chốt</h2>
+  <div class="tablewrap"><table><tr><th>Câu hỏi</th><th>Chốt</th></tr>${D.decisions.map(([q, a]) => `<tr><td>${md(q)}</td><td>${md(a)}</td></tr>`).join("")}</table></div>
+  <p class="crumb">Còn thiếu (không chặn việc làm): mẫu phản hồi thật của các API ngoài Login/EDA.</p>`;
+}
+
+function searchPage(q) {
+  const f = q.toLowerCase();
+  const hits = [];
+  for (const o of D.ops) {
+    if ((o.id + " " + o.title + " " + (o.purpose || "")).toLowerCase().includes(f)) hits.push(`<a href="#op/${o.id}"><b>${esc(o.id)}</b> – ${esc(o.title)}</a>`);
+    for (const g of o.fieldGroups) for (const fl of D.tables[g.table].fields)
+      if ((fl.name + " " + fl.json + " " + fl.desc + " " + fl.descEn).toLowerCase().includes(f)) hits.push(`<a href="#op/${o.id}/${encodeURIComponent(q)}"><code>${esc(fl.name)}</code> ${esc(fl.desc)} <span class="crumb">· ${esc(o.id)} / ${esc(g.label)}</span></a>`);
+  }
+  for (const r of D.rep) if ((r.code + " " + r.name).toLowerCase().includes(f)) hits.push(`<a href="#rep"><code>${esc(r.code)}</code> ${esc(r.name)} <span class="crumb">· mã thông điệp</span></a>`);
+  nav(null, "");
+  $("#main").innerHTML = `<div class="topbar"><div class="crumb"><button class="btn menu-btn" data-menu>☰</button> <a href="#">Tổng quan</a> › Tìm “${esc(q)}”</div><button class="btn" data-theme-toggle>Sáng / tối</button></div>
+  <h1>Kết quả tìm “${esc(q)}”</h1><p class="lead">${hits.length} kết quả${hits.length > 300 ? " (hiện 300 đầu)" : ""}.</p><div class="results card">${hits.slice(0, 300).join("") || "Không có kết quả."}</div>`;
+}
+
+function applyFilter(fid, q) {
+  const f = q.trim().toLowerCase();
+  document.querySelectorAll(`table[data-filter="${fid}"] tr[data-s]`).forEach((tr) => {
+    const hit = f && tr.dataset.s.includes(f);
+    tr.style.display = !f || hit ? "" : "none";
+    tr.classList.toggle("hit", !!hit);
+  });
+  if (f) document.querySelectorAll(`table[data-filter="${fid}"]`).forEach((t) => { if (t.querySelector("tr.hit")) t.closest("details").open = true; });
+}
+
+function route() {
+  $("#side").classList.remove("open");
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h.startsWith("op/")) {
+    const [, id, q] = h.split("/");
+    opPage(id);
+    if (q) { const inp = $(".filter"); if (inp) { inp.value = q; applyFilter("f-" + id, q); } }
+  } else if (h === "rep") repPage();
+  else if (h === "messages") messagesPage();
+  else if (h === "gaps") gapsPage();
+  else if (h.startsWith("search/")) searchPage(h.slice(7));
+  else home();
+}
+
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest("[data-theme-toggle]")) {
+    const r = document.documentElement;
+    const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    r.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("vnaccs-doc-theme", r.dataset.theme); } catch {}
+  }
+  if (ev.target.closest("[data-menu]")) $("#side").classList.toggle("open");
+});
+document.addEventListener("input", (ev) => {
+  if (ev.target.matches(".filter")) applyFilter(ev.target.dataset.for, ev.target.value);
+});
+$("#q").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.value.trim()) location.hash = "search/" + encodeURIComponent(ev.target.value.trim()); });
+$("#q").addEventListener("input", (ev) => nav((location.hash.match(/^#op\/([^/]+)/) || [])[1], ev.target.value));
+try { const t = localStorage.getItem("vnaccs-doc-theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>

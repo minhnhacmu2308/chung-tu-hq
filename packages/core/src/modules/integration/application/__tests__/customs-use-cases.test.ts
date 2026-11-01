@@ -410,6 +410,66 @@ describe("pollStatus – nhánh biên", () => {
     expect(queue.jobs).toHaveLength(1);
   });
 
+  it("VNACCSREP báo thông quan → ghi IN mã thông điệp, tờ khai CLEARED, dừng hỏi, không cần tra IID", async () => {
+    seedResult();
+    deps.gateway = gw({
+      queryStatus: async () => { throw new Error("không được hỏi IID khi thông điệp đã báo thông quan"); },
+      pullMessages: async () => [
+        { kind: "IDA", code: "VAD1LF0", name: "Tờ khai hàng hóa nhập khẩu (thông quan)", declarationNo: "107000000001", status: { status: "Đã thông quan", cleared: true, channel: "GREEN" } },
+        { kind: "IDA", code: "VAD1LD0", name: "Phân luồng", declarationNo: "199999999999", status: { status: "Khai chính thức (IDC)", cleared: false } },
+      ],
+    });
+    expect(unwrap(await poll())).toEqual({ done: true, cleared: true });
+    expect(uow.data.messages).toHaveLength(1);
+    expect(uow.data.messages[0]).toMatchObject({ operation: "IID", direction: "IN", summary: expect.stringContaining("VAD1LF0"), payloadMasked: { maThongDiep: "VAD1LF0", soToKhai: "107000000001" } });
+    expect(uow.data.results[0]).toMatchObject({ state: "CLEARED", clearanceStatus: "CLEARED", channel: "GREEN" });
+    expect(queue.jobs).toHaveLength(0);
+    // Lượt hỏi trạng thái dừng ngay vì đã CLEARED → báo thông quan phải đến từ thông điệp.
+    expect(notifier.sent.map((n) => n.draft.title)).toEqual([expect.stringMatching(/đã thông quan/)]);
+    // Cả lô lưu hộp thư; thông điệp chưa khớp tờ khai giữ PENDING để lượt sau khớp lại.
+    expect(uow.data.inbox.map((x) => [x.message.code, x.status])).toEqual([["VAD1LF0", "APPLIED"], ["VAD1LD0", "PENDING"]]);
+  });
+
+  it("hộp thư VNACCSREP: thông điệp đến trước khi có số tờ khai → giữ, khớp ở lượt sau; FPT gửi lại cùng thông điệp → không ghi trùng", async () => {
+    const msg = { kind: "IDA" as const, code: "VAD1LD0", name: "Phân luồng", declarationNo: "107000000002", at: "2026-10-14 09:00", status: { status: "Luồng xanh", cleared: false, channel: "GREEN" as const } };
+    seedResult({ externalId: "107000000009", declarationNo: "107000000009" });
+    deps.gateway = gw({ pullMessages: async () => [msg], queryStatus: async () => ({ status: "Chờ", cleared: false }) });
+    unwrap(await poll());
+    expect(uow.data.inbox).toMatchObject([{ status: "PENDING", attempts: 1 }]);
+    // Tờ khai giờ mang số đó (vd tra cứu trả số thật); FPT gửi lại cùng thông điệp.
+    uow.data.results[0] = { ...uow.data.results[0]!, externalId: "107000000002", declarationNo: "107000000002" };
+    unwrap(await poll());
+    expect(uow.data.inbox).toHaveLength(1);
+    expect(uow.data.inbox[0]).toMatchObject({ status: "APPLIED" });
+    expect(uow.data.messages.filter((m) => m.summary.includes("VAD1LD0"))).toHaveLength(1);
+    expect(uow.data.results[0]).toMatchObject({ channel: "GREEN" });
+  });
+
+  it("hộp thư VNACCSREP: hai job cùng doanh nghiệp áp song song → một dòng nhật ký, một thông báo thông quan", async () => {
+    seedResult();
+    deps.gateway = gw({
+      pullMessages: async () => [{ kind: "IDA", code: "VAD1LF0", name: "Thông quan", declarationNo: "107000000001", status: { status: "Đã thông quan", cleared: true, channel: "GREEN" } }],
+      queryStatus: async () => ({ status: "Đã thông quan", cleared: true }),
+    });
+    await Promise.all([poll(), poll()]);
+    expect(uow.data.messages.filter((m) => m.summary.includes("VAD1LF0"))).toHaveLength(1);
+    expect(notifier.sent.filter((n) => /đã thông quan/.test(n.draft.title))).toHaveLength(1);
+  });
+
+  it("hộp thư VNACCSREP: org khác không thấy, không áp được thông điệp của org A", async () => {
+    seedResult();
+    await uow.asOrg({ orgId: asOrgId(ORG), userId: asUserId("usr_1") }, (r) => r.inbox.insertMany([{ id: "cin_1", orgId: ORG, dedupKey: "k", message: { kind: "IDA", code: "X", name: "", declarationNo: "107000000001" }, status: "PENDING", attempts: 0, receivedAt: new Date(), appliedAt: null }]));
+    expect(await uow.asOrg({ orgId: asOrgId("org_b"), userId: asUserId("usr_b") }, (r) => r.inbox.listPending("org_b", 10))).toEqual([]);
+    await expect(uow.asOrg({ orgId: asOrgId("org_b"), userId: asUserId("usr_b") }, (r) => r.inbox.update(ORG, "cin_1", { status: "APPLIED" }))).rejects.toThrow(/row-level security/);
+  });
+
+  it("lấy thông điệp lỗi (tài khoản/mạng) → bỏ qua, vẫn tra IID như cũ", async () => {
+    seedResult();
+    deps.gateway = gw({ pullMessages: async () => { throw new Error("A0004"); }, queryStatus: async () => ({ status: "Chờ", cleared: false }) });
+    expect(unwrap(await poll())).toEqual({ done: false, cleared: false });
+    expect(uow.data.messages[0]).toMatchObject({ operation: "IID", summary: "Trạng thái tờ khai: Chờ" });
+  });
+
   it("đạt số lần hỏi tối đa → dừng, không xếp job", async () => {
     seedResult();
     deps.gateway = gw({ queryStatus: async () => ({ status: "Chờ", cleared: false }) });

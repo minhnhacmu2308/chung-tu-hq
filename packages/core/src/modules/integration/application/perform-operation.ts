@@ -132,6 +132,10 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
       if (blocking.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: blocking.join("; ") }));
       payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
     }
+  } else if (op === "AMB" || op === "AMC") {
+    // Gọi lại / đăng ký bản khai bổ sung: theo số tờ khai bổ sung Hải quan cấp ở AMA (tK_SYN).
+    const syn = amendment?.header["TK_SYN"] ?? amendment?.result?.["TK_SYN"];
+    payload = { request: { soToKhai: result.declarationNo, ...(syn ? { tK_SYN: String(syn) } : {}) }, certificateId: result.raw?.certificateId };
   } else if (op === "CONT" || op === "PORT_FEE") {
     payload = { request: { soToKhai: result.declarationNo, containers: snap.payload.containers }, certificateId: result.raw?.certificateId };
   }
@@ -199,7 +203,7 @@ async function queryNow(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, dir
   const op = queryOpFor(direction);
   const now = () => deps.clock.now();
   await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: result.branch, operation: op, direction: "OUT", result: "OK", summary: `Tra cứu trạng thái tờ khai (${op})`, payloadMasked: { nghiepVu: op, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
-  const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId);
+  const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId, direction);
   await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: op, quantity: 1 });
   const stage = stageOf(result);
   const cleared = st.cleared && (stage === "DECLARED" || stage === "AMEND_PRE_DECLARED" || stage === "AMEND_RECALLED");

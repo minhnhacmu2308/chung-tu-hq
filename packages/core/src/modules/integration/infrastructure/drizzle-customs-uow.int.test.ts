@@ -218,3 +218,29 @@ describe("DrizzleCustomsUow – bộ HYS", () => {
     await expect(uow.asOrg(B, (r) => r.hys.insertFile(file("hf_b2", "hys_x", 1)))).rejects.toThrow();
   });
 });
+
+describe("DrizzleCustomsUow – hộp thư VNACCSREP", () => {
+  const msg = { kind: "IDA" as const, code: "VAD1LF0", name: "Thông quan", declarationNo: "107000000777", at: "2026-10-23 08:00" };
+  const inboxRow = (id: string, orgId: string, dedupKey = "IDA|VAD1LF0|107000000777|2026-10-23 08:00") => ({ id, orgId, dedupKey, message: msg, status: "PENDING" as const, attempts: 0, receivedAt: now, appliedAt: null });
+  it("ghi cả lô, trùng khóa bỏ qua; org khác không thấy, không sửa được; khớp số tờ khai và TK_SYN", async () => {
+    await uow.asOrg(A, (r) => r.inbox.insertMany([inboxRow("cin_a1", "org_anphat"), inboxRow("cin_a2", "org_anphat")]));
+    const pending = await uow.asOrg(A, (r) => r.inbox.listPending("org_anphat", 10));
+    expect(pending.map((x) => [x.id, x.message.code])).toEqual([["cin_a1", "VAD1LF0"]]);
+    expect(await uow.asOrg(B, (r) => r.inbox.listPending("org_anphat", 10))).toEqual([]);
+    await uow.asOrg(B, (r) => r.inbox.update("org_anphat", "cin_a1", { status: "APPLIED" }));
+    expect((await uow.asOrg(A, (r) => r.inbox.listPending("org_anphat", 10))).length).toBe(1);
+    await expect(uow.asOrg(B, (r) => r.inbox.insertMany([inboxRow("cin_b1", "org_anphat", "x")]))).rejects.toThrow();
+    expect(await uow.asOrg(B, (r) => r.inbox.claim("org_anphat", "cin_a1", now))).toBe(false);
+    // Giữ song song: chỉ một transaction thắng (khóa dòng + điều kiện PENDING).
+    const claims = await Promise.all([uow.asOrg(A, (r) => r.inbox.claim("org_anphat", "cin_a1", now)), uow.asOrg(A, (r) => r.inbox.claim("org_anphat", "cin_a1", now))]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    expect(await uow.asOrg(A, (r) => r.inbox.listPending("org_anphat", 10))).toEqual([]);
+
+    await uow.asOrg(A, (r) => r.results.upsert({ id: "res_in", orgId: "org_anphat", dossierId: "dos_in", branch: 1, externalId: "107000000777", declarationNo: "107000000777", channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: null, state: "DECLARED", pollCount: 0, raw: null, updatedAt: now }));
+    expect((await uow.asOrg(A, (r) => r.results.findByNumber("org_anphat", "107000000777")))?.dossierId).toBe("dos_in");
+    expect(await uow.asOrg(B, (r) => r.results.findByNumber("org_anphat", "107000000777"))).toBeNull();
+    await uow.asOrg(A, (r) => r.amendments.insert({ id: "pam_in", orgId: "org_anphat", dossierId: "dos_in", branch: 1, seq: 1, status: "PRE_DECLARED", header: { TK_SYN: "500000000123" }, lines: [], approvedAt: null, createdAt: now, updatedAt: now } as PostAmendmentRow));
+    expect((await uow.asOrg(A, (r) => r.amendments.findBySyn("org_anphat", "500000000123")))?.id).toBe("pam_in");
+    expect(await uow.asOrg(B, (r) => r.amendments.findBySyn("org_anphat", "500000000123"))).toBeNull();
+  });
+});

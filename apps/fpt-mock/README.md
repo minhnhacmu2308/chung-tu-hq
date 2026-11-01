@@ -31,13 +31,37 @@ Khi có cổng test của FPT: đổi `FPT_API_BASE_URL` và tài khoản. Nếu
 
 ## Luồng
 
+Đủ **35 API** của Postman FPT `API-VNACCS NEW` (21/04/2026). Nguồn lệch nhau thì ưu tiên: phản hồi thật > Excel đặc tả > Postman (có thể cũ). Tài liệu từng API (body, bảng trường, mã thông điệp, sơ đồ luồng):
+`docs/vnaccs-api/index.html` (mở trực tiếp bằng trình duyệt) và `docs/vnaccs-api/README.md`. Body mẫu: `docs/vnaccs-api/samples/`.
+
+Xác thực: `Authorization: Bearer <token>` (token từ `/api/auth/login`, tài khoản API `FPT_MOCK_API_USERS`) cho mọi API – FPT đã
+bỏ HTTP Basic (Postman còn ghi Basic là bản cũ). Đường dẫn không phân biệt hoa thường (`/api/hys` = `/api/HYS`).
+
+Trạng thái tờ khai (`tK_TRANGTHAI`, theo VN_IDA_TRANGTHAI): `T` lưu tạm · `A` khai tạm · `C` khai chính thức · `TE` lưu tạm sửa đổi ·
+`A01` khai tạm sửa đổi · `E` khai chính thức sửa đổi · `R` hủy.
+
 ```
 POST /api/auth/login {username,password}         → {token, expiration}
-POST /api/EDA | /api/IDA  (Bearer)               → objEDA[0] / objIDA[0]: số tờ khai (tK_ECN/tK_ICN), TRANGTHAI A
-Tờ khai nhánh (lô > 50 dòng): head có tK_FIC/tK_BNO/tK_DNO; tờ 1 ghi tK_FIC "F" + tK_BNO 1 → số mới; tK_BNO ≥ 2 phải có tK_FIC = số tờ 1 mock đã cấp, nếu không lỗi MOCK-REQ (FIC); mỗi tờ một số riêng.
-POST /api/EDC | /api/IDC  {tK_ECN | tK_ICN}      → TRANGTHAI C + tK_LUONG (1 xanh, 2 vàng, 3 đỏ)
-POST /api/HYS  {tK_CH, tK_TSB, lisT_FILE[]}      → tK_JNO (số tiếp nhận); đuôi file ngoài danh sách → MOCK-FMT; tK_KJJ chứa "REJECT" → MOCK-REJ (có cách khắc phục)
-POST /api/IEX  {tK_SOTK}                         → TRANGTHAI; sau 2 lần hỏi kể từ EDC/IDC → tK_THONGQUAN "1"
+POST /api/IDA | /api/EDA                          → số tờ khai (tK_ICN/tK_ECN), A. Khai lại (cùng tK_ID hoặc head có số) khi còn T/A → giữ số
+Tờ khai nhánh (lô > 50 dòng): head có tK_FIC/tK_BNO/tK_DNO; tờ 1 ghi tK_FIC "F" + tK_BNO 1 → số mới; tK_BNO ≥ 2 phải có tK_FIC = số tờ 1 mock đã cấp, nếu không lỗi MOCK-REQ (FIC).
+POST /api/IDB | /api/EDB  {tK_ICN | tK_ECN}       → gọi lại tờ khai tạm: A → T (rồi IDA/EDA lại)
+POST /api/IDC | /api/EDC                          → A → C, phân luồng tK_LUONG (1 xanh, 2 vàng, 3 đỏ) + thông điệp phân luồng (P) chờ VNACCSREP
+POST /api/IDD | /api/EDD                          → C/E chưa thông quan → TE (gọi sửa đổi)
+POST /api/IDA01 | /api/EDA01  (như IDA/EDA, head có số tờ khai) → TE → A01
+POST /api/IDE | /api/EDE                          → A01 → E + thông điệp sửa đổi (P)
+POST /api/IID | /api/IEX  {tK_ICN | tK_ECN}       → tham chiếu (nhận cả tK_SOTK cũ); mỗi lần hỏi là một lượt xử lý: sau 2 lượt từ đăng ký → tK_THONGQUAN "1" + thông điệp thông quan (P)
+POST /api/VNACCSREP  {useR_ID, password, terminaL_ID, terminaL_ACCESS_KEY} → mọi thông điệp P đang chờ của user (lấy xong là xóa – giả định); cũng tính một lượt xử lý
+POST /api/HYS  {objVNACCS_ACCOUNT, tK_CH, tK_TSB, …, lisT_FILE[]} (Excel) → tK_JNO (cấp ngoài + vaL0020); dạng Postman objVN_HYS.lisT_FILE_HYS vẫn nhận
+POST /api/AMA → tK_SYN (VAL8000) · /api/AMB {tK_SYN} → gọi lại (VAL8010) · /api/AMC {tK_SYN} → đăng ký (VAL8020) + chấp nhận VAL8050 (P)
+POST /api/V5Bill | V5Invoice | V5Permit | V5Contract | V5Co | V5Container | V5OtherDoc → reF_ID; /api/V5Response {reF_ID}
+POST /api/V5IdentifierReq → reF_ID; /api/V5IdentifierRes {reF_ID} → sO_DD + codE_CONTENT (QR) khi tranG_THAI 15
+POST /api/TachVanDonReq → reF_ID; /api/TachVanDonRes {reF_ID}
+POST /api/V5ContainerReq (Excel v1.1 – bản dùng, seal bắt buộc) | ContainerReq (bản cũ) → reF_ID; /api/V5ContainerRes | ContainerRes {reF_ID}
+   Hỏi kết quả: lần 1 tranG_THAI "11" (chưa phản hồi), lần 2 "12" chấp nhận (+ sO_TN) – dữ liệu gửi chứa "REJECT" → "10" từ chối
+POST /api/KVGS {TK_SOTK, TK_NGAYDK, TK_MAHQ, MA_DV} → mã vạch + danh sách container
+POST /api/PrintObjectRefIDA | PrintObjectRef | PrintEdiRef | PrintXPS → filE_BASE64 (PDF giả)
+POST /api/KyFile {mA_DV, useR_ID, filE_TEN, filE_BASE64} → file "đã ký"
+POST /api/SyncCategory {} → vN_A038, vN_A015, vN_A016_FOREIGN, vN_A202, vN_A501, vN_A527 (từ danh mục @kb/contracts)
 ```
 
 Mọi body nghiệp vụ có `objVNACCS_ACCOUNT` {useR_ID, password, terminaL_ID, terminaL_ACCESS_KEY}; client tự thêm vào.
@@ -53,7 +77,8 @@ Mẫu thật nằm ở `src/fixtures/` (tách từ curl trong `docdungapivnacss/
 | Login: đường dẫn, body, `{token, expiration}`, JWT HS256 | Có mẫu thật |
 | EDA: đường dẫn, request, response thành công (`objEDA[0]`, các trường VNACCS tự tính) | Có mẫu thật |
 | Lỗi A0004 (sai mật khẩu VNACCS, FPT trả trùng 2 lần), S1139 (ngày đi < ngày khai) | Có mẫu thật |
-| IDA, EDC/IDC, HYS, IEX: đường dẫn, body, response | **Giả định** – response có header `X-Mock-Assumed: 1` |
+| Đường dẫn + body của 35 API (IDA…IID, EDA…IEX, AMA/AMB/AMC, hys, VNACCSREP, V5…, định danh, tách vận đơn, container, KVGS, Print*, KyFile, SyncCategory) | Có mẫu (Postman 21/04/2026) |
+| Phản hồi của mọi API trừ Login/EDA; mã thông điệp nhóm nhập khẩu (VAD…); VNACCSREP lấy một lần | **Giả định** – response có header `X-Mock-Assumed: 1` |
 | Mã HTTP khi sai login/token (401), body sai JSON (400 ProblemDetails) | **Giả định** |
 | Lỗi thiếu chỉ tiêu bắt buộc / sai định dạng ngày | Mock tự đặt mã `MOCK-REQ`, `MOCK-FMT` |
 | Tỷ giá ngoài USD, tên chi cục/kho ngoài mẫu (`src/catalog.ts`) | Số giả |
@@ -66,6 +91,7 @@ Có thêm curl thật của FPT thì thêm fixture rồi sửa mock cho test kh�
 |---|---|
 | `GET /__mock/declarations` | Danh sách tờ khai mock đang giữ (trong bộ nhớ, mất khi tắt) |
 | `POST /__mock/declarations/:so` `{channel: 1\|2\|3, cleared, rejected}` | Ép phân luồng / thông quan / từ chối (IEX trả `tK_TRANGTHAI: "R"`) |
+| `GET /__mock/messages` | Thông điệp loại P đang chờ VNACCSREP, theo user |
 | `POST /__mock/reset` | Xóa hết |
 | Header `X-Mock-Fail: 500\|502\|503\|429\|timeout` | Giả lập sự cố để thử retry |
 

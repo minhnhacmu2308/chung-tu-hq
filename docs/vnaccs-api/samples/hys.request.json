@@ -1,0 +1,25 @@
+{
+  "objVNACCS_ACCOUNT": {
+    "useR_ID": "***",
+    "password": "***",
+    "terminaL_ID": "***",
+    "terminaL_ACCESS_KEY": "***"
+  },
+  "objVN_HYS": {
+    "tK_TNM": "Danh sách container chất lên tàu",
+    "tK_SNM": "Nguyễn Duy Hoà",
+    "tK_SAD": "TỔ 7, KHU PHỐ CÔNG CHÁNH",
+    "tK_CH": "60CB",
+    "tK_CHB": "00",
+    "tK_TSB": "A02",
+    "tK_STL": "",
+    "tK_REF": "",
+    "tK_KJJ": "",
+    "lisT_FILE_HYS": [
+      {
+        "filE_NAME": "TEST.XLSX",
+        "filE_BASE64": "UEsDBBQABgAIAAAAIQDIo800dgEAAAQFAAATAN0B…(base64/chuỗi dài 99920 ký tự)"
+      }
+    ]
+  }
+}

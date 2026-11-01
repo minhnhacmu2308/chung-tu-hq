@@ -1,9 +1,9 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { CustomsRepos, CustomsUow, HysFileRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
+import type { CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
 
 /** Fake mô phỏng RLS theo org; outbox unique theo idempotency_key; messages append-only. */
 export class InMemoryCustomsUow implements CustomsUow {
-  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[], hys: [] as HysSubmissionRow[], hysFiles: [] as HysFileRow[] };
+  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[], hys: [] as HysSubmissionRow[], hysFiles: [] as HysFileRow[], inbox: [] as InboxRow[] };
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T> {
     const d = this.data;
     const org = ctx.orgId as string;
@@ -37,6 +37,7 @@ export class InMemoryCustomsUow implements CustomsUow {
         listForDossiers: async (orgId, ids) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && ids.includes(r.dossierId)).sort((a, b) => a.branch - b.branch)),
         listForOrg: async (orgId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId)),
         listForDossier: async (orgId, dossierId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId).sort((a, b) => a.branch - b.branch)),
+        findByNumber: async (orgId, no) => clone(d.results.find((r) => r.orgId === org && r.orgId === orgId && (r.declarationNo === no || r.externalId === no)) ?? null),
         deleteUnsentAbove: async (orgId, dossierId, branch) => {
           const drop = (r: ResultRow) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId && r.branch > branch && r.declarationNo === null && r.raw?.stage === "NOT_SENT";
           const n = d.results.filter(drop).length;
@@ -52,6 +53,7 @@ export class InMemoryCustomsUow implements CustomsUow {
       },
       amendments: {
         listForDossier: async (orgId, dossierId, branch) => clone(d.amendments.filter((a) => a.orgId === org && a.orgId === orgId && a.dossierId === dossierId && (branch === undefined || a.branch === branch)).sort((a, b) => a.branch - b.branch || a.seq - b.seq)),
+        findBySyn: async (orgId, syn) => clone(d.amendments.find((a) => a.orgId === org && a.orgId === orgId && (String(a.header["TK_SYN"] ?? "") === syn || String(a.result?.["TK_SYN"] ?? "") === syn)) ?? null),
         insert: async (row) => {
           if (row.orgId !== org) deny("post_amendments");
           if (d.amendments.some((a) => a.dossierId === row.dossierId && a.branch === row.branch && a.seq === row.seq)) throw new Error("duplicate key value violates unique constraint post_amendments_dossier_branch_seq_uq");
@@ -60,6 +62,27 @@ export class InMemoryCustomsUow implements CustomsUow {
         update: async (row) => {
           const i = d.amendments.findIndex((a) => a.id === row.id && a.orgId === org);
           if (i >= 0) d.amendments[i] = clone(row);
+        },
+      },
+      inbox: {
+        insertMany: async (rows) => {
+          for (const row of rows) {
+            if (row.orgId !== org) deny("customs_inbox");
+            if (!d.inbox.some((x) => x.orgId === row.orgId && x.dedupKey === row.dedupKey)) d.inbox.push(clone(row));
+          }
+        },
+        listPending: async (orgId, limit) => clone(d.inbox.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "PENDING").sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime()).slice(0, limit)),
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny("customs_inbox update");
+          const x = d.inbox.find((y) => y.id === id && y.orgId === org && y.status === "PENDING");
+          if (x) Object.assign(x, clone(patch));
+        },
+        claim: async (orgId, id, at) => {
+          if (orgId !== org) deny("customs_inbox claim");
+          const x = d.inbox.find((y) => y.id === id && y.orgId === org && y.status === "PENDING");
+          if (!x) return false;
+          Object.assign(x, { status: "APPLIED", attempts: x.attempts + 1, appliedAt: at });
+          return true;
         },
       },
       hys: {

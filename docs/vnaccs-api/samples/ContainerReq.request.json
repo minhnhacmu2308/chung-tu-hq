@@ -1,0 +1,19 @@
+{
+  "tK_SOTK": "1234567890",
+  "tK_NGAYDK": "12/12/2025",
+  "tK_MALH": "A12",
+  "tK_MAHQ": "88AB",
+  "mA_DV": "123",
+  "teN_DV": "Tên đơn vị",
+  "mA_DAI_LY": "",
+  "teN_DAI_LY": "",
+  "useR_ID": "***",
+  "hanG_CONT": [
+    {
+      "vD_SO": "VANDON",
+      "coN_SO": "SOCONT",
+      "seL_SO": "SOSEAL",
+      "ghI_CHU": ""
+    }
+  ]
+}

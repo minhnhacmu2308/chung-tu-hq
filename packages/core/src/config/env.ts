@@ -44,6 +44,8 @@ export const EnvSchema = z
     AI_PROVIDER: z.enum(["fake", "claude"]).default("fake"),
     ANTHROPIC_API_KEY: z.string().optional(),
     AI_MODEL: z.string().default("claude-sonnet-5-5"),
+    /** Model rẻ cho việc nhỏ không cần suy luận (Nhờ AI điền form Tạo hồ sơ – ADR 0010). */
+    AI_FAST_MODEL: z.string().default("claude-haiku-4-5-20251001"),
     AI_USD_VND_RATE: z.coerce.number().positive().default(25400),
     /** Timeout một lời gọi AI (ms). SDK chỉ thử lại 1 lần – BullMQ đã thử lại job 5 lần. */
     AI_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),

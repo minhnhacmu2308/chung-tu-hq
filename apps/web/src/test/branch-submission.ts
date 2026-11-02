@@ -22,7 +22,7 @@ export function branch(no: number, of: number, stage: CustomsStage, over: Partia
     pipeline: pipelineFor(stage), nextOp: null, queryOp: "IID", amendments: 0, postAmendments: 0,
     messages: numbered ? [{ id: `m${no}`, dossierId: "dos_028", operation: "IDA", direction: "IN", result: "OK", summary: `Tờ ${no}: cấp số`, at: AT, payloadPreview: "{}" }] : [],
     result: declarationNo ? { declarationNo, ...(stage === "CLEARED" ? { channel: "GREEN" as const, clearanceStatus: "CLEARED" as const } : {}) } : null,
-    customsInfo: null, rejection: null, inProgress: false, started: numbered, sentChanges: null,
+    customsInfo: null, rejection: null, inProgress: false, sending: false, started: numbered, sentChanges: null,
     ...over,
   };
 }
@@ -35,7 +35,7 @@ export function submissionOf(branches: BranchSubmission[], over: Partial<Submiss
     b.stage === "REJECTED" ? [{ no: b.no, kind: "REJECTED" }] : b.state === "SEND_FAILED" ? [{ no: b.no, kind: "SEND_FAILED" }] : []);
   return {
     declarationStatus: "SUBMITTED", hsUnconfirmed: 0,
-    started: first.started, inProgress: first.inProgress, stage: first.stage, nextOp: first.nextOp, queryOp: first.queryOp,
+    started: first.started, inProgress: first.inProgress, sending: first.sending, stage: first.stage, nextOp: first.nextOp, queryOp: first.queryOp,
     amendments: first.amendments, postAmendments: first.postAmendments, pipeline: first.pipeline, messages: first.messages,
     result: first.result, customsInfo: first.customsInfo, rejection: first.rejection,
     branches, summary: { of: branches.length, cleared, problems },

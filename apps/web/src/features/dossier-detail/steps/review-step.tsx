@@ -27,7 +27,7 @@ import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { IncotermChangedNote } from "./incoterm-changed-note";
 import { REVIEW_MESSAGES } from "./review-step.messages";
-import { anyInProgress, encodeRecalled, parseRecalled, recalledCount } from "./branch-sheets";
+import { anyInProgress, encodeRecalled, parseRecalled, recalledCount, submissionRefetchMs } from "./branch-sheets";
 import { editScopeOf, sentChangeWarnings } from "./edit-scope";
 import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
 import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
@@ -151,8 +151,8 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
     queryFn: () => getSubmission(dossier.id),
-    // Như bước Khai báo: còn tờ đang chờ phản hồi (vd gọi về các tờ còn lại đang chạy) → hỏi lại mỗi giây, phạm vi sửa tự cập nhật khi chuỗi xong.
-    refetchInterval: (q) => (q.state.data && anyInProgress(q.state.data) ? 1000 : false),
+    // Như bước Khai báo: còn tờ đang chờ phản hồi (vd gọi về các tờ còn lại đang chạy) → hỏi lại (đang gửi 1 giây, chờ Hải quan 30 giây – submissionRefetchMs), phạm vi sửa tự cập nhật khi chuỗi xong.
+    refetchInterval: (q) => (q.state.data ? submissionRefetchMs(q.state.data) : false),
   });
   // Lô > 50 dòng: tờ khai nhánh đang xem trên bản in (?sheet=k), kẹp về 1..N như bản in; tham số ngoài khoảng → sửa lại URL.
   const sheetParam = params.get("sheet");

@@ -80,6 +80,7 @@ export function toBranchSubmission(b: BranchInput): BranchSubmission {
     customsInfo: b.result?.raw?.customsInfo ?? null,
     rejection: b.result?.raw?.rejection ?? null,
     inProgress: hasBlockingPending(b.outbox) || b.polling,
+    sending: hasBlockingPending(b.outbox),
     started: startedOf(b.messages, b.outbox, b.result),
     sentChanges: b.sentChanges ?? null,
   };

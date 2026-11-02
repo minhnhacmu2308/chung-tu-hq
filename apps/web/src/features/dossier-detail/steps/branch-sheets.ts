@@ -10,7 +10,7 @@ export function sheetsOf(s: SubmissionView): BranchSubmission[] {
   return [{
     no: 1, of: 1, stage: s.stage, state: "APPROVED", declarationNo: s.result?.declarationNo ?? null, channel: s.result?.channel ?? null,
     pipeline: s.pipeline, nextOp: s.nextOp, queryOp: s.queryOp, amendments: s.amendments, postAmendments: s.postAmendments, messages: s.messages,
-    result: s.result, customsInfo: s.customsInfo, rejection: s.rejection, inProgress: s.inProgress, started: s.started, sentChanges: null,
+    result: s.result, customsInfo: s.customsInfo, rejection: s.rejection, inProgress: s.inProgress, sending: s.sending, started: s.started, sentChanges: null,
   }];
 }
 
@@ -21,7 +21,7 @@ export function sheetView(s: SubmissionView, no: number): SubmissionView {
   return {
     ...s,
     stage: b.stage, nextOp: b.nextOp, queryOp: b.queryOp, amendments: b.amendments, postAmendments: b.postAmendments, pipeline: b.pipeline,
-    messages: b.messages, result: b.result, customsInfo: b.customsInfo, rejection: b.rejection, inProgress: b.inProgress, started: b.started,
+    messages: b.messages, result: b.result, customsInfo: b.customsInfo, rejection: b.rejection, inProgress: b.inProgress, sending: b.sending, started: b.started,
   };
 }
 
@@ -80,6 +80,16 @@ export const problemOf = (s: SubmissionView, no: number) => s.summary.problems.f
 
 /** Còn tờ nào đang chờ gửi / phản hồi / hỏi trạng thái → màn tiếp tục hỏi lại. */
 export const anyInProgress = (s: SubmissionView) => s.inProgress || s.branches.some((b) => b.inProgress);
+
+/** Đang gửi nghiệp vụ (hàng đợi gửi còn việc, kể cả chuỗi gọi về IDB/EDB / chờ phản hồi FPT của lần gửi) – thường vài giây là xong. */
+export const anySending = (s: SubmissionView) =>
+  s.sending || s.branches.some((b) => b.sending) || [...s.pipeline, ...s.branches.flatMap((b) => b.pipeline)].some((p) => p.status === "SENDING");
+
+/**
+ * Nhịp làm mới trạng thái truyền: đang gửi → 1 giây; chỉ còn chờ Hải quan phân luồng / thông quan (worker hỏi 5 phút/lần, người khai bấm
+ * Tra cứu khi cần – thống nhất với đội nghiệp vụ 01/11/2026) → 30 giây; không chờ gì → không hỏi.
+ */
+export const submissionRefetchMs = (s: SubmissionView): number | false => (anySending(s) ? 1000 : anyInProgress(s) ? 30_000 : false);
 
 /** Bước 7 hiện khi có ít nhất một tờ đã thông quan / đang sửa sau thông quan (tờ thông quan trước làm AMA ngay, không chờ tờ khác). */
 export const anyPostVisible = (s: SubmissionView) => sheetsOf(s).some((b) => postStepVisible(b.stage));

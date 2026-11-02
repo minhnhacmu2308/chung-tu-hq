@@ -200,6 +200,8 @@ describe("submitDeclaration", () => {
     expect(queue.jobs[0]).toMatchObject({ name: "customs-send", payload: { outboxId: r.outboxId } });
     expect(decls.submitted).toEqual([D]);
     expect(dossiers.rows[0]).toMatchObject({ status: "SUBMITTED", step: "submit" });
+    // Outbox IDA còn chờ gửi → "đang gửi" (màn Truyền hỏi lại nhanh).
+    expect(unwrap(await getSubmission(deps, declarant, D))).toMatchObject({ inProgress: true, sending: true });
     expect(errCode(await submitDeclaration(deps, declarant, D, "cert_1"))).toBe("ALREADY_SUBMITTED");
     expect(uow.data.outbox).toHaveLength(1);
   });
@@ -522,7 +524,10 @@ describe("getSubmission / listCustomsDeclarations – nhánh biên", () => {
     [{ state: "PRE_DECLARED" as const, raw: { stage: "PRE_DECLARED" as const } }, false],
   ])("kết quả %o → đang hỏi trạng thái = %s", async (patch, polling) => {
     seedResult(patch);
-    expect(unwrap(await getSubmission(deps, declarant, D)).inProgress).toBe(polling);
+    const v = unwrap(await getSubmission(deps, declarant, D));
+    expect(v.inProgress).toBe(polling);
+    // Chỉ chờ Hải quan (không còn việc trong hàng đợi gửi) → không phải "đang gửi": màn Truyền hỏi chậm.
+    expect(v.sending).toBe(false);
   });
 
   it("danh sách: hồ sơ bị xóa → bỏ qua", async () => {

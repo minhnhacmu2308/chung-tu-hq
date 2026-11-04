@@ -18,6 +18,13 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...base, APP_MASTER_KEYS: `v2:${k2},v2:${k2}` })).toThrow(/trùng phiên bản v2/);
     expect(() => loadEnv({ ...base, APP_MASTER_KEYS: `v2:${Buffer.alloc(8).toString("base64")}` })).toThrow(/v2 phải là base64 của 32 byte/);
   });
+  it("FPT_API_BASE_URL: production bắt buộc https (http chỉ cho máy nội bộ); dev/test cho http", () => {
+    const fpt = { ...base, CUSTOMS_GATEWAY: "fpt", FPT_API_USERNAME: "u", FPT_API_PASSWORD: "p" };
+    expect(() => loadEnv({ ...fpt, NODE_ENV: "production", FPT_API_BASE_URL: "http://tsst.fcs.vn" })).toThrow(/https/);
+    expect(loadEnv({ ...fpt, NODE_ENV: "production", FPT_API_BASE_URL: "https://tsst.fcs.vn" }).FPT_API_BASE_URL).toBe("https://tsst.fcs.vn");
+    expect(loadEnv({ ...fpt, NODE_ENV: "production", FPT_API_BASE_URL: "http://fpt-mock:7070" }).FPT_API_BASE_URL).toBe("http://fpt-mock:7070");
+    expect(loadEnv({ ...fpt, FPT_API_BASE_URL: "http://tsst.fcs.vn" }).FPT_API_BASE_URL).toBe("http://tsst.fcs.vn");
+  });
   it("mặc định: adapter fake, mail console, S3 path-style", () => {
     const env = loadEnv(base);
     expect(env.AI_TIMEOUT_MS).toBe(180_000);

@@ -87,7 +87,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
 /** Tra trạng thái trước khi gửi lại (ADR 0005): ghi nhật ký OUT + chi phí tra cứu. */
 async function queryBeforeResend(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch: number, op: CustomsOperation, qop: CustomsOperation, declarationNo: string | null, externalId: string) {
   await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, operation: qop, direction: "OUT", result: "OK", summary: "Tra cứu trạng thái trước khi gửi lại", payloadMasked: { nghiepVu: qop, soToKhai: declarationNo }, externalRef: externalId, at: deps.clock.now() }));
-  const st = await deps.gateway.queryStatus(ctx.orgId, externalId, dossierId);
+  const st = await deps.gateway.queryStatus(ctx.orgId, externalId, dossierId, qop === "IEX" ? "XK" : "NK");
   await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: qop, quantity: 1, meta: { beforeResend: op } });
   return st;
 }

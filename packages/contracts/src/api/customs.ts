@@ -62,6 +62,8 @@ export const BranchSubmissionSchema = z.object({
   rejection: CustomsRejectionSchema.nullable(),
   /** Đang chờ gửi / phản hồi / hỏi trạng thái của tờ. */
   inProgress: z.boolean(),
+  /** Phần "đang gửi" của inProgress: còn nghiệp vụ trong hàng đợi gửi (vài giây là xong) – khác chờ Hải quan phân luồng / thông quan. Đã gửi mà còn chờ FPT trả lời thì xem pipeline status "SENDING" (web gộp cả hai: anySending). JSON cũ → false. */
+  sending: z.boolean().default(false),
   /** Tờ đã từng gửi (outbox hoặc thông điệp gửi đi) – lỗi "chưa khai tạm tự động" ghi trên tờ chưa gửi không tính. */
   started: z.boolean(),
   /**
@@ -78,6 +80,8 @@ export const SubmissionViewSchema = z.object({
   hsUnconfirmed: z.number().int().nonnegative(),
   started: z.boolean(),
   inProgress: z.boolean(),
+  /** = tờ 1 (xem BranchSubmission.sending). */
+  sending: z.boolean().default(false),
   /** Giai đoạn vòng đời tờ khai (xem customs-flow). */
   stage: CustomsStageSchema.default("NOT_SENT"),
   /** Việc tiếp theo nên làm; null khi chỉ còn chờ Hải quan. */

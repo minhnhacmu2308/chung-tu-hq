@@ -37,7 +37,7 @@ import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUB
 import { HysCard } from "./hys/hys-card";
 import { HysSuggestDialog } from "./hys/hys-suggest-dialog";
 import { HYS_MESSAGES } from "./hys/hys.messages";
-import { anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
+import { canDeclareAll, submissionRefetchMs, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -447,7 +447,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     queryKey: customsKeys.submission(dossier.id),
     queryFn: () => getSubmission(dossier.id),
     // Lô nhiều tờ: còn tờ nào đang chờ phản hồi / hỏi trạng thái thì hỏi lại.
-    refetchInterval: (q) => (q.state.data && anyInProgress(q.state.data) ? 1000 : false),
+    refetchInterval: (q) => (q.state.data ? submissionRefetchMs(q.state.data) : false),
     // Quay lại từ Review (sửa + duyệt lại) → khả năng bấm đã đổi; không dùng bản cache cũ.
     refetchOnMount: "always",
   });

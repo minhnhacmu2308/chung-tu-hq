@@ -65,6 +65,34 @@ export const customsMessages = pgTable(
   ],
 ).enableRLS();
 
+/**
+ * Hộp thư thông điệp Hải quan trả sau (FPT VNACCSREP – lấy một lần, FPT không trả lại): cả lô lưu ngay khi lấy, rồi mới áp vào tờ khai.
+ * PENDING = chưa khớp tờ khai nào (thử lại lượt sau), APPLIED = đã ghi nhật ký + cập nhật kết quả, UNMATCHED = quá số lần thử – giữ để tra.
+ * `dedup_key` (mã thông điệp + số tờ khai + thời điểm) chống ghi trùng khi FPT gửi lại.
+ */
+export const customsInbox = pgTable(
+  "customs_inbox",
+  {
+    id: id(),
+    orgId: orgId(),
+    dedupKey: text("dedup_key").notNull(),
+    kind: text("kind").notNull(),
+    code: text("code").notNull(),
+    declarationNo: text("declaration_no").notNull(),
+    message: jsonb("message").notNull(),
+    status: text("status").notNull().default("PENDING"),
+    attempts: integer("attempts").notNull().default(0),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("customs_inbox_org_key_uq").on(t.orgId, t.dedupKey),
+    index("customs_inbox_org_status_idx").on(t.orgId, t.status, t.receivedAt),
+    check("customs_inbox_status_chk", sql`status in ('PENDING', 'APPLIED', 'UNMATCHED')`),
+    orgRls("customs_inbox_rls"),
+  ],
+).enableRLS();
+
 /** Kết quả hiện tại của tờ khai bên Hải quan: số tờ khai, phân luồng, thông quan, thuế, trạng thái truyền. */
 export const customsResults = pgTable(
   "customs_results",

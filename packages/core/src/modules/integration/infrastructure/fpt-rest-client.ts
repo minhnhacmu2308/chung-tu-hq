@@ -1,5 +1,5 @@
 // HTTP tới FPT.VNACCS: đăng nhập lấy JWT (giữ tới gần hết hạn) → gọi nghiệp vụ kèm Bearer + objVNACCS_ACCOUNT.
-// Đường dẫn khớp mẫu curl thật (docdungapivnacss): /api/auth/login, /api/EDA. Các nghiệp vụ khác GIẢ ĐỊNH /api/<OP> – sửa ở FPT_PATHS.
+// Đường dẫn: mẫu curl thật (/api/auth/login, /api/EDA) + Postman FPT 21/04/2026 cho các nghiệp vụ còn lại (docs/vnaccs-api). Xác thực Bearer.
 // Dev: trỏ FPT_API_BASE_URL tới apps/fpt-mock (http://localhost:7070). KHÔNG trỏ tới cổng thật khi dev – cổng thật là production.
 import { z } from "zod";
 import type { FptVnaccsCredentials } from "@kb/contracts";
@@ -8,13 +8,11 @@ import type { FptHttpClient, FptOperation } from "./fpt-vnaccs-gateway.js";
 
 export const FPT_PATHS: Record<FptOperation | "LOGIN", string> = {
   LOGIN: "/api/auth/login",
-  EDA: "/api/EDA",
-  IDA: "/api/IDA",
-  EDC: "/api/EDC",
-  IDC: "/api/IDC",
+  IDA: "/api/IDA", IDB: "/api/IDB", IDC: "/api/IDC", IDD: "/api/IDD", IDA01: "/api/IDA01", IDE: "/api/IDE", IID: "/api/IID",
+  EDA: "/api/EDA", EDB: "/api/EDB", EDC: "/api/EDC", EDD: "/api/EDD", EDA01: "/api/EDA01", EDE: "/api/EDE", IEX: "/api/IEX",
+  AMA: "/api/AMA", AMB: "/api/AMB", AMC: "/api/AMC",
   HYS: "/api/HYS",
-  IEX: "/api/IEX",
-  AMA: "/api/AMA",
+  VNACCSREP: "/api/VNACCSREP",
 };
 
 const LoginResponseSchema = z.object({ token: z.string().min(1), expiration: z.iso.datetime({ offset: true }) });
@@ -47,7 +45,8 @@ export class FptRestClient implements FptHttpClient {
   }
 
   async post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials): Promise<unknown> {
-    const payload = { objVNACCS_ACCOUNT: creds, ...(body as Record<string, unknown>) };
+    // VNACCSREP: body chính là tài khoản VNACCS (phẳng, theo Postman); nghiệp vụ khác bọc trong objVNACCS_ACCOUNT.
+    const payload = op === "VNACCSREP" ? { ...creds } : { objVNACCS_ACCOUNT: creds, ...(body as Record<string, unknown>) };
     let res = await this.send(FPT_PATHS[op], payload, await this.getToken());
     if (res.status === 401) {
       // Token bị thu hồi/hết hạn sớm: đăng nhập lại đúng một lần.

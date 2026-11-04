@@ -18,7 +18,7 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 
 ## Cấu trúc
 
-- `apps/web` – Next.js, MỎNG. `apps/worker` – BullMQ, MỎNG. `apps/fpt-mock` – server giả lập FPT.VNACCS + HSCodePro (`pnpm fpt-mock`); dev/test KHÔNG gọi cổng FPT thật (production). Kiểm khói HSCodePro thật: `pnpm hscodepro:smoke`. Xem `apps/fpt-mock/README.md`.
+- `apps/web` – Next.js, MỎNG. `apps/worker` – BullMQ, MỎNG. `apps/fpt-mock` – server giả lập FPT.VNACCS + HSCodePro (`pnpm fpt-mock`); dev/test KHÔNG gọi cổng FPT thật (production). Kiểm khói HSCodePro thật: `pnpm hscodepro:smoke`. Xem `apps/fpt-mock/README.md`. Tài liệu API FPT.VNACCS (35 API, body, bảng trường, mã thông điệp, sơ đồ luồng): `docs/vnaccs-api/index.html` – sinh bằng `scripts/vnaccs-api-docs/build.py`, không sửa tay.
 - `packages/core/src/modules/<module>/{domain,application,infrastructure,index.ts}` – toàn bộ nghiệp vụ.
 - `packages/contracts` – Zod schema dùng chung FE/BE.
 - `packages/ui` – design system `@kb/ui`: token, component, theme. Xem `docs/DESIGN-SYSTEM.md`.
@@ -30,7 +30,7 @@ pnpm eval --live    # gọi AI thật, tốn tiền – chỉ chạy khi đổi 
 2. Mã định danh (MST, MAWB, HAWB, số invoice/C/O/container, HS) là `string`.
 3. Tiền/trị giá tính bằng `Decimal`, không dùng `number`.
 4. Ngày nghiệp vụ `YYYY-MM-DD`; thời điểm UTC.
-5. AI chỉ đọc chứng từ, gợi ý HS (qua port `AiProvider`) và soạn nháp email cho khu Quản trị (ADR 0008 – không dữ liệu khách trong prompt, người duyệt trước khi gửi). Đối chiếu, ánh xạ tờ khai, thuế, chặn truyền là code thuần có test.
+5. AI chỉ đọc chứng từ, gợi ý HS (qua port `AiProvider`), soạn nháp email cho khu Quản trị (ADR 0008 – không dữ liệu khách trong prompt, người duyệt trước khi gửi) và gợi ý giá trị form Tạo hồ sơ từ câu yêu cầu (ADR 0010 – model rẻ, code kiểm danh mục, không tự tạo hồ sơ). Đối chiếu, ánh xạ tờ khai, thuế, chặn truyền là code thuần có test.
 6. Người dùng sửa trường → ghi `field_audit` append-only.
 7. Không truyền tờ khai khi còn BLOCKER FAIL hoặc HS chưa xác nhận.
 8. Mọi lần gọi AI ghi `usage_events`.

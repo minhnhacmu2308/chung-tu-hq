@@ -1,32 +1,34 @@
-// Worker `customs-poll`: sau khai chính thức (IDC/IDE), hỏi trạng thái (IID nhập / IEX xuất) tới khi thông quan/từ chối; ghi IN khi đổi; lặp theo delay.
+// Worker `customs-poll`: sau khai chính thức (IDC/IDE), mỗi lượt lấy thông điệp Hải quan (VNACCSREP) rồi hỏi trạng thái (IID nhập / IEX xuất)
+// tới khi thông quan/từ chối; ghi IN khi đổi; lặp theo delay.
 // Lô nhiều tờ: mỗi tờ khai nhánh hỏi riêng (payload `branch`, vắng = 1); hồ sơ CLEARED khi mọi tờ thông quan (syncDossierClearance).
-import { AWAITING_CLEARANCE, dossierCustomsSummary, queryOpFor, type DossierCustomsSummary } from "@kb/contracts";
+import { AWAITING_CLEARANCE, queryOpFor } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
+import { syncDossierClearance } from "./_clearance.js";
+import { pullCustomsMessages } from "./customs-messages.js";
+
+export { syncDossierClearance };
 import type { CustomsDeps } from "./customs-ports.js";
 
 /** `branch`: tờ khai nhánh (vắng = 1 – job tạo trước khi tách tờ khai). */
 export type PollStatusInput = { orgId: string; userId: string; dossierId: string; attempt: number; branch?: number | undefined };
 export const MAX_POLLS = 200;
-
 /**
- * Trạng thái hồ sơ gộp từ mọi tờ khai nhánh (spec §6.5): mọi tờ thông quan → hồ sơ CLEARED (không thêm giá trị trạng thái hồ sơ).
- * Gọi sau mỗi lần một tờ có thể vừa thông quan (hỏi trạng thái, tra cứu, AMC). Lô một tờ: như trước.
+ * Khoảng cách giữa hai lượt hỏi tự động (cổng FPT thật / mock HTTP): 5 phút – chỉ là lưới an toàn. Cách chính là người khai bấm
+ * "Tra cứu trạng thái" (lấy VNACCSREP + IID/IEX ngay); không hỏi dồn theo giây để tránh nghẽn cổng Hải quan (thống nhất với đội nghiệp vụ 01/11/2026).
+ * 200 lượt × 5 phút ≈ 16,7 giờ.
  */
-export async function syncDossierClearance(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, dossierId: string): Promise<DossierCustomsSummary> {
-  const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));
-  const summary = dossierCustomsSummary(results.map((r) => ({ stage: stageOf(r), state: r.state })));
-  if (summary.allCleared) await deps.dossiers.update(ctx.orgId, dossierId, { status: "CLEARED" });
-  return summary;
-}
+export const CUSTOMS_POLL_DELAY_MS = 5 * 60_000;
 
 export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Promise<Result<{ done: boolean; cleared: boolean }>> {
   const ctx = { orgId: asOrgId(input.orgId), userId: asUserId(input.userId) };
   const branch = input.branch ?? 1;
+  // Thông điệp Hải quan trả sau (VNACCSREP) trước – có thể đã báo phân luồng/thông quan; đọc kết quả sau khi áp.
+  await pullCustomsMessages(deps, ctx);
   const result = await deps.uow.asOrg(ctx, (r) => r.results.get(input.orgId, input.dossierId, branch));
   if (!result) return err(domainError("NOT_FOUND", "Hồ sơ chưa truyền"));
   const stage = stageOf(result);
@@ -34,7 +36,7 @@ export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Pro
   const dossier = await deps.dossiers.get(input.orgId, input.dossierId);
   const op = queryOpFor(dossier?.direction ?? "NK");
 
-  const st = await deps.gateway.queryStatus(input.orgId, result.externalId, input.dossierId);
+  const st = await deps.gateway.queryStatus(input.orgId, result.externalId, input.dossierId, dossier?.direction);
   await meterSafely(deps.usage, { orgId: input.orgId, dossierId: input.dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: op, quantity: 1, meta: { attempt: input.attempt } });
   const nextStage = st.rejected ? "REJECTED" : st.cleared ? "CLEARED" : stage;
   const now = deps.clock.now();

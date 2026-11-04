@@ -73,6 +73,11 @@ describe("parseCustomsInfo", () => {
       { title: "Sửa trị giá", content: "Khai lại 1.50" },
     ]);
   });
+  it("chỉ thị nguyên văn (directivesRaw): giữ khoảng trắng, bỏ ô trống; merge giữ bản cũ khi bản mới không có", () => {
+    const info = parseCustomsInfo("IDA", { objVN_IDA_CTHQ: { cthQ_ID: 9, cthQ_CCM: "A", cthQ_T01: " Bổ sung  C/O ", cthQ_I01: "Nộp  C/O ", cthQ_I02: "" } }, AT);
+    expect(info.directivesRaw).toEqual({ cthQ_CCM: "A", cthQ_T01: " Bổ sung  C/O ", cthQ_I01: "Nộp  C/O " });
+    expect(mergeCustomsInfo(info, parseCustomsInfo("IDA", {}, AT)).directivesRaw).toEqual(info.directivesRaw);
+  });
 
   it("EDA: thuế xuất khẩu và lệ phí cộng thành tổng thuế", () => {
     const info = parseCustomsInfo("EDA", { objVN_EDA: { tK_ETA: "1500000", tK_TCO: 20000, tK_K10: "15/10/2026", tK_RT1: "080000", tK_K07: "2" } }, AT);

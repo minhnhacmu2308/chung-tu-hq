@@ -42,8 +42,30 @@ export const getDossier = (id: string) =>
 
 export const listDocuments = (dossierId: string) => query((db) => db.documents.filter((d) => d.dossierId === dossierId));
 
-import type { CreateDossierInput } from "@kb/contracts";
+import type { CreateDossierInput, DossierDraft, DraftDossierInput } from "@kb/contracts";
 export type { CreateDossierInput };
+
+/**
+ * "Nhờ AI điền" (mock): không gọi AI – nhận mã hồ sơ gõ trong câu + vài từ khóa vận tải/chiều. Backend dùng model rẻ (ADR 0010).
+ * Như backend: chỉ sao chép thông tin form (không chứng từ, không tờ khai), hạn xử lý không đổi.
+ */
+export const draftDossier = (input: DraftDossierInput) =>
+  query((db): DossierDraft => {
+    const text = input.prompt.toLowerCase();
+    const code = /hs-(?:nk|xk)-\d{4}-\d{3,}/.exec(text)?.[0]?.toUpperCase();
+    const base = code ? db.dossiers.find((d) => d.code === code) : undefined;
+    const transportMode = /máy bay|hàng không|\bair\b/.test(text) ? "AIR" : /container|đường biển|\bsea\b/.test(text) ? "SEA_CONTAINER" : /đường bộ|xe tải|\btruck\b/.test(text) ? "ROAD" : (base?.transportMode);
+    const direction = /xuất khẩu|\bxk\b|\bexport\b/.test(text) ? "XK" : /nhập khẩu|\bnk\b|\bimport\b/.test(text) ? "NK" : base?.direction;
+    const office = base?.customsOffice.split(/\s+[–-]\s+/)[0]?.trim();
+    return {
+      ...(direction ? { direction } : {}),
+      ...(transportMode ? { transportMode } : {}),
+      ...(base && base.direction === direction ? { typeCode: base.typeCode } : {}),
+      ...(office ? { customsOfficeCode: office } : {}),
+      ...(base ? { partner: base.partner, skillSetId: base.skillSetId, fromDossier: { id: base.id, code: base.code } } : {}),
+      ...(base?.note ? { note: base.note } : {}),
+    };
+  });
 
 export const createDossier = (input: CreateDossierInput) =>
   mutate((db) => {

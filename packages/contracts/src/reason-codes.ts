@@ -90,6 +90,9 @@ export const REASON_TEXT_VI = {
   INBOX_MESSAGE_NOT_FOUND: "Không tìm thấy email trong hộp thư chứng từ",
   INBOX_ATTACHMENT_ADDED: "File đã được thêm vào hồ sơ {code}",
   DOSSIER_SENT_TO_CUSTOMS: "Hồ sơ đã truyền Hải quan, không xóa được – hãy hủy hồ sơ",
+  DOSSIER_AI_NOT_CONFIGURED: "Chưa bật AI điền hồ sơ – nhập tay hoặc sao chép từ hồ sơ cũ",
+  DOSSIER_AI_RATE_LIMITED: "Đã nhờ AI điền quá nhiều lần trong 1 giờ – thử lại sau hoặc sao chép từ hồ sơ cũ",
+  DOSSIER_AI_FAILED: "AI chưa điền được – thử viết lại yêu cầu hoặc sao chép từ hồ sơ cũ",
 
   // ── Chi phí và điều chỉnh trị giá (value-charges chargesConflict) ──
   CHARGES_FREIGHT_AMOUNT_REQUIRED: "Chứng từ có phí vận chuyển {amount} {currency} – nhập số tiền cước hoặc chọn theo chứng từ",

@@ -71,7 +71,7 @@ describe("Hộp thư chứng từ", () => {
     await expectNoA11yViolations(container);
     const card = within(list).getByText(/Dongguan Changli/).closest("li")!;
     expect(within(card).getByText("Trùng mã hồ sơ")).toBeTruthy();
-    await userEvent.click(await within(card).findByRole("button", { name: "Thêm vào hồ sơ HS-NK-2610-027" }, T));
+    await userEvent.click(await within(card).findByRole("button", { name: /^Thêm vào hồ sơ HS-NK-\d{4}-027$/ }, T));
     await waitFor(() => expect(screen.getByRole("tab", { name: "Mới (3)" })).toBeTruthy(), T);
     expect(getDb().inboxMessages.find((m) => m.id === "imsg_seed_1")?.status).toBe("DONE");
   }, 20_000);

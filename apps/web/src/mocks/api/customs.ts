@@ -806,6 +806,7 @@ function branchView(db: MockDb, c: Ctx, now: number): BranchSubmission {
     channel: result?.channel ?? null,
     started: all.length > 0,
     inProgress: Boolean(c.flow.pending) || Boolean(c.flow.clearAt) || all.some((m) => Date.parse(m.at) > now),
+    sending: Boolean(c.flow.pending) || all.some((m) => Date.parse(m.at) > now),
     nextOp: nextCustomsOperation(input),
     queryOp: queryOpFor(c.dossier.direction),
     amendments: c.flow.amendments,

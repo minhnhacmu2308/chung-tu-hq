@@ -31,3 +31,26 @@ export type UpdateDossierInput = z.infer<typeof UpdateDossierInputSchema>;
 /** Kết quả xóa hẳn hồ sơ (chỉ hồ sơ chưa truyền Hải quan). */
 export const DeleteDossierResultSchema = z.object({ id: z.string(), code: z.string() });
 export type DeleteDossierResult = z.infer<typeof DeleteDossierResultSchema>;
+
+/** "Nhờ AI điền" ở màn Tạo hồ sơ (ADR 0010): người dùng gõ yêu cầu, vd "giống hồ sơ HS-NK-2610-142 nhưng đi máy bay". */
+export const DraftDossierInputSchema = z.object({ prompt: z.string().trim().min(3, "Nhập yêu cầu").max(1000) });
+export type DraftDossierInput = z.infer<typeof DraftDossierInputSchema>;
+
+/**
+ * Giá trị gợi ý cho form Tạo hồ sơ – KHÔNG tạo hồ sơ; người dùng xem, sửa rồi bấm Tạo.
+ * Chỉ có ô AI/hồ sơ gốc xác định được; mã đã kiểm với danh mục VNACCS (TYPE_CODE theo chiều, A038 đang dùng).
+ */
+export const DossierDraftSchema = z.object({
+  direction: DirectionSchema.optional(),
+  transportMode: TransportModeSchema.optional(),
+  typeCode: z.string().optional(),
+  /** Mã chi cục A038 (form dùng mã). */
+  customsOfficeCode: z.string().optional(),
+  partner: z.string().optional(),
+  dueDate: IsoDateSchema.optional(),
+  skillSetId: z.string().optional(),
+  note: z.string().optional(),
+  /** Hồ sơ cũ yêu cầu nhắc tới – các ô không được nói khác lấy theo hồ sơ này. */
+  fromDossier: z.object({ id: z.string(), code: z.string() }).optional(),
+});
+export type DossierDraft = z.infer<typeof DossierDraftSchema>;

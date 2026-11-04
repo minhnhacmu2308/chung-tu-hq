@@ -1,0 +1,54 @@
+{
+  "mA_HQ": "88AB",
+  "mA_DV": "123",
+  "teN_DV": "Tên đơn vị",
+  "mA_DAI_LY": "",
+  "teN_DAI_LY": "",
+  "tvD_VD_GOC": "VANDON",
+  "tvD_VD_GOC_NGAY": "12/12/2025",
+  "tvD_NGUOIPHATHANH": "Người phát hành",
+  "tvD_VDNHANH_SOLUONG": 2,
+  "tvD_LOAI": 1,
+  "tvD_LOAIHANG": 1,
+  "useR_ID": "***",
+  "tvdN_HANG": [
+    {
+      "tvdN_STT": 1,
+      "tvdN_VD_NHANH": "VANDON-01",
+      "tvdN_NGUOIGUI_TEN": "người gửi",
+      "tvdN_NGUOIGUI_DIACHI": "địa chỉ người gửi",
+      "tvdN_NGUOINHAN_TEN": "người nhận",
+      "tvdN_NGUOINHAN_DIACHI": "địa chỉ người nhận",
+      "tvdN_CONT_LUONG": 1,
+      "tvdN_LUONG": 1,
+      "tvdN_LUONG_DVT": "CT",
+      "tvdN_TRONGLUONG": 5,
+      "tvdN_TRONGLUONG_DVT": "TNE",
+      "tvdnC_HANG": [
+        {
+          "tvdnC_SOCONT": "SOCONT1",
+          "tvdnC_SOSEAL": "SOESAL1"
+        }
+      ]
+    },
+    {
+      "tvdN_STT": 2,
+      "tvdN_VD_NHANH": "VANDON-02",
+      "tvdN_NGUOIGUI_TEN": "người gửi",
+      "tvdN_NGUOIGUI_DIACHI": "địa chỉ người gửi",
+      "tvdN_NGUOINHAN_TEN": "người nhận",
+      "tvdN_NGUOINHAN_DIACHI": "địa chỉ người nhận",
+      "tvdN_CONT_LUONG": 1,
+      "tvdN_LUONG": 1,
+      "tvdN_LUONG_DVT": "CT",
+      "tvdN_TRONGLUONG": 3,
+      "tvdN_TRONGLUONG_DVT": "TNE",
+      "tvdnC_HANG": [
+        {
+          "tvdnC_SOCONT": "SOCONT2",
+          "tvdnC_SOSEAL": "SOESAL2"
+        }
+      ]
+    }
+  ]
+}

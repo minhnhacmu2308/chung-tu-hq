@@ -3,6 +3,7 @@ import type { CustomsSummary, DocKind, EditSheet, DocumentStatus, DossierStatus,
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
+import type { AiDossierDraft } from "../domain/draft.js";
 
 export type DossierRow = {
   id: string; orgId: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; customsOfficeCode: string; customsOfficeName: string;
@@ -92,6 +93,14 @@ export interface DossierCustomsReader {
   summaries(ctx: { orgId: OrgId; userId: UserId }, dossierIds: string[]): Promise<Map<string, CustomsSummary>>;
 }
 
+/** Tóm tắt hồ sơ gần đây gửi kèm yêu cầu để AI nhận ra "giống hồ sơ …" (chỉ thông tin form của chính doanh nghiệp). */
+export type DossierBrief = { code: string; direction: string; transportMode: string; typeCode: string; customsOffice: string; partner: string; createdOn: string };
+
+export interface DossierDraftAi {
+  /** `result` null = model đã trả lời (đã tính token) nhưng không ra JSON hợp lệ (từ chối, cắt ở max_tokens) – vẫn ghi usage. Lỗi mạng/API → throw. */
+  draft(input: { prompt: string; today: string; recent: DossierBrief[] }): Promise<{ result: AiDossierDraft | null; usage: { model: string; inputTokens: number; outputTokens: number } }>;
+}
+
 export type DossierDeps = {
   uow: DossierUow;
   queue: JobQueue;
@@ -106,6 +115,12 @@ export type DossierDeps = {
   customs?: DossierCustomsReader;
   /** Các tờ khai nhánh đã lập ở Hải quan (module integration; container nối) – chặn đổi bộ chứng từ khi lô nhiều tờ còn tờ chưa gọi về. Không nối → không kiểm. */
   customsSheets?: (orgId: string, dossierId: string) => Promise<EditSheet[]>;
+  /** "Nhờ AI điền" form Tạo hồ sơ (ADR 0010) – container nối model rẻ; không nối → báo chưa bật. */
+  draftAi?: DossierDraftAi;
+  /** Giới hạn số lần nhờ AI điền / người / giờ (container nối bộ đếm Redis của identity). */
+  limiter?: { hit(key: string, limit: number, windowSec: number): Promise<{ allowed: boolean }> };
+  /** Ghi usage_events cho lần gọi AI điền hồ sơ (bất biến 8); container nối UsageRecorder. */
+  recordAiUsage?: (u: { orgId: string; kind: "AI_DOSSIER_DRAFT"; model: string; inputTokens: number; outputTokens: number }) => Promise<void>;
   /** Sau khi xóa hẳn hồ sơ (container nối: file hộp thư đã xếp vào hồ sơ trở lại "chờ xếp"). */
   onDeleted?: (ctx: { orgId: OrgId; userId: UserId }, dossierId: string) => Promise<void>;
   clock: Clock;

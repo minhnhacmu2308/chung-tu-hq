@@ -17,6 +17,7 @@ import { coarseState, stageOf } from "../domain/state-machine.js";
 import { availabilityInput, hasBlockingPending, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { auditHysWaiver, hysGuard, recordHysWaiver, type HysWaiver } from "./hys-guard.js";
+import { pullCustomsMessages } from "./customs-messages.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { resultsSentError } from "./sent-sheets.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
@@ -132,6 +133,10 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
       if (blocking.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: blocking.join("; ") }));
       payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
     }
+  } else if (op === "AMB" || op === "AMC") {
+    // Gọi lại / đăng ký bản khai bổ sung: theo số tờ khai bổ sung Hải quan cấp ở AMA (tK_SYN).
+    const syn = amendment?.header["TK_SYN"] ?? amendment?.result?.["TK_SYN"];
+    payload = { request: { soToKhai: result.declarationNo, ...(syn ? { tK_SYN: String(syn) } : {}) }, certificateId: result.raw?.certificateId };
   } else if (op === "CONT" || op === "PORT_FEE") {
     payload = { request: { soToKhai: result.declarationNo, containers: snap.payload.containers }, certificateId: result.raw?.certificateId };
   }
@@ -193,13 +198,19 @@ export async function enqueue(
   return ok({ sent: true, message: `Đang gửi ${OPERATION_LABELS[p.op].toLowerCase()} (${p.op})` });
 }
 
-/** Tra cứu trạng thái tờ khai (IID nhập / IEX xuất) – trả lời ngay, ghi nhật ký OUT/IN. */
-async function queryNow(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, direction: "NK" | "XK", result: ResultRow): Promise<Result<OperationResult>> {
+/**
+ * Nút "Tra cứu / lấy kết quả" (người khai bấm – cách chính, thống nhất với đội nghiệp vụ 01/11/2026): lấy thông điệp Hải quan trả sau (VNACCSREP)
+ * rồi tra IID nhập / IEX xuất – trả lời ngay, ghi nhật ký OUT/IN.
+ */
+async function queryNow(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, direction: "NK" | "XK", before: ResultRow): Promise<Result<OperationResult>> {
+  if (!before.externalId) return err(domainError("INVALID_STATE", "Chưa có số tờ khai để tra cứu"));
+  await pullCustomsMessages(deps, ctx);
+  const result = (await deps.uow.asOrg(ctx, (r) => r.results.get(ctx.orgId, dossierId, before.branch))) ?? before;
   if (!result.externalId) return err(domainError("INVALID_STATE", "Chưa có số tờ khai để tra cứu"));
   const op = queryOpFor(direction);
   const now = () => deps.clock.now();
   await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: result.branch, operation: op, direction: "OUT", result: "OK", summary: `Tra cứu trạng thái tờ khai (${op})`, payloadMasked: { nghiepVu: op, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
-  const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId);
+  const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId, direction);
   await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: op, quantity: 1 });
   const stage = stageOf(result);
   const cleared = st.cleared && (stage === "DECLARED" || stage === "AMEND_PRE_DECLARED" || stage === "AMEND_RECALLED");

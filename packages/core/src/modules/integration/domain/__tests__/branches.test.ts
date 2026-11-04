@@ -40,11 +40,19 @@ describe("branchPayload", () => {
     expect(branchPayload(p, 2, null).blockers).toEqual(["Tờ 2/3: chưa có số tờ khai đầu tiên (tờ 1)"]);
   });
 
-  it("TK_TP có source USER thì giữ", () => {
+  it("TK_TP luôn tự tính = tổng trị giá hóa đơn cả lô – giá trị sửa tay (kể cả USER) bị bỏ qua (VNACCS phân bổ thuế theo hệ số)", () => {
     const q = mk(120, { fields: { TK_TP: { value: "999", source: "USER" } } });
-    expect(branchPayload(q, 1, null).payload.fields.TK_TP!.value).toBe("999");
+    expect(branchPayload(q, 1, null).payload.fields.TK_TP!.value).toBe(invoiceTotal(q));
+    expect(branchPayload(q, 2, "104000000001").payload.fields.TK_TP!.value).toBe(invoiceTotal(q));
   });
 
+  it("40 dòng: ô tách tờ nhập tay cũ (TK_TP/TK_DNO/TK_FIC/TK_BNO) bị bỏ – không gửi Hải quan, không sinh KTG_VT", () => {
+    const q = mk(40, { fields: { TK_TP: { value: "999", source: "USER" }, TK_DNO: { value: "2", source: "USER" }, TK_FIC: { value: "F" }, TK_BNO: { value: "1" } } });
+    const out = branchPayload(q, 1, null).payload.fields;
+    for (const k of ["TK_TP", "TK_DNO", "TK_FIC", "TK_BNO"]) expect(out[k]).toBeUndefined();
+    const req = buildFptRequest(branchPayload(q, 1, null).payload) as unknown as { request?: Record<string, Record<string, unknown>> };
+    expect(JSON.stringify(req)).not.toMatch(/tK_TP"|ktG_VT1|tK_DNO/);
+  });
   it("40 dòng: payload không đổi", () => {
     const q = mk(40);
     const snap = structuredClone(q);
@@ -124,8 +132,8 @@ describe("sheetSnapshot / sentSheetsDiff / sentSheetsError (nội dung đã gử
   it("đổi ô HANG.<id dòng 10>.X → chỉ tờ 1 lines", () => {
     expect(byNo(edit((p) => { p.fields["HANG.i10.X"] = { value: "1" }; })).map((x) => [x.lines, x.common])).toEqual([[true, []], [false, []], [false, []]]);
   });
-  it("đổi TK_TP (người khai nhập) → common chứa TK_TP", () => {
-    expect(byNo(edit((p) => { p.fields.TK_TP = { value: "1", source: "USER" }; }))[0]!.common).toEqual(["TK_TP"]);
+  it("TK_TP sửa tay không làm đổi nội dung đã gửi (luôn tự tính)", () => {
+    expect(byNo(edit((p) => { p.fields.TK_TP = { value: "1", source: "USER" }; }))[0]?.common ?? []).toEqual([]);
   });
   it("tờ RECALLED / CLEARED / không sent → không xét", () => {
     const p = edit((x) => { x.fields.CQHQ = { value: "01AB" }; });

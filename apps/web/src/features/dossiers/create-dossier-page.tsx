@@ -20,7 +20,10 @@ import { useCodeLists } from "@/features/declaration-form/use-code-list";
 import { LoadError } from "@/components/common/load-error";
 import { dossierQuota, isQuotaError } from "./dossier-quota";
 import { prefillFromProfile } from "./profile-prefill";
+import { applyDraft } from "./apply-draft";
+import { QuickFillCard } from "./quick-fill-card";
 import type { Direction, Dossier } from "@/mocks/types";
+import type { DossierDraft } from "@/api/dossiers";
 import { officeOptions, skillSetOptions, suggestedDocuments, typeCodesIn, typeGroupOf, typeGroupOptions, type TypeGroup } from "./create-dossier-options";
 import { DIRECTION_LABELS, transportLabels, transportOptions } from "./dossier-display";
 import { CREATE_DOSSIER_MESSAGES } from "./dossiers.messages";
@@ -108,6 +111,22 @@ export function CreateDossierPage() {
     setForm((f) => ({ ...f, [key]: value }));
     if (key === "typeCode" || key === "customsOffice") setTouched((t) => new Set(t).add(key));
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+  };
+
+  // Điền nhanh (AI / sao chép hồ sơ cũ): ô đã điền coi như người dùng chọn – Mặc định khai báo không ghi đè, lỗi cũ của ô đó xóa.
+  const applyQuickFill = (draft: DossierDraft) => {
+    // Giá trị không còn trong danh sách chọn (bộ skill đã bỏ, mã chi cục cũ trước sắp xếp 2025) → bỏ, để Mặc định khai báo điền.
+    const clean: DossierDraft = { ...draft };
+    if (clean.skillSetId && !skillSetOptions(locale).some((o) => o.value === clean.skillSetId)) delete clean.skillSetId;
+    if (clean.customsOfficeCode && officeList && !offices.some((o) => o.value === clean.customsOfficeCode)) delete clean.customsOfficeCode;
+    const r = applyDraft(form, clean);
+    setForm(r.form);
+    const picked = r.filled.filter((k) => k === "typeCode" || k === "customsOffice");
+    // Đổi chiều: ô đã chọn của chiều cũ không còn giá trị (như changeDirection) – chỉ giữ ô gợi ý vừa điền.
+    const switched = r.form.direction !== form.direction;
+    setTouched((s) => new Set([...(switched ? [] : s), ...picked]));
+    setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !(r.filled as string[]).includes(k))));
+    return r.filled.length;
   };
 
   const changeDirection = (d: Direction) => {
@@ -212,6 +231,8 @@ export function CreateDossierPage() {
       )}
 
       {codeLists.error && <LoadError title={t.codeListsFailed} onRetry={codeLists.retry} />}
+
+      <QuickFillCard dossiers={dossiers.data} loading={dossiers.isLoading} failed={dossiers.isError} onRetry={() => void dossiers.refetch()} onApply={applyQuickFill} />
 
       <form onSubmit={submit} noValidate>
         <Grid cols={{ base: 1, lg: 3 }} gap="lg">

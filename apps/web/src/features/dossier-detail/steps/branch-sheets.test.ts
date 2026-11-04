@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
-import { recallProgress, anyInProgress, canDeclareAll, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
+import { recallProgress, anyInProgress, submissionRefetchMs, canDeclareAll, clearedWhileResending, declareWaitingOn, postSheet, problemOf, sheetsOf, sheetView, orderLocked, waitingOn } from "./branch-sheets";
 
 describe("sheetsOf", () => {
   it("JSON cũ không có branches → một tờ từ trường cấp hồ sơ", () => {
@@ -196,5 +196,18 @@ describe("recalled notice", () => {
     expect(parseRecalled(null)).toBeNull();
     expect(parseRecalled("x")).toBeNull();
     expect(parseRecalled("all:0")).toBeNull();
+  });
+});
+
+describe("submissionRefetchMs – nhịp làm mới màn Truyền", () => {
+  it("đang gửi → 1 giây; chỉ chờ Hải quan phân luồng/thông quan → 30 giây; không chờ gì → không hỏi", () => {
+    const waiting = submissionOf([branch(1, 1, "DECLARED", { inProgress: true })], { inProgress: true });
+    expect(submissionRefetchMs(waiting)).toBe(30_000);
+    const sending = submissionOf([branch(1, 1, "PRE_DECLARED", { inProgress: true, pipeline: pipelineFor("PRE_DECLARED").map((p) => (p.op === "IDC" ? { ...p, status: "SENDING" as const } : p)) })], { inProgress: true });
+    expect(submissionRefetchMs(sending)).toBe(1000);
+    // Chuỗi gọi về (IDB/EDB) của tờ 2 còn trong hàng đợi gửi – không có dòng SENDING trên pipeline vẫn hỏi nhanh.
+    const recalling = submissionOf([branch(1, 2, "RECALLED"), branch(2, 2, "PRE_DECLARED", { inProgress: true, sending: true })]);
+    expect(submissionRefetchMs(recalling)).toBe(1000);
+    expect(submissionRefetchMs(submissionOf([branch(1, 1, "CLEARED")]))).toBe(false);
   });
 });

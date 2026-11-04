@@ -46,7 +46,7 @@ pnpm eval                            # chỉ khi đổi prompt / schema trích x
 | A3 | Mã định danh (MST, MAWB/HAWB, số invoice/C/O/container, HS) là `string` – không `Number()/parseInt` | grep trong diff |
 | A4 | Tiền/trị giá dùng `Decimal` (`dec`, `sumDec`, cột `numeric`), không cộng/nhân `number` | grep `+`/`*` trên trường tiền, `Number(` |
 | A5 | Ngày nghiệp vụ `YYYY-MM-DD`; thời điểm `timestamptz`/UTC; `domain/` không `Date.now()`/`new Date()`/`Math.random()` (nhận `clock`/`idGen`) | grep trong `domain/` |
-| A6 | AI chỉ qua port `AiProvider` (extraction + gợi ý HS + soạn nháp email quản trị); đối chiếu, ánh xạ tờ khai, thuế, chặn truyền là code thuần có test (ADR 0002) | Logic quyết định có dựa thẳng vào câu trả lời AI không |
+| A6 | AI chỉ qua port `AiProvider` (extraction + gợi ý HS + soạn nháp email quản trị + gợi ý form Tạo hồ sơ – ADR 0010); đối chiếu, ánh xạ tờ khai, thuế, chặn truyền là code thuần có test (ADR 0002) | Logic quyết định có dựa thẳng vào câu trả lời AI không |
 | A7 | Người dùng sửa trường → `field_audit` append-only **cùng transaction** | So mẫu `_field-edit.ts` |
 | A8 | Không đường nào truyền tờ khai khi còn BLOCKER FAIL / HS chưa xác nhận / tỷ giá khác tuần – mọi đường gửi đi qua guard `submit-declaration.ts` | |
 | A9 | Mọi lần gọi AI ghi `usage_events`, **kể cả nhánh lỗi** (`AiDataError.usage`), có `dedupeKey` khi job có thể chạy lại | |

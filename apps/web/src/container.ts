@@ -11,7 +11,7 @@ import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/in
 import { listOpenDocuments, rereadDocuments, type DossierDeps } from "@kb/core/modules/dossier";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
 import { latestReads, type ExtractionDeps } from "@kb/core/modules/extraction";
-import { ClaudeEmailDrafter, createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
+import { ClaudeDossierDrafter, ClaudeEmailDrafter, createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
 import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
@@ -279,6 +279,11 @@ function build(): Container {
   declaration.customsSheets = customsSheets;
   extraction.customsSheets = customsSheets;
   dossier.customsSheets = customsSheets;
+  // "Nhờ AI điền" form Tạo hồ sơ (ADR 0010): model rẻ (AI_FAST_MODEL), tối đa 30 lần/người/giờ, ghi usage_events theo doanh nghiệp (bất biến 8).
+  if (env.AI_PROVIDER === "claude" && env.ANTHROPIC_API_KEY) dossier.draftAi = new ClaudeDossierDrafter(env.ANTHROPIC_API_KEY, env.AI_FAST_MODEL);
+  dossier.limiter = identity.rateLimiter;
+  dossier.recordAiUsage = async (u) =>
+    void (await usageRecorder.record({ orgId: u.orgId, dossierId: null, documentId: null, kind: u.kind, provider: "anthropic", model: u.model, inputTokens: u.inputTokens, outputTokens: u.outputTokens }));
   // Duyệt tờ khai lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi Hải quan (SENT_SHEETS_CHANGED).
   declaration.sentSheetsGuard = (orgId, dossierId) => checkSentSheets(customs, orgId, dossierId);
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });

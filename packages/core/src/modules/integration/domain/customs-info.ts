@@ -112,6 +112,19 @@ function directivesOf(cthq: Obj | undefined): CustomsDirective[] {
   return out;
 }
 
+const CTHQ_KEYS = ["CTHQ_CCM", ...Array.from({ length: 10 }, (_, i) => [`CTHQ_D${pad2(i + 1)}`, `CTHQ_T${pad2(i + 1)}`, `CTHQ_I${pad2(i + 1)}`]).flat()];
+
+/** Chỉ thị nguyên văn (không trim, không đổi kiểu) – gửi lại ở IDA01/EDA01. Không có ô nào → undefined. */
+export function directivesRawOf(cthq: Obj | undefined): Record<string, unknown> | undefined {
+  if (!cthq) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const k of CTHQ_KEYS) {
+    const v = cthq[fptKey(k)];
+    if (v !== null && v !== undefined && v !== "") out[fptKey(k)] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** Một phần tử objIDA/objEDA (đã có objVN_<KIND>, _HANG, _THUE, _CTHQ, _TRANGTHAI) → thông tin Hải quan trả về. */
 export function parseCustomsInfo(kind: Kind, item: Obj, receivedAt: Date): CustomsInfo {
   const F = FIELDS[kind];
@@ -152,6 +165,7 @@ export function parseCustomsInfo(kind: Kind, item: Obj, receivedAt: Date): Custo
     items,
     directiveKind: str(get(cthq, "CTHQ_CCM")),
     directives: directivesOf(cthq),
+    directivesRaw: directivesRawOf(cthq),
     permitDate: date(get(tt, F.permitDate)),
     permitTime: time(get(tt, F.permitTime)),
     inspectionDoneDate: date(get(tt, F.inspectedDate)),
@@ -170,5 +184,6 @@ export function mergeCustomsInfo(prev: CustomsInfo | null | undefined, next: Cus
     taxes: keepList(prev.taxes, next.taxes),
     items: keepList(prev.items, next.items),
     directives: keepList(prev.directives, next.directives),
+    ...(next.directivesRaw ?? prev.directivesRaw ? { directivesRaw: next.directivesRaw ?? prev.directivesRaw } : {}),
   };
 }

@@ -135,7 +135,7 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     nav.query = "step=review&recalled=2";
     api.current = partial();
     api.recallAll.mockImplementation(async () => {
-      api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED", { inProgress: true })], { declarationStatus: "DRAFT" });
+      api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED", { inProgress: true, sending: true })], { declarationStatus: "DRAFT" });
       return { sent: true, message: "ok", sheets: [1, 3] };
     });
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
@@ -146,7 +146,7 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     // Tờ 3 đang gọi về → nút gọi về các tờ còn lại bị khóa.
     const recallButton = () => screen.getByText("Gọi về các tờ còn lại để sửa thông tin chung").closest("button")!;
     await waitFor(() => expect(recallButton().disabled).toBe(true), T);
-    // Chuỗi xong (Review tự hỏi lại mỗi giây) → mọi tờ đã gọi về, phạm vi đầy đủ.
+    // Chuỗi xong (đang gửi → Review hỏi lại mỗi giây) → mọi tờ đã gọi về, phạm vi đầy đủ.
     api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "RECALLED")], { declarationStatus: "DRAFT" });
     await waitFor(() => expect(screen.queryByText(/chưa gọi về/)).toBeNull(), T);
     expect(screen.queryByText(/Đã gọi về tờ 2 – chỉ sửa dòng hàng/)).toBeNull();

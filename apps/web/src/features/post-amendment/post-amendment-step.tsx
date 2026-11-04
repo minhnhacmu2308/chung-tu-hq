@@ -18,7 +18,7 @@ import { getOrganization, settingsKeys } from "@/api/settings";
 import { formatDate, formatNumber } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { StepError, StepLoading } from "../dossier-detail/steps/declaration-parts";
-import { anyInProgress, postSheet, sheetsOf, sheetView } from "../dossier-detail/steps/branch-sheets";
+import { submissionRefetchMs, postSheet, sheetsOf, sheetView } from "../dossier-detail/steps/branch-sheets";
 import type { StepProps } from "../dossier-detail/steps/types";
 import { AMA_MESSAGES } from "./ama.messages";
 import { amaHeaderLabel, amaSubSteps, amaDeadline, copyResultLines, maxSubStep, postStepVisible, resolveSubStep, subStepEditable, type AmaSubStep } from "./ama-wizard";
@@ -40,8 +40,8 @@ export function PostAmendmentStep({ dossier }: StepProps) {
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
     queryFn: () => getSubmission(dossier.id),
-    // Đang chờ Hải quan phản hồi AMA/AMB/AMC (của bất kỳ tờ nào) → hỏi lại mỗi giây.
-    refetchInterval: (sq) => (sq.state.data && anyInProgress(sq.state.data) ? 1000 : false),
+    // Đang chờ Hải quan phản hồi AMA/AMB/AMC (của bất kỳ tờ nào) → hỏi lại (đang gửi 1 giây, chờ Hải quan 30 giây – submissionRefetchMs).
+    refetchInterval: (sq) => (sq.state.data ? submissionRefetchMs(sq.state.data) : false),
   });
   // Lô nhiều tờ khai: AMA theo từng tờ (?branch=k; vắng → tờ đang sửa sau thông quan / đã thông quan). Lô 1 tờ: tờ 1.
   const sheets = subQ.data ? sheetsOf(subQ.data) : [];

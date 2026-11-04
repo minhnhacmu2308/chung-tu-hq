@@ -1,8 +1,9 @@
 export { dossierChannel } from "./application/ports.js";
-export type { DocumentRow, DossierCustomsReader, DossierDeps, DossierRepos, DossierRow, DossierUow, ObjectStorage, PdfInspector, ProgressEvent, ProgressPublisher, QuotaChecker, Unzipper, UploadFile } from "./application/ports.js";
+export type { DocumentRow, DossierBrief, DossierCustomsReader, DossierDeps, DossierDraftAi, DossierRepos, DossierRow, DossierUow, ObjectStorage, PdfInspector, ProgressEvent, ProgressPublisher, QuotaChecker, Unzipper, UploadFile } from "./application/ports.js";
 export { listDossiers, listDossiersPage } from "./application/list-dossiers.js";
 export { getDossier } from "./application/get-dossier.js";
 export { createDossier } from "./application/create-dossier.js";
+export { draftDossierWithAi, DOSSIER_AI_PER_HOUR } from "./application/draft-dossier.js";
 export { updateDossier } from "./application/update-dossier.js";
 export { cancelDossier } from "./application/cancel-dossier.js";
 export { deleteDossier } from "./application/delete-dossier.js";
@@ -15,3 +16,4 @@ export { listOpenDocuments, rereadDocuments, type OpenDocument } from "./applica
 export { requeueStuckDocuments, STUCK_DOCUMENT_MS } from "./application/requeue-stuck-documents.js";
 export { toDossier, toDocument } from "./application/_dto.js";
 export { classifyByFileName } from "./domain/upload-rules.js";
+export type { AiDossierDraft } from "./domain/draft.js";

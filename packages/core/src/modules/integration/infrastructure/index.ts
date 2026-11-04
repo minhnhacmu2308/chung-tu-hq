@@ -3,6 +3,7 @@ import type { Env } from "../../../config/env.js";
 import type { Db } from "../../../db/client.js";
 import { systemClock, type Clock } from "../../../shared/clock.js";
 import { ulidIdGen } from "../../../shared/ids.js";
+import { CUSTOMS_POLL_DELAY_MS } from "../application/poll-status.js";
 import type { IntegrationDeps, IntegrationProbe } from "../application/ports.js";
 import type { JobQueue } from "../../../shared/queue.js";
 import type { DeclarationDeps } from "../../declaration/index.js";
@@ -48,7 +49,7 @@ export function createCustomsInfrastructure(opts: {
     uow: new DrizzleCustomsUow(opts.db), queue: opts.queue, gateway,
     declarations: createDeclarationReader(opts.declaration), dossiers: createCustomsDossierPort(opts.dossier), validation: createCustomsValidationReader(opts.validation), certificates: createCertificateReader(opts.identity),
     audit: opts.declaration.audit, org: { fourEyes: async (orgId) => (await opts.declaration.org.get(orgId)).fourEyes },
-    pollDelayMs: gateway.name === "fake-customs" ? 3_000 : 30_000, clock: opts.clock ?? systemClock, idGen: ulidIdGen,
+    pollDelayMs: gateway.name === "fake-customs" ? 3_000 : CUSTOMS_POLL_DELAY_MS, clock: opts.clock ?? systemClock, idGen: ulidIdGen,
   };
 }
 

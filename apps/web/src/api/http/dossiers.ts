@@ -1,5 +1,5 @@
 // Hồ sơ khai báo – gọi backend thật. Cùng chữ ký với src/mocks/api/dossiers.ts.
-import { DeleteDossierResultSchema, DossierDocumentSchema, DossierSchema, pageOf, type CreateDossierInput, type Dossier, type DossierFilter, type PageQuery } from "@kb/contracts";
+import { DeleteDossierResultSchema, DossierDocumentSchema, DossierDraftSchema, DossierSchema, pageOf, type CreateDossierInput, type DraftDossierInput, type Dossier, type DossierFilter, type PageQuery } from "@kb/contracts";
 import { z } from "zod";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/http";
 
@@ -26,6 +26,8 @@ export const listDossiersPage = (f: DossierFilter, page: PageQuery) => apiGet(`d
 export const getDossier = (id: string) => apiGet(`dossiers/${id}`, DossierSchema);
 export const listDocuments = (dossierId: string) => apiGet(`dossiers/${dossierId}/documents`, z.array(DossierDocumentSchema));
 export const createDossier = (input: CreateDossierInput) => apiPost("dossiers", input, DossierSchema);
+/** "Nhờ AI điền" form Tạo hồ sơ – trả giá trị gợi ý, không tạo hồ sơ. */
+export const draftDossier = (input: DraftDossierInput) => apiPost("dossiers/draft", input, DossierDraftSchema);
 export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" | "step" | "suspectFields" | "note" | "declarationNo" | "channel">>) =>
   apiPatch(`dossiers/${id}`, { ...(patch.note !== undefined ? { note: patch.note } : {}), ...(patch.step ? { step: patch.step } : {}) }, DossierSchema);
 export const cancelDossier = (id: string) => apiPost(`dossiers/${id}/cancel`, {}, DossierSchema);

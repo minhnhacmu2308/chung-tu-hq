@@ -44,6 +44,11 @@ export const ManualAdjustmentSchema = z.object({
   allocate: z.boolean().default(true),
 });
 export type ManualAdjustment = z.infer<typeof ManualAdjustmentSchema>;
+/**
+ * Tờ khai xuất không có chỉ tiêu 1.49: khoản cộng / trừ khác (chi phí đưa hàng ra cửa khẩu xuất, phí phát sinh ở nước ngoài…) chỉ dồn vào 2.40,
+ * lưu cùng dạng ManualAdjustment với mã tên cố định "N" (khác); `note` là tên khoản.
+ */
+export const EXPORT_ADJUSTMENT_CODE = "N";
 
 /**
  * Giải trình khi điều kiện giao hàng mâu thuẫn với người trả cước trên vận đơn (vd CIF mà vận đơn ghi Freight Collect):
@@ -113,8 +118,10 @@ export const ValueChargesViewSchema = z.object({
   freightVnd: DecimalStringSchema.nullable().optional(),
   /** Người trả cước trên vận đơn (Freight Prepaid / Collect); null = vận đơn không ghi / chưa đọc được. */
   freightTerm: z.enum(["PREPAID", "COLLECT"]).nullable().optional(),
-  /** Điều kiện giá đã gồm bảo hiểm (CIF, CIP…): nhập khẩu không khai 1.48. */
+  /** Nhập khẩu: điều kiện giá đã gồm bảo hiểm (CIF, CIP…) – không khai 1.48. Xuất khẩu: phải trừ bảo hiểm khỏi giá (giá đã gồm bảo hiểm: CIF, CIP, C&I, nhóm D). */
   insuranceIncluded: z.boolean(),
+  /** Được lập khoản điều chỉnh: nhập khẩu luôn có (1.49); xuất khẩu khi điều kiện giá có khai 2.40 (khác FOB). Không có = true. */
+  adjustmentsAllowed: z.boolean().optional(),
   /** Hồ sơ đã duyệt / truyền – chỉ xem. */
   locked: z.boolean(),
   updatedAt: IsoDateTimeSchema.nullable(),

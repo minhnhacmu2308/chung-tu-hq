@@ -22,9 +22,10 @@ describe("DECLARATION_CONDITIONS – chỉ tiêu theo tình huống", () => {
     expect(C.IN_CONTAINER.test(ctx({ transportCode: "2" }))).toBe(true);
     expect(C.IN_CONTAINER.test(ctx({ transportCode: "3" }))).toBe(false);
   });
-  it("EXPORT_VALUE: FOB có hóa đơn → không; CIF → có; FOB không hóa đơn → có", () => {
+  it("EXPORT_VALUE: FOB có hóa đơn → không; CIF, DAP, DAF → có; FOB không hóa đơn → có", () => {
     expect(C.EXPORT_VALUE.test(ctx({ incoterm: "FOB" }))).toBe(false);
-    expect(C.EXPORT_VALUE.test(ctx({ incoterm: "DAP" }))).toBe(false);
+    expect(C.EXPORT_VALUE.test(ctx({ incoterm: "DAP" }))).toBe(true);
+    expect(C.EXPORT_VALUE.test(ctx({ incoterm: "DAF" }))).toBe(true);
     expect(C.EXPORT_VALUE.test(ctx({ incoterm: "CIF" }))).toBe(true);
     expect(C.EXPORT_VALUE.test(ctx({ incoterm: "FOB", hasInvoice: false }))).toBe(true);
   });

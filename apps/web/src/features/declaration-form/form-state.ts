@@ -18,7 +18,7 @@ type Unit = { filled: boolean; missing: boolean };
 function units(kind: Kind, item: LayoutItem, v: FormValues, ctx: ConditionContext, blockCondition?: ConditionId): Unit[] {
   if (blockCondition && !isApplicable({ condition: blockCondition }, ctx)) return [];
   if (!isApplicable(item, ctx)) return [];
-  if (item.kind === "group" && item.fill === "any") return [{ filled: item.fields.some((f) => has(v, f.key)), missing: groupMissing(kind, item, v, ctx, blockCondition) }];
+  if (item.kind === "group" && item.fill === "any") return [{ filled: (item.sequence ?? item.fields.map((f) => f.key)).some((k) => has(v, k)), missing: groupMissing(kind, item, v, ctx, blockCondition) }];
   const fields = item.kind === "field" ? [item] : item.kind === "group" ? item.fields : (expandRepeat(item)[0] ?? []);
   const parentNo = item.kind === "field" ? undefined : item.no;
   const parentCondition = item.kind === "field" ? blockCondition : item.condition ?? blockCondition;

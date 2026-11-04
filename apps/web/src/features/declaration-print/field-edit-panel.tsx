@@ -1,11 +1,14 @@
 "use client";
 // Panel sửa ô của bản in (Dialog dạng panel bên phải, không chặn trang): mở khi chọn một ô, hiện cả nhóm ô của chỉ tiêu, lưu bằng API sửa chỉ tiêu.
 // `target` = ô người dùng vừa chọn; panel hiện `shown`. Còn thay đổi chưa lưu mà chọn ô khác / đóng / Tab sang ô khác / sang bước OCR
-// → hỏi Lưu · Bỏ thay đổi · Ở lại (Ở lại trả lựa chọn và focus về ô đang sửa). Đang lưu → chờ lưu xong mới chuyển ô (không hỏi / lưu lặp).
-// Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
+// → hỏi Lưu · Giữ giá trị cũ · Ở lại (Ở lại trả lựa chọn và focus về ô đang sửa). Bấm chuột ra ngoài panel khi còn thay đổi
+// → hỏi "Giá trị đã thay đổi, bạn muốn lưu không?" (Lưu · Giữ giá trị cũ), panel vẫn ở ô đang sửa. Đang lưu → chờ lưu xong mới chuyển ô (không hỏi / lưu lặp).
+// Enter trong ô nhập (Shift+Enter = xuống dòng; danh sách thả xuống đang mở → Enter chọn mục) → lưu mọi thay đổi của panel rồi hỏi
+// Thoát panel · Ở lại. Panel nhiều ô: Tab qua lại giữa các ô, nhập xong hết mới Enter.
+// Tab trong ô nhập → ô nhập kế tiếp của panel (bỏ qua nút TH / hướng dẫn). Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
 import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
 import {
-  editBlockFor, fieldRole, formKeysOf, isDeclarationFieldEditable, itemFieldCode, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
+  editBlockFor, fieldRole, fixedPlaceCode, formKeysOf, isDeclarationFieldEditable, itemFieldCode, sequenceBlocker, transportPlaceChanges, type AmendLock, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
 } from "@kb/contracts";
 import { CheckCircle2, CopyCheck, PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -18,8 +21,10 @@ import { RoleMark } from "../declaration-form/field";
 import { fieldTitle } from "../declaration-form/display";
 import type { FormValues } from "../declaration-form/form-state";
 import { useSaveDeclarationEdits } from "../declaration-form/use-save-edits";
+import { useCodeName, usePlaceNameLookup } from "../declaration-form/use-code-list";
 import { PanelDetails } from "./panel-details";
 import { applyToOtherLines, fieldLocator, nextTarget, taxCodeKeys, type PrintTarget } from "./print-state";
+import { SavedDialog } from "./saved-dialog";
 import { UnsavedDialog } from "./unsaved-dialog";
 import { PRINT_MESSAGES } from "./print.messages";
 
@@ -51,7 +56,8 @@ type Props = {
 };
 
 const tid = (t: PrintTarget | null) => (t ? `${t.line ?? ""}:${t.key}` : "");
-const INPUTS = "input:not([disabled]), textarea:not([disabled]), select:not([disabled])";
+/** Ô nhập của panel cho Tab: chữ / số / ngày, ô chọn (Select · Combobox – role combobox); bỏ thẻ select ẩn của Select (tabindex -1). */
+const FIELDS = ":is(input, textarea, [role=combobox]):not([disabled]):not([tabindex='-1']):not([type=hidden])";
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
 
 export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope, sheet = 1, canEdit, values, itemRows, lineNos, errors, order, target, onTarget, leaveGuard }: Props) {
@@ -75,10 +81,44 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
     : t.lockedReason;
   const readOnlyReason = !canEdit ? t.noPermission : mode === "LOCKED" ? lockedText : null;
   const editable = useMemo(() => editableKeys(kind, decl.fields, mode), [kind, decl.fields, mode]);
-  const lockOf = useMemo(() => declarationLockOf(kind, mode, original, editable, locale), [kind, mode, original, editable, locale]);
+  const baseLockOf = useMemo(() => declarationLockOf(kind, mode, original, editable, locale), [kind, mode, original, editable, locale]);
   const [changes, setChanges] = useState<FormValues>({});
-  const [confirm, setConfirm] = useState<{ next: PrintTarget | null; href?: string } | null>(null);
+  // Ô nhập theo thứ tự (2.59 mã 1–5, 2.60 số container 1–50): ô trước còn trống → khóa, xét theo giá trị đang sửa (nhập ô 1 là mở ô 2 ngay).
+  const lockOf = useCallback((key: string): AmendLock | null => {
+    const base = baseLockOf(key);
+    if (base) return base;
+    if (shown?.line !== undefined) return null;
+    const current = { ...values, ...changes };
+    // PTVC 9 (khác / tại chỗ): mã địa điểm xếp / dỡ cố định VNZZZ – không sửa.
+    const fixed = fixedPlaceCode(kind, key, current);
+    if (fixed) return { basis: "SOFTWARE", reason: fill(t.onSiteFixed, { code: fixed }) };
+    const prev = sequenceBlocker(kind, key, current);
+    return prev ? { basis: "SOFTWARE", reason: fill(t.fillPrevFirst, { n: prev.position }) } : null;
+  }, [baseLockOf, kind, values, changes, shown?.line, t.fillPrevFirst, t.onSiteFixed]);
+  // Đổi một ô: áp quy tắc địa điểm theo PTVC (đổi PTVC sang / khỏi 9 → mã xếp / dỡ VNZZZ / bỏ VNZZZ; tên khi PTVC 9 → in hoa không dấu).
+  // Đổi mã địa điểm xếp / dỡ (không phải PTVC 9 / mã …ZZZ) → tên theo danh mục A016 của mã mới.
+  const placeName = usePlaceNameLookup();
+  const change = useCallback((key: string, value: string) => {
+    setChanges((c) => (shown?.line === undefined ? { ...c, ...transportPlaceChanges(kind, { ...values, ...c }, key, value, placeName) } : { ...c, [key]: value }));
+  }, [kind, values, shown?.line, placeName]);
+  // 2.59: tên địa điểm xếp hàng lên xe tự điền theo mã 1 (danh mục A202) khi tên đang trống hoặc là tên tự điền theo mã cũ – người khai sửa được.
+  const vanningCode = kind === "EDA" ? (changes["CON_VC1"] ?? values["CON_VC1"] ?? "") : "";
+  const vanningName = useCodeName("A202", vanningCode, null);
+  const savedVanningName = useCodeName("A202", kind === "EDA" ? values["CON_VC1"] ?? "" : "", null);
+  const autoName = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (changes["CON_VC1"] === undefined || !vanningName) return;
+    setChanges((c) => {
+      const current = (c["CON_VN"] ?? values["CON_VN"] ?? "").trim();
+      if (current && current !== autoName.current && current !== savedVanningName) return c;
+      autoName.current = vanningName;
+      return current === vanningName ? c : { ...c, CON_VN: vanningName };
+    });
+  }, [changes, vanningName, savedVanningName, values]);
+  const [confirm, setConfirm] = useState<{ next: PrintTarget | null; href?: string; leaving?: boolean } | null>(null);
   const [hsItem, setHsItem] = useState<LineItem | null>(null);
+  // Vừa lưu bằng Enter → hỏi Thoát panel · Ở lại.
+  const [saved, setSaved] = useState(false);
   // Mã thuế của dòng hàng: mặc định áp cho mọi dòng khác của tờ (bỏ chọn → chỉ dòng đang sửa, các dòng khác sửa tay từng dòng).
   const [applyAll, setApplyAll] = useState(true);
 
@@ -99,6 +139,19 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
     f.suspect && isDeclarationFieldEditable(f.code) && spot.group.some((g) => (item ? itemFieldCode(item.id, g.key) === f.code : formKeysOf(kind, f.code).includes(g.key))));
   const confirmations = suspects.filter((f) => !edits.some((e) => e.code === f.code)).map((f) => ({ code: f.code, value: f.value }));
   const notes = [...new Set(suspects.flatMap((f) => (f.note ? [f.note] : [])))];
+  // PTVC 9 mà mã xếp / dỡ đang lưu khác VNZZZ (dữ liệu cũ): panel của chỉ tiêu tự sửa thành VNZZZ (người khai bấm Lưu).
+  const fixPlaces = !spot || readOnlyReason || line !== undefined ? [] : spot.group.flatMap((g) => {
+    const fixed = fixedPlaceCode(kind, g.key, { ...values, ...changes });
+    return fixed && (changes[g.key] ?? values[g.key] ?? "") !== fixed ? [[g.key, fixed] as const] : [];
+  });
+  useEffect(() => {
+    if (fixPlaces.length) setChanges((c) => ({ ...c, ...Object.fromEntries(fixPlaces) }));
+  });
+
+  const field = spot?.field;
+  const no = field ? field.no ?? spot.parentNo : undefined;
+  // Ô con của nhóm (1.29 Mã / Tên, 1.33 Mã / Tên…): panel hiện cả nhóm → tiêu đề theo tên nhóm.
+  const title = field ? fieldTitle(no, field.no ? field.label : spot.groupLabel ?? field.label) : "";
   // Lưu / xác nhận xong → đóng panel, người dùng quay lại bản in (khỏi phải bấm Đóng).
   const commit = () => save.mutate([...edits, ...confirmations, ...bulk], { onSuccess: () => { setChanges({}); onTarget(null); } });
 
@@ -132,15 +185,31 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   const shownKey = shown?.key;
   const focusField = useCallback((key: string | undefined) => {
     const root = body.current;
-    const own = key ? root?.querySelector<HTMLElement>(`[data-panel-field="${key}"] :is(${INPUTS})`) : null;
-    (own ?? root?.querySelector<HTMLElement>(INPUTS))?.focus();
+    const own = key ? root?.querySelector<HTMLElement>(`[data-panel-field="${key}"] ${FIELDS}`) : null;
+    (own ?? root?.querySelector<HTMLElement>(FIELDS))?.focus();
   }, []);
   const shownId = tid(shown);
+  // Ô nhập có thể hiện muộn hoặc dựng lại (danh mục mã tải xong → ô chọn mới) làm mất focus → trong 2 giây đầu, focus "lạc"
+  // (body / ô vừa bấm trên bản in) thì đặt lại; người dùng tự focus chỗ khác thì thôi.
   useEffect(() => {
-    if (shownId) focusField(shownKey);
+    if (!shownId) return;
+    focusField(shownKey);
+    const start = document.activeElement;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const active = document.activeElement;
+      const inside = Boolean(active && body.current?.contains(active));
+      // Người dùng tự focus chỗ khác (ngoài panel, không phải ô vừa bấm) hoặc hết 2 giây → thôi.
+      if ((!inside && active && active !== document.body && active !== start) || ++tries > 20) {
+        window.clearInterval(timer);
+        return;
+      }
+      if (!inside) focusField(shownKey);
+    }, 100);
+    return () => window.clearInterval(timer);
   }, [shownId, shownKey, focusField]);
   /** Đóng hộp hỏi: focus lại ô đang focus trước đó trong panel (còn trên trang), không thì ô đang chọn. */
-  // Chỉ khi chọn "Ở lại" (hoặc lưu lỗi): Lưu / Bỏ thay đổi đã chuyển ô – focus do effect chuyển ô đặt, không kéo về ô cũ.
+  // Chỉ khi chọn "Ở lại" (hoặc lưu lỗi): Lưu / Giữ giá trị cũ đã chuyển ô – focus do effect chuyển ô đặt, không kéo về ô cũ.
   const stayed = useRef(false);
   const restoreFocus = () => {
     if (!stayed.current) return;
@@ -174,6 +243,37 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
     };
     return () => { leaveGuard.current = null; };
   });
+  // Bấm chuột ra ngoài panel (trang phía sau, thanh menu…) khi còn thay đổi chưa lưu → hỏi lưu hay giữ giá trị cũ.
+  // Hỏi sau khi cú bấm xử lý xong: bấm vào ô khác của bản in đã mở hộp hỏi kèm ô mới (giữ hộp đó). Đang lưu / đang có hộp khác → bỏ qua.
+  const leaveState = useRef({ dirty, busy: false, shown });
+  useEffect(() => {
+    leaveState.current = { dirty, busy: save.isPending || confirm !== null || hsItem !== null || saved, shown };
+  });
+  // Radix báo "bấm ra ngoài" lúc pointerdown hoặc (thường) lúc click – hoãn một nhịp để xử lý của cú bấm (chọn ô khác) chạy trước.
+  const onPointerDownOutside = () => {
+    if (!leaveState.current.dirty || leaveState.current.busy) return;
+    window.setTimeout(() => {
+      const now = leaveState.current;
+      if (now.dirty && !now.busy) setConfirm((c) => c ?? { next: now.shown, leaving: true });
+    }, 0);
+  };
+  // Enter trong ô nhập của panel → lưu. Xử lý ở pha nổi bọt và hoãn một nhịp: ô ngày / mã chốt phần đang gõ bằng Enter của chính nó trước,
+  // panel lưu theo giá trị đã chốt. Ô nằm ngoài cây DOM của panel (ô tìm của danh sách thả xuống – portal) không tính.
+  const enterSave = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    enterSave.current = () => {
+      if (!dirty || readOnlyReason || save.isPending) return;
+      save.mutate([...edits, ...confirmations, ...bulk], { onSuccess: () => { setChanges({}); setSaved(true); } });
+    };
+  });
+  const onEnter = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Enter" || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.nativeEvent.isComposing) return;
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) || !body.current?.contains(el)) return;
+    if (el.getAttribute("aria-expanded") === "true" || (el instanceof HTMLInputElement && ["checkbox", "radio", "button", "submit"].includes(el.type))) return;
+    e.preventDefault();
+    window.setTimeout(() => enterSave.current(), 0);
+  };
   const goOcr = () => {
     if (save.isPending) return;
     const href = item ? `${pathname}?step=ocr&dong=${item.lineNo}` : `${pathname}?step=ocr`;
@@ -182,7 +282,31 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   };
 
   const onKeyDownCapture = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab" || !shown || order.length === 0) return;
+    // Enter trên ô chọn (Select · Combobox) đang đóng khi panel có thay đổi → lưu (Space / ↓ vẫn mở danh sách). Chặn ở pha bắt
+    // vì ô chọn tự mở danh sách bằng Enter. Không có thay đổi → để ô chọn xử lý như thường.
+    if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && dirty && e.target instanceof HTMLButtonElement
+      && e.target.getAttribute("role") === "combobox" && e.target.getAttribute("aria-expanded") !== "true" && body.current?.contains(e.target)) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.setTimeout(() => enterSave.current(), 0);
+      return;
+    }
+    if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey) return;
+    // Đang ở ô nhập: Tab / Shift+Tab nhảy thẳng sang ô nhập kế tiếp / trước của panel, bỏ qua nút vai trò (TH) và nút hướng dẫn
+    // giữa các ô. Ô nhập cuối (Tab) / đầu (Shift+Tab) → theo thứ tự Tab thường (nút Hủy · Lưu rồi sang ô kế tiếp của bản in).
+    const el = e.target;
+    const root = body.current;
+    if (el instanceof HTMLElement && el.matches(FIELDS) && root?.contains(el) && el.getAttribute("aria-expanded") !== "true") {
+      const inputs = [...root.querySelectorAll<HTMLElement>(FIELDS)].filter((n) => n.offsetParent !== null || n === el);
+      const to = inputs[inputs.indexOf(el) + (e.shiftKey ? -1 : 1)];
+      if (to) {
+        e.preventDefault();
+        e.stopPropagation();
+        to.focus();
+        return;
+      }
+    }
+    if (!shown || order.length === 0) return;
     const nodes = [...e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.offsetParent !== null || n === document.activeElement);
     const edge = e.shiftKey ? nodes[0] : nodes[nodes.length - 1];
     if (!edge || document.activeElement !== edge) return;
@@ -193,9 +317,6 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
     onTarget(next);
   };
 
-  const field = spot?.field;
-  const no = field ? field.no ?? spot.parentNo : undefined;
-  const title = field ? fieldTitle(no, field.label) : "";
   const role = field && spot ? fieldRole(kind, field, spot.parentNo) : undefined;
   // Vai trò cạnh tiêu đề (dòng mô tả của header), không nằm trong tên trợ năng của panel và không bị cắt.
   const roleNode = role === "REQUIRED" ? t.required : role === "CONDITIONAL" || role === "REFERENCE" ? <RoleMark role={role} /> : null;
@@ -210,9 +331,16 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
           icon={<PenLine className="h-4 w-4" />}
           {...(description ? { description } : {})}
           onKeyDownCapture={onKeyDownCapture}
+          onPointerDownOutside={onPointerDownOutside}
+          // Mở panel: focus vào ô nhập của ô được chọn (gõ ngay được), không phải nút đầu tiên trên header như mặc định của Radix.
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            // Panel dựng lại (đổi khổ màn hình → đổi kiểu hiển thị) khi đang mở hộp hỏi: giữ focus ở hộp hỏi, không kéo về ô nhập.
+            if (!confirm && !saved && !hsItem) focusField(shownKey);
+          }}
         >
           {spot && (
-            <div ref={body} className="flex min-h-0 flex-1 flex-col gap-4" onFocus={(e) => { lastFocus.current = e.target; }}>
+            <div ref={body} className="flex min-h-0 flex-1 flex-col gap-4" onFocus={(e) => { lastFocus.current = e.target; }} onKeyDown={onEnter}>
               {suspects.length > 0 && (
                 <Alert
                   tone="warning"
@@ -234,7 +362,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                 item={item}
                 decl={decl}
                 values={{ ...(row ?? values), ...changes }}
-                onChange={readOnlyReason ? undefined : (key, value) => setChanges((c) => ({ ...c, [key]: value }))}
+                onChange={readOnlyReason ? undefined : change}
                 lockOf={lockOf}
                 errors={cellErrors}
                 readOnlyReason={readOnlyReason}
@@ -251,6 +379,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                   onChange={(e) => setApplyAll(e.target.checked)}
                 />
               )}
+              {!readOnlyReason && <p className="text-xs text-fg-muted">{t.enterHint}</p>}
               <DialogFooter>
                 {readOnlyReason ? (
                   <Button type="button" variant="ghost" onClick={() => onTarget(null)}>{t.close}</Button>
@@ -281,6 +410,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
         open={confirm !== null}
         title={title}
         count={edits.length + bulk.length}
+        leaving={confirm?.leaving ?? false}
         saving={save.isPending}
         onSave={() => {
           const c = confirm;
@@ -289,6 +419,13 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
         }}
         onDiscard={() => confirm && proceed(confirm.next, confirm.href)}
         onStay={stay}
+        onClosed={restoreFocus}
+      />
+      <SavedDialog
+        open={saved}
+        title={title}
+        onExit={() => { setSaved(false); onTarget(null); }}
+        onStay={() => { stayed.current = true; setSaved(false); }}
         onClosed={restoreFocus}
       />
       <ChangeHsDialog item={hsItem} onClose={() => setHsItem(null)} dossierId={dossierId} />

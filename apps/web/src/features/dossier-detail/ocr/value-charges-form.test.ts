@@ -96,9 +96,28 @@ describe("tóm tắt từng khoản", () => {
     expect(cif.slice(0, 2).map((r) => r.tone)).toEqual(["neutral", "neutral"]);
   });
 
-  it("xuất khẩu: không có dòng 1.49; cước / bảo hiểm theo chỉ tiêu 2.40", () => {
+  it("xuất khẩu: không có dòng 1.49; cước / bảo hiểm / khoản cộng trừ khác đều theo chỉ tiêu 2.40; FOB không có dòng khoản khác", () => {
     const rows = summarize({ ...VIEW, direction: "XK", incoterm: "CIF", freightRequired: true, insuranceIncluded: true });
-    expect(rows.map((r) => `${r.key}:${r.no}`)).toEqual(["freight:2.40", "insurance:2.40"]);
+    expect(rows.map((r) => `${r.key}:${r.no}`)).toEqual(["freight:2.40", "insurance:2.40", "adjustments:2.40"]);
+    // Gợi ý bảo hiểm hàng xuất không nhắc mã D (mã D chỉ có ở 1.48 tờ khai nhập).
+    expect(rows[1]?.hint).toBe("Không mua bảo hiểm thì xác nhận để không trừ bảo hiểm khỏi giá hóa đơn");
+    expect(summarize({ ...VIEW, incoterm: "FOB" })[1]?.hint).toMatch(/mã D/);
+    const fob = summarize({ ...VIEW, direction: "XK", incoterm: "FOB", freightRequired: false, insuranceIncluded: false, adjustmentsAllowed: false });
+    expect(fob.map((r) => r.key)).toEqual(["freight", "insurance"]);
+    expect(fob[1]?.hint).toBe("Không trừ bảo hiểm với điều kiện giao hàng này");
+  });
+
+  it("xuất khẩu: khoản cộng / trừ khác ghi tên (bắt buộc), lưu mã N, không phân bổ; tóm tắt nêu tên và chiều", () => {
+    const XK: ValueChargesView = { ...VIEW, direction: "XK", incoterm: "FCA", freightRequired: false, adjustmentsAllowed: true };
+    expect(formFromView(XK, "USD").adjustmentsMode).toBe("NONE");
+    const row = { code: "", kind: "AD" as const, amount: "150", currency: "USD", note: "", allocate: true };
+    const f = { ...formFromView(XK, "USD"), adjustmentsMode: "MANUAL" as const, adjustments: [row] };
+    expect(toValueCharges(f, "vi", { docsFreight: false, xk: true })).toMatchObject({ ok: false, errors: { "adjustments.0.note": "Ghi tên khoản" } });
+    const ok = toValueCharges({ ...f, adjustments: [{ ...row, note: "Vận chuyển nội địa" }] }, "vi", { docsFreight: false, xk: true });
+    expect(ok).toMatchObject({ ok: true, value: { adjustments: [{ code: "N", kind: "AD", amount: "150", note: "Vận chuyển nội địa", allocate: false }] } });
+    const rows = summarize({ ...XK, charges: { ...EMPTY_VALUE_CHARGES, adjustments: [{ code: "N", kind: "SB", amount: "20", currency: "USD", note: "Phí dỡ hàng cảng đích", allocate: false }] } });
+    expect(rows.at(-1)).toMatchObject({ key: "adjustments", no: "2.40", source: "Người khai lập", value: expect.stringMatching(/^− Phí dỡ hàng cảng đích/) });
+    expect(summarize(XK).at(-1)).toMatchObject({ value: "Không có", hint: expect.stringMatching(/EXW, FCA/) });
   });
 });
 

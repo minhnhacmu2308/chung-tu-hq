@@ -13,8 +13,11 @@ export const CODE_LIST_IDS = [
 ] as const;
 export type CodeListId = (typeof CODE_LIST_IDS)[number];
 
-/** Một mã: `parent` = mã cha (cơ quan Hải quan của địa điểm / bộ phận, mã nước của cảng, NK/XK của loại hình). */
-export type CodeListEntry = { code: string; name: string; parent?: string; note?: string; inactive?: boolean };
+/**
+ * Một mã: `parent` = mã cha (cơ quan Hải quan của địa điểm / bộ phận, mã nước của cảng, NK/XK của loại hình).
+ * `modes`: mã phương thức vận chuyển áp dụng (A016 địa điểm trong nước: 1, 2, 3, 6 hoặc 4, 5) – lọc theo PTVC (declaration-layout/transport-places.ts).
+ */
+export type CodeListEntry = { code: string; name: string; parent?: string; note?: string; inactive?: boolean; modes?: string[] };
 export type CodeListMeta = {
   id: CodeListId;
   title: string;
@@ -29,6 +32,8 @@ export type CodeListMeta = {
   /** Danh mục còn dùng mã cơ quan Hải quan trước đợt sắp xếp 2025 (vd A202 dùng 02B1 thay cho 06B1). */
   usesOldOfficeCodes?: boolean;
   unassigned?: boolean;
+  /** Mục trong nước có `modes` (PTVC áp dụng) – A016. */
+  byTransportMode?: boolean;
 };
 
 export const CODE_LIST_META = Object.fromEntries(manifest.lists.map((l) => [l.id, l])) as unknown as Record<CodeListId, CodeListMeta>;

@@ -61,6 +61,11 @@ const ITEMS: Record<string, ItemSeed[]> = {
     { desc: "Vòng bi cầu 6205-2RS", qty: "4000", unit: "PCE", price: "1.85", amount: "7400.00", hs: "8482.10.00", conf: 0.94 },
     { desc: "Ổ bi đũa côn 30205", qty: "1600", unit: "PCE", price: "5.30", amount: "8480.00", hs: "8482.20.00", conf: 0.88 },
   ],
+  // Hồ sơ xuất FOB ở bước OCR (chưa chạy agent) – có dòng hàng để chạy được agent và dựng tờ khai EDA nháp. Tổng = trị giá hồ sơ 31.500,00 USD.
+  dos_025: [
+    { desc: "Dao phay ngón hợp kim D10", qty: "1500", unit: "PCE", price: "9.80", amount: "14700.00", hs: "8207.70.00", conf: 0.91 },
+    { desc: "Mũi khoan hợp kim D8", qty: "2400", unit: "PCE", price: "7.00", amount: "16800.00", hs: "8207.50.00", conf: 0.89 },
+  ],
   dos_014: [
     { desc: "Vòng bi cầu 6001ZZ", qty: "3000", unit: "PCE", price: "1.25", amount: "3750.00", hs: "8482.10.00", conf: 0.93 },
     { desc: "Vòng bi kim HK1012", qty: "2000", unit: "PCE", price: "1.46", amount: "2920.00", hs: "8482.40.00", conf: 0.87 },

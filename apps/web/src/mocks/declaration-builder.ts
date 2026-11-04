@@ -1,7 +1,7 @@
 // Dựng tờ khai từ dữ liệu lô hàng – bản mô phỏng của phần "code + cấu hình" (ADR 0002, không dùng AI).
 // Dùng chung cho seed (tờ khai có sẵn) và api/declaration (tờ khai dựng khi agent chạy xong).
 // Biểu thuế/HS dưới đây là DỮ LIỆU MẪU cho prototype, không dùng để khai thật.
-import { PARTY_CLASS_LABELS, TRANSPORT_MODE_INFO } from "@kb/contracts";
+import { isDomesticDelivery, PARTY_CLASS_LABELS, TRANSPORT_MODE_INFO } from "@kb/contracts";
 import { applyRate, fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import type { Declaration, DeclarationField, Dossier, IsoDate, LineItem, Organization, ValueSource } from "./types";
 
@@ -219,7 +219,29 @@ export function computeTaxes(d: Dossier, items: LineItem[], adjustments: Declara
 
 const transportLabel = (m: Dossier["transportMode"]) => `${TRANSPORT_MODE_INFO[m].code} – ${TRANSPORT_MODE_INFO[m].label}`;
 
-const EXPORT_NO_DEDUCTION = new Set(["EXW", "FCA", "FAS", "FOB", "DAP", "DAF"]);
+// Giống backend adjustments.ts: chỉ FOB khai thẳng giá hóa đơn; nhóm C, D (kể cả DAP, DAF) trừ cước / bảo hiểm.
+const EXPORT_NO_DEDUCTION = new Set(["EXW", "FCA", "FAS", "FOB"]);
+const EXPORT_NO_240 = new Set(["FOB"]);
+
+/** "20850.00" → "20850", "1000.50" → "1000.5" (giống plainNumber của backend). */
+const plain = (v: string) => (v.includes(".") ? v.replace(/0+$/, "").replace(/\.$/, "") : v);
+/** Tên ngắn không dấu của khoản trong diễn giải 2.32 (giống backend mapping/eda.ts). */
+const shortLabel = (label: string) => (label.startsWith("Cước") ? "cuoc" : label.startsWith("Phí bảo hiểm") ? "BH" : "dc khac");
+
+/**
+ * Tờ khai xuất (giống backend mapping/eda.ts): 2.40 = giá hóa đơn ± khoản điều chỉnh (khoản trừ là số âm); 2.32 diễn giải cách tính
+ * (không dấu, ≤ 140 ký tự). Mock chỉ tính khoản cùng tiền tệ hóa đơn như computeTaxes. FOB không khai 2.40 → null.
+ */
+export function exportValueFields(incoterm: string, currency: string, invoiceTotal: string, adjustments: Declaration["valueAdjustments"]): { value: string; marks: string } | null {
+  if (EXPORT_NO_240.has(incoterm)) return null;
+  const same = adjustments.filter((a) => a.currency === currency);
+  const value = `${plain(fromMinor(toMinor(invoiceTotal) + sumMinor(same.map((a) => toMinor(a.amount)))))} ${currency}`;
+  if (!same.length) return { value, marks: "" };
+  const head = `TGTT 2.40: ${incoterm} ${plain(invoiceTotal)} ${currency}`;
+  const parts = same.map((a) => `${a.amount.startsWith("-") ? "-" : "+"} ${shortLabel(a.label)} ${plain(a.amount.replace(/^-/, ""))} ${a.currency}`);
+  const full = `${head} ${parts.join(" ")} = ${value}`;
+  return { value, marks: full.length <= 140 ? full : `${head} +/- dieu chinh = ${value}` };
+}
 
 /** Số chỉ tiêu Phụ lục II (giống packages/core declaration/domain/mapping/numbers.ts) – để màn Review hiện hướng dẫn khai theo catalog. */
 const FIELD_NO: Record<"IDA" | "EDA", Record<string, string>> = {
@@ -235,7 +257,7 @@ const FIELD_NO: Record<"IDA" | "EDA", Record<string, string>> = {
     NNK_TEN: "2.19", NNK_DC: "2.21", MA_NUOC: "2.22", SO_VD: "2.24", SO_KIEN: "2.25", TRONG_LUONG: "2.26", CANG_DO: "2.28", CANG_XEP: "2.29", NGAY_DEN: "2.31",
     SO_HD: "2.36", NGAY_HD: "2.37", PT_TT: "2.38", DK_GIA: "2.39", MA_TT: "2.39", TONG_TG: "2.39",
     KHO: "2.27", PTVC_TEN: "2.30", HD_PL: "2.34", GIA_PL: "2.39", NXK_DT: "2.15",
-    GP: "2.33", TG_TT: "2.40", NGUOI_NT: "2.43", VBPQ: "2.80", HO_HIEU: "2.30", HAN_TN: "2.7", TNTX_TK: "2.3",
+    GP: "2.33", TG_TT: "2.40", TK_MRK: "2.32", CON_VA: "2.59", NGUOI_NT: "2.43", VBPQ: "2.80", HO_HIEU: "2.30", HAN_TN: "2.7", TNTX_TK: "2.3",
   },
 };
 
@@ -244,8 +266,10 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
   const s = shipmentOf(d);
   const nk = d.direction === "NK";
   // Tờ khai xuất: trị giá hải quan là giá tại cửa khẩu xuất – FOB/nhóm E, F không cộng cước; giá đã gồm cước/bảo hiểm thì trừ ra (giống backend planExportAdjustments).
-  const adjustments = nk ? s.adjustments : EXPORT_NO_DEDUCTION.has(d.incoterm) ? [] : s.adjustments.map((a) => ({ ...a, amount: a.amount.startsWith("-") ? a.amount.slice(1) : `-${a.amount}` }));
+  // Phương thức 9 (giao tại chỗ, trong nước): không có cước, bảo hiểm quốc tế để trừ.
+  const adjustments = nk ? s.adjustments : EXPORT_NO_DEDUCTION.has(d.incoterm) || isDomesticDelivery(d.transportMode) ? [] : s.adjustments.map((a) => ({ ...a, amount: a.amount.startsWith("-") ? a.amount.slice(1) : `-${a.amount}` }));
   const t = computeTaxes(d, items, adjustments);
+  const exportValue = nk ? null : exportValueFields(d.incoterm, d.currency, t.invoiceTotal, adjustments);
   const numbers = FIELD_NO[nk ? "IDA" : "EDA"];
   const f = (section: DeclarationField["section"], code: string, label: string, value: string, source: ValueSource): DeclarationField => ({
     section,
@@ -299,7 +323,11 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     ...(nk
       ? [f("VALUE", "CT_TG", "Chi tiết khai trị giá", `${isoDayOffset(-s.invoiceDaysAgo).split("-").reverse().join("")}#&`, "BILL_OF_LADING")]
       : [
-          ...(["FOB", "DAP", "DAF"].includes(d.incoterm) ? [] : [when(f("VALUE", "TG_TT", "Trị giá tính thuế", `${t.invoiceTotal} ${d.currency}`, "SYSTEM"), "Điều kiện giá khác FOB/DAP/DAF hoặc không có hóa đơn")]),
+          ...(exportValue ? [when(f("VALUE", "TG_TT", "Trị giá tính thuế", exportValue.value, "SYSTEM"), "Điều kiện giá khác FOB hoặc không có hóa đơn")] : []),
+          // 2.59 địa chỉ xếp hàng lên xe: mặc định địa chỉ người xuất khẩu (giống backend mapping/eda.ts), chỉ khi đóng container.
+          ...(d.transportMode === "SEA_CONTAINER" ? [when(f("TRANSPORT", "CON_VA", "Địa chỉ địa điểm xếp hàng lên xe chở hàng", org.address, "ACCOUNT"), "Hàng đóng container")] : []),
+          // 2.32: diễn giải cách tính 2.40 (tờ khai xuất không có ô cước / bảo hiểm / khoản điều chỉnh).
+          f("TRANSPORT", "TK_MRK", "Ký hiệu và số hiệu", exportValue?.marks ?? "", exportValue?.marks ? "SYSTEM" : "DOSSIER"),
           f("VALUE", "VBPQ", "Mã văn bản pháp luật khác (theo dòng hàng)", "", "DOSSIER"),
         ]),
     // Chỉ tiêu theo tình huống (giống backend mapping/conditions.ts).
@@ -307,9 +335,10 @@ export function buildDeclaration(d: Dossier, items: LineItem[], org: Organizatio
     ...(nk && d.typeCode === "G51" ? [when(f("GENERAL", "TNTX_TK", "Số tờ khai tạm xuất tương ứng", "", "DOSSIER"), "Loại hình tái nhập hàng đã tạm xuất (G51)")] : []),
     ...(!nk && /^G2[1-4]$/.test(d.typeCode) ? [when(f("GENERAL", "TNTX_TK", "Số tờ khai tạm nhập tương ứng", "", "DOSSIER"), "Loại hình tái xuất hàng đã tạm nhập (G21–G24)")] : []),
     ...(!nk && d.typeCode === "G61" ? [when(f("GENERAL", "HAN_TN", "Thời hạn tái nhập khẩu", "", "DOSSIER"), "Loại hình tạm xuất (G61)")] : []),
-    ...(d.transportMode === "SEA_CONTAINER" || d.transportMode === "SEA_BULK" || d.transportMode === "RIVER"
-      ? [when(f("TRANSPORT", "HO_HIEU", "Hô hiệu phương tiện (call sign)", "9999", "DEFAULT"), "Vận chuyển đường biển / đường sông (mã 2, 3, 6)")]
-      : []),
+    // 1.31 / 2.30 ô 1 (giống backend mapping): đường biển / sông (PTVC 2, 3, 6) điền sẵn 9999; phương thức khác để trống cho người khai nhập.
+    d.transportMode === "SEA_CONTAINER" || d.transportMode === "SEA_BULK" || d.transportMode === "RIVER"
+      ? when(f("TRANSPORT", "HO_HIEU", "Hô hiệu phương tiện (call sign)", "9999", "DEFAULT"), "Vận chuyển đường biển / đường sông (mã 2, 3, 6)")
+      : f("TRANSPORT", "HO_HIEU", "Hô hiệu phương tiện (call sign)", "", "DOSSIER"),
     f("GENERAL", "NGUOI_NT", "Người nộp thuế", nk ? "1 – Người nhập khẩu" : "1 – Người xuất khẩu", "DEFAULT"),
     f("VALUE", "TY_GIA", "Tỷ giá tính thuế", t.exchangeRate, "SYSTEM"),
     ...(s.coNo ? [f("VALUE", "SO_CO", s.coForm === "EVFTA" ? "Chứng từ chứng nhận xuất xứ (REX)" : "Số C/O (form AK)", s.coNo, "CERT_OF_ORIGIN")] : []),

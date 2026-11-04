@@ -41,7 +41,7 @@ type Props = {
   onSheetChange?: (no: number) => void;
   /**
    * Nơi gọi (review-step) hỏi trước khi rời tab "Tờ khai": gọi `current(href)` → true = panel còn thay đổi chưa lưu, đã mở hộp
-   * Lưu / Bỏ thay đổi / Ở lại và sẽ tự chuyển tới `href` khi người dùng chọn Lưu hoặc Bỏ; false = rời được ngay.
+   * Lưu / Giữ giá trị cũ / Ở lại và sẽ tự chuyển tới `href` khi người dùng chọn Lưu hoặc Giữ giá trị cũ; false = rời được ngay.
    */
   leaveGuard?: LeaveGuard;
 };

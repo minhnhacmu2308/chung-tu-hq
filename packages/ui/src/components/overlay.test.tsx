@@ -111,6 +111,35 @@ describe("Dialog", () => {
     }
   });
 
+  it("onOpenAutoFocus chặn mặc định → nơi gọi tự chọn ô focus khi mở (cả dạng panel)", () => {
+    render(
+      <Dialog defaultOpen defaultPresentation="panel">
+        <DialogContent
+          icon={<span />}
+          title="Sửa ô"
+          description={<button type="button">TH</button>}
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            screen.getByLabelText("Ô 2").focus();
+          }}
+        >
+          <input aria-label="Ô 1" />
+          <input aria-label="Ô 2" />
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(document.activeElement).toBe(screen.getByLabelText("Ô 2"));
+  });
+
+  it("không truyền onOpenAutoFocus → mở dialog focus phần tử đầu tiên như cũ", () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent icon={<span />} title="Mặc định"><input aria-label="Ô 1" /></DialogContent>
+      </Dialog>,
+    );
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+  });
+
   it("chỉ khóa cuộn trang khi cửa sổ ĐANG MỞ; dialog đóng hoặc dạng panel thì trang vẫn cuộn được", async () => {
     setup();
     expect(document.body.style.overflow).toBe("");

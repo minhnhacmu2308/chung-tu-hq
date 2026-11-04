@@ -78,9 +78,9 @@ export const VN_EDA_ROWS = [
   ["TK_ST", "text", "7", false, "Mã địa điểm lưu kho hàng chờ thông quan dự kiến"],
   ["TK_K42", "text", "20", false, "Tên địa điểm lưu kho hàng chờ thông quan dự kiến"],
   ["TK_DSC", "text", "6", true, "Mã địa điểm nhận hàng cuối cùng"],
-  ["TK_DSN", "text", "255", true, "Tên địa điểm nhận hàng cuối cùng"],
+  ["TK_DSN", "text", "255", false, "Tên địa điểm nhận hàng cuối cùng", { note: "Sheet ghi Required nhưng Hải quan tự xuất tên theo mã: chỉ gửi khi PTVC 9 hoặc mã chưa mã hóa (…ZZZ) – sendsPlaceName (declaration-layout/transport-places.ts)" }],
   ["TK_PSC", "text", "6", true, "Mã địa điểm xếp hàng"],
-  ["TK_PSN", "text", "255", true, "Tên địa điểm xếp hàng"],
+  ["TK_PSN", "text", "255", false, "Tên địa điểm xếp hàng", { note: "Sheet ghi Required nhưng Hải quan tự xuất tên theo mã: chỉ gửi khi PTVC 9 hoặc mã chưa mã hóa (…ZZZ) – sendsPlaceName (declaration-layout/transport-places.ts)" }],
   ["TK_VSC", "text", "9", false, "Mã phương tiện vận chuyển dự kiến"],
   ["TK_VSN", "text", "255", true, "Tên phương tiện vận chuyển dự kiến"],
   ["TK_SYM", "date", null, true, "Ngày hàng đi dự kiến"],
@@ -109,7 +109,7 @@ export const VN_EDA_ROWS = [
   ["TK_IP4", "decimal", "20.4", true, "Tổng trị giá hóa đơn"],
   ["TK_IP1", "text", "1", false, "Mã phân loại giá hóa đơn"],
   ["TK_SBC", "text", "11", false, "Mã ngân hàng bảo lãnh"],
-  // 2.40: sheet ghi bắt buộc nhưng Phụ lục II chỉ khai khi điều kiện giá khác FOB/DAP/DAF (EXPORT_VALUE) – để tùy chọn, form bắt theo điều kiện.
+  // 2.40: sheet ghi bắt buộc nhưng app khai khi điều kiện giá khác FOB (EXPORT_VALUE) – để tùy chọn, form bắt theo điều kiện.
   ["TK_FCD", "text", "3", false, "Mã đồng tiền của tổng trị giá tính thuế"],
   ["TK_RYA", "long", null, false, "Năm phát hành bảo lãnh"],
   ["TK_FKK", "decimal", "20.4", false, "Tổng trị giá tính thuế", { acceptString: "numeric", note: "format.json gửi \"5543.17\" (chuỗi số)" }],

@@ -96,9 +96,28 @@ describe("chi phí và điều chỉnh trị giá", () => {
     expect(unwrap(await getValueCharges(deps, declarant, D)).freightVnd).toBeNull();
   });
 
-  it("xuất khẩu: bỏ danh sách khoản điều chỉnh (không có chỉ tiêu 1.49)", async () => {
+  it("xuất khẩu FCA: giữ khoản cộng / trừ khác (dồn vào 2.40) – mã N, không phân bổ 1.88; danh sách rỗng lưu null", async () => {
     dossiers.rows[0]!.direction = "XK";
-    const v = unwrap(await saveValueCharges(deps, declarant, D, { ...EMPTY_VALUE_CHARGES, adjustments: [{ code: "A", kind: "AD", amount: "10", currency: "USD", note: "", allocate: true }] }));
-    expect(v.charges.adjustments).toBeNull();
+    const row = { code: "A", kind: "AD" as const, amount: "10", currency: "USD", note: "Vận chuyển nội địa ra cảng", allocate: true };
+    const v = unwrap(await saveValueCharges(deps, declarant, D, { ...EMPTY_VALUE_CHARGES, adjustments: [row] }));
+    expect(v).toMatchObject({ direction: "XK", incoterm: "FCA", adjustmentsAllowed: true, insuranceIncluded: false });
+    expect(v.charges.adjustments).toEqual([{ ...row, code: "N", allocate: false }]);
+    expect(unwrap(await saveValueCharges(deps, declarant, D, { ...EMPTY_VALUE_CHARGES, adjustments: [] })).charges.adjustments).toBeNull();
+  });
+
+  it("xuất khẩu FOB: không khai 2.40 → bỏ khoản điều chỉnh, không hỏi bảo hiểm; DAP: trừ cước, bảo hiểm, giữ khoản điều chỉnh", async () => {
+    dossiers.rows[0]!.direction = "XK";
+    const save = async (incoterm: string) => {
+      deps = { ...deps, shipments: new FakeShipments({ [D]: hansol((s) => void (s.invoice.incoterm = { value: incoterm, sources: [], status: "SINGLE_SOURCE" })) }) };
+      return unwrap(await saveValueCharges(deps, declarant, D, { ...EMPTY_VALUE_CHARGES, adjustments: [{ code: "N", kind: "AD", amount: "10", currency: "USD", note: "x", allocate: false }] }));
+    };
+    const fob = await save("FOB");
+    expect(fob).toMatchObject({ adjustmentsAllowed: false, insuranceIncluded: false, freightRequired: false });
+    expect(fob.charges.adjustments).toBeNull();
+    const dap = await save("DAP");
+    expect(dap).toMatchObject({ adjustmentsAllowed: true, insuranceIncluded: true, freightRequired: true });
+    expect(dap.charges.adjustments).toHaveLength(1);
+    dossiers.rows[0]!.transportMode = "OTHER"; // phương thức 9: giao tại chỗ, trong nước
+    expect(unwrap(await getValueCharges(deps, declarant, D))).toMatchObject({ freightRequired: false, insuranceIncluded: false, adjustmentsAllowed: true });
   });
 });

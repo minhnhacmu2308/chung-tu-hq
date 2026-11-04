@@ -1,10 +1,10 @@
 // Chi phí và điều chỉnh trị giá người khai nhập ở bước OCR & kiểm tra (1.47 cước, 1.48 bảo hiểm, 1.49 khoản điều chỉnh; 2.40 xuất khẩu).
 // Đọc: mọi thành viên. Ghi: người khai / người duyệt / quản trị, hồ sơ chưa duyệt – mỗi phần đổi ghi field_audit (bất biến 6), rồi dựng lại tờ khai nháp.
-import { chargesConflict, EMPTY_VALUE_CHARGES, type DocumentCharges, type Shipment, type ValueCharges, type ValueChargesView } from "@kb/contracts";
+import { chargesConflict, EMPTY_VALUE_CHARGES, EXPORT_ADJUSTMENT_CODE, type DocumentCharges, type Shipment, type ValueCharges, type ValueChargesView } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { freightRequired, INSURANCE_INCLUDED, incotermCode } from "../domain/adjustments.js";
+import { exportAdjustmentsAllowed, exportInsuranceDeducted, freightRequired, INSURANCE_INCLUDED, incotermCode } from "../domain/adjustments.js";
 import { vnDate } from "../domain/mapping/types.js";
 import { sheetScopeError } from "./_edit-scope.js";
 import { Decimal, dec } from "../../../shared/decimal.js";
@@ -37,7 +37,10 @@ function toView(dossier: DossierInfo, shipment: Shipment | null, row: ValueCharg
   const incoterm = incotermCode(shipment?.invoice.incoterm.value ?? dossier.incoterm);
   return {
     charges: row?.data ?? EMPTY_VALUE_CHARGES, fromDocuments: documentCharges(shipment), direction: dossier.direction, incoterm,
-    freightRequired: freightRequired(kind, incoterm), freightTerm: freightTermOf(shipment), freightVnd, insuranceIncluded: INSURANCE_INCLUDED.has(incoterm), locked: LOCKED.has(dossier.status),
+    freightRequired: freightRequired(kind, incoterm, dossier.transportMode), freightTerm: freightTermOf(shipment), freightVnd,
+    // Xuất khẩu: true = phải trừ bảo hiểm khỏi giá (giá đã gồm bảo hiểm: CIF, CIP, C&I, nhóm D).
+    insuranceIncluded: kind === "IDA" ? INSURANCE_INCLUDED.has(incoterm) : exportInsuranceDeducted(incoterm, dossier.transportMode),
+    adjustmentsAllowed: kind === "IDA" || exportAdjustmentsAllowed(incoterm), locked: LOCKED.has(dossier.status),
     updatedAt: row ? row.updatedAt.toISOString() : null, updatedBy: row?.updatedBy ?? null,
   };
 }
@@ -61,6 +64,10 @@ export async function getValueCharges(deps: DeclarationDeps, ctx: Ctx, dossierId
   return ok(toView(dossier, shipment, row, await freightVndOf(deps, ctx, shipment)));
 }
 
+/** Khoản cộng / trừ khác của tờ khai xuất: mã tên cố định "N" (khác), không phân bổ 1.88; danh sách rỗng = không có khoản nào. */
+const exportAdjustments = (rows: ValueCharges["adjustments"]): ValueCharges["adjustments"] =>
+  rows === null || rows.length === 0 ? null : rows.map((a) => ({ ...a, code: EXPORT_ADJUSTMENT_CODE, allocate: false }));
+
 /** Giá trị một phần để ghi audit (rỗng = theo chứng từ). */
 const auditText = (v: unknown) => (v === null || v === undefined ? "" : JSON.stringify(v));
 const PARTS = ["freight", "insurance", "adjustments", "freightTermNote"] as const;
@@ -74,10 +81,12 @@ export async function saveValueCharges(deps: DeclarationDeps, ctx: Ctx, dossierI
   // Cước / bảo hiểm / khoản điều chỉnh là chỉ tiêu chung: lô nhiều tờ còn tờ chưa gọi về → khóa.
   const blocked = await sheetScopeError(deps, ctx, dossierId, { kind: "COMMON" });
   if (blocked) return err(blocked);
-  // Xuất khẩu không có chỉ tiêu 1.49 – bỏ danh sách khoản điều chỉnh nếu gửi kèm.
-  const data: ValueCharges = dossier.direction === "XK" ? { ...input, adjustments: null } : input;
+  const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
+  const current = toView(dossier, shipment, null);
+  // Xuất khẩu không có chỉ tiêu 1.49: khoản cộng / trừ khác chỉ dồn vào 2.40 (không mã tên) – điều kiện giá không khai 2.40 thì bỏ.
+  const data: ValueCharges = dossier.direction === "XK" ? { ...input, adjustments: current.adjustmentsAllowed ? exportAdjustments(input.adjustments) : null } : input;
   // Ràng buộc theo chứng từ: chứng từ có cước thì phải có số cước; có phí khác thì không khai "Không có phí phát sinh".
-  const conflict = chargesConflict(data, toView(dossier, await deps.shipments.latest(ctx.orgId, dossierId), null));
+  const conflict = chargesConflict(data, current);
   if (conflict) return err(reasonError("VALIDATION", conflict.reason, conflict.params));
   const now = deps.clock.now();
   const row: ValueChargesRow = { id: deps.idGen.next("dec"), orgId: ctx.orgId, dossierId, data, updatedBy: ctx.userId, updatedAt: now };

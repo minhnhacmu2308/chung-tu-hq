@@ -14,12 +14,12 @@ describe("catalog-resolve", () => {
     // Từ tiếng Anh trùng mã A016 ở giữa câu không bị bắt thành mã cảng.
     expect(resolvePort("GRAND PORT TERMINAL", A016)).toBeNull();
   });
-  it("bí danh chỉ trỏ tới mã: mã có trong A016 thì dùng tên A016, mã chưa có (sân bay VNSGN/VNHAN) thì bỏ qua", () => {
+  it("bí danh chỉ trỏ tới mã: mã có trong A016 thì dùng tên A016, mã chưa có thì bỏ qua", () => {
     const codes = new Set(A016.map((e) => e.code));
-    const missing = PORT_ALIASES.filter((p) => !codes.has(p.code)).map((p) => p.code);
-    expect(missing.sort()).toEqual(["VNHAN", "VNSGN"]);
-    expect(resolvePort("TAN SON NHAT AIRPORT", A016)).toBeNull();
-    expect(resolvePort("TAN SON NHAT AIRPORT", [...A016, { code: "VNSGN", name: "SAN BAY TAN SON NHAT", parent: "VN" }])).toEqual({ code: "VNSGN", name: "SAN BAY TAN SON NHAT" });
+    // A016 bản 11/2026 (chia theo PTVC) đã có sân bay VNSGN / VNHAN – mọi bí danh đều trỏ tới mã có trong danh mục.
+    expect(PORT_ALIASES.filter((p) => !codes.has(p.code)).map((p) => p.code)).toEqual([]);
+    expect(resolvePort("TAN SON NHAT AIRPORT", A016)).toEqual({ code: "VNSGN", name: "HO CHI MINH" });
+    expect(resolvePort("TAN SON NHAT AIRPORT", A016.filter((e) => e.code !== "VNSGN"))).toBeNull();
   });
   it("POD nước ngoài (chuyển tải) → điểm đến cuối tại VN kèm ghi chú", () => {
     // Chỉ tên thành phố → cảng chung, kèm ghi chú chọn bến cụ thể.
@@ -71,9 +71,9 @@ describe("catalog-resolve", () => {
       expect(pickLoadingPort(["SOMEWHERE"], [addr], "CN", WORLD)).toMatchObject({ resolved: null, raw: "SOMEWHERE" });
     });
     it("mã sân bay IATA / mã trạm chuyển phát FedEx (IATA + 1 chữ) → mã nước + IATA; từ 3 chữ trong câu dài không bị nhầm", () => {
-      // VNSGN / VNHAN chưa có trong A016 → không nhận (có trong danh mục là tự nhận, xem test bí danh ở trên).
-      expect(resolvePort("SGNA", A016)).toBeNull();
-      expect(resolvePort("HAN", A016)).toBeNull();
+      // Mã trạm chuyển phát SGNA / HAN → sân bay VNSGN / VNHAN (có trong A016 bản 11/2026).
+      expect(resolvePort("SGNA", A016)?.code).toBe("VNSGN");
+      expect(resolvePort("HAN", A016)?.code).toBe("VNHAN");
       expect(resolveWorldPort("ZUHA", "CN", WORLD)?.code).toBe("CNZUH");
       expect(resolveWorldPort("ZUH", null, WORLD)?.code).toBe("CNZUH");
       expect(resolvePort("VIET NAM", A016)).toBeNull();

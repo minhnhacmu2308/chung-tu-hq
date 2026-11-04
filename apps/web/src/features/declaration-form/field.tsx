@@ -3,8 +3,8 @@
 // nút ⓘ mở hướng dẫn khai (catalog Phụ lục II) kèm nghĩa vai trò (VNACCS tự xác định…). Ô mã có danh mục VNACCS: chỉ hiện mã, tên khi rê chuột,
 // tra cứu bằng danh sách thả xuống / popup (CodeInput); chỉ đọc thì hiện "mã · tên". Tùy chọn nhãn bên trái (phương án F). "Còn thiếu", lý do áp dụng.
 import { Abbreviation, Button, Checkbox, cn, Field, FieldFrame, fill, Input, Popover, PopoverContent, PopoverTrigger, RadioGroup, Textarea, useMessages, useUiLocale } from "@kb/ui";
-import type { ReactNode } from "react";
-import { codeListFor, DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, type ConditionContext, type ConditionId, type DeclarationFieldRole, type FieldOption, type LayoutField } from "@kb/contracts";
+import type { ChangeEvent, CompositionEvent, ReactNode } from "react";
+import { codeListFor, DECLARATION_CONDITIONS, fieldGuideNo, fieldRole, isOnSiteTransport, placeNameSource, plainUpper, transportPlaceOf, type ConditionContext, type ConditionId, type DeclarationFieldRole, type FieldOption, type LayoutField } from "@kb/contracts";
 import { Info, Lock } from "lucide-react";
 import { useMemo } from "react";
 import { useAmendLock } from "./amend-context";
@@ -117,13 +117,24 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   // Ô mã có danh mục VNACCS: phạm vi lọc (cơ quan Hải quan, nhập/xuất) và tên của mã.
   const listId = field.input === "code" ? codeListFor(field.codeTable) : undefined;
   const office = values["TK_CH"] ?? "";
-  const scope = useMemo(() => (listId ? codeScope(listId, field.key, kind, { TK_CH: office }, locale) : null), [listId, field.key, kind, office, locale]);
+  const transport = values["TK_MTC"] ?? "";
+  const scope = useMemo(() => (listId ? codeScope(listId, field.key, kind, { TK_CH: office, TK_MTC: transport }, locale) : null), [listId, field.key, kind, office, transport, locale]);
   const name = useCodeName(field.codeTable, values[field.key] ?? "", scope);
+  // Ô "Tên" của ô mã (1.29 / 2.27, 1.67 / 2.56): tên Hải quan trả về, không thì tên tra danh mục theo mã đang nhập (đổi ngay khi sửa mã).
+  // Tên địa điểm xếp / dỡ (1.33 / 1.34, 2.28 / 2.29) khi không phải PTVC 9 / mã …ZZZ: cũng theo mã (A016), chỉ đọc – chỉ gửi mã, Hải quan tự xuất tên.
+  const placeCode = placeNameSource(kind, field.key, values);
+  const nameOf = useMemo(() => field.nameOf ?? (placeCode ? { key: placeCode, table: "A016" as const } : undefined), [field.nameOf, placeCode]);
+  const sourceList = nameOf ? codeListFor(nameOf.table) : undefined;
+  const sourceScope = useMemo(
+    () => (sourceList && nameOf ? codeScope(sourceList, nameOf.key, kind, { TK_CH: office, TK_MTC: transport }, locale) : null),
+    [sourceList, nameOf, kind, office, transport, locale],
+  );
+  const lookedUp = useCodeName(nameOf?.table, nameOf ? values[nameOf.key] ?? "" : "", sourceScope);
   const applicable = isApplicable(field, ctx);
   if (!applicable && !showInapplicable) return null;
-  const value = values[field.key] ?? "";
+  const value = nameOf ? (nameOf.customs && values[nameOf.customs]?.trim()) || lookedUp || (placeCode ? values[field.key] ?? "" : "") : values[field.key] ?? "";
   const title = fieldLabelNode(field, !compact);
-  const readOnly = field.origin === "CUSTOMS" || !onChange || Boolean(lock);
+  const readOnly = field.origin === "CUSTOMS" || Boolean(nameOf) || !onChange || Boolean(lock);
   // Ô mã có tra cứu trong nhóm: bề rộng theo ô mã + nút tra cứu (CodeInput tự đặt bề rộng ô mã).
   const sizeClass = fill ? "w-full" : compact ? (listId ? undefined : fieldWidthClass(field)) : spansRow(field) ? "col-span-full" : undefined;
 
@@ -134,7 +145,8 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
       <div className={cn("flex min-w-0 flex-col gap-0.5 rounded-md px-3 py-2", customs ? "bg-info-subtle" : "bg-surface-muted", sizeClass)}>
         <p className={cn("text-xs", customs ? "text-info-subtle-fg" : "text-fg-muted")}>{title}</p>
         <p className={cn("break-words text-sm font-medium", customs ? "text-info-subtle-fg" : "text-fg")}>{[displayValue(field, value), value.trim() && field.codeTable ? name : undefined].filter(Boolean).join(" · ") || "—"}</p>
-        {lock?.reason && onChange && (
+        {nameOf && onChange && <p className="text-xs text-fg-muted">{placeCode ? t.placeNameFromCode : t.nameFromCode}</p>}
+        {lock?.reason && onChange && !nameOf && (
           <p className="flex items-start gap-1 text-xs text-fg-muted">
             <Lock aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
             {lock.reason}
@@ -204,15 +216,32 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   }
 
   const inline = !compact && !listId && Boolean(name) && !spansRow(field);
+  // PTVC 9: tên địa điểm xếp / dỡ bắt buộc, in hoa không dấu (ô tự chuyển khi gõ).
+  const onSiteName = isOnSiteTransport(values) && transportPlaceOf(kind, field.key)?.name === field.key ? t.onSiteNameHint : null;
+  // Tên khi PTVC 9: chuyển in hoa không dấu ngay trên ô (giữ vị trí con trỏ – không để React đặt lại giá trị làm con trỏ nhảy cuối);
+  // bộ gõ đang ghép dấu (composition) thì chờ ghép xong mới chuyển.
+  const typePlain = (el: HTMLInputElement) => {
+    const v = plainUpper(el.value);
+    if (v !== el.value) {
+      const { selectionStart: a, selectionEnd: b } = el;
+      el.value = v;
+      if (a !== null && b !== null) el.setSelectionRange(a, b);
+    }
+    set(el.value);
+  };
+  const onInput = onSiteName
+    ? (e: ChangeEvent<HTMLInputElement>) => ((e.nativeEvent as InputEvent).isComposing ? set(e.currentTarget.value) : typePlain(e.currentTarget))
+    : (e: ChangeEvent<HTMLInputElement>) => set(e.currentTarget.value);
+  const plainProps = onSiteName ? { onCompositionEnd: (e: CompositionEvent<HTMLInputElement>) => typePlain(e.currentTarget), onBlur: (e: { currentTarget: HTMLInputElement }) => typePlain(e.currentTarget) } : {};
   // Ô hẹp trong nhóm lặp: chữ gợi ý ngắn; ô thường: "Nhập <tên chỉ tiêu>".
   const placeholder = field.input === "number" ? t.enterNumber : compact ? t.enterShort : fillText(t.enterField, { label: field.label });
   const control =
     listId && field.codeTable ? <div className={cn("min-w-0", fill && "flex-1", dim)}><CodeInput table={field.codeTable} fieldKey={field.key} kind={kind} values={values} value={value} onChange={set} label={field.label} widthClass={fill ? "w-full" : compact ? fieldWidthClass(field) : "w-32"} /></div>
     : field.input === "textarea" ? <Textarea className={cn(!compact && "min-w-0 flex-1", dim)} rows={2} placeholder={placeholder} value={value} onChange={(e) => set(e.currentTarget.value)} />
-    : <Input className={cn(fill ? "min-w-0 flex-1" : compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1", dim)} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} placeholder={placeholder} value={value} onChange={(e) => set(e.currentTarget.value)} />;
+    : <Input className={cn(fill ? "min-w-0 flex-1" : compact ? undefined : inline ? "w-32 shrink-0" : field.input === "date" ? cn(DATE_WIDTH, "shrink-0") : "min-w-0 flex-1", dim)} type={field.input === "date" ? "date" : field.input === "time" ? "time" : "text"} inputMode={field.input === "number" ? "decimal" : undefined} placeholder={placeholder} value={value} onChange={onInput} {...plainProps} />;
   // Ô con trong nhóm hẹp: tên mã để dưới ô. Ô thường: tên mã cạnh ô; nút ⓘ trên đường viền sau tên (nhãn bên trái: cuối hàng).
   // Panel sửa ô (fill): ô mã có danh mục hiện luôn tên theo mã dưới ô – người dùng đối chiếu mã ↔ tên (vd 1.29 mã địa điểm lưu kho → tên kho).
-  const hint = [(compact && !listId) || (fill && listId) ? (name ? `→ ${name}` : null) : null, shownReason].filter(Boolean).join(" · ") || undefined;
+  const hint = [(compact && !listId) || (fill && listId) ? (name ? `→ ${name}` : null) : null, onSiteName, shownReason].filter(Boolean).join(" · ") || undefined;
 
   return (
     <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", sizeClass)}>

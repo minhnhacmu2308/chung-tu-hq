@@ -5,11 +5,29 @@ import { resolvePackageUnit, resolvePayment, resolvePort } from "../catalog-reso
 // Suy từ chứng từ (không có/nhiều hóa đơn, dòng FOC, phương thức thanh toán trên invoice) luôn thắng; chứng từ không cho tín hiệu riêng
 // thì dùng Mặc định khai báo của doanh nghiệp (profileOr). Ghi đè nguồn/giá trị cố định của doanh nghiệp vẫn chạy trước (evaluateMapping).
 import { fixed, fromSourced, missing, profileOr, type MappedValue, type MappingInput } from "./types.js";
+import { ON_SITE_PLACE, ON_SITE_TRANSPORT } from "@kb/contracts";
+import type { CatalogEntry } from "../catalog-resolve.js";
+import { transportCode } from "./conditions.js";
 
 type Kind = "IDA" | "EDA";
 
 export const port = (raw: string | null, pick: ReturnType<typeof resolvePort>, source: MappedValue["source"]): MappedValue =>
   pick ? { value: `${pick.code} – ${pick.name}`, source } : raw ? { value: raw, source, suspect: true, note: `Không tìm thấy mã VNACCS cho “${raw}” – chọn mã địa điểm` } : missing(source, "Chưa có địa điểm trên chứng từ");
+
+/**
+ * Địa điểm xếp / dỡ theo PTVC (@kb/contracts transport-places.ts): trong nước chỉ lấy mã có PTVC của lô (danh mục không ghi PTVC → mọi mã VN);
+ * nước ngoài = mã cha khác VN. PTVC 9 (tại chỗ): mã VNZZZ, tên người khai nhập in hoa không dấu.
+ */
+export function domesticPorts(i: MappingInput): CatalogEntry[] | undefined {
+  const mode = transportCode(i);
+  return i.catalogs?.ports?.filter((p) => !p.modes?.length || p.modes.includes(mode));
+}
+export const foreignPorts = (i: MappingInput): CatalogEntry[] | undefined => i.catalogs?.worldPorts?.filter((p) => p.parent !== "VN");
+export function onSitePlace(i: MappingInput): MappedValue | null {
+  return transportCode(i) === ON_SITE_TRANSPORT
+    ? { value: ON_SITE_PLACE, source: "DOSSIER", suspect: true, note: `Phương thức vận chuyển 9: mã địa điểm ${ON_SITE_PLACE}; nhập tên địa điểm in hoa, không dấu` }
+    : null;
+}
 
 const invoiceCount = (i: MappingInput) => i.shipment.documents.filter((d) => d.kind === "INVOICE").length;
 /** Dòng hàng không phải trả tiền (FOC): trị giá dòng = 0. */

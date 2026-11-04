@@ -128,20 +128,24 @@ export const LAYOUT_EDA: DeclarationLayout = withShortLabels({
         },
         {
           id: "dia-diem", title: "Địa điểm và phương tiện", items: [
-            fld("TK_ST", "Mã địa điểm lưu kho hàng chờ thông quan", "code", { no: "2.27", codeTable: "A202", width: "sm" }),
+            // 2.27: người khai nhập mã; tên chỉ đọc – Hải quan trả theo mã (TK_K42), trước đó tra danh mục A202.
+            grp("Địa điểm lưu kho hàng chờ thông quan", "2.27", [fld("TK_ST", "Mã", "code", { codeTable: "A202", width: "sm" }), fld("APP_TEN_KHO", "Tên", "text", { width: "md", nameOf: { key: "TK_ST", table: "A202", customs: "TK_K42" } })]),
             grp("Địa điểm nhận hàng cuối cùng", "2.28", [fld("TK_DSC", "Mã", "code", { codeTable: "A016", width: "sm" }), fld("TK_DSN", "Tên", "text", { width: "md" })]),
             grp("Địa điểm xếp hàng", "2.29", [fld("TK_PSC", "Mã", "code", { codeTable: "A016", width: "sm" }), fld("TK_PSN", "Tên", "text", { width: "md" })]),
-            grp("Phương tiện vận chuyển dự kiến", "2.30", [fld("TK_VSC", "Hô hiệu (call sign)", "text", { width: "sm", condition: "BY_WATER" }), fld("TK_VSN", "Tên phương tiện / chuyến", "text", { width: "md" })]),
+            grp("Phương tiện vận chuyển dự kiến", "2.30", [fld("TK_VSC", "Hô hiệu (call sign)", "text", { width: "sm" }), fld("TK_VSN", "Tên phương tiện / chuyến", "text", { width: "md" })]),
             fld("TK_SYM", "Ngày hàng đi dự kiến", "date", { no: "2.31", width: "sm" }),
           ],
         },
         {
           id: "container", title: "Container", condition: "IN_CONTAINER", actions: [{ id: "copy-cont", label: "Copy số cont từ tờ khai khác" }], items: [
+            // 2.59: bắt buộc ít nhất mã 1; mã nhập theo thứ tự 1 → 5, tra danh mục địa điểm lưu kho (A202) như 2.27 / 1.29.
+            // Tên tự điền theo mã 1 (A202), địa chỉ mặc định địa chỉ người xuất khẩu – người khai sửa được.
             grp("Địa điểm xếp hàng lên xe chở hàng (vanning)", "2.59", [
-              fld("CON_VC1", "Mã 1", "code", { width: "xs" }), fld("CON_VC2", "Mã 2", "code", { width: "xs" }), fld("CON_VC3", "Mã 3", "code", { width: "xs" }), fld("CON_VC4", "Mã 4", "code", { width: "xs" }), fld("CON_VC5", "Mã 5", "code", { width: "xs" }),
+              ...[1, 2, 3, 4, 5].map((n) => fld(`CON_VC${n}`, `Mã ${n}`, "code", { codeTable: "A202", width: "xs" })),
               fld("CON_VN", "Tên", "text", { width: "lg" }), fld("CON_VA", "Địa chỉ", "text", { width: "lg" }),
-            ], { fill: "any" }),
-            rep("Số container", "2.60", 50, [fld("CON_C{nn}", "Số container", "text", { width: "sm" })]),
+            ], { fill: "any", sequence: ["CON_VC1", "CON_VC2", "CON_VC3", "CON_VC4", "CON_VC5"] }),
+            // 2.60: nhập theo thứ tự – số container thứ n chỉ nhập khi đã có số thứ n−1 (tối đa 50).
+            rep("Số container", "2.60", 50, [fld("CON_C{nn}", "Số container", "text", { width: "sm" })], { sequential: true }),
           ],
         },
         transitBlock("EDA"),

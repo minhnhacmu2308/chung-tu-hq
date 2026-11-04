@@ -7,6 +7,8 @@ import { itemDefaults, itemOverrides } from "./item-fields.js";
 import { declarationFormValues } from "./app-fields.js";
 import { layoutFor } from "./layout-for.js";
 import { fieldRole } from "./role.js";
+import { sequenceHoles } from "./sequence.js";
+import { CALL_SIGN_KEY, isByWater, ON_SITE_PLACE, sendsPlaceName, transportPlaceIssues, TRANSPORT_PLACES } from "./transport-places.js";
 import type { LayoutBlock, LayoutField, LayoutGroup, LayoutItem } from "./types.js";
 
 type Kind = "IDA" | "EDA";
@@ -37,16 +39,25 @@ export const isApplicable = (x: { condition?: ConditionId | undefined }, ctx: Co
  * Ô "theo tình huống" không gắn điều kiện cụ thể (ví dụ số hóa đơn) không bị coi là thiếu – tránh báo sai.
  */
 export function missingRequired(kind: Kind, f: LayoutField, v: Values, parentNo: string | undefined, parentCondition: ConditionId | undefined, ctx: ConditionContext): boolean {
-  if (f.origin === "CUSTOMS" || has(v, f.key)) return false;
+  if (f.origin === "CUSTOMS" || f.nameOf || has(v, f.key)) return false;
+  // Tên địa điểm xếp / dỡ hàng (transport-places.ts): nhập tay (PTVC 9, mã …ZZZ) → bắt buộc; theo mã → Hải quan tự xuất, không báo thiếu.
+  const place = TRANSPORT_PLACES[kind].find((p) => p.name === f.key);
+  if (place) return sendsPlaceName(v["TK_MTC"] ?? "", v[place.code] ?? "");
+  // 1.31 / 2.30 ô 1: ô luôn có (PTVC khác người khai tự nhập) nhưng chỉ bắt buộc khi đường biển / sông (điền sẵn 9999).
+  if (f.key === CALL_SIGN_KEY[kind]) return isByWater(v);
   const condition = f.condition ?? parentCondition;
   if (condition && !DECLARATION_CONDITIONS[condition].test(ctx)) return false;
   const role = fieldRole(kind, f, parentNo);
   return role === "REQUIRED" || (role === "CONDITIONAL" && Boolean(condition));
 }
 
-/** Nhóm "chỉ cần một ô" (fill: any) còn thiếu: đang áp dụng, chưa ô nào có giá trị, và chỉ tiêu bắt buộc trong tình huống này. */
+/**
+ * Nhóm "chỉ cần một ô" (fill: any) còn thiếu: đang áp dụng, chưa ô nào có giá trị, và chỉ tiêu bắt buộc trong tình huống này.
+ * Nhóm có `sequence` (2.59): chỉ xét các ô của dãy – tên / địa chỉ điền sẵn không thay được mã.
+ */
 export function groupMissing(kind: Kind, g: LayoutGroup, v: Values, ctx: ConditionContext, blockCondition?: ConditionId): boolean {
-  if (g.fields.some((f) => has(v, f.key))) return false;
+  const keys = g.sequence ?? g.fields.map((f) => f.key);
+  if (keys.some((k) => has(v, k))) return false;
   return g.fields.some((f) => missingRequired(kind, f, v, g.no, g.condition ?? blockCondition, ctx));
 }
 
@@ -94,14 +105,37 @@ const blockGaps = (kind: Kind, blocks: LayoutBlock[], v: Values) => {
   });
 };
 
+/** Ô bỏ trống giữa dãy nhập theo thứ tự (2.59 mã 1–5, 2.60 container 1–50) – dãy / khối không áp dụng thì bỏ qua. */
+const holeGaps = (kind: Kind, v: Values): Omit<RequiredGap, "line">[] => {
+  const ctx = conditionContext(kind, v);
+  return sequenceHoles(kind, v)
+    .filter(({ sequence: s }) => isApplicable({ condition: s.blockCondition }, ctx) && isApplicable({ condition: s.condition }, ctx))
+    .map(({ sequence: s, field, index }) => {
+      const label = `${s.label} – ô ${index + 1} còn trống (nhập theo thứ tự)`;
+      return s.no ? { key: field.key, label, no: s.no } : { key: field.key, label };
+    });
+};
+
+const PLACE_ISSUE_TEXT = {
+  NAME_REQUIRED: "tên địa điểm bắt buộc khi phương thức vận chuyển 9 hoặc mã địa điểm chưa mã hóa (…ZZZ)",
+  NAME_FORMAT: "tên địa điểm nhập in hoa, không dấu",
+  CODE_FIXED: `mã địa điểm phải là ${ON_SITE_PLACE} khi phương thức vận chuyển 9`,
+} as const;
+/** PTVC 9: mã xếp / dỡ phải là VNZZZ; tên nhập tay (PTVC 9, mã …ZZZ) bắt buộc và in hoa không dấu (transport-places.ts). */
+const placeGaps = (kind: Kind, v: Values): Omit<RequiredGap, "line">[] =>
+  transportPlaceIssues(kind, v).map((i) => ({ key: i.key, no: i.no, label: PLACE_ISSUE_TEXT[i.reason] }));
+
 /**
  * Mọi ô bắt buộc còn trống: tờ khai (`decl`) rồi từng dòng hàng (`items`, điều kiện xét theo giá trị của chính dòng).
  * Ô APP_* chỉ lưu trong phần mềm (nhóm loại hình suy từ mã loại hình, ngày vận đơn…) – không gửi Hải quan nên không chặn.
  */
 export function requiredGaps(kind: Kind, decl: Values, items: Values[]): RequiredGap[] {
   const layout = layoutFor(kind);
+  const head = blockGaps(kind, layout.declarant.flatMap((s) => s.blocks), decl);
   return [
-    ...blockGaps(kind, layout.declarant.flatMap((s) => s.blocks), decl),
+    ...head,
+    ...holeGaps(kind, decl),
+    ...placeGaps(kind, decl).filter((g) => !head.some((x) => x.key === g.key)),
     ...items.flatMap((row, line) => blockGaps(kind, layout.item.declarant, row).map((g) => ({ ...g, line }))),
   ].filter((g) => !g.key.startsWith("APP_"));
 }

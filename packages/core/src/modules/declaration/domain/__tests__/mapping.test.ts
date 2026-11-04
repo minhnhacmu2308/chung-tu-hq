@@ -22,6 +22,12 @@ const ida = (o?: Opts) => build("NK", o);
 const eda = (o?: Opts) => build("XK", o);
 
 describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
+  it("2.59 địa chỉ xếp hàng lên xe: mặc định địa chỉ người xuất khẩu khi đóng container; không container → không có ô", () => {
+    const f = eda({ dossier: { transportMode: "SEA_CONTAINER" } });
+    expect(f["CON_VA"]).toMatchObject({ no: "2.59", value: ORG.address, source: "ACCOUNT" });
+    expect(eda({ dossier: { transportMode: "AIR" }, mutate: (s) => void (s.transport.containers = []) })["CON_VA"]).toBeUndefined();
+  });
+
   it("số tờ khai đã cấp, tên chi cục rỗng → chỉ mã chi cục; ghi chú nội bộ của hồ sơ KHÔNG vào phần ghi chú", () => {
     const f = eda({ dossier: { declarationNo: "305123456789", customsOfficeName: "", note: "Hàng mẫu" } });
     expect(f["SOTK"]).toMatchObject({ value: "305123456789", source: "SYSTEM" });
@@ -330,5 +336,26 @@ describe("giữ cả hai: quy định chỉ tiêu + cấu hình doanh nghiệp (
     const profile = { HD_PL: "D – Hóa đơn điện tử", GIA_PL: "A – Giá hóa đơn cho hàng hóa phải trả tiền" };
     expect(ida({ profile })["HD_PL"]).toMatchObject({ value: "D – Hóa đơn điện tử", provenance: { via: "profile" } });
     expect(ida({ profile, mutate: (s) => void (s.documents = s.documents.filter((d) => d.kind !== "INVOICE")) })["HD_PL"]?.value).toMatch(/^B/);
+  });
+});
+
+describe("địa điểm xếp / dỡ theo PTVC (A016 bản chia theo PTVC)", () => {
+  it("PTVC 9 (tại chỗ): mã xếp và dỡ = VNZZZ cả nhập lẫn xuất, đánh dấu để người khai nhập tên in hoa không dấu", () => {
+    for (const f of [ida({ dossier: { transportMode: "OTHER" } }), eda({ dossier: { transportMode: "OTHER" } })]) {
+      expect(f["CANG_DO"]).toMatchObject({ value: "VNZZZ", suspect: true, note: expect.stringMatching(/in hoa, không dấu/) });
+      expect(f["CANG_XEP"]).toMatchObject({ value: "VNZZZ", suspect: true });
+    }
+  });
+  it("nhập: xếp hàng chỉ nhận địa điểm nước ngoài; dỡ hàng chỉ nhận địa điểm Việt Nam đúng PTVC", () => {
+    expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("BUSAN, KOREA")) })["CANG_XEP"]?.value).toBe("KRPUS – BUSAN");
+    expect(ida({ mutate: (s) => void (s.transport.portOfLoading = val("HAI PHONG, VIETNAM")) })["CANG_XEP"]).toMatchObject({ suspect: true });
+    // Cát Lái chỉ có trong danh mục PTVC 1/2/3/6 – lô đường bộ (4) không tự điền mã này.
+    const pod = (s: Shipment) => void (s.transport.portOfDischarge = val("CANG CAT LAI (HCM)"));
+    expect(ida({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: pod })["CANG_DO"]?.value).toBe("VNCLI – CANG CAT LAI (HCM)");
+    expect(ida({ dossier: { transportMode: "ROAD" }, mutate: pod })["CANG_DO"]?.value).not.toMatch(/^VNCLI/);
+  });
+  it("xuất: nhận hàng cuối cùng chỉ nhận địa điểm nước ngoài", () => {
+    const f = eda({ mutate: (s) => { s.transport.finalDestination = val("HAI PHONG, VIETNAM"); s.transport.portOfDischarge = val("BUSAN, KOREA"); } });
+    expect(f["CANG_DO"]?.value).toBe("KRPUS – BUSAN");
   });
 });

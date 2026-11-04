@@ -24,7 +24,8 @@ type Rule = { code: string; keys: string[]; to: (v: string) => Values; from?: (v
 const firstToken = (v: string) => v.split(/\s*[–-]\s*/)[0]!.trim();
 const splitCodeName = (v: string) => {
   const m = /^([A-Z0-9-]{1,12})\s*[–-]\s*(.+)$/.exec(v);
-  return m ? { code: m[1]!, name: m[2]!.trim() } : { code: v, name: v };
+  // Chỉ có mã chưa mã hóa (VNZZZ khi PTVC 9, CNZZZ…): tên do người khai nhập – để trống (báo thiếu), không lấy mã làm tên.
+  return m ? { code: m[1]!, name: m[2]!.trim() } : { code: v, name: /^[A-Z]{2}ZZZ$/.test(v.trim()) ? "" : v };
 };
 /**
  * Địa chỉ → tối đa `max` ô 35 ký tự (FE form + backend truyền FPT dùng chung).

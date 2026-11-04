@@ -8,6 +8,7 @@ import { documentSetMockError, editScopeMockError } from "./customs";
 import { refreshDeclaration } from "./declaration";
 import { generateChecks, generateFieldsForDocument, SUSPECT_STATUSES } from "@/mocks/seed/ocr";
 import { syncFreightTermCheck } from "@/mocks/freight-term";
+import { syncIncotermFreightCheck } from "@/mocks/incoterm-freight";
 import type { CrossCheck, DocKind, DossierDocument, ExtractedField, FieldStatus } from "@/mocks/types";
 
 export const ocrKeys = {
@@ -232,6 +233,7 @@ function syncTerms(db: MockDb, f: ExtractedField) {
     if (code) dossier.incoterm = code;
   }
   if (f.key === "incoterm" || f.key === "freight_terms" || f.key === "freight_term") syncFreightTermCheck(db, dossier.id);
+  if (f.key === "incoterm") syncIncotermFreightCheck(db, dossier.id);
 }
 
 /** Người dùng sửa giá trị → USER_CONFIRMED, giữ originalValue (bản thật ghi field_audit). */

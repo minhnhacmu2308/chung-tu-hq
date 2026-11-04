@@ -86,13 +86,19 @@
       "id": "A016",
       "title": "Địa điểm xếp / dỡ hàng",
       "sources": [
+        "DM.MA_XEPDO_TRONGNUOC_PTVC_1-2-3-6",
+        "DM.MA_XEPDO_TRONGNUOC_PTVC_4-5",
+        "DM.MA_XEPDO_NUOCNGOAI"
+      ],
+      "parentLabel": "Mã nước",
+      "superseded": [
         "11a.DM_DDXEPDOHANG_Cang - ICDtrongnuoc",
         "11.DM.DD_XEPDOHANG",
         "12.DM.DD_XEPDOHANG_NUOCNGOAI"
       ],
-      "parentLabel": "Mã nước",
-      "count": 14710,
-      "inactive": 14,
+      "byTransportMode": true,
+      "count": 15433,
+      "inactive": 0,
       "hasParent": true
     },
     {

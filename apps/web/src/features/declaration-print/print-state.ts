@@ -26,6 +26,8 @@ export type PrintTarget = { key: string; line?: number };
 export type FieldSpot = {
   field: LayoutField; group: LayoutField[]; parentNo?: string; parentCondition?: ConditionId; blockCondition?: ConditionId; scope: "decl" | "item";
   repeatRow?: number; repeatCount?: number; fillAny?: boolean;
+  /** Tên nhóm ô (chỉ tiêu nhiều ô con – "Địa điểm dỡ hàng") – tiêu đề panel / thông báo đã lưu thay cho tên ô con ("Mã"). */
+  groupLabel?: string;
 };
 
 function locate(blocks: LayoutBlock[], scope: "decl" | "item", out: Map<string, FieldSpot>) {
@@ -36,7 +38,7 @@ function locate(blocks: LayoutBlock[], scope: "decl" | "item", out: Map<string, 
       if (it.kind === "field") { put({ ...base, field: it, group: [it] }); continue; }
       const parent = { ...base, ...(it.no ? { parentNo: it.no } : {}), ...(it.condition ? { parentCondition: it.condition } : {}) };
       if (it.kind === "group") {
-        for (const f of it.fields) put({ ...parent, field: f, group: it.fields, ...(it.fill === "any" ? { fillAny: true } : {}) });
+        for (const f of it.fields) put({ ...parent, field: f, group: it.fields, groupLabel: it.label, ...(it.fill === "any" ? { fillAny: true } : {}) });
         continue;
       }
       expandRepeat(it).forEach((row, i) => { for (const f of row) put({ ...parent, field: f, group: row, repeatRow: i + 1, repeatCount: it.count }); });

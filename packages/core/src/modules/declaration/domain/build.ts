@@ -34,7 +34,7 @@ export { mappingsFor } from "./mapping/registry.js";
 export function buildDeclaration(input: BuildInput): BuiltDeclaration {
   const kind = input.dossier.direction === "NK" ? "IDA" : "EDA";
   const charges = input.charges ?? EMPTY_VALUE_CHARGES;
-  const plan = planAdjustmentsFor(kind, input.shipment, charges);
+  const plan = planAdjustmentsFor(kind, input.shipment, charges, input.dossier.transportMode);
   const currency = input.shipment.invoice.currency.value ?? input.dossier.currency;
   const valuation = allocateCustomsValue({ items: input.items.map((i) => ({ id: i.id, amount: i.amount })), adjustments: plan.adjustments, currency, rates: input.exchange.rates });
   const taxes = computeTaxes(valuation.perItem.map((p) => {

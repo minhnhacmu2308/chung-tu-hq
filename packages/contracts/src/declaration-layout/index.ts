@@ -16,4 +16,9 @@ export {
   type ItemDefaultsInput, type ItemFieldClass,
 } from "./item-fields.js";
 export { declarantFieldApplicable, inapplicableExtraCodes } from "./applicable.js";
+export { fieldSequences, sequenceBlocker, sequenceHoles, type FieldSequence } from "./sequence.js";
 export { allOrNoneGaps, conditionContext, declarationRequiredGaps, groupMissing, isApplicable, itemFormValues, missingRequired, requiredGaps, requiredGapsText, type ItemFormInput, type RequiredGap } from "./required.js";
+export {
+  CALL_SIGN_KEY, fixedPlaceCode, inPlaceScope, isByWater, isOnSiteTransport, UNREGISTERED_CALL_SIGN, ON_SITE_PLACE, ON_SITE_TRANSPORT, plainUpper, TRANSPORT_PLACES, placeNameSource, sendsPlaceName, transportPlaceChanges, transportPlaceIssues, transportPlaceOf, transportPlaceScope,
+  type PlaceIssue, type PlaceScope, type TransportPlace,
+} from "./transport-places.js";

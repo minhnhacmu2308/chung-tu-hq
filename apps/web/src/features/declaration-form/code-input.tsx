@@ -51,7 +51,7 @@ function LookupDialog({ label, state, onRetry, scope, title, hasParent, parentLa
     [hasParent, parentLabel, t],
   );
   return (
-    <DialogContent title={fill(t.lookupTitle, { label })} icon={<Search className="h-4 w-4" />} description={`${title}${entries ? fill(t.lookupCount, { n: formatNumber(data.length) }) : ""}${t.lookupHint}`} size="lg">
+    <DialogContent title={fill(t.lookupTitle, { label })} icon={<Search className="h-4 w-4" />} description={`${title}${scope && !scope.optional ? fill(t.lookupScope, { scope: scope.label }) : ""}${entries ? fill(t.lookupCount, { n: formatNumber(data.length) }) : ""}${t.lookupHint}`} size="lg">
       <Stack gap="sm">
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {scope?.optional && <Checkbox label={fill(t.onlyShow, { scope: scope.label })} checked={!all} onChange={() => setAll((a) => !a)} />}
@@ -80,8 +80,9 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
   const [open, setOpen] = useState(false);
   const nameId = useId();
   const office = values["TK_CH"] ?? "";
-  // Phạm vi chỉ phụ thuộc cơ quan Hải quan / loại tờ khai – giữ nguyên giữa các lần gõ để không lọc lại hàng chục nghìn mã.
-  const scope = useMemo(() => codeScope(id, fieldKey, kind, { TK_CH: office }, locale), [id, fieldKey, kind, office, locale]);
+  const transport = values["TK_MTC"] ?? "";
+  // Phạm vi chỉ phụ thuộc cơ quan Hải quan / PTVC / loại tờ khai – giữ nguyên giữa các lần gõ để không lọc lại hàng chục nghìn mã.
+  const scope = useMemo(() => codeScope(id, fieldKey, kind, { TK_CH: office, TK_MTC: transport }, locale), [id, fieldKey, kind, office, transport, locale]);
   const entries = useMemo(() => (list ? scopedEntries(list, scope, { all: false, inactive: false }) : []), [list, scope]);
   const name = list ? codeName(list, value, scope) : undefined;
 

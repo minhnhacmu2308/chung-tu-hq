@@ -158,10 +158,11 @@ export const LAYOUT_IDA: DeclarationLayout = withShortLabels({
         },
         {
           id: "dia-diem", title: "Địa điểm và phương tiện", items: [
-            fld("VD_ST", "Mã địa điểm lưu kho hàng chờ thông quan", "code", { no: "1.29", codeTable: "A202", width: "sm" }),
+            // 1.29: người khai nhập mã; tên chỉ đọc – Hải quan trả theo mã (VD_A51), trước đó tra danh mục A202.
+            grp("Địa điểm lưu kho hàng chờ thông quan", "1.29", [fld("VD_ST", "Mã", "code", { codeTable: "A202", width: "sm" }), fld("APP_TEN_KHO", "Tên", "text", { width: "md", nameOf: { key: "VD_ST", table: "A202", customs: "VD_A51" } })]),
             grp("Địa điểm dỡ hàng", "1.33", [fld("VD_DST", "Mã", "code", { codeTable: "A016", width: "sm" }), fld("VD_DSN", "Tên", "text", { width: "md" })]),
             grp("Địa điểm xếp hàng", "1.34", [fld("VD_PSC", "Mã", "code", { codeTable: "A016", width: "sm" }), fld("VD_PSN", "Tên", "text", { width: "md" })]),
-            grp("Phương tiện vận chuyển", "1.31", [fld("VD_VSC", "Hô hiệu (call sign)", "text", { width: "sm", condition: "BY_WATER" }), fld("VD_VSN", "Tên phương tiện / chuyến", "text", { width: "md" })]),
+            grp("Phương tiện vận chuyển", "1.31", [fld("VD_VSC", "Hô hiệu (call sign)", "text", { width: "sm" }), fld("VD_VSN", "Tên phương tiện / chuyến", "text", { width: "md" })]),
             fld("VD_ARR", "Ngày hàng đến", "date", { no: "1.32", width: "sm" }),
             fld("TK_N4", "Mã kết quả kiểm tra nội dung", "code", { no: "1.36", codeTable: "INSPECTION_RESULT", width: "xs" }),
             // 1.64: Phụ lục II gắn với kho ngoại quan / loại hình A41, nhưng mã loại hình trong repo chưa đối chiếu (A41 ở code-tables.ts là "quyền nhập khẩu")

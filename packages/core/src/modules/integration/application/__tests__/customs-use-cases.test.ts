@@ -168,7 +168,7 @@ describe("submitDeclaration", () => {
   it("ô bắt buộc trống (đổi sau khi duyệt) → VALIDATION nêu chỉ tiêu, không tạo outbox, hồ sơ chưa SUBMITTED", async () => {
     decls.fields = { KHO: { value: "" } };
     const r = await submitDeclaration(deps, declarant, D, "cert_1");
-    expect(r).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringContaining("1.29 Mã địa điểm lưu kho") } });
+    expect(r).toMatchObject({ ok: false, error: { code: "VALIDATION", message: expect.stringContaining("1.29 Địa điểm lưu kho hàng chờ thông quan – Mã") } });
     expect(uow.data.outbox).toHaveLength(0);
     expect(decls.submitted).toEqual([]);
   });

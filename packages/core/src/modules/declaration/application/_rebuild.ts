@@ -28,7 +28,7 @@ export async function exchangeFor(r: DeclarationRepos, currencies: string[], dat
 /** Các tiền tệ một lô hàng cần tỷ giá: tiền tệ hóa đơn + tiền tệ của từng khoản điều chỉnh (kể cả khoản người khai nhập). */
 export function currenciesOf(shipment: Shipment, dossier: DossierInfo, charges: ValueCharges = EMPTY_VALUE_CHARGES): string[] {
   const invoiceCurrency = shipment.invoice.currency.value ?? dossier.currency;
-  return [invoiceCurrency, ...planAdjustmentsFor(dossier.direction === "NK" ? "IDA" : "EDA", shipment, charges).adjustments.map((a) => a.currency)];
+  return [invoiceCurrency, ...planAdjustmentsFor(dossier.direction === "NK" ? "IDA" : "EDA", shipment, charges, dossier.transportMode).adjustments.map((a) => a.currency)];
 }
 
 /** Chi phí người khai nhập ở bước OCR & kiểm tra; chưa nhập → chỉ theo chứng từ. */

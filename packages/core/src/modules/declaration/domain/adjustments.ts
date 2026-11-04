@@ -1,6 +1,6 @@
 // Khoản điều chỉnh cộng vào trị giá tính thuế theo Incoterm (PRODUCT §7.3). Thuần.
 // Nguồn: chứng từ (shipment.charges) + chi phí người khai nhập ở bước OCR & kiểm tra (ValueCharges) – nhập tay thắng chứng từ.
-import { ADJUSTMENT_CODES, EMPTY_VALUE_CHARGES, FREIGHT_REASON_LABELS, type DocKind, type ManualFreight, type Shipment, type ValueCharges, type ValueSource } from "@kb/contracts";
+import { ADJUSTMENT_CODES, EMPTY_VALUE_CHARGES, FREIGHT_REASON_LABELS, isDomesticDelivery, type DocKind, type TransportMode, type ManualFreight, type Shipment, type ValueCharges, type ValueSource } from "@kb/contracts";
 import type { Adjustment } from "./valuation.js";
 
 const SOURCE_BY_KIND: Partial<Record<DocKind, ValueSource>> = { FREIGHT_INVOICE: "FREIGHT_INVOICE", ARRIVAL_NOTICE: "ARRIVAL_NOTICE", BILL_OF_LADING: "BILL_OF_LADING", INVOICE: "INVOICE", SALES_CONTRACT: "CONTRACT" };
@@ -24,15 +24,24 @@ export function incotermCode(raw: string | null): string {
 export const isIncotermCode = (code: string, kind: "IDA" | "EDA") => INCOTERM_CODES.includes(code) && !(kind === "EDA" && code === "DPU");
 
 /**
- * Điều kiện giá xuất khẩu không phải trừ cước/bảo hiểm: nhóm E/F (giá chưa gồm cước quốc tế) và FOB/DAP/DAF –
- * chỉ tiêu 2.40 Phụ lục II: điều kiện giá FOB, DAP, DAF thì không khai trị giá tính thuế (lấy theo giá hóa đơn).
+ * Điều kiện giá xuất khẩu không phải trừ cước/bảo hiểm: nhóm E/F – giá chưa gồm cước quốc tế. Nhóm C, D (kể cả DAP, DAF) đã gồm cước
+ * → trừ ra (quyết định nghiệp vụ 31/10/2026: chỉ FOB khai thẳng giá hóa đơn; Phụ lục II cho DAP/DAF không khai 2.40 nhưng giá đó gồm cước quốc tế).
  */
-export const EXPORT_NO_DEDUCTION = new Set(["EXW", "FCA", "FAS", "FOB", "DAP", "DAF"]);
+export const EXPORT_NO_DEDUCTION = new Set(["EXW", "FCA", "FAS", "FOB"]);
+/** Chỉ tiêu 2.40: chỉ FOB không khai trị giá tính thuế (giá hóa đơn = giá tại cửa khẩu xuất) – mọi điều kiện khác khai 2.40. */
+export const EXPORT_NO_240 = new Set(["FOB"]);
 
-/** Lô hàng phải có số cước: nhập khẩu nhóm E/F (cộng vào), xuất khẩu giá đã gồm cước (trừ ra). */
-export function freightRequired(kind: "IDA" | "EDA", incoterm: string): boolean {
+/** Tờ khai xuất phải trừ phí bảo hiểm quốc tế khỏi giá hóa đơn: giá đã gồm bảo hiểm (CIF, CIP, C&I, nhóm D). */
+export const exportInsuranceDeducted = (incoterm: string, mode?: TransportMode) => !isDomesticDelivery(mode) && INSURANCE_INCLUDED.has(incoterm) && !EXPORT_NO_DEDUCTION.has(incoterm);
+/** Tờ khai xuất có khoản cộng / trừ khác người khai lập (đều dồn vào 2.40) – chỉ khi điều kiện giá có khai 2.40. */
+export const exportAdjustmentsAllowed = (incoterm: string) => incoterm !== "" && !EXPORT_NO_240.has(incoterm);
+/** Nhãn khoản cộng / trừ khác của tờ khai xuất (không có mã 1.49): lấy ghi chú người khai. */
+export const exportAdjustmentLabel = (note: string) => note.trim() || "Khoản điều chỉnh khác";
+
+/** Lô hàng phải có số cước: nhập khẩu nhóm E/F (cộng vào), xuất khẩu giá đã gồm cước (trừ ra) – trừ giao tại chỗ / trong nước (phương thức 9). */
+export function freightRequired(kind: "IDA" | "EDA", incoterm: string, mode?: TransportMode): boolean {
   if (kind === "IDA") return FREIGHT_NOT_INCLUDED.has(incoterm);
-  return incoterm !== "" && !EXPORT_NO_DEDUCTION.has(incoterm) && incoterm !== "C&I";
+  return !isDomesticDelivery(mode) && incoterm !== "" && !EXPORT_NO_DEDUCTION.has(incoterm) && incoterm !== "C&I";
 }
 
 /** Lý do chưa có số cước (hiện ở ghi chú tờ khai). */
@@ -92,17 +101,28 @@ export function planAdjustments(s: Shipment, c: ValueCharges = EMPTY_VALUE_CHARG
  * (Điều 7 TT39/2015/TT-BTC; chỉ tiêu 2.40 Phụ lục II). Giá hóa đơn đã gồm cước/bảo hiểm (CFR, CIF, CPT, CIP, nhóm D…) → trừ ra.
  * Chưa có số cước/bảo hiểm thì không trừ bừa – ghi chú để người khai bổ sung.
  */
-export function planExportAdjustments(s: Shipment, c: ValueCharges = EMPTY_VALUE_CHARGES): AdjustmentPlan {
+export function planExportAdjustments(s: Shipment, c: ValueCharges = EMPTY_VALUE_CHARGES, mode?: TransportMode): AdjustmentPlan {
   const incoterm = incotermCode(s.invoice.incoterm.value);
   const currency = s.invoice.currency.value ?? "";
   const out: Adjustment[] = [];
   const notes: string[] = [];
   const src = (kind: DocKind | undefined, fallback: ValueSource): ValueSource => (kind && SOURCE_BY_KIND[kind]) || fallback;
+  // Khoản cộng / trừ khác người khai lập: EXW, FCA giao trong nội địa cộng chi phí đưa hàng ra cửa khẩu xuất; nhóm D trừ phí phát sinh ở nước ngoài.
+  const others = () => {
+    if (!exportAdjustmentsAllowed(incoterm)) return;
+    for (const a of c.adjustments ?? []) out.push({ label: exportAdjustmentLabel(a.note), amount: a.amount, currency: a.currency, source: "USER", kind: a.kind === "SB" ? "SUBTRACT" : "ADD" });
+  };
   if (!incoterm || EXPORT_NO_DEDUCTION.has(incoterm)) {
-    if (incoterm === "EXW") notes.push("EXW: trị giá tính thuế xuất khẩu phải gồm chi phí đưa hàng đến cửa khẩu xuất – bổ sung ở chỉ tiêu 2.40 nếu có");
+    others();
+    if ((incoterm === "EXW" || incoterm === "FCA") && !out.length) notes.push(`${incoterm}: trị giá tính thuế xuất khẩu phải gồm chi phí đưa hàng đến cửa khẩu xuất – nhập khoản cộng ở bước OCR & kiểm tra nếu giá chưa gồm`);
     return { adjustments: out, notes };
   }
-  if (freightRequired("EDA", incoterm)) {
+  if (isDomesticDelivery(mode)) {
+    // Phương thức 9: giao tại chỗ / trong nước (DNCX, khu phi thuế quan) – không có cước, bảo hiểm quốc tế để trừ.
+    others();
+    return { adjustments: out, notes };
+  }
+  if (freightRequired("EDA", incoterm, mode)) {
     const m = c.freight;
     if (m?.amount && m.currency) {
       out.push({ label: FREIGHT_ADJUSTMENT_LABEL, amount: m.amount, currency: m.currency, source: "USER", kind: "SUBTRACT" });
@@ -126,9 +146,10 @@ export function planExportAdjustments(s: Shipment, c: ValueCharges = EMPTY_VALUE
       notes.push(`${incoterm}: giá hóa đơn đã gồm bảo hiểm quốc tế – cần phí bảo hiểm để trừ ra (chỉ tiêu 2.40)`);
     }
   }
+  others();
   return { adjustments: out, notes };
 }
 
 /** Khoản điều chỉnh theo chiều tờ khai: nhập cộng (1.47–1.49), xuất trừ về giá tại cửa khẩu xuất (2.40). */
-export const planAdjustmentsFor = (kind: "IDA" | "EDA", s: Shipment, c: ValueCharges = EMPTY_VALUE_CHARGES): AdjustmentPlan =>
-  kind === "IDA" ? planAdjustments(s, c) : planExportAdjustments(s, c);
+export const planAdjustmentsFor = (kind: "IDA" | "EDA", s: Shipment, c: ValueCharges = EMPTY_VALUE_CHARGES, mode?: TransportMode): AdjustmentPlan =>
+  kind === "IDA" ? planAdjustments(s, c) : planExportAdjustments(s, c, mode);

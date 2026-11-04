@@ -200,9 +200,9 @@ describe("lô chuyển phát nhanh 770471184612 (FedEx, đối chiếu TK 106794
   const catalogs = CATALOGS;
   const b = buildDeclaration({ shipment: lot, dossier: { ...DOSSIER, transportMode: "AIR", customsOfficeCode: "02DS" }, org: ORG, items: ITEMS, now: NOW, exchange: { date: "2026-10-14", rates: { VND: "1", USD: "25176" }, missing: [] }, catalogs });
 
-  it("số vận đơn không khoảng trắng; cảng dỡ: TK thật khai VNSGN nhưng mã này chưa có trong A016 → giữ chữ, cần chọn; cảng xếp CNZUH suy từ địa chỉ người xuất khẩu (cần kiểm)", () => {
+  it("số vận đơn không khoảng trắng; cảng dỡ VNSGN như TK thật (A016 bản 11/2026 có mã sân bay, PTVC 1); cảng xếp CNZUH suy từ địa chỉ người xuất khẩu (cần kiểm)", () => {
     expect(b.fields["SO_VD"]).toMatchObject({ value: "770471184612" });
-    expect(b.fields["CANG_DO"]).toMatchObject({ value: "HO CHI MINH , VIET NAM", suspect: true });
+    expect(b.fields["CANG_DO"]).toMatchObject({ value: "VNSGN – HO CHI MINH" });
     expect(b.fields["CANG_XEP"]).toMatchObject({ value: "CNZUH – ZHUHAI", suspect: true, note: expect.stringMatching(/ZHUHAI/) });
   });
   it("ngày đến theo thông báo cước (cần kiểm); ghi chú có ngày cấp C/O như TK thật", () => {
@@ -250,6 +250,51 @@ describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)",
     expect(cif.valuation.customsValueVnd).toBe(String((20850 - 1150 - 40) * 25400));
     expect(cif.fields["TG_TT"]).toMatchObject({ no: "2.40", value: "19660 USD", note: expect.stringMatching(/Đã trừ/) });
     expect(cif.fields["TG_TT"]?.suspect).toBeUndefined();
+  });
+
+  it("EDA CIF: 2.32 tự diễn giải cách tính 2.40 (không dấu, ≤ 140 ký tự); FOB / chặn duyệt → 2.32 để trống", () => {
+    const cif = build(hansol((s) => {
+      s.invoice.incoterm = { value: "CIF", sources: [], status: "SINGLE_SOURCE" };
+      s.charges.insurance = { value: "40", sources: [], status: "SINGLE_SOURCE" };
+    }), XK);
+    expect(cif.fields["TK_MRK"]).toMatchObject({ no: "2.32", source: "SYSTEM", value: "TGTT 2.40: CIF 20850 USD - cuoc 1150 USD - BH 40 USD = 19660 USD" });
+    const fob = build(hansol((s) => void (s.invoice.incoterm = { value: "FOB", sources: [], status: "SINGLE_SOURCE" })), XK);
+    expect(fob.fields["TK_MRK"]?.value).toBe("");
+    const cfr = build(hansol((s) => {
+      s.invoice.incoterm = { value: "CFR", sources: [], status: "SINGLE_SOURCE" };
+      s.charges.freight = { value: null, sources: [], status: "SINGLE_SOURCE" };
+    }), XK);
+    expect(cfr.fields["TK_MRK"]?.value).toBe("");
+  });
+
+  it("EDA FCA giao trong nội địa: khoản cộng người khai lập dồn vào 2.40 và diễn giải ở 2.32; quá 140 ký tự → gộp phần điều chỉnh", () => {
+    const adj = (note: string, kind: "AD" | "SB", amount: string) => ({ code: "N", kind, amount, currency: "USD", note, allocate: false });
+    const fca = build(hansol(), XK, ITEMS, { charges: { ...EMPTY_VALUE_CHARGES, adjustments: [adj("Vận chuyển nội địa ra cảng", "AD", "150")] } });
+    expect(fca.adjustments.map((a) => `${a.label}:${a.kind}:${a.amount}`)).toEqual(["Vận chuyển nội địa ra cảng:ADD:150"]);
+    expect(fca.fields["TG_TT"]).toMatchObject({ value: "21000 USD", note: expect.stringMatching(/Đã cộng vận chuyển nội địa ra cảng/) });
+    expect(fca.fields["TK_MRK"]?.value).toBe("TGTT 2.40: FCA 20850 USD + dc khac 150 USD = 21000 USD");
+    const many = build(hansol(), XK, ITEMS, { charges: { ...EMPTY_VALUE_CHARGES, adjustments: ["1", "2", "3", "4", "5"].map((n) => adj(`Khoản ${n}`, "AD", "1000.25")) } });
+    expect(many.fields["TK_MRK"]?.value).toBe("TGTT 2.40: FCA 20850 USD +/- dieu chinh = 25851.25 USD");
+    // DAP giá đã gồm cước, bảo hiểm → khai 2.40, trừ cả hai (chỉ FOB khai thẳng giá hóa đơn).
+    const dap = build(hansol((s) => {
+      s.invoice.incoterm = { value: "DAP", sources: [], status: "SINGLE_SOURCE" };
+      s.charges.insurance = { value: "40", sources: [], status: "SINGLE_SOURCE" };
+    }), XK);
+    expect(dap.fields["TG_TT"]?.value).toBe("19660 USD");
+    expect(dap.fields["TK_MRK"]?.value).toBe("TGTT 2.40: DAP 20850 USD - cuoc 1150 USD - BH 40 USD = 19660 USD");
+    // Phương thức 9 (giao tại chỗ, DNCX): DAP không trừ cước / bảo hiểm, 2.40 = giá hóa đơn, không chặn duyệt.
+    const domestic = build(hansol((s) => {
+      s.invoice.incoterm = { value: "DAP", sources: [], status: "SINGLE_SOURCE" };
+      s.charges.freight = { value: null, sources: [], status: "SINGLE_SOURCE" };
+      s.charges.insurance = { value: "40", sources: [], status: "SINGLE_SOURCE" };
+    }), { ...XK, transportMode: "OTHER" });
+    expect(domestic.adjustments).toEqual([]);
+    expect(domestic.fields["TG_TT"]).toMatchObject({ value: "20850 USD", note: expect.stringMatching(/phương thức vận chuyển 9/i) });
+    expect(domestic.fields["TG_TT"]?.suspect).toBeUndefined();
+    expect(domestic.fields["TG_TT"]?.blocking).toBeUndefined();
+    // FOB không khai 2.40 → khoản điều chỉnh bị bỏ.
+    const fob = build(hansol((s) => void (s.invoice.incoterm = { value: "FOB", sources: [], status: "SINGLE_SOURCE" })), XK, ITEMS, { charges: { ...EMPTY_VALUE_CHARGES, adjustments: [adj("x", "AD", "1")] } });
+    expect(fob.adjustments).toEqual([]);
   });
 
   it("EDA CFR chưa có số cước → không trừ bừa: không lý do thì 2.40 để trống và chặn duyệt, có lý do thì cảnh báo; FOB → không khai 2.40", () => {
@@ -312,7 +357,7 @@ describe("chỉ tiêu theo tình huống (bật/tắt theo loại hình, phươn
     expect(codes(b)).not.toContain("TNTX_TK");
     expect(b.hidden).toEqual(expect.arrayContaining(["HAN_TX", "TNTX_TK"]));
     expect(b.fields["SL_CONT"]).toMatchObject({ no: "1.35", value: "1", condition: expect.stringMatching(/container/) });
-    expect(b.fields["HO_HIEU"]).toMatchObject({ no: "1.31", value: "9999", source: "DEFAULT", condition: expect.stringMatching(/đường biển/) });
+    expect(b.fields["HO_HIEU"]).toMatchObject({ no: "1.31", value: "9999", source: "DEFAULT", note: expect.stringMatching(/9999/) });
     expect(b.fields["HO_HIEU"]?.suspect).toBeUndefined();
   });
 
@@ -328,9 +373,11 @@ describe("chỉ tiêu theo tình huống (bật/tắt theo loại hình, phươn
     expect(missingRequiredFields("IDA", build({ ...DOSSIER, typeCode: "G12" }).fields).map((m) => m.code)).toContain("HAN_TX");
   });
 
-  it("đường hàng không → không có hô hiệu, số lượng container", () => {
+  it("đường hàng không → 1.31 ô 1 để trống cho người khai nhập (không bắt buộc, không nghi ngờ); không có số lượng container", () => {
     const air = build({ ...DOSSIER, transportMode: "AIR" }, hansol((s) => void (s.transport.containers = [])));
-    expect(codes(air)).not.toContain("HO_HIEU");
+    expect(air.fields["HO_HIEU"]).toMatchObject({ no: "1.31", value: "" });
+    expect(air.fields["HO_HIEU"]?.suspect).toBeUndefined();
+    expect(missingRequiredFields("IDA", air.fields).map((m) => m.code)).not.toContain("HO_HIEU");
     expect(codes(air)).not.toContain("SL_CONT");
   });
 

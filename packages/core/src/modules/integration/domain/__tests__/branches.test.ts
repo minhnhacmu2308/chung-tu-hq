@@ -70,6 +70,18 @@ describe("branchPayload", () => {
     expect(small.objVN_IDA_KTG["ktG_VT1"]).toBeUndefined();
   });
 
+  it("tờ khai xuất 120 dòng: mọi tờ nhánh gửi cùng 2.59 (mã, tên, địa chỉ) và 2.60 (số container) như tờ gốc; 2.2 đúng từng tờ", () => {
+    const con = { CON_VC1: { value: "03CCS01" }, CON_VC2: { value: "03CCS02" }, CON_VN: { value: "Kho CFS Đình Vũ" }, CON_VA: { value: "KCN Đình Vũ, Hải Phòng" }, CON_C01: { value: "SITU2246781" }, CON_C02: { value: "SITU2246782" } };
+    const eda = mk(120, { kind: "EDA", direction: "XK", containers: ["SITU2246781", "SITU2246782"], adjustments: [], fields: { MA_LH: { value: "B11" }, PTVC: { value: "2 – Đường biển (container)" }, NXK_MST: { value: "0316789012" }, ...con } });
+    type Eda = { objVN_EDA: Record<string, unknown>; objVN_EDA_CON: Record<string, unknown> | null; objVN_EDA_HANG: unknown[] };
+    const sheets = [1, 2, 3].map((no) => buildFptRequest(branchPayload(eda, no, "305000000001").payload).request as unknown as Eda);
+    expect(sheets.map((r) => r.objVN_EDA_HANG.length)).toEqual([50, 50, 20]);
+    expect(sheets.map((r) => [r.objVN_EDA["tK_FIC"], r.objVN_EDA["tK_BNO"], r.objVN_EDA["tK_DNO"]])).toEqual([["F", 1, 3], ["305000000001", 2, 3], ["305000000001", 3, 3]]);
+    expect(sheets[0]!.objVN_EDA_CON).toMatchObject({ coN_VC1: "03CCS01", coN_VC2: "03CCS02", coN_VN: "Kho CFS Đình Vũ", coN_VA: "KCN Đình Vũ, Hải Phòng", coN_C01: "SITU2246781", coN_C02: "SITU2246782" });
+    expect(sheets[1]!.objVN_EDA_CON).toEqual(sheets[0]!.objVN_EDA_CON);
+    expect(sheets[2]!.objVN_EDA_CON).toEqual(sheets[0]!.objVN_EDA_CON);
+  });
+
   it("tổng amount các nhánh = invoiceTotal", () => {
     const sum = [1, 2, 3].map((n) => invoiceTotal(branchPayload(p, n, "104000000001").payload)).reduce((a, b) => new Decimal(a).plus(b), new Decimal(0)).toFixed();
     expect(sum).toBe(invoiceTotal(p));

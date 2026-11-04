@@ -4,7 +4,7 @@
 // thanh tóm tắt một dòng.
 import { Badge, Button, fill, PageHeader, Popover, PopoverContent, PopoverTrigger, SegmentedControl, Stack, Tabs, TabsContent, TabsList, TabsTrigger, useMessages } from "@kb/ui";
 import { Info } from "lucide-react";
-import { layoutFor } from "@kb/contracts";
+import { layoutFor, transportPlaceChanges } from "@kb/contracts";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { CustomsTab } from "./customs-tab";
@@ -16,6 +16,7 @@ import type { FormValues } from "./form-state";
 import { OperationsTab } from "./operations-tab";
 import { changedCount, declarantEditable, summaryAt } from "./stage-rules";
 import { ViewPrefsProvider } from "./view-prefs";
+import { usePlaceNameLookup } from "./use-code-list";
 import { parseView, toQuery, type Tab, type ViewState } from "./view-state";
 
 
@@ -26,6 +27,7 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
   const fixture = fixtureFor(view.kind);
   const initial = useMemo(() => valuesAt(fixture, view.stage), [fixture, view.stage]);
   const [values, setValues] = useState<FormValues>(initial.header);
+  const placeName = usePlaceNameLookup();
   const [items, setItems] = useState<FormValues[]>(initial.items);
   // Khai sửa đổi bổ sung (chỉ giai đoạn đã khai): mở khóa phần người khai; hủy → trả lại giá trị đã đăng ký.
   const [amending, setAmending] = useState(false);
@@ -59,7 +61,7 @@ function PrototypeBody({ view, go }: { view: ViewState; go: (patch: Partial<View
         <TabsContent value="khai" className="pt-3">
           <DeclarantTab
             layout={layout} stage={view.stage} values={values} items={items} section={view.section} onSection={(id) => go({ section: id })}
-            onChange={editable ? (k, v) => setValues((s) => ({ ...s, [k]: v })) : undefined}
+            onChange={editable ? (k, v) => setValues((s) => ({ ...s, ...transportPlaceChanges(view.kind, s, k, v, placeName) })) : undefined}
             onItemChange={editable ? (i, k, v) => setItems((s) => s.map((it, j) => (j === i ? { ...it, [k]: v } : it))) : undefined}
             amending={amending} onAmend={amend} changed={amending ? changedCount(initial, { header: values, items }) : 0}
           />

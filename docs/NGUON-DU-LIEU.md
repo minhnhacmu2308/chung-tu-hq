@@ -30,8 +30,8 @@ Bảng mã gọn của backend (chuẩn hóa trích xuất, đối chiếu) ở 
 |---|---|---|---:|---|---|
 | `A038` | Cơ quan Hải quan | Ma_DVHQ_01.06.2026 ver 16 | 197 | EDA 2.8, IDA 1.8 | thay 1.Bang ma don vi HQ 2025 17032025 |
 | `A014` | Bộ phận xử lý tờ khai | Ma_DVHQ_01.06.2026 ver 16 | 213 | EDA 2.9, IDA 1.9 | thay 2.DM_Bo_Phan_Xuly_ToKhai |
-| `A202` | Địa điểm lưu kho | 13.DM_DDLK_CTQ | 14754 | EDA 2.27, EDA 2.55, EDA 2.56, IDA 1.29, IDA 1.66, IDA 1.67 | còn mã chi cục cũ |
-| `A016` | Địa điểm xếp / dỡ hàng | 11a.DM_DDXEPDOHANG_Cang - ICDtrongnuoc, 11.DM.DD_XEPDOHANG, 12.DM.DD_XEPDOHANG_NUOCNGOAI | 14710 | EDA 2.28, EDA 2.29, IDA 1.33, IDA 1.34 | 14 mã ngưng dùng |
+| `A202` | Địa điểm lưu kho | 13.DM_DDLK_CTQ | 14754 | EDA 2.27, EDA 2.55, EDA 2.56, EDA 2.59, IDA 1.29, IDA 1.66, IDA 1.67 | còn mã chi cục cũ |
+| `A016` | Địa điểm xếp / dỡ hàng | DM.MA_XEPDO_TRONGNUOC_PTVC_1-2-3-6, DM.MA_XEPDO_TRONGNUOC_PTVC_4-5, DM.MA_XEPDO_NUOCNGOAI | 15433 | EDA 2.28, EDA 2.29, IDA 1.33, IDA 1.34 | thay 11a.DM_DDXEPDOHANG_Cang - ICDtrongnuoc, 11.DM.DD_XEPDOHANG, 12.DM.DD_XEPDOHANG_NUOCNGOAI |
 | `COUNTRY` | Mã nước | 10.QUOCGIA | 246 | EDA 2.22, EDA ô APP_XUAT_XU, IDA 1.23, IDA 1.79 | 1 mã ngưng dùng |
 | `PACKAGE_KIND` | Loại kiện | 14.DM_MA_LOAIKIEN | 138 | EDA 2.25, IDA 1.27 |  |
 | `UNIT` | Đơn vị tính | 15.DM_DVT | 158 | EDA 2.68, EDA 2.72, EDA 2.73, EDA 2.75, EDA ô HAG_CQC, EDA ô HAG_IQC, IDA 1.77, IDA 1.83, IDA 1.84, IDA 1.86 |  |

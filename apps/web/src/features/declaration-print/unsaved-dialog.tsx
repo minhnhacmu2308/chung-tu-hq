@@ -1,5 +1,6 @@
 "use client";
-// Hỏi khi panel sửa ô còn thay đổi chưa lưu mà người dùng chọn ô khác / đóng panel / Tab sang ô khác / sang bước OCR: Lưu · Bỏ thay đổi · Ở lại.
+// Hỏi khi panel sửa ô còn thay đổi chưa lưu mà người dùng chọn ô khác / đóng panel / Tab sang ô khác / sang bước OCR: Lưu · Giữ giá trị cũ · Ở lại.
+// Bấm chuột ra ngoài panel (`leaving`): "Giá trị đã thay đổi, bạn muốn lưu không?" – chỉ Lưu · Giữ giá trị cũ (Esc = tiếp tục sửa).
 import { Button, Dialog, DialogContent, DialogFooter, fill, useMessages } from "@kb/ui";
 import { Save } from "lucide-react";
 import { formatNumber } from "@/lib/format";
@@ -10,6 +11,8 @@ type Props = {
   /** "1.44 · Tổng trị giá hóa đơn". */
   title: string;
   count: number;
+  /** Hỏi vì bấm chuột ra ngoài panel (không chuyển ô): không có nút "Ở lại". */
+  leaving?: boolean;
   saving: boolean;
   onSave: () => void;
   onDiscard: () => void;
@@ -18,14 +21,14 @@ type Props = {
   onClosed: () => void;
 };
 
-export function UnsavedDialog({ open, title, count, saving, onSave, onDiscard, onStay, onClosed }: Props) {
+export function UnsavedDialog({ open, title, count, leaving = false, saving, onSave, onDiscard, onStay, onClosed }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && !saving && onStay()}>
       <DialogContent
         title={fill(t.saveAt, { title })}
         icon={<Save className="h-4 w-4" />}
-        description={fill(t.unsavedDesc, { n: formatNumber(count) })}
+        description={fill(leaving ? t.leaveDesc : t.unsavedDesc, { n: formatNumber(count) })}
         size="sm"
         // Phải chọn rõ ràng (Esc = Ở lại): hộp có thể mở ngay lúc nhấn chuột xuống (tab kích hoạt khi mousedown) – lần nhả chuột / focus
         // ngay sau đó nằm ngoài hộp không được tính là bấm ra ngoài.
@@ -42,7 +45,7 @@ export function UnsavedDialog({ open, title, count, saving, onSave, onDiscard, o
           }}
         >
           <DialogFooter>
-            <Button type="button" variant="ghost" disabled={saving} onClick={onStay}>{t.stay}</Button>
+            {!leaving && <Button type="button" variant="ghost" disabled={saving} onClick={onStay}>{t.stay}</Button>}
             <Button type="button" variant="secondary" disabled={saving} onClick={onDiscard}>{t.discard}</Button>
             <Button type="submit" loading={saving} autoFocus>{t.save}</Button>
           </DialogFooter>

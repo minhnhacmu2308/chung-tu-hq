@@ -1,25 +1,31 @@
 // Chi phí và điều chỉnh trị giá người khai nhập ở bước OCR & kiểm tra (mock). Quy tắc theo Incoterm giống backend
 // (packages/core declaration/domain/adjustments.ts); lưu xong tính lại trị giá tính thuế của tờ khai nháp.
-import { ADJUSTMENT_CODES, canEditDeclaration, chargesConflict, EMPTY_VALUE_CHARGES, ValueChargesSchema, type DocumentCharges, type ValueCharges, type ValueChargesView } from "@kb/contracts";
+import { ADJUSTMENT_CODES, canEditDeclaration, isDomesticDelivery, chargesConflict, EMPTY_VALUE_CHARGES, EXPORT_ADJUSTMENT_CODE, ValueChargesSchema, type DocumentCharges, type ValueCharges, type ValueChargesView } from "@kb/contracts";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
-import { computeTaxes, EXCHANGE_RATES, shipmentOf } from "@/mocks/declaration-builder";
+import { computeTaxes, EXCHANGE_RATES, exportValueFields, shipmentOf } from "@/mocks/declaration-builder";
 import { toMinor } from "@/lib/decimal";
 import type { MockDb } from "@/mocks/db";
 import type { Declaration, Dossier } from "@/mocks/types";
 import { freightTermOfDossier, syncFreightTermCheck } from "@/mocks/freight-term";
+import { syncIncotermFreightCheck } from "@/mocks/incoterm-freight";
 import { reasonApiError } from "@/mocks/reason-error";
 import { editScopeMockError } from "./customs";
 
 export const valueChargesKeys = { detail: (dossierId: string) => ["value-charges", dossierId] as const };
 
 const FREIGHT_NOT_INCLUDED = new Set(["EXW", "FCA", "FAS", "FOB"]);
-const EXPORT_NO_DEDUCTION = new Set(["EXW", "FCA", "FAS", "FOB", "DAP", "DAF"]);
+const EXPORT_NO_DEDUCTION = new Set(["EXW", "FCA", "FAS", "FOB"]);
 const INSURANCE_INCLUDED = new Set(["CIF", "CIP", "C&I", "DDU", "DDP", "DAP", "DAF", "DAT", "DPU"]);
 const LOCKED = new Set(["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"]);
 const isFreight = (label: string) => label.startsWith("Cước");
+const EXPORT_NO_240 = new Set(["FOB"]);
+/** Xuất khẩu: phải trừ bảo hiểm (giá đã gồm bảo hiểm: CIF, CIP, C&I, nhóm D); nhập khẩu: giá đã gồm bảo hiểm. */
+const insuranceIncluded = (d: Dossier) => INSURANCE_INCLUDED.has(d.incoterm) && (d.direction === "NK" || (!EXPORT_NO_DEDUCTION.has(d.incoterm) && !isDomesticDelivery(d.transportMode)));
+/** Xuất khẩu: khoản cộng / trừ khác dồn vào 2.40 – chỉ khi điều kiện giá có khai 2.40. */
+const adjustmentsAllowed = (d: Dossier) => d.direction === "NK" || (d.incoterm !== "" && !EXPORT_NO_240.has(d.incoterm));
 
 const freightRequired = (d: Dossier) =>
-  d.direction === "NK" ? FREIGHT_NOT_INCLUDED.has(d.incoterm) : d.incoterm !== "" && !EXPORT_NO_DEDUCTION.has(d.incoterm) && d.incoterm !== "C&I";
+  d.direction === "NK" ? FREIGHT_NOT_INCLUDED.has(d.incoterm) : !isDomesticDelivery(d.transportMode) && d.incoterm !== "" && !EXPORT_NO_DEDUCTION.has(d.incoterm) && d.incoterm !== "C&I";
 
 function documentCharges(d: Dossier): DocumentCharges {
   const adj = shipmentOf(d).adjustments;
@@ -43,7 +49,7 @@ function view(db: MockDb, d: Dossier): ValueChargesView {
   const docs = documentCharges(d);
   return {
     charges: saved?.data ?? EMPTY_VALUE_CHARGES, fromDocuments: docs, freightVnd: freightVndOf(docs), direction: d.direction, incoterm: d.incoterm,
-    freightRequired: freightRequired(d), freightTerm: freightTermOfDossier(db, d.id), insuranceIncluded: INSURANCE_INCLUDED.has(d.incoterm), locked: LOCKED.has(d.status),
+    freightRequired: freightRequired(d), freightTerm: freightTermOfDossier(db, d.id), insuranceIncluded: insuranceIncluded(d), adjustmentsAllowed: adjustmentsAllowed(d), locked: LOCKED.has(d.status),
     updatedAt: saved?.updatedAt ?? null, updatedBy: saved?.updatedBy ?? null,
   };
 }
@@ -59,9 +65,13 @@ function adjustmentsOf(d: Dossier, c: ValueCharges): Declaration["valueAdjustmen
     if (c.freight?.amount && c.freight.currency) out.push({ label: "Cước vận chuyển quốc tế – người khai nhập", amount: sign(c.freight.amount, true), currency: c.freight.currency, source: "USER" });
     else if (docFreight) out.push({ ...docFreight, amount: sign(docFreight.amount, true) });
   }
-  const insuranceApplies = nk ? !INSURANCE_INCLUDED.has(d.incoterm) : INSURANCE_INCLUDED.has(d.incoterm);
+  const insuranceApplies = nk ? !insuranceIncluded(d) : insuranceIncluded(d);
   if (insuranceApplies && c.insurance?.mode === "AMOUNT") out.push({ label: "Phí bảo hiểm – người khai nhập", amount: sign(c.insurance.amount, true), currency: c.insurance.currency, source: "USER" });
-  if (!nk) return out;
+  if (!nk) {
+    // Khoản cộng / trừ khác của tờ khai xuất: tên khoản = ghi chú; khoản trừ là số âm.
+    for (const a of adjustmentsAllowed(d) ? c.adjustments ?? [] : []) out.push({ label: a.note || "Khoản điều chỉnh khác", amount: a.kind === "SB" ? `-${a.amount}` : a.amount, currency: a.currency, source: "USER" });
+    return out;
+  }
   if (c.adjustments === null) return [...out, ...doc.filter((a) => !isFreight(a.label))];
   for (const a of c.adjustments) {
     const label = ADJUSTMENT_CODES.find((x) => x.code === a.code)?.label ?? `Khoản điều chỉnh ${a.code}`;
@@ -87,17 +97,27 @@ export const saveValueCharges = (dossierId: string, input: ValueCharges) =>
     const scoped = editScopeMockError(db, d.id, { kind: "COMMON" });
     if (scoped) throw scoped;
     const parsed = ValueChargesSchema.parse(input);
-    const data: ValueCharges = d.direction === "XK" ? { ...parsed, adjustments: null } : parsed;
+    // Xuất khẩu (giống backend): khoản khác lưu mã "N", không phân bổ 1.88; không khai 2.40 hoặc danh sách rỗng → null.
+    const xkRows = adjustmentsAllowed(d) && parsed.adjustments?.length ? parsed.adjustments.map((a) => ({ ...a, code: EXPORT_ADJUSTMENT_CODE, allocate: false })) : null;
+    const data: ValueCharges = d.direction === "XK" ? { ...parsed, adjustments: xkRows } : parsed;
     // Cùng ràng buộc theo chứng từ với backend (@kb/contracts chargesConflict).
     const conflict = chargesConflict(data, view(db, d));
     if (conflict) throw reasonApiError("VALIDATION", conflict.reason, conflict.params);
     db.valueCharges[d.id] = { data, updatedAt: nowIso(), updatedBy: db.currentUserId };
     syncFreightTermCheck(db, d.id);
+    syncIncotermFreightCheck(db, d.id);
     const decl = db.declarations.find((x) => x.dossierId === d.id);
     if (decl?.status === "DRAFT") {
       const adjustments = adjustmentsOf(d, data);
       const t = computeTaxes(d, db.lineItems.filter((i) => i.dossierId === d.id), adjustments);
       Object.assign(decl, { valueAdjustments: adjustments, customsValueVnd: t.customsValueVnd, estimatedImportDutyVnd: t.importDutyVnd, estimatedVatVnd: t.vatVnd });
+      // Tờ khai xuất: dựng lại 2.40 và diễn giải 2.32; ô người khai đã sửa thì giữ.
+      const ev = d.direction === "XK" ? exportValueFields(d.incoterm, d.currency, t.invoiceTotal, adjustments) : null;
+      for (const field of ev ? decl.fields : []) {
+        if (field.source === "USER") continue;
+        if (field.code === "TG_TT") field.value = ev!.value;
+        if (field.code === "TK_MRK") Object.assign(field, { value: ev!.marks, source: ev!.marks ? "SYSTEM" : "DOSSIER" });
+      }
     }
     return view(db, d);
   });

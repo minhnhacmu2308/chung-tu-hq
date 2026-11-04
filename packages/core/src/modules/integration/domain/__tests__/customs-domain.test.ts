@@ -55,6 +55,29 @@ describe("declaration-to-fpt", () => {
     expect(b.blockers).toEqual([]);
   });
 
+  it("1.33 / 1.34, 2.28 / 2.29: chỉ gửi mã địa điểm (Hải quan tự xuất tên); PTVC 9 hoặc mã …ZZZ → gửi cả mã và tên", () => {
+    const vd = (p: DeclarationPayload) => (buildFptRequest(p).request as { objVN_IDA_VANDON: Record<string, unknown> }).objVN_IDA_VANDON;
+    const sea = vd(PAYLOAD);
+    expect(sea).toMatchObject({ vD_DST: "VNHPH", vD_PSC: "KRPUS" });
+    expect(sea["vD_DSN"]).toBeUndefined();
+    expect(sea["vD_PSN"]).toBeUndefined();
+    const onSite = vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "9 – Khác" }, CANG_DO: { value: "VNZZZ – KHO CONG TY A" }, CANG_XEP: { value: "VNZZZ – KHO CONG TY B" } } });
+    expect(onSite).toMatchObject({ vD_DST: "VNZZZ", vD_DSN: "KHO CONG TY A", vD_PSC: "VNZZZ", vD_PSN: "KHO CONG TY B" });
+    // Tờ khai dựng tự động PTVC 9: chỉ có mã VNZZZ, chưa nhập tên → không gửi mã làm tên.
+    const bare = vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "9 – Khác" }, CANG_DO: { value: "VNZZZ" }, CANG_XEP: { value: "VNZZZ" } } });
+    expect(bare).toMatchObject({ vD_DST: "VNZZZ", vD_PSC: "VNZZZ" });
+    expect(bare["vD_DSN"]).toBeUndefined();
+    expect(bare["vD_PSN"]).toBeUndefined();
+    const uncoded = vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, CANG_XEP: { value: "KRZZZ – GUNSAN NEW PORT" } } });
+    expect(uncoded).toMatchObject({ vD_PSC: "KRZZZ", vD_PSN: "GUNSAN NEW PORT" });
+    expect(buildFptRequest(PAYLOAD).issues).toEqual([]);
+    const eda = buildFptRequest({ ...PAYLOAD, kind: "EDA", direction: "XK", fields: { ...PAYLOAD.fields, MA_LH: { value: "B11" }, CANG_DO: { value: "KRPUS – Busan" }, CANG_XEP: { value: "VNHPH – Cảng Hải Phòng" } } });
+    const tk = (eda.request as { objVN_EDA: Record<string, unknown> }).objVN_EDA;
+    expect(tk).toMatchObject({ tK_DSC: "KRPUS", tK_PSC: "VNHPH" });
+    expect(tk["tK_DSN"]).toBeUndefined();
+    expect(tk["tK_PSN"]).toBeUndefined();
+  });
+
   it("1.37: nhiều mã → TK_OL1..5, bỏ trùng; hàng 84/85 mà ô 1 không phải MO/CU → chặn truyền (CV 2061)", () => {
     const multi = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, VBPQ: { value: "CU; KT, KT" } } });
     const r = multi.request as { objVN_IDA: Record<string, unknown> };
@@ -203,9 +226,11 @@ describe("declaration-to-fpt – chỉ tiêu theo tình huống", () => {
     const r = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, TNTX_TK: { value: "305123456780" }, HAN_TX: { value: "2027-01-31" }, HO_HIEU: { value: "3WAB9" }, SL_CONT: { value: "2" } } }).request as Req;
     expect(r.objVN_IDA).toMatchObject({ tK_TDN: 305123456780, tK_RED: "31/01/2027" });
     expect(r.objVN_IDA_VANDON).toMatchObject({ vD_VSC: "3WAB9", vD_COC: 2 });
-    // Đổi sang đường hàng không sau khi dựng: hô hiệu cũ không gửi.
+    // Đổi sang đường hàng không sau khi dựng: 9999 cũ không gửi; mã phương tiện người khai tự nhập thì gửi.
     const air = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "1 – Đường hàng không" }, HO_HIEU: { value: "9999" } } }).request as Req;
     expect(air.objVN_IDA_VANDON!["vD_VSC"]).toBeUndefined();
+    const typed = buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "1 – Đường hàng không" }, HO_HIEU: { value: "VN0123" } } }).request as Req;
+    expect(typed.objVN_IDA_VANDON!["vD_VSC"]).toBe("VN0123");
     const plain = buildFptRequest(PAYLOAD).request as Req;
     expect(plain.objVN_IDA!["tK_TDN"]).toBeUndefined();
     expect(plain.objVN_IDA_VANDON!["vD_COC"]).toBe(1);

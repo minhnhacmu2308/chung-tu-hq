@@ -266,7 +266,11 @@ export function DialogContent({
         {!isModal && (
           <DrawerResizeHandle label={l.resize} width={() => drawerWidth ?? contentEl?.offsetWidth ?? DRAWER_MIN_PX} onChange={setDrawerWidth} />
         )}
-        <FocusScope asChild trapped={isModal} loop>
+        {/*
+          Lớp này chỉ để giữ Tab vòng trong dialog (khi modal). Không tự focus lúc mở: DialogPrimitive.Content đã focus phần tử đầu tiên
+          và tôn trọng `onOpenAutoFocus` (nơi gọi chặn để tự chọn ô cần focus) – lớp này focus trước sẽ làm `onOpenAutoFocus` không bao giờ chạy.
+        */}
+        <FocusScope asChild trapped={isModal} loop onMountAutoFocus={(e) => e.preventDefault()}>
         <div ref={setContentEl} className="flex min-h-0 flex-1 flex-col">
         {/* div, không phải <header>: hai dialog chồng nhau (panel chi tiết + cửa sổ con) sẽ thành hai landmark banner. */}
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">

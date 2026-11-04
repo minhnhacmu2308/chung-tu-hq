@@ -7,8 +7,8 @@ type Extra = Partial<Omit<LayoutField, "kind" | "key" | "label" | "input">>;
 export const fld = (key: string, label: string, input: FieldInput = "text", extra: Extra = {}): LayoutField => ({ kind: "field", key, label, input, ...extra });
 /** Ô Hải quan cấp/tính – chỉ đọc. */
 export const hq = (key: string, label: string, input: FieldInput = "text", extra: Extra = {}): LayoutField => fld(key, label, input, { ...extra, origin: "CUSTOMS" });
-export const grp = (label: string, no: string | undefined, fields: LayoutField[], extra: Partial<Pick<LayoutGroup, "condition" | "fill">> = {}): LayoutGroup => ({ kind: "group", label, ...(no ? { no } : {}), fields, ...extra });
-export const rep = (label: string, no: string | undefined, count: number, fields: LayoutField[], extra: Partial<Pick<LayoutRepeat, "condition">> = {}): LayoutRepeat => ({ kind: "repeat", label, ...(no ? { no } : {}), count, fields, ...extra });
+export const grp = (label: string, no: string | undefined, fields: LayoutField[], extra: Partial<Pick<LayoutGroup, "condition" | "fill" | "sequence">> = {}): LayoutGroup => ({ kind: "group", label, ...(no ? { no } : {}), fields, ...extra });
+export const rep = (label: string, no: string | undefined, count: number, fields: LayoutField[], extra: Partial<Pick<LayoutRepeat, "condition" | "sequential">> = {}): LayoutRepeat => ({ kind: "repeat", label, ...(no ? { no } : {}), count, fields, ...extra });
 /** Số chỉ tiêu theo mẫu: n("1.39", "2.34"). */
 const n = (k: Kind) => (ida: string, eda: string) => (k === "IDA" ? ida : eda);
 
@@ -125,7 +125,7 @@ export function transitBlock(k: Kind): LayoutBlock {
         fld("TK_AD{n}", "Ngày đến", "date", { width: "sm" }),
         fld("TK_SD{n}", "Ngày khởi hành", "date", { width: "sm" }),
       ]),
-      grp("Địa điểm đích cho vận chuyển bảo thuế", no("1.67", "2.56"), [fld("TK_ARP", "Mã địa điểm đích", "code", { codeTable: "A202", width: "sm" }), fld("TK_ADT", "Ngày dự kiến đến", "date", { width: "sm" })]),
+      grp("Địa điểm đích cho vận chuyển bảo thuế", no("1.67", "2.56"), [fld("TK_ARP", "Mã địa điểm đích", "code", { codeTable: "A202", width: "sm" }), fld("APP_TEN_ARP", "Tên địa điểm đích", "text", { width: "md", nameOf: { key: "TK_ARP", table: "A202" } }), fld("TK_ADT", "Ngày dự kiến đến", "date", { width: "sm" })]),
     ],
   };
 }

@@ -4,6 +4,7 @@
 // Vị trí (region) tính bằng bố cục chuẩn dưới đây; màn hình dựng lại trang chứng từ theo đúng các vùng này.
 import type { CrossCheck, DocKind, Dossier, DossierDocument, ExtractedField, FieldStatus, LineItem, Region } from "../types";
 import { SHOWCASE_DOSSIER_ID } from "./core";
+import { incotermFreightCheck } from "../incoterm-freight";
 
 /* ---------------- Bố cục trang (đơn vị % trang) ---------------- */
 
@@ -199,7 +200,7 @@ const SHOWCASE: Record<string, Def[]> = {
 };
 
 const SHOWCASE_CHECKS: Omit<CrossCheck, "id" | "dossierId">[] = [
-  { ruleCode: "R-FREIGHT-INCOTERM", title: "FCA: chưa cộng cước vận chuyển vào trị giá", detail: "Trị giá invoice 20.850,00 USD là giá FCA. Đã tìm thấy hóa đơn cước 0004512: 1.150,00 USD – cần cộng vào trị giá tính thuế ở bước Review tờ khai.", result: "FAIL", severity: "BLOCKER", documentKinds: ["INVOICE", "FREIGHT_INVOICE", "ARRIVAL_NOTICE"] },
+  { ruleCode: "R-INCOTERM-FREIGHT", title: "FCA: chưa cộng cước vận chuyển vào trị giá", detail: "Trị giá invoice 20.850,00 USD là giá FCA. Đã tìm thấy hóa đơn cước 0004512: 1.150,00 USD – cần cộng vào trị giá tính thuế ở bước Review tờ khai.", result: "FAIL", severity: "BLOCKER", documentKinds: ["INVOICE", "FREIGHT_INVOICE", "ARRIVAL_NOTICE"] },
   { ruleCode: "R-BUYER-MST", title: "MST người mua trên invoice khác MST doanh nghiệp", detail: "Invoice ghi MST sai định dạng, khác MST doanh nghiệp 0316789012 – kiểm tra lại MST người mua ở tab Commercial Invoice. Tờ khai luôn dùng tên và MST đã đăng ký: CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT – 0316789012.", result: "WARN", severity: "INFO", documentKinds: ["INVOICE", "BILL_OF_LADING"] },
   { ruleCode: "R-CBM-PL-BL", title: "Thể tích Packing List lệch B/L", detail: "Packing List 21,35 CBM – B/L 21,53 CBM (có thể đảo chữ số). Không ảnh hưởng thuế.", result: "WARN", severity: "INFO", documentKinds: ["PACKING_LIST", "BILL_OF_LADING"] },
   { ruleCode: "R-WEIGHT-PL-BL", title: "Trọng lượng Packing List khớp B/L", detail: "Gross weight 3.860,50 kg = 3.860,50 kg · 18 pallets.", result: "PASS", severity: "WARNING", documentKinds: ["PACKING_LIST", "BILL_OF_LADING"] },
@@ -304,17 +305,9 @@ export function generateChecks(dossier: Dossier, kinds: DocKind[]): CrossCheck[]
   const list: Omit<CrossCheck, "id" | "dossierId">[] = [];
   if (has("INVOICE") && has("PACKING_LIST")) list.push({ ruleCode: "R-INVOICE-REF", title: "Số invoice khớp Packing List", detail: "Số và ngày invoice trùng khớp.", result: "PASS", severity: "BLOCKER", documentKinds: ["INVOICE", "PACKING_LIST"] });
   if (has("PACKING_LIST") && bill) list.push({ ruleCode: "R-WEIGHT-PL-BL", title: "Trọng lượng Packing List khớp vận đơn", detail: "846,00 kg = 846,00 kg · 12 kiện.", result: "PASS", severity: "WARNING", documentKinds: ["PACKING_LIST", bill] });
-  if (["EXW", "FCA", "FAS", "FOB"].includes(dossier.incoterm)) {
-    const ok = has("FREIGHT_INVOICE") || has("ARRIVAL_NOTICE");
-    list.push({
-      ruleCode: "R-FREIGHT-INCOTERM",
-      title: ok ? `${dossier.incoterm}: đã có chứng từ cước` : `${dossier.incoterm}: thiếu cước vận chuyển`,
-      detail: ok ? "Cước sẽ được cộng vào trị giá tính thuế." : `Điều kiện ${dossier.incoterm} phải cộng cước quốc tế vào trị giá – bộ chứng từ chưa có hóa đơn cước hoặc Arrival Notice.`,
-      result: ok ? "PASS" : "FAIL",
-      severity: "BLOCKER",
-      documentKinds: ["INVOICE"],
-    });
-  }
+  // Cước theo điều kiện giao hàng: nhập cộng (R-INCOTERM-FREIGHT), xuất trừ (R-EXPORT-FREIGHT-DEDUCT) – cùng quy tắc với backend.
+  const freight = incotermFreightCheck({ incoterm: dossier.incoterm, direction: dossier.direction, transportMode: dossier.transportMode, kinds, manual: null });
+  if (freight) list.push(freight);
   list.push({ ruleCode: "R-BUYER-MST", title: "Người mua trên invoice là doanh nghiệp (theo MST)", detail: "Tên người mua trên invoice là tên tiếng Anh; tờ khai dùng tên theo MST 0316789012: CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT.", result: "PASS", severity: "INFO", documentKinds: ["INVOICE"] });
   return list.map((c, i) => ({ ...c, id: `chk_${dossier.id}_${i + 1}`, dossierId: dossier.id }));
 }

@@ -134,17 +134,38 @@ const OLD_TO_NEW = new Map();
   const rows = sheet(p).slice(1).filter((r) => !/^deleted/i.test(r[0])).map((r) => entry(r[1], r[2], { parent: r[3], note: [r[6], r[7]].filter(Boolean).join(" – ") }));
   add("A202", "Địa điểm lưu kho", [sourceOf(p)], rows, { parentLabel: "Cơ quan Hải quan", usesOldOfficeCodes: true });
 }
-{ // A016 – Địa điểm xếp / dỡ hàng: cảng & ICD trong nước, kho hàng không/đường bộ trong nước, cảng nước ngoài (mã cha = mã nước)
-  const ports = sheet("11a.DM_DDXEPDOHANG").slice(2).map((r) => entry(r[1], r[3] || r[2], { parent: "VN", note: r[2] }));
-  const depots = sheet("11.DM.DD_XEPDOHANG").slice(1).flatMap((r) => {
-    const inactive = /dừng hoạt động/i.test(r.join(" "));
-    const note = [r[1], r[5]].filter(Boolean).join(" – ");
-    return [r[2] && entry(r[2], r[4] || r[1], { parent: "VN", note, inactive }), r[3] && entry(r[3], `${r[4] || r[1]} (đường bộ/sắt)`, { parent: "VN", note, inactive })];
-  });
-  const foreign = sheet("12.DM.DD_XEPDOHANG_NUOCNGOAI").slice(1).map((r) => entry(r[0], r[1], { parent: r[2], note: r[3] }));
-  // Bỏ trùng theo mã (không theo mã cha) – cảng trong nước đứng trước.
+{ // A016 – Địa điểm xếp / dỡ hàng (bản 11/2026 chia theo phương thức vận chuyển, thay 3 file 11a / 11 / 12 cũ):
+  //   DM.MA_XEPDO_TRONGNUOC_PTVC_1-2-3-6 – địa điểm trong nước cho PTVC 1 hàng không, 2 biển cont, 3 biển hàng lẻ, 6 sông;
+  //   DM.MA_XEPDO_TRONGNUOC_PTVC_4-5     – địa điểm trong nước cho PTVC 4 đường bộ, 5 đường sắt;
+  //   DM.MA_XEPDO_NUOCNGOAI              – địa điểm nước ngoài (mã cha = mã nước), mọi PTVC.
+  // Mục trong nước: parent "VN" + `modes` (mã PTVC áp dụng, cột 3 "1 - Hàng Không, 2 - …"). PTVC 9 (khác / tại chỗ) không dùng danh mục: khai VNZZZ.
+  const file = (part) => {
+    const name = files.find((f) => f.includes(part) && f.endsWith(".csv"));
+    if (!name) throw new Error(`Không thấy CSV có "${part}"`);
+    return name.replace(/__\d+_.*$/, "");
+  };
+  const src = { air: file("MA_XEPDO_TRONGNUOC_PTVC_1-2-3-6"), land: file("MA_XEPDO_TRONGNUOC_PTVC_4-5"), foreign: file("MA_XEPDO_NUOCNGOAI") };
+  const bad = [];
+  const domestic = new Map();
+  for (const p of [src.air, src.land]) {
+    for (const r of sheet(p).slice(1)) {
+      const code = (r[0] ?? "").trim();
+      if (!code) continue;
+      // Mã trong nước luôn "VN" + 3–4 ký tự; dòng sai (vd "V NV15", mã nước ngoài CWZZZ lẫn vào) bỏ ra và báo khi dựng.
+      if (!/^VN[A-Z0-9]{3,4}$/.test(code)) { bad.push(`${p}: "${code}"`); continue; }
+      const modes = [...new Set((r[2] ?? "").match(/\d/g) ?? [])];
+      const prev = domestic.get(code);
+      if (prev) prev.modes = [...new Set([...prev.modes, ...modes])].sort();
+      else { const e = entry(code, r[1]); if (e) domestic.set(code, { ...e, parent: "VN", modes: modes.sort() }); }
+    }
+  }
+  // Nước ngoài: mã đã có trong danh mục trong nước bỏ qua (giữ mục trong nước có PTVC). Mã VN chỉ có ở file nước ngoài giữ để tra tên mã cũ (không có PTVC → không hiện khi lọc).
+  const foreign = sheet(src.foreign).slice(1).map((r) => entry(r[0], r[1], { parent: r[2] })).filter((e) => e && !domestic.has(e.code));
+  if (bad.length) console.warn(`A016 – bỏ ${bad.length} mã sai dạng: ${bad.join(", ")}`);
   const seen = new Set();
-  add("A016", "Địa điểm xếp / dỡ hàng", [sourceOf("11a.DM"), sourceOf("11.DM"), sourceOf("12.DM")], [...ports, ...depots, ...foreign].filter((e) => e && !seen.has(e.code) && seen.add(e.code)), { parentLabel: "Mã nước" });
+  add("A016", "Địa điểm xếp / dỡ hàng", [src.air, src.land, src.foreign], [...domestic.values(), ...foreign].filter((e) => !seen.has(e.code) && seen.add(e.code)), {
+    parentLabel: "Mã nước", superseded: ["11a.DM_DDXEPDOHANG_Cang - ICDtrongnuoc", "11.DM.DD_XEPDOHANG", "12.DM.DD_XEPDOHANG_NUOCNGOAI"], byTransportMode: true,
+  });
 }
 { // COUNTRY – mã nước: tên tiếng Việt theo bảng đang dùng, kèm tên viết tắt trên hệ thống VNACCS
   const vi = curatedCountryNames();

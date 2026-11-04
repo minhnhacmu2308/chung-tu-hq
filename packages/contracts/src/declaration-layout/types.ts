@@ -31,15 +31,25 @@ export type LayoutField = {
   short?: string;
   /** Ý nghĩa hiện khi bấm chữ viết tắt; không có → hiện `label`. */
   full?: string;
+  /**
+   * Ô "Tên" chỉ đọc của ô mã `key` (1.29 / 2.27 địa điểm lưu kho, 1.67 / 2.56 địa điểm đích bảo thuế): hiện tên Hải quan trả về (ô `customs`) nếu có,
+   * không thì tên tra danh mục `table` theo mã đang nhập. Không bắt buộc, không lưu, không gửi Hải quan – tên đổi theo mã ngay khi nhập.
+   */
+  nameOf?: { key: string; table: CodeTable; customs?: string };
 };
 /** Chỉ tiêu nhiều ô con nằm ngang (địa chỉ 4 dòng, tổng trị giá 4 ô…). */
 export type LayoutGroup = {
   kind: "group"; label: string; no?: string; condition?: ConditionId; fields: LayoutField[];
-  /** "any": các ô con là lựa chọn thay thế – nhập một ô là đủ chỉ tiêu (2.59 địa điểm đóng hàng: 5 mã hoặc tên/địa chỉ). */
+  /** "any": các ô con là lựa chọn thay thế – nhập một ô là đủ chỉ tiêu (khi có `sequence`, chỉ xét các ô trong `sequence`). */
   fill?: "any";
+  /**
+   * Ô phải nhập theo thứ tự (2.59 mã 1 → mã 5): ô thứ n chỉ nhập được khi ô n−1 đã có giá trị; ô trước trống mà ô sau có giá trị → thiếu
+   * (sequenceGaps). Cùng `fill: "any"`: nhập ô đầu là đủ chỉ tiêu.
+   */
+  sequence?: string[];
 };
-/** Nhóm lặp: key chứa "{n}" (1..count) hoặc "{nn}" (01..count); mỗi dòng = các ô của `fields`. */
-export type LayoutRepeat = { kind: "repeat"; label: string; no?: string; count: number; condition?: ConditionId; fields: LayoutField[] };
+/** Nhóm lặp: key chứa "{n}" (1..count) hoặc "{nn}" (01..count); mỗi dòng = các ô của `fields`. `sequential`: dòng n chỉ nhập khi dòng n−1 đã có (2.60 số container). */
+export type LayoutRepeat = { kind: "repeat"; label: string; no?: string; count: number; condition?: ConditionId; fields: LayoutField[]; sequential?: boolean };
 export type LayoutItem = LayoutField | LayoutGroup | LayoutRepeat;
 
 export type LayoutBlock = {

@@ -5,7 +5,7 @@ import { FREIGHT_ADJUSTMENT_LABEL, FREIGHT_NOT_INCLUDED, freightReasonText, INSU
 import type { Adjustment } from "../valuation.js";
 import { IDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
-import { incotermField, invoiceKind, lineHs, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
+import { domesticPorts, foreignPorts, incotermField, invoiceKind, lineHs, onSitePlace, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { BY_WATER, IN_CONTAINER, RE_IMPORT, TEMP_IMPORT } from "./conditions.js";
 import { profileSource, SRC, warehouseFromAn } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, sourceOfKind, type MappingInput } from "./types.js";
@@ -119,22 +119,26 @@ function seaBillNo(i: MappingInput, v: MappedValue): MappedValue {
 
 /** 1.33 cảng dỡ: xét mọi chứng từ ghi cảng dỡ (B/L, Arrival Notice…) – bến cụ thể / tên trùng danh mục A016 thắng tên thành phố chung. */
 function dischargePort(i: MappingInput): MappedValue {
+  const onSite = onSitePlace(i);
+  if (onSite) return onSite;
   const t = i.shipment.transport;
   const raws = (s: typeof t.portOfDischarge) => [...new Set([s.value, ...s.sources.map((x) => x.raw)].filter((x): x is string => !!x))];
-  const pick = pickDischargePort(raws(t.portOfDischarge), raws(t.finalDestination), i.catalogs?.ports, { air: i.dossier.transportMode === "AIR", ...(i.catalogs?.worldPorts ? { world: i.catalogs.worldPorts } : {}) });
+  const pick = pickDischargePort(raws(t.portOfDischarge), raws(t.finalDestination), domesticPorts(i), { air: i.dossier.transportMode === "AIR", ...(i.catalogs?.worldPorts ? { world: foreignPorts(i) ?? [] } : {}) });
   const ref = [...t.portOfDischarge.sources, ...t.finalDestination.sources].find((x) => x.raw === pick.raw);
   const source = ref ? sourceOfKind(ref.kind) : fromSourced(t.portOfDischarge, "BILL_OF_LADING").source;
   const base = port(pick.raw ?? t.portOfDischarge.value, pick.resolved, source);
   return pick.note ? { ...base, suspect: true, note: pick.note } : base;
 }
 
-/** 1.34 cảng xếp: mọi chứng từ ghi nơi đi; không có → suy từ địa chỉ người xuất khẩu (đánh dấu kiểm). */
+/** 1.34 cảng xếp (nước ngoài – không nhận mã VN): mọi chứng từ ghi nơi đi; không có → suy từ địa chỉ người xuất khẩu (đánh dấu kiểm). */
 function loadingPort(i: MappingInput): MappedValue {
+  const onSite = onSitePlace(i);
+  if (onSite) return onSite;
   const { portOfLoading: pol } = i.shipment.transport;
   const seller = i.shipment.parties.seller;
   const raws = [...new Set([pol.value, ...pol.sources.map((x) => x.raw)].filter((x): x is string => !!x))];
   const addresses = [...new Set([seller.address.value, ...seller.address.sources.map((x) => x.raw)].filter((x): x is string => !!x))];
-  const pick = pickLoadingPort(raws, addresses, seller.country.value, i.catalogs?.worldPorts);
+  const pick = pickLoadingPort(raws, addresses, seller.country.value, foreignPorts(i));
   const ref = pol.sources.find((x) => x.raw === pick.raw);
   const source = ref ? sourceOfKind(ref.kind) : pick.note ? fromSourced(seller.address, "INVOICE").source : fromSourced(pol, "BILL_OF_LADING").source;
   const base = port(pick.raw, pick.resolved, source);
@@ -186,7 +190,10 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     warehouseFromAn(i) ?? profileOr(i, "KHO", missing("DOSSIER", "Chọn mã địa điểm lưu kho (kho/bãi/cảng nơi hàng chờ thông quan – CV 4613/TCHQ-VNACCS)")) },
   { code: "CANG_DO", no: N.CANG_DO, section: "TRANSPORT", label: "Mã địa điểm dỡ hàng", required: true, from: dischargePort },
   { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Mã địa điểm xếp hàng", required: true, from: loadingPort },
-  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, when: BY_WATER, from: () => ({ ...fixed("9999"), note: "Ô 1 chỉ tiêu 1.31: hô hiệu tàu – điền sẵn 9999 (tàu chưa đăng ký trên hệ thống); B/L có hô hiệu thật thì sửa lại. Phương thức khác đường biển/sông: không có ô này" }) },
+  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, from: (i) => (BY_WATER.test(i)
+    ? { ...fixed("9999"), note: "Ô 1 chỉ tiêu 1.31: hô hiệu tàu – điền sẵn 9999 (tàu chưa đăng ký trên hệ thống); B/L có hô hiệu thật thì sửa lại" }
+    // PTVC khác 2, 3, 6: ô vẫn có, để trống cho người khai tự nhập (đổi PTVC trên tờ khai → ô đổi theo, transportPlaceChanges).
+    : { value: null, source: "DOSSIER", note: "Ô 1 chỉ tiêu 1.31: phương thức khác đường biển/sông – người khai tự nhập mã phương tiện nếu có" }) },
   // 1.35: hệ thống tự xuất nếu đã đăng ký; không khai khi đường hàng không / hàng rời / hàng CFS (mã 3).
   { code: "SL_CONT", no: N.SL_CONT, section: "TRANSPORT", label: "Số lượng container", required: false, when: IN_CONTAINER, from: (i) => {
     const n = i.shipment.transport.containers.length;

@@ -181,6 +181,7 @@ export const CATALOG_EDA: DeclarationFieldDef[] = [
   f("2.40", "VALUE", "Trị giá tính thuế", "decimal", "C", {
     maxLen: 20, fptField: "VN_EDA.TK_FKK",
     legalNote: "Bắt buộc khi điều kiện giá khác FOB, DAP, DAF hoặc không có hóa đơn: ô 1 mã đồng tiền (TK_FCD), ô 2 tổng trị giá tính thuế (TK_FKK), VND không thập phân, ngoại tệ ≤ 4 số. Điều kiện giá FOB, DAP, DAF: không nhập.",
+    // KhaiBáo AI (quyết định nghiệp vụ 31/10/2026): chỉ FOB không khai; DAP, DAF giá đã gồm cước nên vẫn khai trị giá đã trừ cước, bảo hiểm (EXPORT_VALUE).
   }),
   f("2.41", "VALUE", "Phân loại không cần quy đổi VND", "code", "O", {
     maxLen: 1, fptField: "VN_EDA.TK_CNV",

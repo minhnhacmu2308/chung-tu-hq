@@ -17,7 +17,7 @@ export function printKeys(p: PrintLayout): { decl: string[]; item: string[] } {
   return { decl: [...rowKeys(p.header), ...regionKeys(p.pages.flatMap((pg) => pg.regions))], item: regionKeys(p.item) };
 }
 
-const declarantKeys = (blocks: LayoutBlock[]) => blocks.flatMap((b) => b.items.flatMap(itemFields)).filter((f) => f.origin !== "CUSTOMS").map((f) => f.key);
+const declarantKeys = (blocks: LayoutBlock[]) => blocks.flatMap((b) => b.items.flatMap(itemFields)).filter((f) => f.origin !== "CUSTOMS" && !f.nameOf).map((f) => f.key);
 
 /** Ô người khai nhập không có chỗ trên mẫu in (khối "Chỉ tiêu khác"), giữ thứ tự bố cục Phụ lục II. */
 export function otherFieldKeys(kind: "IDA" | "EDA"): { decl: string[]; item: string[] } {

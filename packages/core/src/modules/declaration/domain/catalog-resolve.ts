@@ -4,7 +4,8 @@ import { TRANSPORT_MODE_INFO, type TransportMode } from "@kb/contracts";
 
 export type Resolved = { code: string; name: string } | null;
 /** Một mã trong danh mục VNACCS đầy đủ (@kb/contracts code-lists) – tầng application nạp sẵn rồi truyền vào (domain không tải file). */
-export type CatalogEntry = { code: string; name: string; parent?: string; note?: string };
+/** `modes`: mã PTVC áp dụng của địa điểm trong nước (A016 bản chia theo PTVC). */
+export type CatalogEntry = { code: string; name: string; parent?: string; note?: string; modes?: readonly string[] };
 
 /**
  * Cách chứng từ hay ghi tên cảng → mã cảng (CHỈ bí danh để nhận ra). Mã và tên khai lấy từ danh mục A016 của @kb/contracts (code-lists):

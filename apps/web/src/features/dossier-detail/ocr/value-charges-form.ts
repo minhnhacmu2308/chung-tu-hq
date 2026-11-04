@@ -1,6 +1,6 @@
 // Chi phí và điều chỉnh trị giá (bước OCR & kiểm tra): trạng thái form ↔ ValueCharges, kiểm tra bằng schema dùng chung,
 // và dòng tóm tắt từng khoản (giá trị đang dùng + nguồn + có chặn duyệt không). Thuần – test ở value-charges-form.test.ts.
-import { ADJUSTMENT_CODES, freightTermFit, ValueChargesSchema, type FreightReason, type FreightTermReason, type ValueCharges, type ValueChargesView } from "@kb/contracts";
+import { ADJUSTMENT_CODES, EXPORT_ADJUSTMENT_CODE, freightTermFit, ValueChargesSchema, type FreightReason, type FreightTermReason, type ValueCharges, type ValueChargesView } from "@kb/contracts";
 import { fill, pickMessages, type UiLocale } from "@kb/ui";
 import { formatMoney } from "@/lib/format";
 import { VALUE_CHARGES_MESSAGES } from "./value-charges.messages";
@@ -69,7 +69,8 @@ export function formFromView(v: ValueChargesView, invoiceCurrency: string): Char
     insuranceMode: c.insurance?.mode ?? "DOC",
     insuranceAmount: c.insurance?.mode === "AMOUNT" ? c.insurance.amount : "",
     insuranceCurrency: c.insurance?.mode === "AMOUNT" ? c.insurance.currency : invoiceCurrency,
-    adjustmentsMode: !c.adjustments ? "DOC" : c.adjustments.length === 0 ? "NONE" : "MANUAL",
+    // Xuất khẩu không đọc phí khác từ chứng từ: chưa lập danh sách = không có khoản nào.
+    adjustmentsMode: !c.adjustments ? (v.direction === "XK" ? "NONE" : "DOC") : c.adjustments.length === 0 ? "NONE" : "MANUAL",
     adjustments: (c.adjustments ?? []).map((a) => ({ ...a })),
     termReason: c.freightTermNote?.reason ?? "",
     termNote: c.freightTermNote?.note ?? "",
@@ -81,7 +82,8 @@ export function formFromView(v: ValueChargesView, invoiceCurrency: string): Char
  * Ràng buộc theo chứng từ (ngoài schema): chứng từ có cước mà chọn nhập tay → phải có số tiền; chọn lập danh sách khoản điều chỉnh
  * → ít nhất một khoản (không có khoản nào thì chọn "Không có phí phát sinh"). Lựa chọn "Không có phí phát sinh" bị khóa ngay trên form.
  */
-export type ChargesContext = { docsFreight: boolean };
+/** xk: khoản cộng / trừ khác của tờ khai xuất – không mã tên (lưu mã "N"), bắt buộc ghi tên khoản, không phân bổ 1.88. */
+export type ChargesContext = { docsFreight: boolean; xk?: boolean };
 
 export function toValueCharges(f: ChargesForm, locale: UiLocale = "vi", ctx: ChargesContext = { docsFreight: false }): { ok: true; value: ValueCharges } | { ok: false; errors: ChargesFormErrors } {
   const amount = normalizeAmount(f.freightAmount);
@@ -89,12 +91,13 @@ export function toValueCharges(f: ChargesForm, locale: UiLocale = "vi", ctx: Cha
   const rules: ChargesFormErrors = {};
   if (f.freightMode === "MANUAL" && ctx.docsFreight && !amount) rules.freightAmount = t.errFreightNeedsAmount;
   if (f.adjustmentsMode === "MANUAL" && f.adjustments.length === 0) rules.adjustments = t.errAdjustmentsEmpty;
+  if (ctx.xk && f.adjustmentsMode === "MANUAL") f.adjustments.forEach((a, i) => { if (!a.note.trim()) rules[`adjustments.${i}.note`] = t.errNameXk; });
   if (Object.keys(rules).length > 0) return { ok: false, errors: rules };
   const raw = {
     freight: f.freightMode === "MANUAL" ? { amount: amount || null, currency: amount ? f.freightCurrency.trim().toUpperCase() : null, reason: f.freightReason || undefined, note: f.freightNote } : null,
     insurance: f.insuranceMode === "DOC" ? null : f.insuranceMode === "NONE" ? { mode: "NONE" } : { mode: "AMOUNT", amount: normalizeAmount(f.insuranceAmount), currency: f.insuranceCurrency.trim().toUpperCase() },
     ...(f.termReason ? { freightTermNote: { reason: f.termReason, note: f.termNote } } : {}),
-    adjustments: f.adjustmentsMode === "NONE" ? [] : f.adjustmentsMode === "MANUAL" ? f.adjustments.map((a) => ({ ...a, amount: normalizeAmount(a.amount), currency: a.currency.trim().toUpperCase() })) : null,
+    adjustments: f.adjustmentsMode === "NONE" ? [] : f.adjustmentsMode === "MANUAL" ? f.adjustments.map((a) => ({ ...a, amount: normalizeAmount(a.amount), currency: a.currency.trim().toUpperCase(), ...(ctx.xk ? { code: EXPORT_ADJUSTMENT_CODE, allocate: false } : {}) })) : null,
   };
   const r = ValueChargesSchema.safeParse(raw);
   if (r.success) return { ok: true, value: r.data };
@@ -160,7 +163,7 @@ export function summarize(v: ValueChargesView, locale: UiLocale = "vi"): Summary
   } else if (d.insurance) {
     rows.push({ key: "insurance", label: t.sumInsurance, no: insuranceNo, value: money(d.insurance.amount, d.insurance.currency), source: t.srcDocs, tone: "success" });
   } else {
-    rows.push({ key: "insurance", label: t.sumInsurance, no: insuranceNo, value: t.sumNoInsuranceDoc, source: t.srcUnconfirmed, tone: "neutral", hint: t.hintConfirmNoInsurance });
+    rows.push({ key: "insurance", label: t.sumInsurance, no: insuranceNo, value: t.sumNoInsuranceDoc, source: t.srcUnconfirmed, tone: "neutral", hint: nk ? t.hintConfirmNoInsurance : t.hintConfirmNoInsuranceXk });
   }
 
   if (nk) {
@@ -171,6 +174,12 @@ export function summarize(v: ValueChargesView, locale: UiLocale = "vi"): Summary
     } else {
       rows.push({ key: "adjustments", label: t.sumAdjustments, no: "1.49", value: t.sumNone, source: t.srcDocs, tone: "neutral" });
     }
+  } else if (v.adjustmentsAllowed !== false) {
+    // Xuất khẩu: khoản cộng / trừ khác dồn vào 2.40 (không có chỉ tiêu riêng).
+    const list = c.adjustments ?? [];
+    rows.push(list.length
+      ? { key: "adjustments", label: t.sumAdjustmentsXk, no: "2.40", value: list.map((a) => `${a.kind === "SB" ? "−" : "+"} ${a.note} ${money(a.amount, a.currency)}`).join(" · "), source: t.srcDeclarantList, tone: "info", hint: t.hintAdjustmentsXk }
+      : { key: "adjustments", label: t.sumAdjustmentsXk, no: "2.40", value: t.sumNone, source: c.adjustments ? t.srcDeclarantConfirmed : t.srcSystem, tone: "neutral", ...(v.incoterm === "EXW" || v.incoterm === "FCA" ? { hint: t.hintNoAdjustmentsXk } : {}) });
   }
   return rows;
 }

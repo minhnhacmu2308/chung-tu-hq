@@ -5,10 +5,11 @@
 // Dòng hàng: số liệu chứng từ sửa ở bước OCR (nút mở đúng dòng), mã HS qua hộp chọn mã HS; ô chỉ có trên tờ khai (mã biểu thuế, miễn giảm…) sửa trực tiếp,
 // lưu theo id dòng (HANG.<id>.<ô>). Lưu bằng API sửa chỉ tiêu (backend kiểm tra lại cùng quy tắc, ghi field_audit).
 import { Alert, Button, fill, Stack, useMessages, useUiLocale } from "@kb/ui";
-import { layoutFor, sheetOfLine, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem } from "@kb/contracts";
+import { fixedPlaceCode, layoutFor, sheetOfLine, transportPlaceChanges, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem } from "@kb/contracts";
 import { FileSearch, Save, Search, Undo2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { usePlaceNameLookup } from "./use-code-list";
 import { formatNumber } from "@/lib/format";
 import type { FieldLockLookup } from "./amend-context";
 import { DeclarantTab } from "./declarant-tab";
@@ -63,11 +64,19 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   const [hsItem, setHsItem] = useState<LineItem | null>(null);
   const editable = useMemo(() => editableKeys(kind, decl.fields, mode), [kind, decl.fields, mode]);
   const [draft, setDraft] = useState<FormValues>(original);
+  const placeName = usePlaceNameLookup();
   // Nội dung tờ khai đổi (sau khi lưu, mở lại, sửa ở tab khác) → bản nháp theo dữ liệu mới. So theo nội dung: tải lại nền
   // (quay lại cửa sổ) cùng dữ liệu không xóa phần đang sửa dở.
   const originalKey = JSON.stringify(original);
   useEffect(() => setDraft(original), [originalKey]);
-  const lockOf: FieldLockLookup = declarationLockOf(kind, mode, original, editable, locale);
+  const baseLockOf = declarationLockOf(kind, mode, original, editable, locale);
+  // PTVC 9 (khác / tại chỗ): mã địa điểm xếp / dỡ cố định VNZZZ (transportPlaceChanges điền khi đổi PTVC).
+  const lockOf: FieldLockLookup = (key) => {
+    const base = baseLockOf(key);
+    if (base) return base;
+    const fixed = fixedPlaceCode(kind, key, draft);
+    return fixed ? { basis: "SOFTWARE", reason: fill(t.onSiteFixed, { code: fixed }) } : null;
+  };
   // Dòng sửa được: theo tờ chứa dòng (lô nhiều tờ chỉ gọi về một số tờ), không có phạm vi → theo chế độ chung.
   const lineNos = items.map((it) => it.lineNo);
   const lineEditable = (i: number) => canEdit && (scope ? scope.lines[sheetOfLine(lineNos, items[i]?.lineNo ?? 0)] ?? scope.common : stageMode) !== "LOCKED";
@@ -149,7 +158,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
           items={itemDraft}
           section={section}
           onSection={setSection}
-          onChange={editable.size ? (key, value) => setDraft((v) => ({ ...v, [key]: value })) : undefined}
+          onChange={editable.size ? (key, value) => setDraft((v) => ({ ...v, ...transportPlaceChanges(kind, v, key, value, placeName) })) : undefined}
           onItemChange={anyLineEditable ? (i, key, value) => lineEditable(i) && setItemDraft((rows) => rows.map((r, j) => (j === i ? { ...r, [key]: value } : r))) : undefined}
           itemActions={itemActions}
           amending={false}

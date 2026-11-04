@@ -72,10 +72,10 @@ describe("review: bộ đếm khớp với ô, không báo thiếu ô không áp
   const eda = LAYOUT_EDA.declarant.find((s) => s.id === "van-chuyen")!;
   const base: FormValues = { TK_ECB: "B11", TK_MTC: "2", TK_EKN: "X", TK_NO: "1", TK_NOT: "PK", TK_GW: "1", TK_GWT: "KGM", TK_ST: "06B1A04", TK_DSC: "SGSIN", TK_DSN: "SINGAPORE", TK_PSC: "VNSGN", TK_SYM: "2026-09-12", TK_VSN: "A" };
   it("EDA đường biển container: 2.59 (một địa điểm đóng hàng) tính 1 ô thiếu, không phải 7; số container 1; hô hiệu 1", () => {
-    // + TK_PSN (tên địa điểm xếp hàng) FPT bắt buộc.
-    expect(sectionProgress("EDA", eda, base).missingRequired).toBe(4);
+    // TK_PSN (tên địa điểm xếp hàng) không tính: Hải quan tự xuất theo mã 2.29 (chỉ nhập khi PTVC 9 / mã …ZZZ).
+    expect(sectionProgress("EDA", eda, base).missingRequired).toBe(3);
     // Có một mã địa điểm đóng hàng là đủ 2.59.
-    expect(sectionProgress("EDA", eda, { ...base, CON_VC1: "02CIS01" }).missingRequired).toBe(3);
+    expect(sectionProgress("EDA", eda, { ...base, CON_VC1: "02CIS01" }).missingRequired).toBe(2);
   });
   it("ô thuộc nhóm có điều kiện không áp dụng → không 'Còn thiếu' (EDA FOB có hóa đơn: 2.40)", () => {
     const tg = LAYOUT_EDA.declarant.flatMap((s) => s.blocks).find((b) => b.id === "tri-gia")!.items[0]!;
@@ -85,11 +85,12 @@ describe("review: bộ đếm khớp với ô, không báo thiếu ô không áp
     const cif = { ...v, TK_IP2: "CIF" };
     expect(missingRequired("EDA", tg.fields[1]!, cif, tg.no, tg.condition, conditionContext("EDA", cif))).toBe(true);
   });
-  it("nhóm 'chỉ cần một ô' (2.59) báo thiếu ở cấp nhóm", () => {
+  it("nhóm 'chỉ cần một ô' (2.59) báo thiếu ở cấp nhóm; chỉ mã (1–5) mới đủ – tên / địa chỉ điền sẵn không thay được mã", () => {
     const g = eda.blocks.find((b) => b.id === "container")!.items[0]!;
     if (g.kind !== "group") throw new Error("test setup");
     expect(groupMissing("EDA", g, base, conditionContext("EDA", base), "IN_CONTAINER")).toBe(true);
-    expect(groupMissing("EDA", g, { ...base, CON_VN: "Kho X" }, conditionContext("EDA", base), "IN_CONTAINER")).toBe(false);
+    expect(groupMissing("EDA", g, { ...base, CON_VN: "Kho X", CON_VA: "KCN" }, conditionContext("EDA", base), "IN_CONTAINER")).toBe(true);
+    expect(groupMissing("EDA", g, { ...base, CON_VC1: "03CCS01" }, conditionContext("EDA", base), "IN_CONTAINER")).toBe(false);
   });
 });
 

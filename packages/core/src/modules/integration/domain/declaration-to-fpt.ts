@@ -1,6 +1,6 @@
 // Tờ khai (chỉ tiêu theo mnemonic `code`) → object FPT.VNACCS (objVN_IDA/HANG/VANDON/KTG, objVN_EDA/HANG/CON).
 // Cắt độ dài theo đặc tả (ghi cảnh báo), ngày → dd/MM/yyyy, số → number. Thuần; kiểm tra bằng Zod của @kb/contracts/fpt.
-import { NO_INSURANCE_VALUE, DECLARATION_CONDITIONS, EdaRequestSchema, extraFieldFpt, fptKey, inapplicableExtraCodes, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
+import { NO_INSURANCE_VALUE, DECLARATION_CONDITIONS, sendsPlaceName, EdaRequestSchema, extraFieldFpt, fptKey, inapplicableExtraCodes, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
 
 /** Dữ liệu tờ khai đủ để dựng payload – không phụ thuộc kiểu của module declaration. */
 export type DeclarationPayload = {
@@ -27,11 +27,16 @@ const val = (p: DeclarationPayload, code: string) => p.fields[code]?.value?.trim
 /** "VNHPH – CANG HAI PHONG" → { code: "VNHPH", name: "CANG HAI PHONG" }; "03CE – …" → code 03CE. */
 const split = (v: string) => {
   const m = /^([A-Z0-9-]{1,12})\s*[–-]\s*(.+)$/.exec(v);
-  return m ? { code: m[1]!, name: m[2]!.trim() } : { code: v, name: v };
+  // Chỉ có mã chưa mã hóa (VNZZZ khi PTVC 9, CNZZZ…) mà chưa nhập tên → không gửi mã làm tên.
+  return m ? { code: m[1]!, name: m[2]!.trim() } : { code: v, name: /^[A-Z]{2}ZZZ$/.test(v.trim()) ? "" : v };
 };
 const firstToken = (v: string) => v.split(/\s*[–-]\s*/)[0]!.trim();
-/** Hô hiệu (1.31/2.30 ô 1) chỉ có khi đường biển/sông – đổi phương thức sau khi dựng thì giá trị cũ không gửi. */
-const callSign = (p: DeclarationPayload) => (DECLARATION_CONDITIONS.BY_WATER.test({ typeCode: "", transportCode: firstToken(val(p, "PTVC")), incoterm: "", hasInvoice: true }) ? val(p, "HO_HIEU") : "");
+/** 1.31/2.30 ô 1: gửi giá trị người khai; 9999 (hô hiệu tàu chưa đăng ký) chỉ gửi khi đường biển/sông – dữ liệu cũ đổi phương thức mà còn 9999 thì không gửi. */
+const callSign = (p: DeclarationPayload) => {
+  const v = val(p, "HO_HIEU");
+  const water = DECLARATION_CONDITIONS.BY_WATER.test({ typeCode: "", transportCode: firstToken(val(p, "PTVC")), incoterm: "", hasInvoice: true });
+  return !water && v === "9999" ? "" : v;
+};
 const ddmmyyyy = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso);
 /**
  * Số gửi FPT (đặc tả nhận số JSON). Giá trị trong app là chuỗi Decimal; chỉ đổi sang number ở đây, lúc serialize.
@@ -207,12 +212,14 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     setVd("VD_GW", num(val(p, "TRONG_LUONG"), "VD_GW"));
     setVd("VD_GWT", "KGM");
     setVd("VD_ST", firstToken(val(p, "KHO")));
+    // 1.33 / 1.34: tên địa điểm chỉ gửi khi PTVC 9 hoặc mã chưa mã hóa (…ZZZ) – còn lại Hải quan tự xuất tên theo mã.
+    const transport = firstToken(val(p, "PTVC"));
     const pod = split(val(p, "CANG_DO"));
     setVd("VD_DST", pod.code);
-    setVd("VD_DSN", pod.name);
+    if (sendsPlaceName(transport, pod.code)) setVd("VD_DSN", pod.name);
     const pol = split(val(p, "CANG_XEP"));
     setVd("VD_PSC", pol.code);
-    setVd("VD_PSN", pol.name);
+    if (sendsPlaceName(transport, pol.code)) setVd("VD_PSN", pol.name);
     setVd("VD_VSC", callSign(p)); // 1.31 ô 1
     setVd("VD_VSN", val(p, "PTVC_TEN"));
     setVd("VD_ARR", ddmmyyyy(val(p, "NGAY_DEN")));
@@ -281,12 +288,14 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_GW", num(val(p, "TRONG_LUONG"), "TK_GW"));
   set("TK_GWT", "KGM");
   set("TK_ST", firstToken(val(p, "KHO")));
+  // 2.28 / 2.29: tên địa điểm chỉ gửi khi PTVC 9 hoặc mã chưa mã hóa (…ZZZ) – còn lại Hải quan tự xuất tên theo mã.
+  const transport = firstToken(val(p, "PTVC"));
   const dst = split(val(p, "CANG_DO"));
   set("TK_DSC", dst.code);
-  set("TK_DSN", dst.name);
+  if (sendsPlaceName(transport, dst.code)) set("TK_DSN", dst.name);
   const psc = split(val(p, "CANG_XEP"));
   set("TK_PSC", psc.code);
-  set("TK_PSN", psc.name);
+  if (sendsPlaceName(transport, psc.code)) set("TK_PSN", psc.name);
   set("TK_VSC", callSign(p)); // 2.30 ô 1
   set("TK_VSN", val(p, "PTVC_TEN"));
   set("TK_SYM", ddmmyyyy(val(p, "NGAY_DI")));
@@ -298,7 +307,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_IP2", val(p, "DK_GIA"));
   set("TK_IP3", val(p, "MA_TT") || p.currency);
   set("TK_IP4", num(val(p, "TONG_TG"), "TK_IP4"));
-  // 2.40 trị giá tính thuế dạng "19660 USD" → TK_FKK + TK_FCD; điều kiện FOB/DAP/DAF không khai (ô trống).
+  // 2.40 trị giá tính thuế dạng "19660 USD" → TK_FKK + TK_FCD; điều kiện FOB không khai (ô trống).
   const fkk = val(p, "TG_TT");
   if (fkk) {
     set("TK_FKK", numPart(fkk, "TK_FKK"));

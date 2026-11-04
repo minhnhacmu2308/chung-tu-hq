@@ -109,7 +109,8 @@ export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf,
       <AmendLockProvider kind={kind} values={values} active={false} override={lockOf}>
         <Stack gap="sm">
           {billCell && billPanelFields(kind, field.key).map((f) => row(f))}
-          {spot.group.map((f) => row(f, parent))}
+          {/* Nhóm "chỉ cần một ô" (2.59): chỉ ô đầu (mã 1) báo "Còn thiếu" – các ô còn lại không bắt buộc riêng. */}
+          {spot.group.map((f, i) => row(f, spot.fillAny && i > 0 ? { ...parent, suppressMissing: true } : parent))}
         </Stack>
       </AmendLockProvider>
 

@@ -18,10 +18,23 @@ describe("codeScope – phạm vi lọc danh mục theo tờ khai", () => {
     expect(codeScope("TYPE_CODE", "TK_ICB", "IDA", {}, "vi")).toMatchObject({ parents: ["NK"], optional: false });
     expect(codeScope("TYPE_CODE", "TK_ECB", "EDA", {}, "vi")).toMatchObject({ parents: ["XK"], optional: false });
   });
-  it("địa điểm dỡ hàng (nhập) / xếp hàng (xuất): ưu tiên địa điểm Việt Nam; cảng nước ngoài không lọc", () => {
-    expect(codeScope("A016", "VD_DST", "IDA", {}, "vi")).toMatchObject({ parents: ["VN"], optional: true });
-    expect(codeScope("A016", "TK_PSC", "EDA", {}, "vi")).toMatchObject({ parents: ["VN"], optional: true });
-    expect(codeScope("A016", "VD_PSC", "IDA", {}, "vi")).toBeNull();
+  it("địa điểm xếp / dỡ (A016): nhập – dỡ Việt Nam theo PTVC, xếp nước ngoài; xuất – xếp Việt Nam theo PTVC, nhận cuối nước ngoài; PTVC 9 không tra", () => {
+    const list = [
+      { code: "VNCLI", name: "CANG CAT LAI", parent: "VN", modes: ["1", "2", "3", "6"] },
+      { code: "VNLSN", name: "CUA KHAU LANG SON", parent: "VN", modes: ["4", "5"] },
+      { code: "VNOLD", name: "MA CU", parent: "VN" },
+      { code: "SGSIN", name: "SINGAPORE", parent: "SG" },
+    ];
+    const pick = (key: string, kind: "IDA" | "EDA", mode: string) => scopedEntries(list, codeScope("A016", key, kind, { TK_MTC: mode }, "vi"), { all: false, inactive: false }).map((x) => x.code);
+    expect(pick("VD_DST", "IDA", "2")).toEqual(["VNCLI"]);
+    expect(pick("VD_DST", "IDA", "4")).toEqual(["VNLSN"]);
+    expect(pick("VD_DST", "IDA", "")).toEqual(["VNCLI", "VNLSN"]);
+    expect(pick("VD_PSC", "IDA", "2")).toEqual(["SGSIN"]);
+    expect(pick("TK_PSC", "EDA", "5")).toEqual(["VNLSN"]);
+    expect(pick("TK_DSC", "EDA", "1")).toEqual(["SGSIN"]);
+    expect(codeScope("A016", "VD_DST", "IDA", { TK_MTC: "4" }, "vi")).toMatchObject({ optional: false, label: expect.stringContaining("4") });
+    expect(codeScope("A016", "VD_DST", "IDA", { TK_MTC: "9" }, "vi")).toBeNull();
+    expect(codeName(list, "VNLSN", codeScope("A016", "VD_DST", "IDA", { TK_MTC: "4" }, "vi"))).toBe("CUA KHAU LANG SON");
   });
 });
 

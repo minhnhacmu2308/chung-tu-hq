@@ -1,7 +1,7 @@
 "use client";
 // Tải danh mục VNACCS khi cần (giữ trong bộ nhớ cho cả trang) và tra tên của mã cho một ô.
 import { codeListFor, loadCodeList, type CodeListEntry, type CodeListId, type CodeTable } from "@kb/contracts";
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { createCodeListCache, type CodeListState } from "./code-list-cache";
 import { codeName, type CodeScope } from "./code-scope";
 import { codeLabel } from "./display";
@@ -44,6 +44,15 @@ export function useCodeLists<K extends CodeListId>(ids: readonly K[]): { lists: 
 export function useCodeList(id: CodeListId | undefined): CodeListEntry[] | null {
   const { state } = useCodeListState(id);
   return state?.status === "ready" ? state.list : null;
+}
+
+/**
+ * Tra tên theo mã ngay trong lúc đổi ô (không chờ vẽ lại): tên địa điểm xếp / dỡ theo A016 khi đổi mã (transportPlaceChanges).
+ * Danh mục tải khi gọi hook; chưa tải xong → undefined (tên để trống, ô tên vẫn hiện tên tra theo mã khi danh mục có).
+ */
+export function usePlaceNameLookup(): (code: string) => string | undefined {
+  const list = useCodeList("A016");
+  return useCallback((code: string) => (list ? codeName(list, code, null) : undefined), [list]);
 }
 
 /** Tên của mã: danh mục VNACCS (theo phạm vi), không có thì bảng mã gọn đang dùng (declaration/code-tables). */

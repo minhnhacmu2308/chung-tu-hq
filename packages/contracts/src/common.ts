@@ -44,6 +44,11 @@ export const TRANSPORT_MODE_INFO: Record<TransportMode, { code: string; label: s
   OTHER: { code: "9", label: "Khác" },
 };
 export const isSeaMode = (m: TransportMode) => m === "SEA_CONTAINER" || m === "SEA_BULK";
+/**
+ * Phương thức vận chuyển mã 9 (Khác) = giao hàng tại chỗ / trong nước (bán cho DNCX, khu phi thuế quan, xuất nhập khẩu tại chỗ):
+ * không có cước, bảo hiểm quốc tế để trừ khỏi trị giá tờ khai xuất (quyết định nghiệp vụ 31/10/2026).
+ */
+export const isDomesticDelivery = (m: TransportMode | null | undefined) => m === "OTHER";
 
 /** Phân loại cá nhân/tổ chức – chỉ tiêu 1.7 tờ khai nhập khẩu (VN_IDA.TK_SKB). Tờ khai xuất khẩu không có chỉ tiêu này. Giá trị là mã VNACCS. */
 export const PartyClassSchema = z.enum(["1", "2", "3", "4", "5"]);

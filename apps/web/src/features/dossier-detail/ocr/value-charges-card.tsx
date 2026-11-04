@@ -1,5 +1,6 @@
 "use client";
-// Khối "Chi phí và điều chỉnh trị giá" ở bước OCR & kiểm tra: cước (1.47), bảo hiểm (1.48), khoản điều chỉnh (1.49); xuất khẩu theo 2.40.
+// Khối "Chi phí và điều chỉnh trị giá" ở bước OCR & kiểm tra: cước (1.47), bảo hiểm (1.48), khoản điều chỉnh (1.49); xuất khẩu cước, bảo hiểm,
+// khoản cộng / trừ khác đều dồn vào 2.40 (tờ khai xuất không có ô riêng – diễn giải tự điền ở 2.32).
 // Chứng từ là nguồn chính; người khai nhập số / ghi lý do khi chứng từ không có. Tờ khai đọc lại từ đây (ô 1.47–1.49 chỉ đọc).
 import { ADJUSTMENT_CODES, editBlockFor, FreightReasonSchema, FreightTermReasonSchema, type FreightReason, type FreightTermReason, type ValueChargesView } from "@kb/contracts";
 import {
@@ -32,7 +33,6 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
   const t = useMessages(VALUE_CHARGES_MESSAGES);
   const locale = useUiLocale();
   const reasonOptions = FreightReasonSchema.options.map((r) => ({ value: r, label: freightReasonLabel(t, r) }));
-  const kindOptions = [{ value: "AD", label: t.kindAdd }, { value: "SB", label: t.kindSubtract }];
   const [form, setForm] = useState<ChargesForm>(() => formFromView(view, currency));
   // Loại tiền theo danh mục VNACCS (CURRENCY, đủ 26 mã); mã đang dùng luôn có trong danh sách kể cả khi danh mục chưa tải xong.
   const currencyList = useCodeList("CURRENCY");
@@ -43,6 +43,9 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
   const termFit = freightTermStatus(view);
   const termOptions = FreightTermReasonSchema.options.map((r) => ({ value: r, label: freightTermReasonLabel(t, r) }));
   const insuranceApplies = nk ? !view.insuranceIncluded : view.insuranceIncluded;
+  // Xuất khẩu: khoản cộng / trừ khác dồn vào 2.40 – chỉ khi điều kiện giá có khai 2.40; không mã tên, không phân bổ 1.88.
+  const xkAdjustments = !nk && view.adjustmentsAllowed !== false;
+  const kindOptions = [{ value: "AD", label: nk ? t.kindAdd : t.kindAddXk }, { value: "SB", label: nk ? t.kindSubtract : t.kindSubtractXk }];
   const save = useMutation({
     mutationFn: (input: Parameters<typeof saveValueCharges>[1]) => saveValueCharges(dossierId, input),
     onSuccess: (v) => {
@@ -60,7 +63,7 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
   const setRow = (i: number, patch: Partial<AdjustmentRowForm>) => set("adjustments", form.adjustments.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const r = toValueCharges(form, locale, { docsFreight: Boolean(view.fromDocuments.freight) });
+    const r = toValueCharges(form, locale, { docsFreight: Boolean(view.fromDocuments.freight), xk: !nk });
     if (!r.ok) return setErrors(r.errors);
     // Điều kiện giao hàng không cộng / trừ cước (vd vừa đổi FCA → CIF): bỏ số cước nhập tay cũ thay vì giữ ngầm.
     save.mutate(view.freightRequired ? r.value : { ...r.value, freight: null });
@@ -221,21 +224,24 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
               )}
             </FormSection>
 
-            {nk && (
-              <FormSection title={t.adjustmentsTitle} description={t.adjustmentsDescription}>
+            {(nk || xkAdjustments) && (
+              <FormSection title={nk ? t.adjustmentsTitle : fill(t.adjustmentsTitleXk, { no: "2.40" })} description={nk ? t.adjustmentsDescription : t.adjustmentsDescriptionXk}>
                 <Stack gap="sm">
                   <RadioGroup<ChargesForm["adjustmentsMode"]>
                     label={t.adjustments}
                     hideLabel
                     value={form.adjustmentsMode}
                     onChange={(v) => set("adjustmentsMode", v)}
-                    options={[
+                    options={nk ? [
                       { value: "DOC", label: t.fromDocs, description: view.fromDocuments.other.length ? fill(t.adjustmentsFromDocs, { n: view.fromDocuments.other.length }) : t.adjustmentsNoDocs },
                       {
                         value: "NONE", label: t.adjustmentsNone, disabled: view.fromDocuments.other.length > 0,
                         description: view.fromDocuments.other.length > 0 ? fill(t.adjustmentsNoneDocs, { n: view.fromDocuments.other.length }) : t.adjustmentsNoneHint,
                       },
                       { value: "MANUAL", label: t.adjustmentsManual, description: t.adjustmentsManualHint },
+                    ] : [
+                      { value: "NONE", label: t.adjustmentsNoneXk, description: t.adjustmentsNoneHintXk },
+                      { value: "MANUAL", label: t.adjustmentsManualXk, description: t.adjustmentsManualHintXk },
                     ]}
                   />
                   {errors.adjustments && <Alert tone="danger">{errors.adjustments}</Alert>}
@@ -245,9 +251,15 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
                       {form.adjustments.map((row, i) => (
                         <fieldset key={i} className="grid gap-3 rounded-md border border-border p-3 cq-md:grid-cols-2">
                           <legend className="px-1 text-sm font-medium text-fg">{fill(t.adjustmentNo, { n: i + 1 })}</legend>
-                          <Field label={t.adjustmentCode} required {...errorProp(errors[`adjustments.${i}.code`])}>
-                            <Select options={CODE_OPTIONS} placeholder={t.chooseCode} value={row.code} onChange={(e) => setRow(i, { code: e.target.value, kind: kindOfCode(e.target.value, row.kind) })} />
-                          </Field>
+                          {nk ? (
+                            <Field label={t.adjustmentCode} required {...errorProp(errors[`adjustments.${i}.code`])}>
+                              <Select options={CODE_OPTIONS} placeholder={t.chooseCode} value={row.code} onChange={(e) => setRow(i, { code: e.target.value, kind: kindOfCode(e.target.value, row.kind) })} />
+                            </Field>
+                          ) : (
+                            <Field label={t.adjustmentNameXk} required {...errorProp(errors[`adjustments.${i}.note`])}>
+                              <Input value={row.note} onChange={(e) => setRow(i, { note: e.target.value })} maxLength={200} placeholder={t.adjustmentNamePlaceholderXk} />
+                            </Field>
+                          )}
                           <Field label={t.adjustmentKind} {...errorProp(errors[`adjustments.${i}.kind`])}>
                             <Select options={kindOptions} value={row.kind} onChange={(e) => setRow(i, { kind: e.target.value as AdjustmentRowForm["kind"] })} />
                           </Field>
@@ -257,15 +269,19 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
                           <Field label={t.currency} {...errorProp(errors[`adjustments.${i}.currency`])}>
                             <Select options={CURRENCY_OPTIONS} value={row.currency} onChange={(e) => setRow(i, { currency: e.target.value })} />
                           </Field>
-                          <Field label={t.adjustmentNote} className="cq-md:col-span-2">
-                            <Input value={row.note} onChange={(e) => setRow(i, { note: e.target.value })} maxLength={200} placeholder={t.adjustmentNotePlaceholder} />
-                          </Field>
-                          <Checkbox
-                            className="cq-md:col-span-2"
-                            label={fill(t.allocate, { n: i + 1 })}
-                            checked={row.allocate}
-                            onChange={(e) => setRow(i, { allocate: e.target.checked })}
-                          />
+                          {nk && (
+                            <>
+                              <Field label={t.adjustmentNote} className="cq-md:col-span-2">
+                                <Input value={row.note} onChange={(e) => setRow(i, { note: e.target.value })} maxLength={200} placeholder={t.adjustmentNotePlaceholder} />
+                              </Field>
+                              <Checkbox
+                                className="cq-md:col-span-2"
+                                label={fill(t.allocate, { n: i + 1 })}
+                                checked={row.allocate}
+                                onChange={(e) => setRow(i, { allocate: e.target.checked })}
+                              />
+                            </>
+                          )}
                           <div className="cq-md:col-span-2">
                             <Button type="button" size="sm" variant="ghost" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => set("adjustments", form.adjustments.filter((_, j) => j !== i))}>
                               {fill(t.removeAdjustment, { n: i + 1 })}
@@ -277,7 +293,7 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
                         <Button type="button" size="sm" variant="secondary" leftIcon={<Plus className="h-4 w-4" />} disabled={form.adjustments.length >= MAX_ADJUSTMENTS} onClick={() => set("adjustments", [...form.adjustments, emptyAdjustmentRow(currency)])}>
                           {t.addAdjustment}
                         </Button>
-                        {view.fromDocuments.other.length > 0 && (
+                        {nk && view.fromDocuments.other.length > 0 && (
                           <Button type="button" size="sm" variant="ghost" leftIcon={<Sparkles className="h-4 w-4" />} onClick={() => set("adjustments", suggestAdjustments(view).slice(0, MAX_ADJUSTMENTS))}>
                             {t.suggestAdjustments}
                           </Button>

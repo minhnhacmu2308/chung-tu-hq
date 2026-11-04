@@ -13,6 +13,7 @@ import { seedSkills } from "./seed/skills";
 import { seedSettings } from "./seed/settings";
 import { seedAdmin } from "./seed/admin";
 import { syncFreightTermCheck } from "./freight-term";
+import { syncIncotermFreightCheck } from "./incoterm-freight";
 import { seedProducts } from "./seed/products";
 import { seedMailbox, type MockInboxMessage, type MockMailConnection } from "./seed/mailbox";
 import type { AdminDb } from "./admin/types";
@@ -71,7 +72,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 29;
+const DB_VERSION = 34;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -97,7 +98,10 @@ function createSeed(): MockDb {
     ...seedAdmin(),
   });
   // Luật R-FREIGHT-TERM tính từ ô Điều kiện cước của vận đơn (như khi chạy lại luật ở backend).
-  for (const d of seed.dossiers) syncFreightTermCheck(seed, d.id);
+  for (const d of seed.dossiers) {
+    syncFreightTermCheck(seed, d.id);
+    syncIncotermFreightCheck(seed, d.id);
+  }
   return seed;
 }
 

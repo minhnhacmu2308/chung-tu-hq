@@ -2,8 +2,9 @@
 import { resolvePort, resolveWorldPort, transportModeCode } from "../catalog-resolve.js";
 import { EDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
-import { freightRequired, incotermCode, planExportAdjustments } from "../adjustments.js";
-import { incotermField, invoiceKind, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
+import { isDomesticDelivery } from "@kb/contracts";
+import { EXPORT_NO_240, exportAdjustmentsAllowed, freightRequired, incotermCode, planExportAdjustments } from "../adjustments.js";
+import { domesticPorts, foreignPorts, incotermField, invoiceKind, onSitePlace, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { BY_WATER, EXPORT_VALUE, IN_CONTAINER, RE_EXPORT, TEMP_EXPORT } from "./conditions.js";
 import { profileSource, SRC } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
@@ -11,29 +12,61 @@ import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type Field
 const isVn = (code: string | undefined) => !!code?.startsWith("VN");
 
 /**
- * 2.40 Trị giá tính thuế (tổng): khai khi điều kiện giá khác FOB/DAP/DAF hoặc không có hóa đơn. Trị giá hải quan hàng xuất = giá đến
+ * 2.40 Trị giá tính thuế (tổng): khai khi điều kiện giá khác FOB hoặc không có hóa đơn. Trị giá hải quan hàng xuất = giá đến
  * cửa khẩu xuất, không gồm cước và bảo hiểm quốc tế (planExportAdjustments đã trừ). Cùng tiền tệ hóa đơn thì khai theo tiền tệ đó, khác thì VND.
  */
-const NO_240 = new Set(["FOB", "DAP", "DAF"]);
 const exportCustomsValue = (i: MappingInput): MappedValue => {
   const incoterm = incotermCode(i.shipment.invoice.incoterm.value);
   const noInvoice = i.shipment.documents.every((d) => d.kind !== "INVOICE");
-  if (NO_240.has(incoterm) && !noInvoice) {
+  if (EXPORT_NO_240.has(incoterm) && !noInvoice) {
     return { value: null, source: "SYSTEM", note: `${incoterm}: không khai chỉ tiêu 2.40 – Hải quan lấy trị giá hóa đơn làm trị giá tính thuế` };
   }
-  const cur = i.shipment.invoice.currency.value ?? i.dossier.currency;
-  const notes = planExportAdjustments(i.shipment, i.charges).notes;
-  // Giá đã gồm cước mà không có số cước, cũng không có lý do người khai ghi nhận → chặn duyệt (trị giá tính thuế sai).
-  const noFreight = freightRequired("EDA", incoterm) && !i.adjustments.some((a) => a.label.startsWith("Cước")) && !i.charges.freight;
-  const same = i.adjustments.every((a) => a.currency === cur);
-  const value = same
-    ? `${plainNumber(i.adjustments.reduce((s, a) => (a.kind === "SUBTRACT" ? s.minus(a.amount) : s.plus(a.amount)), dec(i.valuation.invoiceTotal)).toFixed())} ${cur}`
-    : `${i.valuation.customsValueVnd} VND`;
+  const notes = planExportAdjustments(i.shipment, i.charges, i.dossier.transportMode).notes;
+  const value = exportValueText(i);
   const deducted = i.adjustments.filter((a) => a.kind === "SUBTRACT").map((a) => a.label.toLowerCase());
-  const note = [deducted.length ? `Đã trừ ${deducted.join(", ")} khỏi giá hóa đơn ${incoterm}` : null, ...notes].filter(Boolean).join(". ");
+  const added = i.adjustments.filter((a) => a.kind === "ADD").map((a) => a.label.toLowerCase());
+  const note = [
+    deducted.length ? `Đã trừ ${deducted.join(", ")} khỏi giá hóa đơn ${incoterm}` : null,
+    added.length ? `Đã cộng ${added.join(", ")}` : null,
+    isDomesticDelivery(i.dossier.transportMode) ? `Phương thức vận chuyển 9 (giao hàng tại chỗ, trong nước): không trừ cước, bảo hiểm quốc tế khỏi giá ${incoterm}` : null,
+    ...notes,
+  ].filter(Boolean).join(". ");
   // Chặn duyệt = để trống (canApprove chỉ chặn chỉ tiêu blocking chưa có giá trị) – không khai trị giá chưa trừ cước.
-  if (noFreight) return { value: null, source: "SYSTEM", suspect: true, blocking: true, note: `${note}. Nhập số cước hoặc lý do chưa có ở bước OCR & kiểm tra` };
+  if (exportFreightMissing(i)) return { value: null, source: "SYSTEM", suspect: true, blocking: true, note: `${note}. Nhập số cước hoặc lý do chưa có ở bước OCR & kiểm tra` };
   return { value, source: "SYSTEM", ...(notes.length ? { suspect: true } : {}), ...(note ? { note } : {}) };
+};
+
+/** Giá đã gồm cước mà không có số cước, cũng không có lý do người khai ghi nhận → trị giá tính thuế sai, chặn duyệt. */
+const exportFreightMissing = (i: MappingInput) =>
+  freightRequired("EDA", incotermCode(i.shipment.invoice.incoterm.value), i.dossier.transportMode) && !i.adjustments.some((a) => a.label.startsWith("Cước")) && !i.charges.freight;
+
+/** Trị giá 2.40 dạng "19660 USD": cùng tiền tệ hóa đơn thì tính theo tiền tệ đó, khác thì lấy trị giá quy VND. */
+function exportValueText(i: MappingInput): string {
+  const cur = i.shipment.invoice.currency.value ?? i.dossier.currency;
+  if (!i.adjustments.every((a) => a.currency === cur)) return `${i.valuation.customsValueVnd} VND`;
+  return `${plainNumber(i.adjustments.reduce((s, a) => (a.kind === "SUBTRACT" ? s.minus(a.amount) : s.plus(a.amount)), dec(i.valuation.invoiceTotal)).toFixed())} ${cur}`;
+}
+
+/** Tên ngắn không dấu của khoản trong diễn giải 2.32 (ô VNACCS chỉ nhận chữ không dấu). */
+const shortLabel = (label: string) => (label.startsWith("Cước") ? "cuoc" : label.startsWith("Phí bảo hiểm") ? "BH" : "dc khac");
+const MRK_MAX = 140;
+
+/**
+ * 2.32 Ký hiệu và số hiệu: tờ khai xuất không có ô cước / bảo hiểm / khoản điều chỉnh, người khai tự tính rồi khai kết quả ở 2.40.
+ * Phụ lục II chỉ tiêu 2.57 cho ghi tiếp sang 2.32 khi Phần ghi chú không đủ chỗ → phần mềm tự diễn giải cách tính 2.40 vào đây
+ * (vd "TGTT 2.40: CIF 20850 USD - cuoc 1150 USD - BH 40 USD = 19660 USD"). Không có khoản trừ / cộng hoặc chưa tính được 2.40 → để trống.
+ */
+const valuationMarks = (i: MappingInput): MappedValue => {
+  const incoterm = incotermCode(i.shipment.invoice.incoterm.value);
+  const hint = "Phần mềm tự diễn giải cách tính trị giá tính thuế 2.40; ghi thêm ký hiệu bao bì (shipping marks) nếu có, tối đa 140 ký tự";
+  if (!i.adjustments.length || !exportAdjustmentsAllowed(incoterm) || exportFreightMissing(i)) return { value: null, source: "DOSSIER" };
+  const cur = i.shipment.invoice.currency.value ?? i.dossier.currency;
+  const parts = i.adjustments.map((a) => `${a.kind === "SUBTRACT" ? "-" : "+"} ${shortLabel(a.label)} ${plainNumber(a.amount)} ${a.currency}`);
+  const head = `TGTT 2.40: ${incoterm} ${plainNumber(i.valuation.invoiceTotal)} ${cur}`;
+  const full = `${head} ${parts.join(" ")} = ${exportValueText(i)}`;
+  // Quá 140 ký tự (nhiều khoản) → gộp phần điều chỉnh, chi tiết xem ở bước OCR & kiểm tra.
+  const value = full.length <= MRK_MAX ? full : `${head} +/- dieu chinh = ${exportValueText(i)}`;
+  return { value, source: "SYSTEM", note: hint };
 };
 
 export const EDA_MAPPINGS: FieldMapping[] = [
@@ -73,26 +106,39 @@ export const EDA_MAPPINGS: FieldMapping[] = [
     profileOr(i, "KHO", missing("DOSSIER", "Chọn mã địa điểm lưu kho / tập kết hàng xuất; dùng mã dùng chung của Chi cục (…OZZ) thì ghi địa điểm tập kết, thời gian đóng container, xếp hàng ở ô địa chỉ 2.59")) },
   // 2.28: nơi hàng được giao cuối cùng ở nước ngoài – ưu tiên điểm đến cuối (place of delivery), không có thì cảng dỡ.
   { code: "CANG_DO", no: N.CANG_DO, section: "TRANSPORT", label: "Địa điểm nhận hàng cuối cùng", required: true, from: (i) => {
+    const onSite = onSitePlace(i);
+    if (onSite) return onSite;
     const fd = i.shipment.transport.finalDestination;
     const pod = i.shipment.transport.portOfDischarge;
     const buyerCountry = i.shipment.parties.buyer.country.value;
-    const fdPort = resolveWorldPort(fd.value, buyerCountry, i.catalogs?.worldPorts);
+    const fdPort = resolveWorldPort(fd.value, buyerCountry, foreignPorts(i));
     if (fdPort) return port(fd.value, fdPort, fromSourced(fd, "BILL_OF_LADING").source);
-    return port(pod.value, resolveWorldPort(pod.value, buyerCountry, i.catalogs?.worldPorts), fromSourced(pod, "BILL_OF_LADING").source);
+    return port(pod.value, resolveWorldPort(pod.value, buyerCountry, foreignPorts(i)), fromSourced(pod, "BILL_OF_LADING").source);
   } },
   // 2.29: bắt buộc (trừ PTVC mã 9), là cảng/ICD/cửa khẩu/sân bay tại Việt Nam – không tự điền mặc định.
   { code: "CANG_XEP", no: N.CANG_XEP, section: "TRANSPORT", label: "Địa điểm xếp hàng", required: true, from: (i) => {
+    const onSite = onSitePlace(i);
+    if (onSite) return onSite;
     const pol = i.shipment.transport.portOfLoading;
-    const r = resolvePort(pol.value, i.catalogs?.worldPorts);
+    // Địa điểm Việt Nam đúng PTVC của lô trước; không có thì tra cả danh mục để báo "phải là địa điểm tại Việt Nam".
+    const r = resolvePort(pol.value, domesticPorts(i)) ?? resolvePort(pol.value, i.catalogs?.worldPorts);
     const v = pol.value ? port(pol.value, r, fromSourced(pol, "BILL_OF_LADING").source) : missing("BILL_OF_LADING", "Chọn địa điểm xếp hàng tại Việt Nam (cảng, ICD, cửa khẩu, sân bay) – bắt buộc (chỉ tiêu 2.29)");
     return r && !isVn(r.code) ? { ...v, suspect: true, note: "Địa điểm xếp hàng của tờ khai xuất phải là địa điểm tại Việt Nam" } : v;
   } },
-  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, when: BY_WATER, from: () => ({ ...fixed("9999"), note: "Ô 1 chỉ tiêu 2.30: hô hiệu tàu – điền sẵn 9999 (tàu chưa đăng ký trên hệ thống); B/L có hô hiệu thật thì sửa lại. Phương thức khác đường biển/sông: không có ô này" }) },
+  { code: "HO_HIEU", no: N.HO_HIEU, section: "TRANSPORT", label: "Hô hiệu phương tiện (call sign)", required: false, from: (i) => (BY_WATER.test(i)
+    ? { ...fixed("9999"), note: "Ô 1 chỉ tiêu 2.30: hô hiệu tàu – điền sẵn 9999 (tàu chưa đăng ký trên hệ thống); B/L có hô hiệu thật thì sửa lại" }
+    // PTVC khác 2, 3, 6: ô vẫn có, để trống cho người khai tự nhập (đổi PTVC trên tờ khai → ô đổi theo, transportPlaceChanges).
+    : { value: null, source: "DOSSIER", note: "Ô 1 chỉ tiêu 2.30: phương thức khác đường biển/sông – người khai tự nhập mã phương tiện nếu có" }) },
   // 2.60: tối đa 50 số container (phần dư khai qua HYS).
   { code: "SO_CONT", no: N.SO_CONT, section: "TRANSPORT", label: "Số container", required: false, when: IN_CONTAINER, from: (i) => {
     const c = i.shipment.transport.containers.map((x) => x.no);
     return c.length ? { value: c.join(", "), source: "BILL_OF_LADING" } : missing("BILL_OF_LADING", "Chưa có số container – nhập khi hàng đóng container");
   } },
+  // Mã chỉ tiêu = tên ô VNACCS (như 2.13 TK_EPP) – gửi FPT qua applyExtras; người khai sửa thì giá trị sửa thắng.
+  { code: "TK_MRK", no: "2.32", section: "TRANSPORT", label: "Ký hiệu và số hiệu", required: false, from: valuationMarks },
+  // 2.59 địa chỉ địa điểm xếp hàng lên xe chở hàng: mặc định địa chỉ người xuất khẩu (Tài khoản) – người khai sửa khi đóng hàng nơi khác.
+  // Mã 1–5 người khai nhập theo thứ tự (danh mục A202), tên tự điền theo mã 1 trên panel sửa ô.
+  { code: "CON_VA", no: "2.59", section: "TRANSPORT", label: "Địa chỉ địa điểm xếp hàng lên xe chở hàng", required: false, when: IN_CONTAINER, from: (i) => ({ value: i.org.address || null, source: "ACCOUNT" }) },
   { code: "PTVC_TEN", no: N.PTVC_TEN, section: "TRANSPORT", label: "Tên phương tiện vận chuyển", required: false, from: (i) => {
     const v = fromSourced(i.shipment.transport.vessel, "BILL_OF_LADING");
     return v.value === null ? { value: null, source: "BILL_OF_LADING", note: "Bổ sung khi có booking" } : v;

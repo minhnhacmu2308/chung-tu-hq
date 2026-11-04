@@ -32,7 +32,8 @@ export const DECLARATION_CONDITIONS: Record<ConditionId, { label: string; test: 
   /** 1.35 số lượng container / 2.59–2.60 container. */
   IN_CONTAINER: { label: "Hàng container đường biển (mã 2)", test: (c) => c.transportCode.trim() === "2" },
   /** 2.40 trị giá tính thuế xuất khẩu. */
-  EXPORT_VALUE: { label: "Điều kiện giá khác FOB/DAP/DAF hoặc không có hóa đơn", test: (c) => !["FOB", "DAP", "DAF"].includes(c.incoterm.trim().toUpperCase()) || !c.hasInvoice },
+  // Chỉ FOB khai thẳng giá hóa đơn (quyết định nghiệp vụ 31/10/2026 – DAP/DAF đã gồm cước nên vẫn khai 2.40, trừ cước / bảo hiểm).
+  EXPORT_VALUE: { label: "Điều kiện giá khác FOB hoặc không có hóa đơn", test: (c) => c.incoterm.trim().toUpperCase() !== "FOB" || !c.hasInvoice },
   /** Vận đơn: hỏi "có phát hành HAWB" khi khai định danh theo hàng không. */
   AIR_IDENT: { label: "Khai báo định danh theo đường hàng không", test: (c) => c.identMode === "HANG_KHONG" },
   /** Vận đơn: ô số HAWB cạnh từng số vận đơn. */

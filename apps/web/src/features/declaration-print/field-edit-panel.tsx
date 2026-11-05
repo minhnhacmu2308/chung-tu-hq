@@ -5,12 +5,14 @@
 // → hỏi "Giá trị đã thay đổi, bạn muốn lưu không?" (Lưu · Giữ giá trị cũ), panel vẫn ở ô đang sửa. Đang lưu → chờ lưu xong mới chuyển ô (không hỏi / lưu lặp).
 // Enter trong ô nhập (Shift+Enter = xuống dòng; danh sách thả xuống đang mở → Enter chọn mục) → lưu mọi thay đổi của panel rồi hỏi
 // Thoát panel · Ở lại. Panel nhiều ô: Tab qua lại giữa các ô, nhập xong hết mới Enter.
+// Ctrl+S / Ctrl+Enter → lưu như Enter (ô đang gõ dở được chốt trước). Esc trên ô đã sửa → trả ô về giá trị cũ (lần nữa → đóng panel như thường).
+// F1 / nút "Phím tắt" → bảng phím tắt (panel-keys.ts).
 // Tab trong ô nhập → ô nhập kế tiếp của panel (bỏ qua nút TH / hướng dẫn). Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
 import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
 import {
   editBlockFor, fieldRole, fixedPlaceCode, formKeysOf, isDeclarationFieldEditable, itemFieldCode, sequenceBlocker, transportPlaceChanges, type AmendLock, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
 } from "@kb/contracts";
-import { CheckCircle2, CopyCheck, PenLine, Save } from "lucide-react";
+import { CheckCircle2, CopyCheck, Keyboard, PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { formatNumber } from "@/lib/format";
@@ -23,8 +25,10 @@ import type { FormValues } from "../declaration-form/form-state";
 import { useSaveDeclarationEdits } from "../declaration-form/use-save-edits";
 import { useCodeName, usePlaceNameLookup } from "../declaration-form/use-code-list";
 import { PanelDetails } from "./panel-details";
+import { panelShortcut, revertField } from "./panel-keys";
 import { applyToOtherLines, fieldLocator, nextTarget, taxCodeKeys, type PrintTarget } from "./print-state";
 import { SavedDialog } from "./saved-dialog";
+import { ShortcutsDialog } from "./shortcuts-dialog";
 import { UnsavedDialog } from "./unsaved-dialog";
 import { PRINT_MESSAGES } from "./print.messages";
 
@@ -98,8 +102,14 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   // Đổi một ô: áp quy tắc địa điểm theo PTVC (đổi PTVC sang / khỏi 9 → mã xếp / dỡ VNZZZ / bỏ VNZZZ; tên khi PTVC 9 → in hoa không dấu).
   // Đổi mã địa điểm xếp / dỡ (không phải PTVC 9 / mã …ZZZ) → tên theo danh mục A016 của mã mới.
   const placeName = usePlaceNameLookup();
+  // Ô bị quy tắc tự đổi theo ô khác (ô bị đổi → ô gây ra) – Esc trên ô gây ra trả cả các ô này về giá trị cũ; người dùng tự sửa ô thì bỏ khỏi đây.
+  const derivedFrom = useRef(new Map<string, string>());
   const change = useCallback((key: string, value: string) => {
-    setChanges((c) => (shown?.line === undefined ? { ...c, ...transportPlaceChanges(kind, { ...values, ...c }, key, value, placeName) } : { ...c, [key]: value }));
+    setChanges((c) => {
+      const out = shown?.line === undefined ? transportPlaceChanges(kind, { ...values, ...c }, key, value, placeName) : { [key]: value };
+      for (const k of Object.keys(out)) if (k === key) derivedFrom.current.delete(k); else derivedFrom.current.set(k, key);
+      return { ...c, ...out };
+    });
   }, [kind, values, shown?.line, placeName]);
   // 2.59: tên địa điểm xếp hàng lên xe tự điền theo mã 1 (danh mục A202) khi tên đang trống hoặc là tên tự điền theo mã cũ – người khai sửa được.
   const vanningCode = kind === "EDA" ? (changes["CON_VC1"] ?? values["CON_VC1"] ?? "") : "";
@@ -112,6 +122,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
       const current = (c["CON_VN"] ?? values["CON_VN"] ?? "").trim();
       if (current && current !== autoName.current && current !== savedVanningName) return c;
       autoName.current = vanningName;
+      derivedFrom.current.set("CON_VN", "CON_VC1");
       return current === vanningName ? c : { ...c, CON_VN: vanningName };
     });
   }, [changes, vanningName, savedVanningName, values]);
@@ -121,6 +132,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   const [saved, setSaved] = useState(false);
   // Mã thuế của dòng hàng: mặc định áp cho mọi dòng khác của tờ (bỏ chọn → chỉ dòng đang sửa, các dòng khác sửa tay từng dòng).
   const [applyAll, setApplyAll] = useState(true);
+  const [help, setHelp] = useState(false);
 
   const spot = shown ? fieldLocator(kind).get(shown.key) : undefined;
   const line = shown?.line;
@@ -247,8 +259,40 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   // Hỏi sau khi cú bấm xử lý xong: bấm vào ô khác của bản in đã mở hộp hỏi kèm ô mới (giữ hộp đó). Đang lưu / đang có hộp khác → bỏ qua.
   const leaveState = useRef({ dirty, busy: false, shown });
   useEffect(() => {
-    leaveState.current = { dirty, busy: save.isPending || confirm !== null || hsItem !== null || saved, shown };
+    leaveState.current = { dirty, busy: save.isPending || confirm !== null || hsItem !== null || saved || help, shown };
   });
+  // Ctrl+S / Ctrl+Enter / F1 khi panel đang mở (focus ở panel hay ở bản in phía sau): chặn mặc định của trình duyệt (lưu trang, trợ giúp).
+  // Lưu: rời ô đang focus trước (ô ngày chốt phần đang gõ khi mất focus) rồi lưu; không có gì để lưu → focus lại ô đó. Đang có hộp khác → bỏ qua.
+  const open = Boolean(shown && spot);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      const action = panelShortcut(e);
+      if (!action) return;
+      e.preventDefault();
+      if (leaveState.current.busy) return;
+      if (action === "HELP") {
+        setHelp(true);
+        return;
+      }
+      const el = document.activeElement instanceof HTMLElement && body.current?.contains(document.activeElement) ? document.activeElement : null;
+      el?.blur();
+      window.setTimeout(() => {
+        if (!enterSave.current() && el?.isConnected) el.focus();
+      }, 0);
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [open]);
+  // Esc trên ô đã sửa → trả ô về giá trị cũ, panel vẫn mở. Ô chưa sửa → để Radix đóng panel (còn thay đổi ở ô khác → hỏi như khi đóng).
+  const onEscapeKeyDown = (e: globalThis.KeyboardEvent) => {
+    const el = document.activeElement;
+    const key = el instanceof HTMLElement && body.current?.contains(el) ? el.closest<HTMLElement>("[data-panel-field]")?.dataset["panelField"] : undefined;
+    const next = key ? revertField(changes, row ?? values, key, derivedFrom.current) : null;
+    if (!next) return;
+    e.preventDefault();
+    setChanges(next);
+  };
   // Radix báo "bấm ra ngoài" lúc pointerdown hoặc (thường) lúc click – hoãn một nhịp để xử lý của cú bấm (chọn ô khác) chạy trước.
   const onPointerDownOutside = () => {
     if (!leaveState.current.dirty || leaveState.current.busy) return;
@@ -259,11 +303,13 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   };
   // Enter trong ô nhập của panel → lưu. Xử lý ở pha nổi bọt và hoãn một nhịp: ô ngày / mã chốt phần đang gõ bằng Enter của chính nó trước,
   // panel lưu theo giá trị đã chốt. Ô nằm ngoài cây DOM của panel (ô tìm của danh sách thả xuống – portal) không tính.
-  const enterSave = useRef<() => void>(() => undefined);
+  /** Lưu bằng phím (Enter, Ctrl+S…) rồi hỏi Thoát panel · Ở lại; false = không có gì để lưu. */
+  const enterSave = useRef<() => boolean>(() => false);
   useEffect(() => {
     enterSave.current = () => {
-      if (!dirty || readOnlyReason || save.isPending) return;
+      if (!dirty || readOnlyReason || save.isPending) return false;
       save.mutate([...edits, ...confirmations, ...bulk], { onSuccess: () => { setChanges({}); setSaved(true); } });
+      return true;
     };
   });
   const onEnter = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -325,18 +371,19 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
 
   return (
     <>
-      <Dialog open={Boolean(shown && spot)} defaultPresentation="panel" onOpenChange={(o) => !o && onTarget(null)}>
+      <Dialog open={open} defaultPresentation="panel" onOpenChange={(o) => !o && onTarget(null)}>
         <DialogContent
           title={title}
           icon={<PenLine className="h-4 w-4" />}
           {...(description ? { description } : {})}
           onKeyDownCapture={onKeyDownCapture}
           onPointerDownOutside={onPointerDownOutside}
+          onEscapeKeyDown={onEscapeKeyDown}
           // Mở panel: focus vào ô nhập của ô được chọn (gõ ngay được), không phải nút đầu tiên trên header như mặc định của Radix.
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             // Panel dựng lại (đổi khổ màn hình → đổi kiểu hiển thị) khi đang mở hộp hỏi: giữ focus ở hộp hỏi, không kéo về ô nhập.
-            if (!confirm && !saved && !hsItem) focusField(shownKey);
+            if (!confirm && !saved && !hsItem && !help) focusField(shownKey);
           }}
         >
           {spot && (
@@ -379,7 +426,12 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                   onChange={(e) => setApplyAll(e.target.checked)}
                 />
               )}
-              {!readOnlyReason && <p className="text-xs text-fg-muted">{t.enterHint}</p>}
+              {!readOnlyReason && (
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-fg-muted">{t.enterHint}</p>
+                  <Button type="button" size="sm" variant="ghost" leftIcon={<Keyboard className="h-4 w-4" />} onClick={() => setHelp(true)}>{t.shortcuts}</Button>
+                </div>
+              )}
               <DialogFooter>
                 {readOnlyReason ? (
                   <Button type="button" variant="ghost" onClick={() => onTarget(null)}>{t.close}</Button>
@@ -428,6 +480,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
         onStay={() => { stayed.current = true; setSaved(false); }}
         onClosed={restoreFocus}
       />
+      <ShortcutsDialog open={help} onClose={() => setHelp(false)} onClosed={() => { stayed.current = true; restoreFocus(); }} />
       <ChangeHsDialog item={hsItem} onClose={() => setHsItem(null)} dossierId={dossierId} />
     </>
   );

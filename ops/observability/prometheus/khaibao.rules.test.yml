@@ -1,0 +1,105 @@
+# Kiểm luật bằng promtool (không nạp vào Prometheus – glob *.rules.yml không khớp file này):
+#   docker run --rm -v "$PWD":/r -w /r --entrypoint promtool prom/prometheus:v3.12.0 test rules khaibao.rules.test.yml
+rule_files: [khaibao.rules.yml]
+evaluation_interval: 30s
+
+tests:
+  - interval: 30s
+    input_series:
+      - series: 'up{job="khaibao-worker",instance="khaibao-worker-1:9464",project="khaibao"}'
+        values: "1 1 0x10"
+      - series: 'khaibao_jobs_total{queue="extract-document",outcome="failed",project="khaibao",service="worker"}'
+        values: "0 1 2 3 4 5 6 7 8 9 10"
+      - series: 'khaibao_queue_jobs{queue="customs-send",state="waiting",project="khaibao",service="worker"}'
+        values: "60x40"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: KhaibaoTargetDown
+        exp_alerts:
+          - exp_labels: { severity: critical, project: khaibao, job: khaibao-worker, instance: "khaibao-worker-1:9464" }
+            exp_annotations:
+              summary: "KhaiBáo: khaibao-worker không scrape được (khaibao-worker-1:9464)"
+              description: "Prometheus không lấy được chỉ số của khaibao-worker trong 2 phút – container dừng, sai token, hoặc chưa gắn mạng hscodepro-observability."
+              runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaotargetdown"
+      - eval_time: 5m
+        alertname: KhaibaoJobsFailing
+        exp_alerts:
+          - exp_labels: { severity: warning, project: khaibao, queue: extract-document }
+            exp_annotations:
+              summary: "KhaiBáo: 10 job extract-document hết số lần thử trong 15 phút"
+              description: "Job hết số lần thử → bản ghi liên quan bị đánh dấu lỗi (chứng từ ERROR, outbox FAILED…), người dùng phải thử lại."
+              runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaojobsfailing"
+      - eval_time: 10m
+        alertname: KhaibaoQueueBacklog
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: KhaibaoQueueBacklog
+        exp_alerts:
+          - exp_labels: { severity: warning, project: khaibao, queue: customs-send }
+            exp_annotations:
+              summary: "KhaiBáo: queue customs-send tồn 60 job chờ"
+              description: "Hơn 50 job chờ trong 15 phút – worker chậm/dừng, bị giới hạn AI_RATE_PER_MINUTE hoặc một doanh nghiệp đẩy lô lớn."
+              runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaoqueuebacklog"
+
+  # RAM: worker có mem_limit 1 GiB đang dùng 950 MiB (> 90%); web không giới hạn dùng 2.5 GiB (> 2 GiB); redis không giới hạn 100 MiB (không báo).
+  - interval: 1m
+    input_series:
+      - series: 'container_memory_working_set_bytes{name="khaibao-worker-1",id="/a"}'
+        values: "996147200x20"
+      - series: 'container_spec_memory_limit_bytes{name="khaibao-worker-1",id="/a"}'
+        values: "1073741824x20"
+      - series: 'container_memory_working_set_bytes{name="khaibao-web-1",id="/b"}'
+        values: "2684354560x20"
+      - series: 'container_spec_memory_limit_bytes{name="khaibao-web-1",id="/b"}'
+        values: "0x20"
+      - series: 'container_memory_working_set_bytes{name="khaibao-redis-1",id="/c"}'
+        values: "104857600x20"
+      - series: 'container_spec_memory_limit_bytes{name="khaibao-redis-1",id="/c"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: KhaibaoContainerMemoryHigh
+        exp_alerts:
+          - exp_labels: { severity: warning, project: khaibao, name: khaibao-worker-1 }
+            exp_annotations:
+              summary: "KhaiBáo: container khaibao-worker-1 dùng 92.77% ngưỡng RAM"
+              description: "RAM > 90% mem_limit (hoặc > 2 GiB nếu container không đặt giới hạn) trong 10 phút – sắp bị OOM kill / chèn ép hscodepro trên VPS dùng chung."
+              runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaocontainermemoryhigh"
+          - exp_labels: { severity: warning, project: khaibao, name: khaibao-web-1 }
+            exp_annotations:
+              summary: "KhaiBáo: container khaibao-web-1 dùng 112.5% ngưỡng RAM"
+              description: "RAM > 90% mem_limit (hoặc > 2 GiB nếu container không đặt giới hạn) trong 10 phút – sắp bị OOM kill / chèn ép hscodepro trên VPS dùng chung."
+              runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaocontainermemoryhigh"
+
+  # p95: route SSE chậm (bị loại) không báo; route thường chậm thì báo.
+  - interval: 30s
+    input_series:
+      - series: 'khaibao_http_request_duration_seconds_bucket{route="/api/dossiers/:id/events",method="GET",le="5",project="khaibao"}'
+        values: "0+0x60"
+      - series: 'khaibao_http_request_duration_seconds_bucket{route="/api/dossiers/:id/events",method="GET",le="+Inf",project="khaibao"}'
+        values: "0+10x60"
+      - series: 'khaibao_http_request_duration_seconds_count{route="/api/dossiers/:id/events",method="GET",project="khaibao"}'
+        values: "0+10x60"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: KhaibaoHighP95Latency
+        exp_alerts: []
+  - interval: 30s
+    input_series:
+      - series: 'khaibao_http_request_duration_seconds_bucket{route="/api/dossiers/:id",method="GET",le="1",project="khaibao"}'
+        values: "0+0x60"
+      - series: 'khaibao_http_request_duration_seconds_bucket{route="/api/dossiers/:id",method="GET",le="5",project="khaibao"}'
+        values: "0+10x60"
+      - series: 'khaibao_http_request_duration_seconds_bucket{route="/api/dossiers/:id",method="GET",le="+Inf",project="khaibao"}'
+        values: "0+10x60"
+      - series: 'khaibao_http_request_duration_seconds_count{route="/api/dossiers/:id",method="GET",project="khaibao"}'
+        values: "0+10x60"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: KhaibaoHighP95Latency
+        exp_alerts:
+          - exp_labels: { severity: warning, project: khaibao }
+            exp_annotations:
+              summary: "KhaiBáo: p95 thời gian phản hồi API = 4.8s"
+              description: "p95 > 3 giây trong 15 phút (đã bỏ các route dài theo bản chất). Xem bảng 'HTTP theo route' để biết route nào chậm."
+              runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaohighp95latency"

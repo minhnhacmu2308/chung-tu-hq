@@ -12,4 +12,5 @@
 - Log bằng `createLogger({ name: "worker" })` từ `@kb/core/shared` (JSON một dòng, tự che khóa/mật khẩu) – không `console.*`. Kèm `queue`, `jobId`, `orgId`, `dossierId` để tra được.
 - Job hết số lần thử → `onFinalFailure` trong `src/index.ts` phải đánh dấu bản ghi liên quan (chứng từ ERROR, outbox FAILED, agent run ERROR, tờ khai mẫu Dạy khai báo FAILED…). Thêm queue mới = thêm nhánh ở đó, không để bản ghi kẹt "đang xử lý".
 - Health HTTP (tùy chọn, `WORKER_HEALTH_PORT`): `/health/live`, `/health/ready` (Redis + đang nghe hàng đợi) – `src/health-server.ts`.
+- Chỉ số Prometheus (ADR 0012, `docs/OBSERVABILITY.md`): chỉ khi đặt `METRICS_TOKEN` – `src/metrics-server.ts` mở `GET /metrics` trên `METRICS_PORT` (mặc định 9464, Bearer token). `src/index.ts` ghi `khaibao_jobs_total{queue,outcome=completed|retry|failed}` + `khaibao_job_duration_seconds` từ sự kiện Worker và đăng ký gauge `khaibao_queue_jobs` (đọc `getJobCounts` lúc scrape). Queue mới đăng ký trong mảng `workers` là tự có số đo.
 - Tắt êm: SIGTERM → ngừng nhận job, chờ job đang chạy tối đa 30 s rồi thoát; `unhandledRejection`/`uncaughtException` → log rồi thoát để orchestrator khởi động lại.

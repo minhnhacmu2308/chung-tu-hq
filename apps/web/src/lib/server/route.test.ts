@@ -101,3 +101,18 @@ describe("route()", () => {
     expect(await res.json()).toEqual({ code: "CSRF", message: "Request không đến từ ứng dụng" });
   });
 });
+
+describe("route() – chỉ số HTTP (ADR 0012)", () => {
+  it("ghi khaibao_http_requests_total theo route mẫu, không id thật; lỗi 4xx/5xx vẫn được đếm", async () => {
+    const { metrics } = await import("@kb/core/observability");
+    const params = Promise.resolve({ id: "dos_01JABCDEFGHJKMNPQRSTVWXYZ0" });
+    const r = new NextRequest("http://localhost/api/metric-test/dos_01JABCDEFGHJKMNPQRSTVWXYZ0/fields", { method: "GET" });
+    await route(async () => ({ ok: true }))(r, { params });
+    await route(async () => { throw new HttpError(404, "NOT_FOUND", "x"); })(r, { params });
+    const values = (await metrics().httpRequests.get()).values.filter((v) => String(v.labels["route"]).startsWith("/api/metric-test"));
+    expect(values.map((v) => [v.labels["route"], v.labels["status_class"], v.value]).sort()).toEqual([
+      ["/api/metric-test/:id/fields", "2xx", 1],
+      ["/api/metric-test/:id/fields", "4xx", 1],
+    ]);
+  });
+});

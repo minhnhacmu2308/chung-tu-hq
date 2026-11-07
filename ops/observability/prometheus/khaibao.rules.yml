@@ -1,0 +1,147 @@
+# KhaiBáo AI – luật cảnh báo cho Prometheus dùng chung (nạp qua rule_files: /etc/prometheus/khaibao/*.rules.yml).
+# Prometheus dùng chung KHÔNG có Alertmanager: luật ở đây được đánh giá để hiện trạng thái trong Grafana (data source-managed) rồi
+# chuyển sang Grafana-managed alerting (Telegram) theo ops/observability/README.md. Mọi luật có nhãn project=khaibao để định tuyến.
+# Cách xử lý từng cảnh báo: docs/OBSERVABILITY.md (mục "Runbook").
+# Kiểm cú pháp: docker run --rm -v "$PWD":/r --entrypoint promtool prom/prometheus:v3.12.0 check rules /r/khaibao.rules.yml
+
+groups:
+  - name: khaibao-availability
+    interval: 30s
+    rules:
+      - alert: KhaibaoTargetDown
+        expr: up{project="khaibao"} == 0
+        for: 2m
+        labels: { severity: critical, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: {{ $labels.job }} không scrape được ({{ $labels.instance }})"
+          description: "Prometheus không lấy được chỉ số của {{ $labels.job }} trong 2 phút – container dừng, sai token, hoặc chưa gắn mạng hscodepro-observability."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaotargetdown"
+
+      - alert: KhaibaoPostgresDown
+        expr: pg_up{project="khaibao"} == 0
+        for: 2m
+        labels: { severity: critical, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: Postgres không trả lời postgres-exporter"
+          description: "pg_up = 0 trong 2 phút – web/worker sẽ lỗi mọi thao tác có DB."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaopostgresdown"
+
+      - alert: KhaibaoPostgresConnectionsHigh
+        expr: |
+          sum by (instance) (pg_stat_activity_count{project="khaibao"})
+            / on (instance) max by (instance) (pg_settings_max_connections{project="khaibao"}) > 0.8
+        for: 10m
+        labels: { severity: warning, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: Postgres dùng {{ $value | humanizePercentage }} số kết nối tối đa"
+          description: "Số kết nối > 80% max_connections trong 10 phút – nguy cơ web treo vì hết pool (xem sự cố 28/10/2026 trong docs/ARCHITECTURE.md §4)."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaopostgresdown"
+
+      - alert: KhaibaoRedisDown
+        expr: redis_up{project="khaibao"} == 0
+        for: 2m
+        labels: { severity: critical, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: Redis không trả lời redis-exporter"
+          description: "redis_up = 0 trong 2 phút – hàng đợi job (BullMQ), phiên SSE và giới hạn tần suất ngừng hoạt động."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaotargetdown"
+
+  - name: khaibao-http
+    interval: 30s
+    rules:
+      - alert: KhaibaoHigh5xxRate
+        expr: |
+          (
+            sum(rate(khaibao_http_requests_total{project="khaibao",status_class="5xx"}[5m]))
+              / sum(rate(khaibao_http_requests_total{project="khaibao"}[5m]))
+          ) > 0.05
+          and sum(rate(khaibao_http_requests_total{project="khaibao"}[5m])) > 0.05
+        for: 10m
+        labels: { severity: critical, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: {{ $value | humanizePercentage }} request API lỗi 5xx"
+          description: "Tỷ lệ 5xx > 5% trong 10 phút (lưu lượng > 0,05 req/s). Tra log theo requestId trong Loki."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaohigh5xxrate"
+
+      - alert: KhaibaoHighP95Latency
+        # Bỏ route dài theo bản chất: SSE (events), tải file lên/xuống, xuất Excel, nhập danh mục, AI điền nháp, gửi thử, đồng bộ hộp thư.
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(khaibao_http_request_duration_seconds_bucket{project="khaibao",route!~".*/events|.*/export\\.xlsx|.*/documents|.*/files?(/:[A-Za-z]+)?|.*/import|.*/draft|.*/test|.*/samples|.*/sync|.*/oauth/callback"}[5m]))) > 3
+          and sum(rate(khaibao_http_request_duration_seconds_count{project="khaibao"}[5m])) > 0.02
+        for: 15m
+        labels: { severity: warning, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: p95 thời gian phản hồi API = {{ $value | humanizeDuration }}"
+          description: "p95 > 3 giây trong 15 phút (đã bỏ các route dài theo bản chất). Xem bảng 'HTTP theo route' để biết route nào chậm."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaohighp95latency"
+
+  - name: khaibao-integrations
+    interval: 30s
+    rules:
+      - alert: KhaibaoFptErrorRate
+        expr: |
+          (
+            sum(rate(khaibao_fpt_requests_total{project="khaibao",outcome=~"error|timeout"}[10m]))
+              / sum(rate(khaibao_fpt_requests_total{project="khaibao"}[10m]))
+          ) > 0.2
+          and sum(increase(khaibao_fpt_requests_total{project="khaibao"}[10m])) >= 5
+        for: 10m
+        labels: { severity: critical, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: {{ $value | humanizePercentage }} lời gọi FPT.VNACCS lỗi/timeout"
+          description: "Lỗi tạm (mạng, 429, 5xx) + timeout > 20% trong 10 phút (≥ 5 lời gọi). Job customs-send sẽ thử lại; kéo dài → outbox FAILED."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaofpterrorrate"
+
+  - name: khaibao-jobs
+    interval: 30s
+    rules:
+      - alert: KhaibaoQueueBacklog
+        expr: max by (queue) (khaibao_queue_jobs{project="khaibao",state="waiting"}) > 50
+        for: 15m
+        labels: { severity: warning, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: queue {{ $labels.queue }} tồn {{ $value }} job chờ"
+          description: "Hơn 50 job chờ trong 15 phút – worker chậm/dừng, bị giới hạn AI_RATE_PER_MINUTE hoặc một doanh nghiệp đẩy lô lớn."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaoqueuebacklog"
+
+      - alert: KhaibaoJobsFailing
+        expr: sum by (queue) (increase(khaibao_jobs_total{project="khaibao",outcome="failed"}[15m])) > 5
+        for: 1m
+        labels: { severity: warning, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: {{ $value | printf \"%.0f\" }} job {{ $labels.queue }} hết số lần thử trong 15 phút"
+          description: "Job hết số lần thử → bản ghi liên quan bị đánh dấu lỗi (chứng từ ERROR, outbox FAILED…), người dùng phải thử lại."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaojobsfailing"
+
+  - name: khaibao-resources
+    interval: 1m
+    rules:
+      # Có mem_limit → so với giới hạn; không đặt giới hạn → mẫu số = 2 GiB / 0,9 (tức cảnh báo khi > 2 GiB). Giá trị = tỷ lệ.
+      - alert: KhaibaoContainerMemoryHigh
+        expr: |
+          (
+            max by (name) (container_memory_working_set_bytes{name=~"khaibao-.+"})
+              / (
+                max by (name) (container_spec_memory_limit_bytes{name=~"khaibao-.+"} > 0)
+                or max by (name) (container_memory_working_set_bytes{name=~"khaibao-.+"}) * 0 + 2147483648 / 0.9
+              )
+          ) > 0.9
+        for: 10m
+        labels: { severity: warning, project: khaibao }
+        annotations:
+          summary: "KhaiBáo: container {{ $labels.name }} dùng {{ $value | humanizePercentage }} ngưỡng RAM"
+          description: "RAM > 90% mem_limit (hoặc > 2 GiB nếu container không đặt giới hạn) trong 10 phút – sắp bị OOM kill / chèn ép hscodepro trên VPS dùng chung."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaocontainermemoryhigh"
+
+      - alert: KhaibaoDiskLow
+        expr: |
+          min by (instance, mountpoint) (
+            node_filesystem_avail_bytes{mountpoint=~"/|/rootfs|/host|/host/root",fstype!~"tmpfs|overlay|squashfs"}
+              / node_filesystem_size_bytes{mountpoint=~"/|/rootfs|/host|/host/root",fstype!~"tmpfs|overlay|squashfs"}
+          ) < 0.10
+        for: 10m
+        labels: { severity: critical, project: khaibao }
+        annotations:
+          summary: "VPS: ổ {{ $labels.mountpoint }} còn {{ $value | humanizePercentage }} dung lượng"
+          description: "Ổ gốc còn < 10% – Postgres, MinIO, Redis AOF và bản sao lưu (./backups) cùng nằm trên ổ này."
+          runbook_url: "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md#khaibaodisklow"

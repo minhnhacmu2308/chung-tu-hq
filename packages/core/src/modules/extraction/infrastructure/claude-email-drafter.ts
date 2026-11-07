@@ -4,6 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { observeAiCall } from "../../../observability/index.js";
 
 const AiBlock = z.object({
   type: z.enum(["heading", "text", "button", "divider", "spacer"]),
@@ -39,7 +40,7 @@ export class ClaudeEmailDrafter {
   }
 
   async draft(input: EmailDraftInput) {
-    const res = await this.client.beta.messages.create({
+    const res = await observeAiCall("AI_EMAIL_DRAFT", this.model, () => this.client.beta.messages.create({
       model: this.model,
       max_tokens: 4000,
       system: SYSTEM,
@@ -47,7 +48,7 @@ export class ClaudeEmailDrafter {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       messages: [{ role: "user", content: `Ngôn ngữ email: ${LANG[input.language]}. Giọng văn: ${TONE[input.tone]}.\nMô tả email cần soạn:\n${input.description}` }],
-    });
+    }));
     const usage = { model: res.model, inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
     const text = res.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join("");
     let out: z.infer<typeof AiOutput>;

@@ -6,6 +6,7 @@
 // Cùng cơ chế: chuỗi người khai bấm một lần cho cả lô – khai chính thức cả lô (chain "declare"), gọi về tất cả (chain "recall", lệnh cuối xong → tự mở lại tờ khai).
 import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, isRecallOperation, queryOpFor, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
 import { z } from "zod";
+import { countCustomsMessage, countDeclarationAccepted } from "../../../observability/index.js";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -172,6 +173,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       outcome = { errors: [{ code: e.code, message: e.message ?? e.code }], summary: "", payload: null, patch: {} };
     } else {
       // Lỗi tạm (mạng/5xx): ghi nhật ký, giữ PENDING, ném để BullMQ retry với backoff.
+      countCustomsMessage(op, "error");
       const message = e instanceof Error ? e.message : String(e);
       await deps.uow.asOrg(ctx, async (r) => {
         await msg(r, { operation: op, direction: "IN", result: "ERROR", summary: `Lỗi tạm thời khi gửi: ${message} – sẽ thử lại`, payloadMasked: { error: message }, externalRef: result.externalId });
@@ -182,6 +184,8 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   }
 
   const failed = !!outcome.errors?.length;
+  countCustomsMessage(op, failed ? "rejected" : "ok");
+  if (!failed && b === "IDC") countDeclarationAccepted(op === "EDC" ? "EDC" : "IDC");
   const nextStage = failed ? stage : stageAfter(stage, op) ?? stage;
   const { rejection: prevRejection, sent: prevSent, ...prevRaw } = result.raw ?? {};
   // Lô nhiều tờ: nội dung tờ Hải quan vừa nhận (IDA/IDA01/EDA/EDA01 thành công) = ảnh chụp ghi lúc dựng outbox (spec §2.5). Outbox không mang ảnh chụp

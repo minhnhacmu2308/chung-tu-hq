@@ -1,0 +1,54 @@
+# KhaiBáo AI – phần bổ sung compose cho quan sát hệ thống (ADR 0012). Ghép SAU file compose chính của project `khaibao`:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml -f observability/compose.monitoring.yml up -d
+# (hoặc đặt COMPOSE_FILE trong /opt/khaibao/.env – xem ops/observability/README.md). Không chứa bí mật; không publish cổng nào.
+#
+# - web, worker: gắn thêm mạng docker dùng chung `hscodepro-observability` để Prometheus scrape khaibao-web-1:3100 / khaibao-worker-1:9464
+#   (vẫn giữ mạng default để nói chuyện với postgres/redis/minio).
+# - postgres-exporter, redis-exporter: chỉ số Postgres/Redis cho Prometheus. Trỏ tới tên CONTAINER (khaibao-postgres-1, khaibao-redis-1)
+#   thay vì tên service để không nhầm với container cùng tên service của project khác trên mạng dùng chung.
+
+services:
+  web:
+    networks: [default, hscodepro-observability]
+
+  worker:
+    networks: [default, hscodepro-observability]
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.19.0
+    container_name: khaibao-postgres-exporter
+    # Cùng profile với postgres: dùng Postgres managed (bỏ "db" khỏi COMPOSE_PROFILES) thì exporter cũng không chạy.
+    profiles: ["db"]
+    restart: unless-stopped
+    environment:
+      # Cùng tài khoản/biến với service postgres trong docker-compose.yml (POSTGRES_USER kb_admin, POSTGRES_DB khaibao, POSTGRES_PASSWORD từ .env).
+      DATA_SOURCE_URI: "khaibao-postgres-1:5432/khaibao?sslmode=disable"
+      DATA_SOURCE_USER: kb_admin
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD:?Đặt POSTGRES_PASSWORD trong .env}
+    mem_limit: 64m
+    cpus: 0.25
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [default, hscodepro-observability]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.82.0
+    container_name: khaibao-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://khaibao-redis-1:6379"
+    mem_limit: 64m
+    cpus: 0.25
+    depends_on:
+      redis: { condition: service_healthy }
+    networks: [default, hscodepro-observability]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  hscodepro-observability:
+    external: true

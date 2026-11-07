@@ -25,6 +25,13 @@ describe("loadEnv", () => {
     expect(loadEnv({ ...fpt, NODE_ENV: "production", FPT_API_BASE_URL: "http://fpt-mock:7070" }).FPT_API_BASE_URL).toBe("http://fpt-mock:7070");
     expect(loadEnv({ ...fpt, FPT_API_BASE_URL: "http://tsst.fcs.vn" }).FPT_API_BASE_URL).toBe("http://tsst.fcs.vn");
   });
+  it("METRICS_TOKEN: tùy chọn (trống = tắt chỉ số), có thì ≥ 16 ký tự; METRICS_PORT mặc định 9464", () => {
+    expect(loadEnv(base).METRICS_TOKEN).toBeUndefined();
+    expect(loadEnv({ ...base, METRICS_TOKEN: "" }).METRICS_TOKEN).toBeUndefined();
+    expect(loadEnv(base).METRICS_PORT).toBe(9464);
+    expect(() => loadEnv({ ...base, METRICS_TOKEN: "ngan" })).toThrow(/METRICS_TOKEN/);
+    expect(loadEnv({ ...base, METRICS_TOKEN: "a".repeat(64), METRICS_PORT: "9500" })).toMatchObject({ METRICS_TOKEN: "a".repeat(64), METRICS_PORT: 9500 });
+  });
   it("mặc định: adapter fake, mail console, S3 path-style", () => {
     const env = loadEnv(base);
     expect(env.AI_TIMEOUT_MS).toBe(180_000);

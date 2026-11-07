@@ -1,0 +1,2452 @@
+{
+  "uid": "khaibao-overview",
+  "title": "KhaiBáo AI – Tổng quan",
+  "description": "Chỉ số + log của KhaiBáo AI (chung-tu-hq) trên stack quan sát dùng chung. Tài liệu: docs/OBSERVABILITY.md",
+  "tags": [
+    "khaibao",
+    "prod"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "1m",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "route",
+        "label": "Route",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "hscodepro-prometheus"
+        },
+        "query": {
+          "query": "label_values(khaibao_http_requests_total{project=\"khaibao\"}, route)",
+          "refId": "route"
+        },
+        "definition": "label_values(khaibao_http_requests_total{project=\"khaibao\"}, route)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "queue",
+        "label": "Queue",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "hscodepro-prometheus"
+        },
+        "query": {
+          "query": "label_values(khaibao_jobs_total{project=\"khaibao\"}, queue)",
+          "refId": "queue"
+        },
+        "definition": "label_values(khaibao_jobs_total{project=\"khaibao\"}, queue)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "service",
+        "label": "Service (log)",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "hscodepro-loki"
+        },
+        "query": {
+          "label": "compose_service",
+          "stream": "{compose_project=\"khaibao\"}",
+          "type": 1,
+          "refId": "service"
+        },
+        "definition": "label_values({compose_project=\"khaibao\"}, compose_service)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Runbook",
+      "type": "link",
+      "url": "https://github.com/minhnhacmu2308/chung-tu-hq/blob/main/docs/OBSERVABILITY.md",
+      "targetBlank": true,
+      "icon": "doc"
+    }
+  ],
+  "panels": [
+    {
+      "type": "row",
+      "title": "Tổng quan",
+      "id": 1,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Web",
+      "id": 2,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(up{project=\"khaibao\",job=\"khaibao-web\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Worker",
+      "id": 3,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(up{project=\"khaibao\",job=\"khaibao-worker\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Postgres exporter",
+      "id": 4,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(up{project=\"khaibao\",job=\"khaibao-postgres\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Redis exporter",
+      "id": 5,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(up{project=\"khaibao\",job=\"khaibao-redis\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Request/giây",
+      "id": 6,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum(rate(khaibao_http_requests_total{project=\"khaibao\"}[5m]))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Tỷ lệ lỗi 5xx",
+      "id": 7,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum(rate(khaibao_http_requests_total{project=\"khaibao\",status_class=\"5xx\"}[5m])) / clamp_min(sum(rate(khaibao_http_requests_total{project=\"khaibao\"}[5m])), 1e-9)",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "p95 API (bỏ route dài)",
+      "id": 8,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(khaibao_http_request_duration_seconds_bucket{project=\"khaibao\",route!~\".*/events|.*/export\\\\.xlsx|.*/documents|.*/files?(/:[A-Za-z]+)?|.*/import|.*/draft|.*/test|.*/samples|.*/sync|.*/oauth/callback\"}[5m])))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1.5
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Phiên bản",
+      "id": 9,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max by (version, commit) (khaibao_build_info{project=\"khaibao\",service=\"web\"})",
+          "legendFormat": "{{version}} · {{commit}}",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "name",
+        "justifyMode": "auto"
+      },
+      "description": "khaibao_build_info – commit lấy từ GIT_COMMIT",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 1
+      }
+    },
+    {
+      "type": "row",
+      "title": "HTTP theo route",
+      "id": 10,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Request/giây theo route",
+      "id": 11,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (route) (rate(khaibao_http_requests_total{project=\"khaibao\",route=~\"$route\"}[5m]))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Lỗi theo nhóm mã trạng thái",
+      "id": 12,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (status_class) (rate(khaibao_http_requests_total{project=\"khaibao\",route=~\"$route\",status_class!=\"2xx\"}[5m]))",
+          "legendFormat": "{{status_class}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 theo route",
+      "id": 13,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(khaibao_http_request_duration_seconds_bucket{project=\"khaibao\",route=~\"$route\"}[5m])))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      }
+    },
+    {
+      "type": "table",
+      "title": "Top route chậm (p95, 1 giờ)",
+      "id": 14,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "topk(15, histogram_quantile(0.95, sum by (le, route, method) (rate(khaibao_http_request_duration_seconds_bucket{project=\"khaibao\"}[1h]))))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "p95"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "p95",
+            "desc": true
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      }
+    },
+    {
+      "type": "row",
+      "title": "FPT.VNACCS theo nghiệp vụ",
+      "id": 15,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Lời gọi/phút theo nghiệp vụ",
+      "id": 16,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (op) (rate(khaibao_fpt_requests_total{project=\"khaibao\"}[5m])) * 60",
+          "legendFormat": "{{op}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 23
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tỷ lệ lỗi/timeout",
+      "id": 17,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (op) (rate(khaibao_fpt_requests_total{project=\"khaibao\",outcome=~\"error|timeout\"}[10m])) / clamp_min(sum by (op) (rate(khaibao_fpt_requests_total{project=\"khaibao\"}[10m])), 1e-9)",
+          "legendFormat": "{{op}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "error = mạng/429/5xx, timeout = quá FPT_API_TIMEOUT_MS; rejected (4xx, sai định dạng) xem bảng kết quả",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 23
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 thời gian gọi FPT",
+      "id": 18,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, op) (rate(khaibao_fpt_request_duration_seconds_bucket{project=\"khaibao\"}[10m])))",
+          "legendFormat": "{{op}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 23
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kết quả lời gọi FPT",
+      "id": 19,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (outcome) (increase(khaibao_fpt_requests_total{project=\"khaibao\"}[$__rate_interval]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Nghiệp vụ Hải quan qua outbox",
+      "id": 20,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (op, outcome) (increase(khaibao_customs_messages_total{project=\"khaibao\"}[$__rate_interval]))",
+          "legendFormat": "{{op}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "ok = Hải quan tiếp nhận; rejected = VNACCS trả lỗi nghiệp vụ/lỗi vĩnh viễn; error = lỗi tạm sẽ thử lại",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      }
+    },
+    {
+      "type": "row",
+      "title": "Hàng đợi job",
+      "id": 21,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Job đang chờ (waiting)",
+      "id": 22,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max by (queue) (khaibao_queue_jobs{project=\"khaibao\",state=\"waiting\",queue=~\"$queue\"})",
+          "legendFormat": "{{queue}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 40
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Job đang chạy / trễ",
+      "id": 23,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max by (queue) (khaibao_queue_jobs{project=\"khaibao\",state=\"active\",queue=~\"$queue\"})",
+          "legendFormat": "active · {{queue}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max by (queue) (khaibao_queue_jobs{project=\"khaibao\",state=\"delayed\",queue=~\"$queue\"})",
+          "legendFormat": "delayed · {{queue}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 40
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Job lỗi đang giữ trong queue",
+      "id": 24,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max by (queue) (khaibao_queue_jobs{project=\"khaibao\",state=\"failed\",queue=~\"$queue\"})",
+          "legendFormat": "{{queue}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Số job failed BullMQ còn giữ (removeOnFail) – không phải tốc độ lỗi",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 40
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kết quả job / 5 phút",
+      "id": 25,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (queue, outcome) (increase(khaibao_jobs_total{project=\"khaibao\",queue=~\"$queue\"}[5m]))",
+          "legendFormat": "{{queue}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 thời gian chạy job",
+      "id": 26,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, queue) (rate(khaibao_job_duration_seconds_bucket{project=\"khaibao\",queue=~\"$queue\"}[15m])))",
+          "legendFormat": "{{queue}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      }
+    },
+    {
+      "type": "row",
+      "title": "AI",
+      "id": 27,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Lời gọi AI / 5 phút",
+      "id": 28,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (kind, outcome) (increase(khaibao_ai_calls_total{project=\"khaibao\"}[5m]))",
+          "legendFormat": "{{kind}} · {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 57
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Lời gọi theo model / 1 giờ",
+      "id": 29,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (model) (increase(khaibao_ai_calls_total{project=\"khaibao\"}[1h]))",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 57
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Chi phí AI 24 giờ (VND)",
+      "id": 30,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum(increase(khaibao_ai_cost_vnd_total{project=\"khaibao\"}[24h]))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "locale",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "justifyMode": "auto"
+      },
+      "description": "Ước tính theo chỉ số tiến trình (reset khi khởi động lại được increase() bù). Số tiền chuẩn: bảng usage_events.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 57
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Chi phí AI theo ngày (VND)",
+      "id": 31,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (kind) (increase(khaibao_ai_cost_vnd_total{project=\"khaibao\"}[1d]))",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "locale",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 65
+      }
+    },
+    {
+      "type": "row",
+      "title": "Nghiệp vụ",
+      "id": 32,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Tờ khai được chấp nhận / ngày",
+      "id": 33,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (kind) (increase(khaibao_declarations_accepted_total{project=\"khaibao\"}[1d]))",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 73
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Thông điệp Hải quan / giờ",
+      "id": 34,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (outcome) (increase(khaibao_customs_messages_total{project=\"khaibao\"}[1h]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 73
+      }
+    },
+    {
+      "type": "row",
+      "title": "Postgres / Redis",
+      "id": 35,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 81
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Kết nối Postgres",
+      "id": 36,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (state) (pg_stat_activity_count{project=\"khaibao\"})",
+          "legendFormat": "{{state}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(pg_settings_max_connections{project=\"khaibao\"})",
+          "legendFormat": "max_connections",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 82
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache hit Postgres (khaibao)",
+      "id": 37,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum(rate(pg_stat_database_blks_hit{project=\"khaibao\",datname=\"khaibao\"}[5m])) / clamp_min(sum(rate(pg_stat_database_blks_hit{project=\"khaibao\",datname=\"khaibao\"}[5m])) + sum(rate(pg_stat_database_blks_read{project=\"khaibao\",datname=\"khaibao\"}[5m])), 1e-9)",
+          "legendFormat": "hit ratio",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 82
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Giao dịch Postgres / giây",
+      "id": 38,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum(rate(pg_stat_database_xact_commit{project=\"khaibao\",datname=\"khaibao\"}[5m]))",
+          "legendFormat": "commit",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum(rate(pg_stat_database_xact_rollback{project=\"khaibao\",datname=\"khaibao\"}[5m]))",
+          "legendFormat": "rollback",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 82
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Bộ nhớ Redis",
+      "id": 39,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(redis_memory_used_bytes{project=\"khaibao\"})",
+          "legendFormat": "used",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(redis_memory_max_bytes{project=\"khaibao\"})",
+          "legendFormat": "maxmemory",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 90
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kết nối Redis",
+      "id": 40,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(redis_connected_clients{project=\"khaibao\"})",
+          "legendFormat": "clients",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max(redis_blocked_clients{project=\"khaibao\"})",
+          "legendFormat": "blocked (BullMQ chờ job)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 90
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Lệnh Redis / giây",
+      "id": 41,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum(rate(redis_commands_processed_total{project=\"khaibao\"}[5m]))",
+          "legendFormat": "commands",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 90
+      }
+    },
+    {
+      "type": "row",
+      "title": "Container khaibao (cAdvisor)",
+      "id": 42,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 98
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU theo container (core)",
+      "id": 43,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"khaibao-.+\"}[5m]))",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 99
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "RAM theo container (working set)",
+      "id": 44,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "max by (name) (container_memory_working_set_bytes{name=~\"khaibao-.+\"})",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 99
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Mạng vào/ra theo container",
+      "id": 45,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "sum by (name) (rate(container_network_receive_bytes_total{name=~\"khaibao-.+\"}[5m]))",
+          "legendFormat": "rx · {{name}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "-sum by (name) (rate(container_network_transmit_bytes_total{name=~\"khaibao-.+\"}[5m]))",
+          "legendFormat": "tx · {{name}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 107
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Ổ đĩa VPS còn trống",
+      "id": 46,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hscodepro-prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "hscodepro-prometheus"
+          },
+          "expr": "min by (mountpoint) (node_filesystem_avail_bytes{mountpoint=~\"/|/rootfs|/host|/host/root\",fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{mountpoint=~\"/|/rootfs|/host|/host/root\",fstype!~\"tmpfs|overlay|squashfs\"})",
+          "legendFormat": "{{mountpoint}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 107
+      }
+    },
+    {
+      "type": "row",
+      "title": "Log (Loki)",
+      "id": 47,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 115
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Số dòng log theo service",
+      "id": 48,
+      "datasource": {
+        "type": "loki",
+        "uid": "hscodepro-loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "hscodepro-loki"
+          },
+          "expr": "sum by (compose_service) (count_over_time({compose_project=\"khaibao\"}[$__interval]))",
+          "legendFormat": "{{compose_service}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 116
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Dòng log mức error theo service",
+      "id": 49,
+      "datasource": {
+        "type": "loki",
+        "uid": "hscodepro-loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "hscodepro-loki"
+          },
+          "expr": "sum by (compose_service) (count_over_time({compose_project=\"khaibao\"} |= \"\\\"level\\\":\\\"error\\\"\" [$__interval]))",
+          "legendFormat": "{{compose_service}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Log JSON của web/worker (createLogger): \"level\":\"error\"",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 116
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Lỗi, exception, [usage], [billing]",
+      "id": 50,
+      "datasource": {
+        "type": "loki",
+        "uid": "hscodepro-loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "hscodepro-loki"
+          },
+          "expr": "{compose_project=\"khaibao\", compose_service=~\"$service\"} |~ \"(?i)error|exception|\\\\[usage\\\\]|\\\\[billing\\\\]\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 124
+      }
+    }
+  ]
+}

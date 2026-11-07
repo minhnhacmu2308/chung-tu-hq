@@ -3,6 +3,7 @@
 // Dev: trỏ FPT_API_BASE_URL tới apps/fpt-mock (http://localhost:7070). KHÔNG trỏ tới cổng thật khi dev – cổng thật là production.
 import { z } from "zod";
 import type { FptVnaccsCredentials } from "@kb/contracts";
+import { fptOutcome, observeFpt } from "../../../observability/index.js";
 import { domainError } from "../../../shared/errors.js";
 import type { FptCallMeta, FptHttpClient, FptOperation } from "./fpt-vnaccs-gateway.js";
 import type { FptExchange } from "./fpt-trace.js";
@@ -20,7 +21,7 @@ const LoginResponseSchema = z.object({ token: z.string().min(1), expiration: z.i
 
 /** Lỗi tạm (mạng, timeout, 429, 5xx) – ném Error thường để BullMQ retry; lỗi vĩnh viễn ném DomainError. */
 export class FptTransientError extends Error {
-  constructor(message: string, readonly status?: number) { super(message); this.name = "FptTransientError"; }
+  constructor(message: string, readonly status?: number, readonly timeout = false) { super(message); this.name = "FptTransientError"; }
 }
 
 export type FptRestClientOptions = {
@@ -55,6 +56,7 @@ export class FptRestClient implements FptHttpClient {
     let status: number | null = null;
     let responseText: string | null = null;
     let error: string | null = null;
+    let thrown: unknown;
     try {
       let res = await this.send(FPT_PATHS[op], payload, await this.getToken());
       status = res.status;
@@ -68,8 +70,10 @@ export class FptRestClient implements FptHttpClient {
       return await this.readJson(op, res, (text) => { responseText = text; });
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
+      thrown = e;
       throw e;
     } finally {
+      observeFpt(op, fptOutcome(thrown), (performance.now() - started) / 1000);
       if (this.opts.trace && meta) {
         try {
           this.opts.trace({ ...meta, operation: op, path: FPT_PATHS[op], at, status, durationMs: performance.now() - started, request: payload, responseText, error });
@@ -117,7 +121,7 @@ export class FptRestClient implements FptHttpClient {
       });
     } catch (e) {
       const timeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
-      throw new FptTransientError(timeout ? `FPT không phản hồi sau ${this.opts.timeoutMs ?? 60_000}ms (${path})` : `Không kết nối được FPT (${path}): ${e instanceof Error ? e.message : String(e)}`);
+      throw new FptTransientError(timeout ? `FPT không phản hồi sau ${this.opts.timeoutMs ?? 60_000}ms (${path})` : `Không kết nối được FPT (${path}): ${e instanceof Error ? e.message : String(e)}`, undefined, timeout);
     }
   }
 

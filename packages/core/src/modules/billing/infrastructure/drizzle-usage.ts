@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { Db } from "../../../db/client.js";
+import { addAiCostVnd } from "../../../observability/index.js";
 import { usageEvents } from "../../../db/schema/billing.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import { Decimal, dec, toDecimalString } from "../../../shared/decimal.js";
@@ -31,15 +32,19 @@ export class DrizzleUsageRecorder {
     // Có dedupeKey → id suy từ khóa, trùng thì bỏ qua (ràng buộc khóa chính): retry sau khi AI đã trả lời không ghi hai lần.
     const id = e.dedupeKey ? usageIdFor(e.dedupeKey) : ulidIdGen.next("use");
     const usd = costUsd(e.model, e.inputTokens, e.outputTokens);
-    await withCtx(this.db, { orgId: asOrgId(e.orgId), userId: asUserId("") }, (tx) =>
+    const vnd = usd.mul(this.usdVnd);
+    const inserted = await withCtx(this.db, { orgId: asOrgId(e.orgId), userId: asUserId("") }, (tx) =>
       tx
         .insert(usageEvents)
         .values({
           id, orgId: e.orgId, dossierId: e.dossierId, documentId: e.documentId, kind: e.kind, provider: e.provider, model: e.model, inputTokens: e.inputTokens, outputTokens: e.outputTokens,
-          costUsd: toDecimalString(usd, 6), costVnd: toDecimalString(usd.mul(this.usdVnd), 2), ...(e.dedupeKey ? { meta: { dedupeKey: e.dedupeKey } } : {}),
+          costUsd: toDecimalString(usd, 6), costVnd: toDecimalString(vnd, 2), ...(e.dedupeKey ? { meta: { dedupeKey: e.dedupeKey } } : {}),
         })
-        .onConflictDoNothing({ target: usageEvents.id }),
+        .onConflictDoNothing({ target: usageEvents.id })
+        .returning({ id: usageEvents.id }),
     );
+    // Chỉ số theo dõi (ADR 0012): chỉ cộng khi dòng mới được ghi – job chạy lại trùng dedupeKey không cộng hai lần.
+    if (inserted.length > 0) addAiCostVnd(e.kind, vnd.toNumber());
     return id;
   }
   /** Chi phí AI (VND) từ 00:00 giờ VN của ngày chứa `now` – cho trần chi phí/ngày. */

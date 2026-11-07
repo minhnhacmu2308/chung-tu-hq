@@ -29,6 +29,9 @@
       ],
       "@kb/core/config": [
         "packages/core/src/config/index.ts"
+      ],
+      "@kb/core/observability": [
+        "packages/core/src/observability/index.ts"
       ]
     }
   }

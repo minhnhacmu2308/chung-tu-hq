@@ -22,7 +22,7 @@ apps/web          CHỈ ghép component + utility token. Không tự định ngh
 |---|---|---|
 | Nền | `bg-bg` (trang), `bg-surface` (thẻ, ô nhập), `bg-surface-muted` (vùng phụ) | |
 | Chữ | `text-fg`, `text-fg-muted`, `text-fg-subtle` | Cả 3 đều đạt AA 4.5:1 trên mọi nền – có test |
-| Viền | `border-border`, `border-border-strong`, `border-input-border` | `input-border`: viền ô nhập/chọn, đạt 3:1 với nền (WCAG 1.4.11) – có test |
+| Viền | `border-border`, `border-border-strong`, `border-input-border` | `input-border`: viền ô nhập/chọn – xám nhạt (gray-400, ≥ 2,2:1 và đậm hơn `border`), rê chuột đậm lên, focus đổi màu focus + quầng; không dùng gray-500 (nhìn như viền đen). Ô đánh dấu/nút chọn (`control-border`) vẫn 3:1 – có test |
 | Thương hiệu | `bg-primary` / `text-primary-fg`, `hover:bg-primary-hover`, `bg-primary-subtle` / `text-primary-subtle-fg`, `ring-focus` | **Khách đổi được** |
 | Trạng thái | `{success,warning,danger,info,neutral}` × `{"", -fg, -subtle, -subtle-fg}` | **Khóa** – đỏ luôn là lỗi |
 | Bo góc | `rounded-sm/md/lg/full` | Theo tùy chọn Bo góc (mặc định 6/10/14px) |

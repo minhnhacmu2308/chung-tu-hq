@@ -65,9 +65,11 @@ describe.each(MATRIX)("tương phản – dải xám $gray, chế độ $mode", 
     expect(c(`--kb-color-${tone}-subtle-fg`, `--kb-color-${tone}-subtle`)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
   });
 
-  it("viền ô nhập / ô chọn đạt 3:1 trên surface và bg (WCAG 1.4.11)", () => {
+  it("viền ô nhập đủ rõ (≥ 2,2:1, đậm hơn border thường) và ô đánh dấu/nút chọn đạt 3:1 trên surface và bg", () => {
     for (const bg of ["--kb-color-surface", "--kb-color-bg"]) {
-      expect(c("--kb-color-input-border", bg), `input-border trên ${bg}`).toBeGreaterThanOrEqual(3);
+      // Ô nhập: PO chốt nhạt hơn 3:1 cho đỡ thô; ô vẫn nhận ra nhờ nhãn, nền surface, viền đậm hơn border thường, hover/focus.
+      expect(c("--kb-color-input-border", bg), `input-border trên ${bg}`).toBeGreaterThanOrEqual(2.2);
+      expect(c("--kb-color-input-border", bg), `input-border đậm hơn border trên ${bg}`).toBeGreaterThan(c("--kb-color-border", bg));
       expect(c("--kb-color-control-border", bg), `control-border trên ${bg}`).toBeGreaterThanOrEqual(3);
     }
   });

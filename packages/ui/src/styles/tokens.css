@@ -59,8 +59,9 @@
   --kb-color-selection: color-mix(in oklab, var(--kb-color-primary) 22%, transparent);
   /* Viền ô đánh dấu/nút chọn khi chưa chọn: đậm hơn viền thường để đạt tương phản 3:1 với nền. */
   --kb-color-control-border: light-dark(var(--kb-gray-500), var(--kb-gray-400));
-  /* Viền ô nhập (input, select, combobox, chọn ngày): đạt 3:1 với nền (WCAG 1.4.11) ở cả sáng và tối – border thường quá nhạt để nhận ra ô. */
-  --kb-color-input-border: var(--kb-gray-500);
+  /* Viền ô nhập (input, select, combobox, chọn ngày): gray-400 – vẫn rõ hơn border thường để nhận ra ô (≥ 2,2:1 với nền) mà không thô;
+     rê chuột đậm lên (fg-subtle), focus đổi màu focus + quầng. Gray-500 (3:1) nhìn như viền đen trên form dày ô – PO chốt 2026-11-08. */
+  --kb-color-input-border: light-dark(var(--kb-gray-400), var(--kb-gray-600));
   --kb-color-scrollbar: light-dark(var(--kb-gray-300), var(--kb-gray-700));
 
   /* Thương hiệu – mặc định = createBrandTheme("#0F6B55"), tenant ghi đè */

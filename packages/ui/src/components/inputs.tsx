@@ -8,7 +8,7 @@ import { useFieldControl, useFieldLabelId } from "./field.js";
 import { Tooltip } from "./tooltip.js";
 
 const control = [
-  // Viền ô: token input-border (đạt 3:1 – nhận ra ô). Chữ ≥ 16px trên màn cảm ứng để iOS Safari không tự phóng to khi chạm vào ô
+  // Viền ô: token input-border (xám nhạt, rê chuột đậm lên – nhận ra ô mà không thô). Chữ ≥ 16px trên màn cảm ứng để iOS Safari không tự phóng to khi chạm vào ô
   // (max() vì cỡ chữ gốc có thể là 15px ở mật độ "sm").
   "w-full rounded-md border border-input-border bg-surface text-fg text-sm pointer-coarse:text-[max(1rem,16px)]",
   "placeholder:text-fg-subtle",

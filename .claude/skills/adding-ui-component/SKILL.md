@@ -38,7 +38,7 @@ App không được tự vá giao diện. Thiếu gì → thêm vào `packages/u
 - **Phần tử dính** dùng `top-shell` / biến `--kb-shell-top` (menu có thể nằm trên).
 - **SVG nhiều hình chồng nhau**: `fill-rule="evenodd"` chỉ đặt cho path có lỗ; hình chồng lên nhau để path riêng (nếu gộp, chỗ chồng bị thủng).
 - **Tùy chọn giao diện mới**: ngoài các bước ở bảng trên, thêm **hình mô phỏng** cho từng lựa chọn trong `AppearancePanel` (kích thước/màu của hình không được phụ thuộc chính tùy chọn đó) và đặt vào đúng tab (Chung / Bố cục & chữ / Màu sắc).
-- **Màu mới cho control** (viền, vùng chọn, thanh cuộn…): thêm token `--kb-color-*` trong `tokens.css` bằng `light-dark()`; phần tử tương tác chưa chọn cần tương phản ≥ 3:1 với nền.
+- **Màu mới cho control** (viền, vùng chọn, thanh cuộn…): thêm token `--kb-color-*` trong `tokens.css` bằng `light-dark()`; ô đánh dấu/nút chọn chưa chọn cần tương phản ≥ 3:1 với nền; viền ô nhập dùng `input-border` (xám nhạt ≥ 2,2:1, đậm hơn `border`, rê chuột/focus làm rõ) – không đậm hơn để tránh nhìn thô.
 - **Trạng thái nghiệp vụ mới**: thêm vào `STATUS_META` + `STATUS_LABELS_EN` (TypeScript bắt thiếu nhãn EN).
 - Component mới phải có trong **playground** và một dòng trong bảng `docs/DESIGN-SYSTEM.md` §4; thứ thay cho cách làm cũ → thêm dòng vào bảng "Cần gì → dùng gì" của skill `building-frontend-feature`.
 

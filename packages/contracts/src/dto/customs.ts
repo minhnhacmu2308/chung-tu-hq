@@ -28,6 +28,52 @@ export const CustomsMessageSchema = z.object({
 });
 export type CustomsMessage = z.infer<typeof CustomsMessageSchema>;
 
+/**
+ * GỠ LỖI TẠM (env FPT_DEBUG_TRACE): một lần gọi HTTP tới FPT – body gửi đi (đúng như gửi, kể cả objVNACCS_ACCOUNT) và phản hồi thô.
+ * Mật khẩu / terminal key / token đã che; chuỗi rất dài (base64 tệp, EDI) cắt bớt. Bỏ tính năng: grep "FPT_DEBUG_TRACE".
+ */
+export const FptTraceEntrySchema = z.object({
+  id: z.string(),
+  at: IsoDateTimeSchema,
+  /** Mã nghiệp vụ FPT (IDA, IDC, IID, VNACCSREP…). */
+  operation: z.string(),
+  path: z.string(),
+  /** null = lời gọi chung của doanh nghiệp (VNACCSREP – lấy thông điệp mọi tờ khai). */
+  dossierId: z.string().nullable(),
+  /** HTTP status; null khi không kết nối được. */
+  status: z.number().int().nullable(),
+  durationMs: z.number().int().nonnegative(),
+  request: z.unknown(),
+  /** JSON đã parse; phản hồi không phải JSON → chuỗi thô. */
+  response: z.unknown(),
+  error: z.string().nullable(),
+});
+export type FptTraceEntry = z.infer<typeof FptTraceEntrySchema>;
+export const FptTraceViewSchema = z.object({ enabled: z.boolean(), entries: z.array(FptTraceEntrySchema) });
+export type FptTraceView = z.infer<typeof FptTraceViewSchema>;
+
+/**
+ * GỠ LỖI TẠM (env FPT_DEBUG_TRACE): body IDA/EDA (hoặc IDA01/EDA01) mỗi tờ sẽ gửi FPT nếu truyền ngay bây giờ – dựng bằng đúng hàm của lần truyền thật, KHÔNG gọi FPT.
+ * `objVNACCS_ACCOUNT` không nằm trong `request` (client HTTP thêm lúc gửi). Còn blocker / sai đặc tả / thiếu ô bắt buộc thì vẫn trả body để soi, kèm danh sách lỗi.
+ */
+export const FptPreviewSheetSchema = z.object({
+  branch: z.number().int().positive(),
+  of: z.number().int().positive(),
+  operation: z.string(),
+  path: z.string(),
+  request: z.unknown(),
+  /** Thiếu ô bắt buộc trên tờ khai (như khi bấm Truyền). */
+  missing: z.string().nullable(),
+  /** Chặn gửi (dữ liệu chưa dựng được chỉ tiêu). */
+  blockers: z.array(z.string()),
+  /** Sai đặc tả FPT (Required, kiểu, độ dài) – kiểm cả ở lúc dựng và ở schema cổng. */
+  issues: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+export type FptPreviewSheet = z.infer<typeof FptPreviewSheetSchema>;
+export const FptPreviewSchema = z.object({ enabled: z.boolean(), sheets: z.array(FptPreviewSheetSchema) });
+export type FptPreview = z.infer<typeof FptPreviewSchema>;
+
 export const CustomsResultSchema = z.object({
   dossierId: z.string(),
   declarationNo: z.string(),

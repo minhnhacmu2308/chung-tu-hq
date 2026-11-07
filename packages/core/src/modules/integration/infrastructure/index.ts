@@ -16,9 +16,12 @@ import { createCertificateReader, createCustomsDossierPort, createCustomsValidat
 import { customsHubProbe } from "./customs-hub-probe.js";
 import { DrizzleCustomsUow } from "./drizzle-customs-uow.js";
 import { DrizzleIntegrationStatusRepo } from "./drizzle-status-repo.js";
+import type { Redis } from "ioredis";
 import { FPT_PATHS, FptRestClient, FptTransientError } from "./fpt-rest-client.js";
+import { RedisFptTrace, type FptExchange } from "./fpt-trace.js";
 import { FptHttpClientStub, FptVnaccsGateway, type FptHttpClient, type VnaccsCredentialsReader } from "./fpt-vnaccs-gateway.js";
 
+export { RedisFptTrace, toTraceEntry, type FptExchange } from "./fpt-trace.js";
 export { DrizzleCustomsUow, DrizzleIntegrationStatusRepo, FakeCustomsGateway, FPT_PATHS, FptHttpClientStub, FptRestClient, FptTransientError, FptVnaccsGateway, type FptHttpClient, type VnaccsCredentialsReader };
 export { createCertificateReader, createCustomsDossierPort, createCustomsValidationReader, createDeclarationReader, createVnaccsCredentialsReader };
 
@@ -36,16 +39,23 @@ export function createCustomsGateway(env: Env, creds: VnaccsCredentialsReader, h
 }
 
 /** Client HTTP FPT theo env; thiếu cấu hình → null. */
-export function createFptHttpClient(env: Env, opts: { timeoutMs?: number } = {}): FptRestClient | null {
+export function createFptHttpClient(env: Env, opts: { timeoutMs?: number; trace?: (e: FptExchange) => void } = {}): FptRestClient | null {
   if (!env.FPT_API_BASE_URL || !env.FPT_API_USERNAME || !env.FPT_API_PASSWORD) return null;
-  return new FptRestClient({ baseUrl: env.FPT_API_BASE_URL, username: env.FPT_API_USERNAME, password: env.FPT_API_PASSWORD, timeoutMs: opts.timeoutMs ?? env.FPT_API_TIMEOUT_MS });
+  return new FptRestClient({ baseUrl: env.FPT_API_BASE_URL, username: env.FPT_API_USERNAME, password: env.FPT_API_PASSWORD, timeoutMs: opts.timeoutMs ?? env.FPT_API_TIMEOUT_MS, ...(opts.trace ? { trace: opts.trace } : {}) });
 }
 
 export function createCustomsInfrastructure(opts: {
   db: Db; env: Env; queue: JobQueue; declaration: DeclarationDeps; dossier: DossierDeps; validation: ValidationDeps; identity: IdentityDeps; creds?: VnaccsCredentialsReader; gateway?: CustomsGateway; clock?: Clock;
+  /** GỠ LỖI TẠM (FPT_DEBUG_TRACE): nơi lưu nhật ký API FPT. */
+  redis?: Redis;
 }): CustomsDeps {
-  const gateway = opts.gateway ?? createCustomsGateway(opts.env, opts.creds ?? createVnaccsCredentialsReader(opts.identity, envVnaccsCredentials(opts.env)));
+  // GỠ LỖI TẠM (FPT_DEBUG_TRACE): chỉ khi gọi FPT thật qua HTTP.
+  const fptTrace = !opts.gateway && opts.env.FPT_DEBUG_TRACE && opts.env.CUSTOMS_GATEWAY === "fpt" && opts.redis ? new RedisFptTrace(opts.redis) : undefined;
+  const http = fptTrace ? createFptHttpClient(opts.env, { trace: (e) => fptTrace.record(e) }) ?? undefined : undefined;
+  const gateway = opts.gateway ?? createCustomsGateway(opts.env, opts.creds ?? createVnaccsCredentialsReader(opts.identity, envVnaccsCredentials(opts.env)), http);
   return {
+    ...(fptTrace ? { fptTrace } : {}),
+    ...(!opts.gateway && opts.env.FPT_DEBUG_TRACE ? { fptDebug: true } : {}),
     uow: new DrizzleCustomsUow(opts.db), queue: opts.queue, gateway,
     declarations: createDeclarationReader(opts.declaration), dossiers: createCustomsDossierPort(opts.dossier), validation: createCustomsValidationReader(opts.validation), certificates: createCertificateReader(opts.identity),
     audit: opts.declaration.audit, org: { fourEyes: async (orgId) => (await opts.declaration.org.get(orgId)).fourEyes },

@@ -5,7 +5,7 @@ import * as mock from "@/mocks/api/customs";
 import * as http from "./http/customs";
 
 export const customsKeys = mock.customsKeys;
-export type { BranchSubmission, CustomsRow, OperationResult, PipelineRow, RecallAllResult, PipelineStatus, SubmissionView } from "@kb/contracts";
+export type { BranchSubmission, CustomsRow, FptPreview, FptPreviewSheet, FptTraceEntry, FptTraceView, OperationResult, PipelineRow, RecallAllResult, PipelineStatus, SubmissionView } from "@kb/contracts";
 
 export const listCertificates = pick(mock.listCertificates, http.listCertificates);
 export const getSubmission = pick(mock.getSubmission, http.getSubmission);
@@ -16,3 +16,6 @@ export const declareAllSheets = pick(mock.declareAllSheets, http.declareAllSheet
 export const recallAllSheets = pick(mock.recallAllSheets, http.recallAllSheets);
 export const startPostAmendment = pick(mock.startPostAmendment, http.startPostAmendment);
 export const listCustomsDeclarations = pick(mock.listCustomsDeclarations, http.listCustomsDeclarations);
+/** GỠ LỖI TẠM (FPT_DEBUG_TRACE). */
+export const getFptTrace = pick(mock.getFptTrace, http.getFptTrace);
+export const getFptPreview = pick(mock.getFptPreview, http.getFptPreview);

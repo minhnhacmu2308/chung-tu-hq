@@ -34,6 +34,7 @@ import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
+import { FptPreviewButton, FptTracePanel } from "./fpt-trace-panel";
 import { HysCard } from "./hys/hys-card";
 import { HysSuggestDialog } from "./hys/hys-suggest-dialog";
 import { HYS_MESSAGES } from "./hys/hys.messages";
@@ -606,6 +607,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         >
           {fill(t.signSend, { op: next.op })}
         </Button>
+        {/* GỠ LỖI TẠM (FPT_DEBUG_TRACE): xem body sẽ gửi trước khi bấm truyền. */}
+        <FptPreviewButton dossierId={dossier.id} />
       </div>
     ) : null;
   const certNote =
@@ -828,6 +831,9 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       {s.customsInfo && <CustomsInfoPanel kind={kind} info={s.customsInfo} estimate={estimateOf(declQ.data?.declaration)} />}
 
       <MessageLog messages={s.messages} />
+
+      {/* GỠ LỖI TẠM (FPT_DEBUG_TRACE): body gửi FPT + phản hồi thô. */}
+      <FptTracePanel dossierId={dossier.id} refreshAt={subQ.dataUpdatedAt} />
 
       {confirmDialog}
     </Stack>

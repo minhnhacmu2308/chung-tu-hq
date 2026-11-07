@@ -6,7 +6,7 @@ import {
   awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, isActiveSheet, recallOpFor, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, sheetApproved, sheetOrderWait, stageAfter,
   declarationEditScope, editBlockFor, sheetOfLine, type DeclarationEditScope, type DeclarationStatus, type EditSheet, type EditTarget, type SentSnapshot,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type RecallAllResult, type PipelineRow, type PipelineStatus,
-  type CustomsError, type CustomsInfo, type ResendResult, type SubmissionView,
+  type CustomsError, type CustomsInfo, type FptPreview, type FptTraceEntry, type FptTraceView, type ResendResult, type SubmissionView,
 } from "@kb/contracts";
 import { computeTaxes } from "@/mocks/declaration-builder";
 import { formatVnd } from "@/lib/format";
@@ -28,6 +28,9 @@ export const customsKeys = {
   submission: (id: string) => ["customs", "submission", id] as const,
   list: ["customs", "list"] as const,
   certificates: ["customs", "certificates"] as const,
+  /** GỠ LỖI TẠM (FPT_DEBUG_TRACE). */
+  fptTrace: (id: string) => ["customs", "fpt-trace", id] as const,
+  fptPreview: (id: string) => ["customs", "fpt-preview", id] as const,
 };
 
 /** Hải quan (mô phỏng) trả lời mỗi nghiệp vụ sau 2,5 giây. */
@@ -848,6 +851,45 @@ export const getSubmission = (dossierId: string) =>
     const now = Date.now();
     settle(db, now);
     return view(db, dossierId, now);
+  });
+
+/**
+ * GỠ LỖI TẠM (FPT_DEBUG_TRACE): mô phỏng nhật ký API FPT từ nhật ký thông điệp – thông điệp OUT là body gửi, thông điệp IN cùng nghiệp vụ kế tiếp là phản hồi.
+ * Backend thật lưu nguyên văn body/phản hồi HTTP; mock chỉ để xem giao diện.
+ */
+export const getFptTrace = (dossierId: string) =>
+  mutate((db): FptTraceView => {
+    const now = Date.now();
+    settle(db, now);
+    const msgs = [...view(db, dossierId, now).messages].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    const parse = (text: string): unknown => {
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        return text;
+      }
+    };
+    const entries = msgs.flatMap((m, i): FptTraceEntry[] => {
+      if (m.direction !== "OUT") return [];
+      const reply = msgs.slice(i + 1).find((x) => x.direction === "IN" && x.operation === m.operation);
+      return [{
+        id: m.id, at: m.at, operation: m.operation, path: `/api/${m.operation}`, dossierId, status: reply ? 200 : null,
+        durationMs: reply ? Math.max(0, Date.parse(reply.at) - Date.parse(m.at)) : 0,
+        request: { objVNACCS_ACCOUNT: { useR_ID: "BI820001", password: "***", terminaL_ID: "Z9999M", terminaL_ACCESS_KEY: "***" }, ...(parse(m.payloadPreview) as object) },
+        response: reply ? parse(reply.payloadPreview) : null, error: null,
+      }];
+    });
+    return { enabled: true, entries: entries.reverse() };
+  });
+
+/** GỠ LỖI TẠM (FPT_DEBUG_TRACE): mô phỏng xem trước body – mock không dựng thông điệp FPT, chỉ đủ để xem giao diện. */
+export const getFptPreview = (dossierId: string) =>
+  query((db): FptPreview => {
+    const decl = db.declarations.find((d) => d.dossierId === dossierId);
+    if (!decl) return { enabled: true, sheets: [] };
+    const op = decl.kind === "EDA" ? "EDA" : "IDA";
+    const head = Object.fromEntries(decl.fields.filter((f) => f.value).map((f) => [f.code, f.value]));
+    return { enabled: true, sheets: [{ branch: 1, of: 1, operation: op, path: `/api/${op}`, request: { [`objVN_${op}`]: head }, missing: null, blockers: [], issues: [], warnings: [] }] };
   });
 
 /** Danh sách tờ khai đã duyệt / đang / đã truyền cho màn "Khai báo Hải quan": mỗi tờ khai nhánh một dòng (các dòng cùng hồ sơ liền nhau). */

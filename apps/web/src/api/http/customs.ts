@@ -1,6 +1,6 @@
 // Bước 6: truyền tờ khai, nhật ký, màn Khai báo Hải quan – gọi backend thật. Cùng chữ ký với src/mocks/api/customs.ts.
 // `branch`: tờ khai nhánh (lô > 50 dòng tách nhiều tờ), mặc định tờ 1.
-import { CustomsRowSchema, OperationResultSchema, RecallAllResultSchema, ResendResultSchema, SubmissionViewSchema, type CustomsOperation } from "@kb/contracts";
+import { CustomsRowSchema, FptPreviewSchema, FptTraceViewSchema, OperationResultSchema, RecallAllResultSchema, ResendResultSchema, SubmissionViewSchema, type CustomsOperation } from "@kb/contracts";
 import { z } from "zod";
 import { apiGet, apiPost } from "@/lib/http";
 import { listCertificates } from "./settings";
@@ -19,3 +19,7 @@ export const startPostAmendment = async (dossierId: string, branch = 1) => {
   await apiPost(`dossiers/${dossierId}/submission/post-amendment`, { branch }, z.object({ ok: z.literal(true) }));
 };
 export const listCustomsDeclarations = () => apiGet("customs/declarations", z.array(CustomsRowSchema));
+/** GỠ LỖI TẠM (FPT_DEBUG_TRACE): body gửi FPT + phản hồi thô của hồ sơ. */
+export const getFptTrace = (dossierId: string) => apiGet(`dossiers/${dossierId}/submission/fpt-trace`, FptTraceViewSchema);
+/** GỠ LỖI TẠM (FPT_DEBUG_TRACE): body sẽ gửi FPT nếu truyền ngay – không gọi FPT. */
+export const getFptPreview = (dossierId: string) => apiGet(`dossiers/${dossierId}/submission/fpt-preview`, FptPreviewSchema);

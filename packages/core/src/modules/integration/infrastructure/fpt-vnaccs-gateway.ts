@@ -3,20 +3,23 @@
 // mỗi phần tử objEDA/objIDA = { objMsgResult, objVN_<KIND>, objVN_<KIND>_TRANGTHAI, … }.
 // externalId = số tờ khai VNACCS (tK_ECN/tK_ICN) – gọi lại/đăng ký/tra cứu theo số này. Đặc tả từng nghiệp vụ: docs/vnaccs-api
 // (nguồn lệch nhau: phản hồi thật > Excel đặc tả > Postman). Mã thông điệp theo REP_VNACCS.
-import { AmaRequestSchema, EdaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, IdaRequestSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
+import { AmaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
 import type { CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult } from "../application/customs-ports.js";
 import { parseCustomsInfo } from "../domain/customs-info.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
+import { fptContentBody, fptNumberField } from "../domain/fpt-content-body.js";
 
 export type FptOperation =
   | "IDA" | "IDB" | "IDC" | "IDD" | "IDA01" | "IDE" | "IID"
   | "EDA" | "EDB" | "EDC" | "EDD" | "EDA01" | "EDE" | "IEX"
   | "AMA" | "AMB" | "AMC" | "HYS" | "VNACCSREP";
+/** Lời gọi của doanh nghiệp / hồ sơ nào – cho nhật ký gỡ lỗi (FPT_DEBUG_TRACE). Không có dossierId = lời gọi chung (VNACCSREP). */
+export type FptCallMeta = { orgId: string; dossierId?: string };
 export interface FptHttpClient {
   /** Gửi `body` (client tự thêm `objVNACCS_ACCOUNT` + token); trả JSON thô. */
-  post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials): Promise<unknown>;
+  post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials, meta?: FptCallMeta): Promise<unknown>;
 }
 export interface VnaccsCredentialsReader {
   get(orgId: string): Promise<FptVnaccsCredentials | null>;
@@ -54,7 +57,7 @@ const channelOf = (luong: unknown): "GREEN" | "YELLOW" | "RED" | undefined => {
   const n = Number(luong ?? 0);
   return n === 1 ? "GREEN" : n === 2 ? "YELLOW" : n === 3 ? "RED" : undefined;
 };
-const numberField = (kind: "IDA" | "EDA") => (kind === "IDA" ? "tK_ICN" : "tK_ECN");
+const numberField = fptNumberField;
 /** Chiều của nghiệp vụ tờ khai: E… = xuất (EDA, EDB…, IEX), còn lại nhập. */
 const kindOfOp = (op: string): "IDA" | "EDA" => (op.startsWith("E") || op === "IEX" ? "EDA" : "IDA");
 /** Số tờ khai VNACCS: tờ khai xuất bắt đầu bằng 3, nhập bằng 1 (quy ước đánh số VNACCS). */
@@ -74,15 +77,15 @@ export class FptVnaccsGateway implements CustomsGateway {
     if (!c) throw domainError("INTEGRATION_NOT_CONFIGURED", "Chưa cấu hình tài khoản VNACCS (USER_ID, PASSWORD, TERMINAL_ID, TERMINAL_ACCESS_KEY) ở Tài khoản & tích hợp");
     return c;
   }
-  private async call(orgId: string, op: FptOperation, body: unknown) {
-    const env = FptResponseEnvelopeSchema.parse(await this.http.post(op, body, await this.credsFor(orgId)));
+  private async call(orgId: string, op: FptOperation, body: unknown, dossierId?: string) {
+    const env = FptResponseEnvelopeSchema.parse(await this.http.post(op, body, await this.credsFor(orgId), { orgId, ...(dossierId ? { dossierId } : {}) }));
     return { env: env as Obj, errors: toErrors(env), result: firstResult(env as Obj) };
   }
 
-  async preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown }) {
-    const parsed = (msg.kind === "IDA" ? IdaRequestSchema : EdaRequestSchema).safeParse(msg.request);
-    if (!parsed.success) return { externalId: "", errors: parsed.error.issues.map(describeSchemaIssue) };
-    const { errors, result } = await this.call(orgId, msg.kind, parsed.data);
+  async preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId?: string }) {
+    const built = fptContentBody(msg.kind, msg.request);
+    if (!built.ok) return { externalId: "", errors: built.issues };
+    const { errors, result } = await this.call(orgId, msg.kind, built.body, msg.dossierId);
     if (errors) return { externalId: "", errors };
     const head = sub(result?.item, `objVN_${msg.kind}`);
     const no = String(head[numberField(msg.kind)] ?? (result?.item["objMsgResult"] as Obj | undefined)?.["decNumber"] ?? "");
@@ -90,11 +93,11 @@ export class FptVnaccsGateway implements CustomsGateway {
     return { externalId: no, declarationNo: no, ...(result ? { info: parseCustomsInfo(result.kind, result.item, new Date()) } : {}) };
   }
 
-  async declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string }) {
+  async declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId?: string }) {
     const kind = msg.kind === "IDC" ? "IDA" : "EDA";
     const no = declarationNoOf(msg.externalId);
     if (!no) return { accepted: false, errors: [noNumberError(msg.kind)] };
-    const { errors, result } = await this.call(orgId, msg.kind, { [numberField(kind)]: Number(no) });
+    const { errors, result } = await this.call(orgId, msg.kind, { [numberField(kind)]: Number(no) }, msg.dossierId);
     if (errors) return { accepted: false, errors };
     const channel = channelOf(sub(result?.item, `objVN_${kind}_TRANGTHAI`)["tK_LUONG"]);
     return { accepted: true, ...(channel ? { channel } : {}), ...(result ? { info: parseCustomsInfo(result.kind, result.item, new Date()) } : {}) };
@@ -109,7 +112,7 @@ export class FptVnaccsGateway implements CustomsGateway {
     // Tài khoản VNACCS là chỉ tiêu bắt buộc của sheet HYS; client gửi trong objVNACCS_ACCOUNT – ở đây chỉ để kiểm đủ schema.
     const parsed = HysRequestSchema.safeParse({ ...(await this.credsFor(orgId)), ...body });
     if (!parsed.success) return { errors: parsed.error.issues.map(describeSchemaIssue) };
-    const { env, errors } = await this.call(orgId, "HYS", body);
+    const { env, errors } = await this.call(orgId, "HYS", body, req.dossierId);
     if (errors) return { errors };
     // Chỉ tiêu vô hướng FPT trả dạng số (tK_JNO, tK_STL…) → chuỗi. Phản hồi vẫn sai dạng → lỗi VĨNH VIỄN (DomainError):
     // Hải quan có thể đã tiếp nhận – không để worker coi là lỗi tạm và gửi lại thông điệp.
@@ -128,12 +131,12 @@ export class FptVnaccsGateway implements CustomsGateway {
    * - AMA (objVN_AMA + objVN_AMA_HANG, VNACCS_AMA v1.4) → số tờ khai bổ sung tK_SYN; AMB/AMC – body tK_SYN.
    * Container qua khu vực giám sát / lệ phí cảng: chưa nối (V5ContainerReq, KVGS – docs/vnaccs-api).
    */
-  async send(orgId: string, msg: { op: CustomsOperation; externalId?: string; request?: unknown }): Promise<GatewaySendResult> {
+  async send(orgId: string, msg: { op: CustomsOperation; externalId?: string; request?: unknown; dossierId?: string }): Promise<GatewaySendResult> {
     const op = msg.op;
     if (op === "AMA") {
       const parsed = AmaRequestSchema.safeParse(msg.request);
       if (!parsed.success) return { errors: parsed.error.issues.map(describeSchemaIssue) };
-      const { env, errors } = await this.call(orgId, "AMA", parsed.data);
+      const { env, errors } = await this.call(orgId, "AMA", parsed.data, msg.dossierId);
       if (errors) return { errors };
       const list = env["objAMA"];
       const head = Array.isArray(list) && list[0] && typeof list[0] === "object" ? sub(list[0] as Obj, "objVN_AMA") : {};
@@ -143,7 +146,7 @@ export class FptVnaccsGateway implements CustomsGateway {
     if (op === "AMB" || op === "AMC") {
       const syn = declarationNoOf(String((msg.request as Obj | undefined)?.["tK_SYN"] ?? ""));
       if (!syn) return { errors: [{ code: "E-AMA-NO-SYN", message: `${op}: chưa có số tờ khai bổ sung (tK_SYN) – khai AMA trước` }] };
-      const { errors } = await this.call(orgId, op, { tK_SYN: Number(syn) });
+      const { errors } = await this.call(orgId, op, { tK_SYN: Number(syn) }, msg.dossierId);
       if (errors) return { errors };
       return { receiptNo: syn, note: op === "AMB" ? "Đã gọi bản khai bổ sung về sửa" : "Hải quan đã đăng ký bản khai bổ sung" };
     }
@@ -151,7 +154,7 @@ export class FptVnaccsGateway implements CustomsGateway {
       const kind = kindOfOp(op);
       const no = declarationNoOf(msg.externalId);
       if (!no) return { errors: [noNumberError(op)] };
-      const { errors, result } = await this.call(orgId, op, { [numberField(kind)]: Number(no) });
+      const { errors, result } = await this.call(orgId, op, { [numberField(kind)]: Number(no) }, msg.dossierId);
       if (errors) return { errors };
       const code = msgOf(result?.item)["code"];
       return { note: `${op === "IDB" || op === "EDB" ? "Đã gọi tờ khai tạm về sửa" : "Đã gọi tờ khai về sửa đổi bổ sung"}${code ? ` (${String(code)})` : ""}` };
@@ -160,15 +163,10 @@ export class FptVnaccsGateway implements CustomsGateway {
       const kind = kindOfOp(op);
       const no = declarationNoOf(msg.externalId);
       if (!no) return { errors: [noNumberError(op)] };
-      const parsed = (kind === "IDA" ? IdaRequestSchema : EdaRequestSchema).safeParse(msg.request);
-      if (!parsed.success) return { errors: parsed.error.issues.map(describeSchemaIssue) };
-      // Khai tạm sửa đổi: cùng cấu trúc IDA/EDA, đầu tờ khai mang số tờ khai đã đăng ký.
-      // Chỉ thị Hải quan (objVN_<KIND>_CTHQ) gửi lại nguyên văn như đã nhận – lấy từ request gốc, không qua schema (không trim, không đổi kiểu).
-      const cthqKey = `objVN_${kind}_CTHQ`;
-      const cthq = (msg.request as Obj | undefined)?.[cthqKey];
-      const body = { ...(parsed.data as Obj), ...(cthq && typeof cthq === "object" ? { [cthqKey]: cthq } : {}) };
-      const head = { ...((body[`objVN_${kind}`] ?? {}) as Obj), [numberField(kind)]: Number(no) };
-      const { errors } = await this.call(orgId, op, { ...body, [`objVN_${kind}`]: head });
+      // Khai tạm sửa đổi: cùng cấu trúc IDA/EDA, đầu tờ khai mang số tờ khai đã đăng ký; chỉ thị CTHQ nguyên văn (fptContentBody).
+      const built = fptContentBody(kind, msg.request, { declarationNo: no });
+      if (!built.ok) return { errors: built.issues };
+      const { errors } = await this.call(orgId, op, built.body, msg.dossierId);
       if (errors) return { errors };
       return { note: "Hải quan tiếp nhận khai tạm sửa đổi" };
     }
@@ -176,7 +174,7 @@ export class FptVnaccsGateway implements CustomsGateway {
       const kind = kindOfOp(op);
       const no = declarationNoOf(msg.externalId);
       if (!no) return { errors: [noNumberError(op)] };
-      const { errors, result } = await this.call(orgId, op, { [numberField(kind)]: Number(no) });
+      const { errors, result } = await this.call(orgId, op, { [numberField(kind)]: Number(no) }, msg.dossierId);
       if (errors) return { errors };
       const channel = channelOf(sub(result?.item, `objVN_${kind}_TRANGTHAI`)["tK_LUONG"]);
       return { ...(channel ? { channel } : {}), note: "Hải quan đăng ký sửa đổi bổ sung" };
@@ -185,12 +183,12 @@ export class FptVnaccsGateway implements CustomsGateway {
   }
 
   /** IID (nhập, body tK_ICN) / IEX (xuất, body tK_ECN) – theo Postman FPT; trạng thái theo VN_IDA/EDA_TRANGTHAI. */
-  async queryStatus(orgId: string, externalId: string, _dossierId?: string, direction?: "NK" | "XK"): Promise<GatewayStatus> {
+  async queryStatus(orgId: string, externalId: string, dossierId?: string, direction?: "NK" | "XK"): Promise<GatewayStatus> {
     const dir = direction ?? directionOfNo(externalId);
     const op = dir === "XK" ? "IEX" : "IID";
     const no = declarationNoOf(externalId);
     if (!no) throw domainError("GATEWAY_ERROR", `Tra cứu: số tờ khai "${externalId}" không hợp lệ`);
-    const { errors, result } = await this.call(orgId, op, { [numberField(dir === "XK" ? "EDA" : "IDA")]: Number(no) });
+    const { errors, result } = await this.call(orgId, op, { [numberField(dir === "XK" ? "EDA" : "IDA")]: Number(no) }, dossierId);
     if (errors) throw domainError("GATEWAY_ERROR", `Tra cứu tờ khai ${externalId} lỗi: ${errors.map((e) => `${e.code}: ${e.message}`).join("; ")}`);
     if (!result) throw domainError("GATEWAY_ERROR", `FPT không trả thông tin tờ khai ${externalId}`);
     return statusOf(result.kind, result.item);
@@ -198,7 +196,7 @@ export class FptVnaccsGateway implements CustomsGateway {
 
   /** VNACCSREP: thông điệp loại P của tài khoản VNACCS (objIDA/objEDA/objAMA, mỗi phần tử có objMsgResult). Lỗi tài khoản → ném (người gọi bỏ qua lượt này). */
   async pullMessages(orgId: string): Promise<GatewayMessage[]> {
-    const env = FptResponseEnvelopeSchema.parse(await this.http.post("VNACCSREP", {}, await this.credsFor(orgId))) as Obj;
+    const env = FptResponseEnvelopeSchema.parse(await this.http.post("VNACCSREP", {}, await this.credsFor(orgId), { orgId })) as Obj;
     const errors = toErrors(env as Parameters<typeof toErrors>[0]);
     if (errors) throw domainError("GATEWAY_ERROR", `Lấy thông điệp Hải quan lỗi: ${errors.map((e) => `${e.code}: ${e.message}`).join("; ")}`);
     const out: GatewayMessage[] = [];

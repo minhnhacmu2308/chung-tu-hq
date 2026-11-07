@@ -261,7 +261,7 @@ function build(): Container {
     const r = await refreshFromShipment(declaration, { orgId: asOrgId(orgId), userId: asUserId("") }, dossierId);
     if (!r.ok) console.error("[extraction→declaration]", r.error.code, r.error.message);
   };
-  const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity });
+  const customs = createCustomsInfrastructure({ db, env, queue, declaration, dossier, validation, identity, redis });
   // Luật R-BRANCH-COUNT-LOCKED: số tờ đã khai (đã lập kết quả các tờ) khi đã có tờ được cấp số – chuỗi dừng giữa chừng vẫn đủ N tờ.
   validation.branches = async (orgId, dossierId) => lockedSheetCount(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.listForDossier(orgId, dossierId)));
   customs.notify = notify;

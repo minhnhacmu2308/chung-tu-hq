@@ -13,6 +13,8 @@ export { resendOperation } from "./application/resend-operation.js";
 export { declareOpFor } from "./application/branch-send.js";
 export { requeueStuckOutbox, STUCK_OUTBOX_MS } from "./application/requeue-stuck-outbox.js";
 export { dossierCustomsSummaries, getSubmission, listCustomsDeclarations } from "./application/get-submission.js";
+export { getFptTrace } from "./application/get-fpt-trace.js";
+export { previewFptPayload } from "./application/preview-fpt-payload.js";
 export { markOutboxFailed, reopenDeclaration } from "./application/reopen-declaration.js";
 export { checkSentSheets, customsEditSheets } from "./application/sent-sheets.js";
 export { OPERATION_LABELS } from "./application/_customs-view.js";

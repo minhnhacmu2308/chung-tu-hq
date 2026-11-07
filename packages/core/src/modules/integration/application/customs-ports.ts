@@ -1,6 +1,6 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
-import type { AttachKind, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, HysFill, HysStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
+import type { AttachKind, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, FptTraceEntry, HysFill, HysStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -136,6 +136,10 @@ export type GatewayMessage = {
   /** Thông điệp loại B: EDI chuẩn Hải quan (base64) – lưu trong hộp thư để lưu trữ / in tờ khai (PrintEdiRef). */
   ediBase64?: string;
 };
+/** GỠ LỖI TẠM (FPT_DEBUG_TRACE): đọc lại body gửi / phản hồi thô của các lần gọi FPT. */
+export interface FptTraceReader {
+  list(orgId: string, dossierId: string): Promise<FptTraceEntry[]>;
+}
 export type GatewaySendResult = { channel?: "GREEN" | "YELLOW" | "RED"; receiptNo?: string; customsTaxVnd?: string; note?: string; errors?: GatewayError[] };
 
 /** Tờ khai + dòng hàng từ module declaration (composition root nối). */
@@ -194,6 +198,10 @@ export type CustomsDeps = {
   notify?: Notifier;
   /** Ghi chi phí Customs Hub vào usage_events (module billing; container nối). Không nối → không ghi. */
   usage?: ServiceUsageMeter;
+  /** GỠ LỖI TẠM (FPT_DEBUG_TRACE): có = đang bật ghi nhật ký API FPT. */
+  fptTrace?: FptTraceReader;
+  /** GỠ LỖI TẠM (FPT_DEBUG_TRACE): bật xem trước body gửi FPT (previewFptPayload). */
+  fptDebug?: boolean;
   clock: Clock;
   idGen: IdGen;
 };

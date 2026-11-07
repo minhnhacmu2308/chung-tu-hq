@@ -4,7 +4,8 @@
 import { z } from "zod";
 import type { FptVnaccsCredentials } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
-import type { FptHttpClient, FptOperation } from "./fpt-vnaccs-gateway.js";
+import type { FptCallMeta, FptHttpClient, FptOperation } from "./fpt-vnaccs-gateway.js";
+import type { FptExchange } from "./fpt-trace.js";
 
 export const FPT_PATHS: Record<FptOperation | "LOGIN", string> = {
   LOGIN: "/api/auth/login",
@@ -32,6 +33,8 @@ export type FptRestClientOptions = {
   refreshBeforeSeconds?: number;
   fetch?: typeof fetch;
   now?: () => Date;
+  /** GỠ LỖI TẠM (FPT_DEBUG_TRACE): nhận từng lần gọi nghiệp vụ (body gửi + phản hồi thô; chưa che – bên nhận che). Không gọi cho đăng nhập. */
+  trace?: (e: FptExchange) => void;
 };
 
 export class FptRestClient implements FptHttpClient {
@@ -44,17 +47,37 @@ export class FptRestClient implements FptHttpClient {
     this.now = opts.now ?? (() => new Date());
   }
 
-  async post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials): Promise<unknown> {
+  async post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials, meta?: FptCallMeta): Promise<unknown> {
     // VNACCSREP: body chính là tài khoản VNACCS (phẳng, theo Postman); nghiệp vụ khác bọc trong objVNACCS_ACCOUNT.
     const payload = op === "VNACCSREP" ? { ...creds } : { objVNACCS_ACCOUNT: creds, ...(body as Record<string, unknown>) };
-    let res = await this.send(FPT_PATHS[op], payload, await this.getToken());
-    if (res.status === 401) {
-      // Token bị thu hồi/hết hạn sớm: đăng nhập lại đúng một lần.
-      this.token = null;
-      res = await this.send(FPT_PATHS[op], payload, await this.getToken());
-      if (res.status === 401) throw domainError("GATEWAY_ERROR", `FPT từ chối token cho ${op} sau khi đăng nhập lại (HTTP 401)`);
+    const at = this.now();
+    const started = performance.now();
+    let status: number | null = null;
+    let responseText: string | null = null;
+    let error: string | null = null;
+    try {
+      let res = await this.send(FPT_PATHS[op], payload, await this.getToken());
+      status = res.status;
+      if (res.status === 401) {
+        // Token bị thu hồi/hết hạn sớm: đăng nhập lại đúng một lần.
+        this.token = null;
+        res = await this.send(FPT_PATHS[op], payload, await this.getToken());
+        status = res.status;
+        if (res.status === 401) throw domainError("GATEWAY_ERROR", `FPT từ chối token cho ${op} sau khi đăng nhập lại (HTTP 401)`);
+      }
+      return await this.readJson(op, res, (text) => { responseText = text; });
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+      throw e;
+    } finally {
+      if (this.opts.trace && meta) {
+        try {
+          this.opts.trace({ ...meta, operation: op, path: FPT_PATHS[op], at, status, durationMs: performance.now() - started, request: payload, responseText, error });
+        } catch {
+          // Nhật ký gỡ lỗi không được làm hỏng lần gọi thật.
+        }
+      }
     }
-    return this.readJson(op, res);
   }
 
   /** Đăng nhập mới (bỏ token đang giữ) – dùng cho "Kiểm tra kết nối". */
@@ -98,9 +121,13 @@ export class FptRestClient implements FptHttpClient {
     }
   }
 
-  private async readJson(op: string, res: Response): Promise<unknown> {
-    if (res.status === 429 || res.status >= 500) throw new FptTransientError(`FPT trả HTTP ${res.status} cho ${op}`, res.status);
+  private async readJson(op: string, res: Response, onText?: (text: string) => void): Promise<unknown> {
+    if (res.status === 429 || res.status >= 500) {
+      if (onText) onText(await res.text().catch(() => ""));
+      throw new FptTransientError(`FPT trả HTTP ${res.status} cho ${op}`, res.status);
+    }
     const text = await res.text();
+    onText?.(text);
     if (!res.ok) throw domainError("GATEWAY_ERROR", `FPT trả HTTP ${res.status} cho ${op}${res.status === 404 ? " – kiểm tra FPT_PATHS/FPT_API_BASE_URL" : ""}`, { status: res.status, body: text.slice(0, 2000) });
     try {
       return JSON.parse(text) as unknown;

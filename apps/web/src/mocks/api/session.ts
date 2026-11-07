@@ -1,6 +1,6 @@
 // Phiên đăng nhập + doanh nghiệp + thông báo (mock).
-import type { Session } from "@kb/contracts";
-import { mutate, query } from "@/lib/mock-request";
+import type { AcceptInviteInput, Session } from "@kb/contracts";
+import { ApiError, mutate, query } from "@/lib/mock-request";
 import { resetDb } from "@/mocks/db";
 import { adminLogin } from "@/mocks/admin/ops";
 
@@ -86,5 +86,44 @@ export const changePassword = (input: { currentPassword: string; newPassword: st
 export const logout = () =>
   mutate((db) => {
     db.admin.currentStaffId = null;
+    return { ok: true as const };
+  });
+
+// ---- Liên kết trong email (nhận lời mời, xác thực email, đặt lại mật khẩu) ----
+// Mock không phát token thật: token ngắn hơn 16 ký tự (như VerifyEmailInputSchema) hoặc có chữ "expired"/"invalid"
+// → TOKEN_INVALID cùng câu backend; token khác coi như hợp lệ. Thử: /reset-password?token=expired-0000000000000.
+
+/** Token liên kết email hợp lệ trong mock (để thử nhánh hết hạn: `?token=expired-…`). */
+export const isMockTokenValid = (token: string) => token.length >= 16 && !/expired|invalid/i.test(token);
+
+const tokenInvalid = (message = "Liên kết không hợp lệ hoặc đã hết hạn") => new ApiError("TOKEN_INVALID", message, 400);
+
+/** Mock nhận lời mời: thành viên đang INVITED đầu tiên đặt tên → ACTIVE và trở thành người đang đăng nhập (như backend cấp phiên). */
+export const acceptInvite = (input: AcceptInviteInput) =>
+  mutate((db) => {
+    if (!isMockTokenValid(input.token)) throw tokenInvalid("Lời mời không hợp lệ hoặc đã hết hạn");
+    const invited = db.members.find((m) => m.status === "INVITED");
+    if (invited) {
+      invited.name = input.name.trim();
+      invited.status = "ACTIVE";
+      db.currentUserId = invited.id;
+    }
+    db.admin.currentStaffId = null;
+    return { ok: true as const };
+  });
+
+export const verifyEmail = (token: string) =>
+  mutate(() => {
+    if (!isMockTokenValid(token)) throw tokenInvalid();
+    return { ok: true as const };
+  });
+
+/** Mock quên mật khẩu: luôn "đã gửi" như backend (không lộ email có tồn tại); không gửi email thật. */
+export const requestPasswordReset = (_email: string) => mutate(() => ({ ok: true as const }));
+
+export const resetPassword = (input: { token: string; password: string }) =>
+  mutate(() => {
+    if (!isMockTokenValid(input.token)) throw tokenInvalid();
+    if (input.password.length < 8) throw new ApiError("VALIDATION", "Mật khẩu ít nhất 8 ký tự", 400);
     return { ok: true as const };
   });

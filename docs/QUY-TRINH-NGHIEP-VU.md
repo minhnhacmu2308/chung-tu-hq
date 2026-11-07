@@ -55,8 +55,10 @@ flowchart TD
 
 - MST 10 hoặc 13 số; tên/địa chỉ điền sẵn từ tra cứu đăng ký thuế (hiện là adapter giả).
 - Đăng ký tối đa 5 lần/IP/giờ. Đăng nhập: khóa 15 phút sau 10 lần sai (theo email + IP). Phiên 30 ngày, tự gia hạn khi còn < 15 ngày.
-- Quên mật khẩu: tối đa 3 yêu cầu/email/giờ, luôn trả "đã gửi" (không lộ email có tồn tại).
-- Mời thành viên: mọi vai trò trừ OWNER; lời mời hạn 7 ngày; người được mời đặt tên + mật khẩu là vào được.
+- Quên mật khẩu: "Quên mật khẩu?" ở trang đăng nhập → `/forgot-password` (mang theo email đang nhập) → `POST /api/auth/password/forgot`; tối đa 3 yêu cầu/email/giờ, luôn trả "đã gửi" (không lộ email có tồn tại). Email chứa liên kết `/reset-password?token=…` (hiệu lực 1 giờ, dùng một lần): đặt mật khẩu mới + nhập lại (8–128 ký tự, như đăng ký) → `POST /api/auth/password/reset` → mọi phiên cũ bị hủy, người dùng đăng nhập lại. Email mời quản trị viên hệ thống cũng dùng trang này để đặt mật khẩu lần đầu (hạn 7 ngày).
+- Xác thực email: email sau đăng ký chứa `/verify-email?token=…` (hiệu lực 3 ngày, dùng một lần). Mở trang là gửi `POST /api/auth/verify-email` ngay → "Đã xác thực email" + nút vào ứng dụng. Chưa có API để người dùng tự gửi lại email xác thực (chỉ khu Quản trị gửi lại được) → liên kết hỏng chỉ dẫn về đăng nhập.
+- Mời thành viên: mọi vai trò trừ OWNER; lời mời hạn 7 ngày; người được mời mở `/accept-invite?token=…`, đặt họ tên + mật khẩu + nhập lại → `POST /api/auth/invites/accept` → thành viên ACTIVE, email coi như đã xác thực, server cấp phiên và vào thẳng ứng dụng.
+- Liên kết đã dùng / hết hạn / sai (`TOKEN_INVALID`) hoặc thiếu `token`: cả ba trang báo "liên kết không hợp lệ hoặc đã hết hạn" kèm lối tiếp theo (đặt lại mật khẩu: "Gửi lại liên kết mới" → `/forgot-password`; lời mời, xác thực email: về đăng nhập). Các trang này công khai (`PUBLIC_PREFIXES` trong `apps/web/src/proxy.ts`).
 - Yêu cầu tham gia (Cài đặt → Thành viên, chỉ OWNER/ADMIN thấy): **Duyệt** hoặc **Từ chối** (lý do không bắt buộc, ≤ 500 ký tự, gửi kèm email cho người xin). Chỉ xử lý được yêu cầu đang PENDING; bị từ chối thì đăng nhập báo "chưa thuộc doanh nghiệp nào".
 - Chuyển quyền sở hữu: chỉ OWNER, cho thành viên **đang hoạt động** khác mình; phải nhập lại mật khẩu (sai 5 lần/15 phút → tạm khóa thao tác). Trong một transaction: người nhận → OWNER, chủ cũ → ADMIN (luôn đúng một OWNER); người nhận có thông báo + email. Phiên không phải đăng nhập lại – vai trò đọc lại ở mỗi request.
 
@@ -512,7 +514,7 @@ Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết
 | Số quản lý hàng hóa (tờ khai xuất, Mẫu 14) | Chưa lấy tự động; người khai nhập tay |
 | Hàng LCL qua kho CFS | Hai văn bản hướng dẫn khác nhau (TT39: mã 3; CV 6376: mã 2) – cần chốt |
 | Đọc chứng từ | Chưa đọc lớp chữ PDF / XML hóa đơn điện tử; mọi chứng từ gửi AI |
-| Tài khoản | Xác thực email chưa bắt buộc khi đăng nhập; chưa có trang xác thực email / đặt lại mật khẩu / nhận lời mời; người bị từ chối tham gia chỉ nhận email (chưa có màn báo trạng thái), chuyển quyền sở hữu chưa ghi nhật ký kiểm toán riêng; tra cứu MST là giả lập |
+| Tài khoản | Xác thực email chưa bắt buộc khi đăng nhập; người dùng chưa tự gửi lại được email xác thực (chỉ khu Quản trị); người bị từ chối tham gia chỉ nhận email (chưa có màn báo trạng thái), chuyển quyền sở hữu chưa ghi nhật ký kiểm toán riêng; tra cứu MST là giả lập |
 | Hộp thư chứng từ | Chưa tự lấy định kỳ; chưa nhận XML hóa đơn điện tử; chưa tự tạo hồ sơ từ email; gmail.readonly cần Google verification + CASA khi mở công khai (Testing tối đa 100 người dùng) |
 | Danh mục hàng hóa | Chưa dùng danh mục khi dựng tờ khai (khớp hàng → lấy HS, bỏ qua HSCodePro); mặt hàng tự thêm khi duyệt chưa có số tờ khai (số chỉ có sau khi truyền); duyệt lại tờ khai đã mở lại sẽ tăng số lần khai thêm lần nữa |
 | Chi phí | HSCodePro và Customs Hub ghi theo đơn giá cấu hình (mặc định 0 – chưa có giá hợp đồng); chưa có lịch sử giá theo thời gian (đổi đơn giá không tính lại sự kiện cũ) |

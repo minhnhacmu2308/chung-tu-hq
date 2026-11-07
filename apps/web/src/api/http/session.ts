@@ -1,5 +1,5 @@
 // Phiên, thông báo, đăng ký/đăng nhập – gọi backend thật. Cùng chữ ký với src/mocks/api/session.ts.
-import { CompanyLookupSchema, MemberSchema, NotificationSchema, OkSchema, RegisterResultSchema, SessionSchema, type CompanyLookup } from "@kb/contracts";
+import { type AcceptInviteInput, CompanyLookupSchema, MemberSchema, NotificationSchema, OkSchema, RegisterResultSchema, SessionSchema, type CompanyLookup } from "@kb/contracts";
 import { z } from "zod";
 import { apiGet, apiPost } from "@/lib/http";
 
@@ -21,3 +21,9 @@ export const listMembers = () => apiGet("org/members", z.array(MemberSchema));
 export const lookupTaxCode = (taxCode: string) => apiGet(`auth/lookup-tax-code?taxCode=${encodeURIComponent(taxCode)}`, CompanyLookupSchema);
 export const register = (input: { email: string; name: string; password: string; taxCode: string; joinExisting: boolean }) =>
   apiPost("auth/register", input, RegisterResultSchema);
+/** Người được mời đặt tên + mật khẩu; thành công → server đặt cookie phiên (đăng nhập luôn). */
+export const acceptInvite = (input: AcceptInviteInput) => apiPost("auth/invites/accept", input, OkSchema);
+export const verifyEmail = (token: string) => apiPost("auth/verify-email", { token }, OkSchema);
+/** Luôn ok (không lộ email có tồn tại); chỉ lỗi khi RATE_LIMITED. */
+export const requestPasswordReset = (email: string) => apiPost("auth/password/forgot", { email }, OkSchema);
+export const resetPassword = (input: { token: string; password: string }) => apiPost("auth/password/reset", input, OkSchema);

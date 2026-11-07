@@ -23,4 +23,10 @@ describe("proxy", () => {
     expect(proxy(req("/register")).headers.get("location")).toBeNull();
     expect(proxy(req("/api/auth/login")).headers.get("location")).toBeNull();
   });
+  it("nguồn http: trang mở từ liên kết email (mời, xác thực, quên/đặt lại mật khẩu) không cần cookie", () => {
+    vi.stubEnv("NEXT_PUBLIC_DATA_SOURCE", "http");
+    for (const path of ["/accept-invite?token=x", "/verify-email?token=x", "/forgot-password", "/reset-password?token=x"]) {
+      expect(proxy(req(path)).headers.get("location")).toBeNull();
+    }
+  });
 });

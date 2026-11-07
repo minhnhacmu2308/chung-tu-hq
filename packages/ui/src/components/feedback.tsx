@@ -11,7 +11,7 @@ export type Tone = "neutral" | "primary" | "success" | "warning" | "danger" | "i
 
 export const badgeVariants = cva("inline-flex items-center gap-1 rounded-full font-medium whitespace-nowrap", {
   variants: {
-    size: { sm: "px-1.5 py-px text-[0.6875rem]", md: "px-2 py-0.5 text-xs", lg: "px-2.5 py-1 text-sm" },
+    size: { sm: "px-1.5 py-0.5 text-xs", md: "px-2 py-0.5 text-xs", lg: "px-2.5 py-1 text-sm" },
     tone: { neutral: "", primary: "", success: "", warning: "", danger: "", info: "" },
     variant: { subtle: "", solid: "", outline: "border bg-transparent" },
   },

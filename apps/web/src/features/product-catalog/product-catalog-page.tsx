@@ -161,7 +161,7 @@ export function ProductCatalogPage() {
         initialSorting={[{ id: "lastSort", desc: true }]}
         columnVisibility={visibility ?? autoVisibility}
         onColumnVisibilityChange={setVisibility}
-        pagination={{ initialPageSize: 20, pageSizeOptions: [20, 50, 100] }}
+        pagination={{ initialPageSize: 50, pageSizeOptions: [20, 50, 100] }}
         {...(canEdit ? { onRowClick: (r: Row) => setEditing({ product: byId.get(r.id) ?? r }) } : {})}
         selectionActions={(picked) => (
           <Button size="sm" variant="danger" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => setToDelete(picked.map((r) => byId.get(r.id)).filter((p): p is ProductCatalogItem => !!p))}>
@@ -177,7 +177,7 @@ export function ProductCatalogPage() {
                 <RowActions
                   rowLabel={r.name}
                   actions={[
-                    { id: "edit", label: t.edit, icon: <Pencil />, onSelect: () => setEditing({ product: byId.get(r.id) ?? r }) },
+                    { id: "edit", label: t.edit, icon: <Pencil />, primary: true, onSelect: () => setEditing({ product: byId.get(r.id) ?? r }) },
                     { id: "delete", label: t.delete, icon: <Trash2 />, tone: "danger", onSelect: () => setToDelete([byId.get(r.id) ?? r]) },
                   ]}
                 />

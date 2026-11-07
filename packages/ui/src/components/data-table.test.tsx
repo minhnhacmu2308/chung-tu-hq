@@ -373,6 +373,47 @@ describe("DataTable – lọc theo cột", () => {
     expect(vnCodes()).toEqual(["HS-004"]);
   });
 
+  it("bộ lọc đang bật hiện thành chip 'Cột: nhãn'; ✕ bỏ đúng một bộ lọc (chuột và bàn phím); a11y", async () => {
+    const columns = vcol.columns([
+      vcol.accessor("code", { header: "Mã hồ sơ" }),
+      vcol.accessor("partner", { header: "Đối tác", meta: { filter: "text" } }),
+      vcol.accessor("status", { header: "Trạng thái", meta: { filter: "select", filterOptions: [{ value: "Nháp", label: "Bản nháp" }, { value: "Đã duyệt", label: "Đã duyệt" }] } }),
+    ]);
+    setupVn({ columns });
+    await openFilters();
+    await chooseOption(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Bản nháp");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Lọc theo Đối tác" }), "hưng");
+    await userEvent.keyboard("{Escape}");
+    // Chip select hiện NHÃN lựa chọn, không phải giá trị gốc.
+    const chips = () => [...document.querySelectorAll("[data-slot=filter-chip]")].map((c) => c.textContent);
+    expect(chips()).toEqual(["Trạng thái: Bản nháp", "Đối tác: hưng"]);
+    expect(vnCodes()).toEqual(["HS-004"]);
+    await expectNoA11yViolations(document.body);
+    await userEvent.click(screen.getByRole("button", { name: "Bỏ lọc Đối tác" }));
+    expect(chips()).toEqual(["Trạng thái: Bản nháp"]);
+    screen.getByRole("button", { name: "Bỏ lọc Trạng thái" }).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(chips()).toEqual([]);
+    expect(vnCodes()).toHaveLength(4);
+  });
+
+  it("ô bị cắt '…': rê chuột thấy chữ đang hiển thị; ô không bị cắt thì không có title", async () => {
+    const columns = vcol.columns([
+      vcol.accessor("code", { header: "Mã hồ sơ" }),
+      vcol.accessor("status", { header: "Trạng thái", cell: (c) => (c.getValue() === "Nháp" ? "Bản nháp" : c.getValue()) }),
+    ]);
+    setupVn({ columns, resizable: true });
+    const cell = screen.getByText("Bản nháp").closest("td")!;
+    Object.defineProperty(cell, "scrollWidth", { configurable: true, value: 200 });
+    Object.defineProperty(cell, "clientWidth", { configurable: true, value: 80 });
+    await userEvent.hover(cell);
+    expect(cell).toHaveAttribute("title", "Bản nháp");
+    Object.defineProperty(cell, "scrollWidth", { configurable: true, value: 80 });
+    await userEvent.unhover(cell);
+    await userEvent.hover(cell);
+    expect(cell).not.toHaveAttribute("title");
+  });
+
   it("kết hợp tìm kiếm + lọc cột; 'Xóa bộ lọc' trả lại đủ dòng và làm trống các ô", async () => {
     setupVn({ searchable: true });
     const search = screen.getByRole("searchbox", { name: "Tìm trong bảng" });

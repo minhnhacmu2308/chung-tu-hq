@@ -8,12 +8,14 @@ import { useFieldControl, useFieldLabelId } from "./field.js";
 import { Tooltip } from "./tooltip.js";
 
 const control = [
-  "w-full rounded-md border border-border bg-surface text-fg text-sm",
+  // Viền ô: token input-border (đạt 3:1 – nhận ra ô). Chữ ≥ 16px trên màn cảm ứng để iOS Safari không tự phóng to khi chạm vào ô
+  // (max() vì cỡ chữ gốc có thể là 15px ở mật độ "sm").
+  "w-full rounded-md border border-input-border bg-surface text-fg text-sm pointer-coarse:text-[max(1rem,16px)]",
   "placeholder:text-fg-subtle",
-  "hover:border-border-strong",
+  "hover:border-fg-subtle",
   // Focus: viền đổi sang màu focus (đủ tương phản) + quầng mờ 3px cho dịu mắt.
   "focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-focus/25 focus-visible:border-focus",
-  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border",
+  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-input-border",
   "aria-invalid:border-danger aria-invalid:hover:border-danger aria-invalid:focus-visible:border-danger aria-invalid:focus-visible:ring-danger/25",
 ].join(" ");
 
@@ -275,7 +277,7 @@ export function Select({ className, options, placeholder, value, defaultValue, o
           data-glass=""
           className={cn(
             "z-50 max-h-[min(20rem,var(--radix-popover-content-available-height))] min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)]",
-            "overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface p-1 text-fg shadow-lg outline-none motion-safe:animate-pop-in",
+            "overflow-y-auto overscroll-contain rounded-lg border border-border bg-surface p-1 text-fg shadow-lg outline-none motion-safe:animate-pop-in motion-safe:data-[state=closed]:animate-pop-out",
             // Mục đang trỏ cuộn vào khung không nằm khuất dưới ô tìm dính.
             withSearch && "scroll-pt-12",
           )}
@@ -319,7 +321,7 @@ export function Select({ className, options, placeholder, value, defaultValue, o
                 onPointerDown={(e) => e.preventDefault()}
                 onClick={() => commit(i)}
                 className={cn(
-                  "relative flex min-h-9 cursor-pointer select-none items-center gap-2 rounded-md py-1.5 pl-2.5 pr-8 text-sm",
+                  "relative flex min-h-9 pointer-coarse:min-h-11 cursor-pointer select-none items-center gap-2 rounded-md py-1.5 pl-2.5 pr-8 text-sm",
                   "data-active:bg-surface-muted",
                   isSelected && "bg-primary-subtle font-medium text-primary-subtle-fg data-active:bg-primary-subtle",
                   placeholder !== undefined && i === 0 && !isSelected && "text-fg-muted",

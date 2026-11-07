@@ -44,6 +44,7 @@
   --color-surface-muted: var(--kb-color-surface-muted);
   --color-border: var(--kb-color-border);
   --color-border-strong: var(--kb-color-border-strong);
+  --color-input-border: var(--kb-color-input-border);
   --color-fg: var(--kb-color-fg);
   --color-paper: var(--kb-color-paper);
   --color-paper-fg: var(--kb-color-paper-fg);
@@ -71,6 +72,8 @@
   --color-warning-subtle-fg: var(--kb-color-warning-subtle-fg);
   --color-danger: var(--kb-color-danger);
   --color-danger-fg: var(--kb-color-danger-fg);
+  --color-danger-hover: var(--kb-color-danger-hover);
+  --color-danger-active: var(--kb-color-danger-active);
   --color-danger-subtle: var(--kb-color-danger-subtle);
   --color-danger-subtle-fg: var(--kb-color-danger-subtle-fg);
   --color-info: var(--kb-color-info);
@@ -95,15 +98,32 @@
   --font-mono: var(--kb-font-mono);
 }
 
-/* Chuyển động vào của lớp nổi (dialog, menu, popover, tooltip, toast). Luôn dùng kèm `motion-safe:`. */
+/*
+ * Độ mượt + thời lượng (token chuyển động, DESIGN-SYSTEM §2). UI phản hồi: ease-out mạnh, ≤ 200ms; không dùng ease-in cho UI.
+ * `ease-out` / `ease-in-out` của Tailwind trỏ về đường cong mạnh này; hiệu ứng ra ngắn hơn hiệu ứng vào.
+ */
 @theme {
-  --animate-fade-in: kb-fade-in 160ms ease-out;
-  --animate-pop-in: kb-pop-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-slide-in-right: kb-slide-in-right 240ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-slide-up: kb-slide-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --kb-duration-press: 120ms;
+  --kb-duration-fast: 160ms;
+  --kb-duration-overlay: 200ms;
+  --kb-duration-drawer: 260ms;
+}
+
+/* Chuyển động vào/ra của lớp nổi (dialog, menu, popover, tooltip, toast). Luôn dùng kèm `motion-safe:`. */
+@theme {
+  --animate-fade-in: kb-fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  --animate-pop-in: kb-pop-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  /* Ra: ngắn hơn vào, giữ trạng thái cuối (Radix Presence chờ animation xong mới gỡ phần tử). */
+  --animate-fade-out: kb-fade-out 120ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+  --animate-pop-out: kb-pop-out 120ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
+  --animate-slide-in-right: kb-slide-in-right 260ms cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-slide-up: kb-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1);
   /* Toast: vào từ phải, ra mờ dần sang phải; thanh đếm ngược tự đóng; vạch chạy khi đang xử lý. */
-  --animate-toast-in: kb-toast-in 320ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-toast-out: kb-toast-out 180ms ease-in forwards;
+  --animate-toast-in: kb-toast-in 260ms cubic-bezier(0.23, 1, 0.32, 1);
+  --animate-toast-out: kb-toast-out 150ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
   --animate-countdown: kb-countdown linear forwards;
   --animate-indeterminate: kb-indeterminate 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 
@@ -116,7 +136,7 @@
   --animate-signal: kb-signal 3.6s linear infinite;
   --animate-twinkle: kb-twinkle 3.2s ease-in-out infinite;
   --animate-shimmer: kb-shimmer 1.6s linear infinite;
-  --animate-rise: kb-slide-up 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-rise: kb-slide-up 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
   --animate-dot: kb-dot 1.1s ease-in-out infinite;
 
   @keyframes kb-orb-a {
@@ -161,6 +181,12 @@
   @keyframes kb-pop-in {
     from { opacity: 0; transform: scale(0.97); }
   }
+  @keyframes kb-fade-out {
+    to { opacity: 0; }
+  }
+  @keyframes kb-pop-out {
+    to { opacity: 0; transform: scale(0.97); }
+  }
   @keyframes kb-slide-in-right {
     from { opacity: 0; transform: translateX(1.5rem); }
   }
@@ -194,6 +220,14 @@
     font-variant-numeric: tabular-nums;
     scrollbar-color: var(--kb-color-scrollbar) transparent;
   }
+  /*
+   * Lớp nổi định vị theo nút mở (menu, popover, select, combobox, date picker): phóng ra từ phía nút bấm, không từ tâm.
+   * Radix gắn --radix-popper-transform-origin lên wrapper; con kế thừa.
+   */
+  [data-radix-popper-content-wrapper] > * { transform-origin: var(--radix-popper-transform-origin); }
+  /* Tiếng Trung: ngắt dòng theo quy tắc CJK, không giãn chữ của tiêu đề (tracking âm làm chữ Hán dính nhau). */
+  :lang(zh) { line-break: strict; }
+  :lang(zh) :where(.tracking-tight, .tracking-tighter) { letter-spacing: 0; }
   /* Tiêu đề không để mồ côi một chữ ở dòng cuối; đoạn văn ngắt dòng đều hơn. */
   :where(h1, h2, h3, h4) { text-wrap: balance; }
   :where(p) { text-wrap: pretty; }
@@ -206,10 +240,10 @@
    * :where() = độ ưu tiên 0, utility `transition-*` của component vẫn ghi đè được.
    */
   @media (prefers-reduced-motion: no-preference) {
-    :where(a, button, input, select, textarea, summary, label, tr, [role="tab"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="switch"]) {
+    :where(a, button, input, select, textarea, summary, label, [role="tab"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="switch"]) {
       transition-property: color, background-color, border-color, box-shadow, opacity;
       transition-duration: 150ms;
-      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+      transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
     }
   }
 }
@@ -261,6 +295,31 @@
   &:checked { border-color: var(--kb-color-primary); border-width: 5px; }
 }
 
+/*
+ * Vùng chạm ≥ 44px trên màn cảm ứng cho nút nhỏ (icon, nút sm) mà KHÔNG đổi kích thước nhìn thấy trên desktop:
+ * mở rộng vùng bấm bằng ::after vô hình khi con trỏ là ngón tay.
+ */
+@utility hit-area {
+  /* Cần là phần tử định vị để ::after bám theo; nút đã absolute/fixed/sticky giữ nguyên kiểu định vị của nó. */
+  &:not(.absolute, .fixed, .sticky) { position: relative; }
+  @media (pointer: coarse) {
+    &::after {
+      content: "";
+      position: absolute;
+      inset: min(0px, calc((100% - 2.75rem) / 2));
+    }
+  }
+}
+
+/* Phản hồi khi nhấn cho nút tự vẽ (ngoài Button): lún nhẹ, nhanh. Button đã có sẵn. */
+@utility pressable {
+  @media (prefers-reduced-motion: no-preference) {
+    transition-property: color, background-color, border-color, box-shadow, opacity, scale;
+    transition-duration: var(--kb-duration-press);
+    &:active { scale: 0.96; }
+  }
+}
+
 /* Phần tử dính trong trang: cách mép trên 1rem, tính cả thanh menu trên (nếu người dùng chọn menu ở trên). */
 @utility top-shell {
   top: calc(var(--kb-shell-top) + 1rem);
@@ -306,18 +365,16 @@
 
 /*
  * Con trực tiếp lần lượt trồi lên khi vùng chứa xuất hiện (thẻ KPI, danh sách, khối form).
- * Dùng qua prop `stagger` của Stack/Grid. Từ phần tử thứ 9 trở đi vào cùng lúc để không phải chờ lâu.
+ * Dùng qua prop `stagger` của Stack/Grid. Từ phần tử thứ 6 trở đi vào cùng lúc: cả khối xong trong ~0,5 giây.
  */
 @utility stagger-children {
   @media (prefers-reduced-motion: no-preference) {
     & > * { animation: var(--animate-rise); }
-    & > :nth-child(2) { animation-delay: 50ms; }
-    & > :nth-child(3) { animation-delay: 100ms; }
-    & > :nth-child(4) { animation-delay: 150ms; }
-    & > :nth-child(5) { animation-delay: 200ms; }
-    & > :nth-child(6) { animation-delay: 250ms; }
-    & > :nth-child(7) { animation-delay: 300ms; }
-    & > :nth-child(n + 8) { animation-delay: 350ms; }
+    & > :nth-child(2) { animation-delay: 40ms; }
+    & > :nth-child(3) { animation-delay: 80ms; }
+    & > :nth-child(4) { animation-delay: 120ms; }
+    & > :nth-child(5) { animation-delay: 160ms; }
+    & > :nth-child(n + 6) { animation-delay: 200ms; }
   }
 }
 

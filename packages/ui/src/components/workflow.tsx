@@ -307,7 +307,7 @@ export function WorkflowDiagram({ nodes, edges, label, onNodeClick, className, l
           { label: l.fit, icon: <Scan className="h-4 w-4" />, on: fit },
         ].map((b) => (
           <button key={b.label} type="button" aria-label={b.label} onClick={b.on}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-sm text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+            className="hit-area pressable inline-flex h-7 w-7 items-center justify-center rounded-sm text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
             <span aria-hidden="true">{b.icon}</span>
           </button>
         ))}

@@ -1,6 +1,6 @@
 "use client";
 import {
-  Alert, Avatar, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable,
+  Alert, Avatar, Badge, Button, Card, ConfirmDialog, CardContent, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable,
   Dialog, DialogContent, DialogFooter, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger, Field, Input, Select, Stack, fill, toast, useMessages, StatusBadge, type Status,
 } from "@kb/ui";
@@ -102,6 +102,7 @@ export function MembersTab() {
     mutationFn: ({ id, d }: { id: string; d: boolean }) => setMemberDisabled(id, d),
     onSuccess: (m) => {
       refresh();
+      setLockTarget(null);
       toast({ tone: "success", title: fill(m.status === "DISABLED" ? t.locked : t.unlocked, { name: m.name }) });
     },
     onError,
@@ -111,6 +112,8 @@ export function MembersTab() {
   const isOwner = myRole === "OWNER";
   const isManager = isOwner || myRole === "ADMIN";
   const [transferTarget, setTransferTarget] = useState<Member | null>(null);
+  /** Khóa tài khoản: người đó bị đăng xuất, không vào được – hỏi lại trước (mở khóa thì làm ngay). */
+  const [lockTarget, setLockTarget] = useState<Member | null>(null);
 
   const memberMenu = (m: Member) => {
     const locked = m.role === "OWNER" || m.id === meId;
@@ -133,7 +136,7 @@ export function MembersTab() {
           {m.status === "INVITED" && (
             <DropdownMenuItem onSelect={() => toast({ tone: "success", title: fill(t.resent, { email: m.email }) })}>{t.resend}</DropdownMenuItem>
           )}
-          <DropdownMenuItem tone="danger" disabled={locked} onSelect={() => disable.mutate({ id: m.id, d: m.status !== "DISABLED" })}>
+          <DropdownMenuItem tone="danger" disabled={locked} onSelect={() => (m.status === "DISABLED" ? disable.mutate({ id: m.id, d: false }) : setLockTarget(m))}>
             {m.status === "DISABLED" ? t.unlock : t.lock}
           </DropdownMenuItem>
           {/* Chỉ Chủ sở hữu thấy; người nhận phải đang hoạt động (backend kiểm lại). */}
@@ -223,6 +226,17 @@ export function MembersTab() {
       </Card>
       <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
       <TransferOwnershipDialog target={transferTarget} onOpenChange={(o) => !o && setTransferTarget(null)} />
+      <ConfirmDialog
+        open={lockTarget !== null}
+        onOpenChange={(o) => !o && setLockTarget(null)}
+        title={t.lockConfirmTitle}
+        subject={lockTarget ? `${lockTarget.name} · ${lockTarget.email}` : null}
+        confirmLabel={t.lock}
+        loading={disable.isPending}
+        onConfirm={() => lockTarget && disable.mutate({ id: lockTarget.id, d: true })}
+      >
+        {t.lockConfirmBody}
+      </ConfirmDialog>
     </Stack>
   );
 }

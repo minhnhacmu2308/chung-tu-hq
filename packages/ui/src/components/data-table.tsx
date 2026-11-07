@@ -71,6 +71,7 @@ const MESSAGES = {
     filterBy: "Lọc theo {label}",
     filterAll: "Tất cả",
     clearFilters: "Xóa bộ lọc",
+    removeFilter: "Bỏ lọc {label}",
     filteredCount: "Hiển thị {shown}/{total} dòng",
     noResultsTitle: "Không có kết quả phù hợp",
     noResultsDescription: "Thử từ khóa khác hoặc xóa bộ lọc.",
@@ -102,6 +103,7 @@ const MESSAGES = {
     filterBy: "Filter by {label}",
     filterAll: "All",
     clearFilters: "Clear filters",
+    removeFilter: "Remove filter {label}",
     filteredCount: "Showing {shown} of {total} rows",
     noResultsTitle: "No matching results",
     noResultsDescription: "Try another keyword or clear the filters.",
@@ -133,6 +135,7 @@ const MESSAGES = {
     filterBy: "按{label}筛选",
     filterAll: "全部",
     clearFilters: "清除筛选",
+    removeFilter: "移除筛选 {label}",
     filteredCount: "显示 {shown}/{total} 行",
     noResultsTitle: "没有匹配的结果",
     noResultsDescription: "请尝试其他关键词或清除筛选。",
@@ -164,6 +167,7 @@ const MESSAGES = {
   | "filterBy"
   | "filterAll"
   | "clearFilters"
+  | "removeFilter"
   | "filteredCount"
   | "noResultsTitle"
   | "noResultsDescription"
@@ -184,6 +188,15 @@ const MESSAGES = {
   | "selectionToolbar"
   | "clearSelection"
 >;
+
+/** Ô bảng bị cắt "…": gắn title = chữ đang hiển thị khi rê chuột; ô không bị cắt thì bỏ title. */
+function showFullText(e: MouseEvent<HTMLTableCellElement>) {
+  const el = e.currentTarget;
+  // innerText = chữ nhìn thấy (bỏ nhãn sr-only); jsdom không có innerText → textContent.
+  const text = (el.innerText ?? el.textContent ?? "").trim();
+  if (el.scrollWidth > el.clientWidth && text) el.title = text;
+  else el.removeAttribute("title");
+}
 
 /** Thông tin hiển thị theo cột (đặt trong `meta` của column). */
 export type DataTableColumnMeta = {
@@ -858,6 +871,30 @@ export function DataTable<TData extends RowData>({
               </PopoverContent>
             </Popover>
           )}
+          {/* Từng bộ lọc cột đang bật thành chip "Cột: giá trị ✕" – nhìn là biết đang lọc gì, bỏ riêng từng cái. */}
+          {columnFilters.map((f) => {
+            const column = table.getColumn(f.id);
+            if (!column) return null;
+            const label = columnLabel(column);
+            const raw: unknown = f.value;
+            const shown = isSelectFilter(raw)
+              ? (selectOptions(column).find((o) => o.value === raw.equals)?.label ?? raw.equals)
+              : typeof raw === "string" ? raw : "";
+            if (!shown) return null;
+            return (
+              <span key={f.id} data-slot="filter-chip" className="inline-flex h-7 max-w-64 items-center gap-1 rounded-full border border-border bg-surface-muted pl-2.5 pr-0.5 text-xs text-fg">
+                <span className="truncate"><span className="text-fg-muted">{label}:</span> {shown}</span>
+                <button
+                  type="button"
+                  aria-label={fill(t.removeFilter, { label })}
+                  onClick={() => column.setFilterValue(undefined)}
+                  className="hit-area pressable inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-surface hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <X aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            );
+          })}
           {isFiltered && clearButton}
           <p role="status" className="text-sm text-fg-muted">
             {isFiltered && !loading ? fill(t.filteredCount, { shown: filteredCount, total: data.length }) : null}
@@ -1085,9 +1122,13 @@ export function DataTable<TData extends RowData>({
                 >
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta;
+                    // Ô có thể bị cắt "…" (cột kéo được độ rộng): rê chuột thấy đủ đúng CHỮ ĐANG HIỂN THỊ (đã dịch, đã định dạng),
+                    // chỉ khi ô thật sự bị cắt – không dùng giá trị gốc (mã enum, ngày ISO, số thô).
+                    const truncatable = resizable && !meta?.wrap;
                     return (
                       <td
                         key={cell.id}
+                        {...(truncatable ? { onMouseEnter: showFullText } : {})}
                         className={cn(
                           "px-3 py-3 text-fg",
                           !meta?.wrap && "whitespace-nowrap",
@@ -1129,7 +1170,7 @@ export function DataTable<TData extends RowData>({
             role="toolbar"
             aria-label={t.selectionToolbar}
             data-slot="selection-bar"
-            className="fixed bottom-6 left-1/2 z-50 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border border-border bg-surface py-2 pl-4 pr-2 text-fg shadow-lg motion-safe:animate-pop-in"
+            className="fixed bottom-6 left-1/2 z-50 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border border-border bg-surface py-2 pl-4 pr-2 text-fg shadow-lg motion-safe:animate-slide-up"
           >
             <span className="text-sm font-medium tabular-nums">{fill(t.selectedCount, { n: selectedRows.length })}</span>
             <span aria-hidden="true" className="h-5 w-px bg-border" />

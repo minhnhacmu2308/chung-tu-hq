@@ -76,7 +76,7 @@ export type DialogContentProps = Omit<ComponentProps<typeof DialogPrimitive.Cont
 };
 
 const iconBtn =
-  "inline-flex h-8 w-8 items-center justify-center rounded-sm text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-pressed:text-primary";
+  "hit-area pressable inline-flex h-8 w-8 items-center justify-center rounded-sm text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus aria-pressed:text-primary";
 
 function WindowIcon() {
   return (
@@ -128,7 +128,7 @@ function ModalOverlay({ active }: { active: boolean }) {
     <div
       aria-hidden="true"
       data-slot="dialog-overlay"
-      className={cn("fixed inset-0 z-50 bg-overlay backdrop-blur-xs motion-safe:animate-fade-in", !active && "hidden")}
+      className={cn("fixed inset-0 z-50 bg-overlay motion-safe:animate-fade-in [@media(prefers-reduced-transparency:no-preference)]:backdrop-blur-xs", !active && "hidden")}
     />
   );
 }
@@ -252,7 +252,7 @@ export function DialogContent({
         className={cn(
           "fixed z-50 flex w-full flex-col border-border bg-surface text-fg focus-visible:outline-none",
           mode === "modal"
-            ? cn("left-1/2 top-1/2 max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border shadow-lg motion-safe:animate-pop-in", MODAL_SIZE[size])
+            ? cn("left-1/2 top-1/2 w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border shadow-lg motion-safe:animate-pop-in", MODAL_SIZE[size])
             : cn("inset-y-0 right-0 border-l shadow-lg motion-safe:animate-slide-in-right", PANEL_SIZE[size]),
           // Sau lớp viền của chế độ (`border` ghi đè `border-t-*` đứng trước).
           tone && (tone === "danger" ? "border-t-4 border-t-danger" : "border-t-4 border-t-warning"),
@@ -276,7 +276,7 @@ export function DialogContent({
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">
           {icon && (tone ? <IconTile icon={icon} tone={tone} size="sm" /> : <span aria-hidden="true" className="text-fg-muted">{icon}</span>)}
           <div className="flex min-w-0 flex-1 flex-col">
-            <DialogPrimitive.Title className="truncate text-base font-semibold">{title}</DialogPrimitive.Title>
+            <DialogPrimitive.Title className="line-clamp-2 break-words text-pretty text-base font-semibold">{title}</DialogPrimitive.Title>
             {description && <DialogPrimitive.Description className="text-sm text-fg-muted">{description}</DialogPrimitive.Description>}
           </div>
           {allowPresentationToggle && (
@@ -313,7 +313,8 @@ export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
       className={cn(
         // sticky tính "đáy" từ mép trong phần đệm của vùng cuộn (py-5) → -bottom-5 để chân popup nằm đúng đáy,
         // không bị đẩy lên đè khoảng cách với ô cuối (lỗi cũ: ô nhập cuối dính sát đường kẻ).
-        "sticky -bottom-5 -mx-6 -mb-5 mt-auto flex justify-end gap-2 rounded-b-lg border-t border-border bg-surface px-6 py-4",
+        // Nhãn dài (vi/zh) hoặc popup hẹp: nút xuống dòng; vùng rất hẹp thì xếp dọc, nút chính ở trên, rộng hết.
+        "sticky -bottom-5 -mx-6 -mb-5 mt-auto flex flex-wrap justify-end gap-2 cq-max-sm:flex-col-reverse cq-max-sm:*:w-full rounded-b-lg border-t border-border bg-surface px-6 py-4",
         // Nội dung cuộn dưới chân popup mờ dần thay vì bị cắt cụt ngay đường kẻ.
         // Lớp mờ nằm ngay trên đường kẻ (-translate-y-px: không che border-t).
         "before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:-translate-y-px before:bg-gradient-to-t before:from-surface before:to-transparent",

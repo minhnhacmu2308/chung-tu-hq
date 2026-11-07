@@ -84,7 +84,7 @@ export function EmailTemplatesPage() {
               rowLabel={x.name}
               actions={[
                 ...(edit ? [{ id: "use", label: t.useTemplate, icon: <Send />, onSelect: () => router.push(`/admin/email/compose?template=${encodeURIComponent(x.id)}`) }] : []),
-                { id: "edit", label: t.editTemplate, icon: <Pencil />, onSelect: () => router.push(`/admin/email/templates/${x.id}`) },
+                { id: "edit", label: t.editTemplate, icon: <Pencil />, primary: true, onSelect: () => router.push(`/admin/email/templates/${x.id}`) },
                 ...(edit
                   ? [
                       { id: "dup", label: t.duplicateTemplate, icon: <Copy />, quick: false, onSelect: () => duplicate.mutate(x) },

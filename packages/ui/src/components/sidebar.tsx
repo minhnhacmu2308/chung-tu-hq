@@ -175,7 +175,7 @@ export function Sidebar({
             aria-expanded={!c}
             aria-controls={navId}
             className={cn(
-              "absolute top-12 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-fg-muted shadow-sm hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+              "hit-area pressable absolute top-12 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-surface text-fg-muted shadow-sm hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
               right ? "-left-3" : "-right-3",
             )}
           >
@@ -288,7 +288,7 @@ export function Sidebar({
                         <MenuPrimitive.Content
                           align="start"
                           sideOffset={6}
-                          className="z-50 min-w-48 rounded-lg border border-border bg-surface p-1.5 text-fg shadow-lg motion-safe:animate-pop-in"
+                          className="z-50 min-w-48 rounded-lg border border-border bg-surface p-1.5 text-fg shadow-lg motion-safe:animate-pop-in motion-safe:data-[state=closed]:animate-pop-out"
                         >
                           {item.children.map((ch) => {
                             const chCls = cn(
@@ -339,7 +339,7 @@ export function Sidebar({
         data-position={position}
         className={cn(
           asideBase,
-          "transition-[width] duration-200 motion-reduce:transition-none",
+          // Đổi bề rộng tức thì: animate width làm reflow cả vùng nội dung (bảng dài) mỗi khung hình → giật.
           collapsed ? "w-16" : "w-64",
           // DOM giữ menu đứng trước nội dung (thứ tự Tab), chỉ đổi vị trí hiển thị.
           right && "order-last",

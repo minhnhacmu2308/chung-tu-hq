@@ -31,7 +31,7 @@ export function Loader({ size = "md", label, className }: LoaderProps) {
   return (
     <span {...(label === null ? { "aria-hidden": true } : { role: "status" })} className={cn("relative inline-flex shrink-0 items-center justify-center text-primary", s.box, className)}>
       <span aria-hidden="true" className={cn("absolute inset-0 rounded-full border-primary-subtle", s.ring)} />
-      <span aria-hidden="true" className={cn("absolute inset-0 animate-spin rounded-full border-transparent border-t-current motion-reduce:animate-none", s.ring)} />
+      <span aria-hidden="true" className={cn("absolute inset-0 animate-spin rounded-full border-transparent border-t-current motion-reduce:[animation-duration:1.5s]", s.ring)} />
       <BrandMark decorative small={size === "sm"} className={s.mark} />
       {label !== null && <span className="sr-only">{label ?? t.loading}</span>}
     </span>

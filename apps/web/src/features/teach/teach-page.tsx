@@ -448,6 +448,7 @@ function SamplesTab({
                 ? [
                     {
                       id: "view",
+                      primary: true,
                       label: t.viewComparison,
                       icon: <Eye />,
                       onSelect: () => setViewing(s.id),

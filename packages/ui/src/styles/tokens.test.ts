@@ -65,7 +65,14 @@ describe.each(MATRIX)("tương phản – dải xám $gray, chế độ $mode", 
     expect(c(`--kb-color-${tone}-subtle-fg`, `--kb-color-${tone}-subtle`)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
   });
 
-  it("màu thương hiệu mặc định đọc được trên surface", () => {
+  it("viền ô nhập / ô chọn đạt 3:1 trên surface và bg (WCAG 1.4.11)", () => {
+    for (const bg of ["--kb-color-surface", "--kb-color-bg"]) {
+      expect(c("--kb-color-input-border", bg), `input-border trên ${bg}`).toBeGreaterThanOrEqual(3);
+      expect(c("--kb-color-control-border", bg), `control-border trên ${bg}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+    it("màu thương hiệu mặc định đọc được trên surface", () => {
     expect(c("--kb-color-primary", "--kb-color-surface")).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
   });
 

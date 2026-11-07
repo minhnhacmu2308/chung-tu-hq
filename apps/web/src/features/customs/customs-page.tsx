@@ -5,7 +5,7 @@ import {
   pickMessages, StatCard, StatusBadge, statusLabel, useUiLocale, fill, type RecordCardPattern, type Status, type Tone, type UiLocale,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { CircleCheck, FolderOpen, Hourglass, Leaf, ScanSearch, Send, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, CircleCheck, FolderOpen, Hourglass, Leaf, ScanSearch, Send, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
@@ -181,7 +181,7 @@ export function CustomsPage() {
           columnToggle
           resizable
           onRowClick={(r) => router.push(submitHref(r))}
-          pagination={{ initialPageSize: 10, pageSizeOptions: [10, 20, 50] }}
+          pagination={{ initialPageSize: 50, pageSizeOptions: [20, 50, 100] }}
           emptyTitle={t.emptyTitle}
           emptyDescription={t.emptyDescription}
           emptyAction={
@@ -194,7 +194,7 @@ export function CustomsPage() {
             <RowActions
               rowLabel={rowName(r, t)}
               actions={[
-                { id: "submit", label: t.openSubmit, icon: <Send />, onSelect: () => router.push(submitHref(r)) },
+                { id: "submit", label: t.openSubmit, icon: <ArrowUpRight />, primary: true, onSelect: () => router.push(submitHref(r)) },
                 { id: "dossier", label: t.openDossier, icon: <FolderOpen />, onSelect: () => router.push(`/dossiers/${r.dossierId}`) },
               ]}
             />

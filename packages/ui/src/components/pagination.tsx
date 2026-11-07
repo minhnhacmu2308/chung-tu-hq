@@ -48,7 +48,7 @@ export type PaginationProps = {
 };
 
 const pageBtn = cn(
-  "inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm text-fg-muted transition-colors",
+  "hit-area pressable inline-flex h-8 min-w-8 items-center justify-center rounded-md px-2 text-sm text-fg-muted",
   "hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
   "disabled:pointer-events-none disabled:opacity-40",
 );

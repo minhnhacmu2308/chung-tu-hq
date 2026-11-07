@@ -129,13 +129,13 @@ function bounds(min?: string, max?: string) {
 }
 
 const shell = cn(
-  "flex h-10 w-full items-center gap-1 rounded-md border border-border bg-surface pl-3 pr-1 text-sm text-fg",
+  "flex h-10 w-full items-center gap-1 rounded-md border border-input-border bg-surface pl-3 pr-1 text-sm text-fg pointer-coarse:text-[max(1rem,16px)]",
   "focus-within:border-focus focus-within:ring-2 focus-within:ring-focus",
   "has-[[aria-invalid=true]]:border-danger",
 );
 const iconBtn =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-fg-subtle hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed";
-const popover = "z-50 rounded-lg border border-border bg-surface shadow-lg motion-safe:animate-pop-in";
+const popover = "z-50 rounded-lg border border-border bg-surface shadow-lg motion-safe:animate-pop-in motion-safe:data-[state=closed]:animate-pop-out";
 
 type CommonProps = {
   /** Ngày nhỏ nhất cho phép, ISO. */

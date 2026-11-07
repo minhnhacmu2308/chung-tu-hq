@@ -130,7 +130,7 @@ export function InboxTable({
   const rowActions = (m: Row) => {
     const canFile = actions.canUse && m.status === "NEW" && pendingAttachments(m).length > 0;
     const list: RowAction[] = [
-      { id: "detail", label: t.viewDetail, icon: <Info />, onSelect: () => onOpen(m) },
+      { id: "detail", label: t.viewDetail, icon: <Info />, primary: true, onSelect: () => onOpen(m) },
       ...(canFile && m.suggestion ? [{ id: "suggested", label: fill(t.addToCode, { code: m.suggestion.dossierCode }), icon: <FolderInput />, onSelect: () => actions.onAddToSuggested(m) }] : []),
       ...(canFile ? [{ id: "add", label: t.addToDossier, icon: <FolderInput />, onSelect: () => actions.onAddTo(m), quick: false }] : []),
       ...(canFile ? [{ id: "create", label: t.createDossier, icon: <FilePlus2 />, onSelect: () => actions.onCreateDossier(m), quick: false }] : []),
@@ -161,7 +161,7 @@ export function InboxTable({
       initialSorting={[{ id: "receivedAt", desc: true }]}
       columnVisibility={visibility}
       onColumnVisibilityChange={setVisibility}
-      pagination={{ initialPageSize: 20, pageSizeOptions: [10, 20, 50, 100] }}
+      pagination={{ initialPageSize: 50, pageSizeOptions: [20, 50, 100] }}
       onRowClick={onOpen}
       rowActions={rowActions}
       emptyTitle={emptyTitle}

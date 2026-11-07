@@ -156,7 +156,7 @@ function ToastCard({ item, closeLabel }: { item: ToastItem; closeLabel: string }
       </div>
       <ToastPrimitive.Close
         aria-label={closeLabel}
-        className="absolute right-2 top-2 rounded-md p-1.5 text-fg-subtle hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="hit-area pressable absolute right-2 top-2 rounded-md p-1.5 text-fg-subtle hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <X aria-hidden="true" className="h-4 w-4" />
       </ToastPrimitive.Close>

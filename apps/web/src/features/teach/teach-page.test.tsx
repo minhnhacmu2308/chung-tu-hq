@@ -40,7 +40,9 @@ describe("Dạy khai báo", () => {
     expect(screen.getByRole("switch", { name: "Dùng bài học khi dựng tờ khai nháp" })).toBeTruthy();
     await expectNoA11yViolations(container);
 
-    await userEvent.click(within(row).getByRole("button", { name: "Xem so sánh – 106794645160" }));
+    // "Xem so sánh" trùng bấm dòng → thao tác chính trong menu "…" (RowActions primary), không còn icon nhanh.
+    await userEvent.click(within(row).getByRole("button", { name: "Thao tác khác – 106794645160" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Xem so sánh" }));
     const dialog = await screen.findByRole("dialog", {}, T);
     const kho = await rowWith(dialog, "Mã địa điểm lưu kho hàng chờ thông quan dự kiến");
     expect(within(kho).getByText("02DSEA0 – KHO FEDEX")).toBeTruthy();

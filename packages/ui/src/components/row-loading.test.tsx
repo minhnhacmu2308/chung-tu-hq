@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { Loader, LoadingDots, LoadingOverlay, LoadingState, PageLoading, SkeletonCard, SkeletonForm, SkeletonList, SkeletonStats, SkeletonTable, SkeletonText } from "./loading.js";
 import { Dialog, DialogContent } from "./dialog.js";
-import { RowActions, type RowAction } from "./row-actions.js";
+import { menuGroupsOf, quickActionsOf, RowActions, type RowAction } from "./row-actions.js";
 import { TooltipProvider } from "./tooltip.js";
 
 beforeAll(() => {
@@ -49,6 +49,36 @@ describe("RowActions", () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
+  it("luật icon nhanh: thao tác nguy hiểm và thao tác chính không thành icon; tối đa 2 icon", () => {
+    const a = (id: string, extra: Partial<RowAction> = {}): RowAction => ({ id, label: id, icon: null, onSelect: () => {}, ...extra });
+    const list = [a("open", { primary: true }), a("send"), a("edit"), a("copy"), a("del", { tone: "danger" }), a("hide", { quick: false })];
+    expect(quickActionsOf(list).map((x) => x.id)).toEqual(["send", "edit"]);
+    const g = menuGroupsOf([a("edit"), a("del", { tone: "danger" }), a("open", { primary: true })]);
+    expect(g.main.map((x) => x.id)).toEqual(["open", "edit"]);
+    expect(g.danger.map((x) => x.id)).toEqual(["del"]);
+  });
+
+  it("menu: thao tác chính đứng đầu, nguy hiểm ở cuối sau đường kẻ; icon nguy hiểm không hiện nhanh", async () => {
+    render(
+      <TooltipProvider>
+        <table><tbody><tr className="group"><td>
+          <RowActions rowLabel="HS-1" actions={[
+            { id: "del", label: "Xóa", icon: <svg />, tone: "danger", onSelect: () => {} },
+            { id: "edit", label: "Sửa", icon: <svg />, onSelect: () => {} },
+            { id: "open", label: "Mở", icon: <svg />, primary: true, onSelect: () => {} },
+          ]} />
+        </td></tr></tbody></table>
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Xóa – HS-1" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mở – HS-1" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Sửa – HS-1" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Thao tác khác – HS-1" }));
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Mở", "Sửa", "Xóa"]);
+    expect(within(menu).getByRole("separator")).toBeTruthy();
+  });
+
   it("thao tác trong menu mở popup (xác nhận) → popup giữ mở sau khi menu đóng và trả focus", async () => {
     function Host() {
       const [open, setOpen] = useState(false);
@@ -70,12 +100,16 @@ describe("RowActions", () => {
   });
 
   it("thao tác bị khóa không bấm được; quick=false chỉ nằm trong menu", async () => {
-    const { cancel } = setup([{ quick: false }, { disabled: true }]);
-    expect(screen.queryByRole("button", { name: "Mở hồ sơ – HS-NK-021" })).not.toBeInTheDocument();
-    const btn = screen.getByRole("button", { name: "Hủy hồ sơ – HS-NK-021" });
+    const { open } = setup([{ disabled: true }]);
+    const btn = screen.getByRole("button", { name: "Mở hồ sơ – HS-NK-021" });
     expect(btn).toBeDisabled();
     await userEvent.click(btn);
-    expect(cancel).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+    // quick=false (và thao tác nguy hiểm): không có icon nhanh, chỉ trong menu "…".
+    setup([{ quick: false }]);
+    expect(screen.getAllByRole("button", { name: /Thao tác khác/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Mở hồ sơ – HS-NK-021" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Hủy hồ sơ – HS-NK-021" })).toBeNull();
   });
 });
 

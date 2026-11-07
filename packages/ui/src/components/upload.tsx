@@ -265,7 +265,7 @@ const STATUS_STYLE: Record<UploadStatus, string> = {
 };
 
 const iconBtn =
-  "inline-flex h-7 w-7 items-center justify-center rounded-sm text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+  "hit-area pressable inline-flex h-7 w-7 items-center justify-center rounded-sm text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
 export function FileUploadList({ items, onRemove, onRetry, labels, className }: FileUploadListProps) {
   const t = useMessages(MESSAGES, labels);

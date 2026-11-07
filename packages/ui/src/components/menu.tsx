@@ -6,7 +6,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
-const surface = "z-50 min-w-48 rounded-lg border border-border bg-surface p-1.5 text-fg shadow-lg motion-safe:animate-pop-in";
+const surface = "z-50 min-w-48 rounded-lg border border-border bg-surface p-1.5 text-fg shadow-lg motion-safe:animate-pop-in motion-safe:data-[state=closed]:animate-pop-out";
 const itemCls = cn(
   "relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none",
   "data-[highlighted]:bg-surface-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
@@ -115,14 +115,14 @@ export function PopoverContent({ className, sideOffset = 6, showClose = false, s
       <PopoverPrimitive.Content
         data-glass=""
         sideOffset={sideOffset}
-        className={cn("z-50 w-72 rounded-lg border border-border bg-surface p-4 text-fg shadow-lg focus-visible:outline-none motion-safe:animate-pop-in", showClose && "pr-10", className)}
+        className={cn("z-50 w-72 rounded-lg border border-border bg-surface p-4 text-fg shadow-lg focus-visible:outline-none motion-safe:animate-pop-in motion-safe:data-[state=closed]:animate-pop-out", showClose && "pr-10", className)}
         {...props}
       >
         {children}
         {showClose && (
           <PopoverPrimitive.Close
             aria-label={t.close}
-            className="absolute right-2 top-2 rounded-sm p-1 text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="hit-area pressable absolute right-2 top-2 rounded-sm p-1 text-fg-muted hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             <X aria-hidden="true" className="h-4 w-4" />
           </PopoverPrimitive.Close>

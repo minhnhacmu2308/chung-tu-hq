@@ -1,7 +1,7 @@
 "use client";
 // Bảng trường của skill: khách tự chọn trường nào AI trích xuất, trường nào hiện trên màn kiểm tra.
 import {
-  Alert, Badge, Button, createDataTableColumnHelper, DataTable, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Stack, Switch, toast, RowActions, fill, pickMessages, useMessages, useUiLocale,
+  Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Stack, Switch, toast, RowActions, fill, pickMessages, useMessages, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -37,9 +37,12 @@ export function SkillFieldsTable({ skill, advanced = true }: { skill: Skill; adv
   const update = useFieldMutation(skill);
   const [editing, setEditing] = useState<SkillField | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
+  /** Trường đang chờ xác nhận xóa – xóa trường làm skill thôi trích xuất trường đó, không tự hoàn tác được. */
+  const [removing, setRemoving] = useState<SkillField | null>(null);
   const remove = useMutation({
     mutationFn: (key: string) => removeSkillField(skill.id, key),
     onSuccess: (_s, key) => {
+      setRemoving(null);
       void qc.invalidateQueries({ queryKey: skillKeys.all });
       toast({ tone: "success", title: fill(t.removed, { key }) });
     },
@@ -153,7 +156,7 @@ export function SkillFieldsTable({ skill, advanced = true }: { skill: Skill; adv
                 icon: <Trash2 />,
                 tone: "danger",
                 disabled: isStandard(f),
-                onSelect: () => remove.mutate(f.key),
+                onSelect: () => setRemoving(f),
               },
             ]}
           />
@@ -169,6 +172,19 @@ export function SkillFieldsTable({ skill, advanced = true }: { skill: Skill; adv
         emptyTitle={t.emptyTitle}
         emptyDescription={t.emptyDescription}
       />
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={t.removeConfirmTitle}
+        icon={<Trash2 className="h-4 w-4" />}
+        subject={removing ? `${removing.label} (${removing.key})` : null}
+        irreversible
+        confirmLabel={t.remove}
+        loading={remove.isPending}
+        onConfirm={() => removing && remove.mutate(removing.key)}
+      >
+        {t.removeConfirmBody}
+      </ConfirmDialog>
       <p className="text-sm text-fg-muted">
         {fill(t.summary, { total: skill.fields.length, extracted, shown })}
       </p>

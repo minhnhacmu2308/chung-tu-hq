@@ -148,7 +148,7 @@ function ListInner() {
             <RowActions
               rowLabel={r.name}
               actions={[
-                { id: "open", label: t.open, icon: <Building2 />, onSelect: () => router.push(`/admin/orgs/${r.id}`) },
+                { id: "open", label: t.open, icon: <Building2 />, primary: true, onSelect: () => router.push(`/admin/orgs/${r.id}`) },
                 ...(can("SUPPORT")
                   ? [
                       r.status === "ACTIVE"

@@ -194,91 +194,94 @@ function ListInner() {
                 { value: "XK", label: directionLabels.XK },
               ]}
             />
-            <DataTable
-              aria-label={title}
-              columns={columns}
-              data={rows}
-              getRowId={(r) => r.id}
-              rowLabel={(r) => r.code}
-              loading={dossiers.isLoading}
-              selectable
-              searchable
-              columnToggle
-              resizable
-              columnVisibility={columnVisibility}
-              onColumnVisibilityChange={setColumnVisibility}
-              pagination={{ initialPageSize: 10, pageSizeOptions: [10, 20, 50] }}
-              onRowClick={(r) => router.push(`/dossiers/${r.id}`)}
-              emptyTitle={t.emptyTitle}
-              emptyDescription={t.emptyDescription}
-              filtered={scope !== "ALL"}
-              onClearFilters={() => setScope("ALL")}
-              emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">{t.create}</Link></Button>}
-              viewStorageKey="dossiers"
-              selectionActions={(picked) => (
-                <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: t.exporting, description: t.exportMock })}>
-                  {fill(t.exportSelected, { n: picked.length })}
-                </Button>
-              )}
-              renderCard={(r, parts) => {
-                const Transport = TRANSPORT_ICON[r.transportMode];
-                return (
-                <RecordCard
-                  title={<span className="font-mono">{r.code}</span>}
-                  titleLines={1}
-                  subtitle={r.partner}
-                  tone={r.direction === "NK" ? "info" : "primary"}
-                  pattern={r.direction === "NK" ? "dots" : "diagonal"}
-                  leading={<IconTile icon={<Transport />} tone={r.direction === "NK" ? "info" : "primary"} size="md" className="bg-surface" />}
-                  art={<Transport />}
-                  status={<DossierStatusBadge status={r.status} customs={r.customs} />}
-                  select={parts.select}
-                  actions={parts.actions}
-                  fields={[
-                    { label: t.colStep, value: <DossierStep dossier={r} stepLabels={stepLabels} />, wide: true },
-                    {
-                      label: t.colType,
-                      value: (
-                        <span className="inline-flex items-center gap-1.5">
-                          <Badge tone={r.direction === "NK" ? "info" : "primary"} variant="outline">{r.direction}</Badge>
-                          {r.typeCode}
-                        </span>
-                      ),
-                    },
-                    { label: t.colValue, value: <span className="tabular-nums">{formatMoney(r.invoiceValue, r.currency)}</span> },
-                    { label: t.colDue, value: <DueBadge dossier={r} /> },
-                    { label: t.colOwner, value: r.ownerName },
-                  ]}
-                />
-                );
-              }}
-              rowActions={(r) => (
-                <RowActions
-                  rowLabel={r.code}
-                  actions={[
-                    { id: "open", label: t.open, icon: <FolderOpen />, onSelect: () => router.push(`/dossiers/${r.id}`) },
-                    {
-                      id: "cancel",
-                      label: t.cancel,
-                      icon: <XCircle />,
-                      tone: "danger",
-                      disabled: r.status === "CANCELLED" || r.status === "CLEARED" || r.status === "SUBMITTED",
-                      onSelect: () => setToCancel(r),
-                    },
-                    ...(canDelete && !sentToCustoms(r)
-                      ? [{
-                          id: "delete",
-                          label: t.delete,
-                          icon: <Trash2 />,
-                          tone: "danger" as const,
-                          quick: false,
-                          onSelect: () => setToDelete(r),
-                        }]
-                      : []),
-                  ]}
-                />
-              )}
-            />
+            {/* Tải lỗi: chỉ báo lỗi (Alert ở trên), không hiện bảng trống "Chưa có hồ sơ" – sai nghĩa. */}
+            {!dossiers.isError && (
+              <DataTable
+                aria-label={title}
+                columns={columns}
+                data={rows}
+                getRowId={(r) => r.id}
+                rowLabel={(r) => r.code}
+                loading={dossiers.isLoading}
+                selectable
+                searchable
+                columnToggle
+                resizable
+                columnVisibility={columnVisibility}
+                onColumnVisibilityChange={setColumnVisibility}
+                pagination={{ initialPageSize: 50, pageSizeOptions: [20, 50, 100] }}
+                onRowClick={(r) => router.push(`/dossiers/${r.id}`)}
+                emptyTitle={t.emptyTitle}
+                emptyDescription={t.emptyDescription}
+                filtered={scope !== "ALL"}
+                onClearFilters={() => setScope("ALL")}
+                emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">{t.create}</Link></Button>}
+                viewStorageKey="dossiers"
+                selectionActions={(picked) => (
+                  <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: t.exporting, description: t.exportMock })}>
+                    {fill(t.exportSelected, { n: picked.length })}
+                  </Button>
+                )}
+                renderCard={(r, parts) => {
+                  const Transport = TRANSPORT_ICON[r.transportMode];
+                  return (
+                  <RecordCard
+                    title={<span className="font-mono">{r.code}</span>}
+                    titleLines={1}
+                    subtitle={r.partner}
+                    tone={r.direction === "NK" ? "info" : "primary"}
+                    pattern={r.direction === "NK" ? "dots" : "diagonal"}
+                    leading={<IconTile icon={<Transport />} tone={r.direction === "NK" ? "info" : "primary"} size="md" className="bg-surface" />}
+                    art={<Transport />}
+                    status={<DossierStatusBadge status={r.status} customs={r.customs} />}
+                    select={parts.select}
+                    actions={parts.actions}
+                    fields={[
+                      { label: t.colStep, value: <DossierStep dossier={r} stepLabels={stepLabels} />, wide: true },
+                      {
+                        label: t.colType,
+                        value: (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Badge tone={r.direction === "NK" ? "info" : "primary"} variant="outline">{r.direction}</Badge>
+                            {r.typeCode}
+                          </span>
+                        ),
+                      },
+                      { label: t.colValue, value: <span className="tabular-nums">{formatMoney(r.invoiceValue, r.currency)}</span> },
+                      { label: t.colDue, value: <DueBadge dossier={r} /> },
+                      { label: t.colOwner, value: r.ownerName },
+                    ]}
+                  />
+                  );
+                }}
+                rowActions={(r) => (
+                  <RowActions
+                    rowLabel={r.code}
+                    actions={[
+                      { id: "open", label: t.open, icon: <FolderOpen />, primary: true, onSelect: () => router.push(`/dossiers/${r.id}`) },
+                      {
+                        id: "cancel",
+                        label: t.cancel,
+                        icon: <XCircle />,
+                        tone: "danger",
+                        disabled: r.status === "CANCELLED" || r.status === "CLEARED" || r.status === "SUBMITTED",
+                        onSelect: () => setToCancel(r),
+                      },
+                      ...(canDelete && !sentToCustoms(r)
+                        ? [{
+                            id: "delete",
+                            label: t.delete,
+                            icon: <Trash2 />,
+                            tone: "danger" as const,
+                            quick: false,
+                            onSelect: () => setToDelete(r),
+                          }]
+                        : []),
+                    ]}
+                  />
+                )}
+              />
+            )}
       </Stack>
 
       <ConfirmDialog

@@ -76,7 +76,7 @@ export function Progress({
         className={trackVariants({ size })}
       >
         <ProgressPrimitive.Indicator
-          className={cn(barVariants({ tone }), indeterminate && "w-1/3 animate-pulse motion-reduce:animate-none")}
+          className={cn(barVariants({ tone }), indeterminate && "w-2/5 motion-safe:animate-indeterminate")}
           style={indeterminate ? undefined : { width: `${ratio * 100}%` }}
         />
       </ProgressPrimitive.Root>

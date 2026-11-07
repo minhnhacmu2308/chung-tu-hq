@@ -125,7 +125,7 @@ export function UserTable({ users, loading, showOrg = true, showJoinRequested = 
           <RowActions
             rowLabel={r.name}
             actions={[
-              { id: "open", label: t.viewDetail, icon: <UserRound />, onSelect: () => setOpenId(r.id) },
+              { id: "open", label: t.viewDetail, icon: <UserRound />, primary: true, onSelect: () => setOpenId(r.id) },
               ...(can("SUPPORT")
                 ? availableUserActions(r).map((a) => ({
                     id: a,

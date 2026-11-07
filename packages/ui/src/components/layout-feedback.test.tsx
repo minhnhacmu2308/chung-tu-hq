@@ -91,7 +91,8 @@ describe("Badge – cỡ, chấm, icon; trạng thái dùng chung", () => {
         <Badge size="lg" dot icon={<svg />}>Lớn</Badge>
       </>,
     );
-    expect(screen.getByText("Nhỏ")).toHaveClass("text-[0.6875rem]");
+    // Cỡ nhỏ tối thiểu 12px (dấu chồng tiếng Việt, chữ Hán đọc được) – khác cỡ vừa ở lề ngang.
+    expect(screen.getByText("Nhỏ")).toHaveClass("text-xs", "px-1.5");
     expect(screen.getByText("Vừa")).toHaveClass("text-xs");
     const lg = screen.getByText("Lớn");
     expect(lg).toHaveClass("text-sm");

@@ -131,7 +131,7 @@ export type ComboboxProps =
   | (BaseProps & { multiple: true; value: readonly string[]; onChange: (value: string[]) => void });
 
 const shell = cn(
-  "flex min-h-10 w-full items-center gap-1 rounded-md border border-border bg-surface px-2 text-sm text-fg",
+  "flex min-h-10 w-full items-center gap-1 rounded-md border border-input-border bg-surface px-2 text-sm text-fg pointer-coarse:text-[max(1rem,16px)]",
   "focus-within:border-focus focus-within:ring-2 focus-within:ring-focus",
   "has-[[aria-invalid=true]]:border-danger",
 );
@@ -257,7 +257,7 @@ export function Combobox(props: ComboboxProps) {
               type="button"
               aria-label={t.clear}
               onClick={clear}
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-fg-subtle hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="hit-area pressable inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-fg-subtle hover:bg-surface-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             >
               <X aria-hidden="true" className="h-4 w-4" />
             </button>
@@ -275,7 +275,7 @@ export function Combobox(props: ComboboxProps) {
           data-expanded={expandable ? String(expanded) : undefined}
           data-glass=""
           className={cn(
-            "z-50 min-w-56 rounded-lg border border-border bg-surface text-fg shadow-lg motion-safe:animate-pop-in",
+            "z-50 min-w-56 rounded-lg border border-border bg-surface text-fg shadow-lg motion-safe:animate-pop-in motion-safe:data-[state=closed]:animate-pop-out",
             // Mở rộng: tới 36rem nhưng không vượt màn hình (chừa 1rem mỗi bên).
             wrap ? "w-[min(36rem,calc(100vw-2rem))]" : "w-[var(--radix-popover-trigger-width)]",
           )}
@@ -287,7 +287,7 @@ export function Combobox(props: ComboboxProps) {
                 value={search}
                 onValueChange={setSearchValue}
                 placeholder={t.search}
-                className="h-8 w-full min-w-0 rounded-sm bg-transparent px-2 text-sm text-fg placeholder:text-fg-subtle focus-visible:outline-none"
+                className="h-8 w-full min-w-0 rounded-sm bg-transparent px-2 text-sm text-fg pointer-coarse:text-[max(1rem,16px)] placeholder:text-fg-subtle focus-visible:outline-none"
               />
               {expandable && (
                 <button
@@ -327,7 +327,7 @@ export function Combobox(props: ComboboxProps) {
                     onSelect={() => toggle(o.value)}
                     data-checked={isSelected || undefined}
                     className={cn(
-                      "flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-sm text-fg",
+                      "flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 pointer-coarse:py-2.5 text-sm text-fg",
                       "data-[selected=true]:bg-surface-muted data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50",
                     )}
                   >

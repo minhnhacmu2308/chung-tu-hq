@@ -6,11 +6,12 @@ import { Spinner } from "./spinner.js";
 
 export const buttonVariants = cva(
   [
-    "inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium select-none",
-    "rounded-md border border-transparent transition-[color,background-color,border-color,box-shadow,scale] duration-150",
+    "relative inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium select-none",
+    "rounded-md border border-transparent transition-[color,background-color,border-color,box-shadow,scale] duration-(--kb-duration-press) ease-out",
     // Phản hồi khi nhấn: nút lún nhẹ.
     "motion-safe:active:scale-[0.98]",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+    // Vòng focus bằng outline + khe trong suốt: không lộ dải màu nền trang khi nút nằm trên thẻ / popup.
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
     "disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",
   ],
   {
@@ -19,16 +20,17 @@ export const buttonVariants = cva(
         primary: "bg-primary text-primary-fg shadow-sm hover:bg-primary-hover hover:shadow-md active:bg-primary-active active:shadow-sm",
         secondary: "bg-surface text-fg border-border shadow-sm hover:bg-surface-muted hover:border-border-strong",
         ghost: "bg-transparent text-fg hover:bg-surface-muted",
-        danger: "bg-danger text-danger-fg shadow-sm hover:opacity-90 hover:shadow-md active:shadow-sm",
+        danger: "bg-danger text-danger-fg shadow-sm hover:bg-danger-hover hover:shadow-md active:bg-danger-active active:shadow-sm",
         link: "bg-transparent text-primary underline-offset-4 hover:underline px-0",
       },
       size: {
-        sm: "h-8 px-3 text-sm",
+        // Nút nhỏ / nút biểu tượng: vùng chạm ≥ 44px trên màn cảm ứng (hit-area), kích thước nhìn thấy giữ nguyên.
+        sm: "h-8 px-3 text-sm hit-area",
         md: "h-10 px-4 text-sm",
         lg: "h-12 px-6 text-base",
-        icon: "h-10 w-10 p-0",
+        icon: "h-10 w-10 p-0 hit-area",
         /** Nút biểu tượng nhỏ (24px) – trên đường viền khung (FieldFrame legendAction), cạnh nhãn. */
-        "icon-sm": "h-6 w-6 p-0",
+        "icon-sm": "h-6 w-6 p-0 hit-area",
       },
       fullWidth: { true: "w-full" },
       /** Nhãn dài (vd nút trong Alert trên mobile): cho xuống dòng, cao theo nội dung thay vì tràn khung; cao tối thiểu theo size.
@@ -88,8 +90,18 @@ export function Button({
       aria-busy={loading || undefined}
       {...props}
     >
-      {loading ? <Spinner size="sm" label={null} /> : leftIcon}
-      {children}
+      {loading && leftIcon ? <Spinner size="sm" label={null} /> : leftIcon}
+      {/* Không có icon trái: spinner nằm giữa, chữ mờ đi tại chỗ – nút không đổi bề rộng (nhóm nút không xô lệch); chữ vẫn là tên của nút. */}
+      {loading && !leftIcon ? (
+        <>
+          <span className="opacity-0">{children}</span>
+          <span className="absolute inset-0 flex items-center justify-center">
+            <Spinner size="sm" label={null} />
+          </span>
+        </>
+      ) : (
+        children
+      )}
       {!loading && rightIcon}
     </button>
   );

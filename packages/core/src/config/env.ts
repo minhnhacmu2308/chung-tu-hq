@@ -55,6 +55,15 @@ export const EnvSchema = z
     AI_RATE_PER_MINUTE: z.coerce.number().int().positive().default(30),
     /** Cổng HTTP health của worker (/health/live, /health/ready); bỏ trống = không mở. */
     WORKER_HEALTH_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+    /**
+     * Token Bearer cho chỉ số Prometheus (web `GET /api/metrics`, worker `:METRICS_PORT/metrics`) – ADR 0012, docs/OBSERVABILITY.md.
+     * Trống = tắt: web trả 404, worker không mở cổng. Tạo trên máy chủ bằng `openssl rand -hex 32`, không log, không commit.
+     */
+    METRICS_TOKEN: z.string().min(16, "METRICS_TOKEN tối thiểu 16 ký tự (openssl rand -hex 32)").optional(),
+    /** Cổng HTTP chỉ số của worker (chỉ mở khi có METRICS_TOKEN). */
+    METRICS_PORT: z.coerce.number().int().min(1).max(65535).default(9464),
+    /** Mã commit của bản đang chạy (nhãn khaibao_build_info); trống = "unknown". */
+    GIT_COMMIT: z.string().optional(),
     /** Số job đọc chứng từ / chạy agent đồng thời tối đa của MỘT doanh nghiệp – khách lớn không chiếm hết worker. */
     WORKER_MAX_PER_ORG: z.coerce.number().int().positive().default(2),
     CUSTOMS_GATEWAY: z.enum(["fake", "fpt"]).default("fake"),

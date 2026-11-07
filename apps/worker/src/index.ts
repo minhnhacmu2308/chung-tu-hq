@@ -9,6 +9,7 @@ import { failAgentRun, failHsWork } from "@kb/core/modules/declaration";
 import { markDocumentFailed } from "@kb/core/modules/extraction";
 import { markOutboxFailed } from "@kb/core/modules/integration";
 import { failMailSync } from "@kb/core/modules/mailbox";
+import { configureMetrics, observeJob, registerQueueCollector } from "@kb/core/observability";
 import { createLogger } from "@kb/core/shared";
 import { emailCampaignJob } from "./jobs/email-campaign.js";
 import { exchangeRateCatchUpJob, exchangeRateJob } from "./jobs/exchange-rate.js";
@@ -21,6 +22,7 @@ import { failTeachSample } from "@kb/core/modules/teaching";
 import { stuckSweeperJob } from "./jobs/stuck-sweeper.js";
 import { perOrgLimit } from "./jobs/_per-org.js";
 import { startHealthServer } from "./health-server.js";
+import { startMetricsServer } from "./metrics-server.js";
 
 const log = createLogger({ name: "worker" });
 const c = buildContainer();
@@ -87,13 +89,18 @@ async function onFinalFailure(queue: string, job: Job, e: Error) {
   else if (queue === "customs-send" && d["orgId"] && d["outboxId"]) await markOutboxFailed(c.customs, { orgId: d["orgId"], outboxId: d["outboxId"], reason });
 }
 
+/** Thời gian chạy một lần job (giây) cho khaibao_job_duration_seconds. */
+const jobSeconds = (job: Job | undefined) => (job?.finishedOn && job.processedOn ? (job.finishedOn - job.processedOn) / 1000 : undefined);
+
 for (const w of workers) {
   w.on("failed", (job, e) => {
     const final = !!job && (job.attemptsMade >= (job.opts.attempts ?? 1) || e.name === "UnrecoverableError");
+    observeJob(w.name, final ? "failed" : "retry", jobSeconds(job));
     log.error(final ? "job lỗi – hết số lần thử" : "job lỗi – sẽ thử lại", { queue: w.name, ...jobFields(job), err: e });
     if (!final) return;
     onFinalFailure(w.name, job, e).catch((x) => log.error("không đánh dấu được bản ghi sau khi job lỗi", { queue: w.name, ...jobFields(job), err: x }));
   });
+  w.on("completed", (job) => observeJob(w.name, "completed", jobSeconds(job)));
   w.on("completed", (job, result) => log.info("job xong", { queue: w.name, ...jobFields(job), result: String(result), durationMs: job.finishedOn && job.processedOn ? job.finishedOn - job.processedOn : undefined }));
   w.on("error", (e) => log.error("worker lỗi kết nối/khung", { queue: w.name, err: e }));
   w.on("stalled", (jobId) => log.warn("job bị coi là treo (stalled) – sẽ chạy lại", { queue: w.name, jobId }));
@@ -101,6 +108,12 @@ for (const w of workers) {
 
 let shuttingDown = false;
 const health = c.env.WORKER_HEALTH_PORT ? startHealthServer({ port: c.env.WORKER_HEALTH_PORT, redis: c.redis, queues: () => workers.map((w) => w.name), isShuttingDown: () => shuttingDown }) : null;
+
+// Chỉ số Prometheus (ADR 0012): chỉ bật khi đặt METRICS_TOKEN. Gauge số job mỗi queue đọc lúc scrape qua Queue (chỉ đọc).
+configureMetrics({ service: "worker", version: process.env.npm_package_version, commit: c.env.GIT_COMMIT });
+const metricQueues = c.env.METRICS_TOKEN ? workers.map((w) => new Queue(w.name, { connection: c.redis })) : [];
+if (metricQueues.length) registerQueueCollector(metricQueues);
+const metricsServer = c.env.METRICS_TOKEN ? startMetricsServer({ port: c.env.METRICS_PORT, token: c.env.METRICS_TOKEN }) : null;
 
 registerSchedulers()
   .then(() => log.info("worker sẵn sàng", { queues: workers.map((w) => w.name), ai: c.env.AI_PROVIDER, hs: c.env.HS_CLASSIFIER, mail: c.env.MAILBOX_PROVIDER }))
@@ -122,7 +135,8 @@ async function shutdown(signal: string, code = 0) {
   forceExit.unref();
   try {
     health?.close();
-    await Promise.all([...workers.map((w) => w.close()), certQueue.close(), rateQueue.close(), sweeperQueue.close()]);
+    metricsServer?.close();
+    await Promise.all([...workers.map((w) => w.close()), certQueue.close(), rateQueue.close(), sweeperQueue.close(), ...metricQueues.map((q) => q.close())]);
     await c.close();
   } catch (e) {
     log.error("lỗi khi tắt", { err: e });

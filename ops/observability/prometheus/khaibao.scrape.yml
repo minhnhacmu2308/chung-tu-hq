@@ -1,0 +1,39 @@
+# KhaiBáo AI – cấu hình scrape cho Prometheus dùng chung (hscodepro-observability), nạp qua `scrape_config_files`.
+# Đặt tại /opt/khaibao/observability/prometheus/khaibao.scrape.yml trên VPS, gắn vào container Prometheus ở /etc/prometheus/khaibao (ro).
+# Không chứa bí mật: token đọc từ file metrics.token cạnh file này (tạo trên máy chủ, KHÔNG commit). Xem ops/observability/README.md.
+# Tên đích = tên container của compose project `khaibao` trên mạng docker `hscodepro-observability` (ops/observability/compose.monitoring.yml).
+
+scrape_configs:
+  - job_name: khaibao-web
+    metrics_path: /api/metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/khaibao/metrics.token
+    static_configs:
+      - targets: ["khaibao-web-1:3100"]
+        labels: { environment: prod, project: khaibao }
+
+  - job_name: khaibao-worker
+    metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/khaibao/metrics.token
+    static_configs:
+      - targets: ["khaibao-worker-1:9464"]
+        labels: { environment: prod, project: khaibao }
+
+  - job_name: khaibao-postgres
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["khaibao-postgres-exporter:9187"]
+        labels: { environment: prod, project: khaibao }
+
+  - job_name: khaibao-redis
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["khaibao-redis-exporter:9121"]
+        labels: { environment: prod, project: khaibao }

@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { AiDossierDraft, DossierBrief, DossierDraftAi } from "../../dossier/index.js";
+import { observeAiCall } from "../../../observability/index.js";
 
 const AiOutput = z.object({
   baseDossierCode: z.string().nullable(),
@@ -38,13 +39,13 @@ export class ClaudeDossierDrafter implements DossierDraftAi {
 
   async draft(input: { prompt: string; today: string; recent: DossierBrief[] }) {
     const recent = input.recent.length ? input.recent.map(line).join("\n") : "(chưa có)";
-    const res = await this.client.beta.messages.create({
+    const res = await observeAiCall("AI_DOSSIER_DRAFT", this.model, () => this.client.beta.messages.create({
       model: this.model,
       max_tokens: 600,
       system: SYSTEM,
       output_config: { format: zodOutputFormat(AiOutput) },
       messages: [{ role: "user", content: `Hôm nay: ${input.today}\nHồ sơ gần đây (mã | chiều | vận tải | loại hình | chi cục | đối tác | ngày tạo):\n${recent}\n\nYêu cầu:\n${input.prompt}` }],
-    });
+    }));
     const usage = { model: res.model, inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens };
     const text = res.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join("");
     return { result: parseOutput(text), usage };

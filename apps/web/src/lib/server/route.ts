@@ -1,4 +1,5 @@
 // Wrapper cho route handler: parse input, map lỗi nghiệp vụ → HTTP, không lộ chi tiết lỗi hạ tầng.
+import { observeHttp, routeTemplate } from "@kb/core/observability";
 import { createLogger, type DomainError, type DomainErrorCode, type Logger, type Result } from "@kb/core/shared";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError, type ZodType } from "zod";
@@ -149,13 +150,16 @@ export function route(handler: Handler) {
   return async (req: NextRequest, ctx: { params: Promise<Params> }): Promise<Response> => {
     const requestId = requestIdOf(req);
     const startedAt = Date.now();
+    let params: Params | undefined;
     const finish = (res: Response) => {
       res.headers.set(REQUEST_ID_HEADER, requestId);
+      // Chỉ số HTTP (ADR 0012): nhãn route dạng mẫu (/api/dossiers/:id), không id thật.
+      observeHttp(req.method, routeTemplate(req.nextUrl.pathname, params), res.status, (Date.now() - startedAt) / 1000);
       return res;
     };
     try {
+      params = await ctx.params;
       if (crossSiteOrigin(req)) throw new HttpError(403, "CSRF", "Request không đến từ ứng dụng");
-      const params = await ctx.params;
       const out = await handler(req, params);
       if (out instanceof Response) return finish(out);
       if (out === undefined) return finish(new NextResponse(null, { status: 204 }));

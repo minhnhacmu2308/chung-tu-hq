@@ -8,6 +8,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z, type ZodType } from "zod";
 import { AiDataError, PROMPT_VERSION, type AiFile, type AiProvider, type AiUsage, type ExtractPrompt } from "../application/ports.js";
 import { needsAiRegions } from "./pdf-text-layer.js";
+import { observeAiCall } from "../../../observability/index.js";
 
 const KIND_VI: Record<DocKind, string> = {
   INVOICE: "Commercial Invoice (hóa đơn thương mại)", PACKING_LIST: "Packing List", BILL_OF_LADING: "Bill of Lading (vận đơn đường biển)", AIR_WAYBILL: "Air Waybill",
@@ -108,7 +109,7 @@ export class ClaudeAiProvider implements AiProvider {
   }
 
   async classifyPages(file: AiFile) {
-    const { input, usage } = await this.callStructured(file, ClassifyResultSchema, `File "${file.fileName}" có ${file.pages} trang. Phân loại từng trang thành các chứng từ (một file có thể chứa nhiều chứng từ; trang Duplicate/Triplicate/Copy đánh dấu isDuplicateCopy). Nếu nhận ra tên nhà cung cấp/hãng tàu, ghi vào supplierHint.`);
+    const { input, usage } = await observeAiCall("AI_CLASSIFY", this.model, () => this.callStructured(file, ClassifyResultSchema, `File "${file.fileName}" có ${file.pages} trang. Phân loại từng trang thành các chứng từ (một file có thể chứa nhiều chứng từ; trang Duplicate/Triplicate/Copy đánh dấu isDuplicateCopy). Nếu nhận ra tên nhà cung cấp/hãng tàu, ghi vào supplierHint.`));
     const parsed = ClassifyResultSchema.safeParse(input);
     if (!parsed.success) throw new AiDataError("Kết quả phân loại không đúng cấu trúc", usage);
     return { result: parsed.data as ClassifyResult, usage };
@@ -122,7 +123,7 @@ export class ClaudeAiProvider implements AiProvider {
     const examples = prompt.examples.length ? `\nVí dụ đã duyệt (tham khảo cách đọc):\n${JSON.stringify(prompt.examples.slice(0, 2))}` : "";
     // PDF chuẩn (có lớp chữ): màn OCR tự tìm vị trí từ lớp chữ → không tốn token xin tọa độ.
     const withRegions = prompt.regions !== false && (await needsAiRegions(file));
-    const { input, regions, usage } = await this.callStructured(file, schema, `${prompt.title ?? `Đây là ${KIND_VI[prompt.kind]}`}, đọc các trang ${pages.join(", ")} của file "${file.fileName}".${hints}${supplier}${examples}`, withRegions);
+    const { input, regions, usage } = await observeAiCall("AI_EXTRACT", this.model, () => this.callStructured(file, schema, `${prompt.title ?? `Đây là ${KIND_VI[prompt.kind]}`}, đọc các trang ${pages.join(", ")} của file "${file.fileName}".${hints}${supplier}${examples}`, withRegions));
     return { result: input, regions, usage };
   }
 }

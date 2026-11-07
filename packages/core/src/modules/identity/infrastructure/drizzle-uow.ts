@@ -4,11 +4,17 @@ import type { Db, Tx } from "../../../db/client.js";
 import { authTokens, digitalCertificates, joinRequests, memberships, notifications, organizations, orgAudit, orgSecrets, sessions, users } from "../../../db/schema/identity.js";
 import { withCtx, withSystem, withUser } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { IdentityRepos, IdentityUow, JoinRequestStatus, MembershipRow, MembershipStatus } from "../application/ports.js";
+import type { CreditGrantRow, IdentityRepos, IdentityUow, JoinRequestStatus, MembershipRow, MembershipStatus } from "../application/ports.js";
+
+/**
+ * Ghi dòng tặng lượt trong transaction đang mở – hiện thực thuộc billing (sổ lượt), composition root truyền vào
+ * (identity không đọc/ghi bảng của module khác). Không nối → bỏ qua (test hạ tầng cũ).
+ */
+export type CreditGrantTx = (tx: Tx, row: CreditGrantRow) => Promise<void>;
 import type { AuthTokenKind } from "../domain/token.js";
 import type { Role } from "@kb/contracts";
 
-function repos(tx: Tx): IdentityRepos {
+function repos(tx: Tx, grant?: CreditGrantTx): IdentityRepos {
   const toMembership = (m: typeof memberships.$inferSelect): MembershipRow => ({ id: m.id, orgId: m.orgId, userId: m.userId, role: m.role as Role, status: m.status as MembershipStatus, invitedBy: m.invitedBy });
   return {
     users: {
@@ -24,6 +30,11 @@ function repos(tx: Tx): IdentityRepos {
       listAll: async () => tx.select().from(organizations).orderBy(organizations.id),
       insert: async (row) => void (await tx.insert(organizations).values(row)),
       update: async (id, patch) => void (await tx.update(organizations).set({ ...patch, updatedAt: new Date() }).where(eq(organizations.id, id))),
+    },
+    credits: {
+      grant: async (row) => {
+        if (grant) await grant(tx, row);
+      },
     },
     memberships: {
       listByOrg: async (orgId) => (await tx.select().from(memberships).where(eq(memberships.orgId, orgId)).orderBy(memberships.createdAt)).map(toMembership),
@@ -102,14 +113,14 @@ function repos(tx: Tx): IdentityRepos {
 const toJoin = (j: typeof joinRequests.$inferSelect) => ({ id: j.id, orgId: j.orgId, userId: j.userId, status: j.status as JoinRequestStatus, createdAt: j.createdAt });
 
 export class DrizzleIdentityUow implements IdentityUow {
-  constructor(private db: Db) {}
+  constructor(private db: Db, private grant?: CreditGrantTx) {}
   system<T>(fn: (r: IdentityRepos) => Promise<T>) {
-    return withSystem(this.db, (tx) => fn(repos(tx)));
+    return withSystem(this.db, (tx) => fn(repos(tx, this.grant)));
   }
   asUser<T>(userId: UserId, fn: (r: IdentityRepos) => Promise<T>) {
-    return withUser(this.db, userId, (tx) => fn(repos(tx)));
+    return withUser(this.db, userId, (tx) => fn(repos(tx, this.grant)));
   }
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: IdentityRepos) => Promise<T>) {
-    return withCtx(this.db, ctx, (tx) => fn(repos(tx)));
+    return withCtx(this.db, ctx, (tx) => fn(repos(tx, this.grant)));
   }
 }

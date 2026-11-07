@@ -1,21 +1,22 @@
 "use client";
-import type { AdminOrgDetail } from "@kb/contracts";
+import { LOW_CREDITS, type AdminOrgDetail } from "@kb/contracts";
 import {
   Alert, Badge, Breadcrumb, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader, PageLoading, Stack,
   StatCard, StatusBadge, Tabs, TabsContent, TabsList, TabsTrigger, fill, useMessages,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarPlus, Coins, FileText, FolderOpen, Gauge, Lock, LockOpen, PlugZap, Repeat, ShieldCheck, UsersRound } from "lucide-react";
+import { Coins, FileSignature, FileText, FolderOpen, Gauge, Lock, LockOpen, PlugZap, Repeat, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type ReactNode } from "react";
-import { adminKeys, getAdminOrg, listAdminUsers } from "@/api/admin";
+import { adminKeys, getAdminOrg, listAdminUsers, listOrgCredits } from "@/api/admin";
+import { ContractStatusBadge, CreditLedgerTable, PaymentsTable } from "@/components/common/billing-display";
+import { fromMinor, toMinor } from "@/lib/decimal";
 import { LoadError } from "@/components/common/load-error";
 import { ApiError } from "@/lib/api-error";
 import { daysUntil, formatDate, formatDateTime, formatNumber, formatRelative, formatVnd } from "@/lib/format";
 import { AuditTable } from "../audit/audit-table";
 import { INTEGRATION_STATUS, ORG_STATUS, PLAN_TONE } from "../common/admin-display";
-import { QuotaMeter } from "../common/quota-meter";
 import { useAdminSession } from "../shell/use-admin-session";
 import { UserTable } from "../users/user-table";
 import { CREATE_ORG_MESSAGES, ORG_DETAIL_MESSAGES } from "./orgs.messages";
@@ -46,7 +47,7 @@ function OverviewTab({ org }: { org: AdminOrgDetail }) {
     <Stack gap="lg">
       <Grid cols={{ base: 2, xl: 4 }}>
         <StatCard icon={<UsersRound />} label={t.members} value={org.memberCount} hint={org.lastActiveAt ? fill(t.activeAgo, { ago: formatRelative(org.lastActiveAt) }) : t.nobodyLoggedIn} />
-        <StatCard icon={<FolderOpen />} tone="success" label={t.dossiersThisMonth} value={org.usage.dossiersThisMonth} hint={fill(t.quotaHint, { n: formatNumber(org.plan.dossiersPerMonth + org.quotaBonus) })} />
+        <StatCard icon={<FolderOpen />} tone="success" label={t.dossiersThisMonth} value={org.usage.dossiersThisMonth} hint={t.thisMonth} />
         <StatCard icon={<FileText />} tone="info" label={t.pagesRead} value={org.usage.pagesThisMonth} hint={t.thisMonth} />
         <StatCard icon={<Coins />} tone="warning" label={t.aiCostThisMonth} value={formatVnd(org.usage.aiCostVnd)} hint={t.aiCostHint} />
       </Grid>
@@ -77,10 +78,10 @@ function OverviewTab({ org }: { org: AdminOrgDetail }) {
             <dl className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2">
               <Info label={tc.contractNo}>{org.contract.contractNo ?? "—"}</Info>
               <Info label={tc.contractEndsOn}>
-                {org.contract.endsOn ? formatDate(org.contract.endsOn) : "—"}
-                {org.contract.endsOn && daysUntil(org.contract.endsOn) <= 30 && (
-                  <span className="block text-xs text-warning-subtle-fg">{fill(tc.contractEndsIn, { n: Math.max(0, daysUntil(org.contract.endsOn)) })}</span>
-                )}
+                <span className="flex flex-wrap items-center gap-2">
+                  {org.contract.endsOn ? formatDate(org.contract.endsOn) : "—"}
+                  {org.billing.contract && org.billing.contract.status !== "ACTIVE" && <ContractStatusBadge contract={org.billing.contract} />}
+                </span>
               </Info>
               {org.contract.note && <div className="cq-sm:col-span-2"><Info label={tc.note}><span className="whitespace-pre-line">{org.contract.note}</span></Info></div>}
             </dl>
@@ -94,51 +95,111 @@ function OverviewTab({ org }: { org: AdminOrgDetail }) {
 function PlanTab({ org, onAction }: { org: AdminOrgDetail; onAction: (a: OrgAction) => void }) {
   const t = useMessages(ORG_DETAIL_MESSAGES);
   const { can } = useAdminSession();
-  const days = daysUntil(org.plan.renewsAt);
-  const trial = org.plan.code === "TRIAL";
+  const payg = org.plan.kind === "PAYG";
+  const credits = useQuery({ queryKey: adminKeys.orgCredits(org.id), queryFn: () => listOrgCredits(org.id) });
+  const c = org.contract;
+  const status = org.billing.contract;
   return (
-    <Stack gap="md" className="max-w-4xl">
-      {days <= 7 && (
-        <Alert tone={days < 0 ? "danger" : "warning"} title={fill(days < 0 ? (trial ? t.trialExpired : t.planExpired) : days === 0 ? (trial ? t.trialToday : t.planToday) : trial ? t.trialSoon : t.planSoon, { n: Math.abs(days) })}>
-          {trial ? t.trialAdvice : t.planAdvice}
-        </Alert>
-      )}
+    <Stack gap="lg" className="max-w-5xl">
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex flex-col gap-1">
+            <div className="flex min-w-0 flex-col gap-1">
               <CardTitle className="flex flex-wrap items-center gap-2">
-                {fill(t.planTitle, { plan: org.plan.name })} <Badge tone={PLAN_TONE[org.plan.code]}>{trial ? t.trialBadge : t.inUseBadge}</Badge>
+                {fill(t.planTitle, { plan: org.plan.name })} <Badge tone={PLAN_TONE[org.plan.code]}>{payg ? t.kindPayg : t.kindContract}</Badge>
               </CardTitle>
               <CardDescription>
-                {fill(trial ? t.trialUntil : t.renewsOn, { date: formatDate(org.plan.renewsAt), pages: org.plan.pagesPerDossier })}
+                {payg
+                  ? fill(t.paygPrice, { price: formatVnd(org.plan.pricePerDeclarationVnd), pages: formatNumber(org.plan.pagesPerDossier) })
+                  : fill(t.contractPages, { pages: formatNumber(org.plan.pagesPerDossier) })}
               </CardDescription>
             </div>
             {can("BILLING") && (
               <div className="flex flex-wrap gap-2">
-                {trial && <Button size="sm" variant="secondary" leftIcon={<CalendarPlus className="h-4 w-4" />} onClick={() => onAction("trial")}>{t.extendTrial}</Button>}
-                <Button size="sm" variant="secondary" leftIcon={<Gauge className="h-4 w-4" />} onClick={() => onAction("quota")}>{t.raiseQuota}</Button>
-                <Button size="sm" leftIcon={<Repeat className="h-4 w-4" />} onClick={() => onAction("plan")}>{t.changePlan}</Button>
+                {payg ? (
+                  <Button size="sm" leftIcon={<Coins className="h-4 w-4" />} onClick={() => onAction("credits")}>{t.adjustCredits}</Button>
+                ) : (
+                  <Button size="sm" leftIcon={<FileSignature className="h-4 w-4" />} onClick={() => onAction("contract")}>{c ? t.editContract : t.addContract}</Button>
+                )}
+                <Button size="sm" variant="secondary" leftIcon={<Repeat className="h-4 w-4" />} onClick={() => onAction("plan")}>{t.changePlan}</Button>
               </div>
             )}
           </div>
         </CardHeader>
+      </Card>
+
+      <Grid cols={{ base: 2, xl: 4 }}>
+        {payg ? (
+          <StatCard icon={<Coins />} tone={org.billing.balance <= LOW_CREDITS ? "warning" : "success"} label={t.balance} value={org.billing.balance} hint={t.balanceHint} />
+        ) : (
+          <StatCard icon={<FileSignature />} tone="info" label={t.contractStatus} value={status?.endsOn ? formatDate(status.endsOn) : t.contractNoEnd} hint={status ? <ContractStatusBadge contract={status} /> : undefined} />
+        )}
+        <StatCard icon={<FileText />} tone="info" label={t.declarationsThisMonth} value={org.billing.declarationsThisMonth} hint={t.declarationsHint} />
+        <StatCard icon={<Gauge />} tone="neutral" label={t.declarations30d} value={org.billing.declarations30d} hint={t.declarations30dHint} />
+        <StatCard icon={<FolderOpen />} tone="neutral" label={t.pagesRead} value={org.usage.pagesThisMonth} hint={t.thisMonth} />
+      </Grid>
+
+      {!payg && (
+        <Card>
+          <CardHeader>
+            <CardTitle as="h3">{t.contractCardTitle}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {c ? (
+              <dl className="grid grid-cols-1 gap-4 cq-sm:grid-cols-2 cq-lg:grid-cols-3">
+                <Info label={t.contractNo}><span className="font-mono">{c.contractNo ?? "—"}</span></Info>
+                <Info label={t.contractStartsOn}>{c.startsOn ? formatDate(c.startsOn) : "—"}</Info>
+                <Info label={t.contractEndsOn}>{c.endsOn ? formatDate(c.endsOn) : t.contractNoEnd}</Info>
+                <Info label={t.contractValue}><span className="tabular-nums">{formatVnd(c.valueVnd)}</span></Info>
+                <Info label={t.contractStatus}>{status ? <ContractStatusBadge contract={status} /> : "—"}</Info>
+                {c.note && <div className="cq-sm:col-span-2 cq-lg:col-span-3"><Info label={t.contractNote}><span className="whitespace-pre-line">{c.note}</span></Info></div>}
+              </dl>
+            ) : (
+              <Alert tone="warning">{t.contractMissing}</Alert>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle as="h3">{t.ledgerTitle}</CardTitle>
+          <CardDescription>{t.ledgerDesc}</CardDescription>
+        </CardHeader>
         <CardContent>
-          <Stack gap="md">
-            <div className="flex flex-col gap-1.5">
-              <p className="text-sm font-medium text-fg">{t.dossiersThisMonth}</p>
-              <QuotaMeter used={org.usage.dossiersThisMonth} limit={org.plan.dossiersPerMonth} bonus={org.quotaBonus} />
-            </div>
-            <dl className="grid grid-cols-2 gap-3 rounded-md bg-surface-muted p-3 cq-sm:grid-cols-3">
-              <Info label={t.pagesRead}><span className="font-semibold tabular-nums">{formatNumber(org.usage.pagesThisMonth)}</span></Info>
-              <Info label={t.aiCost}><span className="font-semibold tabular-nums">{formatVnd(org.usage.aiCostVnd)}</span></Info>
-              <Info label={t.costPerDossier}>
-                <span className="font-semibold tabular-nums">
-                  {org.usage.dossiersThisMonth > 0 ? formatVnd(String(Math.round(Number(org.usage.aiCostVnd) / org.usage.dossiersThisMonth))) : "—"}
-                </span>
-              </Info>
-            </dl>
-          </Stack>
+          {credits.isError ? (
+            <LoadError onRetry={() => void credits.refetch()} title={t.creditsLoadError} />
+          ) : (
+            <CreditLedgerTable entries={credits.data?.ledger ?? []} loading={credits.isLoading} />
+          )}
+        </CardContent>
+      </Card>
+      {payg && (
+        <Card>
+          <CardHeader>
+            <CardTitle as="h3">{t.paymentsTitle}</CardTitle>
+            <CardDescription>{t.paymentsDesc}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {credits.isError ? null : <PaymentsTable payments={credits.data?.payments ?? []} loading={credits.isLoading} />}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle as="h3">{t.usageTitle}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-2 gap-3 rounded-md bg-surface-muted p-3 cq-sm:grid-cols-3">
+            <Info label={t.pagesRead}><span className="font-semibold tabular-nums">{formatNumber(org.usage.pagesThisMonth)}</span></Info>
+            <Info label={t.aiCost}><span className="font-semibold tabular-nums">{formatVnd(org.usage.aiCostVnd)}</span></Info>
+            <Info label={t.costPerDossier}>
+              <span className="font-semibold tabular-nums">
+                {org.usage.dossiersThisMonth > 0 ? formatVnd(fromMinor(Math.round(toMinor(org.usage.aiCostVnd, 0) / org.usage.dossiersThisMonth), 0)) : "—"}
+              </span>
+            </Info>
+          </dl>
         </CardContent>
       </Card>
     </Stack>

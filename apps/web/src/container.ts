@@ -3,9 +3,9 @@
 import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv, type Env } from "@kb/core/config";
 import { createDb, platformDbUrl, runSeed, type Db } from "@kb/core/db";
-import { withinDossierQuota, type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
+import { type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
 import { createAdminInfrastructure, DbPlatformMailer, platformStaffOf, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
-import type { BillingDeps } from "@kb/core/modules/billing";
+import { createDeclarationBilling, getOrgBilling, type BillingDeps } from "@kb/core/modules/billing";
 import { refreshFromShipment, type DeclarationDeps } from "@kb/core/modules/declaration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { listOpenDocuments, rereadDocuments, type DossierDeps } from "@kb/core/modules/dossier";
@@ -14,18 +14,18 @@ import { latestReads, type ExtractionDeps } from "@kb/core/modules/extraction";
 import { ClaudeDossierDrafter, ClaudeEmailDrafter, createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
-import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
+import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder, grantCreditsInTx } from "@kb/core/modules/billing/infrastructure";
 import { hashToken, provisionOrgAccount, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { releaseDossierAttachments, type MailboxDeps } from "@kb/core/modules/mailbox";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
-import { checkSentSheets, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
+import { checkSentSheets, countReservedDeclarations, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { lessonsForDossier, type TeachDeps } from "@kb/core/modules/teaching";
 import { createTeachInfrastructure, createTeachLotPort } from "@kb/core/modules/teaching/infrastructure";
 import { createCustomsInfrastructure, createIntegrationInfrastructure, createVnaccsCredentialsReader, envVnaccsCredentials } from "@kb/core/modules/integration/infrastructure";
-import { asOrgId, asUserId, dec, QUEUE_NAMES, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
+import { asOrgId, asUserId, createLogger, dec, QUEUE_NAMES, systemClock, type JobQueue, type QueueName } from "@kb/core/shared";
 import { Queue } from "bullmq";
 import type { NextRequest } from "next/server";
 import { clientIp } from "@/lib/server/route";
@@ -148,7 +148,8 @@ function build(): Container {
   const db = createDb(env.DATABASE_URL, { max: 10 });
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
   redis.on("error", (e) => console.error("[redis]", e.message));
-  const identity = createIdentityInfrastructure({ db, redis, env, clock: systemClock });
+  // Đăng ký / quản trị tạo hộ: tặng lượt ghi cùng transaction tạo doanh nghiệp (sổ lượt của billing – ADR 0011).
+  const identity = createIdentityInfrastructure({ db, redis, env, clock: systemClock, grantCredits: grantCreditsInTx });
   // Billing/integration lấy dữ liệu org qua uow của identity (không đọc bảng của module khác).
   const orgPlan = { get: (orgId: string) => identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId)) };
   const defaultCertificate = async (orgId: string) =>
@@ -159,8 +160,9 @@ function build(): Container {
   // Mức dùng tháng: số hồ sơ + trang từ module dossier (nối lazy vì dossier tạo sau), chi phí AI từ usage_events.
   const monthRange = (now: Date) => ({ from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)) });
   let dossierStats: (orgId: string, now: Date) => Promise<{ dossiers: number; pages: number }> = async () => ({ dossiers: 0, pages: 0 });
+  // Gói PAYG/CONTRACT, sổ lượt, thanh toán PayOS (PAYMENT_PROVIDER) – ADR 0011.
   const billing = createBillingInfrastructure({
-    db, orgPlan, clock: systemClock,
+    db, orgPlan, clock: systemClock, env,
     usage: {
       thisMonth: async (orgId, now) => {
         const { aiCostVnd, hsCostVnd, customsCostVnd } = await usageRecorder.monthlyTotals(orgId, now);
@@ -169,15 +171,12 @@ function build(): Container {
     },
   });
   const queue = new BullMqJobQueue(redis);
-  // Hạn mức theo gói: hồ sơ/tháng và trang/hồ sơ (billing giữ số; dossier chỉ hỏi được/không).
+  // Hạn mức theo gói: chỉ còn số trang/hồ sơ (ADR 0011 bỏ hạn mức hồ sơ/tháng; billing giữ số, dossier chỉ hỏi được/không).
   const quota = {
-    check: async (orgId: string, kind: "DOSSIER" | "PAGES", amount: number) => {
+    check: async (orgId: string, _kind: "PAGES", amount: number) => {
       const op = await orgPlan.get(orgId);
       const plan = op ? await billing.plans.get(op.planCode) : null;
-      if (!plan) return false;
-      if (kind === "PAGES") return amount <= plan.pagesPerDossier;
-      // amount = tổng hồ sơ trong tháng sau khi tạo (createDossier đã đếm) – không cộng số đã dùng lần nữa.
-      return withinDossierQuota(plan.dossiersPerMonth, { quotaBonus: op?.quotaBonus ?? 0, quotaBonusMonth: op?.quotaBonusMonth ?? null }, amount, systemClock.now());
+      return !!plan && amount <= plan.pagesPerDossier;
     },
   };
   const dossier = createDossierInfrastructure({ db, redis, env, queue, quota, clock: systemClock });
@@ -185,9 +184,21 @@ function build(): Container {
     const { from, to } = monthRange(now);
     return dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.statsInRange(orgId, from, to));
   };
+  // Mức dùng tháng của khách: chỉ hồ sơ + trang (giá vốn AI/HS/Customs là số nội bộ – chỉ khu Quản trị xem).
   identity.usage = async (orgId) => {
-    const u = await billing.usage.thisMonth(orgId, systemClock.now());
-    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd, hsCostVnd: u.hsCostVnd, customsCostVnd: u.customsCostVnd };
+    const u = await dossierStats(orgId, systemClock.now());
+    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages };
+  };
+  // Lượt / hợp đồng trong phiên + GET /api/org: lỗi đọc không được làm hỏng đăng nhập → trả 0, ghi log.
+  const billingLog = createLogger({ name: "billing" });
+  const emptyBilling = { balance: 0, reserved: 0, available: 0, contract: null, declarationsThisMonth: 0 };
+  identity.billing = async (orgId) => {
+    try {
+      return (await getOrgBilling(billing, orgId))?.billing ?? emptyBilling;
+    } catch (e) {
+      billingLog.error("không đọc được lượt của doanh nghiệp", { orgId, err: e });
+      return emptyBilling;
+    }
   };
   const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
   // Luật đối chiếu cần biết hồ sơ nhập/xuất + phương thức vận chuyển: nối từ module dossier tại đây (validation không import dossier).
@@ -274,6 +285,9 @@ function build(): Container {
     },
   };
   customs.usage = serviceUsage;
+  // Lượt khai (ADR 0011): chặn khai tạm lần đầu khi thiếu lượt / hợp đồng hết hạn; IDC/EDC được chấp nhận → ghi sổ lượt (worker).
+  customs.billing = createDeclarationBilling(billing);
+  billing.reserved = (orgId) => countReservedDeclarations(customs, orgId);
   // Phạm vi sửa theo giai đoạn truyền và tờ đã gọi về (chưa khai / sửa đổi bổ sung / đã thông quan; lô nhiều tờ chỉ gọi về một phần → khóa chỉ tiêu chung).
   const customsSheets = (orgId: string, dossierId: string) => customsEditSheets(customs, orgId, dossierId);
   declaration.customsSheets = customsSheets;

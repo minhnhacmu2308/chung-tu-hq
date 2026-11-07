@@ -42,10 +42,10 @@ const expectErr = (r: { ok: boolean; error?: { code: string } }, code: string) =
 
 beforeEach(() => {
   uow = new InMemoryIdentityUow().seed({
-    plans: [{ code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40 }],
+    plans: [{ code: "PAYG", name: "Theo lượt", kind: "PAYG" as const, pagesPerDossier: 40, pricePerDeclarationVnd: "25000" }],
     orgs: [
-      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "0225", planCode: "PRO", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-40) },
-      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "PRO", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-5) },
+      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "0225", planCode: "PAYG", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-40) },
+      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "PAYG", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-5) },
     ],
     users: [
       { id: "usr_chau", email: "chau.le@anphat-demo.vn", passwordHash: "h", name: "Lê Minh Châu", emailVerifiedAt: day(-1), createdAt: day(-40) },
@@ -227,7 +227,7 @@ describe("chuyển quyền sở hữu", () => {
 
 describe("doanh nghiệp", () => {
   it("getOrganization trả DTO đúng gói; updateOrganization ADMIN ok, VIEWER → FORBIDDEN", async () => {
-    expect(unwrap(await getOrganization(deps, ctx("VIEWER")))).toMatchObject({ name: "AN PHÁT", plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150 } });
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER")))).toMatchObject({ name: "AN PHÁT", plan: { code: "PAYG", name: "Theo lượt", kind: "PAYG", pricePerDeclarationVnd: "25000" } });
     const o = unwrap(await updateOrganization(deps, ctx("ADMIN"), { name: "AN PHÁT MỚI", address: "HP 2", phone: "0225 3 888" }));
     expect(o.name).toBe("AN PHÁT MỚI");
     expectErr(await updateOrganization(deps, ctx("VIEWER", "usr_quang"), { name: "X", address: "", phone: "" }), "FORBIDDEN");

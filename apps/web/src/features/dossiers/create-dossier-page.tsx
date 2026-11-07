@@ -14,11 +14,9 @@ import { z } from "zod";
 import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
 import { addInboxToDossier, inboxKeys, listInbox } from "@/api/mailbox";
 import { errorText } from "@/lib/reason-codes";
-import { getDeclarationProfile, getOrganization, settingsKeys } from "@/api/settings";
-import { formatDate } from "@/lib/format";
+import { getDeclarationProfile, settingsKeys } from "@/api/settings";
 import { useCodeLists } from "@/features/declaration-form/use-code-list";
 import { LoadError } from "@/components/common/load-error";
-import { dossierQuota, isQuotaError } from "./dossier-quota";
 import { prefillFromProfile } from "./profile-prefill";
 import { applyDraft } from "./apply-draft";
 import { QuickFillCard } from "./quick-fill-card";
@@ -92,9 +90,6 @@ export function CreateDossierPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.data]);
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
-  // Hết hạn mức hồ sơ của gói → báo ngay khi mở trang, không để người dùng điền xong mới biết.
-  const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
-  const quota = org.data ? dossierQuota(org.data) : null;
   // Tạo hồ sơ từ email ở Hộp thư chứng từ (?inbox=<mã email>): tạo xong thì thêm các file chờ xếp vào hồ sơ mới.
   const inboxId = useSearchParams().get("inbox");
   const inbox = useQuery({ queryKey: inboxKeys.list, queryFn: listInbox, enabled: !!inboxId });
@@ -165,12 +160,6 @@ export function CreateDossierPage() {
       router.push(`/dossiers/${d.id}?step=upload`);
     },
     onError: (e) => {
-      if (isQuotaError(e)) {
-        // Số trên máy có thể cũ (người khác vừa tạo) – tải lại để hiện khung hết hạn mức.
-        void qc.invalidateQueries({ queryKey: settingsKeys.org });
-        toast({ tone: "warning", title: t.createFailed, description: errorText(e, locale, t.createFailedHint) });
-        return;
-      }
       toast({ tone: "danger", title: t.createFailed, description: errorText(e, locale, t.createFailedHint) });
     },
   });
@@ -218,16 +207,6 @@ export function CreateDossierPage() {
 
       {fromMail && mailFiles.length > 0 && (
         <Alert tone="info" title={t.fromInboxTitle}>{fill(t.fromInboxBody, { subject: fromMail.subject, from: fromMail.fromName, n: mailFiles.length })}</Alert>
-      )}
-
-      {quota?.full && org.data && (
-        <Alert
-          tone="warning"
-          title={fill(t.quotaFullTitle, { used: quota.used, limit: quota.limit })}
-          action={<Button asChild size="sm" variant="secondary"><Link href="/settings?tab=plan">{t.quotaUpgrade}</Link></Button>}
-        >
-          {fill(t.quotaFullBody, { plan: org.data.plan.name, limit: quota.limit, date: formatDate(org.data.plan.renewsAt) })}
-        </Alert>
       )}
 
       {codeLists.error && <LoadError title={t.codeListsFailed} onRetry={codeLists.retry} />}
@@ -333,7 +312,7 @@ export function CreateDossierPage() {
               <Button asChild variant="ghost">
                 <Link href="/dossiers">{t.cancel}</Link>
               </Button>
-              <Button type="submit" loading={create.isPending} disabled={!!quota?.full}>{t.submit}</Button>
+              <Button type="submit" loading={create.isPending}>{t.submit}</Button>
             </CardFooter>
           </Card>
 

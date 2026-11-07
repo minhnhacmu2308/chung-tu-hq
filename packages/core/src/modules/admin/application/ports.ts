@@ -1,7 +1,10 @@
 // Port của module admin (khu Quản trị hệ thống, ADR 0006). Hạ tầng dùng kết nối kb_platform – đọc xuyên doanh nghiệp,
 // nên CHỈ trả số liệu tổng hợp và thông tin tài khoản; không port nào đọc nội dung hồ sơ/chứng từ/tờ khai.
 import type { JobQueue } from "../../../shared/queue.js";
-import type { IntegrationId, Role, ServiceHealth, StaffRole } from "@kb/contracts";
+import type { IntegrationId, PlanKind, Role, ServiceHealth, StaffRole } from "@kb/contracts";
+import type { LedgerReason, LedgerRow, PaymentRow } from "../../billing/index.js";
+
+export type { LedgerReason, LedgerRow, PaymentRow };
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen } from "../../../shared/ids.js";
 import type { Result } from "../../../shared/result.js";
@@ -12,19 +15,20 @@ export type StaffRow = {
   /** Tài khoản tạo bằng mật khẩu tạm, chưa đổi. */
   mustChangePassword: boolean;
 };
-/** Hợp đồng ký trực tiếp của doanh nghiệp (quản trị tạo hộ). */
-export type OrgContractRow = { orgId: string; contractNo: string | null; endsOn: string | null; note: string | null; createdBy: string; at: Date };
+/** Hợp đồng năm của doanh nghiệp gói CONTRACT (ADR 0011). `valueVnd` – báo cáo doanh thu (giá trị/12 mỗi tháng hợp đồng phủ). */
+export type OrgContractRow = { orgId: string; contractNo: string | null; startsOn: string | null; endsOn: string | null; valueVnd: string; note: string | null; createdBy: string; at: Date };
+/** Lượt theo doanh nghiệp trong một khoảng: số tờ khai đã tính (CHARGE + CONTRACT_USE), doanh thu ghi nhận (tổng tiền CHARGE), tiền thu PayOS (PURCHASE). */
+export type OrgCreditStats = { orgId: string; declarations: number; chargedVnd: string; collectedVnd: string };
 /** Khóa 2FA (mã hóa) của một quản trị viên. */
 export type StaffMfaRow = {
   totpCiphertext: string | null; totpPendingCiphertext: string | null; totpKeyVersion: number; totpEnabledAt: Date | null; totpLastCounter: number | null; recoveryCodes: string[];
 };
 export type AdminOrgRow = {
   id: string; name: string; taxCode: string; address: string; phone: string; planCode: string;
-  status: "ACTIVE" | "SUSPENDED"; suspendedReason: string | null; quotaBonus: number; quotaBonusMonth: string | null;
-  planStartedAt: Date | null; trialEndsAt: Date | null; createdAt: Date;
+  status: "ACTIVE" | "SUSPENDED"; suspendedReason: string | null; planStartedAt: Date | null; createdAt: Date;
 };
-export type OrgPatch = Partial<Pick<AdminOrgRow, "status" | "suspendedReason" | "quotaBonus" | "quotaBonusMonth" | "planCode" | "planStartedAt" | "trialEndsAt">>;
-export type PlanRow = { code: string; name: string; dossiersPerMonth: number; pagesPerDossier: number; priceVnd: string };
+export type OrgPatch = Partial<Pick<AdminOrgRow, "status" | "suspendedReason" | "planCode" | "planStartedAt">>;
+export type PlanRow = { code: string; name: string; kind: PlanKind; pagesPerDossier: number; priceVnd: string; pricePerDeclarationVnd: string };
 export type MemberRow = {
   userId: string; orgId: string; name: string; email: string; role: Role; status: "ACTIVE" | "INVITED" | "DISABLED";
   emailVerified: boolean; createdAt: Date; lastSeenAt: Date | null;
@@ -92,8 +96,22 @@ export interface AdminRepos {
   joins: { listPending(orgId?: string): Promise<JoinRow[]> };
   contracts: {
     get(orgId: string): Promise<OrgContractRow | null>;
-    insert(row: OrgContractRow): Promise<void>;
+    list(): Promise<OrgContractRow[]>;
+    /** Tạo hoặc sửa (khóa org_id). */
+    upsert(row: OrgContractRow): Promise<void>;
   };
+  /** Sổ lượt (credit_ledger) – append-only: chỉ thêm dòng (trùng id bỏ qua), không sửa/xóa. */
+  credits: {
+    insert(row: LedgerRow): Promise<boolean>;
+    list(orgId: string, limit: number): Promise<LedgerRow[]>;
+    /** Số dư (tổng delta) của một doanh nghiệp. */
+    balance(orgId: string): Promise<number>;
+    /** Số dư (tổng delta) của mọi doanh nghiệp có dòng sổ lượt. */
+    balances(): Promise<{ orgId: string; balance: number }[]>;
+    /** Số liệu lượt của mọi doanh nghiệp trong [from, to). */
+    statsByOrg(from: Date, to: Date): Promise<OrgCreditStats[]>;
+  };
+  payments: { list(orgId: string, limit: number): Promise<PaymentRow[]> };
   emailTemplates: {
     list(): Promise<EmailTemplateRow[]>;
     get(id: string): Promise<EmailTemplateRow | null>;
@@ -127,7 +145,7 @@ export interface AdminRepos {
   plans: {
     list(): Promise<PlanRow[]>;
     get(code: string): Promise<PlanRow | null>;
-    update(code: string, patch: Omit<PlanRow, "code">, at: Date): Promise<void>;
+    update(code: string, patch: Omit<PlanRow, "code" | "kind">, at: Date): Promise<void>;
   };
   usage: {
     /** Số liệu mọi doanh nghiệp trong [from, to): hồ sơ tạo mới, trang chứng từ, lượt gọi + giá vốn theo loại lệnh gọi trả phí. */
@@ -187,7 +205,8 @@ export interface IdentityGateway {
   resendVerification(userId: string): Promise<Result<void>>;
   provisionAccount(input: { email: string; name: string }): Promise<Result<{ userId: string; created: boolean }>>;
   /** Doanh nghiệp + Chủ sở hữu (mật khẩu tạm, bắt đổi ở lần đăng nhập đầu); MST/email đã có → lỗi. */
-  provisionOrg(input: { taxCode: string; name: string; address: string; planCode: string; owner: { email: string; name: string } }): Promise<Result<{ orgId: string; userId: string; tempPassword: string }>>;
+  /** `grantCredits` (gói PAYG): lượt tặng ghi cùng transaction tạo doanh nghiệp. */
+  provisionOrg(input: { taxCode: string; name: string; address: string; planCode: string; owner: { email: string; name: string }; grantCredits?: number; createdBy?: string }): Promise<Result<{ orgId: string; userId: string; tempPassword: string }>>;
 }
 
 /** Hàng đợi BullMQ – chỉ số đếm và job lỗi (không đọc payload ngoài orgId). */

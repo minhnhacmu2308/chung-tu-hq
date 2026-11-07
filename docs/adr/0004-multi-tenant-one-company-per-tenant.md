@@ -15,7 +15,7 @@ Khách hàng mục tiêu là doanh nghiệp xuất nhập khẩu tự khai báo.
 **Đăng ký:**
 1. Người đăng ký tạo tài khoản bằng email + mật khẩu, xác thực email.
 2. Nhập MST → kiểm tra định dạng, điền sẵn tên/địa chỉ từ thông tin đăng ký thuế.
-3. MST chưa tồn tại → tạo organization, người đăng ký là `OWNER`, kích hoạt gói dùng thử.
+3. MST chưa tồn tại → tạo organization, người đăng ký là `OWNER`, kích hoạt gói dùng thử (từ ADR 0011: gói Theo lượt + tặng 3 lượt).
 4. MST đã tồn tại → gửi yêu cầu tham gia cho Owner duyệt. Không tạo trùng.
 5. Owner/Admin mời nhân viên qua email.
 

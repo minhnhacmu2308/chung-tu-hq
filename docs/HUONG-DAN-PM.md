@@ -25,7 +25,8 @@ Xem toàn bộ component (nút, bảng, form, hộp thoại…) và thử cấu 
 | 4 | Bấm **Xem cây quy trình** để xem sơ đồ các bước | Đầu trang hồ sơ |
 | 5 | Bước 4 – AI Agent: xem tiến trình, xác nhận mã HS | |
 | 6 | Bước 5 – Review tờ khai, **Phê duyệt** | |
-| 7 | Bước 6 – chọn chứng thư số, **Truyền tờ khai**, xem phân luồng + nhật ký thông điệp | |
+| 7 | Bước 6 – chọn chứng thư số, **Truyền tờ khai**, xem phân luồng + nhật ký thông điệp. Cạnh nút Ký số có dòng "Lô này dùng N lượt… còn X lượt khả dụng"; thiếu lượt (gói Theo lượt) hoặc hợp đồng đã hết hạn quá 7 ngày ân hạn → khung đỏ + nút **Mua lượt** / **Xem gói**, nút Ký số bị khóa | |
+| 7b | **Mua lượt**: chọn 10/50/100 hoặc nhập 1–1.000 lượt → **Thanh toán qua PayOS**. Bản demo dùng cổng giả lập: quay lại ngay tab Gói, báo "Đã thanh toán – cộng N lượt" và sổ lượt có dòng mới | Tài khoản & tích hợp → **Gói dịch vụ & sử dụng** |
 | 8 | Tạo hồ sơ mới, upload file PDF bất kỳ | Hồ sơ khai báo → Tạo hồ sơ |
 | 9 | Bật/tắt trường cần trích xuất cho từng loại chứng từ | Cấu hình Skill AI |
 | 10 | Đổi màu thương hiệu, sáng/tối, mật độ, font | Menu trái → **Giao diện** |

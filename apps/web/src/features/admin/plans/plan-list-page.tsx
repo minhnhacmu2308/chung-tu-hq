@@ -1,6 +1,6 @@
 "use client";
 import { UpdatePlanInputSchema, type AdminPlan } from "@kb/contracts";
-import { Alert, Badge, Button, Card, CardContent, CardFooter, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, Field, Grid, Input, PageHeader, SkeletonCard, Stack, Textarea, fill, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, Field, Grid, Input, PageHeader, SkeletonCard, Stack, Textarea, fill, useMessages, useUiLocale } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -12,21 +12,23 @@ import { useAdminMutation } from "../common/use-admin-mutation";
 import { useAdminSession } from "../shell/use-admin-session";
 import { PLAN_LIST_MESSAGES } from "./plan-list-page.messages";
 
-type Draft = { name: string; dossiersPerMonth: string; pagesPerDossier: string; priceVnd: string; reason: string };
+type Draft = { name: string; pagesPerDossier: string; price: string; reason: string };
 type Errors = Partial<Record<keyof Draft, string>>;
 
 const toInt = (s: string) => (s.trim() === "" ? Number.NaN : Number(s));
-/** Người dùng gõ "3.990.000" hay "3 990 000" đều được – bỏ dấu phân cách trước khi kiểm tra. */
+/** Người dùng gõ "25.000" hay "25 000" đều được – bỏ dấu phân cách trước khi kiểm tra. */
 const cleanMoney = (s: string) => s.replace(/[.\s,]/g, "");
 
-function EditPlanDialog({ plan, onClose }: { plan: AdminPlan | null; onClose: () => void }) {
+/** Sửa gói: PAYG – tên, trang/hồ sơ, đơn giá/lượt; CONTRACT – tên, trang/hồ sơ, giá niêm yết (0 = Liên hệ). */
+export function EditPlanDialog({ plan, onClose }: { plan: AdminPlan | null; onClose: () => void }) {
   const t = useMessages(PLAN_LIST_MESSAGES);
   const locale = useUiLocale();
-  const [draft, setDraft] = useState<Draft>({ name: "", dossiersPerMonth: "", pagesPerDossier: "", priceVnd: "", reason: "" });
+  const [draft, setDraft] = useState<Draft>({ name: "", pagesPerDossier: "", price: "", reason: "" });
   const [errors, setErrors] = useState<Errors>({});
+  const payg = plan?.kind === "PAYG";
   useEffect(() => {
     if (plan) {
-      setDraft({ name: plan.name, dossiersPerMonth: String(plan.dossiersPerMonth), pagesPerDossier: String(plan.pagesPerDossier), priceVnd: plan.priceVnd, reason: "" });
+      setDraft({ name: plan.name, pagesPerDossier: String(plan.pagesPerDossier), price: plan.kind === "PAYG" ? plan.pricePerDeclarationVnd : plan.priceVnd, reason: "" });
       setErrors({});
     }
   }, [plan]);
@@ -39,19 +41,23 @@ function EditPlanDialog({ plan, onClose }: { plan: AdminPlan | null; onClose: ()
   });
 
   const submit = () => {
+    if (!plan) return;
+    const price = cleanMoney(draft.price);
     const parsed = UpdatePlanInputSchema.safeParse({
       name: draft.name,
-      dossiersPerMonth: toInt(draft.dossiersPerMonth),
       pagesPerDossier: toInt(draft.pagesPerDossier),
-      priceVnd: cleanMoney(draft.priceVnd),
+      // Mỗi loại gói chỉ sửa một loại giá; giá còn lại giữ nguyên.
+      priceVnd: payg ? plan.priceVnd : price,
+      pricePerDeclarationVnd: payg ? price : plan.pricePerDeclarationVnd,
       reason: draft.reason,
     });
     if (!parsed.success) {
       const found: Errors = {};
       for (const issue of parsed.error.issues) {
-        const key = issue.path[0] as keyof Draft;
+        const raw = issue.path[0];
+        const key: keyof Draft = raw === "priceVnd" || raw === "pricePerDeclarationVnd" ? "price" : (raw as keyof Draft);
         // Thông báo của schema (@kb/contracts) chỉ có tiếng Việt: ngôn ngữ khác dùng nhãn chung.
-        found[key] ??= key === "priceVnd" ? t.priceInvalid : locale === "vi" ? issue.message : t.fieldInvalid;
+        found[key] ??= key === "price" ? t.priceInvalid : locale === "vi" ? issue.message : t.fieldInvalid;
       }
       setErrors(found);
       return;
@@ -65,7 +71,7 @@ function EditPlanDialog({ plan, onClose }: { plan: AdminPlan | null; onClose: ()
 
   return (
     <Dialog open={plan !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={fill(t.editTitle, { name: plan?.name ?? "" })} size="sm" icon={<Pencil className="h-4 w-4" />}>
+      <DialogContent title={fill(t.editTitle, { name: plan?.name ?? "" })} size="sm" icon={<Pencil className="h-4 w-4" />} description={payg ? t.kindPayg : t.kindContract}>
         <form
           noValidate
           onSubmit={(e) => {
@@ -76,25 +82,20 @@ function EditPlanDialog({ plan, onClose }: { plan: AdminPlan | null; onClose: ()
           <Stack gap="md">
             {plan && plan.orgCount > 0 && (
               <Alert tone="warning">
-                {fill(t.appliesNow, { n: formatNumber(plan.orgCount) })}
+                {fill(payg ? t.appliesNowPayg : t.appliesNow, { n: formatNumber(plan.orgCount) })}
               </Alert>
             )}
             <Field label={t.name} required {...err("name")}>
-              <Input value={draft.name} onChange={set("name")} />
+              <Input value={draft.name} onChange={set("name")} placeholder={t.namePlaceholder} />
             </Field>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={t.dossiersPerMonth} required {...err("dossiersPerMonth")}>
-                <Input inputMode="numeric" value={draft.dossiersPerMonth} onChange={set("dossiersPerMonth")} />
-              </Field>
-              <Field label={t.pagesPerDossier} required {...err("pagesPerDossier")}>
-                <Input inputMode="numeric" value={draft.pagesPerDossier} onChange={set("pagesPerDossier")} />
-              </Field>
-            </div>
-            <Field label={t.price} required hint={plan?.customPricing ? t.priceHintCustom : t.priceHintFree} {...err("priceVnd")}>
-              <Input inputMode="numeric" value={draft.priceVnd} onChange={set("priceVnd")} />
+            <Field label={t.pagesPerDossier} required hint={t.pagesHint} {...err("pagesPerDossier")}>
+              <Input inputMode="numeric" value={draft.pagesPerDossier} onChange={set("pagesPerDossier")} placeholder={t.pagesPlaceholder} className="cq-sm:max-w-xs" />
+            </Field>
+            <Field label={payg ? t.unitPrice : t.listPrice} required hint={payg ? t.unitPriceHint : t.listPriceHint} {...err("price")}>
+              <Input inputMode="numeric" value={draft.price} onChange={set("price")} placeholder={payg ? t.unitPricePlaceholder : t.listPricePlaceholder} className="cq-sm:max-w-xs" />
             </Field>
             <Field label={t.reason} required hint={t.reasonHint} {...err("reason")}>
-              <Textarea value={draft.reason} onChange={set("reason")} rows={3} maxLength={500} />
+              <Textarea value={draft.reason} onChange={set("reason")} rows={3} maxLength={500} placeholder={t.reasonPlaceholder} />
             </Field>
           </Stack>
           <DialogFooter>
@@ -122,23 +123,23 @@ export function PlanListPage() {
       {isError ? (
         <LoadError onRetry={() => void refetch()} title={t.loadFailed} />
       ) : isLoading || !data ? (
-        <Grid cols={{ base: 1, md: 2, xl: 4 }}>{[0, 1, 2, 3].map((i) => <SkeletonCard key={i} lines={4} />)}</Grid>
+        <Grid cols={{ base: 1, md: 2 }}>{[0, 1].map((i) => <SkeletonCard key={i} lines={4} />)}</Grid>
       ) : (
-        <Grid cols={{ base: 1, md: 2, xl: 4 }} stagger>
+        <Grid cols={{ base: 1, md: 2 }} stagger>
           {data.map((p) => (
             <Card key={p.code} className="flex flex-col">
               <CardHeader>
                 <CardTitle className="flex flex-wrap items-center gap-2">
-                  {p.name} <Badge tone={PLAN_TONE[p.code]} variant="outline" size="sm" className="font-mono">{p.code}</Badge>
+                  {p.name} <Badge tone={PLAN_TONE[p.code]} variant="outline" size="sm">{p.kind === "PAYG" ? t.kindPayg : t.kindContract}</Badge>
                 </CardTitle>
                 <p className="text-xl font-semibold text-fg">
-                  {p.customPricing ? t.customPricing : Number(p.priceVnd) === 0 ? t.free : fill(t.perMonth, { price: formatVnd(p.priceVnd) })}
+                  {p.kind === "PAYG" ? fill(t.perCredit, { price: formatVnd(p.pricePerDeclarationVnd) }) : Number(p.priceVnd) === 0 ? t.contact : fill(t.perYear, { price: formatVnd(p.priceVnd) })}
                 </p>
-                {p.customPricing && <p className="text-xs text-fg-subtle">{fill(t.referencePrice, { price: formatVnd(p.priceVnd) })}</p>}
+                {p.kind === "CONTRACT" && Number(p.priceVnd) > 0 && <p className="text-xs text-fg-subtle">{t.listPriceNote}</p>}
+                <CardDescription>{p.kind === "PAYG" ? t.paygSummary : t.contractSummary}</CardDescription>
               </CardHeader>
               <CardContent className="flex-1">
                 <dl className="flex flex-col gap-2 text-sm">
-                  <div className="flex justify-between gap-2"><dt className="text-fg-muted">{t.dossiersPerMonthLong}</dt><dd className="font-medium tabular-nums text-fg">{formatNumber(p.dossiersPerMonth)}</dd></div>
                   <div className="flex justify-between gap-2"><dt className="text-fg-muted">{t.pagesPerDossierLong}</dt><dd className="font-medium tabular-nums text-fg">{formatNumber(p.pagesPerDossier)}</dd></div>
                   <div className="flex justify-between gap-2"><dt className="text-fg-muted">{t.orgsUsing}</dt><dd className="font-medium tabular-nums text-fg">{formatNumber(p.orgCount)}</dd></div>
                 </dl>

@@ -14,12 +14,17 @@ import { useAdminMutation } from "../common/use-admin-mutation";
 import { CREATE_ORG_MESSAGES } from "./orgs.messages";
 
 type Draft = {
-  taxCode: string; name: string; address: string; planCode: PlanCode | ""; contractNo: string; contractEndsOn: string | null;
+  taxCode: string; name: string; address: string; planCode: PlanCode | ""; grantCredits: string;
+  contractNo: string; startsOn: string | null; endsOn: string | null; value: string;
   ownerName: string; ownerEmail: string; note: string;
 };
-type ErrorKey = "taxCode" | "name" | "ownerName" | "ownerEmail";
+type ErrorKey = "taxCode" | "name" | "ownerName" | "ownerEmail" | "grantCredits" | "endsOn" | "value";
 
-const EMPTY: Draft = { taxCode: "", name: "", address: "", planCode: "", contractNo: "", contractEndsOn: null, ownerName: "", ownerEmail: "", note: "" };
+const EMPTY: Draft = {
+  taxCode: "", name: "", address: "", planCode: "", grantCredits: "", contractNo: "", startsOn: null, endsOn: null, value: "", ownerName: "", ownerEmail: "", note: "",
+};
+/** "144.000.000" / "144 000 000" → "144000000". */
+const cleanMoney = (s: string) => s.replace(/[.\s,]/g, "");
 
 async function copyText(text: string, done: string) {
   try {
@@ -84,7 +89,9 @@ export function CreateOrgDialog({ open, onOpenChange }: { open: boolean; onOpenC
   }, [open]);
   // Gói mặc định: gói trả phí đầu tiên (doanh nghiệp ký hợp đồng không đi qua dùng thử).
   const planOptions = (plans.data ?? []).map((p) => ({ value: p.code, label: p.name }));
-  const planCode = draft.planCode || ((plans.data ?? []).find((p) => p.code !== "TRIAL")?.code ?? plans.data?.[0]?.code ?? "");
+  // Mặc định Hợp đồng năm: tạo hộ thường là doanh nghiệp ký hợp đồng trực tiếp (tự đăng ký đã vào gói Theo lượt).
+  const planCode = draft.planCode || ((plans.data ?? []).find((p) => p.code === "CONTRACT")?.code ?? plans.data?.[0]?.code ?? "");
+  const kind = (plans.data ?? []).find((p) => p.code === planCode)?.kind;
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
   // Tra MST chỉ điền sẵn form – không ghi gì, không cần toast / tải lại dữ liệu như thao tác quản trị.
@@ -108,8 +115,12 @@ export function CreateOrgDialog({ open, onOpenChange }: { open: boolean; onOpenC
       name: draft.name,
       address: draft.address,
       planCode,
-      ...(draft.contractNo.trim() ? { contractNo: draft.contractNo } : {}),
-      ...(draft.contractEndsOn ? { contractEndsOn: draft.contractEndsOn } : {}),
+      // Theo lượt: tặng lượt tùy chọn. Hợp đồng năm: số HĐ, hiệu lực, giá trị.
+      ...(kind === "PAYG" && draft.grantCredits.trim() ? { grantCredits: /^\d+$/.test(draft.grantCredits.trim()) ? Number(draft.grantCredits.trim()) : Number.NaN } : {}),
+      ...(kind === "CONTRACT" && draft.contractNo.trim() ? { contractNo: draft.contractNo } : {}),
+      ...(kind === "CONTRACT" && draft.startsOn ? { startsOn: draft.startsOn } : {}),
+      ...(kind === "CONTRACT" && draft.endsOn ? { endsOn: draft.endsOn } : {}),
+      ...(kind === "CONTRACT" && cleanMoney(draft.value) ? { valueVnd: cleanMoney(draft.value) } : {}),
       owner: { email: draft.ownerEmail, name: draft.ownerName },
       ...(draft.note.trim() ? { note: draft.note } : {}),
     });
@@ -122,6 +133,9 @@ export function CreateOrgDialog({ open, onOpenChange }: { open: boolean; onOpenC
         if (a === "name") found.name ??= t.nameRequired;
         if (a === "owner" && b === "name") found.ownerName ??= t.ownerNameRequired;
         if (a === "owner" && b === "email") found.ownerEmail ??= t.emailInvalid;
+        if (a === "grantCredits") found.grantCredits ??= t.grantInvalid;
+        if (a === "endsOn") found.endsOn ??= t.rangeInvalid;
+        if (a === "valueVnd") found.value ??= t.valueInvalid;
       }
       setErrors(found);
       return;
@@ -149,7 +163,7 @@ export function CreateOrgDialog({ open, onOpenChange }: { open: boolean; onOpenC
                 <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">{t.sectionOrg}</legend>
                 <Field label={t.taxCode} required {...err("taxCode")}>
                   <div className="flex gap-2">
-                    <Input value={draft.taxCode} onChange={(e) => set("taxCode", e.target.value)} inputMode="numeric" autoFocus className="font-mono" />
+                    <Input value={draft.taxCode} onChange={(e) => set("taxCode", e.target.value)} inputMode="numeric" autoFocus className="font-mono" placeholder={t.taxCodePlaceholder} />
                     <Button type="button" variant="secondary" leftIcon={<Search className="h-4 w-4" />} loading={lookup.isPending} disabled={draft.taxCode.replace(/\D/g, "").length < 10} onClick={() => void runLookup()}>
                       {t.lookup}
                     </Button>
@@ -157,38 +171,55 @@ export function CreateOrgDialog({ open, onOpenChange }: { open: boolean; onOpenC
                 </Field>
                 {lookupNote && <Alert tone={lookupNote.tone}>{lookupNote.text}</Alert>}
                 <Field label={t.name} required {...err("name")}>
-                  <Input value={draft.name} onChange={(e) => set("name", e.target.value)} />
+                  <Input value={draft.name} onChange={(e) => set("name", e.target.value)} placeholder={t.namePlaceholder} />
                 </Field>
                 <Field label={t.address}>
-                  <Textarea value={draft.address} onChange={(e) => set("address", e.target.value)} rows={2} />
+                  <Textarea value={draft.address} onChange={(e) => set("address", e.target.value)} rows={2} placeholder={t.addressPlaceholder} />
                 </Field>
               </fieldset>
               <fieldset className="flex min-w-0 flex-col gap-3">
                 <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">{t.sectionContract}</legend>
-                <Field label={t.plan} required>
+                <Field label={t.plan} required hint={t.planHint}>
                   <Select options={planOptions} value={planCode} onChange={(e) => set("planCode", e.target.value as PlanCode)} />
                 </Field>
-                <Grid cols={{ base: 1, sm: 2 }}>
-                  <Field label={t.contractNo}>
-                    <Input value={draft.contractNo} onChange={(e) => set("contractNo", e.target.value)} />
+                {kind === "PAYG" && (
+                  <Field label={t.grantCredits} hint={t.grantHint} {...err("grantCredits")}>
+                    <Input inputMode="numeric" value={draft.grantCredits} onChange={(e) => set("grantCredits", e.target.value)} placeholder={t.grantPlaceholder} className="cq-sm:max-w-xs" />
                   </Field>
-                  <Field label={t.contractEndsOn}>
-                    <DatePicker value={draft.contractEndsOn} onChange={(v) => set("contractEndsOn", v)} />
-                  </Field>
-                </Grid>
+                )}
+                {kind === "CONTRACT" && (
+                  <>
+                    <Grid cols={{ base: 1, sm: 2 }}>
+                      <Field label={t.contractNo}>
+                        <Input value={draft.contractNo} onChange={(e) => set("contractNo", e.target.value)} placeholder={t.contractNoPlaceholder} />
+                      </Field>
+                      <Field label={t.value} {...err("value")}>
+                        <Input inputMode="numeric" value={draft.value} onChange={(e) => set("value", e.target.value)} placeholder={t.valuePlaceholder} />
+                      </Field>
+                    </Grid>
+                    <Grid cols={{ base: 1, sm: 2 }}>
+                      <Field label={t.startsOn}>
+                        <DatePicker value={draft.startsOn} onChange={(v) => set("startsOn", v)} />
+                      </Field>
+                      <Field label={t.endsOn} {...err("endsOn")}>
+                        <DatePicker value={draft.endsOn} onChange={(v) => set("endsOn", v)} />
+                      </Field>
+                    </Grid>
+                  </>
+                )}
               </fieldset>
               <fieldset className="flex min-w-0 flex-col gap-3">
                 <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">{t.sectionOwner}</legend>
                 <Grid cols={{ base: 1, sm: 2 }}>
                   <Field label={t.ownerName} required {...err("ownerName")}>
-                    <Input value={draft.ownerName} onChange={(e) => set("ownerName", e.target.value)} autoComplete="off" />
+                    <Input value={draft.ownerName} onChange={(e) => set("ownerName", e.target.value)} autoComplete="off" placeholder={t.ownerNamePlaceholder} />
                   </Field>
                   <Field label={t.ownerEmail} required {...err("ownerEmail")}>
-                    <Input type="email" value={draft.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} autoComplete="off" />
+                    <Input type="email" value={draft.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} autoComplete="off" placeholder={t.ownerEmailPlaceholder} />
                   </Field>
                 </Grid>
                 <Field label={t.note} hint={t.noteHint}>
-                  <Textarea value={draft.note} onChange={(e) => set("note", e.target.value)} rows={3} maxLength={2000} />
+                  <Textarea value={draft.note} onChange={(e) => set("note", e.target.value)} rows={3} maxLength={2000} placeholder={t.notePlaceholder} />
                 </Field>
               </fieldset>
             </Stack>

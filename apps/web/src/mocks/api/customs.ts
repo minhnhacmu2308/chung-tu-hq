@@ -19,6 +19,7 @@ import {
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
+import { assertAllowance, recordDeclared } from "@/mocks/billing-sim";
 import { pendingSuggestions } from "@/mocks/hys-sim";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
 import type { CustomsMessage, CustomsOperation, CustomsSummary, CustomsResult, Declaration, DigitalCertificate, Dossier, LineItem } from "@/mocks/types";
@@ -262,6 +263,8 @@ function apply(db: MockDb, c: Ctx) {
       r.clearanceStatus = "WAITING";
     }
     if (b === "IDC" || b === "IDE") {
+      // Lượt khai (ADR 0011, như process-outbox của backend): tờ được chấp nhận khai chính thức → trừ 1 lượt (khóa theo số tờ khai).
+      if (b === "IDC" && r.declarationNo) recordDeclared(db, { dossierId: c.dossier.id, branch: c.branch, declarationNo: r.declarationNo, op: p.op, at: p.doneAt });
       if (c.branch === 1) c.dossier.channel = r.channel;
       r.clearanceStatus = r.channel === "GREEN" ? "WAITING" : "INSPECTING";
       if (b === "IDE") c.flow.amendments += 1;
@@ -567,6 +570,8 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   }
   if (op === "AMA") assertAmendmentSendable(db, c);
   else if (isContentOperation(op)) assertSendable(db, c);
+  // Lượt khai (ADR 0011 §4.2, như backend – kiểm trước nhắc HYS): khai tạm lần đầu một tờ chưa có số → đủ lượt cho mọi tờ chưa có số (chuỗi nối tiếp khai các tờ sau).
+  if (baseOp(op) === "IDA" && !chain && !hasDeclarationNumber(c.flow.stage)) assertAllowance(db, unnumberedSheets(db, dossierId, c.of));
   // Nhắc khai HYS trước IDA/EDA (cùng hys-guard backend): còn gợi ý chưa thỏa và chưa xác nhận bỏ qua → HYS_SUGGESTED.
   if ((op === "IDA" || op === "EDA") && c.branch === 1 && !chain) {
     const codes = pendingSuggestions(db, dossierId, containersOf(db, c.dossier).length).map((s) => s.code).join(", ");
@@ -575,6 +580,9 @@ function perform(db: MockDb, dossierId: string, op: CustomsOperation, now: numbe
   send(db, c, op, now, chain);
   return { sent: true, message: `Đã gửi ${op} – ${CUSTOMS_OPERATIONS[op].label.toLowerCase()}. Chờ Hải quan phản hồi.` };
 }
+
+/** Số tờ khai nhánh 1..of chưa có số tờ khai – mỗi tờ dùng một lượt khi được chấp nhận khai chính thức. */
+const unnumberedSheets = (db: MockDb, dossierId: string, of: number) => Array.from({ length: of }, (_, i) => i + 1).filter((no) => !hasDeclarationNumber(flowOf(db, dossierId, no).stage)).length;
 
 /** Thực hiện một nghiệp vụ theo quy tắc chung (operationAvailability); bị khóa → lỗi kèm lý do. */
 /** `branch`: tờ khai nhánh của lô > 50 dòng (mặc định tờ 1). */
@@ -670,6 +678,8 @@ export const resendOperation = (dossierId: string, op: CustomsOperation, branch 
     if (c.flow.pending) throw new ApiError("BUSY", `Đang chờ phản hồi ${c.flow.pending.op}`);
     const last = db.customsMessages.filter((m) => m.dossierId === dossierId && (m.branch ?? 1) === branch && m.operation === op && Date.parse(m.at) <= now).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
     if (last?.result !== "ERROR") throw new ApiError("NOTHING_TO_RESEND", `${op} không có lỗi cần gửi lại`);
+    // Gửi lại khai tạm một tờ chưa có số = khai tạm lần đầu (ADR 0011 §4.2) → kiểm lượt cho mọi tờ chưa có số.
+    if (baseOp(op) === "IDA" && !hasDeclarationNumber(c.flow.stage)) assertAllowance(db, unnumberedSheets(db, dossierId, c.of));
     const no = c.result.declarationNo;
     const text = statusText(c);
     const t = texts(db, c, op, no);
@@ -969,5 +979,8 @@ export const declareAllSheets = (dossierId: string) =>
     if (!target) throw reasonApiError("INVALID_STATE", "DECLARE_ALL_NONE");
     const unconfirmed = c.items.filter((i) => !i.hsConfirmed).length;
     if (unconfirmed) throw reasonApiError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: unconfirmed });
+    // Lượt khai (ADR 0011 §4.2): các tờ đang chờ khai chính thức (đã giữ lượt) – đủ lượt cho cả lô, không tính hai lần.
+    const toDeclare = sheets.filter((s) => s.stage === "PRE_DECLARED").length;
+    assertAllowance(db, toDeclare, toDeclare);
     return perform(db, dossierId, declareOpFor(target.stage, c.dossier.direction)!, Date.now(), target.no, "declare");
   });

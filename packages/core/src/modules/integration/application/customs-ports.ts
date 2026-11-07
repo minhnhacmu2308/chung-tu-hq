@@ -6,6 +6,7 @@ import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
 import type { ServiceUsageMeter } from "../../../shared/usage.js";
+import type { DeclarationBilling } from "../../../shared/billing.js";
 import type { ProgressEvent } from "../../dossier/index.js";
 import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import type { ResultRaw } from "../domain/state-machine.js";
@@ -42,6 +43,8 @@ export interface CustomsRepos {
   messages: {
     /** `branch` vắng = mọi nhánh. */
     list(orgId: string, dossierId: string, branch?: number): Promise<MessageRow[]>;
+    /** Thông điệp IN thành công của các nghiệp vụ `operations` từ `since` (cả org, một truy vấn) – đối soát lượt. */
+    listSucceededSince(orgId: string, operations: string[], since: Date): Promise<MessageRow[]>;
     insert(row: MessageRow): Promise<void>;
   };
   results: {
@@ -50,6 +53,8 @@ export interface CustomsRepos {
     /** Mọi nhánh của hồ sơ, sắp theo nhánh. */
     listForDossier(orgId: string, dossierId: string): Promise<ResultRow[]>;
     listForOrg(orgId: string): Promise<ResultRow[]>;
+    /** Tờ khai nhánh đã có số tờ khai của org (cập nhật từ `updatedSince` nếu có) – đếm lượt đang giữ / đối soát lượt (ADR 0011). */
+    listNumbered(orgId: string, updatedSince?: Date): Promise<ResultRow[]>;
     /** Tờ khai nhánh có số tờ khai (hoặc mã tham chiếu FPT) này – áp thông điệp Hải quan trả sau. */
     findByNumber(orgId: string, no: string): Promise<ResultRow | null>;
     /** Mọi nhánh của các hồ sơ (danh sách hồ sơ: tóm tắt "Thông quan k/N" một truy vấn cho cả trang). */
@@ -165,6 +170,8 @@ export interface DeclarationReader {
 export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; status: DossierStatus; step: StepId; declarationNo: string | null; updatedAt: Date; /** Người tạo hồ sơ (nguyên tắc 4 mắt). */ ownerId?: string };
 export interface CustomsDossierPort {
   get(orgId: string, dossierId: string): Promise<DossierBrief | null>;
+  /** Trạng thái nhiều hồ sơ một lần (đếm lượt đang giữ); thiếu → gọi `get` từng hồ sơ. */
+  statuses?(orgId: string, dossierIds: string[]): Promise<Map<string, DossierStatus>>;
   update(orgId: string, dossierId: string, patch: { status?: DossierStatus; step?: StepId; declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED" }): Promise<void>;
   documents(orgId: string, dossierId: string): Promise<{ id: string; kind: DocKind; fileName: string; storageKey: string; mime: string; sizeBytes: number }[]>;
   readFile(storageKey: string): Promise<Buffer>;
@@ -198,6 +205,8 @@ export type CustomsDeps = {
   notify?: Notifier;
   /** Ghi chi phí Customs Hub vào usage_events (module billing; container nối). Không nối → không ghi. */
   usage?: ServiceUsageMeter;
+  /** Lượt khai (ADR 0011, module billing; container nối): chặn khai tạm lần đầu khi thiếu lượt/hợp đồng hết hạn, ghi lượt khi IDC/EDC được chấp nhận. Không nối → không chặn, không ghi. */
+  billing?: DeclarationBilling;
   /** GỠ LỖI TẠM (FPT_DEBUG_TRACE): có = đang bật ghi nhật ký API FPT. */
   fptTrace?: FptTraceReader;
   /** GỠ LỖI TẠM (FPT_DEBUG_TRACE): bật xem trước body gửi FPT (previewFptPayload). */

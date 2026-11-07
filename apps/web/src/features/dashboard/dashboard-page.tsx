@@ -1,6 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader, Progress, Skeleton, Stack, StatCard, SkeletonStats, SkeletonList, fill, useMessages,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, PageHeader, Stack, StatCard, SkeletonStats, SkeletonList, fill, useMessages,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, CalendarClock, FileSearch, FolderOpen, Plus, Send } from "lucide-react";
@@ -10,9 +10,12 @@ import { dossierKeys, listDossiers } from "@/api/dossiers";
 import { getSession, sessionKeys } from "@/api/session";
 import { ChannelBadge, DossierStatusBadge, DueBadge } from "@/features/dossiers/dossier-badges";
 import { DIRECTION_LABELS, isOpen } from "@/features/dossiers/dossier-display";
-import { daysUntil, formatDate, formatMoney, formatNumber, formatRelative, formatVnd } from "@/lib/format";
+import { daysUntil, formatDate, formatMoney, formatNumber, formatRelative } from "@/lib/format";
 import { STEP_LABELS, type Dossier } from "@/mocks/types";
+import { LOW_CREDITS, type Organization } from "@kb/contracts";
+import { ContractStatusBadge } from "@/components/common/billing-display";
 import { DASHBOARD_MESSAGES } from "./dashboard.messages";
+import { byCount } from "@/lib/plural";
 
 const rowLink =
   "flex rounded-md px-3 py-3 transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
@@ -61,6 +64,31 @@ function SectionHeader({ title, description, href, linkLabel }: { title: string;
   );
 }
 
+/** Nhắc gói (ADR 0011): PAYG còn ≤ 3 lượt khả dụng → nhắc mua; hợp đồng sắp hết / ân hạn / hết hạn → nhắc gia hạn. */
+function BillingReminder({ org }: { org: Organization }) {
+  const t = useMessages(DASHBOARD_MESSAGES);
+  if (org.plan.kind === "PAYG") {
+    const n = org.billing.available;
+    if (n > LOW_CREDITS) return null;
+    return (
+      <Alert
+        tone={n <= 0 ? "danger" : "warning"}
+        title={n <= 0 ? t.outTitle : t.lowTitle}
+        action={<Button asChild size="sm" variant="secondary"><Link href="/settings?tab=plan">{t.buyCredits}</Link></Button>}
+      >
+        {n <= 0 ? t.outBody : fill(byCount(t, "lowBody", n), { n: formatNumber(n) })}
+      </Alert>
+    );
+  }
+  const c = org.billing.contract;
+  if (!c?.endsOn || c.status === "ACTIVE") return null;
+  const date = formatDate(c.endsOn);
+  const action = <Button asChild size="sm" variant="secondary"><Link href="/settings?tab=plan">{t.viewPlan}</Link></Button>;
+  if (c.status === "EXPIRING") return <Alert tone="warning" title={t.expiringTitle} action={action}>{fill(byCount(t, "expiringBody", c.daysLeft ?? 0), { date, n: c.daysLeft ?? 0 })}</Alert>;
+  if (c.status === "GRACE") return <Alert tone="warning" title={t.graceTitle} action={action}>{fill(t.graceBody, { date })}</Alert>;
+  return <Alert tone="danger" title={t.expiredTitle} action={action}>{fill(t.expiredBody, { date })}</Alert>;
+}
+
 export function DashboardPage() {
   const t = useMessages(DASHBOARD_MESSAGES);
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
@@ -78,7 +106,6 @@ export function DashboardPage() {
   const recent = [...submitted].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6);
   const firstName = session.data?.user.name.split(" ").pop();
   const org = session.data?.org;
-  const usageRatio = org ? org.usage.dossiersThisMonth / org.plan.dossiersPerMonth : 0;
 
   return (
     <Stack gap="lg">
@@ -95,6 +122,8 @@ export function DashboardPage() {
           </Button>
         }
       />
+
+      {org && <BillingReminder org={org} />}
 
       {dossiers.isError && (
         <Alert tone="danger" title={t.loadError} action={<Button size="sm" variant="secondary" onClick={() => dossiers.refetch()}>{t.retry}</Button>}>
@@ -148,37 +177,45 @@ export function DashboardPage() {
         <Card className="self-start">
           <CardHeader>
             <CardTitle>{t.plan}</CardTitle>
-            <CardDescription>{org ? fill(t.planDesc, { name: org.plan.name, date: formatDate(org.plan.renewsAt) }) : t.loading}</CardDescription>
+            <CardDescription>{org ? fill(t.planDesc, { name: org.plan.name }) : t.loading}</CardDescription>
           </CardHeader>
           <CardContent>
             {!org ? (
-              <Stack gap="sm"><Skeleton className="h-8" /><Skeleton className="h-16" /></Stack>
+              <SkeletonList rows={2} />
             ) : (
               <Stack gap="md">
-                <Stack gap="xs">
-                  <Progress
-                    label={t.dossiersThisMonth}
-                    showValue
-                    value={org.usage.dossiersThisMonth}
-                    max={org.plan.dossiersPerMonth}
-                    tone={usageRatio > 0.8 ? "warning" : "primary"}
-                  />
-                  <p className="text-xs text-fg-subtle">
-                    {fill(t.quotaLine, { used: formatNumber(org.usage.dossiersThisMonth), max: formatNumber(org.plan.dossiersPerMonth), pages: org.plan.pagesPerDossier })}
-                  </p>
-                </Stack>
+                {org.plan.kind === "PAYG" ? (
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm text-fg-muted">{t.available}</p>
+                    <p className="text-2xl font-semibold tabular-nums text-fg">{fill(byCount(t, "availableValue", org.billing.available), { n: formatNumber(org.billing.available) })}</p>
+                    {org.billing.reserved > 0 && <p className="text-xs text-fg-subtle">{fill(byCount(t, "reservedHint", org.billing.reserved), { n: formatNumber(org.billing.reserved) })}</p>}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm text-fg-muted">{t.contractStatus}</p>
+                    {org.billing.contract && <div><ContractStatusBadge contract={org.billing.contract} /></div>}
+                    <p className="text-xs text-fg-subtle">
+                      {org.billing.contract?.endsOn ? fill(t.contractUntil, { date: formatDate(org.billing.contract.endsOn) }) : t.contractOpen}
+                    </p>
+                  </div>
+                )}
                 <dl className="grid grid-cols-2 gap-3 rounded-md bg-surface-muted p-3 text-sm">
+                  <div className="flex flex-col gap-0.5">
+                    <dt className="text-xs text-fg-subtle">{t.declarationsThisMonth}</dt>
+                    <dd className="font-semibold tabular-nums text-fg">{formatNumber(org.billing.declarationsThisMonth)}</dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <dt className="text-xs text-fg-subtle">{t.dossiersThisMonth}</dt>
+                    <dd className="font-semibold tabular-nums text-fg">{formatNumber(org.usage.dossiersThisMonth)}</dd>
+                  </div>
                   <div className="flex flex-col gap-0.5">
                     <dt className="text-xs text-fg-subtle">{t.pagesRead}</dt>
                     <dd className="font-semibold tabular-nums text-fg">{formatNumber(org.usage.pagesThisMonth)}</dd>
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    <dt className="text-xs text-fg-subtle">{t.aiCost}</dt>
-                    <dd className="font-semibold tabular-nums text-fg">{formatVnd(org.usage.aiCostVnd)}</dd>
-                  </div>
                 </dl>
+                <p className="text-xs text-fg-subtle">{fill(t.pagesLine, { pages: org.plan.pagesPerDossier })}</p>
                 <Button asChild variant="secondary" size="sm">
-                  <Link href="/settings">{t.managePlan}</Link>
+                  <Link href="/settings?tab=plan">{t.managePlan}</Link>
                 </Button>
               </Stack>
             )}

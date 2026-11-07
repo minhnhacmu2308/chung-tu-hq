@@ -2,12 +2,13 @@
 import type { OrgUsageRow } from "@kb/contracts";
 import { Badge, createDataTableColumnHelper, DataTable, Field, fill, Grid, PageHeader, Select, SkeletonStats, Stack, StatCard, useMessages, useUiLocale, type DataTableColumnVisibility } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Coins, FileText, FolderOpen, TrendingUp } from "lucide-react";
+import { Coins, FileText, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { adminKeys, getUsageReport, listUsageMonths } from "@/api/admin";
 import { LoadError } from "@/components/common/load-error";
+import { fromMinor, toMinor } from "@/lib/decimal";
 import { formatNumber, formatVnd } from "@/lib/format";
 import { monthLabel, PLAN_TONE } from "../common/admin-display";
 import { USAGE_MESSAGES } from "./usage-page.messages";
@@ -33,6 +34,7 @@ const makeColumns = (m: UsageMessages) => col.columns([
     cell: (c) => <Link href={`/admin/orgs/${c.row.original.orgId}?tab=plan`} className="block min-w-48 font-medium text-primary hover:underline">{c.getValue()}</Link>,
   }),
   col.accessor("planName", { header: m.colPlan, size: 140, meta: { filter: "select" }, cell: (c) => <Badge tone={PLAN_TONE[c.row.original.planCode]}>{c.getValue()}</Badge> }),
+  col.accessor("declarations", { header: m.colDeclarations, size: 150, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
   col.accessor("dossiers", { header: m.colDossiers, size: 100, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
   col.accessor("pages", { header: m.colPages, size: 130, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
   col.accessor("aiCalls", { header: m.colAiCalls, size: 150, meta: { align: "end" }, cell: (c) => <span className="tabular-nums">{formatNumber(c.getValue())}</span> }),
@@ -42,7 +44,8 @@ const makeColumns = (m: UsageMessages) => col.columns([
   money("hsCostVnd", m.colHsCost),
   money("customsCostVnd", m.colCustomsCost),
   money("totalCostVnd", m.colTotalCost),
-  money("planPriceVnd", m.colPlanPrice),
+  money("revenueVnd", m.colRevenue, 170),
+  money("collectedVnd", m.colCollected, 160),
   col.accessor((r) => Number(r.marginVnd), {
     id: "marginVnd",
     header: m.colMargin,
@@ -100,15 +103,15 @@ function UsageInner() {
       {!failed &&
         (t ? (
           <Grid cols={{ base: 2, xl: 4 }} stagger>
-            <StatCard icon={<FolderOpen />} label={m.statDossiers} value={t.dossiers} hint={fill(m.statDossiersHint, { n: formatNumber(report.data!.rows.length) })} />
-            <StatCard icon={<FileText />} tone="info" label={m.statPages} value={t.pages} hint={fill(m.statPagesHint, { n: formatNumber(t.aiCalls) })} />
-            <StatCard icon={<Coins />} tone="warning" label={m.statCost} value={formatVnd(t.totalCostVnd)} hint={t.dossiers > 0 ? fill(m.perDossier, { amount: formatVnd(String(Math.round(Number(t.totalCostVnd) / t.dossiers))) }) : m.noDossiers} />
+            <StatCard icon={<FileText />} label={m.statDeclarations} value={t.declarations} hint={fill(m.statDeclarationsHint, { dossiers: formatNumber(t.dossiers), pages: formatNumber(t.pages) })} />
+            <StatCard icon={<Wallet />} tone="success" label={m.statRevenue} value={formatVnd(t.revenueVnd)} hint={fill(m.statRevenueHint, { amount: formatVnd(t.collectedVnd) })} />
+            <StatCard icon={<Coins />} tone="warning" label={m.statCost} value={formatVnd(t.totalCostVnd)} hint={t.dossiers > 0 ? fill(m.perDossier, { amount: formatVnd(fromMinor(Math.round(toMinor(t.totalCostVnd, 0) / t.dossiers), 0)) }) : m.noDossiers} />
             <StatCard
               icon={<TrendingUp />}
               tone={Number(t.marginVnd) < 0 ? "danger" : "success"}
               label={m.statMargin}
               value={formatVnd(t.marginVnd)}
-              hint={fill(m.revenue, { amount: formatVnd(t.revenueVnd) })}
+              hint={fill(m.statDossiersHint, { n: formatNumber(report.data!.rows.length) })}
               hintTone={Number(t.marginVnd) < 0 ? "danger" : "default"}
             />
           </Grid>

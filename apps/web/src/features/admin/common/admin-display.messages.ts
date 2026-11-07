@@ -1,5 +1,5 @@
 // Bộ nhãn 3 ngôn ngữ cho các mã back-office (vai trò, quyền, hành động nhật ký...). Bản `vi` giữ nguyên chữ cũ.
-import type { AdminAction, AdminPermission, AdminTargetType, AnnouncementKind, SkillKind, StaffRole } from "@kb/contracts";
+import type { AdminAction, AdminPermission, AdminTargetType, AnnouncementKind, AttentionKind, SkillKind, StaffRole } from "@kb/contracts";
 import { defineMessages, type Messages } from "@kb/ui";
 
 export const STAFF_ROLE_LABELS: Messages<StaffRole> = defineMessages({
@@ -13,21 +13,21 @@ export const PERMISSION_LABELS: Messages<AdminPermission> = defineMessages({
   vi: {
     VIEW: "Xem mọi màn và báo cáo",
     SUPPORT: "Khóa/mở doanh nghiệp, người dùng; đặt lại mật khẩu; chạy lại job; gửi thông báo",
-    BILLING: "Đổi gói, nới hạn mức, sửa danh mục gói",
+    BILLING: "Đổi gói, điều chỉnh lượt, sửa hợp đồng, sửa danh mục gói",
     PLATFORM: "Cập nhật khóa API tích hợp, phát hành skill mẫu",
     STAFF: "Mời, đổi vai trò, khóa quản trị viên",
   },
   en: {
     VIEW: "View all screens and reports",
     SUPPORT: "Suspend/reactivate organizations and users; reset passwords; retry jobs; send announcements",
-    BILLING: "Change plans, raise quotas, edit the plan catalog",
+    BILLING: "Change plans, adjust credits, edit contracts and the plan catalog",
     PLATFORM: "Update integration API keys, publish skill templates",
     STAFF: "Invite admins, change their roles, disable them",
   },
   zh: {
     VIEW: "查看所有页面和报表",
     SUPPORT: "停用/启用企业和用户；重置密码；重跑任务；发送通知",
-    BILLING: "更换套餐、提高额度、编辑套餐目录",
+    BILLING: "更换套餐、调整次数、编辑合同和套餐目录",
     PLATFORM: "更新集成 API 密钥、发布技能模板",
     STAFF: "邀请管理员、变更角色、停用管理员",
   },
@@ -51,6 +51,8 @@ export const ACTION_LABELS: Messages<AdminAction> = defineMessages({
     ORG_SUSPENDED: "Tạm khóa doanh nghiệp",
     ORG_REACTIVATED: "Mở khóa doanh nghiệp",
     ORG_PLAN_CHANGED: "Đổi gói",
+    ORG_CONTRACT_UPDATED: "Cập nhật hợp đồng",
+    ORG_CREDITS_ADJUSTED: "Điều chỉnh lượt",
     ORG_QUOTA_ADJUSTED: "Nới hạn mức",
     ORG_TRIAL_EXTENDED: "Gia hạn dùng thử",
     USER_DISABLED: "Khóa người dùng",
@@ -84,6 +86,8 @@ export const ACTION_LABELS: Messages<AdminAction> = defineMessages({
     ORG_SUSPENDED: "Suspend organization",
     ORG_REACTIVATED: "Reactivate organization",
     ORG_PLAN_CHANGED: "Change plan",
+    ORG_CONTRACT_UPDATED: "Update contract",
+    ORG_CREDITS_ADJUSTED: "Adjust credits",
     ORG_QUOTA_ADJUSTED: "Raise quota",
     ORG_TRIAL_EXTENDED: "Extend trial",
     USER_DISABLED: "Disable user",
@@ -117,6 +121,8 @@ export const ACTION_LABELS: Messages<AdminAction> = defineMessages({
     ORG_SUSPENDED: "停用企业",
     ORG_REACTIVATED: "启用企业",
     ORG_PLAN_CHANGED: "更换套餐",
+    ORG_CONTRACT_UPDATED: "更新合同",
+    ORG_CREDITS_ADJUSTED: "调整额度",
     ORG_QUOTA_ADJUSTED: "提高额度",
     ORG_TRIAL_EXTENDED: "延长试用",
     USER_DISABLED: "停用用户",
@@ -155,33 +161,34 @@ export const TARGET_TYPE_LABELS: Messages<AdminTargetType> = defineMessages({
 
 export const ADMIN_DISPLAY_MESSAGES = defineMessages({
   vi: {
-    unlimited: "Không giới hạn",
-    overQuota: "Vượt hạn mức",
-    quotaExhausted: "Hết hạn mức",
-    nearQuota: "Sắp hết hạn mức",
-    withinQuota: "Trong hạn mức",
     month: "Tháng {m}/{y}",
     audienceAll: "Mọi doanh nghiệp",
     audiencePlan: "Gói {plan}",
   },
   en: {
-    unlimited: "Unlimited",
-    overQuota: "Over quota",
-    quotaExhausted: "Quota used up",
-    nearQuota: "Nearly at quota",
-    withinQuota: "Within quota",
     month: "{m}/{y}",
     audienceAll: "All organizations",
     audiencePlan: "{plan} plan",
   },
   zh: {
-    unlimited: "不限",
-    overQuota: "超出额度",
-    quotaExhausted: "额度已用完",
-    nearQuota: "额度即将用完",
-    withinQuota: "额度内",
     month: "{y}年{m}月",
     audienceAll: "所有企业",
     audiencePlan: "{plan} 套餐",
+  },
+});
+
+/** Loại mục "Cần chú ý" ở Tổng quan vận hành (ADR 0011 thêm LOW_CREDITS / CONTRACT_*). */
+export const ATTENTION_KIND_LABELS: Messages<AttentionKind> = defineMessages({
+  vi: {
+    LOW_CREDITS: "Sắp hết lượt", CONTRACT_EXPIRING: "Hợp đồng sắp hết hạn", CONTRACT_EXPIRED: "Hợp đồng hết hạn", CONTRACT_NO_END: "Hợp đồng chưa có ngày kết thúc",
+    INTEGRATION_ERROR: "Kết nối lỗi", JOBS_FAILED: "Job lỗi", JOIN_PENDING: "Yêu cầu tham gia", RATE_FETCH: "Tỷ giá",
+  },
+  en: {
+    LOW_CREDITS: "Low credits", CONTRACT_EXPIRING: "Contract expiring", CONTRACT_EXPIRED: "Contract expired", CONTRACT_NO_END: "Contract without end date",
+    INTEGRATION_ERROR: "Integration error", JOBS_FAILED: "Failed jobs", JOIN_PENDING: "Join requests", RATE_FETCH: "Exchange rate",
+  },
+  zh: {
+    LOW_CREDITS: "次数不足", CONTRACT_EXPIRING: "合同即将到期", CONTRACT_EXPIRED: "合同已到期", CONTRACT_NO_END: "合同无结束日期",
+    INTEGRATION_ERROR: "集成错误", JOBS_FAILED: "任务失败", JOIN_PENDING: "加入申请", RATE_FETCH: "汇率",
   },
 });

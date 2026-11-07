@@ -1,4 +1,4 @@
-import type { RegisterInput } from "@kb/contracts";
+import { SIGNUP_GRANT_CREDITS, type RegisterInput } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { createLogger } from "../../../shared/log.js";
@@ -14,7 +14,7 @@ const log = createLogger({ name: "core" });
 
 /**
  * Đăng ký: tài khoản mới + (doanh nghiệp mới theo MST | yêu cầu tham gia doanh nghiệp đã có).
- * Mọi dòng (user, org, token, membership OWNER, phiên) ghi trong MỘT transaction – lỗi giữa chừng không để lại doanh nghiệp không có chủ
+ * Mọi dòng (user, org, 3 lượt tặng, token, membership OWNER, phiên) ghi trong MỘT transaction – lỗi giữa chừng không để lại doanh nghiệp không có chủ
  * hay MST đã bị chiếm. Email chỉ gửi SAU khi commit (gửi mail không giữ transaction, mail lỗi không làm hỏng đăng ký).
  */
 export async function register(deps: IdentityDeps, input: RegisterInput, meta: { ip: string }): Promise<Result<RegisterOutput>> {
@@ -40,8 +40,10 @@ export async function register(deps: IdentityDeps, input: RegisterInput, meta: {
     const orgId = deps.idGen.next("org");
     await r.orgs.insert({
       id: orgId, taxCode: input.taxCode, name: registry.found ? registry.name : `Doanh nghiệp MST ${input.taxCode}`, address: registry.found ? registry.address : "",
-      phone: "", planCode: "TRIAL", suspectThreshold: "BALANCED", fourEyes: false, createdAt: now,
+      phone: "", planCode: "PAYG", suspectThreshold: "BALANCED", fourEyes: false, createdAt: now,
     });
+    // D4 (ADR 0011): doanh nghiệp tự đăng ký vào gói Theo lượt, tặng 3 lượt – cùng transaction, khóa chống trùng = id.
+    await r.credits.grant({ id: `grant:signup:${orgId}`, orgId, delta: SIGNUP_GRANT_CREDITS, note: `Tặng ${SIGNUP_GRANT_CREDITS} lượt khi đăng ký`, createdBy: userId, at: now });
     const t = newToken(deps.random);
     await r.authTokens.insert({ id: deps.idGen.next("tok"), userId, orgId, kind: "VERIFY_EMAIL", tokenHash: t.hash, expiresAt: new Date(now.getTime() + TOKEN_TTL_MS.VERIFY_EMAIL), usedAt: null });
     await r.memberships.insert({ id: deps.idGen.next("mem"), orgId, userId, role: "OWNER", status: "ACTIVE", invitedBy: null });

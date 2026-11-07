@@ -1,9 +1,6 @@
 // Danh sách "cần chú ý" trên màn Tổng quan vận hành – code thuần.
-import type { AdminOrg, AttentionItem } from "@kb/contracts";
-import { daysUntil } from "./period.js";
+import { LOW_CREDITS, type AdminOrg, type AttentionItem } from "@kb/contracts";
 
-export const QUOTA_WARN = 0.9;
-export const EXPIRING_DAYS = 7;
 export const JOIN_STALE_DAYS = 3;
 const DAY = 86_400_000;
 
@@ -23,30 +20,30 @@ export type AttentionInput = {
 export function buildAttention(i: AttentionInput): AttentionItem[] {
   const out: AttentionItem[] = [];
   for (const o of i.orgs.filter((x) => x.status === "ACTIVE")) {
-    const limit = o.plan.dossiersPerMonth + o.quotaBonus;
-    const ratio = limit > 0 ? o.usage.dossiersThisMonth / limit : 0;
-    if (ratio >= QUOTA_WARN) {
-      out.push({
-        id: `quota_${o.id}`,
-        kind: "QUOTA",
-        severity: ratio >= 1 ? "danger" : "warning",
-        title: ratio >= 1 ? `${o.name} đã hết hạn mức` : `${o.name} sắp hết hạn mức`,
-        detail: `${o.usage.dossiersThisMonth}/${limit} hồ sơ tháng này · gói ${o.plan.name}`,
-        href: `/admin/orgs/${o.id}?tab=plan`,
-      });
+    const href = `/admin/orgs/${o.id}?tab=plan`;
+    if (o.plan.kind === "PAYG") {
+      // Chỉ nhắc doanh nghiệp đang khai (có tờ khai được chấp nhận trong 30 ngày) – không làm ồn với doanh nghiệp chưa dùng.
+      if (o.billing.balance <= LOW_CREDITS && o.billing.declarations30d > 0)
+        out.push({
+          id: `low_credits_${o.id}`, kind: "LOW_CREDITS", severity: o.billing.balance <= 0 ? "danger" : "warning",
+          title: o.billing.balance <= 0 ? `${o.name} đã hết lượt` : `${o.name} còn ${o.billing.balance} lượt`,
+          detail: `${o.billing.declarations30d} tờ khai trong 30 ngày qua – nhắc khách mua thêm lượt hoặc nạp tay.`, href,
+        });
+      continue;
     }
-    const days = daysUntil(new Date(`${o.plan.renewsAt}T00:00:00Z`), i.now);
-    // Gói trả phí tự gia hạn theo kỳ; chỉ dùng thử mới thật sự "hết hạn".
-    if (o.plan.code === "TRIAL" && days <= EXPIRING_DAYS) {
-      out.push({
-        id: `expiring_${o.id}`,
-        kind: "PLAN_EXPIRING",
-        severity: days < 0 ? "danger" : "warning",
-        title: `${o.name}: dùng thử ${days < 0 ? `đã hết hạn ${-days} ngày` : days === 0 ? "hết hạn hôm nay" : `hết hạn sau ${days} ngày`}`,
-        detail: "Liên hệ chuyển sang gói trả phí hoặc gia hạn dùng thử.",
-        href: `/admin/orgs/${o.id}?tab=plan`,
-      });
+    const c = o.billing.contract;
+    if (!c?.endsOn) {
+      out.push({ id: `contract_no_end_${o.id}`, kind: "CONTRACT_NO_END", severity: "warning", title: `${o.name}: hợp đồng chưa có ngày kết thúc`, detail: "Nhập số hợp đồng, hiệu lực và giá trị ở tab Gói.", href });
+      continue;
     }
+    if (c.status === "EXPIRING")
+      out.push({ id: `contract_expiring_${o.id}`, kind: "CONTRACT_EXPIRING", severity: "warning", title: `${o.name}: hợp đồng ${c.daysLeft === 0 ? "hết hạn hôm nay" : `còn ${c.daysLeft} ngày`}`, detail: `Hết hạn ${c.endsOn} – liên hệ gia hạn.`, href });
+    if (c.status === "GRACE" || c.status === "EXPIRED")
+      out.push({
+        id: `contract_expired_${o.id}`, kind: "CONTRACT_EXPIRED", severity: c.status === "EXPIRED" ? "danger" : "warning",
+        title: `${o.name}: hợp đồng đã hết hạn ${-(c.daysLeft ?? 0)} ngày`,
+        detail: c.status === "EXPIRED" ? "Đã quá 7 ngày ân hạn – doanh nghiệp không khai được tờ khai mới." : "Đang trong 7 ngày ân hạn – vẫn khai được, cần gia hạn ngay.", href,
+      });
   }
   for (const it of i.integrations.filter((x) => x.status === "ERROR")) {
     out.push({ id: `integration_${it.id}`, kind: "INTEGRATION_ERROR", severity: "danger", title: `${it.name} đang lỗi`, detail: it.detail ?? "Kiểm tra kết nối.", href: "/admin/integrations" });

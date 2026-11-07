@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, ilike, like, lt, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, like, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { documents, dossiers, jobProgress } from "../../../db/schema/dossier.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -29,6 +29,8 @@ function repos(tx: Tx): DossierRepos {
         const d = (await tx.select().from(dossiers).where(and(eq(dossiers.orgId, orgId), eq(dossiers.id, id))).limit(1))[0];
         return d ? toDossier(d) : null;
       },
+      statusesOf: async (orgId, ids) =>
+        new Map(ids.length ? (await tx.select({ id: dossiers.id, status: dossiers.status }).from(dossiers).where(and(eq(dossiers.orgId, orgId), inArray(dossiers.id, ids)))).map((r) => [r.id, r.status as DossierRow["status"]]) : []),
       codesInMonth: async (orgId, direction, prefix) => (await tx.select({ code: dossiers.code }).from(dossiers).where(and(eq(dossiers.orgId, orgId), eq(dossiers.direction, direction), like(dossiers.code, `${prefix}%`)))).map((r) => r.code),
       insert: async (row) => void (await tx.insert(dossiers).values(row)),
       update: async (orgId, id, patch) => void (await tx.update(dossiers).set(patch).where(and(eq(dossiers.orgId, orgId), eq(dossiers.id, id)))),

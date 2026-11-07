@@ -161,10 +161,15 @@ Nguyên tắc tích hợp (chi tiết ở ADR 0005):
 
 ## 8. Gói dịch vụ & chi phí
 
-- Bên vận hành dùng API key của mình; khách mua theo gói (ADR liên quan: quyết định ngày 2026-10-12).
-- Đơn vị tính: **số hồ sơ/tháng**, mỗi hồ sơ tối đa N trang; vượt thì tính thêm.
-- Mọi lần gọi AI và API trả phí bên thứ 3 ghi `usage_events` theo organization để tính giá vốn và hạn mức.
-- Gói gợi ý: Cơ bản / Chuyên nghiệp (skill theo nhà cung cấp, lịch sử) / Doanh nghiệp (API, truyền Hải quan, SLA).
+Quyết định: ADR 0011 (`docs/adr/0011-billing-payg-and-annual-contract.md`). Bên vận hành dùng API key của mình; khách trả tiền cho **tờ khai được Hải quan chấp nhận**, không cho số hồ sơ tạo ra.
+
+- **Hai gói:**
+  - **Theo lượt (PAYG)** – trả trước qua PayOS, mặc định **25.000 đ/lượt**. **1 lượt = 1 tờ khai nhánh được chấp nhận khai chính thức (IDC/EDC)**; lô tách 3 tờ = 3 lượt. Không trừ khi đọc chứng từ, bị từ chối, hủy hồ sơ, khai sửa cùng số tờ khai, HYS, gọi về, tra cứu. Doanh nghiệp tự đăng ký vào gói này, **tặng 3 lượt**.
+  - **Hợp đồng năm (CONTRACT)** – bán theo liên hệ, khai không giới hạn trong hạn hợp đồng. Cảnh báo trước 30 ngày; hết hạn còn 7 ngày ân hạn, sau đó khóa khai tạm tờ khai mới (vẫn đăng nhập, xem, đọc chứng từ, sửa hồ sơ).
+- **Chặn trước khi gửi:** khai tạm lần đầu cần đủ lượt khả dụng (= số dư − lượt đang giữ cho tờ khai đã có số chưa khai chính thức); thiếu → `INSUFFICIENT_CREDITS`, hợp đồng hết hạn → `CONTRACT_EXPIRED`.
+- **Không còn hạn mức số hồ sơ/tháng.** Giữ **số trang tối đa/hồ sơ** (PAYG 40, CONTRACT 100) và trần chi phí AI/ngày để chống lạm dụng chi phí AI.
+- Mua lượt: Cài đặt → Gói & sử dụng → Mua lượt (10/50/100 hoặc nhập số, 1–1000) → trang thanh toán PayOS → quay lại tự xác nhận. Đội vận hành nạp/điều chỉnh tay được (chuyển khoản ngoài, tặng, hoàn).
+- Mọi lần gọi AI và API trả phí bên thứ 3 ghi `usage_events` theo organization để tính **giá vốn** (chỉ đội vận hành xem). Báo cáo admin: doanh thu ghi nhận (PAYG = tiền lượt đã trừ; CONTRACT = giá trị hợp đồng/12), tiền thu PayOS, lãi gộp.
 
 ## 9. Yêu cầu phi chức năng
 

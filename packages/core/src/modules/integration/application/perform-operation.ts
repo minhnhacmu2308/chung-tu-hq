@@ -14,6 +14,7 @@ import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { buildAmaRequest } from "../domain/post-amendment.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
+import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
 import { availabilityInput, hasBlockingPending, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { auditHysWaiver, hysGuard, recordHysWaiver, type HysWaiver } from "./hys-guard.js";
@@ -90,6 +91,13 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
     // Bất biến 7: khai chính thức lô nhiều tờ cũng không vượt HS chưa xác nhận / BLOCKER (lô một tờ giữ nguyên hành vi cũ).
     const blocked = await declareBlockError(deps, ctx, dossierId, snap);
     if (blocked) return err(blocked);
+  }
+  // Lượt khai (ADR 0011 §4.2): khai tạm lần đầu một tờ chưa có số (gửi lại sau khi bị từ chối, tờ 2..N chưa khai) – đếm mọi tờ chưa có số
+  // vì chuỗi nối tiếp sẽ khai tạm các tờ sau. Chuỗi của worker (chainFrom) đã được kiểm lúc bắt đầu.
+  if (isContentOperation(op) && baseOp(op) === "IDA" && !result.declarationNo && !opts?.chainFrom) {
+    const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));
+    const allowance = await checkFirstSendAllowance(deps, ctx.orgId, unnumberedSheets(results, of));
+    if (!allowance.ok) return allowance;
   }
   if (branch > 1 && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA") return preDeclareBranch(deps, ctx, dossierId, branch, op, snap, first);
 

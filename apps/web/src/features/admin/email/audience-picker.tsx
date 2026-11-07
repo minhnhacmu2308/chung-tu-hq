@@ -44,7 +44,7 @@ export function AudiencePicker({ value, onChange, onCount }: { value: EmailAudie
   const setMode = (mode: Mode) =>
     onChange({
       ...value,
-      orgs: mode === "PLANS" ? { mode, plans: plans.data?.map((p) => p.code).filter((c) => c !== "TRIAL").slice(0, 1) ?? [] } : mode === "PICK" ? { mode, orgIds: [] } : { mode },
+      orgs: mode === "PLANS" ? { mode, plans: plans.data?.map((p) => p.code).slice(0, 1) ?? [] } : mode === "PICK" ? { mode, orgIds: [] } : { mode },
     });
   const userOptions = useMemo(() => (users.data ?? []).filter((u) => u.status === "ACTIVE").map((u) => ({ value: u.id, label: u.name, description: `${u.email} · ${u.orgName ?? ""}` })), [users.data]);
   const orgOptions = useMemo(() => (orgs.data ?? []).filter((o) => o.status === "ACTIVE").map((o) => ({ value: o.id, label: o.name, description: `MST ${o.taxCode} · ${o.plan.name}` })), [orgs.data]);

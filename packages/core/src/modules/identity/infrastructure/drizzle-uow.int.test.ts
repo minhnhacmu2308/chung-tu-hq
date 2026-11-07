@@ -20,7 +20,7 @@ beforeAll(async () => {
   await runSeed(t.adminUrl);
   const admin = createDb(t.adminUrl, { max: 1 });
   const { organizations, users, memberships } = await import("../../../db/schema/identity.js");
-  await admin.insert(organizations).values({ id: "org_khac", taxCode: "0100000099", name: "KHÁC", planCode: "TRIAL" });
+  await admin.insert(organizations).values({ id: "org_khac", taxCode: "0100000099", name: "KHÁC", planCode: "PAYG" });
   await admin.insert(users).values({ id: "usr_khac", email: "khac@x.vn", passwordHash: "x", name: "Khác" });
   await admin.insert(memberships).values({ id: "mem_khac", orgId: "org_khac", userId: "usr_khac", role: "OWNER" });
   await admin.close();
@@ -38,7 +38,7 @@ describe("DrizzleIdentityUow", () => {
     expect(u?.id).toBe("usr_chau");
     const o = await uow.system((r) => r.orgs.findByTaxCode("0316789012"));
     expect(o?.id).toBe("org_anphat");
-    expect((await new DrizzlePlansReader(db).get("PRO"))?.dossiersPerMonth).toBe(150);
+    expect(await new DrizzlePlansReader(db).get("PAYG")).toMatchObject({ kind: "PAYG", pagesPerDossier: 40 });
   });
   it("orgs: mã bưu chính đọc/ghi theo org đang đặt; org khác không sửa được (RLS)", async () => {
     expect((await uow.asOrg(ANPHAT, (r) => r.orgs.findById("org_anphat")))?.postalCode).toBe("180000");

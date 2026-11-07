@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { DecimalStringSchema, IsoDateSchema, IsoDateTimeSchema, RoleSchema } from "../common.js";
+import { IsoDateTimeSchema, RoleSchema } from "../common.js";
+import { OrgBillingSchema, OrgPlanSchema } from "./billing.js";
 
 export const MemberSchema = z.object({
   id: z.string(),
@@ -11,10 +12,6 @@ export const MemberSchema = z.object({
 });
 export type Member = z.infer<typeof MemberSchema>;
 
-/** TRIAL: gói dùng thử khi tạo doanh nghiệp mới (ADR 0004). */
-export const PlanCodeSchema = z.enum(["TRIAL", "BASIC", "PRO", "ENTERPRISE"]);
-export type PlanCode = z.infer<typeof PlanCodeSchema>;
-
 export const OrganizationSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -24,22 +21,16 @@ export const OrganizationSchema = z.object({
   phone: z.string(),
   /** Mã bưu chính (6 số) – điền chỉ tiêu 1.14 IDA / 2.13 EDA. Thiếu hoặc "" = chưa khai. */
   postalCode: z.string().optional(),
-  plan: z.object({
-    code: PlanCodeSchema,
-    name: z.string(),
-    dossiersPerMonth: z.number().int().nonnegative(),
-    pagesPerDossier: z.number().int().nonnegative(),
-    /** Hồ sơ đội vận hành nới thêm, chỉ tính trong tháng hiện tại. Hạn mức tháng này = dossiersPerMonth + bonusThisMonth. */
-    bonusThisMonth: z.number().int().nonnegative().optional(),
-    renewsAt: IsoDateSchema,
-  }),
-  /** Mức dùng tháng hiện tại; chi phí (VND, từ usage_events) tách theo nhà cung cấp: AI đọc chứng từ, HSCodePro, Customs Hub. */
+  /** Gói (ADR 0011): PAYG theo lượt hoặc CONTRACT hợp đồng năm. */
+  plan: OrgPlanSchema,
+  /** Lượt / hợp đồng (module billing cung cấp). */
+  billing: OrgBillingSchema,
+  /**
+   * Mức dùng tháng hiện tại (giờ VN). Giá vốn AI/HSCodePro/Customs Hub là số nội bộ – chỉ khu Quản trị xem, không trả cho khách.
+   */
   usage: z.object({
     dossiersThisMonth: z.number().int().nonnegative(),
     pagesThisMonth: z.number().int().nonnegative(),
-    aiCostVnd: DecimalStringSchema,
-    hsCostVnd: DecimalStringSchema,
-    customsCostVnd: DecimalStringSchema,
   }),
   suspectThreshold: z.enum(["STRICT", "BALANCED", "RELAXED"]),
   /** Nguyên tắc 4 mắt: người duyệt tờ khai phải khác người tạo hồ sơ (Chủ sở hữu được miễn). */

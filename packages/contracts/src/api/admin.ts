@@ -16,37 +16,73 @@ export type AdminReasonInput = z.infer<typeof AdminReasonInputSchema>;
 export const ChangeOrgPlanInputSchema = z.object({ planCode: PlanCodeSchema, ...withReason });
 export type ChangeOrgPlanInput = z.infer<typeof ChangeOrgPlanInputSchema>;
 
-/** Quản trị tạo hộ doanh nghiệp ký hợp đồng trực tiếp + tài khoản Chủ sở hữu (mật khẩu tạm, bắt đổi ở lần đăng nhập đầu). */
-export const CreateOrgInputSchema = z.object({
-  taxCode: TaxCodeSchema,
-  name: z.string().trim().min(1, "Nhập tên doanh nghiệp").max(300),
-  address: z.string().trim().max(500),
-  planCode: PlanCodeSchema,
+/** Tiền VND không âm (giá trị hợp đồng, giá gói) – chuỗi thập phân. */
+const VndSchema = DecimalStringSchema.refine((v) => !v.startsWith("-"), "Không nhỏ hơn 0");
+
+/**
+ * Hợp đồng năm (gói CONTRACT): số hợp đồng, hiệu lực từ–đến, giá trị (báo cáo doanh thu = giá trị/12 mỗi tháng hợp đồng phủ), ghi chú nội bộ.
+ * Chưa có ngày kết thúc → khai không giới hạn (khu Quản trị nhắc CONTRACT_NO_END).
+ */
+const contractFields = {
   contractNo: z.string().trim().max(100).optional(),
-  /** Hạn hợp đồng YYYY-MM-DD. */
-  contractEndsOn: IsoDateSchema.optional(),
-  owner: z.object({ email: EmailSchema, name: z.string().trim().min(2, "Nhập họ tên").max(200) }),
+  startsOn: IsoDateSchema.optional(),
+  endsOn: IsoDateSchema.optional(),
+  valueVnd: VndSchema.optional(),
   note: z.string().trim().max(2000).optional(),
-});
+};
+const contractRangeOk = (v: { startsOn?: string | undefined; endsOn?: string | undefined }) => !v.startsOn || !v.endsOn || v.startsOn <= v.endsOn;
+
+/**
+ * Quản trị tạo hộ doanh nghiệp + tài khoản Chủ sở hữu (mật khẩu tạm, bắt đổi ở lần đăng nhập đầu).
+ * PAYG: tùy chọn tặng `grantCredits` lượt. CONTRACT: kèm hợp đồng (số, bắt đầu, kết thúc, giá trị).
+ */
+export const CreateOrgInputSchema = z
+  .object({
+    taxCode: TaxCodeSchema,
+    name: z.string().trim().min(1, "Nhập tên doanh nghiệp").max(300),
+    address: z.string().trim().max(500),
+    planCode: PlanCodeSchema,
+    grantCredits: z.number().int("Nhập số nguyên").min(0, "Không nhỏ hơn 0").max(10_000, "Tối đa 10.000 lượt").optional(),
+    ...contractFields,
+    owner: z.object({ email: EmailSchema, name: z.string().trim().min(2, "Nhập họ tên").max(200) }),
+  })
+  .refine(contractRangeOk, { path: ["endsOn"], message: "Ngày kết thúc phải sau ngày bắt đầu" });
 export type CreateOrgInput = z.infer<typeof CreateOrgInputSchema>;
 /** Mật khẩu tạm chỉ trả về MỘT lần, lúc tạo – không lưu dạng đọc được ở đâu cả. */
 export const CreateOrgResultSchema = z.object({ orgId: z.string(), orgName: z.string(), ownerEmail: z.string(), tempPassword: z.string() });
 export type CreateOrgResult = z.infer<typeof CreateOrgResultSchema>;
 
-export const AdjustOrgQuotaInputSchema = z.object({
-  bonusDossiers: z.number().int("Nhập số nguyên").min(0, "Không nhỏ hơn 0").max(10_000, "Tối đa 10.000 hồ sơ"),
-  ...withReason,
-});
-export type AdjustOrgQuotaInput = z.infer<typeof AdjustOrgQuotaInputSchema>;
+/** PUT /api/admin/orgs/[id]/contract – tạo/sửa hợp đồng năm của doanh nghiệp gói CONTRACT. */
+export const UpsertOrgContractInputSchema = z.object({ ...contractFields, valueVnd: VndSchema, ...withReason }).refine(contractRangeOk, { path: ["endsOn"], message: "Ngày kết thúc phải sau ngày bắt đầu" });
+export type UpsertOrgContractInput = z.infer<typeof UpsertOrgContractInputSchema>;
 
-export const ExtendOrgTrialInputSchema = z.object({ days: z.number().int("Nhập số nguyên").min(1, "Ít nhất 1 ngày").max(90, "Tối đa 90 ngày"), ...withReason });
-export type ExtendOrgTrialInput = z.infer<typeof ExtendOrgTrialInputSchema>;
+/** Lý do điều chỉnh lượt tay (nạp chuyển khoản ngoài, tặng, hoàn, điều chỉnh). PURCHASE/CHARGE/CONTRACT_USE chỉ hệ thống ghi. */
+export const ManualCreditReasonSchema = z.enum(["MANUAL_TOPUP", "GRANT", "REFUND", "ADJUST"]);
+export type ManualCreditReason = z.infer<typeof ManualCreditReasonSchema>;
 
+/**
+ * POST /api/admin/orgs/[id]/credits – cộng/trừ lượt. `kind` = loại dòng sổ lượt, `note` = ghi chú hiện cho khách (bắt buộc),
+ * `reason` = lý do ghi nhật ký quản trị. `amountVnd`: tiền tương ứng (vd chuyển khoản ngoài) – tùy chọn.
+ */
+export const AdjustOrgCreditsInputSchema = z
+  .object({
+    delta: z.number().int("Nhập số nguyên").min(-10_000, "Tối đa 10.000 lượt").max(10_000, "Tối đa 10.000 lượt").refine((v) => v !== 0, "Nhập số lượt khác 0"),
+    kind: ManualCreditReasonSchema,
+    note: z.string().trim().min(3, "Nhập ghi chú (ít nhất 3 ký tự)").max(500, "Ghi chú tối đa 500 ký tự"),
+    amountVnd: VndSchema.optional(),
+    /** Khóa chống ghi trùng do hộp thoại sinh mỗi lần mở (bấm hai lần không thành hai dòng). */
+    idempotencyKey: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/, "Khóa chống trùng không hợp lệ").optional(),
+    ...withReason,
+  })
+  .refine((v) => v.kind === "ADJUST" || v.kind === "REFUND" || v.delta > 0, { path: ["delta"], message: "Nạp/tặng lượt phải là số dương" });
+export type AdjustOrgCreditsInput = z.infer<typeof AdjustOrgCreditsInputSchema>;
+
+/** Sửa gói: PAYG – tên, trang/hồ sơ, đơn giá/lượt; CONTRACT – tên, trang/hồ sơ, giá niêm yết (0 = "Liên hệ"). */
 export const UpdatePlanInputSchema = z.object({
   name: z.string().trim().min(1, "Nhập tên gói"),
-  dossiersPerMonth: z.number().int("Nhập số nguyên").min(1, "Ít nhất 1 hồ sơ"),
   pagesPerDossier: z.number().int("Nhập số nguyên").min(1, "Ít nhất 1 trang"),
-  priceVnd: DecimalStringSchema,
+  priceVnd: VndSchema,
+  pricePerDeclarationVnd: VndSchema,
   ...withReason,
 });
 export type UpdatePlanInput = z.infer<typeof UpdatePlanInputSchema>;

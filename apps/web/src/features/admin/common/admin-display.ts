@@ -6,7 +6,7 @@ import { fill, pickMessages, statusLabel as uiStatusLabel, type Status, type Ton
 import { ADMIN_DISPLAY_MESSAGES } from "./admin-display.messages";
 
 export {
-  ACTION_LABELS, ANNOUNCEMENT_KIND_LABELS, PERMISSION_LABELS, SKILL_KIND_LABELS, STAFF_ROLE_LABELS, TARGET_TYPE_LABELS,
+  ACTION_LABELS, ANNOUNCEMENT_KIND_LABELS, ATTENTION_KIND_LABELS, PERMISSION_LABELS, SKILL_KIND_LABELS, STAFF_ROLE_LABELS, TARGET_TYPE_LABELS,
 } from "./admin-display.messages";
 
 /** Giữ tên kiểu cũ cho nơi gọi: mọi trạng thái của StatusBadge. */
@@ -38,28 +38,12 @@ export const SERVICE_STATUS = { UP: "SERVICE_UP", DEGRADED: "SERVICE_DEGRADED", 
 export const statusLabel = (s: Status, locale: UiLocale = "vi") => uiStatusLabel(s, locale);
 
 /** Gói là nhãn phân loại (Badge), không phải trạng thái nghiệp vụ. */
-export const PLAN_TONE: Record<PlanCode, Tone> = { TRIAL: "neutral", BASIC: "info", PRO: "primary", ENTERPRISE: "success" };
+export const PLAN_TONE: Record<PlanCode, Tone> = { PAYG: "info", CONTRACT: "success" };
 
 export const audienceLabel = (audience: AnnouncementAudience, planNames: Partial<Record<PlanCode, string>> = {}, locale: UiLocale = "vi") => {
   const t = pickMessages(ADMIN_DISPLAY_MESSAGES, locale);
   return audience === "ALL" ? t.audienceAll : fill(t.audiencePlan, { plan: planNames[audience] ?? audience });
 };
-
-/** Ngưỡng cảnh báo hạn mức – cùng mốc với mục "Cần chú ý" ở màn tổng quan. */
-const QUOTA_WARN = 0.9;
-
-export type QuotaState = { ratio: number; percent: number; tone: "primary" | "warning" | "danger"; label: string };
-
-/** Mức dùng hạn mức hồ sơ trong tháng. `limit` đã gồm phần nới tạm. Luôn có chữ đi kèm màu. */
-export function quotaState(used: number, limit: number, locale: UiLocale = "vi"): QuotaState {
-  const t = pickMessages(ADMIN_DISPLAY_MESSAGES, locale);
-  if (limit <= 0) return { ratio: 0, percent: 0, tone: "primary", label: t.unlimited };
-  const ratio = used / limit;
-  const percent = Math.round(ratio * 100);
-  if (ratio >= 1) return { ratio, percent, tone: "danger", label: ratio > 1 ? t.overQuota : t.quotaExhausted };
-  if (ratio >= QUOTA_WARN) return { ratio, percent, tone: "warning", label: t.nearQuota };
-  return { ratio, percent, tone: "primary", label: t.withinQuota };
-}
 
 /** "2026-10" → "Tháng 10/2026" (vi). */
 export function monthLabel(month: string, locale: UiLocale = "vi"): string {

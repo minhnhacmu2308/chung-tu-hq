@@ -30,12 +30,14 @@ export class InMemoryCustomsUow implements CustomsUow {
       },
       messages: {
         list: async (orgId, dossierId, branch) => clone(d.messages.filter((m) => m.orgId === org && m.orgId === orgId && m.dossierId === dossierId && (branch === undefined || m.branch === branch)).sort((a, b) => a.at.getTime() - b.at.getTime() || a.id.localeCompare(b.id))),
+        listSucceededSince: async (orgId, ops, since) => clone(d.messages.filter((m) => m.orgId === org && m.orgId === orgId && m.direction === "IN" && m.result === "OK" && ops.includes(m.operation) && m.at >= since)),
         insert: async (row) => void (row.orgId === org ? d.messages.push(clone(row)) : deny("customs_messages")),
       },
       results: {
         get: async (orgId, dossierId, branch = 1) => clone(d.results.find((r) => r.dossierId === dossierId && r.branch === branch && r.orgId === org && r.orgId === orgId) ?? null),
         listForDossiers: async (orgId, ids) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && ids.includes(r.dossierId)).sort((a, b) => a.branch - b.branch)),
         listForOrg: async (orgId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId)),
+        listNumbered: async (orgId, since) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && !!r.declarationNo && (!since || r.updatedAt >= since))),
         listForDossier: async (orgId, dossierId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId).sort((a, b) => a.branch - b.branch)),
         findByNumber: async (orgId, no) => clone(d.results.find((r) => r.orgId === org && r.orgId === orgId && (r.declarationNo === no || r.externalId === no)) ?? null),
         deleteUnsentAbove: async (orgId, dossierId, branch) => {

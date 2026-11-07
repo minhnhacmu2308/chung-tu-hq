@@ -1,7 +1,7 @@
 // Fake cho test use case: giữ dữ liệu trong mảng, mô phỏng RLS bằng cách lọc theo org/user của ngữ cảnh.
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type {
-  AuthTokenRow, CertificateRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgAuditRow, OrgRow, OrgSecretRow,
+  AuthTokenRow, CertificateRow, CreditGrantRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgAuditRow, OrgRow, OrgSecretRow,
   PlanRow, PlansReader, SessionRow, UserRow,
 } from "../ports.js";
 
@@ -17,12 +17,14 @@ export type MemoryData = {
   audit: OrgAuditRow[];
   secrets: OrgSecretRow[];
   plans: PlanRow[];
+  /** Dòng tặng lượt ghi cùng transaction đăng ký (sổ lượt thật thuộc billing). Trùng id bỏ qua. */
+  credits: CreditGrantRow[];
 };
 
 type Scope = { kind: "system" } | { kind: "user"; userId: string } | { kind: "org"; orgId: string; userId: string };
 
 export class InMemoryIdentityUow implements IdentityUow, PlansReader {
-  readonly data: MemoryData = { users: [], orgs: [], memberships: [], sessions: [], authTokens: [], joinRequests: [], certificates: [], notifications: [], audit: [], secrets: [], plans: [] };
+  readonly data: MemoryData = { users: [], orgs: [], memberships: [], sessions: [], authTokens: [], joinRequests: [], certificates: [], notifications: [], audit: [], secrets: [], plans: [], credits: [] };
 
   seed(partial: Partial<MemoryData>) {
     for (const k of Object.keys(partial) as (keyof MemoryData)[]) (this.data[k] as unknown[]).push(...(partial[k] as unknown[]));
@@ -73,6 +75,9 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
         listAll: async () => clone(isSystem ? d.orgs : d.orgs.filter((o) => canSeeOrg(o.id))),
         insert: async (row) => void (isSystem ? d.orgs.push(clone(row)) : deny("organizations insert")),
         update: async (id, patch) => void (orgOk(id) ? Object.assign(d.orgs.find((o) => o.id === id) ?? {}, patch) : deny("organizations update")),
+      },
+      credits: {
+        grant: async (row) => void (d.credits.some((c) => c.id === row.id) ? undefined : d.credits.push(clone(row))),
       },
       memberships: {
         listByOrg: async (orgId) => clone(d.memberships.filter((m) => m.orgId === orgId && canSeeMembership(m))),

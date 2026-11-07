@@ -21,7 +21,7 @@ const BLOCKS = [{ id: "b1", type: "text" as const, text: "Chào {{name}}", align
 
 beforeEach(() => {
   const core = seedCore();
-  db = structuredClone({ org: core.org, members: core.members, notifications: core.notifications, ...seedSettings(), ...seedAdmin() });
+  db = structuredClone({ org: core.org, members: core.members, notifications: core.notifications, ...seedSettings(), ...seedAdmin(), billing: { ledger: [], payments: [], contracts: {} } });
 });
 
 describe("email (mock)", () => {

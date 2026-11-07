@@ -3,9 +3,9 @@ import {
   DraftEmailResultSchema, EmailAudiencePreviewSchema, EmailCampaignDetailSchema, EmailCampaignSchema, EmailSignatureSchema, EmailTemplateSchema, MailSettingsSchema,
   type DraftEmailInput, type EmailAudience, type SaveEmailSignatureInput, type SaveEmailTemplateInput, type SendEmailInput, type SendTestEmailInput, type UpdateMailSettingsInput,
   ExchangeRateSchema, ExchangeRatesViewSchema, type UpsertExchangeRateInput, CreateOrgResultSchema, type CreateOrgInput,
-  AdminAuditEntrySchema, AdminMfaEnabledSchema, AdminMfaSetupSchema, AdminOrgDetailSchema, AdminOrgSchema, AdminOverviewSchema, AdminPlanSchema, AdminSessionSchema, AdminUserSchema, AnnouncementSchema,
+  AdminAuditEntrySchema, AdminMfaEnabledSchema, AdminMfaSetupSchema, AdminOrgCreditsSchema, AdminOrgDetailSchema, AdminOrgSchema, AdminOverviewSchema, AdminPlanSchema, AdminSessionSchema, AdminUserSchema, AnnouncementSchema,
   FailedJobSchema, PlatformIntegrationSchema, SkillTemplateSchema, StaffSchema, SystemHealthSchema, UsageMonthSchema, UsageReportSchema,
-  type AdjustOrgQuotaInput, type AdminReasonInput, type ChangeOrgPlanInput, type ChangeStaffRoleInput, type ExtendOrgTrialInput, type IntegrationId,
+  type AdjustOrgCreditsInput, type AdminReasonInput, type ChangeOrgPlanInput, type ChangeStaffRoleInput, type IntegrationId, type UpsertOrgContractInput,
   type InviteStaffInput, type PlanCode, type SendAnnouncementInput, type SetTemplatePublishedInput, type UpdateIntegrationKeyInput, type UpdatePlanInput,
 } from "@kb/contracts";
 import { z } from "zod";
@@ -33,8 +33,9 @@ export const suspendOrg = (id: string, input: AdminReasonInput) => apiPost(`admi
 export const reactivateOrg = (id: string, input: AdminReasonInput) => apiPost(`admin/orgs/${enc(id)}/reactivate`, input, AdminOrgSchema);
 export const createOrg = (input: CreateOrgInput) => apiPost("admin/orgs", input, CreateOrgResultSchema);
 export const changeOrgPlan = (id: string, input: ChangeOrgPlanInput) => apiPost(`admin/orgs/${enc(id)}/plan`, input, AdminOrgSchema);
-export const adjustOrgQuota = (id: string, input: AdjustOrgQuotaInput) => apiPost(`admin/orgs/${enc(id)}/quota`, input, AdminOrgSchema);
-export const extendOrgTrial = (id: string, input: ExtendOrgTrialInput) => apiPost(`admin/orgs/${enc(id)}/trial`, input, AdminOrgSchema);
+export const listOrgCredits = (id: string) => apiGet(`admin/orgs/${enc(id)}/credits`, AdminOrgCreditsSchema);
+export const adjustOrgCredits = (id: string, input: AdjustOrgCreditsInput) => apiPost(`admin/orgs/${enc(id)}/credits`, input, AdminOrgSchema);
+export const upsertOrgContract = (id: string, input: UpsertOrgContractInput) => apiPut(`admin/orgs/${enc(id)}/contract`, input, AdminOrgSchema);
 
 export const listAdminUsers = (filter: { orgId?: string } = {}) => apiGet(`admin/users${qs(filter)}`, z.array(AdminUserSchema));
 export const setAdminUserDisabled = (id: string, disabled: boolean, input: AdminReasonInput) => apiPost(`admin/users/${enc(id)}/disabled`, { ...input, disabled }, AdminUserSchema);

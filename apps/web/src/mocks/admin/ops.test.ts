@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api-error";
 import { seedAdmin, DEMO_ORG_ID } from "../seed/admin";
 import { seedCore } from "../seed/core";
 import { seedSettings } from "../seed/settings";
+import { seedBilling } from "../seed/billing";
 import * as ops from "./ops";
 
 const REASON = { reason: "Khách yêu cầu qua hotline" };
@@ -24,7 +25,7 @@ const codeOf = (fn: () => unknown) => {
 beforeEach(() => {
   // Bản sao sâu như mocks/db.ts: seed dùng hằng số cấp module, không được để test này sửa dữ liệu của test kia.
   const core = seedCore();
-  db = structuredClone({ org: core.org, members: core.members, notifications: core.notifications, ...seedSettings(), ...seedAdmin() });
+  db = structuredClone({ org: core.org, members: core.members, notifications: core.notifications, ...seedSettings(), ...seedAdmin(), billing: seedBilling({ org: core.org, customsResults: [] }) });
 });
 
 describe("phiên quản trị", () => {
@@ -59,7 +60,7 @@ describe("phân quyền theo vai trò", () => {
   it("Hỗ trợ: khóa doanh nghiệp được, nhưng không đổi gói / khóa API / skill mẫu / quản trị viên", () => {
     as("trang.mai");
     expect(ops.suspendOrg(db, "org_hoanggia", REASON).status).toBe("SUSPENDED");
-    expect(codeOf(() => ops.changeOrgPlan(db, "org_hoanggia", { planCode: "BASIC", ...REASON }))).toBe("FORBIDDEN");
+    expect(codeOf(() => ops.changeOrgPlan(db, "org_hoanggia", { planCode: "CONTRACT", ...REASON }))).toBe("FORBIDDEN");
     expect(codeOf(() => ops.updateIntegrationKey(db, "CUSTOMS_HUB", { apiKey: "sk-moi-12345678", ...REASON }))).toBe("FORBIDDEN");
     expect(codeOf(() => ops.setTemplatePublished(db, "tpl_an", { published: true, ...REASON }))).toBe("FORBIDDEN");
     expect(codeOf(() => ops.inviteStaff(db, { email: "moi@khaibao-demo.vn", name: "Người Mới", role: "SUPPORT" }))).toBe("FORBIDDEN");
@@ -109,23 +110,33 @@ describe("doanh nghiệp", () => {
     expect(back.status).toBe("ACTIVE");
     expect(back.suspendedReason).toBeUndefined();
   });
-  it("đổi gói doanh nghiệp demo → ứng dụng khách thấy gói mới (db.org)", () => {
-    ops.changeOrgPlan(db, DEMO_ORG_ID, { planCode: "ENTERPRISE", ...REASON });
-    expect(db.org.plan).toMatchObject({ code: "ENTERPRISE", name: "Doanh nghiệp", dossiersPerMonth: 1000 });
-    expect(db.admin.audit[0]?.detail).toBe("Chuyên nghiệp → Doanh nghiệp");
+  it("đổi loại gói doanh nghiệp demo → ứng dụng khách thấy gói mới (db.org); sổ lượt giữ nguyên", () => {
+    const before = ops.listOrgs(db).find((o) => o.id === DEMO_ORG_ID)!.billing.balance;
+    const o = ops.changeOrgPlan(db, DEMO_ORG_ID, { planCode: "CONTRACT", ...REASON });
+    expect(db.org.plan).toMatchObject({ code: "CONTRACT", name: "Hợp đồng năm", kind: "CONTRACT" });
+    expect(o.billing).toMatchObject({ balance: before, contract: { status: "ACTIVE", endsOn: null } });
+    expect(db.admin.audit[0]?.detail).toBe("Theo lượt → Hợp đồng năm");
   });
   it("đổi sang đúng gói đang dùng → CONFLICT", () => {
-    expect(codeOf(() => ops.changeOrgPlan(db, DEMO_ORG_ID, { planCode: "PRO", ...REASON }))).toBe("CONFLICT");
+    expect(codeOf(() => ops.changeOrgPlan(db, DEMO_ORG_ID, { planCode: "PAYG", ...REASON }))).toBe("CONFLICT");
   });
-  it("nới hạn mức: đặt số hồ sơ cộng thêm; 0 = bỏ nới", () => {
-    expect(ops.adjustOrgQuota(db, "org_minhkhang", { bonusDossiers: 30, ...REASON }).quotaBonus).toBe(30);
-    expect(ops.adjustOrgQuota(db, "org_minhkhang", { bonusDossiers: 0, ...REASON }).quotaBonus).toBe(0);
+  it("điều chỉnh lượt: nạp tay cộng số dư + ghi sổ lượt + nhật ký; nạp số âm bị từ chối; Hỗ trợ không được", () => {
+    const before = ops.listOrgs(db).find((o) => o.id === "org_minhkhang")!.billing.balance;
+    const o = ops.adjustOrgCredits(db, "org_minhkhang", { delta: 20, kind: "MANUAL_TOPUP", note: "Chuyển khoản 05/11", amountVnd: "500000", ...REASON });
+    expect(o.billing.balance).toBe(before + 20);
+    expect(ops.listOrgCredits(db, "org_minhkhang").ledger[0]).toMatchObject({ delta: 20, reason: "MANUAL_TOPUP", amountVnd: "500000", unitPriceVnd: "25000", note: "Chuyển khoản 05/11" });
+    expect(db.admin.audit[0]).toMatchObject({ action: "ORG_CREDITS_ADJUSTED", detail: "Nạp tay +20 lượt · Chuyển khoản 05/11" });
+    expect(codeOf(() => ops.adjustOrgCredits(db, "org_minhkhang", { delta: -2, kind: "MANUAL_TOPUP", note: "Sai", ...REASON }))).toBe("VALIDATION");
+    expect(ops.adjustOrgCredits(db, "org_minhkhang", { delta: -2, kind: "ADJUST", note: "Trừ nhầm", ...REASON }).billing.balance).toBe(before + 18);
+    as("trang.mai");
+    expect(codeOf(() => ops.adjustOrgCredits(db, "org_minhkhang", { delta: 1, kind: "GRANT", note: "Tặng", ...REASON }))).toBe("FORBIDDEN");
   });
-  it("gia hạn dùng thử chỉ áp dụng cho gói TRIAL", () => {
-    const before = ops.listOrgs(db).find((o) => o.id === "org_dailoc")!.plan.renewsAt;
-    const after = ops.extendOrgTrial(db, "org_dailoc", { days: 14, ...REASON }).plan.renewsAt;
-    expect(new Date(after).getTime() - new Date(before).getTime()).toBe(14 * 86_400_000);
-    expect(codeOf(() => ops.extendOrgTrial(db, "org_hoanggia", { days: 14, ...REASON }))).toBe("CONFLICT");
+  it("hợp đồng: chỉ gói CONTRACT; sửa ngày kết thúc → trạng thái tính lại; ghi nhật ký", () => {
+    expect(codeOf(() => ops.upsertOrgContract(db, "org_minhkhang", { valueVnd: "1", ...REASON }))).toBe("INVALID_STATE");
+    const iso = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
+    const o = ops.upsertOrgContract(db, "org_tanviet", { contractNo: "HĐ-2027", startsOn: iso(-300), endsOn: iso(-3), valueVnd: "120000000", ...REASON });
+    expect(o.billing.contract).toMatchObject({ contractNo: "HĐ-2027", status: "GRACE" });
+    expect(db.admin.audit[0]?.action).toBe("ORG_CONTRACT_UPDATED");
   });
   it("doanh nghiệp không tồn tại → NOT_FOUND", () => {
     expect(codeOf(() => ops.getOrg(db, "org_khong_co"))).toBe("NOT_FOUND");
@@ -172,31 +183,35 @@ describe("người dùng", () => {
 describe("gói & sử dụng", () => {
   beforeEach(() => void as("bao.hoang"));
 
-  it("sửa gói → doanh nghiệp đang dùng gói nhận hạn mức mới", () => {
-    const p = ops.updatePlan(db, "PRO", { name: "Chuyên nghiệp", dossiersPerMonth: 200, pagesPerDossier: 40, priceVnd: "3990000", ...REASON });
-    expect(p).toMatchObject({ dossiersPerMonth: 200, orgCount: 4 });
-    expect(db.org.plan.dossiersPerMonth).toBe(200);
-    expect(db.admin.audit[0]?.detail).toBe("Hồ sơ/tháng 150 → 200");
+  it("sửa gói PAYG → doanh nghiệp đang dùng gói nhận đơn giá mới", () => {
+    const p = ops.updatePlan(db, "PAYG", { name: "Theo lượt", pagesPerDossier: 40, priceVnd: "0", pricePerDeclarationVnd: "30000", ...REASON });
+    expect(p).toMatchObject({ pricePerDeclarationVnd: "30000", orgCount: 11 });
+    expect(db.org.plan.pricePerDeclarationVnd).toBe("30000");
+    expect(db.admin.audit[0]?.detail).toBe("Đơn giá/lượt 25000 → 30000 VND");
   });
-  it("lưu gói mà không đổi gì → CONFLICT", () => {
-    expect(codeOf(() => ops.updatePlan(db, "PRO", { name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, priceVnd: "3990000", ...REASON }))).toBe("CONFLICT");
+  it("lưu gói mà không đổi gì → CONFLICT; gói CONTRACT luôn đơn giá lượt 0", () => {
+    expect(codeOf(() => ops.updatePlan(db, "PAYG", { name: "Theo lượt", pagesPerDossier: 40, priceVnd: "0", pricePerDeclarationVnd: "25000", ...REASON }))).toBe("CONFLICT");
+    expect(ops.updatePlan(db, "CONTRACT", { name: "Hợp đồng năm", pagesPerDossier: 120, priceVnd: "0", pricePerDeclarationVnd: "99999", ...REASON }).pricePerDeclarationVnd).toBe("0");
   });
   it("6 tháng gần nhất, mới nhất đứng đầu, qua được ranh giới năm", () => {
     expect(ops.usageMonths(new Date("2026-02-10T00:00:00Z"))).toEqual(["2026-02", "2026-01", "2025-12", "2025-11", "2025-10", "2025-09"]);
   });
-  it("báo cáo tháng hiện tại: tổng = cộng các dòng; biên = giá gói − giá vốn", () => {
+  it("báo cáo tháng hiện tại: tổng = cộng các dòng; lãi gộp = doanh thu ghi nhận − giá vốn", () => {
     const r = ops.getUsageReport(db, ops.usageMonths()[0]!);
     expect(r.rows).toHaveLength(12);
-    const sum = (k: "totalCostVnd" | "planPriceVnd") => r.rows.reduce((n, x) => n + Number(x[k]), 0);
+    const sum = (k: "totalCostVnd" | "revenueVnd") => r.rows.reduce((n, x) => n + Number(x[k]), 0);
     expect(Number(r.totals.totalCostVnd)).toBe(sum("totalCostVnd"));
-    expect(Number(r.totals.marginVnd)).toBe(sum("planPriceVnd") - sum("totalCostVnd"));
+    expect(Number(r.totals.marginVnd)).toBe(sum("revenueVnd") - sum("totalCostVnd"));
+    // PAYG: doanh thu = tổng tiền các lượt đã trừ; CONTRACT (Tân Việt): giá trị hợp đồng / 12.
+    expect(r.rows.find((x) => x.orgId === "org_tanviet")?.revenueVnd).toBe("12000000");
+    expect(r.totals.declarations).toBe(r.rows.reduce((n, x) => n + x.declarations, 0));
     // Giá vốn theo nhà cung cấp (AI / HSCodePro / Customs Hub) cộng lại đúng tổng.
     expect(Number(r.totals.readCostVnd) + Number(r.totals.hsCostVnd) + Number(r.totals.customsCostVnd)).toBe(Number(r.totals.totalCostVnd));
     expect(r.totals.hsItems).toBe(r.rows.reduce((n, x) => n + x.hsItems, 0));
     expect(r.totals.customsMessages).toBe(r.rows.reduce((n, x) => n + x.customsMessages, 0));
     for (const x of r.rows) {
       expect(Number(x.readCostVnd) + Number(x.hsCostVnd) + Number(x.customsCostVnd)).toBe(Number(x.totalCostVnd));
-      expect(Number(x.marginVnd)).toBe(Number(x.planPriceVnd) - Number(x.totalCostVnd));
+      expect(Number(x.marginVnd)).toBe(Number(x.revenueVnd) - Number(x.totalCostVnd));
     }
   });
   it("tháng cũ: bỏ doanh nghiệp chưa đăng ký ở tháng đó; số liệu ổn định giữa hai lần gọi", () => {
@@ -280,12 +295,12 @@ describe("thông báo hệ thống", () => {
   });
   it("gửi theo gói mà doanh nghiệp demo không dùng → khách demo không nhận", () => {
     const before = db.notifications.length;
-    expect(ops.sendAnnouncement(db, { ...input, audience: "TRIAL" }).recipients).toBe(3);
+    expect(ops.sendAnnouncement(db, { ...input, audience: "CONTRACT" }).recipients).toBe(1);
     expect(db.notifications).toHaveLength(before);
   });
   it("thu hồi → gỡ khỏi panel của khách; thu hồi lần hai → CONFLICT", () => {
     const before = db.notifications.length;
-    const a = ops.sendAnnouncement(db, { ...input, audience: "PRO" });
+    const a = ops.sendAnnouncement(db, { ...input, audience: "PAYG" });
     expect(ops.withdrawAnnouncement(db, a.id, REASON).status).toBe("WITHDRAWN");
     expect(db.notifications).toHaveLength(before);
     expect(codeOf(() => ops.withdrawAnnouncement(db, a.id, REASON))).toBe("CONFLICT");
@@ -301,18 +316,21 @@ describe("tổng quan vận hành", () => {
     expect(o.dossiersThisMonth).toBe(ops.listOrgs(db).reduce((n, x) => n + x.usage.dossiersThisMonth, 0));
     expect(o.recentOrgs.map((x) => x.id).slice(0, 2)).toEqual(["org_kimlong", "org_dailoc"]);
   });
-  it("mục cần chú ý: hết hạn mức (đỏ) xếp trước sắp hết (vàng); có tích hợp lỗi, job lỗi, yêu cầu tham gia treo", () => {
+  it("mục cần chú ý: hết lượt (đỏ) xếp trước sắp hết (vàng); hợp đồng sắp hết hạn; tích hợp lỗi, job lỗi, yêu cầu tham gia treo", () => {
     const { attention } = ops.getOverview(db);
     const kinds = new Set(attention.map((a) => a.kind));
-    expect(kinds).toEqual(new Set(["QUOTA", "PLAN_EXPIRING", "INTEGRATION_ERROR", "JOBS_FAILED", "JOIN_PENDING"]));
-    expect(attention.find((a) => a.id === "quota_org_minhkhang")?.severity).toBe("danger"); // 51/50
-    expect(attention.find((a) => a.id === "quota_org_hoanggia")?.severity).toBe("warning"); // 142/150
+    expect(kinds).toEqual(new Set(["LOW_CREDITS", "CONTRACT_EXPIRING", "INTEGRATION_ERROR", "JOBS_FAILED", "JOIN_PENDING"]));
+    expect(attention.find((a) => a.id === "low_credits_org_phuongnam")?.severity).toBe("danger"); // 0 lượt, có khai
+    expect(attention.find((a) => a.id === "low_credits_org_minhkhang")?.severity).toBe("warning"); // 2 lượt
+    // Còn ít lượt nhưng không khai trong 30 ngày → không nhắc.
+    expect(attention.some((a) => a.id === "low_credits_org_kimlong")).toBe(false);
+    expect(attention.find((a) => a.id === "contract_expiring_org_tanviet")?.severity).toBe("warning");
     expect(attention.findIndex((a) => a.severity === "warning")).toBeGreaterThan(attention.findLastIndex((a) => a.severity === "danger"));
   });
-  it("doanh nghiệp đã nới hạn mức không còn bị cảnh báo", () => {
+  it("nạp thêm lượt → hết cảnh báo sắp hết lượt", () => {
     as("bao.hoang");
-    ops.adjustOrgQuota(db, "org_minhkhang", { bonusDossiers: 50, ...REASON });
-    expect(ops.getOverview(db).attention.some((a) => a.id === "quota_org_minhkhang")).toBe(false);
+    ops.adjustOrgCredits(db, "org_minhkhang", { delta: 50, kind: "MANUAL_TOPUP", note: "Nạp", ...REASON });
+    expect(ops.getOverview(db).attention.some((a) => a.id === "low_credits_org_minhkhang")).toBe(false);
   });
   it("doanh nghiệp đang tạm khóa không sinh cảnh báo hạn mức / hết hạn", () => {
     expect(ops.getOverview(db).attention.some((a) => a.id.endsWith("org_baotin"))).toBe(false);
@@ -340,16 +358,22 @@ describe("tỷ giá tính thuế", () => {
 
 describe("tạo hộ doanh nghiệp ký hợp đồng trực tiếp", () => {
   const INPUT = {
-    taxCode: "0108888888", name: "CÔNG TY HỢP ĐỒNG", address: "Hà Nội", planCode: "PRO", contractNo: "HĐ-15", contractEndsOn: "2027-10-31",
+    taxCode: "0108888888", name: "CÔNG TY HỢP ĐỒNG", address: "Hà Nội", planCode: "CONTRACT", contractNo: "HĐ-15", startsOn: "2026-11-01", endsOn: "2027-10-31", valueVnd: "120000000",
     owner: { email: "chu@hopdong.vn", name: "Đỗ Chủ" }, note: "Phụ trách: Bảo",
   };
   it("Cấp cao tạo được: có trong danh sách, chi tiết có hợp đồng, Chủ sở hữu ACTIVE, mật khẩu tạm 12 ký tự, có nhật ký", () => {
     as("bao.hoang");
     const r = ops.createOrg(db, INPUT);
     expect(r.tempPassword).toHaveLength(12);
-    expect(ops.listOrgs(db).find((o) => o.id === r.orgId)).toMatchObject({ name: "CÔNG TY HỢP ĐỒNG", plan: { code: "PRO" }, ownerEmail: "chu@hopdong.vn" });
-    expect(ops.getOrg(db, r.orgId).contract).toEqual({ contractNo: "HĐ-15", endsOn: "2027-10-31", note: "Phụ trách: Bảo" });
+    expect(ops.listOrgs(db).find((o) => o.id === r.orgId)).toMatchObject({ name: "CÔNG TY HỢP ĐỒNG", plan: { code: "CONTRACT", kind: "CONTRACT" }, ownerEmail: "chu@hopdong.vn" });
+    expect(ops.getOrg(db, r.orgId).contract).toEqual({ contractNo: "HĐ-15", startsOn: "2026-11-01", endsOn: "2027-10-31", valueVnd: "120000000", note: "Phụ trách: Bảo" });
     expect(db.admin.audit[0]).toMatchObject({ action: "ORG_CREATED", targetId: r.orgId });
+  });
+  it("gói PAYG: tặng N lượt khi tạo (ghi sổ lượt cùng lúc)", () => {
+    as("bao.hoang");
+    const r = ops.createOrg(db, { taxCode: "0105555555", name: "CÔNG TY THEO LƯỢT", address: "", planCode: "PAYG", grantCredits: 10, owner: { email: "a@theoluot.vn", name: "Chủ A" } });
+    expect(ops.listOrgs(db).find((o) => o.id === r.orgId)?.billing.balance).toBe(10);
+    expect(ops.listOrgCredits(db, r.orgId).ledger[0]).toMatchObject({ id: `grant:admin:${r.orgId}`, delta: 10, reason: "GRANT" });
   });
   it("Hỗ trợ không có quyền; MST / email trùng → lỗi; thiếu tên Chủ sở hữu → VALIDATION", () => {
     as("trang.mai");

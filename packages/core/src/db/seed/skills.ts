@@ -14,7 +14,7 @@ export const SYSTEM_ORG_ID = "org_system";
 export async function seedSkillTemplates(db: Db) {
   await db
     .insert(organizations)
-    .values({ id: SYSTEM_ORG_ID, taxCode: "0000000000", name: "KhaiBáo AI – skill mẫu hệ thống", address: "", phone: "", planCode: "ENTERPRISE" })
+    .values({ id: SYSTEM_ORG_ID, taxCode: "0000000000", name: "KhaiBáo AI – skill mẫu hệ thống", address: "", phone: "", planCode: "CONTRACT" })
     .onConflictDoNothing();
   for (const s of skillTemplates().skills) {
     const id = `sk_tpl_${s.code.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;

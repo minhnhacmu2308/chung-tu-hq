@@ -22,7 +22,7 @@ beforeAll(async () => {
   await runSeed(t.adminUrl);
   const admin = createDb(t.adminUrl, { max: 1 });
   // Doanh nghiệp thứ hai bằng SQL thô (module integration không import schema identity – depcruise).
-  await admin.execute(sql`INSERT INTO organizations (id, tax_code, name, plan_code) VALUES ('org_khac', '0100000098', 'KHÁC', 'TRIAL')`);
+  await admin.execute(sql`INSERT INTO organizations (id, tax_code, name, plan_code) VALUES ('org_khac', '0100000098', 'KHÁC', 'PAYG')`);
   await admin.execute(sql`INSERT INTO users (id, email, password_hash, name) VALUES ('usr_khac', 'khac2@x.vn', 'x', 'Khác')`);
   await admin.execute(sql`INSERT INTO memberships (id, org_id, user_id, role) VALUES ('mem_khac2', 'org_khac', 'usr_khac', 'OWNER')`);
   await admin.close();

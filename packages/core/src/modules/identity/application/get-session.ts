@@ -32,7 +32,7 @@ export async function getSession(deps: IdentityDeps, sessionToken: string): Prom
     ctx,
     session: {
       user: toMember(user, membership, now),
-      org: toOrganization(org, plan, now, await deps.usage?.(org.id)),
+      org: toOrganization(org, plan, await deps.billing?.(org.id), await deps.usage?.(org.id)),
       ...(user.mustChangePassword ? { mustChangePassword: true } : {}),
     },
   });

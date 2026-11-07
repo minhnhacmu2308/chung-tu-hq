@@ -1,10 +1,13 @@
-// Doanh nghiệp: danh sách, chi tiết, tạm khóa/mở, đổi gói, nới hạn mức, gia hạn dùng thử.
-import type { AdjustOrgQuotaInput, AdminOrg, AdminOrgDetail, AdminReasonInput, ChangeOrgPlanInput, CreateOrgInput, CreateOrgResult, ExtendOrgTrialInput, IntegrationStatus } from "@kb/contracts";
+// Doanh nghiệp: danh sách, chi tiết, tạo hộ, tạm khóa/mở, đổi loại gói (PAYG ↔ CONTRACT – ADR 0011).
+import type { AdminOrg, AdminOrgDetail, AdminReasonInput, ChangeOrgPlanInput, CreateOrgInput, CreateOrgResult, IntegrationStatus } from "@kb/contracts";
+import { dec, toDecimalString } from "../../../shared/decimal.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { extendTrial, renewsAt, vnMonth, vnMonthRange } from "../domain/period.js";
+import { vnMonth, vnMonthRange } from "../domain/period.js";
 import { audit, guarded, orgTarget, toAdminOrg, type StaffActor } from "./_shared.js";
 import type { AdminDeps, AdminOrgRow, AdminRepos } from "./ports.js";
+
+const DAY = 86_400_000;
 
 const INTEGRATION_NAMES: Record<string, string> = { HSCODEPRO: "hscodepro", CUSTOMS_HUB: "Customs Hub (VNACCS)", AI_PROVIDER: "Nhà cung cấp AI", EINVOICE: "Tra cứu hóa đơn điện tử" };
 
@@ -12,10 +15,18 @@ const INTEGRATION_NAMES: Record<string, string> = { HSCODEPRO: "hscodepro", CUST
 export async function orgSnapshot(deps: AdminDeps, r: AdminRepos) {
   const now = deps.clock.now();
   const { from, to } = vnMonthRange(vnMonth(now));
-  const [orgs, plans, members, usage] = await Promise.all([r.orgs.list(), r.plans.list(), r.members.list(), r.usage.byOrg(from, to)]);
+  const [orgs, plans, members, usage, balances, contracts, month, last30] = await Promise.all([
+    r.orgs.list(), r.plans.list(), r.members.list(), r.usage.byOrg(from, to), r.credits.balances(), r.contracts.list(), r.credits.statsByOrg(from, to), r.credits.statsByOrg(new Date(now.getTime() - 30 * DAY), now),
+  ]);
   const planMap = new Map(plans.map((p) => [p.code, p]));
   const usageMap = new Map(usage.map((u) => [u.orgId, u]));
-  return { orgs, plans, members, usage, toDto: (o: AdminOrgRow) => toAdminOrg(o, planMap, members, usageMap.get(o.id), now) };
+  const balanceMap = new Map(balances.map((b) => [b.orgId, b.balance]));
+  const contractMap = new Map(contracts.map((c) => [c.orgId, c]));
+  const monthMap = new Map(month.map((x) => [x.orgId, x.declarations]));
+  const last30Map = new Map(last30.map((x) => [x.orgId, x.declarations]));
+  const toDto = (o: AdminOrgRow) =>
+    toAdminOrg(o, planMap, members, usageMap.get(o.id), { balance: balanceMap.get(o.id) ?? 0, contract: contractMap.get(o.id) ?? null, declarationsThisMonth: monthMap.get(o.id) ?? 0, declarations30d: last30Map.get(o.id) ?? 0 }, now);
+  return { orgs, plans, members, usage, toDto };
 }
 
 export async function listOrgs(deps: AdminDeps, actor: StaffActor): Promise<Result<AdminOrg[]>> {
@@ -45,7 +56,9 @@ export async function getOrg(deps: AdminDeps, actor: StaffActor, orgId: string):
           ? {
               contract: {
                 ...(contract.contractNo ? { contractNo: contract.contractNo } : {}),
+                ...(contract.startsOn ? { startsOn: contract.startsOn } : {}),
                 ...(contract.endsOn ? { endsOn: contract.endsOn } : {}),
+                valueVnd: toDecimalString(dec(contract.valueVnd), 0),
                 ...(contract.note ? { note: contract.note } : {}),
               },
             }
@@ -56,30 +69,41 @@ export async function getOrg(deps: AdminDeps, actor: StaffActor, orgId: string):
 }
 
 /**
- * Tạo hộ doanh nghiệp ký hợp đồng trực tiếp: doanh nghiệp (gói chọn sẵn) + Chủ sở hữu đăng nhập bằng mật khẩu tạm (bắt đổi ở lần đầu)
- * + hợp đồng (số, hạn, ghi chú nội bộ). Mật khẩu tạm chỉ trả về một lần trong kết quả này.
+ * Tạo hộ doanh nghiệp + Chủ sở hữu đăng nhập bằng mật khẩu tạm (bắt đổi ở lần đầu). Mật khẩu tạm chỉ trả về một lần trong kết quả này.
+ * PAYG: tùy chọn tặng N lượt (ghi cùng transaction tạo doanh nghiệp). CONTRACT: kèm hợp đồng năm (số, bắt đầu, kết thúc, giá trị, ghi chú nội bộ).
  */
 export async function createOrg(deps: AdminDeps, actor: StaffActor, input: CreateOrgInput): Promise<Result<CreateOrgResult>> {
   return guarded(actor, "BILLING", async () => {
     const plan = await deps.uow.run((r) => r.plans.get(input.planCode));
     if (!plan) return err(domainError("NOT_FOUND", "Không tìm thấy gói dịch vụ"));
-    const created = await deps.identity.provisionOrg({ taxCode: input.taxCode, name: input.name, address: input.address, planCode: input.planCode, owner: input.owner });
+    const grant = plan.kind === "PAYG" ? input.grantCredits ?? 0 : 0;
+    const created = await deps.identity.provisionOrg({
+      taxCode: input.taxCode, name: input.name, address: input.address, planCode: input.planCode, owner: input.owner, ...(grant > 0 ? { grantCredits: grant, createdBy: actor.userId } : {}),
+    });
     if (!created.ok) return created;
     const { orgId, tempPassword } = created.value;
     await deps.uow.run(async (r) => {
       const now = deps.clock.now();
-      await r.contracts.insert({ orgId, contractNo: input.contractNo || null, endsOn: input.contractEndsOn ?? null, note: input.note || null, createdBy: actor.userId, at: now });
-      const detail = [`Gói ${plan.name}`, input.contractNo ? `HĐ ${input.contractNo}` : null, input.contractEndsOn ? `hết hạn ${input.contractEndsOn}` : null, `Chủ sở hữu ${input.owner.email}`]
+      const contract = plan.kind === "CONTRACT" || input.contractNo || input.note;
+      if (contract)
+        await r.contracts.upsert({
+          orgId, contractNo: input.contractNo || null, startsOn: input.startsOn ?? null, endsOn: input.endsOn ?? null, valueVnd: toDecimalString(dec(input.valueVnd ?? "0"), 0),
+          note: input.note || null, createdBy: actor.userId, at: now,
+        });
+      const detail = [
+        `Gói ${plan.name}`, grant > 0 ? `tặng ${grant} lượt` : null, input.contractNo ? `HĐ ${input.contractNo}` : null,
+        input.startsOn || input.endsOn ? `hiệu lực ${input.startsOn ?? "…"} → ${input.endsOn ?? "…"}` : null, `Chủ sở hữu ${input.owner.email}`,
+      ]
         .filter(Boolean)
         .join(" · ");
-      await audit(deps, r, actor, "ORG_CREATED", { type: "ORG", id: orgId, label: input.name, orgId, orgName: input.name }, "Tạo doanh nghiệp ký hợp đồng trực tiếp", detail);
+      await audit(deps, r, actor, "ORG_CREATED", { type: "ORG", id: orgId, label: input.name, orgId, orgName: input.name }, "Tạo hộ doanh nghiệp", detail);
     });
     return ok({ orgId, orgName: input.name, ownerEmail: input.owner.email, tempPassword });
   });
 }
 
 /** Khung chung cho thao tác ghi trên một doanh nghiệp: tìm org → `fn` ghi + nhật ký → trả AdminOrg mới. */
-async function mutateOrg(deps: AdminDeps, actor: StaffActor, permission: "SUPPORT" | "BILLING", orgId: string, fn: (r: AdminRepos, o: AdminOrgRow) => Promise<Result<void>>): Promise<Result<AdminOrg>> {
+export async function mutateOrg(deps: AdminDeps, actor: StaffActor, permission: "SUPPORT" | "BILLING", orgId: string, fn: (r: AdminRepos, o: AdminOrgRow) => Promise<Result<void>>): Promise<Result<AdminOrg>> {
   return guarded(actor, permission, () =>
     deps.uow.run(async (r) => {
       const o = await r.orgs.get(orgId);
@@ -111,35 +135,18 @@ export async function reactivateOrg(deps: AdminDeps, actor: StaffActor, orgId: s
   });
 }
 
-/** Đổi gói: bắt đầu kỳ 30 ngày mới từ hôm nay; bỏ hạn dùng thử đã gia hạn tay. */
+/**
+ * Đổi loại gói PAYG ↔ CONTRACT. Sổ lượt giữ nguyên (CONTRACT không trừ lượt; chuyển lại PAYG dùng tiếp số dư cũ).
+ * Sang CONTRACT mà chưa có hợp đồng → khai không giới hạn tới khi nhập ngày kết thúc (khu Quản trị nhắc CONTRACT_NO_END).
+ */
 export async function changeOrgPlan(deps: AdminDeps, actor: StaffActor, orgId: string, input: ChangeOrgPlanInput): Promise<Result<AdminOrg>> {
   return mutateOrg(deps, actor, "BILLING", orgId, async (r, o) => {
     if (o.planCode === input.planCode) return err(domainError("CONFLICT", "Doanh nghiệp đang dùng đúng gói này"));
     const [next, before] = await Promise.all([r.plans.get(input.planCode), r.plans.get(o.planCode)]);
     if (!next) return err(domainError("NOT_FOUND", "Không tìm thấy gói dịch vụ"));
     const now = deps.clock.now();
-    await r.orgs.update(o.id, { planCode: next.code, planStartedAt: now, trialEndsAt: null }, now);
+    await r.orgs.update(o.id, { planCode: next.code, planStartedAt: now }, now);
     await audit(deps, r, actor, "ORG_PLAN_CHANGED", orgTarget(o), input.reason, `${before?.name ?? o.planCode} → ${next.name}`);
-    return ok(undefined);
-  });
-}
-
-/** Nới hạn mức cho tháng hiện tại (giờ VN); sang tháng sau tự hết. 0 = bỏ phần nới. */
-export async function adjustOrgQuota(deps: AdminDeps, actor: StaffActor, orgId: string, input: AdjustOrgQuotaInput): Promise<Result<AdminOrg>> {
-  return mutateOrg(deps, actor, "BILLING", orgId, async (r, o) => {
-    const now = deps.clock.now();
-    await r.orgs.update(o.id, { quotaBonus: input.bonusDossiers, quotaBonusMonth: input.bonusDossiers > 0 ? vnMonth(now) : null }, now);
-    await audit(deps, r, actor, "ORG_QUOTA_ADJUSTED", orgTarget(o), input.reason, input.bonusDossiers > 0 ? `+${input.bonusDossiers} hồ sơ tháng này` : "Bỏ phần nới hạn mức");
-    return ok(undefined);
-  });
-}
-
-export async function extendOrgTrial(deps: AdminDeps, actor: StaffActor, orgId: string, input: ExtendOrgTrialInput): Promise<Result<AdminOrg>> {
-  return mutateOrg(deps, actor, "BILLING", orgId, async (r, o) => {
-    if (o.planCode !== "TRIAL") return err(domainError("CONFLICT", "Chỉ gia hạn được cho doanh nghiệp đang dùng thử"));
-    const now = deps.clock.now();
-    await r.orgs.update(o.id, { trialEndsAt: extendTrial(renewsAt(o, now), now, input.days) }, now);
-    await audit(deps, r, actor, "ORG_TRIAL_EXTENDED", orgTarget(o), input.reason, `+${input.days} ngày dùng thử`);
     return ok(undefined);
   });
 }

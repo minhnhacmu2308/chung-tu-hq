@@ -9,7 +9,7 @@ import { AesSecretStore } from "./aes-secret-store.js";
 import { DrizzleOrgAudit } from "./drizzle-org-audit.js";
 import { Argon2Hasher } from "./argon2-hasher.js";
 import { DrizzlePlansReader } from "./drizzle-plans-reader.js";
-import { DrizzleIdentityUow } from "./drizzle-uow.js";
+import { DrizzleIdentityUow, type CreditGrantTx } from "./drizzle-uow.js";
 import { FakeTaxRegistryLookup } from "./fake-tax-registry.js";
 import { InMemoryRateLimiter } from "./in-memory-rate-limiter.js";
 import { ConsoleMailer, SmtpMailer } from "./mailer.js";
@@ -18,10 +18,12 @@ import { RedisRateLimiter } from "./redis-rate-limiter.js";
 
 export { AesSecretStore, Argon2Hasher, ConsoleMailer, createNotifier, DrizzleIdentityUow, DrizzlePlansReader, FakeTaxRegistryLookup, InMemoryRateLimiter, RedisRateLimiter, SmtpMailer };
 
-/** Nối toàn bộ hạ tầng identity theo cấu hình môi trường. Gọi từ container của apps. */
-export function createIdentityInfrastructure(opts: { db: Db; redis?: Redis; env: Env; clock?: Clock }): IdentityDeps & { secrets: SecretStore; audit: OrgAuditWriter } {
+export type { CreditGrantTx };
+
+/** Nối toàn bộ hạ tầng identity theo cấu hình môi trường. Gọi từ container của apps. `grantCredits`: ghi tặng lượt cùng transaction (billing cung cấp). */
+export function createIdentityInfrastructure(opts: { db: Db; redis?: Redis; env: Env; clock?: Clock; grantCredits?: CreditGrantTx }): IdentityDeps & { secrets: SecretStore; audit: OrgAuditWriter } {
   const clock = opts.clock ?? systemClock;
-  const uow = new DrizzleIdentityUow(opts.db);
+  const uow = new DrizzleIdentityUow(opts.db, opts.grantCredits);
   return {
     uow,
     audit: new DrizzleOrgAudit(uow, clock),

@@ -5,6 +5,8 @@ import {
   RejectJoinRequestInputSchema, TransferOwnershipInputSchema, type RejectJoinRequestInput, type TransferOwnershipInput, type TransferOwnershipResult,
 } from "@kb/contracts";
 import type { MockDb } from "@/mocks/db";
+import { orgView } from "@/mocks/billing-sim";
+import { settleCustoms } from "./customs";
 import { mockRules } from "@/mocks/seed/declaration-rules";
 import type { DigitalCertificate, Integration, Member, Organization, Role } from "@/mocks/types";
 
@@ -19,7 +21,13 @@ export const settingsKeys = {
   declarationRules: (direction: "NK" | "XK") => ["settings", "declaration-rules", direction] as const,
 };
 
-export const getOrganization = () => query((db) => db.org);
+/** Như backend: gói + lượt tính lúc đọc (bảng gói ở khu Quản trị + sổ lượt). */
+export const getOrganization = () =>
+  query((db) => {
+    // Phản hồi Hải quan mô phỏng đến theo thời gian → áp trước khi tính lượt đang giữ / đã trừ.
+    settleCustoms(db);
+    return orgView(db);
+  });
 
 import { OrgProfileInputSchema, type OrgProfileInput } from "@kb/contracts";
 export type { OrgProfileInput };
@@ -30,13 +38,13 @@ export const updateOrganization = (input: OrgProfileInput) =>
     if (!parsed.success) throw new ApiError("VALIDATION", parsed.error.issues.map((i) => i.message).join("; "));
     const { name, address, phone, postalCode } = parsed.data;
     Object.assign(db.org, { name, address, phone, ...(postalCode !== undefined ? { postalCode } : {}) });
-    return db.org;
+    return orgView(db);
   });
 
 export const updateSuspectThreshold = (threshold: Organization["suspectThreshold"]) =>
   mutate((db) => {
     db.org.suspectThreshold = threshold;
-    return db.org;
+    return orgView(db);
   });
 
 /** Bật/tắt nguyên tắc 4 mắt (chỉ Quản trị / Chủ sở hữu). */
@@ -45,7 +53,7 @@ export const updateFourEyes = (enabled: boolean) =>
     const role = db.members.find((m) => m.id === db.currentUserId)?.role;
     if (role !== "OWNER" && role !== "ADMIN") throw new ApiError("FORBIDDEN", "Cần vai trò Quản trị hoặc Chủ sở hữu");
     db.org.fourEyes = enabled;
-    return db.org;
+    return orgView(db);
   });
 
 export const listMembers = () => query((db) => db.members);

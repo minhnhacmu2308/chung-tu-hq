@@ -10,6 +10,7 @@ import { sheetSnapshot } from "../domain/branches.js";
 import { stageOf } from "../domain/state-machine.js";
 import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, outboxKey, pinOf, pinOfOutbox, sheetCountError, sheetOf } from "./branch-send.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
+import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
 import { auditHysWaiver, hysGuard, recordHysWaiver } from "./hys-guard.js";
 import { performOperation } from "./perform-operation.js";
 import { resultsSentError } from "./sent-sheets.js";
@@ -83,6 +84,9 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
     const sent = await performOperation(deps, ctx, dossierId, op, 1, opts);
     return sent.ok ? ok({ outboxId: "" }) : sent;
   }
+  // Lượt khai (ADR 0011 §4.2): khai tạm lần đầu cả lô – mỗi tờ chưa có số sẽ dùng một lượt khi được chấp nhận khai chính thức.
+  const allowance = await checkFirstSendAllowance(deps, ctx.orgId, unnumberedSheets(await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId)), of));
+  if (!allowance.ok) return allowance;
   // Nhắc khai HYS trước IDA/EDA: sau mọi guard khác, trước khi tạo outbox (lần gửi lại qua performOperation tự guard).
   const hys = await hysGuard(deps, ctx, dossierId, snap, opts?.hysWaived === true);
   if (!hys.ok) return hys;

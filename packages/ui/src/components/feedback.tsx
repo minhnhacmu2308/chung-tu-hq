@@ -150,6 +150,15 @@ export const STATUS_META = {
   LESSON_OFF: { tone: "neutral", label: "Đã tắt" },
   TEACH_DOCUMENT: { tone: "warning", label: "Có trên chứng từ" },
   TEACH_KNOWLEDGE: { tone: "info", label: "Không có trên chứng từ" },
+  // Gói dịch vụ (ADR 0011): hợp đồng năm (CONTRACT) và đơn mua lượt qua PayOS (PAYG)
+  CONTRACT_ACTIVE: { tone: "success", label: "Đang hiệu lực" },
+  CONTRACT_EXPIRING: { tone: "warning", label: "Sắp hết hạn" },
+  CONTRACT_GRACE: { tone: "warning", label: "Đang ân hạn" },
+  CONTRACT_EXPIRED: { tone: "danger", label: "Hết hạn" },
+  PAYMENT_PENDING: { tone: "info", label: "Chờ thanh toán" },
+  PAYMENT_PAID: { tone: "success", label: "Đã thanh toán" },
+  PAYMENT_CANCELLED: { tone: "neutral", label: "Đã hủy" },
+  PAYMENT_EXPIRED: { tone: "neutral", label: "Hết hạn" },
 } as const satisfies Record<string, { tone: Tone; label: string }>;
 
 export type Status = keyof typeof STATUS_META;
@@ -176,6 +185,8 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   EMAIL_QUEUED: "Queued", EMAIL_SENDING: "Sending", EMAIL_SENT: "Sent", EMAIL_PARTIAL: "Partly sent", EMAIL_FAILED: "Failed", TEMPLATE_PUBLISHED: "Published", TEMPLATE_DRAFT: "Unpublished",
   DOC_UPLOADING: "Uploading", DOC_QUEUED: "Queued", DOC_READING: "AI reading", DOC_DONE: "Read", DOC_ERROR: "Error",
   LESSON_PENDING: "Pending review", LESSON_ACTIVE: "In use", LESSON_OFF: "Off", TEACH_DOCUMENT: "On the documents", TEACH_KNOWLEDGE: "Not on the documents",
+  CONTRACT_ACTIVE: "Active", CONTRACT_EXPIRING: "Expiring soon", CONTRACT_GRACE: "Grace period", CONTRACT_EXPIRED: "Expired",
+  PAYMENT_PENDING: "Awaiting payment", PAYMENT_PAID: "Paid", PAYMENT_CANCELLED: "Cancelled", PAYMENT_EXPIRED: "Expired",
 };
 
 /** Nhãn tiếng Trung (giản thể) tương ứng STATUS_META. */
@@ -200,6 +211,8 @@ export const STATUS_LABELS_ZH: Record<Status, string> = {
   EMAIL_QUEUED: "待发送", EMAIL_SENDING: "发送中", EMAIL_SENT: "已发送", EMAIL_PARTIAL: "部分发送", EMAIL_FAILED: "发送失败", TEMPLATE_PUBLISHED: "已发布", TEMPLATE_DRAFT: "未发布",
   DOC_UPLOADING: "上传中", DOC_QUEUED: "等待读取", DOC_READING: "AI 读取中", DOC_DONE: "已读取", DOC_ERROR: "错误",
   LESSON_PENDING: "待审核", LESSON_ACTIVE: "使用中", LESSON_OFF: "已关闭", TEACH_DOCUMENT: "单证上有", TEACH_KNOWLEDGE: "单证上没有",
+  CONTRACT_ACTIVE: "有效", CONTRACT_EXPIRING: "即将到期", CONTRACT_GRACE: "宽限期", CONTRACT_EXPIRED: "已到期",
+  PAYMENT_PENDING: "待付款", PAYMENT_PAID: "已付款", PAYMENT_CANCELLED: "已取消", PAYMENT_EXPIRED: "已过期",
 };
 
 /** Nhãn trạng thái theo ngôn ngữ – dùng cho code không phải component (bộ lọc bảng, xuất file…). */

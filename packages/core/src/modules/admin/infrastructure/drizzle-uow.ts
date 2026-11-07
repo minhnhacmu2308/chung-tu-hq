@@ -4,8 +4,8 @@ import type { IntegrationId, Role, StaffRole } from "@kb/contracts";
 import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import {
-  adminAudit, announcements, digitalCertificates, emailCampaignRecipients, emailCampaigns, emailSignatures, emailTemplates, mailSettings, orgContracts, documents, dossiers, exchangeRateFetches, exchangeRates, integrationStatus, joinRequests, memberships, notifications, organizations,
-  plans, platformIntegrations, platformStaff, sessions, skills, usageEvents, users,
+  adminAudit, announcements, creditLedger, digitalCertificates, emailCampaignRecipients, emailCampaigns, emailSignatures, emailTemplates, mailSettings, orgContracts, documents, dossiers, exchangeRateFetches, exchangeRates, integrationStatus, joinRequests, memberships, notifications, organizations,
+  payments, plans, platformIntegrations, platformStaff, sessions, skills, usageEvents, users,
 } from "../../../db/schema/index.js";
 import type { StaffStatus } from "../domain/staff-rules.js";
 
@@ -15,13 +15,19 @@ const toRecipientRow = (x: typeof emailCampaignRecipients.$inferSelect): EmailRe
 
 /** Doanh nghiệp hệ thống giữ skill mẫu (db/seed/skills.ts) – không hiện ở khu quản trị. */
 const SYSTEM_ORG_ID = "org_system";
-import type { AdminOrgRow, AdminRepos, AdminUow, AnnouncementRow, EmailCampaignRow, EmailRecipientRow, AuditRow, ExchangeRateRow, OrgUsage, PlatformIntegrationRow, RateFetchRow, StaffRow } from "../application/ports.js";
+import type { AdminOrgRow, AdminRepos, AdminUow, AnnouncementRow, LedgerReason, LedgerRow, PaymentRow, EmailCampaignRow, EmailRecipientRow, AuditRow, ExchangeRateRow, OrgUsage, PlatformIntegrationRow, RateFetchRow, StaffRow } from "../application/ports.js";
 
 /** Phân loại giá vốn theo `usage_events.kind`: AI_* = đọc chứng từ, HS_* = HSCodePro, CUSTOMS_* = Customs Hub. */
 const costByKind = (prefix: string) => sql<string>`coalesce(sum(case when ${usageEvents.kind} like ${`${prefix}%`} then ${usageEvents.costVnd} else 0 end), 0)::text`;
 const countByKind = (prefix: string) => sql<number>`count(*) filter (where ${usageEvents.kind} like ${`${prefix}%`})::int`;
 /** Số dòng gửi HSCodePro (meta.quantity của HS_CLASSIFY/HS_ANSWER; HS_RESULT chỉ là kết quả về, không tính). */
 const hsItemsSql = sql<number>`coalesce(sum(case when ${usageEvents.kind} in ('HS_CLASSIFY', 'HS_ANSWER') then coalesce((${usageEvents.meta}->>'quantity')::int, 0) else 0 end), 0)::int`;
+
+const planCols = { code: plans.code, name: plans.name, kind: plans.kind, pagesPerDossier: plans.pagesPerDossier, priceVnd: plans.priceVnd, pricePerDeclarationVnd: plans.pricePerDeclarationVnd };
+const toPlan = (p: { code: string; name: string; kind: string; pagesPerDossier: number; priceVnd: string; pricePerDeclarationVnd: string }) => ({ ...p, kind: p.kind as "PAYG" | "CONTRACT" });
+const toContract = (c: typeof orgContracts.$inferSelect) => ({
+  orgId: c.orgId, contractNo: c.contractNo, startsOn: c.startsOn, endsOn: c.endsOn, valueVnd: c.valueVnd, note: c.note, createdBy: c.createdBy, at: c.updatedAt,
+});
 
 function repos(tx: Tx): AdminRepos {
   const staffSelect = () =>
@@ -39,7 +45,7 @@ function repos(tx: Tx): AdminRepos {
   });
   const toOrg = (o: typeof organizations.$inferSelect): AdminOrgRow => ({
     id: o.id, name: o.name, taxCode: o.taxCode, address: o.address, phone: o.phone, planCode: o.planCode, status: o.status as AdminOrgRow["status"],
-    suspendedReason: o.suspendedReason, quotaBonus: o.quotaBonus, quotaBonusMonth: o.quotaBonusMonth, planStartedAt: o.planStartedAt, trialEndsAt: o.trialEndsAt, createdAt: o.createdAt,
+    suspendedReason: o.suspendedReason, planStartedAt: o.planStartedAt, createdAt: o.createdAt,
   });
   const lastSeen = sql<Date | null>`(select max(${sessions.lastSeenAt}) from ${sessions} where ${sessions.userId} = ${memberships.userId} and ${sessions.orgId} = ${memberships.orgId})`.mapWith((v) =>
     v ? new Date(v as string) : null,
@@ -150,10 +156,40 @@ function repos(tx: Tx): AdminRepos {
     contracts: {
       get: async (orgId) => {
         const c = (await tx.select().from(orgContracts).where(eq(orgContracts.orgId, orgId)).limit(1))[0];
-        return c ? { orgId: c.orgId, contractNo: c.contractNo, endsOn: c.endsOn, note: c.note, createdBy: c.createdBy, at: c.createdAt } : null;
+        return c ? toContract(c) : null;
       },
-      insert: async (row) =>
-        void (await tx.insert(orgContracts).values({ orgId: row.orgId, contractNo: row.contractNo, endsOn: row.endsOn, note: row.note, createdBy: row.createdBy, createdAt: row.at, updatedAt: row.at })),
+      list: async () => (await tx.select().from(orgContracts)).map(toContract),
+      upsert: async (row) => {
+        const values = { orgId: row.orgId, contractNo: row.contractNo, startsOn: row.startsOn, endsOn: row.endsOn, valueVnd: row.valueVnd, note: row.note, createdBy: row.createdBy, createdAt: row.at, updatedAt: row.at };
+        await tx
+          .insert(orgContracts)
+          .values(values)
+          .onConflictDoUpdate({ target: orgContracts.orgId, set: { contractNo: row.contractNo, startsOn: row.startsOn, endsOn: row.endsOn, valueVnd: row.valueVnd, note: row.note, updatedAt: row.at } });
+      },
+    },
+    credits: {
+      insert: async (row) => (await tx.insert(creditLedger).values(row).onConflictDoNothing({ target: creditLedger.id }).returning({ id: creditLedger.id })).length === 1,
+      list: async (orgId, limit) =>
+        (await tx.select().from(creditLedger).where(eq(creditLedger.orgId, orgId)).orderBy(desc(creditLedger.at), desc(creditLedger.id)).limit(limit)).map((l): LedgerRow => ({ ...l, reason: l.reason as LedgerReason })),
+      balance: async (orgId) => Number((await tx.select({ n: sql<number>`coalesce(sum(${creditLedger.delta}), 0)::int` }).from(creditLedger).where(eq(creditLedger.orgId, orgId)))[0]?.n ?? 0),
+      balances: async () => tx.select({ orgId: creditLedger.orgId, balance: sql<number>`coalesce(sum(${creditLedger.delta}), 0)::int` }).from(creditLedger).groupBy(creditLedger.orgId),
+      statsByOrg: async (from, to) =>
+        tx
+          .select({
+            orgId: creditLedger.orgId,
+            declarations: sql<number>`count(*) filter (where ${creditLedger.reason} in ('CHARGE', 'CONTRACT_USE'))::int`,
+            chargedVnd: sql<string>`coalesce(sum(case when ${creditLedger.reason} = 'CHARGE' then ${creditLedger.amountVnd} else 0 end), 0)::text`,
+            collectedVnd: sql<string>`coalesce(sum(case when ${creditLedger.reason} = 'PURCHASE' then ${creditLedger.amountVnd} else 0 end), 0)::text`,
+          })
+          .from(creditLedger)
+          .where(and(gte(creditLedger.at, from), lt(creditLedger.at, to)))
+          .groupBy(creditLedger.orgId),
+    },
+    payments: {
+      list: async (orgId, limit) =>
+        (await tx.select().from(payments).where(eq(payments.orgId, orgId)).orderBy(desc(payments.createdAt)).limit(limit)).map(
+          (p): PaymentRow => ({ ...p, provider: "PAYOS", status: p.status as PaymentRow["status"], raw: (p.raw as Record<string, unknown> | null) ?? null }),
+        ),
     },
     members: {
       list: async (orgId) =>
@@ -184,8 +220,12 @@ function repos(tx: Tx): AdminRepos {
         ).map(({ emailVerifiedAt, ...j }) => ({ ...j, emailVerified: emailVerifiedAt !== null })),
     },
     plans: {
-      list: async () => tx.select({ code: plans.code, name: plans.name, dossiersPerMonth: plans.dossiersPerMonth, pagesPerDossier: plans.pagesPerDossier, priceVnd: plans.priceVnd }).from(plans).orderBy(plans.dossiersPerMonth),
-      get: async (code) => (await tx.select({ code: plans.code, name: plans.name, dossiersPerMonth: plans.dossiersPerMonth, pagesPerDossier: plans.pagesPerDossier, priceVnd: plans.priceVnd }).from(plans).where(eq(plans.code, code)).limit(1))[0] ?? null,
+      // PAYG trước, CONTRACT sau.
+      list: async () => (await tx.select(planCols).from(plans).orderBy(desc(plans.kind))).map(toPlan),
+      get: async (code) => {
+        const p = (await tx.select(planCols).from(plans).where(eq(plans.code, code)).limit(1))[0];
+        return p ? toPlan(p) : null;
+      },
       update: async (code, patch, at) => void (await tx.update(plans).set({ ...patch, updatedAt: at }).where(eq(plans.code, code))),
     },
     usage: {

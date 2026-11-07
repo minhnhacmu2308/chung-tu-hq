@@ -3,7 +3,7 @@
 import type {
   DraftEmailInput, EmailAudience, SaveEmailSignatureInput, SaveEmailTemplateInput, SendEmailInput, SendTestEmailInput, UpdateMailSettingsInput,
   UpsertExchangeRateInput,
-  AdjustOrgQuotaInput, AdminReasonInput, ChangeOrgPlanInput, ChangeStaffRoleInput, CreateOrgInput, ExtendOrgTrialInput, IntegrationId, InviteStaffInput,
+  AdjustOrgCreditsInput, AdminReasonInput, ChangeOrgPlanInput, ChangeStaffRoleInput, CreateOrgInput, IntegrationId, InviteStaffInput, UpsertOrgContractInput,
   PlanCode, SendAnnouncementInput, SetTemplatePublishedInput, UpdateIntegrationKeyInput, UpdatePlanInput,
 } from "@kb/contracts";
 import { ApiError, mutate, query } from "@/lib/mock-request";
@@ -16,6 +16,7 @@ export const adminKeys = {
   overview: ["admin", "overview"] as const,
   orgs: ["admin", "orgs"] as const,
   org: (id: string) => ["admin", "orgs", id] as const,
+  orgCredits: (id: string) => ["admin", "orgs", id, "credits"] as const,
   users: (f: { orgId?: string } = {}) => ["admin", "users", f] as const,
   plans: ["admin", "plans"] as const,
   usageMonths: ["admin", "usage", "months"] as const,
@@ -48,8 +49,9 @@ export const suspendOrg = (id: string, input: AdminReasonInput) => mutate((db) =
 export const reactivateOrg = (id: string, input: AdminReasonInput) => mutate((db) => ops.reactivateOrg(db, id, input));
 export const createOrg = (input: CreateOrgInput) => mutate((db) => ops.createOrg(db, input));
 export const changeOrgPlan = (id: string, input: ChangeOrgPlanInput) => mutate((db) => ops.changeOrgPlan(db, id, input));
-export const adjustOrgQuota = (id: string, input: AdjustOrgQuotaInput) => mutate((db) => ops.adjustOrgQuota(db, id, input));
-export const extendOrgTrial = (id: string, input: ExtendOrgTrialInput) => mutate((db) => ops.extendOrgTrial(db, id, input));
+export const listOrgCredits = (id: string) => query((db) => ops.listOrgCredits(db, id));
+export const adjustOrgCredits = (id: string, input: AdjustOrgCreditsInput) => mutate((db) => ops.adjustOrgCredits(db, id, input));
+export const upsertOrgContract = (id: string, input: UpsertOrgContractInput) => mutate((db) => ops.upsertOrgContract(db, id, input));
 
 export const listAdminUsers = (filter: { orgId?: string } = {}) => query((db) => ops.listUsers(db, filter));
 export const setAdminUserDisabled = (id: string, disabled: boolean, input: AdminReasonInput) => mutate((db) => ops.setUserDisabled(db, id, disabled, input));

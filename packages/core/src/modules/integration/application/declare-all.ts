@@ -8,6 +8,7 @@ import { err, type Result } from "../../../shared/result.js";
 import { stageOf } from "../domain/state-machine.js";
 import { hasBlockingPending } from "./_customs-view.js";
 import { declareOpFor } from "./branch-send.js";
+import { checkFirstSendAllowance } from "./billing-sheets.js";
 import type { CustomsDeps } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
 
@@ -34,6 +35,11 @@ export async function declareAllSheets(deps: CustomsDeps, ctx: Ctx, dossierId: s
   if (snap.status === "DRAFT") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
   const target = sheets.find((s) => declareOpFor(stageOf(s), snap.payload.kind));
   if (!target) return err(reasonError("INVALID_STATE", "DECLARE_ALL_NONE"));
+  // Lượt khai (ADR 0011 §4.2): các tờ đang chờ khai chính thức (đã khai tạm, đang giữ lượt) sẽ dùng mỗi tờ một lượt khi được chấp nhận –
+  // kiểm đủ lượt cho cả lô trước khi bắt đầu chuỗi (các tờ này đã nằm trong lượt đang giữ → không tính hai lần).
+  const toDeclare = sheets.filter((s) => stageOf(s) === "PRE_DECLARED").length;
+  const allowance = await checkFirstSendAllowance(deps, ctx.orgId, toDeclare, toDeclare);
+  if (!allowance.ok) return allowance;
   // HS / BLOCKER: performOperationChecked kiểm cho mọi khai chính thức lô nhiều tờ (bất biến 7).
   return performOperation(deps, ctx, dossierId, declareOpFor(stageOf(target), snap.payload.kind)!, target.branch, { chain: "declare" });
 }

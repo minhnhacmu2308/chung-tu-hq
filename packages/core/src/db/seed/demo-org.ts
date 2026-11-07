@@ -1,5 +1,5 @@
 import type { Db } from "../client.js";
-import { memberships, organizations, users } from "../schema/index.js";
+import { creditLedger, memberships, organizations, users } from "../schema/index.js";
 
 /** Giống dữ liệu mock của FE (apps/web/src/mocks/seed/core.ts) để demo liền mạch. Tên công ty/MST là GIẢ. */
 export const DEMO_ORG_ID = "org_anphat";
@@ -24,8 +24,13 @@ export async function seedDemoOrg(db: Db, opts: { passwordHash: string }) {
       address: "Lô B4, KCN Tràng Duệ, xã Lê Lợi, huyện An Dương, TP. Hải Phòng",
       phone: "0225 3 888 123",
       postalCode: "180000",
-      planCode: "PRO",
+      planCode: "PAYG",
     })
+    .onConflictDoNothing();
+  // Gói Theo lượt + 50 lượt tặng để demo khai được ngay (idempotent theo id).
+  await db
+    .insert(creditLedger)
+    .values({ id: `grant:demo:${DEMO_ORG_ID}`, orgId: DEMO_ORG_ID, delta: 50, reason: "GRANT", amountVnd: "0", unitPriceVnd: "0", note: "Tặng 50 lượt dữ liệu mẫu", createdBy: "system" })
     .onConflictDoNothing();
   for (const u of DEMO_USERS) {
     await db

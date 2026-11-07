@@ -32,6 +32,20 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...base, METRICS_TOKEN: "ngan" })).toThrow(/METRICS_TOKEN/);
     expect(loadEnv({ ...base, METRICS_TOKEN: "a".repeat(64), METRICS_PORT: "9500" })).toMatchObject({ METRICS_TOKEN: "a".repeat(64), METRICS_PORT: 9500 });
   });
+  it("PAYMENT_PROVIDER: mặc định fake; payos bắt buộc đủ 3 khóa (lỗi nêu tên biến, không in giá trị)", () => {
+    expect(loadEnv(base).PAYMENT_PROVIDER).toBe("fake");
+    expect(loadEnv(base).PAYOS_API_URL).toBe("https://api-merchant.payos.vn");
+    expect(() => loadEnv({ ...base, PAYMENT_PROVIDER: "payos", PAYOS_CLIENT_ID: "cid" })).toThrow(/PAYOS_API_KEY bắt buộc khi PAYMENT_PROVIDER=payos/);
+    expect(() => loadEnv({ ...base, PAYMENT_PROVIDER: "payos", PAYOS_CLIENT_ID: "cid", PAYOS_API_KEY: "bí-mật-123" })).toThrow(/PAYOS_CHECKSUM_KEY/);
+    expect(() => loadEnv({ ...base, PAYMENT_PROVIDER: "payos", PAYOS_CLIENT_ID: "cid", PAYOS_API_KEY: "bí-mật-123" })).not.toThrow(/bí-mật-123/);
+    expect(loadEnv({ ...base, PAYMENT_PROVIDER: "payos", PAYOS_CLIENT_ID: "c", PAYOS_API_KEY: "k", PAYOS_CHECKSUM_KEY: "s" }).PAYMENT_PROVIDER).toBe("payos");
+  });
+  it("PAYMENT_PROVIDER fail-closed ở production: mặc định none (tắt thanh toán online); fake bị từ chối", () => {
+    expect(loadEnv({ ...base, NODE_ENV: "production" }).PAYMENT_PROVIDER).toBe("none");
+    expect(() => loadEnv({ ...base, NODE_ENV: "production", PAYMENT_PROVIDER: "fake" })).toThrow(/PAYMENT_PROVIDER=fake không được dùng ở production/);
+    expect(loadEnv({ ...base, NODE_ENV: "production", PAYMENT_PROVIDER: "none" }).PAYMENT_PROVIDER).toBe("none");
+    expect(loadEnv({ ...base, NODE_ENV: "test" }).PAYMENT_PROVIDER).toBe("fake");
+  });
   it("mặc định: adapter fake, mail console, S3 path-style", () => {
     const env = loadEnv(base);
     expect(env.AI_TIMEOUT_MS).toBe(180_000);

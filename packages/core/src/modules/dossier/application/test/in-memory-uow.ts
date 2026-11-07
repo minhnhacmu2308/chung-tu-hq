@@ -24,6 +24,7 @@ export class InMemoryDossierUow implements DossierUow {
         list: async (orgId, f, page) => clone(matchDossiers(orgId, f).slice(page.offset, page.offset + page.limit)),
         count: async (orgId, f) => matchDossiers(orgId, f).length,
         get: async (orgId, id) => clone(d.dossiers.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
+        statusesOf: async (orgId, ids) => new Map(d.dossiers.filter((x) => x.orgId === org && x.orgId === orgId && ids.includes(x.id)).map((x) => [x.id, x.status])),
         codesInMonth: async (orgId, direction, prefix) => d.dossiers.filter((x) => x.orgId === org && x.orgId === orgId && x.direction === direction && x.code.startsWith(prefix)).map((x) => x.code),
         insert: async (row) => void (row.orgId === org ? d.dossiers.push(clone(row)) : deny("dossiers insert")),
         update: async (orgId, id, patch) => {

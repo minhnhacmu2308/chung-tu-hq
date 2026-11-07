@@ -31,19 +31,19 @@ let queue: InMemoryJobQueue;
 let storage: InMemoryStorage;
 let publisher: RecordingPublisher;
 let deps: DossierDeps;
-let quota: { dossiers: number; pages: number };
+let quota: { pages: number };
 
 beforeEach(() => {
   uow = new InMemoryDossierUow();
   queue = new InMemoryJobQueue();
   storage = new InMemoryStorage();
   publisher = new RecordingPublisher();
-  quota = { dossiers: 10, pages: 20 };
+  quota = { pages: 20 };
   deps = {
     uow, queue, storage, publisher,
     pdf: new FakePdfInspector(),
     unzipper: new FakeUnzipper(),
-    quota: { check: async (_orgId, kind, amount) => (kind === "DOSSIER" ? amount <= quota.dossiers : amount <= quota.pages) },
+    quota: { check: async (_orgId, _kind, amount) => amount <= quota.pages },
     clock: fixedClock("2026-10-14T03:00:00.000Z"),
     idGen: sequentialIdGen(),
   };
@@ -56,12 +56,12 @@ describe("createDossier / list / get", () => {
     expect(unwrap(await listDossiers(deps, ctx(), {})).map((x) => x.id)).toEqual([d.id]);
     expect(unwrap(await getDossier(deps, ctx(), d.id)).code).toBe(d.code);
   });
-  it("VIEWER không tạo được; hết hạn mức → QUOTA_EXCEEDED", async () => {
+  it("VIEWER không tạo được; không còn hạn mức số hồ sơ/tháng (ADR 0011)", async () => {
     expect((await createDossier(deps, ctx("VIEWER"), INPUT)).ok).toBe(false);
-    quota.dossiers = 0;
-    const r = await createDossier(deps, ctx(), INPUT);
-    if (!r.ok) expect(r.error.code).toBe("QUOTA_EXCEEDED");
-    else throw new Error("phải lỗi");
+    let checked = 0;
+    deps.quota = { check: async () => (checked++, false) };
+    expect((await createDossier(deps, ctx(), INPUT)).ok).toBe(true);
+    expect(checked).toBe(0);
   });
   it("org B không thấy/lấy được hồ sơ của A", async () => {
     const d = unwrap(await createDossier(deps, ctx(), INPUT));

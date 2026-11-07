@@ -8,9 +8,9 @@ import type {
 } from "@kb/contracts";
 
 export type OrgMeta = {
-  status: OrgStatus; suspendedReason?: string; quotaBonus: number; createdAt: string;
-  /** Doanh nghiệp quản trị tạo hộ (ký hợp đồng trực tiếp). */
-  contract?: { contractNo?: string; endsOn?: string; note?: string };
+  status: OrgStatus; suspendedReason?: string; createdAt: string;
+  /** Giá vốn tháng này (mô phỏng) – chỉ khu Quản trị thấy; khách không thấy giá vốn (ADR 0011). Hợp đồng / lượt nằm ở db.billing. */
+  costs: { aiCostVnd: string; hsCostVnd: string; customsCostVnd: string };
 };
 export type StoredOrg = { org: Organization; meta: OrgMeta };
 export type StoredUser = Omit<AdminUser, "orgName">;

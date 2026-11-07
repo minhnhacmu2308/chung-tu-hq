@@ -2,33 +2,20 @@ import type { AdminOrg } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { errCode } from "../../../../shared/result.js";
 import { buildAttention } from "../attention.js";
-import { daysUntil, extendTrial, recentMonths, renewsAt, vnMonth, vnMonthRange } from "../period.js";
+import { daysUntil, recentMonths, vnMonth, vnMonthRange } from "../period.js";
 import { deviceLabel, sanitizeJobError } from "../sanitize.js";
 import { keepsASuperAdmin, requirePermission } from "../staff-rules.js";
 
 const NOW = new Date("2026-10-14T03:00:00Z");
 const d = (iso: string) => new Date(iso);
 
-describe("kỳ gói, hạn mức", () => {
+describe("tháng báo cáo", () => {
   it("tháng VN: 31/10 20:00 UTC đã là tháng 11 ở VN; khoảng tháng VN theo UTC", () => {
     expect(vnMonth(d("2026-10-31T16:59:59Z"))).toBe("2026-10");
     expect(vnMonth(d("2026-10-31T17:00:00Z"))).toBe("2026-11");
     expect(vnMonthRange("2026-10")).toEqual({ from: d("2026-09-30T17:00:00Z"), to: d("2026-10-31T17:00:00Z") });
     expect(recentMonths(NOW, 3)).toEqual(["2026-10", "2026-09", "2026-08"]);
     expect(recentMonths(d("2026-01-05T00:00:00Z"), 2)).toEqual(["2026-01", "2025-12"]);
-  });
-
-  it("ngày gia hạn theo kỳ 30 ngày từ mốc đổi gói; dùng thử đã gia hạn tay → đúng ngày đó", () => {
-    const base = { planCode: "PRO", createdAt: d("2026-01-01T00:00:00Z"), planStartedAt: null, trialEndsAt: null };
-    expect(renewsAt(base, NOW)).toEqual(d("2026-10-28T00:00:00Z")); // 300 ngày đã qua → kỳ thứ 10 hết 28/10
-    expect(renewsAt({ ...base, planStartedAt: d("2026-10-10T00:00:00Z") }, NOW)).toEqual(d("2026-11-09T00:00:00Z"));
-    expect(renewsAt({ ...base, planCode: "TRIAL", trialEndsAt: d("2026-10-01T00:00:00Z") }, NOW)).toEqual(d("2026-10-01T00:00:00Z"));
-    expect(renewsAt({ ...base, planCode: "PRO", trialEndsAt: d("2026-10-01T00:00:00Z") }, NOW)).toEqual(d("2026-10-28T00:00:00Z"));
-  });
-
-  it("gia hạn dùng thử: còn hạn cộng từ hạn cũ, đã hết hạn cộng từ hôm nay", () => {
-    expect(extendTrial(d("2026-10-20T00:00:00Z"), NOW, 10)).toEqual(d("2026-10-30T00:00:00Z"));
-    expect(extendTrial(d("2026-10-01T00:00:00Z"), NOW, 10)).toEqual(d("2026-10-24T03:00:00Z"));
   });
 
   it("daysUntil: số ngày tới một ngày (âm = đã qua)", () => {
@@ -75,20 +62,28 @@ describe("quản trị viên", () => {
 });
 
 describe("cần chú ý", () => {
+  const PAYG = { code: "PAYG" as const, name: "Theo lượt", kind: "PAYG" as const, pagesPerDossier: 40, pricePerDeclarationVnd: "25000" };
+  const CONTRACT = { code: "CONTRACT" as const, name: "Hợp đồng năm", kind: "CONTRACT" as const, pagesPerDossier: 100, pricePerDeclarationVnd: "0" };
+  const contract = (endsOn: string | null, status: "ACTIVE" | "EXPIRING" | "GRACE" | "EXPIRED", daysLeft: number | null) => ({ contractNo: "HĐ", startsOn: null, endsOn, status, daysLeft });
   const org = (over: Partial<AdminOrg> & { id: string }): AdminOrg => ({
-    name: over.id, taxCode: "0100000000", status: "ACTIVE", quotaBonus: 0, memberCount: 1, ownerName: "A", ownerEmail: "a@x.vn", createdAt: "2026-01-01T00:00:00.000Z",
-    plan: { code: "BASIC", name: "Cơ bản", dossiersPerMonth: 50, pagesPerDossier: 20, renewsAt: "2026-11-30" },
+    name: over.id, taxCode: "0100000000", status: "ACTIVE", memberCount: 1, ownerName: "A", ownerEmail: "a@x.vn", createdAt: "2026-01-01T00:00:00.000Z",
+    plan: PAYG, billing: { balance: 20, contract: null, declarationsThisMonth: 0, declarations30d: 5 },
     usage: { dossiersThisMonth: 0, pagesThisMonth: 0, aiCostVnd: "0" },
     ...over,
   });
-  it("hạn mức ≥90% vàng, ≥100% đỏ (tính cả phần nới); dùng thử sắp/đã hết hạn; tích hợp lỗi; job lỗi; yêu cầu tham gia > 3 ngày; đỏ đứng trước", () => {
+  it("PAYG ≤ 3 lượt và có khai 30 ngày (0 lượt đỏ); hợp đồng sắp hết / ân hạn / hết hạn / chưa có ngày kết thúc; tích hợp lỗi; job lỗi; yêu cầu tham gia > 3 ngày; đỏ đứng trước", () => {
     const items = buildAttention({
       orgs: [
-        org({ id: "near", usage: { dossiersThisMonth: 45, pagesThisMonth: 0, aiCostVnd: "0" } }),
-        org({ id: "full", usage: { dossiersThisMonth: 50, pagesThisMonth: 0, aiCostVnd: "0" } }),
-        org({ id: "bonus", quotaBonus: 50, usage: { dossiersThisMonth: 50, pagesThisMonth: 0, aiCostVnd: "0" } }),
-        org({ id: "trial", plan: { code: "TRIAL", name: "Dùng thử", dossiersPerMonth: 10, pagesPerDossier: 20, renewsAt: "2026-10-12" } }),
-        org({ id: "suspended", status: "SUSPENDED", usage: { dossiersThisMonth: 99, pagesThisMonth: 0, aiCostVnd: "0" } }),
+        org({ id: "low", billing: { balance: 3, contract: null, declarationsThisMonth: 2, declarations30d: 4 } }),
+        org({ id: "empty", billing: { balance: 0, contract: null, declarationsThisMonth: 1, declarations30d: 1 } }),
+        org({ id: "idle", billing: { balance: 1, contract: null, declarationsThisMonth: 0, declarations30d: 0 } }),
+        org({ id: "rich", billing: { balance: 4, contract: null, declarationsThisMonth: 9, declarations30d: 9 } }),
+        org({ id: "expiring", plan: CONTRACT, billing: { balance: 0, contract: contract("2026-11-01", "EXPIRING", 18), declarationsThisMonth: 0, declarations30d: 0 } }),
+        org({ id: "grace", plan: CONTRACT, billing: { balance: 0, contract: contract("2026-10-10", "GRACE", -4), declarationsThisMonth: 0, declarations30d: 0 } }),
+        org({ id: "expired", plan: CONTRACT, billing: { balance: 0, contract: contract("2026-09-01", "EXPIRED", -43), declarationsThisMonth: 0, declarations30d: 0 } }),
+        org({ id: "noend", plan: CONTRACT, billing: { balance: 0, contract: contract(null, "ACTIVE", null), declarationsThisMonth: 0, declarations30d: 0 } }),
+        org({ id: "fine", plan: CONTRACT, billing: { balance: 0, contract: contract("2027-06-01", "ACTIVE", 230), declarationsThisMonth: 0, declarations30d: 0 } }),
+        org({ id: "suspended", status: "SUSPENDED", billing: { balance: 0, contract: null, declarationsThisMonth: 0, declarations30d: 9 } }),
       ],
       integrations: [{ id: "HSCODEPRO", name: "hscodepro", status: "ERROR", detail: "401" }, { id: "AI_PROVIDER", name: "AI", status: "CONNECTED" }],
       failedJobs: 2,
@@ -96,8 +91,8 @@ describe("cần chú ý", () => {
       now: NOW,
     });
     expect(items.map((i) => `${i.severity}:${i.id}`)).toEqual([
-      "danger:quota_full", "danger:expiring_trial", "danger:integration_HSCODEPRO",
-      "warning:quota_near", "warning:jobs_failed", "warning:join_pending",
+      "danger:low_credits_empty", "danger:contract_expired_expired", "danger:integration_HSCODEPRO",
+      "warning:low_credits_low", "warning:contract_expiring_expiring", "warning:contract_expired_grace", "warning:contract_no_end_noend", "warning:jobs_failed", "warning:join_pending",
     ]);
     expect(items.find((i) => i.id === "join_pending")?.title).toMatch(/^1 yêu cầu/);
   });

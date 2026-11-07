@@ -116,6 +116,20 @@ export const EnvSchema = z
     MICROSOFT_OAUTH_TENANT: z.string().default("common"),
     MAIL: z.enum(["console", "smtp"]).default("console"),
     SMTP_URL: z.string().optional(),
+    /**
+     * Cổng thanh toán mua lượt (ADR 0011) – fail-closed:
+     * - `payos` = PayOS thật, cần đủ 3 khóa kênh thanh toán;
+     * - `none` = tắt thanh toán online (mua lượt báo chưa bật, webhook 404; đội vận hành vẫn nạp tay) – **mặc định khi NODE_ENV=production**;
+     * - `fake` = giả lập (dev/demo/test – checkout quay về /settings?tab=plan&payment=…&fake=1, route dev giả lập "đã trả") – mặc định ngoài production,
+     *   **bị từ chối khi NODE_ENV=production** (ai cũng tự cộng lượt được).
+     * Khóa chỉ dùng phía máy chủ: không gửi xuống trình duyệt, không log, không ghi vào payments.raw.
+     */
+    PAYMENT_PROVIDER: z.enum(["none", "fake", "payos"]).optional(),
+    PAYOS_CLIENT_ID: z.string().optional(),
+    PAYOS_API_KEY: z.string().optional(),
+    PAYOS_CHECKSUM_KEY: z.string().optional(),
+    /** Đổi chỉ khi PayOS đổi địa chỉ API. */
+    PAYOS_API_URL: z.url().default("https://api-merchant.payos.vn"),
   })
   .superRefine((e, ctx) => {
     const need = (cond: boolean, key: string, when: string) => {
@@ -133,11 +147,16 @@ export const EnvSchema = z
     need(e.HS_CLASSIFIER === "hscodepro" && !e.HSCODEPRO_URL, "HSCODEPRO_URL", "HS_CLASSIFIER=hscodepro");
     need(e.HS_CLASSIFIER === "hscodepro" && !e.HSCODEPRO_INTERNAL_KEY, "HSCODEPRO_INTERNAL_KEY", "HS_CLASSIFIER=hscodepro");
     need(e.MAIL === "smtp" && !e.SMTP_URL, "SMTP_URL", "MAIL=smtp");
+    for (const k of ["PAYOS_CLIENT_ID", "PAYOS_API_KEY", "PAYOS_CHECKSUM_KEY"] as const) need(e.PAYMENT_PROVIDER === "payos" && !e[k], k, "PAYMENT_PROVIDER=payos");
+    if (e.NODE_ENV === "production" && e.PAYMENT_PROVIDER === "fake")
+      ctx.addIssue({ code: "custom", path: ["PAYMENT_PROVIDER"], message: "PAYMENT_PROVIDER=fake không được dùng ở production (ai cũng tự cộng lượt được) – dùng payos (kèm khóa) hoặc none" });
     if (e.APP_MASTER_KEYS !== undefined) {
       const bad = parseKeyRing(e.APP_MASTER_KEYS).error;
       if (bad) ctx.addIssue({ code: "custom", path: ["APP_MASTER_KEYS"], message: bad });
     }
-  });
+  })
+  // Mặc định cổng thanh toán theo môi trường: production → none (tắt), còn lại → fake.
+  .transform((e) => ({ ...e, PAYMENT_PROVIDER: e.PAYMENT_PROVIDER ?? (e.NODE_ENV === "production" ? ("none" as const) : ("fake" as const)) }));
 
 /** https://…, hoặc http tới máy nội bộ (localhost/127.0.0.1/tên service docker không có dấu chấm). */
 export function isHttpsOrInternal(url: string): boolean {

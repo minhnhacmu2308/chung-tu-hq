@@ -14,10 +14,10 @@ beforeAll(async () => {
   t = await startTestDb();
   admin = createDb(t.adminUrl, { max: 2 });
   app = createDb(t.appUrl, { max: 2 });
-  await admin.insert(plans).values({ code: "TRIAL", name: "Dùng thử", dossiersPerMonth: 10, pagesPerDossier: 20 });
+  await admin.insert(plans).values({ code: "PAYG", name: "Theo lượt", kind: "PAYG", pagesPerDossier: 40 }).onConflictDoNothing();
   await admin.insert(organizations).values([
-    { id: "org_a", taxCode: "0100000001", name: "A", planCode: "TRIAL" },
-    { id: "org_b", taxCode: "0100000002", name: "B", planCode: "TRIAL" },
+    { id: "org_a", taxCode: "0100000001", name: "A", planCode: "PAYG" },
+    { id: "org_b", taxCode: "0100000002", name: "B", planCode: "PAYG" },
   ]);
   await admin.insert(users).values([
     { id: "usr_a", email: "a@x.vn", passwordHash: "x", name: "A" },

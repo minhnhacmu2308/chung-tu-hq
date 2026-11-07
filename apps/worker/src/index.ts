@@ -3,6 +3,7 @@ import { buildContainer } from "./container.js";
 import { extractDocumentJob } from "./jobs/extract-document.js";
 import { healthJob } from "./jobs/health.js";
 import { certExpiryJob } from "./jobs/cert-expiry.js";
+import { billingReconcileJob } from "./jobs/billing-reconcile.js";
 import { customsPollJob, customsSendJob } from "./jobs/customs.js";
 import { RATE_JOB_CRON, recordRateCatchUpFailure, recordRateFetchFailure } from "@kb/core/modules/admin";
 import { failAgentRun, failHsWork } from "@kb/core/modules/declaration";
@@ -51,6 +52,8 @@ const workers = [
   new Worker("customs-send", async (job) => customsSendJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("customs-poll", async (job) => customsPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("cert-expiry", async () => certExpiryJob(c.identity), { connection: c.redis, concurrency: 1 }),
+  // Đối soát lượt / thanh toán (ADR 0011): idempotent, một lượt một lúc.
+  new Worker("billing-reconcile", async () => billingReconcileJob(c.billing, c.billingReconcile), { connection: c.redis, concurrency: 1 }),
   new Worker("exchange-rate-weekly", async (job) => (job.name === "catch-up" ? exchangeRateCatchUpJob(c.rates) : exchangeRateJob(c.rates)), { connection: c.redis, concurrency: 1 }),
   new Worker("mailbox-sync", async (job) => mailboxSyncJob(c.mailbox, job.data), { connection: c.redis, concurrency: 2 }),
   // Gửi email theo đợt: một đợt một lúc (máy chủ SMTP thường giới hạn số thư / phút).
@@ -65,8 +68,11 @@ const certQueue = new Queue("cert-expiry", { connection: c.redis });
 const rateQueue = new Queue("exchange-rate-weekly", { connection: c.redis });
 // Quét bản ghi kẹt (job mất giữa ghi DB và đẩy job) mỗi 5 phút – xem jobs/stuck-sweeper.ts. Không retry: lần quét sau làm tiếp.
 const sweeperQueue = new Queue("stuck-sweeper", { connection: c.redis });
+// Đối soát lượt / thanh toán hằng ngày 20:00 UTC (03:00 VN, ít người khai); lỗi thử lại 3 lần cách 15 phút – lần chạy sau vẫn bù được.
+const billingQueue = new Queue("billing-reconcile", { connection: c.redis });
 async function registerSchedulers() {
   await sweeperQueue.upsertJobScheduler("stuck-sweeper-5m", { pattern: "*/5 * * * *", tz: "UTC" }, { name: "stuck-sweeper", data: {}, opts: { attempts: 1, removeOnComplete: 20, removeOnFail: 20 } });
+  await billingQueue.upsertJobScheduler("billing-reconcile-daily", { pattern: "0 20 * * *", tz: "UTC" }, { name: "billing-reconcile", data: {}, opts: { attempts: 3, backoff: { type: "fixed", delay: 15 * 60_000 }, removeOnComplete: 20, removeOnFail: 20 } });
   await certQueue.upsertJobScheduler("cert-expiry-daily", { pattern: "0 1 * * *", tz: "UTC" }, { name: "cert-expiry", data: {}, opts: { attempts: 3, backoff: { type: "fixed", delay: 10 * 60_000 }, removeOnComplete: 10, removeOnFail: 10 } });
   await rateQueue.upsertJobScheduler("exchange-rate-weekly", { pattern: RATE_JOB_CRON, tz: "UTC" }, { name: "exchange-rate-weekly", data: {}, opts: { attempts: 16, backoff: { type: "fixed", delay: 30 * 60_000 }, removeOnComplete: 20, removeOnFail: 20 } });
   // Lấy bù tỷ giá tuần đang áp dụng (chưa có thì đọc bảng thứ Năm tuần trước): mỗi sáng 07:30 VN và ngay khi worker khởi động.

@@ -25,7 +25,7 @@ Một repo, một DB, triển khai bằng Docker Compose (web, worker, postgres,
 | `validation` | Luật đối chiếu chéo → PASS/WARN/FAIL/SKIPPED |
 | `skill` | Cấu hình skill (trường, alias, ví dụ đã duyệt, phiên bản), đánh giá độ chính xác |
 | `declaration` | Ánh xạ shipment → tờ khai IDA/EDA, gợi ý HS, thuế dự kiến, chặn truyền khi còn BLOCKER |
-| `billing` | Gói, hạn mức, usage (token, chi phí) theo org |
+| `billing` | Gói PAYG (theo lượt) / CONTRACT (hợp đồng năm), sổ lượt append-only (số dư = tổng delta), chặn khai tạm khi thiếu lượt / hợp đồng hết hạn, ghi lượt khi IDC/EDC được chấp nhận (cổng `DeclarationBilling` ở `shared/`), mua lượt qua PayOS (`PaymentGateway`: PayOS / giả lập), đối soát hằng ngày, usage (token, chi phí) theo org – ADR 0011 |
 | `integration` | Adapter: Customs Hub, hscodepro, tra cứu HĐĐT, nhà cung cấp AI, object storage |
 | `admin` | Khu Quản trị hệ thống của đội vận hành (`/admin`): đọc xuyên doanh nghiệp bằng role `kb_platform`, chỉ số liệu tổng hợp, mọi thao tác ghi `admin_audit` (ADR 0006) |
 
@@ -114,20 +114,20 @@ PostgreSQL + Drizzle, migration trong `packages/core/drizzle/` (0000 nền → 0
 
 | Module | Bảng |
 |---|---|
-| identity | `organizations, users, memberships, sessions, auth_tokens, join_requests, digital_certificates, org_secrets, notifications`; `plans` |
+| identity | `organizations, users, memberships, sessions, auth_tokens, join_requests, digital_certificates, org_secrets, notifications` (đăng ký ghi tặng lượt vào `credit_ledger` cùng transaction qua hàm của billing do container truyền vào – identity không import bảng billing) |
 | dossier | `dossiers, documents, document_pages, job_progress` |
 | extraction | `extractions, shipments, extracted_fields, field_audit` (append-only) |
 | validation | `validations` |
 | skill | `skills` (+ `is_template` ở org `org_system`), `skill_versions, skill_samples, skill_evaluations` |
 | declaration | `line_items, hs_suggestions, declarations, agent_runs`; bảng chung `catalog_hs, exchange_rates` |
 | integration | `integration_status, customs_outbox, customs_messages` (append-only), `customs_results` |
-| billing | `usage_events` |
+| billing | `usage_events`; `credit_ledger` (sổ lượt append-only – kb_app chỉ select/insert dòng của org), `payments` (đơn PayOS; đọc không ngữ cảnh để webhook tìm theo `order_code`), `org_contracts` (hợp đồng năm – khu Quản trị ghi, khách chỉ đọc của mình); bảng chung `plans` (`kind` PAYG/CONTRACT, `price_per_declaration_vnd`) |
 
 Cách truy cập: mỗi module có **Unit of Work** (`uow.asOrg(ctx, repos => …)`) bọc một transaction và `set_config('app.org_id')` để Row-Level Security lọc; app kết nối bằng role `kb_app` (chịu RLS), migration/seed bằng admin. Module khác chỉ đọc dữ liệu của nhau qua port + adapter nối ở composition root (`apps/web/src/container.ts`, `apps/worker/src/container.ts`), không import bảng của nhau (depcruise chặn).
 
 **Transaction không gọi ra ngoài:** callback của `uow.*` chỉ dùng repos `r` của chính nó. Port sang module khác (`deps.quota`, `deps.users`, `deps.plans`, `deps.usage`, `orgAudit`…), storage, HTTP/AI gọi **trước hoặc sau** transaction – các port này lấy kết nối pool khác; transaction đang giữ khóa dòng mà chờ kết nối pool thì khi nhiều request song song (pool 10) cả web treo (sự cố 28/10/2026: `getSession` UPDATE `sessions` rồi gọi `plans`/`usage` trong transaction). Ghi dòng "nóng" (phiên, bộ đếm) trong transaction ngắn riêng và hạn chế tần suất.
 
-Việc nền: BullMQ (`extract-document`, `run-agent`, `customs-send`, `customs-poll`, `skill-sample-read`, `skill-evaluate`, `cert-expiry` hằng ngày). Tiến trình đẩy qua Redis pub/sub → SSE `GET /api/dossiers/:id/events`. Truyền Hải quan theo outbox (ADR 0005): mỗi nghiệp vụ một dòng `customs_outbox` với `idempotency_key`, thông điệp đi/đến ghi `customs_messages` (đã che bí mật), trạng thái ở `customs_results` theo máy trạng thái `domain/state-machine.ts`.
+Việc nền: BullMQ (`extract-document`, `run-agent`, `customs-send`, `customs-poll`, `skill-sample-read`, `skill-evaluate`, `cert-expiry` hằng ngày, `billing-reconcile` hằng ngày – đối soát lượt/thanh toán PayOS). Tiến trình đẩy qua Redis pub/sub → SSE `GET /api/dossiers/:id/events`. Truyền Hải quan theo outbox (ADR 0005): mỗi nghiệp vụ một dòng `customs_outbox` với `idempotency_key`, thông điệp đi/đến ghi `customs_messages` (đã che bí mật), trạng thái ở `customs_results` theo máy trạng thái `domain/state-machine.ts`.
 
 - Multi-tenant theo ADR 0004: mỗi doanh nghiệp (1 MST) là một organization; người dùng là nhân viên, đăng nhập bằng email, vai trò `OWNER / ADMIN / DECLARANT / APPROVER / VIEWER`.
 - Mọi bảng nghiệp vụ có `org_id`; bật Row-Level Security làm lớp bảo vệ thứ hai.

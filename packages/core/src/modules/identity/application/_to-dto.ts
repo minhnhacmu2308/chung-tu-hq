@@ -1,5 +1,5 @@
 import type { Member, Organization } from "@kb/contracts";
-import { activeQuotaBonus } from "../../../shared/quota.js";
+import { dec, toDecimalString } from "../../../shared/decimal.js";
 import type { MembershipRow, OrgRow, PlanRow, UserRow } from "./ports.js";
 
 export function toMember(u: UserRow, m: MembershipRow, lastSeen?: Date): Member {
@@ -13,16 +13,11 @@ export function toMember(u: UserRow, m: MembershipRow, lastSeen?: Date): Member 
   };
 }
 
-/**
- * `usage` do billing cung cấp (container nối); không có → 0.
- * renewsAt = mốc (lần đổi gói gần nhất, hoặc ngày tạo) + bội số 30 ngày tiếp theo; dùng thử được gia hạn tay → đúng ngày hết hạn đó.
- * Cùng công thức với `renewsAt` của module admin (domain/period.ts).
- */
-export function toOrganization(o: OrgRow, plan: PlanRow | null, now: Date, usage?: Organization["usage"]): Organization {
-  const DAY = 86_400_000;
-  const anchor = o.planStartedAt ?? o.createdAt;
-  const elapsed = Math.max(0, now.getTime() - anchor.getTime());
-  const renews = o.planCode === "TRIAL" && o.trialEndsAt ? o.trialEndsAt : new Date(anchor.getTime() + (Math.floor(elapsed / (30 * DAY)) + 1) * 30 * DAY);
+/** Lượt mặc định khi billing chưa nối (test/cấu hình cũ). */
+export const EMPTY_BILLING: Organization["billing"] = { balance: 0, reserved: 0, available: 0, contract: null, declarationsThisMonth: 0 };
+
+/** `billing`/`usage` do module billing cung cấp (container nối); không có → 0. */
+export function toOrganization(o: OrgRow, plan: PlanRow | null, billing?: Organization["billing"], usage?: Organization["usage"]): Organization {
   return {
     id: o.id,
     name: o.name,
@@ -33,12 +28,12 @@ export function toOrganization(o: OrgRow, plan: PlanRow | null, now: Date, usage
     plan: {
       code: (plan?.code ?? o.planCode) as Organization["plan"]["code"],
       name: plan?.name ?? o.planCode,
-      dossiersPerMonth: plan?.dossiersPerMonth ?? 0,
+      kind: plan?.kind ?? (o.planCode === "CONTRACT" ? "CONTRACT" : "PAYG"),
       pagesPerDossier: plan?.pagesPerDossier ?? 0,
-      bonusThisMonth: activeQuotaBonus({ quotaBonus: o.quotaBonus ?? 0, quotaBonusMonth: o.quotaBonusMonth ?? null }, now),
-      renewsAt: renews.toISOString().slice(0, 10),
+      pricePerDeclarationVnd: plan ? toDecimalString(dec(plan.pricePerDeclarationVnd), 0) : "0",
     },
-    usage: usage ?? { dossiersThisMonth: 0, pagesThisMonth: 0, aiCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" },
+    billing: billing ?? EMPTY_BILLING,
+    usage: usage ?? { dossiersThisMonth: 0, pagesThisMonth: 0 },
     suspectThreshold: o.suspectThreshold as Organization["suspectThreshold"],
     fourEyes: o.fourEyes,
   };

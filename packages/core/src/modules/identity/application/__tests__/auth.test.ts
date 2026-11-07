@@ -31,10 +31,10 @@ let deps: IdentityDeps;
 
 beforeEach(() => {
   uow = new InMemoryIdentityUow().seed({
-    plans: [{ code: "TRIAL", name: "Dùng thử", dossiersPerMonth: 10, pagesPerDossier: 20 }, { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40 }],
+    plans: [{ code: "PAYG", name: "Theo lượt", kind: "PAYG" as const, pagesPerDossier: 40, pricePerDeclarationVnd: "25000" }, { code: "CONTRACT", name: "Hợp đồng năm", kind: "CONTRACT" as const, pagesPerDossier: 100, pricePerDeclarationVnd: "0" }],
     orgs: [
-      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "", planCode: "PRO", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-40) },
-      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "TRIAL", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-5) },
+      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "", planCode: "CONTRACT", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-40) },
+      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "PAYG", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-5) },
     ],
     users: [
       { id: "usr_chau", email: "chau.le@anphat-demo.vn", passwordHash: "h:demo1234", name: "Lê Minh Châu", emailVerifiedAt: day(-40), createdAt: day(-40) },
@@ -74,20 +74,22 @@ describe("register", () => {
     expect(uow.data.memberships.find((m) => m.orgId === org.id)).toMatchObject({ role: "OWNER", status: "ACTIVE" });
     expect(mailer.sent).toHaveLength(1);
   });
-  it("MST mới: tạo org TRIAL, membership OWNER, mail xác thực, session dùng được, gọi onOrgCreated", async () => {
+  it("MST mới: tạo org PAYG, membership OWNER, mail xác thực, session dùng được, gọi onOrgCreated", async () => {
     const created: { orgId: string; userId: string }[] = [];
     deps.onOrgCreated = async (o) => void created.push(o);
     const r = unwrap(await register(deps, { email: "an@minhkhang.vn", name: "Nguyễn Văn An", password: "matkhau123", taxCode: "0101234567", joinExisting: false }, META));
     expect(r.mode).toBe("CREATED_ORG");
     const org = uow.data.orgs.find((o) => o.taxCode === "0101234567");
-    expect(org?.planCode).toBe("TRIAL");
+    expect(org?.planCode).toBe("PAYG");
+    // D4 (ADR 0011): tặng 3 lượt, ghi CÙNG transaction đăng ký, khóa grant:signup:<orgId>.
+    expect(uow.data.credits).toEqual([expect.objectContaining({ id: `grant:signup:${org?.id}`, orgId: org?.id, delta: 3 })]);
     expect(uow.data.memberships.find((m) => m.orgId === org?.id)).toMatchObject({ role: "OWNER", status: "ACTIVE" });
     expect(mailer.sent).toHaveLength(1);
     expect(mailer.sent[0]?.subject).toMatch(/Xác thực email/);
     const s = unwrap(await getSession(deps, r.sessionToken));
     expect(s.ctx.role).toBe("OWNER");
     expect(s.session.org.taxCode).toBe("0101234567");
-    expect(s.session.org.plan.code).toBe("TRIAL");
+    expect(s.session.org.plan.code).toBe("PAYG");
     expect(created).toEqual([{ orgId: org?.id, userId: uow.data.memberships.find((m) => m.orgId === org?.id)?.userId }]);
   });
   it("email trùng → EMAIL_TAKEN", async () => {
@@ -116,7 +118,7 @@ describe("login / getSession / logout", () => {
     expect(s.session.user.id).toBe("usr_chau");
     expect(s.session.user.role).toBe("OWNER");
     expect(s.session.org.taxCode).toBe("0316789012");
-    expect(s.session.org.plan.name).toBe("Chuyên nghiệp");
+    expect(s.session.org.plan.name).toBe("Hợp đồng năm");
     expect(s.ctx.orgId).toBe("org_a");
   });
   it("getSession chỉ ghi lần hoạt động khi đã quá 1 phút (request song song không tranh khóa dòng phiên)", async () => {
@@ -299,7 +301,7 @@ describe("token một lần", () => {
 });
 
 describe("tạo hộ doanh nghiệp (mật khẩu tạm) + đổi mật khẩu", () => {
-  const INPUT = { taxCode: "0109999999", name: "CÔNG TY HỢP ĐỒNG", address: "Hà Nội", planCode: "PRO", owner: { email: "owner@hopdong.vn", name: "Trần Chủ" } };
+  const INPUT = { taxCode: "0109999999", name: "CÔNG TY HỢP ĐỒNG", address: "Hà Nội", planCode: "CONTRACT", owner: { email: "owner@hopdong.vn", name: "Trần Chủ" } };
 
   it("tạo org (gói chọn sẵn) + Chủ sở hữu ACTIVE, email đã xác thực, bắt đổi mật khẩu; đăng nhập được bằng mật khẩu tạm; hook skill mẫu chạy", async () => {
     const created: string[] = [];
@@ -308,7 +310,7 @@ describe("tạo hộ doanh nghiệp (mật khẩu tạm) + đổi mật khẩu",
     expect(r.tempPassword).toHaveLength(12);
     expect(created).toEqual([r.orgId]);
     const org = uow.data.orgs.find((o) => o.id === r.orgId)!;
-    expect(org).toMatchObject({ taxCode: "0109999999", name: "CÔNG TY HỢP ĐỒNG", planCode: "PRO" });
+    expect(org).toMatchObject({ taxCode: "0109999999", name: "CÔNG TY HỢP ĐỒNG", planCode: "CONTRACT" });
     const user = uow.data.users.find((u) => u.id === r.userId)!;
     expect(user).toMatchObject({ email: "owner@hopdong.vn", mustChangePassword: true });
     expect(user.emailVerifiedAt).not.toBeNull();
@@ -317,6 +319,12 @@ describe("tạo hộ doanh nghiệp (mật khẩu tạm) + đổi mật khẩu",
 
     const { sessionToken } = unwrap(await login(deps, { email: "owner@hopdong.vn", password: r.tempPassword }, META));
     expect(unwrap(await getSession(deps, sessionToken)).session.mustChangePassword).toBe(true);
+    // Không yêu cầu tặng lượt → không có dòng sổ lượt.
+    expect(uow.data.credits).toEqual([]);
+  });
+  it("gói PAYG kèm tặng lượt → dòng tặng ghi cùng transaction (khóa grant:admin:<orgId>)", async () => {
+    const r = unwrap(await provisionOrgAccount(deps, { ...INPUT, planCode: "PAYG", grantCredits: 10, createdBy: "stf_bao" }));
+    expect(uow.data.credits).toEqual([expect.objectContaining({ id: `grant:admin:${r.orgId}`, orgId: r.orgId, delta: 10, createdBy: "stf_bao" })]);
   });
 
   it("MST hoặc email đã có → lỗi, không ghi gì", async () => {

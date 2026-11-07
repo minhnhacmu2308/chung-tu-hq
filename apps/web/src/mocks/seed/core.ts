@@ -18,8 +18,10 @@ const ORG: Organization = {
   address: "Lô B4, KCN Tràng Duệ, xã Lê Lợi, huyện An Dương, TP. Hải Phòng",
   phone: "0225 3 888 123",
   postalCode: "180000",
-  plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, renewsAt: isoDay(19) },
-  usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "69500", hsCostVnd: "19300", customsCostVnd: "7700" },
+  // Gói Theo lượt (ADR 0011). `plan`/`billing` được tính lại lúc đọc từ bảng gói + sổ lượt (mocks/billing-sim.orgView).
+  plan: { code: "PAYG", name: "Theo lượt", kind: "PAYG", pagesPerDossier: 40, pricePerDeclarationVnd: "25000" },
+  billing: { balance: 0, reserved: 0, available: 0, contract: null, declarationsThisMonth: 0 },
+  usage: { dossiersThisMonth: 37, pagesThisMonth: 412 },
   suspectThreshold: "BALANCED",
   fourEyes: false,
 };

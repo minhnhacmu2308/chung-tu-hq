@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as React from "react";
 import { createElement, type ComponentType } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { billingKeys } from "@/api/billing";
 import { sessionKeys } from "@/api/session";
 import { settingsKeys } from "@/api/settings";
 import type { JoinRequest } from "@kb/contracts";
@@ -14,6 +15,12 @@ import { MembersTab } from "./members-tab";
 import { OrgTab } from "./org-tab";
 import { PlanTab } from "./plan-tab";
 import { validateVnaccsForm } from "./vnaccs-account-form";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/settings",
+  useSearchParams: () => new URLSearchParams("tab=plan"),
+}));
 
 // tsconfig để jsx "preserve" nên vitest biên dịch JSX kiểu cổ điển (React.createElement) – cần React toàn cục.
 (globalThis as { React?: typeof React }).React = React;
@@ -25,8 +32,9 @@ const ORG: Organization = {
   address: "Hải Phòng",
   phone: "0225 3 888 123",
   postalCode: "180000",
-  plan: { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, renewsAt: "2026-11-30" },
-  usage: { dossiersThisMonth: 37, pagesThisMonth: 412, aiCostVnd: "69500", hsCostVnd: "19300", customsCostVnd: "7700" },
+  plan: { code: "PAYG", name: "Theo lượt", kind: "PAYG", pagesPerDossier: 40, pricePerDeclarationVnd: "25000" },
+  billing: { balance: 12, reserved: 1, available: 11, contract: null, declarationsThisMonth: 4 },
+  usage: { dossiersThisMonth: 37, pagesThisMonth: 412 },
   suspectThreshold: "BALANCED",
   fourEyes: false,
 };
@@ -43,6 +51,7 @@ function render(locale: UiLocale, Comp: ComponentType, me: Member = MEMBERS[0]!)
   qc.setQueryData(settingsKeys.members, MEMBERS);
   qc.setQueryData(settingsKeys.joinRequests, JOIN_REQUESTS);
   qc.setQueryData(sessionKeys.me, { user: me, org: ORG });
+  qc.setQueryData(billingKeys.overview, { plan: ORG.plan, billing: ORG.billing, ledger: [], payments: [] });
   return renderToStaticMarkup(createElement(QueryClientProvider, { client: qc }, createElement(UiLocaleProvider, { locale, children: createElement(Comp) })));
 }
 
@@ -54,13 +63,12 @@ describe("Cài đặt – đa ngôn ngữ", () => {
     expect(org).toContain("邮政编码");
     expect(org).not.toContain("Lưu thay đổi");
     const plan = render("zh", PlanTab);
-    expect(plan).toContain("套餐对比");
-    expect(plan).toContain("切换到此套餐");
-    expect(plan).not.toContain("So sánh gói");
-    // Chi phí tháng tách theo nhà cung cấp.
-    expect(plan).toContain("本月服务费用");
-    expect(plan).toContain("HS 编码建议（HSCodePro）");
-    expect(plan).toContain("海关申报传输（Customs Hub）");
+    expect(plan).toContain("剩余 11 次");
+    expect(plan).toContain("两种套餐");
+    expect(plan).toContain("购买次数");
+    expect(plan).not.toContain("Hai loại gói");
+    // Giá vốn AI/HSCodePro/Customs Hub là số nội bộ – không hiện cho khách (ADR 0011).
+    expect(plan).not.toContain("HSCodePro");
   });
   it("en: tab Thành viên dùng nhãn vai trò, quyền, trạng thái tiếng Anh", () => {
     const html = render("en", MembersTab);
@@ -86,7 +94,7 @@ describe("Cài đặt – đa ngôn ngữ", () => {
     expect(render("vi", OrgTab)).toContain("Thông tin doanh nghiệp");
     expect(render("vi", OrgTab)).toContain("Mã bưu chính");
     expect(render("en", OrgTab)).toContain("Postal code");
-    expect(render("vi", PlanTab)).toContain("So sánh gói");
+    expect(render("vi", PlanTab)).toContain("Hai loại gói");
   });
   it("lỗi form và nhãn chỉ tiêu theo ngôn ngữ; giá trị mẫu dạng tờ khai giữ tiếng Việt", () => {
     expect(validateVnaccsForm({ userId: "", password: "x", terminalId: "Z", terminalAccessKey: "K" }, "en")).toEqual({ ok: false, errors: { userId: "Enter VNACCS User ID" } });

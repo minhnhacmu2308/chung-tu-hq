@@ -11,6 +11,7 @@ import { domainError, reasonError, type DomainError } from "../../../shared/erro
 import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
+import { chargeSafely } from "../../../shared/billing.js";
 import { maskPayload } from "../domain/mask.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js";
@@ -220,6 +221,12 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     });
   });
 
+  // Lượt khai (ADR 0011 – D2): tờ khai nhánh được Hải quan chấp nhận khai chính thức (IDC/EDC thành công, có phân luồng) → ghi sổ lượt.
+  // Khóa theo số tờ khai: IDC01 / khai lại cùng số không trừ lần 2. "Cố gắng hết sức": lỗi chỉ log [billing], job billing-reconcile ghi bù.
+  if (!failed && b === "IDC") {
+    const declarationNo = patch.declarationNo ?? result.declarationNo;
+    if (declarationNo) await chargeSafely(deps.billing, { orgId: input.orgId, dossierId: ob.dossierId, branch: ob.branch, declarationNo, op });
+  }
   if (!failed) {
     // Số tờ khai và phân luồng của hồ sơ lấy từ nhánh 1 (tờ 2..N có số, luồng riêng trên kết quả nhánh).
     const declarationNo = ob.branch === 1 ? patch.declarationNo : undefined;

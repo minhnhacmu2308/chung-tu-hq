@@ -69,9 +69,8 @@ export const draftDossier = (input: DraftDossierInput) =>
 
 export const createDossier = (input: CreateDossierInput) =>
   mutate((db) => {
-    // Như backend: hết hồ sơ của gói trong tháng → QUOTA_EXCEEDED.
-    const { plan, usage } = db.org;
-    if (usage.dossiersThisMonth + 1 > plan.dossiersPerMonth + (plan.bonusThisMonth ?? 0)) throw new ApiError("QUOTA_EXCEEDED", "Đã dùng hết số hồ sơ của gói trong tháng này – nâng gói hoặc chờ tới ngày gia hạn để tạo thêm");
+    // Như backend (ADR 0011): không còn hạn mức số hồ sơ/tháng – chỉ đếm.
+    const { usage } = db.org;
     db.org = { ...db.org, usage: { ...usage, dossiersThisMonth: usage.dossiersThisMonth + 1 } };
     const n = 100 + db.dossiers.length;
     const ym = new Date().toISOString().slice(2, 7).replace("-", "");

@@ -20,6 +20,8 @@ import {
 import { declarationKeys, getDeclarationView } from "@/api/declaration";
 import { getHysOverview, hysKeys } from "@/api/hys";
 import { getPostAmendmentView, postAmendmentKeys } from "@/api/post-amendment";
+import { billingKeys } from "@/api/billing";
+import { getOrganization, settingsKeys } from "@/api/settings";
 import { ApiError } from "@/lib/api-error";
 import { fromMinor, toMinor } from "@/lib/decimal";
 import { formatDate, formatDateTime, formatRelative, formatTime, formatVnd } from "@/lib/format";
@@ -38,6 +40,7 @@ import { FptPreviewButton, FptTracePanel } from "./fpt-trace-panel";
 import { HysCard } from "./hys/hys-card";
 import { HysSuggestDialog } from "./hys/hys-suggest-dialog";
 import { HYS_MESSAGES } from "./hys/hys.messages";
+import { billingErrorOf, billingBlockFor, BillingBlockAlert, ContractGraceAlert, CreditsUsageLine, type BillingBlock } from "./submit-billing";
 import { canDeclareAll, submissionRefetchMs, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
@@ -98,6 +101,8 @@ type RowHandlers = {
   nextOp: CustomsOperation | null;
   busyOp: CustomsOperation | null;
   canResend: boolean;
+  /** Gói chặn khai tạm lần đầu (thiếu lượt / hợp đồng hết hạn – ADR 0011): nút IDA/EDA của tờ chưa có số bị khóa. */
+  idaBlocked?: boolean;
   onAction: (r: PipelineRow) => void;
   onResend: (r: PipelineRow) => void;
 };
@@ -105,9 +110,10 @@ type RowHandlers = {
 function RowButton({ r, h }: { r: PipelineRow; h: RowHandlers }) {
   const t = useMessages(SUBMIT_MESSAGES);
   const loading = h.busyOp === r.op;
+  const blocked = Boolean(h.idaBlocked) && baseOp(r.op) === "IDA";
   if (r.status === "ERROR" && RESENDABLE.has(r.op) && h.canResend) {
     return (
-      <Button size="sm" variant="secondary" leftIcon={<RotateCcw className="h-3.5 w-3.5" />} loading={loading} onClick={() => h.onResend(r)} aria-label={fill(t.resendAria, { op: r.op })}>
+      <Button size="sm" variant="secondary" leftIcon={<RotateCcw className="h-3.5 w-3.5" />} loading={loading} disabled={blocked} onClick={() => h.onResend(r)} aria-label={fill(t.resendAria, { op: r.op })}>
         {t.resend}
       </Button>
     );
@@ -127,6 +133,7 @@ function RowButton({ r, h }: { r: PipelineRow; h: RowHandlers }) {
       variant={primary ? "primary" : isRecall(r.op) ? "ghost" : "secondary"}
       leftIcon={isRecall(r.op) ? <RotateCcw className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
       loading={loading}
+      disabled={blocked}
       onClick={() => h.onAction(r)}
       aria-label={`${sendLabel(t, r, h.stage)} (${r.op})`}
     >
@@ -470,6 +477,17 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recalled, reopened]);
   const certQ = useQuery({ queryKey: customsKeys.certificates, queryFn: listCertificates });
+  // Gói (ADR 0011): lượt khả dụng / hợp đồng để báo trước và khóa nút gửi lần đầu; máy chủ vẫn chặn lần nữa (INSUFFICIENT_CREDITS / CONTRACT_EXPIRED).
+  const orgQ = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
+  const [billingError, setBillingError] = useState<BillingBlock | null>(null);
+  /** Lỗi do gói → giữ để hiện Alert chặn, tải lại số lượt; trả true khi đúng là lỗi do gói. */
+  const onBillingError = (e: unknown) => {
+    const b = billingErrorOf(e);
+    if (!b) return false;
+    setBillingError(b);
+    void qc.invalidateQueries({ queryKey: settingsKeys.org });
+    return true;
+  };
   const certs = certQ.data ?? [];
   const selectedId = certId || certs.find((c) => c.isDefault)?.id || certs[0]?.id || "";
   const selected = certs.find((c) => c.id === selectedId);
@@ -478,6 +496,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     void qc.invalidateQueries({ queryKey: customsKeys.all });
     void qc.invalidateQueries({ queryKey: dossierKeys.all });
     void qc.invalidateQueries({ queryKey: declarationKeys.view(dossier.id) });
+    // Lượt đang giữ / đã trừ đổi theo phản hồi Hải quan.
+    void qc.invalidateQueries({ queryKey: settingsKeys.org });
+    void qc.invalidateQueries({ queryKey: billingKeys.overview });
+    setBillingError(null);
   };
   const submit = useMutation({
     // Một toast đi suốt thao tác: "đang ký số…" → "đã gửi" hoặc lỗi.
@@ -494,6 +516,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     // Lỗi đã hiện trong toast của toastPromise (cùng một toast với "đang ký số…"); còn gợi ý HYS → hộp xác nhận.
     onError: (e) => {
       if (isHysSuggested(e)) askHys({ op: dossier.direction === "NK" ? "IDA" : "EDA", proceed: () => submit.mutate({ hysWaived: true }) });
+      else onBillingError(e);
     },
   });
   const perform = useMutation({
@@ -510,7 +533,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     },
     onError: (e, b) => {
       if (isHysSuggested(e)) askHys({ op: b.op, proceed: () => perform.mutate({ ...b, hysWaived: true }) });
-      else toastMutationError(t.performFailed)(e);
+      else {
+        onBillingError(e);
+        toastMutationError(t.performFailed)(e);
+      }
     },
     onSettled: () => setBusy(null),
   });
@@ -531,7 +557,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       toast({ tone: r.sent ? "info" : "success", title: r.message });
       invalidate();
     },
-    onError: toastMutationError(t.performFailed),
+    onError: (e) => {
+      if (onBillingError(e)) setDeclareAllOpen(false);
+      toastMutationError(t.performFailed)(e);
+    },
   });
   const resend = useMutation({
     mutationFn: ({ r, branch }: { r: PipelineRow; branch: number }) => {
@@ -542,7 +571,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       toast({ tone: "info", title: res.resent ? fill(t.resending, { op: r.op }) : res.message, description: t.resendDesc });
       invalidate();
     },
-    onError: toastMutationError(t.resendFailed),
+    onError: (e) => {
+      onBillingError(e);
+      toastMutationError(t.resendFailed)(e);
+    },
     onSettled: () => setBusy(null),
   });
 
@@ -566,6 +598,23 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const pipeline = s.pipeline.filter((r) => !AMA_OPS.has(r.op));
   const next = s.nextOp && !AMA_OPS.has(s.nextOp) ? pipeline.find((r) => r.op === s.nextOp) : undefined;
   const rejection = s.rejection && !AMA_OPS.has(s.rejection.operation) ? s.rejection : null;
+  // Gói (ADR 0011 §4.2): gửi lần đầu = khai tạm mọi tờ chưa có số → mỗi tờ một lượt khi được chấp nhận khai chính thức.
+  const org = orgQ.data;
+  const unnumbered = sheets.filter((b) => !b.declarationNo).length;
+  const firstBlock = firstSend ? billingBlockFor(org, unnumbered) : null;
+  // Gửi lại khai tạm một tờ chưa có số cũng là khai tạm lần đầu (như backend) → cùng điều kiện.
+  const resendBlock = !firstSend && unnumbered > 0 ? billingBlockFor(org, unnumbered) : null;
+  // Khai chính thức cả lô: các tờ đã khai tạm đã giữ lượt – không tính hai lần.
+  const toDeclare = sheets.filter((b) => b.stage === "PRE_DECLARED").length;
+  const declareAllBlock = billingBlockFor(org, toDeclare, toDeclare);
+  const billingBlock = billingError ?? firstBlock;
+  const contract = org?.plan.kind === "CONTRACT" ? org.billing.contract : null;
+  const billingNotice = (
+    <>
+      {billingBlock && <BillingBlockAlert block={billingBlock} />}
+      {!billingBlock && firstSend && contract?.status === "GRACE" && <ContractGraceAlert endsOn={contract.endsOn} />}
+    </>
+  );
 
   /** Bộ xử lý nút của tờ `branch` (lô 1 tờ: tờ 1). */
   const handlersFor = (branch: number, stage: CustomsStage, nextOp: CustomsOperation | null): RowHandlers => ({
@@ -573,6 +622,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     nextOp,
     busyOp: busy?.branch === branch ? busy.op : null,
     canResend: !anyBusy,
+    idaBlocked: Boolean(firstBlock ?? (resendBlock && !sheets.find((x) => x.no === branch)?.declarationNo)),
     onAction: (r) => {
       if (r.action === "EDIT") return goTo("review");
       if (isRecall(r.op)) {
@@ -580,7 +630,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         openAtClick.current = reopened;
         return setConfirm({ row: r, branch });
       }
-      if (firstSend && branch === 1 && baseOp(r.op) === "IDA") return submit.mutate();
+      if (firstSend && branch === 1 && baseOp(r.op) === "IDA") return firstBlock ? undefined : submit.mutate();
       perform.mutate({ op: r.op, branch });
     },
     onResend: (r) => resend.mutate({ r, branch }),
@@ -601,7 +651,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         <Button
           className="shrink-0"
           leftIcon={<KeyRound className="h-4 w-4" />}
-          disabled={blocked || !selectedId || certExpired || anyBusy}
+          disabled={blocked || !selectedId || certExpired || anyBusy || Boolean(firstBlock)}
           loading={submit.isPending}
           onClick={() => submit.mutate()}
         >
@@ -611,13 +661,20 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         <FptPreviewButton dossierId={dossier.id} />
       </div>
     ) : null;
+  const usageLine = firstSend && !firstBlock && org?.plan.kind === "PAYG" && unnumbered > 0 ? <CreditsUsageLine sheets={unnumbered} available={org.billing.available} /> : null;
   const certNote =
-    firstSend && selected ? (
-      <p className="text-xs text-fg-subtle">
-        {fill(t.certNote, { serial: selected.serial.slice(0, 14), date: formatDate(selected.validTo) })}
-      </p>
+    firstSend && (selected || usageLine) ? (
+      <>
+        {usageLine}
+        {selected && (
+          <p className="text-xs text-fg-subtle">
+            {fill(t.certNote, { serial: selected.serial.slice(0, 14), date: formatDate(selected.validTo) })}
+          </p>
+        )}
+      </>
     ) : null;
 
+  const declareAllState = canDeclareAll(sheets);
   const alerts = (
     <>
       {notApproved && (
@@ -643,9 +700,10 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel={t.openReview} onAction={() => goTo("review")}>
         {t.gapsBody}
       </RequiredGapsAlert>
+      {/* Sau lần gửi đầu (gửi lại tờ chưa có số, khai chính thức cả lô): Alert do gói ở đầu bước. Lần gửi đầu: cạnh nút Ký số và gửi. */}
+      {!firstSend && (billingError ?? (declareAllState.ok ? declareAllBlock : null)) && <BillingBlockAlert block={(billingError ?? declareAllBlock)!} />}
     </>
   );
-  const declareAllState = canDeclareAll(sheets);
   const kind = dossier.direction === "NK" ? "IDA" : "EDA";
   const hysCard = s.declarationStatus !== "NOT_CREATED" ? <HysCard dossierId={dossier.id} kind={kind} startCode={hysStart} onStartHandled={() => setHysStart(null)} /> : null;
   const confirmDialog = (
@@ -715,6 +773,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             <CardContent>
               <Stack gap="md">
                 <NextStep s={s} next={next} sending={sending} firstSend={firstSend} h={h} certPicker={certPicker} certNote={certNote} />
+                {billingNotice}
                 {certExpired && <Alert tone="warning">{t.certExpired}</Alert>}
               </Stack>
             </CardContent>
@@ -723,7 +782,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
 
         {declareAllState.ok && (
           <div>
-            <Button leftIcon={<Send className="h-4 w-4" />} disabled={anyBusy} onClick={() => setDeclareAllOpen(true)}>
+            <Button leftIcon={<Send className="h-4 w-4" />} disabled={anyBusy || Boolean(declareAllBlock)} onClick={() => setDeclareAllOpen(true)}>
               {fill(sh.declareAll, { n: declareAllState.pending })}
             </Button>
           </div>
@@ -816,6 +875,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
           <CardContent>
             <Stack gap="md">
               <NextStep s={s} next={next} sending={sending} firstSend={firstSend} h={h} certPicker={certPicker} certNote={certNote} />
+              {firstSend && billingNotice}
               {firstSend && certExpired && <Alert tone="warning">{t.certExpired}</Alert>}
 
               {CUSTOMS_PHASES.filter((p) => pipeline.some((r) => r.phase === p.id)).map((p, i) => (

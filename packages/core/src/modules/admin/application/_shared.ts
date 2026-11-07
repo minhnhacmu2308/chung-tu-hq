@@ -1,12 +1,11 @@
 // Dùng chung trong các use case admin: xác định quản trị viên từ phiên, ghi nhật ký, ánh xạ DTO.
-import type { AdminAction, AdminAuditEntry, AdminOrg, AdminTargetType, AdminPermission, PlanCode, Staff } from "@kb/contracts";
+import type { AdminAction, AdminAuditEntry, AdminOrg, AdminTargetType, AdminPermission, Staff } from "@kb/contracts";
+import { toOrgContract, toOrgPlan } from "../../billing/index.js";
 import { sumDec, toDecimalString } from "../../../shared/decimal.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { activeQuotaBonus } from "../../../shared/quota.js";
-import { renewsAt } from "../domain/period.js";
 import { requirePermission, type StaffActor } from "../domain/staff-rules.js";
-import type { AdminDeps, AdminOrgRow, AdminRepos, AuditRow, MemberRow, OrgUsage, PlanRow, StaffRow } from "./ports.js";
+import type { AdminDeps, AdminOrgRow, AdminRepos, AuditRow, MemberRow, OrgContractRow, OrgUsage, PlanRow, StaffRow } from "./ports.js";
 
 export type { StaffActor };
 
@@ -75,11 +74,13 @@ export const toStaff = (s: StaffRow): Staff => ({
 
 export const orgTarget = (o: AdminOrgRow): Target => ({ type: "ORG", id: o.id, label: o.name, orgId: o.id, orgName: o.name });
 
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+/** Lượt / hợp đồng của một doanh nghiệp cho DTO quản trị. */
+export type OrgBillingFacts = { balance: number; contract: OrgContractRow | null; declarationsThisMonth: number; declarations30d: number };
 
 /** Doanh nghiệp → DTO tổng hợp (không có nội dung hồ sơ). `usage` = số liệu tháng hiện tại. */
-export function toAdminOrg(o: AdminOrgRow, plans: Map<string, PlanRow>, members: MemberRow[], usage: OrgUsage | undefined, now: Date): AdminOrg {
+export function toAdminOrg(o: AdminOrgRow, plans: Map<string, PlanRow>, members: MemberRow[], usage: OrgUsage | undefined, billing: OrgBillingFacts, now: Date): AdminOrg {
   const plan = plans.get(o.planCode);
+  const kind = plan?.kind ?? (o.planCode === "CONTRACT" ? "CONTRACT" : "PAYG");
   const own = members.filter((m) => m.orgId === o.id);
   const owner = own.find((m) => m.role === "OWNER" && m.status === "ACTIVE") ?? own.find((m) => m.role === "OWNER");
   const lastSeen = own.map((m) => m.lastSeenAt?.getTime() ?? 0).reduce((a, b) => Math.max(a, b), 0);
@@ -90,8 +91,13 @@ export function toAdminOrg(o: AdminOrgRow, plans: Map<string, PlanRow>, members:
     taxCode: o.taxCode,
     status: o.status,
     ...(o.suspendedReason ? { suspendedReason: o.suspendedReason } : {}),
-    plan: { code: o.planCode as PlanCode, name: plan?.name ?? o.planCode, dossiersPerMonth: plan?.dossiersPerMonth ?? 0, pagesPerDossier: plan?.pagesPerDossier ?? 0, renewsAt: isoDate(renewsAt(o, now)) },
-    quotaBonus: activeQuotaBonus(o, now),
+    plan: toOrgPlan(plan ?? { code: o.planCode, name: o.planCode, kind, pagesPerDossier: 0, priceVnd: "0", pricePerDeclarationVnd: "0" }),
+    billing: {
+      balance: billing.balance,
+      contract: kind === "CONTRACT" ? toOrgContract(billing.contract, now) : null,
+      declarationsThisMonth: billing.declarationsThisMonth,
+      declarations30d: billing.declarations30d,
+    },
     usage: { dossiersThisMonth: usage?.dossiers ?? 0, pagesThisMonth: usage?.pages ?? 0, aiCostVnd: sumMoney(cost) },
     memberCount: own.filter((m) => m.status !== "DISABLED").length,
     ownerName: owner?.name ?? "—",

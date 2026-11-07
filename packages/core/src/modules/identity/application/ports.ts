@@ -1,4 +1,4 @@
-import type { Organization, Role } from "@kb/contracts";
+import type { DecimalString, Organization, PlanKind, Role } from "@kb/contracts";
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -14,7 +14,7 @@ export type OrgRow = {
   /** Mã bưu chính (6 số) – chỉ tiêu 1.14 IDA / 2.13 EDA; thiếu = mặc định của DB (""). */
   postalCode?: string;
   /** Do khu Quản trị hệ thống đặt (module admin); thiếu = mặc định của DB. */
-  status?: string; quotaBonus?: number; quotaBonusMonth?: string | null; planStartedAt?: Date | null; trialEndsAt?: Date | null;
+  status?: string; planStartedAt?: Date | null;
 };
 export type MembershipStatus = "ACTIVE" | "INVITED" | "DISABLED";
 export type MembershipRow = { id: string; orgId: string; userId: string; role: Role; status: MembershipStatus; invitedBy: string | null };
@@ -27,7 +27,9 @@ export type NotificationRow = { id: string; orgId: string; userId: string; title
 /** Bí mật đã mã hóa của doanh nghiệp (org_secrets); `kind` duy nhất trong một org. */
 export type OrgSecretRow = { id: string; orgId: string; kind: string; ciphertext: string; keyVersion: number; updatedAt: Date };
 export type OrgAuditRow = { id: string; orgId: string; at: Date; actorId: string; actorName: string; action: string; targetType: string; targetId: string; targetLabel: string; detail: Record<string, unknown> | null };
-export type PlanRow = { code: string; name: string; dossiersPerMonth: number; pagesPerDossier: number };
+export type PlanRow = { code: string; name: string; kind: PlanKind; pagesPerDossier: number; pricePerDeclarationVnd: DecimalString };
+/** Dòng tặng lượt ghi CÙNG transaction với việc tạo doanh nghiệp (sổ lượt thuộc billing – hạ tầng do composition root nối). */
+export type CreditGrantRow = { id: string; orgId: string; delta: number; note: string; createdBy: string; at: Date };
 
 export interface IdentityRepos {
   users: {
@@ -44,6 +46,10 @@ export interface IdentityRepos {
     listAll(): Promise<OrgRow[]>;
     insert(row: OrgRow): Promise<void>;
     update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "postalCode" | "suspectThreshold" | "fourEyes" | "planCode">>): Promise<void>;
+  };
+  /** Tặng lượt khi tạo doanh nghiệp (đăng ký: 3 lượt, khóa grant:signup:<orgId>) – cùng transaction, trùng id bỏ qua. */
+  credits: {
+    grant(row: CreditGrantRow): Promise<void>;
   };
   memberships: {
     listByOrg(orgId: string): Promise<MembershipRow[]>;
@@ -152,4 +158,6 @@ export type IdentityDeps = {
   platformStaff?: (userId: string) => Promise<{ status: "ACTIVE" | "INVITED" | "DISABLED" } | null>;
   /** Mức dùng tháng của org (billing cung cấp qua container); thiếu → 0. */
   usage?: (orgId: string) => Promise<Organization["usage"]>;
+  /** Lượt / hợp đồng của org (billing cung cấp qua container); thiếu → số dư 0, không hợp đồng. */
+  billing?: (orgId: string) => Promise<Organization["billing"]>;
 };

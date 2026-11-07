@@ -15,7 +15,7 @@
 8. [Bước 5 – Review & phê duyệt tờ khai](#8-bước-5--review--phê-duyệt-tờ-khai)
 9. [Bước 6 – Khai báo Hải quan (12 nghiệp vụ)](#9-bước-6--khai-báo-hải-quan-12-nghiệp-vụ)
 10. [Cấu hình doanh nghiệp](#10-cấu-hình-doanh-nghiệp)
-11. [Gói dịch vụ & hạn mức](#11-gói-dịch-vụ--hạn-mức)
+11. [Gói dịch vụ, lượt khai & thanh toán](#11-gói-dịch-vụ-lượt-khai--thanh-toán)
 12. [Khu Quản trị hệ thống (đội vận hành)](#12-khu-quản-trị-hệ-thống-đội-vận-hành)
 13. [Việc nền & thông báo](#13-việc-nền--thông-báo)
 14. [Bất biến nghiệp vụ](#14-bất-biến-nghiệp-vụ)
@@ -47,7 +47,7 @@ flowchart LR
 ```mermaid
 flowchart TD
   R[Đăng ký: email + mật khẩu + MST] --> Q{MST đã có<br/>trong hệ thống?}
-  Q -- Chưa --> N[Tạo doanh nghiệp<br/>gói TRIAL, người đăng ký = OWNER<br/>sao chép Skill mẫu] --> L[Đăng nhập ngay<br/>+ gửi email xác thực]
+  Q -- Chưa --> N[Tạo doanh nghiệp<br/>gói Theo lượt + tặng 3 lượt, người đăng ký = OWNER<br/>sao chép Skill mẫu] --> L[Đăng nhập ngay<br/>+ gửi email xác thực]
   Q -- Có --> J[Gửi yêu cầu tham gia<br/>PENDING] --> O{OWNER/ADMIN}
   O -- Duyệt --> M[Thành viên vai trò DECLARANT<br/>+ thông báo + email]
   O -- Từ chối --> X[REJECTED<br/>email kèm lý do nếu có]
@@ -125,7 +125,7 @@ Người khai nhập:
 
 Không hỏi **điều kiện giao hàng** (lấy từ invoice ở bước OCR – dùng cho ô điều kiện giá, cộng cước/bảo hiểm, luật thiếu cước) và **phân loại cá nhân/tổ chức** (chỉ tiêu 1.7, lấy theo Mặc định khai báo, sửa ở bước Review). Hồ sơ cũ đã có điều kiện giao hàng vẫn hiện.
 
-Mã hồ sơ tự sinh `HS-{NK|XK}-{YYMM}-{NNN}`. Tạo hồ sơ tính vào hạn mức hồ sơ/tháng của gói.
+Mã hồ sơ tự sinh `HS-{NK|XK}-{YYMM}-{NNN}`. Tạo hồ sơ không còn bị giới hạn theo gói (ADR 0011) – chỉ giới hạn số trang/hồ sơ khi tải chứng từ.
 
 **Điền nhanh** (thẻ đầu trang, ADR 0010) – khỏi nhập lại cho lô lặp lại:
 - **Sao chép từ hồ sơ cũ**: chọn hồ sơ → điền chiều, phương thức vận tải, loại hình, chi cục, đối tác, bộ skill, ghi chú. Không chép chứng từ, tờ khai, hạn xử lý.
@@ -401,7 +401,7 @@ Menu **Tài khoản & tích hợp**:
 | Tab | Nội dung | Ai sửa |
 |---|---|---|
 | Doanh nghiệp | Thông tin doanh nghiệp (MST khóa) | OWNER/ADMIN |
-| Gói & sử dụng | Gói, số hồ sơ/trang đã dùng trong tháng, chi phí AI | Xem |
+| Gói & sử dụng | Gói Theo lượt: số lượt khả dụng / đang giữ, đơn giá, **Mua lượt** (PayOS), lịch sử lượt, thanh toán. Hợp đồng năm: số HĐ, hiệu lực, trạng thái, liên hệ gia hạn. Chung: số trang/hồ sơ, giới thiệu 2 loại gói (§11) | Xem; mua lượt: OWNER/ADMIN |
 | Thành viên & vai trò | Mời, đổi vai trò, khóa; duyệt yêu cầu tham gia | OWNER/ADMIN |
 | Kết nối hệ thống | Hộp thư nhận chứng từ (Gmail/Outlook); tài khoản VNACCS + kiểm tra đăng nhập FPT.VNACCS. Dịch vụ nền tảng (AI, HSCodePro, HĐĐT) chỉ quản trị KhaiBáo AI thấy ở khu Quản trị hệ thống | OWNER/ADMIN |
 | Chứng thư số | Thêm, đặt mặc định, xóa; nhắc trước 30 ngày khi sắp hết hạn | OWNER/ADMIN |
@@ -423,18 +423,57 @@ Menu **Tài khoản & tích hợp**:
 - Chứng từ mẫu: AI đọc nháp nhãn → người xác nhận.
 - **Đánh giá lại** cần ≥ 5 mẫu đã gắn nhãn, đo độ chính xác từng trường.
 
-## 11. Gói dịch vụ & hạn mức
+## 11. Gói dịch vụ, lượt khai & thanh toán
 
-| Gói | Hồ sơ/tháng | Trang/hồ sơ | Giá (VND/tháng) |
+Quyết định: ADR 0011. Mã nguồn: module `billing` (`packages/core/src/modules/billing`), quy tắc thuần dùng chung FE/BE ở `@kb/contracts` (`billing-rules.ts`).
+
+| Gói (`plans.code` = `kind`) | Trang/hồ sơ | Đơn giá | Ghi chú |
 |---|---|---|---|
-| TRIAL | 10 | 20 | 0 |
-| BASIC | 50 | 30 | 990.000 |
-| PRO | 150 | 40 | 2.990.000 |
-| ENTERPRISE | 1.000 | 100 | Theo hợp đồng |
+| `PAYG` – Theo lượt | 40 | 25.000 đ/lượt (`price_per_declaration_vnd`) | Trả trước qua PayOS; tự đăng ký tặng 3 lượt |
+| `CONTRACT` – Hợp đồng năm | 100 | 0 (giá niêm yết `price_vnd`, 0 = "Liên hệ") | Khai không giới hạn trong hạn hợp đồng |
 
-- Tạo hồ sơ vượt số hồ sơ/tháng (gồm cả phần thưởng thêm trong tháng do đội vận hành cấp) hoặc upload vượt số trang/hồ sơ → `QUOTA_EXCEEDED`.
-  - Cách tính (`withinDossierQuota`, `packages/core/src/shared/quota.ts`): `createDossier` đếm số hồ sơ trong tháng **sau khi tạo** rồi so với hạn mức gói + phần nới thêm của tháng – chỉ đếm một lần (gói 10 hồ sơ tạo được đủ 10).
-  - Hết hạn mức → trang Tạo hồ sơ hiện cảnh báo "Đã dùng hết n/n hồ sơ tháng này" ngay khi mở (kèm ngày đặt lại, nút Xem gói dịch vụ) và khóa nút Tạo; tổ chức nhận `plan.bonusThisMonth` để giao diện tính đúng hạn mức.
+**Lượt (D2).** 1 lượt = 1 tờ khai nhánh được Hải quan chấp nhận khai chính thức (IDC/EDC thành công, có phân luồng). Lô 3 tờ = 3 lượt.
+- Ghi ở worker `customs-send` (`process-outbox.ts`, nhánh IDC thành công) qua cổng `DeclarationBilling.onDeclared` → `credit_ledger`: PAYG `CHARGE` (−1, tiền = đơn giá lúc trừ = doanh thu ghi nhận), CONTRACT `CONTRACT_USE` (0, chỉ đếm). Khóa `charge:<orgId>:<số tờ khai>` – IDC01 / khai lại cùng số không trừ lần 2. Lỗi ghi chỉ log `[billing]`, không làm hỏng luồng.
+- Không trừ khi: đọc chứng từ, IDA/IDC bị từ chối, hủy hồ sơ, khai sửa (IDA01/IDC01 cùng số), HYS, IDB, tra cứu.
+- **Sổ lượt** `credit_ledger` append-only, **số dư = tổng `delta`**: `PURCHASE` (PayOS), `MANUAL_TOPUP`, `GRANT` (tặng: `grant:signup:<orgId>` khi đăng ký, `grant:admin:<orgId>` khi quản trị tạo hộ, `grant:migrate:<orgId>` khi chuyển gói cũ), `CHARGE`, `CONTRACT_USE`, `REFUND`, `ADJUST`.
+
+**Chặn trước khi gửi** (`checkDeclarationAllowance`, kiểm ở use case – không chỉ UI). Chạy khi khai tạm lần đầu một tờ chưa có số: Ký số & khai tạm, Gửi lại khai tạm tờ chưa có số, IDA tờ 2..N người khai bấm, và Khai chính thức cả lô.
+- PAYG: `khả dụng = số dư − lượt đang giữ` (lượt đang giữ = tờ khai nhánh đã có số ở giai đoạn PRE_DECLARED/RECALLED, bỏ hồ sơ đã hủy). Cần `khả dụng ≥ số tờ chưa có số` (khai chính thức cả lô: số tờ đang chờ khai chính thức, không tính hai lần) → thiếu `INSUFFICIENT_CREDITS` (402, `{needed, available}`).
+- CONTRACT: tình trạng theo ngày giờ VN – `ACTIVE` (chưa có ngày kết thúc / còn > 30 ngày), `EXPIRING` (còn ≤ 30 ngày, cảnh báo), `GRACE` (quá hạn ≤ 7 ngày, vẫn khai), `EXPIRED` (quá 7 ngày) → `CONTRACT_EXPIRED` (402).
+- Không kiểm khi: IDC một tờ, IDA01, HYS, IDB, tra cứu, gọi về; chuỗi nối tiếp của worker (đã kiểm lúc bắt đầu). Số dư có thể âm trong ca hai lô gửi song song – lần gửi sau bị chặn.
+
+**Hạn mức còn lại.** Bỏ hạn mức số hồ sơ/tháng (`createDossier` không kiểm). Tải chứng từ vẫn kiểm **số trang/hồ sơ** của gói → `QUOTA_EXCEEDED`. Trần chi phí AI/ngày (`AI_DAILY_COST_CAP_VND`) giữ nguyên.
+
+**Mua lượt qua PayOS (D3).**
+1. OWNER/ADMIN, gói PAYG, 1–1000 lượt: `POST /api/org/billing/checkout` → `payments` PENDING (mã đơn số nguyên duy nhất, mô tả `KB<mã đơn>` ≤ 25 ký tự), tiền = số lượt × đơn giá → link PayOS (`POST https://api-merchant.payos.vn/v2/payment-requests`, header `x-client-id`/`x-api-key`, chữ ký HMAC-SHA256 checksum key) → trình duyệt chuyển sang `checkoutUrl`.
+2. PayOS gọi **webhook** `POST /api/billing/payos/webhook` (public): verify chữ ký `data` (key sắp alphabet, null → rỗng, `timingSafeEqual`) → tìm đơn theo `order_code` (không ngữ cảnh org) → đúng số tiền thì PAID + `PURCHASE` (delta = số lượt, khóa `payos:<mã đơn>`) cùng transaction; lệch tiền không cộng, lưu `raw` + log để đối soát tay. Chữ ký đúng luôn trả 200 `{success:true}`; sai → 400.
+3. Trang return `/settings?tab=plan&payment=<id>` gọi `POST /api/org/billing/payments/<id>/sync` (tra cứu `GET /v2/payment-requests/<mã đơn>` khi đơn còn PENDING) – dùng khi webhook đến chậm.
+- **Cổng thanh toán – fail-closed** (`PAYMENT_PROVIDER`, `packages/core/src/config/env.ts`):
+  | Giá trị | Khi nào | Hành vi |
+  |---|---|---|
+  | `payos` | Production đã có khóa PayOS | Bắt buộc `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` (thiếu → web/worker không khởi động, liệt kê biến thiếu, không in giá trị) |
+  | `none` | **Mặc định khi `NODE_ENV=production`** (chưa có khóa) | Tắt thanh toán online: `GET /api/org/billing` trả `onlinePaymentEnabled: false` → tab Gói ẩn **Mua lượt**, hiện "Thanh toán online chưa bật – liên hệ KhaiBáo AI để nạp lượt"; mua / đồng bộ → `INTEGRATION_NOT_CONFIGURED` (`PAYMENT_NOT_CONFIGURED`); webhook → 404. Đội vận hành **nạp lượt tay** vẫn dùng bình thường |
+  | `fake` | Mặc định ngoài production (dev/test/demo) | Giả lập. **Bị từ chối khi `NODE_ENV=production`** (env lỗi khi khởi động) – vì ai cũng tự cộng lượt được; route webhook còn chặn thêm cổng giả lập ở production (404) |
+- **Bật PayOS (production):** đặt `PAYMENT_PROVIDER=payos` + 3 khóa kênh thanh toán (my.payos.vn), khởi động lại web/worker; đăng ký URL webhook `https://<APP_URL>/api/billing/payos/webhook` ở kênh thanh toán. Khóa chỉ ở máy chủ: không log, không ghi vào `payments.raw` (raw còn che số tài khoản – giữ 4 số cuối – và tên chủ tài khoản), không xuống trình duyệt.
+- **Hạn đơn:** link PayOS gửi `expiredAt` = lúc tạo + 24 giờ. Hệ thống **không tự** đặt EXPIRED: chỉ chốt CANCELLED / EXPIRED khi PayOS xác nhận; PayOS xác nhận PAID đúng tiền cho đơn đã EXPIRED/CANCELLED (khách trả trễ) → vẫn PAID + cộng lượt (khóa `payos:<mã đơn>` giữ đúng một lần) và log cảnh báo. Webhook lỗi / lệch tiền không ghi đè dữ liệu của đơn đã chốt.
+- **Dev/demo:** `PAYMENT_PROVIDER=fake`: checkout quay về `/settings?tab=plan&payment=…&fake=1`; đồng bộ giữ PENDING (cổng giả lập không tự trả), nút **Giả lập đã thanh toán** gọi route dev `POST /api/dev/payments/<id>/simulate-paid` (chỉ khi fake, không chạy ở production). Mock FE làm y hệt (`db.billing.onlinePaymentEnabled = false` để thử trạng thái tắt).
+
+**Giao diện (khách).**
+- **Tài khoản & tích hợp → Gói & sử dụng** (`features/settings/plan-tab.tsx`, dữ liệu `GET /api/org/billing`):
+  - Theo lượt: thẻ số dư "Còn N lượt" (= khả dụng), dòng "đang giữ R lượt cho tờ khai đã có số, chưa khai chính thức", đơn giá "25.000 đ/lượt · 1 lượt = 1 tờ khai được Hải quan chấp nhận khai chính thức"; còn ≤ 3 lượt → cảnh báo (≤ 0 → đỏ). Nút **Mua lượt** chỉ OWNER/ADMIN: hộp chọn nhanh 10/50/100 hoặc nhập 1–1.000, tổng tiền = số lượt × đơn giá, **Thanh toán qua PayOS** chuyển sang `checkoutUrl`. Bảng **Lịch sử lượt** (thời gian, loại, ±lượt, tờ khai – bấm mở hồ sơ, số tiền, ghi chú) và **Thanh toán** gần đây (mã đơn, số lượt, tiền, trạng thái).
+  - Quay lại từ PayOS (`?payment=<id>`): gọi đồng bộ → PAID: toast "Đã thanh toán – cộng N lượt" + bỏ query; PENDING: "Đang chờ xác nhận thanh toán", tự hỏi lại 5 lần × 3 giây rồi hiện nút **Kiểm tra lại**; CANCELLED / EXPIRED: báo chưa cộng lượt. Cổng giả lập (`fake=1`, không production): thêm nút **Giả lập đã thanh toán** (route dev `simulate-paid`).
+  - Hợp đồng năm: số HĐ, hiệu lực từ–đến, trạng thái (Đang hiệu lực / Sắp hết hạn · còn n ngày / Ân hạn · quá hạn n ngày / Hết hạn) kèm cảnh báo tương ứng, số tờ khai đã khai tháng này, **Liên hệ gia hạn**.
+- **Bước Truyền tờ khai** (lần gửi đầu): Theo lượt hiện "Lô này dùng **N lượt** khi Hải quan chấp nhận khai chính thức · còn X lượt khả dụng" (N = số tờ chưa có số). Không đủ lượt → khung đỏ "Không đủ lượt để truyền tờ khai" + **Mua lượt** (`/settings?tab=plan`), khóa **Ký số & khai tạm**. Hợp đồng ân hạn → cảnh báo vàng (vẫn gửi); hết hạn → khung đỏ + **Xem gói**, khóa nút. Cùng quy tắc `allowanceDecision` của `@kb/contracts` như backend; lỗi máy chủ `INSUFFICIENT_CREDITS` / `CONTRACT_EXPIRED` (gửi lần đầu, gửi lại tờ chưa có số, khai chính thức cả lô) hiện cùng khung đó. Nút **Khai chính thức tất cả** khóa khi lượt khả dụng âm.
+- **Tổng quan**: thẻ Gói hiện lượt khả dụng (hoặc trạng thái hợp đồng), số tờ khai tháng này; nhắc mua khi còn ≤ 3 lượt, nhắc gia hạn khi hợp đồng sắp hết / ân hạn / hết hạn. **Tạo hồ sơ** không còn cảnh báo/khóa theo số hồ sơ.
+
+**Giao diện (khu Quản trị).** Gói dịch vụ: 2 thẻ (Theo lượt – sửa tên, trang/hồ sơ, đơn giá/lượt; Hợp đồng năm – sửa tên, trang/hồ sơ, giá niêm yết, 0 = "Liên hệ"). Doanh nghiệp → tab Gói: loại gói + **Đổi gói**; Theo lượt: số dư, **Điều chỉnh lượt** (loại Nạp tay / Tặng / Hoàn / Điều chỉnh, số lượt ±, số tiền tùy chọn, ghi chú cho khách bắt buộc, lý do ghi nhật ký), sổ lượt, thanh toán PayOS; Hợp đồng năm: thông tin + **Sửa hợp đồng** (số, bắt đầu, kết thúc, giá trị, ghi chú). Tạo doanh nghiệp: chọn gói, Theo lượt kèm "Tặng lượt", Hợp đồng năm kèm số HĐ / hiệu lực / giá trị. Danh sách doanh nghiệp: cột Gói (loại), "Số dư / Hạn HĐ", lọc theo loại gói. Sử dụng & chi phí: tờ khai đã tính, doanh thu ghi nhận, tiền thu PayOS, lãi gộp. Cần chú ý: Sắp hết lượt, Hợp đồng sắp hết hạn / hết hạn / chưa có ngày kết thúc.
+
+**Đối soát** (job worker `billing-reconcile`, hằng ngày 20:00 UTC = 03:00 VN; chạy tay bằng cách đẩy job cùng tên): ghi bù tờ khai đã IDC/EDC thành công (có thông điệp IDC/EDC IN OK) mà thiếu dòng sổ lượt – chỉ từ mốc dòng sổ lượt đầu tiên của doanh nghiệp, tối đa 7 ngày gần nhất (không tính hồi tố trước khi có gói theo lượt); thanh toán PENDING > 15 phút tra cứu PayOS – chốt PAID / CANCELLED / EXPIRED **chỉ theo PayOS**; tra cứu lỗi → giữ PENDING (log, lần sau thử lại); quá 24 giờ mà PayOS vẫn PENDING → log để kiểm tay. Không có cổng (`none`) → bỏ qua phần thanh toán.
+
+**Triển khai migration 0034 – KHÔNG đảo ngược được** (xóa 4 gói cũ, bỏ cột `dossiers_per_month`, `quota_bonus`, `quota_bonus_month`, `trial_ends_at`): **chụp `pg_dump` đầy đủ trước khi chạy `db:migrate`** (vd `pg_dump -Fc "$DATABASE_ADMIN_URL" > khaibao-truoc-0034.dump`), giữ bản dump tới khi đối soát xong số dư lượt của mọi doanh nghiệp. Production chưa có khóa PayOS: để `PAYMENT_PROVIDER` trống (= `none`) – khách chưa mua online được, đội vận hành nạp tay.
+
+**Chuyển gói cũ (migration 0034, D6):** ENTERPRISE → CONTRACT (chưa có ngày kết thúc – quản trị nhập sau); TRIAL/BASIC/PRO → PAYG + tặng 3 lượt. Doanh nghiệp demo (seed) dùng PAYG + 50 lượt tặng; doanh nghiệp hệ thống (skill mẫu) dùng CONTRACT.
+
 - Kỳ tính theo tháng dương lịch. Mọi lần gọi dịch vụ trả phí ghi `usage_events` theo doanh nghiệp (cột `provider`, `kind`; số lượng + nghiệp vụ + đơn giá trong `meta`):
 
 | Nhà cung cấp | `kind` | Khi nào ghi | Chi phí |
@@ -449,7 +488,7 @@ Menu **Tài khoản & tích hợp**:
 - Đơn giá HSCodePro / Customs Hub đặt trong biến môi trường (chuỗi thập phân VND; chưa có giá hợp đồng → để trống = 0). Tiền tính bằng Decimal.
 - Không tính trùng: `CUSTOMS_SEND` khóa theo `idempotencyKey` của outbox (job chạy lại sau crash gửi lại cùng thông điệp chỉ ghi một lần; "Gửi lại" tạo outbox mới = thông điệp mới); lỗi tạm (mạng/5xx) và nghiệp vụ cổng chưa hỗ trợ (chưa gửi được) không ghi. `HS_CLASSIFY` khóa theo mã lượt HSCodePro.
 - Ghi chi phí là "cố gắng hết sức": ghi lỗi chỉ log `[usage]`, không làm hỏng nghiệp vụ đã gửi.
-- Tab **Gói & sử dụng** hiện chi phí tháng tách AI / HSCodePro / Customs Hub (tất cả do KhaiBáo AI chịu theo gói). Báo cáo **Sử dụng & chi phí** của đội vận hành tách giá vốn theo nhà cung cấp, kèm số lệnh gọi AI, số dòng gửi HSCodePro, số thông điệp Customs Hub.
+- Giá vốn (AI / HSCodePro / Customs Hub) là số nội bộ: khách **không** thấy (tab Gói & sử dụng chỉ hiện gói, số dư/lượt đang giữ hoặc hợp đồng, số hồ sơ/trang tháng này, sổ lượt và thanh toán – `GET /api/org/billing`). Báo cáo **Sử dụng & chi phí** của đội vận hành tách giá vốn theo nhà cung cấp, kèm số lệnh gọi AI, số dòng gửi HSCodePro, số thông điệp Customs Hub, **số tờ khai đã tính**, **doanh thu ghi nhận** (PAYG = tổng tiền `CHARGE` trong tháng; CONTRACT = giá trị hợp đồng/12 nếu hợp đồng phủ tháng), **tiền thu PayOS** (`PURCHASE`) và **lãi gộp** = doanh thu ghi nhận − giá vốn.
 
 ## 12. Khu Quản trị hệ thống (đội vận hành)
 
@@ -461,7 +500,7 @@ Khu `/admin` dành cho đội vận hành KhaiBáo AI, nhìn xuyên doanh nghi�
 | SUPPORT | Xem, hỗ trợ |
 | READONLY | Xem |
 
-Chức năng: tổng quan "Cần chú ý" (vượt hạn mức, gói sắp hết hạn, lỗi tích hợp, job lỗi, yêu cầu tham gia chờ, lấy tỷ giá lỗi) · doanh nghiệp (tạm khóa/mở, đổi gói, cấp thêm hạn mức, gia hạn dùng thử) · người dùng (khóa/mở, gửi lại email, thu hồi phiên) · gói · báo cáo sử dụng/biên lợi nhuận · tích hợp nền tảng (khóa API) · sức khỏe hệ thống và job lỗi (chạy lại) · Skill mẫu · thông báo hệ thống · **tỷ giá tính thuế** (sửa tay có lý do) · nhân sự · nhật ký kiểm toán.
+Chức năng: tổng quan "Cần chú ý" (`LOW_CREDITS` – PAYG còn ≤ 3 lượt và có khai trong 30 ngày, `CONTRACT_EXPIRING` – hợp đồng còn ≤ 30 ngày, `CONTRACT_EXPIRED` – ân hạn/hết hạn, `CONTRACT_NO_END` – hợp đồng chưa có ngày kết thúc, lỗi tích hợp, job lỗi, yêu cầu tham gia chờ, lấy tỷ giá lỗi) · doanh nghiệp (tạo hộ – PAYG tùy chọn tặng N lượt / CONTRACT kèm số HĐ, hiệu lực, giá trị; tạm khóa/mở; **đổi loại gói** `POST /api/admin/orgs/:id/plan`; **hợp đồng năm** `PUT …/contract`; **sổ lượt** `GET …/credits` và **điều chỉnh lượt** `POST …/credits` – nạp tay/tặng/hoàn/điều chỉnh, bắt buộc ghi chú + lý do; mọi lệnh ghi vào nhật ký `ORG_PLAN_CHANGED` / `ORG_CONTRACT_UPDATED` / `ORG_CREDITS_ADJUSTED`) · người dùng (khóa/mở, gửi lại email, thu hồi phiên) · gói (PAYG sửa tên, trang/hồ sơ, đơn giá/lượt; CONTRACT sửa tên, trang/hồ sơ, giá niêm yết) · báo cáo sử dụng/doanh thu ghi nhận/lãi gộp · tích hợp nền tảng (khóa API) · sức khỏe hệ thống và job lỗi (chạy lại) · Skill mẫu · thông báo hệ thống · **tỷ giá tính thuế** (sửa tay có lý do) · nhân sự · nhật ký kiểm toán.
 
 ## 13. Việc nền & thông báo
 

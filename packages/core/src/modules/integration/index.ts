@@ -26,3 +26,4 @@ export { coarseState, rowState, stageOf, type ResultRaw } from "./domain/state-m
 export { addHysUploadedFiles, createHysSubmission, deleteHysSubmission, getHysOverview, hysValuesOf, removeHysFile, updateHysSubmission } from "./application/hys-submissions.js";
 export { isLotEditable } from "./domain/lot-editable.js";
 export { sendHysSubmission } from "./application/send-hys.js";
+export { countReservedDeclarations, listDeclaredBranches, unnumberedSheets } from "./application/billing-sheets.js";

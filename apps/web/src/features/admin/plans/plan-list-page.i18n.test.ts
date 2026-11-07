@@ -13,8 +13,8 @@ import { PlanListPage } from "./plan-list-page";
 (globalThis as { React?: typeof React }).React = React;
 
 const PLANS: AdminPlan[] = [
-  { code: "TRIAL", name: "Trial", dossiersPerMonth: 10, pagesPerDossier: 20, priceVnd: "0", customPricing: false, orgCount: 3 },
-  { code: "ENTERPRISE", name: "Enterprise", dossiersPerMonth: 2000, pagesPerDossier: 200, priceVnd: "20000000", customPricing: true, orgCount: 1 },
+  { code: "PAYG", name: "Trial", kind: "PAYG", pagesPerDossier: 20, priceVnd: "0", pricePerDeclarationVnd: "25000", orgCount: 3 },
+  { code: "CONTRACT", name: "Enterprise", kind: "CONTRACT", pagesPerDossier: 200, priceVnd: "20000000", pricePerDeclarationVnd: "0", orgCount: 1 },
 ];
 const SESSION: AdminSession = { staff: { id: "s1", name: "Nguyễn Văn A", email: "a@example.com", role: "SUPER_ADMIN", status: "ACTIVE" } };
 
@@ -31,9 +31,9 @@ describe("PlanListPage – đa ngôn ngữ", () => {
   it("zh: tiêu đề, nhãn thẻ và nút đã dịch, không còn chữ tiếng Việt", () => {
     const html = render("zh");
     expect(html).toContain("套餐");
-    expect(html).toContain("免费");
-    expect(html).toContain("按合同");
-    expect(html).toContain("每月档案数");
+    expect(html).toContain("/次");
+    expect(html).toContain("年度合同");
+    expect(html).toContain("每份档案页数");
     expect(html).toContain("编辑套餐");
     expect(html).not.toContain("Gói dịch vụ");
     expect(html).not.toContain("Sửa gói");
@@ -47,7 +47,8 @@ describe("PlanListPage – đa ngôn ngữ", () => {
   it("vi: giữ nguyên chữ cũ", () => {
     const html = render("vi");
     expect(html).toContain("Gói dịch vụ");
-    expect(html).toContain("Miễn phí");
+    expect(html).toContain("/lượt");
+    expect(html).toContain("Hợp đồng năm");
     expect(html).toContain("Sửa gói");
   });
 });

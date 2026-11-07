@@ -2,7 +2,8 @@
 // không schema nào ở đây chứa nội dung hồ sơ, chứng từ hay tờ khai của khách.
 import { z } from "zod";
 import { DecimalStringSchema, DocKindSchema, IsoDateSchema, IsoDateTimeSchema, RoleSchema } from "../common.js";
-import { IntegrationIdSchema, PlanCodeSchema } from "./identity.js";
+import { CreditLedgerEntrySchema, OrgContractSchema, OrgPlanSchema, PaymentSchema, PlanCodeSchema, PlanKindSchema } from "./billing.js";
+import { IntegrationIdSchema } from "./identity.js";
 import { SkillKindSchema } from "./skill.js";
 
 /* ---------------- Quản trị viên & quyền ---------------- */
@@ -12,7 +13,7 @@ export type StaffRole = z.infer<typeof StaffRoleSchema>;
 
 /**
  * VIEW: xem mọi màn · SUPPORT: thao tác hỗ trợ khách (khóa/mở, đặt lại mật khẩu, chạy lại job, thông báo)
- * BILLING: gói, hạn mức · PLATFORM: khóa API tích hợp, skill mẫu · STAFF: quản lý quản trị viên.
+ * BILLING: gói, lượt, hợp đồng · PLATFORM: khóa API tích hợp, skill mẫu · STAFF: quản lý quản trị viên.
  */
 export const AdminPermissionSchema = z.enum(["VIEW", "SUPPORT", "BILLING", "PLATFORM", "STAFF"]);
 export type AdminPermission = z.infer<typeof AdminPermissionSchema>;
@@ -67,15 +68,17 @@ export const AdminOrgSchema = z.object({
   taxCode: z.string(),
   status: OrgStatusSchema,
   suspendedReason: z.string().optional(),
-  plan: z.object({
-    code: PlanCodeSchema,
-    name: z.string(),
-    dossiersPerMonth: z.number().int().nonnegative(),
-    pagesPerDossier: z.number().int().nonnegative(),
-    renewsAt: IsoDateSchema,
+  plan: OrgPlanSchema,
+  /**
+   * Lượt / hợp đồng: `balance` = số dư lượt (PAYG); `contract` chỉ với gói CONTRACT. `declarations30d` = số tờ khai nhánh được chấp nhận khai chính thức
+   * trong 30 ngày qua (cảnh báo sắp hết lượt chỉ cho doanh nghiệp đang khai).
+   */
+  billing: z.object({
+    balance: z.number().int(),
+    contract: OrgContractSchema.nullable(),
+    declarationsThisMonth: z.number().int().nonnegative(),
+    declarations30d: z.number().int().nonnegative(),
   }),
-  /** Số hồ sơ được cộng thêm vào hạn mức của tháng này (nới tạm, tự hết khi sang kỳ). */
-  quotaBonus: z.number().int().nonnegative(),
   usage: z.object({ dossiersThisMonth: z.number().int().nonnegative(), pagesThisMonth: z.number().int().nonnegative(), aiCostVnd: DecimalStringSchema }),
   memberCount: z.number().int().nonnegative(),
   ownerName: z.string(),
@@ -94,8 +97,10 @@ export const AdminOrgDetailSchema = AdminOrgSchema.extend({
   /** Chỉ trạng thái kết nối – không có khóa, không có nội dung thông điệp. */
   integrations: z.array(z.object({ id: IntegrationIdSchema, name: z.string(), status: IntegrationStatusSchema })),
   certificates: z.array(z.object({ id: z.string(), issuer: z.string(), validTo: IsoDateSchema, isDefault: z.boolean() })),
-  /** Doanh nghiệp ký hợp đồng trực tiếp (quản trị tạo hộ): số hợp đồng, hạn, ghi chú nội bộ – chỉ khu Quản trị thấy. */
-  contract: z.object({ contractNo: z.string().optional(), endsOn: IsoDateSchema.optional(), note: z.string().optional() }).optional(),
+  /** Hợp đồng năm (gói CONTRACT): số, hiệu lực, giá trị (báo cáo doanh thu), ghi chú nội bộ – chỉ khu Quản trị thấy. */
+  contract: z
+    .object({ contractNo: z.string().optional(), startsOn: IsoDateSchema.optional(), endsOn: IsoDateSchema.optional(), valueVnd: DecimalStringSchema, note: z.string().optional() })
+    .optional(),
 });
 export type AdminOrgDetail = z.infer<typeof AdminOrgDetailSchema>;
 
@@ -129,11 +134,12 @@ export type AdminUser = z.infer<typeof AdminUserSchema>;
 export const AdminPlanSchema = z.object({
   code: PlanCodeSchema,
   name: z.string(),
-  dossiersPerMonth: z.number().int().nonnegative(),
+  kind: PlanKindSchema,
   pagesPerDossier: z.number().int().nonnegative(),
+  /** Giá niêm yết tham khảo (CONTRACT; 0 = "Liên hệ"). PAYG không dùng. */
   priceVnd: DecimalStringSchema,
-  /** Giá theo hợp đồng riêng (gói Doanh nghiệp) – `priceVnd` chỉ là giá tham chiếu. */
-  customPricing: z.boolean(),
+  /** Đơn giá một lượt (PAYG). CONTRACT = 0. */
+  pricePerDeclarationVnd: DecimalStringSchema,
   orgCount: z.number().int().nonnegative(),
 });
 export type AdminPlan = z.infer<typeof AdminPlanSchema>;
@@ -147,6 +153,7 @@ export const OrgUsageRowSchema = z.object({
   orgName: z.string(),
   planCode: PlanCodeSchema,
   planName: z.string(),
+  planKind: PlanKindSchema,
   dossiers: z.number().int().nonnegative(),
   pages: z.number().int().nonnegative(),
   /** Số lần gọi AI đọc chứng từ (usage_events kind AI_*). */
@@ -160,8 +167,13 @@ export const OrgUsageRowSchema = z.object({
   hsCostVnd: DecimalStringSchema,
   customsCostVnd: DecimalStringSchema,
   totalCostVnd: DecimalStringSchema,
-  planPriceVnd: DecimalStringSchema,
-  /** Giá gói − giá vốn; âm = đang lỗ trên doanh nghiệp này. */
+  /** Số tờ khai nhánh được Hải quan chấp nhận khai chính thức trong tháng (CHARGE / CONTRACT_USE). */
+  declarations: z.number().int().nonnegative(),
+  /** Doanh thu ghi nhận: PAYG = tổng tiền các lượt đã trừ (CHARGE) trong tháng; CONTRACT = giá trị hợp đồng / 12 nếu hợp đồng phủ tháng đó. */
+  revenueVnd: DecimalStringSchema,
+  /** Tiền thu qua PayOS trong tháng (PURCHASE) – tiền mặt, không phải doanh thu ghi nhận. */
+  collectedVnd: DecimalStringSchema,
+  /** Lãi gộp = doanh thu ghi nhận − giá vốn; âm = đang lỗ trên doanh nghiệp này. */
   marginVnd: DecimalStringSchema,
 });
 export type OrgUsageRow = z.infer<typeof OrgUsageRowSchema>;
@@ -179,7 +191,9 @@ export const UsageReportSchema = z.object({
     hsCostVnd: DecimalStringSchema,
     customsCostVnd: DecimalStringSchema,
     totalCostVnd: DecimalStringSchema,
+    declarations: z.number().int().nonnegative(),
     revenueVnd: DecimalStringSchema,
+    collectedVnd: DecimalStringSchema,
     marginVnd: DecimalStringSchema,
   }),
 });
@@ -271,6 +285,9 @@ export const AdminActionSchema = z.enum([
   "ORG_SUSPENDED",
   "ORG_REACTIVATED",
   "ORG_PLAN_CHANGED",
+  "ORG_CONTRACT_UPDATED",
+  "ORG_CREDITS_ADJUSTED",
+  /** Đã bỏ (ADR 0011) – chỉ còn để đọc dòng nhật ký cũ. */
   "ORG_QUOTA_ADJUSTED",
   "ORG_TRIAL_EXTENDED",
   "USER_DISABLED",
@@ -349,7 +366,11 @@ export type Announcement = z.infer<typeof AnnouncementSchema>;
 
 /* ---------------- Tổng quan vận hành ---------------- */
 
-export const AttentionKindSchema = z.enum(["QUOTA", "PLAN_EXPIRING", "INTEGRATION_ERROR", "JOBS_FAILED", "JOIN_PENDING", "RATE_FETCH"]);
+/**
+ * LOW_CREDITS: PAYG còn ≤ 3 lượt và có khai trong 30 ngày · CONTRACT_EXPIRING: hợp đồng còn ≤ 30 ngày · CONTRACT_EXPIRED: hợp đồng đang ân hạn / đã hết hạn
+ * · CONTRACT_NO_END: hợp đồng chưa có ngày kết thúc.
+ */
+export const AttentionKindSchema = z.enum(["LOW_CREDITS", "CONTRACT_EXPIRING", "CONTRACT_EXPIRED", "CONTRACT_NO_END", "INTEGRATION_ERROR", "JOBS_FAILED", "JOIN_PENDING", "RATE_FETCH"]);
 export type AttentionKind = z.infer<typeof AttentionKindSchema>;
 
 export const AttentionItemSchema = z.object({
@@ -372,3 +393,13 @@ export const AdminOverviewSchema = z.object({
   recentOrgs: z.array(AdminOrgSchema),
 });
 export type AdminOverview = z.infer<typeof AdminOverviewSchema>;
+
+/* ---------------- Lượt & thanh toán của một doanh nghiệp (tab Gói) ---------------- */
+
+/** GET /api/admin/orgs/[id]/credits – sổ lượt + thanh toán gần đây + số dư. */
+export const AdminOrgCreditsSchema = z.object({
+  balance: z.number().int(),
+  ledger: z.array(CreditLedgerEntrySchema),
+  payments: z.array(PaymentSchema),
+});
+export type AdminOrgCredits = z.infer<typeof AdminOrgCreditsSchema>;

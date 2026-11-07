@@ -1,14 +1,14 @@
 import { lockedSheetCount } from "@kb/contracts";
 import { loadEnv } from "@kb/core/config";
-import { withinDossierQuota } from "@kb/core/modules/admin";
 import { createRateDeps, DbPlatformMailer, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
 import { createDb, platformDbUrl } from "@kb/core/db";
-import { createAiBudget, createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder } from "@kb/core/modules/billing/infrastructure";
+import { createDeclarationBilling, getOrgBilling } from "@kb/core/modules/billing";
+import { createAiBudget, createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder, grantCreditsInTx } from "@kb/core/modules/billing/infrastructure";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { createCustomsInfrastructure } from "@kb/core/modules/integration/infrastructure";
-import { checkSentSheets, customsEditSheets } from "@kb/core/modules/integration";
+import { checkSentSheets, countReservedDeclarations, customsEditSheets, listDeclaredBranches } from "@kb/core/modules/integration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skill";
@@ -41,7 +41,8 @@ export function buildContainer() {
     await q.add(name, payload, { ...(opts?.jobId ? { jobId: opts.jobId.replace(/:/g, "_") } : {}), ...(opts?.delayMs ? { delay: opts.delayMs } : {}) });
     },
   };
-  const identity = createIdentityInfrastructure({ db, redis, env, clock: systemClock });
+  // Đăng ký / quản trị tạo hộ: tặng lượt ghi cùng transaction tạo doanh nghiệp (sổ lượt của billing – ADR 0011).
+  const identity = createIdentityInfrastructure({ db, redis, env, clock: systemClock, grantCredits: grantCreditsInTx });
   const orgPlan = { get: (orgId: string) => identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId)) };
   const usageRecorder = new DrizzleUsageRecorder(db, dec(String(env.AI_USD_VND_RATE)));
   // Chi phí HSCodePro / Customs Hub (đơn giá từ env, mặc định 0) – nối vào declaration và customs bên dưới.
@@ -50,7 +51,7 @@ export function buildContainer() {
   const monthRange = (now: Date) => ({ from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)) });
   let dossierStats: (orgId: string, now: Date) => Promise<{ dossiers: number; pages: number }> = async () => ({ dossiers: 0, pages: 0 });
   const billing = createBillingInfrastructure({
-    db, orgPlan, clock: systemClock,
+    db, orgPlan, clock: systemClock, env,
     usage: {
       thisMonth: async (orgId, now) => {
         const { aiCostVnd, hsCostVnd, customsCostVnd } = await usageRecorder.monthlyTotals(orgId, now);
@@ -58,14 +59,12 @@ export function buildContainer() {
       },
     },
   });
+  // Hạn mức theo gói: chỉ còn số trang/hồ sơ (ADR 0011 bỏ hạn mức hồ sơ/tháng).
   const quota = {
-    check: async (orgId: string, kind: "DOSSIER" | "PAGES", amount: number) => {
+    check: async (orgId: string, _kind: "PAGES", amount: number) => {
       const op = await orgPlan.get(orgId);
       const plan = op ? await billing.plans.get(op.planCode) : null;
-      if (!plan) return false;
-      if (kind === "PAGES") return amount <= plan.pagesPerDossier;
-      // amount = tổng hồ sơ trong tháng sau khi tạo (createDossier đã đếm) – không cộng số đã dùng lần nữa.
-      return withinDossierQuota(plan.dossiersPerMonth, { quotaBonus: op?.quotaBonus ?? 0, quotaBonusMonth: op?.quotaBonusMonth ?? null }, amount, systemClock.now());
+      return !!plan && amount <= plan.pagesPerDossier;
     },
   };
   const dossier = createDossierInfrastructure({ db, redis, env, queue, quota, clock: systemClock });
@@ -74,8 +73,18 @@ export function buildContainer() {
     return dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.statsInRange(orgId, from, to));
   };
   identity.usage = async (orgId) => {
-    const u = await billing.usage.thisMonth(orgId, systemClock.now());
-    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages, aiCostVnd: u.aiCostVnd, hsCostVnd: u.hsCostVnd, customsCostVnd: u.customsCostVnd };
+    const u = await dossierStats(orgId, systemClock.now());
+    return { dossiersThisMonth: u.dossiers, pagesThisMonth: u.pages };
+  };
+  // Lượt / hợp đồng trong phiên + GET /api/org: lỗi đọc không được làm hỏng đăng nhập → trả 0, ghi log.
+  const emptyBilling = { balance: 0, reserved: 0, available: 0, contract: null, declarationsThisMonth: 0 };
+  identity.billing = async (orgId) => {
+    try {
+      return (await getOrgBilling(billing, orgId))?.billing ?? emptyBilling;
+    } catch (e) {
+      log.error("không đọc được lượt của doanh nghiệp", { orgId, err: e });
+      return emptyBilling;
+    }
   };
   const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
   // Luật đối chiếu cần biết hồ sơ nhập/xuất + phương thức vận chuyển: nối từ module dossier tại đây (validation không import dossier).
@@ -137,6 +146,14 @@ export function buildContainer() {
   validation.branches = async (orgId, dossierId) => lockedSheetCount(await customs.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.results.listForDossier(orgId, dossierId)));
   customs.notify = notify;
   customs.usage = serviceUsage;
+  // Lượt khai (ADR 0011): IDC/EDC được chấp nhận → ghi sổ lượt; lượt đang giữ = tờ đã khai tạm chưa khai chính thức (integration đếm).
+  customs.billing = createDeclarationBilling(billing);
+  billing.reserved = (orgId) => countReservedDeclarations(customs, orgId);
+  /** Job billing-reconcile: mọi doanh nghiệp + tờ khai được chấp nhận từ mốc (integration) → billing ghi bù. */
+  const billingReconcile = {
+    orgIds: async () => (await identity.uow.system((r) => r.orgs.listAll())).map((o) => o.id),
+    declared: (orgId: string, since: Date) => listDeclaredBranches(customs, orgId, since),
+  };
   // Duyệt tờ khai lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi Hải quan (SENT_SHEETS_CHANGED).
   declaration.sentSheetsGuard = (orgId, dossierId) => checkSentSheets(customs, orgId, dossierId);
   // Phạm vi sửa theo giai đoạn truyền và tờ đã gọi về (chưa khai / sửa đổi bổ sung / đã thông quan; lô nhiều tờ chỉ gọi về một phần → khóa chỉ tiêu chung).
@@ -159,7 +176,7 @@ export function buildContainer() {
   identity.mailer = { send: (m) => mail.send(m) };
   const email = { uow: rates.uow as DrizzleAdminUow, mail, clock: systemClock };
   return {
-    env, db, redis, queue, identity, billing, dossier, validation, extraction, skill, declaration, teach, customs, mailbox, rates, email,
+    env, db, redis, queue, identity, billing, billingReconcile, dossier, validation, extraction, skill, declaration, teach, customs, mailbox, rates, email,
     async close() {
       await Promise.all([...queues.values()].map((q) => q.close()));
       await rates.db.close();

@@ -13,7 +13,7 @@ import { changePassword, getSession, hashToken, listNotifications, login, provis
 import { FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../modules/identity/application/test/fakes.js";
 import { AesSecretStore, Argon2Hasher, DrizzleIdentityUow, DrizzlePlansReader } from "../modules/identity/infrastructure/index.js";
 import {
-  adjustOrgQuota, changeOrgPlan, changeStaffRole, createOrg, extendOrgTrial,
+  adjustOrgCredits, changeOrgPlan, changeStaffRole, createOrg, listOrgCredits, upsertOrgContract,
   draftEmailWithAi, getEmailCampaign, getMailSettings, listEmailSignatures, listEmailTemplates, previewEmailAudience, processEmailCampaign, saveEmailSignature,
   saveEmailTemplate, sendEmail, updateMailSettings, getAdminSession, getOrg, getOverview, getSystemHealth, getUsageReport, inviteStaff, listAudit, listOrgs,
   listPlans, listPlatformIntegrations, listSkillTemplates, listStaff, listUsers, reactivateOrg, resolveStaff, retryFailedJob, revokeUserSessions, sendAnnouncement,
@@ -23,6 +23,7 @@ import {
 } from "../modules/admin/index.js";
 import { createAdminInfrastructure, platformStaffOf, type DrizzleAdminUow } from "../modules/admin/infrastructure/index.js";
 import { base32Decode, totp } from "../modules/admin/domain/totp.js";
+import { grantCreditsInTx } from "../modules/billing/infrastructure/index.js";
 
 let t: TestDb;
 let appDb: Db;
@@ -59,7 +60,8 @@ beforeAll(async () => {
   appDb = createDb(t.appUrl, { max: 4 });
   mailer = new RecordingMailer();
   identity = {
-    uow: new DrizzleIdentityUow(appDb), plans: new DrizzlePlansReader(appDb), hasher: new Argon2Hasher(), rateLimiter: new InMemoryRateLimiter(systemClock), mailer,
+    // Tặng lượt khi đăng ký ghi cùng transaction (hạ tầng billing, như container).
+    uow: new DrizzleIdentityUow(appDb, grantCreditsInTx), plans: new DrizzlePlansReader(appDb), hasher: new Argon2Hasher(), rateLimiter: new InMemoryRateLimiter(systemClock), mailer,
     taxRegistry: new FakeTaxRegistry(), clock: systemClock, idGen: ulidIdGen, appUrl: "http://localhost:3100",
   };
   admin = createAdminInfrastructure({
@@ -89,7 +91,7 @@ beforeAll(async () => {
     clock: adminClock,
   });
   identity.platformStaff = (userId) => platformStaffOf(admin.uow as DrizzleAdminUow, userId);
-  // Doanh nghiệp thứ hai (gói dùng thử) để kiểm tra đọc xuyên doanh nghiệp và nhóm nhận thông báo.
+  // Doanh nghiệp thứ hai (tự đăng ký → gói Theo lượt + 3 lượt tặng) để kiểm tra đọc xuyên doanh nghiệp và nhóm nhận thông báo.
   unwrap(await register(identity, { email: "an@minhkhang.vn", name: "Nguyễn Văn An", password: "matkhau123", taxCode: "0101234567", joinExisting: false }, META));
 }, 120_000);
 
@@ -145,23 +147,70 @@ describe("doanh nghiệp", () => {
     expect(errCode(await suspendOrg(admin, trang, "org_khong_co", R))).toBe("NOT_FOUND");
   });
 
-  it("đổi gói (Cấp cao) → kỳ 30 ngày mới; nới hạn mức chỉ tháng này; gia hạn chỉ cho gói dùng thử; Hỗ trợ không có quyền BILLING", async () => {
+  it("đăng ký: gói PAYG + 3 lượt tặng ghi cùng transaction; đổi loại gói / điều chỉnh lượt / hợp đồng (Cấp cao) có nhật ký; Hỗ trợ không có quyền BILLING", async () => {
     const bao = await staff("bao.hoang@khaibao-demo.vn");
     const trang = await staff("trang.mai@khaibao-demo.vn");
     const minhKhang = unwrap(await listOrgs(admin, bao)).find((o) => o.taxCode === "0101234567")!;
-    expect(errCode(await changeOrgPlan(admin, trang, minhKhang.id, { planCode: "BASIC", ...R }))).toBe("FORBIDDEN");
+    expect(minhKhang.plan).toMatchObject({ code: "PAYG", kind: "PAYG", pricePerDeclarationVnd: "25000" });
+    expect(minhKhang.billing).toMatchObject({ balance: 3, contract: null });
+    expect(unwrap(await listOrgCredits(admin, bao, minhKhang.id)).ledger).toEqual([expect.objectContaining({ id: `grant:signup:${minhKhang.id}`, reason: "GRANT", delta: 3 })]);
+    expect(errCode(await changeOrgPlan(admin, trang, minhKhang.id, { planCode: "CONTRACT", ...R }))).toBe("FORBIDDEN");
+    expect(errCode(await adjustOrgCredits(admin, trang, minhKhang.id, { delta: 5, kind: "GRANT", note: "Tặng", ...R }))).toBe("FORBIDDEN");
 
-    const trialEnds = unwrap(await extendOrgTrial(admin, bao, minhKhang.id, { days: 14, ...R })).plan.renewsAt;
-    expect(new Date(`${trialEnds}T00:00:00Z`).getTime()).toBeGreaterThan(Date.now() + 40 * 86_400_000); // 30 ngày kỳ hiện tại + 14
-    const changed = unwrap(await changeOrgPlan(admin, bao, minhKhang.id, { planCode: "BASIC", ...R }));
-    expect(changed.plan).toMatchObject({ code: "BASIC", name: "Cơ bản", dossiersPerMonth: 50 });
-    expect(new Date(`${changed.plan.renewsAt}T00:00:00Z`).getTime() - Date.now()).toBeLessThan(31 * 86_400_000);
-    expect(errCode(await changeOrgPlan(admin, bao, minhKhang.id, { planCode: "BASIC", ...R }))).toBe("CONFLICT");
-    expect(errCode(await extendOrgTrial(admin, bao, minhKhang.id, { days: 7, ...R }))).toBe("CONFLICT");
-    expect(unwrap(await adjustOrgQuota(admin, bao, minhKhang.id, { bonusDossiers: 20, ...R })).quotaBonus).toBe(20);
+    const once = { delta: 20, kind: "MANUAL_TOPUP" as const, note: "Chuyển khoản 05/11", amountVnd: "500000", idempotencyKey: "dlg_0123456789ab", ...R };
+    const topped = unwrap(await adjustOrgCredits(admin, bao, minhKhang.id, once));
+    expect(topped.billing.balance).toBe(23);
+    // Bấm hai lần cùng khóa chống trùng → không thêm dòng, không thêm nhật ký.
+    expect(unwrap(await adjustOrgCredits(admin, bao, minhKhang.id, once)).billing.balance).toBe(23);
+    expect(unwrap(await listOrgCredits(admin, bao, minhKhang.id))).toMatchObject({ balance: 23 });
+    expect(errCode(await upsertOrgContract(admin, bao, minhKhang.id, { valueVnd: "1000", ...R }))).toBe("INVALID_STATE");
+    const changed = unwrap(await changeOrgPlan(admin, bao, minhKhang.id, { planCode: "CONTRACT", ...R }));
+    expect(changed.plan).toMatchObject({ code: "CONTRACT", name: "Hợp đồng năm", kind: "CONTRACT" });
+    // Chưa có hợp đồng → chưa có ngày kết thúc (khai không giới hạn); sổ lượt giữ nguyên.
+    expect(changed.billing).toMatchObject({ balance: 23, contract: { endsOn: null, status: "ACTIVE" } });
+    expect(errCode(await changeOrgPlan(admin, bao, minhKhang.id, { planCode: "CONTRACT", ...R }))).toBe("CONFLICT");
+    const withContract = unwrap(await upsertOrgContract(admin, bao, minhKhang.id, { contractNo: "HĐ-01", startsOn: "2026-01-01", endsOn: "2099-12-31", valueVnd: "120000000", note: "Ký năm", ...R }));
+    expect(withContract.billing.contract).toMatchObject({ contractNo: "HĐ-01", endsOn: "2099-12-31", status: "ACTIVE" });
     const detail = unwrap(await getOrg(admin, bao, minhKhang.id));
-    expect(detail).toMatchObject({ quotaBonus: 20, ownerEmail: "an@minhkhang.vn", memberCount: 1, integrations: [], certificates: [] });
-    expect(unwrap(await listAudit(admin, bao, { orgId: minhKhang.id })).map((a) => a.detail)).toEqual(["+20 hồ sơ tháng này", "Dùng thử → Cơ bản", "+14 ngày dùng thử"]);
+    expect(detail).toMatchObject({ ownerEmail: "an@minhkhang.vn", memberCount: 1, integrations: [], certificates: [], contract: { contractNo: "HĐ-01", startsOn: "2026-01-01", endsOn: "2099-12-31", valueVnd: "120000000", note: "Ký năm" } });
+    expect(unwrap(await listAudit(admin, bao, { orgId: minhKhang.id })).map((a) => a.action)).toEqual(["ORG_CONTRACT_UPDATED", "ORG_PLAN_CHANGED", "ORG_CREDITS_ADJUSTED"]);
+    // Khách (kb_app) đọc được hợp đồng của chính mình, không đọc được của doanh nghiệp khác.
+    const own = await withCtxRows(minhKhang.id, sql`select contract_no from org_contracts`);
+    expect(own).toEqual([{ contract_no: "HĐ-01" }]);
+    expect(await withCtxRows("org_anphat", sql`select contract_no from org_contracts`)).toEqual([]);
+  });
+});
+
+/** Đọc bằng role ứng dụng (kb_app) trong ngữ cảnh RLS của một org. */
+async function withCtxRows(orgId: string, q: ReturnType<typeof sql>) {
+  return appDb.transaction(async (tx) => {
+    await tx.execute(sql`select set_config('app.org_id', ${orgId}, true)`);
+    return [...((await tx.execute(q)) as unknown as Record<string, unknown>[])];
+  });
+}
+
+describe("sổ lượt & thanh toán – RLS (kb_app)", () => {
+  it("org A không thấy / không ghi được sổ lượt và thanh toán của org B; không ngữ cảnh chỉ tra được thanh toán", async () => {
+    await admin.db.execute(sql`insert into payments (id, org_id, order_code, credits, amount_vnd, created_by) values ('pay_rls_b', 'org_anphat', 990000000001, 2, 50000, 'usr_chau') on conflict do nothing`);
+    const minhKhangId = ((await admin.db.execute(sql`select id from organizations where tax_code = '0101234567'`)) as unknown as { id: string }[])[0]!.id;
+    expect(await withCtxRows(minhKhangId, sql`select id from payments where id = 'pay_rls_b'`)).toEqual([]);
+    expect((await withCtxRows(minhKhangId, sql`select org_id from credit_ledger`)).every((r) => r["org_id"] === minhKhangId)).toBe(true);
+    expect((await withCtxRows("org_anphat", sql`select id from payments where id = 'pay_rls_b'`))).toEqual([{ id: "pay_rls_b" }]);
+    await expect(withCtxRows(minhKhangId, sql`insert into credit_ledger (id, org_id, delta, reason, created_by) values ('x:rls', 'org_anphat', 100, 'GRANT', 'hacker')`)).rejects.toMatchObject({ cause: expect.objectContaining({ message: expect.stringMatching(/row-level security/) }) });
+    // Sổ lượt append-only với ứng dụng: không sửa/xóa được (không có policy update/delete).
+    const upd = await withCtxRows("org_anphat", sql`update credit_ledger set delta = 999 where org_id = 'org_anphat' returning id`);
+    expect(upd).toEqual([]);
+    // Không ngữ cảnh (webhook PayOS): tìm được đơn theo mã, không đọc được sổ lượt.
+    const sys = await appDb.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.org_id', '', true)`);
+      await tx.execute(sql`select set_config('app.user_id', '', true)`);
+      return {
+        pay: [...((await tx.execute(sql`select id from payments where order_code = 990000000001`)) as unknown as unknown[])],
+        ledger: [...((await tx.execute(sql`select id from credit_ledger`)) as unknown as unknown[])],
+      };
+    });
+    expect(sys.pay).toHaveLength(1);
+    expect(sys.ledger).toHaveLength(0);
   });
 });
 
@@ -189,15 +238,25 @@ describe("người dùng", () => {
 describe("gói, chi phí, tích hợp, hệ thống, skill mẫu", () => {
   it("sửa gói ghi chi tiết thay đổi; không đổi gì → CONFLICT; báo cáo tháng có mọi doanh nghiệp, tiền là chuỗi thập phân", async () => {
     const bao = await staff("bao.hoang@khaibao-demo.vn");
-    const pro = unwrap(await listPlans(admin, bao)).find((p) => p.code === "PRO")!;
-    const updated = unwrap(await updatePlan(admin, bao, "PRO", { name: pro.name, dossiersPerMonth: 160, pagesPerDossier: pro.pagesPerDossier, priceVnd: "3190000", ...R }));
-    expect(updated).toMatchObject({ dossiersPerMonth: 160, priceVnd: "3190000" });
-    expect(errCode(await updatePlan(admin, bao, "PRO", { name: pro.name, dossiersPerMonth: 160, pagesPerDossier: pro.pagesPerDossier, priceVnd: "3190000.00", ...R }))).toBe("CONFLICT");
-    expect(unwrap(await listAudit(admin, bao))[0]).toMatchObject({ action: "PLAN_UPDATED", detail: "Hồ sơ/tháng 150 → 160 · Giá 2990000 → 3190000 VND" });
+    const plans = unwrap(await listPlans(admin, bao));
+    expect(plans.map((p) => [p.code, p.kind, p.pricePerDeclarationVnd])).toEqual([["PAYG", "PAYG", "25000"], ["CONTRACT", "CONTRACT", "0"]]);
+    const payg = plans[0]!;
+    const updated = unwrap(await updatePlan(admin, bao, "PAYG", { name: payg.name, pagesPerDossier: 45, priceVnd: "0", pricePerDeclarationVnd: "27000", ...R }));
+    expect(updated).toMatchObject({ pagesPerDossier: 45, pricePerDeclarationVnd: "27000" });
+    expect(errCode(await updatePlan(admin, bao, "PAYG", { name: payg.name, pagesPerDossier: 45, priceVnd: "0", pricePerDeclarationVnd: "27000.00", ...R }))).toBe("CONFLICT");
+    expect(unwrap(await listAudit(admin, bao))[0]).toMatchObject({ action: "PLAN_UPDATED", detail: "Trang/hồ sơ 40 → 45 · Đơn giá/lượt 25000 → 27000 VND" });
+    unwrap(await updatePlan(admin, bao, "PAYG", { name: payg.name, pagesPerDossier: 40, priceVnd: "0", pricePerDeclarationVnd: "25000", ...R }));
 
     const month = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 7);
+    // Doanh thu ghi nhận: PAYG = tiền lượt đã trừ trong tháng; CONTRACT = giá trị hợp đồng / 12 (Minh Khang: 120.000.000 → 10.000.000).
+    await admin.db.execute(sql`insert into credit_ledger (id, org_id, delta, reason, amount_vnd, unit_price_vnd, declaration_no, created_by) values ('charge:org_anphat:107000000123', 'org_anphat', -1, 'CHARGE', 25000, 25000, '107000000123', 'system')`);
+    await admin.db.execute(sql`insert into credit_ledger (id, org_id, delta, reason, amount_vnd, unit_price_vnd, created_by) values ('payos:7770001', 'org_anphat', 10, 'PURCHASE', 250000, 25000, 'system')`);
     const report = unwrap(await getUsageReport(admin, bao, month));
     expect(report.rows.map((r) => r.orgId)).toEqual(expect.arrayContaining(["org_anphat"]));
+    const anphat = report.rows.find((r) => r.orgId === "org_anphat")!;
+    expect(anphat).toMatchObject({ planKind: "PAYG", declarations: 1, revenueVnd: "25000", collectedVnd: "250000" });
+    expect(Number(anphat.marginVnd)).toBe(25000 - Number(anphat.totalCostVnd));
+    expect(report.rows.find((r) => r.planKind === "CONTRACT")).toMatchObject({ revenueVnd: "10000000", collectedVnd: "0" });
     expect(report.totals.totalCostVnd).toMatch(/^\d+$/);
     expect(errCode(await getUsageReport(admin, bao, "2001-01"))).toBe("NOT_FOUND");
   });
@@ -277,7 +336,10 @@ describe("thông báo hệ thống", () => {
     expect(a).toMatchObject({ status: "SENT", recipients: 2, sentByName: "Mai Thị Thu Trang", maintenanceDate: "2026-10-18" });
     expect(unwrap(await listNotifications(identity, chau as never)).map((n) => n.title)).toContain("Bảo trì hệ thống tối thứ Bảy");
 
-    expect(errCode(await sendAnnouncement(admin, trang, { title: "Riêng gói Doanh nghiệp", body: "Nội dung chỉ cho gói Doanh nghiệp.", kind: "INFO", audience: "ENTERPRISE" }))).toBe("CONFLICT");
+    // Gửi theo gói: chỉ doanh nghiệp gói Hợp đồng năm (Minh Khang – đã đổi ở trên) nhận, doanh nghiệp demo (Theo lượt) không nhận.
+    const onlyContract = unwrap(await sendAnnouncement(admin, trang, { title: "Riêng gói Hợp đồng năm", body: "Nội dung chỉ cho gói Hợp đồng năm.", kind: "INFO", audience: "CONTRACT" }));
+    expect(onlyContract.recipients).toBe(1);
+    expect(unwrap(await listNotifications(identity, chau as never)).map((n) => n.title)).not.toContain("Riêng gói Hợp đồng năm");
     unwrap(await suspendOrg(admin, trang, "org_anphat", R));
     expect(unwrap(await sendAnnouncement(admin, trang, { title: "Chỉ doanh nghiệp đang hoạt động", body: "Doanh nghiệp tạm khóa không nhận được.", kind: "INFO", audience: "ALL" })).recipients).toBe(1);
     unwrap(await reactivateOrg(admin, trang, "org_anphat", R));
@@ -351,8 +413,8 @@ describe("tạo hộ doanh nghiệp ký hợp đồng trực tiếp + mật kh�
     const bao = await staff("bao.hoang@khaibao-demo.vn");
     const trang = await staff("trang.mai@khaibao-demo.vn");
     const input = {
-      taxCode: "0108888888", name: "CÔNG TY HỢP ĐỒNG TRỰC TIẾP", address: "Hà Nội", planCode: "PRO" as const,
-      contractNo: "HĐ-2026/015", contractEndsOn: "2027-10-31", owner: { email: "chu@hopdong-test.vn", name: "Đỗ Chủ Sở Hữu" }, note: "Phụ trách: anh Bảo",
+      taxCode: "0108888888", name: "CÔNG TY HỢP ĐỒNG TRỰC TIẾP", address: "Hà Nội", planCode: "CONTRACT" as const,
+      contractNo: "HĐ-2026/015", startsOn: "2026-11-01", endsOn: "2027-10-31", valueVnd: "120000000", owner: { email: "chu@hopdong-test.vn", name: "Đỗ Chủ Sở Hữu" }, note: "Phụ trách: anh Bảo",
     };
     expect(errCode(await createOrg(admin, trang, input))).toBe("FORBIDDEN");
     const r = unwrap(await createOrg(admin, bao, input));
@@ -360,10 +422,10 @@ describe("tạo hộ doanh nghiệp ký hợp đồng trực tiếp + mật kh�
     expect(r.tempPassword).toMatch(/^[A-Za-z2-9]{12}$/);
 
     const detail = unwrap(await getOrg(admin, bao, r.orgId));
-    expect(detail).toMatchObject({ taxCode: "0108888888", ownerEmail: "chu@hopdong-test.vn", plan: { code: "PRO" }, contract: { contractNo: "HĐ-2026/015", endsOn: "2027-10-31", note: "Phụ trách: anh Bảo" } });
+    expect(detail).toMatchObject({ taxCode: "0108888888", ownerEmail: "chu@hopdong-test.vn", plan: { code: "CONTRACT" }, contract: { contractNo: "HĐ-2026/015", startsOn: "2026-11-01", endsOn: "2027-10-31", valueVnd: "120000000", note: "Phụ trách: anh Bảo" } });
     expect(unwrap(await listAudit(admin, bao))[0]).toMatchObject({ action: "ORG_CREATED", targetId: r.orgId });
     expect(errCode(await createOrg(admin, bao, { ...input, owner: { ...input.owner, email: "khac@hopdong-test.vn" } }))).toBe("TAX_CODE_EXISTS");
-    // Hợp đồng chỉ khu quản trị đọc được.
+    // Hợp đồng: kb_app không có ngữ cảnh org → không đọc được dòng nào (khách chỉ đọc hợp đồng của chính mình).
     await expect(appDb.execute(sql`select * from org_contracts`)).resolves.toHaveLength(0);
 
     const first = unwrap(await login(identity, { email: input.owner.email, password: r.tempPassword }, META)).sessionToken;

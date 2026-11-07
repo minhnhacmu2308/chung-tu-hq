@@ -4,19 +4,21 @@ import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Grid, IconTile, PageHeader, SkeletonList, SkeletonStats, Stack, StatCard, fill, useMessages,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, CalendarClock, CircleCheck, Coins, FolderOpen, Gauge, Landmark, PlugZap, ServerCrash, UserRoundPlus, UsersRound } from "lucide-react";
+import { ArrowRight, Building2, CalendarClock, CalendarX, CircleCheck, Coins, FileQuestion, FolderOpen, Landmark, PlugZap, ServerCrash, UserRoundPlus, UsersRound } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { adminKeys, getAdminOverview } from "@/api/admin";
 import { LoadError } from "@/components/common/load-error";
 import { formatNumber, formatRelative, formatVnd } from "@/lib/format";
-import { PLAN_TONE } from "../common/admin-display";
+import { ATTENTION_KIND_LABELS, PLAN_TONE } from "../common/admin-display";
 import { useAdminSession } from "../shell/use-admin-session";
 import { OVERVIEW_MESSAGES } from "./admin-overview-page.messages";
 
 const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
-  QUOTA: <Gauge />,
-  PLAN_EXPIRING: <CalendarClock />,
+  LOW_CREDITS: <Coins />,
+  CONTRACT_EXPIRING: <CalendarClock />,
+  CONTRACT_EXPIRED: <CalendarX />,
+  CONTRACT_NO_END: <FileQuestion />,
   INTEGRATION_ERROR: <PlugZap />,
   JOBS_FAILED: <ServerCrash />,
   JOIN_PENDING: <UserRoundPlus />,
@@ -29,6 +31,7 @@ const rowLink =
 export function AdminOverviewPage() {
   const { staff } = useAdminSession();
   const t = useMessages(OVERVIEW_MESSAGES);
+  const kindLabels = useMessages(ATTENTION_KIND_LABELS);
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: adminKeys.overview, queryFn: getAdminOverview });
   const firstName = staff?.name.split(" ").pop();
   const urgent = data?.attention.filter((a) => a.severity === "danger").length ?? 0;
@@ -87,6 +90,7 @@ export function AdminOverviewPage() {
                       <Link href={a.href} className={rowLink}>
                         <IconTile icon={ATTENTION_ICON[a.kind]} tone={a.severity === "danger" ? "danger" : "warning"} size="md" />
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <p className="text-xs text-fg-subtle">{kindLabels[a.kind]}</p>
                           <p className="text-sm font-medium text-fg">{a.title}</p>
                           <p className="text-sm text-fg-muted">{a.detail}</p>
                         </div>

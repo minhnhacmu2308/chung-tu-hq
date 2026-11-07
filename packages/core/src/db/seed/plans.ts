@@ -1,21 +1,15 @@
 import type { Db } from "../client.js";
 import { plans } from "../schema/index.js";
 
+/** Hai gói (ADR 0011): Theo lượt (PAYG – 25.000 đ/lượt) và Hợp đồng năm (CONTRACT – giá niêm yết 0 = "Liên hệ"). */
 export const PLANS = [
-  { code: "TRIAL", name: "Dùng thử", dossiersPerMonth: 10, pagesPerDossier: 20, priceVnd: "0" },
-  { code: "BASIC", name: "Cơ bản", dossiersPerMonth: 50, pagesPerDossier: 30, priceVnd: "990000" },
-  { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, priceVnd: "2990000" },
-  { code: "ENTERPRISE", name: "Doanh nghiệp", dossiersPerMonth: 1000, pagesPerDossier: 100, priceVnd: "0" },
+  { code: "PAYG", name: "Theo lượt", kind: "PAYG", pagesPerDossier: 40, priceVnd: "0", pricePerDeclarationVnd: "25000" },
+  { code: "CONTRACT", name: "Hợp đồng năm", kind: "CONTRACT", pagesPerDossier: 100, priceVnd: "0", pricePerDeclarationVnd: "0" },
 ] as const;
 
+/** Idempotent theo mã. Chỉ tạo khi chưa có – giá/số trang quản trị đã sửa không bị seed ghi đè (trừ `kind`). */
 export async function seedPlans(db: Db) {
   for (const p of PLANS) {
-    await db
-      .insert(plans)
-      .values(p)
-      .onConflictDoUpdate({
-        target: plans.code,
-        set: { name: p.name, dossiersPerMonth: p.dossiersPerMonth, pagesPerDossier: p.pagesPerDossier, priceVnd: p.priceVnd },
-      });
+    await db.insert(plans).values(p).onConflictDoUpdate({ target: plans.code, set: { kind: p.kind } });
   }
 }

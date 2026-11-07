@@ -19,6 +19,8 @@ import { seedMailbox, type MockInboxMessage, type MockMailConnection } from "./s
 import type { AdminDb } from "./admin/types";
 import type { MockHys } from "./hys-sim";
 import type { BranchMessage, CustomsFlow } from "./customs-sim";
+import type { MockBilling } from "./billing-types";
+import { seedBilling } from "./seed/billing";
 import type { SkillSuggestion } from "@kb/contracts";
 
 export type MockDb = {
@@ -69,10 +71,12 @@ export type MockDb = {
   hys: MockHys[];
   /** Back-office của bên vận hành (màn /admin). */
   admin: AdminDb;
+  /** Gói & lượt (ADR 0011): sổ lượt, thanh toán PayOS giả, hợp đồng năm – của mọi doanh nghiệp. */
+  billing: MockBilling;
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 34;
+const DB_VERSION = 35;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -96,7 +100,10 @@ function createSeed(): MockDb {
     ...seedSkills(),
     ...seedSettings(),
     ...seedAdmin(),
+    billing: { ledger: [], payments: [], contracts: {} },
   });
+  // Sổ lượt mẫu: tặng/mua lượt + lượt đã trừ cho tờ khai đã khai chính thức của dữ liệu mẫu.
+  seed.billing = seedBilling(seed);
   // Luật R-FREIGHT-TERM tính từ ô Điều kiện cước của vận đơn (như khi chạy lại luật ở backend).
   for (const d of seed.dossiers) {
     syncFreightTermCheck(seed, d.id);

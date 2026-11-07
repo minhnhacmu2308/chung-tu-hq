@@ -3,6 +3,7 @@ import type { AcceptInviteInput, Session } from "@kb/contracts";
 import { ApiError, mutate, query } from "@/lib/mock-request";
 import { resetDb } from "@/mocks/db";
 import { adminLogin } from "@/mocks/admin/ops";
+import { orgView } from "@/mocks/billing-sim";
 
 export const sessionKeys = {
   me: ["session", "me"] as const,
@@ -12,7 +13,7 @@ export const sessionKeys = {
 export const getSession = () =>
   query((db): Session => ({
     user: db.members.find((m) => m.id === db.currentUserId)!,
-    org: db.org,
+    org: orgView(db),
   }));
 
 export const listNotifications = () => query((db) => db.notifications);

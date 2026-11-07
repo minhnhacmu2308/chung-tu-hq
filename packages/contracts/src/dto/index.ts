@@ -4,6 +4,7 @@ export * from "./ocr.js";
 export * from "./declaration.js";
 export * from "./customs.js";
 export * from "./skill.js";
+export * from "./billing.js";
 export * from "./identity.js";
 export * from "./notification.js";
 export * from "./admin.js";

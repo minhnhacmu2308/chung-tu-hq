@@ -15,11 +15,10 @@ function splitCost(total: string): { aiCostVnd: string; hsCostVnd: string; custo
 
 export const DEMO_ORG_ID = "org_anphat";
 
+/** Hai gói như seed backend (ADR 0011): Theo lượt 25.000 đ/lượt và Hợp đồng năm (giá niêm yết 0 = "Liên hệ"). */
 const PLANS: StoredPlan[] = [
-  { code: "TRIAL", name: "Dùng thử", dossiersPerMonth: 10, pagesPerDossier: 20, priceVnd: "0", customPricing: false },
-  { code: "BASIC", name: "Cơ bản", dossiersPerMonth: 50, pagesPerDossier: 20, priceVnd: "1490000", customPricing: false },
-  { code: "PRO", name: "Chuyên nghiệp", dossiersPerMonth: 150, pagesPerDossier: 40, priceVnd: "3990000", customPricing: false },
-  { code: "ENTERPRISE", name: "Doanh nghiệp", dossiersPerMonth: 1000, pagesPerDossier: 80, priceVnd: "12000000", customPricing: true },
+  { code: "PAYG", name: "Theo lượt", kind: "PAYG", pagesPerDossier: 40, priceVnd: "0", pricePerDeclarationVnd: "25000" },
+  { code: "CONTRACT", name: "Hợp đồng năm", kind: "CONTRACT", pagesPerDossier: 100, priceVnd: "0", pricePerDeclarationVnd: "0" },
 ];
 
 type OrgSeed = {
@@ -32,8 +31,11 @@ type OrgSeed = {
   pages: number;
   cost: string;
   createdDays: number;
-  renewsIn: number;
-  bonus?: number;
+  /** PAYG: số dư lượt; CONTRACT: hạn hợp đồng sau n ngày (âm = đã quá hạn). */
+  credits?: number;
+  contractEndsIn?: number;
+  /** Số tờ khai đã khai chính thức tháng này (sổ lượt CHARGE / CONTRACT_USE). */
+  declared: number;
   suspended?: string;
   domain: string;
   /** [họ tên, phần trước @, vai trò, giờ từ lần hoạt động cuối (null = chưa đăng nhập), trạng thái] */
@@ -43,57 +45,57 @@ type OrgSeed = {
 const ORGS: OrgSeed[] = [
   {
     id: "org_hoanggia", name: "CÔNG TY CỔ PHẦN DỆT MAY HOÀNG GIA", mst: "0101234567", city: "KCN Phố Nối A, huyện Văn Lâm, tỉnh Hưng Yên",
-    plan: "PRO", dossiers: 142, pages: 1630, cost: "412000", createdDays: 210, renewsIn: 11, domain: "hoanggia-demo.vn",
+    plan: "PAYG", dossiers: 142, pages: 1630, cost: "412000", createdDays: 210, credits: 31, declared: 24, domain: "hoanggia-demo.vn",
     people: [["Bùi Thị Ngọc Ánh", "anh.bui", "OWNER", 3], ["Đặng Văn Hùng", "hung.dang", "ADMIN", 1], ["Lương Thị Mai", "mai.luong", "DECLARANT", 0.5], ["Tạ Quang Huy", "huy.ta", "APPROVER", 20]],
   },
   {
     id: "org_minhkhang", name: "CÔNG TY CỔ PHẦN XUẤT NHẬP KHẨU MINH KHANG", mst: "0201987654", city: "Số 18 Lê Hồng Phong, quận Ngô Quyền, TP. Hải Phòng",
-    plan: "BASIC", dossiers: 51, pages: 498, cost: "131500", createdDays: 95, renewsIn: 4, domain: "minhkhang-demo.vn",
+    plan: "PAYG", dossiers: 51, pages: 498, cost: "131500", createdDays: 95, credits: 2, declared: 9, domain: "minhkhang-demo.vn",
     people: [["Phan Minh Khang", "khang.phan", "OWNER", 6], ["Vũ Thị Hồng Nhung", "nhung.vu", "DECLARANT", 2]],
   },
   {
     id: "org_tanviet", name: "CÔNG TY TNHH LINH KIỆN ĐIỆN TỬ TÂN VIỆT", mst: "0312456789", city: "Khu Công nghệ cao, TP. Thủ Đức, TP. Hồ Chí Minh",
-    plan: "ENTERPRISE", dossiers: 388, pages: 5120, cost: "1284000", createdDays: 300, renewsIn: 160, domain: "tanviet-demo.vn",
+    plan: "CONTRACT", dossiers: 388, pages: 5120, cost: "1284000", createdDays: 300, contractEndsIn: 21, declared: 46, domain: "tanviet-demo.vn",
     people: [["Trịnh Quốc Tân", "tan.trinh", "OWNER", 30], ["Hồ Thị Bích Vân", "van.ho", "ADMIN", 0.3], ["Dương Văn Lộc", "loc.duong", "DECLARANT", 0.2], ["Châu Ngọc Diệp", "diep.chau", "DECLARANT", 4], ["Lâm Thanh Tùng", "tung.lam", "APPROVER", 1], ["Kiều Thị Oanh", "oanh.kieu", "VIEWER", 200]],
   },
   {
     id: "org_songhong", name: "CÔNG TY TNHH THỦY SẢN SÔNG HỒNG", mst: "0801122334", city: "Cụm CN An Đồng, huyện Nam Sách, tỉnh Hải Dương",
-    plan: "BASIC", dossiers: 18, pages: 150, cost: "39800", createdDays: 60, renewsIn: 22, domain: "songhong-demo.vn",
+    plan: "PAYG", dossiers: 18, pages: 150, cost: "39800", createdDays: 60, credits: 14, declared: 4, domain: "songhong-demo.vn",
     people: [["Ngô Văn Sơn", "son.ngo", "OWNER", 50], ["Trương Thị Yến", "yen.truong", "DECLARANT", 26]],
   },
   {
     id: "org_dailoc", name: "CÔNG TY TNHH NỘI THẤT ĐẠI LỘC", mst: "3702233445", city: "KCN Sóng Thần 2, TP. Dĩ An, tỉnh Bình Dương",
-    plan: "TRIAL", dossiers: 7, pages: 61, cost: "16400", createdDays: 9, renewsIn: 5, domain: "dailoc-demo.vn",
+    plan: "PAYG", dossiers: 7, pages: 61, cost: "16400", createdDays: 9, credits: 3, declared: 2, domain: "dailoc-demo.vn",
     people: [["Huỳnh Đại Lộc", "loc.huynh", "OWNER", 5], ["Mạc Thị Thu", "thu.mac", "DECLARANT", null, "INVITED"]],
   },
   {
     id: "org_phuongnam", name: "CÔNG TY CỔ PHẦN NHỰA PHƯƠNG NAM", mst: "0304455667", city: "KCN Tân Tạo, quận Bình Tân, TP. Hồ Chí Minh",
-    plan: "PRO", dossiers: 64, pages: 702, cost: "171000", createdDays: 150, renewsIn: 27, domain: "phuongnam-demo.vn",
+    plan: "PAYG", dossiers: 64, pages: 702, cost: "171000", createdDays: 150, credits: 0, declared: 12, domain: "phuongnam-demo.vn",
     people: [["Lý Phương Nam", "nam.ly", "OWNER", 12], ["Cao Thị Thanh Hằng", "hang.cao", "DECLARANT", 1.5], ["Đoàn Minh Trí", "tri.doan", "APPROVER", 9]],
   },
   {
     id: "org_baotin", name: "CÔNG TY TNHH THƯƠNG MẠI BẢO TÍN", mst: "0105566778", city: "Số 205 Giải Phóng, quận Đống Đa, TP. Hà Nội",
-    plan: "BASIC", dossiers: 0, pages: 0, cost: "0", createdDays: 240, renewsIn: -12, suspended: "Quá hạn thanh toán 2 kỳ liên tiếp", domain: "baotin-demo.vn",
+    plan: "PAYG", dossiers: 0, pages: 0, cost: "0", createdDays: 240, credits: 5, declared: 0, suspended: "Quá hạn thanh toán 2 kỳ liên tiếp", domain: "baotin-demo.vn",
     people: [["Tô Bảo Tín", "tin.to", "OWNER", 24 * 16], ["Giang Thị Lan", "lan.giang", "DECLARANT", 24 * 18]],
   },
   {
     id: "org_kimlong", name: "CÔNG TY TNHH CƠ KHÍ KIM LONG", mst: "0700667788", city: "KCN Đồng Văn, thị xã Duy Tiên, tỉnh Hà Nam",
-    plan: "TRIAL", dossiers: 2, pages: 14, cost: "4100", createdDays: 3, renewsIn: 11, domain: "kimlong-demo.vn",
+    plan: "PAYG", dossiers: 2, pages: 14, cost: "4100", createdDays: 3, credits: 3, declared: 0, domain: "kimlong-demo.vn",
     people: [["Thái Kim Long", "long.thai", "OWNER", 8]],
   },
   {
     id: "org_vietuc", name: "CÔNG TY CỔ PHẦN THỰC PHẨM VIỆT ÚC", mst: "0309988776", city: "KCN Vĩnh Lộc, huyện Bình Chánh, TP. Hồ Chí Minh",
-    plan: "PRO", dossiers: 97, pages: 1011, cost: "262000", createdDays: 180, renewsIn: 15, bonus: 20, domain: "vietuc-demo.vn",
+    plan: "PAYG", dossiers: 97, pages: 1011, cost: "262000", createdDays: 180, credits: 40, declared: 18, domain: "vietuc-demo.vn",
     people: [["Quách Việt Úc", "uc.quach", "OWNER", 40], ["La Thị Kim Ngân", "ngan.la", "ADMIN", 0.8], ["Từ Hoàng Phúc", "phuc.tu", "DECLARANT", 3]],
   },
   {
     id: "org_thanhcong", name: "CÔNG TY TNHH BAO BÌ THÀNH CÔNG", mst: "3600778899", city: "KCN Amata, TP. Biên Hòa, tỉnh Đồng Nai",
-    plan: "BASIC", dossiers: 33, pages: 287, cost: "84000", createdDays: 120, renewsIn: 19, domain: "thanhcong-demo.vn",
+    plan: "PAYG", dossiers: 33, pages: 287, cost: "84000", createdDays: 120, credits: 22, declared: 6, domain: "thanhcong-demo.vn",
     people: [["Văn Thành Công", "cong.van", "OWNER", 28], ["Ông Thị Mỹ Duyên", "duyen.ong", "DECLARANT", 7, "DISABLED"]],
   },
   {
     id: "org_haian", name: "CÔNG TY TNHH HÓA CHẤT HẢI AN", mst: "0200889900", city: "KCN Đình Vũ, quận Hải An, TP. Hải Phòng",
-    plan: "TRIAL", dossiers: 10, pages: 96, cost: "25300", createdDays: 12, renewsIn: 2, domain: "haian-demo.vn",
+    plan: "PAYG", dossiers: 10, pages: 96, cost: "25300", createdDays: 12, credits: 1, declared: 5, domain: "haian-demo.vn",
     people: [["Khúc Hải An", "an.khuc", "OWNER", 2], ["Sầm Văn Đạt", "dat.sam", "DECLARANT", 1]],
   },
 ];
@@ -139,15 +141,16 @@ function toStored(seeds: OrgSeed[]): { orgs: StoredOrg[]; users: StoredUser[] } 
         taxCode: s.mst,
         address: s.city,
         phone: `024 3 ${700 + oi * 37} ${100 + oi * 53}`,
-        plan: { code: plan.code, name: plan.name, dossiersPerMonth: plan.dossiersPerMonth, pagesPerDossier: plan.pagesPerDossier, renewsAt: isoDay(s.renewsIn) },
-        usage: { dossiersThisMonth: s.dossiers, pagesThisMonth: s.pages, ...splitCost(s.cost) },
+        plan: { code: plan.code, name: plan.name, kind: plan.kind, pagesPerDossier: plan.pagesPerDossier, pricePerDeclarationVnd: plan.pricePerDeclarationVnd },
+        billing: { balance: 0, reserved: 0, available: 0, contract: null, declarationsThisMonth: 0 },
+        usage: { dossiersThisMonth: s.dossiers, pagesThisMonth: s.pages },
         suspectThreshold: "BALANCED",
         fourEyes: false,
       },
       meta: {
         status: s.suspended ? "SUSPENDED" : "ACTIVE",
         ...(s.suspended ? { suspendedReason: s.suspended } : {}),
-        quotaBonus: s.bonus ?? 0,
+        costs: splitCost(s.cost),
         createdAt: isoTime(-24 * s.createdDays),
       },
     };
@@ -174,7 +177,7 @@ export function seedAdmin(): { admin: AdminDb } {
         { id: "stf_viet", name: "Đinh Quốc Việt", email: "viet.dinh@khaibao-demo.vn", role: "READONLY", status: "ACTIVE", lastActiveAt: isoTime(-26) },
         { id: "stf_yen", name: "Lý Hải Yến", email: "yen.ly@khaibao-demo.vn", role: "SUPPORT", status: "INVITED" },
       ],
-      demoOrgMeta: { status: "ACTIVE", quotaBonus: 0, createdAt: isoTime(-24 * 130) },
+      demoOrgMeta: { status: "ACTIVE", costs: { aiCostVnd: "69500", hsCostVnd: "19300", customsCostVnd: "7700" }, createdAt: isoTime(-24 * 130) },
       email: seedEmail(),
       demoUserMeta: {
         usr_chau: { emailVerified: true, createdAt: isoTime(-24 * 128), sessions: [{ id: "ses_chau_1", device: "Chrome · Windows", ip: "198.51.100.24", lastSeenAt: isoTime(-0.2) }, { id: "ses_chau_2", device: "Safari · iPhone", ip: "198.51.100.77", lastSeenAt: isoTime(-14) }] },
@@ -265,3 +268,6 @@ function seedExchangeRates() {
   out.push({ currency: "TWD", effectiveFrom: rateWeek(-1), rate: "802.30", source: "MANUAL", snapshotAt: null, updatedByName: "Hoàng Gia Bảo", note: "Tỷ giá chéo NHNN – Vietcombank không công bố TWD" });
   return out;
 }
+
+/** Lượt / hợp đồng của doanh nghiệp mẫu (seed/billing dựng sổ lượt từ đây). */
+export const ADMIN_ORG_BILLING = ORGS.map((o) => ({ id: o.id, plan: o.plan, credits: o.credits ?? 0, declared: o.declared, contractEndsIn: o.contractEndsIn ?? null, createdDays: o.createdDays }));

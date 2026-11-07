@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, postAmendments } from "../../../db/schema/integration.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -35,6 +35,10 @@ function repos(tx: Tx): CustomsRepos {
     },
     messages: {
       list: async (orgId, dossierId, branch) => (await tx.select().from(customsMessages).where(and(eq(customsMessages.orgId, orgId), eq(customsMessages.dossierId, dossierId), branch === undefined ? undefined : eq(customsMessages.branch, branch))).orderBy(customsMessages.at, customsMessages.id)).map(toMsg),
+      listSucceededSince: async (orgId, operations, since) =>
+        operations.length
+          ? (await tx.select().from(customsMessages).where(and(eq(customsMessages.orgId, orgId), eq(customsMessages.direction, "IN"), eq(customsMessages.result, "OK"), inArray(customsMessages.operation, operations), gte(customsMessages.at, since)))).map(toMsg)
+          : [],
       insert: async (row) => void (await tx.insert(customsMessages).values(row)),
     },
     results: {
@@ -46,6 +50,14 @@ function repos(tx: Tx): CustomsRepos {
       listForDossiers: async (orgId, dossierIds) =>
         dossierIds.length ? (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), inArray(customsResults.dossierId, dossierIds))).orderBy(customsResults.dossierId, customsResults.branch)).map(toResult) : [],
       listForOrg: async (orgId) => (await tx.select().from(customsResults).where(eq(customsResults.orgId, orgId)).orderBy(desc(customsResults.updatedAt))).map(toResult),
+      listNumbered: async (orgId, since) =>
+        (
+          await tx
+            .select()
+            .from(customsResults)
+            .where(and(eq(customsResults.orgId, orgId), isNotNull(customsResults.declarationNo), since ? gte(customsResults.updatedAt, since) : undefined))
+            .orderBy(desc(customsResults.updatedAt))
+        ).map(toResult),
       findByNumber: async (orgId, no) => {
         const r = (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), or(eq(customsResults.declarationNo, no), eq(customsResults.externalId, no)))).orderBy(desc(customsResults.updatedAt)).limit(1))[0];
         return r ? toResult(r) : null;

@@ -22,13 +22,8 @@ export const organizations = pgTable(
     /** ACTIVE | SUSPENDED – đội vận hành tạm khóa: không đăng nhập, phiên cũ hết hiệu lực. */
     status: text("status").notNull().default("ACTIVE"),
     suspendedReason: text("suspended_reason"),
-    /** Số hồ sơ nới thêm cho đúng tháng `quota_bonus_month` (YYYY-MM, giờ VN) – sang tháng khác tự hết. */
-    quotaBonus: integer("quota_bonus").notNull().default(0),
-    quotaBonusMonth: text("quota_bonus_month"),
-    /** Mốc tính kỳ 30 ngày của gói (đổi gói → kỳ mới); null = ngày tạo doanh nghiệp. */
+    /** Lần đổi gói gần nhất (PAYG ↔ CONTRACT); null = từ lúc tạo doanh nghiệp. */
     planStartedAt: timestamp("plan_started_at", { withTimezone: true }),
-    /** Hết hạn dùng thử (gói TRIAL) khi được gia hạn; null = theo kỳ 30 ngày. */
-    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [

@@ -24,6 +24,8 @@ export interface DossierRepos {
     list(orgId: string, f: DossierListFilter, page: { limit: number; offset: number }): Promise<DossierRow[]>;
     count(orgId: string, f: DossierListFilter): Promise<number>;
     get(orgId: string, id: string): Promise<DossierRow | null>;
+    /** Trạng thái của nhiều hồ sơ một truy vấn (đếm lượt đang giữ – chạy mỗi lần đọc phiên). Id không có/không thuộc org → vắng. */
+    statusesOf(orgId: string, ids: string[]): Promise<Map<string, DossierRow["status"]>>;
     codesInMonth(orgId: string, direction: string, prefix: string): Promise<string[]>;
     insert(row: DossierRow): Promise<void>;
     update(orgId: string, id: string, patch: Partial<Omit<DossierRow, "id" | "orgId" | "createdAt">>): Promise<void>;
@@ -76,9 +78,9 @@ export interface PdfInspector {
   inspect(bytes: Buffer, mime: string): Promise<{ pages: number; encrypted: boolean }>;
 }
 
+/** Hạn mức theo gói – chỉ còn số trang/hồ sơ (chống lạm dụng chi phí AI; ADR 0011 bỏ hạn mức hồ sơ/tháng). `amount` = tổng trang hồ sơ sau khi thêm. */
 export interface QuotaChecker {
-  /** DOSSIER: amount = số hồ sơ sẽ có trong tháng; PAGES: tổng trang hồ sơ sau khi thêm. */
-  check(orgId: string, kind: "DOSSIER" | "PAGES", amount: number): Promise<boolean>;
+  check(orgId: string, kind: "PAGES", amount: number): Promise<boolean>;
 }
 
 export type UploadFile = { name: string; mime: string; bytes: Buffer };

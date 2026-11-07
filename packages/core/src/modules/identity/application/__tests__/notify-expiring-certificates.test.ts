@@ -16,8 +16,8 @@ let deps: IdentityDeps;
 beforeEach(() => {
   uow = new InMemoryIdentityUow().seed({
     orgs: [
-      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "0225", planCode: "PRO", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-40) },
-      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "PRO", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-5) },
+      { id: "org_a", taxCode: "0316789012", name: "AN PHÁT", address: "HP", phone: "0225", planCode: "PAYG", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-40) },
+      { id: "org_b", taxCode: "0100000002", name: "B", address: "", phone: "", planCode: "PAYG", suspectThreshold: "BALANCED", fourEyes: false, createdAt: day(-5) },
     ],
     memberships: [
       { id: "mem_chau", orgId: "org_a", userId: "usr_chau", role: "ADMIN", status: "ACTIVE", invitedBy: null },

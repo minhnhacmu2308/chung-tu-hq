@@ -1,7 +1,7 @@
 // "Gửi lại" một nghiệp vụ bị lỗi: LUÔN tra trạng thái trước (ADR 0005); Hải quan đã ghi nhận → không gửi; chưa → outbox mới (…:retryN) và job.
 // Lô nhiều tờ: tờ chưa có số (NOT_SENT) mà lần khai tạm đã ghim chưa từng có externalId (hết lượt thử / lỗi trước khi FPT nhận) → không có gì để tra,
 // gửi lại nguyên thông điệp đã ghim (kiểm ghim như mọi lần gửi lại) – chuỗi nối tiếp chạy tiếp từ tờ đó (spec §6.2.3). Lô một tờ: như trước.
-import { baseOp, CUSTOMS_OPERATIONS, isContentOperation, queryOpFor, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
+import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, queryOpFor, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
@@ -13,6 +13,7 @@ import type { CustomsDeps } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
 import { MAX_ATTEMPTS } from "./process-outbox.js";
 import { outboxKey, pinOfOutbox, stalePinReason } from "./branch-send.js";
+import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
 
 /** `branch`: tờ khai nhánh (mặc định 1). Gửi lại nội dung tờ k (lần truyền có ghim) thành công → worker nối tiếp tờ sau. */
 export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: string, op: CustomsOperation, branch = 1): Promise<Result<ResendResult>> {
@@ -54,6 +55,12 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
     const snap = await deps.declarations.get(ctx.orgId, dossierId);
     if (snap && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
       return err(domainError("RATE_WEEK_CHANGED", `Tờ khai dùng tỷ giá tuần ${weekStart(snap.exchangeRateDate)} – đã sang tuần tỷ giá mới. Mở lại tờ khai để dựng lại với tỷ giá tuần này rồi duyệt và truyền lại`));
+    // Lượt khai (ADR 0011 §4.2): gửi lại khai tạm một tờ chưa có số = khai tạm lần đầu (chuỗi nối tiếp các tờ sau) → kiểm lượt cho mọi tờ chưa có số.
+    if (!result.declarationNo && snap) {
+      const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));
+      const allowance = await checkFirstSendAllowance(deps, ctx.orgId, unnumberedSheets(results, branchCount(snap.payload.items.length)));
+      if (!allowance.ok) return allowance;
+    }
   }
   if (!last) return err(domainError("INVALID_STATE", `Chưa gửi ${op} lần nào`));
   if (last.status === "PENDING" && last.attempts < MAX_ATTEMPTS) {

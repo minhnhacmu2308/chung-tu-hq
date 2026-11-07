@@ -15,10 +15,14 @@ export type ProvisionOrgInput = {
   address: string;
   planCode: string;
   owner: { email: string; name: string };
+  /** Gói PAYG: số lượt tặng ghi cùng transaction (khóa grant:admin:<orgId>); 0/thiếu = không tặng. */
+  grantCredits?: number;
+  /** Người tạo (quản trị viên) – ghi vào dòng tặng lượt. */
+  createdBy?: string;
 };
 
 /**
- * Tạo doanh nghiệp (gói chọn sẵn, không qua dùng thử) + Chủ sở hữu đã xác thực email, đăng nhập bằng mật khẩu tạm và bị bắt đổi
+ * Tạo doanh nghiệp (gói chọn sẵn; PAYG có thể kèm lượt tặng) + Chủ sở hữu đã xác thực email, đăng nhập bằng mật khẩu tạm và bị bắt đổi
  * ở lần đầu. Mật khẩu tạm chỉ trả về đây một lần – không lưu dạng đọc được. MST hoặc email đã có → lỗi (không gộp vào tài khoản cũ).
  */
 export async function provisionOrgAccount(deps: IdentityDeps, input: ProvisionOrgInput): Promise<Result<{ orgId: string; userId: string; tempPassword: string }>> {
@@ -35,6 +39,8 @@ export async function provisionOrgAccount(deps: IdentityDeps, input: ProvisionOr
       id: orgId, taxCode: input.taxCode, name: input.name, address: input.address, phone: "", planCode: input.planCode,
       suspectThreshold: "BALANCED", fourEyes: false, createdAt: now, planStartedAt: now,
     });
+    if (input.grantCredits && input.grantCredits > 0)
+      await r.credits.grant({ id: `grant:admin:${orgId}`, orgId, delta: input.grantCredits, note: `Tặng ${input.grantCredits} lượt khi tạo doanh nghiệp`, createdBy: input.createdBy ?? "system", at: now });
     await r.memberships.insert({ id: deps.idGen.next("mem"), orgId, userId, role: "OWNER", status: "ACTIVE", invitedBy: null });
     return ok({ orgId, userId });
   });

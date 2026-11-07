@@ -1,10 +1,10 @@
 // Nghiệp vụ back-office của bản mock, viết thành hàm thuần trên "DB" để kiểm thử được (ops.test.ts).
 // mocks/api/admin.ts chỉ bọc các hàm này bằng độ trễ mạng giả. Backend thật sẽ thay toàn bộ file này.
 import {
-  AdjustOrgQuotaInputSchema, AdminReasonInputSchema, ChangeOrgPlanInputSchema, ChangeStaffRoleInputSchema, CreateOrgInputSchema, ExtendOrgTrialInputSchema,
+  AdjustOrgCreditsInputSchema, AdminReasonInputSchema, ChangeOrgPlanInputSchema, ChangeStaffRoleInputSchema, CreateOrgInputSchema, LOW_CREDITS, UpsertOrgContractInputSchema,
   InviteStaffInputSchema, SendAnnouncementInputSchema, SetTemplatePublishedInputSchema, staffCan, UpdateIntegrationKeyInputSchema,
   UpdatePlanInputSchema, UpsertExchangeRateInputSchema, UsageMonthSchema,
-  type AdminAction, type CreateOrgResult, type ExchangeRate, type ExchangeRatesView, type AdminAuditEntry, type AdminOrg, type AdminOrgDetail, type AdminOverview, type AdminPermission, type AdminPlan,
+  type AdminAction, type AdminOrgCredits, type CreateOrgResult, type ExchangeRate, type ExchangeRatesView, type AdminAuditEntry, type AdminOrg, type AdminOrgDetail, type AdminOverview, type AdminPermission, type AdminPlan,
   type AdminSession, type AdminTargetType, type AdminUser, type Announcement, type AttentionItem, type FailedJob, type IntegrationId,
   type Organization, type OrgUsageRow, type PlanCode, type PlatformIntegration, type SkillTemplate, type Staff, type SystemHealth,
   type UsageReport,
@@ -12,17 +12,16 @@ import {
 import type { z } from "zod";
 import { ApiError } from "@/lib/api-error";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
+import { addLedger, balanceOf, contractView, declarations30d, declarationsBetween, MANUAL_KIND_LABEL, planView, revenueOf, vnMonthRange } from "../billing-sim";
 import type { MockDb } from "../db";
 import type { OrgMeta, StoredUser, UserMeta } from "./types";
 
 /** Phần của DB mà back-office đọc/ghi. */
-export type AdminScope = Pick<MockDb, "org" | "members" | "integrations" | "certificates" | "notifications" | "admin">;
+export type AdminScope = Pick<MockDb, "org" | "members" | "integrations" | "certificates" | "notifications" | "admin" | "billing">;
 
 const DAY = 86_400_000;
 const nowIso = () => new Date().toISOString();
 const newId = (prefix: string) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
-const isoDay = (t: number) => new Date(t).toISOString().slice(0, 10);
-const daysUntil = (isoDate: string) => Math.round((new Date(`${isoDate}T00:00:00Z`).getTime() - new Date(`${isoDay(Date.now())}T00:00:00Z`).getTime()) / DAY);
 
 /** Dữ liệu từ form đi qua đúng schema dùng chung với backend (bất biến 9). */
 export function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
@@ -120,20 +119,28 @@ export function allUsers(db: AdminScope): AdminUser[] {
 
 const orgCostMinor = (u: { aiCostVnd: string; hsCostVnd: string; customsCostVnd: string }) => sumMinor([u.aiCostVnd, u.hsCostVnd, u.customsCostVnd].map((v) => toMinor(v, 0)));
 
-function toAdminOrg(r: OrgRef, users: readonly AdminUser[]): AdminOrg {
+function toAdminOrg(db: AdminScope, r: OrgRef, users: readonly AdminUser[]): AdminOrg {
   const members = users.filter((u) => u.orgId === r.org.id && u.status !== "PENDING_JOIN");
   const owner = members.find((u) => u.role === "OWNER");
   const lastActiveAt = members.map((u) => u.lastActiveAt ?? "").sort().at(-1);
+  const plan = planView(db, r.org.plan.code);
+  const { from, to } = vnMonthRange(new Date());
   return {
     id: r.org.id,
     name: r.org.name,
     taxCode: r.org.taxCode,
     status: r.meta.status,
     ...(r.meta.suspendedReason ? { suspendedReason: r.meta.suspendedReason } : {}),
-    plan: r.org.plan,
-    quotaBonus: r.meta.quotaBonus,
+    plan,
+    // Lượt / hợp đồng như backend (admin/_shared): số dư sổ lượt, hợp đồng chỉ với CONTRACT.
+    billing: {
+      balance: balanceOf(db, r.org.id),
+      contract: plan.kind === "CONTRACT" ? contractView(db, r.org.id) : null,
+      declarationsThisMonth: declarationsBetween(db, r.org.id, from, to),
+      declarations30d: declarations30d(db, r.org.id),
+    },
     // Màn quản trị xem tổng giá vốn (AI + HSCodePro + Customs Hub) như backend (admin/_shared).
-    usage: { dossiersThisMonth: r.org.usage.dossiersThisMonth, pagesThisMonth: r.org.usage.pagesThisMonth, aiCostVnd: fromMinor(orgCostMinor(r.org.usage), 0) },
+    usage: { dossiersThisMonth: r.org.usage.dossiersThisMonth, pagesThisMonth: r.org.usage.pagesThisMonth, aiCostVnd: fromMinor(orgCostMinor(r.meta.costs), 0) },
     memberCount: members.length,
     ownerName: owner?.name ?? "—",
     ownerEmail: owner?.email ?? "",
@@ -145,7 +152,7 @@ function toAdminOrg(r: OrgRef, users: readonly AdminUser[]): AdminOrg {
 export function listOrgs(db: AdminScope): AdminOrg[] {
   actor(db, "VIEW");
   const users = allUsers(db);
-  return orgRefs(db).map((r) => toAdminOrg(r, users)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return orgRefs(db).map((r) => toAdminOrg(db, r, users)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export function getOrg(db: AdminScope, id: string): AdminOrgDetail {
@@ -153,43 +160,48 @@ export function getOrg(db: AdminScope, id: string): AdminOrgDetail {
   const r = orgRef(db, id);
   const demo = r.org === db.org;
   return {
-    ...toAdminOrg(r, allUsers(db)),
+    ...toAdminOrg(db, r, allUsers(db)),
     address: r.org.address,
     phone: r.org.phone,
     // Doanh nghiệp mẫu khác không có dữ liệu kết nối riêng trong bản mock.
     integrations: demo ? db.integrations.map((i) => ({ id: i.id, name: i.name, status: i.status })) : [],
     certificates: demo ? db.certificates.map((c) => ({ id: c.id, issuer: c.issuer, validTo: c.validTo, isDefault: c.isDefault })) : [],
-    ...(r.meta.contract ? { contract: r.meta.contract } : {}),
+    ...(db.billing.contracts[r.org.id] ? { contract: db.billing.contracts[r.org.id]! } : {}),
   };
 }
 
 /** Mật khẩu tạm giả cho bản mock (backend thật sinh ngẫu nhiên 12 ký tự, chỉ trả một lần). */
 const mockTempPassword = () => Array.from({ length: 12 }, () => "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"[Math.floor(Math.random() * 54)]).join("");
 
-/** Tạo hộ doanh nghiệp ký hợp đồng trực tiếp + Chủ sở hữu (mật khẩu tạm). Như backend: MST hoặc email đã có → lỗi. */
+/** Tạo hộ doanh nghiệp + Chủ sở hữu (mật khẩu tạm). Như backend: MST hoặc email đã có → lỗi; PAYG tặng N lượt; CONTRACT kèm hợp đồng. */
 export function createOrg(db: AdminScope, input: unknown): CreateOrgResult {
   const staff = actor(db, "BILLING");
   const v = parse(CreateOrgInputSchema, input);
   if (orgRefs(db).some((r) => r.org.taxCode === v.taxCode)) throw new ApiError("TAX_CODE_EXISTS", "Doanh nghiệp có MST này đã có trên hệ thống", 409);
   if (allUsers(db).some((u) => u.email === v.owner.email)) throw new ApiError("EMAIL_TAKEN", "Email này đã có tài khoản – dùng email khác cho Chủ sở hữu", 409);
-  const plan = planOf(db, v.planCode);
+  const plan = planView(db, planOf(db, v.planCode).code);
   const orgId = newId("org");
   const now = nowIso();
   db.admin.orgs.unshift({
     org: {
-      id: orgId, name: v.name, taxCode: v.taxCode, address: v.address, phone: "",
-      plan: { code: plan.code, name: plan.name, dossiersPerMonth: plan.dossiersPerMonth, pagesPerDossier: plan.pagesPerDossier, renewsAt: isoDay(Date.now() + 30 * DAY) },
-      usage: { dossiersThisMonth: 0, pagesThisMonth: 0, aiCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" },
+      id: orgId, name: v.name, taxCode: v.taxCode, address: v.address, phone: "", plan,
+      billing: { balance: 0, reserved: 0, available: 0, contract: null, declarationsThisMonth: 0 },
+      usage: { dossiersThisMonth: 0, pagesThisMonth: 0 },
       suspectThreshold: "BALANCED", fourEyes: false,
     },
-    meta: {
-      status: "ACTIVE", quotaBonus: 0, createdAt: now,
-      contract: { ...(v.contractNo ? { contractNo: v.contractNo } : {}), ...(v.contractEndsOn ? { endsOn: v.contractEndsOn } : {}), ...(v.note ? { note: v.note } : {}) },
-    },
+    meta: { status: "ACTIVE", createdAt: now, costs: { aiCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" } },
   });
+  const grant = plan.kind === "PAYG" ? v.grantCredits ?? 0 : 0;
+  if (grant > 0) addLedger(db, { id: `grant:admin:${orgId}`, orgId, at: now, delta: grant, reason: "GRANT", note: `Tặng ${grant} lượt khi tạo doanh nghiệp`, createdBy: staff.id });
+  if (plan.kind === "CONTRACT" || v.contractNo || v.note) {
+    db.billing.contracts[orgId] = {
+      ...(v.contractNo ? { contractNo: v.contractNo } : {}), ...(v.startsOn ? { startsOn: v.startsOn } : {}), ...(v.endsOn ? { endsOn: v.endsOn } : {}),
+      valueVnd: fromMinor(toMinor(v.valueVnd ?? "0", 0), 0), ...(v.note ? { note: v.note } : {}),
+    };
+  }
   db.admin.users.push({ id: newId("usr"), name: v.owner.name, email: v.owner.email, orgId, role: "OWNER", status: "ACTIVE", emailVerified: true, createdAt: now, sessions: [] });
   const r = orgRef(db, orgId);
-  log(db, staff, "ORG_CREATED", orgTarget(r), "Tạo doanh nghiệp ký hợp đồng trực tiếp", [`Gói ${plan.name}`, v.contractNo ? `HĐ ${v.contractNo}` : null, `Chủ sở hữu ${v.owner.email}`].filter(Boolean).join(" · "));
+  log(db, staff, "ORG_CREATED", orgTarget(r), "Tạo hộ doanh nghiệp", [`Gói ${plan.name}`, grant > 0 ? `tặng ${grant} lượt` : null, v.contractNo ? `HĐ ${v.contractNo}` : null, `Chủ sở hữu ${v.owner.email}`].filter(Boolean).join(" · "));
   return { orgId, orgName: v.name, ownerEmail: v.owner.email, tempPassword: mockTempPassword() };
 }
 
@@ -203,7 +215,7 @@ export function suspendOrg(db: AdminScope, id: string, input: unknown): AdminOrg
   r.meta.status = "SUSPENDED";
   r.meta.suspendedReason = reason;
   log(db, staff, "ORG_SUSPENDED", orgTarget(r), reason);
-  return toAdminOrg(r, allUsers(db));
+  return toAdminOrg(db, r, allUsers(db));
 }
 
 export function reactivateOrg(db: AdminScope, id: string, input: unknown): AdminOrg {
@@ -214,7 +226,7 @@ export function reactivateOrg(db: AdminScope, id: string, input: unknown): Admin
   r.meta.status = "ACTIVE";
   delete r.meta.suspendedReason;
   log(db, staff, "ORG_REACTIVATED", orgTarget(r), reason);
-  return toAdminOrg(r, allUsers(db));
+  return toAdminOrg(db, r, allUsers(db));
 }
 
 function planOf(db: AdminScope, code: PlanCode) {
@@ -223,38 +235,64 @@ function planOf(db: AdminScope, code: PlanCode) {
   return p;
 }
 
+/** Đổi loại gói PAYG ↔ CONTRACT (sổ lượt giữ nguyên) – như backend. */
 export function changeOrgPlan(db: AdminScope, id: string, input: unknown): AdminOrg {
   const staff = actor(db, "BILLING");
   const { planCode, reason } = parse(ChangeOrgPlanInputSchema, input);
   const r = orgRef(db, id);
   if (r.org.plan.code === planCode) throw new ApiError("CONFLICT", "Doanh nghiệp đang dùng đúng gói này", 409);
-  const next = planOf(db, planCode);
-  const before = r.org.plan.name;
-  // Đổi gói bắt đầu kỳ mới 30 ngày.
-  r.org.plan = { code: next.code, name: next.name, dossiersPerMonth: next.dossiersPerMonth, pagesPerDossier: next.pagesPerDossier, renewsAt: isoDay(Date.now() + 30 * DAY) };
+  const next = planView(db, planOf(db, planCode).code);
+  const before = planView(db, r.org.plan.code).name;
+  r.org.plan = next;
   log(db, staff, "ORG_PLAN_CHANGED", orgTarget(r), reason, `${before} → ${next.name}`);
-  return toAdminOrg(r, allUsers(db));
+  return toAdminOrg(db, r, allUsers(db));
 }
 
-export function adjustOrgQuota(db: AdminScope, id: string, input: unknown): AdminOrg {
-  const staff = actor(db, "BILLING");
-  const { bonusDossiers, reason } = parse(AdjustOrgQuotaInputSchema, input);
+const stripOrg = <T extends { orgId: string }>(x: T): Omit<T, "orgId"> => {
+  const { orgId: _o, ...rest } = x;
+  return rest;
+};
+
+/** Sổ lượt + thanh toán gần đây + số dư (GET /api/admin/orgs/[id]/credits). */
+export function listOrgCredits(db: AdminScope, id: string): AdminOrgCredits {
+  actor(db, "VIEW");
   const r = orgRef(db, id);
-  r.meta.quotaBonus = bonusDossiers;
-  log(db, staff, "ORG_QUOTA_ADJUSTED", orgTarget(r), reason, bonusDossiers > 0 ? `+${bonusDossiers} hồ sơ tháng này` : "Bỏ phần nới hạn mức");
-  return toAdminOrg(r, allUsers(db));
+  return {
+    balance: balanceOf(db, r.org.id),
+    ledger: db.billing.ledger.filter((l) => l.orgId === r.org.id).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100).map(stripOrg),
+    payments: db.billing.payments.filter((p) => p.orgId === r.org.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 50).map(stripOrg),
+  };
 }
 
-export function extendOrgTrial(db: AdminScope, id: string, input: unknown): AdminOrg {
+/** Nạp/tặng/hoàn/điều chỉnh lượt tay – một dòng sổ lượt + nhật ký ORG_CREDITS_ADJUSTED. */
+export function adjustOrgCredits(db: AdminScope, id: string, input: unknown): AdminOrg {
   const staff = actor(db, "BILLING");
-  const { days, reason } = parse(ExtendOrgTrialInputSchema, input);
+  const v = parse(AdjustOrgCreditsInputSchema, input);
   const r = orgRef(db, id);
-  if (r.org.plan.code !== "TRIAL") throw new ApiError("CONFLICT", "Chỉ gia hạn được cho doanh nghiệp đang dùng thử", 409);
-  // Dùng thử đã hết hạn thì tính từ hôm nay.
-  const from = Math.max(Date.now(), new Date(`${r.org.plan.renewsAt}T00:00:00Z`).getTime());
-  r.org.plan.renewsAt = isoDay(from + days * DAY);
-  log(db, staff, "ORG_TRIAL_EXTENDED", orgTarget(r), reason, `+${days} ngày dùng thử`);
-  return toAdminOrg(r, allUsers(db));
+  const amount = fromMinor(toMinor(v.amountVnd ?? "0", 0), 0);
+  // Cùng khóa chống trùng (hộp thoại sinh mỗi lần mở) → không ghi dòng thứ hai, không ghi nhật ký lần nữa – như backend.
+  const inserted = addLedger(db, {
+    id: v.idempotencyKey ? `adj:${r.org.id}:${v.idempotencyKey}` : newId("crd"), orgId: r.org.id, at: nowIso(), delta: v.delta, reason: v.kind, amountVnd: amount,
+    unitPriceVnd: fromMinor(Math.round(toMinor(amount, 0) / Math.abs(v.delta)), 0), note: v.note, createdBy: staff.id,
+  });
+  if (inserted) log(db, staff, "ORG_CREDITS_ADJUSTED", orgTarget(r), v.reason, `${MANUAL_KIND_LABEL[v.kind]} ${v.delta > 0 ? "+" : ""}${v.delta} lượt · ${v.note}`);
+  return toAdminOrg(db, r, allUsers(db));
+}
+
+/** Tạo/sửa hợp đồng năm – chỉ doanh nghiệp gói CONTRACT (như backend). */
+export function upsertOrgContract(db: AdminScope, id: string, input: unknown): AdminOrg {
+  const staff = actor(db, "BILLING");
+  const v = parse(UpsertOrgContractInputSchema, input);
+  const r = orgRef(db, id);
+  if (planView(db, r.org.plan.code).kind !== "CONTRACT") throw new ApiError("INVALID_STATE", "Chỉ doanh nghiệp gói Hợp đồng năm mới có hợp đồng – đổi loại gói trước", 409);
+  const before = db.billing.contracts[r.org.id];
+  const value = fromMinor(toMinor(v.valueVnd, 0), 0);
+  db.billing.contracts[r.org.id] = {
+    ...(v.contractNo ? { contractNo: v.contractNo } : {}), ...(v.startsOn ? { startsOn: v.startsOn } : {}), ...(v.endsOn ? { endsOn: v.endsOn } : {}), valueVnd: value, ...(v.note ? { note: v.note } : {}),
+  };
+  const detail = [v.contractNo ? `HĐ ${v.contractNo}` : null, `hiệu lực ${v.startsOn ?? "…"} → ${v.endsOn ?? "…"}`, `giá trị ${value} VND`].filter(Boolean).join(" · ");
+  log(db, staff, "ORG_CONTRACT_UPDATED", orgTarget(r), v.reason, before ? `Sửa: ${detail}` : `Tạo: ${detail}`);
+  return toAdminOrg(db, r, allUsers(db));
 }
 
 /* ---------------- Người dùng ---------------- */
@@ -347,18 +385,18 @@ export function updatePlan(db: AdminScope, code: PlanCode, input: unknown): Admi
   const staff = actor(db, "BILLING");
   const v = parse(UpdatePlanInputSchema, input);
   const p = planOf(db, code);
+  const perDeclaration = p.kind === "PAYG" ? fromMinor(toMinor(v.pricePerDeclarationVnd, 0), 0) : "0";
+  if (p.kind === "PAYG" && toMinor(perDeclaration, 0) <= 0) throw new ApiError("VALIDATION", "Đơn giá một lượt phải lớn hơn 0");
   const changes = [
     p.name !== v.name && `Tên ${p.name} → ${v.name}`,
-    p.dossiersPerMonth !== v.dossiersPerMonth && `Hồ sơ/tháng ${p.dossiersPerMonth} → ${v.dossiersPerMonth}`,
     p.pagesPerDossier !== v.pagesPerDossier && `Trang/hồ sơ ${p.pagesPerDossier} → ${v.pagesPerDossier}`,
-    toMinor(p.priceVnd, 0) !== toMinor(v.priceVnd, 0) && `Giá ${p.priceVnd} → ${v.priceVnd} VND`,
+    toMinor(p.priceVnd, 0) !== toMinor(v.priceVnd, 0) && `Giá niêm yết ${p.priceVnd} → ${v.priceVnd} VND`,
+    toMinor(p.pricePerDeclarationVnd, 0) !== toMinor(perDeclaration, 0) && `Đơn giá/lượt ${p.pricePerDeclarationVnd} → ${perDeclaration} VND`,
   ].filter(Boolean);
   if (changes.length === 0) throw new ApiError("CONFLICT", "Chưa có thay đổi nào", 409);
-  Object.assign(p, { name: v.name, dossiersPerMonth: v.dossiersPerMonth, pagesPerDossier: v.pagesPerDossier, priceVnd: fromMinor(toMinor(v.priceVnd, 0), 0) });
-  // Doanh nghiệp đang dùng gói nhận hạn mức mới ngay.
-  for (const r of orgRefs(db)) {
-    if (r.org.plan.code === code) Object.assign(r.org.plan, { name: p.name, dossiersPerMonth: p.dossiersPerMonth, pagesPerDossier: p.pagesPerDossier });
-  }
+  Object.assign(p, { name: v.name, pagesPerDossier: v.pagesPerDossier, priceVnd: fromMinor(toMinor(v.priceVnd, 0), 0), pricePerDeclarationVnd: perDeclaration });
+  // Doanh nghiệp đang dùng gói nhận số trang / đơn giá mới ngay.
+  for (const r of orgRefs(db)) if (r.org.plan.code === code) r.org.plan = planView(db, code);
   log(db, staff, "PLAN_UPDATED", { type: "PLAN", id: code, label: `Gói ${p.name}` }, v.reason, changes.join(" · "));
   return listPlans(db).find((x) => x.code === code)!;
 }
@@ -383,14 +421,17 @@ const splitMinor = (total: number): CostSplit => {
   return { read, hs, customs: total - read - hs };
 };
 
-function usageRow(db: AdminScope, r: OrgRef, dossiers: number, pages: number, cost: CostSplit): OrgUsageRow {
+function usageRow(db: AdminScope, r: OrgRef, month: string, dossiers: number, pages: number, cost: CostSplit): OrgUsageRow {
   const totalCost = cost.read + cost.hs + cost.customs;
-  const price = toMinor(planOf(db, r.org.plan.code).priceVnd, 0);
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  const rev = revenueOf(db, r.org.id, r.org.plan.code, month, Date.UTC(y, m - 1, 1) - 7 * 3_600_000, Date.UTC(y, m, 1) - 7 * 3_600_000);
+  const plan = planView(db, r.org.plan.code);
   return {
     orgId: r.org.id,
     orgName: r.org.name,
-    planCode: r.org.plan.code,
-    planName: r.org.plan.name,
+    planCode: plan.code,
+    planName: plan.name,
+    planKind: plan.kind,
     dossiers,
     pages,
     aiCalls: Math.round(pages * 1.25) + dossiers * 2,
@@ -401,8 +442,11 @@ function usageRow(db: AdminScope, r: OrgRef, dossiers: number, pages: number, co
     hsCostVnd: fromMinor(cost.hs, 0),
     customsCostVnd: fromMinor(cost.customs, 0),
     totalCostVnd: fromMinor(totalCost, 0),
-    planPriceVnd: fromMinor(price, 0),
-    marginVnd: fromMinor(price - totalCost, 0),
+    // Doanh thu ghi nhận như backend: PAYG = tiền lượt đã trừ trong tháng; CONTRACT = giá trị hợp đồng / 12 nếu phủ tháng.
+    declarations: rev.declarations,
+    revenueVnd: rev.revenueVnd,
+    collectedVnd: rev.collectedVnd,
+    marginVnd: fromMinor(toMinor(rev.revenueVnd, 0) - totalCost, 0),
   };
 }
 
@@ -415,16 +459,17 @@ export function getUsageReport(db: AdminScope, monthInput: string): UsageReport 
     .map((r, i): OrgUsageRow | null => {
       if (r.meta.createdAt.slice(0, 7) > month) return null; // chưa đăng ký ở tháng đó
       const u = r.org.usage;
-      if (k === 0) return usageRow(db, r, u.dossiersThisMonth, u.pagesThisMonth, { read: toMinor(u.aiCostVnd, 0), hs: toMinor(u.hsCostVnd, 0), customs: toMinor(u.customsCostVnd, 0) });
+      const c = r.meta.costs;
+      if (k === 0) return usageRow(db, r, month, u.dossiersThisMonth, u.pagesThisMonth, { read: toMinor(c.aiCostVnd, 0), hs: toMinor(c.hsCostVnd, 0), customs: toMinor(c.customsCostVnd, 0) });
       // Tháng cũ: số mô phỏng ổn định theo (doanh nghiệp, tháng) – không ngẫu nhiên để F5 không đổi.
-      const base = Math.max(u.dossiersThisMonth, Math.round(r.org.plan.dossiersPerMonth * 0.3));
+      const base = Math.max(u.dossiersThisMonth, 10);
       const dossiers = Math.round((base * (60 + ((i * 7 + k * 13) % 50))) / 100);
-      return usageRow(db, r, dossiers, dossiers * (8 + (i % 5)), splitMinor(dossiers * (2400 + ((i * 137) % 900))));
+      return usageRow(db, r, month, dossiers, dossiers * (8 + (i % 5)), splitMinor(dossiers * (2400 + ((i * 137) % 900))));
     })
     .filter((x): x is OrgUsageRow => x !== null)
     .sort((a, b) => toMinor(b.totalCostVnd, 0) - toMinor(a.totalCostVnd, 0));
   const cost = sumMinor(rows.map((x) => toMinor(x.totalCostVnd, 0)));
-  const revenue = sumMinor(rows.map((x) => toMinor(x.planPriceVnd, 0)));
+  const revenue = sumMinor(rows.map((x) => toMinor(x.revenueVnd, 0)));
   return {
     month,
     rows,
@@ -438,6 +483,8 @@ export function getUsageReport(db: AdminScope, monthInput: string): UsageReport 
       hsCostVnd: fromMinor(sumMinor(rows.map((x) => toMinor(x.hsCostVnd, 0))), 0),
       customsCostVnd: fromMinor(sumMinor(rows.map((x) => toMinor(x.customsCostVnd, 0))), 0),
       totalCostVnd: fromMinor(cost, 0),
+      declarations: rows.reduce((n, x) => n + x.declarations, 0),
+      collectedVnd: fromMinor(sumMinor(rows.map((x) => toMinor(x.collectedVnd, 0))), 0),
       revenueVnd: fromMinor(revenue, 0),
       marginVnd: fromMinor(revenue - cost, 0),
     },
@@ -649,42 +696,40 @@ export function withdrawAnnouncement(db: AdminScope, id: string, input: unknown)
 /* ---------------- Tổng quan ---------------- */
 
 /** Ngưỡng cảnh báo trên màn tổng quan. */
-const QUOTA_WARN = 0.9;
-const EXPIRING_DAYS = 7;
 const JOIN_STALE_DAYS = 3;
 
 export function getOverview(db: AdminScope): AdminOverview {
   actor(db, "VIEW");
   const users = allUsers(db);
-  const orgs = orgRefs(db).map((r) => toAdminOrg(r, users));
+  const orgs = orgRefs(db).map((r) => toAdminOrg(db, r, users));
   const active = orgs.filter((o) => o.status === "ACTIVE");
   const attention: AttentionItem[] = [];
 
+  // Cùng quy tắc backend (admin/domain/attention): PAYG sắp hết lượt (có khai trong 30 ngày), hợp đồng sắp hết / hết hạn / chưa có ngày kết thúc.
   for (const o of active) {
-    const limit = o.plan.dossiersPerMonth + o.quotaBonus;
-    const ratio = limit > 0 ? o.usage.dossiersThisMonth / limit : 0;
-    if (ratio >= QUOTA_WARN) {
-      attention.push({
-        id: `quota_${o.id}`,
-        kind: "QUOTA",
-        severity: ratio >= 1 ? "danger" : "warning",
-        title: ratio >= 1 ? `${o.name} đã hết hạn mức` : `${o.name} sắp hết hạn mức`,
-        detail: `${o.usage.dossiersThisMonth}/${limit} hồ sơ tháng này · gói ${o.plan.name}`,
-        href: `/admin/orgs/${o.id}?tab=plan`,
-      });
+    const href = `/admin/orgs/${o.id}?tab=plan`;
+    if (o.plan.kind === "PAYG") {
+      if (o.billing.balance <= LOW_CREDITS && o.billing.declarations30d > 0)
+        attention.push({
+          id: `low_credits_${o.id}`, kind: "LOW_CREDITS", severity: o.billing.balance <= 0 ? "danger" : "warning",
+          title: o.billing.balance <= 0 ? `${o.name} đã hết lượt` : `${o.name} còn ${o.billing.balance} lượt`,
+          detail: `${o.billing.declarations30d} tờ khai trong 30 ngày qua – nhắc khách mua thêm lượt hoặc nạp tay.`, href,
+        });
+      continue;
     }
-    const days = daysUntil(o.plan.renewsAt);
-    if (days <= EXPIRING_DAYS) {
-      const trial = o.plan.code === "TRIAL";
-      attention.push({
-        id: `expiring_${o.id}`,
-        kind: "PLAN_EXPIRING",
-        severity: days < 0 ? "danger" : "warning",
-        title: `${o.name}: ${trial ? "dùng thử" : "gói"} ${days < 0 ? `đã hết hạn ${-days} ngày` : days === 0 ? "hết hạn hôm nay" : `hết hạn sau ${days} ngày`}`,
-        detail: trial ? "Liên hệ chuyển sang gói trả phí hoặc gia hạn dùng thử." : `Gói ${o.plan.name} tới kỳ gia hạn.`,
-        href: `/admin/orgs/${o.id}?tab=plan`,
-      });
+    const c = o.billing.contract;
+    if (!c?.endsOn) {
+      attention.push({ id: `contract_no_end_${o.id}`, kind: "CONTRACT_NO_END", severity: "warning", title: `${o.name}: hợp đồng chưa có ngày kết thúc`, detail: "Nhập số hợp đồng, hiệu lực và giá trị ở tab Gói.", href });
+      continue;
     }
+    if (c.status === "EXPIRING")
+      attention.push({ id: `contract_expiring_${o.id}`, kind: "CONTRACT_EXPIRING", severity: "warning", title: `${o.name}: hợp đồng ${c.daysLeft === 0 ? "hết hạn hôm nay" : `còn ${c.daysLeft} ngày`}`, detail: `Hết hạn ${c.endsOn} – liên hệ gia hạn.`, href });
+    if (c.status === "GRACE" || c.status === "EXPIRED")
+      attention.push({
+        id: `contract_expired_${o.id}`, kind: "CONTRACT_EXPIRED", severity: c.status === "EXPIRED" ? "danger" : "warning",
+        title: `${o.name}: hợp đồng đã hết hạn ${-(c.daysLeft ?? 0)} ngày`,
+        detail: c.status === "EXPIRED" ? "Đã quá 7 ngày ân hạn – doanh nghiệp không khai được tờ khai mới." : "Đang trong 7 ngày ân hạn – vẫn khai được, cần gia hạn ngay.", href,
+      });
   }
   for (const it of db.admin.integrations) {
     if (it.status === "ERROR") {

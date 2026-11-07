@@ -81,7 +81,7 @@ export function InboxMessageDetail({ m, actions, onOpenChange }: { m: InboxMessa
           <DetailBody m={m} actions={actions} />
           <DialogFooter>
             {actions.canUse && (
-              <Button variant="ghost" className="mr-auto text-danger" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => actions.onDelete([m])}>{t.delete}</Button>
+              <Button variant="danger-outline" className="mr-auto" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => actions.onDelete([m])}>{t.delete}</Button>
             )}
             {actions.canUse && m.status === "NEW" && (
               <Button variant="ghost" leftIcon={<EyeOff className="h-4 w-4" />} onClick={() => actions.onSetStatus(m, "IGNORED")}>{t.ignore}</Button>

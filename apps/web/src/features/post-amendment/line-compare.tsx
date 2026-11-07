@@ -169,7 +169,7 @@ function LineCard({ kind, line, defaultOpen, editable, onChange, onRemove, remov
       {...(editable
         ? {
             actions: (
-              <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-4 w-4" />} loading={removing} onClick={onRemove} aria-label={fill(t.removeLineAria, { n: ran })}>
+              <Button size="sm" variant="danger-ghost" leftIcon={<Trash2 className="h-4 w-4" />} loading={removing} onClick={onRemove} aria-label={fill(t.removeLineAria, { n: ran })}>
                 <span className="cq-max-sm:sr-only">{t.removeLine}</span>
               </Button>
             ),

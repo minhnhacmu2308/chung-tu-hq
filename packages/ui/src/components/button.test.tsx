@@ -54,7 +54,7 @@ describe("Button", () => {
     expect(link.className).toContain("bg-surface");
   });
 
-  it.each(["primary", "secondary", "ghost", "danger", "link"] as const)("biến thể %s chỉ dùng class token", (variant) => {
+  it.each(["primary", "secondary", "ghost", "danger", "danger-outline", "danger-ghost", "link"] as const)("biến thể %s chỉ dùng class token", (variant) => {
     render(<Button variant={variant}>X</Button>);
     expect(screen.getByRole("button").className).not.toMatch(/#|rgb\(|-(red|blue|gray|green|slate)-\d/);
   });

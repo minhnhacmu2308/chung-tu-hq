@@ -283,7 +283,7 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
                             </>
                           )}
                           <div className="cq-md:col-span-2">
-                            <Button type="button" size="sm" variant="ghost" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => set("adjustments", form.adjustments.filter((_, j) => j !== i))}>
+                            <Button type="button" size="sm" variant="danger-ghost" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => set("adjustments", form.adjustments.filter((_, j) => j !== i))}>
                               {fill(t.removeAdjustment, { n: i + 1 })}
                             </Button>
                           </div>

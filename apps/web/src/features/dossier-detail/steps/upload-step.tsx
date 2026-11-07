@@ -86,7 +86,7 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
         className="shrink-0"
         {...(doc.status === "READING" ? { icon: <Spinner size="sm" label={null} /> } : doc.status === "DONE" ? { icon: <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" /> } : {})}
       />
-      <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" aria-label={fill(t.deleteAria, { file: doc.fileName })} loading={remove.isPending} onClick={() => remove.mutate()}>
+      <Button size="icon" variant="danger-ghost" className="h-8 w-8 shrink-0" aria-label={fill(t.deleteAria, { file: doc.fileName })} loading={remove.isPending} onClick={() => remove.mutate()}>
         {!remove.isPending && <Trash2 className="h-4 w-4" />}
       </Button>
     </li>

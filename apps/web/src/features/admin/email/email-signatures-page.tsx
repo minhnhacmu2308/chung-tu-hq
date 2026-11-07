@@ -81,7 +81,7 @@ function SignatureCard({ s, canEdit, onEdit, onDelete }: { s: EmailSignature; ca
         {canEdit && (
           <div className="flex gap-1">
             <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={`${t.editSignature} – ${s.name}`} title={t.editSignature} onClick={onEdit}><Pencil className="h-4 w-4" /></Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-danger-subtle-fg" aria-label={`${t.deleteSignature} – ${s.name}`} title={t.deleteSignature} onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
+            <Button size="icon" variant="danger-ghost" className="h-8 w-8" aria-label={`${t.deleteSignature} – ${s.name}`} title={t.deleteSignature} onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
           </div>
         )}
       </CardHeader>

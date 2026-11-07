@@ -319,7 +319,7 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
           <DialogFooter>
             {editable ? (
               <>
-                <Button variant="ghost" type="button" className="cq-sm:mr-auto" leftIcon={<Trash2 className="h-4 w-4" />} disabled={busy} onClick={() => setDeleteOpen(true)}>
+                <Button variant="danger-outline" type="button" className="cq-sm:mr-auto" leftIcon={<Trash2 className="h-4 w-4" />} disabled={busy} onClick={() => setDeleteOpen(true)}>
                   {t.remove}
                 </Button>
                 <Button variant="secondary" type="submit" leftIcon={<Save className="h-4 w-4" />} disabled={busy} loading={save.isPending}>

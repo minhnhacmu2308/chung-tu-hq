@@ -292,7 +292,8 @@ function Demo() {
             </CardContent>
             <CardFooter>
               <Button variant="ghost">Quay lại OCR</Button>
-              <Button variant="danger">Huỷ hồ sơ</Button>
+              <Button variant="danger-outline">Huỷ hồ sơ</Button>
+              <Button variant="danger">Xác nhận xóa</Button>
               <Button loading>Phê duyệt</Button>
             </CardFooter>
           </Card>

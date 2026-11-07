@@ -112,8 +112,10 @@ export function Showcase() {
       <Card>
         <CardHeader><CardTitle>Hộp xác nhận (ConfirmDialog)</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button variant="danger" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirm("delete")}>Xóa hồ sơ</Button>
-          <Button variant="secondary" leftIcon={<XCircle className="h-4 w-4" />} onClick={() => setConfirm("cancel")}>Hủy hồ sơ</Button>
+          {/* Nút mở hộp xác nhận: đỏ viền (danger-outline); nút đỏ đặc nằm trong hộp (xác nhận cuối). */}
+          <Button variant="danger-outline" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => setConfirm("delete")}>Xóa hồ sơ</Button>
+          <Button variant="danger-outline" leftIcon={<XCircle className="h-4 w-4" />} onClick={() => setConfirm("cancel")}>Hủy hồ sơ</Button>
+          <Button size="icon" variant="danger-ghost" aria-label="Xóa dòng"><Trash2 className="h-4 w-4" /></Button>
           <Button variant="secondary" onClick={() => setConfirm("warning")}>Cảnh báo</Button>
           <ConfirmDialog
             open={confirm === "delete"}

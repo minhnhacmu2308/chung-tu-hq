@@ -232,7 +232,7 @@ export function EmailBuilder({
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
-                      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-danger-subtle-fg" aria-label={`${t.remove} – ${label}`} title={t.remove}
+                      <Button type="button" size="icon" variant="danger-ghost" className="h-8 w-8" aria-label={`${t.remove} – ${label}`} title={t.remove}
                         onClick={() => setBlocks(value.blocks.filter((x) => x.id !== b.id))}
                       >
                         <Trash2 className="h-4 w-4" />

@@ -351,7 +351,7 @@ function MenuImagePicker({ value, onChange, t }: { value: Appearance; onChange: 
               {value.menuImage ? t.replace : t.upload}
             </Button>
             {value.menuImage && (
-              <Button type="button" variant="ghost" size="sm" leftIcon={<Trash2 aria-hidden="true" className="h-4 w-4" />} onClick={() => onChange({ ...value, menuImage: null })}>
+              <Button type="button" variant="danger-outline" size="sm" leftIcon={<Trash2 aria-hidden="true" className="h-4 w-4" />} onClick={() => onChange({ ...value, menuImage: null })}>
                 {t.remove}
               </Button>
             )}

@@ -126,7 +126,7 @@ export function VnaccsAccountSection() {
               {data.configured ? t.change : t.enter}
             </Button>
             {data.configured && (
-              <Button size="sm" variant="ghost" leftIcon={<Trash2 className="h-4 w-4" />} loading={remove.isPending} onClick={() => remove.mutate()}>
+              <Button size="sm" variant="danger-outline" leftIcon={<Trash2 className="h-4 w-4" />} loading={remove.isPending} onClick={() => remove.mutate()}>
                 {t.remove}
               </Button>
             )}

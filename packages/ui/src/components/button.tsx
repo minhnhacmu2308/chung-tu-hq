@@ -21,6 +21,10 @@ export const buttonVariants = cva(
         secondary: "bg-surface text-fg border-border shadow-sm hover:bg-surface-muted hover:border-border-strong",
         ghost: "bg-transparent text-fg hover:bg-surface-muted",
         danger: "bg-danger text-danger-fg shadow-sm hover:bg-danger-hover hover:shadow-md active:bg-danger-active active:shadow-sm",
+        /** Nút xóa / gỡ đứng cạnh nút chính (chân form, thanh công cụ): viền + chữ đỏ, nhìn là biết nguy hiểm mà không lấn nút chính. Đỏ đặc (`danger`) dành cho bước xác nhận cuối. */
+        "danger-outline": "bg-surface text-danger-subtle-fg border-danger/50 shadow-sm hover:bg-danger-subtle hover:border-danger active:bg-danger-subtle",
+        /** Nút xóa nhỏ trong dòng / nút biểu tượng (thùng rác cạnh từng mục): chữ/icon đỏ, nền đỏ nhạt khi rê. */
+        "danger-ghost": "bg-transparent text-danger-subtle-fg hover:bg-danger-subtle",
         link: "bg-transparent text-primary underline-offset-4 hover:underline px-0",
       },
       size: {

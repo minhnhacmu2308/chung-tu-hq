@@ -50,6 +50,7 @@ Muốn quay về dữ liệu ban đầu: menu người dùng (góc trái dưới
 | Màn | Đường dẫn | Thư mục |
 |---|---|---|
 | Đăng nhập / Đăng ký | `/login`, `/register` | `features/auth` |
+| Liên kết trong email: nhận lời mời, xác thực email, quên / đặt lại mật khẩu | `/accept-invite?token=`, `/verify-email?token=`, `/forgot-password`, `/reset-password?token=` (bản demo: token có chữ `expired` hoặc ngắn hơn 16 ký tự → "liên kết hết hạn") | `features/auth` |
 | Tổng quan | `/` | `features/dashboard` |
 | Danh sách hồ sơ | `/dossiers` (`?direction=NK` / `XK`) | `features/dossiers` |
 | Tạo hồ sơ (bước 1) | `/dossiers/new` | `features/dossiers` |

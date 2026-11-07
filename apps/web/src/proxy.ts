@@ -1,7 +1,7 @@
 // Chặn trang chưa đăng nhập khi dùng backend thật. Chế độ mock (demo) cho qua tất cả.
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PREFIXES = ["/login", "/register", "/verify-email", "/reset-password", "/accept-invite", "/api/", "/_next/"];
+const PUBLIC_PREFIXES = ["/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/accept-invite", "/api/", "/_next/"];
 const SESSION_COOKIE = "kb_session";
 
 export function proxy(req: NextRequest): NextResponse {

@@ -5,7 +5,7 @@ import type { UiLocale } from "@kb/ui";
 
 type TitleKey =
   | "brand" | "template" | "description" | "overview" | "dossiers" | "newDossier" | "customs" | "inbox" | "products" | "skills" | "teach" | "settings"
-  | "declarationSample" | "login" | "register" | "notFound";
+  | "declarationSample" | "login" | "register" | "acceptInvite" | "verifyEmail" | "forgotPassword" | "resetPassword" | "notFound";
 
 export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
   vi: {
@@ -24,6 +24,10 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     declarationSample: "Bản mẫu tờ khai đầy đủ",
     login: "Đăng nhập",
     register: "Đăng ký",
+    acceptInvite: "Nhận lời mời",
+    verifyEmail: "Xác thực email",
+    forgotPassword: "Quên mật khẩu",
+    resetPassword: "Đặt lại mật khẩu",
     notFound: "Không tìm thấy trang",
   },
   en: {
@@ -42,6 +46,10 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     declarationSample: "Full declaration sample",
     login: "Sign in",
     register: "Register",
+    acceptInvite: "Accept invitation",
+    verifyEmail: "Verify email",
+    forgotPassword: "Forgot password",
+    resetPassword: "Reset password",
     notFound: "Page not found",
   },
   zh: {
@@ -60,6 +68,10 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     declarationSample: "完整报关单样本",
     login: "登录",
     register: "注册",
+    acceptInvite: "接受邀请",
+    verifyEmail: "验证邮箱",
+    forgotPassword: "忘记密码",
+    resetPassword: "重置密码",
     notFound: "页面未找到",
   },
 };
@@ -84,6 +96,10 @@ export function titleKeyForPath(pathname: string): AppTitleKey | undefined {
     "/ban-mau/to-khai": "declarationSample",
     "/login": "login",
     "/register": "register",
+    "/accept-invite": "acceptInvite",
+    "/verify-email": "verifyEmail",
+    "/forgot-password": "forgotPassword",
+    "/reset-password": "resetPassword",
   };
   return exact[pathname];
 }

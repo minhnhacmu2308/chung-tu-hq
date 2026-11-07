@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Button, Checkbox, Field, Input, Stack, toast, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Button, Checkbox, Field, Input, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -69,12 +69,9 @@ export function LoginPage() {
           </Field>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Checkbox label={t.remember} defaultChecked />
-            <Button
-              type="button"
-              variant="link"
-              onClick={() => toast({ tone: "info", title: t.resetSent, description: t.resetSentDesc })}
-            >
-              {t.forgot}
+            {/* Mang email đang nhập sang trang Quên mật khẩu để khỏi gõ lại. */}
+            <Button asChild variant="link">
+              <Link href={EMAIL_RE.test(email.trim()) ? `/forgot-password?email=${encodeURIComponent(email.trim())}` : "/forgot-password"}>{t.forgot}</Link>
             </Button>
           </div>
           <Button type="submit" fullWidth loading={mutation.isPending}>{t.submit}</Button>

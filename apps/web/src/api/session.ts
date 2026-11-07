@@ -17,3 +17,8 @@ export const resetMockData = pick(mock.resetMockData, http.resetMockData);
 export const listMembers = pick(mock.listMembers, http.listMembers);
 export const lookupTaxCode = pick(mock.lookupTaxCode, http.lookupTaxCode);
 export const register = pick(mock.register, http.register);
+// Liên kết trong email (công khai, chưa đăng nhập): nhận lời mời, xác thực email, quên / đặt lại mật khẩu.
+export const acceptInvite = pick(mock.acceptInvite, http.acceptInvite);
+export const verifyEmail = pick(mock.verifyEmail, http.verifyEmail);
+export const requestPasswordReset = pick(mock.requestPasswordReset, http.requestPasswordReset);
+export const resetPassword = pick(mock.resetPassword, http.resetPassword);

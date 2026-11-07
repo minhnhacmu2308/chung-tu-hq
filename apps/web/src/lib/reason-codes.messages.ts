@@ -296,6 +296,7 @@ export const DOMAIN_ERROR_MESSAGES = defineMessages({
     ORG_SUSPENDED: "Doanh nghiệp đang bị tạm ngừng",
     OPERATION_LOCKED: "Nghiệp vụ chưa thực hiện được ở giai đoạn này",
     INVALID_OPERATION: "Nghiệp vụ không hợp lệ cho tờ khai này",
+    TOKEN_INVALID: "Liên kết không hợp lệ hoặc đã hết hạn",
     INTERNAL: "Lỗi máy chủ, thử lại sau",
   },
   en: {
@@ -327,6 +328,7 @@ export const DOMAIN_ERROR_MESSAGES = defineMessages({
     ORG_SUSPENDED: "The organization is suspended",
     OPERATION_LOCKED: "This operation isn't available at this stage",
     INVALID_OPERATION: "This operation isn't valid for this declaration",
+    TOKEN_INVALID: "This link is invalid or has expired",
     INTERNAL: "Server error, try again later",
   },
   zh: {
@@ -358,6 +360,7 @@ export const DOMAIN_ERROR_MESSAGES = defineMessages({
     ORG_SUSPENDED: "企业已被暂停",
     OPERATION_LOCKED: "该业务在当前阶段无法执行",
     INVALID_OPERATION: "该业务不适用于此报关单",
+    TOKEN_INVALID: "链接无效或已过期",
     INTERNAL: "服务器错误，请稍后重试",
   },
 });

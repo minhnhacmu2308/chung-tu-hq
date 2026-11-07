@@ -54,6 +54,8 @@ describe("chọn ngôn ngữ ở trang đăng nhập", () => {
     expect(html).toContain("Đăng nhập");
     expect(html).toContain("Ghi nhớ đăng nhập");
     expect(html).toContain("Quên mật khẩu?");
+    // "Quên mật khẩu?" mở trang /forgot-password, mang theo email đang nhập.
+    expect(html).toContain('href="/forgot-password?email=chau.le%40anphat-demo.vn"');
   });
 
   it("English: nhãn trang đăng nhập đổi sang tiếng Anh", () => {

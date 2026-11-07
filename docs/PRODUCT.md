@@ -123,7 +123,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 
 | Màn | Nội dung chính |
 |---|---|
-| Đăng nhập / Đăng ký | Email + mật khẩu; đăng ký doanh nghiệp theo MST; quên mật khẩu |
+| Đăng nhập / Đăng ký | Email + mật khẩu; đăng ký doanh nghiệp theo MST; quên mật khẩu (`/forgot-password` → email → `/reset-password`); xác thực email (`/verify-email`); nhận lời mời thành viên (`/accept-invite`) |
 | Tổng quan | KPI: hồ sơ đang mở (nhập/xuất), sắp/quá hạn khai, tỷ lệ trường cần sửa, tờ khai đã truyền. "Cần xử lý" sắp theo hạn khai. "Kết quả khai báo gần đây" kèm phân luồng |
 | Hồ sơ khai báo | Danh sách, lọc theo trạng thái/bước/hạn; mở hồ sơ vào đúng bước đang dở |
 | Tạo hồ sơ | Bước 1 |

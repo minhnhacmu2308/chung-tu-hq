@@ -28,7 +28,7 @@ export const listDocuments = (dossierId: string) => apiGet(`dossiers/${dossierId
 export const createDossier = (input: CreateDossierInput) => apiPost("dossiers", input, DossierSchema);
 /** "Nhờ AI điền" form Tạo hồ sơ – trả giá trị gợi ý, không tạo hồ sơ. */
 export const draftDossier = (input: DraftDossierInput) => apiPost("dossiers/draft", input, DossierDraftSchema);
-export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" | "step" | "suspectFields" | "note" | "declarationNo" | "channel">>) =>
-  apiPatch(`dossiers/${id}`, { ...(patch.note !== undefined ? { note: patch.note } : {}), ...(patch.step ? { step: patch.step } : {}) }, DossierSchema);
+export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" | "step" | "suspectFields" | "note" | "declarationNo" | "channel" | "documentSources">>) =>
+  apiPatch(`dossiers/${id}`, { ...(patch.note !== undefined ? { note: patch.note } : {}), ...(patch.step ? { step: patch.step } : {}), ...(patch.documentSources ? { documentSources: patch.documentSources } : {}) }, DossierSchema);
 export const cancelDossier = (id: string) => apiPost(`dossiers/${id}/cancel`, {}, DossierSchema);
 export const deleteDossier = (id: string) => apiDelete(`dossiers/${id}`, DeleteDossierResultSchema);

@@ -38,6 +38,7 @@ import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
 import { FptPreviewButton, FptTracePanel } from "./fpt-trace-panel";
 import { HysCard } from "./hys/hys-card";
+import { IssuedInvoiceCard } from "../issued-invoice/issued-invoice-card";
 import { HysSuggestDialog } from "./hys/hys-suggest-dialog";
 import { HYS_MESSAGES } from "./hys/hys.messages";
 import { billingErrorOf, billingBlockFor, BillingBlockAlert, ContractGraceAlert, CreditsUsageLine, type BillingBlock } from "./submit-billing";
@@ -705,6 +706,8 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     </>
   );
   const kind = dossier.direction === "NK" ? "IDA" : "EDA";
+  // Hóa đơn thương mại sau thông quan (ADR 0013 mục 3): phát hành / in ngay ở bước Truyền khi hồ sơ đã thông quan.
+  const invoiceCard = dossier.direction === "XK" && dossier.documentSources.INVOICE === "ISSUED" && dossier.status === "CLEARED" ? <IssuedInvoiceCard dossierId={dossier.id} /> : null;
   const hysCard = s.declarationStatus !== "NOT_CREATED" ? <HysCard dossierId={dossier.id} kind={kind} startCode={hysStart} onStartHandled={() => setHysStart(null)} /> : null;
   const confirmDialog = (
     <>
@@ -750,6 +753,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         {alerts}
         {progress && <Alert tone="info">{fill(sh.recallProgress, progress)}</Alert>}
         {hysCard}
+        {invoiceCard}
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-2">
@@ -843,6 +847,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       )}
 
       {hysCard}
+      {invoiceCard}
 
       <Grid cols={{ base: 1, lg: 3 }} gap="lg">
         <Card className="cq-lg:col-span-2">

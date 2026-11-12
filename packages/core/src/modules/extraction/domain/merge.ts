@@ -1,5 +1,6 @@
 // Gộp kết quả đọc của mọi chứng từ → Shipment có nguồn và trạng thái từng trường (ADR 0003). Hàm thuần.
 import { emptyShipment, type DocKind, type Region, type Shipment, type ShipmentItem, type SourceRef, type Sourced } from "@kb/contracts";
+import { sumDec, toDecimalString } from "../../../shared/decimal.js";
 import { fieldStatusFromCandidates, type Candidate } from "./field-status.js";
 import { ITEM_SPECS, SHIPMENT_FIELDS, type FieldSpec } from "./shipment-spec.js";
 
@@ -48,23 +49,46 @@ function setPath(obj: Record<string, unknown>, path: string, value: unknown) {
   cur[parts[parts.length - 1]!] = value;
 }
 
+/**
+ * Dòng hàng: nối dòng của mọi invoice theo thứ tự chứng từ (lô nhiều hóa đơn – ADR 0013); không có invoice thì lấy Packing List đầu tiên.
+ * Một invoice: giữ số dòng trên chứng từ; nhiều invoice: đánh số lại liên tục (số dòng mỗi hóa đơn đều bắt đầu từ 1).
+ */
 function mergeItems(files: FileExtraction[]): ShipmentItem[] {
-  const inv = files.find((f) => f.kind === "INVOICE") ?? files.find((f) => f.kind === "PACKING_LIST");
-  if (!inv) return [];
-  const items = (inv.data["items"] as Record<string, unknown>[] | undefined) ?? [];
-  return items.map((it, i) => {
-    const lineNo = typeof it["lineNo"] === "number" ? (it["lineNo"] as number) : i + 1;
-    const out = { lineNo } as ShipmentItem;
-    for (const spec of ITEM_SPECS) {
-      const rawVal = spec.get(it);
-      const normalized = rawVal === null || rawVal === undefined ? null : spec.normalize(rawVal);
-      const region = inv.regions?.[`items.${i}.${spec.field}`];
-      const sources: SourceRef[] = normalized !== null ? [{ documentId: inv.documentId, kind: inv.kind, page: region?.page ?? 1, raw: String(rawVal), normalized, ...(region ? { region } : {}) }] : [];
-      const unsure = uncertain(inv.data, `items.${i}.${spec.field}`);
-      (out as unknown as Record<string, Sourced<string>>)[spec.field] = { value: normalized, sources, status: normalized === null ? "SINGLE_SOURCE" : unsure ? "MODEL_UNSURE" : "SINGLE_SOURCE" };
-    }
-    return out;
-  });
+  const invoices = files.filter((f) => f.kind === "INVOICE");
+  const pl = files.find((f) => f.kind === "PACKING_LIST");
+  const from = invoices.length ? invoices : pl ? [pl] : [];
+  const many = from.length > 1;
+  const out: ShipmentItem[] = [];
+  for (const inv of from) {
+    const items = (inv.data["items"] as Record<string, unknown>[] | undefined) ?? [];
+    items.forEach((it, i) => {
+      const lineNo = !many && typeof it["lineNo"] === "number" ? (it["lineNo"] as number) : out.length + 1;
+      const row = { lineNo } as ShipmentItem;
+      for (const spec of ITEM_SPECS) {
+        const rawVal = spec.get(it);
+        const normalized = rawVal === null || rawVal === undefined ? null : spec.normalize(rawVal);
+        const region = inv.regions?.[`items.${i}.${spec.field}`];
+        const sources: SourceRef[] = normalized !== null ? [{ documentId: inv.documentId, kind: inv.kind, page: region?.page ?? 1, raw: String(rawVal), normalized, ...(region ? { region } : {}) }] : [];
+        const unsure = uncertain(inv.data, `items.${i}.${spec.field}`);
+        (row as unknown as Record<string, Sourced<string>>)[spec.field] = { value: normalized, sources, status: normalized === null ? "SINGLE_SOURCE" : unsure ? "MODEL_UNSURE" : "SINGLE_SOURCE" };
+      }
+      out.push(row);
+    });
+  }
+  return out;
+}
+
+/** Lô nhiều invoice: tổng trị giá = Σ tổng từng invoice (Decimal), không so lệch giữa các invoice. Thiếu tổng ở một invoice → giữ cách gộp thường (người duyệt thấy). */
+function sumInvoiceTotals(files: FileExtraction[], s: Shipment) {
+  const refs = s.invoice.totalAmount.sources.filter((r) => r.kind === "INVOICE");
+  const invoices = files.filter((f) => f.kind === "INVOICE");
+  if (invoices.length < 2 || refs.length !== invoices.length || refs.some((r) => !r.normalized)) return;
+  s.invoice.totalAmount = {
+    value: toDecimalString(sumDec(refs.map((r) => r.normalized!))),
+    sources: refs,
+    status: "SINGLE_SOURCE",
+    note: `Tổng ${invoices.length} hóa đơn`,
+  };
 }
 
 function mergeCharges(files: FileExtraction[], s: Shipment) {
@@ -141,6 +165,7 @@ export function mergeExtractions(files: FileExtraction[], opts: MergeOptions): S
     .filter((c) => typeof c["no"] === "string" && c["no"])
     .map((c) => ({ no: String(c["no"]), sealNo: (c["sealNo"] as string | null) ?? null, size: (c["size"] as string | null) ?? null }));
   s.items = mergeItems(files);
+  sumInvoiceTotals(files, s);
   mergeCharges(files, s);
   const co = files.find((f) => f.kind === "CERT_OF_ORIGIN");
   s.origin.criteria = ((co?.data["items"] as Record<string, unknown>[] | undefined) ?? [])

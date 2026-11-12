@@ -159,6 +159,10 @@ export const STATUS_META = {
   PAYMENT_PAID: { tone: "success", label: "Đã thanh toán" },
   PAYMENT_CANCELLED: { tone: "neutral", label: "Đã hủy" },
   PAYMENT_EXPIRED: { tone: "neutral", label: "Hết hạn" },
+  // Invoice + Packing List hệ thống phát hành (ADR 0013)
+  ISSUED_RESERVED: { tone: "info", label: "Đã cấp số" },
+  ISSUED_ACTIVE: { tone: "success", label: "Đã phát hành" },
+  ISSUED_VOID: { tone: "danger", label: "Đã hủy số" },
 } as const satisfies Record<string, { tone: Tone; label: string }>;
 
 export type Status = keyof typeof STATUS_META;
@@ -187,6 +191,7 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   LESSON_PENDING: "Pending review", LESSON_ACTIVE: "In use", LESSON_OFF: "Off", TEACH_DOCUMENT: "On the documents", TEACH_KNOWLEDGE: "Not on the documents",
   CONTRACT_ACTIVE: "Active", CONTRACT_EXPIRING: "Expiring soon", CONTRACT_GRACE: "Grace period", CONTRACT_EXPIRED: "Expired",
   PAYMENT_PENDING: "Awaiting payment", PAYMENT_PAID: "Paid", PAYMENT_CANCELLED: "Cancelled", PAYMENT_EXPIRED: "Expired",
+  ISSUED_RESERVED: "Number assigned", ISSUED_ACTIVE: "Issued", ISSUED_VOID: "Number voided",
 };
 
 /** Nhãn tiếng Trung (giản thể) tương ứng STATUS_META. */
@@ -213,6 +218,7 @@ export const STATUS_LABELS_ZH: Record<Status, string> = {
   LESSON_PENDING: "待审核", LESSON_ACTIVE: "使用中", LESSON_OFF: "已关闭", TEACH_DOCUMENT: "单证上有", TEACH_KNOWLEDGE: "单证上没有",
   CONTRACT_ACTIVE: "有效", CONTRACT_EXPIRING: "即将到期", CONTRACT_GRACE: "宽限期", CONTRACT_EXPIRED: "已到期",
   PAYMENT_PENDING: "待付款", PAYMENT_PAID: "已付款", PAYMENT_CANCELLED: "已取消", PAYMENT_EXPIRED: "已过期",
+  ISSUED_RESERVED: "已分配号码", ISSUED_ACTIVE: "已开具", ISSUED_VOID: "号码已作废",
 };
 
 /** Nhãn trạng thái theo ngôn ngữ – dùng cho code không phải component (bộ lọc bảng, xuất file…). */

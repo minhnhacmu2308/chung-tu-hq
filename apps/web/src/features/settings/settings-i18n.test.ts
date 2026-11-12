@@ -37,6 +37,7 @@ const ORG: Organization = {
   usage: { dossiersThisMonth: 37, pagesThisMonth: 412 },
   suspectThreshold: "BALANCED",
   fourEyes: false,
+  invoiceSettings: { numbering: { pattern: "INV{YY}{MM}-{NNN}", reset: "MONTH" }, signatoryName: null, signatoryTitle: null, sellerName: null },
 };
 const MEMBERS: Member[] = [
   { id: "u1", name: "Lê Minh Châu", email: "chau@example.com", role: "ADMIN", status: "ACTIVE", lastActiveAt: "2026-10-20T00:00:00.000Z" },

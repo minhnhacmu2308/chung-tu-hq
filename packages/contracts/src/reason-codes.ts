@@ -100,6 +100,15 @@ export const REASON_TEXT_VI = {
   // ── Chi phí và điều chỉnh trị giá (value-charges chargesConflict) ──
   CHARGES_FREIGHT_AMOUNT_REQUIRED: "Chứng từ có phí vận chuyển {amount} {currency} – nhập số tiền cước hoặc chọn theo chứng từ",
   CHARGES_ADJUSTMENTS_IN_DOCS: "Chứng từ có {n} khoản phí khác – lập danh sách khoản điều chỉnh, không khai Không có phí phát sinh",
+
+  // ── Hóa đơn thương mại sau thông quan (ADR 0013 mục 3) ──
+  INVOICE_NOT_ISSUED_SOURCE: "Hồ sơ không đặt Invoice do hệ thống phát hành – đổi nguồn Invoice ở bước Tải chứng từ",
+  INVOICE_DATA_INCOMPLETE: "Dữ liệu lô hàng chưa đủ để phát hành hóa đơn: {missing}",
+  INVOICE_ALREADY_RESERVED: "Hồ sơ đã có số hóa đơn {no} – hủy số trước nếu muốn cấp số khác",
+  INVOICE_NOT_RESERVED: "Chưa cấp số hóa đơn",
+  INVOICE_NOT_CLEARED: "Tờ khai chưa thông quan – chỉ phát hành hóa đơn sau khi thông quan",
+  INVOICE_TEMPLATE_NOT_FOUND: "Không tìm thấy mẫu hóa đơn",
+  INVOICE_NUMBERING_INVALID: "Mẫu số hóa đơn của doanh nghiệp không hợp lệ – sửa ở Cài đặt › Doanh nghiệp",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

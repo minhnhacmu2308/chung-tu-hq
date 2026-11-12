@@ -2,11 +2,11 @@ import type { ClassifyResult, DocKind, Region, Shipment, CustomFieldDef } from "
 import type { ZodType } from "zod";
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type { ProgressEvent } from "../../../dossier/index.js";
-import type { AiFile, AiProvider, AuditRow, DocumentInfo, DocumentsPort, ExtractionRepos, ExtractionRow, ExtractionUow, FieldRow, ShipmentRow, SkillResolver, UsageRecorder, ValidationPort } from "../ports.js";
+import type { AiFile, AiProvider, AuditRow, DocumentInfo, DocumentsPort, ExtractionRepos, ExtractionRow, ExtractionUow, FieldRow, IssuedRow, ManualShipmentRow, OrgInfo, ShipmentRow, SkillResolver, TemplateRow, UsageRecorder, ValidationPort } from "../ports.js";
 
 /** UoW in-memory mô phỏng RLS theo org. */
 export class InMemoryExtractionUow implements ExtractionUow {
-  readonly data = { extractions: [] as ExtractionRow[], shipments: [] as ShipmentRow[], fields: [] as FieldRow[], audit: [] as AuditRow[] };
+  readonly data = { extractions: [] as ExtractionRow[], shipments: [] as ShipmentRow[], fields: [] as FieldRow[], audit: [] as AuditRow[], manual: [] as ManualShipmentRow[], issued: [] as IssuedRow[], counters: new Map<string, number>(), templates: [] as TemplateRow[] };
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: ExtractionRepos) => Promise<T>) {
     const d = this.data;
     const org = ctx.orgId as string;
@@ -52,6 +52,51 @@ export class InMemoryExtractionUow implements ExtractionUow {
         },
       },
       audit: { insert: async (row) => void (row.orgId === org ? d.audit.push(clone(row)) : deny("field_audit")) },
+      manual: {
+        get: async (orgId, dossierId) => clone(d.manual.find((x) => x.orgId === own(orgId) && x.dossierId === dossierId) ?? null),
+        upsert: async (row) => {
+          if (row.orgId !== org) deny("manual_shipments");
+          const i = d.manual.findIndex((x) => x.orgId === row.orgId && x.dossierId === row.dossierId);
+          if (i >= 0) d.manual[i] = { ...clone(row), id: d.manual[i]!.id, createdAt: d.manual[i]!.createdAt };
+          else d.manual.push(clone(row));
+        },
+      },
+      issued: {
+        list: async (orgId, dossierId) => clone(d.issued.filter((x) => x.orgId === own(orgId) && x.dossierId === dossierId).reverse()),
+        insert: async (row) => {
+          if (row.orgId !== org) deny("issued_documents");
+          if (d.issued.some((x) => x.orgId === row.orgId && x.kind === row.kind && x.no === row.no)) throw new Error("duplicate key value violates unique constraint issued_documents_org_no_uq");
+          if (row.status !== "VOID" && d.issued.some((x) => x.orgId === row.orgId && x.dossierId === row.dossierId && x.kind === row.kind && x.status !== "VOID")) throw new Error("duplicate key value violates unique constraint issued_documents_one_current_uq");
+          d.issued.push(clone(row));
+        },
+        update: async (orgId, id, patch) => {
+          const x = d.issued.find((r) => r.orgId === own(orgId) && r.id === id);
+          if (x) Object.assign(x, clone(patch));
+        },
+        exists: async (orgId, kind, no) => d.issued.some((x) => x.orgId === own(orgId) && x.kind === kind && x.no === no),
+        nextSeq: async (orgId, kind, prefix, period) => {
+          const k = [own(orgId), kind, prefix, period].join("|");
+          const n = (d.counters.get(k) ?? 0) + 1;
+          d.counters.set(k, n);
+          return n;
+        },
+        peekSeq: async (orgId, kind, prefix, period) => (d.counters.get([own(orgId), kind, prefix, period].join("|")) ?? 0) + 1,
+      },
+      templates: {
+        list: async (orgId) => clone(d.templates.filter((x) => x.orgId === own(orgId))),
+        get: async (orgId, id) => clone(d.templates.find((x) => x.orgId === own(orgId) && x.id === id) ?? null),
+        insert: async (row) => {
+          if (row.orgId !== org) deny("invoice_templates");
+          if (row.isDefault && d.templates.some((x) => x.orgId === row.orgId && x.isDefault)) throw new Error("duplicate key value violates unique constraint invoice_templates_one_default_uq");
+          d.templates.push(clone(row));
+        },
+        update: async (orgId, id, patch) => {
+          const x = d.templates.find((r) => r.orgId === own(orgId) && r.id === id);
+          if (x) Object.assign(x, clone(patch));
+        },
+        delete: async (orgId, id) => void (d.templates = d.templates.filter((x) => !(x.orgId === own(orgId) && x.id === id))),
+        clearDefault: async (orgId) => d.templates.filter((x) => x.orgId === own(orgId)).forEach((x) => (x.isDefault = false)),
+      },
     });
   }
 }
@@ -64,7 +109,17 @@ export class FakeDocuments implements DocumentsPort {
   readonly events: ProgressEvent[] = [];
   threshold: "STRICT" | "BALANCED" | "RELAXED" = "BALANCED";
   dossierStatusValue: "DRAFT" | "PROCESSING" | "NEEDS_REVIEW" | "APPROVED" | "SUBMITTED" | "CLEARED" | "CANCELLED" = "PROCESSING";
-  async dossierStatus() {
+  /** Hồ sơ thuộc org nào (mô phỏng RLS của module dossier): khai báo → org khác thấy null. */
+  readonly dossierOrg = new Map<string, string>();
+  dossierDirection: "NK" | "XK" = "XK";
+  dossierSources: Record<string, string> = {};
+  dossierDeclarationNo: string | null = null;
+  async dossierInfo(orgId: string, dossierId: string) {
+    const status = await this.dossierStatus(orgId, dossierId);
+    return status ? { status, direction: this.dossierDirection, documentSources: { ...this.dossierSources } as never, declarationNo: this.dossierDeclarationNo } : null;
+  }
+  async dossierStatus(orgId?: string, dossierId?: string) {
+    if (dossierId && this.dossierOrg.has(dossierId) && this.dossierOrg.get(dossierId) !== orgId) return null;
     return this.dossierStatusValue;
   }
   async get(orgId: string, id: string) {
@@ -96,8 +151,10 @@ export class FakeDocuments implements DocumentsPort {
   async publish(_o: string, _d: string, event: ProgressEvent) {
     this.events.push(event);
   }
-  async orgInfo() {
-    return { taxCode: "0316789012", name: "CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT", suspectThreshold: this.threshold };
+  /** Địa chỉ/cài đặt hóa đơn của doanh nghiệp (Invoice/PL phát hành). */
+  orgExtra: Omit<OrgInfo, "taxCode" | "name" | "suspectThreshold"> = {};
+  async orgInfo(): Promise<OrgInfo> {
+    return { taxCode: "0316789012", name: "CÔNG TY TNHH THIẾT BỊ CÔNG NGHIỆP AN PHÁT", suspectThreshold: this.threshold, ...this.orgExtra };
   }
 }
 

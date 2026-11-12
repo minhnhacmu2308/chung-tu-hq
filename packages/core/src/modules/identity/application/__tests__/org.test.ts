@@ -25,6 +25,7 @@ import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } fro
 import { InMemoryIdentityUow } from "../test/in-memory-uow.js";
 import { updateOrganization } from "../update-organization.js";
 import { updateFourEyes } from "../update-four-eyes.js";
+import { updateInvoiceSettings } from "../update-invoice-settings.js";
 import { updateSuspectThreshold } from "../update-suspect-threshold.js";
 
 const T0 = "2026-10-13T00:00:00.000Z";
@@ -251,6 +252,14 @@ describe("doanh nghiệp", () => {
     expectErr(await updateFourEyes(deps, ctx("APPROVER", "usr_quang"), false), "FORBIDDEN");
     expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).fourEyes).toBe(true);
     expect(unwrap(await updateFourEyes(deps, ctx("OWNER", "usr_phong"), false)).fourEyes).toBe(false);
+  });
+  it("cài đặt hóa đơn xuất khẩu: mặc định trống; ADMIN/OWNER lưu được; vai trò khác FORBIDDEN; org khác không đổi", async () => {
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).invoiceSettings).toEqual({ numbering: { pattern: "INV{YY}{MM}-{NNN}", reset: "MONTH" }, signatoryName: null, signatoryTitle: null, sellerName: null });
+    const v = unwrap(await updateInvoiceSettings(deps, ctx("ADMIN"), { numbering: { pattern: "KB/{YYYY}/{NNNN}", reset: "YEAR" }, signatoryName: "Lê Minh Châu", signatoryTitle: "Director", sellerName: "AN PHAT CO., LTD" }));
+    expect(v.invoiceSettings).toEqual({ numbering: { pattern: "KB/{YYYY}/{NNNN}", reset: "YEAR" }, signatoryName: "Lê Minh Châu", signatoryTitle: "Director", sellerName: "AN PHAT CO., LTD" });
+    expectErr(await updateInvoiceSettings(deps, ctx("DECLARANT", "usr_quang"), { numbering: { pattern: "X{NNN}", reset: "NEVER" }, signatoryName: null, signatoryTitle: null, sellerName: null }), "FORBIDDEN");
+    expect(unwrap(await getOrganization(deps, ctx("VIEWER"))).invoiceSettings.numbering.pattern).toBe("KB/{YYYY}/{NNNN}");
+    expect(uow.data.orgs.find((x) => x.id === "org_b")?.invoiceNumberPattern ?? null).toBeNull();
   });
   it("updateSuspectThreshold đổi ngưỡng", async () => {
     expect(unwrap(await updateSuspectThreshold(deps, ctx("OWNER", "usr_phong"), "STRICT")).suspectThreshold).toBe("STRICT");

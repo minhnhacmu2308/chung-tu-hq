@@ -246,6 +246,13 @@
       "when": 1794056309972,
       "tag": "0034_billing_payg_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794473486371,
+      "tag": "0035_xk_khai_truoc_hoa_don",
+      "breakpoints": true
     }
   ]
 }

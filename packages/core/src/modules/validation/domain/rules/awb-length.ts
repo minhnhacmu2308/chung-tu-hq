@@ -8,6 +8,7 @@ export const awbLength: Rule = {
   title: "Số AWB không quá 20 ký tự",
   severity: "BLOCKER",
   docKinds: ["AIR_WAYBILL"],
+  awaits: ["AIR_WAYBILL"],
   run(s, ctx) {
     const mode = ctx.dossier?.transportMode;
     if (!mode) return skipped("Chưa biết phương thức vận chuyển của hồ sơ");

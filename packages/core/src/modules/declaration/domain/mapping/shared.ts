@@ -38,7 +38,7 @@ export function invoiceKind(i: MappingInput, kind: Kind): MappedValue {
   const n = invoiceCount(i);
   const no = kind === "IDA" ? "1.39" : "2.34";
   if (n === 0) return { value: "B – Không có hóa đơn thương mại", source: "SYSTEM", suspect: true, note: `Hồ sơ chưa có hóa đơn: khai B và để trống số hóa đơn; nếu có hóa đơn thì tải lên (chỉ tiêu ${no})` };
-  if (n > 1) return { value: "B – Bảng kê hóa đơn (nhiều hóa đơn)", source: "SYSTEM", suspect: true, note: `Có ${n} hóa đơn: khai B, số hóa đơn là số bảng kê/hóa đơn tổng, đính kèm danh sách hóa đơn qua HYS (chỉ tiêu ${no})` };
+  if (n > 1) return { value: "B – Bảng kê hóa đơn (nhiều hóa đơn)", source: "SYSTEM", suspect: true, note: `Có ${n} hóa đơn: khai B, số hóa đơn là số bảng kê/hóa đơn tổng; số + ngày từng hóa đơn đã ghi ở Phần ghi chú (${kind === "IDA" ? "tiếp sang 1.50" : "tiếp sang 2.32"} khi không đủ chỗ), đính kèm danh sách hóa đơn qua HYS (chỉ tiêu ${no})` };
   return profileOr(i, "HD_PL", fixed("A – Hóa đơn thương mại", "INVOICE"));
 }
 

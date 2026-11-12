@@ -12,6 +12,7 @@ export const freightTerm: Rule = {
   title: "Điều kiện giao hàng khớp người trả cước trên vận đơn",
   severity: "BLOCKER",
   docKinds: ["INVOICE", "BILL_OF_LADING"],
+  awaits: ["BILL_OF_LADING"],
   run(s, ctx) {
     const code = incotermOf(s.invoice.incoterm.value);
     const term = s.transport.freightTerm?.value;

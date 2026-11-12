@@ -2,14 +2,14 @@
 // Bước 1 – Tạo hồ sơ. Prototype: kiểm tra form bằng zod tại chỗ (bản thật: schema dùng chung @kb/contracts + react-hook-form).
 import {
   Alert, Badge, Breadcrumb, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Combobox,
-  DatePicker, fill, Field, FormSection, Grid, Input, PageHeader, pickMessages, SegmentedControl, Select, Stack, Textarea, toast, useUiLocale,
+  DatePicker, fill, Field, FormSection, Grid, Input, PageHeader, pickMessages, RadioGroup, SegmentedControl, Select, Stack, Textarea, toast, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Info } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { DEFAULT_PARTY_CLASS, TransportModeSchema } from "@kb/contracts";
+import { DEFAULT_PARTY_CLASS, TransportModeSchema, type StartMode } from "@kb/contracts";
 import { z } from "zod";
 import { createDossier, dossierKeys, listDossiers } from "@/api/dossiers";
 import { addInboxToDossier, inboxKeys, listInbox } from "@/api/mailbox";
@@ -49,6 +49,8 @@ type FormState = {
   partner: string;
   customsOffice: string | null;
   transportMode: Dossier["transportMode"];
+  /** Hồ sơ xuất (ADR 0013): từ chứng từ hoặc khai trước (hệ thống phát hành Invoice + PL). */
+  startMode: StartMode;
   /** Nhóm loại hình người dùng chọn; null → theo mã loại hình đang chọn (kể cả mã điền sẵn từ Mặc định khai báo). */
   typeGroup: TypeGroup | null;
   dueDate: string | null;
@@ -64,6 +66,7 @@ const INITIAL: FormState = {
   partner: "",
   customsOffice: null,
   transportMode: "SEA_CONTAINER",
+  startMode: "DOCUMENTS",
   typeGroup: null,
   dueDate: isoDay(3),
   skillSetId: "default",
@@ -188,6 +191,7 @@ export function CreateDossierPage() {
       // Không hỏi khi tạo hồ sơ: tờ khai lấy điều kiện giao hàng đọc từ invoice ở bước OCR.
       incoterm: "",
       transportMode: v.transportMode,
+      ...(v.direction === "XK" && form.startMode === "DECLARE_FIRST" ? { startMode: "DECLARE_FIRST" as const } : {}),
       // Không hỏi ở bước tạo hồ sơ: tờ khai lấy theo Mặc định khai báo (PL_CN), sửa ở bước Review nếu cần.
       partyClass: DEFAULT_PARTY_CLASS,
       ...(v.note.trim() ? { note: v.note.trim() } : {}),
@@ -242,6 +246,17 @@ export function CreateDossierPage() {
                     onChange={(e) => set("transportMode", TransportModeSchema.parse(e.target.value))}
                   />
                 </Field>
+                {form.direction === "XK" && (
+                  <RadioGroup<StartMode>
+                    label={t.startMode}
+                    value={form.startMode}
+                    onChange={(v) => set("startMode", v)}
+                    options={[
+                      { value: "DOCUMENTS", label: t.startDocuments, description: t.startDocumentsDesc },
+                      { value: "DECLARE_FIRST", label: t.startDeclareFirst, description: t.startDeclareFirstDesc },
+                    ]}
+                  />
+                )}
               </FormSection>
 
               <FormSection title={t.declSection} description={t.declSectionDesc}>

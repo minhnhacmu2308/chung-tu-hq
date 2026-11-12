@@ -1,4 +1,4 @@
-import { lockedSheetCount } from "@kb/contracts";
+import { issuedKinds, lockedSheetCount, numberingFromColumns, pendingKinds } from "@kb/contracts";
 import { loadEnv } from "@kb/core/config";
 import { createRateDeps, DbPlatformMailer, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
 import { createDb, platformDbUrl } from "@kb/core/db";
@@ -93,7 +93,7 @@ export function buildContainer() {
     dossiers: {
       profile: async (orgId, dossierId) => {
         const d = await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId));
-        return d ? { direction: d.direction, typeCode: d.typeCode, transportMode: d.transportMode } : null;
+        return d ? { direction: d.direction, typeCode: d.typeCode, transportMode: d.transportMode, pendingKinds: pendingKinds(d.documentSources), issuedKinds: issuedKinds(d.documentSources) } : null;
       },
     },
   });
@@ -108,7 +108,10 @@ export function buildContainer() {
     db, env, dossier,
     orgInfo: async (orgId) => {
       const o = await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId));
-      return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", suspectThreshold: (o?.suspectThreshold as "STRICT" | "BALANCED" | "RELAXED") ?? "BALANCED" };
+      return {
+        taxCode: o?.taxCode ?? "", name: o?.name ?? "", suspectThreshold: (o?.suspectThreshold as "STRICT" | "BALANCED" | "RELAXED") ?? "BALANCED",
+        address: o?.address ?? "", phone: o?.phone ?? "", invoiceNumbering: numberingFromColumns(o?.invoiceNumberPattern, o?.invoiceNumberReset), signatoryName: o?.invoiceSignatoryName ?? null, signatoryTitle: o?.invoiceSignatoryTitle ?? null, sellerName: o?.invoiceSellerName ?? null,
+      };
     },
     validation: { run: (orgId, dossierId, shipment, version, org) => runRules(validation, orgId, dossierId, shipment, version, org) },
     usage, ai: skillBase.ai, skills: createSkillResolver(skillBase),

@@ -146,6 +146,7 @@ function toStored(seeds: OrgSeed[]): { orgs: StoredOrg[]; users: StoredUser[] } 
         usage: { dossiersThisMonth: s.dossiers, pagesThisMonth: s.pages },
         suspectThreshold: "BALANCED",
         fourEyes: false,
+        invoiceSettings: { numbering: { pattern: "INV{YY}{MM}-{NNN}", reset: "MONTH" }, signatoryName: null, signatoryTitle: null, sellerName: null },
       },
       meta: {
         status: s.suspended ? "SUSPENDED" : "ACTIVE",

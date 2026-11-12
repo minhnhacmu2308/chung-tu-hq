@@ -5,6 +5,7 @@ import { FREIGHT_ADJUSTMENT_LABEL, FREIGHT_NOT_INCLUDED, freightReasonText, INSU
 import type { Adjustment } from "../valuation.js";
 import { IDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
+import { spreadInvoiceList } from "./invoice-list.js";
 import { domesticPorts, foreignPorts, incotermField, invoiceKind, lineHs, onSitePlace, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { BY_WATER, IN_CONTAINER, RE_IMPORT, TEMP_IMPORT } from "./conditions.js";
 import { profileSource, SRC, warehouseFromAn } from "./sources.js";
@@ -39,6 +40,19 @@ const valuationDetail = (i: MappingInput): MappedValue => {
   const src = fromSourced(i.shipment.transport.departureDate, "BILL_OF_LADING");
   return { ...src, value: `${date}${notes.join("; ")}` };
 };
+
+/** 1.68 Phần ghi chú: C/O (kèm ngày cấp), container. Ghi chú của hồ sơ là ghi chú nội bộ (“không gửi Hải quan”) – không đưa vào. */
+const noteBase = (i: MappingInput): MappedValue => {
+  const c = i.shipment.transport.containers;
+  const co = coRef(i);
+  const parts = [co?.text, c.length ? `Container: ${c.map((x) => x.no).join(", ")}` : null].filter(Boolean);
+  const value = parts.length ? parts.join("; ") : null;
+  return co && !co.dated ? { value, source: "DOSSIER", suspect: true, note: "Bổ sung ngày cấp C/O sau số C/O (TT121, chỉ tiêu 1.68)" } : { value, source: "DOSSIER" };
+};
+
+/** Lô nhiều hóa đơn: số hóa đơn ghi ở 1.68 (≤ 100), tiếp sang 1.50 (≤ 280) – ADR 0013. */
+const invoiceSlots = (i: MappingInput) =>
+  spreadInvoiceList(i, [{ base: noteBase(i), max: 100, no: N.GHI_CHU }, { base: valuationDetail(i), max: 280, no: N.CT_TG }]);
 
 /** Phương thức thanh toán thực tế khi 1.43 khai KC: T/T, chuyển khoản → "PHƯƠNG THỨC THANH TOÁN TT"; mã khác không cần ghi thêm. */
 function paymentDetail(raw: string | null): string | null {
@@ -228,7 +242,7 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   } },
   { code: "KHAI_TG", no: N.KHAI_TG, section: "VALUE", label: "Mã phân loại khai trị giá", required: true, options: { sources: [profileSource("KHAI_TG")], allowFixed: true }, from: (i) => profileOr(i, "KHAI_TG", fixed("6 – Áp dụng phương pháp trị giá giao dịch")) },
   { code: "GP", no: N.GP, section: "VALUE", label: "Giấy phép nhập khẩu", required: false, from: (i) => permitsField(i, "IDA") },
-  { code: "CT_TG", no: N.CT_TG, section: "VALUE", label: "Chi tiết khai trị giá", required: false, from: valuationDetail },
+  { code: "CT_TG", no: N.CT_TG, section: "VALUE", label: "Chi tiết khai trị giá", required: false, from: (i) => invoiceSlots(i)[1]! },
   { code: "PHI_VC", no: N.PHI_VC, section: "VALUE", label: "Phí vận chuyển", required: false, from: freight },
   { code: "PHI_BH", no: N.PHI_BH, section: "VALUE", label: "Phí bảo hiểm", required: false, from: insurance },
   { code: "KHOAN_DC", no: N.KHOAN_DC, section: "VALUE", label: "Khoản điều chỉnh khác", required: false, from: otherAdjustments },
@@ -255,13 +269,6 @@ export const IDA_MAPPINGS: FieldMapping[] = [
     return { value: "MO", source: "SYSTEM", blocking: true, note: `${ch.length} dòng chương 84/85, mô tả không ghi đã qua sử dụng → MO (máy móc, thiết bị chưa qua sử dụng – CV 2061/TCHQ-GSQL). Hàng đã qua sử dụng thì đổi thành CU` };
   } },
   { code: "NGUOI_NT", no: N.NGUOI_NT, section: "GENERAL", label: "Người nộp thuế", required: true, options: { sources: [profileSource("NGUOI_NT")], allowFixed: true }, from: (i) => profileOr(i, "NGUOI_NT", fixed("1 – Người nhập khẩu")) },
-  { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: (i) => {
-    const c = i.shipment.transport.containers;
-    const co = coRef(i);
-    // Ghi chú của hồ sơ là ghi chú nội bộ (“không gửi Hải quan”) – không đưa vào Phần ghi chú của tờ khai.
-    const parts = [co?.text, c.length ? `Container: ${c.map((x) => x.no).join(", ")}` : null].filter(Boolean);
-    const value = parts.length ? parts.join("; ") : null;
-    return co && !co.dated ? { value, source: "DOSSIER", suspect: true, note: "Bổ sung ngày cấp C/O sau số C/O (TT121, chỉ tiêu 1.68)" } : { value, source: "DOSSIER" };
-  } },
+  { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: (i) => invoiceSlots(i)[0]! },
   { code: "SO_QLNB", no: N.SO_QLNB, section: "GENERAL", label: "Số quản lý nội bộ doanh nghiệp", required: false, from: (i) => ({ value: i.dossier.code, source: "DOSSIER" }) },
 ];

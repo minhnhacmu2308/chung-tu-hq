@@ -1,5 +1,5 @@
 // TT121 Điều 18 khoản 1 điểm k + chỉ tiêu 2.60 (tối đa 50 số container): tờ khai xuất hàng container khai đủ số container; nhập khai danh sách container qua HYS (chỉ tiêu 1.35).
-import { fail, listSome, pass, skipped, warn, type Rule } from "../helpers.js";
+import { awaitingDoc, fail, listSome, pass, skipped, warn, type Rule } from "../helpers.js";
 
 const MAX_XK = 50;
 
@@ -18,7 +18,12 @@ export const containerList: Rule = {
     }
     if (d.transportMode !== "SEA_CONTAINER") return skipped("Phương thức vận chuyển không phải đường biển container");
     if (d.direction === "XK") {
-      if (!cs.length) return fail("Tờ khai xuất hàng container phải khai đầy đủ số container (TT121, Điều 18 khoản 1 điểm k)", f);
+      if (!cs.length) {
+        // ADR 0013: B/L có sau khi khai vẫn phải khai số container – lấy theo booking / Packing List.
+        return awaitingDoc(s, ctx, "BILL_OF_LADING")
+          ? fail("Tờ khai xuất hàng container phải khai đầy đủ số container (TT121, Điều 18 khoản 1 điểm k) – vận đơn có sau khi khai: nhập số container theo booking / Packing List", f)
+          : fail("Tờ khai xuất hàng container phải khai đầy đủ số container (TT121, Điều 18 khoản 1 điểm k)", f);
+      }
       if (cs.length > MAX_XK) return warn(`Lô hàng có ${cs.length} container – chỉ tiêu 2.60 nhận tối đa ${MAX_XK} số container: tách tờ khai hoặc kiểm tra lại danh sách`, f);
       return pass(`${cs.length} container sẽ khai ở chỉ tiêu 2.60: ${listSome(cs.map((c) => c.no))}`, f);
     }

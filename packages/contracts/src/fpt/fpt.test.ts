@@ -255,3 +255,9 @@ describe("trạng thái & lỗi", () => {
     expect(FptErrorItemSchema.safeParse({ errorCode: 1 }).success).toBe(false);
   });
 });
+
+describe("Phần ghi chú TK_NT2 – 100 ký tự cả IDA lẫn EDA (ADR 0013)", () => {
+  it.each([["IDA", VN_IDA_FIELDS], ["EDA", VN_EDA_FIELDS]] as const)("%s", (_k, fields) => {
+    expect(fields.find((f) => f.name === "TK_NT2")?.size).toBe(100);
+  });
+});

@@ -6,6 +6,7 @@ export const originCo: Rule = {
   title: "Xuất xứ C/O khớp invoice",
   severity: "WARNING",
   docKinds: ["CERT_OF_ORIGIN", "INVOICE"],
+  awaits: ["CERT_OF_ORIGIN"],
   run(s) {
     const form = s.origin.coForm.value;
     const country = s.origin.country.value;

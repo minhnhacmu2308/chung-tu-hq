@@ -13,6 +13,8 @@ export type OrgRow = {
   id: string; taxCode: string; name: string; address: string; phone: string; planCode: string; suspectThreshold: string; fourEyes: boolean; createdAt: Date;
   /** Mã bưu chính (6 số) – chỉ tiêu 1.14 IDA / 2.13 EDA; thiếu = mặc định của DB (""). */
   postalCode?: string;
+  /** Cài đặt hóa đơn xuất khẩu; thiếu = null. */
+  invoiceNumberPattern?: string | null; invoiceNumberReset?: string | null; invoiceSignatoryName?: string | null; invoiceSignatoryTitle?: string | null; invoiceSellerName?: string | null;
   /** Do khu Quản trị hệ thống đặt (module admin); thiếu = mặc định của DB. */
   status?: string; planStartedAt?: Date | null;
 };
@@ -45,7 +47,7 @@ export interface IdentityRepos {
     /** Mọi org (chỉ dùng trong ngữ cảnh hệ thống: job định kỳ). */
     listAll(): Promise<OrgRow[]>;
     insert(row: OrgRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "postalCode" | "suspectThreshold" | "fourEyes" | "planCode">>): Promise<void>;
+    update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "postalCode" | "suspectThreshold" | "fourEyes" | "planCode" | "invoiceNumberPattern" | "invoiceNumberReset" | "invoiceSignatoryName" | "invoiceSignatoryTitle" | "invoiceSellerName">>): Promise<void>;
   };
   /** Tặng lượt khi tạo doanh nghiệp (đăng ký: 3 lượt, khóa grant:signup:<orgId>) – cùng transaction, trùng id bỏ qua. */
   credits: {

@@ -1,5 +1,5 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
-import type { CustomsSummary, DocKind, EditSheet, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
+import type { CustomsSummary, DocKind, DocumentSources, EditSheet, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
@@ -8,7 +8,7 @@ import type { AiDossierDraft } from "../domain/draft.js";
 export type DossierRow = {
   id: string; orgId: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; customsOfficeCode: string; customsOfficeName: string;
   skillSetId: string; status: DossierStatus; step: StepId; dueDate: string; ownerId: string; note: string | null; invoiceValue: string; currency: string;
-  incoterm: string; transportMode: TransportMode; partyClass: PartyClass; billNo: string; suspectFields: number; declarationNo: string | null; channel: string | null;
+  incoterm: string; transportMode: TransportMode; partyClass: PartyClass; billNo: string; documentSources: DocumentSources; suspectFields: number; declarationNo: string | null; channel: string | null;
   createdAt: Date; updatedAt: Date;
 };
 export type DocumentRow = {
@@ -125,6 +125,8 @@ export type DossierDeps = {
   recordAiUsage?: (u: { orgId: string; kind: "AI_DOSSIER_DRAFT"; model: string; inputTokens: number; outputTokens: number }) => Promise<void>;
   /** Sau khi xóa hẳn hồ sơ (container nối: file hộp thư đã xếp vào hồ sơ trở lại "chờ xếp"). */
   onDeleted?: (ctx: { orgId: OrgId; userId: UserId }, dossierId: string) => Promise<void>;
+  /** Sau khi đổi nguồn chứng từ (ADR 0013) – container nối: chạy lại luật đối chiếu (chứng từ chờ sau khai → SKIPPED). */
+  onDocumentSourcesChanged?: (orgId: string, dossierId: string) => Promise<void>;
   clock: Clock;
   idGen: IdGen;
 };

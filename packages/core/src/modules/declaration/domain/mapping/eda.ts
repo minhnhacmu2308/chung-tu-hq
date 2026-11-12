@@ -4,6 +4,7 @@ import { EDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
 import { isDomesticDelivery } from "@kb/contracts";
 import { EXPORT_NO_240, exportAdjustmentsAllowed, freightRequired, incotermCode, planExportAdjustments } from "../adjustments.js";
+import { spreadInvoiceList } from "./invoice-list.js";
 import { domesticPorts, foreignPorts, incotermField, invoiceKind, onSitePlace, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { BY_WATER, EXPORT_VALUE, IN_CONTAINER, RE_EXPORT, TEMP_EXPORT } from "./conditions.js";
 import { profileSource, SRC } from "./sources.js";
@@ -68,6 +69,10 @@ const valuationMarks = (i: MappingInput): MappedValue => {
   const value = full.length <= MRK_MAX ? full : `${head} +/- dieu chinh = ${exportValueText(i)}`;
   return { value, source: "SYSTEM", note: hint };
 };
+
+/** Lô nhiều hóa đơn: số hóa đơn ghi ở 2.57 (≤ 100), tiếp sang 2.32 (≤ 140) – ADR 0013. */
+const invoiceSlots = (i: MappingInput) =>
+  spreadInvoiceList(i, [{ base: { value: null, source: "DOSSIER" }, max: 100, no: N.GHI_CHU }, { base: valuationMarks(i), max: MRK_MAX, no: "2.32" }]);
 
 export const EDA_MAPPINGS: FieldMapping[] = [
   { code: "SOTK", no: N.SOTK, section: "GENERAL", label: "Số tờ khai", required: false, from: (i) => ({ value: i.dossier.declarationNo ?? "Chưa cấp – nhận sau khi truyền EDA", source: "SYSTEM" }) },
@@ -135,7 +140,7 @@ export const EDA_MAPPINGS: FieldMapping[] = [
     return c.length ? { value: c.join(", "), source: "BILL_OF_LADING" } : missing("BILL_OF_LADING", "Chưa có số container – nhập khi hàng đóng container");
   } },
   // Mã chỉ tiêu = tên ô VNACCS (như 2.13 TK_EPP) – gửi FPT qua applyExtras; người khai sửa thì giá trị sửa thắng.
-  { code: "TK_MRK", no: "2.32", section: "TRANSPORT", label: "Ký hiệu và số hiệu", required: false, from: valuationMarks },
+  { code: "TK_MRK", no: "2.32", section: "TRANSPORT", label: "Ký hiệu và số hiệu", required: false, from: (i) => invoiceSlots(i)[1]! },
   // 2.59 địa chỉ địa điểm xếp hàng lên xe chở hàng: mặc định địa chỉ người xuất khẩu (Tài khoản) – người khai sửa khi đóng hàng nơi khác.
   // Mã 1–5 người khai nhập theo thứ tự (danh mục A202), tên tự điền theo mã 1 trên panel sửa ô.
   { code: "CON_VA", no: "2.59", section: "TRANSPORT", label: "Địa chỉ địa điểm xếp hàng lên xe chở hàng", required: false, when: IN_CONTAINER, from: (i) => ({ value: i.org.address || null, source: "ACCOUNT" }) },
@@ -172,6 +177,6 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   // 2.80 khai theo từng dòng hàng (HAG_OL1..5). Chứng từ không cho biết mặt hàng thuộc quản lý chuyên ngành → người khai nhập.
   { code: "VBPQ", no: N.VBPQ, section: "VALUE", label: "Mã văn bản pháp luật khác (theo dòng hàng)", required: false, from: () => ({ value: null, source: "DOSSIER", note: "Khai khi hàng xuất khẩu thuộc quản lý chuyên ngành. Mã áp cho mọi dòng ghi cách nhau dấu cách; riêng từng dòng ghi “số dòng: mã”, các phần cách nhau dấu “;” (ví dụ “XK; 2: GP KD”). Tối đa 5 mã mỗi dòng" }) },
   // Ghi chú của hồ sơ là ghi chú nội bộ (“không gửi Hải quan”) – người khai tự nhập nội dung gửi Hải quan ở chỉ tiêu này.
-  { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: () => ({ value: null, source: "DOSSIER" }) },
+  { code: "GHI_CHU", no: N.GHI_CHU, section: "GENERAL", label: "Phần ghi chú", required: false, from: (i) => invoiceSlots(i)[0]! },
   { code: "SO_QLNB", no: N.SO_QLNB, section: "GENERAL", label: "Số quản lý nội bộ doanh nghiệp", required: false, from: (i) => ({ value: i.dossier.code, source: "DOSSIER" }) },
 ];

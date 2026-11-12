@@ -42,7 +42,7 @@ export const getDossier = (id: string) =>
 
 export const listDocuments = (dossierId: string) => query((db) => db.documents.filter((d) => d.dossierId === dossierId));
 
-import type { CreateDossierInput, DossierDraft, DraftDossierInput } from "@kb/contracts";
+import { canBeIssued, canBePending, defaultDocumentSources, type CreateDossierInput, type DocKind, type DocSource, type DossierDraft, type DraftDossierInput } from "@kb/contracts";
 export type { CreateDossierInput };
 
 /**
@@ -94,6 +94,7 @@ export const createDossier = (input: CreateDossierInput) =>
       transportMode: input.transportMode,
       partyClass: input.partyClass,
       billNo: "",
+      documentSources: defaultDocumentSources(input.direction, input.transportMode, input.startMode),
       suspectFields: 0,
       ...(input.note ? { note: input.note } : {}),
     };
@@ -101,11 +102,26 @@ export const createDossier = (input: CreateDossierInput) =>
     return d;
   });
 
-export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" | "step" | "suspectFields" | "note" | "declarationNo" | "channel">>) =>
+export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" | "step" | "suspectFields" | "note" | "declarationNo" | "channel" | "documentSources">>) =>
   mutate((db) => {
     const d = db.dossiers.find((x) => x.id === id);
     if (!d) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
-    Object.assign(d, patch, { updatedAt: nowIso() });
+    const { documentSources, ...rest } = patch;
+    // Như backend: gộp nguồn chứng từ; UPLOADED = bỏ đánh dấu ("có sau khi khai" / "hệ thống phát hành"). (Mock không chạy lại luật đối chiếu.)
+    if (documentSources) {
+      const next = { ...d.documentSources };
+      for (const [k, v] of Object.entries(documentSources) as [DocKind, DocSource][]) {
+        if (v === "PENDING_AFTER_DECLARATION") {
+          if (!canBePending(d.direction, k)) throw new ApiError("VALIDATION", "Chứng từ này không đánh dấu có sau khi khai được");
+          next[k] = v;
+        } else if (v === "ISSUED") {
+          if (!canBeIssued(d.direction, k)) throw new ApiError("VALIDATION", "Chứng từ này không do hệ thống phát hành được");
+          next[k] = v;
+        } else delete next[k];
+      }
+      d.documentSources = next;
+    }
+    Object.assign(d, rest, { updatedAt: nowIso() });
     return d;
   });
 

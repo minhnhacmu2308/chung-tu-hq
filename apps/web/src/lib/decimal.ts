@@ -26,3 +26,35 @@ export function applyRate(amount: number, ratePercent: string): number {
 }
 
 export const sumMinor = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
+
+/** Chuỗi thập phân → BigInt × 10^scale (cắt phần lẻ thừa). Dùng cho phép nhân không tràn số. */
+const toScaled = (v: string, scale: number): bigint => {
+  const t = v.trim();
+  const neg = t.startsWith("-");
+  const [int = "0", frac = ""] = t.replace(/^-/, "").split(".");
+  const n = BigInt((int || "0") + (frac + "0".repeat(scale)).slice(0, scale));
+  return neg ? -n : n;
+};
+
+/**
+ * a × b làm tròn `scale` số lẻ (half-up), không qua số thực – vd thành tiền dòng = số lượng × đơn giá.
+ * Cùng quy tắc với backend (Decimal ROUND_HALF_UP, toDecimalString(·, 2)); số chính thức vẫn do server tính.
+ */
+export function mulDecimal(a: string, b: string, scale = 2): string {
+  const S = 12;
+  const prod = toScaled(a, S) * toScaled(b, S); // × 10^(2S)
+  const div = 10n ** BigInt(2 * S - scale);
+  const abs = prod < 0n ? -prod : prod;
+  const q = (abs + div / 2n) / div;
+  const s = q.toString().padStart(scale + 1, "0");
+  const out = scale ? `${s.slice(0, -scale)}.${s.slice(-scale)}` : s;
+  return prod < 0n && q !== 0n ? `-${out}` : out;
+}
+
+/** Tổng chuỗi thập phân, giữ `scale` số lẻ. */
+export function sumDecimal(xs: readonly string[], scale = 2): string {
+  const total = xs.reduce((acc, x) => acc + toScaled(x, scale), 0n);
+  const abs = total < 0n ? -total : total;
+  const s = abs.toString().padStart(scale + 1, "0");
+  return `${total < 0n ? "-" : ""}${scale ? `${s.slice(0, -scale)}.${s.slice(-scale)}` : s}`;
+}

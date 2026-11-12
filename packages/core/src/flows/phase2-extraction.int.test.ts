@@ -14,9 +14,12 @@ import { FakePdfInspector, FakeUnzipper, InMemoryStorage, RecordingPublisher } f
 import { DrizzleDossierUow } from "../modules/dossier/infrastructure/drizzle-uow.js";
 import { listChecks, runRules } from "../modules/validation/index.js";
 import { createValidationInfrastructure } from "../modules/validation/infrastructure/index.js";
-import { finishReading, listFields, processDocument, updateFieldValue, type ExtractionDeps } from "../modules/extraction/index.js";
+import { finishReading, getIssuedInvoices, getManualShipment, issueInvoiceAction, listInvoiceTemplates, saveInvoiceTemplate, listFields, processDocument, saveManualShipment, updateFieldValue, type ExtractionDeps } from "../modules/extraction/index.js";
+import { DEFAULT_INVOICE_LAYOUT, ManualShipmentSchema } from "@kb/contracts";
 import { createDocumentsAdapter, DrizzleExtractionUow, FakeAiProvider } from "../modules/extraction/infrastructure/index.js";
 import { dec } from "../shared/decimal.js";
+import { sql } from "drizzle-orm";
+import { withCtx } from "../db/with-ctx.js";
 
 let t: TestDb;
 let db: Db;
@@ -77,6 +80,75 @@ describe("luồng đọc chứng từ trên Postgres", () => {
     const d = (await dossier.uow.asOrg(ctx, (r) => r.dossiers.list(ctx.orgId, {}, { limit: 1, offset: 0 })))[0]!;
     expect(unwrap(await listFields(extraction, other, d.id))).toEqual([]);
     expect(unwrap(await listChecks(validationDepsOf(), other, d.id))).toEqual([]);
+  });
+  it("nhập tay lô hàng khi chưa có chứng từ (ADR 0013): lưu jsonb, shipment có dòng hàng, audit; org khác không đọc/ghi được", async () => {
+    const d = unwrap(await createDossier(dossier, ctx, { direction: "XK", typeCode: "B11", partner: "NORDIC", customsOffice: "03CE – HP", skillSetId: "default", dueDate: "2026-11-20", incoterm: "FOB", transportMode: "SEA_CONTAINER", partyClass: "4" }));
+    const data = ManualShipmentSchema.parse({ buyer: { name: "NORDIC TOOLING GROUP AB" }, invoice: { currency: "USD" }, items: [{ description: "Drill bit", quantity: "1000", unit: "PCE", unitPrice: "1.25" }] });
+    expect(unwrap(await saveManualShipment(extraction, ctx, d.id, data)).data).toEqual(data);
+    const ship = await extraction.uow.asOrg(ctx, (r) => r.shipments.latest(ctx.orgId, d.id));
+    expect(ship?.data.invoice.totalAmount.value).toBe("1250.00");
+    expect(ship?.data.items).toHaveLength(1);
+    const other: Ctx = { orgId: asOrgId("org_khac"), userId: asUserId("usr_x"), role: "OWNER" };
+    expect((await getManualShipment(extraction, other, d.id)).ok).toBe(false);
+    expect((await saveManualShipment(extraction, other, d.id, data)).ok).toBe(false);
+    expect(await extraction.uow.asOrg(other, (r) => r.manual.get(other.orgId, d.id))).toBeNull();
+  });
+  it("cấp số hóa đơn (ADR 0013 mục 3): số tuần tự kể cả cấp song song, một số đang dùng mỗi hồ sơ, số duy nhất; hủy không tái dùng; org khác không thấy", async () => {
+    const data = ManualShipmentSchema.parse({ buyer: { name: "NORDIC TOOLING GROUP AB" }, invoice: { currency: "USD" }, items: [{ description: "Drill bit", quantity: "10", unit: "PCE", unitPrice: "2" }] });
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const d = unwrap(await createDossier(dossier, ctx, { direction: "XK", typeCode: "B11", partner: `NORDIC ${i}`, customsOffice: "03CE – HP", skillSetId: "default", dueDate: "2026-11-20", incoterm: "FOB", transportMode: "SEA_CONTAINER", partyClass: "4", startMode: "DECLARE_FIRST" }));
+      unwrap(await saveManualShipment(extraction, ctx, d.id, data));
+      ids.push(d.id);
+    }
+    // Ba hồ sơ cấp số cùng lúc → ba số khác nhau, liên tục (bộ đếm khóa dòng).
+    const nos = (await Promise.all(ids.map((id) => issueInvoiceAction(extraction, ctx, id, { action: "RESERVE" })))).map((v) => unwrap(v).current!.no);
+    expect([...nos].sort()).toEqual(["INV2610-001", "INV2610-002", "INV2610-003"]);
+    // Bấm cấp số hai lần cùng lúc trên một hồ sơ → chỉ một số đang dùng.
+    const d0 = ids[0]!;
+    unwrap(await issueInvoiceAction(extraction, ctx, d0, { action: "VOID", reason: "Sai người mua" }));
+    const twice = await Promise.allSettled([issueInvoiceAction(extraction, ctx, d0, { action: "RESERVE" }), issueInvoiceAction(extraction, ctx, d0, { action: "RESERVE" })]);
+    expect(twice.filter((x) => x.status === "fulfilled" && x.value.ok)).toHaveLength(1);
+    const v = unwrap(await getIssuedInvoices(extraction, ctx, d0));
+    expect(v.current?.no).toMatch(/^INV2610-00[45]$/);
+    expect(v.history.map((h) => h.status).sort()).toEqual(["RESERVED", "VOID"]);
+    const ship = await extraction.uow.asOrg(ctx, (r) => r.shipments.latest(ctx.orgId, d0));
+    expect(ship?.data.invoice.no.value).toBe(v.current?.no);
+    // Số duy nhất theo doanh nghiệp (index issued_documents_org_no_uq).
+    await expect(extraction.uow.asOrg(ctx, (r) => r.issued.insert({ id: "isd_dup", orgId: ctx.orgId, dossierId: ids[1]!, kind: "INVOICE", no: nos[0]!, status: "VOID", snapshot: null, issuedBy: ctx.userId, issuedAt: new Date(), releasedBy: null, releasedAt: null, templateId: null, voidedBy: null, voidedAt: null, voidReason: null }))).rejects.toThrow();
+    const other: Ctx = { orgId: asOrgId("org_khac"), userId: asUserId("usr_x"), role: "OWNER" };
+    expect((await getIssuedInvoices(extraction, other, d0)).ok).toBe(false);
+    expect(await extraction.uow.asOrg(other, (r) => r.issued.list(other.orgId, d0))).toEqual([]);
+    expect(await extraction.uow.asOrg(other, (r) => r.issued.peekSeq(other.orgId, "INVOICE", "INV{YY}{MM}-{NNN}", "2610"))).toBe(1);
+  });
+  it("phát hành sau thông quan: snapshot jsonb (layout, số tờ khai, thông tin bổ sung) ghi và đọc lại được; chưa thông quan thì từ chối", async () => {
+    const data = ManualShipmentSchema.parse({ buyer: { name: "NORDIC TOOLING GROUP AB" }, invoice: { currency: "USD" }, marks: "NTG", items: [{ description: "Drill bit", quantity: "10", unit: "PCE", unitPrice: "2" }] });
+    const d = unwrap(await createDossier(dossier, ctx, { direction: "XK", typeCode: "B11", partner: "NORDIC REL", customsOffice: "03CE – HP", skillSetId: "default", dueDate: "2026-11-20", incoterm: "FOB", transportMode: "SEA_CONTAINER", partyClass: "4", startMode: "DECLARE_FIRST" }));
+    unwrap(await saveManualShipment(extraction, ctx, d.id, data));
+    const no = unwrap(await issueInvoiceAction(extraction, ctx, d.id, { action: "RESERVE" })).current!.no;
+    const early = await issueInvoiceAction(extraction, ctx, d.id, { action: "RELEASE" });
+    expect(!early.ok && early.error.reason).toBe("INVOICE_NOT_CLEARED");
+    await withCtx(db, ctx, (tx) => tx.execute(sql`update dossiers set status = 'CLEARED', declaration_no = '306123456780' where id = ${d.id}`));
+    const tpl = unwrap(await saveInvoiceTemplate(extraction, ctx, null, { name: "Mẫu phát hành", isDefault: false, layout: { ...DEFAULT_INVOICE_LAYOUT, title: "INVOICE" } }));
+    unwrap(await issueInvoiceAction(extraction, ctx, d.id, { action: "RELEASE", templateId: tpl.id, extra: { lcNo: "LC-INT-9", blNo: "BL-9" } }));
+    const v = unwrap(await getIssuedInvoices(extraction, ctx, d.id));
+    expect(v.current).toMatchObject({ no, status: "ISSUED", templateId: tpl.id });
+    expect(v.current?.releasedAt).not.toBeNull();
+    expect(v.current?.snapshot).toMatchObject({ declarationNo: "306123456780", marks: "NTG", extra: { lcNo: "LC-INT-9", blNo: "BL-9" }, layout: { title: "INVOICE" }, invoice: { totalAmount: "20.00" } });
+    // Phát hành không đổi tờ khai: số trên shipment giữ nguyên.
+    const ship = await extraction.uow.asOrg(ctx, (r) => r.shipments.latest(ctx.orgId, d.id));
+    expect(ship?.data.invoice.no.value).toBe(no);
+  });
+  it("mẫu in hóa đơn: lưu/đọc layout jsonb, một mẫu mặc định, RLS theo org", async () => {
+    const a = unwrap(await saveInvoiceTemplate(extraction, ctx, null, { name: "Mẫu A", layout: DEFAULT_INVOICE_LAYOUT }));
+    const b = unwrap(await saveInvoiceTemplate(extraction, ctx, null, { name: "Mẫu B", isDefault: true, layout: { ...DEFAULT_INVOICE_LAYOUT, title: "INVOICE" } }));
+    const list = unwrap(await listInvoiceTemplates(extraction, ctx));
+    expect(list[0]?.id).toBe(b.id); // mẫu mặc định đứng đầu
+    expect(list.filter((t) => t.isDefault).map((t) => t.id)).toEqual([b.id]); // một mặc định duy nhất (index invoice_templates_one_default_uq)
+    expect(list.find((t) => t.id === a.id)?.isDefault).toBe(false);
+    expect(list[0]?.layout.title).toBe("INVOICE");
+    const other: Ctx = { orgId: asOrgId("org_khac"), userId: asUserId("usr_x"), role: "OWNER" };
+    expect(unwrap(await listInvoiceTemplates(extraction, other))).toEqual([]);
   });
 });
 

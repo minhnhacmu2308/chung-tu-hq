@@ -1,4 +1,4 @@
-import type { Member, Organization } from "@kb/contracts";
+import { numberingFromColumns, type Member, type Organization } from "@kb/contracts";
 import { dec, toDecimalString } from "../../../shared/decimal.js";
 import type { MembershipRow, OrgRow, PlanRow, UserRow } from "./ports.js";
 
@@ -36,5 +36,6 @@ export function toOrganization(o: OrgRow, plan: PlanRow | null, billing?: Organi
     usage: usage ?? { dossiersThisMonth: 0, pagesThisMonth: 0 },
     suspectThreshold: o.suspectThreshold as Organization["suspectThreshold"],
     fourEyes: o.fourEyes,
+    invoiceSettings: { numbering: numberingFromColumns(o.invoiceNumberPattern, o.invoiceNumberReset), signatoryName: o.invoiceSignatoryName ?? null, signatoryTitle: o.invoiceSignatoryTitle ?? null, sellerName: o.invoiceSellerName ?? null },
   };
 }

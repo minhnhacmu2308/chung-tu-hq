@@ -125,6 +125,46 @@ describe("updateDossier / cancel", () => {
   });
 });
 
+describe("nguồn chứng từ – có sau khi khai (ADR 0013)", () => {
+  const XK = { ...INPUT, direction: "XK" as const, typeCode: "B11", partner: "TOKYO BEARING" };
+  it("hồ sơ XK mới: vận đơn mặc định có sau khi khai; hồ sơ NK như cũ", async () => {
+    expect(unwrap(await createDossier(deps, ctx(), XK)).documentSources).toEqual({ BILL_OF_LADING: "PENDING_AFTER_DECLARATION" });
+    expect(unwrap(await createDossier(deps, ctx(), { ...XK, transportMode: "AIR" })).documentSources).toEqual({ AIR_WAYBILL: "PENDING_AFTER_DECLARATION" });
+    expect(unwrap(await createDossier(deps, ctx(), INPUT)).documentSources).toEqual({});
+  });
+  it("đánh dấu C/O, bỏ B/L → lưu và chạy lại luật một lần; không đổi gì → không chạy lại", async () => {
+    const runs: string[] = [];
+    deps.onDocumentSourcesChanged = async (_orgId, id) => void runs.push(id);
+    const d = unwrap(await createDossier(deps, ctx(), XK));
+    const u = unwrap(await updateDossier(deps, ctx(), d.id, { documentSources: { CERT_OF_ORIGIN: "PENDING_AFTER_DECLARATION", BILL_OF_LADING: "UPLOADED" } }));
+    expect(u.documentSources).toEqual({ CERT_OF_ORIGIN: "PENDING_AFTER_DECLARATION" });
+    expect(uow.data.dossiers[0]!.documentSources).toEqual({ CERT_OF_ORIGIN: "PENDING_AFTER_DECLARATION" });
+    unwrap(await updateDossier(deps, ctx(), d.id, { note: "PO 7" }));
+    expect(runs).toEqual([d.id]);
+  });
+  it("hồ sơ NK không đánh dấu được → VALIDATION, không chạy lại luật", async () => {
+    const runs: string[] = [];
+    deps.onDocumentSourcesChanged = async (_orgId, id) => void runs.push(id);
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    expect(errCode(await updateDossier(deps, ctx(), d.id, { documentSources: { BILL_OF_LADING: "PENDING_AFTER_DECLARATION" } }))).toBe("VALIDATION");
+    expect(runs).toEqual([]);
+  });
+  it("khai trước (GĐ2b): Invoice + PL hệ thống phát hành; đổi qua lại được; B/L, hồ sơ NK không đặt ISSUED được", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), { ...XK, startMode: "DECLARE_FIRST" }));
+    expect(d.documentSources).toEqual({ BILL_OF_LADING: "PENDING_AFTER_DECLARATION", INVOICE: "ISSUED", PACKING_LIST: "ISSUED" });
+    expect(unwrap(await updateDossier(deps, ctx(), d.id, { documentSources: { PACKING_LIST: "UPLOADED" } })).documentSources).toEqual({ BILL_OF_LADING: "PENDING_AFTER_DECLARATION", INVOICE: "ISSUED" });
+    expect(errCode(await updateDossier(deps, ctx(), d.id, { documentSources: { BILL_OF_LADING: "ISSUED" } }))).toBe("VALIDATION");
+    const nk = unwrap(await createDossier(deps, ctx(), { ...INPUT, startMode: "DECLARE_FIRST" }));
+    expect(nk.documentSources).toEqual({});
+    expect(errCode(await updateDossier(deps, ctx(), nk.id, { documentSources: { INVOICE: "ISSUED" } }))).toBe("VALIDATION");
+  });
+  it("org khác không đổi được nguồn chứng từ", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), XK));
+    expect(errCode(await updateDossier(deps, ctx("DECLARANT", "org_b", "usr_b"), d.id, { documentSources: { CERT_OF_ORIGIN: "PENDING_AFTER_DECLARATION" } }))).toBe("NOT_FOUND");
+    expect(uow.data.dossiers[0]!.documentSources).toEqual({ BILL_OF_LADING: "PENDING_AFTER_DECLARATION" });
+  });
+});
+
 describe("uploadDocuments", () => {
   it("3 PDF → 3 chứng từ QUEUED, loại theo tên file, file lên storage, job extract-document mỗi file, hồ sơ PROCESSING, sự kiện tiến trình", async () => {
     const d = unwrap(await createDossier(deps, ctx(), INPUT));

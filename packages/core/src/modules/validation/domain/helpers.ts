@@ -3,7 +3,8 @@ import { Decimal, dec } from "../../../shared/decimal.js";
 
 export type Direction = "NK" | "XK";
 /** Thông tin hồ sơ mà luật cần biết: nhập hay xuất, mã loại hình, phương thức vận chuyển. */
-export type DossierProfile = { direction: Direction; typeCode: string; transportMode: TransportMode };
+/** `pendingKinds`: chứng từ "có sau khi khai"; `issuedKinds`: chứng từ hệ thống phát hành (ADR 0013) – vắng = không có. */
+export type DossierProfile = { direction: Direction; typeCode: string; transportMode: TransportMode; pendingKinds?: DocKind[]; issuedKinds?: DocKind[] };
 export type RuleOutcome = { result: RuleResult; detail: string; fields: string[] };
 /** `dossier` vắng khi chưa biết hồ sơ (luật cần nó trả SKIPPED). */
 /** `charges`: chi phí người khai nhập ở bước OCR & kiểm tra (cước nhập tay / lý do chưa có số) – vắng = chỉ theo chứng từ. */
@@ -16,6 +17,8 @@ export type Rule = {
   code: string; title: string; severity: RuleSeverity; docKinds: DocKind[];
   /** Chỉ áp dụng cho các chiều này (vắng = cả nhập lẫn xuất). */
   directions?: Direction[];
+  /** Chứng từ có thể đến sau tờ khai mà luật lấy dữ liệu từ đó (ADR 0013): đang chờ và chưa tải lên → luật SKIPPED ghi lý do "chờ chứng từ sau khai". */
+  awaits?: DocKind[];
   run(s: Shipment, ctx: RuleContext): RuleOutcome;
 };
 
@@ -50,6 +53,8 @@ export const valueOf = (f: Sourced<string>, kind: DocKind) => {
   return src ? (src.normalized ?? src.raw) : null;
 };
 export const hasKind = (s: Shipment, kind: DocKind) => s.documents.some((d) => d.kind === kind);
+/** Chứng từ hồ sơ đánh dấu có sau khi khai mà chưa tải lên (ADR 0013). */
+export const awaitingDoc = (s: Shipment, ctx: RuleContext, kind: DocKind) => !!ctx.dossier?.pendingKinds?.includes(kind) && !hasKind(s, kind);
 
 /** Số chữ số phần nguyên: 3860.5 → 4; 0.25 → 1. */
 export const intDigits = (d: Decimal) => d.abs().trunc().toFixed().length;

@@ -1,7 +1,9 @@
 // Gộp lại toàn bộ hồ sơ từ các extraction DONE: shipment version mới, chiếu trường (giữ USER_CONFIRMED), chạy luật, cập nhật hồ sơ.
-import { EXTRACTION_SCHEMA_VERSION, type Shipment, type Sourced } from "@kb/contracts";
+import { EXTRACTION_SCHEMA_VERSION, vnDateOf, type Shipment, type Sourced } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { isSuspect } from "../domain/field-status.js";
+import { applyIssued } from "../domain/issued.js";
+import { applyManual } from "../domain/manual.js";
 import { mergeExtractions, type FileExtraction } from "../domain/merge.js";
 import { isValidTaxCode } from "../domain/normalize.js";
 import { projectFields } from "../domain/project-fields.js";
@@ -21,6 +23,8 @@ export const countSuspect = (rows: { status: FieldRow["status"] }[], threshold: 
 export async function remergeDossier(deps: ExtractionDeps, orgId: string, dossierId: string): Promise<void> {
   const org = await deps.documents.orgInfo(orgId);
   const docsAll = await deps.documents.listForDossier(orgId, dossierId);
+  // Đọc ngoài transaction (không gọi port module khác trong uow – CLAUDE.md core).
+  const invoiceIssued = (await deps.documents.dossierInfo(orgId, dossierId))?.documentSources.INVOICE === "ISSUED";
   const ctx = { orgId: asOrgId(orgId), userId: asUserId("") };
   const result = await deps.uow.asOrg(ctx, async (r: ExtractionRepos) => {
     await r.lockDossier(orgId, dossierId);
@@ -34,7 +38,9 @@ export async function remergeDossier(deps: ExtractionDeps, orgId: string, dossie
     });
     const latestShipment = await r.shipments.latest(orgId, dossierId);
     const version = (latestShipment?.version ?? 0) + 1;
-    const shipment = mergeExtractions(files, { version, taxCodeValid: isValidTaxCode });
+    // Dữ liệu nhập tay (ADR 0013) ghép sau khi gộp chứng từ – hồ sơ chưa có chứng từ nào vẫn có shipment.
+    const manual = await r.manual.get(orgId, dossierId);
+    const shipment = applyManual(mergeExtractions(files, { version, taxCodeValid: isValidTaxCode }), manual?.data ?? null);
 
     const existing = await r.fields.list(orgId, dossierId);
     const byKey = new Map(existing.map((f) => [`${f.documentId}:${f.key}`, f]));
@@ -50,6 +56,10 @@ export async function remergeDossier(deps: ExtractionDeps, orgId: string, dossie
         confirmedBy: keepUser ? prev.confirmedBy : null, confirmedAt: keepUser ? prev.confirmedAt : null,
       };
     });
+    // Số hóa đơn hệ thống cấp (ADR 0013 mục 3) ghép sau cùng: số đã cấp luôn là chỉ tiêu Số hóa đơn, không bị ô sửa tay đè.
+    // Chỉ khi nguồn Invoice còn là "hệ thống phát hành": người khai đổi sang invoice tải lên thì số trên invoice thật thắng.
+    const issued = invoiceIssued ? (await r.issued.list(orgId, dossierId)).find((x) => x.status !== "VOID") : undefined;
+    applyIssued(shipment, issued ? { no: issued.no, date: issued.snapshot?.invoice.date ?? vnDateOf(issued.issuedAt) } : null);
     await r.fields.replaceForDossier(orgId, dossierId, fieldRows);
     await r.shipments.insert({ id: deps.idGen.next("job"), orgId, dossierId, version, data: shipment, schemaVersion: String(EXTRACTION_SCHEMA_VERSION), createdAt: now });
     return { shipment, version, suspect: countSuspect(fieldRows, org.suspectThreshold) };
@@ -64,6 +74,12 @@ export async function remergeDossier(deps: ExtractionDeps, orgId: string, dossie
     allDone: docsAll.every((d) => d.status === "DONE" || d.status === "ERROR"),
   });
   // Chỉ báo một lần khi hồ sơ vừa đọc xong; chạy lại job / gộp lại sau khi xóa chứng từ không báo nữa.
-  if (finishedNow) await deps.notify?.notify(orgId, { dossierOwnerOf: dossierId }, { title: "Đã đọc xong bộ chứng từ", body: `${result.suspect} trường cần kiểm tra – vào bước OCR & kiểm tra để xác nhận.`, href: `/dossiers/${dossierId}?step=ocr` });
+  if (finishedNow && docsAll.length) await deps.notify?.notify(orgId, { dossierOwnerOf: dossierId }, { title: "Đã đọc xong bộ chứng từ", body: `${result.suspect} trường cần kiểm tra – vào bước OCR & kiểm tra để xác nhận.`, href: `/dossiers/${dossierId}?step=ocr` });
   await deps.documents.publish(orgId, dossierId, { type: "fields.updated" });
+}
+
+/** Gộp lại shipment + luật + tờ khai nháp sau khi nguồn chứng từ đổi (vd Invoice ISSUED ↔ tải lên). Gọi từ composition root. */
+export async function refreshAfterSourcesChanged(deps: ExtractionDeps, orgId: string, dossierId: string): Promise<void> {
+  await remergeDossier(deps, orgId, dossierId);
+  await deps.onShipmentEdited?.(orgId, dossierId);
 }

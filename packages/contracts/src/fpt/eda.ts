@@ -138,7 +138,7 @@ export const VN_EDA_ROWS = [
   ["TK_EB2", "decimal", "12", false, "Số đính kèm khai báo điện tử"],
   ["TK_EA3", "text", "3", false, "Phân loại đính kèm khai báo điện tử"],
   ["TK_EB3", "decimal", "12", false, "Số đính kèm khai báo điện tử"],
-  ["TK_NT2", "text", null, false, "Phần ghi chú", { note: "Đặc tả ghi Type \"Memo\" (không giới hạn độ dài) – coi là text" }],
+  ["TK_NT2", "text", "100", false, "Phần ghi chú", { note: "Đặc tả FPT ghi Type \"Memo\"; giới hạn 100 ký tự như IDA và chỉ tiêu 2.57 (chốt nghiệp vụ 2026-11-10, ADR 0013)" }],
   ["TK_REF", "text", "20", false, "Số quản lý của nội bộ doanh nghiệp"],
   ["TK_K82", "text", "5", false, "Số quản lý người sử dụng"],
   ["TK_DPD", "date", null, false, "Ngày khởi hành vận chuyển"],

@@ -1,4 +1,4 @@
-import type { CustomFieldDef, ClassifyResult, CrossCheck, DocKind, DocumentStatus, DossierStatus, EditSheet, FieldGroup, FieldStatus, Region, Shipment } from "@kb/contracts";
+import type { CustomFieldDef, ClassifyResult, CrossCheck, DocKind, DocumentSources, DocumentStatus, DossierStatus, EditSheet, FieldGroup, FieldStatus, InvoiceLayout, InvoiceNumbering, IssuedInvoiceSnapshot, IssuedStatus, ManualShipment, Region, Shipment } from "@kb/contracts";
 import type { ZodType } from "zod";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
@@ -8,7 +8,25 @@ import type { ProgressEvent } from "../../dossier/index.js";
 export type ExtractionRow = { id: string; orgId: string; documentId: string; kind: DocKind; skillVersionId: string | null; promptVersion: string; schemaVersion: string; pipelineVersion: string; model: string; idempotencyKey: string; raw: unknown; regions: Record<string, Region> | null; status: "DONE" | "ERROR"; error: string | null; usageEventId: string | null; createdAt: Date };
 export type ShipmentRow = { id: string; orgId: string; dossierId: string; version: number; data: Shipment; schemaVersion: string; createdAt: Date };
 export type FieldRow = { id: string; orgId: string; dossierId: string; documentId: string; group: FieldGroup; key: string; label: string; value: string; originalValue: string; status: FieldStatus; region: Region | null; note: string | null; shipmentPath: string | null; confirmedBy: string | null; confirmedAt: Date | null };
-export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL"; at: Date };
+export type ManualShipmentRow = { id: string; orgId: string; dossierId: string; data: ManualShipment; updatedBy: string; createdAt: Date; updatedAt: Date };
+/** Một số hóa đơn thương mại do hệ thống cấp (ADR 0013 mục 3). RESERVED: snapshot null; ISSUED: snapshot đóng băng lúc phát hành. */
+export type IssuedRow = {
+  id: string; orgId: string; dossierId: string; kind: "INVOICE"; no: string; status: IssuedStatus; snapshot: IssuedInvoiceSnapshot | null;
+  issuedBy: string; issuedAt: Date; releasedBy: string | null; releasedAt: Date | null; templateId: string | null;
+  voidedBy: string | null; voidedAt: Date | null; voidReason: string | null;
+};
+/** Mẫu in hóa đơn của doanh nghiệp. */
+export type TemplateRow = { id: string; orgId: string; name: string; isDefault: boolean; layout: InvoiceLayout; createdBy: string; createdAt: Date; updatedAt: Date };
+/** Thông tin doanh nghiệp (module identity, container nối). Địa chỉ/điện thoại/cài đặt hóa đơn in trên hóa đơn thương mại. */
+export type OrgInfo = {
+  taxCode: string; name: string; suspectThreshold: "STRICT" | "BALANCED" | "RELAXED";
+  address?: string; phone?: string; signatoryName?: string | null; signatoryTitle?: string | null;
+  /** Mẫu số hóa đơn; thiếu = DEFAULT_INVOICE_NUMBERING. */
+  invoiceNumbering?: InvoiceNumbering;
+  /** Tên người bán in trên hóa đơn; thiếu = name. */
+  sellerName?: string | null;
+};
+export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "MANUAL_EDIT" | "INVOICE_ISSUE"; at: Date };
 
 /** Mọi phương thức nhận `orgId` tường minh (bất biến 1) – RLS là lớp thứ hai; fake in-memory từ chối orgId khác ngữ cảnh. */
 export interface ExtractionRepos {
@@ -32,6 +50,34 @@ export interface ExtractionRepos {
     update(orgId: string, id: string, patch: Partial<Pick<FieldRow, "value" | "status" | "note" | "confirmedBy" | "confirmedAt">>): Promise<void>;
   };
   audit: { insert(row: AuditRow): Promise<void> };
+  /** Dữ liệu lô hàng nhập tay (ADR 0013), một dòng mỗi hồ sơ. */
+  manual: {
+    get(orgId: string, dossierId: string): Promise<ManualShipmentRow | null>;
+    upsert(row: ManualShipmentRow): Promise<void>;
+  };
+  /** Số hóa đơn thương mại hệ thống cấp (ADR 0013 mục 3). */
+  issued: {
+    /** Mọi số của hồ sơ, mới nhất trước. */
+    list(orgId: string, dossierId: string): Promise<IssuedRow[]>;
+    insert(row: IssuedRow): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<IssuedRow, "status" | "snapshot" | "releasedBy" | "releasedAt" | "templateId" | "voidedBy" | "voidedAt" | "voidReason">>): Promise<void>;
+    /** Số đã có trong doanh nghiệp chưa (mọi trạng thái) – tránh trùng khi mẫu số đổi. */
+    exists(orgId: string, kind: "INVOICE", no: string): Promise<boolean>;
+    /** Số thứ tự kế tiếp của (doanh nghiệp, loại, mẫu, kỳ) – tăng nguyên tử, khóa dòng đếm tới hết transaction; không quay lại kể cả khi hủy. */
+    nextSeq(orgId: string, kind: "INVOICE", pattern: string, period: string, now: Date): Promise<number>;
+    /** Xem số kế tiếp, không tăng. */
+    peekSeq(orgId: string, kind: "INVOICE", pattern: string, period: string): Promise<number>;
+  };
+  /** Mẫu in hóa đơn. */
+  templates: {
+    list(orgId: string): Promise<TemplateRow[]>;
+    get(orgId: string, id: string): Promise<TemplateRow | null>;
+    insert(row: TemplateRow): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Pick<TemplateRow, "name" | "isDefault" | "layout" | "updatedAt">>): Promise<void>;
+    delete(orgId: string, id: string): Promise<void>;
+    /** Bỏ cờ mặc định của mọi mẫu trong doanh nghiệp (trước khi đặt mẫu khác làm mặc định). */
+    clearDefault(orgId: string): Promise<void>;
+  };
 }
 
 export interface ExtractionUow {
@@ -51,9 +97,11 @@ export interface DocumentsPort {
   finishReading(orgId: string, dossierId: string, suspectFields: number): Promise<void>;
   readFile(storageKey: string): Promise<Buffer>;
   publish(orgId: string, dossierId: string, event: ProgressEvent): Promise<void>;
-  orgInfo(orgId: string): Promise<{ taxCode: string; name: string; suspectThreshold: "STRICT" | "BALANCED" | "RELAXED" }>;
+  orgInfo(orgId: string): Promise<OrgInfo>;
   /** Trạng thái hồ sơ (khóa sửa khi đã duyệt/truyền/hủy). */
   dossierStatus(orgId: string, dossierId: string): Promise<DossierStatus | null>;
+  /** Hồ sơ cho việc phát hành chứng từ (ADR 0013): chiều, nguồn chứng từ, số tờ khai Hải quan (đã khai tạm). */
+  dossierInfo(orgId: string, dossierId: string): Promise<{ status: DossierStatus; direction: "NK" | "XK"; documentSources: DocumentSources; declarationNo: string | null } | null>;
 }
 
 export interface ValidationPort {

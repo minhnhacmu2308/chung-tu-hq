@@ -2,9 +2,9 @@
 import type { DocKind, DocumentStatus } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import type { DossierDeps } from "../../dossier/index.js";
-import type { DocumentInfo, DocumentsPort } from "../application/ports.js";
+import type { DocumentInfo, DocumentsPort, OrgInfo } from "../application/ports.js";
 
-export type OrgInfoReader = (orgId: string) => Promise<{ taxCode: string; name: string; suspectThreshold: "STRICT" | "BALANCED" | "RELAXED" }>;
+export type OrgInfoReader = (orgId: string) => Promise<OrgInfo>;
 
 export function createDocumentsAdapter(dossier: DossierDeps, orgInfo: OrgInfoReader): DocumentsPort {
   const ctx = (orgId: string) => ({ orgId: asOrgId(orgId), userId: asUserId("") });
@@ -37,6 +37,10 @@ export function createDocumentsAdapter(dossier: DossierDeps, orgInfo: OrgInfoRea
     finishReading: (orgId, dossierId, suspectFields) => dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.update(orgId, dossierId, { suspectFields, step: "ocr", status: "NEEDS_REVIEW", updatedAt: dossier.clock.now() })),
     readFile: (key) => dossier.storage.get(key),
     dossierStatus: async (orgId, dossierId) => (await dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.get(orgId, dossierId)))?.status ?? null,
+    dossierInfo: async (orgId, dossierId) => {
+      const d = await dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.get(orgId, dossierId));
+      return d ? { status: d.status, direction: d.direction, documentSources: d.documentSources, declarationNo: d.declarationNo } : null;
+    },
     publish: (orgId, dossierId, event) => dossier.publisher.publish(orgId, dossierId, event),
     orgInfo,
   };

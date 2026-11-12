@@ -82,6 +82,8 @@ export const ShipmentSchema = z.object({
   documents: z.array(z.object({ id: z.string(), kind: DocKindSchema, pages: z.number().int().nonnegative() })),
   /** Trường bổ sung riêng của doanh nghiệp: custom[loại chứng từ][key]. */
   custom: z.record(z.string(), z.record(z.string(), str())),
+  /** Số hóa đơn thương mại hệ thống đã cấp (ADR 0013 mục 3) – đã điền vào `invoice.no`. Vắng/null = chưa cấp số / đã hủy. */
+  issuedInvoice: z.object({ no: z.string(), date: IsoDateSchema }).nullable().optional(),
 });
 export type Shipment = z.infer<typeof ShipmentSchema>;
 

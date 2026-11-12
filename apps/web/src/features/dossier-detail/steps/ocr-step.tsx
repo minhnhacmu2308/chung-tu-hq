@@ -24,6 +24,9 @@ import { SKILL_LEARN_MESSAGES } from "../ocr/ocr.messages";
 import { IncotermChangeDialog, incotermCodeChanged, useSaveFreightTermNote } from "../ocr/incoterm-change-dialog";
 import { useFieldMutations } from "../ocr/use-field-mutations";
 import { ValueChargesCard } from "../ocr/value-charges-card";
+import { IssuedInvoiceCard } from "../issued-invoice/issued-invoice-card";
+import { ManualShipmentCard } from "../manual-shipment/manual-shipment-card";
+import { getManualShipment, manualShipmentKeys } from "@/api/manual-shipment";
 import { useAdvanceDossier } from "../use-advance";
 import type { StepProps } from "./types";
 import { OCR_STEP_MESSAGES } from "./ocr-step.messages";
@@ -236,6 +239,9 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const docsQuery = useQuery({ queryKey: ocrKeys.documents(dossier.id), queryFn: () => listDossierDocuments(dossier.id) });
   const fieldsQuery = useQuery({ queryKey: ocrKeys.fields(dossier.id), queryFn: () => listFields(dossier.id) });
   const checksQuery = useQuery({ queryKey: ocrKeys.checks(dossier.id), queryFn: () => listChecks(dossier.id) });
+  // Dữ liệu nhập tay (ADR 0013 – Khai trước): có dòng hàng thì xác nhận dữ liệu được dù chưa có chứng từ.
+  const manualQuery = useQuery({ queryKey: manualShipmentKeys.detail(dossier.id), queryFn: () => getManualShipment(dossier.id) });
+  const hasManualItems = (manualQuery.data?.data?.items.length ?? 0) > 0;
   const advance = useAdvanceDossier(dossier.id, goTo);
   const [filter, setFilter] = useState<Filter>("all");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -335,7 +341,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
           ) : docs.length === 0 ? (
             <EmptyState
               title={t.noDocsTitle}
-              description={t.noDocsDesc}
+              description={dossier.direction === "XK" ? t.noDocsManual : t.noDocsDesc}
               action={<Button onClick={() => goTo("upload")}>{t.backToUpload}</Button>}
             />
           ) : (
@@ -364,6 +370,12 @@ export function OcrStep({ dossier, goTo }: StepProps) {
           )}
         </CardContent>
       </Card>
+
+      {(dossier.direction === "XK" || (!loading && docs.length === 0)) && (
+        <ManualShipmentCard dossierId={dossier.id} currency={dossier.currency} incoterm={dossier.incoterm} hasDocuments={docs.length > 0} />
+      )}
+
+      {dossier.direction === "XK" && dossier.documentSources.INVOICE === "ISSUED" && <IssuedInvoiceCard dossierId={dossier.id} />}
 
       <ValueChargesCard dossierId={dossier.id} currency={dossier.currency} {...(editIncoterm ? { onEditIncoterm: editIncoterm } : {})} />
 
@@ -394,7 +406,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
               {t.toAgent}
             </Button>
           ) : (
-            <Button className="cq-max-sm:flex-1" rightIcon={<ArrowRight className="h-4 w-4" />} loading={advance.isPending} disabled={docs.length === 0} onClick={onConfirmData}>
+            <Button className="cq-max-sm:flex-1" rightIcon={<ArrowRight className="h-4 w-4" />} loading={advance.isPending} disabled={docs.length === 0 && !hasManualItems} onClick={onConfirmData}>
               {t.confirmData}
             </Button>
           )}

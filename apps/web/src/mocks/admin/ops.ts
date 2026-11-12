@@ -187,7 +187,7 @@ export function createOrg(db: AdminScope, input: unknown): CreateOrgResult {
       id: orgId, name: v.name, taxCode: v.taxCode, address: v.address, phone: "", plan,
       billing: { balance: 0, reserved: 0, available: 0, contract: null, declarationsThisMonth: 0 },
       usage: { dossiersThisMonth: 0, pagesThisMonth: 0 },
-      suspectThreshold: "BALANCED", fourEyes: false,
+      suspectThreshold: "BALANCED", fourEyes: false, invoiceSettings: { numbering: { pattern: "INV{YY}{MM}-{NNN}", reset: "MONTH" }, signatoryName: null, signatoryTitle: null, sellerName: null },
     },
     meta: { status: "ACTIVE", createdAt: now, costs: { aiCostVnd: "0", hsCostVnd: "0", customsCostVnd: "0" } },
   });

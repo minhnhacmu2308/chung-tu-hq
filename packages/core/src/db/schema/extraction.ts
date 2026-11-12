@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgPolicy, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, jsonb, pgPolicy, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { documents, dossiers } from "./dossier.js";
 import { appRole, id, orgId, orgPolicyUsing, orgRls, timestamps } from "./shared.js";
 
@@ -44,6 +44,22 @@ export const shipments = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("shipments_dossier_version_uq").on(t.dossierId, t.version), orgRls("shipments_rls")],
+).enableRLS();
+
+/** Dữ liệu lô hàng nhập tay (ADR 0013 – Khai trước), một dòng mỗi hồ sơ; ghép vào shipment mỗi lần gộp. */
+export const manualShipments = pgTable(
+  "manual_shipments",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id")
+      .notNull()
+      .references(() => dossiers.id, { onDelete: "cascade" }),
+    data: jsonb("data").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    ...timestamps(),
+  },
+  (t) => [uniqueIndex("manual_shipments_org_dossier_uq").on(t.orgId, t.dossierId), orgRls("manual_shipments_rls")],
 ).enableRLS();
 
 /** Hình chiếu của shipment cho màn OCR: từng trường, có vị trí và trạng thái. */
@@ -95,5 +111,78 @@ export const fieldAudit = pgTable(
     index("field_audit_org_dossier_idx").on(t.orgId, t.dossierId, t.at),
     pgPolicy("field_audit_select", { for: "select", to: appRole, using: orgPolicyUsing }),
     pgPolicy("field_audit_insert", { for: "insert", to: appRole, withCheck: sql`${orgPolicyUsing}` }),
+  ],
+).enableRLS();
+
+/**
+ * Hóa đơn thương mại do hệ thống phát hành (ADR 0013 mục 3 – sau thông quan). Một dòng một số:
+ * RESERVED = đã cấp số (điền vào tờ khai, chưa có nội dung) → ISSUED = đã phát hành sau thông quan (snapshot đóng băng, in được);
+ * VOID = đã hủy (số không dùng lại). Số duy nhất theo (org, loại); mỗi hồ sơ tối đa một số đang dùng (index một phần).
+ */
+export const issuedDocuments = pgTable(
+  "issued_documents",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id")
+      .notNull()
+      .references(() => dossiers.id, { onDelete: "cascade" }),
+    /** "INVOICE" – hóa đơn thương mại (Packing List in cùng số). */
+    kind: text("kind").notNull(),
+    no: text("no").notNull(),
+    status: text("status").notNull(),
+    /** Nội dung lúc phát hành – null khi mới cấp số. */
+    snapshot: jsonb("snapshot"),
+    /** Cấp số: ai, lúc nào. */
+    issuedBy: text("issued_by").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+    /** Phát hành (sau thông quan): ai, lúc nào, theo mẫu nào. */
+    releasedBy: text("released_by"),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    templateId: text("template_id"),
+    voidedBy: text("voided_by"),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("issued_documents_org_no_uq").on(t.orgId, t.kind, t.no),
+    uniqueIndex("issued_documents_one_current_uq").on(t.orgId, t.dossierId, t.kind).where(sql`status in ('RESERVED', 'ISSUED')`),
+    index("issued_documents_org_dossier_idx").on(t.orgId, t.dossierId),
+    check("issued_documents_status_chk", sql`status in ('RESERVED', 'ISSUED', 'VOID')`),
+    orgRls("issued_documents_rls"),
+  ],
+).enableRLS();
+
+/** Bộ đếm số chứng từ theo doanh nghiệp / loại / mẫu số (cột `prefix` giữ mẫu) / kỳ đánh lại. Tăng bằng UPSERT … RETURNING trong transaction cấp số – khóa dòng tới khi commit. */
+export const documentCounters = pgTable(
+  "document_counters",
+  {
+    orgId: orgId(),
+    kind: text("kind").notNull(),
+    prefix: text("prefix").notNull(),
+    period: text("period").notNull(),
+    last: integer("last").notNull(),
+    ...timestamps(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.kind, t.prefix, t.period] }), orgRls("document_counters_rls")],
+).enableRLS();
+
+/** Mẫu in hóa đơn thương mại do doanh nghiệp thiết kế (layout = InvoiceLayout, parse Zod khi đọc). Tối đa một mẫu mặc định mỗi doanh nghiệp. */
+export const invoiceTemplates = pgTable(
+  "invoice_templates",
+  {
+    id: id(),
+    orgId: orgId(),
+    name: text("name").notNull(),
+    isDefault: boolean("is_default").notNull().default(false),
+    layout: jsonb("layout").notNull(),
+    createdBy: text("created_by").notNull(),
+    ...timestamps(),
+  },
+  (t) => [
+    index("invoice_templates_org_idx").on(t.orgId),
+    uniqueIndex("invoice_templates_one_default_uq").on(t.orgId).where(sql`is_default`),
+    orgRls("invoice_templates_rls"),
   ],
 ).enableRLS();

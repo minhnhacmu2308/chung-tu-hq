@@ -76,6 +76,45 @@ export const DocKindSchema = z.enum([
 ]);
 export type DocKind = z.infer<typeof DocKindSchema>;
 
+/**
+ * Nguồn của từng loại chứng từ dự kiến trong hồ sơ (ADR 0013). Vắng = `UPLOADED` (tải lên, AI đọc – như cũ).
+ * `PENDING_AFTER_DECLARATION`: chưa có, sẽ có sau khi khai (B/L, AWB, C/O của hàng xuất) – không chặn khai; luật cần chứng từ này trả SKIPPED.
+ * `ISSUED`: hệ thống phát hành từ dữ liệu lô hàng (Invoice, Packing List của hàng xuất "khai trước") – chưa phát hành invoice thì chặn khai.
+ */
+export const DocSourceSchema = z.enum(["UPLOADED", "PENDING_AFTER_DECLARATION", "ISSUED"]);
+export type DocSource = z.infer<typeof DocSourceSchema>;
+/** Loại chứng từ được đánh dấu "có sau khi khai" – chỉ hồ sơ xuất khẩu. */
+export const PENDING_CAPABLE_KINDS = ["BILL_OF_LADING", "AIR_WAYBILL", "CERT_OF_ORIGIN"] as const satisfies readonly DocKind[];
+/** Loại chứng từ hệ thống phát hành được (cùng một bộ, cùng số tham chiếu) – chỉ hồ sơ xuất khẩu. */
+export const ISSUABLE_KINDS = ["INVOICE", "PACKING_LIST"] as const satisfies readonly DocKind[];
+export const DocumentSourcesSchema = z.partialRecord(DocKindSchema, DocSourceSchema);
+export type DocumentSources = z.infer<typeof DocumentSourcesSchema>;
+const kindsWith = (s: DocumentSources | undefined, src: DocSource): DocKind[] => Object.entries(s ?? {}).filter(([, v]) => v === src).map(([k]) => k as DocKind);
+/** Loại chứng từ đang chờ sau khai. */
+export const pendingKinds = (s: DocumentSources | undefined): DocKind[] => kindsWith(s, "PENDING_AFTER_DECLARATION");
+/** Loại chứng từ hệ thống phát hành. */
+export const issuedKinds = (s: DocumentSources | undefined): DocKind[] => kindsWith(s, "ISSUED");
+/** Có được đặt `PENDING_AFTER_DECLARATION` cho loại này ở hồ sơ chiều `direction` không. */
+export const canBePending = (direction: "NK" | "XK", kind: DocKind) => direction === "XK" && (PENDING_CAPABLE_KINDS as readonly DocKind[]).includes(kind);
+/** Có được đặt `ISSUED` (hệ thống phát hành) cho loại này ở hồ sơ chiều `direction` không. */
+export const canBeIssued = (direction: "NK" | "XK", kind: DocKind) => direction === "XK" && (ISSUABLE_KINDS as readonly DocKind[]).includes(kind);
+
+/** Cách bắt đầu hồ sơ xuất (ADR 0013): từ chứng từ (như cũ) hoặc khai trước – hệ thống phát hành Invoice + Packing List. */
+export const StartModeSchema = z.enum(["DOCUMENTS", "DECLARE_FIRST"]);
+export type StartMode = z.infer<typeof StartModeSchema>;
+/**
+ * Nguồn chứng từ mặc định của hồ sơ mới. Hồ sơ xuất: vận đơn (B/L theo đường biển, AWB theo hàng không) có sau khi khai;
+ * "khai trước" thêm Invoice + Packing List do hệ thống phát hành. Hồ sơ nhập: như cũ.
+ */
+export function defaultDocumentSources(direction: "NK" | "XK", mode: TransportMode, start: StartMode = "DOCUMENTS"): DocumentSources {
+  if (direction !== "XK") return {};
+  const bill: DocKind | null = mode === "AIR" ? "AIR_WAYBILL" : mode === "SEA_CONTAINER" || mode === "SEA_BULK" ? "BILL_OF_LADING" : null;
+  return {
+    ...(bill ? { [bill]: "PENDING_AFTER_DECLARATION" as const } : {}),
+    ...(start === "DECLARE_FIRST" ? { INVOICE: "ISSUED" as const, PACKING_LIST: "ISSUED" as const } : {}),
+  };
+}
+
 export const DocumentStatusSchema = z.enum(["UPLOADING", "QUEUED", "READING", "DONE", "ERROR"]);
 export type DocumentStatus = z.infer<typeof DocumentStatusSchema>;
 

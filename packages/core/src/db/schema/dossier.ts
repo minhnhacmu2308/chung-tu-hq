@@ -27,6 +27,8 @@ export const dossiers = pgTable(
     transportMode: text("transport_mode").notNull().default("SEA_CONTAINER"),
     partyClass: text("party_class").notNull().default("4"),
     billNo: text("bill_no").notNull().default(""),
+    /** Nguồn từng loại chứng từ (ADR 0013): { BILL_OF_LADING: "PENDING_AFTER_DECLARATION", … } – vắng loại = tải lên. */
+    documentSources: jsonb("document_sources").$type<Record<string, string>>().notNull().default({}),
     suspectFields: integer("suspect_fields").notNull().default(0),
     declarationNo: text("declaration_no"),
     channel: text("channel"),

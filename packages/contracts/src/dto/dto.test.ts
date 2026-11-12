@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DeclarationSchema, DossierSchema, ExtractedFieldSchema, SkillSchema } from "./index.js";
+import { canBeIssued, defaultDocumentSources, issuedKinds } from "../common.js";
 import { BranchParamSchema, BranchQuerySchema, BranchSubmissionSchema, CustomsRowSchema, PerformOperationInputSchema, ResendOperationInputSchema, SubmissionViewSchema } from "../api/customs.js";
 
 const dossier = {
@@ -7,7 +8,7 @@ const dossier = {
   customsOffice: "03CE – Chi cục HQ cửa khẩu cảng Hải Phòng KV III", skillSetId: "set_default", status: "NEEDS_REVIEW",
   step: "ocr", dueDate: "2026-10-14", createdAt: "2026-10-12T06:00:00.000Z", updatedAt: "2026-10-13T06:00:00.000Z",
   ownerId: "usr_chau", invoiceValue: "20850.00", currency: "USD", incoterm: "FCA", transportMode: "SEA_CONTAINER", partyClass: "4",
-  billNo: "HPSEL2610078", suspectFields: 16,
+  billNo: "HPSEL2610078", documentSources: {}, suspectFields: 16,
 };
 
 describe("DTO", () => {
@@ -67,5 +68,22 @@ describe("Hải quan theo tờ khai nhánh (spec tách tờ khai §7)", () => {
     const customs = { cleared: 2, of: 3, problems: [{ no: 3, kind: "REJECTED" }] };
     expect(DossierSchema.parse({ ...dossier, customs })).toMatchObject({ customs });
     expect(DossierSchema.safeParse({ ...dossier, customs: { cleared: 1, of: 0, problems: [] } }).success).toBe(false);
+  });
+});
+
+describe("Dossier.documentSources (ADR 0013)", () => {
+  it("vắng → {} (dữ liệu cũ); chỉ nhận UPLOADED / PENDING_AFTER_DECLARATION / ISSUED", () => {
+    const { documentSources: _, ...old } = dossier;
+    expect(DossierSchema.parse(old).documentSources).toEqual({});
+    expect(DossierSchema.parse({ ...dossier, documentSources: { BILL_OF_LADING: "PENDING_AFTER_DECLARATION", INVOICE: "ISSUED" } }).documentSources).toEqual({ BILL_OF_LADING: "PENDING_AFTER_DECLARATION", INVOICE: "ISSUED" });
+    expect(DossierSchema.safeParse({ ...dossier, documentSources: { BILL_OF_LADING: "LATER" } }).success).toBe(false);
+  });
+  it("nguồn mặc định: XK khai trước thêm Invoice + PL hệ thống phát hành; NK bỏ qua cách bắt đầu", () => {
+    expect(defaultDocumentSources("XK", "SEA_CONTAINER", "DECLARE_FIRST")).toEqual({ BILL_OF_LADING: "PENDING_AFTER_DECLARATION", INVOICE: "ISSUED", PACKING_LIST: "ISSUED" });
+    expect(defaultDocumentSources("XK", "ROAD", "DECLARE_FIRST")).toEqual({ INVOICE: "ISSUED", PACKING_LIST: "ISSUED" });
+    expect(defaultDocumentSources("XK", "AIR")).toEqual({ AIR_WAYBILL: "PENDING_AFTER_DECLARATION" });
+    expect(defaultDocumentSources("NK", "SEA_CONTAINER", "DECLARE_FIRST")).toEqual({});
+    expect(issuedKinds({ INVOICE: "ISSUED", BILL_OF_LADING: "PENDING_AFTER_DECLARATION" })).toEqual(["INVOICE"]);
+    expect([canBeIssued("XK", "INVOICE"), canBeIssued("XK", "BILL_OF_LADING"), canBeIssued("NK", "INVOICE")]).toEqual([true, false, false]);
   });
 });

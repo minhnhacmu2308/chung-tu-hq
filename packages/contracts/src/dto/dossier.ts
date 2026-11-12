@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CustomsChannelSchema, DecimalStringSchema, DirectionSchema, DossierStatusSchema, IsoDateSchema, IsoDateTimeSchema, PartyClassSchema, StepIdSchema, TransportModeSchema } from "../common.js";
+import { CustomsChannelSchema, DecimalStringSchema, DirectionSchema, DocumentSourcesSchema, DossierStatusSchema, IsoDateSchema, IsoDateTimeSchema, PartyClassSchema, StepIdSchema, TransportModeSchema } from "../common.js";
 
 /** Trạng thái Hải quan gộp từ các tờ khai nhánh ("Thông quan k/N", cảnh báo tờ bị từ chối / lỗi gửi) – dossierCustomsSummary. */
 export const CustomsProblemSchema = z.object({ no: z.number().int().min(1), kind: z.enum(["REJECTED", "SEND_FAILED"]) });
@@ -26,6 +26,8 @@ export const DossierSchema = z.object({
   transportMode: TransportModeSchema,
   partyClass: PartyClassSchema,
   billNo: z.string(),
+  /** Nguồn từng loại chứng từ (ADR 0013) – vắng loại nào = tải lên như cũ. */
+  documentSources: DocumentSourcesSchema.default({}),
   suspectFields: z.number().int().nonnegative(),
   note: z.string().optional(),
   declarationNo: z.string().optional(),

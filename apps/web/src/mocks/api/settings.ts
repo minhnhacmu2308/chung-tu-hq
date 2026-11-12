@@ -1,6 +1,6 @@
 // Tài khoản doanh nghiệp, thành viên, tích hợp, chứng thư số (mock).
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
-import { DeclarationProfileInputSchema, PROFILE_FIELD_CODES, VnaccsAccountInputSchema, type DeclarationDirection, type DeclarationProfile, type DeclarationProfileInput, type RuleOptionView, type VnaccsAccount, type VnaccsAccountInput } from "@kb/contracts";
+import { DeclarationProfileInputSchema, InvoiceSettingsInputSchema, PROFILE_FIELD_CODES, type InvoiceSettingsInput, VnaccsAccountInputSchema, type DeclarationDirection, type DeclarationProfile, type DeclarationProfileInput, type RuleOptionView, type VnaccsAccount, type VnaccsAccountInput } from "@kb/contracts";
 import {
   RejectJoinRequestInputSchema, TransferOwnershipInputSchema, type RejectJoinRequestInput, type TransferOwnershipInput, type TransferOwnershipResult,
 } from "@kb/contracts";
@@ -54,6 +54,15 @@ export const updateFourEyes = (enabled: boolean) =>
     if (role !== "OWNER" && role !== "ADMIN") throw new ApiError("FORBIDDEN", "Cần vai trò Quản trị hoặc Chủ sở hữu");
     db.org.fourEyes = enabled;
     return orgView(db);
+  });
+
+/** Cài đặt hóa đơn xuất khẩu (chỉ Quản trị / Chủ sở hữu). Cùng quy tắc Zod với backend. */
+export const updateInvoiceSettings = (input: InvoiceSettingsInput) =>
+  mutate((db) => {
+    const role = db.members.find((m) => m.id === db.currentUserId)?.role;
+    if (role !== "OWNER" && role !== "ADMIN") throw new ApiError("FORBIDDEN", "Cần vai trò Quản trị hoặc Chủ sở hữu");
+    db.org.invoiceSettings = InvoiceSettingsInputSchema.parse(input);
+    return db.org;
   });
 
 export const listMembers = () => query((db) => db.members);

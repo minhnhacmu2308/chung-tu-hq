@@ -4,7 +4,7 @@ import type {
   AgentRun, CrossCheck, CustomsResult, Declaration, DigitalCertificate, Dossier, DossierDocument,
   ExtractedField, Integration, LineItem, Member, Notification, Organization, Skill,
 } from "./types";
-import type { DeclarationProfile, JoinRequest, PostAmendment, ProductCatalogItem, ValueCharges } from "@kb/contracts";
+import type { DeclarationProfile, InvoiceTemplate, IssuedInvoice, JoinRequest, PostAmendment, ManualShipment, ProductCatalogItem, ValueCharges } from "@kb/contracts";
 import { seedCore } from "./seed/core";
 import { seedOcr } from "./seed/ocr";
 import { seedDeclaration } from "./seed/declaration";
@@ -66,6 +66,14 @@ export type MockDb = {
   declarationProfiles: Partial<Record<"NK" | "XK", DeclarationProfile>>;
   /** Chi phí và điều chỉnh trị giá người khai nhập (bước OCR & kiểm tra) theo hồ sơ. */
   valueCharges: Record<string, { data: ValueCharges; updatedAt: string; updatedBy: string }>;
+  /** Dữ liệu lô hàng nhập tay (ADR 0013 – Khai trước) theo hồ sơ. */
+  manualShipments: Record<string, { data: ManualShipment; updatedAt: string; updatedBy: string }>;
+  /** Số hóa đơn thương mại hệ thống cấp (ADR 0013 mục 3) – mỗi phần tử một số, theo thứ tự cấp. */
+  issuedInvoices: { dossierId: string; invoice: IssuedInvoice }[];
+  /** Mẫu in hóa đơn của doanh nghiệp. */
+  invoiceTemplates: InvoiceTemplate[];
+  /** Bộ đếm số hóa đơn theo "mẫu|kỳ". */
+  invoiceCounters: Record<string, number>;
   notifications: Notification[];
   /** Bộ HYS (hồ sơ đính kèm điện tử) theo hồ sơ. */
   hys: MockHys[];
@@ -76,7 +84,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 35;
+const DB_VERSION = 42;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -96,6 +104,10 @@ function createSeed(): MockDb {
     products: seedProducts(),
     ...seedMailbox(core.dossiers),
     valueCharges: {},
+    manualShipments: {},
+    issuedInvoices: [],
+    invoiceCounters: {},
+    invoiceTemplates: [],
     hys: [],
     ...seedSkills(),
     ...seedSettings(),

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { IsoDateTimeSchema, RoleSchema } from "../common.js";
 import { OrgBillingSchema, OrgPlanSchema } from "./billing.js";
+import { InvoiceNumberingSchema } from "../invoice-numbering.js";
 
 export const MemberSchema = z.object({
   id: z.string(),
@@ -35,6 +36,8 @@ export const OrganizationSchema = z.object({
   suspectThreshold: z.enum(["STRICT", "BALANCED", "RELAXED"]),
   /** Nguyên tắc 4 mắt: người duyệt tờ khai phải khác người tạo hồ sơ (Chủ sở hữu được miễn). */
   fourEyes: z.boolean(),
+  /** Cài đặt hóa đơn thương mại xuất khẩu: mẫu số, người ký mặc định, tên người bán in trên hóa đơn. */
+  invoiceSettings: z.object({ numbering: InvoiceNumberingSchema, signatoryName: z.string().nullable(), signatoryTitle: z.string().nullable(), sellerName: z.string().nullable() }),
 });
 export type Organization = z.infer<typeof OrganizationSchema>;
 

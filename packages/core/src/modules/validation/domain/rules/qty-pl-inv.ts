@@ -7,6 +7,7 @@ export const qtyPlInv: Rule = {
   title: "Số kiện Packing List khớp vận đơn",
   severity: "BLOCKER",
   docKinds: ["PACKING_LIST", "BILL_OF_LADING", "AIR_WAYBILL"],
+  awaits: ["BILL_OF_LADING", "AIR_WAYBILL"],
   run(s) {
     const p = s.transport.packages;
     const pl = valueOf(p, "PACKING_LIST");

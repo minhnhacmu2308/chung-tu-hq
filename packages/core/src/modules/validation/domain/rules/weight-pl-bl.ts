@@ -7,6 +7,7 @@ export const weightPlBl: Rule = {
   title: "Trọng lượng Packing List khớp vận đơn",
   severity: "BLOCKER",
   docKinds: ["PACKING_LIST", "BILL_OF_LADING", "AIR_WAYBILL"],
+  awaits: ["BILL_OF_LADING", "AIR_WAYBILL"],
   run(s) {
     const gw = s.transport.grossWeightKg;
     const pl = valueOf(gw, "PACKING_LIST");

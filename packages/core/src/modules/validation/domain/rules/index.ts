@@ -14,6 +14,7 @@ import { hs6 } from "./hs-6.js";
 import { incotermCode } from "./incoterm-code.js";
 import { incotermFreight } from "./incoterm-freight.js";
 import { insuranceIncoterm } from "./insurance-incoterm.js";
+import { invoiceIssued } from "./invoice-issued.js";
 import { invoiceRef } from "./invoice-ref.js";
 import { lawMoCu } from "./law-mo-cu.js";
 import { lineAmount } from "./line-amount.js";
@@ -32,7 +33,7 @@ import { weightPlBl } from "./weight-pl-bl.js";
 /** Thứ tự hiển thị trên màn OCR: BLOCKER trước (trị giá/dòng hàng → trọng lượng/kiện → điều kiện giao hàng → vận đơn/container → đối tác), rồi WARNING, INFO. */
 export const RULES: Rule[] = [
   // BLOCKER
-  amountSum, branchCountLocked, lineValueDigits, weightPlBl, grossWeightDigits, qtyPlInv, packagesInteger, incotermFreight, exportFreight, freightTerm, incotermCode, awbLength, containerList, countryCode, lawMoCu,
+  invoiceIssued, amountSum, branchCountLocked, lineValueDigits, weightPlBl, grossWeightDigits, qtyPlInv, packagesInteger, incotermFreight, exportFreight, freightTerm, incotermCode, awbLength, containerList, countryCode, lawMoCu,
   // WARNING
   invoiceRef, lineAmount, qtyDecimals, descriptionLength, originCo, insuranceIncoterm, podTransship, dateOrder, partyNameLength, sharedContainer, warehouseCode,
   // INFO

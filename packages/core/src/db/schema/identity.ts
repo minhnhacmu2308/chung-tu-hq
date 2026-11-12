@@ -19,6 +19,13 @@ export const organizations = pgTable(
     suspectThreshold: text("suspect_threshold").notNull().default("BALANCED"),
     /** Nguyên tắc 4 mắt: người duyệt tờ khai phải khác người tạo hồ sơ. */
     fourEyes: boolean("four_eyes").notNull().default(false),
+    /** Cài đặt hóa đơn thương mại xuất khẩu (ADR 0013 mục 3): mẫu số + cách đánh lại (null = mặc định INV{YY}{MM}-{NNN} / MONTH), người ký. */
+    invoiceNumberPattern: text("invoice_number_pattern"),
+    invoiceNumberReset: text("invoice_number_reset"),
+    invoiceSignatoryName: text("invoice_signatory_name"),
+    invoiceSignatoryTitle: text("invoice_signatory_title"),
+    /** Tên người bán in trên chứng từ (thường tiếng Anh); null = tên doanh nghiệp. */
+    invoiceSellerName: text("invoice_seller_name"),
     /** ACTIVE | SUSPENDED – đội vận hành tạm khóa: không đăng nhập, phiên cũ hết hiệu lực. */
     status: text("status").notNull().default("ACTIVE"),
     suspendedReason: text("suspended_reason"),

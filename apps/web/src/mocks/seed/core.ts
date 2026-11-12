@@ -1,6 +1,6 @@
 // Dữ liệu mẫu cốt lõi: doanh nghiệp, thành viên, hồ sơ, chứng từ, thông báo.
 // Toàn bộ tên công ty/MST là GIẢ. Ngày tính theo hôm nay để màn hình luôn "sống" (sắp hạn, quá hạn…).
-import { DEFAULT_PARTY_CLASS, type JoinRequest } from "@kb/contracts";
+import { DEFAULT_PARTY_CLASS, defaultDocumentSources, type JoinRequest } from "@kb/contracts";
 import { largeLotTotal } from "./large-lot";
 import type { DocKind, Dossier, DossierDocument, DossierStatus, Member, Notification, Organization, StepId } from "../types";
 
@@ -24,6 +24,7 @@ const ORG: Organization = {
   usage: { dossiersThisMonth: 37, pagesThisMonth: 412 },
   suspectThreshold: "BALANCED",
   fourEyes: false,
+  invoiceSettings: { numbering: { pattern: "INV{YY}{MM}-{NNN}", reset: "MONTH" }, signatoryName: null, signatoryTitle: null, sellerName: null },
 };
 
 const MEMBERS: Member[] = [
@@ -120,6 +121,7 @@ function toDossier(s: DossierSeed): Dossier {
     transportMode: s.mode,
     partyClass: DEFAULT_PARTY_CLASS,
     billNo: s.bill,
+    documentSources: s.status === "DRAFT" ? defaultDocumentSources(s.dir, s.mode) : {},
     suspectFields: s.suspect ?? 0,
     ...(s.note ? { note: s.note } : {}),
     ...(s.decl ? { declarationNo: s.decl } : {}),

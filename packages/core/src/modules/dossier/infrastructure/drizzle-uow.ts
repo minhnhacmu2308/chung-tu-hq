@@ -1,4 +1,5 @@
 import { and, count, desc, eq, gte, ilike, inArray, like, lt, or, sql } from "drizzle-orm";
+import { DocumentSourcesSchema } from "@kb/contracts";
 import type { Db, Tx } from "../../../db/client.js";
 import { documents, dossiers, jobProgress } from "../../../db/schema/dossier.js";
 import { withCtx } from "../../../db/with-ctx.js";
@@ -19,7 +20,7 @@ function dossierWhere(orgId: string, f: DossierListFilter) {
 }
 
 function repos(tx: Tx): DossierRepos {
-  const toDossier = (d: typeof dossiers.$inferSelect): DossierRow => ({ ...d, direction: d.direction as DossierRow["direction"], status: d.status as DossierRow["status"], step: d.step as DossierRow["step"], transportMode: d.transportMode as DossierRow["transportMode"], partyClass: d.partyClass as DossierRow["partyClass"] });
+  const toDossier = (d: typeof dossiers.$inferSelect): DossierRow => ({ ...d, direction: d.direction as DossierRow["direction"], status: d.status as DossierRow["status"], step: d.step as DossierRow["step"], transportMode: d.transportMode as DossierRow["transportMode"], partyClass: d.partyClass as DossierRow["partyClass"], documentSources: DocumentSourcesSchema.catch({}).parse(d.documentSources) });
   const toDocument = (d: typeof documents.$inferSelect): DocumentRow => ({ ...d, kind: d.kind as DocumentRow["kind"], kindSource: d.kindSource as DocumentRow["kindSource"], status: d.status as DocumentRow["status"] });
   return {
     dossiers: {

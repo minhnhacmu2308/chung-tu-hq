@@ -1,6 +1,6 @@
 // Composition root của web: nơi DUY NHẤT nối hạ tầng (DB, Redis, queue) vào use case của @kb/core.
 // Route handler chỉ gọi getContainer(); không import drizzle/postgres/bullmq ở nơi khác (depcruise chặn).
-import { lockedSheetCount } from "@kb/contracts";
+import { issuedKinds, lockedSheetCount, numberingFromColumns, pendingKinds } from "@kb/contracts";
 import { loadEnv, type Env } from "@kb/core/config";
 import { createDb, platformDbUrl, runSeed, type Db } from "@kb/core/db";
 import { type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
@@ -10,7 +10,7 @@ import { refreshFromShipment, type DeclarationDeps } from "@kb/core/modules/decl
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { listOpenDocuments, rereadDocuments, type DossierDeps } from "@kb/core/modules/dossier";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
-import { latestReads, type ExtractionDeps } from "@kb/core/modules/extraction";
+import { latestReads, refreshAfterSourcesChanged, type ExtractionDeps } from "@kb/core/modules/extraction";
 import { ClaudeDossierDrafter, ClaudeEmailDrafter, createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
@@ -207,7 +207,7 @@ function build(): Container {
     dossiers: {
       profile: async (orgId, dossierId) => {
         const d = await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId));
-        return d ? { direction: d.direction, typeCode: d.typeCode, transportMode: d.transportMode } : null;
+        return d ? { direction: d.direction, typeCode: d.typeCode, transportMode: d.transportMode, pendingKinds: pendingKinds(d.documentSources), issuedKinds: issuedKinds(d.documentSources) } : null;
       },
     },
   });
@@ -223,7 +223,10 @@ function build(): Container {
     db, env, dossier,
     orgInfo: async (orgId: string) => {
       const o = await identity.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.orgs.findById(orgId));
-      return { taxCode: o?.taxCode ?? "", name: o?.name ?? "", suspectThreshold: (o?.suspectThreshold as "STRICT" | "BALANCED" | "RELAXED") ?? "BALANCED" };
+      return {
+        taxCode: o?.taxCode ?? "", name: o?.name ?? "", suspectThreshold: (o?.suspectThreshold as "STRICT" | "BALANCED" | "RELAXED") ?? "BALANCED",
+        address: o?.address ?? "", phone: o?.phone ?? "", invoiceNumbering: numberingFromColumns(o?.invoiceNumberPattern, o?.invoiceNumberReset), signatoryName: o?.invoiceSignatoryName ?? null, signatoryTitle: o?.invoiceSignatoryTitle ?? null, sellerName: o?.invoiceSellerName ?? null,
+      };
     },
     validation: { run: (orgId, dossierId, shipment, version, org) => runRules(validation, orgId, dossierId, shipment, version, org) },
     usage, ai: skill.ai, skills: createSkillResolver(skill),
@@ -261,11 +264,22 @@ function build(): Container {
   declaration.lessons = (orgId, dossierId) => lessonsForDossier(teach, orgId, dossierId);
   // Chi phí người khai nhập ở bước OCR (module declaration) → luật đối chiếu đọc được (R-INCOTERM-FREIGHT); lưu xong chạy lại luật.
   validation.charges = async (orgId, dossierId) => (await declaration.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.valueCharges.get(orgId, dossierId)))?.data ?? null;
-  declaration.onChargesSaved = async (orgId, dossierId) => {
+  const rerunRules = async (orgId: string, dossierId: string) => {
     const s = await extraction.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.shipments.latest(orgId, dossierId));
     if (!s) return;
     const o = await extraction.documents.orgInfo(orgId);
     await runRules(validation, orgId, dossierId, s.data, s.version, { taxCode: o.taxCode, name: o.name });
+  };
+  declaration.onChargesSaved = rerunRules;
+  // Đổi chứng từ "có sau khi khai" (ADR 0013) → chạy lại luật; lỗi chạy luật không làm hỏng việc đã lưu (ghi log).
+  const sourcesLog = createLogger({ name: "document-sources" });
+  dossier.onDocumentSourcesChanged = async (orgId, dossierId) => {
+    try {
+      // Gộp lại shipment (số hóa đơn hệ thống cấp chỉ áp khi Invoice còn nguồn ISSUED) → luật → tờ khai nháp.
+      await refreshAfterSourcesChanged(extraction, orgId, dossierId);
+    } catch (e) {
+      sourcesLog.error("gộp lại sau khi đổi nguồn chứng từ thất bại", { orgId, dossierId, err: e });
+    }
   };
   // Sửa dữ liệu chứng từ ở OCR → dòng hàng + tờ khai nháp cập nhật theo (lỗi không chặn việc lưu trường; ghi log).
   extraction.onShipmentEdited = async (orgId, dossierId) => {

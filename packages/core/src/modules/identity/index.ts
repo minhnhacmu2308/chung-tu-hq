@@ -21,6 +21,7 @@ export { getOrganization } from "./application/get-organization.js";
 export { updateOrganization } from "./application/update-organization.js";
 export { updateSuspectThreshold } from "./application/update-suspect-threshold.js";
 export { updateFourEyes } from "./application/update-four-eyes.js";
+export { updateInvoiceSettings } from "./application/update-invoice-settings.js";
 export { listCertificates } from "./application/list-certificates.js";
 export { addCertificate } from "./application/add-certificate.js";
 export { removeCertificate } from "./application/remove-certificate.js";

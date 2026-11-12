@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_PARTY_CLASS, DirectionSchema, DossierStatusSchema, IsoDateSchema, PartyClassSchema, StepIdSchema, TransportModeSchema } from "../common.js";
+import { DEFAULT_PARTY_CLASS, DirectionSchema, DocumentSourcesSchema, DossierStatusSchema, IsoDateSchema, PartyClassSchema, StartModeSchema, StepIdSchema, TransportModeSchema } from "../common.js";
 
 export const CreateDossierInputSchema = z.object({
   direction: DirectionSchema,
@@ -13,6 +13,8 @@ export const CreateDossierInputSchema = z.object({
   transportMode: TransportModeSchema,
   partyClass: PartyClassSchema.default(DEFAULT_PARTY_CLASS),
   note: z.string().trim().optional(),
+  /** Hồ sơ xuất (ADR 0013): "khai trước" → Invoice + Packing List do hệ thống phát hành. Hồ sơ nhập bỏ qua. */
+  startMode: StartModeSchema.optional(),
 });
 export type CreateDossierInput = z.infer<typeof CreateDossierInputSchema>;
 
@@ -25,7 +27,12 @@ export const DossierFilterSchema = z.object({
 });
 export type DossierFilter = z.infer<typeof DossierFilterSchema>;
 
-export const UpdateDossierInputSchema = z.object({ note: z.string().trim().optional(), step: StepIdSchema.optional() });
+export const UpdateDossierInputSchema = z.object({
+  note: z.string().trim().optional(),
+  step: StepIdSchema.optional(),
+  /** Đổi nguồn chứng từ (ADR 0013): gộp vào nguồn hiện có; `UPLOADED` = bỏ đánh dấu "có sau khi khai". */
+  documentSources: DocumentSourcesSchema.optional(),
+});
 export type UpdateDossierInput = z.infer<typeof UpdateDossierInputSchema>;
 
 /** Kết quả xóa hẳn hồ sơ (chỉ hồ sơ chưa truyền Hải quan). */

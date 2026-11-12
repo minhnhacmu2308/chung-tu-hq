@@ -1,5 +1,6 @@
 // Tài khoản doanh nghiệp, thành viên, kết nối, chứng thư số – gọi backend thật. Cùng chữ ký với src/mocks/api/settings.ts.
 import {
+  type InvoiceSettingsInput,
   DeclarationProfileSchema, DigitalCertificateSchema, IntegrationSchema, JoinRequestSchema, MemberSchema, OkSchema, OrganizationSchema, RuleOptionViewSchema,
   TransferOwnershipResultSchema, VnaccsAccountSchema,
   type DeclarationDirection, type DeclarationProfileInput, type Integration, type OrgProfileInput, type Organization, type RejectJoinRequestInput, type Role,
@@ -14,6 +15,7 @@ export const getOrganization = () => apiGet("org", OrganizationSchema);
 export const updateOrganization = (input: OrgProfileInput) => apiPatch("org", input, OrganizationSchema);
 export const updateSuspectThreshold = (threshold: Organization["suspectThreshold"]) => apiPatch("org/suspect-threshold", { threshold }, OrganizationSchema);
 export const updateFourEyes = (enabled: boolean) => apiPatch("org/four-eyes", { enabled }, OrganizationSchema);
+export const updateInvoiceSettings = (input: InvoiceSettingsInput) => apiPatch("org/invoice-settings", input, OrganizationSchema);
 export const listMembers = () => apiGet("org/members", z.array(MemberSchema));
 export const inviteMember = (input: { email: string; role: Role }) => apiPost("org/members", input, MemberSchema);
 export const changeMemberRole = (id: string, role: Role) => apiPatch(`org/members/${id}/role`, { role }, MemberSchema);

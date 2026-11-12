@@ -8,6 +8,7 @@ export const OrgAuditEntrySchema = z.object({
 });
 export type OrgAuditEntryDto = z.infer<typeof OrgAuditEntrySchema>;
 import { IsoDateSchema, IsoDateTimeSchema, RoleSchema } from "../common.js";
+import { InvoiceNumberingSchema } from "../invoice-numbering.js";
 import { MemberSchema, OrganizationSchema } from "../dto/index.js";
 
 export const EmailSchema = z.string().trim().toLowerCase().pipe(z.email("Email không hợp lệ"));
@@ -71,6 +72,16 @@ export const OrgProfileInputSchema = z.object({
 export type OrgProfileInput = z.infer<typeof OrgProfileInputSchema>;
 
 export const SuspectThresholdInputSchema = z.object({ threshold: z.enum(["STRICT", "BALANCED", "RELAXED"]) });
+const optText = (max: number) => z.string().trim().max(max).transform((v) => (v === "" ? null : v)).nullable();
+/** Cài đặt hóa đơn thương mại xuất khẩu: mẫu số (ADR 0013 mục 3), người ký, tên người bán. */
+export const InvoiceSettingsInputSchema = z.object({
+  numbering: InvoiceNumberingSchema,
+  signatoryName: optText(100),
+  signatoryTitle: optText(100),
+  /** Tên người bán in trên hóa đơn (thường tiếng Anh, như beneficiary trên L/C); rỗng = tên doanh nghiệp. */
+  sellerName: optText(255),
+});
+export type InvoiceSettingsInput = z.infer<typeof InvoiceSettingsInputSchema>;
 export const FourEyesInputSchema = z.object({ enabled: z.boolean() });
 
 const NonOwnerRole = RoleSchema.exclude(["OWNER"]);

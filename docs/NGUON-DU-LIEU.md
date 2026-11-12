@@ -104,3 +104,10 @@ Không phải bảng mã mà là quy định / đặc tả → đã chuyển th�
 | `BO SUNG CHUNG TU v1.4.xlsx`, `KHAI BAO DANH SACH CONTAINER v1.1.xlsx`, `KHAI BAO LAY MA DINH DANH v1.1.xlsx`, `TACH VAN DON.xlsx`, `In bản kê mã vạch container.pdf`, `In bản kê mã vạch hàng lẻ.pdf` | Đặc tả nghiệp vụ phụ: bổ sung chứng từ, danh sách container, lấy mã định danh, tách vận đơn, bản kê mã vạch | **Chưa làm** – nguồn cho các tính năng sau |
 
 > Lưu ý: 3 file `TK_AMA_(…).pdf` và bản lưu HYS trong `HYS/` có thể chứa dữ liệu doanh nghiệp thật – kiểm tra trước khi chia sẻ ra ngoài nhóm.
+
+## 4. Quy tắc thương mại quốc tế (không có file trong repo – ấn phẩm ICC có bản quyền)
+
+| Nguồn | Nội dung | Đã thành gì trong code |
+|---|---|---|
+| UCP600 (ICC Pub. 600) – Điều 17, 18 | Bản gốc/bản sao; nội dung hóa đơn thương mại (người bán, người mua, loại tiền, mô tả hàng) | Nhóm thông tin chuẩn của mẫu in `contracts/src/api/invoice-template.ts` (`InvoiceBlockKeySchema`, nhóm bắt buộc), bộ ORIGINAL/COPY và bản in `apps/web/src/features/invoice-print/`. **Không đối chiếu L/C** (quyết định 2026-11-12) |
+| ISBP 821 (ICC Pub. 821E, 2023) – mục C (Invoice) | Tiêu đề "Invoice/Commercial Invoice" (không Proforma), Incoterm kèm phiên bản | `InvoiceLayoutSchema.title` (cấm Proforma/Provisional), `incotermsVersion`; bản in `invoice-document.tsx`. **Số đoạn chưa đối chiếu bản chính thức** – mua tại ICC Knowledge 2 Go / ICC Digital Library |

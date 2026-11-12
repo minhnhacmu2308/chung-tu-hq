@@ -6,12 +6,12 @@
 // (lô thật hay thiếu Packing List) – các trường liên quan được đánh dấu để bổ sung ở bước sau.
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, FileDropzone, Grid, Progress,
-  Select, Skeleton, Spinner, Stack, fill, toast, useMessages, useUiLocale, type Tone, StatusBadge, type Status,
+  Select, Skeleton, Spinner, Stack, Switch, fill, toast, useMessages, useUiLocale, type Tone, StatusBadge, type Status,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CheckCircle2, CircleAlert, CircleDashed, FileText, Trash2 } from "lucide-react";
+import { ArrowRight, CheckCircle2, CircleAlert, CircleDashed, Clock, FileCheck2, FileText, PackagePlus, Trash2 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { dossierKeys } from "@/api/dossiers";
+import { dossierKeys, updateDossier } from "@/api/dossiers";
 import { changeDocumentKind, deleteDocument, finishReading, listDossierDocuments, ocrKeys, uploadDocuments } from "@/api/ocr";
 import { formatBytesVi } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
@@ -37,6 +37,8 @@ const slotBadge = (t: Tm): Record<DocSlot["need"], { label: string; tone: Tone }
   optional: { label: t.needOptional, tone: "neutral" },
   extra: null,
   other: null,
+  pending: { label: t.needPending, tone: "neutral" },
+  issued: { label: t.needIssued, tone: "primary" },
 });
 
 function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: string }) {
@@ -94,7 +96,11 @@ function DocumentRow({ doc, dossierId }: { doc: DossierDocument; dossierId: stri
 }
 
 /** Ô của một loại chứng từ: tình trạng, file đã có, vùng thả/chọn file vào thẳng loại này. */
-function DocKindSlot({ slot, dossierId, disabled, onFiles }: { slot: DocSlot; dossierId: string; disabled: boolean; onFiles: (files: File[], kind: DocKind) => void }) {
+function DocKindSlot({ slot, dossierId, disabled, onFiles, onSource }: {
+  slot: DocSlot; dossierId: string; disabled: boolean; onFiles: (files: File[], kind: DocKind) => void;
+  /** Bật/tắt "có sau khi khai" (ô `canPend`) / "hệ thống phát hành" (ô `canIssue`) – ADR 0013, chỉ ô chưa có file; `saving` khi đang lưu. */
+  onSource?: { save: (kind: DocKind, source: "PENDING_AFTER_DECLARATION" | "ISSUED", on: boolean) => void; saving: boolean };
+}) {
   const t = useMessages(UPLOAD_STEP_MESSAGES);
   const kindLabels = useMessages(DOC_KIND_LABELS);
   const titleId = useId();
@@ -102,11 +108,17 @@ function DocKindSlot({ slot, dossierId, disabled, onFiles }: { slot: DocSlot; do
   const isOther = slot.need === "other";
   const label = isOther ? t.otherSlot : kindLabels[slot.kind];
   const badge = slotBadge(t)[slot.need];
+  const isPending = slot.need === "pending";
+  const isIssued = slot.need === "issued";
   return (
     // @container: dòng file co theo bề rộng của ô, không theo cả trang.
     <section aria-labelledby={titleId} data-kind={slot.kind} className="@container flex flex-col gap-3 rounded-lg border border-border p-4">
       <div className="flex items-start gap-2">
-        {isOther && has ? (
+        {isPending ? (
+          <Clock aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-fg-subtle" />
+        ) : isIssued ? (
+          <FileCheck2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        ) : isOther && has ? (
           <CircleAlert aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-warning-subtle-fg" />
         ) : has ? (
           <CheckCircle2 aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-success-subtle-fg" />
@@ -119,7 +131,7 @@ function DocKindSlot({ slot, dossierId, disabled, onFiles }: { slot: DocSlot; do
             <span className="sr-only">{has ? fill(t.hasFiles, { n: slot.docs.length }) : t.noFiles}</span>
           </h4>
           <p className="text-sm text-fg-muted">
-            {isOther ? t.otherHelp : (slot.reason ?? t.addedKindHelp)}
+            {isIssued ? t.issuedHelp : isOther ? t.otherHelp : (slot.reason ?? t.addedKindHelp)}
           </p>
         </div>
         {badge && <Badge tone={badge.tone} className="shrink-0">{badge.label}</Badge>}
@@ -131,7 +143,25 @@ function DocKindSlot({ slot, dossierId, disabled, onFiles }: { slot: DocSlot; do
           ))}
         </ul>
       )}
-      <FileDropzone
+      {slot.canPend && !has && onSource && (
+        <Switch
+          label={t.pendingSwitch}
+          description={t.pendingSwitchDesc}
+          checked={isPending}
+          disabled={onSource.saving}
+          onCheckedChange={(on) => onSource.save(slot.kind, "PENDING_AFTER_DECLARATION", on)}
+        />
+      )}
+      {slot.canIssue && !has && onSource && (
+        <Switch
+          label={t.issuedSwitch}
+          description={t.issuedSwitchDesc}
+          checked={isIssued}
+          disabled={onSource.saving}
+          onCheckedChange={(on) => onSource.save(slot.kind, "ISSUED", on)}
+        />
+      )}
+      {!isIssued && <FileDropzone
         size="sm"
         accept={ACCEPT_SLOT}
         maxSize={MAX_SIZE}
@@ -140,7 +170,7 @@ function DocKindSlot({ slot, dossierId, disabled, onFiles }: { slot: DocSlot; do
         labels={{ title: fill(has ? t.addFiles : t.dropFiles, { label }), browse: "" }}
         onFiles={(files) => onFiles(files, slot.kind)}
         onReject={(rejected) => toast({ tone: "danger", title: fill(t.invalidFiles, { n: rejected.length }), description: t.slotRejectDesc })}
-      />
+      />}
     </section>
   );
 }
@@ -209,8 +239,23 @@ export function UploadStep({ dossier, goTo }: StepProps) {
     toast({ tone: "info", title: t.readingTitle, description: t.readingDesc });
   };
 
+  // Chứng từ có sau khi khai (ADR 0013): lưu vào hồ sơ; backend chạy lại luật đối chiếu.
+  const setPending = useMutation({
+    mutationFn: ({ kind, source, on }: { kind: DocKind; source: "PENDING_AFTER_DECLARATION" | "ISSUED"; on: boolean }) => updateDossier(dossier.id, { documentSources: { [kind]: on ? source : "UPLOADED" } }),
+    onSuccess: (d, { kind, source, on }) => {
+      qc.setQueryData(dossierKeys.detail(d.id), d);
+      void qc.invalidateQueries({ queryKey: ocrKeys.checks(dossier.id) });
+      const msg = source === "ISSUED" ? (on ? t.issuedOn : t.issuedOff) : on ? t.pendingOn : t.pendingOff;
+      toast({ tone: "success", title: fill(msg, { kind: kindLabels[kind] }) });
+    },
+    onError: toastMutationError(t.pendingFailed),
+  });
+
   const [addedKinds, setAddedKinds] = useState<DocKind[]>([]);
-  const slots = buildSlots(suggestedKinds(dossier, locale), docs, addedKinds);
+  const slots = buildSlots(suggestedKinds(dossier, locale), docs, addedKinds, { direction: dossier.direction, sources: dossier.documentSources });
+  const pendingSlots = slots.filter((s) => s.need === "pending").length;
+  // Như backend (canModify): hồ sơ đã truyền / thông quan / hủy không đổi được nguồn chứng từ.
+  const sourcesEditable = !["SUBMITTED", "CLEARED", "CANCELLED"].includes(dossier.status);
   const missing = missingRequired(slots);
   const addable = addableKinds(slots);
   const required = slots.filter((s) => s.need === "required");
@@ -263,7 +308,14 @@ export function UploadStep({ dossier, goTo }: StepProps) {
               <Stack gap="md">
                 <Grid cols={{ base: 1, md: 2 }} className="items-start">
                   {slots.map((slot) => (
-                    <DocKindSlot key={slot.kind} slot={slot} dossierId={dossier.id} disabled={upload.isPending} onFiles={(files, kind) => upload.mutate({ files, kind })} />
+                    <DocKindSlot
+                      key={slot.kind}
+                      slot={slot}
+                      dossierId={dossier.id}
+                      disabled={upload.isPending}
+                      onFiles={(files, kind) => upload.mutate({ files, kind })}
+                      {...(sourcesEditable ? { onSource: { save: (kind: DocKind, source: "PENDING_AFTER_DECLARATION" | "ISSUED", on: boolean) => setPending.mutate({ kind, source, on }), saving: setPending.isPending } } : {})}
+                    />
                   ))}
                 </Grid>
                 {addable.length > 0 && (
@@ -291,6 +343,7 @@ export function UploadStep({ dossier, goTo }: StepProps) {
             <CardTitle as="h3">{t.statusTitle}</CardTitle>
             <CardDescription>
               {fill(t.requiredCount, { have: required.length - missing.length, total: required.length })}
+              {pendingSlots > 0 ? fill(t.pendingCount, { n: pendingSlots }) : ""}
               {uploading.length > 0 ? fill(t.uploadingCount, { n: uploading.length }) : ""}.
             </CardDescription>
           </CardHeader>
@@ -319,6 +372,14 @@ export function UploadStep({ dossier, goTo }: StepProps) {
                 {pastUpload ? t.viewResults : pending.length > 0 ? t.startReading : t.viewResults}
               </Button>
               {docs.length === 0 && <p className="text-center text-xs text-fg-subtle">{t.needOne}</p>}
+              {docs.length === 0 && dossier.direction === "XK" && (
+                <>
+                  <Button fullWidth variant="secondary" leftIcon={<PackagePlus className="h-4 w-4" />} loading={finish.isPending} disabled={pastUpload ? false : !sourcesEditable} onClick={() => (pastUpload ? goTo("ocr") : finish.mutate())}>
+                    {t.manualEntry}
+                  </Button>
+                  <p className="text-center text-xs text-fg-subtle">{t.manualEntryHint}</p>
+                </>
+              )}
             </Stack>
           </CardContent>
         </Card>

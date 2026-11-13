@@ -11,6 +11,7 @@ export const KVGS_MESSAGES = defineMessages({
     history: "Lịch sử",
     historyTitle: "Lịch sử qua khu vực giám sát",
     historyDesc: "Thông điệp khai danh sách container và lấy danh sách qua khu vực giám sát",
+    historyClose: "Đóng",
     loadError: "Không tải được thông tin qua khu vực giám sát",
     viewOnly: "Bạn chỉ có quyền xem và in bản kê.",
 
@@ -106,6 +107,7 @@ export const KVGS_MESSAGES = defineMessages({
     history: "History",
     historyTitle: "Supervised-area history",
     historyDesc: "Messages for the container list and the supervised-area list",
+    historyClose: "Close",
     loadError: "Couldn't load the supervised-area information",
     viewOnly: "You can only view and print the list.",
 
@@ -201,6 +203,7 @@ export const KVGS_MESSAGES = defineMessages({
     history: "历史",
     historyTitle: "通过监管区历史",
     historyDesc: "集装箱清单申报及获取监管区清单的报文",
+    historyClose: "关闭",
     loadError: "无法加载通过监管区信息",
     viewOnly: "您只能查看和打印清单。",
 

@@ -6,7 +6,7 @@
 // đang lấy → spinner + thẻ tự làm mới; chấp nhận → "Lấy lúc …"; từ chối → lỗi Hải quan dưới khối, lấy lại được.
 // Bấm được hay không theo customs-flow (dòng CONT_LIST / KVGS của tờ trong bản truyền) – màn chỉ hiển thị; backend chặn lần nữa.
 import {
-  Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog, Dialog, DialogContent, FileDropzone, fill, Grid, IconTile, RowActions,
+  Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog, Dialog, DialogContent, DialogFooter, FileDropzone, fill, Grid, IconTile, RowActions,
   SkeletonList, Spinner, Stack, toast, useMessages, useUiLocale,
 } from "@kb/ui";
 import { baseOp, checkContainerList, type ContainerListRow, type KvgsView, type Role } from "@kb/contracts";
@@ -444,6 +444,9 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen} defaultPresentation="panel">
         <DialogContent title={t.historyTitle} icon={<History className="h-4 w-4" />} description={t.historyDesc}>
           <MessageList messages={(sheet?.messages ?? []).filter((m) => baseOp(m.operation) === "CONT_LIST" || baseOp(m.operation) === "KVGS")} />
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setHistoryOpen(false)}>{t.historyClose}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

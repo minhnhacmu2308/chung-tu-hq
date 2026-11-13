@@ -115,6 +115,17 @@ describe("KvgsCard – XK hàng lẻ (dos_030)", () => {
     await expectNoA11yViolations(container);
   }, 30_000);
 
+  it("panel Lịch sử có nút Đóng ở cuối như các panel khác; bấm → panel đóng", async () => {
+    renderWithProviders(<KvgsCard dossierId="dos_030" branch={1} canEdit />);
+    await userEvent.click(await screen.findByRole("button", { name: "Lịch sử" }, T));
+    const panel = await screen.findByRole("dialog", { name: "Lịch sử qua khu vực giám sát" }, T);
+    const close = within(panel).getAllByRole("button", { name: "Đóng" });
+    // Nút X ở đầu panel + nút "Đóng" ở cuối (DialogFooter).
+    expect(close).toHaveLength(2);
+    await userEvent.click(close.at(-1)!);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull(), T);
+  }, 30_000);
+
   it("Lấy DS qua KVGS một bước: đang lấy (tự làm mới) → chấp nhận, 'Lấy lúc', không Lấy phản hồi / số tiếp nhận; In bật", async () => {
     renderWithProviders(<KvgsCard dossierId="dos_030" branch={1} canEdit />);
     const b2 = await screen.findByRole("region", { name: "Lấy DS qua KVGS" }, T);

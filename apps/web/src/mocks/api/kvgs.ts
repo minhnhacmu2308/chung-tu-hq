@@ -6,7 +6,7 @@ import {
 import { ApiError, mutate, newId, nowIso } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
 import { CHANNEL_VI, containersFor } from "@/mocks/customs-sim";
-import { emptyKvgs, isRejectSeal, KVGS_REPLY_MS, latestFetch, latestList, prefillRowsOf, settleKvgs, type MockContainerList, type MockKvgsFetch } from "@/mocks/kvgs-sim";
+import { emptyKvgs, isRejectSeal, KVGS_FETCH_MS, KVGS_REPLY_MS, latestFetch, latestList, MOCK_BARCODE_PNG, prefillRowsOf, settleKvgs, type MockContainerList, type MockKvgsFetch } from "@/mocks/kvgs-sim";
 import { reasonApiError } from "@/mocks/reason-error";
 import type { Dossier } from "@/mocks/types";
 import { kvgsHeaderOf, kvgsOperationBlock } from "./customs";
@@ -47,7 +47,6 @@ function settleAll(db: MockDb) {
     if (l.status === "ACCEPTED" && !l.receiptNo) Object.assign(l, { receiptNo: receiptNoOf(l.id), receiptDate: (l.doneAt ?? nowIso()).slice(0, 10) });
     if (l.status === "REJECTED" && l.errors.length === 0) l.errors = rejectErrors(l.rows);
   }
-  for (const f of db.kvgs.fetches) if (f.status === "ACCEPTED" && !f.receiptNo) Object.assign(f, { receiptNo: receiptNoOf(f.id), receiptDate: (f.doneAt ?? nowIso()).slice(0, 10) });
 }
 
 const listView = (l: MockContainerList): NonNullable<KvgsView["containerList"]> => ({
@@ -134,7 +133,10 @@ export const sendContainerList = (dossierId: string, branch: number) =>
 const pad = (n: number) => String(n).padStart(2, "0");
 const numberOf = (v: string | undefined) => v?.match(/\d+(?:\.\d+)?/)?.[0] ?? "0";
 
-/** Bảng kê dựng từ dữ liệu hồ sơ; mã vạch giả `KVGS-MOCK|<số tờ khai>|<container>`. */
+/**
+ * Bảng kê dựng từ dữ liệu hồ sơ, cùng hình dạng backend ánh xạ từ API KVGS: hàng container → ảnh mã vạch PNG (Base64) từng dòng, barcode null;
+ * hàng lẻ → barcode = số tờ khai (in Code128). Mock chọn loại hàng theo phương thức vận chuyển (API thật tự quyết – isContainer).
+ */
 function sheetOf(db: MockDb, dossier: Dossier, branch: number, declarationNo: string, registeredOn: string | null): KvgsSheet {
   const kind = dossier.transportMode === "SEA_CONTAINER" ? "CONTAINER" : "CARGO";
   const fields = Object.fromEntries((db.declarations.find((d) => d.dossierId === dossier.id)?.fields ?? []).map((f) => [f.code, f.value]));
@@ -148,7 +150,7 @@ function sheetOf(db: MockDb, dossier: Dossier, branch: number, declarationNo: st
     regionOffice: kv ? `Chi cục Hải quan khu vực ${kv}` : "Chi cục Hải quan khu vực",
     customsOffice: office[1] ?? dossier.customsOffice,
     supervisionOffice: `Đội Kiểm soát Hải quan – ${office[1] ?? dossier.customsOffice}`,
-    sealRequired: kind === "CONTAINER",
+    sealRequired: false,
     companyName: fields[dossier.direction === "NK" ? "NNK_TEN" : "NXK_TEN"] ?? db.org.name,
     taxCode: db.org.taxCode,
     declarationNo,
@@ -158,14 +160,19 @@ function sheetOf(db: MockDb, dossier: Dossier, branch: number, declarationNo: st
     typeName: `${dossier.typeCode} – ${dossier.direction === "NK" ? "Nhập khẩu" : "Xuất khẩu"}`,
     channel: `Luồng ${CHANNEL_VI[db.customsResults.find((r) => r.dossierId === dossier.id)?.channel ?? "GREEN"]}`,
     cargoControlNo: `QLHH${declarationNo.slice(-8)}${pad(branch)}`,
-    barcode: kind === "CARGO" ? `KVGS-MOCK|${declarationNo}|CARGO` : null,
-    containers: kind === "CONTAINER" ? nos.map((c) => ({ containerNo: c.containerNo, sealNo: c.sealNo || null, customsSealNo: null, barcode: `KVGS-MOCK|${declarationNo}|${c.containerNo}` })) : [],
-    cargo: kind === "CARGO" ? { quantity: numberOf(fields["SO_KIEN"]), quantityUnit: "PK", grossWeight: numberOf(fields["TRONG_LUONG"]), weightUnit: "KGM" } : null,
+    barcode: kind === "CARGO" ? declarationNo : null,
+    // Không có số niêm phong Hải quan → sealRequired false (như backend: phải niêm phong khi có soSealHQ).
+    containers: kind === "CONTAINER" ? nos.map((c) => ({ containerNo: c.containerNo, sealNo: c.sealNo || null, customsSealNo: null, barcodeImage: MOCK_BARCODE_PNG })) : [],
+    // API KVGS trả số lượng / trọng lượng cho cả hàng container (backend giữ cả hai); bản in hàng lẻ mới dùng.
+    cargo: { quantity: numberOf(fields["SO_KIEN"]), quantityUnit: "PK", grossWeight: numberOf(fields["TRONG_LUONG"]), weightUnit: "KGM" },
     exportedAt: nowIso(),
   };
 }
 
-/** Lấy bảng kê qua KVGS: đang SENDING → KVGS_ALREADY_SENDING; chưa thông quan / NK container chưa được chấp nhận danh sách → lý do (customs-flow). */
+/**
+ * Lấy bảng kê qua KVGS (một bước, không REF_ID / số tiếp nhận): đang SENDING → KVGS_ALREADY_SENDING; chưa thông quan / NK container chưa được chấp nhận danh sách
+ * → lý do (customs-flow). SENDING ~KVGS_FETCH_MS rồi ACCEPTED (như worker customs-send gọi POST /api/KVGS).
+ */
 export const fetchKvgs = (dossierId: string, branch: number) =>
   mutate((db) => {
     const dossier = dossierOf(db, dossierId);
@@ -177,19 +184,19 @@ export const fetchKvgs = (dossierId: string, branch: number) =>
     const head = kvgsHeaderOf(db, dossierId, branch);
     const now = Date.now();
     db.kvgs.fetches.push({
-      id: newId("kvg"), dossierId, branch, status: "SENDING", refId: newId("ref"), receiptNo: null, receiptDate: null, errors: [], requestedAt: new Date(now).toISOString(), fetchedAt: null,
-      doneAt: new Date(now + KVGS_REPLY_MS).toISOString(), outcome: "ACCEPTED", sheet: sheetOf(db, dossier, branch, head.declarationNo ?? "", head.registeredOn),
+      id: newId("kvg"), dossierId, branch, status: "SENDING", refId: null, receiptNo: null, receiptDate: null, errors: [], requestedAt: new Date(now).toISOString(), fetchedAt: null,
+      doneAt: new Date(now + KVGS_FETCH_MS).toISOString(), outcome: "ACCEPTED", sheet: sheetOf(db, dossier, branch, head.declarationNo ?? "", head.registeredOn),
     });
     return viewOf(db, dossierId, branch);
   });
 
-/** "Lấy phản hồi" ngay: bản đang SENDING / NO_RESPONSE được chốt luôn (mock không chờ lịch). */
-export const pollNow = (dossierId: string, branch: number, kind: "CONT_LIST" | "KVGS") =>
+/** "Lấy phản hồi" danh sách container ngay: bản đang SENDING / NO_RESPONSE được chốt luôn (mock không chờ lịch). KVGS không có bước này. */
+export const pollContainerList = (dossierId: string, branch: number) =>
   mutate((db): { again: boolean } => {
     dossierOf(db, dossierId);
     assertBranch(db, dossierId, branch);
     settleAll(db);
-    const latest = kind === "CONT_LIST" ? latestList(db, dossierId, branch) : latestFetch(db, dossierId, branch);
+    const latest = latestList(db, dossierId, branch);
     if (!latest || (latest.status !== "SENDING" && latest.status !== "NO_RESPONSE")) throw new ApiError("INVALID_STATE", "Không có yêu cầu đang chờ phản hồi");
     if (latest.status === "SENDING") latest.doneAt = nowIso();
     settleAll(db);

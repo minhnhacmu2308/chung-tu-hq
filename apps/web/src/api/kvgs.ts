@@ -12,4 +12,4 @@ export const saveContainerList = pick(mock.saveContainerList, http.saveContainer
 export const refillContainerList = pick(mock.refillContainerList, http.refillContainerList);
 export const sendContainerList = pick(mock.sendContainerList, http.sendContainerList);
 export const fetchKvgs = pick(mock.fetchKvgs, http.fetchKvgs);
-export const pollNow = pick(mock.pollNow, http.pollNow);
+export const pollContainerList = pick(mock.pollContainerList, http.pollContainerList);

@@ -19,13 +19,13 @@ describe("requestKvgsFetch", () => {
     seed(h, 1, "CLEARED");
     expect(await requestKvgsFetch(h.deps, declarant, D, 1)).toMatchObject({ ok: false, error: { reason: "KVGS_REQUIRES_CONTAINER_LIST" } });
   });
-  it("đủ điều kiện → bản SENDING, outbox kvgs:<id> kind CONTAINER, job; gọi lần 2 → KVGS_ALREADY_SENDING, một outbox", async () => {
+  it("đủ điều kiện → bản SENDING, outbox kvgs:<id> (không gửi loại hàng – API quyết), job; gọi lần 2 → KVGS_ALREADY_SENDING, một outbox", async () => {
     seed(h, 1, "CLEARED");
     h.uow.data.containerLists.push(accepted());
     const r = await requestKvgsFetch(h.deps, declarant, D, 1);
     expect(r).toMatchObject({ ok: true, value: { kvgs: { status: "SENDING" } } });
     const k = h.uow.data.kvgs[0]!;
-    expect(h.uow.data.outbox).toEqual([expect.objectContaining({ operation: "KVGS", idempotencyKey: `kvgs:${k.id}`, payload: { kvgsId: k.id, kind: "CONTAINER" } })]);
+    expect(h.uow.data.outbox).toEqual([expect.objectContaining({ operation: "KVGS", idempotencyKey: `kvgs:${k.id}`, payload: { kvgsId: k.id } })]);
     expect(h.queue.jobs).toHaveLength(1);
     expect(await requestKvgsFetch(h.deps, declarant, D, 1)).toMatchObject({ ok: false, error: { reason: "KVGS_ALREADY_SENDING" } });
     expect(h.uow.data.outbox).toHaveLength(1);
@@ -40,11 +40,11 @@ describe("requestKvgsFetch", () => {
     expect(h.uow.data.outbox).toHaveLength(1);
     expect(h.queue.jobs).toHaveLength(1);
   });
-  it("hàng không container → kind CARGO, không đòi danh sách container", async () => {
+  it("hàng không container → không đòi danh sách container", async () => {
     h.dossiers.rows[0]!.transportMode = "SEA_BULK";
     seed(h, 1, "CLEARED");
     expect((await requestKvgsFetch(h.deps, declarant, D, 1)).ok).toBe(true);
-    expect(h.uow.data.outbox[0]!.payload).toMatchObject({ kind: "CARGO" });
+    expect(h.uow.data.outbox[0]!.payload).toEqual({ kvgsId: expect.any(String) });
   });
   it("VIEWER → FORBIDDEN; org khác → NOT_FOUND", async () => {
     seed(h, 1, "CLEARED");

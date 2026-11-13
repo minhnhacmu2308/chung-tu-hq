@@ -89,3 +89,37 @@ describe("Barcode", () => {
     expect(container.innerHTML).not.toContain("alert");
   });
 });
+
+// PNG 1×1 hợp lệ (Base64 thuần, không tiền tố data:).
+const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+describe("Barcode type=png (ảnh mã do Hải quan cấp)", () => {
+  it("render img data:image/png;base64 có alt, vuông, không làm mờ", async () => {
+    const { container, getByRole } = render(<Barcode type="png" value={TINY_PNG} label="Mã vạch container" />);
+    const img = getByRole("img", { name: "Mã vạch container" });
+    expect(img.tagName.toLowerCase()).toBe("img");
+    expect(img).toHaveAttribute("src", `data:image/png;base64,${TINY_PNG}`);
+    expect(img).toHaveAttribute("alt", "Mã vạch container");
+    expect(img).toHaveClass("h-32", "w-32", "object-contain", "[image-rendering:pixelated]");
+    expect(img).not.toHaveAttribute("style");
+    await expectNoA11yViolations(container);
+  });
+
+  it("cỡ sm/lg theo token class", () => {
+    const { getByRole, rerender } = render(<Barcode type="png" value={TINY_PNG} label="p" size="sm" />);
+    expect(getByRole("img")).toHaveClass("h-24", "w-24");
+    rerender(<Barcode type="png" value={TINY_PNG} label="p" size="lg" className="mx-auto" />);
+    expect(getByRole("img")).toHaveClass("h-48", "w-48", "mx-auto");
+  });
+
+  it.each([
+    ["rỗng", ""],
+    ["có tiền tố data:", `data:image/png;base64,${TINY_PNG}`],
+    ["ký tự lạ", "abc$%^"],
+    ["chèn thuộc tính", '"><script>alert(1)</script>'],
+    ["dấu = giữa chuỗi", "ab=cd"],
+  ])("Base64 không hợp lệ (%s): không render, không throw", (_name, value) => {
+    const { container } = render(<Barcode type="png" value={value} label="x" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});

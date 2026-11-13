@@ -11,5 +11,5 @@ export const saveContainerList = (dossierId: string, branch: number, input: Save
 export const refillContainerList = (dossierId: string, branch: number) => apiPost(`${base(dossierId, branch)}/container-list/refill`, {}, KvgsViewSchema);
 export const sendContainerList = (dossierId: string, branch: number) => apiPost(`${base(dossierId, branch)}/container-list/send`, {}, KvgsViewSchema);
 export const fetchKvgs = (dossierId: string, branch: number) => apiPost(`${base(dossierId, branch)}/fetch`, {}, KvgsViewSchema);
-export const pollNow = (dossierId: string, branch: number, kind: "CONT_LIST" | "KVGS") =>
-  apiPost(kind === "CONT_LIST" ? `${base(dossierId, branch)}/container-list/poll` : `${base(dossierId, branch)}/poll`, {}, PollResult);
+/** "Lấy phản hồi" danh sách container (V5ContainerRes). KVGS không có bước này – lấy bảng kê là một lời gọi đồng bộ. */
+export const pollContainerList = (dossierId: string, branch: number) => apiPost(`${base(dossierId, branch)}/container-list/poll`, {}, PollResult);

@@ -2,7 +2,9 @@
 // Bản kê mã vạch qua khu vực giám sát (spec KVGS §4) theo đúng 2 mẫu Hải quan: đầu trang (chi cục khu vực, hải quan cửa khẩu, ngày),
 // tiêu đề, "Tờ khai (không) phải niêm phong", mục 1–9, bảng, "Ghi chú" nguyên văn, "Kết xuất dữ liệu lúc". Chữ cố định: kvgs-print.vi.ts.
 // Dữ liệu in nguyên văn như Hải quan trả (không đổi chữ hoa/dấu). Màu: token giấy (paper) + `scheme-light` – trang giấy luôn
-// chữ đen nền trắng kể cả khi app ở chế độ tối (khi in: @media print của @kb/ui ép đen/trắng), mã QR/Code128 quét được.
+// chữ đen nền trắng kể cả khi app ở chế độ tối (khi in: @media print của @kb/ui ép đen/trắng), mã quét được.
+// Cột (5) mẫu container: ảnh mã PNG Hải quan cấp (barcodeImage, in nguyên ảnh – không tự dựng QR); thiếu ảnh → ô trống.
+// Mẫu hàng lẻ: Code128 của số tờ khai (sheet.barcode) góc phải trên.
 import type { KvgsSheet } from "@kb/contracts";
 import { Barcode, fill, PaperSheet, PaperStack } from "@kb/ui";
 import { formatDate } from "@/lib/format";
@@ -116,7 +118,7 @@ function ContainerTable({ rows, start }: { rows: Container[]; start: number }) {
               <td className={`${TD} break-all`}>{c.customsSealNo ?? ""}</td>
               <td className={TD} />
               <td className={`${TD} text-center`}>
-                <Barcode type="qr" size="sm" value={c.barcode} label={fill(V.BARCODE_LABEL.container, { no: c.containerNo })} />
+                <Barcode type="png" size="sm" value={c.barcodeImage ?? ""} label={fill(V.BARCODE_LABEL.container, { no: c.containerNo })} />
               </td>
             </tr>
           ))}
@@ -167,7 +169,7 @@ function Notes({ sheet, template }: { sheet: KvgsSheet; template: KvgsTemplate }
   );
 }
 
-/** Bản kê theo mẫu `template` (cont: bảng container + QR mỗi dòng, sang trang; le: một dòng hàng + Code128 đầu trang). */
+/** Bản kê theo mẫu `template` (cont: bảng container + ảnh mã Hải quan cấp mỗi dòng, sang trang; le: một dòng hàng + Code128 đầu trang). */
 export function KvgsDocument({ sheet, template }: { sheet: KvgsSheet; template: KvgsTemplate }) {
   // Số dòng mỗi trang (chừa chỗ cho Ghi chú ở trang cuối): KVGS_PAGE_LIMITS trong paginate.ts. Mẫu hàng lẻ: một trang.
   const pages: KvgsPage<Container>[] = template === "cont" ? paginateWithNotes(sheet.containers) : [{ rows: [], notes: true }];

@@ -1,11 +1,18 @@
 // Qua khu vực giám sát (mock): trạng thái danh sách container / bảng kê KVGS theo thời gian giả lập. Chỉ phụ thuộc dữ liệu db (không import api/customs → không vòng).
-// Gửi → SENDING, Hải quan (giả lập) trả lời sau KVGS_REPLY_MS; settleKvgs chốt các phản hồi đã đến (gọi lúc đọc, như settle của customs).
+// Khai danh sách → SENDING, Hải quan (giả lập) trả lời sau KVGS_REPLY_MS. Lấy bảng kê KVGS là một lời gọi đồng bộ (POST /api/KVGS) – mock vẫn để
+// SENDING ~KVGS_FETCH_MS (giống worker customs-send đang chạy) rồi ACCEPTED. settleKvgs chốt các phản hồi đã đến (gọi lúc đọc, như settle của customs).
 import { containerListRequired, normalizeContainerNo, type ContainerListRow, type ContainerListStatus, type CustomsErrorItem, type KvgsFlowState, type KvgsSheet } from "@kb/contracts";
 import type { MockDb } from "@/mocks/db";
 import type { Dossier } from "@/mocks/types";
 
-/** Hải quan (mô phỏng) trả lời danh sách container / bảng kê KVGS sau ~3 giây. */
+/** Hải quan (mô phỏng) trả lời danh sách container sau ~3 giây. */
 export const KVGS_REPLY_MS = 3_000;
+/** Lấy bảng kê KVGS (mô phỏng thời gian worker gọi POST /api/KVGS) ~2 giây. */
+export const KVGS_FETCH_MS = 2_000;
+
+/** Ảnh mã vạch container mô phỏng: QR "MSCU1234566" (PNG 84×84, bwip-js) Base64 thuần – như `barcodeImage` của API KVGS. Một ảnh dùng cho mọi dòng. */
+export const MOCK_BARCODE_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAFQAAABUCAYAAAAcaxDBAAAAHnRFWHRTb2Z0d2FyZQBid2lwLWpzLm1ldGFmbG9vci5jb21Tnbi0AAABi0lEQVR4nO3VSw7CMBAE0dz/0rBnEWvUNWOTVEvZ4DCfZwmu67o+w89v6O+n9eP9BBVU0FeD0qnWT4HT/tUICkdQOILCKYOmC9IL0aD4foIKKqignQ2LAGl9QQUVVNDO/XaD0heS1hd0EUGL56sIWjxf5TjQNOlC9Pvt+wkK7ycovJ+g8H6rAemnujB93r6foIIK+irQ03L8gP8WQeEICudxoKf9iNN/At31yg0Fva9Xbijofb1yQ0Hv640PtPuC0nlW38cHoBcQFF5AUHiBx4NWC04DpPOm+8URVFBByXrtoGmDbqDufvg8gsLzCArPIyg8T3Xg9P3qedq/mnh/QbN5BS3WL/cXNJuX7h+HvpDdz/YICkdQOI8D3X2D0+/T59tvWFBBBT0KlM70Qt0XvjwXVNBSP0GL56v3jwOdHogGGY+gcASFIyic00HT+en98YKCwgUFhQsKChfsBqXnna4nqKBn1xN0GjTNNHg6TzyfoPD8gsLzCwrP//tB99MNUj3H5xVUUEFfA/oFjUASs1R8sn4AAAAASUVORK5CYII=";
 
 type Reply = { doneAt: string | null; outcome: "ACCEPTED" | "REJECTED" | null };
 type Receipt = { refId: string | null; receiptNo: string | null; receiptDate: string | null; errors: CustomsErrorItem[] };

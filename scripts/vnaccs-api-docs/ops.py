@@ -42,7 +42,7 @@ FLOWS = [
     ], "Khai định danh nhận REF_ID → hỏi kết quả lấy số định danh + QR. Tách vận đơn (nhập khẩu) → hỏi kết quả lấy số tiếp nhận."),
     ("flow-container", "Container", [
         ["ContainerReq", "V5ContainerReq"], ["ContainerRes", "V5ContainerRes"], ["KVGS"],
-    ], "Khai danh sách container cho tờ khai → hỏi kết quả. KVGS: lấy thông tin đưa hàng qua khu vực giám sát (mã vạch)."),
+    ], "Khai danh sách container cho tờ khai → hỏi kết quả. KVGS: lấy thông tin đưa hàng qua khu vực giám sát (mã vạch) – một lời gọi đồng bộ, có phản hồi ngay."),
 ]
 
 # Mỗi nghiệp vụ. fields: [(nhãn đối tượng JSON, file excel, sheet, kind)] kind: req|res|both
@@ -252,10 +252,10 @@ OPS = {
                        "purpose": "Theo REF_ID. Đã nối (13/11/2026).", "when": "Sau V5ContainerReq.",
                        "fields": [("Body + phản hồi", "KHAI BAO DANH SACH CONTAINER v1.1.xlsx", "Hỏi kết quả danh sách container", "both"), ("errorList[]", "KHAI BAO DANH SACH CONTAINER v1.1.xlsx", "errorList", "res")]},
     "KVGS": {"group": "transport", "title": "Thông tin qua khu vực giám sát (mã vạch container)", "code": None,
-             "purpose": "Lấy thông tin để đưa hàng/container qua khu vực giám sát hải quan (danh sách container + mã vạch) theo số tờ khai.",
+             "purpose": "Lấy thông tin để đưa hàng/container qua khu vực giám sát hải quan (danh sách container + ảnh mã vạch) theo số tờ khai. Đồng bộ: một lời gọi POST /api/KVGS, không REF_ID, không hỏi lại.",
              "when": "Sau thông quan / giải phóng hàng.", "fields": [],
              "body_note": "`TK_SOTK`, `TK_NGAYDK` (dd/MM/yyyy), `TK_MAHQ`, `MA_DV` – không có tài khoản VNACCS.",
-             "response_note": "Chưa có đặc tả phản hồi trong bộ tài liệu. Tích hợp: chờ đặc tả phản hồi – hiện giả lập trong fpt-mock (2 bước)."},
+             "response_note": "`{ errorList[], serviceMessage }`. `errorList` khác rỗng → từ chối (errorCode, indexCode, nameCode, errorContent, proposedSolution, rowPosition). `serviceMessage`: `isContainer` (1 container / 0 hàng lẻ), `bangKeMaVachContainer[]` (soContainer, soSeal, soSealHQ, `barcodeImage` Base64 PNG), `so_Luong_Hang`, `dvT_So_Luong_Hang`, `tong_Trong_Luong_Hang`, `dvT_Tong_Trong_Luong_Hang`, soToKhai, ngayToKhai, loaiHinh, tenLoaiHinh, trangThaiToKhai, luongToKhai, maSoThue, tenDonViXNK, maDDGS, tenDDGS, tenChiCucHaiQuanGS, tenCucHaiQuan, tenChiCucHaiQuan, soDinhDanh, ghi_Chu, thoiGianLayDuLieu (dd/MM/yyyy HH:mm:ss, giờ VN)… Đã nối (13/11/2026): một bước, không tài khoản VNACCS; spec `docs/mauin_danhsachcontqua_kvgs/API-KVGS.md`."},
     # ───────── In ─────────
     "PrintObjectRefIDA": {"group": "print", "title": "In tờ khai nhập từ object", "code": None,
                           "purpose": "Gửi object tờ khai nhập (như phản hồi IDA/IID: objVN_IDA, _VANDON, _KTG, _THUE, _TRANGTHAI, _CTHQ, _HANG) → nhận bản in.",
@@ -296,7 +296,7 @@ GAPS = [
     ("Phản hồi bất đồng bộ", "Đã nối: mỗi lượt hỏi trạng thái (customs-poll) gọi VNACCSREP trước, ghi thông điệp vào nhật ký của đúng tờ khai, cập nhật luồng/thông quan; sau đó vẫn tra IID/IEX.", "–"),
     ("HYS", "Gửi phẳng + `lisT_FILE` – đúng Excel (Postman bọc `objVN_HYS` + `lisT_FILE_HYS`, có thể cũ).", "Đối chiếu khi có phản hồi thật."),
     ("Container", "Đã nối (13/11/2026): V5ContainerReq/Res – body phẳng, USER_ID, không gửi mật khẩu; ADR 0014.", "Bản cũ ContainerReq/Res không dùng."),
-    ("KVGS", "Chờ đặc tả phản hồi của FPT: cổng thật trả NOT_SUPPORTED; giả lập hai bước trong fpt-mock (gửi → hỏi lại) và bộ ánh xạ linh hoạt.", "Nối thật khi FPT gửi đặc tả phản hồi."),
+    ("KVGS", "Đã nối (13/11/2026): POST /api/KVGS một bước đồng bộ, body phẳng (TK_SOTK, TK_NGAYDK dd/MM/yyyy, TK_MAHQ, MA_DV), không tài khoản VNACCS; phản hồi Zod đúng đặc tả `API-KVGS.md`; fpt-mock trả đúng vỏ; ADR 0014.", "Chưa ánh xạ loaiHinh/ghi_Chu lên bản in."),
     ("Bổ sung chứng từ V5, định danh, tách vận đơn, in, SyncCategory", "Chưa gọi (định danh/tách vận đơn mới có panel giao diện). Mock đã có đủ để làm.", "Làm theo thứ tự ưu tiên nghiệp vụ. KyFile không bắt buộc."),
 ]
 

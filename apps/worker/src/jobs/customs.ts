@@ -25,10 +25,10 @@ export async function customsPollJob(deps: CustomsDeps, raw: unknown) {
   return r.ok ? (r.value.done ? (r.value.cleared ? "cleared" : "done") : "again") : r.error.code;
 }
 
-/** Payload job kvgs-poll: `kind` CONT_LIST (danh sách container) | KVGS (bảng kê), `id` = bản ghi, `n` = lần hỏi thứ n. */
+/** Payload job kvgs-poll: `kind` CONT_LIST (danh sách container – KVGS lấy bảng kê đồng bộ, không poll), `id` = bản ghi, `n` = lần hỏi thứ n. */
 export const KvgsPollPayload = z.object({ orgId: z.string().min(1), userId: z.string().min(1), kind: KvgsKindSchema, id: z.string().min(1), n: z.number().int().positive() });
 
-/** Hỏi kết quả danh sách container / bảng kê KVGS theo REF_ID. Lỗi tạm ném ra để BullMQ retry. */
+/** Hỏi kết quả khai danh sách container (V5ContainerRes) theo REF_ID. Lỗi tạm ném ra để BullMQ retry. */
 export async function kvgsPollJob(deps: CustomsDeps, raw: unknown) {
   const p = parsePayload(KvgsPollPayload, raw, "kvgs-poll");
   const r = await pollKvgs(deps, p);

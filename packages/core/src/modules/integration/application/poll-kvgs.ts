@@ -1,6 +1,7 @@
-// Worker `kvgs-poll`: hỏi kết quả danh sách container (V5ContainerRes) / bảng kê KVGS theo REF_ID tới khi có phản hồi.
+// Worker `kvgs-poll`: hỏi kết quả danh sách container (V5ContainerRes) theo REF_ID tới khi có phản hồi. KVGS (bảng kê) là một lời gọi đồng bộ
+// (POST /api/KVGS) – xử lý xong trong customs-send (process-kvgs), không poll.
 // PENDING → lặp mỗi KVGS_POLL_DELAY_MS tới KVGS_MAX_POLLS lần rồi NO_RESPONSE (người khai bấm "Lấy phản hồi" – pollKvgsNow – để hỏi tiếp);
-// ACCEPTED → số tiếp nhận / ngày (+ bảng kê cho KVGS); REJECTED → lỗi Hải quan. Lỗi mạng/5xx → ném (BullMQ retry); lỗi nghiệp vụ của gateway (chưa hỗ trợ…) → REJECTED, không retry.
+// ACCEPTED → số tiếp nhận / ngày; REJECTED → lỗi Hải quan. Lỗi mạng/5xx → ném (BullMQ retry); lỗi nghiệp vụ của gateway (chưa hỗ trợ…) → REJECTED, không retry.
 import { z } from "zod";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, type DomainError } from "../../../shared/errors.js";
@@ -14,23 +15,26 @@ import { KVGS_ROLES } from "./kvgs.js";
 export const KVGS_POLL_DELAY_MS = 30_000;
 export const KVGS_MAX_POLLS = 40;
 
-export const KvgsKindSchema = z.enum(["CONT_LIST", "KVGS"]);
+/** Job kvgs-poll chỉ còn hỏi danh sách container (giữ trường `kind` để jobId/payload ổn định). */
+export const KvgsKindSchema = z.enum(["CONT_LIST"]);
 export type KvgsPollKind = z.infer<typeof KvgsKindSchema>;
+/** Bản ghi qua KVGS: danh sách container hoặc bảng kê. */
+export type KvgsTargetKind = "CONT_LIST" | "KVGS";
 /** `n`: lần hỏi thứ n (1-based). `manual`: một lượt do người dùng bấm – không xếp lượt kế, không đổi sang NO_RESPONSE. */
 export type KvgsPollInput = { orgId: string; userId: string; kind: KvgsPollKind; id: string; n: number; manual?: boolean };
 
 type ActorCtx = { orgId: OrgId; userId: UserId };
 export const isDomainError = (e: unknown): e is DomainError => typeof e === "object" && e !== null && "code" in e && typeof (e as { code: unknown }).code === "string";
 export const fmtErrors = (errors: GatewayError[]) => errors.map((e) => `${e.code}${e.field ? ` (${e.field})` : ""}: ${e.message}${e.solution ? ` → ${e.solution}` : ""}`).join("; ");
-export const LABEL: Record<KvgsPollKind, string> = { CONT_LIST: "danh sách container", KVGS: "bảng kê KVGS" };
+export const LABEL: Record<KvgsTargetKind, string> = { CONT_LIST: "danh sách container", KVGS: "bảng kê KVGS" };
 
 type Target = ContainerListRecord | KvgsSheetRecord;
-export const loadTarget = (deps: CustomsDeps, ctx: ActorCtx, kind: KvgsPollKind, id: string): Promise<Target | null> =>
+export const loadTarget = (deps: CustomsDeps, ctx: ActorCtx, kind: KvgsTargetKind, id: string): Promise<Target | null> =>
   deps.uow.asOrg<Target | null>(ctx, (r) => (kind === "CONT_LIST" ? r.containerLists.get(ctx.orgId, id) : r.kvgs.get(ctx.orgId, id)));
 
 type Patch = { status: Target["status"]; errors?: GatewayError[] | null; receiptNo?: string | null; receiptDate?: string | null; sheet?: KvgsSheetRecord["sheet"]; raw?: unknown; fetchedAt?: Date | null; refId?: string | null };
 /** Ghi `patch` vào bản ghi (danh sách container không có sheet/raw/fetchedAt). */
-export async function patchTarget(r: CustomsRepos, orgId: string, kind: KvgsPollKind, id: string, patch: Patch, at: Date): Promise<void> {
+export async function patchTarget(r: CustomsRepos, orgId: string, kind: KvgsTargetKind, id: string, patch: Patch, at: Date): Promise<void> {
   if (kind === "KVGS") return r.kvgs.update(orgId, id, { ...patch, updatedAt: at });
   const { sheet: _s, raw: _r, fetchedAt: _f, ...list } = patch;
   return r.containerLists.update(orgId, id, { ...list, updatedAt: at });
@@ -60,14 +64,14 @@ export async function pollKvgs(deps: CustomsDeps, input: KvgsPollInput): Promise
 
   const built = await loadRefRequests(deps, ctx, dossierId, branch);
   if (!built.ok) return rejectWith([{ code: built.error.code, message: built.error.message ?? built.error.code }]);
-  let res: Awaited<ReturnType<CustomsDeps["gateway"]["kvgsResult"]>>;
+  let res: Awaited<ReturnType<CustomsDeps["gateway"]["containerListResult"]>>;
   try {
-    res = input.kind === "CONT_LIST" ? await deps.gateway.containerListResult(input.orgId, { ...built.value.head, refId }) : await deps.gateway.kvgsResult(input.orgId, { ...built.value.kvgs, refId });
+    res = await deps.gateway.containerListResult(input.orgId, { ...built.value.head, refId });
   } catch (e) {
     if (!isDomainError(e)) throw e; // lỗi tạm (mạng/5xx): BullMQ retry
     return rejectWith([{ code: e.code, message: e.message ?? e.code }]);
   }
-  await meterSafely(deps.usage, { orgId: input.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: input.kind === "CONT_LIST" ? "V5ContainerRes" : "KVGS", quantity: 1, ...(input.manual ? {} : { dedupeKey: `kvgs-poll:${input.kind}:${input.id}:${input.n}` }), meta: { refId, attempt: input.n, ...(input.manual ? { manual: true } : {}) } });
+  await meterSafely(deps.usage, { orgId: input.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: "V5ContainerRes", quantity: 1, ...(input.manual ? {} : { dedupeKey: `kvgs-poll:${input.kind}:${input.id}:${input.n}` }), meta: { refId, attempt: input.n, ...(input.manual ? { manual: true } : {}) } });
 
   if (res.state === "PENDING") {
     if (input.manual) return ok({ again: false });
@@ -79,27 +83,23 @@ export async function pollKvgs(deps: CustomsDeps, input: KvgsPollInput): Promise
     return ok({ again: true });
   }
 
-  const raw = "raw" in res && res.raw !== undefined ? { raw: res.raw } : {};
-  const sheet = "sheet" in res ? res.sheet : undefined;
-  if (res.state === "REJECTED") return rejectWith(res.errors?.length ? res.errors : [{ code: "E-REJECTED", message: `Hải quan từ chối ${LABEL[input.kind]}` }], raw);
-  // ACCEPTED. KVGS thiếu dữ liệu để in (KVGS_RESPONSE_INCOMPLETE, không có sheet) → chưa dùng được: REJECTED, giữ `raw` để truy vết.
+  if (res.state === "REJECTED") return rejectWith(res.errors?.length ? res.errors : [{ code: "E-REJECTED", message: `Hải quan từ chối ${LABEL[input.kind]}` }]);
   const receipt = { receiptNo: res.receiptNo ?? null, receiptDate: res.receiptDate ?? null };
-  if (input.kind === "KVGS" && !sheet) return rejectWith(res.errors?.length ? res.errors : [{ code: "KVGS_RESPONSE_INCOMPLETE", message: "Phản hồi của Hải quan thiếu thông tin để in" }], { ...raw, ...receipt });
   const summary = receipt.receiptNo ? `Hải quan chấp nhận ${LABEL[input.kind]} – số tiếp nhận ${receipt.receiptNo}` : `Hải quan chấp nhận ${LABEL[input.kind]}`;
-  await settle({ status: "ACCEPTED", errors: null, ...receipt, ...(input.kind === "KVGS" ? { sheet: sheet ?? null, raw: "raw" in res ? res.raw ?? null : null, fetchedAt: now() } : {}) }, { result: "OK", summary, payloadMasked: { nghiepVu: input.kind, soTiepNhan: receipt.receiptNo, ngayTiepNhan: receipt.receiptDate } });
+  await settle({ status: "ACCEPTED", errors: null, ...receipt }, { result: "OK", summary, payloadMasked: { nghiepVu: input.kind, soTiepNhan: receipt.receiptNo, ngayTiepNhan: receipt.receiptDate } });
   return ok({ again: false });
 }
 
 /**
- * Route "Lấy phản hồi": bản SENDING / NO_RESPONSE mới nhất của (hồ sơ, nhánh) → hỏi một lượt (không xếp lượt kế, không đếm lần).
- * Không có bản phù hợp → INVALID_STATE.
+ * Route "Lấy phản hồi" của danh sách container: bản SENDING / NO_RESPONSE mới nhất của (hồ sơ, nhánh) → hỏi một lượt (không xếp lượt kế, không đếm lần).
+ * Không có bản phù hợp → INVALID_STATE. (KVGS không có bước hỏi lại – lấy bảng kê là một lời gọi đồng bộ.)
  */
-export async function pollKvgsNow(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch: number, kind: KvgsPollKind): Promise<Result<{ again: boolean }>> {
+export async function pollKvgsNow(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch: number): Promise<Result<{ again: boolean }>> {
   const allowed = requireRole(ctx, ...KVGS_ROLES);
   if (!allowed.ok) return allowed;
-  const latest = await deps.uow.asOrg<Target | null>(ctx, (r) => (kind === "CONT_LIST" ? r.containerLists.latest(ctx.orgId, dossierId, branch) : r.kvgs.latest(ctx.orgId, dossierId, branch)));
-  if (!latest || (latest.status !== "SENDING" && latest.status !== "NO_RESPONSE") || !latest.refId) return err(domainError("INVALID_STATE", `Không có ${LABEL[kind]} đang chờ phản hồi`));
-  return pollKvgs(deps, { orgId: ctx.orgId, userId: ctx.userId, kind, id: latest.id, n: 1, manual: true });
+  const latest = await deps.uow.asOrg(ctx, (r) => r.containerLists.latest(ctx.orgId, dossierId, branch));
+  if (!latest || (latest.status !== "SENDING" && latest.status !== "NO_RESPONSE") || !latest.refId) return err(domainError("INVALID_STATE", `Không có ${LABEL.CONT_LIST} đang chờ phản hồi`));
+  return pollKvgs(deps, { orgId: ctx.orgId, userId: ctx.userId, kind: "CONT_LIST", id: latest.id, n: 1, manual: true });
 }
 
 /** Hết số lần thử của job kvgs-poll (lỗi tạm kéo dài): để NO_RESPONSE – người khai bấm Lấy phản hồi để hỏi lại. */

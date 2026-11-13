@@ -3,23 +3,27 @@
 // mỗi phần tử objEDA/objIDA = { objMsgResult, objVN_<KIND>, objVN_<KIND>_TRANGTHAI, … }.
 // externalId = số tờ khai VNACCS (tK_ECN/tK_ICN) – gọi lại/đăng ký/tra cứu theo số này. Đặc tả từng nghiệp vụ: docs/vnaccs-api
 // (nguồn lệch nhau: phản hồi thật > Excel đặc tả > Postman). Mã thông điệp theo REP_VNACCS.
-import { AmaRequestSchema, FPT_DECLARATION_STATES, FptRefIdResponseSchema, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, V5ContainerResSchema, type CustomsOperation, type FptVnaccsCredentials, type KvgsSheet } from "@kb/contracts";
+import { AmaRequestSchema, FPT_DECLARATION_STATES, FptKvgsRequestSchema, FptRefIdResponseSchema, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, V5ContainerResSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
-import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult, KvgsGatewayRequest, RefResult } from "../application/customs-ports.js";
+import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../application/customs-ports.js";
 import { parseCustomsInfo } from "../domain/customs-info.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
 import { fptContentBody, fptNumberField } from "../domain/fpt-content-body.js";
+import { mapKvgsResponse } from "./kvgs-mapper.js";
 
 export type FptOperation =
   | "IDA" | "IDB" | "IDC" | "IDD" | "IDA01" | "IDE" | "IID"
   | "EDA" | "EDB" | "EDC" | "EDD" | "EDA01" | "EDE" | "IEX"
-  | "AMA" | "AMB" | "AMC" | "HYS" | "VNACCSREP" | "V5ContainerReq" | "V5ContainerRes";
+  | "AMA" | "AMB" | "AMC" | "HYS" | "VNACCSREP" | "V5ContainerReq" | "V5ContainerRes" | "KVGS";
 /** Lời gọi của doanh nghiệp / hồ sơ nào – cho nhật ký gỡ lỗi (FPT_DEBUG_TRACE). Không có dossierId = lời gọi chung (VNACCSREP). */
 export type FptCallMeta = { orgId: string; dossierId?: string };
 export interface FptHttpClient {
-  /** Gửi `body` (client tự thêm `objVNACCS_ACCOUNT` + token); trả JSON thô. */
-  post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials, meta?: FptCallMeta): Promise<unknown>;
+  /**
+   * Gửi `body` (client tự thêm `objVNACCS_ACCOUNT` + token); trả JSON thô. `creds` = tài khoản VNACCS của doanh nghiệp: null chỉ hợp lệ với nghiệp vụ body phẳng
+   * (V5Container…, KVGS – không gửi tài khoản); nghiệp vụ khác thiếu `creds` → INTEGRATION_NOT_CONFIGURED.
+   */
+  post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials | null, meta?: FptCallMeta): Promise<unknown>;
 }
 export interface VnaccsCredentialsReader {
   get(orgId: string): Promise<FptVnaccsCredentials | null>;
@@ -74,8 +78,6 @@ const isoToFptDate = (iso: string): string => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 };
-/** Chưa nối API KVGS: không đoán định dạng gửi/nhận khi chưa có đặc tả của FPT. */
-const KVGS_NOT_WIRED = "Chưa nối API KVGS – chờ đặc tả phản hồi của FPT";
 
 export class FptVnaccsGateway implements CustomsGateway {
   readonly name = "fpt-vnaccs";
@@ -137,7 +139,7 @@ export class FptVnaccsGateway implements CustomsGateway {
    * - khai tạm sửa đổi IDA01/EDA01 – như IDA/EDA, head mang số tờ khai;
    * - đăng ký sửa đổi IDE/EDE – body số tờ khai, trả phân luồng;
    * - AMA (objVN_AMA + objVN_AMA_HANG, VNACCS_AMA v1.4) → số tờ khai bổ sung tK_SYN; AMB/AMC – body tK_SYN.
-   * Container qua khu vực giám sát / lệ phí cảng: chưa nối (V5ContainerReq, KVGS – docs/vnaccs-api).
+   * Lệ phí cảng: chưa nối. Container qua khu vực giám sát đi riêng (sendContainerList / containerListResult / fetchKvgs).
    */
   async send(orgId: string, msg: { op: CustomsOperation; externalId?: string; request?: unknown; dossierId?: string }): Promise<GatewaySendResult> {
     const op = msg.op;
@@ -220,12 +222,17 @@ export class FptVnaccsGateway implements CustomsGateway {
     return { state: "PENDING" };
   }
 
-  // TODO(ADR 0014): nối API KVGS khi chủ sản phẩm cung cấp đặc tả của FPT (body gửi, phản hồi → mapKvgsResponse). Không đoán định dạng.
-  async requestKvgs(_orgId: string, _req: KvgsGatewayRequest, _idempotencyKey?: string): Promise<{ refId?: string; errors?: GatewayError[] }> {
-    throw domainError("NOT_SUPPORTED", KVGS_NOT_WIRED);
-  }
-  async kvgsResult(_orgId: string, _req: KvgsGatewayRequest & { refId: string }): Promise<RefResult & { sheet?: KvgsSheet; raw?: unknown }> {
-    throw domainError("NOT_SUPPORTED", KVGS_NOT_WIRED);
+  /**
+   * KVGS (đặc tả API-KVGS): `POST /api/KVGS` một lời gọi đồng bộ, body phẳng { TK_SOTK, TK_NGAYDK dd/MM/yyyy, TK_MAHQ, MA_DV } – chuỗi để giữ số 0 đầu.
+   * Kiểm body trước khi gọi (ngày sai định dạng thì controller FPT vẫn tra với ngày mặc định). errorList → REJECTED; thiếu dữ liệu để in → REJECTED
+   * KVGS_RESPONSE_INCOMPLETE; `raw` luôn là phản hồi thô. HTTP 429/5xx/mạng → FptTransientError (retry); 400/401 (sau đăng nhập lại) → DomainError.
+   */
+  async fetchKvgs(orgId: string, req: KvgsGatewayRequest, _idempotencyKey?: string): Promise<KvgsFetchResult> {
+    const body = FptKvgsRequestSchema.safeParse({ TK_SOTK: req.declarationNo.trim(), TK_NGAYDK: isoToFptDate(req.registeredOn.trim()), TK_MAHQ: req.customsOffice.trim(), MA_DV: req.taxCode.trim() });
+    if (!body.success) return { state: "REJECTED", errors: body.error.issues.map(describeSchemaIssue) };
+    // Không đọc tài khoản VNACCS: KVGS chỉ cần JWT (FPT_API_*), body phẳng không có objVNACCS_ACCOUNT.
+    const raw = await this.http.post("KVGS", body.data, null, { orgId, ...(req.dossierId ? { dossierId: req.dossierId } : {}) });
+    return { ...mapKvgsResponse(raw, new Date()), raw };
   }
 
   /** IID (nhập, body tK_ICN) / IEX (xuất, body tK_ECN) – theo Postman FPT; trạng thái theo VN_IDA/EDA_TRANGTHAI. */

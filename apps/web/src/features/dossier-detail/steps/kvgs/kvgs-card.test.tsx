@@ -2,6 +2,7 @@
 // Thẻ "Qua khu vực giám sát" chạy trên mock thật (dos_029 NK container đã thông quan, dos_030 XK hàng lẻ đã thông quan):
 // bảng điền sẵn từ vận đơn, sửa → Lưu; seal rỗng chặn Khai; xác nhận (DN + chi cục) → Đang gửi → Lấy phản hồi → chấp nhận;
 // khối 2 khóa kèm lý do trước khi danh sách được chấp nhận; seal REJECT → lỗi dưới bảng đúng dòng; XK hàng lẻ; chỉ xem; axe.
+// Khối 2 (KVGS) một bước: Lấy → đang lấy (thẻ tự làm mới) → chấp nhận "Lấy lúc …" / từ chối kèm lỗi; không "Lấy phản hồi", không số tham chiếu/tiếp nhận.
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -112,6 +113,42 @@ describe("KvgsCard – XK hàng lẻ (dos_030)", () => {
     await waitFor(() => expect((screen.getByRole("button", { name: "Lấy DS qua KVGS" }) as HTMLButtonElement).disabled).toBe(false), T);
     expect((screen.getByRole("button", { name: "In bản kê" }) as HTMLButtonElement).disabled).toBe(true);
     await expectNoA11yViolations(container);
+  }, 30_000);
+
+  it("Lấy DS qua KVGS một bước: đang lấy (tự làm mới) → chấp nhận, 'Lấy lúc', không Lấy phản hồi / số tiếp nhận; In bật", async () => {
+    renderWithProviders(<KvgsCard dossierId="dos_030" branch={1} canEdit />);
+    const b2 = await screen.findByRole("region", { name: "Lấy DS qua KVGS" }, T);
+    const fetchBtn = within(b2).getByRole("button", { name: "Lấy DS qua KVGS" }) as HTMLButtonElement;
+    await waitFor(() => expect(fetchBtn.disabled).toBe(false), T);
+    await userEvent.click(fetchBtn);
+    await userEvent.click(within(await screen.findByRole("dialog", {}, T)).getByRole("button", { name: "Gửi" }));
+    expect(await within(b2).findByText("Đang lấy danh sách từ Hải quan – thẻ tự làm mới.", {}, T)).toBeTruthy();
+    expect(within(b2).getByRole("status")).toBeTruthy();
+    expect(within(b2).queryByRole("button", { name: /Lấy phản hồi/ })).toBeNull();
+    expect((within(b2).getByRole("button", { name: "Lấy DS qua KVGS" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(await within(b2).findByText("Hải quan chấp nhận", {}, T)).toBeTruthy();
+    expect(within(b2).getByText(/^Lấy lúc .*\d{2}\/\d{2}\/\d{4}/)).toBeTruthy();
+    expect(within(b2).queryByText("Số tham chiếu")).toBeNull();
+    expect(within(b2).queryByText("Số tiếp nhận")).toBeNull();
+    expect(within(b2).queryByText("Ngày tiếp nhận")).toBeNull();
+    expect(within(b2).queryByRole("button", { name: /Lấy phản hồi/ })).toBeNull();
+    expect(within(b2).getByRole("link", { name: "In bản kê" }).getAttribute("href")).toBe("/dossiers/dos_030/kvgs/1/print?mau=le");
+  }, 30_000);
+
+  it("KVGS bị từ chối → lỗi Hải quan, ghi chú xem lỗi, lấy lại được; không số tiếp nhận", async () => {
+    getDb().kvgs.fetches.push({
+      id: "kvf_rej", dossierId: "dos_030", branch: 1, status: "REJECTED", requestedAt: "2026-02-27T02:00:00Z", fetchedAt: null, doneAt: "2026-02-27T02:00:01Z",
+      outcome: "REJECTED", refId: null, receiptNo: null, receiptDate: null, sheet: null,
+      errors: [{ code: "000", message: "Không tìm thấy tờ khai", solution: "Kiểm tra số tờ khai" }],
+    });
+    renderWithProviders(<KvgsCard dossierId="dos_030" branch={1} canEdit />);
+    const b2 = await screen.findByRole("region", { name: "Lấy DS qua KVGS" }, T);
+    expect(within(b2).getByText("Bị từ chối")).toBeTruthy();
+    expect(within(b2).getByText("Hải quan báo lỗi – xem lỗi bên dưới rồi lấy lại.")).toBeTruthy();
+    expect(screen.getByText(/Hải quan báo lỗi khi lấy danh sách \(1 lỗi\)/)).toBeTruthy();
+    expect(screen.getByText(/Không tìm thấy tờ khai/)).toBeTruthy();
+    expect(within(b2).queryByText("Số tiếp nhận")).toBeNull();
+    await waitFor(() => expect((within(b2).getByRole("button", { name: "Lấy DS qua KVGS" }) as HTMLButtonElement).disabled).toBe(false), T);
   }, 30_000);
 
   it("en / zh: tiêu đề và khối đã dịch", async () => {

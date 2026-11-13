@@ -293,6 +293,21 @@ describe("DrizzleCustomsUow – danh sách container và bảng kê KVGS", () =>
     expect(await uow.asOrg(B, (r) => r.kvgs.get("org_anphat", "kv_1"))).toBeNull();
     await expect(uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_bad", 3, { status: "LA" as KvgsSheetRecord["status"] })))).rejects.toThrow();
   });
+  it("kvgs_sheets: bảng kê jsonb khứ hồi đúng (ảnh mã vạch Base64); bảng kê dạng cũ (container `barcode` chuỗi, trước API KVGS thật) → đọc ra null, không làm hỏng màn hình", async () => {
+    const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAIAAAUAAYRcDQAAAAAASUVORK5CYII=";
+    const good: NonNullable<KvgsSheetRecord["sheet"]> = {
+      kind: "CONTAINER", regionOffice: "Cục", customsOffice: "Chi cục", supervisionOffice: "GS", sealRequired: true, companyName: "A", taxCode: "0312345678", declarationNo: "106123456780",
+      declarationStatus: "Thông quan", declarationDate: "2026-11-10", declarationDateTo: null, typeName: "Nhập kinh doanh tiêu dùng", channel: "Xanh", cargoControlNo: "101126000001", barcode: null,
+      containers: [{ containerNo: "MSCU1234566", sealNo: "SL1", customsSealNo: "HQ1", barcodeImage: PNG }], cargo: { quantity: "120", quantityUnit: "PK", grossWeight: "12450.5", weightUnit: "KGM" }, exportedAt: "2026-11-13T02:30:00.000Z",
+    };
+    const legacy = { ...good, containers: [{ containerNo: "MSCU1234566", sealNo: "SL1", customsSealNo: null, barcode: "KVGS-MOCK|1|MSCU1234566" }] } as unknown as KvgsSheetRecord["sheet"];
+    await uow.asOrg(A, async (r) => {
+      await r.kvgs.insert(sheet("kv_g", 20, { branch: 4, status: "ACCEPTED", sheet: good }));
+      await r.kvgs.insert(sheet("kv_l", 21, { branch: 5, status: "ACCEPTED", sheet: legacy }));
+    });
+    expect((await uow.asOrg(A, (r) => r.kvgs.get("org_anphat", "kv_g")))?.sheet).toEqual(good);
+    expect((await uow.asOrg(A, (r) => r.kvgs.get("org_anphat", "kv_l")))?.sheet).toBeNull();
+  });
   it("kvgs_sheets: chỉ một bản SENDING mỗi (hồ sơ, nhánh) – chỉ mục duy nhất từng phần; xong bản cũ thì tạo được bản mới", async () => {
     await uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_s1", 10, { branch: 2 })));
     const dup = await uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_s2", 11, { branch: 2 }))).then(() => null, (e: unknown) => e);

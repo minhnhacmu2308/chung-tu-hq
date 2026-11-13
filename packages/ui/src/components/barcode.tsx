@@ -4,15 +4,17 @@ import { cva } from "class-variance-authority";
 import { cn } from "../lib/cn.js";
 
 // Mã vạch 2 chiều (QR) / 1 chiều (Code128) dạng SVG cho bản in cán bộ hải quan quét.
+// `type="png"`: ảnh mã do hệ thống Hải quan cấp sẵn (Base64 PNG thuần, vd. bangKeMaVachContainer[].barcodeImage) –
+// hiển thị nguyên ảnh, khung vuông cố định, `image-rendering: pixelated` để phóng to không nhòe module (vẫn quét được).
 // Màu luôn `currentColor` (trang in tự ép đen trên trắng). KHÔNG dùng CSS làm méo tỉ lệ:
 // svg giữ `preserveAspectRatio="xMidYMid meet"`, vùng yên tĩnh (quiet zone) nằm trong viewBox.
 
-export type BarcodeType = "qr" | "code128";
+export type BarcodeType = "qr" | "code128" | "png";
 export type BarcodeSize = "sm" | "md" | "lg";
 
 export interface BarcodeProps {
   type: BarcodeType;
-  /** Nội dung mã hóa. Rỗng → không render. */
+  /** Nội dung mã hóa; `type="png"`: Base64 PNG thuần (không tiền tố `data:`). Rỗng/không hợp lệ → không render. */
   value: string;
   /** Tên truy cập (aria-label) – bắt buộc. */
   label: string;
@@ -27,13 +29,16 @@ const CODE128_HEIGHT_PX: Record<BarcodeSize, number> = { sm: 40, md: 56, lg: 80 
 
 const barcodeVariants = cva("inline-block shrink-0 max-w-none text-current", {
   variants: {
-    type: { qr: "", code128: "" },
+    type: { qr: "", code128: "", png: "object-contain [image-rendering:pixelated]" },
     size: { sm: "", md: "", lg: "" },
   },
   compoundVariants: [
     { type: "qr", size: "sm", className: "h-24 w-24" },
     { type: "qr", size: "md", className: "h-32 w-32" },
     { type: "qr", size: "lg", className: "h-48 w-48" },
+    { type: "png", size: "sm", className: "h-24 w-24" },
+    { type: "png", size: "md", className: "h-32 w-32" },
+    { type: "png", size: "lg", className: "h-48 w-48" },
   ],
   defaultVariants: { type: "qr", size: "md" },
 });
@@ -62,7 +67,10 @@ function parseSvg(svg: string): Shape | null {
   return paths.length > 0 ? { viewBox, paths } : null;
 }
 
-function build(type: BarcodeType, value: string): Shape | null {
+// Base64 thuần (cùng quy tắc với KvgsSheet.containers[].barcodeImage). Chặn cả tiền tố data: lẫn ký tự lạ chèn vào src.
+const PLAIN_BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+
+function build(type: Exclude<BarcodeType, "png">, value: string): Shape | null {
   try {
     const svg =
       type === "qr"
@@ -75,7 +83,19 @@ function build(type: BarcodeType, value: string): Shape | null {
 }
 
 export function Barcode({ type, value, label, size = "md", className }: BarcodeProps) {
-  const shape = useMemo(() => (value === "" ? null : build(type, value)), [type, value]);
+  const shape = useMemo(() => (value === "" || type === "png" ? null : build(type, value)), [type, value]);
+  if (type === "png") {
+    if (!PLAIN_BASE64_RE.test(value)) return null;
+    return (
+      <img
+        src={`data:image/png;base64,${value}`}
+        alt={label}
+        decoding="sync"
+        draggable={false}
+        className={cn(barcodeVariants({ type, size }), className)}
+      />
+    );
+  }
   if (!shape) return null;
   // Code128: width/height tường minh; preserveAspectRatio="none" chỉ giãn trục Y của vạch dọc (không đổi
   // bề rộng vạch – thứ quét dựa vào). Rộng hơn khung chứa thì tràn/cuộn (max-w-none), không bị nén.

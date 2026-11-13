@@ -3,7 +3,10 @@
 // (đặt ở application/test) và tái xuất qua infrastructure cho container.
 import type { CustomsInfo, CustomsOperation, KvgsSheet } from "@kb/contracts";
 import { systemClock, type Clock } from "../../../../shared/clock.js";
-import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewaySendResult, HysGatewayRequest, HysGatewayResult, KvgsGatewayRequest, RefResult } from "../customs-ports.js";
+import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewaySendResult, HysGatewayRequest, HysGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../customs-ports.js";
+
+/** Ảnh mã vạch mô phỏng: PNG 1×1 Base64 thuần (mẫu của đặc tả API-KVGS). */
+export const FAKE_BARCODE_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAIAAAUAAYRcDQAAAAAASUVORK5CYII=";
 
 export function hashId(s: string) {
   let h = 0;
@@ -28,10 +31,12 @@ export class FakeCustomsGateway implements CustomsGateway {
    */
   constructor(private opts: {
     clearAfterPolls?: number; alwaysGreen?: boolean; flakyHys?: boolean; rejectHys?: boolean; clock?: Clock;
-    /** Số lần hỏi (V5ContainerRes / KVGS) còn PENDING trước khi có kết quả (mặc định 0 = có ngay). */
+    /** Số lần hỏi (V5ContainerRes) còn PENDING trước khi có kết quả (mặc định 0 = có ngay). */
     refPendingPolls?: number;
-    /** Kịch bản kết quả KVGS: ACCEPTED (mặc định, đủ trường) · REJECTED · INCOMPLETE (ACCEPTED nhưng thiếu số quản lý → không có sheet). */
+    /** Kịch bản KVGS: ACCEPTED (mặc định, đủ trường) · REJECTED (errorList) · INCOMPLETE (thiếu số định danh → REJECTED KVGS_RESPONSE_INCOMPLETE, giữ raw). */
     kvgsOutcome?: "ACCEPTED" | "REJECTED" | "INCOMPLETE";
+    /** Loại hàng API trả về (isContainer); mặc định CONTAINER. */
+    kvgsKind?: "CONTAINER" | "CARGO";
   } = {}) {}
   /** Lời gọi danh sách container / KVGS (test kiểm nội dung gửi). */
   containerListCalls: ContainerListGatewayRequest[] = [];
@@ -66,25 +71,25 @@ export class FakeCustomsGateway implements CustomsGateway {
     if (bad.length) return { state: "REJECTED", errors: bad.map(({ line }) => ({ code: "E-CONT-REJ", field: "SEL_SO", message: `Dòng ${line}: số seal không hợp lệ`, solution: "Sửa số seal và khai lại", line })) };
     return { state: "ACCEPTED", receiptNo: String(hashId(req.refId) % 100_000_000).padStart(8, "0"), receiptDate: this.today() };
   }
-  async requestKvgs(_orgId: string, req: KvgsGatewayRequest, _idempotencyKey?: string) {
+  /** KVGS một bước (POST /api/KVGS): loại hàng theo kịch bản `kvgsKind` (mặc định CONTAINER – API thật tự quyết theo tờ khai). */
+  async fetchKvgs(_orgId: string, req: KvgsGatewayRequest, _idempotencyKey?: string): Promise<KvgsFetchResult> {
     this.kvgsCalls.push(req);
-    return { refId: `FAKE-KVGS-${++this.refSeq}-${hashId(req.declarationNo)}` };
-  }
-  async kvgsResult(_orgId: string, req: KvgsGatewayRequest & { refId: string }): Promise<RefResult & { sheet?: KvgsSheet; raw?: unknown }> {
-    if (this.pending(req.refId)) return { state: "PENDING" };
     const outcome = this.opts.kvgsOutcome ?? "ACCEPTED";
-    if (outcome === "REJECTED") return { state: "REJECTED", errors: [{ code: "E-KVGS-001", message: "Tờ khai chưa đủ điều kiện qua khu vực giám sát" }] };
-    const receipt = { receiptNo: String(hashId(req.refId) % 100_000_000).padStart(8, "0"), receiptDate: this.today() };
-    if (outcome === "INCOMPLETE") return { state: "ACCEPTED", ...receipt, raw: { declarationNo: req.declarationNo }, errors: [{ code: "KVGS_RESPONSE_INCOMPLETE", message: "Phản hồi của Hải quan thiếu thông tin để in" }] };
+    if (outcome === "REJECTED") {
+      const errors = [{ code: "E-KVGS-001", message: "Tờ khai chưa đủ điều kiện qua khu vực giám sát", solution: "Kiểm tra trạng thái tờ khai" }];
+      return { state: "REJECTED", errors, raw: { errorList: [{ errorCode: "E-KVGS-001", indexCode: "000", nameCode: "000", errorContent: errors[0]!.message, proposedSolution: errors[0]!.solution, rowPosition: "0" }], serviceMessage: null } };
+    }
+    if (outcome === "INCOMPLETE") return { state: "REJECTED", raw: { errorList: [], serviceMessage: { soToKhai: req.declarationNo, soDinhDanh: null } }, errors: [{ code: "KVGS_RESPONSE_INCOMPLETE", message: "Phản hồi của Hải quan thiếu thông tin để in (soDinhDanh)" }] };
+    const kind = this.opts.kvgsKind ?? "CONTAINER";
     const sheet: KvgsSheet = {
-      kind: req.kind, regionOffice: "Chi cục Hải quan khu vực II (mô phỏng)", customsOffice: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1 (mô phỏng)", supervisionOffice: "02CI - 02CIS01: Kho mô phỏng",
-      sealRequired: true, companyName: "CONG TY MO PHONG", taxCode: req.taxCode, declarationNo: req.declarationNo, declarationStatus: "Thông quan", declarationDate: req.registeredOn, declarationDateTo: null,
-      typeName: "Nhập kinh doanh", channel: "Xanh", cargoControlNo: `QL${req.declarationNo}`, barcode: req.kind === "CARGO" ? `*${req.declarationNo}*` : null,
-      containers: req.kind === "CONTAINER" ? [{ containerNo: "FBIU5802429", sealNo: "SEAL0001", customsSealNo: null, barcode: `${req.declarationNo}|FBIU5802429` }] : [],
-      cargo: req.kind === "CARGO" ? { quantity: "10", quantityUnit: "CTN", grossWeight: "125.500", weightUnit: "KGM" } : null,
+      kind, regionOffice: "Chi cục Hải quan khu vực II (mô phỏng)", customsOffice: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1 (mô phỏng)", supervisionOffice: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1 - 02CIS01: Kho mô phỏng",
+      sealRequired: kind === "CONTAINER", companyName: "CONG TY MO PHONG", taxCode: req.taxCode, declarationNo: req.declarationNo, declarationStatus: "Thông quan", declarationDate: req.registeredOn, declarationDateTo: null,
+      typeName: "Nhập kinh doanh", channel: "Xanh", cargoControlNo: `${req.declarationNo.slice(0, 6)}000001`, barcode: kind === "CARGO" ? req.declarationNo : null,
+      containers: kind === "CONTAINER" ? [{ containerNo: "FBIU5802429", sealNo: "SEAL0001", customsSealNo: "HQ000001", barcodeImage: FAKE_BARCODE_PNG }] : [],
+      cargo: { quantity: "10", quantityUnit: "CTN", grossWeight: "125.5", weightUnit: "KGM" },
       exportedAt: (this.opts.clock ?? systemClock).now().toISOString(),
     };
-    return { state: "ACCEPTED", ...receipt, sheet, raw: sheet };
+    return { state: "ACCEPTED", sheet, raw: { errorList: [], serviceMessage: { soToKhai: req.declarationNo, isContainer: kind === "CONTAINER" ? 1 : 0 } } };
   }
 
   channelFor(dossierId: string): "GREEN" | "YELLOW" | "RED" {

@@ -1,6 +1,6 @@
 // API "gửi → nhận REF_ID → hỏi kết quả" của FPT (Postman API-VNACCS NEW 21/04/2026 + Excel đặc tả):
 // chứng từ bổ sung V5 (V5Bill…V5OtherDoc → V5Response), định danh (V5IdentifierReq/Res), tách vận đơn (TachVanDonReq/Res),
-// danh sách container (ContainerReq/Res, V5ContainerReq/Res), cùng KVGS, in (Print*), ký file (KyFile), danh mục (SyncCategory).
+// danh sách container (ContainerReq/Res, V5ContainerReq/Res), KVGS (một lời gọi đồng bộ – đặc tả API-KVGS), in (Print*), ký file (KyFile), danh mục (SyncCategory).
 // GIẢ ĐỊNH: hình dạng phản hồi (chưa có mẫu thật) – lấy theo cột Response của Excel, key camelCase .NET như request trong Postman.
 // Trạng thái tiếp nhận (Excel): 0 nhập mới · 10 từ chối · 11 chưa có phản hồi · 12 Hải quan chấp nhận · 15 đã duyệt (có mã định danh).
 import { randomUUID } from "node:crypto";
@@ -27,7 +27,11 @@ export const V5_DOCS = {
 } as const;
 export type V5Doc = keyof typeof V5_DOCS;
 
-type RefKind = "V5" | "IDENTIFIER" | "TACHVANDON" | "CONTAINER" | "V5CONTAINER" | "KVGS";
+type RefKind = "V5" | "IDENTIFIER" | "TACHVANDON" | "CONTAINER" | "V5CONTAINER";
+
+/** Ảnh mã vạch container mô phỏng: QR "MSCU1234566" (PNG 84×84, bwip-js) Base64 thuần – như `barcodeImage` của API KVGS. */
+export const KVGS_QR_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAFQAAABUCAYAAAAcaxDBAAAAHnRFWHRTb2Z0d2FyZQBid2lwLWpzLm1ldGFmbG9vci5jb21Tnbi0AAABi0lEQVR4nO3VSw7CMBAE0dz/0rBnEWvUNWOTVEvZ4DCfZwmu67o+w89v6O+n9eP9BBVU0FeD0qnWT4HT/tUICkdQOILCKYOmC9IL0aD4foIKKqignQ2LAGl9QQUVVNDO/XaD0heS1hd0EUGL56sIWjxf5TjQNOlC9Pvt+wkK7ycovJ+g8H6rAemnujB93r6foIIK+irQ03L8gP8WQeEICudxoKf9iNN/At31yg0Fva9Xbijofb1yQ0Hv640PtPuC0nlW38cHoBcQFF5AUHiBx4NWC04DpPOm+8URVFBByXrtoGmDbqDufvg8gsLzCArPIyg8T3Xg9P3qedq/mnh/QbN5BS3WL/cXNJuX7h+HvpDdz/YICkdQOI8D3X2D0+/T59tvWFBBBT0KlM70Qt0XvjwXVNBSP0GL56v3jwOdHogGGY+gcASFIyic00HT+en98YKCwgUFhQsKChfsBqXnna4nqKBn1xN0GjTNNHg6TzyfoPD8gsLzCwrP//tB99MNUj3H5xVUUEFfA/oFjUASs1R8sn4AAAAASUVORK5CYII=";
 type RefRecord = { kind: RefKind; refId: string; userId: string; createdAt: Date; polls: number; reject: boolean; loaiCt?: string; head: Rec; receiptNo?: string; identifierNo?: string };
 
 export function createRefApis(opts: { now: () => Date; log: (l: string) => void; pollsToAccept: number }) {
@@ -166,32 +170,37 @@ export function createRefApis(opts: { now: () => Date; log: (l: string) => void;
   handlers["V5ContainerRes"] = containerRes("V5CONTAINER");
 
   /**
-   * KVGS hai bước: KVGS (TK_SOTK, TK_NGAYDK, TK_MAHQ, MA_DV) → reF_ID; KVGSRes (theo reF_ID) → đủ trường của cả 2 mẫu in (container + hàng lẻ) + nội dung mã vạch giả.
-   * GIẢ ĐỊNH: tên trường phản hồi (đặc tả thật chưa có – ADR 0014); khớp bí danh tạm trong core/kvgs-mapper.ts.
+   * KVGS (đặc tả API-KVGS): MỘT lời gọi đồng bộ, không REF_ID. Phản hồi `{ errorList, serviceMessage }` đúng tên trường của đặc tả.
+   * Kịch bản mock: thiếu trường → errorList (errorCode "000", nameCode = tên trường đầu tiên thiếu theo thứ tự MA_DV, TK_SOTK, TK_NGAYDK, TK_MAHQ);
+   * dữ liệu chứa REJECT → lỗi Hải quan (nameCode "000"); chữ số áp chót của TK_SOTK lẻ → hàng lẻ (…790), chẵn → hàng container (…780) – khớp 2 mẫu của đặc tả.
    */
   handlers["KVGS"] = (b) => {
-    const errors = required(b, ["TK_SOTK", "TK_NGAYDK", "TK_MAHQ", "MA_DV"]);
-    if (errors.length) return fail(errors);
-    const r = create("KVGS", b);
-    return ok({ reF_ID: r.refId, tK_SOTK: pick(b, "TK_SOTK"), tK_NGAYDK: pick(b, "TK_NGAYDK"), tK_MAHQ: pick(b, "TK_MAHQ"), mA_DV: pick(b, "MA_DV") });
-  };
-  handlers["KVGSRes"] = (b) => {
-    const r = find(b, "KVGS");
-    if (isErr(r)) return fail([r]);
-    const st = status(r);
-    const base = { reF_ID: r.refId, tK_SOTK: pick(r.head, "TK_SOTK"), tK_NGAYDK: pick(r.head, "TK_NGAYDK"), tK_MAHQ: pick(r.head, "TK_MAHQ"), mA_DV: pick(r.head, "MA_DV"), ...receipt(r, st) };
-    if (st.trangThai !== "12") return ok(base);
-    const no = s(pick(r.head, "TK_SOTK"));
-    return ok({
-      ...base, chiCucKhuVuc: "Chi cục Hải quan khu vực II", haiQuanCuaKhau: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1", chiCucGiamSat: "02CI - 02CIS01: Kho mô phỏng",
-      phaiNiemPhong: true, teN_DV: "CONG TY MO PHONG", tK_TRANGTHAI: "Thông quan", teN_LH: "Nhập kinh doanh", tK_LUONG: "Xanh",
-      sO_QUAN_LY: `QL${no}`, mA_VACH: `*${no}*`, ngaY_KET_XUAT: now().toISOString(),
-      danH_SACH_CONT: [
-        { coN_SO: "FBIU5802429", seL_SO: "SEAL0001", seL_HQ: "", mA_VACH: `${no}|FBIU5802429` },
-        { coN_SO: "MSKU1234565", seL_SO: "SEAL0002", seL_HQ: "HQ0002", mA_VACH: `${no}|MSKU1234565` },
-      ],
-      hanG_LE: { sO_LUONG: "10", sO_LUONG_DVT: "CTN", tronG_LUONG: "125.500", tronG_LUONG_DVT: "KGM" },
-    });
+    const missing = ["MA_DV", "TK_SOTK", "TK_NGAYDK", "TK_MAHQ"].find((n) => !s(pick(b, n)));
+    const kvgsError = (nameCode: string, errorContent: string, proposedSolution: string) => ({ errorList: [{ errorCode: "000", indexCode: "000", nameCode, errorContent, proposedSolution, rowPosition: "0" }], serviceMessage: null });
+    if (missing) return kvgsError(missing, `Không được để trống ${missing}`, `Vui lòng nhập ${missing}`);
+    if (wantsReject(b)) return kvgsError("000", "Không tìm thấy thông tin tờ khai (kịch bản mock: dữ liệu chứa REJECT)", "Kiểm tra số tờ khai, ngày đăng ký, mã Hải quan");
+    const no = s(pick(b, "TK_SOTK"));
+    const container = Number(no.at(-2) ?? "0") % 2 === 0;
+    opts.log(`KVGS ${no} → ${container ? "hàng container" : "hàng lẻ"}`);
+    const [d, m, y] = vnDate(now()).split("/");
+    const hms = new Date(now().getTime() + 7 * 3_600_000).toISOString().slice(11, 19);
+    return {
+      errorList: [],
+      serviceMessage: {
+        ghi_Chu: null, ngayTau: null, maPTVC: null, soDinhDanh: `${container ? "10" : "11"}${m}${y?.slice(-2)}${no.slice(-6)}`, maDDGS: "02CIS01", tenDDGS: "TONG CTY TAN CANG SG - 2 (mô phỏng)",
+        isContainer: container ? 1 : 0, dvT_So_Luong_Hang: "PK", dvT_Tong_Trong_Luong_Hang: "KGM", so_Luong_Hang: container ? 120 : 25, tong_Trong_Luong_Hang: container ? 12450.5 : 680.5,
+        tenChiCucHaiQuanGS: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1", tenCucHaiQuan: "Chi cục Hải quan khu vực II", tenChiCucHaiQuan: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1",
+        tenDonViXNK: "CONG TY MO PHONG", maSoThue: s(pick(b, "MA_DV")), soToKhai: no, ngayToKhai: s(pick(b, "TK_NGAYDK")), loaiHinh: no.startsWith("3") ? "B11" : "A11",
+        tenLoaiHinh: no.startsWith("3") ? "Xuất kinh doanh" : "Nhập kinh doanh tiêu dùng", maTrangThaiToKhai: null, trangThaiToKhai: "Thông quan", luongToKhai: "Xanh", thongBaoLoi: null,
+        thoiGianLayDuLieu: `${d}/${m}/${y} ${hms}`,
+        bangKeMaVachContainer: container
+          ? [
+              { soContainer: "FBIU5802429", soSeal: "SEAL0001", soSealHQ: "", barcodeImage: KVGS_QR_PNG },
+              { soContainer: "MSKU1234565", soSeal: "SEAL0002", soSealHQ: "HQ0002", barcodeImage: KVGS_QR_PNG },
+            ]
+          : [],
+      },
+    };
   };
 
   /** Ký file: trả lại chính file (đã "ký") – giả định. */

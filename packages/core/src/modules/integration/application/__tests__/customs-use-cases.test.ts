@@ -375,7 +375,7 @@ const seedOutbox = (p: Partial<OutboxRow> = {}): OutboxRow => {
 /** Gateway giả với vài phương thức thay thế (giữ `this` của FakeCustomsGateway). */
 const gw = (o: Partial<CustomsGateway>): CustomsGateway => ({
   name: "stub", preDeclare: gateway.preDeclare.bind(gateway), declare: gateway.declare.bind(gateway), attachDocuments: gateway.attachDocuments.bind(gateway), queryStatus: gateway.queryStatus.bind(gateway), send: gateway.send.bind(gateway),
-  sendContainerList: gateway.sendContainerList.bind(gateway), containerListResult: gateway.containerListResult.bind(gateway), requestKvgs: gateway.requestKvgs.bind(gateway), kvgsResult: gateway.kvgsResult.bind(gateway), ...o,
+  sendContainerList: gateway.sendContainerList.bind(gateway), containerListResult: gateway.containerListResult.bind(gateway), fetchKvgs: gateway.fetchKvgs.bind(gateway), ...o,
 });
 const noQuery = () => gw({ queryStatus: async () => { throw new Error("không được hỏi IEX"); } });
 const poll = (attempt = 1, dossierId = D) => pollStatus(deps, { orgId: ORG, userId: "usr_chau", dossierId, attempt });

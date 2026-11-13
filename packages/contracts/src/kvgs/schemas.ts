@@ -58,6 +58,12 @@ export function checkContainerList(rows: ContainerListRow[]): ContainerListIssue
 export const SaveContainerListInputSchema = z.object({ rows: z.array(ContainerListRowSchema) });
 export type SaveContainerListInput = z.infer<typeof SaveContainerListInputSchema>;
 
+/** Ảnh mã vạch Base64 thuần (không tiền tố data:) – API KVGS `bangKeMaVachContainer[].barcodeImage`. Tối đa 200 KB ký tự. */
+export const PLAIN_BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+export const BARCODE_IMAGE_MAX_LENGTH = 200 * 1024;
+export const isPlainBase64 = (v: string): boolean => v.length <= BARCODE_IMAGE_MAX_LENGTH && PLAIN_BASE64_RE.test(v);
+export const BarcodeImageSchema = z.string().max(BARCODE_IMAGE_MAX_LENGTH).regex(PLAIN_BASE64_RE);
+
 /** Bảng kê qua khu vực giám sát đã chuẩn hóa (spec §2.4). Số lượng/trọng lượng là chuỗi thập phân. */
 export const KvgsSheetSchema = z.object({
   kind: z.enum(["CONTAINER", "CARGO"]),
@@ -74,8 +80,10 @@ export const KvgsSheetSchema = z.object({
   typeName: z.string(),
   channel: z.string(),
   cargoControlNo: z.string(),
+  /** CARGO: số tờ khai (in Code128); CONTAINER: null (mã vạch theo từng container). */
   barcode: z.string().nullable(),
-  containers: z.array(z.object({ containerNo: z.string(), sealNo: z.string().nullable(), customsSealNo: z.string().nullable(), barcode: z.string() })),
+  /** CONTAINER: ảnh mã vạch từng container do Hải quan cấp (PNG Base64). CARGO: rỗng. */
+  containers: z.array(z.object({ containerNo: z.string(), sealNo: z.string().nullable(), customsSealNo: z.string().nullable(), barcodeImage: BarcodeImageSchema.nullable() })),
   cargo: z.object({ quantity: z.string(), quantityUnit: z.string(), grossWeight: z.string(), weightUnit: z.string() }).nullable(),
   exportedAt: IsoDateTimeSchema,
 });

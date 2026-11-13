@@ -58,7 +58,7 @@ POST /api/V5IdentifierReq → reF_ID; /api/V5IdentifierRes {reF_ID} → sO_DD + 
 POST /api/TachVanDonReq → reF_ID; /api/TachVanDonRes {reF_ID}
 POST /api/V5ContainerReq (Excel v1.1 – bản dùng, seal bắt buộc) | ContainerReq (bản cũ) → reF_ID; /api/V5ContainerRes | ContainerRes {reF_ID}
    Hỏi kết quả: lần 1 tranG_THAI "11" (chưa phản hồi), lần 2 "12" chấp nhận (+ sO_TN) – dữ liệu gửi chứa "REJECT" → "10" từ chối
-POST /api/KVGS {TK_SOTK, TK_NGAYDK, TK_MAHQ, MA_DV} → mã vạch + danh sách container
+POST /api/KVGS {TK_SOTK, TK_NGAYDK, TK_MAHQ, MA_DV} → một lời gọi (không REF_ID): {errorList, serviceMessage} theo đặc tả API-KVGS – chữ số áp chót của TK_SOTK chẵn → hàng container (bangKeMaVachContainer + ảnh QR PNG Base64), lẻ → hàng lẻ; thiếu trường → errorList "000"
 POST /api/PrintObjectRefIDA | PrintObjectRef | PrintEdiRef | PrintXPS → filE_BASE64 (PDF giả)
 POST /api/KyFile {mA_DV, useR_ID, filE_TEN, filE_BASE64} → file "đã ký"
 POST /api/SyncCategory {} → vN_A038, vN_A015, vN_A016_FOREIGN, vN_A202, vN_A501, vN_A527 (từ danh mục @kb/contracts)

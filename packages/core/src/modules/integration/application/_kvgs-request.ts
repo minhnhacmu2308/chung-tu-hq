@@ -26,6 +26,6 @@ export async function loadRefRequests(deps: CustomsDeps, ctx: { orgId: OrgId; us
   const customsOffice = officeCode(fields["CQHQ"]?.value) ?? "";
   const userId = (await deps.vnaccsUserId?.(ctx.orgId)) ?? "";
   const head: RefHead = { dossierId, declarationNo, registeredOn, typeCode: dossier.typeCode, customsOffice, taxCode, companyName: fields[nk ? "NNK_TEN" : "NXK_TEN"]?.value ?? "", userId };
-  const kvgs: KvgsGatewayRequest = { dossierId, declarationNo, registeredOn, customsOffice, taxCode, kind: dossier.transportMode === "SEA_CONTAINER" ? "CONTAINER" : "CARGO" };
+  const kvgs: KvgsGatewayRequest = { dossierId, declarationNo, registeredOn, customsOffice, taxCode };
   return ok({ head, kvgs });
 }

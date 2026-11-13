@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Bản kê mã vạch qua khu vực giám sát (spec KVGS §4): mẫu container (QR mỗi dòng, sang trang), mẫu hàng lẻ (Code128 đầu trang),
+// Bản kê mã vạch qua khu vực giám sát (spec KVGS §4): mẫu container (ảnh mã PNG Hải quan cấp mỗi dòng, sang trang), mẫu hàng lẻ (Code128 đầu trang),
 // "Tờ khai (không) phải niêm phong", trang in khi chưa có bảng kê → EmptyState + liên kết về thẻ; axe.
 import type { KvgsSheet } from "@kb/contracts";
 import { screen, within } from "@testing-library/react";
@@ -15,22 +15,25 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// Ảnh PNG 1×1 hợp lệ (Base64 thuần) – thay ảnh QR Hải quan trả trong bangKeMaVachContainer[].barcodeImage.
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 const CONT: KvgsSheet = {
   kind: "CONTAINER", regionOffice: "Chi cục Hải quan khu vực II", customsOffice: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1",
   supervisionOffice: "02CI – CTYCP Cảng Cát Lái", sealRequired: false, companyName: "CÔNG TY A", taxCode: "0312345678",
   declarationNo: "309096721420", declarationStatus: "Thông quan", declarationDate: "2026-02-27", declarationDateTo: "2026-03-01",
   typeName: "Nhập kinh doanh", channel: "Luồng xanh", cargoControlNo: "122600049332258", barcode: null,
-  containers: [{ containerNo: "FBIU5802429", sealNo: "NA", customsSealNo: null, barcode: "FBIU5802429" }], cargo: null, exportedAt: "2026-02-27T03:00:00Z",
+  containers: [{ containerNo: "FBIU5802429", sealNo: "NA", customsSealNo: null, barcodeImage: PNG }], cargo: null, exportedAt: "2026-02-27T03:00:00Z",
 };
 const CARGO: KvgsSheet = {
-  ...CONT, kind: "CARGO", barcode: "KVGS-MOCK|309096721420|CARGO", containers: [],
+  ...CONT, kind: "CARGO", barcode: "309096721420", containers: [],
   cargo: { quantity: "17", quantityUnit: "CASE", grossWeight: "255", weightUnit: "Kilogam" },
 };
 const qr = () => screen.queryAllByRole("img").filter((i) => i.getAttribute("viewBox") && !i.hasAttribute("width"));
+const png = () => screen.queryAllByRole("img").filter((i) => i.tagName.toLowerCase() === "img");
 const code128 = () => screen.queryAllByRole("img").filter((i) => i.hasAttribute("width"));
 
 describe("KvgsDocument – mẫu container", () => {
-  it("tiêu đề, mục 1–9, số quản lý hàng hóa, 1 QR theo container, ghi chú; a11y", async () => {
+  it("tiêu đề, mục 1–9, số quản lý hàng hóa, 1 ảnh mã PNG theo container (không tự dựng QR), ghi chú; a11y", async () => {
     const { container } = renderWithProviders(<KvgsDocument sheet={CONT} template="cont" />);
     expect(screen.getByRole("heading", { name: /DANH SÁCH CONTAINER/ })).toBeTruthy();
     expect(screen.getByText("ĐỦ ĐIỀU KIỆN QUA KHU VỰC GIÁM SÁT HẢI QUAN")).toBeTruthy();
@@ -40,9 +43,11 @@ describe("KvgsDocument – mẫu container", () => {
     expect(screen.getByText("02CI – CTYCP Cảng Cát Lái")).toBeTruthy();
     expect(screen.getByText("FBIU5802429")).toBeTruthy();
     expect(screen.getByText("NA")).toBeTruthy();
-    const codes = screen.getAllByRole("img").filter((i) => i.getAttribute("aria-label")?.includes("FBIU5802429"));
+    const codes = screen.getAllByRole("img", { name: /FBIU5802429/ });
     expect(codes).toHaveLength(1);
-    expect(qr()).toHaveLength(1);
+    expect(codes[0]!.getAttribute("src")).toBe(`data:image/png;base64,${PNG}`);
+    expect(png()).toHaveLength(1);
+    expect(qr()).toHaveLength(0);
     expect(screen.getByText(/lấy từ tiêu chí "Số container" trên tờ khai xuất/)).toBeTruthy();
     expect(screen.getByText(/^Kết xuất dữ liệu lúc:/)).toBeTruthy();
     expect(screen.getByText("Trang 1/1")).toBeTruthy();
@@ -57,28 +62,39 @@ describe("KvgsDocument – mẫu container", () => {
     expect(screen.getByText("Tờ khai phải niêm phong")).toBeTruthy();
   });
 
-  it("11 container → 2 trang giấy (5 + 6 kèm ghi chú), tiêu đề bảng lặp mỗi trang, mỗi container 1 QR", () => {
-    const containers = Array.from({ length: 11 }, (_, i) => ({ containerNo: `CONT${String(i).padStart(7, "0")}`, sealNo: null, customsSealNo: null, barcode: `B${i}` }));
+  it("11 container → 2 trang giấy (5 + 6 kèm ghi chú), tiêu đề bảng lặp mỗi trang, mỗi container 1 ảnh mã", () => {
+    const containers = Array.from({ length: 11 }, (_, i) => ({ containerNo: `CONT${String(i).padStart(7, "0")}`, sealNo: null, customsSealNo: null, barcodeImage: PNG }));
     renderWithProviders(<KvgsDocument sheet={{ ...CONT, containers }} template="cont" />);
     const pages = screen.getAllByRole("region", { name: /^Trang \d+ \/ \d+$/ });
     expect(pages).toHaveLength(2);
     expect(screen.getAllByText("MÃ VẠCH")).toHaveLength(pages.length);
-    expect(qr()).toHaveLength(11);
+    expect(png()).toHaveLength(11);
     expect(screen.getByText(`Trang ${pages.length}/${pages.length}`)).toBeTruthy();
     // Ghi chú chỉ in một lần, ở trang cuối
     expect(screen.getAllByText(/^Kết xuất dữ liệu lúc:/)).toHaveLength(1);
   });
 
   it("13 container → dòng cuối không còn chỗ cho ghi chú: ghi chú sang trang riêng, có trong 'Trang x/y', không in lại bảng rỗng", () => {
-    const containers = Array.from({ length: 13 }, (_, i) => ({ containerNo: `CONT${String(i).padStart(7, "0")}`, sealNo: null, customsSealNo: null, barcode: `B${i}` }));
+    const containers = Array.from({ length: 13 }, (_, i) => ({ containerNo: `CONT${String(i).padStart(7, "0")}`, sealNo: null, customsSealNo: null, barcodeImage: PNG }));
     renderWithProviders(<KvgsDocument sheet={{ ...CONT, containers }} template="cont" />);
     const pages = screen.getAllByRole("region", { name: /^Trang \d+ \/ \d+$/ });
     expect(pages).toHaveLength(3);
     expect(screen.getAllByText("MÃ VẠCH")).toHaveLength(2);
-    expect(qr()).toHaveLength(13);
+    expect(png()).toHaveLength(13);
     expect(within(pages[2]!).getByText(/^Kết xuất dữ liệu lúc:/)).toBeTruthy();
     expect(within(pages[2]!).getByText("Trang 3/3")).toBeTruthy();
     expect(within(pages[1]!).queryByText(/^Kết xuất dữ liệu lúc:/)).toBeNull();
+  });
+
+  it("container thiếu ảnh mã (null/không hợp lệ) → ô (5) trống, không vỡ trang", () => {
+    const containers = [
+      { containerNo: "CONT0000001", sealNo: null, customsSealNo: null, barcodeImage: null },
+      { containerNo: "CONT0000002", sealNo: null, customsSealNo: null, barcodeImage: PNG },
+    ];
+    renderWithProviders(<KvgsDocument sheet={{ ...CONT, containers }} template="cont" />);
+    expect(screen.getByText("CONT0000001")).toBeTruthy();
+    expect(png()).toHaveLength(1);
+    expect(png()[0]!.getAttribute("alt")).toBe("Mã vạch container CONT0000002");
   });
 });
 
@@ -89,7 +105,9 @@ describe("KvgsDocument – mẫu hàng lẻ", () => {
     expect(screen.getByText("17 CASE")).toBeTruthy();
     expect(screen.getByText("255 Kilogam")).toBeTruthy();
     expect(code128()).toHaveLength(1);
+    expect(code128()[0]!.getAttribute("aria-label")).toBe("Mã vạch tờ khai 309096721420");
     expect(qr()).toHaveLength(0);
+    expect(png()).toHaveLength(0);
     expect(screen.getByText(/ghi rõ lượng hàng từng lần qua KVGS/)).toBeTruthy();
     await expectNoA11yViolations(container);
   }, 30_000);
@@ -109,7 +127,7 @@ describe("KvgsPrintPage", () => {
   const withSheet = (sheet: KvgsSheet) =>
     getDb().kvgs.fetches.push({
       id: "kvf_t", dossierId: "dos_029", branch: 1, status: "ACCEPTED", requestedAt: "2026-02-27T02:00:00Z", fetchedAt: "2026-02-27T03:00:00Z",
-      doneAt: "2026-02-27T03:00:00Z", outcome: "ACCEPTED", refId: "R1", receiptNo: "1", receiptDate: "2026-02-27", errors: [], sheet,
+      doneAt: "2026-02-27T03:00:00Z", outcome: "ACCEPTED", refId: null, receiptNo: null, receiptDate: null, errors: [], sheet,
     });
   const btn = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
 

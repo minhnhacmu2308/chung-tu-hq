@@ -160,11 +160,14 @@ export interface CustomsGateway {
   sendContainerList(orgId: string, req: ContainerListGatewayRequest, idempotencyKey: string): Promise<{ refId?: string; errors?: GatewayError[] }>;
   /** Bước 2 (V5ContainerRes): hỏi kết quả theo REF_ID – body KHÔNG có dòng container; phản hồi không trả lại dòng (giữ sentRows ở DB). */
   containerListResult(orgId: string, req: Omit<ContainerListGatewayRequest, "rows"> & { refId: string }): Promise<RefResult>;
-  /** Lấy bảng kê qua khu vực giám sát (KVGS), bước 1: trả REF_ID hoặc lỗi. */
-  requestKvgs(orgId: string, req: KvgsGatewayRequest, idempotencyKey: string): Promise<{ refId?: string; errors?: GatewayError[] }>;
-  /** Bước 2: hỏi phản hồi KVGS theo REF_ID; `sheet` đã chuẩn hóa, `raw` = phản hồi thô. Thiếu trường để in → ACCEPTED, không có `sheet`, `errors` = KVGS_RESPONSE_INCOMPLETE. */
-  kvgsResult(orgId: string, req: KvgsGatewayRequest & { refId: string }): Promise<RefResult & { sheet?: KvgsSheet; raw?: unknown }>;
+  /**
+   * Lấy bảng kê qua khu vực giám sát (KVGS, POST /api/KVGS): một lời gọi đồng bộ, không REF_ID. API tự xác định hàng container / hàng lẻ.
+   * ACCEPTED → `sheet` đã chuẩn hóa; REJECTED → `errors` (errorList của FPT, hoặc KVGS_RESPONSE_INCOMPLETE khi thiếu dữ liệu để in). `raw` = phản hồi thô (giữ để truy vết).
+   * Lỗi tạm (mạng/5xx) → throw; lỗi vĩnh viễn (chưa cấu hình, HTTP 400/401 sau khi đăng nhập lại) → DomainError.
+   */
+  fetchKvgs(orgId: string, req: KvgsGatewayRequest, idempotencyKey: string): Promise<KvgsFetchResult>;
 }
+export type KvgsFetchResult = { state: "ACCEPTED" | "REJECTED"; sheet?: KvgsSheet; raw?: unknown; errors?: GatewayError[] };
 /** Kết quả hỏi theo REF_ID: `12` → ACCEPTED, `10` → REJECTED, `0`/`11` → PENDING. `receiptDate` YYYY-MM-DD. */
 export type RefResult = { state: "PENDING" | "ACCEPTED" | "REJECTED"; receiptNo?: string; receiptDate?: string; errors?: GatewayError[] };
 /** Danh sách container gửi cổng: ngày `registeredOn` YYYY-MM-DD (cổng đổi sang dd/MM/yyyy); `userId` = user id tài khoản VNACCS của doanh nghiệp (không gửi mật khẩu). `dossierId` chỉ để ghi nhật ký gỡ lỗi. */
@@ -172,7 +175,8 @@ export type ContainerListGatewayRequest = {
   dossierId?: string; declarationNo: string; registeredOn: string; typeCode: string; customsOffice: string; taxCode: string; companyName: string;
   agent?: { taxCode: string; name: string }; userId: string; rows: { billNo: string; containerNo: string; sealNo: string; note: string }[];
 };
-export type KvgsGatewayRequest = { dossierId?: string; declarationNo: string; registeredOn: string; customsOffice: string; taxCode: string; kind: "CONTAINER" | "CARGO" };
+/** Yêu cầu KVGS: ngày `registeredOn` YYYY-MM-DD (cổng đổi sang dd/MM/yyyy); `taxCode` = MST đơn vị XNK trên tờ khai. `dossierId` chỉ để ghi nhật ký gỡ lỗi. */
+export type KvgsGatewayRequest = { dossierId?: string; declarationNo: string; registeredOn: string; customsOffice: string; taxCode: string };
 /** Thông điệp HYS gửi cổng (spec §2.2): thông tin chung của bộ + file (bytes đọc từ kho). */
 export type HysGatewayRequest = { dossierId: string; customsOffice: string; processingUnit: string; procedureCode: string; phone: string | null; internalRef: string | null; note: string | null; files: { name: string; bytes: Buffer }[]; certificateId?: string };
 export type HysGatewayResult = { receiptNo?: string; registeredOn?: string; errors?: GatewayError[] };

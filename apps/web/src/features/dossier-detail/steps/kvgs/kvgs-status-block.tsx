@@ -1,6 +1,6 @@
 "use client";
 // Một khối trạng thái của thẻ Qua khu vực giám sát: "1 Khai danh sách container" / "2 Lấy DS qua KVGS" –
-// trạng thái (StatusBadge), số Hải quan trả (tham chiếu, tiếp nhận), lý do khóa / ghi chú, các nút.
+// trạng thái (StatusBadge), số Hải quan trả (tham chiếu, tiếp nhận – chỉ khai danh sách container; KVGS một bước không có), lý do khóa / ghi chú, các nút.
 import { StatusBadge, useMessages } from "@kb/ui";
 import type { ContainerListStatus } from "@kb/contracts";
 import { useId, type ReactNode } from "react";
@@ -16,9 +16,10 @@ export type KvgsStatusBlockProps = {
   title: string;
   /** null = chưa gửi lần nào. */
   status: ContainerListStatus | null;
-  refId: string | null;
-  receiptNo: string | null;
-  receiptDate: string | null;
+  /** Số Hải quan trả – chỉ khối khai danh sách container (KVGS gọi một bước, không có số tham chiếu / tiếp nhận). */
+  refId?: string | null;
+  receiptNo?: string | null;
+  receiptDate?: string | null;
   /** Lý do khóa (đã dịch) hoặc ghi chú trạng thái. */
   note?: ReactNode;
   actions: ReactNode;

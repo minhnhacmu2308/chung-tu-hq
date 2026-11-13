@@ -9,7 +9,7 @@ import { isDuplicate, buildView, checkOperation, KVGS_ROLES, loadScope, preload 
 
 /**
  * Yêu cầu lấy bảng kê KVGS. Đang SENDING → KVGS_ALREADY_SENDING (không tạo outbox thứ hai); chưa thông quan / NK container chưa được chấp nhận danh sách
- * → lý do tương ứng (customs-flow). `kind` = CONTAINER khi hàng container đường biển, ngược lại CARGO; đi trong payload outbox cùng `kvgsId`.
+ * → lý do tương ứng (customs-flow). Loại hàng (container / hàng lẻ) do API KVGS trả về, không gửi đi.
  */
 export async function requestKvgsFetch(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch: number): Promise<Result<KvgsView>> {
   const allowed = requireRole(ctx, ...KVGS_ROLES);
@@ -27,8 +27,7 @@ export async function requestKvgsFetch(deps: CustomsDeps, ctx: Ctx, dossierId: s
     if (!snap) return err(domainError("NO_DECLARATION", "Chưa dựng tờ khai"));
     const now = deps.clock.now();
     const row: KvgsSheetRecord = { id: deps.idGen.next("kvg"), orgId: ctx.orgId, dossierId, branch, status: "SENDING", refId: null, receiptNo: null, receiptDate: null, errors: null, sheet: null, raw: null, requestedBy: ctx.userId, requestedAt: now, fetchedAt: null, createdAt: now, updatedAt: now };
-    const kind = scope.value.dossier.transportMode === "SEA_CONTAINER" ? "CONTAINER" : "CARGO";
-    const outbox: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, declarationId: snap.declarationId, operation: "KVGS", idempotencyKey: `kvgs:${row.id}`, payload: { kvgsId: row.id, kind }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+    const outbox: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, declarationId: snap.declarationId, operation: "KVGS", idempotencyKey: `kvgs:${row.id}`, payload: { kvgsId: row.id }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
     try {
       await r.kvgs.insert(row);
       await r.outbox.insert(outbox);

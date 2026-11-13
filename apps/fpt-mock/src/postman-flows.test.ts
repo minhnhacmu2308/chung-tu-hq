@@ -192,18 +192,26 @@ describe("fpt-mock: gửi → REF_ID → hỏi kết quả", () => {
     expect(rejected.errorList[0].rowPosition).toBe("0002");
     expect(rejected.hanG_CONT).toBeUndefined();
     expect((await call("V5ContainerRes", { reF_ID: ok.body.reF_ID })).body.hanG_CONT).toBeUndefined();
-    // KVGS hai bước: KVGS → reF_ID; KVGSRes → (lần đầu chưa có phản hồi) → đủ trường 2 mẫu in.
-    const kv = await call("KVGS", sample("KVGS"));
-    expect(kv.body.reF_ID).toBeTruthy();
-    expect((await call("KVGS", { ...sample("KVGS"), TK_SOTK: "" })).body.errorList[0].indexCode).toBe("TK_SOTK");
-    expect((await call("KVGSRes", { reF_ID: kv.body.reF_ID })).body.tranG_THAI).toBe("11");
-    const full = (await call("KVGSRes", { reF_ID: kv.body.reF_ID })).body;
-    expect(full.tranG_THAI).toBe("12");
-    expect(full).toMatchObject({ sO_QUAN_LY: "QL307072510200", mA_VACH: "*307072510200*", phaiNiemPhong: true });
-    expect(full.danH_SACH_CONT).toHaveLength(2);
-    expect(full.danH_SACH_CONT[0].mA_VACH).toBe("307072510200|FBIU5802429");
-    expect(full.hanG_LE.sO_LUONG).toBe("10");
-    expect((await call("KVGSRes", { reF_ID: "khong-co" })).body.errorList[0].indexCode).toBe("REF_ID");
+    // KVGS (đặc tả API-KVGS): một lời gọi đồng bộ – không REF_ID, không KVGSRes. Mẫu Postman (…200) → hàng container.
+    const kv = (await call("KVGS", sample("KVGS"))).body;
+    expect(kv.errorList).toEqual([]);
+    expect(kv).not.toHaveProperty("reF_ID");
+    expect(kv.serviceMessage).toMatchObject({ isContainer: 1, soToKhai: "307072510200", ngayToKhai: "14/01/2025", maSoThue: "0106502680", maDDGS: "02CIS01", so_Luong_Hang: 120, tong_Trong_Luong_Hang: 12450.5, dvT_Tong_Trong_Luong_Hang: "KGM", thoiGianLayDuLieu: "14/10/2026 10:00:00" });
+    expect(kv.serviceMessage.soDinhDanh).toMatch(/^\d{12}$/);
+    expect(kv.serviceMessage.bangKeMaVachContainer).toHaveLength(2);
+    expect(kv.serviceMessage.bangKeMaVachContainer[1]).toMatchObject({ soContainer: "MSKU1234565", soSeal: "SEAL0002", soSealHQ: "HQ0002" });
+    const png = Buffer.from(kv.serviceMessage.bangKeMaVachContainer[0].barcodeImage, "base64");
+    expect(png.subarray(1, 4).toString()).toBe("PNG");
+    // Chữ số áp chót lẻ (…790) → hàng lẻ: bảng kê rỗng, có số lượng/trọng lượng.
+    const cargo = (await call("KVGS", { ...sample("KVGS"), TK_SOTK: "106123456790" })).body.serviceMessage;
+    expect(cargo).toMatchObject({ isContainer: 0, bangKeMaVachContainer: [], so_Luong_Hang: 25, tong_Trong_Luong_Hang: 680.5 });
+    // Thiếu trường → errorList mã "000", nameCode = trường đầu tiên thiếu theo thứ tự MA_DV, TK_SOTK, TK_NGAYDK, TK_MAHQ; serviceMessage null.
+    expect((await call("KVGS", { ...sample("KVGS"), TK_SOTK: "", TK_MAHQ: "" })).body).toEqual({
+      errorList: [{ errorCode: "000", indexCode: "000", nameCode: "TK_SOTK", errorContent: "Không được để trống TK_SOTK", proposedSolution: "Vui lòng nhập TK_SOTK", rowPosition: "0" }],
+      serviceMessage: null,
+    });
+    expect((await call("KVGS", { ...sample("KVGS"), MA_DV: "REJECT" })).body.errorList[0]).toMatchObject({ errorCode: "000", nameCode: "000" });
+    expect((await call("KVGSRes", { reF_ID: "x" })).status).toBe(404);
     expect((await call("PrintXPS", sample("PrintXPS"))).body.filE_BASE64).toBeTruthy();
     expect((await call("KyFile", sample("KyFile"))).body.daA_KY).toBe(true);
     const cat = (await call("SyncCategory", {})).body;

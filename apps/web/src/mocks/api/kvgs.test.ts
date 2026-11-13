@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb, saveDb } from "@/mocks/db";
-import { fetchKvgs, getKvgs, pollNow, refillContainerList, saveContainerList, sendContainerList } from "./kvgs";
+import { KvgsViewSchema } from "@kb/contracts";
+import { fetchKvgs, getKvgs, pollContainerList, refillContainerList, saveContainerList, sendContainerList } from "./kvgs";
 import { getSubmission } from "./customs";
 
 vi.mock("@/lib/mock-request", async (importOriginal) => {
@@ -27,7 +28,7 @@ beforeEach(() => {
 });
 
 describe("KVGS mock", () => {
-  it("NK container: bản nháp điền sẵn từ vận đơn → khai → chấp nhận sau ~3 s → lấy bảng kê có container và mã vạch", async () => {
+  it("NK container: bản nháp điền sẵn từ vận đơn → khai → chấp nhận sau ~3 s → lấy bảng kê (~2 s, một bước) có container và ảnh mã vạch PNG", async () => {
     const v = await getKvgs(NK, 1);
     expect(v.applies).toEqual({ containerList: true, kvgs: true });
     expect(v.containerList?.status).toBe("DRAFT");
@@ -47,16 +48,23 @@ describe("KVGS mock", () => {
     expect(ok.containerList?.receiptNo).toMatch(/^\d{12}$/);
 
     const f = await fetchKvgs(NK, 1);
-    expect(f.kvgs?.status).toBe("SENDING");
-    wait(3_500);
+    expect(f.kvgs).toMatchObject({ status: "SENDING", refId: null, receiptNo: null, receiptDate: null, fetchedAt: null, sheet: null });
+    wait(1_000);
+    expect((await getKvgs(NK, 1)).kvgs?.status).toBe("SENDING");
+    wait(1_500);
     const done = await getKvgs(NK, 1);
+    expect(KvgsViewSchema.parse(done)).toBeTruthy();
     const sheet = done.kvgs?.sheet;
-    expect(done.kvgs?.status).toBe("ACCEPTED");
+    // KVGS một bước: không mã tham chiếu / số tiếp nhận; có thời điểm lấy.
+    expect(done.kvgs).toMatchObject({ status: "ACCEPTED", refId: null, receiptNo: null, receiptDate: null, errors: [] });
+    expect(done.kvgs?.fetchedAt).toBeTruthy();
     expect(sheet?.kind).toBe("CONTAINER");
+    expect(sheet?.barcode).toBeNull();
     expect(sheet?.containers).toHaveLength(2);
-    expect(sheet?.containers[0]).toMatchObject({ containerNo: "TGHU0123450", sealNo: "KR884120", barcode: `KVGS-MOCK|${done.header.declarationNo}|TGHU0123450` });
+    expect(sheet?.containers[0]).toMatchObject({ containerNo: "TGHU0123450", sealNo: "KR884120" });
+    const png = Buffer.from(sheet!.containers[0]!.barcodeImage!, "base64");
+    expect(png.subarray(1, 4).toString()).toBe("PNG");
     expect(sheet?.declarationNo).toBe("107433370720");
-    expect(sheet?.cargo).toBeNull();
   });
 
   it("seal REJECT1 → bị từ chối, lỗi theo dòng 1; sửa seal rồi khai lại thành lần khai mới", async () => {
@@ -79,9 +87,9 @@ describe("KVGS mock", () => {
     expect((await err(sendContainerList(NK, 1)))?.reason).toBe("CONT_LIST_INVALID");
     await saveContainerList(NK, 1, { rows: v.containerList!.rows });
     await sendContainerList(NK, 1);
-    expect(await pollNow(NK, 1, "CONT_LIST")).toEqual({ again: false });
+    expect(await pollContainerList(NK, 1)).toEqual({ again: false });
     expect((await getKvgs(NK, 1)).containerList?.status).toBe("ACCEPTED");
-    expect((await err(pollNow(NK, 1, "CONT_LIST")))?.code).toBe("INVALID_STATE");
+    expect((await err(pollContainerList(NK, 1)))?.code).toBe("INVALID_STATE");
   });
 
   it("làm lại từ chứng từ ghi đè bảng", async () => {
@@ -90,7 +98,7 @@ describe("KVGS mock", () => {
     expect((await refillContainerList(NK, 1)).containerList?.rows).toHaveLength(v.containerList!.rows.length);
   });
 
-  it("XK hàng lẻ: không có khối danh sách container; lấy bảng kê → kind CARGO có cargo + mã vạch đầu trang", async () => {
+  it("XK hàng lẻ: không có khối danh sách container; lấy bảng kê → kind CARGO có cargo + mã vạch đầu trang = số tờ khai (Code128)", async () => {
     const v = await getKvgs(XK, 1);
     expect(v.applies).toEqual({ containerList: false, kvgs: true });
     expect(v.containerList).toBeNull();
@@ -100,7 +108,8 @@ describe("KVGS mock", () => {
     const sheet = (await getKvgs(XK, 1)).kvgs?.sheet;
     expect(sheet?.kind).toBe("CARGO");
     expect(sheet?.containers).toEqual([]);
-    expect(sheet?.barcode).toBe("KVGS-MOCK|307433370730|CARGO");
+    expect(sheet?.barcode).toBe("307433370730");
+    expect(sheet?.sealRequired).toBe(false);
     expect(sheet?.cargo).toMatchObject({ quantityUnit: "PK", weightUnit: "KGM" });
     expect(sheet?.cargo?.grossWeight).toMatch(/^\d+(\.\d+)?$/);
   });

@@ -19,18 +19,19 @@ describe("FakeCustomsGateway – container list và KVGS", () => {
     expect((await g.containerListResult("o", { ...head, refId: refId! })).state).toBe("PENDING");
     expect((await g.containerListResult("o", { ...head, refId: refId! })).state).toBe("ACCEPTED");
   });
-  it("KVGS hai bước: container và hàng lẻ; kịch bản REJECTED / INCOMPLETE", async () => {
+  it("KVGS một bước: container (mặc định) / hàng lẻ theo kịch bản; REJECTED errorList; INCOMPLETE giữ raw", async () => {
     const kv = { declarationNo: "108007708100", registeredOn: "2026-02-27", customsOffice: "02CI", taxCode: "0316789012" };
     const g = new FakeCustomsGateway();
-    const c = await g.requestKvgs("o", { ...kv, kind: "CONTAINER" }, "k");
-    const rc = await g.kvgsResult("o", { ...kv, kind: "CONTAINER", refId: c.refId! });
-    expect(rc.sheet?.containers).toHaveLength(1);
-    const l = await g.requestKvgs("o", { ...kv, kind: "CARGO" }, "k");
-    expect((await g.kvgsResult("o", { ...kv, kind: "CARGO", refId: l.refId! })).sheet?.cargo?.quantity).toBe("10");
-    const rej = new FakeCustomsGateway({ kvgsOutcome: "REJECTED" });
-    expect((await rej.kvgsResult("o", { ...kv, kind: "CARGO", refId: "x" })).state).toBe("REJECTED");
-    const inc = await new FakeCustomsGateway({ kvgsOutcome: "INCOMPLETE" }).kvgsResult("o", { ...kv, kind: "CARGO", refId: "x" });
-    expect(inc.sheet).toBeUndefined();
-    expect(inc.errors?.[0]?.code).toBe("KVGS_RESPONSE_INCOMPLETE");
+    const c = await g.fetchKvgs("o", kv, "k");
+    expect(c).toMatchObject({ state: "ACCEPTED", sheet: { kind: "CONTAINER", barcode: null, declarationNo: "108007708100", declarationDate: "2026-02-27" } });
+    expect(c.sheet?.containers[0]?.barcodeImage).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+    expect(g.kvgsCalls).toEqual([kv]);
+    const l = await new FakeCustomsGateway({ kvgsKind: "CARGO" }).fetchKvgs("o", kv, "k");
+    expect(l.sheet).toMatchObject({ kind: "CARGO", barcode: "108007708100", containers: [], cargo: { quantity: "10" } });
+    const rej = await new FakeCustomsGateway({ kvgsOutcome: "REJECTED" }).fetchKvgs("o", kv, "k");
+    expect(rej).toMatchObject({ state: "REJECTED", errors: [{ code: "E-KVGS-001" }] });
+    expect(rej.sheet).toBeUndefined();
+    const inc = await new FakeCustomsGateway({ kvgsOutcome: "INCOMPLETE" }).fetchKvgs("o", kv, "k");
+    expect(inc).toMatchObject({ state: "REJECTED", raw: expect.anything(), errors: [{ code: "KVGS_RESPONSE_INCOMPLETE" }] });
   });
 });

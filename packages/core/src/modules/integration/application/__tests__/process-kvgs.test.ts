@@ -16,7 +16,7 @@ const list = (): ContainerListRecord => ({ id: "cl_1", orgId: ORG, dossierId: D,
 const kv = (): KvgsSheetRecord => ({ id: "kv_1", orgId: ORG, dossierId: D, branch: 1, status: "SENDING", refId: null, receiptNo: null, receiptDate: null, errors: null, sheet: null, raw: null, requestedBy: "usr_chau", requestedAt: T, fetchedAt: null, createdAt: T, updatedAt: T });
 const ob = (operation: "CONT_LIST" | "KVGS", payload: unknown, key: string): OutboxRow => ({ id: `ob_${key}`, orgId: ORG, dossierId: D, branch: 1, declarationId: "dec_1", operation, idempotencyKey: key, payload, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: T, updatedAt: T });
 const run = (o: OutboxRow) => processOutbox(h.deps, { orgId: ORG, userId: "usr_chau", outboxId: o.id });
-const poll = (kind: "CONT_LIST" | "KVGS", id: string, n: number) => pollKvgs(h.deps, { orgId: ORG, userId: "usr_chau", kind, id, n });
+const poll = (kind: "CONT_LIST", id: string, n: number) => pollKvgs(h.deps, { orgId: ORG, userId: "usr_chau", kind, id, n });
 /** Chạy hết chuỗi poll đã xếp (bỏ qua delay) tới khi không còn job mới. */
 async function drain() {
   for (let i = 0; i < 100; i++) {
@@ -100,56 +100,81 @@ describe("outbox CONT_LIST", () => {
   });
 });
 
-describe("outbox KVGS", () => {
-  it("→ ACCEPTED có sheet, fetchedAt, raw, receiptNo", async () => {
-    const g = gw({});
+describe("outbox KVGS (POST /api/KVGS – một lời gọi đồng bộ)", () => {
+  const start = (payload: unknown = { kvgsId: "kv_1" }) => {
     h.uow.data.kvgs.push(kv());
-    const o = ob("KVGS", { kvgsId: "kv_1", kind: "CONTAINER" }, "kvgs:kv_1");
+    const o = ob("KVGS", payload, "kvgs:kv_1");
     h.uow.data.outbox.push(o);
-    await run(o);
-    expect(g.kvgsCalls[0]).toMatchObject({ kind: "CONTAINER", declarationNo: "104000000001" });
-    await drain();
+    return o;
+  };
+  it("→ ACCEPTED ngay: sheet, raw, fetchedAt = clock; không REF_ID / số tiếp nhận, không job kvgs-poll; phí gửi 1 lần", async () => {
+    const g = gw({});
+    const o = start();
+    expect(await run(o)).toMatchObject({ ok: true, value: { status: "SENT" } });
+    expect(g.kvgsCalls).toEqual([{ dossierId: D, declarationNo: "104000000001", registeredOn: "2026-10-14", customsOffice: "03CE", taxCode: "0316789012" }]);
     const k = h.uow.data.kvgs[0]!;
-    expect(k.status).toBe("ACCEPTED");
+    expect(k).toMatchObject({ status: "ACCEPTED", errors: null, refId: null, receiptNo: null, receiptDate: null, fetchedAt: T });
     expect(k.sheet?.containers).toHaveLength(1);
     expect(k.raw).toBeTruthy();
-    expect(k.fetchedAt).toEqual(T);
-    expect(k.receiptNo).toBeTruthy();
+    expect(h.uow.data.outbox[0]).toMatchObject({ status: "SENT", lastError: null });
+    expect(h.queue.jobs.filter((j) => j.name === "kvgs-poll")).toHaveLength(0);
+    expect(h.uow.data.messages.map((m) => `${m.direction}:${m.result}`)).toEqual(["OUT:OK", "IN:OK"]);
+    expect(usage.events).toEqual([expect.objectContaining({ kind: "CUSTOMS_SEND", operation: "KVGS", dedupeKey: "customs:kvgs:kv_1" })]);
+    expect(h.dossiers.events.length).toBeGreaterThan(0);
   });
-  it("ACCEPTED nhưng mapper thiếu dữ liệu → REJECTED + KVGS_RESPONSE_INCOMPLETE, raw vẫn lưu", async () => {
+  it("payload cũ còn `kind` vẫn xử lý được (API tự quyết loại hàng)", async () => {
+    gw({ kvgsKind: "CARGO" });
+    await run(start({ kvgsId: "kv_1", kind: "CONTAINER" }));
+    expect(h.uow.data.kvgs[0]).toMatchObject({ status: "ACCEPTED", sheet: { kind: "CARGO", barcode: "104000000001" } });
+  });
+  it("thiếu dữ liệu để in → REJECTED + KVGS_RESPONSE_INCOMPLETE, raw vẫn lưu, outbox SENT, có tính phí", async () => {
     gw({ kvgsOutcome: "INCOMPLETE" });
-    h.uow.data.kvgs.push(kv());
-    const o = ob("KVGS", { kvgsId: "kv_1", kind: "CONTAINER" }, "kvgs:kv_1");
-    h.uow.data.outbox.push(o);
-    await run(o);
-    await drain();
-    expect(h.uow.data.kvgs[0]).toMatchObject({ status: "REJECTED", sheet: null, raw: { declarationNo: "104000000001" }, errors: [expect.objectContaining({ code: "KVGS_RESPONSE_INCOMPLETE" })] });
+    await run(start());
+    expect(h.uow.data.kvgs[0]).toMatchObject({ status: "REJECTED", sheet: null, raw: expect.anything(), errors: [expect.objectContaining({ code: "KVGS_RESPONSE_INCOMPLETE" })] });
+    expect(h.uow.data.outbox[0]!.status).toBe("SENT");
+    expect(usage.events).toHaveLength(1);
   });
-  it("Hải quan từ chối → REJECTED + errors", async () => {
+  it("errorList của FPT → REJECTED + errors, thông điệp IN lỗi", async () => {
     gw({ kvgsOutcome: "REJECTED" });
-    h.uow.data.kvgs.push(kv());
-    const o = ob("KVGS", { kvgsId: "kv_1", kind: "CARGO" }, "kvgs:kv_1");
-    h.uow.data.outbox.push(o);
-    await run(o);
-    await drain();
+    await run(start());
     expect(h.uow.data.kvgs[0]).toMatchObject({ status: "REJECTED", errors: [expect.objectContaining({ code: "E-KVGS-001" })] });
+    expect(h.uow.data.messages.map((m) => `${m.direction}:${m.result}`)).toEqual(["OUT:OK", "IN:ERROR"]);
   });
-  it("gateway thật chưa hỗ trợ (NOT_SUPPORTED) → REJECTED ngay, outbox FAILED, không retry/không tính phí", async () => {
+  it("lỗi mạng/5xx → ném (retry), outbox PENDING + lastError, bản kê vẫn SENDING, không tính phí; lần sau thành công", async () => {
     const g = gw({});
-    g.requestKvgs = async () => { throw domainError("NOT_SUPPORTED", "Chưa nối API KVGS"); };
-    h.uow.data.kvgs.push(kv());
-    const o = ob("KVGS", { kvgsId: "kv_1", kind: "CONTAINER" }, "kvgs:kv_1");
-    h.uow.data.outbox.push(o);
-    expect(await run(o)).toMatchObject({ ok: true, value: { status: "FAILED" } });
-    expect(h.uow.data.kvgs[0]).toMatchObject({ status: "REJECTED", errors: [expect.objectContaining({ code: "NOT_SUPPORTED" })] });
+    const o = start();
+    const real = g.fetchKvgs.bind(g);
+    g.fetchKvgs = async () => { throw new Error("ECONNRESET"); };
+    await expect(run(o)).rejects.toThrow("ECONNRESET");
+    expect(h.uow.data.outbox[0]).toMatchObject({ status: "PENDING", lastError: "ECONNRESET", attempts: 1 });
+    expect(h.uow.data.kvgs[0]!.status).toBe("SENDING");
+    expect(usage.events).toHaveLength(0);
+    g.fetchKvgs = real;
+    await run(h.uow.data.outbox[0]!);
+    expect(h.uow.data.kvgs[0]!.status).toBe("ACCEPTED");
+    expect(h.uow.data.messages.filter((m) => m.direction === "OUT")).toHaveLength(1);
+  });
+  it("lỗi vĩnh viễn (chưa cấu hình) → REJECTED ngay, outbox FAILED, không retry/không tính phí", async () => {
+    const g = gw({});
+    g.fetchKvgs = async () => { throw domainError("INTEGRATION_NOT_CONFIGURED", "Chưa cấu hình tài khoản VNACCS"); };
+    expect(await run(start())).toMatchObject({ ok: true, value: { status: "FAILED" } });
+    expect(h.uow.data.kvgs[0]).toMatchObject({ status: "REJECTED", errors: [expect.objectContaining({ code: "INTEGRATION_NOT_CONFIGURED" })] });
     expect(usage.events).toHaveLength(0);
   });
-  it("kvgsResult ném NOT_SUPPORTED khi hỏi → REJECTED, không lặp", async () => {
+  it("outbox đã SENT (job chạy lại) → không gọi cổng lần hai", async () => {
     const g = gw({});
-    h.uow.data.kvgs.push({ ...kv(), refId: "R1" });
-    g.kvgsResult = async () => { throw domainError("NOT_SUPPORTED", "Chưa nối API KVGS"); };
-    expect(await poll("KVGS", "kv_1", 1)).toMatchObject({ ok: true, value: { again: false } });
-    expect(h.uow.data.kvgs[0]!.status).toBe("REJECTED");
+    const o = start();
+    await run(o);
+    await run(h.uow.data.outbox[0]!);
+    expect(g.kvgsCalls).toHaveLength(1);
+    expect(usage.events).toHaveLength(1);
+  });
+  it("org khác không đọc được bản kê của outbox", async () => {
+    const g = gw({});
+    const o = start();
+    await processOutbox(h.deps, { orgId: "org_b", userId: "usr_chau", outboxId: o.id });
+    expect(g.kvgsCalls).toHaveLength(0);
+    expect(h.uow.data.kvgs[0]!.status).toBe("SENDING");
   });
 });
 
@@ -211,22 +236,21 @@ describe("pollKvgsNow", () => {
   it("NO_RESPONSE → hỏi một lượt, có kết quả thì ACCEPTED, không xếp job", async () => {
     gw({});
     h.uow.data.containerLists.push({ ...list(), refId: "R1", status: "NO_RESPONSE" });
-    expect(await pollKvgsNow(h.deps, declarant, D, 1, "CONT_LIST")).toMatchObject({ ok: true });
+    expect(await pollKvgsNow(h.deps, declarant, D, 1)).toMatchObject({ ok: true });
     expect(h.uow.data.containerLists[0]!.status).toBe("ACCEPTED");
     expect(h.queue.jobs).toHaveLength(0);
   });
   it("vẫn PENDING → giữ nguyên NO_RESPONSE, không xếp job", async () => {
     gw({ refPendingPolls: 5 });
-    h.uow.data.kvgs.push({ ...kv(), refId: "R1", status: "NO_RESPONSE" });
-    await pollKvgsNow(h.deps, declarant, D, 1, "KVGS");
-    expect(h.uow.data.kvgs[0]!.status).toBe("NO_RESPONSE");
+    h.uow.data.containerLists.push({ ...list(), refId: "R1", status: "NO_RESPONSE" });
+    await pollKvgsNow(h.deps, declarant, D, 1);
+    expect(h.uow.data.containerLists[0]!.status).toBe("NO_RESPONSE");
     expect(h.queue.jobs).toHaveLength(0);
   });
   it("không có bản SENDING/NO_RESPONSE → INVALID_STATE; VIEWER → FORBIDDEN", async () => {
     h.uow.data.containerLists.push({ ...list(), refId: "R1", status: "ACCEPTED" });
-    expect(await pollKvgsNow(h.deps, declarant, D, 1, "CONT_LIST")).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
-    expect(await pollKvgsNow(h.deps, declarant, D, 1, "KVGS")).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
-    expect(await pollKvgsNow(h.deps, viewer, D, 1, "KVGS")).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
+    expect(await pollKvgsNow(h.deps, declarant, D, 1)).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
+    expect(await pollKvgsNow(h.deps, viewer, D, 1)).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
 });
 
@@ -243,7 +267,7 @@ describe("markOutboxFailed (BullMQ hết lượt thử)", () => {
   });
   it("KVGS: bản kê SENDING → REJECTED E-SEND; có thể yêu cầu lại; kết quả truyền không đổi", async () => {
     h.uow.data.kvgs.push(kv());
-    const o = ob("KVGS", { kvgsId: "kv_1", kind: "CONTAINER" }, "kvgs:kv_1");
+    const o = ob("KVGS", { kvgsId: "kv_1" }, "kvgs:kv_1");
     h.uow.data.outbox.push(o);
     const before = JSON.stringify(h.uow.data.results);
     await markOutboxFailed(h.deps, { orgId: ORG, outboxId: o.id, reason: "FPT 503" });
@@ -253,7 +277,7 @@ describe("markOutboxFailed (BullMQ hết lượt thử)", () => {
   });
   it("bản ghi không còn SENDING / đã có REF_ID → giữ nguyên; payload hỏng không ném", async () => {
     h.uow.data.kvgs.push({ ...kv(), status: "ACCEPTED" });
-    const o = ob("KVGS", { kvgsId: "kv_1", kind: "CONTAINER" }, "kvgs:kv_1");
+    const o = ob("KVGS", { kvgsId: "kv_1" }, "kvgs:kv_1");
     const bad = ob("CONT_LIST", { sai: 1 }, "cont:bad");
     h.uow.data.outbox.push(o, bad);
     await markOutboxFailed(h.deps, { orgId: ORG, outboxId: o.id, reason: "x" });
@@ -265,7 +289,7 @@ describe("markOutboxFailed (BullMQ hết lượt thử)", () => {
 
 describe("outbox CONT_LIST/KVGS đang PENDING không phải nghiệp vụ tờ khai đang chờ", () => {
   it("hasBlockingPending / pendingOps bỏ qua; IDA vẫn tính", () => {
-    const k = ob("KVGS", { kvgsId: "kv_1", kind: "CONTAINER" }, "k1");
+    const k = ob("KVGS", { kvgsId: "kv_1" }, "k1");
     const c = ob("CONT_LIST", { listId: "cl_1" }, "k2");
     expect(hasBlockingPending([k, c])).toBe(false);
     expect(pendingOps([k, c])).toEqual([]);

@@ -11,11 +11,11 @@ describe("customs-poll payload", () => {
 });
 
 describe("kvgs-poll payload", () => {
-  it("nhận CONT_LIST | KVGS, n nguyên dương; sai → lỗi", async () => {
+  it("chỉ nhận CONT_LIST (KVGS là một lời gọi đồng bộ – không poll), n nguyên dương; sai → lỗi", async () => {
     const { KvgsPollPayload } = await import("./customs.js");
     const base = { orgId: "org_a", userId: "usr_a", kind: "CONT_LIST", id: "cl_1", n: 1 };
     expect(KvgsPollPayload.parse(base)).toEqual(base);
-    expect(KvgsPollPayload.parse({ ...base, kind: "KVGS" }).kind).toBe("KVGS");
+    expect(KvgsPollPayload.safeParse({ ...base, kind: "KVGS" }).success).toBe(false);
     expect(KvgsPollPayload.safeParse({ ...base, kind: "HYS" }).success).toBe(false);
     expect(KvgsPollPayload.safeParse({ ...base, n: 0 }).success).toBe(false);
   });

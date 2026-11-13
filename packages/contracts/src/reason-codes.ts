@@ -114,7 +114,7 @@ export const REASON_TEXT_VI = {
   CONT_LIST_NOT_APPLICABLE: "Danh sách container chỉ áp dụng cho tờ khai nhập khẩu hàng container",
   CONT_LIST_REQUIRES_DECLARATION_NUMBER: "Tờ khai chưa có số – khai tờ khai trước khi khai danh sách container",
   CONT_LIST_INVALID: "Danh sách container chưa hợp lệ: {issues}",
-  KVGS_ALREADY_SENDING: "Đang chờ phản hồi lần gửi trước – lấy phản hồi trước khi gửi lại",
+  KVGS_ALREADY_SENDING: "Đang gửi tới Hải quan – chờ kết quả rồi thử lại",
   KVGS_RESPONSE_INCOMPLETE: "Phản hồi của Hải quan thiếu thông tin để in (số quản lý hàng hóa hoặc danh sách container)",
   CONT_LIST_LOCKED: "Danh sách container đã gửi – không sửa được, tạo lần khai mới để sửa",
 } as const;

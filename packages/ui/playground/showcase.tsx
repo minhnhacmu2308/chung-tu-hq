@@ -8,6 +8,10 @@ import {
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
 } from "../src/index.js";
 
+// Ảnh QR PNG (Base64 thuần) như Hải quan trả về trong bangKeMaVachContainer[].barcodeImage.
+const DEMO_BARCODE_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAFQAAABUCAYAAAAcaxDBAAAAHnRFWHRTb2Z0d2FyZQBid2lwLWpzLm1ldGFmbG9vci5jb21Tnbi0AAABi0lEQVR4nO3VSw7CMBAE0dz/0rBnEWvUNWOTVEvZ4DCfZwmu67o+w89v6O+n9eP9BBVU0FeD0qnWT4HT/tUICkdQOILCKYOmC9IL0aD4foIKKqignQ2LAGl9QQUVVNDO/XaD0heS1hd0EUGL56sIWjxf5TjQNOlC9Pvt+wkK7ycovJ+g8H6rAemnujB93r6foIIK+irQ03L8gP8WQeEICudxoKf9iNN/At31yg0Fva9Xbijofb1yQ0Hv640PtPuC0nlW38cHoBcQFF5AUHiBx4NWC04DpPOm+8URVFBByXrtoGmDbqDufvg8gsLzCArPIyg8T3Xg9P3qedq/mnh/QbN5BS3WL/cXNJuX7h+HvpDdz/YICkdQOI8D3X2D0+/T59tvWFBBBT0KlM70Qt0XvjwXVNBSP0GL56v3jwOdHogGGY+gcASFIyic00HT+en98YKCwgUFhQsKChfsBqXnna4nqKBn1xN0GjTNNHg6TzyfoPD8gsLzCwrP//tB99MNUj3H5xVUUEFfA/oFjUASs1R8sn4AAAAASUVORK5CYII=";
+
 const ROW_STATUSES: Status[] = ["NEEDS_REVIEW", "AUTO_APPROVED", "GREEN_CHANNEL", "YELLOW_CHANNEL", "RED_CHANNEL"];
 type Row = { id: string; code: string; partner: string; type: "NK" | "XK"; value: number; status: Status; due: string };
 
@@ -261,6 +265,7 @@ export function Showcase() {
               <div className="flex flex-wrap items-center gap-4 text-fg">
                 <Barcode type="qr" value="KVGS-FBIU5802429" label="Mã QR bản kê" />
                 <Barcode type="code128" value="FBIU5802429" label="Mã vạch số container" />
+                <Barcode type="png" value={DEMO_BARCODE_PNG} label="Ảnh mã vạch Hải quan cấp" />
               </div>
             </Stack>
           </CardContent>

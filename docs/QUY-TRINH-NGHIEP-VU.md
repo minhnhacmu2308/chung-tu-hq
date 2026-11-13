@@ -404,12 +404,12 @@ flowchart LR
 
 ### 9.5 Qua khu vực giám sát – danh sách container và bản kê mã vạch (ADR 0014)
 
-Đặc tả: `docs/superpowers/specs/2026-11-13-qua-khu-vuc-giam-sat-kvgs-design.md`. Thẻ "Qua khu vực giám sát" nằm ở nhóm ④ của bước Truyền Hải quan; màn Khai báo Hải quan có lối tắt tới thẻ này. Cả hai nghiệp vụ chạy qua outbox + worker (gửi → hỏi phản hồi, idempotent, như HYS), không trừ lượt khai, mỗi lần gọi FPT ghi `usage_events`.
+Đặc tả: `docs/superpowers/specs/2026-11-13-qua-khu-vuc-giam-sat-kvgs-design.md`. Thẻ "Qua khu vực giám sát" nằm ở nhóm ④ của bước Truyền Hải quan; màn Khai báo Hải quan có lối tắt tới thẻ này. Cả hai nghiệp vụ chạy qua outbox + worker (idempotent, như HYS; khai DS container gửi → hỏi phản hồi, KVGS là một lời gọi đồng bộ), không trừ lượt khai, mỗi lần gọi FPT ghi `usage_events`.
 
 - **CONT_LIST – khai danh sách container**: chỉ hàng **nhập đường biển đi container**, sau khi tờ khai có số. Bảng container điền sẵn từ vận đơn đã OCR (số container, số seal); người khai kiểm và sửa (sửa ô ghi `field_audit`). Kiểm **số container theo ISO 6346** (4 chữ + 7 số, chữ số kiểm tra) và **số seal bắt buộc** trước khi gửi; có "Lấy lại từ vận đơn" và nhập/xuất Excel. Gửi qua `V5ContainerReq`, hỏi kết quả `V5ContainerRes` (worker hỏi lại tới khi có phản hồi). Mỗi lần khai là một dòng `container_lists`.
-- **KVGS – lấy danh sách qua khu vực giám sát**: mọi tờ khai **đã thông quan**. Nút "Lấy DS qua KVGS" gửi yêu cầu theo số tờ khai/ngày đăng ký/chi cục; job `kvgs-poll` hỏi lại mỗi 30 giây, tối đa 40 lần rồi báo không có phản hồi (`NO_RESPONSE`). Kết quả chuẩn hóa thành `KvgsSheet` (có mã vạch do Hải quan cấp – hệ thống không tự sinh); mỗi tờ chỉ một bản đang gửi tại một thời điểm, các bản cũ giữ lại làm lịch sử.
-- **In bản kê**: trang in riêng (A4, đen trắng cả chế độ tối, chỉ tiếng Việt) dựng đúng mẫu **Danh sách container** (hàng container) hoặc **Danh sách hàng hóa đủ điều kiện qua KVGS** (hàng lẻ), kèm mã QR + Code128 từ dữ liệu KVGS mới nhất; tự chia trang. Công chức giám sát quét mã, đối chiếu rồi ký – đóng dấu trên bản in.
-- **Chưa làm**: cổng KVGS thật (chờ đặc tả phản hồi của FPT); bảng container hàng xuất (2.60) chỉ đọc; khai danh sách container cho hàng xuất.
+- **KVGS – lấy danh sách qua khu vực giám sát**: mọi tờ khai **đã thông quan**. Nút "Lấy DS qua KVGS" gọi `POST /api/KVGS` theo số tờ khai/ngày đăng ký/chi cục/mã doanh nghiệp; worker nhận kết quả ngay (không poll): có `errorList` thì bị từ chối kèm lỗi, cho lấy lại. Kết quả chuẩn hóa thành `KvgsSheet`; loại bản kê (container / hàng lẻ) do Hải quan quyết định (`isContainer`); hàng container có ảnh mã vạch PNG từng container do Hải quan cấp, hàng lẻ dùng Code128 sinh từ số tờ khai; mỗi tờ chỉ một bản đang gửi tại một thời điểm, các bản cũ giữ lại làm lịch sử.
+- **In bản kê**: trang in riêng (A4, đen trắng cả chế độ tối, chỉ tiếng Việt) dựng đúng mẫu **Danh sách container** (hàng container) hoặc **Danh sách hàng hóa đủ điều kiện qua KVGS** (hàng lẻ), hàng container in ảnh mã vạch của Hải quan từng dòng, hàng lẻ in Code128 số tờ khai góc trên; dữ liệu từ KVGS mới nhất; tự chia trang. Công chức giám sát quét mã, đối chiếu rồi ký – đóng dấu trên bản in.
+- **Chưa làm**: ánh xạ `loaiHinh`/`ghi_Chu` của KVGS lên bản in; bảng container hàng xuất (2.60) chỉ đọc; khai danh sách container cho hàng xuất.
 
 ## 10. Cấu hình doanh nghiệp
 
@@ -561,7 +561,7 @@ Chức năng: tổng quan "Cần chú ý" (`LOW_CREDITS` – PAYG còn ≤ 3 lư
 
 | Mảng | Hiện trạng |
 |---|---|
-| Kết nối FPT.VNACCS | Chưa có đặc tả API cho IDB, IDD, IDA01, IDE, AMB, AMC, lệ phí cảng biển; KVGS thật chờ FPT gửi đặc tả phản hồi (cổng thật trả NOT_SUPPORTED, mới chạy với giả lập – ADR 0014; khai danh sách container `V5ContainerReq/Res` đã nối); AMA đã ánh xạ nhưng đường dẫn API và vỏ phản hồi chưa đối chiếu với FPT |
+| Kết nối FPT.VNACCS | Chưa có đặc tả API cho IDB, IDD, IDA01, IDE, AMB, AMC, lệ phí cảng biển; KVGS và khai danh sách container `V5ContainerReq/Res` đã nối (ADR 0014; KVGS một bước theo `API-KVGS.md`); AMA đã ánh xạ nhưng đường dẫn API và vỏ phản hồi chưa đối chiếu với FPT |
 | Thuế dự kiến (bước 4–5) | Theo đặc tả VNACCS IDA (7.2) nhưng chưa có thuế suất thuế bổ sung, TTĐB, BVMT và mức thuế tuyệt đối trên dòng hàng → ước tính mới có thuế NK theo % và GTGT (công thức GTGT đã sẵn chỗ cộng các sắc thuế đó). Làm tròn đồng từng dòng (VNACCS làm tròn 4 số lẻ, tròn đồng ở tổng – lệch ≤ 0,5 đồng/dòng/sắc thuế). Chưa tính bảo hiểm tổng hợp (mã điều kiện giá 3, 7); chưa áp mức giảm theo mã miễn / giảm 1.92, 1.95; chưa có tổng thuế bổ sung, BVMT và tổng thuế chung |
 | Người trả cước trên vận đơn | Chỉ đọc "Freight Prepaid / Collect" ở vận đơn đường biển; AWB chưa đọc → luật R-FREIGHT-TERM bỏ qua với lô hàng không. Hồ sơ đọc chứng từ trước khi có trường này → bỏ qua tới khi đọc lại vận đơn |
 | AMA – tự tính thuế "Sau" | Chỉ thuế XNK và GTGT theo %; thuế tuyệt đối, TTĐB, BVMT, chống bán phá giá người khai nhập tiền thuế |

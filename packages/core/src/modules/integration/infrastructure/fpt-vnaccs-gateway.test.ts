@@ -258,11 +258,58 @@ describe("FptVnaccsGateway – danh sách container (V5ContainerReq/Res) và KVG
     await expect(g.containerListResult("org", { ...head, userId: "", refId: "R" })).rejects.toMatchObject({ code: "INTEGRATION_NOT_CONFIGURED" });
     expect(calls).toHaveLength(0);
   });
-  it("KVGS thật chưa nối: báo lỗi rõ ràng, không gọi FPT", async () => {
+  const kv = { dossierId: "dos_1", declarationNo: "106123456780", registeredOn: "2026-11-10", customsOffice: "02CI", taxCode: "0312345678" };
+  const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAIAAAUAAYRcDQAAAAAASUVORK5CYII=";
+  const kvgsOk = {
+    errorList: [],
+    serviceMessage: {
+      soDinhDanh: "101126000001", maDDGS: "02CIS01", tenDDGS: "Địa điểm giám sát mẫu", isContainer: 1, dvT_So_Luong_Hang: "PK", dvT_Tong_Trong_Luong_Hang: "KGM", so_Luong_Hang: 120, tong_Trong_Luong_Hang: 12450.5,
+      tenChiCucHaiQuanGS: "Chi cục Hải quan giám sát mẫu", tenCucHaiQuan: "Cục Hải quan mẫu", tenChiCucHaiQuan: "Chi cục Hải quan đăng ký mẫu", tenDonViXNK: "Công ty Xuất nhập khẩu Mẫu", maSoThue: "0312345678",
+      soToKhai: "106123456780", ngayToKhai: "10/11/2026", loaiHinh: "A11", tenLoaiHinh: "Nhập kinh doanh tiêu dùng", trangThaiToKhai: "Thông quan", luongToKhai: "Xanh", thoiGianLayDuLieu: "13/11/2026 09:30:00",
+      bangKeMaVachContainer: [{ soContainer: "MSCU1234566", soSeal: "SL001234", soSealHQ: "HQ005678", barcodeImage: PNG }],
+    },
+  };
+  it("KVGS: POST /api/KVGS một lần, Bearer, body phẳng đúng 4 trường (ngày dd/MM/yyyy, số giữ chuỗi), không tài khoản VNACCS; ACCEPTED + sheet + raw", async () => {
+    const { g, calls } = gateway({ "/api/KVGS": () => ok(kvgsOk) });
+    const r = await g.fetchKvgs("org", { ...kv, declarationNo: "006123456780" }, "k");
+    const call = calls.find((c) => c.path === "/api/KVGS")!;
+    expect(call.auth).toBe("Bearer tok-1");
+    expect(call.body).toEqual({ TK_SOTK: "006123456780", TK_NGAYDK: "10/11/2026", TK_MAHQ: "02CI", MA_DV: "0312345678" });
+    expect(calls.filter((c) => c.path === "/api/KVGS")).toHaveLength(1);
+    expect(r.state).toBe("ACCEPTED");
+    expect(r.sheet).toMatchObject({ kind: "CONTAINER", declarationNo: "106123456780", cargoControlNo: "101126000001", exportedAt: "2026-11-13T02:30:00.000Z", containers: [{ containerNo: "MSCU1234566", barcodeImage: PNG }] });
+    expect(r.raw).toEqual(kvgsOk);
+  });
+  it("KVGS không cần tài khoản VNACCS của doanh nghiệp (chỉ JWT FPT_API_*): credentials reader trả null vẫn gọi được", async () => {
+    const f = fakeFetch({ "/api/auth/login": login, "/api/KVGS": () => ok(kvgsOk) });
+    const g = new FptVnaccsGateway(client(f.fn), { get: async () => null });
+    expect((await g.fetchKvgs("org", kv, "k")).state).toBe("ACCEPTED");
+    expect(f.calls.find((c) => c.path === "/api/KVGS")!.body).not.toHaveProperty("objVNACCS_ACCOUNT");
+  });
+  it("FptRestClient: thiếu tài khoản VNACCS cho nghiệp vụ cần tài khoản → INTEGRATION_NOT_CONFIGURED, không gọi FPT", async () => {
+    const f = fakeFetch({ "/api/auth/login": login });
+    await expect(client(f.fn).post("IID", { tK_ICN: 1 }, null)).rejects.toMatchObject({ code: "INTEGRATION_NOT_CONFIGURED" });
+    expect(f.calls).toHaveLength(0);
+  });
+  it("KVGS errorList (thiếu TK_SOTK) → REJECTED, lỗi chuẩn hóa, raw giữ nguyên", async () => {
+    const bad = { errorList: [{ errorCode: "000", indexCode: "000", nameCode: "TK_SOTK", errorContent: "Không được để trống TK_SOTK", proposedSolution: "Vui lòng nhập TK_SOTK", rowPosition: "0" }], serviceMessage: null };
+    const { g } = gateway({ "/api/KVGS": () => ok(bad) });
+    expect(await g.fetchKvgs("org", kv, "k")).toEqual({ state: "REJECTED", raw: bad, errors: [{ code: "000", field: "TK_SOTK", message: "Không được để trống TK_SOTK", solution: "Vui lòng nhập TK_SOTK" }] });
+  });
+  it("KVGS thiếu dữ liệu để in (container không có dòng) → REJECTED KVGS_RESPONSE_INCOMPLETE + raw", async () => {
+    const res = { ...kvgsOk, serviceMessage: { ...kvgsOk.serviceMessage, bangKeMaVachContainer: [] } };
+    const { g } = gateway({ "/api/KVGS": () => ok(res) });
+    expect(await g.fetchKvgs("org", kv, "k")).toMatchObject({ state: "REJECTED", raw: res, errors: [{ code: "KVGS_RESPONSE_INCOMPLETE" }] });
+  });
+  it("KVGS: ngày đăng ký / số tờ khai không hợp lệ → REJECTED trước khi gọi FPT (controller sẽ dùng ngày mặc định)", async () => {
     const { g, calls } = gateway({});
-    const kv = { declarationNo: "108007708100", registeredOn: "2026-02-27", customsOffice: "02CI", taxCode: "0316789012", kind: "CONTAINER" as const };
-    await expect(g.requestKvgs("org", kv, "k")).rejects.toMatchObject({ code: "NOT_SUPPORTED", message: expect.stringContaining("Chưa nối API KVGS") });
-    await expect(g.kvgsResult("org", { ...kv, refId: "R" })).rejects.toMatchObject({ code: "NOT_SUPPORTED" });
-    expect(calls).toHaveLength(0);
+    expect((await g.fetchKvgs("org", { ...kv, registeredOn: "10/11/2026x" }, "k")).state).toBe("REJECTED");
+    expect((await g.fetchKvgs("org", { ...kv, declarationNo: " " }, "k")).state).toBe("REJECTED");
+    expect(calls.filter((c) => c.path === "/api/KVGS")).toHaveLength(0);
+  });
+  it("KVGS: HTTP 503 → lỗi tạm (retry); HTTP 400 → DomainError (không retry)", async () => {
+    const { g } = gateway({ "/api/KVGS": (n) => (n === 1 ? new Response("down", { status: 503 }) : new Response("{\"errors\":{}}", { status: 400 })) });
+    await expect(g.fetchKvgs("org", kv, "k")).rejects.toBeInstanceOf(FptTransientError);
+    await expect(g.fetchKvgs("org", kv, "k")).rejects.toMatchObject({ code: "GATEWAY_ERROR", message: expect.stringContaining("HTTP 400") });
   });
 });

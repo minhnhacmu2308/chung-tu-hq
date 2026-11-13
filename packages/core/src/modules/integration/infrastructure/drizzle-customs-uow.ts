@@ -1,3 +1,4 @@
+import { KvgsSheetSchema } from "@kb/contracts";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { containerLists, customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, kvgsSheets, postAmendments } from "../../../db/schema/integration.js";
@@ -19,7 +20,11 @@ function repos(tx: Tx): CustomsRepos {
   const amendmentCols = (row: PostAmendmentRow) => ({ status: row.status, header: row.header, lines: row.lines, approvedBy: row.approvedBy ?? null, approvedAt: row.approvedAt, result: row.result ?? null, updatedAt: row.updatedAt });
   const toHys = (r: typeof hysSubmissions.$inferSelect): HysSubmissionRow => ({ ...r, attachKind: r.attachKind as HysSubmissionRow["attachKind"], purpose: r.purpose as HysSubmissionRow["purpose"], status: r.status as HysSubmissionRow["status"], reject: r.reject as HysSubmissionRow["reject"], fill: r.fill as HysSubmissionRow["fill"] });
   const toContainerList = (r: typeof containerLists.$inferSelect): ContainerListRecord => ({ ...r, rows: r.rows as ContainerListRecord["rows"], status: r.status as ContainerListRecord["status"], errors: r.errors as ContainerListRecord["errors"], sentRows: r.sentRows as ContainerListRecord["sentRows"] });
-  const toKvgs = (r: typeof kvgsSheets.$inferSelect): KvgsSheetRecord => ({ ...r, status: r.status as KvgsSheetRecord["status"], errors: r.errors as KvgsSheetRecord["errors"], sheet: r.sheet as KvgsSheetRecord["sheet"] });
+  // Bảng kê lưu jsonb: đọc lại qua KvgsSheetSchema – bản dạng cũ (trước API KVGS thật: container `barcode` chuỗi) → null (coi như chưa có bảng kê, lấy lại).
+  const toKvgs = (r: typeof kvgsSheets.$inferSelect): KvgsSheetRecord => {
+    const sheet = r.sheet === null ? null : KvgsSheetSchema.safeParse(r.sheet);
+    return { ...r, status: r.status as KvgsSheetRecord["status"], errors: r.errors as KvgsSheetRecord["errors"], sheet: sheet?.success ? sheet.data : null };
+  };
   return {
     outbox: {
       get: async (orgId, id) => {

@@ -2,6 +2,8 @@
 // Thẻ "Qua khu vực giám sát" (spec KVGS §3) trong ④ Chứng từ & cảng của bước Truyền Hải quan – mỗi tờ khai nhánh một thẻ (anchor #kvgs-<tờ>).
 // Khối 1 "Khai danh sách container" (chỉ NK container) + khối 2 "Lấy DS qua KVGS"; bảng container sửa trực tiếp (lưu nháp → khai),
 // hộp xác nhận trước khi gửi (doanh nghiệp + nơi nhận), tự hỏi lại 2 giây/lần khi đang gửi, lỗi Hải quan theo dòng, In bản kê.
+// Khối 2 (KVGS) một bước – worker gọi POST /api/KVGS rồi chốt ngay: không "Lấy phản hồi", không số tham chiếu / tiếp nhận;
+// đang lấy → spinner + thẻ tự làm mới; chấp nhận → "Lấy lúc …"; từ chối → lỗi Hải quan dưới khối, lấy lại được.
 // Bấm được hay không theo customs-flow (dòng CONT_LIST / KVGS của tờ trong bản truyền) – màn chỉ hiển thị; backend chặn lần nữa.
 import {
   Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog, Dialog, DialogContent, FileDropzone, fill, Grid, IconTile, RowActions,
@@ -13,7 +15,7 @@ import { Download, FileSpreadsheet, History, PenLine, Plus, Printer, RefreshCw, 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { customsKeys, getSubmission } from "@/api/customs";
-import { fetchKvgs, getKvgs, kvgsKeys, pollNow, refillContainerList, saveContainerList, sendContainerList } from "@/api/kvgs";
+import { fetchKvgs, getKvgs, kvgsKeys, pollContainerList, refillContainerList, saveContainerList, sendContainerList } from "@/api/kvgs";
 import { LoadError } from "@/components/common/load-error";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
@@ -97,7 +99,7 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
         setReopen(false);
       }
       setConfirm(null);
-      toast({ tone: "info", title: t.sent });
+      toast({ tone: "info", title: kind === "KVGS" ? t.fetchStarted : t.sent });
     },
     onError: (e) => {
       setConfirm(null);
@@ -106,7 +108,7 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
     },
   });
   const poll = useMutation({
-    mutationFn: (kind: Kind) => pollNow(dossierId, branch, kind),
+    mutationFn: () => pollContainerList(dossierId, branch),
     onSettled: () => void qc.invalidateQueries({ queryKey: key }),
     onError: toastMutationError(t.pollFailed),
   });
@@ -194,17 +196,34 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
     contRow && !contRow.enabled ? rowReason(contRow, locale) : listStatus === "SENDING" ? t.sendingNote : listStatus === "NO_RESPONSE" ? t.noResponseNote : cellIssues.length > 0 || issues.some((i) => i.row === 0) ? (
       <span className="text-danger-subtle-fg">{cellIssues.length > 0 ? fill(t.issuesSummary, { n: cellIssues.length }) : t.issueEmpty}</span>
     ) : null;
+  const fetchStatus = fetched?.status ?? null;
   const block2Note =
-    kvgsRow && !kvgsRow.enabled ? rowReason(kvgsRow, locale) : fetched?.status === "SENDING" ? t.sendingNote : fetched?.status === "NO_RESPONSE" ? t.noResponseNote : sheetOutdated ? t.oldSheet : fetched?.fetchedAt ? `${t.fetchedAt} ${formatDateTime(fetched.fetchedAt)}` : null;
+    fetchStatus === "SENDING" ? (
+      <span role="status" className="inline-flex items-center gap-2">
+        <Spinner size="sm" label={null} />
+        {t.kvgsFetchingNote}
+      </span>
+    ) : kvgsRow && !kvgsRow.enabled ? (
+      rowReason(kvgsRow, locale)
+    ) : fetchStatus === "REJECTED" ? (
+      t.kvgsRejectedNote
+    ) : fetchStatus === "NO_RESPONSE" ? (
+      // Bản ghi cũ của luồng hai bước (trước khi nối API thật) – nay lấy lại là đủ.
+      t.kvgsRetryNote
+    ) : sheetOutdated ? (
+      t.oldSheet
+    ) : fetchStatus === "ACCEPTED" && fetched?.fetchedAt ? (
+      `${t.fetchedAt} ${formatDateTime(fetched.fetchedAt)}`
+    ) : null;
 
-  const pollButton = (kind: Kind, status: string | null | undefined, block: string) => (
+  const pollButton = (status: string | null | undefined, block: string) => (
     <Button
       size="sm"
       variant="ghost"
       leftIcon={<RefreshCw className="h-4 w-4" />}
       disabled={status !== "SENDING" && status !== "NO_RESPONSE"}
-      loading={poll.isPending && poll.variables === kind}
-      onClick={() => poll.mutate(kind)}
+      loading={poll.isPending}
+      onClick={() => poll.mutate()}
       aria-label={fill(t.pollNowAria, { block })}
     >
       {t.pollNow}
@@ -239,7 +258,7 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
               </Button>
             )
           )}
-          {canEdit && pollButton("CONT_LIST", listStatus, t.block1)}
+          {canEdit && pollButton(listStatus, t.block1)}
         </>
       }
     />
@@ -249,10 +268,7 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
     <KvgsStatusBlock
       index={hasList ? 2 : 1}
       title={t.block2}
-      status={fetched?.status ?? null}
-      refId={fetched?.refId ?? null}
-      receiptNo={fetched?.receiptNo ?? null}
-      receiptDate={fetched?.receiptDate ?? null}
+      status={fetchStatus}
       note={block2Note}
       actions={
         <>
@@ -260,14 +276,13 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
             <Button
               size="sm"
               leftIcon={<Send className="h-4 w-4" />}
-              disabled={!kvgsRow?.enabled || fetched?.status === "SENDING" || busy}
+              disabled={!kvgsRow?.enabled || fetchStatus === "SENDING" || busy}
               loading={send.isPending && send.variables === "KVGS"}
               onClick={() => setConfirm("KVGS")}
             >
               {t.fetch}
             </Button>
           )}
-          {canEdit && pollButton("KVGS", fetched?.status, t.block2)}
           {kvgsSheet ? (
             <Button asChild size="sm" variant="secondary">
               <Link href={`/dossiers/${dossierId}/kvgs/${branch}/print?mau=${mau}`}>

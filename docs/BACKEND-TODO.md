@@ -51,6 +51,16 @@ Ghi lại trong lúc dựng backend theo `docs/superpowers/specs/2026-10-13-back
 | K8 | Eval trích xuất | **2026-10-15:** `pnpm eval --live --lot <thư mục>` chấm trên lô thật (PDF + Excel đáp án STT/Tên trường/Trị giá, `mapping.json` tùy chọn). Lô FANS25040166 (biển) + YZS24120950 (air): **73/75 = 97,3%** (trước khi có danh mục: 66,7%); 2 lệch còn lại: C/O ô 3 (đáp án kèm chữ nhãn mẫu), số C/O lô YZS (đáp án Excel sai – PDF ghi 02241416230537193). Lô thật để ngoài git (`lo mẫu/`, `evals/private/`). `pnpm eval` offline vẫn dùng bộ HANSOL giả |
 | K9 | Bước 5 Review: xóa form cũ sau thử nghiệm bản in | **2026-10-21:** bước 5 hiện tờ khai dạng bản in VNACCS (`features/declaration-print/`, spec `2026-10-20-review-ban-in-to-khai-design.md`). Form Phụ lục II cũ + tab "Hải quan trả về" còn giữ sau cờ `NEXT_PUBLIC_REVIEW_LEGACY_FORM=1` (`apps/web/src/lib/feature-flags.ts`) để dự phòng. Hết thử nghiệm: xóa cờ, nhánh `legacy` trong `review-step.tsx` và phần `declaration-form` chỉ bước 5 dùng (giữ phần bản in, bản mẫu và bước 7 còn dùng) |
 
+## Danh mục hàng hóa – đợt sau (ADR 0015, 2026-11-14)
+
+| # | Mục | Ghi chú |
+|---|---|---|
+| C1 | Báo cáo quyết toán | Dựng trên mã nối (`item_no`) và hệ số quy đổi |
+| C2 | Nhập – xuất – tồn | Cần số liệu kho; gắn mặt hàng chuẩn vào lô nhập tay |
+| C3 | Định mức | Định mức nguyên vật liệu theo mặt hàng chuẩn (loại MATERIAL / PRODUCT) |
+| C4 | Đồng bộ ERP hai chiều | Hiện chỉ nhập/xuất Excel theo bộ mã |
+| C5 | Xóa bảng `product_catalog` | Giữ chỉ đọc một bản phát hành sau migration `0037`, rồi xóa bảng + bỏ khỏi schema `declaration` |
+
 ## Ngoài phạm vi chuẩn trường chứng từ (2026-10-15)
 
 | # | Mục | Ghi chú |

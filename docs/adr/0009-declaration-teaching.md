@@ -23,3 +23,6 @@ So tờ khai nháp app dựng từ bộ chứng từ với tờ khai thật (lô
 - Lô sau của cùng doanh nghiệp đúng dần mà không cần sửa code; dữ liệu một doanh nghiệp không ảnh hưởng doanh nghiệp khác.
 - Chi phí: mỗi tờ khai mẫu một lần AI đọc (ghi `usage_events`, khóa chống tính trùng).
 - Chưa có: đọc tờ khai .xls của ECUS bằng code (hiện cần PDF), học từ sửa tay trên tờ khai nháp (dự kiến ghi vào cùng kho bài học), đồng bộ bài học mặt hàng sang Danh mục hàng hóa.
+
+## Cập nhật (ADR 0015)
+Bài học mặt hàng (Part No → HS) khi chuyển sang ACTIVE được **đề xuất vào danh mục dùng chung** qua `CatalogPort.proposeFromLesson`: thành bí danh `PROPOSED` ở bộ mã nhà cung cấp (nhà cung cấp = người xuất khẩu trên tờ khai mẫu), hoặc vào hàng chờ ghép nếu chưa nhận ra mặt hàng. Tờ khai mẫu xuất khẩu bị bỏ qua; bài học theo mô tả (không có Part No) không đề xuất. Danh mục không đổi bài học – bài học vẫn là nguồn gốc của nó.

@@ -301,11 +301,20 @@ describe("FptVnaccsGateway – danh sách container (V5ContainerReq/Res) và KVG
     const { g } = gateway({ "/api/KVGS": () => ok(res) });
     expect(await g.fetchKvgs("org", kv, "k")).toMatchObject({ state: "REJECTED", raw: res, errors: [{ code: "KVGS_RESPONSE_INCOMPLETE" }] });
   });
-  it("KVGS: ngày đăng ký / số tờ khai không hợp lệ → REJECTED trước khi gọi FPT (controller sẽ dùng ngày mặc định)", async () => {
+  it("KVGS: ngày đăng ký / số tờ khai / mã HQ / MST không hợp lệ → DomainError (lỗi vĩnh viễn) trước khi gọi FPT", async () => {
     const { g, calls } = gateway({});
-    expect((await g.fetchKvgs("org", { ...kv, registeredOn: "10/11/2026x" }, "k")).state).toBe("REJECTED");
-    expect((await g.fetchKvgs("org", { ...kv, declarationNo: " " }, "k")).state).toBe("REJECTED");
+    await expect(g.fetchKvgs("org", { ...kv, registeredOn: "10/11/2026x" }, "k")).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(g.fetchKvgs("org", { ...kv, declarationNo: " " }, "k")).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(g.fetchKvgs("org", { ...kv, customsOffice: "" }, "k")).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(g.fetchKvgs("org", { ...kv, taxCode: " " }, "k")).rejects.toMatchObject({ code: "VALIDATION" });
     expect(calls.filter((c) => c.path === "/api/KVGS")).toHaveLength(0);
+  });
+  it("KVGS: phản hồi không có thoiGianLayDuLieu → exportedAt lấy từ đồng hồ được tiêm (không phải new Date())", async () => {
+    const { thoiGianLayDuLieu: _t, ...msg } = kvgsOk.serviceMessage;
+    const f = fakeFetch({ "/api/auth/login": login, "/api/KVGS": () => ok({ ...kvgsOk, serviceMessage: msg }) });
+    const g = new FptVnaccsGateway(client(f.fn), { get: async () => null }, { now: () => new Date("2031-01-02T03:04:05.000Z") });
+    const r = await g.fetchKvgs("org", kv, "k");
+    expect(r).toMatchObject({ state: "ACCEPTED", sheet: { exportedAt: "2031-01-02T03:04:05.000Z" } });
   });
   it("KVGS: HTTP 503 → lỗi tạm (retry); HTTP 400 → DomainError (không retry)", async () => {
     const { g } = gateway({ "/api/KVGS": (n) => (n === 1 ? new Response("down", { status: 503 }) : new Response("{\"errors\":{}}", { status: 400 })) });

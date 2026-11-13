@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { REASON_TEXT_VI } from "../reason-codes.js";
 import { FptKvgsResponseSchema } from "../fpt/kvgs.js";
-import { checkContainerList, isPlainBase64, isValidContainerNo, KvgsSheetSchema, normalizeContainerNo, type ContainerListRow } from "./index.js";
+import { checkContainerList, isPlainBase64, isValidContainerNo, KvgsSheetSchema, normalizeContainerNo, SaveContainerListInputSchema, type ContainerListRow } from "./index.js";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAIAAAUAAYRcDQAAAAAASUVORK5CYII=";
 const row = (o: Partial<ContainerListRow> = {}): ContainerListRow => ({ billNo: "122600049332258", containerNo: "FBIU5802429", sealNo: "NA", note: "", source: "USER", ...o });
@@ -84,5 +84,12 @@ describe("mã lý do KVGS", () => {
     for (const c of ["KVGS_REQUIRES_CLEARANCE", "KVGS_REQUIRES_CONTAINER_LIST", "CONT_LIST_NOT_APPLICABLE", "CONT_LIST_REQUIRES_DECLARATION_NUMBER", "CONT_LIST_INVALID", "KVGS_ALREADY_SENDING", "KVGS_RESPONSE_INCOMPLETE", "CONT_LIST_LOCKED"]) {
       expect(REASON_TEXT_VI).toHaveProperty(c);
     }
+  });
+});
+
+describe("SaveContainerListInputSchema", () => {
+  it("tối đa 500 dòng", () => {
+    expect(SaveContainerListInputSchema.safeParse({ rows: Array.from({ length: 500 }, () => row()) }).success).toBe(true);
+    expect(SaveContainerListInputSchema.safeParse({ rows: Array.from({ length: 501 }, () => row()) }).success).toBe(false);
   });
 });

@@ -55,7 +55,9 @@ export function checkContainerList(rows: ContainerListRow[]): ContainerListIssue
   return issues;
 }
 
-export const SaveContainerListInputSchema = z.object({ rows: z.array(ContainerListRowSchema) });
+/** Tối đa 500 dòng: danh sách container thực tế không vượt (chặn payload phình). */
+export const CONTAINER_LIST_MAX_ROWS = 500;
+export const SaveContainerListInputSchema = z.object({ rows: z.array(ContainerListRowSchema).max(CONTAINER_LIST_MAX_ROWS) });
 export type SaveContainerListInput = z.infer<typeof SaveContainerListInputSchema>;
 
 /** Ảnh mã vạch Base64 thuần (không tiền tố data:) – API KVGS `bangKeMaVachContainer[].barcodeImage`. Tối đa 200 KB ký tự. */

@@ -92,5 +92,7 @@ describe("isDuplicate", () => {
     expect(isDuplicate({ code: "23505" })).toBe(true);
     expect(isDuplicate(Object.assign(new Error("Failed query: x"), { cause: { code: "40001" } }))).toBe(false);
     expect(isDuplicate(null)).toBe(false);
+    expect(isDuplicate(new Error("unique index scan failed"))).toBe(false);
+    expect(isDuplicate(Object.assign(new Error("value is not unique"), { cause: { code: "40001" } }))).toBe(false);
   });
 });

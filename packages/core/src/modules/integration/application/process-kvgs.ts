@@ -17,6 +17,22 @@ export const ContListPayload = z.object({ listId: z.string().min(1) });
 /** Outbox cũ còn `kind` (CONTAINER/CARGO): Zod loại bỏ key thừa khi parse – API KVGS tự xác định loại hàng (isContainer). */
 export const KvgsPayload = z.object({ kvgsId: z.string().min(1) });
 
+/**
+ * `raw` lưu để truy vết: ảnh mã vạch (PNG base64, rất lớn) đã nằm trong `sheet` nên thay bằng chỗ giữ chỗ ngắn – không lưu hai lần. Giữ nguyên mọi trường khác.
+ */
+export function stripBarcodeImages(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const msg = (raw as { serviceMessage?: unknown }).serviceMessage;
+  if (!msg || typeof msg !== "object") return raw;
+  const list = (msg as { bangKeMaVachContainer?: unknown }).bangKeMaVachContainer;
+  if (!Array.isArray(list)) return raw;
+  const stripped = list.map((c) => {
+    const img = c && typeof c === "object" ? (c as { barcodeImage?: unknown }).barcodeImage : undefined;
+    return typeof img === "string" && img ? { ...(c as object), barcodeImage: `<base64 ${img.length} bytes – xem sheet>` } : c;
+  });
+  return { ...(raw as object), serviceMessage: { ...(msg as object), bangKeMaVachContainer: stripped } };
+}
+
 type ActorCtx = { orgId: OrgId; userId: UserId };
 type Done = Result<{ status: OutboxRow["status"]; next: null }>;
 
@@ -108,7 +124,8 @@ export async function processKvgsOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Ou
     if ("failed" in call) return call.failed;
     await meter();
     const res = call.value;
-    const raw = res.raw === undefined ? {} : { raw: res.raw };
+    const storedRaw = res.raw === undefined ? undefined : stripBarcodeImages(res.raw);
+    const raw = storedRaw === undefined ? {} : { raw: storedRaw };
     // REJECTED (errorList của FPT / thiếu dữ liệu để in – KVGS_RESPONSE_INCOMPLETE): giữ `raw` để truy vết.
     if (res.state === "REJECTED" || !res.sheet) {
       const errors = res.errors?.length ? res.errors : [{ code: "KVGS_RESPONSE_INCOMPLETE", message: "Phản hồi của Hải quan thiếu thông tin để in" }];
@@ -119,7 +136,7 @@ export async function processKvgsOutbox(deps: CustomsDeps, ctx: ActorCtx, ob: Ou
     await deps.uow.asOrg(ctx, async (r) => {
       await msg(r, { direction: "IN", result: "OK", summary: `Đã lấy ${label} – tờ khai ${sheet.declarationNo}, ${what}`, payloadMasked: { nghiepVu: ob.operation, soToKhai: sheet.declarationNo, loaiHang: sheet.kind } });
       await r.outbox.update(ob.orgId, ob.id, { status: "SENT", lastError: null, updatedAt: now() });
-      await patchTarget(r, ob.orgId, kind, targetId, { status: "ACCEPTED", errors: null, sheet, raw: res.raw ?? null, fetchedAt: now() }, now());
+      await patchTarget(r, ob.orgId, kind, targetId, { status: "ACCEPTED", errors: null, sheet, raw: storedRaw ?? null, fetchedAt: now() }, now());
     });
     await publish();
     return ok({ status: "SENT", next: null });

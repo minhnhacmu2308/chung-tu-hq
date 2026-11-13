@@ -8,12 +8,12 @@ import { stageOf } from "../domain/state-machine.js";
 import { availabilityInput, kvgsFlowOf } from "./_customs-view.js";
 import type { ContainerListRecord, CustomsDeps, CustomsRepos, DeclarationSnapshot, DossierBrief, GatewayError, KvgsSheetRecord, ResultRow } from "./customs-ports.js";
 
-/** Vi phạm ràng buộc duy nhất: Postgres 23505 (drizzle-orm bọc lỗi PG trong DrizzleQueryError, lỗi gốc ở .cause) hoặc thông điệp "duplicate key" (fake in-memory). */
+/** Vi phạm ràng buộc duy nhất: Postgres 23505 (drizzle-orm bọc lỗi PG trong DrizzleQueryError, lỗi gốc ở .cause) hoặc thông điệp "duplicate key" (fake in-memory; không khớp rộng theo chữ "unique"). */
 export function isDuplicate(e: unknown): boolean {
   let cur: unknown = e;
   for (let depth = 0; depth < 4 && cur != null; depth++) {
     if (typeof cur === "object" && (cur as { code?: unknown }).code === "23505") return true;
-    if (/duplicate key|unique/i.test(cur instanceof Error ? cur.message : typeof cur === "object" ? String((cur as { message?: unknown }).message ?? "") : String(cur))) return true;
+    if (/duplicate key/i.test(cur instanceof Error ? cur.message : typeof cur === "object" ? String((cur as { message?: unknown }).message ?? "") : String(cur))) return true;
     cur = typeof cur === "object" ? (cur as { cause?: unknown }).cause : null;
   }
   return false;

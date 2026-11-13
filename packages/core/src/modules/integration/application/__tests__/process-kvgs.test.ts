@@ -154,6 +154,24 @@ describe("outbox KVGS (POST /api/KVGS – một lời gọi đồng bộ)", () =
     expect(h.uow.data.kvgs[0]!.status).toBe("ACCEPTED");
     expect(h.uow.data.messages.filter((m) => m.direction === "OUT")).toHaveLength(1);
   });
+  it("raw lưu không chứa ảnh mã vạch (đã có trong sheet): barcodeImage → chỗ giữ chỗ, các trường khác giữ nguyên", async () => {
+    const g = gw({});
+    const base = await g.fetchKvgs(ORG, { dossierId: D, declarationNo: "104000000001", registeredOn: "2026-10-14", customsOffice: "03CE", taxCode: "0316789012" });
+    const IMG = "iVBORw0KGgo=".repeat(50);
+    g.fetchKvgs = async () => ({ ...base, raw: { errorList: [], serviceMessage: { soToKhai: "104000000001", bangKeMaVachContainer: [{ soContainer: "FBIU5802429", soSeal: "S1", barcodeImage: IMG }, { soContainer: "CSQU3054383", barcodeImage: null }] } } });
+    await run(start());
+    const raw = JSON.stringify(h.uow.data.kvgs[0]!.raw);
+    expect(raw).not.toContain(IMG);
+    expect(h.uow.data.kvgs[0]!.raw).toEqual({ errorList: [], serviceMessage: { soToKhai: "104000000001", bangKeMaVachContainer: [{ soContainer: "FBIU5802429", soSeal: "S1", barcodeImage: `<base64 ${IMG.length} bytes – xem sheet>` }, { soContainer: "CSQU3054383", barcodeImage: null }] } });
+    expect(h.uow.data.kvgs[0]).toMatchObject({ status: "ACCEPTED" });
+  });
+  it("body KVGS không hợp lệ (DomainError từ cổng, chưa gọi FPT) → REJECTED, outbox FAILED, không tính phí", async () => {
+    const g = gw({});
+    g.fetchKvgs = async () => { throw domainError("VALIDATION", "Không gọi được KVGS: thiếu MA_DV"); };
+    expect(await run(start())).toMatchObject({ ok: true, value: { status: "FAILED" } });
+    expect(h.uow.data.kvgs[0]).toMatchObject({ status: "REJECTED", errors: [expect.objectContaining({ code: "VALIDATION" })] });
+    expect(usage.events).toHaveLength(0);
+  });
   it("lỗi vĩnh viễn (chưa cấu hình) → REJECTED ngay, outbox FAILED, không retry/không tính phí", async () => {
     const g = gw({});
     g.fetchKvgs = async () => { throw domainError("INTEGRATION_NOT_CONFIGURED", "Chưa cấu hình tài khoản VNACCS"); };

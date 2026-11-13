@@ -81,7 +81,10 @@ const isoToFptDate = (iso: string): string => {
 
 export class FptVnaccsGateway implements CustomsGateway {
   readonly name = "fpt-vnaccs";
-  constructor(private http: FptHttpClient, private creds: VnaccsCredentialsReader) {}
+  private readonly now: () => Date;
+  constructor(private http: FptHttpClient, private creds: VnaccsCredentialsReader, opts: { now?: () => Date } = {}) {
+    this.now = opts.now ?? (() => new Date());
+  }
   private async credsFor(orgId: string) {
     const c = await this.creds.get(orgId);
     if (!c) throw domainError("INTEGRATION_NOT_CONFIGURED", "Chưa cấu hình tài khoản VNACCS (USER_ID, PASSWORD, TERMINAL_ID, TERMINAL_ACCESS_KEY) ở Tài khoản & tích hợp");
@@ -224,15 +227,16 @@ export class FptVnaccsGateway implements CustomsGateway {
 
   /**
    * KVGS (đặc tả API-KVGS): `POST /api/KVGS` một lời gọi đồng bộ, body phẳng { TK_SOTK, TK_NGAYDK dd/MM/yyyy, TK_MAHQ, MA_DV } – chuỗi để giữ số 0 đầu.
-   * Kiểm body trước khi gọi (ngày sai định dạng thì controller FPT vẫn tra với ngày mặc định). errorList → REJECTED; thiếu dữ liệu để in → REJECTED
+   * Kiểm body trước khi gọi (ngày sai định dạng thì controller FPT vẫn tra với ngày mặc định); body sai → DomainError (không gọi, không tính phí). errorList → REJECTED; thiếu dữ liệu để in → REJECTED
    * KVGS_RESPONSE_INCOMPLETE; `raw` luôn là phản hồi thô. HTTP 429/5xx/mạng → FptTransientError (retry); 400/401 (sau đăng nhập lại) → DomainError.
    */
   async fetchKvgs(orgId: string, req: KvgsGatewayRequest, _idempotencyKey?: string): Promise<KvgsFetchResult> {
     const body = FptKvgsRequestSchema.safeParse({ TK_SOTK: req.declarationNo.trim(), TK_NGAYDK: isoToFptDate(req.registeredOn.trim()), TK_MAHQ: req.customsOffice.trim(), MA_DV: req.taxCode.trim() });
-    if (!body.success) return { state: "REJECTED", errors: body.error.issues.map(describeSchemaIssue) };
+    // Lỗi dữ liệu phía ta (thiếu MÃ HQ / MÃ DV…): chưa gọi FPT → lỗi vĩnh viễn (như sendContainerList), worker không tính phí CUSTOMS_SEND.
+    if (!body.success) throw domainError("VALIDATION", `Không gọi được KVGS: ${body.error.issues.map((i) => describeSchemaIssue(i).message).join("; ")}`);
     // Không đọc tài khoản VNACCS: KVGS chỉ cần JWT (FPT_API_*), body phẳng không có objVNACCS_ACCOUNT.
     const raw = await this.http.post("KVGS", body.data, null, { orgId, ...(req.dossierId ? { dossierId: req.dossierId } : {}) });
-    return { ...mapKvgsResponse(raw, new Date()), raw };
+    return { ...mapKvgsResponse(raw, this.now()), raw };
   }
 
   /** IID (nhập, body tK_ICN) / IEX (xuất, body tK_ECN) – theo Postman FPT; trạng thái theo VN_IDA/EDA_TRANGTHAI. */

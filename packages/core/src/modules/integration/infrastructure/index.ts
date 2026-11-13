@@ -33,9 +33,9 @@ export function envVnaccsCredentials(env: Env): VnaccsCredentialsReader {
 }
 
 /** Gateway theo env: fake (dev/demo) hoặc FPT (HTTP thật – dev trỏ apps/fpt-mock). */
-export function createCustomsGateway(env: Env, creds: VnaccsCredentialsReader, http?: FptHttpClient): CustomsGateway {
+export function createCustomsGateway(env: Env, creds: VnaccsCredentialsReader, http?: FptHttpClient, clock?: Clock): CustomsGateway {
   if (env.CUSTOMS_GATEWAY !== "fpt") return new FakeCustomsGateway();
-  return new FptVnaccsGateway(http ?? createFptHttpClient(env) ?? new FptHttpClientStub(), creds);
+  return new FptVnaccsGateway(http ?? createFptHttpClient(env) ?? new FptHttpClientStub(), creds, clock ? { now: () => clock.now() } : {});
 }
 
 /** Client HTTP FPT theo env; thiếu cấu hình → null. */
@@ -53,7 +53,7 @@ export function createCustomsInfrastructure(opts: {
   const fptTrace = !opts.gateway && opts.env.FPT_DEBUG_TRACE && opts.env.CUSTOMS_GATEWAY === "fpt" && opts.redis ? new RedisFptTrace(opts.redis) : undefined;
   const http = fptTrace ? createFptHttpClient(opts.env, { trace: (e) => fptTrace.record(e) }) ?? undefined : undefined;
   const creds = opts.creds ?? createVnaccsCredentialsReader(opts.identity, envVnaccsCredentials(opts.env));
-  const gateway = opts.gateway ?? createCustomsGateway(opts.env, creds, http);
+  const gateway = opts.gateway ?? createCustomsGateway(opts.env, creds, http, opts.clock ?? systemClock);
   return {
     ...(fptTrace ? { fptTrace } : {}),
     ...(!opts.gateway && opts.env.FPT_DEBUG_TRACE ? { fptDebug: true } : {}),

@@ -14,6 +14,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 const T = { timeout: 5000 };
+/** Mã hồ sơ sinh theo tháng tạo (tương đối so với hôm nay) – không viết cứng kiểu "HS-NK-2610-019". */
+const code19 = () => getDb().dossiers.find((d) => d.id === "dos_019")!.code;
 
 beforeEach(() => {
   resetDb();
@@ -25,7 +27,7 @@ describe("Khai báo Hải quan", () => {
   it("bảng tờ khai: loại hình NK/XK, mã nghiệp vụ mở được tên đầy đủ, thao tác trên dòng; không vi phạm a11y", async () => {
     const { container } = renderWithProviders(<CustomsPage />);
     const table = await screen.findByRole("table", { name: "Tờ khai Hải quan" }, T);
-    const row = (await within(table).findByText("HS-NK-2610-019", {}, T)).closest("tr")!;
+    const row = (await within(table).findByText(code19(), {}, T)).closest("tr")!;
     expect(within(row).getByText("NK")).toBeTruthy();
     // Không còn khung Card bọc bảng.
     expect(table.closest("[data-slot=card]")).toBeNull();
@@ -35,7 +37,7 @@ describe("Khai báo Hải quan", () => {
     expect(push).not.toHaveBeenCalled();
     await userEvent.keyboard("{Escape}");
 
-    await userEvent.click(within(row).getByRole("button", { name: "Thao tác khác – HS-NK-2610-019" }));
+    await userEvent.click(within(row).getByRole("button", { name: `Thao tác khác – ${code19()}` }));
     await userEvent.click(await screen.findByRole("menuitem", { name: /Mở hồ sơ/ }));
     expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/dossiers\/[^?]+$/));
     await expectNoA11yViolations(container);
@@ -44,11 +46,11 @@ describe("Khai báo Hải quan", () => {
   it("dạng thẻ: mỗi tờ khai một thẻ có trạng thái, phân luồng, số tờ khai; nhớ lựa chọn", async () => {
     renderWithProviders(<CustomsPage />);
     const table = await screen.findByRole("table", { name: "Tờ khai Hải quan" }, T);
-    await within(table).findByText("HS-NK-2610-019", {}, T);
+    await within(table).findByText(code19(), {}, T);
     await userEvent.click(screen.getByRole("radio", { name: /Thẻ/ }));
     const cards = document.querySelectorAll("[data-slot=record-card]");
     expect(cards.length).toBeGreaterThan(0);
-    const card = [...cards].find((c) => c.textContent?.includes("HS-NK-2610-019")) as HTMLElement;
+    const card = [...cards].find((c) => c.textContent?.includes(code19())) as HTMLElement;
     expect(within(card).getByText("Luồng vàng")).toBeTruthy();
     expect(within(card).getByText("107624410320")).toBeTruthy();
     expect(window.localStorage.getItem("kb-table-view:customs")).toBe("cards");

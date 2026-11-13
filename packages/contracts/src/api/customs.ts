@@ -122,6 +122,8 @@ export const CustomsRowSchema = z.object({
   state: z.enum(["READY", "SENDING", "INSPECTING", "CLEARED"]),
   stage: CustomsStageSchema.optional(),
   customsTaxVnd: DecimalStringSchema.optional(),
+  /** Tờ đã có bảng kê KVGS lấy về thành công (lần ACCEPTED mới nhất) → có thể in bản kê mã vạch. */
+  kvgsReady: z.boolean().default(false),
   updatedAt: IsoDateTimeSchema,
 });
 export type CustomsRow = z.infer<typeof CustomsRowSchema>;

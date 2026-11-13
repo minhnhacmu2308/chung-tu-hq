@@ -1,9 +1,9 @@
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
+import type { ContainerListRecord, CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
 
 /** Fake mô phỏng RLS theo org; outbox unique theo idempotency_key; messages append-only. */
 export class InMemoryCustomsUow implements CustomsUow {
-  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[], hys: [] as HysSubmissionRow[], hysFiles: [] as HysFileRow[], inbox: [] as InboxRow[] };
+  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[], hys: [] as HysSubmissionRow[], hysFiles: [] as HysFileRow[], inbox: [] as InboxRow[], containerLists: [] as ContainerListRecord[], kvgs: [] as KvgsSheetRecord[] };
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T> {
     const d = this.data;
     const org = ctx.orgId as string;
@@ -11,6 +11,7 @@ export class InMemoryCustomsUow implements CustomsUow {
       throw new Error(`new row violates row-level security policy (${w})`);
     };
     const clone = <X>(x: X): X => structuredClone(x);
+    const newest = (xs: KvgsSheetRecord[]) => [...xs].sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime() || b.id.localeCompare(a.id))[0];
     return fn({
       outbox: {
         get: async (orgId, id) => clone(d.outbox.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
@@ -122,6 +123,35 @@ export class InMemoryCustomsUow implements CustomsUow {
         deleteFiles: async (orgId, submissionId) => {
           if (orgId !== org) return;
           d.hysFiles = d.hysFiles.filter((f) => !(f.submissionId === submissionId && f.orgId === org));
+        },
+      },
+      containerLists: {
+        latest: async (orgId, dossierId, branch) => clone(d.containerLists.filter((c) => c.orgId === org && c.orgId === orgId && c.dossierId === dossierId && c.branch === branch).sort((a, b) => b.attempt - a.attempt)[0] ?? null),
+        get: async (orgId, id) => clone(d.containerLists.find((c) => c.id === id && c.orgId === org && c.orgId === orgId) ?? null),
+        insert: async (row) => {
+          if (row.orgId !== org) deny("container_lists");
+          if (d.containerLists.some((c) => c.dossierId === row.dossierId && c.branch === row.branch && c.attempt === row.attempt)) throw new Error("duplicate key value violates unique constraint container_lists_dossier_branch_attempt_uq");
+          d.containerLists.push(clone(row));
+        },
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`container_lists update orgId ${orgId} khác ngữ cảnh`);
+          const c = d.containerLists.find((x) => x.id === id && x.orgId === org);
+          if (c) Object.assign(c, clone(Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))));
+        },
+      },
+      kvgs: {
+        latest: async (orgId, dossierId, branch) => clone(newest(d.kvgs.filter((k) => k.orgId === org && k.orgId === orgId && k.dossierId === dossierId && k.branch === branch)) ?? null),
+        latestOk: async (orgId, dossierId, branch) => clone(newest(d.kvgs.filter((k) => k.orgId === org && k.orgId === orgId && k.dossierId === dossierId && k.branch === branch && k.status === "ACCEPTED")) ?? null),
+        get: async (orgId, id) => clone(d.kvgs.find((k) => k.id === id && k.orgId === org && k.orgId === orgId) ?? null),
+        insert: async (row) => {
+          if (row.orgId !== org) deny("kvgs_sheets");
+          if (row.status === "SENDING" && d.kvgs.some((k) => k.dossierId === row.dossierId && k.branch === row.branch && k.status === "SENDING")) throw new Error("duplicate key value violates unique constraint kvgs_sheets_sending_uq");
+          d.kvgs.push(clone(row));
+        },
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`kvgs_sheets update orgId ${orgId} khác ngữ cảnh`);
+          const k = d.kvgs.find((x) => x.id === id && x.orgId === org);
+          if (k) Object.assign(k, clone(Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))));
         },
       },
     });

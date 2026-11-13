@@ -27,7 +27,7 @@ export const V5_DOCS = {
 } as const;
 export type V5Doc = keyof typeof V5_DOCS;
 
-type RefKind = "V5" | "IDENTIFIER" | "TACHVANDON" | "CONTAINER" | "V5CONTAINER";
+type RefKind = "V5" | "IDENTIFIER" | "TACHVANDON" | "CONTAINER" | "V5CONTAINER" | "KVGS";
 type RefRecord = { kind: RefKind; refId: string; userId: string; createdAt: Date; polls: number; reject: boolean; loaiCt?: string; head: Rec; receiptNo?: string; identifierNo?: string };
 
 export function createRefApis(opts: { now: () => Date; log: (l: string) => void; pollsToAccept: number }) {
@@ -150,19 +150,48 @@ export function createRefApis(opts: { now: () => Date; log: (l: string) => void;
   const containerRes = (kind: "CONTAINER" | "V5CONTAINER") => (b: Rec) => {
     const r = find(b, kind);
     if (isErr(r)) return fail([r]);
-    return ok({ reF_ID: r.refId, ...declRef(r.head), ...company(r.head), ...receipt(r, status(r)), useR_ID: r.userId, hanG_CONT: pick(r.head, "HANG_CONT") ?? [] });
+    const st = status(r);
+    if (kind === "CONTAINER") return ok({ reF_ID: r.refId, ...declRef(r.head), ...company(r.head), ...receipt(r, st), useR_ID: r.userId, hanG_CONT: pick(r.head, "HANG_CONT") ?? [] });
+    // V5ContainerRes (Excel v1.1): không trả lại dòng container. Từ chối → errorList theo dòng (rowPosition); seal bắt đầu bằng REJECT là dòng lỗi.
+    const base = { reF_ID: r.refId, ...declRef(r.head), ...company(r.head), ...receipt(r, st), useR_ID: r.userId };
+    if (st.trangThai !== "10") return ok(base);
+    const rows = (pick(r.head, "HANG_CONT") as Rec[] | undefined) ?? [];
+    const bad = rows.map((row, i) => ({ row, line: i + 1 })).filter(({ row }) => s(pick(row, "SEL_SO")).toUpperCase().startsWith("REJECT"));
+    const errors = (bad.length ? bad : [{ row: {}, line: 0 }]).map(({ line }) => mockError("MOCK-REJ", "SEL_SO", "Số seal", line ? `Dòng ${line}: số seal không hợp lệ (kịch bản mock: seal bắt đầu bằng REJECT).` : st.ketQua, line));
+    return { ...base, errorList: errors };
   };
   handlers["ContainerReq"] = containerReq("CONTAINER");
   handlers["ContainerRes"] = containerRes("CONTAINER");
   handlers["V5ContainerReq"] = containerReq("V5CONTAINER");
   handlers["V5ContainerRes"] = containerRes("V5CONTAINER");
 
-  /** KVGS: thông tin đưa hàng qua khu vực giám sát – trả danh sách container + mã vạch (giả định). */
+  /**
+   * KVGS hai bước: KVGS (TK_SOTK, TK_NGAYDK, TK_MAHQ, MA_DV) → reF_ID; KVGSRes (theo reF_ID) → đủ trường của cả 2 mẫu in (container + hàng lẻ) + nội dung mã vạch giả.
+   * GIẢ ĐỊNH: tên trường phản hồi (đặc tả thật chưa có – ADR 0014); khớp bí danh tạm trong core/kvgs-mapper.ts.
+   */
   handlers["KVGS"] = (b) => {
     const errors = required(b, ["TK_SOTK", "TK_NGAYDK", "TK_MAHQ", "MA_DV"]);
     if (errors.length) return fail(errors);
-    const no = s(pick(b, "TK_SOTK"));
-    return ok({ tK_SOTK: no, tK_NGAYDK: pick(b, "TK_NGAYDK"), tK_MAHQ: pick(b, "TK_MAHQ"), mA_DV: pick(b, "MA_DV"), mA_VACH: `*${no}*`, danH_SACH_CONT: [{ coN_SO: "MOCK1234567", seL_SO: "SEAL0001", trang_thai: "Đủ điều kiện qua KVGS" }] });
+    const r = create("KVGS", b);
+    return ok({ reF_ID: r.refId, tK_SOTK: pick(b, "TK_SOTK"), tK_NGAYDK: pick(b, "TK_NGAYDK"), tK_MAHQ: pick(b, "TK_MAHQ"), mA_DV: pick(b, "MA_DV") });
+  };
+  handlers["KVGSRes"] = (b) => {
+    const r = find(b, "KVGS");
+    if (isErr(r)) return fail([r]);
+    const st = status(r);
+    const base = { reF_ID: r.refId, tK_SOTK: pick(r.head, "TK_SOTK"), tK_NGAYDK: pick(r.head, "TK_NGAYDK"), tK_MAHQ: pick(r.head, "TK_MAHQ"), mA_DV: pick(r.head, "MA_DV"), ...receipt(r, st) };
+    if (st.trangThai !== "12") return ok(base);
+    const no = s(pick(r.head, "TK_SOTK"));
+    return ok({
+      ...base, chiCucKhuVuc: "Chi cục Hải quan khu vực II", haiQuanCuaKhau: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1", chiCucGiamSat: "02CI - 02CIS01: Kho mô phỏng",
+      phaiNiemPhong: true, teN_DV: "CONG TY MO PHONG", tK_TRANGTHAI: "Thông quan", teN_LH: "Nhập kinh doanh", tK_LUONG: "Xanh",
+      sO_QUAN_LY: `QL${no}`, mA_VACH: `*${no}*`, ngaY_KET_XUAT: now().toISOString(),
+      danH_SACH_CONT: [
+        { coN_SO: "FBIU5802429", seL_SO: "SEAL0001", seL_HQ: "", mA_VACH: `${no}|FBIU5802429` },
+        { coN_SO: "MSKU1234565", seL_SO: "SEAL0002", seL_HQ: "HQ0002", mA_VACH: `${no}|MSKU1234565` },
+      ],
+      hanG_LE: { sO_LUONG: "10", sO_LUONG_DVT: "CTN", tronG_LUONG: "125.500", tronG_LUONG_DVT: "KGM" },
+    });
   };
 
   /** Ký file: trả lại chính file (đã "ký") – giả định. */

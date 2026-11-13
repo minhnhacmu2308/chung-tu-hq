@@ -1,9 +1,9 @@
 import {
-  CUSTOMS_OPERATIONS, dossierCustomsSummary, nextCustomsOperation, operationAvailability, operationsFor, orderedOperation, queryOpFor, reasonVi, sheetOrderWait,
-  type BranchSubmission, type CustomsMessage, type CustomsOperation, type CustomsResult, type CustomsSummary, type DeclarationStatus, type PipelineRow, type SubmissionView,
+  containerListRequired, CUSTOMS_OPERATIONS, dossierCustomsSummary, nextCustomsOperation, operationAvailability, operationsFor, orderedOperation, queryOpFor, reasonVi, sheetOrderWait,
+  type BranchSubmission, type CustomsMessage, type CustomsOperation, type CustomsResult, type CustomsSummary, type DeclarationStatus, type KvgsFlowState, type PipelineRow, type SubmissionView, type TransportMode,
 } from "@kb/contracts";
 import { stageOf } from "../domain/state-machine.js";
-import type { MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
+import type { CustomsRepos, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
 
 export const OPERATION_LABELS: Record<CustomsOperation, string> = Object.fromEntries(Object.entries(CUSTOMS_OPERATIONS).map(([op, d]) => [op, d.label])) as Record<CustomsOperation, string>;
 export const CHANNEL_NOTES = {
@@ -29,16 +29,28 @@ export function toPartialResult(r: ResultRow | null): Partial<CustomsResult> | n
   };
 }
 
-export type FlowContext = { direction: "NK" | "XK"; approved: boolean; hasContainers: boolean };
+export type FlowContext = { direction: "NK" | "XK"; approved: boolean; kvgs: KvgsFlowState };
 
-/** Outbox HYS thuộc bộ hồ sơ đính kèm (hys_submissions), không thuộc luồng từng tờ: không khóa, không hiện "đang chờ" của nghiệp vụ tờ khai. */
-export const isHysOutbox = (o: OutboxRow) => o.operation === "HYS";
+/**
+ * Trạng thái qua khu vực giám sát của một tờ khai nhánh: containerListAccepted = lần khai danh sách container mới nhất được chấp nhận,
+ * kvgsDone = đã có bảng kê KVGS lấy về thành công.
+ */
+export async function kvgsFlowOf(r: Pick<CustomsRepos, "containerLists" | "kvgs">, orgId: string, dossier: { id: string; direction: "NK" | "XK"; transportMode: TransportMode }, branch: number): Promise<KvgsFlowState> {
+  const required = containerListRequired(dossier.direction, dossier.transportMode);
+  const list = required ? await r.containerLists.latest(orgId, dossier.id, branch) : null;
+  const ok = await r.kvgs.latestOk(orgId, dossier.id, branch);
+  return { containerListRequired: required, containerListAccepted: list?.status === "ACCEPTED", kvgsDone: !!ok };
+}
+
+/** Outbox HYS thuộc bộ hồ sơ đính kèm (hys_submissions), CONT_LIST/KVGS thuộc thẻ Qua khu vực giám sát (container_lists/kvgs_sheets): không thuộc luồng từng tờ – không khóa, không hiện "đang chờ" của nghiệp vụ tờ khai. */
+const OFF_FLOW_OPS = new Set(["HYS", "CONT_LIST", "KVGS"]);
+export const isOffFlowOutbox = (o: OutboxRow) => OFF_FLOW_OPS.has(o.operation);
 /** Nghiệp vụ đang chờ gửi/phản hồi (outbox PENDING), không tính HYS. */
-export const hasBlockingPending = (outbox: OutboxRow[], branch?: number) => outbox.some((o) => o.status === "PENDING" && !isHysOutbox(o) && (branch === undefined || o.branch === branch));
-export const pendingOps = (outbox: OutboxRow[]) => [...new Set(outbox.filter((o) => o.status === "PENDING" && !isHysOutbox(o)).map((o) => o.operation))];
+export const hasBlockingPending = (outbox: OutboxRow[], branch?: number) => outbox.some((o) => o.status === "PENDING" && !isOffFlowOutbox(o) && (branch === undefined || o.branch === branch));
+export const pendingOps = (outbox: OutboxRow[]) => [...new Set(outbox.filter((o) => o.status === "PENDING" && !isOffFlowOutbox(o)).map((o) => o.operation))];
 
 export function availabilityInput(ctx: FlowContext, result: ResultRow | null, outbox: OutboxRow[]) {
-  return { direction: ctx.direction, stage: stageOf(result), approved: ctx.approved, channel: result?.channel ?? null, hasContainers: ctx.hasContainers, pending: pendingOps(outbox), done: result?.raw?.done ?? [] };
+  return { direction: ctx.direction, stage: stageOf(result), approved: ctx.approved, channel: result?.channel ?? null, kvgs: ctx.kvgs, pending: pendingOps(outbox), done: result?.raw?.done ?? [] };
 }
 
 /** Mỗi nghiệp vụ của luồng một dòng: trạng thái theo nhật ký + outbox, khả năng bấm theo giai đoạn (customs-flow). */
@@ -62,7 +74,7 @@ export function buildPipeline(ctx: FlowContext, messages: MessageRow[], outbox: 
  * lỗi "chưa khai tạm tự động" của chuỗi nối tiếp ghi trên tờ chưa gửi (process-outbox) – không tính là lần gửi. HYS (bộ hồ sơ đính kèm, gửi được trước IDA) không phải lần gửi của tờ.
  */
 export const startedOf = (messages: MessageRow[], outbox: OutboxRow[], result: ResultRow | null) =>
-  outbox.some((o) => !isHysOutbox(o)) || messages.some((m) => m.direction === "OUT" && m.operation !== "HYS") || stageOf(result) !== "NOT_SENT";
+  outbox.some((o) => !isOffFlowOutbox(o)) || messages.some((m) => m.direction === "OUT" && !OFF_FLOW_OPS.has(m.operation)) || stageOf(result) !== "NOT_SENT";
 
 /** Dữ liệu một tờ khai nhánh (đã lọc theo nhánh): thông điệp, outbox, kết quả, ngữ cảnh luồng (đã duyệt theo tờ khai / AMA của tờ). */
 export type BranchInput = { no: number; of: number; flow: FlowContext; messages: MessageRow[]; outbox: OutboxRow[]; result: ResultRow | null; polling: boolean; /** Xem BranchSubmission.sentChanges; vắng = null. */ sentChanges?: BranchSubmission["sentChanges"] };

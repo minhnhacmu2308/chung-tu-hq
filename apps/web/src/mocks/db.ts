@@ -18,6 +18,7 @@ import { seedProducts } from "./seed/products";
 import { seedMailbox, type MockInboxMessage, type MockMailConnection } from "./seed/mailbox";
 import type { AdminDb } from "./admin/types";
 import type { MockHys } from "./hys-sim";
+import { emptyKvgs, type MockKvgs } from "./kvgs-sim";
 import type { BranchMessage, CustomsFlow } from "./customs-sim";
 import type { MockBilling } from "./billing-types";
 import { seedBilling } from "./seed/billing";
@@ -77,6 +78,8 @@ export type MockDb = {
   notifications: Notification[];
   /** Bộ HYS (hồ sơ đính kèm điện tử) theo hồ sơ. */
   hys: MockHys[];
+  /** Qua khu vực giám sát: danh sách container đã khai và bảng kê KVGS đã lấy (theo hồ sơ + tờ). */
+  kvgs: MockKvgs;
   /** Back-office của bên vận hành (màn /admin). */
   admin: AdminDb;
   /** Gói & lượt (ADR 0011): sổ lượt, thanh toán PayOS giả, hợp đồng năm – của mọi doanh nghiệp. */
@@ -84,7 +87,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 42;
+const DB_VERSION = 43;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -109,6 +112,7 @@ function createSeed(): MockDb {
     invoiceCounters: {},
     invoiceTemplates: [],
     hys: [],
+    kvgs: emptyKvgs(),
     ...seedSkills(),
     ...seedSettings(),
     ...seedAdmin(),

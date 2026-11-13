@@ -5,7 +5,7 @@ import {
   pickMessages, StatCard, StatusBadge, statusLabel, useUiLocale, fill, type RecordCardPattern, type Status, type Tone, type UiLocale,
 } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, CircleCheck, FolderOpen, Hourglass, Leaf, ScanSearch, Send, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, CircleCheck, FolderOpen, Hourglass, Leaf, Printer, ScanSearch, ScanBarcode, Send, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
@@ -28,6 +28,8 @@ const CARD_LOOK: Record<CustomsRow["state"], { tone: Tone; pattern: RecordCardPa
 };
 
 const submitHref = (r: CustomsRow) => `/dossiers/${r.dossierId}?step=submit`;
+const kvgsHref = (r: CustomsRow) => `/dossiers/${r.dossierId}?step=submit#kvgs-${r.branch}`;
+const kvgsPrintHref = (r: CustomsRow) => `/dossiers/${r.dossierId}/kvgs/${r.branch}/print`;
 
 /** Loại hình: NK/XK viền + mã – giống danh sách Hồ sơ. */
 const TypeCell = ({ r }: { r: CustomsRow }) => (
@@ -196,6 +198,8 @@ export function CustomsPage() {
               actions={[
                 { id: "submit", label: t.openSubmit, icon: <ArrowUpRight />, primary: true, onSelect: () => router.push(submitHref(r)) },
                 { id: "dossier", label: t.openDossier, icon: <FolderOpen />, onSelect: () => router.push(`/dossiers/${r.dossierId}`) },
+                ...(r.state === "CLEARED" ? [{ id: "kvgs", label: t.openKvgs, icon: <ScanBarcode />, onSelect: () => router.push(kvgsHref(r)) }] : []),
+                ...(r.kvgsReady ? [{ id: "kvgsPrint", label: t.printKvgs, icon: <Printer />, onSelect: () => router.push(kvgsPrintHref(r)) }] : []),
               ]}
             />
           )}

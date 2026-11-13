@@ -1,9 +1,9 @@
 // Cổng Hải quan GIẢ (dev/test/demo) – deterministic theo id hồ sơ: số tờ khai 12 số, phân luồng 60/30/10,
 // HYS lỗi lần đầu khi hash%7==0 (thử "Gửi lại"), trạng thái tiến dần qua các lần hỏi. Không mạng. Dùng được trong test use case
 // (đặt ở application/test) và tái xuất qua infrastructure cho container.
-import type { CustomsInfo, CustomsOperation } from "@kb/contracts";
+import type { CustomsInfo, CustomsOperation, KvgsSheet } from "@kb/contracts";
 import { systemClock, type Clock } from "../../../../shared/clock.js";
-import type { CustomsGateway, GatewayError, GatewaySendResult, HysGatewayRequest, HysGatewayResult } from "../customs-ports.js";
+import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewaySendResult, HysGatewayRequest, HysGatewayResult, KvgsGatewayRequest, RefResult } from "../customs-ports.js";
 
 export function hashId(s: string) {
   let h = 0;
@@ -26,7 +26,66 @@ export class FakeCustomsGateway implements CustomsGateway {
    * clearAfterPolls: số lần hỏi trước khi luồng vàng/đỏ được thông quan; flakyHys: HYS lỗi lần đầu khi hash%7==0;
    * rejectHys: Hải quan từ chối mọi bộ HYS; clock: ngày tiếp nhận HYS (giờ VN).
    */
-  constructor(private opts: { clearAfterPolls?: number; alwaysGreen?: boolean; flakyHys?: boolean; rejectHys?: boolean; clock?: Clock } = {}) {}
+  constructor(private opts: {
+    clearAfterPolls?: number; alwaysGreen?: boolean; flakyHys?: boolean; rejectHys?: boolean; clock?: Clock;
+    /** Số lần hỏi (V5ContainerRes / KVGS) còn PENDING trước khi có kết quả (mặc định 0 = có ngay). */
+    refPendingPolls?: number;
+    /** Kịch bản kết quả KVGS: ACCEPTED (mặc định, đủ trường) · REJECTED · INCOMPLETE (ACCEPTED nhưng thiếu số quản lý → không có sheet). */
+    kvgsOutcome?: "ACCEPTED" | "REJECTED" | "INCOMPLETE";
+  } = {}) {}
+  /** Lời gọi danh sách container / KVGS (test kiểm nội dung gửi). */
+  containerListCalls: ContainerListGatewayRequest[] = [];
+  kvgsCalls: KvgsGatewayRequest[] = [];
+  /** V5ContainerRes không trả lại dòng: nhớ dòng đã gửi theo REF_ID để quyết định từ chối (seal bắt đầu bằng REJECT). */
+  private refRows = new Map<string, ContainerListGatewayRequest["rows"]>();
+  private refPolls = new Map<string, number>();
+  private refSeq = 0;
+  private today() {
+    return new Date((this.opts.clock ?? systemClock).now().getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+  }
+  private pending(refId: string) {
+    const n = (this.refPolls.get(refId) ?? 0) + 1;
+    this.refPolls.set(refId, n);
+    return n <= (this.opts.refPendingPolls ?? 0);
+  }
+
+  async sendContainerList(_orgId: string, req: ContainerListGatewayRequest, _idempotencyKey?: string) {
+    this.containerListCalls.push(req);
+    const errors: GatewayError[] = [];
+    req.rows.forEach((r, i) => { if (!r.sealNo.trim()) errors.push({ code: "E-CONT-SEL", field: "SEL_SO", message: `Dòng ${i + 1}: chưa nhập số seal`, line: i + 1 }); });
+    if (!req.rows.length) errors.push({ code: "E-CONT-000", field: "HANG_CONT", message: "Chưa có container nào" });
+    if (errors.length) return { errors };
+    const refId = `FAKE-CL-${++this.refSeq}-${hashId(req.declarationNo)}`;
+    this.refRows.set(refId, req.rows);
+    return { refId };
+  }
+  async containerListResult(_orgId: string, req: Omit<ContainerListGatewayRequest, "rows"> & { refId: string }): Promise<RefResult> {
+    if (this.pending(req.refId)) return { state: "PENDING" };
+    const rows = this.refRows.get(req.refId) ?? [];
+    const bad = rows.map((r, i) => ({ r, line: i + 1 })).filter(({ r }) => r.sealNo.toUpperCase().startsWith("REJECT"));
+    if (bad.length) return { state: "REJECTED", errors: bad.map(({ line }) => ({ code: "E-CONT-REJ", field: "SEL_SO", message: `Dòng ${line}: số seal không hợp lệ`, solution: "Sửa số seal và khai lại", line })) };
+    return { state: "ACCEPTED", receiptNo: String(hashId(req.refId) % 100_000_000).padStart(8, "0"), receiptDate: this.today() };
+  }
+  async requestKvgs(_orgId: string, req: KvgsGatewayRequest, _idempotencyKey?: string) {
+    this.kvgsCalls.push(req);
+    return { refId: `FAKE-KVGS-${++this.refSeq}-${hashId(req.declarationNo)}` };
+  }
+  async kvgsResult(_orgId: string, req: KvgsGatewayRequest & { refId: string }): Promise<RefResult & { sheet?: KvgsSheet; raw?: unknown }> {
+    if (this.pending(req.refId)) return { state: "PENDING" };
+    const outcome = this.opts.kvgsOutcome ?? "ACCEPTED";
+    if (outcome === "REJECTED") return { state: "REJECTED", errors: [{ code: "E-KVGS-001", message: "Tờ khai chưa đủ điều kiện qua khu vực giám sát" }] };
+    const receipt = { receiptNo: String(hashId(req.refId) % 100_000_000).padStart(8, "0"), receiptDate: this.today() };
+    if (outcome === "INCOMPLETE") return { state: "ACCEPTED", ...receipt, raw: { declarationNo: req.declarationNo }, errors: [{ code: "KVGS_RESPONSE_INCOMPLETE", message: "Phản hồi của Hải quan thiếu thông tin để in" }] };
+    const sheet: KvgsSheet = {
+      kind: req.kind, regionOffice: "Chi cục Hải quan khu vực II (mô phỏng)", customsOffice: "Hải quan cửa khẩu cảng Sài Gòn khu vực 1 (mô phỏng)", supervisionOffice: "02CI - 02CIS01: Kho mô phỏng",
+      sealRequired: true, companyName: "CONG TY MO PHONG", taxCode: req.taxCode, declarationNo: req.declarationNo, declarationStatus: "Thông quan", declarationDate: req.registeredOn, declarationDateTo: null,
+      typeName: "Nhập kinh doanh", channel: "Xanh", cargoControlNo: `QL${req.declarationNo}`, barcode: req.kind === "CARGO" ? `*${req.declarationNo}*` : null,
+      containers: req.kind === "CONTAINER" ? [{ containerNo: "FBIU5802429", sealNo: "SEAL0001", customsSealNo: null, barcode: `${req.declarationNo}|FBIU5802429` }] : [],
+      cargo: req.kind === "CARGO" ? { quantity: "10", quantityUnit: "CTN", grossWeight: "125.500", weightUnit: "KGM" } : null,
+      exportedAt: (this.opts.clock ?? systemClock).now().toISOString(),
+    };
+    return { state: "ACCEPTED", ...receipt, sheet, raw: sheet };
+  }
 
   channelFor(dossierId: string): "GREEN" | "YELLOW" | "RED" {
     if (this.opts.alwaysGreen) return "GREEN";

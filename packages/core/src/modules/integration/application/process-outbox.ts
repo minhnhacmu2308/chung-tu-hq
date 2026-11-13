@@ -24,6 +24,7 @@ import { contentOpFor, declareOpFor, enqueueBranchPreDeclare, outboxVersion, sta
 import { performOperationChecked } from "./perform-operation.js";
 import { MAX_ATTEMPTS } from "./_outbox.js";
 import { processHysOutbox } from "./process-hys.js";
+import { processKvgsOutbox } from "./process-kvgs.js";
 import { recallTargets } from "./recall-all.js";
 
 /** Loại chuỗi nối tiếp theo tờ: content = gửi nội dung (khai tạm), declare = khai chính thức cả lô, recall = gọi về tất cả. */
@@ -60,14 +61,14 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     const ob = await r.outbox.get(input.orgId, input.outboxId);
     if (!ob) return err(domainError("NOT_FOUND", "Không tìm thấy outbox"));
     // HYS (K1): khai trước IDA nên chưa có customs_results – nhánh riêng, không đọc/ghi kết quả truyền.
-    if (ob.operation === "HYS") return ok({ ob, result: null });
+    if (ob.operation === "HYS" || ob.operation === "CONT_LIST" || ob.operation === "KVGS") return ok({ ob, result: null });
     const result = await r.results.get(input.orgId, ob.dossierId, ob.branch);
     if (!result) return err(domainError("INVALID_STATE", "Chưa có kết quả truyền"));
     return ok({ ob, result });
   });
   if (!prep.ok) return prep;
   const { ob } = prep.value;
-  if (prep.value.result === null) return processHysOutbox(deps, ctx, ob);
+  if (prep.value.result === null) return ob.operation === "HYS" ? processHysOutbox(deps, ctx, ob) : processKvgsOutbox(deps, ctx, ob);
   const result = prep.value.result;
   if (ob.status !== "PENDING") {
     // Job chạy lại sau crash giữa lúc ghi SENT và lúc nối tờ kế tiếp → nối lại (idempotent; lỗi guard đã/ sẽ được ghi ở lần chạy chính).

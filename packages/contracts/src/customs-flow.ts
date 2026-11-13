@@ -3,7 +3,7 @@
 // ③ Sau thông quan (AMA → AMB → AMC) ④ Chứng từ & cảng (container qua KVGS, lệ phí cảng biển; HYS số hóa chứng từ là bộ riêng của hồ sơ, không thuộc luồng từng tờ). Tra cứu IID/IEX dùng mọi lúc.
 // Tờ khai xuất dùng mã E… tương ứng (EDA/EDB/EDC/EDD/EDA01/EDE) và tra cứu IEX.
 import { z } from "zod";
-import type { Direction } from "./common.js";
+import type { Direction, TransportMode } from "./common.js";
 import type { CustomsOperation } from "./dto/customs.js";
 import { reasonVi, type ReasonCode, type ReasonParams } from "./reason-codes.js";
 
@@ -53,7 +53,10 @@ export const CUSTOMS_OPERATIONS: Record<CustomsOperation, OpDef> = {
   AMC: { phase: "POST", label: "Khai chính thức bản khai AMA", kind: "register" },
   /** Chỉ còn cho nhãn/lịch sử: HYS là bộ riêng (hys_submissions), không nằm trong luồng từng tờ. */
   HYS: { phase: "DOCS", label: "Số hóa chứng từ", kind: "side" },
-  CONT: { phase: "DOCS", label: "Container qua khu vực giám sát", kind: "side" },
+  /** Chỉ còn cho nhãn/lịch sử cũ: đã thay bằng CONT_LIST + KVGS (ADR 0014). */
+  CONT: { phase: null, label: "Container qua khu vực giám sát", kind: "side" },
+  CONT_LIST: { phase: "DOCS", label: "Khai danh sách container", kind: "side" },
+  KVGS: { phase: "DOCS", label: "Lấy danh sách container qua khu vực giám sát", kind: "side" },
   PORT_FEE: { phase: "DOCS", label: "Lệ phí cảng biển", kind: "side" },
 };
 
@@ -72,7 +75,7 @@ export const baseOp = (op: CustomsOperation): CustomsOperation => (Object.entrie
 export const queryOpFor = (direction: Direction): CustomsOperation => opFor(direction, "IID");
 /** Nghiệp vụ hiện trên màn theo chiều tờ khai, theo thứ tự luồng. */
 export const operationsFor = (direction: Direction): CustomsOperation[] =>
-  (["IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"] as CustomsOperation[]).map((o) => opFor(direction, o));
+  (["IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "AMA", "AMB", "AMC", "CONT_LIST", "KVGS", "PORT_FEE"] as CustomsOperation[]).map((o) => opFor(direction, o));
 /** Nghiệp vụ gửi nội dung tờ khai (phải được duyệt, không còn BLOCKER, HS đủ – bất biến 7). */
 export const isContentOperation = (op: CustomsOperation) => CUSTOMS_OPERATIONS[op].kind === "content";
 /** Nghiệp vụ gọi tờ khai về sửa: thành công → mở lại tờ khai (bước Review). */
@@ -115,13 +118,18 @@ export function stageFromLegacy(progress: string | undefined, state: string): Cu
   return "NOT_SENT";
 }
 
+export type KvgsFlowState = { containerListRequired: boolean; containerListAccepted: boolean; kvgsDone: boolean };
+/** Phải khai danh sách container trước khi lấy danh sách qua KVGS: nhập khẩu hàng container đường biển. */
+export const containerListRequired = (direction: Direction, transportMode: TransportMode): boolean => direction === "NK" && transportMode === "SEA_CONTAINER";
+
 export type OperationAvailabilityInput = {
   direction: Direction;
   stage: CustomsStage;
   /** Tờ khai đang ở trạng thái đã duyệt, sẵn sàng gửi nội dung (không phải bản nháp đang sửa). */
   approved: boolean;
   channel: "GREEN" | "YELLOW" | "RED" | null;
-  hasContainers: boolean;
+  /** Qua khu vực giám sát (ADR 0014): danh sách container khai trước (chỉ NK container) và lấy danh sách qua KVGS sau thông quan. */
+  kvgs: KvgsFlowState;
   /** Nghiệp vụ đang chờ gửi/phản hồi. */
   pending: CustomsOperation[];
   /** Nghiệp vụ đã thành công ít nhất một lần (để gợi ý việc tiếp theo cho nghiệp vụ phụ). */
@@ -170,7 +178,8 @@ export function operationAvailability(i: OperationAvailabilityInput): OperationA
       : content("AMA", ["POST_EDITING", "POST_RECALLED"], why("AMA_REQUIRES_CLEARANCE")),
     row("AMB", i.stage === "POST_PRE_DECLARED", why("AMA_NOT_PRE_DECLARED")),
     row("AMC", i.stage === "POST_PRE_DECLARED", why("AMA_NOT_PRE_DECLARED")),
-    row("CONT", i.hasContainers && isChanneled(i.stage), why(i.hasContainers ? "CONT_REQUIRES_CHANNEL" : "NO_CONTAINERS")),
+    row("CONT_LIST", i.kvgs.containerListRequired && hasDeclarationNumber(i.stage), why(i.kvgs.containerListRequired ? "CONT_LIST_REQUIRES_DECLARATION_NUMBER" : "CONT_LIST_NOT_APPLICABLE")),
+    row("KVGS", i.stage === "CLEARED" && (!i.kvgs.containerListRequired || i.kvgs.containerListAccepted), why(i.stage !== "CLEARED" ? "KVGS_REQUIRES_CLEARANCE" : "KVGS_REQUIRES_CONTAINER_LIST")),
     row("PORT_FEE", hasDeclarationNumber(i.stage), why("DECLARATION_NUMBER_REQUIRED")),
   ];
   return rejected ? out.map((r) => ({ op: r.op, enabled: false, action: r.action, ...withReason(rejected) })) : out;
@@ -195,7 +204,9 @@ export function nextCustomsOperation(i: OperationAvailabilityInput): CustomsOper
     case "AMEND_PRE_DECLARED": return o("IDE");
     case "POST_EDITING": case "POST_RECALLED": return "AMA";
     case "POST_PRE_DECLARED": return "AMC";
-    case "CLEARED": return i.hasContainers && !i.done.includes("CONT") ? "CONT" : null;
+    case "CLEARED":
+      if (i.kvgs.containerListRequired && !i.kvgs.containerListAccepted) return "CONT_LIST";
+      return i.kvgs.kvgsDone ? null : "KVGS";
     default: return null;
   }
 }

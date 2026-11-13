@@ -27,3 +27,9 @@ export { addHysUploadedFiles, createHysSubmission, deleteHysSubmission, getHysOv
 export { isLotEditable } from "./domain/lot-editable.js";
 export { sendHysSubmission } from "./application/send-hys.js";
 export { countReservedDeclarations, listDeclaredBranches, unnumberedSheets } from "./application/billing-sheets.js";
+export { getKvgs } from "./application/kvgs.js";
+export { refillContainerList, saveContainerList, sendContainerList } from "./application/container-list.js";
+export { requestKvgsFetch } from "./application/kvgs-fetch.js";
+export { prefillDocOf } from "./application/container-sources.js";
+export { prefillContainerRows, type PrefillDoc } from "./domain/container-prefill.js";
+export { KVGS_MAX_POLLS, KVGS_POLL_DELAY_MS, markKvgsPollFailed, pollKvgs, pollKvgsNow, KvgsKindSchema, type KvgsPollInput, type KvgsPollKind } from "./application/poll-kvgs.js";

@@ -66,6 +66,14 @@ const ITEMS: Record<string, ItemSeed[]> = {
     { desc: "Dao phay ngón hợp kim D10", qty: "1500", unit: "PCE", price: "9.80", amount: "14700.00", hs: "8207.70.00", conf: 0.91 },
     { desc: "Mũi khoan hợp kim D8", qty: "2400", unit: "PCE", price: "7.00", amount: "16800.00", hs: "8207.50.00", conf: 0.89 },
   ],
+  // Qua khu vực giám sát (KVGS) – NK container (2 container, có seal) và XK hàng lẻ; cùng đã thông quan.
+  dos_029: [
+    { desc: "Thanh trượt dẫn hướng LGR25, dài 1.500 mm", qty: "200", unit: "PCE", price: "46.00", amount: "9200.00", hs: "8466.93.90", conf: 0.7 },
+    { desc: "Con trượt LGH25CA", qty: "400", unit: "PCE", price: "19.00", amount: "7600.00", hs: "8466.93.90", conf: 0.68 },
+  ],
+  dos_030: [
+    { desc: "Gối đỡ vòng bi UCF206 gia công", qty: "1200", unit: "SET", price: "7.00", amount: "8400.00", hs: "8483.20.90", conf: 0.85 },
+  ],
   dos_014: [
     { desc: "Vòng bi cầu 6001ZZ", qty: "3000", unit: "PCE", price: "1.25", amount: "3750.00", hs: "8482.10.00", conf: 0.93 },
     { desc: "Vòng bi kim HK1012", qty: "2000", unit: "PCE", price: "1.46", amount: "2920.00", hs: "8482.40.00", conf: 0.87 },
@@ -73,7 +81,7 @@ const ITEMS: Record<string, ItemSeed[]> = {
 };
 
 /** Hồ sơ đã chạy xong agent (HS đã xác nhận, đã có tờ khai). */
-const DONE = [LARGE_LOT_ID, "dos_023", "dos_024", "dos_018", "dos_019", "dos_020", "dos_017", "dos_016", "dos_014"];
+const DONE = [LARGE_LOT_ID, "dos_023", "dos_024", "dos_018", "dos_019", "dos_020", "dos_017", "dos_016", "dos_014", "dos_029", "dos_030"];
 
 export function seedDeclaration(dossiers: Dossier[]): { lineItems: LineItem[]; agentRuns: AgentRun[]; declarations: Declaration[] } {
   const lineItems: LineItem[] = [];

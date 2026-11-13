@@ -184,7 +184,26 @@ describe("fpt-mock: gửi → REF_ID → hỏi kết quả", () => {
     const ok = await call("V5ContainerReq", { ...v5, hanG_CONT: [{ ...v5.hanG_CONT[0], seL_SO: "SEAL01" }] });
     await call("V5ContainerRes", { reF_ID: ok.body.reF_ID });
     expect((await call("V5ContainerRes", { reF_ID: ok.body.reF_ID })).body.tranG_THAI).toBe("12");
-    expect((await call("KVGS", sample("KVGS"))).body.mA_VACH).toBe("*307072510200*");
+    // V5ContainerRes: Hải quan từ chối khi có seal bắt đầu bằng REJECT – errorList theo dòng (rowPosition); phản hồi không trả lại dòng container.
+    const bad = await call("V5ContainerReq", { ...v5, hanG_CONT: [{ ...v5.hanG_CONT[0], seL_SO: "SEAL01" }, { vD_SO: "BL1", coN_SO: "MSCU7654321", seL_SO: "REJECT-9", ghI_CHU: "" }] });
+    await call("V5ContainerRes", { reF_ID: bad.body.reF_ID });
+    const rejected = (await call("V5ContainerRes", { reF_ID: bad.body.reF_ID })).body;
+    expect(rejected.tranG_THAI).toBe("10");
+    expect(rejected.errorList[0].rowPosition).toBe("0002");
+    expect(rejected.hanG_CONT).toBeUndefined();
+    expect((await call("V5ContainerRes", { reF_ID: ok.body.reF_ID })).body.hanG_CONT).toBeUndefined();
+    // KVGS hai bước: KVGS → reF_ID; KVGSRes → (lần đầu chưa có phản hồi) → đủ trường 2 mẫu in.
+    const kv = await call("KVGS", sample("KVGS"));
+    expect(kv.body.reF_ID).toBeTruthy();
+    expect((await call("KVGS", { ...sample("KVGS"), TK_SOTK: "" })).body.errorList[0].indexCode).toBe("TK_SOTK");
+    expect((await call("KVGSRes", { reF_ID: kv.body.reF_ID })).body.tranG_THAI).toBe("11");
+    const full = (await call("KVGSRes", { reF_ID: kv.body.reF_ID })).body;
+    expect(full.tranG_THAI).toBe("12");
+    expect(full).toMatchObject({ sO_QUAN_LY: "QL307072510200", mA_VACH: "*307072510200*", phaiNiemPhong: true });
+    expect(full.danH_SACH_CONT).toHaveLength(2);
+    expect(full.danH_SACH_CONT[0].mA_VACH).toBe("307072510200|FBIU5802429");
+    expect(full.hanG_LE.sO_LUONG).toBe("10");
+    expect((await call("KVGSRes", { reF_ID: "khong-co" })).body.errorList[0].indexCode).toBe("REF_ID");
     expect((await call("PrintXPS", sample("PrintXPS"))).body.filE_BASE64).toBeTruthy();
     expect((await call("KyFile", sample("KyFile"))).body.daA_KY).toBe(true);
     const cat = (await call("SyncCategory", {})).body;

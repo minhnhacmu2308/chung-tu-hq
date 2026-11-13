@@ -213,3 +213,56 @@ describe("FptVnaccsGateway.send – gọi lại, sửa đổi, AMB/AMC (Postman 
     expect(res).toMatchObject({ receiptNo: "308173826831" });
   });
 });
+
+describe("FptVnaccsGateway – danh sách container (V5ContainerReq/Res) và KVGS", () => {
+  const gateway = (routes: Parameters<typeof fakeFetch>[0]) => {
+    const f = fakeFetch({ "/api/auth/login": login, ...routes });
+    return { g: new FptVnaccsGateway(client(f.fn), { get: async () => CREDS }), calls: f.calls };
+  };
+  const req = {
+    declarationNo: "108007708100", registeredOn: "2026-02-27", typeCode: "A11", customsOffice: "02CI", taxCode: "0316789012", companyName: "CONG TY AN PHAT", userId: "BI820001",
+    rows: [{ billNo: "BL1", containerNo: "FBIU5802429", sealNo: "S1", note: "" }],
+  };
+  const { rows: _rows, ...head } = req;
+
+  it("V5ContainerReq: ngày dd/MM/yyyy, body phẳng có USER_ID, không mật khẩu / objVNACCS_ACCOUNT; trả REF_ID", async () => {
+    const { g, calls } = gateway({ "/api/V5ContainerReq": () => ok({ reF_ID: "REF-1", errorList: null }) });
+    expect(await g.sendContainerList("org", req, "k")).toEqual({ refId: "REF-1" });
+    const body = calls.at(-1)!.body;
+    expect(body).toMatchObject({ tK_SOTK: "108007708100", tK_NGAYDK: "27/02/2026", tK_MALH: "A11", tK_MAHQ: "02CI", mA_DV: "0316789012", useR_ID: "BI820001", hanG_CONT: [{ vD_SO: "BL1", coN_SO: "FBIU5802429", seL_SO: "S1", ghI_CHU: "" }] });
+    expect(body).not.toHaveProperty("objVNACCS_ACCOUNT");
+    expect(JSON.stringify(body)).not.toContain("12345678");
+  });
+  it("V5ContainerReq lỗi Hải quan → errors có dòng (rowPosition)", async () => {
+    const { g } = gateway({ "/api/V5ContainerReq": () => ok({ errorList: [{ errorCode: "E1", indexCode: "SEL_SO", errorContent: "Thiếu seal", rowPosition: "0001" }] }) });
+    const r = await g.sendContainerList("org", req, "k");
+    expect(r.refId).toBeUndefined();
+    expect(r.errors?.[0]).toMatchObject({ code: "E1", field: "SEL_SO", line: 1 });
+  });
+  it("V5ContainerRes: body không có dòng container; 12 → ACCEPTED (ngày → YYYY-MM-DD), 10 → REJECTED (KET_QUA), 11/0 → PENDING", async () => {
+    const answers = [{ tranG_THAI: "12", sO_TN: 12345, ngaY_TN: "28/02/2026" }, { tranG_THAI: "10", keT_QUA: "Sai seal" }, { tranG_THAI: "11" }, { tranG_THAI: "0" }];
+    const { g, calls } = gateway({ "/api/V5ContainerRes": (n) => ok({ errorList: null, ...answers[n - 1] }) });
+    const r = [];
+    for (let i = 0; i < 4; i++) r.push(await g.containerListResult("org", { ...head, refId: "REF-1" }));
+    expect(r[0]).toEqual({ state: "ACCEPTED", receiptNo: "12345", receiptDate: "2026-02-28" });
+    expect(r[1]).toMatchObject({ state: "REJECTED", errors: [{ message: "Sai seal" }] });
+    expect(r[2]).toEqual({ state: "PENDING" });
+    expect(r[3]).toEqual({ state: "PENDING" });
+    const body = calls.filter((c) => c.path === "/api/V5ContainerRes")[0]!.body;
+    expect(body).toMatchObject({ reF_ID: "REF-1", useR_ID: "BI820001", tK_NGAYDK: "27/02/2026" });
+    expect(body).not.toHaveProperty("hanG_CONT");
+  });
+  it("USER_ID rỗng (chưa cấu hình tài khoản VNACCS) → INTEGRATION_NOT_CONFIGURED, không gọi FPT", async () => {
+    const { g, calls } = gateway({});
+    await expect(g.sendContainerList("org", { ...req, userId: " " }, "k")).rejects.toMatchObject({ code: "INTEGRATION_NOT_CONFIGURED", message: expect.stringContaining("VNACCS") });
+    await expect(g.containerListResult("org", { ...head, userId: "", refId: "R" })).rejects.toMatchObject({ code: "INTEGRATION_NOT_CONFIGURED" });
+    expect(calls).toHaveLength(0);
+  });
+  it("KVGS thật chưa nối: báo lỗi rõ ràng, không gọi FPT", async () => {
+    const { g, calls } = gateway({});
+    const kv = { declarationNo: "108007708100", registeredOn: "2026-02-27", customsOffice: "02CI", taxCode: "0316789012", kind: "CONTAINER" as const };
+    await expect(g.requestKvgs("org", kv, "k")).rejects.toMatchObject({ code: "NOT_SUPPORTED", message: expect.stringContaining("Chưa nối API KVGS") });
+    await expect(g.kvgsResult("org", { ...kv, refId: "R" })).rejects.toMatchObject({ code: "NOT_SUPPORTED" });
+    expect(calls).toHaveLength(0);
+  });
+});

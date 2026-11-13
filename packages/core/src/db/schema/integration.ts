@@ -201,3 +201,68 @@ export const hysSubmissionFiles = pgTable(
   },
   (t) => [index("hys_submission_files_org_sub_idx").on(t.orgId, t.submissionId), orgRls("hys_submission_files_rls")],
 ).enableRLS();
+
+/**
+ * Danh sách container khai qua khu vực giám sát (V5ContainerReq/Res, ADR 0014) – mỗi lần gửi một dòng (attempt) theo (hồ sơ, nhánh).
+ * `rows` = bảng đang soạn; `sent_rows` = ảnh chụp đã gửi; `errors` = lỗi Hải quan (GatewayError[]).
+ */
+export const containerLists = pgTable(
+  "container_lists",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id")
+      .notNull()
+      .references(() => dossiers.id, { onDelete: "cascade" }),
+    /** Nhánh (tờ khai ≤ 50 dòng) của hồ sơ; hồ sơ 1 tờ = nhánh 1. */
+    branch: integer("branch").notNull().default(1),
+    attempt: integer("attempt").notNull(),
+    rows: jsonb("rows").notNull(),
+    status: text("status").notNull().default("DRAFT"),
+    refId: text("ref_id"),
+    receiptNo: text("receipt_no"),
+    receiptDate: date("receipt_date", { mode: "string" }),
+    errors: jsonb("errors"),
+    sentRows: jsonb("sent_rows"),
+    sentBy: text("sent_by"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("container_lists_dossier_branch_attempt_uq").on(t.dossierId, t.branch, t.attempt),
+    index("container_lists_org_dossier_idx").on(t.orgId, t.dossierId, t.branch),
+    check("container_lists_status_chk", sql`status in ('DRAFT', 'SENDING', 'ACCEPTED', 'REJECTED', 'NO_RESPONSE')`),
+    orgRls("container_lists_rls"),
+  ],
+).enableRLS();
+
+/** Bảng kê qua khu vực giám sát (KVGS, ADR 0014) lấy từ Hải quan: `sheet` = bản đã chuẩn hóa, `raw` = phản hồi thô. Mỗi lần lấy một dòng. */
+export const kvgsSheets = pgTable(
+  "kvgs_sheets",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id")
+      .notNull()
+      .references(() => dossiers.id, { onDelete: "cascade" }),
+    branch: integer("branch").notNull().default(1),
+    status: text("status").notNull().default("SENDING"),
+    refId: text("ref_id"),
+    receiptNo: text("receipt_no"),
+    receiptDate: date("receipt_date", { mode: "string" }),
+    errors: jsonb("errors"),
+    sheet: jsonb("sheet"),
+    raw: jsonb("raw"),
+    requestedBy: text("requested_by").notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }).notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }),
+    ...timestamps(),
+  },
+  (t) => [
+    index("kvgs_sheets_org_dossier_idx").on(t.orgId, t.dossierId, t.branch),
+    // Một bảng kê đang SENDING mỗi (hồ sơ, nhánh): hai yêu cầu song song không tạo hai lần gọi/tính phí.
+    uniqueIndex("kvgs_sheets_sending_uq").on(t.dossierId, t.branch).where(sql`${t.status} = 'SENDING'`),
+    check("kvgs_sheets_status_chk", sql`status in ('DRAFT', 'SENDING', 'ACCEPTED', 'REJECTED', 'NO_RESPONSE')`),
+    orgRls("kvgs_sheets_rls"),
+  ],
+).enableRLS();

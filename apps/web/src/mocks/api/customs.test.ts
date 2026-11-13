@@ -185,14 +185,11 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
     expect(await err(submitDeclaration(NEW, CERT))).toMatchObject({ code: "ALREADY_SUBMITTED" });
   });
 
-  it("chứng từ & cảng: container qua KVGS, lệ phí cảng ghi rõ mô phỏng; HYS không còn là nghiệp vụ của tờ", async () => {
+  it("chứng từ & cảng: lệ phí cảng ghi rõ mô phỏng; HYS không còn là nghiệp vụ của tờ; CONT_LIST/KVGS có route riêng nên bị từ chối", async () => {
     await expect(performOperation(INSPECTING, "HYS")).rejects.toMatchObject({ reason: "HYS_USE_SUBMISSION" });
     await expect(resendOperation(INSPECTING, "HYS")).rejects.toMatchObject({ reason: "HYS_USE_SUBMISSION" });
     expect((await getSubmission(INSPECTING)).pipeline.some((p) => p.op === "HYS")).toBe(false);
-    await run(INSPECTING, "CONT");
-    const cont = (await getSubmission(INSPECTING)).messages[0]!;
-    expect(cont).toMatchObject({ operation: "CONT", direction: "IN" });
-    expect(cont.summary).toMatch(/^Đã đăng ký qua khu vực giám sát: [A-Z]{4}\d{7}/);
+    for (const op of ["CONT_LIST", "KVGS"] as const) await expect(performOperation(INSPECTING, op)).rejects.toMatchObject({ code: "NOT_SUPPORTED" });
     await run(INSPECTING, "PORT_FEE");
     const fee = (await getSubmission(INSPECTING)).messages.find((m) => m.operation === "PORT_FEE" && m.direction === "IN")!;
     expect(fee.summary).toContain("mô phỏng");

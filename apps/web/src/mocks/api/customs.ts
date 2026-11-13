@@ -21,6 +21,7 @@ import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
 import { assertAllowance, recordDeclared } from "@/mocks/billing-sim";
 import { pendingSuggestions } from "@/mocks/hys-sim";
+import { kvgsFlowOf, settleKvgs } from "@/mocks/kvgs-sim";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
 import type { CustomsMessage, CustomsOperation, CustomsSummary, CustomsResult, Declaration, DigitalCertificate, Dossier, LineItem } from "@/mocks/types";
 
@@ -212,7 +213,7 @@ function availabilityInput(db: MockDb, c: Ctx): OperationAvailabilityInput {
     // Lô nhiều tờ đang truyền lần lượt (tờ khai SUBMITTED) vẫn là đã duyệt – cùng quy tắc backend (sheetApproved).
     approved: sheetApproved({ stage: c.flow.stage, of: c.of, declarationStatus: c.decl?.status, amendmentStatus: openAmendment(db, c.dossier.id, c.branch)?.status ?? null }),
     channel: isChanneled(c.flow.stage) ? (c.result?.channel ?? null) : null,
-    hasContainers: containersOf(db, c.dossier).length > 0,
+    kvgs: kvgsFlowOf(db, c.dossier, c.branch),
     pending: c.flow.pending ? [c.flow.pending.op] : [],
     done: c.flow.done,
   };
@@ -270,7 +271,6 @@ function apply(db: MockDb, c: Ctx) {
       if (b === "IDE") c.flow.amendments += 1;
       c.flow.clearAt = r.channel === "GREEN" ? new Date(at + GREEN_CLEAR_MS).toISOString() : new Date(at + INSPECTION_CLEAR_MS).toISOString();
     }
-    if (p.op === "CONT") c.flow.side.containers = containersOf(db, c.dossier);
     if (p.op === "PORT_FEE") c.flow.side.portFeeReceipt = receiptOf(r.declarationNo);
     if (p.op === "AMC") {
       c.flow.postAmendments += 1;
@@ -587,7 +587,11 @@ const unnumberedSheets = (db: MockDb, dossierId: string, of: number) => Array.fr
 /** Thực hiện một nghiệp vụ theo quy tắc chung (operationAvailability); bị khóa → lỗi kèm lý do. */
 /** `branch`: tờ khai nhánh của lô > 50 dòng (mặc định tờ 1). */
 export const performOperation = (dossierId: string, op: CustomsOperation, branch = 1, opts?: { hysWaived?: boolean }) =>
-  mutate((db) => perform(db, dossierId, op, Date.now(), branch, undefined, opts?.hysWaived === true));
+  mutate((db) => {
+    // Danh sách container / KVGS có route riêng (như backend), không qua nghiệp vụ của tờ.
+    if (op === "CONT_LIST" || op === "KVGS") throw new ApiError("NOT_SUPPORTED", op + " khai bằng thẻ Qua khu vực giám sát, không gửi qua nghiệp vụ của tờ khai");
+    return perform(db, dossierId, op, Date.now(), branch, undefined, opts?.hysWaived === true);
+  });
 
 /** Ký số và khai tạm lần đầu (IDA/EDA). Khai chính thức (IDC/EDC) là thao tác riêng của người khai. */
 export const submitDeclaration = (dossierId: string, certificateId: string, opts?: { hysWaived?: boolean }) =>
@@ -658,6 +662,21 @@ export function customsSummaryOf(db: MockDb, dossierId: string): CustomsSummary 
 
 /** Chốt các phản hồi đã đến (màn hình bản khai bổ sung đọc trạng thái mới nhất). */
 export const settleCustoms = (db: MockDb) => settle(db, Date.now());
+
+/** Nghiệp vụ Qua khu vực giám sát (CONT_LIST / KVGS) của tờ có làm được không (customs-flow, như checkOperation của backend): được → null, không → lỗi kèm mã lý do. */
+export function kvgsOperationBlock(db: MockDb, dossierId: string, branch: number, op: "CONT_LIST" | "KVGS"): ApiError | null {
+  settle(db, Date.now());
+  const a = operationAvailability(availabilityInput(db, load(db, dossierId, branch))).find((x) => x.op === op);
+  if (!a) return new ApiError("VALIDATION", `Nghiệp vụ ${op} không thuộc luồng tờ khai`);
+  if (a.enabled) return null;
+  return a.reasonCode ? reasonApiError("INVALID_STATE", a.reasonCode, a.reasonParams) : new ApiError("INVALID_STATE", `Chưa thực hiện được ${op}`);
+}
+
+/** Thông tin đầu tờ cho thẻ KVGS: số tờ khai và ngày đăng ký Hải quan đã trả. */
+export const kvgsHeaderOf = (db: MockDb, dossierId: string, branch: number) => ({
+  declarationNo: branchDeclarationNo(db, dossierId, branch),
+  registeredOn: customsInfoNow(db, dossierId, branch)?.registeredDate ?? null,
+});
 
 /**
  * Gửi lại một nghiệp vụ bị lỗi. Nguyên tắc chống gửi trùng (ADR 0005): luôn tra cứu (IID/IEX) trước,
@@ -907,6 +926,7 @@ export const listCustomsDeclarations = () =>
   mutate((db): CustomsRow[] => {
     const now = Date.now();
     settle(db, now);
+    settleKvgs(db, now);
     const groups = db.declarations
       .filter((d) => d.status === "APPROVED" || d.status === "SUBMITTED" || (db.customsFlows?.[d.dossierId]?.stage ?? "NOT_SENT") !== "NOT_SENT")
       .flatMap((decl): CustomsRow[][] => {
@@ -928,6 +948,7 @@ export const listCustomsDeclarations = () =>
             typeCode: d.typeCode,
             state,
             stage: b.stage,
+            kvgsReady: db.kvgs.fetches.some((f) => f.dossierId === d.id && f.branch === b.no && f.status === "ACCEPTED"),
             updatedAt: last?.at ?? decl.approvedAt ?? d.updatedAt,
             ...(last ? { lastOperation: last.operation } : {}),
             ...(b.result?.declarationNo ? { declarationNo: b.result.declarationNo } : {}),

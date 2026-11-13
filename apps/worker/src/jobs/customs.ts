@@ -1,4 +1,4 @@
-import { pollStatus, processOutbox, type CustomsDeps } from "@kb/core/modules/integration";
+import { KvgsKindSchema, pollKvgs, pollStatus, processOutbox, type CustomsDeps } from "@kb/core/modules/integration";
 import { createLogger } from "@kb/core/shared";
 import { z } from "zod";
 import { parsePayload } from "./_payload.js";
@@ -23,4 +23,15 @@ export async function customsPollJob(deps: CustomsDeps, raw: unknown) {
   const r = await pollStatus(deps, p);
   if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "customs-poll", dossierId: p.dossierId, orgId: p.orgId, code: r.error.code, message: r.error.message });
   return r.ok ? (r.value.done ? (r.value.cleared ? "cleared" : "done") : "again") : r.error.code;
+}
+
+/** Payload job kvgs-poll: `kind` CONT_LIST (danh sách container) | KVGS (bảng kê), `id` = bản ghi, `n` = lần hỏi thứ n. */
+export const KvgsPollPayload = z.object({ orgId: z.string().min(1), userId: z.string().min(1), kind: KvgsKindSchema, id: z.string().min(1), n: z.number().int().positive() });
+
+/** Hỏi kết quả danh sách container / bảng kê KVGS theo REF_ID. Lỗi tạm ném ra để BullMQ retry. */
+export async function kvgsPollJob(deps: CustomsDeps, raw: unknown) {
+  const p = parsePayload(KvgsPollPayload, raw, "kvgs-poll");
+  const r = await pollKvgs(deps, p);
+  if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "kvgs-poll", kind: p.kind, id: p.id, orgId: p.orgId, code: r.error.code, message: r.error.message });
+  return r.ok ? (r.value.again ? "again" : "done") : r.error.code;
 }

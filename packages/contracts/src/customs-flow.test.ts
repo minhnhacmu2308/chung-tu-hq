@@ -1,20 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
-  baseOp, CUSTOMS_OPERATIONS, nextCustomsOperation, opFor, operationAvailability, operationsFor, queryOpFor, recallOpFor, stageAfter, stageFromLegacy,
+  baseOp, containerListRequired, CUSTOMS_OPERATIONS, nextCustomsOperation, opFor, operationAvailability, operationsFor, queryOpFor, recallOpFor, stageAfter, stageFromLegacy,
   CustomsStageSchema, type CustomsStage, type OperationAvailabilityInput,
 } from "./customs-flow.js";
 import { fillReason, REASON_CODES, REASON_TEXT_VI, reasonVi } from "./reason-codes.js";
 import type { CustomsOperation } from "./dto/customs.js";
 
-const base: OperationAvailabilityInput = { direction: "NK", stage: "NOT_SENT", approved: true, channel: null, hasContainers: true, pending: [], done: [] };
+const base: OperationAvailabilityInput = { direction: "NK", stage: "NOT_SENT", approved: true, channel: null, kvgs: { containerListRequired: true, containerListAccepted: false, kvgsDone: false }, pending: [], done: [] };
+const none = { containerListRequired: false, containerListAccepted: false, kvgsDone: false };
 const avail = (over: Partial<OperationAvailabilityInput>) => Object.fromEntries(operationAvailability({ ...base, ...over }).map((r) => [r.op, r]));
 const enabled = (over: Partial<OperationAvailabilityInput>) => operationAvailability({ ...base, ...over }).filter((r) => r.enabled).map((r) => r.op);
 
 describe("mã nghiệp vụ theo chiều tờ khai", () => {
   it("nhập dùng I…, xuất dùng E…; tra cứu IID/IEX; AMA và nghiệp vụ cảng dùng chung", () => {
     expect(operationsFor("NK")).not.toContain("HYS");
-    expect(operationsFor("NK")).toEqual(["IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"]);
-    expect(operationsFor("XK")).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"]);
+    expect(operationsFor("NK")).toEqual(["IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "AMA", "AMB", "AMC", "CONT_LIST", "KVGS", "PORT_FEE"]);
+    expect(operationsFor("XK")).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "CONT_LIST", "KVGS", "PORT_FEE"]);
     expect([queryOpFor("NK"), queryOpFor("XK")]).toEqual(["IID", "IEX"]);
     expect([baseOp("EDA01"), baseOp("IEX"), baseOp("AMA"), opFor("XK", "HYS")]).toEqual(["IDA01", "IID", "AMA", "HYS"]);
   });
@@ -57,14 +58,14 @@ describe("stageAfter – máy chuyển giai đoạn", () => {
 describe("operationAvailability – nút nào bấm được", () => {
   it("chưa khai: chỉ IDA; khai tạm xong: IDB, IDC, lệ phí cảng", () => {
     expect(enabled({ stage: "NOT_SENT" })).toEqual(["IDA"]);
-    expect(enabled({ stage: "PRE_DECLARED" })).toEqual(["IDB", "IDC", "PORT_FEE"]);
+    expect(enabled({ stage: "PRE_DECLARED" })).toEqual(["IDB", "IDC", "CONT_LIST", "PORT_FEE"]);
   });
   it("đã gọi sửa (RECALLED) mà chưa duyệt lại → IDA ở chế độ EDIT kèm hướng dẫn; duyệt lại → SEND", () => {
     expect(avail({ stage: "RECALLED", approved: false })["IDA"]).toMatchObject({ enabled: true, action: "EDIT", reason: expect.stringMatching(/Review/) });
     expect(avail({ stage: "RECALLED", approved: true })["IDA"]).toMatchObject({ enabled: true, action: "SEND" });
   });
   it("đã phân luồng: IDD, chứng từ, container, lệ phí; IDB/IDC khóa có lý do", () => {
-    expect(enabled({ stage: "DECLARED", channel: "YELLOW" })).toEqual(["IDD", "CONT", "PORT_FEE"]);
+    expect(enabled({ stage: "DECLARED", channel: "YELLOW" })).toEqual(["IDD", "CONT_LIST", "PORT_FEE"]);
     expect(avail({ stage: "DECLARED" })["IDB"]).toMatchObject({ enabled: false, reason: expect.stringMatching(/chưa khai chính thức/) });
   });
   it("sửa đổi bổ sung: IDD → IDA01 (EDIT khi chưa duyệt) → IDE", () => {
@@ -81,12 +82,11 @@ describe("operationAvailability – nút nào bấm được", () => {
     expect(rows.every((r) => !r.enabled)).toBe(true);
     expect(rows.find((r) => r.op === "IDB")?.reason).toMatch(/IDC/);
   });
-  it("không có container → CONT khóa; tờ khai bị từ chối → mọi nút khóa", () => {
-    expect(avail({ stage: "CLEARED", hasContainers: false })["CONT"]).toMatchObject({ enabled: false, reason: expect.stringMatching(/không có container/) });
+  it("tờ khai bị từ chối → mọi nút khóa", () => {
     expect(operationAvailability({ ...base, stage: "REJECTED" }).some((r) => r.enabled)).toBe(false);
   });
   it("tờ khai xuất dùng mã E…", () => {
-    expect(enabled({ direction: "XK", stage: "PRE_DECLARED" })).toEqual(["EDB", "EDC", "PORT_FEE"]);
+    expect(enabled({ direction: "XK", stage: "PRE_DECLARED", kvgs: none })).toEqual(["EDB", "EDC", "PORT_FEE"]);
   });
 });
 
@@ -108,7 +108,7 @@ describe("nextCustomsOperation – việc tiếp theo", () => {
   it.each([
     ["NOT_SENT", null, [], "IDA"], ["PRE_DECLARED", null, [], "IDC"], ["DECLARED", "YELLOW", [], null], ["DECLARED", "GREEN", [], null],
     ["AMEND_RECALLED", "RED", [], "IDA01"], ["AMEND_PRE_DECLARED", "RED", [], "IDE"], ["POST_EDITING", "GREEN", [], "AMA"], ["POST_PRE_DECLARED", "GREEN", [], "AMC"],
-    ["CLEARED", "GREEN", [], "CONT"], ["CLEARED", "GREEN", ["CONT"], null],
+    ["CLEARED", "GREEN", [], "CONT_LIST"],
   ] as const)("%s (luồng %s, đã làm %j) → %s", (stage, channel, done, expected) =>
     expect(nextCustomsOperation({ ...base, stage, channel, done: [...done] })).toBe(expected));
   it("đang chờ phản hồi → không gợi ý", () => expect(nextCustomsOperation({ ...base, pending: ["IDA"] })).toBeNull());
@@ -118,8 +118,9 @@ describe("mã lý do (reasonCode) – giao diện dịch theo mã, câu tiếng 
   const combos: OperationAvailabilityInput[] = CustomsStageSchema.options.flatMap((stage) =>
     (["NK", "XK"] as const).flatMap((direction) =>
       [true, false].flatMap((approved) =>
-        [true, false].flatMap((hasContainers) =>
-          ([[], ["IDC"], ["IDA", "PORT_FEE"]] as CustomsOperation[][]).map((pending) => ({ ...base, stage, direction, approved, hasContainers, pending }))))));
+        [true, false].flatMap((containerListRequired) =>
+          [true, false].flatMap((containerListAccepted) =>
+            ([[], ["IDC"], ["IDA", "PORT_FEE"]] as CustomsOperation[][]).map((pending) => ({ ...base, stage, direction, approved, kvgs: { containerListRequired, containerListAccepted, kvgsDone: false }, pending })))))));
 
   it("mọi dòng bị khóa / có lý do đều có mã, và câu = câu chuẩn của mã (reasonVi)", () => {
     for (const input of combos) {
@@ -145,12 +146,51 @@ describe("mã lý do (reasonCode) – giao diện dịch theo mã, câu tiếng 
       enabled: true, action: "EDIT", reasonCode: "EDIT_DECLARATION_FIRST", reason: "Sửa chỉ tiêu ở bước Review tờ khai và phê duyệt lại",
     });
     expect(avail({ stage: "REJECTED" })["PORT_FEE"]).toMatchObject({ reasonCode: "DECLARATION_REJECTED", reason: "Tờ khai đã bị Hải quan từ chối/hủy" });
-    expect(avail({ stage: "DECLARED", hasContainers: false })["CONT"]).toMatchObject({ reasonCode: "NO_CONTAINERS", reason: "Lô hàng không có container" });
     expect(avail({ stage: "NOT_SENT" })["IDA"]).toEqual({ op: "IDA", enabled: true, action: "SEND" });
   });
   it("mọi mã đều có câu tiếng Việt; điền tham số", () => {
     for (const code of REASON_CODES) expect(REASON_TEXT_VI[code].trim()).not.toBe("");
     expect(reasonVi("HS_UNCONFIRMED", { n: 3 })).toBe("Còn 3 mã HS chưa xác nhận");
     expect(fillReason("Còn {n} {x}", { n: 1 })).toBe("Còn 1 {x}");
+  });
+});
+
+describe("CONT_LIST + KVGS (qua khu vực giám sát)", () => {
+  const cases = {
+    "NK container": { direction: "NK", kvgs: { containerListRequired: true, containerListAccepted: false, kvgsDone: false } },
+    "XK container": { direction: "XK", kvgs: none },
+    "NK hàng không": { direction: "NK", kvgs: none },
+  } as const;
+  const stages = ["PRE_DECLARED", "DECLARED", "CLEARED"] as const;
+  it.each(Object.entries(cases).flatMap(([name, c]) => stages.map((stage) => [name, stage, c] as const)))("%s ở %s", (_n, stage, c) => {
+    const rows = avail({ stage, direction: c.direction, kvgs: c.kvgs });
+    const req = c.kvgs.containerListRequired;
+    expect(rows["CONT_LIST"]).toMatchObject({ op: "CONT_LIST", enabled: req });
+    if (!req) expect(rows["CONT_LIST"]).toMatchObject({ reasonCode: "CONT_LIST_NOT_APPLICABLE" });
+    // KVGS: cần thông quan và (không cần danh sách hoặc danh sách đã được chấp nhận)
+    const cleared = stage === "CLEARED";
+    expect(rows["KVGS"]!.enabled).toBe(cleared && !req);
+    if (!cleared) expect(rows["KVGS"]).toMatchObject({ reasonCode: "KVGS_REQUIRES_CLEARANCE" });
+    else if (req) expect(rows["KVGS"]).toMatchObject({ reasonCode: "KVGS_REQUIRES_CONTAINER_LIST" });
+  });
+  it("chưa có số tờ khai → CONT_LIST khóa với CONT_LIST_REQUIRES_DECLARATION_NUMBER", () => {
+    expect(avail({ stage: "NOT_SENT" })["CONT_LIST"]).toMatchObject({ enabled: false, reasonCode: "CONT_LIST_REQUIRES_DECLARATION_NUMBER" });
+  });
+  it("danh sách đã được chấp nhận → KVGS mở khi đã thông quan", () => {
+    const kvgs = { containerListRequired: true, containerListAccepted: true, kvgsDone: false };
+    expect(avail({ stage: "CLEARED", kvgs })["KVGS"]).toMatchObject({ enabled: true });
+    expect(avail({ stage: "DECLARED", kvgs })["KVGS"]).toMatchObject({ enabled: false, reasonCode: "KVGS_REQUIRES_CLEARANCE" });
+  });
+  it("việc tiếp theo khi đã thông quan: CONT_LIST → KVGS → null", () => {
+    const next = (kvgs: OperationAvailabilityInput["kvgs"]) => nextCustomsOperation({ ...base, stage: "CLEARED", kvgs });
+    expect(next({ containerListRequired: true, containerListAccepted: false, kvgsDone: false })).toBe("CONT_LIST");
+    expect(next({ containerListRequired: true, containerListAccepted: true, kvgsDone: false })).toBe("KVGS");
+    expect(next({ containerListRequired: false, containerListAccepted: false, kvgsDone: false })).toBe("KVGS");
+    expect(next({ containerListRequired: true, containerListAccepted: true, kvgsDone: true })).toBeNull();
+  });
+  it("containerListRequired chỉ khi NK + SEA_CONTAINER", () => {
+    expect(containerListRequired("NK", "SEA_CONTAINER")).toBe(true);
+    expect(containerListRequired("XK", "SEA_CONTAINER")).toBe(false);
+    expect(containerListRequired("NK", "AIR")).toBe(false);
   });
 });

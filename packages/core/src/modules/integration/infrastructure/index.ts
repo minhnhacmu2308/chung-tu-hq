@@ -52,13 +52,15 @@ export function createCustomsInfrastructure(opts: {
   // GỠ LỖI TẠM (FPT_DEBUG_TRACE): chỉ khi gọi FPT thật qua HTTP.
   const fptTrace = !opts.gateway && opts.env.FPT_DEBUG_TRACE && opts.env.CUSTOMS_GATEWAY === "fpt" && opts.redis ? new RedisFptTrace(opts.redis) : undefined;
   const http = fptTrace ? createFptHttpClient(opts.env, { trace: (e) => fptTrace.record(e) }) ?? undefined : undefined;
-  const gateway = opts.gateway ?? createCustomsGateway(opts.env, opts.creds ?? createVnaccsCredentialsReader(opts.identity, envVnaccsCredentials(opts.env)), http);
+  const creds = opts.creds ?? createVnaccsCredentialsReader(opts.identity, envVnaccsCredentials(opts.env));
+  const gateway = opts.gateway ?? createCustomsGateway(opts.env, creds, http);
   return {
     ...(fptTrace ? { fptTrace } : {}),
     ...(!opts.gateway && opts.env.FPT_DEBUG_TRACE ? { fptDebug: true } : {}),
     uow: new DrizzleCustomsUow(opts.db), queue: opts.queue, gateway,
     declarations: createDeclarationReader(opts.declaration), dossiers: createCustomsDossierPort(opts.dossier), validation: createCustomsValidationReader(opts.validation), certificates: createCertificateReader(opts.identity),
     audit: opts.declaration.audit, org: { fourEyes: async (orgId) => (await opts.declaration.org.get(orgId)).fourEyes },
+    vnaccsUserId: async (orgId) => (await creds.get(orgId))?.useR_ID ?? null,
     pollDelayMs: gateway.name === "fake-customs" ? 3_000 : CUSTOMS_POLL_DELAY_MS, clock: opts.clock ?? systemClock, idGen: ulidIdGen,
   };
 }

@@ -109,6 +109,14 @@ export const REASON_TEXT_VI = {
   INVOICE_NOT_CLEARED: "Tờ khai chưa thông quan – chỉ phát hành hóa đơn sau khi thông quan",
   INVOICE_TEMPLATE_NOT_FOUND: "Không tìm thấy mẫu hóa đơn",
   INVOICE_NUMBERING_INVALID: "Mẫu số hóa đơn của doanh nghiệp không hợp lệ – sửa ở Cài đặt › Doanh nghiệp",
+  KVGS_REQUIRES_CLEARANCE: "Chỉ lấy danh sách qua khu vực giám sát sau khi tờ khai đã thông quan",
+  KVGS_REQUIRES_CONTAINER_LIST: "Khai danh sách container và chờ Hải quan chấp nhận trước khi lấy danh sách qua khu vực giám sát",
+  CONT_LIST_NOT_APPLICABLE: "Danh sách container chỉ áp dụng cho tờ khai nhập khẩu hàng container",
+  CONT_LIST_REQUIRES_DECLARATION_NUMBER: "Tờ khai chưa có số – khai tờ khai trước khi khai danh sách container",
+  CONT_LIST_INVALID: "Danh sách container chưa hợp lệ: {issues}",
+  KVGS_ALREADY_SENDING: "Đang chờ phản hồi lần gửi trước – lấy phản hồi trước khi gửi lại",
+  KVGS_RESPONSE_INCOMPLETE: "Phản hồi của Hải quan thiếu thông tin để in (số quản lý hàng hóa hoặc danh sách container)",
+  CONT_LIST_LOCKED: "Danh sách container đã gửi – không sửa được, tạo lần khai mới để sửa",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

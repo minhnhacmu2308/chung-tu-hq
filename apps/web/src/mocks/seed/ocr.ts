@@ -225,6 +225,9 @@ const lineDefs = (lines: LineItem[]): Def[] =>
     { key: `item.${n}.origin`, label: `Dòng ${n} – Xuất xứ`, value: origin, group: "ITEMS" },
   ] satisfies Def[]);
 
+/** Container + seal trên vận đơn của hồ sơ mẫu "Qua khu vực giám sát" (số container đúng ISO 6346); hồ sơ khác không có → số mô phỏng. */
+const KVGS_CONTAINERS: Record<string, string[]> = { dos_029: ["TGHU0123450 / 40HC / KR884120", "MSKU7654328 / 40HC / KR884121"] };
+
 function genericDefs(kind: DocKind, d: Dossier): Def[] {
   const ref = d.code.split("-").pop() ?? "001";
   const value = d.invoiceValue === "0" ? "12480.00" : d.invoiceValue;
@@ -259,6 +262,9 @@ function genericDefs(kind: DocKind, d: Dossier): Def[] {
         // Vận đơn đường biển ghi người trả cước: nhóm E/F người mua trả (Collect), nhóm C/D người bán trả (Prepaid).
         ...(kind === "BILL_OF_LADING"
           ? [{ key: "freight_terms", label: "Điều kiện cước", value: ["EXW", "FCA", "FAS", "FOB"].includes(d.incoterm) ? "FREIGHT COLLECT" : "FREIGHT PREPAID", group: "COMMERCIAL" as const }]
+          : []),
+        ...(kind === "BILL_OF_LADING" && KVGS_CONTAINERS[d.id]
+          ? KVGS_CONTAINERS[d.id]!.map((c, i): Def => ({ key: i === 0 ? "container" : `container.${i + 1}`, label: "Container / seal", value: c, group: "TRANSPORT" }))
           : []),
         { key: "packages", label: "Số kiện", value: "12 CARTONS", group: "TRANSPORT" },
         { key: "gross_weight", label: "Trọng lượng cả bì", value: "846.00 KGS", group: "TRANSPORT" },

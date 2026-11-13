@@ -94,7 +94,7 @@ describe("orderedOperation – nghiệp vụ truyền theo thứ tự tờ", () 
   it("gửi nội dung → CONTENT; khai chính thức → DECLARE (theo baseOp); còn lại không theo thứ tự", () => {
     for (const op of ["IDA", "IDA01", "EDA", "EDA01"] as const) expect(orderedOperation(op)).toBe("CONTENT");
     for (const op of ["IDC", "IDE", "EDC", "EDE"] as const) expect(orderedOperation(op)).toBe("DECLARE");
-    for (const op of ["IDB", "IDD", "EDB", "AMA", "AMB", "AMC", "IID", "IEX", "HYS", "CONT", "PORT_FEE"] as const) expect(orderedOperation(op)).toBeNull();
+    for (const op of ["IDB", "IDD", "EDB", "AMA", "AMB", "AMC", "IID", "IEX", "HYS", "CONT", "CONT_LIST", "KVGS", "PORT_FEE"] as const) expect(orderedOperation(op)).toBeNull();
   });
   it("khai chính thức tờ 2: tờ 1 đã khai tạm / đã khai chính thức / thông quan / bị từ chối → không chờ; tờ 1 gọi về (RECALLED) → chờ tờ 1", () => {
     const s = (...stages: Parameters<typeof awaitingContent>[0][]) => stages.map((stage, i) => ({ no: i + 1, stage }));

@@ -39,7 +39,7 @@ export function createCustomsDossierPort(dossier: DossierDeps): CustomsDossierPo
   return {
     get: async (orgId, dossierId) => {
       const d = await dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.get(orgId, dossierId));
-      return d ? { id: d.id, code: d.code, direction: d.direction, typeCode: d.typeCode, partner: d.partner, status: d.status, step: d.step, declarationNo: d.declarationNo, updatedAt: d.updatedAt, ownerId: d.ownerId } : null;
+      return d ? { id: d.id, code: d.code, direction: d.direction, transportMode: d.transportMode, typeCode: d.typeCode, partner: d.partner, status: d.status, step: d.step, declarationNo: d.declarationNo, updatedAt: d.updatedAt, ownerId: d.ownerId } : null;
     },
     statuses: (orgId, ids) => dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.statusesOf(orgId, ids)),
     update: (orgId, dossierId, patch) => dossier.uow.asOrg(sys(orgId), (r) => r.dossiers.update(orgId, dossierId, { ...patch, updatedAt: dossier.clock.now() })),

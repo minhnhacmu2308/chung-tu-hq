@@ -26,7 +26,7 @@ export type OrgInfo = {
   /** Tên người bán in trên hóa đơn; thiếu = name. */
   sellerName?: string | null;
 };
-export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "MANUAL_EDIT" | "INVOICE_ISSUE"; at: Date };
+export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "MANUAL_EDIT" | "INVOICE_ISSUE" | "CONT_LIST_EDIT"; at: Date };
 
 /** Mọi phương thức nhận `orgId` tường minh (bất biến 1) – RLS là lớp thứ hai; fake in-memory từ chối orgId khác ngữ cảnh. */
 export interface ExtractionRepos {

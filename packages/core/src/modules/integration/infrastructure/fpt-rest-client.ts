@@ -15,7 +15,10 @@ export const FPT_PATHS: Record<FptOperation | "LOGIN", string> = {
   AMA: "/api/AMA", AMB: "/api/AMB", AMC: "/api/AMC",
   HYS: "/api/HYS",
   VNACCSREP: "/api/VNACCSREP",
+  V5ContainerReq: "/api/V5ContainerReq", V5ContainerRes: "/api/V5ContainerRes",
 };
+/** Nghiệp vụ V5: body phẳng theo Excel đặc tả (USER_ID, không objVNACCS_ACCOUNT / mật khẩu VNACCS). */
+const FLAT_BODY_OPS: ReadonlySet<FptOperation> = new Set(["V5ContainerReq", "V5ContainerRes"]);
 
 const LoginResponseSchema = z.object({ token: z.string().min(1), expiration: z.iso.datetime({ offset: true }) });
 
@@ -50,7 +53,7 @@ export class FptRestClient implements FptHttpClient {
 
   async post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials, meta?: FptCallMeta): Promise<unknown> {
     // VNACCSREP: body chính là tài khoản VNACCS (phẳng, theo Postman); nghiệp vụ khác bọc trong objVNACCS_ACCOUNT.
-    const payload = op === "VNACCSREP" ? { ...creds } : { objVNACCS_ACCOUNT: creds, ...(body as Record<string, unknown>) };
+    const payload = op === "VNACCSREP" ? { ...creds } : FLAT_BODY_OPS.has(op) ? { ...(body as Record<string, unknown>) } : { objVNACCS_ACCOUNT: creds, ...(body as Record<string, unknown>) };
     const at = this.now();
     const started = performance.now();
     let status: number | null = null;

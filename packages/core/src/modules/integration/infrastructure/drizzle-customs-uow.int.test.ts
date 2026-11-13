@@ -5,7 +5,8 @@ import { createDb, type Db } from "../../../db/client.js";
 import { runSeed } from "../../../db/seed/index.js";
 import { startTestDb, type TestDb } from "../../../db/test-db.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
-import type { HysFileRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import type { ContainerListRecord, HysFileRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import { isDuplicate } from "../application/kvgs.js";
 import { sentOf } from "../application/sent-sheets.js";
 import { DrizzleCustomsUow } from "./drizzle-customs-uow.js";
 
@@ -242,5 +243,62 @@ describe("DrizzleCustomsUow – hộp thư VNACCSREP", () => {
     await uow.asOrg(A, (r) => r.amendments.insert({ id: "pam_in", orgId: "org_anphat", dossierId: "dos_in", branch: 1, seq: 1, status: "PRE_DECLARED", header: { TK_SYN: "500000000123" }, lines: [], approvedAt: null, createdAt: now, updatedAt: now } as PostAmendmentRow));
     expect((await uow.asOrg(A, (r) => r.amendments.findBySyn("org_anphat", "500000000123")))?.id).toBe("pam_in");
     expect(await uow.asOrg(B, (r) => r.amendments.findBySyn("org_anphat", "500000000123"))).toBeNull();
+  });
+});
+
+describe("DrizzleCustomsUow – danh sách container và bảng kê KVGS", () => {
+  const list = (id: string, attempt: number, patch: Partial<ContainerListRecord> = {}): ContainerListRecord => ({
+    id, orgId: "org_anphat", dossierId: "dos_kvgs", branch: 1, attempt, rows: [{ billNo: "HBL1", containerNo: "FBIU5802429", sealNo: "S1", note: "", source: "OCR" }], status: "DRAFT", refId: null, receiptNo: null, receiptDate: null,
+    errors: null, sentRows: null, sentBy: null, sentAt: null, createdAt: now, updatedAt: now, ...patch,
+  });
+  const sheet = (id: string, minute: number, patch: Partial<KvgsSheetRecord> = {}): KvgsSheetRecord => ({
+    id, orgId: "org_anphat", dossierId: "dos_kvgs", branch: 1, status: "SENDING", refId: null, receiptNo: null, receiptDate: null, errors: null, sheet: null, raw: null, requestedBy: "usr_chau",
+    requestedAt: new Date(Date.UTC(2026, 10, 13, 0, minute)), fetchedAt: null, createdAt: now, updatedAt: now, ...patch,
+  });
+
+  beforeAll(async () => {
+    const admin = createDb(t.adminUrl, { max: 1 });
+    await admin.execute(sql`INSERT INTO dossiers (id, org_id, code, direction, type_code, partner, customs_office_code, due_date, owner_id) VALUES ('dos_kvgs', 'org_anphat', 'KVGS-001', 'NK', 'A11', 'P', '03CE', '2026-11-01', 'usr_chau')`);
+    await admin.close();
+  });
+
+  it("container_lists: thêm/đọc/sửa khứ hồi đúng (jsonb, ngày YYYY-MM-DD, UTC); latest = attempt lớn nhất; org khác thấy null (RLS); trùng (hồ sơ, nhánh, attempt) và trạng thái lạ bị chặn", async () => {
+    await uow.asOrg(A, async (r) => {
+      await r.containerLists.insert(list("cl_1", 1));
+      await r.containerLists.insert(list("cl_2", 2));
+    });
+    const sentAt = new Date("2026-11-13T03:04:05Z");
+    await uow.asOrg(A, (r) => r.containerLists.update("org_anphat", "cl_2", { status: "REJECTED", refId: "ref-1", receiptNo: "9001", receiptDate: "2026-11-13", errors: [{ code: "E1", message: "Sai seal" }], sentRows: list("x", 1).rows, sentBy: "usr_chau", sentAt, updatedAt: sentAt }));
+    const latest = await uow.asOrg(A, (r) => r.containerLists.latest("org_anphat", "dos_kvgs", 1));
+    expect(latest).toMatchObject({ id: "cl_2", attempt: 2, status: "REJECTED", receiptDate: "2026-11-13", errors: [{ code: "E1", message: "Sai seal" }] });
+    expect(latest?.sentAt?.toISOString()).toBe(sentAt.toISOString());
+    expect((await uow.asOrg(A, (r) => r.containerLists.get("org_anphat", "cl_1")))?.rows[0]?.containerNo).toBe("FBIU5802429");
+    expect(await uow.asOrg(B, (r) => r.containerLists.latest("org_anphat", "dos_kvgs", 1))).toBeNull();
+    expect(await uow.asOrg(B, (r) => r.containerLists.get("org_anphat", "cl_1"))).toBeNull();
+    await uow.asOrg(B, (r) => r.containerLists.update("org_anphat", "cl_1", { status: "ACCEPTED" }));
+    expect((await uow.asOrg(A, (r) => r.containerLists.get("org_anphat", "cl_1")))?.status).toBe("DRAFT");
+    await expect(uow.asOrg(A, (r) => r.containerLists.insert(list("cl_dup", 1)))).rejects.toThrow();
+    await expect(uow.asOrg(A, (r) => r.containerLists.insert(list("cl_bad", 7, { status: "LA" as ContainerListRecord["status"] })))).rejects.toThrow();
+  });
+
+  it("kvgs_sheets: latest theo lần yêu cầu mới nhất, latestOk = ACCEPTED mới nhất; org khác thấy null (RLS)", async () => {
+    await uow.asOrg(A, async (r) => {
+      await r.kvgs.insert(sheet("kv_1", 1, { status: "ACCEPTED", raw: { a: 1 } }));
+      await r.kvgs.insert(sheet("kv_2", 2, { status: "REJECTED" }));
+    });
+    expect((await uow.asOrg(A, (r) => r.kvgs.latest("org_anphat", "dos_kvgs", 1)))?.id).toBe("kv_2");
+    expect((await uow.asOrg(A, (r) => r.kvgs.latestOk("org_anphat", "dos_kvgs", 1)))?.raw).toEqual({ a: 1 });
+    expect(await uow.asOrg(B, (r) => r.kvgs.latest("org_anphat", "dos_kvgs", 1))).toBeNull();
+    expect(await uow.asOrg(B, (r) => r.kvgs.latestOk("org_anphat", "dos_kvgs", 1))).toBeNull();
+    expect(await uow.asOrg(B, (r) => r.kvgs.get("org_anphat", "kv_1"))).toBeNull();
+    await expect(uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_bad", 3, { status: "LA" as KvgsSheetRecord["status"] })))).rejects.toThrow();
+  });
+  it("kvgs_sheets: chỉ một bản SENDING mỗi (hồ sơ, nhánh) – chỉ mục duy nhất từng phần; xong bản cũ thì tạo được bản mới", async () => {
+    await uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_s1", 10, { branch: 2 })));
+    const dup = await uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_s2", 11, { branch: 2 }))).then(() => null, (e: unknown) => e);
+    expect(isDuplicate(dup)).toBe(true); // drizzle bọc lỗi PG: 23505 nằm ở .cause
+    await uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_s3", 12, { branch: 3 })));
+    await uow.asOrg(A, (r) => r.kvgs.update("org_anphat", "kv_s1", { status: "REJECTED" }));
+    await uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_s4", 13, { branch: 2 })));
   });
 });

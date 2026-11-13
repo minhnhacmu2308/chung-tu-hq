@@ -104,6 +104,12 @@ export const STATUS_META = {
   HYS_ACCEPTED: { tone: "success", label: "Hải quan đã nhận" },
   HYS_REJECTED: { tone: "danger", label: "Bị từ chối" },
   HYS_SEND_FAILED: { tone: "danger", label: "Gửi lỗi" },
+  // Qua khu vực giám sát (ADR 0014): khai danh sách container / lấy danh sách qua KVGS (V5ContainerRes.tranG_THAI 0/10/11/12)
+  KVGS_DRAFT: { tone: "neutral", label: "Chưa gửi" },
+  KVGS_SENDING: { tone: "info", label: "Đang gửi" },
+  KVGS_ACCEPTED: { tone: "success", label: "Hải quan chấp nhận" },
+  KVGS_REJECTED: { tone: "danger", label: "Bị từ chối" },
+  KVGS_NO_RESPONSE: { tone: "warning", label: "Chưa có phản hồi" },
   // Trạng thái tài khoản (thành viên doanh nghiệp, quản trị viên hệ thống)
   ACCOUNT_ACTIVE: { tone: "success", label: "Đang hoạt động" },
   ACCOUNT_INVITED: { tone: "warning", label: "Đã mời" },
@@ -179,6 +185,7 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   CUSTOMS_READY: "Awaiting submission", CUSTOMS_SENDING: "Submitting", CUSTOMS_INSPECTING: "Under inspection", CUSTOMS_CLEARED: "Cleared",
   AMA_DRAFT: "Draft, awaiting approval", AMA_APPROVED: "Approved, awaiting AMA", AMA_PRE_DECLARED: "AMA pre-declared", AMA_RECALLED: "Recalled for edit (AMB)", AMA_REGISTERED: "Registered (AMC)",
   HYS_DRAFT: "Draft", HYS_SENDING: "Sending", HYS_ACCEPTED: "Accepted by customs", HYS_REJECTED: "Rejected", HYS_SEND_FAILED: "Send failed",
+  KVGS_DRAFT: "Not sent", KVGS_SENDING: "Sending", KVGS_ACCEPTED: "Accepted by customs", KVGS_REJECTED: "Rejected", KVGS_NO_RESPONSE: "No response yet",
   ACCOUNT_ACTIVE: "Active", ACCOUNT_INVITED: "Invited", ACCOUNT_DISABLED: "Disabled", ACCOUNT_PENDING_JOIN: "Awaiting approval",
   ORG_ACTIVE: "Active", ORG_SUSPENDED: "Suspended",
   INTEGRATION_CONNECTED: "Connected", INTEGRATION_ERROR: "Connection error", INTEGRATION_NOT_CONFIGURED: "Not configured",
@@ -206,6 +213,7 @@ export const STATUS_LABELS_ZH: Record<Status, string> = {
   CUSTOMS_READY: "待发送", CUSTOMS_SENDING: "发送中", CUSTOMS_INSPECTING: "查验中", CUSTOMS_CLEARED: "已通关",
   AMA_DRAFT: "草稿，待批准", AMA_APPROVED: "已批准，待 AMA 申报", AMA_PRE_DECLARED: "已 AMA 临时申报", AMA_RECALLED: "已调回修改（AMB）", AMA_REGISTERED: "已正式申报（AMC）",
   HYS_DRAFT: "草稿", HYS_SENDING: "发送中", HYS_ACCEPTED: "海关已接收", HYS_REJECTED: "被拒绝", HYS_SEND_FAILED: "发送失败",
+  KVGS_DRAFT: "未发送", KVGS_SENDING: "发送中", KVGS_ACCEPTED: "海关已接受", KVGS_REJECTED: "被拒绝", KVGS_NO_RESPONSE: "暂无回复",
   ACCOUNT_ACTIVE: "正常", ACCOUNT_INVITED: "已邀请", ACCOUNT_DISABLED: "已停用", ACCOUNT_PENDING_JOIN: "待批准加入",
   ORG_ACTIVE: "正常", ORG_SUSPENDED: "已暂停",
   INTEGRATION_CONNECTED: "已连接", INTEGRATION_ERROR: "连接错误", INTEGRATION_NOT_CONFIGURED: "未配置",

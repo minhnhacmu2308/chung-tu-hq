@@ -3,10 +3,10 @@
 // mỗi phần tử objEDA/objIDA = { objMsgResult, objVN_<KIND>, objVN_<KIND>_TRANGTHAI, … }.
 // externalId = số tờ khai VNACCS (tK_ECN/tK_ICN) – gọi lại/đăng ký/tra cứu theo số này. Đặc tả từng nghiệp vụ: docs/vnaccs-api
 // (nguồn lệch nhau: phản hồi thật > Excel đặc tả > Postman). Mã thông điệp theo REP_VNACCS.
-import { AmaRequestSchema, FPT_DECLARATION_STATES, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
+import { AmaRequestSchema, FPT_DECLARATION_STATES, FptRefIdResponseSchema, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, V5ContainerResSchema, type CustomsOperation, type FptVnaccsCredentials, type KvgsSheet } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
-import type { CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult } from "../application/customs-ports.js";
+import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult, KvgsGatewayRequest, RefResult } from "../application/customs-ports.js";
 import { parseCustomsInfo } from "../domain/customs-info.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
 import { fptContentBody, fptNumberField } from "../domain/fpt-content-body.js";
@@ -14,7 +14,7 @@ import { fptContentBody, fptNumberField } from "../domain/fpt-content-body.js";
 export type FptOperation =
   | "IDA" | "IDB" | "IDC" | "IDD" | "IDA01" | "IDE" | "IID"
   | "EDA" | "EDB" | "EDC" | "EDD" | "EDA01" | "EDE" | "IEX"
-  | "AMA" | "AMB" | "AMC" | "HYS" | "VNACCSREP";
+  | "AMA" | "AMB" | "AMC" | "HYS" | "VNACCSREP" | "V5ContainerReq" | "V5ContainerRes";
 /** Lời gọi của doanh nghiệp / hồ sơ nào – cho nhật ký gỡ lỗi (FPT_DEBUG_TRACE). Không có dossierId = lời gọi chung (VNACCSREP). */
 export type FptCallMeta = { orgId: string; dossierId?: string };
 export interface FptHttpClient {
@@ -68,6 +68,14 @@ const fptDateToIso = (v: unknown): string | undefined => {
   const m = typeof v === "string" ? /^(\d{2})\/(\d{2})\/(\d{4})/.exec(v.trim()) : null;
   return m ? `${m[3]}-${m[2]}-${m[1]}` : undefined;
 };
+
+/** Ngày `YYYY-MM-DD` → `dd/MM/yyyy` (chỉ đổi định dạng ở cổng). */
+const isoToFptDate = (iso: string): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+};
+/** Chưa nối API KVGS: không đoán định dạng gửi/nhận khi chưa có đặc tả của FPT. */
+const KVGS_NOT_WIRED = "Chưa nối API KVGS – chờ đặc tả phản hồi của FPT";
 
 export class FptVnaccsGateway implements CustomsGateway {
   readonly name = "fpt-vnaccs";
@@ -182,6 +190,44 @@ export class FptVnaccsGateway implements CustomsGateway {
     throw domainError("NOT_SUPPORTED", `Nghiệp vụ ${op} chưa kết nối FPT.VNACCS – thực hiện trên phần mềm khai báo`);
   }
 
+  /**
+   * V5ContainerReq (KHAI BAO DANH SACH CONTAINER v1.1): body phẳng (không objVNACCS_ACCOUNT, không mật khẩu), USER_ID = user id tài khoản VNACCS của doanh nghiệp,
+   * ngày dd/MM/yyyy. Trả REF_ID.
+   */
+  async sendContainerList(orgId: string, req: ContainerListGatewayRequest, _idempotencyKey?: string): Promise<{ refId?: string; errors?: GatewayError[] }> {
+    requireVnaccsUser(req.userId);
+    const body = { ...containerListHead(req), hanG_CONT: req.rows.map((r) => ({ vD_SO: r.billNo, coN_SO: r.containerNo, seL_SO: r.sealNo, ghI_CHU: r.note })) };
+    const { env, errors } = await this.call(orgId, "V5ContainerReq", body, req.dossierId);
+    if (errors) return { errors };
+    const refId = FptRefIdResponseSchema.parse(env).reF_ID;
+    if (!refId) return { errors: [{ code: "E-FPT-NO-REFID", message: "FPT trả thành công nhưng không có REF_ID", solution: "Khai lại danh sách container" }] };
+    return { refId };
+  }
+
+  /** V5ContainerRes: head tờ khai + REF_ID + USER_ID, KHÔNG có dòng container. 12 → ACCEPTED, 10 → REJECTED (KET_QUA nếu errorList rỗng), 0/11 → PENDING. */
+  async containerListResult(orgId: string, req: Omit<ContainerListGatewayRequest, "rows"> & { refId: string }): Promise<RefResult> {
+    requireVnaccsUser(req.userId);
+    const { env, errors } = await this.call(orgId, "V5ContainerRes", { ...containerListHead(req), reF_ID: req.refId }, req.dossierId);
+    if (errors) return { state: "REJECTED", errors };
+    const res = V5ContainerResSchema.safeParse(env);
+    if (!res.success) throw domainError("GATEWAY_ERROR", "Phản hồi V5ContainerRes của FPT không đúng định dạng");
+    const code = res.data.tranG_THAI ?? "";
+    if (code === "12") {
+      const receiptDate = fptDateToIso(res.data.ngaY_TN);
+      return { state: "ACCEPTED", ...(res.data.sO_TN ? { receiptNo: res.data.sO_TN } : {}), ...(receiptDate ? { receiptDate } : {}) };
+    }
+    if (code === "10") return { state: "REJECTED", errors: [{ code: "V5-REJECTED", message: res.data.keT_QUA?.trim() || "Hải quan từ chối danh sách container" }] };
+    return { state: "PENDING" };
+  }
+
+  // TODO(ADR 0014): nối API KVGS khi chủ sản phẩm cung cấp đặc tả của FPT (body gửi, phản hồi → mapKvgsResponse). Không đoán định dạng.
+  async requestKvgs(_orgId: string, _req: KvgsGatewayRequest, _idempotencyKey?: string): Promise<{ refId?: string; errors?: GatewayError[] }> {
+    throw domainError("NOT_SUPPORTED", KVGS_NOT_WIRED);
+  }
+  async kvgsResult(_orgId: string, _req: KvgsGatewayRequest & { refId: string }): Promise<RefResult & { sheet?: KvgsSheet; raw?: unknown }> {
+    throw domainError("NOT_SUPPORTED", KVGS_NOT_WIRED);
+  }
+
   /** IID (nhập, body tK_ICN) / IEX (xuất, body tK_ECN) – theo Postman FPT; trạng thái theo VN_IDA/EDA_TRANGTHAI. */
   async queryStatus(orgId: string, externalId: string, dossierId?: string, direction?: "NK" | "XK"): Promise<GatewayStatus> {
     const dir = direction ?? directionOfNo(externalId);
@@ -220,6 +266,16 @@ export class FptVnaccsGateway implements CustomsGateway {
     return out;
   }
 }
+
+/** USER_ID rỗng = doanh nghiệp chưa cấu hình tài khoản VNACCS: báo lỗi rõ ràng (vĩnh viễn, không retry) trước khi gọi FPT. */
+function requireVnaccsUser(userId: string): void {
+  if (!userId.trim()) throw domainError("INTEGRATION_NOT_CONFIGURED", "Chưa cấu hình tài khoản VNACCS của doanh nghiệp – vào Cài đặt > Tài khoản VNACCS rồi khai lại");
+}
+
+const containerListHead = (r: Omit<ContainerListGatewayRequest, "rows">) => ({
+  tK_SOTK: r.declarationNo, tK_NGAYDK: isoToFptDate(r.registeredOn), tK_MALH: r.typeCode, tK_MAHQ: r.customsOffice, mA_DV: r.taxCode, teN_DV: r.companyName,
+  ...(r.agent ? { mA_DAI_LY: r.agent.taxCode, teN_DAI_LY: r.agent.name } : {}), useR_ID: r.userId,
+});
 
 /** Trạng thái tờ khai từ một phần tử objIDA/objEDA (TRANGTHAI: T/A/C/TE/A01/E/R, luồng, thông quan). */
 function statusOf(kind: "IDA" | "EDA", item: Obj): GatewayStatus {

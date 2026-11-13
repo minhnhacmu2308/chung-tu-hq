@@ -2,7 +2,7 @@
 import { Copy, Filter, MoreHorizontal, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import {
-  Abbreviation, Alert, Avatar, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable,
+  Abbreviation, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   Field, FileDropzone, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
@@ -258,6 +258,10 @@ export function Showcase() {
                 Bảng so sánh Trước | Sau
               </Disclosure>
               <Switch label="Tự truyền tờ khai khi không còn lỗi" description="Chỉ áp dụng cho hồ sơ luồng tự duyệt" checked={autoSubmit} onCheckedChange={setAutoSubmit} />
+              <div className="flex flex-wrap items-center gap-4 text-fg">
+                <Barcode type="qr" value="KVGS-FBIU5802429" label="Mã QR bản kê" />
+                <Barcode type="code128" value="FBIU5802429" label="Mã vạch số container" />
+              </div>
             </Stack>
           </CardContent>
         </Card>

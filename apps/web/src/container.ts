@@ -19,7 +19,7 @@ import { hashToken, provisionOrgAccount, provisionStaffAccount, requestPasswordR
 import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
 import { releaseDossierAttachments, type MailboxDeps } from "@kb/core/modules/mailbox";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
-import { checkSentSheets, countReservedDeclarations, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps } from "@kb/core/modules/integration";
+import { checkSentSheets, countReservedDeclarations, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps, prefillDocOf } from "@kb/core/modules/integration";
 import { cloneTemplatesForOrg, createSkillResolver, type SkillDeps } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
 import { lessonsForDossier, type TeachDeps } from "@kb/core/modules/teaching";
@@ -299,6 +299,15 @@ function build(): Container {
     },
   };
   customs.usage = serviceUsage;
+  // Điền sẵn danh sách container (ADR 0014): số container/seal từ bản đọc mới nhất của chứng từ đã đọc xong (extraction); chứng từ nào có trường container được dùng.
+  customs.containerSources = async (orgId, dossierId) => {
+    const docs = (await extraction.documents.listForDossier(orgId, dossierId)).filter((d) => d.status === "DONE");
+    const reads = await latestReads(extraction, orgId, docs.map((d) => ({ documentId: d.id, dossierId, kind: d.kind })));
+    return docs.flatMap((d) => {
+      const read = reads.find((x) => x.documentId === d.id);
+      return read ? [prefillDocOf(d, read.raw)] : [];
+    });
+  };
   // Lượt khai (ADR 0011): chặn khai tạm lần đầu khi thiếu lượt / hợp đồng hết hạn; IDC/EDC được chấp nhận → ghi sổ lượt (worker).
   customs.billing = createDeclarationBilling(billing);
   billing.reserved = (orgId) => countReservedDeclarations(customs, orgId);

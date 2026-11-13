@@ -19,7 +19,7 @@ export type RecallTarget = { branch: number; op: CustomsOperation | null };
  */
 export function recallTargets(snap: DeclarationSnapshot, results: ResultRow[], outbox: OutboxRow[]): RecallTarget[] {
   const of = branchCount(snap.payload.items.length);
-  const flow = (r: ResultRow) => ({ direction: snap.payload.direction, approved: sheetApproved({ stage: stageOf(r), of, declarationStatus: snap.status }), hasContainers: snap.payload.containers.length > 0 });
+  const flow = (r: ResultRow) => ({ direction: snap.payload.direction, approved: sheetApproved({ stage: stageOf(r), of, declarationStatus: snap.status }), kvgs: { containerListRequired: false, containerListAccepted: false, kvgsDone: false } });
   return results
     .filter((r) => r.branch <= of && isActiveSheet({ stage: stageOf(r), declarationNo: r.declarationNo }))
     .sort((a, b) => a.branch - b.branch)

@@ -94,6 +94,9 @@ const DOSSIERS: DossierSeed[] = [
   { n: 6, dir: "XK", type: "B13", partner: "PACIFIC MACHINERY PTE. LTD.", status: "CLEARED", step: "submit", due: -36, created: -24 * 40, value: "1950.00", inc: "EXW", mode: "ROAD", bill: "", decl: "307519987010", channel: "GREEN", owner: "usr_tuan" },
   { n: 5, dir: "NK", type: "G11", partner: "HANSOL PRECISION CO., LTD.", status: "CLEARED", step: "submit", due: -40, created: -24 * 44, value: "5300.00", inc: "FCA", mode: "SEA_CONTAINER", bill: "HPSEL2608102", decl: "107452209980", channel: "YELLOW", owner: "usr_ha" },
   { n: 4, dir: "NK", type: "A11", partner: "MORINAGA BEARING TRADING", status: "CANCELLED", step: "upload", due: -42, created: -24 * 46, value: "0", inc: "CIF", mode: "AIR", bill: "", owner: "usr_chau", note: "Tạo trùng với HS-NK-…-014" },
+  // Qua khu vực giám sát (KVGS): một NK hàng container (vận đơn có container + seal) và một XK hàng lẻ (không container) đã thông quan.
+  { n: 29, dir: "NK", type: "A11", partner: "KOREA LINEAR SYSTEM INC.", status: "CLEARED", step: "submit", due: -50, created: -24 * 52, value: "16800.00", inc: "CIF", mode: "SEA_CONTAINER", bill: "HDMUPUSA5529", decl: "107433370720", channel: "GREEN", owner: "usr_ha" },
+  { n: 30, dir: "XK", type: "B11", partner: "PACIFIC MACHINERY PTE. LTD.", status: "CLEARED", step: "submit", due: -51, created: -24 * 53, value: "8400.00", inc: "FOB", mode: "ROAD", bill: "", decl: "307433370730", channel: "GREEN", owner: "usr_tuan" },
   { n: 3, dir: "NK", type: "E21", partner: "SHENZHEN KAIDA MOTOR CO., LTD.", status: "CLEARED", step: "submit", due: -45, created: -24 * 49, value: "36475.00", inc: "FOB", mode: "SEA_CONTAINER", bill: "COSU6401502281", decl: "107433370610", channel: "GREEN", owner: "usr_ha" },
 ];
 

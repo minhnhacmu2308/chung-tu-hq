@@ -3,7 +3,7 @@ import type { Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { rowState, stageOf } from "../domain/state-machine.js";
-import { CHANNEL_NOTES, isHysOutbox, startedOf, toSubmissionView, type BranchInput } from "./_customs-view.js";
+import { CHANNEL_NOTES, isOffFlowOutbox, kvgsFlowOf, startedOf, toSubmissionView, type BranchInput } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, ResultRow } from "./customs-ports.js";
 import { openAmendmentOf } from "./post-amendment.js";
 import { sentSheetsDiff } from "../domain/branches.js";
@@ -23,7 +23,7 @@ export async function getSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: stri
     results: await r.results.listForDossier(ctx.orgId, dossierId), amendments: await r.amendments.listForDossier(ctx.orgId, dossierId),
   }));
   const of = sheetCount(snap, results);
-  const hasContainers = (snap?.payload.containers.length ?? 0) > 0;
+  const kvgsFlows = await deps.uow.asOrg(ctx, (r) => Promise.all(Array.from({ length: of }, (_, i) => kvgsFlowOf(r, ctx.orgId, dossier, i + 1))));
   // Lô nhiều tờ: tờ còn hiệu lực có nội dung khác nội dung đã gửi (cùng phép so với guard SENT_SHEETS_CHANGED).
   const changes = new Map((snap && results.length > 1 ? sentSheetsDiff(snap.payload, sentSheetsOf(results)) : []).filter((d) => d.common.length || d.lines).map((d) => [d.no, { common: d.common, lines: d.lines }]));
   const branches = Array.from({ length: of }, (_, i): BranchInput => {
@@ -33,7 +33,7 @@ export async function getSubmission(deps: CustomsDeps, ctx: Ctx, dossierId: stri
     // lô nhiều tờ đang truyền (tờ khai SUBMITTED) – các tờ chờ gửi lại nội dung vẫn là đã duyệt (không trỏ về Review đang khóa).
     const approved = sheetApproved({ stage: stageOf(result), of, declarationStatus: snap?.status ?? null, amendmentStatus: openAmendmentOf(amendments.filter((a) => a.branch === no))?.status ?? null });
     return {
-      no, of, flow: { direction: dossier.direction, approved, hasContainers },
+      no, of, flow: { direction: dossier.direction, approved, kvgs: kvgsFlows[i]! },
       messages: messages.filter((m) => m.branch === no), outbox: outbox.filter((o) => o.branch === no), result, polling: polling(result),
       sentChanges: changes.get(no) ?? null,
     };
@@ -53,17 +53,19 @@ export async function listCustomsDeclarations(deps: CustomsDeps, ctx: Ctx): Prom
     // Chưa truyền (chưa có kết quả nhánh): số tờ theo dòng hàng của tờ khai.
     const of = own.length ? sheetCount(null, own) : sheetCount(await deps.declarations.get(ctx.orgId, d.dossierId), []);
     const { messages, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ messages: await r.messages.list(ctx.orgId, d.dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, d.dossierId) }));
+    const kvgsReady = await deps.uow.asOrg(ctx, (r) => Promise.all(Array.from({ length: of }, async (_, i) => !!(await r.kvgs.latestOk(ctx.orgId, d.dossierId, i + 1)))));
     const rows = Array.from({ length: of }, (_, i): CustomsRow => {
       const no = i + 1;
       const res = own.find((r) => r.branch === no) ?? null;
       const msgs = messages.filter((m) => m.branch === no);
-      const obs = outbox.filter((o) => o.branch === no && !isHysOutbox(o));
+      const obs = outbox.filter((o) => o.branch === no && !isOffFlowOutbox(o));
       // Nghiệp vụ gần nhất của tờ: bỏ NOTE (ghi chú) và HYS (bộ hồ sơ đính kèm của cả lô, không phải lần gửi của tờ).
       const last = msgs.filter((m) => m.direction !== "NOTE" && m.operation !== "HYS").at(-1);
       const stage = stageOf(res);
       return {
         dossierId: d.dossierId, dossierCode: dossier.code, branch: no, of, direction: dossier.direction, partner: dossier.partner, typeCode: dossier.typeCode,
         state: rowState(stage, startedOf(msgs, obs, res), obs.some((o) => o.status === "PENDING")), stage,
+        kvgsReady: kvgsReady[i]!,
         updatedAt: (last?.at ?? d.approvedAt ?? dossier.updatedAt).toISOString(),
         ...(last ? { lastOperation: last.operation } : {}),
         ...(res?.declarationNo ? { declarationNo: res.declarationNo } : {}),

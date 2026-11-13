@@ -1,6 +1,6 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
-import type { AttachKind, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, FptTraceEntry, HysFill, HysStatus, PostAmendment, StepId, SubmissionState } from "@kb/contracts";
+import type { AttachKind, ContainerListRow as ContainerListRowData, ContainerListStatus, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, FptTraceEntry, HysFill, HysStatus, KvgsFetchStatus, KvgsSheet, PostAmendment, StepId, SubmissionState, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -9,6 +9,7 @@ import type { ServiceUsageMeter } from "../../../shared/usage.js";
 import type { DeclarationBilling } from "../../../shared/billing.js";
 import type { ProgressEvent } from "../../dossier/index.js";
 import type { DeclarationPayload } from "../domain/declaration-to-fpt.js";
+import type { PrefillDoc } from "../domain/container-prefill.js";
 import type { ResultRaw } from "../domain/state-machine.js";
 
 export type OutboxRow = { id: string; orgId: string; dossierId: string; /** Nhánh tờ khai (≥ 1). */ branch: number; declarationId: string; operation: CustomsOperation; idempotencyKey: string; payload: unknown; status: "PENDING" | "SENT" | "FAILED"; attempts: number; lastError: string | null; nextAttemptAt: Date | null; createdAt: Date; updatedAt: Date };
@@ -29,6 +30,17 @@ export type HysSubmissionRow = {
   reject: { code: string; message: string; solution?: string }[] | null; fill: HysFill | null; sentBy: string | null; sentAt: Date | null; createdAt: Date; updatedAt: Date;
 };
 export type HysFileRow = { id: string; orgId: string; submissionId: string; documentId: string | null; storageKey: string; fileName: string; mime: string; sizeBytes: number; position: number; createdAt: Date };
+
+/** Danh sách container khai qua khu vực giám sát (V5ContainerReq/Res, ADR 0014); mỗi lần khai (attempt) một dòng. Ngày `receiptDate` YYYY-MM-DD; thời điểm là Date (UTC). */
+export type ContainerListRecord = {
+  id: string; orgId: string; dossierId: string; branch: number; attempt: number; rows: ContainerListRowData[]; status: ContainerListStatus; refId: string | null; receiptNo: string | null; receiptDate: string | null;
+  errors: GatewayError[] | null; sentRows: ContainerListRowData[] | null; sentBy: string | null; sentAt: Date | null; createdAt: Date; updatedAt: Date;
+};
+/** Bảng kê qua khu vực giám sát lấy từ Hải quan (ADR 0014); mỗi lần lấy một dòng, `raw` = phản hồi thô. */
+export type KvgsSheetRecord = {
+  id: string; orgId: string; dossierId: string; branch: number; status: KvgsFetchStatus; refId: string | null; receiptNo: string | null; receiptDate: string | null; errors: GatewayError[] | null;
+  sheet: KvgsSheet | null; raw: unknown; requestedBy: string; requestedAt: Date; fetchedAt: Date | null; createdAt: Date; updatedAt: Date;
+};
 
 export interface CustomsRepos {
   outbox: {
@@ -94,6 +106,21 @@ export interface CustomsRepos {
     deleteFile(orgId: string, fileId: string): Promise<void>;
     deleteFiles(orgId: string, submissionId: string): Promise<void>;
   };
+  /** Danh sách container qua KVGS: `latest` = lần khai (attempt) lớn nhất của (hồ sơ, nhánh). */
+  containerLists: {
+    latest(orgId: string, dossierId: string, branch: number): Promise<ContainerListRecord | null>;
+    get(orgId: string, id: string): Promise<ContainerListRecord | null>;
+    insert(row: ContainerListRecord): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Omit<ContainerListRecord, "id" | "orgId" | "dossierId" | "branch" | "attempt" | "createdAt">>): Promise<void>;
+  };
+  /** Bảng kê KVGS lấy từ Hải quan: `latest` = lần yêu cầu mới nhất, `latestOk` = lần ACCEPTED mới nhất (bản in dùng bản này). */
+  kvgs: {
+    latest(orgId: string, dossierId: string, branch: number): Promise<KvgsSheetRecord | null>;
+    latestOk(orgId: string, dossierId: string, branch: number): Promise<KvgsSheetRecord | null>;
+    get(orgId: string, id: string): Promise<KvgsSheetRecord | null>;
+    insert(row: KvgsSheetRecord): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Omit<KvgsSheetRecord, "id" | "orgId" | "dossierId" | "branch" | "createdAt">>): Promise<void>;
+  };
 }
 
 /** Bản khai bổ sung trong DB (thời điểm là Date; DTO `PostAmendment` dùng chuỗi ISO). */
@@ -101,7 +128,7 @@ export type PostAmendmentRow = Omit<PostAmendment, "approvedAt" | "createdAt" | 
 
 /** field_audit (append-only, bất biến 6) – composition root nối sang bảng của extraction. */
 export interface CustomsAuditWriter {
-  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "AMA_EDIT" }): Promise<void>;
+  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "AMA_EDIT" | "CONT_LIST_EDIT" }): Promise<void>;
 }
 export interface CustomsUow {
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T>;
@@ -129,7 +156,23 @@ export interface CustomsGateway {
    * container qua khu vực giám sát (CONT), lệ phí cảng biển (PORT_FEE). Gateway chưa hỗ trợ nghiệp vụ → ném DomainError NOT_SUPPORTED.
    */
   send(orgId: string, msg: { op: CustomsOperation; externalId: string; dossierId: string; request?: unknown }, idempotencyKey: string): Promise<GatewaySendResult>;
+  /** Danh sách container qua khu vực giám sát, bước 1 (V5ContainerReq): trả REF_ID hoặc lỗi Hải quan (ADR 0014). */
+  sendContainerList(orgId: string, req: ContainerListGatewayRequest, idempotencyKey: string): Promise<{ refId?: string; errors?: GatewayError[] }>;
+  /** Bước 2 (V5ContainerRes): hỏi kết quả theo REF_ID – body KHÔNG có dòng container; phản hồi không trả lại dòng (giữ sentRows ở DB). */
+  containerListResult(orgId: string, req: Omit<ContainerListGatewayRequest, "rows"> & { refId: string }): Promise<RefResult>;
+  /** Lấy bảng kê qua khu vực giám sát (KVGS), bước 1: trả REF_ID hoặc lỗi. */
+  requestKvgs(orgId: string, req: KvgsGatewayRequest, idempotencyKey: string): Promise<{ refId?: string; errors?: GatewayError[] }>;
+  /** Bước 2: hỏi phản hồi KVGS theo REF_ID; `sheet` đã chuẩn hóa, `raw` = phản hồi thô. Thiếu trường để in → ACCEPTED, không có `sheet`, `errors` = KVGS_RESPONSE_INCOMPLETE. */
+  kvgsResult(orgId: string, req: KvgsGatewayRequest & { refId: string }): Promise<RefResult & { sheet?: KvgsSheet; raw?: unknown }>;
 }
+/** Kết quả hỏi theo REF_ID: `12` → ACCEPTED, `10` → REJECTED, `0`/`11` → PENDING. `receiptDate` YYYY-MM-DD. */
+export type RefResult = { state: "PENDING" | "ACCEPTED" | "REJECTED"; receiptNo?: string; receiptDate?: string; errors?: GatewayError[] };
+/** Danh sách container gửi cổng: ngày `registeredOn` YYYY-MM-DD (cổng đổi sang dd/MM/yyyy); `userId` = user id tài khoản VNACCS của doanh nghiệp (không gửi mật khẩu). `dossierId` chỉ để ghi nhật ký gỡ lỗi. */
+export type ContainerListGatewayRequest = {
+  dossierId?: string; declarationNo: string; registeredOn: string; typeCode: string; customsOffice: string; taxCode: string; companyName: string;
+  agent?: { taxCode: string; name: string }; userId: string; rows: { billNo: string; containerNo: string; sealNo: string; note: string }[];
+};
+export type KvgsGatewayRequest = { dossierId?: string; declarationNo: string; registeredOn: string; customsOffice: string; taxCode: string; kind: "CONTAINER" | "CARGO" };
 /** Thông điệp HYS gửi cổng (spec §2.2): thông tin chung của bộ + file (bytes đọc từ kho). */
 export type HysGatewayRequest = { dossierId: string; customsOffice: string; processingUnit: string; procedureCode: string; phone: string | null; internalRef: string | null; note: string | null; files: { name: string; bytes: Buffer }[]; certificateId?: string };
 export type HysGatewayResult = { receiptNo?: string; registeredOn?: string; errors?: GatewayError[] };
@@ -167,7 +210,7 @@ export interface DeclarationReader {
   listForCustoms(orgId: string): Promise<{ dossierId: string; status: DeclarationStatus; approvedAt: Date | null }[]>;
 }
 
-export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; status: DossierStatus; step: StepId; declarationNo: string | null; updatedAt: Date; /** Người tạo hồ sơ (nguyên tắc 4 mắt). */ ownerId?: string };
+export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; transportMode: TransportMode; typeCode: string; partner: string; status: DossierStatus; step: StepId; declarationNo: string | null; updatedAt: Date; /** Người tạo hồ sơ (nguyên tắc 4 mắt). */ ownerId?: string };
 export interface CustomsDossierPort {
   get(orgId: string, dossierId: string): Promise<DossierBrief | null>;
   /** Trạng thái nhiều hồ sơ một lần (đếm lượt đang giữ); thiếu → gọi `get` từng hồ sơ. */
@@ -188,6 +231,8 @@ export interface CertificateReader {
 }
 
 export type CustomsDeps = {
+  /** Chứng từ đã đọc của hồ sơ → nguồn điền sẵn danh sách container (composition root nối từ extraction). Không nối → bảng điền sẵn rỗng. */
+  containerSources?: (orgId: string, dossierId: string) => Promise<PrefillDoc[]>;
   uow: CustomsUow;
   queue: JobQueue;
   gateway: CustomsGateway;
@@ -202,6 +247,8 @@ export type CustomsDeps = {
   org: { fourEyes(orgId: string): Promise<boolean> };
   /** Khoảng cách giữa hai lần hỏi trạng thái (ms); gateway giả dùng ngắn để demo. */
   pollDelayMs: number;
+  /** User id tài khoản VNACCS của doanh nghiệp (USER_ID của danh sách container); chưa cấu hình → null. Không nối → rỗng (gateway giả). */
+  vnaccsUserId?: (orgId: string) => Promise<string | null>;
   notify?: Notifier;
   /** Ghi chi phí Customs Hub vào usage_events (module billing; container nối). Không nối → không ghi. */
   usage?: ServiceUsageMeter;

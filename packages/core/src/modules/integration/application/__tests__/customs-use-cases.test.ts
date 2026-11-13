@@ -125,7 +125,7 @@ beforeEach(() => {
   queue = new InMemoryJobQueue();
   gateway = new FakeCustomsGateway({ clearAfterPolls: 2 });
   decls = new FakeDeclarations();
-  dossiers = new FakeDossiers([{ id: D, orgId: ORG, code: "HS-NK-2610-021", direction: "NK", typeCode: "A11", partner: "HANSOL", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: new Date("2026-10-14T02:00:00.000Z") }]);
+  dossiers = new FakeDossiers([{ id: D, orgId: ORG, code: "HS-NK-2610-021", direction: "NK", transportMode: "SEA_CONTAINER", typeCode: "A11", partner: "HANSOL", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: new Date("2026-10-14T02:00:00.000Z") }]);
   blockers = 0;
   notifier = new RecordingNotifier();
   audits = [];
@@ -251,6 +251,13 @@ describe("customs-send / poll", () => {
     expect(notifier.sent[1]!.audience).toEqual({ dossierOwnerOf: D, roles: ["APPROVER"] });
     const rows = unwrap(await listCustomsDeclarations(deps, declarant));
     expect(rows[0]).toMatchObject({ dossierId: D, state: "CLEARED", stage: "CLEARED", declarationNo: gateway.declarationNoFor(D, "IDA") });
+    // kvgsReady: chỉ khi có bảng kê KVGS ACCEPTED của đúng tờ.
+    expect(rows[0]!.kvgsReady).toBe(false);
+    const at = new Date();
+    uow.data.kvgs.push({ id: "k1", orgId: ORG, dossierId: D, branch: 1, status: "SENDING", refId: null, receiptNo: null, receiptDate: null, errors: null, sheet: null, raw: null, requestedBy: "usr_chau", requestedAt: at, fetchedAt: null, createdAt: at, updatedAt: at });
+    expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]!.kvgsReady).toBe(false);
+    uow.data.kvgs[0]!.status = "ACCEPTED";
+    expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]!.kvgsReady).toBe(true);
   });
   it("job chạy 2 lần cùng outbox → 1 thông điệp OUT; lỗi tạm của gateway → giữ PENDING, ném để retry; luồng vàng cần 2 lần hỏi", async () => {
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
@@ -269,7 +276,7 @@ describe("customs-send / poll", () => {
   // HYS (bộ hồ sơ đính kèm): hys-send.test.ts.
   it("Gửi lại IDC khi Hải quan đã ghi nhận phân luồng → không gửi lại", async () => {
     const id = "dos_r";
-    dossiers.rows.push({ id, orgId: ORG, code: "HS-NK-2610-099", direction: "NK", typeCode: "A11", partner: "X", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: new Date() });
+    dossiers.rows.push({ id, orgId: ORG, code: "HS-NK-2610-099", direction: "NK", transportMode: "SEA_CONTAINER", typeCode: "A11", partner: "X", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: new Date() });
     unwrap(await submitDeclaration(deps, declarant, id, "cert_1"));
     await drain();
     // Khai chính thức, rồi Gửi lại IDC khi Hải quan đã ghi nhận phân luồng → không gửi.
@@ -344,7 +351,7 @@ describe("customs-send / poll", () => {
     unwrap(await performOperation(deps, declarant, D, "EDC"));
     await drain();
     const v = unwrap(await getSubmission(deps, declarant, D));
-    expect(v.pipeline.map((p) => p.op)).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "CONT", "PORT_FEE"]);
+    expect(v.pipeline.map((p) => p.op)).toEqual(["EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "AMA", "AMB", "AMC", "CONT_LIST", "KVGS", "PORT_FEE"]);
     expect(v.pipeline.filter((p) => p.status === "OK").map((p) => p.op)).toEqual(["EDA", "EDC"]);
     expect(v.queryOp).toBe("IEX");
     expect(uow.data.messages.some((m) => m.operation === "IEX" && m.direction === "IN")).toBe(true);
@@ -367,7 +374,8 @@ const seedOutbox = (p: Partial<OutboxRow> = {}): OutboxRow => {
 };
 /** Gateway giả với vài phương thức thay thế (giữ `this` của FakeCustomsGateway). */
 const gw = (o: Partial<CustomsGateway>): CustomsGateway => ({
-  name: "stub", preDeclare: gateway.preDeclare.bind(gateway), declare: gateway.declare.bind(gateway), attachDocuments: gateway.attachDocuments.bind(gateway), queryStatus: gateway.queryStatus.bind(gateway), send: gateway.send.bind(gateway), ...o,
+  name: "stub", preDeclare: gateway.preDeclare.bind(gateway), declare: gateway.declare.bind(gateway), attachDocuments: gateway.attachDocuments.bind(gateway), queryStatus: gateway.queryStatus.bind(gateway), send: gateway.send.bind(gateway),
+  sendContainerList: gateway.sendContainerList.bind(gateway), containerListResult: gateway.containerListResult.bind(gateway), requestKvgs: gateway.requestKvgs.bind(gateway), kvgsResult: gateway.kvgsResult.bind(gateway), ...o,
 });
 const noQuery = () => gw({ queryStatus: async () => { throw new Error("không được hỏi IEX"); } });
 const poll = (attempt = 1, dossierId = D) => pollStatus(deps, { orgId: ORG, userId: "usr_chau", dossierId, attempt });
@@ -536,7 +544,7 @@ describe("getSubmission / listCustomsDeclarations – nhánh biên", () => {
   });
 
   it("danh sách: chưa truyền → READY, thời điểm = ngày duyệt; không có ngày duyệt → ngày cập nhật hồ sơ", async () => {
-    expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]).toEqual({ dossierId: D, dossierCode: "HS-NK-2610-021", branch: 1, of: 1, direction: "NK", partner: "HANSOL", typeCode: "A11", state: "READY", stage: "NOT_SENT", updatedAt: "2026-10-14T02:00:00.000Z" });
+    expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]).toEqual({ dossierId: D, dossierCode: "HS-NK-2610-021", branch: 1, of: 1, direction: "NK", partner: "HANSOL", typeCode: "A11", state: "READY", kvgsReady: false, stage: "NOT_SENT", updatedAt: "2026-10-14T02:00:00.000Z" });
     (decls as DeclarationReader).listForCustoms = async () => [{ dossierId: D, status: "APPROVED", approvedAt: null }];
     dossiers.rows[0]!.updatedAt = new Date("2026-10-10T00:00:00.000Z");
     expect(unwrap(await listCustomsDeclarations(deps, declarant))[0]?.updatedAt).toBe("2026-10-10T00:00:00.000Z");
@@ -991,18 +999,22 @@ describe("performOperation – luồng nghiệp vụ", () => {
     unwrap(await approvePostAmendment(deps, approver, D));
   });
 
-  it("chứng từ & cảng: container qua khu vực giám sát và lệ phí cảng biển – ghi số tiếp nhận, đánh dấu đã làm, không đổi giai đoạn", async () => {
+  it("CONT_LIST và KVGS không đi qua performOperation (có route riêng) → NOT_SUPPORTED, không tạo outbox", async () => {
     deps.gateway = neverClear();
     await declared();
-    unwrap(await perform("CONT"));
-    await drain();
+    for (const op of ["CONT_LIST", "KVGS"] as const) expect(await perform(op)).toMatchObject({ ok: false, error: { code: "NOT_SUPPORTED" } });
+    expect(uow.data.outbox.filter((o) => o.operation === "CONT_LIST" || o.operation === "KVGS")).toHaveLength(0);
+  });
+
+  it("chứng từ & cảng: lệ phí cảng biển – ghi số tiếp nhận, đánh dấu đã làm, không đổi giai đoạn", async () => {
+    deps.gateway = neverClear();
+    await declared();
     unwrap(await perform("PORT_FEE"));
     await drain();
     const v = await view();
     expect(v.stage).toBe("DECLARED");
-    expect(v.pipeline.find((p) => p.op === "CONT")).toMatchObject({ status: "OK", summary: expect.stringMatching(/1 container.*SITU2246781/) });
     expect(v.pipeline.find((p) => p.op === "PORT_FEE")).toMatchObject({ status: "OK", summary: expect.stringMatching(/mô phỏng/) });
-    expect(uow.data.results[0]!.raw).toMatchObject({ done: expect.arrayContaining(["CONT", "PORT_FEE"]), side: { CONT: expect.any(String), PORT_FEE: expect.any(String) } });
+    expect(uow.data.results[0]!.raw).toMatchObject({ done: expect.arrayContaining(["PORT_FEE"]), side: { PORT_FEE: expect.any(String) } });
   });
 
   it("tra cứu IID trả lời ngay (không outbox); đang chờ phản hồi một nghiệp vụ → nghiệp vụ khác bị chặn", async () => {

@@ -253,6 +253,13 @@
       "when": 1794473486371,
       "tag": "0035_xk_khai_truoc_hoa_don",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794547879221,
+      "tag": "0036_kvgs",
+      "breakpoints": true
     }
   ]
 }

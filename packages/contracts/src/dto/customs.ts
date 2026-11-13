@@ -11,7 +11,7 @@ export const CustomsOperationSchema = z.enum([
   "IDA", "IDB", "IDC", "IDD", "IDA01", "IDE", "IID",
   "EDA", "EDB", "EDC", "EDD", "EDA01", "EDE", "IEX",
   "AMA", "AMB", "AMC",
-  "HYS", "CONT", "PORT_FEE",
+  "HYS", "CONT", "CONT_LIST", "KVGS", "PORT_FEE",
 ]);
 export type CustomsOperation = z.infer<typeof CustomsOperationSchema>;
 

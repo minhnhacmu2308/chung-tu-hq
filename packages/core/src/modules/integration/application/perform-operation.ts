@@ -15,7 +15,7 @@ import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { buildAmaRequest } from "../domain/post-amendment.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
-import { availabilityInput, hasBlockingPending, OPERATION_LABELS } from "./_customs-view.js";
+import { availabilityInput, hasBlockingPending, kvgsFlowOf, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { auditHysWaiver, hysGuard, recordHysWaiver, type HysWaiver } from "./hys-guard.js";
 import { pullCustomsMessages } from "./customs-messages.js";
@@ -42,6 +42,8 @@ export async function performOperation(deps: CustomsDeps, ctx: Ctx, dossierId: s
 export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, op: CustomsOperation, branch = 1, opts?: OperationOpts): Promise<Result<OperationResult>> {
   // HYS không còn là nghiệp vụ của từng tờ: khai bằng bộ hồ sơ đính kèm (sendHys).
   if (op === "HYS") return err(reasonError("INVALID_STATE", "HYS_USE_SUBMISSION"));
+  // Danh sách container / KVGS có route riêng (không qua outbox từng tờ).
+  if (op === "CONT_LIST" || op === "KVGS") return err(domainError("NOT_SUPPORTED", op + " khai bằng thẻ Qua khu vực giám sát, không gửi qua nghiệp vụ của tờ khai"));
   const dossier = await deps.dossiers.get(ctx.orgId, dossierId);
   if (!dossier) return err(domainError("NOT_FOUND", "Không tìm thấy hồ sơ"));
   const snap = await deps.declarations.get(ctx.orgId, dossierId);
@@ -56,7 +58,7 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
   // Sau thông quan: "đã duyệt" là bản khai bổ sung AMA (tờ khai gốc giữ nguyên, không duyệt lại).
   // Lô nhiều tờ: tờ khai SUBMITTED = nội dung đã duyệt đang được truyền lần lượt từng tờ (các tờ sau vẫn gửi đúng nội dung đó). Dùng chung màn Truyền (getSubmission).
   const approved = sheetApproved({ stage: stageOf(result), of, declarationStatus: snap.status, amendmentStatus: amendment?.status ?? null });
-  const flow = { direction: dossier.direction, approved, hasContainers: snap.payload.containers.length > 0 };
+  const flow = { direction: dossier.direction, approved, kvgs: await deps.uow.asOrg(ctx, (r) => kvgsFlowOf(r, ctx.orgId, dossier, branch)) };
   const a = operationAvailability(availabilityInput(flow, result, outbox)).find((x) => x.op === op);
   if (!a) return err(domainError("VALIDATION", `Nghiệp vụ ${op} không thuộc luồng tờ khai ${dossier.direction === "NK" ? "nhập" : "xuất"} khẩu`));
   if (!a.enabled) return err(a.reasonCode ? reasonError("INVALID_STATE", a.reasonCode, a.reasonParams) : domainError("INVALID_STATE", `Chưa thực hiện được ${op}`));
@@ -145,7 +147,7 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
     // Gọi lại / đăng ký bản khai bổ sung: theo số tờ khai bổ sung Hải quan cấp ở AMA (tK_SYN).
     const syn = amendment?.header["TK_SYN"] ?? amendment?.result?.["TK_SYN"];
     payload = { request: { soToKhai: result.declarationNo, ...(syn ? { tK_SYN: String(syn) } : {}) }, certificateId: result.raw?.certificateId };
-  } else if (op === "CONT" || op === "PORT_FEE") {
+  } else if (op === "PORT_FEE") {
     payload = { request: { soToKhai: result.declarationNo, containers: snap.payload.containers }, certificateId: result.raw?.certificateId };
   }
   return enqueue(deps, ctx, { dossierId, declarationId: snap.declarationId, op, payload, result, outbox, content: isContentOperation(op), waiver, ...(opts?.chainFrom ? { key: `${dossierId}:${op}:chain${opts.chainFrom}${branch > 1 ? `:b${branch}` : ""}` } : {}), ...(isContentOperation(op) && of > 1 ? { version: snap.version } : {}) });

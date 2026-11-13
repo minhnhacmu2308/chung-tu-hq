@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, postAmendments } from "../../../db/schema/integration.js";
+import { containerLists, customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, kvgsSheets, postAmendments } from "../../../db/schema/integration.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import type { ContainerListRecord, CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
 
 function repos(tx: Tx): CustomsRepos {
   const toOutbox = (r: typeof customsOutbox.$inferSelect): OutboxRow => ({ ...r, operation: r.operation as OutboxRow["operation"], status: r.status as OutboxRow["status"] });
@@ -18,6 +18,8 @@ function repos(tx: Tx): CustomsRepos {
   };
   const amendmentCols = (row: PostAmendmentRow) => ({ status: row.status, header: row.header, lines: row.lines, approvedBy: row.approvedBy ?? null, approvedAt: row.approvedAt, result: row.result ?? null, updatedAt: row.updatedAt });
   const toHys = (r: typeof hysSubmissions.$inferSelect): HysSubmissionRow => ({ ...r, attachKind: r.attachKind as HysSubmissionRow["attachKind"], purpose: r.purpose as HysSubmissionRow["purpose"], status: r.status as HysSubmissionRow["status"], reject: r.reject as HysSubmissionRow["reject"], fill: r.fill as HysSubmissionRow["fill"] });
+  const toContainerList = (r: typeof containerLists.$inferSelect): ContainerListRecord => ({ ...r, rows: r.rows as ContainerListRecord["rows"], status: r.status as ContainerListRecord["status"], errors: r.errors as ContainerListRecord["errors"], sentRows: r.sentRows as ContainerListRecord["sentRows"] });
+  const toKvgs = (r: typeof kvgsSheets.$inferSelect): KvgsSheetRecord => ({ ...r, status: r.status as KvgsSheetRecord["status"], errors: r.errors as KvgsSheetRecord["errors"], sheet: r.sheet as KvgsSheetRecord["sheet"] });
   return {
     outbox: {
       get: async (orgId, id) => {
@@ -108,6 +110,34 @@ function repos(tx: Tx): CustomsRepos {
       insertFile: async (row) => void (await tx.insert(hysSubmissionFiles).values(row)),
       deleteFile: async (orgId, fileId) => void (await tx.delete(hysSubmissionFiles).where(and(eq(hysSubmissionFiles.orgId, orgId), eq(hysSubmissionFiles.id, fileId)))),
       deleteFiles: async (orgId, submissionId) => void (await tx.delete(hysSubmissionFiles).where(and(eq(hysSubmissionFiles.orgId, orgId), eq(hysSubmissionFiles.submissionId, submissionId)))),
+    },
+    containerLists: {
+      latest: async (orgId, dossierId, branch) => {
+        const r = (await tx.select().from(containerLists).where(and(eq(containerLists.orgId, orgId), eq(containerLists.dossierId, dossierId), eq(containerLists.branch, branch))).orderBy(desc(containerLists.attempt)).limit(1))[0];
+        return r ? toContainerList(r) : null;
+      },
+      get: async (orgId, id) => {
+        const r = (await tx.select().from(containerLists).where(and(eq(containerLists.orgId, orgId), eq(containerLists.id, id))).limit(1))[0];
+        return r ? toContainerList(r) : null;
+      },
+      insert: async (row) => void (await tx.insert(containerLists).values(row)),
+      update: async (orgId, id, patch) => void (await tx.update(containerLists).set(patch).where(and(eq(containerLists.orgId, orgId), eq(containerLists.id, id)))),
+    },
+    kvgs: {
+      latest: async (orgId, dossierId, branch) => {
+        const r = (await tx.select().from(kvgsSheets).where(and(eq(kvgsSheets.orgId, orgId), eq(kvgsSheets.dossierId, dossierId), eq(kvgsSheets.branch, branch))).orderBy(desc(kvgsSheets.requestedAt), desc(kvgsSheets.id)).limit(1))[0];
+        return r ? toKvgs(r) : null;
+      },
+      latestOk: async (orgId, dossierId, branch) => {
+        const r = (await tx.select().from(kvgsSheets).where(and(eq(kvgsSheets.orgId, orgId), eq(kvgsSheets.dossierId, dossierId), eq(kvgsSheets.branch, branch), eq(kvgsSheets.status, "ACCEPTED"))).orderBy(desc(kvgsSheets.requestedAt), desc(kvgsSheets.id)).limit(1))[0];
+        return r ? toKvgs(r) : null;
+      },
+      get: async (orgId, id) => {
+        const r = (await tx.select().from(kvgsSheets).where(and(eq(kvgsSheets.orgId, orgId), eq(kvgsSheets.id, id))).limit(1))[0];
+        return r ? toKvgs(r) : null;
+      },
+      insert: async (row) => void (await tx.insert(kvgsSheets).values(row)),
+      update: async (orgId, id, patch) => void (await tx.update(kvgsSheets).set(patch).where(and(eq(kvgsSheets.orgId, orgId), eq(kvgsSheets.id, id)))),
     },
   };
 }

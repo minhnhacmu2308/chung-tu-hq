@@ -119,7 +119,7 @@ export function makeHarness(): Harness {
   const uow = new InMemoryCustomsUow();
   const queue = new InMemoryJobQueue();
   const decls = new FakeDeclarations();
-  const dossiers = new FakeDossiers([{ id: D, orgId: ORG, code: "HS-NK-2610-021", direction: "NK", typeCode: "A11", partner: "HANSOL", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: T }]);
+  const dossiers = new FakeDossiers([{ id: D, orgId: ORG, code: "HS-NK-2610-021", direction: "NK", transportMode: "SEA_CONTAINER", typeCode: "A11", partner: "HANSOL", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: T }]);
   decls.dossiers = dossiers;
   const deps: CustomsDeps = {
     notify: new RecordingNotifier(), uow, queue, gateway: new FakeCustomsGateway({ clearAfterPolls: 2 }), declarations: decls, dossiers,

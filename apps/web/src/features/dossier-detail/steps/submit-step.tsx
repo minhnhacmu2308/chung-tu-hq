@@ -9,7 +9,7 @@ import {
 import { baseOp, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDownLeft, ArrowRight, ArrowUpRight, CheckCircle2, StickyNote, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
+  ArrowDown, ArrowRight, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
@@ -22,9 +22,10 @@ import { getHysOverview, hysKeys } from "@/api/hys";
 import { getPostAmendmentView, postAmendmentKeys } from "@/api/post-amendment";
 import { billingKeys } from "@/api/billing";
 import { getOrganization, settingsKeys } from "@/api/settings";
+import { getSession, sessionKeys } from "@/api/session";
 import { ApiError } from "@/lib/api-error";
 import { fromMinor, toMinor } from "@/lib/decimal";
-import { formatDate, formatDateTime, formatRelative, formatTime, formatVnd } from "@/lib/format";
+import { formatDate, formatDateTime, formatRelative, formatVnd } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { rowReason } from "@/lib/reason-codes";
 import type { CustomsChannel, Declaration } from "@/mocks/types";
@@ -37,7 +38,9 @@ import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
 import { FptPreviewButton, FptTracePanel } from "./fpt-trace-panel";
+import { MessageList } from "./message-list";
 import { HysCard } from "./hys/hys-card";
+import { KVGS_EDITORS, KvgsCard, kvgsAnchor } from "./kvgs/kvgs-card";
 import { IssuedInvoiceCard } from "../issued-invoice/issued-invoice-card";
 import { HysSuggestDialog } from "./hys/hys-suggest-dialog";
 import { HYS_MESSAGES } from "./hys/hys.messages";
@@ -45,8 +48,6 @@ import { billingErrorOf, billingBlockFor, BillingBlockAlert, ContractGraceAlert,
 import { canDeclareAll, submissionRefetchMs, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
-
-const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
 
 const CHANNEL_STATUS = { GREEN: "GREEN_CHANNEL", YELLOW: "YELLOW_CHANNEL", RED: "RED_CHANNEL" } as const satisfies Record<CustomsChannel, string>;
 
@@ -68,7 +69,7 @@ const opLabel = (ops: Record<OpKey, string>, r: Pick<PipelineRow, "op" | "label"
 /** Nhãn nút gửi theo nghiệp vụ gốc (mã nhập; mã xuất E… dùng chung). */
 const SEND_KEY: Partial<Record<CustomsOperation, keyof SubmitText>> = {
   IDA: "sendIDA", IDB: "sendRecall", IDC: "sendIDC", IDD: "sendRecall", IDA01: "sendIDA01", IDE: "sendIDE",
-  AMA: "sendAMA", AMB: "sendRecall", AMC: "sendAMC", CONT: "send", PORT_FEE: "sendPortFee",
+  AMA: "sendAMA", AMB: "sendRecall", AMC: "sendAMC", PORT_FEE: "sendPortFee",
 };
 const sendLabel = (t: SubmitText, r: PipelineRow, stage: CustomsStage) => {
   if (baseOp(r.op) === "IDA" && stage === "RECALLED") return t.sendIDAAgain;
@@ -80,6 +81,8 @@ const monthYear = (iso: string, locale: UiLocale) => (locale === "zh" ? `${iso.s
 /** Gửi lại khi lỗi: chỉ các nghiệp vụ có kịch bản tra cứu-trước-khi-gửi-lại (ADR 0005). */
 const RESENDABLE: ReadonlySet<CustomsOperation> = new Set(["IDA", "EDA", "IDC", "EDC"]);
 const isRecall = (op: CustomsOperation) => CUSTOMS_OPERATIONS[op].kind === "recall";
+/** Khai danh sách container / lấy DS qua KVGS: làm trên thẻ "Qua khu vực giám sát" (route riêng), không gửi qua nghiệp vụ của tờ. */
+const isKvgsOp = (op: CustomsOperation) => baseOp(op) === "CONT_LIST" || baseOp(op) === "KVGS";
 
 type PhaseState = { text: string; tone: Tone };
 function phaseState(t: SubmitText, rows: PipelineRow[], stage: CustomsStage, phase: CustomsPhase): PhaseState {
@@ -98,6 +101,8 @@ function PipeIcon({ status }: { status: PipelineStatus }) {
 }
 
 type RowHandlers = {
+  /** Tờ khai nhánh của bộ xử lý (lô 1 tờ: 1) – nút "Mở thẻ Qua khu vực giám sát" trỏ tới #kvgs-<branch>. */
+  branch: number;
   stage: CustomsStage;
   nextOp: CustomsOperation | null;
   busyOp: CustomsOperation | null;
@@ -121,6 +126,16 @@ function RowButton({ r, h }: { r: PipelineRow; h: RowHandlers }) {
   }
   if (!r.enabled) return null;
   const primary = h.nextOp === r.op;
+  if (isKvgsOp(r.op)) {
+    return (
+      <Button asChild size="sm" variant={primary ? "primary" : "secondary"}>
+        <a href={`#${kvgsAnchor(h.branch)}`}>
+          <ArrowDown aria-hidden="true" className="h-3.5 w-3.5" />
+          {t.openKvgs}
+        </a>
+      </Button>
+    );
+  }
   if (r.action === "EDIT") {
     return (
       <Button size="sm" variant={primary ? "primary" : "secondary"} leftIcon={<FilePen className="h-3.5 w-3.5" />} onClick={() => h.onAction(r)} aria-label={fill(t.editBeforeAria, { op: r.op })}>
@@ -174,13 +189,16 @@ function OperationRow({ r, h }: { r: PipelineRow; h: RowHandlers }) {
   );
 }
 
-function PhaseSection({ index, phase, rows, h }: { index: number; phase: (typeof CUSTOMS_PHASES)[number]; rows: PipelineRow[]; h: RowHandlers }) {
+/** `extra`: nội dung thêm cuối giai đoạn (④ Chứng từ & cảng: thẻ Qua khu vực giám sát thay dòng CONT_LIST/KVGS). */
+function PhaseSection({ index, phase, rows, h, extra }: { index: number; phase: (typeof CUSTOMS_PHASES)[number]; rows: PipelineRow[]; h: RowHandlers; extra?: ReactNode }) {
   const t = useMessages(SUBMIT_MESSAGES);
   const phases = useMessages(PHASE_MESSAGES);
   const title = phases[phase.id];
   const st = phaseState(t, rows, h.stage, phase.id);
   // Lô nhiều tờ: mỗi thẻ tờ có bộ giai đoạn riêng → id tiêu đề riêng từng thẻ.
   const headingId = `${useId()}-phase-${phase.id}`;
+  // CONT_LIST / KVGS có thẻ riêng (extra) khi tờ đã có số; chưa có số thì vẫn hiện dòng (lý do khóa).
+  const shown = extra ? rows.filter((r) => !isKvgsOp(r.op)) : rows;
   return (
     <section aria-labelledby={headingId} className="rounded-md border border-border">
       <header className="flex flex-wrap items-start justify-between gap-2 border-b border-border bg-surface-muted px-3 py-2.5">
@@ -194,11 +212,14 @@ function PhaseSection({ index, phase, rows, h }: { index: number; phase: (typeof
           {st.text}
         </Badge>
       </header>
-      <ol className="flex flex-col divide-y divide-border" aria-label={title}>
-        {rows.map((r) => (
-          <OperationRow key={r.op} r={r} h={h} />
-        ))}
-      </ol>
+      {shown.length > 0 && (
+        <ol className="flex flex-col divide-y divide-border" aria-label={title}>
+          {shown.map((r) => (
+            <OperationRow key={r.op} r={r} h={h} />
+          ))}
+        </ol>
+      )}
+      {extra && <div className={shown.length > 0 ? "border-t border-border p-3" : "p-3"}>{extra}</div>}
     </section>
   );
 }
@@ -272,49 +293,6 @@ export function MessageLog({ messages }: { messages: SubmissionView["messages"] 
         <MessageList messages={messages} />
       </CardContent>
     </Card>
-  );
-}
-
-/** Danh sách thông điệp gửi/nhận (thẻ nhật ký của hồ sơ, hoặc khối nhật ký trong thẻ từng tờ). */
-function MessageList({ messages }: { messages: SubmissionView["messages"] }) {
-  const t = useMessages(SUBMIT_MESSAGES);
-  return (
-    <>
-        {messages.length === 0 ? (
-          <EmptyState title={t.logEmptyTitle} description={t.logEmptyDesc} />
-        ) : (
-          <ul className="flex flex-col divide-y divide-border rounded-md border border-border" aria-live="polite">
-            {messages.map((m) => (
-              <li key={m.id}>
-                <details className="group">
-                  <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-3 py-2.5 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                    {m.direction === "NOTE" ? (
-                      <StickyNote aria-label={t.note} className="h-4 w-4 text-fg-subtle" />
-                    ) : m.direction === "OUT" ? (
-                      <ArrowUpRight aria-label={t.outgoing} className="h-4 w-4 text-fg-subtle" />
-                    ) : (
-                      <ArrowDownLeft aria-label={t.incoming} className="h-4 w-4 text-primary" />
-                    )}
-                    <Badge tone="neutral" variant="outline" className="font-mono">
-                      {m.operation}
-                    </Badge>
-                    <span className="min-w-0 flex-1 text-sm text-fg cq-sm:min-w-48">{m.summary}</span>
-                    {m.direction === "NOTE" ? (
-                      <Badge tone="neutral">{t.note}</Badge>
-                    ) : (
-                      <Badge tone={m.result === "OK" ? "success" : m.result === "ERROR" ? "danger" : "info"}>
-                        {m.result === "OK" ? t.pipeOk : m.result === "ERROR" ? t.pipeError : t.pipeSending}
-                      </Badge>
-                    )}
-                    <span className="text-xs tabular-nums text-fg-subtle" title={formatDateTime(m.at)}>{isToday(m.at) ? formatTime(m.at) : formatDateTime(m.at)}</span>
-                  </summary>
-                  <pre className="mx-3 mb-3 overflow-x-auto rounded-md bg-surface-muted p-3 font-mono text-xs text-fg-muted">{m.payloadPreview}</pre>
-                </details>
-              </li>
-            ))}
-          </ul>
-        )}
-    </>
   );
 }
 
@@ -480,6 +458,9 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   const certQ = useQuery({ queryKey: customsKeys.certificates, queryFn: listCertificates });
   // Gói (ADR 0011): lượt khả dụng / hợp đồng để báo trước và khóa nút gửi lần đầu; máy chủ vẫn chặn lần nữa (INSUFFICIENT_CREDITS / CONTRACT_EXPIRED).
   const orgQ = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
+  // Qua khu vực giám sát: gửi/sửa chỉ DECLARANT / APPROVER / ADMIN (+ OWNER); vai trò khác xem và in.
+  const sessionQ = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
+  const canEditKvgs = Boolean(sessionQ.data && KVGS_EDITORS.has(sessionQ.data.user.role));
   const [billingError, setBillingError] = useState<BillingBlock | null>(null);
   /** Lỗi do gói → giữ để hiện Alert chặn, tải lại số lượt; trả true khi đúng là lỗi do gói. */
   const onBillingError = (e: unknown) => {
@@ -619,6 +600,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
 
   /** Bộ xử lý nút của tờ `branch` (lô 1 tờ: tờ 1). */
   const handlersFor = (branch: number, stage: CustomsStage, nextOp: CustomsOperation | null): RowHandlers => ({
+    branch,
     stage,
     nextOp,
     busyOp: busy?.branch === branch ? busy.op : null,
@@ -637,6 +619,9 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     onResend: (r) => resend.mutate({ r, branch }),
   });
   const h = handlersFor(1, s.stage, s.nextOp);
+  /** Thẻ Qua khu vực giám sát của tờ `b` (thay dòng CONT_LIST / KVGS ở ④): khi tờ đã có số và luồng có hai nghiệp vụ này. */
+  const kvgsCardFor = (b: BranchSubmission | undefined) =>
+    b?.declarationNo && b.pipeline.some((r) => isKvgsOp(r.op)) ? <KvgsCard dossierId={dossier.id} branch={b.no} canEdit={canEditKvgs} customsOfficeName={dossier.customsOffice} /> : null;
 
   const certPicker =
     firstSend && next && baseOp(next.op) === "IDA" ? (
@@ -807,6 +792,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             onQuery={() => perform.mutate({ op: b.queryOp, branch: b.no })}
             onViewErrors={() => goTo("review")}
             onPost={() => goTo("post", { branch: b.no })}
+            kvgs={kvgsCardFor(b)}
           />
         ))}
 
@@ -884,7 +870,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
               {firstSend && certExpired && <Alert tone="warning">{t.certExpired}</Alert>}
 
               {CUSTOMS_PHASES.filter((p) => pipeline.some((r) => r.phase === p.id)).map((p, i) => (
-                <PhaseSection key={p.id} index={i + 1} phase={p} rows={pipeline.filter((r) => r.phase === p.id)} h={h} />
+                <PhaseSection key={p.id} index={i + 1} phase={p} rows={pipeline.filter((r) => r.phase === p.id)} h={h} extra={p.id === "DOCS" ? kvgsCardFor(sheets[0]) : null} />
               ))}
             </Stack>
           </CardContent>
@@ -910,7 +896,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
  * nghiệp vụ theo giai đoạn và nhật ký của tờ; tờ đã thông quan có nút sang bước 7 (AMA của tờ).
  */
 function SheetCard({
-  b, of, s, waiting, declareWaiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost,
+  b, of, s, waiting, declareWaiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost, kvgs,
 }: {
   b: BranchSubmission;
   of: number;
@@ -925,6 +911,8 @@ function SheetCard({
   onQuery: () => void;
   onViewErrors: () => void;
   onPost: () => void;
+  /** Thẻ Qua khu vực giám sát của tờ (ngoài khối nghiệp vụ thu gọn – lối tắt #kvgs-<tờ> cuộn tới được). */
+  kvgs: ReactNode;
 }) {
   const t = useMessages(SUBMIT_MESSAGES);
   const sh = useMessages(SHEET_MESSAGES);
@@ -1018,6 +1006,7 @@ function SheetCard({
           <Disclosure title={sh.sheetLog} meta={<Badge tone="neutral">{b.messages.length}</Badge>}>
             <MessageList messages={b.messages} />
           </Disclosure>
+          {kvgs}
         </Stack>
       </CardContent>
     </Card>

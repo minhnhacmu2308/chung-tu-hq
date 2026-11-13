@@ -10,6 +10,8 @@ import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import type { CustomsDeps } from "./customs-ports.js";
 import { HysOutboxPayloadSchema } from "./process-hys.js";
+import { ContListPayload, KvgsPayload } from "./process-kvgs.js";
+import { patchTarget } from "./poll-kvgs.js";
 
 export async function reopenDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: string): Promise<Result<void>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -40,7 +42,7 @@ export async function reopenDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   return err(domainError("INVALID_STATE", "Tờ khai chưa được duyệt"));
 }
 
-/** Worker gọi khi job customs-send hết số lần thử: outbox FAILED, trạng thái SEND_FAILED để người dùng Gửi lại (HYS: bộ SEND_FAILED, không đụng kết quả truyền – K1). */
+/** Worker gọi khi job customs-send hết số lần thử: outbox FAILED, trạng thái SEND_FAILED để người dùng Gửi lại (HYS: bộ SEND_FAILED; CONT_LIST/KVGS: bản ghi REJECTED – đều không đụng kết quả truyền, K1). */
 export async function markOutboxFailed(deps: CustomsDeps, input: { orgId: string; outboxId: string; reason: string }): Promise<Result<void>> {
   await deps.uow.asOrg({ orgId: asOrgId(input.orgId), userId: asUserId("") }, async (r) => {
     const ob = await r.outbox.get(input.orgId, input.outboxId);
@@ -52,6 +54,14 @@ export async function markOutboxFailed(deps: CustomsDeps, input: { orgId: string
       const p = HysOutboxPayloadSchema.safeParse(ob.payload);
       const sub = p.success ? await r.hys.get(input.orgId, p.data.submissionId) : null;
       if (sub && sub.status === "SENDING") await r.hys.update(input.orgId, sub.id, { status: "SEND_FAILED", reject: [{ code: "E-SEND", message: input.reason }], updatedAt: now });
+      return;
+    }
+    if (ob.operation === "CONT_LIST" || ob.operation === "KVGS") {
+      const kind = ob.operation;
+      const p = kind === "CONT_LIST" ? ContListPayload.safeParse(ob.payload) : KvgsPayload.safeParse(ob.payload);
+      const id = p.success ? ("listId" in p.data ? p.data.listId : p.data.kvgsId) : null;
+      const target = id ? await (kind === "CONT_LIST" ? r.containerLists.get(input.orgId, id) : r.kvgs.get(input.orgId, id)) : null;
+      if (id && target && target.status === "SENDING" && !target.refId) await patchTarget(r, input.orgId, kind, id, { status: "REJECTED", errors: [{ code: "E-SEND", message: input.reason }] }, now);
       return;
     }
     const result = await r.results.get(input.orgId, ob.dossierId, ob.branch);

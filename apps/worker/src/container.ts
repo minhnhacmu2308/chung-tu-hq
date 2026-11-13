@@ -11,8 +11,10 @@ import { createCustomsInfrastructure } from "@kb/core/modules/integration/infras
 import { checkSentSheets, countReservedDeclarations, customsEditSheets, listDeclaredBranches } from "@kb/core/modules/integration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
+import { createCatalogInfrastructure } from "@kb/core/modules/catalog/infrastructure";
 import { cloneTemplatesForOrg, createSkillResolver } from "@kb/core/modules/skill";
 import { createSkillInfrastructure } from "@kb/core/modules/skill/infrastructure";
+import { createCatalogLinks } from "@kb/core/modules/catalog";
 import { lessonsForDossier } from "@kb/core/modules/teaching";
 import { createTeachInfrastructure, createTeachLotPort } from "@kb/core/modules/teaching/infrastructure";
 import { runRules } from "@kb/core/modules/validation";
@@ -166,6 +168,22 @@ export function buildContainer() {
   dossier.customsSheets = customsSheets;
   // Hộp thư chứng từ: lấy thư Gmail / Outlook, file lưu cùng kho chứng từ.
   const mailbox = createMailboxInfrastructure({ db, env, queue, dossier, identity, clock: systemClock });
+  // Danh mục hàng hóa (job catalog-import): cùng cách nối như apps/web/src/container.ts.
+  const catalog = createCatalogInfrastructure({
+    db, extraction, declaration, jobs: queue, orgAudit: identity.audit, clock: systemClock,
+    members: {
+      eligibleOwners: async (orgId, userIds) => {
+        const ms = await identity.uow.asOrg({ orgId, userId: asUserId("") }, (r) => r.memberships.listByOrg(orgId));
+        const want = new Set(userIds);
+        return new Set(ms.filter((m) => want.has(m.userId) && m.status === "ACTIVE" && m.role !== "VIEWER").map((m) => m.userId));
+      },
+    },
+  });
+  // Danh mục hàng hóa dùng chung → dòng tờ khai (gắn mặt hàng, HAG_MAHANG, duyệt → số lần khai / hàng chờ) và bài học mặt hàng (đề xuất bí danh LESSON).
+  // Module declaration/teaching gọi các cổng này NGOÀI transaction của mình.
+  const catalogLinks = createCatalogLinks(catalog);
+  declaration.catalog = catalogLinks;
+  teach.catalog = catalogLinks;
   // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
   mailbox.audit = identity.audit;
   dossier.audit = identity.audit;
@@ -179,7 +197,7 @@ export function buildContainer() {
   identity.mailer = { send: (m) => mail.send(m) };
   const email = { uow: rates.uow as DrizzleAdminUow, mail, clock: systemClock };
   return {
-    env, db, redis, queue, identity, billing, billingReconcile, dossier, validation, extraction, skill, declaration, teach, customs, mailbox, rates, email,
+    env, db, redis, queue, identity, billing, catalog, billingReconcile, dossier, validation, extraction, skill, declaration, teach, customs, mailbox, rates, email,
     async close() {
       await Promise.all([...queues.values()].map((q) => q.close()));
       await rates.db.close();

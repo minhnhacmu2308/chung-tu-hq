@@ -302,6 +302,8 @@ export type DataTableProps<TData extends RowData> = {
   showCaption?: boolean;
   /** Bật cột checkbox chọn dòng. */
   selectable?: boolean;
+  /** Với `selectable`: dòng nào chọn được (vd chỉ mục người dùng có quyền duyệt). Dòng không chọn được không có checkbox; "Chọn tất cả" bỏ qua chúng. */
+  isRowSelectable?: (row: TData) => boolean;
   onSelectionChange?: (ids: string[]) => void;
   /**
    * Thao tác hàng loạt: chọn ≥ 1 dòng → thanh nổi ở giữa đáy màn hình ("Đã chọn n" + các nút này + "Bỏ chọn").
@@ -494,6 +496,7 @@ export function DataTable<TData extends RowData>({
   caption,
   showCaption = false,
   selectable = false,
+  isRowSelectable,
   onSelectionChange,
   selectionActions,
   rowLabel,
@@ -580,6 +583,18 @@ export function DataTable<TData extends RowData>({
     else setInnerPage((p) => ({ ...p, pageIndex: 0 }));
   };
 
+  // rowActions / rowLabel / isRowSelectable thường là hàm viết thẳng trong JSX (mới mỗi lần dựng): giữ qua ref để cột chọn / cột thao tác
+  // không bị dựng lại (ô dựng lại = nút mất focus, menu "…" đang mở bị đóng khi dữ liệu tải lại).
+  const rowActionsRef = useRef(rowActions);
+  rowActionsRef.current = rowActions;
+  const rowLabelRef = useRef(rowLabel);
+  rowLabelRef.current = rowLabel;
+  const selectableRef = useRef(isRowSelectable);
+  selectableRef.current = isRowSelectable;
+  const hasRowActions = !!rowActions;
+  const hasSelectablePredicate = !!isRowSelectable;
+  const labelOf = (row: TData, id: string) => rowLabelRef.current?.(row) ?? id;
+
   const allColumns = useMemo(() => {
     const helper = createDataTableColumnHelper<TData>();
     const list: DataTableColumn<TData>[] = [];
@@ -599,20 +614,21 @@ export function DataTable<TData extends RowData>({
               onChange={table.getToggleAllRowsSelectedHandler()}
             />
           ),
-          cell: ({ row }) => (
-            <IndeterminateCheckbox
-              label={fill(t.selectRow, { label: rowLabel ? rowLabel(row.original) : row.id })}
-              checked={row.getIsSelected()}
-              indeterminate={false}
-              onChange={row.getToggleSelectedHandler()}
-            />
-          ),
+          cell: ({ row }) =>
+            row.getCanSelect() ? (
+              <IndeterminateCheckbox
+                label={fill(t.selectRow, { label: labelOf(row.original, row.id) })}
+                checked={row.getIsSelected()}
+                indeterminate={false}
+                onChange={row.getToggleSelectedHandler()}
+              />
+            ) : null,
           meta: { cellClassName: "w-10", headerClassName: "w-10", resizable: false },
         }),
       );
     }
     list.push(...columns);
-    if (rowActions) {
+    if (hasRowActions) {
       list.push(
         helper.display({
           id: "__actions",
@@ -634,7 +650,7 @@ export function DataTable<TData extends RowData>({
                 "[@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
               )}
             >
-              {rowActions(row.original)}
+              {rowActionsRef.current?.(row.original)}
             </div>
           ),
           meta: { align: "end", resizable: false, headerClassName: "w-0 p-0", cellClassName: "sticky right-0 w-0 p-0 overflow-visible" },
@@ -643,14 +659,14 @@ export function DataTable<TData extends RowData>({
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, selectable, rowActions, rowLabel, t.selectAll, t.selectRow, t.actions]);
+  }, [columns, selectable, hasRowActions, t.selectAll, t.selectRow, t.actions]);
 
   const table = useTable({
     features: dataTableFeatures,
     columns: allColumns,
     data,
     getRowId: (row) => getRowId(row),
-    enableRowSelection: selectable,
+    enableRowSelection: selectable && hasSelectablePredicate ? (row) => selectableRef.current?.(row.original) ?? true : selectable,
     defaultColumn: { filterFn: "fold" },
     globalFilterFn: "fold",
     state: { sorting, rowSelection, pagination: pageState, globalFilter, columnFilters, columnVisibility, columnSizing },
@@ -764,9 +780,9 @@ export function DataTable<TData extends RowData>({
 
   const cardParts = (row: (typeof rows)[number]): DataTableCardParts => ({
     selected: row.getIsSelected(),
-    select: selectable ? (
+    select: selectable && row.getCanSelect() ? (
       <IndeterminateCheckbox
-        label={fill(t.selectRow, { label: rowLabel ? rowLabel(row.original) : row.id })}
+        label={fill(t.selectRow, { label: labelOf(row.original, row.id) })}
         checked={row.getIsSelected()}
         indeterminate={false}
         onChange={row.getToggleSelectedHandler()}

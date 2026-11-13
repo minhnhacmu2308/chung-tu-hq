@@ -7,12 +7,16 @@ import type { DraftLessons, Shipment } from "@kb/contracts";
 import { learnedDescription, learnedLinePlan, lineLessonFor } from "../domain/lessons-apply.js";
 import type { AgentRunRow, DeclarationRepos, DeclarationRow, DossierInfo, HsCatalogRow, HsSuggestionRow, LineItemRow } from "./ports.js";
 import type { DeclarationDeps } from "./ports.js";
+import { linkPatch, plannedCodes, type CatalogPlan } from "./_catalog-plan.js";
 
 export const TASK_ORDER: AgentTaskId[] = ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION", "DIGITIZE"];
 export const TASKS_BY_MODE: Record<AgentRunRow["mode"], AgentTaskId[]> = { DECLARATION: ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION"], DIGITIZE: ["DIGITIZE"], BOTH: TASK_ORDER };
 
-/** `sugs`: gợi ý HS của dòng (gợi ý chính đứng đầu theo tin cậy). Không truyền → không kèm khối `hs`. */
-export function toLineItem(r: LineItemRow, sugs?: HsSuggestionRow[]): LineItem {
+/**
+ * `sugs`: gợi ý HS của dòng (gợi ý chính đứng đầu theo tin cậy). Không truyền → không kèm khối `hs`.
+ * `catalog`: phần danh mục hàng hóa (mặt hàng đã gắn, mã lạ, gợi ý lượng) – catalogView.
+ */
+export function toLineItem(r: LineItemRow, sugs?: HsSuggestionRow[], catalog?: Pick<LineItem, "catalogItem" | "unknownCode" | "qtySuggestion">): LineItem {
   return {
     id: r.id, dossierId: r.dossierId, lineNo: r.lineNo, description: r.description, quantity: r.quantity, unit: r.unit, unitPrice: r.unitPrice, amount: r.amount, origin: r.origin,
     ...(r.invoiceHsCode ? { invoiceHsCode: r.invoiceHsCode } : {}),
@@ -26,6 +30,9 @@ export function toLineItem(r: LineItemRow, sugs?: HsSuggestionRow[]): LineItem {
     ...(r.taxDetail?.vatNote ? { vatNote: r.taxDetail.vatNote } : {}),
     ...(r.taxDetail && r.taxDetail.vatCertain !== null ? { vatCertain: r.taxDetail.vatCertain } : {}),
     ...(r.taxDetail?.needsReview ? { taxNeedsReview: true } : {}),
+    ...(r.itemCode ? { itemCode: r.itemCode } : {}),
+    ...(r.unitFactor ? { unitFactor: r.unitFactor } : {}),
+    ...(catalog ?? {}),
     ...(sugs ? { hs: toLineItemHs(r, sugs) } : {}),
   };
 }
@@ -86,10 +93,14 @@ export async function latestDraftOrNull(r: DeclarationRepos, orgId: string, doss
 /**
  * Đồng bộ dòng hàng từ shipment.items (giữ HS đã xác nhận ở dòng cùng số thứ tự).
  * `lessons` (Dạy khai báo): mặt hàng đã học đủ số lần → mô tả tiếng Việt, mã HS + thuế suất đã khai (vẫn chờ người khai xác nhận HS); ít lần hơn → gợi ý mã.
+ * `catalog` (planCatalogLinks, tra NGOÀI transaction): gắn mặt hàng danh mục + mã HAG_MAHANG; bài học tra theo mã của mặt hàng trước Part No.
+ * Dòng đổi mô tả / mã HS invoice → gỡ mặt hàng đã gắn (cùng lúc bỏ xác nhận HS) rồi gắn lại theo kế hoạch.
  */
-export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, dossierId: string, shipment: Shipment, lessons?: DraftLessons | null): Promise<LineItemRow[]> {
+export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, orgId: string, dossierId: string, shipment: Shipment, lessons?: DraftLessons | null, catalog?: CatalogPlan | null): Promise<LineItemRow[]> {
   const now = deps.clock.now();
-  const lessonOf = (it: Shipment["items"][number]) => lineLessonFor(lessons, { partNo: it.partNo?.value ?? null, description: it.description.value });
+  const before = new Map((await r.lineItems.list(orgId, dossierId)).map((x) => [x.lineNo, x]));
+  const codesOf = (lineNo: number) => plannedCodes(before.get(lineNo) ?? { lineNo, catalogItemId: null, catalogAliasId: null }, catalog);
+  const lessonOf = (it: Shipment["items"][number]) => lineLessonFor(lessons, { partNo: it.partNo?.value ?? null, description: it.description.value, codes: codesOf(it.lineNo) });
   const rows: LineItemRow[] = shipment.items.map((it) => ({
     id: deps.idGen.next("itm"), orgId, dossierId, lineNo: it.lineNo, description: learnedDescription(lessonOf(it)) ?? it.description.value ?? "", quantity: it.quantity.value ?? "0", unit: it.unit.value ?? "PCE",
     unitPrice: it.unitPrice.value ?? "0", amount: it.amount.value ?? "0", origin: it.origin.value ?? "", invoiceHsCode: it.hsOnInvoice.value,
@@ -99,7 +110,6 @@ export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, 
   // Upsert giữ mã HS/thuế đã có theo số dòng. Dòng có mô tả hoặc mã HS trên invoice đổi (đọc lại chứng từ, sửa OCR) → mã/thuế cũ không còn đúng:
   // bỏ xác nhận + kết quả phân loại cũ, ghi chú để người khai xác nhận lại – không giữ im lặng.
   // So với mô tả GỐC trên chứng từ: dòng chỉ đổi sang mô tả đã học (bài học mới đủ số lần) không bị coi là đổi.
-  const before = new Map((await r.lineItems.list(orgId, dossierId)).map((x) => [x.lineNo, x]));
   const rawDesc = new Map(shipment.items.map((it) => [it.lineNo, it.description.value ?? ""]));
   const changed = new Set(rows.filter((x) => {
     const old = before.get(x.lineNo);
@@ -111,14 +121,26 @@ export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, 
   if (changed.size) {
     saved = await Promise.all(saved.map(async (row) => {
       if (!changed.has(row.lineNo)) return row;
+      // Gỡ mặt hàng đã gắn (gắn lại theo kế hoạch bên dưới). Dòng thuộc tờ đang khóa ở Hải quan giữ mặt hàng / HAG_MAHANG đã gửi;
+      // không có kế hoạch (danh mục lỗi / chưa nối) → giữ, lần đồng bộ sau xét lại.
+      const unlink = !catalog || catalog.frozen.has(row.lineNo) ? {} : { catalogItemId: null, catalogAliasId: null, itemCode: null, unitFactor: null };
       const patch = {
         hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, taxDetail: null,
         policyNote: before.get(row.lineNo)?.hsConfirmed ? `Mô tả hoặc mã HS trên invoice của dòng đã đổi – mã ${before.get(row.lineNo)!.hsConfirmed} đã bỏ xác nhận, xác nhận lại mã HS` : null,
-        hsSuggested: null, hsConfidence: null, hsStatus: "idle" as const, hsQuestion: null, hsError: null, hsDetail: null, hsJobId: null, hsItemId: null, updatedAt: now,
+        hsSuggested: null, hsConfidence: null, hsStatus: "idle" as const, hsQuestion: null, hsError: null, hsDetail: null, hsJobId: null, hsItemId: null,
+        ...unlink, updatedAt: now,
       };
       await r.lineItems.update(orgId, row.id, patch);
       await r.suggestions.replaceForItem(orgId, row.id, []);
       return { ...row, ...patch };
+    }));
+  }
+  if (catalog) {
+    saved = await Promise.all(saved.map(async (row) => {
+      const patch = linkPatch(row, catalog);
+      if (!patch) return row;
+      await r.lineItems.update(orgId, row.id, { ...patch, updatedAt: now });
+      return { ...row, ...patch, updatedAt: now };
     }));
   }
   if (!lessons?.lines.length) return saved;

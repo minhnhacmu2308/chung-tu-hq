@@ -1,10 +1,23 @@
 import { z } from "zod";
 import { DecimalStringSchema, IsoDateTimeSchema } from "../common.js";
+import { CatalogFactorSchema, CatalogItemKindSchema } from "../item-catalog/schemas.js";
 import { AgentModeSchema, AgentRunSchema, AgentTaskIdSchema, DeclarationSchema, LineItemSchema } from "../dto/declaration.js";
 
 export const StartAgentRunInputSchema = z.object({ mode: AgentModeSchema });
 export const ConfirmHsInputSchema = z.object({ code: z.string().trim().regex(/^\d{4}\.\d{2}\.\d{2}$/, "Mã HS 8 số dạng 8482.10.00") });
 export const UpdateDeclarationFieldInputSchema = z.object({ value: z.string().trim().max(500) });
+/**
+ * Gắn mặt hàng danh mục cho dòng hàng ("Mã lạ – Chọn mặt hàng"): chọn mặt hàng có sẵn hoặc tạo mới. Part No của dòng thành bí danh trong bộ nhà cung cấp
+ * (người phụ trách bộ mã → ACTIVE ngay; người khác → PROPOSED). `factor`: "1 ĐVT dòng = factor ĐVT gốc" khi ĐVT khác ĐVT gốc chưa có quy đổi.
+ */
+export const LinkLineItemInputSchema = z.union([
+  z.object({ itemId: z.string().min(1), factor: CatalogFactorSchema.optional() }),
+  z.object({ createItem: z.object({ kind: CatalogItemKindSchema, name: z.string().trim().min(1).max(500), hsCode: z.string().trim().regex(/^[\d.]{4,12}$/).optional(), baseUnit: z.string().trim().min(1).max(30).optional(), factor: CatalogFactorSchema.optional() }) }),
+]);
+export type LinkLineItemInput = z.infer<typeof LinkLineItemInputSchema>;
+/** Hệ số quy đổi theo lô của dòng (packing list ghi khác mặc định); null = bỏ, dùng hệ số mặc định của danh mục. */
+export const SetLineUnitFactorInputSchema = z.object({ factor: CatalogFactorSchema.nullable() });
+export type SetLineUnitFactorInput = z.infer<typeof SetLineUnitFactorInputSchema>;
 export const HsCatalogQuerySchema = z.object({ q: z.string().trim().max(100).optional() });
 
 export const AgentLogLineSchema = z.object({ at: IsoDateTimeSchema, text: z.string(), tone: z.enum(["info", "success", "warning"]) });

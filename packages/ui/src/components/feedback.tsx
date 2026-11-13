@@ -169,6 +169,23 @@ export const STATUS_META = {
   ISSUED_RESERVED: { tone: "info", label: "Đã cấp số" },
   ISSUED_ACTIVE: { tone: "success", label: "Đã phát hành" },
   ISSUED_VOID: { tone: "danger", label: "Đã hủy số" },
+  // Danh mục hàng hóa dùng chung (ADR 0015): mặt hàng, mã theo bộ mã (bí danh), loại bộ mã
+  CATALOG_ITEM_ACTIVE: { tone: "success", label: "Đang dùng" },
+  CATALOG_ITEM_MERGED: { tone: "neutral", label: "Đã gộp" },
+  CATALOG_ITEM_ARCHIVED: { tone: "neutral", label: "Ngưng dùng" },
+  CATALOG_ALIAS_PROPOSED: { tone: "warning", label: "Chờ duyệt" },
+  CATALOG_ALIAS_ACTIVE: { tone: "success", label: "Đang dùng" },
+  CATALOG_ALIAS_REJECTED: { tone: "neutral", label: "Từ chối" },
+  CODE_SET_SHARED: { tone: "primary", label: "Mã chung" },
+  CODE_SET_ACCOUNTING: { tone: "info", label: "Kế toán" },
+  CODE_SET_WAREHOUSE: { tone: "info", label: "Kho" },
+  CODE_SET_CUSTOMS: { tone: "primary", label: "XNK" },
+  CODE_SET_SUPPLIER: { tone: "neutral", label: "Nhà cung cấp" },
+  CODE_SET_CUSTOMER: { tone: "neutral", label: "Khách hàng" },
+  // Mức ghép của mục hàng chờ (spec danh mục §4)
+  CATALOG_MATCH_SURE: { tone: "success", label: "Chắc chắn" },
+  CATALOG_MATCH_MAYBE: { tone: "warning", label: "Nghi vấn" },
+  CATALOG_MATCH_NONE: { tone: "neutral", label: "Không khớp" },
 } as const satisfies Record<string, { tone: Tone; label: string }>;
 
 export type Status = keyof typeof STATUS_META;
@@ -199,6 +216,10 @@ export const STATUS_LABELS_EN: Record<Status, string> = {
   CONTRACT_ACTIVE: "Active", CONTRACT_EXPIRING: "Expiring soon", CONTRACT_GRACE: "Grace period", CONTRACT_EXPIRED: "Expired",
   PAYMENT_PENDING: "Awaiting payment", PAYMENT_PAID: "Paid", PAYMENT_CANCELLED: "Cancelled", PAYMENT_EXPIRED: "Expired",
   ISSUED_RESERVED: "Number assigned", ISSUED_ACTIVE: "Issued", ISSUED_VOID: "Number voided",
+  CATALOG_ITEM_ACTIVE: "In use", CATALOG_ITEM_MERGED: "Merged", CATALOG_ITEM_ARCHIVED: "Discontinued",
+  CATALOG_ALIAS_PROPOSED: "Pending review", CATALOG_ALIAS_ACTIVE: "In use", CATALOG_ALIAS_REJECTED: "Rejected",
+  CODE_SET_SHARED: "Shared codes", CODE_SET_ACCOUNTING: "Accounting", CODE_SET_WAREHOUSE: "Warehouse", CODE_SET_CUSTOMS: "Import/export", CODE_SET_SUPPLIER: "Supplier", CODE_SET_CUSTOMER: "Customer",
+  CATALOG_MATCH_SURE: "Certain", CATALOG_MATCH_MAYBE: "Doubtful", CATALOG_MATCH_NONE: "No match",
 };
 
 /** Nhãn tiếng Trung (giản thể) tương ứng STATUS_META. */
@@ -227,6 +248,10 @@ export const STATUS_LABELS_ZH: Record<Status, string> = {
   CONTRACT_ACTIVE: "有效", CONTRACT_EXPIRING: "即将到期", CONTRACT_GRACE: "宽限期", CONTRACT_EXPIRED: "已到期",
   PAYMENT_PENDING: "待付款", PAYMENT_PAID: "已付款", PAYMENT_CANCELLED: "已取消", PAYMENT_EXPIRED: "已过期",
   ISSUED_RESERVED: "已分配号码", ISSUED_ACTIVE: "已开具", ISSUED_VOID: "号码已作废",
+  CATALOG_ITEM_ACTIVE: "使用中", CATALOG_ITEM_MERGED: "已合并", CATALOG_ITEM_ARCHIVED: "已停用",
+  CATALOG_ALIAS_PROPOSED: "待审核", CATALOG_ALIAS_ACTIVE: "使用中", CATALOG_ALIAS_REJECTED: "已拒绝",
+  CODE_SET_SHARED: "通用编码", CODE_SET_ACCOUNTING: "会计", CODE_SET_WAREHOUSE: "仓库", CODE_SET_CUSTOMS: "进出口", CODE_SET_SUPPLIER: "供应商", CODE_SET_CUSTOMER: "客户",
+  CATALOG_MATCH_SURE: "确定", CATALOG_MATCH_MAYBE: "存疑", CATALOG_MATCH_NONE: "不匹配",
 };
 
 /** Nhãn trạng thái theo ngôn ngữ – dùng cho code không phải component (bộ lọc bảng, xuất file…). */

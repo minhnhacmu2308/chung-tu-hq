@@ -1,6 +1,8 @@
 import type { DocKind, HsAnswerRequest, HsCreateRequest, HsJob, HsJobItem, Shipment } from "@kb/contracts";
 import type { ProgressEvent } from "../../../dossier/index.js";
-import { HsApiError, type AuditWriter, type DossierInfo, type DossierPort, type HsClassificationService, type OrgInfo, type OrgReader, type ShipmentReader, type UserNames, type ValidationReader } from "../ports.js";
+import type { Ctx } from "../../../../shared/ctx.js";
+import type { Result } from "../../../../shared/result.js";
+import { HsApiError, type AuditWriter, type CatalogItemInfo, type CatalogQuery, type CatalogResolved, type DeclarationCatalogPort, type DossierInfo, type DossierPort, type HsClassificationService, type OrgInfo, type OrgReader, type ShipmentReader, type UserNames, type ValidationReader } from "../ports.js";
 
 /**
  * HSCodePro giả cho test use case. Mặc định: lượt hoàn tất ngay theo `rules` (khớp mô tả).
@@ -103,7 +105,7 @@ export class FakeDossiers implements DossierPort {
 
 export class RecordingAudit implements AuditWriter {
   readonly rows: { orgId: string; dossierId: string; key: string; oldValue: string; newValue: string; source: string }[] = [];
-  async append(ctx: { orgId: string }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "CONT_LIST_EDIT" }) {
+  async append(ctx: { orgId: string }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "CONT_LIST_EDIT" | "CATALOG_EDIT" }) {
     this.rows.push({ orgId: ctx.orgId, ...row });
   }
 }
@@ -111,3 +113,69 @@ export class RecordingAudit implements AuditWriter {
 export const fakeOrg = (info: OrgInfo): OrgReader => ({ get: async () => info });
 export const fakeValidation = (fails: Record<string, number> = {}): ValidationReader => ({ blockerFails: async (_o, d) => fails[d] ?? 0 });
 export const fakeUsers: UserNames = { names: async (_o, ids) => new Map(ids.map((id) => [id, `Tên ${id}`])) };
+
+/**
+ * Danh mục hàng hóa giả (bản gọn của CatalogPort – test module khác không được import nội bộ catalog, depcruise).
+ * Bí danh: (tên người bán chuẩn hóa, mã chuẩn hóa) → mặt hàng. `owner` = người dùng được coi là phụ trách bộ nhà cung cấp (bí danh ACTIVE ngay).
+ */
+export class FakeCatalog implements DeclarationCatalogPort {
+  items = new Map<string, CatalogItemInfo>();
+  aliases = new Map<string, string>();
+  sets = new Map<string, string>();
+  owners = new Set<string>();
+  declared: { orgId: string; rows: { itemId: string; date: string | null; typeCode: string | null }[] }[] = [];
+  queued: { orgId: string; rows: { codeSetId?: string | null; code: string; name: string; sourceRef?: string | null }[] }[] = [];
+  proposed: { userId: string; itemId: string; codeSetId: string; code: string; status: string; factor?: string }[] = [];
+  failResolve = false;
+  constructor(public orgId = "org_a") {}
+  static key = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[\s\-./_]+/g, "");
+  addItem(info: Partial<CatalogItemInfo> & { id: string }, supplierCodes: string[] = [], seller = "HANSOL PRECISION CO., LTD.") {
+    this.items.set(info.id, { itemNo: `MH-${info.id}`, name: `Hàng ${info.id}`, hsCode: null, baseUnit: null, customs: null, codes: supplierCodes, conversion: null, ...info });
+    for (const c of supplierCodes) this.aliases.set(`${FakeCatalog.key(seller)}|${FakeCatalog.key(c)}`, info.id);
+  }
+  async resolveMany(orgId: string, qs: CatalogQuery[]): Promise<CatalogResolved[]> {
+    if (this.failResolve) throw new Error("catalog down");
+    return qs.map((q) => {
+      const id = orgId === this.orgId && q.code ? this.aliases.get(`${FakeCatalog.key(q.partnerName)}|${FakeCatalog.key(q.code)}`) : undefined;
+      return id ? { itemId: id, aliasId: `ali_${id}`, level: "SURE" as const, reason: "ALIAS_SAME_SET", codeSetId: "cst_ncc" } : { itemId: null, level: "NONE" as const, reason: "NO_MATCH", codeSetId: null };
+    });
+  }
+  async describeItems(orgId: string, ids: string[]) {
+    if (orgId !== this.orgId) return {};
+    return Object.fromEntries(ids.filter((i) => this.items.has(i)).map((i) => [i, structuredClone(this.items.get(i)!)]));
+  }
+  async recordDeclared(orgId: string, rows: { itemId: string; declarationNo: string | null; date: string | null; typeCode: string | null }[]) {
+    this.declared.push({ orgId, rows });
+    return { updated: new Set(rows.map((r) => r.itemId)).size };
+  }
+  async enqueueUnknown(orgId: string, rows: { codeSetId?: string | null; code: string; name: string; sourceRef?: string | null }[]) {
+    this.queued.push({ orgId, rows });
+    return { queued: rows.length };
+  }
+  async ensurePartnerSet(orgId: string, _kind: "SUPPLIER" | "CUSTOMER", name: string) {
+    const k = `${orgId}|${FakeCatalog.key(name)}`;
+    if (!this.sets.has(k)) this.sets.set(k, `cst_ncc_${this.sets.size + 1}`);
+    return this.sets.get(k)!;
+  }
+  async proposeAlias(ctx: Ctx, cmd: { itemId: string; codeSetId: string; code: string; factor?: string }): Promise<Result<{ id: string; itemId: string; status: string }>> {
+    if (ctx.role === "VIEWER") return { ok: false, error: { code: "FORBIDDEN", message: "x" } };
+    if (!this.items.has(cmd.itemId)) return { ok: false, error: { code: "NOT_FOUND", message: "x" } };
+    const status = this.owners.has(ctx.userId) || ctx.role === "ADMIN" ? "ACTIVE" : "PROPOSED";
+    this.proposed.push({ userId: ctx.userId, itemId: cmd.itemId, codeSetId: cmd.codeSetId, code: cmd.code, status, ...(cmd.factor ? { factor: cmd.factor } : {}) });
+    if (status === "ACTIVE") this.aliases.set(`HANSOLPRECISIONCO,LTD|${FakeCatalog.key(cmd.code)}`, cmd.itemId);
+    return { ok: true, value: { id: `ali_${this.proposed.length}`, itemId: cmd.itemId, status } };
+  }
+  created: { userId: string; input: { name: string; codeSetId?: string; code?: string; conversions?: { unit: string; factor: string }[] }; status: string }[] = [];
+  /** Như createItem của catalog: APPROVER/ADMIN (hoặc người phụ trách) tạo thẳng – bí danh ACTIVE khi phụ trách / ADMIN; DECLARANT khác → hàng chờ. */
+  async createItem(ctx: Ctx, input: { name: string; hsCode?: string; baseUnit?: string | null; codeSetId?: string; code?: string; conversions?: { unit: string; factor: string }[] }): Promise<Result<{ status: "CREATED"; itemId: string; aliasId: string | null } | { status: "QUEUED"; queueId: string }>> {
+    const manages = this.owners.has(ctx.userId) || ctx.role === "ADMIN";
+    if (!manages && ctx.role !== "APPROVER") {
+      this.created.push({ userId: ctx.userId, input, status: "QUEUED" });
+      return { ok: true, value: { status: "QUEUED", queueId: `cmq_${this.created.length}` } };
+    }
+    const id = `cat_new${this.items.size + 1}`;
+    this.addItem({ id, name: input.name, hsCode: input.hsCode ?? null, baseUnit: input.baseUnit ?? null });
+    this.created.push({ userId: ctx.userId, input, status: "CREATED" });
+    return { ok: true, value: { status: "CREATED", itemId: id, aliasId: manages && input.code ? `ali_new${this.created.length}` : null } };
+  }
+}

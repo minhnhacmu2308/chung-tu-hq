@@ -54,3 +54,14 @@ describe("mẫu in hóa đơn", () => {
     expect(InvoiceLayoutSchema.safeParse({ ...DEFAULT_INVOICE_LAYOUT, title: "PROFORMA INVOICE" }).success).toBe(false);
   });
 });
+
+describe("InvoiceLayoutSchema.itemCodeSet / ảnh chụp in theo bộ mã", () => {
+  it("itemCodeSet: mặc định null; nhận { codeSetId } hoặc { kind: ITEM_NO }; từ chối dạng khác", () => {
+    const base = { ...DEFAULT_INVOICE_LAYOUT };
+    const { itemCodeSet: _omit, ...noField } = base;
+    expect(InvoiceLayoutSchema.parse(noField).itemCodeSet).toBeNull();
+    expect(InvoiceLayoutSchema.parse({ ...base, itemCodeSet: { codeSetId: "cst_1" } }).itemCodeSet).toEqual({ codeSetId: "cst_1" });
+    expect(InvoiceLayoutSchema.parse({ ...base, itemCodeSet: { kind: "ITEM_NO" } }).itemCodeSet).toEqual({ kind: "ITEM_NO" });
+    expect(InvoiceLayoutSchema.safeParse({ ...base, itemCodeSet: { kind: "ACCOUNTING" } }).success).toBe(false);
+  });
+});

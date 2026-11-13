@@ -35,7 +35,7 @@ describe("form nhập tay lô hàng", () => {
 
   it("chọn từ danh mục hàng hóa: điền tên/mã/HS/đơn vị/xuất xứ, giữ số lượng và đơn giá", () => {
     const row = { ...emptyItem(), quantity: "10", unitPrice: "2" };
-    const p = { id: "prd_1", code: "DB-10", name: "Drill bit 10mm", hsCode: "82075000", unit: "PCE", origin: "VN" } as Parameters<typeof itemFromProduct>[1];
+    const p = { id: "prd_1", setCode: "DB-10", name: "Drill bit 10mm", hsCode: "82075000", baseUnit: "PCE", origin: "VN" };
     expect(itemFromProduct(row, p)).toEqual({ description: "Drill bit 10mm", partNo: "DB-10", hsOnInvoice: "82075000", unit: "PCE", origin: "VN", quantity: "10", unitPrice: "2", catalogItemId: "prd_1" });
   });
 });

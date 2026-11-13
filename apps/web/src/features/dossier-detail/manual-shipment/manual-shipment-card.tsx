@@ -1,12 +1,12 @@
 "use client";
 // Khối "Dữ liệu lô hàng nhập tay" ở bước OCR & kiểm tra (ADR 0013 – Khai trước): tóm tắt + popup nhập người mua, điều kiện giao hàng, vận chuyển, dòng hàng.
 // Backend ghép dữ liệu này vào shipment (thắng chứng từ), chạy lại luật và dựng lại tờ khai nháp.
-import type { ManualShipmentView } from "@kb/contracts";
+import type { CatalogItemListRow, ManualShipmentView } from "@kb/contracts";
 import {
   Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Combobox, DatePicker, Dialog, DialogContent, DialogFooter, Field, FormSection, Input,
   Select, SkeletonList, Stack, Textarea, fill, toast, useMessages,
 } from "@kb/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PackagePlus, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { declarationKeys } from "@/api/declaration";
@@ -14,11 +14,12 @@ import { dossierKeys } from "@/api/dossiers";
 import { issuedInvoiceKeys } from "@/api/issued-invoice";
 import { getManualShipment, manualShipmentKeys, saveManualShipment } from "@/api/manual-shipment";
 import { ocrKeys } from "@/api/ocr";
-import { listProducts, productKeys } from "@/api/products";
+import { catalogKeys, listCatalogItems, listCodeSets } from "@/api/catalog";
 import { LoadError } from "@/components/common/load-error";
 import { useCodeLists } from "@/features/declaration-form/use-code-list";
 import { formatMoney, formatRelative } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { lineAmount, manualTotal } from "./manual-amount";
 import { emptyItem, formFromData, itemFromProduct, toInput, type ErrorKind, type ItemRow, type ManualForm, type ManualFormErrors } from "./manual-shipment-form";
 import { MANUAL_SHIPMENT_MESSAGES } from "./manual-shipment.messages";
@@ -27,19 +28,52 @@ const MAX_ITEMS = 500;
 type T = (typeof MANUAL_SHIPMENT_MESSAGES)["vi"];
 const ERR_KEY: Record<ErrorKind, keyof T> = { required: "errRequired", positive: "errPositive", nonNegative: "errNonNegative", number: "errNumber", date: "errDate", invalid: "errInvalid" };
 
+/**
+ * Chọn hàng từ danh mục dùng chung cho MỘT dòng (ô tìm riêng mỗi dòng): tìm phía server theo tên, mã nối, mọi mã ở mọi bộ mã (spec danh mục §5),
+ * trễ 300 ms sau phím gõ cuối. Kết quả xem theo bộ Hải quan mặc định → setCode là mã điền vào dòng.
+ */
+function CatalogItemPicker({ value, customsSetId, enabled, onPick }: { value: string | null; customsSetId: string | null; enabled: boolean; onPick: (p: CatalogItemListRow) => void }) {
+  const t = useMessages(MANUAL_SHIPMENT_MESSAGES);
+  const [search, setSearch] = useState("");
+  const q = useDebouncedValue(search);
+  const query = { q, pageSize: 50, ...(customsSetId ? { codeSetId: customsSetId } : {}) };
+  const products = useQuery({ queryKey: catalogKeys.items(query), queryFn: () => listCatalogItems(query), enabled, placeholderData: keepPreviousData });
+  const [picked, setPicked] = useState<CatalogItemListRow | null>(null);
+  const rows = products.data?.rows ?? [];
+  const all = picked && !rows.some((r) => r.id === picked.id) ? [...rows, picked] : rows;
+  const options = all.map((p) => ({ value: p.id, label: p.name, description: [p.setCode, p.itemNo, p.hsCode, p.baseUnit].filter(Boolean).join(" · ") }));
+  return (
+    <Combobox
+      options={options}
+      value={value}
+      onChange={(id) => {
+        const p = all.find((x) => x.id === id);
+        if (!p) return;
+        setPicked(p);
+        onPick(p);
+      }}
+      placeholder={t.pickProductPlaceholder}
+      emptyText={t.noProducts}
+      loading={products.isFetching}
+      onSearchChange={setSearch}
+    />
+  );
+}
+
 function ManualDialog({ open, onOpenChange, view, dossierId, currency, incoterm }: { open: boolean; onOpenChange: (o: boolean) => void; view: ManualShipmentView; dossierId: string; currency: string; incoterm: string }) {
   const t = useMessages(MANUAL_SHIPMENT_MESSAGES);
   const qc = useQueryClient();
   const [form, setForm] = useState<ManualForm>(() => formFromData(view.data, { currency, incoterm }));
   const [errors, setErrors] = useState<ManualFormErrors>({});
   const codes = useCodeLists(["COUNTRY", "UNIT", "CURRENCY", "INCOTERM", "PACKAGE_KIND"] as const);
-  const products = useQuery({ queryKey: productKeys.all, queryFn: listProducts, enabled: open });
+  // Bộ mã mặc định cho Hải quan: mã hàng điền vào dòng = mã của mặt hàng trong bộ này (không có → để trống).
+  const codeSets = useQuery({ queryKey: catalogKeys.codeSets, queryFn: listCodeSets, enabled: open });
+  const customsSetId = codeSets.data?.find((s) => s.isDefault)?.id ?? null;
   const opts = (id: keyof typeof codes.lists, keep: string[]) => {
     const list = (codes.lists[id] ?? []).filter((e) => !e.inactive);
     const extra = keep.filter((k) => k && !list.some((e) => e.code === k)).map((k) => ({ value: k, label: k }));
     return [...extra, ...list.map((e) => ({ value: e.code, label: `${e.code} – ${e.name}` }))];
   };
-  const productOptions = (products.data ?? []).map((p) => ({ value: p.id, label: p.name, description: [p.code, p.hsCode, p.unit].filter(Boolean).join(" · ") }));
   const err = (k: string) => (errors[k] ? { error: t[ERR_KEY[errors[k]!]] } : {});
   const set = <K extends keyof ManualForm>(k: K, v: ManualForm[K]) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -163,21 +197,11 @@ function ManualDialog({ open, onOpenChange, view, dossierId, currency, incoterm 
                 {form.items.map((row, i) => {
                   const amount = lineAmount(row.quantity.replace(/[\s,]/g, ""), row.unitPrice.replace(/[\s,]/g, ""));
                   return (
-                    <fieldset key={i} className="grid gap-3 rounded-md border border-border p-3 cq-md:grid-cols-2">
+                    <fieldset key={i} className="grid min-w-0 grid-cols-1 gap-3 rounded-md border border-border p-3 cq-md:grid-cols-2">
                       <legend className="px-1 text-sm font-medium text-fg">{fill(t.itemNo, { n: i + 1 })}</legend>
                       {!readOnly && (
                         <Field label={t.pickProduct} className="cq-md:col-span-2">
-                          <Combobox
-                            options={productOptions}
-                            value={row.catalogItemId}
-                            onChange={(id) => {
-                              const p = products.data?.find((x) => x.id === id);
-                              if (p) setRow(i, itemFromProduct(row, p));
-                            }}
-                            placeholder={t.pickProductPlaceholder}
-                            emptyText={t.noProducts}
-                            loading={products.isLoading}
-                          />
+                          <CatalogItemPicker value={row.catalogItemId} customsSetId={customsSetId} enabled={open && codeSets.isFetched} onPick={(p) => setRow(i, itemFromProduct(row, p))} />
                         </Field>
                       )}
                       <Field label={t.description_} required className="cq-md:col-span-2" {...err(`items.${i}.description`)}>

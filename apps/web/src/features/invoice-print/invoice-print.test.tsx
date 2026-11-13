@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { InvoicePrintView } from "./invoice-print-page";
 
+const NOCAT = { catalogItemId: null, printedCode: null, printedUnit: null, printedQuantity: null, printedUnitPrice: null };
 const SNAP: IssuedInvoiceSnapshot = {
   seller: { name: "AN PHAT INDUSTRIAL EQUIPMENT CO., LTD", taxCode: "0316789012", address: "HAI PHONG, VIETNAM", phone: "0225 3 123 456" },
   buyer: { name: "NORDIC TOOLING GROUP AB", address: "SOLNA, SWEDEN", country: "SE", taxCode: null },
@@ -18,8 +19,8 @@ const SNAP: IssuedInvoiceSnapshot = {
   signatory: { name: "LE MINH CHAU", title: "DIRECTOR" },
   layout: DEFAULT_INVOICE_LAYOUT,
   items: [
-    { lineNo: 1, description: "Drill bit 10mm", partNo: "DB-10", hsCode: "82075000", quantity: "1000", unit: "PCE", unitPrice: "1.25", amount: "1250.00", origin: "VN" },
-    { lineNo: 2, description: "Drill bit 2mm", partNo: null, hsCode: null, quantity: "1", unit: "PCE", unitPrice: "0.5", amount: "0.50", origin: null },
+    { lineNo: 1, description: "Drill bit 10mm", partNo: "DB-10", hsCode: "82075000", quantity: "1000", unit: "PCE", unitPrice: "1.25", amount: "1250.00", origin: "VN", ...NOCAT },
+    { lineNo: 2, description: "Drill bit 2mm", partNo: null, hsCode: null, quantity: "1", unit: "PCE", unitPrice: "0.5", amount: "0.50", origin: null, ...NOCAT },
   ],
 };
 const inv = (o: Partial<IssuedInvoice> = {}): IssuedInvoice => ({
@@ -41,6 +42,24 @@ describe("InvoicePrintView – hóa đơn thương mại theo mẫu", () => {
     expect(screen.getByText(/For and on behalf of AN PHAT INDUSTRIAL EQUIPMENT CO., LTD/)).toBeTruthy();
     await expectNoA11yViolations(container);
   }, 30_000);
+
+  it("in theo bộ mã: cột Mã hàng/Số lượng/ĐVT/Đơn giá lấy từ phần đã in; tổng lượng theo ĐVT in; bản cũ (chưa có phần in) in như dữ liệu dòng", () => {
+    const layout = { ...DEFAULT_INVOICE_LAYOUT, columns: DEFAULT_INVOICE_LAYOUT.columns.map((c) => ({ ...c, visible: true })) };
+    const snap = {
+      ...SNAP, layout,
+      items: [
+        { ...SNAP.items[0]!, catalogItemId: "cat_1", printedCode: "VT-0012", printedUnit: "ROLL", printedQuantity: "10", printedUnitPrice: "125" },
+        { ...SNAP.items[1]!, partNo: "OLD-2" },
+      ],
+    };
+    renderWithProviders(<InvoicePrintView invoice={inv({ snapshot: snap })} snapshot={snap} doc="invoice" />);
+    expect(screen.getByText("VT-0012")).toBeTruthy();
+    expect(screen.queryByText("DB-10")).toBeNull();
+    expect(screen.getByText("ROLL")).toBeTruthy();
+    expect(screen.getByText("125.00")).toBeTruthy();
+    expect(screen.getByText("OLD-2")).toBeTruthy();
+    expect(screen.getByText("10 ROLL + 1 PCE")).toBeTruthy();
+  });
 
   it("mẫu doanh nghiệp: thứ tự nhóm, nhãn riêng, bật L/C + số tờ khai, câu xác nhận, số bản theo mẫu", () => {
     const layout = {

@@ -95,6 +95,39 @@ describe("DataTable – chọn dòng", () => {
   });
 });
 
+describe("DataTable – dòng không chọn được, ô ổn định", () => {
+  it("isRowSelectable: dòng không chọn được không có checkbox; 'Chọn tất cả' bỏ qua dòng đó", async () => {
+    const onSelectionChange = vi.fn();
+    setup({ pagination: false, selectable: true, isRowSelectable: (r) => r.id !== "b", onSelectionChange, rowLabel: (r) => r.code });
+    expect(screen.queryByRole("checkbox", { name: "Chọn dòng HS-001" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Chọn dòng HS-002" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn tất cả" }));
+    expect([...onSelectionChange.mock.lastCall![0]].sort()).toEqual(["a", "c"]);
+  });
+
+  it("rowActions / rowLabel viết thẳng (hàm mới mỗi lần dựng): nút thao tác và checkbox không bị dựng lại, vẫn cập nhật nội dung", async () => {
+    function Host() {
+      const [n, setN] = useState(0);
+      return (
+        <>
+          <Button onClick={() => setN((x) => x + 1)}>Tăng</Button>
+          <DataTable
+            aria-label="Hồ sơ khai báo" columns={COLUMNS} data={DATA} getRowId={(r) => r.id} pagination={false} selectable
+            rowLabel={(r) => r.code} rowActions={(r) => <button type="button">Sửa {r.code} lần {n}</button>}
+          />
+        </>
+      );
+    }
+    render(<Host />);
+    const btn = screen.getByRole("button", { name: "Sửa HS-001 lần 0" });
+    const box = screen.getByRole("checkbox", { name: "Chọn dòng HS-001" });
+    await userEvent.click(screen.getByRole("button", { name: "Tăng" }));
+    expect(btn.isConnected).toBe(true);
+    expect(box.isConnected).toBe(true);
+    expect(btn.textContent).toBe("Sửa HS-001 lần 1");
+  });
+});
+
 describe("DataTable – bấm dòng & hành động", () => {
   it("bấm dòng hoặc Enter/Space trên dòng gọi onRowClick", async () => {
     const onRowClick = vi.fn();

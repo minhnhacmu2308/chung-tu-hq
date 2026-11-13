@@ -69,11 +69,16 @@ function ItemsTable({ s, columns }: { s: IssuedInvoiceSnapshot; columns: Invoice
   const head = (k: InvoiceColumnKey, label: string | null) => fill(label ?? COLUMN_LABELS[k], { cur });
   const right = (k: InvoiceColumnKey) => k === "QUANTITY" || k === "UNIT_PRICE" || k === "AMOUNT";
   const unitCol = cols.some((c) => c.key === "UNIT");
-  const cell = (it: IssuedInvoiceSnapshot["items"][number], k: InvoiceColumnKey): string => {
+  // Mã/ĐVT/lượng/đơn giá IN theo bộ mã của mẫu (ảnh chụp lúc phát hành); bản phát hành cũ chưa có → như dữ liệu dòng.
+  const shown = (it: IssuedInvoiceSnapshot["items"][number]) => ({
+    code: it.printedCode ?? it.partNo, unit: it.printedUnit ?? it.unit, quantity: it.printedQuantity ?? it.quantity, unitPrice: it.printedUnitPrice ?? it.unitPrice,
+  });
+  const cell = (row: IssuedInvoiceSnapshot["items"][number], k: InvoiceColumnKey): string => {
+    const it = { ...row, ...shown(row) };
     switch (k) {
       case "LINE_NO": return String(it.lineNo);
       case "DESCRIPTION": return it.description;
-      case "PART_NO": return it.partNo ?? "";
+      case "PART_NO": return it.code ?? "";
       case "HS_CODE": return it.hsCode ?? "";
       case "ORIGIN": return it.origin ?? "";
       case "QUANTITY": return unitCol ? qty(it.quantity) : `${qty(it.quantity)} ${it.unit}`;
@@ -82,8 +87,9 @@ function ItemsTable({ s, columns }: { s: IssuedInvoiceSnapshot; columns: Invoice
       case "AMOUNT": return money(it.amount);
     }
   };
-  const units = [...new Set(s.items.map((i) => i.unit))];
-  const totalQty = units.map((u) => `${qty(sumDecimal(s.items.filter((i) => i.unit === u).map((i) => i.quantity), 3).replace(/\.?0+$/, "") || "0")} ${u}`).join(" + ");
+  const printed = s.items.map(shown);
+  const units = [...new Set(printed.map((i) => i.unit))];
+  const totalQty = units.map((u) => `${qty(sumDecimal(printed.filter((i) => i.unit === u).map((i) => i.quantity), 3).replace(/\.?0+$/, "") || "0")} ${u}`).join(" + ");
   const total = (k: InvoiceColumnKey, i: number) => (i === 0 ? L.total : k === "QUANTITY" ? totalQty : k === "AMOUNT" ? `${money(s.invoice.totalAmount)} ${cur}` : "");
   return (
     <div className="overflow-x-auto">

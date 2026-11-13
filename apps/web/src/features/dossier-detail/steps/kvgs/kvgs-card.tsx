@@ -20,10 +20,11 @@ import { LoadError } from "@/components/common/load-error";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { rowReason } from "@/lib/reason-codes";
+import { saveBlob } from "@/lib/xlsx-download";
 import { sheetsOf } from "../branch-sheets";
 import { MessageList } from "../message-list";
 import { ContainerTable, type EditRow } from "./container-table";
-import { buildContainerXlsx, parseContainerXlsx, saveBlob } from "./container-xlsx";
+import { buildContainerXlsx, parseContainerXlsx } from "./container-xlsx";
 import { KvgsStatusBlock } from "./kvgs-status-block";
 import { KVGS_MESSAGES } from "./kvgs.messages";
 

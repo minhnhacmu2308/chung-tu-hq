@@ -4,11 +4,12 @@ import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, Combobox, createDataTableColumnHelper,
   DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Progress, RadioGroup, SegmentedControl, Spinner, Stack, StatusBadge, toast, Tooltip, IconTile, fill, useMessages,
 } from "@kb/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bot, Check, CheckCheck, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, Info, Pencil, Play, RotateCcw, Search, Undo2, Workflow, XCircle } from "lucide-react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Bot, Check, CheckCheck, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, HelpCircle, Info, Pencil, Play, RotateCcw, Search, Undo2, Workflow, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { dossierKeys } from "@/api/dossiers";
-import { listProducts, productKeys } from "@/api/products";
+import { catalogKeys, listCatalogItems } from "@/api/catalog";
 import {
   confirmHs, declarationKeys, getAgentRun, listHsCatalog, listLineItems, moveToReview, startAgentRun, unconfirmHs,
   type AgentMode, type AgentRunView,
@@ -16,9 +17,13 @@ import {
 import { formatDateTime, formatMoney, formatNumber, formatTime } from "@/lib/format";
 import type { AgentTaskId, AgentTaskStatus, LineItem } from "@/mocks/types";
 import { errorMessage, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
-import { matchCatalog, type CatalogMatch } from "./hs/catalog-match";
+import { catalogMatches, type CatalogMatch } from "./hs/catalog-match";
+import { useCatalogHints } from "./hs/use-catalog-hints";
 import { DeclaredBeforeHint, HsSuggestionCell } from "./hs/hs-cell";
 import { HsAnswerDialog, ReclassifyDialog } from "./hs/hs-dialogs";
+import { LinkItemDialog } from "./hs/link-item-dialog";
+import { LINK_ITEM_MESSAGES } from "./hs/link-item.messages";
+import { getSession, sessionKeys } from "@/api/session";
 import { formatRates, formatTax, hsBusy, isVatExempt, normalizeHsInput } from "./hs/hs-format";
 import type { StepProps } from "./types";
 import { AGENT_MESSAGES } from "./agent-step.messages";
@@ -198,12 +203,16 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
   const t = useMessages(AGENT_MESSAGES);
   const qc = useQueryClient();
   const catalog = useQuery({ queryKey: declarationKeys.hsCatalog, queryFn: listHsCatalog, staleTime: Infinity });
-  const products = useQuery({ queryKey: productKeys.all, queryFn: listProducts, staleTime: 60_000 });
-  const declared = useMemo(() => matchCatalog(item.description, products.data ?? []), [item.description, products.data]);
+  // Gợi ý theo dòng: tra cả danh mục ở server (resolve-many); ô tìm thêm: tìm phía server theo tên / mọi mã (trễ 300 ms).
+  const hints = useCatalogHints([item.description]);
+  const declared = useMemo(() => catalogMatches(item.description, hints.get(item.description)), [item.description, hints]);
+  const [productSearch, setProductSearch] = useState("");
+  const searchQuery = { q: useDebouncedValue(productSearch), pageSize: 50 };
+  const products = useQuery({ queryKey: catalogKeys.items(searchQuery), queryFn: () => listCatalogItems(searchQuery), select: (p) => p.rows, staleTime: 60_000, placeholderData: keepPreviousData });
   const productOptions = useMemo(
     () => (products.data ?? []).flatMap((p) => {
-      const c = normalizeHsInput(p.hsCode);
-      const meta = [p.code, p.origin].filter(Boolean).join(" · ");
+      const c = normalizeHsInput(p.hsCode ?? "");
+      const meta = [p.displayCode, p.origin].filter(Boolean).join(" · ");
       return c ? [{ value: p.id, label: fill(t.productOption, { code: c, name: p.name }), ...(meta ? { description: meta } : {}) }] : [];
     }),
     [products.data, t.productOption],
@@ -263,11 +272,13 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
             }))}
           />
         )}
-        {productOptions.length > 0 && (
+        {(productOptions.length > 0 || productSearch.trim() !== "") && (
           <Field label={t.productsSearchLabel} hint={t.productsSearchHint}>
             <Combobox
               options={productOptions}
               value={null}
+              onSearchChange={setProductSearch}
+              loading={products.isFetching}
               onChange={(id) => {
                 const c = normalizeHsInput(products.data?.find((p) => p.id === id)?.hsCode ?? "");
                 if (c) (setPicked(c), setManual(""));
@@ -316,26 +327,49 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
 
 const col = createDataTableColumnHelper<LineItem>();
 
+/**
+ * Dòng có Part No chưa có trong danh mục: badge "Mã lạ" + "Chọn mặt hàng" (mọi vai trò trừ VIEWER; chưa biết vai trò → ẩn; backend kiểm lại
+ * quyền + tờ khai đã khóa). Đọc phiên trong ô riêng để phiên tải xong không dựng lại cả bảng.
+ */
+function UnknownCodeCell({ item, onLink }: { item: LineItem; onLink: (it: LineItem) => void }) {
+  const t = useMessages(LINK_ITEM_MESSAGES);
+  const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
+  const role = session.data?.user.role;
+  const canLink = !!role && role !== "VIEWER";
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <Badge size="sm" tone="warning" icon={<HelpCircle className="h-3 w-3" />} title={t.unknownCodeTitle}>{t.unknownCode}</Badge>
+      {canLink && (
+        <Button size="sm" variant="link" className="h-auto" onClick={() => onLink(item)} aria-label={fill(t.linkItemAria, { line: item.lineNo })}>
+          {t.linkItem}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId: string; currency: string }) {
   const t = useMessages(AGENT_MESSAGES);
   const qc = useQueryClient();
   const [editing, setEditing] = useState<LineItem | null>(null);
   const [answering, setAnswering] = useState<LineItem | null>(null);
   const [reclassifying, setReclassifying] = useState<LineItem | null>(null);
+  const [linking, setLinking] = useState<LineItem | null>(null);
+  const tl = useMessages(LINK_ITEM_MESSAGES);
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: declarationKeys.items(dossierId) });
     void qc.invalidateQueries({ queryKey: declarationKeys.view(dossierId) });
   };
-  const products = useQuery({ queryKey: productKeys.all, queryFn: listProducts, staleTime: 60_000 });
-  /** Mặt hàng cùng tên (khớp đúng) đã khai trong danh mục, theo dòng. */
+  const hints = useCatalogHints(useMemo(() => items.map((it) => it.description), [items]));
+  /** Mặt hàng khớp đúng (tra chắc chắn / trùng tên) đã khai trong danh mục, theo dòng. */
   const declared = useMemo(() => {
     const m = new Map<string, CatalogMatch>();
-    if (products.data?.length) for (const it of items) {
-      const hit = matchCatalog(it.description, products.data, { limit: 1 })[0];
+    for (const it of items) {
+      const hit = catalogMatches(it.description, hints.get(it.description), { limit: 1 })[0];
       if (hit?.exact) m.set(it.id, hit);
     }
     return m;
-  }, [items, products.data]);
+  }, [items, hints]);
   const confirm = useMutation({
     mutationFn: ({ it, code }: { it: LineItem; code: string }) => confirmHs(it.id, code),
     onSuccess: (it) => {
@@ -369,14 +403,24 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
       header: t.colDescription,
       size: 260,
       meta: { wrap: true },
-      cell: (c) => (
-        <div>
-          <p className="text-fg">{c.getValue()}</p>
-          <p className="text-xs text-fg-subtle">
-            {fill(t.qtyOrigin, { qty: formatNumber(c.row.original.quantity), unit: c.row.original.unit, origin: c.row.original.origin })}
-          </p>
-        </div>
-      ),
+      cell: (c) => {
+        const it = c.row.original;
+        return (
+          <div>
+            <p className="text-fg">{c.getValue()}</p>
+            <p className="text-xs text-fg-subtle">
+              {fill(t.qtyOrigin, { qty: formatNumber(it.quantity), unit: it.unit, origin: it.origin })}
+            </p>
+            {/* Danh mục hàng hóa (ADR 0015): mặt hàng đã gắn → thẻ mã nối · tên; Part No chưa có trong danh mục → "Mã lạ" (hồ sơ vẫn đi tiếp). */}
+            {it.catalogItem && (
+              <Badge size="sm" className="mt-1 max-w-full truncate" title={tl.linkedChipTitle}>
+                {fill(tl.linkedChip, { itemNo: it.catalogItem.itemNo, name: it.catalogItem.name })}
+              </Badge>
+            )}
+            {it.unknownCode && !it.catalogItem && <UnknownCodeCell item={it} onLink={setLinking} />}
+          </div>
+        );
+      },
     }),
     col.accessor("amount", { header: fill(t.colAmount, { currency }), meta: { align: "end" }, cell: (c) => formatMoney(c.getValue()) }),
     col.accessor("invoiceHsCode", {
@@ -521,6 +565,7 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
       <ChangeHsDialog item={editing} onClose={() => setEditing(null)} dossierId={dossierId} />
       <HsAnswerDialog item={answering} items={items} onClose={() => setAnswering(null)} dossierId={dossierId} />
       <ReclassifyDialog item={reclassifying} onClose={() => setReclassifying(null)} dossierId={dossierId} />
+      <LinkItemDialog item={linking} onClose={() => setLinking(null)} dossierId={dossierId} />
     </>
   );
 }

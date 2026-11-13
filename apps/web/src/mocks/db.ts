@@ -4,7 +4,7 @@ import type {
   AgentRun, CrossCheck, CustomsResult, Declaration, DigitalCertificate, Dossier, DossierDocument,
   ExtractedField, Integration, LineItem, Member, Notification, Organization, Skill,
 } from "./types";
-import type { DeclarationProfile, InvoiceTemplate, IssuedInvoice, JoinRequest, PostAmendment, ManualShipment, ProductCatalogItem, ValueCharges } from "@kb/contracts";
+import type { DeclarationProfile, InvoiceTemplate, IssuedInvoice, JoinRequest, PostAmendment, ManualShipment, ValueCharges } from "@kb/contracts";
 import { seedCore } from "./seed/core";
 import { seedOcr } from "./seed/ocr";
 import { seedDeclaration } from "./seed/declaration";
@@ -14,7 +14,8 @@ import { seedSettings } from "./seed/settings";
 import { seedAdmin } from "./seed/admin";
 import { syncFreightTermCheck } from "./freight-term";
 import { syncIncotermFreightCheck } from "./incoterm-freight";
-import { seedProducts } from "./seed/products";
+import { seedCatalog, seedLineCatalogLinks } from "./seed/catalog";
+import type { MockCatalog } from "./catalog-engine";
 import { seedMailbox, type MockInboxMessage, type MockMailConnection } from "./seed/mailbox";
 import type { AdminDb } from "./admin/types";
 import type { MockHys } from "./hys-sim";
@@ -51,8 +52,8 @@ export type MockDb = {
   skillSuggestions: SkillSuggestion[];
   /** Skill đã đổi cấu hình sau lần đọc gần nhất của chứng từ đang mở → gợi ý đọc lại. */
   staleSkills: string[];
-  /** Danh mục hàng hóa của doanh nghiệp (mặt hàng đã khai). */
-  products: ProductCatalogItem[];
+  /** Danh mục hàng hóa dùng chung (ADR 0015): mặt hàng, bộ mã, bí danh, quy đổi, hàng chờ ghép, lần nhập. */
+  catalog: MockCatalog;
   integrations: Integration[];
   /** Hộp thư Gmail / Outlook đã kết nối (Hộp thư chứng từ). */
   mailConnections: MockMailConnection[];
@@ -87,7 +88,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 43;
+const DB_VERSION = 45;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -104,7 +105,7 @@ function createSeed(): MockDb {
     ...seedCustoms(core.dossiers),
     customsBranchResults: {},
     postAmendments: [],
-    products: seedProducts(),
+    catalog: seedCatalog(),
     ...seedMailbox(core.dossiers),
     valueCharges: {},
     manualShipments: {},
@@ -118,6 +119,8 @@ function createSeed(): MockDb {
     ...seedAdmin(),
     billing: { ledger: [], payments: [], contracts: {} },
   });
+  // Dòng hàng mẫu đã tra danh mục: thẻ mã nối, "Mã lạ" (ADR 0015).
+  seedLineCatalogLinks(seed.lineItems, seed.catalog);
   // Sổ lượt mẫu: tặng/mua lượt + lượt đã trừ cho tờ khai đã khai chính thức của dữ liệu mẫu.
   seed.billing = seedBilling(seed);
   // Luật R-FREIGHT-TERM tính từ ô Điều kiện cước của vận đơn (như khi chạy lại luật ở backend).

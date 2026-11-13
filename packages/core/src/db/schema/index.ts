@@ -11,3 +11,4 @@ export * from "./declaration.js";
 export * from "./admin.js";
 export * from "./mailbox.js";
 export * from "./teaching.js";
+export * from "./catalog.js";

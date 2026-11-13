@@ -117,6 +117,14 @@ export const REASON_TEXT_VI = {
   KVGS_ALREADY_SENDING: "Đang gửi tới Hải quan – chờ kết quả rồi thử lại",
   KVGS_RESPONSE_INCOMPLETE: "Phản hồi của Hải quan thiếu thông tin để in (số quản lý hàng hóa hoặc danh sách container)",
   CONT_LIST_LOCKED: "Danh sách container đã gửi – không sửa được, tạo lần khai mới để sửa",
+  CATALOG_CODE_TAKEN: "Mã này đã gán cho mặt hàng khác trong bộ mã",
+  CATALOG_UNIT_FACTOR_REQUIRED: "ĐVT khác đơn vị gốc của mặt hàng – nhập hệ số quy đổi trước khi xác nhận",
+  CATALOG_QUEUE_ITEM_DONE: "Mục chờ ghép này đã được xử lý",
+  CATALOG_MERGE_INVALID: "Không gộp được: không gộp mặt hàng vào chính nó hoặc vào mặt hàng đã bị gộp",
+  CATALOG_NOT_CODE_SET_OWNER: "Chỉ người phụ trách bộ mã (hoặc Quản trị) mới thao tác được",
+  CATALOG_MODE_CONFLICT: "Chế độ danh mục không cho phép thao tác này",
+  CATALOG_PARTNER_SET_EXISTS: "Đối tác này đã có bộ mã cùng loại – dùng bộ mã đã có",
+  CATALOG_IMPORT_TOO_LARGE: "Mỗi lần gửi tối đa {max} dòng – chia file thành nhiều lần nhập",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

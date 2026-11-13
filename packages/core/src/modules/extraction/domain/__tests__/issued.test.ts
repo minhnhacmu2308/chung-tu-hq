@@ -1,7 +1,7 @@
 // ADR 0013 mục 3 – hóa đơn thương mại: bản nội dung, ghép số vào Shipment; lô nhiều invoice khi gộp chứng từ.
 import { DEFAULT_INVOICE_LAYOUT, emptyShipment, ManualShipmentSchema } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { applyIssued, buildSnapshot } from "../issued.js";
+import { applyIssued, buildSnapshot, printLine } from "../issued.js";
 import { applyManual } from "../manual.js";
 import { mergeExtractions, type FileExtraction } from "../merge.js";
 
@@ -81,5 +81,74 @@ describe("gộp chứng từ – lô nhiều invoice", () => {
     expect(s.items).toHaveLength(1);
     expect(s.invoice.totalAmount.value).toBe("300");
     expect(s.invoice.totalAmount.note).toBeUndefined();
+  });
+});
+
+describe("buildSnapshot – in mã hàng theo bộ mã (ADR 0015, Review Focus 4)", () => {
+  const withItems = (items: Record<string, unknown>[]) =>
+    applyManual(emptyShipment(), ManualShipmentSchema.parse({ buyer: { name: "NORDIC TOOLING GROUP AB" }, invoice: { currency: "USD" }, items }));
+  const line = (o: Record<string, unknown> = {}) => ({ description: "Cable", quantity: "1000", unit: "M", unitPrice: "1.25", partNo: "OCR-1", catalogItemId: "cat_1", ...o });
+  const CAT = {
+    cat_1: { itemNo: "MH-000001", baseUnit: "M", conversion: { base: "M", factors: { ROLL: "100" } }, code: { code: "VT-0012", unit: "ROLL" } },
+  };
+
+  it("in theo bộ Kế toán: mã kế toán + lượng/ĐVT/đơn giá quy đổi sang ĐVT của mã, thành tiền không đổi; ảnh chụp lưu đủ 4 trường", () => {
+    const r = buildSnapshot(withItems([line()]), SELLER, "2026-11-10", { ...X, print: CAT });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.snapshot.items[0]).toMatchObject({
+      catalogItemId: "cat_1", printedCode: "VT-0012", printedUnit: "ROLL", printedQuantity: "10", printedUnitPrice: "125",
+      quantity: "1000", unit: "M", amount: "1250.00",
+    });
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("mặt hàng chưa có mã trong bộ → in mã nối (không để trống), giữ lượng/ĐVT gốc", () => {
+    const r = buildSnapshot(withItems([line()]), SELLER, "2026-11-10", { ...X, print: { cat_1: { ...CAT.cat_1, code: null } } });
+    if (!r.ok) throw new Error("not ok");
+    expect(r.snapshot.items[0]).toMatchObject({ printedCode: "MH-000001", printedUnit: "M", printedQuantity: "1000", printedUnitPrice: null });
+  });
+
+  it("ĐVT của mã khác ĐVT gốc mà thiếu hệ số → giữ lượng/ĐVT gốc (không nhân 1) + cảnh báo theo dòng", () => {
+    const r = buildSnapshot(withItems([line({ unit: "M" })]), SELLER, "2026-11-10", {
+      ...X, print: { cat_1: { ...CAT.cat_1, conversion: { base: "M", factors: {} } } },
+    });
+    if (!r.ok) throw new Error("not ok");
+    expect(r.snapshot.items[0]).toMatchObject({ printedCode: "VT-0012", printedUnit: "M", printedQuantity: "1000", printedUnitPrice: null });
+    expect(r.warnings).toEqual([{ lineNo: 1, code: "UNIT_FACTOR_MISSING" }]);
+  });
+
+  it("dòng không gắn danh mục (hoặc danh mục không có thông tin) → như cũ: Part No đọc từ chứng từ, lượng/ĐVT gốc", () => {
+    const r = buildSnapshot(withItems([line({ catalogItemId: null }), line({ catalogItemId: "cat_gone" })]), SELLER, "2026-11-10", { ...X, print: CAT });
+    if (!r.ok) throw new Error("not ok");
+    for (const it of r.snapshot.items) expect(it).toMatchObject({ printedCode: "OCR-1", printedUnit: "M", printedQuantity: "1000", printedUnitPrice: null });
+    expect(r.snapshot.items[0]!.catalogItemId).toBeNull();
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("không truyền print (không nối danh mục) → như cũ", () => {
+    const r = buildSnapshot(withItems([line()]), SELLER, "2026-11-10", X);
+    if (!r.ok) throw new Error("not ok");
+    expect(r.snapshot.items[0]).toMatchObject({ printedCode: "OCR-1", printedUnit: "M", printedQuantity: "1000" });
+  });
+});
+
+describe("printLine – đơn giá theo ĐVT in (không cắt sai số 0)", () => {
+  const price = (unitPrice: string, factors: Record<string, string>) =>
+    printLine(
+      { partNo: null, quantity: "300", unit: "M", unitPrice, catalogItemId: "c" },
+      { itemNo: "MH-1", baseUnit: "M", conversion: { base: "M", factors }, code: { code: "X", unit: "BOX" } },
+    ).line.printedUnitPrice;
+  it.each([
+    ["125", "100", "1.25"],
+    ["125", "1", "125"],
+    ["125", "10", "12.5"],
+    ["1", "8", "0.125"],
+    ["1", "3", "0.333333"],
+    ["1", "0.5", "2"],
+    ["1.25", "0.01", "125"],
+  ])("unitPrice %s chia hệ số %s → %s", (unitPrice, factor, expected) => {
+    // 1 BOX = 1/factor M  (qty in BOX = qty_M * from/to → factor = 1 / boxFactor)
+    expect(price(unitPrice, { BOX: String(1 / Number(factor)) })).toBe(expected);
   });
 });

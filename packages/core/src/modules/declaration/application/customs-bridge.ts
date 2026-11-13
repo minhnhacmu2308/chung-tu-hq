@@ -10,10 +10,15 @@ import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
 import { syncLineItems, toBranches, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
+import { partNoOf, planForDossier } from "./_catalog-plan.js";
 
 export type DeclarationSnapshot = {
   declarationId: string; version: number; status: DeclarationStatus; kind: "IDA" | "EDA"; direction: "NK" | "XK"; currency: string;
-  fields: Record<string, { value: string; source?: string }>; items: Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote">[];
+  fields: Record<string, { value: string; source?: string }>;
+  /** `itemCode` (HAG_MAHANG) chỉ có khi mặt hàng đã gắn có mã bộ Hải quan – vắng giữ nguyên nội dung đã gửi của lô cũ (so tờ đã gửi). */
+  items: (Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote"> & { itemCode?: string })[];
+  /** Dòng HAG_MAHANG để trống vì mã lạ / mặt hàng chưa có mã Hải quan → cảnh báo khi dựng payload (không chặn truyền – Review Focus 5). */
+  itemNotes: { lineNo: number; note: "UNKNOWN_CODE" | "NO_CUSTOMS_CODE"; partNo: string | null }[];
   adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
   /** Thuế dự tính (thuế NK + VAT, VND) từng tờ khai nhánh – cùng cách tính với DeclarationView.branches. */
   branchTaxVnd: string[];
@@ -33,7 +38,13 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
   return {
     declarationId: decl.id, version: decl.version, status: decl.status, kind: decl.kind, direction: dossier.direction, currency: dossier.currency,
     fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value, source: f.source }])),
-    items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, vatCode: i.taxDetail?.vatCode ?? null, policyNote: i.policyNote })),
+    items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, vatCode: i.taxDetail?.vatCode ?? null, policyNote: i.policyNote, ...(i.itemCode ? { itemCode: i.itemCode } : {}) })),
+    itemNotes: deps.catalog ? items.flatMap((i): DeclarationSnapshot["itemNotes"] => {
+      if (i.itemCode) return [];
+      const partNo = partNoOf(shipment, i.lineNo);
+      if (i.catalogItemId) return [{ lineNo: i.lineNo, note: "NO_CUSTOMS_CODE" as const, partNo }];
+      return partNo ? [{ lineNo: i.lineNo, note: "UNKNOWN_CODE" as const, partNo }] : [];
+    }) : [],
     adjustments: decl.valueAdjustments.map((a) => ({ label: a.label, amount: a.amount, currency: a.currency, kind: a.kind, ...(a.code ? { code: a.code } : {}), ...(a.allocate === false ? { allocate: false } : {}) })),
     containers: shipment?.transport.containers.map((c) => c.no) ?? [],
     unconfirmedHs: unconfirmedCount(items),
@@ -90,10 +101,11 @@ export async function refreshFromShipment(deps: DeclarationDeps, ctx: { orgId: O
   const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
   if (!shipment?.items.length) return ok(undefined);
   const lessons = await lessonsOf(deps, ctx.orgId, dossierId);
+  const plan = await planForDossier(deps, ctx, dossierId, shipment);
   const decl = await deps.uow.asOrg(ctx, async (r) => {
     const latest = await r.declarations.latest(ctx.orgId, dossierId);
     if (latest && latest.status !== "DRAFT") return latest;
-    if ((await r.lineItems.list(ctx.orgId, dossierId)).length) await syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons);
+    if ((await r.lineItems.list(ctx.orgId, dossierId)).length) await syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons, plan);
     return latest;
   });
   if (!decl || decl.status !== "DRAFT") return ok(undefined);

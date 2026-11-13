@@ -52,6 +52,26 @@ describe("ManualShipmentCard", () => {
     expect(getDb().manualShipments[DOS]!.data).toMatchObject({ buyer: { name: "NORDIC AB" }, items: [{ description: "Drill bit 12mm" }] });
   }, 90_000);
 
+  it("chọn hàng từ danh mục: tìm theo mã kho viết khác ('dc 0001') → mã hàng = mã bộ XNK, gắn mặt hàng; chưa có mã XNK → để trống", async () => {
+    render();
+    await userEvent.click(await screen.findByRole("button", { name: "Nhập dữ liệu" }, T));
+    const dialog = await screen.findByRole("dialog", {}, T);
+    const pick = async (search: string, name: string) => {
+      await userEvent.click(within(dialog).getByRole("combobox", { name: "Chọn từ danh mục hàng hóa" }));
+      const box = await screen.findByPlaceholderText("Tìm kiếm…", {}, T);
+      await userEvent.clear(box);
+      await userEvent.type(box, search);
+      await userEvent.click(await screen.findByRole("option", { name: new RegExp(name) }, T));
+    };
+    await pick("dc 0001", "Dây cáp điện CVV 3x2.5mm2");
+    await waitFor(() => expect((within(dialog).getByLabelText("Mã hàng") as HTMLInputElement).value).toBe("CVV3X2.5"), T);
+    expect((within(dialog).getByLabelText(/^Tên hàng/) as HTMLInputElement).value).toBe("Dây cáp điện CVV 3x2.5mm2");
+    // Mặt hàng chưa có mã ở bộ XNK (chỉ có mã Kế toán/Kho) → mã hàng để trống, không lấy mã hiển thị của bộ khác.
+    await pick("VAI-C15", "Vải canvas cotton");
+    await waitFor(() => expect((within(dialog).getByLabelText(/^Tên hàng/) as HTMLInputElement).value).toBe("Vải canvas cotton khổ 1,5 m"), T);
+    expect((within(dialog).getByLabelText("Mã hàng") as HTMLInputElement).value).toBe("");
+  }, 90_000);
+
   it("hồ sơ đã truyền → chỉ xem, báo lý do, không có nút lưu", async () => {
     await saveManualShipment(DOS, { items: [{ description: "X", quantity: "1", unit: "PCE", unitPrice: "1" }] });
     getDb().dossiers.find((d) => d.id === DOS)!.status = "SUBMITTED";

@@ -37,6 +37,11 @@ export const lineItems = pgTable(
     hsQuestion: jsonb("hs_question"),
     hsError: jsonb("hs_error"),
     hsDetail: jsonb("hs_detail"),
+    /** Nối danh mục hàng hóa (chỉ id, không FK chéo module): mặt hàng, bí danh đã khớp, hệ số theo lô (null = mặc định), mã điền HAG_MAHANG. */
+    catalogItemId: text("catalog_item_id"),
+    catalogAliasId: text("catalog_alias_id"),
+    unitFactor: numeric("unit_factor", { precision: 24, scale: 9 }),
+    itemCode: text("item_code"),
     ...timestamps(),
   },
   (t) => [

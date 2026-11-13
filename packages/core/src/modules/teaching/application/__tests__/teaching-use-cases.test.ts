@@ -159,3 +159,34 @@ describe("Dạy khai báo – tờ khai mẫu", () => {
     expect(lesson.status).toBe("PENDING");
   });
 });
+
+describe("bài học LINE đã duyệt → đề xuất bí danh danh mục (source LESSON)", () => {
+  beforeEach(() => make());
+
+  it("duyệt bài học mặt hàng → gọi danh mục sau commit: nhà cung cấp theo tờ khai, mã = Part No, mô tả + HS; bài học khác không gọi; lỗi danh mục không làm hỏng duyệt", async () => {
+    const calls: { orgId: string; userId: string; input: unknown }[] = [];
+    deps.catalog = { proposeFromLesson: async (c, input) => void calls.push({ orgId: c.orgId, userId: c.userId, input }) };
+    await upload();
+    const line = uow.lessons.find((l) => l.kind === "LINE")!;
+    const field = uow.lessons.find((l) => l.kind === "FIELD")!;
+    expect(unwrap(await approveLessons(deps, ctxA, [field.id, line.id]))).toBe(2);
+    expect(calls).toEqual([{ orgId: "org_a", userId: "usr_a", input: { partnerName: "ZHUHAI RISE LIGHTING CO., LTD", code: "2118.564-ACOT-96", name: "Đèn down light âm trần, màu trắng, code: 2118.564-ACOT-96", hsCode: "94051199" } }]);
+    // Đã ACTIVE → duyệt lại không gọi nữa; bật lại qua updateLesson cũng đề xuất.
+    expect(unwrap(await approveLessons(deps, ctxA, [line.id]))).toBe(0);
+    unwrap(await updateLesson(deps, ctxA, line.id, { status: "OFF" }));
+    deps.catalog = { proposeFromLesson: async () => { throw new Error("catalog down"); } };
+    expect(unwrap(await updateLesson(deps, ctxA, line.id, { status: "ACTIVE" }))).toMatchObject({ status: "ACTIVE" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("tờ khai mẫu là tờ khai XUẤT (loại hình B11 – người xuất khẩu là chính doanh nghiệp) → không đề xuất bí danh nhà cung cấp", async () => {
+    make(true, new ScriptedAi({ "TK 106794645160.pdf": { ...TK, MA_LH: "B11" } }));
+    const calls: unknown[] = [];
+    deps.catalog = { proposeFromLesson: async (_c, input) => void calls.push(input) };
+    await upload();
+    const line = uow.lessons.find((l) => l.kind === "LINE")!;
+    expect(line).toBeTruthy();
+    expect(unwrap(await approveLessons(deps, ctxA, [line.id]))).toBe(1);
+    expect(calls).toEqual([]);
+  });
+});

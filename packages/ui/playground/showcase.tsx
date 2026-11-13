@@ -179,6 +179,8 @@ export function Showcase() {
             data={ROWS}
             getRowId={(r) => r.id}
             selectable
+            // isRowSelectable: dòng XK không chọn được (minh họa) – "Chọn tất cả" bỏ qua
+            isRowSelectable={(r) => r.type === "NK"}
             searchable
             columnToggle
             resizable

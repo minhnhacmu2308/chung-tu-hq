@@ -1,5 +1,5 @@
 // Form nhập tay dữ liệu lô hàng (ADR 0013): trạng thái form (chuỗi) ↔ ManualShipmentInput; lỗi theo ô, chữ lỗi theo ngôn ngữ giao diện.
-import { ManualShipmentSchema, type ManualShipment, type ManualShipmentInput, type ProductCatalogItem } from "@kb/contracts";
+import { ManualShipmentSchema, type ManualShipment, type ManualShipmentInput, type CatalogItemListRow } from "@kb/contracts";
 
 export type ItemRow = { description: string; quantity: string; unit: string; unitPrice: string; origin: string; hsOnInvoice: string; partNo: string; catalogItemId: string | null };
 export type ManualForm = {
@@ -18,9 +18,13 @@ export type ManualFormErrors = Record<string, ErrorKind>;
 
 export const emptyItem = (): ItemRow => ({ description: "", quantity: "", unit: "", unitPrice: "", origin: "", hsOnInvoice: "", partNo: "", catalogItemId: null });
 
-/** Chọn mặt hàng từ danh mục: điền tên, mã hàng, HS (gợi ý – vẫn phải xác nhận ở bước HS), đơn vị, xuất xứ; giữ số lượng / đơn giá đã nhập. */
-export const itemFromProduct = (row: ItemRow, p: ProductCatalogItem): ItemRow => ({
-  ...row, description: p.name, partNo: p.code ?? "", hsOnInvoice: p.hsCode, unit: p.unit ?? row.unit, origin: p.origin ?? row.origin, catalogItemId: p.id,
+/**
+ * Chọn mặt hàng từ danh mục dùng chung: điền tên, mã hàng = mã của mặt hàng trong bộ Hải quan mặc định (setCode khi danh sách xem theo bộ đó;
+ * chưa có mã → để trống, không lấy mã hiển thị của bộ khác), HS (gợi ý – vẫn phải xác nhận ở bước HS), ĐVT gốc, xuất xứ; luôn gắn catalogItemId
+ * (tờ khai gắn thẳng mặt hàng này, hóa đơn in mã theo bộ của mẫu). Giữ số lượng / đơn giá đã nhập.
+ */
+export const itemFromProduct = (row: ItemRow, p: Pick<CatalogItemListRow, "id" | "name" | "setCode" | "hsCode" | "baseUnit" | "origin">): ItemRow => ({
+  ...row, description: p.name, partNo: p.setCode ?? "", hsOnInvoice: p.hsCode ?? "", unit: p.baseUnit ?? row.unit, origin: p.origin ?? row.origin, catalogItemId: p.id,
 });
 
 const s = (v: string | null | undefined) => v ?? "";

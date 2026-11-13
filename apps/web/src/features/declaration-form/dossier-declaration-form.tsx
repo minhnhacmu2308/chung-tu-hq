@@ -15,6 +15,7 @@ import type { FieldLockLookup } from "./amend-context";
 import { DeclarantTab } from "./declarant-tab";
 import { ChangeHsDialog } from "../dossier-detail/steps/agent-step";
 import { FORM_MESSAGES } from "./form.messages";
+import { QtySuggestionHint } from "./qty-hint";
 import { declarationLockOf, declarationValues, editableKeys, itemValues, pendingEdits, pendingItemEdits } from "./dossier-adapter";
 import type { FormValues } from "./form-state";
 import { useSaveDeclarationEdits } from "./use-save-edits";
@@ -90,9 +91,13 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   const goOcr = (lineNo: number) => router.replace(`${pathname}?step=ocr&dong=${lineNo}`, { scroll: false });
   const itemActions = (index: number) => {
     const it = items[index];
-    if (!it || !lineEditable(index)) return null;
+    if (!it) return null;
+    // Danh mục hàng hóa: ĐVT invoice khác ĐVT khai → chú thích phép quy đổi lượng (cả khi chỉ xem); sửa hệ số lô khi dòng sửa được.
+    const hint = it.qtySuggestion ? <QtySuggestionHint item={it} dossierId={dossierId} editable={lineEditable(index)} /> : null;
+    if (!lineEditable(index)) return hint;
     return (
       <Stack gap="sm">
+        {hint}
         {/* Panel dòng hàng che thông báo đầu form → lưu ngay trong panel. */}
         {pending && (
           <Alert tone="warning" title={pending}>

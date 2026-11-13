@@ -63,10 +63,13 @@ export function applyLessons(code: string, v: EvaluatedValue, lessons: DraftLess
 
 // ---------------------------------------------------------------- dòng hàng
 
-/** Bài học mặt hàng cho một dòng: theo mã hàng (Part No) trước, không có thì theo mô tả invoice. */
-export function lineLessonFor(lessons: DraftLessons | null | undefined, item: { partNo: string | null; description: string | null }): DraftLineLesson | null {
+/**
+ * Bài học mặt hàng cho một dòng. Thứ tự (spec danh mục §5): mã của mặt hàng danh mục đã gắn với dòng (`codes` – bí danh ACTIVE ở mọi bộ:
+ * mã cũ/mới của nhà cung cấp, mã XNK…) → Part No của dòng → mô tả invoice.
+ */
+export function lineLessonFor(lessons: DraftLessons | null | undefined, item: { partNo: string | null; description: string | null; codes?: readonly string[] | undefined }): DraftLineLesson | null {
   if (!lessons?.lines.length) return null;
-  const keys = [lessonLineKey(item.partNo, null), lessonLineKey(null, item.description)].filter((k): k is string => !!k);
+  const keys = [...new Set([...(item.codes ?? []).map((c) => lessonLineKey(c, null)), lessonLineKey(item.partNo, null), lessonLineKey(null, item.description)].filter((k): k is string => !!k))];
   for (const k of keys) {
     const hit = lessons.lines.find((l) => l.key === k);
     if (hit) return hit;

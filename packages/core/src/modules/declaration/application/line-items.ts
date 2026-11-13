@@ -9,21 +9,22 @@ import { lessonsOf, rebuildDraft } from "./_rebuild.js";
 import { sheetScopeError } from "./_edit-scope.js";
 import { loadDossier, syncLineItems, toHsEntry, toLineItem } from "./_dto.js";
 import type { DeclarationDeps, HsSuggestionRow } from "./ports.js";
+import { catalogView, describeSafe, partNoOf, planForDossier } from "./_catalog-plan.js";
 
 /** Dòng hàng của hồ sơ; chưa có (hồ sơ vừa đọc xong) → tạo từ shipment.items để màn Agent hiển thị trước khi chạy. */
 export async function listLineItems(deps: DeclarationDeps, ctx: Ctx, dossierId: string): Promise<Result<LineItem[]>> {
   const d = await loadDossier(deps, ctx.orgId, dossierId);
   if (!d.ok) return d;
   let rows = await deps.uow.asOrg(ctx, (r) => r.lineItems.list(ctx.orgId, dossierId));
-  if (rows.length === 0) {
-    const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
-    if (shipment && shipment.items.length) {
-      const lessons = await lessonsOf(deps, ctx.orgId, dossierId);
-      rows = await deps.uow.asOrg(ctx, (r) => syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons));
-    }
+  const shipment = await deps.shipments.latest(ctx.orgId, dossierId);
+  if (rows.length === 0 && shipment && shipment.items.length) {
+    const lessons = await lessonsOf(deps, ctx.orgId, dossierId);
+    const plan = await planForDossier(deps, ctx, dossierId, shipment);
+    rows = await deps.uow.asOrg(ctx, (r) => syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons, plan));
   }
   const sugs = rows.length ? await deps.uow.asOrg(ctx, (r) => r.suggestions.listForItems(ctx.orgId, rows.map((x) => x.id))) : [];
-  return ok(rows.map((x) => toLineItem(x, sugs)));
+  const info = await describeSafe(deps, ctx.orgId, rows.map((x) => x.catalogItemId), dossierId);
+  return ok(rows.map((x) => toLineItem(x, sugs, catalogView(x, x.catalogItemId ? info[x.catalogItemId] : undefined, partNoOf(shipment, x.lineNo), !!deps.catalog))));
 }
 
 export async function listHsCatalog(deps: DeclarationDeps, ctx: Ctx, q?: string): Promise<Result<HsEntry[]>> {
@@ -84,7 +85,8 @@ export async function confirmHs(deps: DeclarationDeps, ctx: Ctx, itemId: string,
       deps.shipments.latest(ctx.orgId, item.dossierId), lessonsOf(deps, ctx.orgId, item.dossierId), deps.uow.asOrg(ctx, (r) => r.lineItems.list(ctx.orgId, item.dossierId)),
     ]);
     const sItem = shipment?.items.find((x) => x.lineNo === item.lineNo);
-    const lesson = lineLessonFor(lessons, { partNo: sItem?.partNo?.value ?? null, description: sItem?.description.value ?? null });
+    const codes = (await describeSafe(deps, ctx.orgId, [item.catalogItemId], item.dossierId))[item.catalogItemId ?? ""]?.codes;
+    const lesson = lineLessonFor(lessons, { partNo: sItem?.partNo?.value ?? null, description: sItem?.description.value ?? null, codes });
     rates = withHarmonized(rates, harmonizeRates(code, rates, lesson, siblings.filter((x) => x.id !== item.id), item.origin, !!shipment?.origin.coNo.value));
   }
   const patch = { hsConfirmed: code, hsConfirmedBy: ctx.userId, hsConfirmedAt: now, importDutyRate: rates.importDutyRate, vatRate: rates.vatRate, policyNote: rates.policyNote, taxDetail: rates.taxDetail, updatedAt: now };

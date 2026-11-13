@@ -45,8 +45,18 @@ export const IssuedInvoiceSnapshotSchema = z.object({
   items: z.array(z.object({
     lineNo: z.number().int().positive(), description: z.string(), partNo: z.string().nullable(), hsCode: z.string().nullable(),
     quantity: DecimalStringSchema, unit: z.string(), unitPrice: DecimalStringSchema, amount: DecimalStringSchema, origin: z.string().nullable(),
+    /** Mặt hàng danh mục của dòng (null = dòng chưa gắn danh mục / bản phát hành cũ). */
+    catalogItemId: z.string().nullable().default(null),
+    /** Điều thực sự in ở cột Mã hàng / Số lượng / ĐVT (theo bộ mã của mẫu); null = bản phát hành cũ – in partNo / quantity / unit. */
+    printedCode: z.string().nullable().default(null),
+    printedUnit: z.string().nullable().default(null),
+    printedQuantity: DecimalStringSchema.nullable().default(null),
+    /** Đơn giá theo ĐVT in – chỉ có khi lượng đã quy đổi (thành tiền không đổi); null = dùng unitPrice */
+    printedUnitPrice: DecimalStringSchema.nullable().default(null),
   })).min(1),
 });
+export const PrintWarningSchema = z.object({ lineNo: z.number().int().positive(), code: z.literal("UNIT_FACTOR_MISSING") });
+export type PrintWarning = z.infer<typeof PrintWarningSchema>;
 export type IssuedInvoiceSnapshot = z.infer<typeof IssuedInvoiceSnapshotSchema>;
 
 /** RESERVED = đã cấp số (đã điền vào tờ khai), chưa phát hành; ISSUED = đã phát hành, in được; VOID = đã hủy (số không dùng lại). */
@@ -94,6 +104,8 @@ export const IssuedInvoicesViewSchema = z.object({
   canRelease: z.boolean(),
   /** Được hủy số đang dùng – kể cả khi nguồn Invoice đã đổi sang tải lên (dọn số đã cấp). */
   canVoid: z.boolean().default(false),
+  /** Cảnh báo khi in theo bộ mã: dòng đổi ĐVT mà thiếu hệ số quy đổi → giữ lượng/ĐVT gốc (giao diện dịch theo mã). */
+  printWarnings: z.array(PrintWarningSchema).default([]),
 });
 export type IssuedInvoicesView = z.infer<typeof IssuedInvoicesViewSchema>;
 

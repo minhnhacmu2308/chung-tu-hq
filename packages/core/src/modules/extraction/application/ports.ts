@@ -1,4 +1,4 @@
-import type { CustomFieldDef, ClassifyResult, CrossCheck, DocKind, DocumentSources, DocumentStatus, DossierStatus, EditSheet, FieldGroup, FieldStatus, InvoiceLayout, InvoiceNumbering, IssuedInvoiceSnapshot, IssuedStatus, ManualShipment, Region, Shipment } from "@kb/contracts";
+import type { CustomFieldDef, ClassifyResult, CrossCheck, DocKind, DocumentSources, DocumentStatus, DossierStatus, EditSheet, FieldGroup, FieldStatus, InvoiceLayout, InvoiceNumbering, IssuedInvoiceSnapshot, IssuedStatus, ItemUnitConversionTable, ManualShipment, Region, Shipment } from "@kb/contracts";
 import type { ZodType } from "zod";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
@@ -26,7 +26,7 @@ export type OrgInfo = {
   /** Tên người bán in trên hóa đơn; thiếu = name. */
   sellerName?: string | null;
 };
-export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "MANUAL_EDIT" | "INVOICE_ISSUE" | "CONT_LIST_EDIT"; at: Date };
+export type AuditRow = { id: string; orgId: string; dossierId: string; fieldId: string | null; documentId: string | null; key: string; oldValue: string; newValue: string; userId: string; source: "USER_EDIT" | "USER_CONFIRM" | "USER_REVERT" | "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "MANUAL_EDIT" | "INVOICE_ISSUE" | "CONT_LIST_EDIT" | "CATALOG_EDIT"; at: Date };
 
 /** Mọi phương thức nhận `orgId` tường minh (bất biến 1) – RLS là lớp thứ hai; fake in-memory từ chối orgId khác ngữ cảnh. */
 export interface ExtractionRepos {
@@ -40,6 +40,8 @@ export interface ExtractionRepos {
   };
   shipments: {
     latest(orgId: string, dossierId: string): Promise<ShipmentRow | null>;
+    /** Lô hàng mới nhất của mỗi hồ sơ trong org (danh mục hàng hóa – lấy Part No từ chứng từ đã đọc). */
+    listLatestByOrg(orgId: string): Promise<ShipmentRow[]>;
     insert(row: ShipmentRow): Promise<void>;
     updateData(orgId: string, id: string, data: Shipment): Promise<void>;
   };
@@ -49,7 +51,11 @@ export interface ExtractionRepos {
     replaceForDossier(orgId: string, dossierId: string, rows: FieldRow[]): Promise<void>;
     update(orgId: string, id: string, patch: Partial<Pick<FieldRow, "value" | "status" | "note" | "confirmedBy" | "confirmedAt">>): Promise<void>;
   };
-  audit: { insert(row: AuditRow): Promise<void> };
+  audit: {
+    insert(row: AuditRow): Promise<void>;
+    /** Lịch sử của một đối tượng (cột dossier_id) theo nguồn, mới nhất trước – vd lịch sử mặt hàng danh mục (CATALOG_EDIT). */
+    listForObject(orgId: string, objectId: string, source: AuditRow["source"], limit: number): Promise<AuditRow[]>;
+  };
   /** Dữ liệu lô hàng nhập tay (ADR 0013), một dòng mỗi hồ sơ. */
   manual: {
     get(orgId: string, dossierId: string): Promise<ManualShipmentRow | null>;
@@ -146,6 +152,18 @@ export interface SkillResolver {
   resolve(orgId: string, kind: DocKind, supplierHint: string | null): Promise<{ skillVersionId: string | null; fieldHints: string[]; examples: unknown[]; customFields: CustomFieldDef[] }>;
 }
 
+/**
+ * Danh mục hàng hóa cho hóa đơn phát hành (module catalog; container nối – CatalogPort thỏa cổng này). Gọi NGOÀI transaction.
+ * Không nối → hóa đơn in như cũ (Part No đọc từ chứng từ, lượng/ĐVT gốc).
+ */
+export interface PrintCatalogPort {
+  describeItems(orgId: OrgId, itemIds: string[]): Promise<Record<string, { itemNo: string; baseUnit: string | null; conversion: ItemUnitConversionTable | null }>>;
+  /** Mã của mặt hàng trong bộ (theo loại – "ACCOUNTING" thành "Mã chung" ở chế độ SHARED – hoặc id bộ); không có → null. */
+  codeInSet(orgId: OrgId, itemId: string, codeSet: string): Promise<{ code: string; unit: string | null } | null>;
+  /** Bộ mã khách hàng theo tên người mua; chưa có → null (không tạo). */
+  findPartnerSet(orgId: OrgId, kind: "CUSTOMER", partnerName: string): Promise<string | null>;
+}
+
 export type ExtractionDeps = {
   uow: ExtractionUow;
   documents: DocumentsPort;
@@ -160,6 +178,8 @@ export type ExtractionDeps = {
   onShipmentEdited?: (orgId: string, dossierId: string) => Promise<void>;
   /** Các tờ khai nhánh đã lập ở Hải quan (module integration; container nối) – phạm vi sửa theo tờ đã gọi về. Không nối → không kiểm. */
   customsSheets?: (orgId: string, dossierId: string) => Promise<EditSheet[]>;
+  /** Danh mục hàng hóa (module catalog; container nối) – in mã hàng/ĐVT/lượng theo bộ mã trên hóa đơn phát hành. */
+  catalog?: PrintCatalogPort;
   clock: Clock;
   idGen: IdGen;
 };

@@ -193,3 +193,66 @@ describe("mẫu in hóa đơn", () => {
     expect(!gone.ok && gone.error.reason).toBe("INVOICE_TEMPLATE_NOT_FOUND");
   });
 });
+
+describe("phát hành – in mã hàng theo bộ mã (ADR 0015 §5)", () => {
+  type Code = { code: string; unit: string | null };
+  /** Danh mục giả: mặt hàng cat_1 (ĐVT gốc M, 1 ROLL = 100 M, 1 PCE = 1 M); mã theo "tham chiếu bộ" (loại hoặc id bộ). */
+  const fakeCatalog = (codes: Record<string, Code>, customerSet: string | null = null, factors: Record<string, string> = { ROLL: "100", PCE: "1" }): NonNullable<ExtractionDeps["catalog"]> & { asked: string[] } => {
+    const asked: string[] = [];
+    return {
+      asked,
+      describeItems: async (_o, ids) => Object.fromEntries(ids.filter((i) => i === "cat_1").map((i) => [i, { itemNo: "MH-000001", baseUnit: "M", conversion: { base: "M", factors } }])),
+      codeInSet: async (_o, _i, ref) => (asked.push(ref), codes[ref] ?? null),
+      findPartnerSet: async () => customerSet,
+    };
+  };
+  const release = async (templateId: string | null = null) => {
+    unwrap(await saveManualShipment(deps, ctx(), "dos_1", { ...DATA, items: [{ ...DATA.items[0]!, partNo: "OCR-9", catalogItemId: "cat_1" }] }));
+    unwrap(await issueInvoiceAction(deps, ctx(), "dos_1", { action: "RESERVE" }));
+    clear();
+    return unwrap(await issueInvoiceAction(deps, ctx(), "dos_1", { action: "RELEASE", templateId }));
+  };
+
+  it("mẫu không chọn bộ → Kế toán: mã kế toán + lượng quy đổi, ảnh chụp lưu 4 trường; preview/phát hành không cảnh báo", async () => {
+    const cat = fakeCatalog({ ACCOUNTING: { code: "VT-0012", unit: "ROLL" } });
+    deps.catalog = cat;
+    const v = await release();
+    expect(new Set(cat.asked)).toEqual(new Set(["ACCOUNTING"]));
+    expect(v.current?.snapshot?.items[0]).toMatchObject({ catalogItemId: "cat_1", printedCode: "VT-0012", printedUnit: "ROLL", printedQuantity: "10", quantity: "1000", unit: "PCE" });
+    expect(v.printWarnings).toEqual([]);
+  });
+
+  it("có bộ khách hàng của người mua → ưu tiên bộ đó", async () => {
+    const cat = fakeCatalog({ cst_cus: { code: "NTG-77", unit: null }, ACCOUNTING: { code: "VT-0012", unit: null } }, "cst_cus");
+    deps.catalog = cat;
+    const v = await release();
+    expect(new Set(cat.asked)).toEqual(new Set(["cst_cus"]));
+    expect(v.current?.snapshot?.items[0]).toMatchObject({ printedCode: "NTG-77", printedUnit: "PCE", printedQuantity: "1000" });
+  });
+
+  it("mẫu chỉ định bộ → dùng bộ đó; { kind: ITEM_NO } → mã nối, không hỏi mã", async () => {
+    const cat = fakeCatalog({ cst_wh: { code: "KHO-1", unit: null } });
+    deps.catalog = cat;
+    const tpl = unwrap(await saveInvoiceTemplate(deps, ctx("ADMIN"), null, { name: "Kho", layout: { ...DEFAULT_INVOICE_LAYOUT, itemCodeSet: { codeSetId: "cst_wh" } } }));
+    expect((await release(tpl.id)).current?.snapshot?.items[0]?.printedCode).toBe("KHO-1");
+    const no = unwrap(await saveInvoiceTemplate(deps, ctx("ADMIN"), null, { name: "Mã nối", layout: { ...DEFAULT_INVOICE_LAYOUT, itemCodeSet: { kind: "ITEM_NO" } } }));
+    cat.asked.length = 0;
+    const v = unwrap(await issueInvoiceAction(deps, ctx(), "dos_1", { action: "RELEASE", templateId: no.id }));
+    expect(cat.asked).toEqual([]);
+    expect(v.current?.snapshot?.items[0]).toMatchObject({ printedCode: "MH-000001", printedUnit: "PCE", printedQuantity: "1000" });
+  });
+
+  it("mặt hàng chưa có mã trong bộ → mã nối; thiếu hệ số → giữ lượng/ĐVT gốc + cảnh báo trong view", async () => {
+    deps.catalog = fakeCatalog({}, null);
+    expect((await release()).current?.snapshot?.items[0]).toMatchObject({ printedCode: "MH-000001", printedQuantity: "1000" });
+    deps.catalog = fakeCatalog({ ACCOUNTING: { code: "VT-0012", unit: "BOX" } });
+    const v = unwrap(await getIssuedInvoices(deps, ctx(), "dos_1"));
+    expect(v.preview?.items[0]).toMatchObject({ printedCode: "VT-0012", printedUnit: "PCE", printedQuantity: "1000" });
+    expect(v.printWarnings).toEqual([{ lineNo: 1, code: "UNIT_FACTOR_MISSING" }]);
+  });
+
+  it("không nối danh mục → in như cũ (Part No đọc từ chứng từ)", async () => {
+    const v = await release();
+    expect(v.current?.snapshot?.items[0]).toMatchObject({ printedCode: "OCR-9", printedUnit: "PCE", printedQuantity: "1000" });
+  });
+});

@@ -1,5 +1,6 @@
 import type { CustomsDeclarationExtraction, LessonContext, LessonKind, LessonLineValue, LessonStatus, TeachSampleStatus } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
+import type { Ctx } from "../../../shared/ctx.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
 import type { ObjectStorage } from "../../dossier/index.js";
@@ -56,6 +57,13 @@ export interface TeachFileInspector {
   inspect(bytes: Buffer, mime: string): Promise<{ pages: number; encrypted: boolean }>;
 }
 
+/** Bài học mặt hàng → danh mục hàng hóa (module catalog, container nối proposeLessonAlias). */
+export type LessonCatalogInput = { partnerName: string | null; code: string; name: string | null; hsCode: string | null };
+export interface TeachCatalogPort {
+  /** Đề xuất bí danh source LESSON (PROPOSED) / hàng chờ ghép. Gọi SAU transaction duyệt bài học; lỗi chỉ ghi log. */
+  proposeFromLesson(ctx: Ctx, input: LessonCatalogInput): Promise<unknown>;
+}
+
 export type TeachDeps = {
   uow: TeachUow;
   storage: ObjectStorage;
@@ -64,6 +72,8 @@ export type TeachDeps = {
   usage: UsageRecorder;
   pdf: TeachFileInspector;
   lots: TeachLotPort;
+  /** Danh mục hàng hóa dùng chung (tùy chọn; container nối). */
+  catalog?: TeachCatalogPort;
   clock: Clock;
   idGen: IdGen;
 };

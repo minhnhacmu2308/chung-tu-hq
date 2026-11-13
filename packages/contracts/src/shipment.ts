@@ -35,6 +35,8 @@ export const ShipmentItemSchema = z.object({
   hsOnInvoice: str(),
   /** Mã hàng / Part No / Model (v2). */
   partNo: str(),
+  /** Mặt hàng danh mục (chọn ở lô nhập tay); chỉ là nguồn để tra mã/ĐVT khi in hóa đơn – không phải chỉ tiêu tờ khai. */
+  catalogItemId: z.string().nullable().optional(),
 });
 export type ShipmentItem = z.infer<typeof ShipmentItemSchema>;
 

@@ -4,7 +4,7 @@ import type { Db, Tx } from "../../../db/client.js";
 import { documentCounters, extractedFields, extractions, fieldAudit, invoiceTemplates, issuedDocuments, manualShipments, shipments } from "../../../db/schema/extraction.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { ExtractionRepos, ExtractionRow, ExtractionUow, FieldRow, IssuedRow, ShipmentRow, TemplateRow } from "../application/ports.js";
+import type { AuditRow, ExtractionRepos, ExtractionRow, ExtractionUow, FieldRow, IssuedRow, ShipmentRow, TemplateRow } from "../application/ports.js";
 
 function repos(tx: Tx): ExtractionRepos {
   const toExtraction = (r: typeof extractions.$inferSelect): ExtractionRow => ({ ...r, kind: r.kind as DocKind, regions: r.regions as Record<string, Region> | null, status: r.status as ExtractionRow["status"] });
@@ -38,6 +38,8 @@ function repos(tx: Tx): ExtractionRepos {
         const r = (await tx.select().from(shipments).where(and(eq(shipments.orgId, orgId), eq(shipments.dossierId, dossierId))).orderBy(desc(sql`cast(${shipments.version} as integer)`)).limit(1))[0];
         return r ? toShipment(r) : null;
       },
+      listLatestByOrg: async (orgId) =>
+        (await tx.selectDistinctOn([shipments.dossierId]).from(shipments).where(eq(shipments.orgId, orgId)).orderBy(shipments.dossierId, desc(sql`cast(${shipments.version} as integer)`))).map(toShipment),
       insert: async (row) => void (await tx.insert(shipments).values({ ...row, version: String(row.version), data: row.data })),
       updateData: async (orgId, id, data) => void (await tx.update(shipments).set({ data }).where(and(eq(shipments.orgId, orgId), eq(shipments.id, id)))),
     },
@@ -53,7 +55,11 @@ function repos(tx: Tx): ExtractionRepos {
       },
       update: async (orgId, id, patch) => void (await tx.update(extractedFields).set({ ...patch, updatedAt: new Date() }).where(and(eq(extractedFields.orgId, orgId), eq(extractedFields.id, id)))),
     },
-    audit: { insert: async (row) => void (await tx.insert(fieldAudit).values(row)) },
+    audit: {
+      insert: async (row) => void (await tx.insert(fieldAudit).values(row)),
+      listForObject: async (orgId, objectId, source, limit) =>
+        (await tx.select().from(fieldAudit).where(and(eq(fieldAudit.orgId, orgId), eq(fieldAudit.dossierId, objectId), eq(fieldAudit.source, source))).orderBy(desc(fieldAudit.at), desc(fieldAudit.id)).limit(limit)) as AuditRow[],
+    },
     manual: {
       get: async (orgId, dossierId) => {
         const r = (await tx.select().from(manualShipments).where(and(eq(manualShipments.orgId, orgId), eq(manualShipments.dossierId, dossierId))).limit(1))[0];

@@ -3,12 +3,14 @@
 // Nhóm/cột: kéo để sắp xếp, bật/tắt (nhóm bắt buộc khóa), đổi nhãn in. Xem trước bằng chính bản in với dữ liệu mẫu.
 import {
   DEFAULT_INVOICE_LAYOUT, InvoiceLayoutSchema, REQUIRED_BLOCKS, REQUIRED_COLUMNS,
-  type InvoiceColumnKey, type InvoiceLayout, type InvoiceTemplate, type IssuedInvoice, type IssuedInvoiceSnapshot,
+  type CodeSet, type CodeSetKind, type InvoiceColumnKey, type InvoiceLayout, type InvoiceTemplate, type IssuedInvoice, type IssuedInvoiceSnapshot,
 } from "@kb/contracts";
 import {
   Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog, createDataTableColumnHelper, DataTable, Dialog, DialogContent, DialogFooter,
-  Field, fill, Grid, Input, RowActions, Select, SortableList, Stack, Switch, Textarea, toast, useMessages,
+  Field, fill, Grid, Input, RowActions, Select, SortableList, Stack, Switch, Textarea, toast, useMessages, useUiLocale,
 } from "@kb/ui";
+import { catalogKeys, listCodeSets } from "@/api/catalog";
+import { setTitle } from "@/features/catalog/catalog-xlsx";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, FileText, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
@@ -26,6 +28,7 @@ const col = createDataTableColumnHelper<InvoiceTemplate>();
 const colName = (t: T, k: InvoiceColumnKey) => (k === "ORIGIN" ? t.COL_ORIGIN : t[k]);
 
 /** Dữ liệu mẫu cho xem trước (không phải dữ liệu khách). kb-allow-raw: ví dụ nội dung chứng từ tiếng Anh. */
+const NO_PRINT = { catalogItemId: null, printedCode: null, printedUnit: null, printedQuantity: null, printedUnitPrice: null }; // bản mẫu: chưa in theo bộ mã
 const SAMPLE: Omit<IssuedInvoiceSnapshot, "layout"> = {
   seller: { name: "YOUR COMPANY CO., LTD", taxCode: "0123456789", address: "HAI PHONG, VIETNAM", phone: "0225 000 000" }, // kb-allow-raw: dữ liệu mẫu
   buyer: { name: "SAMPLE BUYER AB", address: "STOCKHOLM, SWEDEN", country: "SE", taxCode: null }, // kb-allow-raw: dữ liệu mẫu
@@ -37,10 +40,27 @@ const SAMPLE: Omit<IssuedInvoiceSnapshot, "layout"> = {
   extra: { contractNo: "HD-01/2026", lcNo: "LC0001", lcDate: "2026-11-01", lcIssuingBank: "SAMPLE BANK", blNo: "BL0001", blDate: "2026-11-22" }, // kb-allow-raw: dữ liệu mẫu
   signatory: { name: "NGUYEN VAN A", title: "DIRECTOR" }, // kb-allow-raw: dữ liệu mẫu
   items: [
-    { lineNo: 1, description: "Drill bit 10mm", partNo: "DB-10", hsCode: "82075000", quantity: "1000", unit: "PCE", unitPrice: "1.25", amount: "1250.00", origin: "VN" }, // kb-allow-raw: dữ liệu mẫu
-    { lineNo: 2, description: "Drill bit 2mm", partNo: "DB-02", hsCode: "82075000", quantity: "1", unit: "PCE", unitPrice: "0.5", amount: "0.50", origin: "VN" }, // kb-allow-raw: dữ liệu mẫu
+    { lineNo: 1, description: "Drill bit 10mm", partNo: "DB-10", hsCode: "82075000", quantity: "1000", unit: "PCE", unitPrice: "1.25", amount: "1250.00", origin: "VN", ...NO_PRINT }, // kb-allow-raw: dữ liệu mẫu
+    { lineNo: 2, description: "Drill bit 2mm", partNo: "DB-02", hsCode: "82075000", quantity: "1", unit: "PCE", unitPrice: "0.5", amount: "0.50", origin: "VN", ...NO_PRINT }, // kb-allow-raw: dữ liệu mẫu
   ],
 };
+/**
+ * Xem trước "In mã hàng theo bộ mã" bằng dữ liệu mẫu: dòng 1 có mã trong mọi loại bộ, dòng 2 chưa có mã ở bộ nào → in mã nối.
+ * Tự động (null): người mua mẫu không có bộ khách hàng → Kế toán / "Mã chung" (theo bộ doanh nghiệp đang có) → mã nối. kb-allow-raw: mã mẫu.
+ */
+const SAMPLE_ITEM_NO = ["MH-000001", "MH-000002"] as const; // kb-allow-raw: mã nối mẫu
+const SAMPLE_SET_CODE: Record<CodeSetKind, string> = { SHARED: "MC-0010", ACCOUNTING: "VT-0010", WAREHOUSE: "KHO-0010", CUSTOMS: "XNK-0010", SUPPLIER: "SUP-DB10", CUSTOMER: "CUS-DB10" }; // kb-allow-raw: mã mẫu
+function sampleItems(pick: InvoiceLayout["itemCodeSet"], sets: readonly CodeSet[]): IssuedInvoiceSnapshot["items"] {
+  if (!sets.length) return SAMPLE.items; // chưa thiết lập danh mục: hàng chưa gắn mặt hàng → in Part No như cũ
+  const set = pick && "codeSetId" in pick ? sets.find((s) => s.id === pick.codeSetId) : !pick ? sets.find((s) => s.kind === "ACCOUNTING" || s.kind === "SHARED") : undefined;
+  return SAMPLE.items.map((it, i) => ({
+    ...it, catalogItemId: `sample-${i + 1}`, printedCode: (i === 0 && set ? SAMPLE_SET_CODE[set.kind] : null) ?? SAMPLE_ITEM_NO[i] ?? null,
+  }));
+}
+const ITEM_NO_VALUE = "__item_no";
+const codeSetValue = (v: InvoiceLayout["itemCodeSet"]) => (!v ? "" : "kind" in v ? ITEM_NO_VALUE : v.codeSetId);
+const codeSetPick = (v: string): InvoiceLayout["itemCodeSet"] => (!v ? null : v === ITEM_NO_VALUE ? { kind: "ITEM_NO" } : { codeSetId: v });
+
 const SAMPLE_INVOICE: IssuedInvoice = { id: "preview", no: "INV2611-001", status: "ISSUED", reservedAt: "2026-11-01T00:00:00.000Z", releasedAt: null, voidedAt: null, voidReason: null, templateId: null, snapshot: null }; // kb-allow-raw: số mẫu
 
 type Draft = { name: string; isDefault: boolean; layout: InvoiceLayout; originals: string; copies: string };
@@ -52,6 +72,7 @@ const count = (v: string, min: number) => Math.min(5, Math.max(min, Number.parse
 
 function TemplateEditor({ open, onOpenChange, template, initial }: { open: boolean; onOpenChange: (o: boolean) => void; template: InvoiceTemplate | null; initial: Draft }) {
   const t = useMessages(INVOICE_TEMPLATES_MESSAGES);
+  const locale = useUiLocale();
   const qc = useQueryClient();
   const [d, setD] = useState<Draft>(initial);
   const [tried, setTried] = useState(false);
@@ -73,7 +94,14 @@ function TemplateEditor({ open, onOpenChange, template, initial }: { open: boole
     setTried(true);
     if (!nameMissing && parsed.success) save.mutate();
   };
-  const snapshot: IssuedInvoiceSnapshot = { ...SAMPLE, layout: parsed.success ? parsed.data : DEFAULT_INVOICE_LAYOUT };
+  const codeSets = useQuery({ queryKey: catalogKeys.codeSets, queryFn: listCodeSets, enabled: open });
+  const sets = codeSets.data ?? [];
+  const codeSetOptions = [
+    { value: "", label: t.itemCodeSetAuto },
+    { value: ITEM_NO_VALUE, label: t.itemCodeSetItemNo },
+    ...sets.map((s) => ({ value: s.id, label: setTitle(s, locale) })),
+  ];
+  const snapshot: IssuedInvoiceSnapshot = { ...SAMPLE, items: sampleItems(d.layout.itemCodeSet, sets), layout: parsed.success ? parsed.data : DEFAULT_INVOICE_LAYOUT };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -103,6 +131,9 @@ function TemplateEditor({ open, onOpenChange, template, initial }: { open: boole
                   <Input value={d.copies} onChange={(e) => setD({ ...d, copies: e.target.value })} inputMode="numeric" maxLength={1} placeholder={t.countPlaceholder} />
                 </Field>
               </div>
+              <Field label={t.itemCodeSet} hint={t.itemCodeSetHint}>
+                <Select value={codeSetValue(d.layout.itemCodeSet)} onChange={(e) => setLayout({ itemCodeSet: codeSetPick(e.target.value) })} options={codeSetOptions} />
+              </Field>
               <Field label={t.headerNote}>
                 <Input value={d.layout.headerNote ?? ""} onChange={(e) => setLayout({ headerNote: e.target.value || null })} maxLength={1000} placeholder={t.headerNotePlaceholder} />
               </Field>

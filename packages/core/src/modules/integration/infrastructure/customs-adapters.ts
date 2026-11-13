@@ -16,7 +16,7 @@ export function createDeclarationReader(declaration: DeclarationDeps): Declarati
       if (!s) return null;
       return {
         declarationId: s.declarationId, version: s.version, status: s.status, unconfirmedHs: s.unconfirmedHs, estimatedTaxVnd: s.estimatedTaxVnd, exchangeRateDate: s.exchangeRateDate, branchTaxVnd: s.branchTaxVnd, approvedAt: s.approvedAt,
-        payload: { kind: s.kind, direction: s.direction, currency: s.currency, fields: s.fields, items: s.items, adjustments: s.adjustments, containers: s.containers },
+        payload: { kind: s.kind, direction: s.direction, currency: s.currency, fields: s.fields, items: s.items, itemNotes: s.itemNotes, adjustments: s.adjustments, containers: s.containers },
       };
     },
     markSubmitted: async (ctx, dossierId) => {

@@ -1,6 +1,7 @@
 import { declarationEditScope, declarationRequiredGaps, editBlockFor, extraFieldMeta, fieldEditBlock, itemFieldMeta, parseItemFieldCode, type Declaration, type DeclarationView } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
+import { createLogger } from "../../../shared/log.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { canApprove, canEditField, canMoveToReview, missingRequiredFields } from "../domain/guards.js";
 import { computeTaxes } from "../domain/tax.js";
@@ -8,8 +9,12 @@ import { allocateCustomsValue } from "../domain/valuation.js";
 import { mappingsFor } from "../domain/mapping/registry.js";
 import { toEditTarget } from "./_edit-scope.js";
 import { loadDossier, toBranches, toDeclaration, toLineItem, unconfirmedCount } from "./_dto.js";
-import type { DeclarationDeps, DeclarationRow } from "./ports.js";
-import { recordApprovedProducts } from "./product-catalog.js";
+import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
+import { catalogView, describeSafe, linkPatch, partNoOf, planCatalogLinks } from "./_catalog-plan.js";
+import { vnDate } from "../domain/mapping/types.js";
+import type { Shipment } from "@kb/contracts";
+
+const log = createLogger({ name: "core" });
 
 async function approvedName(deps: DeclarationDeps, orgId: string, d: DeclarationRow | null) {
   if (!d?.approvedBy) return null;
@@ -29,8 +34,11 @@ export async function getDeclarationView(deps: DeclarationDeps, ctx: Ctx, dossie
   });
   const valuation = decl ? allocateCustomsValue({ items: items.map((i) => ({ id: i.id, amount: i.amount })), adjustments: decl.valueAdjustments, currency, rates: { [currency]: decl.exchangeRate } }) : null;
   const taxes = valuation ? computeTaxes(valuation.perItem.map((p) => ({ id: p.id, customsValueVnd: p.customsValueVnd, importDutyRate: items.find((i) => i.id === p.id)?.importDutyRate ?? null, vatRate: items.find((i) => i.id === p.id)?.vatRate ?? null }))) : null;
+  // Danh mục (ngoài transaction, như listLineItems): mặt hàng đã gắn, "mã lạ", gợi ý lượng theo ĐVT khai cho màn Review.
+  const shipment = deps.catalog ? await deps.shipments.latest(ctx.orgId, dossierId) : null;
+  const info = await describeSafe(deps, ctx.orgId, items.map((i) => i.catalogItemId), dossierId);
   const viewItems = items.map((i) => ({
-    ...toLineItem(i),
+    ...toLineItem(i, undefined, catalogView(i, i.catalogItemId ? info[i.catalogItemId] : undefined, partNoOf(shipment, i.lineNo), !!deps.catalog)),
     customsValueVnd: valuation?.perItem.find((p) => p.id === i.id)?.customsValueVnd ?? "0",
     importDutyVnd: taxes?.perItem.find((p) => p.id === i.id)?.importDutyVnd ?? "0",
     vatVnd: taxes?.perItem.find((p) => p.id === i.id)?.vatVnd ?? "0",
@@ -90,6 +98,35 @@ export async function updateDeclarationField(deps: DeclarationDeps, ctx: Ctx, do
   return ok(toDeclaration(r0.value.decl, null));
 }
 
+/**
+ * Sau khi tờ khai duyệt đã commit (không gọi port module khác trong transaction): dòng đã gắn mặt hàng → times_declared / lần khai gần nhất
+ * (một lần mỗi mặt hàng mỗi lần duyệt); dòng chưa gắn → mục hàng chờ ghép (Part No vào bộ nhà cung cấp; không có Part No → theo tên, bộ mặc định).
+ * Không tự thêm thẳng vào danh mục. Lỗi danh mục chỉ ghi log – tờ khai đã duyệt, không chặn truyền.
+ */
+async function settleCatalog(deps: DeclarationDeps, orgId: Ctx["orgId"], decl: DeclarationRow, items: LineItemRow[], shipment: Shipment | null, now: Date): Promise<void> {
+  const catalog = deps.catalog;
+  if (!catalog) return;
+  const typeCode = Object.values(decl.fields).find((f) => f.no === "1.4" || f.no === "2.4")?.value || null;
+  const linked = items.filter((i) => i.catalogItemId);
+  try {
+    if (linked.length) await catalog.recordDeclared(orgId, linked.map((i) => ({ itemId: i.catalogItemId!, declarationNo: null, date: vnDate(now), typeCode })));
+  } catch (e) {
+    log.error("declaration→catalog: recordDeclared sau duyệt tờ khai lỗi", { orgId, dossierId: decl.dossierId, declarationId: decl.id, err: e });
+  }
+  const unknown = items.filter((i) => !i.catalogItemId);
+  if (!unknown.length) return;
+  try {
+    const seller = shipment?.parties.seller.name.value?.trim() || null;
+    const supplierSet = seller && unknown.some((i) => partNoOf(shipment, i.lineNo)) ? await catalog.ensurePartnerSet(orgId, "SUPPLIER", seller) : null;
+    await catalog.enqueueUnknown(orgId, unknown.map((i) => {
+      const partNo = supplierSet ? partNoOf(shipment, i.lineNo) : null;
+      return { codeSetId: partNo ? supplierSet : null, code: partNo ?? "", name: i.description, unit: i.unit || null, hsCode: i.hsConfirmed?.replace(/\D/g, "") || null, sourceRef: `declaration:${decl.id}:${i.lineNo}` };
+    }));
+  } catch (e) {
+    log.error("declaration→catalog: enqueueUnknown sau duyệt tờ khai lỗi", { orgId, dossierId: decl.dossierId, declarationId: decl.id, err: e });
+  }
+}
+
 /** Phê duyệt (APPROVER/OWNER): không BLOCKER FAIL, HS đủ, tờ khai DRAFT, 4 mắt nếu org bật → APPROVED; hồ sơ sang bước truyền. */
 export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossierId: string): Promise<Result<Declaration>> {
   const d = await loadDossier(deps, ctx.orgId, dossierId);
@@ -98,6 +135,9 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
   const blockerFails = await deps.validation.blockerFails(ctx.orgId, dossierId);
   // Lô nhiều tờ: tờ chưa gọi về phải giữ đúng nội dung đã gửi (bất biến 7 – chặn duyệt); kiểm ngoài transaction, báo sau các kiểm khác.
   const sentChanged = (await deps.sentSheetsGuard?.(ctx.orgId, dossierId)) ?? null;
+  // Danh mục hàng hóa (ngoài transaction): tra lại mặt hàng + mã Hải quan mới nhất để HAG_MAHANG đúng lúc duyệt.
+  const shipment = deps.catalog ? await deps.shipments.latest(ctx.orgId, dossierId) : null;
+  const plan = shipment ? await planCatalogLinks(deps, ctx.orgId, dossierId, shipment, await deps.uow.asOrg(ctx, (r) => r.lineItems.list(ctx.orgId, dossierId))) : null;
   const now = deps.clock.now();
   const r0 = await deps.uow.asOrg(ctx, async (r) => {
     const decl = await r.declarations.latest(ctx.orgId, dossierId);
@@ -113,17 +153,24 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
     if (sentChanged) return err(sentChanged);
     const patch = { status: "APPROVED" as const, approvedBy: ctx.userId, approvedAt: now, updatedAt: now };
     await r.declarations.update(decl!.orgId, decl!.id, patch);
-    // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp (lần sau tra lại, khỏi gọi phân loại).
-    await recordApprovedProducts(r, deps.idGen, decl!, items, now, ctx.userId);
-    return ok({ ...decl!, ...patch });
+    const linked: LineItemRow[] = [];
+    for (const i of items) {
+      const lp = plan ? linkPatch(i, plan) : null;
+      if (lp) await r.lineItems.update(i.orgId, i.id, { ...lp, updatedAt: now });
+      linked.push(lp ? { ...i, ...lp } : i);
+    }
+    return ok({ decl: { ...decl!, ...patch }, items: linked });
   });
   if (!r0.ok) return r0;
+  // Danh mục hàng hóa dùng chung (thay product_catalog cũ): gọi port module catalog SAU khi transaction duyệt commit.
+  await settleCatalog(deps, ctx.orgId, r0.value.decl, r0.value.items, shipment, now);
+  const approved = r0.value.decl;
   await deps.dossiers.update(ctx.orgId, dossierId, { status: "APPROVED", step: "submit", suspectFields: 0 });
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "dossier.updated" });
-  const name = await approvedName(deps, ctx.orgId, r0.value);
-  await deps.orgAudit?.record(ctx, { action: "DECLARATION_APPROVED", targetType: "dossier", targetId: dossierId, targetLabel: d.value.code, detail: { kind: r0.value.kind, version: r0.value.version } });
+  const name = await approvedName(deps, ctx.orgId, approved);
+  await deps.orgAudit?.record(ctx, { action: "DECLARATION_APPROVED", targetType: "dossier", targetId: dossierId, targetLabel: d.value.code, detail: { kind: approved.kind, version: approved.version } });
   await deps.notify?.notify(ctx.orgId, { dossierOwnerOf: dossierId }, { title: `Tờ khai ${d.value.code} đã được phê duyệt`, body: `${name ?? "Người duyệt"} đã duyệt – có thể truyền Hải quan.`, href: `/dossiers/${dossierId}?step=submit` });
-  return ok(toDeclaration(r0.value, name));
+  return ok(toDeclaration(approved, name));
 }
 
 /** Xác nhận đủ HS → sang bước Review; số chỉ tiêu nghi ngờ ghi lên hồ sơ. */

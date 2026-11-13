@@ -1,6 +1,8 @@
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { DomainError } from "../../../shared/errors.js";
-import type { DraftLessons, ValueCharges, AgentMode, EditSheet, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
+import type { Ctx } from "../../../shared/ctx.js";
+import type { Result } from "../../../shared/result.js";
+import type { CatalogItemKind, DraftLessons, ValueCharges, AgentMode, EditSheet, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -19,6 +21,10 @@ export type LineItemRow = {
   importDutyRate: string | null; vatRate: string | null; policyNote: string | null; taxDetail: TaxDetail | null;
   /** Phân loại HSCodePro (xem LineItemHsStatus trong contracts). */
   hsJobId: string | null; hsItemId: string | null; hsStatus: LineItemHsStatus; hsQuestion: HsPendingQuestion | null; hsError: { code: string; message: string } | null; hsDetail: HsDetail | null;
+  /** Mã hàng điền HAG_MAHANG (danh mục hàng hóa – mã của mặt hàng trong bộ XNK). Vắng ở dữ liệu cũ. */
+  itemCode?: string | null;
+  /** Danh mục hàng hóa (module catalog – chỉ id): mặt hàng đã gắn, bí danh đã khớp, hệ số theo lô ("1 ĐVT dòng = hệ số ĐVT gốc"; null = mặc định). */
+  catalogItemId?: string | null; catalogAliasId?: string | null; unitFactor?: string | null;
   createdAt: Date; updatedAt: Date;
 };
 /**
@@ -36,7 +42,7 @@ export type TaxDetail = { vatCode: string | null; vatNote: string | null; vatCer
 export type HsSuggestionRow = { id: string; orgId: string; lineItemId: string; code: string; description: string; confidence: number; rates: HsSuggestionRates | null; whyNot: string | null; source: string; createdAt: Date };
 /** `pending`: đã ghi DB, chưa (hoặc chưa biết đã) tạo được lượt ở HSCodePro – `externalId` rỗng; chạy lại sẽ dùng lại dòng này (chi phí ghi một lần theo `id`). */
 export type HsJobRow = { id: string; orgId: string; dossierId: string; externalId: string; status: "pending" | "processing" | "need_info" | "completed" | "cancelled"; polls: number; createdAt: Date; updatedAt: Date };
-export type HsLinePatch = Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "taxDetail" | "hsJobId" | "hsItemId" | "hsStatus" | "hsQuestion" | "hsError" | "hsDetail" | "description" | "origin" | "updatedAt">>;
+export type HsLinePatch = Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "taxDetail" | "hsJobId" | "hsItemId" | "hsStatus" | "hsQuestion" | "hsError" | "hsDetail" | "description" | "origin" | "updatedAt" | "itemCode" | "catalogItemId" | "catalogAliasId" | "unitFactor">>;
 export type DeclarationRow = {
   id: string; orgId: string; dossierId: string; kind: "IDA" | "EDA"; version: number; status: DeclarationStatus; fields: Record<string, StoredField>;
   exchangeRate: string; exchangeRateDate: string; customsValueVnd: string; valueAdjustments: Adjustment[]; estImportDutyVnd: string; estVatVnd: string;
@@ -49,16 +55,6 @@ export type AgentRunRow = { id: string; orgId: string; dossierId: string; mode: 
 export type ValueChargesRow = { id: string; orgId: string; dossierId: string; data: ValueCharges; updatedBy: string; updatedAt: Date };
 
 export type ProfileRow = { id: string; orgId: string; direction: "NK" | "XK"; values: Record<string, string>; overrides: Record<string, FieldOverride>; updatedBy: string | null; updatedAt: Date };
-
-/** Mặt hàng trong danh mục hàng hóa của doanh nghiệp (bảng product_catalog). */
-export type ProductRow = {
-  id: string; orgId: string; key: string; nameKey: string; code: string | null; name: string; hsCode: string; unit: string | null; origin: string | null;
-  tariffSchedule: string | null; importDutyRate: string | null; vatRate: string | null;
-  envTaxRate: string | null; exciseRate: string | null; safeguardRate: string | null; antiDiscriminationRate: string | null;
-  description: string | null; unit2: string | null; unitPrice: string | null; currency: string | null; partner: string | null; note: string | null;
-  source: "IMPORT" | "MANUAL" | "DECLARATION"; timesDeclared: number; lastDeclarationNo: string | null; lastDeclarationDate: string | null;
-  lastTypeCode: string | null; raw: Record<string, string> | null; updatedBy: string | null; createdAt: Date; updatedAt: Date;
-};
 
 export interface DeclarationRepos {
   lineItems: {
@@ -105,17 +101,6 @@ export interface DeclarationRepos {
     get(orgId: string, direction: "NK" | "XK"): Promise<ProfileRow | null>;
     /** Ghi đè theo (org, chiều). */
     upsert(row: ProfileRow): Promise<void>;
-  };
-  products: {
-    list(orgId: string): Promise<ProductRow[]>;
-    get(orgId: string, id: string): Promise<ProductRow | null>;
-    byKeys(orgId: string, keys: string[]): Promise<ProductRow[]>;
-    /** Mặt hàng có tên chuẩn hóa thuộc danh sách (kể cả mặt hàng khóa theo mã hàng). */
-    byNameKeys(orgId: string, nameKeys: string[]): Promise<ProductRow[]>;
-    insert(rows: ProductRow[]): Promise<void>;
-    update(row: ProductRow): Promise<void>;
-    /** Xóa theo id trong org; trả số dòng đã xóa. */
-    remove(orgId: string, ids: string[]): Promise<number>;
   };
   valueCharges: {
     get(orgId: string, dossierId: string): Promise<ValueChargesRow | null>;
@@ -178,7 +163,34 @@ export interface OrgReader {
 
 /** field_audit (bảng của extraction) – append-only. */
 export interface AuditWriter {
-  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "CONT_LIST_EDIT" }): Promise<void>;
+  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "CONT_LIST_EDIT" | "CATALOG_EDIT" }): Promise<void>;
+}
+
+/** Kết quả tra mã một dòng (module catalog – resolveItem): `itemId` chỉ khi SURE. */
+export type CatalogResolved = { itemId: string | null; aliasId?: string; level: "SURE" | "MAYBE" | "NONE"; reason: string; factor?: string; codeSetId: string | null };
+export type CatalogQuery = { codeSetId?: string | null; partnerName?: string | null; code?: string | null; name?: string | null; hsCode?: string | null; unit?: string | null };
+/** Tóm tắt mặt hàng: cuối chuỗi gộp, mã bộ Hải quan mới nhất (HAG_MAHANG), mọi mã ACTIVE, bảng quy đổi. */
+export type CatalogItemInfo = {
+  id: string; itemNo: string; name: string; hsCode: string | null; baseUnit: string | null;
+  customs: { codeSetId: string; aliasId: string; code: string; unit: string | null } | null; codes: string[]; conversion: { base: string; factors: Record<string, string> } | null;
+};
+/**
+ * Danh mục hàng hóa dùng chung (module catalog, container nối CatalogPort + use case). Gọi NGOÀI transaction của tờ khai.
+ * Không nối → dòng hàng không gắn mặt hàng, HAG_MAHANG trống (như trước). Lỗi danh mục không được chặn luồng tờ khai.
+ */
+export interface DeclarationCatalogPort {
+  resolveMany(orgId: OrgId, qs: CatalogQuery[]): Promise<CatalogResolved[]>;
+  describeItems(orgId: OrgId, itemIds: string[]): Promise<Record<string, CatalogItemInfo>>;
+  recordDeclared(orgId: OrgId, rows: { itemId: string; declarationNo: string | null; date: string | null; typeCode: string | null }[]): Promise<{ updated: number }>;
+  enqueueUnknown(orgId: OrgId, rows: { codeSetId?: string | null; code: string; name: string; unit?: string | null; hsCode?: string | null; sourceRef?: string | null }[]): Promise<{ queued: number }>;
+  ensurePartnerSet(orgId: OrgId, kind: "SUPPLIER" | "CUSTOMER", partnerName: string): Promise<string | null>;
+  /** Use case proposeAlias của catalog (kiểm quyền theo ctx; người phụ trách bộ → ACTIVE, khác → PROPOSED). */
+  proposeAlias(ctx: Ctx, cmd: { itemId: string; codeSetId: string; code: string; name?: string | null; unit?: string | null; factor?: string; source: "DOCUMENT" }): Promise<Result<{ id: string; itemId: string; status: string }>>;
+  /**
+   * Use case createItem của catalog, kèm mã đầu tiên (`codeSetId` + `code`) tạo cùng transaction: CREATED (có mặt hàng; `aliasId` khi bí danh ACTIVE)
+   * hoặc QUEUED (không đủ quyền tạo thẳng – mục hàng chờ mang mã + bộ mã, chưa có mặt hàng).
+   */
+  createItem(ctx: Ctx, input: { kind: CatalogItemKind; name: string; hsCode?: string; baseUnit?: string | null; codeSetId?: string; code?: string; conversions?: { unit: string; factor: string }[] }): Promise<Result<{ status: "CREATED"; itemId: string; aliasId: string | null } | { status: "QUEUED"; queueId: string }>>;
 }
 
 export interface UserNames {
@@ -215,6 +227,8 @@ export type DeclarationDeps = {
   lessons?: (orgId: string, dossierId: string) => Promise<DraftLessons | null>;
   /** Sau khi lưu chi phí người khai nhập: chạy lại luật đối chiếu (container nối với module validation). */
   onChargesSaved?: (orgId: string, dossierId: string) => Promise<void>;
+  /** Danh mục hàng hóa dùng chung (module catalog; container nối). Không nối → bỏ qua gắn mặt hàng / HAG_MAHANG. */
+  catalog?: DeclarationCatalogPort;
   clock: Clock;
   idGen: IdGen;
 };

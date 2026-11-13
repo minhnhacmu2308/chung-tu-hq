@@ -8,7 +8,12 @@ export type DeclarationPayload = {
   direction: "NK" | "XK";
   fields: Record<string, { value: string; /** Nguồn giá trị (USER = người khai nhập) – không bắt buộc. */ source?: string }>;
   /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền. */
-  items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; vatCode?: string | null; policyNote: string | null }[];
+  items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; vatCode?: string | null; policyNote: string | null; /** Mã bộ Hải quan của mặt hàng (danh mục) → HAG_MAHANG. */ itemCode?: string | null }[];
+  /**
+   * Dòng có HAG_MAHANG trống vì mã lạ (Part No chưa có trong danh mục) / mặt hàng chưa có mã bộ Hải quan → cảnh báo, KHÔNG chặn truyền (Review Focus 5).
+   * Ngoài `items` để không đổi nội dung "đã gửi" của tờ khai (so tờ đã gửi). Vắng = dữ liệu cũ / chưa nối danh mục.
+   */
+  itemNotes?: { lineNo: number; note: "UNKNOWN_CODE" | "NO_CUSTOMS_CODE"; partNo: string | null }[];
   /** `kind`/`code`: chiều và mã tên khoản điều chỉnh 1.49 (khoản người khai lập); không có = dữ liệu cũ / phí đọc từ chứng từ. */
   adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[];
   containers: string[];
@@ -145,6 +150,10 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[], nu
       if (!own["HAG_ORS"] && !table.code) blockers.push(`Dòng ${it.lineNo}: chưa có mã Biểu thuế nhập khẩu cho ${table.fta} – nhập chỉ tiêu 1.80 trên tờ khai (tra Bảng mã Biểu thuế trên website Cục Hải quan)`);
     }
     const codes = p.kind === "EDA" ? lawCodesByLine(val(p, "VBPQ"), lineNos).get(it.lineNo) ?? [] : [];
+    const note = own["HAG_MAHANG"] || it.itemCode ? undefined : p.itemNotes?.find((n) => n.lineNo === it.lineNo);
+    if (note) warnings.push(note.note === "UNKNOWN_CODE"
+      ? `Dòng ${it.lineNo}: mã hàng ${note.partNo ?? ""} chưa có trong danh mục hàng hóa – HAG_MAHANG để trống (chọn mặt hàng ở dòng hàng nếu cần)`
+      : `Dòng ${it.lineNo}: mặt hàng chưa có mã trong bộ mã Hải quan – HAG_MAHANG để trống`);
     if (codes.length > 5 && !own["HAG_OL1"]) warnings.push(`Dòng ${it.lineNo}: chỉ gửi 5 mã văn bản pháp luật đầu (${codes.slice(5).join(", ")} bị bỏ)`);
     for (const [key, v] of Object.entries({ ...auto, ...own })) {
       const spec = itemFieldFpt(p.kind, key);

@@ -1,13 +1,14 @@
 import { and, desc, eq, ilike, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { ValueChargesSchema } from "@kb/contracts";
 import type { Db, Tx } from "../../../db/client.js";
-import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems, productCatalog, valueCharges } from "../../../db/schema/declaration.js";
+import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems, valueCharges } from "../../../db/schema/declaration.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProductRow, ProfileRow } from "../application/ports.js";
+import { Decimal } from "../../../shared/decimal.js";
+import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProfileRow } from "../application/ports.js";
 
 function repos(tx: Tx): DeclarationRepos {
-  const toItem = (r: typeof lineItems.$inferSelect): LineItemRow => ({ ...r, hsStatus: r.hsStatus as LineItemRow["hsStatus"], hsQuestion: r.hsQuestion as LineItemRow["hsQuestion"], hsError: r.hsError as LineItemRow["hsError"], hsDetail: r.hsDetail as LineItemRow["hsDetail"], taxDetail: r.taxDetail as LineItemRow["taxDetail"] });
+  const toItem = (r: typeof lineItems.$inferSelect): LineItemRow => ({ ...r, hsStatus: r.hsStatus as LineItemRow["hsStatus"], hsQuestion: r.hsQuestion as LineItemRow["hsQuestion"], hsError: r.hsError as LineItemRow["hsError"], hsDetail: r.hsDetail as LineItemRow["hsDetail"], taxDetail: r.taxDetail as LineItemRow["taxDetail"], unitFactor: r.unitFactor === null ? null : new Decimal(r.unitFactor).toFixed() });
   const toJob = (r: typeof hsJobs.$inferSelect): HsJobRow => ({ ...r, status: r.status as HsJobRow["status"] });
   const toSug = (r: typeof hsSuggestions.$inferSelect): HsSuggestionRow => ({ ...r, rates: r.rates as HsSuggestionRow["rates"] });
   const toDecl = (r: typeof declarations.$inferSelect): DeclarationRow => ({ ...r, kind: r.kind as DeclarationRow["kind"], status: r.status as DeclarationRow["status"], fields: r.fields as DeclarationRow["fields"], valueAdjustments: r.valueAdjustments as DeclarationRow["valueAdjustments"] });
@@ -107,25 +108,6 @@ function repos(tx: Tx): DeclarationRepos {
           .onConflictDoUpdate({ target: [declarationProfiles.orgId, declarationProfiles.direction], set: { values: row.values, overrides: row.overrides, updatedBy: row.updatedBy, updatedAt: row.updatedAt } });
       },
     },
-    products: {
-      // Chặn trên 2.000 mặt hàng cho màn danh mục (lọc phía client); vượt → phân trang server (BACKEND-TODO R6b).
-      list: async (orgId) => (await tx.select().from(productCatalog).where(eq(productCatalog.orgId, orgId)).orderBy(desc(productCatalog.updatedAt)).limit(2000)).map(toProduct),
-      get: async (orgId, id) => {
-        const r = (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), eq(productCatalog.id, id))).limit(1))[0];
-        return r ? toProduct(r) : null;
-      },
-      byKeys: async (orgId, keys) => (keys.length ? (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.key, keys)))).map(toProduct) : []),
-      byNameKeys: async (orgId, nameKeys) => (nameKeys.length ? (await tx.select().from(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.nameKey, nameKeys)))).map(toProduct) : []),
-      insert: async (rows) => {
-        // Chia lô: một câu INSERT tối đa ~65k tham số (30 cột/dòng).
-        for (let i = 0; i < rows.length; i += 500) await tx.insert(productCatalog).values(rows.slice(i, i + 500));
-      },
-      update: async (row) => {
-        const { id, orgId, createdAt: _c, ...rest } = row;
-        await tx.update(productCatalog).set(rest).where(and(eq(productCatalog.orgId, orgId), eq(productCatalog.id, id)));
-      },
-      remove: async (orgId, ids) => (await tx.delete(productCatalog).where(and(eq(productCatalog.orgId, orgId), inArray(productCatalog.id, ids))).returning({ id: productCatalog.id })).length,
-      },
     valueCharges: {
       get: async (orgId, dossierId) => {
         const r = (await tx.select().from(valueCharges).where(and(eq(valueCharges.orgId, orgId), eq(valueCharges.dossierId, dossierId))).limit(1))[0];
@@ -145,10 +127,6 @@ function repos(tx: Tx): DeclarationRepos {
       },
     },
   };
-}
-
-function toProduct(r: typeof productCatalog.$inferSelect): ProductRow {
-  return { ...r, source: r.source as ProductRow["source"], raw: (r.raw as ProductRow["raw"]) ?? null };
 }
 
 export class DrizzleDeclarationUow implements DeclarationUow {

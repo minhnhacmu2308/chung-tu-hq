@@ -11,7 +11,7 @@ import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
 import type { DeclarationBranch, ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
 import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
-import { recordApprovedProducts } from "./products";
+import { recordApprovedCatalog, withLineCatalogView } from "./catalog";
 
 export const declarationKeys = {
   agentRun: (id: string) => ["declaration", "agent-run", id] as const,
@@ -187,6 +187,7 @@ export const listLineItems = (dossierId: string) =>
     const show = hsLookupDone(db, dossierId);
     return db.lineItems
       .filter((i) => i.dossierId === dossierId)
+      .map((x) => withLineCatalogView(db, x))
       .map((i): LineItem => {
         if (!show && !i.hsConfirmed) {
           const { hsSuggested: _s, hsConfidence: _c, ...rest } = i;
@@ -323,9 +324,10 @@ export const getDeclarationView = (dossierId: string) =>
         };
       }),
       unconfirmedHs: items.filter((i) => !i.hsConfirmed).length,
+      // Phần danh mục (gợi ý lượng theo ĐVT khai…) như listLineItems / backend getDeclarationView – màn Review đọc từ đây.
       items: items.map((i) => {
         const t = taxes.find((x) => x.itemId === i.id);
-        return { ...i, customsValueVnd: t?.customsValueVnd ?? "0", importDutyVnd: t?.importDutyVnd ?? "0", vatVnd: t?.vatVnd ?? "0" };
+        return { ...withLineCatalogView(db, i), customsValueVnd: t?.customsValueVnd ?? "0", importDutyVnd: t?.importDutyVnd ?? "0", vatVnd: t?.vatVnd ?? "0" };
       }),
     };
   });
@@ -345,14 +347,9 @@ export const approveDeclaration = (dossierId: string) =>
     const changed = sentSheetsMockError(db, dossierId);
     if (changed) throw changed;
     Object.assign(decl, { status: "APPROVED", approvedBy: me?.name ?? "—", approvedAt: nowIso() });
-    // Mặt hàng đã xác nhận HS → danh mục hàng hóa của doanh nghiệp.
+    // Danh mục hàng hóa (ADR 0015): dòng đã gắn mặt hàng → +1 lần khai; dòng chưa gắn → hàng chờ ghép.
     const fieldValue = (no: string) => decl.fields.find((f) => f.no === no)?.value.trim() || null;
-    recordApprovedProducts(db, db.lineItems.filter((i) => i.dossierId === dossierId), {
-      typeCode: fieldValue("1.4") ?? fieldValue("2.4"),
-      currency: decl.fields.find((f) => f.code === "MA_TT")?.value || null,
-      // Đối tác: tờ khai nhập → người xuất khẩu (1.20); tờ khai xuất → người nhập khẩu (2.19).
-      partner: fieldValue(decl.kind === "EDA" ? "2.19" : "1.20")?.slice(0, 255) ?? null,
-    });
+    recordApprovedCatalog(db, db.lineItems.filter((i) => i.dossierId === dossierId), { declarationId: dossierId, typeCode: fieldValue("1.4") ?? fieldValue("2.4") });
     const dossier = db.dossiers.find((d) => d.id === dossierId)!;
     Object.assign(dossier, { status: "APPROVED", step: "submit", suspectFields: 0, updatedAt: nowIso() });
     return decl;

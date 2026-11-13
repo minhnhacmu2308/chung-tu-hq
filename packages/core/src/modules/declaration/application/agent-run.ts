@@ -12,6 +12,7 @@ import { loadDossier, syncLineItems, TASKS_BY_MODE, toAgentRunView } from "./_dt
 import { sheetScopeError } from "./_edit-scope.js";
 import { hsSummaryLogs, startHsClassification, unsentHsLineIds } from "./hs-classification.js";
 import type { AgentLog, AgentRunRow, AgentTask, DeclarationDeps } from "./ports.js";
+import { planForDossier } from "./_catalog-plan.js";
 
 export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: string, mode: AgentMode): Promise<Result<AgentRunView>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
@@ -27,8 +28,9 @@ export async function startAgentRun(deps: DeclarationDeps, ctx: Ctx, dossierId: 
   if (!shipment || shipment.items.length === 0) return err(domainError("NO_ITEMS", "Chưa có dòng hàng – hoàn tất bước OCR & kiểm tra trước"));
   const now = deps.clock.now();
   const lessons = await lessonsOf(deps, ctx.orgId, dossierId);
+  const plan = await planForDossier(deps, ctx, dossierId, shipment);
   const run = await deps.uow.asOrg(ctx, async (r) => {
-    await syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons);
+    await syncLineItems(deps, r, ctx.orgId, dossierId, shipment, lessons, plan);
     const prev = await r.agentRuns.latest(ctx.orgId, dossierId);
     if (prev?.status === "RUNNING") await r.agentRuns.update(prev.orgId, prev.id, { status: "CANCELLED", finishedAt: now });
     const row: AgentRunRow = {

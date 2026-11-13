@@ -64,3 +64,16 @@ describe("hs_jobs + trạng thái HS dòng hàng", () => {
     await expect(uow.asOrg(B, (r) => r.hsJobs.insert({ id: "hsj_x", orgId: "org_anphat", dossierId: "dos_hs", externalId: "x", status: "processing", polls: 0, createdAt: NOW, updatedAt: NOW }))).rejects.toThrow();
   });
 });
+
+describe("line_items – cột danh mục hàng hóa (Task 5)", () => {
+  it("ghi mặt hàng / bí danh / mã HAG_MAHANG / hệ số lô (numeric → chuỗi gọn); đồng bộ lại không xóa liên kết; org khác không ghi được", async () => {
+    await uow.asOrg(A, (r) => r.lineItems.update("org_anphat", "itm_hs_2", { catalogItemId: "cat_1", catalogAliasId: "ali_1", itemCode: "XNK-01", unitFactor: "95.5", updatedAt: NOW }));
+    expect(await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_2"))).toMatchObject({ catalogItemId: "cat_1", catalogAliasId: "ali_1", itemCode: "XNK-01", unitFactor: "95.5" });
+    await uow.asOrg(A, (r) => r.lineItems.upsertForDossier("org_anphat", "dos_hs", [item(1), item(2)]));
+    expect(await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_2"))).toMatchObject({ catalogItemId: "cat_1", itemCode: "XNK-01", unitFactor: "95.5" });
+    await uow.asOrg(B, (r) => r.lineItems.update("org_anphat", "itm_hs_2", { itemCode: "HACK", updatedAt: NOW }));
+    expect((await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_2")))?.itemCode).toBe("XNK-01");
+    await uow.asOrg(A, (r) => r.lineItems.update("org_anphat", "itm_hs_2", { unitFactor: null, updatedAt: NOW }));
+    expect((await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_2")))?.unitFactor).toBeNull();
+  });
+});

@@ -244,6 +244,12 @@ export function IssuedInvoiceCard({ dossierId }: { dossierId: string }) {
                 </ul>
               </Alert>
             )}
+            {/* In theo bộ mã của mẫu (danh mục hàng hóa): dòng thiếu quy đổi ĐVT → in lượng/ĐVT gốc; chỉ cảnh báo, không khóa phát hành. */}
+            {current && v.printWarnings.length > 0 && (
+              <Alert tone="warning" title={t.printWarningTitle}>
+                {fill(t.printWarningBody, { lines: v.printWarnings.map((w) => w.lineNo).join(", ") })}
+              </Alert>
+            )}
             {current && !v.enabled && <Alert tone="warning">{t.sourceChanged}</Alert>}
             {current && v.declared && v.editable && <Alert tone="info">{t.declared}</Alert>}
             {!v.editable && current && current.status === "RESERVED" && !v.cleared && <Alert tone="info">{t.locked}</Alert>}

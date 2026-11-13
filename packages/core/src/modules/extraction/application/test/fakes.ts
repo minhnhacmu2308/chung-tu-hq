@@ -33,6 +33,11 @@ export class InMemoryExtractionUow implements ExtractionUow {
       },
       shipments: {
         latest: async (orgId, dossierId) => clone(d.shipments.filter((x) => x.orgId === own(orgId) && x.dossierId === dossierId).sort((a, b) => b.version - a.version)[0] ?? null),
+        listLatestByOrg: async (orgId) => {
+          const best = new Map<string, ShipmentRow>();
+          for (const x of d.shipments) if (x.orgId === own(orgId) && (best.get(x.dossierId)?.version ?? -1) < x.version) best.set(x.dossierId, x);
+          return clone([...best.values()]);
+        },
         insert: async (row) => void (row.orgId === org ? d.shipments.push(clone(row)) : deny("shipments")),
         updateData: async (orgId, id, data) => {
           const s = d.shipments.find((x) => x.id === id && x.orgId === own(orgId));
@@ -51,7 +56,11 @@ export class InMemoryExtractionUow implements ExtractionUow {
           if (f) Object.assign(f, patch);
         },
       },
-      audit: { insert: async (row) => void (row.orgId === org ? d.audit.push(clone(row)) : deny("field_audit")) },
+      audit: {
+        insert: async (row) => void (row.orgId === org ? d.audit.push(clone(row)) : deny("field_audit")),
+        listForObject: async (orgId, objectId, source, limit) =>
+          d.audit.filter((a) => a.orgId === org && a.orgId === orgId && a.dossierId === objectId && a.source === source).reverse().slice(0, limit).map(clone),
+      },
       manual: {
         get: async (orgId, dossierId) => clone(d.manual.find((x) => x.orgId === own(orgId) && x.dossierId === dossierId) ?? null),
         upsert: async (row) => {

@@ -3,9 +3,12 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import { issueInvoiceAction } from "@/api/issued-invoice";
+import { DEFAULT_INVOICE_LAYOUT } from "@kb/contracts";
+import { saveInvoiceTemplate } from "@/api/invoice-templates";
+import { getIssuedInvoices, issueInvoiceAction } from "@/api/issued-invoice";
 import { saveManualShipment } from "@/api/manual-shipment";
 import { getDb, resetDb } from "@/mocks/db";
+import { SEED_SETS } from "@/mocks/seed/catalog";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { IssuedInvoiceCard } from "./issued-invoice-card";
 
@@ -59,6 +62,33 @@ describe("IssuedInvoiceCard", () => {
     await waitFor(() => expect(getDb().issuedInvoices[0]?.invoice).toMatchObject({ status: "ISSUED", snapshot: { extra: { lcNo: "LC-889", blNo: "HPH123" }, declarationNo: "306123456780" } }), T);
     expect(await screen.findByRole("link", { name: "In hóa đơn" }, T)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Phát hành lại" })).toBeTruthy();
+  }, 60_000);
+
+  it("mẫu in theo bộ Kho: dòng đổi ĐVT có quy đổi → in lượng quy đổi; thiếu quy đổi → giữ lượng gốc + cảnh báo (không khóa phát hành)", async () => {
+    await saveInvoiceTemplate(null, { name: "Theo mã kho", isDefault: true, layout: { ...DEFAULT_INVOICE_LAYOUT, itemCodeSet: { codeSetId: SEED_SETS.WH } } });
+    const cat = getDb().catalog.items;
+    const canvas = cat.find((i) => i.name === "Vải canvas cotton khổ 1,5 m")!; // Kho tính kg, chưa có quy đổi
+    const cable = cat.find((i) => i.name === "Dây cáp điện CVV 3x2.5mm2")!; // Kho tính cuộn, 1 ROL = 100 MTR
+    await saveManualShipment(DOS, {
+      ...DATA,
+      items: [
+        { description: canvas.name, quantity: "50", unit: "MTR", unitPrice: "2", catalogItemId: canvas.id },
+        { description: cable.name, quantity: "300", unit: "MTR", unitPrice: "1.5", catalogItemId: cable.id },
+      ],
+    });
+    await issueInvoiceAction(DOS, { action: "RESERVE" });
+    Object.assign(dossier(), { status: "CLEARED", declarationNo: "306123456780" });
+    const view = await getIssuedInvoices(DOS);
+    expect(view.printWarnings).toEqual([{ lineNo: 1, code: "UNIT_FACTOR_MISSING" }]);
+    expect(view.preview!.items.map((x) => [x.printedCode, x.printedQuantity, x.printedUnit, x.printedUnitPrice])).toEqual([
+      ["VAI-C15", "50", "MTR", null],
+      ["dc 0001", "3", "ROL", "150"],
+    ]);
+    const { container } = render();
+    const alert = await screen.findByText(/Dòng 1: ĐVT của bộ mã khác ĐVT dòng/, {}, T);
+    expect(alert).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Phát hành hóa đơn" }) as HTMLButtonElement).disabled).toBe(false);
+    await expectNoA11yViolations(container);
   }, 60_000);
 
   it("hủy số cần lý do → VOID, cấp tiếp số mới", async () => {

@@ -83,15 +83,3 @@ export async function buildContainerXlsx(rows: readonly ContainerListRow[], loca
   const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
   return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
-
-export function saveBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Thu hồi sau một nhịp: thu hồi ngay sau click làm Chrome hủy lượt tải.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}

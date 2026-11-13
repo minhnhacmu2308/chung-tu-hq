@@ -6,6 +6,8 @@ import { createDb, platformDbUrl, runSeed, type Db } from "@kb/core/db";
 import { type AdminDeps, type FailedJobInfo, type IntegrationProbe, type JobMonitor, type SystemProbe } from "@kb/core/modules/admin";
 import { createAdminInfrastructure, DbPlatformMailer, platformStaffOf, type DrizzleAdminUow } from "@kb/core/modules/admin/infrastructure";
 import { createDeclarationBilling, getOrgBilling, type BillingDeps } from "@kb/core/modules/billing";
+import { createCatalogLinks, createCatalogPort, type CatalogDeps, type CatalogPort } from "@kb/core/modules/catalog";
+import { createCatalogInfrastructure } from "@kb/core/modules/catalog/infrastructure";
 import { refreshFromShipment, type DeclarationDeps } from "@kb/core/modules/declaration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { listOpenDocuments, rereadDocuments, type DossierDeps } from "@kb/core/modules/dossier";
@@ -49,6 +51,10 @@ export type Container = {
   extraction: ExtractionDeps;
   skill: SkillDeps;
   declaration: DeclarationDeps;
+  /** Danh mục hàng hóa dùng chung (mã nối, bộ mã, bí danh, quy đổi – ADR 0015). */
+  catalog: CatalogDeps;
+  /** Cổng danh mục cho module khác (tra mã, ghi lượt khai, hàng chờ mã lạ). */
+  catalogPort: CatalogPort;
   /** Dạy khai báo: tờ khai đã thông quan → bài học theo doanh nghiệp. */
   teach: TeachDeps;
   customs: CustomsDeps;
@@ -332,6 +338,25 @@ function build(): Container {
   declaration.orgAudit = identity.audit;
   customs.orgAudit = identity.audit;
   skill.audit = identity.audit;
+  // Danh mục hàng hóa: field_audit qua extraction (CATALOG_EDIT); người phụ trách bộ mã = thành viên ACTIVE, vai trò ≠ VIEWER (identity).
+  const catalog = createCatalogInfrastructure({
+    db, extraction, declaration, jobs: queue, orgAudit: identity.audit, clock: systemClock,
+    members: {
+      eligibleOwners: async (orgId, userIds) => {
+        const ms = await identity.uow.asOrg({ orgId, userId: asUserId("") }, (r) => r.memberships.listByOrg(orgId));
+        const want = new Set(userIds);
+        return new Set(ms.filter((m) => want.has(m.userId) && m.status === "ACTIVE" && m.role !== "VIEWER").map((m) => m.userId));
+      },
+    },
+  });
+  const catalogPort = createCatalogPort(catalog);
+  // Hóa đơn phát hành in mã hàng/ĐVT/lượng theo bộ mã (extraction gọi cổng này NGOÀI transaction).
+  extraction.catalog = catalogPort;
+  // Danh mục hàng hóa dùng chung → dòng tờ khai (gắn mặt hàng, HAG_MAHANG, duyệt → số lần khai / hàng chờ) và bài học mặt hàng (đề xuất bí danh LESSON).
+  // Module declaration/teaching gọi các cổng này NGOÀI transaction của mình.
+  const catalogLinks = createCatalogLinks(catalog);
+  declaration.catalog = catalogLinks;
+  teach.catalog = catalogLinks;
   const jobs = new BullMqJobMonitor(redis);
   const system: SystemProbe = {
     async services(now) {
@@ -403,6 +428,8 @@ function build(): Container {
     extraction,
     skill,
     declaration,
+    catalog,
+    catalogPort,
     teach,
     customs,
     mailbox,

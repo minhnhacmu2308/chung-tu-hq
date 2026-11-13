@@ -14,6 +14,7 @@ export { mergeExtractions, type FileExtraction } from "./domain/merge.js";
 export { documentSheets } from "./application/document-sheets.js";
 export { fieldSource, latestReads, reviewedDocuments, type LatestRead, type ReviewedDocument } from "./application/reviewed-documents.js";
 export { applyCorrections, rawPathOf, supplierOf, type Correction } from "./domain/review-learning.js";
+export { listInvoiceLinesForCatalog, type ShipmentCatalogLine } from "./application/catalog-source.js";
 export { getManualShipment, saveManualShipment } from "./application/manual-shipment.js";
 export { getIssuedInvoices, issueInvoiceAction } from "./application/issued-invoice.js";
 export { refreshAfterSourcesChanged } from "./application/_remerge.js";

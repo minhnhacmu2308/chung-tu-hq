@@ -260,6 +260,27 @@
       "when": 1794547879221,
       "tag": "0036_kvgs",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794582111687,
+      "tag": "0037_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794585066728,
+      "tag": "0038_catalog_import_staging",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794588788290,
+      "tag": "0039_code_set_partner_unique",
+      "breakpoints": true
     }
   ]
 }

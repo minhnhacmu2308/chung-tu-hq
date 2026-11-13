@@ -78,6 +78,7 @@ export function applyManual(s: Shipment, m: ManualShipment | null): Shipment {
       origin: manualSourced(it.origin?.toUpperCase() ?? null),
       hsOnInvoice: manualSourced(it.hsOnInvoice ?? null),
       partNo: manualSourced(it.partNo ?? null),
+      catalogItemId: it.catalogItemId ?? null,
     }));
     put(s.invoice.totalAmount, manualTotal(m));
   }

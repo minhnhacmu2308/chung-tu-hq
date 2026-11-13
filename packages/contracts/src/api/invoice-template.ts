@@ -53,6 +53,11 @@ export const InvoiceLayoutSchema = z.object({
   /** Số bản ORIGINAL / COPY in ra (UCP600 Đ17). */
   originals: z.number().int().min(1).max(5).default(1),
   copies: z.number().int().min(0).max(5).default(0),
+  /**
+   * Bộ mã in ở cột mã hàng (PART_NO): { codeSetId } = bộ chỉ định · { kind: "ITEM_NO" } = luôn in mã nối · null = tự chọn
+   * (bộ khách hàng của người mua → Kế toán, hoặc "Mã chung" ở chế độ SHARED → mã nối). Mặt hàng không có mã trong bộ → in mã nối.
+   */
+  itemCodeSet: z.union([z.object({ codeSetId: z.string().min(1).max(64) }), z.object({ kind: z.literal("ITEM_NO") })]).nullable().default(null),
 });
 export type InvoiceLayout = z.infer<typeof InvoiceLayoutSchema>;
 export type InvoiceLayoutInput = z.input<typeof InvoiceLayoutSchema>;
@@ -67,6 +72,7 @@ export const DEFAULT_INVOICE_LAYOUT: InvoiceLayout = {
   statement: null,
   originals: 1,
   copies: 0,
+  itemCodeSet: null,
 };
 
 export const InvoiceTemplateInputSchema = z.object({

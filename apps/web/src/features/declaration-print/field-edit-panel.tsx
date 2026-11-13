@@ -24,6 +24,7 @@ import { fieldTitle } from "../declaration-form/display";
 import type { FormValues } from "../declaration-form/form-state";
 import { useSaveDeclarationEdits } from "../declaration-form/use-save-edits";
 import { useCodeName, usePlaceNameLookup } from "../declaration-form/use-code-list";
+import { QtySuggestionHint } from "../declaration-form/qty-hint";
 import { PanelDetails } from "./panel-details";
 import { panelShortcut, revertField } from "./panel-keys";
 import { applyToOtherLines, fieldLocator, nextTarget, taxCodeKeys, type PrintTarget } from "./print-state";
@@ -63,6 +64,9 @@ const tid = (t: PrintTarget | null) => (t ? `${t.line ?? ""}:${t.key}` : "");
 /** Ô nhập của panel cho Tab: chữ / số / ngày, ô chọn (Select · Combobox – role combobox); bỏ thẻ select ẩn của Select (tabindex -1). */
 const FIELDS = ":is(input, textarea, [role=combobox]):not([disabled]):not([tabindex='-1']):not([type=hidden])";
 const FOCUSABLE = "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])";
+
+/** Ô số lượng của dòng hàng (1.83/1.84 IDA, 2.72/2.73 EDA) – nơi hiện gợi ý quy đổi theo ĐVT khai. */
+const QTY_KEYS = new Set(["HAG_QN1", "HAG_QT1", "HAG_QN2", "HAG_QT2"]);
 
 export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope, sheet = 1, canEdit, values, itemRows, lineNos, errors, order, target, onTarget, leaveGuard }: Props) {
   const t = useMessages(PRINT_MESSAGES);
@@ -403,6 +407,8 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                   <p>{t.suspectBody}</p>
                 </Alert>
               )}
+              {/* Danh mục hàng hóa: ĐVT invoice khác ĐVT khai → phép quy đổi lượng cạnh ô số lượng (cả khi chỉ xem); sửa hệ số lô khi sửa được. */}
+              {item?.qtySuggestion && spot.group.some((g) => QTY_KEYS.has(g.key)) && <QtySuggestionHint item={item} dossierId={dossierId} editable={!readOnlyReason} />}
               <PanelDetails
                 kind={kind}
                 spot={spot}

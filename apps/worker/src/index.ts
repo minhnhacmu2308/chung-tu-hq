@@ -5,13 +5,15 @@ import { healthJob } from "./jobs/health.js";
 import { certExpiryJob } from "./jobs/cert-expiry.js";
 import { billingReconcileJob } from "./jobs/billing-reconcile.js";
 import { customsPollJob, customsSendJob, kvgsPollJob } from "./jobs/customs.js";
+import { catalogImportJob } from "./jobs/catalog-import.js";
+import { failImport } from "@kb/core/modules/catalog";
 import { RATE_JOB_CRON, recordRateCatchUpFailure, recordRateFetchFailure } from "@kb/core/modules/admin";
 import { failAgentRun, failHsWork } from "@kb/core/modules/declaration";
 import { markDocumentFailed } from "@kb/core/modules/extraction";
 import { KvgsKindSchema, markKvgsPollFailed, markOutboxFailed } from "@kb/core/modules/integration";
 import { failMailSync } from "@kb/core/modules/mailbox";
 import { configureMetrics, observeJob, registerQueueCollector } from "@kb/core/observability";
-import { createLogger } from "@kb/core/shared";
+import { asOrgId, asUserId, createLogger } from "@kb/core/shared";
 import { emailCampaignJob } from "./jobs/email-campaign.js";
 import { exchangeRateCatchUpJob, exchangeRateJob } from "./jobs/exchange-rate.js";
 import { hsAnswerJob, hsPollJob, hsReclassifyJob } from "./jobs/hs.js";
@@ -52,6 +54,8 @@ const workers = [
   new Worker("customs-send", async (job) => customsSendJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("customs-poll", async (job) => customsPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("kvgs-poll", async (job) => kvgsPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
+  // Nhập danh mục hàng hóa > 500 dòng: ghép theo lô (không gọi AI/dịch vụ ngoài).
+  new Worker("catalog-import", async (job) => catalogImportJob(c.catalog, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("cert-expiry", async () => certExpiryJob(c.identity), { connection: c.redis, concurrency: 1 }),
   // Đối soát lượt / thanh toán (ADR 0011): idempotent, một lượt một lúc.
   new Worker("billing-reconcile", async () => billingReconcileJob(c.billing, c.billingReconcile), { connection: c.redis, concurrency: 1 }),
@@ -95,6 +99,7 @@ async function onFinalFailure(queue: string, job: Job, e: Error) {
   else if (queue === "teach-sample-read" && d["orgId"] && d["sampleId"]) await failTeachSample(c.teach, { orgId: d["orgId"], sampleId: d["sampleId"], error: "AI chưa đọc được tờ khai sau nhiều lần thử – bấm Đọc lại" });
   else if (queue === "kvgs-poll" && d["orgId"] && d["id"] && KvgsKindSchema.safeParse(d["kind"]).success) await markKvgsPollFailed(c.customs, { orgId: d["orgId"], kind: KvgsKindSchema.parse(d["kind"]), id: d["id"], reason });
   else if (queue === "customs-send" && d["orgId"] && d["outboxId"]) await markOutboxFailed(c.customs, { orgId: d["orgId"], outboxId: d["outboxId"], reason });
+  else if (queue === "catalog-import" && d["orgId"] && d["userId"] && d["importId"]) await failImport(c.catalog, { orgId: asOrgId(d["orgId"]), userId: asUserId(d["userId"]), importId: d["importId"], reason });
 }
 
 /** Thời gian chạy một lần job (giây) cho khaibao_job_duration_seconds. */

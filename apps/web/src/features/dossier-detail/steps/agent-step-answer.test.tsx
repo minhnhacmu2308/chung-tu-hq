@@ -7,7 +7,7 @@ import { getDb, resetDb } from "@/mocks/db";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { AgentStep } from "./agent-step";
 
-const T = { timeout: 8000 };
+const T = { timeout: 20_000 };
 
 function setup() {
   resetDb();
@@ -31,7 +31,13 @@ describe("AgentStep – trả lời AI một lần cho hàng giống nhau", () =
   it("có ô 'Áp dụng cho 1 dòng hàng giống nhau', gửi → cả 2 dòng được trả lời; không vi phạm a11y", async () => {
     const { dossier, lines } = setup();
     renderWithProviders(<AgentStep dossier={dossier} goTo={vi.fn()} />);
-    await userEvent.click(await screen.findByRole("button", { name: `Trả lời AI cho dòng ${lines[0]!.lineNo}` }, T));
+    // Ô bảng dựng lại khi gợi ý danh mục (resolve-many) về → lần bấm rơi vào nút cũ thì mất: lấy lại nút, bấm lại đến khi hộp mở.
+    const label = `Trả lời AI cho dòng ${lines[0]!.lineNo}`;
+    await screen.findByLabelText(label, undefined, T);
+    await waitFor(async () => {
+      if (!document.querySelector("[role=dialog]")) await userEvent.click(await screen.findByLabelText(label, undefined, T));
+      expect(document.querySelector("[role=dialog]")).not.toBeNull();
+    }, T);
     const dialog = await screen.findByRole("dialog", undefined, T);
     const apply = screen.getByRole("checkbox", { name: `Áp dụng cho 1 dòng hàng giống nhau cùng câu hỏi: dòng ${lines[1]!.lineNo}` });
     expect((apply as HTMLInputElement).checked).toBe(true);

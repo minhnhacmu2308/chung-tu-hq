@@ -2,8 +2,9 @@
 // (cách A: cấp số → điền vào tờ khai; phát hành khi đã thông quan; hủy số không dùng lại). Mock lấy nội dung từ dữ liệu nhập tay.
 import {
   canEditDeclaration, DEFAULT_INVOICE_LAYOUT, formatDocNo, IssueActionSchema, patternIssue, periodKey, reasonVi,
-  type InvoiceLayout, type IssueBlocker, type IssuedInvoice, type IssuedInvoiceSnapshot, type IssuedInvoicesView, type IssueAction, type ReasonCode, type ReasonParams, type ReleaseExtra,
+  type InvoiceLayout, type IssueBlocker, type IssuedInvoice, type IssuedInvoiceSnapshot, type IssuedInvoicesView, type IssueAction, type PrintWarning, type ReasonCode, type ReasonParams, type ReleaseExtra,
 } from "@kb/contracts";
+import { printInvoiceLine } from "./catalog";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
 import { mulDecimal, sumDecimal } from "@/lib/decimal";
@@ -19,7 +20,7 @@ const EMPTY_EXTRA: ReleaseExtra = { contractNo: null, lcNo: null, lcDate: null, 
 const fail = (code: string, reason: ReasonCode, params?: ReasonParams, status = 409) => new ApiError(code, reasonVi(reason, params), status, { reason, params });
 const today = () => nowIso().slice(0, 10);
 
-function build(db: MockDb, dossierId: string, fallbackDate: string, layout: InvoiceLayout, extra: ReleaseExtra): { ok: true; snapshot: IssuedInvoiceSnapshot } | { ok: false; blockers: IssueBlocker[] } {
+function build(db: MockDb, dossierId: string, fallbackDate: string, layout: InvoiceLayout, extra: ReleaseExtra): { ok: true; snapshot: IssuedInvoiceSnapshot; warnings: PrintWarning[] } | { ok: false; blockers: IssueBlocker[] } {
   const m = db.manualShipments[dossierId]?.data;
   const d = db.dossiers.find((x) => x.id === dossierId);
   const blockers: IssueBlocker[] = [];
@@ -27,10 +28,17 @@ function build(db: MockDb, dossierId: string, fallbackDate: string, layout: Invo
   if (!m?.invoice.currency) blockers.push("NO_CURRENCY");
   if (!m?.buyer.name) blockers.push("NO_BUYER");
   if (!m || blockers.length) return { ok: false, blockers };
-  const items = m.items.map((it, i) => ({
-    lineNo: i + 1, description: it.description, partNo: it.partNo ?? null, hsCode: it.hsOnInvoice ?? null, quantity: it.quantity, unit: it.unit.toUpperCase(),
-    unitPrice: it.unitPrice, amount: mulDecimal(it.quantity, it.unitPrice, 2), origin: it.origin?.toUpperCase() ?? null,
-  }));
+  const warnings: PrintWarning[] = [];
+  const items = m.items.map((it, i) => {
+    const unit = it.unit.toUpperCase();
+    // Mã/ĐVT/lượng in theo bộ mã của mẫu (danh mục hàng hóa); dòng chưa gắn mặt hàng → như dữ liệu dòng.
+    const printed = printInvoiceLine(db, { partNo: it.partNo ?? null, quantity: it.quantity, unit, unitPrice: it.unitPrice, catalogItemId: it.catalogItemId ?? null }, layout.itemCodeSet, m.buyer.name ?? null);
+    if (printed.warning) warnings.push({ lineNo: i + 1, code: "UNIT_FACTOR_MISSING" });
+    return {
+      lineNo: i + 1, description: it.description, partNo: it.partNo ?? null, hsCode: it.hsOnInvoice ?? null, quantity: it.quantity, unit,
+      unitPrice: it.unitPrice, amount: mulDecimal(it.quantity, it.unitPrice, 2), origin: it.origin?.toUpperCase() ?? null, ...printed.line,
+    };
+  });
   const t = m.transport;
   const s = db.org.invoiceSettings;
   return {
@@ -55,6 +63,7 @@ function build(db: MockDb, dossierId: string, fallbackDate: string, layout: Invo
       layout,
       items,
     },
+    warnings,
   };
 }
 
@@ -83,6 +92,7 @@ function view(db: MockDb, dossierId: string): IssuedInvoicesView {
     nextNo: nextSeq(db, true), cleared, declared: !!d.declarationNo,
     blockers: [...(cleared ? [] : (["NOT_CLEARED"] as const)), ...(built.ok ? [] : built.blockers)],
     preview: built.ok ? built.snapshot : null,
+    printWarnings: built.ok ? built.warnings : [],
     templates: db.invoiceTemplates.map((t) => ({ id: t.id, name: t.name, isDefault: t.isDefault })),
     editable: canAct && !LOCKED.has(d.status),
     canRelease: canAct,

@@ -31,6 +31,16 @@ export function formatNumber(value: string | number, fractionDigits = 0, locale:
   return n.toLocaleString(intlLocale(locale), { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
 }
 
+/** Lượng / hệ số quy đổi: giữ phần lẻ có nghĩa (tối đa `maxFractionDigits`), bỏ số 0 thừa – vd "235.5" → "235,5" (vi). Chỉ để hiển thị. */
+export function formatDecimal(value: string, maxFractionDigits = 6, locale: UiLocale = current): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return value;
+  return n.toLocaleString(intlLocale(locale), { minimumFractionDigits: 0, maximumFractionDigits: maxFractionDigits });
+}
+
+/** Mã HS 8 số → "3303.00.00" (cách viết quen thuộc trên giao diện); mã khác giữ nguyên. */
+export const formatHs = (code: string) => (/^\d{8}$/.test(code) ? `${code.slice(0, 4)}.${code.slice(4, 6)}.${code.slice(6)}` : code);
+
 /** "2026-10-12" → "12/10/2026" (vi) · "10/12/2026" (en) · "2026/10/12" (zh). */
 export function formatDate(iso: string, locale: UiLocale = current): string {
   const [y, m, d] = iso.slice(0, 10).split("-");

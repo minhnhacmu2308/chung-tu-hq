@@ -3,6 +3,7 @@ export * from "./dto/index.js";
 export * from "./api/index.js";
 export * from "./extraction/index.js";
 export * from "./catalog/index.js";
+export * from "./item-catalog/index.js";
 export * from "./shipment.js";
 export * from "./customs-flow.js";
 export * from "./customs-summary.js";

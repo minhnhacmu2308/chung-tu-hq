@@ -1,0 +1,2 @@
+-- Một bộ mã mỗi (org, loại, đối tác): ensurePartnerSet tự tạo bộ nhà cung cấp khi gắn mã từ chứng từ – chặn hai bộ trùng khi chạy song song.
+CREATE UNIQUE INDEX "code_sets_org_kind_partner_uq" ON "code_sets" USING btree ("org_id","kind","partner_key") WHERE partner_key is not null;

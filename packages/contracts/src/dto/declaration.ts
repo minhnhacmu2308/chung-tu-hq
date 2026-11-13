@@ -28,6 +28,19 @@ export const LineItemSchema = z.object({
   vatCertain: z.boolean().optional(),
   /** Thuế của mã đã xác nhận chưa khớp kết quả phân loại mới nhất (mã không còn trong gợi ý, mã nhập tay chưa có thuế…) – cần kiểm tra lại. */
   taxNeedsReview: z.boolean().optional(),
+  /** Mã của mặt hàng trong bộ Hải quan (XNK / "Mã chung") – điền HAG_MAHANG khi truyền; vắng → để trống + cảnh báo (không chặn). */
+  itemCode: z.string().optional(),
+  /** Mặt hàng danh mục đã gắn cho dòng (tra theo Part No người bán / luật ghép, hoặc người khai chọn). */
+  catalogItem: z.object({ id: z.string(), itemNo: z.string(), name: z.string() }).optional(),
+  /** Dòng có Part No mà chưa gắn mặt hàng nào ("Mã lạ – Chọn mặt hàng"); hồ sơ vẫn đi tiếp tới truyền. */
+  unknownCode: z.boolean().optional(),
+  /** Hệ số quy đổi theo lô của dòng ("1 ĐVT dòng = hệ số ĐVT gốc"); vắng = hệ số mặc định của danh mục. */
+  unitFactor: DecimalStringSchema.optional(),
+  /**
+   * Gợi ý lượng theo ĐVT khai (ĐVT của mã Hải quan) khi khác ĐVT invoice: lượng, ĐVT, hệ số "1 ĐVT dòng = factor ĐVT khai";
+   * `lotFactor` = dùng hệ số theo lô; `deviates` = hệ số lô lệch > 20% so với mặc định (cảnh báo, không chặn).
+   */
+  qtySuggestion: z.object({ qty: DecimalStringSchema, unit: z.string(), factor: DecimalStringSchema, lotFactor: z.boolean(), deviates: z.boolean() }).optional(),
   /** Phân loại HS (HSCodePro): trạng thái dòng, câu hỏi chờ trả lời, gợi ý + mã thay thế kèm thuế. */
   hs: z.lazy(() => LineItemHsSchema).optional(),
 });

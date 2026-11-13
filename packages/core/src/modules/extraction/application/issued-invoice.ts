@@ -10,8 +10,9 @@ import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { reasonError, domainError, type DomainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { isReadLocked } from "../domain/edit-normalize.js";
-import { buildSnapshot } from "../domain/issued.js";
+import { buildSnapshot, type PrintCatalog } from "../domain/issued.js";
 import { remergeDossier } from "./_remerge.js";
+import { loadPrintCatalog } from "./issued-print.js";
 import type { ExtractionDeps, ExtractionRepos, IssuedRow, OrgInfo, TemplateRow } from "./ports.js";
 
 const toDto = (r: IssuedRow): IssuedInvoice => ({
@@ -34,16 +35,29 @@ async function loadDossier(deps: ExtractionDeps, ctx: Ctx, dossierId: string) {
   return ok({ ...info, enabled: info.direction === "XK" && info.documentSources.INVOICE === "ISSUED", cleared: info.status === "CLEARED" });
 }
 
-/** Dựng nội dung hóa đơn từ dữ liệu hiện tại (chưa lưu). */
-async function build(r: ExtractionRepos, ctx: Ctx, dossierId: string, org: OrgInfo, declarationNo: string | null, layout: InvoiceLayout, extra: ReleaseExtra | undefined, fallbackDate: string) {
+/**
+ * Dựng nội dung hóa đơn từ dữ liệu hiện tại (chưa lưu). `print` = tra danh mục đã lấy NGOÀI transaction (loadPrintCatalog);
+ * dòng mới thêm sau khi tra (không có trong `print`) in như cũ.
+ */
+async function build(r: ExtractionRepos, ctx: Ctx, dossierId: string, org: OrgInfo, declarationNo: string | null, layout: InvoiceLayout, extra: ReleaseExtra | undefined, fallbackDate: string, print: PrintCatalog) {
   const shipment = await r.shipments.latest(ctx.orgId, dossierId);
   if (!shipment) return { ok: false, blockers: ["NO_ITEMS"] } as const;
   const manual = await r.manual.get(ctx.orgId, dossierId);
   return buildSnapshot(shipment.data, { name: org.sellerName || org.name, taxCode: org.taxCode }, fallbackDate, {
-    layout, extra, declarationNo, marks: manual?.data.marks ?? null,
+    layout, extra, declarationNo, marks: manual?.data.marks ?? null, print,
     seller: { address: org.address || null, phone: org.phone || null },
     signatory: { name: org.signatoryName ?? null, title: org.signatoryTitle ?? null },
   });
+}
+
+/** Đọc lô hàng + mẫu + số đã cấp rồi tra danh mục ngoài transaction (module khác không gọi trong transaction – packages/core/CLAUDE.md). */
+async function preparePrint(deps: ExtractionDeps, ctx: Ctx, dossierId: string, pickTpl: (templates: TemplateRow[], rows: IssuedRow[]) => TemplateRow | null) {
+  const { shipment, templates, rows } = await deps.uow.asOrg(ctx, async (r) => ({
+    shipment: (await r.shipments.latest(ctx.orgId, dossierId))?.data ?? null, templates: await r.templates.list(ctx.orgId), rows: await r.issued.list(ctx.orgId, dossierId),
+  }));
+  const tpl = pickTpl(templates, rows);
+  const layout = tpl?.layout ?? DEFAULT_INVOICE_LAYOUT;
+  return { tpl, layout, templates, rows, print: await loadPrintCatalog(deps, ctx.orgId, shipment, layout) };
 }
 
 export async function getIssuedInvoices(deps: ExtractionDeps, ctx: Ctx, dossierId: string): Promise<Result<IssuedInvoicesView>> {
@@ -52,15 +66,13 @@ export async function getIssuedInvoices(deps: ExtractionDeps, ctx: Ctx, dossierI
   const org = await deps.documents.orgInfo(ctx.orgId);
   const numbering = numberingOf(org);
   const today = vnDateOf(deps.clock.now());
-  const { rows, templates, seq, built } = await deps.uow.asOrg(ctx, async (r) => {
-    const rows = await r.issued.list(ctx.orgId, dossierId);
-    const templates = await r.templates.list(ctx.orgId);
+  const prep = await preparePrint(deps, ctx, dossierId, (templates, rows) => pickTemplate(templates, (rows.find((x) => x.status !== "VOID") ?? null)?.templateId ?? null));
+  const { rows, templates } = prep;
+  const { seq, built } = await deps.uow.asOrg(ctx, async (r) => {
     const current = rows.find((x) => x.status !== "VOID") ?? null;
-    const tpl = pickTemplate(templates, current?.templateId ?? null);
     return {
-      rows, templates,
       seq: await r.issued.peekSeq(ctx.orgId, "INVOICE", numbering.pattern, periodKey(numbering.reset, today)),
-      built: await build(r, ctx, dossierId, org, d.value.declarationNo, tpl?.layout ?? DEFAULT_INVOICE_LAYOUT, current?.snapshot?.extra, current ? vnDateOf(current.issuedAt) : today),
+      built: await build(r, ctx, dossierId, org, d.value.declarationNo, prep.layout, current?.snapshot?.extra, current ? vnDateOf(current.issuedAt) : today, prep.print),
     };
   });
   const current = rows.find((x) => x.status !== "VOID") ?? null;
@@ -75,6 +87,7 @@ export async function getIssuedInvoices(deps: ExtractionDeps, ctx: Ctx, dossierI
     declared: !!d.value.declarationNo,
     blockers,
     preview: built.ok ? built.snapshot : null,
+    printWarnings: built.ok ? built.warnings : [],
     templates: templates.map((t) => ({ id: t.id, name: t.name, isDefault: t.isDefault })),
     editable: canAct && !isReadLocked(d.value.status),
     canRelease: canAct,
@@ -98,6 +111,14 @@ export async function issueInvoiceAction(deps: ExtractionDeps, ctx: Ctx, dossier
   if (action.action === "RESERVE" && patternIssue(numbering.pattern, numbering.reset)) return err(reasonError("VALIDATION", "INVOICE_NUMBERING_INVALID"));
   const now = deps.clock.now();
   const today = vnDateOf(now);
+
+  // Phát hành: chọn mẫu + tra danh mục (mã/quy đổi theo bộ mã của mẫu) NGOÀI transaction; mẫu không có → lỗi trước khi ghi.
+  let release: { tpl: TemplateRow | null; layout: InvoiceLayout; print: PrintCatalog } | null = null;
+  if (action.action === "RELEASE") {
+    const prep = await preparePrint(deps, ctx, dossierId, (templates) => pickTemplate(templates, action.templateId ?? null));
+    if (action.templateId && !prep.tpl) return err(reasonError("NOT_FOUND", "INVOICE_TEMPLATE_NOT_FOUND"));
+    release = prep;
+  }
 
   const res = await deps.uow.asOrg(ctx, async (r): Promise<Result<boolean, DomainError>> => {
     await r.lockDossier(ctx.orgId, dossierId);
@@ -128,10 +149,8 @@ export async function issueInvoiceAction(deps: ExtractionDeps, ctx: Ctx, dossier
     }
 
     // RELEASE (lần đầu hoặc phát hành lại cùng số): mẫu chọn (null = mặc định doanh nghiệp, không có thì mẫu dựng sẵn).
-    const templates = await r.templates.list(ctx.orgId);
-    const tpl = pickTemplate(templates, action.templateId ?? null);
-    if (action.templateId && !tpl) return err(reasonError("NOT_FOUND", "INVOICE_TEMPLATE_NOT_FOUND"));
-    const built = await build(r, ctx, dossierId, org, d.value.declarationNo, tpl?.layout ?? DEFAULT_INVOICE_LAYOUT, ReleaseExtraSchema.parse(action.extra ?? {}), vnDateOf(current.issuedAt));
+    const { tpl, layout, print } = release!;
+    const built = await build(r, ctx, dossierId, org, d.value.declarationNo, layout, ReleaseExtraSchema.parse(action.extra ?? {}), vnDateOf(current.issuedAt), print);
     if (!built.ok) return err(reasonError("VALIDATION", "INVOICE_DATA_INCOMPLETE", { missing: built.blockers.map((b) => BLOCKER_VI[b]).join("; ") }, { blockers: built.blockers }));
     await r.issued.update(ctx.orgId, current.id, { status: "ISSUED", snapshot: built.snapshot, templateId: tpl?.id ?? null, releasedBy: ctx.userId, releasedAt: now });
     await audit("/invoice/release", current.releasedAt?.toISOString() ?? "", now.toISOString());

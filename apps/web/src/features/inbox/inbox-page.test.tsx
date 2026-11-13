@@ -55,7 +55,7 @@ describe("Hộp thư chứng từ", () => {
     expect(within(dialog).getByText("chungtu.anphat@gmail.com")).toBeTruthy();
     expect(within(dialog).getByText("HBL_OOLU2741199012.pdf")).toBeTruthy();
     await expectNoA11yViolations(dialog);
-    await userEvent.click(within(dialog).getByRole("button", { name: "Thêm vào hồ sơ này" }));
+    await userEvent.click(await within(dialog).findByRole("button", { name: "Thêm vào hồ sơ này" }, T));
     await waitFor(() => expect(screen.getByRole("tab", { name: "Mới (3)" })).toBeTruthy(), T);
     expect(getDb().documents.filter((d) => d.dossierId === "dos_027").map((d) => d.fileName)).toContain("HBL_OOLU2741199012.pdf");
     expect(getDb().inboxMessages.find((m) => m.id === "imsg_seed_1")?.status).toBe("DONE");
@@ -103,9 +103,9 @@ describe("Hộp thư chứng từ", () => {
     const table = await screen.findByRole("table", { name: "Danh sách email chứng từ" }, T);
     await userEvent.click(rowOf(table, /Proforma invoice PI-NB-24117/));
     const detail = await screen.findByRole("dialog", { name: /Proforma invoice PI-NB-24117/ }, T);
-    expect(within(detail).getByText(/Chưa tìm thấy hồ sơ khớp/)).toBeTruthy();
-    await userEvent.click(within(detail).getByRole("button", { name: "Thêm vào hồ sơ…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Thêm file vào hồ sơ" });
+    expect(await within(detail).findByText(/Chưa tìm thấy hồ sơ khớp/, {}, T)).toBeTruthy();
+    await userEvent.click(await within(detail).findByRole("button", { name: "Thêm vào hồ sơ…" }, T));
+    const dialog = await screen.findByRole("dialog", { name: "Thêm file vào hồ sơ" }, T);
     const boxes = within(dialog).getAllByRole("checkbox");
     expect(boxes).toHaveLength(2);
     expect(boxes.every((b) => (b as HTMLInputElement).checked)).toBe(true);
@@ -150,7 +150,7 @@ describe("Hộp thư chứng từ", () => {
     // Quyền xóa theo phiên đăng nhập (tải bất đồng bộ) – có ô chọn dòng là đã có quyền.
     await within(table).findAllByRole("checkbox", undefined, T);
     await userEvent.click(within(rowOf(table, /Pre-alert MAWB/)).getByRole("button", { name: `Thao tác khác – ${subject}` }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /^Xóa/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /^Xóa/ }, T));
     const dialog = await screen.findByRole("dialog", { name: "Xóa email?" }, T);
     expect(within(dialog).getByText(subject)).toBeTruthy();
     await expectNoA11yViolations(dialog);
@@ -173,7 +173,7 @@ describe("Hộp thư chứng từ", () => {
     await screen.findByText(/vai trò Người xem/, undefined, T);
     expect(within(table).queryAllByRole("checkbox")).toHaveLength(0);
     await userEvent.click(within(rowOf(table, /Pre-alert MAWB/)).getByRole("button", { name: /^Thao tác khác/ }));
-    await screen.findByRole("menuitem", { name: /Xem chi tiết/ });
+    await screen.findByRole("menuitem", { name: /Xem chi tiết/ }, T);
     expect(screen.queryByRole("menuitem", { name: /^Xóa/ })).toBeNull();
   }, 20_000);
 });

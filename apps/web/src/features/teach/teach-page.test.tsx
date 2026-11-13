@@ -41,8 +41,11 @@ describe("Dạy khai báo", () => {
     await expectNoA11yViolations(container);
 
     // "Xem so sánh" trùng bấm dòng → thao tác chính trong menu "…" (RowActions primary), không còn icon nhanh.
-    await userEvent.click(within(row).getByRole("button", { name: "Thao tác khác – 106794645160" }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Xem so sánh" }));
+    // Thao tác trên dòng theo quyền của phiên đăng nhập (tải bất đồng bộ): chờ vùng thả file (chỉ hiện khi có quyền dạy)
+    // rồi mới mở menu – nếu phiên về đúng lúc bấm, RowActions dựng lại và menu đóng mất (lỗi chập chờn trên CI).
+    await screen.findByText(/Kéo thả tờ khai đã thông quan/, {}, T);
+    await userEvent.click(await screen.findByRole("button", { name: "Thao tác khác – 106794645160" }, T));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Xem so sánh" }, T));
     const dialog = await screen.findByRole("dialog", {}, T);
     const kho = await rowWith(dialog, "Mã địa điểm lưu kho hàng chờ thông quan dự kiến");
     expect(within(kho).getByText("02DSEA0 – KHO FEDEX")).toBeTruthy();

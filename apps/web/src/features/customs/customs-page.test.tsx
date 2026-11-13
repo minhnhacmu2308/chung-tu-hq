@@ -38,7 +38,7 @@ describe("Khai báo Hải quan", () => {
     await userEvent.keyboard("{Escape}");
 
     await userEvent.click(within(row).getByRole("button", { name: `Thao tác khác – ${code19()}` }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /Mở hồ sơ/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /Mở hồ sơ/ }, T));
     expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/dossiers\/[^?]+$/));
     await expectNoA11yViolations(container);
   }, 20_000);
@@ -83,14 +83,14 @@ describe("Khai báo Hải quan – lối tắt qua khu vực giám sát", () => 
     const { code, row } = await rowOf("dos_029");
     await userEvent.click(within(row).getByRole("button", { name: `Thao tác khác – ${code}` }));
     expect(screen.queryByRole("menuitem", { name: /In bản kê mã vạch/ })).toBeNull();
-    await userEvent.click(await screen.findByRole("menuitem", { name: /Qua khu vực giám sát/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /Qua khu vực giám sát/ }, T));
     expect(push).toHaveBeenCalledWith("/dossiers/dos_029?step=submit#kvgs-1");
   }, 20_000);
 
   it("tờ chưa thông quan không có 'Qua khu vực giám sát'", async () => {
     const { code, row } = await rowOf("dos_019");
     await userEvent.click(within(row).getByRole("button", { name: `Thao tác khác – ${code}` }));
-    await screen.findByRole("menuitem", { name: /Mở hồ sơ/ });
+    await screen.findByRole("menuitem", { name: /Mở hồ sơ/ }, T);
     expect(screen.queryByRole("menuitem", { name: /Qua khu vực giám sát/ })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /In bản kê mã vạch/ })).toBeNull();
   }, 20_000);
@@ -103,7 +103,7 @@ describe("Khai báo Hải quan – lối tắt qua khu vực giám sát", () => 
     });
     const { code, row } = await rowOf("dos_029");
     await userEvent.click(within(row).getByRole("button", { name: `Thao tác khác – ${code}` }));
-    await userEvent.click(await screen.findByRole("menuitem", { name: /In bản kê mã vạch/ }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /In bản kê mã vạch/ }, T));
     expect(push).toHaveBeenCalledWith("/dossiers/dos_029/kvgs/1/print");
   }, 20_000);
 });

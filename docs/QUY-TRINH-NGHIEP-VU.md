@@ -304,7 +304,7 @@ Màn sắp theo **dòng đời tờ khai**: đầu trang là số tờ khai, ph�
 | ① Khai báo tờ khai | **IDA**/EDA → **IDB**/EDB → **IDC**/EDC | Khai tạm (nhận số tờ khai, thuế dự kiến) → gọi sửa khai tạm nếu cần → khai chính thức (phân luồng) |
 | ② Sửa đổi bổ sung (trước thông quan) | **IDD**/EDD → **IDA01**/EDA01 → **IDE**/EDE | Gọi tờ khai đã phân luồng về → khai tạm sửa đổi → khai chính thức sửa đổi |
 | ③ Sửa đổi sau thông quan | **AMA** → **AMB** → **AMC** | Bản khai bổ sung riêng (tờ khai gốc giữ nguyên): khai tạm → gọi sửa bản khai tạm → khai chính thức (trong 60 ngày – TT121 Điều 20) |
-| ④ Chứng từ & cảng | **HYS** (bộ riêng của hồ sơ, xem 9.4) · **Container qua KVGS** · **Lệ phí cảng biển** | Số hóa chứng từ · đưa container qua khu vực giám sát · nộp lệ phí cảng biển |
+| ④ Chứng từ & cảng | **HYS** (bộ riêng của hồ sơ, xem 9.4) · **CONT_LIST** (khai danh sách container) · **KVGS** (lấy DS qua khu vực giám sát, xem 9.5) · **Lệ phí cảng biển** | Số hóa chứng từ · khai container/seal · lấy bản kê mã vạch để đưa hàng qua khu vực giám sát · nộp lệ phí cảng biển |
 | Đầu trang | **IID** / IEX | Tra cứu trạng thái tờ khai, dùng mọi lúc khi đã có số tờ khai |
 
 ### 9.1 Chuyển giai đoạn
@@ -401,6 +401,15 @@ flowchart LR
 - **Điền 1.63 (IDA) / 2.53 (EDA)**: có số tiếp nhận và **lô còn sửa được** (tờ khai Nháp/Đã duyệt, mọi tờ chưa truyền hoặc đang chờ gửi lại nội dung) → hệ thống điền cặp (phân loại đính kèm, số tiếp nhận) vào ô trống đầu tiên trong 3 cặp, nguồn "Hệ thống", ghi `field_audit` (nguồn `HYS_FILL`); tờ khai **giữ trạng thái đã duyệt** và Review ghi "điền sau khi duyệt". **Đã đủ 3 cặp** (lô còn sửa được): khi bấm Gửi HYS, hộp xác nhận cảnh báo và bắt chọn 1 cặp sẽ bị thay (chưa chọn không gửi được; API thiếu → `HYS_SLOTS_FULL`); Hải quan cấp số → ghi phân loại/số mới vào đúng cặp đã chọn (`REPLACED`, `field_audit` cũ → mới); bộ cũ bị thay vẫn trong danh sách kèm "Không còn trong ô 1.63"; thẻ HYS cảnh báo trước khi tạo bộ mới. Nhận số mà vẫn đủ cặp và không có cặp chọn trước → không ghi đè, cảnh báo; không có số tiếp nhận → nhập tay. **LOCKED**: lô không còn sửa được (đã khai, đang truyền, gọi về một phần) → chỉ ghi lịch sử, không tự điền: người khai gọi về tất cả tờ rồi tự nhập số tiếp nhận vào 1.63/2.53; khi luồng vàng/đỏ thẻ nhắc khai HYS bổ sung.
 - **Gợi ý** (code thuần `suggestHys`, chỉ cảnh báo, không bắt buộc; mã đã khai thì thôi gợi ý – "đã khai": bộ cùng mã thủ tục đã được Hải quan nhận và số tiếp nhận của bộ đang nằm trong 1.63/2.53 (bị bộ sau thay cặp thì gợi ý lại; bộ đang gửi / chưa có số vẫn bị nhắc); cặp nhập tay (số không thuộc bộ HYS nào của hồ sơ) chỉ tính khi khớp rõ: phân loại INV thỏa G2, ALL thỏa mọi gợi ý, phân loại khác vẫn nhắc. A99 có thể do G2 và G5 – chỉ tắt khi cả hai đều thỏa): G1 hàng đi container (IDA ô 1.35 > 0; EDA > 50 container) → A02; G2 bảng kê nhiều hóa đơn (`TK_IV1` = B) → A99; G3 có điều chỉnh trị giá không thuộc mã 6/7 hoặc `KTG_FR1` = D → A01; G4 bảo lãnh riêng (`TK_ENC` = A) → A08; G5 ghi chú dài quá chỉ tiêu → A99.
 - **Xác nhận khi bỏ qua**: còn gợi ý chưa khai mà bấm Ký số & khai tạm (IDA/EDA lần đầu, hoặc khai lại sau gọi về) → backend trả `HYS_SUGGESTED`, giao diện hiện hộp "Nên khai HYS trước" với **Khai HYS trước** hoặc **Vẫn khai, không cần HYS** (gọi lại với `hysWaived`); xác nhận được ghi vào nhật ký thông điệp. Không áp dụng cho IDC/EDC, gọi về, IDA01/EDA01, AMA và các tờ nối tiếp.
+
+### 9.5 Qua khu vực giám sát – danh sách container và bản kê mã vạch (ADR 0014)
+
+Đặc tả: `docs/superpowers/specs/2026-11-13-qua-khu-vuc-giam-sat-kvgs-design.md`. Thẻ "Qua khu vực giám sát" nằm ở nhóm ④ của bước Truyền Hải quan; màn Khai báo Hải quan có lối tắt tới thẻ này. Cả hai nghiệp vụ chạy qua outbox + worker (gửi → hỏi phản hồi, idempotent, như HYS), không trừ lượt khai, mỗi lần gọi FPT ghi `usage_events`.
+
+- **CONT_LIST – khai danh sách container**: chỉ hàng **nhập đường biển đi container**, sau khi tờ khai có số. Bảng container điền sẵn từ vận đơn đã OCR (số container, số seal); người khai kiểm và sửa (sửa ô ghi `field_audit`). Kiểm **số container theo ISO 6346** (4 chữ + 7 số, chữ số kiểm tra) và **số seal bắt buộc** trước khi gửi; có "Lấy lại từ vận đơn" và nhập/xuất Excel. Gửi qua `V5ContainerReq`, hỏi kết quả `V5ContainerRes` (worker hỏi lại tới khi có phản hồi). Mỗi lần khai là một dòng `container_lists`.
+- **KVGS – lấy danh sách qua khu vực giám sát**: mọi tờ khai **đã thông quan**. Nút "Lấy DS qua KVGS" gửi yêu cầu theo số tờ khai/ngày đăng ký/chi cục; job `kvgs-poll` hỏi lại mỗi 30 giây, tối đa 40 lần rồi báo không có phản hồi (`NO_RESPONSE`). Kết quả chuẩn hóa thành `KvgsSheet` (có mã vạch do Hải quan cấp – hệ thống không tự sinh); mỗi tờ chỉ một bản đang gửi tại một thời điểm, các bản cũ giữ lại làm lịch sử.
+- **In bản kê**: trang in riêng (A4, đen trắng cả chế độ tối, chỉ tiếng Việt) dựng đúng mẫu **Danh sách container** (hàng container) hoặc **Danh sách hàng hóa đủ điều kiện qua KVGS** (hàng lẻ), kèm mã QR + Code128 từ dữ liệu KVGS mới nhất; tự chia trang. Công chức giám sát quét mã, đối chiếu rồi ký – đóng dấu trên bản in.
+- **Chưa làm**: cổng KVGS thật (chờ đặc tả phản hồi của FPT); bảng container hàng xuất (2.60) chỉ đọc; khai danh sách container cho hàng xuất.
 
 ## 10. Cấu hình doanh nghiệp
 
@@ -552,7 +561,7 @@ Chức năng: tổng quan "Cần chú ý" (`LOW_CREDITS` – PAYG còn ≤ 3 lư
 
 | Mảng | Hiện trạng |
 |---|---|
-| Kết nối FPT.VNACCS | Chưa có đặc tả API cho IDB, IDD, IDA01, IDE, AMB, AMC, container qua KVGS, lệ phí cảng biển; AMA đã ánh xạ nhưng đường dẫn API và vỏ phản hồi chưa đối chiếu với FPT |
+| Kết nối FPT.VNACCS | Chưa có đặc tả API cho IDB, IDD, IDA01, IDE, AMB, AMC, lệ phí cảng biển; KVGS thật chờ FPT gửi đặc tả phản hồi (cổng thật trả NOT_SUPPORTED, mới chạy với giả lập – ADR 0014; khai danh sách container `V5ContainerReq/Res` đã nối); AMA đã ánh xạ nhưng đường dẫn API và vỏ phản hồi chưa đối chiếu với FPT |
 | Thuế dự kiến (bước 4–5) | Theo đặc tả VNACCS IDA (7.2) nhưng chưa có thuế suất thuế bổ sung, TTĐB, BVMT và mức thuế tuyệt đối trên dòng hàng → ước tính mới có thuế NK theo % và GTGT (công thức GTGT đã sẵn chỗ cộng các sắc thuế đó). Làm tròn đồng từng dòng (VNACCS làm tròn 4 số lẻ, tròn đồng ở tổng – lệch ≤ 0,5 đồng/dòng/sắc thuế). Chưa tính bảo hiểm tổng hợp (mã điều kiện giá 3, 7); chưa áp mức giảm theo mã miễn / giảm 1.92, 1.95; chưa có tổng thuế bổ sung, BVMT và tổng thuế chung |
 | Người trả cước trên vận đơn | Chỉ đọc "Freight Prepaid / Collect" ở vận đơn đường biển; AWB chưa đọc → luật R-FREIGHT-TERM bỏ qua với lô hàng không. Hồ sơ đọc chứng từ trước khi có trường này → bỏ qua tới khi đọc lại vận đơn |
 | AMA – tự tính thuế "Sau" | Chỉ thuế XNK và GTGT theo %; thuế tuyệt đối, TTĐB, BVMT, chống bán phá giá người khai nhập tiền thuế |

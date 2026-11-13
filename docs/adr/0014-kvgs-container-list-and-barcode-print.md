@@ -1,6 +1,6 @@
 # ADR 0014 – Qua khu vực giám sát: khai danh sách container, lấy DS qua KVGS, in bản kê mã vạch
 
-- Trạng thái: Đề xuất
+- Trạng thái: Chấp thuận (2026-11-13)
 - Ngày: 2026-11-13
 - Spec: `docs/superpowers/specs/2026-11-13-qua-khu-vuc-giam-sat-kvgs-design.md`
 
@@ -19,5 +19,8 @@ Luồng tờ khai đã có bước `CONT` ở nhóm "Chứng từ & cảng" như
 
 ## Hệ quả
 - Gateway `KVGS` thật phải đối chiếu lại khi FPT gửi đặc tả phản hồi; tới lúc đó chỉ có giả lập (`apps/fpt-mock`, mock web) và bộ ánh xạ linh hoạt + lưu phản hồi thô.
+- Khi triển khai: cổng `KVGS` thật trả `NOT_SUPPORTED` cho tới khi FPT gửi đặc tả phản hồi (chưa gọi FPT thật); `V5ContainerReq/Res` đã nối thật.
+- Bảng `kvgs_sheets` có unique index từng phần: một bản `SENDING` cho mỗi (hồ sơ, tờ khai) – chặn gửi trùng ở mức CSDL.
+- `field_audit` ghi sau khi commit (như AMA_EDIT), không nằm trong transaction lưu bảng container.
 - Thêm một phụ thuộc (`bwip-js`) vào `@kb/ui`.
 - Khai HYS danh sách container và đóng chung container nhiều tờ khai để đợt sau.

@@ -245,17 +245,17 @@ OPS = {
                      "purpose": "Theo REF_ID: số tiếp nhận, trạng thái.", "when": "Sau ContainerReq.",
                      "fields": [("Body + phản hồi", "KHAI BAO DS CONT.xlsx", "Response", "both")]},
     "V5ContainerReq": {"group": "transport", "title": "Khai danh sách container (bản V5)", "code": None, "postman": False,
-                       "purpose": "Khai danh sách container/seal theo vận đơn cho tờ khai đã có số – **bản dùng** (Excel v1.1; số seal bắt buộc). Postman chỉ có bản cũ ContainerReq.",
+                       "purpose": "Khai danh sách container/seal theo vận đơn cho tờ khai đã có số – **bản dùng**, đã nối (Excel v1.1; số seal bắt buộc). Postman chỉ có bản cũ ContainerReq.",
                        "when": "Sau khi có số tờ khai.", "next": ["V5ContainerRes"],
                        "fields": [("Body", "KHAI BAO DANH SACH CONTAINER v1.1.xlsx", "Khai danh sách container", "req")]},
     "V5ContainerRes": {"group": "transport", "title": "Hỏi kết quả khai danh sách container (bản V5)", "code": None, "postman": False,
-                       "purpose": "Theo REF_ID.", "when": "Sau V5ContainerReq.",
+                       "purpose": "Theo REF_ID. Đã nối (13/11/2026).", "when": "Sau V5ContainerReq.",
                        "fields": [("Body + phản hồi", "KHAI BAO DANH SACH CONTAINER v1.1.xlsx", "Hỏi kết quả danh sách container", "both"), ("errorList[]", "KHAI BAO DANH SACH CONTAINER v1.1.xlsx", "errorList", "res")]},
     "KVGS": {"group": "transport", "title": "Thông tin qua khu vực giám sát (mã vạch container)", "code": None,
              "purpose": "Lấy thông tin để đưa hàng/container qua khu vực giám sát hải quan (danh sách container + mã vạch) theo số tờ khai.",
              "when": "Sau thông quan / giải phóng hàng.", "fields": [],
              "body_note": "`TK_SOTK`, `TK_NGAYDK` (dd/MM/yyyy), `TK_MAHQ`, `MA_DV` – không có tài khoản VNACCS.",
-             "response_note": "Chưa có đặc tả phản hồi trong bộ tài liệu."},
+             "response_note": "Chưa có đặc tả phản hồi trong bộ tài liệu. Tích hợp: chờ đặc tả phản hồi – hiện giả lập trong fpt-mock (2 bước)."},
     # ───────── In ─────────
     "PrintObjectRefIDA": {"group": "print", "title": "In tờ khai nhập từ object", "code": None,
                           "purpose": "Gửi object tờ khai nhập (như phản hồi IDA/IID: objVN_IDA, _VANDON, _KTG, _THUE, _TRANGTHAI, _CTHQ, _HANG) → nhận bản in.",
@@ -295,8 +295,9 @@ GAPS = [
     ("Gọi lại / sửa đổi", "Đã nối: IDB/EDB, IDD/EDD (body số tờ khai), IDA01/EDA01 (như IDA/EDA, đầu tờ khai mang số), IDE/EDE (trả phân luồng), AMB/AMC (body tK_SYN của bản khai bổ sung).", "–"),
     ("Phản hồi bất đồng bộ", "Đã nối: mỗi lượt hỏi trạng thái (customs-poll) gọi VNACCSREP trước, ghi thông điệp vào nhật ký của đúng tờ khai, cập nhật luồng/thông quan; sau đó vẫn tra IID/IEX.", "–"),
     ("HYS", "Gửi phẳng + `lisT_FILE` – đúng Excel (Postman bọc `objVN_HYS` + `lisT_FILE_HYS`, có thể cũ).", "Đối chiếu khi có phản hồi thật."),
-    ("Container", "Chưa làm.", "Dùng V5ContainerReq/Res (Excel v1.1)."),
-    ("Bổ sung chứng từ V5, định danh, tách vận đơn, KVGS, in, SyncCategory", "Chưa gọi (định danh/tách vận đơn mới có panel giao diện). Mock đã có đủ để làm.", "Làm theo thứ tự ưu tiên nghiệp vụ. KyFile không bắt buộc."),
+    ("Container", "Đã nối (13/11/2026): V5ContainerReq/Res – body phẳng, USER_ID, không gửi mật khẩu; ADR 0014.", "Bản cũ ContainerReq/Res không dùng."),
+    ("KVGS", "Chờ đặc tả phản hồi của FPT: cổng thật trả NOT_SUPPORTED; giả lập hai bước trong fpt-mock (gửi → hỏi lại) và bộ ánh xạ linh hoạt.", "Nối thật khi FPT gửi đặc tả phản hồi."),
+    ("Bổ sung chứng từ V5, định danh, tách vận đơn, in, SyncCategory", "Chưa gọi (định danh/tách vận đơn mới có panel giao diện). Mock đã có đủ để làm.", "Làm theo thứ tự ưu tiên nghiệp vụ. KyFile không bắt buộc."),
 ]
 
 # Thứ tự ưu tiên khi các nguồn lệch nhau: phản hồi thật (docdungapivnacss) > Excel đặc tả > Postman (có thể cũ).

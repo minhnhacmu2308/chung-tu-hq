@@ -1,6 +1,7 @@
 // Phần dùng chung của các use case danh mục: ánh xạ DTO, lỗi, nhật ký field_audit (cùng transaction), tra bộ mã theo loại.
 import { itemUnitKey, type CatalogItem, type CatalogMode, type CodeSet, type CodeSetKind, type ItemAlias } from "@kb/contracts";
 import type { Ctx } from "../../../shared/ctx.js";
+import { Decimal } from "../../../shared/decimal.js";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import type { Result } from "../../../shared/result.js";
 import type { OrgId } from "../../../shared/ids.js";
@@ -72,6 +73,7 @@ export function toItemDto(r: CatalogItemRow): CatalogItem {
   return {
     id: r.id, itemNo: r.itemNo, kind: r.kind, name: r.name, hsCode: r.hsCode, baseUnit: r.baseUnit, origin: r.origin, tariffSchedule: r.tariffSchedule,
     importDutyRate: r.importDutyRate, vatRate: r.vatRate, envTaxRate: r.envTaxRate, exciseRate: r.exciseRate, safeguardRate: r.safeguardRate, antiDiscriminationRate: r.antiDiscriminationRate,
+    qty2Unit: r.qty2Unit, qty2Factor: r.qty2Factor === null ? null : new Decimal(r.qty2Factor).toFixed(),
     description: r.description, note: r.note, timesDeclared: r.timesDeclared, lastDeclarationNo: r.lastDeclarationNo, lastDeclarationDate: r.lastDeclarationDate,
     status: r.status, mergedIntoId: r.mergedIntoId, source: r.source, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   };

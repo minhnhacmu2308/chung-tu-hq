@@ -20,7 +20,8 @@ const RATE_FIELDS = new Set(["importDutyRate", "vatRate", "envTaxRate", "exciseR
 function formatError(t: Messages, tm: MappingMessages, field: string): string {
   if (field === "hs") return t.errHsFormat;
   if (field === "factor") return t.errFactorFormat;
-  if (field === "unit") return t.errUnitFormat;
+  if (field === "unit" || field === "qty2Unit") return t.errUnitFormat;
+  if (field === "qty2Factor") return tm.errQty2FactorFormat;
   if (field === "kind") return tm.errKindFormat;
   if (field === "origin") return tm.errOriginFormat;
   if (RATE_FIELDS.has(field)) return tm.errRateFormat;
@@ -30,6 +31,9 @@ function formatError(t: Messages, tm: MappingMessages, field: string): string {
 export function rowErrorText(t: Messages, tm: MappingMessages, field: string, code: string): string {
   if (code === "TOO_LONG") return fill(t.errTOO_LONG, { max: field in ITEM_IMPORT_MAX_LENGTH ? ITEM_IMPORT_MAX_LENGTH[field as keyof typeof ITEM_IMPORT_MAX_LENGTH] : "" });
   if (code === "INVALID_FORMAT") return formatError(t, tm, field);
+  // ĐVT số lượng 2 + tỷ lệ đi theo cặp: thiếu một trong hai → câu riêng (không phải "thiếu mã/tên").
+  if (code === "MISSING" && field === "qty2Factor") return tm.errQty2FactorMissing;
+  if (code === "MISSING" && field === "qty2Unit") return tm.errQty2UnitMissing;
   if (code === "MISSING" || code === "DUPLICATE_IN_FILE" || code === "UNKNOWN_UNIT") return t[`err${code}`];
   return t.errOther;
 }

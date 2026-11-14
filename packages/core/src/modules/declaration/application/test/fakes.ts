@@ -123,7 +123,7 @@ export class FakeCatalog implements DeclarationCatalogPort {
   constructor(public orgId = "org_a") {}
   static key = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[\s\-./_]+/g, "");
   addItem(info: Partial<CatalogItemInfo> & { id: string }, supplierCodes: string[] = [], seller = "HANSOL PRECISION CO., LTD.") {
-    this.items.set(info.id, { itemNo: `MH-${info.id}`, name: `Hàng ${info.id}`, hsCode: null, baseUnit: null, customs: null, codes: supplierCodes, conversion: null, ...info });
+    this.items.set(info.id, { itemNo: `MH-${info.id}`, name: `Hàng ${info.id}`, hsCode: null, baseUnit: null, customs: null, codes: supplierCodes, conversion: null, qty2: null, ...info });
     for (const c of supplierCodes) this.aliases.set(`${FakeCatalog.key(seller)}|${FakeCatalog.key(c)}`, info.id);
   }
   async resolveMany(orgId: string, qs: CatalogQuery[]): Promise<CatalogResolved[]> {

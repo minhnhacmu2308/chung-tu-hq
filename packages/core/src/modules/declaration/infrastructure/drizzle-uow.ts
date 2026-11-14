@@ -9,7 +9,8 @@ import { Decimal } from "../../../shared/decimal.js";
 import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProfileRow } from "../application/ports.js";
 
 function repos(tx: Tx): DeclarationRepos {
-  const toItem = (r: typeof lineItems.$inferSelect): LineItemRow => ({ ...r, hsStatus: r.hsStatus as LineItemRow["hsStatus"], hsQuestion: r.hsQuestion as LineItemRow["hsQuestion"], hsError: r.hsError as LineItemRow["hsError"], hsDetail: r.hsDetail as LineItemRow["hsDetail"], taxDetail: r.taxDetail as LineItemRow["taxDetail"], unitFactor: r.unitFactor === null ? null : new Decimal(r.unitFactor).toFixed() });
+  const toItem = (r: typeof lineItems.$inferSelect): LineItemRow => ({ ...r, hsStatus: r.hsStatus as LineItemRow["hsStatus"], hsQuestion: r.hsQuestion as LineItemRow["hsQuestion"], hsError: r.hsError as LineItemRow["hsError"], hsDetail: r.hsDetail as LineItemRow["hsDetail"], taxDetail: r.taxDetail as LineItemRow["taxDetail"], unitFactor: r.unitFactor === null ? null : new Decimal(r.unitFactor).toFixed(),
+    quantity2Qty: r.quantity2Qty === null ? null : new Decimal(r.quantity2Qty).toFixed(), quantity2Factor: r.quantity2Factor === null ? null : new Decimal(r.quantity2Factor).toFixed() });
   const toJob = (r: typeof hsJobs.$inferSelect): HsJobRow => ({ ...r, status: r.status as HsJobRow["status"] });
   const toSug = (r: typeof hsSuggestions.$inferSelect): HsSuggestionRow => ({ ...r, rates: r.rates as HsSuggestionRow["rates"] });
   const toDecl = (r: typeof declarations.$inferSelect): DeclarationRow => ({ ...r, kind: r.kind as DeclarationRow["kind"], status: r.status as DeclarationRow["status"], fields: r.fields as DeclarationRow["fields"], valueAdjustments: r.valueAdjustments as DeclarationRow["valueAdjustments"] });

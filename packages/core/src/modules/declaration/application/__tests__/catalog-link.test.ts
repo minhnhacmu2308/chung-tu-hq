@@ -13,6 +13,7 @@ import { buildFptRequest, sentSheetsError, sheetSnapshot } from "../../../integr
 import { runAgent, startAgentRun } from "../agent-run.js";
 import { listLineCatalogItems } from "../catalog-source.js";
 import { getDeclarationSnapshot, markDeclarationDraft, refreshFromShipment } from "../customs-bridge.js";
+import { quantity2AfterLineEdit } from "../_dto.js";
 import { approveDeclaration, getDeclarationView, moveToReview, updateDeclarationField } from "../declaration.js";
 import { linkLineItem, setLineUnitFactor } from "../line-catalog.js";
 import { confirmHs, listLineItems } from "../line-items.js";
@@ -250,6 +251,111 @@ describe("gợi ý lượng theo ĐVT khai (quy đổi)", () => {
       expect(it.qtySuggestion).toBeUndefined();
     }
     expect(errCode(await getDeclarationView(deps, other, D))).toBe("NOT_FOUND");
+  });
+});
+
+describe("Số lượng (2) theo ĐVT 2 của mặt hàng (spec 2026-11-14 số lượng 2)", () => {
+  beforeEach(() => {
+    // 1 ROL = 100 MTR; 1 MTR = 0.2 KGM → dòng 20 ROL = 2000 MTR = 400 KGM.
+    catalog.addItem({ id: "cat_vai", name: "Vải cotton", baseUnit: "MTR", customs: { codeSetId: "cst_xnk", aliasId: "ali_vai", code: "XNK-VAI", unit: "MTR" }, conversion: { base: "MTR", factors: { ROL: "100" } }, qty2: { unit: "KGM", factor: "0.2" } }, ["6205-2RS"]);
+    const s = shipments.byDossier[D]!;
+    s.items[0]!.unit.value = "ROL";
+    s.items[0]!.quantity.value = "20";
+  });
+
+  const build = (s: NonNullable<Awaited<ReturnType<typeof getDeclarationSnapshot>>>) =>
+    (buildFptRequest({ kind: s.kind, direction: s.direction, currency: s.currency, fields: s.fields, items: s.items, adjustments: s.adjustments, containers: s.containers, itemNotes: s.itemNotes }).request as unknown as { objVN_IDA_HANG: Record<string, unknown>[] }).objVN_IDA_HANG;
+  const setRatio = (factor: string) => (catalog.items.get("cat_vai")!.qty2 = { unit: "KGM", factor });
+
+  it("LƯU trên dòng khi áp kế hoạch danh mục; hệ số theo lô tính lại + lưu; dòng không có ĐVT 2 → vắng; màn hình đọc giá trị đã lưu", async () => {
+    const lines = unwrap(await listLineItems(deps, declarant, D));
+    expect(lines[0]!.quantity2).toEqual({ qty: "400", unit: "KGM", factor: "20" });
+    expect(uow.data.lineItems[0]).toMatchObject({ quantity2Qty: "400", quantity2Unit: "KGM", quantity2Factor: "20" });
+    expect(lines[1]!.quantity2).toBeUndefined();
+    expect(unwrap(await setLineUnitFactor(deps, declarant, lines[0]!.id, "95")).quantity2).toEqual({ qty: "380", unit: "KGM", factor: "19" });
+    expect(uow.data.lineItems[0]).toMatchObject({ quantity2Qty: "380", quantity2Factor: "19" });
+    // Danh mục đổi tỷ lệ: màn hình KHÔNG tự tính lại (chưa đồng bộ) – vẫn hiện giá trị đã lưu = giá trị sẽ truyền.
+    setRatio("0.5");
+    expect(unwrap(await getDeclarationView(deps, declarant, D)).items[0]).toMatchObject({ quantity2: { qty: "380", unit: "KGM" } });
+    // Lần đồng bộ sau (dòng chưa khóa) nhận tỷ lệ mới: 20 ROL × 95 × 0,5 = 950.
+    unwrap(await refreshFromShipment(deps, declarant, D));
+    expect(uow.data.lineItems[0]).toMatchObject({ quantity2Qty: "950", quantity2Factor: "47.5" });
+    // Org khác không đổi được hệ số lô (không tính lại).
+    expect(errCode(await setLineUnitFactor(deps, other, lines[0]!.id, "10"))).toBe("NOT_FOUND");
+    expect(uow.data.lineItems[0]!.quantity2Qty).toBe("950");
+  });
+
+  it("payload FPT đọc giá trị ĐÃ LƯU: danh mục đổi tỷ lệ sau khi duyệt / cổng danh mục lỗi → payload không đổi; ô người khai nhập thắng", async () => {
+    await readyToApprove();
+    unwrap(await updateDeclarationField(deps, declarant, D, `HANG.${uow.data.lineItems[1]!.id}.HAG_QN2`, "7.5"));
+    unwrap(await approveDeclaration(deps, approver, D));
+    const snap = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
+    expect(snap.items[0]).toMatchObject({ quantity2: { qty: "400", unit: "KGM" } });
+    expect(snap.items[1]).not.toHaveProperty("quantity2");
+    const hang = build(snap);
+    expect(hang[0]![fptKey("HAG_QN2")]).toBe(400);
+    expect(hang[0]![fptKey("HAG_QT2")]).toBe("KGM");
+    expect(hang[1]![fptKey("HAG_QN2")]).toBe(7.5);
+    // Sau khi duyệt: danh mục đổi tỷ lệ + cổng danh mục lỗi lúc truyền → vẫn gửi đúng 400 KGM đã duyệt (không gọi danh mục khi dựng payload).
+    setRatio("0.5");
+    catalog.describeItems = async () => { throw new Error("catalog down"); };
+    catalog.failResolve = true;
+    const later = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
+    expect(later.items[0]).toMatchObject({ quantity2: { qty: "400", unit: "KGM" } });
+    expect(build(later)[0]![fptKey("HAG_QN2")]).toBe(400);
+  });
+
+  it("danh mục lỗi + OCR đổi SL dòng → Số lượng (2) tính lại theo tỷ lệ dòng đã lưu; đổi ĐVT → xóa (SL2 = SL1); payload theo giá trị mới", async () => {
+    await readyToApprove();
+    expect(uow.data.lineItems[0]).toMatchObject({ quantity2Qty: "400", quantity2Factor: "20" });
+    catalog.failResolve = true;
+    catalog.describeItems = async () => { throw new Error("catalog down"); };
+    const s = shipments.byDossier[D]!;
+    s.items[0]!.quantity.value = "30.333";
+    unwrap(await refreshFromShipment(deps, declarant, D));
+    // 30,333 ROL × 20 KGM/ROL = 606,66 KGM (2 số lẻ).
+    expect(uow.data.lineItems[0]).toMatchObject({ quantity: "30.333", quantity2Qty: "606.66", quantity2Unit: "KGM", quantity2Factor: "20" });
+    const snap = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
+    expect(build(snap)[0]![fptKey("HAG_QN2")]).toBe(606.66);
+    s.items[0]!.unit.value = "MTR";
+    unwrap(await refreshFromShipment(deps, declarant, D));
+    expect(uow.data.lineItems[0]).toMatchObject({ unit: "MTR", quantity2Qty: null, quantity2Unit: null, quantity2Factor: null });
+    const after = build((await getDeclarationSnapshot(deps, ORG_ID, D))!);
+    expect(after[0]![fptKey("HAG_QN2")]).toBe(30.333);
+    expect(after[0]![fptKey("HAG_QT2")]).toBe("MTR");
+  });
+
+  it("quantity2AfterLineEdit: dòng tờ khóa giữ nguyên; không đổi SL/ĐVT hoặc chưa có giá trị lưu → không làm gì", () => {
+    const row = { lineNo: 1, quantity: "30", unit: "ROL", quantity2Qty: "400", quantity2Unit: "KGM", quantity2Factor: "20" };
+    expect(quantity2AfterLineEdit({ quantity: "20", unit: "ROL" }, row, new Set([1]))).toBeNull();
+    expect(quantity2AfterLineEdit({ quantity: "30.0", unit: "rol" }, row)).toBeNull();
+    expect(quantity2AfterLineEdit({ quantity: "20", unit: "ROL" }, { ...row, quantity2Qty: null })).toBeNull();
+    expect(quantity2AfterLineEdit({ quantity: "20", unit: "ROL" }, row)).toEqual({ quantity2Qty: "600", quantity2Unit: "KGM", quantity2Factor: "20" });
+    expect(quantity2AfterLineEdit({ quantity: "20", unit: "ROL" }, { ...row, quantity2Factor: null })).toEqual({ quantity2Qty: null, quantity2Unit: null, quantity2Factor: null });
+  });
+
+  it("danh mục lỗi + dòng thuộc tờ đã gửi: đồng bộ có kế hoạch (frozen) giữ Số lượng (2) dù SL dòng đổi", async () => {
+    await readyToApprove();
+    deps.customsSheets = async () => [{ no: 1, stage: "PRE_DECLARED", declarationNo: "104000000001" }];
+    shipments.byDossier[D]!.items[0]!.quantity.value = "25";
+    unwrap(await refreshFromShipment(deps, declarant, D));
+    expect(uow.data.lineItems[0]).toMatchObject({ quantity2Qty: "400", quantity2Factor: "20" });
+  });
+
+  it("dòng thuộc tờ đã gửi (khóa): đồng bộ sau khi danh mục đổi tỷ lệ giữ Số lượng (2) đã lưu; ảnh chụp đã gửi có quantity2 và bắt được thay đổi", async () => {
+    await readyToApprove();
+    const snap0 = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
+    const payload = (s: typeof snap0) => ({ kind: s.kind, direction: s.direction, currency: s.currency, fields: s.fields, items: s.items, adjustments: s.adjustments, containers: s.containers });
+    const sent = sheetSnapshot(payload(snap0), 1);
+    expect(sent.lines).toContain("quantity2");
+    deps.customsSheets = async () => [{ no: 1, stage: "PRE_DECLARED", declarationNo: "104000000001" }];
+    setRatio("0.5");
+    unwrap(await refreshFromShipment(deps, declarant, D));
+    expect(uow.data.lineItems[0]).toMatchObject({ quantity2Qty: "400", quantity2Factor: "20" });
+    expect(sheetSnapshot(payload((await getDeclarationSnapshot(deps, ORG_ID, D))!), 1)).toEqual(sent);
+    // Nội dung dòng (Số lượng (2)) khác nội dung đã gửi → ảnh chụp khác (guard SENT_SHEETS_CHANGED bắt được).
+    const changed = { ...payload(snap0), items: snap0.items.map((i, k) => (k === 0 ? { ...i, quantity2: { qty: "1000", unit: "KGM" } } : i)) };
+    expect(sheetSnapshot(changed, 1).lines).not.toEqual(sent.lines);
   });
 });
 

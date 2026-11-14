@@ -39,6 +39,11 @@ describe("đổi ĐVT gốc – hàm thuần (như domain/rebase.ts)", () => {
     expect(planRebase({ baseUnit: "PCE", newBase: "DZN", conversions: [], factor: "12" })).toMatchObject({ kind: "REBASE", conversions: [{ unit: "PCE", factor: "0.083333333" }] });
   });
 
+  it("tỷ lệ ĐVT số lượng 2 nhân f (như backend); ĐVT 2 = gốc mới → 1; không có ĐVT 2 → không có qty2Factor", () => {
+    expect(planRebase({ baseUnit: "PCE", newBase: "CT", conversions: [{ unit: "CT", factor: "12" }], qty2: { unit: "KGM", factor: "0.25" } })).toMatchObject({ qty2Factor: { oldValue: "0.25", newValue: "3" } });
+    expect(planRebase({ baseUnit: "PCE", newBase: "CT", conversions: [], factor: "12", qty2: { unit: "ct", factor: "0.083333333" } })).toMatchObject({ qty2Factor: { newValue: "1" } });
+    expect(planRebase({ baseUnit: "PCE", newBase: "CT", conversions: [], factor: "12" })).not.toHaveProperty("qty2Factor");
+  });
   it("SAME / SET_BASE / NO_FACTOR (thiếu hệ số, hoặc kết quả tròn về 0)", () => {
     expect(planRebase({ baseUnit: "pce", newBase: "PCE", conversions: [] }).kind).toBe("SAME");
     expect(planRebase({ baseUnit: null, newBase: "PCE", conversions: [] }).kind).toBe("SET_BASE");

@@ -132,7 +132,7 @@ export async function decideQueue(deps: CatalogDeps, ctx: Ctx, id: string, input
           id: deps.idGen.next("cat"), orgId: ctx.orgId, itemNo: await freeItemNo(r, ctx), kind: input.kind ?? fields?.kind ?? "GOODS", name, nameKey: itemNameKey(name),
           hsCode: fields?.hsCode ?? q.hsCode, baseUnit: q.unit, origin: fields?.origin ?? null, tariffSchedule: fields?.tariffSchedule ?? null, importDutyRate: fields?.importDutyRate ?? null,
           vatRate: fields?.vatRate ?? null, envTaxRate: fields?.envTaxRate ?? null, exciseRate: fields?.exciseRate ?? null, safeguardRate: fields?.safeguardRate ?? null,
-          antiDiscriminationRate: fields?.antiDiscriminationRate ?? null, description: fields?.description ?? null, note: fields?.note ?? null, timesDeclared: 0, lastDeclarationNo: null,
+          antiDiscriminationRate: fields?.antiDiscriminationRate ?? null, qty2Unit: fields?.qty2Unit ?? null, qty2Factor: fields?.qty2Unit ? (fields.qty2Factor ?? null) : null, description: fields?.description ?? null, note: fields?.note ?? null, timesDeclared: 0, lastDeclarationNo: null,
           lastDeclarationDate: null, lastTypeCode: null, status: "ACTIVE", mergedIntoId: null, source: q.importId ? "IMPORT" : "QUEUE", updatedBy: ctx.userId, createdAt: now, updatedAt: now,
         };
         await r.items.insert(item);

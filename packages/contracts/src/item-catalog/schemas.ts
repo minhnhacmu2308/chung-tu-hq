@@ -40,6 +40,10 @@ export const CatalogItemSchema = z.object({
   exciseRate: DecimalStringSchema.nullable(),
   safeguardRate: DecimalStringSchema.nullable(),
   antiDiscriminationRate: DecimalStringSchema.nullable(),
+  /** ĐVT số lượng 2 (mã ĐVT Hải quan) – điền Số lượng (2) 1.84/2.73 trên tờ khai; null = chưa khai báo (SL2 = SL1). */
+  qty2Unit: z.string().nullable(),
+  /** Số ĐVT 2 trong 1 ĐVT gốc (vd 1 PCE = 0.25 KGM → "0.25"); ĐVT 2 = ĐVT gốc → "1". */
+  qty2Factor: DecimalStringSchema.nullable(),
   description: z.string().nullable(),
   note: z.string().nullable(),
   timesDeclared: z.number().int().nonnegative(),
@@ -97,6 +101,9 @@ export const CatalogItemFieldsSchema = z.object({
   exciseRate: CatalogRateSchema.optional(),
   safeguardRate: CatalogRateSchema.optional(),
   antiDiscriminationRate: CatalogRateSchema.optional(),
+  /** ĐVT số lượng 2 + tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc, > 0) – validateItemRows bắt buộc tỷ lệ khi ĐVT 2 khác ĐVT của dòng. */
+  qty2Unit: z.string().trim().min(1).max(30).optional(),
+  qty2Factor: CatalogFactorSchema.optional(),
   description: z.string().trim().min(1).max(500).optional(),
   note: z.string().trim().min(1).max(500).optional(),
 });
@@ -206,6 +213,12 @@ export const UpdateItemInputSchema = CreateItemInputSchema.omit({ codeSetId: tru
   importDutyRate: DecimalStringSchema.nullable().optional(),
   vatRate: DecimalStringSchema.nullable().optional(),
   tariffSchedule: optText.optional(),
+  /**
+   * ĐVT số lượng 2 (mã ĐVT Hải quan, viết hoa) + tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc, > 0). null = bỏ. ĐVT 2 khác ĐVT gốc mà thiếu tỷ lệ →
+   * CATALOG_QTY2_FACTOR_REQUIRED (use case kiểm, vì cần ĐVT gốc); ĐVT 2 = ĐVT gốc → tỷ lệ lưu "1".
+   */
+  qty2Unit: z.string().trim().min(1).max(30).transform((s) => s.toUpperCase()).nullable().optional(),
+  qty2Factor: CatalogFactorSchema.nullable().optional(),
 });
 export type UpdateItemInput = z.infer<typeof UpdateItemInputSchema>;
 

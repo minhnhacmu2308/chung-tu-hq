@@ -126,6 +126,7 @@ export const REASON_TEXT_VI = {
   CATALOG_PARTNER_SET_EXISTS: "Đối tác này đã có bộ mã cùng loại – dùng bộ mã đã có",
   CATALOG_IMPORT_TOO_LARGE: "Mỗi lần gửi tối đa {max} dòng – chia file thành nhiều lần nhập",
   CATALOG_SOURCE_SET_INVALID: "Chỉ bộ mã nội bộ (Mã chung, Kế toán, Kho, XNK) được làm bộ nguồn gốc",
+  CATALOG_QTY2_FACTOR_REQUIRED: "ĐVT số lượng 2 khác ĐVT gốc – nhập tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc, lớn hơn 0)",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

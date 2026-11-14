@@ -408,7 +408,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                 </Alert>
               )}
               {/* Danh mục hàng hóa: ĐVT invoice khác ĐVT khai → phép quy đổi lượng cạnh ô số lượng (cả khi chỉ xem); sửa hệ số lô khi sửa được. */}
-              {item?.qtySuggestion && spot.group.some((g) => QTY_KEYS.has(g.key)) && <QtySuggestionHint item={item} dossierId={dossierId} editable={!readOnlyReason} />}
+              {(item?.qtySuggestion || item?.quantity2) && spot.group.some((g) => QTY_KEYS.has(g.key)) && <QtySuggestionHint item={item} dossierId={dossierId} editable={!readOnlyReason} />}
               <PanelDetails
                 kind={kind}
                 spot={spot}

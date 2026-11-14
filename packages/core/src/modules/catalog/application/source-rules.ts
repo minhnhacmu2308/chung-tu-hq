@@ -20,7 +20,7 @@ export async function rebaseItemTo(deps: Pick<CatalogDeps, "clock" | "idGen">, r
   const nb = newBase.trim();
   if (!nb) return { kind: "SAME", item, conversions: convs };
   const lines = item.baseUnit ? await r.lineFactors.listForItems(ctx.orgId, [item.id]) : [];
-  const plan = planRebase({ baseUnit: item.baseUnit, newBase: nb, conversions: convs, lineFactors: lines.map((l) => ({ id: l.id, factor: l.unitFactor })), ...(factor ? { factor } : {}) });
+  const plan = planRebase({ baseUnit: item.baseUnit, newBase: nb, conversions: convs, lineFactors: lines.map((l) => ({ id: l.id, factor: l.unitFactor })), ...(factor ? { factor } : {}), qty2: item.qty2Unit ? { unit: item.qty2Unit, factor: item.qty2Factor } : null });
   if (plan.kind === "SAME" || plan.kind === "NO_FACTOR") return { kind: plan.kind, item, conversions: convs };
   const now = deps.clock.now();
   const newKey = itemUnitKey(nb);
@@ -46,8 +46,11 @@ export async function rebaseItemTo(deps: Pick<CatalogDeps, "clock" | "idGen">, r
     await r.conversions.upsert(row);
     out.push(row);
   }
-  await r.items.update(ctx.orgId, item.id, { baseUnit: nb, updatedBy: ctx.userId, updatedAt: now });
+  const q2 = plan.qty2Factor ? { qty2Factor: plan.qty2Factor.newValue } : {};
+  await r.items.update(ctx.orgId, item.id, { baseUnit: nb, ...q2, updatedBy: ctx.userId, updatedAt: now });
   audit.push({ itemId: item.id, key: "baseUnit", oldValue: item.baseUnit ?? "", newValue: nb });
+  // Tỷ lệ ĐVT 2 theo gốc mới (cũ × f) – field_audit cùng transaction.
+  if (plan.qty2Factor) audit.push({ itemId: item.id, key: "qty2Factor", oldValue: plan.qty2Factor.oldValue, newValue: plan.qty2Factor.newValue });
   for (const ch of plan.changes) audit.push({ itemId: item.id, key: `conv:${ch.unit}`, oldValue: ch.oldValue, newValue: ch.newValue });
   for (const l of plan.lineFactors) {
     const line = lines.find((x) => x.id === l.id)!;
@@ -55,7 +58,7 @@ export async function rebaseItemTo(deps: Pick<CatalogDeps, "clock" | "idGen">, r
     // Lịch sử của hồ sơ (như sửa hệ số theo lô ở dòng tờ khai): đối tượng = hồ sơ, khóa unitFactor:<số dòng>.
     audit.push({ itemId: line.dossierId, key: `unitFactor:${line.lineNo}`, oldValue: l.oldValue, newValue: l.newValue });
   }
-  return { kind: "REBASED", item: next, conversions: out };
+  return { kind: "REBASED", item: { ...next, ...q2 }, conversions: out };
 }
 
 /** Áp thông tin mặt hàng từ dòng của bộ nguồn gốc (chỉ trường có giá trị và khác hiện tại). Trả mặt hàng sau khi áp. */
@@ -80,6 +83,8 @@ export async function applySourceAttach(
   if (!set.isSource) return null;
   let out: RebaseOutcome = { kind: "SAME", item, conversions: [] };
   if (unit) out = await rebaseItemTo(deps, r, ctx, item, unit, audit);
-  const after = await applySourceFields(deps, r, ctx, out.item, fields, audit);
+  // Không đổi được gốc (thiếu hệ số): tỷ lệ ĐVT 2 của dòng tính theo ĐVT dòng ≠ ĐVT gốc hiện tại → không áp ĐVT 2 / tỷ lệ.
+  const own = out.kind === "NO_FACTOR" && fields ? (({ qty2Unit: _u, qty2Factor: _f, ...rest }: CatalogItemFields) => rest)(fields) : fields;
+  const after = await applySourceFields(deps, r, ctx, out.item, own, audit);
   return { ...out, item: after };
 }

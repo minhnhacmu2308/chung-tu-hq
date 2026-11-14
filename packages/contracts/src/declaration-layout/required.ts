@@ -148,6 +148,8 @@ export function requiredGapsText(gaps: RequiredGap[], lineNos: number[] = []): s
 export type ItemFormInput = {
   id?: string | undefined; lineNo?: number | undefined; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string;
   hsSuggested?: string | null | undefined; hsConfirmed?: string | null | undefined; importDutyRate?: string | null | undefined; vatRate?: string | null | undefined; vatCode?: string | null | undefined; policyNote?: string | null | undefined;
+  /** Số lượng (2) theo ĐVT 2 của mặt hàng danh mục (LineItem.quantity2) → HAG_QN2/QT2 tự điền; vắng → SL2 = SL1. */
+  quantity2?: { qty: string; unit: string } | null | undefined;
 };
 
 /**

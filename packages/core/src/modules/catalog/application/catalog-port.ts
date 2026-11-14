@@ -1,7 +1,7 @@
 // Cổng danh mục cho module khác (extraction, declaration, invoice, lô nhập tay) – export qua index.ts.
 // Module gọi port này SAU khi giao dịch của mình commit (không gọi port module khác trong transaction – packages/core/CLAUDE.md).
 // Chạy dưới ngữ cảnh hệ thống của org (userId rỗng), không kiểm vai trò: nơi gọi đã kiểm quyền thao tác của chính nó.
-import { itemCodeKey, itemNameKey, type CodeSetKind, type ItemUnitConversionTable } from "@kb/contracts";
+import { itemCodeKey, itemNameKey, itemQty2Factor, type CodeSetKind, type ItemUnitConversionTable } from "@kb/contracts";
 import { asUserId, type OrgId } from "../../../shared/ids.js";
 import { findSetByRef, isPartnerKind, newestAlias } from "./common.js";
 import { ensurePartnerSet } from "./partner-set.js";
@@ -15,9 +15,13 @@ export type UnknownCodeRow = { codeSetId?: string | null; code: string; name: st
 export type CodeInSet = { codeSetId: string; aliasId: string; code: string; name: string | null; unit: string | null };
 /**
  * Tóm tắt mặt hàng cho chứng từ (tờ khai): mặt hàng cuối chuỗi gộp, mã ở bộ Hải quan (mới nhất – điền HAG_MAHANG), mọi mã ACTIVE
- * (tra bài học theo bí danh), bảng quy đổi (gợi ý lượng theo ĐVT khai).
+ * (tra bài học theo bí danh), bảng quy đổi (gợi ý lượng theo ĐVT khai), ĐVT số lượng 2 + tỷ lệ đã chuẩn hóa (Số lượng (2) – null khi chưa khai /
+ * thiếu tỷ lệ).
  */
-export type CatalogItemBrief = { id: string; itemNo: string; name: string; hsCode: string | null; baseUnit: string | null; customs: CodeInSet | null; codes: string[]; conversion: ItemUnitConversionTable | null };
+export type CatalogItemBrief = {
+  id: string; itemNo: string; name: string; hsCode: string | null; baseUnit: string | null; customs: CodeInSet | null; codes: string[]; conversion: ItemUnitConversionTable | null;
+  qty2: { unit: string; factor: string } | null;
+};
 
 export interface CatalogPort {
   resolveItem(orgId: OrgId, q: ResolveItemQuery): Promise<ResolveItemResult>;
@@ -153,7 +157,9 @@ export function createCatalogPort(deps: CatalogDeps): CatalogPort {
           const active = aliases.filter((a) => a.itemId === item.id && a.status === "ACTIVE");
           const c = customsSet ? newestAlias(active.filter((a) => a.codeSetId === customsSet.id)) : null;
           const convs = item.baseUnit ? conversions.filter((x) => x.itemId === item.id) : [];
+          const q2Factor = item.qty2Unit ? itemQty2Factor({ unit: item.qty2Unit, factor: item.qty2Factor }, item.baseUnit) : null;
           out[id] = {
+            qty2: item.qty2Unit && q2Factor ? { unit: item.qty2Unit, factor: q2Factor } : null,
             id: item.id, itemNo: item.itemNo, name: item.name, hsCode: item.hsCode, baseUnit: item.baseUnit,
             customs: c ? { codeSetId: c.codeSetId, aliasId: c.id, code: c.code, name: c.name, unit: c.unit } : null,
             codes: [...new Set(active.sort((a, b) => (b.decidedAt ?? b.createdAt).getTime() - (a.decidedAt ?? a.createdAt).getTime()).map((a) => a.code))],

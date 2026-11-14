@@ -76,4 +76,23 @@ describe("line_items – cột danh mục hàng hóa (Task 5)", () => {
     await uow.asOrg(A, (r) => r.lineItems.update("org_anphat", "itm_hs_2", { unitFactor: null, updatedAt: NOW }));
     expect((await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_2")))?.unitFactor).toBeNull();
   });
+
+  it("Số lượng (2) đã lưu (migration 0042): numeric → chuỗi gọn; đồng bộ lại giữ nguyên; org khác không đọc/ghi được", async () => {
+    const cols = await admin.execute(sql`SELECT column_name, data_type, numeric_scale FROM information_schema.columns WHERE table_name = 'line_items' AND column_name IN ('quantity2', 'quantity2_unit', 'quantity2_factor') ORDER BY column_name`);
+    expect(cols).toEqual([
+      { column_name: "quantity2", data_type: "numeric", numeric_scale: 2 },
+      { column_name: "quantity2_factor", data_type: "numeric", numeric_scale: 9 },
+      { column_name: "quantity2_unit", data_type: "text", numeric_scale: null },
+    ]);
+    await uow.asOrg(A, (r) => r.lineItems.update("org_anphat", "itm_hs_1", { quantity2Qty: "400.5", quantity2Unit: "KGM", quantity2Factor: "10.0125", updatedAt: NOW }));
+    expect(await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_1"))).toMatchObject({ quantity2Qty: "400.5", quantity2Unit: "KGM", quantity2Factor: "10.0125" });
+    expect((await admin.execute(sql`SELECT quantity2::text AS q FROM line_items WHERE id = 'itm_hs_1'`))[0]).toEqual({ q: "400.50" });
+    await uow.asOrg(A, (r) => r.lineItems.upsertForDossier("org_anphat", "dos_hs", [item(1), item(2)]));
+    expect(await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_1"))).toMatchObject({ quantity2Qty: "400.5", quantity2Unit: "KGM" });
+    expect(await uow.asOrg(B, (r) => r.lineItems.get("org_anphat", "itm_hs_1"))).toBeNull();
+    await uow.asOrg(B, (r) => r.lineItems.update("org_anphat", "itm_hs_1", { quantity2Qty: "1", updatedAt: NOW }));
+    expect((await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_1")))?.quantity2Qty).toBe("400.5");
+    await uow.asOrg(A, (r) => r.lineItems.update("org_anphat", "itm_hs_1", { quantity2Qty: null, quantity2Unit: null, quantity2Factor: null, updatedAt: NOW }));
+    expect(await uow.asOrg(A, (r) => r.lineItems.get("org_anphat", "itm_hs_1"))).toMatchObject({ quantity2Qty: null, quantity2Unit: null, quantity2Factor: null });
+  });
 });

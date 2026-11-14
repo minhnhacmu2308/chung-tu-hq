@@ -93,7 +93,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
     const it = items[index];
     if (!it) return null;
     // Danh mục hàng hóa: ĐVT invoice khác ĐVT khai → chú thích phép quy đổi lượng (cả khi chỉ xem); sửa hệ số lô khi dòng sửa được.
-    const hint = it.qtySuggestion ? <QtySuggestionHint item={it} dossierId={dossierId} editable={lineEditable(index)} /> : null;
+    const hint = it.qtySuggestion || it.quantity2 ? <QtySuggestionHint item={it} dossierId={dossierId} editable={lineEditable(index)} /> : null;
     if (!lineEditable(index)) return hint;
     return (
       <Stack gap="sm">

@@ -1,5 +1,5 @@
 // Đổi ĐVT gốc của một mặt hàng (spec 2026-11-14 §2) + so thông tin mặt hàng từ bộ nguồn gốc – code thuần, Decimal (bất biến 3).
-import { itemUnitKey, type CatalogItemFields, type CatalogItemKind } from "@kb/contracts";
+import { itemUnitKey, rebaseQty2Factor, type CatalogItemFields, type CatalogItemKind, type ItemQty2 } from "@kb/contracts";
 import { Decimal } from "../../../shared/decimal.js";
 
 /** Số chữ số thập phân của hệ số (numeric(24,9)). */
@@ -17,6 +17,8 @@ export type RebaseInput = {
   lineFactors?: readonly RebaseLineFactor[];
   /** f = số ĐVT gốc cũ trong 1 ĐVT gốc mới – dùng khi chưa có quy đổi của `newBase`. */
   factor?: string;
+  /** ĐVT số lượng 2 + tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc cũ) – đổi gốc thì tỷ lệ nhân f (rebaseQty2Factor). */
+  qty2?: ItemQty2 | null;
 };
 export type RebaseChange = { unit: string; oldValue: string; newValue: string };
 export type RebasePlan =
@@ -33,6 +35,8 @@ export type RebasePlan =
       /** Thay đổi từng ĐVT (thêm: oldValue ""; bỏ: newValue "") – cho field_audit `conv:<ĐVT>`. */
       changes: RebaseChange[];
       lineFactors: { id: string; oldValue: string; newValue: string }[];
+      /** Tỷ lệ ĐVT 2 mới (cũ × f, 9 số lẻ; ĐVT 2 = gốc mới → "1") – vắng khi không có ĐVT 2 / không đổi / không tính được. */
+      qty2Factor?: { oldValue: string; newValue: string };
     };
 
 const positive = (s: string | undefined): Decimal | null => {
@@ -82,7 +86,10 @@ export function planRebase(input: RebaseInput): RebasePlan {
     lineFactors.push({ id: l.id, oldValue: plain(l.factor), newValue: v.toFixed() });
   }
   const byUnit = <X extends { unit: string }>(a: X, b: X) => itemUnitKey(a.unit).localeCompare(itemUnitKey(b.unit));
-  return { kind: "REBASE", factor: f.toFixed(), conversions: next.sort(byUnit), changes: changes.sort(byUnit), lineFactors };
+  const q2 = rebaseQty2Factor(input.qty2, input.baseUnit, input.newBase, f.toFixed());
+  const q2Old = input.qty2?.factor ? plain(input.qty2.factor) : "";
+  const qty2Factor = q2 !== null && q2 !== q2Old ? { qty2Factor: { oldValue: q2Old, newValue: q2 } } : {};
+  return { kind: "REBASE", factor: f.toFixed(), conversions: next.sort(byUnit), changes: changes.sort(byUnit), lineFactors, ...qty2Factor };
 }
 
 /** Thông tin mặt hàng mà bộ nguồn gốc quyết định (ngoài ĐVT gốc). */
@@ -98,11 +105,14 @@ export type SourceItemFields = {
   exciseRate: string | null;
   safeguardRate: string | null;
   antiDiscriminationRate: string | null;
+  qty2Unit: string | null;
+  qty2Factor: string | null;
   description: string | null;
   note: string | null;
 };
-const FIELD_KEYS = ["name", "hsCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "description", "note"] as const;
-const RATE_KEYS = new Set<string>(["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate"]);
+const FIELD_KEYS = ["name", "hsCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "qty2Unit", "qty2Factor", "description", "note"] as const;
+/** So theo giá trị Decimal (thuế suất numeric(10,4), tỷ lệ ĐVT 2 numeric(24,9)). */
+const RATE_KEYS = new Set<string>(["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "qty2Factor"]);
 
 /** Các trường của `incoming` có giá trị và khác mặt hàng (thuế suất so theo giá trị: "5" = "5.0000") → patch + thay đổi cho field_audit. */
 export function diffItemFields(item: SourceItemFields, incoming: CatalogItemFields): { patch: Partial<SourceItemFields>; changes: { key: string; oldValue: string; newValue: string }[] } {
@@ -115,7 +125,7 @@ export function diffItemFields(item: SourceItemFields, incoming: CatalogItemFiel
     const same = cur !== null && (RATE_KEYS.has(k) ? new Decimal(cur).eq(new Decimal(v)) : cur === v);
     if (same) continue;
     (patch as Record<string, string>)[k] = v;
-    changes.push({ key: k, oldValue: cur ?? "", newValue: v });
+    changes.push({ key: k, oldValue: cur === null ? "" : k === "qty2Factor" ? plain(cur) : cur, newValue: v });
   }
   return { patch, changes };
 }

@@ -44,6 +44,9 @@ export const catalogItems = pgTable(
     exciseRate: rate("excise_rate"),
     safeguardRate: rate("safeguard_rate"),
     antiDiscriminationRate: rate("anti_discrimination_rate"),
+    /** ĐVT số lượng 2 (mã ĐVT Hải quan) + tỷ lệ = số ĐVT 2 trong 1 ĐVT gốc (Số lượng (2) 1.84/2.73 – spec 2026-11-14 số lượng 2). */
+    qty2Unit: text("qty2_unit"),
+    qty2Factor: numeric("qty2_factor", { precision: 24, scale: 9 }),
     description: text("description"),
     note: text("note"),
     timesDeclared: integer("times_declared").notNull().default(0),

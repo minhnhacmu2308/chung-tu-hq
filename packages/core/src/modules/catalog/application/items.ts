@@ -1,9 +1,9 @@
 // Mặt hàng chuẩn: danh sách (tìm theo mã nối / tên / mọi mã, xem theo bộ mã), chi tiết, tạo (thẳng hoặc vào hàng chờ), sửa thông tin chung, ngưng dùng.
 import {
-  itemCodeKey, itemNameKey, itemUnitKey, type CatalogItemDetail, type CatalogItemHistoryEntry, type CatalogItemListRow, type CatalogItemPage, type CreateItemInput, type ListCatalogItemsQuery, type UpdateItemInput,
+  itemCodeKey, itemNameKey, itemUnitKey, rebaseQty2Factor, type CatalogItemDetail, type CatalogItemHistoryEntry, type CatalogItemListRow, type CatalogItemPage, type CreateItemInput, type ListCatalogItemsQuery, type UpdateItemInput,
 } from "@kb/contracts";
 import type { Ctx } from "../../../shared/ctx.js";
-import { domainError } from "../../../shared/errors.js";
+import { domainError, reasonError } from "../../../shared/errors.js";
 import { dec } from "../../../shared/decimal.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import {
@@ -147,7 +147,7 @@ export async function createItem(deps: CatalogDeps, ctx: Ctx, input: CreateItemI
       const item: CatalogItemRow = {
         id: deps.idGen.next("cat"), orgId: ctx.orgId, itemNo: await freeItemNo(r, ctx), kind: input.kind, name: input.name, nameKey: itemNameKey(input.name),
         hsCode: input.hsCode ?? null, baseUnit: input.baseUnit ?? null, origin: input.origin ?? null, tariffSchedule: null, importDutyRate: null, vatRate: null, envTaxRate: null,
-        exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, description: input.description ?? null, note: input.note ?? null, timesDeclared: 0,
+        exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, qty2Unit: null, qty2Factor: null, description: input.description ?? null, note: input.note ?? null, timesDeclared: 0,
         lastDeclarationNo: null, lastDeclarationDate: null, lastTypeCode: null, status: "ACTIVE", mergedIntoId: null, source: "MANUAL", updatedBy: ctx.userId, createdAt: now, updatedAt: now,
       };
       await r.items.insert(item);
@@ -185,6 +185,23 @@ function sameValue(f: string, a: unknown, b: unknown): boolean {
   return dec(a).eq(dec(b));
 }
 
+const plainFactor = (v: string | null) => (v === null ? "" : dec(v).toFixed());
+const sameFactor = (a: string | null, b: string | null) => (a === null || b === null ? a === b : dec(a).eq(dec(b)));
+
+/**
+ * ĐVT số lượng 2 + tỷ lệ sau khi sửa (undefined = giữ, null = bỏ): bỏ ĐVT 2 → bỏ tỷ lệ; ĐVT 2 = ĐVT gốc → tỷ lệ "1";
+ * ĐVT 2 khác gốc mà không có tỷ lệ → null (CATALOG_QTY2_FACTOR_REQUIRED).
+ */
+function planQty2(cur: CatalogItemRow, baseUnit: string | null, unitIn: string | null | undefined, factorIn: string | null | undefined): { unit: string | null; factor: string | null } | null {
+  const unit = unitIn !== undefined ? unitIn : cur.qty2Unit;
+  if (!unit) return { unit: null, factor: null };
+  if (baseUnit && itemUnitKey(unit) === itemUnitKey(baseUnit)) return { unit, factor: "1" };
+  // Đổi sang ĐVT 2 khác mà không gửi tỷ lệ → không dùng lại tỷ lệ của ĐVT cũ.
+  const sameUnit = !!cur.qty2Unit && itemUnitKey(cur.qty2Unit) === itemUnitKey(unit);
+  const factor = factorIn !== undefined ? factorIn : sameUnit ? cur.qty2Factor : null;
+  return factor ? { unit, factor: dec(factor).toFixed() } : null;
+}
+
 const EDITABLE = ["kind", "name", "hsCode", "baseUnit", "origin", "description", "note", "importDutyRate", "vatRate", "tariffSchedule"] as const;
 
 /** Sửa thông tin chung (APPROVER/ADMIN/OWNER). Mỗi trường đổi → một mục field_audit; quy đổi kèm theo được thêm/cập nhật. */
@@ -208,6 +225,29 @@ export async function updateItem(deps: CatalogDeps, ctx: Ctx, id: string, input:
     }
     if (patch.name !== undefined) patch.nameKey = itemNameKey(patch.name);
     const baseUnit = patch.baseUnit !== undefined ? patch.baseUnit : cur.baseUnit;
+    if (input.qty2Unit === undefined && input.qty2Factor === undefined && patch.baseUnit && cur.baseUnit && cur.qty2Unit) {
+      // Sửa thẳng ĐVT gốc mà không gửi tỷ lệ mới: tỷ lệ ĐVT 2 theo gốc mới = cũ × f (f = quy đổi "1 gốc mới = f gốc cũ" đang có; ĐVT 2 = gốc mới → 1).
+      // Không có quy đổi giữa hai gốc → không đoán: bắt nhập lại tỷ lệ (CATALOG_QTY2_FACTOR_REQUIRED), không ghi gì.
+      const conv = (await r.conversions.listForItem(ctx.orgId, id)).find((c) => itemUnitKey(c.unit) === itemUnitKey(patch.baseUnit!));
+      const f = itemUnitKey(cur.qty2Unit) === itemUnitKey(patch.baseUnit) ? "1" : conv ? rebaseQty2Factor({ unit: cur.qty2Unit, factor: cur.qty2Factor }, cur.baseUnit, patch.baseUnit, conv.factor) : null;
+      if (!f) return err(reasonError("VALIDATION", "CATALOG_QTY2_FACTOR_REQUIRED"));
+      if (!sameFactor(cur.qty2Factor, f)) {
+        patch.qty2Factor = f;
+        audit.push({ itemId: id, key: "qty2Factor", oldValue: plainFactor(cur.qty2Factor), newValue: f });
+      }
+    }
+    if (input.qty2Unit !== undefined || input.qty2Factor !== undefined) {
+      const q2 = planQty2(cur, baseUnit, input.qty2Unit, input.qty2Factor);
+      if (!q2) return err(reasonError("VALIDATION", "CATALOG_QTY2_FACTOR_REQUIRED"));
+      if ((cur.qty2Unit ?? null) !== q2.unit) {
+        patch.qty2Unit = q2.unit;
+        audit.push({ itemId: id, key: "qty2Unit", oldValue: cur.qty2Unit ?? "", newValue: q2.unit ?? "" });
+      }
+      if (!sameFactor(cur.qty2Factor, q2.factor)) {
+        patch.qty2Factor = q2.factor;
+        audit.push({ itemId: id, key: "qty2Factor", oldValue: plainFactor(cur.qty2Factor), newValue: q2.factor ?? "" });
+      }
+    }
     if (input.conversions?.length) {
       const existing = await r.conversions.listForItem(ctx.orgId, id);
       for (const c of input.conversions) {

@@ -24,6 +24,9 @@ export type CatalogItemRow = {
   exciseRate: string | null;
   safeguardRate: string | null;
   antiDiscriminationRate: string | null;
+  /** ĐVT số lượng 2 + tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc; numeric(24,9) đọc ra có thể "0.250000000" – so bằng Decimal). */
+  qty2Unit: string | null;
+  qty2Factor: string | null;
   description: string | null;
   note: string | null;
   timesDeclared: number;

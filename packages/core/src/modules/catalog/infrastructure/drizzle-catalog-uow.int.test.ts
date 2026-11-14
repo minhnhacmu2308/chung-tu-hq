@@ -40,7 +40,7 @@ const runDataMigration = async () => {
   for (const stmt of migrationSql()) await admin.execute(sql.raw(stmt));
 };
 const item = (id: string, orgId: string, itemNo: string, extra: Partial<CatalogItemRow> = {}): CatalogItemRow => ({
-  id, orgId, itemNo, kind: "GOODS", name: id, nameKey: id, hsCode: null, baseUnit: "PCE", origin: null, tariffSchedule: null, importDutyRate: null, vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null,
+  id, orgId, itemNo, kind: "GOODS", name: id, nameKey: id, hsCode: null, baseUnit: "PCE", origin: null, tariffSchedule: null, importDutyRate: null, vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, qty2Unit: null, qty2Factor: null,
   description: null, note: null, timesDeclared: 0, lastDeclarationNo: null, lastDeclarationDate: null, lastTypeCode: null, status: "ACTIVE", mergedIntoId: null, source: "MANUAL", updatedBy: null, createdAt: now, updatedAt: now, ...extra,
 });
 const alias = (id: string, orgId: string, codeSetId: string, itemId: string, code: string, status: ItemAliasRow["status"]): ItemAliasRow => ({
@@ -370,4 +370,33 @@ describe("bộ nguồn gốc (migration 0040, spec 2026-11-14)", () => {
     const back = await changeSourceSet(deps, ctx, { codeSetId: "cst_mig_org_anphat" });
     expect(back.ok).toBe(true);
   }, 60_000);
+});
+
+describe("ĐVT số lượng 2 + tỷ lệ (migration 0041, spec 2026-11-14 số lượng 2)", () => {
+  it("cột qty2_unit text + qty2_factor numeric(24,9); chạy lại migration an toàn", async () => {
+    const cols = await admin.execute(sql`SELECT column_name, data_type, numeric_precision, numeric_scale FROM information_schema.columns WHERE table_name = 'catalog_items' AND column_name IN ('qty2_unit', 'qty2_factor') ORDER BY column_name`);
+    expect(cols).toEqual([
+      { column_name: "qty2_factor", data_type: "numeric", numeric_precision: 24, numeric_scale: 9 },
+      { column_name: "qty2_unit", data_type: "text", numeric_precision: null, numeric_scale: null },
+    ]);
+    const text = readFileSync(new URL("../../../../drizzle/0041_catalog_qty2.sql", import.meta.url), "utf8");
+    for (const stmt of text.split("--> statement-breakpoint").map((s) => s.trim()).filter(Boolean)) await admin.execute(sql.raw(stmt));
+  });
+
+  it("lưu / đọc ĐVT 2 + tỷ lệ; đổi gốc trên Postgres nhân tỷ lệ theo f + field_audit; org khác không thấy (RLS)", async () => {
+    await uow.asOrg(A, (r) => r.items.insert(item("q2a", A.orgId, "MH-Q2A", { baseUnit: "PCE", qty2Unit: "KGM", qty2Factor: "0.25" })));
+    const got = (await uow.asOrg(A, (r) => r.items.get(A.orgId, "q2a")))!;
+    expect(got.qty2Unit).toBe("KGM");
+    expect(got.qty2Factor).toBe("0.250000000"); // numeric(24,9) đọc ra nguyên dạng – DTO (toItemDto) trả "0.25"
+    expect(await uow.asOrg(B, (r) => r.items.get(B.orgId, "q2a"))).toBeNull();
+    const deps = { clock: { now: () => now }, idGen: ulidIdGen };
+    await uow.asOrg(A, async (r) => {
+      const audit: { itemId: string; key: string; oldValue: string; newValue: string }[] = [];
+      expect((await rebaseItemTo(deps, r, A, got, "BOX", audit, "12")).kind).toBe("REBASED");
+      expect(audit).toContainEqual({ itemId: "q2a", key: "qty2Factor", oldValue: "0.25", newValue: "3" });
+    });
+    expect((await admin.execute(sql`SELECT base_unit, qty2_unit, qty2_factor::text AS f FROM catalog_items WHERE id = 'q2a'`))[0]).toEqual({ base_unit: "BOX", qty2_unit: "KGM", f: "3.000000000" });
+    const brief = await createCatalogPort({ uow, members: { eligibleOwners: async () => new Set<string>() }, jobs: noJobs, documents: noDocs, clock: { now: () => now }, idGen: ulidIdGen }).describeItems(A.orgId, ["q2a"]);
+    expect(brief["q2a"]?.qty2).toEqual({ unit: "KGM", factor: "3" });
+  });
 });

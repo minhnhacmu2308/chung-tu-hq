@@ -288,6 +288,20 @@
       "when": 1794632606702,
       "tag": "0040_catalog_source_set",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794649698402,
+      "tag": "0041_catalog_qty2",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794652969261,
+      "tag": "0042_line_quantity2",
+      "breakpoints": true
     }
   ]
 }

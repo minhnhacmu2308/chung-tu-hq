@@ -1,4 +1,4 @@
-import { branchRanges, type AgentRunView, type AgentTaskId, type Declaration, type DeclarationBranch, type DeclarationField, type DeclarationItemView, type HsEntry, type LineItem, type LineItemHs } from "@kb/contracts";
+import { branchRanges, itemUnitKey, QTY2_SCALE, type AgentRunView, type AgentTaskId, type Declaration, type DeclarationBranch, type DeclarationField, type DeclarationItemView, type HsEntry, type LineItem, type LineItemHs } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { Decimal } from "../../../shared/decimal.js";
@@ -7,16 +7,36 @@ import type { DraftLessons, Shipment } from "@kb/contracts";
 import { learnedDescription, learnedLinePlan, lineLessonFor } from "../domain/lessons-apply.js";
 import type { AgentRunRow, DeclarationRepos, DeclarationRow, DossierInfo, HsCatalogRow, HsSuggestionRow, LineItemRow } from "./ports.js";
 import type { DeclarationDeps } from "./ports.js";
-import { linkPatch, plannedCodes, type CatalogPlan } from "./_catalog-plan.js";
+import { linkPatch, plannedCodes, storedQuantity2, type CatalogPlan } from "./_catalog-plan.js";
 
 export const TASK_ORDER: AgentTaskId[] = ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION", "DIGITIZE"];
 export const TASKS_BY_MODE: Record<AgentRunRow["mode"], AgentTaskId[]> = { DECLARATION: ["HS_LOOKUP", "MAPPING", "BUILD_DECLARATION"], DIGITIZE: ["DIGITIZE"], BOTH: TASK_ORDER };
 
 /**
- * `sugs`: gợi ý HS của dòng (gợi ý chính đứng đầu theo tin cậy). Không truyền → không kèm khối `hs`.
- * `catalog`: phần danh mục hàng hóa (mặt hàng đã gắn, mã lạ, gợi ý lượng) – catalogView.
+ * Số lượng (2) đã lưu khi SL hoặc ĐVT dòng đổi (đọc lại chứng từ, sửa OCR) – KHÔNG cần danh mục: cùng ĐVT + có tỷ lệ dòng (`quantity2Factor` =
+ * số ĐVT 2 / 1 ĐVT dòng) → SL mới × tỷ lệ (Decimal, 2 số lẻ ROUND_HALF_UP); đổi ĐVT / không có tỷ lệ → xóa (về mặc định SL2 = SL1).
+ * Có kế hoạch danh mục thì linkPatch tính lại chính xác sau đó. Dòng thuộc tờ đã khóa (`frozen` – chỉ biết khi có kế hoạch) giữ nguyên.
+ * Không đổi / chưa có giá trị lưu → null.
  */
-export function toLineItem(r: LineItemRow, sugs?: HsSuggestionRow[], catalog?: Pick<LineItem, "catalogItem" | "unknownCode" | "qtySuggestion">): LineItem {
+export function quantity2AfterLineEdit(
+  prev: Pick<LineItemRow, "quantity" | "unit"> | undefined, row: Pick<LineItemRow, "lineNo" | "quantity" | "unit" | "quantity2Qty" | "quantity2Unit" | "quantity2Factor">, frozen?: ReadonlySet<number>,
+): Pick<LineItemRow, "quantity2Qty" | "quantity2Unit" | "quantity2Factor"> | null {
+  if (!prev || row.quantity2Qty == null || frozen?.has(row.lineNo)) return null;
+  const sameUnit = itemUnitKey(prev.unit) === itemUnitKey(row.unit);
+  const sameQty = /^\d+(\.\d+)?$/.test(prev.quantity) && /^\d+(\.\d+)?$/.test(row.quantity) ? new Decimal(prev.quantity).eq(row.quantity) : prev.quantity === row.quantity;
+  if (sameUnit && sameQty) return null;
+  if (sameUnit && row.quantity2Factor && /^\d+(\.\d+)?$/.test(row.quantity)) {
+    return { quantity2Qty: new Decimal(row.quantity).mul(row.quantity2Factor).toDecimalPlaces(QTY2_SCALE, Decimal.ROUND_HALF_UP).toFixed(), quantity2Unit: row.quantity2Unit ?? null, quantity2Factor: row.quantity2Factor };
+  }
+  return { quantity2Qty: null, quantity2Unit: null, quantity2Factor: null };
+}
+
+/**
+ * `sugs`: gợi ý HS của dòng (gợi ý chính đứng đầu theo tin cậy). Không truyền → không kèm khối `hs`.
+ * `catalog`: phần danh mục hàng hóa (mặt hàng đã gắn, mã lạ, gợi ý lượng, Số lượng (2)) – catalogView.
+ */
+export function toLineItem(r: LineItemRow, sugs?: HsSuggestionRow[], catalog?: Pick<LineItem, "catalogItem" | "unknownCode" | "qtySuggestion" | "quantity2">): LineItem {
+  const q2 = storedQuantity2(r);
   return {
     id: r.id, dossierId: r.dossierId, lineNo: r.lineNo, description: r.description, quantity: r.quantity, unit: r.unit, unitPrice: r.unitPrice, amount: r.amount, origin: r.origin,
     ...(r.invoiceHsCode ? { invoiceHsCode: r.invoiceHsCode } : {}),
@@ -32,6 +52,8 @@ export function toLineItem(r: LineItemRow, sugs?: HsSuggestionRow[], catalog?: P
     ...(r.taxDetail?.needsReview ? { taxNeedsReview: true } : {}),
     ...(r.itemCode ? { itemCode: r.itemCode } : {}),
     ...(r.unitFactor ? { unitFactor: r.unitFactor } : {}),
+    // Số lượng (2) đã lưu trên dòng = giá trị truyền (cả khi không kèm phần danh mục).
+    ...(q2 ? { quantity2: q2 } : {}),
     ...(catalog ?? {}),
     ...(sugs ? { hs: toLineItemHs(r, sugs) } : {}),
   };
@@ -118,12 +140,19 @@ export async function syncLineItems(deps: DeclarationDeps, r: DeclarationRepos, 
     return descChanged || (old.invoiceHsCode ?? "") !== (x.invoiceHsCode ?? "");
   }).map((x) => x.lineNo));
   let saved = await r.lineItems.upsertForDossier(orgId, dossierId, rows);
+  // Số lượng (2) đã lưu theo SL/ĐVT cũ: SL/ĐVT dòng đổi → không giữ giá trị cũ, kể cả khi danh mục lỗi (không có kế hoạch).
+  saved = await Promise.all(saved.map(async (row) => {
+    const patch = quantity2AfterLineEdit(before.get(row.lineNo), row, catalog?.frozen);
+    if (!patch) return row;
+    await r.lineItems.update(orgId, row.id, { ...patch, updatedAt: now });
+    return { ...row, ...patch, updatedAt: now };
+  }));
   if (changed.size) {
     saved = await Promise.all(saved.map(async (row) => {
       if (!changed.has(row.lineNo)) return row;
       // Gỡ mặt hàng đã gắn (gắn lại theo kế hoạch bên dưới). Dòng thuộc tờ đang khóa ở Hải quan giữ mặt hàng / HAG_MAHANG đã gửi;
       // không có kế hoạch (danh mục lỗi / chưa nối) → giữ, lần đồng bộ sau xét lại.
-      const unlink = !catalog || catalog.frozen.has(row.lineNo) ? {} : { catalogItemId: null, catalogAliasId: null, itemCode: null, unitFactor: null };
+      const unlink = !catalog || catalog.frozen.has(row.lineNo) ? {} : { catalogItemId: null, catalogAliasId: null, itemCode: null, unitFactor: null, quantity2Qty: null, quantity2Unit: null, quantity2Factor: null };
       const patch = {
         hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, taxDetail: null,
         policyNote: before.get(row.lineNo)?.hsConfirmed ? `Mô tả hoặc mã HS trên invoice của dòng đã đổi – mã ${before.get(row.lineNo)!.hsConfirmed} đã bỏ xác nhận, xác nhận lại mã HS` : null,

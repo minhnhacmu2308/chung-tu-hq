@@ -50,7 +50,7 @@ describe("ghép cột – đủ trường", () => {
   it("danh sách trường hệ thống", () => {
     expect(ItemImportFieldSchema.options).toEqual(ITEM_IMPORT_FIELDS);
     expect(ITEM_IMPORT_FIELDS).toEqual([
-      "code", "name", "unit", "hs", "factor", "linkCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "description", "note",
+      "code", "name", "unit", "hs", "factor", "linkCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "qty2Unit", "qty2Factor", "description", "note",
     ]);
   });
   it("tự đoán cột mới theo tên, giữ cách đoán cũ", () => {

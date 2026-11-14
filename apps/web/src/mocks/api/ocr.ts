@@ -5,6 +5,7 @@ import { incotermOf, type DocumentSheet } from "@kb/contracts";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import type { MockDb } from "@/mocks/db";
 import { documentSetMockError, editScopeMockError } from "./customs";
+import { LOCKED_STATUSES, refreshLineQuantity2 } from "./catalog";
 import { refreshDeclaration } from "./declaration";
 import { generateChecks, generateFieldsForDocument, SUSPECT_STATUSES } from "@/mocks/seed/ocr";
 import { syncFreightTermCheck } from "@/mocks/freight-term";
@@ -255,6 +256,11 @@ function syncLineItem(db: MockDb, f: ExtractedField) {
   else if (m[2] === "unit_price") line.unitPrice = v;
   else if (m[2] === "amount") line.amount = v;
   else if (/^[A-Za-z]{2}$/.test(v)) line.origin = v.toUpperCase();
+  // Số lượng / ĐVT đổi → SL2 đã lưu tính lại (backend: linkPatch ở lần đồng bộ, dòng không thuộc tờ đã gửi). Hồ sơ đã khóa giữ giá trị.
+  if (m[2] === "quantity" || m[2] === "unit") {
+    const dossier = db.dossiers.find((d) => d.id === doc.dossierId);
+    if (!dossier || !LOCKED_STATUSES.has(dossier.status)) refreshLineQuantity2(db, line);
+  }
   refreshDeclaration(db, doc.dossierId);
 }
 

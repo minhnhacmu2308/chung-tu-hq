@@ -133,14 +133,20 @@ export function lawCodesByLine(value: string, lineNos: number[]): Map<number, st
   return new Map(lineNos.map((n) => [n, [...new Set([...all, ...(own.get(n) ?? [])])]]));
 }
 
-export type ItemDefaultsInput = { lineNo: number; quantity: string; unit: string; itemCode?: string | null | undefined; vatRate?: string | null | undefined; vatCode?: string | null | undefined; policyNote?: string | null | undefined };
+export type ItemDefaultsInput = {
+  lineNo: number; quantity: string; unit: string; itemCode?: string | null | undefined; vatRate?: string | null | undefined; vatCode?: string | null | undefined; policyNote?: string | null | undefined;
+  /** Số lượng (2) theo ĐVT 2 của mặt hàng danh mục (itemQuantity2) – vắng → SL2 = SL1. */
+  quantity2?: { qty: string; unit: string } | null | undefined;
+};
 /**
- * Ô dòng hàng phần mềm tự điền khi truyền: số lượng (2) = số lượng (1) (chưa có bảng quy đổi ĐVT biểu thuế – D3), mã tiền đơn giá = nguyên tệ,
+ * Ô dòng hàng phần mềm tự điền khi truyền: số lượng (2) theo ĐVT số lượng 2 + tỷ lệ của mặt hàng danh mục (`quantity2`, spec 2026-11-14 số lượng 2);
+ * mặt hàng chưa khai ĐVT 2 / không quy được về gốc → số lượng (2) = số lượng (1), ĐVT dòng (D3 còn lại: chưa đối chiếu ĐVT theo Biểu thuế), mã tiền đơn giá = nguyên tệ,
  * đơn vị đơn giá = ĐVT; IDA: mã biểu thuế từ ghi chú FTA, mã GTGT từ thuế suất, 1.88 từ khoản điều chỉnh được phân bổ; EDA: mã văn bản pháp luật theo dòng từ chỉ tiêu VBPQ.
  */
 export function itemDefaults(kind: Kind, it: ItemDefaultsInput, ctx: { currency: string; vbpq?: string; lineNos?: number[]; adjustmentNos?: number[] }): Values {
   const unit = it.unit || "PCE";
-  const out: Values = { HAG_QN2: it.quantity, HAG_QT2: unit, HAG_UPC: ctx.currency, HAG_TSC: unit };
+  const q2 = it.quantity2?.unit.trim() ? it.quantity2 : null;
+  const out: Values = { HAG_QN2: q2 ? q2.qty : it.quantity, HAG_QT2: q2 ? q2.unit.trim() : unit, HAG_UPC: ctx.currency, HAG_TSC: unit };
   // Mã hàng: mã của mặt hàng trong bộ Hải quan (danh mục hàng hóa); không có → không gửi (để trống, cảnh báo ở nơi dựng payload).
   if (it.itemCode?.trim()) out["HAG_MAHANG"] = it.itemCode.trim();
   if (kind === "IDA") {

@@ -3,7 +3,7 @@
 // ~40 mặt hàng: ĐVT khác nhau giữa các bộ (cuộn / mét / kg / tấm…) có quy đổi, vài mã trùng viết khác ("vt-0012" / "VT 0012"),
 // vài mặt hàng chưa có mã XNK / chưa có quy đổi; 8 mục hàng chờ ghép đủ 3 mức (mức tính bằng đúng luật ghép của @kb/contracts).
 // Mặt hàng 1–7 giữ id `prd_seed_<n>` của danh mục cũ (product_catalog) – như migration giữ id cũ.
-import { itemCodeKey, itemNameKey, type CatalogItemKind, type CodeSetKind, type LineItem } from "@kb/contracts";
+import { itemCodeKey, itemNameKey, itemQuantity2, type CatalogItemKind, type CodeSetKind, type LineItem } from "@kb/contracts";
 import { matchContext, resolveIn, type MockAlias, type MockCatalog, type MockCatalogItem, type MockCodeSet, type MockQueueItem } from "../catalog-engine";
 
 const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
@@ -25,14 +25,16 @@ type A = [SetRef, string, string?];
 type ItemSeed = {
   kind: CatalogItemKind; name: string; hs: string | null; unit: string; origin?: string; times?: number; ago?: number; no?: string; duty?: string;
   aliases: A[]; conv?: Record<string, string>;
+  /** ĐVT số lượng 2 + tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc) → Số lượng (2) 1.84 trên tờ khai. */
+  q2?: [string, string];
 };
 
 const ITEMS: ItemSeed[] = [
   // 1–7: mặt hàng của danh mục cũ (giữ id).
   { kind: "GOODS", name: "Vòng bi cầu 6205-2RS, đường kính trong 25 mm", hs: "84821000", unit: "PCE", origin: "KR", times: 6, ago: 12, no: "107845120330", duty: "3",
-    aliases: [["ACC", "vt-0012"], ["WH", "VT 0012"], ["XNK", "6205-2RS"], ["SKF", "6205-2RSH"]] },
+    aliases: [["ACC", "vt-0012"], ["WH", "VT 0012"], ["XNK", "6205-2RS"], ["SKF", "6205-2RSH"]], q2: ["KGM", "0.128"] },
   { kind: "GOODS", name: "Vòng bi cầu 6308ZZ, đường kính trong 40 mm", hs: "84821000", unit: "PCE", origin: "KR", times: 4, ago: 12, no: "107845120330", duty: "3",
-    aliases: [["ACC", "VT-0013"], ["WH", "VT0013", "DZN"], ["XNK", "6308ZZ"], ["SKF", "6308-ZZ"]], conv: { DZN: "12" } },
+    aliases: [["ACC", "VT-0013"], ["WH", "VT0013", "DZN"], ["XNK", "6308ZZ"], ["SKF", "6308-ZZ"]], conv: { DZN: "12" }, q2: ["KGM", "0.63"] },
   { kind: "GOODS", name: "Ổ bi đũa côn 30210", hs: "84822000", unit: "PCE", origin: "JP", times: 3, ago: 40, no: "107712004410", duty: "3", aliases: [["ACC", "VT-0014"], ["XNK", "30210"]] },
   { kind: "GOODS", name: "Gối đỡ vòng bi UCP208 (có lắp ổ bi)", hs: "84832090", unit: "SET", origin: "CN", times: 2, ago: 40, no: "107712004410", duty: "0",
     aliases: [["ACC", "VT-0015"], ["WH", "VT-0015"], ["XNK", "UCP208"]] },
@@ -119,6 +121,12 @@ export function seedLineCatalogLinks(lines: LineItem[], cat: MockCatalog): void 
     line.catalogItem = { id: item.id, itemNo: item.itemNo, name: item.name };
     const code = cat.aliases.find((a) => a.itemId === item.id && a.codeSetId === customs?.id && a.status === "ACTIVE")?.code;
     if (code) line.itemCode = code;
+    // Số lượng (2) lưu trên dòng khi gắn mặt hàng (như cột line_items.quantity2 – truyền đọc giá trị này).
+    if (item.qty2Unit && item.baseUnit) {
+      const factors = Object.fromEntries(cat.conversions.filter((c) => c.itemId === item.id).map((c) => [c.unit, c.factor]));
+      const q2 = itemQuantity2({ qty: line.quantity, unit: line.unit, lotFactor: line.unitFactor }, { base: item.baseUnit, factors }, { unit: item.qty2Unit, factor: item.qty2Factor });
+      if (q2) line.quantity2 = q2;
+    }
   }
 }
 
@@ -140,6 +148,7 @@ export function seedCatalog(): MockCatalog {
     items.push({
       id, itemNo: `MH-${String(n).padStart(6, "0")}`, kind: s.kind, name: s.name, nameKey: itemNameKey(s.name), hsCode: s.hs, baseUnit: s.unit, origin: s.origin ?? null,
       tariffSchedule: "B01", importDutyRate: s.duty ?? null, vatRate: s.duty !== undefined ? "8" : null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null,
+      qty2Unit: s.q2?.[0] ?? null, qty2Factor: s.q2?.[1] ?? null,
       description: null, note: null, timesDeclared: s.times ?? 0, lastDeclarationNo: s.no ?? null, lastDeclarationDate: s.times ? day(s.ago ?? 10) : null,
       status: "ACTIVE", mergedIntoId: null, source: n <= 7 ? "MIGRATION" : "IMPORT", createdAt: at, updatedAt: daysAgo(s.ago ?? 10),
     });

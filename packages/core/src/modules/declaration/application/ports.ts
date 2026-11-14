@@ -25,6 +25,11 @@ export type LineItemRow = {
   itemCode?: string | null;
   /** Danh mục hàng hóa (module catalog – chỉ id): mặt hàng đã gắn, bí danh đã khớp, hệ số theo lô ("1 ĐVT dòng = hệ số ĐVT gốc"; null = mặc định). */
   catalogItemId?: string | null; catalogAliasId?: string | null; unitFactor?: string | null;
+  /**
+   * Số lượng (2) đã tính và LƯU (HAG_QN2/QT2 – cột quantity2 / quantity2_unit / quantity2_factor; khóa TS `quantity2Qty` để không trùng DTO `quantity2`): áp cùng kế hoạch danh mục (linkPatch – giữ nguyên ở dòng thuộc tờ đã khóa, như itemCode), gắn mặt hàng,
+   * đổi hệ số theo lô. `quantity2Factor` = số ĐVT 2 / 1 ĐVT dòng. Truyền + màn hình đọc giá trị này. Vắng/null = chưa tính → SL2 = SL1.
+   */
+  quantity2Qty?: string | null; quantity2Unit?: string | null; quantity2Factor?: string | null;
   createdAt: Date; updatedAt: Date;
 };
 /**
@@ -42,7 +47,7 @@ export type TaxDetail = { vatCode: string | null; vatNote: string | null; vatCer
 export type HsSuggestionRow = { id: string; orgId: string; lineItemId: string; code: string; description: string; confidence: number; rates: HsSuggestionRates | null; whyNot: string | null; source: string; createdAt: Date };
 /** `pending`: đã ghi DB, chưa (hoặc chưa biết đã) tạo được lượt ở HSCodePro – `externalId` rỗng; chạy lại sẽ dùng lại dòng này (chi phí ghi một lần theo `id`). */
 export type HsJobRow = { id: string; orgId: string; dossierId: string; externalId: string; status: "pending" | "processing" | "need_info" | "completed" | "cancelled"; polls: number; createdAt: Date; updatedAt: Date };
-export type HsLinePatch = Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "taxDetail" | "hsJobId" | "hsItemId" | "hsStatus" | "hsQuestion" | "hsError" | "hsDetail" | "description" | "origin" | "updatedAt" | "itemCode" | "catalogItemId" | "catalogAliasId" | "unitFactor">>;
+export type HsLinePatch = Partial<Pick<LineItemRow, "hsSuggested" | "hsConfidence" | "hsConfirmed" | "hsConfirmedBy" | "hsConfirmedAt" | "importDutyRate" | "vatRate" | "policyNote" | "taxDetail" | "hsJobId" | "hsItemId" | "hsStatus" | "hsQuestion" | "hsError" | "hsDetail" | "description" | "origin" | "updatedAt" | "itemCode" | "catalogItemId" | "catalogAliasId" | "unitFactor" | "quantity2Qty" | "quantity2Unit" | "quantity2Factor">>;
 export type DeclarationRow = {
   id: string; orgId: string; dossierId: string; kind: "IDA" | "EDA"; version: number; status: DeclarationStatus; fields: Record<string, StoredField>;
   exchangeRate: string; exchangeRateDate: string; customsValueVnd: string; valueAdjustments: Adjustment[]; estImportDutyVnd: string; estVatVnd: string;
@@ -170,6 +175,8 @@ export type CatalogQuery = { codeSetId?: string | null; partnerName?: string | n
 export type CatalogItemInfo = {
   id: string; itemNo: string; name: string; hsCode: string | null; baseUnit: string | null;
   customs: { codeSetId: string; aliasId: string; code: string; unit: string | null } | null; codes: string[]; conversion: { base: string; factors: Record<string, string> } | null;
+  /** ĐVT số lượng 2 + tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc, đã chuẩn hóa) → Số lượng (2) của dòng (itemQuantity2); null = chưa khai. */
+  qty2: { unit: string; factor: string } | null;
 };
 /**
  * Danh mục hàng hóa dùng chung (module catalog, container nối CatalogPort + use case). Gọi NGOÀI transaction của tờ khai.

@@ -45,6 +45,8 @@ export function sentSnapshotOf(p: SentSheetInput): SentSnapshot {
   const lines = [...p.items]
     .sort((a, b) => a.lineNo - b.lineNo)
     .map((item) => {
+      // Dòng có Số lượng (2) đã lưu (`quantity2`) → thuộc nội dung đã gửi; dòng không có thì không có khóa → ảnh chụp cũ vẫn khớp
+      // (test: item-catalog/item-catalog-qty2.test.ts + core declaration/application/__tests__/catalog-link.test.ts "dòng thuộc tờ đã gửi (khóa)").
       const prefix = item.id ? `${ITEM_PREFIX}${item.id}.` : null;
       return { item, fields: prefix ? Object.fromEntries(Object.entries(p.fields).filter(([code]) => code.startsWith(prefix))) : {} };
     });

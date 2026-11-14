@@ -13,7 +13,7 @@ import { admin, ctxOf, declarant, makeHarness, NOW, ORG, OTHER, otherAdmin, seed
 function seedItem(h: Harness, row: Partial<CatalogItemRow> & { id: string; name: string }, orgId: string = ORG) {
   h.uow.data.items.push({
     orgId, itemNo: `MH-${row.id}`, kind: "GOODS", nameKey: row.name.toLowerCase(), hsCode: null, baseUnit: null, origin: null, tariffSchedule: null, importDutyRate: null,
-    vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, description: null, note: null, timesDeclared: 0,
+    vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, qty2Unit: null, qty2Factor: null, description: null, note: null, timesDeclared: 0,
     lastDeclarationNo: null, lastDeclarationDate: null, lastTypeCode: null, status: "ACTIVE", mergedIntoId: null, source: "MANUAL", updatedBy: null, createdAt: NOW, updatedAt: NOW, ...row,
   });
 }

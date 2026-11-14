@@ -63,6 +63,7 @@ export async function resetMockDataEmptyCatalog() {
     delete line.unknownCode;
     delete line.itemCode;
     delete line.unitFactor;
+    delete line.quantity2;
   }
   saveDb();
 }

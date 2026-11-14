@@ -41,6 +41,11 @@ export const LineItemSchema = z.object({
    * `lotFactor` = dùng hệ số theo lô; `deviates` = hệ số lô lệch > 20% so với mặc định (cảnh báo, không chặn).
    */
   qtySuggestion: z.object({ qty: DecimalStringSchema, unit: z.string(), factor: DecimalStringSchema, lotFactor: z.boolean(), deviates: z.boolean() }).optional(),
+  /**
+   * Số lượng (2) – 1.84 IDA / 2.73 EDA (HAG_QN2/QT2) – theo ĐVT số lượng 2 của mặt hàng đã gắn (itemQuantity2): lượng (2 số lẻ), ĐVT 2,
+   * `factor` = số ĐVT 2 trên 1 ĐVT dòng. Vắng = mặt hàng chưa khai ĐVT 2 / không quy được về gốc → SL2 = SL1 như trước.
+   */
+  quantity2: z.object({ qty: DecimalStringSchema, unit: z.string(), factor: DecimalStringSchema }).optional(),
   /** Phân loại HS (HSCodePro): trạng thái dòng, câu hỏi chờ trả lời, gợi ý + mã thay thế kèm thuế. */
   hs: z.lazy(() => LineItemHsSchema).optional(),
 });

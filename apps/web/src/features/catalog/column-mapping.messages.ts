@@ -1,7 +1,7 @@
 import { defineMessages } from "@kb/ui";
 
 /**
- * Bước Ghép cột khi nhập file (spec 2026-11-14 §4): nhãn 17 trường hệ thống (ITEM_IMPORT_FIELDS, khóa `f_<trường>`), cảnh báo bộ không phải
+ * Bước Ghép cột khi nhập file (spec 2026-11-14 §4): nhãn 19 trường hệ thống (ITEM_IMPORT_FIELDS, khóa `f_<trường>`), cảnh báo bộ không phải
  * nguồn gốc, xem trước 5 dòng, lỗi định dạng của các trường mới.
  */
 export const CATALOG_MAPPING_MESSAGES = defineMessages({
@@ -21,6 +21,8 @@ export const CATALOG_MAPPING_MESSAGES = defineMessages({
     f_exciseRate: "Thuế suất TTĐB (%)",
     f_safeguardRate: "Thuế tự vệ (%)",
     f_antiDiscriminationRate: "Thuế chống phân biệt đối xử (%)",
+    f_qty2Unit: "ĐVT số lượng 2",
+    f_qty2Factor: "Tỷ lệ SL2 (ĐVT 2 / 1 ĐVT gốc)",
     f_description: "Mô tả",
     f_note: "Ghi chú",
     skip: "Bỏ qua",
@@ -43,6 +45,9 @@ export const CATALOG_MAPPING_MESSAGES = defineMessages({
     errKindFormat: "Loại hàng không nhận ra (Nguyên liệu, Sản phẩm, Hàng hóa, Vật tư)",
     errOriginFormat: "Xuất xứ phải là mã nước 2 chữ cái (vd VN, CN)",
     errRateFormat: "Thuế suất phải là số từ 0 đến 1000, tối đa 4 chữ số thập phân",
+    errQty2FactorFormat: "Tỷ lệ số lượng 2 phải là số lớn hơn 0 (vd 0,25)",
+    errQty2FactorMissing: "ĐVT số lượng 2 khác ĐVT của dòng – cần cột Tỷ lệ SL2",
+    errQty2UnitMissing: "Có tỷ lệ số lượng 2 nhưng thiếu ĐVT số lượng 2",
   },
   en: {
     f_code: "Item code",
@@ -60,6 +65,8 @@ export const CATALOG_MAPPING_MESSAGES = defineMessages({
     f_exciseRate: "Excise tax rate (%)",
     f_safeguardRate: "Safeguard duty (%)",
     f_antiDiscriminationRate: "Anti-discrimination duty (%)",
+    f_qty2Unit: "Second quantity unit",
+    f_qty2Factor: "Qty 2 ratio (second units / 1 base unit)",
     f_description: "Description",
     f_note: "Note",
     skip: "Skip",
@@ -82,6 +89,9 @@ export const CATALOG_MAPPING_MESSAGES = defineMessages({
     errKindFormat: "Unknown item type (Material, Product, Goods, Supply)",
     errOriginFormat: "Origin must be a 2-letter country code (e.g. VN, CN)",
     errRateFormat: "Tax rate must be a number from 0 to 1000 with at most 4 decimal places",
+    errQty2FactorFormat: "The qty 2 ratio must be a number greater than 0 (e.g. 0.25)",
+    errQty2FactorMissing: "The second quantity unit differs from the row's unit – a Qty 2 ratio column is needed",
+    errQty2UnitMissing: "A qty 2 ratio is given but the second quantity unit is missing",
   },
   zh: {
     f_code: "商品编码",
@@ -99,6 +109,8 @@ export const CATALOG_MAPPING_MESSAGES = defineMessages({
     f_exciseRate: "特别消费税率（%）",
     f_safeguardRate: "保障措施税（%）",
     f_antiDiscriminationRate: "反歧视税（%）",
+    f_qty2Unit: "第二数量单位",
+    f_qty2Factor: "第二数量比率（第二单位 / 1 基本单位）",
     f_description: "描述",
     f_note: "备注",
     skip: "跳过",
@@ -121,5 +133,8 @@ export const CATALOG_MAPPING_MESSAGES = defineMessages({
     errKindFormat: "无法识别的商品类型（原料、产品、货物、物料）",
     errOriginFormat: "原产地须为 2 个字母的国家代码（如 VN、CN）",
     errRateFormat: "税率须为 0 至 1000 之间的数字，最多 4 位小数",
+    errQty2FactorFormat: "第二数量比率须为大于 0 的数字（如 0.25）",
+    errQty2FactorMissing: "第二数量单位与该行单位不同——需要第二数量比率列",
+    errQty2UnitMissing: "已填写第二数量比率，但缺少第二数量单位",
   },
 });

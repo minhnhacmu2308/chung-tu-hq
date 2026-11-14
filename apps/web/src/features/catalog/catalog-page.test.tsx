@@ -115,6 +115,29 @@ describe("Danh mục hàng hóa – tab Mặt hàng", () => {
     await waitFor(() => expect(screen.queryByText("Chi tiết mặt hàng", { selector: "h2" })).toBeNull(), T);
   }, 40_000);
 
+  it("ĐVT số lượng 2 + tỷ lệ: hiện ở thông tin chung, sửa tỷ lệ → lịch sử; tỷ lệ trống/0 → không lưu được; a11y", async () => {
+    renderWithProviders(<CatalogPage />);
+    const dialog = await openItem("Vòng bi cầu 6205-2RS, đường kính trong 25 mm");
+    expect(await within(dialog).findByText("KGM · 1 PCE = 0,128 KGM", {}, T)).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Sửa thông tin" }));
+    const edit = (await screen.findByText("Sửa thông tin mặt hàng", { selector: "h2" }, T)).closest<HTMLElement>("[role=dialog]")!;
+    const ratio = within(edit).getByLabelText(/^Tỷ lệ số lượng 2/);
+    expect(within(edit).getByText(/Số KGM trong 1 PCE/)).toBeTruthy();
+    await expectNoA11yViolations(edit);
+    await userEvent.clear(ratio);
+    await userEvent.type(ratio, "0");
+    expect(within(edit).getByText("Nhập tỷ lệ lớn hơn 0 khi ĐVT số lượng 2 khác ĐVT gốc.")).toBeTruthy();
+    expect((within(edit).getByRole("button", { name: "Lưu" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.clear(ratio);
+    await userEvent.type(ratio, "0,13");
+    await userEvent.click(within(edit).getByRole("button", { name: "Lưu" }));
+    const reopened = await panel();
+    expect(await within(reopened).findByText("KGM · 1 PCE = 0,13 KGM", {}, T)).toBeTruthy();
+    const history = await within(reopened).findByRole("list", { name: "Lịch sử" }, T);
+    expect(await within(history).findByText("Tỷ lệ số lượng 2", {}, T)).toBeTruthy();
+    expect(getDb().catalog.items.find((i) => i.id === "prd_seed_1")).toMatchObject({ qty2Unit: "KGM", qty2Factor: "0.13" });
+  }, 40_000);
+
   it("Gộp vào mặt hàng khác → ConfirmDialog → mặt hàng nguồn biến khỏi danh sách", async () => {
     renderWithProviders(<CatalogPage />);
     const source = "Dây cáp điện CVV 3x4mm2";

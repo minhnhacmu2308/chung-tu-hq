@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { itemCodeKey, itemHsDigits } from "./code-key.js";
 import { CatalogFactorSchema, CatalogItemKindSchema, CatalogRateSchema, type CatalogItemFields, type CatalogItemKind } from "./schemas.js";
+import { itemUnitKey } from "./units.js";
 
 export const CATALOG_IMPORT_SYNC_MAX_ROWS = 500;
 /**
@@ -15,18 +16,18 @@ export const CATALOG_IMPORT_MAX_ROWS_PER_REQUEST = 5_000;
  * Từ `kind` trở đi là thông tin mặt hàng – chỉ áp khi bộ nhận dữ liệu là bộ nguồn gốc (bộ khác: giao diện không gửi, server bỏ qua).
  */
 export const ITEM_IMPORT_FIELDS = [
-  "code", "name", "unit", "hs", "factor", "linkCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "description", "note",
+  "code", "name", "unit", "hs", "factor", "linkCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "qty2Unit", "qty2Factor", "description", "note",
 ] as const;
 export const ItemImportFieldSchema = z.enum(ITEM_IMPORT_FIELDS);
 export type ItemImportField = z.infer<typeof ItemImportFieldSchema>;
 /** Các trường thông tin mặt hàng (chỉ bộ nguồn gốc). */
-export const ITEM_IMPORT_ITEM_FIELDS = ["kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "description", "note"] as const satisfies readonly ItemImportField[];
+export const ITEM_IMPORT_ITEM_FIELDS = ["kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "qty2Unit", "qty2Factor", "description", "note"] as const satisfies readonly ItemImportField[];
 const RATE_FIELDS = ["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate"] as const;
 
 /** Độ dài tối đa từng trường của một dòng gửi lên (vượt → `validateItemRows` báo `TOO_LONG`; giao diện không gửi dòng đó – không cắt bớt dữ liệu). */
 export const ITEM_IMPORT_MAX_LENGTH = {
   code: 200, name: 1000, unit: 100, hs: 50, factor: 50, linkCode: 200, kind: 50, origin: 50, tariffSchedule: 100,
-  importDutyRate: 50, vatRate: 50, envTaxRate: 50, exciseRate: 50, safeguardRate: 50, antiDiscriminationRate: 50, description: 500, note: 500,
+  importDutyRate: 50, vatRate: 50, envTaxRate: 50, exciseRate: 50, safeguardRate: 50, antiDiscriminationRate: 50, qty2Unit: 100, qty2Factor: 50, description: 500, note: 500,
 } as const satisfies Record<ItemImportField, number>;
 
 const cell = (f: ItemImportField) => z.string().max(ITEM_IMPORT_MAX_LENGTH[f]).optional();
@@ -48,6 +49,9 @@ export const ItemImportRowSchema = z.object({
   exciseRate: cell("exciseRate"),
   safeguardRate: cell("safeguardRate"),
   antiDiscriminationRate: cell("antiDiscriminationRate"),
+  /** ĐVT số lượng 2 + tỷ lệ "1 ĐVT gốc = n ĐVT 2" (Số lượng (2) trên tờ khai). */
+  qty2Unit: cell("qty2Unit"),
+  qty2Factor: cell("qty2Factor"),
   description: cell("description"),
   note: cell("note"),
 });
@@ -100,6 +104,8 @@ const HEADER_ALIASES: Record<ItemImportField, string[]> = {
   exciseRate: ["thue ttdb", "thue tieu thu dac biet", "excise", "excise tax"],
   safeguardRate: ["thue tu ve", "thue suat tu ve", "safeguard", "safeguard duty"],
   antiDiscriminationRate: ["thue chong phan biet doi xu", "thue cpbdx", "anti discrimination", "anti discrimination duty"],
+  qty2Unit: ["dvt so luong 2", "dvt sl2", "dvt sl 2", "dvt 2", "don vi tinh 2", "unit 2", "second unit"],
+  qty2Factor: ["ty le sl2", "ty le sl 2", "ty le so luong 2", "qty2 factor", "qty 2 factor"],
   description: ["mo ta", "mo ta chi tiet", "mo ta hang hoa", "dien giai", "quy cach", "description", "specification"],
   note: ["ghi chu", "note", "notes", "remark", "remarks"],
 };
@@ -163,6 +169,7 @@ export function itemImportTooLong(r: Partial<ItemImportRow>): ItemImportField[] 
  * chữ số; mã HS luôn có số chữ số chẵn – số lẻ thường là ô số Excel mất số 0 đầu), hệ số là số thập phân > 0.
  * ĐVT: có `knownUnits` (mã ĐVT Hải quan, viết hoa) → ngoài danh sách là `UNKNOWN_UNIT` để người dùng chọn ĐVT tương ứng;
  * không có → chỉ kiểm không quá 30 ký tự. Loại hàng (mã hoặc nhãn), xuất xứ (mã nước 2 chữ), thuế suất (0–1000, ≤ 4 số lẻ) sai → `INVALID_FORMAT`.
+ * ĐVT số lượng 2 (viết hoa, kiểm như ĐVT) + tỷ lệ (> 0): ĐVT 2 khác ĐVT của dòng mà thiếu tỷ lệ → `MISSING` (qty2Factor); trùng ĐVT dòng → tỷ lệ 1.
  */
 export function validateItemRows(rows: readonly ItemImportRow[], opts: { knownUnits?: ReadonlySet<string> } = {}): { ok: ValidItemImportRow[]; errors: ItemImportRowError[] } {
   const ok: ValidItemImportRow[] = [];
@@ -220,6 +227,22 @@ export function validateItemRows(rows: readonly ItemImportRow[], opts: { knownUn
       const v = parseRate(raw);
       if (v) fields[f] = v;
       else bad(f);
+    }
+    // ĐVT số lượng 2 + tỷ lệ: ĐVT 2 = ĐVT của dòng (dòng bộ nguồn gốc → ĐVT gốc) → tỷ lệ 1; khác mà thiếu tỷ lệ → MISSING; tỷ lệ không có ĐVT 2 → MISSING.
+    const qty2Unit = text("qty2Unit").toUpperCase();
+    const qty2Factor = text("qty2Factor").replace(",", ".");
+    if (qty2Unit) {
+      if (qty2Unit.length > 30) bad("qty2Unit");
+      else if (known && !known.has(qty2Unit)) errors.push({ row, field: "qty2Unit", code: "UNKNOWN_UNIT" });
+      else fields.qty2Unit = qty2Unit;
+    }
+    if (qty2Factor) {
+      if (!CatalogFactorSchema.safeParse(qty2Factor).success) bad("qty2Factor");
+      else if (!qty2Unit && !long.has("qty2Unit")) errors.push({ row, field: "qty2Unit", code: "MISSING" });
+      else fields.qty2Factor = qty2Factor;
+    } else if (qty2Unit) {
+      if (unit && itemUnitKey(unit) === qty2Unit) fields.qty2Factor = "1";
+      else errors.push({ row, field: "qty2Factor", code: "MISSING" });
     }
     const description = text("description");
     if (description) fields.description = description;

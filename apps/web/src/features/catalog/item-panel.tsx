@@ -12,7 +12,7 @@ import { useState, type ReactNode } from "react";
 import { archiveCatalogItem, catalogKeys, getCatalogItem, getCatalogItemHistory, updateCatalogItem } from "@/api/catalog";
 import { listMembers, memberKeys } from "@/api/session";
 import { LoadError } from "@/components/common/load-error";
-import { formatDate, formatDateTime, formatHs, getFormatLocale } from "@/lib/format";
+import { formatDate, formatDateTime, formatDecimal, formatHs, getFormatLocale } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { errorText } from "@/lib/reason-codes";
 import type { CatalogAccess } from "./catalog-access";
@@ -46,7 +46,7 @@ function Meta({ label, wide, children }: { label: string; wide?: boolean; childr
 
 const FIELD_LABEL: Partial<Record<string, keyof Messages>> = {
   name: "name", hsCode: "hs", baseUnit: "baseUnit", kind: "kind", origin: "origin", description: "description", note: "note",
-  importDutyRate: "importDuty", vatRate: "vat", tariffSchedule: "tariffSchedule", status: "status",
+  importDutyRate: "importDuty", vatRate: "vat", tariffSchedule: "tariffSchedule", status: "status", qty2Unit: "qty2Unit", qty2Factor: "qty2Factor",
 };
 
 /** Một dòng lịch sử → nhãn đã dịch + giá trị cũ/mới dễ đọc. */
@@ -136,11 +136,16 @@ function EditItemDialog({ item, onClose }: { item: CatalogItem; onClose: () => v
   const t = useMessages(CATALOG_ITEM_MESSAGES);
   const tl = useMessages(CATALOG_MESSAGES);
   const qc = useQueryClient();
-  const units = useUnitOptions(item.baseUnit ? [item.baseUnit] : []);
+  const units = useUnitOptions([item.baseUnit, item.qty2Unit]);
   const [form, setForm] = useState({
     name: item.name, kind: item.kind, hsCode: item.hsCode ?? "", baseUnit: item.baseUnit, origin: item.origin ?? "",
     importDutyRate: item.importDutyRate ?? "", vatRate: item.vatRate ?? "", description: item.description ?? "", note: item.note ?? "",
+    qty2Unit: item.qty2Unit, qty2Factor: item.qty2Factor ?? "",
   });
+  // ĐVT 2 trùng ĐVT gốc → tỷ lệ 1 (không nhập); khác gốc → bắt buộc tỷ lệ > 0 (backend kiểm lại – CATALOG_QTY2_FACTOR_REQUIRED).
+  const q2SameAsBase = !!form.qty2Unit && !!form.baseUnit && form.qty2Unit.trim().toUpperCase() === form.baseUnit.trim().toUpperCase();
+  const q2FactorText = form.qty2Factor.trim().replace(",", ".");
+  const q2Missing = !!form.qty2Unit && !q2SameAsBase && !(/^\d+(\.\d+)?$/.test(q2FactorText) && /[1-9]/.test(q2FactorText));
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const text = (v: string) => (v.trim() ? v.trim() : null);
   const save = useMutation({
@@ -155,6 +160,10 @@ function EditItemDialog({ item, onClose }: { item: CatalogItem; onClose: () => v
       if (form.vatRate !== (item.vatRate ?? "")) patch.vatRate = text(form.vatRate.replace(",", "."));
       if (form.description !== (item.description ?? "")) patch.description = text(form.description);
       if (form.note !== (item.note ?? "")) patch.note = text(form.note);
+      if (form.qty2Unit !== item.qty2Unit || form.qty2Factor !== (item.qty2Factor ?? "")) {
+        patch.qty2Unit = form.qty2Unit;
+        if (form.qty2Unit && !q2SameAsBase) patch.qty2Factor = q2FactorText;
+      }
       return updateCatalogItem(item.id, patch);
     },
     onSuccess: () => {
@@ -186,6 +195,21 @@ function EditItemDialog({ item, onClose }: { item: CatalogItem; onClose: () => v
             <Field label={t.baseUnit}>
               <Combobox options={units} value={form.baseUnit} onChange={(v) => set("baseUnit", v)} placeholder={t.unitPlaceholder} />
             </Field>
+            <Field label={t.qty2Unit}>
+              <Combobox options={units} value={form.qty2Unit} onChange={(v) => set("qty2Unit", v)} placeholder={t.unitPlaceholder} clearable />
+            </Field>
+            {form.qty2Unit && (q2SameAsBase ? (
+              <p className="text-sm text-fg-muted">{t.qty2SameAsBase}</p>
+            ) : (
+              <Field
+                label={t.qty2Factor}
+                required
+                hint={fill(t.qty2FactorHint, { unit: form.qty2Unit, base: form.baseUnit ?? t.baseUnit })}
+                {...(q2Missing && form.qty2Factor.trim() ? { error: t.qty2Required } : {})}
+              >
+                <Input value={form.qty2Factor} onChange={(e) => set("qty2Factor", e.target.value)} placeholder={t.qty2FactorPlaceholder} inputMode="decimal" />
+              </Field>
+            ))}
             <Field label={t.origin}>
               <Input value={form.origin} onChange={(e) => set("origin", e.target.value)} placeholder={t.originPlaceholder} />
             </Field>
@@ -204,7 +228,7 @@ function EditItemDialog({ item, onClose }: { item: CatalogItem; onClose: () => v
           </Stack>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
-            <Button type="submit" loading={save.isPending} disabled={!form.name.trim()}>{t.save}</Button>
+            <Button type="submit" loading={save.isPending} disabled={!form.name.trim() || q2Missing}>{t.save}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -259,6 +283,11 @@ export function ItemPanel({ itemId, sets, access, onOpenChange }: { itemId: stri
                   <Meta label={t.kind}>{tl[`kind${item.kind}`]}</Meta>
                   <Meta label={t.hs}><span className="font-mono">{item.hsCode ? formatHs(item.hsCode) : t.none}</span></Meta>
                   <Meta label={t.baseUnit}>{item.baseUnit ?? t.none}</Meta>
+                  <Meta label={t.qty2Unit}>
+                    {item.qty2Unit
+                      ? fill(item.baseUnit ? t.qty2Value : t.qty2ValueNoBase, { unit: item.qty2Unit, base: item.baseUnit ?? "", n: formatDecimal(item.qty2Factor ?? "1", 9) })
+                      : t.none}
+                  </Meta>
                   <Meta label={t.origin}>{item.origin ?? t.none}</Meta>
                   <Meta label={t.importDuty}>{pct(item.importDutyRate)}</Meta>
                   <Meta label={t.vat}>{pct(item.vatRate)}</Meta>

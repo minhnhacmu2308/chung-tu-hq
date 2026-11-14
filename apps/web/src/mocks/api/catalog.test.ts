@@ -5,9 +5,10 @@ import { SEED_SETS } from "@/mocks/seed/catalog";
 import {
   aliasAction, archiveCatalogItem, changeCatalogMode, createCatalogItem, decideQueueBulk, decideQueueItem, exportCrossReference, getCatalogImport, getCatalogItem,
   getCatalogSettings, importCatalogRows, linkLineItem, recordCatalogDeclarationNo, resolveCatalogMany, listCatalogItems, listCodeSets, listMatchQueue, mergeCatalogItems, proposeAlias, resolveCatalogItem, saveCodeSet,
-  setConversion, setLineUnitFactor, setupCatalog,
+  setConversion, setLineUnitFactor, setupCatalog, updateCatalogItem,
 } from "./catalog";
 import { getDeclarationView } from "./declaration";
+import { updateFieldValue } from "./ocr";
 
 /** Lỗi → mã lý do (nếu có) hoặc mã lỗi – cùng dạng ApiError client http trả. */
 const code = async (p: Promise<unknown>) => p.then(() => "OK", (e: { code?: string; reason?: string }) => e.reason ?? e.code);
@@ -253,6 +254,54 @@ describe("dòng hàng ↔ danh mục", () => {
     expect(linked.unknownCode).toBeFalsy();
     expect((await setLineUnitFactor(line.id, "12")).unitFactor).toBe("12");
     expect((await setLineUnitFactor(line.id, null)).unitFactor).toBeUndefined();
+  });
+
+  it("Số lượng (2) LƯU trên dòng: gắn mặt hàng / hệ số lô tính lại; sửa tỷ lệ danh mục → dòng hồ sơ chưa khóa tính lại, hồ sơ đã duyệt giữ nguyên", async () => {
+    const db = getDb();
+    const open = db.lineItems.find((l) => { const d = db.dossiers.find((x) => x.id === l.dossierId); return d && !["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"].includes(d.status); })!;
+    Object.assign(open, { quantity: "100", unit: "PCE" });
+    delete open.unitFactor;
+    // prd_seed_1: 1 PCE = 0,128 KGM.
+    expect((await linkLineItem(open.id, { itemId: "prd_seed_1" })).quantity2).toEqual({ qty: "12.8", unit: "KGM", factor: "0.128" });
+    expect(getDb().lineItems.find((l) => l.id === open.id)!.quantity2).toEqual({ qty: "12.8", unit: "KGM", factor: "0.128" });
+    const locked = getDb().lineItems.find((l) => l.dossierId === "dos_016" && l.lineNo === 1)!;
+    const lockedBefore = locked.quantity2;
+    expect(lockedBefore).toBeDefined();
+    expect(["APPROVED", "SUBMITTED", "CLEARED"]).toContain(getDb().dossiers.find((d) => d.id === "dos_016")!.status);
+    await updateCatalogItem("prd_seed_1", { qty2Factor: "0.2" });
+    expect(getDb().lineItems.find((l) => l.id === open.id)!.quantity2).toEqual({ qty: "20", unit: "KGM", factor: "0.2" });
+    expect(getDb().lineItems.find((l) => l.id === locked.id)!.quantity2).toEqual(lockedBefore);
+  });
+
+  it("Số lượng (2) theo dòng: sửa số lượng trên chứng từ → tính lại; ngưng dùng mặt hàng → bỏ; gộp → theo mặt hàng đích", async () => {
+    const db = getDb();
+    const LOCKED = ["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"];
+    // Dòng của hồ sơ chưa khóa có chứng từ; thêm ô "item.<n>.quantity" trên chứng từ đó (dữ liệu mẫu không phải dòng nào cũng có ô này).
+    const line = db.lineItems.find((l) => {
+      const dos = db.dossiers.find((d) => d.id === l.dossierId);
+      return !!dos && !LOCKED.includes(dos.status) && db.documents.some((d) => d.dossierId === dos.id);
+    })!;
+    const doc = db.documents.find((d) => d.dossierId === line.dossierId)!;
+    const f = { ...db.fields[0]!, id: "fld_qty2_test", documentId: doc.id, key: `item.${line.lineNo}.quantity`, value: "100" };
+    db.fields.push(f);
+    Object.assign(line, { unit: "PCE" });
+    delete line.unitFactor;
+    await linkLineItem(line.id, { itemId: "prd_seed_1" });
+    await updateFieldValue(f.id, "200");
+    // prd_seed_1: 1 PCE = 0,128 KGM → 200 × 0,128 = 25,6.
+    expect(getDb().lineItems.find((l) => l.id === line.id)!.quantity2).toEqual({ qty: "25.6", unit: "KGM", factor: "0.128" });
+    // Gộp prd_seed_1 vào prd_seed_2 (1 PCE = 0,63 KGM) → dòng theo mặt hàng đích.
+    await mergeCatalogItems("prd_seed_1", "prd_seed_2");
+    expect(getDb().lineItems.find((l) => l.id === line.id)!.quantity2).toEqual({ qty: "126", unit: "KGM", factor: "0.63" });
+    await archiveCatalogItem("prd_seed_2", true);
+    expect(getDb().lineItems.find((l) => l.id === line.id)!.quantity2).toBeUndefined();
+  });
+
+  it("sửa thẳng ĐVT gốc: tỷ lệ ĐVT 2 × quy đổi; không có quy đổi → CATALOG_QTY2_FACTOR_REQUIRED", async () => {
+    // prd_seed_2: gốc PCE, 1 DZN = 12 PCE, 1 PCE = 0,63 KGM → gốc DZN: 7,56 KGM.
+    expect((await updateCatalogItem("prd_seed_2", { baseUnit: "DZN" })).item).toMatchObject({ baseUnit: "DZN", qty2Factor: "7.56" });
+    await expect(updateCatalogItem("prd_seed_1", { baseUnit: "SET" })).rejects.toMatchObject({ reason: "CATALOG_QTY2_FACTOR_REQUIRED" });
+    expect(getDb().catalog.items.find((i) => i.id === "prd_seed_1")).toMatchObject({ baseUnit: "PCE", qty2Factor: "0.128" });
   });
 
   it("getDeclarationView (màn Review) mang gợi ý lượng theo ĐVT khai như listLineItems – dòng đã gắn, ĐVT invoice khác ĐVT mã XNK", async () => {

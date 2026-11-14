@@ -174,6 +174,28 @@ describe("Danh mục – tab Nhập dữ liệu", () => {
     expect(screen.getByText("Đã dùng lại cách ghép cột lần trước của bộ này.")).toBeTruthy();
   }, 90_000);
 
+  it("ĐVT số lượng 2 + tỷ lệ: tự nhận cột, nhập vào bộ nguồn gốc → mặt hàng có ĐVT 2; thiếu tỷ lệ → lỗi dòng đã dịch", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("DM");
+    ws.addRow(["Mã vật tư", "Tên vật tư", "ĐVT", "Mã nối", "ĐVT số lượng 2", "Tỷ lệ SL2"]);
+    ws.addRow(["VT-9201", "Ổ bi đũa côn 30210", "PCE", "MH-000003", "KGM", "0,35"]);
+    ws.addRow(["VT-9202", "Bu lông M16", "PCE", "", "KGM", ""]);
+    ws.addRow(["VT-9203", "Bu lông M20", "PCE", "", "", ""]);
+    const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+    const view = renderWithProviders(<CatalogPage />);
+    await chooseSet(/^XNK/);
+    await upload(view.container, new File([buf], "dm-sl2.xlsx", { type: XLSX }));
+    expect((await screen.findByRole("combobox", { name: "Cột E · ĐVT số lượng 2" }, T)).textContent).toContain("ĐVT số lượng 2");
+    expect(screen.getByRole("combobox", { name: "Cột F · Tỷ lệ SL2" }).textContent).toContain("Tỷ lệ SL2");
+    expect(await screen.findByText("ĐVT số lượng 2 khác ĐVT của dòng – cần cột Tỷ lệ SL2", {}, T)).toBeTruthy();
+    const btn = await screen.findByRole("button", { name: /^Nhập 2 dòng hợp lệ/ }, T);
+    await waitFor(() => expect(btn).toHaveProperty("disabled", false), T);
+    await userEvent.click(btn);
+    await screen.findByText("Đã nhập xong", {}, T);
+    expect(getDb().catalog.imports[0]!.columnMap).toMatchObject({ qty2Unit: 4, qty2Factor: 5 });
+    expect(getDb().catalog.items.find((i) => i.id === "prd_seed_3")).toMatchObject({ qty2Unit: "KGM", qty2Factor: "0.35" });
+  }, 90_000);
+
   it("bộ không phải nguồn gốc: cảnh báo, cột thông tin mặt hàng bỏ qua và không gửi đi", async () => {
     const { container } = renderWithProviders(<CatalogPage />);
     await chooseSet(/^Kho/);

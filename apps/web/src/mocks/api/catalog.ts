@@ -5,7 +5,7 @@ import {
   AliasActionInputSchema, CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, CATALOG_IMPORT_SYNC_MAX_ROWS, ChangeCatalogModeInputSchema, ChangeSourceInputSchema, CreateItemInputSchema, DecideQueueBulkInputSchema,
   DecideQueueInputSchema, ImportFromDocumentsInputSchema, ImportRowsInputSchema, ListCatalogItemsQuerySchema, ListQueueQuerySchema, ProposeAliasInputSchema, ResolveManyInputSchema, SetConversionInputSchema,
   SetupCatalogInputSchema, SourcePreviewQuerySchema, SplitAliasesInputSchema, UpdateItemInputSchema, UpsertCodeSetInputSchema, convertItemQty, importRowsTooLarge, itemCodeKey, itemHsDigits,
-  itemLotFactorDeviates, itemNameKey, itemUnitKey, loadCodeList, reasonVi, sheetOfLine, validateItemRows,
+  itemLotFactorDeviates, itemNameKey, itemQuantity2, itemUnitKey, loadCodeList, rebaseQty2Factor, reasonVi, sheetOfLine, validateItemRows,
   type AliasActionInput, type AliasSource, type CatalogImport, type CatalogItem, type CatalogItemDetail, type CatalogItemFields, type CatalogItemHistoryEntry, type CatalogItemListRow, type CatalogItemPage,
   type CatalogSettingsView, type ChangeCatalogModeInput, type CodeSet, type CodeSetKind, type CreateItemRequest, type CreateItemResult, type CrossReference, type CrossReferenceRow,
   type DecideQueueBulkInput, type DecideQueueBulkResult, type DecideQueueInput, type ImportFromDocumentsInput, type ImportRowsInput, type InvoiceLayout, type ItemAlias, type ItemMatchLevel,
@@ -16,7 +16,7 @@ import {
 } from "@kb/contracts";
 import type { ZodType } from "zod";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
-import { mulDecimal } from "@/lib/decimal";
+import { mulDecimal, plainDecimal, sameDecimal } from "@/lib/decimal";
 import type { MockDb } from "@/mocks/db";
 import {
   DEFAULT_SET_NAME, DEPARTMENT_KINDS, defaultSet, diffItemFields, effectiveMode, endOfChain, factorFor, isInternal, isPartnerKind, matchContext, needsFactor, newestAlias, nextItemNo,
@@ -140,7 +140,7 @@ function newItem(db: MockDb, v: Pick<MockCatalogItem, "kind" | "name" | "hsCode"
   const now = nowIso();
   const item: MockCatalogItem = {
     id: newId("cat"), itemNo: nextItemNo(db.catalog), kind: v.kind, name: v.name, nameKey: itemNameKey(v.name), hsCode: v.hsCode, baseUnit: v.baseUnit, origin: v.origin ?? null,
-    tariffSchedule: null, importDutyRate: null, vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null,
+    tariffSchedule: null, importDutyRate: null, vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, qty2Unit: null, qty2Factor: null,
     description: v.description ?? null, note: v.note ?? null, timesDeclared: 0, lastDeclarationNo: null, lastDeclarationDate: null, status: "ACTIVE", mergedIntoId: null,
     source, createdAt: now, updatedAt: now,
   };
@@ -171,7 +171,10 @@ function rebaseItem(db: MockDb, item: MockCatalogItem, newBase: string, factor?:
   if (!nb) return "SAME";
   const convs = cat.conversions.filter((c) => c.itemId === item.id);
   const lines = item.baseUnit ? db.lineItems.filter((l) => l.catalogItem?.id === item.id && l.unitFactor) : [];
-  const plan = planRebase({ baseUnit: item.baseUnit, newBase: nb, conversions: convs, lineFactors: lines.map((l) => ({ id: l.id, factor: l.unitFactor! })), ...(factor ? { factor } : {}) });
+  const plan = planRebase({
+    baseUnit: item.baseUnit, newBase: nb, conversions: convs, lineFactors: lines.map((l) => ({ id: l.id, factor: l.unitFactor! })), ...(factor ? { factor } : {}),
+    qty2: item.qty2Unit ? { unit: item.qty2Unit, factor: item.qty2Factor } : null,
+  });
   if (plan.kind === "SAME" || plan.kind === "NO_FACTOR") return plan.kind;
   const newKey = itemUnitKey(nb);
   if (plan.kind === "SET_BASE") {
@@ -187,6 +190,11 @@ function rebaseItem(db: MockDb, item: MockCatalogItem, newBase: string, factor?:
   const kept = plan.conversions.map((c) => ({ itemId: item.id, unit: convs.find((x) => itemUnitKey(x.unit) === itemUnitKey(c.unit))?.unit ?? c.unit, factor: c.factor }));
   cat.conversions = [...cat.conversions.filter((c) => c.itemId !== item.id), ...kept];
   audit(db, item.id, "baseUnit", item.baseUnit ?? "", nb);
+  // Tỷ lệ ĐVT 2 theo gốc mới (cũ × f).
+  if (plan.qty2Factor) {
+    audit(db, item.id, "qty2Factor", plan.qty2Factor.oldValue, plan.qty2Factor.newValue);
+    item.qty2Factor = plan.qty2Factor.newValue;
+  }
   for (const ch of plan.changes) audit(db, item.id, `conv:${ch.unit}`, ch.oldValue, ch.newValue);
   for (const l of plan.lineFactors) {
     const line = lines.find((x) => x.id === l.id)!;
@@ -208,13 +216,16 @@ function applySourceFields(db: MockDb, item: MockCatalogItem, fields: CatalogIte
     (item as Record<string, unknown>)[c.key] = c.newValue;
   }
   Object.assign(item, { nameKey: itemNameKey(item.name), updatedAt: nowIso() });
+  if (changes.some((c) => c.key === "qty2Unit" || c.key === "qty2Factor")) refreshItemLinesQuantity2(db, item.id);
 }
 
 /** Gắn mã của bộ nguồn gốc: ĐVT của mã thành ĐVT gốc (biết hệ số) rồi áp thông tin mặt hàng. Bộ khác → không làm gì. */
 function applySourceAttach(db: MockDb, set: Pick<MockCodeSet, "isSource"> | null | undefined, item: MockCatalogItem, unit: string | null | undefined, fields: CatalogItemFields | null | undefined) {
   if (!set?.isSource) return;
-  if (unit) rebaseItem(db, item, unit);
-  applySourceFields(db, item, fields);
+  const kind = unit ? rebaseItem(db, item, unit) : "SAME";
+  // Không đổi được gốc (thiếu hệ số): tỷ lệ ĐVT 2 của dòng tính theo ĐVT dòng ≠ gốc hiện tại → không áp ĐVT 2 / tỷ lệ (như source-rules.ts).
+  const own = kind === "NO_FACTOR" && fields ? (({ qty2Unit: _u, qty2Factor: _f, ...rest }: CatalogItemFields) => rest)(fields) : fields;
+  applySourceFields(db, item, own);
 }
 const setById = (cat: MockCatalog, id: string) => cat.codeSets.find((s) => s.id === id) ?? null;
 
@@ -693,6 +704,17 @@ export const updateCatalogItem = (id: string, input: UpdateItemRequest) =>
     const cur = db.catalog.items.find((i) => i.id === id);
     if (!cur) throw itemNotFound();
     if (cur.status === "MERGED") throw fail("INVALID_STATE", "Mặt hàng đã gộp vào mặt hàng khác");
+    // Sửa thẳng ĐVT gốc mà không gửi tỷ lệ mới (như updateItem backend): tỷ lệ ĐVT 2 × f theo quy đổi "1 gốc mới = f gốc cũ"; không có → bắt nhập lại.
+    let rescaled: string | null = null;
+    if (v.qty2Unit === undefined && v.qty2Factor === undefined && v.baseUnit && cur.baseUnit && cur.qty2Unit && itemUnitKey(v.baseUnit) !== itemUnitKey(cur.baseUnit)) {
+      const conv = db.catalog.conversions.find((c) => c.itemId === id && itemUnitKey(c.unit) === itemUnitKey(v.baseUnit!));
+      rescaled = itemUnitKey(cur.qty2Unit) === itemUnitKey(v.baseUnit) ? "1" : conv ? rebaseQty2Factor({ unit: cur.qty2Unit, factor: cur.qty2Factor }, cur.baseUnit, v.baseUnit, conv.factor) : null;
+      if (!rescaled) throw failReason("VALIDATION", "CATALOG_QTY2_FACTOR_REQUIRED");
+    }
+    if (rescaled && !(cur.qty2Factor && sameDecimal(cur.qty2Factor, rescaled))) {
+      audit(db, id, "qty2Factor", cur.qty2Factor ?? "", rescaled);
+      cur.qty2Factor = rescaled;
+    }
     for (const f of EDITABLE) {
       const next = v[f];
       if (next === undefined || cur[f] === (next ?? null)) continue;
@@ -700,8 +722,20 @@ export const updateCatalogItem = (id: string, input: UpdateItemRequest) =>
       (cur as Record<string, unknown>)[f] = next ?? null;
     }
     cur.nameKey = itemNameKey(cur.name);
+    // ĐVT số lượng 2 + tỷ lệ (như updateItem/planQty2 của backend): bỏ ĐVT 2 → bỏ tỷ lệ; = ĐVT gốc → "1"; khác gốc thiếu tỷ lệ → CATALOG_QTY2_FACTOR_REQUIRED.
+    if (v.qty2Unit !== undefined || v.qty2Factor !== undefined) {
+      const unit = v.qty2Unit !== undefined ? v.qty2Unit : cur.qty2Unit;
+      const sameUnit = !!unit && !!cur.qty2Unit && itemUnitKey(cur.qty2Unit) === itemUnitKey(unit);
+      const factor = !unit ? null : cur.baseUnit && itemUnitKey(unit) === itemUnitKey(cur.baseUnit) ? "1" : v.qty2Factor !== undefined ? v.qty2Factor : sameUnit ? cur.qty2Factor : null;
+      if (unit && !factor) throw failReason("VALIDATION", "CATALOG_QTY2_FACTOR_REQUIRED");
+      const nextFactor = factor === null ? null : plainDecimal(factor);
+      if ((cur.qty2Unit ?? null) !== (unit ?? null)) audit(db, id, "qty2Unit", cur.qty2Unit ?? "", unit ?? "");
+      if ((cur.qty2Factor === null || nextFactor === null) ? cur.qty2Factor !== nextFactor : !sameDecimal(cur.qty2Factor, nextFactor)) audit(db, id, "qty2Factor", cur.qty2Factor ?? "", nextFactor ?? "");
+      Object.assign(cur, { qty2Unit: unit ?? null, qty2Factor: nextFactor });
+    }
     for (const c of v.conversions ?? []) if (!cur.baseUnit || itemUnitKey(c.unit) !== itemUnitKey(cur.baseUnit)) upsertConversion(db, id, c.unit, c.factor);
     cur.updatedAt = nowIso();
+    refreshItemLinesQuantity2(db, id);
     return detailOf(db.catalog, id);
   });
 
@@ -715,6 +749,8 @@ export const archiveCatalogItem = (id: string, archived: boolean) =>
     if (cur.status !== next) {
       audit(db, id, "status", cur.status, next);
       Object.assign(cur, { status: next, updatedAt: nowIso() });
+      // Ngưng dùng → backend gỡ mặt hàng khỏi dòng chưa khóa ở lần đồng bộ sau (SL2 null); dùng lại → tính lại.
+      refreshItemLinesQuantity2(db, id);
     }
     return detailOf(db.catalog, id);
   });
@@ -756,6 +792,8 @@ export const mergeCatalogItems = (fromId: string, intoId: string) =>
       ...(!into.baseUnit && from.baseUnit ? { baseUnit: from.baseUnit } : {}),
       updatedAt: nowIso(),
     });
+    // Dòng gắn mặt hàng nguồn giờ theo mặt hàng đích (endOfChain) → SL2 tính lại theo ĐVT 2 / tỷ lệ của mặt hàng đích.
+    refreshItemLinesQuantity2(db, into.id);
     return detailOf(cat, into.id);
   });
 
@@ -882,6 +920,7 @@ export const setConversion = (input: SetConversionInput) =>
     if (!item || item.status === "MERGED") throw itemNotFound();
     if (item.baseUnit && itemUnitKey(item.baseUnit) === itemUnitKey(v.unit)) throw fail("VALIDATION", "ĐVT trùng ĐVT gốc của mặt hàng");
     upsertConversion(db, v.itemId, v.unit, v.factor);
+    refreshItemLinesQuantity2(db, v.itemId);
     return conversionsOf(db, v.itemId);
   });
 
@@ -894,6 +933,7 @@ export const removeConversion = (itemId: string, unit: string) =>
       audit(db, itemId, `conv:${old.unit}`, old.factor, "");
       db.catalog.conversions = db.catalog.conversions.filter((c) => c !== old);
     }
+    refreshItemLinesQuantity2(db, itemId);
     return conversionsOf(db, itemId);
   });
 
@@ -960,6 +1000,7 @@ function decideIn(db: MockDb, id: string, input: DecideQueueInput): MatchQueueIt
     Object.assign(item, {
       tariffSchedule: fields?.tariffSchedule ?? null, importDutyRate: fields?.importDutyRate ?? null, vatRate: fields?.vatRate ?? null, envTaxRate: fields?.envTaxRate ?? null,
       exciseRate: fields?.exciseRate ?? null, safeguardRate: fields?.safeguardRate ?? null, antiDiscriminationRate: fields?.antiDiscriminationRate ?? null,
+      qty2Unit: fields?.qty2Unit ?? null, qty2Factor: fields?.qty2Unit ? (fields.qty2Factor ?? null) : null,
     });
     if (codeKey) {
       const a = newAlias(db, { codeSetId: q.codeSetId, code: q.code, name: q.name, unit: q.unit, itemId: item.id, status: "ACTIVE", source: aliasSourceOf(q) });
@@ -1039,7 +1080,9 @@ export const getCatalogImport = (id: string) =>
     return toImport(imp);
   });
 
-const LOCKED = new Set(["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"]);
+/** Trạng thái hồ sơ coi như đã khóa nội dung tờ khai (mock thay cho "dòng thuộc tờ đã gửi" của backend). */
+export const LOCKED_STATUSES: ReadonlySet<string> = new Set(["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"]);
+const LOCKED = LOCKED_STATUSES;
 
 /**
  * "Lấy từ chứng từ đã đọc" (mock): DECLARATIONS → dòng tờ khai đã duyệt có mã hàng (HAG_MAHANG) → bộ XNK mặc định;
@@ -1141,7 +1184,40 @@ const customsCodeOf = (cat: MockCatalog, itemId: string) => {
  * Phần danh mục của dòng khi đọc (như catalogView của backend – declaration/_catalog-plan.ts): gợi ý lượng theo ĐVT khai (ĐVT của mã bộ Hải quan)
  * khi khác ĐVT dòng – hệ số theo lô (`unitFactor`) thắng hệ số mặc định; lô lệch > 20% → `deviates`. Thiếu hệ số → không gợi ý (không tự nhân 1).
  */
+/** Số lượng (2) của dòng theo ĐVT 2 + tỷ lệ của mặt hàng đang gắn (itemQuantity2 – như quantity2Columns của backend); không tính được → null. */
+function lineQuantity2Of(db: MockDb, line: LineItem): NonNullable<LineItem["quantity2"]> | null {
+  const cat = db.catalog;
+  const item = line.catalogItem ? endOfChain(cat, line.catalogItem.id) : null;
+  if (!item?.qty2Unit || item.status !== "ACTIVE") return null;
+  const factors = Object.fromEntries(cat.conversions.filter((c) => c.itemId === item.id).map((c) => [c.unit, c.factor]));
+  return itemQuantity2({ qty: line.quantity, unit: line.unit, lotFactor: line.unitFactor }, item.baseUnit ? { base: item.baseUnit, factors } : null, { unit: item.qty2Unit, factor: item.qty2Factor });
+}
+
+/**
+ * LƯU Số lượng (2) trên dòng (như cột line_items.quantity2 của backend): gọi khi gắn mặt hàng, đổi hệ số lô, và khi đồng bộ dòng của hồ sơ chưa khóa
+ * (mock không có bước đồng bộ riêng – đọc danh sách dòng của hồ sơ chưa duyệt/truyền thay cho "lần đồng bộ sau"). Hồ sơ đã khóa giữ giá trị đã lưu.
+ */
+export function refreshLineQuantity2(db: MockDb, line: LineItem): void {
+  const q2 = lineQuantity2Of(db, line);
+  if (q2) line.quantity2 = q2;
+  else delete line.quantity2;
+}
+
+/**
+ * Mặt hàng đổi ĐVT 2 / tỷ lệ / quy đổi → dòng gắn mặt hàng của hồ sơ CHƯA khóa tính lại (như lần đồng bộ sau của backend); hồ sơ đã duyệt/truyền giữ
+ * giá trị đã lưu (nội dung đã duyệt không đổi).
+ */
+export function refreshItemLinesQuantity2(db: MockDb, itemId: string): void {
+  for (const line of db.lineItems) {
+    if (!line.catalogItem || endOfChain(db.catalog, line.catalogItem.id)?.id !== itemId) continue;
+    const dossier = db.dossiers.find((d) => d.id === line.dossierId);
+    if (dossier && LOCKED.has(dossier.status)) continue;
+    refreshLineQuantity2(db, line);
+  }
+}
+
 export function withLineCatalogView(db: MockDb, line: LineItem): LineItem {
+  // Số lượng (2) đọc giá trị ĐÃ LƯU trên dòng (giá trị hiện = giá trị truyền), không tính lại.
   const { qtySuggestion: _old, ...rest } = line;
   const cat = db.catalog;
   const item = line.catalogItem ? endOfChain(cat, line.catalogItem.id) : null;
@@ -1216,6 +1292,7 @@ export const linkLineItem = (lineItemId: string, input: LinkLineItemInput) =>
     if (code) line.itemCode = code;
     else delete line.itemCode;
     delete line.unknownCode;
+    refreshLineQuantity2(db, line);
     return withLineCatalogView(db, line);
   });
 
@@ -1227,6 +1304,7 @@ export const setLineUnitFactor = (lineItemId: string, factor: string | null) =>
     if (!line.catalogItem) throw fail("INVALID_STATE", "Dòng chưa gắn mặt hàng danh mục");
     if (factor === null) delete line.unitFactor;
     else line.unitFactor = parse(SetConversionInputSchema.shape.factor, factor);
+    refreshLineQuantity2(db, line);
     return withLineCatalogView(db, line);
   });
 

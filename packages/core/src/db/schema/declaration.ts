@@ -42,6 +42,14 @@ export const lineItems = pgTable(
     catalogAliasId: text("catalog_alias_id"),
     unitFactor: numeric("unit_factor", { precision: 24, scale: 9 }),
     itemCode: text("item_code"),
+    /**
+     * Số lượng (2) – 1.84/2.73 (HAG_QN2/QT2) – tính từ ĐVT số lượng 2 + tỷ lệ của mặt hàng KHI áp kế hoạch danh mục (cùng lúc item_code, giữ nguyên ở
+     * dòng thuộc tờ đã khóa) và khi đổi hệ số theo lô; truyền đọc giá trị đã lưu (không gọi danh mục lúc gửi). `quantity2_factor` = số ĐVT 2 / 1 ĐVT dòng.
+     * NULL = chưa tính (mặt hàng không có ĐVT 2 / không quy được) → SL2 = SL1.
+     */
+    quantity2Qty: numeric("quantity2", { precision: 24, scale: 2 }),
+    quantity2Unit: text("quantity2_unit"),
+    quantity2Factor: numeric("quantity2_factor", { precision: 24, scale: 9 }),
     ...timestamps(),
   },
   (t) => [

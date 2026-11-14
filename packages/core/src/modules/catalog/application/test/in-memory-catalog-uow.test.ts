@@ -7,7 +7,7 @@ const A = { orgId: asOrgId("org_a"), userId: asUserId("usr_a") };
 const B = { orgId: asOrgId("org_b"), userId: asUserId("usr_b") };
 const now = new Date("2026-11-13T00:00:00Z");
 const item = (id: string, orgId: string, extra: Partial<CatalogItemRow> = {}): CatalogItemRow => ({
-  id, orgId, itemNo: `MH-${id}`, kind: "GOODS", name: id, nameKey: id, hsCode: null, baseUnit: null, origin: null, tariffSchedule: null, importDutyRate: null, vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null,
+  id, orgId, itemNo: `MH-${id}`, kind: "GOODS", name: id, nameKey: id, hsCode: null, baseUnit: null, origin: null, tariffSchedule: null, importDutyRate: null, vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null, antiDiscriminationRate: null, qty2Unit: null, qty2Factor: null,
   description: null, note: null, timesDeclared: 0, lastDeclarationNo: null, lastDeclarationDate: null, lastTypeCode: null, status: "ACTIVE", mergedIntoId: null, source: "MANUAL", updatedBy: null, createdAt: now, updatedAt: now, ...extra,
 });
 

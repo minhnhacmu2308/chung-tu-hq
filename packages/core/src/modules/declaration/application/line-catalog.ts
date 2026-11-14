@@ -6,7 +6,7 @@ import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { sheetScopeError } from "./_edit-scope.js";
 import { loadDossier, toLineItem } from "./_dto.js";
-import { catalogView, describeSafe, partNoOf } from "./_catalog-plan.js";
+import { catalogView, describeSafe, partNoOf, quantity2Columns } from "./_catalog-plan.js";
 import type { CatalogItemInfo, DeclarationDeps, LineItemRow } from "./ports.js";
 
 const LOCKED = new Set(["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"]);
@@ -75,7 +75,9 @@ export async function linkLineItem(deps: DeclarationDeps, ctx: Ctx, lineItemId: 
   }
   const old = row.catalogItemId ? (await describeSafe(deps, ctx.orgId, [row.catalogItemId], row.dossierId))[row.catalogItemId]?.itemNo ?? row.catalogItemId : "";
   const now = deps.clock.now();
-  const patch = { catalogItemId: info.id, catalogAliasId: aliasId, itemCode: info.customs?.code ?? null, ...(row.catalogItemId === info.id ? {} : { unitFactor: null }), updatedAt: now };
+  const unitFactor = row.catalogItemId === info.id ? (row.unitFactor ?? null) : null;
+  // Số lượng (2) theo mặt hàng vừa gắn – lưu trên dòng (truyền đọc giá trị này).
+  const patch = { catalogItemId: info.id, catalogAliasId: aliasId, itemCode: info.customs?.code ?? null, ...(row.catalogItemId === info.id ? {} : { unitFactor: null }), ...quantity2Columns({ ...row, unitFactor }, info), updatedAt: now };
   const itemNo = info.itemNo;
   await deps.uow.asOrg(ctx, async (r) => {
     await r.lineItems.update(ctx.orgId, row.id, patch);
@@ -94,11 +96,15 @@ export async function setLineUnitFactor(deps: DeclarationDeps, ctx: Ctx, lineIte
   const row = line.value;
   if (factor !== null && !CatalogFactorSchema.safeParse(factor).success) return err(domainError("VALIDATION", "Hệ số phải là số lớn hơn 0"));
   if (!row.catalogItemId) return err(domainError("INVALID_STATE", "Dòng chưa gắn mặt hàng danh mục"));
+  // Số lượng (2) phụ thuộc hệ số lô → tính lại với mặt hàng đang gắn (đọc danh mục NGOÀI transaction). Danh mục lỗi / mặt hàng không còn dùng
+  // → bỏ giá trị cũ (đã sai theo hệ số mới) – dòng về mặc định SL2 = SL1, lần đồng bộ sau tính lại.
+  const info = (await describeSafe(deps, ctx.orgId, [row.catalogItemId], row.dossierId))[row.catalogItemId];
+  const q2 = quantity2Columns({ ...row, unitFactor: factor }, info);
   const now = deps.clock.now();
   await deps.uow.asOrg(ctx, async (r) => {
-    await r.lineItems.update(ctx.orgId, row.id, { unitFactor: factor, updatedAt: now });
+    await r.lineItems.update(ctx.orgId, row.id, { unitFactor: factor, ...q2, updatedAt: now });
     await r.fieldAudit.append(ctx, now, [{ dossierId: row.dossierId, key: `unitFactor:${row.lineNo}`, oldValue: row.unitFactor ?? "", newValue: factor ?? "", source: "CATALOG_EDIT" }]);
   });
   await deps.dossiers.publish(ctx.orgId, row.dossierId, { type: "dossier.updated" });
-  return ok(await viewOf(deps, ctx, { ...row, unitFactor: factor, updatedAt: now }));
+  return ok(await viewOf(deps, ctx, { ...row, unitFactor: factor, ...q2, updatedAt: now }));
 }

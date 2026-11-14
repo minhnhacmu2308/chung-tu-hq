@@ -2,8 +2,8 @@
 // Ghép/quy đổi/chuẩn hóa mã dùng ĐÚNG hàm thuần của @kb/contracts (item-catalog) như backend (packages/core/src/modules/catalog/application/resolve.ts).
 // Chỉ phụ thuộc @kb/contracts + lib/decimal → seed, db và api cùng import không vòng.
 import {
-  buildItemMatchIndex, itemCodeKey, itemNameKey, itemUnitKey, matchItemCandidate,
-  type CatalogImport, type CatalogItem, type CatalogItemFields, type CatalogMode, type CodeSet, type CodeSetKind, type ItemAlias, type ItemIndexAlias, type ItemMatchIndex,
+  buildItemMatchIndex, itemCodeKey, itemNameKey, itemUnitKey, matchItemCandidate, rebaseQty2Factor,
+  type CatalogImport, type ItemQty2, type CatalogItem, type CatalogItemFields, type CatalogMode, type CodeSet, type CodeSetKind, type ItemAlias, type ItemIndexAlias, type ItemMatchIndex,
   type MatchQueueItem, type ResolveItemResultDto,
 } from "@kb/contracts";
 import { divDecimal, plainDecimal, sameDecimal } from "@/lib/decimal";
@@ -100,7 +100,11 @@ export type RebasePlan =
   | { kind: "SAME" }
   | { kind: "SET_BASE" }
   | { kind: "NO_FACTOR" }
-  | { kind: "REBASE"; factor: string; conversions: RebaseConversion[]; changes: { unit: string; oldValue: string; newValue: string }[]; lineFactors: { id: string; oldValue: string; newValue: string }[] };
+  | {
+      kind: "REBASE"; factor: string; conversions: RebaseConversion[]; changes: { unit: string; oldValue: string; newValue: string }[]; lineFactors: { id: string; oldValue: string; newValue: string }[];
+      /** Tỷ lệ ĐVT 2 mới (cũ × f – rebaseQty2Factor dùng chung với backend). */
+      qty2Factor?: { oldValue: string; newValue: string };
+    };
 
 const positive = (s: string | undefined): string | null => (s && /^\d+(\.\d+)?$/.test(s.trim()) && /[1-9]/.test(s) ? plainDecimal(s) : null);
 const isZero = (s: string) => plainDecimal(s) === "0";
@@ -109,7 +113,9 @@ const isZero = (s: string) => plainDecimal(s) === "0";
  * Gốc cũ B, gốc mới N, f = số B trong 1 N (quy đổi hiện có của N, không có thì `factor`). Mỗi quy đổi `1 X = x B` (X ≠ N) → `1 X = x / f N`;
  * thêm `1 B = 1 / f N`; bỏ dòng của N; hệ số theo lô chia f. Một giá trị tròn về 0 → NO_FACTOR.
  */
-export function planRebase(input: { baseUnit: string | null; newBase: string; conversions: readonly RebaseConversion[]; lineFactors?: readonly { id: string; factor: string }[]; factor?: string }): RebasePlan {
+export function planRebase(input: {
+  baseUnit: string | null; newBase: string; conversions: readonly RebaseConversion[]; lineFactors?: readonly { id: string; factor: string }[]; factor?: string; qty2?: ItemQty2 | null;
+}): RebasePlan {
   const newKey = itemUnitKey(input.newBase);
   if (!input.baseUnit) return { kind: "SET_BASE" };
   const baseKey = itemUnitKey(input.baseUnit);
@@ -142,11 +148,13 @@ export function planRebase(input: { baseUnit: string | null; newBase: string; co
     lineFactors.push({ id: l.id, oldValue: plainDecimal(l.factor), newValue: v });
   }
   const byUnit = <X extends { unit: string }>(a: X, b: X) => itemUnitKey(a.unit).localeCompare(itemUnitKey(b.unit));
-  return { kind: "REBASE", factor: f, conversions: next.sort(byUnit), changes: changes.sort(byUnit), lineFactors };
+  const q2 = rebaseQty2Factor(input.qty2, input.baseUnit, input.newBase, f);
+  const q2Old = input.qty2?.factor ? plainDecimal(input.qty2.factor) : "";
+  return { kind: "REBASE", factor: f, conversions: next.sort(byUnit), changes: changes.sort(byUnit), lineFactors, ...(q2 !== null && q2 !== q2Old ? { qty2Factor: { oldValue: q2Old, newValue: q2 } } : {}) };
 }
 
-const ITEM_FIELD_KEYS = ["name", "hsCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "description", "note"] as const;
-const RATE_KEYS = new Set<string>(["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate"]);
+const ITEM_FIELD_KEYS = ["name", "hsCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "qty2Unit", "qty2Factor", "description", "note"] as const;
+const RATE_KEYS = new Set<string>(["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "qty2Factor"]);
 
 /** Các trường của `incoming` có giá trị và khác mặt hàng (thuế suất so theo giá trị) – như diffItemFields. */
 export function diffItemFields(item: Pick<MockCatalogItem, (typeof ITEM_FIELD_KEYS)[number]>, incoming: CatalogItemFields): { key: (typeof ITEM_FIELD_KEYS)[number]; oldValue: string; newValue: string }[] {

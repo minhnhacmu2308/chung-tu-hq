@@ -10,13 +10,14 @@ import { computeTaxes } from "../domain/tax.js";
 import { allocateCustomsValue } from "../domain/valuation.js";
 import { syncLineItems, toBranches, unconfirmedCount } from "./_dto.js";
 import type { DeclarationDeps, DeclarationRow, LineItemRow } from "./ports.js";
-import { partNoOf, planForDossier } from "./_catalog-plan.js";
+import { partNoOf, planForDossier, storedQuantity2 } from "./_catalog-plan.js";
 
 export type DeclarationSnapshot = {
   declarationId: string; version: number; status: DeclarationStatus; kind: "IDA" | "EDA"; direction: "NK" | "XK"; currency: string;
   fields: Record<string, { value: string; source?: string }>;
   /** `itemCode` (HAG_MAHANG) chỉ có khi mặt hàng đã gắn có mã bộ Hải quan – vắng giữ nguyên nội dung đã gửi của lô cũ (so tờ đã gửi). */
-  items: (Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote"> & { itemCode?: string })[];
+  /** `quantity2`: Số lượng (2) theo ĐVT 2 của mặt hàng danh mục (HAG_QN2/QT2 – itemDefaults); đọc từ cột đã lưu của dòng; vắng → SL2 = SL1. Có thì thuộc nội dung "đã gửi" (sentSnapshotOf). */
+  items: (Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote"> & { itemCode?: string; quantity2?: { qty: string; unit: string } })[];
   /** Dòng HAG_MAHANG để trống vì mã lạ / mặt hàng chưa có mã Hải quan → cảnh báo khi dựng payload (không chặn truyền – Review Focus 5). */
   itemNotes: { lineNo: number; note: "UNKNOWN_CODE" | "NO_CUSTOMS_CODE"; partNo: string | null }[];
   adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
@@ -38,7 +39,14 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
   return {
     declarationId: decl.id, version: decl.version, status: decl.status, kind: decl.kind, direction: dossier.direction, currency: dossier.currency,
     fields: Object.fromEntries(Object.entries(decl.fields).map(([k, f]) => [k, { value: f.value, source: f.source }])),
-    items: items.map((i) => ({ id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate, vatRate: i.vatRate, vatCode: i.taxDetail?.vatCode ?? null, policyNote: i.policyNote, ...(i.itemCode ? { itemCode: i.itemCode } : {}) })),
+    items: items.map((i) => {
+      // Số lượng (2) ĐÃ LƯU trên dòng (tính khi áp kế hoạch danh mục / đổi hệ số lô) – không gọi danh mục lúc truyền: gửi đúng nội dung đã duyệt.
+      const q2 = storedQuantity2(i);
+      return {
+        id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate,
+        vatRate: i.vatRate, vatCode: i.taxDetail?.vatCode ?? null, policyNote: i.policyNote, ...(i.itemCode ? { itemCode: i.itemCode } : {}), ...(q2 ? { quantity2: { qty: q2.qty, unit: q2.unit } } : {}),
+      };
+    }),
     itemNotes: deps.catalog ? items.flatMap((i): DeclarationSnapshot["itemNotes"] => {
       if (i.itemCode) return [];
       const partNo = partNoOf(shipment, i.lineNo);

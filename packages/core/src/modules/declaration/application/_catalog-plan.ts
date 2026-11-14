@@ -1,7 +1,8 @@
 // Gắn dòng hàng với danh mục hàng hóa dùng chung (module catalog qua DeclarationCatalogPort) – spec danh mục §5.
 // Tra mã chạy NGOÀI transaction (port module khác lấy kết nối pool riêng); kết quả (kế hoạch) được áp trong transaction của tờ khai.
 // Danh mục lỗi / chưa nối → không gắn gì, luồng tờ khai đi tiếp (Review Focus 5).
-import { convertItemQty, declarationEditScope, editBlockFor, itemLotFactorDeviates, itemUnitKey, sheetOfLine, type LineItem, type Shipment } from "@kb/contracts";
+import { convertItemQty, declarationEditScope, editBlockFor, itemLotFactorDeviates, itemQuantity2, itemUnitKey, sheetOfLine, type LineItem, type Shipment } from "@kb/contracts";
+import { Decimal } from "../../../shared/decimal.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { createLogger } from "../../../shared/log.js";
 import type { CatalogItemInfo, CatalogQuery, DeclarationDeps, HsLinePatch, LineItemRow } from "./ports.js";
@@ -104,8 +105,28 @@ export function linkPatch(row: LineItemRow, plan: CatalogPlan): HsLinePatch | nu
   if (plan.frozen.has(row.lineNo)) return null;
   const p = plannedItem(row, plan);
   const next = { catalogItemId: p?.info.id ?? null, catalogAliasId: p?.aliasId ?? null, itemCode: p?.info.customs?.code ?? null };
-  const same = (row.catalogItemId ?? null) === next.catalogItemId && (row.catalogAliasId ?? null) === next.catalogAliasId && (row.itemCode ?? null) === next.itemCode;
-  return same ? null : { ...next, ...(next.catalogItemId ? {} : { unitFactor: null }) };
+  // Đổi mặt hàng → bỏ hệ số theo lô (như trước); Số lượng (2) tính lại với hệ số còn lại sau khi áp.
+  const unitFactor = next.catalogItemId && (row.catalogItemId ?? null) === next.catalogItemId ? (row.unitFactor ?? null) : null;
+  const q2 = quantity2Columns({ ...row, unitFactor }, p?.info);
+  const same = (row.catalogItemId ?? null) === next.catalogItemId && (row.catalogAliasId ?? null) === next.catalogAliasId && (row.itemCode ?? null) === next.itemCode && sameQuantity2(row, q2);
+  return same ? null : { ...next, ...(next.catalogItemId ? {} : { unitFactor: null }), ...q2 };
+}
+
+/** Cột Số lượng (2) lưu trên dòng (null hết = chưa tính). */
+export type Quantity2Columns = Required<Pick<LineItemRow, "quantity2Qty" | "quantity2Unit" | "quantity2Factor">>;
+/** Số lượng (2) của dòng theo mặt hàng (không có mặt hàng / ĐVT 2 / không quy được → null hết). */
+export function quantity2Columns(row: Pick<LineItemRow, "quantity" | "unit" | "unitFactor">, info: CatalogItemInfo | undefined): Quantity2Columns {
+  const q = lineQuantity2(row, info);
+  return q ? { quantity2Qty: q.qty, quantity2Unit: q.unit, quantity2Factor: q.factor } : { quantity2Qty: null, quantity2Unit: null, quantity2Factor: null };
+}
+const sameDec = (a: string | null | undefined, b: string | null) => ((a ?? null) === null || b === null ? (a ?? null) === b : new Decimal(a!).eq(b));
+const sameQuantity2 = (row: Pick<LineItemRow, "quantity2Qty" | "quantity2Unit" | "quantity2Factor">, q: Quantity2Columns) =>
+  sameDec(row.quantity2Qty, q.quantity2Qty) && (row.quantity2Unit ?? null) === q.quantity2Unit && sameDec(row.quantity2Factor, q.quantity2Factor);
+
+/** Số lượng (2) ĐÃ LƯU của dòng → DTO (màn hình + truyền dùng cùng giá trị). */
+export function storedQuantity2(row: Pick<LineItemRow, "quantity2Qty" | "quantity2Unit" | "quantity2Factor">): NonNullable<LineItem["quantity2"]> | undefined {
+  if (row.quantity2Qty == null || !row.quantity2Unit) return undefined;
+  return { qty: new Decimal(row.quantity2Qty).toFixed(), unit: row.quantity2Unit, factor: new Decimal(row.quantity2Factor ?? "1").toFixed() };
 }
 
 /** Hệ số mặc định "1 ĐVT dòng = ? ĐVT gốc" theo danh mục; ĐVT gốc → "1"; không có → null. */
@@ -115,10 +136,24 @@ function defaultFactor(conv: NonNullable<CatalogItemInfo["conversion"]>, unit: s
   return Object.entries(conv.factors).find(([k]) => itemUnitKey(k) === u)?.[1] ?? null;
 }
 
-/** Phần danh mục của DTO dòng hàng: mặt hàng đã gắn, "mã lạ", gợi ý lượng theo ĐVT khai (ĐVT của mã Hải quan). */
-export function catalogView(row: LineItemRow, info: CatalogItemInfo | undefined, partNo: string | null, catalogOn: boolean): Pick<LineItem, "catalogItem" | "unknownCode" | "qtySuggestion"> {
-  if (!info) return catalogOn && !row.catalogItemId && partNo ? { unknownCode: true } : {};
-  const out: Pick<LineItem, "catalogItem" | "unknownCode" | "qtySuggestion"> = { catalogItem: { id: info.id, itemNo: info.itemNo, name: info.name } };
+/**
+ * Số lượng (2) của dòng theo ĐVT 2 + tỷ lệ của mặt hàng (itemQuantity2 – dùng chung với mock): hệ số theo lô của dòng thắng quy đổi danh mục.
+ * Không có mặt hàng / ĐVT 2 / không quy được về gốc → undefined (giữ mặc định SL2 = SL1).
+ */
+export function lineQuantity2(row: Pick<LineItemRow, "quantity" | "unit" | "unitFactor">, info: CatalogItemInfo | undefined): NonNullable<LineItem["quantity2"]> | undefined {
+  if (!info?.qty2) return undefined;
+  return itemQuantity2({ qty: row.quantity, unit: row.unit, lotFactor: row.unitFactor }, info.conversion, info.qty2) ?? undefined;
+}
+
+/**
+ * Phần danh mục của DTO dòng hàng: mặt hàng đã gắn, "mã lạ", gợi ý lượng theo ĐVT khai (ĐVT của mã Hải quan), Số lượng (2) ĐÃ LƯU trên dòng
+ * (không tính lại từ danh mục – giá trị hiện = giá trị truyền).
+ */
+export function catalogView(row: LineItemRow, info: CatalogItemInfo | undefined, partNo: string | null, catalogOn: boolean): Pick<LineItem, "catalogItem" | "unknownCode" | "qtySuggestion" | "quantity2"> {
+  const q2 = storedQuantity2(row);
+  // Danh mục lỗi / không đọc được mặt hàng: vẫn hiện Số lượng (2) đã lưu (đó là giá trị sẽ truyền).
+  if (!info) return catalogOn && !row.catalogItemId && partNo ? { unknownCode: true } : q2 ? { quantity2: q2 } : {};
+  const out: Pick<LineItem, "catalogItem" | "unknownCode" | "qtySuggestion" | "quantity2"> = { catalogItem: { id: info.id, itemNo: info.itemNo, name: info.name }, ...(q2 ? { quantity2: q2 } : {}) };
   const toUnit = info.customs?.unit;
   if (!toUnit || !info.conversion || itemUnitKey(toUnit) === itemUnitKey(row.unit)) return out;
   const lot = row.unitFactor ?? undefined;

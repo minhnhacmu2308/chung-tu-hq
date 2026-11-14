@@ -8,7 +8,7 @@ export type DeclarationPayload = {
   direction: "NK" | "XK";
   fields: Record<string, { value: string; /** Nguồn giá trị (USER = người khai nhập) – không bắt buộc. */ source?: string }>;
   /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền. */
-  items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; vatCode?: string | null; policyNote: string | null; /** Mã bộ Hải quan của mặt hàng (danh mục) → HAG_MAHANG. */ itemCode?: string | null }[];
+  items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; vatCode?: string | null; policyNote: string | null; /** Mã bộ Hải quan của mặt hàng (danh mục) → HAG_MAHANG. */ itemCode?: string | null; /** Số lượng (2) theo ĐVT 2 của mặt hàng → HAG_QN2/QT2 (ô người khai nhập vẫn thắng). */ quantity2?: { qty: string; unit: string } | null }[];
   /**
    * Dòng có HAG_MAHANG trống vì mã lạ (Part No chưa có trong danh mục) / mặt hàng chưa có mã bộ Hải quan → cảnh báo, KHÔNG chặn truyền (Review Focus 5).
    * Ngoài `items` để không đổi nội dung "đã gửi" của tờ khai (so tờ đã gửi). Vắng = dữ liệu cũ / chưa nối danh mục.

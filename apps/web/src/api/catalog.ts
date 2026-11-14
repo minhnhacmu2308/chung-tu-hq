@@ -8,7 +8,7 @@ export const catalogKeys = mock.catalogKeys;
 export type {
   AliasActionInput, CatalogImport, CatalogItem, CatalogItemDetail, CatalogItemHistoryEntry, CatalogItemListRow, CatalogItemPage, CatalogMode, CatalogSettingsView, CodeSet, CodeSetKind,
   CreateItemRequest, CreateItemResult, CrossReference, DecideQueueInput, ItemAlias, ListCatalogItemsQueryInput, ListQueueQueryInput, MatchQueueItem, MatchQueuePage,
-  ResolveItemResultDto, ResolveManyResult, ResolveManyRow, UnitConversion,
+  ResolveItemResultDto, ResolveManyResult, ResolveManyRow, SourceChangeBlockedItem, SourceChangePreview, SourceChangeResult, UnitConversion,
 } from "@kb/contracts";
 
 export const getCatalogSettings = pick(mock.getCatalogSettings, http.getCatalogSettings);
@@ -18,6 +18,8 @@ export const changeCatalogMode = pick(mock.changeCatalogMode, http.changeCatalog
 export const listCodeSets = pick(mock.listCodeSets, http.listCodeSets);
 export const saveCodeSet = pick(mock.saveCodeSet, http.saveCodeSet);
 export const setPrimaryDisplay = pick(mock.setPrimaryDisplay, http.setPrimaryDisplay);
+export const previewSourceChange = pick(mock.previewSourceChange, http.previewSourceChange);
+export const changeSourceSet = pick(mock.changeSourceSet, http.changeSourceSet);
 
 export const listCatalogItems = pick(mock.listCatalogItems, http.listCatalogItems);
 export const getCatalogItem = pick(mock.getCatalogItem, http.getCatalogItem);

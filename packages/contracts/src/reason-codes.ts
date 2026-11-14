@@ -125,6 +125,7 @@ export const REASON_TEXT_VI = {
   CATALOG_MODE_CONFLICT: "Chế độ danh mục không cho phép thao tác này",
   CATALOG_PARTNER_SET_EXISTS: "Đối tác này đã có bộ mã cùng loại – dùng bộ mã đã có",
   CATALOG_IMPORT_TOO_LARGE: "Mỗi lần gửi tối đa {max} dòng – chia file thành nhiều lần nhập",
+  CATALOG_SOURCE_SET_INVALID: "Chỉ bộ mã nội bộ (Mã chung, Kế toán, Kho, XNK) được làm bộ nguồn gốc",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

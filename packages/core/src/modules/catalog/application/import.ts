@@ -77,7 +77,9 @@ export async function importRows(deps: CatalogDeps, ctx: Ctx, input: ImportRowsI
     const can = await requireSetManager(r, ctx, set.id);
     if (!can.ok) return can;
     const columnMap = Object.fromEntries(Object.entries(input.columnMap).filter((e): e is [string, number] => typeof e[1] === "number"));
-    return ok(await stageImport(deps, r, ctx, { codeSetId: set.id, fileName: input.fileName, columnMap, rows: staged, errors }));
+    // Thông tin mặt hàng (loại, xuất xứ, thuế…) chỉ áp khi bộ nhận là bộ nguồn gốc – bộ khác bỏ qua (spec 2026-11-14 §4).
+    const rows = set.isSource ? staged : staged.map(({ fields: _drop, ...rest }) => rest);
+    return ok(await stageImport(deps, r, ctx, { codeSetId: set.id, fileName: input.fileName, columnMap, rows, errors }));
   });
   if (!done.ok) return done;
   return startMatch(deps, ctx, done.value);

@@ -115,6 +115,7 @@ export const REASON_MESSAGES = defineMessages({
     CATALOG_MODE_CONFLICT: "Chế độ danh mục không cho phép thao tác này",
     CATALOG_PARTNER_SET_EXISTS: "Đối tác này đã có bộ mã cùng loại – dùng bộ mã đã có",
     CATALOG_IMPORT_TOO_LARGE: "Mỗi lần gửi tối đa {max} dòng – chia file thành nhiều lần nhập",
+    CATALOG_SOURCE_SET_INVALID: "Chỉ bộ mã nội bộ (Mã chung, Kế toán, Kho, XNK) được làm bộ nguồn gốc",
   },
   en: {
     OPERATION_PENDING: "Waiting for a response to {ops}",
@@ -226,6 +227,7 @@ export const REASON_MESSAGES = defineMessages({
     CATALOG_MODE_CONFLICT: "The catalog mode does not allow this action",
     CATALOG_PARTNER_SET_EXISTS: "This partner already has a code set of this type – use the existing one",
     CATALOG_IMPORT_TOO_LARGE: "At most {max} rows per request – split the file into several imports",
+    CATALOG_SOURCE_SET_INVALID: "Only internal code sets (Shared, Accounting, Warehouse, Customs) can be the source set",
   },
   zh: {
     OPERATION_PENDING: "正在等待 {ops} 的回复",
@@ -337,6 +339,7 @@ export const REASON_MESSAGES = defineMessages({
     CATALOG_MODE_CONFLICT: "当前目录模式不允许此操作",
     CATALOG_PARTNER_SET_EXISTS: "该合作方已有同类编码集 – 请使用已有编码集",
     CATALOG_IMPORT_TOO_LARGE: "每次最多提交 {max} 行 – 请将文件拆分为多次导入",
+    CATALOG_SOURCE_SET_INVALID: "只有内部编码集（通用、会计、仓库、进出口）可以作为源编码集",
   },
 });
 

@@ -2,30 +2,32 @@
 // (packages/core/src/modules/catalog/application/*): ghép / quy đổi / chuẩn hóa mã / kiểm dòng Excel dùng chung hàm thuần của @kb/contracts.
 // Lỗi nghiệp vụ là ApiError cùng `code` + `reason` (mã lý do) như client http nhận từ route. Nhập > 500 dòng mô phỏng job nền: ghép dần theo thời gian.
 import {
-  AliasActionInputSchema, CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, CATALOG_IMPORT_SYNC_MAX_ROWS, ChangeCatalogModeInputSchema, CreateItemInputSchema, DecideQueueBulkInputSchema, DecideQueueInputSchema,
-  ImportFromDocumentsInputSchema, ImportRowsInputSchema, ListCatalogItemsQuerySchema, ListQueueQuerySchema, ProposeAliasInputSchema, ResolveManyInputSchema, SetConversionInputSchema,
-  SetupCatalogInputSchema, SplitAliasesInputSchema, UpdateItemInputSchema, UpsertCodeSetInputSchema, convertItemQty, importRowsTooLarge, itemCodeKey, itemHsDigits, itemLotFactorDeviates, itemNameKey, itemUnitKey,
-  loadCodeList, reasonVi, sheetOfLine, validateItemRows,
-  type AliasActionInput, type AliasSource, type CatalogImport, type CatalogItem, type CatalogItemDetail, type CatalogItemHistoryEntry, type CatalogItemListRow, type CatalogItemPage, type CatalogSettingsView,
-  type ChangeCatalogModeInput, type CodeSet, type CodeSetKind, type CreateItemRequest, type CreateItemResult, type CrossReference, type CrossReferenceRow,
-  type DecideQueueBulkInput, type DecideQueueBulkResult, type DecideQueueInput, type ImportFromDocumentsInput, type ImportRowsInput, type InvoiceLayout, type ItemAlias, type LineItem,
-  type LinkLineItemInput, type ListCatalogItemsQueryInput, type ListQueueQueryInput, type MatchQueueItem, type MatchQueueListRow, type MatchQueuePage, type ProposeAliasInput, type ReasonCode,
-  type ReasonParams, type ResolveItemQueryInput, type ResolveItemResultDto, type ResolveManyResult, type ResolveManyRow, type SetConversionInput, type SetupCatalogRequest, type SplitAliasesInput, type UnitConversion,
-  type UpdateItemRequest, type UpsertCodeSetInput,
+  AliasActionInputSchema, CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, CATALOG_IMPORT_SYNC_MAX_ROWS, ChangeCatalogModeInputSchema, ChangeSourceInputSchema, CreateItemInputSchema, DecideQueueBulkInputSchema,
+  DecideQueueInputSchema, ImportFromDocumentsInputSchema, ImportRowsInputSchema, ListCatalogItemsQuerySchema, ListQueueQuerySchema, ProposeAliasInputSchema, ResolveManyInputSchema, SetConversionInputSchema,
+  SetupCatalogInputSchema, SourcePreviewQuerySchema, SplitAliasesInputSchema, UpdateItemInputSchema, UpsertCodeSetInputSchema, convertItemQty, importRowsTooLarge, itemCodeKey, itemHsDigits,
+  itemLotFactorDeviates, itemNameKey, itemUnitKey, loadCodeList, reasonVi, sheetOfLine, validateItemRows,
+  type AliasActionInput, type AliasSource, type CatalogImport, type CatalogItem, type CatalogItemDetail, type CatalogItemFields, type CatalogItemHistoryEntry, type CatalogItemListRow, type CatalogItemPage,
+  type CatalogSettingsView, type ChangeCatalogModeInput, type CodeSet, type CodeSetKind, type CreateItemRequest, type CreateItemResult, type CrossReference, type CrossReferenceRow,
+  type DecideQueueBulkInput, type DecideQueueBulkResult, type DecideQueueInput, type ImportFromDocumentsInput, type ImportRowsInput, type InvoiceLayout, type ItemAlias, type ItemMatchLevel,
+  type ItemMatchReason, type LineItem, type LinkLineItemInput, type ListCatalogItemsQueryInput, type ListQueueQueryInput, type MatchQueueItem, type MatchQueueListRow, type MatchQueuePage,
+  type ProposeAliasInput, type ReasonCode, type ReasonParams, type ResolveItemQueryInput, type ResolveItemResultDto, type ResolveManyResult, type ResolveManyRow, type SetConversionInput,
+  type SetupCatalogRequest, type SourceChangeBlockedItem, type SourceChangePreview, type SourceChangeResult, type SplitAliasesInput, type UnitConversion, type UpdateItemRequest,
+  type UpsertCodeSetInput,
 } from "@kb/contracts";
 import type { ZodType } from "zod";
 import { ApiError, mutate, newId, nowIso, query } from "@/lib/mock-request";
 import { mulDecimal } from "@/lib/decimal";
 import type { MockDb } from "@/mocks/db";
 import {
-  DEFAULT_SET_NAME, DEPARTMENT_KINDS, defaultSet, effectiveMode, endOfChain, factorFor, isInternal, isPartnerKind, matchContext, needsFactor, newestAlias, nextItemNo,
-  resolveIn, type MockAlias, type MockCatalog, type MockCatalogItem, type MockCodeSet, type MockImport, type MockQueueItem, type MockStagedRow,
+  DEFAULT_SET_NAME, DEPARTMENT_KINDS, defaultSet, diffItemFields, effectiveMode, endOfChain, factorFor, isInternal, isPartnerKind, matchContext, needsFactor, newestAlias, nextItemNo,
+  planRebase, resolveIn, sourceSetOf, type MockAlias, type MockCatalog, type MockCatalogItem, type MockCodeSet, type MockImport, type MockQueueItem, type MockStagedRow,
 } from "@/mocks/catalog-engine";
 
 export const catalogKeys = {
   all: ["catalog"] as const,
   settings: ["catalog", "settings"] as const,
   codeSets: ["catalog", "code-sets"] as const,
+  sourcePreview: (codeSetId: string) => ["catalog", "source-preview", codeSetId] as const,
   items: (q: ListCatalogItemsQueryInput = {}) => ["catalog", "items", q] as const,
   item: (id: string) => ["catalog", "item", id] as const,
   history: (id: string) => ["catalog", "item", id, "history"] as const,
@@ -50,6 +52,7 @@ const factorRequired = () => failReason("VALIDATION", "CATALOG_UNIT_FACTOR_REQUI
 const mergeInvalid = () => failReason("INVALID_STATE", "CATALOG_MERGE_INVALID");
 const queueDone = () => failReason("INVALID_STATE", "CATALOG_QUEUE_ITEM_DONE");
 const notOwner = () => failReason("FORBIDDEN", "CATALOG_NOT_CODE_SET_OWNER");
+const sourceSetInvalid = () => failReason("VALIDATION", "CATALOG_SOURCE_SET_INVALID");
 
 function parse<T>(schema: ZodType<T>, input: unknown): T {
   const r = schema.safeParse(input);
@@ -150,10 +153,70 @@ function ensurePartnerSet(db: MockDb, kind: "SUPPLIER" | "CUSTOMER", name: strin
   if (!key) return null;
   const cur = db.catalog.codeSets.find((s) => s.kind === kind && s.partnerKey === key);
   if (cur) return cur.id;
-  const row: MockCodeSet = { id: newId("cst"), kind, name: name.trim(), partnerName: name.trim(), partnerKey: key, isPrimaryDisplay: false, isDefault: false, createdAt: nowIso() };
+  const row: MockCodeSet = { id: newId("cst"), kind, name: name.trim(), partnerName: name.trim(), partnerKey: key, isPrimaryDisplay: false, isDefault: false, isSource: false, createdAt: nowIso() };
   db.catalog.codeSets.push(row);
   return row.id;
 }
+
+// ---------- luật bộ nguồn gốc (như source-rules.ts, spec 2026-11-14 §1–2) ----------
+type RebaseKind = "SAME" | "SET_BASE" | "REBASED" | "NO_FACTOR";
+
+/**
+ * Đổi ĐVT gốc của `item` sang `newBase` (ĐVT mã ở bộ nguồn gốc): f lấy từ quy đổi hiện có của `newBase`, không có thì `factor`. Thiếu → NO_FACTOR, không ghi gì.
+ * Quy đổi + hệ số theo lô trên dòng tờ khai gắn mặt hàng (kể cả tờ đã gửi – chỉ là gợi ý) chia lại f; mọi thay đổi ghi lịch sử (CATALOG_EDIT).
+ */
+function rebaseItem(db: MockDb, item: MockCatalogItem, newBase: string, factor?: string): RebaseKind {
+  const cat = db.catalog;
+  const nb = newBase.trim();
+  if (!nb) return "SAME";
+  const convs = cat.conversions.filter((c) => c.itemId === item.id);
+  const lines = item.baseUnit ? db.lineItems.filter((l) => l.catalogItem?.id === item.id && l.unitFactor) : [];
+  const plan = planRebase({ baseUnit: item.baseUnit, newBase: nb, conversions: convs, lineFactors: lines.map((l) => ({ id: l.id, factor: l.unitFactor! })), ...(factor ? { factor } : {}) });
+  if (plan.kind === "SAME" || plan.kind === "NO_FACTOR") return plan.kind;
+  const newKey = itemUnitKey(nb);
+  if (plan.kind === "SET_BASE") {
+    const same = convs.find((c) => itemUnitKey(c.unit) === newKey);
+    if (same) {
+      cat.conversions = cat.conversions.filter((c) => c !== same);
+      audit(db, item.id, `conv:${same.unit}`, same.factor, "");
+    }
+    audit(db, item.id, "baseUnit", "", nb);
+    Object.assign(item, { baseUnit: nb, updatedAt: nowIso() });
+    return "SET_BASE";
+  }
+  const kept = plan.conversions.map((c) => ({ itemId: item.id, unit: convs.find((x) => itemUnitKey(x.unit) === itemUnitKey(c.unit))?.unit ?? c.unit, factor: c.factor }));
+  cat.conversions = [...cat.conversions.filter((c) => c.itemId !== item.id), ...kept];
+  audit(db, item.id, "baseUnit", item.baseUnit ?? "", nb);
+  for (const ch of plan.changes) audit(db, item.id, `conv:${ch.unit}`, ch.oldValue, ch.newValue);
+  for (const l of plan.lineFactors) {
+    const line = lines.find((x) => x.id === l.id)!;
+    line.unitFactor = l.newValue;
+    // Lịch sử của hồ sơ (như sửa hệ số theo lô ở dòng tờ khai): đối tượng = hồ sơ, khóa unitFactor:<số dòng>.
+    audit(db, line.dossierId, `unitFactor:${line.lineNo}`, l.oldValue, l.newValue);
+  }
+  Object.assign(item, { baseUnit: nb, updatedAt: nowIso() });
+  return "REBASED";
+}
+
+/** Áp thông tin mặt hàng từ dòng của bộ nguồn gốc (chỉ trường có giá trị và khác hiện tại). */
+function applySourceFields(db: MockDb, item: MockCatalogItem, fields: CatalogItemFields | null | undefined) {
+  if (!fields) return;
+  const changes = diffItemFields(item, fields);
+  if (!changes.length) return;
+  for (const c of changes) {
+    audit(db, item.id, c.key, c.oldValue, c.newValue);
+    (item as Record<string, unknown>)[c.key] = c.newValue;
+  }
+  Object.assign(item, { nameKey: itemNameKey(item.name), updatedAt: nowIso() });
+}
+
+/** Gắn mã của bộ nguồn gốc: ĐVT của mã thành ĐVT gốc (biết hệ số) rồi áp thông tin mặt hàng. Bộ khác → không làm gì. */
+function applySourceAttach(db: MockDb, set: Pick<MockCodeSet, "isSource"> | null | undefined, item: MockCatalogItem, unit: string | null | undefined, fields: CatalogItemFields | null | undefined) {
+  if (!set?.isSource) return;
+  if (unit) rebaseItem(db, item, unit);
+  applySourceFields(db, item, fields);
+}
+const setById = (cat: MockCatalog, id: string) => cat.codeSets.find((s) => s.id === id) ?? null;
 
 // ---------- nhập Excel / ghép (như match-run.ts) ----------
 /** Lỗi theo dòng giữ trong "DB" mock (localStorage có hạn) – counts.errors vẫn đếm đủ. */
@@ -169,17 +232,74 @@ function bumpImport(cat: MockCatalog, importId: string | null, delta: Partial<Ca
   for (const [k, v] of Object.entries(delta) as [keyof CatalogImport["counts"], number][]) imp.counts[k] += v;
 }
 
+/** Mã nối so khớp không phân biệt hoa thường / khoảng trắng. */
+const itemNoKey = (s: string) => s.toUpperCase().replace(/\s+/g, "");
+
+/** Mặt hàng được cột Mã nối chỉ tới: mã nối (item_no) hoặc mã ở bộ nguồn gốc; đã gộp → cuối chuỗi; phải ACTIVE (như linkTarget). */
+function linkTarget(cat: MockCatalog, linkCode: string, ctx: ReturnType<typeof matchContext>): MockCatalogItem | null {
+  const key = itemNoKey(linkCode);
+  const byNo = cat.items.find((i) => itemNoKey(i.itemNo) === key);
+  let end = byNo ? endOfChain(cat, byNo.id) : null;
+  const source = sourceSetOf(cat);
+  if (!end && source) {
+    const a = ctx.aliasBySetCode.get(`${source.id}\0${itemCodeKey(linkCode)}`);
+    end = a ? (cat.items.find((i) => i.id === a.itemId) ?? null) : null;
+  }
+  return end && end.status === "ACTIVE" ? end : null;
+}
+
 function matchRow(db: MockDb, imp: MockImport, row: MockStagedRow, ctx: { current: ReturnType<typeof matchContext> }): keyof CatalogImport["counts"] {
   const cat = db.catalog;
   const codeKey = itemCodeKey(row.code);
   const unit = row.unit ?? null;
   const source: AliasSource = row.sourceRef ? "DOCUMENT" : "IMPORT";
+  const set = setById(cat, imp.codeSetId);
+  const isSource = !!set?.isSource;
+  // Bộ nguồn gốc + dòng Excel → tên, HS và thông tin mặt hàng của dòng quyết định mặt hàng (chứng từ OCR không đè).
+  const itemFields: CatalogItemFields | null = isSource && source === "IMPORT" ? { name: row.name, ...(row.hs ? { hsCode: row.hs } : {}), ...(row.fields ?? {}) } : null;
   const saveFactor = (itemId: string) => {
     const item = cat.items.find((i) => i.id === itemId);
     if (item && row.factor && unit && needsFactor(cat, item, unit)) upsertConversion(db, itemId, unit, row.factor);
   };
-  // 1. Mã đã có trong bộ → cập nhật tên/ĐVT (Excel cập nhật; chứng từ chỉ điền chỗ trống).
+  const sourceAttach = (itemId: string, codeUnit: string | null) => {
+    const item = cat.items.find((i) => i.id === itemId);
+    if (item && isSource) applySourceAttach(db, set, item, codeUnit, itemFields);
+  };
+  const enqueue = (level: ItemMatchLevel, reason: ItemMatchReason, suggestedItemId: string | null, candidates: MockQueueItem["candidates"]): keyof CatalogImport["counts"] => {
+    // Mã đã chờ duyệt trong bộ → không thêm mục trùng.
+    if (cat.queue.some((q) => q.status === "PENDING" && q.codeSetId === imp.codeSetId && itemCodeKey(q.code) === codeKey)) return "skipped";
+    cat.queue.push({
+      id: newId("cmq"), importId: imp.id, importRow: row.row, codeSetId: imp.codeSetId, code: row.code, name: row.name, unit, hsCode: row.hs ?? null, level,
+      suggestedItemId, candidates, reason, status: "PENDING", decidedBy: null, decidedAt: null, sourceRef: row.sourceRef ?? null,
+      factor: row.factor ?? null, itemFields, createdAt: nowIso(),
+    });
+    return "queued";
+  };
+  const attach = (itemId: string) => {
+    saveFactor(itemId);
+    const a = newAlias(db, { codeSetId: imp.codeSetId, code: row.code, name: row.name, unit, itemId, status: "ACTIVE", source });
+    audit(db, itemId, auditKeyAlias(a), "", "ACTIVE");
+    sourceAttach(itemId, unit);
+    ctx.current = matchContext(cat);
+  };
   const existing = activeHolder(cat, imp.codeSetId, codeKey);
+  const existingItemId = existing ? (endOfChain(cat, existing.itemId)?.id ?? existing.itemId) : null;
+
+  // 0. Cột Mã nối: nối thẳng vào mặt hàng đó, bỏ qua luật SURE/MAYBE (spec 2026-11-14 §5).
+  if (row.linkCode) {
+    const target = linkTarget(cat, row.linkCode, ctx.current);
+    if (!target) return enqueue("NONE", "LINK_NOT_FOUND", existingItemId, existingItemId ? [{ itemId: existingItemId, score: 1, reason: "ALIAS_SAME_SET" }] : []);
+    const linked = { itemId: target.id, score: 1, reason: "LINKED_BY_CODE" };
+    // Mã đã ACTIVE trong bộ cho mặt hàng khác → không tự chuyển, người duyệt quyết định.
+    if (existingItemId && existingItemId !== target.id) return enqueue("MAYBE", "AMBIGUOUS", target.id, [linked, { itemId: existingItemId, score: 1, reason: "ALIAS_SAME_SET" }]);
+    if (!existing) {
+      if (!row.factor && needsFactor(cat, target, unit)) return enqueue("MAYBE", "UNIT_NO_FACTOR", target.id, [linked]);
+      attach(target.id);
+      return "matched";
+    }
+  }
+
+  // 1. Mã đã có trong bộ → cập nhật tên/ĐVT (Excel cập nhật; chứng từ chỉ điền chỗ trống).
   if (existing) {
     const fromDocument = source === "DOCUMENT";
     if (row.name !== (existing.name ?? "") && (!fromDocument || !existing.name)) {
@@ -190,27 +310,22 @@ function matchRow(db: MockDb, imp: MockImport, row: MockStagedRow, ctx: { curren
       audit(db, existing.itemId, `${auditKeyAlias(existing)}:unit`, existing.unit ?? "", unit);
       existing.unit = unit;
     }
-    saveFactor(endOfChain(cat, existing.itemId)?.id ?? existing.itemId);
+    const target = existingItemId ?? existing.itemId;
+    saveFactor(target);
+    // Bộ nguồn gốc: ĐVT của mã là ĐVT gốc (đổi gốc khi biết hệ số) + thông tin mặt hàng của dòng.
+    sourceAttach(target, existing.unit);
+    if (isSource) ctx.current = matchContext(cat);
     return "matched";
   }
   // 2. Luật ghép; file có hệ số cho ĐVT khác ĐVT gốc → không cần hạ MAYBE.
   const res = resolveIn(cat, { codeSetId: imp.codeSetId, code: row.code, name: row.name, hsCode: row.hs ?? null, unit }, ctx.current);
   const itemId = res.level === "SURE" ? res.itemId : res.reason === "UNIT_NO_FACTOR" && row.factor ? (res.candidates[0]?.itemId ?? null) : null;
   if (itemId) {
-    saveFactor(itemId);
-    const a = newAlias(db, { codeSetId: imp.codeSetId, code: row.code, name: row.name, unit, itemId, status: "ACTIVE", source });
-    audit(db, itemId, auditKeyAlias(a), "", "ACTIVE");
-    ctx.current = matchContext(cat);
+    attach(itemId);
     return "matched";
   }
-  // 3. Hàng chờ – mã đã chờ duyệt trong bộ → không thêm mục trùng.
-  if (cat.queue.some((q) => q.status === "PENDING" && q.codeSetId === imp.codeSetId && itemCodeKey(q.code) === codeKey)) return "skipped";
-  cat.queue.push({
-    id: newId("cmq"), importId: imp.id, importRow: row.row, codeSetId: imp.codeSetId, code: row.code, name: row.name, unit, hsCode: row.hs ?? null, level: res.level,
-    suggestedItemId: res.candidates[0]?.itemId ?? null, candidates: res.candidates, reason: res.reason, status: "PENDING", decidedBy: null, decidedAt: null,
-    sourceRef: row.sourceRef ?? null, createdAt: nowIso(),
-  });
-  return "queued";
+  // 3. Hàng chờ.
+  return enqueue(res.level, res.reason as ItemMatchReason, res.candidates[0]?.itemId ?? null, res.candidates);
 }
 
 /** Ghép tới dòng `upTo` (đồng bộ: hết; nền: theo thời gian đã trôi) rồi chốt DONE khi xong. */
@@ -254,7 +369,7 @@ export const getCatalogSettings = () =>
 export const listCodeSets = () => read((db) => setsOf(db.catalog));
 
 const kindAllowed = (mode: string, kind: CodeSetKind) => (mode === "SHARED" ? !DEPARTMENT_KINDS.includes(kind) : kind !== "SHARED");
-const clearFlag = (cat: MockCatalog, flag: "isPrimaryDisplay" | "isDefault", except: string | null) => {
+const clearFlag = (cat: MockCatalog, flag: "isPrimaryDisplay" | "isDefault" | "isSource", except: string | null) => {
   for (const s of cat.codeSets) if (s.id !== except) s[flag] = false;
 };
 
@@ -278,8 +393,10 @@ export const saveCodeSet = (id: string | null, input: UpsertCodeSetInput) =>
       Object.assign(cur, { name: v.name, partnerName, partnerKey });
       row = cur;
     } else {
-      row = { id: newId("cst"), kind: v.kind, name: v.name, partnerName, partnerKey, isPrimaryDisplay: false, isDefault: false, createdAt: nowIso() };
+      row = { id: newId("cst"), kind: v.kind, name: v.name, partnerName, partnerKey, isPrimaryDisplay: false, isDefault: false, isSource: false, createdAt: nowIso() };
       if ((v.kind === "CUSTOMS" || v.kind === "SHARED") && !cat.codeSets.some((s) => s.isDefault)) row.isDefault = true;
+      // Chưa có bộ nguồn gốc → bộ nội bộ đầu tiên thành nguồn gốc (luôn đúng một bộ khi đã có bộ nội bộ).
+      if (isInternal(v.kind) && !sourceSetOf(cat)) row.isSource = true;
       cat.codeSets.push(row);
     }
     if (v.isDefault && !row.isDefault) {
@@ -305,7 +422,11 @@ export const setPrimaryDisplay = (codeSetId: string | null) =>
     return setsOf(cat);
   });
 
-/** Thiết lập lần đầu – idempotent; đã thiết lập chế độ khác → CATALOG_MODE_CONFLICT (dùng đổi chế độ). */
+/**
+ * Thiết lập lần đầu – idempotent; đã thiết lập chế độ khác → CATALOG_MODE_CONFLICT (dùng đổi chế độ). Bộ nguồn gốc: PER_DEPARTMENT → `sourceKind`
+ * (mặc định XNK; chạy lại không kèm → giữ bộ đang có), SHARED → bộ "Mã chung". Đã có nguồn gốc khác mà bộ chọn đã có mã → CATALOG_MODE_CONFLICT
+ * (reason SOURCE_CHANGE_REQUIRED – dùng "Đổi bộ nguồn gốc").
+ */
 export const setupCatalog = (input: SetupCatalogRequest) =>
   write((db) => {
     requireAdmin(db);
@@ -315,6 +436,19 @@ export const setupCatalog = (input: SetupCatalogRequest) =>
     const st = cat.settings;
     if (st.setupAt && st.mode && st.mode !== v.mode) throw modeConflict();
     if (v.sets.some((s) => !kindAllowed(v.mode, s.kind))) throw modeConflict();
+    const curSource = sourceSetOf(cat);
+    const keepCurrent = v.mode === "PER_DEPARTMENT" && v.sourceKind === undefined ? curSource : null;
+    const sourceKind: CodeSetKind = v.mode === "SHARED" ? "SHARED" : (v.sourceKind ?? "CUSTOMS");
+    const pickSource = (list: readonly MockCodeSet[]) =>
+      keepCurrent
+        ? (list.find((s) => s.id === keepCurrent.id) ?? null)
+        : sourceKind === "CUSTOMS"
+          ? (list.find((s) => s.kind === "CUSTOMS" && s.isDefault) ?? list.find((s) => s.kind === "CUSTOMS") ?? null)
+          : (list.find((s) => s.kind === sourceKind) ?? null);
+    const wantedSource = pickSource(cat.codeSets);
+    if (v.mode === "PER_DEPARTMENT" && curSource && wantedSource && wantedSource.id !== curSource.id && cat.aliases.some((a) => a.codeSetId === wantedSource.id && a.status === "ACTIVE")) {
+      throw modeConflict();
+    }
     const wanted = (k: CodeSetKind) => v.sets.find((s) => s.kind === k);
     const touched = new Map<string, string[]>();
     const ensure = (kind: CodeSetKind, existing: MockCodeSet | undefined, isDefault: boolean) => {
@@ -323,7 +457,7 @@ export const setupCatalog = (input: SetupCatalogRequest) =>
       let row = existing;
       if (row) Object.assign(row, { kind, name });
       else {
-        row = { id: newId("cst"), kind, name, partnerName: null, partnerKey: null, isPrimaryDisplay: false, isDefault: false, createdAt: nowIso() };
+        row = { id: newId("cst"), kind, name, partnerName: null, partnerKey: null, isPrimaryDisplay: false, isDefault: false, isSource: false, createdAt: nowIso() };
         cat.codeSets.push(row);
       }
       if (isDefault) {
@@ -347,6 +481,11 @@ export const setupCatalog = (input: SetupCatalogRequest) =>
       if (id) touched.set(id, p.ownerIds);
     }
     for (const [id, owners] of touched) cat.owners[id] = [...new Set(owners)];
+    const target = pickSource(cat.codeSets);
+    if (target && !target.isSource) {
+      clearFlag(cat, "isSource", target.id);
+      target.isSource = true;
+    }
     const primaryKind = v.primaryDisplayKind !== undefined ? v.primaryDisplayKind : v.mode === "SHARED" && !cat.codeSets.some((s) => s.isPrimaryDisplay) ? "SHARED" : undefined;
     if (primaryKind !== undefined) {
       const target = primaryKind ? cat.codeSets.find((s) => s.kind === primaryKind) : undefined;
@@ -370,7 +509,9 @@ export const changeCatalogMode = (input: ChangeCatalogModeInput) =>
       const only = internal[0]!;
       clearFlag(cat, "isDefault", only.id);
       clearFlag(cat, "isPrimaryDisplay", only.id);
-      Object.assign(only, { kind: "SHARED", name: DEFAULT_SET_NAME.SHARED, isDefault: true, isPrimaryDisplay: true });
+      clearFlag(cat, "isSource", only.id);
+      // Bộ nội bộ duy nhất thành "Mã chung", vẫn là nguồn gốc.
+      Object.assign(only, { kind: "SHARED", name: DEFAULT_SET_NAME.SHARED, isDefault: true, isPrimaryDisplay: true, isSource: true });
     } else {
       const shared = cat.codeSets.find((s) => s.kind === "SHARED");
       if (!shared) throw modeConflict();
@@ -380,11 +521,86 @@ export const changeCatalogMode = (input: ChangeCatalogModeInput) =>
         if (v.customsSetId && (!chosen || chosen.kind !== "CUSTOMS")) throw setNotFound();
         Object.assign(shared, { kind: v.sharedBecomes, name: DEFAULT_SET_NAME[v.sharedBecomes], isDefault: false });
         if (chosen) chosen.isDefault = true;
-        else cat.codeSets.push({ id: newId("cst"), kind: "CUSTOMS", name: DEFAULT_SET_NAME.CUSTOMS, partnerName: null, partnerKey: null, isPrimaryDisplay: false, isDefault: true, createdAt: nowIso() });
+        else cat.codeSets.push({ id: newId("cst"), kind: "CUSTOMS", name: DEFAULT_SET_NAME.CUSTOMS, partnerName: null, partnerKey: null, isPrimaryDisplay: false, isDefault: true, isSource: false, createdAt: nowIso() });
       }
+      // Giữ nguyên bộ nguồn gốc: bộ "Mã chung" đổi loại nhưng giữ cờ (chưa có nguồn gốc → bộ này thành nguồn gốc).
+      if (!sourceSetOf(cat)) shared.isSource = true;
     }
     Object.assign(cat.settings, { mode: v.to, setupAt: cat.settings.setupAt ?? nowIso() });
     return setsOf(cat);
+  });
+
+// ---------- đổi bộ nguồn gốc (như source.ts, spec 2026-11-14 §3) ----------
+type SourcePlanRow = { item: MockCatalogItem; alias: MockAlias; outcome: "REBASE" | "UNCHANGED" | "BLOCKED" };
+
+/** Phân loại mặt hàng ACTIVE theo mã (mới nhất) ở bộ `setId` – chỉ đọc. */
+function planSource(cat: MockCatalog, setId: string): { totalItems: number; plans: SourcePlanRow[]; missingCount: number } {
+  const active = cat.items.filter((i) => i.status === "ACTIVE");
+  const byItem = new Map<string, MockAlias[]>();
+  for (const a of cat.aliases) {
+    if (a.codeSetId !== setId || a.status !== "ACTIVE") continue;
+    const end = endOfChain(cat, a.itemId);
+    if (!end || end.status !== "ACTIVE") continue;
+    byItem.set(end.id, [...(byItem.get(end.id) ?? []), a]);
+  }
+  const plans: SourcePlanRow[] = [];
+  for (const [id, list] of byItem) {
+    const item = cat.items.find((i) => i.id === id)!;
+    const alias = newestAlias(list)!;
+    let outcome: SourcePlanRow["outcome"] = "UNCHANGED";
+    if (alias.unit) {
+      const p = planRebase({ baseUnit: item.baseUnit, newBase: alias.unit, conversions: cat.conversions.filter((c) => c.itemId === id) });
+      outcome = p.kind === "NO_FACTOR" ? "BLOCKED" : p.kind === "SAME" ? "UNCHANGED" : "REBASE";
+    }
+    plans.push({ item, alias, outcome });
+  }
+  plans.sort((a, b) => a.item.itemNo.localeCompare(b.item.itemNo));
+  return { totalItems: active.length, plans, missingCount: active.length - byItem.size };
+}
+const blockedOf = (plans: SourcePlanRow[]): SourceChangeBlockedItem[] =>
+  plans.filter((p) => p.outcome === "BLOCKED").map((p) => ({ itemId: p.item.id, itemNo: p.item.itemNo, name: p.item.name, code: p.alias.code, baseUnit: p.item.baseUnit, newUnit: p.alias.unit }));
+
+/** Bộ đích hợp lệ + quyền (Quản trị/Chủ hoặc người phụ trách bộ, ≠ VIEWER); chỉ bộ nội bộ → CATALOG_SOURCE_SET_INVALID. */
+function sourceTarget(db: MockDb, codeSetId: string): MockCodeSet {
+  const set = setById(db.catalog, codeSetId);
+  if (!set) throw setNotFound();
+  requireSetManager(db, set.id);
+  if (!isInternal(set.kind)) throw sourceSetInvalid();
+  return set;
+}
+
+/** Xem trước đổi bộ nguồn gốc (không ghi gì). */
+export const previewSourceChange = (codeSetId: string) =>
+  read((db): SourceChangePreview => {
+    const set = sourceTarget(db, parse(SourcePreviewQuerySchema, { codeSetId }).codeSetId);
+    const p = planSource(db.catalog, set.id);
+    return {
+      codeSetId: set.id, currentSourceId: sourceSetOf(db.catalog)?.id ?? null, totalItems: p.totalItems,
+      rebaseCount: p.plans.filter((x) => x.outcome === "REBASE").length, unchangedCount: p.plans.filter((x) => x.outcome === "UNCHANGED").length,
+      missingCount: p.missingCount, blocked: blockedOf(p.plans),
+    };
+  });
+
+/** Đặt bộ nguồn gốc + đổi gốc các mặt hàng đổi được; mặt hàng thiếu hệ số giữ nguyên. Gọi lại sau khi bổ sung hệ số = "Áp dụng lại". */
+export const changeSourceSet = (codeSetId: string) =>
+  write((db): SourceChangeResult => {
+    const set = sourceTarget(db, parse(ChangeSourceInputSchema, { codeSetId }).codeSetId);
+    const cat = db.catalog;
+    const changed = !set.isSource;
+    if (changed) {
+      clearFlag(cat, "isSource", set.id);
+      set.isSource = true;
+    }
+    let rebased = 0;
+    for (const p of planSource(cat, set.id).plans) {
+      if (p.outcome !== "REBASE" || !p.alias.unit) continue;
+      const kind = rebaseItem(db, p.item, p.alias.unit);
+      if (kind === "REBASED" || kind === "SET_BASE") rebased += 1;
+    }
+    const after = planSource(cat, set.id);
+    // `unchanged` gồm cả mặt hàng vừa đổi gốc (giờ cùng ĐVT với mã) → trừ ra.
+    const unchanged = after.plans.filter((x) => x.outcome === "UNCHANGED").length;
+    return { codeSets: setsOf(cat), rebased, unchanged: Math.max(0, unchanged - rebased), missingCount: after.missingCount, blocked: blockedOf(after.plans), changed };
   });
 
 // ---------- mặt hàng ----------
@@ -450,7 +666,8 @@ function createItemIn(db: MockDb, input: CreateItemRequest): CreateItemResult {
     if (!target) throw fail("VALIDATION", "Chưa có bộ mã để đưa vào hàng chờ");
     const q: MockQueueItem = {
       id: newId("cmq"), importId: null, importRow: null, codeSetId: target.id, code: v.code ?? "", name: v.name, unit: v.baseUnit ?? null, hsCode: v.hsCode ?? null,
-      level: "NONE", suggestedItemId: null, candidates: [], reason: "NO_MATCH", status: "PENDING", decidedBy: null, decidedAt: null, sourceRef: `user:${db.currentUserId}`, createdAt: nowIso(),
+      level: "NONE", suggestedItemId: null, candidates: [], reason: "NO_MATCH", status: "PENDING", decidedBy: null, decidedAt: null, sourceRef: `user:${db.currentUserId}`,
+      factor: null, itemFields: null, createdAt: nowIso(),
     };
     cat.queue.push(q);
     return { status: "QUEUED", queueId: q.id };
@@ -594,6 +811,8 @@ export const proposeAlias = (input: ProposeAliasInput) =>
     if (status === "ACTIVE") ensureFactor(db, item, unit, v.factor);
     const a = newAlias(db, { codeSetId: v.codeSetId, code: v.code, name: v.name ?? null, unit, itemId: item.id, status, source: "MANUAL" });
     audit(db, item.id, auditKeyAlias(a), "", status);
+    // Mã ACTIVE ở bộ nguồn gốc: ĐVT của mã thành ĐVT gốc (đổi gốc theo hệ số vừa bảo đảm).
+    if (status === "ACTIVE") applySourceAttach(db, setById(cat, v.codeSetId), item, unit, null);
     return toAlias(a);
   });
 
@@ -611,7 +830,10 @@ export const aliasAction = (id: string, input: AliasActionInput) =>
       const to = liveItem(cat, v.toItemId);
       if (!to) throw itemNotFound();
       if (to.id === a.itemId) return toAlias(a);
-      if (a.status === "ACTIVE") ensureFactor(db, to, a.unit, v.factor);
+      if (a.status === "ACTIVE") {
+        ensureFactor(db, to, a.unit, v.factor);
+        applySourceAttach(db, setById(cat, a.codeSetId), to, a.unit, null);
+      }
       const from = cat.items.find((i) => i.id === a.itemId);
       audit(db, a.itemId, auditKeyAlias(a), a.status, `→ ${to.itemNo}`);
       audit(db, to.id, auditKeyAlias(a), from ? `${from.itemNo} →` : "", a.status);
@@ -629,6 +851,7 @@ export const aliasAction = (id: string, input: AliasActionInput) =>
         return toAlias(holder);
       }
       ensureFactor(db, item, a.unit, v.factor);
+      applySourceAttach(db, setById(cat, a.codeSetId), item, a.unit, null);
       Object.assign(a, { status: "ACTIVE", itemId: item.id, decidedBy: db.currentUserId, decidedAt: now });
     } else Object.assign(a, { status: "REJECTED", decidedBy: db.currentUserId, decidedAt: now });
     audit(db, a.itemId, auditKeyAlias(a), "PROPOSED", a.status);
@@ -719,13 +942,25 @@ function decideIn(db: MockDb, id: string, input: DecideQueueInput): MatchQueueIt
     bumpImport(cat, q.importId, { queued: -1, skipped: 1 });
     return toQueue(q);
   }
+  const set = setById(cat, q.codeSetId);
+  // Hệ số: người duyệt nhập (ô điền sẵn từ cột Quy đổi) – không gửi thì dùng hệ số của dòng file (xác nhận hàng loạt).
+  const factor = v.factor ?? q.factor ?? undefined;
+  const fields = set?.isSource ? q.itemFields : null;
   const codeKey = q.code ? itemCodeKey(q.code) : "";
   const holder = codeKey ? activeHolder(cat, q.codeSetId, codeKey) : null;
   const holderItem = holder ? endOfChain(cat, holder.itemId) : null;
   const targetId = v.action === "CHOOSE" ? v.itemId! : v.action === "CONFIRM" ? q.suggestedItemId : null;
   if (!targetId) {
     if (holder) throw codeTaken();
-    const item = newItem(db, { kind: v.kind ?? "GOODS", name: q.name, hsCode: q.hsCode, baseUnit: q.unit }, q.importId ? "IMPORT" : "QUEUE");
+    // Dòng của bộ nguồn gốc mang thông tin mặt hàng (loại, xuất xứ, thuế…) → dữ liệu mặt hàng mới.
+    const item = newItem(db, {
+      kind: v.kind ?? fields?.kind ?? "GOODS", name: fields?.name ?? q.name, hsCode: fields?.hsCode ?? q.hsCode, baseUnit: q.unit, origin: fields?.origin ?? null,
+      description: fields?.description ?? null, note: fields?.note ?? null,
+    }, q.importId ? "IMPORT" : "QUEUE");
+    Object.assign(item, {
+      tariffSchedule: fields?.tariffSchedule ?? null, importDutyRate: fields?.importDutyRate ?? null, vatRate: fields?.vatRate ?? null, envTaxRate: fields?.envTaxRate ?? null,
+      exciseRate: fields?.exciseRate ?? null, safeguardRate: fields?.safeguardRate ?? null, antiDiscriminationRate: fields?.antiDiscriminationRate ?? null,
+    });
     if (codeKey) {
       const a = newAlias(db, { codeSetId: q.codeSetId, code: q.code, name: q.name, unit: q.unit, itemId: item.id, status: "ACTIVE", source: aliasSourceOf(q) });
       audit(db, item.id, auditKeyAlias(a), "", "ACTIVE");
@@ -738,8 +973,10 @@ function decideIn(db: MockDb, id: string, input: DecideQueueInput): MatchQueueIt
   if (!item) throw itemNotFound();
   if (holder && holderItem?.id !== item.id) throw codeTaken();
   const needFactor = !holder && needsFactor(cat, item, q.unit);
-  if (needFactor && !v.factor) throw factorRequired();
-  if (needFactor && q.unit && v.factor) upsertConversion(db, item.id, q.unit, v.factor);
+  if (needFactor && !factor) throw factorRequired();
+  if (needFactor && q.unit && factor) upsertConversion(db, item.id, q.unit, factor);
+  // Bộ nguồn gốc: ĐVT của mã thành ĐVT gốc (đổi gốc theo hệ số vừa có) + áp thông tin mặt hàng của dòng.
+  applySourceAttach(db, set, item, q.unit, fields);
   if (codeKey && !holder) {
     const a = newAlias(db, { codeSetId: q.codeSetId, code: q.code, name: q.name, unit: q.unit, itemId: item.id, status: "ACTIVE", source: aliasSourceOf(q) });
     audit(db, item.id, auditKeyAlias(a), "", "ACTIVE");
@@ -779,10 +1016,14 @@ export const importCatalogRows = async (input: ImportRowsInput): Promise<Catalog
     requireSetManager(db, v.codeSetId);
     const { ok, errors } = validateItemRows(v.rows, { knownUnits: units });
     const bad = new Set(errors.map((e) => e.row));
+    // Thông tin mặt hàng (loại, xuất xứ, thuế…) chỉ áp khi bộ nhận là bộ nguồn gốc – bộ khác bỏ qua (spec 2026-11-14 §4).
+    const isSource = !!setById(db.catalog, v.codeSetId)?.isSource;
     const staged: MockStagedRow[] = [];
     let k = 0;
     v.rows.forEach((_, i) => {
-      if (!bad.has(i + 1)) staged.push({ row: i + 1, ...ok[k++]! });
+      if (bad.has(i + 1)) return;
+      const { fields, ...rest } = ok[k++]!;
+      staged.push({ row: i + 1, ...rest, ...(isSource && fields ? { fields } : {}) });
     });
     const columnMap = Object.fromEntries(Object.entries(v.columnMap).filter((e): e is [string, number] => typeof e[1] === "number"));
     return toImport(stageImport(db, v.codeSetId, v.fileName, columnMap, staged, errors));
@@ -1036,7 +1277,7 @@ export function recordApprovedCatalog(db: MockDb, lines: LineItem[], info: { dec
     cat.queue.push({
       id: newId("cmq"), importId: null, importRow: null, codeSetId: set.id, code: "", name: l.description, unit: l.unit || null, hsCode: hs, level: res.level,
       suggestedItemId: res.itemId ?? res.candidates[0]?.itemId ?? null, candidates: res.candidates, reason: res.reason, status: "PENDING",
-      decidedBy: null, decidedAt: null, sourceRef: `declaration:${info.declarationId}:${l.lineNo}`, createdAt: nowIso(),
+      decidedBy: null, decidedAt: null, sourceRef: `declaration:${info.declarationId}:${l.lineNo}`, factor: null, itemFields: null, createdAt: nowIso(),
     });
   }
 }

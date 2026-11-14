@@ -9,6 +9,7 @@ import { managesSet, requireContributor, requireSetManager } from "./permissions
 import { ensurePartnerSet } from "./partner-set.js";
 import type { CatalogDeps, CatalogItemRow, CatalogRepos, ItemAliasRow, MatchQueueRow } from "./ports.js";
 import { resolveInTx } from "./resolve.js";
+import { applySourceAttach } from "./source-rules.js";
 
 type Tx<T> = Result<{ value: T; audit: AuditEntry[] }>;
 
@@ -85,6 +86,8 @@ export async function proposeAlias(deps: CatalogDeps, ctx: Ctx, input: ProposeAl
     };
     await r.aliases.insert(row);
     audit.unshift({ itemId: item.id, key: auditKeyAlias(row), oldValue: "", newValue: status });
+    // Mã ACTIVE ở bộ nguồn gốc: ĐVT của mã thành ĐVT gốc (đổi gốc theo hệ số vừa bảo đảm) – spec 2026-11-14 §1.
+    if (status === "ACTIVE") await applySourceAttach(deps, r, ctx, set, item, unit, null, audit);
     return ok({ value: toAliasDto(row), audit });
   });
 }
@@ -122,6 +125,8 @@ export async function decideAlias(deps: CatalogDeps, ctx: Ctx, id: string, decis
       const f = await ensureFactor(deps, r, ctx, item, a.unit, factor, audit);
       if (!f.ok) return f;
       status = "ACTIVE";
+      const set = await r.codeSets.get(ctx.orgId, a.codeSetId);
+      if (set) await applySourceAttach(deps, r, ctx, set, item, a.unit, null, audit);
     }
     await r.aliases.update(ctx.orgId, a.id, { status, itemId, decidedBy: ctx.userId, decidedAt: now, updatedAt: now });
     audit.unshift({ itemId, key: auditKeyAlias(a), oldValue: "PROPOSED", newValue: status });
@@ -147,6 +152,8 @@ export async function moveAlias(deps: CatalogDeps, ctx: Ctx, id: string, toItemI
     if (a.status === "ACTIVE") {
       const f = await ensureFactor(deps, r, ctx, to, a.unit, factor, audit);
       if (!f.ok) return f;
+      const set = await r.codeSets.get(ctx.orgId, a.codeSetId);
+      if (set) await applySourceAttach(deps, r, ctx, set, to, a.unit, null, audit);
     }
     const now = deps.clock.now();
     await r.aliases.update(ctx.orgId, a.id, { itemId: to.id, updatedAt: now });

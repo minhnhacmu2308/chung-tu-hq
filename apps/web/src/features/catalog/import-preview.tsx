@@ -7,27 +7,40 @@ import { useMemo } from "react";
 import { formatNumber } from "@/lib/format";
 import { CATALOG_IMPORT_MESSAGES } from "./catalog.messages";
 import { fieldLabel } from "./column-mapper";
+import { CATALOG_MAPPING_MESSAGES } from "./column-mapping.messages";
 import { useUnitOptions } from "./unit-options";
 
 type Messages = (typeof CATALOG_IMPORT_MESSAGES)["vi"];
+type MappingMessages = (typeof CATALOG_MAPPING_MESSAGES)["vi"];
 /** `group`: bộ mã của lần nhập (Lấy từ chứng từ ra nhiều lần nhập – số dòng trùng nhau giữa các bộ). */
 export type ImportErrorRow = { id: string; row: number; field: string; code: string; value: string; group?: string };
 export type UnknownUnit = { key: string; unit: string; count: number };
 
-export function rowErrorText(t: Messages, field: string, code: string): string {
+const RATE_FIELDS = new Set(["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate"]);
+function formatError(t: Messages, tm: MappingMessages, field: string): string {
+  if (field === "hs") return t.errHsFormat;
+  if (field === "factor") return t.errFactorFormat;
+  if (field === "unit") return t.errUnitFormat;
+  if (field === "kind") return tm.errKindFormat;
+  if (field === "origin") return tm.errOriginFormat;
+  if (RATE_FIELDS.has(field)) return tm.errRateFormat;
+  return t.errINVALID_FORMAT;
+}
+
+export function rowErrorText(t: Messages, tm: MappingMessages, field: string, code: string): string {
   if (code === "TOO_LONG") return fill(t.errTOO_LONG, { max: field in ITEM_IMPORT_MAX_LENGTH ? ITEM_IMPORT_MAX_LENGTH[field as keyof typeof ITEM_IMPORT_MAX_LENGTH] : "" });
-  if (code === "INVALID_FORMAT") return field === "hs" ? t.errHsFormat : field === "factor" ? t.errFactorFormat : field === "unit" ? t.errUnitFormat : t.errINVALID_FORMAT;
+  if (code === "INVALID_FORMAT") return formatError(t, tm, field);
   if (code === "MISSING" || code === "DUPLICATE_IN_FILE" || code === "UNKNOWN_UNIT") return t[`err${code}`];
   return t.errOther;
 }
 
 const col = createDataTableColumnHelper<ImportErrorRow>();
-function buildColumns(t: Messages, withGroup: boolean) {
+function buildColumns(t: Messages, tm: MappingMessages, withGroup: boolean) {
   return col.columns([
     ...(withGroup ? [col.accessor((r) => r.group ?? "", { id: "group", header: t.colSet, size: 220, meta: { wrap: true } })] : []),
     col.accessor("row", { header: t.colRow, size: 80, meta: { sticky: !withGroup } }),
-    col.accessor((r) => fieldLabel(t, r.field), { id: "field", header: t.colField, size: 140 }),
-    col.accessor((r) => rowErrorText(t, r.field, r.code), { id: "error", header: t.colError, size: 280, meta: { wrap: true } }),
+    col.accessor((r) => fieldLabel(tm, r.field), { id: "field", header: t.colField, size: 160 }),
+    col.accessor((r) => rowErrorText(t, tm, r.field, r.code), { id: "error", header: t.colError, size: 280, meta: { wrap: true } }),
     col.accessor("value", { header: t.colValue, size: 240, meta: { wrap: true }, cell: (c) => <span className="break-all text-fg">{c.getValue()}</span> }),
   ]);
 }
@@ -36,7 +49,7 @@ export function ImportErrorTable({ rows }: { rows: readonly ImportErrorRow[] }) 
   const t = useMessages(CATALOG_IMPORT_MESSAGES);
   const locale = useUiLocale();
   const withGroup = rows.some((r) => r.group);
-  const columns = useMemo(() => buildColumns(pickMessages(CATALOG_IMPORT_MESSAGES, locale), withGroup), [locale, withGroup]);
+  const columns = useMemo(() => buildColumns(pickMessages(CATALOG_IMPORT_MESSAGES, locale), pickMessages(CATALOG_MAPPING_MESSAGES, locale), withGroup), [locale, withGroup]);
   return <DataTable aria-label={t.errorsLabel} columns={columns} data={rows} getRowId={(r) => r.id} searchable pagination={{ mode: "client", initialPageSize: 10 }} />;
 }
 

@@ -89,8 +89,10 @@ export function QueueTab() {
     setChosen(({ [id]: _, ...rest }) => rest);
     setFactors(({ [id]: _, ...rest }) => rest);
   };
+  /** Hệ số trên dòng: người duyệt đang gõ, chưa gõ thì điền sẵn từ cột Quy đổi của file (`factor` của mục). */
+  const factorOf = (r: Row) => factors[r.id] ?? r.factor ?? "";
   const confirmInput = (r: Row) => {
-    const f = needsFactor(r) && factorOk(factors[r.id]) ? { factor: normFactor(factors[r.id]!) } : {};
+    const f = needsFactor(r) && factorOk(factorOf(r)) ? { factor: normFactor(factorOf(r)) } : {};
     const pick = chosen[r.id];
     return pick ? { action: "CHOOSE" as const, itemId: pick.id, ...f } : { action: "CONFIRM" as const, ...f };
   };
@@ -124,7 +126,7 @@ export function QueueTab() {
     let done = 0;
     const codeOf = (r: Row) => r.code || r.name;
     // Dòng có lựa chọn riêng (chọn khác / hệ số) gửi từng mục; còn lại gửi một lần.
-    const single = picked.filter((r) => chosen[r.id] || (needsFactor(r) && factorOk(factors[r.id])));
+    const single = picked.filter((r) => chosen[r.id] || (needsFactor(r) && factors[r.id] !== undefined && factorOk(factors[r.id])));
     const bulk = picked.filter((r) => !single.includes(r));
     try {
       for (const r of single) {
@@ -179,7 +181,7 @@ export function QueueTab() {
   // Theo ngôn ngữ (useMessages trả object mới mỗi lần dựng) – cột đổi thì ô bị dựng lại, ô nhập mất focus.
   const columns = useMemo(() => buildColumns(pickMessages(CATALOG_QUEUE_MESSAGES, locale)), [locale]);
   const view: QueueView = {
-    sets, targetOf, needsFactor, chosen, factors, sourceOf, manages: access.managesSet,
+    sets, targetOf, needsFactor, chosen, factorOf, sourceOf, manages: access.managesSet,
     setFactor: (id, v) => setFactors((f) => ({ ...f, [id]: v })),
   };
 
@@ -249,7 +251,7 @@ export function QueueTab() {
               const need = needsFactor(r);
               const actions = queueRowActions(
                 t,
-                { target: targetOf(r), factorBlocked: need === null || (need && !factorOk(factors[r.id])), pending: decide.isPending || bulkRunning },
+                { target: targetOf(r), factorBlocked: need === null || (need && !factorOk(factorOf(r))), pending: decide.isPending || bulkRunning },
                 {
                   confirm: () => decide.mutate({ r, action: "CONFIRM" }),
                   choose: () => setChoosing(r),
@@ -289,7 +291,7 @@ type QueueView = {
   targetOf: (r: Row) => QueueTargetSummary | null;
   needsFactor: (r: Row) => boolean | null;
   chosen: Record<string, QueueTargetSummary>;
-  factors: Record<string, string>;
+  factorOf: (r: Row) => string;
   setFactor: (id: string, value: string) => void;
   sourceOf: (r: Row) => string;
   manages: (codeSetId: string) => boolean;
@@ -329,23 +331,37 @@ function FactorCell({ r }: { r: Row }) {
   const t = useMessages(CATALOG_QUEUE_MESSAGES);
   const v = useQueueView();
   if (!v.needsFactor(r) || !v.manages(r.codeSetId)) return null;
-  const value = v.factors[r.id] ?? "";
+  const value = v.factorOf(r);
+  const fromFile = !!r.factor && value === r.factor;
   return (
-    <Input
-      aria-label={fill(t.factorLabel, { code: r.code || r.name })}
-      value={value}
-      onChange={(e) => v.setFactor(r.id, e.target.value)}
-      placeholder={fill(t.factorPlaceholder, { unit: r.unit ?? "", base: v.targetOf(r)?.baseUnit ?? "" })}
-      inputMode="decimal"
-      aria-invalid={value !== "" && !factorOk(value)}
-    />
+    <span className="flex min-w-0 flex-col gap-1">
+      <Input
+        aria-label={fill(t.factorLabel, { code: r.code || r.name })}
+        value={value}
+        onChange={(e) => v.setFactor(r.id, e.target.value)}
+        placeholder={fill(t.factorPlaceholder, { unit: r.unit ?? "", base: v.targetOf(r)?.baseUnit ?? "" })}
+        inputMode="decimal"
+        aria-invalid={value !== "" && !factorOk(value)}
+      />
+      {fromFile && <span className="text-xs text-fg-muted">{fill(t.factorFromFile, { factor: r.factor! })}</span>}
+    </span>
+  );
+}
+
+function NameCell({ r }: { r: Row }) {
+  const t = useMessages(CATALOG_QUEUE_MESSAGES);
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="line-clamp-2 text-fg">{r.name}</span>
+      {r.itemFields && <span className="text-sm text-fg-muted">{t.itemFieldsHint}</span>}
+    </span>
   );
 }
 
 function buildColumns(t: Messages) {
   return col.columns([
     col.accessor("code", { header: t.colCode, size: 220, meta: { sticky: true, hideable: false, wrap: true }, cell: (c) => <CodeCell r={c.row.original} /> }),
-    col.accessor("name", { header: t.colName, size: 260, minSize: 200, meta: { wrap: true }, cell: (c) => <span className="line-clamp-2 text-fg">{c.getValue()}</span> }),
+    col.accessor("name", { header: t.colName, size: 260, minSize: 200, meta: { wrap: true }, cell: (c) => <NameCell r={c.row.original} /> }),
     col.accessor((r) => r.unit ?? "", { id: "unit", header: t.colUnit, size: 80 }),
     col.accessor((r) => formatHs(r.hsCode ?? ""), { id: "hs", header: t.colHs, size: 110, cell: (c) => <span className="font-mono">{c.getValue()}</span> }),
     col.display({ id: "target", header: t.colTarget, size: 260, meta: { wrap: true }, cell: (c) => <TargetCell r={c.row.original} /> }),

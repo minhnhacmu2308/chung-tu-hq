@@ -81,7 +81,7 @@ describe("Danh mục – tab Chờ duyệt", () => {
     expect(within(row).queryByRole("button", { name: /^Xác nhận ghép vào/ })).toBeNull();
   }, 30_000);
 
-  it("thiếu hệ số quy đổi → nút xác nhận khóa; nhập hệ số → xác nhận, lưu quy đổi", async () => {
+  it("thiếu hệ số quy đổi → nút xác nhận khóa; nhập hệ số → xác nhận; bộ XNK là nguồn gốc → mặt hàng đổi ĐVT gốc sang TNE, quy đổi tính lại", async () => {
     renderWithProviders(<CatalogPage />);
     const row = await readyRow("TH-0010");
     const confirm = () => within(row).getByRole("button", { name: /^Xác nhận ghép vào MH-\d{6} – TH-0010$/ });
@@ -91,7 +91,46 @@ describe("Danh mục – tab Chờ duyệt", () => {
     await userEvent.click(confirm());
     await waitFor(() => expect(queueOf("TH-0010").status).toBe("DONE"), T);
     const itemId = queueOf("TH-0010").suggestedItemId!;
-    expect(getDb().catalog.conversions.find((c) => c.itemId === itemId && c.unit === "TNE")?.factor).toBe("1000");
+    const cat = getDb().catalog;
+    // 1 TNE = 1000 KGM → gốc mới TNE: 1 KGM = 0,001 TNE; 1 PCE = 471 KGM = 0,471 TNE.
+    expect(cat.items.find((i) => i.id === itemId)?.baseUnit).toBe("TNE");
+    const conv = Object.fromEntries(cat.conversions.filter((c) => c.itemId === itemId).map((c) => [c.unit, c.factor]));
+    expect(conv).toEqual({ KGM: "0.001", PCE: "0.471" });
+  }, 30_000);
+
+  it("mục có hệ số từ cột Quy đổi của file → ô hệ số điền sẵn, xác nhận được ngay; không vi phạm a11y", async () => {
+    Object.assign(queueOf("TH-0010"), { factor: "1000" });
+    const { container } = renderWithProviders(<CatalogPage />);
+    const row = await readyRow("TH-0010");
+    const box = within(row).getByRole<HTMLInputElement>("textbox", { name: "Hệ số quy đổi cho mã TH-0010" });
+    expect(box.value).toBe("1000");
+    expect(within(row).getByText("Hệ số 1000 lấy từ cột Quy đổi của file")).toBeTruthy();
+    const confirm = within(row).getByRole("button", { name: /^Xác nhận ghép vào MH-\d{6} – TH-0010$/ });
+    expect(confirm).toHaveProperty("disabled", false);
+    await expectNoA11yViolations(container);
+    await userEvent.click(confirm);
+    await waitFor(() => expect(queueOf("TH-0010").status).toBe("DONE"), T);
+    expect(getDb().catalog.items.find((i) => i.id === queueOf("TH-0010").suggestedItemId)?.baseUnit).toBe("TNE");
+  }, 30_000);
+
+  it("xác nhận hàng loạt dùng hệ số của dòng file khi không gõ", async () => {
+    Object.assign(queueOf("TH-0010"), { factor: "1000" });
+    renderWithProviders(<CatalogPage />);
+    await userEvent.click(within(await readyRow("TH-0010")).getByRole("checkbox"));
+    await userEvent.click(await screen.findByRole("button", { name: "Xác nhận 1 mục" }, T));
+    expect(await screen.findByText("Đã xác nhận 1 mục", {}, T)).toBeTruthy();
+    expect(queueOf("TH-0010").status).toBe("DONE");
+  }, 30_000);
+
+  it("lý do LINKED_BY_CODE / LINK_NOT_FOUND có nhãn; mục kèm thông tin mặt hàng ghi rõ", async () => {
+    const [a, b] = getDb().catalog.queue;
+    Object.assign(a!, { reason: "LINK_NOT_FOUND", level: "NONE", itemFields: { kind: "MATERIAL", origin: "VN" } });
+    Object.assign(b!, { reason: "LINKED_BY_CODE" });
+    renderWithProviders(<CatalogPage />);
+    const rowA = await rowWith(a!.code);
+    expect(within(rowA).getByText(/Mã nối không khớp mặt hàng nào/)).toBeTruthy();
+    expect(within(rowA).getByText(/Kèm thông tin mặt hàng từ file/)).toBeTruthy();
+    expect(within(await rowWith(b!.code)).getByText("Nối theo cột Mã nối")).toBeTruthy();
   }, 30_000);
 
   it("chọn nhiều → “Xác nhận n mục”; có mục tạo mặt hàng mới → hỏi lại (k ghép, m tạo mới); mục lỗi (thiếu hệ số) báo riêng", async () => {

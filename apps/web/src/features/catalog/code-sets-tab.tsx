@@ -2,13 +2,15 @@
 // Tab Bộ mã (spec §6.2): dòng đầu hiện chế độ + tiền tố mã nối + "Đổi chế độ" (Quản trị/Chủ, popup theo quy tắc chuyển §3);
 // danh sách bộ mã (tên, loại StatusBadge, số mã, người phụ trách, ★ mã hiển thị chính); Thêm/Sửa bộ mã (Quản trị/Chủ).
 // Chưa thiết lập → EmptyState + "Thiết lập danh mục" (trình hướng dẫn; chế độ dùng chung xong đi thẳng tới tab Nhập dữ liệu).
+// Bộ nguồn gốc (spec 2026-11-14): nhãn "Nguồn gốc" cạnh tên; "Đặt làm nguồn gốc" (bộ nội bộ khác) / "Áp dụng lại nguồn gốc" (bộ đang là nguồn gốc)
+// cho Quản trị/Chủ hoặc người phụ trách bộ đó → popup xem trước + thực hiện.
 import type { CatalogMode, CodeSet } from "@kb/contracts";
 import {
-  Alert, Button, Card, CardContent, createDataTableColumnHelper, DataTable, Dialog, DialogContent, DialogFooter, EmptyState, fill, RadioGroup, RowActions, SkeletonCard,
+  Alert, Badge, Button, Card, CardContent, createDataTableColumnHelper, DataTable, Dialog, DialogContent, DialogFooter, EmptyState, fill, RadioGroup, RowActions, SkeletonCard,
   pickMessages, Stack, StatusBadge, toast, useMessages, useUiLocale, type RowAction,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Layers, Pencil, Plus, Settings2, Star, StarOff } from "lucide-react";
+import { ArrowLeftRight, Crown, Layers, Pencil, Plus, RefreshCw, Settings2, Star, StarOff } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { catalogKeys, changeCatalogMode, getCatalogSettings, listCodeSets, setPrimaryDisplay } from "@/api/catalog";
@@ -21,9 +23,11 @@ import { useCatalogAccess } from "./catalog-access";
 import { CATALOG_SETS_MESSAGES } from "./catalog.messages";
 import { CodeSetDialog } from "./code-set-dialog";
 import { codeSetStatus } from "./code-set-label";
+import { SetSourceDialog } from "./set-source-dialog";
 import { SetupWizard } from "./setup-wizard";
+import { CATALOG_SOURCE_MESSAGES } from "./source-set.messages";
 
-type Messages = (typeof CATALOG_SETS_MESSAGES)["vi"];
+type Messages = (typeof CATALOG_SETS_MESSAGES)["vi"] & { sourceBadge: string };
 const INTERNAL = ["SHARED", "ACCOUNTING", "WAREHOUSE", "CUSTOMS"] as const;
 const isInternal = (s: CodeSet) => (INTERNAL as readonly string[]).includes(s.kind);
 /** Dòng bảng: bộ mã + tên người phụ trách (đã tra từ danh sách thành viên). */
@@ -35,8 +39,9 @@ function buildColumns(t: Messages) {
     col.accessor("name", {
       header: t.colName, size: 260, meta: { sticky: true, hideable: false, wrap: true },
       cell: (c) => (
-        <span className="flex flex-col gap-0.5">
+        <span className="flex flex-col items-start gap-1">
           <span className="break-words font-medium text-fg">{c.getValue()}</span>
+          {c.row.original.isSource && <Badge tone="primary" size="sm" icon={<Crown />}>{t.sourceBadge}</Badge>}
           {c.row.original.isDefault && <span className="text-sm text-fg-muted">{t.defaultCustoms}</span>}
         </span>
       ),
@@ -62,6 +67,7 @@ function buildColumns(t: Messages) {
 
 export function CodeSetsTab() {
   const t = useMessages(CATALOG_SETS_MESSAGES);
+  const ts = useMessages(CATALOG_SOURCE_MESSAGES);
   const locale = useUiLocale();
   const qc = useQueryClient();
   const router = useRouter();
@@ -74,12 +80,13 @@ export function CodeSetsTab() {
   const [editing, setEditing] = useState<CodeSet | "new" | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [changing, setChanging] = useState(false);
+  const [sourceFor, setSourceFor] = useState<CodeSet | null>(null);
 
   const rows = useMemo<SetRow[]>(() => {
     const byId = new Map((members.data ?? []).map((m) => [m.id, m.name]));
     return sets.map((s) => ({ ...s, ownerNames: s.ownerIds.map((id) => byId.get(id) ?? id).join(", ") }));
   }, [sets, members.data]);
-  const columns = useMemo(() => buildColumns(pickMessages(CATALOG_SETS_MESSAGES, locale)), [locale]);
+  const columns = useMemo(() => buildColumns({ ...pickMessages(CATALOG_SETS_MESSAGES, locale), sourceBadge: pickMessages(CATALOG_SOURCE_MESSAGES, locale).badge }), [locale]);
 
   const primary = useMutation({
     mutationFn: (s: CodeSet | null) => setPrimaryDisplay(s?.id ?? null),
@@ -117,12 +124,25 @@ export function CodeSetsTab() {
       </>
     );
 
+  // Bộ nguồn gốc: chỉ bộ nội bộ; Quản trị/Chủ hoặc người phụ trách bộ đó.
+  const sourceAction = (s: CodeSet): RowAction[] =>
+    isInternal(s) && access.managesSet(s.id)
+      ? [s.isSource
+          ? { id: "reapply-source", label: ts.reapply, icon: <RefreshCw />, quick: false, onSelect: () => setSourceFor(s) }
+          : { id: "make-source", label: ts.makeSource, icon: <Crown />, quick: false, onSelect: () => setSourceFor(s) }]
+      : [];
   const actionsFor = (s: CodeSet): RowAction[] => [
-    { id: "edit", label: t.edit, icon: <Pencil />, onSelect: () => setEditing(s) },
-    s.isPrimaryDisplay
-      ? { id: "unprimary", label: t.clearPrimary, icon: <StarOff />, quick: false, disabled: primary.isPending, onSelect: () => primary.mutate(null) }
-      : { id: "primary", label: t.makePrimary, icon: <Star />, quick: false, disabled: primary.isPending, onSelect: () => primary.mutate(s) },
+    ...(access.isAdmin
+      ? [
+          { id: "edit", label: t.edit, icon: <Pencil />, onSelect: () => setEditing(s) },
+          s.isPrimaryDisplay
+            ? { id: "unprimary", label: t.clearPrimary, icon: <StarOff />, quick: false, disabled: primary.isPending, onSelect: () => primary.mutate(null) }
+            : { id: "primary", label: t.makePrimary, icon: <Star />, quick: false, disabled: primary.isPending, onSelect: () => primary.mutate(s) },
+        ]
+      : []),
+    ...sourceAction(s),
   ];
+  const hasRowActions = access.isAdmin || sets.some((s) => sourceAction(s).length > 0);
 
   return (
     <Stack gap="md">
@@ -152,15 +172,19 @@ export function CodeSetsTab() {
         rowLabel={(s) => s.name}
         pagination={false}
         emptyTitle={t.emptyTitle}
-        {...(access.isAdmin
+        {...(access.isAdmin ? { toolbarActions: <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditing("new")}>{t.add}</Button> } : {})}
+        {...(hasRowActions
           ? {
-              toolbarActions: <Button size="sm" leftIcon={<Plus className="h-4 w-4" />} onClick={() => setEditing("new")}>{t.add}</Button>,
-              rowActions: (s: SetRow) => <RowActions rowLabel={s.name} actions={actionsFor(s)} />,
+              rowActions: (s: SetRow) => {
+                const actions = actionsFor(s);
+                return actions.length ? <RowActions rowLabel={s.name} actions={actions} /> : null;
+              },
             }
           : {})}
       />
 
       {editing && <CodeSetDialog set={editing === "new" ? null : editing} mode={mode} onClose={() => setEditing(null)} />}
+      {sourceFor && <SetSourceDialog set={sourceFor} sets={sets} access={access} onClose={() => setSourceFor(null)} />}
       {changing && <ChangeModeDialog mode={mode} sets={sets} onClose={() => setChanging(false)} />}
       {setup}
     </Stack>

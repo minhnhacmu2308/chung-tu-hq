@@ -1,10 +1,12 @@
 // Xuất Excel của danh mục ngay trên trình duyệt (exceljs, nạp khi cần – như bảng danh sách container KVGS):
 // (1) danh sách mặt hàng theo bộ mã đang xem (cột mã/tên/ĐVT theo bộ đó; không chọn bộ → mã hiển thị chính),
-// (2) bảng đối chiếu mã: mỗi dòng một mã nối + mã ở mọi bộ + hệ số quy đổi. Tiêu đề cột theo ngôn ngữ đang chọn.
-import type { CatalogItemListRow, CodeSet, CrossReference } from "@kb/contracts";
+// (2) bảng đối chiếu mã: mỗi dòng một mã nối + mã ở mọi bộ + hệ số quy đổi, (3) file đối chiếu cho một bộ để bộ phận điền mã rồi nhập lại.
+// Tiêu đề cột theo ngôn ngữ đang chọn.
+import { itemUnitKey, type CatalogItemListRow, type CodeSet, type CrossReference } from "@kb/contracts";
 import { fill, pickMessages, statusLabel, type UiLocale } from "@kb/ui";
 import { CATALOG_MESSAGES } from "./catalog.messages";
 import { codeSetStatus } from "./code-set-label";
+import { MAPPING_TEMPLATE_MESSAGES } from "./mapping-template.messages";
 
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -70,5 +72,62 @@ export function buildCrossRefXlsx(ref: CrossReference, locale: UiLocale): Promis
       row.factors = Object.entries(r.factors).map(([unit, factor]) => `1 ${unit} = ${factor} ${r.baseUnit ?? ""}`.trim()).join("; ");
       ws.addRow(row);
     }
+  });
+}
+
+// ---------- file đối chiếu mã (tab Nhập dữ liệu → "Tải file đối chiếu") ----------
+
+/** Một dòng của file đối chiếu: Mã nối + cột tham khảo (bộ nguồn gốc) + cột bộ phận điền (mã/tên/ĐVT/quy đổi của bộ đích). */
+export type MappingTemplateRow = { linkCode: string; refCode: string; refName: string; refHs: string; refUnit: string; code: string; name: string; unit: string; factor: string };
+/** Mã/tên/ĐVT hiện có của mặt hàng ở bộ đích (theo mã nối). */
+export type TargetAliasInfo = { name: string | null; unit: string | null };
+
+/**
+ * Dòng file đối chiếu cho bộ `targetSetId`: mỗi mặt hàng một dòng (đã có nhiều mã ở bộ đích → mỗi mã một dòng). Mặt hàng đã có mã ở bộ đích →
+ * điền sẵn mã/tên/ĐVT của bộ đó + hệ số đã có; chưa có → trống mã, tên = tên mặt hàng (bộ phận sửa nếu gọi khác).
+ */
+export function mappingTemplateRows(ref: CrossReference, sourceSetId: string | null, targetSetId: string, target: ReadonlyMap<string, TargetAliasInfo>): MappingTemplateRow[] {
+  const out: MappingTemplateRow[] = [];
+  for (const r of ref.rows) {
+    const base = {
+      linkCode: r.itemNo, refCode: sourceSetId ? (r.codes[sourceSetId] ?? []).join(", ") : "", refName: r.name, refHs: r.hs ?? "", refUnit: r.baseUnit ?? "",
+    };
+    const codes = r.codes[targetSetId] ?? [];
+    if (!codes.length) {
+      out.push({ ...base, code: "", name: r.name, unit: "", factor: "" });
+      continue;
+    }
+    const info = target.get(r.itemNo);
+    const unit = info?.unit ?? "";
+    const differs = !!unit && !!r.baseUnit && itemUnitKey(unit) !== itemUnitKey(r.baseUnit);
+    const factor = differs ? (Object.entries(r.factors).find(([u]) => itemUnitKey(u) === itemUnitKey(unit))?.[1] ?? "") : "";
+    for (const code of codes) out.push({ ...base, code, name: info?.name ?? r.name, unit, factor });
+  }
+  return out;
+}
+
+/** Excel file đối chiếu: trang "Đối chiếu" (cột mã dạng Text để không mất số 0 đầu) + trang "Hướng dẫn". */
+export function buildMappingTemplateXlsx(rows: readonly MappingTemplateRow[], names: { set: string; source: string }, locale: UiLocale): Promise<Blob> {
+  const t = pickMessages(MAPPING_TEMPLATE_MESSAGES, locale);
+  return toBlob((wb) => {
+    const ws = wb.addWorksheet(t.sheet.slice(0, 31));
+    ws.columns = [
+      { header: t.colLink, key: "linkCode", width: 14 },
+      { header: fill(t.colRefCode, { source: names.source }), key: "refCode", width: 20 },
+      { header: t.colRefName, key: "refName", width: 40 },
+      { header: t.colRefHs, key: "refHs", width: 12 },
+      { header: t.colRefUnit, key: "refUnit", width: 10 },
+      { header: t.colCode, key: "code", width: 20 },
+      { header: t.colName, key: "name", width: 40 },
+      { header: t.colUnit, key: "unit", width: 10 },
+      { header: t.colFactor, key: "factor", width: 12 },
+    ];
+    for (const k of ["linkCode", "refCode", "refHs", "code"]) ws.getColumn(k).numFmt = "@";
+    ws.getRow(1).font = { bold: true };
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+    for (const r of rows) ws.addRow(r);
+    const guide = wb.addWorksheet(t.guideSheet.slice(0, 31));
+    guide.getColumn(1).width = 120;
+    for (const line of [t.guide1, t.guide2, t.guide3, t.guide4, t.guide5]) guide.addRow([fill(line, names)]);
   });
 }

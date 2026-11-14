@@ -1,4 +1,4 @@
-import type { AliasSource, AliasStatus, CatalogItemKind, CatalogMode, CodeSetKind, ItemMatchCandidateDto, ItemMatchLevel, ItemStatus } from "@kb/contracts";
+import type { AliasSource, AliasStatus, CatalogItemFields, CatalogItemKind, CatalogMode, CodeSetKind, ItemMatchCandidateDto, ItemMatchLevel, ItemStatus } from "@kb/contracts";
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { id, orgId, orgRls, timestamps } from "./shared.js";
@@ -79,6 +79,8 @@ export const codeSets = pgTable(
     partnerKey: text("partner_key"),
     isPrimaryDisplay: boolean("is_primary_display").notNull().default(false),
     isDefault: boolean("is_default").notNull().default(false),
+    /** Bộ nguồn gốc (spec 2026-11-14): quyết định ĐVT gốc + thông tin mặt hàng. Đúng một bộ mỗi org (unique một phần), chỉ bộ nội bộ (kiểm ở use case). */
+    isSource: boolean("is_source").notNull().default(false),
     ...timestamps(),
   },
   (t) => [
@@ -86,6 +88,7 @@ export const codeSets = pgTable(
     index("code_sets_org_partner_idx").on(t.orgId, t.partnerKey),
     uniqueIndex("code_sets_org_primary_uq").on(t.orgId).where(sql`is_primary_display`),
     uniqueIndex("code_sets_org_default_uq").on(t.orgId).where(sql`is_default`),
+    uniqueIndex("code_sets_org_source_uq").on(t.orgId).where(sql`is_source`),
     // Một bộ mã mỗi (loại, đối tác) – ensurePartnerSet tự tạo bộ khi đọc chứng từ, hai request song song không sinh hai bộ.
     uniqueIndex("code_sets_org_kind_partner_uq").on(t.orgId, t.kind, t.partnerKey).where(sql`partner_key is not null`),
     check("code_sets_kind_chk", sql`kind in ('SHARED', 'ACCOUNTING', 'WAREHOUSE', 'CUSTOMS', 'SUPPLIER', 'CUSTOMER')`),
@@ -168,7 +171,7 @@ export const catalogImports = pgTable(
     counts: jsonb("counts").$type<{ created: number; matched: number; queued: number; skipped: number; errors: number }>().notNull(),
     errors: jsonb("errors").$type<{ row: number; field: string; code: string }[]>().notNull(),
     /** Dòng hợp lệ chờ ghép (lưu tạm cho job catalog-import); xóa (null) khi DONE. `row` = số dòng trong file (từ 1). */
-    rows: jsonb("rows").$type<{ row: number; code: string; name: string; unit?: string; hs?: string; factor?: string; sourceRef?: string }[]>(),
+    rows: jsonb("rows").$type<{ row: number; code: string; name: string; unit?: string; hs?: string; factor?: string; linkCode?: string; fields?: CatalogItemFields; sourceRef?: string }[]>(),
     /** Tiến độ ghép: số dòng hợp lệ / đã ghép xong (mỗi lô dòng ghi cùng transaction với kết quả – chạy lại tiếp từ đây). */
     rowsTotal: integer("rows_total").notNull().default(0),
     rowsDone: integer("rows_done").notNull().default(0),
@@ -201,6 +204,10 @@ export const catalogMatchQueue = pgTable(
     sourceRef: text("source_ref"),
     /** Số dòng trong lần nhập đã sinh ra mục này – idempotent theo (import_id, import_row). */
     importRow: integer("import_row"),
+    /** Hệ số "1 ĐVT của dòng = factor ĐVT gốc" từ cột Quy đổi của file – điền sẵn khi duyệt. */
+    factor: numeric("factor", { precision: 24, scale: 9 }),
+    /** Thông tin mặt hàng của dòng (chỉ khi bộ là nguồn gốc): tên, HS, loại, xuất xứ, biểu thuế, thuế suất, mô tả, ghi chú. */
+    itemFields: jsonb("item_fields").$type<CatalogItemFields>(),
     ...timestamps(),
   },
   (t) => [

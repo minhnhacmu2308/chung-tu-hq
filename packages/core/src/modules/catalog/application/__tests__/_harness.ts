@@ -45,7 +45,7 @@ export type Harness = ReturnType<typeof makeHarness>;
 
 /** Bộ mã có sẵn (vd bộ XNK mặc định do migration tạo). */
 export function seedSet(h: Harness, row: Partial<CodeSetRow> & { id: string; kind: CodeSetRow["kind"] }, orgId: string = ORG) {
-  h.uow.data.codeSets.push({ orgId, name: row.kind, partnerName: null, partnerKey: null, isPrimaryDisplay: false, isDefault: false, createdAt: NOW, updatedAt: NOW, ...row });
+  h.uow.data.codeSets.push({ orgId, name: row.kind, partnerName: null, partnerKey: null, isPrimaryDisplay: false, isDefault: false, isSource: false, createdAt: NOW, updatedAt: NOW, ...row });
 }
 export function seedOwner(h: Harness, codeSetId: string, userId: string, orgId: string = ORG) {
   h.uow.data.owners.push({ codeSetId, userId, orgId });

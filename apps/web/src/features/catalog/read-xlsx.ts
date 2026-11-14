@@ -3,7 +3,7 @@
 // bỏ dòng trống. Chưa kiểm gì và KHÔNG cắt bớt – `validateItemRows` (@kb/contracts) kiểm ở bước xem trước (dài quá → TOO_LONG), server kiểm lại.
 // Ô số trên Excel mất số 0 đầu và dấu chấm (mã HS 0801.32.00 → 8013200; mã "0012" → 12): chỉ mã HS ô số được bù số 0 (HS luôn có số chữ
 // số chẵn); mã hàng thì không đoán được – giao diện khuyên định dạng cột mã/HS là Text.
-import { detectItemColumns, type ItemColumnMap, type ItemImportRow } from "@kb/contracts";
+import { detectItemColumns, ITEM_IMPORT_FIELDS, type ItemColumnMap, type ItemImportField, type ItemImportRow } from "@kb/contracts";
 import type ExcelJS from "exceljs";
 
 export type ItemSheet = {
@@ -105,18 +105,24 @@ function fixNumericHs(s: string): string {
   return /^\d+$/.test(s) && s.length % 2 === 1 && s.length >= 3 && s.length <= 9 ? `0${s}` : s;
 }
 
-/** Dòng dữ liệu → dòng nhập theo cột đã ghép (trường không ghép hoặc ô trống thì bỏ). Không cắt bớt – dài quá do bước kiểm báo lỗi. */
+/**
+ * Dòng dữ liệu → dòng nhập theo cột đã ghép (mọi trường của ITEM_IMPORT_FIELDS; trường không ghép hoặc ô trống thì bỏ). Không cắt bớt – dài quá
+ * do bước kiểm báo lỗi.
+ */
 export function toImportRows(sheet: Pick<ItemSheet, "rows"> & Partial<Pick<ItemSheet, "numeric">>, map: ItemColumnMap): ItemImportRow[] {
   return sheet.rows.map((cells, r) => {
-    const get = (field: keyof ItemColumnMap) => {
+    const get = (field: ItemImportField) => {
       const i = map[field];
       return i === undefined ? "" : (cells[i] ?? "").trim();
     };
-    const unit = get("unit");
-    const hsRaw = get("hs");
-    const hs = map.hs !== undefined && sheet.numeric?.[r]?.[map.hs] ? fixNumericHs(hsRaw) : hsRaw;
-    const factor = get("factor");
-    return { code: get("code"), name: get("name"), ...(unit ? { unit } : {}), ...(hs ? { hs } : {}), ...(factor ? { factor } : {}) };
+    const row: ItemImportRow = { code: get("code"), name: get("name") };
+    for (const f of ITEM_IMPORT_FIELDS) {
+      if (f === "code" || f === "name") continue;
+      let v = get(f);
+      if (f === "hs" && map.hs !== undefined && sheet.numeric?.[r]?.[map.hs]) v = fixNumericHs(v);
+      if (v) row[f] = v;
+    }
+    return row;
   });
 }
 

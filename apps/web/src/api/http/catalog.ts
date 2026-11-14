@@ -1,7 +1,8 @@
 // Danh mục hàng hóa dùng chung (ADR 0015) qua route /api/org/catalog/** + gắn mặt hàng cho dòng hàng (/api/line-items/:id/*).
 import {
   CatalogImportSchema, CatalogItemDetailSchema, CatalogItemHistoryEntrySchema, CatalogItemPageSchema, CatalogSettingsViewSchema, CodeSetSchema, CreateItemResultSchema, CrossReferenceSchema,
-  DecideQueueBulkResultSchema, ItemAliasSchema, LineItemSchema, MatchQueueItemSchema, MatchQueuePageSchema, ResolveItemResultSchema, ResolveManyResultSchema, UnitConversionSchema,
+  DecideQueueBulkResultSchema, ItemAliasSchema, LineItemSchema, MatchQueueItemSchema, MatchQueuePageSchema, ResolveItemResultSchema, ResolveManyResultSchema, SourceChangePreviewSchema,
+  SourceChangeResultSchema, UnitConversionSchema,
   type AliasActionInput, type ChangeCatalogModeInput, type CreateItemRequest, type DecideQueueBulkInput, type DecideQueueInput, type ImportFromDocumentsInput,
   type ImportRowsInput, type LinkLineItemInput, type ListCatalogItemsQueryInput, type ListQueueQueryInput, type ProposeAliasInput, type ResolveItemQueryInput, type ResolveManyRow,
   type SetConversionInput, type SetupCatalogRequest, type SplitAliasesInput, type UpdateItemRequest, type UpsertCodeSetInput,
@@ -27,6 +28,9 @@ export const listCodeSets = () => apiGet(`${C}/code-sets`, z.array(CodeSetSchema
 export const saveCodeSet = (id: string | null, input: UpsertCodeSetInput) =>
   id ? apiPut(`${C}/code-sets/${id}`, input, CodeSetSchema) : apiPost(`${C}/code-sets`, input, CodeSetSchema);
 export const setPrimaryDisplay = (codeSetId: string | null) => apiPut(`${C}/code-sets/primary-display`, { codeSetId }, z.array(CodeSetSchema));
+/** Bộ nguồn gốc: xem trước (không ghi) + đổi / "Áp dụng lại" (idempotent). */
+export const previewSourceChange = (codeSetId: string) => apiGet(`${C}/code-sets/source/preview${qs({ codeSetId })}`, SourceChangePreviewSchema);
+export const changeSourceSet = (codeSetId: string) => apiPut(`${C}/code-sets/source`, { codeSetId }, SourceChangeResultSchema);
 
 export const listCatalogItems = (query: ListCatalogItemsQueryInput = {}) => apiGet(`${C}/items${qs(query)}`, CatalogItemPageSchema);
 export const getCatalogItem = (id: string) => apiGet(`${C}/items/${id}`, CatalogItemDetailSchema);

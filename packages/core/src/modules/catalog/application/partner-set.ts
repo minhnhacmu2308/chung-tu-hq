@@ -16,7 +16,7 @@ export async function ensurePartnerSetInTx(deps: Pick<CatalogDeps, "clock" | "id
   const row: CodeSetRow = {
     // Tên bộ = tên đối tác (như "Lấy từ chứng từ đã đọc"); người dùng đổi tên được.
     id: deps.idGen.next("cst"), orgId, kind, name: name.slice(0, 100) || DEFAULT_SET_NAME[kind], partnerName: name.slice(0, 200), partnerKey: key,
-    isPrimaryDisplay: false, isDefault: false, createdAt: now, updatedAt: now,
+    isPrimaryDisplay: false, isDefault: false, isSource: false, createdAt: now, updatedAt: now,
   };
   await r.codeSets.insert(row);
   return row.id;

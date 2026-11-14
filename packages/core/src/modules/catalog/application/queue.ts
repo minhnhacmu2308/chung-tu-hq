@@ -11,12 +11,14 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { ALIAS_ACTIVE_UQ, auditKeyAlias, codeTaken, factorRequired, asOrgAudited, isDuplicate, itemNotFound, needsFactor, type AuditEntry } from "./common.js";
 import { freeItemNo } from "./items.js";
 import { requireContributor, requireSetManager } from "./permissions.js";
+import { applySourceAttach } from "./source-rules.js";
 import type { CatalogDeps, CatalogItemRow, CatalogRepos, ItemAliasRow, MatchQueueRow } from "./ports.js";
 
 export function toQueueDto(q: MatchQueueRow): MatchQueueItem {
   return {
     id: q.id, importId: q.importId, codeSetId: q.codeSetId, code: q.code, name: q.name, unit: q.unit, hsCode: q.hsCode, level: q.level, suggestedItemId: q.suggestedItemId,
     candidates: q.candidates, reason: q.reason, status: q.status, decidedBy: q.decidedBy, decidedAt: q.decidedAt?.toISOString() ?? null, sourceRef: q.sourceRef,
+    factor: q.factor ?? null, itemFields: q.itemFields ?? null,
   };
 }
 
@@ -109,6 +111,11 @@ export async function decideQueue(deps: CatalogDeps, ctx: Ctx, id: string, input
         return ok({ out: { ...q, status: "SKIPPED" as const, ...closed }, audit: [] });
       }
 
+      const set = await r.codeSets.get(ctx.orgId, q.codeSetId);
+      const isSource = !!set?.isSource;
+      // Hệ số: người duyệt nhập (ô điền sẵn từ cột Quy đổi) – không gửi thì dùng hệ số của dòng file (xác nhận hàng loạt).
+      const factor = input.factor ?? q.factor ?? undefined;
+      const fields = isSource ? (q.itemFields ?? null) : null;
       const codeKey = q.code ? itemCodeKey(q.code) : "";
       const holder = codeKey ? await r.aliases.findActive(ctx.orgId, q.codeSetId, codeKey) : null;
       const holderItem = holder ? await r.items.resolveMerged(ctx.orgId, holder.itemId) : null;
@@ -119,11 +126,14 @@ export async function decideQueue(deps: CatalogDeps, ctx: Ctx, id: string, input
       if (!targetId) {
         if (holder) return err(codeTaken(holderItem ?? (await r.items.get(ctx.orgId, holder.itemId))));
         if (!(await r.queue.claim(ctx.orgId, q.id, { status: "DONE", ...closed }))) return err(queueDone());
+        // Dòng của bộ nguồn gốc mang thông tin mặt hàng (loại, xuất xứ, thuế…) → dùng làm dữ liệu mặt hàng mới.
+        const name = fields?.name ?? q.name;
         const item: CatalogItemRow = {
-          id: deps.idGen.next("cat"), orgId: ctx.orgId, itemNo: await freeItemNo(r, ctx), kind: input.kind ?? "GOODS", name: q.name, nameKey: itemNameKey(q.name),
-          hsCode: q.hsCode, baseUnit: q.unit, origin: null, tariffSchedule: null, importDutyRate: null, vatRate: null, envTaxRate: null, exciseRate: null, safeguardRate: null,
-          antiDiscriminationRate: null, description: null, note: null, timesDeclared: 0, lastDeclarationNo: null, lastDeclarationDate: null, lastTypeCode: null,
-          status: "ACTIVE", mergedIntoId: null, source: q.importId ? "IMPORT" : "QUEUE", updatedBy: ctx.userId, createdAt: now, updatedAt: now,
+          id: deps.idGen.next("cat"), orgId: ctx.orgId, itemNo: await freeItemNo(r, ctx), kind: input.kind ?? fields?.kind ?? "GOODS", name, nameKey: itemNameKey(name),
+          hsCode: fields?.hsCode ?? q.hsCode, baseUnit: q.unit, origin: fields?.origin ?? null, tariffSchedule: fields?.tariffSchedule ?? null, importDutyRate: fields?.importDutyRate ?? null,
+          vatRate: fields?.vatRate ?? null, envTaxRate: fields?.envTaxRate ?? null, exciseRate: fields?.exciseRate ?? null, safeguardRate: fields?.safeguardRate ?? null,
+          antiDiscriminationRate: fields?.antiDiscriminationRate ?? null, description: fields?.description ?? null, note: fields?.note ?? null, timesDeclared: 0, lastDeclarationNo: null,
+          lastDeclarationDate: null, lastTypeCode: null, status: "ACTIVE", mergedIntoId: null, source: q.importId ? "IMPORT" : "QUEUE", updatedBy: ctx.userId, createdAt: now, updatedAt: now,
         };
         await r.items.insert(item);
         audit.push({ itemId: item.id, key: "item", oldValue: "", newValue: `${item.itemNo} ${item.name}` });
@@ -146,12 +156,14 @@ export async function decideQueue(deps: CatalogDeps, ctx: Ctx, id: string, input
       if (holder && holderItem?.id !== item.id) return err(codeTaken(holderItem ?? (await r.items.get(ctx.orgId, holder.itemId))));
       const convs = await r.conversions.listForItem(ctx.orgId, item.id);
       const needFactor = !holder && needsFactor(item, convs, q.unit);
-      if (needFactor && !input.factor) return err(factorRequired(q.unit!));
+      if (needFactor && !factor) return err(factorRequired(q.unit!));
       if (!(await r.queue.claim(ctx.orgId, q.id, { status: "DONE", suggestedItemId: item.id, ...closed }))) return err(queueDone());
-      if (needFactor && q.unit && input.factor) {
-        await r.conversions.upsert({ id: deps.idGen.next("ucv"), orgId: ctx.orgId, itemId: item.id, unit: q.unit, factor: input.factor, createdAt: now, updatedAt: now });
-        audit.push({ itemId: item.id, key: `conv:${q.unit}`, oldValue: "", newValue: input.factor });
+      if (needFactor && q.unit && factor) {
+        await r.conversions.upsert({ id: deps.idGen.next("ucv"), orgId: ctx.orgId, itemId: item.id, unit: q.unit, factor, createdAt: now, updatedAt: now });
+        audit.push({ itemId: item.id, key: `conv:${q.unit}`, oldValue: "", newValue: factor });
       }
+      // Bộ nguồn gốc: ĐVT của mã thành ĐVT gốc (đổi gốc theo hệ số vừa có) + áp thông tin mặt hàng của dòng.
+      if (isSource) await applySourceAttach(deps, r, ctx, { isSource }, item, q.unit, fields, audit);
       if (codeKey && !holder) {
         const alias: ItemAliasRow = {
           id: deps.idGen.next("ali"), orgId: ctx.orgId, codeSetId: q.codeSetId, code: q.code, codeKey, name: q.name, unit: q.unit, itemId: item.id, status: "ACTIVE",

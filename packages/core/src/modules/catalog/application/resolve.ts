@@ -37,7 +37,7 @@ export type MatchContext = {
 };
 
 /** Mặt hàng cuối chuỗi gộp (trong bộ nhớ); chu trình / không có → null. */
-function endOfChain(items: Map<string, CatalogItemRow>, id: string): CatalogItemRow | null {
+export function endOfChain(items: ReadonlyMap<string, CatalogItemRow>, id: string): CatalogItemRow | null {
   const seen = new Set<string>();
   let cur: CatalogItemRow | undefined = items.get(id);
   while (cur) {

@@ -14,6 +14,8 @@ export class InMemoryCatalogUow implements CatalogUow {
     conversions: [] as ItemConversionRow[],
     queue: [] as MatchQueueRow[],
     imports: [] as CatalogImportRow[],
+    /** Dòng tờ khai (bảng line_items của declaration) – chỉ phần catalog dùng: hệ số theo lô của dòng gắn mặt hàng. */
+    lines: [] as { id: string; orgId: string; dossierId: string; lineNo: number; catalogItemId: string | null; unitFactor: string | null; updatedAt?: Date }[],
   };
   /** Bảng field_audit (ghi qua repos.fieldAudit trong transaction). */
   readonly fieldAudit = new InMemoryFieldAuditLog();
@@ -37,6 +39,7 @@ export class InMemoryCatalogUow implements CatalogUow {
     const checkSet = (row: CodeSetRow, self?: string) => {
       if (row.isPrimaryDisplay && d.codeSets.some((s) => s.orgId === row.orgId && s.id !== self && s.isPrimaryDisplay)) dup("code_sets_org_primary_uq");
       if (row.isDefault && d.codeSets.some((s) => s.orgId === row.orgId && s.id !== self && s.isDefault)) dup("code_sets_org_default_uq");
+      if (row.isSource && d.codeSets.some((s) => s.orgId === row.orgId && s.id !== self && s.isSource)) dup("code_sets_org_source_uq");
     };
     const checkAlias = (row: ItemAliasRow, self?: string) => {
       if (row.status === "ACTIVE" && d.aliases.some((a) => a.id !== self && a.codeSetId === row.codeSetId && a.codeKey === row.codeKey && a.status === "ACTIVE")) dup("item_aliases_set_code_active_uq");
@@ -202,6 +205,13 @@ export class InMemoryCatalogUow implements CatalogUow {
           for (const k of ["created", "matched", "queued", "skipped", "errors"] as const) x.counts[k] = Math.max(0, (x.counts[k] ?? 0) + (delta[k] ?? 0));
           x.updatedAt = now;
         },
+      },
+      lineFactors: {
+        listForItems: async (orgId, itemIds) =>
+          mine(d.lines, orgId)
+            .filter((l) => l.catalogItemId !== null && itemIds.includes(l.catalogItemId) && l.unitFactor !== null)
+            .map((l) => ({ id: l.id, dossierId: l.dossierId, lineNo: l.lineNo, catalogItemId: l.catalogItemId!, unitFactor: l.unitFactor! })),
+        setFactor: async (orgId, id, factor, now) => patchOf(d.lines, orgId, (l) => l.id === id, { unitFactor: factor, updatedAt: now }),
       },
       fieldAudit: this.fieldAudit.repo(org),
     });

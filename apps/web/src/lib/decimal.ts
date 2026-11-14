@@ -51,6 +51,38 @@ export function mulDecimal(a: string, b: string, scale = 2): string {
   return prod < 0n && q !== 0n ? `-${out}` : out;
 }
 
+/** Chuỗi thập phân dạng gọn: bỏ số 0 thừa đầu/cuối ("012.500" → "12.5", "3.000" → "3") – như Decimal.toFixed() của backend. */
+export function plainDecimal(v: string): string {
+  const t = v.trim();
+  const neg = t.startsWith("-");
+  const [int = "0", frac = ""] = t.replace(/^-/, "").split(".");
+  const i = int.replace(/^0+(?=\d)/, "") || "0";
+  const f = frac.replace(/0+$/, "");
+  const out = f ? `${i}.${f}` : i;
+  return neg && out !== "0" ? `-${out}` : out;
+}
+
+/**
+ * a ÷ b làm tròn `scale` số lẻ (half-up), không qua số thực, kết quả dạng gọn (plainDecimal) – như Decimal.div().toDecimalPlaces(scale, ROUND_HALF_UP)
+ * của backend (vd đổi ĐVT gốc mặt hàng: hệ số ÷ f, 9 số lẻ). b = 0 → ném lỗi.
+ */
+export function divDecimal(a: string, b: string, scale = 9): string {
+  const S = 18;
+  const num = toScaled(a, S) * 10n ** BigInt(scale);
+  const den = toScaled(b, S);
+  if (den === 0n) throw new Error("divDecimal: chia cho 0");
+  const neg = num < 0n !== den < 0n && num !== 0n;
+  const n = num < 0n ? -num : num;
+  const d = den < 0n ? -den : den;
+  const q = (2n * n + d) / (2n * d);
+  const s = q.toString().padStart(scale + 1, "0");
+  const out = plainDecimal(scale ? `${s.slice(0, -scale)}.${s.slice(-scale)}` : s);
+  return neg && out !== "0" ? `-${out}` : out;
+}
+
+/** So sánh hai chuỗi thập phân theo giá trị ("5" = "5.0000"). */
+export const sameDecimal = (a: string, b: string) => plainDecimal(a) === plainDecimal(b);
+
 /** Tổng chuỗi thập phân, giữ `scale` số lẻ. */
 export function sumDecimal(xs: readonly string[], scale = 2): string {
   const total = xs.reduce((acc, x) => acc + toScaled(x, scale), 0n);

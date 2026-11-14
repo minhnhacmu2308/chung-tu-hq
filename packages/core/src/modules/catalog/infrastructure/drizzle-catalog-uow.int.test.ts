@@ -11,6 +11,9 @@ import { importRows } from "../application/import.js";
 import { mergeItems } from "../application/merge.js";
 import { decideQueue } from "../application/queue.js";
 import { runMatch } from "../application/match-run.js";
+import { changeSourceSet } from "../application/source.js";
+import { isDuplicate } from "../application/common.js";
+import { rebaseItemTo } from "../application/source-rules.js";
 import type { CatalogItemRow, ItemAliasRow } from "../application/ports.js";
 import { DrizzleCatalogUow } from "./drizzle-catalog-uow.js";
 
@@ -24,9 +27,9 @@ const now = new Date("2026-11-13T00:00:00Z");
 const noJobs = { enqueue: async () => {} };
 const noDocs = { approvedDeclarationLines: async () => [], invoiceLines: async () => [] };
 
-/** Phần SQL chuyển dữ liệu nằm cuối migration 0037 (sau dòng `-- data-migration`). */
-const migrationSql = () => {
-  const text = readFileSync(new URL("../../../../drizzle/0037_catalog.sql", import.meta.url), "utf8");
+/** Phần SQL chuyển dữ liệu nằm cuối migration (sau dòng `-- data-migration`). */
+const migrationSql = (file = "0037_catalog.sql") => {
+  const text = readFileSync(new URL(`../../../../drizzle/${file}`, import.meta.url), "utf8");
   return text
     .slice(text.indexOf("-- data-migration"))
     .split("--> statement-breakpoint")
@@ -150,7 +153,7 @@ describe("RLS và ràng buộc", () => {
   });
 
   it("chỉ một bộ mặc định / hiển thị chính mỗi org", async () => {
-    const base = { orgId: A.orgId, partnerName: null, partnerKey: null, createdAt: now, updatedAt: now };
+    const base = { orgId: A.orgId, partnerName: null, partnerKey: null, isSource: false, createdAt: now, updatedAt: now };
     await expect(uow.asOrg(A, (r) => r.codeSets.insert({ ...base, id: "cst_x", kind: "CUSTOMS", name: "Hai", isPrimaryDisplay: false, isDefault: true }))).rejects.toThrow();
     await uow.asOrg(A, (r) => r.codeSets.insert({ ...base, id: "cst_y", kind: "ACCOUNTING", name: "KT", isPrimaryDisplay: true, isDefault: false }));
     await expect(uow.asOrg(A, (r) => r.codeSets.insert({ ...base, id: "cst_z", kind: "WAREHOUSE", name: "Kho", isPrimaryDisplay: true, isDefault: false }))).rejects.toThrow();
@@ -283,4 +286,88 @@ describe("bộ mã đối tác: một bộ mỗi (org, loại, đối tác) – 
     const other = await port.ensurePartnerSet(B.orgId, "SUPPLIER", "Song Song Co., Ltd");
     expect(other).not.toBe(ids[0]);
   });
+});
+
+describe("bộ nguồn gốc (migration 0040, spec 2026-11-14)", () => {
+  const sourceOf = async (orgId: string) =>
+    (await admin.execute(sql`SELECT id FROM code_sets WHERE org_id = ${orgId} AND is_source ORDER BY id`)).map((r) => (r as { id: string }).id);
+
+  it("chuyển dữ liệu: SHARED nếu có, không thì bộ is_default (XNK); chạy lại không đổi; org đã có nguồn gốc giữ nguyên", async () => {
+    await admin.execute(sql`UPDATE code_sets SET is_source = false`);
+    await admin.execute(sql`INSERT INTO code_sets (id, org_id, kind, name, created_at) VALUES ('cst_b_shared', 'org_khac', 'SHARED', 'Mã chung', '2027-01-01T00:00:00Z')`);
+    for (const stmt of migrationSql("0040_catalog_source_set.sql")) await admin.execute(sql.raw(stmt));
+    expect(await sourceOf("org_anphat")).toEqual(["cst_mig_org_anphat"]);
+    expect(await sourceOf("org_khac")).toEqual(["cst_b_shared"]);
+    for (const stmt of migrationSql("0040_catalog_source_set.sql")) await admin.execute(sql.raw(stmt));
+    expect(await sourceOf("org_anphat")).toEqual(["cst_mig_org_anphat"]);
+    expect(await sourceOf("org_khac")).toEqual(["cst_b_shared"]);
+    await admin.execute(sql`DELETE FROM code_sets WHERE id = 'cst_b_shared'`);
+    await admin.execute(sql`UPDATE code_sets SET is_source = true WHERE id = 'cst_mig_org_khac'`);
+  });
+
+  it("unique is_source: bộ thứ hai cùng org bị DB chặn; org khác độc lập", async () => {
+    const base = { partnerName: null, partnerKey: null, isPrimaryDisplay: false, isDefault: false, createdAt: now, updatedAt: now };
+    const e = await uow.asOrg(A, (r) => r.codeSets.insert({ ...base, orgId: A.orgId, id: "cst_src2", kind: "WAREHOUSE", name: "Kho 2", isSource: true })).then(() => null, (x: unknown) => x);
+    expect(isDuplicate(e, "code_sets_org_source_uq")).toBe(true);
+    expect(await sourceOf("org_khac")).toEqual(["cst_mig_org_khac"]);
+  });
+
+  it("hàng chờ: cột factor (numeric → chuỗi gọn) + item_fields (jsonb); org khác không thấy", async () => {
+    const setId = (await uow.asOrg(A, (r) => r.codeSets.list(A.orgId))).find((s) => s.isDefault)!.id;
+    await uow.asOrg(A, (r) =>
+      r.queue.insert({
+        id: "cmq_src1", orgId: A.orgId, importId: null, codeSetId: setId, code: "Q1", name: "Q", unit: "PCE", hsCode: null, level: "NONE", suggestedItemId: null, candidates: [], reason: "NO_MATCH",
+        status: "PENDING", decidedBy: null, decidedAt: null, sourceRef: null, factor: "12.5", itemFields: { kind: "MATERIAL", vatRate: "8" }, createdAt: now, updatedAt: now,
+      }),
+    );
+    expect(await uow.asOrg(A, (r) => r.queue.get(A.orgId, "cmq_src1"))).toMatchObject({ factor: "12.5", itemFields: { kind: "MATERIAL", vatRate: "8" } });
+    expect(await uow.asOrg(B, (r) => r.queue.get(B.orgId, "cmq_src1"))).toBeNull();
+  });
+
+  it("đổi bộ nguồn gốc trên Postgres: quy đổi + hệ số theo lô dòng tờ khai chia lại, field_audit; lỗi giữa chừng → rollback cả mặt hàng, quy đổi, dòng tờ khai", async () => {
+    const deps = { uow, members: { eligibleOwners: async () => new Set<string>() }, jobs: noJobs, documents: noDocs, clock: { now: () => now }, idGen: ulidIdGen };
+    const ctx = { ...A, role: "ADMIN" as const };
+    await admin.execute(sql`INSERT INTO dossiers (id, org_id, code, direction, type_code, partner, customs_office_code, due_date, owner_id) VALUES ('dos_src', 'org_anphat', 'SRC-1', 'NK', 'A11', 'X', '02CI', '2026-11-30', 'usr_chau')`);
+    await admin.execute(sql`INSERT INTO line_items (id, org_id, dossier_id, line_no, description, quantity, unit, unit_price, amount, origin, catalog_item_id, unit_factor) VALUES
+      ('itm_src1', 'org_anphat', 'dos_src', 1, 'Thép', '2', 'TNE', '5', '10', 'CN', 'rb1', '2500'), ('itm_src2', 'org_anphat', 'dos_src', 2, 'Ốc', '2', 'PCE', '5', '10', 'CN', 'rb2', '3')`);
+    await uow.asOrg(A, async (r) => {
+      await r.codeSets.insert({ id: "cst_rb_acc", orgId: A.orgId, kind: "ACCOUNTING", name: "KT", partnerName: null, partnerKey: null, isPrimaryDisplay: false, isDefault: false, isSource: false, createdAt: now, updatedAt: now });
+      await r.items.insert(item("rb1", A.orgId, "MH-400001", { baseUnit: "KGM" }));
+      await r.items.insert(item("rb2", A.orgId, "MH-400002", { baseUnit: "PCE" }));
+      await r.conversions.upsert({ id: "ucv_rb1", orgId: A.orgId, itemId: "rb1", unit: "TNE", factor: "1000", createdAt: now, updatedAt: now });
+      await r.aliases.insert({ ...alias("ali_rb1", A.orgId, "cst_rb_acc", "rb1", "RB1", "ACTIVE"), unit: "TNE" });
+      await r.aliases.insert({ ...alias("ali_rb2", A.orgId, "cst_rb_acc", "rb2", "RB2", "ACTIVE"), unit: "SET" });
+    });
+    // Org khác không đọc được hệ số theo lô của org A.
+    expect(await uow.asOrg(B, (r) => r.lineFactors.listForItems(B.orgId, ["rb1"]))).toEqual([]);
+
+    // Lỗi sau khi đã đổi gốc trong transaction → không còn dấu vết nào.
+    const rb1 = (await uow.asOrg(A, (r) => r.items.get(A.orgId, "rb1")))!;
+    await expect(
+      uow.asOrg(A, async (r) => {
+        expect((await rebaseItemTo(deps, r, A, rb1, "TNE", [])).kind).toBe("REBASED");
+        throw new Error("boom");
+      }),
+    ).rejects.toThrow("boom");
+    expect((await uow.asOrg(A, (r) => r.items.get(A.orgId, "rb1")))?.baseUnit).toBe("KGM");
+    expect((await admin.execute(sql`SELECT unit_factor::text AS f FROM line_items WHERE id = 'itm_src1'`))[0]).toEqual({ f: "2500.000000000" });
+
+    const res = await changeSourceSet(deps, ctx, { codeSetId: "cst_rb_acc" });
+    if (!res.ok) throw new Error(JSON.stringify(res.error));
+    expect(res.value).toMatchObject({ changed: true, rebased: 1, blocked: [{ itemId: "rb2", code: "RB2", baseUnit: "PCE", newUnit: "SET" }] });
+    expect(await sourceOf("org_anphat")).toEqual(["cst_rb_acc"]);
+    expect((await uow.asOrg(A, (r) => r.items.get(A.orgId, "rb1")))?.baseUnit).toBe("TNE");
+    expect((await uow.asOrg(A, (r) => r.conversions.listForItem(A.orgId, "rb1"))).map((c) => [c.unit, Number(c.factor)])).toEqual([["KGM", 0.001]]);
+    expect(await admin.execute(sql`SELECT id, unit_factor::text AS f FROM line_items WHERE dossier_id = 'dos_src' ORDER BY id`)).toEqual([{ id: "itm_src1", f: "2.500000000" }, { id: "itm_src2", f: "3.000000000" }]);
+    const audit = await admin.execute(sql`SELECT dossier_id, key, old_value, new_value FROM field_audit WHERE source = 'CATALOG_EDIT' AND dossier_id IN ('rb1', 'dos_src') ORDER BY key`);
+    expect(audit).toEqual(expect.arrayContaining([
+      { dossier_id: "rb1", key: "baseUnit", old_value: "KGM", new_value: "TNE" },
+      { dossier_id: "dos_src", key: "unitFactor:1", old_value: "2500", new_value: "2.5" },
+    ]));
+    // Org khác không đổi được bộ nguồn gốc của org A.
+    expect(await changeSourceSet(deps, { ...B, role: "ADMIN" }, { codeSetId: "cst_mig_org_anphat" })).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    // Trả lại nguồn gốc cũ (bộ XNK) cho các test khác.
+    const back = await changeSourceSet(deps, ctx, { codeSetId: "cst_mig_org_anphat" });
+    expect(back.ok).toBe(true);
+  }, 60_000);
 });

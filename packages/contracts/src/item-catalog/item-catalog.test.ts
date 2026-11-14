@@ -75,6 +75,28 @@ describe("matchItemCandidate", () => {
     expect(matchItemCandidate(row("K9", "Không HS gì đó"), idx, "ACC")).toMatchObject({ level: "SURE", itemId: "i5" });
     expect(matchItemCandidate(row("K9", "Tên khác"), idx, "ACC").level).not.toBe("SURE");
   });
+  it("CODE_OTHER_SET_NAME -> SURE khi file không có HS, mã trùng mã bộ khác và tên giống >= 0,8", () => {
+    // Mặt hàng XNK có HS, file Kế toán cùng mã, không HS, tên gần giống.
+    const idx = buildItemMatchIndex([alias("XNK", "VT-2", "i2")], [item("i2", "Ống thép mạ kẽm D20", "73063010")]);
+    expect(matchItemCandidate(row("vt-2", "Ống thép mạ kẽm D20"), idx, "ACC")).toMatchObject({ level: "SURE", itemId: "i2", reason: "CODE_OTHER_SET_NAME" });
+    expect(matchItemCandidate(row("VT-2", "ống thép mạ kẽm d20 loại"), idx, "ACC")).toMatchObject({ level: "SURE", itemId: "i2", reason: "CODE_OTHER_SET_NAME" });
+  });
+  it("CODE_OTHER_SET_NAME cả khi mặt hàng thiếu HS mà dòng có HS", () => {
+    const idx = buildItemMatchIndex([alias("WH", "K9", "i5")], [item("i5", "Keo dán sắt", null)]);
+    expect(matchItemCandidate(row("K9", "Keo dán sắt", "35069900"), idx, "ACC")).toMatchObject({ level: "SURE", itemId: "i5", reason: "CODE_OTHER_SET_NAME" });
+  });
+  it("CODE_OTHER_SET_NO_HS -> MAYBE khi mã trùng nhưng tên khác (có thể trùng ngẫu nhiên)", () => {
+    const idx = buildItemMatchIndex([alias("XNK", "VT-2", "i2")], [item("i2", "Ống thép mạ kẽm D20", "73063010")]);
+    expect(matchItemCandidate(row("VT-2", "Giấy in A4"), idx, "ACC")).toMatchObject({ level: "MAYBE", itemId: "i2", reason: "CODE_OTHER_SET_NO_HS" });
+  });
+  it("CODE_OTHER_SET_NAME vẫn hạ MAYBE khi ĐVT khác ĐVT gốc chưa có quy đổi", () => {
+    const idx = buildItemMatchIndex([alias("XNK", "VT-2", "i2")], [item("i2", "Ống thép", "73063010", "PCE")]);
+    expect(matchItemCandidate(row("VT-2", "Ống thép", undefined, "BOX"), idx, "ACC")).toMatchObject({ level: "MAYBE", itemId: "i2", reason: "UNIT_NO_FACTOR" });
+  });
+  it("mã trùng ở 2 mặt hàng khác nhau (thiếu HS, tên giống cả hai) -> AMBIGUOUS, không tự nối", () => {
+    const idx = buildItemMatchIndex([alias("XNK", "A1", "i1"), alias("WH", "A1", "i2")], [item("i1", "Bu lông M8", "73181510"), item("i2", "Bu lông M8", "73181590")]);
+    expect(matchItemCandidate(row("A1", "Bu lông M8"), idx, "ACC")).toMatchObject({ level: "MAYBE", reason: "AMBIGUOUS" });
+  });
   it("mã ở bộ khác nhưng HS khác nhóm -> không SURE", () => {
     const r = matchItemCandidate(row("VT-2", "tên khác hẳn", "99999999"), index, "ACC");
     expect(r.level).toBe("NONE");
@@ -163,7 +185,7 @@ describe("detectItemColumns / validateItemRows", () => {
     expect(detectItemColumns(["Item code", "Mã HS", "Quy đổi", "Đơn vị tính", "Tên vật tư"])).toEqual({ code: 0, hs: 1, factor: 2, unit: 3, name: 4 });
   });
   it("cột không nhận ra -> không có khóa", () => {
-    expect(detectItemColumns(["Ghi chú"])).toEqual({});
+    expect(detectItemColumns(["Cột lạ"])).toEqual({});
   });
   it("báo thiếu mã/tên, trùng mã, HS sai", () => {
     const rows = [

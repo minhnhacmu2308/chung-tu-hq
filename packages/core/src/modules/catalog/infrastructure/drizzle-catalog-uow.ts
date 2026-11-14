@@ -2,11 +2,16 @@ import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-o
 import type { Db, Tx } from "../../../db/client.js";
 import { catalogImports, catalogItems, catalogMatchQueue, catalogSettings, codeSetOwners, codeSets, itemAliases, itemUnitConversions } from "../../../db/schema/catalog.js";
 import { drizzleFieldAudit } from "../../../db/field-audit.js";
+import { drizzleCatalogLineFactors } from "../../../db/catalog-line-factors.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { CatalogRepos, CatalogUow } from "../application/ports.js";
+import { Decimal } from "../../../shared/decimal.js";
+import type { CatalogRepos, CatalogUow, MatchQueueRow } from "../application/ports.js";
 import { formatItemNo } from "../domain/item-no.js";
 
+
+/** numeric(24,9) đọc ra "12.500000000" → chuỗi Decimal gọn "12.5" (điền sẵn ô hệ số). */
+const toQueueRow = (r: typeof catalogMatchQueue.$inferSelect): MatchQueueRow => ({ ...r, factor: r.factor === null ? null : new Decimal(r.factor).toFixed() });
 
 function repos(tx: Tx): CatalogRepos {
   return {
@@ -99,13 +104,18 @@ function repos(tx: Tx): CatalogRepos {
       delete: async (orgId, itemId, unit) => void (await tx.delete(itemUnitConversions).where(and(eq(itemUnitConversions.orgId, orgId), eq(itemUnitConversions.itemId, itemId), eq(itemUnitConversions.unit, unit)))),
     },
     queue: {
-      get: async (orgId, id) => (await tx.select().from(catalogMatchQueue).where(and(eq(catalogMatchQueue.orgId, orgId), eq(catalogMatchQueue.id, id))).limit(1))[0] ?? null,
+      get: async (orgId, id) => {
+        const r = (await tx.select().from(catalogMatchQueue).where(and(eq(catalogMatchQueue.orgId, orgId), eq(catalogMatchQueue.id, id))).limit(1))[0];
+        return r ? toQueueRow(r) : null;
+      },
       list: async (orgId, f) =>
-        tx
-          .select()
-          .from(catalogMatchQueue)
-          .where(and(eq(catalogMatchQueue.orgId, orgId), f?.status ? eq(catalogMatchQueue.status, f.status) : undefined, f?.codeSetId ? eq(catalogMatchQueue.codeSetId, f.codeSetId) : undefined, f?.importId ? eq(catalogMatchQueue.importId, f.importId) : undefined))
-          .orderBy(asc(catalogMatchQueue.createdAt), asc(catalogMatchQueue.id)),
+        (
+          await tx
+            .select()
+            .from(catalogMatchQueue)
+            .where(and(eq(catalogMatchQueue.orgId, orgId), f?.status ? eq(catalogMatchQueue.status, f.status) : undefined, f?.codeSetId ? eq(catalogMatchQueue.codeSetId, f.codeSetId) : undefined, f?.importId ? eq(catalogMatchQueue.importId, f.importId) : undefined))
+            .orderBy(asc(catalogMatchQueue.createdAt), asc(catalogMatchQueue.id))
+        ).map(toQueueRow),
       insert: async (row) => void (await tx.insert(catalogMatchQueue).values(row)),
       update: async (orgId, id, patch) => void (await tx.update(catalogMatchQueue).set(patch).where(and(eq(catalogMatchQueue.orgId, orgId), eq(catalogMatchQueue.id, id)))),
       claim: async (orgId, id, patch) =>
@@ -125,6 +135,7 @@ function repos(tx: Tx): CatalogRepos {
           .where(and(eq(catalogImports.orgId, orgId), eq(catalogImports.id, id)));
       },
     },
+    lineFactors: drizzleCatalogLineFactors(tx),
     fieldAudit: drizzleFieldAudit(tx),
   };
 }

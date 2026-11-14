@@ -1,8 +1,9 @@
 "use client";
 // Thiết lập danh mục lần đầu (Quản trị/Chủ – spec §4): bước 1 chọn chế độ; bước 2
 // - SHARED: tên "Mã chung" + người phụ trách + tiền tố mã nối → thiết lập rồi chuyển thẳng sang tab Nhập dữ liệu (nhập một file là xong);
-// - PER_DEPARTMENT: tiền tố, ba bộ Kế toán/Kho/XNK (tên + người phụ trách chọn nhiều), mã hiển thị chính.
-import { SetupCatalogInputSchema, type CatalogMode, type CodeSetKind } from "@kb/contracts";
+// - PER_DEPARTMENT: tiền tố, ba bộ Kế toán/Kho/XNK (tên + người phụ trách chọn nhiều), mã hiển thị chính, bộ nguồn gốc (bắt buộc, gợi ý XNK).
+// Bộ nguồn gốc (spec 2026-11-14 §1) quyết định ĐVT gốc + tên/HS/thuế của mặt hàng; dùng chung → bộ "Mã chung" tự là nguồn gốc.
+import { SetupCatalogInputSchema, type CatalogMode, type CodeSetKind, type SetupCatalogInput } from "@kb/contracts";
 import {
   Alert, Button, Combobox, Dialog, DialogContent, DialogFooter, Field, fill, FormSection, Input, RadioGroup, Select, Stack, statusLabel, toast, useMessages, useUiLocale,
 } from "@kb/ui";
@@ -15,14 +16,18 @@ import { errorText } from "@/lib/reason-codes";
 import { CATALOG_SETS_MESSAGES } from "./catalog.messages";
 import { useOwnerOptions } from "./code-set-dialog";
 import { codeSetStatus } from "./code-set-label";
+import { CATALOG_SOURCE_MESSAGES } from "./source-set.messages";
 
 type SetupKind = "SHARED" | "ACCOUNTING" | "WAREHOUSE" | "CUSTOMS";
+type SourceKind = NonNullable<SetupCatalogInput["sourceKind"]>;
 const KINDS_OF: Record<CatalogMode, readonly SetupKind[]> = { SHARED: ["SHARED"], PER_DEPARTMENT: ["ACCOUNTING", "WAREHOUSE", "CUSTOMS"] };
 type Draft = { name: string; ownerIds: string[] };
 
 export function SetupWizard({ prefix: initialPrefix, onClose, onSharedDone }: { prefix: string; onClose: () => void; onSharedDone: () => void }) {
   const t = useMessages(CATALOG_SETS_MESSAGES);
+  const ts = useMessages(CATALOG_SOURCE_MESSAGES);
   const locale = useUiLocale();
+  const [sourceKind, setSourceKind] = useState<SourceKind>("CUSTOMS");
   const qc = useQueryClient();
   const owners = useOwnerOptions();
   const [step, setStep] = useState<1 | 2>(1);
@@ -48,6 +53,7 @@ export function SetupWizard({ prefix: initialPrefix, onClose, onSharedDone }: { 
         mode: m, prefix: prefix.trim(),
         sets: KINDS_OF[m].map((k) => ({ kind: k, name: drafts[k].name.trim(), ownerIds: drafts[k].ownerIds })),
         primaryDisplayKind: m === "SHARED" ? "SHARED" : primaryKind || null,
+        ...(m === "PER_DEPARTMENT" ? { sourceKind } : {}),
       }),
     onSuccess: (_, m) => {
       void qc.invalidateQueries({ queryKey: catalogKeys.all });
@@ -112,6 +118,18 @@ export function SetupWizard({ prefix: initialPrefix, onClose, onSharedDone }: { 
                   />
                 </Field>
               )}
+              {mode === "PER_DEPARTMENT" && (
+                <Stack gap="sm">
+                  <RadioGroup
+                    label={ts.question}
+                    options={(["ACCOUNTING", "WAREHOUSE", "CUSTOMS"] as const).map((k) => ({ value: k, label: drafts[k].name.trim() || kindLabel(k), description: ts[`optionHint${k}`] }))}
+                    value={sourceKind}
+                    onChange={setSourceKind}
+                  />
+                  <p className="text-sm text-fg-muted">{ts.hint}</p>
+                </Stack>
+              )}
+              {mode === "SHARED" && <Alert tone="info">{fill(ts.sharedNote, { name: drafts.SHARED.name.trim() || t.defaultNameSHARED })}</Alert>}
             </Stack>
           )}
           <DialogFooter>

@@ -10,6 +10,7 @@ export const CatalogImportPayload = z.object({ orgId: z.string().min(1), userId:
 /**
  * Nhập danh mục > 500 dòng (spec §4): ghép các dòng đã lưu tạm của lần nhập theo lô. Idempotent – lần nhập đã DONE trả lại ngay,
  * chạy lại giữa chừng tiếp từ `rows_done`. Lỗi DB tạm ném ra để BullMQ retry; hết lượt → onFinalFailure đánh dấu FAILED.
+ * Dòng tạm (catalog_imports.rows) mang cả cột Mã nối + thông tin mặt hàng (bộ nguồn gốc, spec 2026-11-14) – runMatch xử lý như nhập đồng bộ; payload không đổi.
  */
 export async function catalogImportJob(deps: CatalogDeps, raw: unknown, run: typeof runMatch = runMatch) {
   const p = parsePayload(CatalogImportPayload, raw, "catalog-import");

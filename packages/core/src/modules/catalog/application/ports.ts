@@ -1,4 +1,4 @@
-import type { AliasSource, AliasStatus, CatalogItemKind, CatalogMode, CodeSetKind, ItemMatchCandidateDto, ItemMatchLevel, ItemStatus } from "@kb/contracts";
+import type { AliasSource, AliasStatus, CatalogItemFields, CatalogItemKind, CatalogMode, CodeSetKind, ItemMatchCandidateDto, ItemMatchLevel, ItemStatus } from "@kb/contracts";
 import type { FieldAuditRepo, OrgAuditWriter } from "../../../shared/audit.js";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -38,7 +38,8 @@ export type CatalogItemRow = {
   updatedAt: Date;
 };
 
-export type CodeSetRow = { id: string; orgId: string; kind: CodeSetKind; name: string; partnerName: string | null; partnerKey: string | null; isPrimaryDisplay: boolean; isDefault: boolean; createdAt: Date; updatedAt: Date };
+/** `isSource`: bộ nguồn gốc (unique một phần theo org – đúng một bộ, chỉ bộ nội bộ). */
+export type CodeSetRow = { id: string; orgId: string; kind: CodeSetKind; name: string; partnerName: string | null; partnerKey: string | null; isPrimaryDisplay: boolean; isDefault: boolean; isSource: boolean; createdAt: Date; updatedAt: Date };
 
 export type ItemAliasRow = {
   id: string;
@@ -79,12 +80,22 @@ export type MatchQueueRow = {
   sourceRef: string | null;
   /** Số dòng trong lần nhập đã sinh ra mục (idempotent theo (importId, importRow)); mục không từ lần nhập → null/vắng. */
   importRow?: number | null;
+  /** Hệ số từ cột Quy đổi của dòng (chuỗi Decimal) – điền sẵn khi duyệt. */
+  factor?: string | null;
+  /** Thông tin mặt hàng của dòng – chỉ khi bộ là nguồn gốc (dòng file Excel). */
+  itemFields?: CatalogItemFields | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
-/** Dòng hợp lệ chờ ghép, lưu tạm trong catalog_imports.rows. `row` = số dòng trong file (từ 1); `sourceRef` = chứng từ sinh ra dòng. */
-export type CatalogStagedRow = { row: number; code: string; name: string; unit?: string; hs?: string; factor?: string; sourceRef?: string };
+/**
+ * Dòng hợp lệ chờ ghép, lưu tạm trong catalog_imports.rows. `row` = số dòng trong file (từ 1); `sourceRef` = chứng từ sinh ra dòng;
+ * `linkCode` = cột Mã nối; `fields` = thông tin mặt hàng (chỉ lưu khi bộ nhận là bộ nguồn gốc).
+ */
+export type CatalogStagedRow = { row: number; code: string; name: string; unit?: string; hs?: string; factor?: string; linkCode?: string; fields?: CatalogItemFields; sourceRef?: string };
+
+/** Hệ số theo lô của một dòng tờ khai gắn mặt hàng (line_items.unit_factor khác null; đơn vị = ĐVT gốc). */
+export type CatalogLineFactorRow = { id: string; dossierId: string; lineNo: number; catalogItemId: string; unitFactor: string };
 /**
  * created: mặt hàng tạo từ lần nhập (qua duyệt hàng chờ) · matched: tự ghép / mã đã có cập nhật / xác nhận ghép · queued: còn chờ duyệt
  * · skipped: mã đã chờ duyệt sẵn trong bộ, hoặc bị bỏ qua khi duyệt · errors: dòng lỗi. Luôn: created + matched + queued + skipped = rowsTotal.
@@ -200,8 +211,18 @@ export interface CatalogImportRepo {
   bumpCounts(orgId: OrgId, id: string, delta: Partial<CatalogImportCounts>, now: Date): Promise<void>;
 }
 
+/**
+ * Hệ số theo lô trên dòng tờ khai (bảng line_items của declaration) – CHỈ dùng khi đổi ĐVT gốc mặt hàng (spec 2026-11-14 §2) để chia lại hệ số
+ * trong CÙNG transaction với quy đổi. Hiện thực ở db/catalog-line-factors.ts (như field_audit), chỉ đọc/ghi cột unit_factor.
+ */
+export interface CatalogLineFactorRepo {
+  listForItems(orgId: OrgId, itemIds: string[]): Promise<CatalogLineFactorRow[]>;
+  setFactor(orgId: OrgId, id: string, factor: string, now: Date): Promise<void>;
+}
+
 export interface CatalogRepos {
   settings: CatalogSettingsRepo;
+  lineFactors: CatalogLineFactorRepo;
   items: CatalogItemRepo;
   codeSets: CodeSetRepo;
   owners: CodeSetOwnerRepo;

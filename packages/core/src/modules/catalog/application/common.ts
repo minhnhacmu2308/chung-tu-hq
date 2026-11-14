@@ -82,8 +82,12 @@ export function toAliasDto(a: ItemAliasRow): ItemAlias {
 }
 
 export function toCodeSetDto(s: CodeSetRow, ownerIds: string[], codeCount: number): CodeSet {
-  return { id: s.id, kind: s.kind, name: s.name, partnerName: s.partnerName, partnerKey: s.partnerKey, isPrimaryDisplay: s.isPrimaryDisplay, isDefault: s.isDefault, ownerIds, codeCount };
+  return { id: s.id, kind: s.kind, name: s.name, partnerName: s.partnerName, partnerKey: s.partnerKey, isPrimaryDisplay: s.isPrimaryDisplay, isDefault: s.isDefault, isSource: s.isSource, ownerIds, codeCount };
 }
+
+/** Bộ nguồn gốc của doanh nghiệp (null = chưa có). */
+export const sourceSetOf = <S extends Pick<CodeSetRow, "isSource">>(sets: readonly S[]): S | null => sets.find((s) => s.isSource) ?? null;
+export const sourceSetInvalid = (): DomainError => reasonError("VALIDATION", "CATALOG_SOURCE_SET_INVALID");
 
 /** Bí danh mới nhất (đã duyệt muộn nhất, rồi tạo muộn nhất) – "nhiều mã → mã mới nhất". */
 export function newestAlias(aliases: ItemAliasRow[]): ItemAliasRow | null {

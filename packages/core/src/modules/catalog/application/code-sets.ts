@@ -3,7 +3,7 @@ import { itemNameKey, type CatalogMode, type ChangeCatalogModeInput, type CodeSe
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { DEFAULT_SET_NAME, DEPARTMENT_KINDS, effectiveMode, isDuplicate, isInternal, isPartnerKind, modeConflict, setNotFound, toCodeSetDto } from "./common.js";
+import { DEFAULT_SET_NAME, DEPARTMENT_KINDS, effectiveMode, isDuplicate, isInternal, isPartnerKind, modeConflict, setNotFound, sourceSetOf, toCodeSetDto } from "./common.js";
 import { PARTNER_SET_UQ } from "./partner-set.js";
 import { requireCatalogAdmin } from "./permissions.js";
 import type { CatalogDeps, CatalogRepos, CodeSetRow } from "./ports.js";
@@ -39,13 +39,13 @@ async function checkOwners(deps: CatalogDeps, ctx: Ctx, ids: string[]): Promise<
 const kindAllowed = (mode: CatalogMode, kind: CodeSetKind) => (mode === "SHARED" ? !DEPARTMENT_KINDS.includes(kind as (typeof DEPARTMENT_KINDS)[number]) : kind !== "SHARED");
 
 /** Bỏ cờ mã hiển thị chính / mặc định ở các bộ khác trước khi đặt (unique một phần theo org). */
-async function clearFlag(r: CatalogRepos, ctx: Ctx, flag: "isPrimaryDisplay" | "isDefault", except: string | null, now: Date) {
+async function clearFlag(r: CatalogRepos, ctx: Ctx, flag: "isPrimaryDisplay" | "isDefault" | "isSource", except: string | null, now: Date) {
   for (const s of await r.codeSets.list(ctx.orgId)) if (s[flag] && s.id !== except) await r.codeSets.update(ctx.orgId, s.id, { [flag]: false, updatedAt: now });
 }
 
 export const newSet = (deps: CatalogDeps, ctx: Ctx, kind: CodeSetKind, name: string, now: Date, extra: Partial<CodeSetRow> = {}): CodeSetRow => {
   const partnerName = isPartnerKind(kind) ? (extra.partnerName ?? null) : null;
-  return { id: deps.idGen.next("cst"), orgId: ctx.orgId, kind, name, partnerName, partnerKey: partnerName ? itemNameKey(partnerName) : null, isPrimaryDisplay: false, isDefault: false, createdAt: now, updatedAt: now, ...extra };
+  return { id: deps.idGen.next("cst"), orgId: ctx.orgId, kind, name, partnerName, partnerKey: partnerName ? itemNameKey(partnerName) : null, isPrimaryDisplay: false, isDefault: false, isSource: false, createdAt: now, updatedAt: now, ...extra };
 };
 
 export type UpsertCodeSetCommand = UpsertCodeSetInput & { id?: string };
@@ -94,6 +94,8 @@ function upsertCodeSetTx(deps: CatalogDeps, ctx: Ctx, input: UpsertCodeSetComman
       row = newSet(deps, ctx, input.kind, input.name, now, { partnerName });
       // Bộ XNK đầu tiên (hoặc Mã chung) thành bộ mặc định cho Hải quan khi org chưa có.
       if ((input.kind === "CUSTOMS" || input.kind === "SHARED") && !sets.some((s) => s.isDefault)) row.isDefault = true;
+      // Doanh nghiệp chưa có bộ nguồn gốc → bộ nội bộ đầu tiên thành nguồn gốc (luôn đúng một bộ khi đã có bộ nội bộ).
+      if (isInternal(input.kind) && !sourceSetOf(sets)) row.isSource = true;
       await r.codeSets.insert(row);
     }
     if (input.isDefault && !row.isDefault) {
@@ -155,6 +157,20 @@ export async function setupCatalog(deps: CatalogDeps, ctx: Ctx, input: SetupCata
     if (settings?.setupAt && settings.mode && settings.mode !== input.mode) return err(modeConflict({ mode: settings.mode }));
     if (input.sets.some((s) => !kindAllowed(input.mode, s.kind))) return err(modeConflict({ mode: input.mode }));
     let sets = await r.codeSets.list(ctx.orgId);
+    // Bộ nguồn gốc (kiểm TRƯỚC lần ghi đầu tiên): PER_DEPARTMENT → `sourceKind` (mặc định XNK); SHARED → bộ "Mã chung".
+    // Đã có nguồn gốc khác mà bộ chọn đã có mã → phải đổi qua "Đổi bộ nguồn gốc" (đổi gốc mặt hàng), không chuyển cờ ngầm ở đây.
+    // Chạy lại thiết lập không kèm `sourceKind` → giữ bộ nguồn gốc đang có.
+    const keepCurrent = input.mode === "PER_DEPARTMENT" && input.sourceKind === undefined ? sourceSetOf(sets) : null;
+    const sourceKind: CodeSetKind = input.mode === "SHARED" ? "SHARED" : (input.sourceKind ?? "CUSTOMS");
+    const pickSource = (list: CodeSetRow[]) =>
+      keepCurrent
+        ? (list.find((s) => s.id === keepCurrent.id) ?? null)
+        : sourceKind === "SHARED" ? (list.find((s) => s.kind === "SHARED") ?? null) : sourceKind === "CUSTOMS" ? (list.find((s) => s.kind === "CUSTOMS" && s.isDefault) ?? list.find((s) => s.kind === "CUSTOMS") ?? null) : (list.find((s) => s.kind === sourceKind) ?? null);
+    const curSource = sourceSetOf(sets);
+    const wantedSource = pickSource(sets);
+    if (input.mode === "PER_DEPARTMENT" && curSource && wantedSource && wantedSource.id !== curSource.id && (await r.aliases.listForCodeSet(ctx.orgId, wantedSource.id, { status: "ACTIVE" })).length) {
+      return err(modeConflict({ mode: input.mode, reason: "SOURCE_CHANGE_REQUIRED" }));
+    }
     const wanted = (k: CodeSetKind) => input.sets.find((s) => s.kind === k);
     const touched = new Map<string, string[]>(); // set id → ownerIds từ input
 
@@ -208,6 +224,12 @@ export async function setupCatalog(deps: CatalogDeps, ctx: Ctx, input: SetupCata
     for (const [id, owners] of touched) await r.owners.replace(ctx.orgId, id, owners);
 
     sets = await r.codeSets.list(ctx.orgId);
+    const target = pickSource(sets);
+    if (target && !target.isSource) {
+      for (const s of sets) if (s.isSource) await r.codeSets.update(ctx.orgId, s.id, { isSource: false, updatedAt: now });
+      await r.codeSets.update(ctx.orgId, target.id, { isSource: true, updatedAt: now });
+      sets = await r.codeSets.list(ctx.orgId);
+    }
     const primaryKind = input.primaryDisplayKind !== undefined ? input.primaryDisplayKind : input.mode === "SHARED" && !sets.some((s) => s.isPrimaryDisplay) ? "SHARED" : undefined;
     if (primaryKind !== undefined) {
       const target = primaryKind ? sets.find((s) => s.kind === primaryKind) : null;
@@ -245,7 +267,9 @@ export async function changeMode(deps: CatalogDeps, ctx: Ctx, input: ChangeCatal
       const only = internal[0]!;
       await clearFlag(r, ctx, "isDefault", only.id, now);
       await clearFlag(r, ctx, "isPrimaryDisplay", only.id, now);
-      await r.codeSets.update(ctx.orgId, only.id, { kind: "SHARED", name: DEFAULT_SET_NAME.SHARED, isDefault: true, isPrimaryDisplay: true, updatedAt: now });
+      await clearFlag(r, ctx, "isSource", only.id, now);
+      // Bộ nội bộ duy nhất (đã là nguồn gốc – bộ đối tác không làm nguồn gốc được) thành "Mã chung", vẫn là nguồn gốc.
+      await r.codeSets.update(ctx.orgId, only.id, { kind: "SHARED", name: DEFAULT_SET_NAME.SHARED, isDefault: true, isPrimaryDisplay: true, isSource: true, updatedAt: now });
     } else {
       const shared = sets.find((s) => s.kind === "SHARED");
       if (!shared) return err(modeConflict({ reason: "NO_SHARED_SET" }));
@@ -263,6 +287,9 @@ export async function changeMode(deps: CatalogDeps, ctx: Ctx, input: ChangeCatal
       }
     }
     if (e) return err(e);
+    // → PER_DEPARTMENT giữ nguyên bộ nguồn gốc: bộ "Mã chung" đổi loại nhưng giữ cờ is_source (chưa có nguồn gốc → bộ này thành nguồn gốc).
+    const sharedSet = sets.find((s) => s.kind === "SHARED");
+    if (input.to === "PER_DEPARTMENT" && sharedSet && !sourceSetOf(sets)) await r.codeSets.update(ctx.orgId, sharedSet.id, { isSource: true, updatedAt: now });
     await r.settings.upsert(ctx.orgId, { mode: input.to, setupAt: settings?.setupAt ?? now }, now);
     return ok({ sets: await list(), changed: true });
   });

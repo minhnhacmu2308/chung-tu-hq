@@ -1,28 +1,35 @@
 "use client";
-// Tab Nhập dữ liệu (spec §4, §6.4): chọn bộ mã (người phụ trách bộ hoặc Quản trị) → file .xlsx (đọc trên trình duyệt) → ghép cột (tự nhận theo
-// tên) → xem trước lỗi theo dòng + chọn ĐVT Hải quan cho ĐVT lạ → nhập (file > 5.000 dòng chia nhiều lần nhập liên tiếp, tra tiến độ phần chạy
+// Tab Nhập dữ liệu (spec §4, §6.4): chọn bộ mã (người phụ trách bộ hoặc Quản trị) → file .xlsx (đọc trên trình duyệt) → Ghép cột (mỗi cột → một
+// trong 17 trường hoặc Bỏ qua; tự đoán theo tên / lần ghép trước của bộ – spec 2026-11-14 §4; bộ không phải nguồn gốc → bỏ cột thông tin mặt
+// hàng, không gửi) + xem trước 5 dòng → xem trước lỗi theo dòng + chọn ĐVT Hải quan cho ĐVT lạ → nhập (file > 5.000 dòng chia nhiều lần nhập liên tiếp, tra tiến độ phần chạy
 // nền) → tóm tắt mới / tự ghép / chờ duyệt / bỏ qua / lỗi + "Xem n mục chờ duyệt". "Lấy từ chứng từ đã đọc": tờ khai đã duyệt (người phụ trách
 // bộ XNK mặc định hoặc Quản trị), hóa đơn / phiếu đóng gói (Quản trị). Giao diện chỉ ẩn nút – backend kiểm quyền thật.
 import {
-  CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, itemUnitKey, validateItemRows, type CodeSet, type ImportFromDocumentsInput, type ItemColumnMap, type ItemImportRow,
+  CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, isUnfilledLinkRow, itemUnitKey, validateItemRows, type CodeSet, type ImportFromDocumentsInput, type ItemColumnMap, type ItemImportRow,
 } from "@kb/contracts";
 import {
   Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Field, FileDropzone, fill, Grid, LoadingState, Progress, Select, SkeletonForm,
   Stack, StatCard, toast, useMessages, useUiLocale,
 } from "@kb/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileSpreadsheet, FileStack, Inbox, ListChecks } from "lucide-react";
+import { Download, FileSpreadsheet, FileStack, Inbox, ListChecks } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
-import { catalogKeys, getCatalogImport, getCatalogSettings, importCatalogFromDocuments, importCatalogRows, listCodeSets } from "@/api/catalog";
+import {
+  catalogKeys, exportCrossReference, getCatalogImport, getCatalogSettings, importCatalogFromDocuments, importCatalogRows, listCatalogItems, listCodeSets,
+} from "@/api/catalog";
 import { LoadError } from "@/components/common/load-error";
 import { formatNumber } from "@/lib/format";
 import { errorText } from "@/lib/reason-codes";
+import { saveBlob } from "@/lib/xlsx-download";
 import { useCodeLists } from "../declaration-form/use-code-list";
 import { useCatalogAccess } from "./catalog-access";
 import { CATALOG_IMPORT_MESSAGES } from "./catalog.messages";
-import { setTitle } from "./catalog-xlsx";
-import { ColumnMapper } from "./column-mapper";
+import { buildMappingTemplateXlsx, mappingTemplateRows, setTitle, type TargetAliasInfo } from "./catalog-xlsx";
+import { effectiveColumnMap, missingRequired, recallColumnMap, saveColumnMap } from "./column-map";
+import { ColumnMapper, MappedRowsPreview } from "./column-mapper";
+import { CATALOG_MAPPING_MESSAGES } from "./column-mapping.messages";
+import { MAPPING_TEMPLATE_MESSAGES } from "./mapping-template.messages";
 import { ImportErrorTable, ImportPreview, type ImportErrorRow, type UnknownUnit } from "./import-preview";
 import { JOB_FAILED, runImportInParts, waitForImports, type ImportProgress, type ImportRunResult } from "./import-run";
 import { readFileBuffer, readItemWorkbook, toImportRows, type ItemSheet } from "./read-xlsx";
@@ -40,10 +47,13 @@ type Run = {
 };
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const TEMPLATE_PAGE = 200;
 const valueOf = (row: ItemImportRow | undefined, field: string) => (row && field in row ? String(row[field as keyof ItemImportRow] ?? "") : "");
 
 export function ImportTab() {
   const t = useMessages(CATALOG_IMPORT_MESSAGES);
+  const tm = useMessages(CATALOG_MAPPING_MESSAGES);
+  const tt = useMessages(MAPPING_TEMPLATE_MESSAGES);
   const locale = useUiLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -62,8 +72,10 @@ export function ImportTab() {
   const [reading, setReading] = useState(false);
   const [readError, setReadError] = useState<"failed" | "empty" | null>(null);
   const [map, setMap] = useState<ItemColumnMap>({});
+  const [remembered, setRemembered] = useState(false);
   const [unitMap, setUnitMap] = useState<Record<string, string>>({});
   const [run, setRun] = useState<Run | null>(null);
+  const [templating, setTemplating] = useState(false);
 
   const manageable = sets.filter((s) => access.managesSet(s.id));
   // Như backend: chế độ dùng chung → bộ "Mã chung" (loại SHARED, ưu tiên bộ mặc định); chưa biết chế độ cũng ưu tiên bộ SHARED nếu có.
@@ -73,8 +85,20 @@ export function ImportTab() {
   const defaultSet = sets.find((s) => s.isDefault);
   const canDeclarations = access.canContribute && !!defaultSet && access.managesSet(defaultSet.id);
   const canInvoices = access.isAdmin;
+  const targetSet = sets.find((s) => s.id === chosenSetId);
+  const sourceSet = sets.find((s) => s.isSource);
+  // Bộ không phải nguồn gốc: cột thông tin mặt hàng bỏ qua – không đọc, không gửi (server cũng bỏ).
+  const isSource = !!targetSet?.isSource;
+  const sendMap = useMemo(() => effectiveColumnMap(map, isSource), [map, isSource]);
 
-  const rawRows = useMemo(() => (source ? toImportRows(source.sheet, map) : []), [source, map]);
+  // Dòng của file đối chiếu chưa điền mã (có Mã nối, trống Mã hàng) → bỏ qua, không báo lỗi; giữ số dòng Excel của các dòng còn lại.
+  const mapped = useMemo(() => {
+    if (!source) return { rows: [] as ItemImportRow[], rowNumbers: [] as number[], unfilled: 0 };
+    const all = toImportRows(source.sheet, sendMap);
+    const keep = all.flatMap((r, i) => (isUnfilledLinkRow(r) ? [] : [i]));
+    return { rows: keep.map((i) => all[i]!), rowNumbers: keep.map((i) => source.sheet.rowNumbers[i] ?? i + 1), unfilled: all.length - keep.length };
+  }, [source, sendMap]);
+  const rawRows = mapped.rows;
   const unknownUnits = useMemo<UnknownUnit[]>(() => {
     if (!knownUnits) return [];
     const byKey = new Map<string, UnknownUnit>();
@@ -88,9 +112,9 @@ export function ImportTab() {
     return [...byKey.values()];
   }, [rawRows, knownUnits]);
   const rows = useMemo(() => rawRows.map((r) => (r.unit && unitMap[itemUnitKey(r.unit)] ? { ...r, unit: unitMap[itemUnitKey(r.unit)]! } : r)), [rawRows, unitMap]);
-  const mapReady = map.code !== undefined && map.name !== undefined;
+  const mapReady = missingRequired(map).length === 0;
   const validation = useMemo(() => (mapReady ? validateItemRows(rows, knownUnits ? { knownUnits } : {}) : null), [mapReady, rows, knownUnits]);
-  const rowNumbers = source?.sheet.rowNumbers ?? [];
+  const rowNumbers = mapped.rowNumbers;
   const previewErrors: ImportErrorRow[] = (validation?.errors ?? []).map((e, i) => ({
     id: `${e.row}:${e.field}:${i}`, row: rowNumbers[e.row - 1] ?? e.row, field: e.field, code: e.code, value: valueOf(rows[e.row - 1], e.field),
   }));
@@ -100,9 +124,16 @@ export function ImportTab() {
   const reset = () => {
     setSource(null);
     setMap({});
+    setRemembered(false);
     setUnitMap({});
     setReadError(null);
     setRun(null);
+  };
+  /** Ghép cột cho file theo bộ: lần ghép trước của bộ (theo tiêu đề cột), còn lại đoán theo tên. */
+  const applyRecall = (codeSetId: string, sheet: ItemSheet) => {
+    const r = codeSetId ? recallColumnMap(codeSetId, sheet.headers, sheet.detected) : { map: sheet.detected, remembered: false };
+    setMap(r.map);
+    setRemembered(r.remembered);
   };
   const onFiles = async (files: File[]) => {
     const file = files[0];
@@ -114,7 +145,7 @@ export function ImportTab() {
       if (!sheet || !sheet.rows.length) setReadError("empty");
       else {
         setSource({ name: file.name, sheet });
-        setMap(sheet.detected);
+        applyRecall(chosenSetId, sheet);
       }
     } catch {
       setReadError("failed");
@@ -131,9 +162,34 @@ export function ImportTab() {
   const startImport = async () => {
     const set = sets.find((s) => s.id === chosenSetId);
     if (!source || !set || !mapReady) return;
+    saveColumnMap(set.id, source.sheet.headers, map);
     setRun({ kind: "file", setName: setTitle(set, locale), progress: { part: 1, parts: Math.max(1, parts), percent: 0 }, result: null, rows, rowNumbers });
-    const result = await runImportInParts(rows, { codeSetId: set.id, fileName: source.name.slice(0, 260), columnMap: map }, { importRows: importCatalogRows, getImport: getCatalogImport }, progressTo);
+    const result = await runImportInParts(rows, { codeSetId: set.id, fileName: source.name.slice(0, 260), columnMap: sendMap }, { importRows: importCatalogRows, getImport: getCatalogImport }, progressTo);
     finish(result);
+  };
+  /** File đối chiếu cho bộ đang chọn: mọi mặt hàng (mã nối + cột tham khảo bộ nguồn gốc) + mã/tên/ĐVT/hệ số đã có ở bộ này. */
+  const downloadTemplate = async () => {
+    if (!targetSet) return;
+    setTemplating(true);
+    try {
+      const ref = await exportCrossReference();
+      const info = new Map<string, TargetAliasInfo>();
+      for (let p = 1, seen = 0; ; p++) {
+        const r = await listCatalogItems({ codeSetId: targetSet.id, status: "ACTIVE", page: p, pageSize: TEMPLATE_PAGE });
+        for (const row of r.rows) if (row.setCode) info.set(row.itemNo, { name: row.setName, unit: row.setUnit });
+        seen += r.rows.length;
+        if (seen >= r.total || r.rows.length === 0) break;
+      }
+      const rows = mappingTemplateRows(ref, sourceSet?.id ?? null, targetSet.id, info);
+      // Trong file: tên bộ ngắn (tiêu đề cột “Mã XNK (tham khảo)”), không kèm loại bộ.
+      const names = { set: targetSet.name, source: sourceSet?.name ?? tm.noSource };
+      saveBlob(await buildMappingTemplateXlsx(rows, names, locale), `${tt.file}-${targetSet.name}.xlsx`);
+      toast({ tone: "success", title: tt.done });
+    } catch (e) {
+      toast({ tone: "danger", title: tt.failed, description: errorText(e, locale, tt.failed) });
+    } finally {
+      setTemplating(false);
+    }
   };
   const pull = async (from: ImportFromDocumentsInput["source"]) => {
     reset();
@@ -177,8 +233,29 @@ export function ImportTab() {
           <CardContent>
             <Stack gap="lg">
               <Field label={t.setLabel} required className="w-full cq-md:max-w-md">
-                <Select options={manageable.map((s) => ({ value: s.id, label: setTitle(s, locale) }))} placeholder={t.setPlaceholder} value={chosenSetId} onChange={(e) => setSetId(e.target.value)} />
+                <Select
+                  options={manageable.map((s) => ({ value: s.id, label: setTitle(s, locale) }))}
+                  placeholder={t.setPlaceholder}
+                  value={chosenSetId}
+                  onChange={(e) => {
+                    setSetId(e.target.value);
+                    if (source) applyRecall(e.target.value, source.sheet);
+                  }}
+                />
               </Field>
+              {!source && targetSet && !isSource && (
+                <Alert
+                  tone="info"
+                  title={tt.title}
+                  action={
+                    <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />} loading={templating} disabled={templating} onClick={() => void downloadTemplate()}>
+                      {tt.button}
+                    </Button>
+                  }
+                >
+                  {fill(tt.hint, { set: setTitle(targetSet, locale), source: sourceSet ? setTitle(sourceSet, locale) : tm.noSource })}
+                </Alert>
+              )}
               {!source && (
                 <Stack gap="sm">
                   <FileDropzone accept=".xlsx" multiple={false} maxSize={MAX_FILE_BYTES} disabled={!chosenSetId || reading} onFiles={(f) => void onFiles(f)} />
@@ -195,10 +272,27 @@ export function ImportTab() {
                   </div>
                   <Stack gap="sm">
                     <h3 className="font-semibold text-fg">{t.mapTitle}</h3>
-                    <p className="text-sm text-fg-muted">{t.mapHint}</p>
-                    <ColumnMapper headers={source.sheet.headers} map={map} onChange={setMap} />
+                    <ColumnMapper
+                      headers={source.sheet.headers}
+                      map={map}
+                      onChange={(next) => {
+                        setMap(next);
+                        setRemembered(false);
+                      }}
+                      isSource={isSource}
+                      setName={targetSet ? setTitle(targetSet, locale) : ""}
+                      sourceName={sourceSet ? setTitle(sourceSet, locale) : null}
+                      remembered={remembered}
+                    />
                     <p className="text-sm text-fg-muted">{t.hsTip}</p>
                   </Stack>
+                  {mapped.unfilled > 0 && <Alert tone="info">{fill(tt.skipped, { n: formatNumber(mapped.unfilled) })}</Alert>}
+                  {mapReady && (
+                    <Stack gap="sm">
+                      <h3 className="font-semibold text-fg">{tm.previewTitle}</h3>
+                      <MappedRowsPreview rows={rows} rowNumbers={rowNumbers} map={sendMap} />
+                    </Stack>
+                  )}
                   <Stack gap="sm">
                     <h3 className="font-semibold text-fg">{t.previewTitle}</h3>
                     {validation ? (

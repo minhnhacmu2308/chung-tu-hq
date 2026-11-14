@@ -61,10 +61,46 @@ export const CodeSetSchema = z.object({
   partnerKey: z.string().nullable(),
   isPrimaryDisplay: z.boolean(),
   isDefault: z.boolean(),
+  /**
+   * Bộ nguồn gốc (đúng một bộ mỗi doanh nghiệp, chỉ bộ nội bộ): quyết định ĐVT gốc + tên, HS, loại, xuất xứ, biểu thuế, thuế suất, mô tả, ghi chú
+   * của mặt hàng. Bộ khác chỉ đổi mã/tên/ĐVT của chính bộ đó.
+   */
+  isSource: z.boolean(),
   ownerIds: z.array(z.string()),
   codeCount: z.number().int().nonnegative(),
 });
 export type CodeSet = z.infer<typeof CodeSetSchema>;
+
+/** Thuế suất (%) từ file / hàng chờ: chuỗi Decimal 0–1000. */
+export const CatalogRateSchema = DecimalStringSchema.refine((s) => !s.startsWith("-") && rateAtMost1000(s), "Thuế suất từ 0 đến 1000");
+
+/** So sánh ≤ 1000 trên chuỗi (không qua number – bất biến 3). */
+function rateAtMost1000(s: string): boolean {
+  const [int = "", frac = ""] = s.split(".");
+  const n = int.replace(/^0+/, "");
+  return n.length < 4 || (n === "1000" && /^0*$/.test(frac));
+}
+
+/**
+ * Thông tin mặt hàng lấy từ một dòng của bộ nguồn gốc (nhập file / hàng chờ): chỉ các trường có giá trị. Áp vào mặt hàng khi dòng thuộc bộ
+ * nguồn gốc; bộ khác không gửi / không lưu.
+ */
+export const CatalogItemFieldsSchema = z.object({
+  name: z.string().trim().min(1).max(1000).optional(),
+  hsCode: z.string().regex(/^\d{4,10}$/).optional(),
+  kind: CatalogItemKindSchema.optional(),
+  origin: z.string().regex(/^[A-Z]{2}$/).optional(),
+  tariffSchedule: z.string().trim().min(1).max(100).optional(),
+  importDutyRate: CatalogRateSchema.optional(),
+  vatRate: CatalogRateSchema.optional(),
+  envTaxRate: CatalogRateSchema.optional(),
+  exciseRate: CatalogRateSchema.optional(),
+  safeguardRate: CatalogRateSchema.optional(),
+  antiDiscriminationRate: CatalogRateSchema.optional(),
+  description: z.string().trim().min(1).max(500).optional(),
+  note: z.string().trim().min(1).max(500).optional(),
+});
+export type CatalogItemFields = z.infer<typeof CatalogItemFieldsSchema>;
 
 export const ItemAliasSchema = z.object({
   id: z.string(),
@@ -101,6 +137,10 @@ export const MatchQueueItemSchema = z.object({
   decidedBy: z.string().nullable(),
   decidedAt: IsoDateTimeSchema.nullable(),
   sourceRef: z.string().nullable(),
+  /** Hệ số "1 ĐVT của dòng = factor ĐVT gốc" từ cột Quy đổi của file – giao diện điền sẵn ô hệ số khi duyệt. */
+  factor: CatalogFactorSchema.nullable(),
+  /** Thông tin mặt hàng của dòng (chỉ khi bộ là nguồn gốc): "Tạo mới" dùng làm dữ liệu mặt hàng, "Xác nhận" áp vào mặt hàng có sẵn. */
+  itemFields: CatalogItemFieldsSchema.nullable(),
 });
 export type MatchQueueItem = z.infer<typeof MatchQueueItemSchema>;
 
@@ -292,8 +332,47 @@ export const SetupCatalogInputSchema = z.object({
   prefix: z.string().trim().min(1).max(10).regex(/^[A-Za-z0-9\-_.]+$/).optional(),
   sets: z.array(z.object({ kind: CodeSetKindSchema, name: z.string().trim().min(1).max(100), ownerIds: z.array(z.string()).max(50).default([]) })).max(20).default([]),
   primaryDisplayKind: CodeSetKindSchema.nullable().optional(),
+  /**
+   * Bộ nguồn gốc khi PER_DEPARTMENT (giao diện bắt buộc chọn, gợi ý CUSTOMS; bỏ trống = CUSTOMS). SHARED: bộ "Mã chung" luôn là nguồn gốc (bỏ qua).
+   * Doanh nghiệp đã có bộ nguồn gốc khác mà bộ chọn đã có mã → CATALOG_MODE_CONFLICT (dùng "Đổi bộ nguồn gốc").
+   */
+  sourceKind: z.enum(["ACCOUNTING", "WAREHOUSE", "CUSTOMS"]).optional(),
 });
 export type SetupCatalogInput = z.infer<typeof SetupCatalogInputSchema>;
+
+/** Đổi bộ nguồn gốc (PUT /api/org/catalog/code-sets/source): Quản trị/Chủ hoặc người phụ trách bộ đích. Gọi lại = "Áp dụng lại" (idempotent). */
+export const ChangeSourceInputSchema = z.object({ codeSetId: z.string().min(1) });
+export type ChangeSourceInput = z.infer<typeof ChangeSourceInputSchema>;
+/** GET /api/org/catalog/code-sets/source/preview?codeSetId= */
+export const SourcePreviewQuerySchema = z.object({ codeSetId: z.string().min(1) });
+
+/** Mặt hàng không đổi gốc được: mã ở bộ mới có ĐVT khác ĐVT gốc mà chưa có hệ số quy đổi – bổ sung hệ số rồi "Áp dụng lại". */
+export const SourceChangeBlockedItemSchema = z.object({ itemId: z.string(), itemNo: z.string(), name: z.string(), code: z.string(), baseUnit: z.string().nullable(), newUnit: z.string().nullable() });
+export type SourceChangeBlockedItem = z.infer<typeof SourceChangeBlockedItemSchema>;
+/**
+ * Xem trước đổi bộ nguồn gốc. `totalItems`: mặt hàng ACTIVE · `rebaseCount`: sẽ đổi ĐVT gốc · `unchangedCount`: có mã ở bộ mới, cùng ĐVT gốc (hoặc mã không có ĐVT)
+ * · `missingCount`: không có mã ở bộ mới (giữ nguyên) · `blocked`: thiếu hệ số.
+ */
+export const SourceChangePreviewSchema = z.object({
+  codeSetId: z.string(),
+  currentSourceId: z.string().nullable(),
+  totalItems: z.number().int().nonnegative(),
+  rebaseCount: z.number().int().nonnegative(),
+  unchangedCount: z.number().int().nonnegative(),
+  missingCount: z.number().int().nonnegative(),
+  blocked: z.array(SourceChangeBlockedItemSchema),
+});
+export type SourceChangePreview = z.infer<typeof SourceChangePreviewSchema>;
+/** Kết quả thực hiện: danh sách bộ mã mới (cờ isSource), số mặt hàng đã đổi gốc, mặt hàng còn thiếu hệ số; `changed` = cờ nguồn gốc vừa chuyển. */
+export const SourceChangeResultSchema = z.object({
+  codeSets: z.array(CodeSetSchema),
+  rebased: z.number().int().nonnegative(),
+  unchanged: z.number().int().nonnegative(),
+  missingCount: z.number().int().nonnegative(),
+  blocked: z.array(SourceChangeBlockedItemSchema),
+  changed: z.boolean(),
+});
+export type SourceChangeResult = z.infer<typeof SourceChangeResultSchema>;
 
 /** Đổi chế độ: sang PER_DEPARTMENT chọn bộ "Mã chung" thành loại nào (không thành XNK → chọn/tạo bộ XNK mặc định); sang SHARED khi còn đúng một bộ nội bộ. */
 export const ChangeCatalogModeInputSchema = z.discriminatedUnion("to", [

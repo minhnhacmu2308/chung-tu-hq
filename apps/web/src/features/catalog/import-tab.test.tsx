@@ -8,6 +8,7 @@ import { getDb, resetDb } from "@/mocks/db";
 import { SEED_SETS } from "@/mocks/seed/catalog";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { CatalogPage } from "./catalog-page";
+import { readFileBuffer } from "./read-xlsx";
 
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -15,6 +16,9 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/products",
   useSearchParams: () => new URLSearchParams("tab=import"),
 }));
+
+const saved: { blob: Blob; name: string }[] = [];
+vi.mock("@/lib/xlsx-download", () => ({ saveBlob: (blob: Blob, name: string) => saved.push({ blob, name }) }));
 
 const T = { timeout: 8000 };
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -36,19 +40,43 @@ async function chooseSet(name: RegExp) {
   await userEvent.click(await screen.findByRole("combobox", { name: "Bộ mã nhận dữ liệu" }, T));
   await userEvent.click(await screen.findByRole("option", { name }, T));
 }
-async function upload(container: HTMLElement) {
+async function upload(container: HTMLElement, file?: File) {
   const input = await waitFor(() => {
     const el = container.querySelector<HTMLInputElement>("input[type=file]");
     if (!el || el.disabled) throw new Error("dropzone chưa sẵn sàng");
     return el;
   }, T);
-  await userEvent.upload(input, await sampleFile());
+  await userEvent.upload(input, file ?? (await sampleFile()));
+}
+
+/** File có cột Mã nối, thông tin mặt hàng (xuất xứ, thuế NK) và một cột không dùng. */
+async function richFile() {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("DM");
+  ws.addRow(["Mã vật tư", "Tên vật tư", "ĐVT", "Mã nối", "Xuất xứ", "Thuế NK", "Người lập"]);
+  ws.addRow(["VT-9101", "Bu lông M12", "PCE", "", "CN", "5", "An"]);
+  ws.addRow(["VT-9102", "Ổ bi đũa côn 30210", "PCE", "MH-000003", "DE", "7", "An"]);
+  const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+  return new File([buf], "dm-moi.xlsx", { type: XLSX });
+}
+/** Bấm "Nhập 2 dòng" khi đã mở (danh mục ĐVT Hải quan tải xong). */
+async function clickImport() {
+  const btn = await screen.findByRole("button", { name: "Nhập 2 dòng" }, T);
+  await waitFor(() => expect(btn).toHaveProperty("disabled", false), T);
+  await userEvent.click(btn);
+}
+/** Chọn trường cho một cột ở bước Ghép cột. */
+async function mapColumn(column: string, field: string | RegExp) {
+  await userEvent.click(screen.getByRole("combobox", { name: column }));
+  await userEvent.click(await screen.findByRole("option", { name: field }, T));
 }
 
 beforeEach(() => {
   dismissToast();
   resetDb();
   replace.mockClear();
+  window.localStorage.clear();
+  saved.length = 0;
 });
 
 describe("Danh mục – tab Nhập dữ liệu", () => {
@@ -57,11 +85,12 @@ describe("Danh mục – tab Nhập dữ liệu", () => {
     await chooseSet(/^XNK/);
     await upload(container);
 
-    // Ghép cột: nhận theo tên cột.
-    expect((await screen.findByRole("combobox", { name: "Mã hàng" }, T)).textContent).toContain("Mã vật tư");
-    expect(screen.getByRole("combobox", { name: "Tên hàng" }).textContent).toContain("Tên vật tư");
-    expect(screen.getByRole("combobox", { name: "ĐVT" }).textContent).toContain("ĐVT");
-    expect(screen.getByRole("combobox", { name: "Mã HS" }).textContent).toContain("Mã HS");
+    // Ghép cột: mỗi cột của file → trường hệ thống, nhận theo tên cột.
+    expect((await screen.findByRole("combobox", { name: "Cột A · Mã vật tư" }, T)).textContent).toContain("Mã hàng");
+    expect(screen.getByRole("combobox", { name: "Cột B · Tên vật tư" }).textContent).toContain("Tên hàng");
+    expect(screen.getByRole("combobox", { name: "Cột C · ĐVT" }).textContent).toContain("ĐVT");
+    expect(screen.getByRole("combobox", { name: "Cột D · Mã HS" }).textContent).toContain("Mã HS");
+    expect(await screen.findByRole("table", { name: "5 dòng đầu theo ghép cột" }, T)).toBeTruthy();
 
     // Xem trước: dòng trùng mã = dòng dữ liệu thứ 2 (dòng 3 trên Excel); ĐVT lạ.
     const errors = await screen.findByRole("table", { name: "Dòng lỗi" }, T);
@@ -99,6 +128,122 @@ describe("Danh mục – tab Nhập dữ liệu", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Xem 2 mục chờ duyệt" }));
     expect(replace).toHaveBeenCalledWith("/products?tab=queue", { scroll: false });
+  }, 60_000);
+
+  it("Ghép cột vào bộ nguồn gốc: đoán cột mới (Mã nối, Xuất xứ, Thuế NK), mỗi trường một cột, xem trước 5 dòng, nhớ ghép cột cho lần sau; không vi phạm a11y", async () => {
+    const view = renderWithProviders(<CatalogPage />);
+    await chooseSet(/^XNK/);
+    await upload(view.container, await richFile());
+    expect((await screen.findByRole("combobox", { name: "Cột D · Mã nối" }, T)).textContent).toContain("Mã nối");
+    expect(screen.getByRole("combobox", { name: "Cột E · Xuất xứ" }).textContent).toContain("Xuất xứ");
+    expect(screen.getByRole("combobox", { name: "Cột F · Thuế NK" }).textContent).toContain("Thuế suất NK (%)");
+    expect(screen.getByRole("combobox", { name: "Cột G · Người lập" }).textContent).toContain("Bỏ qua");
+    // XNK là bộ nguồn gốc → không có cảnh báo bỏ qua cột.
+    expect(screen.queryByText(/không phải bộ nguồn gốc/)).toBeNull();
+    const preview = await screen.findByRole("table", { name: "5 dòng đầu theo ghép cột" }, T);
+    expect(within(preview).getByText("MH-000003")).toBeTruthy();
+    expect(within(preview).getByText("DE")).toBeTruthy();
+
+    // Trường đã gán cột khác không chọn được ở cột G (mỗi trường chỉ một cột).
+    await userEvent.click(screen.getByRole("combobox", { name: "Cột G · Người lập" }));
+    expect((await screen.findByRole("option", { name: "Mã hàng (đang gán cột A)" }, T)).getAttribute("aria-disabled")).toBe("true");
+    await userEvent.click(await screen.findByRole("option", { name: "Ghi chú" }, T));
+    expect(screen.getByRole("combobox", { name: "Cột G · Người lập" }).textContent).toContain("Ghi chú");
+    // Bỏ cột mã → báo thiếu trường bắt buộc, chưa xem trước được.
+    await mapColumn("Cột A · Mã vật tư", "Bỏ qua");
+    expect(await screen.findByText("Chưa gán cột cho: Mã hàng.", {}, T)).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "5 dòng đầu theo ghép cột" })).toBeNull();
+    await mapColumn("Cột A · Mã vật tư", "Mã hàng");
+    await expectNoA11yViolations(view.container);
+
+    await clickImport();
+    await screen.findByText("Đã nhập xong", {}, T);
+    const imp = getDb().catalog.imports[0]!;
+    expect(imp.columnMap).toMatchObject({ code: 0, name: 1, unit: 2, linkCode: 3, origin: 4, importDutyRate: 5, note: 6 });
+    // Dòng 2 nối thẳng vào MH-000003 (Ổ bi đũa côn 30210) qua cột Mã nối; bộ nguồn gốc → xuất xứ, thuế của dòng áp vào mặt hàng.
+    const linked = getDb().catalog.aliases.find((a) => a.code === "VT-9102" && a.status === "ACTIVE")!;
+    expect(linked.itemId).toBe("prd_seed_3");
+    expect(getDb().catalog.items.find((i) => i.id === "prd_seed_3")).toMatchObject({ origin: "DE", importDutyRate: "7", note: "An" });
+
+    // Lần sau (cùng bộ): cột G dùng lại "Ghi chú" đã chọn.
+    view.unmount();
+    const again = renderWithProviders(<CatalogPage />);
+    await chooseSet(/^XNK/);
+    await upload(again.container, await richFile());
+    expect((await screen.findByRole("combobox", { name: "Cột G · Người lập" }, T)).textContent).toContain("Ghi chú");
+    expect(screen.getByText("Đã dùng lại cách ghép cột lần trước của bộ này.")).toBeTruthy();
+  }, 90_000);
+
+  it("bộ không phải nguồn gốc: cảnh báo, cột thông tin mặt hàng bỏ qua và không gửi đi", async () => {
+    const { container } = renderWithProviders(<CatalogPage />);
+    await chooseSet(/^Kho/);
+    await upload(container, await richFile());
+    expect(await screen.findByText("Bộ “Kho (Kho)” không phải bộ nguồn gốc", {}, T)).toBeTruthy();
+    expect(screen.getByText(/Các cột thông tin mặt hàng \(Xuất xứ, Thuế suất NK \(%\)\) sẽ bỏ qua/)).toBeTruthy();
+    expect(screen.getAllByText("Bỏ qua – bộ này không phải bộ nguồn gốc")).toHaveLength(2);
+    // Trường thông tin mặt hàng không gán được cho cột khác.
+    await userEvent.click(screen.getByRole("combobox", { name: "Cột G · Người lập" }));
+    expect((await screen.findByRole("option", { name: "Loại hàng (chỉ bộ nguồn gốc)" }, T)).getAttribute("aria-disabled")).toBe("true");
+    await userEvent.keyboard("{Escape}");
+    // Xem trước không có cột Xuất xứ.
+    const preview = await screen.findByRole("table", { name: "5 dòng đầu theo ghép cột" }, T);
+    expect(within(preview).getByText("MH-000003")).toBeTruthy();
+    expect(within(preview).queryByText("DE")).toBeNull();
+    await expectNoA11yViolations(container);
+
+    await clickImport();
+    await screen.findByText("Đã nhập xong", {}, T);
+    const imp = getDb().catalog.imports[0]!;
+    expect(imp.codeSetId).toBe(SEED_SETS.WH);
+    expect(imp.columnMap).not.toHaveProperty("origin");
+    expect(imp.columnMap).not.toHaveProperty("importDutyRate");
+    // Mặt hàng được nối không bị đổi xuất xứ (bộ Kho không quyết định thông tin mặt hàng).
+    expect(getDb().catalog.items.find((i) => i.id === "prd_seed_3")?.origin).toBe("JP");
+    expect(getDb().catalog.items.find((i) => i.id === "prd_seed_3")?.importDutyRate).toBe("3");
+  }, 60_000);
+
+  it("file đối chiếu: tải cho bộ Kho, điền mã một dòng rồi nhập lại → dòng chưa điền bỏ qua, dòng đã điền nối thẳng theo Mã nối", async () => {
+    const { container } = renderWithProviders(<CatalogPage />);
+    await chooseSet(/^Kho/);
+    expect(await screen.findByText("Chưa có mã chung với bộ nguồn gốc?", {}, T)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Tải file đối chiếu" }));
+    await waitFor(() => expect(saved).toHaveLength(1), T);
+    expect(saved[0]!.name).toBe("doi-chieu-ma-Kho.xlsx");
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await readFileBuffer(saved[0]!.blob));
+    const ws = wb.worksheets[0]!;
+    expect((ws.getRow(1).values as unknown[]).slice(1)).toEqual([
+      "Mã nối", "Mã XNK (tham khảo)", "Tên mặt hàng (tham khảo)", "Mã HS (tham khảo)", "ĐVT gốc (tham khảo)", "Mã hàng", "Tên hàng", "ĐVT", "Quy đổi",
+    ]);
+    const item = getDb().catalog.items.find((i) => i.id === "prd_seed_3")!;
+    let filled = 0;
+    ws.eachRow((row, n) => {
+      if (n === 1) return;
+      if (row.getCell(1).value === item.itemNo) {
+        expect(row.getCell(2).value).toBe("30210");
+        row.getCell(6).value = "KHO-30210";
+        filled = n;
+      }
+    });
+    expect(filled).toBeGreaterThan(0);
+    // Mặt hàng đã có mã ở bộ Kho được điền sẵn (mã/tên/ĐVT/hệ số) → cũng được nhập lại (cập nhật); dòng trống mã → bỏ qua.
+    let withCode = 0;
+    ws.eachRow((row, n) => {
+      if (n > 1 && String(row.getCell(6).value ?? "").trim()) withCode += 1;
+    });
+    const rowsTotal = ws.rowCount - 1;
+    expect(withCode).toBeLessThan(rowsTotal);
+    const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+
+    await upload(container, new File([buf], "doi-chieu.xlsx", { type: XLSX }));
+    expect(await screen.findByText(new RegExp(`^${rowsTotal - withCode} dòng có Mã nối nhưng chưa điền Mã hàng`), {}, T)).toBeTruthy();
+    const btn = await screen.findByRole("button", { name: `Nhập ${withCode} dòng` }, T);
+    await waitFor(() => expect(btn).toHaveProperty("disabled", false), T);
+    await userEvent.click(btn);
+    await screen.findByText("Đã nhập xong", {}, T);
+    const alias = getDb().catalog.aliases.find((a) => a.codeSetId === SEED_SETS.WH && a.code === "KHO-30210");
+    expect(alias?.itemId).toBe("prd_seed_3");
   }, 60_000);
 
   it("Lấy từ chứng từ đã đọc (Quản trị): có cả hai nguồn; lấy từ tờ khai đã duyệt → tóm tắt hoặc báo không có dòng mới", async () => {

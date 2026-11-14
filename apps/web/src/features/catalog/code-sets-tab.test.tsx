@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { dismissToast } from "@kb/ui";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,6 +33,8 @@ function emptyCatalog() {
 }
 
 beforeEach(() => {
+  // Kho toast là toàn cục: toast của test trước không được làm test sau "thấy" kết quả sớm.
+  dismissToast();
   resetDb();
   search = new URLSearchParams("tab=code-sets");
   replace.mockReset();
@@ -164,6 +167,89 @@ describe("Danh mục – tab Bộ mã", () => {
     expect(screen.queryByRole("button", { name: "Thêm bộ mã" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Sửa bộ mã – Kho" })).toBeNull();
   }, 30_000);
+
+  it("thiết lập mỗi bộ phận: chọn bộ nguồn gốc (mặc định XNK) → Kho thành nguồn gốc; dùng chung → Mã chung là nguồn gốc (giải thích)", async () => {
+    emptyCatalog();
+    const view = renderWithProviders(<CatalogPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Thiết lập danh mục" }, T));
+    let wizard = await dialogTitled("Thiết lập danh mục");
+    await userEvent.click(within(wizard).getByRole("radio", { name: /Mỗi bộ phận một bộ mã/ }));
+    await userEvent.click(within(wizard).getByRole("button", { name: "Tiếp tục" }));
+    const group = within(wizard).getByRole("radiogroup", { name: "Bộ nào là bộ nguồn gốc?" });
+    expect(within(group).getByRole("radio", { name: /^XNK/ })).toHaveProperty("checked", true);
+    expect(within(wizard).getByText(/Bộ nguồn gốc quyết định ĐVT gốc, tên, mã HS/)).toBeTruthy();
+    await userEvent.click(within(group).getByRole("radio", { name: /^Kho/ }));
+    await expectNoA11yViolations(wizard);
+    await userEvent.click(within(wizard).getByRole("button", { name: "Thiết lập" }));
+    expect(await screen.findByText("Đã thiết lập danh mục", {}, T)).toBeTruthy();
+    await waitFor(() => expect(getDb().catalog.codeSets.filter((s) => s.isSource).map((s) => s.kind)).toEqual(["WAREHOUSE"]), T);
+    expect(within(await rowWith("Kho")).getByText("Nguồn gốc")).toBeTruthy();
+    view.unmount();
+
+    emptyCatalog();
+    renderWithProviders(<CatalogPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Thiết lập danh mục" }, T));
+    wizard = await dialogTitled("Thiết lập danh mục");
+    await userEvent.click(within(wizard).getByRole("radio", { name: /Dùng chung một bộ mã/ }));
+    await userEvent.click(within(wizard).getByRole("button", { name: "Tiếp tục" }));
+    expect(within(wizard).queryByRole("radiogroup", { name: "Bộ nào là bộ nguồn gốc?" })).toBeNull();
+    expect(within(wizard).getByText(/Bộ “Mã chung” là bộ nguồn gốc/)).toBeTruthy();
+    await userEvent.click(within(wizard).getByRole("button", { name: "Thiết lập và nhập file" }));
+    await waitFor(() => expect(getDb().catalog.codeSets.filter((s) => s.isSource).map((s) => s.kind)).toEqual(["SHARED"]), T);
+  }, 60_000);
+
+  it("bộ XNK mẫu có nhãn Nguồn gốc; bộ nhà cung cấp không có thao tác Đặt làm nguồn gốc", async () => {
+    renderWithProviders(<CatalogPage />);
+    expect(within(await rowWith("XNK")).getByText("Nguồn gốc")).toBeTruthy();
+    const skf = await rowWith("SKF KOREA LTD");
+    expect(within(skf).queryByText("Nguồn gốc")).toBeNull();
+    await userEvent.click(await screen.findByRole("button", { name: "Thao tác khác – SKF KOREA LTD" }, T));
+    await screen.findAllByRole("menuitem", {}, T);
+    expect(screen.queryByRole("menuitem", { name: "Đặt làm nguồn gốc" })).toBeNull();
+  }, 30_000);
+
+  it("Đặt Kho làm nguồn gốc: xem trước số liệu + mặt hàng thiếu hệ số, đổi gốc theo hệ số (9 số lẻ), bổ sung hệ số rồi Áp dụng lại", async () => {
+    renderWithProviders(<CatalogPage />);
+    await rowWith("Kho");
+    await userEvent.click(await screen.findByRole("button", { name: "Thao tác khác – Kho" }, T));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Đặt làm nguồn gốc" }, T));
+    const dialog = await dialogTitled("Đặt “Kho” làm bộ nguồn gốc");
+    expect(await within(dialog).findByText("Bộ nguồn gốc hiện tại: XNK.", {}, T)).toBeTruthy();
+    expect(within(dialog).getByText(/làm tròn 9 chữ số thập phân/)).toBeTruthy();
+    const blocked = await within(dialog).findByRole("table", { name: "Mặt hàng thiếu hệ số" }, T);
+    const canvas = within(blocked).getAllByRole("row").find((r) => r.textContent?.includes("Vải canvas cotton"))!;
+    expect(within(canvas).getByText("VAI-C15")).toBeTruthy();
+    expect(within(canvas).getByText("MTR → KGM")).toBeTruthy();
+    expect(within(dialog).getByText(/mặt hàng chưa đổi được ĐVT gốc/)).toBeTruthy();
+    await expectNoA11yViolations(dialog);
+
+    // Bấm dòng thiếu hệ số → panel mặt hàng thay chỗ popup; đóng panel → popup hiện lại.
+    await userEvent.click(within(canvas).getByText("VAI-C15"));
+    expect(await screen.findByText("Chi tiết mặt hàng", { selector: "h2" }, T)).toBeTruthy();
+    expect(screen.queryByText("Đặt “Kho” làm bộ nguồn gốc", { selector: "h2" })).toBeNull();
+    await userEvent.keyboard("{Escape}");
+    const reopened = await dialogTitled("Đặt “Kho” làm bộ nguồn gốc");
+
+    await userEvent.click(within(reopened).getByRole("button", { name: "Đặt làm nguồn gốc" }));
+    expect((await screen.findAllByText("Đã đặt bộ Kho làm nguồn gốc", {}, T)).length).toBeGreaterThan(0);
+    const cat = getDb().catalog;
+    expect(cat.codeSets.filter((s) => s.isSource).map((s) => s.id)).toEqual([SEED_SETS.WH]);
+    // Vòng bi 6308ZZ: Kho tính theo DZN (1 DZN = 12 PCE) → gốc DZN, 1 PCE = 1/12 DZN làm tròn 9 số lẻ.
+    expect(cat.items.find((i) => i.id === "prd_seed_2")?.baseUnit).toBe("DZN");
+    expect(cat.conversions.filter((c) => c.itemId === "prd_seed_2")).toEqual([{ itemId: "prd_seed_2", unit: "PCE", factor: "0.083333333" }]);
+    // Còn mặt hàng thiếu hệ số → popup giữ mở, nút đổi thành Áp dụng lại.
+    expect(await within(reopened).findByText("Đã đặt làm nguồn gốc – còn mặt hàng thiếu hệ số", {}, T)).toBeTruthy();
+    const reapply = within(reopened).getByRole("button", { name: "Áp dụng lại" });
+
+    // Bổ sung hệ số cho mặt hàng còn thiếu (như thêm quy đổi ở panel mặt hàng) rồi áp dụng lại.
+    const stuck = cat.items.find((i) => i.name.startsWith("Vải canvas cotton"))!;
+    cat.conversions.push({ itemId: stuck.id, unit: "KGM", factor: "2" });
+    await userEvent.click(reapply);
+    expect((await screen.findAllByText("Đã áp dụng lại bộ nguồn gốc Kho", {}, T)).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.queryByText("Áp dụng lại bộ nguồn gốc “Kho”", { selector: "h2" })).toBeNull(), T);
+    expect(getDb().catalog.items.find((i) => i.id === stuck.id)?.baseUnit).toBe("KGM");
+    expect(getDb().catalog.conversions.find((c) => c.itemId === stuck.id && c.unit === "MTR")?.factor).toBe("0.5");
+  }, 60_000);
 
   it.each([
     ["en", "One code set per department", "Change mode", "Code set list"],

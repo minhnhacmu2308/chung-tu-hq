@@ -1,11 +1,16 @@
 // Ghép dòng mã hàng (Excel/chứng từ) với mặt hàng chuẩn – code thuần, không AI (bất biến 5).
-// SURE: bí danh ACTIVE cùng bộ · HS 8 số + tên trùng · mã ACTIVE ở bộ khác + cùng HS 4 số (hoặc cả hai thiếu HS và tên trùng).
-// MAYBE: Dice(tên) >= 0,8 + cùng chương HS (hoặc một bên thiếu HS) · cùng HS 8 số tên khác · SURE nhưng ĐVT ≠ ĐVT gốc và chưa có quy đổi.
+// SURE: bí danh ACTIVE cùng bộ · HS 8 số + tên trùng · mã ACTIVE ở bộ khác + cùng HS 4 số · mã ACTIVE ở bộ khác + một bên thiếu HS + tên giống
+// >= 0,8 (CODE_OTHER_SET_NAME – file Kế toán/Kho thường không có HS, mã đặt trùng mã XNK).
+// MAYBE: Dice(tên) >= 0,8 + cùng chương HS (hoặc một bên thiếu HS) · mã ở bộ khác + một bên thiếu HS nhưng tên khác (CODE_OTHER_SET_NO_HS – có
+// thể mã trùng ngẫu nhiên giữa hai phần mềm, người duyệt xác nhận) · cùng HS 8 số tên khác · SURE nhưng ĐVT ≠ ĐVT gốc và chưa có quy đổi.
 import { itemHsDigits } from "./code-key.js";
 import { itemUnitKey } from "./units.js";
 import type { ItemMatchLevel } from "./schemas.js";
 
-export const ITEM_MATCH_REASONS = ["ALIAS_SAME_SET", "HS8_NAME", "CODE_OTHER_SET_HS4", "NAME_SIMILAR_CHAPTER", "HS8_NAME_DIFF", "UNIT_NO_FACTOR", "AMBIGUOUS", "NO_MATCH", "MIGRATION_DUPLICATE_CODE"] as const;
+// Cột Mã nối của file (spec 2026-11-14 §5): LINKED_BY_CODE = nối thẳng theo mã nối / mã bộ nguồn gốc (SURE, bỏ qua luật trên) · LINK_NOT_FOUND = không có mặt hàng như vậy (hàng chờ).
+export const ITEM_MATCH_REASONS = [
+  "ALIAS_SAME_SET", "HS8_NAME", "CODE_OTHER_SET_HS4", "CODE_OTHER_SET_NAME", "CODE_OTHER_SET_NO_HS", "NAME_SIMILAR_CHAPTER", "HS8_NAME_DIFF", "UNIT_NO_FACTOR", "AMBIGUOUS", "NO_MATCH", "MIGRATION_DUPLICATE_CODE", "LINKED_BY_CODE", "LINK_NOT_FOUND",
+] as const;
 export type ItemMatchReason = (typeof ITEM_MATCH_REASONS)[number];
 
 export const ITEM_MAX_CANDIDATES = 5;
@@ -76,8 +81,8 @@ export type ItemMatchResult = {
   reason: ItemMatchReason;
 };
 
-const RANK: Record<string, number> = { ALIAS_SAME_SET: 0, HS8_NAME: 1, CODE_OTHER_SET_HS4: 2, NAME_SIMILAR_CHAPTER: 3, HS8_NAME_DIFF: 4 };
-const SURE_REASONS = new Set<string>(["ALIAS_SAME_SET", "HS8_NAME", "CODE_OTHER_SET_HS4"]);
+const RANK: Record<string, number> = { ALIAS_SAME_SET: 0, HS8_NAME: 1, CODE_OTHER_SET_HS4: 2, CODE_OTHER_SET_NAME: 3, CODE_OTHER_SET_NO_HS: 4, NAME_SIMILAR_CHAPTER: 5, HS8_NAME_DIFF: 6 };
+const SURE_REASONS = new Set<string>(["ALIAS_SAME_SET", "HS8_NAME", "CODE_OTHER_SET_HS4", "CODE_OTHER_SET_NAME"]);
 
 /**
  * Ghép một dòng theo luật SURE / MAYBE / NONE. `candidates` ≤ 5, tốt nhất trước.
@@ -98,9 +103,15 @@ export function matchItemCandidate(row: ItemMatchRow, index: ItemMatchIndex, cod
       if (a.codeSetId === codeSetId) continue;
       const it = index.items.get(a.itemId);
       if (!it) continue;
-      const hs4 = rowHs.length >= 4 && it.hs.length >= 4 && rowHs.slice(0, 4) === it.hs.slice(0, 4);
-      const noHsSameName = !rowHs && !it.hs && it.nameKey === row.nameKey;
-      if (hs4 || noHsSameName) add(it.id, 1, "CODE_OTHER_SET_HS4");
+      if (rowHs.length >= 4 && it.hs.length >= 4) {
+        // Cả hai có HS: cùng nhóm 4 số mới nối; khác nhóm = hai mặt hàng khác nhau trùng mã → không gợi ý.
+        if (rowHs.slice(0, 4) === it.hs.slice(0, 4)) add(it.id, 1, "CODE_OTHER_SET_HS4");
+        continue;
+      }
+      // Một bên thiếu HS (thường là file Kế toán/Kho): tên giống → nối; tên khác → chỉ gợi ý (mã có thể trùng ngẫu nhiên).
+      const sim = it.nameKey === row.nameKey ? 1 : itemNameSimilarity(row.nameKey, it.nameKey);
+      if (sim >= ITEM_NAME_SIMILARITY_MIN) add(it.id, sim, "CODE_OTHER_SET_NAME");
+      else add(it.id, sim, "CODE_OTHER_SET_NO_HS");
     }
   }
 

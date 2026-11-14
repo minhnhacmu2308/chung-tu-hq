@@ -15,3 +15,4 @@ export { getImport, importRows, listImports } from "./application/import.js";
 export { failImport, MATCH_CHUNK_ROWS, runMatch } from "./application/match-run.js";
 export { decideQueue, decideQueueBulk, listQueue } from "./application/queue.js";
 export { importFromDocuments } from "./application/from-documents.js";
+export { changeSourceSet, previewSourceChange, SOURCE_REBASE_CHUNK } from "./application/source.js";

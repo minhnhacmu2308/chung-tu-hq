@@ -1,18 +1,22 @@
 // Danh mục hàng hóa dùng chung (mock, ADR 0015): kiểu dữ liệu + phần tra mã dùng chung cho seed và mocks/api/catalog.
 // Ghép/quy đổi/chuẩn hóa mã dùng ĐÚNG hàm thuần của @kb/contracts (item-catalog) như backend (packages/core/src/modules/catalog/application/resolve.ts).
-// Chỉ phụ thuộc @kb/contracts → seed, db và api cùng import không vòng.
+// Chỉ phụ thuộc @kb/contracts + lib/decimal → seed, db và api cùng import không vòng.
 import {
   buildItemMatchIndex, itemCodeKey, itemNameKey, itemUnitKey, matchItemCandidate,
-  type CatalogImport, type CatalogItem, type CatalogMode, type CodeSet, type CodeSetKind, type ItemAlias, type ItemIndexAlias, type ItemMatchIndex,
+  type CatalogImport, type CatalogItem, type CatalogItemFields, type CatalogMode, type CodeSet, type CodeSetKind, type ItemAlias, type ItemIndexAlias, type ItemMatchIndex,
   type MatchQueueItem, type ResolveItemResultDto,
 } from "@kb/contracts";
+import { divDecimal, plainDecimal, sameDecimal } from "@/lib/decimal";
 
+/** `isSource`: bộ nguồn gốc (đúng một bộ nội bộ mỗi doanh nghiệp – spec 2026-11-14 §1). */
 export type MockCodeSet = Omit<CodeSet, "ownerIds" | "codeCount"> & { createdAt: string };
 export type MockCatalogItem = CatalogItem & { nameKey: string };
 export type MockAlias = ItemAlias & { createdAt: string };
 export type MockConversion = { itemId: string; unit: string; factor: string };
+/** Mục hàng chờ giữ hệ số của dòng file (`factor`) + thông tin mặt hàng (`itemFields`, chỉ khi bộ là nguồn gốc) – như catalog_match_queue. */
 export type MockQueueItem = MatchQueueItem & { createdAt: string; importRow: number | null };
-export type MockStagedRow = { row: number; code: string; name: string; unit?: string; hs?: string; factor?: string; sourceRef?: string };
+/** Dòng đã kiểm chờ ghép: `linkCode` = cột Mã nối, `fields` = thông tin mặt hàng (bỏ khi bộ nhận không phải nguồn gốc). */
+export type MockStagedRow = { row: number; code: string; name: string; unit?: string; hs?: string; factor?: string; linkCode?: string; fields?: CatalogItemFields; sourceRef?: string };
 /** Lần nhập: `rows` = dòng hợp lệ chờ ghép (lần nhập lớn ghép dần theo thời gian – như job `catalog-import`); `matchAfter` = mốc bắt đầu ghép (ms). */
 export type MockImport = CatalogImport & { rows: MockStagedRow[] | null; matchAfter: number };
 export type MockCatalogAudit = { itemId: string; key: string; oldValue: string; newValue: string; at: string; by: string };
@@ -86,6 +90,76 @@ export function newestAlias(aliases: MockAlias[]): MockAlias | null {
 
 /** Bộ mặc định cho Hải quan (XNK ở PER_DEPARTMENT, "Mã chung" ở SHARED). */
 export const defaultSet = (cat: MockCatalog) => cat.codeSets.find((s) => s.isDefault) ?? null;
+/** Bộ nguồn gốc của doanh nghiệp (quyết định ĐVT gốc + tên/HS/thuế của mặt hàng). */
+export const sourceSetOf = (cat: MockCatalog) => cat.codeSets.find((s) => s.isSource) ?? null;
+
+// ---------- đổi ĐVT gốc (như domain/rebase.ts của backend – Decimal, 9 số lẻ ROUND_HALF_UP) ----------
+export const CATALOG_FACTOR_SCALE = 9;
+export type RebaseConversion = { unit: string; factor: string };
+export type RebasePlan =
+  | { kind: "SAME" }
+  | { kind: "SET_BASE" }
+  | { kind: "NO_FACTOR" }
+  | { kind: "REBASE"; factor: string; conversions: RebaseConversion[]; changes: { unit: string; oldValue: string; newValue: string }[]; lineFactors: { id: string; oldValue: string; newValue: string }[] };
+
+const positive = (s: string | undefined): string | null => (s && /^\d+(\.\d+)?$/.test(s.trim()) && /[1-9]/.test(s) ? plainDecimal(s) : null);
+const isZero = (s: string) => plainDecimal(s) === "0";
+
+/**
+ * Gốc cũ B, gốc mới N, f = số B trong 1 N (quy đổi hiện có của N, không có thì `factor`). Mỗi quy đổi `1 X = x B` (X ≠ N) → `1 X = x / f N`;
+ * thêm `1 B = 1 / f N`; bỏ dòng của N; hệ số theo lô chia f. Một giá trị tròn về 0 → NO_FACTOR.
+ */
+export function planRebase(input: { baseUnit: string | null; newBase: string; conversions: readonly RebaseConversion[]; lineFactors?: readonly { id: string; factor: string }[]; factor?: string }): RebasePlan {
+  const newKey = itemUnitKey(input.newBase);
+  if (!input.baseUnit) return { kind: "SET_BASE" };
+  const baseKey = itemUnitKey(input.baseUnit);
+  if (baseKey === newKey) return { kind: "SAME" };
+  const existing = input.conversions.find((c) => itemUnitKey(c.unit) === newKey);
+  const f = positive(existing?.factor) ?? (existing ? null : positive(input.factor));
+  if (!f) return { kind: "NO_FACTOR" };
+  const next: RebaseConversion[] = [];
+  const changes: { unit: string; oldValue: string; newValue: string }[] = [];
+  for (const c of input.conversions) {
+    const k = itemUnitKey(c.unit);
+    if (k === newKey) {
+      changes.push({ unit: c.unit, oldValue: plainDecimal(c.factor), newValue: "" });
+      continue;
+    }
+    if (k === baseKey) continue;
+    const v = divDecimal(c.factor, f, CATALOG_FACTOR_SCALE);
+    if (isZero(v)) return { kind: "NO_FACTOR" };
+    next.push({ unit: c.unit, factor: v });
+    changes.push({ unit: c.unit, oldValue: plainDecimal(c.factor), newValue: v });
+  }
+  const back = divDecimal("1", f, CATALOG_FACTOR_SCALE);
+  if (isZero(back)) return { kind: "NO_FACTOR" };
+  next.push({ unit: input.baseUnit, factor: back });
+  changes.push({ unit: input.baseUnit, oldValue: "", newValue: back });
+  const lineFactors: { id: string; oldValue: string; newValue: string }[] = [];
+  for (const l of input.lineFactors ?? []) {
+    const v = divDecimal(l.factor, f, CATALOG_FACTOR_SCALE);
+    if (isZero(v)) return { kind: "NO_FACTOR" };
+    lineFactors.push({ id: l.id, oldValue: plainDecimal(l.factor), newValue: v });
+  }
+  const byUnit = <X extends { unit: string }>(a: X, b: X) => itemUnitKey(a.unit).localeCompare(itemUnitKey(b.unit));
+  return { kind: "REBASE", factor: f, conversions: next.sort(byUnit), changes: changes.sort(byUnit), lineFactors };
+}
+
+const ITEM_FIELD_KEYS = ["name", "hsCode", "kind", "origin", "tariffSchedule", "importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate", "description", "note"] as const;
+const RATE_KEYS = new Set<string>(["importDutyRate", "vatRate", "envTaxRate", "exciseRate", "safeguardRate", "antiDiscriminationRate"]);
+
+/** Các trường của `incoming` có giá trị và khác mặt hàng (thuế suất so theo giá trị) – như diffItemFields. */
+export function diffItemFields(item: Pick<MockCatalogItem, (typeof ITEM_FIELD_KEYS)[number]>, incoming: CatalogItemFields): { key: (typeof ITEM_FIELD_KEYS)[number]; oldValue: string; newValue: string }[] {
+  const changes: { key: (typeof ITEM_FIELD_KEYS)[number]; oldValue: string; newValue: string }[] = [];
+  for (const k of ITEM_FIELD_KEYS) {
+    const v = incoming[k];
+    if (v === undefined || v === "") continue;
+    const cur = item[k];
+    if (cur !== null && (RATE_KEYS.has(k) ? sameDecimal(cur, v) : cur === v)) continue;
+    changes.push({ key: k, oldValue: cur ?? "", newValue: v });
+  }
+  return changes;
+}
 
 type MatchContext = { index: ItemMatchIndex; aliasBySetCode: Map<string, MockAlias> };
 

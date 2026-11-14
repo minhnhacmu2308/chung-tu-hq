@@ -126,7 +126,8 @@ export function seedCatalog(): MockCatalog {
   const created = daysAgo(120);
   const codeSets: MockCodeSet[] = SETS.map((s) => ({
     id: SEED_SETS[s.ref], kind: s.kind, name: s.name, partnerName: s.partner ?? null, partnerKey: s.partner ? itemNameKey(s.partner) : null,
-    isPrimaryDisplay: !!s.primary, isDefault: !!s.isDefault, createdAt: created,
+    // Bộ nguồn gốc mẫu = XNK (như migration: chưa có SHARED → bộ mặc định cho Hải quan).
+    isPrimaryDisplay: !!s.primary, isDefault: !!s.isDefault, isSource: !!s.isDefault, createdAt: created,
   }));
   const owners = Object.fromEntries(SETS.map((s) => [SEED_SETS[s.ref], s.owners]));
   const items: MockCatalogItem[] = [];
@@ -167,7 +168,7 @@ export function seedCatalog(): MockCatalog {
     return {
       id: `cmq_seed_${i + 1}`, importId: null, importRow: null, codeSetId, code: q.code, name: q.name, unit: q.unit, hsCode: q.hs, level: res.level,
       suggestedItemId: res.itemId ?? res.candidates[0]?.itemId ?? null, candidates: res.candidates, reason: res.reason, status: "PENDING",
-      decidedBy: null, decidedAt: null, sourceRef: q.ref, createdAt: daysAgo(q.ago),
+      decidedBy: null, decidedAt: null, sourceRef: q.ref, factor: null, itemFields: null, createdAt: daysAgo(q.ago),
     };
   });
   return cat;

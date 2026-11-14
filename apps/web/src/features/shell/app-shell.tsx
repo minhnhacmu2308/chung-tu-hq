@@ -6,14 +6,15 @@ import {
   SidebarMobileTrigger, SidebarUser, toast, useMessages, type AssistantMode, type NavItem,
 } from "@kb/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, FolderOpen, Inbox, LayoutDashboard, LogOut, Package, RotateCcw, Send, GraduationCap, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
+import { Bell, BookX, FolderOpen, Inbox, LayoutDashboard, LogOut, Package, RotateCcw, Send, GraduationCap, Settings2, Sparkles, SunMoon, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { adminKeys, getAdminSession } from "@/api/admin";
 import { dossierKeys, listDossiers } from "@/api/dossiers";
 import { inboxKeys, listInbox } from "@/api/mailbox";
-import { getSession, listNotifications, logout, resetMockData, sessionKeys } from "@/api/session";
+import { getSession, listNotifications, logout, resetMockData, resetMockDataEmptyCatalog, sessionKeys } from "@/api/session";
+import { dataSource } from "@/lib/data-source";
 import { ChangePasswordScreen } from "@/components/common/change-password-screen";
 import { APP_TITLES } from "@/app/app-titles.messages";
 import { LanguageMenuSub } from "@/features/appearance/language-switcher";
@@ -122,6 +123,12 @@ function ShellInner({ children }: { children: ReactNode }) {
     await qc.invalidateQueries();
     toast({ tone: "success", title: t.resetDone });
   };
+  // Chỉ bản dữ liệu mẫu: danh mục hàng hóa về trống để thử trình thiết lập lần đầu (dùng chung một bộ mã / mỗi bộ phận một bộ).
+  const resetEmptyCatalog = async () => {
+    await resetMockDataEmptyCatalog();
+    await qc.invalidateQueries();
+    toast({ tone: "success", title: t.resetEmptyCatalogDone });
+  };
 
   // Vị trí menu do người dùng chọn trong "Giao diện": cột trái / cột phải / thanh ngang trên đầu.
   const menu = appearance.menuPosition;
@@ -181,7 +188,8 @@ function ShellInner({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <SidebarUser name={session?.user.name ?? "…"} role={session ? roleLabels[session.user.role] : ""} />
               </DropdownMenuTrigger>
-              <DropdownMenuContent side={menuOnTop ? "bottom" : menu === "right" ? "left" : "right"} align="end">
+              {/* Ngăn menu trên mobile: bên cạnh không đủ chỗ (menu bị cắt khỏi màn) → mở lên trên. */}
+              <DropdownMenuContent side={mobileNav ? "top" : menuOnTop ? "bottom" : menu === "right" ? "left" : "right"} align="end">
                 <DropdownMenuItem icon={<UserRound className="h-4 w-4" />} onSelect={() => router.push("/settings")}>
                   {t.navSettings}
                 </DropdownMenuItem>
@@ -194,6 +202,11 @@ function ShellInner({ children }: { children: ReactNode }) {
                 <DropdownMenuItem icon={<RotateCcw className="h-4 w-4" />} onSelect={reset}>
                   {t.resetData}
                 </DropdownMenuItem>
+                {dataSource() === "mock" && (
+                  <DropdownMenuItem icon={<BookX className="h-4 w-4" />} onSelect={resetEmptyCatalog}>
+                    {t.resetDataEmptyCatalog}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   icon={<LogOut className="h-4 w-4" />}

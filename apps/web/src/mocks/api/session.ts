@@ -1,7 +1,8 @@
 // Phiên đăng nhập + doanh nghiệp + thông báo (mock).
 import type { AcceptInviteInput, Session } from "@kb/contracts";
 import { ApiError, mutate, query } from "@/lib/mock-request";
-import { resetDb } from "@/mocks/db";
+import { getDb, resetDb, saveDb } from "@/mocks/db";
+import { emptyCatalog } from "@/mocks/catalog-engine";
 import { adminLogin } from "@/mocks/admin/ops";
 import { orgView } from "@/mocks/billing-sim";
 
@@ -47,6 +48,23 @@ export async function resetMockData() {
   } catch {
     /* bỏ qua */
   }
+}
+
+/**
+ * Như resetMockData nhưng danh mục hàng hóa về trạng thái chưa thiết lập (chỉ bản dữ liệu mẫu): tab Bộ mã hiện trình thiết lập lần đầu
+ * để thử cả hai chế độ (dùng chung một bộ mã / mỗi bộ phận một bộ). Dòng hàng mẫu bỏ liên kết mặt hàng + cờ "Mã lạ" + mã hàng theo danh mục.
+ */
+export async function resetMockDataEmptyCatalog() {
+  await resetMockData();
+  const db = getDb();
+  db.catalog = emptyCatalog();
+  for (const line of db.lineItems) {
+    delete line.catalogItem;
+    delete line.unknownCode;
+    delete line.itemCode;
+    delete line.unitFactor;
+  }
+  saveDb();
 }
 
 export const memberKeys = { all: ["members"] as const };

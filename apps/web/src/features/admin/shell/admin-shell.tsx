@@ -185,7 +185,8 @@ function AdminShellInner({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <SidebarUser name={staff?.name ?? "…"} role={staff ? roleLabels[staff.role] : ""} />
               </DropdownMenuTrigger>
-              <DropdownMenuContent side={menuOnTop ? "bottom" : menu === "right" ? "left" : "right"} align="end">
+              {/* Ngăn menu trên mobile: bên cạnh không đủ chỗ (menu bị cắt khỏi màn) → mở lên trên. */}
+              <DropdownMenuContent side={mobileNav ? "top" : menuOnTop ? "bottom" : menu === "right" ? "left" : "right"} align="end">
                 <DropdownMenuItem icon={<RotateCcw className="h-4 w-4" />} onSelect={reset}>
                   {t.resetData}
                 </DropdownMenuItem>

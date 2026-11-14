@@ -17,6 +17,10 @@ export const changePassword = (input: { currentPassword: string; newPassword: st
 export const resetMockData = async () => {
   await apiPost("dev/reset-demo", {}, OkSchema);
 };
+/** Chỉ có ở bản dữ liệu mẫu (menu ẩn khi chạy backend thật). */
+export const resetMockDataEmptyCatalog = async (): Promise<void> => {
+  throw new Error("resetMockDataEmptyCatalog: chỉ dùng ở chế độ dữ liệu mẫu");
+};
 export const listMembers = () => apiGet("org/members", z.array(MemberSchema));
 export const lookupTaxCode = (taxCode: string) => apiGet(`auth/lookup-tax-code?taxCode=${encodeURIComponent(taxCode)}`, CompanyLookupSchema);
 export const register = (input: { email: string; name: string; password: string; taxCode: string; joinExisting: boolean }) =>

@@ -84,7 +84,8 @@ export function LoginPage() {
         <ul className="flex flex-col">
           {OPERATOR_DEMO_ACCOUNTS.map((a) => (
             <li key={a.email}>
-              <Button type="button" variant="link" size="sm" onClick={() => setEmail(a.email)}>{t[a.label]} – {a.email}</Button>
+              {/* Email dài: cho xuống dòng, không đẩy khung đăng nhập tràn ngang trên mobile (~390px). */}
+              <Button type="button" variant="link" size="sm" className="h-auto whitespace-normal wrap-anywhere text-left" onClick={() => setEmail(a.email)}>{t[a.label]} – {a.email}</Button>
             </li>
           ))}
         </ul>

@@ -78,6 +78,8 @@ export const EnvSchema = z
      * Mật khẩu/terminal key đã che nhưng body có dữ liệu tờ khai đầy đủ (MST, tên, địa chỉ) – chỉ bật khi thử tích hợp. Bỏ tính năng: grep FPT_DEBUG_TRACE.
      */
     FPT_DEBUG_TRACE: bool.default(false),
+    /** Thử cổng test Hải quan: ghi đè tK_CH (mã Hải quan) trên mọi body gửi FPT, vd 88AB. Trống = lấy theo ô Cơ quan Hải quan của tờ khai. */
+    FPT_FORCE_TK_CH: z.string().trim().regex(/^[0-9A-Z]{4}$/, "FPT_FORCE_TK_CH là mã Hải quan 4 ký tự, vd 88AB").optional().or(z.literal("").transform(() => undefined)),
     /** Tài khoản VNACCS dùng khi doanh nghiệp chưa nhập (T5: chưa có màn nhập). Chỉ để dev/test với fpt-mock. */
     FPT_VNACCS_USER_ID: z.string().optional(),
     FPT_VNACCS_PASSWORD: z.string().optional(),

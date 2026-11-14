@@ -40,7 +40,19 @@ export type FptRestClientOptions = {
   now?: () => Date;
   /** GỠ LỖI TẠM (FPT_DEBUG_TRACE): nhận từng lần gọi nghiệp vụ (body gửi + phản hồi thô; chưa che – bên nhận che). Không gọi cho đăng nhập. */
   trace?: (e: FptExchange) => void;
+  /** FPT_FORCE_TK_CH: ghi đè mã Hải quan tK_CH trên mọi body gửi (cổng test VNACCS chỉ nhận mã test, vd 88AB). */
+  forceCustomsOffice?: string;
 };
+
+/** tK_CH nằm ở đầu tờ khai (objVN_IDA / objVN_EDA – kể cả khi tờ khai bỏ trống ô) hoặc ở gốc body (HYS). */
+export function forceTkCh(payload: Record<string, unknown>, code: string): Record<string, unknown> {
+  const out: Record<string, unknown> = "tK_CH" in payload ? { ...payload, tK_CH: code } : { ...payload };
+  for (const key of ["objVN_IDA", "objVN_EDA"]) {
+    const head = out[key];
+    if (head && typeof head === "object") out[key] = { ...(head as Record<string, unknown>), tK_CH: code };
+  }
+  return out;
+}
 
 export class FptRestClient implements FptHttpClient {
   private token: { value: string; expiresAt: number } | null = null;
@@ -55,7 +67,8 @@ export class FptRestClient implements FptHttpClient {
   async post(op: FptOperation, body: unknown, creds: FptVnaccsCredentials | null, meta?: FptCallMeta): Promise<unknown> {
     if (!creds && !FLAT_BODY_OPS.has(op)) throw domainError("INTEGRATION_NOT_CONFIGURED", `Chưa cấu hình tài khoản VNACCS cho ${op}`);
     // VNACCSREP: body chính là tài khoản VNACCS (phẳng, theo Postman); nghiệp vụ khác bọc trong objVNACCS_ACCOUNT.
-    const payload = op === "VNACCSREP" ? { ...creds } : FLAT_BODY_OPS.has(op) ? { ...(body as Record<string, unknown>) } : { objVNACCS_ACCOUNT: creds, ...(body as Record<string, unknown>) };
+    const built = op === "VNACCSREP" ? { ...creds } : FLAT_BODY_OPS.has(op) ? { ...(body as Record<string, unknown>) } : { objVNACCS_ACCOUNT: creds, ...(body as Record<string, unknown>) };
+    const payload = this.opts.forceCustomsOffice && op !== "VNACCSREP" ? forceTkCh(built, this.opts.forceCustomsOffice) : built;
     const at = this.now();
     const started = performance.now();
     let status: number | null = null;

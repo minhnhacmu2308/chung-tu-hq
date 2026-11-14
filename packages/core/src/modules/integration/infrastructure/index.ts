@@ -41,7 +41,7 @@ export function createCustomsGateway(env: Env, creds: VnaccsCredentialsReader, h
 /** Client HTTP FPT theo env; thiếu cấu hình → null. */
 export function createFptHttpClient(env: Env, opts: { timeoutMs?: number; trace?: (e: FptExchange) => void } = {}): FptRestClient | null {
   if (!env.FPT_API_BASE_URL || !env.FPT_API_USERNAME || !env.FPT_API_PASSWORD) return null;
-  return new FptRestClient({ baseUrl: env.FPT_API_BASE_URL, username: env.FPT_API_USERNAME, password: env.FPT_API_PASSWORD, timeoutMs: opts.timeoutMs ?? env.FPT_API_TIMEOUT_MS, ...(opts.trace ? { trace: opts.trace } : {}) });
+  return new FptRestClient({ baseUrl: env.FPT_API_BASE_URL, username: env.FPT_API_USERNAME, password: env.FPT_API_PASSWORD, timeoutMs: opts.timeoutMs ?? env.FPT_API_TIMEOUT_MS, ...(opts.trace ? { trace: opts.trace } : {}), ...(env.FPT_FORCE_TK_CH ? { forceCustomsOffice: env.FPT_FORCE_TK_CH } : {}) });
 }
 
 export function createCustomsInfrastructure(opts: {

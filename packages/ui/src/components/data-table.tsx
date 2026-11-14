@@ -302,7 +302,8 @@ export type DataTableProps<TData extends RowData> = {
   showCaption?: boolean;
   /** Bật cột checkbox chọn dòng. */
   selectable?: boolean;
-  /** Với `selectable`: dòng nào chọn được (vd chỉ mục người dùng có quyền duyệt). Dòng không chọn được không có checkbox; "Chọn tất cả" bỏ qua chúng. */
+  /** Với `selectable`: dòng nào chọn được (vd chỉ mục người dùng có quyền duyệt). Dòng không chọn được không có checkbox; "Chọn tất cả" bỏ qua chúng.
+   * Hàm được đọc qua ref ở mỗi lần dựng (truyền hàm mới không dựng lại cột) – kết quả đổi theo state của màn thì màn phải dựng lại (đổi state là đủ). */
   isRowSelectable?: (row: TData) => boolean;
   onSelectionChange?: (ids: string[]) => void;
   /**

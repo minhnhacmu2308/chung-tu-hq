@@ -12,7 +12,7 @@ import { partNoInDescription, toTeachSample } from "./samples.js";
 
 const log = createLogger({ name: "core" });
 
-const canReview =(ctx: Ctx) => requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
+const canReview = (ctx: Ctx) => requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
 
 export function toLesson(r: StoredLesson, labels: Record<string, string>): Lesson {
   return {

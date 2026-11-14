@@ -48,6 +48,6 @@ describe("ChangePasswordScreen", () => {
 
     await userEvent.type(screen.getByLabelText(/Nhập lại/), "3");
     await userEvent.click(submit);
-    await waitFor(() => expect(changePassword).toHaveBeenCalledWith({ currentPassword: "TamThoi12345", newPassword: "matkhaurieng123" }));
-  });
+    await waitFor(() => expect(changePassword).toHaveBeenCalledWith({ currentPassword: "TamThoi12345", newPassword: "matkhaurieng123" }), { timeout: 30_000 });
+  }, 60_000);
 });

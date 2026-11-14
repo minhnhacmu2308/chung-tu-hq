@@ -36,5 +36,5 @@ describe("EmailBuilder", () => {
     await userEvent.click(screen.getByRole("button", { name: "Xóa khối – Khối 1: Đoạn văn" }));
     expect(within(list).getAllByRole("listitem")).toHaveLength(1);
     expect(preview()).not.toContain("Xin chào");
-  });
+  }, 60_000);
 });

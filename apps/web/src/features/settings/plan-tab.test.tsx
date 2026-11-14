@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // Cài đặt › Gói & sử dụng (ADR 0011): PAYG (số dư, mua lượt, lịch sử), CONTRACT (hợp đồng), quay lại từ PayOS (PAID / PENDING / CANCELLED).
 import type { Payment } from "@kb/contracts";
+import { vnToday } from "@kb/contracts";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -84,11 +85,14 @@ describe("PlanTab – gói Theo lượt", () => {
   }, 15_000);
 });
 
+/** Ngày theo giờ Việt Nam + n ngày – luật hợp đồng đếm "còn n ngày" theo vnToday (UTC+7); isoDay (ngày UTC) lệch 1 ngày từ 0h–7h sáng giờ VN. */
+const vnDay = (n: number) => { const d = new Date(`${vnToday(new Date())}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+
 describe("PlanTab – Hợp đồng năm", () => {
   it("thẻ hợp đồng: số HĐ, hiệu lực, trạng thái 'Sắp hết hạn · còn n ngày', liên hệ gia hạn; không có Mua lượt; a11y", async () => {
     const db = getDb();
     db.org.plan = { ...db.org.plan, code: "CONTRACT" };
-    db.billing.contracts[db.org.id] = { contractNo: "HĐ-01/2026", startsOn: isoDay(-340), endsOn: isoDay(12), valueVnd: "120000000" };
+    db.billing.contracts[db.org.id] = { contractNo: "HĐ-01/2026", startsOn: isoDay(-340), endsOn: vnDay(12), valueVnd: "120000000" };
     const { container } = renderWithProviders(<PlanTab />);
     expect(await screen.findByText("HĐ-01/2026", undefined, T)).toBeTruthy();
     expect(screen.getByText("Sắp hết hạn · còn 12 ngày")).toBeTruthy();

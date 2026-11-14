@@ -22,7 +22,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(nav.query),
 }));
 
-const T = { timeout: 30_000 };
+const T = { timeout: 120_000 };
 const dossier = () => getDb().dossiers.find((d) => d.id === "dos_028")!;
 // Truy vấn theo role trên cả trang in 120 dòng rất chậm → tìm hộp thoại / nút bằng DOM, thu hẹp bằng within.
 const dialog = () => waitFor(() => { const d = document.querySelector<HTMLElement>("[role=dialog]"); if (!d) throw new Error("no dialog"); return d; }, T);
@@ -150,7 +150,8 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "RECALLED")], { declarationStatus: "DRAFT" });
     await waitFor(() => expect(screen.queryByText(/chưa gọi về/)).toBeNull(), T);
     expect(screen.queryByText(/Đã gọi về tờ 2 – chỉ sửa dòng hàng/)).toBeNull();
-  }, 60_000);
+    // Bản in 120 dòng dựng lại nhiều lần trong test này: ~70 s khi cả bộ test chạy song song.
+  }, 300_000);
 
   it("gọi về các tờ còn lại bị từ chối → tải lại bản truyền", async () => {
     api.current = partial();

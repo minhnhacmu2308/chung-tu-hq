@@ -48,10 +48,10 @@ export async function fillAttachmentFromHys(
       changes.push({ key: `decl:${code}`, oldValue: old?.value ?? "", newValue: value });
     }
     await r.declarations.update(decl.orgId, decl.id, { fields, updatedAt: now });
+    await r.fieldAudit.append(ctx, now, changes.map((c) => ({ dossierId, ...c, source: "HYS_FILL" as const })));
     return ok({ outcome: fill.outcome, slot: fill.slot!, ...(fill.replaced ? { replaced: fill.replaced } : {}), afterApproval, changes });
   });
   if (!done.ok) return done;
-  const { changes, ...result } = done.value;
-  for (const c of changes) await deps.audit.append(ctx, { dossierId, ...c, source: "HYS_FILL" });
+  const { changes: _written, ...result } = done.value;
   return ok(result);
 }

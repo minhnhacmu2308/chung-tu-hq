@@ -60,12 +60,11 @@ async function writeRows(deps: CustomsDeps, ctx: Ctx, dossierId: string, branch:
       await r.containerLists.update(ctx.orgId, cur.id, patch);
       list = { ...cur, ...patch };
     }
-    return ok({ scope: scope.value, list, changes });
+    // Bất biến 6: mỗi ô người dùng đổi → field_audit append-only, cùng transaction với lệnh lưu bảng.
+    await r.fieldAudit.append(ctx, now, changes.map((c) => ({ dossierId, ...c, source: "CONT_LIST_EDIT" as const })));
+    return ok({ scope: scope.value, list });
   });
   if (!done.ok) return done;
-  // Bất biến 6: mỗi ô người dùng đổi → field_audit append-only. Theo đúng mẫu AMA_EDIT (post-amendment.ts): writer audit là port của extraction (kết nối pool khác),
-  // không tham gia transaction của integration và quy tắc core cấm gọi port module khác trong transaction → ghi ngay sau khi lưu bảng.
-  for (const c of done.value.changes) await deps.audit.append(ctx, { dossierId, ...c, source: "CONT_LIST_EDIT" });
   return deps.uow.asOrg(ctx, async (r) => ok(await buildView(ctx, snap, done.value.scope, r, done.value.list, null)));
 }
 

@@ -76,8 +76,11 @@ export async function linkLineItem(deps: DeclarationDeps, ctx: Ctx, lineItemId: 
   const old = row.catalogItemId ? (await describeSafe(deps, ctx.orgId, [row.catalogItemId], row.dossierId))[row.catalogItemId]?.itemNo ?? row.catalogItemId : "";
   const now = deps.clock.now();
   const patch = { catalogItemId: info.id, catalogAliasId: aliasId, itemCode: info.customs?.code ?? null, ...(row.catalogItemId === info.id ? {} : { unitFactor: null }), updatedAt: now };
-  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(ctx.orgId, row.id, patch));
-  await deps.audit.append(ctx, { dossierId: row.dossierId, key: `catalog:${row.lineNo}`, oldValue: old, newValue: info.itemNo, source: "CATALOG_EDIT" });
+  const itemNo = info.itemNo;
+  await deps.uow.asOrg(ctx, async (r) => {
+    await r.lineItems.update(ctx.orgId, row.id, patch);
+    await r.fieldAudit.append(ctx, now, [{ dossierId: row.dossierId, key: `catalog:${row.lineNo}`, oldValue: old, newValue: itemNo, source: "CATALOG_EDIT" }]);
+  });
   await deps.dossiers.publish(ctx.orgId, row.dossierId, { type: "dossier.updated" });
   return ok(await viewOf(deps, ctx, { ...row, ...patch }));
 }
@@ -92,8 +95,10 @@ export async function setLineUnitFactor(deps: DeclarationDeps, ctx: Ctx, lineIte
   if (factor !== null && !CatalogFactorSchema.safeParse(factor).success) return err(domainError("VALIDATION", "Hệ số phải là số lớn hơn 0"));
   if (!row.catalogItemId) return err(domainError("INVALID_STATE", "Dòng chưa gắn mặt hàng danh mục"));
   const now = deps.clock.now();
-  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(ctx.orgId, row.id, { unitFactor: factor, updatedAt: now }));
-  await deps.audit.append(ctx, { dossierId: row.dossierId, key: `unitFactor:${row.lineNo}`, oldValue: row.unitFactor ?? "", newValue: factor ?? "", source: "CATALOG_EDIT" });
+  await deps.uow.asOrg(ctx, async (r) => {
+    await r.lineItems.update(ctx.orgId, row.id, { unitFactor: factor, updatedAt: now });
+    await r.fieldAudit.append(ctx, now, [{ dossierId: row.dossierId, key: `unitFactor:${row.lineNo}`, oldValue: row.unitFactor ?? "", newValue: factor ?? "", source: "CATALOG_EDIT" }]);
+  });
   await deps.dossiers.publish(ctx.orgId, row.dossierId, { type: "dossier.updated" });
   return ok(await viewOf(deps, ctx, { ...row, unitFactor: factor, updatedAt: now }));
 }

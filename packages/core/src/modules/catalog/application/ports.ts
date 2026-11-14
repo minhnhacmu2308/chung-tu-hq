@@ -1,5 +1,5 @@
 import type { AliasSource, AliasStatus, CatalogItemKind, CatalogMode, CodeSetKind, ItemMatchCandidateDto, ItemMatchLevel, ItemStatus } from "@kb/contracts";
-import type { OrgAuditWriter } from "../../../shared/audit.js";
+import type { FieldAuditRepo, OrgAuditWriter } from "../../../shared/audit.js";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
 import type { JobQueue } from "../../../shared/queue.js";
@@ -132,6 +132,11 @@ export interface CatalogItemRepo {
   markMerged(orgId: OrgId, id: string, intoId: string, by: string, at: Date): Promise<boolean>;
   /** times_declared + 1 NGUYÊN TỬ (một câu UPDATE, không đọc-rồi-ghi) kèm các cột lần khai gần nhất (nếu có). */
   incrementDeclared(orgId: OrgId, id: string, patch: Partial<Pick<CatalogItemRow, "lastDeclarationNo" | "lastDeclarationDate" | "lastTypeCode" | "updatedAt">>): Promise<void>;
+  /**
+   * Số tờ khai Hải quan cấp (sau duyệt): ghi last_declaration_no + ngày NGUYÊN TỬ (một câu UPDATE) chỉ khi ngày đang lưu trống hoặc ≤ `date`
+   * (không đè tờ khai mới hơn). Không đụng times_declared. true = đã ghi.
+   */
+  recordDeclarationNo(orgId: OrgId, id: string, declarationNo: string, date: string, now: Date): Promise<boolean>;
 }
 
 export interface CodeSetRepo {
@@ -204,22 +209,17 @@ export interface CatalogRepos {
   conversions: ItemConversionRepo;
   queue: MatchQueueRepo;
   imports: CatalogImportRepo;
+  /**
+   * field_audit (bảng dùng chung, append-only) – lịch sử mặt hàng (CATALOG_EDIT; `dossierId` = id mặt hàng, cột dossier_id là khóa đối tượng, không FK).
+   * Ghi CÙNG transaction với lệnh sửa danh mục (bất biến 6); đọc lịch sử cũng qua đây.
+   */
+  fieldAudit: FieldAuditRepo;
 }
 
 export interface CatalogUow {
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CatalogRepos) => Promise<T>): Promise<T>;
 }
 
-/**
- * field_audit (thuộc extraction) – ghi SAU khi transaction của catalog commit (tiền lệ AMA_EDIT / CONT_LIST_EDIT).
- * `dossierId` = id mặt hàng (đối tượng của lịch sử; cột dossier_id là khóa đối tượng, field_audit không có FK).
- */
-export interface CatalogAuditWriter {
-  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "CATALOG_EDIT" }): Promise<void>;
-  /** Lịch sử CATALOG_EDIT của một mặt hàng (lọc org), mới nhất trước, tối đa `limit` dòng. Gọi ngoài transaction của catalog. */
-  list(ctx: { orgId: OrgId; userId: UserId }, itemId: string, limit: number): Promise<CatalogHistoryRow[]>;
-}
-export type CatalogHistoryRow = { key: string; oldValue: string; newValue: string; userId: string; at: Date };
 
 /** Thành viên doanh nghiệp (identity) – kiểm người phụ trách bộ mã: đang hoạt động và vai trò ≠ VIEWER. Gọi ngoài transaction. */
 export interface CatalogMembers {
@@ -248,7 +248,6 @@ export interface CatalogDocumentSource {
 
 export type CatalogDeps = {
   uow: CatalogUow;
-  audit: CatalogAuditWriter;
   members: CatalogMembers;
   /** Nhật ký hoạt động doanh nghiệp (bộ mã, chế độ, thiết lập) – tùy chọn, container nối từ identity. */
   orgAudit?: OrgAuditWriter;

@@ -338,7 +338,7 @@ function build(): Container {
   declaration.orgAudit = identity.audit;
   customs.orgAudit = identity.audit;
   skill.audit = identity.audit;
-  // Danh mục hàng hóa: field_audit qua extraction (CATALOG_EDIT); người phụ trách bộ mã = thành viên ACTIVE, vai trò ≠ VIEWER (identity).
+  // Danh mục hàng hóa: field_audit (CATALOG_EDIT) ghi cùng transaction qua uow của catalog; người phụ trách bộ mã = thành viên ACTIVE, vai trò ≠ VIEWER (identity).
   const catalog = createCatalogInfrastructure({
     db, extraction, declaration, jobs: queue, orgAudit: identity.audit, clock: systemClock,
     members: {
@@ -357,6 +357,8 @@ function build(): Container {
   const catalogLinks = createCatalogLinks(catalog);
   declaration.catalog = catalogLinks;
   teach.catalog = catalogLinks;
+  // Hải quan cấp số tờ khai nhánh → số tờ khai cuối của mặt hàng (integration gọi NGOÀI transaction, lỗi chỉ log).
+  customs.catalog = catalogPort;
   const jobs = new BullMqJobMonitor(redis);
   const system: SystemProbe = {
     async services(now) {

@@ -57,8 +57,6 @@ function repos(tx: Tx): ExtractionRepos {
     },
     audit: {
       insert: async (row) => void (await tx.insert(fieldAudit).values(row)),
-      listForObject: async (orgId, objectId, source, limit) =>
-        (await tx.select().from(fieldAudit).where(and(eq(fieldAudit.orgId, orgId), eq(fieldAudit.dossierId, objectId), eq(fieldAudit.source, source))).orderBy(desc(fieldAudit.at), desc(fieldAudit.id)).limit(limit)) as AuditRow[],
     },
     manual: {
       get: async (orgId, dossierId) => {

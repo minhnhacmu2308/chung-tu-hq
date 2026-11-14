@@ -60,8 +60,8 @@ Ghi lại trong lúc dựng backend theo `docs/superpowers/specs/2026-10-13-back
 | C3 | Định mức | Định mức nguyên vật liệu theo mặt hàng chuẩn (loại MATERIAL / PRODUCT) |
 | C4 | Đồng bộ ERP hai chiều | Hiện chỉ nhập/xuất Excel theo bộ mã |
 | C5 | Xóa bảng `product_catalog` | Giữ chỉ đọc một bản phát hành sau migration `0037`, rồi xóa bảng + bỏ khỏi schema `declaration` |
-| C6 | Số tờ khai cuối của mặt hàng | Lúc duyệt chưa có số nên `recordDeclared` ghi `declarationNo: null` (`declaration.ts` `settleCatalog`) – chi tiết mặt hàng chỉ có ngày khai. Khi Hải quan cấp số (customs-bridge) gọi thêm cổng danh mục để ghi `last_declaration_no` |
-| C7 | `field_audit` cùng giao dịch với lệnh sửa | `line-catalog.ts` (gắn mặt hàng / hệ số lô) sửa dòng rồi mới ghi `field_audit` ở giao dịch riêng (writer thuộc module extraction) – tiến trình chết giữa hai bước thì mất dòng audit. Nợ chung của module declaration (`declaration.ts`, `line-items.ts` cùng mẫu): cân nhắc outbox hoặc writer audit trong uow |
+| C6 | ~~Số tờ khai cuối của mặt hàng~~ | **Xong 2026-11-14:** Hải quan cấp số tờ khai nhánh (`process-outbox` IDA, `poll-status` khi số đổi) → `CatalogPort.recordDeclarationNo` ghi `last_declaration_no` (+ ngày) lên mặt hàng của các dòng thuộc tờ đó (UPDATE có điều kiện ngày, không cộng `times_declared`), ngoài transaction, lỗi chỉ log; mock web làm như vậy |
+| C7 | ~~`field_audit` cùng giao dịch với lệnh sửa~~ | **Xong 2026-11-14:** bảng `field_audit` chuyển sang `db/schema/shared.ts` (không đổi SQL); declaration, catalog, integration ghi qua repo `fieldAudit` trong uow của mình (`src/db/field-audit.ts`), cùng transaction với lệnh sửa – bỏ các port `AuditWriter` / `CatalogAuditWriter` / `CustomsAuditWriter` |
 
 ## Ngoài phạm vi chuẩn trường chứng từ (2026-10-15)
 

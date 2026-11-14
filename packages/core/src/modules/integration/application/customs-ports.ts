@@ -1,4 +1,4 @@
-import type { OrgAuditWriter } from "../../../shared/audit.js";
+import type { FieldAuditRepo, OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
 import type { AttachKind, ContainerListRow as ContainerListRowData, ContainerListStatus, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, FptTraceEntry, HysFill, HysStatus, KvgsFetchStatus, KvgsSheet, PostAmendment, StepId, SubmissionState, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
@@ -121,15 +121,13 @@ export interface CustomsRepos {
     insert(row: KvgsSheetRecord): Promise<void>;
     update(orgId: string, id: string, patch: Partial<Omit<KvgsSheetRecord, "id" | "orgId" | "dossierId" | "branch" | "createdAt">>): Promise<void>;
   };
+  /** field_audit (bảng dùng chung, append-only, bất biến 6) – ô bản khai bổ sung (AMA_EDIT), danh sách container (CONT_LIST_EDIT): cùng transaction với lệnh sửa. */
+  fieldAudit: FieldAuditRepo;
 }
 
 /** Bản khai bổ sung trong DB (thời điểm là Date; DTO `PostAmendment` dùng chuỗi ISO). */
 export type PostAmendmentRow = Omit<PostAmendment, "approvedAt" | "createdAt" | "updatedAt"> & { orgId: string; branch: number; approvedAt: Date | null; createdAt: Date; updatedAt: Date };
 
-/** field_audit (append-only, bất biến 6) – composition root nối sang bảng của extraction. */
-export interface CustomsAuditWriter {
-  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "AMA_EDIT" | "CONT_LIST_EDIT" }): Promise<void>;
-}
 export interface CustomsUow {
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T>;
 }
@@ -212,6 +210,16 @@ export interface DeclarationReader {
   ): Promise<{ outcome: "FILLED" | "ALREADY" | "FULL" | "REPLACED" | "LOCKED"; slot?: 1 | 2 | 3; replaced?: { code: string; receipt: string }; afterApproval: boolean }>;
   /** Hồ sơ có tờ khai APPROVED/SUBMITTED (màn Khai báo Hải quan). */
   listForCustoms(orgId: string): Promise<{ dossierId: string; status: DeclarationStatus; approvedAt: Date | null }[]>;
+  /** Dòng hàng hiện tại của hồ sơ + mặt hàng danh mục đã gắn (C6 – số tờ khai cuối của mặt hàng). Không nối → bỏ qua. */
+  lineCatalogItems?(orgId: string, dossierId: string): Promise<{ declarationId: string; lines: { lineNo: number; catalogItemId: string | null }[] } | null>;
+}
+
+/**
+ * Danh mục hàng hóa (module catalog – CatalogPort.recordDeclarationNo; container nối). Gọi NGOÀI transaction của integration;
+ * lỗi chỉ ghi log – xử lý Hải quan không bao giờ hỏng vì danh mục.
+ */
+export interface CustomsCatalogPort {
+  recordDeclarationNo(orgId: OrgId, rows: { itemId: string; declarationNo: string; date: string }[]): Promise<{ updated: number }>;
 }
 
 export type DossierBrief = { id: string; code: string; direction: "NK" | "XK"; transportMode: TransportMode; typeCode: string; partner: string; status: DossierStatus; step: StepId; declarationNo: string | null; updatedAt: Date; /** Người tạo hồ sơ (nguyên tắc 4 mắt). */ ownerId?: string };
@@ -244,9 +252,10 @@ export type CustomsDeps = {
   dossiers: CustomsDossierPort;
   validation: ValidationReader;
   certificates: CertificateReader;
-  audit: CustomsAuditWriter;
   /** Nhật ký hoạt động doanh nghiệp (mở lại tờ khai); container nối từ identity. */
   orgAudit?: OrgAuditWriter;
+  /** Danh mục hàng hóa: Hải quan cấp số tờ khai nhánh → số tờ khai cuối của mặt hàng trên các dòng của tờ đó (C6). Không nối → bỏ qua. */
+  catalog?: CustomsCatalogPort;
   /** Cấu hình doanh nghiệp: nguyên tắc 4 mắt khi phê duyệt bản khai bổ sung. */
   org: { fourEyes(orgId: string): Promise<boolean> };
   /** Khoảng cách giữa hai lần hỏi trạng thái (ms); gateway giả dùng ngắn để demo. */

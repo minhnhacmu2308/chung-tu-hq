@@ -4,7 +4,7 @@ import { CatalogFactorSchema, itemCodeKey, type AliasSource, type ItemAlias, typ
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { ALIAS_ACTIVE_UQ, aliasNotFound, auditKeyAlias, codeTaken, factorRequired, flushAudit, isDuplicate, itemNotFound, needsFactor, setNotFound, toAliasDto, type AuditEntry } from "./common.js";
+import { ALIAS_ACTIVE_UQ, aliasNotFound, auditKeyAlias, codeTaken, factorRequired, asOrgAudited, isDuplicate, itemNotFound, needsFactor, setNotFound, toAliasDto, type AuditEntry } from "./common.js";
 import { managesSet, requireContributor, requireSetManager } from "./permissions.js";
 import { ensurePartnerSet } from "./partner-set.js";
 import type { CatalogDeps, CatalogItemRow, CatalogRepos, ItemAliasRow, MatchQueueRow } from "./ports.js";
@@ -16,17 +16,16 @@ type Tx<T> = Result<{ value: T; audit: AuditEntry[] }>;
 const badFactor = (factor: string | undefined) => factor !== undefined && !CatalogFactorSchema.safeParse(factor).success;
 const factorInvalid = () => err(domainError("VALIDATION", "Hệ số phải là số lớn hơn 0"));
 
-/** Chạy transaction; trùng unique (đua đồng thời) → CATALOG_CODE_TAKEN; ghi field_audit sau commit. */
+/** Chạy transaction (field_audit ghi trong cùng transaction); trùng unique (đua đồng thời) → CATALOG_CODE_TAKEN. */
 async function run<T>(deps: CatalogDeps, ctx: Ctx, fn: (r: CatalogRepos) => Promise<Tx<T>>): Promise<Result<T>> {
   let done: Tx<T>;
   try {
-    done = await deps.uow.asOrg(ctx, fn);
+    done = await asOrgAudited(deps, ctx, fn);
   } catch (e) {
     if (isDuplicate(e, ALIAS_ACTIVE_UQ)) return err(codeTaken(null));
     throw e;
   }
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   return ok(done.value.value);
 }
 

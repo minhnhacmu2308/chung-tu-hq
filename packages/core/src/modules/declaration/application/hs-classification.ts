@@ -439,10 +439,14 @@ export async function reclassifyHs(deps: DeclarationDeps, ctx: Ctx, lineItemId: 
   if (LOCKED.includes(dossier.status)) return err(domainError("DOSSIER_LOCKED", "Tờ khai đã duyệt/truyền – mở lại tờ khai trước"));
   // Gỡ dòng khỏi lượt cũ ngay (kết quả cũ về muộn không ghi đè), rồi để worker tạo lượt mới.
   const originChanged = !!input.origin && input.origin !== it.origin;
-  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(it.orgId, it.id, { ...(originChanged ? { origin: input.origin! } : {}), hsStatus: "queued", hsError: null, hsQuestion: null, hsJobId: null, hsItemId: null, updatedAt: deps.clock.now() }));
+  const now = deps.clock.now();
+  await deps.uow.asOrg(ctx, async (r) => {
+    await r.lineItems.update(it.orgId, it.id, { ...(originChanged ? { origin: input.origin! } : {}), hsStatus: "queued", hsError: null, hsQuestion: null, hsJobId: null, hsItemId: null, updatedAt: now });
+    // Xuất xứ là dữ liệu tờ khai: ghi field_audit (bất biến 6) cùng transaction với lệnh sửa.
+    if (originChanged) await r.fieldAudit.append(ctx, now, [{ dossierId: it.dossierId, key: `origin:${it.lineNo}`, oldValue: it.origin, newValue: input.origin!, source: "DECL_EDIT" }]);
+  });
   if (originChanged) {
-    // Xuất xứ là dữ liệu tờ khai: ghi field_audit (bất biến 6) và dựng lại tờ khai nháp.
-    await deps.audit.append(ctx, { dossierId: it.dossierId, key: `origin:${it.lineNo}`, oldValue: it.origin, newValue: input.origin!, source: "DECL_EDIT" });
+    // Dựng lại tờ khai nháp theo xuất xứ mới.
     const rebuilt = await rebuildDraft(deps, ctx, it.dossierId);
     if (!rebuilt.ok) return rebuilt;
   }

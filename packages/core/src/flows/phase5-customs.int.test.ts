@@ -18,7 +18,7 @@ import { createValidationInfrastructure } from "../modules/validation/infrastruc
 import { finishReading, processDocument, type ExtractionDeps } from "../modules/extraction/index.js";
 import { createDocumentsAdapter, DrizzleExtractionUow, FakeAiProvider } from "../modules/extraction/infrastructure/index.js";
 import { approveDeclaration, confirmHs, getDeclarationView, listLineItems, moveToReview, runAgent, startAgentRun, updateDeclarationField, type DeclarationDeps } from "../modules/declaration/index.js";
-import { createAuditWriter, createDossierAdapter, createShipmentReader, createValidationReader, DrizzleDeclarationUow, FakeHsClassificationService } from "../modules/declaration/infrastructure/index.js";
+import { createDossierAdapter, createShipmentReader, createValidationReader, DrizzleDeclarationUow, FakeHsClassificationService } from "../modules/declaration/infrastructure/index.js";
 import { addCertificate, listCertificates, type IdentityDeps } from "../modules/identity/index.js";
 import { FakeHasher, FakeTaxRegistry, InMemoryRateLimiter, RecordingMailer } from "../modules/identity/application/test/fakes.js";
 import { DrizzlePlansReader } from "../modules/identity/infrastructure/drizzle-plans-reader.js";
@@ -58,13 +58,13 @@ beforeAll(async () => {
   declaration = {
     uow: duow, queue, hs: new FakeHsClassificationService(() => duow.asOrg({ orgId: asOrgId("org_anphat"), userId: asUserId("") }, (r) => r.catalogHs.all())),
     shipments: createShipmentReader(extraction, dossier), dossiers: createDossierAdapter(dossier), validation: createValidationReader(validation), org: { get: async () => ORG },
-    audit: createAuditWriter(extraction), users: { names: async (_o, ids) => new Map(ids.map((id) => [id, id])) }, clock: systemClock, idGen: ulidIdGen,
+    users: { names: async (_o, ids) => new Map(ids.map((id) => [id, id])) }, clock: systemClock, idGen: ulidIdGen,
   };
   identity = { uow: new DrizzleIdentityUow(db), plans: new DrizzlePlansReader(db), hasher: new FakeHasher(), rateLimiter: new InMemoryRateLimiter(systemClock), mailer: new RecordingMailer(), taxRegistry: new FakeTaxRegistry(), clock: systemClock, idGen: ulidIdGen, appUrl: "http://localhost:3100" };
   customs = {
     uow: new DrizzleCustomsUow(db), queue, gateway: new FakeCustomsGateway({ clearAfterPolls: 2, flakyHys: false }),
     declarations: createDeclarationReader(declaration), dossiers: createCustomsDossierPort(dossier), validation: createCustomsValidationReader(validation), certificates: createCertificateReader(identity),
-    audit: declaration.audit, org: { fourEyes: async () => false }, pollDelayMs: 1, clock: systemClock, idGen: ulidIdGen,
+    org: { fourEyes: async () => false }, pollDelayMs: 1, clock: systemClock, idGen: ulidIdGen,
   };
 });
 afterAll(async () => {

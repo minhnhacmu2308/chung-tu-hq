@@ -10,7 +10,7 @@ import { getDeclarationProfile, listRuleOptions, saveDeclarationProfile } from "
 import { getDeclarationView } from "../declaration.js";
 import { confirmHs, listLineItems } from "../line-items.js";
 import type { DeclarationDeps } from "../ports.js";
-import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit, ScriptedHs } from "../test/fakes.js";
+import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, ScriptedHs } from "../test/fakes.js";
 import { InMemoryDeclarationUow } from "../test/in-memory-uow.js";
 
 const ctx = (role: Ctx["role"], org = "org_a"): Ctx => ({ orgId: asOrgId(org), userId: asUserId(`usr_${role}`), role });
@@ -26,7 +26,7 @@ beforeEach(() => {
   deps = {
     uow, queue, hs: new ScriptedHs([{ match: /./, code: "8482.10.00", description: "Ổ bi", confidence: 0.9 }]),
     shipments: new FakeShipments({ dos_1: hansol() }, { dos_1: [] }), dossiers: new FakeDossiers([{ ...DOSSIER, orgId: "org_a", status: "NEEDS_REVIEW", step: "ocr" }], { dos_1: [] }),
-    validation: fakeValidation({}), org: fakeOrg(ORG), audit: new RecordingAudit(), users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
+    validation: fakeValidation({}), org: fakeOrg(ORG), users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
   };
 });
 

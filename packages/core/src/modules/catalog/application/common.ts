@@ -1,7 +1,8 @@
-// Phần dùng chung của các use case danh mục: ánh xạ DTO, lỗi, nhật ký field_audit (ghi sau commit), tra bộ mã theo loại.
+// Phần dùng chung của các use case danh mục: ánh xạ DTO, lỗi, nhật ký field_audit (cùng transaction), tra bộ mã theo loại.
 import { itemUnitKey, type CatalogItem, type CatalogMode, type CodeSet, type CodeSetKind, type ItemAlias } from "@kb/contracts";
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
+import type { Result } from "../../../shared/result.js";
 import type { OrgId } from "../../../shared/ids.js";
 import type { CatalogDeps, CatalogItemRow, CatalogRepos, CatalogSettingsRow, CodeSetRow, ItemAliasRow, ItemConversionRow } from "./ports.js";
 
@@ -17,11 +18,23 @@ export const DEFAULT_SET_NAME: Record<CodeSetKind, string> = { SHARED: "Mã chun
 /** `mode` NULL = chưa thiết lập → coi như PER_DEPARTMENT. */
 export const effectiveMode = (s: CatalogSettingsRow | null): CatalogMode => s?.mode ?? "PER_DEPARTMENT";
 
-/** Mục field_audit gom trong transaction, ghi sau commit. `itemId` là đối tượng của lịch sử (cột dossier_id). */
+/** Mục field_audit gom trong transaction. `itemId` là đối tượng của lịch sử (cột dossier_id). */
 export type AuditEntry = { itemId: string; key: string; oldValue: string; newValue: string };
 
-export async function flushAudit(deps: CatalogDeps, ctx: { orgId: OrgId; userId: Ctx["userId"] }, entries: AuditEntry[]): Promise<void> {
-  for (const e of entries) await deps.audit.append(ctx, { dossierId: e.itemId, key: e.key, oldValue: e.oldValue, newValue: e.newValue, source: "CATALOG_EDIT" });
+type AuditCtx = { orgId: OrgId; userId: Ctx["userId"] };
+
+/** Ghi các mục field_audit (CATALOG_EDIT) qua repo của transaction đang chạy – commit/rollback cùng lệnh sửa (bất biến 6). */
+export async function writeAudit(r: CatalogRepos, ctx: AuditCtx, at: Date, entries: readonly AuditEntry[]): Promise<void> {
+  await r.fieldAudit.append(ctx, at, entries.map((e) => ({ dossierId: e.itemId, key: e.key, oldValue: e.oldValue, newValue: e.newValue, source: "CATALOG_EDIT" as const })));
+}
+
+/** Transaction danh mục có nhật ký: callback trả Result kèm `audit`; kết quả ok → ghi field_audit ngay trong transaction đó, trước commit. */
+export function asOrgAudited<V extends { audit: AuditEntry[] }>(deps: CatalogDeps, ctx: AuditCtx, fn: (r: CatalogRepos) => Promise<Result<V>>): Promise<Result<V>> {
+  return deps.uow.asOrg(ctx, async (r) => {
+    const res = await fn(r);
+    if (res.ok) await writeAudit(r, ctx, deps.clock.now(), res.value.audit);
+    return res;
+  });
 }
 
 export const itemNotFound = (): DomainError => reasonError("NOT_FOUND", "PRODUCT_NOT_FOUND");

@@ -2,7 +2,7 @@ import type { DocKind, HsAnswerRequest, HsCreateRequest, HsJob, HsJobItem, Shipm
 import type { ProgressEvent } from "../../../dossier/index.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import type { Result } from "../../../../shared/result.js";
-import { HsApiError, type AuditWriter, type CatalogItemInfo, type CatalogQuery, type CatalogResolved, type DeclarationCatalogPort, type DossierInfo, type DossierPort, type HsClassificationService, type OrgInfo, type OrgReader, type ShipmentReader, type UserNames, type ValidationReader } from "../ports.js";
+import { HsApiError, type CatalogItemInfo, type CatalogQuery, type CatalogResolved, type DeclarationCatalogPort, type DossierInfo, type DossierPort, type HsClassificationService, type OrgInfo, type OrgReader, type ShipmentReader, type UserNames, type ValidationReader } from "../ports.js";
 
 /**
  * HSCodePro giả cho test use case. Mặc định: lượt hoàn tất ngay theo `rules` (khớp mô tả).
@@ -100,13 +100,6 @@ export class FakeDossiers implements DossierPort {
   }
   async putFile(key: string, body: Buffer) {
     this.files.set(key, body);
-  }
-}
-
-export class RecordingAudit implements AuditWriter {
-  readonly rows: { orgId: string; dossierId: string; key: string; oldValue: string; newValue: string; source: string }[] = [];
-  async append(ctx: { orgId: string }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "CONT_LIST_EDIT" | "CATALOG_EDIT" }) {
-    this.rows.push({ orgId: ctx.orgId, ...row });
   }
 }
 

@@ -12,7 +12,7 @@ import { DOSSIER, hansol, ORG } from "../../domain/test/shipment.js";
 import { answerHsQuestion, pollHsJob, startHsClassification } from "../hs-classification.js";
 import { confirmHs, listLineItems } from "../line-items.js";
 import type { DeclarationDeps } from "../ports.js";
-import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit, ScriptedHs } from "../test/fakes.js";
+import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, ScriptedHs } from "../test/fakes.js";
 import { InMemoryDeclarationUow } from "../test/in-memory-uow.js";
 
 const ORG_ID = "org_a";
@@ -48,7 +48,7 @@ beforeEach(() => {
   shipments = new FakeShipments({ [D]: ledShipment(null) });
   deps = {
     uow, queue, hs, shipments, dossiers: new FakeDossiers([{ ...DOSSIER, orgId: ORG_ID, status: "NEEDS_REVIEW", step: "ocr" }], { [D]: [] }), validation: fakeValidation({}),
-    org: fakeOrg(ORG), audit: new RecordingAudit(), users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
+    org: fakeOrg(ORG), users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
   };
 });
 

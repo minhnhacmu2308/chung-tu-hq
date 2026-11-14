@@ -90,8 +90,10 @@ export async function confirmHs(deps: DeclarationDeps, ctx: Ctx, itemId: string,
     rates = withHarmonized(rates, harmonizeRates(code, rates, lesson, siblings.filter((x) => x.id !== item.id), item.origin, !!shipment?.origin.coNo.value));
   }
   const patch = { hsConfirmed: code, hsConfirmedBy: ctx.userId, hsConfirmedAt: now, importDutyRate: rates.importDutyRate, vatRate: rates.vatRate, policyNote: rates.policyNote, taxDetail: rates.taxDetail, updatedAt: now };
-  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(item.orgId, item.id, patch));
-  await deps.audit.append(ctx, { dossierId: item.dossierId, key: `hs:${item.lineNo}`, oldValue: item.hsConfirmed ?? item.hsSuggested ?? "", newValue: code, source: "HS_CONFIRM" });
+  await deps.uow.asOrg(ctx, async (r) => {
+    await r.lineItems.update(item.orgId, item.id, patch);
+    await r.fieldAudit.append(ctx, now, [{ dossierId: item.dossierId, key: `hs:${item.lineNo}`, oldValue: item.hsConfirmed ?? item.hsSuggested ?? "", newValue: code, source: "HS_CONFIRM" }]);
+  });
   if (fetchTax) await deps.queue.enqueue("hs-reclassify", { orgId: ctx.orgId, userId: ctx.userId, dossierId: item.dossierId, lineItemId: item.id }, { jobId: `hs-retax:${item.id}:${code}:${now.getTime()}` });
   const rebuilt = await rebuildDraft(deps, ctx, item.dossierId);
   if (!rebuilt.ok) return rebuilt;
@@ -115,8 +117,10 @@ export async function unconfirmHs(deps: DeclarationDeps, ctx: Ctx, itemId: strin
   const blocked = await sheetScopeError(deps, ctx, item.dossierId, { kind: "LINE_NO", lineNo: item.lineNo });
   if (blocked) return err(blocked);
   const patch = { hsConfirmed: null, hsConfirmedBy: null, hsConfirmedAt: null, importDutyRate: null, vatRate: null, policyNote: null, taxDetail: null, updatedAt: now };
-  await deps.uow.asOrg(ctx, (r) => r.lineItems.update(item.orgId, item.id, patch));
-  if (item.hsConfirmed) await deps.audit.append(ctx, { dossierId: item.dossierId, key: `hs:${item.lineNo}`, oldValue: item.hsConfirmed, newValue: "", source: "HS_CONFIRM" });
+  await deps.uow.asOrg(ctx, async (r) => {
+    await r.lineItems.update(item.orgId, item.id, patch);
+    if (item.hsConfirmed) await r.fieldAudit.append(ctx, now, [{ dossierId: item.dossierId, key: `hs:${item.lineNo}`, oldValue: item.hsConfirmed, newValue: "", source: "HS_CONFIRM" }]);
+  });
   const rebuilt = await rebuildDraft(deps, ctx, item.dossierId);
   if (!rebuilt.ok) return rebuilt;
   return ok(toLineItem({ ...item, ...patch }));

@@ -8,7 +8,7 @@ import {
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { ALIAS_ACTIVE_UQ, auditKeyAlias, codeTaken, factorRequired, flushAudit, isDuplicate, itemNotFound, needsFactor, type AuditEntry } from "./common.js";
+import { ALIAS_ACTIVE_UQ, auditKeyAlias, codeTaken, factorRequired, asOrgAudited, isDuplicate, itemNotFound, needsFactor, type AuditEntry } from "./common.js";
 import { freeItemNo } from "./items.js";
 import { requireContributor, requireSetManager } from "./permissions.js";
 import type { CatalogDeps, CatalogItemRow, CatalogRepos, ItemAliasRow, MatchQueueRow } from "./ports.js";
@@ -92,7 +92,7 @@ export async function decideQueue(deps: CatalogDeps, ctx: Ctx, id: string, input
   const now = deps.clock.now();
   let done: Result<{ out: MatchQueueRow; audit: AuditEntry[] }>;
   try {
-    done = await deps.uow.asOrg(ctx, async (r): Promise<Result<{ out: MatchQueueRow; audit: AuditEntry[] }>> => {
+    done = await asOrgAudited(deps, ctx, async (r): Promise<Result<{ out: MatchQueueRow; audit: AuditEntry[] }>> => {
       const q = await r.queue.get(ctx.orgId, id);
       if (!q) return err(queueNotFound());
       const can = await requireSetManager(r, ctx, q.codeSetId);
@@ -169,7 +169,6 @@ export async function decideQueue(deps: CatalogDeps, ctx: Ctx, id: string, input
     throw e;
   }
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   return ok(toQueueDto(done.value.out));
 }
 

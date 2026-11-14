@@ -1,4 +1,4 @@
-import type { OrgAuditWriter } from "../../../shared/audit.js";
+import type { FieldAuditRepo, OrgAuditWriter } from "../../../shared/audit.js";
 import type { DomainError } from "../../../shared/errors.js";
 import type { Ctx } from "../../../shared/ctx.js";
 import type { Result } from "../../../shared/result.js";
@@ -111,6 +111,8 @@ export interface DeclarationRepos {
     /** Tỷ giá gần nhất ≤ ngày (VND / 1 đơn vị). */
     latest(currency: string, date: string): Promise<{ rate: string; date: string; source: "VCB" | "MANUAL" | "SEED"; snapshotAt: Date | null } | null>;
   };
+  /** field_audit (bảng dùng chung, append-only) – ghi CÙNG transaction với lệnh sửa dòng / tờ khai (bất biến 6). */
+  fieldAudit: FieldAuditRepo;
 }
 
 export interface DeclarationUow {
@@ -161,11 +163,6 @@ export interface OrgReader {
   get(orgId: string): Promise<OrgInfo>;
 }
 
-/** field_audit (bảng của extraction) – append-only. */
-export interface AuditWriter {
-  append(ctx: { orgId: OrgId; userId: UserId }, row: { dossierId: string; key: string; oldValue: string; newValue: string; source: "HS_CONFIRM" | "DECL_EDIT" | "AMA_EDIT" | "CHARGE_EDIT" | "HYS_FILL" | "CONT_LIST_EDIT" | "CATALOG_EDIT" }): Promise<void>;
-}
-
 /** Kết quả tra mã một dòng (module catalog – resolveItem): `itemId` chỉ khi SURE. */
 export type CatalogResolved = { itemId: string | null; aliasId?: string; level: "SURE" | "MAYBE" | "NONE"; reason: string; factor?: string; codeSetId: string | null };
 export type CatalogQuery = { codeSetId?: string | null; partnerName?: string | null; code?: string | null; name?: string | null; hsCode?: string | null; unit?: string | null };
@@ -205,7 +202,6 @@ export type DeclarationDeps = {
   dossiers: DossierPort;
   validation: ValidationReader;
   org: OrgReader;
-  audit: AuditWriter;
   /** Nhật ký hoạt động doanh nghiệp (duyệt tờ khai, danh mục hàng hóa); container nối từ identity. */
   orgAudit?: OrgAuditWriter;
   users: UserNames;

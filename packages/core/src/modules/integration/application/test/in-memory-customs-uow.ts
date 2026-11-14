@@ -1,9 +1,12 @@
+import { InMemoryFieldAuditLog } from "../../../../shared/audit.js";
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type { ContainerListRecord, CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
 
 /** Fake mô phỏng RLS theo org; outbox unique theo idempotency_key; messages append-only. */
 export class InMemoryCustomsUow implements CustomsUow {
   readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[], hys: [] as HysSubmissionRow[], hysFiles: [] as HysFileRow[], inbox: [] as InboxRow[], containerLists: [] as ContainerListRecord[], kvgs: [] as KvgsSheetRecord[] };
+  /** Bảng field_audit (ghi qua repos.fieldAudit trong transaction). */
+  readonly fieldAudit = new InMemoryFieldAuditLog();
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T> {
     const d = this.data;
     const org = ctx.orgId as string;
@@ -154,6 +157,7 @@ export class InMemoryCustomsUow implements CustomsUow {
           if (k) Object.assign(k, clone(Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))));
         },
       },
+      fieldAudit: this.fieldAudit.repo(org),
     });
   }
 }

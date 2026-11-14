@@ -3,7 +3,7 @@ import { CatalogFactorSchema, itemUnitKey, type UnitConversion } from "@kb/contr
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { flushAudit, itemNotFound, type AuditEntry } from "./common.js";
+import { asOrgAudited, itemNotFound, type AuditEntry } from "./common.js";
 import { requireConversionEditor } from "./permissions.js";
 import type { CatalogDeps } from "./ports.js";
 
@@ -12,7 +12,7 @@ export async function setConversion(deps: CatalogDeps, ctx: Ctx, itemId: string,
   const u = unit.trim();
   if (!u) return err(domainError("VALIDATION", "Thiếu đơn vị tính"));
   if (!CatalogFactorSchema.safeParse(factor).success) return err(domainError("VALIDATION", "Hệ số phải là số lớn hơn 0"));
-  const done = await deps.uow.asOrg(ctx, async (r): Promise<Result<{ list: UnitConversion[]; audit: AuditEntry[] }>> => {
+  const done = await asOrgAudited(deps, ctx, async (r): Promise<Result<{ list: UnitConversion[]; audit: AuditEntry[] }>> => {
     const can = await requireConversionEditor(r, ctx);
     if (!can.ok) return can;
     const item = await r.items.get(ctx.orgId, itemId);
@@ -29,12 +29,11 @@ export async function setConversion(deps: CatalogDeps, ctx: Ctx, itemId: string,
     return ok({ list: (await r.conversions.listForItem(ctx.orgId, itemId)).map((c) => ({ unit: c.unit, factor: c.factor })), audit });
   });
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   return ok(done.value.list);
 }
 
 export async function removeConversion(deps: CatalogDeps, ctx: Ctx, itemId: string, unit: string): Promise<Result<UnitConversion[]>> {
-  const done = await deps.uow.asOrg(ctx, async (r): Promise<Result<{ list: UnitConversion[]; audit: AuditEntry[] }>> => {
+  const done = await asOrgAudited(deps, ctx, async (r): Promise<Result<{ list: UnitConversion[]; audit: AuditEntry[] }>> => {
     const can = await requireConversionEditor(r, ctx);
     if (!can.ok) return can;
     const item = await r.items.get(ctx.orgId, itemId);
@@ -48,6 +47,5 @@ export async function removeConversion(deps: CatalogDeps, ctx: Ctx, itemId: stri
     return ok({ list: (await r.conversions.listForItem(ctx.orgId, itemId)).map((c) => ({ unit: c.unit, factor: c.factor })), audit });
   });
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   return ok(done.value.list);
 }

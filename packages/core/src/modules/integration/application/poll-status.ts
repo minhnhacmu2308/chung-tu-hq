@@ -1,13 +1,14 @@
 // Worker `customs-poll`: sau khai chính thức (IDC/IDE), mỗi lượt lấy thông điệp Hải quan (VNACCSREP) rồi hỏi trạng thái (IID nhập / IEX xuất)
 // tới khi thông quan/từ chối; ghi IN khi đổi; lặp theo delay.
 // Lô nhiều tờ: mỗi tờ khai nhánh hỏi riêng (payload `branch`, vắng = 1); hồ sơ CLEARED khi mọi tờ thông quan (syncDossierClearance).
-import { AWAITING_CLEARANCE, queryOpFor } from "@kb/contracts";
+import { AWAITING_CLEARANCE, queryOpFor, vnDateOf } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
+import { recordCatalogDeclarationNo } from "./_catalog-numbers.js";
 import { syncDossierClearance } from "./_clearance.js";
 import { pullCustomsMessages } from "./customs-messages.js";
 
@@ -52,6 +53,10 @@ export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Pro
       raw: { ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status, ...(st.info ? { customsInfo: mergeCustomsInfo(result.raw?.customsInfo, { ...st.info, receivedAt: now.toISOString() }) } : {}) }, updatedAt: now,
     });
   });
+  // C6: Hải quan trả số tờ khai khác số đang lưu → cập nhật số tờ khai cuối của mặt hàng (sau commit; lỗi chỉ log).
+  if (st.declarationNo && st.declarationNo !== result.declarationNo) {
+    await recordCatalogDeclarationNo(deps, ctx.orgId, input.dossierId, branch, st.declarationNo, st.info?.registeredDate || result.raw?.customsInfo?.registeredDate || vnDateOf(now));
+  }
   if (st.cleared) {
     const summary = await syncDossierClearance(deps, ctx, input.dossierId);
     // Mỗi tờ báo một lần (tờ đã thông quan không còn hỏi trạng thái); lô nhiều tờ ghi rõ "Tờ k/N".

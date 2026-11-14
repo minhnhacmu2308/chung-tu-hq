@@ -4,7 +4,7 @@
 // (outbox có ghim phiên bản) → tự gửi nội dung tờ kế tiếp cần gửi (NOT_SENT/RECALLED → IDA, AMEND_RECALLED → IDA01; TK_FIC = số tờ khai nhánh 1)
 // cùng ghim; tờ đã có outbox cùng lần truyền → không tạo thêm; khóa theo nhánh + unique chặn tạo trùng (chainNextBranch).
 // Cùng cơ chế: chuỗi người khai bấm một lần cho cả lô – khai chính thức cả lô (chain "declare"), gọi về tất cả (chain "recall", lệnh cuối xong → tự mở lại tờ khai).
-import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, isRecallOperation, queryOpFor, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
+import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, isRecallOperation, queryOpFor, stageAfter, vnDateOf, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
 import { z } from "zod";
 import { countCustomsMessage, countDeclarationAccepted } from "../../../observability/index.js";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
@@ -17,6 +17,7 @@ import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, DeclarationSnapshot, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
+import { recordCatalogDeclarationNo } from "./_catalog-numbers.js";
 import { applyPostAmendmentResult } from "./post-amendment.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { parseSent } from "./sent-sheets.js";
@@ -227,6 +228,10 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   if (!failed && b === "IDC") {
     const declarationNo = patch.declarationNo ?? result.declarationNo;
     if (declarationNo) await chargeSafely(deps.billing, { orgId: input.orgId, dossierId: ob.dossierId, branch: ob.branch, declarationNo, op });
+  }
+  // C6: Hải quan vừa cấp (hoặc đổi) số cho tờ này → số tờ khai cuối của mặt hàng trên các dòng của tờ (sau commit; lỗi chỉ log).
+  if (!failed && b === "IDA" && patch.declarationNo && patch.declarationNo !== result.declarationNo) {
+    await recordCatalogDeclarationNo(deps, ctx.orgId, ob.dossierId, ob.branch, patch.declarationNo, raw.customsInfo?.registeredDate || vnDateOf(now()));
   }
   if (!failed) {
     // Số tờ khai và phân luồng của hồ sơ lấy từ nhánh 1 (tờ 2..N có số, luồng riêng trên kết quả nhánh).

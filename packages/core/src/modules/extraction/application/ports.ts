@@ -53,8 +53,6 @@ export interface ExtractionRepos {
   };
   audit: {
     insert(row: AuditRow): Promise<void>;
-    /** Lịch sử của một đối tượng (cột dossier_id) theo nguồn, mới nhất trước – vd lịch sử mặt hàng danh mục (CATALOG_EDIT). */
-    listForObject(orgId: string, objectId: string, source: AuditRow["source"], limit: number): Promise<AuditRow[]>;
   };
   /** Dữ liệu lô hàng nhập tay (ADR 0013), một dòng mỗi hồ sơ. */
   manual: {

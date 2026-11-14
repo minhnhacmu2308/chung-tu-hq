@@ -18,7 +18,7 @@ import { createValidationInfrastructure } from "../modules/validation/infrastruc
 import { finishReading, processDocument, type ExtractionDeps } from "../modules/extraction/index.js";
 import { createDocumentsAdapter, DrizzleExtractionUow, FakeAiProvider } from "../modules/extraction/infrastructure/index.js";
 import { approveDeclaration, confirmHs, getAgentRun, getDeclarationView, listLineItems, moveToReview, runAgent, startAgentRun, updateDeclarationField, type DeclarationDeps } from "../modules/declaration/index.js";
-import { createAuditWriter, createDossierAdapter, createShipmentReader, createValidationReader, DrizzleDeclarationUow, FakeHsClassificationService } from "../modules/declaration/infrastructure/index.js";
+import { createDossierAdapter, createShipmentReader, createValidationReader, DrizzleDeclarationUow, FakeHsClassificationService } from "../modules/declaration/infrastructure/index.js";
 import { dec } from "../shared/decimal.js";
 import { withCtx } from "../db/with-ctx.js";
 import { sql } from "drizzle-orm";
@@ -51,7 +51,7 @@ beforeAll(async () => {
   declaration = {
     uow, queue, hs: new FakeHsClassificationService(() => uow.asOrg({ orgId: asOrgId("org_anphat"), userId: asUserId("") }, (r) => r.catalogHs.all())),
     shipments: createShipmentReader(extraction, dossier), dossiers: createDossierAdapter(dossier), validation: createValidationReader(validation), org: { get: async () => ORG },
-    audit: createAuditWriter(extraction), users: { names: async (_o, ids) => new Map(ids.map((id) => [id, id === "usr_tuan" ? "Phạm Anh Tuấn" : id])) }, clock: systemClock, idGen: ulidIdGen,
+    users: { names: async (_o, ids) => new Map(ids.map((id) => [id, id === "usr_tuan" ? "Phạm Anh Tuấn" : id])) }, clock: systemClock, idGen: ulidIdGen,
   };
 });
 afterAll(async () => {

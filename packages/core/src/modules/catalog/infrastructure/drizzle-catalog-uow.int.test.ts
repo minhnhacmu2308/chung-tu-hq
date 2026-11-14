@@ -184,7 +184,7 @@ describe("gộp đồng thời (lockForUpdate + markMerged)", () => {
       await r.items.insert(item("rX", A.orgId, "MH-200001"));
       await r.items.insert(item("rY", A.orgId, "MH-200002"));
     });
-    const deps = { uow, audit: { append: async () => {}, list: async () => [] }, members: { eligibleOwners: async () => new Set<string>() }, jobs: noJobs, documents: noDocs, clock: { now: () => now }, idGen: ulidIdGen };
+    const deps = { uow, members: { eligibleOwners: async () => new Set<string>() }, jobs: noJobs, documents: noDocs, clock: { now: () => now }, idGen: ulidIdGen };
     const ctx = { ...A, role: "ADMIN" as const };
     const [r1, r2] = await Promise.all([mergeItems(deps, ctx, { fromId: "rX", intoId: "rY" }), mergeItems(deps, ctx, { fromId: "rY", intoId: "rX" })]);
     expect([r1.ok, r2.ok].filter(Boolean)).toHaveLength(1);
@@ -210,10 +210,27 @@ describe("incrementDeclared nguyên tử", () => {
   });
 });
 
+describe("recordDeclarationNo – số tờ khai cuối (C6)", () => {
+  it("UPDATE có điều kiện: ngày trống / ≤ → ghi; ngày cũ hơn → không; times_declared giữ nguyên; org khác không ghi được; qua cổng theo chuỗi gộp", async () => {
+    await uow.asOrg(A, (r) => r.items.insert(item("dno1", A.orgId, "MH-310001", { timesDeclared: 2 })));
+    const at = new Date("2026-11-14T00:00:00Z");
+    expect(await uow.asOrg(A, (r) => r.items.recordDeclarationNo(A.orgId, "dno1", "107000000001", "2026-11-14", at))).toBe(true);
+    expect(await uow.asOrg(A, (r) => r.items.recordDeclarationNo(A.orgId, "dno1", "107000000000", "2026-11-10", at))).toBe(false);
+    expect(await uow.asOrg(A, (r) => r.items.recordDeclarationNo(A.orgId, "dno1", "107000000001", "2026-11-14", at))).toBe(true);
+    expect(await uow.asOrg(B, (r) => r.items.recordDeclarationNo(B.orgId, "dno1", "999", "2026-12-31", at))).toBe(false);
+    expect(await uow.asOrg(A, (r) => r.items.get(A.orgId, "dno1"))).toMatchObject({ lastDeclarationNo: "107000000001", lastDeclarationDate: "2026-11-14", timesDeclared: 2 });
+    // Mặt hàng đã gộp: cổng ghi vào mặt hàng cuối chuỗi.
+    await uow.asOrg(A, (r) => r.items.insert(item("dno2", A.orgId, "MH-310002", { status: "MERGED", mergedIntoId: "dno1" })));
+    const deps = { uow, members: { eligibleOwners: async () => new Set<string>() }, jobs: noJobs, documents: noDocs, clock: { now: () => at }, idGen: ulidIdGen };
+    expect(await createCatalogPort(deps).recordDeclarationNo(A.orgId, [{ itemId: "dno2", declarationNo: "107000000002", date: "2026-11-15" }])).toEqual({ updated: 1 });
+    expect(await uow.asOrg(A, (r) => r.items.get(A.orgId, "dno1"))).toMatchObject({ lastDeclarationNo: "107000000002", lastDeclarationDate: "2026-11-15", timesDeclared: 2 });
+  });
+});
+
 describe("nhập Excel → ghép → hàng chờ (Postgres thật)", () => {
   it("lưu tạm dòng, ghép theo lô, cộng counts nguyên tử, xóa dòng tạm khi DONE; chạy lại không trùng; duyệt 2 lần → DONE; org khác không thấy", async () => {
     const jobs: { name: string; payload: unknown }[] = [];
-    const deps = { uow, audit: { append: async () => {}, list: async () => [] }, members: { eligibleOwners: async () => new Set<string>() }, jobs: { enqueue: async (name: string, payload: unknown) => void jobs.push({ name, payload }) }, documents: noDocs, clock: { now: () => now }, idGen: ulidIdGen };
+    const deps = { uow, members: { eligibleOwners: async () => new Set<string>() }, jobs: { enqueue: async (name: string, payload: unknown) => void jobs.push({ name, payload }) }, documents: noDocs, clock: { now: () => now }, idGen: ulidIdGen };
     const ctx = { ...A, role: "ADMIN" as const };
     const setId = (await uow.asOrg(A, (r) => r.codeSets.list(A.orgId))).find((x) => x.isDefault)!.id;
     const rows = Array.from({ length: 520 }, (_, i) => ({ code: `IMP-${i}`, name: `Hàng nhập thử ${i} mẫu ${i * 3}`, unit: "PCE" }));
@@ -251,7 +268,7 @@ describe("nhập Excel → ghép → hàng chờ (Postgres thật)", () => {
 
 describe("bộ mã đối tác: một bộ mỗi (org, loại, đối tác) – ensurePartnerSet song song (Task 5)", () => {
   it("10 lần ensurePartnerSet song song cùng tên → một bộ, cùng id; insert trùng trực tiếp lỗi unique; upsertCodeSet trùng → CATALOG_PARTNER_SET_EXISTS; org khác tách biệt", async () => {
-    const deps = { uow, audit: { append: async () => {}, list: async () => [] }, members: { eligibleOwners: async () => new Set<string>() }, jobs: noJobs, documents: noDocs, clock: { now: () => now }, idGen: ulidIdGen };
+    const deps = { uow, members: { eligibleOwners: async () => new Set<string>() }, jobs: noJobs, documents: noDocs, clock: { now: () => now }, idGen: ulidIdGen };
     const port = createCatalogPort(deps);
     const ids = await Promise.all(Array.from({ length: 10 }, () => port.ensurePartnerSet(A.orgId, "SUPPLIER", "Song Song Co., Ltd")));
     expect(new Set(ids).size).toBe(1);

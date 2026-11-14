@@ -20,6 +20,7 @@ import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
 import { assertAllowance, recordDeclared } from "@/mocks/billing-sim";
+import { recordCatalogDeclarationNo } from "./catalog";
 import { pendingSuggestions } from "@/mocks/hys-sim";
 import { kvgsFlowOf, settleKvgs } from "@/mocks/kvgs-sim";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
@@ -262,6 +263,8 @@ function apply(db: MockDb, c: Ctx) {
     if (b === "IDA") {
       if (c.branch === 1) c.dossier.declarationNo = r.declarationNo;
       r.clearanceStatus = "WAITING";
+      // Số tờ khai cuối của mặt hàng trên các dòng của tờ (như integration → CatalogPort.recordDeclarationNo, C6).
+      if (r.declarationNo) recordCatalogDeclarationNo(db, c.dossier.id, c.branch, r.declarationNo, p.doneAt.slice(0, 10));
     }
     if (b === "IDC" || b === "IDE") {
       // Lượt khai (ADR 0011, như process-outbox của backend): tờ được chấp nhận khai chính thức → trừ 1 lượt (khóa theo số tờ khai).

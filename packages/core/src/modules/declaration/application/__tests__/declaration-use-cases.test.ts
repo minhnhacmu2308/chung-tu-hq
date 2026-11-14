@@ -1,3 +1,4 @@
+import type { InMemoryFieldAuditLog } from "../../../../shared/audit.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Decimal } from "../../../../shared/decimal.js";
 import { fixedClock } from "../../../../shared/clock.js";
@@ -17,7 +18,7 @@ import { answerHsQuestion, reclassifyHs } from "../hs-classification.js";
 import { saveValueCharges } from "../value-charges.js";
 import { EMPTY_VALUE_CHARGES, type CustomsStage } from "@kb/contracts";
 import type { DeclarationDeps } from "../ports.js";
-import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit, ScriptedHs } from "../test/fakes.js";
+import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, ScriptedHs } from "../test/fakes.js";
 import { InMemoryDeclarationUow } from "../test/in-memory-uow.js";
 
 const ORG_ID = "org_a";
@@ -31,7 +32,7 @@ let uow: InMemoryDeclarationUow;
 let queue: InMemoryJobQueue;
 let hs: ScriptedHs;
 let dossiers: FakeDossiers;
-let audit: RecordingAudit;
+let audit: InMemoryFieldAuditLog;
 let deps: DeclarationDeps;
 let fails: Record<string, number>;
 let notifier: RecordingNotifier;
@@ -52,13 +53,13 @@ beforeEach(() => {
     { match: /linear guide/i, code: "8482.80.00", description: "Ổ bi khác", confidence: 0.55 },
   ]);
   dossiers = new FakeDossiers([{ ...DOSSIER, orgId: ORG_ID, status: "NEEDS_REVIEW", step: "ocr" }], { [D]: [{ id: "doc_invoice", kind: "INVOICE", fileName: "inv.pdf" }, { id: "doc_pl", kind: "PACKING_LIST", fileName: "pl.pdf" }] });
-  audit = new RecordingAudit();
+  audit = uow.fieldAudit;
   fails = {};
   notifier = new RecordingNotifier();
   deps = {
     notify: notifier,
     uow, queue, hs, shipments: new FakeShipments({ [D]: hansol() }, { [D]: [{ documentId: "doc_invoice", kind: "INVOICE", raw: { invoiceNo: "HSP-2610-0457" } }] }), dossiers, validation: fakeValidation(fails),
-    org: fakeOrg(ORG), audit, users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
+    org: fakeOrg(ORG), users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
   };
 });
 
@@ -141,7 +142,7 @@ describe("HS và tờ khai", () => {
     expect(errCode(await confirmHs(deps, declarant, items[0]!.id, "8482.10"))).toBe("INVALID_HS");
     const c = unwrap(await confirmHs(deps, declarant, items[0]!.id, "8482.10.00"));
     expect(c).toMatchObject({ hsConfirmed: "8482.10.00", importDutyRate: "0", vatRate: "8", policyNote: expect.stringMatching(/AKFTA/) });
-    expect(audit.rows).toEqual([{ orgId: ORG_ID, dossierId: D, key: "hs:1", oldValue: "8482.10.00", newValue: "8482.10.00", source: "HS_CONFIRM" }]);
+    expect(audit.rows).toEqual([expect.objectContaining({ orgId: ORG_ID, dossierId: D, key: "hs:1", oldValue: "8482.10.00", newValue: "8482.10.00", source: "HS_CONFIRM", userId: declarant.userId, at: new Date("2026-10-14T03:00:00.000Z") })]);
     const view = unwrap(await getDeclarationView(deps, declarant, D));
     expect(view.items[0]).toMatchObject({ importDutyVnd: "0", vatVnd: "7933084" });
     expect(view.unconfirmedHs).toBe(6);

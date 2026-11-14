@@ -1,3 +1,4 @@
+import type { InMemoryFieldAuditLog } from "../../../../shared/audit.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fixedClock } from "../../../../shared/clock.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
@@ -5,7 +6,7 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import { DOSSIER, hansol } from "../../domain/test/shipment.js";
 import { fillAttachmentFromHys } from "../fill-attachment.js";
 import type { DeclarationDeps, DeclarationRow } from "../ports.js";
-import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit } from "../test/fakes.js";
+import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation } from "../test/fakes.js";
 import { InMemoryDeclarationUow } from "../test/in-memory-uow.js";
 
 const ORG_ID = "org_a";
@@ -15,7 +16,7 @@ const input = { attachKind: "INV", receiptNo: "HYS-0001", note: "Số tiếp nh�
 const APPROVED_AT = new Date("2026-10-14T05:00:00.000Z");
 
 let uow: InMemoryDeclarationUow;
-let audit: RecordingAudit;
+let audit: InMemoryFieldAuditLog;
 let deps: DeclarationDeps;
 
 const seed = (patch: Partial<DeclarationRow> = {}) =>
@@ -28,11 +29,11 @@ const decl = () => uow.data.declarations[0]!;
 
 beforeEach(() => {
   uow = new InMemoryDeclarationUow();
-  audit = new RecordingAudit();
+  audit = uow.fieldAudit;
   deps = {
     uow, queue: undefined as never, hs: undefined as never, shipments: new FakeShipments({ [D]: hansol() }, {}),
     dossiers: new FakeDossiers([{ ...DOSSIER, orgId: ORG_ID, status: "NEEDS_REVIEW", step: "review" }], {}),
-    validation: fakeValidation({}), org: fakeOrg({} as never), audit, users: fakeUsers, clock: fixedClock("2026-10-15T03:00:00.000Z"), idGen: sequentialIdGen(),
+    validation: fakeValidation({}), org: fakeOrg({} as never), users: fakeUsers, clock: fixedClock("2026-10-15T03:00:00.000Z"), idGen: sequentialIdGen(),
   } as DeclarationDeps;
 });
 

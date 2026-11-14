@@ -2,6 +2,7 @@ import { KvgsSheetSchema } from "@kb/contracts";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { containerLists, customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, kvgsSheets, postAmendments } from "../../../db/schema/integration.js";
+import { drizzleFieldAudit } from "../../../db/field-audit.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import type { ContainerListRecord, CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
@@ -144,6 +145,7 @@ function repos(tx: Tx): CustomsRepos {
       insert: async (row) => void (await tx.insert(kvgsSheets).values(row)),
       update: async (orgId, id, patch) => void (await tx.update(kvgsSheets).set(patch).where(and(eq(kvgsSheets.orgId, orgId), eq(kvgsSheets.id, id)))),
     },
+    fieldAudit: drizzleFieldAudit(tx),
   };
 }
 

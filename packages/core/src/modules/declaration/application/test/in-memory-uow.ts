@@ -1,3 +1,4 @@
+import { InMemoryFieldAuditLog } from "../../../../shared/audit.js";
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type { AgentRunRow, DeclarationRepos, DeclarationRow, DeclarationUow, HsCatalogRow, HsJobRow, HsSuggestionRow, LineItemRow, ProfileRow, ValueChargesRow } from "../ports.js";
 
@@ -7,6 +8,8 @@ export class InMemoryDeclarationUow implements DeclarationUow {
     lineItems: [] as LineItemRow[], hsJobs: [] as HsJobRow[], suggestions: [] as HsSuggestionRow[], declarations: [] as DeclarationRow[], agentRuns: [] as AgentRunRow[],
     catalogHs: [] as HsCatalogRow[], exchangeRates: [] as { currency: string; date: string; rate: string; source?: "VCB" | "MANUAL" | "SEED"; snapshotAt?: Date | null }[], profiles: [] as ProfileRow[], valueCharges: [] as ValueChargesRow[],
   };
+  /** Bảng field_audit (ghi qua repos.fieldAudit trong transaction). */
+  readonly fieldAudit = new InMemoryFieldAuditLog();
 
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: DeclarationRepos) => Promise<T>): Promise<T> {
     const d = this.data;
@@ -120,6 +123,7 @@ export class InMemoryDeclarationUow implements DeclarationUow {
           return r ? { rate: r.rate, date: r.date, source: r.source ?? "SEED", snapshotAt: r.snapshotAt ?? null } : null;
         },
       },
+      fieldAudit: this.fieldAudit.repo(org),
     };
     return fn(repos);
   }

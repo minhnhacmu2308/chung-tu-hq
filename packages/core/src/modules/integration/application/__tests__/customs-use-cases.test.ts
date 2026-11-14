@@ -128,12 +128,12 @@ beforeEach(() => {
   dossiers = new FakeDossiers([{ id: D, orgId: ORG, code: "HS-NK-2610-021", direction: "NK", transportMode: "SEA_CONTAINER", typeCode: "A11", partner: "HANSOL", status: "APPROVED", step: "submit", declarationNo: null, updatedAt: new Date("2026-10-14T02:00:00.000Z") }]);
   blockers = 0;
   notifier = new RecordingNotifier();
-  audits = [];
+  audits = uow.fieldAudit.rows;
   fourEyes = false;
   deps = {
     notify: notifier,
     uow, queue, gateway, declarations: decls, dossiers, validation: { blockerFails: async () => blockers }, certificates: { exists: async (_o, id) => id === "cert_1" },
-    audit: { append: async (_c, row) => void audits.push(row) }, org: { fourEyes: async () => fourEyes },
+    org: { fourEyes: async () => fourEyes },
     pollDelayMs: 10, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
   };
 });
@@ -2028,7 +2028,11 @@ describe("nhân bản chỉ tiêu chung AMA – bổ sung (Task 9)", () => {
     audits.length = 0;
     // Lúc ghi audit của tờ 2, bản khai tờ 3 chưa được lập (audit không dồn tới cuối vòng lặp).
     const seen: number[] = [];
-    deps.audit = { append: async (_c, row) => { audits.push(row); seen.push(uow.data.amendments.filter((a) => a.branch === 3).length); } };
+    const repoOf = uow.fieldAudit.repo.bind(uow.fieldAudit);
+    uow.fieldAudit.repo = (o) => {
+      const r = repoOf(o);
+      return { ...r, append: async (c, at, es) => { await r.append(c, at, es); for (const _ of es) seen.push(uow.data.amendments.filter((a) => a.branch === 3).length); } };
+    };
     expect(unwrap(await copyPostAmendmentHeader(deps, declarant, D, { fromBranch: 1, keys: ["TK_REF"] }))).toEqual({ applied: [2, 3], skipped: [] });
     expect(audits.map((a) => a.key)).toEqual(["ama:b2:1:TK_REF", "ama:b3:1:TK_REF"]);
     expect(seen).toEqual([0, 1]);

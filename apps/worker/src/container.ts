@@ -184,6 +184,8 @@ export function buildContainer() {
   const catalogLinks = createCatalogLinks(catalog);
   declaration.catalog = catalogLinks;
   teach.catalog = catalogLinks;
+  // Hải quan cấp số tờ khai nhánh (job customs-send / customs-poll) → số tờ khai cuối của mặt hàng (NGOÀI transaction, lỗi chỉ log).
+  customs.catalog = catalogLinks;
   // Nhật ký hoạt động doanh nghiệp (org_audit) – một writer của identity dùng chung cho mọi module.
   mailbox.audit = identity.audit;
   dossier.audit = identity.audit;

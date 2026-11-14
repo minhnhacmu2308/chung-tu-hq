@@ -23,24 +23,14 @@ export type AuditRec = { orgId: string; dossierId: string; key: string; oldValue
 
 export function makeHarness() {
   const uow = new InMemoryCatalogUow();
-  const audits: AuditRec[] = [];
-  /** Như bảng field_audit: kèm người sửa + thời điểm (cho getItemHistory). */
-  const auditLog: (AuditRec & { userId: string; at: Date })[] = [];
+  /** Bảng field_audit của uow in-memory – use case ghi qua repos.fieldAudit trong transaction. */
+  const audits: AuditRec[] = uow.fieldAudit.rows;
   const orgAudit = new RecordingOrgAudit();
   const jobs = new InMemoryJobQueue();
   /** Dòng hàng từ chứng từ (giả) – test đặt trước khi gọi importFromDocuments. */
   const docs = { declarations: [] as CatalogDocumentLine[], invoices: [] as CatalogDocumentLine[] };
   const deps: CatalogDeps = {
     uow,
-    audit: {
-      append: async (c, r) => {
-        audits.push({ orgId: c.orgId, ...r });
-        auditLog.push({ orgId: c.orgId, ...r, userId: c.userId, at: NOW });
-      },
-      list: async (c, itemId, limit) =>
-        auditLog.filter((a) => a.orgId === c.orgId && a.dossierId === itemId && a.source === "CATALOG_EDIT").reverse().slice(0, limit)
-          .map((a) => ({ key: a.key, oldValue: a.oldValue, newValue: a.newValue, userId: a.userId, at: a.at })),
-    },
     // Người xem / người lạ không được làm người phụ trách.
     members: { eligibleOwners: async (_o, ids) => new Set(ids.filter((i) => i !== "usr_viewer" && i !== "usr_stranger")) },
     orgAudit,

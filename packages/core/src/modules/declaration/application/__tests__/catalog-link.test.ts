@@ -1,5 +1,6 @@
 // Nối danh mục hàng hóa dùng chung vào tờ khai (Task 5, spec §5): gắn mặt hàng theo Part No người bán, HAG_MAHANG = mã bộ Hải quan,
 // mã lạ không chặn truyền (Review Focus 5), gợi ý lượng quy đổi theo lô, duyệt tờ khai → times_declared / hàng chờ, bài học tra theo bí danh.
+import type { InMemoryFieldAuditLog } from "../../../../shared/audit.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fptKey, type DraftLessons } from "@kb/contracts";
 import { fixedClock } from "../../../../shared/clock.js";
@@ -15,7 +16,7 @@ import { approveDeclaration, getDeclarationView, moveToReview, updateDeclaration
 import { linkLineItem, setLineUnitFactor } from "../line-catalog.js";
 import { confirmHs, listLineItems } from "../line-items.js";
 import type { DeclarationDeps } from "../ports.js";
-import { FakeCatalog, FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit, ScriptedHs } from "../test/fakes.js";
+import { FakeCatalog, FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, ScriptedHs } from "../test/fakes.js";
 import { InMemoryDeclarationUow } from "../test/in-memory-uow.js";
 
 const ORG_ID = "org_a";
@@ -27,7 +28,7 @@ const D = "dos_1";
 
 let uow: InMemoryDeclarationUow;
 let queue: InMemoryJobQueue;
-let audit: RecordingAudit;
+let audit: InMemoryFieldAuditLog;
 let catalog: FakeCatalog;
 let shipments: FakeShipments;
 let deps: DeclarationDeps;
@@ -37,7 +38,7 @@ beforeEach(() => {
   uow.data.catalogHs.push({ code: "8482.10.00", description: "Ổ bi cầu", mfn: "3", pref: { AK: "0" }, vat: "8", policy: null, keywords: ["ball bearing"] });
   uow.data.exchangeRates.push({ currency: "USD", date: "2026-10-13", rate: "25400" });
   queue = new InMemoryJobQueue();
-  audit = new RecordingAudit();
+  audit = uow.fieldAudit;
   catalog = new FakeCatalog();
   // Dòng 1: Part No đã có bí danh trong bộ nhà cung cấp HANSOL, mặt hàng có mã XNK. Dòng 2: mã lạ. Dòng 3+: không có Part No.
   catalog.addItem({ id: "cat_1", itemNo: "MH-000001", name: "Ổ bi 6205", hsCode: "84821000", baseUnit: "PCE", customs: { codeSetId: "cst_xnk", aliasId: "ali_hq", code: "XNK-6205", unit: "PCS" }, codes: ["6205-2RS", "OLD-6205", "XNK-6205"] }, ["6205-2RS"]);
@@ -48,7 +49,7 @@ beforeEach(() => {
   deps = {
     uow, queue, hs: new ScriptedHs([{ match: /./, code: "8482.10.00", description: "Ổ bi cầu", confidence: 0.8 }]), shipments,
     dossiers: new FakeDossiers([{ ...DOSSIER, orgId: ORG_ID, status: "NEEDS_REVIEW", step: "ocr" }]), validation: fakeValidation(),
-    org: fakeOrg(ORG), audit, users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(), catalog,
+    org: fakeOrg(ORG), users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(), catalog,
   };
 });
 
@@ -202,6 +203,27 @@ describe("gợi ý lượng theo ĐVT khai (quy đổi)", () => {
     expect(errCode(await setLineUnitFactor(deps, declarant, line.id, "-1"))).toBe("VALIDATION");
     expect(errCode(await setLineUnitFactor(deps, declarant, line.id, "0"))).toBe("VALIDATION");
     expect((deps.dossiers as FakeDossiers).events.filter((e) => e.type === "dossier.updated").length).toBeGreaterThan(0);
+  });
+
+  it("C7: field_audit ghi qua repo của transaction cùng lệnh sửa dòng (người sửa + giờ theo clock); lỗi trước khi ghi → không có dòng audit", async () => {
+    const line = unwrap(await listLineItems(deps, declarant, D))[0]!;
+    const seen: { audits: number; factor: string | null | undefined }[] = [];
+    // Ghi audit đúng lúc dòng đã sửa trong cùng callback asOrg (không phải port riêng sau commit).
+    const asOrg = uow.asOrg.bind(uow);
+    uow.asOrg = (async (c: Parameters<typeof asOrg>[0], fn: Parameters<typeof asOrg>[1]) =>
+      asOrg(c, async (r) => {
+        const out = await fn(r);
+        seen.push({ audits: uow.fieldAudit.rows.length, factor: uow.data.lineItems.find((x) => x.id === line.id)?.unitFactor });
+        return out;
+      })) as typeof uow.asOrg;
+    const before = uow.fieldAudit.rows.length;
+    unwrap(await setLineUnitFactor(deps, declarant, line.id, "95"));
+    expect(seen).toContainEqual({ audits: before + 1, factor: "95" });
+    expect(uow.fieldAudit.rows.at(-1)).toMatchObject({ orgId: ORG_ID, dossierId: D, key: "unitFactor:1", oldValue: "", newValue: "95", source: "CATALOG_EDIT", userId: declarant.userId, at: new Date("2026-10-14T03:00:00.000Z") });
+    const n = uow.fieldAudit.rows.length;
+    expect(errCode(await setLineUnitFactor(deps, other, line.id, "90"))).toBe("NOT_FOUND");
+    expect(errCode(await setLineUnitFactor(deps, declarant, line.id, "abc"))).toBe("VALIDATION");
+    expect(uow.fieldAudit.rows).toHaveLength(n);
   });
 
   it("getDeclarationView (màn Review) mang cùng phần danh mục như listLineItems: gợi ý lượng, mặt hàng, mã lạ; không nối danh mục → không thêm gì", async () => {

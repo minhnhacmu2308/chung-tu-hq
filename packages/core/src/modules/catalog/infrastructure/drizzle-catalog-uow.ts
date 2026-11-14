@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { catalogImports, catalogItems, catalogMatchQueue, catalogSettings, codeSetOwners, codeSets, itemAliases, itemUnitConversions } from "../../../db/schema/catalog.js";
+import { drizzleFieldAudit } from "../../../db/field-audit.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import type { CatalogRepos, CatalogUow } from "../application/ports.js";
@@ -52,6 +53,12 @@ function repos(tx: Tx): CatalogRepos {
       update: async (orgId, id, patch) => void (await tx.update(catalogItems).set(patch).where(and(eq(catalogItems.orgId, orgId), eq(catalogItems.id, id)))),
       incrementDeclared: async (orgId, id, patch) =>
         void (await tx.update(catalogItems).set({ ...patch, timesDeclared: sql`${catalogItems.timesDeclared} + 1` }).where(and(eq(catalogItems.orgId, orgId), eq(catalogItems.id, id)))),
+      recordDeclarationNo: async (orgId, id, declarationNo, date, now) =>
+        (await tx
+          .update(catalogItems)
+          .set({ lastDeclarationNo: declarationNo, lastDeclarationDate: date, updatedAt: now })
+          .where(and(eq(catalogItems.orgId, orgId), eq(catalogItems.id, id), or(isNull(catalogItems.lastDeclarationDate), lte(catalogItems.lastDeclarationDate, date))))
+          .returning({ id: catalogItems.id })).length > 0,
       lockForUpdate: async (orgId, ids) => {
         if (ids.length) await tx.select({ id: catalogItems.id }).from(catalogItems).where(and(eq(catalogItems.orgId, orgId), inArray(catalogItems.id, ids))).orderBy(asc(catalogItems.id)).for("update");
       },
@@ -118,6 +125,7 @@ function repos(tx: Tx): CatalogRepos {
           .where(and(eq(catalogImports.orgId, orgId), eq(catalogImports.id, id)));
       },
     },
+    fieldAudit: drizzleFieldAudit(tx),
   };
 }
 

@@ -5,7 +5,7 @@ import {
   AliasActionInputSchema, CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, CATALOG_IMPORT_SYNC_MAX_ROWS, ChangeCatalogModeInputSchema, CreateItemInputSchema, DecideQueueBulkInputSchema, DecideQueueInputSchema,
   ImportFromDocumentsInputSchema, ImportRowsInputSchema, ListCatalogItemsQuerySchema, ListQueueQuerySchema, ProposeAliasInputSchema, ResolveManyInputSchema, SetConversionInputSchema,
   SetupCatalogInputSchema, SplitAliasesInputSchema, UpdateItemInputSchema, UpsertCodeSetInputSchema, convertItemQty, importRowsTooLarge, itemCodeKey, itemHsDigits, itemLotFactorDeviates, itemNameKey, itemUnitKey,
-  loadCodeList, reasonVi, validateItemRows,
+  loadCodeList, reasonVi, sheetOfLine, validateItemRows,
   type AliasActionInput, type AliasSource, type CatalogImport, type CatalogItem, type CatalogItemDetail, type CatalogItemHistoryEntry, type CatalogItemListRow, type CatalogItemPage, type CatalogSettingsView,
   type ChangeCatalogModeInput, type CodeSet, type CodeSetKind, type CreateItemRequest, type CreateItemResult, type CrossReference, type CrossReferenceRow,
   type DecideQueueBulkInput, type DecideQueueBulkResult, type DecideQueueInput, type ImportFromDocumentsInput, type ImportRowsInput, type InvoiceLayout, type ItemAlias, type LineItem,
@@ -988,6 +988,25 @@ export const setLineUnitFactor = (lineItemId: string, factor: string | null) =>
     else line.unitFactor = parse(SetConversionInputSchema.shape.factor, factor);
     return withLineCatalogView(db, line);
   });
+
+// ---------- số tờ khai Hải quan cấp (gọi từ mocks/api/customs) ----------
+/**
+ * Hải quan cấp số cho tờ khai nhánh `branch` (như CatalogPort.recordDeclarationNo, gọi từ integration sau commit): mặt hàng (cuối chuỗi gộp, không trùng)
+ * của các dòng thuộc tờ đó (50 dòng/tờ – sheetOfLine) → số tờ khai cuối + ngày, chỉ khi ngày đang lưu trống hoặc ≤ `date`. Không cộng lần khai.
+ */
+export function recordCatalogDeclarationNo(db: MockDb, dossierId: string, branch: number, declarationNo: string, date: string) {
+  const lines = db.lineItems.filter((l) => l.dossierId === dossierId);
+  const lineNos = lines.map((l) => l.lineNo);
+  const seen = new Set<string>();
+  for (const l of lines) {
+    if (!l.catalogItem || sheetOfLine(lineNos, l.lineNo) !== branch) continue;
+    const item = endOfChain(db.catalog, l.catalogItem.id);
+    if (!item || seen.has(item.id)) continue;
+    seen.add(item.id);
+    if (item.lastDeclarationDate && item.lastDeclarationDate > date) continue;
+    Object.assign(item, { lastDeclarationNo: declarationNo, lastDeclarationDate: date, updatedAt: nowIso() });
+  }
+}
 
 // ---------- tờ khai duyệt (gọi từ mocks/api/declaration) ----------
 /**

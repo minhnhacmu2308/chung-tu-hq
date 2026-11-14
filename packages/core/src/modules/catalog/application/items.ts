@@ -7,7 +7,7 @@ import { domainError } from "../../../shared/errors.js";
 import { dec } from "../../../shared/decimal.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import {
-  ALIAS_ACTIVE_UQ, auditKeyAlias, codeTaken, flushAudit, isDuplicate, itemNotFound, newestAlias, setNotFound, toAliasDto, toItemDto, type AuditEntry,
+  ALIAS_ACTIVE_UQ, auditKeyAlias, codeTaken, asOrgAudited, isDuplicate, itemNotFound, newestAlias, setNotFound, toAliasDto, toItemDto, type AuditEntry,
 } from "./common.js";
 import { isItemEditor, managesSet, requireCatalogAdmin, requireContributor, requireItemEditor } from "./permissions.js";
 import type { CatalogDeps, CatalogItemRow, CatalogRepos, ItemAliasRow, ItemConversionRow, MatchQueueRow } from "./ports.js";
@@ -35,10 +35,8 @@ export const ITEM_HISTORY_LIMIT = 200;
 
 /** Lịch sử sửa mặt hàng (field_audit CATALOG_EDIT), mới nhất trước. Mọi vai trò được xem; mặt hàng org khác → NOT_FOUND. */
 export async function getItemHistory(deps: CatalogDeps, ctx: Ctx, id: string): Promise<Result<CatalogItemHistoryEntry[]>> {
-  const item = await deps.uow.asOrg(ctx, (r) => r.items.get(ctx.orgId, id));
-  if (!item) return err(itemNotFound());
-  // Đọc qua cổng field_audit (kết nối riêng) – NGOÀI transaction của catalog.
-  const rows = await deps.audit.list(ctx, id, ITEM_HISTORY_LIMIT);
+  const rows = await deps.uow.asOrg(ctx, async (r) => ((await r.items.get(ctx.orgId, id)) ? r.fieldAudit.listForObject(ctx.orgId, id, "CATALOG_EDIT", ITEM_HISTORY_LIMIT) : null));
+  if (!rows) return err(itemNotFound());
   return ok(rows.map((r) => ({ key: r.key, oldValue: r.oldValue, newValue: r.newValue, userId: r.userId, at: r.at.toISOString() })));
 }
 
@@ -124,7 +122,7 @@ export async function createItem(deps: CatalogDeps, ctx: Ctx, input: CreateItemI
   const now = deps.clock.now();
   let done: Result<{ out: CreateItemResult; audit: AuditEntry[] }>;
   try {
-    done = await deps.uow.asOrg(ctx, async (r) => {
+    done = await asOrgAudited(deps, ctx, async (r): Promise<Result<{ out: CreateItemResult; audit: AuditEntry[] }>> => {
       const set = input.codeSetId ? await r.codeSets.get(ctx.orgId, input.codeSetId) : null;
       if (input.codeSetId && !set) return err(setNotFound());
       // Tạo mặt hàng: người sửa thông tin chung hoặc người phụ trách bộ mã. Bí danh ACTIVE chỉ khi quản lý được bộ (phụ trách / ADMIN / OWNER) – APPROVER khác → PROPOSED.
@@ -176,7 +174,6 @@ export async function createItem(deps: CatalogDeps, ctx: Ctx, input: CreateItemI
     throw e;
   }
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   return ok(done.value.out);
 }
 
@@ -195,7 +192,7 @@ export async function updateItem(deps: CatalogDeps, ctx: Ctx, id: string, input:
   const allowed = requireItemEditor(ctx);
   if (!allowed.ok) return allowed;
   const now = deps.clock.now();
-  const done = await deps.uow.asOrg(ctx, async (r) => {
+  const done = await asOrgAudited(deps, ctx, async (r): Promise<Result<{ detail: CatalogItemDetail; audit: AuditEntry[] }>> => {
     const cur = await r.items.get(ctx.orgId, id);
     if (!cur) return err(itemNotFound());
     if (cur.status === "MERGED") return err(domainError("INVALID_STATE", "Mặt hàng đã gộp vào mặt hàng khác"));
@@ -225,7 +222,6 @@ export async function updateItem(deps: CatalogDeps, ctx: Ctx, id: string, input:
     return ok({ detail: (await loadItemDetail(r, ctx, id))!, audit });
   });
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   return ok(done.value.detail);
 }
 
@@ -233,7 +229,7 @@ export async function updateItem(deps: CatalogDeps, ctx: Ctx, id: string, input:
 export async function archiveItem(deps: CatalogDeps, ctx: Ctx, id: string, archived = true): Promise<Result<CatalogItemDetail>> {
   const allowed = requireCatalogAdmin(ctx);
   if (!allowed.ok) return allowed;
-  const done = await deps.uow.asOrg(ctx, async (r) => {
+  const done = await asOrgAudited(deps, ctx, async (r): Promise<Result<{ detail: CatalogItemDetail; audit: AuditEntry[] }>> => {
     const cur = await r.items.get(ctx.orgId, id);
     if (!cur) return err(itemNotFound());
     if (cur.status === "MERGED") return err(domainError("INVALID_STATE", "Mặt hàng đã gộp vào mặt hàng khác"));
@@ -246,6 +242,5 @@ export async function archiveItem(deps: CatalogDeps, ctx: Ctx, id: string, archi
     return ok({ detail: (await loadItemDetail(r, ctx, id))!, audit });
   });
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   return ok(done.value.detail);
 }

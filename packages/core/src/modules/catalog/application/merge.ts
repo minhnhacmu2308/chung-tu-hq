@@ -4,7 +4,7 @@ import { itemNameKey, itemUnitKey, type CatalogItemDetail, type CreateItemInput 
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { auditKeyAlias, factorRequired, flushAudit, itemNotFound, needsFactor, type AuditEntry } from "./common.js";
+import { auditKeyAlias, factorRequired, asOrgAudited, itemNotFound, needsFactor, type AuditEntry } from "./common.js";
 import { freeItemNo, loadItemDetail } from "./items.js";
 import { requireCatalogAdmin } from "./permissions.js";
 import type { CatalogDeps, CatalogItemRow } from "./ports.js";
@@ -23,7 +23,7 @@ export async function mergeItems(deps: CatalogDeps, ctx: Ctx, input: { fromId: s
   const allowed = requireCatalogAdmin(ctx);
   if (!allowed.ok) return allowed;
   if (input.fromId === input.intoId) return err(mergeInvalid("SELF"));
-  const done = await deps.uow.asOrg(ctx, async (r): Promise<Result<{ detail: CatalogItemDetail; audit: AuditEntry[]; label: string }>> => {
+  const done = await asOrgAudited(deps, ctx, async (r): Promise<Result<{ detail: CatalogItemDetail; audit: AuditEntry[]; label: string }>> => {
     // Khóa cả hai dòng theo thứ tự id rồi mới đọc: gộp A→B và B→A song song không cùng thành công (bên sau đọc lại thấy MERGED).
     await r.items.lockForUpdate(ctx.orgId, [input.fromId, input.intoId]);
     const from = await r.items.get(ctx.orgId, input.fromId);
@@ -78,7 +78,6 @@ export async function mergeItems(deps: CatalogDeps, ctx: Ctx, input: { fromId: s
     return ok({ detail: (await loadItemDetail(r, ctx, into.id))!, audit, label: `${from.itemNo} → ${into.itemNo}` });
   });
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   await deps.orgAudit?.record(ctx, { action: "CATALOG_ITEMS_MERGED", targetType: "catalog_item", targetId: input.intoId, targetLabel: done.value.label });
   return ok(done.value.detail);
 }
@@ -94,7 +93,7 @@ export async function splitAliases(deps: CatalogDeps, ctx: Ctx, input: { aliasId
   if (!allowed.ok) return allowed;
   const ids = [...new Set(input.aliasIds)];
   if (!ids.length) return err(domainError("VALIDATION", "Chưa chọn mã hàng để tách"));
-  const done = await deps.uow.asOrg(ctx, async (r): Promise<Result<{ detail: CatalogItemDetail; audit: AuditEntry[] }>> => {
+  const done = await asOrgAudited(deps, ctx, async (r): Promise<Result<{ detail: CatalogItemDetail; audit: AuditEntry[] }>> => {
     const aliases = [];
     for (const id of ids) {
       const a = await r.aliases.get(ctx.orgId, id);
@@ -132,6 +131,5 @@ export async function splitAliases(deps: CatalogDeps, ctx: Ctx, input: { aliasId
     return ok({ detail: (await loadItemDetail(r, ctx, item.id))!, audit });
   });
   if (!done.ok) return done;
-  await flushAudit(deps, ctx, done.value.audit);
   return ok(done.value.detail);
 }

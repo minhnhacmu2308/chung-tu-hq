@@ -4,7 +4,7 @@ import { emptyCatalog } from "@/mocks/catalog-engine";
 import { SEED_SETS } from "@/mocks/seed/catalog";
 import {
   aliasAction, archiveCatalogItem, changeCatalogMode, createCatalogItem, decideQueueBulk, decideQueueItem, exportCrossReference, getCatalogImport, getCatalogItem,
-  getCatalogSettings, importCatalogRows, linkLineItem, resolveCatalogMany, listCatalogItems, listCodeSets, listMatchQueue, mergeCatalogItems, proposeAlias, resolveCatalogItem, saveCodeSet,
+  getCatalogSettings, importCatalogRows, linkLineItem, recordCatalogDeclarationNo, resolveCatalogMany, listCatalogItems, listCodeSets, listMatchQueue, mergeCatalogItems, proposeAlias, resolveCatalogItem, saveCodeSet,
   setConversion, setLineUnitFactor, setupCatalog,
 } from "./catalog";
 import { getDeclarationView } from "./declaration";
@@ -222,6 +222,26 @@ describe("quyền, bí danh, gộp, chế độ", () => {
 });
 
 describe("dòng hàng ↔ danh mục", () => {
+  it("C6: Hải quan cấp số tờ khai nhánh → số tờ khai cuối của mặt hàng trên dòng thuộc tờ đó (không đè tờ mới hơn, không cộng lần khai)", () => {
+    const db = getDb();
+    const base = db.lineItems[0]!;
+    const [a, b] = db.catalog.items.filter((i) => i.status === "ACTIVE");
+    const ref = (i: typeof a) => ({ id: i!.id, itemNo: i!.itemNo, name: i!.name });
+    // Lô 2 tờ: dòng 1..50 tờ 1, dòng 51..60 tờ 2. Mặt hàng a ở dòng 1, b ở dòng 55.
+    const { catalogItem: _none, ...plain } = structuredClone(base);
+    db.lineItems.push(...Array.from({ length: 60 }, (_, k) => ({ ...plain, id: `itm_c6_${k + 1}`, dossierId: "dos_c6", lineNo: k + 1, ...(k === 0 ? { catalogItem: ref(a) } : k === 54 ? { catalogItem: ref(b) } : {}) })));
+    Object.assign(a!, { lastDeclarationNo: null, lastDeclarationDate: "2026-11-13" });
+    Object.assign(b!, { lastDeclarationNo: "107000000777", lastDeclarationDate: "2026-12-01" });
+    const timesA = a!.timesDeclared;
+    recordCatalogDeclarationNo(db, "dos_c6", 1, "107000000001", "2026-11-14");
+    expect(a).toMatchObject({ lastDeclarationNo: "107000000001", lastDeclarationDate: "2026-11-14", timesDeclared: timesA });
+    expect(b!.lastDeclarationNo).toBe("107000000777");
+    // Tờ 2: mặt hàng b đang giữ tờ khai mới hơn → không đè.
+    recordCatalogDeclarationNo(db, "dos_c6", 2, "107000000002", "2026-11-14");
+    expect(b).toMatchObject({ lastDeclarationNo: "107000000777", lastDeclarationDate: "2026-12-01" });
+    expect(a!.lastDeclarationNo).toBe("107000000001");
+  });
+
   it("gắn mặt hàng cho dòng → mã HAG_MAHANG từ bộ XNK; hệ số theo lô", async () => {
     const line = getDb().lineItems[0]!;
     const linked = await linkLineItem(line.id, { itemId: "prd_seed_1" });

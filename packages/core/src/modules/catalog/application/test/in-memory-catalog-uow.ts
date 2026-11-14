@@ -1,3 +1,4 @@
+import { InMemoryFieldAuditLog } from "../../../../shared/audit.js";
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import { formatItemNo } from "../../domain/item-no.js";
 import type { CatalogImportRow, CatalogItemRow, CatalogRepos, CatalogSettingsRow, CatalogUow, CodeSetRow, ItemAliasRow, ItemConversionRow, MatchQueueRow } from "../ports.js";
@@ -14,6 +15,8 @@ export class InMemoryCatalogUow implements CatalogUow {
     queue: [] as MatchQueueRow[],
     imports: [] as CatalogImportRow[],
   };
+  /** Bảng field_audit (ghi qua repos.fieldAudit trong transaction). */
+  readonly fieldAudit = new InMemoryFieldAuditLog();
 
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CatalogRepos) => Promise<T>): Promise<T> {
     const d = this.data;
@@ -92,6 +95,13 @@ export class InMemoryCatalogUow implements CatalogUow {
         incrementDeclared: async (orgId, id, patch) => {
           const x = mine(d.items, orgId).find((y) => y.id === id);
           if (x) Object.assign(x, patch, { timesDeclared: x.timesDeclared + 1 });
+        },
+        recordDeclarationNo: async (orgId, id, declarationNo, date, now) => {
+          if (orgId !== org) deny("update orgId khác ngữ cảnh");
+          const x = d.items.find((y) => y.orgId === org && y.id === id);
+          if (!x || (x.lastDeclarationDate !== null && x.lastDeclarationDate > date)) return false;
+          Object.assign(x, { lastDeclarationNo: declarationNo, lastDeclarationDate: date, updatedAt: now });
+          return true;
         },
         lockForUpdate: async () => {},
         markMerged: async (orgId, id, intoId, by, at) => {
@@ -193,6 +203,7 @@ export class InMemoryCatalogUow implements CatalogUow {
           x.updatedAt = now;
         },
       },
+      fieldAudit: this.fieldAudit.repo(org),
     });
   }
 }

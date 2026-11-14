@@ -43,6 +43,8 @@ export class FakeDeclarations implements DeclarationReader {
   /** Thuế dự tính từng tờ khai nhánh (lô nhiều tờ). */
   branchTaxVnd: string[] | undefined = undefined;
   readonly submitted: string[] = [];
+  /** Dòng hàng + mặt hàng danh mục (C6); vắng = không nối. */
+  lineCatalogItems?: NonNullable<DeclarationReader["lineCatalogItems"]>;
   /** Payload hiện tại (đồng bộ – dựng ảnh chụp nội dung đã gửi khi gieo kết quả). */
   payloadNow(): DeclarationPayload {
     const p = payload(this.kind);
@@ -124,7 +126,7 @@ export function makeHarness(): Harness {
   const deps: CustomsDeps = {
     notify: new RecordingNotifier(), uow, queue, gateway: new FakeCustomsGateway({ clearAfterPolls: 2 }), declarations: decls, dossiers,
     validation: { blockerFails: async () => 0 }, certificates: { exists: async (_o, id) => id === "cert_1" },
-    audit: { append: async () => undefined }, org: { fourEyes: async () => false },
+    org: { fourEyes: async () => false },
     pollDelayMs: 10, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
   };
   return { uow, queue, decls, dossiers, deps };

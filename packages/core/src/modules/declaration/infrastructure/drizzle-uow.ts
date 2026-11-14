@@ -2,6 +2,7 @@ import { and, desc, eq, ilike, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { ValueChargesSchema } from "@kb/contracts";
 import type { Db, Tx } from "../../../db/client.js";
 import { agentRuns, catalogHs, declarationProfiles, declarations, exchangeRates, hsJobs, hsSuggestions, lineItems, valueCharges } from "../../../db/schema/declaration.js";
+import { drizzleFieldAudit } from "../../../db/field-audit.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { Decimal } from "../../../shared/decimal.js";
@@ -126,6 +127,7 @@ function repos(tx: Tx): DeclarationRepos {
         return r ? { rate: r.rate, date: r.date, source: r.source as "VCB" | "MANUAL" | "SEED", snapshotAt: r.snapshotAt } : null;
       },
     },
+    fieldAudit: drizzleFieldAudit(tx),
   };
 }
 

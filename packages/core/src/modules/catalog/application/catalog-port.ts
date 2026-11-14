@@ -8,6 +8,8 @@ import { ensurePartnerSet } from "./partner-set.js";
 import type { CatalogDeps, CatalogItemRow, MatchQueueRow } from "./ports.js";
 import { loadMatchContext, resolveInTx, resolveManyInTx, resolveWith, type ResolveItemQuery, type ResolveItemResult } from "./resolve.js";
 
+/** Số tờ khai Hải quan cấp cho một mặt hàng (dòng của tờ khai nhánh), ngày `YYYY-MM-DD`. */
+export type DeclarationNoRow = { itemId: string; declarationNo: string; date: string };
 export type DeclaredRow = { itemId: string; declarationNo: string | null; date: string | null; typeCode: string | null };
 export type UnknownCodeRow = { codeSetId?: string | null; code: string; name: string; unit?: string | null; hsCode?: string | null; sourceRef?: string | null };
 export type CodeInSet = { codeSetId: string; aliasId: string; code: string; name: string | null; unit: string | null };
@@ -28,6 +30,11 @@ export interface CatalogPort {
    * dù nhiều dòng cùng mặt hàng (như recordApprovedProducts cũ). Gọi đúng một lần cho mỗi lần duyệt – duyệt lại sau khi mở lại sẽ cộng thêm (giống bản cũ).
    */
   recordDeclared(orgId: OrgId, rows: DeclaredRow[]): Promise<{ updated: number }>;
+  /**
+   * Hải quan cấp số cho tờ khai đã duyệt (customs – sau khi giao dịch của integration commit): ghi số tờ khai cuối (+ ngày) của mỗi mặt hàng
+   * (theo chuỗi gộp, một lần mỗi mặt hàng) khi ngày đang lưu trống hoặc ≤ ngày này. KHÔNG cộng times_declared (đã cộng lúc duyệt). Gọi lại y nguyên → kết quả như cũ.
+   */
+  recordDeclarationNo(orgId: OrgId, rows: DeclarationNoRow[]): Promise<{ updated: number }>;
   /** Mã/dòng chưa biết → mục hàng chờ ghép (kèm gợi ý theo luật ghép). Đã biết chắc trong bộ / đang chờ trùng → bỏ qua. */
   enqueueUnknown(orgId: OrgId, rows: UnknownCodeRow[]): Promise<{ queued: number }>;
   /** Mã của mặt hàng trong bộ (theo loại hoặc id). "CUSTOMS" → bộ mặc định Hải quan (XNK hoặc "Mã chung"); nhiều mã → mã mới nhất. */
@@ -69,6 +76,18 @@ export function createCatalogPort(deps: CatalogDeps): CatalogPort {
           });
         }
         return { updated: byItem.size };
+      }),
+    recordDeclarationNo: (orgId, rows) =>
+      deps.uow.asOrg(sys(orgId), async (r) => {
+        const now = deps.clock.now();
+        const byItem = new Map<string, DeclarationNoRow>();
+        for (const row of rows) {
+          const item = await r.items.resolveMerged(orgId, row.itemId);
+          if (item && !byItem.has(item.id)) byItem.set(item.id, row);
+        }
+        let updated = 0;
+        for (const [id, row] of byItem) if (await r.items.recordDeclarationNo(orgId, id, row.declarationNo, row.date, now)) updated++;
+        return { updated };
       }),
     enqueueUnknown: (orgId, rows) =>
       deps.uow.asOrg(sys(orgId), async (r) => {

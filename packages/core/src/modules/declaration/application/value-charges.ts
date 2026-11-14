@@ -93,13 +93,12 @@ export async function saveValueCharges(deps: DeclarationDeps, ctx: Ctx, dossierI
   const prev = await deps.uow.asOrg(ctx, async (r) => {
     const before = await r.valueCharges.get(ctx.orgId, dossierId);
     await r.valueCharges.upsert(before ? { ...row, id: before.id } : row);
+    // Bất biến 6: mỗi phần đổi → field_audit, cùng transaction với lệnh lưu.
+    const old = before?.data ?? EMPTY_VALUE_CHARGES;
+    const changes = PARTS.map((part) => ({ part, o: auditText(old[part]), n: auditText(data[part]) })).filter((c) => c.o !== c.n);
+    await r.fieldAudit.append(ctx, now, changes.map((c) => ({ dossierId, key: `CHARGES.${c.part}`, oldValue: c.o, newValue: c.n, source: "CHARGE_EDIT" as const })));
     return before;
   });
-  const old = prev?.data ?? EMPTY_VALUE_CHARGES;
-  for (const part of PARTS) {
-    const [o, n] = [auditText(old[part]), auditText(data[part])];
-    if (o !== n) await deps.audit.append(ctx, { dossierId, key: `CHARGES.${part}`, oldValue: o, newValue: n, source: "CHARGE_EDIT" });
-  }
   await deps.onChargesSaved?.(ctx.orgId, dossierId);
   const rebuilt = await rebuildDraft(deps, ctx, dossierId);
   if (!rebuilt.ok) return rebuilt;

@@ -58,8 +58,6 @@ export class InMemoryExtractionUow implements ExtractionUow {
       },
       audit: {
         insert: async (row) => void (row.orgId === org ? d.audit.push(clone(row)) : deny("field_audit")),
-        listForObject: async (orgId, objectId, source, limit) =>
-          d.audit.filter((a) => a.orgId === org && a.orgId === orgId && a.dossierId === objectId && a.source === source).reverse().slice(0, limit).map(clone),
       },
       manual: {
         get: async (orgId, dossierId) => clone(d.manual.find((x) => x.orgId === own(orgId) && x.dossierId === dossierId) ?? null),

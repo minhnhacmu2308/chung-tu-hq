@@ -1,3 +1,4 @@
+import type { InMemoryFieldAuditLog } from "../../../../shared/audit.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { EMPTY_VALUE_CHARGES, type ValueCharges } from "@kb/contracts";
 import { fixedClock } from "../../../../shared/clock.js";
@@ -10,7 +11,7 @@ import { runAgent, startAgentRun } from "../agent-run.js";
 import { getDeclarationView } from "../declaration.js";
 import type { DeclarationDeps } from "../ports.js";
 import { getValueCharges, saveValueCharges } from "../value-charges.js";
-import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, RecordingAudit, ScriptedHs } from "../test/fakes.js";
+import { FakeDossiers, FakeShipments, fakeOrg, fakeUsers, fakeValidation, ScriptedHs } from "../test/fakes.js";
 import { InMemoryDeclarationUow } from "../test/in-memory-uow.js";
 
 const ORG_ID = "org_a";
@@ -22,7 +23,7 @@ const D = "dos_1";
 let uow: InMemoryDeclarationUow;
 let queue: InMemoryJobQueue;
 let dossiers: FakeDossiers;
-let audit: RecordingAudit;
+let audit: InMemoryFieldAuditLog;
 let deps: DeclarationDeps;
 
 beforeEach(() => {
@@ -30,10 +31,10 @@ beforeEach(() => {
   uow.data.exchangeRates.push({ currency: "USD", date: "2026-10-13", rate: "25400" });
   queue = new InMemoryJobQueue();
   dossiers = new FakeDossiers([{ ...DOSSIER, orgId: ORG_ID, status: "NEEDS_REVIEW", step: "ocr" }], { [D]: [{ id: "doc_invoice", kind: "INVOICE", fileName: "inv.pdf" }] });
-  audit = new RecordingAudit();
+  audit = uow.fieldAudit;
   deps = {
     uow, queue, hs: new ScriptedHs([]), shipments: new FakeShipments({ [D]: hansol() }), dossiers, validation: fakeValidation({}),
-    org: fakeOrg(ORG), audit, users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
+    org: fakeOrg(ORG), users: fakeUsers, clock: fixedClock("2026-10-14T03:00:00.000Z"), idGen: sequentialIdGen(),
   };
 });
 

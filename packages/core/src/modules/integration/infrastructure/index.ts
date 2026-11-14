@@ -59,7 +59,7 @@ export function createCustomsInfrastructure(opts: {
     ...(!opts.gateway && opts.env.FPT_DEBUG_TRACE ? { fptDebug: true } : {}),
     uow: new DrizzleCustomsUow(opts.db), queue: opts.queue, gateway,
     declarations: createDeclarationReader(opts.declaration), dossiers: createCustomsDossierPort(opts.dossier), validation: createCustomsValidationReader(opts.validation), certificates: createCertificateReader(opts.identity),
-    audit: opts.declaration.audit, org: { fourEyes: async (orgId) => (await opts.declaration.org.get(orgId)).fourEyes },
+    org: { fourEyes: async (orgId) => (await opts.declaration.org.get(orgId)).fourEyes },
     vnaccsUserId: async (orgId) => (await creds.get(orgId))?.useR_ID ?? null,
     pollDelayMs: gateway.name === "fake-customs" ? 3_000 : CUSTOMS_POLL_DELAY_MS, clock: opts.clock ?? systemClock, idGen: ulidIdGen,
   };

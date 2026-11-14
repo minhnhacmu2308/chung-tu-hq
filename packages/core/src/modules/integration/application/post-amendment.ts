@@ -82,7 +82,7 @@ export async function getPostAmendmentView(deps: CustomsDeps, ctx: Ctx, dossierI
 type Edit = (a: PostAmendmentRow, r: CustomsRepos) => Promise<Result<PostAmendmentRow>>;
 
 /** Sửa bản khai đang mở: kiểm quyền, trạng thái sửa được; sửa sau khi duyệt → về nháp (duyệt lại trước khi khai). */
-async function editOpen(deps: CustomsDeps, ctx: Ctx, dossierId: string, fn: Edit, branch: number): Promise<Result<PostAmendment>> {
+async function editOpen(deps: CustomsDeps, ctx: Ctx, dossierId: string, fn: Edit, branch: number, audit?: () => { key: string; oldValue: string; newValue: string } | null): Promise<Result<PostAmendment>> {
   const allowed = requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
   if (!allowed.ok) return allowed;
   const out = await deps.uow.asOrg(ctx, async (r): Promise<Result<PostAmendmentRow>> => {
@@ -100,6 +100,9 @@ async function editOpen(deps: CustomsDeps, ctx: Ctx, dossierId: string, fn: Edit
       row.approvedAt = null;
     }
     await r.amendments.update(row);
+    // Bất biến 6: người dùng sửa trường → field_audit append-only, cùng transaction với lệnh sửa.
+    const a6 = audit?.();
+    if (a6) await r.fieldAudit.append(ctx, row.updatedAt, [{ dossierId, ...a6, source: "AMA_EDIT" }]);
     return ok(row);
   });
   if (!out.ok) return out;
@@ -125,10 +128,7 @@ export async function updatePostAmendmentField(deps: CustomsDeps, ctx: Ctx, doss
     if (!isAmaHeaderKey(input.key) || amaHeaderLocked(input.key)) return err(domainError("INVALID_STATE", "Ô này theo tờ khai gốc – không sửa"));
     audit = { key: `${auditPrefix(a)}:${input.key}`, oldValue: a.header[input.key] ?? "", newValue: input.value.trim() };
     return ok({ ...a, header: { ...a.header, [input.key]: input.value.trim() } });
-  }, branch);
-  // Bất biến 6: người dùng sửa trường → field_audit append-only.
-  const row = audit as { key: string; oldValue: string; newValue: string } | null;
-  if (res.ok && row) await deps.audit.append(ctx, { dossierId, ...row, source: "AMA_EDIT" });
+  }, branch, () => audit);
   return res;
 }
 
@@ -245,7 +245,10 @@ export async function copyPostAmendmentHeader(deps: CustomsDeps, ctx: Ctx, dossi
         audits.push({ key: `${auditPrefix(a)}:${k}`, oldValue: header[k] ?? "", newValue: values[k]! });
         header[k] = values[k]!;
       }
-      await r.amendments.update({ ...a, header, updatedAt: deps.clock.now() });
+      const now = deps.clock.now();
+      await r.amendments.update({ ...a, header, updatedAt: now });
+      // Bất biến 6: mỗi ô của tờ → field_audit, cùng transaction với lệnh lưu tờ đó (lỗi ở tờ sau không làm mất audit tờ trước).
+      await r.fieldAudit.append(ctx, now, audits.map((row) => ({ dossierId, ...row, source: "AMA_EDIT" as const })));
       return null;
     });
     if (outcome) {
@@ -253,8 +256,6 @@ export async function copyPostAmendmentHeader(deps: CustomsDeps, ctx: Ctx, dossi
       continue;
     }
     applied.push(target.branch);
-    // Bất biến 6: người dùng sửa trường → field_audit append-only (mỗi ô của tờ, ngay sau khi tờ đó lưu – lỗi ở tờ sau không làm mất audit tờ trước).
-    for (const row of audits) await deps.audit.append(ctx, { dossierId, ...row, source: "AMA_EDIT" });
   }
   // Như startPostAmendment: lập bản khai mới → hồ sơ về bước Review (sửa / duyệt bản khai).
   if (created) await deps.dossiers.update(ctx.orgId, dossierId, { step: "review" });

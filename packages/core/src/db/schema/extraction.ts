@@ -91,28 +91,8 @@ export const extractedFields = pgTable(
   (t) => [uniqueIndex("extracted_fields_doc_key_uq").on(t.documentId, t.key), index("extracted_fields_org_dossier_idx").on(t.orgId, t.dossierId), orgRls("extracted_fields_rls")],
 ).enableRLS();
 
-/** Nhật ký sửa trường – append-only: chỉ INSERT/SELECT (B6). */
-export const fieldAudit = pgTable(
-  "field_audit",
-  {
-    id: id(),
-    orgId: orgId(),
-    dossierId: text("dossier_id").notNull(),
-    fieldId: text("field_id"),
-    documentId: text("document_id"),
-    key: text("key").notNull(),
-    oldValue: text("old_value").notNull().default(""),
-    newValue: text("new_value").notNull().default(""),
-    userId: text("user_id").notNull(),
-    source: text("source").notNull(),
-    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("field_audit_org_dossier_idx").on(t.orgId, t.dossierId, t.at),
-    pgPolicy("field_audit_select", { for: "select", to: appRole, using: orgPolicyUsing }),
-    pgPolicy("field_audit_insert", { for: "insert", to: appRole, withCheck: sql`${orgPolicyUsing}` }),
-  ],
-).enableRLS();
+/** Nhật ký sửa trường (field_audit) – bảng dùng chung nhiều module, định nghĩa ở shared.ts; giữ re-export cho import cũ. */
+export { fieldAudit } from "./shared.js";
 
 /**
  * Hóa đơn thương mại do hệ thống phát hành (ADR 0013 mục 3 – sau thông quan). Một dòng một số:

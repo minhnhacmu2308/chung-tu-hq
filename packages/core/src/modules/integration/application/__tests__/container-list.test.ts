@@ -12,8 +12,8 @@ const val = <T>(r: { ok: boolean; value?: T; error?: unknown }): T => {
 };
 beforeEach(() => {
   h = makeHarness();
-  audits = [];
-  h.deps.audit = { append: async (_c, r) => void audits.push(r) };
+  // field_audit ghi qua repo của transaction (uow in-memory), không qua port riêng.
+  audits = h.uow.fieldAudit.rows;
   h.deps.containerSources = async () => [{ id: "doc_bl", kind: "BILL_OF_LADING", billNo: "HBL1", containers: [{ no: "fbiu 580242-9", sealNo: null }, { no: "CSQU 305438-3", sealNo: "SL2" }] }];
   seed(h, 1, "DECLARED");
 });

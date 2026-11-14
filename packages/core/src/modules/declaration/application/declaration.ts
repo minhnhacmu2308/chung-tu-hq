@@ -91,10 +91,11 @@ export async function updateDeclarationField(deps: DeclarationDeps, ctx: Ctx, do
     if (!editable.ok) return editable;
     const fields = { ...decl.fields, [code]: { no: f.no, label: f.label, section: f.section, value, source: "USER" as const, ...(f.blocking ? { blocking: true as const } : {}) } };
     await r.declarations.update(decl.orgId, decl.id, { fields, updatedAt: now });
-    return ok({ old: f.value, decl: { ...decl, fields, updatedAt: now } });
+    // Bất biến 6: field_audit cùng transaction với lệnh sửa.
+    await r.fieldAudit.append(ctx, now, [{ dossierId, key: `decl:${code}`, oldValue: f.value, newValue: value, source: "DECL_EDIT" }]);
+    return ok({ decl: { ...decl, fields, updatedAt: now } });
   });
   if (!r0.ok) return r0;
-  await deps.audit.append(ctx, { dossierId, key: `decl:${code}`, oldValue: r0.value.old, newValue: value, source: "DECL_EDIT" });
   return ok(toDeclaration(r0.value.decl, null));
 }
 

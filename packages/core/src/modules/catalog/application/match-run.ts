@@ -7,7 +7,7 @@ import { itemCodeKey, itemUnitKey, type AliasSource, type CatalogImport } from "
 import { domainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { auditKeyAlias, flushAudit, needsFactor, type AuditEntry } from "./common.js";
+import { auditKeyAlias, writeAudit, needsFactor, type AuditEntry } from "./common.js";
 import type { CatalogDeps, CatalogImportCounts, CatalogImportRow, CatalogRepos, CatalogStagedRow, ItemAliasRow, MatchQueueRow } from "./ports.js";
 import { loadMatchContext, resolveWith, type MatchContext } from "./resolve.js";
 
@@ -124,9 +124,9 @@ export async function runMatch(deps: CatalogDeps, ctx: RunCtx, importId: string)
     const step = await deps.uow.asOrg(ctx, async (r) => {
       // Khóa dòng lần nhập rồi kiểm lại rows_done: job chạy trùng (treo rồi chạy lại) chờ ở đây và không ghép lại lô đã xong.
       const cur = await r.imports.getForUpdate(ctx.orgId, importId);
-      if (!cur || cur.status !== "MATCHING") return { next: rows.length, audit: [] as AuditEntry[] };
+      if (!cur || cur.status !== "MATCHING") return { next: rows.length };
       // Lần chạy khác đã đi trước → tiếp từ chỗ đó.
-      if (cur.rowsDone !== from) return { next: cur.rowsDone, audit: [] as AuditEntry[] };
+      if (cur.rowsDone !== from) return { next: cur.rowsDone };
       st ??= await loadState(r, ctx.orgId, cur.codeSetId);
       const chunk = rows.slice(from, from + MATCH_CHUNK_ROWS);
       const audit: AuditEntry[] = [];
@@ -138,9 +138,10 @@ export async function runMatch(deps: CatalogDeps, ctx: RunCtx, importId: string)
       const now = deps.clock.now();
       if (Object.keys(delta).length) await r.imports.bumpCounts(ctx.orgId, importId, delta, now);
       await r.imports.update(ctx.orgId, importId, { rowsDone: from + chunk.length, updatedAt: now });
-      return { next: from + chunk.length, audit };
+      // Bất biến 6: nhật ký của lô cùng transaction với lô ghép.
+      await writeAudit(r, ctx, now, audit);
+      return { next: from + chunk.length };
     });
-    await flushAudit(deps, ctx, step.audit);
     done = step.next;
   }
 

@@ -69,6 +69,24 @@ describe("createItem / updateItem / archiveItem", () => {
     expect(await updateItem(h.deps, declarant, d.item.id, { name: "z" })).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
   });
 
+  it("C7: field_audit ghi qua repo của transaction cùng lệnh sửa (người sửa + giờ theo clock); lỗi trước khi ghi / org khác → không có dòng audit", async () => {
+    const d = await created();
+    h.audits.length = 0;
+    // Lúc callback transaction kết thúc, dòng audit đã có (ghi trong cùng asOrg, không phải port riêng sau commit).
+    const seen: number[] = [];
+    const real = h.uow.asOrg.bind(h.uow);
+    h.deps.uow = { asOrg: (c, fn) => real(c, async (r) => { const out = await fn(r); seen.push(h.audits.length); return out; }) };
+    expect((await updateItem(h.deps, approver, d.item.id, { name: "Vải mới" })).ok).toBe(true);
+    expect(seen).toEqual([1]);
+    expect(h.audits).toEqual([expect.objectContaining({ orgId: ORG, dossierId: d.item.id, key: "name", source: "CATALOG_EDIT", userId: approver.userId, at: NOW })]);
+    expect(await updateItem(h.deps, approver, "cat_khong_co", { name: "x" })).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(await updateItem(h.deps, otherAdmin, d.item.id, { name: "x" })).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(h.audits).toHaveLength(1);
+    // Lịch sử đọc qua repo của uow: org khác không thấy.
+    expect(await getItemHistory(h.deps, otherAdmin, d.item.id)).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+    expect(await getItemHistory(h.deps, viewer, d.item.id)).toMatchObject({ ok: true, value: [expect.objectContaining({ key: "name", newValue: "Vải mới", userId: approver.userId })] });
+  });
+
   it("ngưng dùng (ADMIN): ARCHIVED, 1 mục audit, ẩn khỏi danh sách mặc định", async () => {
     const d = await created();
     h.audits.length = 0;

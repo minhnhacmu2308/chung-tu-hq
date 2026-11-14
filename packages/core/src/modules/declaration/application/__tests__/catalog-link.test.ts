@@ -11,6 +11,7 @@ import { errCode, unwrap } from "../../../../shared/result.js";
 import { DOSSIER, hansol, ORG } from "../../domain/test/shipment.js";
 import { buildFptRequest, sentSheetsError, sheetSnapshot } from "../../../integration/index.js";
 import { runAgent, startAgentRun } from "../agent-run.js";
+import { listLineCatalogItems } from "../catalog-source.js";
 import { getDeclarationSnapshot, markDeclarationDraft, refreshFromShipment } from "../customs-bridge.js";
 import { approveDeclaration, getDeclarationView, moveToReview, updateDeclarationField } from "../declaration.js";
 import { linkLineItem, setLineUnitFactor } from "../line-catalog.js";
@@ -73,6 +74,16 @@ describe("dòng hàng gắn mặt hàng danh mục", () => {
     expect(items[1]!.itemCode).toBeUndefined();
     expect(items[2]!.unknownCode).toBeUndefined();
     expect(uow.data.lineItems[0]).toMatchObject({ catalogItemId: "cat_1", catalogAliasId: "ali_cat_1", itemCode: "XNK-6205" });
+  });
+
+  it("listLineCatalogItems (C6): id dòng khớp items[].id của tờ khai gửi đi (integration lấy mặt hàng theo dòng đã gửi); org khác không đọc được", async () => {
+    await readyToApprove();
+    const snap = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
+    const found = (await listLineCatalogItems(deps, ORG_ID, D))!;
+    expect(found.lines.map((l) => l.id)).toEqual(snap.items.map((i) => i.id));
+    expect(found.lines.every((l) => !!l.id)).toBe(true);
+    expect(found.lines[0]).toMatchObject({ lineNo: 1, catalogItemId: "cat_1" });
+    expect(await listLineCatalogItems(deps, other.orgId, D)).toBeNull();
   });
 
   it("danh mục lỗi → dòng hàng vẫn dựng được (không gắn), không chặn", async () => {

@@ -1,19 +1,19 @@
 // Worker `customs-poll`: sau khai chính thức (IDC/IDE), mỗi lượt lấy thông điệp Hải quan (VNACCSREP) rồi hỏi trạng thái (IID nhập / IEX xuất)
 // tới khi thông quan/từ chối; ghi IN khi đổi; lặp theo delay.
 // Lô nhiều tờ: mỗi tờ khai nhánh hỏi riêng (payload `branch`, vắng = 1); hồ sơ CLEARED khi mọi tờ thông quan (syncDossierClearance).
-import { AWAITING_CLEARANCE, queryOpFor, vnDateOf } from "@kb/contracts";
+import { AWAITING_CLEARANCE, queryOpFor } from "@kb/contracts";
 import { domainError } from "../../../shared/errors.js";
 import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
-import { recordCatalogDeclarationNo } from "./_catalog-numbers.js";
+import { reconcileCatalogDeclarationNo } from "./_catalog-numbers.js";
 import { syncDossierClearance } from "./_clearance.js";
 import { pullCustomsMessages } from "./customs-messages.js";
 
 export { syncDossierClearance };
-import type { CustomsDeps } from "./customs-ports.js";
+import type { CustomsDeps, ResultRow } from "./customs-ports.js";
 
 /** `branch`: tờ khai nhánh (vắng = 1 – job tạo trước khi tách tờ khai). */
 export type PollStatusInput = { orgId: string; userId: string; dossierId: string; attempt: number; branch?: number | undefined };
@@ -33,7 +33,11 @@ export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Pro
   const result = await deps.uow.asOrg(ctx, (r) => r.results.get(input.orgId, input.dossierId, branch));
   if (!result) return err(domainError("NOT_FOUND", "Hồ sơ chưa truyền"));
   const stage = stageOf(result);
-  if (!result.externalId || !AWAITING_CLEARANCE.has(stage)) return ok({ done: true, cleared: stage === "CLEARED" });
+  if (!result.externalId || !AWAITING_CLEARANCE.has(stage)) {
+    // Lượt cuối (đã thông quan qua VNACCSREP / không còn chờ): vẫn ghi bù số tờ khai vào danh mục nếu chưa ghi (C6).
+    await reconcileCatalogDeclarationNo(deps, ctx, result, result.updatedAt);
+    return ok({ done: true, cleared: stage === "CLEARED" });
+  }
   const dossier = await deps.dossiers.get(input.orgId, input.dossierId);
   const op = queryOpFor(dossier?.direction ?? "NK");
 
@@ -42,21 +46,26 @@ export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Pro
   const nextStage = st.rejected ? "REJECTED" : st.cleared ? "CLEARED" : stage;
   const now = deps.clock.now();
   const changed = st.status !== result.raw?.lastStatus;
+  const saved: ResultRow = {
+    ...result, state: coarseState(nextStage, result.state === "SEND_FAILED" && nextStage === stage), pollCount: result.pollCount + 1,
+    clearanceStatus: st.rejected ? "REJECTED" : st.cleared ? "CLEARED" : "INSPECTING",
+    ...(st.customsTaxVnd ? { customsTaxVnd: st.customsTaxVnd } : {}), ...(st.declarationNo ? { declarationNo: st.declarationNo } : {}), ...(st.channel ? { channel: st.channel } : {}),
+    raw: {
+      ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status, ...(st.info ? { customsInfo: mergeCustomsInfo(result.raw?.customsInfo, { ...st.info, receivedAt: now.toISOString() }) } : {}),
+      // C6: lúc nhận số mới / đổi – ngày ghi danh mục khi Hải quan không trả ngày đăng ký.
+      ...(st.declarationNo && st.declarationNo !== result.declarationNo ? { numberAt: now.toISOString() } : {}),
+    },
+    updatedAt: now,
+  };
   await deps.uow.asOrg(ctx, async (r) => {
     if (changed) {
       await r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: input.dossierId, branch, operation: op, direction: "IN", result: "OK", summary: `Trạng thái tờ khai: ${st.status}`, payloadMasked: { nghiepVu: op, soToKhai: st.declarationNo ?? result.declarationNo, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now });
     }
-    await r.results.upsert({
-      ...result, state: coarseState(nextStage, result.state === "SEND_FAILED" && nextStage === stage), pollCount: result.pollCount + 1,
-      clearanceStatus: st.rejected ? "REJECTED" : st.cleared ? "CLEARED" : "INSPECTING",
-      ...(st.customsTaxVnd ? { customsTaxVnd: st.customsTaxVnd } : {}), ...(st.declarationNo ? { declarationNo: st.declarationNo } : {}), ...(st.channel ? { channel: st.channel } : {}),
-      raw: { ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status, ...(st.info ? { customsInfo: mergeCustomsInfo(result.raw?.customsInfo, { ...st.info, receivedAt: now.toISOString() }) } : {}) }, updatedAt: now,
-    });
+    await r.results.upsert(saved);
   });
-  // C6: Hải quan trả số tờ khai khác số đang lưu → cập nhật số tờ khai cuối của mặt hàng (sau commit; lỗi chỉ log).
-  if (st.declarationNo && st.declarationNo !== result.declarationNo) {
-    await recordCatalogDeclarationNo(deps, ctx.orgId, input.dossierId, branch, st.declarationNo, st.info?.registeredDate || result.raw?.customsInfo?.registeredDate || vnDateOf(now));
-  }
+  // C6: số tờ khai / tập dòng đã gửi không khớp raw.catalogNo (số mới / đổi, khai sửa đổi dòng, hoặc danh mục chưa ghi xong – crash, lỗi) → số tờ khai
+  // cuối của mặt hàng (sau commit; lỗi chỉ log; ngày = ngày đăng ký Hải quan → lúc nhận số → thông điệp khai tạm → updated_at trước lượt này).
+  await reconcileCatalogDeclarationNo(deps, ctx, saved, result.updatedAt);
   if (st.cleared) {
     const summary = await syncDossierClearance(deps, ctx, input.dossierId);
     // Mỗi tờ báo một lần (tờ đã thông quan không còn hỏi trạng thái); lô nhiều tờ ghi rõ "Tờ k/N".

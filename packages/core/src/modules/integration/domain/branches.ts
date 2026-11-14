@@ -44,6 +44,16 @@ export function sheetSnapshot(p: DeclarationPayload, no: number): SentSnapshot {
   return sentSnapshotOf({ fields: Object.fromEntries(Object.entries(b.fields).map(([k, f]) => [k, f.value])), items: b.items, adjustments: b.adjustments, containers: b.containers, currency: b.currency });
 }
 
+/**
+ * Id dòng hàng của tờ `no` như được gửi (C6 – mặt hàng nhận số tờ khai lấy theo đúng các dòng đã gửi, không theo dòng hiện tại).
+ * Mọi lô (kể cả một tờ). Có dòng thiếu id (dữ liệu cũ) hoặc tờ không có dòng → null (đọc lại dùng cách dự phòng).
+ */
+export function sheetLineIds(p: DeclarationPayload, no: number): string[] | null {
+  const items = branchPayload(p, no, null).payload.items;
+  if (!items.length || items.some((i) => !i.id)) return null;
+  return items.map((i) => i.id!);
+}
+
 export type SentSheet = { no: number; stage: CustomsStage; declarationNo: string | null; sent: SentSnapshot | null };
 
 /** Tờ còn hiệu lực (có số, chưa gọi về, không miễn) CÓ ảnh chụp: chỉ tiêu chung khác (mã) và dòng hàng khác không. */

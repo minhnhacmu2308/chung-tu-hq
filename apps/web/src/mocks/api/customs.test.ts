@@ -83,6 +83,41 @@ describe("luồng nghiệp vụ Hải quan (mock)", () => {
     expect((await listCustomsDeclarations()).find((r) => r.dossierId === NEW)).toMatchObject({ state: "CLEARED", stage: "CLEARED", lastOperation: "IID" });
   });
 
+  it("C6: Hải quan cấp số lúc 00:00–07:00 giờ VN → ngày tờ khai cuối của mặt hàng là ngày VN (không phải ngày UTC)", async () => {
+    // 2026-10-14T18:30Z = 01:30 ngày 15/10 giờ VN; phản hồi IDA đến sau ~2,5 giây – vẫn ngày 15/10 VN, ngày UTC còn 14/10.
+    vi.setSystemTime(new Date("2026-10-14T18:30:00Z"));
+    const db = getDb();
+    const item = db.catalog.items.find((i) => i.status === "ACTIVE")!;
+    Object.assign(item, { lastDeclarationNo: null, lastDeclarationDate: null });
+    const line = db.lineItems.find((l) => l.dossierId === NEW)!;
+    line.catalogItem = { id: item.id, itemNo: item.itemNo, name: item.name };
+    saveDb();
+    await submitDeclaration(NEW, CERT);
+    wait(3_000);
+    const s = await getSubmission(NEW);
+    expect(s.result?.declarationNo).toMatch(/^107\d{9}$/);
+    expect(getDb().catalog.items.find((i) => i.id === item.id)).toMatchObject({ lastDeclarationNo: s.result?.declarationNo, lastDeclarationDate: "2026-10-15" });
+  });
+
+  it("C6: mặt hàng theo dòng ĐÃ GỬI của tờ (như raw.sentLineIds) – dòng thêm sau khi gửi, trước khi Hải quan trả số, không nhận số", async () => {
+    const db = getDb();
+    const [a, b] = db.catalog.items.filter((i) => i.status === "ACTIVE");
+    for (const it of [a!, b!]) Object.assign(it, { lastDeclarationNo: null, lastDeclarationDate: null });
+    const lines = db.lineItems.filter((l) => l.dossierId === NEW);
+    lines[0]!.catalogItem = { id: a!.id, itemNo: a!.itemNo, name: a!.name };
+    saveDb();
+    await submitDeclaration(NEW, CERT);
+    // Thêm dòng gắn mặt hàng b sau khi gửi (vị trí vẫn thuộc tờ 1 – cách cũ theo vị trí sẽ ghi cả b).
+    const { catalogItem: _x, ...plain } = structuredClone(lines[0]!);
+    getDb().lineItems.push({ ...plain, id: "itm_added_after_send", lineNo: Math.max(...lines.map((l) => l.lineNo)) + 1, catalogItem: { id: b!.id, itemNo: b!.itemNo, name: b!.name } });
+    saveDb();
+    wait(3_000);
+    const s = await getSubmission(NEW);
+    const items = getDb().catalog.items;
+    expect(items.find((i) => i.id === a!.id)!.lastDeclarationNo).toBe(s.result?.declarationNo);
+    expect(items.find((i) => i.id === b!.id)!.lastDeclarationNo).toBeNull();
+  });
+
   it("IDB gọi về sửa → mở lại tờ khai → duyệt lại → IDA khai tạm lại", async () => {
     await submitDeclaration(NEW, CERT);
     wait(3_000);

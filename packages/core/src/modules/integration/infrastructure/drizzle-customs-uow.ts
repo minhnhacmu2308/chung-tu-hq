@@ -78,6 +78,15 @@ function repos(tx: Tx): CustomsRepos {
           .values(row)
           .onConflictDoUpdate({ target: [customsResults.dossierId, customsResults.branch], set: { externalId: row.externalId, declarationNo: row.declarationNo, channel: row.channel, channelNote: row.channelNote, clearanceStatus: row.clearanceStatus, customsTaxVnd: row.customsTaxVnd, state: row.state, pollCount: row.pollCount, raw: row.raw, updatedAt: row.updatedAt } });
       },
+      // Chỉ gộp khóa catalogNo vào jsonb (không ghi đè cả dòng – không làm mất cập nhật song song của poll/outbox); điều kiện số tờ khai hiện tại.
+      markCatalogNo: async (orgId, dossierId, branch, declarationNo, lines) =>
+        (
+          await tx
+            .update(customsResults)
+            .set({ raw: sql`coalesce(${customsResults.raw}, '{}'::jsonb) || jsonb_build_object('catalogNo', jsonb_build_object('no', ${declarationNo}::text, 'lines', ${lines}::text))` })
+            .where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId), eq(customsResults.branch, branch), eq(customsResults.declarationNo, declarationNo)))
+            .returning({ id: customsResults.id })
+        ).length > 0,
     },
     amendments: {
       listForDossier: async (orgId, dossierId, branch) => (await tx.select().from(postAmendments).where(and(eq(postAmendments.orgId, orgId), eq(postAmendments.dossierId, dossierId), branch === undefined ? undefined : eq(postAmendments.branch, branch))).orderBy(postAmendments.branch, postAmendments.seq)).map(toAmendment),

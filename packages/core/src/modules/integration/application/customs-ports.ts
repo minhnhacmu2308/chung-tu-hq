@@ -74,6 +74,11 @@ export interface CustomsRepos {
     /** Xóa kết quả nhánh > `branch` chưa từng khai (giai đoạn NOT_SENT, chưa có số tờ khai) – số tờ giảm giữa hai lần truyền. Trả số dòng đã xóa. */
     deleteUnsentAbove(orgId: string, dossierId: string, branch: number): Promise<number>;
     upsert(row: ResultRow): Promise<void>;
+    /**
+     * C6: đánh dấu số tờ khai + khóa tập dòng đã gửi đã ghi vào danh mục (raw.catalogNo = { no, lines }) – UPDATE riêng chỉ khóa này (không ghi đè cả dòng),
+     * chỉ khi tờ còn đúng số `declarationNo`. Trả true nếu đã đặt. Gọi trong transaction ngắn riêng SAU khi CatalogPort.recordDeclarationNo thành công.
+     */
+    markCatalogNo(orgId: string, dossierId: string, branch: number, declarationNo: string, lines: string | null): Promise<boolean>;
   };
   /** Bản khai bổ sung sau thông quan (AMA) – bản riêng, tờ khai gốc không đổi. */
   amendments: {
@@ -210,8 +215,8 @@ export interface DeclarationReader {
   ): Promise<{ outcome: "FILLED" | "ALREADY" | "FULL" | "REPLACED" | "LOCKED"; slot?: 1 | 2 | 3; replaced?: { code: string; receipt: string }; afterApproval: boolean }>;
   /** Hồ sơ có tờ khai APPROVED/SUBMITTED (màn Khai báo Hải quan). */
   listForCustoms(orgId: string): Promise<{ dossierId: string; status: DeclarationStatus; approvedAt: Date | null }[]>;
-  /** Dòng hàng hiện tại của hồ sơ + mặt hàng danh mục đã gắn (C6 – số tờ khai cuối của mặt hàng). Không nối → bỏ qua. */
-  lineCatalogItems?(orgId: string, dossierId: string): Promise<{ declarationId: string; lines: { lineNo: number; catalogItemId: string | null }[] } | null>;
+  /** Dòng hàng hiện tại của hồ sơ (id, số dòng) + mặt hàng danh mục đã gắn (C6 – số tờ khai cuối của mặt hàng). Không nối → bỏ qua. */
+  lineCatalogItems?(orgId: string, dossierId: string): Promise<{ declarationId: string; lines: { id: string; lineNo: number; catalogItemId: string | null }[] } | null>;
 }
 
 /**

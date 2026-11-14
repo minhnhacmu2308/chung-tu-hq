@@ -106,6 +106,25 @@ describe("DrizzleCustomsUow – trạng thái theo nhánh tờ khai", () => {
     expect(await uow.asOrg(B, (r) => r.results.listForDossier("org_anphat", "dos_sent"))).toEqual([]);
   });
 
+  it("markCatalogNo (C6): chỉ đặt raw.catalogNo khi tờ còn đúng số; giữ các khóa raw khác, không đụng nhánh khác; org khác không đặt được", async () => {
+    await uow.asOrg(A, (r) => r.results.upsert(res("res_cat1", 1, { dossierId: "dos_cat", declarationNo: "104000000011", state: "PRE_DECLARED", raw: { stage: "PRE_DECLARED", sentLineIds: ["ln_1", "ln_2"] } })));
+    await uow.asOrg(A, (r) => r.results.upsert(res("res_cat2", 2, { dossierId: "dos_cat", declarationNo: "104000000012", state: "PRE_DECLARED", raw: null })));
+    const get = async (branch: number) => (await uow.asOrg(A, (r) => r.results.get("org_anphat", "dos_cat", branch)))!;
+    const before = (await get(1)).updatedAt;
+    // Org khác (RLS + lọc orgId) và số không khớp → không đặt.
+    expect(await uow.asOrg(B, (r) => r.results.markCatalogNo("org_anphat", "dos_cat", 1, "104000000011", "2:abc"))).toBe(false);
+    expect(await uow.asOrg(B, (r) => r.results.markCatalogNo("org_khac", "dos_cat", 1, "104000000011", "2:abc"))).toBe(false);
+    expect(await uow.asOrg(A, (r) => r.results.markCatalogNo("org_anphat", "dos_cat", 1, "104000000099", "2:abc"))).toBe(false);
+    expect((await get(1)).raw?.catalogNo).toBeUndefined();
+    expect(await uow.asOrg(A, (r) => r.results.markCatalogNo("org_anphat", "dos_cat", 1, "104000000011", "2:abc"))).toBe(true);
+    expect((await get(1)).raw).toEqual({ stage: "PRE_DECLARED", sentLineIds: ["ln_1", "ln_2"], catalogNo: { no: "104000000011", lines: "2:abc" } });
+    expect((await get(1)).updatedAt).toEqual(before);
+    expect((await get(2)).raw).toBeNull();
+    // raw NULL → tạo object chỉ có catalogNo; khóa dòng null → JSON null.
+    expect(await uow.asOrg(A, (r) => r.results.markCatalogNo("org_anphat", "dos_cat", 2, "104000000012", null))).toBe(true);
+    expect((await get(2)).raw).toEqual({ catalogNo: { no: "104000000012", lines: null } });
+  });
+
   it("post_amendments: seq 1 của nhánh 1 và nhánh 2 cùng tồn tại; trùng (dossier, branch, seq) bị chặn; lọc theo nhánh", async () => {
     await uow.asOrg(A, async (r) => {
       await r.amendments.insert(ama("ama_1", 1, 1));

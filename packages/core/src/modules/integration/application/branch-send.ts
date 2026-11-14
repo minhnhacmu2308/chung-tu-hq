@@ -4,7 +4,7 @@ import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, orderedO
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
-import { branchPayload, sheetSnapshot } from "../domain/branches.js";
+import { branchPayload, sheetLineIds, sheetSnapshot } from "../domain/branches.js";
 import { buildFptRequest, type DeclarationPayload } from "../domain/declaration-to-fpt.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
@@ -24,6 +24,14 @@ export const outboxVersion = (key: string): number | null => {
  * (payload.pin) không còn khớp – không gửi nội dung cũ. Lô một tờ không ghim (giữ hành vi cũ).
  */
 export const pinOf = (snap: Pick<DeclarationSnapshot, "version" | "approvedAt">) => `v${snap.version}@${snap.approvedAt ?? ""}`;
+/**
+ * `payload.lineIds` của outbox gửi nội dung (IDA/IDA01/EDA/EDA01): id dòng hàng của tờ như được gửi – process-outbox chép vào raw.sentLineIds khi
+ * Hải quan nhận (C6: mặt hàng nhận số tờ khai theo đúng dòng đã gửi). Payload thiếu id dòng (dữ liệu cũ) → không ghi (đọc lại dùng dự phòng).
+ */
+export const lineIdsOf = (p: DeclarationPayload, branch: number): { lineIds?: string[] } => {
+  const ids = sheetLineIds(p, branch);
+  return ids ? { lineIds: ids } : {};
+};
 export const pinOfOutbox = (o: Pick<OutboxRow, "payload">): string | undefined => (o.payload as { pin?: unknown } | null)?.pin as string | undefined;
 
 /**
@@ -176,7 +184,7 @@ export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: O
   if (same.some((o) => o.status === "PENDING" || pinOfOutbox(o) === pin)) return ok(undefined);
   const now = deps.clock.now();
   const key = contentKey(dossierId, op, snap.version, same.length + 1, branch);
-  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: target.raw?.certificateId, pin, sent: sheetSnapshot(snap.payload, branch) }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+  const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: target.raw?.certificateId, pin, sent: sheetSnapshot(snap.payload, branch), ...lineIdsOf(snap.payload, branch) }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
   const toSend = await deps.uow.asOrg(ctx, async (r): Promise<OutboxRow | null> => {
     const existing = await r.outbox.findByKey(ctx.orgId, key);
     if (existing) return existing.status === "PENDING" && existing.attempts === 0 ? existing : null;

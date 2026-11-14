@@ -240,6 +240,10 @@ describe("dòng hàng ↔ danh mục", () => {
     recordCatalogDeclarationNo(db, "dos_c6", 2, "107000000002", "2026-11-14");
     expect(b).toMatchObject({ lastDeclarationNo: "107000000777", lastDeclarationDate: "2026-12-01" });
     expect(a!.lastDeclarationNo).toBe("107000000001");
+    // Có id dòng đã gửi (như raw.sentLineIds): theo đúng các dòng đó, không theo vị trí (dòng 1 thuộc tờ 1 theo vị trí nhưng được gửi trong tờ 2).
+    recordCatalogDeclarationNo(db, "dos_c6", 2, "107000000003", "2026-12-05", ["itm_c6_1"]);
+    expect(a).toMatchObject({ lastDeclarationNo: "107000000003", lastDeclarationDate: "2026-12-05" });
+    expect(b!.lastDeclarationNo).toBe("107000000777");
   });
 
   it("gắn mặt hàng cho dòng → mã HAG_MAHANG từ bộ XNK; hệ số theo lô", async () => {

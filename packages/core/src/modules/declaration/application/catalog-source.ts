@@ -24,10 +24,11 @@ export async function listApprovedLinesForCatalog(deps: Pick<DeclarationDeps, "u
  * Dòng hàng hiện tại của hồ sơ và mặt hàng danh mục đã gắn (C6 – Hải quan cấp số cho tờ khai nhánh → ghi số tờ khai cuối của mặt hàng).
  * `declarationId` = tờ khai mới nhất (log). Chưa có tờ khai → null. Chỉ đọc; integration gọi qua composition root, ngoài transaction của nó.
  */
-export async function listLineCatalogItems(deps: Pick<DeclarationDeps, "uow">, orgId: string, dossierId: string): Promise<{ declarationId: string; lines: { lineNo: number; catalogItemId: string | null }[] } | null> {
+export async function listLineCatalogItems(deps: Pick<DeclarationDeps, "uow">, orgId: string, dossierId: string): Promise<{ declarationId: string; lines: { id: string; lineNo: number; catalogItemId: string | null }[] } | null> {
   return deps.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, async (r) => {
     const decl = await r.declarations.latest(orgId, dossierId);
     if (!decl) return null;
-    return { declarationId: decl.id, lines: (await r.lineItems.list(orgId, dossierId)).map((l) => ({ lineNo: l.lineNo, catalogItemId: l.catalogItemId ?? null })) };
+    // `id` = id dòng (khớp items[].id của tờ khai đã gửi – raw.sentLineIds / raw.sent của integration).
+    return { declarationId: decl.id, lines: (await r.lineItems.list(orgId, dossierId)).map((l) => ({ id: l.id, lineNo: l.lineNo, catalogItemId: l.catalogItemId ?? null })) };
   });
 }

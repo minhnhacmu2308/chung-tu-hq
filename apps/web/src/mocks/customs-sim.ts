@@ -22,9 +22,12 @@ export type CustomsFlow = {
   pending: {
     op: CustomsOperation; outcome: "OK" | "ERROR"; doneAt: string; errors?: CustomsError[]; /** Chuỗi nối tiếp của lần gửi (khai chính thức cả lô): sau khi xong, khai tờ kế tiếp. */ chain?: "declare" | "recall";
     /** Lô nhiều tờ, gửi nội dung: ảnh chụp nội dung tờ lúc gửi (như outbox.payload.sent ở backend). */ sent?: SentSnapshot;
+    /** Gửi nội dung (mọi lô): id dòng của tờ lúc gửi (như outbox.payload.lineIds ở backend). */ lineIds?: string[];
   } | null;
   /** Lô nhiều tờ: nội dung tờ Hải quan đang giữ (như results.raw.sent ở backend) – guard SENT_SHEETS_CHANGED. */
   sent?: SentSnapshot;
+  /** Id dòng của tờ trong lần gửi nội dung thành công gần nhất (như results.raw.sentLineIds) – C6: mặt hàng nhận số theo dòng đã gửi. Vắng (dữ liệu cũ) → theo vị trí. */
+  sentLineIds?: string[];
   /** Lần gửi bị từ chối gần nhất (giống results.raw.rejection ở backend). */
   rejection?: CustomsRejection;
   /** Số lần sửa đổi bổ sung (IDE/EDE) và sửa sau thông quan (AMC) thành công. */

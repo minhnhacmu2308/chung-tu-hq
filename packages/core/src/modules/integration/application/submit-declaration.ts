@@ -8,7 +8,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import type { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { sheetSnapshot } from "../domain/branches.js";
 import { stageOf } from "../domain/state-machine.js";
-import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, outboxKey, pinOf, pinOfOutbox, sheetCountError, sheetOf } from "./branch-send.js";
+import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, lineIdsOf, outboxKey, pinOf, pinOfOutbox, sheetCountError, sheetOf } from "./branch-send.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
 import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
 import { auditHysWaiver, hysGuard, recordHysWaiver } from "./hys-guard.js";
@@ -106,7 +106,7 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
       if (existing.status === "PENDING" && existing.attempts === 0) await deps.queue.enqueue("customs-send", { orgId: ctx.orgId, userId: ctx.userId, outboxId: existing.id }, { jobId: `customs-send:${existing.id}` });
       return err(domainError("ALREADY_SUBMITTED", "Tờ khai đã được truyền – không gửi trùng"));
     }
-    const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.request, warnings: built.warnings, issues: built.issues, certificateId, ...(of > 1 ? { pin, sent: sheetSnapshot(snap.payload, 1) } : {}) }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
+    const row: OutboxRow = { id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: 1, declarationId: snap.declarationId, operation: op, idempotencyKey: key, payload: { request: built.request, warnings: built.warnings, issues: built.issues, certificateId, ...(of > 1 ? { pin, sent: sheetSnapshot(snap.payload, 1) } : {}), ...lineIdsOf(snap.payload, 1) }, status: "PENDING", attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now, updatedAt: now };
     try {
       await r.outbox.insert(row);
     } catch (e) {

@@ -22,7 +22,7 @@ import { pullCustomsMessages } from "./customs-messages.js";
 import { syncDossierClearance } from "./poll-status.js";
 import { resultsSentError } from "./sent-sheets.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
-import { buildSheet, contentKey, declareBlockError, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
+import { buildSheet, contentKey, lineIdsOf, declareBlockError, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
 
 /** Người gọi không cần vai trò (worker nối tiếp chạy không có phiên người dùng). */
 export type ActorCtx = Pick<Ctx, "orgId" | "userId">;
@@ -134,14 +134,14 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
       if (gaps) return err(gaps);
       const built = buildSheet(sheet);
       if (!built.ok) return built;
-      payload = { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: result.raw?.certificateId, pin: pinOf(snap), sent: sheetSnapshot(snap.payload, branch) };
+      payload = { request: built.value.request, warnings: built.value.warnings, issues: built.value.issues, certificateId: result.raw?.certificateId, pin: pinOf(snap), sent: sheetSnapshot(snap.payload, branch), ...lineIdsOf(snap.payload, branch) };
     } else {
       // Lô một tờ: cả tờ khai (như trước).
       const sheet = branchPayload(snap.payload, branch, null);
       const built = buildFptRequest(sheet.payload);
       const blocking = [...sheet.blockers, ...built.blockers];
       if (blocking.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: blocking.join("; ") }));
-      payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId };
+      payload = { request: built.request, warnings: built.warnings, issues: built.issues, certificateId: result.raw?.certificateId, ...lineIdsOf(snap.payload, branch) };
     }
   } else if (op === "AMB" || op === "AMC") {
     // Gọi lại / đăng ký bản khai bổ sung: theo số tờ khai bổ sung Hải quan cấp ở AMA (tK_SYN).

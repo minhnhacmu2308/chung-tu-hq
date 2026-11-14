@@ -992,14 +992,16 @@ export const setLineUnitFactor = (lineItemId: string, factor: string | null) =>
 // ---------- số tờ khai Hải quan cấp (gọi từ mocks/api/customs) ----------
 /**
  * Hải quan cấp số cho tờ khai nhánh `branch` (như CatalogPort.recordDeclarationNo, gọi từ integration sau commit): mặt hàng (cuối chuỗi gộp, không trùng)
- * của các dòng thuộc tờ đó (50 dòng/tờ – sheetOfLine) → số tờ khai cuối + ngày, chỉ khi ngày đang lưu trống hoặc ≤ `date`. Không cộng lần khai.
+ * của các dòng ĐÃ GỬI trong tờ đó (`sentLineIds` – như raw.sentLineIds; vắng = dữ liệu cũ → dòng hiện tại theo vị trí, 50 dòng/tờ – sheetOfLine)
+ * → số tờ khai cuối + ngày, chỉ khi ngày đang lưu trống hoặc ≤ `date`. Không cộng lần khai.
  */
-export function recordCatalogDeclarationNo(db: MockDb, dossierId: string, branch: number, declarationNo: string, date: string) {
-  const lines = db.lineItems.filter((l) => l.dossierId === dossierId);
+export function recordCatalogDeclarationNo(db: MockDb, dossierId: string, branch: number, declarationNo: string, date: string, sentLineIds?: string[]) {
+  const lines = db.lineItems.filter((l) => l.dossierId === dossierId).sort((a, b) => a.lineNo - b.lineNo);
   const lineNos = lines.map((l) => l.lineNo);
+  const sent = sentLineIds?.length ? new Set(sentLineIds) : null;
   const seen = new Set<string>();
   for (const l of lines) {
-    if (!l.catalogItem || sheetOfLine(lineNos, l.lineNo) !== branch) continue;
+    if (!l.catalogItem || (sent ? !sent.has(l.id) : sheetOfLine(lineNos, l.lineNo) !== branch)) continue;
     const item = endOfChain(db.catalog, l.catalogItem.id);
     if (!item || seen.has(item.id)) continue;
     seen.add(item.id);

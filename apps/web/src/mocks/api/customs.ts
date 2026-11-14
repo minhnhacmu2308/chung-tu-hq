@@ -254,6 +254,8 @@ function apply(db: MockDb, c: Ctx) {
   if (isContentOperation(p.op) && p.op !== "AMA") {
     if (p.sent) c.flow.sent = p.sent;
     else delete c.flow.sent;
+    if (p.lineIds?.length) c.flow.sentLineIds = p.lineIds;
+    else delete c.flow.sentLineIds;
   }
   const r = c.result;
   const b = baseOp(p.op);
@@ -264,7 +266,8 @@ function apply(db: MockDb, c: Ctx) {
       if (c.branch === 1) c.dossier.declarationNo = r.declarationNo;
       r.clearanceStatus = "WAITING";
       // Số tờ khai cuối của mặt hàng trên các dòng của tờ (như integration → CatalogPort.recordDeclarationNo, C6).
-      if (r.declarationNo) recordCatalogDeclarationNo(db, c.dossier.id, c.branch, r.declarationNo, p.doneAt.slice(0, 10));
+      // Ngày nghiệp vụ theo giờ VN như backend (vnDateOf – helper UTC+7 của file này) – số cấp 00:00–07:00 VN không lùi về ngày UTC hôm trước.
+      if (r.declarationNo) recordCatalogDeclarationNo(db, c.dossier.id, c.branch, r.declarationNo, vnDateOf(p.doneAt), c.flow.sentLineIds);
     }
     if (b === "IDC" || b === "IDE") {
       // Lượt khai (ADR 0011, như process-outbox của backend): tờ được chấp nhận khai chính thức → trừ 1 lượt (khóa theo số tờ khai).
@@ -518,8 +521,11 @@ function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number, chain?: "de
     return;
   }
   db.customsMessages.push(message(c.dossier.id, op, "OUT", "OK", t.out, now, t.payload, c.branch), message(c.dossier.id, op, "IN", "OK", t.in, doneAt, { ...t.payload, ketQua: "Thành công" }, c.branch));
-  const sent = c.of > 1 && isContentOperation(op) && op !== "AMA" ? sheetSnapshotOf(db, c.dossier.id, c.branch) : null;
-  c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString(), ...(chain ? { chain } : {}), ...(sent ? { sent } : {}) };
+  const content = isContentOperation(op) && op !== "AMA";
+  const sent = c.of > 1 && content ? sheetSnapshotOf(db, c.dossier.id, c.branch) : null;
+  // Id dòng của tờ lúc gửi (mọi lô – như outbox.payload.lineIds): C6 ghi số vào mặt hàng của đúng các dòng này.
+  const lineIds = content ? branchesOf(db.lineItems.filter((i) => i.dossierId === c.dossier.id))[c.branch - 1]?.items.map((i) => i.id) ?? [] : [];
+  c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString(), ...(chain ? { chain } : {}), ...(sent ? { sent } : {}), ...(lineIds.length ? { lineIds } : {}) };
   if (isContentOperation(op) && op !== "AMA" && c.decl) {
     c.decl.status = "SUBMITTED";
     Object.assign(c.dossier, { status: "SUBMITTED", step: "submit", updatedAt: nowIso() });

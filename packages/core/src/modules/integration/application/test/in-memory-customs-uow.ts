@@ -56,6 +56,12 @@ export class InMemoryCustomsUow implements CustomsUow {
           if (i >= 0) d.results[i] = clone(row);
           else d.results.push(clone(row));
         },
+        markCatalogNo: async (orgId, dossierId, branch, declarationNo, lines) => {
+          const x = d.results.find((r) => r.orgId === org && r.orgId === orgId && r.dossierId === dossierId && r.branch === branch && r.declarationNo === declarationNo);
+          if (!x) return false;
+          x.raw = { ...(x.raw ?? {}), catalogNo: { no: declarationNo, lines } };
+          return true;
+        },
       },
       amendments: {
         listForDossier: async (orgId, dossierId, branch) => clone(d.amendments.filter((a) => a.orgId === org && a.orgId === orgId && a.dossierId === dossierId && (branch === undefined || a.branch === branch)).sort((a, b) => a.branch - b.branch || a.seq - b.seq)),

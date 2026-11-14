@@ -14,6 +14,12 @@ const canUse = (ctx: Ctx) => requireRole(ctx, "DECLARANT", "APPROVER", "ADMIN");
 const STATE_TTL_MS = 10 * 60_000;
 /** Mỗi lần lấy tối đa bấy nhiêu email (cũ nhất trước); còn nữa thì lần sau lấy tiếp từ email mới nhất của lô. */
 export const SYNC_BATCH = 100;
+/**
+ * Lấy lùi trước mốc lần trước: tìm kiếm Gmail/Outlook lập chỉ mục thư mới có độ trễ – thư đến ngay trước lúc bấm "Lấy thư"
+ * chưa có trong kết quả, mốc lại tiến qua nó → mất hẳn. Thư đã lấy bỏ qua theo mã thư (existingProviderIds).
+ * Lô đầy: mốc = thư mới nhất + khoảng lùi (không quá lúc bắt đầu) → lần sau đọc tiếp từ thư mới nhất, không kẹt ở đoạn dồn thư.
+ */
+export const SYNC_OVERLAP_MS = 15 * 60_000;
 
 const TokensSchema = z.object({ accessToken: z.string(), refreshToken: z.string().nullable(), expiresAt: z.string() });
 const sysCtx = (orgId: string) => ({ orgId: asOrgId(orgId), userId: asUserId("") });
@@ -166,7 +172,7 @@ export async function syncMailConnection(deps: MailboxDeps, input: MailboxSyncPa
       const sealed = cipher.encrypt(JSON.stringify(tokens));
       await finish(sealed);
     }
-    const since = conn.lastSyncedAt ?? new Date(startedAt.getTime() - INBOX_FIRST_SYNC_DAYS * 86_400_000);
+    const since = conn.lastSyncedAt ? new Date(conn.lastSyncedAt.getTime() - SYNC_OVERLAP_MS) : new Date(startedAt.getTime() - INBOX_FIRST_SYNC_DAYS * 86_400_000);
     const filters = normalizeMailFilters(conn.filters);
     const remote = await adapter.listMessages(tokens, since, SYNC_BATCH, filters);
     const known = await deps.uow.asOrg(ctx, (r) => r.messages.existingProviderIds(input.orgId, conn.id, remote.map((m) => m.id)));
@@ -201,7 +207,7 @@ export async function syncMailConnection(deps: MailboxDeps, input: MailboxSyncPa
       added++;
     }
     const newest = remote.reduce<Date | null>((a, m) => (!a || m.receivedAt > a ? m.receivedAt : a), null);
-    const mark = remote.length < SYNC_BATCH || !newest ? startedAt : newest;
+    const mark = remote.length < SYNC_BATCH || !newest ? startedAt : new Date(Math.min(newest.getTime() + SYNC_OVERLAP_MS, startedAt.getTime()));
     await finish({ status: "ACTIVE", lastError: null, lastSyncCount: added, lastSyncedAt: mark });
     return { added, status: "ACTIVE" };
   } catch (e) {

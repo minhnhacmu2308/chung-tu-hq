@@ -48,4 +48,8 @@ describe("sửa Số vận đơn của AWB chuyển phát nhanh", () => {
     expect(r.data).toMatchObject({ awbNo: "770471184612", hawbNo: null });
     expect(r.corrections).toEqual([expect.objectContaining({ rawPath: "awbNo", to: "770471184612" })]);
   });
+  it("applyCorrections: xuất xứ dòng hàng người khai tự chọn (hóa đơn không ghi) không thành mẫu dạy skill", () => {
+    const { corrections } = applyCorrections("INVOICE", { items: [{ description: "Fish" }] }, [row("/items/0/origin", "", "ID"), row("/items/0/description", "Fish", "Frozen fish")]);
+    expect(corrections.map((c) => c.rawPath)).toEqual(["items.0.description"]);
+  });
 });

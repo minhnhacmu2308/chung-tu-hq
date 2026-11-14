@@ -12,7 +12,7 @@ import { refreshFromShipment, type DeclarationDeps } from "@kb/core/modules/decl
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
 import { listOpenDocuments, rereadDocuments, type DossierDeps } from "@kb/core/modules/dossier";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
-import { latestReads, refreshAfterSourcesChanged, type ExtractionDeps } from "@kb/core/modules/extraction";
+import { latestReads, ocrExitBlockers, refreshAfterSourcesChanged, type ExtractionDeps } from "@kb/core/modules/extraction";
 import { ClaudeDossierDrafter, ClaudeEmailDrafter, createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
 import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
@@ -286,6 +286,10 @@ function build(): Container {
     } catch (e) {
       sourcesLog.error("gộp lại sau khi đổi nguồn chứng từ thất bại", { orgId, dossierId, err: e });
     }
+  };
+  dossier.ocrExitBlockers = async (orgId, dossierId) => {
+    const s = await extraction.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.shipments.latest(orgId, dossierId));
+    return s ? ocrExitBlockers(s.data) : [];
   };
   // Sửa dữ liệu chứng từ ở OCR → dòng hàng + tờ khai nháp cập nhật theo (lỗi không chặn việc lưu trường; ghi log).
   extraction.onShipmentEdited = async (orgId, dossierId) => {

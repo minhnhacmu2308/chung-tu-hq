@@ -1,3 +1,4 @@
+import type { ReasonCode, ReasonParams } from "@kb/contracts";
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { CustomsSummary, DocKind, DocumentSources, EditSheet, DocumentStatus, DossierStatus, PartyClass, StepId, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
@@ -9,6 +10,7 @@ export type DossierRow = {
   id: string; orgId: string; code: string; direction: "NK" | "XK"; typeCode: string; partner: string; customsOfficeCode: string; customsOfficeName: string;
   skillSetId: string; status: DossierStatus; step: StepId; dueDate: string; ownerId: string; note: string | null; invoiceValue: string; currency: string;
   incoterm: string; transportMode: TransportMode; partyClass: PartyClass; billNo: string; documentSources: DocumentSources; suspectFields: number; declarationNo: string | null; channel: string | null;
+  mergeIdenticalLines: boolean;
   createdAt: Date; updatedAt: Date;
 };
 export type DocumentRow = {
@@ -127,6 +129,8 @@ export type DossierDeps = {
   onDeleted?: (ctx: { orgId: OrgId; userId: UserId }, dossierId: string) => Promise<void>;
   /** Sau khi đổi nguồn chứng từ (ADR 0013) – container nối: chạy lại luật đối chiếu (chứng từ chờ sau khai → SKIPPED). */
   onDocumentSourcesChanged?: (orgId: string, dossierId: string) => Promise<void>;
+  /** Lý do chặn rời bước Đọc chứng từ (shipment mới nhất: dòng thiếu xuất xứ, PTTT không nhận ra mã; container nối từ extraction). Không nối → không kiểm. */
+  ocrExitBlockers?: (orgId: string, dossierId: string) => Promise<{ reason: ReasonCode; params?: ReasonParams }[]>;
   clock: Clock;
   idGen: IdGen;
 };

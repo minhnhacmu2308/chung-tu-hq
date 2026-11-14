@@ -51,6 +51,8 @@ export function applyCorrections(kind: DocKind, data: Record<string, unknown>, f
   const corrections: Correction[] = [];
   for (const f of fields) {
     if (f.status !== "USER_CONFIRMED" || f.value === f.originalValue || !f.shipmentPath) continue;
+    // Ô xuất xứ dòng hàng trống = hóa đơn không ghi, người khai tự chọn (project-fields) – không phải AI đọc sót, không dạy skill.
+    if (!f.originalValue && /^\/items\/\d+\/origin$/.test(f.shipmentPath)) continue;
     const rawPath = rawPathOf(kind, f.shipmentPath, data);
     if (rawPath && setAt(out, rawPath, f.value)) corrections.push({ key: f.key, label: f.label, rawPath, from: f.originalValue, to: f.value });
   }

@@ -58,6 +58,13 @@ export const ITEMS_TABLE_MESSAGES = defineMessages({
     confirmed: "Đã xác nhận", checked: "Đã đối chiếu", total: "Cộng {n} dòng",
     lineN: "Dòng {n}", confirmLines: "Xác nhận {n} dòng đúng", empty: "Không có dòng hàng", search: "Tìm mô tả, ĐVT, xuất xứ…",
     show: "Hiện dòng", showAll: "Tất cả ({n})", showSuspect: "Cần kiểm tra ({n})",
+    chooseOrigin: "Chọn xuất xứ",
+    mergeTitle: "Có {n} nhóm dòng hàng giống nhau – gộp mỗi nhóm thành 1 dòng?",
+    mergeGroup: "Dòng {lines}",
+    mergeAction: "Gộp dòng",
+    mergedTitle: "Đã gộp các dòng hàng giống nhau",
+    mergedDesc: "Dòng cùng tên hàng, ĐVT, đơn giá, xuất xứ, mã HS và mã hàng (nếu hóa đơn ghi) đã gộp thành một dòng (cộng số lượng và thành tiền).",
+    splitAction: "Tách lại",
   },
   en: {
     description: "Goods description", quantity: "Quantity", unit: "Unit", unitPrice: "Unit price", amount: "Amount", origin: "Origin",
@@ -65,6 +72,13 @@ export const ITEMS_TABLE_MESSAGES = defineMessages({
     confirmed: "Confirmed", checked: "Cross-checked", total: "Total {n} lines",
     lineN: "Line {n}", confirmLines: "Confirm {n} lines", empty: "No goods lines", search: "Search description, unit, origin…",
     show: "Show lines", showAll: "All ({n})", showSuspect: "To review ({n})",
+    chooseOrigin: "Choose origin",
+    mergeTitle: "{n} groups of identical goods lines – merge each group into one line?",
+    mergeGroup: "Lines {lines}",
+    mergeAction: "Merge lines",
+    mergedTitle: "Identical goods lines merged",
+    mergedDesc: "Lines with the same description, unit, unit price, origin, HS code and part number (if on the invoice) were merged into one line (quantities and amounts added).",
+    splitAction: "Split again",
   },
   zh: {
     description: "货物描述", quantity: "数量", unit: "单位", unitPrice: "单价", amount: "金额", origin: "原产地",
@@ -72,13 +86,29 @@ export const ITEMS_TABLE_MESSAGES = defineMessages({
     confirmed: "已确认", checked: "已核对", total: "合计 {n} 行",
     lineN: "第 {n} 行", confirmLines: "确认 {n} 行正确", empty: "没有货物行", search: "搜索描述、单位、原产地…",
     show: "显示行", showAll: "全部（{n}）", showSuspect: "待检查（{n}）",
+    chooseOrigin: "选择原产地",
+    mergeTitle: "有 {n} 组相同的货物行 – 是否将每组合并为一行？",
+    mergeGroup: "第 {lines} 行",
+    mergeAction: "合并行",
+    mergedTitle: "已合并相同的货物行",
+    mergedDesc: "品名、单位、单价、原产地、HS 编码和货号（如发票上有）相同的行已合并为一行（数量和金额相加）。",
+    splitAction: "重新拆分",
   },
 });
 
 export const FIELD_ROW_MESSAGES = defineMessages({
-  vi: { confirmField: "Xác nhận {label} đúng", correct: "Đúng", aiRead: "AI đọc:", revert: "Hoàn tác", pickOnFile: "Chỉ vị trí {label} trên file" },
-  en: { confirmField: "Confirm {label} is correct", correct: "Correct", aiRead: "AI read:", revert: "Undo", pickOnFile: "Point to {label} on the file" },
-  zh: { confirmField: "确认{label}正确", correct: "正确", aiRead: "AI 读取：", revert: "撤销", pickOnFile: "在文件上指出{label}" },
+  vi: {
+    confirmField: "Xác nhận {label} đúng", correct: "Đúng", aiRead: "AI đọc:", revert: "Hoàn tác", pickOnFile: "Chỉ vị trí {label} trên file",
+    paymentCode: "Mã phương thức thanh toán (1.43 / 2.38)", choosePayment: "Chọn mã", paymentUnknown: "Không nhận ra mã chuẩn từ chữ trên chứng từ – chọn mã để sang bước tiếp theo",
+  },
+  en: {
+    confirmField: "Confirm {label} is correct", correct: "Correct", aiRead: "AI read:", revert: "Undo", pickOnFile: "Point to {label} on the file",
+    paymentCode: "Payment method code (1.43 / 2.38)", choosePayment: "Choose a code", paymentUnknown: "Couldn't recognise a standard code from the document text – choose one to continue",
+  },
+  zh: {
+    confirmField: "确认{label}正确", correct: "正确", aiRead: "AI 读取：", revert: "撤销", pickOnFile: "在文件上指出{label}",
+    paymentCode: "付款方式代码（1.43 / 2.38）", choosePayment: "选择代码", paymentUnknown: "无法从单据文字识别标准代码 – 请选择代码后继续",
+  },
 });
 
 export const FIELD_MUTATION_MESSAGES = defineMessages({

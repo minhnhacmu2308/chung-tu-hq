@@ -1,5 +1,5 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA). Người nhập khẩu lấy theo tài khoản (MST), KHÔNG lấy tên tiếng Anh trên invoice (PRODUCT §7.4).
-import { DEFAULT_PARTY_CLASS, formatAdjustmentField, NO_INSURANCE_VALUE, PARTY_CLASS_LABELS, type Sourced } from "@kb/contracts";
+import { DEFAULT_PARTY_CLASS, formatAdjustmentField, NO_INSURANCE_VALUE, PARTY_CLASS_LABELS, parsePaymentChoice, type Sourced } from "@kb/contracts";
 import { pickDischargePort, pickLoadingPort, resolvePayment, transportModeCode } from "../catalog-resolve.js";
 import { FREIGHT_ADJUSTMENT_LABEL, FREIGHT_NOT_INCLUDED, freightReasonText, INSURANCE_ADJUSTMENT_LABEL, INSURANCE_INCLUDED, incotermCode } from "../adjustments.js";
 import type { Adjustment } from "../valuation.js";
@@ -58,6 +58,9 @@ const invoiceSlots = (i: MappingInput) =>
 function paymentDetail(raw: string | null): string | null {
   const r = resolvePayment(raw);
   if (!r || r.code !== "KC" || !raw) return null;
+  // Người khai đã chọn mã ở OCR: "KC – <phương thức thực tế>" → ghi phần thực tế; chỉ "KC" → không có gì để ghi.
+  const chosen = parsePaymentChoice(raw);
+  if (chosen) return chosen.detail ? paymentDetail(chosen.detail) ?? `PHƯƠNG THỨC THANH TOÁN ${chosen.detail.toUpperCase()}` : null;
   return /\bT\s*\/?\s*T\b|TELEGRAPHIC|WIRE|BANK TRANSFER|REMITTANCE|CHUYỂN KHOẢN|CHUYEN KHOAN/i.test(raw) ? "PHƯƠNG THỨC THANH TOÁN TT" : `PHƯƠNG THỨC THANH TOÁN ${raw.trim().toUpperCase()}`;
 }
 

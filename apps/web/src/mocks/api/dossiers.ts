@@ -95,6 +95,7 @@ export const createDossier = (input: CreateDossierInput) =>
       partyClass: input.partyClass,
       billNo: "",
       documentSources: defaultDocumentSources(input.direction, input.transportMode, input.startMode),
+      mergeIdenticalLines: false,
       suspectFields: 0,
       ...(input.note ? { note: input.note } : {}),
     };
@@ -102,12 +103,13 @@ export const createDossier = (input: CreateDossierInput) =>
     return d;
   });
 
-export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" | "step" | "suspectFields" | "note" | "declarationNo" | "channel" | "documentSources">>) =>
+export const updateDossier = (id: string, patch: Partial<Pick<Dossier, "status" | "step" | "suspectFields" | "note" | "declarationNo" | "channel" | "documentSources" | "mergeIdenticalLines">>) =>
   mutate((db) => {
     const d = db.dossiers.find((x) => x.id === id);
     if (!d) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
     const { documentSources, ...rest } = patch;
     // Như backend: gộp nguồn chứng từ; UPLOADED = bỏ đánh dấu ("có sau khi khai" / "hệ thống phát hành"). (Mock không chạy lại luật đối chiếu.)
+    // shortcut: mock chỉ lưu cờ mergeIdenticalLines (không gộp dòng) và không chặn rời bước OCR khi thiếu xuất xứ / PTTT – backend làm; mô phỏng khi demo cần.
     if (documentSources) {
       const next = { ...d.documentSources };
       for (const [k, v] of Object.entries(documentSources) as [DocKind, DocSource][]) {

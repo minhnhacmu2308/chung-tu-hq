@@ -4,11 +4,13 @@
 // không có thì để trống); Enter lưu và xuống ô cùng cột ở dòng dưới như bảng tính. Rê vào dòng → tô vị trí trên chứng từ.
 // Sửa xong, dòng hàng của tờ khai nháp cập nhật theo.
 import {
-  Button, cn, createDataTableColumnHelper, DataTable, fill, Input, SegmentedControl, Textarea, Tooltip, useMessages,
+  Alert, Button, cn, Combobox, createDataTableColumnHelper, DataTable, fill, Input, SegmentedControl, Textarea, Tooltip, useMessages, type ComboboxOption,
 } from "@kb/ui";
-import { Check, CheckCheck, CheckCircle2 } from "lucide-react";
+import { identicalLineGroups } from "@kb/contracts";
+import { Check, CheckCheck, CheckCircle2, Merge, Split } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { isSuspect } from "@/api/ocr";
+import { useCodeLists } from "@/features/declaration-form/use-code-list";
 import { formatMoney } from "@/lib/format";
 import { fromMinor, toMinor } from "@/lib/decimal";
 import type { ExtractedField } from "@/mocks/types";
@@ -38,8 +40,11 @@ const MIN_WIDTH: Record<Cell, string> = {
   unit: "w-20",
   unit_price: "w-28",
   amount: "w-32",
-  origin: "w-16",
+  origin: "w-40",
 };
+
+/** Ô xuất xứ của dòng hàng trống (hóa đơn không ghi) – bắt buộc chọn trước khi sang bước sau. */
+export const isMissingOrigin = (f: ExtractedField) => /^item\.\d+\.origin$/.test(f.key) && !f.value.trim();
 
 const col = createDataTableColumnHelper<Line>();
 const inputId = (f: ExtractedField) => `${fieldDomId(f.id)}-input`;
@@ -92,7 +97,31 @@ type Live = {
   rows: Line[];
   onSave: (id: string, value: string) => void;
   onActivate: (id: string | null) => void;
+  countries: ComboboxOption[];
+  choose: string;
 };
+
+/** Xuất xứ chọn từ danh mục nước (COUNTRY); giá trị cũ ngoài danh mục vẫn hiện để không mất. */
+function OriginCell({ line, live }: { line: Line; live: RefObject<Live> }) {
+  const f = line.cells.origin;
+  if (!f) return null;
+  const { countries, choose } = live.current;
+  const options = f.value && !countries.some((o) => o.value === f.value) ? [{ value: f.value, label: f.value }, ...countries] : countries;
+  return (
+    <div id={fieldDomId(f.id)} className={MIN_WIDTH.origin} onFocus={() => live.current.onActivate(f.id)}>
+      <Combobox
+        id={inputId(f)}
+        aria-label={f.label}
+        aria-invalid={!f.value.trim()}
+        required
+        options={options}
+        value={f.value || null}
+        onChange={(v) => v && v !== f.value && live.current.onSave(f.id, v)}
+        placeholder={choose}
+      />
+    </div>
+  );
+}
 
 function EditorCell({ line, c, live, multiline, numeric }: { line: Line; c: Cell; live: RefObject<Live>; multiline?: boolean; numeric?: boolean }) {
   const f = line.cells[c];
@@ -117,21 +146,28 @@ function EditorCell({ line, c, live, multiline, numeric }: { line: Line; c: Cell
   );
 }
 
+/** Gộp dòng hàng giống nhau (cờ của hồ sơ): `merged` = đã gộp; đổi cờ → máy chủ dựng lại dòng hàng. */
+export type LineMerge = { merged: boolean; busy: boolean; onChange: (merged: boolean) => void };
+
 export function ItemsTable({
   fields,
   activeId,
   onActivate,
   onSave,
   onConfirm,
+  merge,
 }: {
   fields: ExtractedField[];
   activeId: string | null;
   onActivate: (id: string | null) => void;
   onSave: (id: string, value: string) => void;
   onConfirm: (id: string) => void;
+  merge?: LineMerge;
 }) {
   const t = useMessages(ITEMS_TABLE_MESSAGES);
   const [show, setShow] = useState<"all" | "suspect">("all");
+  const codes = useCodeLists(["COUNTRY"] as const);
+  const countries = useMemo(() => (codes.lists.COUNTRY ?? []).filter((e) => !e.inactive).map((e) => ({ value: e.code, label: `${e.code} – ${e.name}` })), [codes.lists.COUNTRY]);
 
   const lines = useMemo<Line[]>(() => {
     const byLine = new Map<number, Partial<Record<Cell, ExtractedField>>>();
@@ -158,6 +194,13 @@ export function ItemsTable({
   }, [fields]);
 
   const suspectCount = lines.filter((l) => l.suspects.length > 0).length;
+  // Nhóm dòng cùng tên, ĐVT, đơn giá, xuất xứ (và HS trên invoice) – đề xuất gộp thành một dòng (cùng quy tắc với máy chủ).
+  const groups = useMemo(() => {
+    const extra = (k: string) => new Map(fields.filter((f) => f.key.endsWith(`.${k}`) && /^item\.\d+\./.test(f.key)).map((f) => [f.key.split(".")[1], f.value]));
+    const hs = extra("hs_on_invoice");
+    const part = extra("part_no");
+    return identicalLineGroups(lines.map((l) => ({ lineNo: l.n, description: l.description, unit: l.unit, unitPrice: l.unit_price, origin: l.origin, hs: hs.get(String(l.n)) ?? null, partNo: part.get(String(l.n)) ?? null })));
+  }, [fields, lines]);
   // Hết dòng cần kiểm tra thì quay về "Tất cả" (không để bảng trống).
   const mode = suspectCount === 0 ? "all" : show;
   const rows = mode === "suspect" ? lines.filter((l) => l.suspects.length > 0) : lines;
@@ -166,8 +209,8 @@ export function ItemsTable({
 
   const confirmLines = (picked: Line[]) => picked.forEach((l) => l.suspects.forEach((f) => onConfirm(f.id)));
 
-  const live = useRef<Live>({ rows, onSave, onActivate });
-  live.current = { rows, onSave, onActivate };
+  const live = useRef<Live>({ rows, onSave, onActivate, countries, choose: t.chooseOrigin });
+  live.current = { rows, onSave, onActivate, countries, choose: t.chooseOrigin };
   const confirmRef = useRef(confirmLines);
   confirmRef.current = confirmLines;
 
@@ -181,7 +224,7 @@ export function ItemsTable({
       col.accessor("unit", { header: t.unit, size: 80, meta: { cellClassName: "py-2" }, cell: editor("unit") }),
       col.accessor("unit_price", { header: t.unitPrice, size: 120, meta: { align: "end", cellClassName: "py-2" }, cell: editor("unit_price", { numeric: true }) }),
       col.accessor("amount", { header: t.amount, size: 136, meta: { align: "end", cellClassName: "py-2" }, cell: editor("amount", { numeric: true }) }),
-      col.accessor("origin", { header: t.origin, size: 88, meta: { cellClassName: "py-2" }, cell: editor("origin") }),
+      col.accessor("origin", { header: t.origin, size: 184, meta: { cellClassName: "py-2" }, cell: ({ row }) => <OriginCell line={row.original} live={live} /> }),
       col.display({
         id: "status",
         header: () => <span className="sr-only">{t.status}</span>,
@@ -212,6 +255,32 @@ export function ItemsTable({
 
   return (
     <div className="flex flex-col gap-2">
+      {merge && groups.length > 0 && !merge.merged && (
+        <Alert
+          tone="info"
+          title={fill(t.mergeTitle, { n: groups.length })}
+          action={
+            <Button size="sm" leftIcon={<Merge className="h-4 w-4" />} loading={merge.busy} onClick={() => merge.onChange(true)}>
+              {t.mergeAction}
+            </Button>
+          }
+        >
+          {groups.map((g) => fill(t.mergeGroup, { lines: g.join(", ") })).join(" · ")}
+        </Alert>
+      )}
+      {merge?.merged && (
+        <Alert
+          tone="info"
+          title={t.mergedTitle}
+          action={
+            <Button size="sm" variant="secondary" leftIcon={<Split className="h-4 w-4" />} loading={merge.busy} onClick={() => merge.onChange(false)}>
+              {t.splitAction}
+            </Button>
+          }
+        >
+          {t.mergedDesc}
+        </Alert>
+      )}
       <DataTable
         aria-label={t.caption}
         caption={t.caption}
@@ -230,7 +299,7 @@ export function ItemsTable({
             </Button>
           );
         }}
-        rowTone={(l) => (CELLS.some((c) => l.cells[c]?.id === activeId) ? "active" : l.suspects.length > 0 ? "warning" : undefined)}
+        rowTone={(l) => (CELLS.some((c) => l.cells[c]?.id === activeId) ? "active" : l.suspects.length > 0 || (l.cells.origin && isMissingOrigin(l.cells.origin)) ? "warning" : undefined)}
         onRowHover={(l) => onActivate(l ? ((l.suspects[0] ?? l.cells.description ?? l.cells.amount)?.id ?? null) : null)}
         pagination={{ initialPageSize: 20, pageSizeOptions: [20, 50, 100] }}
         revealRowId={lines.find((l) => CELLS.some((c) => l.cells[c]?.id === activeId))?.id ?? null}

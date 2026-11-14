@@ -5,7 +5,7 @@ import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
 import { InMemoryJobQueue } from "../../../../shared/queue.js";
 import { errCode, unwrap } from "../../../../shared/result.js";
-import { completeMailConnect, disconnectMailbox, failMailSync, failStaleMailSyncs, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, syncMailConnection, updateMailFilters } from "../connections.js";
+import { completeMailConnect, disconnectMailbox, failMailSync, failStaleMailSyncs, getMailboxOverview, requestMailSync, startMailConnect, SYNC_BATCH, SYNC_OVERLAP_MS, syncMailConnection, updateMailFilters } from "../connections.js";
 import { addInboxToDossier, deleteInboxMessages, getInboxAttachmentFile, listInbox, releaseDossierAttachments, setInboxMessageStatus } from "../inbox.js";
 import type { MailboxDeps } from "../ports.js";
 import { FakeDossierIntake, FakeMailProvider, FakeStateSigner, fakeCipher, MemoryBlobStore } from "../test/fakes.js";
@@ -119,10 +119,32 @@ describe("lấy chứng từ mới", () => {
 
     gmail.messages.push(msg("m3", "2026-10-22T03:00:00Z"));
     await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id });
-    expect(gmail.calls[1]!.since.toISOString()).toBe(NOW);
+    // Lùi SYNC_OVERLAP_MS trước mốc (độ trễ chỉ mục tìm kiếm của Gmail).
+    expect(gmail.calls[1]!.since.toISOString()).toBe(new Date(Date.parse(NOW) - SYNC_OVERLAP_MS).toISOString());
     expect(uow.data.messages.map((m) => m.providerMessageId)).toEqual(["m1", "m3"]);
     await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id });
     expect(uow.data.messages).toHaveLength(2);
+  });
+
+  it("thư đến ngay trước lần lấy nhưng Gmail chưa lập chỉ mục (lần đó không thấy) → lần sau vẫn lấy được, không trùng", async () => {
+    const c = await connect();
+    gmail.messages = [msg("m1", "2026-10-21T01:00:00Z")];
+    await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id });
+    // Thư đến 8 giây trước mốc lần trước (NOW), lúc đó tìm kiếm chưa trả về.
+    gmail.messages.push(msg("late", new Date(Date.parse(NOW) - 8_000).toISOString()));
+    expect(await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id })).toEqual({ added: 1, status: "ACTIVE" });
+    expect(await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id })).toEqual({ added: 0, status: "ACTIVE" });
+    expect(uow.data.messages.map((m) => m.providerMessageId)).toEqual(["m1", "late"]);
+  });
+
+  it("lô đầy dồn trong khoảng lùi (100 thư trong 100 giây) + thư đến sau → lần sau vẫn lấy được thư sau, mốc không kẹt", async () => {
+    const c = await connect();
+    const base = Date.parse("2026-10-21T01:00:00Z");
+    gmail.messages = Array.from({ length: SYNC_BATCH }, (_, i) => msg(`b${i}`, new Date(base + i * 1000).toISOString()));
+    gmail.messages.push(msg("after", new Date(base + 3_600_000).toISOString()));
+    expect((await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id })).added).toBe(SYNC_BATCH);
+    expect((await syncMailConnection(deps, { orgId: "org_a", connectionId: c.id })).added).toBe(1);
+    expect(uow.data.messages.some((m) => m.providerMessageId === "after")).toBe(true);
   });
 
   it("nhiều hơn một lô: mốc = email mới nhất của lô, lần sau lấy tiếp", async () => {

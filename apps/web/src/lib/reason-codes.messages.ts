@@ -117,6 +117,8 @@ export const REASON_MESSAGES = defineMessages({
     CATALOG_IMPORT_TOO_LARGE: "Mỗi lần gửi tối đa {max} dòng – chia file thành nhiều lần nhập",
     CATALOG_SOURCE_SET_INVALID: "Chỉ bộ mã nội bộ (Mã chung, Kế toán, Kho, XNK) được làm bộ nguồn gốc",
     CATALOG_QTY2_FACTOR_REQUIRED: "ĐVT số lượng 2 khác ĐVT gốc – nhập tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc, lớn hơn 0)",
+    ITEM_ORIGIN_MISSING: "Dòng hàng {lines} chưa có xuất xứ – chọn xuất xứ trước khi sang bước tiếp theo",
+    PAYMENT_METHOD_UNKNOWN: "Không nhận ra mã phương thức thanh toán từ “{raw}” – chọn mã chuẩn trước khi sang bước tiếp theo",
   },
   en: {
     OPERATION_PENDING: "Waiting for a response to {ops}",
@@ -230,6 +232,8 @@ export const REASON_MESSAGES = defineMessages({
     CATALOG_IMPORT_TOO_LARGE: "At most {max} rows per request – split the file into several imports",
     CATALOG_SOURCE_SET_INVALID: "Only internal code sets (Shared, Accounting, Warehouse, Customs) can be the source set",
     CATALOG_QTY2_FACTOR_REQUIRED: "The second quantity unit differs from the base unit – enter the ratio (second units per 1 base unit, greater than 0)",
+    ITEM_ORIGIN_MISSING: "Line {lines} has no country of origin – choose the origin before moving to the next step",
+    PAYMENT_METHOD_UNKNOWN: "Couldn't recognise a payment method code from “{raw}” – choose a standard code before moving to the next step",
   },
   zh: {
     OPERATION_PENDING: "正在等待 {ops} 的回复",
@@ -343,6 +347,8 @@ export const REASON_MESSAGES = defineMessages({
     CATALOG_IMPORT_TOO_LARGE: "每次最多提交 {max} 行 – 请将文件拆分为多次导入",
     CATALOG_SOURCE_SET_INVALID: "只有内部编码集（通用、会计、仓库、进出口）可以作为源编码集",
     CATALOG_QTY2_FACTOR_REQUIRED: "第二数量单位与基本单位不同 – 请输入比率（每 1 基本单位折合的第二单位数，须大于 0）",
+    ITEM_ORIGIN_MISSING: "第 {lines} 行货物缺少原产地 – 请先选择原产地再进入下一步",
+    PAYMENT_METHOD_UNKNOWN: "无法从“{raw}”识别付款方式代码 – 请先选择标准代码再进入下一步",
   },
 });
 

@@ -218,6 +218,17 @@ describe("chỉ tiêu bổ sung theo Phụ lục II (TT39, sửa đổi TT121)",
   const build = (shipment = hansol(), dossier = DOSSIER, items = ITEMS, extra: Partial<BuildInput> = {}) => buildDeclaration({ catalogs: CATALOGS, shipment, dossier, org: ORG, items, now: NOW, exchange: EX, ...extra });
   const withDate = (s: Shipment) => void (s.transport.departureDate = { value: "2026-10-05", sources: [{ documentId: "doc_bl", kind: "BILL_OF_LADING", page: 1, raw: "05 OCT 2026", normalized: "2026-10-05" }], status: "SINGLE_SOURCE" });
 
+  it("PTTT người khai chọn ở OCR: \"KC – <chữ gốc>\" → 1.43 KC không nghi ngờ, 1.50 ghi phương thức thực tế; chỉ \"LC\" → LC, 1.50 không ghi", () => {
+    const pay = (value: string) => hansol((s) => { withDate(s); s.invoice.paymentTerms = { value, sources: [], status: "USER_CONFIRMED" }; });
+    const kc = build(pay("KC – Payment by crypto"));
+    expect(kc.fields["PT_TT"]?.value).toMatch(/^KC – /);
+    expect(kc.fields["PT_TT"]?.suspect).toBeFalsy();
+    expect(kc.fields["CT_TG"]?.value).toBe("05102026#&PHƯƠNG THỨC THANH TOÁN PAYMENT BY CRYPTO");
+    const lc = build(pay("LC"));
+    expect(lc.fields["PT_TT"]?.value).toMatch(/^LC – /);
+    expect(lc.fields["CT_TG"]?.value).toBe("05102026#&");
+  });
+
   it("1.50 mở đầu bằng ngày vận đơn DDMMYYYY#&, ghi dòng hàng FOC; thiếu ngày vận đơn → nghi ngờ, không tự điền", () => {
     // Invoice HANSOL ghi T/T → 1.43 khai KC, phương thức thực tế ghi tại 1.50.
     expect(build(hansol(withDate)).fields["CT_TG"]).toMatchObject({ no: "1.50", value: "05102026#&PHƯƠNG THỨC THANH TOÁN TT", source: "BILL_OF_LADING" });

@@ -105,7 +105,7 @@ export interface DocumentsPort {
   /** Trạng thái hồ sơ (khóa sửa khi đã duyệt/truyền/hủy). */
   dossierStatus(orgId: string, dossierId: string): Promise<DossierStatus | null>;
   /** Hồ sơ cho việc phát hành chứng từ (ADR 0013): chiều, nguồn chứng từ, số tờ khai Hải quan (đã khai tạm). */
-  dossierInfo(orgId: string, dossierId: string): Promise<{ status: DossierStatus; direction: "NK" | "XK"; documentSources: DocumentSources; declarationNo: string | null } | null>;
+  dossierInfo(orgId: string, dossierId: string): Promise<{ status: DossierStatus; direction: "NK" | "XK"; documentSources: DocumentSources; declarationNo: string | null; mergeIdenticalLines?: boolean } | null>;
 }
 
 export interface ValidationPort {

@@ -39,7 +39,7 @@ export function createDocumentsAdapter(dossier: DossierDeps, orgInfo: OrgInfoRea
     dossierStatus: async (orgId, dossierId) => (await dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.get(orgId, dossierId)))?.status ?? null,
     dossierInfo: async (orgId, dossierId) => {
       const d = await dossier.uow.asOrg(ctx(orgId), (r) => r.dossiers.get(orgId, dossierId));
-      return d ? { status: d.status, direction: d.direction, documentSources: d.documentSources, declarationNo: d.declarationNo } : null;
+      return d ? { status: d.status, direction: d.direction, documentSources: d.documentSources, declarationNo: d.declarationNo, mergeIdenticalLines: d.mergeIdenticalLines } : null;
     },
     publish: (orgId, dossierId, event) => dossier.publisher.publish(orgId, dossierId, event),
     orgInfo,

@@ -94,6 +94,15 @@ describe("mergeExtractions", () => {
   });
 });
 
+describe("projectFields – xuất xứ dòng hàng", () => {
+  it("hóa đơn không ghi xuất xứ → vẫn có ô item.N.origin trống trên chứng từ của dòng để người khai chọn; có xuất xứ thì như cũ", () => {
+    const noOrigin: FileExtraction = { ...invoice, data: { ...invoice.data, items: [{ lineNo: 1, description: "Frozen fish", quantity: 10, unit: "KGM", unitPrice: 2, amount: 20, origin: null }, { lineNo: 2, description: "Squid", quantity: 5, unit: "KGM", unitPrice: 3, amount: 15, origin: "ID" }] } };
+    const f = projectFields(mergeExtractions([noOrigin], { version: 1, taxCodeValid: () => true }));
+    expect(f.filter((x) => x.key === "item.1.origin")).toEqual([expect.objectContaining({ documentId: "doc_inv", value: "", group: "ITEMS", shipmentPath: "/items/0/origin" })]);
+    expect(f.filter((x) => x.key === "item.2.origin")).toEqual([expect.objectContaining({ value: "ID" })]);
+  });
+});
+
 describe("projectFields", () => {
   const s = mergeExtractions([invoice, packing, bl], { version: 1, taxCodeValid: (t) => /^\d{10}(\d{3})?$/.test(t) });
   const fields = projectFields(s);

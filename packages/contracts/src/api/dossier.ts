@@ -32,6 +32,8 @@ export const UpdateDossierInputSchema = z.object({
   step: StepIdSchema.optional(),
   /** Đổi nguồn chứng từ (ADR 0013): gộp vào nguồn hiện có; `UPLOADED` = bỏ đánh dấu "có sau khi khai". */
   documentSources: DocumentSourcesSchema.optional(),
+  /** Gộp / tách dòng hàng giống nhau (bước OCR) – đổi thì dựng lại shipment, dòng hàng và tờ khai nháp. */
+  mergeIdenticalLines: z.boolean().optional(),
 });
 export type UpdateDossierInput = z.infer<typeof UpdateDossierInputSchema>;
 

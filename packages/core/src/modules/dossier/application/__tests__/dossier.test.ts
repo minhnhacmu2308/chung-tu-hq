@@ -111,6 +111,40 @@ describe("tóm tắt Hải quan theo tờ khai nhánh (Thông quan k/N)", () => 
 });
 
 describe("updateDossier / cancel", () => {
+  it("gộp / tách dòng hàng giống nhau: lưu cờ, trả về trên hồ sơ, gọi dựng lại shipment; gửi lại cùng giá trị → không dựng lại", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    const calls: string[] = [];
+    deps.onDocumentSourcesChanged = async (_o, id) => void calls.push(id);
+    try {
+      expect(unwrap(await updateDossier(deps, ctx(), d.id, { mergeIdenticalLines: true })).mergeIdenticalLines).toBe(true);
+      expect(unwrap(await updateDossier(deps, ctx(), d.id, { mergeIdenticalLines: true })).mergeIdenticalLines).toBe(true);
+      expect(unwrap(await updateDossier(deps, ctx(), d.id, { mergeIdenticalLines: false })).mergeIdenticalLines).toBe(false);
+      expect(calls).toEqual([d.id, d.id]);
+    } finally {
+      delete deps.onDocumentSourcesChanged;
+    }
+  });
+  it("rời bước Đọc chứng từ khi còn dòng hàng thiếu xuất xứ → VALIDATION ITEM_ORIGIN_MISSING; lùi bước vẫn được; đủ xuất xứ thì sang được", async () => {
+    const d = unwrap(await createDossier(deps, ctx(), INPUT));
+    uow.data.dossiers.find((x) => x.id === d.id)!.step = "ocr";
+    let missing: { reason: "ITEM_ORIGIN_MISSING"; params: { lines: string } }[] = [{ reason: "ITEM_ORIGIN_MISSING", params: { lines: "2, 5" } }];
+    // Port đọc module khác bằng kết nối riêng → phải gọi ngoài transaction của hồ sơ.
+    let inTx = false;
+    const asOrg = deps.uow.asOrg.bind(deps.uow);
+    deps.uow.asOrg = (async (c: Parameters<typeof asOrg>[0], fn: Parameters<typeof asOrg>[1]) => { inTx = true; try { return await asOrg(c, fn); } finally { inTx = false; } }) as typeof deps.uow.asOrg;
+    deps.ocrExitBlockers = async () => { expect(inTx).toBe(false); return missing; };
+    try {
+      const r = await updateDossier(deps, ctx(), d.id, { step: "agent" });
+      if (!r.ok) expect(r.error).toMatchObject({ code: "VALIDATION", reason: "ITEM_ORIGIN_MISSING", params: { lines: "2, 5" } });
+      else throw new Error("phải lỗi");
+      expect(unwrap(await updateDossier(deps, ctx(), d.id, { step: "upload" })).step).toBe("upload");
+      missing = [];
+      expect(unwrap(await updateDossier(deps, ctx(), d.id, { step: "agent" })).step).toBe("agent");
+    } finally {
+      delete deps.ocrExitBlockers;
+      deps.uow.asOrg = asOrg;
+    }
+  });
   it("đổi note; đổi step tới submit khi chưa APPROVED → INVALID_STATE; hủy hồ sơ DRAFT ok, đã truyền → DOSSIER_LOCKED", async () => {
     const d = unwrap(await createDossier(deps, ctx(), INPUT));
     expect(unwrap(await updateDossier(deps, ctx(), d.id, { note: "PO 114" })).note).toBe("PO 114");

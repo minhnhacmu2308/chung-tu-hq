@@ -36,6 +36,7 @@ describe("catalog-resolve", () => {
     expect(resolvePayment("Irrevocable L/C at sight")?.code).toBe("LC");
     expect(resolvePayment("D/P")?.code).toBe("DP");
     expect(resolvePayment("D/A 60 days")?.code).toBe("DA");
+    expect(resolvePayment("CANTRU")).toEqual({ code: "CANTRU", name: "Cấn trừ, bù trừ" });
     expect(resolvePayment("Open account 30 days")?.code).toBe("OA");
     expect(resolvePayment("by cheque")?.code).toBe("CHEQUE");
     expect(resolvePayment("Cash")?.code).toBe("CASH");

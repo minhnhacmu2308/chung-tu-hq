@@ -10,7 +10,7 @@ Các phương án đã cân nhắc: (A) OAuth + lấy thư theo yêu cầu; (B) 
 
 ## Quyết định
 
-**Phương án A.** Người dùng kết nối Gmail (`gmail.readonly`) hoặc Outlook (`Mail.Read`, `offline_access`) bằng OAuth 2.0; bấm "Lấy chứng từ mới" → job `mailbox-sync` lấy email từ mốc lần trước.
+**Phương án A.** Người dùng kết nối Gmail (`gmail.readonly`) hoặc Outlook (`Mail.Read`, `offline_access`) bằng OAuth 2.0; bấm "Lấy chứng từ mới" → job `mailbox-sync` lấy email từ mốc lần trước lùi 15 phút (`SYNC_OVERLAP_MS` – tìm kiếm Gmail/Outlook lập chỉ mục thư mới có độ trễ; thư đã lấy bỏ qua theo mã thư).
 
 - **Token**: access + refresh token lưu mã hóa AES-256-GCM (`APP_MASTER_KEY`) trong `mail_connections`; không bao giờ trả ra API. Refresh token bị thu hồi → trạng thái `REAUTH`, người dùng kết nối lại (giữ refresh token cũ nếu Google không trả lại).
 - **State OAuth** ký HMAC (khóa dẫn xuất từ `APP_MASTER_KEY`), hạn 10 phút, gắn org + người đang đăng nhập; callback kiểm tra khớp phiên → chống CSRF và gắn nhầm hộp thư sang org khác.

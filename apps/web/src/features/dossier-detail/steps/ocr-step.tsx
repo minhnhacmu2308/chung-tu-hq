@@ -7,7 +7,9 @@ import {
   Skeleton, Stack, Tabs, TabsContent, TabsList, TabsTrigger, fill, toast, useMessages,
 } from "@kb/ui";
 import type { FreightTermNote } from "@kb/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { dossierKeys, updateDossier } from "@/api/dossiers";
+import { toastMutationError } from "@/lib/mutation-error";
 import { AlertTriangle, ArrowLeft, ArrowRight } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,8 +20,8 @@ import { ApiError } from "@/lib/api-error";
 import { DOC_KIND_LABELS, FIELD_GROUP_LABELS, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { CrossCheckPanel } from "../ocr/cross-check-panel";
 import { DocumentSheetsCard } from "../ocr/document-sheets";
-import { FieldRow, fieldDomId } from "../ocr/field-row";
-import { ItemsTable } from "../ocr/items-table";
+import { FieldRow, fieldDomId, isUnknownPayment } from "../ocr/field-row";
+import { isMissingOrigin, ItemsTable, type LineMerge } from "../ocr/items-table";
 import { SKILL_LEARN_MESSAGES } from "../ocr/ocr.messages";
 import { IncotermChangeDialog, incotermCodeChanged, useSaveFreightTermNote } from "../ocr/incoterm-change-dialog";
 import { useFieldMutations } from "../ocr/use-field-mutations";
@@ -34,7 +36,7 @@ import { OCR_STEP_MESSAGES } from "./ocr-step.messages";
 const GROUPS = Object.keys(FIELD_GROUP_LABELS.vi) as ExtractedField["group"][];
 type Filter = "all" | "suspect";
 
-function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0 }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined; focusSeq?: number }) {
+function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, merge }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined; focusSeq?: number; merge?: LineMerge }) {
   const t = useMessages(OCR_STEP_MESSAGES);
   const groupLabels = useMessages(FIELD_GROUP_LABELS);
   const [active, setActive] = useState<string | null>(null);
@@ -226,7 +228,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0 }: 
           <h3 id={`grp-${doc.id}-items`} className="px-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
             {groupLabels.ITEMS}
           </h3>
-          <ItemsTable fields={items} activeId={active} onActivate={setActive} onSave={save} onConfirm={confirm} />
+          <ItemsTable fields={items} activeId={active} onActivate={setActive} onSave={save} onConfirm={confirm} {...(merge ? { merge } : {})} />
         </section>
       )}
     </div>
@@ -243,6 +245,18 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const manualQuery = useQuery({ queryKey: manualShipmentKeys.detail(dossier.id), queryFn: () => getManualShipment(dossier.id) });
   const hasManualItems = (manualQuery.data?.data?.items.length ?? 0) > 0;
   const advance = useAdvanceDossier(dossier.id, goTo);
+  // Gộp / tách dòng hàng giống nhau: máy chủ dựng lại shipment → tải lại trường + luật.
+  const qc = useQueryClient();
+  const mergeMut = useMutation({
+    mutationFn: (on: boolean) => updateDossier(dossier.id, { mergeIdenticalLines: on }),
+    onSuccess: (d) => {
+      qc.setQueryData(dossierKeys.detail(d.id), d);
+      void qc.invalidateQueries({ queryKey: ocrKeys.fields(dossier.id) });
+      void qc.invalidateQueries({ queryKey: ocrKeys.checks(dossier.id) });
+    },
+    onError: toastMutationError(t.mergeFailed),
+  });
+  const merge: LineMerge = { merged: !!dossier.mergeIdenticalLines, busy: mergeMut.isPending, onChange: (on) => mergeMut.mutate(on) };
   const [filter, setFilter] = useState<Filter>("all");
   const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -253,6 +267,12 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const suspectTotal = fields.filter((f) => isSuspect(f.status)).length;
   const suspectDocs = docs.filter((d) => suspectOf(d.id) > 0).length;
   const blockers = (checksQuery.data ?? []).filter((c) => c.result === "FAIL" && c.severity === "BLOCKER").length;
+  // Dòng hàng chưa có xuất xứ: bắt buộc chọn mới được sang bước sau (server cũng chặn – ITEM_ORIGIN_MISSING).
+  const originMissing = fields.filter(isMissingOrigin);
+  // Đề xuất gộp / tách chỉ ở một tab: chứng từ đầu tiên có dòng hàng (dòng hàng lấy từ hóa đơn, không có thì packing list).
+  const mergeDocId = [...docs].sort((a, b) => Number(b.kind === "INVOICE") - Number(a.kind === "INVOICE")).find((d) => fields.some((f) => f.documentId === d.id && f.group === "ITEMS"))?.id;
+  const paymentUnknown = fields.some(isUnknownPayment);
+  const exitBlocked = originMissing.length > 0 || paymentUnknown;
   const [tab, setTab] = useState<string | undefined>(undefined);
   const params = useSearchParams();
   const line = params.get("dong");
@@ -363,7 +383,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
               </TabsList>
               {docs.map((d) => (
                 <TabsContent key={d.id} value={d.id} className="pt-4">
-                  <DocumentTab doc={d} fields={byDoc(d.id)} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} focusSeq={picked?.seq ?? 0} />
+                  <DocumentTab doc={d} fields={byDoc(d.id)} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} focusSeq={picked?.seq ?? 0} {...(d.id === mergeDocId ? { merge } : {})} />
                 </TabsContent>
               ))}
             </Tabs>
@@ -387,6 +407,10 @@ export function OcrStep({ dossier, goTo }: StepProps) {
           <p className="min-w-0 basis-full text-sm text-fg-muted cq-sm:flex-1 cq-sm:basis-auto" aria-live="polite">
             {loading ? (
               t.loading
+            ) : exitBlocked ? (
+              <span className="font-semibold text-danger-subtle-fg">
+                {[originMissing.length > 0 && fill(t.originMissing, { n: originMissing.length }), paymentUnknown && t.paymentUnknown].filter(Boolean).join(" · ")}
+              </span>
             ) : suspectTotal > 0 ? (
               <>
                 {t.remainingPrefix}
@@ -406,7 +430,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
               {t.toAgent}
             </Button>
           ) : (
-            <Button className="cq-max-sm:flex-1" rightIcon={<ArrowRight className="h-4 w-4" />} loading={advance.isPending} disabled={docs.length === 0 && !hasManualItems} onClick={onConfirmData}>
+            <Button className="cq-max-sm:flex-1" rightIcon={<ArrowRight className="h-4 w-4" />} loading={advance.isPending} disabled={(docs.length === 0 && !hasManualItems) || exitBlocked} onClick={onConfirmData}>
               {t.confirmData}
             </Button>
           )}

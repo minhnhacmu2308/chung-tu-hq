@@ -86,7 +86,7 @@ Bộ lọc mặc định khi đồng bộ (`packages/contracts/src/api/mailbox.t
 
 | Điều kiện | Giá trị |
 |---|---|
-| Lần đầu lấy thư trong | 30 ngày gần nhất (`INBOX_FIRST_SYNC_DAYS`); các lần sau từ `lastSyncedAt` |
+| Lần đầu lấy thư trong | 30 ngày gần nhất (`INBOX_FIRST_SYNC_DAYS`); các lần sau từ `lastSyncedAt` lùi 15 phút (`SYNC_OVERLAP_MS` – độ trễ lập chỉ mục tìm kiếm; thư đã lấy bỏ qua theo mã thư) |
 | Loại file | `pdf`, `png`, `jpg`, `jpeg`, `zip` (`INBOX_FILE_EXTENSIONS`) |
 | Kích thước | ≤ 25 MB (`INBOX_MAX_FILE_BYTES`) |
 | Từ khóa trong tiêu đề / nội dung / tên file | `invoice`, `hóa đơn`, `packing`, `bill of lading`, `b/l`, `awb`, `c/o`, `chứng từ`, `contract`, `shipment`… (`INBOX_KEYWORDS`) |

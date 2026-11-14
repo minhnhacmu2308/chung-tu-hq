@@ -110,6 +110,8 @@ export class InMemoryExtractionUow implements ExtractionUow {
 
 /** Chứng từ/hồ sơ giả cho pipeline; ghi lại thay đổi trạng thái. */
 export class FakeDocuments implements DocumentsPort {
+  /** Cờ gộp dòng hàng giống nhau của hồ sơ (dossierInfo). */
+  dossierMergeLines = false;
   docs: (DocumentInfo & { orgId: string; error?: string | null })[] = [];
   readonly files = new Map<string, Buffer>();
   readonly dossierUpdates: unknown[] = [];
@@ -123,7 +125,7 @@ export class FakeDocuments implements DocumentsPort {
   dossierDeclarationNo: string | null = null;
   async dossierInfo(orgId: string, dossierId: string) {
     const status = await this.dossierStatus(orgId, dossierId);
-    return status ? { status, direction: this.dossierDirection, documentSources: { ...this.dossierSources } as never, declarationNo: this.dossierDeclarationNo } : null;
+    return status ? { status, direction: this.dossierDirection, documentSources: { ...this.dossierSources } as never, declarationNo: this.dossierDeclarationNo, mergeIdenticalLines: this.dossierMergeLines } : null;
   }
   async dossierStatus(orgId?: string, dossierId?: string) {
     if (dossierId && this.dossierOrg.has(dossierId) && this.dossierOrg.get(dossierId) !== orgId) return null;

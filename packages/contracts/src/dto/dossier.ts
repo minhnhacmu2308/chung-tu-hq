@@ -28,6 +28,8 @@ export const DossierSchema = z.object({
   billNo: z.string(),
   /** Nguồn từng loại chứng từ (ADR 0013) – vắng loại nào = tải lên như cũ. */
   documentSources: DocumentSourcesSchema.default({}),
+  /** Đã đồng ý gộp dòng hàng giống nhau ở bước OCR (tách lại = false). */
+  mergeIdenticalLines: z.boolean().default(false),
   suspectFields: z.number().int().nonnegative(),
   note: z.string().optional(),
   declarationNo: z.string().optional(),

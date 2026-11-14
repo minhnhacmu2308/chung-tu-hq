@@ -7,7 +7,7 @@ export function toDossier(r: DossierRow): Dossier {
     id: r.id, code: r.code, direction: r.direction, typeCode: r.typeCode, partner: r.partner,
     customsOffice: r.customsOfficeName ? `${r.customsOfficeCode} – ${r.customsOfficeName}` : r.customsOfficeCode,
     skillSetId: r.skillSetId, status: r.status, step: r.step, dueDate: r.dueDate, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
-    ownerId: r.ownerId, invoiceValue: r.invoiceValue, currency: r.currency, incoterm: r.incoterm, transportMode: r.transportMode, partyClass: r.partyClass, billNo: r.billNo, documentSources: r.documentSources,
+    ownerId: r.ownerId, invoiceValue: r.invoiceValue, currency: r.currency, incoterm: r.incoterm, transportMode: r.transportMode, partyClass: r.partyClass, billNo: r.billNo, documentSources: r.documentSources, mergeIdenticalLines: r.mergeIdenticalLines,
     suspectFields: r.suspectFields,
     ...(r.note ? { note: r.note } : {}),
     ...(r.declarationNo ? { declarationNo: r.declarationNo } : {}),

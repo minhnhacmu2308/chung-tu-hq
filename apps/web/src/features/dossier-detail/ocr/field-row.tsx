@@ -1,6 +1,7 @@
 "use client";
 // Một trường trích xuất: nhãn + trạng thái, ô sửa trực tiếp, nút "Đúng", ghi chú khi mâu thuẫn, "AI đọc: …" khi đã sửa.
-import { Button, cn, fill, Input, Label, StatusBadge, useMessages } from "@kb/ui";
+import { PAYMENT_METHODS, paymentChoiceValue, paymentNeedsChoice, resolvePayment } from "@kb/contracts";
+import { Button, cn, fill, Input, Label, Select, StatusBadge, useMessages } from "@kb/ui";
 import { Check, Crosshair, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { isSuspect } from "@/api/ocr";
@@ -22,6 +23,10 @@ export type FieldRowProps = {
 
 export const fieldDomId = (id: string) => `field-${id}`;
 
+/** Ô Phương thức thanh toán chưa ra mã chuẩn (chữ trên chứng từ không nhận ra) – bắt chọn mã trước khi sang bước sau. */
+export const isUnknownPayment = (f: ExtractedField) => f.key === "payment_terms" && paymentNeedsChoice(f.value);
+const PAYMENT_OPTIONS = PAYMENT_METHODS.map((p) => ({ value: p.code, label: `${p.code} – ${p.label}` }));
+
 export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false }: FieldRowProps) {
   const t = useMessages(FIELD_ROW_MESSAGES);
   const [value, setValue] = useState(field.value);
@@ -33,6 +38,10 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
   };
   const inputId = `${fieldDomId(field.id)}-input`;
   const noteId = field.note ? `${fieldDomId(field.id)}-note` : undefined;
+  // PTTT: chữ trên chứng từ + mã chuẩn TK_IVP (1.43 / 2.38) – nhận ra thì chọn sẵn, không nhận ra thì bắt chọn.
+  const payment = field.key === "payment_terms";
+  const payUnknown = payment && paymentNeedsChoice(field.value);
+  const payCode = payment && !payUnknown ? (resolvePayment(field.value)?.code ?? "") : "";
 
   return (
     <div
@@ -86,6 +95,24 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
           </Button>
         )}
       </div>
+      {payment && (
+        <div className="flex flex-col gap-1">
+          <Label htmlFor={`${inputId}-code`} className="text-xs text-fg-muted">
+            {t.paymentCode}
+          </Label>
+          <Select
+            id={`${inputId}-code`}
+            options={PAYMENT_OPTIONS}
+            placeholder={t.choosePayment}
+            value={payCode}
+            aria-invalid={payUnknown || undefined}
+            required
+            disabled={busy}
+            onChange={(e) => e.target.value && e.target.value !== payCode && onSave(field.id, paymentChoiceValue(e.target.value, field.value))}
+          />
+          {payUnknown && <p className="text-sm text-danger-subtle-fg">{t.paymentUnknown}</p>}
+        </div>
+      )}
       {field.note && field.status !== "USER_CONFIRMED" && (
         <p id={noteId} className={cn("text-sm", field.status === "CONFLICT" || field.status === "INVALID_FORMAT" ? "text-danger-subtle-fg" : "text-fg-muted")}>
           {field.note}

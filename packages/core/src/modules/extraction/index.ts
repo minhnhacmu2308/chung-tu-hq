@@ -21,3 +21,4 @@ export { refreshAfterSourcesChanged } from "./application/_remerge.js";
 export { buildSnapshot } from "./domain/issued.js";
 export { deleteInvoiceTemplate, listInvoiceTemplates, saveInvoiceTemplate, type TemplateDeps } from "./application/invoice-templates.js";
 export { applyManual, lineAmount, manualTotal } from "./domain/manual.js";
+export { ocrExitBlockers } from "./domain/ocr-exit.js";

@@ -127,6 +127,9 @@ export const REASON_TEXT_VI = {
   CATALOG_IMPORT_TOO_LARGE: "Mỗi lần gửi tối đa {max} dòng – chia file thành nhiều lần nhập",
   CATALOG_SOURCE_SET_INVALID: "Chỉ bộ mã nội bộ (Mã chung, Kế toán, Kho, XNK) được làm bộ nguồn gốc",
   CATALOG_QTY2_FACTOR_REQUIRED: "ĐVT số lượng 2 khác ĐVT gốc – nhập tỷ lệ (số ĐVT 2 trong 1 ĐVT gốc, lớn hơn 0)",
+  // ── Chặn sang bước sau ở màn Đọc chứng từ ──
+  ITEM_ORIGIN_MISSING: "Dòng hàng {lines} chưa có xuất xứ – chọn xuất xứ trước khi sang bước tiếp theo",
+  PAYMENT_METHOD_UNKNOWN: "Không nhận ra mã phương thức thanh toán từ “{raw}” – chọn mã chuẩn trước khi sang bước tiếp theo",
 } as const;
 
 export type ReasonCode = keyof typeof REASON_TEXT_VI;

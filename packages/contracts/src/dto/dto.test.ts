@@ -8,7 +8,7 @@ const dossier = {
   customsOffice: "03CE – Chi cục HQ cửa khẩu cảng Hải Phòng KV III", skillSetId: "set_default", status: "NEEDS_REVIEW",
   step: "ocr", dueDate: "2026-10-14", createdAt: "2026-10-12T06:00:00.000Z", updatedAt: "2026-10-13T06:00:00.000Z",
   ownerId: "usr_chau", invoiceValue: "20850.00", currency: "USD", incoterm: "FCA", transportMode: "SEA_CONTAINER", partyClass: "4",
-  billNo: "HPSEL2610078", documentSources: {}, suspectFields: 16,
+  billNo: "HPSEL2610078", documentSources: {}, mergeIdenticalLines: false, suspectFields: 16,
 };
 
 describe("DTO", () => {

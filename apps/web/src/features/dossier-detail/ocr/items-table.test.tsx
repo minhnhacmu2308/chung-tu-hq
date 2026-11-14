@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import type { ExtractedField } from "@/mocks/types";
-import { ItemsTable } from "./items-table";
+import { isMissingOrigin, ItemsTable } from "./items-table";
 
 const cell = (n: number, c: string, value: string, status = "CROSS_CHECKED") =>
   ({ id: `f_${n}_${c}`, documentId: "doc_1", group: "ITEMS", key: `item.${n}.${c}`, label: `${c} ${n}`, value, originalValue: value, status }) as ExtractedField;
@@ -80,4 +80,38 @@ describe("ItemsTable", () => {
     expect(onSave).toHaveBeenCalledWith("f_1_quantity", "65");
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "quantity 2" }));
   });
+
+  it("xuất xứ: ô chọn nước; dòng hóa đơn không ghi xuất xứ → ô trống báo lỗi, dòng tô vàng; chọn nước → lưu mã", async () => {
+    const fields = [...line(1, "Frozen fish").filter((f) => f.key !== "item.1.origin"), cell(1, "origin", ""), ...line(2, "Squid")];
+    const onSave = vi.fn();
+    const { container } = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={onSave} onConfirm={vi.fn()} />);
+    const empty = screen.getByRole("combobox", { name: "origin 1" });
+    expect(empty.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByRole("combobox", { name: "origin 2" }).getAttribute("aria-invalid")).not.toBe("true");
+    expect(rows()[0]!.getAttribute("data-tone")).toBe("warning");
+    expect(isMissingOrigin(fields.find((f) => f.key === "item.1.origin")!)).toBe(true);
+    await userEvent.click(empty);
+    await userEvent.keyboard("VN");
+    await userEvent.click(await screen.findByRole("option", { name: /^VN – / }, { timeout: 5000 }));
+    expect(onSave).toHaveBeenCalledWith("f_1_origin", "VN");
+    await expectNoA11yViolations(container);
+  });
+
+  it("gộp dòng: có dòng giống nhau → đề xuất 'Gộp dòng' (bấm → bật cờ); đã gộp → 'Tách lại'; không có merge → không hiện", async () => {
+    const fields = [...line(1, "Frozen fish"), ...line(2, "Squid"), ...line(3, "frozen  FISH")];
+    const onChange = vi.fn();
+    const { unmount } = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange }} />);
+    expect(screen.getByText("Có 1 nhóm dòng hàng giống nhau – gộp mỗi nhóm thành 1 dòng?")).toBeTruthy();
+    expect(screen.getByText("Dòng 1, 3")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Gộp dòng" }));
+    expect(onChange).toHaveBeenCalledWith(true);
+    unmount();
+    const r2 = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: true, busy: false, onChange }} />);
+    await userEvent.click(screen.getByRole("button", { name: "Tách lại" }));
+    expect(onChange).toHaveBeenLastCalledWith(false);
+    r2.unmount();
+    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Gộp dòng" })).toBeNull();
+  });
 });
+

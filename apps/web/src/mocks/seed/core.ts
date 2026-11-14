@@ -125,6 +125,7 @@ function toDossier(s: DossierSeed): Dossier {
     partyClass: DEFAULT_PARTY_CLASS,
     billNo: s.bill,
     documentSources: s.status === "DRAFT" ? defaultDocumentSources(s.dir, s.mode) : {},
+    mergeIdenticalLines: false,
     suspectFields: s.suspect ?? 0,
     ...(s.note ? { note: s.note } : {}),
     ...(s.decl ? { declarationNo: s.decl } : {}),

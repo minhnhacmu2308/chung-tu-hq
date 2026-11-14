@@ -29,6 +29,8 @@ export const dossiers = pgTable(
     billNo: text("bill_no").notNull().default(""),
     /** Nguồn từng loại chứng từ (ADR 0013): { BILL_OF_LADING: "PENDING_AFTER_DECLARATION", … } – vắng loại = tải lên. */
     documentSources: jsonb("document_sources").$type<Record<string, string>>().notNull().default({}),
+    /** Người khai đồng ý gộp dòng hàng giống nhau (tên, ĐVT, đơn giá, xuất xứ, HS) ở bước OCR – shipment gộp khi dựng lại. */
+    mergeIdenticalLines: boolean("merge_identical_lines").notNull().default(false),
     suspectFields: integer("suspect_fields").notNull().default(0),
     declarationNo: text("declaration_no"),
     channel: text("channel"),

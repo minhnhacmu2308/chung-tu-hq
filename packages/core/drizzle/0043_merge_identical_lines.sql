@@ -1,0 +1,1 @@
+ALTER TABLE "dossiers" ADD COLUMN "merge_identical_lines" boolean DEFAULT false NOT NULL;

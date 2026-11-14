@@ -32,10 +32,13 @@ export function projectFields(s: Shipment): ProjectedField[] {
   s.items.forEach((item, i) => {
     for (const spec of ITEM_SPECS) {
       const f = item[spec.field];
+      // Xuất xứ là chỉ tiêu bắt buộc của dòng hàng: hóa đơn không ghi thì vẫn có ô trống trên chứng từ của dòng để người khai chọn (chặn sang bước sau tới khi đủ).
+      const home = spec.field === "origin" && f.sources.length === 0 ? ITEM_SPECS.map((x) => item[x.field].sources[0]?.documentId).find(Boolean) : undefined;
+      if (home) out.push({ documentId: home, key: `item.${item.lineNo}.origin`, label: `Dòng ${item.lineNo} – ${spec.label}`, group: "ITEMS", value: "", status: f.status, shipmentPath: `/items/${i}/origin` });
       for (const src of f.sources) {
         out.push({
           documentId: src.documentId, key: `item.${item.lineNo}.${spec.key}`, label: `Dòng ${item.lineNo} – ${spec.label}`, group: "ITEMS", value: f.value ?? src.raw, status: f.status,
-          shipmentPath: `/items/${i}/${spec.field}`, ...(src.region ? { region: src.region } : {}),
+          shipmentPath: `/items/${i}/${spec.field}`, ...(src.region ? { region: src.region } : {}), ...(f.note ? { note: f.note } : {}),
         });
       }
     }

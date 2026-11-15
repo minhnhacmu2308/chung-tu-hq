@@ -5,7 +5,7 @@ import { createDb, type Db } from "../../../db/client.js";
 import { runSeed } from "../../../db/seed/index.js";
 import { startTestDb, type TestDb } from "../../../db/test-db.js";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
-import type { ContainerListRecord, HysFileRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import type { ContainerListRecord, HysFileRow, HysSubmissionRow, IdentifierRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
 import { isDuplicate } from "../application/kvgs.js";
 import { sentOf } from "../application/sent-sheets.js";
 import { DrizzleCustomsUow } from "./drizzle-customs-uow.js";
@@ -334,5 +334,41 @@ describe("DrizzleCustomsUow – danh sách container và bảng kê KVGS", () =>
     await uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_s3", 12, { branch: 3 })));
     await uow.asOrg(A, (r) => r.kvgs.update("org_anphat", "kv_s1", { status: "REJECTED" }));
     await uow.asOrg(A, (r) => r.kvgs.insert(sheet("kv_s4", 13, { branch: 2 })));
+  });
+});
+
+describe("DrizzleCustomsUow – khai báo định danh", () => {
+  const ident = (id: string, attempt: number, p: Partial<IdentifierRow> = {}): IdentifierRow => ({
+    id, orgId: "org_anphat", dossierId: "dos_idn", attempt, status: "SENDING", request: { objectType: "1", goodsType: "1", customsOffice: "03CE", taxCode: "0316789012", companyName: "AN PHÁT" },
+    refId: null, receiptNo: null, receiptDate: null, customsState: null, identifierNo: null, identifiedOn: null, qrPng: null, resultText: null, errors: null, sendAttempts: 0, sentBy: "usr_chau",
+    sentAt: new Date(now.getTime() + attempt * 1000), createdAt: now, updatedAt: now, ...p,
+  });
+  beforeAll(async () => {
+    const admin = createDb(t.adminUrl, { max: 1 });
+    await admin.execute(sql`INSERT INTO dossiers (id, org_id, code, direction, type_code, partner, customs_office_code, due_date, owner_id) VALUES ('dos_idn', 'org_anphat', 'IDN-001', 'NK', 'A11', 'P', '03CE', '2026-11-01', 'usr_chau')`);
+    await admin.close();
+  });
+  it("latest theo attempt; request jsonb khứ hồi qua Zod; kết quả (số, ngày, QR) ghi/đọc đúng; org khác thấy null (RLS)", async () => {
+    await uow.asOrg(A, (r) => r.identifiers.insert(ident("idn_1", 1)));
+    await uow.asOrg(A, (r) => r.identifiers.update("org_anphat", "idn_1", { status: "ACCEPTED", identifierNo: "122600050501472", identifiedOn: "2026-11-15", qrPng: "iVBOR", customsState: "15", sendAttempts: 1 }));
+    await uow.asOrg(A, (r) => r.identifiers.insert(ident("idn_2", 2, { status: "REJECTED", errors: [{ code: "E1", message: "Sai" }] })));
+    const latest = await uow.asOrg(A, (r) => r.identifiers.latest("org_anphat", "dos_idn"));
+    expect(latest).toMatchObject({ id: "idn_2", attempt: 2, status: "REJECTED", errors: [{ code: "E1", message: "Sai" }], request: { taxCode: "0316789012" } });
+    expect(await uow.asOrg(A, (r) => r.identifiers.get("org_anphat", "idn_1"))).toMatchObject({ status: "ACCEPTED", identifierNo: "122600050501472", identifiedOn: "2026-11-15", qrPng: "iVBOR", sendAttempts: 1 });
+    expect(await uow.asOrg(B, (r) => r.identifiers.latest("org_anphat", "dos_idn"))).toBeNull();
+    expect(await uow.asOrg(B, (r) => r.identifiers.get("org_anphat", "idn_1"))).toBeNull();
+    await expect(uow.asOrg(B, (r) => r.identifiers.insert({ ...ident("idn_b", 9), orgId: "org_anphat" }))).rejects.toThrow();
+  });
+  it("chỉ một lần gửi SENDING mỗi hồ sơ (chỉ mục duy nhất từng phần); trạng thái lạ bị chặn", async () => {
+    await uow.asOrg(A, (r) => r.identifiers.insert(ident("idn_s1", 10)));
+    const dup = await uow.asOrg(A, (r) => r.identifiers.insert(ident("idn_s2", 11))).then(() => null, (e: unknown) => e);
+    expect(isDuplicate(dup)).toBe(true);
+    await expect(uow.asOrg(A, (r) => r.identifiers.insert(ident("idn_bad", 12, { status: "LA" as IdentifierRow["status"] })))).rejects.toThrow();
+  });
+  it("listStuckSending: chỉ SENDING có updatedAt trước mốc; org khác không thấy", async () => {
+    // idn_s1 (test trên) đang SENDING với updatedAt = now.
+    expect((await uow.asOrg(A, (r) => r.identifiers.listStuckSending("org_anphat", new Date(now.getTime() + 1000)))).map((x) => x.id)).toEqual(["idn_s1"]);
+    expect(await uow.asOrg(A, (r) => r.identifiers.listStuckSending("org_anphat", now))).toEqual([]);
+    expect(await uow.asOrg(B, (r) => r.identifiers.listStuckSending("org_anphat", new Date(now.getTime() + 1000)))).toEqual([]);
   });
 });

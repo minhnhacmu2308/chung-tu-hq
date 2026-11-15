@@ -3,7 +3,7 @@
 // (đặt ở application/test) và tái xuất qua infrastructure cho container.
 import type { CustomsInfo, CustomsOperation, KvgsSheet } from "@kb/contracts";
 import { systemClock, type Clock } from "../../../../shared/clock.js";
-import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewaySendResult, HysGatewayRequest, HysGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../customs-ports.js";
+import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewaySendResult, HysGatewayRequest, HysGatewayResult, IdentifierGatewayRequest, IdentifierGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../customs-ports.js";
 
 /** Ảnh mã vạch mô phỏng: PNG 1×1 Base64 thuần (mẫu của đặc tả API-KVGS). */
 export const FAKE_BARCODE_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAIAAAUAAYRcDQAAAAAASUVORK5CYII=";
@@ -37,10 +37,14 @@ export class FakeCustomsGateway implements CustomsGateway {
     kvgsOutcome?: "ACCEPTED" | "REJECTED" | "INCOMPLETE";
     /** Loại hàng API trả về (isContainer); mặc định CONTAINER. */
     kvgsKind?: "CONTAINER" | "CARGO";
+    /** Định danh: ASYNC = V5IdentifierReq chỉ trả REF_ID (hỏi V5IdentifierRes, áp refPendingPolls); mặc định SYNC như cổng thật (kết quả ngay). MST bắt đầu bằng 9 → Hải quan từ chối. */
+    identifierMode?: "SYNC" | "ASYNC";
   } = {}) {}
   /** Lời gọi danh sách container / KVGS (test kiểm nội dung gửi). */
   containerListCalls: ContainerListGatewayRequest[] = [];
   kvgsCalls: KvgsGatewayRequest[] = [];
+  identifierCalls: IdentifierGatewayRequest[] = [];
+  private identifierRefs = new Map<string, IdentifierGatewayRequest>();
   /** V5ContainerRes không trả lại dòng: nhớ dòng đã gửi theo REF_ID để quyết định từ chối (seal bắt đầu bằng REJECT). */
   private refRows = new Map<string, ContainerListGatewayRequest["rows"]>();
   private refPolls = new Map<string, number>();
@@ -72,6 +76,26 @@ export class FakeCustomsGateway implements CustomsGateway {
     return { state: "ACCEPTED", receiptNo: String(hashId(req.refId) % 100_000_000).padStart(8, "0"), receiptDate: this.today() };
   }
   /** KVGS một bước (POST /api/KVGS): loại hàng theo kịch bản `kvgsKind` (mặc định CONTAINER – API thật tự quyết theo tờ khai). */
+  /** Định danh: số 12 chữ số theo MST + ngày (deterministic), ảnh QR mô phỏng; MST bắt đầu bằng 9 → từ chối (tranG_THAI 10). */
+  private identifierOutcome(req: IdentifierGatewayRequest, refId: string): IdentifierGatewayResult {
+    const receipt = { refId, receiptNo: String(hashId(refId) % 1_000_000_000_000).padStart(12, "0"), receiptDate: this.today() };
+    if (req.taxCode.startsWith("9")) return { state: "REJECTED", ...receipt, customsState: "10", resultText: "Doanh nghiệp không đủ điều kiện cấp số định danh", errors: [{ code: "E-IDENT-REJ", field: "MA_DV", message: "Doanh nghiệp không đủ điều kiện cấp số định danh", solution: "Kiểm tra mã số thuế" }] };
+    const no = `1226${String(hashId(req.taxCode + refId) % 100_000_000_000).padStart(11, "0")}`;
+    return { state: "ACCEPTED", ...receipt, customsState: "15", identifierNo: no, identifiedOn: this.today(), qrPng: FAKE_BARCODE_PNG, resultText: `Số định danh là [${no}]` };
+  }
+  async sendIdentifier(_orgId: string, req: IdentifierGatewayRequest, _idempotencyKey?: string): Promise<IdentifierGatewayResult> {
+    this.identifierCalls.push(req);
+    const refId = `FAKE-DD-${++this.refSeq}-${hashId(req.taxCode)}`;
+    if (this.opts.identifierMode === "ASYNC") {
+      this.identifierRefs.set(refId, req);
+      return { state: "PENDING", refId, customsState: "11" };
+    }
+    return this.identifierOutcome(req, refId);
+  }
+  async identifierResult(_orgId: string, req: IdentifierGatewayRequest & { refId: string }): Promise<IdentifierGatewayResult> {
+    if (this.pending(req.refId)) return { state: "PENDING", refId: req.refId, customsState: "12" };
+    return this.identifierOutcome(this.identifierRefs.get(req.refId) ?? req, req.refId);
+  }
   async fetchKvgs(_orgId: string, req: KvgsGatewayRequest, _idempotencyKey?: string): Promise<KvgsFetchResult> {
     this.kvgsCalls.push(req);
     const outcome = this.opts.kvgsOutcome ?? "ACCEPTED";

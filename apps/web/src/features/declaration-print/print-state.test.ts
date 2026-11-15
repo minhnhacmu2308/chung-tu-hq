@@ -1,7 +1,7 @@
 import { expandPrintRow, formKeysOf, itemFieldCode, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
-import { applyToOtherLines, attentionCells, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import { applyToOtherLines, attentionCells, billNoKey, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -509,5 +509,11 @@ describe("isBillCell / billPanelFields – ô số vận đơn", () => {
   it("EDA 2.24 là ô vận đơn nhưng lựa chọn định danh nằm trong form định danh – không thêm ô", () => {
     expect(isBillCell("EDA", "TK_EKN")).toBe(true);
     expect(billPanelFields("EDA", "TK_EKN")).toEqual([]);
+  });
+  it("billNoKey: số định danh xác nhận điền vào ô số vận đơn cùng dòng (IDA) / TK_EKN (EDA)", () => {
+    expect(billNoKey("IDA", "VD_BL1")).toBe("VD_BL1");
+    expect(billNoKey("IDA", "APP_NGAY_VD3")).toBe("VD_BL3");
+    expect(billNoKey("IDA", "APP_HAWB5")).toBe("VD_BL5");
+    expect(billNoKey("EDA", "TK_EKN")).toBe("TK_EKN");
   });
 });

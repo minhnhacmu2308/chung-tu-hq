@@ -4,7 +4,7 @@ import { stuckSweeperJob, type SweeperDeps } from "./stuck-sweeper.js";
 /** Deps giả: chỉ cần uow của identity (danh sách org) và các uow module khác trả danh sách kẹt theo org. */
 function fakeDeps(opts: { orgs: { id: string; status?: string }[]; stuckDocsFor?: string; throwFor?: string }): SweeperDeps {
   const asOrg = (fn: (r: unknown) => unknown, repos: unknown) => fn(repos);
-  const outboxRepos = { outbox: { listUnsentBefore: async () => [] } };
+  const outboxRepos = { outbox: { listUnsentBefore: async () => [] }, identifiers: { listStuckSending: async () => [] } };
   const mailRepos = { connections: { listSyncingBefore: async () => [] } };
   const runRepos = { agentRuns: { listRunningBefore: async () => [] }, hsJobs: { openForDossier: async () => [] } };
   const docRepos = (orgId: string) => ({
@@ -30,10 +30,10 @@ function fakeDeps(opts: { orgs: { id: string; status?: string }[]; stuckDocsFor?
 describe("stuckSweeperJob", () => {
   it("chạy theo từng doanh nghiệp đang hoạt động, bỏ qua doanh nghiệp tạm khóa, cộng dồn số bản ghi đã gỡ", async () => {
     const r = await stuckSweeperJob(fakeDeps({ orgs: [{ id: "org_a" }, { id: "org_b", status: "SUSPENDED" }, { id: "org_c" }], stuckDocsFor: "org_c" }));
-    expect(r).toEqual({ orgs: 2, documents: 1, agentRuns: 0, outbox: 0, mailboxes: 0 });
+    expect(r).toEqual({ orgs: 2, documents: 1, agentRuns: 0, outbox: 0, mailboxes: 0, identifiers: 0 });
   });
   it("lỗi ở một doanh nghiệp không chặn doanh nghiệp khác", async () => {
     const r = await stuckSweeperJob(fakeDeps({ orgs: [{ id: "org_a" }, { id: "org_c" }], throwFor: "org_a", stuckDocsFor: "org_c" }));
-    expect(r).toEqual({ orgs: 2, documents: 1, agentRuns: 0, outbox: 0, mailboxes: 0 });
+    expect(r).toEqual({ orgs: 2, documents: 1, agentRuns: 0, outbox: 0, mailboxes: 0, identifiers: 0 });
   });
 });

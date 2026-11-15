@@ -52,6 +52,9 @@
   --kb-color-paper: light-dark(#FFFFFF, var(--kb-gray-900));
   --kb-color-paper-fg: light-dark(var(--kb-gray-900), var(--kb-gray-50));
   --kb-color-paper-rule: light-dark(var(--kb-gray-400), var(--kb-gray-500));
+  /* Nền quét mã (QR / mã vạch hiển thị trên màn hình): luôn đen trên trắng ở cả chế độ tối – máy quét cần tương phản thật */
+  --kb-color-scan: light-dark(#FFFFFF, #FFFFFF);
+  --kb-color-scan-fg: light-dark(#000000, #000000);
   --kb-color-fg-muted: light-dark(var(--kb-gray-600), var(--kb-gray-300));
   --kb-color-fg-subtle: light-dark(var(--kb-gray-600), var(--kb-gray-400));
   --kb-color-overlay: light-dark(rgb(15 23 42 / 0.32), rgb(0 0 0 / 0.55));

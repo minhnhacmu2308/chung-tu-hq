@@ -105,6 +105,16 @@ describe("Barcode type=png (ảnh mã do Hải quan cấp)", () => {
     await expectNoA11yViolations(container);
   });
 
+  it("surface=scan: nền trắng + mã đen cố định (quét được ở chế độ tối), có viền yên tĩnh; mặc định không nền", async () => {
+    const { container, getByRole, rerender } = render(<Barcode type="png" value={TINY_PNG} label="QR định danh" surface="scan" size="lg" />);
+    expect(getByRole("img", { name: "QR định danh" })).toHaveClass("bg-scan", "text-scan-fg", "p-2", "h-48", "w-48");
+    await expectNoA11yViolations(container);
+    rerender(<Barcode type="qr" value="DD1226" label="QR" surface="scan" />);
+    expect(getByRole("img", { name: "QR" })).toHaveClass("bg-scan", "text-scan-fg");
+    rerender(<Barcode type="png" value={TINY_PNG} label="p" />);
+    expect(getByRole("img")).not.toHaveClass("bg-scan");
+  });
+
   it("cỡ sm/lg theo token class", () => {
     const { getByRole, rerender } = render(<Barcode type="png" value={TINY_PNG} label="p" size="sm" />);
     expect(getByRole("img")).toHaveClass("h-24", "w-24");

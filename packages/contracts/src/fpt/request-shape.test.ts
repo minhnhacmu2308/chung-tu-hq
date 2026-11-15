@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shapeIdaBody } from "./ida-request-shape.js";
+import { shapeEdaBody, shapeIdaBody } from "./request-shape.js";
 
 describe("shapeIdaBody – body IDA đúng hình mẫu request FPT", () => {
   it("đủ mọi key; ô trống: decimal → null, chữ/ngày/Long → \"\"; bỏ tK_CHB, haG_B25; giữ object khác (tài khoản, CTHQ)", () => {
@@ -23,5 +23,21 @@ describe("shapeIdaBody – body IDA đúng hình mẫu request FPT", () => {
     expect(Object.keys(b["objVN_IDA_KTG"] as object)).toHaveLength(37);
     expect(b["objVN_IDA_KTG"]).toMatchObject({ ktG_VD1: "6", ktG_VPC: null, ktG_FR3: null, ktG_VR1: "" });
     expect(b["objVNACCS_ACCOUNT"]).toEqual({ useR_ID: "U" });
+  });
+
+  it("EDA: đủ key (95 / HANG 27 / CON 57), giữ tK_CHB, bỏ haG_R01; chưa có CTHQ → CTHQ rỗng 30 key; CTHQ của EDA01 giữ nguyên", () => {
+    const b = shapeEdaBody({ objVN_EDA: { tK_ECB: "B11", tK_CHB: "00", tK_FKK: 5543.17, tK_NO: "23" }, objVN_EDA_CON: null, objVN_EDA_HANG: [{ haG_CMD: "84821000", haG_R01: "01", haG_QN1: 5 }] });
+    const head = b["objVN_EDA"] as Record<string, unknown>;
+    expect(Object.keys(head)).toHaveLength(95);
+    expect(head).toMatchObject({ tK_ECB: "B11", tK_CHB: "00", tK_FKK: 5543.17, tK_NO: "23", tK_ECN: null, tK_FIC: "", tK_BYA: "" });
+    expect(head).not.toHaveProperty("tK_ID");
+    const hang = (b["objVN_EDA_HANG"] as Record<string, unknown>[])[0]!;
+    expect(Object.keys(hang)).toHaveLength(27);
+    expect(hang).not.toHaveProperty("haG_R01");
+    expect(Object.keys(b["objVN_EDA_CON"] as object)).toHaveLength(57);
+    expect(b["objVN_EDA_CON"]).toMatchObject({ coN_VC1: "", coN_C50: "" });
+    expect(Object.keys(b["objVN_EDA_CTHQ"] as object)).toHaveLength(30);
+    const cthq = { cthQ_CCM: "X", cthQ_D01: "A" };
+    expect(shapeEdaBody({ objVN_EDA: {}, objVN_EDA_HANG: [], objVN_EDA_CTHQ: cthq })["objVN_EDA_CTHQ"]).toBe(cthq);
   });
 });

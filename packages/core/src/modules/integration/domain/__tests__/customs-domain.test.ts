@@ -81,11 +81,11 @@ describe("declaration-to-fpt", () => {
     expect(b.blockers).toEqual([]);
   });
 
-  it("1.33 / 1.34, 2.28 / 2.29: chỉ gửi mã địa điểm (Hải quan tự xuất tên); PTVC 9 hoặc mã …ZZZ → gửi cả mã và tên", () => {
+  it("1.33 (IDA dỡ hàng) / 2.29 (EDA xếp hàng) – địa điểm phía Việt Nam: luôn gửi cả mã và tên (R0178/S1024); 1.34 / 2.28 nước ngoài: chỉ mã, PTVC 9 hoặc mã …ZZZ → cả tên", () => {
     const vd = (p: DeclarationPayload) => (buildFptRequest(p).request as { objVN_IDA_VANDON: Record<string, unknown> }).objVN_IDA_VANDON;
     const sea = vd(PAYLOAD);
     expect(sea).toMatchObject({ vD_DST: "VNHPH", vD_PSC: "KRPUS" });
-    expect(sea["vD_DSN"]).toBeUndefined();
+    expect(sea["vD_DSN"]).toBeTruthy();
     expect(sea["vD_PSN"]).toBeUndefined();
     const onSite = vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "9 – Khác" }, CANG_DO: { value: "VNZZZ – KHO CONG TY A" }, CANG_XEP: { value: "VNZZZ – KHO CONG TY B" } } });
     expect(onSite).toMatchObject({ vD_DST: "VNZZZ", vD_DSN: "KHO CONG TY A", vD_PSC: "VNZZZ", vD_PSN: "KHO CONG TY B" });
@@ -101,7 +101,7 @@ describe("declaration-to-fpt", () => {
     const tk = (eda.request as { objVN_EDA: Record<string, unknown> }).objVN_EDA;
     expect(tk).toMatchObject({ tK_DSC: "KRPUS", tK_PSC: "VNHPH" });
     expect(tk["tK_DSN"]).toBeUndefined();
-    expect(tk["tK_PSN"]).toBeUndefined();
+    expect(tk["tK_PSN"]).toBe("Cảng Hải Phòng");
   });
 
   it("1.37: nhiều mã → TK_OL1..5, bỏ trùng; hàng 84/85 mà ô 1 không phải MO/CU → chặn truyền (CV 2061)", () => {
@@ -169,11 +169,12 @@ describe("declaration-to-fpt", () => {
     expect(r.objVN_EDA_CON["coN_C01"]).toBe("SITU2246781");
   });
 
-  it("EDA dòng hàng: số dòng HAG_R01 (không phải HAG_B25 của IDA); mô tả kèm “#&mã nước xuất xứ” (TT121 2.69), không nhân đôi; thiếu xuất xứ → chặn", () => {
+  it("EDA dòng hàng: không gửi số dòng (HAG_R01/HAG_B25 – mẫu request FPT không có); mô tả kèm “#&mã nước xuất xứ” (TT121 2.69), không nhân đôi; thiếu xuất xứ → chặn", () => {
     const base = { ...PAYLOAD, kind: "EDA" as const, direction: "XK" as const, fields: { ...PAYLOAD.fields, NXK_MST: { value: "0316789012" }, HD_PL: { value: "B – Bảng kê" } } };
     const eda = buildFptRequest({ ...base, items: [{ ...PAYLOAD.items[0]!, origin: "VN" }, { ...PAYLOAD.items[1]!, origin: "VN", description: "Thanh trượt#&VN" }] });
     const r = eda.request as { objVN_EDA: Record<string, unknown>; objVN_EDA_HANG: Record<string, unknown>[] };
-    expect(r.objVN_EDA_HANG[0]).toMatchObject({ haG_R01: "01", haG_CMN: "Vòng bi cầu 6205-2RS#&VN" });
+    expect(r.objVN_EDA_HANG[0]).toMatchObject({ haG_CMN: "Vòng bi cầu 6205-2RS#&VN" });
+    expect(r.objVN_EDA_HANG[0]!["haG_R01"]).toBeUndefined();
     expect(r.objVN_EDA_HANG[0]!["haG_B25"]).toBeUndefined();
     expect(r.objVN_EDA_HANG[1]!["haG_CMN"]).toBe("Thanh trượt#&VN");
     expect(r.objVN_EDA["tK_IV1"]).toBe("B");

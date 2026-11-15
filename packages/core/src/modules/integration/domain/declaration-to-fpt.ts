@@ -10,7 +10,8 @@ export type DeclarationPayload = {
   /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền. */
   items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; vatCode?: string | null; policyNote: string | null; /** Mã bộ Hải quan của mặt hàng (danh mục) → HAG_MAHANG. */ itemCode?: string | null; /** Số lượng (2) theo ĐVT 2 của mặt hàng → HAG_QN2/QT2 (ô người khai nhập vẫn thắng). */ quantity2?: { qty: string; unit: string } | null }[];
   /**
-   * Dòng có HAG_MAHANG trống vì mã lạ (Part No chưa có trong danh mục) / mặt hàng chưa có mã bộ Hải quan → cảnh báo, KHÔNG chặn truyền (Review Focus 5).
+   * Dòng có HAG_MAHANG trống vì mã lạ (Part No chưa có trong danh mục) / mặt hàng chưa có mã bộ Hải quan. Hiện KHÔNG dùng khi dựng body FPT:
+   * mẫu request FPT (IDA, EDA) không có HAG_MAHANG nên không gửi, không cảnh báo (2026-11-15).
    * Ngoài `items` để không đổi nội dung "đã gửi" của tờ khai (so tờ đã gửi). Vắng = dữ liệu cũ / chưa nối danh mục.
    */
   itemNotes?: { lineNo: number; note: "UNKNOWN_CODE" | "NO_CUSTOMS_CODE"; partNo: string | null }[];
@@ -137,7 +138,7 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[], nu
     // Ô người khai nhập / sửa đè trên form đầy đủ (theo id dòng) thắng giá trị tự điền.
     const own = it.id ? itemOverrides(Object.entries(p.fields).map(([code, f]) => ({ code, value: f.value })), it.id) : {};
     const auto = itemDefaults(p.kind, it, { currency: p.currency, vbpq: val(p, "VBPQ"), lineNos, adjustmentNos });
-    if (p.kind === "EDA") set("HAG_R01", String(i + 1).padStart(2, "0")); // IDA: mẫu request FPT không có HAG_B25 – không gửi
+    // Số dòng (IDA HAG_B25 / EDA HAG_R01): mẫu request FPT không có – không gửi.
     set("HAG_CMD", hs8(it.hsConfirmed));
     if (p.kind === "EDA" && !it.origin) blockers.push(`Dòng ${it.lineNo}: chưa có mã nước xuất xứ – mô tả hàng xuất khẩu phải ghi “mô tả#&mã nước” (chỉ tiêu 2.69)`);
     set("HAG_CMN", p.kind === "EDA" ? withOrigin(it.description, it.origin) : it.description);
@@ -152,11 +153,7 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[], nu
       if (!own["HAG_ORS"] && !table.code) blockers.push(`Dòng ${it.lineNo}: chưa có mã Biểu thuế nhập khẩu cho ${table.fta} – nhập chỉ tiêu 1.80 trên tờ khai (tra Bảng mã Biểu thuế trên website Cục Hải quan)`);
     }
     const codes = p.kind === "EDA" ? lawCodesByLine(val(p, "VBPQ"), lineNos).get(it.lineNo) ?? [] : [];
-    // IDA: mẫu request FPT không có HAG_MAHANG (shapeIdaBody không gửi) → không cảnh báo mã hàng trống.
-    const note = p.kind === "IDA" || own["HAG_MAHANG"] || it.itemCode ? undefined : p.itemNotes?.find((n) => n.lineNo === it.lineNo);
-    if (note) warnings.push(note.note === "UNKNOWN_CODE"
-      ? `Dòng ${it.lineNo}: mã hàng ${note.partNo ?? ""} chưa có trong danh mục hàng hóa – HAG_MAHANG để trống (chọn mặt hàng ở dòng hàng nếu cần)`
-      : `Dòng ${it.lineNo}: mặt hàng chưa có mã trong bộ mã Hải quan – HAG_MAHANG để trống`);
+    // Mẫu request FPT (IDA, EDA) không có HAG_MAHANG – không gửi, không cảnh báo mã hàng trống (shapeIdaBody / shapeEdaBody).
     if (codes.length > 5 && !own["HAG_OL1"]) warnings.push(`Dòng ${it.lineNo}: chỉ gửi 5 mã văn bản pháp luật đầu (${codes.slice(5).join(", ")} bị bỏ)`);
     for (const [key, v] of Object.entries({ ...auto, ...own })) {
       const spec = itemFieldFpt(p.kind, key);
@@ -224,11 +221,12 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     setVd("VD_GW", num(val(p, "TRONG_LUONG"), "VD_GW"));
     setVd("VD_GWT", "KGM");
     setVd("VD_ST", firstToken(val(p, "KHO")));
-    // 1.33 / 1.34: tên địa điểm chỉ gửi khi PTVC 9 hoặc mã chưa mã hóa (…ZZZ) – còn lại Hải quan tự xuất tên theo mã.
+    // 1.33 địa điểm dỡ hàng (phía Việt Nam): luôn gửi cả tên – VNACCS báo R0178 "DST chưa được đăng ký" + S1024 "DSN chưa được nhập" khi chỉ gửi mã
+    // (2026-11-15, người dùng chốt: tờ khai nhập vD_DST, tờ khai xuất TK_PSC). 1.34 (nước ngoài): tên chỉ gửi khi PTVC 9 hoặc mã …ZZZ.
     const transport = firstToken(val(p, "PTVC"));
     const pod = split(val(p, "CANG_DO"));
     setVd("VD_DST", pod.code);
-    if (sendsPlaceName(transport, pod.code)) setVd("VD_DSN", pod.name);
+    setVd("VD_DSN", pod.name);
     const pol = split(val(p, "CANG_XEP"));
     setVd("VD_PSC", pol.code);
     if (sendsPlaceName(transport, pol.code)) setVd("VD_PSN", pol.name);
@@ -300,14 +298,14 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_GW", num(val(p, "TRONG_LUONG"), "TK_GW"));
   set("TK_GWT", "KGM");
   set("TK_ST", firstToken(val(p, "KHO")));
-  // 2.28 / 2.29: tên địa điểm chỉ gửi khi PTVC 9 hoặc mã chưa mã hóa (…ZZZ) – còn lại Hải quan tự xuất tên theo mã.
+  // 2.28 (nước ngoài): tên chỉ gửi khi PTVC 9 hoặc mã …ZZZ. 2.29 địa điểm xếp hàng (phía Việt Nam): luôn gửi cả tên (như 1.33 của IDA).
   const transport = firstToken(val(p, "PTVC"));
   const dst = split(val(p, "CANG_DO"));
   set("TK_DSC", dst.code);
   if (sendsPlaceName(transport, dst.code)) set("TK_DSN", dst.name);
   const psc = split(val(p, "CANG_XEP"));
   set("TK_PSC", psc.code);
-  if (sendsPlaceName(transport, psc.code)) set("TK_PSN", psc.name);
+  set("TK_PSN", psc.name);
   set("TK_VSC", callSign(p)); // 2.30 ô 1
   set("TK_VSN", val(p, "PTVC_TEN"));
   set("TK_SYM", ddmmyyyy(val(p, "NGAY_DI")));

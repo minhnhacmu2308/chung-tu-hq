@@ -18,7 +18,7 @@ export type DeclarationSnapshot = {
   /** `itemCode` (HAG_MAHANG) chỉ có khi mặt hàng đã gắn có mã bộ Hải quan – vắng giữ nguyên nội dung đã gửi của lô cũ (so tờ đã gửi). */
   /** `quantity2`: Số lượng (2) theo ĐVT 2 của mặt hàng danh mục (HAG_QN2/QT2 – itemDefaults); đọc từ cột đã lưu của dòng; vắng → SL2 = SL1. Có thì thuộc nội dung "đã gửi" (sentSnapshotOf). */
   items: (Pick<LineItemRow, "id" | "lineNo" | "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsConfirmed" | "importDutyRate" | "vatRate" | "policyNote"> & { itemCode?: string; quantity2?: { qty: string; unit: string } })[];
-  /** Dòng HAG_MAHANG để trống vì mã lạ / mặt hàng chưa có mã Hải quan → cảnh báo khi dựng payload (không chặn truyền – Review Focus 5). */
+  /** Dòng HAG_MAHANG để trống vì mã lạ / mặt hàng chưa có mã Hải quan (hiện không dùng khi dựng body FPT – mẫu FPT không có HAG_MAHANG). */
   itemNotes: { lineNo: number; note: "UNKNOWN_CODE" | "NO_CUSTOMS_CODE"; partNo: string | null }[];
   adjustments: { label: string; amount: string; currency: string; kind?: "ADD" | "SUBTRACT"; code?: string; allocate?: boolean }[]; containers: string[]; unconfirmedHs: number; estimatedTaxVnd: string; exchangeRateDate: string;
   /** Thuế dự tính (thuế NK + VAT, VND) từng tờ khai nhánh – cùng cách tính với DeclarationView.branches. */

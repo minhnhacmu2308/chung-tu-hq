@@ -1,7 +1,9 @@
-// Body IDA gửi FPT đúng hình mẫu request FPT (người dùng cung cấp 2026-11-15): đủ mọi key của từng object, ô trống vẫn gửi
-// ("" cho chữ/ngày/Long, null cho decimal) – không bỏ key. Gửi thiếu key → S0049 "Số tờ khai đã nhập chưa được đăng ký" (2026-11-15).
-// Chỉ gửi key có trong mẫu: TK_CHB, HAG_B25 không có trong mẫu → không gửi.
+// Body IDA/EDA gửi FPT đúng hình mẫu request FPT (người dùng cung cấp 2026-11-15; Postman API-VNACCS NEW 21/04/2026 /api/IDA, IDA01, EDA01):
+// đủ mọi key của từng object, ô trống vẫn gửi ("" cho chữ/ngày/Long, null cho decimal) – không bỏ key.
+// Gửi thiếu key → S0049 "Số tờ khai đã nhập chưa được đăng ký" (2026-11-15). Chỉ gửi key có trong mẫu:
+// IDA không có TK_CHB, HAG_B25, HAG_MAHANG; EDA không có TK_ID, HAG_R01, HAG_MAHANG.
 import { fptKey, type FptFieldMeta } from "./common.js";
+import { VN_EDA_CON_FIELDS, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS } from "./eda.js";
 import { VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "./ida.js";
 
 const IDA_KEYS = [
@@ -48,5 +50,37 @@ export function shapeIdaBody(body: Record<string, unknown>): Record<string, unkn
     objVN_IDA_HANG: items.map(hang),
     objVN_IDA_VANDON: vandon(body["objVN_IDA_VANDON"] as Record<string, unknown>),
     objVN_IDA_KTG: ktg(body["objVN_IDA_KTG"] as Record<string, unknown>),
+  };
+}
+
+const EDA_KEYS = [
+  "tK_ECN", "tK_FIC", "tK_BNO", "tK_DNO", "tK_TDN", "tK_ECB", "tK_CCC", "tK_CH", "tK_MTC", "tK_ECD", "tK_CHB", "tK_RID", "tK_EPC", "tK_EPN", "tK_EPP", "tK_EPA", "tK_EPT",
+  "tK_EXC", "tK_EXN", "tK_CGC", "tK_ECC", "tK_CGN", "tK_CGP", "tK_CGA", "tK_CAT", "tK_CAC", "tK_CAS", "tK_CGK", "tK_EKN", "tK_NO", "tK_NOT", "tK_GW", "tK_GWT",
+  "tK_ST", "tK_DSC", "tK_DSN", "tK_PSC", "tK_PSN", "tK_VSC", "tK_VSN", "tK_SYM", "tK_MRK", "tK_SS1", "tK_SN1", "tK_SS2", "tK_SN2", "tK_SS3", "tK_SN3", "tK_SS4", "tK_SN4",
+  "tK_SS5", "tK_SN5", "tK_IV1", "tK_IV3", "tK_IV2", "tK_IVD", "tK_BRC", "tK_IVP", "tK_BYA", "tK_IP2", "tK_BCM", "tK_IP3", "tK_BCN", "tK_IP4", "tK_IP1", "tK_SBC", "tK_FCD",
+  "tK_RYA", "tK_FKK", "tK_SCM", "tK_SCN", "tK_TP", "tK_CNV", "tK_TPM", "tK_ENC", "tK_EA1", "tK_EB1", "tK_EA2", "tK_EB2", "tK_EA3", "tK_EB3", "tK_NT2", "tK_REF", "tK_DPD",
+  "tK_ST1", "tK_AD1", "tK_SD1", "tK_ST2", "tK_AD2", "tK_SD2", "tK_ST3", "tK_AD3", "tK_SD3", "tK_ARP", "tK_ADT",
+];
+const EDA_HANG_KEYS = [
+  "haG_CMD", "haG_COC", "haG_CMN", "haG_QN1", "haG_QT1", "haG_QN2", "haG_QT2", "haG_BPR", "haG_UPR", "haG_UPC", "haG_TSC", "haG_BPC", "haG_REG", "haG_TDL",
+  "haG_TXR", "haG_OL1", "haG_OL2", "haG_OL3", "haG_OL4", "haG_OL5", "haG_RE", "haG_TXD", "haG_DPR", "haG_TXN", "haG_TXC", "haG_TXA", "haG_TXB",
+];
+const CON_KEYS = ["coN_VC1", "coN_VC2", "coN_VC3", "coN_VC4", "coN_VC5", "coN_VN", "coN_VA", ...Array.from({ length: 50 }, (_, i) => `coN_C${String(i + 1).padStart(2, "0")}`)];
+/** Mẫu EDA (khai lần đầu) gửi kèm chỉ thị Hải quan rỗng; EDA01 gửi nguyên văn chỉ thị Hải quan trả về (không qua đây). */
+const EMPTY_EDA_CTHQ = Object.fromEntries(Array.from({ length: 10 }, (_, i) => String(i + 1).padStart(2, "0")).flatMap((n) => [[`cthQ_D${n}`, ""], [`cthQ_T${n}`, ""], [`cthQ_I${n}`, ""]]));
+
+const edaHead = shaper(EDA_KEYS, VN_EDA_FIELDS);
+const edaHang = shaper(EDA_HANG_KEYS, VN_EDA_HANG_FIELDS);
+const edaCon = shaper(CON_KEYS, VN_EDA_CON_FIELDS);
+
+/** Đưa body EDA (đã qua EdaRequestSchema) về đúng hình mẫu FPT; objVN_EDA_CTHQ đã có (EDA01) giữ nguyên. Thuần. */
+export function shapeEdaBody(body: Record<string, unknown>): Record<string, unknown> {
+  const items = Array.isArray(body["objVN_EDA_HANG"]) ? (body["objVN_EDA_HANG"] as Record<string, unknown>[]) : [];
+  return {
+    ...body,
+    objVN_EDA: edaHead(body["objVN_EDA"] as Record<string, unknown>),
+    objVN_EDA_CON: edaCon(body["objVN_EDA_CON"] as Record<string, unknown> | null),
+    objVN_EDA_CTHQ: body["objVN_EDA_CTHQ"] ?? { ...EMPTY_EDA_CTHQ },
+    objVN_EDA_HANG: items.map(edaHang),
   };
 }

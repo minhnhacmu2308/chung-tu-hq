@@ -58,7 +58,7 @@ describe("requiredGaps – ô bắt buộc còn trống trước khi khai", () =
     expect(requiredGaps("IDA", { ...decl, TK_EPA: "" }, [item])).toEqual([{ key: "TK_EPA", no: "1.22", label: expect.stringContaining("Địa chỉ") }]);
   });
 
-  it("1.15 địa chỉ người nhập khẩu (HT – VNACCS tự hiện theo MST) và 1.14 mã bưu chính (trống gửi 000000) trống → không chặn", () => {
+  it("1.15 địa chỉ người nhập khẩu (HT – VNACCS tự hiện theo MST) và 1.14 mã bưu chính (trống gửi (+084)) trống → không chặn", () => {
     const { decl, item } = complete("IDA");
     expect(requiredGaps("IDA", { ...decl, TK_IMA: "", TK_IMY: "" }, [item])).toEqual([]);
     const f = layoutFor("IDA").declarant.flatMap((s) => s.blocks).flatMap((b) => b.items).find((it) => it.kind === "field" && it.key === "TK_IMA");

@@ -182,10 +182,10 @@ describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
     expect(f["NNK_DT"]?.value).toBe("");
   });
 
-  it("1.14 mã bưu chính lấy từ Tài khoản (mã chỉ tiêu = ô VNACCS TK_IMY); chưa có → trống, không nghi ngờ, ghi chú sẽ gửi 000000", () => {
+  it("1.14 mã bưu chính lấy từ Tài khoản (mã chỉ tiêu = ô VNACCS TK_IMY); chưa có → trống, không nghi ngờ, ghi chú sẽ gửi (+084)", () => {
     expect(ida({ org: { postalCode: "180000" } })["TK_IMY"]).toMatchObject({ value: "180000", source: "ACCOUNT", no: "1.14", section: "PARTIES" });
     const empty = ida({ org: { postalCode: "" } })["TK_IMY"];
-    expect(empty).toMatchObject({ value: "", source: "ACCOUNT", note: expect.stringContaining("000000") });
+    expect(empty).toMatchObject({ value: "", source: "ACCOUNT", note: expect.stringContaining("(+084)") });
     expect(empty?.suspect).toBeUndefined();
     expect(ida()["TK_IMY"]?.value).toBe(""); // OrgInfo cũ chưa có postalCode
   });

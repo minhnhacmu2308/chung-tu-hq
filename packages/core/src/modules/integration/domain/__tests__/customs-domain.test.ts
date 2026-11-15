@@ -260,12 +260,12 @@ describe("declaration-to-fpt – ô bổ sung người khai nhập trên form đ
     expect(b.warnings.some((w) => w.startsWith("TK_IMY"))).toBe(false);
     expect(b.issues).toEqual([]);
   });
-  it("1.14 mã bưu chính (TK_IMY – tờ khai điền từ Tài khoản): có → gửi giá trị thật; trống/thiếu → 000000 kèm cảnh báo", () => {
+  it("1.14 mã bưu chính (TK_IMY – tờ khai điền từ Tài khoản): có → gửi giá trị thật; trống/thiếu → (+084) kèm cảnh báo", () => {
     const sent = (fields: Record<string, { value: string }>) => buildFptRequest({ ...PAYLOAD, fields: { ...PAYLOAD.fields, ...fields } });
     expect((sent({ TK_IMY: { value: "180000" } }).request as Req).objVN_IDA["tK_IMY"]).toBe("180000");
     for (const b of [sent({ TK_IMY: { value: "" } }), sent({})]) {
-      expect((b.request as Req).objVN_IDA["tK_IMY"]).toBe("000000");
-      expect(b.warnings.find((w) => w.startsWith("TK_IMY"))).toMatch(/1\.14.*000000/);
+      expect((b.request as Req).objVN_IDA["tK_IMY"]).toBe("(+084)");
+      expect(b.warnings.find((w) => w.startsWith("TK_IMY"))).toMatch(/1\.14.*\(\+084\)/);
     }
   });
   it("EDA 2.13 mã bưu chính người xuất khẩu (TK_EPP) từ tờ khai → objVN_EDA; trống → không gửi, không cảnh báo", () => {

@@ -57,7 +57,7 @@ Cột "App":
 |---|---|---|---|---|
 | 1.12 | Mã người nhập khẩu | K (HT tự hiện nếu người nhập khẩu tự khai IDA) | Luôn luôn. TT121: nhập khẩu tại chỗ thì khai MST người được chỉ định nhận hàng | ✅ (Tài khoản) |
 | 1.13 | Tên người nhập khẩu | K (HT) | Như trên | ✅ |
-| 1.14 | Mã bưu chính | Tùy chọn | — | ⚠️ 📤 **Gửi `"000000"` khi không có dữ liệu**, trái quy tắc "thiếu thì để trống" |
+| 1.14 | Mã bưu chính | Tùy chọn | — | ⚠️ 📤 **Gửi `"(+084)"` khi không có dữ liệu** (trước 2026-11-15: `"000000"`), trái quy tắc "thiếu thì để trống" |
 | 1.15 | Địa chỉ người nhập khẩu | HT | Chỉ nhập khi hệ thống hiện sai | ✅ |
 | 1.16 | Điện thoại | HT | — | ✅ |
 | 1.17–1.18 | Mã/tên người ủy thác nhập khẩu | ĐK | Nhập khẩu ủy thác | ✅ người khai nhập, tùy chọn (đợt 5) |
@@ -235,7 +235,7 @@ Tất cả phản hồi lỗi (`errorList`) đều có `indexCode`/`nameCode` (c
 1.3/1.10/1.89 (tạm nhập – tái xuất); 1.5; 1.17–1.19, 1.24 (ủy thác, nhập khẩu tại chỗ); 1.25 (đại lý); ~~hô hiệu tàu 1.31/2.30~~ (xong 2026-10-21); 1.35/2.60 hiển thị container; 1.36; 1.40; 1.47–1.49 hiện đủ mã phân loại và đủ 5 khoản điều chỉnh; 1.51; 1.53–1.62 (bảo lãnh, hạn mức); 1.63; 1.64–1.67 (kho ngoại quan, vận chuyển kết hợp); 1.75, 1.77, 1.81, 1.82, 1.88, 1.90–1.93, 1.95–1.96; 2.59 vanning.
 
 ### Sai nghiệp vụ cần sửa
-- ~~`TK_IMY = "000000"` và `TK_CHB = "00"` gửi cứng là sai~~ – **đính chính (đợt 3):** đặc tả `VNACCS_IDA/EDA v1.2` đánh dấu `TK_IMY` và `TK_CHB` là Required (X), và phản hồi thật của FPT trả `tK_CHB: "00"`. Bỏ hai trường này có thể làm FPT từ chối, nên **giữ nguyên**. Cách đúng lâu dài: lưu mã bưu chính của doanh nghiệp ở Tài khoản và gửi giá trị thật thay cho `000000`.
+- ~~`TK_IMY = "000000"` và `TK_CHB = "00"` gửi cứng là sai~~ – **đính chính (đợt 3):** đặc tả `VNACCS_IDA/EDA v1.2` đánh dấu `TK_IMY` và `TK_CHB` là Required (X), và phản hồi thật của FPT trả `tK_CHB: "00"`. Bỏ hai trường này có thể làm FPT từ chối, nên **giữ nguyên**. Cách đúng lâu dài: lưu mã bưu chính của doanh nghiệp ở Tài khoản và gửi giá trị thật thay cho mặc định (nay là `(+084)`, đổi từ `000000` ngày 2026-11-15).
 - `HAG_QN2/QT2` chép từ số lượng (1) (`declaration-to-fpt.ts:93-94`).
 - 1.69 luôn điền mã hồ sơ, sẽ đè cú pháp TT121 bắt buộc (`#&NKTC#&…`, `#&GCPTQ`, `#&1…#&9`) khi rơi vào các tình huống đó.
 - Tiêu đề thuế của EDA ghi "Thuế NK / VAT" (`review-step.tsx` `ItemsTab`, `TaxTab`).

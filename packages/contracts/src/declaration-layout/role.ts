@@ -6,7 +6,7 @@ export const fieldGuideNo = (f: LayoutField, parentNo?: string): string | undefi
 
 /**
  * Ô người khai nhập mà đặc tả FPT.VNACCS bắt buộc (cột Required) nhưng Phụ lục II ghi "theo tình huống"/"hỗ trợ" – thiếu thì Hải quan từ chối
- * nên coi là Bắt buộc. Ô FPT bắt buộc mà phần mềm tự điền khi truyền (đội thủ tục 00, mã bưu chính 000000, đơn vị KGM, mã tiền, số lượng (2)…)
+ * nên coi là Bắt buộc. Ô FPT bắt buộc mà phần mềm tự điền khi truyền (đội thủ tục 00, mã bưu chính (+084), đơn vị KGM, mã tiền, số lượng (2)…)
  * không có ở đây. required.test.ts kiểm mọi ô FPT bắt buộc trên form đều thuộc một trong hai nhóm.
  * Tên địa điểm dỡ / xếp hàng (VD_DSN, TK_PSN…) KHÔNG ở đây: Hải quan tự xuất theo mã, chỉ nhập khi PTVC 9 / mã …ZZZ (transport-places.ts).
  * 1.15 địa chỉ người nhập khẩu (TK_IMA) KHÔNG ở đây: chỉ tiêu HT (TT39) – VNACCS tự hiện theo MST, phần mềm điền từ Tài khoản; trống không chặn duyệt.

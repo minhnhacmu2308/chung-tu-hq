@@ -58,7 +58,7 @@ export const AcceptInviteInputSchema = z.object({ token: z.string().min(16), nam
 export type AcceptInviteInput = z.infer<typeof AcceptInviteInputSchema>;
 
 /**
- * Mã bưu chính doanh nghiệp: 5 chữ số (mã bưu chính quốc gia từ 2018) hoặc 6 chữ số (mã cũ, VNACCS nhận tối đa 7 ký tự) (ô TK_IMY/TK_EPP, chỉ tiêu 1.14 IDA / 2.13 EDA); "" = xóa (khi truyền IDA gửi "000000").
+ * Mã bưu chính doanh nghiệp: 5 chữ số (mã bưu chính quốc gia từ 2018) hoặc 6 chữ số (mã cũ, VNACCS nhận tối đa 7 ký tự) (ô TK_IMY/TK_EPP, chỉ tiêu 1.14 IDA / 2.13 EDA); "" = xóa (khi truyền IDA gửi "(+084)").
  */
 export const PostalCodeSchema = z.string().trim().regex(/^(\d{5,6})?$/, "Mã bưu chính gồm 5 hoặc 6 chữ số");
 

@@ -101,8 +101,8 @@ describe("ItemsTable", () => {
     const fields = [...line(1, "Frozen fish"), ...line(2, "Squid"), ...line(3, "frozen  FISH")];
     const onChange = vi.fn();
     const { unmount } = renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange }} />);
-    expect(screen.getByText("Có 1 nhóm dòng hàng giống nhau – gộp mỗi nhóm thành 1 dòng?")).toBeTruthy();
-    expect(screen.getByText("Dòng 1, 3")).toBeTruthy();
+    expect(screen.getByText("Có 1 nhóm dòng hàng cùng loại – gộp mỗi nhóm thành 1 dòng?")).toBeTruthy();
+    expect(screen.getByText("Dòng 1, 3 → “Frozen fish”")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Gộp dòng" }));
     expect(onChange).toHaveBeenCalledWith(true);
     unmount();
@@ -112,6 +112,12 @@ describe("ItemsTable", () => {
     r2.unmount();
     renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Gộp dòng" })).toBeNull();
+  });
+
+  it("gộp dòng cùng tên hàng gốc, khác size: đề xuất kèm tên dòng gộp chỉ giữ phần chung", () => {
+    const fields = [...line(1, "Octopus, size 1, 10 cartons"), ...line(2, "Octopus, size 2, 5 cartons"), ...line(3, "Squid")];
+    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange: vi.fn() }} />);
+    expect(screen.getByText("Dòng 1, 2 → “Octopus”")).toBeTruthy();
   });
 });
 

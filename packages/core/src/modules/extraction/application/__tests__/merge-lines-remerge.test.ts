@@ -128,5 +128,24 @@ describe("gộp / tách dòng hàng qua remerge", () => {
     expect(field("item.4.amount")?.value).toBe("10");
     expect(uow.data.fields.some((f) => f.key.endsWith("@line"))).toBe(false);
   });
+  it("gộp dòng khác size: dòng gộp mang tên chung; tách lại → tên riêng từng dòng (kể cả tên người khai đã sửa ở dòng đầu)", async () => {
+    uow = new InMemoryExtractionUow();
+    docs = new FakeDocuments();
+    deps = { ...deps, uow, documents: docs, ai: new ScriptedAi({ INVOICE: { ...INVOICE, items: [item(1, "Fish, size S", 1, 2), item(2, "Fish, size M", 5, 10)] } }) };
+    docs.docs.push({ id: "doc_inv", orgId: "org_a", dossierId: "dos_1", kind: "INVOICE", kindSource: "USER", fileName: "inv.pdf", mime: "application/pdf", pages: 1, status: "QUEUED", storageKey: "k", sha256: "s" });
+    docs.files.set("k", Buffer.from("%PDF"));
+    unwrap(await processDocument(deps, { orgId: "org_a", dossierId: "dos_1", documentId: "doc_inv", mode: "FULL" }));
+    unwrap(await updateFieldValue(deps, ctx, field("item.1.description")!.id, "Fish, size XS"));
+    docs.dossierMergeLines = true;
+    await refreshAfterSourcesChanged(deps, "org_a", "dos_1");
+    expect(field("item.1.description")).toMatchObject({ value: "Fish", note: "Gộp dòng 1, 2" });
+    expect(field("item.1.quantity")?.value).toBe("6");
+    await refreshAfterSourcesChanged(deps, "org_a", "dos_1");
+    expect(field("item.1.description")?.value).toBe("Fish");
+    docs.dossierMergeLines = false;
+    await refreshAfterSourcesChanged(deps, "org_a", "dos_1");
+    expect(field("item.1.description")).toMatchObject({ value: "Fish, size XS", status: "USER_CONFIRMED" });
+    expect(field("item.2.description")?.value).toBe("Fish, size M");
+    expect(uow.data.fields.some((f) => f.key.endsWith("@line"))).toBe(false);
+  });
 });
-

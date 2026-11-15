@@ -6,7 +6,7 @@
 import {
   Alert, Button, cn, Combobox, createDataTableColumnHelper, DataTable, fill, Input, SegmentedControl, Textarea, Tooltip, useMessages, type ComboboxOption,
 } from "@kb/ui";
-import { identicalLineGroups } from "@kb/contracts";
+import { identicalLineGroups, mergedDescription } from "@kb/contracts";
 import { Check, CheckCheck, CheckCircle2, Merge, Split } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import { isSuspect } from "@/api/ocr";
@@ -194,12 +194,14 @@ export function ItemsTable({
   }, [fields]);
 
   const suspectCount = lines.filter((l) => l.suspects.length > 0).length;
-  // Nhóm dòng cùng tên, ĐVT, đơn giá, xuất xứ (và HS trên invoice) – đề xuất gộp thành một dòng (cùng quy tắc với máy chủ).
+  // Nhóm dòng cùng tên hàng gốc, ĐVT, đơn giá, xuất xứ (và HS trên invoice) – đề xuất gộp thành một dòng, kèm tên dòng gộp (cùng quy tắc với máy chủ).
   const groups = useMemo(() => {
     const extra = (k: string) => new Map(fields.filter((f) => f.key.endsWith(`.${k}`) && /^item\.\d+\./.test(f.key)).map((f) => [f.key.split(".")[1], f.value]));
     const hs = extra("hs_on_invoice");
     const part = extra("part_no");
-    return identicalLineGroups(lines.map((l) => ({ lineNo: l.n, description: l.description, unit: l.unit, unitPrice: l.unit_price, origin: l.origin, hs: hs.get(String(l.n)) ?? null, partNo: part.get(String(l.n)) ?? null })));
+    const desc = new Map(lines.map((l) => [l.n, l.description]));
+    return identicalLineGroups(lines.map((l) => ({ lineNo: l.n, description: l.description, unit: l.unit, unitPrice: l.unit_price, origin: l.origin, hs: hs.get(String(l.n)) ?? null, partNo: part.get(String(l.n)) ?? null })))
+      .map((g) => ({ lines: g, name: mergedDescription(g.map((n) => desc.get(n) ?? null)) }));
   }, [fields, lines]);
   // Hết dòng cần kiểm tra thì quay về "Tất cả" (không để bảng trống).
   const mode = suspectCount === 0 ? "all" : show;
@@ -265,7 +267,9 @@ export function ItemsTable({
             </Button>
           }
         >
-          {groups.map((g) => fill(t.mergeGroup, { lines: g.join(", ") })).join(" · ")}
+          <ul className="flex flex-col gap-1 break-words">
+            {groups.map((g) => <li key={g.lines[0]}>{fill(t.mergeGroup, { lines: g.lines.join(", "), name: g.name })}</li>)}
+          </ul>
         </Alert>
       )}
       {merge?.merged && (

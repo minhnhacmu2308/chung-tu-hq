@@ -18,9 +18,9 @@ export function setSourced(s: Shipment, path: string, patch: Partial<Sourced<str
   if (leaf) Object.assign(leaf, patch);
 }
 
-/** Hậu tố khóa giữ ẩn số lượng / thành tiền riêng của dòng đầu nhóm khi đang gộp dòng. */
+/** Hậu tố khóa giữ ẩn số lượng / thành tiền / tên hàng riêng của dòng đầu nhóm khi đang gộp dòng. */
 const LINE_SUFFIX = "@line";
-const QA = /^item\.\d+\.(quantity|amount)$/;
+const QA = /^item\.\d+\.(quantity|amount|description)$/;
 const baseKey = (key: string) => (key.endsWith(LINE_SUFFIX) ? key.slice(0, -LINE_SUFFIX.length) : key);
 /** Số dòng của khóa trường dòng hàng `item.N.<key>` (khác → NaN). */
 const lineOf = (key: string) => Number(/^item\.(\d+)\./.exec(key)?.[1]);

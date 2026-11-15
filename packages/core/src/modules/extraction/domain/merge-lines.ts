@@ -1,12 +1,13 @@
 // Gộp dòng hàng giống nhau khi hồ sơ bật mergeIdenticalLines (người khai đồng ý ở bước OCR; tách lại = tắt cờ, gộp lại shipment).
-// Dòng gộp giữ số dòng + nguồn của dòng đầu nhóm (khóa trường item.N.* của các dòng khác không bị lệch); số lượng, thành tiền cộng bằng Decimal.
-import { identicalLineGroups, type Shipment, type ShipmentItem, type Sourced } from "@kb/contracts";
+// Dòng gộp giữ số dòng + nguồn của dòng đầu nhóm (khóa trường item.N.* của các dòng khác không bị lệch); số lượng, thành tiền cộng bằng Decimal;
+// tên hàng = phần chung của các dòng (bỏ size, số carton… khác nhau).
+import { identicalLineGroups, mergedDescription, type Shipment, type ShipmentItem, type Sourced } from "@kb/contracts";
 import { sumDec, toDecimalString } from "../../../shared/decimal.js";
 import { ITEM_SPECS } from "./shipment-spec.js";
 
-/** Nhãn ghi chú của số lượng / thành tiền dòng gộp – remerge dựa vào đây để biết dòng nào vừa được tách ra. */
+/** Nhãn ghi chú của số lượng / thành tiền / tên hàng dòng gộp – remerge dựa vào đây để biết dòng nào vừa được tách ra. */
 export const MERGED_NOTE_PREFIX = "Gộp dòng";
-export const isMergedLine = (it: ShipmentItem) => !!(it.quantity.note?.startsWith(MERGED_NOTE_PREFIX) || it.amount.note?.startsWith(MERGED_NOTE_PREFIX));
+export const isMergedLine = (it: ShipmentItem) => [it.quantity, it.amount, it.description].some((f) => f.note?.startsWith(MERGED_NOTE_PREFIX));
 
 /** Giá trị người khai đã xác nhận theo dòng (`item.N.<key>` USER_CONFIRMED) – chỉ dùng để XÉT NHÓM, không ghi vào shipment. */
 export type ConfirmedItemValues = Map<number, Partial<Record<(typeof ITEM_SPECS)[number]["field"], string>>>;
@@ -42,7 +43,9 @@ export function mergeIdenticalLines(s: Shipment, confirmed: ConfirmedItemValues 
     const items = g.map((n) => byNo.get(n)!);
     const note = `${MERGED_NOTE_PREFIX} ${g.join(", ")}`;
     const head = items[0]!;
-    byNo.set(head.lineNo, { ...head, quantity: sum(items, "quantity", note, confirmed), amount: sum(items, "amount", note, confirmed) });
+    const name = mergedDescription(items.map((it) => v(it, "description")));
+    const description = name === v(head, "description") ? head.description : { ...head.description, value: name, note };
+    byNo.set(head.lineNo, { ...head, description, quantity: sum(items, "quantity", note, confirmed), amount: sum(items, "amount", note, confirmed) });
     g.slice(1).forEach((n) => absorbed.add(n));
   }
   s.items = s.items.filter((it) => !absorbed.has(it.lineNo)).map((it) => byNo.get(it.lineNo)!);

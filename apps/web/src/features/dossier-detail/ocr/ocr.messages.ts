@@ -63,7 +63,7 @@ export const ITEMS_TABLE_MESSAGES = defineMessages({
     mergeGroup: "Dòng {lines} → “{name}”",
     mergeAction: "Gộp dòng",
     mergedTitle: "Đã gộp các dòng hàng cùng loại",
-    mergedDesc: "Dòng cùng tên hàng gốc, ĐVT, đơn giá, xuất xứ, mã HS và mã hàng (nếu hóa đơn ghi) đã gộp thành một dòng: cộng số lượng và thành tiền, tên hàng bỏ chi tiết khác nhau (size, số carton…).",
+    mergedDesc: "Dòng cùng tên hàng gốc, ĐVT, đơn giá, xuất xứ, mã HS và mã hàng (nếu hóa đơn ghi) đã gộp thành một dòng: cộng số lượng và thành tiền, tên hàng giữ phần chung, gom các giá trị khác nhau cùng nhãn (vd SIZE 50/100, 100/200), bỏ số kiện từng dòng.",
     splitAction: "Tách lại",
   },
   en: {
@@ -77,7 +77,7 @@ export const ITEMS_TABLE_MESSAGES = defineMessages({
     mergeGroup: "Lines {lines} → “{name}”",
     mergeAction: "Merge lines",
     mergedTitle: "Similar goods lines merged",
-    mergedDesc: "Lines with the same base description, unit, unit price, origin, HS code and part number (if on the invoice) were merged into one line: quantities and amounts added, differing details (size, cartons…) dropped from the description.",
+    mergedDesc: "Lines with the same base description, unit, unit price, origin, HS code and part number (if on the invoice) were merged into one line: quantities and amounts added, the description keeps the common parts, lists differing values under the same label (e.g. SIZE 50/100, 100/200) and drops per-line package counts.",
     splitAction: "Split again",
   },
   zh: {
@@ -91,7 +91,7 @@ export const ITEMS_TABLE_MESSAGES = defineMessages({
     mergeGroup: "第 {lines} 行 → “{name}”",
     mergeAction: "合并行",
     mergedTitle: "已合并同类货物行",
-    mergedDesc: "基本品名、单位、单价、原产地、HS 编码和货号（如发票上有）相同的行已合并为一行：数量和金额相加，品名去掉不同的细节（规格、箱数…）。",
+    mergedDesc: "基本品名、单位、单价、原产地、HS 编码和货号（如发票上有）相同的行已合并为一行：数量和金额相加，品名保留相同部分，同一标签下的不同值合并列出（如 SIZE 50/100, 100/200），去掉各行箱数。",
     splitAction: "重新拆分",
   },
 });

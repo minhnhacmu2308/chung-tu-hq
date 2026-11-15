@@ -1,6 +1,6 @@
 // Gộp dòng hàng giống nhau khi hồ sơ bật mergeIdenticalLines (người khai đồng ý ở bước OCR; tách lại = tắt cờ, gộp lại shipment).
 // Dòng gộp giữ số dòng + nguồn của dòng đầu nhóm (khóa trường item.N.* của các dòng khác không bị lệch); số lượng, thành tiền cộng bằng Decimal;
-// tên hàng = phần chung của các dòng (bỏ size, số carton… khác nhau).
+// tên hàng = mergedDescription (phần chung + gom giá trị cùng nhãn như SIZE, bỏ số kiện từng dòng).
 import { identicalLineGroups, mergedDescription, type Shipment, type ShipmentItem, type Sourced } from "@kb/contracts";
 import { sumDec, toDecimalString } from "../../../shared/decimal.js";
 import { ITEM_SPECS } from "./shipment-spec.js";

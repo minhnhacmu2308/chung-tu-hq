@@ -128,7 +128,7 @@ describe("gộp / tách dòng hàng qua remerge", () => {
     expect(field("item.4.amount")?.value).toBe("10");
     expect(uow.data.fields.some((f) => f.key.endsWith("@line"))).toBe(false);
   });
-  it("gộp dòng khác size: dòng gộp mang tên chung; tách lại → tên riêng từng dòng (kể cả tên người khai đã sửa ở dòng đầu)", async () => {
+  it("gộp dòng khác size: dòng gộp mang tên chung gom size; tách lại → tên riêng từng dòng (kể cả tên người khai đã sửa ở dòng đầu)", async () => {
     uow = new InMemoryExtractionUow();
     docs = new FakeDocuments();
     deps = { ...deps, uow, documents: docs, ai: new ScriptedAi({ INVOICE: { ...INVOICE, items: [item(1, "Fish, size S", 1, 2), item(2, "Fish, size M", 5, 10)] } }) };
@@ -138,10 +138,10 @@ describe("gộp / tách dòng hàng qua remerge", () => {
     unwrap(await updateFieldValue(deps, ctx, field("item.1.description")!.id, "Fish, size XS"));
     docs.dossierMergeLines = true;
     await refreshAfterSourcesChanged(deps, "org_a", "dos_1");
-    expect(field("item.1.description")).toMatchObject({ value: "Fish", note: "Gộp dòng 1, 2" });
+    expect(field("item.1.description")).toMatchObject({ value: "Fish, size XS, M", note: "Gộp dòng 1, 2" });
     expect(field("item.1.quantity")?.value).toBe("6");
     await refreshAfterSourcesChanged(deps, "org_a", "dos_1");
-    expect(field("item.1.description")?.value).toBe("Fish");
+    expect(field("item.1.description")?.value).toBe("Fish, size XS, M");
     docs.dossierMergeLines = false;
     await refreshAfterSourcesChanged(deps, "org_a", "dos_1");
     expect(field("item.1.description")).toMatchObject({ value: "Fish, size XS", status: "USER_CONFIRMED" });

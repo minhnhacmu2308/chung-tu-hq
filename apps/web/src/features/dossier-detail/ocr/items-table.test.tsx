@@ -114,10 +114,10 @@ describe("ItemsTable", () => {
     expect(screen.queryByRole("button", { name: "Gộp dòng" })).toBeNull();
   });
 
-  it("gộp dòng cùng tên hàng gốc, khác size: đề xuất kèm tên dòng gộp chỉ giữ phần chung", () => {
+  it("gộp dòng cùng tên hàng gốc, khác size: đề xuất kèm tên dòng gộp gom size, bỏ số carton", () => {
     const fields = [...line(1, "Octopus, size 1, 10 cartons"), ...line(2, "Octopus, size 2, 5 cartons"), ...line(3, "Squid")];
     renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange: vi.fn() }} />);
-    expect(screen.getByText("Dòng 1, 2 → “Octopus”")).toBeTruthy();
+    expect(screen.getByText("Dòng 1, 2 → “Octopus, size 1, 2”")).toBeTruthy();
   });
 });
 

@@ -28,7 +28,7 @@ describe("mergeIdenticalLines", () => {
     expect(f.find((x) => x.key === "item.1.quantity")).toMatchObject({ value: "1930.1", note: "Gộp dòng 1, 3" });
     expect(f.some((x) => x.key.startsWith("item.3."))).toBe(false);
   });
-  it("cùng tên hàng gốc, khác size / số carton → gộp, tên dòng gộp bỏ phần khác nhau (ghi chú gộp); tên giống hệt → giữ nguyên tên", () => {
+  it("cùng tên hàng gốc, khác size / số carton → gộp, tên dòng gộp gom size, bỏ số carton (ghi chú gộp); tên giống hệt → giữ nguyên tên", () => {
     const d = (size: string, ctn: number) => `FROZEN OCTOPUS WHOLE LONG ARM, SIZE ${size}, PACKING: 5X4KG NET WEIGHT, ${ctn} CARTONS`;
     const octo: FileExtraction = { ...inv, data: { ...inv.data, items: [
       { lineNo: 1, description: d("50/100", 10), quantity: 200, unit: "KGM", unitPrice: 3.85, amount: 770, origin: "IN" },
@@ -36,7 +36,7 @@ describe("mergeIdenticalLines", () => {
     ] } };
     const s = mergeExtractions([octo], { version: 1, taxCodeValid: () => true });
     expect(mergeIdenticalLines(s)).toEqual([1]);
-    expect(s.items[0]!.description).toMatchObject({ value: "FROZEN OCTOPUS WHOLE LONG ARM, PACKING: 5X4KG NET WEIGHT", note: "Gộp dòng 1, 2" });
+    expect(s.items[0]!.description).toMatchObject({ value: "FROZEN OCTOPUS WHOLE LONG ARM, SIZE 50/100, 100/200, PACKING: 5X4KG NET WEIGHT", note: "Gộp dòng 1, 2" });
     expect(s.items[0]!.quantity.value).toBe("2220");
     const s2 = mergeExtractions([inv], { version: 1, taxCodeValid: () => true });
     mergeIdenticalLines(s2);

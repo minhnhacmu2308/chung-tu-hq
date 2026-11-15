@@ -34,7 +34,8 @@ function officeDefaults(snap: DeclarationSnapshot | null): { customsOffice: stri
   if (!snap) return { customsOffice: null, processingUnit: null };
   const req = buildFptRequest(snap.payload).request as Obj;
   const head = (req[snap.payload.kind === "IDA" ? "objVN_IDA" : "objVN_EDA"] ?? {}) as Obj;
-  return { customsOffice: str(head["tK_CH"]), processingUnit: str(head["tK_CHB"]) };
+  // IDA không gửi TK_CHB (mẫu request FPT) → HYS vẫn cần đội thủ tục: lấy ô người khai nhập (1.9) nếu có, không thì "00" như trước.
+  return { customsOffice: str(head["tK_CH"]), processingUnit: str(head["tK_CHB"]) ?? "00" };
 }
 
 function toView(row: HysSubmissionRow, files: HysFileRow[]): HysSubmissionView {

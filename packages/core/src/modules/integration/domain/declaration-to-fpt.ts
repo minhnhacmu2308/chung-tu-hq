@@ -137,7 +137,7 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[], nu
     // Ô người khai nhập / sửa đè trên form đầy đủ (theo id dòng) thắng giá trị tự điền.
     const own = it.id ? itemOverrides(Object.entries(p.fields).map(([code, f]) => ({ code, value: f.value })), it.id) : {};
     const auto = itemDefaults(p.kind, it, { currency: p.currency, vbpq: val(p, "VBPQ"), lineNos, adjustmentNos });
-    set(p.kind === "IDA" ? "HAG_B25" : "HAG_R01", String(i + 1).padStart(2, "0"));
+    if (p.kind === "EDA") set("HAG_R01", String(i + 1).padStart(2, "0")); // IDA: mẫu request FPT không có HAG_B25 – không gửi
     set("HAG_CMD", hs8(it.hsConfirmed));
     if (p.kind === "EDA" && !it.origin) blockers.push(`Dòng ${it.lineNo}: chưa có mã nước xuất xứ – mô tả hàng xuất khẩu phải ghi “mô tả#&mã nước” (chỉ tiêu 2.69)`);
     set("HAG_CMN", p.kind === "EDA" ? withOrigin(it.description, it.origin) : it.description);
@@ -152,7 +152,8 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[], nu
       if (!own["HAG_ORS"] && !table.code) blockers.push(`Dòng ${it.lineNo}: chưa có mã Biểu thuế nhập khẩu cho ${table.fta} – nhập chỉ tiêu 1.80 trên tờ khai (tra Bảng mã Biểu thuế trên website Cục Hải quan)`);
     }
     const codes = p.kind === "EDA" ? lawCodesByLine(val(p, "VBPQ"), lineNos).get(it.lineNo) ?? [] : [];
-    const note = own["HAG_MAHANG"] || it.itemCode ? undefined : p.itemNotes?.find((n) => n.lineNo === it.lineNo);
+    // IDA: mẫu request FPT không có HAG_MAHANG (shapeIdaBody không gửi) → không cảnh báo mã hàng trống.
+    const note = p.kind === "IDA" || own["HAG_MAHANG"] || it.itemCode ? undefined : p.itemNotes?.find((n) => n.lineNo === it.lineNo);
     if (note) warnings.push(note.note === "UNKNOWN_CODE"
       ? `Dòng ${it.lineNo}: mã hàng ${note.partNo ?? ""} chưa có trong danh mục hàng hóa – HAG_MAHANG để trống (chọn mặt hàng ở dòng hàng nếu cần)`
       : `Dòng ${it.lineNo}: mặt hàng chưa có mã trong bộ mã Hải quan – HAG_MAHANG để trống`);
@@ -180,7 +181,7 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     if (val(p, "TNTX_TK")) set("TK_TDN", num(val(p, "TNTX_TK").replace(/\D/g, ""), "TK_TDN")); // 1.3
     set("TK_RED", ddmmyyyy(val(p, "HAN_TX"))); // 1.10
     set("TK_CH", firstToken(val(p, "CQHQ")));
-    set("TK_CHB", "00"); // đội thủ tục mặc định (format.json) – đổi khi có danh mục A038 chi tiết (D3); người khai nhập 1.9 thì ghi đè (applyExtras)
+    // TK_CHB (đội thủ tục): mẫu request FPT (2026-11-15) không có ô này – IDA không gửi (trước đây gửi "00" theo format.json).
     // 1.14 mã bưu chính: tờ khai đã điền từ Tài khoản (mapping TK_IMY), người khai sửa thì giá trị sửa thắng – gửi qua applyExtras.
     // Đặc tả VNACCS_IDA bắt buộc TK_IMY: chỉ khi vẫn trống mới gửi mặc định "(+084)" (mã quốc gia VN – cách khai phổ biến khi không ghi mã bưu chính).
     if (!val(p, "TK_IMY")) {

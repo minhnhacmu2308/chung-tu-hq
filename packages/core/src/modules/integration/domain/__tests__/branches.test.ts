@@ -69,7 +69,7 @@ describe("branchPayload", () => {
   it("buildFptRequest nhánh 2: HAG_B25 bắt đầu 01 và KTG_VT1 = TK_TP; lô 40 dòng không có KTG_VT1", () => {
     const b = branchPayload(p, 2, "104000000001");
     const r = buildFptRequest(b.payload).request as unknown as Ida;
-    expect(r.objVN_IDA_HANG[0]!["haG_B25"]).toBe("01");
+    expect(r.objVN_IDA_HANG[0]!["haG_B25"]).toBeUndefined(); // IDA không gửi HAG_B25 (mẫu request FPT)
     expect(r.objVN_IDA_KTG["ktG_VT1"]).toBe(Number(b.payload.fields.TK_TP!.value));
     expect(r.objVN_IDA["tK_FIC"]).toBe("104000000001");
     expect(r.objVN_IDA["tK_BNO"]).toBe("2");

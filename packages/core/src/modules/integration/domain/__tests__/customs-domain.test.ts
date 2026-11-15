@@ -72,7 +72,7 @@ describe("declaration-to-fpt", () => {
     expect(r.objVN_IDA_KTG["ktG_FR3"]).toBe(29200000);
     expect(r.objVN_IDA_KTG["ktG_FR2"]).toBe("VND");
     // AKFTA là B06 theo bảng mã biểu thuế Phụ lục II TT39 (B07 là AANZFTA).
-    expect(r.objVN_IDA_HANG[0]).toMatchObject({ haG_B25: "01", haG_CMD: "84821000", haG_ORS: "B06", haG_QN1: 2000, haG_UPC: "USD" });
+    expect(r.objVN_IDA_HANG[0]).toMatchObject({ haG_CMD: "84821000", haG_ORS: "B06", haG_QN1: 2000, haG_UPC: "USD" });
     expect(r.objVN_IDA_HANG[1]!["haG_ORS"]).toBe("B01");
     expect(r.objVN_IDA["tK_OL1"]).toBe("MO");
     expect(r.objVN_IDA_VANDON["vD_COC"]).toBe("1");

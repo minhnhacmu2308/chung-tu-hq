@@ -1,6 +1,6 @@
 // GỠ LỖI TẠM (FPT_DEBUG_TRACE): xem trước body gửi FPT – cùng hàm dựng với lần truyền thật, không gửi, không đổi trạng thái.
 import { describe, expect, it } from "vitest";
-import { IdaRequestSchema } from "@kb/contracts";
+import { IdaRequestSchema, shapeIdaBody } from "@kb/contracts";
 import { errCode, unwrap } from "../../../../shared/result.js";
 import { buildFptRequest } from "../../domain/declaration-to-fpt.js";
 import { previewFptPayload } from "../preview-fpt-payload.js";
@@ -25,7 +25,7 @@ describe("previewFptPayload", () => {
     const s = v.sheets[0]!;
     expect(s).toMatchObject({ branch: 1, of: 1, operation: "IDA", path: "/api/IDA", missing: null, blockers: [] });
     // Body gửi thật = output schema cổng (fptContentBody), như FptVnaccsGateway.preDeclare.
-    expect(s.request).toEqual(IdaRequestSchema.parse(buildFptRequest(h.decls.payloadNow()).request));
+    expect(s.request).toEqual(shapeIdaBody(IdaRequestSchema.parse(buildFptRequest(h.decls.payloadNow()).request)));
     expect(JSON.stringify(s.request)).not.toContain("objVNACCS_ACCOUNT");
     expect(h.uow.data.outbox).toHaveLength(0);
     expect(h.queue.jobs).toHaveLength(0);

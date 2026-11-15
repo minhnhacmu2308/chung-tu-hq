@@ -94,7 +94,7 @@ describe("dòng hàng gắn mặt hàng danh mục", () => {
     expect(items[0]!.catalogItem).toBeUndefined();
   });
 
-  it("mã lạ: duyệt + truyền vẫn được; HAG_MAHANG trống + cảnh báo (không chặn) – Review Focus 5", async () => {
+  it("mã lạ: duyệt + truyền vẫn được; HAG_MAHANG trống, không chặn; IDA không cảnh báo (mẫu request FPT không có HAG_MAHANG) – Review Focus 5", async () => {
     await readyToApprove();
     expect(unwrap(await approveDeclaration(deps, approver, D))).toMatchObject({ status: "APPROVED" });
     const snap = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
@@ -104,7 +104,7 @@ describe("dòng hàng gắn mặt hàng danh mục", () => {
     const hang = (built.request as unknown as { objVN_IDA_HANG: Record<string, unknown>[] }).objVN_IDA_HANG;
     expect(hang[0]![fptKey("HAG_MAHANG")]).toBe("XNK-6205");
     expect(hang[1]![fptKey("HAG_MAHANG")]).toBeUndefined();
-    expect(built.warnings.some((w) => /Dòng 2.*6308ZZ-NEW.*HAG_MAHANG/.test(w))).toBe(true);
+    expect(built.warnings.some((w) => /Dòng 2.*6308ZZ-NEW.*HAG_MAHANG/.test(w))).toBe(false);
     expect(built.blockers.some((b) => /HAG_MAHANG|mã hàng/i.test(b))).toBe(false);
   });
 

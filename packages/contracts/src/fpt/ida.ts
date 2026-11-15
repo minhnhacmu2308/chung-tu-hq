@@ -32,7 +32,7 @@ export const VN_IDA_ROWS = [
   ["TK_A06", "text", "3", false, "Mã phân loại kiểm tra"],
   ["TK_A00", "text", "4", false, "Mã số hàng hóa đại diện"],
   ["TK_A07", "text", "10", false, "Tên cơ quan Hải quan"],
-  ["TK_CHB", "text", "2", true, "Đội thủ tục", { category: "Don vi Hai quan.xls" }],
+  ["TK_CHB", "text", "2", false, "Đội thủ tục", { category: "Don vi Hai quan.xls", note: "Sheet ghi Required nhưng mẫu request FPT (2026-11-15) không có ô này – IDA không gửi (shapeIdaBody)" }],
   ["TK_A09", "date", null, false, "Ngày đăng ký"],
   ["TK_AD11", "text", "6", false, "Giờ đăng ký"],
   ["TK_AD21", "date", null, false, "Ngày thay đổi đăng ký"],

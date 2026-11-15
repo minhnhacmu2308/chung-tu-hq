@@ -1341,8 +1341,8 @@ describe("tờ khai nhánh – truyền lần đầu + khai tạm nối tiếp",
     const hang = (b: number) => ((idaOutbox(b)[0]!.payload as { request: { objVN_IDA_HANG: Record<string, unknown>[] } }).request.objVN_IDA_HANG);
     const desc = (h: Record<string, unknown>) => Object.values(h).find((v) => typeof v === "string" && v.startsWith("Vòng bi"));
     expect([1, 2, 3].map((b) => hang(b).length)).toEqual([50, 50, 20]);
-    expect([hang(2)[0]!["haG_B25"], desc(hang(2)[0]!), desc(hang(2).at(-1)!)]).toEqual(["01", "Vòng bi 51", "Vòng bi 100"]);
-    expect([hang(3)[0]!["haG_B25"], desc(hang(3)[0]!), desc(hang(3).at(-1)!)]).toEqual(["01", "Vòng bi 101", "Vòng bi 120"]);
+    expect([hang(2)[0]!["haG_B25"], desc(hang(2)[0]!), desc(hang(2).at(-1)!)]).toEqual([undefined, "Vòng bi 51", "Vòng bi 100"]); // IDA không gửi HAG_B25 (mẫu FPT)
+    expect([hang(3)[0]!["haG_B25"], desc(hang(3)[0]!), desc(hang(3).at(-1)!)]).toEqual([undefined, "Vòng bi 101", "Vòng bi 120"]);
   });
 
   it("outbox nhánh 2 đã xếp nhưng tờ khai bị gọi về sửa (DRAFT) / duyệt lại phiên bản mới → không gửi nội dung cũ: FAILED + lỗi, không nối nhánh 3", async () => {

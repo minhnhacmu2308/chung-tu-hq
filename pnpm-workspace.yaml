@@ -4,3 +4,14 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
+
+# Vá lỗ hổng `pnpm audit` ở dependency gián tiếp khi gói cha chưa ra bản sửa.
+# Gỡ từng dòng khi gói cha đã kéo bản an toàn (`pnpm why <gói> -r`).
+overrides:
+  undici@8: ^8.12.2                              # testcontainers – GHSA-2m5v-pch6-74hx, GHSA-qrxm-fqhp-jwvm
+  glob@10: ^14.0.2                               # testcontainers>archiver-utils
+  minimatch@9: ^11.0.1                           # testcontainers>archiver-utils>glob
+  fast-uri@3: ^3.1.9                             # dependency-cruiser>ajv
+  fast-xml-parser@5: ^5.12.0                     # @azure/storage-blob
+  uuid@8: ^11.1.1                                # exceljs – không lên >=12 (bỏ CJS, exceljs dùng require)
+  "@esbuild-kit/core-utils>esbuild": ^0.25.0     # drizzle-kit

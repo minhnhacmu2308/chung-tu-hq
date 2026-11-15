@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Hằng ngày: advisory mới công bố làm đỏ main sớm, không đợi PR kế tiếp.
+  schedule:
+    - cron: "0 1 * * *"
 
 jobs:
   check:
@@ -35,9 +38,8 @@ jobs:
           HS_CLASSIFIER=fake
           MAIL=console
           EOF
-      # Lỗ hổng mức high/critical trong dependency: báo đỏ nhưng chưa chặn merge (bật chặn khi đã dọn hết tồn đọng).
+      # Lỗ hổng mức high/critical trong dependency: chặn. Gói cha chưa ra bản sửa → thêm `overrides` trong pnpm-workspace.yaml.
       - run: pnpm audit --audit-level=high
-        continue-on-error: true
       - run: pnpm typecheck
       - run: pnpm lint          # design tokens + depcruise ranh giới module
       - run: pnpm test          # vitest (unit + integration với Testcontainers – runner ubuntu có sẵn Docker)

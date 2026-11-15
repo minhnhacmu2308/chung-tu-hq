@@ -46,8 +46,9 @@ describe("InvoiceTemplatesCard", () => {
     const partSwitch = within(dialog).getByRole("switch", { name: /^Hiện Mã hàng/ }) as HTMLButtonElement;
     if (partSwitch.getAttribute("aria-checked") !== "true") await userEvent.click(partSwitch);
     // Mặc định tự động: người mua mẫu không có bộ khách hàng → bộ Kế toán; mặt hàng chưa có mã trong bộ → mã nối.
-    expect(within(dialog).getByText("VT-0010")).toBeTruthy();
-    expect(within(dialog).getByText("MH-000002")).toBeTruthy();
+    // Mã hàng của bộ mã tải bất đồng bộ → phải chờ (getByText đồng bộ làm test chập chờn trên CI).
+    expect(await within(dialog).findByText("VT-0010", {}, T)).toBeTruthy();
+    expect(await within(dialog).findByText("MH-000002", {}, T)).toBeTruthy();
     const pick = async (name: RegExp) => {
       await userEvent.click(within(dialog).getByRole("combobox", { name: "In mã hàng theo bộ mã" }));
       await userEvent.click(await screen.findByRole("option", { name }, T));

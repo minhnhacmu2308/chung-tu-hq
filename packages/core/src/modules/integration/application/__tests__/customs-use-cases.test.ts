@@ -1219,7 +1219,7 @@ describe("tờ khai nhánh – truyền lần đầu + khai tạm nối tiếp",
     expect(uow.data.results.map((r) => [r.branch, r.raw?.stage, r.raw?.certificateId])).toEqual([[1, "NOT_SENT", "cert_1"], [2, "NOT_SENT", "cert_1"], [3, "NOT_SENT", "cert_1"]]);
     expect(uow.data.outbox).toHaveLength(1);
     expect(uow.data.outbox[0]).toMatchObject({ branch: 1, operation: "IDA", idempotencyKey: `${D}:IDA:v2`, status: "PENDING" });
-    expect(idaOf(uow.data.outbox[0]!)).toMatchObject({ tK_FIC: "F", tK_BNO: 1, tK_DNO: 3 });
+    expect(idaOf(uow.data.outbox[0]!)).toMatchObject({ tK_FIC: "F", tK_BNO: "1", tK_DNO: "3" });
     expect(queue.jobs).toHaveLength(1);
     expect(decls.submitted).toEqual([D]);
     expect(dossiers.rows[0]).toMatchObject({ status: "SUBMITTED", step: "submit" });
@@ -1241,11 +1241,11 @@ describe("tờ khai nhánh – truyền lần đầu + khai tạm nối tiếp",
     await drain(1);
     expect(idaOutbox(2)).toHaveLength(1);
     expect(idaOutbox(2)[0]).toMatchObject({ idempotencyKey: `${D}:IDA:v2:b2`, status: "PENDING", declarationId: "dec_1" });
-    expect(idaOf(idaOutbox(2)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2, tK_DNO: 3 });
+    expect(idaOf(idaOutbox(2)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: "2", tK_DNO: "3" });
     expect(idaOutbox(3)).toHaveLength(0);
     await drain(1);
     expect(idaOutbox(3)).toHaveLength(1);
-    expect(idaOf(idaOutbox(3)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 3, tK_DNO: 3 });
+    expect(idaOf(idaOutbox(3)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: "3", tK_DNO: "3" });
     await drain(1);
     expect(queue.jobs).toHaveLength(0);
     expect(uow.data.outbox.map((o) => [o.branch, o.operation, o.status])).toEqual([[1, "IDA", "SENT"], [2, "IDA", "SENT"], [3, "IDA", "SENT"]]);
@@ -1287,7 +1287,7 @@ describe("tờ khai nhánh – truyền lần đầu + khai tạm nối tiếp",
     await drain();
     expect(idaOutbox(1)).toHaveLength(1);
     expect(idaOutbox(3)).toHaveLength(1);
-    expect(idaOf(idaOutbox(3)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 3 });
+    expect(idaOf(idaOutbox(3)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: "3" });
     expect(stages()).toEqual([[1, "PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
   });
 
@@ -1515,7 +1515,7 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     expect(errCode(await performOperation(deps, viewer, D, "IDA", 2))).toBe("FORBIDDEN");
     expect(unwrap(await performOperation(deps, declarant, D, "IDA", 2))).toMatchObject({ sent: true });
     expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`]);
-    expect(idaOf(idaOutbox(2)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2 });
+    expect(idaOf(idaOutbox(2)[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: "2" });
     expect(errCode(await performOperation(deps, declarant, D, "IDA", 2))).toBe("INVALID_STATE");
     expect(idaOutbox(2)).toHaveLength(1);
     await sendAll();
@@ -1634,7 +1634,7 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     expect(sends).toContain("IDA01:fpt-b1");
     expect(keysOf("IDA", 2)).toEqual([`${D}:IDA:v2:b2`, `${D}:IDA:v2:n2:b2`]);
     expect(keysOf("IDA", 3)).toEqual([`${D}:IDA:v2:b3`, `${D}:IDA:v2:n2:b3`]);
-    expect(idaOf(idaOutbox(3).at(-1)!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 3 });
+    expect(idaOf(idaOutbox(3).at(-1)!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: "3" });
     expect(preDeclared).toEqual([1, 2, 3, 2, 3]);
     expect(uow.data.results.map((r) => [r.branch, r.raw?.stage, r.declarationNo])).toEqual([[1, "AMEND_PRE_DECLARED", "104000000001"], [2, "PRE_DECLARED", "104000000002"], [3, "PRE_DECLARED", "104000000003"]]);
     unwrap(await performOperation(deps, declarant, D, "IDE", 1));
@@ -1684,7 +1684,7 @@ describe("tờ khai nhánh – nghiệp vụ, hỏi trạng thái, mở lại th
     decls.fields = {};
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     expect(uow.data.outbox.slice(before).map((o) => [o.branch, o.operation])).toEqual([[2, "IDA"]]);
-    expect(idaOf(uow.data.outbox.at(-1)!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2 });
+    expect(idaOf(uow.data.outbox.at(-1)!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: "2" });
   });
 
   it("CRITICAL: IDA tờ 1 (lô nhiều tờ) hết lượt thử → bấm IDA lại bị chặn, phải Gửi lại (chưa có externalId: gửi lại thông điệp đã ghim; có externalId: tra trạng thái trước)", async () => {

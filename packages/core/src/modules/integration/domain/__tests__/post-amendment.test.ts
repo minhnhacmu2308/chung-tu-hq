@@ -27,6 +27,14 @@ describe("bản khai bổ sung AMA – domain", () => {
     expect(b.request.objVN_AMA_HANG[0]).toEqual({ haG_RAN: "01", haG_AKB: 78721520.22 });
     expect(buildAmaRequest({ header: {}, lines: [] }).blockers).toHaveLength(3);
   });
+  it("AMA: trường Long Integer gửi dạng chuỗi (cổng FPT thật từ chối số), decimal vẫn là số", () => {
+    const b = buildAmaRequest({
+      header: { TK_YNK: "I", TK_ICN: "108173826831", TK_ICB: "A12", TK_CHS: "10BB", TK_CHB: "00", TK_IDD: "2026-04-23", TK_IPD: "2026-04-28", TK_REC: "6", TK_TTC: "VND", TK_BYA: "2026" },
+      lines: [{ id: "l1", ran: 1, manual: [], values: { HAG_RAN: "01", HAG_AKB: "100" } }],
+    });
+    expect(b.issues).toEqual([]);
+    expect(b.request.objVN_AMA).toMatchObject({ tK_BYA: "2026", tK_ICN: 108173826831 });
+  });
   it("tổng tăng/giảm tiền thuế (VND, làm tròn)", () => {
     expect(amendmentDeltaVnd({ lines: [{ id: "l", ran: 1, manual: [], values: { HAG_MKA: "100", HAG_AKA: "150.6", HAG_MA1: "10", HAG_AA1: "5" } }] })).toBe("46");
   });

@@ -87,7 +87,7 @@ describe("guard tờ chưa gọi về (SENT_SHEETS_CHANGED, thay R3)", () => {
     reapprove();
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     expect(h.uow.data.outbox.map((o) => [o.branch, o.operation])).toEqual([[2, "IDA"]]);
-    expect(idaOf(h.uow.data.outbox[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: 2 });
+    expect(idaOf(h.uow.data.outbox[0]!)).toMatchObject({ tK_FIC: "104000000001", tK_BNO: "2" });
     expect((h.uow.data.outbox[0]!.payload as { sent?: unknown }).sent).toEqual(sheetSnapshot(h.decls.payloadNow(), 2));
   });
   it("sửa số tiền dòng tờ 2 → TK_TP đổi → lỗi nêu tờ 1, 3, chỉ tiêu 1.51", async () => {

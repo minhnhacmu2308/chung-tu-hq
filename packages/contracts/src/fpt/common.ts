@@ -148,9 +148,15 @@ export function fptFieldSchema(meta: FptFieldMeta, mode: FptSchemaMode = "reques
     case "decimal":
     case "long": {
       const num = meta.type === "long" ? z.number().int() : z.number();
-      if (meta.acceptString === "any") base = z.union([num, z.string()]);
-      else if (meta.acceptString === "numeric") base = z.union([num, z.string().regex(NUMERIC_STRING_RE)]);
-      else base = num;
+      let either: z.ZodType;
+      if (meta.acceptString === "any") either = z.union([num, z.string()]);
+      else if (meta.acceptString === "numeric") either = z.union([num, z.string().regex(NUMERIC_STRING_RE)]);
+      // Cổng FPT thật (.NET) chỉ nhận chuỗi cho trường Long Integer dù sheet ghi số: gửi số → 400 "could not be converted to System.String"
+      // (vD_NO, 2026-11-15); mẫu request FPT cũng ghi chuỗi ("vD_NO": "208"). Nhận số hoặc chuỗi số nguyên.
+      else if (meta.type === "long") either = z.union([num, z.string().regex(/^-?\d+$/)]);
+      else either = num;
+      // Body gửi đi (request): Long luôn là chuỗi – mọi đường gửi (IDA/EDA, IDA01/EDA01, AMA, tin đã xếp hàng, gửi lại, xem trước) đều qua schema này.
+      base = strict && meta.type === "long" ? either.transform((v) => (typeof v === "number" ? String(v) : v)) : either;
       break;
     }
   }
@@ -164,7 +170,7 @@ type RowValue<R extends FptFieldRow> =
       ? number | string
       : BaseValue<R[1]>
     : BaseValue<R[1]>;
-type BaseValue<T extends FptFieldType> = T extends "decimal" | "long" ? number : string;
+type BaseValue<T extends FptFieldType> = T extends "decimal" ? number : T extends "long" ? number | string : string;
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 

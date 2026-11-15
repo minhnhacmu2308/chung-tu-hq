@@ -59,7 +59,7 @@ export function amendmentDeltaVnd(a: Pick<PostAmendment, "lines">): string {
 
 const ddmmyyyy = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso);
 
-/** Ô theo đặc tả: ngày → dd/MM/yyyy, số → number, chữ cắt theo độ dài (ghi cảnh báo); ô trống không gửi. */
+/** Ô theo đặc tả: ngày → dd/MM/yyyy, decimal → number, Long → chuỗi số (cổng FPT thật từ chối số), chữ cắt theo độ dài (ghi cảnh báo); ô trống không gửi. */
 function toObject(rows: readonly FptFieldRow[], values: Record<string, string>, warnings: string[], where: string): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [name, type, size] of rows) {
@@ -68,7 +68,7 @@ function toObject(rows: readonly FptFieldRow[], values: Record<string, string>, 
     if (type === "date") out[fptKey(name)] = ddmmyyyy(v);
     else if (type === "decimal" || type === "long") {
       const t = v.replace(/,/g, "");
-      if (isNum(t)) out[fptKey(name)] = Number(t);
+      if (isNum(t)) out[fptKey(name)] = type === "long" ? String(Number(t)) : Number(t);
       else warnings.push(`${where}${name}: "${v}" không phải số – bỏ`);
     } else {
       const max = size ? Number(size.split(".")[0]) : undefined;

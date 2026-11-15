@@ -72,8 +72,8 @@ describe("branchPayload", () => {
     expect(r.objVN_IDA_HANG[0]!["haG_B25"]).toBe("01");
     expect(r.objVN_IDA_KTG["ktG_VT1"]).toBe(Number(b.payload.fields.TK_TP!.value));
     expect(r.objVN_IDA["tK_FIC"]).toBe("104000000001");
-    expect(r.objVN_IDA["tK_BNO"]).toBe(2);
-    expect(r.objVN_IDA["tK_DNO"]).toBe(3);
+    expect(r.objVN_IDA["tK_BNO"]).toBe("2");
+    expect(r.objVN_IDA["tK_DNO"]).toBe("3");
     const small = buildFptRequest(mk(40)).request as unknown as Ida;
     expect(small.objVN_IDA_KTG["ktG_VT1"]).toBeUndefined();
   });
@@ -84,7 +84,7 @@ describe("branchPayload", () => {
     type Eda = { objVN_EDA: Record<string, unknown>; objVN_EDA_CON: Record<string, unknown> | null; objVN_EDA_HANG: unknown[] };
     const sheets = [1, 2, 3].map((no) => buildFptRequest(branchPayload(eda, no, "305000000001").payload).request as unknown as Eda);
     expect(sheets.map((r) => r.objVN_EDA_HANG.length)).toEqual([50, 50, 20]);
-    expect(sheets.map((r) => [r.objVN_EDA["tK_FIC"], r.objVN_EDA["tK_BNO"], r.objVN_EDA["tK_DNO"]])).toEqual([["F", 1, 3], ["305000000001", 2, 3], ["305000000001", 3, 3]]);
+    expect(sheets.map((r) => [r.objVN_EDA["tK_FIC"], r.objVN_EDA["tK_BNO"], r.objVN_EDA["tK_DNO"]])).toEqual([["F", "1", "3"], ["305000000001", "2", "3"], ["305000000001", "3", "3"]]);
     expect(sheets[0]!.objVN_EDA_CON).toMatchObject({ coN_VC1: "03CCS01", coN_VC2: "03CCS02", coN_VN: "Kho CFS Đình Vũ", coN_VA: "KCN Đình Vũ, Hải Phòng", coN_C01: "SITU2246781", coN_C02: "SITU2246782" });
     expect(sheets[1]!.objVN_EDA_CON).toEqual(sheets[0]!.objVN_EDA_CON);
     expect(sheets[2]!.objVN_EDA_CON).toEqual(sheets[0]!.objVN_EDA_CON);

@@ -27,6 +27,8 @@ export type FptBuild = { request: IdaRequest | EdaRequest; warnings: string[]; i
 // Cùng tên trường nhưng size khác nhau giữa IDA và EDA (TK_EPN 70 vs 100) → bảng riêng từng mẫu.
 const SIZE_IDA = new Map([...VN_IDA_FIELDS, ...VN_IDA_HANG_FIELDS, ...VN_IDA_VANDON_FIELDS, ...VN_IDA_KTG_FIELDS].map((f) => [f.name, f.size]));
 const SIZE_EDA = new Map([...VN_EDA_FIELDS, ...VN_EDA_HANG_FIELDS].map((f) => [f.name, f.size]));
+// Trường Long Integer gửi dạng chuỗi (cổng FPT thật từ chối số – xem fptFieldSchema); đổi ngay khi dựng để body thô (schema lỗi) cũng đúng.
+const LONG = new Set([...VN_IDA_FIELDS, ...VN_IDA_HANG_FIELDS, ...VN_IDA_VANDON_FIELDS, ...VN_IDA_KTG_FIELDS, ...VN_EDA_FIELDS, ...VN_EDA_HANG_FIELDS].filter((f) => f.type === "long").map((f) => f.name));
 
 const val = (p: DeclarationPayload, code: string) => p.fields[code]?.value?.trim() ?? "";
 /** "VNHPH – CANG HAI PHONG" → { code: "VNHPH", name: "CANG HAI PHONG" }; "03CE – …" → code 03CE. */
@@ -71,7 +73,7 @@ const withOrigin = (description: string, origin: string) => (!origin || /#&[A-Z]
 function setter(target: Record<string, unknown>, warnings: string[], sizes: Map<string, number | undefined>) {
   return (name: string, value: string | number | null | undefined) => {
     if (value === null || value === undefined || value === "") return;
-    let v = value;
+    let v = typeof value === "number" && LONG.has(name) ? String(value) : value;
     const size = sizes.get(name);
     if (typeof v === "string" && size && v.length > size) {
       warnings.push(`${name}: cắt "${v.slice(0, 20)}…" từ ${v.length} xuống ${size} ký tự`);

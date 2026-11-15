@@ -2173,11 +2173,27 @@ describe("tờ khai nhánh – sửa sau review toàn nhánh", () => {
     expect(keysOf("IDA", 2)).toHaveLength(1);
   });
 
-  it("I3 (R8): lô một tờ chưa có externalId → Gửi lại giữ như trước (NOT_FOUND)", async () => {
+  it("lô một tờ: khai tạm bị từ chối (errorList S0049), chưa có số tờ khai → Gửi lại được ngay: outbox mới, gửi thành công", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    const ok0 = deps.gateway;
+    deps.gateway = gw({ preDeclare: async () => ({ externalId: "", errors: [{ code: "S0049", message: "Số tờ khai đã nhập chưa được đăng ký vào hệ thống." }] }) });
+    await sendAll();
+    expect(uow.data.outbox[0]!.status).toBe("FAILED");
+    expect(uow.data.results[0]!).toMatchObject({ externalId: null, state: "SEND_FAILED" });
+    deps.gateway = ok0;
+    const r = unwrap(await resendOperation(deps, declarant, D, "IDA"));
+    expect(r.resent).toBe(true);
+    expect(keysOf("IDA", 1)).toHaveLength(2);
+    await sendAll();
+    expect(uow.data.outbox.at(-1)!.status).toBe("SENT");
+    expect(uow.data.results[0]!.declarationNo).toBeTruthy();
+  });
+
+  it("I3 (R8, đổi 2026-11-15): lô một tờ hết lượt thử, chưa có số tờ khai → Gửi lại được (chưa có số = Hải quan chưa nhận)", async () => {
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     uow.data.outbox[0]!.attempts = MAX_ATTEMPTS;
     await sendAll();
-    expect(errCode(await resendOperation(deps, declarant, D, "IDA"))).toBe("NOT_FOUND");
+    expect(unwrap(await resendOperation(deps, declarant, D, "IDA")).resent).toBe(true);
   });
 
   it("I4: lần truyền lại đang chạy (tờ khai SUBMITTED) – tờ 2, 3 đã gọi về: màn Truyền và thực hiện nghiệp vụ cùng coi là đã duyệt (IDA không phải EDIT)", async () => {

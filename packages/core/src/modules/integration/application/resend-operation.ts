@@ -1,6 +1,7 @@
-// "Gửi lại" một nghiệp vụ bị lỗi: LUÔN tra trạng thái trước (ADR 0005); Hải quan đã ghi nhận → không gửi; chưa → outbox mới (…:retryN) và job.
+// "Gửi lại" một nghiệp vụ bị lỗi: đã có externalId → tra trạng thái trước (ADR 0005); Hải quan đã ghi nhận → không gửi; chưa → outbox mới (…:retryN) và job.
 // Lô nhiều tờ: tờ chưa có số (NOT_SENT) mà lần khai tạm đã ghim chưa từng có externalId (hết lượt thử / lỗi trước khi FPT nhận) → không có gì để tra,
-// gửi lại nguyên thông điệp đã ghim (kiểm ghim như mọi lần gửi lại) – chuỗi nối tiếp chạy tiếp từ tờ đó (spec §6.2.3). Lô một tờ: như trước.
+// gửi lại nguyên thông điệp đã ghim (kiểm ghim như mọi lần gửi lại) – chuỗi nối tiếp chạy tiếp từ tờ đó (spec §6.2.3).
+// Khai tạm lỗi mà Hải quan chưa trả số tờ khai → gửi lại được ngay; body dựng lại theo đặc tả hiện hành lúc gửi (fptContentBody).
 import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, queryOpFor, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
@@ -28,7 +29,10 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const last = base.at(-1);
   // Khai tạm đã ghim (lô nhiều tờ) chưa từng được FPT nhận: không có externalId để tra trạng thái.
   const unsentPinned = !!result && !result.externalId && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA" && !!last && pinOfOutbox(last) !== undefined;
-  if (!result || (!result.externalId && !unsentPinned)) return err(domainError("NOT_FOUND", "Hồ sơ chưa truyền"));
+  // Quy tắc nghiệp vụ (người dùng chốt 2026-11-15): khai tạm lỗi mà Hải quan CHƯA trả số tờ khai → coi như chưa nhận, cho gửi lại
+  // (lỗi từ chối, lỗi mạng, hết lượt thử – mọi trường hợp). Đã có số tờ khai mới coi là đã nhận (luồng tra trạng thái bên dưới chặn).
+  const failedBeforeNumber = !!result && !result.externalId && !result.declarationNo && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA" && last?.status === "FAILED";
+  if (!result || (!result.externalId && !unsentPinned && !failedBeforeNumber)) return err(domainError("NOT_FOUND", "Hồ sơ chưa truyền"));
   // Tra cứu: dùng chung với nút IID/IEX.
   if (CUSTOMS_OPERATIONS[op].kind === "query") {
     const q = await performOperation(deps, ctx, dossierId, op, branch);

@@ -88,12 +88,14 @@ describe("declaration-to-fpt", () => {
     expect(sea["vD_DSN"]).toBeTruthy();
     expect(sea["vD_PSN"]).toBeUndefined();
     const onSite = vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "9 – Khác" }, CANG_DO: { value: "VNZZZ – KHO CONG TY A" }, CANG_XEP: { value: "VNZZZ – KHO CONG TY B" } } });
-    expect(onSite).toMatchObject({ vD_DST: "VNZZZ", vD_DSN: "KHO CONG TY A", vD_PSC: "VNZZZ", vD_PSN: "KHO CONG TY B" });
+    expect(onSite).toMatchObject({ vD_DST: "ZZZ", vD_DSN: "KHO CONG TY A", vD_PSC: "VNZZZ", vD_PSN: "KHO CONG TY B" }); // PTVC 9: DST bỏ "VN"
     // Tờ khai dựng tự động PTVC 9: chỉ có mã VNZZZ, chưa nhập tên → không gửi mã làm tên.
     const bare = vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "9 – Khác" }, CANG_DO: { value: "VNZZZ" }, CANG_XEP: { value: "VNZZZ" } } });
-    expect(bare).toMatchObject({ vD_DST: "VNZZZ", vD_PSC: "VNZZZ" });
+    expect(bare).toMatchObject({ vD_DST: "ZZZ", vD_PSC: "VNZZZ" });
     expect(bare["vD_DSN"]).toBeUndefined();
     expect(bare["vD_PSN"]).toBeUndefined();
+    // PTVC 4/5 (đường bộ): mã gửi nguyên, không bỏ "VN".
+    expect(vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "4 – Đường bộ (xe tải)" }, CANG_DO: { value: "VNLAS – CK LAO BAO" } } })["vD_DST"]).toBe("VNLAS");
     const uncoded = vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, CANG_XEP: { value: "KRZZZ – GUNSAN NEW PORT" } } });
     expect(uncoded).toMatchObject({ vD_PSC: "KRZZZ", vD_PSN: "GUNSAN NEW PORT" });
     expect(buildFptRequest(PAYLOAD).issues).toEqual([]);

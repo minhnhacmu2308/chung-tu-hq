@@ -59,6 +59,12 @@ export class HscodeproHttpService implements HsClassificationService {
 const norm = (s: string) => s.toLowerCase().normalize("NFC");
 const digits = (c: string) => c.replace(/\D/g, "");
 
+/**
+ * Mã GTGT (vnaccs_code) dịch vụ giả trả kèm thuế suất – mã có thật trong danh mục OTHER_TAX, để dev không bị chặn "thiếu mã GTGT" ở 8% / 5%
+ * (vatAutoFill chỉ tự suy 10% / 0%). 8 → VB205, 5 → VB085 (thực phẩm tươi sống, lâm sản chưa chế biến – mã 5% chính thức).
+ */
+const FAKE_VAT_CODE: Record<string, string> = { "8": "VB205", "5": "VB085" };
+
 /** Giả (dev/test, không mạng): chấm điểm từ khóa catalog_hs, lượt hoàn tất ngay; thuế theo biểu (MFN hoặc FTA theo co_form). */
 export class FakeHsClassificationService implements HsClassificationService {
   readonly name = "fake-hs";
@@ -81,7 +87,7 @@ export class FakeHsClassificationService implements HsClassificationService {
         .sort((a, b) => b.score - a.score);
       const tax = (h: HsCatalogRow): HsTax => {
         const pref = it.co_form ? h.pref[it.co_form.toUpperCase()] : undefined;
-        return { import: pref !== undefined ? { rate: Number(pref), basis: "FTA", agreement: it.co_form!.toUpperCase() } : { rate: Number(h.mfn), basis: "MFN", agreement: null }, vat: { rate: Number(h.vat), note: null }, source_date: req.import_date ?? "" };
+        return { import: pref !== undefined ? { rate: Number(pref), basis: "FTA", agreement: it.co_form!.toUpperCase() } : { rate: Number(h.mfn), basis: "MFN", agreement: null }, vat: { rate: Number(h.vat), note: null, ...(FAKE_VAT_CODE[String(Number(h.vat))] ? { vnaccs_code: FAKE_VAT_CODE[String(Number(h.vat))] } : {}) }, source_date: req.import_date ?? "" };
       };
       const [best, ...rest] = scored;
       if (!best) return { id: randomUUID(), line_no: it.line_no, status: "failed", question: null, result: null, error: { code: "NO_SUGGESTION", message: "Không có gợi ý – chọn mã HS thủ công" } };

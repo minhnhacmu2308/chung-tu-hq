@@ -38,12 +38,13 @@ export function displayValue(f: Pick<LayoutField, "key" | "input" | "options">, 
 
 /**
  * Dòng hiện của nhóm lặp. Người khai: dòng có dữ liệu + `extra` dòng thêm (luôn còn ít nhất 1 dòng trống để nhập), tới dòng cuối có dữ liệu.
- * Chỉ đọc (Hải quan trả về): chỉ dòng có dữ liệu.
+ * Chỉ đọc (Hải quan trả về): chỉ dòng có dữ liệu. `fixedRows` (thuế và thu khác): sửa → luôn đủ `count` dòng.
  */
 export function visibleRows(r: LayoutRepeat, values: FormValues, extra: number, readOnly: boolean): LayoutField[][] {
   const rows = expandRepeat(r);
   const filled = rows.map((row) => row.some((f) => Boolean(values[f.key]?.trim())));
   if (readOnly) return rows.filter((_, i) => filled[i]);
+  if (r.fixedRows) return rows;
   const last = filled.lastIndexOf(true);
   return rows.slice(0, Math.min(r.count, last + 2 + extra));
 }

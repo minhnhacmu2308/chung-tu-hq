@@ -139,20 +139,20 @@ export function ratesFromCandidate(c: HsCandidate | null, p: { direction: "NK" |
   const notes = [
     c.basis === "FTA" ? `Thuế ưu đãi đặc biệt ${c.agreement ?? "FTA"} – cần C/O hợp lệ và đúng quy tắc xuất xứ` : null,
     ...vatNotes,
-    oldApiNoVat ? `Biểu thuế chưa có thuế suất GTGT cho mã này – tạm tính ${DEFAULT_VAT_RATE}% (VB901); hàng thuộc nhóm 5%, 0%, không chịu thuế hoặc được giảm thuế GTGT thì sửa lại` : null,
+    oldApiNoVat ? `Biểu thuế chưa có thuế suất GTGT cho mã này – tạm tính ${DEFAULT_VAT_RATE}%; hàng thuộc nhóm 5%, 0%, không chịu thuế hoặc được giảm thuế GTGT thì sửa lại` : null,
   ].filter(Boolean);
   return {
     importDutyRate: c.importRate,
     vatRate: oldApiNoVat ? DEFAULT_VAT_RATE : c.vatRate,
     policyNote: notes.length ? notes.join(". ") : null,
-    taxDetail: oldApiNoVat ? { ...detail!, vatCode: "VB901" } : detail,
+    taxDetail: oldApiNoVat ? { ...detail!, vatCode: null } : detail,
   };
 }
 
 /**
  * Gộp thuế đã thống nhất (bài học tờ khai đã thông quan / dòng cùng mã – harmonizeRates) vào thuế của ứng viên.
- * VAT bị đổi so với ứng viên → mã VAT VNACCS của ứng viên không còn khớp (vd VB245 là mã 8% mà thuế suất thành 10%, hoặc VK… không chịu thuế
- * mà nay có VAT) → bỏ mã, để bước truyền suy mã theo thuế suất (vatCode).
+ * VAT bị đổi so với ứng viên → mã VAT VNACCS của ứng viên không còn khớp (vd VB205 là mã 8% mà thuế suất thành 10%, hoặc VK… không chịu thuế
+ * mà nay có VAT) → bỏ mã, để bước truyền tự điền theo thuế suất (vatAutoFill).
  */
 export function withHarmonized(rates: AppliedRates, h: { importDutyRate: string | null; vatRate: string | null; policyNote: string | null }): AppliedRates {
   const vatChanged = h.vatRate !== rates.vatRate;

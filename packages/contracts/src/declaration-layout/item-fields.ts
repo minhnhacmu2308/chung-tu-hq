@@ -98,15 +98,31 @@ export function itemFieldIssue(kind: Kind, key: string, value: string): string |
 
 const num = (v: string) => (/^-?\d+(\.\d+)?$/.test(v) ? Number(v) : 0);
 /**
- * Mã áp dụng thuế suất GTGT cho dòng hàng. Ưu tiên mã HSCodePro trả kèm thuế (`vnaccs_code` lưu trên dòng: VB901 10%, VB245 8%, VKxxx không chịu thuế).
- * Không có mã (HSCodePro bản cũ / nhập tay) → suy theo thuế suất – bảng suy CHƯA đối chiếu "Thue khac - GTGT.xls" (D3).
- * Không có thuế suất lẫn mã → không tự điền (KHÔNG mặc định 10%): người khai nhập.
+ * CHỈ dùng cho phần "Trước" của bản khai bổ sung (AMA): mã GTGT mà phần mềm bản cũ (trước spec thuế theo loại) đã tự suy theo thuế suất và GỬI lên
+ * Hải quan cho dòng không có mã HSCodePro – 10 → VB901, 8 → VB903, 5 → VB905, 0 → VB900. vatAutoFill bây giờ không sinh VB903/VB905/VB900 nữa,
+ * nhưng tờ khai đã đăng ký theo cách cũ vẫn mang các mã này – "Trước" phải khớp nội dung đã khai. Thuế suất khác / trống → null. KHÔNG dùng khi dựng tờ khai mới.
  */
-export const vatCode = (rate: string | null | undefined, stored?: string | null) => {
-  if (stored) return stored;
-  if (rate === null || rate === undefined || rate === "") return undefined;
-  return ({ "10": "VB901", "8": "VB903", "5": "VB905", "0": "VB900" } as Record<string, string>)[String(num(rate))] ?? "VB901";
-};
+export function legacySentVatCode(rate: string | null | undefined): string | null {
+  if (rate === null || rate === undefined || !/^-?\d+(\.\d+)?$/.test(rate.trim())) return null;
+  return ({ "10": "VB901", "8": "VB903", "5": "VB905", "0": "VB900" } as Record<string, string>)[String(Number(rate.trim()))] ?? null;
+}
+export type OtherTaxCheckReason = "VAT_FROM_EXEMPT_CODE" | "VAT_FROM_RATE" | "VAT_UNCERTAIN";
+export type VatAutoFill = { tx?: string; tr?: string; check?: OtherTaxCheckReason };
+/**
+ * Tự điền ô thuế GTGT (HAG_TX5/TR5) theo spec 4.10: mã `V…` HSCodePro → giữ (chưa chắc → cảnh báo); `VK…` (không chịu thuế) → TX = "V", TR = mã VK + cảnh báo;
+ * không mã: 10% → VB901 + cảnh báo, 0% → "V" + cảnh báo; 8% / 5% / không có thuế suất → không điền (báo thiếu). KHÔNG còn sinh VB903/VB905/VB900.
+ */
+export function vatAutoFill(rate: string | null | undefined, stored: string | null | undefined, certain?: boolean | null): VatAutoFill {
+  const code = stored?.trim().toUpperCase();
+  if (code?.startsWith("VK")) return { tx: "V", tr: code, check: "VAT_FROM_EXEMPT_CODE" };
+  if (code?.startsWith("V")) return certain === false ? { tx: code, check: "VAT_UNCERTAIN" } : { tx: code };
+  if (rate === null || rate === undefined || rate === "") return {};
+  if (!/^-?\d+(\.\d+)?$/.test(rate)) return {};
+  const r = Number(rate);
+  if (r === 10) return { tx: "VB901", check: "VAT_FROM_RATE" };
+  if (r === 0) return { tx: "V", check: "VAT_FROM_RATE" };
+  return {};
+}
 /**
  * Mã Biểu thuế NK (chỉ tiêu 1.80) suy từ ghi chú chính sách (dòng hàng chưa lưu mã riêng). Danh sách Phụ lục II TT39:
  * B04 ATIGA, B05 ACFTA, B06 AKFTA, B09 AJCEP, B10 VJEPA (B17 là Chương 98). FTA khác chưa có mã trong văn bản đã đối chiếu → code null (chặn truyền nếu người khai không nhập).
@@ -134,14 +150,14 @@ export function lawCodesByLine(value: string, lineNos: number[]): Map<number, st
 }
 
 export type ItemDefaultsInput = {
-  lineNo: number; quantity: string; unit: string; itemCode?: string | null | undefined; vatRate?: string | null | undefined; vatCode?: string | null | undefined; policyNote?: string | null | undefined;
+  lineNo: number; quantity: string; unit: string; itemCode?: string | null | undefined; vatRate?: string | null | undefined; vatCode?: string | null | undefined; vatCertain?: boolean | null | undefined; policyNote?: string | null | undefined;
   /** Số lượng (2) theo ĐVT 2 của mặt hàng danh mục (itemQuantity2) – vắng → SL2 = SL1. */
   quantity2?: { qty: string; unit: string } | null | undefined;
 };
 /**
  * Ô dòng hàng phần mềm tự điền khi truyền: số lượng (2) theo ĐVT số lượng 2 + tỷ lệ của mặt hàng danh mục (`quantity2`, spec 2026-11-14 số lượng 2);
  * mặt hàng chưa khai ĐVT 2 / không quy được về gốc → số lượng (2) = số lượng (1), ĐVT dòng (D3 còn lại: chưa đối chiếu ĐVT theo Biểu thuế), mã tiền đơn giá = nguyên tệ,
- * đơn vị đơn giá = ĐVT; IDA: mã biểu thuế từ ghi chú FTA, mã GTGT từ thuế suất, 1.88 từ khoản điều chỉnh được phân bổ; EDA: mã văn bản pháp luật theo dòng từ chỉ tiêu VBPQ.
+ * đơn vị đơn giá = ĐVT; IDA: mã biểu thuế từ ghi chú FTA, mã GTGT theo bảng vatAutoFill, 1.88 từ khoản điều chỉnh được phân bổ; EDA: mã văn bản pháp luật theo dòng từ chỉ tiêu VBPQ.
  */
 export function itemDefaults(kind: Kind, it: ItemDefaultsInput, ctx: { currency: string; vbpq?: string; lineNos?: number[]; adjustmentNos?: number[] }): Values {
   const unit = it.unit || "PCE";
@@ -152,8 +168,9 @@ export function itemDefaults(kind: Kind, it: ItemDefaultsInput, ctx: { currency:
   if (kind === "IDA") {
     const t = taxTable(it.policyNote);
     if (t.code) out["HAG_ORS"] = t.code;
-    const vat = vatCode(it.vatRate, it.vatCode);
-    if (vat) out["HAG_TX5"] = vat;
+    const vat = vatAutoFill(it.vatRate, it.vatCode, it.vatCertain);
+    if (vat.tx) out["HAG_TX5"] = vat.tx;
+    if (vat.tr) out["HAG_TR5"] = vat.tr;
     // 1.88: số thứ tự khoản điều chỉnh 1.49 người khai đã xác nhận phân bổ cho mọi dòng hàng.
     (ctx.adjustmentNos ?? []).slice(0, 5).forEach((n, k) => (out[`HAG_VN${k + 1}`] = String(n)));
   } else {
@@ -161,4 +178,11 @@ export function itemDefaults(kind: Kind, it: ItemDefaultsInput, ctx: { currency:
     codes.slice(0, 5).forEach((c, k) => (out[`HAG_OL${k + 1}`] = c));
   }
   return out;
+}
+
+/** Ô tự điền cần người khai kiểm tra lại (lý do là mã ổn định – giao diện/backend tự dịch). IDA: ô GTGT khi vatAutoFill có cảnh báo. */
+export function itemAutoChecks(kind: Kind, it: ItemDefaultsInput): { key: string; reason: OtherTaxCheckReason }[] {
+  if (kind !== "IDA") return [];
+  const { check } = vatAutoFill(it.vatRate, it.vatCode, it.vatCertain);
+  return check ? [{ key: "HAG_TX5", reason: check }] : [];
 }

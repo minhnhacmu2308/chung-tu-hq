@@ -1,4 +1,4 @@
-import { LAYOUT_EDA, type DeclarationLayout, type LayoutSection } from "@kb/contracts";
+import { LAYOUT_EDA, LAYOUT_IDA, type DeclarationLayout, type LayoutSection } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import { choiceControl, conditionContext, toggleChoice, groupMissing, isApplicable, itemProgress, missingRequired, sectionProgress, type FormValues } from "./form-state";
 
@@ -117,5 +117,16 @@ describe("ô lựa chọn – radio hay checkbox", () => {
     expect(toggleChoice("", "BIEN")).toBe("BIEN");
     expect(toggleChoice("BIEN", "HANG_KHONG")).toBe("HANG_KHONG");
     expect(toggleChoice("HANG_KHONG", "HANG_KHONG")).toBe("");
+  });
+});
+
+describe("progress_counts_vat_row – khối thuế và thu khác đếm đủ 5 dòng", () => {
+  const block = LAYOUT_IDA.item.declarant.find((b) => b.id === "thu-khac")!;
+  const count = (v: FormValues) => sectionProgress("IDA", { id: "item", title: "", blocks: [block] }, v);
+  it("GTGT chỉ ở dòng 5 → tính là đã điền", () => {
+    expect(count({}).filled).toBe(0);
+    expect(count({ HAG_TX5: "VB901" }).filled).toBe(1);
+    expect(count({ HAG_TX5: "VB901", HAG_TR5: "VB1", HAG_TG5: "1" }).filled).toBe(3);
+    expect(count({}).total).toBe(15);
   });
 });

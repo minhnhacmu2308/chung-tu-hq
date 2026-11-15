@@ -7,6 +7,7 @@ import { itemDefaults, itemOverrides } from "./item-fields.js";
 import { declarationFormValues } from "./app-fields.js";
 import { layoutFor } from "./layout-for.js";
 import { fieldRole } from "./role.js";
+import { mergeOtherTaxes, normalizeOtherTaxes, otherTaxKeys } from "./other-tax.js";
 import { sequenceHoles } from "./sequence.js";
 import { CALL_SIGN_KEY, isByWater, ON_SITE_PLACE, sendsPlaceName, transportPlaceIssues, TRANSPORT_PLACES } from "./transport-places.js";
 import type { LayoutBlock, LayoutField, LayoutGroup, LayoutItem } from "./types.js";
@@ -125,6 +126,16 @@ const PLACE_ISSUE_TEXT = {
 const placeGaps = (kind: Kind, v: Values): Omit<RequiredGap, "line">[] =>
   transportPlaceIssues(kind, v).map((i) => ({ key: i.key, no: i.no, label: PLACE_ISSUE_TEXT[i.reason] }));
 
+/** GTGT (IDA 1.94, nhóm 5) là bắt buộc theo LOẠI thuế: ô HAG_TX1 không còn bắt buộc riêng (ô 1 là mã sau khi dồn); thiếu mã GTGT sau chuẩn hóa → báo HAG_TX5. */
+const VAT_GAP_LABEL = "Mã áp dụng thuế suất và thu khác – dòng GTGT";
+function itemRowGaps(kind: Kind, blocks: LayoutBlock[], row: Values): Omit<RequiredGap, "line">[] {
+  if (kind !== "IDA") return blockGaps(kind, blocks, row);
+  const norm = normalizeOtherTaxes(row);
+  const gaps = blockGaps(kind, blocks, norm).filter((g) => g.key !== otherTaxKeys(1).tx);
+  const vat = otherTaxKeys(5).tx;
+  return has(norm, vat) ? gaps : [...gaps, { key: vat, no: "1.94", label: VAT_GAP_LABEL }];
+}
+
 /**
  * Mọi ô bắt buộc còn trống: tờ khai (`decl`) rồi từng dòng hàng (`items`, điều kiện xét theo giá trị của chính dòng).
  * Ô APP_* chỉ lưu trong phần mềm (nhóm loại hình suy từ mã loại hình, ngày vận đơn…) – không gửi Hải quan nên không chặn.
@@ -136,7 +147,7 @@ export function requiredGaps(kind: Kind, decl: Values, items: Values[]): Require
     ...head,
     ...holeGaps(kind, decl),
     ...placeGaps(kind, decl).filter((g) => !head.some((x) => x.key === g.key)),
-    ...items.flatMap((row, line) => blockGaps(kind, layout.item.declarant, row).map((g) => ({ ...g, line }))),
+    ...items.flatMap((row, line) => itemRowGaps(kind, layout.item.declarant, row).map((g) => ({ ...g, line }))),
   ].filter((g) => !g.key.startsWith("APP_"));
 }
 
@@ -147,7 +158,7 @@ export function requiredGapsText(gaps: RequiredGap[], lineNos: number[] = []): s
 
 export type ItemFormInput = {
   id?: string | undefined; lineNo?: number | undefined; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string;
-  hsSuggested?: string | null | undefined; hsConfirmed?: string | null | undefined; importDutyRate?: string | null | undefined; vatRate?: string | null | undefined; vatCode?: string | null | undefined; policyNote?: string | null | undefined;
+  hsSuggested?: string | null | undefined; hsConfirmed?: string | null | undefined; importDutyRate?: string | null | undefined; vatRate?: string | null | undefined; vatCode?: string | null | undefined; vatCertain?: boolean | null | undefined; policyNote?: string | null | undefined;
   /** Số lượng (2) theo ĐVT 2 của mặt hàng danh mục (LineItem.quantity2) → HAG_QN2/QT2 tự điền; vắng → SL2 = SL1. */
   quantity2?: { qty: string; unit: string } | null | undefined;
 };
@@ -170,7 +181,8 @@ export function itemFormValues(kind: Kind, items: ItemFormInput[], ctx: { fields
       v["HAG_OR"] = it.origin;
       if (it.importDutyRate !== undefined && it.importDutyRate !== null) v["HAG_TXA"] = it.importDutyRate;
     } else if (it.origin) v["APP_XUAT_XU"] = it.origin;
-    return it.id && ctx.fields ? { ...v, ...itemOverrides(ctx.fields, it.id) } : v;
+    const merged = it.id && ctx.fields ? mergeOtherTaxes(v, itemOverrides(ctx.fields, it.id)) : v;
+    return kind === "IDA" ? normalizeOtherTaxes(merged) : merged;
   });
 }
 

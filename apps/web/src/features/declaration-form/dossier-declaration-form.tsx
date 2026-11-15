@@ -5,7 +5,7 @@
 // Dòng hàng: số liệu chứng từ sửa ở bước OCR (nút mở đúng dòng), mã HS qua hộp chọn mã HS; ô chỉ có trên tờ khai (mã biểu thuế, miễn giảm…) sửa trực tiếp,
 // lưu theo id dòng (HANG.<id>.<ô>). Lưu bằng API sửa chỉ tiêu (backend kiểm tra lại cùng quy tắc, ghi field_audit).
 import { Alert, Button, fill, Stack, useMessages, useUiLocale } from "@kb/ui";
-import { fixedPlaceCode, layoutFor, sheetOfLine, transportPlaceChanges, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem } from "@kb/contracts";
+import { fixedPlaceCode, itemOverrides, layoutFor, sheetOfLine, transportPlaceChanges, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem } from "@kb/contracts";
 import { FileSearch, Save, Search, Undo2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -16,7 +16,8 @@ import { DeclarantTab } from "./declarant-tab";
 import { ChangeHsDialog } from "../dossier-detail/steps/agent-step";
 import { FORM_MESSAGES } from "./form.messages";
 import { QtySuggestionHint } from "./qty-hint";
-import { declarationLockOf, declarationValues, editableKeys, itemValues, pendingEdits, pendingItemEdits } from "./dossier-adapter";
+import { declarationLockOf, gtgtAutoCheck, declarationValues, editableKeys, itemValues, pendingEdits, pendingItemEdits } from "./dossier-adapter";
+import type { FieldCheck } from "./field-checks";
 import type { FormValues } from "./form-state";
 import { useSaveDeclarationEdits } from "./use-save-edits";
 import { ViewPrefsProvider } from "./view-prefs";
@@ -59,9 +60,16 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   const ctxCurrency = decl.fields.find((f) => f.code === "MA_TT")?.value.trim() || "USD";
   const vbpq = decl.fields.find((f) => f.code === "VBPQ")?.value ?? "";
   const itemRows = useMemo(() => itemValues(kind, items, { fields: decl.fields, currency: ctxCurrency, vbpq }), [kind, items, decl.fields, ctxCurrency, vbpq]);
+  // Ô người khai đã lưu của từng dòng: chuẩn hóa mã thuế khác ở khóa lệch khi lưu (pendingItemEdits) và bỏ cảnh báo "tự điền" khi người khai đã tự nhập GTGT.
+  const ownRows = useMemo(() => items.map((it) => itemOverrides(decl.fields, it.id)), [items, decl.fields]);
   const [itemDraft, setItemDraft] = useState<FormValues[]>(itemRows);
+  // Ô GTGT người khai đã chủ động chọn/xác nhận (theo chỉ số dòng) khi đang có cảnh báo tự điền: lưu như giá trị người khai dù bằng giá trị tự điền.
+  const [confirmed, setConfirmed] = useState<Record<number, string[]>>({});
   const itemKey = JSON.stringify(itemRows);
-  useEffect(() => setItemDraft(itemRows), [itemKey]);
+  useEffect(() => {
+    setItemDraft(itemRows);
+    setConfirmed({});
+  }, [itemKey]);
   const [hsItem, setHsItem] = useState<LineItem | null>(null);
   const editable = useMemo(() => editableKeys(kind, decl.fields, mode), [kind, decl.fields, mode]);
   const [draft, setDraft] = useState<FormValues>(original);
@@ -85,10 +93,20 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
   const anyLineEditable = editableLines.length > 0;
   const edits = [
     ...pendingEdits(kind, original, draft, editable),
-    ...pendingItemEdits(kind, editableLines.map((i) => items[i]!.id), editableLines.map((i) => itemRows[i]!), editableLines.map((i) => itemDraft[i]!)),
+    ...pendingItemEdits(kind, editableLines.map((i) => items[i]!.id), editableLines.map((i) => itemRows[i]!), editableLines.map((i) => itemDraft[i]!), editableLines.map((i) => ownRows[i]!), editableLines.map((i) => confirmed[i] ?? [])),
   ];
   const editableCount = new Set(editable.values()).size;
   const goOcr = (lineNo: number) => router.replace(`${pathname}?step=ocr&dong=${lineNo}`, { scroll: false });
+  // Ô GTGT tự điền theo thuế suất / mã không chịu thuế / mã chưa chắc → cảnh báo kiểm tra lại; người khai đã nhập hoặc sửa mã GTGT → hết cảnh báo.
+  // Cảnh báo chỉ hết khi ô GTGT đang có mã (sửa sang mã khác / bấm "Xác nhận"); xóa trống ô không tính là xác nhận.
+  const itemChecks = (index: number): FieldCheck[] => {
+    const it = items[index];
+    if (!it) return [];
+    const { checks, confirmKeys } = gtgtAutoCheck(kind, it, ownRows[index] ?? {}, itemRows[index] ?? {}, itemDraft[index] ?? {}, confirmed[index] ?? []);
+    const onConfirm = lineEditable(index) && confirmKeys.length > 0 ? () => setConfirmed((c) => ({ ...c, [index]: confirmKeys })) : undefined;
+    return checks.map((c) => ({ ...c, onConfirm }));
+  };
+  // Nút "Xác nhận" trong cảnh báo GTGT (onConfirm): giữ mã GTGT đang có (và HAG_TR5 nếu có) làm giá trị người khai → lưu cùng các sửa khác (field_audit).
   const itemActions = (index: number) => {
     const it = items[index];
     if (!it) return null;
@@ -124,6 +142,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
       <Button size="sm" variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => {
           setDraft(original);
           setItemDraft(itemRows);
+          setConfirmed({});
         }}>
         {t.undo}
       </Button>
@@ -166,6 +185,7 @@ export function DossierDeclarationForm({ dossierId, decl, items, mode: stageMode
           onChange={editable.size ? (key, value) => setDraft((v) => ({ ...v, ...transportPlaceChanges(kind, v, key, value, placeName) })) : undefined}
           onItemChange={anyLineEditable ? (i, key, value) => lineEditable(i) && setItemDraft((rows) => rows.map((r, j) => (j === i ? { ...r, [key]: value } : r))) : undefined}
           itemActions={itemActions}
+          itemChecks={itemChecks}
           amending={false}
           onAmend={() => {}}
           changed={0}

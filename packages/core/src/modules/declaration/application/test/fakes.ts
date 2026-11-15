@@ -8,6 +8,9 @@ import { HsApiError, type CatalogItemInfo, type CatalogQuery, type CatalogResolv
  * HSCodePro giả cho test use case. Mặc định: lượt hoàn tất ngay theo `rules` (khớp mô tả).
  * `onGet(jobId)` cho phép kịch bản trạng thái theo từng lần hỏi; ghi lại create/answer/cancel.
  */
+/** HSCodePro thật trả mã GTGT cho mức 8%/5%; giả lập để hàng 8%/5% không thiếu GTGT (spec 4.10: 8%/5% không mã → báo thiếu). */
+const FAKE_VAT_CODES: Record<string, string> = { "8": "VB205", "5": "VB015" };
+
 export class ScriptedHs implements HsClassificationService {
   readonly name = "fake-hs";
   calls = 0;
@@ -33,7 +36,7 @@ export class ScriptedHs implements HsClassificationService {
     const id = `hsjob_${++this.seq}`;
     const tax = (rate: number, basis: "MFN" | "FTA" = "MFN", agreement: string | null = null, vat: number | null = 10, ext: { vatCode?: string; vatCertain?: boolean; vatNote?: string } = {}) => ({
       import: { rate, basis, agreement },
-      vat: { rate: vat, note: ext.vatNote ?? null, ...(ext.vatCode ? { vnaccs_code: ext.vatCode } : {}), ...(ext.vatCertain !== undefined ? { certain: ext.vatCertain } : {}) },
+      vat: { rate: vat, note: ext.vatNote ?? null, ...((ext.vatCode ?? FAKE_VAT_CODES[String(vat)]) ? { vnaccs_code: ext.vatCode ?? FAKE_VAT_CODES[String(vat)] } : {}), ...(ext.vatCertain !== undefined ? { certain: ext.vatCertain } : {}) },
       source_date: req.import_date ?? "",
     });
     const items: HsJobItem[] = req.items.map((it, i) => {

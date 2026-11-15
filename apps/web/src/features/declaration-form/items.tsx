@@ -5,12 +5,14 @@ import type { DeclarationLayout } from "@kb/contracts";
 import { Package } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { BlockView } from "./block-view";
+import { FieldChecksProvider, type FieldCheck } from "./field-checks";
 import { displayValue } from "./display";
 import { FORM_MESSAGES } from "./form.messages";
 import { conditionContext, itemProgress, type FormValues } from "./form-state";
 
 type Row = { index: number; values: FormValues };
 const col = createDataTableColumnHelper<Row>();
+const NO_CHECKS: readonly FieldCheck[] = [];
 
 type Props = {
   layout: DeclarationLayout;
@@ -19,10 +21,12 @@ type Props = {
   onItemChange?: ((index: number, key: string, value: string) => void) | undefined;
   /** Thao tác ở đầu panel chi tiết dòng (tờ khai của hồ sơ: sửa số liệu chứng từ ở OCR, chọn mã HS). */
   actions?: ((index: number) => ReactNode) | undefined;
+  /** Ô tự điền cần người khai kiểm tra lại của dòng (vd GTGT điền theo thuế suất) – hiện cảnh báo dưới dòng thuế tương ứng. */
+  checks?: ((index: number) => readonly FieldCheck[]) | undefined;
   showInapplicable: boolean;
 };
 
-export function ItemsSection({ layout, items, onItemChange, actions, showInapplicable }: Props) {
+export function ItemsSection({ layout, items, onItemChange, actions, checks, showInapplicable }: Props) {
   const [open, setOpen] = useState<number | null>(null);
   const t = useMessages(FORM_MESSAGES);
   const kind = layout.kind;
@@ -56,6 +60,7 @@ export function ItemsSection({ layout, items, onItemChange, actions, showInappli
       <Dialog open={current !== null && current !== undefined} onOpenChange={(o) => !o && setOpen(null)} defaultPresentation="panel">
         {current && open !== null && (
           <DialogContent title={`${fill(t.lineN, { n: open + 1 })}${current["HAG_CMD"] ? ` · HS ${current["HAG_CMD"]}` : ""}`} icon={<Package className="h-4 w-4" />} description={t.lineDesc} size="lg">
+            <FieldChecksProvider value={checks?.(open) ?? NO_CHECKS}>
             <Stack gap="md">
               {actions?.(open)}
               {layout.item.declarant.map((b) => (
@@ -65,6 +70,7 @@ export function ItemsSection({ layout, items, onItemChange, actions, showInappli
                 <BlockView key={b.id} kind={kind} block={b} values={current} ctx={conditionContext(kind, current)} showInapplicable={showInapplicable} />
               ))}
             </Stack>
+            </FieldChecksProvider>
           </DialogContent>
         )}
       </Dialog>

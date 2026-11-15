@@ -7,7 +7,7 @@ type Kind = "IDA" | "EDA";
 
 /** Ô FPT bắt buộc mà declaration-to-fpt / itemDefaults tự điền khi trống – người khai không phải nhập. */
 const AUTO_FILLED: Record<Kind, string[]> = {
-  IDA: ["TK_CHB", "TK_IMY", "TK_IP1", "TK_IP3", "VD_GWT", "HAG_QN2", "HAG_QT2", "HAG_UPC"],
+  IDA: ["TK_CHB", "TK_IMY", "TK_IP1", "TK_IP3", "VD_GWT", "HAG_QN2", "HAG_QT2", "HAG_UPC", "HAG_TX1" /* ô 1 = mã GTGT sau khi dồn ô (hàng chỉ có GTGT); form nhập theo dòng loại thuế, backend chặn khi thiếu GTGT */],
   EDA: ["TK_CHB", "HAG_QN2", "HAG_QT2", "HAG_UPC"],
 };
 /** Ô FPT bắt buộc nhưng là chỉ tiêu HT (TT39) – VNACCS tự hiện theo MST, phần mềm điền từ Tài khoản: trống không chặn duyệt. */
@@ -96,5 +96,26 @@ describe("itemFormValues", () => {
     const it0 = { id: "li1", lineNo: 1, description: "Bạc đạn", quantity: "10", unit: "PCE", unitPrice: "2", amount: "20", origin: "KR", hsConfirmed: "84821000", importDutyRate: "0" };
     const [v] = itemFormValues("IDA", [it0], { currency: "USD", fields: [{ code: "HANG.li1.HAG_UPR", value: "2.5" }] });
     expect(v).toMatchObject({ HAG_CMD: "84821000", HAG_QN1: "10", HAG_UPC: "USD", HAG_QN2: "10", HAG_OR: "KR", HAG_TXA: "0", HAG_UPR: "2.5" });
+  });
+});
+
+describe("vat_row_required – GTGT theo dòng loại thuế", () => {
+  const gapKeys = (item: Record<string, string>) => requiredGaps("IDA", complete("IDA").decl, [item]).filter((g) => g.line === 0).map((g) => g.key);
+  const base = () => { const { item } = complete("IDA"); delete item["HAG_TX5"]; delete item["HAG_TX1"]; return item; };
+  it("dòng không có GTGT → gap HAG_TX5 (1.94)", () => {
+    const gaps = requiredGaps("IDA", complete("IDA").decl, [base()]);
+    expect(gaps).toEqual([expect.objectContaining({ key: "HAG_TX5", no: "1.94", line: 0 })]);
+  });
+  it("VB901 ở override HAG_TX1 → normalize về dòng 5, không gap", () => {
+    expect(gapKeys({ ...base(), HAG_TX1: "VB901" })).toEqual([]);
+  });
+  it("GTGT đã ở dòng 5 → không gap", () => {
+    expect(gapKeys({ ...base(), HAG_TX5: "VB901" })).toEqual([]);
+  });
+  it("itemFormValues trả giá trị theo dòng loại (chưa dồn)", () => {
+    const it0 = { id: "li1", lineNo: 1, description: "x", quantity: "1", unit: "PCE", unitPrice: "1", amount: "1", origin: "KR", hsConfirmed: "84821000", vatRate: "10" };
+    const [v] = itemFormValues("IDA", [it0], { currency: "USD", fields: [{ code: "HANG.li1.HAG_TX1", value: " vb901 " }, { code: "HANG.li1.HAG_TX3", value: "T01" }] });
+    expect(v).toMatchObject({ HAG_TX5: "VB901", HAG_TX3: "T01" });
+    expect(v).not.toHaveProperty("HAG_TX1");
   });
 });

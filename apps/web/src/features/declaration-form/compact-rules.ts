@@ -1,5 +1,5 @@
 // Quy tắc gọn diện tích của bản mẫu tờ khai (thuần): chế độ hiển thị “Ô cần nhập”, khối trống đóng sẵn, bề rộng nhóm ô, nhóm trước/sau.
-import { DECLARATION_CONDITIONS, expandRepeat, fieldRole, type ConditionContext, type ConditionId, type LayoutBlock, type LayoutField, type LayoutGroup, type LayoutItem } from "@kb/contracts";
+import { DECLARATION_CONDITIONS, expandRepeat, fieldRole, normalizeOtherTaxes, otherTaxKeys, type ConditionContext, type ConditionId, type LayoutBlock, type LayoutField, type LayoutGroup, type LayoutItem } from "@kb/contracts";
 import type { FormValues } from "./form-state";
 
 type Kind = "IDA" | "EDA";
@@ -24,6 +24,9 @@ export function itemVisible(mode: ViewMode, kind: Kind, item: LayoutItem, v: For
   const condition = item.condition ?? blockCondition;
   if (item.kind === "group") return item.fields.some((f) => essential(kind, f, v, item.no, condition, ctx));
   const rows = expandRepeat(item);
+  // Khối thuế và thu khác (dòng cố định theo loại): IDA bắt buộc có mã GTGT – thiếu thì luôn hiện (không ẩn ở "Ô cần nhập", không đóng sẵn).
+  const gtgt = item.fixedRows ? item.rowKeys?.indexOf("GTGT") ?? -1 : -1;
+  if (kind === "IDA" && gtgt >= 0 && !(normalizeOtherTaxes(v)[otherTaxKeys(gtgt + 1).tx] ?? "").trim()) return true;
   return rows.some((r) => r.some((f) => has(v, f.key))) || (rows[0] ?? []).some((f) => essential(kind, f, v, item.no, condition, ctx));
 }
 

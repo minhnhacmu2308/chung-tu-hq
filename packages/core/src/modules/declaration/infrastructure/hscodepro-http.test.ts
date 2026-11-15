@@ -69,4 +69,11 @@ describe("FakeHsClassificationService", () => {
     expect(job.items[1]).toMatchObject({ status: "failed", result: null, error: { code: "NO_SUGGESTION" } });
     expect((await s.get(job.id)).id).toBe(job.id);
   });
+  it("mã GTGT kèm thuế suất: 8% → VB205, 5% → VB085 (mã chính thức trong danh mục), 10% → không kèm mã (vatAutoFill tự suy)", async () => {
+    const row = (code: string, vat: string, kw: string) => ({ code, description: kw, mfn: "0", pref: {}, vat, policy: null, keywords: [kw] });
+    const s = new FakeHsClassificationService(async () => [row("8482.10.00", "8", "bearing"), row("0702.00.00", "5", "tomato"), row("7318.15.90", "10", "screw")]);
+    const job = await s.create({ items: ["bearing", "tomato", "screw"].map((d, i) => ({ line_no: i + 1, description: d, origin_country: "CN" })) });
+    const vat = job.items.map((x) => (x.result as { tax: { vat: { vnaccs_code?: string } } } | null)?.tax.vat.vnaccs_code);
+    expect(vat).toEqual(["VB205", "VB085", undefined]);
+  });
 });

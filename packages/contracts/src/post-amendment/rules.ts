@@ -87,9 +87,12 @@ export function recalcAmaLine(values: Values, manual: readonly string[]): Values
   // Thu khác không phải GTGT trước (TTĐB, BVMT… cộng vào trị giá tính GTGT), GTGT sau.
   for (const n of [...used.filter((k) => !isVat(out[`HAG_AK${k}`])), ...used.filter((k) => isVat(out[`HAG_AK${k}`]))]) {
     if (isVat(out[`HAG_AK${n}`]) && value) {
+      // TODO(follow-up): tiền thu khác không phải GTGT mới chỉ cộng khi người khai nhập tay, chưa tự tính vào trị giá tính GTGT.
       const others = used.filter((k) => k !== n && !isVat(out[`HAG_AK${k}`])).reduce((s, k) => addDec(s, amount(k) ?? ZERO), ZERO);
       set(`HAG_AB${n}`, addDec(addDec(value, dec(out["HAG_AKA"]) ?? ZERO), others), false);
     }
+    // Chỉ GTGT tự tính tiền; nhóm khác giữ tiền người khai nhập (chưa tính chênh lệch).
+    if (!isVat(out[`HAG_AK${n}`])) continue;
     const base = dec(out[`HAG_AB${n}`]);
     const r = percentRate(out[`HAG_AR${n}`]);
     if (base && r) set(`HAG_AA${n}`, percentOf(base, r), true);
@@ -105,6 +108,11 @@ export function amaLineDelta(values: Values): { importTax: string | null; other:
     return a || b ? formatDec(subDec(a ?? ZERO, b ?? ZERO), { scale: 4 }) : null;
   };
   const other = OTHER_TAX_SLOTS.flatMap((n) => {
+    // Bỏ qua nhóm chỉ khi ĐÃ CÓ mã Trước không phải GTGT và mã Sau cũng không phải GTGT (hoặc trống) – TTĐB, BVMT…: chưa tính chênh lệch.
+    // Một bên là GTGT vẫn tính để không mất tiền GTGT; loại thuế mới thêm ở "Sau" (Trước trống) tính tiền như trước khi có loại thuế.
+    const before = (values[`HAG_MK${n}`] ?? "").trim();
+    const after = (values[`HAG_AK${n}`] ?? "").trim();
+    if (before && !isVat(before) && !isVat(after)) return [];
     const d = diff(`HAG_AA${n}`, `HAG_MA${n}`);
     return d ? [{ slot: n, amount: d }] : [];
   });
@@ -178,7 +186,8 @@ export type AmaSourceLine = {
   values: Values;
   customs?: CustomsInfo["items"][number] | undefined;
   /** Thuế và thu khác đã biết (GTGT…): mã áp dụng, thuế suất %, trị giá tính, tiền thuế. */
-  otherTaxes?: { code: string; rate: string; base?: string | undefined; amount?: string | undefined }[] | undefined;
+  /** Nhóm không phải GTGT chỉ mang mã: rate/base/amount null (chưa tính chênh lệch). */
+  otherTaxes?: { code: string; rate: string | null; base?: string | null | undefined; amount?: string | null | undefined }[] | undefined;
 };
 
 /** "Trước" = tờ khai gốc; "Sau" mặc định bằng "Trước". */
@@ -201,7 +210,7 @@ export function amaLineFrom(src: AmaSourceLine): Values {
   (src.otherTaxes ?? []).slice(0, 5).forEach((t, i) => {
     const n = i + 1;
     before[`HAG_MK${n}`] = t.code;
-    before[`HAG_MR${n}`] = t.rate;
+    if (t.rate) before[`HAG_MR${n}`] = t.rate;
     if (t.base) before[`HAG_MB${n}`] = t.base;
     if (t.amount) before[`HAG_MA${n}`] = t.amount;
   });
@@ -220,4 +229,10 @@ export function amaLineFrom(src: AmaSourceLine): Values {
 export function processingContractNote(no: string, isoDate: string): string {
   const [y, m, d] = isoDate.split("-");
   return `SO HOP DONG: ${no}${y && m && d ? ` ngày ${d}/${m}/${y}` : ""}`;
+}
+
+/** Ô mã thuế/thu khác của AMA (HAG_MK{n}/HAG_AK{n}) → số ô n (1–5); ô khác → null. */
+export function amaOtherTaxSlotOf(fieldKey: string): number | null {
+  const m = /^HAG_(?:MK|AK)([1-5])$/.exec(fieldKey);
+  return m ? Number(m[1]) : null;
 }

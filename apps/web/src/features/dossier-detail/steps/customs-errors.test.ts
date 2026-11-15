@@ -29,3 +29,11 @@ describe("fieldErrors", () => {
     expect(errorPlace(c!)).toBe("Mã lỗi S9999");
   });
 });
+
+describe("fieldErrors – ô thuế", () => {
+  it("HAG_TX2 → slot 2 cùng số chỉ tiêu; ô khác không có slot", () => {
+    const errs = fieldErrors("IDA", { operation: "IDA", at: "2026-10-17T03:00:00.000Z", errors: [{ code: "E1", field: "HAG_TX2", line: 1, message: "x" }, { code: "E2", field: "CMD", line: 1, message: "y" }] });
+    expect(errs[0]).toMatchObject({ no: "1.94", line: 1, slot: 2 });
+    expect(errs[1]!.slot).toBeUndefined();
+  });
+});

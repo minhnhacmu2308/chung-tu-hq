@@ -12,6 +12,7 @@ import { neighborSections } from "./compact-rules";
 import { FORM_MESSAGES } from "./form.messages";
 import { conditionContext, itemProgress, sectionProgress, type FormValues } from "./form-state";
 import { ItemsSection } from "./items";
+import type { FieldCheck } from "./field-checks";
 import type { Stage } from "./fixtures";
 import { TransportOperationsBar } from "./transport-operations-bar";
 import { ViewOptions } from "./view-options";
@@ -30,6 +31,8 @@ type Props = {
   onItemChange?: ((index: number, key: string, value: string) => void) | undefined;
   /** Thao tác ở đầu panel chi tiết dòng hàng (sửa số liệu chứng từ ở OCR, chọn mã HS…). */
   itemActions?: ((index: number) => ReactNode) | undefined;
+  /** Ô tự điền cần kiểm tra lại của dòng hàng (cảnh báo dưới ô). */
+  itemChecks?: ((index: number) => readonly FieldCheck[]) | undefined;
   amending: boolean;
   onAmend: (on: boolean) => void;
   /** Số ô đã sửa so với tờ khai đã đăng ký (khi khai sửa đổi). */
@@ -102,7 +105,7 @@ function goToMissing() {
   el.querySelector<HTMLElement>("input, textarea, select")?.focus({ preventScroll: true });
 }
 
-export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, itemActions, amending, onAmend, changed, lockOf, prototypeActions = true, showMissing = true }: Props) {
+export function DeclarantTab({ layout, stage, values, items, section, onSection, onChange, onItemChange, itemActions, itemChecks, amending, onAmend, changed, lockOf, prototypeActions = true, showMissing = true }: Props) {
   const { mode } = useViewPrefs();
   const t = useMessages(FORM_MESSAGES);
   const locale = useUiLocale();
@@ -163,7 +166,7 @@ export function DeclarantTab({ layout, stage, values, items, section, onSection,
               </div>
             </div>
             {section === ITEMS_SECTION ? (
-              <ItemsSection layout={layout} items={items} onItemChange={onItemChange} actions={itemActions} showInapplicable={showInapplicable} />
+              <ItemsSection layout={layout} items={items} onItemChange={onItemChange} actions={itemActions} checks={itemChecks} showInapplicable={showInapplicable} />
             ) : (
               current && (
                 <Stack gap="md">

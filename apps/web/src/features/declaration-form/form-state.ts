@@ -12,6 +12,9 @@ const has = (v: FormValues, key: string) => Boolean(v[key]?.trim());
 // Điều kiện áp dụng và ô bắt buộc còn thiếu: quy tắc chung ở @kb/contracts (required.ts) – backend chặn duyệt/khai bằng cùng quy tắc.
 export { conditionContext, groupMissing, isApplicable, missingRequired };
 
+/** Nhóm lặp đếm đủ mọi dòng: nhóm số dòng cố định (khối "thuế và thu khác": mỗi dòng là một LOẠI thuế, GTGT ở dòng 5). */
+const countsAllRows = (item: LayoutItem): boolean => item.kind === "repeat" && item.fixedRows === true;
+
 type Unit = { filled: boolean; missing: boolean };
 
 /** Đơn vị đếm của một mục: mỗi ô người khai đang áp dụng (nhóm lặp chỉ dòng 1); nhóm "chỉ cần một ô" = 1 đơn vị. */
@@ -19,12 +22,12 @@ function units(kind: Kind, item: LayoutItem, v: FormValues, ctx: ConditionContex
   if (blockCondition && !isApplicable({ condition: blockCondition }, ctx)) return [];
   if (!isApplicable(item, ctx)) return [];
   if (item.kind === "group" && item.fill === "any") return [{ filled: (item.sequence ?? item.fields.map((f) => f.key)).some((k) => has(v, k)), missing: groupMissing(kind, item, v, ctx, blockCondition) }];
-  const fields = item.kind === "field" ? [item] : item.kind === "group" ? item.fields : (expandRepeat(item)[0] ?? []);
+  const fields = item.kind === "field" ? [item] : item.kind === "group" ? item.fields : (countsAllRows(item) ? expandRepeat(item).flat() : (expandRepeat(item)[0] ?? []));
   const parentNo = item.kind === "field" ? undefined : item.no;
   const parentCondition = item.kind === "field" ? blockCondition : item.condition ?? blockCondition;
   return fields
     .filter((f) => f.origin !== "CUSTOMS" && isApplicable(f, ctx))
-    .map((f) => ({ filled: has(v, f.key), missing: missingRequired(kind, f, v, parentNo, parentCondition, ctx) }));
+    .map((f) => ({ filled: has(v, f.key), missing: countsAllRows(item) ? f.key === "HAG_TX5" && kind === "IDA" && !has(v, f.key) : missingRequired(kind, f, v, parentNo, parentCondition, ctx) }));
 }
 
 export function sectionProgress(kind: Kind, s: LayoutSection, v: FormValues): { filled: number; total: number; missingRequired: number } {

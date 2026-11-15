@@ -62,6 +62,23 @@ describe("điền sẵn từ tờ khai gốc", () => {
     });
     expect(v).toMatchObject({ HAG_RAN: "01", HAG_CMB: "Bột thạch anh", HAG_CMA: "Bột thạch anh", HAG_MKT: "25061000", HAG_AKT: "25061000", HAG_MKB: "78721520.22", HAG_AKA: "3936076", HAG_MK1: "VB901", HAG_AK1: "VB901", HAG_AA1: "8265759.6231" });
   });
+  it("nhóm không phải GTGT: chỉ mang mã, chênh lệch bỏ qua", () => {
+    const v = amaLineFrom({ lineNo: 1, values: {}, otherTaxes: [{ code: "TB020", rate: null, base: null, amount: null }, { code: "VB901", rate: "10", amount: "100" }] });
+    expect(v).toMatchObject({ HAG_MK1: "TB020", HAG_AK1: "TB020", HAG_MK2: "VB901", HAG_MA2: "100" });
+    expect(v["HAG_MR1"]).toBeUndefined();
+    expect(amaLineDelta({ ...v, HAG_MA1: "5", HAG_AA1: "9", HAG_AA2: "150" }).other).toEqual([{ slot: 2, amount: "50" }]);
+  });
+  it("delta: VB901 → TB020 vẫn tính (một bên là GTGT); recalc không tự tính tiền nhóm không phải GTGT", () => {
+    expect(amaLineDelta({ HAG_MK1: "VB901", HAG_AK1: "TB020", HAG_MA1: "100", HAG_AA1: "0" }).other).toEqual([{ slot: 1, amount: "-100" }]);
+    const r = recalcAmaLine({ HAG_AK1: "TB020", HAG_AR1: "10", HAG_AB1: "1000" }, []);
+    expect(r["HAG_AA1"]).toBeUndefined();
+    expect(recalcAmaLine({ HAG_AK1: "TB020", HAG_AR1: "10", HAG_AB1: "1000", HAG_AA1: "7" }, [])["HAG_AA1"]).toBe("7");
+  });
+  it("delta: loại thuế không phải GTGT mới thêm ở Sau (Trước trống) vẫn tính tiền; Trước không phải GTGT + Sau trống → bỏ qua", () => {
+    expect(amaLineDelta({ HAG_AK1: "TB020", HAG_AA1: "250" }).other).toEqual([{ slot: 1, amount: "250" }]);
+    expect(amaLineDelta({ HAG_MK1: "TB020", HAG_MA1: "100", HAG_AA1: "40" }).other).toEqual([]);
+    expect(amaLineDelta({ HAG_MK1: "TB020", HAG_AK1: "TB030", HAG_MA1: "100", HAG_AA1: "40" }).other).toEqual([]);
+  });
   it("chèn hợp đồng gia công vào ghi chú", () => {
     expect(processingContractNote("WSYH-20260418", "2026-04-18")).toBe("SO HOP DONG: WSYH-20260418 ngày 18/04/2026");
   });

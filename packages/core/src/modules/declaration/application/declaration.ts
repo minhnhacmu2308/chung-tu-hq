@@ -147,7 +147,7 @@ export async function approveDeclaration(deps: DeclarationDeps, ctx: Ctx, dossie
       role: ctx.role, userId: ctx.userId, ownerId: d.value.ownerId, fourEyes: org.fourEyes, blockerFails, items, status: decl?.status ?? "NOT_CREATED",
       ...(decl ? {
         exchangeRate: decl.exchangeRate, missingFields: missingRequiredFields(decl.kind, decl.fields), fields: decl.fields,
-        requiredGaps: declarationRequiredGaps(decl.kind, Object.entries(decl.fields).map(([code, f]) => ({ code, value: f.value })), items), lineNos: items.map((i) => i.lineNo),
+        requiredGaps: declarationRequiredGaps(decl.kind, Object.entries(decl.fields).map(([code, f]) => ({ code, value: f.value })), items.map((i) => ({ ...i, vatCode: i.taxDetail?.vatCode ?? null, vatCertain: i.taxDetail?.needsReview === true ? false : (i.taxDetail?.vatCertain ?? null) }))), lineNos: items.map((i) => i.lineNo),
       } : {}),
     });
     if (!guard.ok) return guard;

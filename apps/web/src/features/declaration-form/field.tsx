@@ -9,7 +9,7 @@ import { Info, Lock } from "lucide-react";
 import { useMemo } from "react";
 import { useAmendLock } from "./amend-context";
 import { CodeInput } from "./code-input";
-import { codeScope } from "./code-scope";
+import { codeScope, otherTaxRow } from "./code-scope";
 import { roleInfo } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
 import { DATE_WIDTH, displayValue, fieldWidthClass } from "./display";
@@ -118,7 +118,14 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const listId = field.input === "code" ? codeListFor(field.codeTable) : undefined;
   const office = values["TK_CH"] ?? "";
   const transport = values["TK_MTC"] ?? "";
-  const scope = useMemo(() => (listId ? codeScope(listId, field.key, kind, { TK_CH: office, TK_MTC: transport }, locale) : null), [listId, field.key, kind, office, transport, locale]);
+  // Ô trong khối "thuế và thu khác": mã thuế của dòng quyết định phạm vi mã.
+  const taxRow = otherTaxRow(field.key, values);
+  const taxKey = taxRow?.key;
+  const taxCode = taxRow?.code;
+  const scope = useMemo(
+    () => (listId ? codeScope(listId, field.key, kind, { TK_CH: office, TK_MTC: transport }, locale, taxKey ? { [taxKey]: taxCode ?? "" } : undefined) : null),
+    [listId, field.key, kind, office, transport, locale, taxKey, taxCode],
+  );
   const name = useCodeName(field.codeTable, values[field.key] ?? "", scope);
   // Ô "Tên" của ô mã (1.29 / 2.27, 1.67 / 2.56): tên Hải quan trả về, không thì tên tra danh mục theo mã đang nhập (đổi ngay khi sửa mã).
   // Tên địa điểm xếp / dỡ (1.33 / 1.34, 2.28 / 2.29) khi không phải PTVC 9 / mã …ZZZ: cũng theo mã (A016), chỉ đọc – chỉ gửi mã, Hải quan tự xuất tên.

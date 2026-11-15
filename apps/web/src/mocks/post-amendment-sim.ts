@@ -1,7 +1,7 @@
 // Bản khai bổ sung sau thông quan (AMA) trong mock: lập từ tờ khai gốc + số Hải quan trả về, đổi trạng thái theo AMA/AMB/AMC.
 // Dùng chung cho api/customs (bắt đầu sửa, phản hồi nghiệp vụ) và api/post-amendment (màn hình). Quy tắc thuần: @kb/contracts post-amendment.
 import {
-  addDec, amaHeaderFrom, amaLineDelta, amaLineFrom, DEC_ZERO, declarationFormValues, formatDec, itemOverrides, parseDec, vatCode,
+  addDec, amaHeaderFrom, amaLineDelta, amaLineFrom, DEC_ZERO, declarationFormValues, formatDec, itemOverrides, legacySentVatCode, otherTaxCodes, otherTaxGroupOf, parseDec, vatAutoFill,
   type AmaSourceLine, type CustomsInfo, type CustomsOperation, type PostAmendment, type PostAmendmentLine,
 } from "@kb/contracts";
 import { computeTaxes } from "@/mocks/declaration-builder";
@@ -25,15 +25,22 @@ export function sourceLines(db: MockDb, dossier: Dossier, decl: Declaration, cus
   return items.map((it, idx) => {
     const t = taxes.find((x) => x.itemId === it.id);
     const vat = dossier.direction === "NK" && it.vatRate !== undefined && t;
+    const own = itemOverrides(decl.fields, it.id);
+    // Dòng cũ không mã HSCodePro: tờ khai đã gửi mang mã suy theo thuế suất của phần mềm bản cũ (legacySentVatCode) – như backend amaSourceLines.
+    const ownVat = Object.entries(own).some(([k, v]) => /^HAG_TX[1-5]$/.test(k) && otherTaxGroupOf(v) === 5);
+    const vatTx = vat ? vatAutoFill(it.vatRate, it.vatCode).tx ?? (ownVat ? null : legacySentVatCode(it.vatRate)) : undefined;
+    const codes = dossier.direction === "NK" ? otherTaxCodes(vatTx ? { HAG_TX5: vatTx } : {}, own) : [];
     const base = t ? formatDec({ n: BigInt(t.customsValueVnd) + BigInt(t.importDutyVnd), scale: 0 }) : undefined;
     return {
       lineNo: idx + 1,
       values: {
         HAG_CMN: it.description, HAG_OR: it.origin, HAG_CMD: it.hsConfirmed ?? "", HAG_QN1: it.quantity, HAG_QT1: it.unit, HAG_TXA: it.importDutyRate ?? "",
-        ...itemOverrides(decl.fields, it.id),
+        ...own,
       },
       customs: customs?.items.find((c) => c.lineNo === idx + 1),
-      ...(vat ? { otherTaxes: [{ code: vatCode(it.vatRate, it.vatCode)!, rate: `${it.vatRate}%`, base, amount: t.vatVnd }] } : {}),
+      ...(codes.length
+        ? { otherTaxes: codes.map((c) => (c.group === 5 && vat ? { code: c.code, rate: `${it.vatRate}%`, base, amount: t.vatVnd } : { code: c.code, rate: null, base: null, amount: null })) }
+        : {}),
     };
   });
 }

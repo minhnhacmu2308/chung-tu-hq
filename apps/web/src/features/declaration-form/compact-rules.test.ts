@@ -66,3 +66,18 @@ describe("neighborSections – nút Nhóm trước / Nhóm tiếp (G)", () => {
     expect(neighborSections(nav, "c")).toEqual({ prev: nav[1], next: undefined });
   });
 });
+
+describe("itemVisible / blockCollapsedByDefault – khối thuế và thu khác (GTGT bắt buộc)", () => {
+  const thuKhac = LAYOUT_IDA.item.declarant.find((b) => b.id === "thu-khac")!;
+  const rep = thuKhac.items[0]!;
+  it("thiếu mã GTGT → luôn hiện ở 'Ô cần nhập' và không đóng sẵn", () => {
+    expect(itemVisible("can-nhap", "IDA", rep, {}, ctx({}), undefined)).toBe(true);
+    expect(itemVisible("can-nhap", "IDA", rep, { HAG_TX3: "TB020" }, ctx({}), undefined)).toBe(true);
+    expect(blockCollapsedByDefault("IDA", thuKhac, {}, ctx({}))).toBe(false);
+  });
+  it("có mã GTGT (kể cả nằm lệch ô, sau chuẩn hóa) → như cũ: hiện vì đã có dữ liệu", () => {
+    expect(itemVisible("can-nhap", "IDA", rep, { HAG_TX5: "VB901" }, ctx({}), undefined)).toBe(true);
+    expect(itemVisible("can-nhap", "IDA", rep, { HAG_TX1: "VB901" }, ctx({}), undefined)).toBe(true);
+    expect(blockCollapsedByDefault("IDA", thuKhac, { HAG_TX5: "VB901" }, ctx({}))).toBe(false);
+  });
+});

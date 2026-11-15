@@ -1,4 +1,4 @@
-import { KvgsKindSchema, pollKvgs, pollStatus, processOutbox, type CustomsDeps } from "@kb/core/modules/integration";
+import { KvgsKindSchema, pollIdentifier, pollKvgs, pollStatus, processIdentifier, processOutbox, type CustomsDeps } from "@kb/core/modules/integration";
 import { createLogger } from "@kb/core/shared";
 import { z } from "zod";
 import { parsePayload } from "./_payload.js";
@@ -33,5 +33,25 @@ export async function kvgsPollJob(deps: CustomsDeps, raw: unknown) {
   const p = parsePayload(KvgsPollPayload, raw, "kvgs-poll");
   const r = await pollKvgs(deps, p);
   if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "kvgs-poll", kind: p.kind, id: p.id, orgId: p.orgId, code: r.error.code, message: r.error.message });
+  return r.ok ? (r.value.again ? "again" : "done") : r.error.code;
+}
+
+/** Payload job identifier-send / identifier-poll: `id` = bản ghi khai báo định danh, `n` = lần hỏi thứ n. */
+export const IdentifierSendPayload = z.object({ orgId: z.string().min(1), userId: z.string().min(1), id: z.string().min(1) });
+export const IdentifierPollPayload = IdentifierSendPayload.extend({ n: z.number().int().positive() });
+
+/** Gửi khai báo định danh (V5IdentifierReq). Lỗi tạm ném ra để BullMQ retry; lỗi Hải quan / chưa cấu hình ghi vào bản ghi, không retry. */
+export async function identifierSendJob(deps: CustomsDeps, raw: unknown) {
+  const p = parsePayload(IdentifierSendPayload, raw, "identifier-send");
+  const r = await processIdentifier(deps, p);
+  if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "identifier-send", id: p.id, orgId: p.orgId, code: r.error.code, message: r.error.message });
+  return r.ok ? r.value.status : r.error.code;
+}
+
+/** Hỏi kết quả khai báo định danh (V5IdentifierRes) theo REF_ID. */
+export async function identifierPollJob(deps: CustomsDeps, raw: unknown) {
+  const p = parsePayload(IdentifierPollPayload, raw, "identifier-poll");
+  const r = await pollIdentifier(deps, p);
+  if (!r.ok) log.warn("use case trả lỗi nghiệp vụ", { queue: "identifier-poll", id: p.id, orgId: p.orgId, code: r.error.code, message: r.error.message });
   return r.ok ? (r.value.again ? "again" : "done") : r.error.code;
 }

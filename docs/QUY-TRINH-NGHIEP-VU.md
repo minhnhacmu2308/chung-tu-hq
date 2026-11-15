@@ -415,6 +415,15 @@ flowchart LR
 - **In bản kê**: trang in riêng (A4, đen trắng cả chế độ tối, chỉ tiếng Việt) dựng đúng mẫu **Danh sách container** (hàng container) hoặc **Danh sách hàng hóa đủ điều kiện qua KVGS** (hàng lẻ), hàng container in ảnh mã vạch của Hải quan từng dòng, hàng lẻ in Code128 số tờ khai góc trên; dữ liệu từ KVGS mới nhất; tự chia trang. Công chức giám sát quét mã, đối chiếu rồi ký – đóng dấu trên bản in.
 - **Chưa làm**: ánh xạ `loaiHinh`/`ghi_Chu` của KVGS lên bản in; bảng container hàng xuất (2.60) chỉ đọc; khai danh sách container cho hàng xuất.
 
+### 9.6 Khai báo định danh hàng hóa (V5IdentifierReq / V5IdentifierRes)
+
+Xin **số định danh hàng hóa** (kèm mã QR) để đưa hàng qua khu vực giám sát khi chưa có số vận đơn. Mở từ panel ô **Số vận đơn** của tờ khai (IDA 1.26 / EDA 2.24) → nút "Khai báo định danh". Không thuộc tờ khai, không trừ lượt khai; mỗi lần gọi FPT ghi `usage_events`.
+
+- **Gửi**: ô khai (loại đối tượng, loại hàng, chi cục, MST + tên doanh nghiệp, đại lý, USER_ID – trống thì lấy tài khoản VNACCS của doanh nghiệp) điền sẵn từ tờ khai, lần sau điền lại từ lần gửi trước. Gửi tạo một dòng `customs_identifiers` SENDING (mỗi hồ sơ chỉ một lần gửi đang chờ) + job `identifier-send`; worker gọi `V5IdentifierReq` (body phẳng, không tài khoản VNACCS; cổng thật mất khoảng 45 giây).
+- **Kết quả**: FPT trả ngay số định danh + ngày + QR (`tranG_THAI` 15) → Hải quan chấp nhận. Mới tiếp nhận (`tranG_THAI` 11 – có REF_ID, số tiếp nhận, chưa có số định danh) → worker hỏi `V5IdentifierRes` (mã HQ, MST, tên DN, đại lý, REF_ID, USER_ID) mỗi 30 giây, tối đa 40 lần rồi "Hải quan chưa phản hồi"; panel nhắc "đã cấp số tiếp nhận – bấm Hỏi kết quả" và cho hỏi tay bất cứ lúc nào. `errorList` / `tranG_THAI` 10 → bị từ chối kèm lỗi, gửi lại được. Lỗi khi hỏi (phản hồi sai dạng, chưa cấu hình) không coi là từ chối – về "chưa phản hồi" để hỏi lại.
+- **Xác nhận**: khi đã có số định danh, nút Gửi khai báo đổi thành **Xác nhận** – điền số định danh vào ô số vận đơn đang mở (người khai bấm Lưu để ghi tờ khai).
+- **Kẹt**: job mất (Redis lỗi ngay sau khi ghi) → stuck-sweeper (mỗi 5 phút): SENDING không đổi quá 15 phút, chưa có REF_ID thì đẩy lại gửi, đã có REF_ID thì "chưa phản hồi".
+
 ## 10. Cấu hình doanh nghiệp
 
 Menu **Tài khoản & tích hợp**:

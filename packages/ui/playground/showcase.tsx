@@ -268,6 +268,7 @@ export function Showcase() {
                 <Barcode type="qr" value="KVGS-FBIU5802429" label="Mã QR bản kê" />
                 <Barcode type="code128" value="FBIU5802429" label="Mã vạch số container" />
                 <Barcode type="png" value={DEMO_BARCODE_PNG} label="Ảnh mã vạch Hải quan cấp" />
+                <Barcode type="png" value={DEMO_BARCODE_PNG} label="Ảnh mã QR định danh (nền quét)" surface="scan" />
               </div>
             </Stack>
           </CardContent>

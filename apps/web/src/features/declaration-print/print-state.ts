@@ -501,6 +501,9 @@ export const customsAnswered = (submission: SubmissionView | undefined): boolean
 const BILL_CELL: Record<Kind, RegExp> = { IDA: /^(VD_BL|APP_NGAY_VD|APP_HAWB)\d+$/, EDA: /^TK_EKN$/ };
 export const isBillCell = (kind: Kind, key: string) => BILL_CELL[kind].test(key);
 
+/** Ô số vận đơn ứng với ô vận đơn đang mở: IDA cùng số thứ tự (ngày / HAWB n → VD_BLn), EDA TK_EKN. Số định danh được điền vào đây. */
+export const billNoKey = (kind: Kind, key: string): string => (kind === "IDA" ? `VD_BL${/\d+$/.exec(key)?.[0] ?? "1"}` : "TK_EKN");
+
 /**
  * Ô chọn khai định danh đi cùng số vận đơn (không có chỗ trên mẫu in – nằm ở "Chỉ tiêu khác"): khai định danh theo đường biển / hàng không,
  * hàng không có phát hành HAWB không. Panel ô vận đơn hiện các ô này trước để chọn ngay cạnh số vận đơn. EDA: lựa chọn nằm trong form định danh.

@@ -1,11 +1,11 @@
-import { KvgsSheetSchema } from "@kb/contracts";
+import { IdentifierRequestSchema, KvgsSheetSchema } from "@kb/contracts";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
-import { containerLists, customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, kvgsSheets, postAmendments } from "../../../db/schema/integration.js";
+import { containerLists, customsIdentifiers, customsInbox, customsMessages, customsOutbox, customsResults, hysSubmissionFiles, hysSubmissions, kvgsSheets, postAmendments } from "../../../db/schema/integration.js";
 import { drizzleFieldAudit } from "../../../db/field-audit.js";
 import { withCtx } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { ContainerListRecord, CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
+import type { ContainerListRecord, CustomsRepos, CustomsUow, HysFileRow, IdentifierRow, InboxRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../application/customs-ports.js";
 
 function repos(tx: Tx): CustomsRepos {
   const toOutbox = (r: typeof customsOutbox.$inferSelect): OutboxRow => ({ ...r, operation: r.operation as OutboxRow["operation"], status: r.status as OutboxRow["status"] });
@@ -155,8 +155,27 @@ function repos(tx: Tx): CustomsRepos {
       update: async (orgId, id, patch) => void (await tx.update(kvgsSheets).set(patch).where(and(eq(kvgsSheets.orgId, orgId), eq(kvgsSheets.id, id)))),
     },
     fieldAudit: drizzleFieldAudit(tx),
+    identifiers: {
+      latest: async (orgId, dossierId) => {
+        const r = (await tx.select().from(customsIdentifiers).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.dossierId, dossierId))).orderBy(desc(customsIdentifiers.attempt)).limit(1))[0];
+        return r ? toIdentifier(r) : null;
+      },
+      get: async (orgId, id) => {
+        const r = (await tx.select().from(customsIdentifiers).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.id, id))).limit(1))[0];
+        return r ? toIdentifier(r) : null;
+      },
+      listStuckSending: async (orgId, before) =>
+        (await tx.select().from(customsIdentifiers).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.status, "SENDING"), lt(customsIdentifiers.updatedAt, before)))).map(toIdentifier),
+      insert: async (row) => void (await tx.insert(customsIdentifiers).values(row)),
+      update: async (orgId, id, patch) => void (await tx.update(customsIdentifiers).set(patch).where(and(eq(customsIdentifiers.orgId, orgId), eq(customsIdentifiers.id, id)))),
+    },
   };
 }
+
+/** `request` lưu jsonb – đọc lại qua Zod (bất biến 9). */
+const toIdentifier = (r: typeof customsIdentifiers.$inferSelect): IdentifierRow => ({
+  ...r, status: r.status as IdentifierRow["status"], request: IdentifierRequestSchema.parse(r.request), errors: r.errors as IdentifierRow["errors"],
+});
 
 export class DrizzleCustomsUow implements CustomsUow {
   constructor(private db: Db) {}

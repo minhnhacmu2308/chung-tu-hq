@@ -11,6 +11,7 @@ import { cn } from "../lib/cn.js";
 
 export type BarcodeType = "qr" | "code128" | "png";
 export type BarcodeSize = "sm" | "md" | "lg";
+export type BarcodeSurface = "plain" | "scan";
 
 export interface BarcodeProps {
   type: BarcodeType;
@@ -19,6 +20,8 @@ export interface BarcodeProps {
   /** Tên truy cập (aria-label) – bắt buộc. */
   label: string;
   size?: BarcodeSize;
+  /** `scan`: nền trắng + mã đen cố định kèm viền yên tĩnh (hiển thị trên màn hình để quét, kể cả chế độ tối). Mặc định `plain` (theo màu chữ – bản in). */
+  surface?: BarcodeSurface;
   className?: string;
 }
 
@@ -31,6 +34,7 @@ const barcodeVariants = cva("inline-block shrink-0 max-w-none text-current", {
   variants: {
     type: { qr: "", code128: "", png: "object-contain [image-rendering:pixelated]" },
     size: { sm: "", md: "", lg: "" },
+    surface: { plain: "", scan: "rounded-sm bg-scan p-2 text-scan-fg" },
   },
   compoundVariants: [
     { type: "qr", size: "sm", className: "h-24 w-24" },
@@ -40,7 +44,7 @@ const barcodeVariants = cva("inline-block shrink-0 max-w-none text-current", {
     { type: "png", size: "md", className: "h-32 w-32" },
     { type: "png", size: "lg", className: "h-48 w-48" },
   ],
-  defaultVariants: { type: "qr", size: "md" },
+  defaultVariants: { type: "qr", size: "md", surface: "plain" },
 });
 
 interface Shape {
@@ -82,7 +86,7 @@ function build(type: Exclude<BarcodeType, "png">, value: string): Shape | null {
   }
 }
 
-export function Barcode({ type, value, label, size = "md", className }: BarcodeProps) {
+export function Barcode({ type, value, label, size = "md", surface = "plain", className }: BarcodeProps) {
   const shape = useMemo(() => (value === "" || type === "png" ? null : build(type, value)), [type, value]);
   if (type === "png") {
     if (!PLAIN_BASE64_RE.test(value)) return null;
@@ -92,7 +96,7 @@ export function Barcode({ type, value, label, size = "md", className }: BarcodeP
         alt={label}
         decoding="sync"
         draggable={false}
-        className={cn(barcodeVariants({ type, size }), className)}
+        className={cn(barcodeVariants({ type, size, surface }), className)}
       />
     );
   }
@@ -115,7 +119,7 @@ export function Barcode({ type, value, label, size = "md", className }: BarcodeP
       height={dims?.height}
       preserveAspectRatio={dims ? "none" : "xMidYMid meet"}
       shapeRendering="crispEdges"
-      className={cn(barcodeVariants({ type, size }), className)}
+      className={cn(barcodeVariants({ type, size, surface }), className)}
     >
       {shape.paths.map((p, i) =>
         p.strokeWidth ? (

@@ -266,3 +266,43 @@ export const kvgsSheets = pgTable(
     orgRls("kvgs_sheets_rls"),
   ],
 ).enableRLS();
+
+/**
+ * Khai báo định danh hàng hóa (V5IdentifierReq/Res – KHAI BAO LAY MA DINH DANH v1.1): mỗi lần gửi một dòng (attempt) theo hồ sơ.
+ * `request` = ô người khai đã gửi (IdentifierRequest); kết quả Hải quan: số định danh, ngày, ảnh QR (Base64 PNG), câu kết quả; `errors` = GatewayError[].
+ * `send_attempts` = số lần worker đã gọi cổng (chống gọi lại vô hạn khi lỗi tạm kéo dài).
+ */
+export const customsIdentifiers = pgTable(
+  "customs_identifiers",
+  {
+    id: id(),
+    orgId: orgId(),
+    dossierId: text("dossier_id")
+      .notNull()
+      .references(() => dossiers.id, { onDelete: "cascade" }),
+    attempt: integer("attempt").notNull(),
+    status: text("status").notNull().default("SENDING"),
+    request: jsonb("request").notNull(),
+    refId: text("ref_id"),
+    receiptNo: text("receipt_no"),
+    receiptDate: date("receipt_date", { mode: "string" }),
+    customsState: text("customs_state"),
+    identifierNo: text("identifier_no"),
+    identifiedOn: date("identified_on", { mode: "string" }),
+    qrPng: text("qr_png"),
+    resultText: text("result_text"),
+    errors: jsonb("errors"),
+    sendAttempts: integer("send_attempts").notNull().default(0),
+    sentBy: text("sent_by").notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull(),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("customs_identifiers_dossier_attempt_uq").on(t.dossierId, t.attempt),
+    // Một lần gửi đang chờ mỗi hồ sơ: bấm Gửi hai lần song song không tạo hai lời gọi Hải quan.
+    uniqueIndex("customs_identifiers_sending_uq").on(t.dossierId).where(sql`${t.status} = 'SENDING'`),
+    index("customs_identifiers_org_dossier_idx").on(t.orgId, t.dossierId),
+    check("customs_identifiers_status_chk", sql`status in ('SENDING', 'ACCEPTED', 'REJECTED', 'NO_RESPONSE')`),
+    orgRls("customs_identifiers_rls"),
+  ],
+).enableRLS();

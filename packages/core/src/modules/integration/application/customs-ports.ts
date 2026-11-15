@@ -1,6 +1,6 @@
 import type { FieldAuditRepo, OrgAuditWriter } from "../../../shared/audit.js";
 // Cổng cho truyền Hải quan (outbox, nhật ký, kết quả, gateway). Nghiệp vụ không thấy DTO FPT (anti-corruption).
-import type { AttachKind, ContainerListRow as ContainerListRowData, ContainerListStatus, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, FptTraceEntry, HysFill, HysStatus, KvgsFetchStatus, KvgsSheet, PostAmendment, StepId, SubmissionState, TransportMode } from "@kb/contracts";
+import type { AttachKind, ContainerListRow as ContainerListRowData, ContainerListStatus, CustomsInfo, CustomsOperation, DeclarationStatus, DocKind, DossierStatus, FptTraceEntry, HysFill, HysStatus, IdentifierRequest, IdentifierStatus, KvgsFetchStatus, KvgsSheet, PostAmendment, StepId, SubmissionState, TransportMode } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -40,6 +40,13 @@ export type ContainerListRecord = {
 export type KvgsSheetRecord = {
   id: string; orgId: string; dossierId: string; branch: number; status: KvgsFetchStatus; refId: string | null; receiptNo: string | null; receiptDate: string | null; errors: GatewayError[] | null;
   sheet: KvgsSheet | null; raw: unknown; requestedBy: string; requestedAt: Date; fetchedAt: Date | null; createdAt: Date; updatedAt: Date;
+};
+
+/** Khai báo định danh hàng hóa (V5IdentifierReq/Res); mỗi lần gửi một dòng (attempt) theo hồ sơ. Ngày YYYY-MM-DD; thời điểm là Date (UTC). */
+export type IdentifierRow = {
+  id: string; orgId: string; dossierId: string; attempt: number; status: IdentifierStatus; request: IdentifierRequest; refId: string | null; receiptNo: string | null; receiptDate: string | null;
+  customsState: string | null; identifierNo: string | null; identifiedOn: string | null; qrPng: string | null; resultText: string | null; errors: GatewayError[] | null;
+  /** Số lần worker đã gọi cổng gửi khai báo. */ sendAttempts: number; sentBy: string; sentAt: Date; createdAt: Date; updatedAt: Date;
 };
 
 export interface CustomsRepos {
@@ -128,6 +135,15 @@ export interface CustomsRepos {
   };
   /** field_audit (bảng dùng chung, append-only, bất biến 6) – ô bản khai bổ sung (AMA_EDIT), danh sách container (CONT_LIST_EDIT): cùng transaction với lệnh sửa. */
   fieldAudit: FieldAuditRepo;
+  /** Khai báo định danh: `latest` = lần gửi (attempt) lớn nhất của hồ sơ. Insert SENDING khi đã có SENDING → lỗi trùng khóa (customs_identifiers_sending_uq). */
+  identifiers: {
+    latest(orgId: string, dossierId: string): Promise<IdentifierRow | null>;
+    get(orgId: string, id: string): Promise<IdentifierRow | null>;
+    /** Lần gửi còn SENDING mà không đổi gì từ trước `before` (job identifier-send / identifier-poll có thể đã mất) – cho stuck-sweeper. */
+    listStuckSending(orgId: string, before: Date): Promise<IdentifierRow[]>;
+    insert(row: IdentifierRow): Promise<void>;
+    update(orgId: string, id: string, patch: Partial<Omit<IdentifierRow, "id" | "orgId" | "dossierId" | "attempt" | "createdAt">>): Promise<void>;
+  };
 }
 
 /** Bản khai bổ sung trong DB (thời điểm là Date; DTO `PostAmendment` dùng chuỗi ISO). */
@@ -169,7 +185,21 @@ export interface CustomsGateway {
    * Lỗi tạm (mạng/5xx) → throw; lỗi vĩnh viễn (chưa cấu hình, HTTP 400/401 sau khi đăng nhập lại) → DomainError.
    */
   fetchKvgs(orgId: string, req: KvgsGatewayRequest, idempotencyKey: string): Promise<KvgsFetchResult>;
+  /**
+   * Khai báo định danh hàng hóa (V5IdentifierReq). Cổng thật có thể trả kết quả ngay (ACCEPTED + số định danh + QR); chỉ trả REF_ID → PENDING, hỏi tiếp bằng identifierResult.
+   * Lỗi tạm (mạng/5xx) → throw; chưa cấu hình / dữ liệu sai phía ta → DomainError.
+   */
+  sendIdentifier(orgId: string, req: IdentifierGatewayRequest, idempotencyKey: string): Promise<IdentifierGatewayResult>;
+  /** V5IdentifierRes: hỏi kết quả theo REF_ID. */
+  identifierResult(orgId: string, req: IdentifierGatewayRequest & { refId: string }): Promise<IdentifierGatewayResult>;
 }
+/** Yêu cầu định danh gửi cổng: ô người khai + USER_ID đã chọn (ô panel hoặc tài khoản VNACCS doanh nghiệp). `dossierId` chỉ để ghi nhật ký gỡ lỗi. */
+export type IdentifierGatewayRequest = IdentifierRequest & { userId: string; dossierId?: string };
+/** Kết quả định danh: `customsState` = TRANG_THAI thô; ngày YYYY-MM-DD; `qrPng` = Base64 PNG thuần. */
+export type IdentifierGatewayResult = {
+  state: "PENDING" | "ACCEPTED" | "REJECTED"; refId?: string; receiptNo?: string; receiptDate?: string; customsState?: string;
+  identifierNo?: string; identifiedOn?: string; qrPng?: string; resultText?: string; errors?: GatewayError[];
+};
 export type KvgsFetchResult = { state: "ACCEPTED" | "REJECTED"; sheet?: KvgsSheet; raw?: unknown; errors?: GatewayError[] };
 /** Kết quả hỏi theo REF_ID: `12` → ACCEPTED, `10` → REJECTED, `0`/`11` → PENDING. `receiptDate` YYYY-MM-DD. */
 export type RefResult = { state: "PENDING" | "ACCEPTED" | "REJECTED"; receiptNo?: string; receiptDate?: string; errors?: GatewayError[] };

@@ -4,7 +4,7 @@ import type {
   AgentRun, CrossCheck, CustomsResult, Declaration, DigitalCertificate, Dossier, DossierDocument,
   ExtractedField, Integration, LineItem, Member, Notification, Organization, Skill,
 } from "./types";
-import type { DeclarationProfile, InvoiceTemplate, IssuedInvoice, JoinRequest, PostAmendment, ManualShipment, ValueCharges } from "@kb/contracts";
+import type { DeclarationProfile, IdentifierRecord, InvoiceTemplate, IssuedInvoice, JoinRequest, PostAmendment, ManualShipment, ValueCharges } from "@kb/contracts";
 import { seedCore } from "./seed/core";
 import { seedOcr } from "./seed/ocr";
 import { seedDeclaration } from "./seed/declaration";
@@ -81,6 +81,8 @@ export type MockDb = {
   hys: MockHys[];
   /** Qua khu vực giám sát: danh sách container đã khai và bảng kê KVGS đã lấy (theo hồ sơ + tờ). */
   kvgs: MockKvgs;
+  /** Khai báo định danh hàng hóa (V5IdentifierReq/Res) – mỗi lần gửi một bản ghi theo hồ sơ; `doneAt` = lúc Hải quan (giả lập) trả lời. */
+  identifiers: (IdentifierRecord & { id: string; dossierId: string; doneAt: string })[];
   /** Back-office của bên vận hành (màn /admin). */
   admin: AdminDb;
   /** Gói & lượt (ADR 0011): sổ lượt, thanh toán PayOS giả, hợp đồng năm – của mọi doanh nghiệp. */
@@ -88,7 +90,7 @@ export type MockDb = {
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 49;
+const DB_VERSION = 50;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {
@@ -114,6 +116,7 @@ function createSeed(): MockDb {
     invoiceTemplates: [],
     hys: [],
     kvgs: emptyKvgs(),
+    identifiers: [],
     ...seedSkills(),
     ...seedSettings(),
     ...seedAdmin(),

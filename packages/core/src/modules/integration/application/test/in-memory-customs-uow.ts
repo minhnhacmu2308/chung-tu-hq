@@ -1,10 +1,10 @@
 import { InMemoryFieldAuditLog } from "../../../../shared/audit.js";
 import type { OrgId, UserId } from "../../../../shared/ids.js";
-import type { ContainerListRecord, CustomsRepos, CustomsUow, HysFileRow, InboxRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
+import type { ContainerListRecord, CustomsRepos, CustomsUow, HysFileRow, IdentifierRow, InboxRow, HysSubmissionRow, KvgsSheetRecord, MessageRow, OutboxRow, PostAmendmentRow, ResultRow } from "../customs-ports.js";
 
 /** Fake mô phỏng RLS theo org; outbox unique theo idempotency_key; messages append-only. */
 export class InMemoryCustomsUow implements CustomsUow {
-  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[], hys: [] as HysSubmissionRow[], hysFiles: [] as HysFileRow[], inbox: [] as InboxRow[], containerLists: [] as ContainerListRecord[], kvgs: [] as KvgsSheetRecord[] };
+  readonly data = { outbox: [] as OutboxRow[], messages: [] as MessageRow[], results: [] as ResultRow[], amendments: [] as PostAmendmentRow[], hys: [] as HysSubmissionRow[], hysFiles: [] as HysFileRow[], inbox: [] as InboxRow[], containerLists: [] as ContainerListRecord[], kvgs: [] as KvgsSheetRecord[], identifiers: [] as IdentifierRow[] };
   /** Bảng field_audit (ghi qua repos.fieldAudit trong transaction). */
   readonly fieldAudit = new InMemoryFieldAuditLog();
   asOrg<T>(ctx: { orgId: OrgId; userId: UserId }, fn: (r: CustomsRepos) => Promise<T>): Promise<T> {
@@ -164,6 +164,21 @@ export class InMemoryCustomsUow implements CustomsUow {
         },
       },
       fieldAudit: this.fieldAudit.repo(org),
+      identifiers: {
+        latest: async (orgId, dossierId) => clone([...d.identifiers.filter((x) => x.orgId === org && x.orgId === orgId && x.dossierId === dossierId)].sort((a, b) => b.attempt - a.attempt)[0] ?? null),
+        get: async (orgId, id) => clone(d.identifiers.find((x) => x.id === id && x.orgId === org && x.orgId === orgId) ?? null),
+        listStuckSending: async (orgId, before) => clone(d.identifiers.filter((x) => x.orgId === org && x.orgId === orgId && x.status === "SENDING" && x.updatedAt < before)),
+        insert: async (row) => {
+          if (row.orgId !== org) deny("customs_identifiers");
+          if (d.identifiers.some((x) => x.dossierId === row.dossierId && (x.attempt === row.attempt || (row.status === "SENDING" && x.status === "SENDING")))) throw new Error("duplicate key value violates unique constraint customs_identifiers_sending_uq");
+          d.identifiers.push(clone(row));
+        },
+        update: async (orgId, id, patch) => {
+          if (orgId !== org) deny(`customs_identifiers update orgId ${orgId} khác ngữ cảnh`);
+          const x = d.identifiers.find((i) => i.id === id && i.orgId === org);
+          if (x) Object.assign(x, clone(Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))));
+        },
+      },
     });
   }
 }

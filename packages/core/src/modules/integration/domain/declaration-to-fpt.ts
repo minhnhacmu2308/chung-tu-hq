@@ -32,6 +32,9 @@ const SIZE_EDA = new Map([...VN_EDA_FIELDS, ...VN_EDA_HANG_FIELDS].map((f) => [f
 const LONG = new Set([...VN_IDA_FIELDS, ...VN_IDA_HANG_FIELDS, ...VN_IDA_VANDON_FIELDS, ...VN_IDA_KTG_FIELDS, ...VN_EDA_FIELDS, ...VN_EDA_HANG_FIELDS].filter((f) => f.type === "long").map((f) => f.name));
 
 const val = (p: DeclarationPayload, code: string) => p.fields[code]?.value?.trim() ?? "";
+/** Mã địa điểm phía Việt Nam gửi VNACCS (IDA 1.33 vD_DST, EDA 2.29 TK_PSC): bỏ tiền tố nước "VN" của mã UN/LOCODE – VNCLI → CLI
+ * (mẫu request FPT "vD_DST": "PTS"; VNACCS báo R0178 "DST chưa được đăng ký" với VNCLI – người dùng chốt 2026-11-15). VNZZZ (PTVC 9) giữ nguyên. */
+export const vnPlaceCode = (code: string) => (/^VN[A-Z0-9]{3}$/.test(code) && code !== "VNZZZ" ? code.slice(2) : code);
 /** "VNHPH – CANG HAI PHONG" → { code: "VNHPH", name: "CANG HAI PHONG" }; "03CE – …" → code 03CE. */
 const split = (v: string) => {
   const m = /^([A-Z0-9-]{1,12})\s*[–-]\s*(.+)$/.exec(v);
@@ -221,11 +224,11 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
     setVd("VD_GW", num(val(p, "TRONG_LUONG"), "VD_GW"));
     setVd("VD_GWT", "KGM");
     setVd("VD_ST", firstToken(val(p, "KHO")));
-    // 1.33 địa điểm dỡ hàng (phía Việt Nam): luôn gửi cả tên – VNACCS báo R0178 "DST chưa được đăng ký" + S1024 "DSN chưa được nhập" khi chỉ gửi mã
-    // (2026-11-15, người dùng chốt: tờ khai nhập vD_DST, tờ khai xuất TK_PSC). 1.34 (nước ngoài): tên chỉ gửi khi PTVC 9 hoặc mã …ZZZ.
+    // 1.33 địa điểm dỡ hàng (phía Việt Nam): mã bỏ tiền tố "VN" (vnPlaceCode) + luôn gửi cả tên (S1024 "DSN chưa được nhập").
+    // 1.34 (nước ngoài): tên chỉ gửi khi PTVC 9 hoặc mã …ZZZ.
     const transport = firstToken(val(p, "PTVC"));
     const pod = split(val(p, "CANG_DO"));
-    setVd("VD_DST", pod.code);
+    setVd("VD_DST", vnPlaceCode(pod.code));
     setVd("VD_DSN", pod.name);
     const pol = split(val(p, "CANG_XEP"));
     setVd("VD_PSC", pol.code);
@@ -298,13 +301,13 @@ export function buildFptRequest(p: DeclarationPayload): FptBuild {
   set("TK_GW", num(val(p, "TRONG_LUONG"), "TK_GW"));
   set("TK_GWT", "KGM");
   set("TK_ST", firstToken(val(p, "KHO")));
-  // 2.28 (nước ngoài): tên chỉ gửi khi PTVC 9 hoặc mã …ZZZ. 2.29 địa điểm xếp hàng (phía Việt Nam): luôn gửi cả tên (như 1.33 của IDA).
+  // 2.28 (nước ngoài): tên chỉ gửi khi PTVC 9 hoặc mã …ZZZ. 2.29 địa điểm xếp hàng (phía Việt Nam): mã bỏ tiền tố "VN" + luôn gửi cả tên (như 1.33 của IDA).
   const transport = firstToken(val(p, "PTVC"));
   const dst = split(val(p, "CANG_DO"));
   set("TK_DSC", dst.code);
   if (sendsPlaceName(transport, dst.code)) set("TK_DSN", dst.name);
   const psc = split(val(p, "CANG_XEP"));
-  set("TK_PSC", psc.code);
+  set("TK_PSC", vnPlaceCode(psc.code));
   set("TK_PSN", psc.name);
   set("TK_VSC", callSign(p)); // 2.30 ô 1
   set("TK_VSN", val(p, "PTVC_TEN"));

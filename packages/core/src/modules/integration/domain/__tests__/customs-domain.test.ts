@@ -66,7 +66,7 @@ describe("declaration-to-fpt", () => {
     expect(r.objVN_IDA_VANDON["vD_BL1"]).toBe("HPSEL2610078");
     expect(r.objVN_IDA_VANDON["vD_NO"]).toBe("48"); // Long Integer gửi chuỗi – cổng FPT thật từ chối số (400 vD_NO, 2026-11-15)
     expect(r.objVN_IDA_VANDON["vD_NOT"]).toBe("PL");
-    expect(r.objVN_IDA_VANDON["vD_DST"]).toBe("VNHPH");
+    expect(r.objVN_IDA_VANDON["vD_DST"]).toBe("HPH"); // bỏ tiền tố "VN" (vnPlaceCode)
     expect(r.objVN_IDA_VANDON["vD_ST"]).toBe("03CCS01");
     expect(r.objVN_IDA_VANDON["vD_ARR"]).toBe("15/10/2026");
     expect(r.objVN_IDA_KTG["ktG_FR3"]).toBe(29200000);
@@ -81,10 +81,10 @@ describe("declaration-to-fpt", () => {
     expect(b.blockers).toEqual([]);
   });
 
-  it("1.33 (IDA dỡ hàng) / 2.29 (EDA xếp hàng) – địa điểm phía Việt Nam: luôn gửi cả mã và tên (R0178/S1024); 1.34 / 2.28 nước ngoài: chỉ mã, PTVC 9 hoặc mã …ZZZ → cả tên", () => {
+  it("1.33 (IDA dỡ hàng) / 2.29 (EDA xếp hàng) – địa điểm phía Việt Nam: mã bỏ tiền tố VN (VNCLI → CLI) + luôn gửi cả tên (R0178/S1024); 1.34 / 2.28 nước ngoài: chỉ mã, PTVC 9 hoặc mã …ZZZ → cả tên", () => {
     const vd = (p: DeclarationPayload) => (buildFptRequest(p).request as { objVN_IDA_VANDON: Record<string, unknown> }).objVN_IDA_VANDON;
     const sea = vd(PAYLOAD);
-    expect(sea).toMatchObject({ vD_DST: "VNHPH", vD_PSC: "KRPUS" });
+    expect(sea).toMatchObject({ vD_DST: "HPH", vD_PSC: "KRPUS" }); // mã VN bỏ tiền tố "VN" (VNCLI → CLI)
     expect(sea["vD_DSN"]).toBeTruthy();
     expect(sea["vD_PSN"]).toBeUndefined();
     const onSite = vd({ ...PAYLOAD, fields: { ...PAYLOAD.fields, PTVC: { value: "9 – Khác" }, CANG_DO: { value: "VNZZZ – KHO CONG TY A" }, CANG_XEP: { value: "VNZZZ – KHO CONG TY B" } } });
@@ -99,7 +99,7 @@ describe("declaration-to-fpt", () => {
     expect(buildFptRequest(PAYLOAD).issues).toEqual([]);
     const eda = buildFptRequest({ ...PAYLOAD, kind: "EDA", direction: "XK", fields: { ...PAYLOAD.fields, MA_LH: { value: "B11" }, CANG_DO: { value: "KRPUS – Busan" }, CANG_XEP: { value: "VNHPH – Cảng Hải Phòng" } } });
     const tk = (eda.request as { objVN_EDA: Record<string, unknown> }).objVN_EDA;
-    expect(tk).toMatchObject({ tK_DSC: "KRPUS", tK_PSC: "VNHPH" });
+    expect(tk).toMatchObject({ tK_DSC: "KRPUS", tK_PSC: "HPH" });
     expect(tk["tK_DSN"]).toBeUndefined();
     expect(tk["tK_PSN"]).toBe("Cảng Hải Phòng");
   });

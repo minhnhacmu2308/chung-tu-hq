@@ -89,7 +89,7 @@ describe("groupSameGoods", () => {
     const screw = { ...base, importRate: "12", basis: "MFN" as const, agreement: null, vatRate: "10", vatCode: "VB901", vatCertain: false, vatNote: "Đa số tờ khai đang khai 10%" };
     expect(ratesFromCandidate(screw, NK).policyNote).toContain("Thuế GTGT cần xét điều kiện: Đa số tờ khai đang khai 10%");
     const old = { ...base, vatRate: null, vatCode: null, vatCertain: null };
-    expect(ratesFromCandidate(old, NK)).toMatchObject({ vatRate: "10", taxDetail: { vatCode: "VB901" }, policyNote: expect.stringContaining("tạm tính 10%") });
+    expect(ratesFromCandidate(old, NK)).toMatchObject({ vatRate: "10", taxDetail: { vatCode: null }, policyNote: expect.stringContaining("tạm tính 10%") });
   });
   it("withHarmonized: thuế suất VAT bị đổi theo bài học / dòng khác → bỏ mã VAT của ứng viên (không để VB245 đi với 10%)", () => {
     const r = ratesFromCandidate({ code: "9405.11.99", description: "", confidence: 0.9, whyNot: null, importRate: "0", basis: "MFN", agreement: null, vatRate: "8", vatCode: "VB245" }, { direction: "NK", typeCode: "A11" });

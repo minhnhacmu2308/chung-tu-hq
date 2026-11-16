@@ -5,7 +5,7 @@ import { editScopeMockError, editScopeOf, sentSheetsMockError, toEditTargetMock 
 import { branchesOf } from "@/mocks/customs-sim";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
-import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
+import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, mockVatCode, ratesFor, type HsEntry, type ItemTax } from "@/mocks/declaration-builder";
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
@@ -256,9 +256,6 @@ function assertCanEdit(db: MockDb) {
   const role = db.members.find((m) => m.id === db.currentUserId)?.role;
   if (!role || !canEditDeclaration(role)) throw new ApiError("FORBIDDEN", "Vai trò của bạn không được sửa tờ khai");
 }
-
-/** Mã VAT VNACCS như hscode-api mới trả kèm thuế (mô phỏng): 10% VB901, 8% (giảm thuế) VB245. */
-const mockVatCode = (rate: string | null | undefined) => (rate === "10" ? "VB901" : rate === "8" ? "VB245" : undefined);
 
 /** Người dùng xác nhận mã HS (giữ gợi ý hoặc chọn mã khác). */
 export const confirmHs = (itemId: string, code: string) =>

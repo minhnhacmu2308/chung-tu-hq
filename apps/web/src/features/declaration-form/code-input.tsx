@@ -5,7 +5,7 @@ import { Alert, Checkbox, cn, Combobox, createDataTableColumnHelper, DataTable, 
 import { CODE_LIST_META, codeListFor, type CodeListEntry, type CodeTable } from "@kb/contracts";
 import { Search } from "lucide-react";
 import { useId, useMemo, useState } from "react";
-import { codeName, codeScope, lookupMode, scopedEntries, type CodeScope } from "./code-scope";
+import { codeName, codeScope, lookupMode, otherTaxRow, scopedEntries, type CodeScope } from "./code-scope";
 import { FORM_MESSAGES } from "./form.messages";
 import type { FormValues } from "./form-state";
 import { LoadError } from "@/components/common/load-error";
@@ -25,6 +25,8 @@ type Props = {
   label: string;
   /** Ô trong bảng nhóm lặp (không có Field bao) – tên truy cập riêng. */
   ariaLabel?: string;
+  /** Id phần tử ghi chú liên quan (lỗi / cảnh báo của dòng). */
+  describedBy?: string | undefined;
   /** Bề rộng ô mã (lớp token). */
   widthClass?: string;
 };
@@ -70,7 +72,7 @@ function LookupDialog({ label, state, onRetry, scope, title, hasParent, parentLa
   );
 }
 
-export function CodeInput({ table, fieldKey, kind, values, value, onChange, label, ariaLabel, widthClass = "w-32" }: Props) {
+export function CodeInput({ table, fieldKey, kind, values, value, onChange, label, ariaLabel, describedBy, widthClass = "w-32" }: Props) {
   const t = useMessages(FORM_MESSAGES);
   const locale = useUiLocale();
   const id = codeListFor(table)!;
@@ -82,7 +84,10 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
   const office = values["TK_CH"] ?? "";
   const transport = values["TK_MTC"] ?? "";
   // Phạm vi chỉ phụ thuộc cơ quan Hải quan / PTVC / loại tờ khai – giữ nguyên giữa các lần gõ để không lọc lại hàng chục nghìn mã.
-  const scope = useMemo(() => codeScope(id, fieldKey, kind, { TK_CH: office, TK_MTC: transport }, locale), [id, fieldKey, kind, office, transport, locale]);
+  const taxRow = otherTaxRow(fieldKey, values);
+  const taxKey = taxRow?.key;
+  const taxCode = taxRow?.code;
+  const scope = useMemo(() => codeScope(id, fieldKey, kind, { TK_CH: office, TK_MTC: transport }, locale, taxKey ? { [taxKey]: taxCode ?? "" } : undefined), [id, fieldKey, kind, office, transport, locale, taxKey, taxCode]);
   const entries = useMemo(() => (list ? scopedEntries(list, scope, { all: false, inactive: false }) : []), [list, scope]);
   const name = list ? codeName(list, value, scope) : undefined;
 
@@ -103,6 +108,7 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
         placeholder={t.pickCode}
         labels={{ search: t.searchCode }}
         {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+        {...(describedBy ? { "aria-describedby": describedBy } : {})}
       />
     );
   }
@@ -116,7 +122,7 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
         tooltip={name ?? (value ? t.notInList : t.typeOrLookup)}
         onLookup={() => setOpen(true)}
         lookupLabel={fill(t.lookupAria, { label })}
-        aria-describedby={name ? nameId : undefined}
+        aria-describedby={[name ? nameId : undefined, describedBy].filter(Boolean).join(" ") || undefined}
         {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
       />
       {name && <span id={nameId} className="sr-only">{name}</span>}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldEditBlock, itemDefaults, itemFieldClass, itemFieldCode, itemFieldIssue, itemFieldMeta, itemInputKeys, itemOverrides, parseItemFieldCode } from "./index.js";
+import { fieldEditBlock, itemDefaults, itemFieldClass, itemFieldCode, itemFieldIssue, itemFieldMeta, itemInputKeys, itemOverrides, parseItemFieldCode, vatAutoFill, itemAutoChecks, legacySentVatCode } from "./index.js";
 
 describe("itemFieldClass – ô dòng hàng sửa ở đâu", () => {
   it("số liệu chứng từ → OCR; mã HS, thuế suất NK → luồng HS; mã tiền đơn giá → tự điền; còn lại người khai nhập", () => {
@@ -40,15 +40,47 @@ describe("mã lưu ô dòng hàng theo id dòng", () => {
 
 describe("itemDefaults – giá trị tự điền khi truyền", () => {
   it("IDA: lượng (2) = lượng (1), mã tiền, mã biểu thuế theo FTA (FTA chưa có mã → bỏ trống), mã GTGT theo thuế suất", () => {
-    expect(itemDefaults("IDA", { lineNo: 1, quantity: "10", unit: "", vatRate: "8", policyNote: "Ưu đãi AKFTA" }, { currency: "USD" })).toEqual({ HAG_QN2: "10", HAG_QT2: "PCE", HAG_UPC: "USD", HAG_TSC: "PCE", HAG_ORS: "B06", HAG_TX5: "VB903" });
+    expect(itemDefaults("IDA", { lineNo: 1, quantity: "10", unit: "", vatRate: "8", policyNote: "Ưu đãi AKFTA" }, { currency: "USD" })).toEqual({ HAG_QN2: "10", HAG_QT2: "PCE", HAG_UPC: "USD", HAG_TSC: "PCE", HAG_ORS: "B06" });
     expect(itemDefaults("IDA", { lineNo: 1, quantity: "1", unit: "KGM", policyNote: "EVFTA" }, { currency: "EUR" })).not.toHaveProperty("HAG_ORS");
   });
-  it("IDA mã GTGT (HAG_TX5): ưu tiên mã HSCodePro lưu trên dòng (VB245, VK010); không có thuế suất lẫn mã → không tự điền 10%", () => {
+  it("IDA mã GTGT (HAG_TX5): ưu tiên mã HSCodePro lưu trên dòng (VB205, VK010); không có thuế suất lẫn mã → không tự điền 10%", () => {
     const base = { lineNo: 1, quantity: "1", unit: "PCE" };
-    expect(itemDefaults("IDA", { ...base, vatRate: "8", vatCode: "VB245" }, { currency: "USD" }).HAG_TX5).toBe("VB245");
-    expect(itemDefaults("IDA", { ...base, vatRate: null, vatCode: "VK010" }, { currency: "USD" }).HAG_TX5).toBe("VK010");
+    expect(itemDefaults("IDA", { ...base, vatRate: "8", vatCode: "VB205" }, { currency: "USD" }).HAG_TX5).toBe("VB205");
+    const ex = itemDefaults("IDA", { ...base, vatRate: null, vatCode: "VK010" }, { currency: "USD" });
+    expect(ex.HAG_TX5).toBe("V");
+    expect(ex.HAG_TR5).toBe("VK010");
     expect(itemDefaults("IDA", { ...base, vatRate: "10" }, { currency: "USD" }).HAG_TX5).toBe("VB901");
     expect(itemDefaults("IDA", { ...base, vatRate: null }, { currency: "USD" })).not.toHaveProperty("HAG_TX5");
+    expect(itemDefaults("IDA", { ...base, vatRate: "5", vatCode: null }, { currency: "USD" })).not.toHaveProperty("HAG_TX5");
+  });
+  it("vat_auto_fill_table", () => {
+    expect(vatAutoFill("10", "VB205", true)).toEqual({ tx: "VB205" });
+    expect(vatAutoFill("10", "VB901", false)).toEqual({ tx: "VB901", check: "VAT_UNCERTAIN" });
+    expect(vatAutoFill(null, "VK010")).toEqual({ tx: "V", tr: "VK010", check: "VAT_FROM_EXEMPT_CODE" });
+    expect(vatAutoFill("10", null)).toEqual({ tx: "VB901", check: "VAT_FROM_RATE" });
+    expect(vatAutoFill("0", null)).toEqual({ tx: "V", check: "VAT_FROM_RATE" });
+    expect(vatAutoFill("8", null)).toEqual({});
+    expect(vatAutoFill("5", null)).toEqual({});
+    expect(vatAutoFill(null, null)).toEqual({});
+    expect(vatAutoFill("10.0", null)).toEqual({ tx: "VB901", check: "VAT_FROM_RATE" });
+    expect(vatAutoFill("0.00", null)).toEqual({ tx: "V", check: "VAT_FROM_RATE" });
+    expect(vatAutoFill("8.00", null)).toEqual({});
+    for (const bad of ["abc", "10%", "8,5", ""]) expect(vatAutoFill(bad, null)).toEqual({});
+    expect(vatAutoFill(null, " vk010 ")).toEqual({ tx: "V", tr: "VK010", check: "VAT_FROM_EXEMPT_CODE" });
+    expect(vatAutoFill("10", "vb901")).toEqual({ tx: "VB901" });
+    expect(vatAutoFill(null, "V")).toEqual({ tx: "V" });
+    expect(vatAutoFill("8", "VB205", false)).toEqual({ tx: "VB205", check: "VAT_UNCERTAIN" });
+  });
+  it("legacySentVatCode (chỉ AMA \"Trước\"): mã phần mềm bản cũ đã gửi theo thuế suất; thuế suất khác / trống → null", () => {
+    expect(["10", "8", "5", "0", "8.0"].map(legacySentVatCode)).toEqual(["VB901", "VB903", "VB905", "VB900", "VB903"]);
+    expect(["7", "", null, undefined, "abc"].map(legacySentVatCode)).toEqual([null, null, null, null, null]);
+  });
+  it("itemAutoChecks: IDA báo HAG_TX5 khi tự điền có cảnh báo", () => {
+    const base = { lineNo: 1, quantity: "1", unit: "PCE" };
+    expect(itemAutoChecks("IDA", { ...base, vatRate: "10" })).toEqual([{ key: "HAG_TX5", reason: "VAT_FROM_RATE" }]);
+    expect(itemAutoChecks("IDA", { ...base, vatRate: "10", vatCode: "VB901", vatCertain: false })).toEqual([{ key: "HAG_TX5", reason: "VAT_UNCERTAIN" }]);
+    expect(itemAutoChecks("IDA", { ...base, vatRate: "10", vatCode: "VB901", vatCertain: true })).toEqual([]);
+    expect(itemAutoChecks("EDA", { ...base, vatRate: "10" })).toEqual([]);
   });
   it("EDA: mã văn bản pháp luật theo dòng từ VBPQ", () => {
     expect(itemDefaults("EDA", { lineNo: 2, quantity: "1", unit: "PCE" }, { currency: "USD", vbpq: "XK; 2: GP", lineNos: [1, 2] })).toMatchObject({ HAG_OL1: "XK", HAG_OL2: "GP" });

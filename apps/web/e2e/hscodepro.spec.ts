@@ -3,7 +3,7 @@
 //   pnpm fpt-mock; worker: HS_CLASSIFIER=hscodepro HSCODEPRO_URL=http://localhost:7070 HSCODEPRO_INTERNAL_KEY=dev-hs-key
 //   E2E_HS=hscodepro pnpm test:e2e hscodepro
 import { expect, test } from "@playwright/test";
-import { createDossier, login, uploadAndConfirm } from "./helpers";
+import { confirmAllHs, createDossier, login, uploadAndConfirm } from "./helpers";
 
 test.skip(process.env.E2E_HS !== "hscodepro", "Cần worker HS_CLASSIFIER=hscodepro + pnpm fpt-mock (E2E_HS=hscodepro)");
 
@@ -33,14 +33,10 @@ test("AI phân loại HS hỏi lại dòng thanh trượt → trả lời → c�
   }
 
   // Sau khi trả lời: máy giả lập trả mã 8466.93.90 cho thanh trượt (poll 3 giây).
-  const confirmButtons = page.getByRole("button", { name: /^Xác nhận mã .* cho dòng \d+$/ });
   await expect(page.getByText("8466.93.90").first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByText(/\d+% · 10%/).first()).toBeVisible(); // thuế NK · VAT theo gợi ý
   await expect(page.getByText(/Đang phân loại|Đang chờ|Đang gửi câu trả lời/)).toHaveCount(0, { timeout: 60_000 });
-  while ((await confirmButtons.count()) > 0) {
-    await confirmButtons.first().click();
-    await page.waitForTimeout(300);
-  }
+  await confirmAllHs(page);
   await page.getByRole("button", { name: "Sang Review tờ khai" }).click();
   await expect(page).toHaveURL(/step=review/);
 });

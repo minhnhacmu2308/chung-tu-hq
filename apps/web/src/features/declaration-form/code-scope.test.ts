@@ -59,3 +59,28 @@ describe("scopedEntries / lookupMode", () => {
     expect(codeName(list, "ZZ", null)).toBeUndefined();
   });
 });
+
+describe("codeScope – khối thuế và thu khác: mỗi dòng một loại thuế", () => {
+  const taxes = [e("TB020", "TTĐB"), e("BB01", "CBPG"), e("CB01", "CBPG"), e("GB01", "CBPG"), e("PB01", "PBĐX"), e("MB01", "BVMT"), e("VB901", "GTGT")];
+  const exempts = [e("TK060", "Miễn TTĐB"), e("VK110", "Không chịu thuế GTGT"), e("VK120", "Không chịu thuế GTGT"), e("XN180", "Miễn NK")];
+  const pick = (id: "OTHER_TAX" | "A520", key: string, rowValues?: Record<string, string>) =>
+    scopedEntries(id === "A520" ? exempts : taxes, codeScope(id, key, "IDA", {}, "vi", rowValues), { all: false, inactive: false }).map((x) => x.code);
+  it("other_tax_scope_by_row: mã thuế lọc theo chữ cái đầu của loại ở dòng đó, bắt buộc lọc", () => {
+    expect(pick("OTHER_TAX", "HAG_TX3")).toEqual(["TB020"]);
+    expect(pick("OTHER_TAX", "HAG_TX1")).toEqual(["BB01", "CB01", "GB01"]);
+    expect(pick("OTHER_TAX", "HAG_TX5")).toEqual(["VB901"]);
+    expect(codeScope("OTHER_TAX", "HAG_TX3", "IDA", {}, "vi")).toMatchObject({ optional: false });
+  });
+  it("mã miễn/giảm: theo chữ cái đầu của mã thuế cùng dòng; chưa có mã thuế → các chữ của loại; không phải ô của khối → không lọc", () => {
+    expect(pick("A520", "HAG_TR5", { HAG_TX5: "VB901" })).toEqual(["VK110", "VK120"]);
+    expect(pick("A520", "HAG_TR3", { HAG_TX3: " tb020 " })).toEqual(["TK060"]);
+    expect(pick("A520", "HAG_TR3")).toEqual(["TK060"]);
+    expect(codeScope("A520", "HAG_TR5", "IDA", {}, "vi", { HAG_TX5: "VB901" })).toMatchObject({ optional: false });
+    expect(codeScope("A520", "HAG_RE", "IDA", {}, "vi")).toBeNull();
+  });
+  it("AMA: ô HAG_MK/AK{n} lọc theo nhóm của mã Trước ở ô đó; chưa có mã Trước → không lọc", () => {
+    expect(pick("OTHER_TAX", "HAG_AK1", { HAG_MK1: "TB020" })).toEqual(["TB020"]);
+    expect(pick("OTHER_TAX", "HAG_MK2", { HAG_MK2: "VB901" })).toEqual(["VB901"]);
+    expect(codeScope("OTHER_TAX", "HAG_AK3", "IDA", {}, "vi", { HAG_MK3: "" })).toBeNull();
+  });
+});

@@ -127,7 +127,7 @@ export function IdentifierDialog({ form, kind, header, dossierId, showInapplicab
     refetchInterval: (query) => (query.state.data?.latest?.status === "SENDING" ? REFRESH_MS : false),
   });
   const latest = q.data?.latest ?? null;
-  const [values, setValues] = useState<FormValues>(() => operationValues(form, kind, header, "nhap"));
+  const [values, setValues] = useState<FormValues>(() => operationValues(form, kind, header));
   const [missing, setMissing] = useState<string[]>([]);
 
   // Lần đầu có dữ liệu: điền ô khai từ lần gửi gần nhất (người khai sửa tiếp rồi gửi lại).

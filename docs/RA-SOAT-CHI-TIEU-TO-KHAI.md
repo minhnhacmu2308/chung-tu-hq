@@ -150,8 +150,8 @@ Tab "Hàng hóa" hiện có các cột: STT, mô tả + xuất xứ, mã HS, lư
 | 1.89 | STT dòng trên tờ khai TN-TX | ĐK | Đi kèm 1.3 | ❌ |
 | 1.90–1.91 | Số danh mục miễn thuế, số dòng tương ứng | ĐK | Hàng miễn thuế theo danh mục | ❌ |
 | 1.92–1.93 | Mã miễn/giảm/không chịu thuế nhập khẩu, số tiền giảm | ĐK | — | ❌ |
-| 1.94 | Mã áp dụng thuế suất thu khác (5 khoản: chống bán phá giá, chống phân biệt đối xử, TTĐB, BVMT, **VAT bắt buộc**) | K (VAT) / ĐK (các khoản còn lại) | — | 📤 Gửi mã VAT (`HAG_TX5`, ghi chú "chưa đối chiếu") nhưng chỉ hiện %; chưa có TTĐB/BVMT/chống bán phá giá |
-| 1.95–1.96 | Mã miễn/giảm thu khác, số tiền giảm | ĐK | — | ❌ |
+| 1.94 | Mã áp dụng thuế suất thu khác (5 khoản: chống bán phá giá, chống phân biệt đối xử, TTĐB, BVMT, **VAT bắt buộc**) | K (VAT) / ĐK (các khoản còn lại) | — | 📤 Ô theo loại thuế (1 CBPG `B/C/G` · 2 PBĐX `P` · 3 TTĐB `T` · 4 BVMT `M` · 5 GTGT `V`); tự điền dòng GTGT (mã `V…` HSCodePro giữ; `VK…` → `V` + 1.95 `VK…`; 10% → `VB901`, 0% → `V`, kèm cảnh báo; **8% và 5% không có mã HSCodePro thì KHÔNG tự điền** – mã 5% phụ thuộc nhóm hàng (`VB0x5`), mã 8% (`VB195`/`VB205`) phụ thuộc HS → báo thiếu, người khai tự chọn), khi truyền dồn ô (bỏ dòng trống, ô cuối không gửi), chặn mã sai loại / trùng loại; chưa tính số tiền TTĐB/BVMT/CBPG |
+| 1.95–1.96 | Mã miễn/giảm thu khác, số tiền giảm | ĐK | — | 📤 Nhập tay, cùng chữ cái đầu với mã thuế cùng dòng (sai → chặn truyền); riêng `VK…` do tự điền ghi vào 1.95 |
 
 ## 4. Mẫu 02 – Tờ khai xuất khẩu (EDA): đối chiếu
 
@@ -226,7 +226,7 @@ Tất cả phản hồi lỗi (`errorList`) đều có `indexCode`/`nameCode` (c
 - 2.80 Mã văn bản pháp luật theo dòng hàng của EDA.
 - 1.80 Mã biểu thuế: đã gửi nhưng phải hiển thị và cho người duyệt xác nhận (quyết định thuế suất FTA).
 - 1.84 / 2.73 Số lượng (2) theo đơn vị tính biểu thuế: đang chép sai từ số lượng (1).
-- 1.94 Các khoản thu khác (TTĐB, BVMT, chống bán phá giá) và mã VAT hiển thị được.
+- 1.94 Các khoản thu khác (TTĐB, BVMT, chống bán phá giá) và mã VAT hiển thị và gửi đúng ô theo loại thuế.
 - 1.58 Mã xác định thời hạn nộp thuế; 2.43 Người nộp thuế cho EDA.
 - 1.70–1.73 / 2.61–2.64 Chỉ thị Hải quan và **thuế chính thức theo sắc thuế** trong phần phản hồi.
 - 1.2 / 2.2 Tách tờ khai khi > 50 dòng: app tự tách nhánh (đã hỗ trợ).
@@ -306,7 +306,7 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 | Kho ngoại quan / A41 | 1.64, 1.68 |
 | Vận chuyển kết hợp | 1.65–1.67 · 2.54–2.56 |
 | Miễn/giảm thuế, danh mục miễn thuế | 1.90–1.93, 1.95–1.96 · 2.70–2.71, 2.78–2.79 |
-| Hàng chịu TTĐB / BVMT / chống bán phá giá | 1.94 (khoản tương ứng) |
+| Hàng chịu TTĐB / BVMT / chống bán phá giá | 1.94 (ô theo loại: 1 CBPG, 3 TTĐB, 4 BVMT; dồn ô khi truyền) |
 
 ## 8. Tiến độ
 
@@ -355,15 +355,15 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 - 1.53 `TK_BP`, 1.58 / 2.48 `TK_ENC` (luôn hiện, tùy chọn); hạn mức 1.54–1.57 / 2.44–2.47 (`TK_BRC/BYA/BCM/BCN`) và bảo lãnh 1.59–1.62 / 2.49–2.52 (`TK_SBC/RYA/SCM/SCN`): khối `fill: "all"` – **khai cả nhóm**, đã nhập một ô thì các ô còn lại thành ô bắt buộc còn thiếu (`allOrNoneGaps` trong `requiredGaps`, chặn Phê duyệt / Ký số).
 - 1.17–1.19, 1.24 (`TK_NMC/NMN/EPC/ENM`) · 2.16–2.18 (`TK_EXC/EXN/CGC`): tùy chọn, **không gắn điều kiện** – hồ sơ không cho biết lô ủy thác / tại chỗ và bảng mã loại hình trong repo chưa đối chiếu (`unverified`), nên không suy theo loại hình.
 - 1.64 `VD_ISD`, 1.65–1.67 / 2.54–2.56 (`TK_DPD`, `TK_ST/AD/SD1..3`, `TK_ARP/ADT`): tùy chọn, không gắn điều kiện (A41 trong bảng mã của repo là "quyền nhập khẩu", không phải kho ngoại quan – cần đối chiếu).
-- Chưa làm: form cũ (`NEXT_PUBLIC_REVIEW_LEGACY_FORM`) chưa hiện luật khai cả nhóm; luật "TK_BP chỉ khi giải phóng hàng trên cơ sở bảo lãnh" và liên hệ 1.58 ↔ bảo lãnh chưa kiểm.
+- Chưa làm: luật "TK_BP chỉ khi giải phóng hàng trên cơ sở bảo lãnh" và liên hệ 1.58 ↔ bảo lãnh chưa kiểm.
 
 **Bản mẫu tờ khai đầy đủ chỉ tiêu (xong, nhánh `feat/to-khai-day-du-ban-mau`):**
-- Trang `/ban-mau/to-khai` (không nằm trong menu): 3 tab theo luồng làm việc (Người khai nhập / Hải quan trả về / Theo dõi & nghiệp vụ). Dữ liệu giả theo ảnh mẫu `CHITIEU_NHAPKHAU`/`CHITIEU_XUATKHAU`, có 3 giai đoạn. Thiết kế: `docs/superpowers/specs/2026-10-17-to-khai-day-du-ban-mau-design.md`.
+- Trang `/ban-mau/to-khai` (không nằm trong menu – **đã xóa 2026-11-16** cùng form cũ, BACKEND-TODO K9): 3 tab theo luồng làm việc (Người khai nhập / Hải quan trả về / Theo dõi & nghiệp vụ). Dữ liệu giả theo ảnh mẫu `CHITIEU_NHAPKHAU`/`CHITIEU_XUATKHAU`, có 3 giai đoạn. Thiết kế: `docs/superpowers/specs/2026-10-17-to-khai-day-du-ban-mau-design.md`.
 - Bố cục là dữ liệu trong `@kb/contracts/declaration-layout` (khóa ô = tên trường VNACCS), có test bắt buộc đủ 1.1–1.96 (trừ 1.46) và 2.1–2.80.
 - Luật "theo tình huống" giờ là một nguồn chung (`DECLARATION_CONDITIONS`), backend và bản mẫu cùng dùng.
 - Cần đối chiếu khi làm thật: catalog EDA ghi 2.79 là `HAG_TXR`, nhưng đặc tả VNACCS_EDA là `HAG_ADE`.
 
-**Bước 5 dạng bản in (xong, nhánh `feat/review-ban-in-to-khai`):** bước 5 hiện tờ khai giống mẫu in VNACCS (`@kb/contracts/print-layout`, `features/declaration-print/`), sửa ô bằng panel, lỗi / còn thiếu / ước tính đánh dấu trên ô, gộp tab "Hải quan trả về"; form cũ còn sau cờ `NEXT_PUBLIC_REVIEW_LEGACY_FORM=1` đến hết thử nghiệm (BACKEND-TODO K9).
+**Bước 5 dạng bản in (xong, nhánh `feat/review-ban-in-to-khai`):** bước 5 hiện tờ khai giống mẫu in VNACCS (`@kb/contracts/print-layout`, `features/declaration-print/`), sửa ô bằng panel, lỗi / còn thiếu / ước tính đánh dấu trên ô, gộp tab "Hải quan trả về"; form Phụ lục II cũ đã xóa 2026-11-16 (BACKEND-TODO K9) – bản in là màn Review duy nhất.
 
 **Cập nhật 2026-10-21:**
 - **Ô bắt buộc trống chặn Phê duyệt và Ký số & khai tạm**: một quy tắc `requiredGaps` (`@kb/contracts`) = Phụ lục II (M, hoặc C khi tình huống áp dụng) + ô FPT.VNACCS Required người khai nhập (không tính ô APP_* và ô phần mềm tự điền). Backend từ chối trước khi đánh dấu SUBMITTED; lỗi sai đặc tả FPT giờ chặn thay vì chỉ ghi log. 2.40 (`TK_FCD`/`TK_FKK`) đổi thành không bắt buộc trong schema FPT (Phụ lục II bỏ qua khi FOB/DAP/DAF); form vẫn bắt buộc khi áp dụng.
@@ -381,7 +381,7 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 1. **Sửa sai nghiệp vụ trước**: bỏ gửi cứng `TK_IMY`/`TK_CHB`, sửa `HAG_QN2`, sửa nhãn thuế của EDA, xử lý xung đột 1.69 với cú pháp TT121.
 2. **Tách vai trò trên giao diện**: huy hiệu K/ĐK/HT/Ước tính/HQ, hiện số chỉ tiêu, chuyển Số tờ khai và Tỷ giá ra khỏi nhóm chỉ tiêu khai.
 3. **Tab "Kết quả Hải quan"**: parse `VN_IDA_THUE`, `VN_IDA_CTHQ`, `VN_IDA_TRANGTHAI` (và bản EDA), so sánh ước tính với số HQ, gắn `errorList` vào đúng ô chỉ tiêu.
-4. **Bổ sung chỉ tiêu ưu tiên cao**: 1.50, 1.38/2.33, 2.40, 2.80, hiển thị 1.80, 1.94, 1.58.
+4. **Bổ sung chỉ tiêu ưu tiên cao**: 1.50, 1.38/2.33, 2.40, 2.80, hiển thị 1.80, 1.94 (theo loại thuế), 1.58.
 5. **Cấu hình `when` cho chỉ tiêu ĐK**, rồi thêm dần các chỉ tiêu theo tình huống ở mục 6.
 6. Nghiệp vụ còn thiếu: định danh hàng hóa (hiện QR), tách vận đơn (Mẫu 12), bổ sung chứng từ V5.
    - Bản mẫu (2026-10-17): nhóm 3 "Vận đơn & vận chuyển" có nút **Chia tách vận đơn** (chỉ nhập khẩu, TachVanDonReq) và **Khai báo định danh** (V5IdentifierReq) – panel đủ chỉ tiêu theo đặc tả FPT, điền sẵn từ tờ khai, phần kết quả chỉ đọc (`packages/contracts/src/declaration-layout/transport-operations.ts`). Khối Vận đơn thêm lựa chọn khai định danh theo đường biển / hàng không, hàng không → có phát hành HAWB → ô Số HAWB cạnh từng số vận đơn; ngày vận đơn theo từng số. Chưa có: gửi/hỏi kết quả thật, hiện ảnh QR, ghép ngày vận đơn vào 1.50.

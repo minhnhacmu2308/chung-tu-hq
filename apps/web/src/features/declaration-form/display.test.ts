@@ -79,3 +79,14 @@ describe("fieldWidthClass – ô ngày cùng một bề rộng trên toàn form"
     expect(fieldWidthClass({ input: "text" })).toBe("w-40");
   });
 });
+
+describe("visibleRows – nhóm lặp số dòng cố định (thuế và thu khác)", () => {
+  const rep: LayoutRepeat = { kind: "repeat", label: "Thuế", count: 5, fixedRows: true, rowKeys: ["A", "B", "C", "D", "E"], fields: [{ kind: "field", key: "HAG_TX{n}", label: "Mã", input: "text" }] };
+  it("fixed_rows_show_all_in_edit: sửa luôn đủ count dòng (kể cả khi trống, bỏ qua dòng thêm)", () => {
+    expect(visibleRows(rep, {}, 0, false)).toHaveLength(5);
+    expect(visibleRows(rep, { HAG_TX3: "TB020" }, 2, false)).toHaveLength(5);
+  });
+  it("chỉ xem: chỉ dòng có giá trị", () => {
+    expect(visibleRows(rep, { HAG_TX3: "TB020", HAG_TX5: "V" }, 0, true).map((r) => r[0]!.key)).toEqual(["HAG_TX3", "HAG_TX5"]);
+  });
+});

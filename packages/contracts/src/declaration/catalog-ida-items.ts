@@ -92,11 +92,11 @@ export const CATALOG_IDA_ITEMS: DeclarationFieldDef[] = [
   }),
   f("1.94", "ITEMS", "Mã áp dụng thuế suất/mức thuế và thu khác", "code", "C", {
     maxLen: 10, fptField: "VN_IDA_HANG.HAG_TX1",
-    legalNote: "Tối đa 5 (HAG_TX1..5), nhập theo thứ tự: thuế NK bổ sung (tự vệ, CBPG…), TTĐB, BVMT, GTGT. Hàng không chịu thuế: vẫn nhập mã sắc thuế và mã không chịu thuế tại 1.95.",
+    legalNote: "Tối đa 5 ô (HAG_TX1..5), mỗi ô một loại theo thứ tự: CBPG (tự vệ, chống trợ cấp, bán phá giá – B/C/G), PBĐX (P), TTĐB (T), BVMT (M), GTGT (V); khi gửi dồn về ô 1, bỏ loại trống. Hàng không chịu thuế: vẫn nhập mã sắc thuế và mã không chịu thuế tại 1.95.",
   }),
   f("1.95", "ITEMS", "Mã miễn/giảm/không chịu thuế và thu khác", "code", "C", {
     maxLen: 5, codeTable: "A520", fptField: "VN_IDA_HANG.HAG_TR1",
-    legalNote: "Tương ứng từng ô của 1.94 (HAG_TR1..5); ngày đăng ký tờ khai phải trong thời hạn hiệu lực của mã.",
+    legalNote: "Tương ứng từng ô của 1.94 (HAG_TR1..5); mã phải cùng chữ cái đầu với mã 1.94 cùng ô (vd V… với V…); ngày đăng ký tờ khai phải trong thời hạn hiệu lực của mã.",
   }),
   f("1.96", "ITEMS", "Số tiền giảm thuế và thu khác", "decimal", "C", {
     maxLen: 16, fptField: "VN_IDA_HANG.HAG_TG1",

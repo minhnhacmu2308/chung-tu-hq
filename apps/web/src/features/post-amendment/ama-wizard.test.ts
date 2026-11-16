@@ -2,7 +2,7 @@ import type { LayoutBlock, PostAmendment, PostAmendmentLine } from "@kb/contract
 import { describe, expect, it } from "vitest";
 import {
   amaChangeSummary, amaDeadline, amaPrimaryAction, amaRejection, applyEdits, lineSaves, reviewTarget, approveBlockers, changedKeys, defaultSubStep, maxSubStep, missingOther, otherSlotsInUse, postStepVisible, reasonLayout, resolveSubStep,
-  subStepEditable,
+  subStepEditable, vatBaseNeedsCheck,
 } from "./ama-wizard";
 
 const line = (values: Record<string, string>, id = "l1", ran = 1): PostAmendmentLine => ({ id, ran, values, manual: [] });
@@ -55,6 +55,15 @@ describe("changedKeys", () => {
 
 describe("otherSlotsInUse", () => {
   it("chỉ các slot có giá trị Trước hoặc Sau", () => expect(otherSlotsInUse({ HAG_MR1: "10", HAG_AA3: "5" })).toEqual([1, 3]));
+});
+
+describe("vatBaseNeedsCheck", () => {
+  it("nhóm GTGT + dòng còn nhóm không phải GTGT → nhắc; chỉ GTGT / nhóm không phải GTGT → không", () => {
+    expect(vatBaseNeedsCheck({ HAG_MK1: "TB020", HAG_AK1: "TB020", HAG_MK2: "VB901", HAG_AK2: "VB901" }, 2)).toBe(true);
+    expect(vatBaseNeedsCheck({ HAG_AK1: "TB020", HAG_MK2: "VB901" }, 2)).toBe(true);
+    expect(vatBaseNeedsCheck({ HAG_MK1: "TB020", HAG_MK2: "VB901" }, 1)).toBe(false);
+    expect(vatBaseNeedsCheck({ HAG_MK1: "VB901", HAG_AK1: "VB901" }, 1)).toBe(false);
+  });
 });
 
 describe("amaDeadline", () => {

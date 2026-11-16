@@ -16,6 +16,12 @@ const PREFIX = /^(TK|HAG|VD|KTG|CON|CTHQ)_/;
 const stem = (s: string) => s.replace(/\d+$/, "");
 const nameOf = (def: DeclarationFieldDef) => (def.fptField?.split(".")[1] ?? "").replace(PREFIX, "");
 
+/** Ô "Thuế và thu khác" mà lỗi nhắc tới: `HAG_TX2`/`TR3`/`TG1` (có/không tiền tố) → 1–5; không phải ô thuế → null. Ô tính theo bản đã dồn gửi đi. */
+export function fptIndexSlot(indexCode: string | null | undefined): number | null {
+  const m = /^(?:HAG_)?(?:TX|TR|TG)([1-5])$/.exec((indexCode ?? "").trim().toUpperCase());
+  return m ? Number(m[1]) : null;
+}
+
 /** `indexCode` của lỗi FPT → chỉ tiêu Phụ lục II của tờ khai IDA/EDA; không xác định được → undefined. */
 export function fieldDefForFptIndex(kind: "IDA" | "EDA", indexCode: string | null | undefined): DeclarationFieldDef | undefined {
   const raw = (indexCode ?? "").trim().toUpperCase().replace(PREFIX, "");

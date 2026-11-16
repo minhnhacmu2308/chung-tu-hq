@@ -102,6 +102,22 @@ describe("PaperField", () => {
     expect(screen.getByRole("img", { name: "Có lỗi" })).toHaveAttribute("data-paper-mark");
   });
 
+  it("renders_check_state: biểu tượng cảnh báo 'Cần kiểm tra' (data-paper-mark), tông warning, khác error", () => {
+    const { container, rerender } = render(<PaperField label="a" value="VB901" ariaLabel="ô" state="check" />);
+    const mark = screen.getByRole("img", { name: "Cần kiểm tra" });
+    expect(mark).toHaveAttribute("data-paper-mark", "check");
+    // WCAG 1.4.1: khác lỗi không chỉ ở màu – biểu tượng dấu hỏi, không phải tam giác cảnh báo.
+    expect(mark.querySelector("svg")?.getAttribute("class")).toMatch(/circle-(help|question-mark)/);
+    expect(mark.querySelector("svg")?.getAttribute("class")).not.toMatch(/triangle-alert/);
+    expect(container.firstElementChild).toHaveClass("border-warning", "bg-warning-subtle", "text-warning-subtle-fg");
+    expect(container.firstElementChild).not.toHaveClass("border-danger");
+    expect(container.firstElementChild).not.toHaveClass("border-dashed");
+    rerender(<UiLocaleProvider locale="en"><PaperField label="a" value="1" ariaLabel="x" state="check" /></UiLocaleProvider>);
+    expect(screen.getByRole("img", { name: "Needs checking" })).toBeInTheDocument();
+    rerender(<PaperField label="a" value="1" ariaLabel="x" state="check" labels={{ check: "Xem lại" }} />);
+    expect(screen.getByRole("img", { name: "Xem lại" })).toBeInTheDocument();
+  });
+
   it("edited: dấu sr-only 'Đã sửa'", () => {
     render(<PaperField label="a" value="1" ariaLabel="ô" state="edited" />);
     const mark = screen.getByText("Đã sửa");
@@ -215,7 +231,7 @@ describe("PaperField", () => {
     expect(container.firstElementChild).toHaveClass("col-span-4", "text-right");
   });
 
-  it.each<PaperFieldState>(["none", "error", "missing", "estimate", "edited"])("axe không vi phạm: %s (có và không onSelect)", async (state) => {
+  it.each<PaperFieldState>(["none", "error", "missing", "estimate", "edited", "check"])("axe không vi phạm: %s (có và không onSelect)", async (state) => {
     const { container } = render(
       <div>
         <PaperField label="Nhãn" value="Giá trị" ariaLabel="Ô một" state={state} compareTo="1" />

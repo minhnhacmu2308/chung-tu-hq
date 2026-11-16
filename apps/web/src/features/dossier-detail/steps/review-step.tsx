@@ -1,6 +1,6 @@
 "use client";
 // Bước 5 – Review tờ khai: tờ khai dạng bản in VNACCS (sửa chỉ tiêu nháp bằng panel, gồm cả số Hải quan trả về), chứng từ đính kèm,
-// theo dõi nghiệp vụ → phê duyệt. Cờ NEXT_PUBLIC_REVIEW_LEGACY_FORM=1 → form Phụ lục II cũ + tab "Hải quan trả về" (dự phòng khi thử nghiệm).
+// theo dõi nghiệp vụ → phê duyệt. Trên bản in: thông báo giai đoạn sửa (chưa khai / khai sửa đổi bổ sung / chỉ đọc).
 // Sau thông quan: tờ khai gốc chỉ đọc – sửa bằng bản khai bổ sung AMA ở bước 7 "Sửa sau thông quan".
 import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Checkbox,
@@ -17,20 +17,18 @@ import { getSession, sessionKeys } from "@/api/session";
 import { customsKeys, getSubmission, recallAllSheets } from "@/api/customs";
 import { getOrganization, settingsKeys } from "@/api/settings";
 import { toastMutationError } from "@/lib/mutation-error";
-import { legacyReviewForm } from "@/lib/feature-flags";
 import { formatBytesVi, formatDateTime, formatMoney, formatNumber, formatVnd } from "@/lib/format";
 import { DOC_KIND_LABELS, type Declaration } from "@/mocks/types";
 import { errorMessage, KeyValue, StepError, StepLoading, StickyActionBar } from "./declaration-parts";
-import { CustomsInfoPanel } from "./customs-info-panel";
-import { errorPlace, fieldErrors } from "./customs-errors";
+import { fieldErrors } from "./customs-errors";
 import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { IncotermChangedNote } from "./incoterm-changed-note";
 import { REVIEW_MESSAGES } from "./review-step.messages";
 import { anyInProgress, encodeRecalled, parseRecalled, recalledCount, submissionRefetchMs } from "./branch-sheets";
 import { editScopeOf, sentChangeWarnings } from "./edit-scope";
-import { DossierDeclarationForm } from "../../declaration-form/dossier-declaration-form";
-import { DossierCustomsTab, DossierOperationsTab } from "../../declaration-form/dossier-tabs";
+import { editableKeys } from "../../declaration-form/dossier-adapter";
+import { DossierOperationsTab } from "../../declaration-form/dossier-tabs";
 import { PrintDeclaration } from "../../declaration-print/print-declaration";
 import type { LeaveGuard } from "../../declaration-print/field-edit-panel";
 import { cellDomId } from "../../declaration-print/print-cell";
@@ -84,10 +82,37 @@ function AttentionBadge({ decl, items, branches, submission, mode, lineModes, ca
   );
 }
 
-const LEGACY_TABS = ["full", "docs", "customs", "ops"] as const;
-type Tab = (typeof LEGACY_TABS)[number];
-// Bản in gộp tab "Hải quan trả về" vào tab "Tờ khai": ?tab=customs cũ → "full".
-const PRINT_TABS: readonly Tab[] = ["full", "docs", "ops"];
+/**
+ * Thông báo giai đoạn sửa tờ khai, đặt trên bản in: chưa khai báo → số chỉ tiêu sửa được; đã phân luồng → khai sửa đổi bổ sung
+ * (khai tạm sửa đổi IDA01/EDA01); chỉ đọc → không có quyền / đã thông quan (sửa bằng AMA ở bước 7) / đã duyệt – đã truyền.
+ * Lô nhiều tờ còn tờ chưa gọi về: khung "Thông tin chung: tờ … chưa gọi về" ở đầu bước đã nói rõ → không nhắc lại.
+ */
+function StageNotice({ decl, mode, canEdit, cleared }: { decl: Declaration; mode: DeclarationEditMode; canEdit: boolean; cleared: boolean }) {
+  const t = useMessages(REVIEW_MESSAGES);
+  const editableCount = useMemo(() => (mode === "FULL" ? new Set(editableKeys(decl.kind, decl.fields, mode).values()).size : 0), [decl.kind, decl.fields, mode]);
+  if (mode === "FULL") {
+    return (
+      <Alert tone="info" title={t.stageFullTitle}>
+        {fill(t.stageFullBody, { n: formatNumber(editableCount) })}
+      </Alert>
+    );
+  }
+  if (mode === "AMEND") {
+    return (
+      <Alert tone="warning" title={t.stageAmendTitle}>
+        {fill(t.stageAmendBody, { op: decl.kind === "IDA" ? "IDA01" : "EDA01" })}
+      </Alert>
+    );
+  }
+  return (
+    <Alert tone="info" title={t.stageReadTitle}>
+      {!canEdit ? t.stageNoPermission : cleared ? t.stageClearedNote : t.stageLockedNote}
+    </Alert>
+  );
+}
+
+const TABS = ["full", "docs", "ops"] as const;
+type Tab = (typeof TABS)[number];
 
 export function ReviewStep({ dossier, goTo }: StepProps) {
   const t = useMessages(REVIEW_MESSAGES);
@@ -131,7 +156,6 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const [checked, setChecked] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [recallOpen, setRecallOpen] = useState(false);
-  const legacy = legacyReviewForm();
   const session = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
   const canEdit = session.data ? canEditDeclaration(session.data.user.role) : false;
   const org = useQuery({ queryKey: settingsKeys.org, queryFn: getOrganization });
@@ -165,12 +189,11 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
     else next.delete("sheet");
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   }, [sheetCount, sheetParam, sheet, params, pathname, router]);
-  const customsInfo = subQ.data?.customsInfo ?? null;
   // Đang sửa sau thông quan (bản khai bổ sung AMA ở bước 7): tờ khai gốc giữ nguyên, khóa như đã thông quan.
   const stage = subQ.data?.stage;
   const postEditing = Boolean(stage?.startsWith("POST_"));
-  const tabs: readonly Tab[] = legacy ? LEGACY_TABS : PRINT_TABS;
-  const tab: Tab = (tabs as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "full";
+  // ?tab=customs cũ (tab "Hải quan trả về" đã gộp vào bản in) và tab lạ → "full".
+  const tab: Tab = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as Tab) : "full";
   const rejection = subQ.data?.rejection ?? null;
   // "Đến ô cần xử lý": mở tab bản in rồi bấm vào ô (mở panel sửa ô) sau khi tab đã vẽ; n để bấm lại cùng ô.
   const [jump, setJump] = useState<{ id: string; n: number; sheet?: number } | null>(null);
@@ -313,20 +336,6 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             )}
             {sentWarn.totalValue && <Alert tone="warning">{t.tkTpChanged}</Alert>}
             {sentWarn.otherCommon.length > 0 && <Alert tone="warning">{fill(t.commonChanged, { codes: sentWarn.otherCommon.join(", ") })}</Alert>}
-            {/* Bản in: lỗi Hải quan hiện trên ô + "Chỉ ô cần xử lý" ở thanh công cụ – không cần khung tổng hợp. */}
-            {legacy && rejection && errs.length > 0 && (
-              <Alert tone="danger" title={fill(t.rejectedTitle, { op: rejection.operation, at: formatDateTime(rejection.at), n: errs.length })}>
-                <p>{isDraft ? t.rejectedDraft : t.rejectedLocked}</p>
-                <ul className="mt-1 flex flex-col gap-1">
-                  {errs.map((e, i) => (
-                    <li key={i}>
-                      <span className="font-medium">{errorPlace(e, locale)}:</span> {e.message}
-                      {e.solution ? ` → ${e.solution}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              </Alert>
-            )}
             {!isDraft && decl.approvedBy && (
               <Alert tone="success" title={t.approvedTitle}>
                 {fill(t.approvedBy, { who: decl.approvedBy, at: decl.approvedAt ? formatDateTime(decl.approvedAt) : "—" })}
@@ -335,10 +344,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             {isDraft && <IncotermChangedNote dossierId={dossier.id} />}
             {isDraft && suspect.length > 0 && (
               <Alert tone="warning" title={fill(t.suspectTitle, { n: suspect.length })}>
-                {legacy ? (
-                  fill(t.suspectBody, { tab: t.tabFullLegacy, fields: suspect.map((f) => fieldTitle(f)).join(", ") })
-                ) : (
-                  <>
+                <>
                     <p>{t.suspectPick}</p>
                     {/* Mỗi chỉ tiêu là một nút: mở tab bản in, cuộn tới ô và mở panel để kiểm tra / xác nhận. Ô không có trên bản in → chỉ ghi tên. */}
                     <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
@@ -357,8 +363,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                         );
                       })}
                     </ul>
-                  </>
-                )}
+                </>
               </Alert>
             )}
             {isDraft && blockedByFourEyes && (
@@ -366,11 +371,9 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
                 {t.fourEyesBody}
               </Alert>
             )}
-            {!legacy && (
-              <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel={t.goToGap} onAction={goToGap}>
-                {t.gapsBody}
-              </RequiredGapsAlert>
-            )}
+            <RequiredGapsAlert gaps={required.gaps} lineNos={required.lineNos} actionLabel={t.goToGap} onAction={goToGap}>
+              {t.gapsBody}
+            </RequiredGapsAlert>
             {unconfirmedHs > 0 && (
               <Alert
                 tone="danger"
@@ -388,53 +391,26 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
 
           <Tabs value={tab} onValueChange={setTab} className="mt-4">
             <TabsList aria-label={t.tabsAria}>
-              {legacy ? (
-                <TabsTrigger value="full">
-                  {t.tabFullLegacy} {errs.length > 0 && <Badge tone="danger">{fill(t.errorsBadge, { n: errs.length })}</Badge>}
-                </TabsTrigger>
-              ) : (
-                <TabsTrigger value="full">
-                  {t.tabFull} {subQ.isSuccess && <AttentionBadge decl={decl} items={items} branches={branches} submission={subQ.data} mode={editMode} lineModes={scope.lines} canEdit={canEdit} hasErrors={errs.length > 0} />}
-                </TabsTrigger>
-              )}
+              <TabsTrigger value="full">
+                {t.tabFull} {subQ.isSuccess && <AttentionBadge decl={decl} items={items} branches={branches} submission={subQ.data} mode={editMode} lineModes={scope.lines} canEdit={canEdit} hasErrors={errs.length > 0} />}
+              </TabsTrigger>
               <TabsTrigger value="docs">{t.tabDocs}</TabsTrigger>
-              {legacy && (
-                <TabsTrigger value="customs">
-                  {t.tabCustoms} {customsInfo ? customsInfo.directives.length > 0 && <Badge tone="warning">{customsInfo.directives.length}</Badge> : <Badge tone="neutral">{t.notYet}</Badge>}
-                </TabsTrigger>
-              )}
               <TabsTrigger value="ops">{t.tabOps}</TabsTrigger>
             </TabsList>
             <TabsContent value="full">
-              {legacy ? (
-                <DossierDeclarationForm dossierId={dossier.id} decl={decl} items={items} mode={editMode} scope={scope} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
-              ) : (
-                // Chưa có giai đoạn Hải quan thì chưa vẽ: tránh hiện "BẢN NHÁP" / watermark cho tờ khai đã khai.
-                subQ.isPending ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
+              {/* Chưa có giai đoạn Hải quan thì chưa vẽ: tránh hiện "BẢN NHÁP" / watermark cho tờ khai đã khai. */}
+              {subQ.isPending ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
+                <Stack gap="md">
+                  {session.isSuccess && !(isDraft && scope.lockedSheets.length > 0) && (
+                    <StageNotice decl={decl} mode={canEdit ? editMode : "LOCKED"} canEdit={canEdit} cleared={stage === "CLEARED" || postEditing} />
+                  )}
                   <PrintDeclaration dossierId={dossier.id} decl={decl} items={items} mode={editMode} scope={scope} canEdit={canEdit} submission={subQ.data} branches={branches} sheet={sheet} onSheetChange={setSheet} leaveGuard={leaveGuard} />
-                )
+                </Stack>
               )}
             </TabsContent>
             <TabsContent value="docs">
               <DocumentsTab dossierId={dossier.id} />
             </TabsContent>
-            {legacy && (
-              <TabsContent value="customs">
-                {subQ.isLoading ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
-                  <Stack gap="lg">
-                    {/* Tóm tắt + so với số ứng dụng ước tính, rồi đủ chỉ tiêu Hải quan trả về theo Phụ lục II. */}
-                    {customsInfo && (
-                      <CustomsInfoPanel
-                        kind={decl.kind}
-                        info={customsInfo}
-                        estimate={{ customsValueVnd: decl.customsValueVnd, exchangeRate: decl.exchangeRate, ...(decl.kind === "IDA" ? { taxVnd: totalTax } : {}) }}
-                      />
-                    )}
-                    <DossierCustomsTab kind={decl.kind} submission={subQ.data} items={items} />
-                  </Stack>
-                )}
-              </TabsContent>
-            )}
             <TabsContent value="ops">
               {subQ.isLoading ? <SkeletonCard /> : subQ.isError ? <LoadError onRetry={() => void subQ.refetch()} /> : (
                 <DossierOperationsTab kind={decl.kind} submission={subQ.data} onGoSubmit={isDraft ? undefined : () => goTo("submit")} />

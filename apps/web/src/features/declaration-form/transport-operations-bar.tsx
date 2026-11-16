@@ -1,13 +1,12 @@
 "use client";
 // Hai nút nghiệp vụ ở đầu nhóm "Vận đơn & vận chuyển": Chia tách vận đơn (chỉ nhập khẩu), Khai báo định danh. Mỗi nút mở panel đủ chỉ tiêu
-// theo đặc tả FPT, điền sẵn từ tờ khai; phần kết quả Hải quan trả về chỉ đọc. Bản mẫu: gửi / hỏi kết quả chỉ báo "chưa kết nối".
-// Hồ sơ thật (`dossierId`): Khai báo định danh gửi Hải quan thật (IdentifierDialog); Chia tách vận đơn chưa kết nối.
+// theo đặc tả FPT, điền sẵn từ tờ khai; phần kết quả Hải quan trả về chỉ đọc. Gửi / hỏi kết quả hiện chỉ báo "chưa kết nối nghiệp vụ".
+// Có `dossierId`: Khai báo định danh gửi Hải quan thật (IdentifierDialog); Chia tách vận đơn chưa kết nối.
 import { Button, Dialog, DialogContent, DialogFooter, fill, Stack, toast, useMessages } from "@kb/ui";
 import type { TransportOperationForm } from "@kb/contracts";
 import { QrCode, Split } from "lucide-react";
 import { useState } from "react";
 import { BlockView } from "./block-view";
-import type { Stage } from "./fixtures";
 import { FORM_MESSAGES } from "./form.messages";
 import { IdentifierDialog } from "./identifier-dialog";
 import { conditionContext, type FormValues } from "./form-state";
@@ -27,13 +26,13 @@ const opText = (t: T, kind: Kind, id: TransportOperationForm["id"]) => {
   return { menu: t[kind === "EDA" && k.edaMenu ? k.edaMenu : k.menu], title: t[k.title], description: t[k.description] };
 };
 
-function OperationDialog({ form, kind, header, stage, showInapplicable, prototype, onClose }: { form: TransportOperationForm; kind: Kind; header: FormValues; stage: Stage; showInapplicable: boolean; prototype: boolean; onClose: () => void }) {
+function OperationDialog({ form, kind, header, showInapplicable, onClose }: { form: TransportOperationForm; kind: Kind; header: FormValues; showInapplicable: boolean; onClose: () => void }) {
   const t = useMessages(FORM_MESSAGES);
-  const [values, setValues] = useState<FormValues>(() => operationValues(form, kind, header, stage));
+  const [values, setValues] = useState<FormValues>(() => operationValues(form, kind, header));
   const ctx = conditionContext(kind, values);
   const Icon = ICON[form.id];
   const text = opText(t, kind, form.id);
-  const notConnected = (what: string) => toast({ tone: "info", title: prototype ? t.prototypeNotConnected : t.operationNotConnected, description: `${what} (${form.api.request} / ${form.api.response})` });
+  const notConnected = (what: string) => toast({ tone: "info", title: t.operationNotConnected, description: `${what} (${form.api.request} / ${form.api.response})` });
   return (
     <DialogContent title={text.title} icon={<Icon className="h-4 w-4" />} description={text.description} size="lg">
       <form
@@ -61,10 +60,10 @@ function OperationDialog({ form, kind, header, stage, showInapplicable, prototyp
 }
 
 /**
- * `prototype` = trang Bản mẫu (gửi báo "bản mẫu"); false = hồ sơ thật (panel ô vận đơn của bản in) – gửi báo chưa kết nối nghiệp vụ với Hải quan.
- * `dossierId` (hồ sơ thật): Khai báo định danh gửi Hải quan thật. `onIdentifier`: Xác nhận số định danh đã cấp → điền vào ô số vận đơn.
+ * Panel ô vận đơn của bản in (hồ sơ thật): gửi báo chưa kết nối nghiệp vụ với Hải quan.
+ * `dossierId`: Khai báo định danh gửi Hải quan thật. `onIdentifier`: Xác nhận số định danh đã cấp → điền vào ô số vận đơn.
  */
-export function TransportOperationsBar({ kind, header, stage, amending, showInapplicable, prototype = true, dossierId, onIdentifier }: { kind: Kind; header: FormValues; stage: Stage; amending: boolean; showInapplicable: boolean; prototype?: boolean; dossierId?: string; onIdentifier?: (identifierNo: string) => void }) {
+export function TransportOperationsBar({ kind, header, amending, showInapplicable, dossierId, onIdentifier }: { kind: Kind; header: FormValues; amending: boolean; showInapplicable: boolean; dossierId?: string; onIdentifier?: (identifierNo: string) => void }) {
   const t = useMessages(FORM_MESSAGES);
   const [open, setOpen] = useState<TransportOperationForm["id"] | null>(null);
   const forms = operationsFor(kind, amending);
@@ -83,7 +82,7 @@ export function TransportOperationsBar({ kind, header, stage, amending, showInap
         {current && dossierId && current.id === "dinh-danh" ? (
           <IdentifierDialog key={current.id} form={current} kind={kind} header={header} dossierId={dossierId} showInapplicable={showInapplicable} text={opText(t, kind, current.id)} onClose={() => setOpen(null)} {...(onIdentifier ? { onConfirm: onIdentifier } : {})} />
         ) : (
-          current && <OperationDialog key={current.id} form={current} kind={kind} header={header} stage={stage} showInapplicable={showInapplicable} prototype={prototype} onClose={() => setOpen(null)} />
+          current && <OperationDialog key={current.id} form={current} kind={kind} header={header} showInapplicable={showInapplicable} onClose={() => setOpen(null)} />
         )}
       </Dialog>
     </div>

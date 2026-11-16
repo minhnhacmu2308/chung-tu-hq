@@ -51,7 +51,7 @@ describe("identifierRequestOf / requestValues / resultValues", () => {
 describe("Panel Khai báo định danh – hồ sơ thật (mock dos_029)", () => {
   it("điền sẵn từ tờ khai → Gửi → mới có số tiếp nhận → Hỏi kết quả → khung kết quả (số định danh + QR) → Xác nhận điền số vào ô vận đơn; a11y", async () => {
     const onIdentifier = vi.fn();
-    const { container } = renderWithProviders(<TransportOperationsBar kind="IDA" header={HEADER} stage="nhap" amending={false} showInapplicable prototype={false} dossierId="dos_029" onIdentifier={onIdentifier} />);
+    const { container } = renderWithProviders(<TransportOperationsBar kind="IDA" header={HEADER} amending={false} showInapplicable dossierId="dos_029" onIdentifier={onIdentifier} />);
     const dialog = await open();
     await within(dialog).findByText("Chưa gửi khai báo định danh", undefined, T);
     expect((within(dialog).getByRole("textbox", { name: /Mã số thuế$/ }) as HTMLInputElement).value).toBe("0316789012");
@@ -80,7 +80,7 @@ describe("Panel Khai báo định danh – hồ sơ thật (mock dos_029)", () =
   }, 30_000);
 
   it("xóa MST → báo còn thiếu, không gửi", async () => {
-    renderWithProviders(<TransportOperationsBar kind="IDA" header={HEADER} stage="nhap" amending={false} showInapplicable prototype={false} dossierId="dos_029" />);
+    renderWithProviders(<TransportOperationsBar kind="IDA" header={HEADER} amending={false} showInapplicable dossierId="dos_029" />);
     const dialog = await open();
     await within(dialog).findByText("Chưa gửi khai báo định danh", undefined, T);
     await userEvent.clear(within(dialog).getByRole("textbox", { name: /Mã số thuế$/ }));

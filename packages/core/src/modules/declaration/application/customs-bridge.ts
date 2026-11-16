@@ -42,6 +42,8 @@ export async function getDeclarationSnapshot(deps: DeclarationDeps, orgId: strin
     items: items.map((i) => {
       // Số lượng (2) ĐÃ LƯU trên dòng (tính khi áp kế hoạch danh mục / đổi hệ số lô) – không gọi danh mục lúc truyền: gửi đúng nội dung đã duyệt.
       const q2 = storedQuantity2(i);
+      // KHÔNG thêm `vatCertain` (HSCodePro chưa chắc mã GTGT) vào dòng: `items` thuộc nội dung "đã gửi" (sentSnapshotOf) – thêm khóa làm ảnh chụp cũ lệch
+      // → SENT_SHEETS_CHANGED giả. vatCertain chỉ đổi cảnh báo (itemAutoChecks), không đổi ô tự điền (vatAutoFill.tx/tr) nên payload FPT không cần nó.
       return {
         id: i.id, lineNo: i.lineNo, description: i.description, quantity: i.quantity, unit: i.unit, unitPrice: i.unitPrice, amount: i.amount, origin: i.origin, hsConfirmed: i.hsConfirmed, importDutyRate: i.importDutyRate,
         vatRate: i.vatRate, vatCode: i.taxDetail?.vatCode ?? null, policyNote: i.policyNote, ...(i.itemCode ? { itemCode: i.itemCode } : {}), ...(q2 ? { quantity2: { qty: q2.qty, unit: q2.unit } } : {}),

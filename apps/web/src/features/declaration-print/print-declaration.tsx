@@ -12,7 +12,7 @@ import { cellDomId, type CellLook } from "./print-cell";
 import { regionDomId, PrintSheets } from "./print-sheets";
 import {
   cellState, customsAnswered, editedKeys, errorSlots, fieldLocator, LOOKUP_NAME_CELLS, otherFieldCells, pageCount, panelOrder, hiddenUntilCustoms, printData, printIssues, printValue,
-  printStateFor, sameNumber, sheetIssueCounts, withLookupNames, type PrintData, type PrintTarget,
+  printedKeyTarget, printStateFor, sameNumber, sheetIssueCounts, withLookupNames, type PrintData, type PrintTarget,
 } from "./print-state";
 import { codeScope } from "../declaration-form/code-scope";
 import { useCodeName } from "../declaration-form/use-code-list";
@@ -51,7 +51,7 @@ const slotId = (key: string, line?: number) => `${line ?? ""}:${key}`;
 const UNPLACED_DOM_ID = "print-unplaced-errors";
 
 function printModel(data: PrintData, decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean, lineMode: DeclarationEditMode) {
-  const { kind, values, itemRows, errors, lineNos, customs, estimate, estimated } = data;
+  const { kind, values, itemRows, printRows, checks, errors, lineNos, customs, estimate, estimated } = data;
   const info = submission?.customsInfo ?? null;
 
   const errorIds = new Set(errorSlots(kind, errors, lineNos).map((s) => slotId(s.key, s.line)));
@@ -73,12 +73,14 @@ function printModel(data: PrintData, decl: Declaration, items: LineItem[], submi
   };
   const look = (key: string, line?: number): CellLook => {
     const id = slotId(key, line);
-    const raw = (line === undefined ? values[key] : itemRows[line]?.[key]) ?? "";
+    const raw = (line === undefined ? values[key] : printRows[line]?.[key]) ?? "";
     const state = cellState({
       error: errorIds.has(id),
       missing: missingIds.has(id),
+      check: line !== undefined && Boolean(checks[line]?.has(key)),
       estimated: line === undefined && estimated.has(key),
-      edited: line === undefined ? editedDecl.has(key) : Boolean(editedItem[line]?.has(key)),
+      // Ô in dồn → khóa lưu của dòng nhóm (người khai sửa lưu ở khóa lưu).
+      edited: line === undefined ? editedDecl.has(key) : Boolean(editedItem[line]?.has(printedKeyTarget(itemRows[line] ?? {}, key).key)),
     });
     return { raw, state, compareTo: line === undefined ? compareTo(key) : null };
   };

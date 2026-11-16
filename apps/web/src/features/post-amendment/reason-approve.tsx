@@ -12,7 +12,6 @@ import { toastMutationError } from "@/lib/mutation-error";
 import { AmendLockProvider, type FieldLockLookup } from "../declaration-form/amend-context";
 import { BlockView } from "../declaration-form/block-view";
 import { conditionContext, type FormValues } from "../declaration-form/form-state";
-import { ViewPrefsProvider } from "../declaration-form/view-prefs";
 import { StickyActionBar } from "../dossier-detail/steps/declaration-parts";
 import type { AmaStepCtx } from "./ama-context";
 import { AMA_MESSAGES } from "./ama.messages";
@@ -61,11 +60,11 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
 
   const approved = a.status === "APPROVED";
   const block = (b: LayoutBlock) => (
-    <BlockView key={b.id} kind={ctx.kind} block={b} values={draft} onChange={onChange} ctx={conditionContext(ctx.kind, draft)} showInapplicable={false} showActions={false} />
+    <BlockView key={b.id} kind={ctx.kind} block={b} values={draft} onChange={onChange} ctx={conditionContext(ctx.kind, draft)} showInapplicable={false} />
   );
 
   return (
-    <ViewPrefsProvider>
+    <>
       <AmendLockProvider kind={ctx.kind} values={draft} active={false} override={lock}>
         <Stack gap="md">
           {approved && (
@@ -167,6 +166,6 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
           </form>
         </DialogContent>
       </Dialog>
-    </ViewPrefsProvider>
+    </>
   );
 }

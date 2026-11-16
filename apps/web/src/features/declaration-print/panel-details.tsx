@@ -116,7 +116,7 @@ export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf,
         </Stack>
       </AmendLockProvider>
 
-      {billCell && !readOnlyReason && <TransportOperationsBar kind={kind} header={values} stage="nhap" amending={amending} showInapplicable prototype={false} dossierId={decl.dossierId} {...(onIdentifier ? { onIdentifier } : {})} />}
+      {billCell && !readOnlyReason && <TransportOperationsBar kind={kind} header={values} amending={amending} showInapplicable dossierId={decl.dossierId} {...(onIdentifier ? { onIdentifier } : {})} />}
     </Stack>
   );
 }

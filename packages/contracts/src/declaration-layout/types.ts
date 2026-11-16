@@ -48,8 +48,11 @@ export type LayoutGroup = {
    */
   sequence?: string[];
 };
-/** Nhóm lặp: key chứa "{n}" (1..count) hoặc "{nn}" (01..count); mỗi dòng = các ô của `fields`. `sequential`: dòng n chỉ nhập khi dòng n−1 đã có (2.60 số container). */
-export type LayoutRepeat = { kind: "repeat"; label: string; no?: string; count: number; condition?: ConditionId; fields: LayoutField[]; sequential?: boolean };
+/**
+ * Nhóm lặp: key chứa "{n}" (1..count) hoặc "{nn}" (01..count); mỗi dòng = các ô của `fields`. `sequential`: dòng n chỉ nhập khi dòng n−1 đã có (2.60 số container).
+ * `rowKeys`: khóa nhóm của từng dòng (dòng n ứng với rowKeys[n-1]) – nhãn do app dịch. `fixedRows`: số dòng cố định theo loại (không thêm/bớt; sửa luôn hiện đủ `count` dòng, chỉ xem hiện dòng có giá trị).
+ */
+export type LayoutRepeat = { kind: "repeat"; label: string; no?: string; count: number; condition?: ConditionId; fields: LayoutField[]; sequential?: boolean; rowKeys?: readonly string[]; fixedRows?: boolean };
 export type LayoutItem = LayoutField | LayoutGroup | LayoutRepeat;
 
 export type LayoutBlock = {

@@ -12,7 +12,7 @@ export { CATALOG_IDA } from "./catalog-ida.js";
 export { CATALOG_IDA_ITEMS } from "./catalog-ida-items.js";
 export { CATALOG_EDA } from "./catalog-eda.js";
 export { catalogFieldRole, declarationFieldRole, findDeclarationFieldDef, type DeclarationFieldRole } from "./field-role.js";
-export { fieldDefForFptIndex } from "./fpt-index.js";
+export { fieldDefForFptIndex, fptIndexSlot } from "./fpt-index.js";
 export { DECLARATION_CONDITIONS, type ConditionContext, type ConditionId } from "./conditions.js";
 export * from "./code-tables.js";
 export * from "./payment-resolve.js";

@@ -8,9 +8,9 @@
 // Ctrl+S / Ctrl+Enter → lưu như Enter (ô đang gõ dở được chốt trước). Esc trên ô đã sửa → trả ô về giá trị cũ (lần nữa → đóng panel như thường).
 // F1 / nút "Phím tắt" → bảng phím tắt (panel-keys.ts).
 // Tab trong ô nhập → ô nhập kế tiếp của panel (bỏ qua nút TH / hướng dẫn). Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
-import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Button, Checkbox, Dialog, RadioGroup, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
 import {
-  editBlockFor, fieldRole, fixedPlaceCode, formKeysOf, isDeclarationFieldEditable, itemFieldCode, sequenceBlocker, transportPlaceChanges, type AmendLock, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
+  editBlockFor, fieldRole, fixedPlaceCode, formKeysOf, isDeclarationFieldEditable, itemFieldCode, itemOverrides, OTHER_TAX_GROUPS, otherTaxIssues, otherTaxKeys, sequenceBlocker, transportPlaceChanges, type AmendLock, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
 } from "@kb/contracts";
 import { CheckCircle2, CopyCheck, Keyboard, PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { formatNumber } from "@/lib/format";
 import { ChangeHsDialog } from "../dossier-detail/steps/agent-step";
 import { errorsForField, type FieldError } from "../dossier-detail/steps/customs-errors";
-import { declarationLockOf, declarationValues, editableKeys, pendingEdits, pendingItemEdits } from "../declaration-form/dossier-adapter";
+import { declarationLockOf, gtgtAutoCheck, declarationValues, editableKeys, pendingEdits, pendingItemEdits } from "../declaration-form/dossier-adapter";
 import { RoleMark } from "../declaration-form/field";
 import { fieldTitle } from "../declaration-form/display";
 import type { FormValues } from "../declaration-form/form-state";
@@ -27,7 +27,9 @@ import { useCodeName, usePlaceNameLookup } from "../declaration-form/use-code-li
 import { QtySuggestionHint } from "../declaration-form/qty-hint";
 import { PanelDetails } from "./panel-details";
 import { panelShortcut, revertField } from "./panel-keys";
-import { applyToOtherLines, fieldLocator, nextTarget, taxCodeKeys, type PrintTarget } from "./print-state";
+import { applyToOtherLines, emptyOtherTaxGroups, emptyPrintedTaxSlot, fieldLocator, followTaxSlot, nextTarget, printedKeyTarget, taxCodeKeys, type PrintTarget } from "./print-state";
+import { OTHER_TAX_MESSAGES, otherTaxGroupLabel } from "../declaration-form/other-tax.messages";
+import { reasonText } from "@/lib/reason-codes";
 import { SavedDialog } from "./saved-dialog";
 import { ShortcutsDialog } from "./shortcuts-dialog";
 import { UnsavedDialog } from "./unsaved-dialog";
@@ -70,6 +72,7 @@ const QTY_KEYS = new Set(["HAG_QN1", "HAG_QT1", "HAG_QN2", "HAG_QT2"]);
 
 export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope, sheet = 1, canEdit, values, itemRows, lineNos, errors, order, target, onTarget, leaveGuard }: Props) {
   const t = useMessages(PRINT_MESSAGES);
+  const ot = useMessages(OTHER_TAX_MESSAGES);
   const locale = useUiLocale();
   const kind = decl.kind;
   const save = useSaveDeclarationEdits(dossierId);
@@ -137,14 +140,43 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   // Mã thuế của dòng hàng: mặc định áp cho mọi dòng khác của tờ (bỏ chọn → chỉ dòng đang sửa, các dòng khác sửa tay từng dòng).
   const [applyAll, setApplyAll] = useState(true);
   const [help, setHelp] = useState(false);
+  // Ô GTGT tự điền đang có cảnh báo kiểm tra: người khai bấm "Xác nhận" → mã đang có lưu như giá trị người khai (hết cảnh báo), như form đầy đủ.
+  const [confirmed, setConfirmed] = useState<string[]>([]);
+  // Ô in "Thuế và thu khác" còn trống: loại thuế người khai chọn để thêm (theo dòng + số ô in; chuyển sang ô khác là bỏ).
+  const [pick, setPick] = useState<{ at: string; group: number } | null>(null);
 
-  const spot = shown ? fieldLocator(kind).get(shown.key) : undefined;
   const line = shown?.line;
   const item = line === undefined ? undefined : items[line];
   const row = line === undefined ? undefined : itemRows[line];
+  // Ô in "Thuế và thu khác" đã dồn ô → panel mở đúng dòng theo loại thuế (khóa lưu), không theo số ô in.
+  // Ô in trống → người khai chọn loại thuế cần thêm (chỉ các loại dòng hàng chưa khai); chưa chọn → loại còn trống đầu tiên.
+  const emptySlot = row && shown ? emptyPrintedTaxSlot(row, shown.key) : undefined;
+  const pickAt = emptySlot === undefined ? undefined : `${line}:${emptySlot}`;
+  const pickable = row && emptySlot !== undefined ? emptyOtherTaxGroups(row) : [];
+  const pickGroup = pick && pick.at === pickAt && pickable.includes(pick.group) ? pick.group : undefined;
+  const spotKey = shown ? (row ? printedKeyTarget(row, shown.key, pickGroup).key : shown.key) : undefined;
+  const spot = spotKey ? fieldLocator(kind).get(spotKey) : undefined;
+  // Khóa của nhóm ô theo cách in (ô in k thay cho dòng nhóm g) – để Tab / "cùng nhóm" so với khóa in.
+  const slotNo = shown ? /^HAG_(?:TX|TR|TG)([1-5])$/.exec(shown.key)?.[1] : undefined;
+  const printedGroupKeys = spot?.group.map((f) => (slotNo ? f.key.replace(/^(HAG_(?:TX|TR|TG))[1-5]$/, `$1${slotNo}`) : f.key));
+  const taxRowGroup = spotKey ? /^HAG_(?:TX|TR|TG)([1-5])$/.exec(spotKey)?.[1] : undefined;
   const edits = !spot || readOnlyReason ? []
     : line === undefined ? pendingEdits(kind, original, { ...original, ...changes }, editable)
-    : item && row ? pendingItemEdits(kind, [item.id], [row], [{ ...row, ...changes }]) : [];
+    : item && row ? pendingItemEdits(kind, [item.id], [row], [{ ...row, ...changes }], [itemOverrides(decl.fields, item.id)], [confirmed]) : [];
+  const own = item ? itemOverrides(decl.fields, item.id) : undefined;
+  // Cảnh báo GTGT hết khi: đã có mã GTGT người khai lưu, ô đang có mã khác mã tự điền, hoặc đã bấm "Xác nhận" với ô có mã. Ô trống không tính.
+  const vat = item && own && row ? gtgtAutoCheck(kind, item, own, row, { ...row, ...changes }, confirmed) : { checks: [], confirmKeys: [] };
+  const autoChecks = vat.checks;
+  // Lỗi chặn truyền của dòng loại thuế đang sửa (mã sai loại, trùng loại, miễn giảm khác loại, miễn giảm không có mã) – báo ngay khi nhập.
+  const taxIssues = taxRowGroup && row && !readOnlyReason ? otherTaxIssues({ ...row, ...changes }).filter((i) => i.group === Number(taxRowGroup)) : [];
+  const vatTx = (changes["HAG_TX5"] ?? row?.["HAG_TX5"] ?? "").trim();
+  // Đổi loại thuế của ô trống: bỏ phần đã nhập cho loại cũ (mã thuộc loại cũ, không dùng được cho loại mới).
+  const pickType = (g: number) => {
+    const old = taxRowGroup ? Object.values(otherTaxKeys(Number(taxRowGroup))) : [];
+    setChanges((c) => Object.fromEntries(Object.entries(c).filter(([k]) => !old.includes(k))));
+    if (pickAt) setPick({ at: pickAt, group: g });
+  };
+  const confirmVat = () => { if (vat.confirmKeys.length > 0) setConfirmed(vat.confirmKeys); };
   const dirty = edits.length > 0;
   const taxKeys = !spot || readOnlyReason || !item || !row ? [] : spot.group.map((f) => f.key).filter((k) => taxCodeKeys(kind).has(k) && !lockOf(k));
   const spread = taxKeys.length > 0 && line !== undefined && row ? applyToOtherLines(items, itemRows, line, { ...row, ...changes }, taxKeys) : { edits: [], lines: 0 };
@@ -167,7 +199,9 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   const field = spot?.field;
   const no = field ? field.no ?? spot.parentNo : undefined;
   // Ô con của nhóm (1.29 Mã / Tên, 1.33 Mã / Tên…): panel hiện cả nhóm → tiêu đề theo tên nhóm.
-  const title = field ? fieldTitle(no, field.no ? field.label : spot.groupLabel ?? field.label) : "";
+  // "Thuế và thu khác": tiêu đề = nhãn loại thuế của dòng (CBPG, TTĐB, GTGT…).
+  const taxLabel = taxRowGroup ? otherTaxGroupLabel(ot, OTHER_TAX_GROUPS[Number(taxRowGroup) - 1]?.key) : undefined;
+  const title = field ? fieldTitle(no, taxLabel ?? (field.no ? field.label : spot.groupLabel ?? field.label)) : "";
   // Lưu / xác nhận xong → đóng panel, người dùng quay lại bản in (khỏi phải bấm Đóng).
   const commit = () => save.mutate([...edits, ...confirmations, ...bulk], { onSuccess: () => { setChanges({}); onTarget(null); } });
 
@@ -177,13 +211,13 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   if (tid(seen) !== tid(target) && !save.isPending) {
     setSeen(target);
     // Ô khác cùng nhóm, cùng dòng: panel đang hiện đúng các ô đó → giữ phần đang sửa, chỉ đổi ô được chọn.
-    const sameGroup = Boolean(target && shown && target.line === shown.line && spot?.group.some((f) => f.key === target.key));
+    const sameGroup = Boolean(target && shown && target.line === shown.line && printedGroupKeys?.includes(target.key));
     if (tid(target) !== tid(shown)) {
       if (sameGroup) setShown(target);
       else if (dirty) setConfirm({ next: target });
       else {
         setShown(target);
-        setChanges({});
+        setChanges({}); setConfirmed([]);
       }
     }
   }
@@ -193,12 +227,28 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   if (seenData !== dataKey) {
     setSeenData(dataKey);
     setChanges({});
+    setConfirmed([]);
   }
+  // Lưu xong mà panel còn mở ("Ở lại"): bản in dồn ô lại có thể đẩy loại thuế đang sửa sang ô in khác (thêm BVMT trước GTGT → GTGT
+  // xuống một ô) → panel đi theo loại thuế vừa sửa, không nhảy sang loại khác đang nằm ở số ô cũ. Loại thuế lấy từ lần vẽ trước
+  // (effect theo dõi khai báo sau effect này nên vẫn giữ giá trị cũ khi effect này chạy).
+  const shownTaxGroup = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const group = shownTaxGroup.current;
+    if (!group || !shown || shown.line === undefined) return;
+    const key = followTaxSlot(itemRows[shown.line] ?? {}, shown.key, group);
+    if (!key) return;
+    const next = { line: shown.line, key };
+    setShown(next);
+    setSeen(next);
+    onTarget(next);
+  }, [dataKey]); // dữ liệu tờ khai đổi (lưu ở panel này hay nơi khác): đi theo loại thuế. Giữ effect này TRƯỚC effect cập nhật shownTaxGroup.
+  useEffect(() => { shownTaxGroup.current = taxRowGroup ? Number(taxRowGroup) : undefined; });
 
   // Chuyển ô → focus ô nhập của đúng ô được chọn trong nhóm; ô đó chỉ đọc → ô nhập đầu tiên của nhóm.
   const body = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
-  const shownKey = shown?.key;
+  const shownKey = spotKey;
   const focusField = useCallback((key: string | undefined) => {
     const root = body.current;
     const own = key ? root?.querySelector<HTMLElement>(`[data-panel-field="${key}"] ${FIELDS}`) : null;
@@ -209,6 +259,9 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   // (body / ô vừa bấm trên bản in) thì đặt lại; người dùng tự focus chỗ khác thì thôi.
   useEffect(() => {
     if (!shownId) return;
+    // Đang chọn loại thuế cho ô trống (phím mũi tên trong nhóm lựa chọn) → giữ focus ở đó, không kéo sang ô mã.
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement && active.type === "radio" && body.current?.contains(active)) return;
     focusField(shownKey);
     const start = document.activeElement;
     let tries = 0;
@@ -238,7 +291,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   const proceed = (next: PrintTarget | null, href?: string) => {
     stayed.current = false;
     setConfirm(null);
-    setChanges({});
+    setChanges({}); setConfirmed([]);
     setShown(next);
     if (href) router.replace(href, { scroll: false });
   };
@@ -360,7 +413,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
     const nodes = [...e.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.offsetParent !== null || n === document.activeElement);
     const edge = e.shiftKey ? nodes[0] : nodes[nodes.length - 1];
     if (!edge || document.activeElement !== edge) return;
-    const next = nextTarget(order, shown, spot?.group.map((f) => f.key) ?? [shown.key], e.shiftKey ? -1 : 1);
+    const next = nextTarget(order, shown, printedGroupKeys ?? [shown.key], e.shiftKey ? -1 : 1);
     if (!next) return;
     e.preventDefault();
     e.stopPropagation();
@@ -409,6 +462,38 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
               )}
               {/* Danh mục hàng hóa: ĐVT invoice khác ĐVT khai → phép quy đổi lượng cạnh ô số lượng (cả khi chỉ xem); sửa hệ số lô khi sửa được. */}
               {(item?.qtySuggestion || item?.quantity2) && spot.group.some((g) => QTY_KEYS.has(g.key)) && <QtySuggestionHint item={item} dossierId={dossierId} editable={!readOnlyReason} />}
+              {autoChecks.length > 0 && taxRowGroup === "5" && (
+                <Alert
+                  tone="warning"
+                  // Mã tự điền đúng → "Xác nhận" giữ nguyên mã làm giá trị người khai (lưu bằng nút Lưu như các sửa khác → field_audit).
+                  {...(!readOnlyReason && vat.confirmKeys.length > 0 ? { action: (
+                    <Button type="button" size="sm" variant="secondary" leftIcon={<CheckCircle2 className="h-4 w-4" />} aria-label={fill(ot.confirmAria, { code: vatTx })} onClick={confirmVat}>
+                      {ot.confirm}
+                    </Button>
+                  ) } : {})}
+                >
+                  {autoChecks.map((c) => <p key={c.reason}>{reasonText(c.reason, undefined, undefined, locale)}</p>)}
+                </Alert>
+              )}
+              {kind === "IDA" && !readOnlyReason && pickable.length > 1 && taxRowGroup && (
+                <RadioGroup
+                  label={ot.groupHeader}
+                  description={ot.pickHint}
+                  framed
+                  value={taxRowGroup}
+                  onChange={(v) => pickType(Number(v))}
+                  disabled={save.isPending}
+                  options={pickable.map((g) => {
+                    const group = OTHER_TAX_GROUPS[g - 1]!;
+                    return { value: String(g), label: otherTaxGroupLabel(ot, group.key) ?? group.key, description: fill(ot.scopeLetters, { letters: group.taxPrefixes.join(", ") }) };
+                  })}
+                />
+              )}
+              {taxIssues.length > 0 && (
+                <Alert tone="danger">
+                  {taxIssues.map((i) => <p key={i.reason}>{reasonText(i.reason, undefined, undefined, locale)}</p>)}
+                </Alert>
+              )}
               <PanelDetails
                 kind={kind}
                 spot={spot}

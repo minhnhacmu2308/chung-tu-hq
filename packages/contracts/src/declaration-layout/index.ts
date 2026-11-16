@@ -12,9 +12,13 @@ export {
   type DeclarationEditMode, type DeclarationEditScope, type EditBlock, type EditSheet, type EditTarget, type ExtraFieldMeta, type FptObjectName,
 } from "./app-fields.js";
 export {
-  isItemFieldKey, itemDefaults, itemFieldClass, itemFieldCode, itemFieldFpt, itemFieldIssue, itemFieldMeta, itemInputKeys, itemOverrides, lawCodesByLine, parseItemFieldCode, taxTable, vatCode,
-  type ItemDefaultsInput, type ItemFieldClass,
+  isItemFieldKey, itemDefaults, itemFieldClass, itemFieldCode, itemFieldFpt, itemFieldIssue, itemFieldMeta, itemInputKeys, itemOverrides, lawCodesByLine, parseItemFieldCode, taxTable, vatAutoFill, legacySentVatCode, itemAutoChecks,
+  type ItemDefaultsInput, type ItemFieldClass, type OtherTaxCheckReason, type VatAutoFill,
 } from "./item-fields.js";
+export {
+  OTHER_TAX_GROUPS, compactOtherTaxes, mergeOtherTaxes, normalizationEdits, normalizeOtherTaxes, otherTaxCodes, otherTaxGroupOf, otherTaxIssues, otherTaxKeys,
+  type OtherTaxGroupKey, type OtherTaxIssue, type OtherTaxIssueReason,
+} from "./other-tax.js";
 export { declarantFieldApplicable, inapplicableExtraCodes } from "./applicable.js";
 export { fieldSequences, sequenceBlocker, sequenceHoles, type FieldSequence } from "./sequence.js";
 export { allOrNoneGaps, conditionContext, declarationRequiredGaps, groupMissing, isApplicable, itemFormValues, missingRequired, requiredGaps, requiredGapsText, type ItemFormInput, type RequiredGap } from "./required.js";

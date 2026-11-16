@@ -442,11 +442,11 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
         </DialogContent>
       </Dialog>
 
-      <Dialog open={historyOpen} onOpenChange={setHistoryOpen} defaultPresentation="panel">
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent title={t.historyTitle} icon={<History className="h-4 w-4" />} description={t.historyDesc}>
           <MessageList messages={(sheet?.messages ?? []).filter((m) => baseOp(m.operation) === "CONT_LIST" || baseOp(m.operation) === "KVGS")} />
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setHistoryOpen(false)}>{t.historyClose}</Button>
+            <Button type="button" variant="secondary" onClick={() => setHistoryOpen(false)}>{t.historyClose}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

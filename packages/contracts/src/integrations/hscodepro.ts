@@ -17,12 +17,22 @@ export const HsTaxSchema = z.object({
   }),
   source_date: z.string(),
 });
+/**
+ * Cảnh báo có cấu trúc (bản hscode-api mới, cùng nội dung `warnings`): `code` ổn định để giao diện hiện nhãn ngắn theo ngôn ngữ,
+ * `level` tô màu, `group` xếp cột (phân loại / thuế / chính sách), `items` = từng mục chi tiết.
+ */
+export const HsWarningDetailSchema = z.object({
+  code: z.string(), level: z.enum(["danger", "warning", "info"]), group: z.enum(["classification", "tax", "policy"]), text: z.string(),
+  params: z.record(z.string(), z.string()).optional(), items: z.array(z.string()).optional(),
+});
 export const HsAlternativeSchema = z.object({ hs_code: HS8, hs_description: z.string(), confidence: z.number().min(0).max(100), why_not: z.string(), tax: HsTaxSchema.nullable() });
 export const HsResultSchema = z.object({
   hs_code: HS8, hs_description: z.string(), confidence: z.number().min(0).max(100), reasoning: z.string(),
   legal_basis: z.array(z.string()), warnings: z.array(z.string()), tax: HsTaxSchema.nullable(), alternatives: z.array(HsAlternativeSchema).max(3),
   /** Mô tả hàng tiếng Việt AI gợi ý (bản hscode-api mới). */
   description_vi: z.string().nullable().optional(),
+  // Lỗi ở phần mở rộng này (vd hscode-api thêm level/group mới) chỉ bỏ phần chi tiết – vẫn còn `warnings` dạng câu, không hỏng cả job HS.
+  warning_details: z.array(HsWarningDetailSchema).optional().catch(undefined),
 });
 export const HsQuestionSchema = z.object({
   id: z.string(), question: z.string(), header: z.string().optional(), detail: z.string().optional(),
@@ -61,6 +71,7 @@ export const HsApiErrorBodySchema = z.object({ error: z.string(), code: z.string
 export const HS_CO_FORMS = ["D", "E", "AK", "AANZ", "AI", "AJ", "VJ", "VC", "VK", "EAV", "EUR.1", "EUR.1-UK", "CPTPP", "VI", "CEPA"] as const;
 
 export type HsTax = z.infer<typeof HsTaxSchema>;
+export type HsWarningDetail = z.infer<typeof HsWarningDetailSchema>;
 export type HsResult = z.infer<typeof HsResultSchema>;
 export type HsPendingQuestion = z.infer<typeof HsPendingQuestionSchema>;
 export type HsItemStatus = z.infer<typeof HsItemStatusSchema>;

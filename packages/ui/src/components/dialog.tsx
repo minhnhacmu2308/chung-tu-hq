@@ -6,10 +6,10 @@ import { useMessages, type Messages } from "../lib/i18n.js";
 import { IconTile } from "./icon-tile.js";
 
 const MESSAGES = {
-  vi: { close: "Đóng", modal: "Hiển thị dạng cửa sổ", panel: "Hiển thị dạng panel bên phải", resize: "Kéo để đổi độ rộng (nhấp đúp để về mặc định)" },
-  en: { close: "Close", modal: "Show as window", panel: "Show as side panel", resize: "Drag to resize (double-click to reset)" },
-  zh: { close: "关闭", modal: "以窗口显示", panel: "以右侧面板显示", resize: "拖动调整宽度（双击恢复默认）" },
-} satisfies Messages<"close" | "modal" | "panel" | "resize">;
+  vi: { close: "Đóng", modal: "Hiển thị dạng cửa sổ", panel: "Hiển thị dạng panel bên phải", sheet: "Hiển thị dạng khay từ dưới lên", dock: "Hiển thị dạng cột bên phải, đẩy nội dung sang trái", resize: "Kéo để đổi độ rộng (nhấp đúp để về mặc định)" },
+  en: { close: "Close", modal: "Show as window", panel: "Show as side panel", sheet: "Show as bottom sheet", dock: "Dock to the right, pushing the page aside", resize: "Drag to resize (double-click to reset)" },
+  zh: { close: "关闭", modal: "以窗口显示", panel: "以右侧面板显示", sheet: "以底部抽屉显示", dock: "停靠在右侧，页面内容左移", resize: "拖动调整宽度（双击恢复默认）" },
+} satisfies Messages<"close" | "modal" | "panel" | "sheet" | "dock" | "resize">;
 
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
@@ -18,12 +18,16 @@ export const DialogClose = DialogPrimitive.Close;
  * modal = cửa sổ giữa màn hình, phủ nền, giữ focus trong dialog.
  * panel = drawer trượt từ phải vào, cao hết màn hình, nằm ĐÈ lên trang (trang không bị đẩy/co lại) và KHÔNG chặn
  * trang phía sau (thao tác song song được, vd bấm ô khác trên bản in khi đang sửa).
+ * sheet = khay trượt từ dưới lên, rộng theo màn hình, cao tối đa 85% – phủ nền và giữ focus như cửa sổ; hợp với bảng/danh sách dài.
+ * dock = như panel nhưng ĐẨY nội dung trang sang trái (giống trợ lý AI ghim bên phải): trang không bị che; màn < md thì nổi như panel.
  */
-export type DialogPresentation = "modal" | "panel";
+export type DialogPresentation = "modal" | "panel" | "sheet" | "dock";
 
-const PresentationContext = createContext<{ mode: DialogPresentation; setMode: (p: DialogPresentation) => void }>({
+// auto = nơi gọi không chọn dạng và người dùng chưa bấm đổi: DialogContent có `tone` (hộp xác nhận) thì mở dạng cửa sổ.
+const PresentationContext = createContext<{ mode: DialogPresentation; setMode: (p: DialogPresentation) => void; auto: boolean }>({
   mode: "modal",
   setMode: () => {},
+  auto: false,
 });
 
 export type DialogProps = ComponentProps<typeof DialogPrimitive.Root> & {
@@ -38,15 +42,19 @@ export type DialogProps = ComponentProps<typeof DialogPrimitive.Root> & {
  * toàn bộ nội dung → mất dữ liệu form đang nhập. Hành vi "chặn trang" của dạng cửa sổ do DialogContent tự làm:
  * lớp phủ, giữ focus (FocusScope), aria-modal, khóa cuộn.
  */
-export function Dialog({ presentation, defaultPresentation = "modal", onPresentationChange, children, ...props }: DialogProps) {
-  const [inner, setInner] = useState<DialogPresentation>(defaultPresentation);
+// Mặc định: cột bên phải đẩy nội dung (dock) – trang không bị che. Hộp xác nhận (`tone`, ConfirmDialog) vẫn là cửa sổ.
+export function Dialog({ presentation, defaultPresentation, onPresentationChange, children, ...props }: DialogProps) {
+  const [inner, setInner] = useState<DialogPresentation>(defaultPresentation ?? "dock");
+  const [touched, setTouched] = useState(false);
   const mode = presentation ?? inner;
   const setMode = (p: DialogPresentation) => {
+    setTouched(true);
     if (presentation === undefined) setInner(p);
     onPresentationChange?.(p);
   };
+  const auto = presentation === undefined && defaultPresentation === undefined && !touched;
   return (
-    <PresentationContext.Provider value={{ mode, setMode }}>
+    <PresentationContext.Provider value={{ mode, setMode, auto }}>
       <DialogPrimitive.Root {...props} modal={false}>
         {children}
       </DialogPrimitive.Root>
@@ -72,7 +80,7 @@ export type DialogContentProps = Omit<ComponentProps<typeof DialogPrimitive.Cont
   /** Hiện nút chuyển cửa sổ ↔ panel trên header. */
   allowPresentationToggle?: boolean;
   /** Nhãn – đổi khi có đa ngôn ngữ. */
-  labels?: { close?: string; modal?: string; panel?: string; resize?: string };
+  labels?: { close?: string; modal?: string; panel?: string; sheet?: string; dock?: string; resize?: string };
 };
 
 const iconBtn =
@@ -91,6 +99,22 @@ function PanelIcon() {
     <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.4">
       <rect x="2" y="3" width="12" height="10" rx="1.5" />
       <path d="M10 3v10" />
+    </svg>
+  );
+}
+function DockIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.4">
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <path d="M10 3v10M5 8h3M6.5 6.5 5 8l1.5 1.5" />
+    </svg>
+  );
+}
+function SheetIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.4">
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <path d="M2 9h12" />
     </svg>
   );
 }
@@ -131,6 +155,39 @@ function ModalOverlay({ active }: { active: boolean }) {
       className={cn("fixed inset-0 z-50 bg-overlay motion-safe:animate-fade-in [@media(prefers-reduced-transparency:no-preference)]:backdrop-blur-xs", !active && "hidden")}
     />
   );
+}
+
+/**
+ * Dạng dock: chừa chỗ bên phải trang bằng đúng độ rộng drawer (body padding-right qua `--kb-dock-width`, CSS chỉ áp từ md).
+ * Nằm TRONG Portal như ModalOverlay – Portal chỉ dựng con khi dialog đang mở.
+ */
+/** Các drawer dock đang mở → độ rộng. Dock lồng nhau (sửa trong chi tiết): trang chừa theo drawer rộng nhất, chỉ bỏ khi đóng cái cuối. */
+const openDocks = new Map<HTMLElement, number>();
+function syncDocks() {
+  const root = document.documentElement;
+  if (openDocks.size === 0) {
+    delete document.body.dataset.kbDocked;
+    root.style.removeProperty("--kb-dock-width");
+    return;
+  }
+  root.style.setProperty("--kb-dock-width", `${Math.max(...openDocks.values())}px`);
+  document.body.dataset.kbDocked = "";
+}
+
+function DockSpacer({ el }: { el: HTMLElement | null }) {
+  useEffect(() => {
+    if (!el) return;
+    const set = () => (openDocks.set(el, el.offsetWidth), syncDocks());
+    set();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(set);
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      openDocks.delete(el);
+      syncDocks();
+    };
+  }, [el]);
+  return null;
 }
 
 /** Drawer hẹp nhất / phần trang chừa lại bên trái tối thiểu khi kéo rộng. */
@@ -231,13 +288,16 @@ export function DialogContent({
   children,
   ...props
 }: DialogContentProps) {
-  const { mode, setMode } = useContext(PresentationContext);
+  const ctx = useContext(PresentationContext);
+  const mode: DialogPresentation = ctx.auto && tone ? "modal" : ctx.mode;
+  const setMode = ctx.setMode;
   const l = useMessages(MESSAGES, labels);
   // Dạng panel: bấm/rê ra trang phía sau không đóng panel (Escape và nút Đóng vẫn đóng).
   const keepOpen = (e: Event) => {
-    if (mode === "panel") e.preventDefault();
+    if (mode === "panel" || mode === "dock") e.preventDefault();
   };
-  const isModal = mode === "modal";
+  // Cửa sổ và khay dưới: phủ nền + giữ focus; chỉ panel bên phải cho thao tác song song với trang
+  const isModal = mode === "modal" || mode === "sheet";
   const [drawerWidth, setDrawerWidth] = useDrawerWidth(size);
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
 
@@ -245,6 +305,7 @@ export function DialogContent({
     <DialogPrimitive.Portal>
       {/* Lớp phủ tự làm (Overlay của Radix chỉ có ở chế độ modal). Bấm vào = bấm ngoài → Radix đóng dialog. */}
       <ModalOverlay active={isModal} />
+      {mode === "dock" && <DockSpacer el={contentEl?.parentElement ?? null} />}
       <DialogPrimitive.Content
         data-glass=""
         data-presentation={mode}
@@ -253,7 +314,9 @@ export function DialogContent({
           "fixed z-50 flex w-full flex-col border-border bg-surface text-fg focus-visible:outline-none",
           mode === "modal"
             ? cn("left-1/2 top-1/2 w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border shadow-lg motion-safe:animate-pop-in", MODAL_SIZE[size])
-            : cn("inset-y-0 right-0 border-l shadow-lg motion-safe:animate-slide-in-right", PANEL_SIZE[size]),
+            : mode === "sheet"
+              ? "inset-x-0 bottom-0 mx-auto max-h-[85dvh] max-w-7xl rounded-t-lg border border-b-0 shadow-lg motion-safe:animate-sheet-in"
+              : cn("inset-y-0 right-0 border-l shadow-lg motion-safe:animate-slide-in-right", PANEL_SIZE[size]),
           // Sau lớp viền của chế độ (`border` ghi đè `border-t-*` đứng trước).
           tone && (tone === "danger" ? "border-t-4 border-t-danger" : "border-t-4 border-t-warning"),
           className,
@@ -272,6 +335,7 @@ export function DialogContent({
         */}
         <FocusScope asChild trapped={isModal} loop onMountAutoFocus={(e) => e.preventDefault()}>
         <div ref={setContentEl} className="flex min-h-0 flex-1 flex-col">
+        {mode === "sheet" && <span aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border-strong" />}
         {/* div, không phải <header>: hai dialog chồng nhau (panel chi tiết + cửa sổ con) sẽ thành hai landmark banner. */}
         <div className="flex items-center gap-3 border-b border-border px-6 py-4">
           {icon && (tone ? <IconTile icon={icon} tone={tone} size="sm" /> : <span aria-hidden="true" className="text-fg-muted">{icon}</span>)}
@@ -286,6 +350,12 @@ export function DialogContent({
               </button>
               <button type="button" className={iconBtn} aria-label={l.panel} aria-pressed={mode === "panel"} onClick={() => setMode("panel")}>
                 <PanelIcon />
+              </button>
+              <button type="button" className={iconBtn} aria-label={l.dock} aria-pressed={mode === "dock"} onClick={() => setMode("dock")}>
+                <DockIcon />
+              </button>
+              <button type="button" className={iconBtn} aria-label={l.sheet} aria-pressed={mode === "sheet"} onClick={() => setMode("sheet")}>
+                <SheetIcon />
               </button>
             </div>
           )}
@@ -313,8 +383,9 @@ export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
       className={cn(
         // sticky tính "đáy" từ mép trong phần đệm của vùng cuộn (py-5) → -bottom-5 để chân popup nằm đúng đáy,
         // không bị đẩy lên đè khoảng cách với ô cuối (lỗi cũ: ô nhập cuối dính sát đường kẻ).
+        // z-30: trên tiêu đề dính (z-10/z-20) của bảng con trong popup khi cuộn.
         // Nhãn dài (vi/zh) hoặc popup hẹp: nút xuống dòng; vùng rất hẹp thì xếp dọc, nút chính ở trên, rộng hết.
-        "sticky -bottom-5 -mx-6 -mb-5 mt-auto flex flex-wrap justify-end gap-2 cq-max-sm:flex-col-reverse cq-max-sm:*:w-full rounded-b-lg border-t border-border bg-surface px-6 py-4",
+        "sticky -bottom-5 z-30 -mx-6 -mb-5 mt-auto flex flex-wrap justify-end gap-2 cq-max-sm:flex-col-reverse cq-max-sm:*:w-full rounded-b-lg border-t border-border bg-surface px-6 py-4",
         // Nội dung cuộn dưới chân popup mờ dần thay vì bị cắt cụt ngay đường kẻ.
         // Lớp mờ nằm ngay trên đường kẻ (-translate-y-px: không che border-t).
         "before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:-translate-y-px before:bg-gradient-to-t before:from-surface before:to-transparent",

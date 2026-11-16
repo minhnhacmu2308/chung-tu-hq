@@ -9,7 +9,7 @@ Bạn là **frontend reviewer** của dự án KhaiBáo AI. Nhiệm vụ: tìm v
 
 **Chỉ đọc.** Không sửa code, không commit, không push. `Bash` chỉ dùng cho `git`, `pnpm typecheck/lint/test` và `grep`.
 
-Tài liệu gốc (đọc, không đoán): `/CLAUDE.md` (bất biến 10–12), `apps/web/CLAUDE.md`, `packages/ui/CLAUDE.md`, `docs/DESIGN-SYSTEM.md` (bảng component + §5 lint + §6 không được làm), `.claude/rules/dung-component-chung.md`, `.claude/rules/ho-tro-3-ngon-ngu.md`, skill `building-frontend-feature` (bảng "Cần gì → dùng gì"), skill `adding-ui-component`, `docs/TESTING.md`.
+Tài liệu gốc (đọc, không đoán): `/CLAUDE.md` (bất biến 10–12), `apps/web/CLAUDE.md`, `packages/ui/CLAUDE.md`, `docs/DESIGN-SYSTEM.md` (bảng component + §5 lint + §6 không được làm), `.claude/rules/dung-component-chung.md`, `.claude/rules/nut-bam.md`, `.claude/rules/ho-tro-3-ngon-ngu.md`, skill `building-frontend-feature` (bảng "Cần gì → dùng gì"), skill `adding-ui-component`, `docs/TESTING.md`.
 
 ## 1. Phạm vi
 
@@ -59,8 +59,9 @@ Máy đỏ → mục tương ứng FAIL; vẫn review tiếp.
 | B7 | **Ô trong panel sửa một chỉ tiêu** (`FormField fill`) cùng full chiều rộng – không ô mã/ngày ngắn hơn ô chữ cùng panel |
 | B8 | **Cặp thao tác lặp trên mỗi dòng** (Đồng ý/Bỏ qua, Duyệt/Từ chối) là nút icon tròn `Button size="icon" variant="ghost"` + `Tooltip` + `aria-label`; nhiều thao tác hơn → `RowActions` |
 | B8b | Chọn trong danh sách dùng `Select` (≥ 6 lựa chọn tự có ô tìm) / `Combobox`; không `searchable={false}` không lý do, không tự ghép ô lọc |
+| B10 | **Nút bấm** theo `.claude/rules/nut-bam.md`: variant theo vai trò (tối đa 1 `primary` mỗi vùng; Hủy/Đóng/Quay lại/Để sau = `secondary`, kể cả bọc `<Link>`; xóa = `danger-outline`/`danger-ghost`/`danger`); nút cùng hàng cùng size; ô nhập và nút trong dòng bảng cùng cao 32px (`Input h-8`, `Combobox size="sm"`); phụ trái – chính phải; `loading` thay vì tự ghép spinner |
 | B9 | Phần tử dính: `top-shell`/`top-shell-flush`; nội dung dialog không chiều cao cứng (`dialog-fill`) |
-| B10 | Component mới đáng dùng chung đã được đưa vào `@kb/ui` (không vá trong app bằng `span` + class) |
+| B11 | Component mới đáng dùng chung đã được đưa vào `@kb/ui` (không vá trong app bằng `span` + class) |
 
 ### C. Dữ liệu & trạng thái
 

@@ -72,7 +72,7 @@ export function SampleLabelDialog({ skill, sample, onClose }: { skill: Skill; sa
             </Stack>
           )}
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="secondary" onClick={onClose}>
               {t.cancel}
             </Button>
             <Button type="submit" loading={save.isPending} disabled={!label.data || reading}>

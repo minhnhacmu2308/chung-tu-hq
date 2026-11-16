@@ -148,7 +148,7 @@ function ComposeDialog({ open, onOpenChange, planNames }: { open: boolean; onOpe
             {recipients === 0 && <Alert tone="warning">{t.noRecipients}</Alert>}
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" loading={send.isPending} disabled={recipients === 0}>{t.send}</Button>
           </DialogFooter>
         </form>

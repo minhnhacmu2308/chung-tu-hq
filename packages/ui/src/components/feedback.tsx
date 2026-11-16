@@ -276,18 +276,52 @@ export function StatusBadge({ status, label, className, icon }: StatusBadgeProps
 
 /* ---------------- Alert ---------------- */
 
-const ALERT_TONE: Record<Exclude<Tone, "primary">, string> = {
-  neutral: "bg-neutral-subtle text-neutral-subtle-fg border-border",
-  success: "bg-success-subtle text-success-subtle-fg border-success/30",
-  warning: "bg-warning-subtle text-warning-subtle-fg border-warning/30",
-  danger: "bg-danger-subtle text-danger-subtle-fg border-danger/30",
-  info: "bg-info-subtle text-info-subtle-fg border-info/30",
+// Thẻ nền sáng, phủ nhẹ màu tông từ trái sang + vạch màu bên trái; icon trong ô màu. Dùng chung cho Alert và hàng cảnh báo trong danh sách.
+export const alertVariants = cva(
+  "relative flex items-start gap-3 overflow-hidden rounded-lg border bg-surface bg-linear-to-r to-surface to-60% py-3 pl-5 pr-4 text-sm shadow-sm",
+  {
+    variants: {
+      tone: {
+        neutral: "border-border from-neutral-subtle",
+        success: "border-success/25 from-success-subtle",
+        warning: "border-warning/30 from-warning-subtle",
+        danger: "border-danger/25 from-danger-subtle",
+        info: "border-info/25 from-info-subtle",
+      },
+    },
+    defaultVariants: { tone: "info" },
+  },
+);
+const ALERT_BAR: Record<AlertTone, string> = { neutral: "bg-border-strong", success: "bg-success", warning: "bg-warning", danger: "bg-danger", info: "bg-info" };
+// Ô icon nền sáng nổi trên lớp phủ màu
+const ALERT_ICON_BOX: Record<AlertTone, string> = {
+  neutral: "bg-surface text-fg-muted ring-border",
+  success: "bg-surface text-success-subtle-fg ring-success/25",
+  warning: "bg-surface text-warning-subtle-fg ring-warning/30",
+  danger: "bg-surface text-danger-subtle-fg ring-danger/25",
+  info: "bg-surface text-info-subtle-fg ring-info/25",
 };
 // Icon đi kèm tông màu: không truyền nghĩa chỉ bằng màu.
 const ALERT_ICON = { neutral: Info, success: CircleCheck, warning: TriangleAlert, danger: CircleAlert, info: Info } as const;
 
+type AlertTone = Exclude<Tone, "primary">;
+
+/** Vạch màu + icon trong ô màu – phần đầu của thẻ cảnh báo (`icon` thay icon mặc định của tông). */
+export function AlertMark({ tone, icon }: { tone: AlertTone; icon?: ReactNode }) {
+  const Icon = ALERT_ICON[tone];
+  return (
+    <>
+      <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1", ALERT_BAR[tone])} />
+      {/* Ô icon như IconTile (không import để tránh vòng icon-tile ↔ feedback) */}
+      <span aria-hidden="true" className={cn("inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-sm ring-1 [&>svg]:h-4 [&>svg]:w-4", ALERT_ICON_BOX[tone])}>
+        {icon ?? <Icon />}
+      </span>
+    </>
+  );
+}
+
 export type AlertProps = {
-  tone?: Exclude<Tone, "primary">;
+  tone?: AlertTone;
   title?: ReactNode;
   children?: ReactNode;
   action?: ReactNode;
@@ -296,18 +330,14 @@ export type AlertProps = {
 
 /** danger/warning dùng role="alert" (đọc ngay); còn lại role="status". */
 export function Alert({ tone = "info", title, children, action, className }: AlertProps) {
-  const Icon = ALERT_ICON[tone];
   return (
-    <div
-      role={tone === "danger" || tone === "warning" ? "alert" : "status"}
-      className={cn("flex items-start gap-3 rounded-md border px-4 py-3 text-sm", ALERT_TONE[tone], className)}
-    >
-      <Icon aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+    <div role={tone === "danger" || tone === "warning" ? "alert" : "status"} className={cn(alertVariants({ tone }), className)}>
+      <AlertMark tone={tone} />
       {/* Nội dung + action một hàng xuống dòng được: khung hẹp (mobile) thì action xuống dưới nội dung thay vì ép chữ thành cột hẹp. */}
-      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-3 gap-y-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2 self-center">
         <div className="flex min-w-0 flex-1 basis-60 flex-col gap-0.5">
-          {title && <p className="font-semibold">{title}</p>}
-          {children && <div>{children}</div>}
+          {title && <p className="font-semibold text-fg">{title}</p>}
+          {children && <div className="leading-relaxed text-fg-muted">{children}</div>}
         </div>
         {action}
       </div>

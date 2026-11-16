@@ -433,7 +433,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <p className="text-sm font-medium text-fg">{exportTaxText(decl.status, t)}</p>
           </div>
         )}
-        <Button variant="ghost" onClick={() => goStep("ocr")}>
+        <Button variant="secondary" onClick={() => goStep("ocr")}>
           {t.backToOcr}
         </Button>
         {isDraft ? (
@@ -467,7 +467,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         <DialogContent title={t.reopenDialogTitle} icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
           <p className="text-sm text-fg-muted">{t.reopenDialogBody}</p>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setReopenOpen(false)}>
+            <Button variant="secondary" onClick={() => setReopenOpen(false)}>
               {t.cancel}
             </Button>
             <Button loading={reopen.isPending} onClick={() => reopen.mutate()}>
@@ -481,7 +481,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
         <DialogContent title={t.recallRemainingTitle} icon={<RotateCcw className="h-4 w-4" />} description={`${kindLabel} · ${dossier.code}`} size="sm">
           <p className="text-sm text-fg-muted">{fill(t.recallRemainingBody, { sheets: lockedSheets })}</p>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setRecallOpen(false)}>
+            <Button variant="secondary" onClick={() => setRecallOpen(false)}>
               {t.cancel}
             </Button>
             <Button loading={recallRest.isPending} disabled={recallBusy} leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => recallRest.mutate()}>
@@ -510,7 +510,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
             <p className="text-xs text-fg-subtle">{t.approveNote}</p>
           </Stack>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
               {t.cancel}
             </Button>
             <Button loading={approve.isPending} disabled={suspect.length > 0 && !checked} onClick={() => approve.mutate()}>

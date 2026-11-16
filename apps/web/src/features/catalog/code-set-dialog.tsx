@@ -91,7 +91,7 @@ export function CodeSetDialog({ set, mode, onClose }: { set: CodeSet | null; mod
             <Checkbox label={t.fieldPrimary} checked={primary} onChange={(e) => setPrimary(e.target.checked)} />
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>{t.cancel}</Button>
             <Button type="submit" loading={save.isPending} disabled={!name.trim()}>{t.save}</Button>
           </DialogFooter>
         </form>

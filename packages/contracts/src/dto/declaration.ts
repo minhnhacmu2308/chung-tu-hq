@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DecimalStringSchema, IsoDateSchema, IsoDateTimeSchema, ValueSourceSchema, type Role } from "../common.js";
-import { HsItemErrorSchema, HsPendingQuestionSchema } from "../integrations/hscodepro.js";
+import { HsItemErrorSchema, HsPendingQuestionSchema, HsWarningDetailSchema } from "../integrations/hscodepro.js";
 
 export const LineItemSchema = z.object({
   id: z.string(),
@@ -68,6 +68,8 @@ export const LineItemHsSchema = z.object({
   reasoning: z.string().nullable(),
   legalBasis: z.array(z.string()),
   warnings: z.array(z.string()),
+  /** Cảnh báo có cấu trúc (hscode-api mới; vắng khi API cũ / dữ liệu cũ – giao diện dựng từ `warnings`). */
+  warningDetails: z.array(HsWarningDetailSchema).optional(),
   /** Gợi ý chính đứng đầu, sau đó các mã thay thế. */
   candidates: z.array(HsCandidateSchema),
   /** Mô tả hàng tiếng Việt AI gợi ý (vắng khi API cũ). */

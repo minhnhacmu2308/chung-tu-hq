@@ -102,6 +102,7 @@ async function ingest(deps: DeclarationDeps, r: DeclarationRepos, orgId: string,
         hsStatus: "completed", hsSuggested: cands[0]!.code, hsConfidence: cands[0]!.confidence, hsQuestion: null, hsError: null,
         hsDetail: {
           reasoning: it.result.reasoning, legalBasis: it.result.legal_basis, warnings: it.result.warnings,
+          ...(it.result.warning_details?.length ? { warningDetails: it.result.warning_details } : {}),
           ...(it.result.description_vi ? { descriptionVi: it.result.description_vi } : {}),
           ...(row.hsDetail?.answered?.length ? { answered: row.hsDetail.answered } : {}),
         },
@@ -382,7 +383,7 @@ export async function answerHsQuestion(deps: DeclarationDeps, ctx: Ctx, lineItem
   await deps.uow.asOrg(ctx, async (r) => {
     for (const x of await sameItemRows(r, it)) {
       const answered = [...new Set([...(x.hsDetail?.answered ?? []), ...said])];
-      await r.lineItems.update(x.orgId, x.id, { hsStatus: "answering", hsDetail: { reasoning: x.hsDetail?.reasoning ?? "", legalBasis: x.hsDetail?.legalBasis ?? [], warnings: x.hsDetail?.warnings ?? [], ...(x.hsDetail?.learned ? { learned: x.hsDetail.learned } : {}), answered }, updatedAt: deps.clock.now() });
+      await r.lineItems.update(x.orgId, x.id, { hsStatus: "answering", hsDetail: { reasoning: x.hsDetail?.reasoning ?? "", legalBasis: x.hsDetail?.legalBasis ?? [], warnings: x.hsDetail?.warnings ?? [], ...(x.hsDetail?.warningDetails ? { warningDetails: x.hsDetail.warningDetails } : {}), ...(x.hsDetail?.learned ? { learned: x.hsDetail.learned } : {}), answered }, updatedAt: deps.clock.now() });
     }
   });
   await deps.queue.enqueue("hs-answer", { orgId: ctx.orgId, userId: ctx.userId, dossierId: it.dossierId, lineItemId: it.id, questionId: input.questionId, answers: input.answers }, { jobId: `hs-answer:${it.id}:${deps.idGen.next("job")}` });

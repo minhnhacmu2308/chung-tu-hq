@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
@@ -130,8 +130,27 @@ describe("Toast – giới hạn, gộp trùng, theo tiến trình", () => {
       toast({ tone: "loading", title: "Đang gửi…" });
     });
     const bar = screen.getByText("Lỗi mạng").closest("li")!.querySelector<HTMLElement>("[data-slot=toast-countdown]")!;
-    expect(bar.style.animationDuration).toBe("8000ms");
+    expect(bar.style.animationDuration).toBe("6000ms");
     expect(screen.getByText("Đang gửi…").closest("li")!.querySelector("[data-slot=toast-countdown]")).toBeNull();
+  });
+
+  it("tự đóng sau 4 giây kể cả khi cửa sổ mất focus; rê chuột vào thì giữ lại", () => {
+    vi.useFakeTimers();
+    try {
+      render(<Toaster />);
+      act(() => { window.dispatchEvent(new Event("blur")); });
+      act(() => { toast({ tone: "success", title: "Đã lưu" }); toast({ tone: "info", title: "Đang xem" }); });
+      const held = screen.getByText("Đang xem").closest("li")!;
+      fireEvent.pointerEnter(held);
+      act(() => { vi.advanceTimersByTime(4100); });
+      expect(screen.queryByText("Đã lưu")).not.toBeInTheDocument();
+      expect(held).toHaveAttribute("data-state", "open");
+      fireEvent.pointerLeave(held);
+      act(() => { vi.advanceTimersByTime(4100); });
+      expect(screen.queryByText("Đang xem")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("updateToast đổi nội dung toast đang mở", () => {

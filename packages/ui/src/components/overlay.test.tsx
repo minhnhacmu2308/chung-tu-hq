@@ -35,7 +35,7 @@ describe("Tabs", () => {
 describe("Dialog", () => {
   function setup(props: Partial<Parameters<typeof DialogContent>[0]> = {}, root: Partial<Parameters<typeof Dialog>[0]> = {}) {
     render(
-      <Dialog {...root}>
+      <Dialog defaultPresentation="modal" {...root}>
         <DialogTrigger asChild><Button>Thêm mới</Button></DialogTrigger>
         <DialogContent icon={<span />} title="Thêm mới báo cáo" {...props}>
           <p>Nội dung</p>
@@ -55,6 +55,44 @@ describe("Dialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("dock lồng nhau (sửa trong chi tiết): đóng popup con, trang vẫn chừa chỗ cho popup ngoài; đóng hết mới trả lại", async () => {
+    const { unmount } = render(
+      <Dialog defaultOpen>
+        <DialogContent icon={<span />} title="Chi tiết">
+          <Dialog>
+            <DialogTrigger asChild><Button>Sửa thông tin</Button></DialogTrigger>
+            <DialogContent icon={<span />} title="Sửa">x</DialogContent>
+          </Dialog>
+        </DialogContent>
+      </Dialog>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Sửa thông tin" }));
+    expect(screen.getAllByRole("dialog")).toHaveLength(2);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(document.body).toHaveAttribute("data-kb-docked");
+    unmount();
+    expect(document.body).not.toHaveAttribute("data-kb-docked");
+  });
+
+  it("mặc định: cột bên phải đẩy nội dung (dock); popup có tone (hộp xác nhận) mở dạng cửa sổ", async () => {
+    const { unmount } = render(
+      <Dialog defaultOpen>
+        <DialogContent icon={<span />} title="Sửa">x</DialogContent>
+      </Dialog>,
+    );
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-presentation", "dock");
+    expect(document.body).toHaveAttribute("data-kb-docked");
+    unmount();
+    expect(document.body).not.toHaveAttribute("data-kb-docked");
+    render(
+      <Dialog defaultOpen>
+        <DialogContent icon={<span />} title="Xóa?" tone="danger">x</DialogContent>
+      </Dialog>,
+    );
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-presentation", "modal");
   });
 
   it("tone danger: icon đầu nằm trong ô nền đỏ + vạch đỏ đỉnh popup; không tone thì icon trơn", async () => {
@@ -77,6 +115,22 @@ describe("Dialog", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Hiển thị dạng panel bên phải" }));
     expect(screen.getByRole("dialog")).toHaveAttribute("data-presentation", "panel");
     expect(onPresentationChange).toHaveBeenCalledWith("panel");
+
+    // Cột bên phải đẩy nội dung: không phủ nền, trang chừa chỗ (body data-kb-docked + --kb-dock-width); rời dock thì trả lại
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Hiển thị dạng cột bên phải, đẩy nội dung sang trái" }));
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-presentation", "dock");
+    expect(screen.getByRole("dialog")).not.toHaveAttribute("aria-modal");
+    expect(document.body).toHaveAttribute("data-kb-docked");
+    expect(document.documentElement.style.getPropertyValue("--kb-dock-width")).toMatch(/px$/);
+
+    // Khay từ dưới lên: phủ nền + giữ focus như cửa sổ
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Hiển thị dạng khay từ dưới lên" }));
+    const sheet = screen.getByRole("dialog");
+    expect(sheet).toHaveAttribute("data-presentation", "sheet");
+    expect(sheet).toHaveAttribute("aria-modal", "true");
+    expect(onPresentationChange).toHaveBeenCalledWith("sheet");
+    expect(document.body).not.toHaveAttribute("data-kb-docked");
+    await expectNoA11yViolations(document.body);
   });
 
   it("đổi cửa sổ ↔ panel KHÔNG làm mất dữ liệu đang nhập", async () => {
@@ -98,7 +152,7 @@ describe("Dialog", () => {
     render(
       <>
         <button type="button">Ngoài</button>
-        <Dialog defaultOpen>
+        <Dialog defaultPresentation="modal" defaultOpen>
           <DialogContent icon={<span />} title="Giữ focus"><input aria-label="Ô 1" /></DialogContent>
         </Dialog>
       </>,
@@ -155,9 +209,9 @@ describe("Dialog", () => {
 
   it("cửa sổ lồng nhau: đóng cửa sổ con vẫn khóa cuộn, đóng hết mới trả lại cuộn trang", async () => {
     render(
-      <Dialog defaultOpen>
+      <Dialog defaultPresentation="modal" defaultOpen>
         <DialogContent icon={<span />} title="Cha">
-          <Dialog>
+          <Dialog defaultPresentation="modal">
             <DialogTrigger asChild><Button>Mở con</Button></DialogTrigger>
             <DialogContent icon={<span />} title="Con">con</DialogContent>
           </Dialog>
@@ -293,7 +347,7 @@ describe("Dialog – dạng panel dùng hết chiều cao", () => {
 describe("Dialog – khoảng thở và kích thước", () => {
   it("cỡ sm rộng max-w-lg; nội dung đệm rộng; chân popup có lớp mờ phía trên để ô cuối không bị cắt cụt sát đường kẻ", () => {
     render(
-      <Dialog open>
+      <Dialog defaultPresentation="modal" open>
         <DialogContent icon={<span />} title="Thêm chứng thư số" size="sm">
           <form><input aria-label="Số serial" /><DialogFooter><Button>Thêm</Button></DialogFooter></form>
         </DialogContent>

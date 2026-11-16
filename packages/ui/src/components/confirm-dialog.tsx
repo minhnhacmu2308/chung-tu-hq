@@ -42,7 +42,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const l = useMessages(MESSAGES, labels);
   return (
-    <Dialog open={open} onOpenChange={(o) => (o || !loading) && onOpenChange(o)}>
+    <Dialog open={open} onOpenChange={(o) => (o || !loading) && onOpenChange(o)} defaultPresentation="modal">
       <DialogContent
         title={title}
         icon={icon ?? <TriangleAlert className="h-4 w-4" />}
@@ -59,7 +59,7 @@ export function ConfirmDialog({
         )}
         <DialogFooter>
           {/* Focus sẵn ở "Giữ lại": Enter / Space vô tình không chạy thao tác. FocusScope của Dialog thấy đã có focus bên trong nên không dời đi. */}
-          <Button autoFocus variant="ghost" disabled={loading} onClick={() => onOpenChange(false)}>
+          <Button autoFocus variant="secondary" disabled={loading} onClick={() => onOpenChange(false)}>
             {l.keep}
           </Button>
           <Button variant={tone === "danger" ? "danger" : "primary"} loading={loading} onClick={onConfirm}>

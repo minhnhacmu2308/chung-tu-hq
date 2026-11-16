@@ -1,10 +1,12 @@
 "use client";
 // Ô "Gợi ý hscodepro" theo trạng thái phân loại của dòng hàng (tài liệu HSCodePro §2, §5).
 import { Badge, Button, Progress, Spinner, fill, useMessages } from "@kb/ui";
-import { AlertTriangle, History, MessageCircleQuestion, RotateCcw } from "lucide-react";
+import { History, MessageCircleQuestion, RotateCcw } from "lucide-react";
 import type { LineItem } from "@/mocks/types";
 import type { CatalogMatch } from "./catalog-match";
 import { hsTone } from "./hs-format";
+import type { Notice } from "./hs-notices";
+import { HsNoticeList } from "./hs-notices-view";
 import { HS_MESSAGES } from "./hs.messages";
 
 export function ConfidenceMeter({ value, warn = false }: { value: number; warn?: boolean }) {
@@ -37,7 +39,8 @@ export function DeclaredBeforeHint({ item, match, onUse, busy = false }: { item:
   );
 }
 
-export function HsSuggestionCell({ item, onAnswer, onReclassify }: { item: LineItem; onAnswer: (it: LineItem) => void; onReclassify: (it: LineItem) => void }) {
+/** `notices`: lưu ý phân loại / chính sách của dòng (lưu ý thuế ở cột thuế, lưu ý lặp nhiều dòng ở đầu bảng). */
+export function HsSuggestionCell({ item, notices = [], onAnswer, onReclassify }: { item: LineItem; notices?: Notice[]; onAnswer: (it: LineItem) => void; onReclassify: (it: LineItem) => void }) {
   const t = useMessages(HS_MESSAGES);
   const hs = item.hs;
   const status = hs?.status ?? (item.hsSuggested ? "completed" : "idle");
@@ -73,20 +76,14 @@ export function HsSuggestionCell({ item, onAnswer, onReclassify }: { item: LineI
     );
   }
   if (!item.hsSuggested) return <span className="text-xs text-fg-subtle">{t.notLookedUp}</span>;
-  const warnings = hs?.warnings ?? [];
-  const warn = item.hsConfidence !== undefined && hsTone(item.hsConfidence, warnings) === "warning";
+  // Lưu ý mức "info" (quản lý chuyên ngành, VAT có điều kiện…) không làm thanh tin cậy đổi màu cảnh báo.
+  const warn = item.hsConfidence !== undefined && hsTone(item.hsConfidence, notices.filter((n) => n.level !== "info").map((n) => n.text)) === "warning";
   return (
     <div className="flex flex-col gap-1">
       <span className="font-mono text-sm text-fg">{item.hsSuggested}</span>
       {item.hsConfidence !== undefined && <ConfidenceMeter value={item.hsConfidence} warn={warn} />}
       {hs?.descriptionVi && <p className="line-clamp-2 text-xs text-fg-muted" title={hs.descriptionVi}>{fill(t.descriptionVi, { desc: hs.descriptionVi })}</p>}
-      {warnings.map((w) => (
-        // Cảnh báo quản lý chuyên ngành dài → tối đa 2 dòng, rê chuột xem đủ (dòng hàng không cao vống).
-        <p key={w} className="flex items-start gap-1 text-xs text-warning-subtle-fg" title={w}>
-          <AlertTriangle aria-hidden="true" className="mt-0.5 h-3 w-3 shrink-0" />
-          <span className="line-clamp-2">{w}</span>
-        </p>
-      ))}
+      <HsNoticeList notices={notices} />
     </div>
   );
 }

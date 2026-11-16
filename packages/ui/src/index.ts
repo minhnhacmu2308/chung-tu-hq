@@ -4,6 +4,7 @@ export { Button, buttonVariants, type ButtonProps } from "./components/button.js
 export { Spinner, type SpinnerProps } from "./components/spinner.js";
 export { Field, FieldFrame, Label, useFieldControl, type FieldFrameProps, type FieldProps } from "./components/field.js";
 export { Abbreviation, type AbbreviationProps } from "./components/abbreviation.js";
+export { NoticeChip, type NoticeChipProps, type NoticeItem, type NoticeTone } from "./components/notice-chip.js";
 export { PaperStack, PaperSheet, PaperField, PaperColumns, PaperLabel, type PaperSheetProps, type PaperFieldProps, type PaperFieldState } from "./components/paper.js";
 export { Disclosure, type DisclosureProps } from "./components/disclosure.js";
 export { Input, LookupInput, Textarea, Select, SELECT_SEARCH_FROM, Checkbox, type SelectOption, type SelectProps, type CheckboxProps, type LookupInputProps } from "./components/inputs.js";
@@ -14,7 +15,7 @@ export {
   type GridProps, type StackProps, type PageHeaderProps,
 } from "./components/layout.js";
 export {
-  Badge, badgeVariants, StatusBadge, STATUS_META, STATUS_LABELS_EN, STATUS_LABELS_ZH, statusLabel, Alert, Skeleton, EmptyState,
+  Badge, badgeVariants, StatusBadge, STATUS_META, STATUS_LABELS_EN, STATUS_LABELS_ZH, statusLabel, Alert, AlertMark, alertVariants, Skeleton, EmptyState,
   type BadgeProps, type Tone, type Status, type StatusBadgeProps, type AlertProps, type EmptyStateProps,
 } from "./components/feedback.js";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/overlay.js";

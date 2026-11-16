@@ -4,7 +4,7 @@
 // mã/tên/ĐVT; lọc loại / chưa có mã XNK / chưa có quy đổi; Thêm, Xuất Excel, Xuất bảng đối chiếu mã. Bấm dòng → panel chi tiết.
 import type { CatalogItemKind, CatalogItemListRow, CodeSet, ListCatalogItemsQueryInput } from "@kb/contracts";
 import {
-  Button, Checkbox, createDataTableColumnHelper, DataTable, Field, fill, Input, pickMessages, RecordCard, RowActions, Select, StatusBadge, statusLabel, toast, useMessages, useUiLocale, type UiLocale,
+  Button, Checkbox, createDataTableColumnHelper, DataTable, Field, fill, pickMessages, RecordCard, RowActions, Select, StatusBadge, statusLabel, toast, useMessages, useUiLocale, type UiLocale,
 } from "@kb/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download, Eye, Plus, TableProperties } from "lucide-react";
@@ -118,25 +118,6 @@ export function ItemsTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label={t.searchLabel} className="min-w-60 flex-1">
-          <Input type="search" value={search} onChange={(e) => reset(setSearch)(e.target.value)} placeholder={t.searchPlaceholder} />
-        </Field>
-        <Field label={t.viewBy} className="w-full cq-sm:w-64">
-          <Select options={setOptions} value={setId} onChange={(e) => reset(setSetId)(e.target.value)} />
-        </Field>
-        <Field label={t.kindFilter} className="w-full cq-sm:w-48">
-          <Select options={kindOptions} value={kind} onChange={(e) => reset(setKind)(e.target.value as CatalogItemKind | "")} />
-        </Field>
-        <Field label={t.statusFilter} className="w-full cq-sm:w-44">
-          <Select options={statusOptions} value={status} onChange={(e) => reset(setStatus)(e.target.value as "ACTIVE" | "ARCHIVED")} />
-        </Field>
-        <div className="flex flex-wrap gap-4 pb-2">
-          <Checkbox label={t.missingCustoms} checked={missingCustoms} onChange={(e) => reset(setMissingCustoms)(e.target.checked)} />
-          <Checkbox label={t.missingFactor} checked={missingFactor} onChange={(e) => reset(setMissingFactor)(e.target.checked)} />
-        </div>
-      </div>
-
       {items.isError && <LoadError onRetry={() => void items.refetch()} title={t.loadError} />}
       {!items.isError && (
         <DataTable
@@ -150,6 +131,26 @@ export function ItemsTab() {
           pagination={{ mode: "controlled", ...page, rowCount: items.data?.total ?? 0, onChange: setPage, pageSizeOptions: [20, 50, 100, 200] }}
           onRowClick={(r) => setOpenId(r.id)}
           filtered={isFiltered}
+          search={{ value: search, onChange: reset(setSearch), placeholder: t.searchPlaceholder, label: t.searchLabel }}
+          // "Xem theo bộ mã" là cách hiển thị, không tính là lọc và không bị "Xóa bộ lọc" đặt lại
+          activeFilters={[kind, missingCustoms, missingFactor, status !== "ACTIVE"].filter(Boolean).length}
+          filters={
+            <>
+              <Field label={t.viewBy}>
+                <Select options={setOptions} value={setId} onChange={(e) => reset(setSetId)(e.target.value)} />
+              </Field>
+              <Field label={t.kindFilter}>
+                <Select options={kindOptions} value={kind} onChange={(e) => reset(setKind)(e.target.value as CatalogItemKind | "")} />
+              </Field>
+              <Field label={t.statusFilter}>
+                <Select options={statusOptions} value={status} onChange={(e) => reset(setStatus)(e.target.value as "ACTIVE" | "ARCHIVED")} />
+              </Field>
+              <div className="col-span-full flex flex-wrap gap-x-6 gap-y-2">
+                <Checkbox label={t.missingCustoms} checked={missingCustoms} onChange={(e) => reset(setMissingCustoms)(e.target.checked)} />
+                <Checkbox label={t.missingFactor} checked={missingFactor} onChange={(e) => reset(setMissingFactor)(e.target.checked)} />
+              </div>
+            </>
+          }
           onClearFilters={() => {
             setSearch("");
             setKind("");

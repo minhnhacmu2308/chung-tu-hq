@@ -52,7 +52,7 @@ export function TransferOwnershipDialog({ target, onOpenChange }: { target: Memb
             </Field>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" variant="danger" loading={transfer.isPending} disabled={!password}>{t.transferConfirm}</Button>
           </DialogFooter>
         </form>

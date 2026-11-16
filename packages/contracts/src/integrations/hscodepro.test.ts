@@ -28,6 +28,14 @@ describe("HSCodePro – schema dây theo tài liệu v1", () => {
     expect(HsJobItemSchema.parse({ id: "a3", line_no: 3, status: "failed", question: null, result: null, error: { code: "TIMEOUT", message: "AI xử lý quá 10 phút." } }).error!.code).toBe("TIMEOUT");
     expect(HsResultSchema.parse({ hs_code: "84833090", hs_description: "Loại khác", confidence: 74, reasoning: "…", legal_basis: [], warnings: ["Chưa tra được thuế"], tax: null, alternatives: [] }).tax).toBeNull();
   });
+  it("warning_details: parse được khi đúng; giá trị lạ chỉ bỏ phần chi tiết, không hỏng kết quả", () => {
+    const base = { hs_code: "03075200", hs_description: "Bạch tuộc", confidence: 90, reasoning: "", legal_basis: [], warnings: ["Cần giấy phép"], tax: null, alternatives: [] };
+    const ok = HsResultSchema.parse({ ...base, warning_details: [{ code: "license", level: "warning", group: "policy", text: "Cần giấy phép" }] });
+    expect(ok.warning_details).toHaveLength(1);
+    const odd = HsResultSchema.parse({ ...base, warning_details: [{ code: "origin", level: "warning", group: "origin", text: "x" }] });
+    expect(odd.warning_details).toBeUndefined();
+    expect(odd.warnings).toEqual(["Cần giấy phép"]);
+  });
   it("mã HS phải 8 chữ số liền; nước xuất xứ ISO alpha-2", () => {
     expect(HsResultSchema.safeParse({ hs_code: "8483.40.90", hs_description: "", confidence: 1, reasoning: "", legal_basis: [], warnings: [], tax: null, alternatives: [] }).success).toBe(false);
     expect(HsCreateItemSchema.safeParse({ line_no: 1, description: "Vít me bi", origin_country: "TWN" }).success).toBe(false);

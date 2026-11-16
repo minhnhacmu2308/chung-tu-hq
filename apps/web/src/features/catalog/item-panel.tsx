@@ -227,7 +227,7 @@ function EditItemDialog({ item, onClose }: { item: CatalogItem; onClose: () => v
             </Field>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>{t.cancel}</Button>
             <Button type="submit" loading={save.isPending} disabled={!form.name.trim() || q2Missing}>{t.save}</Button>
           </DialogFooter>
         </form>
@@ -268,7 +268,7 @@ export function ItemPanel({ itemId, sets, access, onOpenChange }: { itemId: stri
 
   return (
     <>
-      <Dialog open={!!id} onOpenChange={close} defaultPresentation="panel">
+      <Dialog open={!!id} onOpenChange={close}>
         <DialogContent title={t.panelTitle} {...(item ? { description: `${item.itemNo} · ${item.name}` } : {})} icon={<Package className="h-4 w-4" />} size="lg">
           {detail.isLoading && <SkeletonList rows={6} />}
           {detail.isError && <LoadError onRetry={() => void detail.refetch()} title={t.loadError} />}

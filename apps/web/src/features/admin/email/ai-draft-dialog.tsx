@@ -50,7 +50,7 @@ export function AiDraftDialog({ open, onOpenChange, onDraft }: { open: boolean; 
             <Checkbox label={t.replace} checked={replace} onChange={(e) => setReplace(e.target.checked)} />
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={draft.isPending}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} disabled={draft.isPending}>{t.cancel}</Button>
             <Button type="submit" leftIcon={<Sparkles className="h-4 w-4" />} loading={draft.isPending} disabled={description.trim().length < 10}>{t.generate}</Button>
           </DialogFooter>
         </form>

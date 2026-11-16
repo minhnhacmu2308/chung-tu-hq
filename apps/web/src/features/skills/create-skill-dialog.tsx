@@ -131,7 +131,7 @@ export function CreateSkillForm({ skills, defaultKind, onCancel, onCreated }: Fo
         </Grid>
       </Stack>
       <DialogFooter>
-        <Button type="button" variant="ghost" onClick={onCancel}>{t.cancel}</Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>{t.cancel}</Button>
         <Button type="submit" loading={save.isPending}>{t.submit}</Button>
       </DialogFooter>
     </form>

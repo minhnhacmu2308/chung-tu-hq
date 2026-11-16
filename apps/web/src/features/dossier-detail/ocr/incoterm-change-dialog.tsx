@@ -101,7 +101,7 @@ export function IncotermChangeDialog({ dossierId, change, saving, onConfirm, onC
           )}
         </Stack>
         <DialogFooter>
-          <Button type="button" variant="ghost" disabled={saving} onClick={onCancel}>{t.cancel}</Button>
+          <Button type="button" variant="secondary" disabled={saving} onClick={onCancel}>{t.cancel}</Button>
           <Button
             type="button"
             leftIcon={<ArrowRightLeft className="h-4 w-4" />}

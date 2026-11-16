@@ -2,7 +2,7 @@
 import { Copy, Filter, MoreHorizontal, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import {
-  Abbreviation, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable,
+  Abbreviation, NoticeChip, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   Field, FileDropzone, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
@@ -252,6 +252,11 @@ export function Showcase() {
               <Field label="Cảng dỡ hàng" hint="Gõ không dấu: “hai phong” · nút Mở rộng để đọc hết mô tả"><Combobox options={PORTS} value={port} onChange={setPort} clearable expandable /></Field>
               <Field label="Loại chứng từ"><Combobox multiple options={DOC_TYPES} value={docs} onChange={setDocs} /></Field>
               <Field label={<>1.5 · <Abbreviation short="Mã PLHH" full="Mã phân loại hàng hóa" /></>} hint="Nhãn dài viết tắt – bấm chữ gạch chấm xem tên đầy đủ"><Input /></Field>
+              <div className="flex flex-wrap gap-1.5">
+                <NoticeChip tone="danger" label="Khác HS hóa đơn" description="Khác mã HS trên hóa đơn (940511)." />
+                <NoticeChip tone="warning" label="Tin cậy thấp 42%" description="Độ tin cậy thấp (42%): kiểm tra kỹ mô tả và mã thay thế trước khi xác nhận." />
+                <NoticeChip tone="info" label="Kiểm dịch · Bộ NN&PTNT" count={5} meta="Áp dụng cho dòng 1, 2, 3, 4, 5" items={[{ text: "Bạch tuộc (Octopus spp.) đông lạnh", refs: ["Luật Thú y", "Nghị định số 15/2018/NĐ-CP", "Thông tư số 26/2016/TT-BNNPTNT"] }]} />
+              </div>
               <Field label="Đối tác (20.000 mục)" hint="Gõ “da nang 00123” – chỉ hiện 100 kết quả đầu, gõ thêm để thu hẹp">
                 <Combobox options={PARTNERS} value={partner} onChange={setPartner} clearable />
               </Field>

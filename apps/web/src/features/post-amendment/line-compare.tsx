@@ -113,7 +113,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
         ) : (
           <>
             {editable && (
-              <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub("pick")}>
+              <Button variant="secondary" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub("pick")}>
                 {t.pickMore}
               </Button>
             )}

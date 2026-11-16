@@ -56,7 +56,7 @@ export function KvgsPrintPage({ dossierId, branch, template }: { dossierId: stri
           description={t.description}
           actions={
             <>
-              <Button asChild variant="ghost">
+              <Button asChild variant="secondary">
                 <Link href={kvgsCardHref(dossierId, branch)}>
                   <ArrowLeft aria-hidden="true" className="h-4 w-4" />
                   {t.backToCard}

@@ -80,7 +80,7 @@ function InviteDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
             </Field>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" loading={invite.isPending}>{t.sendInvite}</Button>
           </DialogFooter>
         </form>

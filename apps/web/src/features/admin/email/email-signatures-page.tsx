@@ -57,7 +57,7 @@ function SignatureEditor({ editing, onClose }: { editing: Editing | null; onClos
               {problem && <Alert tone="danger">{problem}</Alert>}
             </Stack>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={onClose} disabled={save.isPending}>{t.back}</Button>
+              <Button type="button" variant="secondary" onClick={onClose} disabled={save.isPending}>{t.back}</Button>
               <Button type="submit" loading={save.isPending}>{t.save}</Button>
             </DialogFooter>
           </form>

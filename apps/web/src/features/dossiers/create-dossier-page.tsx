@@ -324,7 +324,7 @@ export function CreateDossierPage() {
               </FormSection>
             </CardContent>
             <CardFooter className="justify-end">
-              <Button asChild variant="ghost">
+              <Button asChild variant="secondary">
                 <Link href="/dossiers">{t.cancel}</Link>
               </Button>
               <Button type="submit" loading={create.isPending}>{t.submit}</Button>

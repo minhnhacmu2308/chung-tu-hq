@@ -122,6 +122,7 @@
   --animate-fade-out: kb-fade-out 120ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
   --animate-pop-out: kb-pop-out 120ms cubic-bezier(0.23, 1, 0.32, 1) forwards;
   --animate-slide-in-right: kb-slide-in-right 260ms cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-sheet-in: kb-sheet-in 300ms cubic-bezier(0.32, 0.72, 0, 1);
   --animate-slide-up: kb-slide-up 220ms cubic-bezier(0.23, 1, 0.32, 1);
   /* Toast: vào từ phải, ra mờ dần sang phải; thanh đếm ngược tự đóng; vạch chạy khi đang xử lý. */
   --animate-toast-in: kb-toast-in 260ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -191,6 +192,9 @@
   }
   @keyframes kb-slide-in-right {
     from { opacity: 0; transform: translateX(1.5rem); }
+  }
+  @keyframes kb-sheet-in {
+    from { transform: translateY(100%); }
   }
   @keyframes kb-slide-up {
     from { opacity: 0; transform: translateY(0.5rem); }
@@ -340,6 +344,13 @@
   box-shadow: inset 1px 0 0 var(--kb-color-border);
 }
 
+/* Dialog dạng dock: trang chừa chỗ bên phải bằng độ rộng drawer (màn nhỏ thì drawer nổi như panel). */
+@media (min-width: 48rem) {
+  body[data-kb-docked] {
+    padding-right: var(--kb-dock-width, 0px);
+  }
+}
+
 /*
  * Nội dung chính của một Dialog (sơ đồ, bảng, khung xem) chiếm hết chỗ dialog có:
  *  - dạng panel bên phải: giãn kín chiều cao còn lại của panel (không để thừa khoảng trắng rồi lại phải cuộn bên trong);
@@ -347,7 +358,8 @@
  */
 @utility dialog-fill {
   height: min(40rem, calc(100dvh - 9rem));
-  [data-presentation="panel"] & {
+  [data-presentation="panel"] &,
+  [data-presentation="dock"] & {
     flex: 1 1 0%;
     min-height: 0;
     height: auto;

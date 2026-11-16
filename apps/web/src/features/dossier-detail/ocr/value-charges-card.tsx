@@ -306,7 +306,7 @@ function ChargesDialog({ open, onOpenChange, view, dossierId, currency, onEditIn
             )}
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" loading={save.isPending}>{t.save}</Button>
           </DialogFooter>
         </form>

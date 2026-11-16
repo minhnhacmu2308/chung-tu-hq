@@ -141,7 +141,7 @@ export function UserTable({ users, loading, showOrg = true, showJoinRequested = 
         )}
       />
 
-      <Dialog open={!!opened} onOpenChange={(o) => !o && setOpenId(null)} defaultPresentation="panel">
+      <Dialog open={!!opened} onOpenChange={(o) => !o && setOpenId(null)}>
         <DialogContent title={t.accountTitle} size="sm" icon={<UserRound className="h-4 w-4" />}>
           {opened && <UserPanel user={opened} />}
         </DialogContent>

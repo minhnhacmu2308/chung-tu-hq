@@ -118,7 +118,7 @@ export function AddToDossierDialog({ message, onOpenChange }: { message: InboxMe
           </Stack>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="ghost">{t.cancel}</Button>
+              <Button variant="secondary">{t.cancel}</Button>
             </DialogClose>
             <Button type="submit" loading={add.isPending} leftIcon={<FolderInput className="h-4 w-4" />}>{fill(t.submit, { n: selected.length })}</Button>
           </DialogFooter>

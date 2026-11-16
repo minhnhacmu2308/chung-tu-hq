@@ -99,7 +99,7 @@ export function EditPlanDialog({ plan, onClose }: { plan: AdminPlan | null; onCl
             </Field>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>{t.cancel}</Button>
             <Button type="submit" loading={save.isPending}>{t.save}</Button>
           </DialogFooter>
         </form>

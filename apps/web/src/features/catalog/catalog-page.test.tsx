@@ -59,6 +59,7 @@ describe("Danh mục hàng hóa – tab Mặt hàng", () => {
   it("Xem theo bộ mã: Kho → cột mã/tên/ĐVT theo bộ Kho", async () => {
     renderWithProviders(<CatalogPage />);
     await rowWith("vt-0012");
+    await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" })); // bộ lọc nằm trong hộp phễu
     await userEvent.click(screen.getByRole("combobox", { name: "Xem theo bộ mã" }));
     await userEvent.click(await screen.findByRole("option", { name: /^Kho/ }, T));
     const t = await table();
@@ -170,8 +171,10 @@ describe("Danh mục hàng hóa – tab Mặt hàng", () => {
     fireEvent.click(within(await panel()).getAllByRole("button", { name: "Đóng" }).at(-1)!);
     await waitFor(async () => expect(within(await table()).queryByText(name)).toBeNull(), T);
 
+    await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" }));
     await userEvent.click(screen.getByRole("combobox", { name: "Trạng thái" }));
     await userEvent.click(await screen.findByRole("option", { name: "Ngưng dùng" }, T));
+    await userEvent.keyboard("{Escape}");
     const row = await rowWith(name);
     expect(within(row).getByText("Ngưng dùng")).toBeTruthy();
     const again = await openItem(name);
@@ -210,8 +213,10 @@ describe("Danh mục hàng hóa – tab Mặt hàng", () => {
     expect(screen.getByRole("tab", { name: tab })).toBeTruthy();
     await screen.findAllByText("vt-0012", {}, T);
     const view = locale === "en" ? "View by code set" : "按编码集查看";
+    await userEvent.click(screen.getByRole("button", { name: locale === "en" ? "Filters" : "筛选" }));
     await userEvent.click(screen.getByRole("combobox", { name: view }));
     await userEvent.click(await screen.findByRole("option", { name: /^Kho/ }, T));
+    await userEvent.keyboard("{Escape}");
     // Tên bộ là dữ liệu nghiệp vụ (không dịch).
     expect(await screen.findByRole("columnheader", { name: header }, T)).toBeTruthy();
     // Panel chi tiết theo ngôn ngữ (tiêu đề h2 + các mục + nút Đóng); không còn chữ tiếng Việt của giao diện.

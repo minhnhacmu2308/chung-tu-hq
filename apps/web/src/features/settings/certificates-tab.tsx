@@ -59,7 +59,7 @@ function AddDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: bo
             </Field>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{m.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{m.cancel}</Button>
             <Button type="submit" loading={add.isPending}>{m.add}</Button>
           </DialogFooter>
         </form>

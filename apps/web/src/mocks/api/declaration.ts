@@ -9,7 +9,7 @@ import { buildDeclaration, computeTaxes, findHs, HS_CATALOG, mockVatCode, ratesF
 import type { MockDb } from "@/mocks/db";
 import { assertNoGaps } from "@/mocks/required-gaps";
 import { reasonApiError } from "@/mocks/reason-error";
-import type { DeclarationBranch, ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, LineItemHs } from "@kb/contracts";
+import type { DeclarationBranch, ExchangeRateInfo, HsAnswerInput, HsReclassifyInput, HsWarningDetail, LineItemHs } from "@kb/contracts";
 import type { AgentRun, AgentTaskId, AgentTaskStatus, Declaration, LineItem } from "@/mocks/types";
 import { recordApprovedCatalog, withLineCatalogView } from "./catalog";
 
@@ -172,13 +172,50 @@ function mockHs(db: MockDb, i: LineItem, now = Date.now()): LineItemHs {
   const main = i.hsSuggested;
   const alt = HS_CATALOG.find((h) => h.code !== main && h.code.slice(0, 4) === main.slice(0, 4)) ?? HS_CATALOG.find((h) => h.code !== main)!;
   const conf = i.hsConfidence ?? 0.5;
-  return {
-    ...empty, status: "completed",
-    reasoning: `Mô tả "${i.description}" khớp nhóm ${main.slice(0, 4)} của biểu thuế (giả lập).`,
-    legalBasis: ["Quy tắc tổng quát 1 và 6"],
-    warnings: conf < 0.6 ? ["Mô tả chưa nêu rõ công dụng – kiểm tra lại trước khi khai"] : [],
-    candidates: [cand(main, conf, null), cand(alt.code, 0.12, "Mô tả hàng không khớp phân nhóm này")],
-  };
+  const candidates = [cand(main, conf, null), cand(alt.code, 0.12, "Mô tả hàng không khớp phân nhóm này")];
+  const base = { ...empty, status: "completed" as const, reasoning: `Mô tả "${i.description}" khớp nhóm ${main.slice(0, 4)} của biểu thuế (giả lập).`, legalBasis: ["Quy tắc tổng quát 1 và 6"], candidates };
+  // Bạch tuộc 0307.x: câu cảnh báo thật của hscode-api bản cũ (chỉ `warnings`, chưa có warning_details) – giao diện phải tự gộp.
+  if (main.startsWith("0307")) return { ...base, warnings: OCTOPUS_WARNINGS };
+  const warningDetails = mockWarnings(i, main, conf, candidates[0]!.agreement);
+  return { ...base, warnings: warningDetails.map((w) => w.text), warningDetails };
+}
+
+const OCTOPUS_WARNINGS = [
+  "Quản lý chuyên ngành (Bộ Nông nghiệp và Phát triển nông thôn): Động vật thân mềm, đã hoặc chưa bóc mai, vỏ, sống, tươi, ướp lạnh, đông lạnh, khô, muối hoặc ngâm nước muối; động vật thân mềm hun khói, đã hoặc chưa bóc mai, vỏ, đã hoặc chưa làm chín trước hoặc trong quá trình hun khói.| Bạch tuộc (Octopus spp.):/ - Đông lạnh – Luật Thú y, - Nghị định số 15/2018/NĐ-CP, - Thông tư số 26/2016/TT-BNNPTNT, - Thông tư số 36/2018/TT-BNNPTNT, - Thông tư số 06/2022/TT-BNNPTNT, - Thông tư số 24/2013/TT-BYT, - Quyết định số: 46/2007/QĐ-BYT, - TCVN 8711 -1, 2: 2011, - QCVN số 8-2:2011/BYT, - QCVN 8-3: 2012/BYT, - TCVN 8710 (các tiêu chuẩn kỹ thuật kiểm tra bệnh động vật thủy sản).",
+  "Quản lý chuyên ngành (Bộ Nông nghiệp và Phát triển nông thôn): Động vật thân mềm, đã hoặc chưa bóc mai, vỏ, sống, tươi, ướp lạnh, đông lạnh, khô, muối hoặc ngâm nước muối; động vật thân mềm hun khói, đã hoặc chưa bóc mai, vỏ, đã hoặc chưa làm chín trước hoặc trong quá trình hun khói. – Luật Thú y, - Nghị định số 15/2018/NĐ-CP, - Thông tư số 26/2016/TT-BNNPTNT.",
+  "Thuế GTGT không chịu thuế phụ thuộc điều kiện ngoài mã HS: xem ghi chú thuế GTGT.",
+  "Biểu thuế FTA chưa có kỳ của ngày nhập khẩu: áp thuế suất kỳ cuối, cần xác nhận với biểu thuế mới.",
+  "Thuế FTA của mã này còn đang giảm theo lộ trình: mức thật của năm nhập khẩu có thể thấp hơn.",
+];
+
+/** Cảnh báo giả lập theo dạng hscode-api (warning_details): kỳ FTA, quản lý chuyên ngành động cơ, khác HS hóa đơn, tin cậy thấp. */
+function mockWarnings(i: LineItem, main: string, conf: number, agreement: string | null): HsWarningDetail[] {
+  const out: HsWarningDetail[] = [];
+  const digits = (v: string) => v.replace(/\D/g, "");
+  if (conf < 0.6) {
+    const pct = String(Math.round(conf * 100));
+    out.push({ code: "LOW_CONFIDENCE", level: "warning", group: "classification", text: `Độ tin cậy thấp (${pct}%): kiểm tra kỹ mô tả và mã thay thế trước khi xác nhận.`, params: { pct } });
+    out.push({ code: "MISSING_DETAIL", level: "warning", group: "classification", text: "Mô tả có thể thiếu đặc điểm để phân định (chất liệu, công dụng, cấu tạo...)." });
+  }
+  if (i.invoiceHsCode && digits(i.invoiceHsCode).slice(0, 6) !== digits(main).slice(0, 6)) {
+    const invoiceHs = digits(i.invoiceHsCode).slice(0, 6);
+    out.push({ code: "INVOICE_HS_MISMATCH", level: "danger", group: "classification", text: `Khác mã HS trên hóa đơn (${invoiceHs}).`, params: { invoiceHs } });
+  }
+  if (/^850[14]/.test(digits(main))) {
+    const items = [
+      "Quản lý chuyên ngành (Bộ Công Thương): Động cơ điện không đồng bộ ba pha rô to lồng sóc – dán nhãn năng lượng, - Quyết định số 04/2017/QĐ-TTg, - Thông tư số 36/2016/TT-BCT.",
+      "Quản lý chuyên ngành (Bộ Công Thương): Động cơ điện – kiểm tra hiệu suất năng lượng tối thiểu, - TCVN 7540-1:2013.",
+    ];
+    out.push({ code: "SPECIALIZED_POLICY", level: "info", group: "policy", text: items.join(" "), params: { ministry: "Bộ Công Thương" }, items });
+  }
+  if (agreement) {
+    const items = [
+      "Biểu thuế FTA chưa có kỳ của ngày nhập khẩu: áp thuế suất kỳ cuối, cần xác nhận với biểu thuế mới.",
+      "Thuế FTA của mã này còn đang giảm theo lộ trình: mức thật của năm nhập khẩu có thể thấp hơn.",
+    ];
+    out.push({ code: "FTA_LAST_PERIOD", level: "info", group: "tax", text: items.join(" "), params: { agreement }, items });
+  }
+  return out;
 }
 
 /** Dòng hàng. Gợi ý hscodepro chỉ hiện khi bước tra HS đã xong (và AI không còn chờ người khai trả lời). */

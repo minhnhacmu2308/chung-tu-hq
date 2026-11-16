@@ -195,26 +195,6 @@ export function QueueTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label={t.setFilter} className="w-full cq-sm:w-64">
-          <Select
-            options={[{ value: "", label: t.setAll }, ...sets.map((s) => ({ value: s.id, label: setTitle(s, locale) }))]}
-            value={setId}
-            onChange={(e) => resetPage(setSetId)(e.target.value)}
-          />
-        </Field>
-        <Field label={t.levelFilter} className="w-full cq-sm:w-48">
-          <Select
-            options={[{ value: "", label: t.levelAll }, ...LEVELS.map((l) => ({ value: l, label: statusLabel(MATCH_LEVEL[l], locale) }))]}
-            value={level}
-            onChange={(e) => resetPage(setLevel)(e.target.value as ItemMatchLevel | "")}
-          />
-        </Field>
-        <div className="pb-2">
-          <Checkbox label={t.mine} checked={mine} onChange={(e) => resetPage(setMine)(e.target.checked)} />
-        </div>
-      </div>
-
       {queue.isError && <LoadError onRetry={() => void queue.refetch()} title={t.loadError} />}
       {!queue.isError && (
         <QueueViewContext.Provider value={view}>
@@ -227,6 +207,28 @@ export function QueueTab() {
             loading={queue.isLoading}
             pagination={{ mode: "controlled", ...page, rowCount: queue.data?.total ?? 0, onChange: setPage, pageSizeOptions: PAGE_SIZES }}
             filtered={filtered}
+            activeFilters={[mine, setId, level].filter(Boolean).length}
+            filters={
+              <>
+                <Field label={t.setFilter}>
+                  <Select
+                    options={[{ value: "", label: t.setAll }, ...sets.map((s) => ({ value: s.id, label: setTitle(s, locale) }))]}
+                    value={setId}
+                    onChange={(e) => resetPage(setSetId)(e.target.value)}
+                  />
+                </Field>
+                <Field label={t.levelFilter}>
+                  <Select
+                    options={[{ value: "", label: t.levelAll }, ...LEVELS.map((l) => ({ value: l, label: statusLabel(MATCH_LEVEL[l], locale) }))]}
+                    value={level}
+                    onChange={(e) => resetPage(setLevel)(e.target.value as ItemMatchLevel | "")}
+                  />
+                </Field>
+                <div className="col-span-full">
+                  <Checkbox label={t.mine} checked={mine} onChange={(e) => resetPage(setMine)(e.target.checked)} />
+                </div>
+              </>
+            }
             onClearFilters={() => {
               setMine(false);
               setSetId("");

@@ -125,7 +125,7 @@ function AnswerForm({ item, same, onDone, dossierId }: { item: LineItem; same: L
         )}
       </Stack>
       <DialogFooter>
-        <Button variant="ghost" type="button" onClick={onDone}>
+        <Button variant="secondary" type="button" onClick={onDone}>
           {t.later}
         </Button>
         <Button type="submit" disabled={!isAnswerComplete(q, state)} loading={send.isPending}>
@@ -180,7 +180,7 @@ function ReclassifyForm({ item, onDone, dossierId }: { item: LineItem; onDone: (
         </Field>
       </Stack>
       <DialogFooter>
-        <Button variant="ghost" type="button" onClick={onDone}>
+        <Button variant="secondary" type="button" onClick={onDone}>
           {t.cancel}
         </Button>
         <Button type="submit" disabled={needsOrigin && !originOk} loading={run.isPending}>

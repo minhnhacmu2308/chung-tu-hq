@@ -114,6 +114,7 @@ function OriginCell({ line, live }: { line: Line; live: RefObject<Live> }) {
         aria-label={f.label}
         aria-invalid={!f.value.trim()}
         required
+        size="sm"
         options={options}
         value={f.value || null}
         onChange={(v) => v && v !== f.value && live.current.onSave(f.id, v)}

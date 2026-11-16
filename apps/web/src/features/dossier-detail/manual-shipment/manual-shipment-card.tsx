@@ -250,7 +250,7 @@ function ManualDialog({ open, onOpenChange, view, dossierId, currency, incoterm 
             </FormSection>
           </fieldset>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               {t.cancel}
             </Button>
             {!readOnly && (

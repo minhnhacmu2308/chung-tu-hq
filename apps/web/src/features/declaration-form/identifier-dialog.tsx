@@ -231,7 +231,7 @@ export function IdentifierDialog({ form, kind, header, dossierId, showInapplicab
           ))}
         </Stack>
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>{t.close}</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>{t.close}</Button>
           {issued ? (
             onConfirm && (
               <Button type="button" leftIcon={<Check className="h-4 w-4" />} onClick={() => confirm(issued)}>

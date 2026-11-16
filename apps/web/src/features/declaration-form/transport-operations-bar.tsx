@@ -50,7 +50,7 @@ function OperationDialog({ form, kind, header, showInapplicable, onClose }: { fo
           ))}
         </Stack>
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>{t.close}</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>{t.close}</Button>
           <Button type="button" variant="secondary" onClick={() => notConnected(t.askResult)}>{t.askResult}</Button>
           <Button type="submit">{t.sendDecl}</Button>
         </DialogFooter>
@@ -78,7 +78,7 @@ export function TransportOperationsBar({ kind, header, amending, showInapplicabl
           </Button>
         );
       })}
-      <Dialog open={!!current} onOpenChange={(o) => !o && setOpen(null)} defaultPresentation="panel">
+      <Dialog open={!!current} onOpenChange={(o) => !o && setOpen(null)}>
         {current && dossierId && current.id === "dinh-danh" ? (
           <IdentifierDialog key={current.id} form={current} kind={kind} header={header} dossierId={dossierId} showInapplicable={showInapplicable} text={opText(t, kind, current.id)} onClose={() => setOpen(null)} {...(onIdentifier ? { onConfirm: onIdentifier } : {})} />
         ) : (

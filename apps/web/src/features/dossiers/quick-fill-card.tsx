@@ -132,7 +132,7 @@ function CopyDialog({ open, onOpenChange, dossiers, loading, failed, onRetry, on
             </Field>
           )}
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" disabled={!picked}>{t.apply}</Button>
           </DialogFooter>
         </form>

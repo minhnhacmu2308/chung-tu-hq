@@ -2,7 +2,7 @@ import type { FieldAuditRepo, OrgAuditWriter } from "../../../shared/audit.js";
 import type { DomainError } from "../../../shared/errors.js";
 import type { Ctx } from "../../../shared/ctx.js";
 import type { Result } from "../../../shared/result.js";
-import type { CatalogItemKind, DraftLessons, ValueCharges, AgentMode, EditSheet, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
+import type { CatalogItemKind, DraftLessons, ValueCharges, AgentMode, EditSheet, AgentTaskId, AgentTaskStatus, DeclarationStatus, DocKind, DossierStatus, HsAnswerRequest, HsCreateRequest, HsJob, HsPendingQuestion, HsWarningDetail, LineItemHsStatus, Shipment, StepId } from "@kb/contracts";
 import type { Clock } from "../../../shared/clock.js";
 import type { Notifier } from "../../../shared/notifier.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -36,7 +36,7 @@ export type LineItemRow = {
  * `learned`: mã HS lấy từ bài học (đủ số lần) – không gửi HSCodePro lại, trừ khi người khai bấm phân loại lại.
  * `descriptionVi`: mô tả tiếng Việt AI gợi ý. `answered`: các câu đã trả lời AI ("câu hỏi: trả lời") – gửi kèm khi phân loại lại để AI không hỏi lại.
  */
-export type HsDetail = { reasoning: string; legalBasis: string[]; warnings: string[]; learned?: { lessonId: string; hits: number }; descriptionVi?: string | null; answered?: string[] };
+export type HsDetail = { reasoning: string; legalBasis: string[]; warnings: string[]; warningDetails?: HsWarningDetail[]; learned?: { lessonId: string; hits: number }; descriptionVi?: string | null; answered?: string[] };
 /** Thuế của một ứng viên (chuỗi thập phân); null khi HSCodePro chưa tra được. Trường mở rộng vắng khi API cũ. */
 export type HsSuggestionRates = {
   importRate: string | null; basis: "MFN" | "FTA" | null; agreement: string | null; vatRate: string | null;

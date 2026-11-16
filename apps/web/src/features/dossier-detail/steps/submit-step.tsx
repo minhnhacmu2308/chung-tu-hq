@@ -332,7 +332,7 @@ function ConfirmReopenDialog({ confirm, onClose, onConfirm, pending, code, multi
             </p>
           </Stack>
           <DialogFooter>
-            <Button variant="ghost" type="button" onClick={onClose}>
+            <Button variant="secondary" type="button" onClick={onClose}>
               {t.cancel}
             </Button>
             <Button type="submit" loading={pending} leftIcon={<RotateCcw className="h-4 w-4" />}>
@@ -362,7 +362,7 @@ function ConfirmDeclareAllDialog({ open, count, onClose, onConfirm, pending, cod
             <p className="text-sm text-fg-muted">{fill(sh.declareAllBody, { n: count })}</p>
           </Stack>
           <DialogFooter>
-            <Button variant="ghost" type="button" onClick={onClose}>
+            <Button variant="secondary" type="button" onClick={onClose}>
               {t.cancel}
             </Button>
             <Button type="submit" loading={pending} leftIcon={<Send className="h-4 w-4" />}>

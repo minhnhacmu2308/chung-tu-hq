@@ -60,7 +60,7 @@ export function RejectJoinRequestDialog({ request, onOpenChange }: { request: Jo
             <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500} />
           </Field>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" variant="danger" loading={reject.isPending}>{t.rejectConfirm}</Button>
           </DialogFooter>
         </form>

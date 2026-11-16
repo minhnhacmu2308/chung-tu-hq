@@ -70,7 +70,7 @@ export function ReasonDialog({
             </Field>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" variant={tone === "danger" ? "danger" : "primary"} loading={pending} disabled={!canSubmit}>{confirmLabel}</Button>
           </DialogFooter>
         </form>

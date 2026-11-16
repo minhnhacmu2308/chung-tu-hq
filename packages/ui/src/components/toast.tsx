@@ -2,7 +2,7 @@
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "lucide-react";
 import { Spinner } from "./spinner.js";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
@@ -14,7 +14,7 @@ export type ToastOptions = {
   title: ReactNode;
   description?: ReactNode;
   action?: { label: string; onClick: () => void };
-  /** ms; mặc định 5000, danger 8000. */
+  /** ms; mặc định 4000, danger/warning 6000. */
   duration?: number;
 };
 
@@ -109,18 +109,31 @@ function ToastCard({ item, closeLabel }: { item: ToastItem; closeLabel: string }
   const tone = item.tone ?? "info";
   const look = TONE[tone];
   const urgent = tone === "danger" || tone === "warning";
-  const duration = item.duration ?? (tone === "loading" ? Number.POSITIVE_INFINITY : tone === "danger" ? 8000 : 5000);
-  // Radix dừng đếm khi rê chuột / focus vào vùng thông báo – thanh đếm ngược dừng theo.
+  const duration = item.duration ?? (tone === "loading" ? Number.POSITIVE_INFINITY : urgent ? 6000 : 4000);
+  // Tự đếm giờ đóng cho từng toast. Bộ đếm của Radix dừng chung cho mọi toast khi cửa sổ mất focus hoặc focus kẹt
+  // lại vùng thông báo sau khi bấm ✕ → toast không bao giờ tự tắt. Ở đây chỉ dừng khi rê chuột / focus vào chính toast này.
   const [paused, setPaused] = useState(false);
+  const remaining = useRef(duration);
+  useEffect(() => {
+    if (!item.open || paused || !Number.isFinite(duration)) return;
+    const started = Date.now();
+    const timer = window.setTimeout(() => dismissToast(item.id), remaining.current);
+    return () => {
+      window.clearTimeout(timer);
+      remaining.current -= Date.now() - started;
+    };
+  }, [item.open, item.id, paused, duration]);
   return (
     <ToastPrimitive.Root
       open={item.open}
       onOpenChange={(open) => (open ? undefined : dismissToast(item.id))}
       // danger/warning đọc ngay (assertive), còn lại lịch sự (polite)
       type={urgent ? "foreground" : "background"}
-      duration={duration}
-      onPause={() => setPaused(true)}
-      onResume={() => setPaused(false)}
+      duration={Number.POSITIVE_INFINITY}
+      onPointerEnter={() => setPaused(true)}
+      onPointerLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={(e) => (e.currentTarget.contains(e.relatedTarget) ? undefined : setPaused(false))}
       data-tone={tone}
       // Chỉ tính hiệu ứng đóng của chính toast, không tính thanh đếm ngược bên trong.
       onAnimationEnd={(e) => (e.target === e.currentTarget && !item.open ? removeToast(item.id) : undefined)}

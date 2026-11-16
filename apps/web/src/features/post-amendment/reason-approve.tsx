@@ -130,7 +130,7 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
           </>
         ) : (
           <>
-            <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub("edit")}>
+            <Button variant="secondary" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub("edit")}>
               {t.back}
             </Button>
             {approved || !editable ? (
@@ -156,7 +156,7 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
           >
             <p className="text-sm text-fg-muted">{t.approveBody}</p>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setApproveOpen(false)}>
+              <Button type="button" variant="secondary" onClick={() => setApproveOpen(false)}>
                 {t.cancel}
               </Button>
               <Button type="submit" loading={approve.isPending}>

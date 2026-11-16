@@ -144,7 +144,7 @@ export function MailFiltersDialog({ connection, onOpenChange }: { connection: Ma
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setDraft(toDraft(DEFAULT_MAIL_FILTERS))}>{t.reset}</Button>
             <DialogClose asChild>
-              <Button type="button" variant="ghost">{t.cancel}</Button>
+              <Button type="button" variant="secondary">{t.cancel}</Button>
             </DialogClose>
             <Button type="submit" loading={save.isPending}>{t.save}</Button>
           </DialogFooter>

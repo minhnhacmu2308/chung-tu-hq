@@ -117,6 +117,8 @@ type BaseProps = {
   /** Nút "Mở rộng" trong danh sách: khung rộng hơn, nhãn/mô tả xuống dòng để đọc hết (mô tả dài như tên đơn vị, hướng dẫn mã). */
   expandable?: boolean;
   disabled?: boolean;
+  /** "sm" (cao 32px) cho ô trong bảng, đứng cạnh Input `h-8`. Mặc định "md" (40px). */
+  size?: "md" | "sm";
   className?: string;
   labels?: Partial<Record<keyof (typeof MESSAGES)["vi"], string>>;
   id?: string;
@@ -131,7 +133,7 @@ export type ComboboxProps =
   | (BaseProps & { multiple: true; value: readonly string[]; onChange: (value: string[]) => void });
 
 const shell = cn(
-  "flex min-h-10 w-full items-center gap-1 rounded-md border border-input-border bg-surface px-2 text-sm text-fg pointer-coarse:text-[max(1rem,16px)]",
+  "flex w-full items-center gap-1 rounded-md border border-input-border bg-surface px-2 text-sm text-fg pointer-coarse:text-[max(1rem,16px)]",
   "focus-within:border-focus focus-within:ring-2 focus-within:ring-focus",
   "has-[[aria-invalid=true]]:border-danger",
 );
@@ -147,6 +149,7 @@ export function Combobox(props: ComboboxProps) {
     clearable = false,
     expandable = false,
     disabled = false,
+    size = "md",
     className,
     labels,
   } = props;
@@ -213,7 +216,7 @@ export function Combobox(props: ComboboxProps) {
       }}
     >
       <PopoverPrimitive.Anchor asChild>
-        <div data-glass-input="" className={cn(shell, disabled && "cursor-not-allowed opacity-50", className)}>
+        <div data-glass-input="" className={cn(shell, size === "sm" ? "min-h-8" : "min-h-10", disabled && "cursor-not-allowed opacity-50", className)}>
           {props.multiple && selectedOptions.length > 0 && (
             <ul className="flex flex-wrap items-center gap-1 py-1">
               {selectedOptions.map((o) => (
@@ -245,7 +248,8 @@ export function Combobox(props: ComboboxProps) {
               aria-describedby={a11y["aria-describedby"]}
               aria-invalid={a11y["aria-invalid"]}
               className={cn(
-                "flex h-9 min-w-0 flex-1 items-center gap-2 bg-transparent px-1 text-left focus-visible:outline-none disabled:cursor-not-allowed",
+                size === "sm" ? "h-7" : "h-9",
+                "flex min-w-0 flex-1 items-center gap-2 bg-transparent px-1 text-left focus-visible:outline-none disabled:cursor-not-allowed",
               )}
             >
               <span className={cn("min-w-0 flex-1 truncate", selected.length === 0 && "text-fg-subtle")}>{triggerText}</span>

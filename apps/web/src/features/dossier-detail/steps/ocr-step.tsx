@@ -422,7 +422,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
             )}
             {blockers > 0 && <span className="text-danger-subtle-fg">{fill(t.blockers, { n: blockers })}</span>}
           </p>
-          <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => goTo("upload")}>
+          <Button variant="secondary" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => goTo("upload")}>
             <span className="cq-max-sm:sr-only">{t.documents}</span>
           </Button>
           {alreadyPast ? (

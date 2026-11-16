@@ -236,7 +236,7 @@ function ChangeModeDialog({ mode, sets, onClose }: { mode: CatalogMode; sets: re
             )}
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>{t.cancel}</Button>
             <Button type="submit" loading={change.isPending} disabled={blocked}>{t.changeConfirm}</Button>
           </DialogFooter>
         </form>

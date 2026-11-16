@@ -64,6 +64,7 @@ function toLineItemHs(r: LineItemRow, sugs: HsSuggestionRow[]): LineItemHs {
   return {
     status: r.hsStatus, question: r.hsQuestion, error: r.hsError,
     reasoning: r.hsDetail?.reasoning ?? null, legalBasis: r.hsDetail?.legalBasis ?? [], warnings: r.hsDetail?.warnings ?? [],
+    ...(r.hsDetail?.warningDetails?.length ? { warningDetails: r.hsDetail.warningDetails } : {}),
     candidates: mine.map((x) => ({
       code: x.code, description: x.description, confidence: x.confidence, whyNot: x.whyNot, importRate: x.rates?.importRate ?? null, basis: x.rates?.basis ?? null, agreement: x.rates?.agreement ?? null, vatRate: x.rates?.vatRate ?? null,
       vatCode: x.rates?.vatCode ?? null, vatNote: x.rates?.vatNote ?? null, vatCertain: x.rates?.vatCertain ?? null, normalImportRate: x.rates?.normalImportRate ?? null,

@@ -8,6 +8,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Dossier, LineItem } from "@/mocks/types";
 import { CreateSummaryStep } from "./create-step";
 import { HsSuggestionCell } from "./hs/hs-cell";
+import { lineNotices } from "./hs/hs-notices";
 
 const dossier = {
   id: "d1",
@@ -40,7 +41,7 @@ function render(locale: UiLocale, node: ReactElement) {
   return renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(UiLocaleProvider, { locale, children: node })));
 }
 const step = () => createElement(CreateSummaryStep, { dossier, goTo: () => {} });
-const cell = (item: LineItem) => createElement(HsSuggestionCell, { item, onAnswer: () => {}, onReclassify: () => {} });
+const cell = (item: LineItem) => createElement(HsSuggestionCell, { item, notices: lineNotices(item), onAnswer: () => {}, onReclassify: () => {} });
 
 describe("Bước 1 và ô gợi ý HS theo ngôn ngữ", () => {
   // vitest của app chạy môi trường node, JSX biên dịch kiểu cổ điển → cần React toàn cục.
@@ -68,10 +69,11 @@ describe("Bước 1 và ô gợi ý HS theo ngôn ngữ", () => {
     expect(html).toContain("Lưu ghi chú");
   });
 
-  it("zh: ô gợi ý HS dịch nhãn, cảnh báo từ HSCodePro giữ nguyên", () => {
+  it("zh: ô gợi ý HS dịch nhãn; cảnh báo HSCodePro thành nhãn ngắn đã dịch (câu gốc tiếng Việt nằm trong thẻ chi tiết)", () => {
     expect(render("zh", cell(needInfo))).toContain("回答 AI");
     const html = render("zh", cell(suggested));
     expect(html).toContain("置信度 92%");
-    expect(html).toContain("Hàng thuộc diện kiểm tra chuyên ngành");
+    expect(html).toContain("其他提示");
+    expect(html).not.toContain("Hàng thuộc diện kiểm tra chuyên ngành");
   });
 });

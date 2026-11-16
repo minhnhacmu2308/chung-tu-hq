@@ -206,6 +206,7 @@ describe("Danh mục – tab Chờ duyệt", () => {
     const other = await rowWith("QCN-750-B");
     expect(within(other).queryByRole("button")).toBeNull();
     expect(within(other).queryByRole("checkbox")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" })); // bộ lọc nằm trong hộp phễu
     await userEvent.click(screen.getByRole("checkbox", { name: "Của tôi" }));
     await waitFor(async () => expect(within(await table()).queryByText("QCN-750-B")).toBeNull(), T);
     expect(await rowWith("VT-0099")).toBeTruthy();

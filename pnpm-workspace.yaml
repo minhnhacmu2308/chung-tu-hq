@@ -5,6 +5,12 @@ packages:
 onlyBuiltDependencies:
   - esbuild
 
+# Cài cả bản native x64 và arm64 (lightningcss, tailwind oxide, next-swc, esbuild): máy Mac M1 chạy được Node arm64
+# kể cả khi terminal/Claude Code đang chạy qua Rosetta (x64). Chạy native: `arch -arm64 pnpm dev`.
+supportedArchitectures:
+  os: [current]
+  cpu: [x64, arm64]
+
 # Vá lỗ hổng `pnpm audit` ở dependency gián tiếp khi gói cha chưa ra bản sửa.
 # Gỡ từng dòng khi gói cha đã kéo bản an toàn (`pnpm why <gói> -r`).
 overrides:

@@ -174,7 +174,7 @@ function AddAliasDialog({ item, sets, onClose }: { item: CatalogItem; sets: read
             )}
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>{t.cancel}</Button>
             <Button type="submit" loading={add.isPending} disabled={!setId || !code.trim()}>{t.save}</Button>
           </DialogFooter>
         </form>
@@ -209,7 +209,7 @@ function MoveAliasDialog({ alias, item, onClose }: { alias: ItemAlias; item: Cat
             <ItemPicker excludeId={item.id} value={target} onChange={setTarget} placeholder={t.mergeTargetPlaceholder} emptyText={t.pickNoResults} />
           </Field>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>{t.cancel}</Button>
             <Button type="submit" loading={move.isPending} disabled={!target}>{t.moveConfirm}</Button>
           </DialogFooter>
         </form>

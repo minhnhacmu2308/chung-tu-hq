@@ -119,7 +119,7 @@ export function FieldDialog({ skill, field, open, onOpenChange, onSaved }: Props
             />
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
             <Button type="submit" loading={save.isPending}>{field ? t.save : t.add}</Button>
           </DialogFooter>
         </form>

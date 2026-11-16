@@ -149,7 +149,7 @@ export function FptPreviewButton({ dossierId }: { dossierId: string }) {
             </Stack>
           )}
           <DialogFooter>
-            <Button variant="ghost" type="button" onClick={() => setOpen(false)}>
+            <Button variant="secondary" type="button" onClick={() => setOpen(false)}>
               {t.close}
             </Button>
           </DialogFooter>

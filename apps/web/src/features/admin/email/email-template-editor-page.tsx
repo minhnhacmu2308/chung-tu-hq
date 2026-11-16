@@ -74,7 +74,7 @@ export function EmailTemplateEditorPage({ id }: { id: string | null }) {
       {problem && <Alert tone="danger">{problem}</Alert>}
       {editable && (
         <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-          <Button variant="ghost" onClick={() => router.push("/admin/email/templates")}>{t.back}</Button>
+          <Button variant="secondary" onClick={() => router.push("/admin/email/templates")}>{t.back}</Button>
           <Button leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={submit}>{t.save}</Button>
         </div>
       )}

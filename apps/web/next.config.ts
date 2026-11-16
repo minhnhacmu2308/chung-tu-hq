@@ -20,6 +20,8 @@ const SECURITY_HEADERS = [
 ];
 
 const config: NextConfig = {
+  // Xem dev server từ xa qua ngrok (chỉ ảnh hưởng `next dev`): Next chặn /_next/* từ origin lạ
+  allowedDevOrigins: ["*.ngrok-free.app", "*.ngrok-free.dev", "*.ngrok.app"],
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

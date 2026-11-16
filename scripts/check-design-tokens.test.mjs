@@ -17,6 +17,15 @@ describe("check-design-tokens", () => {
     assert.deepEqual(rules("apps/web/a.tsx", `className="text-white"`), ["tw-palette"]);
   });
 
+  it("chặn nút Hủy / Đóng / Quay lại kiểu ghost, kể cả viết nhiều dòng", () => {
+    assert.deepEqual(rules("apps/web/a.tsx", `<Button variant="ghost" onClick={x}>{t.cancel}</Button>`), ["apps-ghost-cancel"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Button variant="ghost" onClick={x}>\n  {t.backToOcr}\n</Button>`), ["apps-ghost-cancel"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Button asChild variant="ghost">\n  <Link href={h}>\n    <ArrowLeft />\n    {t.backToCard}`), ["apps-ghost-cancel"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={x}>`), ["apps-ghost-cancel"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Button variant="secondary">{t.later}</Button>`), []);
+    assert.deepEqual(rules("apps/web/a.tsx", `<Button variant="ghost">{t.addRow}</Button>`), []);
+  });
+
   it("chặn bo góc ngoài thang (không theo cấu hình giao diện)", () => {
     assert.deepEqual(rules("packages/ui/src/c.tsx", `className="rounded-xl border"`), ["radius-off-scale"]);
     assert.deepEqual(rules("apps/web/a.tsx", `className="hover:rounded-t-2xl"`), ["radius-off-scale"]);

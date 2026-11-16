@@ -70,7 +70,7 @@ function Meta({ label, wide, children }: { label: string; wide?: boolean; childr
 export function InboxMessageDetail({ m, actions, onOpenChange }: { m: InboxMessage | null; actions: InboxActions; onOpenChange: (open: boolean) => void }) {
   const t = useMessages(INBOX_MESSAGES);
   return (
-    <Dialog open={m !== null} onOpenChange={onOpenChange} defaultPresentation="panel">
+    <Dialog open={m !== null} onOpenChange={onOpenChange}>
       {m && (
         <DialogContent
           title={m.subject}

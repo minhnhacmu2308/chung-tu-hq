@@ -156,7 +156,7 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
           {primary ? t.nextStep : sending ? t.waitingShort : a.status === "REGISTERED" ? t.doneAll : t.notYetDeclare}
         </p>
         {/* Màn hẹp thanh bước nhỏ không bấm được – nút này là đường quay lại xem/sửa bản khai. */}
-        <Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub(reviewTarget(a))}>
+        <Button variant="secondary" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={() => ctx.goSub(reviewTarget(a))}>
           {t.review}
         </Button>
         {canRecall && (
@@ -186,7 +186,7 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
           >
             <p className="text-sm text-fg-muted">{t.recallBody}</p>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setRecallOpen(false)}>
+              <Button type="button" variant="secondary" onClick={() => setRecallOpen(false)}>
                 {t.cancel}
               </Button>
               <Button type="submit" loading={perform.isPending} leftIcon={<RotateCcw className="h-4 w-4" />}>

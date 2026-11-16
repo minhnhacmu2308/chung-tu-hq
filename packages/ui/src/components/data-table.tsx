@@ -85,6 +85,7 @@ const MESSAGES = {
     sortDefault: "Sắp xếp mặc định",
     filters: "Bộ lọc",
     filtersActive: "Bộ lọc ({n})",
+    filtersDone: "Xong",
     selectedCount: "Đã chọn {n}",
     selectionToolbar: "Thao tác với các dòng đã chọn",
     clearSelection: "Bỏ chọn",
@@ -117,6 +118,7 @@ const MESSAGES = {
     sortDefault: "Default order",
     filters: "Filters",
     filtersActive: "Filters ({n})",
+    filtersDone: "Done",
     selectedCount: "{n} selected",
     selectionToolbar: "Actions for selected rows",
     clearSelection: "Clear selection",
@@ -149,6 +151,7 @@ const MESSAGES = {
     sortDefault: "默认排序",
     filters: "筛选",
     filtersActive: "筛选（{n}）",
+    filtersDone: "完成",
     selectedCount: "已选 {n} 项",
     selectionToolbar: "所选行的操作",
     clearSelection: "取消选择",
@@ -184,6 +187,7 @@ const MESSAGES = {
   | "sortDirection"
   | "filters"
   | "filtersActive"
+  | "filtersDone"
   | "selectedCount"
   | "selectionToolbar"
   | "clearSelection"
@@ -341,6 +345,15 @@ export type DataTableProps<TData extends RowData> = {
   filtered?: boolean;
   /** Bỏ bộ lọc bên ngoài – gọi khi bấm "Xóa bộ lọc" (cùng với xóa ô tìm kiếm/lọc cột của bảng). */
   onClearFilters?: () => void;
+  /**
+   * Bộ lọc của trang (lọc phía server, chọn bộ mã…): đặt trong hộp lọc mở từ nút phễu, cùng lưới 2 cột với lọc theo cột.
+   * Mỗi ô bọc trong `Field`; nhóm checkbox bọc `<div className="col-span-full">`. Chuẩn hệ thống: KHÔNG đặt bộ lọc ngoài bảng.
+   */
+  filters?: ReactNode;
+  /** Số bộ lọc của trang đang khác mặc định – cộng vào số trên nút phễu. */
+  activeFilters?: number;
+  /** Ô tìm kiếm do trang điều khiển (tìm phía server) thay cho tìm trong dữ liệu đã tải; cùng chỗ với `searchable`. */
+  search?: { value: string; onChange: (value: string) => void; placeholder?: string; label?: string };
   initialSorting?: SortingState;
   pagination?: DataTablePagination;
   stickyHeader?: boolean;
@@ -513,6 +526,9 @@ export function DataTable<TData extends RowData>({
   emptyAction,
   filtered: filteredOutside = false,
   onClearFilters,
+  filters,
+  activeFilters = 0,
+  search,
   initialSorting = [],
   pagination = { mode: "client" },
   stickyHeader = true,
@@ -746,9 +762,12 @@ export function DataTable<TData extends RowData>({
     return def.meta?.label ?? (typeof def.header === "string" ? def.header : column.id);
   };
   const filterColumns = leafColumns.filter((c) => c.columnDef.meta?.filter && c.getCanFilter());
-  const hasFilterRow = filterColumns.length > 0;
+  const hasFilterRow = filterColumns.length > 0 || !!filters;
   const isFiltered = globalFilter.trim() !== "" || columnFilters.length > 0;
-  const showToolbar = searchable || columnToggle || hasFilterRow || !!toolbarActions || !!renderCard;
+  const filterCount = columnFilters.length + activeFilters;
+  // Có gì để "Xóa bộ lọc": lọc trong bảng, bộ lọc của trang hoặc ô tìm phía server
+  const anyFilter = isFiltered || activeFilters > 0 || !!search?.value;
+  const showToolbar = searchable || !!search || columnToggle || hasFilterRow || !!toolbarActions || !!renderCard;
   const clearFilters = () => {
     setGlobalFilter("");
     setColumnFilters([]);
@@ -805,15 +824,15 @@ export function DataTable<TData extends RowData>({
           options={selectOptions(column)}
           value={isSelectFilter(value) ? value.equals : ""}
           onChange={(e) => column.setFilterValue(e.target.value ? { equals: e.target.value } : undefined)}
-          className="h-8 min-w-24 text-sm"
+          className="h-9 min-w-24 text-sm"
         />
       ) : kind === "text" ? (
-        <Input type="search" aria-label={label} value={typeof value === "string" ? value : ""} onChange={(e) => column.setFilterValue(e.target.value)} className="h-8" />
+        <Input type="search" aria-label={label} value={typeof value === "string" ? value : ""} onChange={(e) => column.setFilterValue(e.target.value)} className="h-9" />
       ) : null;
     if (!withLabel || !control) return control;
     return (
       <div key={column.id} className="flex min-w-0 flex-col gap-1">
-        <span aria-hidden="true" className="text-xs text-fg-muted">{columnLabel(column)}</span>
+        <span aria-hidden="true" className="text-xs font-medium text-fg-muted">{columnLabel(column)}</span>
         {control}
       </div>
     );
@@ -846,7 +865,8 @@ export function DataTable<TData extends RowData>({
   );
 
   const clearButton = (
-    <Button variant="ghost" size="sm" leftIcon={<FilterX aria-hidden="true" className="h-4 w-4" />} onClick={clearFilters}>
+    // Viền như nút phụ (không đỏ: chỉ bỏ điều kiện lọc, không xóa dữ liệu), cao bằng nút phễu
+    <Button variant="secondary" size="sm" className="h-9" leftIcon={<FilterX aria-hidden="true" className="h-4 w-4" />} onClick={clearFilters}>
       {t.clearFilters}
     </Button>
   );
@@ -855,15 +875,15 @@ export function DataTable<TData extends RowData>({
     <div className="flex flex-col gap-3">
       {showToolbar && (
         <div className="flex flex-wrap items-center gap-2">
-          {searchable && (
+          {(searchable || search) && (
             <div className="relative w-full cq-sm:w-64">
               <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
               <Input
                 type="search"
-                aria-label={t.search}
-                placeholder={t.searchPlaceholder}
-                value={globalFilter}
-                onChange={(e) => table.setGlobalFilter(e.target.value)}
+                aria-label={search?.label ?? t.search}
+                placeholder={search?.placeholder ?? t.searchPlaceholder}
+                value={search ? search.value : globalFilter}
+                onChange={(e) => (search ? search.onChange(e.target.value) : table.setGlobalFilter(e.target.value))}
                 className="h-9 pl-8"
               />
             </div>
@@ -872,19 +892,32 @@ export function DataTable<TData extends RowData>({
             <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
               <PopoverTrigger asChild>
                 <Button
-                  variant={columnFilters.length ? "primary" : "secondary"}
-                  size={columnFilters.length ? "sm" : "icon"}
-                  aria-label={columnFilters.length ? fill(t.filtersActive, { n: columnFilters.length }) : t.filters}
+                  variant={filterCount ? "primary" : "secondary"}
+                  size={filterCount ? "sm" : "icon"}
+                  aria-label={filterCount ? fill(t.filtersActive, { n: filterCount }) : t.filters}
                   title={t.filters}
-                  className={columnFilters.length ? "h-9" : "h-9 w-9"}
-                  leftIcon={columnFilters.length ? <Filter aria-hidden="true" className="h-4 w-4" /> : undefined}
+                  className={filterCount ? "h-9" : "h-9 w-9"}
+                  leftIcon={filterCount ? <Filter aria-hidden="true" className="h-4 w-4" /> : undefined}
                 >
-                  {columnFilters.length ? columnFilters.length : <Filter aria-hidden="true" className="h-4 w-4" />}
+                  {filterCount ? filterCount : <Filter aria-hidden="true" className="h-4 w-4" />}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="start" aria-label={t.filters} className="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3">
-                <p className="text-sm font-semibold">{t.filters}</p>
-                <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">{filterColumns.map((c) => filterControl(c, true))}</div>
+              {/* Hộp lọc rộng, 2 cột từ màn sm: thấy hết điều kiện một lượt; chân hộp có Xóa bộ lọc + Xong (lọc áp dụng ngay khi chọn). */}
+              <PopoverContent align="start" aria-label={t.filters} className="flex w-[36rem] max-w-[calc(100vw-2rem)] flex-col p-0">
+                <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+                  <Filter aria-hidden="true" className="h-4 w-4 text-fg-muted" />
+                  <p className="text-sm font-semibold">{filterCount ? fill(t.filtersActive, { n: filterCount }) : t.filters}</p>
+                </div>
+                <div className="grid max-h-[60vh] grid-cols-1 gap-x-4 gap-y-3 overflow-y-auto p-4 sm:grid-cols-2">
+                  {filterColumns.map((c) => filterControl(c, true))}
+                  {filters}
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-border bg-surface-muted px-4 py-2.5">
+                  <Button variant="secondary" size="sm" leftIcon={<FilterX aria-hidden="true" className="h-4 w-4" />} onClick={clearFilters} disabled={!anyFilter}>
+                    {t.clearFilters}
+                  </Button>
+                  <Button size="sm" onClick={() => setFiltersOpen(false)}>{t.filtersDone}</Button>
+                </div>
               </PopoverContent>
             </Popover>
           )}
@@ -912,7 +945,7 @@ export function DataTable<TData extends RowData>({
               </span>
             );
           })}
-          {isFiltered && clearButton}
+          {anyFilter && clearButton}
           <p role="status" className="text-sm text-fg-muted">
             {isFiltered && !loading ? fill(t.filteredCount, { shown: filteredCount, total: data.length }) : null}
           </p>

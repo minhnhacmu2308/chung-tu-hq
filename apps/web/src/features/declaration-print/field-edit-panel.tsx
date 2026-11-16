@@ -428,7 +428,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
 
   return (
     <>
-      <Dialog open={open} defaultPresentation="panel" onOpenChange={(o) => !o && onTarget(null)}>
+      <Dialog open={open} onOpenChange={(o) => !o && onTarget(null)}>
         <DialogContent
           title={title}
           icon={<PenLine className="h-4 w-4" />}
@@ -525,10 +525,10 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
               )}
               <DialogFooter>
                 {readOnlyReason ? (
-                  <Button type="button" variant="ghost" onClick={() => onTarget(null)}>{t.close}</Button>
+                  <Button type="button" variant="secondary" onClick={() => onTarget(null)}>{t.close}</Button>
                 ) : (
                   <>
-                    <Button type="button" variant="ghost" disabled={save.isPending} onClick={() => { setChanges({}); onTarget(null); }}>{t.cancel}</Button>
+                    <Button type="button" variant="secondary" disabled={save.isPending} onClick={() => { setChanges({}); onTarget(null); }}>{t.cancel}</Button>
                     {!dirty && suspects.length > 0 ? (
                       <Button type="button" leftIcon={<CheckCircle2 className="h-4 w-4" />} loading={save.isPending} onClick={commit}>
                         {t.confirmOk}

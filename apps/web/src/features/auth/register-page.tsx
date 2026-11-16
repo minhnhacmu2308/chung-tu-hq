@@ -149,7 +149,7 @@ export function RegisterPage() {
           )}
 
           <div className="flex flex-wrap justify-between gap-2">
-            <Button type="button" variant="ghost" onClick={() => setStep("account")}>{t.back}</Button>
+            <Button type="button" variant="secondary" onClick={() => setStep("account")}>{t.back}</Button>
             {company?.found === true && (
               <Button
                 type="button"

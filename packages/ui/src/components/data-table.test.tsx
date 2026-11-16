@@ -454,12 +454,18 @@ describe("DataTable – lọc theo cột", () => {
     await openFilters();
     await chooseOption(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }), "Chờ duyệt");
     expect(vnCodes()).toEqual(["HS-002"]);
-    await userEvent.click(screen.getByRole("button", { name: "Xóa bộ lọc" }));
+    // Hộp lọc có nút "Xóa bộ lọc" riêng ở chân hộp
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Bộ lọc" })).getByRole("button", { name: "Xóa bộ lọc" }));
     expect(vnCodes()).toHaveLength(4);
     expect(search).toHaveValue("");
     if (!screen.queryByRole("dialog", { name: "Bộ lọc" })) await openFilters();
+    const dialog = screen.getByRole("dialog", { name: "Bộ lọc" });
     expect(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" })).toHaveTextContent("Tất cả");
-    expect(screen.queryByRole("button", { name: "Xóa bộ lọc" })).not.toBeInTheDocument();
+    // Hết lọc: thanh công cụ không còn nút xóa, nút trong hộp bị tắt; "Xong" đóng hộp
+    expect(within(dialog).getByRole("button", { name: "Xóa bộ lọc" })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Xóa bộ lọc" })).toHaveLength(1);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Xong" }));
+    expect(screen.queryByRole("dialog", { name: "Bộ lọc" })).not.toBeInTheDocument();
   });
 
   it("rỗng do lọc: trạng thái riêng có nút 'Xóa bộ lọc' (khác rỗng do không có dữ liệu)", async () => {

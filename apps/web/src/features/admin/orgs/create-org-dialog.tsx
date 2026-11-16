@@ -224,7 +224,7 @@ export function CreateOrgDialog({ open, onOpenChange }: { open: boolean; onOpenC
               </fieldset>
             </Stack>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={create.isPending}>{t.cancel}</Button>
+              <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} disabled={create.isPending}>{t.cancel}</Button>
               <Button type="submit" loading={create.isPending} disabled={!planCode}>{t.submit}</Button>
             </DialogFooter>
           </form>

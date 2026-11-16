@@ -35,6 +35,7 @@ export const RULES = [
   { id: "apps-actions-column", scope: "apps", test: /\bid:\s*["'](?:__)?actions["']|\bsticky:\s*["']end["']/, msg: "Tự dựng cột thao tác. Truyền rowActions cho DataTable (cụm nút nổi đè cuối dòng khi rê chuột/Tab, không chiếm cột; cảm ứng chỉ hiện \"…\")." },
   { id: "apps-status-map", scope: "apps", test: /\{\s*(?:label:\s*string;\s*tone\b|tone:[^}]*;\s*label:\s*string)/, msg: "Tự dựng bảng { label, tone } cho trạng thái. Trạng thái nghiệp vụ dùng StatusBadge (thêm vào STATUS_META + nhãn EN của @kb/ui); nhãn phụ không phải trạng thái thì ghi kb-allow-raw kèm lý do." },
   { id: "apps-dialog-toggle-off", scope: "apps", test: /allowPresentationToggle=\{false\}/, msg: "Tắt nút chuyển cửa sổ ↔ panel của popup. Mọi popup giữ nút này để người dùng tự chọn dạng hiển thị." },
+  { id: "apps-ghost-cancel", scope: "apps", span: 4, test: /variant="ghost"(?:[^>]*>\s*(?:<[^>]*>\s*)*\{\w+\.\w*(?:[Cc]ancel|[Cc]lose|[Bb]ack|[Ll]ater)\w*\}|[^>]*leftIcon=\{<ArrowLeft\b)/, msg: 'Nút Hủy / Đóng / Quay lại (kể cả nút mũi tên ←) kiểu ghost (chỉ có chữ, trông như chữ thường). Đứng cạnh nút chính dùng variant="secondary" (nền trắng, viền).' },
   { id: "apps-raw-table", scope: "apps", test: /<table\b/, msg: "Bảng tự viết. Danh sách dùng DataTable; ma trận vai trò × quyền dùng PermissionMatrix (components/common)." },
   {
     id: "apps-hardcoded-text", scope: "apps", codeOnly: true,
@@ -81,7 +82,11 @@ export function checkSource(path, text) {
       if (r.rawColor && rawColorAllowed) continue;
       if (r.skipPath?.test(path)) continue;
       if (r.onlyPath && !r.onlyPath.test(path)) continue;
-      if (r.test.test(r.codeOnly ? stripComment(line) : line)) out.push({ path, line: i + 1, rule: r.id, msg: r.msg, text: line.trim().slice(0, 160) });
+      // span: nút JSX hay xuống dòng → ghép thêm vài dòng sau, chỉ tính khi chỗ khớp bắt đầu ở dòng này (không báo trùng).
+      const hit = r.span
+        ? (r.test.exec(lines.slice(i, i + r.span).join("\n"))?.index ?? Infinity) < line.length
+        : r.test.test(r.codeOnly ? stripComment(line) : line);
+      if (hit) out.push({ path, line: i + 1, rule: r.id, msg: r.msg, text: line.trim().slice(0, 160) });
     }
   });
   return out;

@@ -109,7 +109,7 @@ export function SetSourceDialog({ set, sets, access, onClose }: { set: CodeSet; 
           >
             {body}
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={onClose}>{applied ? t.close : t.cancel}</Button>
+              <Button type="button" variant="secondary" onClick={onClose}>{applied ? t.close : t.cancel}</Button>
               <Button type="submit" loading={apply.isPending} disabled={!preview.data}>{reapply ? t.confirmReapply : t.confirm}</Button>
             </DialogFooter>
           </form>

@@ -44,7 +44,7 @@ function CampaignDialog({ id, onClose }: { id: string | null; onClose: () => voi
   const q = useQuery({ queryKey: adminKeys.emailCampaign(id ?? ""), queryFn: () => getEmailCampaign(id!), enabled: !!id });
   const c = q.data;
   return (
-    <Dialog open={!!id} onOpenChange={(o) => !o && onClose()} defaultPresentation="panel">
+    <Dialog open={!!id} onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={c?.subject ?? t.detail} description={c ? `${c.audienceLabel} · ${formatDateTime(c.createdAt)}` : undefined} icon={<Mail className="h-4 w-4" />} size="lg">
         {q.isError ? (
           <LoadError onRetry={() => void q.refetch()} title={t.loadError} />

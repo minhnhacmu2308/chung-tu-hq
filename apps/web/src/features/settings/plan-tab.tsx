@@ -104,7 +104,7 @@ export function BuyCreditsDialog({ open, onOpenChange, unitPrice }: { open: bool
             </div>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={buy.isPending}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} disabled={buy.isPending}>{t.cancel}</Button>
             <Button type="submit" loading={buy.isPending} disabled={touched && !ok}>{t.payWithPayos}</Button>
           </DialogFooter>
         </form>

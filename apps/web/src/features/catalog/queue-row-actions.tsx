@@ -83,7 +83,7 @@ export function ChooseItemDialog({ row, onPick, onClose }: { row: MatchQueueList
             </Field>
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
+            <Button type="button" variant="secondary" onClick={onClose}>{t.cancel}</Button>
             <Button type="submit" disabled={!target}>{t.chooseConfirm}</Button>
           </DialogFooter>
         </form>

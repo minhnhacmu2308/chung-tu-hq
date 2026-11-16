@@ -5,7 +5,7 @@ import {
   DataTable, Dialog, DialogContent, DialogFooter, Field, Grid, Input, Progress, RadioGroup, SegmentedControl, Spinner, Stack, StatusBadge, toast, Tooltip, IconTile, fill, useMessages,
 } from "@kb/ui";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bot, Check, CheckCheck, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, HelpCircle, Info, Pencil, Play, RotateCcw, Search, Undo2, Workflow, XCircle } from "lucide-react";
+import { Bot, Check, CheckCheck, CheckCircle2, Circle, CircleSlash, Cpu, FileStack, HelpCircle, Info, Pencil, Play, RotateCcw, Search, Undo2, Workflow, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { dossierKeys } from "@/api/dossiers";
@@ -20,6 +20,8 @@ import { errorMessage, StepError, StepLoading, StickyActionBar } from "./declara
 import { catalogMatches, type CatalogMatch } from "./hs/catalog-match";
 import { useCatalogHints } from "./hs/use-catalog-hints";
 import { DeclaredBeforeHint, HsSuggestionCell } from "./hs/hs-cell";
+import { splitShared } from "./hs/hs-notices";
+import { HsNoticeList, SharedHsNotices } from "./hs/hs-notices-view";
 import { HsAnswerDialog, ReclassifyDialog } from "./hs/hs-dialogs";
 import { LinkItemDialog } from "./hs/link-item-dialog";
 import { LINK_ITEM_MESSAGES } from "./hs/link-item.messages";
@@ -89,7 +91,7 @@ function ModeDialog({ open, onOpenChange, onStart, pending }: { open: boolean; o
           <p className="text-xs text-fg-subtle">{t.aiNote}</p>
         </Stack>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
             {t.cancel}
           </Button>
           <Button leftIcon={<Play className="h-4 w-4" />} loading={pending} onClick={() => onStart(mode)}>
@@ -314,7 +316,7 @@ function ChangeHsForm({ item, onDone, dossierId }: { item: LineItem; onDone: () 
         )}
       </Stack>
       <DialogFooter>
-        <Button variant="ghost" type="button" onClick={onDone}>
+        <Button variant="secondary" type="button" onClick={onDone}>
           {t.cancel}
         </Button>
         <Button type="submit" disabled={!code} loading={save.isPending}>
@@ -370,6 +372,8 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
     }
     return m;
   }, [items, hints]);
+  /** Lưu ý từng dòng (đã bỏ lưu ý lặp nhiều dòng – hiện một lần trên đầu bảng). */
+  const notices = useMemo(() => splitShared(items), [items]);
   const confirm = useMutation({
     mutationFn: ({ it, code }: { it: LineItem; code: string }) => confirmHs(it.id, code),
     onSuccess: (it) => {
@@ -445,7 +449,7 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
         const hit = declared.get(it.id);
         return (
           <>
-            <HsSuggestionCell item={it} onAnswer={setAnswering} onReclassify={setReclassifying} />
+            <HsSuggestionCell item={it} notices={(notices.perLine.get(it.id) ?? []).filter((n) => n.group !== "tax")} onAnswer={setAnswering} onReclassify={setReclassifying} />
             {hit && hit.code !== it.hsConfirmed && (
               <DeclaredBeforeHint item={it} match={hit} busy={confirm.isPending && confirm.variables?.it.id === it.id && confirm.variables.code === hit.code} onUse={(row, code) => confirm.mutate({ it: row, code })} />
             )}
@@ -458,32 +462,32 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
       cell: (c) => {
         const it = c.row.original;
         // Ghi chú thuế (ưu đãi cần C/O, VAT tạm tính…) dài và giống nhau trên nhiều dòng → để trong tooltip, ô chỉ còn thuế suất.
-        // VAT: số % + mã khai VNACCS (VB245, VK010…); không chịu thuế → chữ thay số; VAT phụ thuộc điều kiện ngoài mã HS → icon cảnh báo kèm căn cứ.
+        // VAT: số % + mã khai VNACCS (VB245, VK010…); không chịu thuế → chữ thay số. Lưu ý thuế (VAT có điều kiện, kỳ FTA…) → nhãn bên dưới.
         const exempt = it.vatRate === undefined && isVatExempt(it.vatCode);
+        const taxNotices = <HsNoticeList notices={(notices.perLine.get(it.id) ?? []).filter((n) => n.group === "tax")} />;
         return it.hsConfirmed ? (
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="whitespace-nowrap tabular-nums text-fg">{formatRates(it.importDutyRate, it.vatRate, exempt ? t.vatExempt : undefined)}</span>
-            {it.vatCode && <Badge tone={exempt ? "info" : "neutral"} className="font-mono">{it.vatCode}</Badge>}
-            {it.vatCertain === false && it.vatNote && (
-              <Tooltip content={it.vatNote}>
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-warning" aria-label={fill(t.vatCheckAria, { line: it.lineNo })}>
-                  <AlertTriangle className="h-4 w-4" />
-                </Button>
-              </Tooltip>
-            )}
-            {it.policyNote && (
-              <Tooltip content={it.policyNote}>
-                <Button size="icon" variant="ghost" className="h-7 w-7 text-fg-muted" aria-label={fill(t.policyNoteAria, { line: it.lineNo })}>
-                  <Info className="h-4 w-4" />
-                </Button>
-              </Tooltip>
-            )}
-            {it.taxNeedsReview && <Badge tone="warning">{t.taxNeedsReview}</Badge>}
+          <div className="flex flex-col items-start gap-1">
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="whitespace-nowrap tabular-nums text-fg">{formatRates(it.importDutyRate, it.vatRate, exempt ? t.vatExempt : undefined)}</span>
+              {it.vatCode && <Badge tone={exempt ? "info" : "neutral"} className="font-mono">{it.vatCode}</Badge>}
+              {it.policyNote && (
+                <Tooltip content={it.policyNote}>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-fg-muted" aria-label={fill(t.policyNoteAria, { line: it.lineNo })}>
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </Tooltip>
+              )}
+              {it.taxNeedsReview && <Badge tone="warning">{t.taxNeedsReview}</Badge>}
+            </div>
+            {taxNotices}
           </div>
         ) : it.hs?.candidates[0] ? (
-          <p className="tabular-nums text-fg-muted" title={t.taxPreviewTitle}>
-            {formatTax(it.hs.candidates[0], t.vatExempt)}
-          </p>
+          <div className="flex flex-col items-start gap-1">
+            <p className="tabular-nums text-fg-muted" title={t.taxPreviewTitle}>
+              {formatTax(it.hs.candidates[0], t.vatExempt)}
+            </p>
+            {taxNotices}
+          </div>
         ) : (
           <span className="text-xs text-fg-subtle">{t.afterConfirm}</span>
         );
@@ -527,6 +531,7 @@ function HsTable({ items, dossierId, currency }: { items: LineItem[]; dossierId:
 
   return (
     <>
+      <SharedHsNotices shared={notices.shared} />
       <DataTable
         aria-label={t.tableAria}
         columns={columns}
@@ -657,7 +662,7 @@ export function AgentStep({ dossier, goTo }: StepProps) {
             )}
           </CardContent>
           <CardFooter>
-            <Button variant="ghost" onClick={() => goTo("ocr")}>
+            <Button variant="secondary" onClick={() => goTo("ocr")}>
               {t.backToOcr}
             </Button>
             <Button leftIcon={<Play className="h-4 w-4" />} disabled={items.length === 0} onClick={() => setDialogOpen(true)}>
@@ -715,7 +720,7 @@ export function AgentStep({ dossier, goTo }: StepProps) {
               className="mt-1 max-w-sm"
             />
           </div>
-          <Button variant="ghost" onClick={() => goTo("ocr")}>
+          <Button variant="secondary" onClick={() => goTo("ocr")}>
             {t.backToOcr}
           </Button>
           <Button disabled={!canProceed} loading={next.isPending} onClick={() => next.mutate()}>

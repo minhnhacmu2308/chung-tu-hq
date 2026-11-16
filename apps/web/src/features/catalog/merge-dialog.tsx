@@ -48,7 +48,7 @@ export function MergeDialog({ item, open, onOpenChange, onMerged }: { item: Cata
               </Field>
             </Stack>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={close}>{t.cancel}</Button>
+              <Button type="button" variant="secondary" onClick={close}>{t.cancel}</Button>
               <Button type="submit" disabled={!target}>{t.mergeNext}</Button>
             </DialogFooter>
           </form>

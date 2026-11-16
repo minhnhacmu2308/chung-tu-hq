@@ -187,7 +187,7 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
   const code = (procedureCode || null) as HysProcedureCode | null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} defaultPresentation="panel">
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent title={fill(t.setTitle, { seq: submission.seq })} icon={<Paperclip className="h-4 w-4" />} description={t.formDesc} size="md">
         <form
           onSubmit={(e) => {
@@ -347,7 +347,7 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
             >
               <p className="text-sm text-fg-muted">{fill(t.deleteBody, { seq: submission.seq })}</p>
               <DialogFooter>
-                <Button variant="ghost" type="button" onClick={() => setDeleteOpen(false)}>
+                <Button variant="secondary" type="button" onClick={() => setDeleteOpen(false)}>
                   {t.cancel}
                 </Button>
                 <Button type="submit" variant="danger" loading={remove.isPending} leftIcon={<Trash2 className="h-4 w-4" />}>
@@ -399,7 +399,7 @@ export function HysForm({ dossierId, kind, submission, documents, open, onOpenCh
                 {certExpired && <Alert tone="warning">{st.certExpired}</Alert>}
               </Stack>
               <DialogFooter>
-                <Button variant="ghost" type="button" onClick={() => setSendOpen(false)}>
+                <Button variant="secondary" type="button" onClick={() => setSendOpen(false)}>
                   {t.cancel}
                 </Button>
                 <Button type="submit" loading={send.isPending} disabled={!selectedId || certExpired || (slotsFull && !replaceSlot)} leftIcon={<KeyRound className="h-4 w-4" />}>

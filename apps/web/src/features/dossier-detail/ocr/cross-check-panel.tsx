@@ -1,6 +1,6 @@
 "use client";
 // Khối "AI đối chiếu chéo": luật lỗi/lưu ý lên đầu, luật khớp gọn lại (bấm để xem).
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, cn, fill, Skeleton, Stack, useMessages } from "@kb/ui";
+import { AlertMark, alertVariants, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, cn, fill, Skeleton, Stack, useMessages } from "@kb/ui";
 import { CheckCircle2, ChevronDown, MinusCircle, Sparkles, TriangleAlert, XCircle } from "lucide-react";
 import { useState } from "react";
 import { DOC_KIND_LABELS, type CrossCheck, type RuleResult } from "@/mocks/types";
@@ -19,9 +19,11 @@ function CheckRow({ c }: { c: CrossCheck }) {
   const t = useMessages(CROSS_CHECK_MESSAGES);
   const kindLabels = useMessages(DOC_KIND_LABELS);
   const { icon: Icon, className, label } = ICON[c.result];
+  // Lỗi / lưu ý: cùng thẻ với Alert; khớp / chưa kiểm tra giữ hàng gọn
+  const tone = c.result === "FAIL" ? "danger" : c.result === "WARN" ? "warning" : undefined;
   return (
-    <li className={cn("flex gap-3 rounded-md px-3 py-2", c.result === "FAIL" && "bg-danger-subtle", c.result === "WARN" && "bg-warning-subtle")}>
-      <Icon aria-hidden="true" className={cn("mt-0.5 h-4 w-4 shrink-0", className)} />
+    <li className={tone ? alertVariants({ tone }) : "flex gap-3 rounded-md px-3 py-2"}>
+      {tone ? <AlertMark tone={tone} icon={<Icon />} /> : <Icon aria-hidden="true" className={cn("mt-0.5 h-4 w-4 shrink-0", className)} />}
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-fg">
           <span className="sr-only">{t[label]}: </span>

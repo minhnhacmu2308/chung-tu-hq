@@ -134,9 +134,9 @@ export function SetupWizard({ prefix: initialPrefix, onClose, onSharedDone }: { 
           )}
           <DialogFooter>
             {step === 1 ? (
-              <Button type="button" variant="ghost" onClick={onClose}>{t.cancel}</Button>
+              <Button type="button" variant="secondary" onClick={onClose}>{t.cancel}</Button>
             ) : (
-              <Button type="button" variant="ghost" onClick={() => setStep(1)}>{t.back}</Button>
+              <Button type="button" variant="secondary" onClick={() => setStep(1)}>{t.back}</Button>
             )}
             {step === 1 ? (
               <Button type="submit" disabled={!mode}>{t.next}</Button>

@@ -41,6 +41,12 @@ export const pinOfOutbox = (o: Pick<OutboxRow, "payload">): string | undefined =
 export function stalePinReason(snap: DeclarationSnapshot | null, ob: Pick<OutboxRow, "branch" | "idempotencyKey" | "payload">): string | null {
   const pin = pinOfOutbox(ob);
   const version = ob.branch > 1 || pin !== undefined ? outboxVersion(ob.idempotencyKey) : null;
+  // Bất biến 7 cho MỌI outbox nội dung (kể cả tờ 1 không ghim): mọi đường xếp gửi đều đánh SUBMITTED trước khi đẩy job (submitDeclaration,
+  // performOperation, enqueueBranchPreDeclare "user"; chuỗi / Gửi lại đòi SUBMITTED) → tờ khai không còn SUBMITTED lúc worker gửi = đã mở lại
+  // trong lúc chờ (vd Gửi lại đang tra trạng thái thì người khác bấm Mở lại để sửa) – không gửi nội dung cũ.
+  if (!snap || snap.status !== "SUBMITTED") {
+    return `tờ khai đã mở lại hoặc đổi phiên bản sau khi xếp gửi (v${version ?? "?"}, hiện ${snap ? `v${snap.version} – ${snap.status === "DRAFT" ? "đang sửa" : "chưa truyền lại"}` : "không còn tờ khai"})`;
+  }
   if (version === null && pin === undefined) return null;
   if (snap && snap.status === "SUBMITTED" && (version === null || snap.version === version) && (pin === undefined || pinOf(snap) === pin)) return null;
   const now = snap ? `v${snap.version}${pin !== undefined && pinOf(snap) !== pin && snap.version === version ? " – đã duyệt lại" : ""}` : "không còn tờ khai";

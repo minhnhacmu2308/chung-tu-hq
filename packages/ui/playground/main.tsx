@@ -224,6 +224,8 @@ function Demo() {
               </Dialog>
             }
           />
+          {/* state="stopped": hồ sơ hủy / tờ khai bị từ chối – dừng ở bước hiện tại, xám (như StepProgress stopped) */}
+          <Stepper steps={STEPS} currentId="ocr" state="stopped" onStepClick={() => {}} />
 
           <Grid cols={{ base: 1, sm: 2, xl: 4 }}>
             {[

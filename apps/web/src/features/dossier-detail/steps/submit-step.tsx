@@ -6,7 +6,7 @@ import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Field, RadioGroup,
   fill, Grid, IconTile, pickMessages, Select, Spinner, Stack, StatusBadge, toast, toastPromise, useMessages, useUiLocale, type Tone, type UiLocale,
 } from "@kb/ui";
-import { baseOp, canEditDeclaration, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
+import { baseOp, canEditDeclaration, CUSTOMS_OPERATIONS, isContentOperation, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown, ArrowRight, Ban, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
@@ -27,7 +27,7 @@ import { ApiError } from "@/lib/api-error";
 import { fromMinor, toMinor } from "@/lib/decimal";
 import { formatDate, formatDateTime, formatRelative, formatVnd } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
-import { rowReason } from "@/lib/reason-codes";
+import { reasonText, rowReason } from "@/lib/reason-codes";
 import type { CustomsChannel, Declaration } from "@/mocks/types";
 import { CustomsInfoPanel, type CustomsEstimate } from "./customs-info-panel";
 import { errorMessage, KeyValue, StepError, StepLoading } from "./declaration-parts";
@@ -109,6 +109,8 @@ type RowHandlers = {
   nextOp: CustomsOperation | null;
   busyOp: CustomsOperation | null;
   canResend: boolean;
+  /** Gửi lại nội dung tờ khai (IDA/EDA) chỉ khi tờ khai còn SUBMITTED – đã mở lại để sửa / duyệt lại chưa truyền thì phải duyệt lại rồi Truyền (backend RESEND_AFTER_REOPEN). */
+  canResendContent: boolean;
   /** Gói chặn khai tạm lần đầu (thiếu lượt / hợp đồng hết hạn – ADR 0011): nút IDA/EDA của tờ chưa có số bị khóa. */
   idaBlocked?: boolean;
   onAction: (r: PipelineRow) => void;
@@ -119,7 +121,7 @@ function RowButton({ r, h }: { r: PipelineRow; h: RowHandlers }) {
   const t = useMessages(SUBMIT_MESSAGES);
   const loading = h.busyOp === r.op;
   const blocked = Boolean(h.idaBlocked) && baseOp(r.op) === "IDA";
-  if (r.status === "ERROR" && RESENDABLE.has(r.op) && h.canResend) {
+  if (r.status === "ERROR" && RESENDABLE.has(r.op) && h.canResend && (h.canResendContent || !isContentOperation(r.op))) {
     return (
       <Button size="sm" variant="secondary" leftIcon={<RotateCcw className="h-3.5 w-3.5" />} loading={loading} disabled={blocked} onClick={() => h.onResend(r)} aria-label={fill(t.resendAria, { op: r.op })}>
         {t.resend}
@@ -170,6 +172,8 @@ function OperationRow({ r, h }: { r: PipelineRow; h: RowHandlers }) {
   const reason = rowReason(r, locale);
   // Ưu tiên: hướng dẫn sửa tờ khai → kết quả gần nhất (đã gửi) → lý do bị khóa (chưa gửi).
   const note = r.enabled && r.action === "EDIT" ? reason : r.summary ?? (busyLock ? undefined : reason);
+  // Nội dung lỗi mà tờ khai đã mở lại để sửa / duyệt lại chưa truyền: không có nút Gửi lại (RowButton) – nói rõ việc cần làm.
+  const resendHint = r.status === "ERROR" && RESENDABLE.has(r.op) && isContentOperation(r.op) && !h.canResendContent ? reasonText("RESEND_AFTER_REOPEN", undefined, undefined, locale) : null;
   return (
     <li className="flex flex-wrap items-start gap-3 px-3 py-3">
       <PipeIcon status={r.status} />
@@ -182,6 +186,7 @@ function OperationRow({ r, h }: { r: PipelineRow; h: RowHandlers }) {
           <Badge tone={pipe[r.status].tone}>{pipe[r.status].text}</Badge>
         </div>
         {note && <p className={r.enabled || r.summary === note ? "text-sm text-fg-muted" : "text-sm text-fg-subtle"}>{note}</p>}
+        {resendHint && <p className="text-sm text-fg-muted">{resendHint}</p>}
         {r.at && <p className="text-xs tabular-nums text-fg-subtle">{formatDateTime(r.at)}</p>}
       </div>
       <div className="ml-auto flex items-center gap-2">
@@ -256,9 +261,10 @@ function CancelledResult({ s }: { s: SubmissionView }) {
       <KeyValue label={t.status} value={<StatusBadge status="DOSSIER_PROGRESS_CANCELLED" />} />
       {c && (
         <>
-          <KeyValue label={lc.infoReasonLabel} value={reason} />
+          {/* Tên lý do trong danh mục dài – xuống dòng (wrap), không đẩy trang tràn ngang ở 390px */}
+          <KeyValue label={lc.infoReasonLabel} value={reason} wrap />
           <KeyValue label={lc.infoDateLabel} value={formatDate(c.date)} />
-          {c.docNo && <KeyValue label={lc.infoDocNoLabel} value={c.docNo} />}
+          {c.docNo && <KeyValue label={lc.infoDocNoLabel} value={c.docNo} wrap />}
         </>
       )}
     </div>
@@ -682,6 +688,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     nextOp,
     busyOp: busy?.branch === branch ? busy.op : null,
     canResend: !anyBusy,
+    canResendContent: s.declarationStatus === "SUBMITTED",
     idaBlocked: Boolean(firstBlock ?? (resendBlock && !sheets.find((x) => x.no === branch)?.declarationNo)),
     onAction: (r) => {
       if (r.action === "EDIT") return goTo("review");

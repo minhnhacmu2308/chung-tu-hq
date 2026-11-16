@@ -23,6 +23,15 @@ export function progressOfDossier(d: Pick<Dossier, "status" | "customs">) {
   return dossierProgressOf(d.status, d.customs?.sheets ?? []);
 }
 
+/** Theo tiến độ hồ sơ: đã thông quan → tô xong cả quy trình; hồ sơ hủy / mọi tờ khai bị hủy hoặc từ chối → thanh xám (dừng).
+ * Dùng chung: StepProgress ở danh sách, Stepper ở trang chi tiết (chỉ active/stopped). */
+export function stepState(d: Pick<Dossier, "status" | "customs">): "complete" | "stopped" | "active" {
+  const p = progressOfDossier(d).progress;
+  if (p === "CLEARED" || p === "POST_AMENDED") return "complete";
+  if (p === "CANCELLED" || p === "REJECTED" || p === "DOSSIER_CANCELLED") return "stopped";
+  return "active";
+}
+
 /** Nhãn tiến độ (+ "· mức xa nhất k/N" khi lô lệch mức) + nhãn luồng + dòng phụ + cờ lỗi. Hẹp: các phần xuống dòng trong cùng ô. */
 export function DossierProgressBadge({ dossier }: { dossier: Pick<Dossier, "status" | "customs"> }) {
   const t = useMessages(DOSSIER_PROGRESS_MESSAGES);

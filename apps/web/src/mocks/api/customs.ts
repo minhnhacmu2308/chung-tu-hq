@@ -525,6 +525,11 @@ function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number, chain?: "de
   const t = texts(db, c, op, c.result.declarationNo);
   const doneAt = now + LIVE_REPLY_MS;
   const errors = rejectionErrors(c, op);
+  // Như backend (markSubmitted lúc xếp gửi, trước khi có kết quả): gửi nội dung tờ khai → tờ khai + hồ sơ SUBMITTED dù Hải quan trả lỗi.
+  if (isContentOperation(op) && op !== "AMA" && c.decl) {
+    c.decl.status = "SUBMITTED";
+    Object.assign(c.dossier, { status: "SUBMITTED", step: "submit", updatedAt: nowIso() });
+  }
   if (errors.length) {
     // Hải quan (mô phỏng) từ chối khai tạm: nhật ký ghi lỗi, màn Review gắn lỗi vào đúng ô chỉ tiêu.
     const summary = `${CUSTOMS_OPERATIONS[op].label} bị từ chối: ${errors.map((e) => `${e.code} (${e.field}): ${e.message}`).join("; ")}`;
@@ -538,10 +543,6 @@ function send(db: MockDb, c: Ctx, op: CustomsOperation, now: number, chain?: "de
   // Id dòng của tờ lúc gửi (mọi lô – như outbox.payload.lineIds): C6 ghi số vào mặt hàng của đúng các dòng này.
   const lineIds = content ? branchesOf(db.lineItems.filter((i) => i.dossierId === c.dossier.id))[c.branch - 1]?.items.map((i) => i.id) ?? [] : [];
   c.flow.pending = { op, outcome: "OK", doneAt: new Date(doneAt).toISOString(), ...(chain ? { chain } : {}), ...(sent ? { sent } : {}), ...(lineIds.length ? { lineIds } : {}) };
-  if (isContentOperation(op) && op !== "AMA" && c.decl) {
-    c.decl.status = "SUBMITTED";
-    Object.assign(c.dossier, { status: "SUBMITTED", step: "submit", updatedAt: nowIso() });
-  }
 }
 
 /** Tra cứu trạng thái: trả lời ngay, không đổi giai đoạn. */
@@ -723,6 +724,8 @@ export const resendOperation = (dossierId: string, op: CustomsOperation, branch 
       return { resent: false, message: r.message };
     }
     if (op === "HYS") throw reasonApiError("INVALID_STATE", "HYS_USE_SUBMISSION", undefined, "HYS khai bằng bộ hồ sơ đính kèm ở thẻ HYS");
+    // Bất biến 7 (như backend): gửi lại nội dung tờ khai chỉ khi tờ khai còn SUBMITTED – đã mở lại để sửa / duyệt lại chưa truyền → duyệt lại rồi Truyền.
+    if (isContentOperation(op) && op !== "AMA" && c.decl?.status !== "SUBMITTED") throw reasonApiError("INVALID_STATE", "RESEND_AFTER_REOPEN");
     if (c.flow.pending) throw new ApiError("BUSY", `Đang chờ phản hồi ${c.flow.pending.op}`);
     const last = db.customsMessages.filter((m) => m.dossierId === dossierId && (m.branch ?? 1) === branch && m.operation === op && Date.parse(m.at) <= now).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
     if (last?.result !== "ERROR") throw new ApiError("NOTHING_TO_RESEND", `${op} không có lỗi cần gửi lại`);

@@ -130,6 +130,23 @@ describe("tờ đang gửi / kết quả về muộn sau khi hủy", () => {
     expect(stageOf(sheet())).toBe("PRE_DECLARED");
     expect(h.uow.data.messages).toHaveLength(0);
   });
+  it.each(["HYS", "CONT_LIST", "KVGS"] as const)("cancel_not_blocked_by_off_flow_pending (%s): nghiệp vụ ngoài luồng tờ đang gửi không chặn ghi nhận hủy", async (op) => {
+    seed(h, 1, "PRE_DECLARED");
+    h.uow.data.outbox.push({
+      id: "ob_off", orgId: ORG, dossierId: D, branch: 1, declarationId: "dec_1", operation: op, idempotencyKey: `${D}:${op}:b1`,
+      payload: {}, status: "PENDING", attempts: 1, lastError: null, nextAttemptAt: null, createdAt: T, updatedAt: T,
+    });
+    expect((await cancel()).ok).toBe(true);
+    expect(stageOf(sheet())).toBe("CANCELLED");
+  });
+  it("cancel_not_blocked_by_other_branch_pending: IDC tờ 2 đang gửi không chặn hủy tờ 1", async () => {
+    seed(h, 1, "PRE_DECLARED");
+    h.uow.data.outbox.push({
+      id: "ob_2", orgId: ORG, dossierId: D, branch: 2, declarationId: "dec_1", operation: "IDC", idempotencyKey: `${D}:IDC:b2`,
+      payload: {}, status: "PENDING", attempts: 1, lastError: null, nextAttemptAt: null, createdAt: T, updatedAt: T,
+    });
+    expect((await cancel()).ok).toBe(true);
+  });
   it("late_outbox_result_keeps_cancelled", async () => {
     seed(h, 1, "PRE_DECLARED");
     h.dossiers.rows[0]!.status = "SUBMITTED";

@@ -49,7 +49,7 @@ import { useMessages, type Messages } from "../lib/i18n.js";
 import { Button } from "./button.js";
 import { SegmentedControl } from "./choice.js";
 import { EmptyState, Skeleton } from "./feedback.js";
-import { Input, Select } from "./inputs.js";
+import { Input, Select, type SelectOption } from "./inputs.js";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -347,7 +347,7 @@ export type DataTableProps<TData extends RowData> = {
   onClearFilters?: () => void;
   /**
    * Bộ lọc của trang (lọc phía server, chọn bộ mã…): đặt trong hộp lọc mở từ nút phễu, cùng lưới 2 cột với lọc theo cột.
-   * Mỗi ô bọc trong `Field`; nhóm checkbox bọc `<div className="col-span-full">`. Chuẩn hệ thống: KHÔNG đặt bộ lọc ngoài bảng.
+   * Ô chọn một giá trị dùng `DataTableFilterSelect` (cùng dáng lọc theo cột: nhãn nhỏ xám, ô h-9); ô khác bọc trong `Field`; nhóm checkbox bọc `<div className="col-span-full">`. Chuẩn hệ thống: KHÔNG đặt bộ lọc ngoài bảng.
    */
   filters?: ReactNode;
   /** Số bộ lọc của trang đang khác mặc định – cộng vào số trên nút phễu. */
@@ -499,6 +499,32 @@ function ResizeHandle({
         "hover:bg-border-strong focus-visible:bg-focus focus-visible:outline-none",
       )}
     />
+  );
+}
+
+/* Ô lọc trong hộp phễu: lọc theo cột (meta.filter) và DataTableFilterSelect của trang dùng CHUNG các class này – nhìn y hệt nhau. */
+const FILTER_FIELD_CLASS = "flex min-w-0 flex-col gap-1";
+const FILTER_LABEL_CLASS = "text-xs font-medium text-fg-muted";
+const FILTER_SELECT_CLASS = "h-9 min-w-24 text-sm";
+
+export type DataTableFilterSelectProps = {
+  /** Tên bộ lọc (nhãn nhỏ phía trên ô); tên truy cập của ô = "Lọc theo {label}". */
+  label: string;
+  options: readonly SelectOption[];
+  value: string;
+  onChange: (value: string) => void;
+  /** Ghi đè mẫu tên truy cập (mặc định 3 ngôn ngữ "Lọc theo {label}"). */
+  labels?: { filterBy?: string };
+};
+
+/** Ô chọn một giá trị đặt vào `filters` của DataTable (lọc phía trang, vd luồng) – cùng dáng các ô lọc theo cột trong hộp phễu. */
+export function DataTableFilterSelect({ label, options, value, onChange, labels }: DataTableFilterSelectProps) {
+  const t = useMessages(MESSAGES, labels);
+  return (
+    <div className={FILTER_FIELD_CLASS}>
+      <span aria-hidden="true" className={FILTER_LABEL_CLASS}>{label}</span>
+      <Select aria-label={fill(t.filterBy, { label })} options={options} value={value} onChange={(e) => onChange(e.target.value)} className={FILTER_SELECT_CLASS} />
+    </div>
   );
 }
 
@@ -824,15 +850,15 @@ export function DataTable<TData extends RowData>({
           options={selectOptions(column)}
           value={isSelectFilter(value) ? value.equals : ""}
           onChange={(e) => column.setFilterValue(e.target.value ? { equals: e.target.value } : undefined)}
-          className="h-9 min-w-24 text-sm"
+          className={FILTER_SELECT_CLASS}
         />
       ) : kind === "text" ? (
         <Input type="search" aria-label={label} value={typeof value === "string" ? value : ""} onChange={(e) => column.setFilterValue(e.target.value)} className="h-9" />
       ) : null;
     if (!withLabel || !control) return control;
     return (
-      <div key={column.id} className="flex min-w-0 flex-col gap-1">
-        <span aria-hidden="true" className="text-xs font-medium text-fg-muted">{columnLabel(column)}</span>
+      <div key={column.id} className={FILTER_FIELD_CLASS}>
+        <span aria-hidden="true" className={FILTER_LABEL_CLASS}>{columnLabel(column)}</span>
         {control}
       </div>
     );

@@ -71,7 +71,7 @@ function seedProgress() {
 }
 /** Chọn luồng trong ô "Luồng" của hộp phễu (Select tự vẽ: mở rồi bấm lựa chọn). */
 async function pickChannel(label: string) {
-  await userEvent.click(screen.getByRole("combobox", { name: "Luồng" }));
+  await userEvent.click(screen.getByRole("combobox", { name: "Lọc theo Luồng" }));
   await userEvent.click(await screen.findByRole("option", { name: label }));
 }
 const dataRows = (table: HTMLElement) => within(table).getAllByRole("row").slice(1);
@@ -137,12 +137,12 @@ describe("Danh sách hồ sơ – tab việc cần làm và bộ lọc tiến đ
     await waitFor(() => expect(dataRows(table)).toHaveLength(1), T);
     expect(within(dataRows(table)[0]!).getByText(red!)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Bộ lọc (1)" }));
-    expect(screen.getByRole("combobox", { name: "Luồng" }).textContent).toContain("Luồng đỏ");
+    expect(screen.getByRole("combobox", { name: "Lọc theo Luồng" }).textContent).toContain("Luồng đỏ");
     replace.mockClear();
     await userEvent.click(screen.getByRole("tab", { name: /Đã thông quan/ }));
     expect(replace).toHaveBeenCalledWith("/dossiers?viec=cleared", { scroll: false });
     replace.mockClear();
-    if (!screen.queryByRole("combobox", { name: "Luồng" })) await userEvent.click(screen.getByRole("button", { name: /^Bộ lọc/ }));
+    if (!screen.queryByRole("combobox", { name: "Lọc theo Luồng" })) await userEvent.click(screen.getByRole("button", { name: /^Bộ lọc/ }));
     await pickChannel("Luồng vàng");
     expect(replace).toHaveBeenCalledWith("/dossiers?viec=channelled&luong=YELLOW", { scroll: false });
   }, 60_000);

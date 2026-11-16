@@ -38,6 +38,11 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
     const q = await performOperation(deps, ctx, dossierId, op, branch);
     return q.ok ? ok({ resent: false, message: q.value.message }) : q;
   }
+  // Bất biến 7: gửi lại nội dung tờ khai (IDA/IDA01/EDA/EDA01) chỉ khi tờ khai còn SUBMITTED (đúng bản đã duyệt và truyền). Đã "Mở lại để sửa"
+  // (DRAFT) hoặc duyệt lại chưa truyền (APPROVED) → không gửi lại nội dung cũ, bỏ qua duyệt lại/BLOCKER/HS; phải duyệt lại rồi bấm Truyền.
+  // AMA dùng bản khai bổ sung riêng (không theo trạng thái tờ khai).
+  if (isContentOperation(op) && op !== "AMA" && (await deps.declarations.get(ctx.orgId, dossierId))?.status !== "SUBMITTED")
+    return err(reasonError("INVALID_STATE", "RESEND_AFTER_REOPEN"));
   const now = () => deps.clock.now();
   const qop = queryOpFor(dossier.direction);
 

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "../../test/a11y.js";
 import { Button } from "./button.js";
 import { UiLocaleProvider } from "../lib/i18n.js";
-import { createDataTableColumnHelper, DataTable, type DataTableProps } from "./data-table.js";
+import { createDataTableColumnHelper, DataTable, DataTableFilterSelect, type DataTableProps } from "./data-table.js";
 import { RecordCard } from "./record-card.js";
 import { chooseOption } from "../../test/select.js";
 
@@ -753,5 +753,40 @@ describe("DataTable – dạng thẻ", () => {
     );
     expect(screen.getByRole("radio", { name: /Cards/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Table/ })).toBeInTheDocument();
+  });
+});
+
+describe("DataTableFilterSelect – ô lọc của trang trong hộp phễu", () => {
+  const CHANNELS = [{ value: "ALL", label: "Mọi luồng" }, { value: "RED", label: "Luồng đỏ" }];
+  it("cùng dáng ô lọc theo cột (khung, nhãn, ô chọn); tên truy cập 'Lọc theo …'; chọn gọi onChange; a11y", async () => {
+    const onChange = vi.fn();
+    const { container } = setupVn({ filters: <DataTableFilterSelect label="Luồng" options={CHANNELS} value="ALL" onChange={onChange} />, activeFilters: 0 });
+    await openFilters();
+    const own = screen.getByRole("combobox", { name: "Lọc theo Luồng" });
+    const col = screen.getByRole("combobox", { name: "Lọc theo Trạng thái" });
+    // Phần tử bọc ngoài cùng của ô (Select có thể bọc nút trong khung) → so từ khung ô lọc (con trực tiếp của lưới) trở xuống.
+    const cell = (el: HTMLElement) => { let n: HTMLElement = el; while (n.parentElement && !n.parentElement.className.includes("grid")) n = n.parentElement; return n; };
+    const a = cell(own);
+    const b = cell(col);
+    expect(a.className).toBe(b.className);
+    expect(a.firstElementChild!.className).toBe(b.firstElementChild!.className);
+    expect(a.firstElementChild).toHaveTextContent("Luồng");
+    for (const cls of ["h-9", "text-sm"]) {
+      expect(own.className.split(" ")).toContain(cls);
+      expect(col.className.split(" ")).toContain(cls);
+    }
+    await chooseOption(own, "Luồng đỏ");
+    expect(onChange).toHaveBeenCalledWith("RED");
+    await expectNoA11yViolations(container);
+  });
+
+  it("tiếng Anh: tên truy cập 'Filter by …'", async () => {
+    render(
+      <UiLocaleProvider locale="en">
+        <DataTable aria-label="Files" columns={VN_COLUMNS} data={VN_DATA} getRowId={(r) => r.id} pagination={false} filters={<DataTableFilterSelect label="Channel" options={CHANNELS} value="ALL" onChange={() => {}} />} />
+      </UiLocaleProvider>,
+    );
+    await openFilters(/^Filters/);
+    expect(screen.getByRole("combobox", { name: "Filter by Channel" })).toBeInTheDocument();
   });
 });

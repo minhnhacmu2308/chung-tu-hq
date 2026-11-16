@@ -619,6 +619,7 @@ describe("resendOperation – nhánh biên", () => {
     ["EDC" as const, { stage: "PRE_DECLARED" as const }, { status: "s", cleared: false, channel: "GREEN" as const }],
   ])("%s đã được Hải quan ghi nhận → không gửi lại", async (op, raw, status) => {
     seedResult({ raw });
+    decls.status = "SUBMITTED"; // đã truyền (submitDeclaration đánh SUBMITTED)
     deps.gateway = gw({ queryStatus: async () => status });
     expect(unwrap(await resendOperation(deps, declarant, D, op))).toEqual({ resent: false, message: `Hải quan đã ghi nhận ${op}, không cần gửi lại – bấm Tra cứu để cập nhật` });
     expect(uow.data.outbox).toHaveLength(0);
@@ -658,6 +659,7 @@ describe("resendOperation – nhánh biên", () => {
   it("SEND_FAILED không có raw → gửi lại từ bước đầu (APPROVED / chưa khai)", async () => {
     seedResult({ state: "SEND_FAILED", declarationNo: null, raw: null });
     seedOutbox({ status: "FAILED", attempts: 1 });
+    decls.status = "SUBMITTED"; // đã truyền (submitDeclaration đánh SUBMITTED)
     deps.gateway = gw({ queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) });
     unwrap(await resendOperation(deps, declarant, D, "IDA"));
     expect(uow.data.results[0]).toMatchObject({ state: "APPROVED", raw: null });
@@ -681,6 +683,25 @@ describe("resendOperation – nhánh biên", () => {
 });
 
 describe("processOutbox – nhánh biên", () => {
+  // Outbox nội dung chỉ được gửi khi tờ khai SUBMITTED (mọi đường xếp gửi đều đánh SUBMITTED trước khi đẩy job).
+  beforeEach(() => {
+    decls.status = "SUBMITTED";
+  });
+
+  it("bất biến 7: IDA tờ 1 (không ghim) còn PENDING mà tờ khai đã Mở lại để sửa (DRAFT) → FAILED, không gọi cổng, ghi lỗi", async () => {
+    seedResult({ externalId: null, declarationNo: null, state: "APPROVED", raw: { stage: "NOT_SENT" } });
+    let calls = 0;
+    deps.gateway = gw({ preDeclare: async () => (calls++, { externalId: "fpt-9", declarationNo: "107111" }), queryStatus: async () => (calls++, { status: "s", cleared: false }) });
+    const ob = seedOutbox();
+    decls.status = "DRAFT";
+    expect(unwrap(await send(ob.id))).toEqual({ status: "FAILED", next: null });
+    expect(calls).toBe(0);
+    expect(uow.data.outbox[0]).toMatchObject({ status: "FAILED", lastError: expect.stringContaining("mở lại") });
+    expect(uow.data.messages.filter((m) => m.direction === "OUT")).toEqual([]);
+    expect(uow.data.messages.at(-1)).toMatchObject({ operation: "IDA", direction: "IN", result: "ERROR" });
+    expect(uow.data.results[0]).toMatchObject({ state: "SEND_FAILED", declarationNo: null });
+  });
+
   it("outbox không tồn tại → NOT_FOUND; chưa có kết quả → INVALID_STATE; hồ sơ không còn → NOT_FOUND", async () => {
     expect(errCode(await send("ob_khong_co"))).toBe("NOT_FOUND");
     const ob = seedOutbox();
@@ -1147,6 +1168,7 @@ describe("ghi chi phí Customs Hub (usage_events)", () => {
   });
 
   it("chạy lại IDA sau crash: tra IID thấy đã cấp số → ghi 1 lần hỏi IID, không gửi/ghi IDA lần hai", async () => {
+    decls.status = "SUBMITTED";
     seedResult({ externalId: "fpt-1", declarationNo: null, state: "APPROVED", raw: { progress: "APPROVED" } });
     deps.gateway = gw({ queryStatus: async () => ({ declarationNo: "107111", status: "Đã cấp số", cleared: false }), preDeclare: async () => { throw new Error("không được gửi lại"); } });
     const ob = seedOutbox({ attempts: 1 });
@@ -2229,6 +2251,24 @@ describe("tờ khai nhánh – sửa sau review toàn nhánh", () => {
     expect(unwrap(await resendOperation(deps, declarant, D, "IDA")).resent).toBe(true);
   });
 
+  it("bất biến 7: khai tạm lỗi chưa có số → Mở lại để sửa → Gửi lại IDA bị từ chối (RESEND_AFTER_REOPEN), không outbox/job mới; duyệt lại chưa Truyền cũng vậy", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    uow.data.outbox[0]!.attempts = MAX_ATTEMPTS;
+    await sendAll();
+    expect(uow.data.outbox[0]!.status).toBe("FAILED");
+    dossiers.rows[0]!.status = "SUBMITTED";
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    expect(decls.status).toBe("DRAFT");
+    const jobs = queue.jobs.length;
+    const refused = { ok: false, error: { code: "INVALID_STATE", reason: "RESEND_AFTER_REOPEN" } };
+    expect(await resendOperation(deps, declarant, D, "IDA")).toMatchObject(refused);
+    decls.status = "APPROVED";
+    decls.approvedAt = "2026-10-14T05:00:00.000Z";
+    expect(await resendOperation(deps, declarant, D, "IDA")).toMatchObject(refused);
+    expect(keysOf("IDA", 1)).toHaveLength(1);
+    expect(queue.jobs.length).toBe(jobs);
+  });
+
   it("I4: lần truyền lại đang chạy (tờ khai SUBMITTED) – tờ 2, 3 đã gọi về: màn Truyền và thực hiện nghiệp vụ cùng coi là đã duyệt (IDA không phải EDIT)", async () => {
     decls.items = lines(120);
     deps.gateway = branchGateway();
@@ -2360,6 +2400,21 @@ describe("mở lại khi chưa có số tờ khai (spec trạng thái hồ sơ �
     unwrap(await reopenDeclaration(deps, declarant, D));
     expect(decls.reopened).toEqual([D]);
     expect(uow.data.results.map((r) => r.state)).toEqual(["APPROVED", "APPROVED"]);
+  });
+
+  it("lô 2 tờ: IDA tờ 2 (đã ghim) lỗi, chưa tờ nào có số → Mở lại để sửa → Gửi lại IDA tờ 2 bị từ chối (RESEND_AFTER_REOPEN), không outbox mới", async () => {
+    decls.items = lines(80);
+    decls.status = "SUBMITTED";
+    unnumbered(1);
+    unnumbered(2, { state: "SEND_FAILED" });
+    seedOutbox({ operation: "IDA", status: "SENT", idempotencyKey: `${D}:IDA:v1:n1` });
+    seedOutbox({ operation: "IDA", status: "FAILED", branch: 2, idempotencyKey: `${D}:IDA:v1:n1:b2`, payload: { pin: "v1@2026-10-14T02:00:00.000Z" } });
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    expect(decls.status).toBe("DRAFT");
+    const before = uow.data.outbox.length;
+    expect(await resendOperation(deps, declarant, D, "IDA", 2)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "RESEND_AFTER_REOPEN" } });
+    expect(uow.data.outbox.length).toBe(before);
+    expect(queue.jobs).toHaveLength(0);
   });
 
   it("reopen_while_sending: outbox IDA PENDING → DECLARATION_SENDING, không đụng tờ khai", async () => {

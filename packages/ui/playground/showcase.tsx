@@ -2,7 +2,7 @@
 import { Bell, Copy, Filter, FolderOpen, Landmark, MailOpen, MoreHorizontal, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import {
-  Abbreviation, NoticeChip, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable,
+  Abbreviation, NoticeChip, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable, DataTableFilterSelect,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
   BrandMark, FeedGroup, FeedItem, SearchInput, Field, FileDropzone, ImagePicker, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
@@ -83,6 +83,7 @@ export function Showcase() {
   const [port, setPort] = useState<string | null>("VNHPH");
   const [docs, setDocs] = useState<string[]>(["CI", "BL"]);
   const [invoiceDate, setInvoiceDate] = useState<string | null>("2026-09-18");
+  const [channel, setChannel] = useState("ALL");
   const [period, setPeriod] = useState<IsoDateRange>({ from: "2026-10-01", to: "2026-10-31" });
   const [uploads, setUploads] = useState<UploadItem[]>(INITIAL_UPLOADS);
   const [autoSubmit, setAutoSubmit] = useState(false);
@@ -214,6 +215,10 @@ export function Showcase() {
             rowLabel={(r) => r.code}
             onRowClick={(r) => toast({ tone: "info", title: `Mở hồ sơ ${r.code}` })}
             pagination={{ initialPageSize: 8 }}
+            // Bộ lọc của trang trong hộp phễu: DataTableFilterSelect cùng dáng ô lọc theo cột
+            filters={<DataTableFilterSelect label="Luồng" options={[{ value: "ALL", label: "Mọi luồng" }, { value: "GREEN", label: "Luồng xanh" }, { value: "RED", label: "Luồng đỏ" }]} value={channel} onChange={setChannel} />}
+            activeFilters={channel !== "ALL" ? 1 : 0}
+            onClearFilters={() => setChannel("ALL")}
             viewStorageKey="playground"
             renderCard={(r, parts) => (
               <RecordCard

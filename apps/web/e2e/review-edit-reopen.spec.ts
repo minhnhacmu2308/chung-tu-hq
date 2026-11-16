@@ -3,7 +3,8 @@ import { stateFor } from "./global-setup";
 import { createDossier, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
 
 /** Ô 1.29 – mã địa điểm lưu kho hàng chờ thông quan (chỉ tiêu KHO): ô VD_ST trên bản in, ô nhập trong panel sửa. */
-const KHO = /^1\.29/;
+// Tên ô nhập trong panel = tên chỉ tiêu (không kèm số "1.29" – số nằm ở tiêu đề panel).
+const KHO = /Mã địa điểm lưu kho hàng chờ thông quan/;
 const full = (id: string) => `/dossiers/${id}?step=review&tab=full`;
 /** Bấm ô chỉ tiêu chung trên bản in (data-print-cell = ":<khóa>") → mở panel sửa ô. */
 const openCell = async (page: Page, key: string) => {
@@ -23,8 +24,10 @@ test("Review: sửa chỉ tiêu trên bản in tờ khai (chặn chỉ tiêu tí
   await page.goto(full(id));
   await expect(page.getByText("Tờ khai chưa khai báo – nhập đủ chỉ tiêu")).toBeVisible(); // thông báo giai đoạn trên bản in
   let panel = await openCell(page, "TK_ICB");
-  await expect(panel.getByRole("textbox", { name: /^1\.4\b/ })).toHaveCount(0);
-  await expect(panel.getByRole("combobox", { name: /^1\.4\b/ })).toHaveCount(0);
+  // Panel chỉ đọc: không có ô nhập nào.
+  await expect(panel.getByRole("heading", { name: /^1\.4\b/ })).toBeVisible();
+  await expect(panel.getByRole("textbox")).toHaveCount(0);
+  await expect(panel.getByRole("combobox")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
   const derived = await page.request.patch(`/api/dossiers/${id}/declaration/fields/TONG_TG`, { data: { value: "1" } });

@@ -513,6 +513,17 @@ export function emptyPrintedTaxSlot(values: FormValues, key: string): number | u
   return compactOtherTaxes(values).slotToGroup[slot - 1] === undefined ? slot : undefined;
 }
 
+/**
+ * Sau khi lưu, bản in dồn ô lại → loại thuế `group` đang sửa có thể sang ô in khác (thêm BVMT trước GTGT → GTGT xuống một ô).
+ * Trả khóa ô in mới của loại đó khi khác `printedKey`; ô khác / loại không còn trên dòng / không đổi → undefined.
+ */
+export function followTaxSlot(values: FormValues, printedKey: string, group: number): string | undefined {
+  const m = PRINTED_TAX_KEY.exec(printedKey);
+  if (!m) return undefined;
+  const k = compactOtherTaxes(values).slotToGroup.indexOf(group) + 1;
+  return k > 0 && k !== Number(m[2]) ? `HAG_${m[1]}${k}` : undefined;
+}
+
 /** Khóa ô in bất kỳ → khóa lưu: ô "Thuế và thu khác" theo printSlotTarget (ô trống → loại thuế `pick` nếu có), ô khác giữ nguyên. */
 export function printedKeyTarget(values: FormValues, key: string, pick?: number): { key: string } {
   const m = PRINTED_TAX_KEY.exec(key);

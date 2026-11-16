@@ -1,7 +1,7 @@
 import { expandPrintRow, formKeysOf, itemFieldCode, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
-import { applyToOtherLines, attentionCells, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, printSlotTarget, printedKeyTarget, emptyOtherTaxGroups, emptyPrintedTaxSlot, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import { applyToOtherLines, attentionCells, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, printSlotTarget, printedKeyTarget, emptyOtherTaxGroups, emptyPrintedTaxSlot, followTaxSlot, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -103,6 +103,16 @@ describe("thuế và thu khác theo loại – bản in", () => {
     // Loại đã khai (GTGT) không chọn được cho ô trống → loại còn trống đầu tiên; ô đã có loại giữ loại của nó.
     expect(printSlotTarget(row, 2, "TX", 5)).toEqual({ key: "HAG_TX1" });
     expect(printSlotTarget(row, 1, "TX", 3)).toEqual({ key: "HAG_TX5" });
+  });
+
+  it("follow_tax_slot: lưu xong bản in dồn lại → panel theo loại thuế sang ô in mới", () => {
+    // Thêm BVMT (dòng 4) khi đã có TTĐB + GTGT: BVMT in ô 2, GTGT xuống ô 3.
+    const after = { HAG_TX3: "TB020", HAG_TX4: "MB010", HAG_TX5: "V" };
+    expect(followTaxSlot(after, "HAG_TX3", 4)).toBe("HAG_TX2");
+    expect(followTaxSlot(after, "HAG_TR3", 4)).toBe("HAG_TR2");
+    expect(followTaxSlot(after, "HAG_TX2", 4)).toBeUndefined();
+    expect(followTaxSlot(after, "HAG_TX1", 2)).toBeUndefined();
+    expect(followTaxSlot(after, "HAG_ORS", 4)).toBeUndefined();
   });
 
   const decl = { kind: "IDA", fields: [{ code: "MA_TT", value: "USD" }], exchangeRate: "25000", customsValueVnd: "0", estimatedImportDutyVnd: "0", estimatedVatVnd: "0" } as unknown as Declaration;

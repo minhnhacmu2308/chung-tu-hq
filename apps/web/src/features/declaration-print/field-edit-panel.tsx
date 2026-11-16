@@ -27,7 +27,7 @@ import { useCodeName, usePlaceNameLookup } from "../declaration-form/use-code-li
 import { QtySuggestionHint } from "../declaration-form/qty-hint";
 import { PanelDetails } from "./panel-details";
 import { panelShortcut, revertField } from "./panel-keys";
-import { applyToOtherLines, emptyOtherTaxGroups, emptyPrintedTaxSlot, fieldLocator, nextTarget, printedKeyTarget, taxCodeKeys, type PrintTarget } from "./print-state";
+import { applyToOtherLines, emptyOtherTaxGroups, emptyPrintedTaxSlot, fieldLocator, followTaxSlot, nextTarget, printedKeyTarget, taxCodeKeys, type PrintTarget } from "./print-state";
 import { OTHER_TAX_MESSAGES, otherTaxGroupLabel } from "../declaration-form/other-tax.messages";
 import { reasonText } from "@/lib/reason-codes";
 import { SavedDialog } from "./saved-dialog";
@@ -229,6 +229,21 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
     setChanges({});
     setConfirmed([]);
   }
+  // Lưu xong mà panel còn mở ("Ở lại"): bản in dồn ô lại có thể đẩy loại thuế đang sửa sang ô in khác (thêm BVMT trước GTGT → GTGT
+  // xuống một ô) → panel đi theo loại thuế vừa sửa, không nhảy sang loại khác đang nằm ở số ô cũ. Loại thuế lấy từ lần vẽ trước
+  // (effect theo dõi khai báo sau effect này nên vẫn giữ giá trị cũ khi effect này chạy).
+  const shownTaxGroup = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const group = shownTaxGroup.current;
+    if (!group || !shown || shown.line === undefined) return;
+    const key = followTaxSlot(itemRows[shown.line] ?? {}, shown.key, group);
+    if (!key) return;
+    const next = { line: shown.line, key };
+    setShown(next);
+    setSeen(next);
+    onTarget(next);
+  }, [dataKey]); // dữ liệu tờ khai đổi (lưu ở panel này hay nơi khác): đi theo loại thuế. Giữ effect này TRƯỚC effect cập nhật shownTaxGroup.
+  useEffect(() => { shownTaxGroup.current = taxRowGroup ? Number(taxRowGroup) : undefined; });
 
   // Chuyển ô → focus ô nhập của đúng ô được chọn trong nhóm; ô đó chỉ đọc → ô nhập đầu tiên của nhóm.
   const body = useRef<HTMLDivElement>(null);

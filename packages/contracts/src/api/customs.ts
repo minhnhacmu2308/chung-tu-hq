@@ -1,14 +1,13 @@
 import { z } from "zod";
-import { CustomsChannelSchema, DecimalStringSchema, DirectionSchema, IsoDateTimeSchema } from "../common.js";
+import { CustomsChannelSchema, DecimalStringSchema, DirectionSchema, IsoDateSchema, IsoDateTimeSchema } from "../common.js";
 import { CustomsActionSchema, CustomsPhaseSchema, CustomsStageSchema } from "../customs-flow.js";
 import { ReasonCodeSchema, ReasonParamsSchema } from "../reason-codes.js";
 import { CustomsInfoSchema, CustomsRejectionSchema, CustomsMessageSchema, CustomsOperationSchema, CustomsResultSchema } from "../dto/customs.js";
 import { DeclarationStatusSchema } from "../dto/declaration.js";
 import { CustomsSummarySchema } from "../dto/dossier.js";
 
-/** Trạng thái truyền của một tờ khai (ADR 0005): lỗi gửi giữ bước, chỉ bước kế tiếp mới tiến. */
-export const SubmissionStateSchema = z.enum(["APPROVED", "PRE_DECLARED", "DECLARED", "DOCS_SENT", "CLEARED", "INSPECTION", "REJECTED", "SEND_FAILED"]);
-export type SubmissionState = z.infer<typeof SubmissionStateSchema>;
+export { SubmissionStateSchema, type SubmissionState } from "../common.js";
+import { SubmissionStateSchema } from "../common.js";
 
 export const SubmitDeclarationInputSchema = z.object({
   certificateId: z.string().min(1, "Chọn chứng thư số để ký"),
@@ -21,6 +20,12 @@ export const BranchParamSchema = z.coerce.number().int().min(1).default(1);
 export const BranchQuerySchema = z.object({ branch: BranchParamSchema });
 export type BranchQuery = z.infer<typeof BranchQuerySchema>;
 export const ResendOperationInputSchema = z.object({ operation: CustomsOperationSchema, branch: BranchParamSchema });
+/** Người khai ghi nhận Hải quan đã hủy tờ khai (VNACCS không có thông điệp hủy). `reason` = mã danh mục CANCEL_REASON (core kiểm). */
+export const ConfirmCancelledInputSchema = z.object({
+  branch: z.number().int().min(1).default(1), reason: z.string().min(1), date: IsoDateSchema,
+  docNo: z.string().max(100).optional(), note: z.string().max(1000).optional(),
+});
+export type ConfirmCancelledInput = z.infer<typeof ConfirmCancelledInputSchema>;
 /** Thực hiện một nghiệp vụ trên tờ khai đã truyền (IDB, IDC, IDD, IDA01, IDE, AMA, AMB, AMC, HYS, CONT, PORT_FEE, IID/IEX, khai tạm lại IDA) – trên tờ `branch`. */
 export const PerformOperationInputSchema = z.object({ operation: CustomsOperationSchema, branch: BranchParamSchema, hysWaived: z.boolean().optional() });
 
@@ -71,6 +76,8 @@ export const BranchSubmissionSchema = z.object({
    * (guard SENT_SHEETS_CHANGED). Không đổi / không áp dụng / tờ gửi trước khi có ảnh chụp → null. JSON cũ không có → null.
    */
   sentChanges: z.object({ common: z.array(z.string()), lines: z.boolean() }).nullable().default(null),
+  /** Tờ đã hủy (stage CANCELLED): mã lý do danh mục CANCEL_REASON, ngày hủy (YYYY-MM-DD), số văn bản. Chưa hủy / dữ liệu cũ → vắng. */
+  cancellation: z.object({ reason: z.string(), date: IsoDateSchema, docNo: z.string().optional() }).optional(),
 });
 export type BranchSubmission = z.infer<typeof BranchSubmissionSchema>;
 
@@ -102,7 +109,7 @@ export const SubmissionViewSchema = z.object({
   rejection: CustomsRejectionSchema.nullable().default(null),
   /** Mọi tờ khai nhánh (lô 1 tờ → 1 phần tử); JSON cũ không có → []. */
   branches: z.array(BranchSubmissionSchema).default([]),
-  summary: CustomsSummarySchema.default({ of: 1, cleared: 0, problems: [] }),
+  summary: CustomsSummarySchema.default({ of: 1, cleared: 0, problems: [], sheets: [] }),
 });
 export type SubmissionView = z.infer<typeof SubmissionViewSchema>;
 

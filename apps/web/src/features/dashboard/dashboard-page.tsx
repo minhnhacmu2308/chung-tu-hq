@@ -8,7 +8,10 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { dossierKeys, listDossiers } from "@/api/dossiers";
 import { getSession, sessionKeys } from "@/api/session";
-import { ChannelBadge, DossierStatusBadge, DueBadge } from "@/features/dossiers/dossier-badges";
+import { DueBadge } from "@/features/dossiers/dossier-badges";
+import { DossierProgressBadge } from "@/features/dossiers/dossier-progress-badge";
+import { DOSSIER_PROGRESS_MESSAGES } from "@/features/dossiers/dossier-progress.messages";
+import { inViec, VIEC_TABS, type Viec } from "@/features/dossiers/dossier-progress-tabs";
 import { DIRECTION_LABELS, isOpen } from "@/features/dossiers/dossier-display";
 import { daysUntil, formatDate, formatMoney, formatNumber, formatRelative } from "@/lib/format";
 import { STEP_LABELS, type Dossier } from "@/mocks/types";
@@ -39,7 +42,7 @@ function TodoRow({ d }: { d: Dossier }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <DossierStatusBadge status={d.status} />
+          <DossierProgressBadge dossier={d} />
           <DueBadge dossier={d} />
           <ArrowRight className="hidden h-4 w-4 text-fg-subtle cq-sm:block" aria-hidden="true" />
         </div>
@@ -89,6 +92,24 @@ function BillingReminder({ org }: { org: Organization }) {
   return <Alert tone="danger" title={t.expiredTitle} action={action}>{fill(t.expiredBody, { date })}</Alert>;
 }
 
+const VIEC_LINK = { todo: "tabTodo", "await-official": "tabAwaitOfficial", channelled: "tabChannelled", cleared: "tabCleared", attention: "tabAttention" } as const;
+
+/** Đếm hồ sơ theo tab việc cần làm; mỗi ô dẫn tới danh sách đã lọc (`/dossiers?viec=…`). "Việc cần làm" đếm trên hồ sơ đang mở – cùng định nghĩa với lời chào và danh sách Cần xử lý. */
+function ProgressCounts({ dossiers }: { dossiers: Dossier[] }) {
+  const open = dossiers.filter(isOpen);
+  const pm = useMessages(DOSSIER_PROGRESS_MESSAGES);
+  const tabs = VIEC_TABS.filter((v): v is Exclude<Viec, "all"> => v !== "all");
+  return (
+    <nav aria-label={pm.tabsLabel} className="flex flex-wrap gap-2">
+      {tabs.map((v) => (
+        <Button key={v} asChild variant="secondary" size="sm">
+          <Link href={`/dossiers?viec=${v}`}>{pm[VIEC_LINK[v]]}<Badge size="sm" tone="neutral">{(v === "todo" ? open : dossiers).filter((d) => inViec(d, v)).length}</Badge></Link>
+        </Button>
+      ))}
+    </nav>
+  );
+}
+
 export function DashboardPage() {
   const t = useMessages(DASHBOARD_MESSAGES);
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
@@ -97,12 +118,14 @@ export function DashboardPage() {
   const all = dossiers.data ?? [];
   const open = all.filter(isOpen);
   const active = open.filter((d) => d.status !== "SUBMITTED");
+  /** Việc cần làm: một định nghĩa cho lời chào, danh sách Cần xử lý và ô "Việc cần làm" (tab todo trên hồ sơ đang mở). */
+  const todoAll = open.filter((d) => inViec(d, "todo"));
   const dueSoon = active.filter((d) => daysUntil(d.dueDate) <= 2);
   const overdue = dueSoon.filter((d) => daysUntil(d.dueDate) < 0);
   const suspect = open.reduce((n, d) => n + d.suspectFields, 0);
   const suspectDossiers = open.filter((d) => d.suspectFields > 0).length;
   const submitted = all.filter((d) => d.declarationNo);
-  const todo = [...active].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 6);
+  const todo = [...todoAll].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 6);
   const recent = [...submitted].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6);
   const firstName = session.data?.user.name.split(" ").pop();
   const org = session.data?.org;
@@ -113,7 +136,7 @@ export function DashboardPage() {
         title={t.title}
         description={
           firstName && dossiers.data
-            ? fill(t.greeting, { name: firstName, n: active.length })
+            ? fill(t.greeting, { name: firstName, n: todoAll.length })
             : t.subtitle
         }
         actions={
@@ -153,6 +176,8 @@ export function DashboardPage() {
           <StatCard icon={<Send />} tone="success" label={t.statSubmitted} value={submitted.length} hint={t.statSubmittedHint} />
         </Grid>
       )}
+
+      {!dossiers.isLoading && <ProgressCounts dossiers={all} />}
 
       <Grid cols={{ base: 1, lg: 3 }} gap="lg" stagger>
         <Card className="cq-lg:col-span-2">
@@ -242,8 +267,7 @@ export function DashboardPage() {
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
-                      <ChannelBadge channel={d.channel} />
-                      <DossierStatusBadge status={d.status} />
+                      <DossierProgressBadge dossier={d} />
                     </div>
                   </Link>
                 </li>

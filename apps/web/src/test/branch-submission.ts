@@ -30,7 +30,8 @@ export function branch(no: number, of: number, stage: CustomsStage, over: Partia
 /** SubmissionView của lô: trường cấp hồ sơ = tờ 1 (như backend), summary tự đếm. */
 export function submissionOf(branches: BranchSubmission[], over: Partial<SubmissionView> = {}): SubmissionView {
   const first = branches[0]!;
-  const cleared = branches.filter((b) => b.stage === "CLEARED" || b.stage.startsWith("POST_")).length;
+  const active = branches.filter((b) => b.stage !== "CANCELLED");
+  const cleared = active.filter((b) => b.stage === "CLEARED" || b.stage.startsWith("POST_")).length;
   const problems = branches.flatMap((b): SubmissionView["summary"]["problems"] =>
     b.stage === "REJECTED" ? [{ no: b.no, kind: "REJECTED" }] : b.state === "SEND_FAILED" ? [{ no: b.no, kind: "SEND_FAILED" }] : []);
   return {
@@ -38,7 +39,7 @@ export function submissionOf(branches: BranchSubmission[], over: Partial<Submiss
     started: first.started, inProgress: first.inProgress, sending: first.sending, stage: first.stage, nextOp: first.nextOp, queryOp: first.queryOp,
     amendments: first.amendments, postAmendments: first.postAmendments, pipeline: first.pipeline, messages: first.messages,
     result: first.result, customsInfo: first.customsInfo, rejection: first.rejection,
-    branches, summary: { of: branches.length, cleared, problems },
+    branches, summary: { of: active.length, cleared, problems, sheets: branches.map((b) => ({ no: b.no, stage: b.stage, state: b.state, channel: b.channel, amendments: b.amendments, postAmendments: b.postAmendments })) },
     ...over,
   };
 }

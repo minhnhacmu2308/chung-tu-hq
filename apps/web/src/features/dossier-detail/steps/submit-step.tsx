@@ -3,13 +3,13 @@
 // Sửa sau thông quan (AMA/AMB/AMC) làm ở bước 7 – ở đây chỉ còn thẻ lối vào. Quy tắc bấm được / việc tiếp theo do backend (hoặc mock)
 // tính bằng @kb/contracts customs-flow – màn chỉ hiển thị.
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Field, RadioGroup,
+  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Field, RadioGroup,
   fill, Grid, IconTile, pickMessages, Select, Spinner, Stack, StatusBadge, toast, toastPromise, useMessages, useUiLocale, type Tone, type UiLocale,
 } from "@kb/ui";
-import { baseOp, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
+import { baseOp, canEditDeclaration, CUSTOMS_OPERATIONS, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDown, ArrowRight, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
+  ArrowDown, ArrowRight, Ban, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { dossierKeys } from "@/api/dossiers";
@@ -17,7 +17,7 @@ import {
   customsKeys, declareAllSheets, getSubmission, listCertificates, performOperation, recallAllSheets, resendOperation, submitDeclaration,
   type BranchSubmission, type PipelineRow, type PipelineStatus, type SubmissionView,
 } from "@/api/customs";
-import { declarationKeys, getDeclarationView } from "@/api/declaration";
+import { confirmDeclarationCancelled, declarationKeys, getDeclarationView, reopenDeclaration } from "@/api/declaration";
 import { getHysOverview, hysKeys } from "@/api/hys";
 import { getPostAmendmentView, postAmendmentKeys } from "@/api/post-amendment";
 import { billingKeys } from "@/api/billing";
@@ -45,7 +45,9 @@ import { IssuedInvoiceCard } from "../issued-invoice/issued-invoice-card";
 import { HysSuggestDialog } from "./hys/hys-suggest-dialog";
 import { HYS_MESSAGES } from "./hys/hys.messages";
 import { billingErrorOf, billingBlockFor, BillingBlockAlert, ContractGraceAlert, CreditsUsageLine, type BillingBlock } from "./submit-billing";
-import { canDeclareAll, submissionRefetchMs, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
+import { CancelDeclarationDialog, CancellationLine, type CancelInput, SheetStatusBadges, useCancelReasonText } from "./sheet-lifecycle";
+import { SHEET_LIFECYCLE_MESSAGES } from "./sheet-lifecycle.messages";
+import { canCancelSheet, canReopenUnnumbered, canDeclareAll, submissionRefetchMs, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
 
@@ -231,9 +233,56 @@ const CLEARANCE = {
   REJECTED: { key: "clearRejected", tone: "danger" },
 } as const;
 
+/**
+ * Dòng mô tả dưới tiêu đề thẻ: tờ đã hủy → thông tin hủy (ngày · lý do · văn bản) thay cho chữ "Đã hủy" lặp lại nhãn trạng thái;
+ * dữ liệu cũ không có thông tin hủy → bỏ trống (nhãn trạng thái và thẻ "việc tiếp theo" đã báo tờ hủy). Giai đoạn khác → mô tả giai đoạn.
+ */
+function StageOrCancellation({ stage, sheet }: { stage: CustomsStage; sheet: Pick<BranchSubmission, "cancellation"> | undefined }) {
+  const stages = useMessages(STAGE_MESSAGES);
+  if (stage !== "CANCELLED") return <>{stages[stage]}</>;
+  return sheet?.cancellation ? <CancellationLine cancellation={sheet.cancellation} /> : null;
+}
+
+/** Kết quả của tờ đã hủy: số tờ khai, trạng thái "Đã hủy", lý do (mã + tên danh mục), ngày hủy, số văn bản – không còn "Chờ kết quả" / phân luồng. */
+function CancelledResult({ s }: { s: SubmissionView }) {
+  const t = useMessages(SUBMIT_MESSAGES);
+  const lc = useMessages(SHEET_LIFECYCLE_MESSAGES);
+  const c = s.branches[0]?.cancellation;
+  const reason = useCancelReasonText(c?.reason);
+  const no = s.result?.declarationNo ?? s.branches[0]?.declarationNo ?? null;
+  return (
+    <div className="divide-y divide-border">
+      {no && <KeyValue label={t.declNo} value={<span className="font-mono">{no}</span>} />}
+      <KeyValue label={t.status} value={<StatusBadge status="DOSSIER_PROGRESS_CANCELLED" />} />
+      {c && (
+        <>
+          <KeyValue label={lc.infoReasonLabel} value={reason} />
+          <KeyValue label={lc.infoDateLabel} value={formatDate(c.date)} />
+          {c.docNo && <KeyValue label={lc.infoDocNoLabel} value={c.docNo} />}
+        </>
+      )}
+    </div>
+  );
+}
+
 function ResultCard({ s }: { s: SubmissionView }) {
   const t = useMessages(SUBMIT_MESSAGES);
   const result = s.result;
+  if (s.stage === "CANCELLED") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Landmark aria-hidden="true" className="h-5 w-5 text-primary" />
+            {t.resultTitle}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CancelledResult s={s} />
+        </CardContent>
+      </Card>
+    );
+  }
   return (
     <Card>
       <CardHeader>
@@ -407,7 +456,6 @@ type HysPrompt = { op: string; proceed: () => void };
 export function SubmitStep({ dossier, goTo }: StepProps) {
   const t = useMessages(SUBMIT_MESSAGES);
   const sh = useMessages(SHEET_MESSAGES);
-  const stages = useMessages(STAGE_MESSAGES);
   const hysT = useMessages(HYS_MESSAGES);
   const locale = useUiLocale();
   const declQ = useQuery({ queryKey: declarationKeys.view(dossier.id), queryFn: () => getDeclarationView(dossier.id) });
@@ -461,6 +509,13 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
   // Qua khu vực giám sát: gửi/sửa chỉ DECLARANT / APPROVER / ADMIN (+ OWNER); vai trò khác xem và in.
   const sessionQ = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
   const canEditKvgs = Boolean(sessionQ.data && KVGS_EDITORS.has(sessionQ.data.user.role));
+  const role = sessionQ.data?.user.role;
+  // Ghi nhận hủy: chỉ người duyệt / quản trị (+ chủ sở hữu) – backend chặn lần nữa.
+  const canConfirmCancel = role === "APPROVER" || role === "ADMIN" || role === "OWNER";
+  const canReopen = role ? canEditDeclaration(role) : false;
+  const lc = useMessages(SHEET_LIFECYCLE_MESSAGES);
+  const [cancelFor, setCancelFor] = useState<number | null>(null);
+  const [reopenOpen, setReopenOpen] = useState(false);
   const [billingError, setBillingError] = useState<BillingBlock | null>(null);
   /** Lỗi do gói → giữ để hiện Alert chặn, tải lại số lượt; trả true khi đúng là lỗi do gói. */
   const onBillingError = (e: unknown) => {
@@ -543,6 +598,28 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       if (onBillingError(e)) setDeclareAllOpen(false);
       toastMutationError(t.performFailed)(e);
     },
+  });
+  const cancelDecl = useMutation({
+    mutationFn: ({ branch, ...i }: CancelInput & { branch: number }) => confirmDeclarationCancelled(dossier.id, { branch, ...i }),
+    onSuccess: () => {
+      setCancelFor(null);
+      toast({ tone: "success", title: lc.cancelDoneTitle });
+      invalidate();
+      // Tờ hủy đổi cả HYS (khối lối vào) và bản khai bổ sung AMA (bước 7) – không để bản cache cũ.
+      void qc.invalidateQueries({ queryKey: hysKeys.overview(dossier.id) });
+      void qc.invalidateQueries({ queryKey: postAmendmentKeys.view(dossier.id) });
+    },
+    onError: toastMutationError(lc.cancelFailed),
+  });
+  const reopenUnnumbered = useMutation({
+    mutationFn: () => reopenDeclaration(dossier.id),
+    onSuccess: () => {
+      setReopenOpen(false);
+      toast({ tone: "success", title: lc.reopenedTitle });
+      invalidate();
+      goTo("review");
+    },
+    onError: toastMutationError(lc.reopenFailed),
   });
   const resend = useMutation({
     mutationFn: ({ r, branch }: { r: PipelineRow; branch: number }) => {
@@ -661,8 +738,23 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
     ) : null;
 
   const declareAllState = canDeclareAll(sheets);
+  const reopenAvailable = canReopen && canReopenUnnumbered(s);
+  const cancelSheet = cancelFor ? sheets.find((b) => b.no === cancelFor) : undefined;
+  const cancelButton = (b: BranchSubmission) =>
+    canConfirmCancel && canCancelSheet(b) ? (
+      <Button size="sm" variant="danger-outline" leftIcon={<Ban className="h-4 w-4" />} disabled={anyBusy} onClick={() => setCancelFor(b.no)} aria-label={fill(lc.cancelBtnAria, { no: b.no })}>
+        {lc.cancelBtn}
+      </Button>
+    ) : null;
   const alerts = (
     <>
+      {reopenAvailable && (
+        <div>
+          <Button variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} disabled={anyBusy} onClick={() => setReopenOpen(true)}>
+            {lc.reopenBtn}
+          </Button>
+        </div>
+      )}
       {notApproved && (
         <Alert
           tone="danger"
@@ -708,6 +800,26 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         }}
         onProceed={() => hysPrompt?.proceed()}
       />
+      <CancelDeclarationDialog
+        open={cancelFor !== null}
+        description={cancelSheet && multi ? `${dossier.code} · ${fill(sh.sheetTitle, { no: cancelSheet.no, of: sheets.length })}` : `${dossier.code} · ${dossier.partner}`}
+        pending={cancelDecl.isPending}
+        onOpenChange={(o) => !o && setCancelFor(null)}
+        onConfirm={(i) => cancelFor !== null && cancelDecl.mutate({ branch: cancelFor, ...i })}
+      />
+      <ConfirmDialog
+        open={reopenOpen}
+        onOpenChange={setReopenOpen}
+        tone="warning"
+        title={lc.reopenTitle}
+        icon={<RotateCcw className="h-4 w-4" />}
+        description={`${dossier.code} · ${dossier.partner}`}
+        confirmLabel={lc.reopenBtn}
+        loading={reopenUnnumbered.isPending}
+        onConfirm={() => reopenUnnumbered.mutate()}
+      >
+        {lc.reopenBody}
+      </ConfirmDialog>
       <ConfirmDeclareAllDialog
         open={declareAllOpen}
         count={declareAllState.pending}
@@ -792,6 +904,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
             onQuery={() => perform.mutate({ op: b.queryOp, branch: b.no })}
             onViewErrors={() => goTo("review")}
             onPost={() => goTo("post", { branch: b.no })}
+            cancelAction={cancelButton(b)}
             kvgs={kvgsCardFor(b)}
           />
         ))}
@@ -803,6 +916,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
               kind={kind}
               info={b.customsInfo}
               sheet={fill(sh.sheetTitle, { no: b.no, of: sheets.length })}
+              cancelled={b.stage === "CANCELLED"}
               estimate={sheetEstimateOf(declQ.data?.declaration, declQ.data?.branches.find((x) => x.no === b.no))}
             />
           ) : null,
@@ -848,20 +962,23 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
                 ) : (
                   t.filingTitle
                 )}
-                {s.result?.channel && <StatusBadge status={CHANNEL_STATUS[s.result.channel]} />}
+                {sheets[0] && <SheetStatusBadges sheet={sheets[0]} />}
               </CardTitle>
-              <CardDescription>{stages[s.stage]}</CardDescription>
+              <CardDescription><StageOrCancellation stage={s.stage} sheet={sheets[0]} /></CardDescription>
             </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              leftIcon={<Search className="h-4 w-4" />}
-              disabled={!hasNumber || anyBusy}
-              loading={h.busyOp === s.queryOp}
-              onClick={() => perform.mutate({ op: s.queryOp, branch: 1 })}
-            >
-              {fill(t.query, { op: s.queryOp })}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {sheets[0] && cancelButton(sheets[0])}
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon={<Search className="h-4 w-4" />}
+                disabled={!hasNumber || anyBusy}
+                loading={h.busyOp === s.queryOp}
+                onClick={() => perform.mutate({ op: s.queryOp, branch: 1 })}
+              >
+                {fill(t.query, { op: s.queryOp })}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <Stack gap="md">
@@ -879,7 +996,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
         <ResultCard s={s} />
       </Grid>
 
-      {s.customsInfo && <CustomsInfoPanel kind={kind} info={s.customsInfo} estimate={estimateOf(declQ.data?.declaration)} />}
+      {s.customsInfo && <CustomsInfoPanel kind={kind} cancelled={s.stage === "CANCELLED"} info={s.customsInfo} estimate={estimateOf(declQ.data?.declaration)} />}
 
       <MessageLog messages={s.messages} />
 
@@ -896,7 +1013,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
  * nghiệp vụ theo giai đoạn và nhật ký của tờ; tờ đã thông quan có nút sang bước 7 (AMA của tờ).
  */
 function SheetCard({
-  b, of, s, waiting, declareWaiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost, kvgs,
+  b, of, s, waiting, declareWaiting, problem, h, anyBusy, hideNext, onQuery, onViewErrors, onPost, cancelAction, kvgs,
 }: {
   b: BranchSubmission;
   of: number;
@@ -911,12 +1028,13 @@ function SheetCard({
   onQuery: () => void;
   onViewErrors: () => void;
   onPost: () => void;
+  /** Nút "Xác nhận tờ khai đã hủy" (null khi không được phép). */
+  cancelAction: ReactNode;
   /** Thẻ Qua khu vực giám sát của tờ (ngoài khối nghiệp vụ thu gọn – lối tắt #kvgs-<tờ> cuộn tới được). */
   kvgs: ReactNode;
 }) {
   const t = useMessages(SUBMIT_MESSAGES);
   const sh = useMessages(SHEET_MESSAGES);
-  const stages = useMessages(STAGE_MESSAGES);
   const titleId = useId();
   // Tờ chờ tờ trước (truyền theo thứ tự tờ): nút gửi nội dung khóa, lý do SHEET_ORDER – như backend.
   const pipeline = orderLocked(b.pipeline.filter((r) => !AMA_OPS.has(r.op)), b.no, waiting, declareWaiting);
@@ -924,7 +1042,6 @@ function SheetCard({
   const next = b.nextOp && !AMA_OPS.has(b.nextOp) ? pipeline.find((r) => r.op === b.nextOp) : undefined;
   const sending = pipeline.find((r) => r.status === "SENDING");
   const rejection = b.rejection && !AMA_OPS.has(b.rejection.operation) ? b.rejection : null;
-  const channel = b.channel ?? b.result?.channel ?? null;
   // Khối nghiệp vụ mở sẵn khi tờ có lỗi – cả khi lỗi đến sau (tờ đang gửi → bị từ chối / lỗi gửi), không chỉ lúc gắn.
   const [opsOpen, setOpsOpen] = useState(problem !== null);
   useEffect(() => {
@@ -938,7 +1055,7 @@ function SheetCard({
             <span>
               {b.declarationNo ? fill(sh.sheetTitleNo, { no: b.no, of, decl: b.declarationNo }) : fill(sh.sheetTitle, { no: b.no, of })}
             </span>
-            {channel && <StatusBadge status={CHANNEL_STATUS[channel]} />}
+            <SheetStatusBadges sheet={b} />
             {problem && (
               <Badge tone="danger" icon={<XCircle />}>
                 {sh[problem]}
@@ -951,11 +1068,12 @@ function SheetCard({
             )}
           </CardTitle>
           <CardDescription>
-            {stages[b.stage]}
+            <StageOrCancellation stage={b.stage} sheet={b} />
             {!b.declarationNo && <> · {sh.noNumber}</>}
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {cancelAction}
           {postStepVisible(b.stage) && (
             <Button size="sm" variant="secondary" leftIcon={<FilePen className="h-4 w-4" />} onClick={onPost}>
               {sh.postAmend}
@@ -1053,7 +1171,9 @@ function NextStep({
 }) {
   const t = useMessages(SUBMIT_MESSAGES);
   const ops = useMessages(OPERATION_MESSAGES);
+  const lc = useMessages(SHEET_LIFECYCLE_MESSAGES);
   const locale = useUiLocale();
+  if (s.stage === "CANCELLED") return <Alert tone="info">{lc.cancelledNote}</Alert>;
   if (sending) {
     return (
       <Alert tone="info" title={fill(t.awaiting, { op: sending.op, label: opLabel(ops, sending).toLowerCase() })}>

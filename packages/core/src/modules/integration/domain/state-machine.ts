@@ -1,6 +1,6 @@
 // Trạng thái truyền tờ khai (ADR 0005) theo giai đoạn vòng đời dùng chung `@kb/contracts/customs-flow` (stageAfter, operationAvailability).
 // Giai đoạn chi tiết lưu ở results.raw.stage; cột `state` giữ nghĩa thô cho màn danh sách và dữ liệu cũ. Thuần.
-import { stageFromLegacy, type CustomsInfo, type CustomsRejection, type CustomsOperation, type CustomsStage, type SentSnapshot, type SubmissionState } from "@kb/contracts";
+import { coarseState, stageFromLegacy, type CustomsInfo, type CustomsRejection, type CustomsOperation, type CustomsStage, type SentSnapshot, type SubmissionState } from "@kb/contracts";
 
 /** Phần phụ của kết quả truyền (jsonb). `progress` là trường cũ (trước khi có `stage`) – chỉ đọc. */
 export type ResultRaw = {
@@ -36,25 +36,17 @@ export type ResultRaw = {
   catalogNo?: string | { no: string; lines: string | null };
   /** C6: thời điểm (ISO, UTC) hệ thống nhận / lưu số tờ khai hiện tại của tờ – ngày ghi danh mục khi Hải quan không trả ngày đăng ký. */
   numberAt?: string;
+  /** Người khai xác nhận Hải quan đã hủy tờ khai (stage CANCELLED): mã lý do danh mục CANCEL_REASON, ngày, số văn bản, ghi chú, người ghi + lúc ghi (ISO UTC). */
+  cancellation?: { reason: string; date: string; docNo?: string; note?: string; by: string; at: string };
 };
 
 export const stageOf = (r: { state: SubmissionState; raw: ResultRaw | null } | null): CustomsStage =>
   !r ? "NOT_SENT" : r.raw?.stage ?? stageFromLegacy(r.raw?.progress, r.state);
 
-/** Giá trị cột `state` (thô) theo giai đoạn; lỗi gửi → SEND_FAILED nhưng giai đoạn giữ nguyên trong raw.stage. */
-export function coarseState(stage: CustomsStage, failed = false): SubmissionState {
-  if (failed) return "SEND_FAILED";
-  switch (stage) {
-    case "NOT_SENT": return "APPROVED";
-    case "PRE_DECLARED": case "RECALLED": return "PRE_DECLARED";
-    case "DECLARED": case "AMEND_RECALLED": case "AMEND_PRE_DECLARED": return "DECLARED";
-    case "CLEARED": case "POST_EDITING": case "POST_PRE_DECLARED": case "POST_RECALLED": return "CLEARED";
-    case "REJECTED": return "REJECTED";
-  }
-}
+export { coarseState };
 
 /** Không còn nghiệp vụ nào (Hải quan từ chối/hủy). Đã thông quan vẫn còn sửa đổi sau thông quan. */
-export const TERMINAL: ReadonlySet<CustomsStage> = new Set(["REJECTED"]);
+export const TERMINAL: ReadonlySet<CustomsStage> = new Set(["REJECTED", "CANCELLED"]);
 
 /** Trạng thái hồ sơ trên màn Khai báo Hải quan. */
 export function rowState(stage: CustomsStage, started: boolean, pending: boolean): "READY" | "SENDING" | "INSPECTING" | "CLEARED" {

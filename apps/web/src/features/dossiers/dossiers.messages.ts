@@ -139,9 +139,3 @@ export const CREATE_DOSSIER_MESSAGES = defineMessages({
   },
 });
 
-/** Trạng thái Hải quan gộp của lô nhiều tờ khai (danh sách hồ sơ, đầu hồ sơ). Lô 1 tờ không dùng. */
-export const DOSSIER_CUSTOMS_MESSAGES = defineMessages({
-  vi: { clearedPartial: "Thông quan {cleared}/{of}", REJECTED: "Tờ {no}: bị từ chối", SEND_FAILED: "Tờ {no}: lỗi gửi" },
-  en: { clearedPartial: "Cleared {cleared}/{of}", REJECTED: "Sheet {no}: rejected", SEND_FAILED: "Sheet {no}: send failed" },
-  zh: { clearedPartial: "已通关 {cleared}/{of}", REJECTED: "第 {no} 份：被拒绝", SEND_FAILED: "第 {no} 份：发送失败" },
-});

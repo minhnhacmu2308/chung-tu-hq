@@ -144,3 +144,14 @@ export function parseRecalled(raw: string | null): RecalledNotice | null {
   const sheets = raw.split(",").map(Number);
   return sheets.every((x) => Number.isInteger(x) && x > 0) ? { scope: "sheets", sheets } : null;
 }
+
+/** Mở lại để sửa khi tờ khai đã truyền nhưng chưa tờ nào có số: mọi tờ chưa số, NOT_SENT và không có nghiệp vụ nào đang gửi (backend vẫn chặn lần nữa – DECLARATION_SENDING). */
+export function canReopenUnnumbered(s: SubmissionView): boolean {
+  if (s.declarationStatus !== "SUBMITTED") return false;
+  return sheetsOf(s).every((b) => !b.declarationNo && b.stage === "NOT_SENT" && !b.sending && b.pipeline.every((r) => r.status !== "SENDING"));
+}
+
+/** Tờ có thể ghi nhận "đã hủy": đã có số, chưa thông quan, chưa hủy / từ chối. */
+export function canCancelSheet(b: Pick<BranchSubmission, "declarationNo" | "stage">): boolean {
+  return Boolean(b.declarationNo) && b.stage !== "NOT_SENT" && b.stage !== "CLEARED" && !b.stage.startsWith("POST_") && b.stage !== "CANCELLED" && b.stage !== "REJECTED";
+}

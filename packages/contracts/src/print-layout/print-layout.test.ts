@@ -128,6 +128,8 @@ describe("printTitle", () => {
     ["IDA", "AMEND_RECALLED", routed],
     ["IDA", "POST_PRE_DECLARED", cleared("nhập")],
     ["IDA", "POST_RECALLED", cleared("nhập")],
+    ["IDA", "CANCELLED", { title: "Tờ khai hàng hóa nhập khẩu – ĐÃ HỦY", watermark: "ĐÃ HỦY" }],
+    ["EDA", "CANCELLED", { title: "Tờ khai hàng hóa xuất khẩu – ĐÃ HỦY", watermark: "ĐÃ HỦY" }],
   ] as const)("%s %s", (kind, stage, expected) => {
     expect(printTitle(kind, stage)).toEqual(expected);
   });

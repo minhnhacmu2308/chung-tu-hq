@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { stateFor } from "./global-setup";
-import { createDossier, fileIdaThenIdc, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
+import { approveDeclaration, createDossier, ensureCertificate, fileIdaThenIdc, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
 
 test("danh sách hồ sơ: hồ sơ mới hiện ở đầu, tìm theo đối tác, lọc theo phạm vi, mở chi tiết", async ({ page }) => {
   await login(page);
@@ -31,9 +31,7 @@ test("danh sách hồ sơ: hồ sơ mới hiện ở đầu, tìm theo đối t�
 test("truyền Hải quan: ký số & khai tạm IDA → khai chính thức IDC qua cổng giả → phân luồng, thông quan", async ({ page, browser }) => {
   test.setTimeout(240_000);
   await login(page);
-  // Chứng thư số để ký (Customs Hub ký thay bằng chứng thư đã đăng ký).
-  const certs = (await (await page.request.get("/api/org/certificates")).json()) as unknown[];
-  if (certs.length === 0) expect((await page.request.post("/api/org/certificates", { data: { issuer: "Viettel-CA", serial: `E2E${Date.now()}`, validTo: "2027-12-31" } })).ok()).toBeTruthy();
+  await ensureCertificate(page);
 
   const id = await createDossier(page);
   await uploadAndConfirm(page, ["Commercial Invoice.pdf", "Packing List.pdf", "Hoa don cuoc GTGT.pdf"]);
@@ -43,13 +41,7 @@ test("truyền Hải quan: ký số & khai tạm IDA → khai chính thức IDC 
 
   const approverCtx = await browser.newContext({ storageState: stateFor("tuan") });
   const approver = await approverCtx.newPage();
-  await approver.goto(`/dossiers/${id}?step=review`);
-  await approver.getByRole("button", { name: "Phê duyệt tờ khai" }).click();
-  const dialog = approver.getByRole("dialog");
-  const ack = dialog.getByRole("checkbox");
-  if (await ack.isVisible({ timeout: 2_000 }).catch(() => false)) await ack.check();
-  await dialog.getByRole("button", { name: "Phê duyệt", exact: true }).click();
-  await expect(approver).toHaveURL(/step=submit/, { timeout: 15_000 });
+  await approveDeclaration(approver, id);
   await approverCtx.close();
 
   await page.goto(`/dossiers/${id}?step=submit`);
@@ -63,6 +55,12 @@ test("truyền Hải quan: ký số & khai tạm IDA → khai chính thức IDC 
   // Giao diện có thể hiện "Đã thông quan" trước một nhịp so với lần đọc API → chờ API.
   await expect.poll(async () => (await submission()).result.clearanceStatus, { timeout: 120_000 }).toBe("CLEARED");
   expect((await submission()).result.declarationNo).toMatch(/^\d{12}$/);
+  // Danh sách hồ sơ: tab "Đã thông quan" có hồ sơ này và dòng hiện nhãn tiến độ "Đã thông quan".
+  await page.goto("/dossiers?viec=cleared");
+  const { code: dossierCode } = (await (await page.request.get(`/api/dossiers/${id}`)).json()) as { code: string };
+  const row = page.getByRole("row").filter({ hasText: dossierCode });
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("Đã thông quan");
   // Đã truyền: không mở lại tờ khai được nữa.
   expect((await page.request.post(`/api/dossiers/${id}/declaration/reopen`, { data: {} })).status()).toBe(409);
 });

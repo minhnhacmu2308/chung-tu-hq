@@ -16,6 +16,7 @@ export { dossierCustomsSummaries, getSubmission, listCustomsDeclarations } from 
 export { getFptTrace } from "./application/get-fpt-trace.js";
 export { previewFptPayload } from "./application/preview-fpt-payload.js";
 export { markOutboxFailed, reopenDeclaration } from "./application/reopen-declaration.js";
+export { confirmDeclarationCancelled } from "./application/confirm-cancelled.js";
 export { checkSentSheets, customsEditSheets } from "./application/sent-sheets.js";
 export { OPERATION_LABELS } from "./application/_customs-view.js";
 export { buildFptRequest, type DeclarationPayload, type FptBuild } from "./domain/declaration-to-fpt.js";

@@ -54,6 +54,10 @@ function repos(tx: Tx): CustomsRepos {
         const r = (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId), eq(customsResults.branch, branch))).limit(1))[0];
         return r ? toResult(r) : null;
       },
+      getForUpdate: async (orgId, dossierId, branch = 1) => {
+        const r = (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId), eq(customsResults.branch, branch))).limit(1).for("update"))[0];
+        return r ? toResult(r) : null;
+      },
       listForDossier: async (orgId, dossierId) => (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), eq(customsResults.dossierId, dossierId))).orderBy(customsResults.branch)).map(toResult),
       listForDossiers: async (orgId, dossierIds) =>
         dossierIds.length ? (await tx.select().from(customsResults).where(and(eq(customsResults.orgId, orgId), inArray(customsResults.dossierId, dossierIds))).orderBy(customsResults.dossierId, customsResults.branch)).map(toResult) : [],

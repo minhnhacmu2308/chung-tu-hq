@@ -1,7 +1,7 @@
 // Bước 4–5: AI Agent (tra HS, ánh xạ, dựng tờ khai, số hóa) và tờ khai nháp (mock).
 // Tiến trình agent mô phỏng theo thời gian: lưu startedAt, tính tiến độ mỗi lần đọc.
 import { appFieldMeta, canEditDeclaration, editBlockFor, extraFieldIssue, extraFieldMeta, itemFieldIssue, itemFieldMeta, parseItemFieldCode, fieldEditBlock, isDeclarationFieldEditable } from "@kb/contracts";
-import { editScopeMockError, editScopeOf, sentSheetsMockError, toEditTargetMock } from "./customs";
+import { editScopeMockError, editScopeOf, reopenSubmittedState, sentSheetsMockError, toEditTargetMock } from "./customs";
 import { branchesOf } from "@/mocks/customs-sim";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { ApiError, mutate, nowIso, query } from "@/lib/mock-request";
@@ -444,9 +444,14 @@ export const reopenDeclaration = (dossierId: string) =>
     const decl = db.declarations.find((d) => d.dossierId === dossierId);
     const dossier = db.dossiers.find((d) => d.id === dossierId);
     if (!decl || !dossier) throw new ApiError("NOT_FOUND", "Không tìm thấy hồ sơ");
-    if (decl.status === "SUBMITTED") throw new ApiError("DOSSIER_LOCKED", "Hải quan đã ghi nhận tờ khai – không mở lại được, dùng khai sửa đổi");
-    if (decl.status !== "APPROVED") throw new ApiError("INVALID_STATE", "Tờ khai chưa được duyệt");
+    if (decl.status === "SUBMITTED") {
+      // Đã truyền nhưng chưa tờ nào có số tờ khai → mở lại được, trừ khi nghiệp vụ nội dung còn đang gửi.
+      const state = reopenSubmittedState(db, dossierId);
+      if (state === "SENDING") throw reasonApiError("INVALID_STATE", "DECLARATION_SENDING");
+      if (state === "LOCKED") throw new ApiError("DOSSIER_LOCKED", "Hải quan đã ghi nhận tờ khai – không mở lại được, dùng khai sửa đổi");
+    } else if (decl.status !== "APPROVED") throw new ApiError("INVALID_STATE", "Tờ khai chưa được duyệt");
     const { approvedBy: _b, approvedAt: _a, ...rest } = decl;
     db.declarations[db.declarations.indexOf(decl)] = { ...rest, status: "DRAFT" };
     Object.assign(dossier, { status: "NEEDS_REVIEW", step: "review", suspectFields: decl.fields.filter((f) => f.suspect).length, updatedAt: nowIso() });
   });
+export { confirmDeclarationCancelled } from "./customs";

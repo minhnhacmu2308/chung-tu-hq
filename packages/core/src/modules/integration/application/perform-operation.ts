@@ -13,7 +13,7 @@ import { branchPayload, sheetSnapshot } from "../domain/branches.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { buildAmaRequest } from "../domain/post-amendment.js";
-import { coarseState, stageOf } from "../domain/state-machine.js";
+import { coarseState, stageOf, TERMINAL } from "../domain/state-machine.js";
 import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
 import { availabilityInput, hasBlockingPending, kvgsFlowOf, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
@@ -225,15 +225,19 @@ async function queryNow(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, dir
   const stage = stageOf(result);
   const cleared = st.cleared && (stage === "DECLARED" || stage === "AMEND_PRE_DECLARED" || stage === "AMEND_RECALLED");
   const nextStage = st.rejected ? "REJECTED" : cleared ? "CLEARED" : stage;
-  await deps.uow.asOrg(ctx, async (r) => {
+  const terminal = await deps.uow.asOrg(ctx, async (r) => {
     await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: result.branch, operation: op, direction: "IN", result: "OK", summary: `Trạng thái tờ khai: ${st.status}`, payloadMasked: { nghiepVu: op, soToKhai: st.declarationNo ?? result.declarationNo, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now() });
+    // Đọc lại khóa dòng: tờ đã sang giai đoạn cuối (xác nhận hủy / từ chối) → không đổi giai đoạn.
+    const current = await r.results.getForUpdate(ctx.orgId, dossierId, result.branch);
+    if (current && TERMINAL.has(stageOf(current))) return true;
     await r.results.upsert({
       ...result, state: coarseState(nextStage, result.state === "SEND_FAILED" && nextStage === stage),
       ...(stage !== "NOT_SENT" && stage !== "PRE_DECLARED" && stage !== "RECALLED" ? { clearanceStatus: st.rejected ? "REJECTED" as const : st.cleared ? "CLEARED" as const : "INSPECTING" as const } : {}),
       raw: { ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status, ...(st.info ? { customsInfo: mergeCustomsInfo(result.raw?.customsInfo, { ...st.info, receivedAt: now().toISOString() }) } : {}) }, updatedAt: now(),
     });
+    return false;
   });
-  if (cleared) await syncDossierClearance(deps, ctx, dossierId);
+  if (cleared && !terminal) await syncDossierClearance(deps, ctx, dossierId);
   await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });
   return ok({ sent: false, message: `Trạng thái tờ khai: ${st.status}` });
 }

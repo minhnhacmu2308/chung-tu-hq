@@ -86,6 +86,31 @@ describe("mở lại tờ khai (mock)", () => {
   });
 });
 
+describe("mở lại khi chưa có số tờ khai (mock)", () => {
+  /** Hồ sơ đã truyền nhưng Hải quan chưa ghi nhận số nào: bỏ kết quả truyền của hồ sơ SUBMITTED có sẵn. */
+  const unnumberedSubmitted = () => {
+    const db = getDb();
+    const id = db.declarations.find((d) => d.status === "SUBMITTED")!.dossierId;
+    db.customsResults = db.customsResults.filter((r) => r.dossierId !== id);
+    db.customsBranchResults = {};
+    db.customsFlows = {};
+    return id;
+  };
+
+  it("đã truyền, chưa tờ nào có số, không đang gửi → mở lại được", async () => {
+    const id = unnumberedSubmitted();
+    await reopenDeclaration(id);
+    expect(getDb().declarations.find((d) => d.dossierId === id)!.status).toBe("DRAFT");
+  });
+
+  it("đang gửi nghiệp vụ nội dung (flow.pending) → DECLARATION_SENDING, tờ khai giữ nguyên", async () => {
+    const id = unnumberedSubmitted();
+    getDb().customsFlows[id] = { stage: "NOT_SENT", pending: { op: "IDA", doneAt: "2999-01-01T00:00:00.000Z", outcome: "OK" }, amendments: 0, postAmendments: 0, done: [], clearAt: null, side: {} } as never;
+    await expect(reopenDeclaration(id)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "DECLARATION_SENDING" });
+    expect(getDb().declarations.find((d) => d.dossierId === id)!.status).toBe("SUBMITTED");
+  });
+});
+
 describe("tổng theo tờ khai nhánh (mock)", () => {
   const cents = (s: string) => BigInt(s.replace(".", ""));
   const fmt = (n: bigint) => `${n / 100n}.${String(n % 100n).padStart(2, "0")}`;

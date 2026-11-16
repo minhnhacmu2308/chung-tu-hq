@@ -7,7 +7,7 @@ import { asOrgId, asUserId, type OrgId, type UserId } from "../../../shared/ids.
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
-import { coarseState, stageOf } from "../domain/state-machine.js";
+import { coarseState, stageOf, TERMINAL } from "../domain/state-machine.js";
 import { reconcileCatalogDeclarationNo } from "./_catalog-numbers.js";
 import { syncDossierClearance } from "./_clearance.js";
 import { pullCustomsMessages } from "./customs-messages.js";
@@ -57,12 +57,20 @@ export async function pollStatus(deps: CustomsDeps, input: PollStatusInput): Pro
     },
     updatedAt: now,
   };
-  await deps.uow.asOrg(ctx, async (r) => {
+  // Đọc lại khóa dòng: tờ đã sang giai đoạn cuối (xác nhận hủy) trong lúc hỏi → không đổi giai đoạn, dừng hỏi.
+  const terminal = await deps.uow.asOrg(ctx, async (r) => {
+    const current = await r.results.getForUpdate(input.orgId, input.dossierId, branch);
+    if (current && TERMINAL.has(stageOf(current))) return true;
     if (changed) {
       await r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: input.dossierId, branch, operation: op, direction: "IN", result: "OK", summary: `Trạng thái tờ khai: ${st.status}`, payloadMasked: { nghiepVu: op, soToKhai: st.declarationNo ?? result.declarationNo, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now });
     }
     await r.results.upsert(saved);
+    return false;
   });
+  if (terminal) {
+    await deps.dossiers.publish(input.orgId, input.dossierId, { type: "customs.message" });
+    return ok({ done: true, cleared: false });
+  }
   // C6: số tờ khai / tập dòng đã gửi không khớp raw.catalogNo (số mới / đổi, khai sửa đổi dòng, hoặc danh mục chưa ghi xong – crash, lỗi) → số tờ khai
   // cuối của mặt hàng (sau commit; lỗi chỉ log; ngày = ngày đăng ký Hải quan → lúc nhận số → thông điệp khai tạm → updated_at trước lượt này).
   await reconcileCatalogDeclarationNo(deps, ctx, saved, result.updatedAt);

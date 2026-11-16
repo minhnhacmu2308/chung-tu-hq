@@ -102,3 +102,11 @@ describe("orderedOperation – nghiệp vụ truyền theo thứ tự tờ", () 
     expect(sheetOrderWait(s("RECALLED", "PRE_DECLARED"), 2)).toBe(1);
   });
 });
+
+describe("dossierCustomsSummary – tờ đã hủy (CANCELLED)", () => {
+  it("[CLEARED, CANCELLED] → tờ hủy không tính: of 1, allCleared", () => {
+    expect(dossierCustomsSummary([{ stage: "CLEARED", state: "CLEARED" }, { stage: "CANCELLED", state: "DECLARED" }])).toMatchObject({ of: 1, cleared: 1, allCleared: true });
+    expect(dossierCustomsSummary([{ stage: "CANCELLED", state: "DECLARED" }])).toMatchObject({ of: 0, allCleared: false });
+    expect(recallExempt("CANCELLED")).toBe(true);
+  });
+});

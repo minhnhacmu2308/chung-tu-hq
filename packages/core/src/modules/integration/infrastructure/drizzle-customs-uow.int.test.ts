@@ -372,3 +372,44 @@ describe("DrizzleCustomsUow – khai báo định danh", () => {
     expect(await uow.asOrg(B, (r) => r.identifiers.listStuckSending("org_anphat", new Date(now.getTime() + 1000)))).toEqual([]);
   });
 });
+
+describe("DrizzleCustomsUow – results.getForUpdate (khóa dòng)", () => {
+  const res = (id: string, branch: number): ResultRow => ({ id, orgId: "org_anphat", dossierId: "dos_lock", branch, externalId: null, declarationNo: `L${branch}`, channel: null, channelNote: null, clearanceStatus: "WAITING", customsTaxVnd: null, state: "DECLARED", pollCount: 0, raw: null, updatedAt: now });
+
+  it("trả đúng dòng của nhánh trong org mình; org khác nhận null", async () => {
+    await uow.asOrg(A, async (r) => {
+      await r.results.upsert(res("res_l1", 1));
+      await r.results.upsert(res("res_l2", 2));
+    });
+    expect((await uow.asOrg(A, (r) => r.results.getForUpdate("org_anphat", "dos_lock", 2)))?.declarationNo).toBe("L2");
+    expect((await uow.asOrg(A, (r) => r.results.getForUpdate("org_anphat", "dos_lock")))?.declarationNo).toBe("L1");
+    expect(await uow.asOrg(A, (r) => r.results.getForUpdate("org_anphat", "dos_lock", 3))).toBeNull();
+    expect(await uow.asOrg(B, (r) => r.results.getForUpdate("org_anphat", "dos_lock", 1))).toBeNull();
+  });
+
+  it("hai giao dịch đồng thời: giao dịch sau chờ giao dịch trước commit mới đọc được", async () => {
+    const events: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let held!: () => void;
+    const holding = new Promise<void>((resolve) => (held = resolve));
+    const first = uow.asOrg(A, async (r) => {
+      await r.results.getForUpdate("org_anphat", "dos_lock", 1);
+      events.push("first-locked");
+      held();
+      await gate;
+      events.push("first-commit");
+    });
+    await holding;
+    const second = uow.asOrg(A, async (r) => {
+      await r.results.getForUpdate("org_anphat", "dos_lock", 1);
+      events.push("second-locked");
+    });
+    // Cho giao dịch sau đủ thời gian chạm khóa; nó phải CHƯA đọc xong khi giao dịch đầu còn giữ.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(events).toEqual(["first-locked"]);
+    release();
+    await Promise.all([first, second]);
+    expect(events).toEqual(["first-locked", "first-commit", "second-locked"]);
+  });
+});

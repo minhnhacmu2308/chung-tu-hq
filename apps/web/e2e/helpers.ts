@@ -81,3 +81,22 @@ export async function fillManualFields(page: Page, dossierId: string) {
     expect(res.ok(), `${code}: ${await res.text()}`).toBeTruthy();
   }
 }
+
+/** Chứng thư số để ký (Customs Hub ký thay bằng chứng thư đã đăng ký): thiếu thì đăng ký một cái. */
+export async function ensureCertificate(page: Page) {
+  const certs = (await (await page.request.get("/api/org/certificates")).json()) as unknown[];
+  if (certs.length === 0) expect((await page.request.post("/api/org/certificates", { data: { issuer: "Viettel-CA", serial: `E2E${Date.now()}`, validTo: "2027-12-31" } })).ok()).toBeTruthy();
+}
+
+/** Người duyệt (context đã đăng nhập) phê duyệt tờ khai ở bước Review → chuyển sang bước Khai báo. */
+export async function approveDeclaration(approver: Page, dossierId: string) {
+  await approver.goto(`/dossiers/${dossierId}?step=review`);
+  await approver.getByRole("button", { name: "Phê duyệt tờ khai" }).click();
+  const dialog = approver.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  // isVisible() không chờ (bỏ qua timeout) → chờ ô xác nhận hiện tối đa 3 giây; không có thì bỏ qua.
+  const ack = dialog.getByRole("checkbox");
+  if (await ack.waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false)) await ack.check();
+  await dialog.getByRole("button", { name: "Phê duyệt", exact: true }).click();
+  await expect(approver).toHaveURL(/step=submit/, { timeout: 15_000 });
+}

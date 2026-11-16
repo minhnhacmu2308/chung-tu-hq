@@ -19,3 +19,4 @@ export const approveDeclaration = pick(mock.approveDeclaration, http.approveDecl
 export const moveToReview = pick(mock.moveToReview, http.moveToReview);
 export const updateDeclarationField = pick(mock.updateDeclarationField, http.updateDeclarationField);
 export const reopenDeclaration = pick(mock.reopenDeclaration, http.reopenDeclaration);
+export const confirmDeclarationCancelled = pick(mock.confirmDeclarationCancelled, http.confirmDeclarationCancelled);

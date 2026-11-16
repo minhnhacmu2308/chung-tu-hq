@@ -1,4 +1,4 @@
-import { AWAITING_CLEARANCE, branchCount, dossierCustomsSummary, sheetApproved, type CustomsRow, type CustomsSummary, type SubmissionView } from "@kb/contracts";
+import { AWAITING_CLEARANCE, branchCount, dossierCustomsSummary, isChanneled, sheetApproved, type CustomsRow, type CustomsSummary, type SubmissionView } from "@kb/contracts";
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -89,7 +89,8 @@ export async function dossierCustomsSummaries(deps: CustomsDeps, ctx: Pick<Ctx, 
     const own = results.filter((r) => r.dossierId === id).sort((a, b) => a.branch - b.branch);
     if (!own.length || out.has(id)) continue;
     const s = dossierCustomsSummary(own.map((r) => ({ stage: stageOf(r), state: r.state })));
-    out.set(id, { of: s.of, cleared: s.cleared, problems: s.problems });
+    const sheets = own.map((r) => ({ no: r.branch, stage: stageOf(r), state: r.state, channel: isChanneled(stageOf(r)) ? (r.channel ?? null) : null, amendments: r.raw?.amendments ?? 0, postAmendments: r.raw?.postAmendments ?? 0 }));
+    out.set(id, { of: s.of, cleared: s.cleared, problems: s.problems, sheets });
   }
   return ok(out);
 }

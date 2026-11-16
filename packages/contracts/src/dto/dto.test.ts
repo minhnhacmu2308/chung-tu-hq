@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DeclarationSchema, DossierSchema, ExtractedFieldSchema, SkillSchema } from "./index.js";
+import { CustomsSummarySchema, DeclarationSchema, DossierSchema, ExtractedFieldSchema, SkillSchema } from "./index.js";
 import { canBeIssued, defaultDocumentSources, issuedKinds } from "../common.js";
 import { BranchParamSchema, BranchQuerySchema, BranchSubmissionSchema, CustomsRowSchema, PerformOperationInputSchema, ResendOperationInputSchema, SubmissionViewSchema } from "../api/customs.js";
 
@@ -41,7 +41,10 @@ describe("Hải quan theo tờ khai nhánh (spec tách tờ khai §7)", () => {
   it("SubmissionView cũ (không branches/summary) vẫn hợp lệ: branches [] và summary mặc định", () => {
     const v = SubmissionViewSchema.parse(legacyView);
     expect(v.branches).toEqual([]);
-    expect(v.summary).toEqual({ of: 1, cleared: 0, problems: [] });
+    expect(v.summary).toEqual({ of: 1, cleared: 0, problems: [], sheets: [] });
+  });
+  it("summary của hồ sơ chỉ còn tờ đã hủy (of: 0) vẫn hợp lệ", () => {
+    expect(CustomsSummarySchema.parse({ cleared: 0, of: 0, problems: [] })).toEqual({ cleared: 0, of: 0, problems: [], sheets: [] });
   });
   it("SubmissionView có branches: mỗi tờ một mục (số tờ khai null khi chưa cấp)", () => {
     const b = { no: 2, of: 3, stage: "NOT_SENT", state: "APPROVED", declarationNo: null, channel: null, pipeline: [], nextOp: null, queryOp: "IID", amendments: 0, postAmendments: 0, messages: [], result: null, customsInfo: null, rejection: null, inProgress: false, started: false };
@@ -67,7 +70,7 @@ describe("Hải quan theo tờ khai nhánh (spec tách tờ khai §7)", () => {
   it("Dossier: tóm tắt Hải quan tùy chọn { cleared, of, problems }", () => {
     const customs = { cleared: 2, of: 3, problems: [{ no: 3, kind: "REJECTED" }] };
     expect(DossierSchema.parse({ ...dossier, customs })).toMatchObject({ customs });
-    expect(DossierSchema.safeParse({ ...dossier, customs: { cleared: 1, of: 0, problems: [] } }).success).toBe(false);
+    expect(DossierSchema.safeParse({ ...dossier, customs: { cleared: 1, of: -1, problems: [] } }).success).toBe(false);
   });
 });
 

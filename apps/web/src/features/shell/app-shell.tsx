@@ -26,6 +26,7 @@ import { NotificationsPanel } from "./notifications-panel";
 import { OrgFavicon } from "./org-favicon";
 import { SHELL_MESSAGES } from "./shell.messages";
 import { usePageTitle } from "./use-page-title";
+import { useNotificationStream } from "./use-notification-stream";
 import { ROLE_LABELS } from "@/mocks/types";
 
 const COLLAPSE_KEY = "kb-sidebar-collapsed";
@@ -87,8 +88,16 @@ function ShellInner({ children }: { children: ReactNode }) {
   const brandName = session?.org.brand.name ?? null;
   const logoSrc = orgLogoSrc(session?.org);
   usePageTitle(brandName);
-  const { data: notifications } = useQuery({ queryKey: sessionKeys.notifications, queryFn: listNotifications });
-  const unread = notifications?.filter((n) => !n.read).length ?? 0;
+  // Huy hiệu chuông: chỉ cần tổng chưa đọc (server trả kèm trang 1 dòng). Thao tác trong panel làm mới cả khóa sessionKeys.notifications.
+  // Luồng realtime (ADR 0017) làm mới huy hiệu khi có thông báo; luồng hỏng liên tục → poll 60 giây + tải lại khi quay về tab.
+  const { polling } = useNotificationStream({ logoSrc });
+  const { data: unread = 0 } = useQuery({
+    queryKey: [...sessionKeys.notifications, "badge"],
+    queryFn: () => listNotifications({ limit: 1 }),
+    select: (p) => p.unreadCount,
+    refetchInterval: polling ? 60_000 : false,
+    refetchOnWindowFocus: polling,
+  });
 
   // Tài khoản đội vận hành không thuộc doanh nghiệp nào: không có khu khai báo, chuyển sang khu Quản trị hệ thống.
   const { data: adminSession } = useQuery({ queryKey: adminKeys.session, queryFn: getAdminSession });

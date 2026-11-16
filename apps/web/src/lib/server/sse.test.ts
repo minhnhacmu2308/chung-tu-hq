@@ -26,4 +26,12 @@ describe("sseResponse", () => {
     close();
     expect((await reader.read()).done).toBe(true);
   });
+
+  it("retryMs → dòng `retry:` đầu luồng; header chống đệm cho nginx", async () => {
+    const res = sseResponse({ subscribe: () => () => {}, retryMs: 5000, heartbeatMs: 60_000 });
+    expect(res.headers.get("x-accel-buffering")).toBe("no");
+    expect(res.headers.get("cache-control")).toBe("no-cache, no-transform");
+    const first = new TextDecoder().decode((await res.body!.getReader().read()).value);
+    expect(first.startsWith("retry: 5000\n")).toBe(true);
+  });
 });

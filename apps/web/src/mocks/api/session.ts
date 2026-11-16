@@ -1,6 +1,6 @@
 // Phiên đăng nhập + doanh nghiệp + thông báo (mock).
-import type { AcceptInviteInput, Session } from "@kb/contracts";
-import { ApiError, mutate, query } from "@/lib/mock-request";
+import { NotificationListQuerySchema, notificationCategory, notificationCursor, parseNotificationCursor, type AcceptInviteInput, type Notification, type NotificationListQuery, type NotificationEvent, type NotificationPage, type NotificationStreamHandlers, type Session } from "@kb/contracts";
+import { ApiError, mutate, newId, query } from "@/lib/mock-request";
 import { getDb, resetDb, saveDb } from "@/mocks/db";
 import { emptyCatalog } from "@/mocks/catalog-engine";
 import { adminLogin } from "@/mocks/admin/ops";
@@ -17,11 +17,62 @@ export const getSession = () =>
     org: orgView(db),
   }));
 
-export const listNotifications = () => query((db) => db.notifications);
+/** Như GET /api/notifications: lọc, sắp (thời điểm, id) giảm dần, cắt trang theo con trỏ keyset. */
+export const listNotifications = (input: NotificationListQuery = {}) =>
+  query((db): NotificationPage => {
+    const f = NotificationListQuerySchema.parse(input);
+    const before = f.cursor ? parseNotificationCursor(f.cursor) : null;
+    const q = f.q?.toLowerCase();
+    const rows = [...db.notifications]
+      .sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id))
+      .filter((n) => !before || n.at < before.at || (n.at === before.at && n.id < before.id))
+      .filter((n) => (f.status === "all" || !n.read) && (!f.category || n.category === f.category))
+      .filter((n) => !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q));
+    const items = rows.slice(0, f.limit);
+    const last = items.at(-1);
+    return { items, nextCursor: rows.length > f.limit && last ? notificationCursor(last) : null, unreadCount: db.notifications.filter((n) => !n.read).length };
+  });
+
+// Luồng realtime giả lập (thay SSE): phát khi mock tạo thông báo mới trong chính tab này.
+const streamListeners = new Set<NotificationStreamHandlers>();
+export const subscribeNotifications = (h: NotificationStreamHandlers): (() => void) => {
+  streamListeners.add(h);
+  queueMicrotask(() => h.onOpen());
+  return () => void streamListeners.delete(h);
+};
+
+/** Chỉ chế độ mock (nút "Gửi thông báo thử" trong panel Thông báo): tạo một kết quả Hải quan giả rồi phát như server đẩy. */
+export const sendTestNotification = async () => {
+  const event = await mutate((db): NotificationEvent => {
+    const dossier = db.dossiers[0];
+    const href = dossier ? `/dossiers/${dossier.id}?step=submit` : "/";
+    const n: Notification = { id: newId("ntf"), title: "Tờ khai đã được phân luồng xanh", body: `Hồ sơ ${dossier?.code ?? ""} – thông quan, có thể lấy hàng.`, href, at: new Date().toISOString(), read: false, category: notificationCategory({ href }) };
+    db.notifications.unshift(n);
+    return { id: n.id, orgId: db.org.id, userId: db.currentUserId, category: n.category, title: n.title, body: n.body, href, at: n.at };
+  });
+  for (const h of streamListeners) h.onEvent(event);
+};
 
 export const markAllNotificationsRead = () =>
   mutate((db) => {
     db.notifications.forEach((n) => (n.read = true));
+  });
+
+const notificationOf = (db: { notifications: Notification[] }, id: string) => {
+  const n = db.notifications.find((x) => x.id === id);
+  if (!n) throw new ApiError("NOT_FOUND", "Không tìm thấy thông báo", 404);
+  return n;
+};
+
+export const setNotificationRead = (id: string, read: boolean) =>
+  mutate((db) => {
+    notificationOf(db, id).read = read;
+  });
+
+export const deleteNotification = (id: string) =>
+  mutate((db) => {
+    notificationOf(db, id);
+    db.notifications = db.notifications.filter((n) => n.id !== id);
   });
 
 /** Mock đăng nhập: chấp nhận mọi email + mật khẩu ≥ 6 ký tự. */

@@ -101,7 +101,7 @@ const DOSSIERS: DossierSeed[] = [
   { n: 3, dir: "NK", type: "E21", partner: "SHENZHEN KAIDA MOTOR CO., LTD.", status: "CLEARED", step: "submit", due: -45, created: -24 * 49, value: "36475.00", inc: "FOB", mode: "SEA_CONTAINER", bill: "COSU6401502281", decl: "107433370610", channel: "GREEN", owner: "usr_ha" },
 ];
 
-const PAD = (n: number) => String(n).padStart(3, "0");
+const PAD = (n: number, width = 3) => String(n).padStart(width, "0");
 
 function toDossier(s: DossierSeed): Dossier {
   const month = isoDay(s.created / 24).slice(2, 7).replace("-", "");
@@ -162,11 +162,27 @@ function docsFor(d: Dossier): DossierDocument[] {
   }));
 }
 
-const notificationsFor = (dossiers: Dossier[]): Notification[] => [
-  { id: "ntf_1", title: `${dossiers.find((d) => d.id === SHOWCASE_DOSSIER_ID)?.code} cần kiểm tra`, body: "16 trường nghi ngờ trên 6 chứng từ. Thiếu cước vận chuyển (FCA).", at: isoTime(-0.5), read: false, href: `/dossiers/${SHOWCASE_DOSSIER_ID}` },
-  { id: "ntf_2", title: "Phân luồng vàng", body: "Tờ khai 107624410320 được phân luồng vàng – kiểm tra hồ sơ giấy.", at: isoTime(-6), read: false, href: "/dossiers/dos_019" },
-  { id: "ntf_3", title: "Đã thông quan", body: "Tờ khai 107621548840 đã được thông quan.", at: isoTime(-30), read: true, href: "/dossiers/dos_018" },
+/** Mẫu thông báo theo nhóm (như nơi tạo thông báo thật ở backend) – xoay vòng để có đủ dữ liệu thử cuộn vô hạn. */
+const NOTIFICATION_TEMPLATES: ((code: string, id: string, n: number) => Omit<Notification, "id" | "at" | "read">)[] = [
+  (code, id, n) => ({ title: `${code} cần kiểm tra`, body: `${n + 3} trường nghi ngờ trên 6 chứng từ – vào bước OCR & kiểm tra để xác nhận.`, href: `/dossiers/${id}?step=ocr`, category: "DOSSIER" }),
+  (code, id, n) => ({ title: `${code}: phân luồng vàng`, body: `Tờ khai 10762441${PAD(n, 4)} được phân luồng vàng – kiểm tra hồ sơ giấy.`, href: `/dossiers/${id}?step=submit`, category: "CUSTOMS" }),
+  (code, id, n) => ({ title: `${code} đã thông quan`, body: `Số tờ khai 10762154${PAD(n, 4)} – Hải quan báo thông quan.`, href: `/dossiers/${id}?step=submit`, category: "CUSTOMS" }),
+  (code, id) => ({ title: `AI Agent đã xử lý xong ${code}`, body: "Tờ khai nháp đã dựng – xác nhận mã HS rồi chuyển Review.", href: `/dossiers/${id}?step=agent`, category: "DOSSIER" }),
+  (code, id) => ({ title: `${code} chờ phê duyệt tờ khai`, body: "Tờ khai nháp đã sẵn sàng để duyệt.", href: `/dossiers/${id}?step=review`, category: "DOSSIER" }),
+  (code, id) => ({ title: `${code}: Khai báo tờ khai bị từ chối`, body: "E1234: Mã số hàng hóa không hợp lệ ở dòng 3. Sửa rồi truyền lại.", href: `/dossiers/${id}?step=submit`, category: "CUSTOMS" }),
+  (_code, _id, n) => ({ title: n % 2 ? "Bảo trì hệ thống cuối tuần" : "Tính năng mới: Danh mục hàng hóa dùng chung", body: n % 2 ? "Hệ thống tạm ngưng truyền tờ khai từ 22:00 đến 23:30 thứ Bảy." : "Gắn mã nội bộ với mã HS một lần, dùng lại cho mọi hồ sơ.", category: "SYSTEM" }),
+  () => ({ title: "Chứng thư số sắp hết hạn", body: "Gia hạn hoặc thêm chứng thư mới ở Tài khoản & tích hợp → Chứng thư số để không gián đoạn truyền tờ khai.", href: "/settings?tab=certificates", category: "OTHER" }),
 ];
+
+/** 64 thông báo trải ~30 ngày (hôm nay, hôm qua, trước đó), đủ 4 nhóm, vài cái chưa đọc. */
+const notificationsFor = (dossiers: Dossier[]): Notification[] => {
+  const showcase = dossiers.find((d) => d.id === SHOWCASE_DOSSIER_ID) ?? dossiers[0]!;
+  return Array.from({ length: 64 }, (_, i) => {
+    const d = i === 0 ? showcase : dossiers[(i * 7) % dossiers.length]!;
+    const hoursAgo = i < 4 ? [0.5, 1.5, 3, 5][i]! : i < 12 ? 24 + (i - 4) * 2 : 48 + (i - 12) * 13;
+    return { id: `ntf_${PAD(64 - i, 3)}`, at: isoTime(-hoursAgo), read: !(i < 5 || i % 9 === 0), ...NOTIFICATION_TEMPLATES[i % NOTIFICATION_TEMPLATES.length]!(d.code, d.id, i) };
+  });
+};
 
 export function seedCore() {
   const dossiers = DOSSIERS.map(toDossier).sort((a, b) => b.createdAt.localeCompare(a.createdAt));

@@ -7,7 +7,8 @@ export { Abbreviation, type AbbreviationProps } from "./components/abbreviation.
 export { NoticeChip, type NoticeChipProps, type NoticeItem, type NoticeTone } from "./components/notice-chip.js";
 export { PaperStack, PaperSheet, PaperField, PaperColumns, PaperLabel, type PaperSheetProps, type PaperFieldProps, type PaperFieldState } from "./components/paper.js";
 export { Disclosure, type DisclosureProps } from "./components/disclosure.js";
-export { Input, LookupInput, Textarea, Select, SELECT_SEARCH_FROM, Checkbox, type SelectOption, type SelectProps, type CheckboxProps, type LookupInputProps } from "./components/inputs.js";
+export { Input, LookupInput, SearchInput, Textarea, Select, SELECT_SEARCH_FROM, Checkbox, type SelectOption, type SelectProps, type CheckboxProps, type LookupInputProps, type SearchInputProps } from "./components/inputs.js";
+export { FeedGroup, FeedItem, type FeedGroupProps, type FeedItemProps } from "./components/feed.js";
 export { RadioGroup, type RadioGroupProps, type RadioOption } from "./components/radio-group.js";
 export {
   Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter,

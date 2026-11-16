@@ -1,12 +1,36 @@
 // Phiên, thông báo, đăng ký/đăng nhập – gọi backend thật. Cùng chữ ký với src/mocks/api/session.ts.
-import { type AcceptInviteInput, CompanyLookupSchema, MemberSchema, NotificationSchema, OkSchema, RegisterResultSchema, SessionSchema, type CompanyLookup } from "@kb/contracts";
+import { type AcceptInviteInput, CompanyLookupSchema, MemberSchema, NotificationEventSchema, NotificationPageSchema, OkSchema, RegisterResultSchema, SessionSchema, type CompanyLookup, type NotificationListQuery, type NotificationStreamHandlers } from "@kb/contracts";
 import { z } from "zod";
-import { apiGet, apiPost } from "@/lib/http";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/http";
 
 export type { CompanyLookup };
 
 export const getSession = () => apiGet("auth/session", SessionSchema);
-export const listNotifications = () => apiGet("notifications", z.array(NotificationSchema));
+export const listNotifications = (q: NotificationListQuery = {}) => {
+  const params = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined || v === "" ? [] : [[k, String(v)]])));
+  return apiGet(`notifications${params.size ? `?${params}` : ""}`, NotificationPageSchema);
+};
+export const setNotificationRead = async (id: string, read: boolean) => {
+  await apiPatch(`notifications/${encodeURIComponent(id)}`, { read }, OkSchema);
+};
+export const deleteNotification = async (id: string) => {
+  await apiDelete(`notifications/${encodeURIComponent(id)}`, OkSchema);
+};
+/** SSE thông báo realtime (ADR 0017). EventSource tự nối lại (server gửi `retry: 5000`); trả hàm đóng. */
+export const subscribeNotifications = (h: NotificationStreamHandlers): (() => void) => {
+  const es = new EventSource("/api/notifications/stream");
+  es.addEventListener("ready", () => h.onOpen());
+  es.onmessage = (m: MessageEvent<string>) => {
+    try {
+      const e = NotificationEventSchema.safeParse(JSON.parse(m.data));
+      if (e.success) h.onEvent(e.data);
+    } catch {
+      /* bỏ qua message hỏng */
+    }
+  };
+  es.onerror = () => h.onError(es.readyState === EventSource.CLOSED);
+  return () => es.close();
+};
 export const markAllNotificationsRead = async () => {
   await apiPost("notifications/read-all", {}, OkSchema);
 };

@@ -670,7 +670,7 @@ export function sendAnnouncement(db: AdminScope, input: unknown): Announcement {
   // Doanh nghiệp demo nằm trong nhóm nhận → hiện ngay ở panel Thông báo của ứng dụng khách.
   if (receivers.some((r) => r.org === db.org)) {
     const notificationId = newId("ntf");
-    db.notifications.unshift({ id: notificationId, title: a.title, body: a.body, at: a.sentAt, read: false });
+    db.notifications.unshift({ id: notificationId, title: a.title, body: a.body, at: a.sentAt, read: false, category: "SYSTEM" });
     db.admin.announcementNotifications[a.id] = notificationId;
   }
   log(db, staff, "ANNOUNCEMENT_SENT", { type: "ANNOUNCEMENT", id: a.id, label: a.title }, "Gửi thông báo hệ thống", `${receivers.length} doanh nghiệp nhận`);

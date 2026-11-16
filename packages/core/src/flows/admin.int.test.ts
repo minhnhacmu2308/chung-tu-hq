@@ -25,6 +25,8 @@ import { createAdminInfrastructure, platformStaffOf, type DrizzleAdminUow } from
 import { base32Decode, totp } from "../modules/admin/domain/totp.js";
 import { grantCreditsInTx } from "../modules/billing/infrastructure/index.js";
 
+const ALL = { limit: 50, status: "all" } as const;
+
 let t: TestDb;
 let appDb: Db;
 let identity: IdentityDeps;
@@ -334,18 +336,18 @@ describe("thông báo hệ thống", () => {
     const chau = { orgId: "org_anphat", userId: "usr_chau", role: "ADMIN" } as const;
     const a = unwrap(await sendAnnouncement(admin, trang, { title: "Bảo trì hệ thống tối thứ Bảy", body: "Hệ thống tạm dừng từ 22:00 đến 23:00 để nâng cấp.", kind: "MAINTENANCE", audience: "ALL", maintenanceDate: "2026-10-18" }));
     expect(a).toMatchObject({ status: "SENT", recipients: 2, sentByName: "Mai Thị Thu Trang", maintenanceDate: "2026-10-18" });
-    expect(unwrap(await listNotifications(identity, chau as never)).map((n) => n.title)).toContain("Bảo trì hệ thống tối thứ Bảy");
+    expect(unwrap(await listNotifications(identity, chau as never, ALL)).items.map((n) => n.title)).toContain("Bảo trì hệ thống tối thứ Bảy");
 
     // Gửi theo gói: chỉ doanh nghiệp gói Hợp đồng năm (Minh Khang – đã đổi ở trên) nhận, doanh nghiệp demo (Theo lượt) không nhận.
     const onlyContract = unwrap(await sendAnnouncement(admin, trang, { title: "Riêng gói Hợp đồng năm", body: "Nội dung chỉ cho gói Hợp đồng năm.", kind: "INFO", audience: "CONTRACT" }));
     expect(onlyContract.recipients).toBe(1);
-    expect(unwrap(await listNotifications(identity, chau as never)).map((n) => n.title)).not.toContain("Riêng gói Hợp đồng năm");
+    expect(unwrap(await listNotifications(identity, chau as never, ALL)).items.map((n) => n.title)).not.toContain("Riêng gói Hợp đồng năm");
     unwrap(await suspendOrg(admin, trang, "org_anphat", R));
     expect(unwrap(await sendAnnouncement(admin, trang, { title: "Chỉ doanh nghiệp đang hoạt động", body: "Doanh nghiệp tạm khóa không nhận được.", kind: "INFO", audience: "ALL" })).recipients).toBe(1);
     unwrap(await reactivateOrg(admin, trang, "org_anphat", R));
 
     unwrap(await withdrawAnnouncement(admin, trang, a.id, R));
-    expect(unwrap(await listNotifications(identity, chau as never)).map((n) => n.title)).not.toContain("Bảo trì hệ thống tối thứ Bảy");
+    expect(unwrap(await listNotifications(identity, chau as never, ALL)).items.map((n) => n.title)).not.toContain("Bảo trì hệ thống tối thứ Bảy");
     expect(errCode(await withdrawAnnouncement(admin, trang, a.id, R))).toBe("CONFLICT");
   });
 });

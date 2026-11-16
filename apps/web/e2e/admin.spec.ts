@@ -65,8 +65,8 @@ test.describe("khu Quản trị hệ thống trên backend thật", () => {
     await page2.getByRole("button", { name: /^Thông báo/ }).first().click();
     await expect(page2.getByText(title).first()).toBeVisible();
     expect((await api.post(`/api/admin/announcements/${id}/withdraw`, { data: R })).status()).toBe(200);
-    const after = (await (await customer.request.get("/api/notifications")).json()) as { title: string }[];
-    expect(after.map((n) => n.title)).not.toContain(title);
+    const after = (await (await customer.request.get("/api/notifications")).json()) as { items: { title: string }[] };
+    expect(after.items.map((n) => n.title)).not.toContain(title);
     await customer.close();
 
     await page.goto("/admin/audit");

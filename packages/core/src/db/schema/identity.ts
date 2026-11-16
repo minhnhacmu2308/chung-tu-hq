@@ -264,6 +264,8 @@ export const notifications = pgTable(
     href: text("href"),
     /** Bản sao của thông báo hệ thống – thu hồi thì xóa theo cột này. */
     announcementId: text("announcement_id"),
+    /** Nhóm để lọc (DOSSIER/CUSTOMS/SYSTEM/OTHER) – kho ghi lúc tạo theo notificationCategory (@kb/contracts). */
+    category: text("category").notNull().default("OTHER"),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

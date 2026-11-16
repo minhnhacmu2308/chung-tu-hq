@@ -5,6 +5,8 @@ export type SseSource = {
   /** Gọi fn khi nguồn muốn đóng luồng (vd test hoặc shutdown). */
   onClose?(fn: () => void): void;
   heartbeatMs?: number;
+  /** Gửi `retry: <ms>` để EventSource tự nối lại sau khoảng này khi mất kết nối. */
+  retryMs?: number;
 };
 
 export function sseResponse(source: SseSource): Response {
@@ -20,7 +22,7 @@ export function sseResponse(source: SseSource): Response {
           /* luồng đã đóng */
         }
       };
-      send("event: ready\ndata: {}\n\n");
+      send(`${source.retryMs ? `retry: ${source.retryMs}\n` : ""}event: ready\ndata: {}\n\n`);
       unsubscribe = source.subscribe((data) => send(`data: ${data}\n\n`));
       timer = setInterval(() => send(": ping\n\n"), source.heartbeatMs ?? 20_000);
       source.onClose?.(() => {

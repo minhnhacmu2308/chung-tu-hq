@@ -1,10 +1,10 @@
 // Trình diễn các component dữ liệu / nhập liệu / phản hồi của @kb/ui.
-import { Copy, Filter, MoreHorizontal, Trash2, XCircle } from "lucide-react";
+import { Bell, Copy, Filter, FolderOpen, Landmark, MailOpen, MoreHorizontal, Trash2, XCircle } from "lucide-react";
 import { useState } from "react";
 import {
   Abbreviation, NoticeChip, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-  BrandMark, Field, FileDropzone, ImagePicker, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
+  BrandMark, FeedGroup, FeedItem, SearchInput, Field, FileDropzone, ImagePicker, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
 } from "../src/index.js";
 
@@ -111,6 +111,33 @@ export function Showcase() {
             />
             <HtmlPreview title="Xem trước" html={`<body style="font-family:sans-serif;padding:16px">${blocks.map((b) => `<p>${b.name}</p>`).join("")}</body>`} className="h-48" />
           </Grid>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Luồng tin (FeedGroup, FeedItem) + ô tìm (SearchInput)</CardTitle></CardHeader>
+        <CardContent>
+          <Stack gap="sm" className="max-w-md">
+            <SearchInput aria-label="Tìm thông báo" placeholder="Tìm thông báo…" inputClassName="h-8" />
+            {(() => {
+              const actions = (
+                <>
+                  <Tooltip content="Đánh dấu đã đọc"><Button size="icon-sm" variant="ghost" aria-label="Đánh dấu đã đọc"><MailOpen className="h-4 w-4" /></Button></Tooltip>
+                  <Tooltip content="Xóa"><Button size="icon-sm" variant="danger-ghost" aria-label="Xóa"><Trash2 className="h-4 w-4" /></Button></Tooltip>
+                </>
+              );
+              return (
+                <div>
+                  <FeedGroup label="Hôm nay">
+                    <FeedItem unread icon={<Landmark />} tone="success" title="HS-NK-2610-021 đã thông quan" description="Số tờ khai 107621548840 – Hải quan báo thông quan." meta="5 phút" href="#" actions={actions} />
+                    <FeedItem unread icon={<FolderOpen />} tone="primary" title="HS-NK-2610-019 cần kiểm tra" description="16 trường nghi ngờ trên 6 chứng từ. Thiếu cước vận chuyển (FCA)." meta="2 giờ" href="#" actions={actions} />
+                  </FeedGroup>
+                  <FeedGroup label="Hôm qua">
+                    <FeedItem icon={<Bell />} tone="info" title="Bảo trì hệ thống cuối tuần" description="Hệ thống tạm ngưng truyền tờ khai từ 22:00 đến 23:30 thứ Bảy." meta="1 ngày" actions={actions} />
+                  </FeedGroup>
+                </div>
+              );
+            })()}
+          </Stack>
         </CardContent>
       </Card>
       <Card>

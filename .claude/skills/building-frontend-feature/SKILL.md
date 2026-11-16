@@ -63,6 +63,8 @@ apps/web/src/
 | Ô nhập trong panel sửa một chỉ tiêu | `FormField fill` – mọi loại ô full chiều rộng | Ô mã/ngày ngắn hơn ô chữ cùng panel |
 | Đồng ý / Bỏ qua trên mỗi dòng danh sách | Nút icon tròn `Button size="icon" variant="ghost"` + `Tooltip` + `aria-label` | Hai nút chữ trên từng dòng |
 | Icon trong nút | `leftIcon` / `rightIcon` của `Button` | Bọc icon trong `span` + `[&>svg]:…` (lint `apps-svg-selector` chặn) |
+| Danh sách luồng tin (thông báo, hoạt động) nhóm theo ngày, tải thêm khi cuộn | `FeedGroup` + `FeedItem` (mẫu: `features/shell/notifications-panel.tsx` – `useInfiniteQuery` + `IntersectionObserver`, bộ lọc `SegmentedControl` + `SearchInput` + `Select`) | Mỗi mục một `Link` thẻ viền tự ghép; tải hết một lần; nút thao tác đè lên chữ |
+| Cập nhật khi có thông báo mới / báo ra máy tính | Đã có sẵn ở khung app: `useNotificationStream` (SSE `/api/notifications/stream`, ADR 0017) làm mới mọi query dưới `sessionKeys.notifications` + toast + Notification API theo tùy chọn trong panel Thông báo. Màn cần cập nhật theo thông báo → đặt query dưới khóa đó | Mở thêm EventSource / `setInterval` poll riêng trong màn; gọi `new Notification` tự ghép |
 | Ô icon nền dịu ở đầu thẻ / đầu dòng | `IconTile` (`tone`, `size`) | Tự ghép `span` + `bg-*-subtle` (lint `apps-icon-tile` chặn) |
 | Bảng vai trò × quyền | `PermissionMatrix` (`@/components/common/permission-matrix`) | `<table>` tự viết (lint `apps-raw-table` chặn) |
 | Phần tử dính đầu trang trong màn | class `top-shell` (tự né thanh menu khi người dùng chọn menu ở trên) | `top-4`, `top-0` |

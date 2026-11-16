@@ -34,6 +34,7 @@ function build() {
     customsMessages: new Counter({ name: `${METRIC_PREFIX}customs_messages_total`, help: "Số nghiệp vụ gửi Hải quan qua outbox theo mã và kết quả", labelNames: ["op", "outcome"] as const, registers: r }),
     declarationsAccepted: new Counter({ name: `${METRIC_PREFIX}declarations_accepted_total`, help: "Số tờ khai được Hải quan chấp nhận khai chính thức (IDC/EDC có phân luồng)", labelNames: ["kind"] as const, registers: r }),
     buildInfo: new Gauge({ name: `${METRIC_PREFIX}build_info`, help: "Phiên bản đang chạy (giá trị luôn 1)", labelNames: ["version", "commit"] as const, registers: r }),
+    notificationStreams: new Gauge({ name: `${METRIC_PREFIX}notification_stream_clients`, help: "Số kết nối SSE thông báo realtime đang mở ở tiến trình web này", registers: r }),
     queueSources: [] as QueueCountSource[],
     queueGauge: null as Gauge<"queue" | "state"> | null,
   };
@@ -185,6 +186,11 @@ export async function observeAiCall<T>(kind: string, model: string, fn: () => Pr
 }
 
 /** Cộng chi phí AI (VND) – chỉ để theo dõi; số tiền tính bằng Decimal ở billing rồi đổi sang số ở đây. */
+/** Số kết nối SSE thông báo đang mở (ADR 0017) – hub của tiến trình đặt lại mỗi khi có người vào/ra. */
+export function setNotificationStreamClients(n: number): void {
+  metrics().notificationStreams.set(n);
+}
+
 export function addAiCostVnd(kind: string, vnd: number): void {
   if (Number.isFinite(vnd) && vnd > 0) metrics().aiCost.inc({ kind }, vnd);
 }

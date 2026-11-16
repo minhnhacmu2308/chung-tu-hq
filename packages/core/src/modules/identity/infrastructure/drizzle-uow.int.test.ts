@@ -7,6 +7,8 @@ import { systemClock } from "../../../shared/clock.js";
 import { DrizzleOrgAudit } from "./drizzle-org-audit.js";
 import { DrizzlePlansReader } from "./drizzle-plans-reader.js";
 import { DrizzleIdentityUow } from "./drizzle-uow.js";
+import type { NotificationPageFilter } from "../application/ports.js";
+import { sql } from "drizzle-orm";
 
 let t: TestDb;
 let db: Db;
@@ -120,6 +122,51 @@ describe("DrizzleIdentityUow", () => {
     await uow.asOrg(ANPHAT, (r) => r.notifications.markAllRead("org_anphat", "usr_chau", now));
     expect((await uow.asOrg(ANPHAT, (r) => r.notifications.list("org_anphat", "usr_chau")))[0]?.readAt).not.toBeNull();
     expect((await uow.asOrg({ orgId: asOrgId("org_anphat"), userId: asUserId("usr_ha") }, (r) => r.notifications.list("org_anphat", "usr_ha")))[0]?.readAt).toBeNull();
+  });
+  it("notifications: trang keyset (kể cả created_at có micro giây), lọc nhóm/chưa đọc/từ khóa ở SQL, đánh dấu/xóa chỉ của mình (RLS)", async () => {
+    const base = Date.UTC(2026, 0, 10);
+    for (let i = 0; i < 25; i++) {
+      await uow.asOrg(ANPHAT, (r) =>
+        r.notifications.insert({
+          id: `pg${String(i).padStart(2, "0")}`, orgId: "org_anphat", userId: "usr_chau", title: `PGPAGE ${i} 100%_x`, body: i % 5 === 0 ? "Hải quan báo thông quan" : "",
+          href: i % 5 === 0 ? `/dossiers/dos_${i}?step=submit` : i % 2 ? `/dossiers/dos_${i}?step=ocr` : null, readAt: i % 3 ? new Date(base) : null,
+          createdAt: new Date(base + Math.floor(i / 4) * 1000), // 4 dòng cùng thời điểm
+        }),
+      );
+    }
+    // Như created_at mặc định của Postgres: thêm micro giây – con trỏ (mili giây) vẫn không trùng, không sót.
+    const admin = createDb(t.adminUrl, { max: 1 });
+    await admin.execute(sql`update notifications set created_at = created_at + make_interval(secs => (substr(id, 3)::int % 4) * 0.000123) where id like 'pg%'`);
+    await admin.close();
+    const page = (f: Partial<NotificationPageFilter>) => uow.asOrg(ANPHAT, (r) => r.notifications.page("org_anphat", "usr_chau", { limit: 10, unreadOnly: false, q: "PGPAGE", ...f }));
+    const seen: string[] = [];
+    let before: NotificationPageFilter["before"];
+    for (let k = 0; k < 4; k++) {
+      const rows = await page({ ...(before ? { before } : {}) });
+      seen.push(...rows.map((r) => r.id));
+      const last = rows.at(-1);
+      if (!last) break;
+      before = { at: last.createdAt, id: last.id };
+    }
+    expect(seen).toHaveLength(25);
+    expect(new Set(seen).size).toBe(25);
+    expect(seen[0]).toBe("pg24");
+    expect((await page({ limit: 50, category: "CUSTOMS" })).map((r) => r.id).sort()).toEqual(["pg00", "pg05", "pg10", "pg15", "pg20"]);
+    expect((await page({ limit: 50, category: "DOSSIER" })).every((r) => r.category === "DOSSIER" && r.href?.includes("step=ocr"))).toBe(true);
+    expect((await page({ limit: 50, unreadOnly: true })).every((r) => r.readAt === null)).toBe(true);
+    expect((await page({ limit: 50, q: "100%_X" })).length).toBe(25); // ký tự đặc biệt của LIKE được thoát, không phân biệt hoa thường
+    expect((await page({ limit: 50, q: "100%%" })).length).toBe(0);
+    expect((await page({ limit: 50, q: "thông quan" })).length).toBe(5);
+    const unread = await uow.asOrg(ANPHAT, (r) => r.notifications.countUnread("org_anphat", "usr_chau"));
+    expect(await uow.asOrg(ANPHAT, (r) => r.notifications.setRead("org_anphat", "usr_chau", "pg00", new Date()))).toBe(true);
+    expect(await uow.asOrg(ANPHAT, (r) => r.notifications.countUnread("org_anphat", "usr_chau"))).toBe(unread - 1);
+    // Người khác cùng org / org khác: RLS không cho thấy dòng của chau.
+    const HA = { orgId: asOrgId("org_anphat"), userId: asUserId("usr_ha") };
+    expect(await uow.asOrg(HA, (r) => r.notifications.setRead("org_anphat", "usr_chau", "pg01", null))).toBe(false);
+    expect(await uow.asOrg(HA, (r) => r.notifications.delete("org_anphat", "usr_chau", "pg01"))).toBe(false);
+    expect(await uow.asOrg(OTHER, (r) => r.notifications.page("org_anphat", "usr_chau", { limit: 50, unreadOnly: false }))).toEqual([]);
+    expect(await uow.asOrg(ANPHAT, (r) => r.notifications.delete("org_anphat", "usr_chau", "pg01"))).toBe(true);
+    expect((await page({ limit: 50 })).map((r) => r.id)).not.toContain("pg01");
   });
   it("joinRequests: insert (system) → listPending (org) → decide", async () => {
     await uow.system((r) => r.joinRequests.insert({ id: "jr_1", orgId: "org_anphat", userId: "usr_khac", status: "PENDING", createdAt: new Date() }));

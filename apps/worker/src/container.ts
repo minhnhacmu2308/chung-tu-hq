@@ -6,7 +6,7 @@ import { createDeclarationBilling, getOrgBilling } from "@kb/core/modules/billin
 import { createAiBudget, createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder, grantCreditsInTx } from "@kb/core/modules/billing/infrastructure";
 import { createDossierInfrastructure } from "@kb/core/modules/dossier/infrastructure";
 import { createAiProvider, createExtractionInfrastructure } from "@kb/core/modules/extraction/infrastructure";
-import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
+import { createIdentityInfrastructure, createNotifier, RedisNotificationPublisher } from "@kb/core/modules/identity/infrastructure";
 import { createCustomsInfrastructure } from "@kb/core/modules/integration/infrastructure";
 import { checkSentSheets, countReservedDeclarations, customsEditSheets, listDeclaredBranches } from "@kb/core/modules/integration";
 import { createDeclarationInfrastructure } from "@kb/core/modules/declaration/infrastructure";
@@ -88,7 +88,7 @@ export function buildContainer() {
       return emptyBilling;
     }
   };
-  const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
+  const notify = createNotifier({ uow: identity.uow, clock: systemClock, publisher: new RedisNotificationPublisher(redis), dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
   // Luật đối chiếu cần biết hồ sơ nhập/xuất + phương thức vận chuyển: nối từ module dossier tại đây (validation không import dossier).
   const validation = createValidationInfrastructure({
     db,

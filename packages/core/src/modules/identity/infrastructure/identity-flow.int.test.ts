@@ -27,6 +27,8 @@ import { verifyEmail } from "../application/verify-email.js";
 import { DrizzlePlansReader } from "./drizzle-plans-reader.js";
 import { DrizzleIdentityUow } from "./drizzle-uow.js";
 
+const ALL = { limit: 50, status: "all" } as const;
+
 let t: TestDb;
 let db: Db;
 let deps: IdentityDeps;
@@ -77,7 +79,7 @@ describe("luồng identity trên Postgres thật", () => {
     // người thứ ba xin tham gia → chủ sở hữu có thông báo → duyệt
     const jr = unwrap(await register(deps, { email: "cuong@minhkhang.vn", name: "Lê Cường", password: "matkhau789", joinExisting: true, taxCode: "0101234567" }, META));
     expect(jr.mode).toBe("JOIN_REQUESTED");
-    expect(unwrap(await listNotifications(deps, ctx)).some((n) => n.title.includes("Lê Cường"))).toBe(true);
+    expect(unwrap(await listNotifications(deps, ctx, ALL)).items.some((n) => n.title.includes("Lê Cường"))).toBe(true);
     const pending = unwrap(await listJoinRequests(deps, ctx));
     expect(pending).toHaveLength(1);
     const pendingLogin = await login(deps, { email: "cuong@minhkhang.vn", password: "matkhau789" }, META);
@@ -123,7 +125,7 @@ describe("luồng identity trên Postgres thật", () => {
     expect(unwrap(await getSession(deps, reg.sessionToken)).ctx.role).toBe("ADMIN");
     const roles = unwrap(await listMembers(deps, heir)).map((m) => `${m.email}:${m.role}`).sort();
     expect(roles).toEqual(["chu@tanviet.vn:ADMIN", "ke@tanviet.vn:OWNER"]);
-    expect(unwrap(await listNotifications(deps, heir)).some((n) => n.title.includes("Chủ sở hữu mới"))).toBe(true);
+    expect(unwrap(await listNotifications(deps, heir, ALL)).items.some((n) => n.title.includes("Chủ sở hữu mới"))).toBe(true);
   });
   it("org demo seed không bị org mới nhìn thấy", async () => {
     const { sessionToken } = unwrap(await login(deps, { email: "an@minhkhang.vn", password: "matkhau123" }, META));

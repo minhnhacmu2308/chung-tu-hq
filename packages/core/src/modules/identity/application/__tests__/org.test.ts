@@ -15,6 +15,7 @@ import { listJoinRequests } from "../list-join-requests.js";
 import { listMembers } from "../list-members.js";
 import { listNotifications } from "../list-notifications.js";
 import { markAllNotificationsRead } from "../mark-all-notifications-read.js";
+import { deleteNotification, setNotificationRead } from "../notification-actions.js";
 import type { IdentityDeps } from "../ports.js";
 import { rejectJoinRequest } from "../reject-join-request.js";
 import { removeCertificate } from "../remove-certificate.js";
@@ -70,9 +71,9 @@ beforeEach(() => {
       { id: "cert_b1", orgId: "org_b", subject: "B", issuer: "VNPT-CA", serial: "SB", validTo: "2027-01-01", isDefault: true },
     ],
     notifications: [
-      { id: "n1", orgId: "org_a", userId: "usr_chau", title: "a", body: "", href: null, readAt: null, createdAt: day(-1) },
-      { id: "n2", orgId: "org_a", userId: "usr_chau", title: "b", body: "", href: null, readAt: null, createdAt: day(0) },
-      { id: "n3", orgId: "org_a", userId: "usr_ha", title: "của hà", body: "", href: null, readAt: null, createdAt: day(0) },
+      { id: "n1", orgId: "org_a", userId: "usr_chau", title: "a", body: "", href: null, readAt: null, createdAt: day(-1), category: "OTHER" },
+      { id: "n2", orgId: "org_a", userId: "usr_chau", title: "b", body: "", href: null, readAt: null, createdAt: day(0), category: "OTHER" },
+      { id: "n3", orgId: "org_a", userId: "usr_ha", title: "của hà", body: "", href: null, readAt: null, createdAt: day(0), category: "OTHER" },
     ],
     joinRequests: [{ id: "jr_1", orgId: "org_a", userId: "usr_p", status: "PENDING", createdAt: day(0) }],
   });
@@ -284,12 +285,71 @@ describe("chứng thư số", () => {
 });
 
 describe("thông báo", () => {
+  const ALL = { limit: 20, status: "all" } as const;
+  const ids = async (f: Parameters<typeof listNotifications>[2], c = ctx("ADMIN")) => unwrap(await listNotifications(deps, c, f)).items.map((n) => n.id);
+
   it("list chỉ của mình, mới nhất trước; markAllRead chỉ ảnh hưởng mình", async () => {
-    const list = unwrap(await listNotifications(deps, ctx("ADMIN")));
-    expect(list.map((n) => n.id)).toEqual(["n2", "n1"]);
-    expect(list.every((n) => !n.read)).toBe(true);
+    const page = unwrap(await listNotifications(deps, ctx("ADMIN"), ALL));
+    expect(page.items.map((n) => n.id)).toEqual(["n2", "n1"]);
+    expect(page).toMatchObject({ nextCursor: null, unreadCount: 2 });
+    expect(page.items.every((n) => !n.read)).toBe(true);
     unwrap(await markAllNotificationsRead(deps, ctx("ADMIN")));
-    expect(unwrap(await listNotifications(deps, ctx("ADMIN"))).every((n) => n.read)).toBe(true);
+    const after = unwrap(await listNotifications(deps, ctx("ADMIN"), ALL));
+    expect(after.items.every((n) => n.read)).toBe(true);
+    expect(after.unreadCount).toBe(0);
     expect(uow.data.notifications.find((n) => n.id === "n3")?.readAt).toBeNull();
+  });
+
+  it("cắt trang bằng con trỏ: đi hết không trùng, không sót (kể cả cùng thời điểm)", async () => {
+    uow.seed({
+      notifications: Array.from({ length: 23 }, (_, i) => ({
+        id: `m${String(i).padStart(2, "0")}`, orgId: "org_a", userId: "usr_chau", title: `t${i}`, body: "", href: null, readAt: null,
+        createdAt: day(-2 - Math.floor(i / 3)), category: "OTHER" as const, // 3 dòng cùng thời điểm
+      })),
+    });
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const p = unwrap(await listNotifications(deps, ctx("ADMIN"), { limit: 10, status: "all", ...(cursor ? { cursor } : {}) }));
+      seen.push(...p.items.map((n) => n.id));
+      cursor = p.nextCursor ?? undefined;
+      pages++;
+    } while (cursor);
+    expect(pages).toBe(3);
+    expect(seen).toHaveLength(25);
+    expect(new Set(seen).size).toBe(25);
+    expect(seen.slice(0, 2)).toEqual(["n2", "n1"]);
+  });
+
+  it("lọc chưa đọc, theo nhóm (suy từ href lúc tạo), theo từ khóa không phân biệt hoa thường", async () => {
+    await uow.asOrg(ctx("ADMIN"), async (r) => {
+      await r.notifications.insert({ id: "c1", orgId: "org_a", userId: "usr_chau", title: "HS-01 đã thông quan", body: "Số tờ khai 1076", href: "/dossiers/d1?step=submit", readAt: day(0), createdAt: day(0) });
+      await r.notifications.insert({ id: "d1", orgId: "org_a", userId: "usr_chau", title: "Đã đọc xong bộ chứng từ", body: "3 trường cần kiểm tra", href: "/dossiers/d1?step=ocr", readAt: null, createdAt: day(0) });
+    });
+    expect(uow.data.notifications.find((n) => n.id === "c1")?.category).toBe("CUSTOMS");
+    expect(await ids({ ...ALL, category: "CUSTOMS" })).toEqual(["c1"]);
+    expect(await ids({ ...ALL, category: "DOSSIER" })).toEqual(["d1"]);
+    expect(await ids({ ...ALL, status: "unread" })).toEqual(["n2", "d1", "n1"]); // cùng thời điểm → id giảm dần
+    expect(await ids({ ...ALL, q: "THÔNG QUAN" })).toEqual(["c1"]);
+    expect(await ids({ ...ALL, q: "kiểm tra", status: "unread" })).toEqual(["d1"]);
+  });
+
+  it("đánh dấu một cái đã đọc / chưa đọc, xóa một cái; số chưa đọc đổi theo", async () => {
+    unwrap(await setNotificationRead(deps, ctx("ADMIN"), "n1", true));
+    expect(unwrap(await listNotifications(deps, ctx("ADMIN"), ALL)).unreadCount).toBe(1);
+    unwrap(await setNotificationRead(deps, ctx("ADMIN"), "n1", false));
+    expect(uow.data.notifications.find((n) => n.id === "n1")?.readAt).toBeNull();
+    unwrap(await deleteNotification(deps, ctx("ADMIN"), "n2"));
+    expect(await ids(ALL)).toEqual(["n1"]);
+    expectErr(await deleteNotification(deps, ctx("ADMIN"), "n2"), "NOT_FOUND");
+  });
+
+  it("người khác cùng org / org khác không đọc, đánh dấu, xóa được thông báo của mình → NOT_FOUND", async () => {
+    expect(await ids(ALL, ctx("DECLARANT", "usr_ha"))).toEqual(["n3"]);
+    expect(await ids(ALL, ctx("OWNER", "usr_chau", "org_b"))).toEqual([]);
+    expectErr(await setNotificationRead(deps, ctx("DECLARANT", "usr_ha"), "n1", true), "NOT_FOUND");
+    expectErr(await deleteNotification(deps, ctx("OWNER", "usr_chau", "org_b"), "n1"), "NOT_FOUND");
+    expect(uow.data.notifications.find((n) => n.id === "n1")).toMatchObject({ readAt: null });
   });
 });

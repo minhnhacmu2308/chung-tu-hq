@@ -323,6 +323,13 @@
       "when": 1794815301700,
       "tag": "0045_org_branding_avatars",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1794819301938,
+      "tag": "0046_notification_category",
+      "breakpoints": true
     }
   ]
 }

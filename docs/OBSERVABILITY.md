@@ -43,6 +43,7 @@ bằng `:tên`, còn đoạn trông như id thì thành `:id`. Nhãn **không** 
 | `khaibao_jobs_total` | counter | `queue`, `outcome` = `completed` / `retry` (lỗi, còn lượt thử) / `failed` (hết lượt hoặc `UnrecoverableError`) | sự kiện `completed`/`failed` của Worker – `apps/worker/src/index.ts` |
 | `khaibao_job_duration_seconds` | histogram | `queue` | `finishedOn − processedOn` |
 | `khaibao_queue_jobs` | gauge | `queue`, `state` = waiting / active / delayed / failed | đọc `Queue.getJobCounts()` **lúc scrape** (`registerQueueCollector`); Redis lỗi thì bỏ queue đó trong lần scrape |
+| `khaibao_notification_stream_clients` | gauge | – | số luồng SSE thông báo realtime đang mở ở tiến trình web (ADR 0017); hub đặt lại mỗi khi có người vào/ra |
 | `khaibao_ai_calls_total` | counter | `kind` (AI_CLASSIFY, AI_EXTRACT, AI_DOSSIER_DRAFT, AI_EMAIL_DRAFT), `model` (model yêu cầu), `outcome` = `ok` / `invalid` (AiDataError: từ chối, bị cắt, sai cấu trúc) / `error` | adapter Claude trong `extraction/infrastructure` (`observeAiCall`). AI giả lập (`AI_PROVIDER=fake`) không đếm |
 | `khaibao_ai_cost_vnd_total` | counter | `kind` | `DrizzleUsageRecorder.record()`. Chỉ cộng khi dòng `usage_events` mới được ghi, job chạy lại cùng `dedupeKey` thì không cộng. Chỉ để theo dõi: số tiền chuẩn nằm trong DB (Decimal) |
 | `khaibao_customs_messages_total` | counter | `op`, `outcome` = `ok` / `rejected` (Hải quan trả lỗi nghiệp vụ hoặc lỗi vĩnh viễn) / `error` (lỗi tạm, sẽ thử lại) | `processOutbox()` – `integration/application/process-outbox.ts` (HYS đi nhánh riêng, không đếm) |

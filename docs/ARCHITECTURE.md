@@ -66,6 +66,8 @@ apps/*  ──►  module/index.ts  ──►  application  ──►  domain
 
 Tiến trình realtime: worker ghi `job_progress` → web đẩy SSE cho UI.
 
+Thông báo realtime (ADR 0017): `createNotifier` ghi `notifications` rồi (sau commit, không await) PUBLISH sự kiện vào kênh Redis `kb:notify` → mỗi tiến trình web giữ một kết nối SUBSCRIBE (`container.notificationHub`) → `GET /api/notifications/stream` (SSE, chỉ sự kiện của chính user + org của phiên) → `useNotificationStream` trong `AppShell` làm mới panel/huy hiệu, hiện toast và thông báo máy tính (Notification API) khi trang không được nhìn.
+
 ### Biên HTTP, log và vận hành
 
 - Route handler bọc bằng `route()` (`apps/web/src/lib/server/route.ts`): parse Zod → use case → map `DomainError.code` → HTTP. Mọi phản hồi có `x-request-id`; lỗi 500 trả `requestId`, chi tiết chỉ nằm trong log. Request ghi (POST/PUT/PATCH/DELETE) có `Origin` khác host → 403 `CSRF` (lớp hai sau cookie `SameSite=Lax`). Header bảo mật đặt ở `next.config.ts`.

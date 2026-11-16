@@ -29,6 +29,7 @@ export { setDefaultCertificate } from "./application/set-default-certificate.js"
 export { getVnaccsAccount, readVnaccsCredentials, removeVnaccsAccount, saveVnaccsAccount, VNACCS_SECRET_KIND } from "./application/vnaccs-account.js";
 export { listNotifications } from "./application/list-notifications.js";
 export { markAllNotificationsRead } from "./application/mark-all-notifications-read.js";
+export { deleteNotification, setNotificationRead } from "./application/notification-actions.js";
 export { hashToken } from "./domain/token.js";
 export { provisionStaffAccount, resendVerificationEmail } from "./application/staff-account.js";
 export { provisionOrgAccount, type ProvisionOrgInput } from "./application/provision-org-account.js";

@@ -318,7 +318,7 @@ function repos(tx: Tx): AdminRepos {
     notifications: {
       insertMany: async (rows) => {
         if (rows.length === 0) return;
-        await tx.insert(notifications).values(rows.map((r) => ({ id: r.id, orgId: r.orgId, userId: r.userId, title: r.title, body: r.body, announcementId: r.announcementId, createdAt: r.at })));
+        await tx.insert(notifications).values(rows.map((r) => ({ id: r.id, orgId: r.orgId, userId: r.userId, title: r.title, body: r.body, announcementId: r.announcementId, category: "SYSTEM", createdAt: r.at }))); // = notificationCategory({ announcementId })
       },
       deleteByAnnouncement: async (announcementId) =>
         (await tx.delete(notifications).where(and(isNotNull(notifications.announcementId), eq(notifications.announcementId, announcementId))).returning({ id: notifications.id })).length,

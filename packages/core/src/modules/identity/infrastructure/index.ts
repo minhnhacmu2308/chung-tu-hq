@@ -15,10 +15,11 @@ import { InMemoryRateLimiter } from "./in-memory-rate-limiter.js";
 import { ConsoleMailer, SmtpMailer } from "./mailer.js";
 import { createNotifier } from "./notifier.js";
 import { RedisRateLimiter } from "./redis-rate-limiter.js";
+import { createNotificationHub, RedisNotificationPublisher, type NotificationHub } from "./redis-notifications.js";
 
-export { AesSecretStore, Argon2Hasher, ConsoleMailer, createNotifier, DrizzleIdentityUow, DrizzlePlansReader, FakeTaxRegistryLookup, InMemoryRateLimiter, RedisRateLimiter, SmtpMailer };
+export { AesSecretStore, Argon2Hasher, ConsoleMailer, createNotificationHub, createNotifier, RedisNotificationPublisher, DrizzleIdentityUow, DrizzlePlansReader, FakeTaxRegistryLookup, InMemoryRateLimiter, RedisRateLimiter, SmtpMailer };
 
-export type { CreditGrantTx };
+export type { CreditGrantTx, NotificationHub };
 
 /** Nối toàn bộ hạ tầng identity theo cấu hình môi trường. Gọi từ container của apps. `grantCredits`: ghi tặng lượt cùng transaction (billing cung cấp). */
 export function createIdentityInfrastructure(opts: { db: Db; redis?: Redis; env: Env; clock?: Clock; grantCredits?: CreditGrantTx }): IdentityDeps & { secrets: SecretStore; audit: OrgAuditWriter } {

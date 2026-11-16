@@ -24,6 +24,23 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input data-glass-input="" className={cn(control, "h-10 px-3", className)} {...props} {...a11y} />;
 }
 
+export type SearchInputProps = Omit<ComponentProps<"input">, "type" | "className"> & {
+  /** Bề rộng/bố cục của cả ô (kính lúp nằm trong viền). */
+  className?: string;
+  /** Lớp của chính ô nhập (vd `h-8` khi đứng cạnh control 32px). */
+  inputClassName?: string;
+};
+
+/** Ô tìm kiếm: kính lúp trang trí bên trái trong viền ô, `type="search"` (Esc xóa nhanh). Tên truy cập qua `aria-label` hoặc `Field`. */
+export function SearchInput({ className, inputClassName, ...props }: SearchInputProps) {
+  return (
+    <div className={cn("relative min-w-0", className)}>
+      <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" />
+      <Input type="search" className={cn("pl-8", inputClassName)} {...props} />
+    </div>
+  );
+}
+
 export type LookupInputProps = Omit<ComponentProps<"input">, "className"> & {
   /** Bề rộng/bố cục của cả ô (vd w-full, w-32) – nút tra cứu nằm trong viền ô nên không cộng thêm bề rộng. */
   className?: string;

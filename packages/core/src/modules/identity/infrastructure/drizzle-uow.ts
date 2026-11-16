@@ -1,10 +1,10 @@
 // Hiện thực IdentityUow bằng Drizzle: mỗi lời gọi là một transaction với ngữ cảnh RLS (withSystem/withUser/withCtx).
-import { and, count, desc, eq, gt, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, ilike, inArray, isNull, max, or, sql } from "drizzle-orm";
 import type { Db, Tx } from "../../../db/client.js";
 import { authTokens, digitalCertificates, joinRequests, memberships, notifications, organizations, orgAudit, orgSecrets, sessions, users } from "../../../db/schema/identity.js";
 import { withCtx, withSystem, withUser } from "../../../db/with-ctx.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
-import type { CreditGrantRow, IdentityRepos, IdentityUow, JoinRequestStatus, MembershipRow, MembershipStatus } from "../application/ports.js";
+import type { CreditGrantRow, IdentityRepos, IdentityUow, JoinRequestStatus, MembershipRow, MembershipStatus, NotificationRow } from "../application/ports.js";
 
 /**
  * Ghi dòng tặng lượt trong transaction đang mở – hiện thực thuộc billing (sổ lượt), composition root truyền vào
@@ -12,7 +12,7 @@ import type { CreditGrantRow, IdentityRepos, IdentityUow, JoinRequestStatus, Mem
  */
 export type CreditGrantTx = (tx: Tx, row: CreditGrantRow) => Promise<void>;
 import type { AuthTokenKind } from "../domain/token.js";
-import type { Role } from "@kb/contracts";
+import { NotificationCategorySchema, notificationCategory, type Role } from "@kb/contracts";
 
 function repos(tx: Tx, grant?: CreditGrantTx): IdentityRepos {
   const toMembership = (m: typeof memberships.$inferSelect): MembershipRow => ({ id: m.id, orgId: m.orgId, userId: m.userId, role: m.role as Role, status: m.status as MembershipStatus, invitedBy: m.invitedBy });
@@ -98,9 +98,25 @@ function repos(tx: Tx, grant?: CreditGrantTx): IdentityRepos {
       delete: async (orgId, kind) => void (await tx.delete(orgSecrets).where(and(eq(orgSecrets.orgId, orgId), eq(orgSecrets.kind, kind)))),
     },
     notifications: {
-      list: async (orgId, userId) => tx.select().from(notifications).where(and(eq(notifications.orgId, orgId), eq(notifications.userId, userId))).orderBy(desc(notifications.createdAt)).limit(50),
-      insert: async (row) => void (await tx.insert(notifications).values(row)),
-      markAllRead: async (orgId, userId, at) => void (await tx.update(notifications).set({ readAt: at }).where(and(eq(notifications.orgId, orgId), eq(notifications.userId, userId), isNull(notifications.readAt)))),
+      list: async (orgId, userId) => (await tx.select().from(notifications).where(mineN(orgId, userId)).orderBy(desc(notifications.createdAt)).limit(50)).map(toNotification),
+      page: async (orgId, userId, f) => {
+        const conds = [mineN(orgId, userId)];
+        // So theo mili giây: created_at mặc định của Postgres có micro giây, con trỏ (ISO của JS) chỉ tới mili giây.
+        if (f.before) conds.push(sql`(${createdMs}, ${notifications.id}) < (${f.before.at.toISOString()}::timestamptz, ${f.before.id})`);
+        if (f.unreadOnly) conds.push(isNull(notifications.readAt));
+        if (f.category) conds.push(eq(notifications.category, f.category));
+        if (f.q) {
+          const pat = `%${f.q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+          conds.push(or(ilike(notifications.title, pat), ilike(notifications.body, pat))!);
+        }
+        const rows = await tx.select().from(notifications).where(and(...conds)).orderBy(desc(createdMs), desc(notifications.id)).limit(f.limit);
+        return rows.map(toNotification);
+      },
+      countUnread: async (orgId, userId) => Number((await tx.select({ n: count() }).from(notifications).where(and(mineN(orgId, userId), isNull(notifications.readAt))))[0]?.n ?? 0),
+      insert: async (row) => void (await tx.insert(notifications).values({ ...row, category: notificationCategory(row) })),
+      markAllRead: async (orgId, userId, at) => void (await tx.update(notifications).set({ readAt: at }).where(and(mineN(orgId, userId), isNull(notifications.readAt)))),
+      setRead: async (orgId, userId, id, at) => (await tx.update(notifications).set({ readAt: at }).where(and(mineN(orgId, userId), eq(notifications.id, id))).returning({ id: notifications.id })).length > 0,
+      delete: async (orgId, userId, id) => (await tx.delete(notifications).where(and(mineN(orgId, userId), eq(notifications.id, id))).returning({ id: notifications.id })).length > 0,
     },
     audit: {
       insert: async (row) => void (await tx.insert(orgAudit).values(row)),
@@ -109,6 +125,13 @@ function repos(tx: Tx, grant?: CreditGrantTx): IdentityRepos {
     },
   };
 }
+
+const mineN = (orgId: string, userId: string) => and(eq(notifications.orgId, orgId), eq(notifications.userId, userId))!;
+const createdMs = sql`date_trunc('milliseconds', ${notifications.createdAt})`;
+const toNotification = (n: typeof notifications.$inferSelect): NotificationRow => ({
+  id: n.id, orgId: n.orgId, userId: n.userId, title: n.title, body: n.body, href: n.href, readAt: n.readAt, createdAt: n.createdAt,
+  category: NotificationCategorySchema.catch("OTHER").parse(n.category),
+});
 
 const toJoin = (j: typeof joinRequests.$inferSelect) => ({ id: j.id, orgId: j.orgId, userId: j.userId, status: j.status as JoinRequestStatus, createdAt: j.createdAt });
 

@@ -18,7 +18,7 @@ import { runRules, type ValidationDeps } from "@kb/core/modules/validation";
 import { createValidationInfrastructure } from "@kb/core/modules/validation/infrastructure";
 import { createBillingInfrastructure, createServiceUsageMeter, DrizzleUsageRecorder, grantCreditsInTx } from "@kb/core/modules/billing/infrastructure";
 import { hashToken, provisionOrgAccount, provisionStaffAccount, requestPasswordReset, resendVerificationEmail, type IdentityDeps, type SecretStore } from "@kb/core/modules/identity";
-import { createIdentityInfrastructure, createNotifier } from "@kb/core/modules/identity/infrastructure";
+import { createIdentityInfrastructure, createNotifier, RedisNotificationPublisher, createNotificationHub, type NotificationHub } from "@kb/core/modules/identity/infrastructure";
 import { releaseDossierAttachments, type MailboxDeps } from "@kb/core/modules/mailbox";
 import { createMailboxInfrastructure } from "@kb/core/modules/mailbox/infrastructure";
 import { checkSentSheets, countReservedDeclarations, customsEditSheets, dossierCustomsSummaries, type CustomsDeps, type IntegrationDeps, prefillDocOf } from "@kb/core/modules/integration";
@@ -38,6 +38,7 @@ export type Container = {
   env: Env;
   db: Db;
   redis: Redis;
+  notificationHub: NotificationHub;
   queue: JobQueue;
   pingDb: () => Promise<void>;
   /** Số worker đang nghe hàng đợi (health readiness – chỉ để thông tin). */
@@ -208,7 +209,7 @@ function build(): Container {
       return emptyBilling;
     }
   };
-  const notify = createNotifier({ uow: identity.uow, clock: systemClock, dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
+  const notify = createNotifier({ uow: identity.uow, clock: systemClock, publisher: new RedisNotificationPublisher(redis), dossierOwner: async (orgId, dossierId) => (await dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.get(orgId, dossierId)))?.ownerId ?? null });
   // Luật đối chiếu cần biết hồ sơ nhập/xuất + phương thức vận chuyển: nối từ module dossier tại đây (validation không import dossier).
   const validation = createValidationInfrastructure({
     db,
@@ -423,6 +424,8 @@ function build(): Container {
     env,
     db,
     redis,
+    // Một kết nối SUBSCRIBE cho cả tiến trình web; route SSE /api/notifications/stream lọc theo phiên (ADR 0017).
+    notificationHub: createNotificationHub(() => redis.duplicate()),
     queue,
     pingDb: async () => {
       await db.execute(sql`select 1`);

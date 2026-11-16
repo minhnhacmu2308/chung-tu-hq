@@ -1,4 +1,4 @@
-import type { DecimalString, Organization, PlanKind, Role } from "@kb/contracts";
+import type { DecimalString, NotificationCategory, Organization, PlanKind, Role } from "@kb/contracts";
 import type { OrgAuditWriter } from "../../../shared/audit.js";
 import type { Clock } from "../../../shared/clock.js";
 import type { IdGen, OrgId, UserId } from "../../../shared/ids.js";
@@ -29,7 +29,11 @@ export type AuthTokenRow = { id: string; userId: string; orgId: string | null; k
 export type JoinRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type JoinRequestRow = { id: string; orgId: string; userId: string; status: JoinRequestStatus; createdAt: Date };
 export type CertificateRow = { id: string; orgId: string; subject: string; issuer: string; serial: string; validTo: string; isDefault: boolean };
-export type NotificationRow = { id: string; orgId: string; userId: string; title: string; body: string; href: string | null; readAt: Date | null; createdAt: Date };
+export type NotificationRow = { id: string; orgId: string; userId: string; title: string; body: string; href: string | null; readAt: Date | null; createdAt: Date; category: NotificationCategory };
+/** Kho tự suy `category` từ href (notificationCategory của @kb/contracts) – nơi tạo thông báo không phải truyền. */
+export type NewNotificationRow = Omit<NotificationRow, "category">;
+/** Một trang thông báo: keyset (createdAt, id) giảm dần, lọc ở SQL. */
+export type NotificationPageFilter = { before?: { at: Date; id: string }; limit: number; unreadOnly: boolean; category?: NotificationCategory; q?: string };
 /** Bí mật đã mã hóa của doanh nghiệp (org_secrets); `kind` duy nhất trong một org. */
 export type OrgSecretRow = { id: string; orgId: string; kind: string; ciphertext: string; keyVersion: number; updatedAt: Date };
 export type OrgAuditRow = { id: string; orgId: string; at: Date; actorId: string; actorName: string; action: string; targetType: string; targetId: string; targetLabel: string; detail: Record<string, unknown> | null };
@@ -100,8 +104,14 @@ export interface IdentityRepos {
   };
   notifications: {
     list(orgId: string, userId: string): Promise<NotificationRow[]>;
-    insert(row: NotificationRow): Promise<void>;
+    /** Mới nhất trước, tối đa `limit` dòng. */
+    page(orgId: string, userId: string, f: NotificationPageFilter): Promise<NotificationRow[]>;
+    countUnread(orgId: string, userId: string): Promise<number>;
+    insert(row: NewNotificationRow): Promise<void>;
     markAllRead(orgId: string, userId: string, at: Date): Promise<void>;
+    /** `at` null = đánh dấu chưa đọc. false khi không có (hoặc không phải của mình). */
+    setRead(orgId: string, userId: string, id: string, at: Date | null): Promise<boolean>;
+    delete(orgId: string, userId: string, id: string): Promise<boolean>;
   };
   audit: {
     insert(row: OrgAuditRow): Promise<void>;

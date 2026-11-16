@@ -1,4 +1,5 @@
 // Fake cho test use case: giữ dữ liệu trong mảng, mô phỏng RLS bằng cách lọc theo org/user của ngữ cảnh.
+import { notificationCategory } from "@kb/contracts";
 import type { OrgId, UserId } from "../../../../shared/ids.js";
 import type {
   AuthTokenRow, CertificateRow, CreditGrantRow, IdentityRepos, IdentityUow, JoinRequestRow, JoinRequestStatus, MembershipRow, NotificationRow, OrgAuditRow, OrgRow, OrgSecretRow,
@@ -49,6 +50,8 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
     const isSystem = scope.kind === "system";
     const orgOk = (orgId: string) => scope.kind === "org" && scope.orgId === orgId;
     const userOk = (userId: string) => scope.kind !== "system" && scope.userId === userId;
+    // RLS notifications: chỉ thông báo của chính người dùng trong org đang mở.
+    const mine = (orgId: string, userId: string) => (orgOk(orgId) && userOk(userId) ? d.notifications.filter((n) => n.orgId === orgId && n.userId === userId) : []);
     const deny = (what: string): never => {
       throw new Error(`new row violates row-level security policy (${what}, scope=${scope.kind})`);
     };
@@ -150,10 +153,31 @@ export class InMemoryIdentityUow implements IdentityUow, PlansReader {
         delete: async (orgId, kind) => void (d.secrets = d.secrets.filter((x) => !(x.orgId === orgId && x.kind === kind && orgOk(orgId)))),
       },
       notifications: {
-        list: async (orgId, userId) => clone(orgOk(orgId) && userOk(userId) ? d.notifications.filter((n) => n.orgId === orgId && n.userId === userId) : []),
-        insert: async (row) => void (orgOk(row.orgId) ? d.notifications.push(clone(row)) : deny("notifications insert")),
+        list: async (orgId, userId) => clone(mine(orgId, userId)),
+        page: async (orgId, userId, f) => {
+          const q = f.q?.toLowerCase();
+          const rows = mine(orgId, userId)
+            .filter((n) => !f.before || n.createdAt < f.before.at || (n.createdAt.getTime() === f.before.at.getTime() && n.id < f.before.id))
+            .filter((n) => (!f.unreadOnly || n.readAt === null) && (!f.category || n.category === f.category))
+            .filter((n) => !q || n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q))
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : -1));
+          return clone(rows.slice(0, f.limit));
+        },
+        countUnread: async (orgId, userId) => mine(orgId, userId).filter((n) => n.readAt === null).length,
+        insert: async (row) => void (orgOk(row.orgId) ? d.notifications.push({ ...clone(row), category: notificationCategory(row) }) : deny("notifications insert")),
         markAllRead: async (orgId, userId, at) => {
-          for (const n of d.notifications) if (n.orgId === orgId && n.userId === userId && orgOk(orgId) && userOk(userId)) n.readAt = at;
+          for (const n of mine(orgId, userId)) if (n.readAt === null) n.readAt = at;
+        },
+        setRead: async (orgId, userId, id, at) => {
+          const n = mine(orgId, userId).find((x) => x.id === id);
+          if (n) n.readAt = at;
+          return !!n;
+        },
+        delete: async (orgId, userId, id) => {
+          const before = d.notifications.length;
+          const gone = new Set(mine(orgId, userId).filter((x) => x.id === id));
+          d.notifications = d.notifications.filter((x) => !gone.has(x));
+          return d.notifications.length < before;
         },
       },
       audit: {

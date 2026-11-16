@@ -10,6 +10,11 @@ export type { CompanyLookup } from "@kb/contracts";
 export const getSession = pick(mock.getSession, http.getSession);
 export const listNotifications = pick(mock.listNotifications, http.listNotifications);
 export const markAllNotificationsRead = pick(mock.markAllNotificationsRead, http.markAllNotificationsRead);
+export const setNotificationRead = pick(mock.setNotificationRead, http.setNotificationRead);
+export const deleteNotification = pick(mock.deleteNotification, http.deleteNotification);
+export const subscribeNotifications = pick(mock.subscribeNotifications, http.subscribeNotifications);
+/** Chỉ chế độ mock: tạo một thông báo giả và phát qua luồng realtime (demo). */
+export const sendTestNotification = mock.sendTestNotification;
 export const login = pick(mock.login, http.login);
 export const logout = pick(mock.logout, http.logout);
 export const changePassword = pick(mock.changePassword, http.changePassword);

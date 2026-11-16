@@ -66,6 +66,7 @@ export {
   FileDropzone, FileUploadList, formatBytes,
   type FileDropzoneProps, type FileUploadListProps, type UploadItem, type UploadStatus, type RejectedFile, type RejectReason,
 } from "./components/upload.js";
+export { ImagePicker, type ImagePickerProps } from "./components/image-picker.js";
 export { Progress, type ProgressProps } from "./components/progress.js";
 export { Avatar, AvatarGroup, initialsOf, type AvatarProps, type AvatarGroupProps } from "./components/avatar.js";
 export { Switch, type SwitchProps } from "./components/switch.js";

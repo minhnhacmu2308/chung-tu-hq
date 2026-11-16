@@ -160,7 +160,7 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
           {t.review}
         </Button>
         {canRecall && (
-          <Button variant="ghost" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setRecallOpen(true)}>
+          <Button variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setRecallOpen(true)}>
             {t.recall}
           </Button>
         )}

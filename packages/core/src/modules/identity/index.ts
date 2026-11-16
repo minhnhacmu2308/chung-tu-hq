@@ -1,5 +1,5 @@
 // PUBLIC API của module identity: use case + kiểu. Hạ tầng qua "@kb/core/modules/identity/infrastructure" (chỉ container.ts).
-export type { IdentityDeps, IdentityRepos, IdentityUow, Mailer, OrgSecretRow, PasswordHasher, PlansReader, RateLimiter, SecretStore, TaxRegistryLookup } from "./application/ports.js";
+export type { IdentityDeps, IdentityRepos, IdentityUow, ImageStore, Mailer, OrgSecretRow, PasswordHasher, PlansReader, RateLimiter, SecretStore, TaxRegistryLookup } from "./application/ports.js";
 export { register, type RegisterOutput } from "./application/register.js";
 export { login } from "./application/login.js";
 export { logout } from "./application/logout.js";
@@ -37,3 +37,5 @@ export { generateTempPassword } from "./domain/password.js";
 export { notifyExpiringCertificates, CERT_EXPIRY_DAYS } from "./application/notify-expiring-certificates.js";
 export { listActiveOrganizationIds } from "./application/list-organization-ids.js";
 export { listOrgAudit } from "./application/list-org-audit.js";
+export { readMemberAvatar, readOrgLogo, removeMyAvatar, removeOrgLogo, setMyAvatar, setOrgLogo, updateOrgBrandName, type StoredImage } from "./application/branding.js";
+export { checkImage } from "./domain/image.js";

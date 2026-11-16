@@ -25,6 +25,7 @@ const ORG: Organization = {
   suspectThreshold: "BALANCED",
   fourEyes: false,
   invoiceSettings: { numbering: { pattern: "INV{YY}{MM}-{NNN}", reset: "MONTH" }, signatoryName: null, signatoryTitle: null, sellerName: null },
+  brand: { name: null, logoVersion: null },
 };
 
 const MEMBERS: Member[] = [

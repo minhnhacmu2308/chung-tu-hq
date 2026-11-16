@@ -50,6 +50,18 @@ describe("DrizzleIdentityUow", () => {
     expect((await uow.asOrg(ANPHAT, (r) => r.orgs.findById("org_anphat")))?.postalCode).toBe("100000");
     await uow.asOrg(ANPHAT, (r) => r.orgs.update("org_anphat", { postalCode: "180000" }));
   });
+  it("thương hiệu + ảnh đại diện (ADR 0016): org ghi logo/tên của mình; user chỉ sửa ảnh của chính mình (RLS)", async () => {
+    const at = new Date("2026-11-16T00:00:00.000Z");
+    await uow.asOrg(ANPHAT, (r) => r.orgs.update("org_anphat", { brandName: "An Phát", logoKey: "branding/org_anphat/logo-x.png", logoUpdatedAt: at }));
+    expect(await uow.asOrg(ANPHAT, (r) => r.orgs.findById("org_anphat"))).toMatchObject({ brandName: "An Phát", logoKey: "branding/org_anphat/logo-x.png", logoUpdatedAt: at });
+    await uow.asOrg(ANPHAT, (r) => r.users.update("usr_chau", { avatarKey: "avatars/usr_chau/a.png", avatarUpdatedAt: at }));
+    expect(await uow.asOrg(ANPHAT, (r) => r.users.findById("usr_chau"))).toMatchObject({ avatarKey: "avatars/usr_chau/a.png", avatarUpdatedAt: at });
+    // Sửa ảnh người khác cùng org: RLS users_update bỏ qua (0 dòng) → không đổi.
+    await uow.asOrg(ANPHAT, (r) => r.users.update("usr_phong", { avatarKey: "avatars/x.png" })).catch(() => undefined);
+    expect((await uow.asOrg(ANPHAT, (r) => r.users.findById("usr_phong")))?.avatarKey ?? null).toBeNull();
+    await uow.asOrg(ANPHAT, (r) => r.orgs.update("org_anphat", { brandName: null, logoKey: null, logoUpdatedAt: null }));
+    await uow.asOrg(ANPHAT, (r) => r.users.update("usr_chau", { avatarKey: null, avatarUpdatedAt: null }));
+  });
   it("asOrg: liệt kê 6 membership của AN PHÁT; org khác không thấy (RLS)", async () => {
     expect(await uow.asOrg(ANPHAT, (r) => r.memberships.listByOrg("org_anphat"))).toHaveLength(6);
     expect(await uow.asOrg(OTHER, (r) => r.memberships.listByOrg("org_anphat"))).toEqual([]);

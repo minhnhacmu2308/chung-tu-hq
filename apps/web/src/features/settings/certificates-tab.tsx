@@ -1,10 +1,10 @@
 "use client";
 import {
-  Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DatePicker, Dialog, DialogContent, DialogFooter,
+  Alert, Badge, Button, ConfirmDialog, Card, CardContent, CardDescription, CardHeader, CardTitle, DatePicker, Dialog, DialogContent, DialogFooter,
   EmptyState, Field, Input, Select, Skeleton, Stack, fill, toast, useMessages,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileKey2, Plus, ShieldCheck } from "lucide-react";
+import { FileKey2, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { addCertificate, listCertificates, removeCertificate, setDefaultCertificate, settingsKeys } from "@/api/settings";
 import { daysUntil, formatDate } from "@/lib/format";
@@ -83,7 +83,8 @@ export function CertificatesTab() {
     },
     onError,
   });
-  const remove = useMutation({ mutationFn: (id: string) => removeCertificate(id), onSuccess: () => void refresh(), onError });
+  const [removing, setRemoving] = useState<DigitalCertificate | null>(null);
+  const remove = useMutation({ mutationFn: (id: string) => removeCertificate(id), onSuccess: () => { setRemoving(null); void refresh(); }, onError });
   const expiringDefault = data?.find((c) => c.isDefault && daysUntil(c.validTo) <= 30);
 
   return (
@@ -132,7 +133,7 @@ export function CertificatesTab() {
                           <Button size="sm" variant="secondary" loading={makeDefault.isPending && makeDefault.variables === c.id} onClick={() => makeDefault.mutate(c.id)}>
                             {m.makeDefault}
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => remove.mutate(c.id)}>{m.remove}</Button>
+                          <Button size="sm" variant="danger-ghost" onClick={() => setRemoving(c)}>{m.remove}</Button>
                         </>
                       )}
                     </div>
@@ -144,6 +145,19 @@ export function CertificatesTab() {
         </CardContent>
       </Card>
       <AddDialog open={addOpen} onOpenChange={setAddOpen} />
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(o) => !o && setRemoving(null)}
+        title={m.removeTitle}
+        icon={<Trash2 className="h-4 w-4" />}
+        subject={removing ? `${removing.issuer} · ${removing.serial}` : null}
+        confirmLabel={m.remove}
+        loading={remove.isPending}
+        onConfirm={() => removing && remove.mutate(removing.id)}
+        labels={{ keep: m.keep }}
+      >
+        {m.removeBody}
+      </ConfirmDialog>
     </Stack>
   );
 }

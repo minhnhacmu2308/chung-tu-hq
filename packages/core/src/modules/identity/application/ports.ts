@@ -8,6 +8,8 @@ export type UserRow = {
   id: string; email: string; passwordHash: string; name: string; emailVerifiedAt: Date | null; createdAt: Date;
   /** Tạo hộ bằng mật khẩu tạm → bắt đổi ở lần đăng nhập đầu. Thiếu = false. */
   mustChangePassword?: boolean;
+  /** Ảnh đại diện ở kho file (ADR 0016); thiếu/null = chưa có. */
+  avatarKey?: string | null; avatarUpdatedAt?: Date | null;
 };
 export type OrgRow = {
   id: string; taxCode: string; name: string; address: string; phone: string; planCode: string; suspectThreshold: string; fourEyes: boolean; createdAt: Date;
@@ -17,6 +19,8 @@ export type OrgRow = {
   invoiceNumberPattern?: string | null; invoiceNumberReset?: string | null; invoiceSignatoryName?: string | null; invoiceSignatoryTitle?: string | null; invoiceSellerName?: string | null;
   /** Do khu Quản trị hệ thống đặt (module admin); thiếu = mặc định của DB. */
   status?: string; planStartedAt?: Date | null;
+  /** Thương hiệu (ADR 0016): tên hiển thị + logo ở kho file; thiếu/null = mặc định KhaiBáo AI. */
+  brandName?: string | null; logoKey?: string | null; logoUpdatedAt?: Date | null;
 };
 export type MembershipStatus = "ACTIVE" | "INVITED" | "DISABLED";
 export type MembershipRow = { id: string; orgId: string; userId: string; role: Role; status: MembershipStatus; invitedBy: string | null };
@@ -39,7 +43,7 @@ export interface IdentityRepos {
     findById(id: string): Promise<UserRow | null>;
     findByIds(ids: string[]): Promise<UserRow[]>;
     insert(row: UserRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<UserRow, "name" | "passwordHash" | "emailVerifiedAt" | "mustChangePassword">>): Promise<void>;
+    update(id: string, patch: Partial<Pick<UserRow, "name" | "passwordHash" | "emailVerifiedAt" | "mustChangePassword" | "avatarKey" | "avatarUpdatedAt">>): Promise<void>;
   };
   orgs: {
     findByTaxCode(taxCode: string): Promise<OrgRow | null>;
@@ -47,7 +51,7 @@ export interface IdentityRepos {
     /** Mọi org (chỉ dùng trong ngữ cảnh hệ thống: job định kỳ). */
     listAll(): Promise<OrgRow[]>;
     insert(row: OrgRow): Promise<void>;
-    update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "postalCode" | "suspectThreshold" | "fourEyes" | "planCode" | "invoiceNumberPattern" | "invoiceNumberReset" | "invoiceSignatoryName" | "invoiceSignatoryTitle" | "invoiceSellerName">>): Promise<void>;
+    update(id: string, patch: Partial<Pick<OrgRow, "name" | "address" | "phone" | "postalCode" | "suspectThreshold" | "fourEyes" | "planCode" | "invoiceNumberPattern" | "invoiceNumberReset" | "invoiceSignatoryName" | "invoiceSignatoryTitle" | "invoiceSellerName" | "brandName" | "logoKey" | "logoUpdatedAt">>): Promise<void>;
   };
   /** Tặng lượt khi tạo doanh nghiệp (đăng ký: 3 lượt, khóa grant:signup:<orgId>) – cùng transaction, trùng id bỏ qua. */
   credits: {
@@ -135,6 +139,12 @@ export interface SecretStore {
 export interface TaxRegistryLookup {
   lookup(taxCode: string): Promise<{ found: false } | { found: true; name: string; address: string }>;
 }
+/** Kho ảnh logo / ảnh đại diện (container nối vào kho file của dossier – MinIO/S3). Ảnh không nằm trong DB. */
+export interface ImageStore {
+  put(key: string, body: Buffer, mime: string): Promise<void>;
+  get(key: string): Promise<Buffer>;
+  delete(key: string): Promise<void>;
+}
 export interface PlansReader {
   get(code: string): Promise<PlanRow | null>;
 }
@@ -162,4 +172,6 @@ export type IdentityDeps = {
   usage?: (orgId: string) => Promise<Organization["usage"]>;
   /** Lượt / hợp đồng của org (billing cung cấp qua container); thiếu → số dư 0, không hợp đồng. */
   billing?: (orgId: string) => Promise<Organization["billing"]>;
+  /** Kho ảnh logo / ảnh đại diện; thiếu → đổi ảnh trả INTEGRATION_NOT_CONFIGURED, đọc ảnh trả NOT_FOUND. */
+  images?: ImageStore;
 };

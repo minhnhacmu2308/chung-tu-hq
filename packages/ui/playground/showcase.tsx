@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Abbreviation, NoticeChip, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-  Field, FileDropzone, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
+  BrandMark, Field, FileDropzone, ImagePicker, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
 } from "../src/index.js";
 
@@ -297,6 +297,8 @@ export function Showcase() {
                 <Avatar name="Trần Thu Hà" size="sm" />
               </Stack>
               <AvatarGroup people={["Lê Minh Châu", "Nguyễn Văn Phát", "Trần Thu Hà", "Phạm Châu", "Đỗ Quang"].map((name) => ({ name }))} max={3} />
+              <ImagePicker name="An Phát" fallback={<BrandMark small decorative className="h-8 w-8" />} hint="PNG/JPG/WebP, tối đa 1 MB, nên ảnh vuông" onPick={() => {}} />
+              <ImagePicker shape="circle" name="Lê Minh Châu" onPick={() => {}} onRemove={() => {}} />
               <Stack direction="row" gap="sm">
                 <Tooltip content="Tải lại dữ liệu đối chiếu"><Button variant="secondary" size="sm">Làm mới</Button></Tooltip>
                 <Button size="sm" onClick={() => toast({ tone: "success", title: "Đã lưu nháp", description: "Tờ khai HS-NK-2609-021" })}>Toast thành công</Button>

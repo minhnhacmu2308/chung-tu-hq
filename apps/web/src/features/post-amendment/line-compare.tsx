@@ -103,7 +103,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
         </div>
         {dirty > 0 ? (
           <>
-            <Button variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => setEdits({})}>
+            <Button variant="secondary" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => setEdits({})}>
               {t.undo}
             </Button>
             <Button leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={() => save.mutate()}>

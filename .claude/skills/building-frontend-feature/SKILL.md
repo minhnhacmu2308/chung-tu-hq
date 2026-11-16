@@ -68,6 +68,7 @@ apps/web/src/
 | Phần tử dính đầu trang trong màn | class `top-shell` (tự né thanh menu khi người dùng chọn menu ở trên) | `top-4`, `top-0` |
 | Khối hiện lần lượt khi vào trang | prop `stagger` của `Grid`/`Stack` (tối đa 1–2 khối mỗi màn) | Tự viết animation, thư viện motion |
 | Logo | `BrandMark` (`small` khi ≤ 24px, `decorative` khi đứng cạnh tên) | Nhúng file SVG có mã màu |
+| Logo / ảnh đại diện riêng của doanh nghiệp, người dùng | `orgLogoSrc` / `memberAvatarSrc` (`@/api/branding`) → `Sidebar brand.logoSrc`, `SidebarUser avatarSrc`, `Avatar src`; chọn/gỡ ảnh: `ImagePicker` (+ `ConfirmDialog` khi gỡ) | `<img src="/api/...">` tự ghép; `<input type="file">` thô; tự dựng URL ảnh trong feature (mock không có route ảnh) |
 | File `app/**/not-found.tsx`, `loading.tsx`, `error.tsx` dùng `@kb/ui` | Đặt `"use client"` ở đầu file (`@kb/ui` là thư viện phía client) | Import `@kb/ui` vào Server Component → build lỗi |
 
 ## Lỗi hay gặp

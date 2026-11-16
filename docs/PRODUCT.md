@@ -130,7 +130,7 @@ Hộp thoại chọn việc: **Tạo tờ khai** / **Tạo dữ liệu số hóa
 | Chi tiết hồ sơ | Thanh 6 bước + màn của bước hiện tại (bước 2–6) |
 | Khai báo Hải quan | Danh sách tờ khai đã/đang truyền: hồ sơ, nghiệp vụ, số tờ khai, phân luồng, trạng thái, cập nhật. Lô nhiều tờ: mỗi tờ một dòng, cột **Tờ** ghi "2/3" |
 | Cấu hình Skill AI | Danh sách skill (theo chứng từ, theo nhà cung cấp) kèm **độ chính xác đo trên mẫu đã gắn nhãn**. Chi tiết skill: tên, loại chứng từ, ngôn ngữ; bảng trường (mã, tên hiển thị, kiểu, bắt buộc, ánh xạ chỉ tiêu tờ khai); chứng từ mẫu đã gắn nhãn; nút **Đánh giá lại** |
-| Tài khoản & tích hợp | Thông tin doanh nghiệp (MST khóa), gói dịch vụ, thành viên & vai trò, kết nối hệ thống (hscodepro, Customs Hub, dịch vụ AI) kèm trạng thái, chứng thư số, ngưỡng hiển thị trường nghi ngờ |
+| Tài khoản & tích hợp | Thông tin doanh nghiệp (MST khóa), thương hiệu (tên hiển thị + logo thay KhaiBáo AI ở menu, tiêu đề tab, biểu tượng tab sau đăng nhập – ADR 0016), ảnh đại diện của mỗi người (tab Tùy chọn), gói dịch vụ, thành viên & vai trò, kết nối hệ thống (hscodepro, Customs Hub, dịch vụ AI) kèm trạng thái, chứng thư số, ngưỡng hiển thị trường nghi ngờ |
 
 ## 6. Tích hợp hệ thống bên thứ 3
 

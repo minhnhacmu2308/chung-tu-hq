@@ -75,8 +75,17 @@ export function checkSource(path, text) {
   const rawColorAllowed = ALLOW_RAW_COLOR.some((re) => re.test(path));
   const lines = text.split(/\r?\n/);
   const out = [];
+  // Chân popup / form: nút chữ ghost (trông như chữ thường) cạnh nút chính → phải là secondary. Nút icon thì được.
+  let footer = 0;
   lines.forEach((line, i) => {
+    footer += (line.match(/<(?:DialogFooter|CardFooter)\b(?![^>]*\/>)/g) ?? []).length;
+    const inFooter = footer > 0;
+    footer -= (line.match(/<\/(?:DialogFooter|CardFooter)>/g) ?? []).length;
     if (ALLOW_COMMENT.test(line) || (i > 0 && ALLOW_COMMENT.test(lines[i - 1] ?? ""))) return;
+    // Thẻ <Button …> có thể xuống dòng → ghép tới dấu ">" đầu tiên (tối đa 8 dòng).
+    const tag = inFooter && inApps && /<Button\b/.test(line) ? (lines.slice(i, i + 8).join(" ").match(/<Button\b[^>]*>/)?.[0] ?? "") : "";
+    if (/variant="ghost"/.test(tag) && !/size="icon/.test(tag))
+      out.push({ path, line: i + 1, rule: "apps-ghost-in-footer", msg: 'Nút chữ kiểu ghost trong DialogFooter / CardFooter – nút phụ cạnh nút chính dùng variant="secondary" (xóa: danger-outline). Xem .claude/rules/nut-bam.md.', text: line.trim().slice(0, 160) });
     for (const r of RULES) {
       if (r.scope === "apps" && !inApps) continue;
       if (r.rawColor && rawColorAllowed) continue;

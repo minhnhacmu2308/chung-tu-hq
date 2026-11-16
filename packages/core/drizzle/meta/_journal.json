@@ -316,6 +316,13 @@
       "when": 1794763532128,
       "tag": "0044_customs_identifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1794815301700,
+      "tag": "0045_org_branding_avatars",
+      "breakpoints": true
     }
   ]
 }

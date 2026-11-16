@@ -58,7 +58,7 @@ export function VerifyEmailPage({ token }: { token: string }) {
         <Alert tone="danger" title={c.failed}>{errorText(verify.error, locale)}</Alert>
         <div className="flex flex-wrap gap-2">
           <Button type="button" onClick={() => mutate()}>{c.retry}</Button>
-          <Button asChild variant="ghost">
+          <Button asChild variant="secondary">
             <Link href="/login">{c.toLogin}</Link>
           </Button>
         </div>

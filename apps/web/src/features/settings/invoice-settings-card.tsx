@@ -95,7 +95,7 @@ export function InvoiceSettingsCard() {
           </Stack>
         </CardContent>
         <CardFooter>
-          <Button type="button" variant="ghost" disabled={!dirty} onClick={() => setDraft(saved)}>
+          <Button type="button" variant="secondary" disabled={!dirty} onClick={() => setDraft(saved)}>
             {m.undo}
           </Button>
           <Button type="submit" disabled={!canManage || !dirty || !parsed.success} loading={save.isPending}>{m.save}</Button>

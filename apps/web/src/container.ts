@@ -190,6 +190,8 @@ function build(): Container {
     const { from, to } = monthRange(now);
     return dossier.uow.asOrg({ orgId: asOrgId(orgId), userId: asUserId("") }, (r) => r.dossiers.statsInRange(orgId, from, to));
   };
+  // Logo doanh nghiệp + ảnh đại diện (ADR 0016): dùng chung kho file của dossier (MinIO/S3), identity chỉ biết port ImageStore.
+  identity.images = dossier.storage;
   // Mức dùng tháng của khách: chỉ hồ sơ + trang (giá vốn AI/HS/Customs là số nội bộ – chỉ khu Quản trị xem).
   identity.usage = async (orgId) => {
     const u = await dossierStats(orgId, systemClock.now());

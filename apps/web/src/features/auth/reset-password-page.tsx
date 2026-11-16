@@ -43,7 +43,7 @@ export function ResetPasswordPage({ token }: { token: string }) {
           <Button asChild>
             <Link href="/forgot-password">{t.requestNew}</Link>
           </Button>
-          <Button asChild variant="ghost">
+          <Button asChild variant="secondary">
             <Link href="/login">{c.toLogin}</Link>
           </Button>
         </AuthResult>

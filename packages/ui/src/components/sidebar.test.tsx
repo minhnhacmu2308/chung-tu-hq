@@ -224,3 +224,22 @@ describe("Sidebar – vị trí menu", () => {
     await expectNoA11yViolations(container);
   });
 });
+
+describe("Sidebar – logo + ảnh đại diện riêng", () => {
+  it("brand.logoSrc thay logo mặc định; SidebarUser avatarSrc hiện ảnh", async () => {
+    const { container } = render(
+      <Sidebar
+        brand={{ logo: <svg data-default />, name: "An Phát", logoSrc: "/api/org/logo?v=1" }}
+        items={[]}
+        collapsed={false}
+        onCollapsedChange={() => {}}
+        footer={<SidebarUser name="Lê Minh Châu" role="Quản trị" avatarSrc="/api/me/avatar?v=1" />}
+      />,
+    );
+    expect(container.querySelector("[data-default]")).toBeNull();
+    expect(container.querySelector('img[src="/api/org/logo?v=1"]')).toBeTruthy();
+    expect(screen.getByText("An Phát")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Lê Minh Châu/ })).toBeInTheDocument();
+    await expectNoA11yViolations(container);
+  });
+});

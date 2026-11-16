@@ -28,6 +28,7 @@ import {
   settingsKeys,
   updateOrganization,
 } from "@/api/settings";
+import { BrandCard } from "./brand-card";
 import { InvoiceSettingsCard } from "./invoice-settings-card";
 import { InvoiceTemplatesCard } from "./invoice-templates-card";
 import { ORG_TAB_MESSAGES } from "./org-tab.messages";
@@ -164,7 +165,7 @@ export function OrgTab() {
           <CardFooter>
             <Button
               type="button"
-              variant="ghost"
+              variant="secondary"
               disabled={!dirty}
               onClick={() => setDraft(saved)}
             >
@@ -180,6 +181,7 @@ export function OrgTab() {
           </CardFooter>
         </form>
       </Card>
+      <BrandCard />
       <InvoiceSettingsCard />
       <InvoiceTemplatesCard />
     </Stack>

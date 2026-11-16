@@ -97,8 +97,8 @@ function ConnectionRow({ c, onSync, onConnect, onDisconnect, onFilters, syncPend
             <Button size="sm" variant="secondary" leftIcon={<RefreshCw className="h-4 w-4" />} loading={c.status === "SYNCING" || syncPending} onClick={onSync}>{t.sync}</Button>
           )}
           {broken && <Button size="sm" leftIcon={<PlugZap className="h-4 w-4" />} onClick={onConnect}>{t.reconnect}</Button>}
-          {canDisconnect && <Button size="sm" variant="ghost" leftIcon={<Filter className="h-4 w-4" />} onClick={onFilters}>{tf.open}</Button>}
-          {canDisconnect && <Button size="sm" variant="ghost" leftIcon={<Unplug className="h-4 w-4" />} onClick={onDisconnect}>{t.disconnect}</Button>}
+          {canDisconnect && <Button size="sm" variant="secondary" leftIcon={<Filter className="h-4 w-4" />} onClick={onFilters}>{tf.open}</Button>}
+          {canDisconnect && <Button size="sm" variant="danger-outline" leftIcon={<Unplug className="h-4 w-4" />} onClick={onDisconnect}>{t.disconnect}</Button>}
         </div>
       )}
     </li>

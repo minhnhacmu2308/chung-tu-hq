@@ -82,6 +82,9 @@ export const InvoiceSettingsInputSchema = z.object({
   sellerName: optText(255),
 });
 export type InvoiceSettingsInput = z.infer<typeof InvoiceSettingsInputSchema>;
+/** Tên thương hiệu hiển thị (menu, tiêu đề tab); "" = về mặc định KhaiBáo AI. */
+export const OrgBrandInputSchema = z.object({ name: z.string().trim().max(60, "Tối đa 60 ký tự").transform((v) => (v === "" ? null : v)) });
+export type OrgBrandInput = z.input<typeof OrgBrandInputSchema>;
 export const FourEyesInputSchema = z.object({ enabled: z.boolean() });
 
 const NonOwnerRole = RoleSchema.exclude(["OWNER"]);

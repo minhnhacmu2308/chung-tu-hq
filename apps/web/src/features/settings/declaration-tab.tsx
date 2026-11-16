@@ -124,7 +124,7 @@ function OverrideDialog({ rule, current, open, onOpenChange, onSave, saving }: {
           )}
         </Stack>
         <DialogFooter>
-          {current && <Button type="button" variant="ghost" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => onSave(null)}>{t.resetDefault}</Button>}
+          {current && <Button type="button" variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => onSave(null)}>{t.resetDefault}</Button>}
           <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>{t.cancel}</Button>
           <Button type="submit" disabled={!canSave} loading={saving}>{t.save}</Button>
         </DialogFooter>

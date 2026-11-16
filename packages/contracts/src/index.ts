@@ -23,3 +23,4 @@ export * from "./amount-in-words.js";
 export * from "./invoice-numbering.js";
 export * from "./kvgs/index.js";
 export * from "./line-merge.js";
+export * from "./image-type.js";

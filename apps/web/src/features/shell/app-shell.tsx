@@ -13,6 +13,7 @@ import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { adminKeys, getAdminSession } from "@/api/admin";
 import { dossierKeys, listDossiers } from "@/api/dossiers";
 import { inboxKeys, listInbox } from "@/api/mailbox";
+import { memberAvatarSrc, orgLogoSrc } from "@/api/branding";
 import { getSession, listNotifications, logout, resetMockData, resetMockDataEmptyCatalog, sessionKeys } from "@/api/session";
 import { dataSource } from "@/lib/data-source";
 import { ChangePasswordScreen } from "@/components/common/change-password-screen";
@@ -22,6 +23,7 @@ import { InstallAppMenuItem } from "@/features/pwa/install-app";
 import { useAppearance } from "@/features/appearance/use-appearance";
 import { useAssistantChat } from "@/features/assistant/use-assistant-chat";
 import { NotificationsPanel } from "./notifications-panel";
+import { OrgFavicon } from "./org-favicon";
 import { SHELL_MESSAGES } from "./shell.messages";
 import { usePageTitle } from "./use-page-title";
 import { ROLE_LABELS } from "@/mocks/types";
@@ -76,12 +78,15 @@ function useNav(): { items: NavItem[]; activeId: string | undefined } {
 function ShellInner({ children }: { children: ReactNode }) {
   const t = useMessages(SHELL_MESSAGES);
   const roleLabels = useMessages(ROLE_LABELS);
-  usePageTitle();
   const router = useRouter();
   const qc = useQueryClient();
   const { appearance, setAppearance, adjustments } = useAppearance();
   const { items, activeId } = useNav();
   const { data: session } = useQuery({ queryKey: sessionKeys.me, queryFn: getSession });
+  // Thương hiệu doanh nghiệp (ADR 0016) – chỉ trong khung sau đăng nhập; trang đăng nhập giữ KhaiBáo AI.
+  const brandName = session?.org.brand.name ?? null;
+  const logoSrc = orgLogoSrc(session?.org);
+  usePageTitle(brandName);
   const { data: notifications } = useQuery({ queryKey: sessionKeys.notifications, queryFn: listNotifications });
   const unread = notifications?.filter((n) => !n.read).length ?? 0;
 
@@ -164,10 +169,11 @@ function ShellInner({ children }: { children: ReactNode }) {
 
   return (
     <div className={menuOnTop ? "flex min-h-dvh flex-col" : "flex min-h-dvh"}>
+      <OrgFavicon href={logoSrc} />
       <Sidebar
         position={menu}
         {...(menuOnTop ? {} : { className: "sticky top-0" })}
-        brand={{ logo: <BrandMark small decorative className="h-6 w-6" />, name: BRAND, href: "/" }}
+        brand={{ logo: <BrandMark small decorative className="h-6 w-6" />, name: brandName ?? BRAND, href: "/", logoSrc }}
         items={items}
         activeId={activeId}
         collapsed={collapsed}
@@ -186,7 +192,7 @@ function ShellInner({ children }: { children: ReactNode }) {
             <SidebarFooterButton icon={<SunMoon />} label={t.appearance} trailing={<BrandDot />} onClick={() => setAppearanceOpen(true)} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarUser name={session?.user.name ?? "…"} role={session ? roleLabels[session.user.role] : ""} />
+                <SidebarUser name={session?.user.name ?? "…"} role={session ? roleLabels[session.user.role] : ""} avatarSrc={memberAvatarSrc(session?.user)} />
               </DropdownMenuTrigger>
               {/* Ngăn menu trên mobile: bên cạnh không đủ chỗ (menu bị cắt khỏi màn) → mở lên trên. */}
               <DropdownMenuContent side={mobileNav ? "top" : menuOnTop ? "bottom" : menu === "right" ? "left" : "right"} align="end">

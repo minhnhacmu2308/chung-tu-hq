@@ -50,9 +50,10 @@ Các nút đứng cùng một hàng phải cùng size. Ô nhập và nút trong 
 | Sai | Đúng |
 |---|---|
 | `variant="ghost"` cho Hủy / Đóng / Quay lại / Để sau (lint `apps-ghost-cancel` chặn, kể cả nút viết nhiều dòng, bọc `<Link>`, nút có `leftIcon={<ArrowLeft />}`) | `variant="secondary"` |
+| Nút chữ `ghost` trong `DialogFooter` / `CardFooter` hoặc cạnh nút chính (Bỏ qua, Khôi phục, Hoàn tác, Đặt lại, Ở lại, Tạo mới từ…) – lint `apps-ghost-in-footer` chặn phần nằm trong footer | `secondary`; ngắt kết nối / gỡ → `danger-outline` / `danger-ghost` |
 | Hai nút `primary` cạnh nhau | Một `primary`, còn lại `secondary` |
 | Nút xóa `ghost`/`secondary` xám, hoặc tự thêm `text-danger` | `danger-outline` / `danger-ghost` |
 | `<button>` thô, `className` đổi màu/nền/bo góc của `Button` | Chọn đúng `variant`; thiếu thì thêm variant vào `@kb/ui` |
 | Ô nhập cao 40px đứng cạnh ô 32px trong cùng dòng bảng | `Combobox size="sm"` / `Input className="h-8"` |
 
-Máy chưa bắt được (review phải soát): hai nút chính trong một vùng; thứ tự nút sai; nút phụ cạnh nút chính dùng `ghost`; nút cùng hàng khác size; ô nhập lệch chiều cao trong bảng.
+Máy chưa bắt được (review phải soát): hai nút chính trong một vùng; thứ tự nút sai; nút phụ cạnh nút chính dùng `ghost` ở **ngoài** footer (thanh hành động, khối gợi ý); nút cùng hàng khác size; ô nhập lệch chiều cao trong bảng.

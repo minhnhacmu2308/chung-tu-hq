@@ -87,10 +87,12 @@ export type MockDb = {
   admin: AdminDb;
   /** Gói & lượt (ADR 0011): sổ lượt, thanh toán PayOS giả, hợp đồng năm – của mọi doanh nghiệp. */
   billing: MockBilling;
+  /** Logo doanh nghiệp + ảnh đại diện (ADR 0016) dạng data URL – backend thật để ở kho file. Khóa `logo` / `avatar:<userId>`. */
+  images?: Record<string, string>;
 };
 
 /** Tăng khi đổi cấu trúc seed → dữ liệu cũ trong localStorage tự bị bỏ. */
-const DB_VERSION = 50;
+const DB_VERSION = 51;
 const STORAGE_KEY = "kb-mock-db";
 
 function createSeed(): MockDb {

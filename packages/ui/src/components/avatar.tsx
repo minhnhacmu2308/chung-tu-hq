@@ -12,7 +12,7 @@ const MESSAGES = {
 const avatarVariants = cva(
   "relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-subtle font-semibold text-primary-subtle-fg",
   {
-    variants: { size: { sm: "h-6 w-6 text-xs", md: "h-8 w-8 text-xs", lg: "h-10 w-10 text-sm" } },
+    variants: { size: { sm: "h-6 w-6 text-xs", md: "h-8 w-8 text-xs", lg: "h-10 w-10 text-sm", xl: "h-16 w-16 text-lg" } },
     defaultVariants: { size: "md" },
   },
 );

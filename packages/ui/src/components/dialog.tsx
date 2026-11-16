@@ -384,8 +384,9 @@ export function DialogFooter({ className, ...props }: ComponentProps<"div">) {
         // sticky tính "đáy" từ mép trong phần đệm của vùng cuộn (py-5) → -bottom-5 để chân popup nằm đúng đáy,
         // không bị đẩy lên đè khoảng cách với ô cuối (lỗi cũ: ô nhập cuối dính sát đường kẻ).
         // z-30: trên tiêu đề dính (z-10/z-20) của bảng con trong popup khi cuộn.
-        // Nhãn dài (vi/zh) hoặc popup hẹp: nút xuống dòng; vùng rất hẹp thì xếp dọc, nút chính ở trên, rộng hết.
-        "sticky -bottom-5 z-30 -mx-6 -mb-5 mt-auto flex flex-wrap justify-end gap-2 cq-max-sm:flex-col-reverse cq-max-sm:*:w-full rounded-b-lg border-t border-border bg-surface px-6 py-4",
+        // Nhãn dài (vi/zh) hoặc popup hẹp: nút xuống dòng; chỉ vùng rất hẹp (< 24rem, điện thoại) mới xếp dọc, nút chính ở trên, rộng hết
+        // – popup xác nhận (~32rem) vẫn để 2 nút cùng hàng.
+        "sticky -bottom-5 z-30 -mx-6 -mb-5 mt-auto flex flex-wrap justify-end gap-2 cq-max-xs:flex-col-reverse cq-max-xs:*:w-full rounded-b-lg border-t border-border bg-surface px-6 py-4",
         // Nội dung cuộn dưới chân popup mờ dần thay vì bị cắt cụt ngay đường kẻ.
         // Lớp mờ nằm ngay trên đường kẻ (-translate-y-px: không che border-t).
         "before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:-translate-y-px before:bg-gradient-to-t before:from-surface before:to-transparent",

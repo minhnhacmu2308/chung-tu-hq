@@ -117,7 +117,7 @@ function ComposeInner() {
       />
       {problem && <Alert tone="danger">{problem}</Alert>}
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-        <Button variant="ghost" leftIcon={<Save className="h-4 w-4" />} loading={saveTpl.isPending} disabled={draft.blocks.length === 0} onClick={() => saveTpl.mutate(undefined)}>{t.saveAsTemplate}</Button>
+        <Button variant="secondary" leftIcon={<Save className="h-4 w-4" />} loading={saveTpl.isPending} disabled={draft.blocks.length === 0} onClick={() => saveTpl.mutate(undefined)}>{t.saveAsTemplate}</Button>
         <Button variant="secondary" leftIcon={<FlaskConical className="h-4 w-4" />} loading={test.isPending} disabled={draft.blocks.length === 0 || !draft.subject.trim()} onClick={() => test.mutate()}>{t.sendTest}</Button>
         <Button leftIcon={<Send className="h-4 w-4" />} disabled={count === 0} onClick={check}>{count ? fill(t.sendN, { n: count }) : t.send}</Button>
       </div>

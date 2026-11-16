@@ -28,6 +28,9 @@ export const CERTIFICATES_TAB_MESSAGES = defineMessages({
     expiresOn: "hết hạn {date}",
     makeDefault: "Đặt mặc định",
     remove: "Gỡ",
+    removeTitle: "Gỡ chứng thư số?",
+    removeBody: "Chứng thư này sẽ không còn dùng để ký tờ khai. Muốn dùng lại phải thêm lại.",
+    keep: "Giữ lại",
   },
   en: {
     expired: "Expired",
@@ -56,6 +59,9 @@ export const CERTIFICATES_TAB_MESSAGES = defineMessages({
     expiresOn: "expires {date}",
     makeDefault: "Set as default",
     remove: "Remove",
+    removeTitle: "Remove digital certificate?",
+    removeBody: "This certificate will no longer be used to sign declarations. To use it again you must add it back.",
+    keep: "Keep",
   },
   zh: {
     expired: "已过期",
@@ -84,5 +90,8 @@ export const CERTIFICATES_TAB_MESSAGES = defineMessages({
     expiresOn: "{date} 到期",
     makeDefault: "设为默认",
     remove: "移除",
+    removeTitle: "移除数字证书？",
+    removeBody: "该证书将不再用于签署报关单。如需再次使用，须重新添加。",
+    keep: "保留",
   },
 });

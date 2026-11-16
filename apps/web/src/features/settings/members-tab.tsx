@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 // kb-allow-raw: menu của thành viên có nhóm radio chọn vai trò – RowActions chỉ nhận thao tác bấm-là-chạy
 import { Crown, MoreHorizontal, UserPlus } from "lucide-react";
 import { useMemo, useState } from "react";
+import { memberAvatarSrc } from "@/api/branding";
 import { getSession, sessionKeys } from "@/api/session";
 import { changeMemberRole, inviteMember, listMembers, setMemberDisabled, settingsKeys } from "@/api/settings";
 import { formatRelative } from "@/lib/format";
@@ -162,7 +163,7 @@ export function MembersTab() {
           meta: { hideable: false },
           cell: (c) => (
             <div className="flex items-center gap-3">
-              <Avatar name={c.getValue()} size="sm" />
+              <Avatar name={c.getValue()} src={memberAvatarSrc(c.row.original)} size="sm" />
               <div className="min-w-0">
                 <p className="font-medium text-fg">
                   {c.getValue()} {c.row.original.id === meId && <span className="text-xs text-fg-subtle">{t.you}</span>}

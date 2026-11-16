@@ -142,7 +142,7 @@ export function MailFiltersDialog({ connection, onOpenChange }: { connection: Ma
             {save.isError && <Alert tone="danger">{save.error.message}</Alert>}
           </Stack>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setDraft(toDraft(DEFAULT_MAIL_FILTERS))}>{t.reset}</Button>
+            <Button type="button" variant="secondary" onClick={() => setDraft(toDraft(DEFAULT_MAIL_FILTERS))}>{t.reset}</Button>
             <DialogClose asChild>
               <Button type="button" variant="secondary">{t.cancel}</Button>
             </DialogClose>

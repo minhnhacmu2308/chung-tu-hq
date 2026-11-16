@@ -14,6 +14,7 @@ import {
 } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
+import { Avatar } from "./avatar.js";
 import { Tooltip } from "./tooltip.js";
 
 const MESSAGES = {
@@ -42,7 +43,8 @@ const SidebarContext = createContext<Ctx>({ collapsed: false, tooltipSide: "righ
 export const useSidebar = () => useContext(SidebarContext);
 
 export type SidebarProps = {
-  brand: { logo: ReactNode; name: ReactNode; href?: string };
+  /** `logoSrc`: ảnh logo riêng của doanh nghiệp (thay `logo` – nền trắng, ảnh vừa khung, không tô màu thương hiệu). */
+  brand: { logo: ReactNode; name: ReactNode; href?: string; logoSrc?: string | undefined };
   items: readonly NavItem[];
   activeId?: string | undefined;
   collapsed: boolean;
@@ -154,7 +156,7 @@ export function Sidebar({
     return (
       <>
         <div className={cn("flex h-14 items-center gap-2.5 px-3", c && "justify-center px-0")}>
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-fg">{brand.logo}</span>
+          <BrandLogo brand={brand} />
           {!c && <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">{brand.name}</span>}
           {mobile && (
             <DialogPrimitive.Close
@@ -253,7 +255,7 @@ export function Sidebar({
         <header data-slot="app-menu" data-position="top" className={cn("sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3 md:px-4", className)}>
           {hasMobile && <SidebarMobileTrigger onClick={() => onMobileOpenChange?.(true)} expanded={mobileOpen} label={l.openMenu} />}
           <div className="flex shrink-0 items-center gap-2.5 pr-2">
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-fg">{brand.logo}</span>
+            <BrandLogo brand={brand} />
             <span className="truncate text-sm font-semibold text-fg">{brand.name}</span>
           </div>
           <nav aria-label={l.nav} className="hidden min-w-0 flex-1 md:block">
@@ -406,9 +408,10 @@ export function SidebarFooterButton({ icon, label, trailing, className, ...rest 
   return collapsed ? <Tooltip content={label} side={tooltipSide}>{btn}</Tooltip> : btn;
 }
 
-export type SidebarUserProps = Omit<ComponentProps<"button">, "children"> & { name: string; role?: string; initials?: string };
+/** `avatarSrc`: ảnh đại diện (lỗi tải / chưa có → chữ viết tắt). */
+export type SidebarUserProps = Omit<ComponentProps<"button">, "children"> & { name: string; role?: string; initials?: string; avatarSrc?: string | undefined };
 
-export function SidebarUser({ name, role, initials, className, ...rest }: SidebarUserProps) {
+export function SidebarUser({ name, role, initials, avatarSrc, className, ...rest }: SidebarUserProps) {
   const { collapsed, tooltipSide } = useSidebar();
   const ini =
     initials ??
@@ -425,9 +428,15 @@ export function SidebarUser({ name, role, initials, className, ...rest }: Sideba
       aria-label={collapsed ? `${name}${role ? `, ${role}` : ""}` : undefined}
       className={cn(itemBase, "py-1.5", collapsed && "justify-center px-0", className)}
     >
-      <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-xs font-semibold text-primary-subtle-fg">
-        {ini}
-      </span>
+      {avatarSrc ? (
+        <span aria-hidden="true" className="inline-flex shrink-0">
+          <Avatar name={name} src={avatarSrc} initials={ini} className="h-7 w-7" />
+        </span>
+      ) : (
+        <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-subtle text-xs font-semibold text-primary-subtle-fg">
+          {ini}
+        </span>
+      )}
       {!collapsed && (
         <>
           <span className="flex min-w-0 flex-1 flex-col text-left">
@@ -440,6 +449,16 @@ export function SidebarUser({ name, role, initials, className, ...rest }: Sideba
     </button>
   );
   return collapsed ? <Tooltip content={name} side={tooltipSide}>{btn}</Tooltip> : btn;
+}
+
+function BrandLogo({ brand }: { brand: SidebarProps["brand"] }) {
+  return brand.logoSrc ? (
+    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface">
+      <img src={brand.logoSrc} alt="" className="h-full w-full object-contain" />
+    </span>
+  ) : (
+    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-fg">{brand.logo}</span>
+  );
 }
 
 /** Chấm màu thương hiệu hiện tại (đọc từ token, tự đổi theo cấu hình). */

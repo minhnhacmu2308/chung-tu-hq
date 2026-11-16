@@ -10,6 +10,8 @@ export const MemberSchema = z.object({
   role: RoleSchema,
   status: z.enum(["ACTIVE", "INVITED", "DISABLED"]),
   lastActiveAt: IsoDateTimeSchema.optional(),
+  /** Lần đổi ảnh đại diện (ISO) – dùng làm `?v=` của URL ảnh; null/thiếu = chưa có ảnh (hiện chữ viết tắt). */
+  avatarVersion: IsoDateTimeSchema.nullable().optional(),
 });
 export type Member = z.infer<typeof MemberSchema>;
 
@@ -38,6 +40,11 @@ export const OrganizationSchema = z.object({
   fourEyes: z.boolean(),
   /** Cài đặt hóa đơn thương mại xuất khẩu: mẫu số, người ký mặc định, tên người bán in trên hóa đơn. */
   invoiceSettings: z.object({ numbering: InvoiceNumberingSchema, signatoryName: z.string().nullable(), signatoryTitle: z.string().nullable(), sellerName: z.string().nullable() }),
+  /**
+   * Thương hiệu hiển thị sau đăng nhập (ADR 0016): tên thay "KhaiBáo AI" ở menu + tiêu đề tab; logo thay BrandMark + favicon.
+   * `logoVersion` = thời điểm đổi logo (ISO) – dùng làm `?v=` của URL ảnh; null = chưa có logo.
+   */
+  brand: z.object({ name: z.string().nullable(), logoVersion: IsoDateTimeSchema.nullable() }),
 });
 export type Organization = z.infer<typeof OrganizationSchema>;
 

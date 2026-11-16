@@ -45,7 +45,7 @@ export function UnsavedDialog({ open, title, count, leaving = false, saving, onS
           }}
         >
           <DialogFooter>
-            {!leaving && <Button type="button" variant="ghost" disabled={saving} onClick={onStay}>{t.stay}</Button>}
+            {!leaving && <Button type="button" variant="secondary" disabled={saving} onClick={onStay}>{t.stay}</Button>}
             <Button type="button" variant="secondary" disabled={saving} onClick={onDiscard}>{t.discard}</Button>
             <Button type="submit" loading={saving} autoFocus>{t.save}</Button>
           </DialogFooter>

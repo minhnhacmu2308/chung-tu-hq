@@ -23,6 +23,9 @@ describe("check-design-tokens", () => {
     assert.deepEqual(rules("apps/web/a.tsx", `<Button asChild variant="ghost">\n  <Link href={h}>\n    <ArrowLeft />\n    {t.backToCard}`), ["apps-ghost-cancel"]);
     assert.deepEqual(rules("apps/web/a.tsx", `<Button variant="ghost" leftIcon={<ArrowLeft className="h-4 w-4" />} onClick={x}>`), ["apps-ghost-cancel"]);
     assert.deepEqual(rules("apps/web/a.tsx", `<Button variant="secondary">{t.later}</Button>`), []);
+    assert.deepEqual(rules("apps/web/a.tsx", `<DialogFooter>\n  <Button variant="ghost" onClick={x}>{t.ignore}</Button>\n  <Button>{t.save}</Button>\n</DialogFooter>`), ["apps-ghost-in-footer"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<CardFooter>\n  <Button\n    type="button"\n    variant="ghost"\n    onClick={x}\n  >\n    {m.undo}\n  </Button>\n</CardFooter>`), ["apps-ghost-in-footer"]);
+    assert.deepEqual(rules("apps/web/a.tsx", `<CardFooter>\n  <Button size="icon" variant="ghost" aria-label={t.more} />\n</CardFooter>\n<Button variant="ghost">{t.addRow}</Button>`), []);
     assert.deepEqual(rules("apps/web/a.tsx", `<Button variant="ghost">{t.addRow}</Button>`), []);
   });
 

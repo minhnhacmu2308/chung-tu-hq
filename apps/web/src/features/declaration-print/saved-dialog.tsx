@@ -38,7 +38,7 @@ export function SavedDialog({ open, title, onExit, onStay, onClosed }: Props) {
           }}
         >
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onStay}>{t.stay}</Button>
+            <Button type="button" variant="secondary" onClick={onStay}>{t.stay}</Button>
             <Button type="submit" autoFocus>{t.exitPanel}</Button>
           </DialogFooter>
         </form>

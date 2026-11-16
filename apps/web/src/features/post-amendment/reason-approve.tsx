@@ -121,7 +121,7 @@ export function ReasonApprove({ ctx }: { ctx: AmaStepCtx }) {
         </div>
         {pending.length > 0 ? (
           <>
-            <Button variant="ghost" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => setDraft(saved)}>
+            <Button variant="secondary" leftIcon={<Undo2 className="h-4 w-4" />} disabled={save.isPending} onClick={() => setDraft(saved)}>
               {t.undo}
             </Button>
             <Button leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} onClick={() => save.mutate(pending)}>

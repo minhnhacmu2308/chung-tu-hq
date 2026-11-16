@@ -70,7 +70,7 @@ export function ChangePasswordScreen() {
                 <Input type="password" autoComplete="new-password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
               </Field>
               <Button type="submit" fullWidth loading={change.isPending}>{t.submit}</Button>
-              <Button type="button" variant="ghost" fullWidth onClick={signOut}>{t.signOut}</Button>
+              <Button type="button" variant="secondary" fullWidth onClick={signOut}>{t.signOut}</Button>
             </Stack>
           </form>
         </CardContent>

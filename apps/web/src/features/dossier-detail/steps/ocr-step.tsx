@@ -449,7 +449,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
             {blockers > 0 && <li>{fill(t.confirmBlockers, { n: blockers })}</li>}
           </ul>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
               {t.reviewAgain}
             </Button>
             <Button

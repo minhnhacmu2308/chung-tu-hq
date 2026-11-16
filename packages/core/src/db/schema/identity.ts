@@ -31,6 +31,10 @@ export const organizations = pgTable(
     suspendedReason: text("suspended_reason"),
     /** Lần đổi gói gần nhất (PAYG ↔ CONTRACT); null = từ lúc tạo doanh nghiệp. */
     planStartedAt: timestamp("plan_started_at", { withTimezone: true }),
+    /** Thương hiệu sau đăng nhập (ADR 0016): tên thay "KhaiBáo AI"; logo nằm ở kho file (`logo_key`), không trong DB. null = mặc định. */
+    brandName: text("brand_name"),
+    logoKey: text("logo_key"),
+    logoUpdatedAt: timestamp("logo_updated_at", { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [
@@ -58,6 +62,9 @@ export const users = pgTable(
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     /** Tài khoản do quản trị KhaiBáo AI tạo hộ bằng mật khẩu tạm → bắt đổi mật khẩu ở lần đăng nhập đầu. */
     mustChangePassword: boolean("must_change_password").notNull().default(false),
+    /** Ảnh đại diện ở kho file (ADR 0016); null = hiện chữ viết tắt. */
+    avatarKey: text("avatar_key"),
+    avatarUpdatedAt: timestamp("avatar_updated_at", { withTimezone: true }),
     ...timestamps(),
   },
   (t) => [

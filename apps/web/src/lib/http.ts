@@ -55,4 +55,4 @@ export const apiPost = <T>(path: string, body: unknown, schema?: ZodType<T>) => 
 export const apiPut = <T>(path: string, body: unknown, schema?: ZodType<T>) => request<T>("PUT", path, json(body), schema);
 export const apiPatch = <T>(path: string, body: unknown, schema?: ZodType<T>) => request<T>("PATCH", path, json(body), schema);
 export const apiDelete = <T>(path: string, schema?: ZodType<T>) => request<T>("DELETE", path, {}, schema);
-export const apiUpload = <T>(path: string, form: FormData, schema?: ZodType<T>) => request<T>("POST", path, { body: form }, schema);
+export const apiUpload = <T>(path: string, form: FormData, schema?: ZodType<T>, method: "POST" | "PUT" = "POST") => request<T>(method, path, { body: form }, schema);

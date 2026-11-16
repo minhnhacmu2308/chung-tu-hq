@@ -234,7 +234,7 @@ export function PostAmendmentStep({ dossier }: StepProps) {
           >
             <p className="text-sm text-fg-muted">{t.leaveBody}</p>
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => setLeaveTo(null)}>
+              <Button type="button" variant="secondary" onClick={() => setLeaveTo(null)}>
                 {t.stay}
               </Button>
               <Button type="submit" variant="danger">

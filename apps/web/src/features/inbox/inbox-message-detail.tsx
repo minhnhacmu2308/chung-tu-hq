@@ -84,10 +84,10 @@ export function InboxMessageDetail({ m, actions, onOpenChange }: { m: InboxMessa
               <Button variant="danger-outline" className="mr-auto" leftIcon={<Trash2 className="h-4 w-4" />} onClick={() => actions.onDelete([m])}>{t.delete}</Button>
             )}
             {actions.canUse && m.status === "NEW" && (
-              <Button variant="ghost" leftIcon={<EyeOff className="h-4 w-4" />} onClick={() => actions.onSetStatus(m, "IGNORED")}>{t.ignore}</Button>
+              <Button variant="secondary" leftIcon={<EyeOff className="h-4 w-4" />} onClick={() => actions.onSetStatus(m, "IGNORED")}>{t.ignore}</Button>
             )}
             {actions.canUse && m.status === "IGNORED" && (
-              <Button variant="ghost" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => actions.onSetStatus(m, "NEW")}>{t.restore}</Button>
+              <Button variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => actions.onSetStatus(m, "NEW")}>{t.restore}</Button>
             )}
             <Button variant="secondary" onClick={() => onOpenChange(false)}>{t.close}</Button>
           </DialogFooter>
@@ -157,7 +157,7 @@ function DetailBody({ m, actions }: { m: InboxMessage; actions: InboxActions }) 
               <Button size="sm" variant={s ? "secondary" : "primary"} {...(s ? {} : { leftIcon: <FolderInput className="h-4 w-4" /> })} onClick={() => actions.onAddTo(m)}>
                 {t.addToDossier}
               </Button>
-              <Button size="sm" variant="ghost" leftIcon={<FilePlus2 className="h-4 w-4" />} onClick={() => actions.onCreateDossier(m)}>
+              <Button size="sm" variant="secondary" leftIcon={<FilePlus2 className="h-4 w-4" />} onClick={() => actions.onCreateDossier(m)}>
                 {t.createDossier}
               </Button>
             </div>

@@ -10,6 +10,7 @@ export function toMember(u: UserRow, m: MembershipRow, lastSeen?: Date): Member 
     role: m.role,
     status: m.status,
     ...(lastSeen ? { lastActiveAt: lastSeen.toISOString() } : {}),
+    avatarVersion: u.avatarKey && u.avatarUpdatedAt ? u.avatarUpdatedAt.toISOString() : null,
   };
 }
 
@@ -37,5 +38,6 @@ export function toOrganization(o: OrgRow, plan: PlanRow | null, billing?: Organi
     suspectThreshold: o.suspectThreshold as Organization["suspectThreshold"],
     fourEyes: o.fourEyes,
     invoiceSettings: { numbering: numberingFromColumns(o.invoiceNumberPattern, o.invoiceNumberReset), signatoryName: o.invoiceSignatoryName ?? null, signatoryTitle: o.invoiceSignatoryTitle ?? null, sellerName: o.invoiceSellerName ?? null },
+    brand: { name: o.brandName ?? null, logoVersion: o.logoKey && o.logoUpdatedAt ? o.logoUpdatedAt.toISOString() : null },
   };
 }

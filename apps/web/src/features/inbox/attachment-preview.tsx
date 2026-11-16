@@ -52,7 +52,7 @@ export function AttachmentPreviewDialog({ attachment, onOpenChange }: { attachme
               </Button>
             ) : (
               file.status === "ready" && (
-                <Button variant="ghost" asChild>
+                <Button variant="secondary" asChild>
                   <a href={file.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" aria-hidden="true" />{t.openNewTab}</a>
                 </Button>
               )

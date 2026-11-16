@@ -19,9 +19,9 @@ test("AI Agent chạy → xác nhận HS → Review tờ khai (chỉ tiêu + ngu
   }
   await page.getByRole("button", { name: "Sang Review tờ khai" }).click();
   await expect(page).toHaveURL(/step=review/);
-  // Tờ khai đầy đủ (Phụ lục II): MST người nhập khẩu lấy từ tài khoản – ô 1.12, nhóm Đơn vị xuất nhập khẩu.
-  await page.goto(`/dossiers/${id}?step=review&tab=full&nhom=cac-ben`);
-  await expect(page.getByRole("textbox", { name: /^1\.12/ })).toHaveValue("0316789012");
+  // Tờ khai dạng bản in VNACCS: MST người nhập khẩu lấy từ tài khoản – ô 1.12 (TK_IMC, khối Người nhập khẩu).
+  await page.goto(`/dossiers/${id}?step=review&tab=full`);
+  await expect(page.locator('[data-print-cell=":TK_IMC"]')).toContainText("0316789012");
 
   await fillManualFields(page, id);
 

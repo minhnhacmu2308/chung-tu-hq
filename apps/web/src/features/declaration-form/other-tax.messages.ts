@@ -14,6 +14,7 @@ export const OTHER_TAX_MESSAGES = defineMessages({
     groupHeader: "Loại thuế",
     confirm: "Xác nhận",
     confirmAria: "Xác nhận mã GTGT {code} là đúng",
+    pickHint: "Ô trống: chọn loại thuế cần thêm cho dòng hàng, rồi chọn mã. Bản in tự xếp lại theo thứ tự CBPG → PBĐX → TTĐB → BVMT → GTGT.",
   },
   en: {
     CBPG: "CBPG (safeguard, countervailing, anti-dumping)",
@@ -26,6 +27,7 @@ export const OTHER_TAX_MESSAGES = defineMessages({
     groupHeader: "Tax type",
     confirm: "Confirm",
     confirmAria: "Confirm VAT code {code} is correct",
+    pickHint: "Empty box: choose the tax type to add to this line, then pick the code. The printout reorders taxes automatically (CBPG → anti-discrimination → special consumption → environmental → VAT).",
   },
   zh: {
     CBPG: "CBPG（保障措施、反补贴、反倾销）",
@@ -38,6 +40,7 @@ export const OTHER_TAX_MESSAGES = defineMessages({
     groupHeader: "税种",
     confirm: "确认",
     confirmAria: "确认增值税代码 {code} 正确",
+    pickHint: "空白栏：先选择要为该行添加的税种，再选择代码。打印件会自动按 CBPG → 反歧视 → 特别消费税 → 环境保护税 → 增值税 的顺序排列。",
   },
 });
 

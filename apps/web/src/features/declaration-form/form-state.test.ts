@@ -1,6 +1,6 @@
-import { LAYOUT_EDA, LAYOUT_IDA, type DeclarationLayout, type LayoutSection } from "@kb/contracts";
+import { LAYOUT_EDA, type LayoutSection } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { choiceControl, conditionContext, toggleChoice, groupMissing, isApplicable, itemProgress, missingRequired, sectionProgress, type FormValues } from "./form-state";
+import { choiceControl, conditionContext, toggleChoice, groupMissing, isApplicable, missingRequired, type FormValues } from "./form-state";
 
 // Bố cục nhỏ dựng trong test: 1.4 bắt buộc, 1.10 theo tình huống tạm nhập, nhóm phương tiện có hô hiệu theo đường biển, 5 vận đơn.
 const SECTION: LayoutSection = {
@@ -16,31 +16,12 @@ const SECTION: LayoutSection = {
     },
   ],
 };
-const base: FormValues = { TK_ICB: "A11", TK_MTC: "1", VD_BL1: "618-58265281" };
 
 describe("conditionContext", () => {
   it("lấy loại hình theo mẫu, điều kiện giá viết hoa, có hóa đơn khi có số và không phải loại B", () => {
     expect(conditionContext("EDA", { TK_ECB: "B11", TK_IP2: "fob", TK_IV1: "A", TK_IV3: "X" })).toEqual({ typeCode: "B11", incoterm: "FOB", hasInvoice: true, transportCode: "", identMode: "", hawbIssued: false, splitCargo: "", manualValue: false, invoiceKind: "A" });
     expect(conditionContext("IDA", { APP_TGTT_TAY: "1" }).manualValue).toBe(true);
     expect(conditionContext("IDA", { TK_ICB: "G12", TK_MTC: "2", TK_IV1: "B", TK_IV3: "X" })).toMatchObject({ typeCode: "G12", transportCode: "2", hasInvoice: false });
-  });
-});
-
-describe("sectionProgress", () => {
-  it("A11 đường không: 1.10 và hô hiệu không áp dụng, không vào tổng; ô Hải quan không tính; nhóm lặp chỉ tính dòng 1", () => {
-    // Áp dụng: TK_ICB, VD_VSN, VD_BL1 → 3; đã nhập: TK_ICB, VD_BL1 → 2. VD_VSN (tên phương tiện) FPT bắt buộc → thiếu 1.
-    expect(sectionProgress("IDA", SECTION, base)).toEqual({ filled: 2, total: 3, missingRequired: 1 });
-  });
-  it("đổi sang tạm nhập G12 → 1.10 vào tổng và là ô bắt buộc còn thiếu", () => {
-    expect(sectionProgress("IDA", SECTION, { ...base, TK_ICB: "G12" })).toEqual({ filled: 2, total: 4, missingRequired: 2 });
-  });
-  it("ô có giá trị nhưng không còn áp dụng không làm đã nhập vượt tổng", () => {
-    const p = sectionProgress("IDA", SECTION, { ...base, TK_RED: "2027-01-31" });
-    expect(p.filled).toBeLessThanOrEqual(p.total);
-    expect(p).toEqual({ filled: 2, total: 3, missingRequired: 1 });
-  });
-  it("đường biển → hô hiệu áp dụng", () => {
-    expect(sectionProgress("IDA", SECTION, { ...base, TK_MTC: "2" }).total).toBe(4);
   });
 });
 
@@ -56,27 +37,9 @@ describe("missingRequired / isApplicable", () => {
   });
 });
 
-describe("itemProgress", () => {
-  const layout = { kind: "IDA", summary: [], declarant: [], customs: [], item: { columns: [], customs: [], declarant: [{ id: "h", title: "H", items: [
-    { kind: "field", key: "HAG_CMD", label: "HS", no: "1.74", input: "code" },
-    { kind: "field", key: "HAG_CMN", label: "Mô tả", no: "1.78", input: "textarea" },
-    { kind: "field", key: "HAG_GZC", label: "Mã quản lý riêng", no: "1.75", input: "text" },
-  ] }] } } as DeclarationLayout;
-  it("đếm ô bắt buộc còn thiếu của dòng hàng", () => {
-    expect(itemProgress("IDA", layout, { HAG_CMD: "22083090" })).toEqual({ missing: 1 });
-    expect(itemProgress("IDA", layout, { HAG_CMD: "22083090", HAG_CMN: "Rượu" })).toEqual({ missing: 0 });
-  });
-});
-
-describe("review: bộ đếm khớp với ô, không báo thiếu ô không áp dụng", () => {
+describe("review: không báo thiếu ô không áp dụng", () => {
   const eda = LAYOUT_EDA.declarant.find((s) => s.id === "van-chuyen")!;
   const base: FormValues = { TK_ECB: "B11", TK_MTC: "2", TK_EKN: "X", TK_NO: "1", TK_NOT: "PK", TK_GW: "1", TK_GWT: "KGM", TK_ST: "06B1A04", TK_DSC: "SGSIN", TK_DSN: "SINGAPORE", TK_PSC: "VNSGN", TK_SYM: "2026-09-12", TK_VSN: "A" };
-  it("EDA đường biển container: 2.59 (một địa điểm đóng hàng) tính 1 ô thiếu, không phải 7; số container 1; hô hiệu 1", () => {
-    // TK_PSN (tên địa điểm xếp hàng) không tính: Hải quan tự xuất theo mã 2.29 (chỉ nhập khi PTVC 9 / mã …ZZZ).
-    expect(sectionProgress("EDA", eda, base).missingRequired).toBe(3);
-    // Có một mã địa điểm đóng hàng là đủ 2.59.
-    expect(sectionProgress("EDA", eda, { ...base, CON_VC1: "02CIS01" }).missingRequired).toBe(2);
-  });
   it("ô thuộc nhóm có điều kiện không áp dụng → không 'Còn thiếu' (EDA FOB có hóa đơn: 2.40)", () => {
     const tg = LAYOUT_EDA.declarant.flatMap((s) => s.blocks).find((b) => b.id === "tri-gia")!.items[0]!;
     if (tg.kind !== "group") throw new Error("test setup");
@@ -117,16 +80,5 @@ describe("ô lựa chọn – radio hay checkbox", () => {
     expect(toggleChoice("", "BIEN")).toBe("BIEN");
     expect(toggleChoice("BIEN", "HANG_KHONG")).toBe("HANG_KHONG");
     expect(toggleChoice("HANG_KHONG", "HANG_KHONG")).toBe("");
-  });
-});
-
-describe("progress_counts_vat_row – khối thuế và thu khác đếm đủ 5 dòng", () => {
-  const block = LAYOUT_IDA.item.declarant.find((b) => b.id === "thu-khac")!;
-  const count = (v: FormValues) => sectionProgress("IDA", { id: "item", title: "", blocks: [block] }, v);
-  it("GTGT chỉ ở dòng 5 → tính là đã điền", () => {
-    expect(count({}).filled).toBe(0);
-    expect(count({ HAG_TX5: "VB901" }).filled).toBe(1);
-    expect(count({ HAG_TX5: "VB901", HAG_TR5: "VB1", HAG_TG5: "1" }).filled).toBe(3);
-    expect(count({}).total).toBe(15);
   });
 });

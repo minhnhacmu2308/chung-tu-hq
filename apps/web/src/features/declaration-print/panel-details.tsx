@@ -114,7 +114,7 @@ export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf,
         </Stack>
       </AmendLockProvider>
 
-      {billCell && !readOnlyReason && <TransportOperationsBar kind={kind} header={values} stage="nhap" amending={amending} showInapplicable prototype={false} />}
+      {billCell && !readOnlyReason && <TransportOperationsBar kind={kind} header={values} amending={amending} showInapplicable />}
     </Stack>
   );
 }

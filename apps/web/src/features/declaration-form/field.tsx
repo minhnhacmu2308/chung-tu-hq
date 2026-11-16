@@ -16,7 +16,6 @@ import { DATE_WIDTH, displayValue, fieldWidthClass } from "./display";
 import { FORM_MESSAGES } from "./form.messages";
 import { choiceControl, isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 import { useCodeName } from "./use-code-list";
-import { useViewPrefs } from "./view-prefs";
 
 type Kind = "IDA" | "EDA";
 
@@ -111,7 +110,6 @@ export type FormFieldProps = {
 export function FormField({ kind, field, values, onChange, ctx, showInapplicable, parentNo, parentCondition, compact = false, fill = false, suppressMissing = false, dimmed = false }: FormFieldProps) {
   // Khai sửa đổi bổ sung: chỉ tiêu không được sửa hiện chỉ đọc kèm lý do.
   const lock = useAmendLock()(field.key);
-  const { labelsLeft } = useViewPrefs();
   const t = useMessages(FORM_MESSAGES);
   const locale = useUiLocale();
   // Ô mã có danh mục VNACCS: phạm vi lọc (cơ quan Hải quan, nhập/xuất) và tên của mã.
@@ -174,8 +172,8 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
   const missingNote = missing && <p className="text-sm font-medium text-warning-subtle-fg">{t.missing}</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
-  // Ô đứng riêng: khung viền, tên trên đường viền – cùng kiểu với nhóm ô / nhóm lặp trên mọi màn hình. Nhãn bên trái (F) giữ kiểu cũ.
-  const framed = !compact && !labelsLeft;
+  // Ô đứng riêng: khung viền, tên trên đường viền – cùng kiểu với nhóm ô / nhóm lặp trên mọi màn hình.
+  const framed = !compact;
   // Không áp dụng: chỉ làm mờ ô nhập – nhãn và "Không áp dụng vì…" giữ đủ tương phản (WCAG 1.4.3).
   const dim = (!applicable || dimmed) && "opacity-60";
 
@@ -252,7 +250,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
 
   return (
     <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", sizeClass)}>
-      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} framed={framed} labelAction={framed ? guide : null} className={cn(framed && "flex-1")} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
+      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} framed={framed} labelAction={framed ? guide : null} className={cn(framed && "flex-1")} orientation="vertical">
         {compact ? control : (
           <div className="flex min-w-0 items-center gap-2">
             {control}

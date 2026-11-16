@@ -8,9 +8,9 @@
 // Ctrl+S / Ctrl+Enter → lưu như Enter (ô đang gõ dở được chốt trước). Esc trên ô đã sửa → trả ô về giá trị cũ (lần nữa → đóng panel như thường).
 // F1 / nút "Phím tắt" → bảng phím tắt (panel-keys.ts).
 // Tab trong ô nhập → ô nhập kế tiếp của panel (bỏ qua nút TH / hướng dẫn). Tab ở phần tử cuối / Shift+Tab ở phần tử đầu → ô kế tiếp / trước theo `order`, bỏ qua các ô cùng nhóm (panel đã hiện cả nhóm).
-import { Alert, Button, Checkbox, Dialog, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
+import { Alert, Button, Checkbox, Dialog, RadioGroup, DialogContent, DialogFooter, fill, useMessages, useUiLocale } from "@kb/ui";
 import {
-  editBlockFor, fieldRole, fixedPlaceCode, formKeysOf, isDeclarationFieldEditable, itemFieldCode, itemOverrides, OTHER_TAX_GROUPS, sequenceBlocker, transportPlaceChanges, type AmendLock, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
+  editBlockFor, fieldRole, fixedPlaceCode, formKeysOf, isDeclarationFieldEditable, itemFieldCode, itemOverrides, OTHER_TAX_GROUPS, otherTaxIssues, otherTaxKeys, sequenceBlocker, transportPlaceChanges, type AmendLock, type Declaration, type DeclarationEditMode, type DeclarationEditScope, type LineItem,
 } from "@kb/contracts";
 import { CheckCircle2, CopyCheck, Keyboard, PenLine, Save } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -27,7 +27,7 @@ import { useCodeName, usePlaceNameLookup } from "../declaration-form/use-code-li
 import { QtySuggestionHint } from "../declaration-form/qty-hint";
 import { PanelDetails } from "./panel-details";
 import { panelShortcut, revertField } from "./panel-keys";
-import { applyToOtherLines, fieldLocator, nextTarget, printedKeyTarget, taxCodeKeys, type PrintTarget } from "./print-state";
+import { applyToOtherLines, emptyOtherTaxGroups, emptyPrintedTaxSlot, fieldLocator, nextTarget, printedKeyTarget, taxCodeKeys, type PrintTarget } from "./print-state";
 import { OTHER_TAX_MESSAGES, otherTaxGroupLabel } from "../declaration-form/other-tax.messages";
 import { reasonText } from "@/lib/reason-codes";
 import { SavedDialog } from "./saved-dialog";
@@ -142,12 +142,19 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   const [help, setHelp] = useState(false);
   // Ô GTGT tự điền đang có cảnh báo kiểm tra: người khai bấm "Xác nhận" → mã đang có lưu như giá trị người khai (hết cảnh báo), như form đầy đủ.
   const [confirmed, setConfirmed] = useState<string[]>([]);
+  // Ô in "Thuế và thu khác" còn trống: loại thuế người khai chọn để thêm (theo dòng + số ô in; chuyển sang ô khác là bỏ).
+  const [pick, setPick] = useState<{ at: string; group: number } | null>(null);
 
   const line = shown?.line;
   const item = line === undefined ? undefined : items[line];
   const row = line === undefined ? undefined : itemRows[line];
   // Ô in "Thuế và thu khác" đã dồn ô → panel mở đúng dòng theo loại thuế (khóa lưu), không theo số ô in.
-  const spotKey = shown ? (row ? printedKeyTarget(row, shown.key).key : shown.key) : undefined;
+  // Ô in trống → người khai chọn loại thuế cần thêm (chỉ các loại dòng hàng chưa khai); chưa chọn → loại còn trống đầu tiên.
+  const emptySlot = row && shown ? emptyPrintedTaxSlot(row, shown.key) : undefined;
+  const pickAt = emptySlot === undefined ? undefined : `${line}:${emptySlot}`;
+  const pickable = row && emptySlot !== undefined ? emptyOtherTaxGroups(row) : [];
+  const pickGroup = pick && pick.at === pickAt && pickable.includes(pick.group) ? pick.group : undefined;
+  const spotKey = shown ? (row ? printedKeyTarget(row, shown.key, pickGroup).key : shown.key) : undefined;
   const spot = spotKey ? fieldLocator(kind).get(spotKey) : undefined;
   // Khóa của nhóm ô theo cách in (ô in k thay cho dòng nhóm g) – để Tab / "cùng nhóm" so với khóa in.
   const slotNo = shown ? /^HAG_(?:TX|TR|TG)([1-5])$/.exec(shown.key)?.[1] : undefined;
@@ -160,7 +167,15 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   // Cảnh báo GTGT hết khi: đã có mã GTGT người khai lưu, ô đang có mã khác mã tự điền, hoặc đã bấm "Xác nhận" với ô có mã. Ô trống không tính.
   const vat = item && own && row ? gtgtAutoCheck(kind, item, own, row, { ...row, ...changes }, confirmed) : { checks: [], confirmKeys: [] };
   const autoChecks = vat.checks;
+  // Lỗi chặn truyền của dòng loại thuế đang sửa (mã sai loại, trùng loại, miễn giảm khác loại, miễn giảm không có mã) – báo ngay khi nhập.
+  const taxIssues = taxRowGroup && row && !readOnlyReason ? otherTaxIssues({ ...row, ...changes }).filter((i) => i.group === Number(taxRowGroup)) : [];
   const vatTx = (changes["HAG_TX5"] ?? row?.["HAG_TX5"] ?? "").trim();
+  // Đổi loại thuế của ô trống: bỏ phần đã nhập cho loại cũ (mã thuộc loại cũ, không dùng được cho loại mới).
+  const pickType = (g: number) => {
+    const old = taxRowGroup ? Object.values(otherTaxKeys(Number(taxRowGroup))) : [];
+    setChanges((c) => Object.fromEntries(Object.entries(c).filter(([k]) => !old.includes(k))));
+    if (pickAt) setPick({ at: pickAt, group: g });
+  };
   const confirmVat = () => { if (vat.confirmKeys.length > 0) setConfirmed(vat.confirmKeys); };
   const dirty = edits.length > 0;
   const taxKeys = !spot || readOnlyReason || !item || !row ? [] : spot.group.map((f) => f.key).filter((k) => taxCodeKeys(kind).has(k) && !lockOf(k));
@@ -229,6 +244,9 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   // (body / ô vừa bấm trên bản in) thì đặt lại; người dùng tự focus chỗ khác thì thôi.
   useEffect(() => {
     if (!shownId) return;
+    // Đang chọn loại thuế cho ô trống (phím mũi tên trong nhóm lựa chọn) → giữ focus ở đó, không kéo sang ô mã.
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement && active.type === "radio" && body.current?.contains(active)) return;
     focusField(shownKey);
     const start = document.activeElement;
     let tries = 0;
@@ -440,6 +458,25 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                   ) } : {})}
                 >
                   {autoChecks.map((c) => <p key={c.reason}>{reasonText(c.reason, undefined, undefined, locale)}</p>)}
+                </Alert>
+              )}
+              {kind === "IDA" && !readOnlyReason && pickable.length > 1 && taxRowGroup && (
+                <RadioGroup
+                  label={ot.groupHeader}
+                  description={ot.pickHint}
+                  framed
+                  value={taxRowGroup}
+                  onChange={(v) => pickType(Number(v))}
+                  disabled={save.isPending}
+                  options={pickable.map((g) => {
+                    const group = OTHER_TAX_GROUPS[g - 1]!;
+                    return { value: String(g), label: otherTaxGroupLabel(ot, group.key) ?? group.key, description: fill(ot.scopeLetters, { letters: group.taxPrefixes.join(", ") }) };
+                  })}
+                />
+              )}
+              {taxIssues.length > 0 && (
+                <Alert tone="danger">
+                  {taxIssues.map((i) => <p key={i.reason}>{reasonText(i.reason, undefined, undefined, locale)}</p>)}
                 </Alert>
               )}
               <PanelDetails

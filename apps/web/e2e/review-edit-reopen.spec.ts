@@ -1,37 +1,47 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { stateFor } from "./global-setup";
 import { createDossier, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
 
-/** Ô 1.29 – mã địa điểm lưu kho hàng chờ thông quan (chỉ tiêu KHO) trên tab Tờ khai đầy đủ. */
+/** Ô 1.29 – mã địa điểm lưu kho hàng chờ thông quan (chỉ tiêu KHO): ô VD_ST trên bản in, ô nhập trong panel sửa. */
 const KHO = /^1\.29/;
-const full = (id: string, nhom: string) => `/dossiers/${id}?step=review&tab=full&nhom=${nhom}`;
+const full = (id: string) => `/dossiers/${id}?step=review&tab=full`;
+/** Bấm ô chỉ tiêu chung trên bản in (data-print-cell = ":<khóa>") → mở panel sửa ô. */
+const openCell = async (page: Page, key: string) => {
+  await page.locator(`[data-print-cell=":${key}"]`).click();
+  const panel = page.getByRole("dialog");
+  await expect(panel).toBeVisible();
+  return panel;
+};
 
-test("Review: sửa chỉ tiêu trên tờ khai đầy đủ (chặn chỉ tiêu tính thuế, sai dạng số) → 4 mắt chặn người tạo → người khác duyệt → mở lại để sửa", async ({ page, browser }) => {
+test("Review: sửa chỉ tiêu trên bản in tờ khai (chặn chỉ tiêu tính thuế, sai dạng số) → 4 mắt chặn người tạo → người khác duyệt → mở lại để sửa", async ({ page, browser }) => {
   await login(page);
   const id = await createDossier(page);
   await uploadAndConfirm(page, ["Commercial Invoice.pdf", "Packing List.pdf", "Hoa don cuoc GTGT.pdf"]);
   await runAgentToReview(page);
 
-  // Chỉ tiêu là đầu vào tính thuế / do hệ thống cấp chỉ đọc trên form; backend cũng chặn.
-  await page.goto(full(id, "chung"));
-  await expect(page.getByRole("textbox", { name: /^1\.4\b/ })).toHaveCount(0);
-  await expect(page.getByRole("combobox", { name: /^1\.4\b/ })).toHaveCount(0);
+  // Chỉ tiêu là đầu vào tính thuế / do hệ thống cấp chỉ đọc trong panel; backend cũng chặn.
+  await page.goto(full(id));
+  await expect(page.getByText("Tờ khai chưa khai báo – nhập đủ chỉ tiêu")).toBeVisible(); // thông báo giai đoạn trên bản in
+  let panel = await openCell(page, "TK_ICB");
+  await expect(panel.getByRole("textbox", { name: /^1\.4\b/ })).toHaveCount(0);
+  await expect(panel.getByRole("combobox", { name: /^1\.4\b/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
   const derived = await page.request.patch(`/api/dossiers/${id}/declaration/fields/TONG_TG`, { data: { value: "1" } });
   expect(derived.status()).toBe(400);
   const badNumber = await page.request.patch(`/api/dossiers/${id}/declaration/fields/TRONG_LUONG`, { data: { value: "5.402,50 kg" } });
   expect(badNumber.status()).toBe(400);
   expect(((await badNumber.json()) as { message: string }).message).toMatch(/phải là số/);
 
-  // Sửa một chỉ tiêu rồi Lưu: còn nguyên sau khi tải lại trang.
-  await page.goto(full(id, "van-chuyen"));
-  const kho = page.getByRole("textbox", { name: KHO });
+  // Sửa một chỉ tiêu trong panel rồi Lưu: panel đóng, giá trị còn nguyên sau khi tải lại trang.
+  panel = await openCell(page, "VD_ST");
+  const kho = panel.getByRole("textbox", { name: KHO });
   await expect(kho).toBeEditable();
   await kho.fill("03CCS01");
-  const save = page.getByRole("button", { name: /^Lưu 1 thay đổi/ });
-  await save.click();
-  await expect(save).toHaveCount(0); // lưu xong: không còn thay đổi chờ lưu
+  await panel.getByRole("button", { name: /^Lưu 1 thay đổi/ }).click();
+  await expect(panel).toBeHidden(); // lưu xong: panel đóng
   await page.reload();
-  await expect(page.getByRole("textbox", { name: KHO })).toHaveValue("03CCS01");
+  await expect(page.locator('[data-print-cell=":VD_ST"]')).toContainText("03CCS01");
 
   // Bật 4 mắt: người tạo hồ sơ không tự duyệt (cả giao diện lẫn API).
   const on = await page.request.patch("/api/org/four-eyes", { data: { enabled: true } });
@@ -54,13 +64,17 @@ test("Review: sửa chỉ tiêu trên tờ khai đầy đủ (chặn chỉ tiêu
     await dialog.getByRole("button", { name: "Phê duyệt", exact: true }).click();
     await expect(approver).toHaveURL(/step=submit/, { timeout: 15_000 });
 
-    await approver.goto(full(id, "van-chuyen"));
-    await expect(approver.getByText("Tờ khai đầy đủ theo Phụ lục II – chỉ đọc")).toBeVisible(); // đã duyệt: khóa sửa
-    await expect(approver.getByRole("textbox", { name: KHO })).toHaveCount(0);
+    await approver.goto(full(id));
+    await expect(approver.getByText("Tờ khai chỉ đọc")).toBeVisible(); // đã duyệt: khóa sửa
+    const locked = await openCell(approver, "VD_ST");
+    await expect(locked.getByRole("textbox", { name: KHO })).toHaveCount(0);
+    await approver.keyboard.press("Escape");
+    await expect(locked).toBeHidden();
     await approver.getByRole("button", { name: "Mở lại để sửa" }).click();
     await approver.getByRole("dialog").getByRole("button", { name: "Mở lại tờ khai" }).click();
     await expect(approver.getByText("Bản nháp, chờ duyệt")).toBeVisible();
-    await expect(approver.getByRole("textbox", { name: KHO })).toHaveValue("03CCS01"); // sửa tay vẫn giữ sau khi mở lại
+    const reopened = await openCell(approver, "VD_ST");
+    await expect(reopened.getByRole("textbox", { name: KHO })).toHaveValue("03CCS01"); // sửa tay vẫn giữ sau khi mở lại
     await approverCtx.close();
   } finally {
     await page.request.patch("/api/org/four-eyes", { data: { enabled: false } });

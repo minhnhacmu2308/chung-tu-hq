@@ -130,7 +130,7 @@ export function FormFieldRepeat({ kind, repeat, values, onChange, ctx, showInapp
 
   // Cột theo ô mẫu của nhóm lặp; ô có điều kiện (số HAWB khi hàng không có HAWB) chỉ thành cột khi đang áp dụng.
   const cols = repeat.fields.map((f, i) => ({ f, i })).filter(({ f }) => isApplicable(f, ctx) || showInapplicable);
-  // Như bộ đếm sectionProgress: nhóm lặp bắt buộc khi có ít nhất dòng 1 – dòng thêm không tự báo thiếu.
+  // Như quy tắc ô bắt buộc (@kb/contracts required.ts): nhóm lặp bắt buộc khi có ít nhất dòng 1 – dòng thêm không tự báo thiếu.
   const firstRowMissing = !readOnly && applicable && !fixed && (rows[0] ?? []).some((f) => isApplicable(f, ctx) && missingRequired(kind, f, values, repeat.no ?? f.no, condition, ctx));
   // Dòng cố định: lỗi chặn (otherTaxIssues), cảnh báo ô tự điền (checks) và "còn thiếu" của loại GTGT hiện dưới đúng dòng.
   const issues = fixed ? otherTaxIssues(values) : [];

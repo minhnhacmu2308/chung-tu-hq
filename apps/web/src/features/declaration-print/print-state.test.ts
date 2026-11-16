@@ -1,7 +1,7 @@
 import { expandPrintRow, formKeysOf, itemFieldCode, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
-import { applyToOtherLines, attentionCells, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, printSlotTarget, printedKeyTarget, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import { applyToOtherLines, attentionCells, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, printSlotTarget, printedKeyTarget, emptyOtherTaxGroups, emptyPrintedTaxSlot, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -89,6 +89,20 @@ describe("thuế và thu khác theo loại – bản in", () => {
     expect(printSlotTarget({ HAG_TX3: "TB020", HAG_TR3: "T1" }, 1, "TR")).toEqual({ key: "HAG_TR3" });
     expect(printedKeyTarget({ HAG_TX5: "VB901" }, "HAG_TR1")).toEqual({ key: "HAG_TR5" });
     expect(printedKeyTarget({ HAG_TX5: "VB901" }, "HAG_ORS")).toEqual({ key: "HAG_ORS" });
+  });
+
+  it("empty_slot_pick: ô in trống → loại thuế người khai chọn (chỉ loại còn trống); ô đã có loại bỏ qua lựa chọn", () => {
+    const row = { HAG_TX5: "VB901" };
+    expect(emptyOtherTaxGroups(row)).toEqual([1, 2, 3, 4]);
+    expect(emptyOtherTaxGroups({ HAG_TX3: "TB020", HAG_TR1: "G1" })).toEqual([2, 4, 5]);
+    expect(emptyPrintedTaxSlot(row, "HAG_TX1")).toBeUndefined();
+    expect(emptyPrintedTaxSlot(row, "HAG_TR2")).toBe(2);
+    expect(emptyPrintedTaxSlot(row, "HAG_ORS")).toBeUndefined();
+    expect(printSlotTarget(row, 2, "TX", 3)).toEqual({ key: "HAG_TX3" });
+    expect(printedKeyTarget(row, "HAG_TR2", 4)).toEqual({ key: "HAG_TR4" });
+    // Loại đã khai (GTGT) không chọn được cho ô trống → loại còn trống đầu tiên; ô đã có loại giữ loại của nó.
+    expect(printSlotTarget(row, 2, "TX", 5)).toEqual({ key: "HAG_TX1" });
+    expect(printSlotTarget(row, 1, "TX", 3)).toEqual({ key: "HAG_TX5" });
   });
 
   const decl = { kind: "IDA", fields: [{ code: "MA_TT", value: "USD" }], exchangeRate: "25000", customsValueVnd: "0", estimatedImportDutyVnd: "0", estimatedVatVnd: "0" } as unknown as Declaration;

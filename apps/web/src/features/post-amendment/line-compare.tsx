@@ -15,7 +15,6 @@ import { AmendLockProvider, type FieldLockLookup } from "../declaration-form/ame
 import { BlockView } from "../declaration-form/block-view";
 import { CodeInput } from "../declaration-form/code-input";
 import { conditionContext } from "../declaration-form/form-state";
-import { ViewPrefsProvider } from "../declaration-form/view-prefs";
 import { StickyActionBar } from "../dossier-detail/steps/declaration-parts";
 import type { AmaStepCtx } from "./ama-context";
 import { AMA_MESSAGES } from "./ama.messages";
@@ -73,7 +72,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
   });
 
   return (
-    <ViewPrefsProvider>
+    <>
       <Stack gap="md">
         {drafts.map((d, i) => (
           <LineCard
@@ -124,7 +123,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
           </>
         )}
       </StickyActionBar>
-    </ViewPrefsProvider>
+    </>
   );
 }
 
@@ -189,7 +188,7 @@ function LineCard({ kind, line, defaultOpen, editable, onChange, onRemove, remov
         <Disclosure title={t.descGroup} defaultOpen={descChanged} {...(descChanged ? { meta: <Badge tone="info">{t.changedBadge}</Badge> } : {})}>
           <AmendLockProvider kind={kind} values={v} active={false} override={lock}>
             {AMA_LINE_LAYOUT.map((b) => (
-              <BlockView key={b.id} kind={kind} block={b} values={v} onChange={editable ? onChange : undefined} ctx={conditionContext(kind, v)} showInapplicable={false} showActions={false} />
+              <BlockView key={b.id} kind={kind} block={b} values={v} onChange={editable ? onChange : undefined} ctx={conditionContext(kind, v)} showInapplicable={false} />
             ))}
           </AmendLockProvider>
         </Disclosure>

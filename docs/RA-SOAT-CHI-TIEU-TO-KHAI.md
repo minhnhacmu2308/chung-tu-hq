@@ -355,15 +355,15 @@ Nên đặt thành cấu hình thuần, cạnh catalog (ví dụ thêm thuộc t
 - 1.53 `TK_BP`, 1.58 / 2.48 `TK_ENC` (luôn hiện, tùy chọn); hạn mức 1.54–1.57 / 2.44–2.47 (`TK_BRC/BYA/BCM/BCN`) và bảo lãnh 1.59–1.62 / 2.49–2.52 (`TK_SBC/RYA/SCM/SCN`): khối `fill: "all"` – **khai cả nhóm**, đã nhập một ô thì các ô còn lại thành ô bắt buộc còn thiếu (`allOrNoneGaps` trong `requiredGaps`, chặn Phê duyệt / Ký số).
 - 1.17–1.19, 1.24 (`TK_NMC/NMN/EPC/ENM`) · 2.16–2.18 (`TK_EXC/EXN/CGC`): tùy chọn, **không gắn điều kiện** – hồ sơ không cho biết lô ủy thác / tại chỗ và bảng mã loại hình trong repo chưa đối chiếu (`unverified`), nên không suy theo loại hình.
 - 1.64 `VD_ISD`, 1.65–1.67 / 2.54–2.56 (`TK_DPD`, `TK_ST/AD/SD1..3`, `TK_ARP/ADT`): tùy chọn, không gắn điều kiện (A41 trong bảng mã của repo là "quyền nhập khẩu", không phải kho ngoại quan – cần đối chiếu).
-- Chưa làm: form cũ (`NEXT_PUBLIC_REVIEW_LEGACY_FORM`) chưa hiện luật khai cả nhóm; luật "TK_BP chỉ khi giải phóng hàng trên cơ sở bảo lãnh" và liên hệ 1.58 ↔ bảo lãnh chưa kiểm.
+- Chưa làm: luật "TK_BP chỉ khi giải phóng hàng trên cơ sở bảo lãnh" và liên hệ 1.58 ↔ bảo lãnh chưa kiểm.
 
 **Bản mẫu tờ khai đầy đủ chỉ tiêu (xong, nhánh `feat/to-khai-day-du-ban-mau`):**
-- Trang `/ban-mau/to-khai` (không nằm trong menu): 3 tab theo luồng làm việc (Người khai nhập / Hải quan trả về / Theo dõi & nghiệp vụ). Dữ liệu giả theo ảnh mẫu `CHITIEU_NHAPKHAU`/`CHITIEU_XUATKHAU`, có 3 giai đoạn. Thiết kế: `docs/superpowers/specs/2026-10-17-to-khai-day-du-ban-mau-design.md`.
+- Trang `/ban-mau/to-khai` (không nằm trong menu – **đã xóa 2026-11-16** cùng form cũ, BACKEND-TODO K9): 3 tab theo luồng làm việc (Người khai nhập / Hải quan trả về / Theo dõi & nghiệp vụ). Dữ liệu giả theo ảnh mẫu `CHITIEU_NHAPKHAU`/`CHITIEU_XUATKHAU`, có 3 giai đoạn. Thiết kế: `docs/superpowers/specs/2026-10-17-to-khai-day-du-ban-mau-design.md`.
 - Bố cục là dữ liệu trong `@kb/contracts/declaration-layout` (khóa ô = tên trường VNACCS), có test bắt buộc đủ 1.1–1.96 (trừ 1.46) và 2.1–2.80.
 - Luật "theo tình huống" giờ là một nguồn chung (`DECLARATION_CONDITIONS`), backend và bản mẫu cùng dùng.
 - Cần đối chiếu khi làm thật: catalog EDA ghi 2.79 là `HAG_TXR`, nhưng đặc tả VNACCS_EDA là `HAG_ADE`.
 
-**Bước 5 dạng bản in (xong, nhánh `feat/review-ban-in-to-khai`):** bước 5 hiện tờ khai giống mẫu in VNACCS (`@kb/contracts/print-layout`, `features/declaration-print/`), sửa ô bằng panel, lỗi / còn thiếu / ước tính đánh dấu trên ô, gộp tab "Hải quan trả về"; form cũ còn sau cờ `NEXT_PUBLIC_REVIEW_LEGACY_FORM=1` đến hết thử nghiệm (BACKEND-TODO K9).
+**Bước 5 dạng bản in (xong, nhánh `feat/review-ban-in-to-khai`):** bước 5 hiện tờ khai giống mẫu in VNACCS (`@kb/contracts/print-layout`, `features/declaration-print/`), sửa ô bằng panel, lỗi / còn thiếu / ước tính đánh dấu trên ô, gộp tab "Hải quan trả về"; form Phụ lục II cũ đã xóa 2026-11-16 (BACKEND-TODO K9) – bản in là màn Review duy nhất.
 
 **Cập nhật 2026-10-21:**
 - **Ô bắt buộc trống chặn Phê duyệt và Ký số & khai tạm**: một quy tắc `requiredGaps` (`@kb/contracts`) = Phụ lục II (M, hoặc C khi tình huống áp dụng) + ô FPT.VNACCS Required người khai nhập (không tính ô APP_* và ô phần mềm tự điền). Backend từ chối trước khi đánh dấu SUBMITTED; lỗi sai đặc tả FPT giờ chặn thay vì chỉ ghi log. 2.40 (`TK_FCD`/`TK_FKK`) đổi thành không bắt buộc trong schema FPT (Phụ lục II bỏ qua khi FOB/DAP/DAF); form vẫn bắt buộc khi áp dụng.

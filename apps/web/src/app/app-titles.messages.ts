@@ -5,7 +5,7 @@ import type { UiLocale } from "@kb/ui";
 
 type TitleKey =
   | "brand" | "template" | "description" | "overview" | "dossiers" | "newDossier" | "customs" | "inbox" | "products" | "skills" | "teach" | "settings"
-  | "declarationSample" | "login" | "register" | "acceptInvite" | "verifyEmail" | "forgotPassword" | "resetPassword" | "notFound";
+  | "login" | "register" | "acceptInvite" | "verifyEmail" | "forgotPassword" | "resetPassword" | "notFound";
 
 export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
   vi: {
@@ -21,7 +21,6 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     skills: "Cách đọc chứng từ",
     teach: "Dạy khai báo",
     settings: "Tài khoản & tích hợp",
-    declarationSample: "Bản mẫu tờ khai đầy đủ",
     login: "Đăng nhập",
     register: "Đăng ký",
     acceptInvite: "Nhận lời mời",
@@ -43,7 +42,6 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     skills: "Document reading",
     teach: "Declaration teaching",
     settings: "Account & integrations",
-    declarationSample: "Full declaration sample",
     login: "Sign in",
     register: "Register",
     acceptInvite: "Accept invitation",
@@ -65,7 +63,6 @@ export const APP_TITLES: Record<UiLocale, Record<TitleKey, string>> = {
     skills: "单证读取方式",
     teach: "申报教学",
     settings: "账户与集成",
-    declarationSample: "完整报关单样本",
     login: "登录",
     register: "注册",
     acceptInvite: "接受邀请",
@@ -93,7 +90,6 @@ export function titleKeyForPath(pathname: string): AppTitleKey | undefined {
     "/skills": "skills",
     "/teach": "teach",
     "/settings": "settings",
-    "/ban-mau/to-khai": "declarationSample",
     "/login": "login",
     "/register": "register",
     "/accept-invite": "acceptInvite",

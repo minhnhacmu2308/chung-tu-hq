@@ -1,26 +1,44 @@
 "use client";
-// Tab "Hải quan trả về" và "Theo dõi & nghiệp vụ" của form đầy đủ, chạy trên dữ liệu truyền Hải quan thật của hồ sơ (bước Review).
+// Tab "Theo dõi & nghiệp vụ" ở bước Review, chạy trên dữ liệu truyền Hải quan thật của hồ sơ: thông điệp, thông tin thuế, trạng thái nghiệp vụ.
 // Chỉ đọc: thực hiện nghiệp vụ (khai tạm/chính thức, gọi về sửa, sửa đổi, HYS…) ở bước Khai báo Hải quan – tab này dẫn sang đó.
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Stack, useMessages, useUiLocale } from "@kb/ui";
-import { layoutFor, type CustomsInfo, type LineItem, type SubmissionView } from "@kb/contracts";
-import { ArrowRight, Send } from "lucide-react";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, fill, Stack, useMessages, useUiLocale } from "@kb/ui";
+import type { SubmissionView } from "@kb/contracts";
+import { ArrowRight, Receipt, Send } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { MessageLog, pipeStatus } from "../dossier-detail/steps/submit-step";
-import { customsItemValues, customsValues } from "./customs-adapter";
-import { CustomsTab } from "./customs-tab";
+import { customsValues } from "./customs-adapter";
 import { FORM_MESSAGES } from "./form.messages";
-import { itemValues } from "./dossier-adapter";
-import { TaxCard } from "./operations-tab";
+import type { FormValues } from "./form-state";
+import { taxAmount, taxSummary } from "./stage-rules";
 
 type Kind = "IDA" | "EDA";
 
-/** Hải quan trả về – đủ chỉ tiêu theo Phụ lục II; khối chưa có dữ liệu hiện "Có sau khi …". */
-export function DossierCustomsTab({ kind, submission, items }: { kind: Kind; submission: SubmissionView | undefined; items: LineItem[] }) {
-  const info: CustomsInfo | null = submission?.customsInfo ?? null;
-  const values = customsValues(kind, info, submission?.result ?? null);
-  const hs = itemValues(kind, items);
-  const rows = customsItemValues(kind, info, items.map((it) => it.lineNo)).map((v, i) => ({ HAG_CMD: hs[i]?.["HAG_CMD"] ?? "", ...v }));
-  return <CustomsTab layout={layoutFor(kind)} values={values} items={rows} />;
+/** Thông tin thuế tờ khai (≈ tab "Quản lý tờ khai" của phần mềm) – chỉ từ số liệu Hải quan đã trả; chưa có → trống. */
+function TaxCard({ kind, values }: { kind: Kind; values: FormValues }) {
+  const t = useMessages(FORM_MESSAGES);
+  const tax = taxSummary(kind, values, useUiLocale());
+  const rows = tax ? [...(tax.rate ? [{ label: fill(t.taxRate, { c: tax.rate.currency }), value: taxAmount(tax.rate.value) }] : []), ...tax.lines.map((l) => ({ label: l.label, value: taxAmount(l.value) })), ...(tax.total ? [{ label: t.totalTax, value: taxAmount(tax.total) }] : [])] : [];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle as="h2">{t.taxTitle}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {tax ? (
+          <dl className="flex flex-wrap gap-x-8 gap-y-3">
+            {rows.map((r) => (
+              <div key={r.label} className="flex min-w-0 flex-col">
+                <dt className="text-xs text-fg-muted">{r.label}</dt>
+                <dd className="text-sm font-medium tabular-nums text-fg">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <EmptyState icon={<Receipt />} title={t.noTax} description={t.noTaxReal} />
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 /** Theo dõi & nghiệp vụ – thông điệp gửi/nhận, thuế chính thức, trạng thái từng nghiệp vụ; thao tác ở bước Khai báo Hải quan. */
@@ -33,7 +51,7 @@ export function DossierOperationsTab({ kind, submission, onGoSubmit }: { kind: K
   return (
     <Stack gap="lg">
       <MessageLog messages={submission?.messages ?? []} />
-      <TaxCard kind={kind} values={values} edi={false} />
+      <TaxCard kind={kind} values={values} />
       <Card>
         <CardHeader>
           <CardTitle as="h2">{t.opsTitle}</CardTitle>

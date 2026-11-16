@@ -490,18 +490,33 @@ export function declarationGapsOf(decl: Declaration, items: LineItem[], submissi
 
 /**
  * Khóa lưu (dòng nhóm theo loại thuế) của ô in "Thuế và thu khác" khi in dồn ô: `values` = giá trị dòng hàng chưa dồn (itemRows), `slot` = ô in (1-based),
- * `part` = TX (mã thuế, mặc định) / TR (miễn giảm) / TG (số tiền giảm). Ô có nội dung → dòng nhóm của nó; ô trống sau cùng → dòng nhóm trống đầu tiên.
+ * `part` = TX (mã thuế, mặc định) / TR (miễn giảm) / TG (số tiền giảm). Ô có nội dung → dòng nhóm của nó; ô trống sau cùng → loại thuế người khai
+ * chọn ở panel (`pick`, phải là loại còn trống) hoặc, chưa chọn, loại còn trống đầu tiên.
  */
-export function printSlotTarget(values: FormValues, slot: number, part: "TX" | "TR" | "TG" = "TX"): { key: string } {
+export function printSlotTarget(values: FormValues, slot: number, part: "TX" | "TR" | "TG" = "TX", pick?: number): { key: string } {
   const { slotToGroup } = compactOtherTaxes(values);
-  const group = slotToGroup[slot - 1] ?? [1, 2, 3, 4, 5].find((g) => !Object.values(otherTaxKeys(g)).some((k) => (values[k] ?? "") !== "")) ?? slot;
+  const empty = emptyOtherTaxGroups(values);
+  const group = slotToGroup[slot - 1] ?? (pick !== undefined && empty.includes(pick) ? pick : empty[0]) ?? slot;
   return { key: `HAG_${part}${group}` };
 }
 
-/** Khóa ô in bất kỳ → khóa lưu: ô "Thuế và thu khác" theo printSlotTarget, ô khác giữ nguyên. */
-export function printedKeyTarget(values: FormValues, key: string): { key: string } {
+/** Loại thuế (1–5, theo thứ tự ưu tiên) dòng hàng chưa khai ô nào (mã thuế, miễn giảm, số tiền giảm) – loại người khai thêm được ở ô in trống. */
+export function emptyOtherTaxGroups(values: FormValues): number[] {
+  return [1, 2, 3, 4, 5].filter((g) => !Object.values(otherTaxKeys(g)).some((k) => (values[k] ?? "") !== ""));
+}
+
+/** Ô in "Thuế và thu khác" (HAG_TX/TR/TG{k}) còn trống sau khi dồn ô → số ô k; ô khác / ô đã có loại thuế → undefined. */
+export function emptyPrintedTaxSlot(values: FormValues, key: string): number | undefined {
   const m = PRINTED_TAX_KEY.exec(key);
-  return m ? printSlotTarget(values, Number(m[2]), m[1] as "TX" | "TR" | "TG") : { key };
+  if (!m) return undefined;
+  const slot = Number(m[2]);
+  return compactOtherTaxes(values).slotToGroup[slot - 1] === undefined ? slot : undefined;
+}
+
+/** Khóa ô in bất kỳ → khóa lưu: ô "Thuế và thu khác" theo printSlotTarget (ô trống → loại thuế `pick` nếu có), ô khác giữ nguyên. */
+export function printedKeyTarget(values: FormValues, key: string, pick?: number): { key: string } {
+  const m = PRINTED_TAX_KEY.exec(key);
+  return m ? printSlotTarget(values, Number(m[2]), m[1] as "TX" | "TR" | "TG", pick) : { key };
 }
 
 /** Khối thuế của dòng hàng (bố cục form): mã thuế khai giống nhau cho nhiều dòng → panel cho áp một lần cho mọi dòng. */

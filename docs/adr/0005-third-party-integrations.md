@@ -25,7 +25,7 @@ Adapter: `HscodeproClassifier`, `CustomsHubGateway`, và `Fake*` cho dev/test. C
 **Chạy bằng job nền.** Mọi lời gọi ra ngoài đi qua BullMQ, không trong request web. Timeout + retry backoff cho lỗi tạm thời (429, 5xx, timeout).
 
 **Không gửi trùng tờ khai.** Mỗi thông điệp có `idempotencyKey = (dossierId, messageType, declarationVersion)`. Trước khi gửi lại một thông điệp có thể đã tới Hải quan (timeout sau khi gửi), job phải **tra trạng thái (IEX) trước**, chỉ gửi lại khi chắc chắn chưa được ghi nhận.
-  - **Ngoại lệ (2026-11-15, người dùng chốt):** khai tạm IDA/EDA lỗi mà FPT **chưa cấp mã giao dịch và Hải quan chưa trả số tờ khai** → "Gửi lại" gửi ngay, không tra (không có gì để tra). Chưa có số tờ khai = coi như Hải quan chưa nhận. Chấp nhận rủi ro trùng khi FPT timeout/5xx sau khi Hải quan đã nhận – người khai tra trên VNACCS trước khi gửi lại trong trường hợp đó (`resend-operation.ts` `failedBeforeNumber`).
+  - **Ngoại lệ (2026-11-15, người dùng chốt):** khai tạm IDA/EDA lỗi mà FPT **chưa cấp mã giao dịch và Hải quan chưa trả số tờ khai** → "Gửi lại" gửi ngay, không tra (không có gì để tra). Chưa có số tờ khai = coi như Hải quan chưa nhận. Chấp nhận rủi ro trùng khi FPT timeout/5xx sau khi Hải quan đã nhận – người khai tra trên VNACCS trước khi gửi lại trong trường hợp đó (`resend-operation.ts` `failedBeforeNumber`). Áp dụng cả khi outbox còn PENDING chưa hết lượt thử. Gửi lại nội dung tờ khai (IDA/IDA01/EDA/EDA01) **dựng lại request từ tờ khai hiện tại** (giống màn Xem trước), không phát lại body chốt lúc truyền – body cũ có thể thiếu ô điền sau (vd 1.58 `TK_ENC` → E1028).
 
 **Outbox.** Đổi trạng thái tờ khai và tạo bản ghi "cần gửi" trong cùng transaction DB; worker đọc outbox để gửi. Không mất thông điệp khi worker chết giữa chừng.
 

@@ -1,19 +1,22 @@
 // "Gửi lại" một nghiệp vụ bị lỗi: đã có externalId → tra trạng thái trước (ADR 0005); Hải quan đã ghi nhận → không gửi; chưa → outbox mới (…:retryN) và job.
 // Lô nhiều tờ: tờ chưa có số (NOT_SENT) mà lần khai tạm đã ghim chưa từng có externalId (hết lượt thử / lỗi trước khi FPT nhận) → không có gì để tra,
 // gửi lại nguyên thông điệp đã ghim (kiểm ghim như mọi lần gửi lại) – chuỗi nối tiếp chạy tiếp từ tờ đó (spec §6.2.3).
-// Khai tạm lỗi mà Hải quan chưa trả số tờ khai → gửi lại được ngay; body dựng lại theo đặc tả hiện hành lúc gửi (fptContentBody).
+// Khai tạm lỗi mà Hải quan chưa trả số tờ khai → gửi lại được ngay.
+// Nội dung tờ khai (IDA/IDA01/EDA/EDA01): request dựng lại từ tờ khai hiện tại (như màn Xem trước), không phát lại body chốt lúc truyền.
 import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, queryOpFor, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
 import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
+import { branchPayload, sheetSnapshot } from "../domain/branches.js";
+import { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps } from "./customs-ports.js";
 import { performOperation } from "./perform-operation.js";
 import { MAX_ATTEMPTS } from "./process-outbox.js";
-import { outboxKey, pinOfOutbox, stalePinReason } from "./branch-send.js";
+import { buildSheet, lineIdsOf, outboxKey, pinOfOutbox, sheetOf, stalePinReason } from "./branch-send.js";
 import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
 
 /** `branch`: tờ khai nhánh (mặc định 1). Gửi lại nội dung tờ k (lần truyền có ghim) thành công → worker nối tiếp tờ sau. */
@@ -30,8 +33,8 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   // Khai tạm đã ghim (lô nhiều tờ) chưa từng được FPT nhận: không có externalId để tra trạng thái.
   const unsentPinned = !!result && !result.externalId && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA" && !!last && pinOfOutbox(last) !== undefined;
   // Quy tắc nghiệp vụ (người dùng chốt 2026-11-15): khai tạm lỗi mà Hải quan CHƯA trả số tờ khai → coi như chưa nhận, cho gửi lại
-  // (lỗi từ chối, lỗi mạng, hết lượt thử – mọi trường hợp). Đã có số tờ khai mới coi là đã nhận (luồng tra trạng thái bên dưới chặn).
-  const failedBeforeNumber = !!result && !result.externalId && !result.declarationNo && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA" && last?.status === "FAILED";
+  // (lỗi từ chối, lỗi mạng, hết lượt thử, outbox còn PENDING chưa hết lượt thử – nhánh dưới trả "đang gửi"/đẩy lại job; PENDING ở lần thử cuối không tạo outbox mới để tránh gửi trùng). Đã có số tờ khai mới coi là đã nhận (luồng tra trạng thái bên dưới chặn).
+  const failedBeforeNumber = !!result && !result.externalId && !result.declarationNo && stageOf(result) === "NOT_SENT" && baseOp(op) === "IDA" && !!last && (last.status === "FAILED" || (last.status === "PENDING" && last.attempts < MAX_ATTEMPTS));
   if (!result || (!result.externalId && !unsentPinned && !failedBeforeNumber)) return err(domainError("NOT_FOUND", "Hồ sơ chưa truyền"));
   // Tra cứu: dùng chung với nút IID/IEX.
   if (CUSTOMS_OPERATIONS[op].kind === "query") {
@@ -78,10 +81,32 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
     return ok({ resent: false, message: `${OPERATION_LABELS[op]} đang được gửi` });
   }
   if (last.status === "SENT") return err(domainError("INVALID_STATE", `${OPERATION_LABELS[op]} đã thành công – không gửi lại`));
-  // Gửi lại nguyên thông điệp nội dung đã dựng: outbox có ghim (tờ 2..N / lô nhiều tờ) chỉ gửi khi tờ khai còn SUBMITTED đúng phiên bản + lần duyệt đó
+  // Gửi lại thông điệp nội dung: outbox có ghim (tờ 2..N / lô nhiều tờ) chỉ gửi khi tờ khai còn SUBMITTED đúng phiên bản + lần duyệt đó
   // (không gửi nội dung cũ sau khi mở lại/duyệt lại). Khóa theo lượt không phiên bản (`:n<k>`) → guard thường như tờ 1.
   if (isContentOperation(op) && op !== "AMA" && stalePinReason(await deps.declarations.get(ctx.orgId, dossierId), last))
     return err(domainError("INVALID_STATE", `Tờ ${branch}: tờ khai đã mở lại hoặc đổi phiên bản – không gửi lại nội dung cũ; duyệt lại rồi truyền lại`));
+  // Dựng lại request từ tờ khai đang SUBMITTED (đã kiểm ở trên) – cùng đường dựng với performOperation: body cũ có thể thiếu ô người khai
+  // điền sau (vd 1.58 TK_ENC → E1028) hoặc theo mapping cũ. Payload khác (ghim, chain, certificateId…) giữ nguyên.
+  let payload = last.payload;
+  if (isContentOperation(op) && op !== "AMA") {
+    const snap = await deps.declarations.get(ctx.orgId, dossierId);
+    if (snap) {
+      let built: ReturnType<typeof buildFptRequest>;
+      const multi = branchCount(snap.payload.items.length) > 1;
+      if (multi) {
+        const firstNo = branch === 1 ? null : (await deps.uow.asOrg(ctx, (r) => r.results.get(ctx.orgId, dossierId, 1)))?.declarationNo ?? null;
+        const b = buildSheet(sheetOf(snap.payload, branch, firstNo));
+        if (!b.ok) return b;
+        built = b.value;
+      } else {
+        const sheet = branchPayload(snap.payload, branch, null);
+        built = buildFptRequest(sheet.payload);
+        const blocking = [...sheet.blockers, ...built.blockers];
+        if (blocking.length) return err(reasonError("BLOCKER_FAILED", "DECLARATION_NOT_TRANSMITTABLE", { blockers: blocking.join("; ") }));
+      }
+      payload = { ...(last.payload as Record<string, unknown>), request: built.request, warnings: built.warnings, issues: built.issues, ...(multi ? { sent: sheetSnapshot(snap.payload, branch) } : {}), ...lineIdsOf(snap.payload, branch) };
+    }
+  }
   if (last.status === "PENDING") await deps.uow.asOrg(ctx, (r) => r.outbox.update(last.orgId, last.id, { status: "FAILED", updatedAt: now() }));
   const version = Number(/:v(\d+)/.exec(last.idempotencyKey)?.[1] ?? "1");
   // Khóa nhánh ≥ 2 kết thúc bằng :b<no> – lần gửi lại giữ hậu tố nhánh ở cuối (nhánh 1 giữ dạng cũ).
@@ -89,7 +114,7 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
   const lastKey = suffix && last.idempotencyKey.endsWith(suffix) ? last.idempotencyKey.slice(0, -suffix.length) : last.idempotencyKey;
   const key = /:n\d+$/.test(lastKey) ? `${lastKey}:retry${base.length}${suffix}` : outboxKey(dossierId, op, version, base.length, branch);
   // `...last` giữ payload.chain: Gửi lại IDC/IDE bị từ chối trong chuỗi khai chính thức cả lô thành công thì chuỗi nối tiếp tờ sau.
-  const row = { ...last, id: deps.idGen.next("msg"), idempotencyKey: key, status: "PENDING" as const, attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now(), updatedAt: now() };
+  const row = { ...last, payload, id: deps.idGen.next("msg"), idempotencyKey: key, status: "PENDING" as const, attempts: 0, lastError: null, nextAttemptAt: null, createdAt: now(), updatedAt: now() };
   await deps.uow.asOrg(ctx, async (r) => {
     if (st) await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch, operation: qop, direction: "IN", result: "OK", summary: `Chưa ghi nhận ${op} – được phép gửi lại (trạng thái: ${st.status})`, payloadMasked: { nghiepVu: qop, trangThai: st.status }, externalRef: result.externalId, at: now() });
     await r.outbox.insert(row);

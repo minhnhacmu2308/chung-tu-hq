@@ -322,6 +322,20 @@ describe("customs-send / poll", () => {
     unwrap(await markOutboxFailed(deps, { orgId: ORG, outboxId: uow.data.outbox[1]!.id, reason: "timeout" }));
     expect(uow.data.outbox[1]!.status).toBe("FAILED");
   });
+  it("Gửi lại IDA dựng lại request từ tờ khai hiện tại (ô điền sau lần truyền vẫn được gửi), giữ phần payload khác", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    const ob = uow.data.outbox[0]!;
+    expect((ob.payload as { request: { objVN_IDA: Record<string, unknown> } }).request.objVN_IDA["tK_ENC"]).toBeUndefined();
+    ob.attempts = 5;
+    unwrap(await processOutbox(deps, { orgId: ORG, userId: "usr_chau", outboxId: ob.id }));
+    deps.gateway = { ...gateway, queryStatus: async () => ({ status: "Chưa ghi nhận", cleared: false }) } as unknown as FakeCustomsGateway;
+    uow.data.results[0]!.externalId = "fpt-x";
+    decls.fields = { TK_ENC: { value: "D" } };
+    expect(unwrap(await resendOperation(deps, declarant, D, "IDA")).resent).toBe(true);
+    const retry = uow.data.outbox[1]!.payload as { request: { objVN_IDA: Record<string, unknown> }; certificateId?: string };
+    expect(retry.request.objVN_IDA["tK_ENC"]).toBe("D");
+    expect(retry.certificateId).toBe((ob.payload as { certificateId?: string }).certificateId);
+  });
   it("Gửi lại IDA chưa được ghi nhận sang tuần tỷ giá mới → RATE_WEEK_CHANGED, không tạo outbox", async () => {
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     const ob = uow.data.outbox[0]!;

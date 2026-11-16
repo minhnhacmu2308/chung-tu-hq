@@ -48,8 +48,8 @@ export {
 } from "./components/workflow.js";
 export { UiLocaleProvider, useUiLocale, useMessages, defineMessages, pickMessages, fill, intlLocale, UI_LOCALES, type UiLocale, type Messages } from "./lib/i18n.js";
 export {
-  DataTable, createDataTableColumnHelper, dataTableFeatures,
-  type DataTableProps, type DataTableColumn, type DataTableColumnMeta, type DataTablePagination, type DataTableFeatures,
+  DataTable, DataTableFilterSelect, createDataTableColumnHelper, dataTableFeatures,
+  type DataTableProps, type DataTableFilterSelectProps, type DataTableColumn, type DataTableColumnMeta, type DataTablePagination, type DataTableFeatures,
   type DataTableColumnSizing, type DataTableColumnVisibility, type DataTableView, type DataTableCardParts,
 } from "./components/data-table.js";
 export { RecordCard, type RecordCardProps, type RecordCardField, type RecordCardPattern } from "./components/record-card.js";

@@ -1,6 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, Field, fill, IconTile, PageHeader, pickMessages, RecordCard, RowActions, SegmentedControl, Select, Stack, StepProgress, Tabs, TabsContent, TabsList, TabsTrigger, toast, type UiLocale, useUiLocale,
+  Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, DataTableFilterSelect, fill, IconTile, PageHeader, pickMessages, RecordCard, RowActions, SegmentedControl, Stack, StepProgress, Tabs, TabsContent, TabsList, TabsTrigger, toast, type UiLocale, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Container, Download, FolderOpen, Package, Plane, Plus, Ship, TrainFront, Trash2, Truck, XCircle, type LucideIcon } from "lucide-react";
@@ -14,7 +14,7 @@ import { formatMoney } from "@/lib/format";
 import { STEP_LABELS, STEP_ORDER, type Direction, type Dossier } from "@/mocks/types";
 import { DueBadge } from "./dossier-badges";
 import { DIRECTION_LABELS } from "./dossier-display";
-import { channelLabel, DossierProgressBadge, progressLabel, progressOfDossier } from "./dossier-progress-badge";
+import { channelLabel, DossierProgressBadge, progressLabel, progressOfDossier, stepState } from "./dossier-progress-badge";
 import { DOSSIER_PROGRESS_MESSAGES } from "./dossier-progress.messages";
 import { channelOfDossier, inViec, parseChannel, parseViec, type ChannelFilter, PROGRESS_FILTER_ORDER, VIEC_TABS, type Viec } from "./dossier-progress-tabs";
 import { DOSSIER_LIST_MESSAGES } from "./dossiers.messages";
@@ -35,14 +35,6 @@ type Scope = "ALL" | Direction;
 
 /** Hồ sơ đã truyền Hải quan (có số tờ khai / trạng thái Hải quan) giữ để đối chiếu – chỉ hủy, không xóa (backend kiểm lại). */
 const sentToCustoms = (d: Dossier) => d.status === "SUBMITTED" || d.status === "CLEARED" || !!d.declarationNo || !!d.customs;
-
-/** Theo tiến độ hồ sơ: đã thông quan → tô xong cả quy trình; hồ sơ hủy / mọi tờ khai bị hủy hoặc từ chối → thanh xám (dừng). */
-export function stepState(d: Pick<Dossier, "status" | "customs">): "complete" | "stopped" | "active" {
-  const p = progressOfDossier(d).progress;
-  if (p === "CLEARED" || p === "POST_AMENDED") return "complete";
-  if (p === "CANCELLED" || p === "REJECTED" || p === "DOSSIER_CANCELLED") return "stopped";
-  return "active";
-}
 
 function DossierStep({ dossier, stepLabels }: { dossier: Dossier; stepLabels: Record<Dossier["step"], string> }) {
   const steps = STEP_ORDER.map((id) => ({ id, label: stepLabels[id] }));
@@ -262,18 +254,17 @@ function ListInner() {
                     filtered={scope !== "ALL" || viec !== "all" || channel !== "ALL"}
                 activeFilters={channel !== "ALL" ? 1 : 0}
                 {...(viec === "channelled" ? { filters: (
-                  <Field label={pm.channelFilter}>
-                    <Select
-                      options={[
-                        { value: "ALL", label: pm.channelAll },
-                        { value: "GREEN", label: channelLabel("GREEN", locale) },
-                        { value: "YELLOW", label: channelLabel("YELLOW", locale) },
-                        { value: "RED", label: channelLabel("RED", locale) },
-                      ]}
-                      value={channel}
-                      onChange={(e) => setChannel(parseChannel(e.target.value))}
-                    />
-                  </Field>
+                  <DataTableFilterSelect
+                    label={pm.channelFilter}
+                    options={[
+                      { value: "ALL", label: pm.channelAll },
+                      { value: "GREEN", label: channelLabel("GREEN", locale) },
+                      { value: "YELLOW", label: channelLabel("YELLOW", locale) },
+                      { value: "RED", label: channelLabel("RED", locale) },
+                    ]}
+                    value={channel}
+                    onChange={(v) => setChannel(parseChannel(v))}
+                  />
                 ) } : {})}
                     {...(tabEmpty ? { labels: { noResultsTitle: tabEmpty.title, noResultsDescription: tabEmpty.description } } : {})}
                     onClearFilters={() => router.replace(pathname, { scroll: false })}

@@ -144,8 +144,12 @@ describe("Bước Khai báo – sau khi hủy tờ khai", () => {
     api.current = submissionOf([branch(1, 1, "CANCELLED", { cancellation })]);
     const { container } = renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
     const result = (await screen.findByText("Kết quả từ Hải quan", undefined, T)).closest("[data-slot=card]") as HTMLElement ?? document.body;
-    expect(await within(result).findByText(/^H01 – Tờ khai không còn giá trị/, undefined, T)).toBeTruthy();
-    expect(within(result).getByText("CV-9")).toBeTruthy();
+    const reasonValue = await within(result).findByText(/^H01 – Tờ khai không còn giá trị/, undefined, T);
+    // Tên lý do dài: ô giá trị xuống dòng (KeyValue wrap), không `shrink-0` – trước đây đẩy trang tràn ngang (390px: 720px).
+    expect(reasonValue.className.split(" ")).not.toContain("shrink-0");
+    expect(reasonValue.className.split(" ")).toEqual(expect.arrayContaining(["min-w-0", "break-words"]));
+    expect(within(result).getByText("CV-9").className.split(" ")).not.toContain("shrink-0");
+    expect(within(result).getByText("20/10/2026").className.split(" ")).toContain("shrink-0");
     expect(within(result).getByText("20/10/2026")).toBeTruthy();
     expect(screen.queryByText("Đang chờ")).toBeNull();
     expect(screen.queryByText("Có sau khi khai chính thức")).toBeNull();

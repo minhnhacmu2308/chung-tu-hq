@@ -12,7 +12,7 @@ import { Suspense, useState, type ComponentType, type ReactNode } from "react";
 import { customsKeys, getSubmission } from "@/api/customs";
 import { cancelDossier, dossierKeys, getDossier } from "@/api/dossiers";
 import { DueBadge } from "@/features/dossiers/dossier-badges";
-import { DossierProgressBadge } from "@/features/dossiers/dossier-progress-badge";
+import { DossierProgressBadge, stepState } from "@/features/dossiers/dossier-progress-badge";
 import { DIRECTION_LABELS, transportLabels } from "@/features/dossiers/dossier-display";
 import { formatDate, formatMoney } from "@/lib/format";
 import { STEP_LABELS, STEP_ORDER, type Dossier, type StepId } from "@/mocks/types";
@@ -215,6 +215,8 @@ function DetailInner({ id }: { id: string }) {
         currentId={hasPost ? "post" : dossier.step}
         viewingId={viewing}
         onStepClick={(s) => goTo(s as ViewStep)}
+        // Hồ sơ hủy / mọi tờ khai bị hủy hoặc từ chối: dừng ở bước hiện tại, xám – như thanh tiến độ ở danh sách.
+        state={stepState(dossier) === "stopped" ? "stopped" : "active"}
       />
       {dossier.status === "CANCELLED" ? (
         <Card>

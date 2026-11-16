@@ -3,7 +3,7 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { SheetBrief } from "@kb/contracts";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
-import { DossierProgressBadge } from "./dossier-progress-badge";
+import { DossierProgressBadge, stepState } from "./dossier-progress-badge";
 
 const sheet = (no: number, over: Partial<SheetBrief>): SheetBrief => ({ no, stage: "NOT_SENT", state: "APPROVED", channel: null, amendments: 0, postAmendments: 0, ...over });
 const customs = (sheets: SheetBrief[]) => ({ cleared: 0, of: sheets.length, problems: [], sheets });
@@ -53,5 +53,15 @@ describe("DossierProgressBadge", () => {
   it("cờ truyền lỗi dùng trạng thái riêng của tiến độ hồ sơ", () => {
     renderWithProviders(<DossierProgressBadge dossier={{ status: "SUBMITTED", customs: customs([sheet(1, { stage: "CLEARED" }), sheet(2, { stage: "DECLARED", state: "SEND_FAILED" })]) }} />, "en");
     expect(screen.getByText("Send failed")).toBeTruthy();
+  });
+});
+
+describe("stepState – thanh bước ở danh sách (StepProgress) và trang chi tiết (Stepper)", () => {
+  it("mọi tờ bị hủy / bị từ chối, hoặc hồ sơ hủy → stopped; thông quan → complete; đang đi → active", () => {
+    expect(stepState({ status: "SUBMITTED", customs: customs([sheet(1, { stage: "CANCELLED" }), sheet(2, { stage: "CANCELLED" })]) })).toBe("stopped");
+    expect(stepState({ status: "SUBMITTED", customs: customs([sheet(1, { stage: "REJECTED", state: "REJECTED" })]) })).toBe("stopped");
+    expect(stepState({ status: "CANCELLED" })).toBe("stopped");
+    expect(stepState({ status: "CLEARED", customs: customs([sheet(1, { stage: "CLEARED" })]) })).toBe("complete");
+    expect(stepState({ status: "SUBMITTED", customs: customs([sheet(1, { stage: "CANCELLED" }), sheet(2, { stage: "DECLARED" })]) })).toBe("active");
   });
 });

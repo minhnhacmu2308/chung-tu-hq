@@ -83,7 +83,22 @@ describe("Bước Khai báo – lô 3 tờ", () => {
     expect(within(card(/^Tờ 3\/3/)).getAllByText("Chờ tờ 2").length).toBeGreaterThan(0);
     expect(within(c2).queryByText(/Chờ tờ/)).toBeNull();
     await userEvent.click(within(c2).getAllByRole("button", { name: "Gửi lại IDA" })[0]!);
+    expect(within(c2).queryByText(/không gửi lại nội dung cũ/)).toBeNull();
     expect(api.resend).toHaveBeenCalledWith("dos_028", "IDA", 2);
+  }, 20_000);
+
+  it.each(["DRAFT", "APPROVED"] as const)("tờ khai đã mở lại để sửa (%s) → không có nút 'Gửi lại IDA' (phải duyệt lại rồi Truyền – bất biến 7)", async (declarationStatus) => {
+    const failed = pipelineFor("NOT_SENT").map((r) => (r.op === "IDA" ? { ...r, status: "ERROR" as const } : r));
+    api.current = submissionOf([
+      branch(1, 3, "PRE_DECLARED"),
+      branch(2, 3, "NOT_SENT", { state: "SEND_FAILED", pipeline: failed, started: true }),
+      branch(3, 3, "NOT_SENT"),
+    ], { declarationStatus });
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    await screen.findByRole("region", { name: /^Tờ 1\/3/ }, T);
+    expect(within(card(/^Tờ 2\/3/)).queryByRole("button", { name: "Gửi lại IDA" })).toBeNull();
+    expect(within(card(/^Tờ 2\/3/)).getAllByText("Tờ khai đã mở lại để sửa – không gửi lại nội dung cũ; phê duyệt lại rồi bấm Truyền").length).toBeGreaterThan(0);
+    expect(api.resend).not.toHaveBeenCalled();
   }, 20_000);
 
   it("nút tra cứu theo tờ: tên truy cập bắt đầu bằng chữ hiển thị (WCAG 2.5.3)", async () => {

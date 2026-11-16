@@ -7,6 +7,7 @@ import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
 import { coarseState, stageOf } from "../domain/state-machine.js";
 import { syncDossierClearance } from "./_clearance.js";
+import { hasBlockingPending } from "./_customs-view.js";
 import type { CustomsDeps } from "./customs-ports.js";
 
 export async function confirmDeclarationCancelled(deps: CustomsDeps, ctx: Ctx, dossierId: string, input: ConfirmCancelledInput): Promise<Result<void>> {
@@ -24,9 +25,10 @@ export async function confirmDeclarationCancelled(deps: CustomsDeps, ctx: Ctx, d
     if (!row) return err(domainError("NOT_FOUND", "Không tìm thấy tờ khai"));
     const stage = stageOf(row);
     if (stage === "CANCELLED") return ok(null);
-    // Còn lệnh đang gửi cho tờ này: kết quả về muộn có thể ghi đè – chờ xong rồi mới ghi nhận hủy.
+    // Còn nghiệp vụ của luồng tờ này đang gửi: kết quả về muộn có thể ghi đè – chờ xong rồi mới ghi nhận hủy.
+    // HYS / CONT_LIST / KVGS (ngoài luồng tờ – isOffFlowOutbox) không đổi giai đoạn tờ → không chặn, như màn hình.
     const outbox = await r.outbox.listForDossier(ctx.orgId, dossierId);
-    if (outbox.some((o) => o.branch === input.branch && o.status === "PENDING")) return err(reasonError("INVALID_STATE", "DECLARATION_SENDING"));
+    if (hasBlockingPending(outbox, input.branch)) return err(reasonError("INVALID_STATE", "DECLARATION_SENDING"));
     if (!row.declarationNo || stage === "NOT_SENT" || stage === "CLEARED" || stage.startsWith("POST_") || stage === "REJECTED" || row.state === "CLEARED" || row.state === "REJECTED") {
       return err(reasonError("INVALID_STATE", "CANCEL_NOT_ALLOWED"));
     }

@@ -155,6 +155,40 @@ describe("Stepper", () => {
     const { container } = render(<Stepper steps={STEPS} currentId="upload" onStepClick={() => {}} action={<button type="button">Xem cây quy trình</button>} />);
     await expectNoA11yViolations(container);
   });
+
+  it("state=stopped: bước dừng ghi 'Đã dừng' (thay '(đang thực hiện)'), bước và đường nối xám; bước đã qua vẫn bấm được; a11y", async () => {
+    const onStepClick = vi.fn();
+    const { container } = render(<Stepper steps={STEPS} currentId="ocr" state="stopped" onStepClick={onStepClick} />);
+    const nav = screen.getByRole("navigation", { name: "Các bước xử lý hồ sơ" });
+    expect(container.querySelector('[data-slot="stepper"]')).toHaveAttribute("data-state", "stopped");
+    const current = within(nav).getAllByRole("listitem")[2]!;
+    expect(current).toHaveAttribute("aria-current", "step");
+    expect(within(current).getByText("· Đã dừng")).toBeInTheDocument();
+    expect(within(current).queryByText("(đang thực hiện)")).not.toBeInTheDocument();
+    expect(nav.querySelector(".bg-primary")).toBeNull();
+    await userEvent.click(within(nav).getByRole("button", { name: /Upload chứng từ/ }));
+    expect(onStepClick).toHaveBeenCalledWith("upload");
+    await expectNoA11yViolations(container);
+  });
+
+  it("state=stopped, dòng gọn màn nhỏ: 'Đã dừng' chỉ khi đang xem bước dừng, không gắn vào bước đã qua đang xem lại", () => {
+    const compact = (c: HTMLElement) => c.querySelector('[data-slot="stepper"] > p[aria-hidden="true"]')!;
+    const { container, unmount } = render(<Stepper steps={STEPS} currentId="ocr" state="stopped" />);
+    expect(compact(container)).toHaveTextContent("OCR & kiểm tra · Đã dừng");
+    unmount();
+    const again = render(<Stepper steps={STEPS} currentId="ocr" viewingId="upload" state="stopped" onStepClick={() => {}} />);
+    expect(compact(again.container)).toHaveTextContent("Upload chứng từ");
+    expect(compact(again.container)).not.toHaveTextContent("Đã dừng");
+  });
+
+  it("mặc định (active) giữ màu chính, không có 'Đã dừng'; nhãn ghi đè qua labels", () => {
+    const { container } = render(<Stepper steps={STEPS} currentId="ocr" />);
+    expect(container.querySelector('[data-slot="stepper"]')).toHaveAttribute("data-state", "active");
+    expect(screen.queryByText(/Đã dừng/)).not.toBeInTheDocument();
+    expect(container.querySelector("nav .bg-primary")).not.toBeNull();
+    render(<Stepper steps={STEPS} currentId="ocr" state="stopped" labels={{ stopped: "Đã hủy" }} />);
+    expect(screen.getAllByText(/Đã hủy/).length).toBeGreaterThan(0);
+  });
 });
 
 describe("layoutWorkflow – quy trình hồ sơ đầy đủ (2 điểm rẽ nhánh, đường dài)", () => {

@@ -6,10 +6,10 @@ import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
 const STEPPER_MESSAGES = {
-  vi: { nav: "Các bước xử lý hồ sơ", done: "(đã xong)", current: "(đang thực hiện)", todo: "(chưa tới)", viewing: "(đang xem)", stepOf: "Bước {n}/{total}" },
-  en: { nav: "Dossier steps", done: "(done)", current: "(in progress)", todo: "(upcoming)", viewing: "(viewing)", stepOf: "Step {n} of {total}" },
-  zh: { nav: "档案处理步骤", done: "（已完成）", current: "（进行中）", todo: "（未开始）", viewing: "（正在查看）", stepOf: "第 {n}/{total} 步" },
-} satisfies Messages<"nav" | "done" | "current" | "todo" | "viewing" | "stepOf">;
+  vi: { nav: "Các bước xử lý hồ sơ", done: "(đã xong)", current: "(đang thực hiện)", todo: "(chưa tới)", viewing: "(đang xem)", stepOf: "Bước {n}/{total}", stopped: "Đã dừng" },
+  en: { nav: "Dossier steps", done: "(done)", current: "(in progress)", todo: "(upcoming)", viewing: "(viewing)", stepOf: "Step {n} of {total}", stopped: "Stopped" },
+  zh: { nav: "档案处理步骤", done: "（已完成）", current: "（进行中）", todo: "（未开始）", viewing: "（正在查看）", stepOf: "第 {n}/{total} 步", stopped: "已终止" },
+} satisfies Messages<"nav" | "done" | "current" | "todo" | "viewing" | "stepOf" | "stopped">;
 
 const DIAGRAM_MESSAGES = {
   vi: { zoomIn: "Phóng to", zoomOut: "Thu nhỏ", fit: "Vừa khung", currentBadge: "Đang ở bước này",
@@ -34,11 +34,19 @@ export type StepperProps = {
   /** Vùng bên phải, vd nút "Xem cây quy trình". */
   action?: ReactNode;
   label?: string;
+  /**
+   * `active` (mặc định): quy trình đang chạy ở bước `currentId`. `stopped`: quy trình đã dừng ở bước `currentId` (hồ sơ hủy / tờ khai bị từ chối) –
+   * cùng ngôn ngữ với `StepProgress state="stopped"`: bước và đường nối xám, bước dừng ghi "Đã dừng".
+   */
+  state?: "active" | "stopped";
+  /** Ghi đè nhãn (mặc định 3 ngôn ngữ). */
+  labels?: Partial<(typeof STEPPER_MESSAGES)["vi"]>;
   className?: string;
 };
 
-export function Stepper({ steps, currentId, viewingId, onStepClick, action, label, className }: StepperProps) {
-  const t = useMessages(STEPPER_MESSAGES);
+export function Stepper({ steps, currentId, viewingId, onStepClick, action, label, state: flow = "active", labels, className }: StepperProps) {
+  const t = useMessages(STEPPER_MESSAGES, labels);
+  const stopped = flow === "stopped";
   const currentIndex = Math.max(0, steps.findIndex((s) => s.id === currentId));
   const viewing = viewingId ?? currentId;
   const viewingIndex = Math.max(0, steps.findIndex((s) => s.id === viewing));
@@ -52,11 +60,13 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
     if (nav && li) nav.scrollLeft = Math.max(0, li.offsetLeft - (nav.clientWidth - li.offsetWidth) / 2);
   }, [viewing]);
   return (
-    <div className={cn("flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2", className)}>
+    <div data-slot="stepper" data-state={flow} className={cn("flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2", className)}>
       {/* Màn nhỏ: gọn thành 1 dòng "Bước 3/6 · OCR & kiểm tra" (ẩn với trình đọc màn hình vì danh sách đầy đủ vẫn đọc được) */}
       <p aria-hidden="true" className="min-w-0 flex-1 truncate text-sm cq-sm:hidden">
         <span className="text-fg-muted">{t.stepOf.replace("{n}", String(viewingIndex + 1)).replace("{total}", String(steps.length))} · </span>
-        <span className="font-medium text-fg">{steps[viewingIndex]?.label}</span>
+        <span className={cn("font-medium", stopped && viewingIndex === currentIndex ? "text-fg-muted" : "text-fg")}>{steps[viewingIndex]?.label}</span>
+        {/* "Đã dừng" chỉ gắn với bước dừng – đang xem lại bước đã qua thì không ghi */}
+        {stopped && viewingIndex === currentIndex && <span className="text-fg-subtle"> · {t.stopped}</span>}
       </p>
       {/* `relative`: chữ ẩn sr-only (absolute) trong bước phải bị cắt theo vùng cuộn – không thì đẩy cả trang tràn ngang khi nhiều bước */}
       <nav ref={navRef} aria-label={label ?? t.nav} className="relative min-w-0 flex-1 overflow-x-auto cq-max-sm:sr-only">
@@ -71,15 +81,16 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
                   aria-hidden="true"
                   className={cn(
                     "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
-                    state === "done" && "border-primary bg-primary text-primary-fg",
-                    state === "current" && "border-primary text-primary",
+                    state === "done" && (stopped ? "border-border-strong bg-surface-muted text-fg-muted" : "border-primary bg-primary text-primary-fg"),
+                    state === "current" && (stopped ? "border-border-strong bg-surface-muted text-fg-muted" : "border-primary text-primary"),
                     state === "todo" && "border-border-strong text-fg-subtle",
                   )}
                 >
                   {state === "done" ? <Check className="h-3.5 w-3.5" /> : i + 1}
                 </span>
-                <span className={cn("whitespace-nowrap text-sm", state === "current" ? "font-medium text-fg" : "text-fg-muted")}>{s.label}</span>
-                <span className="sr-only">{state === "done" ? t.done : state === "current" ? t.current : t.todo}</span>
+                <span className={cn("whitespace-nowrap text-sm", state === "current" && !stopped ? "font-medium text-fg" : state === "current" ? "font-medium text-fg-muted" : "text-fg-muted")}>{s.label}</span>
+                {state === "current" && stopped && <span className="whitespace-nowrap text-xs font-medium text-fg-subtle">· {t.stopped}</span>}
+                {!(state === "current" && stopped) && <span className="sr-only">{state === "done" ? t.done : state === "current" ? t.current : t.todo}</span>}
                 {isViewing && viewing !== currentId && <span className="sr-only">{t.viewing}</span>}
               </>
             );
@@ -92,7 +103,7 @@ export function Stepper({ steps, currentId, viewingId, onStepClick, action, labe
                 ) : (
                   <span className={cn("flex items-center gap-2 rounded-md px-2 py-1", isViewing && "bg-primary-subtle")}>{inner}</span>
                 )}
-                {i < steps.length - 1 && <span aria-hidden="true" className={cn("mx-0.5 h-px w-3 shrink-0 cq-xl:mx-1 cq-xl:w-6", i < currentIndex ? "bg-primary" : "bg-border-strong")} />}
+                {i < steps.length - 1 && <span aria-hidden="true" className={cn("mx-0.5 h-px w-3 shrink-0 cq-xl:mx-1 cq-xl:w-6", i < currentIndex && !stopped ? "bg-primary" : "bg-border-strong")} />}
               </li>
             );
           })}

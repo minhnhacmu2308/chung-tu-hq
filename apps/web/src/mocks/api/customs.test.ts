@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb, saveDb } from "@/mocks/db";
 import { dossierProgressOf, EMPTY_VALUE_CHARGES } from "@kb/contracts";
 import { newId } from "@/lib/mock-request";
-import { answerHs, approveDeclaration, confirmHs, reclassifyHs, startAgentRun, unconfirmHs, updateDeclarationField } from "./declaration";
+import { answerHs, approveDeclaration, confirmHs, reclassifyHs, reopenDeclaration, startAgentRun, unconfirmHs, updateDeclarationField } from "./declaration";
 import { changeDocumentKind, confirmField, deleteDocument, finishReading, retryDocument, revertField, updateFieldValue, uploadDocuments } from "./ocr";
 import { saveValueCharges } from "./value-charges";
 import { confirmDeclarationCancelled, customsSummaryOf, declareAllSheets, getSubmission, recallAllSheets, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
@@ -10,6 +10,13 @@ import { addPostAmendmentLines, approvePostAmendment, updatePostAmendmentField }
 
 // HYS có test riêng (hys.test.ts): ở đây tắt gợi ý để guard HYS_SUGGESTED không chen vào các ca khai báo.
 vi.mock("@/mocks/hys-sim", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/mocks/hys-sim")>()), pendingSuggestions: () => [] }));
+
+// Bật được từng ca: bỏ qua kiểm ô bắt buộc trước khi khai để dựng tình huống Hải quan (mô phỏng) từ chối khai tạm (MOCK-REQ, địa chỉ trống).
+const gaps = vi.hoisted(() => ({ skip: false }));
+vi.mock("@/mocks/required-gaps", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/mocks/required-gaps")>();
+  return { ...real, assertNoGaps: (...args: Parameters<typeof real.assertNoGaps>) => (gaps.skip ? undefined : real.assertNoGaps(...args)) };
+});
 
 // Bỏ độ trễ mạng giả để test nhanh; thời gian nghiệp vụ điều khiển bằng đồng hồ giả (chỉ Date).
 vi.mock("@/lib/mock-request", async (importOriginal) => {
@@ -47,7 +54,10 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-10-15T03:00:00Z"));
   resetDb();
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  gaps.skip = false;
+});
 
 describe("luồng nghiệp vụ Hải quan (mock)", () => {
   it("IDA chỉ khai tạm → IDC do người khai bấm → luồng xanh tự thông quan, IID trả trạng thái", async () => {
@@ -765,5 +775,35 @@ describe("xác nhận tờ khai đã hủy (mock)", () => {
     await toPreDeclared();
     dossier(NEW).status = "CANCELLED";
     await expect(confirmDeclarationCancelled(NEW, cancelInput)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "CANCEL_NOT_ALLOWED" });
+  });
+});
+
+describe("gửi lại khai tạm lỗi sau khi mở lại để sửa (bất biến 7, như backend RESEND_AFTER_REOPEN)", () => {
+  /** Khai tạm bị Hải quan (mô phỏng) từ chối: địa chỉ người xuất khẩu trống → MOCK-REQ, chưa có số tờ khai. */
+  const rejectedIda = async () => {
+    gaps.skip = true;
+    decl(NEW).fields.find((f) => f.code === "NXK_DC")!.value = "";
+    saveDb();
+    await submitDeclaration(NEW, CERT);
+    wait(3_000);
+    expect((await row(NEW, "IDA")).status).toBe("ERROR");
+    expect(decl(NEW).status).toBe("SUBMITTED");
+  };
+
+  it("tờ khai còn SUBMITTED → Gửi lại được", async () => {
+    await rejectedIda();
+    expect(await resendOperation(NEW, "IDA")).toMatchObject({ resent: true });
+  });
+
+  it("Mở lại để sửa (DRAFT) hoặc duyệt lại chưa Truyền (APPROVED) → RESEND_AFTER_REOPEN, không gửi gì", async () => {
+    await rejectedIda();
+    await reopenDeclaration(NEW);
+    expect(decl(NEW).status).toBe("DRAFT");
+    const count = getDb().customsMessages.length;
+    await expect(resendOperation(NEW, "IDA")).rejects.toMatchObject({ code: "INVALID_STATE", reason: "RESEND_AFTER_REOPEN" });
+    decl(NEW).status = "APPROVED";
+    saveDb();
+    await expect(resendOperation(NEW, "IDA")).rejects.toMatchObject({ code: "INVALID_STATE", reason: "RESEND_AFTER_REOPEN" });
+    expect(getDb().customsMessages.length).toBe(count);
   });
 });

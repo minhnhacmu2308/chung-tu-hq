@@ -11,7 +11,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type ComponentType, type ReactNode } from "react";
 import { customsKeys, getSubmission } from "@/api/customs";
 import { cancelDossier, dossierKeys, getDossier } from "@/api/dossiers";
-import { ChannelBadge, DossierStatusBadge, DueBadge } from "@/components/common/dossier-status";
+import { DueBadge } from "@/features/dossiers/dossier-badges";
+import { DossierProgressBadge } from "@/features/dossiers/dossier-progress-badge";
 import { DIRECTION_LABELS, transportLabels } from "@/features/dossiers/dossier-display";
 import { formatDate, formatMoney } from "@/lib/format";
 import { STEP_LABELS, STEP_ORDER, type Dossier, type StepId } from "@/mocks/types";
@@ -99,9 +100,8 @@ function Header({ dossier, flowAction }: { dossier: Dossier; flowAction: ReactNo
       />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-fg-muted">
         <span className="flex flex-wrap items-center gap-2">
-          <DossierStatusBadge status={dossier.status} customs={dossier.customs} />
-          {dossier.channel && <ChannelBadge channel={dossier.channel} />}
-          <DueBadge dueDate={dossier.dueDate} done={done} />
+          <DossierProgressBadge dossier={dossier} />
+          <DueBadge dossier={dossier} />
         </span>
         <span>
           {directionLabels[dossier.direction]} · <span className="font-medium text-fg">{dossier.typeCode}</span>

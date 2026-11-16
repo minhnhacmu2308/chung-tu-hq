@@ -52,7 +52,8 @@ function ItemsTable({ kind, items }: { kind: "IDA" | "EDA"; items: CustomsInfoIt
 }
 
 /** `sheet`: lô nhiều tờ – tên tờ ghi sau tiêu đề (mỗi tờ một khối, id tiêu đề con riêng từng khối). */
-export function CustomsInfoPanel({ kind, info, estimate, sheet }: { kind: "IDA" | "EDA"; info: CustomsInfo; estimate?: CustomsEstimate | undefined; sheet?: string }) {
+/** `cancelled`: tờ đã hủy – ô chưa có giá trị ghi "—" (không còn "có sau khi khai chính thức"). */
+export function CustomsInfoPanel({ kind, info, estimate, sheet, cancelled = false }: { kind: "IDA" | "EDA"; info: CustomsInfo; estimate?: CustomsEstimate | undefined; sheet?: string; cancelled?: boolean }) {
   const t = useMessages(CUSTOMS_INFO_MESSAGES);
   const uid = useId();
   const locale = useUiLocale();
@@ -110,8 +111,8 @@ export function CustomsInfoPanel({ kind, info, estimate, sheet }: { kind: "IDA" 
                   hint={info.branch ? fill(t.branch, { no: info.branch.no, of: info.branch.of }) : t.declNoHint}
                   value={info.declarationNo ? <span className="font-mono">{info.declarationNo}</span> : pending(t.notIssued)}
                 />
-                <KeyValue label={t.registeredAt} hint={t.registeredHint} value={registered ?? pending(t.afterOfficial)} />
-                <KeyValue wrap label={t.inspection} value={inspection ?? pending(t.afterOfficial)} />
+                <KeyValue label={t.registeredAt} hint={t.registeredHint} value={registered ?? pending(cancelled ? "—" : t.afterOfficial)} />
+                <KeyValue wrap label={t.inspection} value={inspection ?? pending(cancelled ? "—" : t.afterOfficial)} />
                 <KeyValue wrap label={t.office} value={info.customsOfficeName ?? pending("—")} />
                 {info.subsection && <KeyValue label={t.subsection} value={info.subsection} />}
                 {info.representativeHs && <KeyValue label={t.representativeHs} value={<span className="font-mono">{info.representativeHs}</span>} />}

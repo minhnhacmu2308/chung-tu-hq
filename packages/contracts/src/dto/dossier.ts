@@ -1,9 +1,22 @@
 import { z } from "zod";
-import { CustomsChannelSchema, DecimalStringSchema, DirectionSchema, DocumentSourcesSchema, DossierStatusSchema, IsoDateSchema, IsoDateTimeSchema, PartyClassSchema, StepIdSchema, TransportModeSchema } from "../common.js";
+import { CustomsStageSchema } from "../customs-flow.js";
+import { CustomsChannelSchema, SubmissionStateSchema, DecimalStringSchema, DirectionSchema, DocumentSourcesSchema, DossierStatusSchema, IsoDateSchema, IsoDateTimeSchema, PartyClassSchema, StepIdSchema, TransportModeSchema } from "../common.js";
 
 /** Trạng thái Hải quan gộp từ các tờ khai nhánh ("Thông quan k/N", cảnh báo tờ bị từ chối / lỗi gửi) – dossierCustomsSummary. */
 export const CustomsProblemSchema = z.object({ no: z.number().int().min(1), kind: z.enum(["REJECTED", "SEND_FAILED"]) });
-export const CustomsSummarySchema = z.object({ cleared: z.number().int().nonnegative(), of: z.number().int().min(1), problems: z.array(CustomsProblemSchema) });
+/** Tóm tắt một tờ khai nhánh để tính trạng thái tờ / tiến độ hồ sơ (dossier-progress.ts). */
+export const SheetBriefSchema = z.object({
+  no: z.number().int().min(1),
+  stage: CustomsStageSchema,
+  state: SubmissionStateSchema,
+  channel: CustomsChannelSchema.nullable(),
+  /** Số lần sửa đổi bổ sung trước thông quan đã khai. */
+  amendments: z.number().int().nonnegative(),
+  /** Số lần sửa đổi sau thông quan đã khai. */
+  postAmendments: z.number().int().nonnegative(),
+});
+export type SheetBrief = z.infer<typeof SheetBriefSchema>;
+export const CustomsSummarySchema = z.object({ cleared: z.number().int().nonnegative(), of: z.number().int().nonnegative(), problems: z.array(CustomsProblemSchema), sheets: z.array(SheetBriefSchema).default([]) });
 export type CustomsSummary = z.infer<typeof CustomsSummarySchema>;
 
 export const DossierSchema = z.object({

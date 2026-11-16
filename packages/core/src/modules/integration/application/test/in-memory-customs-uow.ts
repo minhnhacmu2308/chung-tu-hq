@@ -39,6 +39,7 @@ export class InMemoryCustomsUow implements CustomsUow {
       },
       results: {
         get: async (orgId, dossierId, branch = 1) => clone(d.results.find((r) => r.dossierId === dossierId && r.branch === branch && r.orgId === org && r.orgId === orgId) ?? null),
+        getForUpdate: async (orgId, dossierId, branch = 1) => clone(d.results.find((r) => r.dossierId === dossierId && r.branch === branch && r.orgId === org && r.orgId === orgId) ?? null),
         listForDossiers: async (orgId, ids) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && ids.includes(r.dossierId)).sort((a, b) => a.branch - b.branch)),
         listForOrg: async (orgId) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId)),
         listNumbered: async (orgId, since) => clone(d.results.filter((r) => r.orgId === org && r.orgId === orgId && !!r.declarationNo && (!since || r.updatedAt >= since))),

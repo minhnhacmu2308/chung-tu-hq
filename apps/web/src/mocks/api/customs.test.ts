@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb, saveDb } from "@/mocks/db";
-import { EMPTY_VALUE_CHARGES } from "@kb/contracts";
+import { dossierProgressOf, EMPTY_VALUE_CHARGES } from "@kb/contracts";
 import { newId } from "@/lib/mock-request";
 import { answerHs, approveDeclaration, confirmHs, reclassifyHs, startAgentRun, unconfirmHs, updateDeclarationField } from "./declaration";
 import { changeDocumentKind, confirmField, deleteDocument, finishReading, retryDocument, revertField, updateFieldValue, uploadDocuments } from "./ocr";
 import { saveValueCharges } from "./value-charges";
-import { declareAllSheets, getSubmission, recallAllSheets, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
+import { confirmDeclarationCancelled, customsSummaryOf, declareAllSheets, getSubmission, recallAllSheets, listCustomsDeclarations, performOperation, resendOperation, startPostAmendment, submitDeclaration } from "./customs";
 import { addPostAmendmentLines, approvePostAmendment, updatePostAmendmentField } from "./post-amendment";
 
 // HYS có test riêng (hys.test.ts): ở đây tắt gợi ý để guard HYS_SUGGESTED không chen vào các ca khai báo.
@@ -297,7 +297,7 @@ describe("tờ khai nhánh (mock)", () => {
     expect(s.stage).toBe("PRE_DECLARED");
     expect(s.result?.declarationNo).toBe(nos[0]);
     expect(s.branches[1]!.messages.every((m) => m.operation === "IDA")).toBe(true);
-    expect(s.summary).toEqual({ of: 3, cleared: 0, problems: [] });
+    expect(s.summary).toMatchObject({ of: 3, cleared: 0, problems: [] });
     expect(await err(performOperation(BIG, "IDC", 4))).toMatchObject({ code: "NOT_FOUND" });
   });
 
@@ -316,15 +316,41 @@ describe("tờ khai nhánh (mock)", () => {
     await clearSheet(BIG, 1);
     let s = await getSubmission(BIG);
     expect(s.branches.map((x) => x.stage)).toEqual(["CLEARED", "PRE_DECLARED", "PRE_DECLARED"]);
-    expect(s.summary).toEqual({ of: 3, cleared: 1, problems: [] });
+    expect(s.summary).toMatchObject({ of: 3, cleared: 1, problems: [] });
     expect(dossier(BIG).status).toBe("SUBMITTED");
     await clearSheet(BIG, 2);
     expect((await getSubmission(BIG)).summary.cleared).toBe(2);
     expect(dossier(BIG).status).toBe("SUBMITTED");
     await clearSheet(BIG, 3);
     s = await getSubmission(BIG);
-    expect(s.summary).toEqual({ of: 3, cleared: 3, problems: [] });
+    expect(s.summary).toMatchObject({ of: 3, cleared: 3, problems: [] });
     expect(dossier(BIG).status).toBe("CLEARED");
+  });
+
+  it("customsSummaryOf: sheets có no/stage/state/channel/amendments/postAmendments, khớp summary của getSubmission; CANCELLED không tính vào of", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    const view = await getSubmission(BIG);
+    const sum = customsSummaryOf(getDb(), BIG)!;
+    expect(sum.sheets).toHaveLength(3);
+    expect(sum.sheets[0]).toMatchObject({ no: 1, stage: "CLEARED", state: "CLEARED", amendments: 0, postAmendments: 0 });
+    expect(sum.sheets.map((x) => x.stage)).toEqual(["CLEARED", "PRE_DECLARED", "PRE_DECLARED"]);
+    expect(sum.sheets[1]!.channel).toBeNull();
+    expect(sum).toEqual(view.summary);
+    getDb().customsFlows[`${BIG}:3`]!.stage = "CANCELLED";
+    expect(customsSummaryOf(getDb(), BIG)).toMatchObject({ of: 2, cleared: 1 });
+  });
+
+  it("hồ sơ mẫu đã thông quan luôn có tiến độ 'đã thông quan' (cả khi mất luồng – suy từ kết quả Hải quan / trạng thái hồ sơ)", () => {
+    const progressOf = (id: string, status: Parameters<typeof dossierProgressOf>[0]) => dossierProgressOf(status, customsSummaryOf(getDb(), id)?.sheets ?? []).progress;
+    const cleared = getDb().dossiers.filter((d) => d.status === "CLEARED");
+    expect(cleared.length).toBeGreaterThan(0);
+    for (const d of cleared) expect(["CLEARED", "POST_AMENDED"], d.id).toContain(progressOf(d.id, d.status));
+    // Mất luồng nhưng còn kết quả / thông điệp (dữ liệu cũ): vẫn suy ra giai đoạn đúng, không rơi về "chưa khai báo".
+    getDb().customsFlows = {};
+    for (const d of cleared) expect(["CLEARED", "POST_AMENDED"], d.id).toContain(progressOf(d.id, d.status));
+    const declared = getDb().dossiers.find((d) => d.id === "dos_019")!;
+    expect(progressOf(declared.id, declared.status)).toBe("DECLARED");
   });
 
   it("nghiệp vụ và gửi lại chỉ tác động tờ được chọn; danh sách Hải quan mỗi tờ một dòng", async () => {
@@ -679,5 +705,65 @@ describe("tờ khai nhánh: khai chính thức cả lô (declareAllSheets)", () 
     await sheets(BIG);
     expect(outs("IDC").map((m) => m.branch ?? 1)).toEqual([1]);
     expect(getDb().customsMessages.some((m) => m.dossierId === BIG && (m.branch ?? 1) === 2 && m.result === "ERROR" && /chưa khai chính thức tự động/.test(m.summary))).toBe(true);
+  });
+});
+
+describe("xác nhận tờ khai đã hủy (mock)", () => {
+  const cancelInput = { branch: 1, reason: "H01", date: "2026-10-20" };
+  const toPreDeclared = async () => {
+    await submitDeclaration(NEW, CERT);
+    wait(3_000);
+    expect((await getSubmission(NEW)).stage).toBe("PRE_DECLARED");
+  };
+
+  it("tờ đã có số → CANCELLED, 1 thông điệp; gọi lại không ghi thêm", async () => {
+    await toPreDeclared();
+    await confirmDeclarationCancelled(NEW, cancelInput);
+    const s = await getSubmission(NEW);
+    expect(s.stage).toBe("CANCELLED");
+    expect(s.messages[0]).toMatchObject({ direction: "IN", result: "OK" });
+    expect(s.messages[0]!.summary).toContain("đã hủy");
+    const count = getDb().customsMessages.length;
+    await confirmDeclarationCancelled(NEW, cancelInput);
+    expect(getDb().customsMessages.length).toBe(count);
+  });
+
+  it("chưa có số / đã thông quan → CANCEL_NOT_ALLOWED", async () => {
+    expect(await err(confirmDeclarationCancelled(NEW, cancelInput))).toMatchObject({ code: "INVALID_STATE" });
+    expect(await err(confirmDeclarationCancelled(CLEARED, cancelInput))).toMatchObject({ code: "INVALID_STATE" });
+  });
+
+  it("vai trò người khai bị chặn; mã lý do lạ bị từ chối", async () => {
+    await toPreDeclared();
+    expect(await err(confirmDeclarationCancelled(NEW, { ...cancelInput, reason: "ZZZ" }))).toMatchObject({ code: "VALIDATION" });
+    getDb().currentUserId = "usr_ha";
+    expect(await err(confirmDeclarationCancelled(NEW, cancelInput))).toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("lô [thông quan, thông quan, đã khai chính thức]: hủy tờ 3 → hồ sơ CLEARED (như backend); tờ 3 mang thông tin hủy", async () => {
+    await preDeclareAll(BIG);
+    await clearSheet(BIG, 1);
+    await clearSheet(BIG, 2);
+    await runB(BIG, "IDC", 3);
+    expect((await sheets(BIG)).map((x) => x.stage)).toEqual(["CLEARED", "CLEARED", "DECLARED"]);
+    expect(dossier(BIG).status).toBe("SUBMITTED");
+    await confirmDeclarationCancelled(BIG, { ...cancelInput, branch: 3, docNo: "CV-9" });
+    const b = await sheets(BIG);
+    expect(b[2]).toMatchObject({ stage: "CANCELLED", cancellation: { reason: "H01", date: "2026-10-20", docNo: "CV-9" } });
+    expect(b[0]!.cancellation).toBeUndefined();
+    expect(dossier(BIG).status).toBe("CLEARED");
+  });
+
+  it("còn nghiệp vụ đang gửi → DECLARATION_SENDING, không đổi giai đoạn", async () => {
+    await toPreDeclared();
+    await performOperation(NEW, "IDC");
+    await expect(confirmDeclarationCancelled(NEW, cancelInput)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "DECLARATION_SENDING" });
+    expect((await getSubmission(NEW)).stage).toBe("PRE_DECLARED");
+  });
+
+  it("hồ sơ đã hủy → CANCEL_NOT_ALLOWED", async () => {
+    await toPreDeclared();
+    dossier(NEW).status = "CANCELLED";
+    await expect(confirmDeclarationCancelled(NEW, cancelInput)).rejects.toMatchObject({ code: "INVALID_STATE", reason: "CANCEL_NOT_ALLOWED" });
   });
 });

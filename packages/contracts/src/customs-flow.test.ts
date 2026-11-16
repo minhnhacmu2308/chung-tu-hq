@@ -194,3 +194,10 @@ describe("CONT_LIST + KVGS (qua khu vực giám sát)", () => {
     expect(containerListRequired("NK", "AIR")).toBe(false);
   });
 });
+
+describe("operationAvailability – tờ đã hủy (CANCELLED)", () => {
+  it("khóa mọi nghiệp vụ với lý do DECLARATION_REJECTED (Hải quan từ chối/hủy)", () => {
+    const rows = operationAvailability({ ...base, stage: "CANCELLED" });
+    expect(rows.every((r) => !r.enabled && r.reasonCode === "DECLARATION_REJECTED")).toBe(true);
+  });
+});

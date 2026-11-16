@@ -1,6 +1,6 @@
 "use client";
 import {
-  Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, fill, IconTile, PageHeader, pickMessages, RecordCard, RowActions, SegmentedControl, Stack, StepProgress, toast, useUiLocale,
+  Alert, Badge, Button, ConfirmDialog, createDataTableColumnHelper, DataTable, type DataTableColumnVisibility, fill, IconTile, PageHeader, pickMessages, RecordCard, RowActions, SegmentedControl, Stack, StepProgress, Tabs, TabsContent, TabsList, TabsTrigger, toast, type UiLocale, useUiLocale,
 } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Container, Download, FolderOpen, Package, Plane, Plus, Ship, TrainFront, Trash2, Truck, XCircle, type LucideIcon } from "lucide-react";
@@ -11,9 +11,12 @@ import { cancelDossier, deleteDossier, dossierKeys, listDossiers } from "@/api/d
 import { getSession, listMembers, memberKeys, sessionKeys } from "@/api/session";
 import { toastMutationError } from "@/lib/mutation-error";
 import { formatMoney } from "@/lib/format";
-import { STEP_LABELS, STEP_ORDER, type Direction, type Dossier, type DossierStatus } from "@/mocks/types";
-import { DossierStatusBadge, DueBadge } from "./dossier-badges";
-import { DIRECTION_LABELS, dossierStatusDisplay } from "./dossier-display";
+import { STEP_LABELS, STEP_ORDER, type Direction, type Dossier } from "@/mocks/types";
+import { DueBadge } from "./dossier-badges";
+import { DIRECTION_LABELS } from "./dossier-display";
+import { channelLabel, DossierProgressBadge, progressLabel, progressOfDossier } from "./dossier-progress-badge";
+import { DOSSIER_PROGRESS_MESSAGES } from "./dossier-progress.messages";
+import { channelOfDossier, inViec, parseChannel, parseViec, type ChannelFilter, PROGRESS_FILTER_ORDER, VIEC_TABS, type Viec } from "./dossier-progress-tabs";
 import { DOSSIER_LIST_MESSAGES } from "./dossiers.messages";
 
 /** Hình đầu thẻ theo phương thức vận chuyển (chỉ trang trí – nghĩa nằm ở chữ trên thẻ). */
@@ -24,23 +27,32 @@ const TRANSPORT_ICON: Record<Dossier["transportMode"], LucideIcon> = {
 /** Dòng hiển thị: thêm nhãn chữ để ô tìm kiếm/lọc khớp với điều người dùng nhìn thấy. */
 type Row = Dossier & { stepLabel: string; statusLabel: string; ownerName: string };
 
+type ProgressMessages = Record<keyof (typeof DOSSIER_PROGRESS_MESSAGES)["vi"], string>;
+
+const TAB_LABEL = { all: "tabAll", todo: "tabTodo", "await-official": "tabAwaitOfficial", channelled: "tabChannelled", cleared: "tabCleared", attention: "tabAttention" } as const satisfies Record<Viec, keyof ProgressMessages>;
+
 type Scope = "ALL" | Direction;
 
 /** Hồ sơ đã truyền Hải quan (có số tờ khai / trạng thái Hải quan) giữ để đối chiếu – chỉ hủy, không xóa (backend kiểm lại). */
 const sentToCustoms = (d: Dossier) => d.status === "SUBMITTED" || d.status === "CLEARED" || !!d.declarationNo || !!d.customs;
 
-/** Hồ sơ đã thông quan → tô xong cả quy trình; đã hủy → thanh xám. */
-const stepState = (status: DossierStatus) => (status === "CLEARED" ? "complete" : status === "CANCELLED" ? "stopped" : "active");
+/** Theo tiến độ hồ sơ: đã thông quan → tô xong cả quy trình; hồ sơ hủy / mọi tờ khai bị hủy hoặc từ chối → thanh xám (dừng). */
+export function stepState(d: Pick<Dossier, "status" | "customs">): "complete" | "stopped" | "active" {
+  const p = progressOfDossier(d).progress;
+  if (p === "CLEARED" || p === "POST_AMENDED") return "complete";
+  if (p === "CANCELLED" || p === "REJECTED" || p === "DOSSIER_CANCELLED") return "stopped";
+  return "active";
+}
 
 function DossierStep({ dossier, stepLabels }: { dossier: Dossier; stepLabels: Record<Dossier["step"], string> }) {
   const steps = STEP_ORDER.map((id) => ({ id, label: stepLabels[id] }));
-  return <StepProgress steps={steps} currentId={dossier.step} state={stepState(dossier.status)} />;
+  return <StepProgress steps={steps} currentId={dossier.step} state={stepState(dossier)} />;
 }
 
 type ListMessages = Record<keyof (typeof DOSSIER_LIST_MESSAGES)["vi"], string>;
 
 const col = createDataTableColumnHelper<Row>();
-const buildColumns = (t: ListMessages, stepLabels: Record<Dossier["step"], string>, statusDisplay: ReturnType<typeof dossierStatusDisplay>) => col.columns([
+const buildColumns = (t: ListMessages, stepLabels: Record<Dossier["step"], string>, locale: UiLocale) => col.columns([
   col.accessor("code", {
     header: t.colCode,
     size: 160,
@@ -79,16 +91,22 @@ const buildColumns = (t: ListMessages, stepLabels: Record<Dossier["step"], strin
   }),
   col.accessor("statusLabel", {
     header: t.colStatus,
-    size: 170,
-    minSize: 150,
+    size: 230,
+    minSize: 170,
     meta: {
+      wrap: true,
       filter: "select",
-      filterOptions: (Object.keys(statusDisplay) as DossierStatus[]).map((s) => ({ value: statusDisplay[s].label, label: statusDisplay[s].label })),
+      filterOptions: [...new Set(PROGRESS_FILTER_ORDER.map((p) => progressLabel(p, locale)))].map((label) => ({ value: label, label })),
     },
-    cell: (c) => <DossierStatusBadge status={c.row.original.status} customs={c.row.original.customs} />,
+    cell: (c) => <DossierProgressBadge dossier={c.row.original} />,
   }),
   col.accessor("ownerName", { header: t.colOwner, size: 160, minSize: 120, meta: { filter: "select" } }),
 ]);
+
+const VIEC_EMPTY = {
+  todo: ["emptyTodo", "emptyTodoDesc"], "await-official": ["emptyAwaitOfficial", "emptyAwaitOfficialDesc"], channelled: ["emptyChannelled", "emptyChannelledDesc"],
+  cleared: ["emptyCleared", "emptyClearedDesc"], attention: ["emptyAttention", "emptyAttentionDesc"],
+} as const;
 
 function ListInner() {
   const router = useRouter();
@@ -101,8 +119,12 @@ function ListInner() {
   const t = pickMessages(DOSSIER_LIST_MESSAGES, locale);
   const stepLabels = pickMessages(STEP_LABELS, locale);
   const directionLabels = pickMessages(DIRECTION_LABELS, locale);
-  const statusDisplay = useMemo(() => dossierStatusDisplay(locale), [locale]);
-  const columns = useMemo(() => buildColumns(t, stepLabels, statusDisplay), [t, stepLabels, statusDisplay]);
+  const pm = pickMessages(DOSSIER_PROGRESS_MESSAGES, locale);
+  const columns = useMemo(() => buildColumns(t, stepLabels, locale), [t, stepLabels, locale]);
+  const viec = parseViec(params.get("viec"));
+  const channel = viec === "channelled" ? parseChannel(params.get("luong")) : "ALL";
+  // Tab việc cần làm không còn hồ sơ: nói đúng tab (không dùng câu "thử từ khóa khác" của ô tìm kiếm).
+  const tabEmpty = viec === "all" ? null : { title: pm[VIEC_EMPTY[viec][0]], description: pm[VIEC_EMPTY[viec][1]] };
 
   const qc = useQueryClient();
   const dossiers = useQuery({ queryKey: dossierKeys.list({}), queryFn: () => listDossiers() });
@@ -136,17 +158,36 @@ function ListInner() {
     onError: toastMutationError(t.deleteFailed),
   });
 
+  const inScope = useMemo(() => (dossiers.data ?? []).filter((d) => scope === "ALL" || d.direction === scope), [dossiers.data, scope]);
+  const counts = useMemo(() => Object.fromEntries(VIEC_TABS.map((v) => [v, inScope.filter((d) => inViec(d, v)).length])) as Record<Viec, number>, [inScope]);
   const rows = useMemo<Row[]>(() => {
     const names = new Map(members.data?.map((m) => [m.id, m.name]));
-    return (dossiers.data ?? [])
-      .filter((d) => scope === "ALL" || d.direction === scope)
+    return inScope
+      .filter((d) => inViec(d, viec) && (viec !== "channelled" || channel === "ALL" || channelOfDossier(d) === channel))
       .map((d) => ({
         ...d,
         stepLabel: stepLabels[d.step],
-        statusLabel: statusDisplay[d.status].label,
+        statusLabel: progressLabel(progressOfDossier(d).progress, locale),
         ownerName: names.get(d.ownerId) ?? "—",
       }));
-    }, [dossiers.data, members.data, scope, stepLabels, statusDisplay]);
+  }, [inScope, members.data, viec, channel, stepLabels, locale]);
+
+  const setViec = (v: Viec) => {
+    const next = new URLSearchParams(params);
+    if (v === "all") next.delete("viec");
+    else next.set("viec", v);
+    next.delete("luong");
+    const q = next.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+  };
+
+  const setChannel = (c: ChannelFilter) => {
+    const next = new URLSearchParams(params);
+    if (c === "ALL") next.delete("luong");
+    else next.set("luong", c);
+    const q = next.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+  };
 
   const setScope = (s: Scope) => {
     const next = new URLSearchParams(params);
@@ -194,94 +235,117 @@ function ListInner() {
                 { value: "XK", label: directionLabels.XK },
               ]}
             />
-            {/* Tải lỗi: chỉ báo lỗi (Alert ở trên), không hiện bảng trống "Chưa có hồ sơ" – sai nghĩa. */}
-            {!dossiers.isError && (
-              <DataTable
-                aria-label={title}
-                columns={columns}
-                data={rows}
-                getRowId={(r) => r.id}
-                rowLabel={(r) => r.code}
-                loading={dossiers.isLoading}
-                selectable
-                searchable
-                columnToggle
-                resizable
-                columnVisibility={columnVisibility}
-                onColumnVisibilityChange={setColumnVisibility}
-                pagination={{ initialPageSize: 50, pageSizeOptions: [20, 50, 100] }}
-                onRowClick={(r) => router.push(`/dossiers/${r.id}`)}
-                emptyTitle={t.emptyTitle}
-                emptyDescription={t.emptyDescription}
-                filtered={scope !== "ALL"}
-                onClearFilters={() => setScope("ALL")}
-                emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">{t.create}</Link></Button>}
-                viewStorageKey="dossiers"
-                selectionActions={(picked) => (
-                  <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: t.exporting, description: t.exportMock })}>
-                    {fill(t.exportSelected, { n: picked.length })}
-                  </Button>
-                )}
-                renderCard={(r, parts) => {
-                  const Transport = TRANSPORT_ICON[r.transportMode];
-                  return (
-                  <RecordCard
-                    title={<span className="font-mono">{r.code}</span>}
-                    titleLines={1}
-                    subtitle={r.partner}
-                    tone={r.direction === "NK" ? "info" : "primary"}
-                    pattern={r.direction === "NK" ? "dots" : "diagonal"}
-                    leading={<IconTile icon={<Transport />} tone={r.direction === "NK" ? "info" : "primary"} size="md" className="bg-surface" />}
-                    art={<Transport />}
-                    status={<DossierStatusBadge status={r.status} customs={r.customs} />}
-                    select={parts.select}
-                    actions={parts.actions}
-                    fields={[
-                      { label: t.colStep, value: <DossierStep dossier={r} stepLabels={stepLabels} />, wide: true },
-                      {
-                        label: t.colType,
-                        value: (
-                          <span className="inline-flex items-center gap-1.5">
-                            <Badge tone={r.direction === "NK" ? "info" : "primary"} variant="outline">{r.direction}</Badge>
-                            {r.typeCode}
-                          </span>
-                        ),
-                      },
-                      { label: t.colValue, value: <span className="tabular-nums">{formatMoney(r.invoiceValue, r.currency)}</span> },
-                      { label: t.colDue, value: <DueBadge dossier={r} /> },
-                      { label: t.colOwner, value: r.ownerName },
-                    ]}
-                  />
-                  );
-                }}
-                rowActions={(r) => (
-                  <RowActions
-                    rowLabel={r.code}
-                    actions={[
-                      { id: "open", label: t.open, icon: <FolderOpen />, primary: true, onSelect: () => router.push(`/dossiers/${r.id}`) },
-                      {
-                        id: "cancel",
-                        label: t.cancel,
-                        icon: <XCircle />,
-                        tone: "danger",
-                        disabled: r.status === "CANCELLED" || r.status === "CLEARED" || r.status === "SUBMITTED",
-                        onSelect: () => setToCancel(r),
-                      },
-                      ...(canDelete && !sentToCustoms(r)
-                        ? [{
-                            id: "delete",
-                            label: t.delete,
-                            icon: <Trash2 />,
-                            tone: "danger" as const,
-                            quick: false,
-                            onSelect: () => setToDelete(r),
-                          }]
-                        : []),
+            <Tabs value={viec} onValueChange={(v) => setViec(parseViec(v))} className="flex flex-col gap-4">
+              <TabsList aria-label={pm.tabsLabel}>
+                {VIEC_TABS.map((v) => <TabsTrigger key={v} value={v}>{pm[TAB_LABEL[v]]}<Badge size="sm" tone="neutral">{counts[v]}</Badge></TabsTrigger>)}
+              </TabsList>
+              <TabsContent value={viec} className="flex flex-col gap-4 pt-0">
+                {viec === "channelled" && (
+                  <SegmentedControl<ChannelFilter>
+                    label={pm.channelFilter}
+                    hideLabel
+                    className="justify-start"
+                    value={channel}
+                    onChange={setChannel}
+                    options={[
+                      { value: "ALL", label: pm.channelAll },
+                      { value: "GREEN", label: channelLabel("GREEN", locale) },
+                      { value: "YELLOW", label: channelLabel("YELLOW", locale) },
+                      { value: "RED", label: channelLabel("RED", locale) },
                     ]}
                   />
                 )}
-              />
-            )}
+                {/* Tải lỗi: chỉ báo lỗi (Alert ở trên), không hiện bảng trống "Chưa có hồ sơ" – sai nghĩa. */}
+                {!dossiers.isError && (
+                  <DataTable
+                    aria-label={title}
+                    columns={columns}
+                    data={rows}
+                    getRowId={(r) => r.id}
+                    rowLabel={(r) => r.code}
+                    loading={dossiers.isLoading}
+                    selectable
+                    searchable
+                    columnToggle
+                    resizable
+                    columnVisibility={columnVisibility}
+                    onColumnVisibilityChange={setColumnVisibility}
+                    pagination={{ initialPageSize: 50, pageSizeOptions: [20, 50, 100] }}
+                    onRowClick={(r) => router.push(`/dossiers/${r.id}`)}
+                    emptyTitle={t.emptyTitle}
+                    emptyDescription={t.emptyDescription}
+                    filtered={scope !== "ALL" || viec !== "all" || channel !== "ALL"}
+                    {...(tabEmpty ? { labels: { noResultsTitle: tabEmpty.title, noResultsDescription: tabEmpty.description } } : {})}
+                    onClearFilters={() => router.replace(pathname, { scroll: false })}
+                    emptyAction={<Button asChild size="sm"><Link href="/dossiers/new">{t.create}</Link></Button>}
+                    viewStorageKey="dossiers"
+                    selectionActions={(picked) => (
+                      <Button size="sm" variant="secondary" leftIcon={<Download className="h-4 w-4" />} onClick={() => toast({ tone: "info", title: t.exporting, description: t.exportMock })}>
+                        {fill(t.exportSelected, { n: picked.length })}
+                      </Button>
+                    )}
+                    renderCard={(r, parts) => {
+                      const Transport = TRANSPORT_ICON[r.transportMode];
+                      return (
+                      <RecordCard
+                        title={<span className="font-mono">{r.code}</span>}
+                        titleLines={1}
+                        subtitle={r.partner}
+                        tone={r.direction === "NK" ? "info" : "primary"}
+                        pattern={r.direction === "NK" ? "dots" : "diagonal"}
+                        leading={<IconTile icon={<Transport />} tone={r.direction === "NK" ? "info" : "primary"} size="md" className="bg-surface" />}
+                        art={<Transport />}
+                        status={<DossierProgressBadge dossier={r} />}
+                        select={parts.select}
+                        actions={parts.actions}
+                        fields={[
+                          { label: t.colStep, value: <DossierStep dossier={r} stepLabels={stepLabels} />, wide: true },
+                          {
+                            label: t.colType,
+                            value: (
+                              <span className="inline-flex items-center gap-1.5">
+                                <Badge tone={r.direction === "NK" ? "info" : "primary"} variant="outline">{r.direction}</Badge>
+                                {r.typeCode}
+                              </span>
+                            ),
+                          },
+                          { label: t.colValue, value: <span className="tabular-nums">{formatMoney(r.invoiceValue, r.currency)}</span> },
+                          { label: t.colDue, value: <DueBadge dossier={r} /> },
+                          { label: t.colOwner, value: r.ownerName },
+                        ]}
+                      />
+                      );
+                    }}
+                    rowActions={(r) => (
+                      <RowActions
+                        rowLabel={r.code}
+                        actions={[
+                          { id: "open", label: t.open, icon: <FolderOpen />, primary: true, onSelect: () => router.push(`/dossiers/${r.id}`) },
+                          {
+                            id: "cancel",
+                            label: t.cancel,
+                            icon: <XCircle />,
+                            tone: "danger",
+                            disabled: r.status === "CANCELLED" || r.status === "CLEARED" || r.status === "SUBMITTED",
+                            onSelect: () => setToCancel(r),
+                          },
+                          ...(canDelete && !sentToCustoms(r)
+                            ? [{
+                                id: "delete",
+                                label: t.delete,
+                                icon: <Trash2 />,
+                                tone: "danger" as const,
+                                quick: false,
+                                onSelect: () => setToDelete(r),
+                              }]
+                            : []),
+                        ]}
+                      />
+                    )}
+                  />
+                )}
+              </TabsContent>
+            </Tabs>
       </Stack>
 
       <ConfirmDialog

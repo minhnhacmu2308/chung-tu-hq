@@ -7,7 +7,7 @@ import type { OrgId, UserId } from "../../../shared/ids.js";
 import { createLogger } from "../../../shared/log.js";
 import { meterSafely } from "../../../shared/usage.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
-import { coarseState, stageOf } from "../domain/state-machine.js";
+import { coarseState, stageOf, TERMINAL } from "../domain/state-machine.js";
 import type { CustomsDeps, GatewayMessage, InboxRow, ResultRow } from "./customs-ports.js";
 import { syncDossierClearance } from "./_clearance.js";
 
@@ -96,7 +96,7 @@ async function apply(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, r
   const now = deps.clock.now();
   return deps.uow.asOrg(ctx, async (r) => {
     if (!(await r.inbox.claim(ctx.orgId, row.id, now))) return null;
-    const latest = (await r.results.get(ctx.orgId, target.dossierId, target.branch)) ?? target;
+    const latest = (await r.results.getForUpdate(ctx.orgId, target.dossierId, target.branch)) ?? target;
     await r.messages.insert({
       id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId: latest.dossierId, branch: latest.branch, operation: op, direction: "IN", result: "OK",
       summary: `Hải quan gửi ${m.code}${m.name ? ` – ${m.name}` : ""}`,
@@ -107,6 +107,8 @@ async function apply(deps: CustomsDeps, ctx: { orgId: OrgId; userId: UserId }, r
     const st = m.status;
     if (!st) return false;
     const stage = stageOf(latest);
+    // Tờ đã ở giai đoạn cuối (người khai xác nhận hủy / bị từ chối): chỉ ghi nhật ký, không đổi giai đoạn.
+    if (TERMINAL.has(stage)) return false;
     // Chỉ tờ khai đang chờ thông quan mới đổi giai đoạn (thông điệp cũ đến muộn không kéo lùi trạng thái).
     const waiting = AWAITING_CLEARANCE.has(stage);
     const nextStage = waiting && st.rejected ? "REJECTED" : waiting && st.cleared ? "CLEARED" : stage;

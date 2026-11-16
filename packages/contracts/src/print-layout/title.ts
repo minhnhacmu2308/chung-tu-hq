@@ -1,11 +1,14 @@
 import type { CustomsStage } from "../customs-flow.js";
 
-/** Tiêu đề bản in + watermark theo giai đoạn khai (spec §3.1). Chưa khai / bị từ chối / chưa có kết quả → bản nháp. */
+/** Tiêu đề bản in + watermark theo giai đoạn khai (spec §3.1). Chưa khai / bị từ chối / chưa có kết quả → bản nháp; đã hủy → "ĐÃ HỦY". */
 export function printTitle(kind: "IDA" | "EDA", stage: CustomsStage | undefined): { title: string; watermark: string | null } {
   const base = kind === "IDA" ? "Tờ khai hàng hóa nhập khẩu" : "Tờ khai hàng hóa xuất khẩu";
   switch (stage) {
     case undefined: case "NOT_SENT": case "REJECTED":
       return { title: `${base} – BẢN NHÁP`, watermark: "BẢN NHÁP – CHƯA KHAI HẢI QUAN" };
+    // Tờ đã có số rồi bị Hải quan hủy (người khai xác nhận): không phải bản nháp.
+    case "CANCELLED":
+      return { title: `${base} – ĐÃ HỦY`, watermark: "ĐÃ HỦY" };
     case "PRE_DECLARED": case "RECALLED":
       return { title: `${base} – KHAI TẠM`, watermark: "KHAI TẠM – CHƯA ĐĂNG KÝ" };
     case "DECLARED": case "AMEND_RECALLED": case "AMEND_PRE_DECLARED":

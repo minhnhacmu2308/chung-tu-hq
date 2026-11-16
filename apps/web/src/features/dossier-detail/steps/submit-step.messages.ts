@@ -15,6 +15,7 @@ export const STAGE_MESSAGES = defineMessages({
     POST_PRE_DECLARED: "Đã khai tạm AMA – chờ khai chính thức (AMC)",
     POST_RECALLED: "Bản khai AMA đã gọi về – sửa bản khai bổ sung, phê duyệt lại rồi khai AMA lại",
     REJECTED: "Hải quan từ chối / hủy tờ khai",
+    CANCELLED: "Đã hủy",
   },
   en: {
     NOT_SENT: "Not filed – sign and file provisionally to get a declaration number",
@@ -28,6 +29,7 @@ export const STAGE_MESSAGES = defineMessages({
     POST_PRE_DECLARED: "AMA filed provisionally – awaiting official filing (AMC)",
     POST_RECALLED: "AMA recalled – edit the supplementary declaration, approve again, then file AMA again",
     REJECTED: "Customs rejected / cancelled the declaration",
+    CANCELLED: "Cancelled",
   },
   zh: {
     NOT_SENT: "尚未申报 – 数字签名并临时申报以获取报关单号",
@@ -41,6 +43,7 @@ export const STAGE_MESSAGES = defineMessages({
     POST_PRE_DECLARED: "已临时申报 AMA – 等待正式申报 (AMC)",
     POST_RECALLED: "AMA 申报单已调回 – 修改补充申报单，重新批准后再次申报 AMA",
     REJECTED: "海关拒绝 / 撤销报关单",
+    CANCELLED: "已作废",
   },
 });
 

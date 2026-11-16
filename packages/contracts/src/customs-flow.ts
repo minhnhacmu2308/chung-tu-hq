@@ -20,6 +20,7 @@ export const CustomsStageSchema = z.enum([
   "POST_PRE_DECLARED",   // AMA ok: chờ khai chính thức (AMC)
   "POST_RECALLED",       // AMB ok: bản khai AMA gọi về sửa
   "REJECTED",            // Hải quan từ chối / hủy
+  "CANCELLED",           // Người khai xác nhận Hải quan đã hủy tờ khai
 ]);
 export type CustomsStage = z.infer<typeof CustomsStageSchema>;
 
@@ -105,7 +106,7 @@ export const EDITING_STAGES: ReadonlySet<CustomsStage> = new Set(["RECALLED", "A
 /** Đang chờ Hải quan xử lý/thông quan (hỏi trạng thái định kỳ). */
 export const AWAITING_CLEARANCE: ReadonlySet<CustomsStage> = new Set(["DECLARED", "AMEND_RECALLED", "AMEND_PRE_DECLARED"]);
 export const hasDeclarationNumber = (stage: CustomsStage) => stage !== "NOT_SENT";
-export const isChanneled = (stage: CustomsStage) => !["NOT_SENT", "PRE_DECLARED", "RECALLED", "REJECTED"].includes(stage);
+export const isChanneled = (stage: CustomsStage) => !["NOT_SENT", "PRE_DECLARED", "RECALLED", "REJECTED", "CANCELLED"].includes(stage);
 
 /** Đọc giai đoạn từ dữ liệu cũ (trước khi có raw.stage): progress APPROVED/PRE_DECLARED/DECLARED/DOCS_SENT/DONE. */
 export function stageFromLegacy(progress: string | undefined, state: string): CustomsStage {
@@ -165,7 +166,7 @@ export function operationAvailability(i: OperationAvailabilityInput): OperationA
     return row(op, true, null);
   };
   const o = (b: CustomsOperation) => opFor(i.direction, b);
-  const rejected = i.stage === "REJECTED" ? why("DECLARATION_REJECTED") : null;
+  const rejected = i.stage === "REJECTED" || i.stage === "CANCELLED" ? why("DECLARATION_REJECTED") : null;
   const out: OperationAvailability[] = [
     content(o("IDA"), ["NOT_SENT", "RECALLED"], i.stage === "NOT_SENT" ? null : why("IDA_ALREADY_PRE_DECLARED")),
     row(o("IDB"), i.stage === "PRE_DECLARED", why("IDB_REQUIRES_PRE_DECLARED")),

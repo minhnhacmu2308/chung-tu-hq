@@ -1,7 +1,7 @@
 // Cách hiển thị các mã của hồ sơ (dùng chung cho Tổng quan, danh sách, chi tiết).
 import { PARTY_CLASS_LABELS, PartyClassSchema, TRANSPORT_MODE_INFO, TransportModeSchema, type TransportMode } from "@kb/contracts";
 import { STATUS_META, statusLabel, type Status, type Tone, type UiLocale } from "@kb/ui";
-import type { CustomsChannel, Dossier, DossierStatus } from "@/mocks/types";
+import type { Dossier, DossierStatus } from "@/mocks/types";
 import { DIRECTION_LABELS, TRANSPORT_MODE_LABELS_INTL } from "./dossiers.messages";
 
 /** Trạng thái hồ sơ → mã StatusBadge của @kb/ui (nguồn duy nhất của nhãn + màu). */
@@ -44,8 +44,5 @@ export function transportOptions(locale: UiLocale = "vi") {
   const labels = transportLabels(locale);
   return TransportModeSchema.options.map((m) => ({ value: m, label: `${TRANSPORT_MODE_INFO[m].code} – ${labels[m]}` }));
 }
-
-/** Ánh xạ sang StatusBadge của @kb/ui. */
-export const CHANNEL_STATUS = { GREEN: "GREEN_CHANNEL", YELLOW: "YELLOW_CHANNEL", RED: "RED_CHANNEL" } as const satisfies Record<CustomsChannel, string>;
 
 export const isOpen = (d: Dossier) => d.status !== "CLEARED" && d.status !== "CANCELLED";

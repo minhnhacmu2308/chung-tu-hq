@@ -25,7 +25,7 @@ import { fieldTitle } from "./declaration-groups";
 import type { StepProps } from "./types";
 import { IncotermChangedNote } from "./incoterm-changed-note";
 import { REVIEW_MESSAGES } from "./review-step.messages";
-import { anyInProgress, encodeRecalled, parseRecalled, recalledCount, submissionRefetchMs } from "./branch-sheets";
+import { anyInProgress, canReopenUnnumbered, encodeRecalled, parseRecalled, recalledCount, submissionRefetchMs } from "./branch-sheets";
 import { editScopeOf, sentChangeWarnings } from "./edit-scope";
 import { editableKeys } from "../../declaration-form/dossier-adapter";
 import { DossierOperationsTab } from "../../declaration-form/dossier-tabs";
@@ -452,7 +452,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
           </Button>
         ) : (
           <>
-            {decl.status === "APPROVED" && canEdit && (
+            {(decl.status === "APPROVED" || (decl.status === "SUBMITTED" && subQ.data && canReopenUnnumbered(subQ.data))) && canEdit && (
               <Button variant="secondary" leftIcon={<RotateCcw className="h-4 w-4" />} onClick={() => setReopenOpen(true)}>
                 {t.reopenEdit}
               </Button>

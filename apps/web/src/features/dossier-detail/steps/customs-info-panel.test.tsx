@@ -26,3 +26,14 @@ describe("CustomsInfoPanel – hoàn thành kiểm tra", () => {
     expect(screen.getByText("海关已完成查验")).toBeTruthy();
   });
 });
+
+describe("CustomsInfoPanel – tờ đã hủy", () => {
+  it("không có ngày đăng ký / phân loại → '—', không còn 'Có sau khi khai chính thức'; có giá trị → hiện giá trị", () => {
+    const { unmount } = renderWithProviders(<CustomsInfoPanel kind="IDA" cancelled info={base} />);
+    expect(screen.queryByText("Có sau khi khai chính thức")).toBeNull();
+    unmount();
+    renderWithProviders(<CustomsInfoPanel kind="IDA" cancelled info={{ ...base, registeredDate: "2026-11-10", registeredTime: "09:30:00" }} />);
+    expect(screen.getByText(/10\/11\/2026 09:30:00/)).toBeTruthy();
+    expect(screen.queryByText("Có sau khi khai chính thức")).toBeNull();
+  });
+});

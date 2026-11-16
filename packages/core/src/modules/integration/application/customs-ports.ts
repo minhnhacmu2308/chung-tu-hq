@@ -69,6 +69,8 @@ export interface CustomsRepos {
   results: {
     /** `branch` vắng = nhánh 1. */
     get(orgId: string, dossierId: string, branch?: number): Promise<ResultRow | null>;
+    /** Như `get` nhưng khóa dòng (SELECT … FOR UPDATE) cho đến hết giao dịch – chuyển giai đoạn không đua nhau (xác nhận hủy). */
+    getForUpdate(orgId: string, dossierId: string, branch?: number): Promise<ResultRow | null>;
     /** Mọi nhánh của hồ sơ, sắp theo nhánh. */
     listForDossier(orgId: string, dossierId: string): Promise<ResultRow[]>;
     listForOrg(orgId: string): Promise<ResultRow[]>;

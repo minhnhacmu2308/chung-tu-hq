@@ -30,6 +30,8 @@ export type CustomsFlow = {
   sentLineIds?: string[];
   /** Lần gửi bị từ chối gần nhất (giống results.raw.rejection ở backend). */
   rejection?: CustomsRejection;
+  /** Người khai xác nhận Hải quan đã hủy tờ (stage CANCELLED) – như results.raw.cancellation ở backend. */
+  cancellation?: { reason: string; date: string; docNo?: string; note?: string };
   /** Số lần sửa đổi bổ sung (IDE/EDE) và sửa sau thông quan (AMC) thành công. */
   amendments: number;
   postAmendments: number;

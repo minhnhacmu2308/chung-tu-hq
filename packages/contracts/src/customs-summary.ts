@@ -2,7 +2,7 @@
 import type { CustomsStage } from "./customs-flow.js";
 import { baseOp, isContentOperation } from "./customs-flow.js";
 import type { CustomsOperation } from "./dto/customs.js";
-import type { SubmissionState } from "./api/customs.js";
+import type { SubmissionState } from "./common.js";
 
 export type DossierCustomsSummary = {
   of: number;
@@ -17,10 +17,12 @@ const CLEARED_STAGES: ReadonlySet<CustomsStage> = new Set(["CLEARED", "POST_EDIT
 
 /** `branches` theo thứ tự nhánh (phần tử i = tờ i+1). Không có nhánh → chưa xong. */
 export function dossierCustomsSummary(branches: { stage: CustomsStage; state: SubmissionState }[]): DossierCustomsSummary {
-  const cleared = branches.filter((b) => CLEARED_STAGES.has(b.stage)).length;
+  // Tờ đã hủy (Hải quan hủy, người khai xác nhận) không tính vào tổng và không cản thông quan hồ sơ.
+  const active = branches.filter((b) => b.stage !== "CANCELLED");
+  const cleared = active.filter((b) => CLEARED_STAGES.has(b.stage)).length;
   const problems = branches.flatMap((b, i): DossierCustomsSummary["problems"] =>
     b.stage === "REJECTED" ? [{ no: i + 1, kind: "REJECTED" }] : b.state === "SEND_FAILED" ? [{ no: i + 1, kind: "SEND_FAILED" }] : []);
-  return { of: branches.length, cleared, problems, allCleared: branches.length > 0 && cleared === branches.length };
+  return { of: active.length, cleared, problems, allCleared: active.length > 0 && cleared === active.length };
 }
 
 /**
@@ -38,7 +40,7 @@ export const sheetCountChanged = (locked: number, now: number) => locked > 0 && 
  * Tờ không còn nhận nội dung tờ khai (đã thông quan, đang sửa sau thông quan, bị Hải quan từ chối) → không bắt gọi về sửa trước khi truyền lại
  * các tờ khác (quyết định R7). Chỉ tiêu chung lệch sau thông quan sửa qua khai bổ sung AMA (Q8).
  */
-export const recallExempt = (stage: CustomsStage) => stage === "CLEARED" || stage === "REJECTED" || stage.startsWith("POST_");
+export const recallExempt = (stage: CustomsStage) => stage === "CLEARED" || stage === "REJECTED" || stage === "CANCELLED" || stage.startsWith("POST_");
 
 /**
  * "Đã duyệt" của một tờ – dùng chung màn Truyền (getSubmission, mock) và thực hiện nghiệp vụ (performOperation).
@@ -71,4 +73,16 @@ export function orderedOperation(op: CustomsOperation): "CONTENT" | "DECLARE" | 
   if (isContentOperation(op)) return "CONTENT";
   const b = baseOp(op);
   return b === "IDC" || b === "IDE" ? "DECLARE" : null;
+}
+
+/** Giá trị cột `state` (thô) theo giai đoạn; lỗi gửi → SEND_FAILED nhưng giai đoạn giữ nguyên. Dùng chung backend và mock. */
+export function coarseState(stage: CustomsStage, failed = false): SubmissionState {
+  if (failed) return "SEND_FAILED";
+  switch (stage) {
+    case "NOT_SENT": return "APPROVED";
+    case "PRE_DECLARED": case "RECALLED": return "PRE_DECLARED";
+    case "DECLARED": case "AMEND_RECALLED": case "AMEND_PRE_DECLARED": return "DECLARED";
+    case "CLEARED": case "POST_EDITING": case "POST_PRE_DECLARED": case "POST_RECALLED": return "CLEARED";
+    case "REJECTED": case "CANCELLED": return "REJECTED";
+  }
 }

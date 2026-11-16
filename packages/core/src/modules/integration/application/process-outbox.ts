@@ -14,7 +14,7 @@ import { meterSafely } from "../../../shared/usage.js";
 import { chargeSafely } from "../../../shared/billing.js";
 import { maskPayload } from "../domain/mask.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
-import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js";
+import { coarseState, stageOf, TERMINAL, type ResultRaw } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, DeclarationSnapshot, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
 import { parseLineIds, reconcileCatalogDeclarationNo } from "./_catalog-numbers.js";
@@ -218,7 +218,11 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
     ...(!failed && op === "AMC" ? { clearanceStatus: "CLEARED" as const } : {}),
     updatedAt: now(),
   };
-  await deps.uow.asOrg(ctx, async (r) => {
+  // Đọc lại khóa dòng trong giao dịch ghi: tờ đã chuyển giai đoạn cuối (người khai xác nhận hủy / bị từ chối) trong lúc gửi → giữ nguyên giai đoạn,
+  // chỉ ghi nhật ký + trạng thái outbox (kết quả về muộn không "hồi sinh" tờ đã hủy).
+  const terminal = await deps.uow.asOrg(ctx, async (r) => {
+    const current = await r.results.getForUpdate(input.orgId, ob.dossierId, ob.branch);
+    const locked = !!current && TERMINAL.has(stageOf(current));
     if (failed) {
       await msg(r, { operation: op, direction: "IN", result: "ERROR", summary: `${OPERATION_LABELS[op]} bị từ chối: ${fmtErrors(outcome.errors!)}`, payloadMasked: { errorList: outcome.errors }, externalRef: result.externalId });
       await r.outbox.update(ob.orgId, ob.id, { status: "FAILED", lastError: fmtErrors(outcome.errors!), updatedAt: now() });
@@ -227,9 +231,15 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       await r.outbox.update(ob.orgId, ob.id, { status: "SENT", lastError: null, updatedAt: now() });
     }
     // Sau thông quan: AMA/AMB/AMC đổi trạng thái bản khai bổ sung (tờ khai gốc giữ nguyên).
+    if (locked) return true;
     if (!failed && (op === "AMA" || op === "AMB" || op === "AMC")) await applyPostAmendmentResult(r, input.orgId, ob.dossierId, op, now(), { receiptNo: outcome.receiptNo }, ob.branch);
     await r.results.upsert(saved);
+    return false;
   });
+  if (terminal) {
+    await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
+    return ok({ status: failed ? "FAILED" : "SENT", next: null });
+  }
 
   // Lượt khai (ADR 0011 – D2): tờ khai nhánh được Hải quan chấp nhận khai chính thức (IDC/EDC thành công, có phân luồng) → ghi sổ lượt.
   // Khóa theo số tờ khai: IDC01 / khai lại cùng số không trừ lần 2. "Cố gắng hết sức": lỗi chỉ log [billing], job billing-reconcile ghi bù.

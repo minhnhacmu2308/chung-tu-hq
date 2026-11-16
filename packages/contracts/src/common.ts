@@ -132,3 +132,7 @@ export type ValueSource = z.infer<typeof ValueSourceSchema>;
 
 export const RoleSchema = z.enum(["OWNER", "ADMIN", "DECLARANT", "APPROVER", "VIEWER"]);
 export type Role = z.infer<typeof RoleSchema>;
+
+/** Trạng thái truyền của một tờ khai (ADR 0005): lỗi gửi giữ bước, chỉ bước kế tiếp mới tiến. */
+export const SubmissionStateSchema = z.enum(["APPROVED", "PRE_DECLARED", "DECLARED", "DOCS_SENT", "CLEARED", "INSPECTION", "REJECTED", "SEND_FAILED"]);
+export type SubmissionState = z.infer<typeof SubmissionStateSchema>;

@@ -2,7 +2,7 @@
 // Mỗi nghiệp vụ gửi đi: thông điệp OUT ngay, thông điệp IN "đến" sau ~2,5 giây (màn hình chỉ thấy thông điệp có at <= bây giờ → poll).
 // Khi phản hồi đã đến, settle() áp stageAfter + tác dụng phụ (số tờ khai, phân luồng, mở lại tờ khai, thông quan…).
 import {
-  baseOp, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
+  baseOp, loadCodeList, type ConfirmCancelledInput, coarseState, CUSTOMS_OPERATIONS, dossierCustomsSummary, hasDeclarationNumber, opFor, isChanneled, isContentOperation, isRecallOperation, nextCustomsOperation,
   awaitingContent, operationAvailability, operationsFor, orderedOperation, queryOpFor, isActiveSheet, recallOpFor, sentSheetsCheck, sentSheetsReason, sentSnapshotDiff, sentSnapshotOf, sheetApproved, sheetOrderWait, stageAfter,
   declarationEditScope, editBlockFor, sheetOfLine, type DeclarationEditScope, type DeclarationStatus, type EditSheet, type EditTarget, type SentSnapshot,
   type BranchSubmission, type CustomsRow, type CustomsStage, type OperationAvailabilityInput, type OperationResult, type RecallAllResult, type PipelineRow, type PipelineStatus,
@@ -83,6 +83,17 @@ export const editSheetsOf = (db: MockDb, dossierId: string): EditSheet[] =>
     const stage = flowOf(db, dossierId, sh.no).stage;
     return { no: sh.no, stage, declarationNo: hasDeclarationNumber(stage) ? (resultOf(db, dossierId, sh.no)?.declarationNo ?? String(sh.no)) : null };
   });
+
+/**
+ * Hồ sơ đã truyền có mở lại để sửa được không (như reopenDeclaration ở backend, chưa tờ nào có số):
+ * LOCKED = có tờ đã có số (hoặc không có tờ nào); SENDING = còn nghiệp vụ nội dung đang chờ phản hồi (mock: flow.pending); FREE = mở lại được.
+ */
+export function reopenSubmittedState(db: MockDb, dossierId: string): "LOCKED" | "SENDING" | "FREE" {
+  const sheets = editSheetsOf(db, dossierId);
+  if (!sheets.length || sheets.some((s) => s.declarationNo || s.stage !== "NOT_SENT")) return "LOCKED";
+  const sending = sheets.some((s) => { const p = flowOf(db, dossierId, s.no).pending; return !!p && isContentOperation(p.op); });
+  return sending ? "SENDING" : "FREE";
+}
 
 /** Phạm vi sửa tờ khai của hồ sơ (cùng declarationEditScope với backend + FE). */
 export function editScopeOf(db: MockDb, dossierId: string, status?: DeclarationStatus): DeclarationEditScope {
@@ -421,6 +432,7 @@ const STAGE_TEXT: Record<CustomsStage, string> = {
   POST_PRE_DECLARED: "Đã thông quan – đã khai tạm AMA, chờ khai chính thức",
   POST_RECALLED: "Đã thông quan – bản khai AMA đang gọi về sửa",
   REJECTED: "Hải quan từ chối / hủy tờ khai",
+  CANCELLED: "Đã hủy",
 };
 
 function statusText(c: Ctx) {
@@ -661,12 +673,20 @@ export const branchBusy = (db: MockDb, dossierId: string, branch: number): boole
  */
 export function customsSummaryOf(db: MockDb, dossierId: string): CustomsSummary | undefined {
   const sheets = branchesOf(db.lineItems.filter((i) => i.dossierId === dossierId));
-  const flows = (sheets.length ? sheets : [{ no: 1 }]).map((sh) => ({ no: sh.no, stage: db.customsFlows?.[branchKey(dossierId, sh.no)]?.stage ?? "NOT_SENT" }));
+  const flows = (sheets.length ? sheets : [{ no: 1 }]).map((sh) => {
+    const flow = db.customsFlows?.[branchKey(dossierId, sh.no)];
+    // Tờ chưa có luồng (dữ liệu cũ / hồ sơ mẫu không dựng luồng): suy giai đoạn từ kết quả Hải quan đã có, như flowOf (khớp backend: có số = đã khai, thông quan = CLEARED).
+    const result = resultOf(db, dossierId, sh.no);
+    const derived: CustomsStage = result ? (result.clearanceStatus === "CLEARED" ? "CLEARED" : "DECLARED") : "NOT_SENT";
+    const stage = flow?.stage ?? derived;
+    return { no: sh.no, stage, amendments: flow?.amendments ?? 0, postAmendments: flow?.postAmendments ?? 0, channel: isChanneled(stage) ? (result?.channel ?? null) : null };
+  });
   const msgs = db.customsMessages.filter((m) => m.dossierId === dossierId);
   if (!msgs.length && flows.every((f) => f.stage === "NOT_SENT")) return undefined;
   const last = (no: number) => msgs.filter((m) => (m.branch ?? 1) === no).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
-  const s = dossierCustomsSummary(flows.map((f) => ({ stage: f.stage, state: last(f.no)?.result === "ERROR" ? ("SEND_FAILED" as const) : ("APPROVED" as const) })));
-  return { of: s.of, cleared: s.cleared, problems: s.problems };
+  const stateOf = (f: { no: number; stage: CustomsStage }) => coarseState(f.stage, last(f.no)?.result === "ERROR");
+  const s = dossierCustomsSummary(flows.map((f) => ({ stage: f.stage, state: stateOf(f) })));
+  return { of: s.of, cleared: s.cleared, problems: s.problems, sheets: flows.map((f) => ({ no: f.no, stage: f.stage, state: stateOf(f), channel: f.channel, amendments: f.amendments, postAmendments: f.postAmendments })) };
 }
 
 /** Chốt các phản hồi đã đến (màn hình bản khai bổ sung đọc trạng thái mới nhất). */
@@ -858,6 +878,7 @@ function branchView(db: MockDb, c: Ctx, now: number): BranchSubmission {
     customsInfo: customsInfoOf(db, c, stage, seen),
     rejection: c.flow.rejection ?? null,
     sentChanges: sentChangesOf(db, c),
+    ...(stage === "CANCELLED" && c.flow.cancellation ? { cancellation: { reason: c.flow.cancellation.reason, date: c.flow.cancellation.date, ...(c.flow.cancellation.docNo ? { docNo: c.flow.cancellation.docNo } : {}) } } : {}),
   };
 }
 
@@ -880,7 +901,7 @@ function view(db: MockDb, dossierId: string, now: number): SubmissionView {
     hsUnconfirmed: db.lineItems.filter((i) => i.dossierId === dossierId && !i.hsConfirmed).length,
     ...legacy,
     branches,
-    summary: { of: s.of, cleared: s.cleared, problems: s.problems },
+    summary: { of: s.of, cleared: s.cleared, problems: s.problems, sheets: branches.map((b) => ({ no: b.no, stage: b.stage, state: coarseState(b.stage, b.state === "SEND_FAILED"), channel: b.channel, amendments: b.amendments, postAmendments: b.postAmendments })) },
   };
 }
 
@@ -1014,3 +1035,31 @@ export const declareAllSheets = (dossierId: string) =>
     assertAllowance(db, toDeclare, toDeclare);
     return perform(db, dossierId, declareOpFor(target.stage, c.dossier.direction)!, Date.now(), target.no, "declare");
   });
+
+/** Ghi nhận Hải quan đã hủy tờ khai (như confirmDeclarationCancelled ở backend): APPROVER/ADMIN/OWNER, tờ đã có số, chưa thông quan/từ chối; gọi lại → không ghi thêm. */
+export const confirmDeclarationCancelled = async (dossierId: string, input: ConfirmCancelledInput) => {
+  const reasons = await loadCodeList("CANCEL_REASON");
+  return mutate((db) => {
+    const role = db.members.find((m) => m.id === db.currentUserId)?.role;
+    if (role !== "APPROVER" && role !== "ADMIN" && role !== "OWNER") throw new ApiError("FORBIDDEN", "Chỉ người duyệt hoặc quản trị được ghi nhận hủy tờ khai");
+    if (!reasons.some((r) => r.code === input.reason)) throw new ApiError("VALIDATION", `Lý do hủy không có trong danh mục: ${input.reason}`);
+    settle(db, Date.now());
+    const c = load(db, dossierId, input.branch);
+    if (c.dossier.status === "CANCELLED") throw reasonApiError("INVALID_STATE", "CANCEL_NOT_ALLOWED");
+    if (c.flow.stage === "CANCELLED") {
+      syncDossierCleared(db, c.dossier);
+      return;
+    }
+    // Còn nghiệp vụ đang gửi cho tờ này (như outbox PENDING ở backend): chờ có kết quả rồi mới ghi nhận hủy.
+    if (c.flow.pending) throw reasonApiError("INVALID_STATE", "DECLARATION_SENDING");
+    const stage = c.flow.stage;
+    if (!hasDeclarationNumber(stage) || stage === "CLEARED" || stage.startsWith("POST_") || stage === "REJECTED") throw reasonApiError("INVALID_STATE", "CANCEL_NOT_ALLOWED");
+    const no = c.result?.declarationNo ?? String(c.branch);
+    c.flow.stage = "CANCELLED";
+    c.flow.clearAt = null;
+    c.flow.cancellation = { reason: input.reason, date: input.date, ...(input.docNo ? { docNo: input.docNo } : {}), ...(input.note ? { note: input.note } : {}) };
+    db.customsMessages.push(message(dossierId, queryOpFor(c.dossier.direction), "IN", "OK", `Người khai xác nhận tờ khai ${no} đã hủy – lý do ${input.reason}`, Date.now(), { declarationNo: no, ...input }, c.branch));
+    // Tờ còn lại đã thông quan hết → hồ sơ CLEARED (như syncDossierClearance ở backend).
+    syncDossierCleared(db, c.dossier);
+  });
+};

@@ -1,5 +1,5 @@
 // Bước 4–5: AI Agent, dòng hàng/HS, tờ khai nháp – gọi backend thật. Cùng chữ ký với src/mocks/api/declaration.ts.
-import { AgentRunViewSchema, DeclarationSchema, DeclarationViewSchema, HsEntrySchema, LineItemSchema, type AgentMode, type AgentRunView, type HsAnswerInput, type HsReclassifyInput } from "@kb/contracts";
+import { AgentRunViewSchema, DeclarationSchema, DeclarationViewSchema, HsEntrySchema, LineItemSchema, type AgentMode, type ConfirmCancelledInput, type AgentRunView, type HsAnswerInput, type HsReclassifyInput } from "@kb/contracts";
 import { z } from "zod";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/http";
 
@@ -21,4 +21,7 @@ export const moveToReview = async (dossierId: string) => {
 };
 export const reopenDeclaration = async (dossierId: string) => {
   await apiPost(`dossiers/${dossierId}/declaration/reopen`, {}, z.object({ ok: z.literal(true) }));
+};
+export const confirmDeclarationCancelled = async (dossierId: string, input: ConfirmCancelledInput) => {
+  await apiPost(`dossiers/${dossierId}/declaration/cancel`, input, z.object({ ok: z.literal(true) }));
 };

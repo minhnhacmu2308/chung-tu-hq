@@ -95,7 +95,15 @@ export function toBranchSubmission(b: BranchInput): BranchSubmission {
     sending: hasBlockingPending(b.outbox),
     started: startedOf(b.messages, b.outbox, b.result),
     sentChanges: b.sentChanges ?? null,
+    ...cancellationOf(b.result),
   };
+}
+
+/** Thông tin hủy (người khai xác nhận) cho giao diện – chỉ khi tờ đang ở giai đoạn CANCELLED. */
+function cancellationOf(r: ResultRow | null): Pick<BranchSubmission, "cancellation"> {
+  const c = r?.raw?.cancellation;
+  if (!r || !c || stageOf(r) !== "CANCELLED") return {};
+  return { cancellation: { reason: c.reason, date: c.date, ...(c.docNo ? { docNo: c.docNo } : {}) } };
 }
 
 /**
@@ -127,6 +135,7 @@ export function toSubmissionView(p: { declarationStatus: DeclarationStatus; hsUn
   const first = branches[0]!;
   const { no: _no, of: _of, state: _state, declarationNo: _dn, channel: _ch, sentChanges: _sc, ...legacy } = first;
   const s = dossierCustomsSummary(branches);
-  const summary: CustomsSummary = { of: s.of, cleared: s.cleared, problems: s.problems };
+  const sheets = branches.map((b) => ({ no: b.no, stage: b.stage, state: b.state, channel: b.channel, amendments: b.amendments, postAmendments: b.postAmendments }));
+  const summary: CustomsSummary = { of: s.of, cleared: s.cleared, problems: s.problems, sheets };
   return { declarationStatus: p.declarationStatus, hsUnconfirmed: p.hsUnconfirmed, ...legacy, branches, summary };
 }

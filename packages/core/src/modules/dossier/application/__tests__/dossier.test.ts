@@ -94,7 +94,7 @@ describe("tóm tắt Hải quan theo tờ khai nhánh (Thông quan k/N)", () => 
     const a = unwrap(await createDossier(deps, ctx(), INPUT));
     const b = unwrap(await createDossier(deps, ctx(), INPUT));
     const calls: { orgId: string; ids: string[] }[] = [];
-    const summary = { of: 3, cleared: 1, problems: [{ no: 2, kind: "REJECTED" as const }] };
+    const summary = { of: 3, cleared: 1, problems: [{ no: 2, kind: "REJECTED" as const }], sheets: [] };
     deps.customs = { summaries: async (c, ids) => { calls.push({ orgId: c.orgId, ids }); return new Map(ids.filter((id) => id === a.id).map((id) => [id, summary])); } };
     const list = unwrap(await listDossiers(deps, ctx(), {}));
     expect(list.find((d) => d.id === a.id)?.customs).toEqual(summary);

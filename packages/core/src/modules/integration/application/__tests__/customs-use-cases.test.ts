@@ -12,6 +12,8 @@ import { buildFptRequest, type DeclarationPayload } from "../../domain/declarati
 import { sheetSnapshot } from "../../domain/branches.js";
 import { checkSentSheets, customsEditSheets } from "../sent-sheets.js";
 import type { CustomsDeps, CustomsDossierPort, CustomsGateway, CustomsUow, DeclarationReader, DossierBrief, MessageRow, OutboxRow, ResultRow } from "../customs-ports.js";
+import { syncDossierClearance } from "../_clearance.js";
+import { stageOf } from "../../domain/state-machine.js";
 import { dossierCustomsSummaries, getSubmission, listCustomsDeclarations } from "../get-submission.js";
 import { markOutboxFailed, reopenDeclaration } from "../reopen-declaration.js";
 import { domainError } from "../../../../shared/errors.js";
@@ -1933,7 +1935,7 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
     // Trường cấp hồ sơ = tờ 1 (tương thích): thông điệp, giai đoạn, kết quả của tờ 1.
     expect(v).toMatchObject({ stage: "CLEARED", started: true, inProgress: false, result: { declarationNo: "104000000001" } });
     expect(v.messages).toHaveLength(2);
-    expect(v.summary).toEqual({ of: 3, cleared: 1, problems: [] });
+    expect(v.summary).toMatchObject({ of: 3, cleared: 1, problems: [] });
   });
 
   it("getSubmission: thông điệp từ chối nối tiếp (IDA IN/ERROR) trên tờ chưa gửi không tính là lần gửi – started/inProgress false, IDA hiện lỗi kèm lý do", async () => {
@@ -1958,7 +1960,7 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
     expect(amaRow(0)).toMatchObject({ action: "EDIT" });
     expect(amaRow(1)).toMatchObject({ enabled: true, action: "SEND" });
     expect(v.branches[1]!.nextOp).toBe("AMA");
-    expect(v.summary).toEqual({ of: 3, cleared: 3, problems: [] });
+    expect(v.summary).toMatchObject({ of: 3, cleared: 3, problems: [] });
   });
 
   it("getSubmission: chưa truyền → số tờ theo dòng hàng (120 dòng → 3 tờ NOT_SENT); lô 1 tờ → 1 mục", async () => {
@@ -1990,11 +1992,41 @@ describe("view / danh sách theo tờ khai nhánh (spec §7)", () => {
     expect(unwrap(await getSubmission(deps, declarant, D)).branches.map((b) => [b.no, b.started, b.inProgress])).toEqual([[1, false, false], [2, false, false], [3, false, false]]);
   });
 
+  it("summaries_include_sheets: sheets mang stage/state/channel/amendments/postAmendments, no = nhánh", async () => {
+    seedBranch(1, { channel: "RED", raw: { stage: "DECLARED", amendments: 1, postAmendments: 2 } });
+    seedBranch(2, { state: "CLEARED", clearanceStatus: "CLEARED", channel: "GREEN", raw: { stage: "CLEARED" } });
+    const s = unwrap(await dossierCustomsSummaries(deps, declarant, [D])).get(D)!;
+    expect(s.sheets).toEqual([
+      { no: 1, stage: "DECLARED", state: "DECLARED", channel: "RED", amendments: 1, postAmendments: 2 },
+      { no: 2, stage: "CLEARED", state: "CLEARED", channel: "GREEN", amendments: 0, postAmendments: 0 },
+    ]);
+  });
+
+  it("legacy_result_without_stage: raw không có stage, state CLEARED → stage theo stageOf", async () => {
+    seedBranch(1, { state: "CLEARED", clearanceStatus: "CLEARED", channel: "GREEN", raw: {} });
+    const s = unwrap(await dossierCustomsSummaries(deps, declarant, [D])).get(D)!;
+    expect(s.sheets).toHaveLength(1);
+    expect(stageOf({ state: "CLEARED", raw: {} })).toBe("CLEARED");
+    expect(s.sheets[0]).toMatchObject({ no: 1, stage: "CLEARED", state: "CLEARED" });
+  });
+
+  it("clearance_ignores_cancelled: tờ 1 CLEARED + tờ 2 CANCELLED → hồ sơ CLEARED, of = 1", async () => {
+    seedBranch(1, { state: "CLEARED", clearanceStatus: "CLEARED", channel: "GREEN", raw: { stage: "CLEARED" } });
+    seedBranch(2, { state: "REJECTED", raw: { stage: "CANCELLED" } });
+    const s = await syncDossierClearance(deps, declarant, D);
+    expect(s).toMatchObject({ of: 1, cleared: 1, allCleared: true });
+    expect(dossiers.rows[0]!.status).toBe("CLEARED");
+  });
+
   it("dossierCustomsSummaries: tóm tắt k/N + tờ lỗi theo hồ sơ; hồ sơ chưa truyền vắng; org khác không thấy", async () => {
     seedThree();
     uow.data.results.find((r) => r.branch === 2)!.state = "SEND_FAILED";
     const map = unwrap(await dossierCustomsSummaries(deps, declarant, [D, "dos_khac"]));
-    expect([...map.entries()]).toEqual([[D, { of: 3, cleared: 1, problems: [{ no: 2, kind: "SEND_FAILED" }] }]]);
+    expect([...map.entries()]).toEqual([[D, { of: 3, cleared: 1, problems: [{ no: 2, kind: "SEND_FAILED" }], sheets: [
+      { no: 1, stage: "CLEARED", state: "CLEARED", channel: "GREEN", amendments: 0, postAmendments: 0 },
+      { no: 2, stage: "DECLARED", state: "SEND_FAILED", channel: "RED", amendments: 0, postAmendments: 0 },
+      { no: 3, stage: "NOT_SENT", state: "APPROVED", channel: null, amendments: 0, postAmendments: 0 },
+    ] }]]);
     expect(unwrap(await dossierCustomsSummaries(deps, declarant, []))).toEqual(new Map());
     expect(unwrap(await dossierCustomsSummaries(deps, other, [D]))).toEqual(new Map());
   });
@@ -2288,5 +2320,43 @@ describe("tờ khai nhánh – luôn truyền theo thứ tự tờ (người kha
     seedBranch(3, { raw: { stage: "RECALLED", certificateId: "cert_1" } });
     expect(await enqueueBranchPreDeclare(deps, declarant, D, 3, { by: "user" })).toMatchObject(order(3, 2));
     expect(uow.data.outbox).toEqual([]);
+  });
+});
+
+describe("mở lại khi chưa có số tờ khai (spec trạng thái hồ sơ §5)", () => {
+  const unnumbered = (branch: number, p: Partial<ResultRow> = {}) =>
+    seedBranch(branch, { externalId: null, declarationNo: null, state: "APPROVED", raw: { stage: "NOT_SENT", certificateId: "cert_1" }, ...p });
+  beforeEach(() => {
+    dossiers.rows[0]!.status = "SUBMITTED";
+  });
+
+  it("reopen_send_failed_no_number: một tờ SEND_FAILED chưa có số → mở lại, tờ về APPROVED/NOT_SENT", async () => {
+    unnumbered(1, { state: "SEND_FAILED" });
+    seedOutbox({ operation: "IDA", status: "FAILED" });
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    expect(decls.reopened).toEqual([D]);
+    expect(uow.data.results[0]).toMatchObject({ state: "APPROVED", raw: expect.objectContaining({ stage: "NOT_SENT" }) });
+  });
+
+  it("reopen_all_sheets_unnumbered_not_pending: 2 tờ NOT_SENT, không outbox PENDING → mở lại được", async () => {
+    unnumbered(1);
+    unnumbered(2);
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    expect(decls.reopened).toEqual([D]);
+    expect(uow.data.results.map((r) => r.state)).toEqual(["APPROVED", "APPROVED"]);
+  });
+
+  it("reopen_while_sending: outbox IDA PENDING → DECLARATION_SENDING, không đụng tờ khai", async () => {
+    unnumbered(1);
+    seedOutbox({ operation: "IDA", status: "PENDING" });
+    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "INVALID_STATE", reason: "DECLARATION_SENDING" } });
+    expect(decls.reopened).toEqual([]);
+  });
+
+  it("reopen_one_sheet_numbered: tờ 1 PRE_DECLARED có số, tờ 2 SEND_FAILED → DOSSIER_LOCKED", async () => {
+    seedBranch(1, { state: "PRE_DECLARED", raw: { stage: "PRE_DECLARED", certificateId: "cert_1" } });
+    unnumbered(2, { state: "SEND_FAILED" });
+    expect(await reopenDeclaration(deps, declarant, D)).toMatchObject({ ok: false, error: { code: "DOSSIER_LOCKED" } });
+    expect(decls.reopened).toEqual([]);
   });
 });

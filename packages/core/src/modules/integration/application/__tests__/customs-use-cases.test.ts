@@ -305,6 +305,17 @@ describe("customs-send / poll", () => {
     expect(uow.data.results[0]!.state).toBe("APPROVED");
     expect(dossiers.rows[0]!.status).toBe("SUBMITTED"); // hồ sơ do declaration.markDraft đổi (fake không mô phỏng) – reopen không tự ghi dossier
   });
+  it("lô một tờ bị từ chối trước khi có số → mở lại, sửa, duyệt lại (cùng phiên bản) → khai tạm lại với khóa mới, không báo đã truyền", async () => {
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    deps.gateway = { ...gateway, name: "fpt", preDeclare: async () => { throw domainError("INTEGRATION_NOT_CONFIGURED", "E1028"); } } as unknown as FakeCustomsGateway;
+    unwrap(await processOutbox(deps, { orgId: ORG, userId: "usr_chau", outboxId: uow.data.outbox[0]!.id }));
+    unwrap(await reopenDeclaration(deps, declarant, D));
+    decls.status = "APPROVED";
+    dossiers.rows[0]!.status = "APPROVED";
+    unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
+    const v = uow.data.outbox[0]!.idempotencyKey.match(/:v\d+/)![0];
+    expect(uow.data.outbox.map((o) => `${o.idempotencyKey}:${o.status}`)).toEqual([`${D}:IDA${v}:FAILED`, `${D}:IDA${v}:n2:PENDING`]);
+  });
   it("hết số lần thử: outbox PENDING attempts≥5 → FAILED, Gửi lại tạo retry; worker hết retry gọi markOutboxFailed", async () => {
     unwrap(await submitDeclaration(deps, declarant, D, "cert_1"));
     const ob = uow.data.outbox[0]!;

@@ -8,7 +8,7 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import type { buildFptRequest } from "../domain/declaration-to-fpt.js";
 import { sheetSnapshot } from "../domain/branches.js";
 import { stageOf } from "../domain/state-machine.js";
-import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, lineIdsOf, outboxKey, pinOf, pinOfOutbox, sheetCountError, sheetOf } from "./branch-send.js";
+import { buildSheet, CHECK_ONLY_FIRST_NO, contentKey, contentOpFor, gapsError, lineIdsOf, pinOf, pinOfOutbox, sheetCountError, sheetOf } from "./branch-send.js";
 import type { CustomsDeps, OutboxRow, ResultRow } from "./customs-ports.js";
 import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
 import { auditHysWaiver, hysGuard, recordHysWaiver } from "./hys-guard.js";
@@ -95,10 +95,11 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   if (failed && !failed.ok) return failed;
   const built = (builds[0] as { ok: true; value: ReturnType<typeof buildFptRequest> }).value;
   const now = deps.clock.now();
-  // Lô nhiều tờ: ghim lần duyệt; tờ 1 bị từ chối trước khi có số → mở lại, duyệt lại (cùng phiên bản) → khóa mới `:n<k>` thay vì trùng khóa lần trước.
+  // Tờ 1 bị từ chối trước khi có số → mở lại, duyệt lại (cùng phiên bản) → khóa mới `:n<k>` thay vì trùng khóa lần trước (lô một tờ lẫn nhiều tờ).
+  // Lô nhiều tờ còn ghim lần duyệt (payload.pin).
   const pin = pinOf(snap);
-  const prior = of > 1 ? (await deps.uow.asOrg(ctx, (r) => r.outbox.listForDossier(ctx.orgId, dossierId))).filter((o) => o.branch === 1 && o.operation === op) : [];
-  const key = of > 1 ? contentKey(dossierId, op, snap.version, prior.length + 1) : outboxKey(dossierId, op, snap.version);
+  const prior = (await deps.uow.asOrg(ctx, (r) => r.outbox.listForDossier(ctx.orgId, dossierId))).filter((o) => o.branch === 1 && o.operation === op);
+  const key = contentKey(dossierId, op, snap.version, prior.length + 1);
   const created = await deps.uow.asOrg(ctx, async (r) => {
     const existing = (await r.outbox.findByKey(ctx.orgId, key)) ?? prior.find((o) => o.status === "PENDING" || pinOfOutbox(o) === pin);
     if (existing) {

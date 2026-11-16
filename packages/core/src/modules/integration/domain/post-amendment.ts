@@ -1,7 +1,7 @@
 // Bản khai bổ sung sau thông quan (AMA): lấy dữ liệu tờ khai gốc làm phần "Trước", dựng payload FPT objVN_AMA / objVN_AMA_HANG. Thuần.
 // Quy tắc dùng chung FE/BE (điền sẵn, tự tính thuế "Sau", ô khóa): @kb/contracts post-amendment.
 import {
-  AmaRequestSchema, amaLineDelta, declarationFormValues, fptKey, itemOverrides, VN_AMA_HANG_ROWS, VN_AMA_ROWS, vatCode,
+  AmaRequestSchema, amaLineDelta, declarationFormValues, fptKey, itemOverrides, legacySentVatCode, otherTaxCodes, otherTaxGroupOf, VN_AMA_HANG_ROWS, VN_AMA_ROWS, vatAutoFill,
   type AmaRequest, type AmaSource, type AmaSourceLine, type CustomsInfo, type FptFieldRow, type PostAmendment,
 } from "@kb/contracts";
 import { Decimal, toDecimalString } from "../../../shared/decimal.js";
@@ -32,16 +32,27 @@ export function amaSourceLines(p: DeclarationPayload, customs: CustomsInfo | nul
   return [...p.items].sort((a, b) => a.lineNo - b.lineNo).map((it) => {
     const c = customs?.items.find((x) => x.lineNo === it.lineNo);
     const vat = p.direction === "NK" && isNum(it.vatRate) ? it.vatRate : null;
+    const own = it.id ? itemOverrides(fields, it.id) : {};
+    // Dòng cũ không mã HSCodePro (8%/5%…): vatAutoFill không điền, nhưng tờ khai đã gửi mang mã suy theo thuế suất của phần mềm bản cũ → "Trước" theo mã đó.
+    const ownVat = Object.entries(own).some(([k, v]) => /^HAG_TX[1-5]$/.test(k) && otherTaxGroupOf(v) === 5);
+    const vatTx = vat ? vatAutoFill(vat, it.vatCode).tx ?? (ownVat ? null : legacySentVatCode(vat)) : null;
+    // Đủ các nhóm có mã (thứ tự nhóm 1..5): GTGT giữ cách tính cũ, nhóm khác chỉ mang mã.
+    const codes = p.direction === "NK" ? otherTaxCodes(vatTx ? { HAG_TX5: vatTx } : {}, own) : [];
     const base = c && isNum(c.customsValue) ? new Decimal(c.customsValue).plus(isNum(c.taxAmountVnd) ? c.taxAmountVnd : 0) : null;
     return {
       lineNo: it.lineNo,
       values: {
         HAG_CMN: it.description, HAG_OR: it.origin, HAG_CMD: it.hsConfirmed ?? "", HAG_QN1: it.quantity, HAG_QT1: it.unit, HAG_TXA: it.importDutyRate ?? "",
-        ...(it.id ? itemOverrides(fields, it.id) : {}),
+        ...own,
       },
       customs: c,
-      ...(vat
-        ? { otherTaxes: [{ code: vatCode(vat, it.vatCode)!, rate: `${vat}%`, ...(base ? { base: toDecimalString(base), amount: toDecimalString(base.times(vat).div(100), 4) } : {}) }] }
+      ...(codes.length
+        ? {
+            otherTaxes: codes.map((c) =>
+              c.group === 5 && vat
+                ? { code: c.code, rate: `${vat}%`, ...(base ? { base: toDecimalString(base), amount: toDecimalString(base.times(vat).div(100), 4) } : {}) }
+                : { code: c.code, rate: null, base: null, amount: null }),
+          }
         : {}),
     };
   });

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { stateFor } from "./global-setup";
-import { createDossier, fillManualFields, login, uploadAndConfirm } from "./helpers";
+import { confirmAllHs, createDossier, fillManualFields, login, uploadAndConfirm } from "./helpers";
 
 test("AI Agent chạy → xác nhận HS → Review tờ khai (chỉ tiêu + nguồn) → Người duyệt phê duyệt → bước truyền", async ({ page, browser }) => {
   await login(page);
@@ -11,17 +11,12 @@ test("AI Agent chạy → xác nhận HS → Review tờ khai (chỉ tiêu + ngu
   await page.getByRole("dialog").getByRole("button", { name: "Bắt đầu" }).click();
   await expect(page.getByText("Đã dựng tờ khai nháp").first()).toBeVisible({ timeout: 90_000 });
   // Xác nhận HS từng dòng (gợi ý từ biểu thuế giả).
-  const confirmButtons = page.getByRole("button", { name: /^Xác nhận mã .* cho dòng \d+$/ });
-  await expect(confirmButtons.first()).toBeVisible();
-  while ((await confirmButtons.count()) > 0) {
-    await confirmButtons.first().click();
-    await page.waitForTimeout(300);
-  }
+  await confirmAllHs(page);
   await page.getByRole("button", { name: "Sang Review tờ khai" }).click();
   await expect(page).toHaveURL(/step=review/);
-  // Tờ khai đầy đủ (Phụ lục II): MST người nhập khẩu lấy từ tài khoản – ô 1.12, nhóm Đơn vị xuất nhập khẩu.
-  await page.goto(`/dossiers/${id}?step=review&tab=full&nhom=cac-ben`);
-  await expect(page.getByRole("textbox", { name: /^1\.12/ })).toHaveValue("0316789012");
+  // Tờ khai dạng bản in VNACCS: MST người nhập khẩu lấy từ tài khoản – ô 1.12 (TK_IMC, khối Người nhập khẩu).
+  await page.goto(`/dossiers/${id}?step=review&tab=full`);
+  await expect(page.locator('[data-print-cell=":TK_IMC"]')).toContainText("0316789012");
 
   await fillManualFields(page, id);
 

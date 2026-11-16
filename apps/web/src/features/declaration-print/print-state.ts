@@ -1,12 +1,12 @@
 // Logic thuần của bản in tờ khai (Review bước 5): vị trí ô trên bố cục, số ước tính, trạng thái ô, danh sách ô cần xử lý, số trang.
 import {
-  billIdentFields, branchRanges, expandRepeat, formKeysOf, itemFieldClass, itemFieldCode, itemFields, layoutFor, otherFieldKeys, parseItemFieldCode, printKeys, printLayoutFor, requiredGaps,
+  billIdentFields, branchRanges, compactOtherTaxes, expandRepeat, formKeysOf, itemAutoChecks, itemFieldClass, itemFieldCode, itemFields, itemOverrides, layoutFor, otherFieldKeys, otherTaxGroupOf, otherTaxKeys, parseItemFieldCode, printKeys, printLayoutFor, requiredGaps,
   type ConditionContext, type ConditionId, type DeclarationBranch, type RequiredGap, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
 } from "@kb/contracts";
 import type { PaperFieldState } from "@kb/ui";
 import { conditionContext, isApplicable, type FormValues } from "../declaration-form/form-state";
 import { customsItemValues, customsValues } from "../declaration-form/customs-adapter";
-import { declarationValues, itemValues } from "../declaration-form/dossier-adapter";
+import { autoCheckInput, declarationValues, itemValues } from "../declaration-form/dossier-adapter";
 import { fieldErrors, type FieldError } from "../dossier-detail/steps/customs-errors";
 import { fromMinor, sumMinor, toMinor } from "@/lib/decimal";
 import { codeLabel, displayValue } from "../declaration-form/display";
@@ -129,16 +129,19 @@ export function editedKeys(kind: Kind, fields: { code: string; source: string }[
   return new Set(fields.filter((f) => f.source === "USER").flatMap((f) => formKeysOf(kind, f.code)));
 }
 
-/** Trạng thái ô trên bản in: error > missing > estimate > edited > none. */
-export function cellState(a: { error: boolean; missing: boolean; estimated: boolean; edited: boolean }): PaperFieldState {
+/** Trạng thái ô trên bản in: error > missing > check > estimate > edited > none. */
+export function cellState(a: { error: boolean; missing: boolean; check: boolean; estimated: boolean; edited: boolean }): PaperFieldState {
   if (a.error) return "error";
   if (a.missing) return "missing";
+  if (a.check) return "check";
   if (a.estimated) return "estimate";
   if (a.edited) return "edited";
   return "none";
 }
 
-export type AttentionCell = { key: string; line?: number; reason: "ERROR" | "MISSING" };
+const PRINTED_TAX_KEY = /^HAG_(TX|TR|TG)([1-5])$/;
+
+export type AttentionCell = { key: string; line?: number; reason: "ERROR" | "MISSING" | "CHECK" };
 
 type Slot = { key: string; line?: number };
 const slotId = (c: Slot) => `${c.line ?? ""}:${c.key}`;
@@ -185,7 +188,10 @@ function slotsPerError(kind: Kind, order: Slot[], errors: FieldError[], lineNos:
     if (!e.no) return [];
     const line = e.line === undefined ? undefined : lineNos.indexOf(e.line);
     if (line === -1) return [];
-    return order.filter((s) => s.line === line && noOf(s) === e.no);
+    const inBlock = order.filter((s) => s.line === line && noOf(s) === e.no);
+    // Lỗi nhắc đúng một ô thuế (HAG_TX2…) → chỉ ô in đó, không tô cả khối 5 ô.
+    if (e.slot === undefined || !(e.no === "1.94" || e.no === "1.95" || e.no === "1.96")) return inBlock;
+    return inBlock.filter((s) => PRINTED_TAX_KEY.exec(s.key)?.[2] === String(e.slot));
   });
 }
 
@@ -203,17 +209,29 @@ export function errorSlots(kind: Kind, errors: FieldError[], lineNos: number[]):
  * Ô cần xử lý theo thứ tự nhảy: mọi ô lỗi rồi mới tới ô còn thiếu; trong mỗi nhóm theo `slotOrder`.
  * Mỗi lỗi gắn vào ô đầu tiên (theo thứ tự đó) của chỉ tiêu (xem `errorSlots`).
  */
-export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[], errors: FieldError[], lineNos: number[]): AttentionCell[] {
+export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[], errors: FieldError[], lineNos: number[], checks?: Set<string>[]): AttentionCell[] {
   const order = slotOrder(kind, items.length);
   const errorIds = new Set(slotsPerError(kind, order, errors, lineNos).flatMap((slots) => (slots[0] ? [slotId(slots[0])] : [])));
 
   // Ô bắt buộc còn trống: cùng quy tắc nút Phê duyệt / Ký số và backend (@kb/contracts requiredGaps).
-  const missingIds = new Set(requiredGaps(kind, decl, items).map(slotId));
+  // "Thuế và thu khác" in dồn ô: ô thiếu của dòng nhóm g hiện ở ô in nơi nhóm đó nằm (hoặc sẽ nằm: số ô đã có + 1, tối đa 5).
+  const missingIds = new Set(requiredGaps(kind, decl, items).map((g) => {
+    const m = g.line === undefined ? null : PRINTED_TAX_KEY.exec(g.key);
+    if (!m || kind !== "IDA") return slotId(g);
+    const { slotToGroup } = compactOtherTaxes(items[g.line!] ?? {});
+    const at = slotToGroup.indexOf(Number(m[2]));
+    return slotId({ ...g, key: `HAG_${m[1]}${at >= 0 ? at + 1 : Math.min(slotToGroup.length + 1, 5)}` });
+  }));
   const cell = (s: Slot, reason: AttentionCell["reason"]): AttentionCell => ({ key: s.key, ...(s.line === undefined ? {} : { line: s.line }), reason });
   const out = order.filter((s) => errorIds.has(slotId(s))).map((s) => cell(s, "ERROR"));
   for (const s of order) {
     if (errorIds.has(slotId(s))) continue;
     if (missingIds.has(slotId(s))) out.push(cell(s, "MISSING"));
+  }
+  // Ô tự điền cần kiểm tra lại (spec 4.10): sau lỗi và còn thiếu.
+  for (const s of order) {
+    if (s.line === undefined || errorIds.has(slotId(s)) || missingIds.has(slotId(s))) continue;
+    if (checks?.[s.line]?.has(s.key)) out.push(cell(s, "CHECK"));
   }
   return out;
 }
@@ -224,6 +242,12 @@ export function attentionCells(kind: Kind, decl: FormValues, items: FormValues[]
  */
 export type PrintData = {
   kind: Kind; lineNos: number[]; values: FormValues; itemRows: FormValues[]; errors: FieldError[];
+  /** itemRows với "Thuế và thu khác" đã dồn ô như VNACCS (HAG_TX/TR/TG{k}) – giá trị in; itemRows giữ dòng theo loại (khóa lưu). */
+  printRows: FormValues[];
+  /** Theo dòng hàng: slotGroups[i][k-1] = nhóm (1–5) in ở ô k. */
+  slotGroups: number[][];
+  /** Theo dòng hàng: khóa ô in (HAG_TX{k}) của ô tự điền cần kiểm tra lại (GTGT suy từ thuế suất…). */
+  checks: Set<string>[];
   /** Số Hải quan trả về (chưa điền ước tính) và số ứng dụng ước tính – để so sánh trên ô. */
   customs: FormValues; estimate: FormValues; estimated: Set<string>;
 };
@@ -249,8 +273,18 @@ export function printData(decl: Declaration, items: LineItem[], submission: Subm
   const values: FormValues = { ...declarationValues(kind, decl.fields), ...sheet.cover, ...customsFilled };
   const customsItems = customsItemValues(kind, info, lineNos);
   const itemRows = itemValues(kind, items, { fields: decl.fields, currency, vbpq }).map((v, i) => ({ ...v, ...customsItems[i] }));
+  const compacted = itemRows.map((v) => (kind === "IDA" ? compactOtherTaxes(v) : { values: v, slotToGroup: [] as number[] }));
+  const printRows = compacted.map((c) => c.values);
+  const slotGroups = compacted.map((c) => c.slotToGroup);
+  // Ô GTGT tự điền cần kiểm tra lại: người khai đã nhập mã GTGT (ở dòng nào) → hết cảnh báo. Dấu trạng thái đặt ở ô in đang chứa mã GTGT.
+  const checks = items.map((it, i) => {
+    const own = itemOverrides(decl.fields, it.id);
+    const ownVat = Object.entries(own).some(([k, v]) => /^HAG_TX[1-5]$/.test(k) && otherTaxGroupOf(v) === 5);
+    const slot = slotGroups[i]!.indexOf(5) + 1;
+    return new Set(ownVat || slot === 0 ? [] : itemAutoChecks(kind, autoCheckInput(it)).map(() => otherTaxKeys(slot).tx));
+  });
   const errors = fieldErrors(kind, submission?.rejection ?? null);
-  return { kind, lineNos, values, itemRows, errors, customs, estimate, estimated };
+  return { kind, lineNos, values, itemRows, printRows, slotGroups, checks, errors, customs, estimate, estimated };
 }
 
 /** Một tờ khai nhánh trên thanh chọn tờ: số tờ / tổng số tờ, lineNo thật của dòng đầu và dòng cuối. */
@@ -350,9 +384,11 @@ export function withLookupNames(data: PrintData, names: Record<string, string | 
 
 /** Ô cần xử lý của bản in. Tờ khai chỉ đọc (LOCKED / không có quyền sửa): bỏ ô còn thiếu (không làm gì được), giữ ô lỗi Hải quan. */
 export function printAttention(data: PrintData, mode: DeclarationEditMode, canEdit: boolean, lineMode: DeclarationEditMode = mode): AttentionCell[] {
-  const cells = attentionCells(data.kind, data.values, data.itemRows, data.errors, data.lineNos);
+  const cells = attentionCells(data.kind, data.values, data.itemRows, data.errors, data.lineNos, data.checks);
   // Ô tờ khai theo `mode` (chỉ tiêu chung), ô dòng hàng theo `lineMode` (tờ đang xem – lô chỉ gọi về một số tờ).
-  return !canEdit ? cells.filter((c) => c.reason !== "MISSING") : cells.filter((c) => c.reason !== "MISSING" || (c.line === undefined ? mode : lineMode) !== "LOCKED");
+  // Ô còn thiếu / cần kiểm tra là việc của người sửa: chỉ đọc hoặc bị khóa → bỏ.
+  const todo = (c: AttentionCell) => c.reason === "MISSING" || c.reason === "CHECK";
+  return !canEdit ? cells.filter((c) => !todo(c)) : cells.filter((c) => !todo(c) || (c.line === undefined ? mode : lineMode) !== "LOCKED");
 }
 
 /** Lỗi Hải quan không gắn được vào ô nào (không có số chỉ tiêu, dòng hàng không có, chỉ tiêu không có trên bản in) – liệt kê riêng. */
@@ -452,6 +488,48 @@ export function declarationGapsOf(decl: Declaration, items: LineItem[], submissi
   return { gaps: requiredGaps(data.kind, data.values, data.itemRows), lineNos: data.lineNos };
 }
 
+/**
+ * Khóa lưu (dòng nhóm theo loại thuế) của ô in "Thuế và thu khác" khi in dồn ô: `values` = giá trị dòng hàng chưa dồn (itemRows), `slot` = ô in (1-based),
+ * `part` = TX (mã thuế, mặc định) / TR (miễn giảm) / TG (số tiền giảm). Ô có nội dung → dòng nhóm của nó; ô trống sau cùng → loại thuế người khai
+ * chọn ở panel (`pick`, phải là loại còn trống) hoặc, chưa chọn, loại còn trống đầu tiên.
+ */
+export function printSlotTarget(values: FormValues, slot: number, part: "TX" | "TR" | "TG" = "TX", pick?: number): { key: string } {
+  const { slotToGroup } = compactOtherTaxes(values);
+  const empty = emptyOtherTaxGroups(values);
+  const group = slotToGroup[slot - 1] ?? (pick !== undefined && empty.includes(pick) ? pick : empty[0]) ?? slot;
+  return { key: `HAG_${part}${group}` };
+}
+
+/** Loại thuế (1–5, theo thứ tự ưu tiên) dòng hàng chưa khai ô nào (mã thuế, miễn giảm, số tiền giảm) – loại người khai thêm được ở ô in trống. */
+export function emptyOtherTaxGroups(values: FormValues): number[] {
+  return [1, 2, 3, 4, 5].filter((g) => !Object.values(otherTaxKeys(g)).some((k) => (values[k] ?? "") !== ""));
+}
+
+/** Ô in "Thuế và thu khác" (HAG_TX/TR/TG{k}) còn trống sau khi dồn ô → số ô k; ô khác / ô đã có loại thuế → undefined. */
+export function emptyPrintedTaxSlot(values: FormValues, key: string): number | undefined {
+  const m = PRINTED_TAX_KEY.exec(key);
+  if (!m) return undefined;
+  const slot = Number(m[2]);
+  return compactOtherTaxes(values).slotToGroup[slot - 1] === undefined ? slot : undefined;
+}
+
+/**
+ * Sau khi lưu, bản in dồn ô lại → loại thuế `group` đang sửa có thể sang ô in khác (thêm BVMT trước GTGT → GTGT xuống một ô).
+ * Trả khóa ô in mới của loại đó khi khác `printedKey`; ô khác / loại không còn trên dòng / không đổi → undefined.
+ */
+export function followTaxSlot(values: FormValues, printedKey: string, group: number): string | undefined {
+  const m = PRINTED_TAX_KEY.exec(printedKey);
+  if (!m) return undefined;
+  const k = compactOtherTaxes(values).slotToGroup.indexOf(group) + 1;
+  return k > 0 && k !== Number(m[2]) ? `HAG_${m[1]}${k}` : undefined;
+}
+
+/** Khóa ô in bất kỳ → khóa lưu: ô "Thuế và thu khác" theo printSlotTarget (ô trống → loại thuế `pick` nếu có), ô khác giữ nguyên. */
+export function printedKeyTarget(values: FormValues, key: string, pick?: number): { key: string } {
+  const m = PRINTED_TAX_KEY.exec(key);
+  return m ? printSlotTarget(values, Number(m[2]), m[1] as "TX" | "TR" | "TG", pick) : { key };
+}
+
 /** Khối thuế của dòng hàng (bố cục form): mã thuế khai giống nhau cho nhiều dòng → panel cho áp một lần cho mọi dòng. */
 const TAX_BLOCKS: Record<Kind, ReadonlySet<string>> = { IDA: new Set(["thue-nk", "thu-khac"]), EDA: new Set(["thue-xk"]) };
 const taxCodeCache = new Map<Kind, Set<string>>();
@@ -500,6 +578,9 @@ export const customsAnswered = (submission: SubmissionView | undefined): boolean
 /** Ô số vận đơn: IDA 1.26 (số / ngày vận đơn / số HAWB của từng dòng), EDA 2.24. */
 const BILL_CELL: Record<Kind, RegExp> = { IDA: /^(VD_BL|APP_NGAY_VD|APP_HAWB)\d+$/, EDA: /^TK_EKN$/ };
 export const isBillCell = (kind: Kind, key: string) => BILL_CELL[kind].test(key);
+
+/** Ô số vận đơn ứng với ô vận đơn đang mở: IDA cùng số thứ tự (ngày / HAWB n → VD_BLn), EDA TK_EKN. Số định danh được điền vào đây. */
+export const billNoKey = (kind: Kind, key: string): string => (kind === "IDA" ? `VD_BL${/\d+$/.exec(key)?.[0] ?? "1"}` : "TK_EKN");
 
 /**
  * Ô chọn khai định danh đi cùng số vận đơn (không có chỗ trên mẫu in – nằm ở "Chỉ tiêu khác"): khai định danh theo đường biển / hàng không,

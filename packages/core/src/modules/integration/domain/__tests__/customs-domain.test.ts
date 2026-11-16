@@ -17,8 +17,8 @@ const PAYLOAD: DeclarationPayload = {
     VBPQ: { value: "MO" }, SO_QLNB: { value: "HS-NK-2610-021" },
   },
   items: [
-    { lineNo: 1, description: "Vòng bi cầu 6205-2RS", quantity: "2000", unit: "PCE", unitPrice: "1.85", amount: "3700", origin: "KR", hsConfirmed: "8482.10.00", importDutyRate: "0", vatRate: "8", policyNote: "Áp thuế suất ưu đãi đặc biệt AKFTA (C/O form AK)" },
-    { lineNo: 2, description: "Thanh trượt HGR25", quantity: "120", unit: "PCE", unitPrice: "32.5", amount: "3900", origin: "KR", hsConfirmed: "8466.93.90", importDutyRate: "0", vatRate: "8", policyNote: null },
+    { lineNo: 1, description: "Vòng bi cầu 6205-2RS", quantity: "2000", unit: "PCE", unitPrice: "1.85", amount: "3700", origin: "KR", hsConfirmed: "8482.10.00", importDutyRate: "0", vatRate: "8", vatCode: "VB205", policyNote: "Áp thuế suất ưu đãi đặc biệt AKFTA (C/O form AK)" },
+    { lineNo: 2, description: "Thanh trượt HGR25", quantity: "120", unit: "PCE", unitPrice: "32.5", amount: "3900", origin: "KR", hsConfirmed: "8466.93.90", importDutyRate: "0", vatRate: "8", vatCode: "VB205", policyNote: null },
   ],
   adjustments: [{ label: "Cước vận chuyển quốc tế", amount: "29200000", currency: "VND" }],
 };
@@ -375,12 +375,13 @@ describe("declaration-to-fpt – ô dòng hàng người khai nhập (HANG.<id d
   type Req = { objVN_IDA_HANG: Record<string, unknown>[] };
   const withIds = { ...PAYLOAD, items: PAYLOAD.items.map((it, i) => ({ ...it, id: `li${i + 1}` })) };
   it("ghi đè giá trị tự điền đúng dòng (theo id), đổi kiểu số; ô người khai nhập thêm được gửi", () => {
-    const b = buildFptRequest({ ...withIds, fields: { ...withIds.fields, "HANG.li2.HAG_QN2": { value: "12.5" }, "HANG.li2.HAG_RE": { value: "XN210" }, "HANG.li1.HAG_TX5": { value: "VB905" } } });
+    const b = buildFptRequest({ ...withIds, fields: { ...withIds.fields, "HANG.li2.HAG_QN2": { value: "12.5" }, "HANG.li2.HAG_RE": { value: "XN210" }, "HANG.li1.HAG_TX5": { value: "VB205" } } });
     const r = b.request as Req;
     expect(r.objVN_IDA_HANG[1]?.[fptKey("HAG_QN2")]).toBe(12.5);
     expect(r.objVN_IDA_HANG[1]?.[fptKey("HAG_RE")]).toBe("XN210");
     expect(r.objVN_IDA_HANG[0]?.[fptKey("HAG_QN2")]).toBe(2000);
-    expect(r.objVN_IDA_HANG[0]?.[fptKey("HAG_TX5")]).toBe("VB905");
+    expect(r.objVN_IDA_HANG[0]?.[fptKey("HAG_TX1")]).toBe("VB205"); // legacy_override_slot5: ô 5 cũ được dồn về ô 1
+    expect(r.objVN_IDA_HANG[0]?.[fptKey("HAG_TX5")]).toBeUndefined();
     expect(b.issues).toEqual([]);
   });
   it("FTA chưa có mã biểu thuế: chặn truyền, trừ khi người khai nhập 1.80 cho dòng", () => {
@@ -389,5 +390,35 @@ describe("declaration-to-fpt – ô dòng hàng người khai nhập (HANG.<id d
     const fixed = buildFptRequest({ ...evfta, fields: { ...evfta.fields, "HANG.li1.HAG_ORS": { value: "B30" }, "HANG.li2.HAG_ORS": { value: "B30" } } });
     expect(fixed.blockers.filter((x) => x.includes("1.80"))).toEqual([]);
     expect((fixed.request as Req).objVN_IDA_HANG[0]?.[fptKey("HAG_ORS")]).toBe("B30");
+  });
+});
+
+describe("declaration-to-fpt – thuế và thu khác dồn ô (IDA)", () => {
+  type Req = { objVN_IDA_HANG: Record<string, unknown>[] };
+  const base = { ...PAYLOAD, items: PAYLOAD.items.map((it, i) => ({ ...it, id: `li${i + 1}` })) };
+  const withOwn = (p: DeclarationPayload, own: Record<string, string>) => buildFptRequest({ ...p, fields: { ...p.fields, ...Object.fromEntries(Object.entries(own).map(([k, v]) => [k, { value: v }])) } });
+  const line1 = (b: ReturnType<typeof buildFptRequest>) => (b.request as unknown as Req).objVN_IDA_HANG[0]!;
+  it("sends_vat_in_slot_1", () => {
+    const p = { ...base, items: base.items.map((it) => ({ ...it, vatCode: "VB901" })) };
+    const b = buildFptRequest(p);
+    expect(line1(b)[fptKey("HAG_TX1")]).toBe("VB901");
+    expect(line1(b)[fptKey("HAG_TX5")]).toBeUndefined();
+    expect(b.issues).toEqual([]);
+  });
+  it("compacts_ttdb_and_vat", () => {
+    const b = withOwn(base, { "HANG.li1.HAG_TX3": "TB020" });
+    expect(line1(b)[fptKey("HAG_TX1")]).toBe("TB020");
+    expect(line1(b)[fptKey("HAG_TX2")]).toBe("VB205");
+    expect(line1(b)[fptKey("HAG_TX3")]).toBeUndefined();
+  });
+  it("blocks_unknown_prefix", () => {
+    const b = withOwn(base, { "HANG.li1.HAG_TX2": "X12" });
+    expect(b.blockers.some((x) => x.includes("Dòng 1") && x.includes("HAG_TX"))).toBe(true);
+  });
+  it("blocks_missing_vat", () => {
+    const p = { ...base, items: base.items.map((it, i) => (i === 0 ? { ...it, vatRate: "5", vatCode: null } : it)) };
+    const b = buildFptRequest(p);
+    expect(b.blockers.some((x) => x.includes("Dòng 1") && x.includes("1.94"))).toBe(true);
+    expect(buildFptRequest(base).blockers.some((x) => x.includes("1.94"))).toBe(false);
   });
 });

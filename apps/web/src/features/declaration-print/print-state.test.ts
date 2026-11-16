@@ -1,7 +1,7 @@
 import { expandPrintRow, formKeysOf, itemFieldCode, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
-import { applyToOtherLines, attentionCells, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import { applyToOtherLines, attentionCells, billNoKey, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, printSlotTarget, printedKeyTarget, emptyOtherTaxGroups, emptyPrintedTaxSlot, followTaxSlot, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -71,12 +71,120 @@ describe("editedKeys", () => {
 });
 
 describe("cellState", () => {
-  it("ưu tiên error > missing > estimate > edited > none", () => {
-    expect(cellState({ error: true, missing: true, estimated: true, edited: true })).toBe("error");
-    expect(cellState({ error: false, missing: true, estimated: true, edited: true })).toBe("missing");
-    expect(cellState({ error: false, missing: false, estimated: true, edited: true })).toBe("estimate");
-    expect(cellState({ error: false, missing: false, estimated: false, edited: true })).toBe("edited");
-    expect(cellState({ error: false, missing: false, estimated: false, edited: false })).toBe("none");
+  it("ưu tiên error > missing > check > estimate > edited > none", () => {
+    expect(cellState({ error: true, missing: true, check: true, estimated: true, edited: true })).toBe("error");
+    expect(cellState({ error: false, missing: true, check: true, estimated: true, edited: true })).toBe("missing");
+    expect(cellState({ error: false, missing: false, check: true, estimated: true, edited: true })).toBe("check");
+    expect(cellState({ error: false, missing: false, check: false, estimated: true, edited: true })).toBe("estimate");
+    expect(cellState({ error: false, missing: false, check: false, estimated: false, edited: true })).toBe("edited");
+    expect(cellState({ error: false, missing: false, check: false, estimated: false, edited: false })).toBe("none");
+  });
+});
+
+describe("thuế và thu khác theo loại – bản in", () => {
+  it("panel_opens_group_row: ô in 2 của dòng TTĐB + GTGT mở dòng nhóm GTGT; ô trống sau cùng → dòng nhóm trống đầu tiên", () => {
+    expect(printSlotTarget({ HAG_TX3: "TB020", HAG_TX5: "VB901" }, 2)).toEqual({ key: "HAG_TX5" });
+    expect(printSlotTarget({ HAG_TX3: "TB020", HAG_TX5: "VB901" }, 1)).toEqual({ key: "HAG_TX3" });
+    expect(printSlotTarget({ HAG_TX3: "TB020", HAG_TX5: "VB901" }, 3)).toEqual({ key: "HAG_TX1" });
+    expect(printSlotTarget({ HAG_TX3: "TB020", HAG_TR3: "T1" }, 1, "TR")).toEqual({ key: "HAG_TR3" });
+    expect(printedKeyTarget({ HAG_TX5: "VB901" }, "HAG_TR1")).toEqual({ key: "HAG_TR5" });
+    expect(printedKeyTarget({ HAG_TX5: "VB901" }, "HAG_ORS")).toEqual({ key: "HAG_ORS" });
+  });
+
+  it("empty_slot_pick: ô in trống → loại thuế người khai chọn (chỉ loại còn trống); ô đã có loại bỏ qua lựa chọn", () => {
+    const row = { HAG_TX5: "VB901" };
+    expect(emptyOtherTaxGroups(row)).toEqual([1, 2, 3, 4]);
+    expect(emptyOtherTaxGroups({ HAG_TX3: "TB020", HAG_TR1: "G1" })).toEqual([2, 4, 5]);
+    expect(emptyPrintedTaxSlot(row, "HAG_TX1")).toBeUndefined();
+    expect(emptyPrintedTaxSlot(row, "HAG_TR2")).toBe(2);
+    expect(emptyPrintedTaxSlot(row, "HAG_ORS")).toBeUndefined();
+    expect(printSlotTarget(row, 2, "TX", 3)).toEqual({ key: "HAG_TX3" });
+    expect(printedKeyTarget(row, "HAG_TR2", 4)).toEqual({ key: "HAG_TR4" });
+    // Loại đã khai (GTGT) không chọn được cho ô trống → loại còn trống đầu tiên; ô đã có loại giữ loại của nó.
+    expect(printSlotTarget(row, 2, "TX", 5)).toEqual({ key: "HAG_TX1" });
+    expect(printSlotTarget(row, 1, "TX", 3)).toEqual({ key: "HAG_TX5" });
+  });
+
+  it("follow_tax_slot: lưu xong bản in dồn lại → panel theo loại thuế sang ô in mới", () => {
+    // Thêm BVMT (dòng 4) khi đã có TTĐB + GTGT: BVMT in ô 2, GTGT xuống ô 3.
+    const after = { HAG_TX3: "TB020", HAG_TX4: "MB010", HAG_TX5: "V" };
+    expect(followTaxSlot(after, "HAG_TX3", 4)).toBe("HAG_TX2");
+    expect(followTaxSlot(after, "HAG_TR3", 4)).toBe("HAG_TR2");
+    expect(followTaxSlot(after, "HAG_TX2", 4)).toBeUndefined();
+    expect(followTaxSlot(after, "HAG_TX1", 2)).toBeUndefined();
+    expect(followTaxSlot(after, "HAG_ORS", 4)).toBeUndefined();
+  });
+
+  const decl = { kind: "IDA", fields: [{ code: "MA_TT", value: "USD" }], exchangeRate: "25000", customsValueVnd: "0", estimatedImportDutyVnd: "0", estimatedVatVnd: "0" } as unknown as Declaration;
+  const mkItem = (id: string, extra: Record<string, unknown> = {}) => ({
+    id, lineNo: 1, description: "x", quantity: "1", unit: "PCE", unitPrice: "1", amount: "1", origin: "CN", hsConfirmed: "85011000", vatRate: "10", vatCertain: false, ...extra,
+  }) as unknown as LineItem;
+
+  it("print_compacts_other_tax: GTGT ở dòng 5 in ở ô 1; TTĐB + GTGT in ô 1, 2", () => {
+    const f = (code: string, value: string) => ({ code, value, source: "USER" });
+    const a = mkItem("a");
+    const d1 = { ...decl, fields: [...decl.fields, f(itemFieldCode("a", "HAG_TX5"), "VB901")] } as unknown as Declaration;
+    const p1 = printData(d1, [a], undefined);
+    expect(p1.printRows[0]!["HAG_TX1"]).toBe("VB901");
+    expect(p1.printRows[0]!["HAG_TX5"]).toBeUndefined();
+    expect(p1.slotGroups[0]).toEqual([5]);
+    const d2 = { ...d1, fields: [...d1.fields, f(itemFieldCode("a", "HAG_TX3"), "TB020")] } as unknown as Declaration;
+    const p2 = printData(d2, [a], undefined);
+    expect(p2.printRows[0]!["HAG_TX1"]).toBe("TB020");
+    expect(p2.printRows[0]!["HAG_TX2"]).toBe("VB901");
+    expect(p2.itemRows[0]!["HAG_TX3"]).toBe("TB020");
+  });
+
+  it("check_state_for_inferred_vat: GTGT tự điền theo thuế suất → ô in chứa mã GTGT có check; người khai đã nhập → hết", () => {
+    const a = mkItem("a");
+    const auto = printData(decl, [a], undefined);
+    const k = auto.slotGroups[0]!.indexOf(5) + 1;
+    expect(k).toBeGreaterThan(0);
+    expect(auto.checks[0]!.has(`HAG_TX${k}`)).toBe(true);
+    const own = { ...decl, fields: [...decl.fields, { code: itemFieldCode("a", "HAG_TX5"), value: "VB901", source: "USER" }] } as unknown as Declaration;
+    expect(printData(own, [a], undefined).checks[0]!.size).toBe(0);
+  });
+
+  it("check_state_needs_review: taxNeedsReview → mã GTGT HSCodePro coi là chưa chắc (cảnh báo như backend)", () => {
+    const sure = mkItem("a", { vatCode: "VB901", vatCertain: true });
+    expect(printData(decl, [sure], undefined).checks[0]!.size).toBe(0);
+    expect(printData(decl, [{ ...sure, taxNeedsReview: true } as LineItem], undefined).checks[0]!.size).toBe(1);
+  });
+
+  it("missing_maps_to_printed_slot: dòng chỉ có TTĐB → GTGT thiếu hiện ở ô in 2", () => {
+    const cells = attentionCells("IDA", {}, [{ HAG_TX3: "TB020" }], [], [1]);
+    expect(cells.some((c) => c.key === "HAG_TX5" && c.line === 0)).toBe(false);
+    expect(cells.some((c) => c.key === "HAG_TX2" && c.line === 0 && c.reason === "MISSING")).toBe(true);
+  });
+
+  it("customs_error_slot_2_hits_vat_row: lỗi 1.94 slot 2 → chỉ ô in HAG_TX2, không tô cả khối", () => {
+    const err = { no: "1.94", line: 1, slot: 2, code: "E1", message: "x" };
+    const cells = attentionCells("IDA", {}, [{ HAG_TX3: "TB020", HAG_TX5: "VB901" }], [err], [1]);
+    expect(cells.filter((c) => c.reason === "ERROR")).toEqual([{ key: "HAG_TX2", line: 0, reason: "ERROR" }]);
+    expect(errorSlots("IDA", [err], [1]).map((s) => s.key)).toEqual(["HAG_TX2"]);
+    expect(printSlotTarget({ HAG_TX3: "TB020", HAG_TX5: "VB901" }, 2).key).toBe("HAG_TX5");
+    expect(errorSlots("IDA", [{ ...err, slot: undefined } as never], [1]).length).toBeGreaterThan(1);
+  });
+
+  it("check_counted_in_attention: ô CHECK sau ERROR/MISSING; chỉ đọc hoặc khóa thì bỏ", () => {
+    const a = mkItem("a");
+    const d = printData(decl, [a], undefined);
+    const k = d.slotGroups[0]!.indexOf(5) + 1;
+    const cells = printAttention(d, "FULL", true);
+    expect(cells.at(-1)).toEqual({ key: `HAG_TX${k}`, line: 0, reason: "CHECK" });
+    expect(cells.filter((c) => c.reason === "CHECK")).toHaveLength(1);
+    expect(printAttention(d, "FULL", false).some((c) => c.reason === "CHECK")).toBe(false);
+    expect(printAttention(d, "LOCKED", true).some((c) => c.reason === "CHECK")).toBe(false);
+    expect(printIssues(d, "FULL", true).count).toBe(cells.length + printIssues(d, "FULL", true).unplaced.length);
+  });
+
+  it("apply_to_other_lines_by_group: áp từ ô in 1 (dòng TTĐB) ghi khóa dòng nhóm TTĐB ở dòng khác", () => {
+    const items = [{ id: "a" }, { id: "b" }];
+    const rows = [{ HAG_TX3: "TB020", HAG_TX5: "VB901" }, { HAG_TX5: "VB901" }];
+    const target = printSlotTarget(rows[0]!, 1).key;
+    expect(target).toBe("HAG_TX3");
+    const r = applyToOtherLines(items, rows, 0, { ...rows[0]! }, [target]);
+    expect(r.edits).toEqual([{ code: itemFieldCode("b", "HAG_TX3"), value: "TB020" }]);
   });
 });
 
@@ -248,7 +356,7 @@ describe("nextTarget", () => {
 
 describe("printAttention (Fix round 1)", () => {
   const data = (errors: Parameters<typeof attentionCells>[3] = []): PrintData => ({
-    kind: "IDA", lineNos: [1], values: {}, itemRows: [{}], errors, customs: {}, estimate: {}, estimated: new Set(),
+    kind: "IDA", lineNos: [1], values: {}, itemRows: [{}], printRows: [{}], slotGroups: [[]], checks: [new Set()], errors, customs: {}, estimate: {}, estimated: new Set(),
   });
   it("sửa được → lỗi và ô còn thiếu, như attentionCells", () => {
     const d = data([{ no: "1.22", code: "E1", message: "x" }]);
@@ -303,7 +411,7 @@ describe("keepTogetherValue (Fix round 2)", () => {
 
 describe("unplacedErrors / printIssues (final review)", () => {
   const base = (errors: Parameters<typeof attentionCells>[3]): PrintData => ({
-    kind: "IDA", lineNos: [1], values: {}, itemRows: [{}], errors, customs: {}, estimate: {}, estimated: new Set(),
+    kind: "IDA", lineNos: [1], values: {}, itemRows: [{}], printRows: [{}], slotGroups: [[]], checks: [new Set()], errors, customs: {}, estimate: {}, estimated: new Set(),
   });
   const noNo = { code: "E9", message: "Lỗi chung" };
   const badLine = { no: "1.74", line: 9, code: "E8", message: "Dòng không có" };
@@ -324,7 +432,7 @@ describe("unplacedErrors / printIssues (final review)", () => {
 
 describe("withLookupNames (tên địa điểm lưu kho theo mã)", () => {
   const base = (values: Record<string, string>): PrintData => ({
-    kind: "IDA", lineNos: [], values, itemRows: [], errors: [], customs: {}, estimate: {}, estimated: new Set(),
+    kind: "IDA", lineNos: [], values, itemRows: [], printRows: [], slotGroups: [], checks: [], errors: [], customs: {}, estimate: {}, estimated: new Set(),
   });
   it("ô tên còn trống → điền tên tra danh mục, đánh dấu ước tính", () => {
     const d = withLookupNames(base({ VD_ST: "03CCS03" }), { VD_A51: "KHO CFS TAN VU" });
@@ -509,5 +617,11 @@ describe("isBillCell / billPanelFields – ô số vận đơn", () => {
   it("EDA 2.24 là ô vận đơn nhưng lựa chọn định danh nằm trong form định danh – không thêm ô", () => {
     expect(isBillCell("EDA", "TK_EKN")).toBe(true);
     expect(billPanelFields("EDA", "TK_EKN")).toEqual([]);
+  });
+  it("billNoKey: số định danh xác nhận điền vào ô số vận đơn cùng dòng (IDA) / TK_EKN (EDA)", () => {
+    expect(billNoKey("IDA", "VD_BL1")).toBe("VD_BL1");
+    expect(billNoKey("IDA", "APP_NGAY_VD3")).toBe("VD_BL3");
+    expect(billNoKey("IDA", "APP_HAWB5")).toBe("VD_BL5");
+    expect(billNoKey("EDA", "TK_EKN")).toBe("TK_EKN");
   });
 });

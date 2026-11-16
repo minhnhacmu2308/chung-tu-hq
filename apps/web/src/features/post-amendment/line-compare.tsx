@@ -3,7 +3,7 @@
 // Tiền thuế Sau tự tính lại (applyAmaLineEdit); ô Sau khác Trước được đánh dấu "đã đổi". Mô tả/xuất xứ và thuế – thu khác nằm trong khối thu gọn.
 import { Badge, Button, Card, CardContent, Disclosure, fill, Grid, Input, Stack, toast, useMessages, useUiLocale } from "@kb/ui";
 import {
-  AMA_COMPUTED_KEYS, AMA_LINE_LAYOUT, AMA_OTHER_TAX_SLOTS, amaLineDelta, amaLineLocked, LINE_LOCK_REASON, parseDec, type PostAmendmentLine,
+  AMA_COMPUTED_KEYS, AMA_LINE_LAYOUT, AMA_OTHER_TAX_SLOTS, amaLineDelta, amaLineLocked, amaOtherTaxSlotOf, otherTaxGroupOf, LINE_LOCK_REASON, parseDec, type PostAmendmentLine,
 } from "@kb/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Calculator, Plus, Save, Trash2, Undo2 } from "lucide-react";
@@ -15,11 +15,10 @@ import { AmendLockProvider, type FieldLockLookup } from "../declaration-form/ame
 import { BlockView } from "../declaration-form/block-view";
 import { CodeInput } from "../declaration-form/code-input";
 import { conditionContext } from "../declaration-form/form-state";
-import { ViewPrefsProvider } from "../declaration-form/view-prefs";
 import { StickyActionBar } from "../dossier-detail/steps/declaration-parts";
 import type { AmaStepCtx } from "./ama-context";
 import { AMA_MESSAGES } from "./ama.messages";
-import { amaChangeSummary, applyEdits, changedKeys, importCompareRows, lineSaves, otherCompareRows, otherSlotsInUse, type CompareRow } from "./ama-wizard";
+import { amaChangeSummary, applyEdits, changedKeys, importCompareRows, lineSaves, otherCompareRows, otherSlotsInUse, vatBaseNeedsCheck, type CompareRow } from "./ama-wizard";
 
 type Edits = Record<string, Record<string, string>>;
 
@@ -73,7 +72,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
   });
 
   return (
-    <ViewPrefsProvider>
+    <>
       <Stack gap="md">
         {drafts.map((d, i) => (
           <LineCard
@@ -124,7 +123,7 @@ export function EditLines({ ctx, onDirtyChange }: { ctx: AmaStepCtx; onDirtyChan
           </>
         )}
       </StickyActionBar>
-    </ViewPrefsProvider>
+    </>
   );
 }
 
@@ -189,7 +188,7 @@ function LineCard({ kind, line, defaultOpen, editable, onChange, onRemove, remov
         <Disclosure title={t.descGroup} defaultOpen={descChanged} {...(descChanged ? { meta: <Badge tone="info">{t.changedBadge}</Badge> } : {})}>
           <AmendLockProvider kind={kind} values={v} active={false} override={lock}>
             {AMA_LINE_LAYOUT.map((b) => (
-              <BlockView key={b.id} kind={kind} block={b} values={v} onChange={editable ? onChange : undefined} ctx={conditionContext(kind, v)} showInapplicable={false} showActions={false} />
+              <BlockView key={b.id} kind={kind} block={b} values={v} onChange={editable ? onChange : undefined} ctx={conditionContext(kind, v)} showInapplicable={false} />
             ))}
           </AmendLockProvider>
         </Disclosure>
@@ -240,6 +239,12 @@ function CompareRowView({ kind, row, line, changed, delta, editable, onChange }:
   ) : (
     <Input className="w-full cq-md:max-w-xs" aria-label={aria} inputMode={row.numeric ? "decimal" : undefined} value={value} onChange={(e) => onChange(row.after, e.currentTarget.value)} />
   );
+  // Ô mã thuế không phải GTGT (TTĐB, BVMT, CBPG, PBĐX): đã mang mã từ tờ khai gốc nhưng chưa tự tính chênh lệch.
+  const slot = amaOtherTaxSlotOf(row.after);
+  const code = slot === null ? "" : (v[row.after] || v[row.before] || "");
+  const noDelta = slot !== null && code.trim() !== "" && otherTaxGroupOf(code) !== 5;
+  // Dòng GTGT khi dòng hàng còn loại thuế khác: trị giá tính GTGT chưa tự cộng tiền các loại đó → nhắc kiểm tra.
+  const vatBaseNote = slot !== null && row.after === `HAG_AK${slot}` && vatBaseNeedsCheck(v, slot);
   return (
     <Grid cols={{ base: 1, md: 3 }} gap="sm" className="items-start border-b border-border py-2 last:border-b-0">
       <p className="text-sm font-medium text-fg">{row.label}</p>
@@ -249,6 +254,8 @@ function CompareRowView({ kind, row, line, changed, delta, editable, onChange }:
       </p>
       <div className="flex min-w-0 flex-col gap-1">
         {control}
+        {noDelta && <p className="text-xs text-fg-muted">{t.noDeltaTax}</p>}
+        {vatBaseNote && <p className="text-xs font-medium text-warning-subtle-fg">{t.vatBaseNote}</p>}
         {(changed || row.computed) && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
             {changed && <Badge tone="info">{t.changedBadge}</Badge>}

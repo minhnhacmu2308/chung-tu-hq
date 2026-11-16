@@ -1,7 +1,7 @@
 // Logic thuần của bước 7 "Sửa sau thông quan": bước nhỏ hiện tại, ô đã đổi, hạn 60 ngày (TT121 Điều 20), lý do chưa duyệt được, nút chính.
 // Tách khỏi màn hình để test bằng vitest (apps/web chỉ chạy test .ts trong môi trường node).
 import {
-  addDec, AMA_HEADER_LAYOUT, AMA_IMPORT_TAX_COLUMNS, AMA_OTHER_TAX_SLOTS, amaHeaderLocked, amaLineDelta, applyAmaLineEdit, amaOtherTaxColumns, DEC_ZERO, formatDec, parseDec,
+  addDec, AMA_HEADER_LAYOUT, AMA_IMPORT_TAX_COLUMNS, AMA_OTHER_TAX_SLOTS, amaHeaderLocked, amaLineDelta, applyAmaLineEdit, amaOtherTaxColumns, DEC_ZERO, formatDec, otherTaxGroupOf, parseDec,
   type AmaTaxColumn, type CustomsOperation, type CustomsRejection, type CustomsStage, type LayoutBlock, type LayoutField, type LayoutItem, type PostAmendment, type PostAmendmentLine,
   type PostAmendmentValues, type CopyPostAmendmentHeaderResult,
 } from "@kb/contracts";
@@ -57,6 +57,16 @@ export const importCompareRows = (locale: UiLocale): CompareRow[] =>
   }));
 export const otherCompareRows = (n: number): CompareRow[] =>
   amaOtherTaxColumns(n).map((c) => ({ ...c, ...(c.after === `HAG_AA${n}` ? { computed: true } : {}) }));
+
+/**
+ * Nhóm `slot` là GTGT (mã Sau, không có thì mã Trước) và dòng còn nhóm thuế khác không phải GTGT (TTĐB, BVMT, CBPG, PBĐX) → trị giá tính GTGT
+ * tự tính chưa cộng tiền các loại đó (recalcAmaLine chỉ cộng tiền người khai nhập tay – TODO follow-up ở @kb/contracts post-amendment/rules) → nhắc kiểm tra lại.
+ */
+export function vatBaseNeedsCheck(values: PostAmendmentValues, slot: number): boolean {
+  const codeOf = (n: number) => (values[`HAG_AK${n}`] || values[`HAG_MK${n}`] || "").trim();
+  if (otherTaxGroupOf(codeOf(slot)) !== 5) return false;
+  return AMA_OTHER_TAX_SLOTS.some((n) => n !== slot && codeOf(n) !== "" && otherTaxGroupOf(codeOf(n)) !== 5);
+}
 
 /** Nhóm thu khác (1–5) đang có giá trị Trước hoặc Sau. */
 export const otherSlotsInUse = (values: PostAmendmentValues): number[] =>

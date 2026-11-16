@@ -49,6 +49,8 @@
   --color-paper: var(--kb-color-paper);
   --color-paper-fg: var(--kb-color-paper-fg);
   --color-paper-rule: var(--kb-color-paper-rule);
+  --color-scan: var(--kb-color-scan);
+  --color-scan-fg: var(--kb-color-scan-fg);
   --color-fg-muted: var(--kb-color-fg-muted);
   --color-fg-subtle: var(--kb-color-fg-subtle);
   --color-overlay: var(--kb-color-overlay);

@@ -268,6 +268,7 @@ export function Showcase() {
                 <Barcode type="qr" value="KVGS-FBIU5802429" label="Mã QR bản kê" />
                 <Barcode type="code128" value="FBIU5802429" label="Mã vạch số container" />
                 <Barcode type="png" value={DEMO_BARCODE_PNG} label="Ảnh mã vạch Hải quan cấp" />
+                <Barcode type="png" value={DEMO_BARCODE_PNG} label="Ảnh mã QR định danh (nền quét)" surface="scan" />
               </div>
             </Stack>
           </CardContent>
@@ -320,6 +321,7 @@ export function Showcase() {
               <PaperField span={6} label="2. Mã loại hình" value="A11" ariaLabel="Mã loại hình" selected onSelect={() => {}} />
               <PaperField span={6} label="3. Tên người xuất khẩu" value="KOREA BEARING SOLUTION" ariaLabel="Tên người xuất khẩu" state="error" />
               <PaperField span={6} label="4. Mã bưu chính" value="" ariaLabel="Mã bưu chính" state="missing" />
+              <PaperField span={6} label="4b. Mã GTGT (tự điền)" value="VB901" ariaLabel="Mã GTGT" state="check" />
               <PaperField span={4} label="5. Tổng trị giá hóa đơn" value="886.187.500" ariaLabel="Tổng trị giá hóa đơn" state="estimate" align="end" />
               <PaperField span={4} label="6. Trọng lượng (kg)" value="1.250" ariaLabel="Trọng lượng" state="edited" compareTo="1.200" />
               <PaperField span={4} label="7. Số kiện" value="12" ariaLabel="Số kiện" />

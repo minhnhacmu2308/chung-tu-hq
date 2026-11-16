@@ -3,11 +3,12 @@
 // mỗi phần tử objEDA/objIDA = { objMsgResult, objVN_<KIND>, objVN_<KIND>_TRANGTHAI, … }.
 // externalId = số tờ khai VNACCS (tK_ECN/tK_ICN) – gọi lại/đăng ký/tra cứu theo số này. Đặc tả từng nghiệp vụ: docs/vnaccs-api
 // (nguồn lệch nhau: phản hồi thật > Excel đặc tả > Postman). Mã thông điệp theo REP_VNACCS.
-import { AmaRequestSchema, FPT_DECLARATION_STATES, FptKvgsRequestSchema, FptRefIdResponseSchema, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, V5ContainerResSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
+import { AmaRequestSchema, FPT_DECLARATION_STATES, FptIdentifierQuerySchema, FptIdentifierRequestSchema, FptKvgsRequestSchema, FptRefIdResponseSchema, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, V5ContainerResSchema, V5IdentifierResSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
-import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../application/customs-ports.js";
+import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult, IdentifierGatewayRequest, IdentifierGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../application/customs-ports.js";
 import { parseCustomsInfo } from "../domain/customs-info.js";
+import { identifierState } from "../domain/identifier.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
 import { fptContentBody, fptNumberField } from "../domain/fpt-content-body.js";
 import { mapKvgsResponse } from "./kvgs-mapper.js";
@@ -15,7 +16,7 @@ import { mapKvgsResponse } from "./kvgs-mapper.js";
 export type FptOperation =
   | "IDA" | "IDB" | "IDC" | "IDD" | "IDA01" | "IDE" | "IID"
   | "EDA" | "EDB" | "EDC" | "EDD" | "EDA01" | "EDE" | "IEX"
-  | "AMA" | "AMB" | "AMC" | "HYS" | "VNACCSREP" | "V5ContainerReq" | "V5ContainerRes" | "KVGS";
+  | "AMA" | "AMB" | "AMC" | "HYS" | "VNACCSREP" | "V5ContainerReq" | "V5ContainerRes" | "V5IdentifierReq" | "V5IdentifierRes" | "KVGS";
 /** Lời gọi của doanh nghiệp / hồ sơ nào – cho nhật ký gỡ lỗi (FPT_DEBUG_TRACE). Không có dossierId = lời gọi chung (VNACCSREP). */
 export type FptCallMeta = { orgId: string; dossierId?: string };
 export interface FptHttpClient {
@@ -239,6 +240,25 @@ export class FptVnaccsGateway implements CustomsGateway {
     return { ...mapKvgsResponse(raw, this.now()), raw };
   }
 
+  /**
+   * V5IdentifierReq (KHAI BAO LAY MA DINH DANH v1.1 + Postman FPT): body phẳng { mA_DV, teN_DV, loaI_DT, loaI_HH, mA_HQ, mA_DAI_LY, teN_DAI_LY, useR_ID },
+   * không gửi tài khoản/mật khẩu VNACCS. Cổng thật trả kết quả ngay (sO_DD, codE_CONTENT, tranG_THAI 15) – có thể ~45 giây; cổng chỉ trả reF_ID → PENDING.
+   * Body sai (thiếu MST, USER_ID…) → DomainError, không gọi FPT.
+   */
+  async sendIdentifier(orgId: string, req: IdentifierGatewayRequest, _idempotencyKey?: string): Promise<IdentifierGatewayResult> {
+    requireVnaccsUser(req.userId);
+    const body = identifierBody(req);
+    const raw = await this.http.post("V5IdentifierReq", body, null, { orgId, ...(req.dossierId ? { dossierId: req.dossierId } : {}) });
+    return mapIdentifierResponse(raw);
+  }
+
+  /** V5IdentifierRes: thông tin doanh nghiệp + reF_ID (Postman FPT). Chưa xử lý xong → tranG_THAI 11, các số null → PENDING. */
+  async identifierResult(orgId: string, req: IdentifierGatewayRequest & { refId: string }): Promise<IdentifierGatewayResult> {
+    requireVnaccsUser(req.userId);
+    const raw = await this.http.post("V5IdentifierRes", identifierQueryBody(req), null, { orgId, ...(req.dossierId ? { dossierId: req.dossierId } : {}) });
+    return mapIdentifierResponse(raw);
+  }
+
   /** IID (nhập, body tK_ICN) / IEX (xuất, body tK_ECN) – theo Postman FPT; trạng thái theo VN_IDA/EDA_TRANGTHAI. */
   async queryStatus(orgId: string, externalId: string, dossierId?: string, direction?: "NK" | "XK"): Promise<GatewayStatus> {
     const dir = direction ?? directionOfNo(externalId);
@@ -276,6 +296,48 @@ export class FptVnaccsGateway implements CustomsGateway {
     }
     return out;
   }
+}
+
+/** Body định danh FPT (chuỗi, giữ số 0 đầu); đại lý trống gửi "" như Postman. Sai → DomainError VALIDATION (không gọi FPT). */
+function identifierBody(req: IdentifierGatewayRequest) {
+  const body = FptIdentifierRequestSchema.safeParse({
+    mA_DV: req.taxCode.trim(), teN_DV: req.companyName.trim(), loaI_DT: req.objectType, loaI_HH: req.goodsType, mA_HQ: req.customsOffice.trim(),
+    mA_DAI_LY: req.agentTaxCode?.trim() ?? "", teN_DAI_LY: req.agentName?.trim() ?? "", useR_ID: req.userId.trim(),
+  });
+  if (!body.success) throw domainError("VALIDATION", `Không gửi được khai báo định danh: ${body.error.issues.map((i) => describeSchemaIssue(i).message).join("; ")}`);
+  return body.data;
+}
+
+/** Body V5IdentifierRes đúng Postman FPT: mA_HQ, mA_DV, teN_DV, mA_DAI_LY, teN_DAI_LY, reF_ID, useR_ID (không loaI_DT/loaI_HH). */
+function identifierQueryBody(req: IdentifierGatewayRequest & { refId: string }) {
+  const body = FptIdentifierQuerySchema.safeParse({
+    mA_HQ: req.customsOffice.trim(), mA_DV: req.taxCode.trim(), teN_DV: req.companyName.trim(), mA_DAI_LY: req.agentTaxCode?.trim() ?? "", teN_DAI_LY: req.agentName?.trim() ?? "",
+    reF_ID: req.refId.trim(), useR_ID: req.userId.trim(),
+  });
+  if (!body.success) throw domainError("VALIDATION", `Không hỏi được kết quả định danh: ${body.error.issues.map((i) => describeSchemaIssue(i).message).join("; ")}`);
+  return body.data;
+}
+
+/**
+ * Phản hồi V5IdentifierReq/Res → kết quả: errorList → REJECTED; tranG_THAI theo identifierState (15 + sO_DD → ACCEPTED, 10 → REJECTED, còn lại PENDING).
+ * Ngày dd/MM/yyyy → YYYY-MM-DD. Phản hồi sai dạng → DomainError (Hải quan có thể đã nhận – không để worker gửi lại).
+ */
+export function mapIdentifierResponse(raw: unknown): IdentifierGatewayResult {
+  const env = FptResponseEnvelopeSchema.parse(raw);
+  const errors = toErrors(env);
+  if (errors) return { state: "REJECTED", errors };
+  const res = V5IdentifierResSchema.safeParse(raw);
+  if (!res.success) throw domainError("GATEWAY_ERROR", "Phản hồi khai báo định danh của FPT không đúng định dạng – bấm Hỏi kết quả, không gửi lại");
+  const d = res.data;
+  const text = (v: string | null | undefined) => (v ?? "").trim() || undefined;
+  const receiptDate = fptDateToIso(d.ngaY_TN);
+  const identifiedOn = fptDateToIso(d.ngaY_DD);
+  const fields = {
+    ...(text(d.reF_ID) ? { refId: text(d.reF_ID)! } : {}), ...(text(d.sO_TN) ? { receiptNo: text(d.sO_TN)! } : {}), ...(receiptDate ? { receiptDate } : {}),
+    ...(text(d.tranG_THAI) ? { customsState: text(d.tranG_THAI)! } : {}), ...(text(d.sO_DD) ? { identifierNo: text(d.sO_DD)! } : {}), ...(identifiedOn ? { identifiedOn } : {}),
+    ...(text(d.codE_CONTENT) ? { qrPng: text(d.codE_CONTENT)! } : {}), ...(text(d.keT_QUA) ? { resultText: text(d.keT_QUA)! } : {}),
+  };
+  return { state: identifierState(d.tranG_THAI, d.sO_DD), ...fields };
 }
 
 /** USER_ID rỗng = doanh nghiệp chưa cấu hình tài khoản VNACCS: báo lỗi rõ ràng (vĩnh viễn, không retry) trước khi gọi FPT. */

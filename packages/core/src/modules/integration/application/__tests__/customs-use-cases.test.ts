@@ -38,7 +38,7 @@ const payload = (kind: "IDA" | "EDA" = "IDA"): DeclarationPayload => ({
     // Đủ ô bắt buộc trước khi khai (@kb/contracts declarationRequiredGaps): IDA và EDA đường biển container, giá FCA.
     PL_CN: { value: "4 – Tổ chức" }, HO_HIEU: { value: "VRDK5" }, HD_PL: { value: "A – Hóa đơn thương mại" }, GIA_PL: { value: "A" }, NGUOI_NT: { value: "1" },
     NXK_DT: { value: "0225 3 888 123" }, TG_TT: { value: "20850 USD" }, SO_CONT: { value: "SITU2246781" }, CON_VC1: { value: "03CCS01" } },
-  items: [{ lineNo: 1, description: "Vòng bi", quantity: "2000", unit: "PCE", unitPrice: "1.85", amount: "3700", origin: "KR", hsConfirmed: "8482.10.00", importDutyRate: "3", vatRate: "8", policyNote: null }],
+  items: [{ lineNo: 1, description: "Vòng bi", quantity: "2000", unit: "PCE", unitPrice: "1.85", amount: "3700", origin: "KR", hsConfirmed: "8482.10.00", importDutyRate: "3", vatRate: "8", vatCode: "VB205", policyNote: null }],
 });
 
 class FakeDeclarations implements DeclarationReader {
@@ -375,7 +375,8 @@ const seedOutbox = (p: Partial<OutboxRow> = {}): OutboxRow => {
 /** Gateway giả với vài phương thức thay thế (giữ `this` của FakeCustomsGateway). */
 const gw = (o: Partial<CustomsGateway>): CustomsGateway => ({
   name: "stub", preDeclare: gateway.preDeclare.bind(gateway), declare: gateway.declare.bind(gateway), attachDocuments: gateway.attachDocuments.bind(gateway), queryStatus: gateway.queryStatus.bind(gateway), send: gateway.send.bind(gateway),
-  sendContainerList: gateway.sendContainerList.bind(gateway), containerListResult: gateway.containerListResult.bind(gateway), fetchKvgs: gateway.fetchKvgs.bind(gateway), ...o,
+  sendContainerList: gateway.sendContainerList.bind(gateway), containerListResult: gateway.containerListResult.bind(gateway), fetchKvgs: gateway.fetchKvgs.bind(gateway),
+  sendIdentifier: gateway.sendIdentifier.bind(gateway), identifierResult: gateway.identifierResult.bind(gateway), ...o,
 });
 const noQuery = () => gw({ queryStatus: async () => { throw new Error("không được hỏi IEX"); } });
 const poll = (attempt = 1, dossierId = D) => pollStatus(deps, { orgId: ORG, userId: "usr_chau", dossierId, attempt });
@@ -946,7 +947,7 @@ describe("performOperation – luồng nghiệp vụ", () => {
 
     expect(errCode(await approvePostAmendment(deps, approver, D))).toBe("VALIDATION");
     pa = unwrap(await addPostAmendmentLines(deps, declarant, D, [1]));
-    expect(pa.lines[0]!.values).toMatchObject({ HAG_RAN: "01", HAG_CMB: "Vòng bi", HAG_CMA: "Vòng bi", HAG_MKT: "84821000", HAG_MK1: "VB903", HAG_AK1: "VB903" });
+    expect(pa.lines[0]!.values).toMatchObject({ HAG_RAN: "01", HAG_CMB: "Vòng bi", HAG_CMA: "Vòng bi", HAG_MKT: "84821000", HAG_MK1: "VB205", HAG_AK1: "VB205" });
     pa = unwrap(await updatePostAmendmentField(deps, declarant, D, { lineId: pa.lines[0]!.id, key: "HAG_AKB", value: "100000000" }));
     expect(pa.lines[0]!.values).toMatchObject({ HAG_AKA: "3000000.0000", HAG_AB1: "103000000", HAG_AA1: "8240000.0000" });
     unwrap(await updatePostAmendmentField(deps, declarant, D, { key: "TK_REC", value: "2" }));

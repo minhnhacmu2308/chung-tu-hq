@@ -301,6 +301,16 @@ describe("tờ khai nhánh (mock)", () => {
     expect(await err(performOperation(BIG, "IDC", 4))).toMatchObject({ code: "NOT_FOUND" });
   });
 
+  it("mock_snapshot_keeps_raw_other_tax: ảnh chụp tờ đã gửi giữ ô HANG.* thô như backend (không dồn ô, không thêm ô tự điền)", async () => {
+    const [line] = getDb().lineItems.filter((i) => i.dossierId === BIG).sort((a, b) => a.lineNo - b.lineNo);
+    Object.assign(line!, { vatRate: "10", vatCode: "VB901" });
+    decl(BIG).fields.push({ code: `HANG.${line!.id}.HAG_TX1`, label: "TTĐB", section: "VALUE", value: "T01", source: "USER" });
+    await preDeclareAll(BIG);
+    await sheets(BIG);
+    const rows = JSON.parse(getDb().customsFlows[BIG]!.sent!.lines) as { item: { id: string }; fields: Record<string, string> }[];
+    expect(rows.find((r) => r.item.id === line!.id)!.fields).toEqual({ [`HANG.${line!.id}.HAG_TX1`]: "T01" });
+  });
+
   it("thông quan từng tờ: summary đếm số tờ; hồ sơ CLEARED chỉ khi đủ mọi tờ", async () => {
     await preDeclareAll(BIG);
     await clearSheet(BIG, 1);

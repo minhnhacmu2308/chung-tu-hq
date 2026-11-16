@@ -14,7 +14,7 @@ import { FormField, GuideButton } from "../declaration-form/field";
 import { conditionContext, type FormValues } from "../declaration-form/form-state";
 import { TransportOperationsBar } from "../declaration-form/transport-operations-bar";
 import type { FieldError } from "../dossier-detail/steps/customs-errors";
-import { billPanelFields, isBillCell, type FieldSpot } from "./print-state";
+import { billNoKey, billPanelFields, isBillCell, type FieldSpot } from "./print-state";
 import { PRINT_MESSAGES } from "./print.messages";
 
 type Kind = "IDA" | "EDA";
@@ -56,6 +56,8 @@ export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf,
   const field = spot.field;
   const ctx = conditionContext(kind, values);
   const billCell = !item && isBillCell(kind, field.key);
+  // Xác nhận số định danh (panel Khai báo định danh) → điền vào ô số vận đơn cùng dòng với ô đang mở; người khai bấm Lưu để ghi.
+  const onIdentifier = billCell && onChange ? (no: string) => onChange(billNoKey(kind, field.key), no) : undefined;
   const parent = { parentNo: spot.parentNo, parentCondition: spot.parentCondition ?? spot.blockCondition };
   // data-panel-field: panel đặt focus vào đúng ô người dùng chọn trong nhóm.
   const row = (f: LayoutField, extra: typeof parent | object = {}) => (
@@ -114,7 +116,7 @@ export function PanelDetails({ kind, spot, item, decl, values, onChange, lockOf,
         </Stack>
       </AmendLockProvider>
 
-      {billCell && !readOnlyReason && <TransportOperationsBar kind={kind} header={values} stage="nhap" amending={amending} showInapplicable prototype={false} />}
+      {billCell && !readOnlyReason && <TransportOperationsBar kind={kind} header={values} amending={amending} showInapplicable dossierId={decl.dossierId} {...(onIdentifier ? { onIdentifier } : {})} />}
     </Stack>
   );
 }

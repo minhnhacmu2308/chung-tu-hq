@@ -63,6 +63,11 @@ beforeEach(() => {
   };
 });
 
+/** Danh mục tĩnh không kèm mã GTGT; GTGT 8% không tự điền (spec 4.10) → người khai/HSCodePro phải có mã V… trước khi duyệt. */
+function giveVatCodes() {
+  for (const row of uow.data.lineItems) row.taxDetail = { vatCode: "VB205", vatNote: null, vatCertain: true, normalImportRate: null, needsReview: false };
+}
+
 async function runFull(mode: "DECLARATION" | "DIGITIZE" | "BOTH" = "BOTH") {
   unwrap(await startAgentRun(deps, declarant, D, mode));
   const job = queue.jobs.filter((j) => j.name === "run-agent").at(-1)!.payload as { agentRunId: string };
@@ -236,6 +241,7 @@ describe("HS và tờ khai", () => {
   it("refreshFromShipment: tờ khai đã duyệt → không đổi dòng hàng", async () => {
     await runFull("DECLARATION");
     for (const it of unwrap(await listLineItems(deps, declarant, D))) unwrap(await confirmHs(deps, declarant, it.id, "8482.10.00"));
+    giveVatCodes();
     unwrap(await moveToReview(deps, declarant, D));
     unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
     unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));
@@ -252,6 +258,7 @@ describe("HS và tờ khai", () => {
     await runFull("DECLARATION");
     expect(errCode(await moveToReview(deps, declarant, D))).toBe("HS_UNCONFIRMED");
     for (const it of unwrap(await listLineItems(deps, declarant, D))) unwrap(await confirmHs(deps, declarant, it.id, "8482.10.00"));
+    giveVatCodes();
     unwrap(await moveToReview(deps, declarant, D));
     expect(dossiers.rows[0]).toMatchObject({ step: "review", status: "NEEDS_REVIEW" });
     expect(dossiers.rows[0]!.suspectFields).toBeGreaterThan(0);
@@ -290,6 +297,7 @@ describe("HS và tờ khai", () => {
   it("approve: port sentSheetsGuard (tờ chưa gọi về bị đổi – SENT_SHEETS_CHANGED) chặn duyệt sau mọi kiểm khác; null → duyệt; vai trò vẫn kiểm trước", async () => {
     await runFull("DECLARATION");
     for (const it of unwrap(await listLineItems(deps, declarant, D))) unwrap(await confirmHs(deps, declarant, it.id, "8482.10.00"));
+    giveVatCodes();
     unwrap(await moveToReview(deps, declarant, D));
     unwrap(await updateDeclarationField(deps, declarant, D, "VBPQ", "MO"));
     unwrap(await updateDeclarationField(deps, declarant, D, "KHO", "03CCS01 – Kho CFS Tân Vũ"));

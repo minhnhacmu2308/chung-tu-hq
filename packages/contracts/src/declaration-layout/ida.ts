@@ -1,5 +1,6 @@
 // Mẫu 01 – tờ khai nhập khẩu (IDA): bố cục đầy đủ chỉ tiêu theo ảnh mẫu CHITIEU_NHAPKHAU + Phụ lục II TT39/TT121 + VNACCS_IDA v1.2.
 import { attachmentBlocks, billIdentFields, directivesBlock, fld, grp, hq, internalContractBlock, invoiceBlock, itemExtraFields, manualValueField, permitsBlock, rep, taxPaymentBlocks, transitBlock, typeGroupField } from "./shared.js";
+import { OTHER_TAX_GROUPS } from "./other-tax.js";
 import { withShortLabels } from "./short-labels.js";
 import type { DeclarationLayout, LayoutBlock } from "./types.js";
 
@@ -39,11 +40,11 @@ const ITEM_DECLARANT: LayoutBlock[] = [
   },
   {
     id: "thu-khac", title: "Thuế và thu khác", items: [
-      rep("Khoản thuế và thu khác (1 chống bán phá giá · 2 chống phân biệt đối xử · 3 TTĐB · 4 BVMT · 5 GTGT)", undefined, 5, [
+      rep("Khoản thuế và thu khác", undefined, 5, [
         fld("HAG_TX{n}", "Mã áp dụng thuế suất", "code", { codeTable: "OTHER_TAX", no: "1.94", width: "sm" }),
         fld("HAG_TR{n}", "Mã miễn/giảm/không chịu thuế", "code", { no: "1.95", codeTable: "A520", width: "sm" }),
         fld("HAG_TG{n}", "Số tiền giảm", "number", { no: "1.96", width: "sm" }),
-      ]),
+      ], { rowKeys: OTHER_TAX_GROUPS.map((g) => g.key), fixedRows: true }),
     ],
   },
 ];

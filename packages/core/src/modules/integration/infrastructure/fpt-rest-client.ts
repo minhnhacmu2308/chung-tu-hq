@@ -16,10 +16,11 @@ export const FPT_PATHS: Record<FptOperation | "LOGIN", string> = {
   HYS: "/api/HYS",
   VNACCSREP: "/api/VNACCSREP",
   V5ContainerReq: "/api/V5ContainerReq", V5ContainerRes: "/api/V5ContainerRes",
+  V5IdentifierReq: "/api/V5IdentifierReq", V5IdentifierRes: "/api/V5IdentifierRes",
   KVGS: "/api/KVGS",
 };
-/** Body phẳng (không objVNACCS_ACCOUNT / mật khẩu VNACCS): V5 theo Excel đặc tả (USER_ID); KVGS theo đặc tả API-KVGS (TK_SOTK, TK_NGAYDK, TK_MAHQ, MA_DV). */
-const FLAT_BODY_OPS: ReadonlySet<FptOperation> = new Set(["V5ContainerReq", "V5ContainerRes", "KVGS"]);
+/** Body phẳng (không objVNACCS_ACCOUNT / mật khẩu VNACCS): V5 (danh sách container, định danh) theo Excel đặc tả + Postman (USER_ID); KVGS theo đặc tả API-KVGS (TK_SOTK, TK_NGAYDK, TK_MAHQ, MA_DV). */
+const FLAT_BODY_OPS: ReadonlySet<FptOperation> = new Set(["V5ContainerReq", "V5ContainerRes", "V5IdentifierReq", "V5IdentifierRes", "KVGS"]);
 
 const LoginResponseSchema = z.object({ token: z.string().min(1), expiration: z.iso.datetime({ offset: true }) });
 

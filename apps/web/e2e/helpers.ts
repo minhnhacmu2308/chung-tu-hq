@@ -34,17 +34,39 @@ export async function uploadAndConfirm(page: Page, files: string[]) {
   await expect(page).toHaveURL(/step=agent/);
 }
 
+/**
+ * Bấm "Xác nhận mã … cho dòng n" lần lượt đến khi hết. Mỗi lần chờ số nút giảm đi 1 (lệnh xác nhận đã xong, dòng đã đổi sang
+ * "Bỏ xác nhận") rồi mới bấm tiếp: bấm lại khi nút dòng cuối còn đang xử lý thì nút biến mất sau đó và lệnh bấm chờ đến hết giờ.
+ */
+export async function confirmAllHs(page: Page) {
+  const confirmButtons = page.getByRole("button", { name: /^Xác nhận mã .* cho dòng \d+$/ });
+  await expect(confirmButtons.first()).toBeVisible();
+  for (let n = await confirmButtons.count(); n > 0; n--) {
+    await confirmButtons.first().click();
+    await expect(confirmButtons).toHaveCount(n - 1);
+  }
+}
+
+/**
+ * Bước 6 – Khai báo Hải quan (đã ở ?step=submit, tờ khai đã duyệt): ký số & khai tạm IDA → (hệ thống gợi ý HYS thì chọn
+ * "Vẫn khai, không cần HYS") → "Đã khai tạm" → khai chính thức IDC. Chờ "Đã thông quan" là việc của người gọi.
+ */
+export async function fileIdaThenIdc(page: Page) {
+  await page.getByRole("button", { name: "Ký số & khai tạm (IDA)" }).click();
+  const skipHys = page.getByRole("dialog").getByRole("button", { name: "Vẫn khai, không cần HYS" });
+  const filed = page.getByText("Đã khai tạm").first();
+  await expect(skipHys.or(filed)).toBeVisible({ timeout: 60_000 });
+  if (await skipHys.isVisible()) await skipHys.click();
+  await expect(filed).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Khai chính thức (IDC)" }).first().click();
+}
+
 /** Chạy AI Agent, xác nhận hết HS gợi ý rồi sang bước Review tờ khai. */
 export async function runAgentToReview(page: Page) {
   await page.getByRole("button", { name: "Chạy AI Agent" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Bắt đầu" }).click();
   await expect(page.getByText("Đã dựng tờ khai nháp").first()).toBeVisible({ timeout: 90_000 });
-  const confirmButtons = page.getByRole("button", { name: /^Xác nhận mã .* cho dòng \d+$/ });
-  await expect(confirmButtons.first()).toBeVisible();
-  while ((await confirmButtons.count()) > 0) {
-    await confirmButtons.first().click();
-    await page.waitForTimeout(300);
-  }
+  await confirmAllHs(page);
   await page.getByRole("button", { name: "Sang Review tờ khai" }).click();
   await expect(page).toHaveURL(/step=review/);
 }

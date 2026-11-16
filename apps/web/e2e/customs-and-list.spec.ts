@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { stateFor } from "./global-setup";
-import { createDossier, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
+import { createDossier, fileIdaThenIdc, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
 
 test("danh sách hồ sơ: hồ sơ mới hiện ở đầu, tìm theo đối tác, lọc theo phạm vi, mở chi tiết", async ({ page }) => {
   await login(page);
@@ -28,7 +28,7 @@ test("danh sách hồ sơ: hồ sơ mới hiện ở đầu, tìm theo đối t�
   await expect(page).toHaveURL(new RegExp(`/dossiers/${id}`));
 });
 
-test("truyền Hải quan: ký số & truyền → IDA/IDC/HYS/IEX qua cổng giả → phân luồng, thông quan, nhật ký thông điệp", async ({ page, browser }) => {
+test("truyền Hải quan: ký số & khai tạm IDA → khai chính thức IDC qua cổng giả → phân luồng, thông quan", async ({ page, browser }) => {
   test.setTimeout(240_000);
   await login(page);
   // Chứng thư số để ký (Customs Hub ký thay bằng chứng thư đã đăng ký).
@@ -53,18 +53,15 @@ test("truyền Hải quan: ký số & truyền → IDA/IDC/HYS/IEX qua cổng gi
   await approverCtx.close();
 
   await page.goto(`/dossiers/${id}?step=submit`);
-  await page.getByRole("button", { name: "Ký số & truyền tờ khai" }).click();
-  // Cổng giả cố ý cho HYS lỗi lần đầu ở ~1/7 hồ sơ ("phiên ký số hết hạn") → người khai bấm Gửi lại HYS.
+  // Luồng theo giai đoạn: khai tạm IDA → khai chính thức IDC (HYS là nghiệp vụ riêng, không tự gửi kèm).
+  await fileIdaThenIdc(page);
   const cleared = page.getByText("Đã thông quan").first();
-  const resendHys = page.getByRole("button", { name: "Gửi lại HYS" });
-  await expect(cleared.or(page.getByText(/E-SIG-401/).first())).toBeVisible({ timeout: 120_000 });
-  if (!(await cleared.isVisible()) && (await resendHys.isVisible())) await resendHys.click();
   await expect(cleared).toBeVisible({ timeout: 120_000 });
   await expect(page.getByText(/luồng (xanh|vàng|đỏ)/i).first()).toBeVisible();
   type View = { result: { declarationNo: string | null; clearanceStatus: string } };
   const submission = async () => (await (await page.request.get(`/api/dossiers/${id}/submission`)).json()) as View;
   // Giao diện có thể hiện "Đã thông quan" trước một nhịp so với lần đọc API → chờ API.
-  await expect.poll(async () => (await submission()).result.clearanceStatus, { timeout: 15_000 }).toBe("CLEARED");
+  await expect.poll(async () => (await submission()).result.clearanceStatus, { timeout: 120_000 }).toBe("CLEARED");
   expect((await submission()).result.declarationNo).toMatch(/^\d{12}$/);
   // Đã truyền: không mở lại tờ khai được nữa.
   expect((await page.request.post(`/api/dossiers/${id}/declaration/reopen`, { data: {} })).status()).toBe(409);

@@ -4,13 +4,13 @@ import { extractDocumentJob } from "./jobs/extract-document.js";
 import { healthJob } from "./jobs/health.js";
 import { certExpiryJob } from "./jobs/cert-expiry.js";
 import { billingReconcileJob } from "./jobs/billing-reconcile.js";
-import { customsPollJob, customsSendJob, kvgsPollJob } from "./jobs/customs.js";
+import { customsPollJob, customsSendJob, identifierPollJob, identifierSendJob, kvgsPollJob } from "./jobs/customs.js";
 import { catalogImportJob } from "./jobs/catalog-import.js";
 import { failImport } from "@kb/core/modules/catalog";
 import { RATE_JOB_CRON, recordRateCatchUpFailure, recordRateFetchFailure } from "@kb/core/modules/admin";
 import { failAgentRun, failHsWork } from "@kb/core/modules/declaration";
 import { markDocumentFailed } from "@kb/core/modules/extraction";
-import { KvgsKindSchema, markKvgsPollFailed, markOutboxFailed } from "@kb/core/modules/integration";
+import { KvgsKindSchema, markIdentifierFailed, markKvgsPollFailed, markOutboxFailed } from "@kb/core/modules/integration";
 import { failMailSync } from "@kb/core/modules/mailbox";
 import { configureMetrics, observeJob, registerQueueCollector } from "@kb/core/observability";
 import { asOrgId, asUserId, createLogger } from "@kb/core/shared";
@@ -56,6 +56,9 @@ const workers = [
   new Worker("kvgs-poll", async (job) => kvgsPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   // Nhập danh mục hàng hóa > 500 dòng: ghép theo lô (không gọi AI/dịch vụ ngoài).
   new Worker("catalog-import", async (job) => catalogImportJob(c.catalog, job.data), { connection: c.redis, concurrency: 2 }),
+  // Khai báo định danh: FPT thật trả kết quả trong cùng lời gọi (~45 giây).
+  new Worker("identifier-send", async (job) => identifierSendJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
+  new Worker("identifier-poll", async (job) => identifierPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("cert-expiry", async () => certExpiryJob(c.identity), { connection: c.redis, concurrency: 1 }),
   // Đối soát lượt / thanh toán (ADR 0011): idempotent, một lượt một lúc.
   new Worker("billing-reconcile", async () => billingReconcileJob(c.billing, c.billingReconcile), { connection: c.redis, concurrency: 1 }),
@@ -98,6 +101,7 @@ async function onFinalFailure(queue: string, job: Job, e: Error) {
   else if (queue === "mailbox-sync" && d["orgId"] && d["connectionId"]) await failMailSync(c.mailbox, { orgId: d["orgId"], connectionId: d["connectionId"] });
   else if (queue === "teach-sample-read" && d["orgId"] && d["sampleId"]) await failTeachSample(c.teach, { orgId: d["orgId"], sampleId: d["sampleId"], error: "AI chưa đọc được tờ khai sau nhiều lần thử – bấm Đọc lại" });
   else if (queue === "kvgs-poll" && d["orgId"] && d["id"] && KvgsKindSchema.safeParse(d["kind"]).success) await markKvgsPollFailed(c.customs, { orgId: d["orgId"], kind: KvgsKindSchema.parse(d["kind"]), id: d["id"], reason });
+  else if ((queue === "identifier-send" || queue === "identifier-poll") && d["orgId"] && d["id"]) await markIdentifierFailed(c.customs, { orgId: d["orgId"], id: d["id"], reason });
   else if (queue === "customs-send" && d["orgId"] && d["outboxId"]) await markOutboxFailed(c.customs, { orgId: d["orgId"], outboxId: d["outboxId"], reason });
   else if (queue === "catalog-import" && d["orgId"] && d["userId"] && d["importId"]) await failImport(c.catalog, { orgId: asOrgId(d["orgId"]), userId: asUserId(d["userId"]), importId: d["importId"], reason });
 }

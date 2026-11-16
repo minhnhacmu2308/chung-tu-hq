@@ -172,8 +172,17 @@ export const EXCHANGE_RATES: Record<string, number> = { USD: 26_150, EUR: 30_420
 
 const isoDayOffset = (n: number): IsoDate => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
-/** Thuế suất NK/VAT cho một mã HS theo loại hình + xuất xứ ưu đãi. */
-export function ratesFor(d: Dossier, code: string): { importDutyRate: string; vatRate: string; policyNote?: string } {
+/** Mã GTGT HSCodePro giả lập theo thuế suất (10% VB901, 8% VB205, 5% VB015); 0% không mã (tự điền "V"). */
+export const mockVatCode = (rate: string | null | undefined): string | undefined => ({ "10": "VB901", "8": "VB205", "5": "VB015" } as Record<string, string>)[rate ?? ""];
+
+/** Thuế suất NK/VAT cho một mã HS theo loại hình + xuất xứ ưu đãi (kèm mã GTGT HSCodePro giả lập). */
+export function ratesFor(d: Dossier, code: string): { importDutyRate: string; vatRate: string; vatCode?: string; policyNote?: string } {
+  const r = ratesForBase(d, code);
+  const vatCode = mockVatCode(r.vatRate);
+  return vatCode ? { ...r, vatCode } : r;
+}
+
+function ratesForBase(d: Dossier, code: string): { importDutyRate: string; vatRate: string; policyNote?: string } {
   if (d.direction === "XK") return { importDutyRate: "0", vatRate: "0", policyNote: "Hàng xuất khẩu – thuế XK 0%" };
   const hs = findHs(code);
   if (!hs) return { importDutyRate: "0", vatRate: "8" };

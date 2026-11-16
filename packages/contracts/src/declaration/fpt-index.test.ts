@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldDefForFptIndex } from "./fpt-index.js";
+import { fieldDefForFptIndex, fptIndexSlot } from "./fpt-index.js";
 
 describe("fieldDefForFptIndex – mã chỉ tiêu lỗi FPT → số chỉ tiêu Phụ lục II", () => {
   it.each([
@@ -14,5 +14,16 @@ describe("fieldDefForFptIndex – mã chỉ tiêu lỗi FPT → số chỉ tiêu
     expect(fieldDefForFptIndex("IDA", "LIST_FILE")).toBeUndefined();
     expect(fieldDefForFptIndex("EDA", "")).toBeUndefined();
     expect(fieldDefForFptIndex("IDA", null)).toBeUndefined();
+  });
+});
+
+describe("fptIndexSlot", () => {
+  it("số ô cuối của HAG_TX/TR/TG; ô khác → null", () => {
+    expect(fptIndexSlot("HAG_TX2")).toBe(2);
+    expect(fptIndexSlot("tr3")).toBe(3);
+    expect(fptIndexSlot("HAG_TG5")).toBe(5);
+    expect(fptIndexSlot("HAG_CMD")).toBeNull();
+    expect(fptIndexSlot("HAG_TX6")).toBeNull();
+    expect(fptIndexSlot(undefined)).toBeNull();
   });
 });

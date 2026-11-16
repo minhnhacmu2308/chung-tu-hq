@@ -7,7 +7,7 @@ const mk = (n: number, extra: Partial<DeclarationPayload> = {}): DeclarationPayl
   kind: "IDA", direction: "NK", currency: "USD", containers: [],
   fields: { MA_LH: { value: "A11" }, NNK_MST: { value: "0316789012" } },
   // đảo thứ tự để chắc chắn sắp theo lineNo
-  items: Array.from({ length: n }, (_, i) => ({ id: `i${i + 1}`, lineNo: i + 1, description: `Hàng ${i + 1}`, quantity: "10", unit: "PCE", unitPrice: "1.5", amount: "15.25", origin: "KR", hsConfirmed: "8482.10.00", importDutyRate: "0", vatRate: "8", policyNote: null })).reverse(),
+  items: Array.from({ length: n }, (_, i) => ({ id: `i${i + 1}`, lineNo: i + 1, description: `Hàng ${i + 1}`, quantity: "10", unit: "PCE", unitPrice: "1.5", amount: "15.25", origin: "KR", hsConfirmed: "8482.10.00", importDutyRate: "0", vatRate: "8", vatCode: "VB205", policyNote: null })).reverse(),
   adjustments: [{ label: "Phí khác", amount: "100", currency: "USD", kind: "ADD", code: "A" }],
   ...extra,
 });

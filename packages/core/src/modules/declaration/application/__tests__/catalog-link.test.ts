@@ -357,6 +357,19 @@ describe("Số lượng (2) theo ĐVT 2 của mặt hàng (spec 2026-11-14 số 
     const changed = { ...payload(snap0), items: snap0.items.map((i, k) => (k === 0 ? { ...i, quantity2: { qty: "1000", unit: "KGM" } } : i)) };
     expect(sheetSnapshot(changed, 1).lines).not.toEqual(sent.lines);
   });
+
+  it("ảnh chụp đã gửi: dòng có taxDetail.vatCertain/needsReview (HSCodePro chưa chắc GTGT) giữ đúng dạng dòng cũ – không SENT_SHEETS_CHANGED giả; payload GTGT vẫn tự điền", async () => {
+    await readyToApprove();
+    for (const row of uow.data.lineItems) row.taxDetail = { vatCode: "VB901", vatNote: null, vatCertain: false, normalImportRate: null, needsReview: true };
+    const snap = (await getDeclarationSnapshot(deps, ORG_ID, D))!;
+    // Dạng dòng trước tính năng thuế theo loại (ảnh chụp đã lưu trong outbox các lô cũ): đúng các khóa này, không có vatCertain.
+    const OLD_KEYS = ["id", "lineNo", "description", "quantity", "unit", "unitPrice", "amount", "origin", "hsConfirmed", "importDutyRate", "vatRate", "vatCode", "policyNote", "itemCode", "quantity2"];
+    const oldShape = snap.items.map((i) => Object.fromEntries(Object.entries(i).filter(([k]) => OLD_KEYS.includes(k)))) as typeof snap.items;
+    const payload = (items: typeof snap.items) => ({ kind: snap.kind, direction: snap.direction, currency: snap.currency, fields: snap.fields, items, adjustments: snap.adjustments, containers: snap.containers });
+    for (const i of snap.items) expect(Object.keys(i).every((k) => OLD_KEYS.includes(k))).toBe(true);
+    expect(sheetSnapshot(payload(snap.items), 1)).toEqual(sheetSnapshot(payload(oldShape), 1));
+    expect(build(snap)[0]![fptKey("HAG_TX1")] ?? build(snap)[0]![fptKey("HAG_TX5")]).toBe("VB901");
+  });
 });
 
 describe("bài học dòng hàng tra theo bí danh trước khóa P:<partNo>", () => {

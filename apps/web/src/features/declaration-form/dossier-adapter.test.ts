@@ -1,6 +1,7 @@
 import { LAYOUT_EDA, LAYOUT_IDA, isItemFieldKey, itemFieldClass, layoutFields } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
-import { ITEM_LOCK, declarationLockOf, declarationValues, editableKeys, itemValues, mappedCodes, pendingEdits, pendingItemEdits } from "./dossier-adapter";
+import type { LineItem } from "@kb/contracts";
+import { ITEM_LOCK, autoCheckInput, declarationLockOf, declarationValues, editableKeys, gtgtAutoCheck, itemValues, mappedCodes, pendingEdits, pendingItemEdits } from "./dossier-adapter";
 
 const f = (code: string, value: string) => ({ code, value });
 
@@ -99,7 +100,8 @@ describe("itemValues / pendingItemEdits – ô dòng hàng chỉ có trên tờ 
   ];
   it("hiện giá trị tự điền khi truyền; ô người khai đã nhập (theo id dòng) đè lên", () => {
     const rows = itemValues("IDA", items, { currency: "USD", fields: [f("HANG.li2.HAG_ORS", "B30"), f("HANG.li2.HAG_RE", "XN210")] });
-    expect(rows[0]).toMatchObject({ HAG_QN2: "10", HAG_QT2: "PCE", HAG_UPC: "USD", HAG_ORS: "B06", HAG_TX5: "VB903" });
+    expect(rows[0]).toMatchObject({ HAG_QN2: "10", HAG_QT2: "PCE", HAG_UPC: "USD", HAG_ORS: "B06" });
+    expect(rows[0]).not.toHaveProperty("HAG_TX5");
     expect(rows[1]).toMatchObject({ HAG_ORS: "B30", HAG_RE: "XN210", HAG_TX5: "VB901" });
   });
   it("chỉ lưu ô người khai nhập đã đổi, theo id dòng; ô số liệu chứng từ bỏ qua", () => {
@@ -123,5 +125,68 @@ describe("declarationLockOf – ô nào khóa và vì sao", () => {
     const key = "HAG_CMN";
     expect(isItemFieldKey("IDA", key) && itemFieldClass("IDA", key)).toBe("DOC");
     expect(declarationLockOf("IDA", "FULL", {}, new Map(), "vi")(key)).toBe(ITEM_LOCK.vi.DOC);
+  });
+});
+
+describe("pendingItemEdits – chuẩn hóa mã thuế khác ở khóa lệch khi lưu", () => {
+  const items = [{ id: "li1", lineNo: 1, description: "Vòng bi", quantity: "10", unit: "PCE", unitPrice: "2", amount: "20", origin: "KR", hsConfirmed: "84821000", vatRate: "10" }];
+  it("save_normalizes_legacy_slot: mã GTGT cũ ở HAG_TX1 được ghi lại về HAG_TX5 cùng lần lưu khi người khai sửa ô thuế khác; người khai thắng nếu cùng khóa", () => {
+    const fields = [f("HANG.li1.HAG_TX1", "VB901"), f("HANG.li1.HAG_TR1", "VK110")];
+    const original = itemValues("IDA", items, { currency: "USD", fields });
+    expect(original[0]).toMatchObject({ HAG_TX5: "VB901", HAG_TR5: "VK110" });
+    const draft = [{ ...original[0]!, HAG_TX3: "TB020" }];
+    const own = [{ HAG_TX1: "VB901", HAG_TR1: "VK110" }];
+    const edits = pendingItemEdits("IDA", ["li1"], original, draft, own);
+    expect(edits).toEqual(expect.arrayContaining([
+      { code: "HANG.li1.HAG_TX3", value: "TB020" },
+      { code: "HANG.li1.HAG_TX1", value: "" }, { code: "HANG.li1.HAG_TR1", value: "" },
+      { code: "HANG.li1.HAG_TX5", value: "VB901" }, { code: "HANG.li1.HAG_TR5", value: "VK110" },
+    ]));
+    // người khai sửa luôn ô GTGT: giá trị của người khai là lệnh cuối, không bị ghi đè bởi bản chuẩn hóa
+    const edited = pendingItemEdits("IDA", ["li1"], original, [{ ...original[0]!, HAG_TX5: "VB902" }], own);
+    expect(edited.filter((e) => e.code === "HANG.li1.HAG_TX5")).toEqual([{ code: "HANG.li1.HAG_TX5", value: "VB902" }]);
+    // không đụng khối thuế khác → không thêm lệnh chuẩn hóa
+    expect(pendingItemEdits("IDA", ["li1"], original, [{ ...original[0]!, HAG_RE: "XN210" }], own)).toEqual([{ code: "HANG.li1.HAG_RE", value: "XN210" }]);
+  });
+});
+
+describe("pendingItemEdits – xác nhận mã tự điền", () => {
+  const items = [{ id: "li1", lineNo: 1, description: "Vòng bi", quantity: "10", unit: "PCE", unitPrice: "2", amount: "20", origin: "KR", hsConfirmed: "84821000", vatRate: "10" }];
+  it("confirm_auto_vat_saves_as_user_value: người khai chọn đúng mã tự điền khi có cảnh báo → vẫn lưu HAG_TX5 (field_audit), không lưu gì khác", () => {
+    const original = itemValues("IDA", items, { currency: "USD" });
+    expect(original[0]).toMatchObject({ HAG_TX5: "VB901" });
+    expect(pendingItemEdits("IDA", ["li1"], original, original, [{}], [["HAG_TX5"]])).toEqual([{ code: "HANG.li1.HAG_TX5", value: "VB901" }]);
+    expect(pendingItemEdits("IDA", ["li1"], original, original, [{}], [[]])).toEqual([]);
+  });
+});
+
+describe("gtgtAutoCheck – cảnh báo GTGT tự điền + nút Xác nhận (form đầy đủ và panel bản in)", () => {
+  const it0 = { id: "li1", lineNo: 1, description: "Vòng bi", quantity: "10", unit: "PCE", unitPrice: "2", amount: "20", origin: "KR", hsConfirmed: "84821000", vatRate: "10" } as unknown as LineItem;
+  const auto = { HAG_TX5: "VB901" };
+  const WARN = [{ key: "HAG_TX5", reason: "VAT_FROM_RATE" }];
+  it("chưa xác nhận → cảnh báo; nút Xác nhận ghi nhận HAG_TX5 (thêm HAG_TR5 khi có)", () => {
+    expect(gtgtAutoCheck("IDA", it0, {}, auto, auto, [])).toEqual({ checks: WARN, confirmKeys: ["HAG_TX5"] });
+    expect(gtgtAutoCheck("IDA", it0, {}, auto, { HAG_TX5: "V", HAG_TR5: "VK010" }, []).confirmKeys).toEqual(["HAG_TX5", "HAG_TR5"]);
+  });
+  it("xác nhận với ô có mã → hết cảnh báo, lưu như giá trị người khai (field_audit qua pendingItemEdits)", () => {
+    const r = gtgtAutoCheck("IDA", it0, {}, auto, auto, ["HAG_TX5"]);
+    expect(r.checks).toEqual([]);
+    const original = itemValues("IDA", [it0], { currency: "USD" });
+    expect(pendingItemEdits("IDA", ["li1"], original, original, [{}], [r.confirmKeys])).toEqual([{ code: "HANG.li1.HAG_TX5", value: "VB901" }]);
+  });
+  it("ô GTGT trống (Combobox chọn lại cùng mã → null / người khai xóa): không bao giờ thành đã xác nhận, cảnh báo còn, không có nút", () => {
+    const r = gtgtAutoCheck("IDA", it0, {}, auto, { HAG_TX5: "" }, ["HAG_TX5"]);
+    expect(r).toEqual({ checks: WARN, confirmKeys: [] });
+  });
+  it("đổi sang mã khác / đã lưu mã GTGT riêng / EDA → không cảnh báo", () => {
+    expect(gtgtAutoCheck("IDA", it0, {}, auto, { HAG_TX5: "VB205" }, []).checks).toEqual([]);
+    expect(gtgtAutoCheck("IDA", it0, { HAG_TX1: "VB901" }, auto, auto, []).checks).toEqual([]);
+    expect(gtgtAutoCheck("EDA", it0, {}, auto, auto, [])).toEqual({ checks: [], confirmKeys: [] });
+  });
+  it("taxNeedsReview (thuế suất chờ tra lại) → mã GTGT coi là chưa chắc như backend: cảnh báo VAT_UNCERTAIN", () => {
+    const item = { ...it0, vatCode: "VB901", vatCertain: true, taxNeedsReview: true } as unknown as LineItem;
+    expect(autoCheckInput(item).vatCertain).toBe(false);
+    expect(gtgtAutoCheck("IDA", item, {}, auto, auto, []).checks).toEqual([{ key: "HAG_TX5", reason: "VAT_UNCERTAIN" }]);
+    expect(gtgtAutoCheck("IDA", { ...item, taxNeedsReview: false } as LineItem, {}, auto, auto, []).checks).toEqual([]);
   });
 });

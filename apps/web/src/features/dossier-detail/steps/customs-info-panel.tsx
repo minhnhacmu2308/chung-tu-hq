@@ -1,6 +1,6 @@
 "use client";
 // Thông tin Hải quan trả về cho tờ khai (người khai không nhập): đăng ký, phân loại kiểm tra, thuế & tỷ giá chính thức,
-// trị giá tính thuế từng dòng, chỉ thị Hải quan, cấp phép thông quan. Dùng ở bước Khai báo Hải quan và tab "Hải quan trả về" của Review.
+// trị giá tính thuế từng dòng, chỉ thị Hải quan, hoàn thành kiểm tra, cấp phép thông quan. Dùng ở bước Khai báo Hải quan (mỗi tờ một khối).
 import {
   Alert, Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, createDataTableColumnHelper, DataTable, fill, Grid, Stack, useMessages, useUiLocale,
 } from "@kb/ui";
@@ -85,6 +85,12 @@ export function CustomsInfoPanel({ kind, info, estimate, sheet }: { kind: "IDA" 
                   </li>
                 ))}
               </ul>
+            </Alert>
+          )}
+          {/* Ngày hoàn thành kiểm tra (IDA TK_C22 – không có trên mẫu in IDA; EDA TK_CCD có trên bản in nhưng nhắc lại ở đây cho đủ). */}
+          {info.inspectionDoneDate && (
+            <Alert tone="info" title={t.inspectionDone}>
+              {formatDate(info.inspectionDoneDate)}
             </Alert>
           )}
           {info.permitDate && (

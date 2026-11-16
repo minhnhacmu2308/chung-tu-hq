@@ -1,13 +1,14 @@
 // Tờ khai (chỉ tiêu theo mnemonic `code`) → object FPT.VNACCS (objVN_IDA/HANG/VANDON/KTG, objVN_EDA/HANG/CON).
 // Cắt độ dài theo đặc tả (ghi cảnh báo), ngày → dd/MM/yyyy, số → number. Thuần; kiểm tra bằng Zod của @kb/contracts/fpt.
-import { NO_INSURANCE_VALUE, DECLARATION_CONDITIONS, sendsPlaceName, EdaRequestSchema, extraFieldFpt, fptKey, inapplicableExtraCodes, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
+import { NO_INSURANCE_VALUE, DECLARATION_CONDITIONS, sendsPlaceName, EdaRequestSchema, extraFieldFpt, fptKey, inapplicableExtraCodes, itemDefaults, itemFieldFpt, itemOverrides, lawCodesByLine, compactOtherTaxes, mergeOtherTaxes, normalizeOtherTaxes, otherTaxIssues, type OtherTaxIssueReason, splitAddressLines, taxTable, type FptObjectName, IdaRequestSchema, type EdaRequest, type IdaRequest, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "@kb/contracts";
 
 /** Dữ liệu tờ khai đủ để dựng payload – không phụ thuộc kiểu của module declaration. */
 export type DeclarationPayload = {
   kind: "IDA" | "EDA";
   direction: "NK" | "XK";
   fields: Record<string, { value: string; /** Nguồn giá trị (USER = người khai nhập) – không bắt buộc. */ source?: string }>;
-  /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền. */
+  /** `id`: id dòng hàng – khóa ô người khai nhập cho dòng (HANG.<id>.<ô>); không có (dữ liệu cũ) → chỉ giá trị tự điền.
+   *  Không có `vatCertain`: dòng thuộc nội dung "đã gửi" (sentSnapshotOf) và vatCertain không đổi ô tự điền (chỉ cảnh báo) – xem customs-bridge. */
   items: { id?: string; lineNo: number; description: string; quantity: string; unit: string; unitPrice: string; amount: string; origin: string; hsConfirmed: string | null; importDutyRate: string | null; vatRate: string | null; vatCode?: string | null; policyNote: string | null; /** Mã bộ Hải quan của mặt hàng (danh mục) → HAG_MAHANG. */ itemCode?: string | null; /** Số lượng (2) theo ĐVT 2 của mặt hàng → HAG_QN2/QT2 (ô người khai nhập vẫn thắng). */ quantity2?: { qty: string; unit: string } | null }[];
   /**
    * Dòng có HAG_MAHANG trống vì mã lạ (Part No chưa có trong danh mục) / mặt hàng chưa có mã bộ Hải quan. Hiện KHÔNG dùng khi dựng body FPT:
@@ -131,6 +132,13 @@ function applyExtras(p: DeclarationPayload, targets: Partial<Record<FptObjectNam
   }
 }
 
+const OTHER_TAX_REASON_VI: Record<OtherTaxIssueReason, string> = {
+  OTHER_TAX_WRONG_GROUP: "mã không thuộc nhóm thuế và thu khác nào (B/C/G, P, T, M, V)",
+  OTHER_TAX_DUPLICATE_GROUP: "trùng nhóm thuế với một ô khác trên cùng dòng",
+  OTHER_TAX_EXEMPT_MISMATCH: "mã miễn/giảm không cùng nhóm với mã thuế trên dòng",
+  OTHER_TAX_EXEMPT_WITHOUT_CODE: "có mã miễn/giảm hoặc số tiền giảm nhưng chưa có mã thuế",
+};
+
 function items(p: DeclarationPayload, warnings: string[], blockers: string[], num: Num) {
   const sizes = p.kind === "IDA" ? SIZE_IDA : SIZE_EDA;
   const lineNos = p.items.map((it) => it.lineNo);
@@ -160,7 +168,15 @@ function items(p: DeclarationPayload, warnings: string[], blockers: string[], nu
     const codes = p.kind === "EDA" ? lawCodesByLine(val(p, "VBPQ"), lineNos).get(it.lineNo) ?? [] : [];
     // Mẫu request FPT (IDA, EDA) không có HAG_MAHANG – không gửi, không cảnh báo mã hàng trống (shapeIdaBody / shapeEdaBody).
     if (codes.length > 5 && !own["HAG_OL1"]) warnings.push(`Dòng ${it.lineNo}: chỉ gửi 5 mã văn bản pháp luật đầu (${codes.slice(5).join(", ")} bị bỏ)`);
-    for (const [key, v] of Object.entries({ ...auto, ...own })) {
+    // Thuế và thu khác (1.94–1.96): gộp (người khai thắng), chuẩn hóa theo loại thuế rồi dồn ô – chỉ IDA (EDA không có TX1..5).
+    let merged: Record<string, string> = { ...auto, ...own };
+    if (p.kind === "IDA") {
+      const norm = normalizeOtherTaxes(mergeOtherTaxes(auto, own));
+      for (const issue of otherTaxIssues(norm)) blockers.push(`Dòng ${it.lineNo}: ${issue.key} – ${OTHER_TAX_REASON_VI[issue.reason]}`);
+      if (!norm["HAG_TX5"]) blockers.push(`Dòng ${it.lineNo}: thiếu mã thuế GTGT (chỉ tiêu 1.94) – chọn mã theo nhóm hàng HS`);
+      merged = compactOtherTaxes(norm).values;
+    }
+    for (const [key, v] of Object.entries(merged)) {
       const spec = itemFieldFpt(p.kind, key);
       if (!spec || !v) continue;
       set(key, spec.type === "date" ? ddmmyyyy(v) : spec.type === "decimal" || spec.type === "long" ? num(v, `Dòng ${it.lineNo} ${key}`) : v);

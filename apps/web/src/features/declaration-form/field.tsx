@@ -9,14 +9,13 @@ import { Info, Lock } from "lucide-react";
 import { useMemo } from "react";
 import { useAmendLock } from "./amend-context";
 import { CodeInput } from "./code-input";
-import { codeScope } from "./code-scope";
+import { codeScope, otherTaxRow } from "./code-scope";
 import { roleInfo } from "../dossier-detail/steps/declaration-groups";
 import { fieldGuide } from "../dossier-detail/steps/field-guide";
 import { DATE_WIDTH, displayValue, fieldWidthClass } from "./display";
 import { FORM_MESSAGES } from "./form.messages";
 import { choiceControl, isApplicable, missingRequired, toggleChoice, type FormValues } from "./form-state";
 import { useCodeName } from "./use-code-list";
-import { useViewPrefs } from "./view-prefs";
 
 type Kind = "IDA" | "EDA";
 
@@ -111,14 +110,20 @@ export type FormFieldProps = {
 export function FormField({ kind, field, values, onChange, ctx, showInapplicable, parentNo, parentCondition, compact = false, fill = false, suppressMissing = false, dimmed = false }: FormFieldProps) {
   // Khai sửa đổi bổ sung: chỉ tiêu không được sửa hiện chỉ đọc kèm lý do.
   const lock = useAmendLock()(field.key);
-  const { labelsLeft } = useViewPrefs();
   const t = useMessages(FORM_MESSAGES);
   const locale = useUiLocale();
   // Ô mã có danh mục VNACCS: phạm vi lọc (cơ quan Hải quan, nhập/xuất) và tên của mã.
   const listId = field.input === "code" ? codeListFor(field.codeTable) : undefined;
   const office = values["TK_CH"] ?? "";
   const transport = values["TK_MTC"] ?? "";
-  const scope = useMemo(() => (listId ? codeScope(listId, field.key, kind, { TK_CH: office, TK_MTC: transport }, locale) : null), [listId, field.key, kind, office, transport, locale]);
+  // Ô trong khối "thuế và thu khác": mã thuế của dòng quyết định phạm vi mã.
+  const taxRow = otherTaxRow(field.key, values);
+  const taxKey = taxRow?.key;
+  const taxCode = taxRow?.code;
+  const scope = useMemo(
+    () => (listId ? codeScope(listId, field.key, kind, { TK_CH: office, TK_MTC: transport }, locale, taxKey ? { [taxKey]: taxCode ?? "" } : undefined) : null),
+    [listId, field.key, kind, office, transport, locale, taxKey, taxCode],
+  );
   const name = useCodeName(field.codeTable, values[field.key] ?? "", scope);
   // Ô "Tên" của ô mã (1.29 / 2.27, 1.67 / 2.56): tên Hải quan trả về, không thì tên tra danh mục theo mã đang nhập (đổi ngay khi sửa mã).
   // Tên địa điểm xếp / dỡ (1.33 / 1.34, 2.28 / 2.29) khi không phải PTVC 9 / mã …ZZZ: cũng theo mã (A016), chỉ đọc – chỉ gửi mã, Hải quan tự xuất tên.
@@ -167,8 +172,8 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
   const guide = compact ? null : <GuideButton kind={kind} no={fieldGuideNo(field, parentNo)} role={role} reason={reasonInGuide ? reason : undefined} label={field.label} />;
   const missingNote = missing && <p className="text-sm font-medium text-warning-subtle-fg">{t.missing}</p>;
   const label = compact ? title : <>{title}<RoleMark role={role} star={false} /></>;
-  // Ô đứng riêng: khung viền, tên trên đường viền – cùng kiểu với nhóm ô / nhóm lặp trên mọi màn hình. Nhãn bên trái (F) giữ kiểu cũ.
-  const framed = !compact && !labelsLeft;
+  // Ô đứng riêng: khung viền, tên trên đường viền – cùng kiểu với nhóm ô / nhóm lặp trên mọi màn hình.
+  const framed = !compact;
   // Không áp dụng: chỉ làm mờ ô nhập – nhãn và "Không áp dụng vì…" giữ đủ tương phản (WCAG 1.4.3).
   const dim = (!applicable || dimmed) && "opacity-60";
 
@@ -245,7 +250,7 @@ export function FormField({ kind, field, values, onChange, ctx, showInapplicable
 
   return (
     <div data-missing={missing || undefined} className={cn("flex min-w-0 flex-col gap-1", sizeClass)}>
-      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} framed={framed} labelAction={framed ? guide : null} className={cn(framed && "flex-1")} orientation={labelsLeft && !compact ? "horizontal" : "vertical"}>
+      <Field label={label} hint={hint} required={!compact && role === "REQUIRED"} framed={framed} labelAction={framed ? guide : null} className={cn(framed && "flex-1")} orientation="vertical">
         {compact ? control : (
           <div className="flex min-w-0 items-center gap-2">
             {control}

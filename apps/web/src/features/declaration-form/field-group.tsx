@@ -8,7 +8,6 @@ import { fieldTitle, groupGuideReason } from "./display";
 import { FormField, GuideButton, RoleMark } from "./field";
 import { FORM_MESSAGES } from "./form.messages";
 import { groupMissing, isApplicable, type FormValues } from "./form-state";
-import { useViewPrefs } from "./view-prefs";
 
 type Props = {
   kind: "IDA" | "EDA";
@@ -24,7 +23,6 @@ type Props = {
 };
 
 export function FormFieldGroup({ kind, group, values, onChange, ctx, showInapplicable, parentCondition, dimmed = false }: Props) {
-  const { labelsLeft } = useViewPrefs();
   const t = useMessages(FORM_MESSAGES);
   const locale = useUiLocale();
   const applicable = isApplicable(group, ctx);
@@ -34,7 +32,7 @@ export function FormFieldGroup({ kind, group, values, onChange, ctx, showInappli
   const first = group.fields[0];
   const effectiveCondition = group.condition ?? parentCondition;
   const anyMissing = group.fill === "any" && applicable && !readOnly && groupMissing(kind, group, values, ctx, parentCondition);
-  const span = groupSpan(group) === "full" ? "col-span-full" : labelsLeft ? undefined : "cq-sm:col-span-2";
+  const span = groupSpan(group) === "full" ? "col-span-full" : "cq-sm:col-span-2";
   // "Có vì: …" của nhóm và ô con (hô hiệu khi đường biển…) nằm trong hướng dẫn ⓘ; "Không áp dụng vì" và "Chỉ cần nhập một ô" vẫn ghi dưới nhãn.
   const reasonInGuide = groupGuideReason(group, ctx, locale);
   const notes = [condition && !applicable ? fill(t.notApplicableBecause, { c: condition }) : null, group.fill === "any" ? t.onlyOne : null].filter(Boolean);

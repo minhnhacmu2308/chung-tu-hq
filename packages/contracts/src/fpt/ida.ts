@@ -195,7 +195,8 @@ export const VN_IDA_HANG_ROWS = [
   ["HAG_RE", "text", "5", false, "Mã miễn / Giảm / Không chịu thuế nhập khẩu", { category: "Mien-Giam-Khong chiu thue XNK.xls" }],
   ["HAG_B59", "text", "60", false, "Điều khoản miễn / Giảm / Không chịu thuế nhập khẩu (Pháp luật)"],
   ["HAG_KQ1", "text", "27", false, "Tên khoản mục thuế và thu khác"],
-  ["HAG_TX1", "text", "10", false, "Mã áp dụng thuế suất thuế và thu khác (thuế chống bán phá giá)", { category: "Bảng thuế CBPG (cập nhật ngày 13.06.2024).xls" }],
+  // Đặc tả FPT ghi TX5 bắt buộc; thực tế VNACCS dồn ô từ TX1 (xác nhận nghiệp vụ 2026-11-16).
+  ["HAG_TX1", "text", "10", true, "Mã áp dụng thuế suất thuế và thu khác (thuế chống bán phá giá)", { category: "Bảng thuế CBPG (cập nhật ngày 13.06.2024).xls" }],
   ["HAG_KS1", "decimal", "25.4", false, "Trị giá tính thuế và thu khác"],
   ["HAG_KT1", "decimal", "20.4", false, "Số tiền giảm thuế và thu khác(output)"],
   ["HAG_KU1", "text", "4", false, "Mã đơn vị tính chuẩn để đánh thuế và thu khác"],
@@ -235,7 +236,7 @@ export const VN_IDA_HANG_ROWS = [
   ["HAG_LC4", "text", "60", false, "Điều khoản miễn / Giảm / Không chịu thuế và thu khác (Pháp luật)"],
   ["HAG_LB4", "decimal", "24.4", false, "Số tiền giảm thuế và thu khác(output)"],
   ["HAG_KQ5", "text", "27", false, "Tên khoản mục thuế và thu khác"],
-  ["HAG_TX5", "text", "10", true, "Mã áp dụng thuế suất thuế và thu khác (thuế VAT)", { category: "Thue khac - GTGT.xls" }],
+  ["HAG_TX5", "text", "10", false, "Mã áp dụng thuế suất thuế và thu khác (thuế VAT)", { category: "Thue khac - GTGT.xls" }],
   ["HAG_KS5", "decimal", "25.4", false, "Trị giá tính thuế và thu khác"],
   ["HAG_KT5", "decimal", "20.4", false, "Số lượng tính thuế và thu khác"],
   ["HAG_KU5", "text", "4", false, "Mã đơn vị tính chuẩn để đánh thuế và thu khác"],

@@ -2,12 +2,12 @@
 // Trên màn hình giấy theo giao diện (sáng: trắng, tối: theo nền tối), mỗi ô có khung để bấm sửa; khi in theo đúng kiểu bản in VNACCS:
 // không khung ô, nhãn và giá trị cùng dòng (giá trị chữ đơn cách), chỉ kẻ ngang giữa các khối và kẻ dọc giữa hai cột; chữ đen nền trắng,
 // ẩn mọi dấu hiệu trạng thái (phần tử có `data-paper-mark`). Quy tắc @media print nằm ở styles/index.css.
-import { TriangleAlert } from "lucide-react";
+import { CircleHelp, TriangleAlert } from "lucide-react";
 import { Fragment, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
-export type PaperFieldState = "none" | "error" | "missing" | "estimate" | "edited";
+export type PaperFieldState = "none" | "error" | "missing" | "estimate" | "edited" | "check";
 
 const SHEET_MESSAGES = {
   vi: { page: "Trang {n} / {total}" },
@@ -16,10 +16,10 @@ const SHEET_MESSAGES = {
 } satisfies Messages<"page">;
 
 const FIELD_MESSAGES = {
-  vi: { missing: "Còn thiếu", estimate: "ƯT", edited: "Đã sửa", error: "Có lỗi", compare: "ước tính" },
-  en: { missing: "Missing", estimate: "Est.", edited: "Edited", error: "Error", compare: "estimate" },
-  zh: { missing: "缺失", estimate: "估", edited: "已修改", error: "有错误", compare: "估计值" },
-} satisfies Messages<"missing" | "estimate" | "edited" | "error" | "compare">;
+  vi: { missing: "Còn thiếu", estimate: "ƯT", edited: "Đã sửa", error: "Có lỗi", compare: "ước tính", check: "Cần kiểm tra" },
+  en: { missing: "Missing", estimate: "Est.", edited: "Edited", error: "Error", compare: "estimate", check: "Needs checking" },
+  zh: { missing: "缺失", estimate: "估", edited: "已修改", error: "有错误", compare: "估计值", check: "需核对" },
+} satisfies Messages<"missing" | "estimate" | "edited" | "error" | "compare" | "check">;
 
 export function PaperStack({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -120,7 +120,7 @@ export type PaperFieldProps = {
   span?: 1 | 2 | 3 | 4 | 6 | 12;
   /** "end": căn phải giá trị (số tiền, số lượng). */
   align?: "end";
-  labels?: Partial<{ missing: string; estimate: string; edited: string; error: string; compare: string }>;
+  labels?: Partial<{ missing: string; estimate: string; edited: string; error: string; compare: string; check: string }>;
   /** Phần tử gốc (button khi có onSelect, ngược lại div) – để làm đích Tooltip asChild. */
   ref?: Ref<HTMLElement>;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "onSelect">;
@@ -135,6 +135,8 @@ export function PaperField({ label, value, compact, keepTogether = false, state 
     keepTogether && "px-0.5 paper-wide:px-1",
     state === "error" && "border-danger bg-danger-subtle text-danger-subtle-fg",
     state === "missing" && "border-dashed border-warning",
+    // Giá trị tự điền cần người dùng xem lại: khung liền + nền dịu tông cảnh báo (vàng), khác error (đỏ) và missing (nét đứt, không nền).
+    state === "check" && "border-warning bg-warning-subtle text-warning-subtle-fg",
     onSelect && "cursor-pointer hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
     selected && "ring-2 ring-primary",
     // In như mẫu VNACCS: không khung ô, không nền trạng thái.
@@ -170,8 +172,13 @@ export function PaperField({ label, value, compact, keepTogether = false, state 
         )}
       </span>
       {state === "error" && (
-        <span data-paper-mark role="img" aria-label={t.error} className="absolute right-1 top-1">
+        <span data-paper-mark="error" role="img" aria-label={t.error} className="absolute right-1 top-1">
           <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5" />
+        </span>
+      )}
+      {state === "check" && (
+        <span data-paper-mark="check" role="img" aria-label={t.check} className="absolute right-1 top-1">
+          <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
         </span>
       )}
       {state === "edited" && (

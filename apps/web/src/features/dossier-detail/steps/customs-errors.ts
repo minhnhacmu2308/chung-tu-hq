@@ -1,5 +1,5 @@
 // Lỗi Hải quan/FPT của lần gửi bị từ chối → chỉ tiêu Phụ lục II (thuần): để màn Review gắn lỗi vào đúng ô người khai cần sửa.
-import { fieldDefForFptIndex, type CustomsRejection } from "@kb/contracts";
+import { fieldDefForFptIndex, fptIndexSlot, type CustomsRejection } from "@kb/contracts";
 import { fill, pickMessages, type UiLocale } from "@kb/ui";
 import { CUSTOMS_ERROR_MESSAGES } from "./customs-errors.messages";
 
@@ -8,6 +8,8 @@ export type FieldError = {
   no?: string;
   label?: string;
   line?: number;
+  /** Ô "Thuế và thu khác" (1–5, theo bản đã dồn gửi đi) khi lỗi nhắc HAG_TX/TR/TG{n}. */
+  slot?: number;
   code: string;
   message: string;
   solution?: string;
@@ -17,7 +19,8 @@ export function fieldErrors(kind: "IDA" | "EDA", rejection: CustomsRejection | n
   if (!rejection) return [];
   return rejection.errors.map((e) => {
     const def = fieldDefForFptIndex(kind, e.field);
-    return { code: e.code, message: e.message, ...(e.solution ? { solution: e.solution } : {}), ...(e.line ? { line: e.line } : {}), ...(def ? { no: def.no, label: def.label } : {}) };
+    const slot = fptIndexSlot(e.field);
+    return { code: e.code, message: e.message, ...(e.solution ? { solution: e.solution } : {}), ...(e.line ? { line: e.line } : {}), ...(def ? { no: def.no, label: def.label } : {}), ...(slot ? { slot } : {}) };
   });
 }
 

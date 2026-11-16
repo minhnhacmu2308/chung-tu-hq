@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shapeEdaBody, shapeIdaBody } from "./request-shape.js";
+import { shapeAmaBody, shapeEdaBody, shapeIdaBody } from "./request-shape.js";
 
 describe("shapeIdaBody – body IDA đúng hình mẫu request FPT", () => {
   it("đủ mọi key; ô trống: decimal → null, chữ/ngày/Long → \"\"; bỏ tK_CHB, haG_B25; giữ object khác (tài khoản, CTHQ)", () => {
@@ -39,5 +39,15 @@ describe("shapeIdaBody – body IDA đúng hình mẫu request FPT", () => {
     expect(Object.keys(b["objVN_EDA_CTHQ"] as object)).toHaveLength(30);
     const cthq = { cthQ_CCM: "X", cthQ_D01: "A" };
     expect(shapeEdaBody({ objVN_EDA: {}, objVN_EDA_HANG: [], objVN_EDA_CTHQ: cthq })["objVN_EDA_CTHQ"]).toBe(cthq);
+  });
+
+  it("AMA: đủ 79 / 120 key theo mẫu Postman; ô trống null hoặc \"\" đúng như mẫu; giá trị có sẵn giữ nguyên", () => {
+    const b = shapeAmaBody({ objVN_AMA: { tK_ICN: 108173826831, tK_CHS: "10BB", tK_BYA: "2026" }, objVN_AMA_HANG: [{ haG_RAN: "01", haG_AKB: 100 }] });
+    const head = b["objVN_AMA"] as Record<string, unknown>;
+    expect(Object.keys(head)).toHaveLength(79);
+    expect(head).toMatchObject({ tK_ICN: 108173826831, tK_CHS: "10BB", tK_BYA: "2026", tK_ADD: null, tK_SYN: null, tK_AD3: "", tK_A02: "" });
+    const hang = (b["objVN_AMA_HANG"] as Record<string, unknown>[])[0]!;
+    expect(Object.keys(hang)).toHaveLength(120);
+    expect(hang).toMatchObject({ haG_RAN: "01", haG_AKB: 100, haG_MK2: "", haG_A26: "" });
   });
 });

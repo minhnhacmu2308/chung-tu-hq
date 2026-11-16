@@ -3,7 +3,7 @@
 // mỗi phần tử objEDA/objIDA = { objMsgResult, objVN_<KIND>, objVN_<KIND>_TRANGTHAI, … }.
 // externalId = số tờ khai VNACCS (tK_ECN/tK_ICN) – gọi lại/đăng ký/tra cứu theo số này. Đặc tả từng nghiệp vụ: docs/vnaccs-api
 // (nguồn lệch nhau: phản hồi thật > Excel đặc tả > Postman). Mã thông điệp theo REP_VNACCS.
-import { AmaRequestSchema, FPT_DECLARATION_STATES, FptIdentifierQuerySchema, FptIdentifierRequestSchema, FptKvgsRequestSchema, FptRefIdResponseSchema, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, V5ContainerResSchema, V5IdentifierResSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
+import { AmaRequestSchema, shapeAmaBody, FPT_DECLARATION_STATES, FptIdentifierQuerySchema, FptIdentifierRequestSchema, FptKvgsRequestSchema, FptRefIdResponseSchema, FptResponseEnvelopeSchema, HYS_LIST_FILE_KEY, HysRequestSchema, HysResponseSchema, V5ContainerResSchema, V5IdentifierResSchema, type CustomsOperation, type FptVnaccsCredentials } from "@kb/contracts";
 import { z } from "zod";
 import { domainError } from "../../../shared/errors.js";
 import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, GatewayStatus, HysGatewayRequest, HysGatewayResult, IdentifierGatewayRequest, IdentifierGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../application/customs-ports.js";
@@ -150,7 +150,8 @@ export class FptVnaccsGateway implements CustomsGateway {
     if (op === "AMA") {
       const parsed = AmaRequestSchema.safeParse(msg.request);
       if (!parsed.success) return { errors: parsed.error.issues.map(describeSchemaIssue) };
-      const { env, errors } = await this.call(orgId, "AMA", parsed.data, msg.dossierId);
+      // Đủ 79 / 120 key theo mẫu request FPT (ô trống vẫn gửi) – shapeAmaBody.
+      const { env, errors } = await this.call(orgId, "AMA", shapeAmaBody(parsed.data as Record<string, unknown>), msg.dossierId);
       if (errors) return { errors };
       const list = env["objAMA"];
       const head = Array.isArray(list) && list[0] && typeof list[0] === "object" ? sub(list[0] as Obj, "objVN_AMA") : {};
@@ -202,7 +203,7 @@ export class FptVnaccsGateway implements CustomsGateway {
    */
   async sendContainerList(orgId: string, req: ContainerListGatewayRequest, _idempotencyKey?: string): Promise<{ refId?: string; errors?: GatewayError[] }> {
     requireVnaccsUser(req.userId);
-    const body = { ...containerListHead(req), hanG_CONT: req.rows.map((r) => ({ vD_SO: r.billNo, coN_SO: r.containerNo, seL_SO: r.sealNo, ghI_CHU: r.note })) };
+    const body = { ...containerListHead(req), hanG_CONT: req.rows.map((r) => ({ vD_SO: r.billNo, coN_SO: r.containerNo, seL_SO: r.sealNo, ghI_CHU: r.note ?? "" })) };
     const { env, errors } = await this.call(orgId, "V5ContainerReq", body, req.dossierId);
     if (errors) return { errors };
     const refId = FptRefIdResponseSchema.parse(env).reF_ID;
@@ -347,7 +348,8 @@ function requireVnaccsUser(userId: string): void {
 
 const containerListHead = (r: Omit<ContainerListGatewayRequest, "rows">) => ({
   tK_SOTK: r.declarationNo, tK_NGAYDK: isoToFptDate(r.registeredOn), tK_MALH: r.typeCode, tK_MAHQ: r.customsOffice, mA_DV: r.taxCode, teN_DV: r.companyName,
-  ...(r.agent ? { mA_DAI_LY: r.agent.taxCode, teN_DAI_LY: r.agent.name } : {}), useR_ID: r.userId,
+  // Mẫu Postman luôn gửi 2 ô đại lý (không có đại lý → "").
+  mA_DAI_LY: r.agent?.taxCode ?? "", teN_DAI_LY: r.agent?.name ?? "", useR_ID: r.userId,
 });
 
 /** Trạng thái tờ khai từ một phần tử objIDA/objEDA (TRANGTHAI: T/A/C/TE/A01/E/R, luồng, thông quan). */

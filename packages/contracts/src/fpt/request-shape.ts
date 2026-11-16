@@ -2,6 +2,7 @@
 // đủ mọi key của từng object, ô trống vẫn gửi ("" cho chữ/ngày/Long, null cho decimal) – không bỏ key.
 // Gửi thiếu key → S0049 "Số tờ khai đã nhập chưa được đăng ký" (2026-11-15). Chỉ gửi key có trong mẫu:
 // IDA không có TK_CHB, HAG_B25, HAG_MAHANG; EDA không có TK_ID, HAG_R01, HAG_MAHANG.
+// AMA (Postman /api/AMA): 79 key đầu + 120 key mỗi dòng; ô trống ghi đúng như mẫu (null hay "").
 import { fptKey, type FptFieldMeta } from "./common.js";
 import { VN_EDA_CON_FIELDS, VN_EDA_FIELDS, VN_EDA_HANG_FIELDS } from "./eda.js";
 import { VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_KTG_FIELDS, VN_IDA_VANDON_FIELDS } from "./ida.js";
@@ -83,4 +84,24 @@ export function shapeEdaBody(body: Record<string, unknown>): Record<string, unkn
     objVN_EDA_CTHQ: body["objVN_EDA_CTHQ"] ?? { ...EMPTY_EDA_CTHQ },
     objVN_EDA_HANG: items.map(edaHang),
   };
+}
+
+// AMA – key và cách ghi ô trống lấy nguyên từ mẫu Postman /api/AMA (đặc tả trong code mới có 32/77 trường).
+const AMA_KEYS: readonly string[] = ["tK_ADD", "tK_AD2", "tK_AD3", "tK_SYN", "tK_A02", "tK_AD1", "tK_CHS", "tK_CHB", "tK_YNK", "tK_ICN", "tK_ICB", "tK_IDD", "tK_ADE", "tK_CTO", "tK_IPD", "tK_TTC", "tK_RED", "tK_BRC", "tK_IMC", "tK_IMN", "tK_BYA", "tK_BCM", "tK_IMY", "tK_BCN", "tK_IMA", "tK_IMT", "tK_SBC", "tK_A12", "tK_RYA", "tK_A13", "tK_SCM", "tK_A14", "tK_REC", "tK_SCN", "tK_A16", "tK_ENC", "tK_ADS", "tK_ADT", "tK_ADU", "tK_REF", "tK_CDB", "tK_RTB", "tK_NTB", "tK_CDA", "tK_RTA", "tK_NTA", "tK_ADB", "tK_A23", "tK_ADN", "tK_KA1", "tK_KB1", "tK_KU1", "tK_KC1", "tK_KW1", "tK_KA2", "tK_KB2", "tK_KU2", "tK_KC2", "tK_KW2", "tK_KA3", "tK_KB3", "tK_KU3", "tK_KC3", "tK_KW3", "tK_KA4", "tK_KB4", "tK_KU4", "tK_KC4", "tK_KW4", "tK_KA5", "tK_KB5", "tK_KU5", "tK_KC5", "tK_KW5", "tK_A24", "tK_A25", "tK_ADO", "tK_ADF", "tK_ADP"];
+const AMA_NULL = new Set(["tK_ADD", "tK_AD2", "tK_SYN", "tK_ICN", "tK_BYA", "tK_RYA", "tK_ADT", "tK_ADU", "tK_RTB", "tK_RTA", "tK_A23", "tK_KC1", "tK_KC2", "tK_KC3", "tK_KC4", "tK_KC5", "tK_A24", "tK_A25"]);
+const AMA_HANG_KEYS: readonly string[] = ["haG_RAN", "haG_MK1", "haG_MK2", "haG_A26", "haG_A28", "haG_CMB", "haG_ORB", "haG_CMA", "haG_ORA", "haG_MK3", "haG_MKB", "haG_MKQ", "haG_MKC", "haG_MKT", "haG_MKR", "haG_MKA", "haG_A45", "haG_AKB", "haG_AKQ", "haG_AKC", "haG_AKT", "haG_AKR", "haG_AKA", "haG_MK4", "haG_A52", "haG_ADC", "haG_A53", "haG_KD1", "haG_KE1", "haG_MB1", "haG_MQ1", "haG_MC1", "haG_KI1", "haG_MR1", "haG_MA1", "haG_MK5", "haG_KL1", "haG_AB1", "haG_AQ1", "haG_AC1", "haG_AK1", "haG_AR1", "haG_AA1", "haG_KS1", "haG_KV1", "haG_KT1", "haG_KD2", "haG_KE2", "haG_MB2", "haG_MQ2", "haG_MC2", "haG_KI2", "haG_MR2", "haG_MA2", "haG_KL2", "haG_AB2", "haG_AQ2", "haG_AC2", "haG_AK2", "haG_AR2", "haG_AA2", "haG_KS2", "haG_KV2", "haG_KT2", "haG_KD3", "haG_KE3", "haG_MB3", "haG_MQ3", "haG_MC3", "haG_KI3", "haG_MR3", "haG_MA3", "haG_KL3", "haG_AB3", "haG_AQ3", "haG_AC3", "haG_AK3", "haG_AR3", "haG_AA3", "haG_KS3", "haG_KV3", "haG_KT3", "haG_KD4", "haG_KE4", "haG_MB4", "haG_MQ4", "haG_MC4", "haG_KI4", "haG_MR4", "haG_MA4", "haG_KL4", "haG_AB4", "haG_AQ4", "haG_AC4", "haG_AK4", "haG_AR4", "haG_AA4", "haG_KS4", "haG_KV4", "haG_KT4", "haG_KD5", "haG_KE5", "haG_MB5", "haG_MQ5", "haG_MC5", "haG_KI5", "haG_MR5", "haG_MA5", "haG_KL5", "haG_AB5", "haG_AQ5", "haG_AC5", "haG_AK5", "haG_AR5", "haG_AA5", "haG_KS5", "haG_KV5", "haG_KT5", "haG_MMA", "haG_AMA"];
+const AMA_HANG_NULL = new Set(["haG_MKB", "haG_MKQ", "haG_AKB", "haG_AKQ", "haG_A53", "haG_MB1", "haG_MQ1", "haG_AB1", "haG_AQ1", "haG_KT1", "haG_MB2", "haG_MQ2", "haG_AB2", "haG_AQ2", "haG_KT2", "haG_MB3", "haG_MQ3", "haG_AB3", "haG_AQ3", "haG_KT3", "haG_MB4", "haG_MQ4", "haG_AB4", "haG_AQ4", "haG_KT4", "haG_MB5", "haG_MQ5", "haG_AB5", "haG_AQ5", "haG_KT5"]);
+
+const amaShaper = (keys: readonly string[], nulls: ReadonlySet<string>) => (o: Record<string, unknown> | null | undefined): Record<string, unknown> =>
+  Object.fromEntries(keys.map((k) => {
+    const v = o?.[k];
+    return [k, v === undefined || v === null || v === "" ? (nulls.has(k) ? null : "") : v];
+  }));
+const amaHead = amaShaper(AMA_KEYS, AMA_NULL);
+const amaHang = amaShaper(AMA_HANG_KEYS, AMA_HANG_NULL);
+
+/** Đưa body AMA (đã qua AmaRequestSchema) về đúng hình mẫu FPT: đủ 79 / 120 key, ô trống null hoặc "" như mẫu. Thuần. */
+export function shapeAmaBody(body: Record<string, unknown>): Record<string, unknown> {
+  const items = Array.isArray(body["objVN_AMA_HANG"]) ? (body["objVN_AMA_HANG"] as Record<string, unknown>[]) : [];
+  return { ...body, objVN_AMA: amaHead(body["objVN_AMA"] as Record<string, unknown>), objVN_AMA_HANG: items.map(amaHang) };
 }

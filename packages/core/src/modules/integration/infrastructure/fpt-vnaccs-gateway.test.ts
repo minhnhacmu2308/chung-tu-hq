@@ -180,6 +180,19 @@ describe("FptVnaccsGateway.send – gọi lại, sửa đổi, AMB/AMC (Postman 
     expect(await r.g.send("org", { op: "AMC", request: { tK_SYN: "308173826831" } })).toMatchObject({ receiptNo: "308173826831" });
     expect(r.calls).toEqual([{ op: "AMC", body: { tK_SYN: 308173826831 } }]);
   });
+  it("AMA: body đủ 79 / 120 key theo mẫu Postman (ô trống vẫn gửi)", async () => {
+    const r = rec(() => ({ errorList: null, objAMA: [{ objVN_AMA: { tK_SYN: 308173826831 } }] }));
+    await r.g.send("org", { op: "AMA", request: { objVN_AMA: { tK_YNK: "I", tK_ICN: 108173826831, tK_ICB: "A12", tK_CHS: "10BB", tK_CHB: "00", tK_IDD: "23/04/2026", tK_IPD: "28/04/2026", tK_REC: "6", tK_TTC: "VND" }, objVN_AMA_HANG: [{ haG_RAN: "01" }] } });
+    const body = r.calls[0]!.body as { objVN_AMA: Record<string, unknown>; objVN_AMA_HANG: Record<string, unknown>[] };
+    expect(r.calls[0]!.op).toBe("AMA");
+    expect(Object.keys(body.objVN_AMA)).toHaveLength(79);
+    expect(Object.keys(body.objVN_AMA_HANG[0]!)).toHaveLength(120);
+  });
+  it("danh sách container: không có đại lý / ghi chú → vẫn gửi mA_DAI_LY, teN_DAI_LY, ghI_CHU = \"\" (mẫu Postman)", async () => {
+    const r = rec(() => ({ errorList: null, reF_ID: "R1" }));
+    await r.g.sendContainerList("org", { declarationNo: "104265243240", registeredOn: "2026-10-14", typeCode: "A11", customsOffice: "02CI", taxCode: "0313833810", companyName: "CTY", userId: "BI820001", rows: [{ billNo: "B1", containerNo: "C1", sealNo: "S1", note: "" }] });
+    expect(r.calls[0]!.body).toMatchObject({ mA_DAI_LY: "", teN_DAI_LY: "", hanG_CONT: [{ vD_SO: "B1", coN_SO: "C1", seL_SO: "S1", ghI_CHU: "" }] });
+  });
   it.each(["CONT", "PORT_FEE"] as const)("%s → NOT_SUPPORTED, không gọi HTTP", async (op) => {
     await expect(g.send("org", { op })).rejects.toMatchObject({ code: "NOT_SUPPORTED" });
   });

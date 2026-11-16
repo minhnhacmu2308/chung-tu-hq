@@ -47,6 +47,20 @@ export async function confirmAllHs(page: Page) {
   }
 }
 
+/**
+ * Bước 6 – Khai báo Hải quan (đã ở ?step=submit, tờ khai đã duyệt): ký số & khai tạm IDA → (hệ thống gợi ý HYS thì chọn
+ * "Vẫn khai, không cần HYS") → "Đã khai tạm" → khai chính thức IDC. Chờ "Đã thông quan" là việc của người gọi.
+ */
+export async function fileIdaThenIdc(page: Page) {
+  await page.getByRole("button", { name: "Ký số & khai tạm (IDA)" }).click();
+  const skipHys = page.getByRole("dialog").getByRole("button", { name: "Vẫn khai, không cần HYS" });
+  const filed = page.getByText("Đã khai tạm").first();
+  await expect(skipHys.or(filed)).toBeVisible({ timeout: 60_000 });
+  if (await skipHys.isVisible()) await skipHys.click();
+  await expect(filed).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Khai chính thức (IDC)" }).first().click();
+}
+
 /** Chạy AI Agent, xác nhận hết HS gợi ý rồi sang bước Review tờ khai. */
 export async function runAgentToReview(page: Page) {
   await page.getByRole("button", { name: "Chạy AI Agent" }).click();

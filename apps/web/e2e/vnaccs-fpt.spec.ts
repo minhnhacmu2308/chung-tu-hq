@@ -4,7 +4,7 @@
 //   E2E_CUSTOMS_GATEWAY=fpt pnpm test:e2e vnaccs-fpt
 import { expect, test, type Page } from "@playwright/test";
 import { stateFor } from "./global-setup";
-import { createDossier, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
+import { createDossier, fileIdaThenIdc, fillManualFields, login, runAgentToReview, uploadAndConfirm } from "./helpers";
 
 const FPT = process.env.E2E_CUSTOMS_GATEWAY === "fpt";
 const MOCK_URL = process.env.E2E_FPT_MOCK_URL ?? "http://localhost:7070";
@@ -78,7 +78,7 @@ test.describe("qua FPT.VNACCS (fpt-mock)", () => {
     await expect(customsHubCard(page)).toContainText(ACCOUNT.userId);
   });
 
-  test("ký số & truyền: IDA → IDC → HYS → IEX đi qua HTTP tới fpt-mock, về Đã thông quan với số tờ khai của mock", async ({ page, browser, request }) => {
+  test("ký số & khai tạm IDA → khai chính thức IDC → tra cứu IID đi qua HTTP tới fpt-mock, về Đã thông quan với số tờ khai của mock", async ({ page, browser, request }) => {
     test.setTimeout(300_000);
     await login(page);
     await enterAccount(page);
@@ -102,8 +102,17 @@ test.describe("qua FPT.VNACCS (fpt-mock)", () => {
     await approverCtx.close();
 
     await page.goto(`/dossiers/${id}?step=submit`);
-    await page.getByRole("button", { name: "Ký số & truyền tờ khai" }).click();
-    await expect(page.getByText("Đã thông quan").first()).toBeVisible({ timeout: 180_000 });
+    await fileIdaThenIdc(page);
+    // Cổng FPT: hệ thống chỉ tự hỏi 5 phút/lần (lưới an toàn) – người khai bấm "Tra cứu trạng thái (IID)"; mock thông quan sau 2 lượt hỏi.
+    // Kiểm qua API (chữ "Đã thông quan" còn là tên bước trên trang, không chứng minh đã thông quan).
+    type View = { result: { clearanceStatus: string } };
+    const clearance = async () => ((await (await page.request.get(`/api/dossiers/${id}/submission`)).json()) as View).result.clearanceStatus;
+    const query = page.getByRole("button", { name: "Tra cứu trạng thái (IID)" });
+    await expect.poll(async () => {
+      const status = await clearance();
+      if (status !== "CLEARED" && (await query.isEnabled())) await query.click();
+      return status;
+    }, { timeout: 120_000, intervals: [3_000] }).toBe("CLEARED");
 
     const after = (await (await request.get(`${MOCK_URL}/__mock/declarations`)).json()) as { declarationNo: string; kind: string; state: string; cleared: boolean }[];
     const created = after.filter((d) => !before.includes(d.declarationNo));

@@ -63,18 +63,39 @@ describe.each([{ kind: "IDA" as const, other: OTHER_IDA }, { kind: "EDA" as cons
   it("chỉ tiêu khác đúng danh sách đã duyệt", () => {
     expect(otherFieldKeys(kind)).toEqual(other);
   });
+  it("mỗi dòng mẫu (dòng thường, lần lặp một dòng) không quá 12 cột – mỗi dòng vẽ thành một lưới 12 cột riêng", () => {
+    const rows = [p.header, ...p.pages.flatMap((pg) => pg.regions.flat().map((r) => r.rows)), ...p.item.flat().map((r) => r.rows)].flat();
+    const wide = rows.filter((row) => Array.isArray(row) || row.cells.reduce((n, c) => n + (c.span ?? 12), 0) <= 12 || row.count === 1)
+      .map((row) => (Array.isArray(row) ? row : row.cells))
+      .filter((cells) => cells.reduce((n, c) => n + (c.span ?? 12), 0) > 12);
+    expect(wide.map((cells) => cells.map((c) => c.key).join(" "))).toEqual([]);
+  });
 });
 
 describe("bản in IDA", () => {
   const p = printLayoutFor("IDA");
   it("ô chính của mẫu có mặt", () => {
     const { decl, item } = printKeys(p);
-    expect(decl).toEqual(expect.arrayContaining(["TK_ICN", "TK_B12", "TK_B13", "TK_A86", "THUE_B02", ...range(6, (i) => `THUE_KG${i}`), ...range(10, (i) => `CTHQ_D${String(i).padStart(2, "0")}`)]));
+    expect(decl).toEqual(expect.arrayContaining(["TK_ICN", "TK_B12", "TK_B13", "TK_A86", "THUE_B02", ...range(6, (i) => `THUE_KG${i}`), ...range(6, (i) => `THUE_KF${i}`), ...range(10, (i) => `CTHQ_D${String(i).padStart(2, "0")}`)]));
     expect(item).toEqual(expect.arrayContaining(["HAG_CMD", "HAG_CMN", "HAG_QN1", "HAG_QN2", "HAG_BPR", "HAG_UPR", "HAG_ORS", ...range(5, (i) => `HAG_TX${i}`)]));
   });
   it("tiêu đề nhóm lặp in trên mẫu được giữ", () => {
     const labels = p.pages.flatMap((pg) => pg.regions.flat()).flatMap((r) => r.rows).flatMap((row) => (Array.isArray(row) ? [] : [row.label]));
     expect(labels).toEqual(expect.arrayContaining(["Các khoản điều chỉnh", "Thông tin trung chuyển"]));
+  });
+  it("nhãn mẫu không có chỉ tiêu: ô fixed (khóa ~, không thuộc printKeys) và <IMP> đầu trang", () => {
+    const cells = p.pages.flatMap((pg) => pg.regions.flat()).flatMap((r) => r.rows).flatMap(expandPrintRow).flat().filter((c) => c.fixed !== undefined && c.label);
+    expect(cells.map((c) => [c.label, c.fixed])).toEqual([["Số quản lý người sử dụng", ""], ["Ngày khai báo nộp thuế", "/ /"], ["Tổng số tiền thuế chậm nộp", ""]]);
+    expect(cells.every((c) => c.key.startsWith("~"))).toBe(true);
+    expect(printKeys(p).decl.some((k) => k.startsWith("~"))).toBe(false);
+    expect(p.mark).toBe("<IMP>");
+    expect(printLayoutFor("EDA").mark).toBe("<EXP>");
+  });
+  it("dòng hàng như mẫu: Số lượng (1) ở nửa phải (nửa trái là chỗ trống), thẳng cột Số lượng (2) / Đơn giá hóa đơn", () => {
+    const hang = p.item.flat().find((r) => r.id === "hang")!;
+    const row = hang.rows.find((r) => Array.isArray(r) && r.some((c) => c.key === "HAG_QN1")) as { key: string; label: string; span?: number; fixed?: string }[];
+    expect(row.map((c) => [c.key, c.span, c.fixed])).toEqual([["~trong-so-luong-1", 6, ""], ["HAG_QN1", 4, undefined], ["HAG_QT1", 2, undefined]]);
+    expect(printKeys(p).item).not.toContain("~trong-so-luong-1");
   });
   it("hai trang chung, một dòng hàng mỗi trang", () => {
     expect(p.kind).toBe("IDA");

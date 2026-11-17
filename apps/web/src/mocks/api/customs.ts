@@ -26,6 +26,13 @@ import { kvgsFlowOf, settleKvgs } from "@/mocks/kvgs-sim";
 import { amendmentDelta, applyPostOperation, createAmendment, openAmendment } from "@/mocks/post-amendment-sim";
 import type { CustomsMessage, CustomsOperation, CustomsSummary, CustomsResult, Declaration, DigitalCertificate, Dossier, LineItem } from "@/mocks/types";
 
+// Tên viết tắt Chi cục (TK_A07 / TK_K08, tối đa 10 ký tự) – VNACCS trả tên, không trả mã (phản hồi thật: 88AB → CCHQTN). Tên giả cho mã seed.
+const OFFICE_SHORT: Record<string, string> = { "88AB": "CCHQTN", "03CE": "HQHPKV3", "01B1": "HQNOIBAI", "02CI": "HQSGKV1" };
+const officeShortName = (office: string): string => {
+  const code = office.split(/\s/)[0] ?? "";
+  return OFFICE_SHORT[code] ?? code;
+};
+
 export const customsKeys = {
   all: ["customs"] as const,
   submission: (id: string) => ["customs", "submission", id] as const,
@@ -790,7 +797,7 @@ function customsInfoOf(db: MockDb, c: Ctx, stage: CustomsStage, seen: CustomsMes
   return {
     receivedAt: seen.at(-1)?.at ?? r.updatedAt,
     declarationNo: r.declarationNo,
-    customsOfficeName: c.dossier.customsOffice,
+    customsOfficeName: officeShortName(c.dossier.customsOffice),
     subsection: "00",
     ...(hs ? { representativeHs: hs.replace(/\D/g, "").slice(0, 4) } : {}),
     pages: 3,
@@ -799,6 +806,7 @@ function customsInfoOf(db: MockDb, c: Ctx, stage: CustomsStage, seen: CustomsMes
     totalCustomsValue: { amount: t.customsValueVnd, currency: "VND" },
     taxes,
     totalTaxVnd: total,
+    ...(nk ? { fields: { TK_TP: t.invoiceTotal, TK_B08: "A", THUE_KI1: String(items.length), THUE_KI2: String(items.length) } } : {}),
     items: items.map((it, idx) => {
       const tax = t.perItem.find((p) => p.itemId === it.id);
       return {
@@ -806,6 +814,10 @@ function customsInfoOf(db: MockDb, c: Ctx, stage: CustomsStage, seen: CustomsMes
         ...(it.hsConfirmed ? { hsCode: it.hsConfirmed.replace(/\D/g, "") } : {}),
         ...(tax ? { customsValue: tax.customsValueVnd, customsValueCurrency: "VND", taxAmountVnd: nk ? tax.importDutyVnd : "0" } : {}),
         taxRate: nk ? (it.importDutyRate ?? "0") : "0",
+        // Ô in nguyên văn như VNACCS: thuế suất "A 10%", thuế GTGT ở ô thuế và thu khác 1 (mẫu không có thuế khác).
+        ...(nk && tax
+          ? { fields: { HAG_B42: "A", HAG_B43: `${it.importDutyRate ?? "0"}%`, HAG_KQ1: "Thuế GTGT", HAG_KS1: String(BigInt(tax.customsValueVnd) + BigInt(tax.importDutyVnd)), HAG_KY1: `${it.vatRate ?? "0"}%`, HAG_KZ1: tax.vatVnd } }
+          : {}),
       };
     }),
     ...(registeredAt ? { registeredDate: vnDateOf(registeredAt), registeredTime: vnTimeOf(registeredAt) } : {}),

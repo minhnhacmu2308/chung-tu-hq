@@ -49,6 +49,10 @@ describe("PaperStack / PaperSheet", () => {
 });
 
 describe("PaperField", () => {
+  it("span 8 (ô số cạnh ô đơn vị 4 cột) → col-span-8; PaperLabel cũng vậy", () => {
+    const { container } = render(<><PaperField label="Trọng lượng" value="10.787" ariaLabel="Trọng lượng: 10.787" span={8} /><PaperLabel span={8}>Nhãn</PaperLabel></>);
+    expect(container.querySelectorAll(".col-span-8")).toHaveLength(2);
+  });
   it("không có onSelect: không có nút", async () => {
     const { container } = render(<PaperField label="Mã loại hình" value="A11" ariaLabel="Mã loại hình: A11" />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();

@@ -9,7 +9,8 @@ export function expandPrintRow(row: PrintRow): PrintCell[][] {
   return Array.from({ length: row.count }, (_, i) => row.cells.map((c) => ({ ...c, key: fillIndex(c.key, i + 1) })));
 }
 
-const rowKeys = (rows: PrintRow[]) => rows.flatMap(expandPrintRow).flat().map((c) => c.key);
+// Ô chỉ in nhãn (fixed) không phải chỉ tiêu → không tính.
+const rowKeys = (rows: PrintRow[]) => rows.flatMap(expandPrintRow).flat().filter((c) => c.fixed === undefined).map((c) => c.key);
 const regionKeys = (regions: PrintPage["regions"]) => regions.flat().flatMap((r) => rowKeys(r.rows));
 
 /** Khóa trên bản in theo thứ tự in: decl = đầu trang + các trang chung; item = khối dòng hàng. */

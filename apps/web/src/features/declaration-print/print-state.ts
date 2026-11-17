@@ -1,7 +1,7 @@
 // Logic thuần của bản in tờ khai (Review bước 5): vị trí ô trên bố cục, số ước tính, trạng thái ô, danh sách ô cần xử lý, số trang.
 import {
   billIdentFields, branchRanges, compactOtherTaxes, expandRepeat, formKeysOf, itemAutoChecks, itemFieldClass, itemFieldCode, itemFields, itemOverrides, layoutFor, otherFieldKeys, otherTaxGroupOf, otherTaxKeys, parseItemFieldCode, printKeys, printLayoutFor, requiredGaps,
-  type ConditionContext, type ConditionId, type DeclarationBranch, type RequiredGap, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
+  type CodeListEntry, type ConditionContext, type ConditionId, type DeclarationBranch, type RequiredGap, type Declaration, type DeclarationEditMode, type LayoutBlock, type LayoutField, type LineItem, type SubmissionView,
 } from "@kb/contracts";
 import type { PaperFieldState } from "@kb/ui";
 import { conditionContext, isApplicable, type FormValues } from "../declaration-form/form-state";
@@ -250,6 +250,8 @@ export type PrintData = {
   checks: Set<string>[];
   /** Số Hải quan trả về (chưa điền ước tính) và số ứng dụng ước tính – để so sánh trên ô. */
   customs: FormValues; estimate: FormValues; estimated: Set<string>;
+  /** Theo dòng hàng: ô điền từ danh mục khi Hải quan chưa trả (đánh dấu ước tính) – vd tên nơi xuất xứ HAG_B56. */
+  itemEstimated?: Set<string>[];
 };
 
 /** Phần theo tờ của printData (printStateFor): số dòng in trên tờ, ô 1.2 (TK_FIC/TK_BNO/TK_DNO), tổng trị giá/thuế của tờ. */
@@ -382,6 +384,29 @@ export function withLookupNames(data: PrintData, names: Record<string, string | 
   return { ...data, values, estimated };
 }
 
+/** Tên nước như VNACCS in (HAG_B56, "INDIA"): danh mục COUNTRY giữ tên ngắn VNACCS ở `note` khi tên đã dịch tiếng Việt, không thì ở `name`. */
+export function vnaccsCountryName(list: readonly CodeListEntry[], code: string): string | undefined {
+  const c = code.trim().toUpperCase();
+  const e = list.find((x) => x.code === c);
+  return e ? (e.note?.trim() || e.name) : undefined;
+}
+
+/** Dòng hàng IDA: Hải quan chưa trả tên nơi xuất xứ (HAG_B56) → tên theo danh mục nước của mã HAG_OR, đánh dấu ước tính; đã có tên Hải quan → giữ. */
+export function withOriginNames(data: PrintData, countries: readonly CodeListEntry[] | null): PrintData {
+  if (data.kind !== "IDA" || !countries) return data;
+  const itemEstimated = data.printRows.map((_, i) => new Set(data.itemEstimated?.[i]));
+  let changed = false;
+  const printRows = data.printRows.map((row, i) => {
+    const code = row["HAG_OR"]?.trim();
+    const name = code && !row["HAG_B56"]?.trim() ? vnaccsCountryName(countries, code) : undefined;
+    if (!name) return row;
+    changed = true;
+    itemEstimated[i]!.add("HAG_B56");
+    return { ...row, HAG_B56: name };
+  });
+  return changed ? { ...data, printRows, itemEstimated } : data;
+}
+
 /** Ô cần xử lý của bản in. Tờ khai chỉ đọc (LOCKED / không có quyền sửa): bỏ ô còn thiếu (không làm gì được), giữ ô lỗi Hải quan. */
 export function printAttention(data: PrintData, mode: DeclarationEditMode, canEdit: boolean, lineMode: DeclarationEditMode = mode): AttentionCell[] {
   const cells = attentionCells(data.kind, data.values, data.itemRows, data.errors, data.lineNos, data.checks);
@@ -412,6 +437,9 @@ export function printIssuesOf(decl: Declaration, items: LineItem[], submission: 
 }
 
 const DECLARATION_NO = new Set(["TK_ICN", "TK_ECN"]);
+const HS_CELL = new Set(["HAG_CMD"]);
+/** Bỏ số 0 cuối phần thập phân của chuỗi số thuần ("12.500" → "12.5", "7.000" → "7"); chuỗi khác giữ nguyên. */
+export const trimZeros = (v: string): string => (/^-?\d+\.\d+$/.test(v) ? v.replace(/0+$/, "").replace(/\.$/, "") : v);
 
 /**
  * Chữ in trong ô bản in: rỗng → "" (ô ngày rỗng in "/ /" như mẫu, số tờ khai rỗng in "Chưa cấp"); ô mã có danh mục → "mã  tên"; còn lại theo `displayValue`.
@@ -421,9 +449,12 @@ export function printValue(field: Pick<LayoutField, "key" | "input" | "options" 
   const v = (raw ?? "").trim();
   if (!v) return field && DECLARATION_NO.has(field.key) ? NOT_ISSUED : field?.input === "date" ? "/ /" : "";
   if (!field) return v;
+  // Mã HS in liền như mẫu VNACCS ("03075200"), dù dữ liệu lưu có dấu chấm ("0307.52.00").
+  if (HS_CELL.has(field.key)) return v.replace(/[.\s]/g, "");
   const name = codeLabel(field.codeTable, v);
   // Trang giấy là văn bản pháp lý tiếng Việt: ngày/số định dạng kiểu Việt Nam ở mọi ngôn ngữ giao diện.
-  return name ? `${v}\u00a0 ${name}` : displayValue(field, v, "vi");
+  // Số như mẫu VNACCS: bỏ số 0 thừa sau dấu thập phân ("9380.000000" → 9.380; "3.850000" → 3,85).
+  return name ? `${v}\u00a0 ${name}` : displayValue(field, field.input === "number" ? trimZeros(v) : v, "vi");
 }
 
 /**
@@ -435,6 +466,23 @@ export function printCode(field: Pick<LayoutField, "key" | "input" | "options" |
   if (!v || !field) return null;
   if (codeLabel(field.codeTable, v) || field.options?.some((o) => o.value === v)) return v;
   return displayValue(field, v, "vi").startsWith(`${v} · `) ? v : null;
+}
+
+/** Tên cơ quan Hải quan Hải quan trả về (tên viết tắt Chi cục) – in thay ô TK_CH khi đã có. */
+const OFFICE_NAME: Record<Kind, string> = { IDA: "TK_A07", EDA: "TK_K08" };
+/** Mặc định gửi Hải quan khi 1.14 trống (integration/declaration-to-fpt) – bản in hiện đúng giá trị đã gửi. */
+export const IDA_POSTAL_DEFAULT = "(+084)";
+
+/**
+ * Giá trị đem in của ô phần chung (chỉ hiển thị – giá trị lưu, panel sửa, kiểm thiếu vẫn theo giá trị người khai):
+ * - TK_CH: Hải quan đã trả tên cơ quan (TK_A07 / TK_K08) → in tên như bản in VNACCS; trước đó in mã + tên theo danh mục.
+ * - TK_IMY (IDA) trống → "(+084)", đúng giá trị phần mềm gửi Hải quan.
+ */
+export function printedRaw(kind: Kind, key: string, values: FormValues): string {
+  const own = values[key] ?? "";
+  if (key === "TK_CH") return values[OFFICE_NAME[kind]]?.trim() || own;
+  if (kind === "IDA" && key === "TK_IMY" && !own.trim()) return IDA_POSTAL_DEFAULT;
+  return own;
 }
 
 /**

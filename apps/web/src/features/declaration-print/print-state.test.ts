@@ -1,7 +1,7 @@
 import { expandPrintRow, formKeysOf, itemFieldCode, layoutFor, otherFieldKeys, printKeys, printLayoutFor } from "@kb/contracts";
 import { describe, expect, it } from "vitest";
 import type { Declaration, DeclarationBranch, LineItem, SubmissionView } from "@kb/contracts";
-import { applyToOtherLines, attentionCells, billNoKey, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printIssues, printIssuesOf, printData, printSlotTarget, printedKeyTarget, emptyOtherTaxGroups, emptyPrintedTaxSlot, followTaxSlot, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
+import { applyToOtherLines, attentionCells, billNoKey, billPanelFields, isBillCell, cellState, customsAnswered, hiddenUntilCustoms, taxCodeKeys, editedKeys, errorSlots, estimateValues, fieldCell, fieldLocator, NOT_ISSUED, otherFieldCells, otherFieldGroups, nextTarget, pageCount, panelOrder, keepTogetherValue, printAttention, printCode, printedRaw, trimZeros, vnaccsCountryName, withOriginNames, printIssues, printIssuesOf, printData, printSlotTarget, printedKeyTarget, emptyOtherTaxGroups, emptyPrintedTaxSlot, followTaxSlot, sheetIssueCounts, printStateFor, printValue, sameNumber, sheetTarget, unplacedErrors, withLookupNames, type PrintData } from "./print-state";
 
 describe("pageCount", () => {
   it("trang chung + dòng hàng theo số khối mỗi trang", () => {
@@ -623,5 +623,61 @@ describe("isBillCell / billPanelFields – ô số vận đơn", () => {
     expect(billNoKey("IDA", "APP_NGAY_VD3")).toBe("VD_BL3");
     expect(billNoKey("IDA", "APP_HAWB5")).toBe("VD_BL5");
     expect(billNoKey("EDA", "TK_EKN")).toBe("TK_EKN");
+  });
+});
+
+describe("printedRaw – chữ in thay giá trị lưu", () => {
+  it("TK_CH: chưa có tên Hải quan trả → mã người khai; có TK_A07 / TK_K08 → in tên", () => {
+    expect(printedRaw("IDA", "TK_CH", { TK_CH: "88AB" })).toBe("88AB");
+    expect(printedRaw("IDA", "TK_CH", { TK_CH: "88AB", TK_A07: "CCHQTN" })).toBe("CCHQTN");
+    expect(printedRaw("EDA", "TK_CH", { TK_CH: "88AB", TK_K08: "CCHQTN" })).toBe("CCHQTN");
+    expect(printedRaw("EDA", "TK_CH", { TK_CH: "88AB", TK_A07: "CCHQTN" })).toBe("88AB");
+  });
+  it("TK_IMY (IDA) trống → (+084) như giá trị gửi Hải quan; có mã → giữ; EDA không đổi", () => {
+    expect(printedRaw("IDA", "TK_IMY", {})).toBe("(+084)");
+    expect(printedRaw("IDA", "TK_IMY", { TK_IMY: " " })).toBe("(+084)");
+    expect(printedRaw("IDA", "TK_IMY", { TK_IMY: "180000" })).toBe("180000");
+    expect(printedRaw("EDA", "TK_EPP", {})).toBe("");
+    expect(printedRaw("IDA", "TK_IMN", { TK_IMN: "An Phát" })).toBe("An Phát");
+  });
+});
+
+describe("printValue – định dạng như mẫu VNACCS", () => {
+  const loc = fieldLocator("IDA");
+  it("số bỏ 0 thừa sau dấu thập phân: 9380.000000 → 9.380; 3.850000 → 3,85; 36113.00 → 36.113", () => {
+    expect(printValue(loc.get("HAG_QN1")?.field, "9380.000000")).toBe("9.380");
+    expect(printValue(loc.get("HAG_UPR")?.field, "3.850000")).toBe("3,85");
+    expect(printValue(loc.get("TK_TP")?.field, "36113.00")).toBe("36.113");
+    expect(printValue(loc.get("HAG_B47")?.field, "138078055.5")).toBe("138.078.055,5");
+  });
+  it("mã HS in liền, không dấu chấm", () => {
+    expect(printValue(loc.get("HAG_CMD")?.field, "0307.52.00")).toBe("03075200");
+    expect(printValue(loc.get("HAG_CMD")?.field, "03075200")).toBe("03075200");
+  });
+  it("trimZeros chỉ đổi chuỗi số thuần có phần thập phân", () => {
+    expect(trimZeros("12.500")).toBe("12.5");
+    expect(trimZeros("7.000")).toBe("7");
+    expect(trimZeros("100")).toBe("100");
+    expect(trimZeros("1.000,50")).toBe("1.000,50");
+  });
+});
+
+describe("tên nơi xuất xứ theo danh mục (HAG_B56)", () => {
+  const COUNTRIES = [{ code: "IN", name: "Ấn Độ", note: "INDIA" }, { code: "AD", name: "ANDORRA" }];
+  const base = (rows: Record<string, string>[], kind: "IDA" | "EDA" = "IDA") =>
+    ({ kind, printRows: rows, estimated: new Set<string>() }) as unknown as PrintData;
+  it("tên ngắn VNACCS: note khi tên đã dịch, không thì name; mã lạ → undefined", () => {
+    expect(vnaccsCountryName(COUNTRIES, "in")).toBe("INDIA");
+    expect(vnaccsCountryName(COUNTRIES, "AD")).toBe("ANDORRA");
+    expect(vnaccsCountryName(COUNTRIES, "ZZ")).toBeUndefined();
+  });
+  it("Hải quan chưa trả → điền tên + đánh dấu ước tính; đã có tên Hải quan / không mã / EDA / chưa tải danh mục → giữ nguyên", () => {
+    const d = withOriginNames(base([{ HAG_OR: "IN" }, { HAG_OR: "IN", HAG_B56: "INDIA REP" }, {}]), COUNTRIES);
+    expect(d.printRows.map((r) => r["HAG_B56"])).toEqual(["INDIA", "INDIA REP", undefined]);
+    expect(d.itemEstimated?.map((s) => [...s])).toEqual([["HAG_B56"], [], []]);
+    const eda = base([{ HAG_OR: "IN" }], "EDA");
+    expect(withOriginNames(eda, COUNTRIES)).toBe(eda);
+    const notLoaded = base([{ HAG_OR: "IN" }]);
+    expect(withOriginNames(notLoaded, null)).toBe(notLoaded);
   });
 });

@@ -2,11 +2,11 @@
 // tr.1 + tr.2 = `pages`, tr.3+ = mỗi dòng hàng một khối (`item`). Khóa = khóa ô của declaration-layout/ida.ts; nhãn = chữ in trên mẫu.
 //
 // Ô có trên mẫu nhưng bố cục IDA không có khóa nào → bỏ:
-// - Đầu trang: mã vạch; "<IMP>"; số trang "n / N" (tính khi vẽ); ô "-" sau "Thời hạn tái nhập/ tái xuất".
-// - Tr.2: "Số quản lý người sử dụng"; mục thông báo: "Ngày khai báo nộp thuế", "Tổng số tiền thuế chậm nộp".
+// - Đầu trang: mã vạch; số trang "n / N" (tính khi vẽ); ô "-" sau "Thời hạn tái nhập/ tái xuất". "<IMP>" in bằng `mark`.
 // - Dòng hàng: số thứ tự dòng "< 01 >" (tính khi vẽ).
+// Nhãn có trên mẫu nhưng không có chỉ tiêu ("Số quản lý người sử dụng", "Ngày khai báo nộp thuế", "Tổng số tiền thuế chậm nộp") → ô `fixed` chỉ in nhãn cho đủ mẫu.
 // Ba dòng không nhãn "tên … / /  tên … / /" ở mục thông báo = 6 sắc thuế được ân hạn (TK_KO{n} tên, TK_KP{n} hạn nộp), hai sắc thuế mỗi dòng.
-import { c, rep } from "./cells.js";
+import { blank, c, fixed, rep } from "./cells.js";
 import type { PrintLayout, PrintRegion, PrintRow } from "./types.js";
 
 /** Đầu trang – lặp ở mọi trang. */
@@ -15,9 +15,10 @@ const HEADER: PrintRow[] = [
   [c("TK_TDN", "Số tờ khai tạm nhập tái xuất tương ứng", 12)],
   // Mã loại hình | mã phân loại hàng hóa | mã hiệu PTVC | [phân loại cá nhân/tổ chức]: "A11  2 [ 4 ]".
   [c("TK_A06", "Mã phân loại kiểm tra", 3), c("TK_ICB", "Mã loại hình", 2), c("TK_CCC", "", 1), c("TK_MTC", "", 1), c("TK_SKB", "", 1), c("TK_A00", "Mã số hàng hóa đại diện của tờ khai", 4)],
-  // TK_CH (danh mục A038): ô mã in "mã  tên" theo danh mục → hiện mã + tên Chi cục cả trước lẫn sau đăng ký; dùng TK_A07 (tên Hải quan trả về) sẽ mất ô bắt buộc của người khai trên bản in.
+  // TK_CH (danh mục A038): trước khi Hải quan trả tên → in "mã  tên" theo danh mục; có TK_A07 (tên Chi cục Hải quan trả về) → in tên như bản in VNACCS (printedRaw, apps/web declaration-print/print-state).
   [c("TK_CH", "Tên cơ quan Hải quan tiếp nhận tờ khai", 6), c("TK_CHB", "Mã bộ phận xử lý tờ khai", 6)],
-  [c("TK_A09", "Ngày đăng ký", 3), c("TK_AD11", "", 1), c("TK_AD21", "Ngày thay đổi đăng ký", 3), c("TK_AD31", "", 1), c("TK_RED", "Thời hạn tái nhập/ tái xuất", 4)],
+  // Ô giờ 2 cột: "20:14:46" không bị bẻ dòng trên trang hẹp.
+  [c("TK_A09", "Ngày đăng ký", 3), c("TK_AD11", "", 2), c("TK_AD21", "Ngày thay đổi đăng ký", 3), c("TK_AD31", "", 2), c("TK_RED", "Thời hạn tái nhập/ tái xuất", 2)],
 ];
 
 const PAGE_1: PrintRegion[] = [
@@ -38,9 +39,10 @@ const BILL: [PrintRegion, PrintRegion] = [
   {
     id: "van-don", rows: [
       rep(5, [c("VD_BL{n}", "Số vận đơn", 12)]),
-      [c("VD_NO", "Số lượng", 6, "end"), c("VD_NOT", "", 6)],
-      [c("VD_GW", "Tổng trọng lượng hàng (Gross)", 6, "end"), c("VD_GWT", "", 6)],
-      [c("VD_COC", "Số lượng container", 6, "end")],
+      // Số rồi đơn vị như mẫu ("10.787 KGM"): ô số 8 cột để nhãn dài và số cùng một dòng khi in hai cột.
+      [c("VD_NO", "Số lượng", 8, "end"), c("VD_NOT", "", 4)],
+      [c("VD_GW", "Tổng trọng lượng hàng (Gross)", 8, "end"), c("VD_GWT", "", 4)],
+      [c("VD_COC", "Số lượng container", 8, "end")],
     ],
   },
   {
@@ -91,7 +93,8 @@ const VALUE: PrintRegion[] = [
 ];
 
 const TAX: [PrintRegion, PrintRegion] = [
-  { id: "sac-thue", rows: [rep(6, [c("THUE_KG{n}", "Tên sắc thuế", 4), c("THUE_KH{n}", "Tổng tiền thuế", 6, "end"), c("THUE_KI{n}", "Số dòng tổng", 2, "end")])] },
+  // Mã sắc thuế (THUE_KF, "N") in trước tên như mẫu: "N Thuế NK" – ô 1 cột chỉ in mã.
+  { id: "sac-thue", rows: [rep(6, [c("THUE_KF{n}", "", 1), c("THUE_KG{n}", "Tên sắc thuế", 4), c("THUE_KH{n}", "Tổng tiền thuế", 4, "end"), c("THUE_KI{n}", "Số dòng tổng", 3, "end")])] },
   {
     id: "tong-thue", rows: [
       [c("THUE_B02", "Tổng tiền thuế phải nộp", 12, "end")],
@@ -106,10 +109,12 @@ const TAX: [PrintRegion, PrintRegion] = [
 const PAGE_2: PrintRegion[] = [
   { id: "dinh-kem", title: "Số đính kèm khai báo điện tử", rows: [[c("TK_EA1", "1", 1), c("TK_EB1", "", 3), c("TK_EA2", "2", 1), c("TK_EB2", "", 3), c("TK_EA3", "3", 1), c("TK_EB3", "", 3)]] },
   { id: "ghi-chu", rows: [[c("TK_NT2", "Phần ghi chú", 12)]] },
-  { id: "so-quan-ly", rows: [[c("TK_REF", "Số quản lý của nội bộ doanh nghiệp", 6)]] },
+  { id: "so-quan-ly", rows: [[c("TK_REF", "Số quản lý của nội bộ doanh nghiệp", 6), fixed("so-quan-ly-nguoi-su-dung", "Số quản lý người sử dụng", 6)]] },
   { id: "chi-thi", rows: [[c("CTHQ_CCM", "Phân loại chỉ thị của Hải quan", 12)], rep(10, [c("CTHQ_D{nn}", "Ngày", 2), c("CTHQ_T{nn}", "Tên", 4), c("CTHQ_I{nn}", "Nội dung", 6)])] },
   {
     id: "thong-bao", title: "Mục thông báo của Hải quan", rows: [
+      [fixed("ngay-khai-nop-thue", "Ngày khai báo nộp thuế", 12, "/ /")],
+      [fixed("tien-thue-cham-nop", "Tổng số tiền thuế chậm nộp", 12)],
       [c("TK_KO1", "", 4), c("TK_KP1", "", 2), c("TK_KO2", "", 4), c("TK_KP2", "", 2)],
       [c("TK_KO3", "", 4), c("TK_KP3", "", 2), c("TK_KO4", "", 4), c("TK_KP4", "", 2)],
       [c("TK_KO5", "", 4), c("TK_KP5", "", 2), c("TK_KO6", "", 4), c("TK_KP6", "", 2)],
@@ -127,7 +132,8 @@ const ITEM: PrintRegion[] = [
     id: "hang", rows: [
       [c("HAG_CMD", "Mã số hàng hóa", 4), c("HAG_GZC", "Mã quản lý riêng", 4), c("HAG_B29", "Mã phân loại tái xác nhận giá", 4)],
       [c("HAG_CMN", "Mô tả hàng hóa", 12)],
-      [c("HAG_QN1", "Số lượng (1)", 4, "end"), c("HAG_QT1", "", 2)],
+      // Như mẫu: "Số lượng (1)" ở nửa phải, thẳng cột "Số lượng (2)" / "Đơn giá hóa đơn"; nửa trái trống.
+      [blank("trong-so-luong-1", 6), c("HAG_QN1", "Số lượng (1)", 4, "end"), c("HAG_QT1", "", 2)],
       [c("HAG_VN1", "Số của mục khai khoản điều chỉnh", 2), c("HAG_VN2", "", 1), c("HAG_VN3", "", 1), c("HAG_VN4", "", 1), c("HAG_VN5", "", 1), c("HAG_QN2", "Số lượng (2)", 4, "end"), c("HAG_QT2", "", 2)],
       [c("HAG_BPR", "Trị giá hóa đơn", 6, "end"), c("HAG_UPR", "Đơn giá hóa đơn", 3, "end"), c("HAG_UPC", "", 1), c("HAG_TSC", "", 2)],
     ],
@@ -160,6 +166,7 @@ const ITEM: PrintRegion[] = [
 
 export const PRINT_IDA: PrintLayout = {
   kind: "IDA",
+  mark: "<IMP>",
   header: HEADER,
   pages: [
     { id: "trang-1", regions: [...PAGE_1, BILL, ...VALUE, TAX, { id: "tong-so", rows: [[c("TK_B12", "Tổng số trang của tờ khai", 6), c("TK_B13", "Tổng số dòng hàng của tờ khai", 6)]] }] },

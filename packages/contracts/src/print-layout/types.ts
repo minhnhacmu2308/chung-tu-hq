@@ -2,8 +2,11 @@
  * Bố cục bản in VNACCS (docs/superpowers/specs/2026-10-20-review-ban-in-to-khai-design.md §4.1).
  * Dữ liệu thuần: mỗi ô trỏ tới một khóa ĐÃ CÓ trong `declaration-layout` (không tạo khóa mới); `label` = chữ in trên mẫu ("" khi mẫu không in nhãn).
  */
-/** span: số cột trên lưới 12 cột của trang; align "end": căn phải (số tiền). */
-export type PrintCell = { key: string; label: string; span?: 1 | 2 | 3 | 4 | 6 | 12; align?: "end" };
+/**
+ * span: số cột trên lưới 12 cột của trang; align "end": căn phải (số tiền).
+ * fixed: ô chỉ in nhãn của mẫu (không có chỉ tiêu, không bấm được) – chữ in cố định ở chỗ giá trị ("" hoặc "/ /"); khóa dạng "~<id>", không thuộc printKeys.
+ */
+export type PrintCell = { key: string; label: string; span?: 1 | 2 | 3 | 4 | 6 | 8 | 12; align?: "end"; fixed?: string };
 /** Dòng lặp: key chứa "{n}" (1..count) hoặc "{nn}" (01..count) như LayoutRepeat; mỗi lần lặp = một dòng các ô `cells`. `label`: tiêu đề in phía trên nhóm (vd "Các khoản điều chỉnh"). */
 export type PrintRepeatRow = { kind: "repeat"; label?: string; count: number; cells: PrintCell[] };
 export type PrintRow = PrintCell[] | PrintRepeatRow;
@@ -14,4 +17,4 @@ export type PrintPage = { id: string; regions: (PrintRegion | [PrintRegion, Prin
  * header: đầu trang lặp ở mọi trang; pages: các trang chung của tờ khai; item: khối một dòng hàng (vùng cặp = hai cột như pages), `itemsPerPage` khối mỗi trang.
  * Tổng số trang = pages.length + ceil(số dòng hàng / itemsPerPage).
  */
-export type PrintLayout = { kind: "IDA" | "EDA"; header: PrintRow[]; pages: PrintPage[]; item: (PrintRegion | [PrintRegion, PrintRegion])[]; itemsPerPage: 1 | 2 };
+export type PrintLayout = { kind: "IDA" | "EDA"; /** Mã in góc trái đầu mỗi trang như mẫu (IDA "<IMP>"). */ mark?: string; header: PrintRow[]; pages: PrintPage[]; item: (PrintRegion | [PrintRegion, PrintRegion])[]; itemsPerPage: 1 | 2 };

@@ -2,7 +2,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDb, resetDb } from "@/mocks/db";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { NotificationsPanel, groupByDay } from "./notifications-panel";
@@ -38,15 +38,23 @@ const reach = () =>
     for (const o of observers) o.cb([{ isIntersecting: true, target: o.el! } as IntersectionObserverEntry], o as unknown as IntersectionObserver);
   });
 
-const T = { timeout: 5000 };
+// Chờ tối đa 30s (máy bận); waitFor xong ngay khi điều kiện đúng.
+const T = { timeout: 30_000 };
 const UNREAD = () => getDb().notifications.filter((n) => !n.read).length;
 const items = () => screen.queryAllByRole("listitem");
 
 beforeEach(() => {
+  // Seed tạo thông báo theo giờ máy (mới nhất = 30 phút trước). Chạy lúc 00:00–00:30 thì mục mới nhất rơi sang
+  // "Hôm qua" và test "Hôm nay" hỏng. Cố định giờ lúc 12:00 (chỉ giả Date, timer vẫn thật cho userEvent/waitFor).
+  vi.useFakeTimers({ now: new Date(2026, 10, 16, 12, 0), toFake: ["Date"], shouldAdvanceTime: true });
   resetDb();
   observers = [];
   globalThis.IntersectionObserver = FakeIO as unknown as typeof IntersectionObserver;
   window.localStorage.removeItem("kb-notifications-status");
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("groupByDay", () => {

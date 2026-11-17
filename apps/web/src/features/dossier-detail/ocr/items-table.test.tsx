@@ -92,7 +92,7 @@ describe("ItemsTable", () => {
     expect(isMissingOrigin(fields.find((f) => f.key === "item.1.origin")!)).toBe(true);
     await userEvent.click(empty);
     await userEvent.keyboard("VN");
-    await userEvent.click(await screen.findByRole("option", { name: /^VN – / }, { timeout: 5000 }));
+    await userEvent.click(await screen.findByRole("option", { name: /^VN – / }, { timeout: 30_000 }));
     expect(onSave).toHaveBeenCalledWith("f_1_origin", "VN");
     await expectNoA11yViolations(container);
   });

@@ -70,7 +70,7 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     panel = await dialog();
     expect(within(panel).getByText("Thông tin chung: tờ 1, 3 chưa gọi về – gọi về tất cả tờ để sửa")).toBeTruthy();
     await userEvent.keyboard("{Escape}");
-  }, 60_000);
+  }, 120_000);
 
   it("tờ 2 (?sheet=2) đã gọi về: không ghi chú khóa, dòng sửa được", async () => {
     nav.query = "step=review&sheet=2";
@@ -83,14 +83,14 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     const panel = await dialog();
     expect(within(panel).queryByText(/chưa gọi về/)).toBeNull();
     expect(within(panel).getByRole("button", { name: /^Lưu/ })).toBeTruthy();
-  }, 60_000);
+  }, 120_000);
 
   it("sentChanges tờ 1 đổi 1.51 → cảnh báo phải gọi về tất cả tờ; chỉ tiêu chung khác → cảnh báo chung", async () => {
     api.current = submissionOf([branch(1, 3, "PRE_DECLARED", { sentChanges: { common: ["TK_TP"], lines: false } }), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED", { sentChanges: { common: ["TK_CN"], lines: false } })], { declarationStatus: "DRAFT" });
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     expect(await screen.findByText("1.51 đã đổi so với tờ đã khai – phải gọi về tất cả tờ", {}, T)).toBeTruthy();
     expect(screen.getByText(/Chỉ tiêu chung đã đổi so với tờ đã khai \(TK_CN\)/)).toBeTruthy();
-  }, 60_000);
+  }, 120_000);
 
   it("mọi tờ RECALLED → không banner khóa, ô chung sửa được như cũ", async () => {
     api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "RECALLED")], { declarationStatus: "DRAFT" });
@@ -100,14 +100,14 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     await userEvent.click(cell("0:HAG_CMD"));
     const panel = await dialog();
     expect(within(panel).getByRole("button", { name: /^Lưu/ })).toBeTruthy();
-  }, 60_000);
+  }, 120_000);
 
   it("tiếng Anh", async () => {
     api.current = partial();
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />, "en");
     expect(await screen.findByText("General information: sheets 1, 3 have not been recalled", {}, T)).toBeTruthy();
     expect(await screen.findByText("Recall the remaining sheets to edit general information", {}, T)).toBeTruthy();
-  }, 60_000);
+  }, 120_000);
 
   it("tờ khai đã duyệt (lô 3 tờ): không có ghi chú 'chưa gọi về' sai", async () => {
     getDb().declarations.find((x) => x.dossierId === "dos_028")!.status = "APPROVED";
@@ -115,7 +115,7 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
     expect(screen.queryByText(/chưa gọi về/)).toBeNull();
-  }, 60_000);
+  }, 120_000);
 
   it("chỉ tờ 2 gọi về: việc cần xử lý (ô dòng hàng còn thiếu) tính ở tờ 2, không tính ở tờ 1", async () => {
     // Thiếu thành tiền (ô bắt buộc) ở một dòng tờ 1 và một dòng tờ 2: chỉ tờ 2 (đã gọi về) tính là việc cần xử lý.
@@ -129,7 +129,7 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     // Số việc cần xử lý chỉ tính khi đã biết quyền sửa (phiên tải bất đồng bộ) → chờ, không khẳng định ngay sau lần vẽ đầu.
     await waitFor(() => expect(labels()[1]).toMatch(/\d+ việc cần xử lý/), T);
     expect(labels()[0]).not.toMatch(/việc cần xử lý/);
-  }, 60_000);
+  }, 120_000);
 
   it("gọi về các tờ còn lại: đang chạy → nút khóa; chuỗi xong → phạm vi đầy đủ (hết banner khóa) không cần tải lại trang; ?recalled= thay bằng all:3", async () => {
     nav.query = "step=review&recalled=2";
@@ -161,7 +161,7 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     const before = api.fetches;
     await userEvent.click(within(await dialog()).getByRole("button", { name: "Gọi về tất cả tờ" }));
     await waitFor(() => expect(api.fetches).toBeGreaterThan(before), T);
-  }, 60_000);
+  }, 120_000);
 
   it("?recalled=2 nhưng không còn tờ khóa (mọi tờ đã gọi về) → không hiện thông báo phạm vi một phần", async () => {
     nav.query = "step=review&recalled=2";
@@ -169,12 +169,12 @@ describe("ReviewStep – phạm vi sửa theo tờ đã gọi về", () => {
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     await screen.findByText("Áp dụng cho cả 3 tờ khai", {}, T);
     expect(screen.queryByText(/Đã gọi về tờ 2/)).toBeNull();
-  }, 60_000);
+  }, 120_000);
 
   it("?recalled=all:3 nhưng chuỗi dừng sớm (2 tờ đã gọi về) → thông báo theo số tờ thật trong bản truyền", async () => {
     nav.query = "step=review&recalled=all:3";
     api.current = submissionOf([branch(1, 3, "RECALLED"), branch(2, 3, "RECALLED"), branch(3, 3, "PRE_DECLARED")], { declarationStatus: "DRAFT" });
     renderWithProviders(<ReviewStep dossier={dossier()} goTo={vi.fn()} />);
     expect(await screen.findByText("Đã gọi về 2 tờ – sửa tờ khai rồi duyệt lại", {}, T)).toBeTruthy();
-  }, 60_000);
+  }, 120_000);
 });

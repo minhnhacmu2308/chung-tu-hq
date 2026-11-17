@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
+import { lotDirection } from "./lot-run.js";
 import { compareValue, guessKindFromSheet, parseExpectedWorkbook, scoreDocument } from "./lot.js";
 
 async function workbook(sheets: Record<string, (string | number | Date | null)[][]>): Promise<Buffer> {
@@ -74,5 +75,13 @@ describe("scoreDocument", () => {
     ], { invoiceNo: "CIKA25041701", items: [{ quantity: 60, partNo: null }] });
     expect(res).toMatchObject({ total: 3, matched: 2 });
     expect(res.misses).toEqual([{ label: "PART NO", key: "partNo", expected: "APSX116D", actual: "" }]);
+  });
+});
+
+describe("lotDirection", () => {
+  it("mặc định NK/A11; mapping.json direction=XK → XK/B11", () => {
+    expect(lotDirection({})).toEqual({ direction: "NK", typeCode: "A11" });
+    expect(lotDirection({ direction: "XK" })).toEqual({ direction: "XK", typeCode: "B11" });
+    expect(lotDirection({ direction: "xyz" })).toEqual({ direction: "NK", typeCode: "A11" });
   });
 });

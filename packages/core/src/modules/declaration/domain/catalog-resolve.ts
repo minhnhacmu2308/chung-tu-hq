@@ -153,11 +153,17 @@ function placeSegments(raw: string): string[] {
 }
 
 /** Một đoạn trùng nguyên tên mã trong danh mục cảng thế giới (A016); trùng tên ở nhiều nước → chỉ nhận khi biết nước. */
-function matchWorldPort(raw: string, catalog: readonly CatalogEntry[], country: string | null): { entry: CatalogEntry; segment: string } | null {
-  for (const seg of placeSegments(raw)) {
-    const hits = catalog.filter((e) => plain(e.name) === seg);
-    const pool = country ? hits.filter((e) => e.parent === country) : hits;
-    if (pool.length === 1) return { entry: pool[0]!, segment: seg };
+function matchWorldPort(raw: string, catalog: readonly CatalogEntry[], country: string | null, byMainName = false): { entry: CatalogEntry; segment: string } | null {
+  const segs = placeSegments(raw);
+  // Trùng nguyên tên trước; `byMainName` (chỉ ô cảng trên chứng từ) thì thêm lượt trùng tên chính – A016 hay ghi kèm vùng ("SURABAYA - JAVA" → IDSUB).
+  // Không dùng cho địa chỉ: tên tỉnh/bang trùng tên cảng nhỏ ("CHIBA - CHIBA", "SALEM - OR") sẽ bắt nhầm.
+  const names = [(e: CatalogEntry) => plain(e.name), ...(byMainName ? [(e: CatalogEntry) => plain(e.name.split(/\s+-\s+|\(/)[0]!)] : [])];
+  for (const nameOf of names) {
+    for (const seg of segs) {
+      const hits = catalog.filter((e) => nameOf(e) === seg);
+      const pool = country ? hits.filter((e) => e.parent === country) : hits;
+      if (pool.length === 1) return { entry: pool[0]!, segment: seg };
+    }
   }
   return null;
 }
@@ -167,7 +173,7 @@ export function resolveWorldPort(raw: string | null, country: string | null, cat
   if (!raw) return null;
   const t = resolvePort(raw, catalog);
   if (t) return t;
-  const w = catalog?.length ? matchWorldPort(raw, catalog, country) : null;
+  const w = catalog?.length ? matchWorldPort(raw, catalog, country, true) : null;
   if (w) return { code: w.entry.code, name: w.entry.name };
   const iata = iataOf(raw);
   const hits = iata && catalog?.length ? catalog.filter((e) => e.code.slice(2) === iata && (!country || e.parent === country)) : [];

@@ -63,6 +63,15 @@ describe("catalog-resolve", () => {
       expect(resolveWorldPort("VICTORIA", null, WORLD)).toBeNull();
       expect(resolveWorldPort("VICTORIA", "CA", WORLD)?.code).toBe("CAVIC");
     });
+    it("A016 ghi kèm vùng (“SURABAYA - JAVA”): không trùng nguyên tên thì khớp tên chính, vẫn chỉ nhận khi ra đúng một mã", () => {
+      expect(resolveWorldPort("TANJUNG PERAK, SURABAYA, INDONESIA", "ID", A016)).toEqual({ code: "IDSUB", name: "SURABAYA - JAVA" });
+      expect(resolveWorldPort("TANJUNG PERAK, SURABAYA, INDONESIA", null, A016)?.code).toBe("IDSUB");
+      expect(resolveWorldPort("COCHIN, INDIA", "IN", A016)?.code).toBe("INCOK");
+      const TWO: CatalogEntry[] = [{ code: "XXAAA", name: "PORTO - NORTE", parent: "XX" }, { code: "XXBBB", name: "PORTO - SUL", parent: "XX" }];
+      expect(resolveWorldPort("PORTO", "XX", TWO)).toBeNull();
+      // Địa chỉ người xuất khẩu chỉ khớp nguyên tên: tỉnh trùng tên cảng nhỏ không thành cảng xếp.
+      expect(pickLoadingPort([], ["1-2 MAKUHARI, CHIBA PREFECTURE, JAPAN"], "JP", [{ code: "JPCHB", name: "CHIBA - CHIBA", parent: "JP" }]).resolved).toBeNull();
+    });
     it("cảng xếp: chứng từ ghi nơi đi → mã đó; không chứng từ nào ghi → suy từ thành phố (đoạn có CITY) trong địa chỉ người xuất khẩu, đánh dấu kiểm", () => {
       expect(pickLoadingPort(["ZHUHAI,CHINA"], [], "CN", WORLD)).toMatchObject({ resolved: { code: "CNZUH" }, raw: "ZHUHAI,CHINA" });
       expect(pickLoadingPort(["ZHUHAI,CHINA"], [], "CN", WORLD).note).toBeUndefined();

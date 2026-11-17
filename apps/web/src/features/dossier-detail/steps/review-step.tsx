@@ -175,7 +175,7 @@ export function ReviewStep({ dossier, goTo }: StepProps) {
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
     queryFn: () => getSubmission(dossier.id),
-    // Như bước Khai báo: còn tờ đang chờ phản hồi (vd gọi về các tờ còn lại đang chạy) → hỏi lại (đang gửi 1 giây, chờ Hải quan 30 giây – submissionRefetchMs), phạm vi sửa tự cập nhật khi chuỗi xong.
+    // Như bước Khai báo: còn tờ đang chờ phản hồi (vd gọi về các tờ còn lại đang chạy) → hỏi lại (đang gửi 3 giây, chờ Hải quan 30 giây – submissionRefetchMs), phạm vi sửa tự cập nhật khi chuỗi xong.
     refetchInterval: (q) => (q.state.data ? submissionRefetchMs(q.state.data) : false),
   });
   // Lô > 50 dòng: tờ khai nhánh đang xem trên bản in (?sheet=k), kẹp về 1..N như bản in; tham số ngoài khoảng → sửa lại URL.

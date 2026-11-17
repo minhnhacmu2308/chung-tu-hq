@@ -105,6 +105,15 @@ describe("useNotificationStream", () => {
     expect(push).toHaveBeenCalledWith("/dossiers/dos_1?step=submit");
   });
 
+  it("sự kiện của một hồ sơ → làm mới trạng thái truyền của hồ sơ đó; không có href → chỉ làm mới thông báo", () => {
+    const { es, invalidate } = setup();
+    act(() => es.emit(ev()));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["customs", "submission", "dos_1"] });
+    invalidate.mockClear();
+    act(() => es.emit(ev({ id: "ntf_2", href: null })));
+    expect(invalidate.mock.calls).toEqual([[{ queryKey: ["session", "notifications"] }]]);
+  });
+
   it("message sai schema bị bỏ qua", () => {
     const { es, invalidate } = setup();
     act(() => es.emit({ id: "x" }));

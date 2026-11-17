@@ -1,5 +1,5 @@
 // GỠ LỖI TẠM (FPT_DEBUG_TRACE): khung xem body gửi FPT + phản hồi thô ở màn Truyền. Backend tắt cờ → không hiện gì.
-// Không tự hỏi định kỳ riêng: tải lại mỗi khi màn Truyền vừa tải lại submission (`refreshAt`) hoặc khi bấm Làm mới. Bỏ tính năng: grep FPT_DEBUG_TRACE.
+// Không tự hỏi định kỳ riêng: tải lại khi submission của màn Truyền đổi nội dung (`refreshOn` – cùng tham chiếu khi dữ liệu không đổi) hoặc khi bấm Làm mới. Bỏ tính năng: grep FPT_DEBUG_TRACE.
 import { Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Dialog, DialogContent, DialogFooter, EmptyState, fill, Stack, toast, useMessages } from "@kb/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -21,13 +21,13 @@ async function copyText(text: string, done: string, failed: string) {
   }
 }
 
-export function FptTracePanel({ dossierId, refreshAt }: { dossierId: string; refreshAt: number }) {
+export function FptTracePanel({ dossierId, refreshOn }: { dossierId: string; refreshOn: unknown }) {
   const t = useMessages(FPT_TRACE_MESSAGES);
   const q = useQuery({ queryKey: customsKeys.fptTrace(dossierId), queryFn: () => getFptTrace(dossierId) });
   const { refetch } = q;
   useEffect(() => {
-    if (refreshAt) void refetch();
-  }, [refreshAt, refetch]);
+    if (refreshOn) void refetch();
+  }, [refreshOn, refetch]);
   if (!q.data?.enabled) return null;
   return (
     <Card>

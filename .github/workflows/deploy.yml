@@ -1,0 +1,107 @@
+name: deploy
+
+# Build image trên máy GitHub (không build trên VPS – build Next ăn ~5 GB RAM, làm sập app khác chung máy) → đẩy GHCR
+# → SSH vào VPS: dump DB, kéo image, đổi KB_IMAGE/GIT_COMMIT trong .env, compose up (migrate tự chạy), chờ web healthy.
+# Tự chạy khi workflow ci xanh trên main (push); hoặc bấm tay (Actions → deploy → Run workflow).
+# Bước SSH chỉ chạy khi biến repo DEPLOY_ENABLED=true. Secrets (environment production): VPS_SSH_KEY, VPS_KNOWN_HOSTS; biến: VPS_HOST, VPS_USER.
+# File compose/.env trên máy chủ (/opt/khaibao) giữ nguyên – workflow chỉ sửa đúng 2 dòng KB_IMAGE và GIT_COMMIT.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    # Repo public: workflow_run cũng nhận PR từ fork có nhánh tên main → chỉ nhận lần push của chính repo.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - id: meta
+        run: echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: NEXT_PUBLIC_DATA_SOURCE=http
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:sha-${{ steps.meta.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: image
+    # Bấm tay từ nhánh khác main → không deploy.
+    if: vars.DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      packages: read
+    env:
+      TARGET: ${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}
+      SHA: ${{ needs.image.outputs.sha }}
+    steps:
+      - name: Chuẩn bị SSH
+        env:
+          KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          printf 'Host *\n  BatchMode yes\n  ServerAliveInterval 30\n' > ~/.ssh/config
+      - name: Kéo image
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Token đi qua stdin, không nằm trên dòng lệnh của máy chủ; đăng nhập trong DOCKER_CONFIG tạm → không đụng đăng nhập ghcr của app khác.
+        run: printf '%s\n' "$TOKEN" | ssh "$TARGET" "export DOCKER_CONFIG=\$(mktemp -d) && docker login ghcr.io -u '${{ github.actor }}' --password-stdin && docker pull '$IMAGE:sha-$SHA'; s=\$?; rm -rf \$DOCKER_CONFIG; exit \$s"
+      - name: Dump DB, đổi image, khởi động lại (migrate tự chạy)
+        run: |
+          # Script đi qua stdin của bash -s → lệnh con không được đọc stdin (</dev/null), nếu không nó nuốt các dòng sau.
+          ssh "$TARGET" bash -s <<EOF
+          set -euo pipefail
+          cd /opt/khaibao
+          mkdir -p backups-manual
+          docker compose exec -T postgres pg_dump -U kb_admin -d khaibao -Fc </dev/null > "backups-manual/pre-$SHA-\$(date +%Y%m%d-%H%M%S).dump"
+          grep '^KB_IMAGE=' .env > .env.prev-image || true
+          sed -i '/^KB_IMAGE=/d; /^GIT_COMMIT=/d' .env
+          printf 'KB_IMAGE=%s\nGIT_COMMIT=%s\n' "$IMAGE:sha-$SHA" "$SHA" >> .env
+          docker compose up -d </dev/null
+          # Giữ 30 bản dump gần nhất.
+          ls -1t backups-manual/pre-*.dump | tail -n +31 | xargs -r rm -f
+          EOF
+      - name: Kiểm tra sức khỏe
+        run: |
+          ssh "$TARGET" "cd /opt/khaibao && c=\$(docker compose ps -q web) && img=\$(docker inspect -f '{{.Config.Image}}' \$c) && echo \"web image: \$img\" && [ \"\$img\" = '$IMAGE:sha-$SHA' ] || { echo 'web không chạy image mới'; docker compose ps; exit 1; }; for i in \$(seq 1 40); do s=\$(docker inspect -f '{{.State.Health.Status}}' \$c); echo \"web: \$s\"; [ \"\$s\" = healthy ] && exit 0; sleep 5; done; docker compose ps; docker compose logs --tail 80 migrate web; exit 1"
+      - name: Dọn image cũ
+        if: success()
+        run: ssh "$TARGET" 'docker image prune -f >/dev/null; docker images "${{ env.IMAGE }}" --format "{{.Tag}}" | tail -n +6 | xargs -r -I{} docker rmi "${{ env.IMAGE }}:{}" || true'

@@ -200,14 +200,14 @@ describe("recalled notice", () => {
 });
 
 describe("submissionRefetchMs – nhịp làm mới màn Truyền", () => {
-  it("đang gửi → 1 giây; chỉ chờ Hải quan phân luồng/thông quan → 30 giây; không chờ gì → không hỏi", () => {
+  it("đang gửi → 3 giây; chỉ chờ Hải quan phân luồng/thông quan → 30 giây; không chờ gì → không hỏi", () => {
     const waiting = submissionOf([branch(1, 1, "DECLARED", { inProgress: true })], { inProgress: true });
     expect(submissionRefetchMs(waiting)).toBe(30_000);
     const sending = submissionOf([branch(1, 1, "PRE_DECLARED", { inProgress: true, pipeline: pipelineFor("PRE_DECLARED").map((p) => (p.op === "IDC" ? { ...p, status: "SENDING" as const } : p)) })], { inProgress: true });
-    expect(submissionRefetchMs(sending)).toBe(1000);
+    expect(submissionRefetchMs(sending)).toBe(3000);
     // Chuỗi gọi về (IDB/EDB) của tờ 2 còn trong hàng đợi gửi – không có dòng SENDING trên pipeline vẫn hỏi nhanh.
     const recalling = submissionOf([branch(1, 2, "RECALLED"), branch(2, 2, "PRE_DECLARED", { inProgress: true, sending: true })]);
-    expect(submissionRefetchMs(recalling)).toBe(1000);
+    expect(submissionRefetchMs(recalling)).toBe(3000);
     expect(submissionRefetchMs(submissionOf([branch(1, 1, "CLEARED")]))).toBe(false);
   });
 });

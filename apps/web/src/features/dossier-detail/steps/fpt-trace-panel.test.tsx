@@ -22,14 +22,14 @@ const VIEW: FptTraceView = {
 describe("FptTracePanel", () => {
   it("backend tắt cờ → không hiện gì", async () => {
     api.current = { enabled: false, entries: [] };
-    const { container } = renderWithProviders(<FptTracePanel dossierId="dos_1" refreshAt={1} />);
+    const { container } = renderWithProviders(<FptTracePanel dossierId="dos_1" refreshOn={1} />);
     await new Promise((r) => setTimeout(r, 20));
     expect(container.textContent).toBe("");
   });
 
   it("bật → mỗi lần gọi một dòng; mở ra thấy body gửi + phản hồi; không vi phạm a11y", async () => {
     api.current = VIEW;
-    const { container } = renderWithProviders(<FptTracePanel dossierId="dos_1" refreshAt={1} />);
+    const { container } = renderWithProviders(<FptTracePanel dossierId="dos_1" refreshOn={1} />);
     expect(await screen.findByText("Nhật ký API FPT")).toBeTruthy();
     expect(screen.getByText("HTTP 200")).toBeTruthy();
     expect(screen.getByText("Không kết nối")).toBeTruthy();

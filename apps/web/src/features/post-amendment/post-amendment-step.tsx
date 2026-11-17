@@ -40,7 +40,7 @@ export function PostAmendmentStep({ dossier }: StepProps) {
   const subQ = useQuery({
     queryKey: customsKeys.submission(dossier.id),
     queryFn: () => getSubmission(dossier.id),
-    // Đang chờ Hải quan phản hồi AMA/AMB/AMC (của bất kỳ tờ nào) → hỏi lại (đang gửi 1 giây, chờ Hải quan 30 giây – submissionRefetchMs).
+    // Đang chờ Hải quan phản hồi AMA/AMB/AMC (của bất kỳ tờ nào) → hỏi lại (đang gửi 3 giây, chờ Hải quan 30 giây – submissionRefetchMs).
     refetchInterval: (sq) => (sq.state.data ? submissionRefetchMs(sq.state.data) : false),
   });
   // Lô nhiều tờ khai: AMA theo từng tờ (?branch=k; vắng → tờ đang sửa sau thông quan / đã thông quan). Lô 1 tờ: tờ 1.

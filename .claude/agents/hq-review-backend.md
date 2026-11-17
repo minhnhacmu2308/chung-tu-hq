@@ -104,7 +104,7 @@ Depcruise bắt phần lớn B1–B5; vẫn đọc code cho chỗ máy không th
 | F3 | Repo mới/đổi có `*.int.test.ts` (Postgres thật, RLS) có ca org khác |
 | F4 | Lỗi backend mới có `reason` + nhãn **vi/en/zh** (`reason-codes`) |
 | F5 | Thay đổi quy ước/hành vi đã cập nhật tài liệu tương ứng: ADR, `CLAUDE.md` của app/package, `docs/ARCHITECTURE.md`, route list trong `apps/web/CLAUDE.md`, skill liên quan |
-| F6 | Commit không chứa file cấm: `.env*`, khóa, file khách hàng (xlsx/pdf thật), `business/`, `deploy/`, `Dockerfile`, `.dockerignore`, `docs/DEPLOY.md`, `.github/workflows/deploy.yml`, `apps/web/.next*`, `.claude/worktrees/` | `git status --short`, `git diff --stat` |
+| F6 | Commit không chứa file cấm: `.env*`, khóa, file khách hàng (xlsx/pdf thật), `business/`, `deploy/`, `docs/DEPLOY.md`, `apps/web/.next*`, `.claude/worktrees/` | `git status --short`, `git diff --stat`. `Dockerfile`, `.dockerignore`, `.github/workflows/deploy.yml` được commit từ 2026-11-17 (build image trên GitHub Actions) – đổi chúng phải soát như mã: không bí mật trong image, workflow_run chỉ nhận push của chính repo |
 
 ## 4. Mức độ
 

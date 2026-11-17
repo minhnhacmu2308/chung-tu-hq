@@ -47,12 +47,12 @@ export function HsNoticeChip({ notice, lines, tile = false }: { notice: Notice; 
   );
 }
 
-/** Lưu ý của một ô: mức nặng trước (danger → warning → info). */
+/** Lưu ý của một ô: mức nặng trước (danger → warning → info); xếp dọc, các chip rộng bằng chip dài nhất (mũi tên thẳng hàng). */
 export function HsNoticeList({ notices }: { notices: Notice[] }) {
   if (notices.length === 0) return null;
   const order = { danger: 0, warning: 1, info: 2 } as const;
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="inline-flex max-w-full flex-col gap-1">
       {[...notices].sort((a, b) => order[a.level] - order[b.level]).map((n) => <HsNoticeChip key={`${n.code}|${n.text}`} notice={n} />)}
     </div>
   );

@@ -1008,7 +1008,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
       <MessageLog messages={s.messages} />
 
       {/* GỠ LỖI TẠM (FPT_DEBUG_TRACE): body gửi FPT + phản hồi thô. */}
-      <FptTracePanel dossierId={dossier.id} refreshAt={subQ.dataUpdatedAt} />
+      <FptTracePanel dossierId={dossier.id} refreshOn={subQ.data} />
 
       {confirmDialog}
     </Stack>

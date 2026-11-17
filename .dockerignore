@@ -1,0 +1,23 @@
+# Không đưa vào image: thư viện/bản build cục bộ, bí mật, tài liệu nội bộ, chứng từ thật của khách.
+**/node_modules
+**/.next
+**/.next-build
+**/test-results
+**/visual-report
+**/*.tsbuildinfo
+.git
+.github
+.vercel
+.playwright-mcp
+.superpowers
+**/.env
+**/.env.*
+!.env.example
+apps/web/e2e/.auth
+business
+docdungapivnacss
+TAI LIEU TICH HOP VNACCS
+lo mẫu
+LÔ FANS25040166
+evals/private
+deploy

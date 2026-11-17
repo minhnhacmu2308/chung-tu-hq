@@ -6,6 +6,7 @@ import { toast, useMessages } from "@kb/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { customsKeys } from "@/api/customs";
 import { sessionKeys, subscribeNotifications } from "@/api/session";
 import { desktopPermission, pageActive, readDesktopScope, wantsDesktop } from "./desktop-notifications";
 import { NOTIFICATION_STREAM_MESSAGES } from "./shell.messages";
@@ -30,6 +31,9 @@ export function useNotificationStream(opts: { logoSrc?: string | undefined } = {
     };
     const onEvent = (e: NotificationEvent) => {
       void qc.invalidateQueries({ queryKey: sessionKeys.notifications });
+      // Thông báo của một hồ sơ (phản hồi Hải quan…) → màn Truyền đang mở cập nhật ngay, không chờ nhịp hỏi lại.
+      const dossierId = /^\/dossiers\/([^/?#]+)/.exec(e.href ?? "")?.[1];
+      if (dossierId) void qc.invalidateQueries({ queryKey: customsKeys.submission(dossierId) });
       const { t: msg, logoSrc } = latest.current;
       toast({ tone: "info", title: e.title, description: e.body, ...(e.href ? { action: { label: msg.open, onClick: () => open(e.href) } } : {}) });
       if (!wantsDesktop(e.category, { scope: readDesktopScope(), permission: desktopPermission(), pageActive: pageActive() })) return;

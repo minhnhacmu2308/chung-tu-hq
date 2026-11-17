@@ -89,7 +89,7 @@ export function NoticeChip({ tone, label, title, description, items = [], meta, 
         ) : (
           <button type="button" className={cn(chipVariants({ tone }), className)}>
             {icon ? <span aria-hidden="true" className="inline-flex shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span> : <ToneIcon tone={tone} className="h-3.5 w-3.5 shrink-0" />}
-            <span className="truncate">{label}</span>
+            <span className="min-w-0 flex-1 truncate text-left">{label}</span>
             {count !== undefined && count > 1 && <span className="tabular-nums opacity-80">×{count}</span>}
             {/* Tên truy cập nói rõ mức độ (không truyền nghĩa chỉ bằng màu). */}
             <span className="sr-only"> ({t[tone]})</span>

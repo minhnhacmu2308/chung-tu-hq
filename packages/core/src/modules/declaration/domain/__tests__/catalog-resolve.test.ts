@@ -67,6 +67,10 @@ describe("catalog-resolve", () => {
       expect(resolveWorldPort("TANJUNG PERAK, SURABAYA, INDONESIA", "ID", A016)).toEqual({ code: "IDSUB", name: "SURABAYA - JAVA" });
       expect(resolveWorldPort("TANJUNG PERAK, SURABAYA, INDONESIA", null, A016)?.code).toBe("IDSUB");
       expect(resolveWorldPort("COCHIN, INDIA", "IN", A016)?.code).toBe("INCOK");
+      expect(resolveWorldPort("PORT LINCOLN, AUSTRALIA", "AU", A016)?.code).toBe("AUPLO");
+      expect(resolveWorldPort("SAO LUIZ, BRAZIL", "BR", A016)?.code).toBe("BRITQ");
+      // Sau khi bỏ PORT / tách tên kép mà ra hai mã → không chọn.
+      expect(resolveWorldPort("LINCOLN", null, [{ code: "AUPLO", name: "PORT LINCOLN - SA", parent: "AU" }, { code: "GBLIN", name: "LINCOLN/HULL", parent: "GB" }])).toBeNull();
       const TWO: CatalogEntry[] = [{ code: "XXAAA", name: "PORTO - NORTE", parent: "XX" }, { code: "XXBBB", name: "PORTO - SUL", parent: "XX" }];
       expect(resolveWorldPort("PORTO", "XX", TWO)).toBeNull();
       // Địa chỉ người xuất khẩu chỉ khớp nguyên tên: tỉnh trùng tên cảng nhỏ không thành cảng xếp.

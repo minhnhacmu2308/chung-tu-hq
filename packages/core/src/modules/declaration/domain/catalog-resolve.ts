@@ -149,18 +149,21 @@ const PLACE_SUFFIX = /\b(CITY|PORT|AIRPORT|DISTRICT|PROVINCE|TOWN|PREFECTURE)\b/
 function placeSegments(raw: string): string[] {
   const parts = [raw, ...raw.split(/[,;/().]+/)];
   const ordered = [...parts.filter((x) => /CITY/i.test(x)), ...parts.filter((x) => !/CITY/i.test(x))];
-  return [...new Set(ordered.map((x) => plain(plain(x).replace(PLACE_SUFFIX, " "))).filter((x) => x.length >= 3))];
+  return [...new Set(ordered.map(placeKey).filter((x) => x.length >= 3))];
 }
+const placeKey = (x: string) => plain(plain(x).replace(PLACE_SUFFIX, " "));
+/** Tên chính của mã A016, chuẩn hóa như đoạn trên chứng từ: bỏ vùng ("PORT LINCOLN - SA", "THETFORD MINES, QC", "… (HCM)"), tách tên kép ("ITAQUI/SAO LUIZ"). */
+const mainKeys = (name: string) => name.split(/\s+-\s+|[(,]/)[0]!.split("/").map(placeKey).filter((x) => x.length >= 3);
 
 /** Một đoạn trùng nguyên tên mã trong danh mục cảng thế giới (A016); trùng tên ở nhiều nước → chỉ nhận khi biết nước. */
 function matchWorldPort(raw: string, catalog: readonly CatalogEntry[], country: string | null, byMainName = false): { entry: CatalogEntry; segment: string } | null {
   const segs = placeSegments(raw);
   // Trùng nguyên tên trước; `byMainName` (chỉ ô cảng trên chứng từ) thì thêm lượt trùng tên chính – A016 hay ghi kèm vùng ("SURABAYA - JAVA" → IDSUB).
   // Không dùng cho địa chỉ: tên tỉnh/bang trùng tên cảng nhỏ ("CHIBA - CHIBA", "SALEM - OR") sẽ bắt nhầm.
-  const names = [(e: CatalogEntry) => plain(e.name), ...(byMainName ? [(e: CatalogEntry) => plain(e.name.split(/\s+-\s+|\(/)[0]!)] : [])];
-  for (const nameOf of names) {
+  const passes = [(e: CatalogEntry, seg: string) => plain(e.name) === seg, ...(byMainName ? [(e: CatalogEntry, seg: string) => mainKeys(e.name).includes(seg)] : [])];
+  for (const same of passes) {
     for (const seg of segs) {
-      const hits = catalog.filter((e) => nameOf(e) === seg);
+      const hits = catalog.filter((e) => same(e, seg));
       const pool = country ? hits.filter((e) => e.parent === country) : hits;
       if (pool.length === 1) return { entry: pool[0]!, segment: seg };
     }

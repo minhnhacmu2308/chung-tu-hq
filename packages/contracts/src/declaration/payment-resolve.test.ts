@@ -5,7 +5,7 @@ describe("payment-resolve", () => {
   it("mã chuẩn người khai chọn (kể cả mã không có chữ nhận diện như GV, BIENMAU) → đúng mã, không nghi ngờ", () => {
     expect(resolvePayment("GV")).toEqual({ code: "GV", name: "Góp vốn" });
     expect(resolvePayment("BIENMAU")?.code).toBe("BIENMAU");
-    expect(resolvePayment("KC – Bitcoin")).toEqual({ code: "KC", name: "Khác (bao gồm cả thanh toán bằng hình thức TT)" });
+    expect(resolvePayment("KC – Bitcoin")).toEqual({ code: "KC", name: "Khác (bao gồm cả TT)" });
     expect(parsePaymentChoice("KC – T/T 30 days")).toEqual({ code: "KC", detail: "T/T 30 days" });
     expect(parsePaymentChoice("XYZ")).toBeNull();
   });
@@ -25,7 +25,12 @@ describe("payment-resolve", () => {
   it("reconcilePayment: AI chọn mã, regex kiểm chéo; lệch hoặc chỉ một bên có → cần xem", () => {
     expect(reconcilePayment("T/T 30 days", "KC", null)).toMatchObject({ code: "KC" });
     expect(reconcilePayment("T/T 30 days", "KC", null)?.suspect).toBeUndefined();
-    expect(reconcilePayment("Irrevocable documentary credit at sight", "LC", null)).toMatchObject({ code: "LC", suspect: true });
+    expect(reconcilePayment("Irrevocable documentary credit at sight", "LC", null)).toMatchObject({
+      code: "LC", suspect: true, note: "Chứng từ ghi “Irrevocable documentary credit at sight”: hệ thống không nhận ra mã, AI nhận là LC – chọn mã đúng",
+    });
+    // Một tên hiển thị cho cùng mã dù mã đến từ regex, người khai chọn hay AI / số L/C.
+    expect(reconcilePayment(null, null, "S700542640040")?.name).toBe(resolvePayment("L/C at sight")?.name);
+    expect(resolvePayment("LC")?.name).toBe(resolvePayment("L/C at sight")?.name);
     expect(reconcilePayment(null, null, "S700542640040")).toMatchObject({ code: "LC", suspect: true });
     expect(reconcilePayment("L/C at sight", "TTR", null)).toMatchObject({ code: "LC", suspect: true, note: "Chứng từ ghi “L/C at sight”: hệ thống đọc ra LC, AI nhận là TTR – chọn mã đúng" });
     expect(reconcilePayment("LC", "TTR", null)).toEqual(expect.objectContaining({ code: "LC" }));

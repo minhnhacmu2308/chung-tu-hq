@@ -125,7 +125,10 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
       value: "LC – Tín dụng thư (L/C)", suspect: true, note: "Chứng từ ghi “L/C at sight”: hệ thống đọc ra LC, AI nhận là TTR – chọn mã đúng",
     });
     expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = val("T/T 30 days")), (s.invoice.paymentMethodCode = val("KC"))) })["PT_TT"]?.suspect).toBeUndefined();
-    expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = nul()), (s.invoice.lcNo = val("S700542640040"))) })["PT_TT"]).toMatchObject({ value: "LC – Tín dụng thư", suspect: true });
+    expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = nul()), (s.invoice.lcNo = val("S700542640040"))) })["PT_TT"]).toMatchObject({ value: "LC – Tín dụng thư (L/C)", suspect: true });
+    // Không chữ, không mã AI, không số L/C → Mặc định khai báo của doanh nghiệp.
+    expect(eda({ profile: { PT_TT: "KC" }, mutate: (s) => void (s.invoice.paymentTerms = nul()) })["PT_TT"]?.value).toBe("KC");
+    expect(eda({ profile: { PT_TT: "KC" }, mutate: (s) => void ((s.invoice.paymentTerms = nul()), (s.invoice.paymentMethodCode = val("LC"))) })["PT_TT"]).toMatchObject({ value: "LC – Tín dụng thư (L/C)", suspect: true });
   });
 
   it("điều kiện giá: chỉ lấy mã (bỏ địa danh), C&F/CNF chuẩn hóa; thiếu tổng trị giá → tính từ tổng các dòng", () => {

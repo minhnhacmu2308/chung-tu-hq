@@ -20,5 +20,7 @@ describe("ocrExitBlockers", () => {
   it("mã AI lệch mã nhận dạng từ khóa → chặn; khớp → không chặn", () => {
     expect(blockers(inv("L/C at sight", ["KR"], "TTR"))).toEqual([{ reason: "PAYMENT_METHOD_UNKNOWN", params: { raw: "L/C at sight" } }]);
     expect(blockers(inv("L/C at sight", ["KR"], "LC"))).toEqual([]);
+    // Chứng từ không ghi PTTT → không chặn (màn OCR không có ô để chọn); mapping gợi ý mã AI.
+    expect(blockers(inv(null, ["KR"], "KC"))).toEqual([]);
   });
 });

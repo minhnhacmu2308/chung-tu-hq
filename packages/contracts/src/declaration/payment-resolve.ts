@@ -24,7 +24,6 @@ export const paymentNeedsChoice = (raw: string | null | undefined, aiCode?: stri
 /**
  * Mã PTTT: AI chọn mã, regex (resolvePayment) kiểm chéo, số L/C là thêm một tín hiệu LC.
  * Người khai đã chọn mã → thắng. Cùng mã → nhận. Khác, hoặc chỉ một bên có → cần xem; mặc định mã regex (nếu nhận ra) → mã AI → LC.
- * AI không trả mã (kể cả hồ sơ đọc trước khi có trường) → chỉ dùng regex như cũ.
  */
 export function reconcilePayment(raw: string | null, aiCode: string | null, lcNo: string | null): ResolvedPayment | null {
   const text = raw?.trim() || null;
@@ -34,15 +33,24 @@ export function reconcilePayment(raw: string | null, aiCode: string | null, lcNo
   const ai = PAYMENT_METHODS.find((p) => p.code === aiCode?.trim().toUpperCase())?.code ?? null;
   const lc = lcNo?.trim() || null;
   const other = ai ?? (lc ? "LC" : null);
+  // AI null = hồ sơ lưu trước khi có trường mã PTTT (không phân biệt được với AI để trống) → giữ kết quả regex, không bắt xem.
   if (!other || other === rxCode) return rx;
   const code = rxCode ?? other;
   const say = ai ? `AI nhận là ${ai}` : `có số L/C ${lc}`;
-  const note = text ? `Chứng từ ghi “${text}”: hệ thống đọc ra ${rx!.code}, ${say} – chọn mã đúng` : `Chứng từ không ghi phương thức thanh toán, ${say} – chọn mã đúng`;
-  const name = rxCode ? rx!.name : PAYMENT_METHODS.find((p) => p.code === code)!.label;
-  return { code, name, suspect: true, note: rxCode && rx!.note ? `${note}. ${rx!.note}` : note };
+  const read = rxCode ? `hệ thống đọc ra ${rxCode}` : "hệ thống không nhận ra mã";
+  const note = text ? `Chứng từ ghi “${text}”: ${read}, ${say} – chọn mã đúng` : `Chứng từ không ghi phương thức thanh toán, ${say} – chọn mã đúng`;
+  return { code, name: paymentName(code), suspect: true, note: rxCode && rx!.note ? `${note}. ${rx!.note}` : note };
 }
 
 export type ResolvedPayment = { code: string; name: string; note?: string; suspect?: true };
+
+/** Tên hiển thị theo mã – một nguồn cho mọi nhánh (regex, người khai chọn, mã AI / L/C); mã không có ở đây → nhãn PAYMENT_METHODS. */
+const NAMES: Record<string, string> = {
+  TTR: "Chuyển tiền bồi hoàn bằng điện", LC: "Tín dụng thư (L/C)", DA: "Nhờ thu chấp nhận chứng từ (D/A)", DP: "Nhờ thu kèm chứng từ (D/P)",
+  CAD: "Trả tiền lấy chứng từ (CAD)", OA: "Mở tài khoản thanh toán (O/A)", CHEQUE: "Séc", CASH: "Tiền mặt", KHONGTT: "Không thanh toán",
+  CANTRU: "Cấn trừ, bù trừ", KC: "Khác (bao gồm cả TT)",
+};
+const paymentName = (code: string) => NAMES[code] ?? PAYMENT_METHODS.find((p) => p.code === code)!.label;
 
 /**
  * Phương thức thanh toán trên chứng từ → mã TK_IVP (chỉ tiêu 1.43 / 2.38, Phụ lục II TT39).
@@ -53,20 +61,21 @@ export function resolvePayment(raw: string | null): ResolvedPayment | null {
   if (!raw) return null;
   // Đúng mã chuẩn (người khai chọn ở OCR): "LC" hoặc "KC – <phương thức thực tế>".
   const exact = parsePaymentChoice(raw);
-  if (exact) return { code: exact.code, name: PAYMENT_METHODS.find((p) => p.code === exact.code)!.label };
+  if (exact) return { code: exact.code, name: paymentName(exact.code) };
   const n = norm(raw);
+  const hit = (code: string, note?: string): ResolvedPayment => ({ code, name: paymentName(code), ...(note ? { note } : {}) });
   const kcNote = (what: string) => `Mã KC gồm cả ${what} – ghi phương thức thực tế (“${raw.trim()}”) vào chi tiết khai trị giá / ghi chú`;
-  if (/\bTTR\b|REIMBURSE/.test(n)) return { code: "TTR", name: "Chuyển tiền bồi hoàn bằng điện" };
-  if (/\bL ?C\b|LETTER OF CREDIT/.test(n)) return { code: "LC", name: "Tín dụng thư (L/C)" };
-  if (/\bD ?A\b|DOCUMENTS? AGAINST ACCEPTANCE/.test(n)) return { code: "DA", name: "Nhờ thu chấp nhận chứng từ (D/A)" };
-  if (/\bD ?P\b|DOCUMENTS? AGAINST PAYMENT/.test(n)) return { code: "DP", name: "Nhờ thu kèm chứng từ (D/P)" };
-  if (/\bCAD\b|CASH AGAINST DOCUMENTS?/.test(n)) return { code: "CAD", name: "Trả tiền lấy chứng từ (CAD)" };
-  if (/\bOA\b|OPEN ACCOUNT/.test(n)) return { code: "OA", name: "Mở tài khoản thanh toán (O/A)" };
-  if (/\bCHEQUE\b|\bCHECK\b|\bSEC\b/.test(n)) return { code: "CHEQUE", name: "Séc" };
-  if (/\bCASH\b|TIEN MAT/.test(n)) return { code: "CASH", name: "Tiền mặt" };
-  if (/FREE OF CHARGE|\bFOC\b|NO COMMERCIAL VALUE|KHONG THANH TOAN|NO PAYMENT/.test(n)) return { code: "KHONGTT", name: "Không thanh toán" };
-  if (/NETTING|OFFSET|CAN TRU|BU TRU/.test(n)) return { code: "CANTRU", name: "Cấn trừ, bù trừ" };
-  if (/\bT ?T\b|TELEGRAPHIC|\bWIRE\b|BANK TRANSFER|REMITTANCE|CHUYEN KHOAN/.test(n)) return { code: "KC", name: "Khác (bao gồm cả TT)", note: kcNote("T/T, chuyển khoản") };
+  if (/\bTTR\b|REIMBURSE/.test(n)) return hit("TTR");
+  if (/\bL ?C\b|LETTER OF CREDIT/.test(n)) return hit("LC");
+  if (/\bD ?A\b|DOCUMENTS? AGAINST ACCEPTANCE/.test(n)) return hit("DA");
+  if (/\bD ?P\b|DOCUMENTS? AGAINST PAYMENT/.test(n)) return hit("DP");
+  if (/\bCAD\b|CASH AGAINST DOCUMENTS?/.test(n)) return hit("CAD");
+  if (/\bOA\b|OPEN ACCOUNT/.test(n)) return hit("OA");
+  if (/\bCHEQUE\b|\bCHECK\b|\bSEC\b/.test(n)) return hit("CHEQUE");
+  if (/\bCASH\b|TIEN MAT/.test(n)) return hit("CASH");
+  if (/FREE OF CHARGE|\bFOC\b|NO COMMERCIAL VALUE|KHONG THANH TOAN|NO PAYMENT/.test(n)) return hit("KHONGTT");
+  if (/NETTING|OFFSET|CAN TRU|BU TRU/.test(n)) return hit("CANTRU");
+  if (/\bT ?T\b|TELEGRAPHIC|\bWIRE\b|BANK TRANSFER|REMITTANCE|CHUYEN KHOAN/.test(n)) return hit("KC", kcNote("T/T, chuyển khoản"));
   return { code: "KC", name: "Khác", suspect: true, note: `Không nhận ra phương thức thanh toán “${raw.trim()}” – chọn mã TK_IVP; nếu khai KC thì ghi phương thức thực tế vào chi tiết khai trị giá / ghi chú` };
 }
 

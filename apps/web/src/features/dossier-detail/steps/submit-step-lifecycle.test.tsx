@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubmissionView } from "@kb/contracts";
+import { dateToIso } from "@kb/ui";
 import { getDb, resetDb } from "@/mocks/db";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
@@ -90,7 +91,8 @@ describe("Bước Khai báo – xác nhận tờ khai đã hủy", () => {
     await waitFor(() => expect(api.cancel).toHaveBeenCalledTimes(1), T);
     const [id, input] = api.cancel.mock.calls[0]!;
     expect(id).toBe("dos_028");
-    expect(input).toMatchObject({ branch: 1, reason: expect.any(String), date: new Date().toISOString().slice(0, 10) });
+    // Ngày giờ máy như hộp thoại (dateToIso) – toISOString là ngày UTC, lệch 1 ngày từ 00:00–07:00 giờ VN.
+    expect(input).toMatchObject({ branch: 1, reason: expect.any(String), date: dateToIso(new Date()) });
   }, 30_000);
 
   it("DECLARANT → không có nút hủy", async () => {

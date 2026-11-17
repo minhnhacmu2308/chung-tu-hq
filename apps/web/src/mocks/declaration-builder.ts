@@ -143,12 +143,23 @@ const PARTNER_ADDRESS: Record<string, string> = {
 const countryOf = (d: Dossier) =>
   d.partner.includes("SHENZHEN") ? "CN" : d.partner.includes("ARTEMIDE") ? "IT" : d.partner.includes("MORINAGA") ? "JP" : d.partner.includes("TAIWAN") ? "TW" : d.partner.includes("NORDIC") ? "SE" : d.partner.includes("PACIFIC") ? "SG" : "KR";
 
+// Địa điểm xếp hàng mặc định theo nước đối tác: mã A016 thật (kèm tên) – ô 1.34/2.29 chỉ nhận mã A016,
+// còn giữ tên thì bị chặn duyệt/khai (CODE_UNRESOLVED, transport-places.ts).
+const LOADING_SEAPORT: Record<string, string> = {
+  CN: "CNYTN – YANTIAN", IT: "ITGOA – GENOA", JP: "JPTYO – TOKYO - TOKYO", TW: "TWKHH – KAOHSIUNG (TAKAO)",
+  SE: "SEGOT – GOTHENBURG", SG: "SGSIN – SINGAPORE", KR: "KRPUS – BUSAN",
+};
+const LOADING_AIRPORT: Record<string, string> = {
+  CN: "CNSZX – SHENZHEN", IT: "ITMXP – MILANO-MALPENSA", JP: "JPNRT – NARITA APT - TOKYO", TW: "TWTPE – TAIPEI",
+  SE: "SEARN – STOCKHOLM-ARLANDA", SG: "SGSIN – SINGAPORE", KR: "KRICN – INCHEON INTL APT/SEO",
+};
+
 const DEFAULT_SHIPMENT = (d: Dossier): ShipmentInfo => ({
   invoiceNo: `INV-${d.code.split("-").pop()}`,
   invoiceDaysAgo: 8,
   sellerAddress: PARTNER_ADDRESS[countryOf(d)]!,
   countryCode: countryOf(d),
-  loadingPort: d.transportMode === "AIR" ? "Sân bay đi" : "Cảng xếp hàng",
+  loadingPort: (d.transportMode === "AIR" ? LOADING_AIRPORT : LOADING_SEAPORT)[countryOf(d)]!,
   dischargePort: d.transportMode === "AIR" ? "VNNFW – CT TNHH ALSC" : "VNHPH – CANG HAI PHONG",
   arrivalInDays: -3,
   packages: "12 PK",

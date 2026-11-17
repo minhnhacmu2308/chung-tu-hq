@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { nDate, nNum, nStr, PartySchema, UncertaintiesSchema } from "./common.js";
+import { PaymentMethodCodeSchema } from "./lot.js";
 
 export const SalesContractExtractionSchema = z.object({
   contractNo: nStr("Số hợp đồng"),
@@ -10,6 +11,7 @@ export const SalesContractExtractionSchema = z.object({
   currency: nStr("Mã tiền tệ"),
   totalAmount: nNum("Tổng trị giá hợp đồng"),
   paymentTerms: nStr("Điều khoản thanh toán"),
+  paymentMethodCode: PaymentMethodCodeSchema,
   uncertainties: UncertaintiesSchema,
 });
 export type SalesContractExtraction = z.infer<typeof SalesContractExtractionSchema>;

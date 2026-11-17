@@ -12,7 +12,7 @@ export type DocFieldDef = {
   aliases: string[];
   type: DocFieldType;
   /** Phiên bản danh mục thêm trường này. */
-  since: 1 | 2;
+  since: 1 | 2 | 3;
 };
 
 export type DocCatalog = {

@@ -11,7 +11,7 @@ const invoice = {
   grossWeightKg: 3860.5, packages: 48, uncertainties: ["vessel"],
 };
 /** Hóa đơn đủ trường v2 (structured output luôn trả đủ key). */
-const invoiceV2 = { ...invoice, incotermPlace: null, originStatement: null, items: invoice.items.map((i) => ({ ...i, partNo: null })) };
+const invoiceV2 = { ...invoice, incotermPlace: null, originStatement: null, paymentMethodCode: null, items: invoice.items.map((i) => ({ ...i, partNo: null })) };
 
 describe("contract extraction", () => {
   it("InvoiceExtractionSchema chấp nhận mẫu và từ chối quantity là chuỗi", () => {
@@ -49,10 +49,10 @@ describe("schema v2 (chuẩn trường chứng từ)", () => {
     expect(keys("BILL_OF_LADING")).toEqual(expect.arrayContaining(["placeOfIssue", "dateOfIssue"]));
     expect(keys("AIR_WAYBILL")).toEqual(expect.arrayContaining(["flightDate", "placeOfIssue"]));
     expect(keys("FREIGHT_INVOICE")).toContain("billRef");
-    expect(EXTRACTION_SCHEMA_VERSION).toBe(3);
+    expect(EXTRACTION_SCHEMA_VERSION).toBe(4);
   });
   it("trường mới là bắt buộc + nullable: thiếu key → lỗi (structured output ổn định), null → hợp lệ", () => {
-    const v2 = { ...invoice, incotermPlace: null, originStatement: null, items: invoice.items.map((i) => ({ ...i, partNo: null })) };
+    const v2 = { ...invoice, incotermPlace: null, originStatement: null, paymentMethodCode: null, items: invoice.items.map((i) => ({ ...i, partNo: null })) };
     expect(InvoiceExtractionSchema.safeParse(v2).success).toBe(true);
     expect(InvoiceExtractionSchema.safeParse(invoice).success).toBe(false);
   });

@@ -43,7 +43,7 @@ describe("tạo skill mới", () => {
     expect(fields.find((f) => f.key === "paymentTerms")?.type).toBe("string");
     expect(fields.at(-1)).toMatchObject({ key: "items", type: "items" });
     expect(fields.every((f) => resolveSkillFieldKey("INVOICE", f.key).standard)).toBe(true);
-    expect(catalogSkillFields("OTHER").map((f) => f.key)).toEqual(["title", "summary"]);
+    expect(catalogSkillFields("OTHER").map((f) => f.key)).toEqual(["title", "summary", "paymentMethodCode"]);
   });
   it("nextSkillCode: số nhỏ nhất chưa dùng, từ 2", () => {
     expect(nextSkillCode("INVOICE", ["SK-INV-GEN"])).toBe("SK-INV-2");

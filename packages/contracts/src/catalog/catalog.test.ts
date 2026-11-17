@@ -10,7 +10,7 @@ const shapeOf = (kind: (typeof KINDS)[number]) => (extractionSchemaFor(kind) as 
 describe("DOC_CATALOG", () => {
   it.each(KINDS)("%s: key phần đầu khớp đúng thứ tự với schema Zod", (kind) => {
     const listKey = DOC_CATALOG[kind].items?.key;
-    const schemaKeys = Object.keys(shapeOf(kind)).filter((k) => k !== "uncertainties" && k !== listKey);
+    const schemaKeys = Object.keys(shapeOf(kind)).filter((k) => !["uncertainties", "lot", "lotContainers", listKey].includes(k));
     expect(DOC_CATALOG[kind].fields.map((f) => f.key)).toEqual(schemaKeys);
   });
   it.each(KINDS)("%s: key dòng hàng khớp schema (nếu có)", (kind) => {

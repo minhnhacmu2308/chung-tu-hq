@@ -8,6 +8,7 @@ import { CertOfOriginExtractionSchema } from "./cert-of-origin.js";
 import { UncertaintiesSchema } from "./common.js";
 import { FreightInvoiceExtractionSchema } from "./freight-invoice.js";
 import { InvoiceExtractionSchema } from "./invoice.js";
+import { LotContainersSchema, lotSchemaFor, PaymentMethodCodeSchema } from "./lot.js";
 import { PackingListExtractionSchema } from "./packing-list.js";
 import { SalesContractExtractionSchema } from "./sales-contract.js";
 
@@ -20,20 +21,26 @@ export * from "./common.js";
 export * from "./customs-declaration.js";
 export * from "./freight-invoice.js";
 export * from "./invoice.js";
+export * from "./lot.js";
 export * from "./packing-list.js";
 export * from "./sales-contract.js";
 
 /** Tăng khi đổi bất kỳ schema trích xuất nào (B10). */
-export const EXTRACTION_SCHEMA_VERSION = 3;
+export const EXTRACTION_SCHEMA_VERSION = 4;
 
 /** Chứng từ loại OTHER: chỉ lấy tiêu đề + tóm tắt để người dùng xếp loại. */
 export const OtherExtractionSchema = z.object({
   title: z.string().nullable().describe("Tiêu đề chứng từ"),
   summary: z.string().nullable().describe("Tóm tắt 1–2 câu nội dung"),
+  paymentMethodCode: PaymentMethodCodeSchema,
   uncertainties: UncertaintiesSchema,
 });
 
-const BY_KIND: Record<DocKind, ZodType> = {
+// Mọi loại có thêm khối lô hàng `lot` (+ `lotContainers`, trừ B/L đã có `containers`).
+const withLot = (kind: DocKind, schema: z.ZodObject): ZodType =>
+  schema.extend({ lot: lotSchemaFor(kind), ...(kind === "BILL_OF_LADING" ? {} : { lotContainers: LotContainersSchema }) });
+
+const BASE: Record<DocKind, z.ZodObject> = {
   INVOICE: InvoiceExtractionSchema,
   PACKING_LIST: PackingListExtractionSchema,
   BILL_OF_LADING: BillOfLadingExtractionSchema,
@@ -44,6 +51,7 @@ const BY_KIND: Record<DocKind, ZodType> = {
   FREIGHT_INVOICE: FreightInvoiceExtractionSchema,
   OTHER: OtherExtractionSchema,
 };
+const BY_KIND = Object.fromEntries(Object.entries(BASE).map(([k, s]) => [k, withLot(k as DocKind, s)])) as Record<DocKind, ZodType>;
 
 export function extractionSchemaFor(kind: DocKind): ZodType {
   return BY_KIND[kind];
@@ -62,6 +70,8 @@ export function fillMissingNullable(schema: ZodType, value: unknown): unknown {
   for (const [key, field] of Object.entries(inner.shape as Record<string, ZodType>)) {
     if (!(key in out)) {
       if (field.safeParse(null).success) out[key] = null;
+      // Chỉ mảng thêm ở v4; mảng bắt buộc khác (items…) thiếu là kết quả hỏng, giữ nguyên để parse báo lỗi.
+      else if (key === "lotContainers") out[key] = [];
       else if (unwrap(field) instanceof z.ZodObject) {
         // Object bắt buộc mà mọi trường con đều nullable (vd `custom` – trường bổ sung) → object toàn null.
         const empty = fillMissingNullable(field, {});

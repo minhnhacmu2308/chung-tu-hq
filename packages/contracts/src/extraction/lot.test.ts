@@ -32,6 +32,18 @@ describe("khối lot", () => {
     expect("bogus" in out.lot).toBe(false);
     expect(extractionSchemaFor("INVOICE").safeParse(out).success).toBe(true);
   });
+  it("key trùng: giá trị đầu rỗng thì lấy giá trị khác rỗng kế tiếp", () => {
+    const out = fromAiOutput(extractionSchemaFor("INVOICE"), { ...invoiceFixture, lot: [{ key: "vessel", value: "" }, { key: "vessel", value: "EVER GIVEN" }] }) as any;
+    expect(out.lot.vessel).toBe("EVER GIVEN");
+  });
+  it("container rỗng số từ AI bị bỏ, cả chứng từ vẫn parse", () => {
+    const empty = fromAiOutput(extractionSchemaFor("INVOICE"), { ...invoiceFixture, lot: [], lotContainers: [{ no: "", sealNo: "", size: "" }] }) as any;
+    expect(empty.lotContainers).toEqual([]);
+    expect(extractionSchemaFor("INVOICE").safeParse(empty).success).toBe(true);
+    const mixed = fromAiOutput(extractionSchemaFor("INVOICE"), { ...invoiceFixture, lot: [], lotContainers: [{ no: "  ", sealNo: "S1", size: "" }, { no: "CMAU1234452", sealNo: "", size: "40HC" }] }) as any;
+    expect(mixed.lotContainers).toEqual([{ no: "CMAU1234452", sealNo: null, size: "40HC" }]);
+    expect(extractionSchemaFor("INVOICE").safeParse(mixed).success).toBe(true);
+  });
   it("kết quả cũ v3 (không có lot, lotContainers, paymentMethodCode) vẫn parse sau fillMissingNullable", () => {
     const { lotContainers: _c, paymentMethodCode: _p, ...v3 } = invoiceFixture;
     const filled = fillMissingNullable(extractionSchemaFor("INVOICE"), v3) as any;

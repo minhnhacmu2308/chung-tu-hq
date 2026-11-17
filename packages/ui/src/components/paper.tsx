@@ -63,7 +63,7 @@ export function PaperSheet({ page, total, header, watermark, id, children, label
 }
 
 const SPAN = {
-  1: "col-span-1", 2: "col-span-2", 3: "col-span-3", 4: "col-span-4", 6: "col-span-6", 12: "col-span-12",
+  1: "col-span-1", 2: "col-span-2", 3: "col-span-3", 4: "col-span-4", 6: "col-span-6", 8: "col-span-8", 12: "col-span-12",
 } as const;
 
 /**
@@ -78,7 +78,7 @@ export function PaperColumns({ children, className }: { children: ReactNode; cla
  * Nhãn cột của nhóm ô lặp (in một lần phía trên các dòng, như mẫu VNACCS: "Số vận đơn", "Tên sắc thuế | Tổng tiền thuế"…).
  * Chỉ để nhìn (aria-hidden): mỗi ô PaperField của dòng lặp vẫn mang tên đầy đủ trong `ariaLabel`.
  */
-export function PaperLabel({ children, span = 12, align }: { children?: ReactNode; span?: 1 | 2 | 3 | 4 | 6 | 12; align?: "end" }) {
+export function PaperLabel({ children, span = 12, align }: { children?: ReactNode; span?: 1 | 2 | 3 | 4 | 6 | 8 | 12; align?: "end" }) {
   return (
     <div aria-hidden="true" className={cn("min-w-0 px-1.5 pt-0.5 text-[10px] leading-tight text-paper-fg opacity-80 print:px-1 print:pt-0 print:text-[7pt] print:opacity-100", SPAN[span], align === "end" && "text-right")}>
       {children}
@@ -117,7 +117,7 @@ export type PaperFieldProps = {
   onSelect?: () => void;
   /** Tên đầy đủ của ô (đọc trước giá trị và trạng thái) – hiển thị dưới dạng sr-only, không ghi đè aria-label. */
   ariaLabel: string;
-  span?: 1 | 2 | 3 | 4 | 6 | 12;
+  span?: 1 | 2 | 3 | 4 | 6 | 8 | 12;
   /** "end": căn phải giá trị (số tiền, số lượng). */
   align?: "end";
   labels?: Partial<{ missing: string; estimate: string; edited: string; error: string; compare: string; check: string }>;

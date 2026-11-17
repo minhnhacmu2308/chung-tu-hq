@@ -54,6 +54,31 @@ describe("customsValues – thông tin Hải quan trả về → ô tab Hải qu
   });
 });
 
+describe("ô in nguyên văn (CustomsInfo.fields) – bản in khớp mẫu VNACCS", () => {
+  const withFields: CustomsInfo = {
+    ...info,
+    subsection: "00",
+    fields: { TK_TP: "36113", TK_B08: "A", VD_A51: "TONG CTY TAN CANG SG", THUE_KI1: "1" },
+    items: [{ lineNo: 1, taxRate: "15", fields: { HAG_B42: "A", HAG_B43: "15%", HAG_SKB: "M", HAG_KKT: "98136.5", HAG_KKS: "VND", HAG_KQ1: "Thuế GTGT", HAG_KY1: "0%", HAG_KZ1: "0" } }],
+  };
+  it("IDA phần chung: bộ phận xử lý, tổng hệ số phân bổ, phân loại nộp thuế, tên kho, số dòng tổng", () => {
+    expect(customsValues("IDA", withFields, null)).toMatchObject({ TK_CHB: "00", TK_TP: "36113", TK_B08: "A", VD_A51: "TONG CTY TAN CANG SG", THUE_KI1: "1" });
+  });
+  it("EDA: bộ phận xử lý là ô người khai – không ghi đè bằng số Hải quan", () => {
+    expect(customsValues("EDA", { ...info, subsection: "01" }, null)).not.toHaveProperty("TK_CHB");
+  });
+  it("dòng hàng: thuế suất nguyên văn thay số đã tách; đơn giá tính thuế; thuế và thu khác", () => {
+    expect(customsItemValues("IDA", withFields, [1])).toEqual([
+      { HAG_B42: "A", HAG_B43: "15%", HAG_SKB: "M", HAG_KKT: "98136.5", HAG_KKS: "VND", HAG_KQ1: "Thuế GTGT", HAG_KY1: "0%", HAG_KZ1: "0" },
+    ]);
+  });
+  it("mọi ô sinh ra có trên bố cục IDA", () => {
+    const keys = new Set(layoutFields(LAYOUT_IDA).map((f) => f.key));
+    const all = [...Object.keys(customsValues("IDA", withFields, null)), ...customsItemValues("IDA", withFields, [1]).flatMap((v) => Object.keys(v))];
+    expect(all.filter((k) => !keys.has(k))).toEqual([]);
+  });
+});
+
 describe("customsItemValues – trị giá / thuế Hải quan tính, theo thứ tự dòng hàng của tờ khai", () => {
   it("IDA: ghép theo số dòng; dòng chưa có → rỗng", () => {
     expect(customsItemValues("IDA", info, [1, 2, 3])).toEqual([

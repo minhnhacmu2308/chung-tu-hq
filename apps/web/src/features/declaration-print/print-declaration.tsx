@@ -11,11 +11,11 @@ import { OTHER_FIELDS_DOM_ID, OtherFields } from "./other-fields";
 import { cellDomId, type CellLook } from "./print-cell";
 import { regionDomId, PrintSheets } from "./print-sheets";
 import {
-  cellState, customsAnswered, editedKeys, errorSlots, fieldLocator, LOOKUP_NAME_CELLS, otherFieldCells, pageCount, panelOrder, hiddenUntilCustoms, printData, printIssues, printValue,
-  printedKeyTarget, printStateFor, sameNumber, sheetIssueCounts, withLookupNames, type PrintData, type PrintTarget,
+  cellState, customsAnswered, editedKeys, errorSlots, fieldLocator, LOOKUP_NAME_CELLS, otherFieldCells, pageCount, panelOrder, hiddenUntilCustoms, printData, printedRaw, printIssues, printValue,
+  printedKeyTarget, printStateFor, sameNumber, sheetIssueCounts, withLookupNames, withOriginNames, type PrintData, type PrintTarget,
 } from "./print-state";
 import { codeScope } from "../declaration-form/code-scope";
-import { useCodeName } from "../declaration-form/use-code-list";
+import { useCodeList, useCodeName } from "../declaration-form/use-code-list";
 import { PrintToolbar } from "./print-toolbar";
 import { SharedFieldsNote, SheetPicker } from "./sheet-picker";
 import { PRINT_MESSAGES } from "./print.messages";
@@ -51,7 +51,7 @@ const slotId = (key: string, line?: number) => `${line ?? ""}:${key}`;
 const UNPLACED_DOM_ID = "print-unplaced-errors";
 
 function printModel(data: PrintData, decl: Declaration, items: LineItem[], submission: SubmissionView | undefined, mode: DeclarationEditMode, canEdit: boolean, lineMode: DeclarationEditMode) {
-  const { kind, values, itemRows, printRows, checks, errors, lineNos, customs, estimate, estimated } = data;
+  const { kind, values, itemRows, printRows, checks, errors, lineNos, customs, estimate, estimated, itemEstimated } = data;
   const info = submission?.customsInfo ?? null;
 
   const errorIds = new Set(errorSlots(kind, errors, lineNos).map((s) => slotId(s.key, s.line)));
@@ -73,12 +73,12 @@ function printModel(data: PrintData, decl: Declaration, items: LineItem[], submi
   };
   const look = (key: string, line?: number): CellLook => {
     const id = slotId(key, line);
-    const raw = (line === undefined ? values[key] : printRows[line]?.[key]) ?? "";
+    const raw = (line === undefined ? printedRaw(kind, key, values) : printRows[line]?.[key]) ?? "";
     const state = cellState({
       error: errorIds.has(id),
       missing: missingIds.has(id),
       check: line !== undefined && Boolean(checks[line]?.has(key)),
-      estimated: line === undefined && estimated.has(key),
+      estimated: line === undefined ? estimated.has(key) : Boolean(itemEstimated?.[line]?.has(key)),
       // Ô in dồn → khóa lưu của dòng nhóm (người khai sửa lưu ở khóa lưu).
       edited: line === undefined ? editedDecl.has(key) : Boolean(editedItem[line]?.has(printedKeyTarget(itemRows[line] ?? {}, key).key)),
     });
@@ -131,7 +131,9 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope
   const office = base.values["TK_CH"] ?? "";
   const scope = useMemo(() => codeScope("A202", storage.code, base.kind, { TK_CH: office }, "vi"), [storage.code, base.kind, office]);
   const storageName = useCodeName("A202", base.values[storage.code] ?? "", scope);
-  const data = useMemo(() => withLookupNames(base, { [storage.name]: storageName }), [base, storage.name, storageName]);
+  // Tên nơi xuất xứ (IDA): Hải quan chưa trả → tên VNACCS theo danh mục nước (ước tính).
+  const countries = useCodeList(base.kind === "IDA" ? "COUNTRY" : undefined);
+  const data = useMemo(() => withOriginNames(withLookupNames(base, { [storage.name]: storageName }), countries), [base, storage.name, storageName, countries]);
   // Lô nhiều tờ: tờ đang xem chưa gọi về / đã thông quan → dòng hàng chỉ đọc, nói rõ trên trang.
   const block = editScope && view.of > 1 && canEdit && editScope.lines[view.no] === "LOCKED" ? editBlockFor(editScope, { kind: "LINE", sheet: view.no }) : null;
   const lineBlock = block?.reasonCode === "LINE_SHEET_LOCKED" || block?.reasonCode === "LINE_SHEET_CLOSED" ? block : null;

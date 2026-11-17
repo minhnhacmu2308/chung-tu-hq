@@ -107,6 +107,11 @@ export const CustomsInfoItemSchema = z.object({
   taxRate: DecimalStringSchema.optional(),
   /** Tiền thuế chính (nhập khẩu HAG_B47 / xuất khẩu HAG_TAX), VND. */
   taxAmountVnd: DecimalStringSchema.optional(),
+  /**
+   * Ô Hải quan tính cho dòng chỉ để in nguyên văn (tên trường VNACCS → giá trị): thuế suất "15%", đơn giá tính thuế, thuế và thu khác…
+   * Số đã chuẩn hóa DecimalString; chữ giữ nguyên. Danh sách trường: CUSTOMS_PRINT_FIELDS (core integration/domain/customs-info.ts).
+   */
+  fields: z.record(z.string(), z.string()).optional(),
 });
 export const CustomsDirectiveSchema = z.object({ date: IsoDateSchema.optional(), title: z.string().optional(), content: z.string() });
 export const CustomsInfoSchema = z.object({
@@ -145,6 +150,8 @@ export const CustomsInfoSchema = z.object({
   permitTime: z.string().optional(),
   inspectionDoneDate: IsoDateSchema.optional(),
   chiefName: z.string().optional(),
+  /** Ô Hải quan trả về ở phần chung chỉ để in nguyên văn (tên trường VNACCS → giá trị): bộ phận xử lý, tổng hệ số phân bổ, phân loại nộp thuế, số dòng tổng… */
+  fields: z.record(z.string(), z.string()).optional(),
 });
 export type CustomsInfo = z.infer<typeof CustomsInfoSchema>;
 

@@ -28,6 +28,8 @@ export function customsValues(kind: Kind, info: CustomsInfo | null, result: Resu
   put(out, ida ? "TK_B12" : "TK_K69", info.pages);
   put(out, ida ? "TK_B13" : "TK_K70", info.lines);
   if (ida) {
+    // 1.9 IDA không gửi – chỉ có số Hải quan xác định.
+    put(out, "TK_CHB", info.subsection);
     info.taxes.slice(0, 6).forEach((t, i) => {
       put(out, `THUE_KF${i + 1}`, t.code);
       put(out, `THUE_KG${i + 1}`, t.name);
@@ -64,6 +66,8 @@ export function customsValues(kind: Kind, info: CustomsInfo | null, result: Resu
     put(out, `CTHQ_T${pad2(i + 1)}`, d.title);
     put(out, `CTHQ_I${pad2(i + 1)}`, d.content);
   });
+  // Ô in nguyên văn (tổng hệ số phân bổ, phân loại nộp thuế, số dòng tổng, tên địa điểm lưu kho…) – khóa đã là tên trường VNACCS.
+  for (const [k, v] of Object.entries(info.fields ?? {})) put(out, k, v);
   return out;
 }
 
@@ -78,6 +82,8 @@ export function customsItemValues(kind: Kind, info: CustomsInfo | null, lineNos:
     put(out, currency!, it.customsValueCurrency);
     put(out, rate!, it.taxRate);
     put(out, tax!, it.taxAmountVnd);
+    // Sau taxRate: thuế suất nguyên văn của Hải quan ("15%") thay số đã tách; cùng đơn giá tính thuế, thuế và thu khác…
+    for (const [k, v] of Object.entries(it.fields ?? {})) put(out, k, v);
     return out;
   });
 }

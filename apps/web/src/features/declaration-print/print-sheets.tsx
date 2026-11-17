@@ -1,7 +1,7 @@
 "use client";
 // Các trang giấy của bản in: đầu trang lặp ở mọi trang, trang chung theo `pages`, rồi khối dòng hàng (`< 01 >`…) theo `itemsPerPage` khối mỗi trang.
 // Vùng dạng cặp = hai cột như mẫu (PaperColumns – đo theo bề rộng trang giấy, khi in luôn hai cột).
-import { Grid, PaperColumns, PaperLabel, PaperSheet, PaperStack } from "@kb/ui";
+import { Grid, PaperColumns, PaperField, PaperLabel, PaperSheet, PaperStack } from "@kb/ui";
 import { expandPrintRow, printLayoutFor, type PrintCell as Cell, type PrintRegion, type PrintRepeatRow, type PrintRow } from "@kb/contracts";
 import { Fragment, type ReactNode } from "react";
 import { PrintCell, type CellLook } from "./print-cell";
@@ -39,11 +39,15 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect, hi
   const NBSP = String.fromCharCode(160);
   const headerOnce = (row: PrintRepeatRow) => row.count > 1 && row.cells.reduce((n, c) => n + (c.span ?? 12), 0) <= 12;
 
-  const shows = (row: PrintRow, line: number | undefined) => !hidden || expandPrintRow(row).flat().some((c) => !hidden(c.key, line));
+  // Ô chỉ in nhãn (fixed) không giữ dòng: dòng chỉ có ô nhãn ẩn theo vùng Hải quan trả về khi Hải quan chưa trả kết quả.
+  const shows = (row: PrintRow, line: number | undefined) => !hidden || expandPrintRow(row).flat().some((c) => c.fixed === undefined && !hidden(c.key, line));
   const showsRegion = (rg: PrintRegion, line: number | undefined) => rg.rows.some((row) => shows(row, line));
 
   // inRepeat: ô của nhóm lặp vẽ đủ cả nhóm (nhãn cột in một lần phải khớp ô) – nhóm ẩn hay hiện cả nhóm; ô dòng thường ẩn riêng.
   const printCell = (cell: Cell, line: number | undefined, interactive: boolean, label = cell.label, inRepeat = false) => {
+    // Nhãn của mẫu không có chỉ tiêu: in nhãn + chữ cố định, không bấm được. Không nhãn, không chữ = chỗ trống của mẫu (giữ cột).
+    if (cell.fixed !== undefined && !cell.label && !cell.fixed) return <PaperLabel key={cell.key} span={cell.span ?? 12} />;
+    if (cell.fixed !== undefined) return <PaperField key={cell.key} label={label} value={cell.fixed} ariaLabel={label} {...(cell.span ? { span: cell.span } : {})} {...(cell.align ? { align: cell.align } : {})} />;
     if (!inRepeat && hidden?.(cell.key, line)) return null;
     const l = look(cell.key, line);
     return (
@@ -64,8 +68,12 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect, hi
     );
   };
 
+  // Một dòng của mẫu = một lưới 12 cột riêng: luôn bắt đầu dòng mới; dòng chưa đủ 12 cột để trống phần còn lại như mẫu
+  // (không để lưới kéo ô của dòng sau lên lấp chỗ trống – lệch cả khối, vd Số lượng (1)/(2) – Trị giá hóa đơn).
+  const lineOf = (key: string, children: ReactNode) => <Grid key={key} cols={12} gap="none" className="col-span-12">{children}</Grid>;
+
   /**
-   * Các ô của một danh sách dòng in, đặt thẳng vào lưới 12 cột. `interactive` = false → ô chỉ đọc (đầu trang lặp).
+   * Các ô của một danh sách dòng in, mỗi dòng mẫu một lưới 12 cột. `interactive` = false → ô chỉ đọc (đầu trang lặp).
    * Nhóm lặp nhiều dòng mà mỗi lần lặp nằm gọn một hàng lưới (như mẫu: vận đơn, sắc thuế, khoản điều chỉnh…): nhãn cột in một lần,
    * mỗi dòng chỉ số thứ tự (nhãn của ô đầu) + giá trị. Lần lặp nhiều hàng lưới ("Thuế và thu khác") giữ nhãn từng ô như mẫu.
    */
@@ -75,15 +83,15 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect, hi
         {!Array.isArray(row) && row.label && <p data-paper-heading className="col-span-12 px-1.5 pt-1 text-xs font-semibold">{row.label}</p>}
         {!Array.isArray(row) && headerOnce(row) ? (
           <>
-            {row.cells.map((c, i) => <PaperLabel key={`h${i}`} span={c.span ?? 12} {...(c.align ? { align: c.align } : {})}>{c.label}</PaperLabel>)}
-            {expandPrintRow(row).map((cells, i) => cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? String(i + 1) : NBSP, true)))}
+            {lineOf("h", row.cells.map((c, i) => <PaperLabel key={`h${i}`} span={c.span ?? 12} {...(c.align ? { align: c.align } : {})}>{c.label}</PaperLabel>))}
+            {expandPrintRow(row).map((cells, i) => lineOf(String(i), cells.map((cell, j) => printCell(cell, line, interactive, j === 0 ? String(i + 1) : NBSP, true))))}
           </>
         ) : !Array.isArray(row) && row.count > 1 ? (
           // Lần lặp nhiều hàng lưới: nhãn từng ô như mẫu, số thứ tự trước nhãn ô đầu ("1 Tên").
           // Ô ẩn được bỏ riêng (mỗi ô có nhãn); số thứ tự đặt trước nhãn ô đầu còn hiện.
-          expandPrintRow(row).map((cells, i) => cells.filter((c) => !hidden?.(c.key, line)).map((cell, j) => printCell(cell, line, interactive, j === 0 ? `${i + 1} ${cell.label}` : cell.label, true)))
+          expandPrintRow(row).map((cells, i) => lineOf(String(i), cells.filter((c) => !hidden?.(c.key, line)).map((cell, j) => printCell(cell, line, interactive, j === 0 ? `${i + 1} ${cell.label}` : cell.label, true))))
         ) : (
-          expandPrintRow(row).flat().map((cell) => printCell(cell, line, interactive))
+          lineOf("row", expandPrintRow(row).flat().map((cell) => printCell(cell, line, interactive)))
         )}
       </Fragment>
     ));
@@ -116,6 +124,7 @@ export function PrintSheets({ kind, title, lineNos, look, selected, onSelect, hi
   const header = (page: number) => (
     <div className="flex flex-col gap-1" aria-hidden={page > 1 ? true : undefined}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
+        {layout.mark && <p className="font-mono text-xs">{layout.mark}</p>}
         <p data-paper-title className="text-sm font-bold uppercase print:flex-1 print:text-center print:text-base print:normal-case">{title.title}</p>
         <p className="font-mono text-xs">{page} / {total}</p>
       </div>

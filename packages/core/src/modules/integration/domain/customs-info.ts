@@ -1,6 +1,6 @@
 // Đọc thông tin Hải quan trả về từ một phần tử objIDA/objEDA của FPT.VNACCS (thuần, không I/O).
 // Tên trường theo VNACCS_IDA v1.2 / VNACCS_EDA v1.2; key JSON qua fptKey (TK_ICN → tK_ICN). Trường không có/rỗng thì bỏ qua.
-import { fptKey, type CustomsDirective, type CustomsInfo, type CustomsInfoItem, type CustomsInfoTax } from "@kb/contracts";
+import { fptKey, VN_IDA_FIELDS, VN_IDA_HANG_FIELDS, VN_IDA_THUE_FIELDS, VN_IDA_VANDON_FIELDS, type CustomsDirective, type CustomsInfo, type CustomsInfoItem, type CustomsInfoTax } from "@kb/contracts";
 import { dec } from "../../../shared/decimal.js";
 
 type Obj = Record<string, unknown>;
@@ -20,6 +20,11 @@ const decimal = (v: unknown): string | undefined => {
   } catch {
     return undefined;
   }
+};
+/** Thuế suất VNACCS là chữ ("15%", "15", "5 %") → số phần trăm; chữ khác (mức tuyệt đối…) → undefined. */
+const percent = (v: unknown): string | undefined => {
+  const m = /^(\d+(?:[.,]\d+)?)\s*%?$/.exec(str(v) ?? "");
+  return m ? decimal(m[1]!.replace(",", ".")) : undefined;
 };
 const int = (v: unknown): number | undefined => {
   const d = decimal(v);
@@ -68,6 +73,42 @@ const FIELDS = {
     permitDate: "TK_K86", permitTime: "TK_AD5", inspectedDate: "TK_CCD", chief: "TK_K87",
   },
 } as const;
+
+const n5 = (stems: string[]) => stems.flatMap((s) => [1, 2, 3, 4, 5].map((n) => `${s}${n}`));
+const n6 = (stems: string[]) => stems.flatMap((s) => [1, 2, 3, 4, 5, 6].map((n) => `${s}${n}`));
+
+/**
+ * Ô Hải quan tính / trả về chỉ để in nguyên văn trên bản in tờ khai nhập (VNACCS_IDA v1.2) – ngoài các trường đã có tên riêng trong CustomsInfo.
+ * Chỉ lấy ô người khai không nhập (đầu ra của Hải quan); ô người khai đã nhập (mã nước, mã biểu thuế, mã áp dụng thuế suất…) giữ số người khai.
+ * Thứ tự "Thuế và thu khác" (HAG_KQ…{k}) là thứ tự ô đã dồn khi truyền – trùng ô in (compactOtherTaxes).
+ */
+export const CUSTOMS_PRINT_FIELDS = {
+  IDA: {
+    /** objVN_IDA: tổng hệ số phân bổ (1.51) + mã phân loại nhập liệu, phân loại nộp thuế. Bộ phận xử lý (TK_CHB) đã có ở `subsection`. */
+    head: ["TK_TP", "TK_A97", "TK_B08"],
+    /** objVN_IDA_VANDON: tên địa điểm lưu kho theo mã 1.29. */
+    vandon: ["VD_A51"],
+    /** objVN_IDA_THUE: số dòng tổng tiền thuế của từng sắc thuế (mã/tên/tiền đã có trong `taxes`). */
+    thue: n6(["THUE_KI"]),
+    /** objVN_IDA_HANG: trị giá (M), lượng/đơn giá tính thuế, thuế suất nguyên văn, tên nơi xuất xứ, tiền giảm; thuế và thu khác 1–5. */
+    item: [
+      "HAG_B51", "HAG_B37", "HAG_B38", "HAG_KKT", "HAG_KKS", "HAG_B42", "HAG_B43", "HAG_SKB", "HAG_B56", "HAG_B49",
+      ...n5(["HAG_KQ", "HAG_KS", "HAG_KT", "HAG_KU", "HAG_KY", "HAG_KZ", "HAG_LB"]),
+    ],
+  },
+} as const;
+
+const NUMERIC = new Set([...VN_IDA_FIELDS, ...VN_IDA_HANG_FIELDS, ...VN_IDA_VANDON_FIELDS, ...VN_IDA_THUE_FIELDS].filter((f) => f.type === "decimal" || f.type === "long").map((f) => f.name));
+
+/** Các ô `names` của `o` có giá trị → { tên trường: giá trị }; ô số chuẩn hóa DecimalString (bỏ ô số không đọc được). Không ô nào → undefined. */
+function printFields(o: Obj | undefined, names: readonly string[]): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const name of names) {
+    const v = NUMERIC.has(name) ? decimal(get(o, name)) : str(get(o, name));
+    if (v !== undefined) out[name] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 function taxesOf(kind: Kind, head: Obj | undefined, thue: Obj | undefined): { taxes: CustomsInfoTax[]; totalTaxVnd?: string | undefined; guaranteeVnd?: string | undefined } {
   if (kind === "IDA") {
@@ -144,9 +185,12 @@ export function parseCustomsInfo(kind: Kind, item: Obj, receivedAt: Date): Custo
     hsCode: str(get(h, "HAG_CMD")),
     customsValue: decimal(get(h, F.itemValue)),
     customsValueCurrency: str(get(h, F.itemCurrency)),
-    taxRate: decimal(get(h, F.itemRate)),
+    taxRate: percent(get(h, F.itemRate)),
     taxAmountVnd: decimal(get(h, F.itemTax)),
+    fields: kind === "IDA" ? printFields(h, CUSTOMS_PRINT_FIELDS.IDA.item) : undefined,
   }));
+  const P = CUSTOMS_PRINT_FIELDS.IDA;
+  const headFields = kind === "IDA" ? { ...printFields(head, P.head), ...printFields(sub(item, `${p}_VANDON`), P.vandon), ...printFields(thue, P.thue) } : {};
   return defined({
     receivedAt: receivedAt.toISOString(),
     declarationNo: str(get(head, F.no)),
@@ -170,6 +214,7 @@ export function parseCustomsInfo(kind: Kind, item: Obj, receivedAt: Date): Custo
     permitTime: time(get(tt, F.permitTime)),
     inspectionDoneDate: date(get(tt, F.inspectedDate)),
     chiefName: str(get(tt, F.chief)),
+    fields: Object.keys(headFields).length ? headFields : undefined,
   }) as CustomsInfo;
 }
 

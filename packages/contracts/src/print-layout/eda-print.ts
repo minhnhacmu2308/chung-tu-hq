@@ -2,7 +2,7 @@
 // tr.1 + tr.2 = `pages`, tr.3+ = hai dòng hàng mỗi trang (`item`). Khóa = khóa ô của declaration-layout/eda.ts; nhãn = chữ in trên mẫu.
 //
 // Ô / chữ có trên mẫu nhưng bố cục EDA không có khóa nào → bỏ:
-// - Đầu trang: mã vạch; "<EXP>"; số trang "n / N" (tính khi vẽ); ô "-" sau "Thời hạn tái nhập/ tái xuất".
+// - Đầu trang: mã vạch; số trang "n / N" (tính khi vẽ); ô "-" sau "Thời hạn tái nhập/ tái xuất". "<EXP>" in bằng `mark`.
 // - Tr.1: "Số quản lý người sử dụng"; chữ "VND" cố định sau "Tổng số tiền lệ phí".
 // - Tr.2: số dòng chỉ thị 1–10 (tính khi vẽ).
 // - Dòng hàng: số thứ tự dòng "< 01 >" (tính khi vẽ); chữ "VND" cố định sau "Khoản tiền" lệ phí / bảo hiểm;
@@ -19,7 +19,7 @@ const HEADER: PrintRow[] = [
   [c("TK_TDN", "Số tờ khai tạm nhập tái xuất tương ứng", 12)],
   // Mã loại hình | mã phân loại hàng hóa | mã hiệu PTVC: "B11  2" (mẫu: hàng container đường biển, mã phân loại hàng trống).
   [c("TK_K07", "Mã phân loại kiểm tra", 3), c("TK_ECB", "Mã loại hình", 3), c("TK_CCC", "", 1), c("TK_MTC", "", 1), c("TK_K01", "Mã số thuế đại diện", 4)],
-  // TK_CH như IDA: in mã + tên Chi cục cả trước lẫn sau đăng ký (TK_K08 = tên Hải quan trả về, không in riêng).
+  // TK_CH như IDA: trước khi Hải quan trả tên → "mã  tên" theo danh mục; có TK_K08 (tên Chi cục Hải quan trả về) → in tên.
   [c("TK_CH", "Tên cơ quan Hải quan tiếp nhận tờ khai", 6), c("TK_CHB", "Mã bộ phận xử lý tờ khai", 6)],
   [c("TK_K10", "Ngày đăng ký", 4), c("TK_RT1", "", 2), c("TK_AD21", "Ngày thay đổi đăng ký", 4), c("TK_AD31", "", 2)],
   [c("TK_RID", "Thời hạn tái nhập/ tái xuất", 6)],
@@ -153,6 +153,7 @@ const ITEM: (PrintRegion | [PrintRegion, PrintRegion])[] = [
 
 export const PRINT_EDA: PrintLayout = {
   kind: "EDA",
+  mark: "<EXP>",
   header: HEADER,
   pages: [
     { id: "trang-1", regions: [...PARTIES, BILL, PERMIT_VALUE, TAX, ...PAGE_1_TAIL] },

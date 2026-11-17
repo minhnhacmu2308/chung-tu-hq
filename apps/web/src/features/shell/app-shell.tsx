@@ -241,7 +241,7 @@ function ShellInner({ children }: { children: ReactNode }) {
         }
       />
 
-      <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="panel">
+      <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="dock">
         <DialogContent title={t.appearanceTitle} icon={<SunMoon className="h-4 w-4" />} size="sm">
           <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} />
         </DialogContent>

@@ -292,24 +292,26 @@ export function DialogContent({
   const mode: DialogPresentation = ctx.auto && tone ? "modal" : ctx.mode;
   const setMode = ctx.setMode;
   const l = useMessages(MESSAGES, labels);
-  // Dạng panel: bấm/rê ra trang phía sau không đóng panel (Escape và nút Đóng vẫn đóng).
+  // Dạng dock: bấm/rê ra trang phía sau không đóng (Escape và nút Đóng vẫn đóng). Panel có lớp phủ: bấm lớp phủ = đóng như cửa sổ.
   const keepOpen = (e: Event) => {
-    if (mode === "panel" || mode === "dock") e.preventDefault();
+    if (mode === "dock") e.preventDefault();
   };
-  // Cửa sổ và khay dưới: phủ nền + giữ focus; chỉ panel bên phải cho thao tác song song với trang
+  // Cửa sổ và khay dưới: phủ nền + giữ focus. Panel phải: drawer đè trang – cũng phủ mờ nền + giữ focus, vẫn kéo đổi độ rộng.
+  // Chỉ dock (đẩy trang sang trái) cho thao tác song song với trang.
   const isModal = mode === "modal" || mode === "sheet";
+  const covers = mode !== "dock";
   const [drawerWidth, setDrawerWidth] = useDrawerWidth(size);
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
 
   return (
     <DialogPrimitive.Portal>
       {/* Lớp phủ tự làm (Overlay của Radix chỉ có ở chế độ modal). Bấm vào = bấm ngoài → Radix đóng dialog. */}
-      <ModalOverlay active={isModal} />
+      <ModalOverlay active={covers} />
       {mode === "dock" && <DockSpacer el={contentEl?.parentElement ?? null} />}
       <DialogPrimitive.Content
         data-glass=""
         data-presentation={mode}
-        aria-modal={isModal || undefined}
+        aria-modal={covers || undefined}
         className={cn(
           "fixed z-50 flex w-full flex-col border-border bg-surface text-fg focus-visible:outline-none",
           mode === "modal"
@@ -333,7 +335,7 @@ export function DialogContent({
           Lớp này chỉ để giữ Tab vòng trong dialog (khi modal). Không tự focus lúc mở: DialogPrimitive.Content đã focus phần tử đầu tiên
           và tôn trọng `onOpenAutoFocus` (nơi gọi chặn để tự chọn ô cần focus) – lớp này focus trước sẽ làm `onOpenAutoFocus` không bao giờ chạy.
         */}
-        <FocusScope asChild trapped={isModal} loop onMountAutoFocus={(e) => e.preventDefault()}>
+        <FocusScope asChild trapped={covers} loop onMountAutoFocus={(e) => e.preventDefault()}>
         <div ref={setContentEl} className="flex min-h-0 flex-1 flex-col">
         {mode === "sheet" && <span aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border-strong" />}
         {/* div, không phải <header>: hai dialog chồng nhau (panel chi tiết + cửa sổ con) sẽ thành hai landmark banner. */}

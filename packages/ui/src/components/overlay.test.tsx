@@ -194,12 +194,12 @@ describe("Dialog", () => {
     expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
   });
 
-  it("chỉ khóa cuộn trang khi cửa sổ ĐANG MỞ; dialog đóng hoặc dạng panel thì trang vẫn cuộn được", async () => {
+  it("chỉ khóa cuộn trang khi cửa sổ ĐANG MỞ; dialog đóng hoặc dạng dock thì trang vẫn cuộn được", async () => {
     setup();
     expect(document.body.style.overflow).toBe("");
     await userEvent.click(screen.getByRole("button", { name: "Thêm mới" }));
     expect(document.body.style.overflow).toBe("hidden");
-    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng panel bên phải" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng cột bên phải, đẩy nội dung sang trái" }));
     expect(document.body.style.overflow).toBe("");
     await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng cửa sổ" }));
     expect(document.body.style.overflow).toBe("hidden");
@@ -228,24 +228,41 @@ describe("Dialog", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
-  it("dạng panel không chặn trang: không phủ nền, bấm được nút phía sau, panel vẫn mở", async () => {
+  it("dạng dock không chặn trang: không phủ nền, bấm được nút phía sau, dock vẫn mở", async () => {
     const onOutside = vi.fn();
     render(
       <>
         <Button onClick={onOutside}>Nút trên trang</Button>
-        <Dialog defaultPresentation="panel">
+        <Dialog defaultPresentation="dock">
           <DialogTrigger asChild><Button>Mở panel</Button></DialogTrigger>
           <DialogContent icon={<span />} title="Panel">x</DialogContent>
         </Dialog>
       </>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Mở panel" }));
-    expect(screen.getByRole("dialog", { name: "Panel" })).toHaveAttribute("data-presentation", "panel");
+    expect(screen.getByRole("dialog", { name: "Panel" })).toHaveAttribute("data-presentation", "dock");
     expect(document.querySelector("[data-slot=dialog-overlay]")).toHaveClass("hidden");
     expect(document.body.style.overflow).toBe("");
     await userEvent.click(screen.getByRole("button", { name: "Nút trên trang" }));
     expect(onOutside).toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "Panel" })).toBeInTheDocument();
+  });
+
+  it("dạng panel (drawer đè trang): phủ mờ nền như cửa sổ, khóa cuộn, bấm lớp phủ thì đóng", async () => {
+    render(
+      <Dialog defaultPresentation="panel">
+        <DialogTrigger asChild><Button>Mở panel</Button></DialogTrigger>
+        <DialogContent icon={<span />} title="Panel">x</DialogContent>
+      </Dialog>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Mở panel" }));
+    expect(screen.getByRole("dialog", { name: "Panel" })).toHaveAttribute("aria-modal", "true");
+    const overlay = document.querySelector("[data-slot=dialog-overlay]")!;
+    expect(overlay).not.toHaveClass("hidden");
+    expect(document.body.style.overflow).toBe("hidden");
+    await userEvent.click(overlay);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("");
   });
 
   it("dạng panel là drawer đè lên trang: không đẩy trang chính (không chừa lề phải)", async () => {
@@ -285,9 +302,9 @@ describe("Dialog", () => {
     unmount();
   });
 
-  it("chuyển drawer → cửa sổ: lớp phủ nằm TRƯỚC cửa sổ (không phủ mờ chính nó), khóa cuộn; về drawer thì mở khóa", async () => {
+  it("chuyển dock → cửa sổ: lớp phủ nằm TRƯỚC cửa sổ (không phủ mờ chính nó), khóa cuộn; về dock thì mở khóa", async () => {
     render(
-      <Dialog defaultOpen defaultPresentation="panel">
+      <Dialog defaultOpen defaultPresentation="dock">
         <DialogContent icon={<span />} title="Panel">x</DialogContent>
       </Dialog>,
     );
@@ -297,7 +314,7 @@ describe("Dialog", () => {
     expect(overlay).not.toHaveClass("hidden");
     expect(overlay.compareDocumentPosition(dialog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(document.body.style.overflow).toBe("hidden");
-    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng panel bên phải" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hiển thị dạng cột bên phải, đẩy nội dung sang trái" }));
     expect(overlay).toHaveClass("hidden");
     expect(document.body.style.overflow).toBe("");
   });

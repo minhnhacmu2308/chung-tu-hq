@@ -147,6 +147,9 @@ function EditorCell({ line, c, live, multiline, numeric }: { line: Line; c: Cell
   );
 }
 
+/** Số nhóm gộp hiện sẵn trong banner – còn lại bấm "Xem thêm" (lô 100+ dòng có hàng chục nhóm, banner dài che bảng). */
+const GROUPS_SHOWN = 3;
+/** Gộp dòng hàng giống nhau (cờ của hồ sơ): `merged` = đã gộp; đổi cờ → máy chủ dựng lại dòng hàng. */
 /** Gộp dòng hàng giống nhau (cờ của hồ sơ): `merged` = đã gộp; đổi cờ → máy chủ dựng lại dòng hàng. */
 export type LineMerge = { merged: boolean; busy: boolean; onChange: (merged: boolean) => void };
 
@@ -167,6 +170,7 @@ export function ItemsTable({
 }) {
   const t = useMessages(ITEMS_TABLE_MESSAGES);
   const [show, setShow] = useState<"all" | "suspect">("all");
+  const [allGroups, setAllGroups] = useState(false);
   const codes = useCodeLists(["COUNTRY"] as const);
   const countries = useMemo(() => (codes.lists.COUNTRY ?? []).filter((e) => !e.inactive).map((e) => ({ value: e.code, label: `${e.code} – ${e.name}` })), [codes.lists.COUNTRY]);
 
@@ -269,8 +273,13 @@ export function ItemsTable({
           }
         >
           <ul className="flex flex-col gap-1 break-words">
-            {groups.map((g) => <li key={g.lines[0]}>{fill(t.mergeGroup, { lines: g.lines.join(", "), name: g.name })}</li>)}
+            {(allGroups ? groups : groups.slice(0, GROUPS_SHOWN)).map((g) => <li key={g.lines[0]}>{fill(t.mergeGroup, { lines: g.lines.join(", "), name: g.name })}</li>)}
           </ul>
+          {groups.length > GROUPS_SHOWN && (
+            <Button size="sm" variant="link" className="self-start px-0" aria-expanded={allGroups} onClick={() => setAllGroups((v) => !v)}>
+              {allGroups ? t.mergeLess : fill(t.mergeMore, { n: groups.length - GROUPS_SHOWN })}
+            </Button>
+          )}
         </Alert>
       )}
       {merge?.merged && (
@@ -295,13 +304,33 @@ export function ItemsTable({
         rowLabel={(l) => fill(t.lineN, { n: l.n })}
         searchable
         columnToggle
-        selectable={suspectCount > 0}
+        selectable
         selectionActions={(picked, clear) => {
           const todo = picked.filter((l) => l.suspects.length > 0);
+          const withOrigin = picked.filter((l) => l.cells.origin);
           return (
-            <Button size="sm" leftIcon={<CheckCheck className="h-4 w-4" />} disabled={todo.length === 0} onClick={() => { confirmLines(todo); clear(); }}>
-              {fill(t.confirmLines, { n: todo.length })}
-            </Button>
+            <>
+              {withOrigin.length > 0 && (
+                <Combobox
+                  size="sm"
+                  className="w-56"
+                  aria-label={fill(t.originBulk, { n: withOrigin.length })}
+                  placeholder={fill(t.originBulk, { n: withOrigin.length })}
+                  options={countries}
+                  value={null}
+                  onChange={(v) => {
+                    if (!v) return;
+                    for (const l of withOrigin) if (l.cells.origin!.value !== v) onSave(l.cells.origin!.id, v);
+                    clear();
+                  }}
+                />
+              )}
+              {suspectCount > 0 && (
+                <Button size="sm" leftIcon={<CheckCheck className="h-4 w-4" />} disabled={todo.length === 0} onClick={() => { confirmLines(todo); clear(); }}>
+                  {fill(t.confirmLines, { n: todo.length })}
+                </Button>
+              )}
+            </>
           );
         }}
         rowTone={(l) => (CELLS.some((c) => l.cells[c]?.id === activeId) ? "active" : l.suspects.length > 0 || (l.cells.origin && isMissingOrigin(l.cells.origin)) ? "warning" : undefined)}

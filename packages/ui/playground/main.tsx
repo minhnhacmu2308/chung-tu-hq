@@ -154,7 +154,7 @@ function Demo() {
           </>
         }
       />
-      <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="panel">
+      <Dialog open={appearanceOpen} onOpenChange={setAppearanceOpen} defaultPresentation="dock">
         <DialogContent title="Cấu hình giao diện" icon={<SunMoon className="h-4 w-4" />} size="sm">
           <AppearancePanel value={appearance} onChange={setAppearance} allowCustomBrand brandAdjustments={adjustments} defaultTab={initialTab === "layout" || initialTab === "color" ? initialTab : "general"} />
         </DialogContent>

@@ -72,6 +72,28 @@ describe("ItemsTable", () => {
     expect(onConfirm.mock.calls.map((c) => c[0])).toEqual(["f_3_amount", "f_7_amount"]);
   });
 
+  it("chọn nhiều dòng → 'Áp xuất xứ cho n dòng' lưu xuất xứ từng dòng đã chọn (bỏ dòng đã đúng nước)", async () => {
+    const fields = [...line(1, "Frozen fish"), ...line(2, "Squid"), ...line(3, "Shrimp").filter((f) => f.key !== "item.3.origin"), cell(3, "origin", "JP")];
+    const onSave = vi.fn();
+    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={onSave} onConfirm={vi.fn()} />);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng Dòng 1" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Chọn dòng Dòng 3" }));
+    await userEvent.click(screen.getByRole("combobox", { name: "Áp xuất xứ cho 2 dòng" }));
+    await userEvent.keyboard("JP");
+    await userEvent.click(await screen.findByRole("option", { name: /^JP – / }, { timeout: 5000 }));
+    expect(onSave.mock.calls).toEqual([["f_1_origin", "JP"]]);
+  });
+
+  it("gộp dòng: nhiều nhóm → hiện 3 nhóm đầu, 'Xem thêm' mở hết, 'Thu gọn' về 3", async () => {
+    const fields = Array.from({ length: 5 }, (_, i) => [...line(i + 1, `Item ${i + 1}`), ...line(i + 6, `Item ${i + 1}`)]).flat();
+    renderWithProviders(<ItemsTable fields={fields} activeId={null} onActivate={vi.fn()} onSave={vi.fn()} onConfirm={vi.fn()} merge={{ merged: false, busy: false, onChange: vi.fn() }} />);
+    expect(screen.getAllByText(/^Dòng \d+, \d+ →/)).toHaveLength(3);
+    await userEvent.click(screen.getByRole("button", { name: "Xem thêm 2 nhóm" }));
+    expect(screen.getAllByText(/^Dòng \d+, \d+ →/)).toHaveLength(5);
+    await userEvent.click(screen.getByRole("button", { name: "Thu gọn" }));
+    expect(screen.getAllByText(/^Dòng \d+, \d+ →/)).toHaveLength(3);
+  });
+
   it("sửa ô + Enter → lưu và focus ô cùng cột ở dòng dưới", async () => {
     const { onSave } = setup();
     const qty = screen.getByRole("textbox", { name: "quantity 1" });

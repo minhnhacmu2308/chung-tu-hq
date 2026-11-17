@@ -25,7 +25,7 @@ const SCALARS: [path: string, get: (m: ManualShipment) => string | null | undefi
   ["/transport/grossWeightKg", (m) => m.transport.grossWeightKg],
   ["/transport/netWeightKg", (m) => m.transport.netWeightKg],
   ["/origin/country", (m) => m.origin.country],
-  ["/marks", (m) => m.marks],
+  ["/transport/marks", (m) => m.marks],
 ];
 
 /** Thành tiền dòng = số lượng × đơn giá, làm tròn 2 số lẻ (Decimal – bất biến 3). Tổng invoice = Σ thành tiền đã làm tròn. */

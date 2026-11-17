@@ -63,6 +63,11 @@ describe("applyManual", () => {
     expect(s.items).toHaveLength(2);
     expect(applyManual(emptyShipment(), null).parties.buyer.name.value).toBeNull();
   });
+
+  it("ký mã hiệu nhập tay vào transport.marks", () => {
+    const s = applyManual(emptyShipment(), m({ marks: "VL-01" }));
+    expect(s.transport.marks!.value).toBe("VL-01");
+  });
 });
 
 describe("manualChanges (field_audit)", () => {

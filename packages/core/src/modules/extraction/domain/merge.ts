@@ -25,13 +25,17 @@ export function mergeField(spec: FieldSpec, files: FileExtraction[]): Sourced<st
   for (const src of spec.sources) {
     if (src.fallback && cands.length) break;
     for (const f of files.filter((x) => x.kind === src.kind)) {
+      // Một chứng từ chỉ là một nguồn của ô (trường riêng + lot cùng ghi) – không tự đối chiếu chéo với chính nó.
+      if (sources.some((r) => r.documentId === f.documentId)) continue;
       const rawVal = src.get(f.data);
       if (rawVal === null || rawVal === undefined || rawVal === "") continue;
       const normalized = spec.normalize(rawVal);
       if (normalized === null) continue;
       const raw = typeof rawVal === "string" ? rawVal : String(rawVal);
-      cands.push({ kind: f.kind, normalized, raw, unsure: uncertain(f.data, src.regionKey) });
       const region = src.regionKey ? f.regions?.[src.regionKey] : undefined;
+      // Chống bịa (5.5): file scan có vùng mà ô lot không chỉ được vùng → không chắc.
+      const noRegion = !!f.regions && !region && !!src.regionKey?.startsWith("lot.");
+      cands.push({ kind: f.kind, normalized, raw, unsure: noRegion || uncertain(f.data, src.regionKey) });
       sources.push({ documentId: f.documentId, kind: f.kind, page: region?.page ?? 1, raw, normalized, ...(region ? { region } : {}) });
     }
   }
@@ -149,6 +153,20 @@ function mergeCustom(files: FileExtraction[]): Shipment["custom"] {
   return out;
 }
 
+/** Container từ mọi chứng từ: B/L trước rồi `lotContainers` theo thứ tự file; trùng số (chữ hoa, bỏ khoảng trắng) → giữ phần tử đứng trước. */
+function mergeContainers(files: FileExtraction[]): Shipment["transport"]["containers"] {
+  const lists = [...files.filter((f) => f.kind === "BILL_OF_LADING").map((f) => [f, f.data["containers"]] as const), ...files.map((f) => [f, f.data["lotContainers"]] as const)];
+  const out = new Map<string, Shipment["transport"]["containers"][number]>();
+  for (const [f, list] of lists) {
+    for (const c of (Array.isArray(list) ? list : []) as Record<string, unknown>[]) {
+      const no = typeof c["no"] === "string" ? c["no"].replace(/\s+/g, "").toUpperCase() : "";
+      if (!no || out.has(no)) continue;
+      out.set(no, { no, sealNo: (c["sealNo"] as string | null) ?? null, size: (c["size"] as string | null) ?? null, sourceKind: f.kind });
+    }
+  }
+  return [...out.values()];
+}
+
 export function mergeExtractions(files: FileExtraction[], opts: MergeOptions): Shipment {
   const s = emptyShipment();
   s.version = opts.version;
@@ -161,9 +179,7 @@ export function mergeExtractions(files: FileExtraction[], opts: MergeOptions): S
   const awb = files.find((f) => f.kind === "AIR_WAYBILL");
   if (bl) s.transport.mode = { value: "SEA", sources: [{ documentId: bl.documentId, kind: "BILL_OF_LADING", page: 1, raw: "B/L" }], status: "SINGLE_SOURCE" };
   else if (awb) s.transport.mode = { value: "AIR", sources: [{ documentId: awb.documentId, kind: "AIR_WAYBILL", page: 1, raw: "AWB" }], status: "SINGLE_SOURCE" };
-  s.transport.containers = ((bl?.data["containers"] as Record<string, unknown>[] | undefined) ?? [])
-    .filter((c) => typeof c["no"] === "string" && c["no"])
-    .map((c) => ({ no: String(c["no"]), sealNo: (c["sealNo"] as string | null) ?? null, size: (c["size"] as string | null) ?? null }));
+  s.transport.containers = mergeContainers(files);
   s.items = mergeItems(files);
   sumInvoiceTotals(files, s);
   mergeCharges(files, s);

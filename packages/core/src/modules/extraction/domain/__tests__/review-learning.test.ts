@@ -10,10 +10,19 @@ describe("review-learning", () => {
     expect(rawPathOf("INVOICE", "/parties/buyer/taxCode")).toBe("buyer.taxCode");
     expect(rawPathOf("INVOICE", "/items/2/hsOnInvoice")).toBe("items.2.hsCodeOnInvoice");
     expect(rawPathOf("INVOICE", "/items/0/quantity")).toBe("items.0.quantity");
-    expect(rawPathOf("INVOICE", "/transport/billNo")).toBeNull();
+    // Mọi chứng từ là nguồn của ô lô hàng: invoice ghi số vận đơn trong khối lot.
+    expect(rawPathOf("INVOICE", "/transport/billNo")).toBe("lot.billNo");
+    expect(rawPathOf("INVOICE", "/parties/buyer/address")).toBe("buyer.address");
     // AWB có hai nguồn cho Số vận đơn: HAWB, không có thì số AWB (chuyển phát nhanh) – ghi ngược vào đúng chỗ đang có giá trị.
     expect(rawPathOf("AIR_WAYBILL", "/transport/billNo", { awbNo: "7704711846I2", hawbNo: null })).toBe("awbNo");
     expect(rawPathOf("AIR_WAYBILL", "/transport/billNo", { awbNo: "92147391621", hawbNo: "YZS24120950" })).toBe("hawbNo");
+  });
+
+  it("applyCorrections: ô lot ghi ngược vào lot.<key>, kể cả kết quả cũ chưa có lot", () => {
+    const { data: out, corrections } = applyCorrections("INVOICE", { invoiceNo: "INV-1", lot: { portOfLoading: "CAT LAI" } }, [row("/transport/portOfLoading", "CAT LAI", "CANG CAT LAI")]);
+    expect(out["lot"]).toEqual({ portOfLoading: "CANG CAT LAI" });
+    expect(corrections.map((c) => c.rawPath)).toEqual(["lot.portOfLoading"]);
+    expect(applyCorrections("INVOICE", { invoiceNo: "INV-1" }, [row("/invoice/lcNo", "", "LC-9")]).data["lot"]).toEqual({ lcNo: "LC-9" });
   });
 
   it("applyCorrections: chỉ giá trị người dùng sửa; giữ kiểu số; tạo object bên khi model không đọc được; không đổi dữ liệu gốc", () => {

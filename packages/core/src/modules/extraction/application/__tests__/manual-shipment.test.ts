@@ -85,6 +85,6 @@ describe("nhập tay – ký mã hiệu", () => {
   it("lưu ký mã hiệu, ghi audit", async () => {
     const v = unwrap(await saveManualShipment(deps, ctx(), "dos_1", { ...DATA, marks: "NTG / STOCKHOLM" }));
     expect(v.data?.marks).toBe("NTG / STOCKHOLM");
-    expect(uow.data.audit.map((a) => a.key)).toEqual(expect.arrayContaining(["/marks"]));
+    expect(uow.data.audit.map((a) => a.key)).toEqual(expect.arrayContaining(["/transport/marks"]));
   });
 });

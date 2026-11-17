@@ -1,5 +1,5 @@
 // Gộp lại toàn bộ hồ sơ từ các extraction DONE: shipment version mới, chiếu trường (giữ USER_CONFIRMED), chạy luật, cập nhật hồ sơ.
-import { EXTRACTION_SCHEMA_VERSION, vnDateOf, type Shipment, type Sourced } from "@kb/contracts";
+import { EXTRACTION_SCHEMA_VERSION, isHiddenOcrRow, vnDateOf, type Shipment, type Sourced } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { isSuspect } from "../domain/field-status.js";
 import { applyIssued } from "../domain/issued.js";
@@ -26,8 +26,8 @@ const baseKey = (key: string) => (key.endsWith(LINE_SUFFIX) ? key.slice(0, -LINE
 /** Số dòng của khóa trường dòng hàng `item.N.<key>` (khác → NaN). */
 const lineOf = (key: string) => Number(/^item\.(\d+)\./.exec(key)?.[1]);
 
-/** Đếm trường nghi ngờ theo ngưỡng org. */
-export const countSuspect = (rows: { status: FieldRow["status"] }[], threshold: "STRICT" | "BALANCED" | "RELAXED") => rows.filter((f) => isSuspect(f.status, threshold)).length;
+/** Đếm trường nghi ngờ theo ngưỡng org; dòng ẩn trên màn OCR không tính (khớp số màn hình). */
+export const countSuspect = (rows: { key: string; status: FieldRow["status"] }[], threshold: "STRICT" | "BALANCED" | "RELAXED") => rows.filter((f) => !isHiddenOcrRow(f.key) && isSuspect(f.status, threshold)).length;
 
 export async function remergeDossier(deps: ExtractionDeps, orgId: string, dossierId: string): Promise<void> {
   const org = await deps.documents.orgInfo(orgId);

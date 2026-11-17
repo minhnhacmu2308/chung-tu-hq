@@ -39,6 +39,12 @@ describe("projectFields – ô container theo từng chứng từ", () => {
     expect(f.map((x) => x.status)).toEqual(["CROSS_CHECKED", "CROSS_CHECKED"]);
   });
 
+  it("B/L ghi cùng số ở containers và lotContainers (dữ liệu cũ/lạ) → một container, không tự lệch", () => {
+    const b: FileExtraction = { documentId: "d_bl", kind: "BILL_OF_LADING", pages: 1, data: { billNo: "B1", containers: [{ no: "FBIU5659719", sealNo: "111", size: null }], lotContainers: [{ no: "fbiu5659719", sealNo: "222", size: null }], uncertainties: [] } };
+    expect(project([b])).toEqual([expect.objectContaining({ value: "FBIU5659719 / 111", status: "SINGLE_SOURCE" })]);
+    expect(project([b])[0]!.note).toBeUndefined();
+  });
+
   it("không truyền danh sách chứng từ → không có ô container (gọi cũ)", () => {
     const files = [inv([{ no: "A1", sealNo: null, size: null }])];
     expect(projectFields(mergeExtractions(files, { version: 1 })).some((f) => f.key === "containers")).toBe(false);

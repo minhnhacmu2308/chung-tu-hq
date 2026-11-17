@@ -153,13 +153,15 @@ function mergeCustom(files: FileExtraction[]): Shipment["custom"] {
   return out;
 }
 
-/** Container một chứng từ ghi (B/L: `containers` rồi `lotContainers`); số chuẩn hóa chữ hoa, bỏ khoảng trắng, bỏ số rỗng. */
+/** Container một chứng từ ghi (B/L: `containers` rồi `lotContainers`); số chuẩn hóa chữ hoa, bỏ khoảng trắng, bỏ số rỗng; trùng số trong cùng chứng từ → giữ phần tử đứng trước. */
 export function containersOf(f: FileExtraction): { no: string; sealNo: string | null; size: string | null }[] {
   const raw = [...(f.kind === "BILL_OF_LADING" && Array.isArray(f.data["containers"]) ? f.data["containers"] : []), ...(Array.isArray(f.data["lotContainers"]) ? f.data["lotContainers"] : [])] as Record<string, unknown>[];
-  return raw.flatMap((c) => {
+  const out = new Map<string, { no: string; sealNo: string | null; size: string | null }>();
+  for (const c of raw) {
     const no = typeof c["no"] === "string" ? c["no"].replace(/\s+/g, "").toUpperCase() : "";
-    return no ? [{ no, sealNo: (c["sealNo"] as string | null) ?? null, size: (c["size"] as string | null) ?? null }] : [];
-  });
+    if (no && !out.has(no)) out.set(no, { no, sealNo: (c["sealNo"] as string | null) ?? null, size: (c["size"] as string | null) ?? null });
+  }
+  return [...out.values()];
 }
 
 /** Container từ mọi chứng từ: B/L trước rồi các chứng từ khác theo thứ tự file; trùng số → giữ phần tử đứng trước. */

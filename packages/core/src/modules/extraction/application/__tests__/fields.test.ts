@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { CustomsStage } from "@kb/contracts";
+import { isHiddenOcrRow, type CustomsStage } from "@kb/contracts";
+import { isSuspect } from "../../domain/field-status.js";
 import { fixedClock } from "../../../../shared/clock.js";
 import type { Ctx } from "../../../../shared/ctx.js";
 import { asOrgId, asUserId, sequentialIdGen } from "../../../../shared/ids.js";
@@ -82,6 +83,17 @@ describe("trường trích xuất", () => {
     expect(r.ok ? "ok" : r.error.code).toBe("VALIDATION");
     expect(unwrap(await confirmField(deps, ctx(), f.id)).status).toBe("USER_CONFIRMED");
     expect(uow.data.shipments.at(-1)?.data.transport.containers).toEqual([{ no: "FBIU5659719", sealNo: "34337288", size: null, sourceKind: "INVOICE" }]);
+  });
+  it("hai chứng từ ghi mã PTTT khác nhau: dòng mã PTTT CONFLICT nhưng ẩn → số ô cần xem máy chủ = số màn OCR (ocrRows)", async () => {
+    deps.ai = new ScriptedAi({ INVOICE: { ...INVOICE, paymentMethodCode: "LC" }, SALES_CONTRACT: { contractNo: "HD-1", paymentMethodCode: "TTR", items: [], uncertainties: [] } });
+    for (const [id, kind] of [["doc_i3", "INVOICE"], ["doc_c3", "SALES_CONTRACT"]] as const) {
+      docs.docs.push({ id, orgId: "org_a", dossierId: "dos_3", kind, kindSource: "USER", fileName: `${id}.pdf`, mime: "application/pdf", pages: 1, status: "QUEUED", storageKey: "k", sha256: id });
+      unwrap(await processDocument(deps, { orgId: "org_a", dossierId: "dos_3", documentId: id, mode: "FULL" }));
+    }
+    const list = unwrap(await listFields(deps, ctx(), "dos_3"));
+    expect(list.filter((f) => f.key === "payment_method_code").map((f) => f.status)).toEqual(["CONFLICT", "CONFLICT"]);
+    const onScreen = list.filter((f) => !isHiddenOcrRow(f.key) && isSuspect(f.status)).length;
+    expect(docs.dossierUpdates.at(-1)).toMatchObject({ suspectFields: onScreen });
   });
   it("hồ sơ đã duyệt/truyền: không sửa trường, không xác nhận dữ liệu lại → DOSSIER_LOCKED", async () => {
     const f = unwrap(await listFields(deps, ctx(), "dos_1"))[0]!;

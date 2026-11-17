@@ -185,6 +185,29 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
   });
 });
 
+describe("container / tàu / thanh toán theo nguồn thật (lô chỉ có invoice)", () => {
+  const onlyInvoice = (s: Shipment) => {
+    s.transport.containers = [{ no: "FBIU5659719", sealNo: null, size: null, sourceKind: "INVOICE" }];
+    s.transport.vessel = { value: "COSCO SHIPPING PLANET", sources: [{ kind: "INVOICE" } as never], status: "SINGLE_SOURCE" };
+    s.invoice.paymentTerms = nul();
+    s.invoice.lcNo = val("LC123");
+  };
+  it("EDA: SO_CONT ghi nguồn invoice, tên tàu có giá trị, PT_TT = LC nghi ngờ", () => {
+    const f = eda({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: onlyInvoice });
+    expect(f["SO_CONT"]).toMatchObject({ value: "FBIU5659719", source: "INVOICE" });
+    expect(f["PTVC_TEN"]?.value).toBe("COSCO SHIPPING PLANET");
+    expect(f["PT_TT"]?.value).toMatch(/^LC/);
+    expect(f["PT_TT"]?.suspect).toBe(true);
+  });
+  it("IDA: SL_CONT ghi nguồn invoice", () => {
+    expect(ida({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: onlyInvoice })["SL_CONT"]).toMatchObject({ value: "1", source: "INVOICE" });
+  });
+  it("container không có sourceKind (shipment cũ) → BILL_OF_LADING", () => {
+    expect(eda({ dossier: { transportMode: "SEA_CONTAINER" } })["SO_CONT"]).toMatchObject({ value: "SITU2246781", source: "BILL_OF_LADING" });
+    expect(ida({ dossier: { transportMode: "SEA_CONTAINER" } })["SL_CONT"]).toMatchObject({ value: "1", source: "BILL_OF_LADING" });
+  });
+});
+
 describe("IDA_MAPPINGS (tờ khai nhập khẩu)", () => {
   it("1.15 địa chỉ doanh nghiệp rỗng (chỉ tiêu HT – VNACCS tự hiện theo MST) → không bắt buộc, không nghi ngờ, ghi chú hướng dẫn; điện thoại rỗng → để trống", () => {
     const f = ida({ org: { address: "", phone: "" } });

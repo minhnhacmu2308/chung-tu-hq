@@ -6,7 +6,7 @@ import type { Adjustment } from "../valuation.js";
 import { IDA_NO as N } from "./numbers.js";
 import { dec } from "../../../../shared/decimal.js";
 import { spreadInvoiceList } from "./invoice-list.js";
-import { domesticPorts, foreignPorts, incotermField, invoiceKind, lineHs, onSitePlace, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
+import { contSource, domesticPorts, foreignPorts, incotermField, invoiceKind, lineHs, onSitePlace, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { BY_WATER, IN_CONTAINER, RE_IMPORT, TEMP_IMPORT } from "./conditions.js";
 import { profileSource, SRC, warehouseFromAn } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, sourceOfKind, type MappingInput } from "./types.js";
@@ -214,7 +214,7 @@ export const IDA_MAPPINGS: FieldMapping[] = [
   // 1.35: hệ thống tự xuất nếu đã đăng ký; không khai khi đường hàng không / hàng rời / hàng CFS (mã 3).
   { code: "SL_CONT", no: N.SL_CONT, section: "TRANSPORT", label: "Số lượng container", required: false, when: IN_CONTAINER, from: (i) => {
     const n = i.shipment.transport.containers.length;
-    return n ? { value: String(n), source: "BILL_OF_LADING" } : missing("BILL_OF_LADING", "Vận đơn chưa có số container");
+    return n ? { value: String(n), source: contSource(i) } : missing("BILL_OF_LADING", "Vận đơn chưa có số container");
   } },
   { code: "PTVC_TEN", no: N.PTVC_TEN, section: "TRANSPORT", label: "Tên phương tiện vận chuyển", required: true, from: (i) => {
     const v = fromSourced(i.shipment.transport.vessel, "BILL_OF_LADING");

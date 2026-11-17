@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePaymentChoice, paymentChoiceValue, paymentNeedsChoice, resolvePayment } from "./payment-resolve.js";
+import { parsePaymentChoice, paymentChoiceValue, paymentNeedsChoice, reconcilePayment, resolvePayment } from "./payment-resolve.js";
 
 describe("payment-resolve", () => {
   it("mã chuẩn người khai chọn (kể cả mã không có chữ nhận diện như GV, BIENMAU) → đúng mã, không nghi ngờ", () => {
@@ -21,5 +21,19 @@ describe("payment-resolve", () => {
     expect(paymentChoiceValue("KC", "KC – Payment by crypto")).toBe("KC – Payment by crypto");
     expect(paymentChoiceValue("LC", "KC – Payment by crypto")).toBe("LC");
     expect(paymentChoiceValue("KC", "")).toBe("KC");
+  });
+  it("reconcilePayment: AI chọn mã, regex kiểm chéo; lệch hoặc chỉ một bên có → cần xem", () => {
+    expect(reconcilePayment("T/T 30 days", "KC", null)).toMatchObject({ code: "KC" });
+    expect(reconcilePayment("T/T 30 days", "KC", null)?.suspect).toBeUndefined();
+    expect(reconcilePayment("Irrevocable documentary credit at sight", "LC", null)).toMatchObject({ code: "LC", suspect: true });
+    expect(reconcilePayment(null, null, "S700542640040")).toMatchObject({ code: "LC", suspect: true });
+    expect(reconcilePayment("L/C at sight", "TTR", null)).toMatchObject({ code: "LC", suspect: true, note: "Chứng từ ghi “L/C at sight”: hệ thống đọc ra LC, AI nhận là TTR – chọn mã đúng" });
+    expect(reconcilePayment("LC", "TTR", null)).toEqual(expect.objectContaining({ code: "LC" }));
+    expect(reconcilePayment("LC", "TTR", null)?.suspect).toBeUndefined();
+    expect(reconcilePayment(null, null, null)).toBeNull();
+    // Số L/C là tín hiệu LC: T/T mà có số L/C → cần xem, giữ mã regex.
+    expect(reconcilePayment("T/T 30 days", null, "S700542640040")).toMatchObject({ code: "KC", suspect: true });
+    expect(paymentNeedsChoice("L/C at sight", "TTR")).toBe(true);
+    expect(paymentNeedsChoice(null, null, "S700542640040")).toBe(true);
   });
 });

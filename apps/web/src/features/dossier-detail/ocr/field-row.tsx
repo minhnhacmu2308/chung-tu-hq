@@ -1,6 +1,6 @@
 "use client";
 // Một trường trích xuất: nhãn + trạng thái, ô sửa trực tiếp, nút "Đúng", ghi chú khi mâu thuẫn, "AI đọc: …" khi đã sửa.
-import { PAYMENT_METHODS, paymentChoiceValue, paymentNeedsChoice, resolvePayment } from "@kb/contracts";
+import { PAYMENT_METHODS, paymentChoiceValue, paymentNeedsChoice, reconcilePayment } from "@kb/contracts";
 import { Button, cn, fill, Input, Label, Select, StatusBadge, useMessages } from "@kb/ui";
 import { Check, Crosshair, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -19,15 +19,23 @@ export type FieldRowProps = {
   onPick?: (id: string) => void;
   picking?: boolean;
   busy?: boolean;
+  /** Mã PTTT AI chọn + số L/C của cùng hồ sơ – kiểm chéo ô Phương thức thanh toán (paymentHint). */
+  paymentHint?: PaymentHint;
 };
+export type PaymentHint = { aiCode: string | null; lcNo: string | null };
 
 export const fieldDomId = (id: string) => `field-${id}`;
 
-/** Ô Phương thức thanh toán chưa ra mã chuẩn (chữ trên chứng từ không nhận ra) – bắt chọn mã trước khi sang bước sau. */
-export const isUnknownPayment = (f: ExtractedField) => f.key === "payment_terms" && paymentNeedsChoice(f.value);
+/** Mã PTTT AI chọn và số L/C: giá trị đầu tiên có trong mọi ô của hồ sơ. */
+export const paymentHint = (fields: ExtractedField[]): PaymentHint => ({
+  aiCode: fields.find((f) => f.key === "payment_method_code" && f.value.trim())?.value ?? null,
+  lcNo: fields.find((f) => f.key === "lc_no" && f.value.trim())?.value ?? null,
+});
+/** Ô Phương thức thanh toán cần chọn mã (không nhận ra, hoặc lệch mã AI / số L/C) – bắt chọn trước khi sang bước sau. */
+export const isUnknownPayment = (f: ExtractedField, hint?: PaymentHint) => f.key === "payment_terms" && paymentNeedsChoice(f.value, hint?.aiCode, hint?.lcNo);
 const PAYMENT_OPTIONS = PAYMENT_METHODS.map((p) => ({ value: p.code, label: `${p.code} – ${p.label}` }));
 
-export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false }: FieldRowProps) {
+export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false, paymentHint: hint }: FieldRowProps) {
   const t = useMessages(FIELD_ROW_MESSAGES);
   const [value, setValue] = useState(field.value);
   useEffect(() => setValue(field.value), [field.value]);
@@ -38,10 +46,12 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
   };
   const inputId = `${fieldDomId(field.id)}-input`;
   const noteId = field.note ? `${fieldDomId(field.id)}-note` : undefined;
-  // PTTT: chữ trên chứng từ + mã chuẩn TK_IVP (1.43 / 2.38) – nhận ra thì chọn sẵn, không nhận ra thì bắt chọn.
+  // PTTT: chữ trên chứng từ + mã chuẩn TK_IVP (1.43 / 2.38) – khớp thì chọn sẵn, không nhận ra / lệch mã AI, số L/C thì bắt chọn.
   const payment = field.key === "payment_terms";
-  const payUnknown = payment && paymentNeedsChoice(field.value);
-  const payCode = payment && !payUnknown ? (resolvePayment(field.value)?.code ?? "") : "";
+  const pay = payment ? reconcilePayment(field.value, hint?.aiCode ?? null, hint?.lcNo ?? null) : null;
+  const payUnknown = !!pay?.suspect;
+  const payCode = payment && !payUnknown ? (pay?.code ?? "") : "";
+  const payHinted = payUnknown && !!(hint?.aiCode || hint?.lcNo);
 
   return (
     <div
@@ -110,7 +120,7 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
             disabled={busy}
             onChange={(e) => e.target.value && e.target.value !== payCode && onSave(field.id, paymentChoiceValue(e.target.value, field.value))}
           />
-          {payUnknown && <p className="text-sm text-danger-subtle-fg">{t.paymentUnknown}</p>}
+          {payUnknown && <p className="text-sm text-danger-subtle-fg">{payHinted ? fill(t.paymentMismatch, { code: pay!.code }) : t.paymentUnknown}</p>}
         </div>
       )}
       {field.note && field.status !== "USER_CONFIRMED" && (

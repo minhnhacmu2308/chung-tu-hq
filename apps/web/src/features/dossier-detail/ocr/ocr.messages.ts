@@ -100,14 +100,17 @@ export const FIELD_ROW_MESSAGES = defineMessages({
   vi: {
     confirmField: "Xác nhận {label} đúng", correct: "Đúng", aiRead: "AI đọc:", revert: "Hoàn tác", pickOnFile: "Chỉ vị trí {label} trên file",
     paymentCode: "Mã phương thức thanh toán (1.43 / 2.38)", choosePayment: "Chọn mã", paymentUnknown: "Không nhận ra mã chuẩn từ chữ trên chứng từ – chọn mã để sang bước tiếp theo",
+    paymentMismatch: "Chữ trên chứng từ, mã AI chọn và số L/C không khớp nhau (gợi ý {code}) – chọn mã đúng để sang bước tiếp theo",
   },
   en: {
     confirmField: "Confirm {label} is correct", correct: "Correct", aiRead: "AI read:", revert: "Undo", pickOnFile: "Point to {label} on the file",
     paymentCode: "Payment method code (1.43 / 2.38)", choosePayment: "Choose a code", paymentUnknown: "Couldn't recognise a standard code from the document text – choose one to continue",
+    paymentMismatch: "The document text, the AI-chosen code and the L/C number don't agree (suggested {code}) – choose the correct code to continue",
   },
   zh: {
     confirmField: "确认{label}正确", correct: "正确", aiRead: "AI 读取：", revert: "撤销", pickOnFile: "在文件上指出{label}",
     paymentCode: "付款方式代码（1.43 / 2.38）", choosePayment: "选择代码", paymentUnknown: "无法从单据文字识别标准代码 – 请选择代码后继续",
+    paymentMismatch: "单据文字、AI 选择的代码与信用证号不一致（建议 {code}）– 请选择正确代码后继续",
   },
 });
 

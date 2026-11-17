@@ -17,8 +17,30 @@ export function paymentChoiceValue(code: string, original: string): string {
   return code === "KC" && text ? `KC – ${text}` : code;
 }
 
-/** OCR phải chọn lại mã: có chữ trên chứng từ mà không nhận ra mã chuẩn nào. */
-export const paymentNeedsChoice = (raw: string | null | undefined): boolean => !!raw?.trim() && !!resolvePayment(raw)?.suspect;
+/** OCR phải chọn lại mã: đối chiếu chữ trên chứng từ / mã AI / số L/C ra kết quả cần xem (xem reconcilePayment). */
+export const paymentNeedsChoice = (raw: string | null | undefined, aiCode?: string | null, lcNo?: string | null): boolean =>
+  !!reconcilePayment(raw ?? null, aiCode ?? null, lcNo ?? null)?.suspect;
+
+/**
+ * Mã PTTT: AI chọn mã, regex (resolvePayment) kiểm chéo, số L/C là thêm một tín hiệu LC.
+ * Người khai đã chọn mã → thắng. Cùng mã → nhận. Khác, hoặc chỉ một bên có → cần xem; mặc định mã regex (nếu nhận ra) → mã AI → LC.
+ * AI không trả mã (kể cả hồ sơ đọc trước khi có trường) → chỉ dùng regex như cũ.
+ */
+export function reconcilePayment(raw: string | null, aiCode: string | null, lcNo: string | null): ResolvedPayment | null {
+  const text = raw?.trim() || null;
+  if (text && parsePaymentChoice(text)) return resolvePayment(text);
+  const rx = text ? resolvePayment(text) : null;
+  const rxCode = rx && !rx.suspect ? rx.code : null;
+  const ai = PAYMENT_METHODS.find((p) => p.code === aiCode?.trim().toUpperCase())?.code ?? null;
+  const lc = lcNo?.trim() || null;
+  const other = ai ?? (lc ? "LC" : null);
+  if (!other || other === rxCode) return rx;
+  const code = rxCode ?? other;
+  const say = ai ? `AI nhận là ${ai}` : `có số L/C ${lc}`;
+  const note = text ? `Chứng từ ghi “${text}”: hệ thống đọc ra ${rx!.code}, ${say} – chọn mã đúng` : `Chứng từ không ghi phương thức thanh toán, ${say} – chọn mã đúng`;
+  const name = rxCode ? rx!.name : PAYMENT_METHODS.find((p) => p.code === code)!.label;
+  return { code, name, suspect: true, note: rxCode && rx!.note ? `${note}. ${rx!.note}` : note };
+}
 
 export type ResolvedPayment = { code: string; name: string; note?: string; suspect?: true };
 

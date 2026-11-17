@@ -20,7 +20,7 @@ import { ApiError } from "@/lib/api-error";
 import { DOC_KIND_LABELS, FIELD_GROUP_LABELS, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { CrossCheckPanel } from "../ocr/cross-check-panel";
 import { DocumentSheetsCard } from "../ocr/document-sheets";
-import { FieldRow, fieldDomId, isUnknownPayment } from "../ocr/field-row";
+import { FieldRow, fieldDomId, isUnknownPayment, paymentHint, type PaymentHint } from "../ocr/field-row";
 import { isMissingOrigin, ItemsTable, type LineMerge } from "../ocr/items-table";
 import { SKILL_LEARN_MESSAGES } from "../ocr/ocr.messages";
 import { IncotermChangeDialog, incotermCodeChanged, useSaveFreightTermNote } from "../ocr/incoterm-change-dialog";
@@ -36,7 +36,7 @@ import { OCR_STEP_MESSAGES } from "./ocr-step.messages";
 const GROUPS = Object.keys(FIELD_GROUP_LABELS.vi) as ExtractedField["group"][];
 type Filter = "all" | "suspect";
 
-function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, merge }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined; focusSeq?: number; merge?: LineMerge }) {
+function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, merge, payHint }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined; focusSeq?: number; merge?: LineMerge; payHint: PaymentHint }) {
   const t = useMessages(OCR_STEP_MESSAGES);
   const groupLabels = useMessages(FIELD_GROUP_LABELS);
   const [active, setActive] = useState<string | null>(null);
@@ -214,6 +214,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, me
                     onConfirm={confirm}
                     onRevert={revert}
                     picking={pick?.id === f.id}
+                    paymentHint={payHint}
                     {...(canPick ? { onPick: (id: string) => setPick(fields.find((x) => x.id === id) ?? null) } : {})}
                   />
                 ))}
@@ -271,7 +272,8 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const originMissing = fields.filter(isMissingOrigin);
   // Đề xuất gộp / tách chỉ ở một tab: chứng từ đầu tiên có dòng hàng (dòng hàng lấy từ hóa đơn, không có thì packing list).
   const mergeDocId = [...docs].sort((a, b) => Number(b.kind === "INVOICE") - Number(a.kind === "INVOICE")).find((d) => fields.some((f) => f.documentId === d.id && f.group === "ITEMS"))?.id;
-  const paymentUnknown = fields.some(isUnknownPayment);
+  const payHint = paymentHint(fields);
+  const paymentUnknown = fields.some((f) => isUnknownPayment(f, payHint));
   const exitBlocked = originMissing.length > 0 || paymentUnknown;
   const [tab, setTab] = useState<string | undefined>(undefined);
   const params = useSearchParams();
@@ -383,7 +385,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
               </TabsList>
               {docs.map((d) => (
                 <TabsContent key={d.id} value={d.id} className="pt-4">
-                  <DocumentTab doc={d} fields={byDoc(d.id)} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} focusSeq={picked?.seq ?? 0} {...(d.id === mergeDocId ? { merge } : {})} />
+                  <DocumentTab doc={d} fields={byDoc(d.id)} payHint={payHint} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} focusSeq={picked?.seq ?? 0} {...(d.id === mergeDocId ? { merge } : {})} />
                 </TabsContent>
               ))}
             </Tabs>

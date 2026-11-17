@@ -6,6 +6,7 @@ export function ocrExitBlockers(s: Shipment): { reason: ReasonCode; params?: Rea
   const noOrigin = s.items.filter((it) => !it.origin.value?.trim()).map((it) => it.lineNo);
   if (noOrigin.length) out.push({ reason: "ITEM_ORIGIN_MISSING", params: { lines: noOrigin.join(", ") } });
   const pay = s.invoice.paymentTerms.value;
-  if (paymentNeedsChoice(pay)) out.push({ reason: "PAYMENT_METHOD_UNKNOWN", params: { raw: pay!.trim() } });
+  // Hồ sơ cũ chưa có paymentMethodCode / lcNo → coi như null.
+  if (paymentNeedsChoice(pay, s.invoice.paymentMethodCode?.value, s.invoice.lcNo?.value)) out.push({ reason: "PAYMENT_METHOD_UNKNOWN", params: { raw: pay?.trim() || (s.invoice.lcNo?.value ? `L/C ${s.invoice.lcNo.value}` : "") } });
   return out;
 }

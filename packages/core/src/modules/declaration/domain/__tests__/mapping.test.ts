@@ -120,6 +120,14 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
     expect(eda({ mutate: (s) => void (s.invoice.paymentTerms = nul()) })["PT_TT"]).toMatchObject({ value: "", suspect: true, note: "Chưa có phương thức thanh toán" });
   });
 
+  it("phương thức thanh toán: mã AI lệch regex → cần xem kèm hai gợi ý; chỉ có số L/C → gợi ý LC", () => {
+    expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = val("L/C at sight")), (s.invoice.paymentMethodCode = val("TTR"))) })["PT_TT"]).toMatchObject({
+      value: "LC – Tín dụng thư (L/C)", suspect: true, note: "Chứng từ ghi “L/C at sight”: hệ thống đọc ra LC, AI nhận là TTR – chọn mã đúng",
+    });
+    expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = val("T/T 30 days")), (s.invoice.paymentMethodCode = val("KC"))) })["PT_TT"]?.suspect).toBeUndefined();
+    expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = nul()), (s.invoice.lcNo = val("S700542640040"))) })["PT_TT"]).toMatchObject({ value: "LC – Tín dụng thư", suspect: true });
+  });
+
   it("điều kiện giá: chỉ lấy mã (bỏ địa danh), C&F/CNF chuẩn hóa; thiếu tổng trị giá → tính từ tổng các dòng", () => {
     expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("fob")) })["DK_GIA"]?.value).toBe("FOB");
     expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("FOB HAIPHONG")) })["DK_GIA"]?.value).toBe("FOB");

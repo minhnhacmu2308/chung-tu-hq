@@ -1,7 +1,8 @@
 // Chỉ tiêu có cùng cách xác định ở Mẫu 01 (IDA) và Mẫu 02 (EDA) – Phụ lục II TT39/2018 sửa đổi TT121/2025. Thuần.
+import { reconcilePayment } from "@kb/contracts";
 import { dec } from "../../../../shared/decimal.js";
 import { incotermCode, isIncotermCode } from "../adjustments.js";
-import { resolvePackageUnit, resolvePayment, resolvePort } from "../catalog-resolve.js";
+import { resolvePackageUnit, resolvePort } from "../catalog-resolve.js";
 // Suy từ chứng từ (không có/nhiều hóa đơn, dòng FOC, phương thức thanh toán trên invoice) luôn thắng; chứng từ không cho tín hiệu riêng
 // thì dùng Mặc định khai báo của doanh nghiệp (profileOr). Ghi đè nguồn/giá trị cố định của doanh nghiệp vẫn chạy trước (evaluateMapping).
 import { fixed, fromSourced, missing, profileOr, type MappedValue, type MappingInput } from "./types.js";
@@ -54,12 +55,12 @@ export function priceKind(i: MappingInput, kind: Kind): MappedValue {
   return profileOr(i, "GIA_PL", fixed("A – Giá hóa đơn cho hàng hóa phải trả tiền", "INVOICE"));
 }
 
-/** 1.43 / 2.38 – Phương thức thanh toán (xem resolvePayment: T/T thường là KC, không phải TTR). Chứng từ không ghi → Mặc định khai báo. */
+/** 1.43 / 2.38 – Phương thức thanh toán (reconcilePayment: mã AI đối chiếu regex resolvePayment – T/T thường là KC, không phải TTR; có số L/C → gợi ý LC). Chứng từ không ghi → Mặc định khai báo. */
 export function paymentMethod(i: MappingInput, kind: Kind): MappedValue {
-  const raw = i.shipment.invoice.paymentTerms;
-  const r = resolvePayment(raw.value);
+  const { paymentTerms, paymentMethodCode, lcNo } = i.shipment.invoice;
+  const r = reconcilePayment(paymentTerms.value, paymentMethodCode?.value ?? null, lcNo?.value ?? null);
   if (!r) return profileOr(i, "PT_TT", missing("CONTRACT", kind === "IDA" ? "Chưa có phương thức thanh toán trên invoice / hợp đồng" : "Chưa có phương thức thanh toán"));
-  const base = fromSourced(raw, "CONTRACT");
+  const base = fromSourced([paymentTerms, paymentMethodCode, lcNo].find((s) => s?.value) ?? paymentTerms, "CONTRACT");
   const note = [base.note, r.note].filter(Boolean).join(". ");
   return { ...base, value: `${r.code} – ${r.name}`, ...(r.suspect || base.suspect ? { suspect: true } : {}), ...(note ? { note } : {}) };
 }

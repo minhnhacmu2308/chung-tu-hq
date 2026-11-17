@@ -50,5 +50,13 @@ describe("FieldRow – mã phương thức thanh toán", () => {
     expect(known.textContent).toMatch(/^KC – /);
     expect(screen.queryByText(/Không nhận ra mã chuẩn/)).toBeNull();
   });
-});
 
+  it("mã AI lệch chữ trên chứng từ → bắt chọn, báo lệch kèm gợi ý; khớp → chọn sẵn", () => {
+    const { unmount } = renderWithProviders(<FieldRow field={pay("L/C at sight")} paymentHint={{ aiCode: "TTR", lcNo: null }} active={false} onActivate={noop} onSave={noop} onConfirm={noop} onRevert={noop} />);
+    expect(screen.getByRole("combobox", { name: "Mã phương thức thanh toán (1.43 / 2.38)" }).getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/không khớp nhau \(gợi ý LC\)/)).toBeTruthy();
+    unmount();
+    renderWithProviders(<FieldRow field={pay("L/C at sight")} paymentHint={{ aiCode: "LC", lcNo: "S700542640040" }} active={false} onActivate={noop} onSave={noop} onConfirm={noop} onRevert={noop} />);
+    expect(screen.getByRole("combobox", { name: "Mã phương thức thanh toán (1.43 / 2.38)" }).textContent).toMatch(/^LC – /);
+  });
+});

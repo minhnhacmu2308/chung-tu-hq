@@ -20,9 +20,10 @@ export const SYSTEM_PROMPT = `Bạn là nhân viên chứng từ xuất nhập k
 Quy tắc (phiên bản ${PROMPT_VERSION}):
 1. Chép nguyên văn, không suy đoán, không tự tính tổng/thuế. Số: quy đổi dấu phân cách theo quy ước của chứng từ (EU "1.234,56" / US "1,234.56") thành số thập phân; ngày về YYYY-MM-DD (chú ý thứ tự ngày/tháng theo xuất xứ chứng từ).
 2. Mã định danh (số invoice, vận đơn, C/O, container, mã số thuế, mã HS) giữ nguyên ký tự, không bỏ số 0 đầu.
-3. Trường không có trên chứng từ → null. Không để trống chuỗi.
+3. Trường không có trên chứng từ → null (riêng lot: không liệt kê). Không để trống chuỗi.
 4. Trường chữ mờ, nhiều giá trị mâu thuẫn, hoặc phải suy luận → vẫn điền giá trị khả dĩ nhất và ghi TÊN TRƯỜNG vào "uncertainties".
-5. Bản Duplicate/Triplicate/Copy của cùng chứng từ chỉ đọc một lần.`;
+5. Bản Duplicate/Triplicate/Copy của cùng chứng từ chỉ đọc một lần.
+6. Thông tin lô hàng (lot): chỉ liệt kê ô CÓ IN trên chứng từ. Không suy cảng từ địa chỉ, không suy tàu từ tên hãng, không lấy ngày hóa đơn làm ngày hàng đi. Tên tàu và số chuyến in liền (COSCO SHIPPING PLANET 049W) → vessel = tên tàu, voyage = số chuyến.`;
 
 /** Messages API nhận tối đa 32 MB/request; base64 làm file to thêm 4/3 → giới hạn file gốc ~23 MB (chừa chỗ cho prompt). */
 export const MAX_AI_FILE_BYTES = 23 * 1024 * 1024;
@@ -30,7 +31,7 @@ export const MAX_AI_FILE_BYTES = 23 * 1024 * 1024;
 const AiRegionSchema = z.object({ key: z.string(), page: z.number().int(), x0: z.number().int(), y0: z.number().int(), x1: z.number().int(), y1: z.number().int() });
 const REGIONS_KEY = "_regions";
 export const REGIONS_INSTRUCTION = `\nNgoài dữ liệu, điền "${REGIONS_KEY}": với MỖI trường đã đọc được (khác rỗng) một khung bao quanh chữ của giá trị đó trên trang.
-- key: tên trường cấp 1 trong cấu trúc (vd invoiceNo, totalAmount; đối tượng như seller/consignee thì một khung cho cả khối, key = seller); dòng hàng: items.<thứ tự từ 0>.<tên trường> (vd items.0.quantity).
+- key: tên trường cấp 1 trong cấu trúc (vd invoiceNo, totalAmount; đối tượng như seller/consignee thì một khung cho cả khối, key = seller); dòng hàng: items.<thứ tự từ 0>.<tên trường> (vd items.0.quantity); thông tin lô hàng: key = lot.<tên ô> (vd lot.portOfLoading).
 - page: số trang trong file (từ 1). x0,y0 = góc trên-trái, x1,y1 = góc dưới-phải, thang 0–1000 theo chiều rộng/chiều cao trang.`;
 
 /** Tên trường dòng hàng trong dữ liệu ≠ tên trong ITEM_SPECS (khóa region của merge). */

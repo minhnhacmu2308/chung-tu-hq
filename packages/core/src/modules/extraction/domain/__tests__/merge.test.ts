@@ -70,6 +70,12 @@ describe("mergeExtractions", () => {
     expect(s.parties.buyer.taxCode.status).toBe("INVALID_FORMAT");
     expect(s.invoice.paymentTerms.status).toBe("MODEL_UNSURE");
   });
+  it("paymentMethodCode có regionKey: uncertainties ghi tên trường → MODEL_UNSURE", () => {
+    const inv: FileExtraction = { ...invoice, data: { ...invoice.data, paymentMethodCode: "KC", uncertainties: ["paymentMethodCode"] } };
+    const m = mergeExtractions([inv], { version: 1, taxCodeValid: () => true });
+    expect(m.invoice.paymentMethodCode?.value).toBe("KC");
+    expect(m.invoice.paymentMethodCode?.status).toBe("MODEL_UNSURE");
+  });
   it("vận tải từ B/L: số vận đơn, cảng, điểm giao cuối, container; loại kiện PALLETS → PL", () => {
     expect(s.transport.billNo.value).toBe("HPSEL2610078");
     expect(s.transport.portOfDischarge.value).toBe("HO CHI MINH, VIETNAM");

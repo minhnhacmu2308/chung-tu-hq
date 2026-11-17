@@ -27,6 +27,10 @@ export const ExtractedFieldSchema = z.object({
   confirmedAt: IsoDateTimeSchema.optional(),
 });
 export type ExtractedField = z.infer<typeof ExtractedFieldSchema>;
+/** Ô chỉ đọc trên màn OCR (container: sửa qua thẻ nhập tay lô hàng) – server từ chối sửa giá trị, web khóa ô. */
+export const isReadOnlyField = (key: string) => key === "containers";
+/** Dòng không hiện trên màn OCR (mã PTTT AI chọn – hiện qua ô mã của dòng thanh toán): không tính vào số ô cần xem. Dùng chung server + web. */
+export const isHiddenOcrRow = (key: string) => key === "payment_method_code";
 
 export const CrossCheckSchema = z.object({
   id: z.string(),

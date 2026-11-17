@@ -15,9 +15,11 @@ Một loại chứng từ mới chạm 5 chỗ. Thiếu một chỗ là dữ li�
    - Mã định danh `z.string()`; ngày `YYYY-MM-DD`; số là `number` (đã quy đổi theo locale chứng từ).
    - `.describe()` từng trường: nhãn thường gặp trên chứng từ (vd "Invoice No / PI No / 发票号") và điều KHÔNG phải (vd "không phải số PO").
    - Thêm vào `DocType` enum và vào `FileExtraction`.
+   - **Khối `lot` (ADR 0018):** loại mới tự có `lot` (`lotSchemaFor(kind)`, `extraction/lot.ts`) nên đã đọc được cảng, tàu, container, L/C… không cần làm gì thêm. Nếu loại có trường **cùng nghĩa** với một key của `lot` thì thêm key đó vào `LOT_OMIT[kind]` để model không chép hai lần; khác nghĩa dù cùng tên (vd số hóa đơn cước) thì giữ trong `lot`.
 1b. **Danh mục trường chuẩn** – `packages/contracts/src/catalog/documents.ts`: thêm `DocCatalog` cùng thứ tự key với schema (test `catalog.test.ts` bắt lệch), nhãn tiếng Việt như bảng đọc chứng từ của người khai + nhãn thường gặp. Schema gửi AI phải ≤ 16 tham số union sau `toAiOutputSchema` (test `ai-schema.test.ts`).
 2. **Prompt** – `modules/extraction/infrastructure/prompts/`: chỉ thêm quy tắc đặc thù của loại này (vd quy ước số kiện). Tăng `PROMPT_VERSION`.
-3. **Chuẩn hóa & gộp** – `modules/extraction/domain/merge.ts`: đưa dữ liệu vào `Shipment`, ghi `sources` (docId, page, raw) cho từng trường.
+3. **Chuẩn hóa & gộp** – `modules/extraction/domain/merge.ts`: đưa dữ liệu vào `Shipment`, ghi `sources` (docId, page, raw) cho từng trường. Ô lô hàng lấy nguồn từ mọi chứng từ (`shipment-spec.ts` sinh `sources`), không khóa theo loại; chỉ đánh `fallback` khi biết chứng từ ghi chung chung (như C/O cho cảng).
+   - **Màn OCR** (`packages/contracts/src/dto/ocr.ts`): ô chỉ đọc (sửa nơi khác) → thêm key vào `isReadOnlyField`; dòng chỉ để đối chiếu, không hiện → `isHiddenOcrRow` (không tính vào "Cần xem"). Server và web dùng chung hai hàm này, không viết lại điều kiện.
 4. **Luật đối chiếu** – thêm luật dùng loại chứng từ mới. **REQUIRED SUB-SKILL:** `adding-validation-rule`.
 5. **Ánh xạ tờ khai** – nếu chứng từ cung cấp chỉ tiêu tờ khai. **REQUIRED SUB-SKILL:** `mapping-declaration-fields`.
 6. **Golden set** – thêm ≥ 2 mẫu thật vào `evals/golden/<lot>/` gồm PDF + `expected.json` do **người** duyệt (không dùng output của model làm đáp án). Lô thật của khách: thư mục PDF + Excel đáp án (STT | Tên trường | Trị giá) ngoài git, chấm bằng `pnpm eval --live --lot <thư mục>`.

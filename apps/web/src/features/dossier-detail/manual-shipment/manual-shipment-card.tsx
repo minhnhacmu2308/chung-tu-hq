@@ -60,7 +60,7 @@ function CatalogItemPicker({ value, customsSetId, enabled, onPick }: { value: st
   );
 }
 
-function ManualDialog({ open, onOpenChange, view, dossierId, currency, incoterm }: { open: boolean; onOpenChange: (o: boolean) => void; view: ManualShipmentView; dossierId: string; currency: string; incoterm: string }) {
+function ManualDialog({ open, onOpenChange, view, dossierId, currency, incoterm, readContainers }: { open: boolean; onOpenChange: (o: boolean) => void; view: ManualShipmentView; dossierId: string; currency: string; incoterm: string; readContainers?: string | undefined }) {
   const t = useMessages(MANUAL_SHIPMENT_MESSAGES);
   const qc = useQueryClient();
   const [form, setForm] = useState<ManualForm>(() => formFromData(view.data, { currency, incoterm }));
@@ -187,7 +187,7 @@ function ManualDialog({ open, onOpenChange, view, dossierId, currency, incoterm 
                   <Input value={form.netWeightKg} onChange={(e) => set("netWeightKg", e.target.value)} inputMode="decimal" className="font-mono" placeholder={t.phNumber} />
                 </Field>
                 <Field label={t.containers} hint={t.containersHint} className="cq-md:col-span-2" {...err("containers")}>
-                  <Input value={form.containers} onChange={(e) => set("containers", e.target.value)} className="font-mono" placeholder={t.phContainers} />
+                  <Input value={form.containers} onChange={(e) => set("containers", e.target.value)} className="font-mono" placeholder={readContainers || t.phContainers} />
                 </Field>
               </div>
             </FormSection>
@@ -265,7 +265,8 @@ function ManualDialog({ open, onOpenChange, view, dossierId, currency, incoterm 
   );
 }
 
-export function ManualShipmentCard({ dossierId, currency, incoterm, hasDocuments }: { dossierId: string; currency: string; incoterm: string; hasDocuments: boolean }) {
+/** readContainers: số container đọc được trên chứng từ – gợi ý (placeholder) cho ô container. */
+export function ManualShipmentCard({ dossierId, currency, incoterm, hasDocuments, readContainers }: { dossierId: string; currency: string; incoterm: string; hasDocuments: boolean; readContainers?: string }) {
   const t = useMessages(MANUAL_SHIPMENT_MESSAGES);
   const q = useQuery({ queryKey: manualShipmentKeys.detail(dossierId), queryFn: () => getManualShipment(dossierId) });
   const [open, setOpen] = useState(false);
@@ -319,7 +320,7 @@ export function ManualShipmentCard({ dossierId, currency, incoterm, hasDocuments
           </Stack>
         )}
       </CardContent>
-      {open && v && <ManualDialog open={open} onOpenChange={setOpen} view={v} dossierId={dossierId} currency={currency} incoterm={incoterm} />}
+      {open && v && <ManualDialog open={open} onOpenChange={setOpen} view={v} dossierId={dossierId} currency={currency} incoterm={incoterm} readContainers={readContainers} />}
     </Card>
   );
 }

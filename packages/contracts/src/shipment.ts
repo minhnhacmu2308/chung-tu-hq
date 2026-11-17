@@ -43,7 +43,7 @@ export type ShipmentItem = z.infer<typeof ShipmentItemSchema>;
 export const ShipmentSchema = z.object({
   version: z.number().int().nonnegative(),
   parties: z.object({ seller: ShipmentPartySchema, buyer: ShipmentPartySchema }),
-  invoice: z.object({ no: str(), date: date(), incoterm: str(), currency: str(), totalAmount: dec(), paymentTerms: str(), poNo: str(), incotermPlace: str() }),
+  invoice: z.object({ no: str(), date: date(), incoterm: str(), currency: str(), totalAmount: dec(), paymentTerms: str(), poNo: str(), incotermPlace: str(), /** Số L/C, số hợp đồng, mã PTTT (khối lô hàng). */ lcNo: str().optional(), contractNo: str().optional(), paymentMethodCode: str().optional() }),
   transport: z.object({
     mode: str(),
     billNo: str(),
@@ -67,7 +67,10 @@ export const ShipmentSchema = z.object({
     /** Kho / CY chờ thông quan (Arrival Notice). */
     warehouseCode: str(),
     warehouseName: str(),
-    containers: z.array(z.object({ no: z.string(), sealNo: z.string().nullable(), size: z.string().nullable() })),
+    containers: z.array(z.object({ no: z.string(), sealNo: z.string().nullable(), size: z.string().nullable(), /** Chứng từ cho ra container này. */ sourceKind: DocKindSchema.optional(), /** Nhập tay ở thẻ lô hàng – nguồn tờ khai "DOSSIER". */ manual: z.literal(true).optional() })),
+    /** Thể tích (CBM) và ký mã hiệu kiện hàng. */
+    volumeCbm: dec().optional(),
+    marks: str().optional(),
     /** v4: người trả cước trên vận đơn – "PREPAID" (người gửi trả) / "COLLECT" (người nhận trả). */
     freightTerm: str().optional(),
   }),
@@ -96,11 +99,11 @@ export function emptyShipment(): Shipment {
   return {
     version: 0,
     parties: { seller: emptyParty(), buyer: emptyParty() },
-    invoice: { no: empty(), date: empty(), incoterm: empty(), currency: empty(), totalAmount: empty(), paymentTerms: empty(), poNo: empty(), incotermPlace: empty() },
+    invoice: { no: empty(), date: empty(), incoterm: empty(), currency: empty(), totalAmount: empty(), paymentTerms: empty(), poNo: empty(), incotermPlace: empty(), lcNo: empty(), contractNo: empty(), paymentMethodCode: empty() },
     transport: {
       mode: empty(), billNo: empty(), masterBillNo: empty(), vessel: empty(), voyage: empty(), portOfLoading: empty(), portOfDischarge: empty(),
       finalDestination: empty(), arrivalDate: empty(), packages: empty(), packageUnit: empty(), grossWeightKg: empty(), netWeightKg: empty(),
-      houseBillNo: empty(), flightNo: empty(), departureDate: empty(), placeOfIssue: empty(), warehouseCode: empty(), warehouseName: empty(), containers: [], freightTerm: empty(),
+      houseBillNo: empty(), flightNo: empty(), departureDate: empty(), placeOfIssue: empty(), warehouseCode: empty(), warehouseName: empty(), containers: [], freightTerm: empty(), volumeCbm: empty(), marks: empty(),
     },
     origin: { country: empty(), coForm: empty(), coNo: empty(), rexNo: empty(), coInvoiceNo: empty(), coDate: empty(), criteria: [] },
     charges: { freight: empty(), insurance: empty(), other: [] },

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { DocKindSchema } from "../common.js";
 import { customFieldsOf, withCustomFields } from "../catalog/index.js";
-import { emptyToNull, extractionSchemaFor, fromAiOutput, toAiOutputSchema } from "./index.js";
+import { extractionSchemaFor, fromAiOutput, toAiOutputSchema } from "./index.js";
 
 /** Số tham số kiểu union (anyOf / type mảng) – API Claude giới hạn 16 cho structured output. */
 function countUnions(node: unknown): number {
@@ -38,9 +38,9 @@ describe("toAiOutputSchema", () => {
     expect(s.shape["eta"]!.safeParse("2025-04-25").success).toBe(true);
     expect(s.shape["packages"]!.safeParse(null).success).toBe(true);
   });
-  it("emptyToNull: chuỗi rỗng → null (cả trong object/mảng) → parse được bằng schema gốc", () => {
-    const ai = { billNo: "FANS25040166", vessel: "", eta: "", portOfDischarge: "CAT LAI", finalDestination: "", masterBillNo: "", transportMode: null, flightNo: "", portOfLoading: "", packages: 1, packageUnit: "", grossWeightKg: null, warehouseCode: "", warehouseName: "KHO 3", note: "", charges: [{ label: "THC", amount: 6, currency: "" }], uncertainties: [] };
-    const back = emptyToNull(ai) as Record<string, unknown>;
+  it("fromAiOutput: chuỗi rỗng → null (cả trong object/mảng), lot rỗng → object toàn null → parse được bằng schema gốc", () => {
+    const ai = { billNo: "FANS25040166", vessel: "", eta: "", portOfDischarge: "CAT LAI", finalDestination: "", masterBillNo: "", transportMode: null, flightNo: "", portOfLoading: "", packages: 1, packageUnit: "", grossWeightKg: null, warehouseCode: "", warehouseName: "KHO 3", note: "", charges: [{ label: "THC", amount: 6, currency: "" }], uncertainties: [], lot: [], lotContainers: [] };
+    const back = fromAiOutput(extractionSchemaFor("ARRIVAL_NOTICE"), ai) as Record<string, unknown>;
     expect(back["vessel"]).toBeNull();
     expect((back["charges"] as Record<string, unknown>[])[0]!["currency"]).toBeNull();
     expect(back["uncertainties"]).toEqual([]);

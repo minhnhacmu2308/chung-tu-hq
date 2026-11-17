@@ -12,7 +12,7 @@ const withDesc = <T extends ZodType>(s: T, desc: string | undefined) => (desc ? 
 export function toAiOutputSchema(schema: ZodType, inCustom = false): ZodType {
   const desc = schema.description;
   if (schema instanceof z.ZodObject) {
-    const shape = Object.fromEntries(Object.entries(schema.shape as Record<string, ZodType>).map(([k, v]) => [k, toAiOutputSchema(v, inCustom || k === "custom")]));
+    const shape = Object.fromEntries(Object.entries(schema.shape as Record<string, ZodType>).map(([k, v]) => [k, k === "lot" && v instanceof z.ZodObject ? lotToAi(v) : toAiOutputSchema(v, inCustom || k === "custom")]));
     return withDesc(z.object(shape), desc);
   }
   if (schema instanceof z.ZodArray) return withDesc(z.array(toAiOutputSchema(schema.element as ZodType, inCustom)), desc);
@@ -28,6 +28,37 @@ export function toAiOutputSchema(schema: ZodType, inCustom = false): ZodType {
   return schema;
 }
 
+// Khối lô hàng gửi dạng mảng chỉ liệt kê ô có in: chứng từ không in thông tin lô hàng gần như không tốn thêm đầu ra.
+// Enum không tính là union. Mô tả từng ô đi kèm mô tả mảng vì mảng {key,value} không mang mô tả trường.
+function lotToAi(lot: z.ZodObject): ZodType {
+  const shape = lot.shape as Record<string, ZodType>;
+  const keys = Object.keys(shape) as [string, ...string[]];
+  const legend = keys.map((k) => `${k}: ${shape[k]!.description ?? ""}`).join("; ");
+  return z.array(z.object({ key: z.enum(keys), value: z.string() })).describe(`Chỉ liệt kê thông tin lô hàng CÓ IN trên chứng từ; không in thì mảng rỗng. ${legend}`);
+}
+
+/**
+ * Khối lô hàng từ AI → dạng schema gốc. Mảng `lot` → object đủ key: thiếu = null, key trùng lấy giá trị KHÁC RỖNG đầu tiên,
+ * key lạ bỏ. `lotContainers`: bỏ phần tử không có số container (một ô rỗng không được làm hỏng cả lượt đọc).
+ */
+function lotFromAi(schema: ZodType, value: unknown): unknown {
+  const shape = schema instanceof z.ZodObject ? (schema.shape as Record<string, ZodType>) : {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const v = { ...(value as Record<string, unknown>) };
+  if (shape["lotContainers"] && Array.isArray(v["lotContainers"])) {
+    v["lotContainers"] = v["lotContainers"].filter((c: { no?: unknown }) => typeof c?.no === "string" && c.no.trim() !== "");
+  }
+  const lot = shape["lot"];
+  if (lot instanceof z.ZodObject && Array.isArray(v["lot"])) {
+    const out: Record<string, unknown> = Object.fromEntries(Object.keys(lot.shape).map((k) => [k, null]));
+    for (const e of v["lot"] as { key?: unknown; value?: unknown }[]) {
+      if (typeof e?.key === "string" && e.key in out && !out[e.key]) out[e.key] = e.value ?? null;
+    }
+    v["lot"] = out;
+  }
+  return v;
+}
+
 /** Chuỗi rỗng ("không có" theo toAiOutputSchema) → null, đệ quy. */
 export function emptyToNull(value: unknown): unknown {
   if (value === "") return null;
@@ -36,9 +67,9 @@ export function emptyToNull(value: unknown): unknown {
   return value;
 }
 
-/** Kết quả AI (theo toAiOutputSchema) → dạng của schema gốc: "" → null, số gửi dạng chuỗi → số. */
+/** Kết quả AI (theo toAiOutputSchema) → dạng của schema gốc: mảng `lot` → object, "" → null, số gửi dạng chuỗi → số. */
 export function fromAiOutput(schema: ZodType, value: unknown): unknown {
-  return coerceNumbers(schema, emptyToNull(value));
+  return coerceNumbers(schema, emptyToNull(lotFromAi(schema, value)));
 }
 
 function coerceNumbers(schema: ZodType, value: unknown): unknown {

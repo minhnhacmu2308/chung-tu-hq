@@ -18,11 +18,16 @@ export type LotReport = {
 /** Chỉ tiêu luôn do người khai/hệ thống cấp, không kỳ vọng có trên chứng từ. */
 const MANUAL_ONLY = new Set(["SOTK", "NNK_DC", "NXK_DC", "TY_GIA"]);
 
+/** Hướng khai lấy từ mapping.json (`"direction": "XK"`); mặc định NK. Mã loại hình mặc định: A11 / B11. */
+export function lotDirection(mapping: { direction?: unknown }): { direction: "NK" | "XK"; typeCode: string } {
+  return mapping.direction === "XK" ? { direction: "XK", typeCode: "B11" } : { direction: "NK", typeCode: "A11" };
+}
+
 export async function runLotEval(ai: AiProvider, dir: string, now = new Date()): Promise<LotReport> {
   const files = readdirSync(dir);
   const xlsx = files.find((f) => /\.xlsx$/i.test(f) && !f.startsWith("~$"));
   if (!xlsx) throw new Error(`${dir}: thiếu file Excel đáp án`);
-  const mapping = existsSync(path.join(dir, "mapping.json")) ? (JSON.parse(readFileSync(path.join(dir, "mapping.json"), "utf8")) as LabelMapping) : {};
+  const mapping = existsSync(path.join(dir, "mapping.json")) ? (JSON.parse(readFileSync(path.join(dir, "mapping.json"), "utf8")) as LabelMapping & { direction?: unknown }) : {};
   const expected = await parseExpectedWorkbook(readFileSync(path.join(dir, xlsx)), mapping);
   const pdfs = files.filter((f) => /\.(pdf|png|jpe?g)$/i.test(f));
 
@@ -53,7 +58,7 @@ export async function runLotEval(ai: AiProvider, dir: string, now = new Date()):
   const air = read.some((r) => r.kind === "AIR_WAYBILL");
   const built = buildDeclaration({
     shipment, now,
-    dossier: { id: "eval", code: path.basename(dir), direction: "NK", typeCode: "A11", partner: "", customsOfficeCode: "02CI", customsOfficeName: "", status: "NEEDS_REVIEW", step: "review", ownerId: "eval", invoiceValue: "0", currency: "USD", incoterm: "", transportMode: air ? "AIR" : "SEA_CONTAINER", partyClass: "4", billNo: "", declarationNo: null, note: null },
+    dossier: { id: "eval", code: path.basename(dir), ...lotDirection(mapping), partner: "", customsOfficeCode: "02CI", customsOfficeName: "", status: "NEEDS_REVIEW", step: "review", ownerId: "eval", invoiceValue: "0", currency: "USD", incoterm: "", transportMode: air ? "AIR" : "SEA_CONTAINER", partyClass: "4", billNo: "", declarationNo: null, note: null },
     org: { taxCode: "0000000000", name: "EVAL", address: "", phone: "", fourEyes: false },
     items: shipment.items.map((it, i) => ({ id: `i${i}`, amount: it.amount.value ?? "0", importDutyRate: null, vatRate: null })),
     exchange: { date: now.toISOString().slice(0, 10), rates: { VND: "1", USD: "25400", EUR: "28000", CNY: "3500" }, missing: [] },

@@ -1,5 +1,5 @@
 // Dùng chung cho sửa/xác nhận/hoàn tác một trường: ghi audit, cập nhật shipment, chạy lại luật, cập nhật tờ khai nháp, đếm nghi ngờ.
-import type { ExtractedField, FieldStatus } from "@kb/contracts";
+import { isReadOnlyField, type ExtractedField, type FieldStatus } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -29,6 +29,7 @@ export async function editField(
     if (!f) return err(domainError("NOT_FOUND", "Không tìm thấy trường"));
     const next = change(f);
     if (next.source === "USER_EDIT") {
+      if (isReadOnlyField(f.key)) return err(domainError("VALIDATION", `${f.label} không sửa ở đây – sửa trong thẻ nhập tay lô hàng`));
       const normalized = normalizeEdit(f.shipmentPath, next.value);
       if (normalized === null) return err(domainError("VALIDATION", `Giá trị "${next.value}" không hợp lệ cho ${f.label}`));
       if (normalized !== undefined) next.value = normalized;

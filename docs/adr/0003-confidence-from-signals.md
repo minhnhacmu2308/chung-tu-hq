@@ -23,3 +23,4 @@ Chỉ hiển thị % khi đã có đủ dữ liệu `field_audit` để tính t�
 ## Hệ quả
 - (+) Trung thực, giải thích được vì sao trường bị đánh dấu.
 - (−) Không có "con số đẹp" ở giai đoạn đầu; UI dùng nhãn trạng thái.
+- Từ ADR 0018: mọi loại chứng từ là nguồn ngang nhau của ô lô hàng (nguồn `lot`); cờ `fallback` (không so, chỉ dùng khi hết nguồn khác) chỉ còn C/O (cảng) và hóa đơn cước (ngày hàng đến). Không thêm trạng thái.

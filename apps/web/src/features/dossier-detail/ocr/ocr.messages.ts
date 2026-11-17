@@ -100,14 +100,23 @@ export const FIELD_ROW_MESSAGES = defineMessages({
   vi: {
     confirmField: "Xác nhận {label} đúng", correct: "Đúng", aiRead: "AI đọc:", revert: "Hoàn tác", pickOnFile: "Chỉ vị trí {label} trên file",
     paymentCode: "Mã phương thức thanh toán (1.43 / 2.38)", choosePayment: "Chọn mã", paymentUnknown: "Không nhận ra mã chuẩn từ chữ trên chứng từ – chọn mã để sang bước tiếp theo",
+    paymentMismatch: "Các nguồn phương thức thanh toán không khớp nhau (gợi ý {code}) – chọn mã đúng để sang bước tiếp theo",
+    readOnlyHint: "Chỉ xem – sửa trong thẻ nhập tay lô hàng",
+    readOnlyReviewHint: "Chỉ xem – sửa số container ở bước Review tờ khai",
   },
   en: {
     confirmField: "Confirm {label} is correct", correct: "Correct", aiRead: "AI read:", revert: "Undo", pickOnFile: "Point to {label} on the file",
     paymentCode: "Payment method code (1.43 / 2.38)", choosePayment: "Choose a code", paymentUnknown: "Couldn't recognise a standard code from the document text – choose one to continue",
+    paymentMismatch: "The payment method sources don't agree (suggested {code}) – choose the correct code to continue",
+    readOnlyHint: "View only – edit in the manual shipment card",
+    readOnlyReviewHint: "View only – correct the container numbers in the Review declaration step",
   },
   zh: {
     confirmField: "确认{label}正确", correct: "正确", aiRead: "AI 读取：", revert: "撤销", pickOnFile: "在文件上指出{label}",
     paymentCode: "付款方式代码（1.43 / 2.38）", choosePayment: "选择代码", paymentUnknown: "无法从单据文字识别标准代码 – 请选择代码后继续",
+    paymentMismatch: "付款方式的各来源不一致（建议 {code}）– 请选择正确代码后继续",
+    readOnlyHint: "仅查看 – 请在手动录入货物信息卡中修改",
+    readOnlyReviewHint: "仅查看 – 请在“审核报关单”步骤修改集装箱号",
   },
 });
 

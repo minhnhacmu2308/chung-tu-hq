@@ -5,7 +5,7 @@ export * from "./types.js";
 export { DOC_CATALOG } from "./documents.js";
 
 /** Phiên bản danh mục trường chuẩn (tăng khi thêm trường; key cũ không đổi). */
-export const DOC_CATALOG_VERSION = 2;
+export const DOC_CATALOG_VERSION = 3;
 
 /** Chuẩn hóa nhãn để so khớp: bỏ dấu tiếng Việt, đ→d, chữ thường, dấu câu thành khoảng trắng. */
 export function normalizeLabel(s: string): string {

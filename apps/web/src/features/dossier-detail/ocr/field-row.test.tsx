@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import type { ExtractedField } from "@/mocks/types";
-import { FieldRow } from "./field-row";
+import { FieldRow, isUnknownPayment, ocrRows, paymentHint } from "./field-row";
 
 const FIELD = { id: "fld_1", documentId: "doc_1", group: "GENERAL", key: "invoice_no", label: "Số hóa đơn", value: "INV-1", originalValue: "INV-1", status: "SINGLE_SOURCE" } as ExtractedField;
 const noop = () => {};
@@ -50,5 +50,60 @@ describe("FieldRow – mã phương thức thanh toán", () => {
     expect(known.textContent).toMatch(/^KC – /);
     expect(screen.queryByText(/Không nhận ra mã chuẩn/)).toBeNull();
   });
+
+  it("mã AI lệch chữ trên chứng từ → bắt chọn, báo lệch kèm gợi ý; khớp → chọn sẵn", () => {
+    const { unmount } = renderWithProviders(<FieldRow field={pay("L/C at sight")} paymentHint={{ aiCode: "TTR", lcNo: null }} active={false} onActivate={noop} onSave={noop} onConfirm={noop} onRevert={noop} />);
+    expect(screen.getByRole("combobox", { name: "Mã phương thức thanh toán (1.43 / 2.38)" }).getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/không khớp nhau \(gợi ý LC\)/)).toBeTruthy();
+    unmount();
+    renderWithProviders(<FieldRow field={pay("L/C at sight")} paymentHint={{ aiCode: "LC", lcNo: "S700542640040" }} active={false} onActivate={noop} onSave={noop} onConfirm={noop} onRevert={noop} />);
+    expect(screen.getByRole("combobox", { name: "Mã phương thức thanh toán (1.43 / 2.38)" }).textContent).toMatch(/^LC – /);
+  });
 });
 
+describe("FieldRow – ô chỉ đọc", () => {
+  const cont = { ...FIELD, id: "fld_c", group: "TRANSPORT", key: "containers", label: "Số container / seal", value: "FBIU5659719 / 34337288", originalValue: "FBIU5659719 / 34337288" } as ExtractedField;
+
+  it("container: ô chỉ đọc, không nút chỉ trên file, gõ không lưu, có chỉ dẫn sửa ở thẻ nhập tay", async () => {
+    const onSave = vi.fn();
+    const { container } = renderWithProviders(<FieldRow field={cont} manualCard active={false} onActivate={noop} onSave={onSave} onConfirm={noop} onRevert={noop} onPick={noop} />);
+    const input = screen.getByRole("textbox", { name: "Số container / seal" });
+    expect(input.hasAttribute("readonly")).toBe(true);
+    await userEvent.type(input, "X{Enter}");
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /trên file/ })).toBeNull();
+    expect(screen.getByText(/thẻ nhập tay lô hàng/)).toBeTruthy();
+    await expectNoA11yViolations(container);
+  });
+
+  it("hồ sơ NK (không có thẻ nhập tay): chỉ dẫn sửa ở bước Review tờ khai, không nhắc thẻ nhập tay", async () => {
+    const { container } = renderWithProviders(<FieldRow field={cont} active={false} onActivate={noop} onSave={noop} onConfirm={noop} onRevert={noop} />);
+    const input = screen.getByRole("textbox", { name: "Số container / seal" });
+    expect(input.hasAttribute("disabled")).toBe(true);
+    expect(input.getAttribute("aria-describedby")).toBe("field-fld_c-ro");
+    expect(screen.getByText(/bước Review tờ khai/)).toBeTruthy();
+    expect(screen.queryByText(/thẻ nhập tay/)).toBeNull();
+    await expectNoA11yViolations(container);
+  });
+
+  it("ocrRows bỏ dòng mã PTTT (thông tin nằm ở ghi chú dòng thanh toán), giữ dòng khác", () => {
+    const rows = [FIELD, { ...FIELD, id: "fld_m", key: "payment_method_code", value: "LC" } as ExtractedField, cont];
+    expect(ocrRows(rows).map((f) => f.key)).toEqual(["invoice_no", "containers"]);
+  });
+});
+
+describe("paymentHint – cùng thứ tự nguồn với máy chủ", () => {
+  it("chữ T/T trên invoice, mã AI invoice LC, mã AI hợp đồng KC → lấy mã của invoice (như ocrExitBlockers), bắt chọn", () => {
+    const docs = [{ id: "doc_sc", kind: "SALES_CONTRACT" as const }, { id: "doc_inv", kind: "INVOICE" as const }];
+    // Dòng hợp đồng đứng trước trong danh sách: web không được lấy theo thứ tự dòng.
+    const rows = [
+      { ...FIELD, id: "f1", documentId: "doc_sc", key: "payment_method_code", value: "KC" },
+      { ...FIELD, id: "f2", documentId: "doc_inv", key: "payment_method_code", value: "LC" },
+      { ...FIELD, id: "f3", documentId: "doc_inv", key: "payment_terms", value: "T/T" },
+    ] as ExtractedField[];
+    const hint = paymentHint(rows, docs);
+    expect(hint).toEqual({ aiCode: "LC", lcNo: null });
+    // Máy chủ: paymentNeedsChoice("T/T", "LC", null) → chặn (PAYMENT_METHOD_UNKNOWN).
+    expect(isUnknownPayment(rows[2]!, hint)).toBe(true);
+  });
+});

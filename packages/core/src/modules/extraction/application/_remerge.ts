@@ -1,5 +1,5 @@
 // Gộp lại toàn bộ hồ sơ từ các extraction DONE: shipment version mới, chiếu trường (giữ USER_CONFIRMED), chạy luật, cập nhật hồ sơ.
-import { EXTRACTION_SCHEMA_VERSION, vnDateOf, type Shipment, type Sourced } from "@kb/contracts";
+import { EXTRACTION_SCHEMA_VERSION, isHiddenOcrRow, vnDateOf, type Shipment, type Sourced } from "@kb/contracts";
 import { asOrgId, asUserId } from "../../../shared/ids.js";
 import { isSuspect } from "../domain/field-status.js";
 import { applyIssued } from "../domain/issued.js";
@@ -15,7 +15,8 @@ export function setSourced(s: Shipment, path: string, patch: Partial<Sourced<str
   const parts = path.split("/").filter(Boolean);
   for (const p of parts.slice(0, -1)) cur = (cur as Record<string, unknown>)[p];
   const leaf = (cur as Record<string, Sourced<string>>)[parts[parts.length - 1]!];
-  if (leaf) Object.assign(leaf, patch);
+  // Ô không phải Sourced (vd danh sách container) → bỏ qua.
+  if (leaf && !Array.isArray(leaf)) Object.assign(leaf, patch);
 }
 
 /** Hậu tố khóa giữ ẩn số lượng / thành tiền / tên hàng riêng của dòng đầu nhóm khi đang gộp dòng. */
@@ -25,8 +26,8 @@ const baseKey = (key: string) => (key.endsWith(LINE_SUFFIX) ? key.slice(0, -LINE
 /** Số dòng của khóa trường dòng hàng `item.N.<key>` (khác → NaN). */
 const lineOf = (key: string) => Number(/^item\.(\d+)\./.exec(key)?.[1]);
 
-/** Đếm trường nghi ngờ theo ngưỡng org. */
-export const countSuspect = (rows: { status: FieldRow["status"] }[], threshold: "STRICT" | "BALANCED" | "RELAXED") => rows.filter((f) => isSuspect(f.status, threshold)).length;
+/** Đếm trường nghi ngờ theo ngưỡng org; dòng ẩn trên màn OCR không tính (khớp số màn hình). */
+export const countSuspect = (rows: { key: string; status: FieldRow["status"] }[], threshold: "STRICT" | "BALANCED" | "RELAXED") => rows.filter((f) => !isHiddenOcrRow(f.key) && isSuspect(f.status, threshold)).length;
 
 export async function remergeDossier(deps: ExtractionDeps, orgId: string, dossierId: string): Promise<void> {
   const org = await deps.documents.orgInfo(orgId);
@@ -77,7 +78,7 @@ export async function remergeDossier(deps: ExtractionDeps, orgId: string, dossie
 
     const byKey = new Map(existing.map((f) => [`${f.documentId}:${f.key}`, f]));
     const now = deps.clock.now();
-    const fieldRows: FieldRow[] = projectFields(shipment).map((p) => {
+    const fieldRows: FieldRow[] = projectFields(shipment, files).map((p) => {
       const prev = splitBack.get(`${p.documentId}:${p.key}`) ?? byKey.get(`${p.documentId}:${p.key}`);
       // Số lượng / thành tiền của dòng vừa gộp / tách: giá trị máy tính ra đổi → giá trị người khai sửa trước đó không còn đúng chỗ, bỏ. Dòng khác giữ nguyên.
       const basisChanged = !!prev && QA.test(p.key) && recomputed.has(lineOf(p.key)) && prev.originalValue !== p.value;

@@ -5,7 +5,7 @@ import { dec } from "../../../../shared/decimal.js";
 import { isDomesticDelivery } from "@kb/contracts";
 import { EXPORT_NO_240, exportAdjustmentsAllowed, freightRequired, incotermCode, planExportAdjustments } from "../adjustments.js";
 import { spreadInvoiceList } from "./invoice-list.js";
-import { domesticPorts, foreignPorts, incotermField, invoiceKind, onSitePlace, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
+import { contSource, domesticPorts, foreignPorts, incotermField, invoiceKind, onSitePlace, packageCount, paymentMethod, permitsField, port, priceKind } from "./shared.js";
 import { BY_WATER, EXPORT_VALUE, IN_CONTAINER, RE_EXPORT, TEMP_EXPORT } from "./conditions.js";
 import { profileSource, SRC } from "./sources.js";
 import { fixed, fromSourced, missing, plainNumber, profileOr, vnDate, type FieldMapping, type MappedValue, type MappingInput } from "./types.js";
@@ -137,7 +137,7 @@ export const EDA_MAPPINGS: FieldMapping[] = [
   // 2.60: tối đa 50 số container (phần dư khai qua HYS).
   { code: "SO_CONT", no: N.SO_CONT, section: "TRANSPORT", label: "Số container", required: false, when: IN_CONTAINER, from: (i) => {
     const c = i.shipment.transport.containers.map((x) => x.no);
-    return c.length ? { value: c.join(", "), source: "BILL_OF_LADING" } : missing("BILL_OF_LADING", "Chưa có số container – nhập khi hàng đóng container");
+    return c.length ? { value: c.join(", "), source: contSource(i) } : missing("BILL_OF_LADING", "Chưa có số container – nhập khi hàng đóng container");
   } },
   // Mã chỉ tiêu = tên ô VNACCS (như 2.13 TK_EPP) – gửi FPT qua applyExtras; người khai sửa thì giá trị sửa thắng.
   { code: "TK_MRK", no: "2.32", section: "TRANSPORT", label: "Ký hiệu và số hiệu", required: false, from: (i) => invoiceSlots(i)[1]! },

@@ -1,6 +1,6 @@
 // Bảng đặc tả: mỗi trường của Shipment lấy từ chứng từ nào, chuẩn hóa ra sao, hiện trên màn OCR với key/nhãn/nhóm nào.
 // Dùng chung cho merge (gộp) và projectFields (chiếu ra extracted_fields) để hai bên không lệch.
-import type { DocKind, FieldGroup } from "@kb/contracts";
+import { LOT_KIND_ORDER, LOT_OMIT, PAYMENT_CODE_KINDS, type DocKind, type FieldGroup, type LotKey } from "@kb/contracts";
 import { countryCode, normalizeTaxCode, packageUnitCode, parseDate, parseNumber, unitCode } from "./normalize.js";
 
 export type Normalizer = (raw: unknown) => string | null;
@@ -26,6 +26,8 @@ export type FieldSpec = {
 
 const str: Normalizer = (v) => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
 const upper: Normalizer = (v) => (typeof v === "string" && v.trim() ? v.trim().toUpperCase() : null);
+/** Cảng, tàu: chữ hoa + gộp khoảng trắng để chứng từ ghi "Cat  Lai" khớp "CAT LAI"; khác chữ vẫn là CONFLICT (không tra mã cảng). */
+const place: Normalizer = (v) => (typeof v === "string" && v.trim() ? v.trim().replace(/\s+/g, " ").toUpperCase() : null);
 /** Số vận đơn/AWB: nhãn chuyển phát in cách nhóm ("7704 7118 4612") – bỏ khoảng trắng, giữ gạch ("618-44021375"). */
 const ident: Normalizer = (v) => (typeof v === "string" && v.trim() ? v.replace(/\s+/g, "").toUpperCase() : typeof v === "number" ? String(v) : null);
 const num: Normalizer = (v) => parseNumber(v as string | number | null);
@@ -41,7 +43,7 @@ const g = (k: string): Getter => at(k, (d) => d[k]);
 /** Số AWB chủ chỉ là số vận đơn khi AWB không có HAWB (chuyển phát nhanh: một AWB duy nhất). */
 const awbIfNoHouse: Getter = at("awbNo", (d) => (d["hawbNo"] ? null : d["awbNo"]));
 
-export const SHIPMENT_FIELDS: FieldSpec[] = [
+const MANUAL_FIELDS: FieldSpec[] = [
   { path: "/invoice/no", key: "invoice_no", label: "Số hóa đơn", group: "GENERAL", normalize: str, sources: [{ kind: "INVOICE", get: g("invoiceNo"), regionKey: "invoiceNo" }, { kind: "PACKING_LIST", get: g("invoiceNo"), regionKey: "invoiceNo" }, { kind: "CERT_OF_ORIGIN", get: g("invoiceNo"), regionKey: "invoiceNo" }] },
   { path: "/invoice/date", key: "invoice_date", label: "Ngày hóa đơn", group: "GENERAL", normalize: date, sources: [{ kind: "INVOICE", get: g("invoiceDate"), regionKey: "invoiceDate" }, { kind: "CERT_OF_ORIGIN", get: g("invoiceDate"), regionKey: "invoiceDate" }] },
   { path: "/invoice/poNo", key: "po_no", label: "Số PO", group: "GENERAL", normalize: str, sources: [{ kind: "INVOICE", get: g("poNo"), regionKey: "poNo" }] },
@@ -50,6 +52,9 @@ export const SHIPMENT_FIELDS: FieldSpec[] = [
   { path: "/invoice/currency", key: "currency", label: "Mã tiền tệ", group: "COMMERCIAL", normalize: upper, sources: [{ kind: "INVOICE", get: g("currency"), regionKey: "currency" }, { kind: "SALES_CONTRACT", get: g("currency"), regionKey: "currency" }], valid: (v) => /^[A-Z]{3}$/.test(v) },
   { path: "/invoice/totalAmount", key: "total_amount", label: "Tổng trị giá", group: "COMMERCIAL", normalize: num, sources: [{ kind: "INVOICE", get: g("totalAmount"), regionKey: "totalAmount" }] },
   { path: "/invoice/paymentTerms", key: "payment_terms", label: "Phương thức thanh toán", group: "COMMERCIAL", normalize: str, sources: [{ kind: "INVOICE", get: g("paymentTerms"), regionKey: "paymentTerms" }, { kind: "SALES_CONTRACT", get: g("paymentTerms"), regionKey: "paymentTerms" }] },
+  { path: "/invoice/lcNo", key: "lc_no", label: "Số L/C", group: "COMMERCIAL", normalize: ident, sources: [] },
+  { path: "/invoice/contractNo", key: "contract_no", label: "Số hợp đồng", group: "COMMERCIAL", normalize: ident, sources: [{ kind: "SALES_CONTRACT", get: g("contractNo"), regionKey: "contractNo" }] },
+  { path: "/invoice/paymentMethodCode", key: "payment_method_code", label: "Mã phương thức thanh toán", group: "COMMERCIAL", normalize: upper, sources: PAYMENT_CODE_KINDS.map((kind) => ({ kind, get: g("paymentMethodCode"), regionKey: "paymentMethodCode" })) },
   { path: "/parties/seller/name", key: "seller_name", label: "Người bán", group: "PARTIES", normalize: str, sources: [{ kind: "INVOICE", get: party("seller"), regionKey: "seller" }, { kind: "BILL_OF_LADING", get: party("shipper"), regionKey: "shipper" }, { kind: "AIR_WAYBILL", get: party("shipper"), regionKey: "shipper" }, { kind: "CERT_OF_ORIGIN", get: party("exporter"), regionKey: "exporter" }, { kind: "SALES_CONTRACT", get: party("seller"), regionKey: "seller" }] },
   { path: "/parties/seller/address", key: "seller_address", label: "Địa chỉ người bán", group: "PARTIES", normalize: str, sources: [{ kind: "INVOICE", get: partyField("seller", "address") }, { kind: "SALES_CONTRACT", get: partyField("seller", "address") }] },
   { path: "/parties/seller/country", key: "seller_country", label: "Nước người bán", group: "PARTIES", normalize: country, sources: [{ kind: "INVOICE", get: partyField("seller", "country") }, { kind: "BILL_OF_LADING", get: partyField("shipper", "country") }, { kind: "CERT_OF_ORIGIN", get: partyField("exporter", "country") }] },
@@ -66,11 +71,11 @@ export const SHIPMENT_FIELDS: FieldSpec[] = [
   { path: "/transport/placeOfIssue", key: "place_of_issue", label: "Nơi phát hành vận đơn", group: "TRANSPORT", normalize: str, sources: [{ kind: "BILL_OF_LADING", get: g("placeOfIssue") }, { kind: "AIR_WAYBILL", get: g("placeOfIssue") }] },
   { path: "/transport/warehouseCode", key: "warehouse_code", label: "Mã kho / CY", group: "TRANSPORT", normalize: upper, sources: [{ kind: "ARRIVAL_NOTICE", get: g("warehouseCode"), regionKey: "warehouseCode" }] },
   { path: "/transport/warehouseName", key: "warehouse_name", label: "Kho / CY", group: "TRANSPORT", normalize: str, sources: [{ kind: "ARRIVAL_NOTICE", get: g("warehouseName"), regionKey: "warehouseName" }] },
-  { path: "/transport/vessel", key: "vessel", label: "Tàu / chuyến bay", group: "TRANSPORT", normalize: str, sources: [{ kind: "BILL_OF_LADING", get: g("vessel"), regionKey: "vessel" }, { kind: "AIR_WAYBILL", get: g("flight"), regionKey: "flight" }, { kind: "ARRIVAL_NOTICE", get: g("vessel"), regionKey: "vessel" }] },
+  { path: "/transport/vessel", key: "vessel", label: "Tàu / chuyến bay", group: "TRANSPORT", normalize: place, sources: [{ kind: "BILL_OF_LADING", get: g("vessel"), regionKey: "vessel" }, { kind: "AIR_WAYBILL", get: g("flight"), regionKey: "flight" }, { kind: "ARRIVAL_NOTICE", get: g("vessel"), regionKey: "vessel" }] },
   { path: "/transport/freightTerm", key: "freight_term", label: "Điều kiện cước (Prepaid / Collect)", group: "TRANSPORT", normalize: upper, valid: (v) => v === "PREPAID" || v === "COLLECT", sources: [{ kind: "BILL_OF_LADING", get: g("freightTerm"), regionKey: "freightTerm" }] },
   { path: "/transport/voyage", key: "voyage", label: "Số chuyến", group: "TRANSPORT", normalize: str, sources: [{ kind: "BILL_OF_LADING", get: g("voyage") }] },
-  { path: "/transport/portOfLoading", key: "port_loading", label: "Cảng xếp hàng", group: "TRANSPORT", normalize: str, sources: [{ kind: "BILL_OF_LADING", get: g("portOfLoading"), regionKey: "portOfLoading" }, { kind: "AIR_WAYBILL", get: g("airportOfDeparture"), regionKey: "airportOfDeparture" }, { kind: "ARRIVAL_NOTICE", get: g("portOfLoading"), regionKey: "portOfLoading" }, { kind: "CERT_OF_ORIGIN", get: g("portOfLoading"), regionKey: "portOfLoading", fallback: true }] },
-  { path: "/transport/portOfDischarge", key: "port_discharge", label: "Cảng dỡ hàng", group: "TRANSPORT", normalize: str, sources: [{ kind: "BILL_OF_LADING", get: g("portOfDischarge"), regionKey: "portOfDischarge" }, { kind: "AIR_WAYBILL", get: g("airportOfDestination"), regionKey: "airportOfDestination" }, { kind: "ARRIVAL_NOTICE", get: g("portOfDischarge"), regionKey: "portOfDischarge" }, { kind: "CERT_OF_ORIGIN", get: g("portOfDischarge"), regionKey: "portOfDischarge", fallback: true }] },
+  { path: "/transport/portOfLoading", key: "port_loading", label: "Cảng xếp hàng", group: "TRANSPORT", normalize: place, sources: [{ kind: "BILL_OF_LADING", get: g("portOfLoading"), regionKey: "portOfLoading" }, { kind: "AIR_WAYBILL", get: g("airportOfDeparture"), regionKey: "airportOfDeparture" }, { kind: "ARRIVAL_NOTICE", get: g("portOfLoading"), regionKey: "portOfLoading" }, { kind: "CERT_OF_ORIGIN", get: g("portOfLoading"), regionKey: "portOfLoading", fallback: true }] },
+  { path: "/transport/portOfDischarge", key: "port_discharge", label: "Cảng dỡ hàng", group: "TRANSPORT", normalize: place, sources: [{ kind: "BILL_OF_LADING", get: g("portOfDischarge"), regionKey: "portOfDischarge" }, { kind: "AIR_WAYBILL", get: g("airportOfDestination"), regionKey: "airportOfDestination" }, { kind: "ARRIVAL_NOTICE", get: g("portOfDischarge"), regionKey: "portOfDischarge" }, { kind: "CERT_OF_ORIGIN", get: g("portOfDischarge"), regionKey: "portOfDischarge", fallback: true }] },
   { path: "/transport/finalDestination", key: "final_destination", label: "Điểm đến cuối", group: "TRANSPORT", normalize: str, sources: [{ kind: "BILL_OF_LADING", get: g("placeOfDelivery") }, { kind: "ARRIVAL_NOTICE", get: g("finalDestination") }] },
   // Không có Arrival Notice (hàng air/chuyển phát): hóa đơn/thông báo cước thường phát hành ngày hàng về – dự phòng, tờ khai đánh dấu cần kiểm.
   { path: "/transport/arrivalDate", key: "arrival_date", label: "Ngày hàng đến", group: "TRANSPORT", normalize: date, sources: [{ kind: "ARRIVAL_NOTICE", get: g("eta"), regionKey: "eta" }, { kind: "FREIGHT_INVOICE", get: g("date"), regionKey: "date", fallback: true }] },
@@ -78,6 +83,8 @@ export const SHIPMENT_FIELDS: FieldSpec[] = [
   { path: "/transport/packageUnit", key: "package_unit", label: "Loại kiện", group: "TRANSPORT", normalize: pkgUnit, sources: [{ kind: "PACKING_LIST", get: g("packageUnit") }, { kind: "BILL_OF_LADING", get: g("packageUnit") }, { kind: "ARRIVAL_NOTICE", get: g("packageUnit") }] },
   { path: "/transport/grossWeightKg", key: "gross_weight", label: "Trọng lượng cả bì (kg)", group: "TRANSPORT", normalize: num, sources: [{ kind: "PACKING_LIST", get: g("grossWeightKg"), regionKey: "grossWeightKg" }, { kind: "BILL_OF_LADING", get: g("grossWeightKg"), regionKey: "grossWeightKg" }, { kind: "AIR_WAYBILL", get: g("grossWeightKg"), regionKey: "grossWeightKg" }, { kind: "ARRIVAL_NOTICE", get: g("grossWeightKg"), regionKey: "grossWeightKg" }, { kind: "INVOICE", get: g("grossWeightKg"), regionKey: "grossWeightKg" }] },
   { path: "/transport/netWeightKg", key: "net_weight", label: "Trọng lượng tịnh (kg)", group: "TRANSPORT", normalize: num, sources: [{ kind: "PACKING_LIST", get: g("netWeightKg"), regionKey: "netWeightKg" }] },
+  { path: "/transport/volumeCbm", key: "volume_cbm", label: "Thể tích (m³)", group: "TRANSPORT", normalize: num, sources: [{ kind: "PACKING_LIST", get: g("volumeCbm"), regionKey: "volumeCbm" }] },
+  { path: "/transport/marks", key: "marks", label: "Ký mã hiệu", group: "TRANSPORT", normalize: str, sources: [{ kind: "PACKING_LIST", get: g("marks"), regionKey: "marks" }] },
   { path: "/origin/country", key: "origin_country", label: "Nước xuất xứ", group: "COMMERCIAL", normalize: country, sources: [{ kind: "CERT_OF_ORIGIN", get: g("originCountry"), regionKey: "originCountry" }] },
   { path: "/origin/coForm", key: "co_form", label: "Mẫu C/O", group: "COMMERCIAL", normalize: upper, sources: [{ kind: "CERT_OF_ORIGIN", get: g("form"), regionKey: "form" }] },
   { path: "/origin/coNo", key: "co_no", label: "Số C/O", group: "COMMERCIAL", normalize: str, sources: [{ kind: "CERT_OF_ORIGIN", get: g("coNo"), regionKey: "coNo" }] },
@@ -85,6 +92,33 @@ export const SHIPMENT_FIELDS: FieldSpec[] = [
   { path: "/origin/coDate", key: "co_date", label: "Ngày cấp C/O", group: "COMMERCIAL", normalize: date, sources: [{ kind: "CERT_OF_ORIGIN", get: g("issueDate"), regionKey: "issueDate" }] },
   { path: "/origin/coInvoiceNo", key: "co_invoice_no", label: "Số invoice trên C/O", group: "COMMERCIAL", normalize: str, sources: [{ kind: "CERT_OF_ORIGIN", get: g("invoiceNo") }] },
 ];
+
+/** Ô Shipment của từng key khối lô hàng (`lot`). */
+export const LOT_PATH: Record<LotKey, string> = {
+  portOfLoading: "/transport/portOfLoading", portOfDischarge: "/transport/portOfDischarge", vessel: "/transport/vessel", voyage: "/transport/voyage",
+  flightNo: "/transport/flightNo", billNo: "/transport/billNo", masterBillNo: "/transport/masterBillNo", departureDate: "/transport/departureDate",
+  arrivalDate: "/transport/arrivalDate", packages: "/transport/packages", packageUnit: "/transport/packageUnit", grossWeightKg: "/transport/grossWeightKg",
+  netWeightKg: "/transport/netWeightKg", volumeCbm: "/transport/volumeCbm", marks: "/transport/marks", freightTerm: "/transport/freightTerm",
+  incoterm: "/invoice/incoterm", incotermPlace: "/invoice/incotermPlace", currency: "/invoice/currency", paymentTerms: "/invoice/paymentTerms",
+  lcNo: "/invoice/lcNo", poNo: "/invoice/poNo", contractNo: "/invoice/contractNo", invoiceNo: "/invoice/no", invoiceDate: "/invoice/date",
+};
+
+/** Mọi chứng từ là nguồn của ô lô hàng: chèn nguồn `lot.<key>` của mọi loại (trừ LOT_OMIT) trước nguồn dự phòng đầu tiên – dự phòng vẫn chỉ dùng khi mọi nguồn khác trống. */
+export function withLotSources(fields: FieldSpec[]): FieldSpec[] {
+  const keyOf = new Map(Object.entries(LOT_PATH).map(([k, p]) => [p, k as LotKey]));
+  return fields.map((spec) => {
+    const key = keyOf.get(spec.path);
+    if (!key) return spec;
+    const lot = LOT_KIND_ORDER.filter((kind) => !LOT_OMIT[kind]?.includes(key)).map((kind) => ({
+      kind, get: at(`lot.${key}`, (d) => (d["lot"] as Record<string, unknown> | null | undefined)?.[key]), regionKey: `lot.${key}`,
+    }));
+    const fb = spec.sources.findIndex((s) => s.fallback);
+    const cut = fb < 0 ? spec.sources.length : fb;
+    return { ...spec, sources: [...spec.sources.slice(0, cut), ...lot, ...spec.sources.slice(cut)] };
+  });
+}
+
+export const SHIPMENT_FIELDS: FieldSpec[] = withLotSources(MANUAL_FIELDS);
 
 export const ITEM_SPECS: { field: "description" | "quantity" | "unit" | "unitPrice" | "amount" | "origin" | "hsOnInvoice" | "partNo"; key: string; label: string; normalize: Normalizer; get: (item: Record<string, unknown>) => unknown; raw?: string }[] = [
   { field: "description", key: "description", label: "Mô tả", normalize: str, get: (i) => i["description"] },

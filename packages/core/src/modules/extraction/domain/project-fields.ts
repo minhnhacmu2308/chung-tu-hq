@@ -1,5 +1,7 @@
 // Chiếu Shipment ra từng trường theo chứng từ cho màn OCR: mỗi (chứng từ, trường) một dòng, giá trị của chính chứng từ đó.
 import type { FieldGroup, FieldStatus, Region, Shipment, Sourced } from "@kb/contracts";
+import { kindLabel } from "./field-status.js";
+import { containersOf, type FileExtraction } from "./merge.js";
 import { ITEM_SPECS, SHIPMENT_FIELDS } from "./shipment-spec.js";
 
 export type ProjectedField = {
@@ -20,7 +22,23 @@ function get(s: Shipment, path: string): Sourced<string> {
   return cur as Sourced<string>;
 }
 
-export function projectFields(s: Shipment): ProjectedField[] {
+/** Ô "Số container" trên tab từng chứng từ: giá trị của chính chứng từ; cùng số mà seal khác giữa hai chứng từ → CONFLICT kèm ghi chú. Chỉ đọc (sửa qua thẻ nhập tay). */
+function containerFields(files: FileExtraction[]): ProjectedField[] {
+  const per = files.map((f) => ({ f, list: containersOf(f) })).filter((x) => x.list.length);
+  const seen = new Map<string, { doc: string; kind: FileExtraction["kind"]; seal: string | null }[]>();
+  for (const { f, list } of per) for (const c of list) seen.set(c.no, [...(seen.get(c.no) ?? []), { doc: f.documentId, kind: f.kind, seal: c.sealNo }]);
+  const notes = [...seen].flatMap(([no, xs]) => {
+    const sealed = xs.filter((x) => x.seal);
+    return new Set(sealed.map((x) => x.seal)).size > 1 ? [`${no}: ${sealed.map((x) => `${kindLabel(x.kind)} ghi seal ${x.seal}`).join("; ")}`] : [];
+  });
+  const status: FieldStatus = notes.length ? "CONFLICT" : [...seen.values()].some((xs) => new Set(xs.map((x) => x.doc)).size > 1) ? "CROSS_CHECKED" : "SINGLE_SOURCE";
+  return per.map(({ f, list }) => ({
+    documentId: f.documentId, key: "containers", label: "Số container / seal", group: "TRANSPORT", status, shipmentPath: "/transport/containers",
+    value: list.map((c) => (c.sealNo ? `${c.no} / ${c.sealNo}` : c.no)).join("; "), ...(notes.length ? { note: notes.join(". ") } : {}),
+  }));
+}
+
+export function projectFields(s: Shipment, files: FileExtraction[] = []): ProjectedField[] {
   const out: ProjectedField[] = [];
   for (const spec of SHIPMENT_FIELDS) {
     const field = get(s, spec.path);
@@ -29,6 +47,7 @@ export function projectFields(s: Shipment): ProjectedField[] {
       out.push({ documentId: src.documentId, key: spec.key, label: spec.label, group: spec.group, value, status: field.status, shipmentPath: spec.path, ...(src.region ? { region: src.region } : {}), ...(field.note ? { note: field.note } : {}) });
     }
   }
+  out.push(...containerFields(files));
   s.items.forEach((item, i) => {
     for (const spec of ITEM_SPECS) {
       const f = item[spec.field];

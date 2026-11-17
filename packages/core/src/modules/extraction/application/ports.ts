@@ -183,4 +183,4 @@ export type ExtractionDeps = {
 };
 
 export const PIPELINE_VERSION = "1";
-export const PROMPT_VERSION = "3";
+export const PROMPT_VERSION = "4";

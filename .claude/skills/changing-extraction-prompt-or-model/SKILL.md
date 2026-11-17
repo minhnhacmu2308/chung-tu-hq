@@ -26,6 +26,7 @@ description: Use when editing an extraction prompt, extraction schema field desc
 - Mô tả trường bằng nhãn thường gặp + điều không phải nó. Quy tắc chung (locale số, ngày, không suy đoán, ghi `uncertainties`) ở system prompt; quy tắc riêng ở `.describe()` của trường.
 - Ví dụ trong skill khách hàng chỉ lấy từ dữ liệu **người đã duyệt**.
 - **Giới hạn grammar của structured output**: schema càng lớn (nhiều trường, mảng lồng, union) càng dễ bị API trả 400 "compiled grammar is too large". File scan/ảnh còn bị thêm mảng `_regions` (khung vị trí cho màn OCR) → schema lớn chỉ hỏng với file scan, PDF có lớp chữ vẫn chạy. Luồng không có màn OCR truyền `regions: false` trong `ExtractPrompt` (vd Dạy khai báo). Thêm/đổi schema lớn: thử với **cả ảnh scan**, không chỉ PDF có chữ.
+- **Khối `lot` (ADR 0018):** gửi AI dạng mảng thưa `[{key, value}]` (enum key không tính vào giới hạn 16 union), chuyển về object ở `fromAiOutput`. Thêm key vào `LotSchema` = đổi schema → tăng `EXTRACTION_SCHEMA_VERSION`; sửa `SYSTEM_PROMPT` mục lô hàng → tăng `PROMPT_VERSION`. Tăng phiên bản làm hồ sơ cũ phải "Đọc lại". Chống bịa: đo số ô bịa trên chứng từ không in thông tin vận tải; lô XK chạy eval với `mapping.json` `{"direction":"XK"}`.
 - Không yêu cầu model tính toán nghiệp vụ (tổng trị giá, thuế). Model chép số; code tính.
 
 ## Red flags – DỪNG lại

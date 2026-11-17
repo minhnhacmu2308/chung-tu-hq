@@ -29,4 +29,18 @@ describe("withShipmentDefaults", () => {
     expect(s.custom).toEqual({});
     expect(s.origin.criteria).toEqual([]);
   });
+  it("shipment cũ thiếu lcNo/marks/sourceKind → bổ sung rỗng, container cũ vẫn parse", () => {
+    const old = emptyShipment() as unknown as Record<string, Record<string, unknown>>;
+    for (const k of ["lcNo", "contractNo", "paymentMethodCode"]) delete old["invoice"]![k];
+    for (const k of ["volumeCbm", "marks"]) delete old["transport"]![k];
+    old["transport"]!["containers"] = [{ no: "ABCD1234567", sealNo: null, size: null }];
+    const s = withShipmentDefaults(old as unknown as Shipment);
+    expect(s.invoice.lcNo?.value).toBeNull();
+    expect(s.invoice.contractNo?.value).toBeNull();
+    expect(s.invoice.paymentMethodCode?.value).toBeNull();
+    expect(s.transport.volumeCbm?.value).toBeNull();
+    expect(s.transport.marks?.value).toBeNull();
+    expect(ShipmentSchema.safeParse(s).success).toBe(true);
+    expect(ShipmentSchema.safeParse(old).success).toBe(true);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyItem, formFromData, itemFromProduct, normalizeNumber, toInput } from "./manual-shipment-form";
+import { emptyItem, formFromData, itemFromProduct, normalizeNumber, readContainerNos, toInput } from "./manual-shipment-form";
 
 const base = () => formFromData(null, { currency: "USD", incoterm: "FOB" });
 
@@ -37,5 +37,17 @@ describe("form nhập tay lô hàng", () => {
     const row = { ...emptyItem(), quantity: "10", unitPrice: "2" };
     const p = { id: "prd_1", setCode: "DB-10", name: "Drill bit 10mm", hsCode: "82075000", baseUnit: "PCE", origin: "VN" };
     expect(itemFromProduct(row, p)).toEqual({ description: "Drill bit 10mm", partNo: "DB-10", hsOnInvoice: "82075000", unit: "PCE", origin: "VN", quantity: "10", unitPrice: "2", catalogItemId: "prd_1" });
+  });
+});
+
+describe("readContainerNos – gợi ý ô container từ giá trị đọc được", () => {
+  it("gom số container (bỏ seal) từ ô containers của mọi chứng từ, bỏ trùng; ô khác bỏ qua", () => {
+    const fields = [
+      { key: "containers", value: "FBIU5659719 / 34337288; TCNU7654321" },
+      { key: "containers", value: "FBIU5659719 / 34337288" },
+      { key: "bill_no", value: "B1" },
+    ];
+    expect(readContainerNos(fields)).toBe("FBIU5659719, TCNU7654321");
+    expect(readContainerNos([])).toBe("");
   });
 });

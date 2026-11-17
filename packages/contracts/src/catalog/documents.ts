@@ -3,7 +3,7 @@
 import type { DocKind } from "../common.js";
 import type { DocCatalog, DocFieldDef, DocFieldType } from "./types.js";
 
-const f = (key: string, label: string, type: DocFieldType, aliases: string[] = [], since: 1 | 2 = 1): DocFieldDef => ({ key, label, type, aliases, since });
+const f = (key: string, label: string, type: DocFieldType, aliases: string[] = [], since: DocFieldDef["since"] = 1): DocFieldDef => ({ key, label, type, aliases, since });
 
 const INVOICE: DocCatalog = {
   kind: "INVOICE",
@@ -21,6 +21,7 @@ const INVOICE: DocCatalog = {
     f("packages", "Số kiện", "number", ["Packages", "Cartons", "Pallets"]),
     f("incotermPlace", "Địa điểm giao hàng", "text", ["Price basis", "Shipment Terms"], 2),
     f("originStatement", "Xuất xứ ghi trên hóa đơn", "text", ["Made In", "Made In China", "Country of origin"], 2),
+    f("paymentMethodCode", "Mã phương thức thanh toán", "code", [], 3),
   ],
   items: {
     key: "items",
@@ -159,6 +160,7 @@ const SALES_CONTRACT: DocCatalog = {
     f("currency", "Mã tiền tệ", "code", ["Currency"]),
     f("totalAmount", "Tổng trị giá hợp đồng", "number", ["Total Amount", "Total Value"]),
     f("paymentTerms", "Phương thức thanh toán", "text", ["Payment", "Terms of Payment"]),
+    f("paymentMethodCode", "Mã phương thức thanh toán", "code", [], 3),
   ],
 };
 
@@ -215,7 +217,11 @@ const FREIGHT_INVOICE: DocCatalog = {
 
 const OTHER: DocCatalog = {
   kind: "OTHER",
-  fields: [f("title", "Tiêu đề chứng từ", "text", ["Title"]), f("summary", "Tóm tắt", "text", ["Summary"])],
+  fields: [
+    f("title", "Tiêu đề chứng từ", "text", ["Title"]),
+    f("summary", "Tóm tắt", "text", ["Summary"]),
+    f("paymentMethodCode", "Mã phương thức thanh toán", "code", [], 3),
+  ],
 };
 
 export const DOC_CATALOG: Record<DocKind, DocCatalog> = { INVOICE, PACKING_LIST, BILL_OF_LADING, AIR_WAYBILL, CERT_OF_ORIGIN, SALES_CONTRACT, ARRIVAL_NOTICE, FREIGHT_INVOICE, OTHER };

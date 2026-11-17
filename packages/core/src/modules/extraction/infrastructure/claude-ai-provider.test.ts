@@ -127,6 +127,7 @@ describe("ClaudeAiProvider", () => {
   it("toRegions bỏ khung sai trang, méo, sai cấu trúc; kẹp vào trang; trùng khóa lấy khung đầu", () => {
     expect(toRegions("x", 1)).toBeNull();
     expect(toRegions([{ key: "a", page: 3, x0: 0, y0: 0, x1: 10, y1: 10 }, { key: "b", page: 1, x0: 50, y0: 50, x1: 40, y1: 60 }], 2)).toBeNull();
+    expect(toRegions([{ key: "lot.portOfLoading", page: 1, x0: 100, y0: 200, x1: 400, y1: 220 }], 1)).toEqual({ "lot.portOfLoading": { page: 1, x: 10, y: 20, w: 30, h: 2 } });
     expect(toRegions([{ key: "a", page: 2, x0: -20, y0: 900, x1: 100, y1: 1200 }, { key: "a", page: 1, x0: 0, y0: 0, x1: 10, y1: 10 }], 2)).toEqual({ a: { page: 2, x: 0, y: 90, w: 10, h: 10 } });
   });
 });

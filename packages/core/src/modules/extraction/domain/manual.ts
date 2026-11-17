@@ -25,7 +25,7 @@ const SCALARS: [path: string, get: (m: ManualShipment) => string | null | undefi
   ["/transport/grossWeightKg", (m) => m.transport.grossWeightKg],
   ["/transport/netWeightKg", (m) => m.transport.netWeightKg],
   ["/origin/country", (m) => m.origin.country],
-  ["/marks", (m) => m.marks],
+  ["/transport/marks", (m) => m.marks],
 ];
 
 /** Thành tiền dòng = số lượng × đơn giá, làm tròn 2 số lẻ (Decimal – bất biến 3). Tổng invoice = Σ thành tiền đã làm tròn. */
@@ -65,7 +65,7 @@ export function applyManual(s: Shipment, m: ManualShipment | null): Shipment {
     const leaf = leafOf(s, path);
     if (v && leaf) put(leaf, norm(path, v));
   }
-  if (m.transport.containers.length) s.transport.containers = m.transport.containers.map((c) => ({ no: c.no.toUpperCase(), sealNo: c.sealNo ?? null, size: c.size ?? null }));
+  if (m.transport.containers.length) s.transport.containers = m.transport.containers.map((c) => ({ no: c.no.toUpperCase(), sealNo: c.sealNo ?? null, size: c.size ?? null, manual: true as const }));
   if (m.items.length) {
     // Dòng hàng nhập tay thay dòng hàng đọc từ chứng từ (một nguồn duy nhất cho tờ khai và invoice phát hành).
     s.items = m.items.map((it, i): ShipmentItem => ({

@@ -1,8 +1,8 @@
 "use client";
 // Một trường trích xuất: nhãn + trạng thái, ô sửa trực tiếp, nút "Đúng", ghi chú khi mâu thuẫn, "AI đọc: …" khi đã sửa.
-import { PAYMENT_METHODS, paymentChoiceValue, paymentNeedsChoice, resolvePayment } from "@kb/contracts";
+import { type DocKind, isHiddenOcrRow, isReadOnlyField, LOT_KIND_ORDER, PAYMENT_CODE_KINDS, PAYMENT_METHODS, paymentChoiceValue, paymentNeedsChoice, reconcilePayment } from "@kb/contracts";
 import { Button, cn, fill, Input, Label, Select, StatusBadge, useMessages } from "@kb/ui";
-import { Check, Crosshair, Undo2 } from "lucide-react";
+import { Check, Crosshair, Lock, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { isSuspect } from "@/api/ocr";
 import type { ExtractedField } from "@/mocks/types";
@@ -19,29 +19,51 @@ export type FieldRowProps = {
   onPick?: (id: string) => void;
   picking?: boolean;
   busy?: boolean;
+  /** Mã PTTT AI chọn + số L/C của cùng hồ sơ – kiểm chéo ô Phương thức thanh toán (paymentHint). */
+  paymentHint?: PaymentHint;
+  /** Thẻ nhập tay lô hàng có trên màn (XK / chưa có chứng từ) – chỉ dẫn ô chỉ đọc trỏ tới thẻ; không thì trỏ tới bước Review tờ khai. */
+  manualCard?: boolean;
 };
+export type PaymentHint = { aiCode: string | null; lcNo: string | null };
 
 export const fieldDomId = (id: string) => `field-${id}`;
 
-/** Ô Phương thức thanh toán chưa ra mã chuẩn (chữ trên chứng từ không nhận ra) – bắt chọn mã trước khi sang bước sau. */
-export const isUnknownPayment = (f: ExtractedField) => f.key === "payment_terms" && paymentNeedsChoice(f.value);
+/** Mã PTTT AI chọn và số L/C như máy chủ gộp (ocrExitBlockers): giá trị khác rỗng đầu tiên theo thứ tự loại chứng từ của nguồn ô. */
+export const paymentHint = (fields: ExtractedField[], docs: { id: string; kind: DocKind }[]): PaymentHint => {
+  const pick = (key: string, kinds: DocKind[]) => {
+    const rank = (f: ExtractedField) => kinds.indexOf(docs.find((d) => d.id === f.documentId)?.kind as DocKind);
+    // Loại không là nguồn của ô (rank -1) thì máy chủ không lấy.
+    const rows = fields.filter((f) => f.key === key && f.value.trim() && rank(f) >= 0);
+    return rows.sort((a, b) => rank(a) - rank(b))[0]?.value ?? null;
+  };
+  return { aiCode: pick("payment_method_code", PAYMENT_CODE_KINDS), lcNo: pick("lc_no", LOT_KIND_ORDER) };
+};
+/** Ô Phương thức thanh toán cần chọn mã (không nhận ra, hoặc lệch mã AI / số L/C) – bắt chọn trước khi sang bước sau. */
+export const isUnknownPayment = (f: ExtractedField, hint?: PaymentHint) => f.key === "payment_terms" && paymentNeedsChoice(f.value, hint?.aiCode, hint?.lcNo);
+/** Dòng hiện trên màn OCR: mã PTTT AI chọn không thành dòng riêng (đã hiện qua ô mã của dòng thanh toán). */
+export const ocrRows = (fields: ExtractedField[]) => fields.filter((f) => !isHiddenOcrRow(f.key));
 const PAYMENT_OPTIONS = PAYMENT_METHODS.map((p) => ({ value: p.code, label: `${p.code} – ${p.label}` }));
 
-export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false }: FieldRowProps) {
+export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false, paymentHint: hint, manualCard = false }: FieldRowProps) {
   const t = useMessages(FIELD_ROW_MESSAGES);
   const [value, setValue] = useState(field.value);
   useEffect(() => setValue(field.value), [field.value]);
   const suspect = isSuspect(field.status);
   const edited = field.value !== field.originalValue;
+  const readOnly = isReadOnlyField(field.key);
   const commit = () => {
-    if (value.trim() !== field.value) onSave(field.id, value);
+    if (!readOnly && value.trim() !== field.value) onSave(field.id, value);
   };
   const inputId = `${fieldDomId(field.id)}-input`;
   const noteId = field.note ? `${fieldDomId(field.id)}-note` : undefined;
-  // PTTT: chữ trên chứng từ + mã chuẩn TK_IVP (1.43 / 2.38) – nhận ra thì chọn sẵn, không nhận ra thì bắt chọn.
+  const hintId = readOnly ? `${fieldDomId(field.id)}-ro` : undefined;
+  const describedBy = [noteId, hintId].filter(Boolean).join(" ");
+  // PTTT: chữ trên chứng từ + mã chuẩn TK_IVP (1.43 / 2.38) – khớp thì chọn sẵn, không nhận ra / lệch mã AI, số L/C thì bắt chọn.
   const payment = field.key === "payment_terms";
-  const payUnknown = payment && paymentNeedsChoice(field.value);
-  const payCode = payment && !payUnknown ? (resolvePayment(field.value)?.code ?? "") : "";
+  const pay = payment ? reconcilePayment(field.value, hint?.aiCode ?? null, hint?.lcNo ?? null) : null;
+  const payUnknown = !!pay?.suspect;
+  const payCode = payment && !payUnknown ? (pay?.code ?? "") : "";
+  const payHinted = payUnknown && !!(hint?.aiCode || hint?.lcNo);
 
   return (
     <div
@@ -62,20 +84,26 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
         <StatusBadge status={field.status} />
       </div>
       <div className="flex items-center gap-2">
-        <Input
-          id={inputId}
-          value={value}
-          className="h-9 min-w-0 flex-1"
-          aria-invalid={field.status === "INVALID_FORMAT" || undefined}
-          {...(noteId ? { "aria-describedby": noteId } : {})}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-            if (e.key === "Escape") setValue(field.value);
-          }}
-        />
-        {onPick && (
+        {/* Ô chỉ đọc: readOnly + disabled + khóa như ô MST ở cài đặt tổ chức (org-tab.tsx) – không trông như sửa được. */}
+        <div className="relative min-w-0 flex-1">
+          <Input
+            id={inputId}
+            value={value}
+            className={cn("h-9 w-full", readOnly && "pr-9")}
+            readOnly={readOnly}
+            disabled={readOnly}
+            aria-invalid={field.status === "INVALID_FORMAT" || undefined}
+            {...(describedBy ? { "aria-describedby": describedBy } : {})}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") setValue(field.value);
+            }}
+          />
+          {readOnly && <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-subtle" aria-hidden="true" />}
+        </div>
+        {onPick && !readOnly && (
           <Button
             size="icon"
             variant={picking ? "secondary" : "ghost"}
@@ -110,8 +138,13 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
             disabled={busy}
             onChange={(e) => e.target.value && e.target.value !== payCode && onSave(field.id, paymentChoiceValue(e.target.value, field.value))}
           />
-          {payUnknown && <p className="text-sm text-danger-subtle-fg">{t.paymentUnknown}</p>}
+          {payUnknown && <p className="text-sm text-danger-subtle-fg">{payHinted ? fill(t.paymentMismatch, { code: pay!.code }) : t.paymentUnknown}</p>}
         </div>
+      )}
+      {readOnly && (
+        <p id={hintId} className="text-xs text-fg-subtle">
+          {manualCard ? t.readOnlyHint : t.readOnlyReviewHint}
+        </p>
       )}
       {field.note && field.status !== "USER_CONFIRMED" && (
         <p id={noteId} className={cn("text-sm", field.status === "CONFLICT" || field.status === "INVALID_FORMAT" ? "text-danger-subtle-fg" : "text-fg-muted")}>

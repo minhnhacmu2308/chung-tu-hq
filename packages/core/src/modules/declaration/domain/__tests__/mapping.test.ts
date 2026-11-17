@@ -120,6 +120,17 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
     expect(eda({ mutate: (s) => void (s.invoice.paymentTerms = nul()) })["PT_TT"]).toMatchObject({ value: "", suspect: true, note: "Chưa có phương thức thanh toán" });
   });
 
+  it("phương thức thanh toán: mã AI lệch regex → cần xem kèm hai gợi ý; chỉ có số L/C → gợi ý LC", () => {
+    expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = val("L/C at sight")), (s.invoice.paymentMethodCode = val("TTR"))) })["PT_TT"]).toMatchObject({
+      value: "LC – Tín dụng thư (L/C)", suspect: true, note: "Chứng từ ghi “L/C at sight”: hệ thống đọc ra LC, AI nhận là TTR – chọn mã đúng",
+    });
+    expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = val("T/T 30 days")), (s.invoice.paymentMethodCode = val("KC"))) })["PT_TT"]?.suspect).toBeUndefined();
+    expect(eda({ mutate: (s) => void ((s.invoice.paymentTerms = nul()), (s.invoice.lcNo = val("S700542640040"))) })["PT_TT"]).toMatchObject({ value: "LC – Tín dụng thư (L/C)", suspect: true });
+    // Không chữ, không mã AI, không số L/C → Mặc định khai báo của doanh nghiệp.
+    expect(eda({ profile: { PT_TT: "KC" }, mutate: (s) => void (s.invoice.paymentTerms = nul()) })["PT_TT"]?.value).toBe("KC");
+    expect(eda({ profile: { PT_TT: "KC" }, mutate: (s) => void ((s.invoice.paymentTerms = nul()), (s.invoice.paymentMethodCode = val("LC"))) })["PT_TT"]).toMatchObject({ value: "LC – Tín dụng thư (L/C)", suspect: true });
+  });
+
   it("điều kiện giá: chỉ lấy mã (bỏ địa danh), C&F/CNF chuẩn hóa; thiếu tổng trị giá → tính từ tổng các dòng", () => {
     expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("fob")) })["DK_GIA"]?.value).toBe("FOB");
     expect(eda({ mutate: (s) => void (s.invoice.incoterm = val("FOB HAIPHONG")) })["DK_GIA"]?.value).toBe("FOB");
@@ -171,6 +182,34 @@ describe("EDA_MAPPINGS (tờ khai xuất khẩu)", () => {
   it("đường biển container nhưng vận đơn không có container → nghi ngờ, không tự đổi mã", () => {
     const f = eda({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: (s) => void (s.transport.containers = []) });
     expect(f["PTVC"]).toMatchObject({ value: "2 – Đường biển (chứa trong container)", suspect: true });
+  });
+});
+
+describe("container / tàu / thanh toán theo nguồn thật (lô chỉ có invoice)", () => {
+  const onlyInvoice = (s: Shipment) => {
+    s.transport.containers = [{ no: "FBIU5659719", sealNo: null, size: null, sourceKind: "INVOICE" }];
+    s.transport.vessel = { value: "COSCO SHIPPING PLANET", sources: [{ kind: "INVOICE" } as never], status: "SINGLE_SOURCE" };
+    s.invoice.paymentTerms = nul();
+    s.invoice.lcNo = val("LC123");
+  };
+  it("EDA: SO_CONT ghi nguồn invoice, tên tàu có giá trị, PT_TT = LC nghi ngờ", () => {
+    const f = eda({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: onlyInvoice });
+    expect(f["SO_CONT"]).toMatchObject({ value: "FBIU5659719", source: "INVOICE" });
+    expect(f["PTVC_TEN"]?.value).toBe("COSCO SHIPPING PLANET");
+    expect(f["PT_TT"]?.value).toMatch(/^LC/);
+    expect(f["PT_TT"]?.suspect).toBe(true);
+  });
+  it("IDA: SL_CONT ghi nguồn invoice", () => {
+    expect(ida({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: onlyInvoice })["SL_CONT"]).toMatchObject({ value: "1", source: "INVOICE" });
+  });
+  it("container nhập tay (thẻ lô hàng) → nguồn DOSSIER, không phải vận đơn", () => {
+    const manual = (s: Shipment) => void (s.transport.containers = [{ no: "FBIU5659719", sealNo: null, size: null, manual: true }]);
+    expect(eda({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: manual })["SO_CONT"]).toMatchObject({ value: "FBIU5659719", source: "DOSSIER" });
+    expect(ida({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: manual })["SL_CONT"]).toMatchObject({ value: "1", source: "DOSSIER" });
+  });
+  it("container không có sourceKind (shipment cũ) → BILL_OF_LADING", () => {
+    expect(eda({ dossier: { transportMode: "SEA_CONTAINER" } })["SO_CONT"]).toMatchObject({ value: "SITU2246781", source: "BILL_OF_LADING" });
+    expect(ida({ dossier: { transportMode: "SEA_CONTAINER" } })["SL_CONT"]).toMatchObject({ value: "1", source: "BILL_OF_LADING" });
   });
 });
 

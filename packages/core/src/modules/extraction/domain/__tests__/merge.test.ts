@@ -70,11 +70,17 @@ describe("mergeExtractions", () => {
     expect(s.parties.buyer.taxCode.status).toBe("INVALID_FORMAT");
     expect(s.invoice.paymentTerms.status).toBe("MODEL_UNSURE");
   });
+  it("paymentMethodCode có regionKey: uncertainties ghi tên trường → MODEL_UNSURE", () => {
+    const inv: FileExtraction = { ...invoice, data: { ...invoice.data, paymentMethodCode: "KC", uncertainties: ["paymentMethodCode"] } };
+    const m = mergeExtractions([inv], { version: 1, taxCodeValid: () => true });
+    expect(m.invoice.paymentMethodCode?.value).toBe("KC");
+    expect(m.invoice.paymentMethodCode?.status).toBe("MODEL_UNSURE");
+  });
   it("vận tải từ B/L: số vận đơn, cảng, điểm giao cuối, container; loại kiện PALLETS → PL", () => {
     expect(s.transport.billNo.value).toBe("HPSEL2610078");
     expect(s.transport.portOfDischarge.value).toBe("HO CHI MINH, VIETNAM");
     expect(s.transport.finalDestination.value).toBe("HAI PHONG, VIETNAM");
-    expect(s.transport.containers).toEqual([{ no: "CMAU1234452", sealNo: "S1", size: "40HC" }]);
+    expect(s.transport.containers).toEqual([{ no: "CMAU1234452", sealNo: "S1", size: "40HC", sourceKind: "BILL_OF_LADING" }]);
     expect(s.transport.packageUnit.value).toBe("PL");
     expect(s.transport.mode.value).toBe("SEA");
   });
@@ -202,5 +208,90 @@ describe("mergeExtractions – trường v2 (chuẩn trường chứng từ)", (
     expect(s.items[0]?.partNo.value).toBe("APSX116D");
     expect(s.origin.criteria).toEqual([{ hs6: "852859", criterion: "PE" }]);
     expect(s.custom["INVOICE"]?.["lcNo"]?.value).toBe("LC-001");
+  });
+});
+
+describe("mergeExtractions – khối lô hàng (lot) trên mọi chứng từ", () => {
+  const opts = { version: 1 };
+  const invoiceWithLot = (lot: Record<string, string | null>, lotContainers: { no: string; sealNo: string | null; size: string | null }[] = [], regions?: FileExtraction["regions"]): FileExtraction => ({
+    documentId: "d_inv", kind: "INVOICE", pages: 1, data: { invoiceNo: "INV-1", items: [], uncertainties: [], lot, lotContainers }, ...(regions ? { regions } : {}),
+  });
+  const bl = (d: Record<string, unknown>): FileExtraction => ({ documentId: "d_bl", kind: "BILL_OF_LADING", pages: 1, data: { billNo: "B1", containers: [], uncertainties: [], ...d } });
+
+  it("XK chỉ có invoice: cảng, tàu, chuyến, L/C, container lấy từ lot", () => {
+    const s = mergeExtractions([invoiceWithLot({ portOfLoading: "BA RIA - VUNG TAU (CM-TV), VIETNAM", portOfDischarge: "NAPOLI PORT, ITALY", vessel: "COSCO SHIPPING PLANET", voyage: "049W", lcNo: "S700542640040" }, [{ no: "FBIU5659719", sealNo: "34337288", size: null }])], opts);
+    expect(s.transport.portOfLoading.value).toBe("BA RIA - VUNG TAU (CM-TV), VIETNAM");
+    expect(s.transport.portOfLoading.status).toBe("SINGLE_SOURCE");
+    expect(s.transport.portOfDischarge.value).toBe("NAPOLI PORT, ITALY");
+    expect(s.transport.vessel.value).toBe("COSCO SHIPPING PLANET");
+    expect(s.transport.voyage.value).toBe("049W");
+    expect(s.invoice.lcNo!.value).toBe("S700542640040");
+    expect(s.transport.containers).toEqual([{ no: "FBIU5659719", sealNo: "34337288", size: null, sourceKind: "INVOICE" }]);
+  });
+  it("invoice + B/L khác chữ cảng → CONFLICT kèm ghi chú, giá trị mặc định là B/L", () => {
+    const s = mergeExtractions([bl({ portOfLoading: "VUNG TAU" }), invoiceWithLot({ portOfLoading: "BA RIA - VUNG TAU (CM-TV), VIETNAM" })], opts);
+    expect(s.transport.portOfLoading.value).toBe("VUNG TAU");
+    expect(s.transport.portOfLoading.status).toBe("CONFLICT");
+    expect(s.transport.portOfLoading.note).toContain("Invoice ghi BA RIA - VUNG TAU (CM-TV), VIETNAM");
+  });
+  it("invoice + B/L cùng cảng (khác hoa thường, khoảng trắng) → CROSS_CHECKED", () => {
+    const s = mergeExtractions([bl({ portOfLoading: "Cat  Lai" }), invoiceWithLot({ portOfLoading: "CAT LAI" })], opts);
+    expect(s.transport.portOfLoading).toMatchObject({ value: "CAT LAI", status: "CROSS_CHECKED" });
+    expect(s.transport.portOfLoading.sources.map((x) => x.kind)).toEqual(["BILL_OF_LADING", "INVOICE"]);
+  });
+  it("C/O vẫn chỉ dự phòng: B/L CAT LAI, C/O HO CHI MINH → SINGLE_SOURCE CAT LAI", () => {
+    const co: FileExtraction = { documentId: "d_co", kind: "CERT_OF_ORIGIN", pages: 1, data: { portOfDischarge: "HO CHI MINH, VIET NAM", items: [], uncertainties: [], lot: {} } };
+    const s = mergeExtractions([bl({ portOfDischarge: "CAT LAI" }), co], opts);
+    expect(s.transport.portOfDischarge).toMatchObject({ value: "CAT LAI", status: "SINGLE_SOURCE" });
+    expect(s.transport.portOfDischarge.sources.map((x) => x.kind)).toEqual(["BILL_OF_LADING"]);
+  });
+  it("cùng một chứng từ cho ô qua trường riêng và lot → một nguồn, không CROSS_CHECKED", () => {
+    // Arrival Notice: vessel riêng (gộp tàu/chuyến) + lot.vessel (tách) – cùng một chứng từ, không phải hai nguồn độc lập.
+    const an: FileExtraction = { documentId: "d_an", kind: "ARRIVAL_NOTICE", pages: 1, data: { vessel: "SITC HAIPHONG", charges: [], uncertainties: [], lot: { vessel: "SITC HAIPHONG", voyage: "2641S" } } };
+    const s = mergeExtractions([an], opts);
+    expect(s.transport.vessel).toMatchObject({ value: "SITC HAIPHONG", status: "SINGLE_SOURCE" });
+    expect(s.transport.vessel.sources).toHaveLength(1);
+  });
+  it("file scan có regions mà ô lot không có vùng → MODEL_UNSURE; có vùng → SINGLE_SOURCE kèm vùng", () => {
+    const region = { page: 1, x: 1, y: 2, w: 3, h: 4 };
+    const s = mergeExtractions([invoiceWithLot({ portOfLoading: "CAT LAI", vessel: "EVER GIVEN" }, [], { "lot.vessel": region })], opts);
+    expect(s.transport.portOfLoading.status).toBe("MODEL_UNSURE");
+    expect(s.transport.vessel.status).toBe("SINGLE_SOURCE");
+    expect(s.transport.vessel.sources[0]?.region).toEqual(region);
+    // Không có regions (PDF chữ) → không đánh không chắc.
+    expect(mergeExtractions([invoiceWithLot({ portOfLoading: "CAT LAI" })], opts).transport.portOfLoading.status).toBe("SINGLE_SOURCE");
+  });
+  it("lot.<key> nằm trong uncertainties → MODEL_UNSURE", () => {
+    const inv = invoiceWithLot({ voyage: "049W" });
+    const s = mergeExtractions([{ ...inv, data: { ...inv.data, uncertainties: ["lot.voyage"] } }], opts);
+    expect(s.transport.voyage.status).toBe("MODEL_UNSURE");
+  });
+  it("container trùng số giữa invoice và B/L → một phần tử, seal của nguồn đứng trước", () => {
+    const s = mergeExtractions([invoiceWithLot({}, [{ no: "fbiu 5659719", sealNo: "X9", size: null }, { no: "TGHU1111111", sealNo: null, size: "20GP" }]), bl({ containers: [{ no: "FBIU5659719", sealNo: "34337288", size: "40HC" }] })], opts);
+    expect(s.transport.containers).toEqual([
+      { no: "FBIU5659719", sealNo: "34337288", size: "40HC", sourceKind: "BILL_OF_LADING" },
+      { no: "TGHU1111111", sealNo: null, size: "20GP", sourceKind: "INVOICE" },
+    ]);
+  });
+  it("ô mới: thể tích, ký mã hiệu từ Packing List; số hợp đồng từ Contract; mã PTTT từ invoice", () => {
+    const pl: FileExtraction = { documentId: "d_pl", kind: "PACKING_LIST", pages: 1, data: { volumeCbm: 12.4, marks: "VL-01", items: [], uncertainties: [], lot: {} } };
+    const sc: FileExtraction = { documentId: "d_sc", kind: "SALES_CONTRACT", pages: 1, data: { contractNo: "SC-01", paymentMethodCode: "LC", uncertainties: [], lot: {} } };
+    const inv = invoiceWithLot({ contractNo: "SC-01" });
+    const s = mergeExtractions([{ ...inv, data: { ...inv.data, paymentMethodCode: "lc" } }, pl, sc], opts);
+    expect(s.transport.volumeCbm!.value).toBe("12.4");
+    expect(s.transport.marks!.value).toBe("VL-01");
+    expect(s.invoice.contractNo).toMatchObject({ value: "SC-01", status: "CROSS_CHECKED" });
+    expect(s.invoice.paymentMethodCode).toMatchObject({ value: "LC", status: "CROSS_CHECKED" });
+  });
+  it("ngày lot dạng YYYY-MM-DD (mô tả schema yêu cầu) giữ nguyên, không đảo ngày/tháng", () => {
+    const s = mergeExtractions([invoiceWithLot({ departureDate: "2025-03-04", arrivalDate: "2025-04-03" })], opts);
+    expect(s.transport.departureDate.value).toBe("2025-03-04");
+    expect(s.transport.arrivalDate.value).toBe("2025-04-03");
+  });
+  it("kết quả v3 không có lot → merge như cũ", () => {
+    const s = mergeExtractions([invoice, packing, bl({ portOfLoading: "BUSAN, KOREA", containers: [{ no: "CMAU1234452", sealNo: "S1", size: "40HC" }] })], opts);
+    expect(s.transport.portOfLoading).toMatchObject({ value: "BUSAN, KOREA", status: "SINGLE_SOURCE" });
+    expect(s.transport.containers).toEqual([{ no: "CMAU1234452", sealNo: "S1", size: "40HC", sourceKind: "BILL_OF_LADING" }]);
+    expect(s.invoice.lcNo!.value).toBeNull();
   });
 });

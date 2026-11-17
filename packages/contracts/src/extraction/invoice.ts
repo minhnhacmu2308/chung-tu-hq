@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { nDate, nNum, nStr, PartySchema, UncertaintiesSchema } from "./common.js";
+import { PaymentMethodCodeSchema } from "./lot.js";
 
 export const InvoiceItemSchema = z.object({
   lineNo: z.number().int().positive().describe("Số thứ tự dòng hàng"),
@@ -28,6 +29,7 @@ export const InvoiceExtractionSchema = z.object({
   packages: nNum("Tổng số kiện (packages / cartons / pallets) nếu in"),
   incotermPlace: nStr("Địa danh đi kèm điều kiện giao hàng (EX-Works Shenzhen → Shenzhen; FOB BUSAN → BUSAN)"),
   originStatement: nStr("Câu xuất xứ in trên hóa đơn (vd \"Made In China\") nguyên văn"),
+  paymentMethodCode: PaymentMethodCodeSchema,
   uncertainties: UncertaintiesSchema,
 });
 export type InvoiceExtraction = z.infer<typeof InvoiceExtractionSchema>;

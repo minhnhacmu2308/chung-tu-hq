@@ -2,6 +2,7 @@
 // Lấy một lần (FPT không trả lại – docs/vnaccs-api "Câu hỏi đã chốt"): cả lô ghi ngay vào hộp thư customs_inbox, rồi mới áp từng thông điệp
 // (nhật ký của đúng tờ khai + luồng/thông quan, cùng transaction với đánh dấu APPLIED). Chưa khớp tờ khai → giữ PENDING, lượt sau thử lại.
 // Gọi đầu mỗi lượt hỏi trạng thái (customs-poll); tra IID/IEX vẫn chạy sau đó để chắc trạng thái.
+// Job customs-messages (3 giờ) gọi thêm cho mọi doanh nghiệp có tài khoản VNACCS – lấy cả khi không còn hồ sơ nào đang hỏi.
 import { AWAITING_CLEARANCE, type CustomsOperation } from "@kb/contracts";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { createLogger } from "../../../shared/log.js";

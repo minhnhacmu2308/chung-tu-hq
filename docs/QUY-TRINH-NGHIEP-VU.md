@@ -532,7 +532,7 @@ Quyết định: ADR 0011. Mã nguồn: module `billing` (`packages/core/src/mod
 | HSCodePro | `HS_ANSWER` | Gửi câu trả lời cho một dòng thành công (409 "đã gửi" khi job chạy lại không ghi) | `HSCODEPRO_PRICE_PER_ITEM_VND` × 1 |
 | HSCodePro | `HS_RESULT` | Lượt hỏi kết quả có dòng vừa có kết quả (hỏi 3 giây/lần mà chưa xong thì không ghi) | 0 – dòng đã tính lúc gửi |
 | Customs Hub | `CUSTOMS_SEND` | Mỗi nghiệp vụ (IDA, IDC, HYS, IDB…) được cổng trả lời, kể cả bị Hải quan từ chối | `CUSTOMS_HUB_PRICE_PER_MESSAGE_VND` × 1 |
-| Customs Hub | `CUSTOMS_QUERY` | Mỗi lần hỏi trạng thái IID/IEX (job `customs-poll`, nút Tra cứu, tra trước khi Gửi lại) | `CUSTOMS_HUB_PRICE_PER_MESSAGE_VND` × 1 |
+| Customs Hub | `CUSTOMS_QUERY` | Mỗi lần hỏi trạng thái IID/IEX (job `customs-poll`, nút Tra cứu, tra trước khi Gửi lại); mỗi lần kéo thông điệp VNACCSREP (đầu lượt `customs-poll`, job `customs-messages` 3 giờ/lần/doanh nghiệp có tài khoản) | `CUSTOMS_HUB_PRICE_PER_MESSAGE_VND` × 1 |
 
 - Đơn giá HSCodePro / Customs Hub đặt trong biến môi trường (chuỗi thập phân VND; chưa có giá hợp đồng → để trống = 0). Tiền tính bằng Decimal.
 - Không tính trùng: `CUSTOMS_SEND` khóa theo `idempotencyKey` của outbox (job chạy lại sau crash gửi lại cùng thông điệp chỉ ghi một lần; "Gửi lại" tạo outbox mới = thông điệp mới); lỗi tạm (mạng/5xx) và nghiệp vụ cổng chưa hỗ trợ (chưa gửi được) không ghi. `HS_CLASSIFY` khóa theo mã lượt HSCodePro.
@@ -561,6 +561,7 @@ Chức năng: tổng quan "Cần chú ý" (`LOW_CREDITS` – PAYG còn ≤ 3 lư
 | `run-agent` | Chạy các việc của AI Agent |
 | `hs-poll`, `hs-answer`, `hs-reclassify` | Theo dõi / trả lời / phân loại lại mã HS với HSCodePro (hỏi mỗi 3 giây, tối đa 15 phút); ghi chi phí HSCodePro (§11) |
 | `customs-send`, `customs-poll` | Gửi một nghiệp vụ Hải quan; hỏi trạng thái tới khi thông quan; ghi chi phí Customs Hub mỗi thông điệp thật sự gửi (§11) |
+| `customs-messages` | Mỗi 3 giờ (phút 15 UTC): kéo VNACCSREP + áp hộp thư `customs_inbox` cho mọi doanh nghiệp có tài khoản VNACCS, kể cả khi không còn hồ sơ nào đang hỏi trạng thái (thông điệp đến muộn, thông điệp chưa khớp tờ khai) |
 | `skill-sample-read`, `skill-evaluate` | Đọc nháp nhãn mẫu; đánh giá độ chính xác Skill |
 | `cert-expiry` | Hằng ngày: nhắc chứng thư số sắp hết hạn |
 | `exchange-rate-weekly` | Thứ Năm 23:30 giờ VN: lấy tỷ giá Vietcombank (thử lại mỗi 30 phút); job `catch-up` khi worker khởi động + 07:30 mỗi sáng: tuần đang áp dụng chưa có tỷ giá thì lấy bù bảng thứ Năm tuần trước |

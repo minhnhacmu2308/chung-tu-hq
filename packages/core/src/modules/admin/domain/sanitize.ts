@@ -28,6 +28,7 @@ export const QUEUE_LABELS: Record<string, string> = {
   "run-agent": "AI Agent dựng tờ khai",
   "customs-send": "Truyền Hải quan",
   "customs-poll": "Hỏi trạng thái Hải quan",
+  "customs-messages": "Lấy thông điệp Hải quan (VNACCSREP)",
   "skill-evaluate": "Đánh giá skill",
   "skill-sample-read": "Đọc mẫu skill",
   "cert-expiry": "Nhắc chứng thư hết hạn",

@@ -23,6 +23,7 @@ import { skillEvaluateJob, skillSampleReadJob } from "./jobs/skill.js";
 import { teachSampleReadJob } from "./jobs/teach.js";
 import { failTeachSample } from "@kb/core/modules/teaching";
 import { stuckSweeperJob } from "./jobs/stuck-sweeper.js";
+import { customsMessagesJob } from "./jobs/customs-messages.js";
 import { perOrgLimit } from "./jobs/_per-org.js";
 import { startHealthServer } from "./health-server.js";
 import { startMetricsServer } from "./metrics-server.js";
@@ -53,6 +54,8 @@ const workers = [
   new Worker("hs-reclassify", async (job) => hsReclassifyJob(c.declaration, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("customs-send", async (job) => customsSendJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   new Worker("customs-poll", async (job) => customsPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
+  // Thông điệp Hải quan trả sau cho mọi doanh nghiệp (không phụ thuộc hồ sơ đang hỏi trạng thái) – một lượt một lúc.
+  new Worker("customs-messages", async () => JSON.stringify(await customsMessagesJob(c)), { connection: c.redis, concurrency: 1 }),
   new Worker("kvgs-poll", async (job) => kvgsPollJob(c.customs, job.data), { connection: c.redis, concurrency: 2 }),
   // Nhập danh mục hàng hóa > 500 dòng: ghép theo lô (không gọi AI/dịch vụ ngoài).
   new Worker("catalog-import", async (job) => catalogImportJob(c.catalog, job.data), { connection: c.redis, concurrency: 2 }),
@@ -78,8 +81,11 @@ const rateQueue = new Queue("exchange-rate-weekly", { connection: c.redis });
 const sweeperQueue = new Queue("stuck-sweeper", { connection: c.redis });
 // Đối soát lượt / thanh toán hằng ngày 20:00 UTC (03:00 VN, ít người khai); lỗi thử lại 3 lần cách 15 phút – lần chạy sau vẫn bù được.
 const billingQueue = new Queue("billing-reconcile", { connection: c.redis });
+// Kéo VNACCSREP cho mọi doanh nghiệp mỗi 3 giờ (phút 15 để không trùng các lịch khác). Không retry: lượt sau lấy tiếp, thông điệp đã lấy nằm trong customs_inbox.
+const customsMessagesQueue = new Queue("customs-messages", { connection: c.redis });
 async function registerSchedulers() {
   await sweeperQueue.upsertJobScheduler("stuck-sweeper-5m", { pattern: "*/5 * * * *", tz: "UTC" }, { name: "stuck-sweeper", data: {}, opts: { attempts: 1, removeOnComplete: 20, removeOnFail: 20 } });
+  await customsMessagesQueue.upsertJobScheduler("customs-messages-3h", { pattern: "15 */3 * * *", tz: "UTC" }, { name: "customs-messages", data: {}, opts: { attempts: 1, removeOnComplete: 20, removeOnFail: 20 } });
   await billingQueue.upsertJobScheduler("billing-reconcile-daily", { pattern: "0 20 * * *", tz: "UTC" }, { name: "billing-reconcile", data: {}, opts: { attempts: 3, backoff: { type: "fixed", delay: 15 * 60_000 }, removeOnComplete: 20, removeOnFail: 20 } });
   await certQueue.upsertJobScheduler("cert-expiry-daily", { pattern: "0 1 * * *", tz: "UTC" }, { name: "cert-expiry", data: {}, opts: { attempts: 3, backoff: { type: "fixed", delay: 10 * 60_000 }, removeOnComplete: 10, removeOnFail: 10 } });
   await rateQueue.upsertJobScheduler("exchange-rate-weekly", { pattern: RATE_JOB_CRON, tz: "UTC" }, { name: "exchange-rate-weekly", data: {}, opts: { attempts: 16, backoff: { type: "fixed", delay: 30 * 60_000 }, removeOnComplete: 20, removeOnFail: 20 } });

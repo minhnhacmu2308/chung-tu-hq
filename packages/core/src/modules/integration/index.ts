@@ -9,6 +9,7 @@ export { recallAllSheets } from "./application/recall-all.js";
 export { addPostAmendmentLines, approvePostAmendment, copyPostAmendmentHeader, getPostAmendmentView, removePostAmendmentLine, updatePostAmendmentField } from "./application/post-amendment.js";
 export { MAX_ATTEMPTS as CUSTOMS_MAX_ATTEMPTS, processOutbox, type ProcessOutboxInput } from "./application/process-outbox.js";
 export { pollStatus, syncDossierClearance, type PollStatusInput } from "./application/poll-status.js";
+export { pullCustomsMessages } from "./application/customs-messages.js";
 export { resendOperation } from "./application/resend-operation.js";
 export { declareOpFor } from "./application/branch-send.js";
 export { requeueStuckOutbox, STUCK_OUTBOX_MS } from "./application/requeue-stuck-outbox.js";

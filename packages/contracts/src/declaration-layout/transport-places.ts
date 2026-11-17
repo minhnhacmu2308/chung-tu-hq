@@ -114,15 +114,20 @@ export function transportPlaceChanges(kind: Kind, before: Values, key: string, v
   return out;
 }
 
-export type PlaceIssue = { key: string; no: string; reason: "NAME_REQUIRED" | "NAME_FORMAT" | "CODE_FIXED" };
+export type PlaceIssue = { key: string; no: string; reason: "NAME_REQUIRED" | "NAME_FORMAT" | "CODE_FIXED" | "CODE_UNRESOLVED" };
+/** Dạng mã A016 (UN/LOCODE 5 ký tự, mã trong nước 6 ký tự): mã nước 2 chữ + 3–4 chữ/số. */
+const PLACE_CODE = /^[A-Z]{2}[A-Z0-9]{3,4}$/;
 /**
  * Tên nhập tay (PTVC 9, mã …ZZZ): bắt buộc, in hoa không dấu. PTVC 9: mã phải là VNZZZ.
+ * Mã không đúng dạng mã A016 (chưa tra ra mã, còn tên) → CODE_UNRESOLVED: chặn duyệt/khai tới khi chọn mã.
  * Tên theo mã → không có lỗi riêng (vai trò ô mã theo Phụ lục II).
  */
 export function transportPlaceIssues(kind: Kind, v: Values): PlaceIssue[] {
   const onSite = isOnSiteTransport(v);
   return TRANSPORT_PLACES[kind].flatMap((p): PlaceIssue[] => {
     const code = (v[p.code] ?? "").trim();
+    // Chưa tìm ra mã (ô còn giữ tên trên chứng từ, vd "TANJUNG PERAK, SURABAYA") → phải chọn mã trong danh mục mới khai được.
+    if (code && !onSite && !PLACE_CODE.test(code)) return [{ key: p.code, no: p.no, reason: "CODE_UNRESOLVED" }];
     if (!sendsPlaceName(v["TK_MTC"] ?? "", code)) return [];
     const name = (v[p.name] ?? "").trim();
     const out: PlaceIssue[] = [];

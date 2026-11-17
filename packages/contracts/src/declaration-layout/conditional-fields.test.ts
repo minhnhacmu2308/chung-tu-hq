@@ -9,7 +9,8 @@ type Values = Record<string, string>;
 /** Giá trị đủ mọi ô bắt buộc (nhập kinh doanh A11 / xuất B11, đường hàng không, giá CIF, hóa đơn A). */
 function complete(kind: Kind): { decl: Values; item: Values } {
   const decl: Values = kind === "IDA" ? { TK_ICB: "A11", TK_MTC: "1", TK_IP2: "CIF", TK_IV1: "A", TK_IV3: "INV-1" } : { TK_ECB: "B11", TK_MTC: "1", TK_IP2: "CIF", TK_IV1: "A", TK_IV3: "INV-1" };
-  for (const g of requiredGaps(kind, decl, [])) decl[g.key] ||= "X";
+  const PLACE: Record<string, string> = { VD_DST: "VNCLI", VD_PSC: "CNSHA", TK_PSC: "VNCLI", TK_DSC: "CNSHA" }; // ô mã địa điểm phải đúng dạng mã A016
+  for (const g of requiredGaps(kind, decl, [])) decl[g.key] ||= PLACE[g.key] ?? "X";
   const item: Values = {};
   for (const g of requiredGaps(kind, decl, [item])) if (g.line === 0) item[g.key] = "1";
   return { decl, item };

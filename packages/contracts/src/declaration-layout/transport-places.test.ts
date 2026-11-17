@@ -51,6 +51,9 @@ describe("địa điểm xếp / dỡ hàng theo PTVC (1.33 / 1.34, 2.28 / 2.29)
     ]);
     expect(transportPlaceIssues("IDA", { ...v, VD_PSC: "VNZZZ", VD_DSN: "KHO A", VD_PSN: "KHO B" })).toEqual([]);
     expect(transportPlaceIssues("IDA", { TK_MTC: "2" })).toEqual([]);
+    // Chưa tra ra mã: ô mã còn tên trên chứng từ → bắt chọn mã; mã A016 5–6 ký tự thì hợp lệ.
+    expect(transportPlaceIssues("EDA", { TK_MTC: "2", TK_DSC: "TANJUNG PERAK, SURABAYA, INDONESIA", TK_PSC: "VNCLI" })).toEqual([{ key: "TK_DSC", no: "2.28", reason: "CODE_UNRESOLVED" }]);
+    expect(transportPlaceIssues("EDA", { TK_MTC: "2", TK_DSC: "IDSUB", TK_PSC: "VNNDBT" })).toEqual([]);
     const gaps = requiredGaps("IDA", v, []).filter((g) => g.no === "1.33" || g.no === "1.34");
     expect(gaps.map((g) => g.key).sort()).toEqual(["VD_DSN", "VD_PSC", "VD_PSN"]);
   });

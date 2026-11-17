@@ -27,7 +27,9 @@ function formFields(blocks: LayoutBlock[]) {
 function complete(kind: Kind) {
   const base = kind === "IDA" ? { TK_ICB: "A11", TK_MTC: "1", TK_IP2: "CIF", TK_IV3: "INV-1" } : { TK_ECB: "B11", TK_MTC: "1", TK_IP2: "CIF", TK_IV3: "INV-1" };
   const decl: Record<string, string> = { ...base };
-  for (const g of requiredGaps(kind, decl, [])) decl[g.key] ||= "X";
+  // Ô mã địa điểm phải đúng dạng mã A016 (CODE_UNRESOLVED) – điền mã thật thay "X".
+  const PLACE: Record<string, string> = { VD_DST: "VNCLI", VD_PSC: "CNSHA", TK_PSC: "VNCLI", TK_DSC: "CNSHA" };
+  for (const g of requiredGaps(kind, decl, [])) decl[g.key] ||= PLACE[g.key] ?? "X";
   const item: Record<string, string> = {};
   for (const g of requiredGaps(kind, decl, [item])) if (g.line === 0) item[g.key] = "1";
   return { decl, item };

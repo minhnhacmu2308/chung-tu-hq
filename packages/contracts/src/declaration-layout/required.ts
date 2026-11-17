@@ -121,6 +121,7 @@ const PLACE_ISSUE_TEXT = {
   NAME_REQUIRED: "tên địa điểm bắt buộc khi phương thức vận chuyển 9 hoặc mã địa điểm chưa mã hóa (…ZZZ)",
   NAME_FORMAT: "tên địa điểm nhập in hoa, không dấu",
   CODE_FIXED: `mã địa điểm phải là ${ON_SITE_PLACE} khi phương thức vận chuyển 9`,
+  CODE_UNRESOLVED: "chưa có mã địa điểm – chọn mã trong danh mục",
 } as const;
 /** PTVC 9: mã xếp / dỡ phải là VNZZZ; tên nhập tay (PTVC 9, mã …ZZZ) bắt buộc và in hoa không dấu (transport-places.ts). */
 const placeGaps = (kind: Kind, v: Values): Omit<RequiredGap, "line">[] =>

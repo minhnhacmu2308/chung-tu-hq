@@ -29,6 +29,10 @@ export const itemFromProduct = (row: ItemRow, p: Pick<CatalogItemListRow, "id" |
 
 const s = (v: string | null | undefined) => v ?? "";
 
+/** Số container đọc được trên các chứng từ (ô `containers` dạng "SỐ / SEAL; SỐ2") – gợi ý cho ô container của form; để trống thì shipment giữ giá trị đọc. */
+export const readContainerNos = (fields: { key: string; value: string }[]) =>
+  [...new Set(fields.filter((f) => f.key === "containers").flatMap((f) => f.value.split(";").map((x) => x.split("/")[0]!.trim()).filter(Boolean)))].join(", ");
+
 export function formFromData(d: ManualShipment | null, defaults: { currency: string; incoterm: string }): ManualForm {
   return {
     buyerName: s(d?.buyer.name), buyerAddress: s(d?.buyer.address), buyerCountry: s(d?.buyer.country), buyerTaxCode: s(d?.buyer.taxCode),

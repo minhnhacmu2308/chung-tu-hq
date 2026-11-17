@@ -27,6 +27,8 @@ export const ExtractedFieldSchema = z.object({
   confirmedAt: IsoDateTimeSchema.optional(),
 });
 export type ExtractedField = z.infer<typeof ExtractedFieldSchema>;
+/** Ô chỉ đọc trên màn OCR (container: sửa qua thẻ nhập tay lô hàng) – server từ chối sửa giá trị, web khóa ô. */
+export const isReadOnlyField = (key: string) => key === "containers";
 
 export const CrossCheckSchema = z.object({
   id: z.string(),

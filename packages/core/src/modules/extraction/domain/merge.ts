@@ -153,17 +153,20 @@ function mergeCustom(files: FileExtraction[]): Shipment["custom"] {
   return out;
 }
 
-/** Container từ mọi chứng từ: B/L trước rồi `lotContainers` theo thứ tự file; trùng số (chữ hoa, bỏ khoảng trắng) → giữ phần tử đứng trước. */
+/** Container một chứng từ ghi (B/L: `containers` rồi `lotContainers`); số chuẩn hóa chữ hoa, bỏ khoảng trắng, bỏ số rỗng. */
+export function containersOf(f: FileExtraction): { no: string; sealNo: string | null; size: string | null }[] {
+  const raw = [...(f.kind === "BILL_OF_LADING" && Array.isArray(f.data["containers"]) ? f.data["containers"] : []), ...(Array.isArray(f.data["lotContainers"]) ? f.data["lotContainers"] : [])] as Record<string, unknown>[];
+  return raw.flatMap((c) => {
+    const no = typeof c["no"] === "string" ? c["no"].replace(/\s+/g, "").toUpperCase() : "";
+    return no ? [{ no, sealNo: (c["sealNo"] as string | null) ?? null, size: (c["size"] as string | null) ?? null }] : [];
+  });
+}
+
+/** Container từ mọi chứng từ: B/L trước rồi các chứng từ khác theo thứ tự file; trùng số → giữ phần tử đứng trước. */
 function mergeContainers(files: FileExtraction[]): Shipment["transport"]["containers"] {
-  const lists = [...files.filter((f) => f.kind === "BILL_OF_LADING").map((f) => [f, f.data["containers"]] as const), ...files.map((f) => [f, f.data["lotContainers"]] as const)];
+  const ordered = [...files.filter((f) => f.kind === "BILL_OF_LADING"), ...files.filter((f) => f.kind !== "BILL_OF_LADING")];
   const out = new Map<string, Shipment["transport"]["containers"][number]>();
-  for (const [f, list] of lists) {
-    for (const c of (Array.isArray(list) ? list : []) as Record<string, unknown>[]) {
-      const no = typeof c["no"] === "string" ? c["no"].replace(/\s+/g, "").toUpperCase() : "";
-      if (!no || out.has(no)) continue;
-      out.set(no, { no, sealNo: (c["sealNo"] as string | null) ?? null, size: (c["size"] as string | null) ?? null, sourceKind: f.kind });
-    }
-  }
+  for (const f of ordered) for (const c of containersOf(f)) if (!out.has(c.no)) out.set(c.no, { ...c, sourceKind: f.kind });
   return [...out.values()];
 }
 

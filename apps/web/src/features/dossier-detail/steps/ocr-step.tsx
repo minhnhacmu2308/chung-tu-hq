@@ -20,7 +20,7 @@ import { ApiError } from "@/lib/api-error";
 import { DOC_KIND_LABELS, FIELD_GROUP_LABELS, type DossierDocument, type ExtractedField } from "@/mocks/types";
 import { CrossCheckPanel } from "../ocr/cross-check-panel";
 import { DocumentSheetsCard } from "../ocr/document-sheets";
-import { FieldRow, fieldDomId, isUnknownPayment, paymentHint, type PaymentHint } from "../ocr/field-row";
+import { FieldRow, fieldDomId, isUnknownPayment, ocrRows, paymentHint, type PaymentHint } from "../ocr/field-row";
 import { isMissingOrigin, ItemsTable, type LineMerge } from "../ocr/items-table";
 import { SKILL_LEARN_MESSAGES } from "../ocr/ocr.messages";
 import { IncotermChangeDialog, incotermCodeChanged, useSaveFreightTermNote } from "../ocr/incoterm-change-dialog";
@@ -28,6 +28,7 @@ import { useFieldMutations } from "../ocr/use-field-mutations";
 import { ValueChargesCard } from "../ocr/value-charges-card";
 import { IssuedInvoiceCard } from "../issued-invoice/issued-invoice-card";
 import { ManualShipmentCard } from "../manual-shipment/manual-shipment-card";
+import { readContainerNos } from "../manual-shipment/manual-shipment-form";
 import { getManualShipment, manualShipmentKeys } from "@/api/manual-shipment";
 import { useAdvanceDossier } from "../use-advance";
 import type { StepProps } from "./types";
@@ -262,7 +263,8 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const docs = useMemo(() => (docsQuery.data ?? []).filter((d) => d.status === "DONE"), [docsQuery.data]);
-  const fields = fieldsQuery.data ?? [];
+  const allFields = fieldsQuery.data ?? [];
+  const fields = ocrRows(allFields);
   const byDoc = (id: string) => fields.filter((f) => f.documentId === id);
   const suspectOf = (id: string) => byDoc(id).filter((f) => isSuspect(f.status)).length;
   const suspectTotal = fields.filter((f) => isSuspect(f.status)).length;
@@ -272,7 +274,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const originMissing = fields.filter(isMissingOrigin);
   // Đề xuất gộp / tách chỉ ở một tab: chứng từ đầu tiên có dòng hàng (dòng hàng lấy từ hóa đơn, không có thì packing list).
   const mergeDocId = [...docs].sort((a, b) => Number(b.kind === "INVOICE") - Number(a.kind === "INVOICE")).find((d) => fields.some((f) => f.documentId === d.id && f.group === "ITEMS"))?.id;
-  const payHint = paymentHint(fields);
+  const payHint = paymentHint(allFields);
   const paymentUnknown = fields.some((f) => isUnknownPayment(f, payHint));
   const exitBlocked = originMissing.length > 0 || paymentUnknown;
   const [tab, setTab] = useState<string | undefined>(undefined);
@@ -394,7 +396,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
       </Card>
 
       {(dossier.direction === "XK" || (!loading && docs.length === 0)) && (
-        <ManualShipmentCard dossierId={dossier.id} currency={dossier.currency} incoterm={dossier.incoterm} hasDocuments={docs.length > 0} />
+        <ManualShipmentCard dossierId={dossier.id} currency={dossier.currency} incoterm={dossier.incoterm} hasDocuments={docs.length > 0} readContainers={readContainerNos(fields)} />
       )}
 
       {dossier.direction === "XK" && dossier.documentSources.INVOICE === "ISSUED" && <IssuedInvoiceCard dossierId={dossier.id} />}

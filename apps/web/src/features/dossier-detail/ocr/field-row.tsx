@@ -1,6 +1,6 @@
 "use client";
 // Một trường trích xuất: nhãn + trạng thái, ô sửa trực tiếp, nút "Đúng", ghi chú khi mâu thuẫn, "AI đọc: …" khi đã sửa.
-import { PAYMENT_METHODS, paymentChoiceValue, paymentNeedsChoice, reconcilePayment } from "@kb/contracts";
+import { isReadOnlyField, PAYMENT_METHODS, paymentChoiceValue, paymentNeedsChoice, reconcilePayment } from "@kb/contracts";
 import { Button, cn, fill, Input, Label, Select, StatusBadge, useMessages } from "@kb/ui";
 import { Check, Crosshair, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -33,6 +33,8 @@ export const paymentHint = (fields: ExtractedField[]): PaymentHint => ({
 });
 /** Ô Phương thức thanh toán cần chọn mã (không nhận ra, hoặc lệch mã AI / số L/C) – bắt chọn trước khi sang bước sau. */
 export const isUnknownPayment = (f: ExtractedField, hint?: PaymentHint) => f.key === "payment_terms" && paymentNeedsChoice(f.value, hint?.aiCode, hint?.lcNo);
+/** Dòng hiện trên màn OCR: mã PTTT AI chọn không thành dòng riêng (đã hiện qua ô mã của dòng thanh toán). */
+export const ocrRows = (fields: ExtractedField[]) => fields.filter((f) => f.key !== "payment_method_code");
 const PAYMENT_OPTIONS = PAYMENT_METHODS.map((p) => ({ value: p.code, label: `${p.code} – ${p.label}` }));
 
 export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRevert, onPick, picking = false, busy = false, paymentHint: hint }: FieldRowProps) {
@@ -41,11 +43,14 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
   useEffect(() => setValue(field.value), [field.value]);
   const suspect = isSuspect(field.status);
   const edited = field.value !== field.originalValue;
+  const readOnly = isReadOnlyField(field.key);
   const commit = () => {
-    if (value.trim() !== field.value) onSave(field.id, value);
+    if (!readOnly && value.trim() !== field.value) onSave(field.id, value);
   };
   const inputId = `${fieldDomId(field.id)}-input`;
   const noteId = field.note ? `${fieldDomId(field.id)}-note` : undefined;
+  const hintId = readOnly ? `${fieldDomId(field.id)}-ro` : undefined;
+  const describedBy = [noteId, hintId].filter(Boolean).join(" ");
   // PTTT: chữ trên chứng từ + mã chuẩn TK_IVP (1.43 / 2.38) – khớp thì chọn sẵn, không nhận ra / lệch mã AI, số L/C thì bắt chọn.
   const payment = field.key === "payment_terms";
   const pay = payment ? reconcilePayment(field.value, hint?.aiCode ?? null, hint?.lcNo ?? null) : null;
@@ -76,8 +81,9 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
           id={inputId}
           value={value}
           className="h-9 min-w-0 flex-1"
+          readOnly={readOnly}
           aria-invalid={field.status === "INVALID_FORMAT" || undefined}
-          {...(noteId ? { "aria-describedby": noteId } : {})}
+          {...(describedBy ? { "aria-describedby": describedBy } : {})}
           onChange={(e) => setValue(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {
@@ -85,7 +91,7 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
             if (e.key === "Escape") setValue(field.value);
           }}
         />
-        {onPick && (
+        {onPick && !readOnly && (
           <Button
             size="icon"
             variant={picking ? "secondary" : "ghost"}
@@ -122,6 +128,11 @@ export function FieldRow({ field, active, onActivate, onSave, onConfirm, onRever
           />
           {payUnknown && <p className="text-sm text-danger-subtle-fg">{payHinted ? fill(t.paymentMismatch, { code: pay!.code }) : t.paymentUnknown}</p>}
         </div>
+      )}
+      {readOnly && (
+        <p id={hintId} className="text-xs text-fg-subtle">
+          {t.readOnlyHint}
+        </p>
       )}
       {field.note && field.status !== "USER_CONFIRMED" && (
         <p id={noteId} className={cn("text-sm", field.status === "CONFLICT" || field.status === "INVALID_FORMAT" ? "text-danger-subtle-fg" : "text-fg-muted")}>

@@ -72,6 +72,17 @@ describe("trường trích xuất", () => {
     const cur = unwrap(await listFields(deps, ctx(), "dos_1")).find((x) => x.key === "currency")!;
     expect(unwrap(await updateFieldValue(deps, ctx(), cur.id, "usd")).value).toBe("USD");
   });
+  it("ô container (chỉ đọc): hiện trên tab invoice; sửa giá trị → VALIDATION, shipment giữ nguyên; xác nhận vẫn được", async () => {
+    deps.ai = new ScriptedAi({ INVOICE: { ...INVOICE, lotContainers: [{ no: "FBIU5659719", sealNo: "34337288", size: null }] } });
+    docs.docs.push({ id: "doc_inv2", orgId: "org_a", dossierId: "dos_2", kind: "INVOICE", kindSource: "USER", fileName: "inv2.pdf", mime: "application/pdf", pages: 1, status: "QUEUED", storageKey: "k", sha256: "s2" });
+    unwrap(await processDocument(deps, { orgId: "org_a", dossierId: "dos_2", documentId: "doc_inv2", mode: "FULL" }));
+    const f = unwrap(await listFields(deps, ctx(), "dos_2")).find((x) => x.key === "containers")!;
+    expect(f).toMatchObject({ documentId: "doc_inv2", group: "TRANSPORT", value: "FBIU5659719 / 34337288", status: "SINGLE_SOURCE" });
+    const r = await updateFieldValue(deps, ctx(), f.id, "XXXX0000000");
+    expect(r.ok ? "ok" : r.error.code).toBe("VALIDATION");
+    expect(unwrap(await confirmField(deps, ctx(), f.id)).status).toBe("USER_CONFIRMED");
+    expect(uow.data.shipments.at(-1)?.data.transport.containers).toEqual([{ no: "FBIU5659719", sealNo: "34337288", size: null, sourceKind: "INVOICE" }]);
+  });
   it("hồ sơ đã duyệt/truyền: không sửa trường, không xác nhận dữ liệu lại → DOSSIER_LOCKED", async () => {
     const f = unwrap(await listFields(deps, ctx(), "dos_1"))[0]!;
     for (const st of ["APPROVED", "SUBMITTED", "CLEARED", "CANCELLED"] as const) {

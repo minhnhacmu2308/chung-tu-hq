@@ -33,7 +33,7 @@ cảng; người khai gõ lại 6 ô dù chứng từ đã có. Gốc vấn đ�
 - **Tờ khai:** EDA/IDA `SO_CONT`/`SL_CONT` lấy container bất kể nguồn, `source` theo chứng từ thật (không còn cứng `BILL_OF_LADING`).
   Nhập tay (`manual.ts`) và hóa đơn phát hành vẫn thắng.
 - **Quy ước mới ở `@kb/contracts` (`dto/ocr.ts`)** – xem skill `adding-document-type`:
-  - `isReadOnlyField(key)`: ô chỉ đọc trên màn OCR (hiện `containers`, sửa qua thẻ nhập tay lô hàng). Server (`_field-edit.ts`, `_remerge.ts`)
+  - `isReadOnlyField(key)`: ô chỉ đọc trên màn OCR (hiện `containers`, sửa qua thẻ nhập tay lô hàng khi thẻ có trên màn – XK hoặc chưa có chứng từ; NK sửa `SO_CONT`/`SL_CONT` ở bước Review tờ khai). Server (`_field-edit.ts`)
     từ chối sửa giá trị, web (`field-row.tsx`) khóa ô.
   - `isHiddenOcrRow(key)`: dòng không hiện trên màn OCR (hiện `payment_method_code`, hiện qua ô mã của dòng thanh toán); không tính vào số ô
     "Cần xem". Server `countSuspect` và web `ocrRows` dùng chung để hai bên không lệch số.
@@ -43,7 +43,7 @@ cảng; người khai gõ lại 6 ô dù chứng từ đã có. Gốc vấn đ�
 
 | Điểm | Quyết định | Lý do / cái giá |
 |---|---|---|
-| Đối chiếu mã PTTT | Regex có mã + AI `null` → **nhận**, không cảnh báo | AI null là trạng thái của mọi lô đã đọc trước thay đổi; cảnh báo sẽ chặn hồ sơ cũ. Cái giá: lệch một phía thật có thể không bị cờ |
+| Đối chiếu mã PTTT | Regex có mã + AI `null` → **nhận**, không cảnh báo (khi không có số L/C) | AI null là trạng thái của mọi lô đã đọc trước thay đổi; cảnh báo sẽ chặn hồ sơ cũ. Cái giá: lệch một phía thật có thể không bị cờ |
 | Chứng từ không có chữ PTTT | Có mã AI hoặc số L/C → **gợi ý** mã đó (nghi ngờ, kèm ghi chú); mặc định hồ sơ chỉ khi không có tín hiệu nào | Khớp ca invoice chỉ có "L/C No". Cái giá: hiện mã AI thay mặc định công ty, gắn "Cần xem" |
 | Chặn rời OCR (`ocrExitBlockers`) | Chỉ chặn khi **có chữ PTTT** mà lệch | Không chặn chứng từ không ghi PTTT |
 | Mã PTTT lệch giữa chứng từ | Hiện qua ghi chú dòng thanh toán, không tính riêng ở `countSuspect` (dòng ẩn) | Một predicate chung `isHiddenOcrRow` |
@@ -62,7 +62,8 @@ cảng; người khai gõ lại 6 ô dù chứng từ đã có. Gốc vấn đ�
 
 ## Chưa làm
 
-- **Chưa chạy eval live.** Bật production chờ mẫu XK vàng của người dùng: thư mục PDF + một sheet `.xlsx` mỗi chứng từ như `evals/golden/hansol`,
+- **Chưa chạy eval live – chưa merge vào `main`.** `main` tự deploy (`.github/workflows/deploy.yml`), nên nhánh này chỉ merge khi eval live
+  trên các lô vàng (có ít nhất một file scan) đạt ngưỡng dưới đây (BACKEND-TODO L5). Chờ mẫu XK vàng của người dùng: thư mục PDF + một sheet `.xlsx` mỗi chứng từ như `evals/golden/hansol`,
   cùng `mapping.json` `{"direction":"XK"}`. Ngưỡng chấp nhận: 0 ô bịa trên ≥ 10 chứng từ thật gồm loại không in thông tin vận tải; thời gian
   tăng ≤ 2 s ở trung vị. Kèm báo cáo: danh mục 17 mã (code) vs 15 mã (wiki 29.DM_GANCODE) – giữ 17 (đang dùng ở regex/mapping production, TT39 PL II).
 - Backlog (`docs/BACKEND-TODO.md`): nhãn–giá trị tự do + "Gán vào ô" tự học alias; trường bổ sung (`custom`) lên tờ khai; so cảng bằng mã;

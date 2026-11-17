@@ -283,6 +283,11 @@ describe("mergeExtractions – khối lô hàng (lot) trên mọi chứng từ",
     expect(s.invoice.contractNo).toMatchObject({ value: "SC-01", status: "CROSS_CHECKED" });
     expect(s.invoice.paymentMethodCode).toMatchObject({ value: "LC", status: "CROSS_CHECKED" });
   });
+  it("ngày lot dạng YYYY-MM-DD (mô tả schema yêu cầu) giữ nguyên, không đảo ngày/tháng", () => {
+    const s = mergeExtractions([invoiceWithLot({ departureDate: "2025-03-04", arrivalDate: "2025-04-03" })], opts);
+    expect(s.transport.departureDate.value).toBe("2025-03-04");
+    expect(s.transport.arrivalDate.value).toBe("2025-04-03");
+  });
   it("kết quả v3 không có lot → merge như cũ", () => {
     const s = mergeExtractions([invoice, packing, bl({ portOfLoading: "BUSAN, KOREA", containers: [{ no: "CMAU1234452", sealNo: "S1", size: "40HC" }] })], opts);
     expect(s.transport.portOfLoading).toMatchObject({ value: "BUSAN, KOREA", status: "SINGLE_SOURCE" });

@@ -41,7 +41,7 @@ describe("applyManual", () => {
     expect(s.invoice.currency.value).toBe("USD");
     expect(s.invoice.totalAmount.value).toBe("1255.30");
     expect(s.invoice.no.value).toBeNull();
-    expect(s.transport.containers).toEqual([{ no: "ONYU1234567", sealNo: null, size: null }]);
+    expect(s.transport.containers).toEqual([{ no: "ONYU1234567", sealNo: null, size: null, manual: true }]);
     expect(s.items.map((it) => [it.lineNo, it.unit.value, it.amount.value, it.origin.value])).toEqual([[1, "PCE", "1255.00", null], [2, "PCE", "0.30", "VN"]]);
   });
 

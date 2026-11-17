@@ -67,7 +67,7 @@ export const ShipmentSchema = z.object({
     /** Kho / CY chờ thông quan (Arrival Notice). */
     warehouseCode: str(),
     warehouseName: str(),
-    containers: z.array(z.object({ no: z.string(), sealNo: z.string().nullable(), size: z.string().nullable(), /** Chứng từ cho ra container này. */ sourceKind: DocKindSchema.optional() })),
+    containers: z.array(z.object({ no: z.string(), sealNo: z.string().nullable(), size: z.string().nullable(), /** Chứng từ cho ra container này. */ sourceKind: DocKindSchema.optional(), /** Nhập tay ở thẻ lô hàng – nguồn tờ khai "DOSSIER". */ manual: z.literal(true).optional() })),
     /** Thể tích (CBM) và ký mã hiệu kiện hàng. */
     volumeCbm: dec().optional(),
     marks: str().optional(),

@@ -21,7 +21,7 @@ Quy tắc (phiên bản ${PROMPT_VERSION}):
 1. Chép nguyên văn, không suy đoán, không tự tính tổng/thuế. Số: quy đổi dấu phân cách theo quy ước của chứng từ (EU "1.234,56" / US "1,234.56") thành số thập phân; ngày về YYYY-MM-DD (chú ý thứ tự ngày/tháng theo xuất xứ chứng từ).
 2. Mã định danh (số invoice, vận đơn, C/O, container, mã số thuế, mã HS) giữ nguyên ký tự, không bỏ số 0 đầu.
 3. Trường không có trên chứng từ → null (riêng lot: không liệt kê). Không để trống chuỗi.
-4. Trường chữ mờ, nhiều giá trị mâu thuẫn, hoặc phải suy luận → vẫn điền giá trị khả dĩ nhất và ghi TÊN TRƯỜNG vào "uncertainties".
+4. Trường chữ mờ, nhiều giá trị mâu thuẫn, hoặc phải suy luận → vẫn điền giá trị khả dĩ nhất và ghi TÊN TRƯỜNG vào "uncertainties" (trừ lot: không in thì không liệt kê – mục 6).
 5. Bản Duplicate/Triplicate/Copy của cùng chứng từ chỉ đọc một lần.
 6. Thông tin lô hàng (lot): chỉ liệt kê ô CÓ IN trên chứng từ. Không suy cảng từ địa chỉ, không suy tàu từ tên hãng, không lấy ngày hóa đơn làm ngày hàng đi. Tên tàu và số chuyến in liền (COSCO SHIPPING PLANET 049W) → vessel = tên tàu, voyage = số chuyến.`;
 

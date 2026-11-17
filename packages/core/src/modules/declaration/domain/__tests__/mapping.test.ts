@@ -202,6 +202,11 @@ describe("container / tàu / thanh toán theo nguồn thật (lô chỉ có invo
   it("IDA: SL_CONT ghi nguồn invoice", () => {
     expect(ida({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: onlyInvoice })["SL_CONT"]).toMatchObject({ value: "1", source: "INVOICE" });
   });
+  it("container nhập tay (thẻ lô hàng) → nguồn DOSSIER, không phải vận đơn", () => {
+    const manual = (s: Shipment) => void (s.transport.containers = [{ no: "FBIU5659719", sealNo: null, size: null, manual: true }]);
+    expect(eda({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: manual })["SO_CONT"]).toMatchObject({ value: "FBIU5659719", source: "DOSSIER" });
+    expect(ida({ dossier: { transportMode: "SEA_CONTAINER" }, mutate: manual })["SL_CONT"]).toMatchObject({ value: "1", source: "DOSSIER" });
+  });
   it("container không có sourceKind (shipment cũ) → BILL_OF_LADING", () => {
     expect(eda({ dossier: { transportMode: "SEA_CONTAINER" } })["SO_CONT"]).toMatchObject({ value: "SITU2246781", source: "BILL_OF_LADING" });
     expect(ida({ dossier: { transportMode: "SEA_CONTAINER" } })["SL_CONT"]).toMatchObject({ value: "1", source: "BILL_OF_LADING" });

@@ -23,4 +23,10 @@ describe("ocrExitBlockers", () => {
     // Chứng từ không ghi PTTT → không chặn (màn OCR không có ô để chọn); mapping gợi ý mã AI.
     expect(blockers(inv(null, ["KR"], "KC"))).toEqual([]);
   });
+  it("mã AI invoice LC, hợp đồng KC, chữ T/T → lấy mã invoice (LC) → chặn; cùng ca với test paymentHint của web (field-row.test.tsx)", () => {
+    const sc: FileExtraction = { documentId: "doc_sc", kind: "SALES_CONTRACT", pages: 1, data: { contractNo: "SC-1", paymentMethodCode: "KC" } };
+    const s = mergeExtractions([sc, inv("T/T", ["KR"], "LC")], { version: 1, taxCodeValid: () => true });
+    expect(s.invoice.paymentMethodCode?.value).toBe("LC");
+    expect(ocrExitBlockers(s)).toEqual([{ reason: "PAYMENT_METHOD_UNKNOWN", params: { raw: "T/T" } }]);
+  });
 });

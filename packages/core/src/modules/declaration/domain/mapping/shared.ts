@@ -56,7 +56,11 @@ export function priceKind(i: MappingInput, kind: Kind): MappedValue {
 }
 
 /** Nguồn số container: chứng từ cho ra container đầu tiên; Shipment cũ chưa có sourceKind → vận đơn như trước. */
-export const contSource = (i: MappingInput): ValueSource => { const k = i.shipment.transport.containers[0]?.sourceKind; return k ? sourceOfKind(k) : "BILL_OF_LADING"; };
+/** Nguồn SO_CONT / SL_CONT: nhập tay → DOSSIER (như ô nhập tay khác); chứng từ cho ra container; shipment cũ không có sourceKind → vận đơn. */
+export const contSource = (i: MappingInput): ValueSource => {
+  const c = i.shipment.transport.containers[0];
+  return c?.manual ? "DOSSIER" : c?.sourceKind ? sourceOfKind(c.sourceKind) : "BILL_OF_LADING";
+};
 
 /** 1.43 / 2.38 – Phương thức thanh toán (reconcilePayment: mã AI đối chiếu regex resolvePayment – T/T thường là KC, không phải TTR; có số L/C → gợi ý LC). Chứng từ không ghi chữ PTTT nhưng có mã AI hoặc số L/C → gợi ý mã đó (cần xem); không chữ, không mã AI, không số L/C → Mặc định khai báo. */
 export function paymentMethod(i: MappingInput, kind: Kind): MappedValue {

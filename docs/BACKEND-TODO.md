@@ -74,7 +74,10 @@ Ghi lại trong lúc dựng backend theo `docs/superpowers/specs/2026-10-13-back
 | L5 | Chạy eval live + mẫu XK vàng | Chờ người dùng cấp thư mục PDF + sheet `.xlsx` mỗi chứng từ + `mapping.json` `{"direction":"XK"}`; xong mới bật production |
 | L6 | Vận đơn/tàu: nguồn AN thắng `lot.vessel` | Arrival Notice nhập tay `vessel` (gộp tàu/chuyến) đứng trước `lot.vessel` đã tách; `lot.voyage` của AN chưa dùng |
 | L7 | Thẻ nhập tay lô hàng thiếu ô seal | Gõ container ở thẻ làm mất seal đã đọc |
-| L8 | `SYSTEM_PROMPT` mục 4 vs 6 | Mục 4 "vẫn điền giá trị khả dĩ nhất" mâu thuẫn mục 6 "chỉ liệt kê ô có in" – thống nhất rồi đo lại |
+| L8 | `resolvePayment` tên dự phòng khi không nhận ra | Tên "Khác" dùng làm tên dự phòng – thành tên KC thứ ba; cần tên riêng cho trạng thái không nhận ra |
+| L9 | Trạng thái dòng `containers` | Mọi dòng container dùng chung một trạng thái `CROSS_CHECKED` – chưa có trạng thái riêng theo từng container |
+| L10 | Mẫu tự học ghi `lot` dạng object | Ví dụ skill-learning ghi `lot` là object, trong khi schema đầu ra gửi AI là mảng `[{key, value}]` – đổi sang mảng hoặc bỏ `lot` khỏi ví dụ |
+| L11 | Skill sample / evaluate với file scan | Luồng sample / evaluate của skill không truyền `regions:false` cho file scan như luồng đọc chính |
 
 ## Ngoài phạm vi chuẩn trường chứng từ (2026-10-15)
 

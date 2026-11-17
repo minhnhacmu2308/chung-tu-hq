@@ -37,7 +37,7 @@ import { OCR_STEP_MESSAGES } from "./ocr-step.messages";
 const GROUPS = Object.keys(FIELD_GROUP_LABELS.vi) as ExtractedField["group"][];
 type Filter = "all" | "suspect";
 
-function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, merge, payHint }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined; focusSeq?: number; merge?: LineMerge; payHint: PaymentHint }) {
+function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, merge, payHint, manualCard }: { doc: DossierDocument; fields: ExtractedField[]; dossierId: string; filter: Filter; focusId?: string | undefined; focusSeq?: number; merge?: LineMerge; payHint: PaymentHint; manualCard: boolean }) {
   const t = useMessages(OCR_STEP_MESSAGES);
   const groupLabels = useMessages(FIELD_GROUP_LABELS);
   const [active, setActive] = useState<string | null>(null);
@@ -216,6 +216,7 @@ function DocumentTab({ doc, fields, dossierId, filter, focusId, focusSeq = 0, me
                     onRevert={revert}
                     picking={pick?.id === f.id}
                     paymentHint={payHint}
+                    manualCard={manualCard}
                     {...(canPick ? { onPick: (id: string) => setPick(fields.find((x) => x.id === id) ?? null) } : {})}
                   />
                 ))}
@@ -274,7 +275,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const originMissing = fields.filter(isMissingOrigin);
   // Đề xuất gộp / tách chỉ ở một tab: chứng từ đầu tiên có dòng hàng (dòng hàng lấy từ hóa đơn, không có thì packing list).
   const mergeDocId = [...docs].sort((a, b) => Number(b.kind === "INVOICE") - Number(a.kind === "INVOICE")).find((d) => fields.some((f) => f.documentId === d.id && f.group === "ITEMS"))?.id;
-  const payHint = paymentHint(allFields);
+  const payHint = paymentHint(allFields, docs);
   const paymentUnknown = fields.some((f) => isUnknownPayment(f, payHint));
   const exitBlocked = originMissing.length > 0 || paymentUnknown;
   const [tab, setTab] = useState<string | undefined>(undefined);
@@ -316,6 +317,8 @@ export function OcrStep({ dossier, goTo }: StepProps) {
   const alreadyPast = dossier.step !== "ocr";
 
   const loading = docsQuery.isLoading || fieldsQuery.isLoading;
+  // Thẻ nhập tay lô hàng: hồ sơ XK, hoặc chưa có chứng từ (Khai trước) – ô chỉ đọc chỉ trỏ tới thẻ khi thẻ có trên màn.
+  const showManualCard = dossier.direction === "XK" || (!loading && docs.length === 0);
   const failed = docsQuery.isError || fieldsQuery.isError;
 
   return (
@@ -387,7 +390,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
               </TabsList>
               {docs.map((d) => (
                 <TabsContent key={d.id} value={d.id} className="pt-4">
-                  <DocumentTab doc={d} fields={byDoc(d.id)} payHint={payHint} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} focusSeq={picked?.seq ?? 0} {...(d.id === mergeDocId ? { merge } : {})} />
+                  <DocumentTab doc={d} fields={byDoc(d.id)} payHint={payHint} manualCard={showManualCard} dossierId={dossier.id} filter={filter} focusId={focus?.documentId === d.id ? focus.id : undefined} focusSeq={picked?.seq ?? 0} {...(d.id === mergeDocId ? { merge } : {})} />
                 </TabsContent>
               ))}
             </Tabs>
@@ -395,7 +398,7 @@ export function OcrStep({ dossier, goTo }: StepProps) {
         </CardContent>
       </Card>
 
-      {(dossier.direction === "XK" || (!loading && docs.length === 0)) && (
+      {showManualCard && (
         <ManualShipmentCard dossierId={dossier.id} currency={dossier.currency} incoterm={dossier.incoterm} hasDocuments={docs.length > 0} readContainers={readContainerNos(fields)} />
       )}
 

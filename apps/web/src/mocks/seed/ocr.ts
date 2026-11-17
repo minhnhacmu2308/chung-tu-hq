@@ -228,6 +228,28 @@ const lineDefs = (lines: LineItem[]): Def[] =>
 /** Container + seal trên vận đơn của hồ sơ mẫu "Qua khu vực giám sát" (số container đúng ISO 6346); hồ sơ khác không có → số mô phỏng. */
 const KVGS_CONTAINERS: Record<string, string[]> = { dos_029: ["TGHU0123450 / 40HC / KR884120", "MSKU7654328 / 40HC / KR884121"] };
 
+/**
+ * Khối lô hàng (ADR 0018) để xem trên màn OCR: dos_025 (XK) – invoice in cảng, tàu, chuyến, L/C, container (dòng chỉ đọc, có thẻ nhập tay)
+ * và PTTT lệch (chữ T/T nhưng mã AI LC + số L/C → bắt chọn mã); dos_021 (NK) – dòng container chỉ đọc trên B/L (không có thẻ nhập tay).
+ */
+const LOT_DEFS: Record<string, Partial<Record<DocKind, Def[]>>> = {
+  dos_025: {
+    INVOICE: [
+      { key: "port_loading", label: "Cảng xếp hàng", value: "BA RIA - VUNG TAU (CM-TV), VIETNAM", group: "TRANSPORT", status: "SINGLE_SOURCE" },
+      { key: "port_discharge", label: "Cảng dỡ hàng", value: "NAPOLI PORT, ITALY", group: "TRANSPORT", status: "SINGLE_SOURCE" },
+      { key: "vessel", label: "Tàu / chuyến bay", value: "COSCO SHIPPING PLANET", group: "TRANSPORT", status: "SINGLE_SOURCE" },
+      { key: "voyage", label: "Số chuyến", value: "049W", group: "TRANSPORT", status: "SINGLE_SOURCE" },
+      { key: "containers", label: "Số container / seal", value: "FBIU5659719 / 34337288", group: "TRANSPORT", status: "SINGLE_SOURCE" },
+      { key: "payment_terms", label: "Phương thức thanh toán", value: "T/T 30 DAYS AFTER B/L DATE", group: "COMMERCIAL", status: "SINGLE_SOURCE" },
+      { key: "payment_method_code", label: "Mã phương thức thanh toán", value: "LC", group: "COMMERCIAL", status: "SINGLE_SOURCE" },
+      { key: "lc_no", label: "Số L/C", value: "S700542640040", group: "COMMERCIAL", status: "SINGLE_SOURCE" },
+    ],
+  },
+  dos_021: {
+    BILL_OF_LADING: [{ key: "containers", label: "Số container / seal", value: "SITU2614507 / KR884120", group: "TRANSPORT", status: "SINGLE_SOURCE" }],
+  },
+};
+
 function genericDefs(kind: DocKind, d: Dossier): Def[] {
   const ref = d.code.split("-").pop() ?? "001";
   const value = d.invoiceValue === "0" ? "12480.00" : d.invoiceValue;
@@ -302,7 +324,8 @@ export function generateFieldsForDocument(doc: DossierDocument, dossier: Dossier
       ? { ...d, status: "MODEL_UNSURE", note: "Chữ in mờ – kiểm tra lại với chứng từ gốc" }
       : { ...d, status: "CONFLICT", note: "Giá trị khác với chứng từ khác trong bộ" };
   });
-  return layoutFields(doc.id, doc.kind === "INVOICE" ? [...defs, ...lineDefs(lines)] : defs);
+  const lot = LOT_DEFS[dossier.id]?.[doc.kind] ?? [];
+  return layoutFields(doc.id, doc.kind === "INVOICE" ? [...defs, ...lot, ...lineDefs(lines)] : [...defs, ...lot]);
 }
 
 export function generateChecks(dossier: Dossier, kinds: DocKind[]): CrossCheck[] {
@@ -330,7 +353,7 @@ export function seedOcr(dossiers: Dossier[], documents: DossierDocument[], lineI
     if (d.status === "DRAFT" || !PAST_UPLOAD.has(d.step)) continue;
     const docs = documents.filter((x) => x.dossierId === d.id);
     if (d.id === SHOWCASE_DOSSIER_ID) {
-      for (const doc of docs) fields.push(...layoutFields(doc.id, SHOWCASE[doc.id] ?? []));
+      for (const doc of docs) fields.push(...layoutFields(doc.id, [...(SHOWCASE[doc.id] ?? []), ...(LOT_DEFS[d.id]?.[doc.kind] ?? [])]));
       checks.push(...SHOWCASE_CHECKS.map((c, i) => ({ ...c, id: `chk_${d.id}_${i + 1}`, dossierId: d.id })));
       continue;
     }

@@ -1,6 +1,6 @@
 // Bảng đặc tả: mỗi trường của Shipment lấy từ chứng từ nào, chuẩn hóa ra sao, hiện trên màn OCR với key/nhãn/nhóm nào.
 // Dùng chung cho merge (gộp) và projectFields (chiếu ra extracted_fields) để hai bên không lệch.
-import { LOT_OMIT, type DocKind, type FieldGroup, type LotKey } from "@kb/contracts";
+import { LOT_KIND_ORDER, LOT_OMIT, PAYMENT_CODE_KINDS, type DocKind, type FieldGroup, type LotKey } from "@kb/contracts";
 import { countryCode, normalizeTaxCode, packageUnitCode, parseDate, parseNumber, unitCode } from "./normalize.js";
 
 export type Normalizer = (raw: unknown) => string | null;
@@ -54,7 +54,7 @@ const MANUAL_FIELDS: FieldSpec[] = [
   { path: "/invoice/paymentTerms", key: "payment_terms", label: "Phương thức thanh toán", group: "COMMERCIAL", normalize: str, sources: [{ kind: "INVOICE", get: g("paymentTerms"), regionKey: "paymentTerms" }, { kind: "SALES_CONTRACT", get: g("paymentTerms"), regionKey: "paymentTerms" }] },
   { path: "/invoice/lcNo", key: "lc_no", label: "Số L/C", group: "COMMERCIAL", normalize: ident, sources: [] },
   { path: "/invoice/contractNo", key: "contract_no", label: "Số hợp đồng", group: "COMMERCIAL", normalize: ident, sources: [{ kind: "SALES_CONTRACT", get: g("contractNo"), regionKey: "contractNo" }] },
-  { path: "/invoice/paymentMethodCode", key: "payment_method_code", label: "Mã phương thức thanh toán", group: "COMMERCIAL", normalize: upper, sources: [{ kind: "INVOICE", get: g("paymentMethodCode"), regionKey: "paymentMethodCode" }, { kind: "SALES_CONTRACT", get: g("paymentMethodCode"), regionKey: "paymentMethodCode" }, { kind: "OTHER", get: g("paymentMethodCode"), regionKey: "paymentMethodCode" }] },
+  { path: "/invoice/paymentMethodCode", key: "payment_method_code", label: "Mã phương thức thanh toán", group: "COMMERCIAL", normalize: upper, sources: PAYMENT_CODE_KINDS.map((kind) => ({ kind, get: g("paymentMethodCode"), regionKey: "paymentMethodCode" })) },
   { path: "/parties/seller/name", key: "seller_name", label: "Người bán", group: "PARTIES", normalize: str, sources: [{ kind: "INVOICE", get: party("seller"), regionKey: "seller" }, { kind: "BILL_OF_LADING", get: party("shipper"), regionKey: "shipper" }, { kind: "AIR_WAYBILL", get: party("shipper"), regionKey: "shipper" }, { kind: "CERT_OF_ORIGIN", get: party("exporter"), regionKey: "exporter" }, { kind: "SALES_CONTRACT", get: party("seller"), regionKey: "seller" }] },
   { path: "/parties/seller/address", key: "seller_address", label: "Địa chỉ người bán", group: "PARTIES", normalize: str, sources: [{ kind: "INVOICE", get: partyField("seller", "address") }, { kind: "SALES_CONTRACT", get: partyField("seller", "address") }] },
   { path: "/parties/seller/country", key: "seller_country", label: "Nước người bán", group: "PARTIES", normalize: country, sources: [{ kind: "INVOICE", get: partyField("seller", "country") }, { kind: "BILL_OF_LADING", get: partyField("shipper", "country") }, { kind: "CERT_OF_ORIGIN", get: partyField("exporter", "country") }] },
@@ -102,8 +102,6 @@ export const LOT_PATH: Record<LotKey, string> = {
   incoterm: "/invoice/incoterm", incotermPlace: "/invoice/incotermPlace", currency: "/invoice/currency", paymentTerms: "/invoice/paymentTerms",
   lcNo: "/invoice/lcNo", poNo: "/invoice/poNo", contractNo: "/invoice/contractNo", invoiceNo: "/invoice/no", invoiceDate: "/invoice/date",
 };
-/** Thứ tự cố định các loại chứng từ khi nối nguồn `lot` sau nguồn tay của ô. */
-const LOT_KIND_ORDER: DocKind[] = ["BILL_OF_LADING", "AIR_WAYBILL", "ARRIVAL_NOTICE", "INVOICE", "PACKING_LIST", "SALES_CONTRACT", "FREIGHT_INVOICE", "CERT_OF_ORIGIN", "OTHER"];
 
 /** Mọi chứng từ là nguồn của ô lô hàng: chèn nguồn `lot.<key>` của mọi loại (trừ LOT_OMIT) trước nguồn dự phòng đầu tiên – dự phòng vẫn chỉ dùng khi mọi nguồn khác trống. */
 export function withLotSources(fields: FieldSpec[]): FieldSpec[] {

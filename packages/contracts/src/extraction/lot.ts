@@ -23,8 +23,8 @@ export const LotSchema = z.object({
   flightNo: lot("số hiệu chuyến bay (Flight No.)"),
   billNo: lot("số vận đơn (B/L No., HBL, HAWB)"),
   masterBillNo: lot("số vận đơn chủ (MBL, MAWB)"),
-  departureDate: lot("ngày khởi hành / ngày tàu chạy (ETD, On board date)"),
-  arrivalDate: lot("ngày đến dự kiến (ETA)"),
+  departureDate: lot("ngày khởi hành / ngày tàu chạy (ETD, On board date), dạng YYYY-MM-DD theo quy ước ngày của chứng từ"),
+  arrivalDate: lot("ngày đến dự kiến (ETA), dạng YYYY-MM-DD theo quy ước ngày của chứng từ"),
   packages: lot("tổng số kiện, chỉ phần số"),
   packageUnit: lot("loại kiện (CARTON, PALLET, PACKAGE…)"),
   grossWeightKg: lot("tổng trọng lượng cả bì, kèm đơn vị như in"),
@@ -34,13 +34,13 @@ export const LotSchema = z.object({
   freightTerm: lot("điều kiện cước (Freight Prepaid / Collect)"),
   incoterm: lot("điều kiện giao hàng (FOB, CIF, EXW…)"),
   incotermPlace: lot("địa danh đi kèm điều kiện giao hàng (FOB BUSAN → BUSAN)"),
-  currency: lot("mã tiền tệ của hàng hóa (USD, EUR…)"),
+  currency: lot("mã tiền tệ của hàng hóa (hóa đơn thương mại), không phải tiền tệ cước (USD, EUR…)"),
   paymentTerms: lot("điều khoản thanh toán nguyên văn"),
   lcNo: lot("số thư tín dụng (L/C No., Documentary Credit No.)"),
   poNo: lot("số đơn đặt hàng (P/O No., Order No.)"),
   contractNo: lot("số hợp đồng (Contract No., S/C No.)"),
   invoiceNo: lot("số hóa đơn thương mại (Commercial Invoice No.)"),
-  invoiceDate: lot("ngày hóa đơn thương mại"),
+  invoiceDate: lot("ngày hóa đơn thương mại, dạng YYYY-MM-DD theo quy ước ngày của chứng từ"),
 } satisfies Record<LotKey, z.ZodType>);
 
 export const LotContainersSchema = z
@@ -62,6 +62,11 @@ export const LOT_OMIT: Partial<Record<DocKind, LotKey[]>> = {
   // invoiceNo, currency là của hóa đơn cước → giữ lot.invoiceNo, lot.currency; billRef = số vận đơn.
   FREIGHT_INVOICE: ["billNo"],
 };
+
+/** Thứ tự cố định các loại chứng từ khi nối nguồn `lot` sau nguồn tay của ô (gộp lấy giá trị nguồn đầu tiên khác rỗng) – server và web dùng chung. */
+export const LOT_KIND_ORDER: DocKind[] = ["BILL_OF_LADING", "AIR_WAYBILL", "ARRIVAL_NOTICE", "INVOICE", "PACKING_LIST", "SALES_CONTRACT", "FREIGHT_INVOICE", "CERT_OF_ORIGIN", "OTHER"];
+/** Loại chứng từ có `paymentMethodCode`, theo thứ tự ưu tiên khi gộp – server và web dùng chung. */
+export const PAYMENT_CODE_KINDS: DocKind[] = ["INVOICE", "SALES_CONTRACT", "OTHER"];
 
 export function lotSchemaFor(kind: DocKind) {
   return LotSchema.omit(Object.fromEntries((LOT_OMIT[kind] ?? []).map((k) => [k, true])) as Partial<Record<LotKey, true>>);

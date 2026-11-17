@@ -148,6 +148,11 @@ export const CustomsInfoSchema = z.object({
 });
 export type CustomsInfo = z.infer<typeof CustomsInfoSchema>;
 
+/**
+ * Mã lỗi khi FPT báo máy ký chưa mở cổng ký (errorCode "000", "Máy chủ chưa khởi động cổng ký…"): lỗi môi trường ký số, không phải dữ liệu
+ * tờ khai – người dùng mở cổng ký rồi gửi lại, không cần sửa tờ khai.
+ */
+export const SIGNING_PORT_CLOSED = "SIGNING_PORT_CLOSED";
 /** Một lỗi Hải quan/FPT trả về: `field` = mã chỉ tiêu lỗi (indexCode, ví dụ "EPN"), `line` = dòng hàng (rowPosition). */
 export const CustomsErrorSchema = z.object({ code: z.string(), message: z.string(), solution: z.string().optional(), field: z.string().optional(), line: z.number().int().positive().optional() });
 /** Lần gửi gần nhất bị từ chối (còn hiệu lực tới khi chính nghiệp vụ đó gửi lại thành công). */

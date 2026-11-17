@@ -3,6 +3,7 @@
 // (số định danh, ngày, mã QR, trạng thái) tự cập nhật khi đang chờ; "Hỏi kết quả" hỏi V5IdentifierRes ngay. Ô khai điền sẵn từ tờ khai, lần sau
 // điền lại từ lần gửi gần nhất. Bản mẫu (không có hồ sơ) vẫn dùng OperationDialog của transport-operations-bar.
 import { IdentifierRequestSchema, type IdentifierRecord, type IdentifierRequest, type LayoutBlock, type TransportOperationForm } from "@kb/contracts";
+import { hasSigningPortError, SigningPortAlert } from "../dossier-detail/steps/signing-port-alert";
 import { Alert, Barcode, Button, Card, DialogContent, DialogFooter, fill, SkeletonCard, Stack, StatusBadge, toast, useMessages } from "@kb/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, QrCode } from "lucide-react";
@@ -217,7 +218,9 @@ export function IdentifierDialog({ form, kind, header, dossierId, showInapplicab
               {latest?.status === "NO_RESPONSE" && <Alert tone="warning" title={m.noResponse} />}
             </>
           )}
-          {latest?.status === "REJECTED" &&
+          {latest?.status === "REJECTED" && hasSigningPortError(latest.errors) ? (
+            <SigningPortAlert />
+          ) : latest?.status === "REJECTED" &&
             (latest.errors.length ? latest.errors : [{ code: "", message: latest.resultText ?? "" }]).map((e, i) => (
               <Alert key={`${e.code}-${i}`} tone="danger" title={i === 0 ? m.rejectedTitle : e.code}>
                 {[e.code, e.message].filter(Boolean).join(" · ")}

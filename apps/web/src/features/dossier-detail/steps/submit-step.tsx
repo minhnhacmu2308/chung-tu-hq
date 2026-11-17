@@ -6,7 +6,7 @@ import {
   Alert, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ConfirmDialog, Dialog, DialogContent, DialogFooter, Disclosure, EmptyState, Field, RadioGroup,
   fill, Grid, IconTile, pickMessages, Select, Spinner, Stack, StatusBadge, toast, toastPromise, useMessages, useUiLocale, type Tone, type UiLocale,
 } from "@kb/ui";
-import { baseOp, canEditDeclaration, CUSTOMS_OPERATIONS, isContentOperation, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
+import { baseOp, canEditDeclaration, CUSTOMS_OPERATIONS, type CustomsRejection, isContentOperation, CUSTOMS_PHASES, type CustomsOperation, type CustomsPhase, type CustomsStage, type HysProcedureCode } from "@kb/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown, ArrowRight, Ban, CheckCircle2, Circle, Clock3, FilePen, KeyRound, Landmark, RefreshCw, RotateCcw, Search, Send, Sparkles, XCircle,
@@ -36,6 +36,7 @@ import { AMA_STATUS } from "../../post-amendment/ama-context";
 import { declarationGapsOf } from "../../declaration-print/print-state";
 import { RequiredGapsAlert } from "../../declaration-print/required-gaps-alert";
 import { AMA_OPS, postStepVisible } from "../../post-amendment/ama-wizard";
+import { hasSigningPortError, SigningPortAlert } from "./signing-port-alert";
 import { OPERATION_MESSAGES, PHASE_MESSAGES, SHEET_MESSAGES, STAGE_MESSAGES, SUBMIT_MESSAGES } from "./submit-step.messages";
 import { FptPreviewButton, FptTracePanel } from "./fpt-trace-panel";
 import { MessageList } from "./message-list";
@@ -50,6 +51,24 @@ import { SHEET_LIFECYCLE_MESSAGES } from "./sheet-lifecycle.messages";
 import { canCancelSheet, canReopenUnnumbered, canDeclareAll, submissionRefetchMs, clearedWhileResending, declareWaitingOn, encodeRecalled, orderLocked, problemOf, recallProgress, sheetsOf, sheetView, waitingOn, type RecalledNotice } from "./branch-sheets";
 
 type SubmitText = Record<keyof (typeof SUBMIT_MESSAGES)["vi"], string>;
+
+/** Hải quan/FPT từ chối: lỗi dữ liệu → sửa ở Review; FPT báo chưa mở cổng ký → mở cổng ký rồi gửi lại, không sửa tờ khai. */
+export function RejectionAlert({ rejection, t, onViewErrors }: { rejection: CustomsRejection; t: SubmitText; onViewErrors: () => void }) {
+  if (hasSigningPortError(rejection.errors)) return <SigningPortAlert />;
+  return (
+    <Alert
+      tone="danger"
+      title={fill(t.rejectedTitle, { op: rejection.operation, n: rejection.errors.length })}
+      action={
+        <Button size="sm" variant="secondary" onClick={onViewErrors}>
+          {t.viewErrors}
+        </Button>
+      }
+    >
+      {fill(t.rejectedBody, { op: rejection.operation })}
+    </Alert>
+  );
+}
 
 const CHANNEL_STATUS = { GREEN: "GREEN_CHANNEL", YELLOW: "YELLOW_CHANNEL", RED: "RED_CHANNEL" } as const satisfies Record<CustomsChannel, string>;
 
@@ -939,19 +958,7 @@ export function SubmitStep({ dossier, goTo }: StepProps) {
 
       {postStepVisible(s.stage) && <PostAmendmentEntry dossierId={dossier.id} onOpen={() => goTo("post")} />}
 
-      {rejection && (
-        <Alert
-          tone="danger"
-          title={fill(t.rejectedTitle, { op: rejection.operation, n: rejection.errors.length })}
-          action={
-            <Button size="sm" variant="secondary" onClick={() => goTo("review")}>
-              {t.viewErrors}
-            </Button>
-          }
-        >
-          {fill(t.rejectedBody, { op: rejection.operation })}
-        </Alert>
-      )}
+      {rejection && <RejectionAlert rejection={rejection} t={t} onViewErrors={() => goTo("review")} />}
 
       {hysCard}
       {invoiceCard}
@@ -1101,19 +1108,7 @@ function SheetCard({
       </CardHeader>
       <CardContent>
         <Stack gap="md">
-          {rejection && (
-            <Alert
-              tone="danger"
-              title={fill(t.rejectedTitle, { op: rejection.operation, n: rejection.errors.length })}
-              action={
-                <Button size="sm" variant="secondary" onClick={onViewErrors}>
-                  {t.viewErrors}
-                </Button>
-              }
-            >
-              {fill(t.rejectedBody, { op: rejection.operation })}
-            </Alert>
-          )}
+          {rejection && <RejectionAlert rejection={rejection} t={t} onViewErrors={onViewErrors} />}
           {waiting ? (
             <Alert tone="info" title={fill(sh.waitingSheet, { no: waiting })}>
               {fill(b.stage === "NOT_SENT" && !sheetsOf(s)[waiting - 1]?.declarationNo ? sh.waitingSheetBody : sh.waitingResendBody, { no: waiting })}

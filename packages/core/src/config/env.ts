@@ -72,7 +72,7 @@ export const EnvSchema = z
     /** Tài khoản API (POST /api/auth/login → JWT), khác tài khoản VNACCS của doanh nghiệp. */
     FPT_API_USERNAME: z.string().optional(),
     FPT_API_PASSWORD: z.string().optional(),
-    FPT_API_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+    FPT_API_TIMEOUT_MS: z.coerce.number().int().positive().default(240_000),
     /**
      * GỠ LỖI TẠM: true = lưu body gửi FPT + phản hồi thô (Redis, 100 lần gọi gần nhất/doanh nghiệp, 7 ngày) và hiện khung "Nhật ký API FPT" ở màn Truyền.
      * Mật khẩu/terminal key đã che nhưng body có dữ liệu tờ khai đầy đủ (MST, tên, địa chỉ) – chỉ bật khi thử tích hợp. Bỏ tính năng: grep FPT_DEBUG_TRACE.

@@ -27,6 +27,7 @@ import { ContainerTable, type EditRow } from "./container-table";
 import { buildContainerXlsx, parseContainerXlsx } from "./container-xlsx";
 import { KvgsStatusBlock } from "./kvgs-status-block";
 import { KVGS_MESSAGES } from "./kvgs.messages";
+import { hasSigningPortError, SigningPortAlert } from "../signing-port-alert";
 
 /** Vai trò được gửi/sửa (như KVGS_ROLES của backend; OWNER luôn được). */
 export const KVGS_EDITORS: ReadonlySet<Role> = new Set<Role>(["OWNER", "ADMIN", "DECLARANT", "APPROVER"]);
@@ -304,6 +305,7 @@ export function KvgsCard({ dossierId, branch, canEdit, customsOfficeName }: Kvgs
   const errors = (kind: Kind) => {
     const list2 = kind === "CONT_LIST" ? list?.errors ?? [] : fetched?.errors ?? [];
     if (list2.length === 0) return null;
+    if (hasSigningPortError(list2)) return <SigningPortAlert />;
     return (
       <Alert tone="danger" title={fill(kind === "CONT_LIST" ? t.listErrorsTitle : t.kvgsErrorsTitle, { n: list2.length })}>
         <ul className="flex flex-col gap-1">

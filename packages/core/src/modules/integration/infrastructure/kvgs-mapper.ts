@@ -1,6 +1,6 @@
 // Phản hồi `POST /api/KVGS` của FPT (đặc tả API-KVGS) → KvgsSheet (ADR 0014). Tên trường đúng đặc tả, parse bằng FptKvgsResponseSchema.
 // errorList không rỗng → REJECTED (lỗi Hải quan / thiếu trường gửi); thiếu dữ liệu để in → REJECTED với KVGS_RESPONSE_INCOMPLETE (người gọi giữ `raw`).
-import { FptKvgsResponseSchema, isPlainBase64, KvgsSheetSchema, type FptErrorItem, type FptKvgsServiceMessage, type KvgsSheet } from "@kb/contracts";
+import { FptKvgsResponseSchema, isPlainBase64, KvgsSheetSchema, SIGNING_PORT_CLOSED, type FptErrorItem, type FptKvgsServiceMessage, type KvgsSheet } from "@kb/contracts";
 import { Decimal } from "../../../shared/decimal.js";
 import type { GatewayError } from "../application/customs-ports.js";
 
@@ -30,6 +30,9 @@ const vnDateTimeToUtc = (v: string): string | null => {
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 };
 
+/** FPT báo chưa mở cổng ký ("000" + "…cổng ký…") → SIGNING_PORT_CLOSED để giao diện hướng dẫn mở cổng ký thay vì sửa tờ khai. */
+export const fptErrorCode = (code: string, content: string) => (code === "000" && /cổng ký/i.test(content.normalize("NFC")) ? SIGNING_PORT_CLOSED : code);
+
 /** Lỗi FPT → GatewayError. `nameCode` là tên trường khi thiếu dữ liệu; "000" (lỗi Hải quan) / "Lỗi hệ thống" không phải tên trường. */
 export function kvgsErrors(list: FptErrorItem[]): GatewayError[] {
   return list.map((e) => {
@@ -37,7 +40,7 @@ export function kvgsErrors(list: FptErrorItem[]): GatewayError[] {
     const line = Number(e.rowPosition ?? 0);
     const solution = str(e.proposedSolution);
     return {
-      code: str(e.errorCode) || "FPT",
+      code: fptErrorCode(str(e.errorCode) || "FPT", str(e.errorContent)),
       ...(/^[A-Za-z][A-Za-z0-9_]*$/.test(name) ? { field: name } : {}),
       message: str(e.errorContent) || "Lỗi FPT",
       ...(solution ? { solution } : {}),

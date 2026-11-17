@@ -136,11 +136,11 @@ export class FptRestClient implements FptHttpClient {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.opts.timeoutMs ?? 60_000),
+        signal: AbortSignal.timeout(this.opts.timeoutMs ?? 240_000),
       });
     } catch (e) {
       const timeout = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
-      throw new FptTransientError(timeout ? `FPT không phản hồi sau ${this.opts.timeoutMs ?? 60_000}ms (${path})` : `Không kết nối được FPT (${path}): ${e instanceof Error ? e.message : String(e)}`, undefined, timeout);
+      throw new FptTransientError(timeout ? `FPT không phản hồi sau ${this.opts.timeoutMs ?? 240_000}ms (${path})` : `Không kết nối được FPT (${path}): ${e instanceof Error ? e.message : String(e)}`, undefined, timeout);
     }
   }
 

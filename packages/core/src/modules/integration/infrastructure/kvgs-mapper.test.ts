@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapKvgsResponse } from "./kvgs-mapper.js";
+import { fptErrorCode, kvgsErrors, mapKvgsResponse } from "./kvgs-mapper.js";
 
 const NOW = new Date("2026-11-13T05:00:00.000Z");
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAIAAAUAAYRcDQAAAAAASUVORK5CYII=";
@@ -129,5 +129,14 @@ describe("mapKvgsResponse (đặc tả API-KVGS)", () => {
     expect(incomplete(s)?.code).toBe("KVGS_RESPONSE_INCOMPLETE");
     expect(incomplete(null)?.code).toBe("KVGS_RESPONSE_INCOMPLETE");
     expect(incomplete({ errorList: "x" })?.code).toBe("KVGS_RESPONSE_INCOMPLETE");
+  });
+});
+
+describe("lỗi chưa mở cổng ký (FPT \"000\")", () => {
+  const portOff = { errorCode: "000", indexCode: "000", nameCode: "Lỗi hệ thống", errorContent: "Máy chủ chưa khởi động cổng ký, vui lòng cắm chữ ký số vào máy chủ và khởi động cổng ký Internet", proposedSolution: "Vui lòng khởi động cổng ký trước khi khai báo", rowPosition: "0" };
+  it("→ SIGNING_PORT_CLOSED, giữ nguyên câu FPT; mã \"000\" khác giữ nguyên", () => {
+    expect(kvgsErrors([portOff])[0]).toMatchObject({ code: "SIGNING_PORT_CLOSED", message: portOff.errorContent, solution: portOff.proposedSolution });
+    expect(fptErrorCode("000", "Lỗi hệ thống khác")).toBe("000");
+    expect(fptErrorCode("E1028", "cổng ký")).toBe("E1028");
   });
 });

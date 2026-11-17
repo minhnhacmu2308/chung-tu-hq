@@ -1,5 +1,5 @@
 // Lỗi Hải quan/FPT của lần gửi bị từ chối → chỉ tiêu Phụ lục II (thuần): để màn Review gắn lỗi vào đúng ô người khai cần sửa.
-import { fieldDefForFptIndex, fptIndexSlot, type CustomsRejection } from "@kb/contracts";
+import { fieldDefForFptIndex, fptIndexSlot, SIGNING_PORT_CLOSED, type CustomsRejection } from "@kb/contracts";
 import { fill, pickMessages, type UiLocale } from "@kb/ui";
 import { CUSTOMS_ERROR_MESSAGES } from "./customs-errors.messages";
 
@@ -17,7 +17,8 @@ export type FieldError = {
 
 export function fieldErrors(kind: "IDA" | "EDA", rejection: CustomsRejection | null | undefined): FieldError[] {
   if (!rejection) return [];
-  return rejection.errors.map((e) => {
+  // Chưa mở cổng ký: lỗi môi trường ký số, không gắn vào ô chỉ tiêu (tờ khai không cần sửa).
+  return rejection.errors.filter((e) => e.code !== SIGNING_PORT_CLOSED).map((e) => {
     const def = fieldDefForFptIndex(kind, e.field);
     const slot = fptIndexSlot(e.field);
     return { code: e.code, message: e.message, ...(e.solution ? { solution: e.solution } : {}), ...(e.line ? { line: e.line } : {}), ...(def ? { no: def.no, label: def.label } : {}), ...(slot ? { slot } : {}) };

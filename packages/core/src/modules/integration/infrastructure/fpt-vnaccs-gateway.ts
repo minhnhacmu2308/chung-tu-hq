@@ -11,7 +11,7 @@ import { parseCustomsInfo } from "../domain/customs-info.js";
 import { identifierState } from "../domain/identifier.js";
 import { describeSchemaIssue } from "../domain/schema-issues.js";
 import { fptContentBody, fptNumberField } from "../domain/fpt-content-body.js";
-import { mapKvgsResponse } from "./kvgs-mapper.js";
+import { fptErrorCode, mapKvgsResponse } from "./kvgs-mapper.js";
 
 export type FptOperation =
   | "IDA" | "IDB" | "IDC" | "IDD" | "IDA01" | "IDE" | "IID"
@@ -51,7 +51,7 @@ const sub = (item: Obj | undefined, key: string) => ((item?.[key] ?? {}) as Obj)
 const toErrors = (env: { errorList?: { errorCode?: string | null | undefined; indexCode?: string | null | undefined; errorContent?: string | null | undefined; proposedSolution?: string | null | undefined; rowPosition?: string | null | undefined }[] | null | undefined }): GatewayError[] | undefined =>
   env.errorList?.length
     ? env.errorList.map((e) => ({
-        code: e.errorCode ?? "FPT",
+        code: fptErrorCode(e.errorCode ?? "FPT", e.errorContent ?? ""),
         ...(e.indexCode ? { field: e.indexCode } : {}),
         message: `${(e.errorContent ?? "Lỗi FPT").trim()}${e.rowPosition && e.rowPosition !== "0000" ? ` (dòng hàng ${Number(e.rowPosition)})` : ""}`,
         ...(e.proposedSolution ? { solution: e.proposedSolution.trim() } : {}),

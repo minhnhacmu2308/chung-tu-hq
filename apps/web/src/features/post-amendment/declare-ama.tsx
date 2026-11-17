@@ -10,6 +10,7 @@ import { performOperation, startPostAmendment } from "@/api/customs";
 import { formatDate, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { toastMutationError } from "@/lib/mutation-error";
 import { StickyActionBar } from "../dossier-detail/steps/declaration-parts";
+import { hasSigningPortError, SigningPortAlert } from "../dossier-detail/steps/signing-port-alert";
 import type { AmaStepCtx } from "./ama-context";
 import { AMA_MESSAGES } from "./ama.messages";
 import { AMA_OPS, amaPrimaryAction, amaRejection, reviewTarget } from "./ama-wizard";
@@ -71,7 +72,9 @@ export function DeclareAma({ ctx }: { ctx: AmaStepCtx }) {
                 <Spinner className="h-4 w-4" /> {t.waiting}
               </p>
             )}
-            {rejection && (
+            {rejection && hasSigningPortError(rejection.errors) ? (
+              <SigningPortAlert />
+            ) : rejection && (
               <Alert
                 tone="danger"
                 title={fill(t.rejectedAt, { op: rejection.operation, at: formatDateTime(rejection.at) })}

@@ -22,6 +22,9 @@ describe("fieldErrors", () => {
   it("chưa bị từ chối → rỗng", () => {
     expect(fieldErrors("EDA", null)).toEqual([]);
   });
+  it("lỗi chưa mở cổng ký không gắn vào tờ khai (không cần sửa)", () => {
+    expect(fieldErrors("IDA", { ...rejection, errors: [{ code: "SIGNING_PORT_CLOSED", field: "000", message: "Máy chủ chưa khởi động cổng ký" }] })).toEqual([]);
+  });
   it("errorPlace: vị trí lỗi để người khai tìm ô", () => {
     const [a, b, c] = fieldErrors("IDA", rejection);
     expect(errorPlace(a!)).toBe("1.22 · Địa chỉ");

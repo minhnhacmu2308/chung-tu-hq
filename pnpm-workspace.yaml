@@ -21,3 +21,11 @@ overrides:
   fast-xml-parser@5: ^5.12.0                     # @azure/storage-blob
   uuid@8: ^11.1.1                                # exceljs – không lên >=12 (bỏ CJS, exceljs dùng require)
   "@esbuild-kit/core-utils>esbuild": ^0.25.0     # drizzle-kit
+
+# Bỏ qua tạm advisory chưa có bản vá nào (kể cả bản mới nhất). Chỉ dùng khi KHÔNG override được.
+# Gỡ dòng khi gói ra bản sửa: `pnpm audit` (bỏ dòng này) → nâng/override như mục trên.
+auditConfig:
+  ignoreGhsas:
+    # picomatch ≤ 4.0.7 ReDoS (extglob) – 2026-11-18 chưa có bản vá (4.0.7 là bản mới nhất).
+    # Chỉ ở công cụ dev (dependency-cruiser, vitest, vite, tinyglobby), so mẫu glob trong cấu hình của repo – không vào bản chạy production, không nhận đầu vào người dùng.
+    - GHSA-fc5q-39xc-vjpf

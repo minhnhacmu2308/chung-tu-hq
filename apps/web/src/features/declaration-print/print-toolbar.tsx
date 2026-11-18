@@ -1,7 +1,7 @@
 "use client";
 // Thanh công cụ của bản in tờ khai: nhảy trang (1…N, "Chỉ tiêu khác"), "Chỉ ô cần xử lý (n)" (lần lượt ô lỗi → ô còn thiếu, cuộn tới + mở panel),
 // "In / Lưu PDF" (window.print – quy tắc in chỉ giữ trang giấy). Nhiều trang (nhiều dòng hàng) → chọn trang bằng danh sách thả xuống.
-import { Button, fill, Select, Stack, useMessages } from "@kb/ui";
+import { Button, fill, Select, Stack, Switch, useMessages } from "@kb/ui";
 import { CircleCheck, ListChecks, Printer } from "lucide-react";
 import { formatNumber } from "@/lib/format";
 import { pageDomId } from "./print-sheets";
@@ -16,11 +16,13 @@ type Props = {
   otherFieldsId: string | null;
   attentionCount: number;
   onNextAttention: () => void;
+  /** Công tắc "Sửa nhanh tại ô" (chỉ khi có ô sửa được); `locked`: còn ô chưa lưu – lưu / hủy rồi mới tắt được. */
+  quickEdit?: { on: boolean; onChange: (on: boolean) => void; locked: boolean };
 };
 
 const scrollToId = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
-export function PrintToolbar({ pages, otherFieldsId, attentionCount, onNextAttention }: Props) {
+export function PrintToolbar({ pages, otherFieldsId, attentionCount, onNextAttention, quickEdit }: Props) {
   const t = useMessages(PRINT_MESSAGES);
   const list = Array.from({ length: pages }, (_, i) => i + 1);
   return (
@@ -49,6 +51,9 @@ export function PrintToolbar({ pages, otherFieldsId, attentionCount, onNextAtten
         )}
       </Stack>
       <Stack direction="row" gap="xs" align="center" wrap>
+        {quickEdit && (
+          <Switch label={t.quickEdit} checked={quickEdit.on} disabled={quickEdit.locked} onCheckedChange={quickEdit.onChange} className="mr-2" />
+        )}
         <Button
           size="sm"
           variant={attentionCount > 0 ? "primary" : "secondary"}

@@ -1,3 +1,4 @@
+import { CATALOG_SEARCH_FIELDS } from "./code-key.js";
 import { z } from "zod";
 import { DecimalStringSchema, IsoDateTimeSchema } from "../common.js";
 
@@ -297,9 +298,11 @@ export type MatchQueueListRow = z.infer<typeof MatchQueueListRowSchema>;
 export const MatchQueuePageSchema = z.object({ rows: z.array(MatchQueueListRowSchema), total: z.number().int().nonnegative(), page: z.number().int(), pageSize: z.number().int() });
 export type MatchQueuePage = z.infer<typeof MatchQueuePageSchema>;
 
-/** Truy vấn danh sách mặt hàng: tìm theo mã nối / tên / mọi mã; `codeSetId` → cột mã/tên/ĐVT theo bộ đó. */
+/** Truy vấn danh sách mặt hàng: tìm theo mã nối / tên / mọi mã (giới hạn bằng `searchIn`); `codeSetId` → cột mã/tên/ĐVT theo bộ đó. */
 export const ListCatalogItemsQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
+  /** Tìm theo: ALL (mặc định) | ITEM_NO mã nối | NAME tên | CODE mã hàng theo bộ mã. */
+  searchIn: z.enum(CATALOG_SEARCH_FIELDS).optional(),
   codeSetId: z.string().optional(),
   kind: CatalogItemKindSchema.optional(),
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional(),

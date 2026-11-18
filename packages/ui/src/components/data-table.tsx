@@ -68,6 +68,9 @@ const MESSAGES = {
     loading: "Đang tải dữ liệu",
     search: "Tìm trong bảng",
     searchPlaceholder: "Tìm kiếm…",
+    searchIn: "Tìm theo",
+    searchInAll: "Tất cả thông tin",
+    searchInPlaceholder: "Tìm theo {label}…",
     filterBy: "Lọc theo {label}",
     filterAll: "Tất cả",
     clearFilters: "Xóa bộ lọc",
@@ -101,6 +104,9 @@ const MESSAGES = {
     loading: "Loading data",
     search: "Search table",
     searchPlaceholder: "Search…",
+    searchIn: "Search in",
+    searchInAll: "All fields",
+    searchInPlaceholder: "Search by {label}…",
     filterBy: "Filter by {label}",
     filterAll: "All",
     clearFilters: "Clear filters",
@@ -134,6 +140,9 @@ const MESSAGES = {
     loading: "正在加载数据",
     search: "在表格中搜索",
     searchPlaceholder: "搜索…",
+    searchIn: "搜索范围",
+    searchInAll: "全部信息",
+    searchInPlaceholder: "按{label}搜索…",
     filterBy: "按{label}筛选",
     filterAll: "全部",
     clearFilters: "清除筛选",
@@ -160,6 +169,9 @@ const MESSAGES = {
     sortDirection: "切换排序方向",
   },
 } satisfies Messages<
+  | "searchIn"
+  | "searchInAll"
+  | "searchInPlaceholder"
   | "selectAll"
   | "selectRow"
   | "actions"
@@ -236,6 +248,10 @@ function fold(value: unknown): string {
     .toLowerCase();
 }
 
+/** Ô tìm kiếm toàn bảng giới hạn trong một cột ("Tìm theo" trong hộp lọc): chuỗi tìm + id cột; không chọn cột = chuỗi thường (mọi cột). */
+type ScopedSearch = { q: string; field: string };
+const isScopedSearch = (v: unknown): v is ScopedSearch => typeof v === "object" && v !== null && "q" in v && "field" in v;
+
 /** Giá trị lọc của cột "select" (tách khỏi chuỗi của cột "text"). */
 type SelectFilterValue = { equals: string };
 const isSelectFilter = (v: unknown): v is SelectFilterValue => typeof v === "object" && v !== null && "equals" in v;
@@ -245,10 +261,12 @@ const isSelectFilter = (v: unknown): v is SelectFilterValue => typeof v === "obj
 const foldFilter: FilterFn<any, any> = (row, columnId, filterValue) => {
   const raw: unknown = row.getValue(columnId);
   if (isSelectFilter(filterValue)) return String(raw ?? "") === filterValue.equals;
-  const needle = fold(filterValue).trim();
+  // Tìm theo một cột: cột khác không tính là khớp (tìm toàn bảng lấy OR qua các cột).
+  if (isScopedSearch(filterValue) && columnId !== filterValue.field) return false;
+  const needle = fold(isScopedSearch(filterValue) ? filterValue.q : filterValue).trim();
   return needle === "" || fold(raw).includes(needle);
 };
-foldFilter.autoRemove = (v: unknown) => (isSelectFilter(v) ? v.equals === "" : v == null || String(v).trim() === "");
+foldFilter.autoRemove = (v: unknown) => (isSelectFilter(v) ? v.equals === "" : isScopedSearch(v) ? v.q.trim() === "" : v == null || String(v).trim() === "");
 
 export const dataTableFeatures = tableFeatures({
   rowSortingFeature,
@@ -353,7 +371,16 @@ export type DataTableProps<TData extends RowData> = {
   /** Số bộ lọc của trang đang khác mặc định – cộng vào số trên nút phễu. */
   activeFilters?: number;
   /** Ô tìm kiếm do trang điều khiển (tìm phía server) thay cho tìm trong dữ liệu đã tải; cùng chỗ với `searchable`. */
-  search?: { value: string; onChange: (value: string) => void; placeholder?: string; label?: string };
+  search?: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    label?: string;
+    /** "Tìm theo" phía server: các nhóm thông tin trang hỗ trợ (không gồm "Tất cả" – bảng tự thêm, giá trị ""); `field` đang chọn. */
+    fields?: { value: string; label: string }[];
+    field?: string;
+    onFieldChange?: (field: string) => void;
+  };
   initialSorting?: SortingState;
   pagination?: DataTablePagination;
   stickyHeader?: boolean;
@@ -604,6 +631,8 @@ export function DataTable<TData extends RowData>({
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [globalFilter, setGlobalFilter] = useState("");
+  // "Tìm theo" (hộp lọc): id cột giới hạn ô tìm kiếm; "" = tìm trong mọi thông tin của bảng.
+  const [searchIn, setSearchIn] = useState("");
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useControllable(visibilityProp, onColumnVisibilityChange, {});
   const [columnSizing, setColumnSizing] = useControllable(sizingProp, onColumnSizingChange, {});
@@ -712,7 +741,7 @@ export function DataTable<TData extends RowData>({
     enableRowSelection: selectable && hasSelectablePredicate ? (row) => selectableRef.current?.(row.original) ?? true : selectable,
     defaultColumn: { filterFn: "fold" },
     globalFilterFn: "fold",
-    state: { sorting, rowSelection, pagination: pageState, globalFilter, columnFilters, columnVisibility, columnSizing },
+    state: { sorting, rowSelection, pagination: pageState, globalFilter: searchIn && globalFilter ? { q: globalFilter, field: searchIn } : globalFilter, columnFilters, columnVisibility, columnSizing },
     onSortingChange: (u) => setSorting((prev) => functionalUpdate(u, prev)),
     onRowSelectionChange: (u) => setRowSelection((prev) => functionalUpdate(u, prev)),
     onPaginationChange: (u) => {
@@ -721,7 +750,8 @@ export function DataTable<TData extends RowData>({
       else setInnerPage(next);
     },
     onGlobalFilterChange: (u) => {
-      setGlobalFilter(String(functionalUpdate(u, globalFilter) ?? ""));
+      const next: unknown = functionalUpdate(u, globalFilter);
+      setGlobalFilter(isScopedSearch(next) ? next.q : String(next ?? ""));
       toFirstPage();
     },
     onColumnFiltersChange: (u) => {
@@ -788,14 +818,27 @@ export function DataTable<TData extends RowData>({
     return def.meta?.label ?? (typeof def.header === "string" ? def.header : column.id);
   };
   const filterColumns = leafColumns.filter((c) => c.columnDef.meta?.filter && c.getCanFilter());
-  const hasFilterRow = filterColumns.length > 0 || !!filters;
+  // "Tìm theo": các cột đang hiện có dữ liệu chữ/số để tìm (cột có accessor, không tắt tìm toàn bảng). Chỉ khi tìm trong dữ liệu đã tải.
+  const searchColumns = searchable && !search ? leafColumns.filter((c) => !!c.accessorFn && c.columnDef.enableGlobalFilter !== false && c.getIsVisible()) : [];
+  // Tìm phía server có "Tìm theo" (search.fields) hoặc tìm trong dữ liệu đã tải theo cột – cùng một ô chọn, chip và cách đếm.
+  const scopeOptions = search?.fields && search.onFieldChange ? search.fields : searchColumns.map((c) => ({ value: c.id, label: columnLabel(c) }));
+  const scopeValue = search?.fields ? (search.field ?? "") : searchIn;
+  const setScope = (v: string) => {
+    if (search?.fields) search.onFieldChange?.(v);
+    else { setSearchIn(v); toFirstPage(); }
+  };
+  const searchInLabel = scopeOptions.find((o) => o.value === scopeValue && o.value !== "")?.label ?? "";
+  const searchInColumn = searchInLabel !== "";
+  const hasFilterRow = filterColumns.length > 0 || !!filters || scopeOptions.length > 1;
   const isFiltered = globalFilter.trim() !== "" || columnFilters.length > 0;
-  const filterCount = columnFilters.length + activeFilters;
+  const filterCount = columnFilters.length + activeFilters + (searchInColumn ? 1 : 0);
   // Có gì để "Xóa bộ lọc": lọc trong bảng, bộ lọc của trang hoặc ô tìm phía server
-  const anyFilter = isFiltered || activeFilters > 0 || !!search?.value;
+  const anyFilter = isFiltered || activeFilters > 0 || !!search?.value || searchInColumn;
   const showToolbar = searchable || !!search || columnToggle || hasFilterRow || !!toolbarActions || !!renderCard;
   const clearFilters = () => {
     setGlobalFilter("");
+    setSearchIn("");
+    if (search?.fields && search.field) search.onFieldChange?.("");
     setColumnFilters([]);
     toFirstPage();
     onClearFilters?.();
@@ -907,7 +950,7 @@ export function DataTable<TData extends RowData>({
               <Input
                 type="search"
                 aria-label={search?.label ?? t.search}
-                placeholder={search?.placeholder ?? t.searchPlaceholder}
+                placeholder={searchInLabel ? fill(t.searchInPlaceholder, { label: searchInLabel }) : search?.placeholder ?? t.searchPlaceholder}
                 value={search ? search.value : globalFilter}
                 onChange={(e) => (search ? search.onChange(e.target.value) : table.setGlobalFilter(e.target.value))}
                 className="h-9 pl-8"
@@ -935,6 +978,14 @@ export function DataTable<TData extends RowData>({
                   <p className="text-sm font-semibold">{filterCount ? fill(t.filtersActive, { n: filterCount }) : t.filters}</p>
                 </div>
                 <div className="grid max-h-[60vh] grid-cols-1 gap-x-4 gap-y-3 overflow-y-auto p-4 sm:grid-cols-2">
+                  {scopeOptions.length > 1 && (
+                    <DataTableFilterSelect
+                      label={t.searchIn}
+                      value={searchInColumn ? scopeValue : ""}
+                      onChange={setScope}
+                      options={[{ value: "", label: t.searchInAll }, ...scopeOptions]}
+                    />
+                  )}
                   {filterColumns.map((c) => filterControl(c, true))}
                   {filters}
                 </div>
@@ -946,6 +997,19 @@ export function DataTable<TData extends RowData>({
                 </div>
               </PopoverContent>
             </Popover>
+          )}
+          {searchInColumn && (
+            <span data-slot="filter-chip" className="inline-flex h-7 max-w-64 items-center gap-1 rounded-full border border-border bg-surface-muted pl-2.5 pr-0.5 text-xs text-fg">
+              <span className="truncate"><span className="text-fg-muted">{t.searchIn}:</span> {searchInLabel}</span>
+              <button
+                type="button"
+                aria-label={fill(t.removeFilter, { label: t.searchIn })}
+                onClick={() => setScope("")}
+                className="hit-area pressable inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-fg-subtle hover:bg-surface hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                <X aria-hidden="true" className="h-3.5 w-3.5" />
+              </button>
+            </span>
           )}
           {/* Từng bộ lọc cột đang bật thành chip "Cột: giá trị ✕" – nhìn là biết đang lọc gì, bỏ riêng từng cái. */}
           {columnFilters.map((f) => {

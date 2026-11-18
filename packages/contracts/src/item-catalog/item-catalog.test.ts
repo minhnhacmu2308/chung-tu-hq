@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { REASON_CODES } from "../reason-codes.js";
-import { itemCodeKey, itemNameKey } from "./code-key.js";
+import { catalogItemMatches, itemCodeKey, itemNameKey } from "./code-key.js";
+import { ListCatalogItemsQuerySchema } from "./schemas.js";
 import {
   CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, detectItemColumns, ITEM_IMPORT_MAX_LENGTH, ImportRowsInputSchema, importRowsTooLarge, itemImportTooLong, validateItemRows,
 } from "./excel.js";
@@ -260,5 +261,28 @@ describe("giới hạn số dòng mỗi lần nhập", () => {
     expect(ImportRowsInputSchema.safeParse(big).success).toBe(false);
     expect(importRowsTooLarge(null)).toBe(false);
     expect(importRowsTooLarge({ rows: "x" })).toBe(false);
+  });
+});
+
+describe("catalogItemMatches – Tìm theo nhóm thông tin", () => {
+  const item = { itemNo: "MH-000002", nameKey: itemNameKey("Chỉ may polyester"), codeKeys: [itemCodeKey("CM-ROLL"), itemCodeKey("XNK 01")] };
+  it("ALL / không truyền: khớp mã nối, tên (không dấu), mã hàng (viết khác)", () => {
+    expect(catalogItemMatches("mh-000002", undefined, item)).toBe(true);
+    expect(catalogItemMatches("chi may", "ALL", item)).toBe(true);
+    expect(catalogItemMatches("cm roll", undefined, item)).toBe(true);
+    expect(catalogItemMatches("khong co", undefined, item)).toBe(false);
+    expect(catalogItemMatches("  ", "NAME", item)).toBe(true);
+  });
+  it("giới hạn một nhóm: chỉ nhóm đó được tính", () => {
+    expect(catalogItemMatches("mh-000002", "ITEM_NO", item)).toBe(true);
+    expect(catalogItemMatches("mh-000002", "NAME", item)).toBe(false);
+    expect(catalogItemMatches("chi may", "NAME", item)).toBe(true);
+    expect(catalogItemMatches("chi may", "CODE", item)).toBe(false);
+    expect(catalogItemMatches("xnk-01", "CODE", item)).toBe(true);
+    expect(catalogItemMatches("xnk-01", "ITEM_NO", item)).toBe(false);
+  });
+  it("schema: searchIn chỉ nhận giá trị hợp lệ", () => {
+    expect(ListCatalogItemsQuerySchema.parse({ searchIn: "NAME" }).searchIn).toBe("NAME");
+    expect(ListCatalogItemsQuerySchema.safeParse({ searchIn: "PRICE" }).success).toBe(false);
   });
 });

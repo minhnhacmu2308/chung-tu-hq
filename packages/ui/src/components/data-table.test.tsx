@@ -333,6 +333,74 @@ describe("DataTable – tìm kiếm toàn bảng", () => {
 /** Ô lọc theo cột nằm trong hộp lọc mở từ nút phễu cạnh ô tìm kiếm. */
 const openFilters = (name: RegExp = /^Bộ lọc/) => userEvent.click(screen.getByRole("button", { name }));
 
+describe("DataTable – Tìm theo (giới hạn ô tìm kiếm trong một cột)", () => {
+  it("không chọn: tìm mọi cột; chọn 'Mã hồ sơ': chỉ tìm cột đó, ô tìm đổi gợi ý, nút phễu đếm + chip bỏ được; Xóa bộ lọc trả về tất cả", async () => {
+    setupVn({ searchable: true });
+    const box = screen.getByRole("searchbox", { name: "Tìm trong bảng" });
+    await userEvent.type(box, "hai");
+    expect(vnCodes()).toEqual(["HS-001", "HS-002"]);
+
+    await openFilters();
+    const scope = screen.getByRole("combobox", { name: "Lọc theo Tìm theo" });
+    await userEvent.click(scope);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Tất cả thông tin", "Mã hồ sơ", "Đối tác", "Trạng thái", "Trị giá"]);
+    await userEvent.click(screen.getByRole("option", { name: "Mã hồ sơ" }));
+    expect(vnCodes()).toEqual([expect.stringContaining("Không có kết quả phù hợp")]);
+    expect(box).toHaveAttribute("placeholder", "Tìm theo Mã hồ sơ…");
+    await userEvent.clear(box);
+    await userEvent.type(box, "003");
+    expect(vnCodes()).toEqual(["HS-003"]);
+    // "300" là trị giá của HS-003 nhưng đang tìm theo mã → không khớp.
+    await userEvent.clear(box);
+    await userEvent.type(box, "300");
+    expect(vnCodes()).toEqual([expect.stringContaining("Không có kết quả phù hợp")]);
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "Bộ lọc (1)" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Bỏ lọc Tìm theo" }));
+    expect(vnCodes()).toEqual(["HS-003"]);
+    expect(box).toHaveAttribute("placeholder", "Tìm kiếm…");
+  });
+
+  it("bảng chỉ có ô tìm (không lọc cột) vẫn có nút phễu để chọn Tìm theo; không vi phạm a11y", async () => {
+    const cols = vcol.columns([vcol.accessor("code", { header: "Mã hồ sơ" }), vcol.accessor("partner", { header: "Đối tác" })]);
+    const { container } = render(<DataTable aria-label="Danh sách hồ sơ" columns={cols} data={VN_DATA} getRowId={(r) => r.id} pagination={false} searchable />);
+    await openFilters();
+    expect(screen.getByRole("combobox", { name: "Lọc theo Tìm theo" })).toBeInTheDocument();
+    await expectNoA11yViolations(container);
+  });
+
+  it("tìm phía server có fields: ô Tìm theo theo danh sách của trang, đổi → onFieldChange; Xóa bộ lọc đặt lại", async () => {
+    const onFieldChange = vi.fn();
+    const { rerender } = setupVn({ search: { value: "abc", onChange: () => {}, fields: [{ value: "NAME", label: "Tên hàng" }, { value: "CODE", label: "Mã hàng" }], field: "", onFieldChange } });
+    await openFilters();
+    await userEvent.click(screen.getByRole("combobox", { name: "Lọc theo Tìm theo" }));
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Tất cả thông tin", "Tên hàng", "Mã hàng"]);
+    await userEvent.click(screen.getByRole("option", { name: "Mã hàng" }));
+    expect(onFieldChange).toHaveBeenLastCalledWith("CODE");
+    rerender(<DataTable aria-label="Danh sách hồ sơ" columns={VN_COLUMNS} data={VN_DATA} getRowId={(r) => r.id} pagination={false} search={{ value: "abc", onChange: () => {}, fields: [{ value: "NAME", label: "Tên hàng" }, { value: "CODE", label: "Mã hàng" }], field: "CODE", onFieldChange }} />);
+    expect(screen.getByRole("searchbox", { name: "Tìm trong bảng" })).toHaveAttribute("placeholder", "Tìm theo Mã hàng…");
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getAllByRole("button", { name: "Xóa bộ lọc" })[0]!);
+    expect(onFieldChange).toHaveBeenLastCalledWith("");
+  });
+
+  it("tìm phía server không có fields – không có Tìm theo", () => {
+    setupVn({ search: { value: "", onChange: () => {} } });
+    expect(screen.queryByRole("combobox", { name: "Lọc theo Tìm theo" })).toBeNull();
+  });
+
+  it("en / zh: nhãn đã dịch", async () => {
+    const { unmount } = render(<UiLocaleProvider locale="en"><DataTable aria-label="t" columns={VN_COLUMNS} data={VN_DATA} getRowId={(r) => r.id} pagination={false} searchable /></UiLocaleProvider>);
+    await userEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+    expect(screen.getByRole("combobox", { name: "Filter by Search in" })).toHaveTextContent("All fields");
+    unmount();
+    render(<UiLocaleProvider locale="zh"><DataTable aria-label="t" columns={VN_COLUMNS} data={VN_DATA} getRowId={(r) => r.id} pagination={false} searchable /></UiLocaleProvider>);
+    await userEvent.click(screen.getByRole("button", { name: /^筛选/ }));
+    expect(screen.getByRole("combobox", { name: /搜索范围/ })).toHaveTextContent("全部信息");
+  });
+});
+
 describe("DataTable – thao tác hàng loạt", () => {
   it("chọn dòng → thanh nổi giữa đáy màn hình: đếm số dòng, nút thao tác nhận các dòng đã chọn, Bỏ chọn ẩn thanh; không vi phạm a11y", async () => {
     const onBulk = vi.fn();

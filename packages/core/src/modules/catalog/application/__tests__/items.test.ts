@@ -123,6 +123,14 @@ describe("listItems", () => {
     expect(byNo.ok && byNo.value.rows.map((r) => r.id)).toEqual([b.item.id]);
     const byName = await listItems(h.deps, viewer, q({ q: "chi may" }));
     expect(byName.ok && byName.value.rows.map((r) => r.id)).toEqual([b.item.id]);
+    // Tìm theo (searchIn): giới hạn một nhóm thông tin – mã nối "MH-000002" không khớp khi chỉ tìm theo tên / mã hàng.
+    const ids = async (query: Record<string, string>) => { const r = await listItems(h.deps, viewer, q(query)); return r.ok ? r.value.rows.map((x) => x.id) : null; };
+    expect(await ids({ q: "mh-000002", searchIn: "ITEM_NO" })).toEqual([b.item.id]);
+    expect(await ids({ q: "mh-000002", searchIn: "NAME" })).toEqual([]);
+    expect(await ids({ q: "chi may", searchIn: "NAME" })).toEqual([b.item.id]);
+    expect(await ids({ q: "chi may", searchIn: "CODE" })).toEqual([]);
+    expect(await ids({ q: "xnk 01", searchIn: "CODE" })).toEqual([a.item.id]);
+    expect(await ids({ q: "xnk 01", searchIn: "ALL" })).toEqual([a.item.id]);
 
     const inSet = await listItems(h.deps, viewer, q({ codeSetId: "cst_xnk" }));
     expect(inSet.ok && inSet.value.rows.map((r) => [r.displayCode, r.setCode])).toEqual([["vt-0012 ", "XNK-01"], ["CM-1", null]]);

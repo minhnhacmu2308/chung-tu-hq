@@ -26,6 +26,7 @@ import { useSaveDeclarationEdits } from "../declaration-form/use-save-edits";
 import { useCodeName, usePlaceNameLookup } from "../declaration-form/use-code-list";
 import { QtySuggestionHint } from "../declaration-form/qty-hint";
 import { PanelDetails } from "./panel-details";
+import { CodeValidityContext } from "../declaration-form/code-validity";
 import { panelShortcut, revertField } from "./panel-keys";
 import { applyToOtherLines, emptyOtherTaxGroups, emptyPrintedTaxSlot, fieldLocator, followTaxSlot, nextTarget, printedKeyTarget, taxCodeKeys, type PrintTarget } from "./print-state";
 import { OTHER_TAX_MESSAGES, otherTaxGroupLabel } from "../declaration-form/other-tax.messages";
@@ -203,7 +204,19 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   const taxLabel = taxRowGroup ? otherTaxGroupLabel(ot, OTHER_TAX_GROUPS[Number(taxRowGroup) - 1]?.key) : undefined;
   const title = field ? fieldTitle(no, taxLabel ?? (field.no ? field.label : spot.groupLabel ?? field.label)) : "";
   // Lưu / xác nhận xong → đóng panel, người dùng quay lại bản in (khỏi phải bấm Đóng).
-  const commit = () => save.mutate([...edits, ...confirmations, ...bulk], { onSuccess: () => { setChanges({}); onTarget(null); } });
+  // Ô mã có danh mục đang có mã không có trong danh mục (ô CodeInput báo lên): ô vừa sửa còn mã sai → không cho lưu.
+  const [invalidCodes, setInvalidCodes] = useState<ReadonlySet<string>>(new Set());
+  const reportCode = useCallback((key: string, invalid: boolean) => {
+    setInvalidCodes((cur) => {
+      if (cur.has(key) === invalid) return cur;
+      const next = new Set(cur);
+      if (invalid) next.add(key); else next.delete(key);
+      return next;
+    });
+  }, []);
+  const badCodes = [...invalidCodes].filter((k) => k in changes);
+  const blocked = badCodes.length > 0;
+  const commit = () => blocked ? undefined : save.mutate([...edits, ...confirmations, ...bulk], { onSuccess: () => { setChanges({}); onTarget(null); } });
 
   // Ô được chọn đổi (bấm ô, Tab, đóng, "Chỉ ô cần xử lý"): chưa lưu → hỏi; không thì chuyển ngay.
   // Đang lưu → chưa xét (giữ `seen`): lưu xong vẽ lại, phần sửa đã xóa → chuyển ngay; lưu lỗi → còn thay đổi → hỏi.
@@ -365,6 +378,8 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
   useEffect(() => {
     enterSave.current = () => {
       if (!dirty || readOnlyReason || save.isPending) return false;
+      // Còn mã sai: không lưu (ô đã báo đỏ kèm câu nhắc); false → Ctrl+S trả focus về ô đang sửa.
+      if (blocked) return false;
       save.mutate([...edits, ...confirmations, ...bulk], { onSuccess: () => { setChanges({}); setSaved(true); } });
       return true;
     };
@@ -494,6 +509,8 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                   {taxIssues.map((i) => <p key={i.reason}>{reasonText(i.reason, undefined, undefined, locale)}</p>)}
                 </Alert>
               )}
+              {blocked && <Alert tone="danger">{t.codeBlocked}</Alert>}
+              <CodeValidityContext.Provider value={reportCode}>
               <PanelDetails
                 kind={kind}
                 spot={spot}
@@ -509,6 +526,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                 onHs={setHsItem}
                 amending={mode === "AMEND"}
               />
+              </CodeValidityContext.Provider>
               {spread.lines > 0 && (
                 <Checkbox
                   label={spread.lines === 1 ? t.applyAllLines1 : fill(t.applyAllLines, { n: formatNumber(spread.lines) })}
@@ -538,7 +556,7 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
                         {spread.lines === 1 ? t.applyLines1 : fill(t.applyLinesN, { n: formatNumber(spread.lines) })}
                       </Button>
                     ) : (
-                      <Button type="button" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty} onClick={commit}>
+                      <Button type="button" leftIcon={<Save className="h-4 w-4" />} loading={save.isPending} disabled={!dirty || blocked} onClick={commit}>
                         {!dirty ? t.save : edits.length + bulk.length === 1 ? t.save1 : fill(t.saveN, { n: formatNumber(edits.length + bulk.length) })}
                       </Button>
                     )}
@@ -558,6 +576,8 @@ export function FieldEditPanel({ dossierId, decl, items, mode: stageMode, scope,
         onSave={() => {
           const c = confirm;
           if (!c || save.isPending) return;
+          // Còn mã sai: không lưu, quay lại panel để sửa.
+          if (blocked) { stay(); return; }
           save.mutate([...edits, ...bulk], { onSuccess: () => proceed(c.next, c.href), onError: stay });
         }}
         onDiscard={() => confirm && proceed(confirm.next, confirm.href)}

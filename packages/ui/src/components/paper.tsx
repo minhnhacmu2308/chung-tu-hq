@@ -3,7 +3,7 @@
 // không khung ô, nhãn và giá trị cùng dòng (giá trị chữ đơn cách), chỉ kẻ ngang giữa các khối và kẻ dọc giữa hai cột; chữ đen nền trắng,
 // ẩn mọi dấu hiệu trạng thái (phần tử có `data-paper-mark`). Quy tắc @media print nằm ở styles/index.css.
 import { CircleHelp, TriangleAlert } from "lucide-react";
-import { Fragment, type HTMLAttributes, type ReactNode, type Ref } from "react";
+import { Fragment, useEffect, useId, useRef, type HTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { cn } from "../lib/cn.js";
 import { useMessages, type Messages } from "../lib/i18n.js";
 
@@ -16,10 +16,10 @@ const SHEET_MESSAGES = {
 } satisfies Messages<"page">;
 
 const FIELD_MESSAGES = {
-  vi: { missing: "Còn thiếu", estimate: "ƯT", edited: "Đã sửa", error: "Có lỗi", compare: "ước tính", check: "Cần kiểm tra" },
-  en: { missing: "Missing", estimate: "Est.", edited: "Edited", error: "Error", compare: "estimate", check: "Needs checking" },
-  zh: { missing: "缺失", estimate: "估", edited: "已修改", error: "有错误", compare: "估计值", check: "需核对" },
-} satisfies Messages<"missing" | "estimate" | "edited" | "error" | "compare" | "check">;
+  vi: { missing: "Còn thiếu", estimate: "ƯT", edited: "Đã sửa", error: "Có lỗi", compare: "ước tính", check: "Cần kiểm tra", pending: "Chưa lưu" },
+  en: { missing: "Missing", estimate: "Est.", edited: "Edited", error: "Error", compare: "estimate", check: "Needs checking", pending: "Not saved" },
+  zh: { missing: "缺失", estimate: "估", edited: "已修改", error: "有错误", compare: "估计值", check: "需核对", pending: "未保存" },
+} satisfies Messages<"missing" | "estimate" | "edited" | "error" | "compare" | "check" | "pending">;
 
 export function PaperStack({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -98,6 +98,23 @@ function breakAtSeparators(node: ReactNode): ReactNode {
   ));
 }
 
+/**
+ * Ô đang nhập tại chỗ (sửa nhanh trên bản in, kiểu ô Excel): thay giá trị bằng ô nhập ngay trong khung ô.
+ * Ô nhập tự focus khi hiện, con trỏ ở cuối. Phím (Enter, Tab, Esc…) và mất focus do nơi gọi xử lý.
+ */
+export type PaperFieldEdit = {
+  value: string;
+  onChange: (value: string) => void;
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  onBlur?: () => void;
+  /** Giá trị không hợp lệ: khung đỏ, `hint` đọc như lỗi. */
+  invalid?: boolean;
+  /** Dòng nhỏ dưới ô nhập (tên theo mã, cách nhập, lỗi) – trình đọc màn hình đọc kèm ô nhập. */
+  hint?: ReactNode;
+  placeholder?: string;
+  inputMode?: "text" | "decimal" | "numeric";
+};
+
 export type PaperFieldProps = {
   /** Chỉ nội dung dòng chữ (phrasing content), không chứa phần tử tương tác (không Abbreviation/button/link) – ô có thể là <button>. */
   label: ReactNode;
@@ -120,13 +137,73 @@ export type PaperFieldProps = {
   span?: 1 | 2 | 3 | 4 | 6 | 8 | 12;
   /** "end": căn phải giá trị (số tiền, số lượng). */
   align?: "end";
-  labels?: Partial<{ missing: string; estimate: string; edited: string; error: string; compare: string; check: string }>;
+  /** Giá trị đã sửa trên ô nhưng chưa lưu: khung nét đứt màu chính + dấu "Chưa lưu" (chỉ trên màn hình). */
+  pending?: boolean;
+  /** Đang nhập tại chỗ: hiện ô nhập thay cho giá trị (xem `PaperFieldEdit`). */
+  edit?: PaperFieldEdit;
+  labels?: Partial<{ missing: string; estimate: string; edited: string; error: string; compare: string; check: string; pending: string }>;
   /** Phần tử gốc (button khi có onSelect, ngược lại div) – để làm đích Tooltip asChild. */
   ref?: Ref<HTMLElement>;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "onSelect">;
 
-export function PaperField({ label, value, compact, keepTogether = false, state = "none", compareTo, selected = false, onSelect, ariaLabel, span = 12, align, labels, ref, className, onClick, ...rest }: PaperFieldProps) {
+/** Ô nhập tại chỗ của PaperField: focus khi hiện, con trỏ cuối giá trị (gõ tiếp ký tự vừa bấm để bắt đầu sửa). */
+function PaperFieldInput({ edit, ariaLabel, align }: { edit: PaperFieldEdit; ariaLabel: string; align?: "end" | undefined }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const hintId = useId();
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+  return (
+    <>
+      <input
+        ref={ref}
+        type="text"
+        value={edit.value}
+        aria-label={ariaLabel}
+        aria-invalid={edit.invalid || undefined}
+        aria-describedby={edit.hint ? hintId : undefined}
+        placeholder={edit.placeholder}
+        inputMode={edit.inputMode}
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(e) => edit.onChange(e.currentTarget.value)}
+        onKeyDown={edit.onKeyDown}
+        onBlur={edit.onBlur}
+        className={cn("block w-full min-w-0 rounded-sm bg-surface px-0.5 font-mono text-xs text-fg outline-none placeholder:text-fg-subtle", align === "end" && "text-right")}
+      />
+      {edit.hint && (
+        <span id={hintId} className={cn("mt-0.5 block font-sans text-[10px] leading-tight", edit.invalid ? "text-danger-subtle-fg" : "text-fg-muted")}>
+          {edit.hint}
+        </span>
+      )}
+    </>
+  );
+}
+
+export function PaperField({ label, value, compact, keepTogether = false, state = "none", compareTo, selected = false, onSelect, ariaLabel, span = 12, align, pending = false, edit, labels, ref, className, onClick, ...rest }: PaperFieldProps) {
   const t = useMessages(FIELD_MESSAGES, labels);
+  if (edit) {
+    // Đang nhập: khung ô giữ nguyên chỗ trên trang, viền focus (đỏ khi giá trị sai); nhãn chỉ để nhìn – ô nhập mang tên đầy đủ.
+    return (
+      <div
+        {...rest}
+        ref={ref as Ref<HTMLDivElement>}
+        data-paper-editing=""
+        className={cn(
+          "relative block min-w-0 border bg-paper px-1.5 py-1 text-left text-paper-fg ring-2",
+          edit.invalid ? "border-danger ring-danger" : "border-paper-rule ring-focus",
+          SPAN[span],
+          className,
+        )}
+      >
+        <span aria-hidden="true" className="block text-[10px] leading-tight opacity-80">{label}</span>
+        <PaperFieldInput edit={edit} ariaLabel={ariaLabel} align={align} />
+      </div>
+    );
+  }
   const cls = cn(
     // In: nhãn và giá trị cùng một dòng, chữ nhỏ – mỗi trang giấy vừa một trang A4 như mẫu VNACCS.
     "relative block min-w-0 border border-paper-rule bg-paper px-1.5 py-1 text-left text-paper-fg print:flex print:flex-wrap print:items-baseline print:gap-x-1.5 print:px-1 print:py-0",
@@ -138,6 +215,8 @@ export function PaperField({ label, value, compact, keepTogether = false, state 
     // Giá trị tự điền cần người dùng xem lại: khung liền + nền dịu tông cảnh báo (vàng), khác error (đỏ) và missing (nét đứt, không nền).
     state === "check" && "border-warning bg-warning-subtle text-warning-subtle-fg",
     onSelect && "cursor-pointer hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+    // Đã sửa trên ô nhưng chưa lưu: nét đứt màu chính – thắng nét đứt "còn thiếu" (giá trị mới sẽ lưu vào ô).
+    pending && "border-dashed border-primary",
     selected && "ring-2 ring-primary",
     // In như mẫu VNACCS: không khung ô, không nền trạng thái.
     "print:border-0 print:bg-transparent print:text-paper-fg print:ring-0",
@@ -181,7 +260,12 @@ export function PaperField({ label, value, compact, keepTogether = false, state 
           <CircleHelp aria-hidden="true" className="h-3.5 w-3.5" />
         </span>
       )}
-      {state === "edited" && (
+      {pending && (
+        <span data-paper-mark="pending" className="absolute right-1 top-1 h-2 w-2 rounded-full border border-primary bg-paper">
+          <span className="sr-only">{t.pending}</span>
+        </span>
+      )}
+      {state === "edited" && !pending && (
         <span data-paper-mark className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary">
           <span className="sr-only">{t.edited}</span>
         </span>

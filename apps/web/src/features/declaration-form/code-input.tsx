@@ -4,7 +4,8 @@
 import { Alert, Checkbox, cn, Combobox, createDataTableColumnHelper, DataTable, Dialog, DialogContent, fill, LookupInput, SkeletonTable, Stack, useMessages, useUiLocale } from "@kb/ui";
 import { CODE_LIST_META, codeListFor, type CodeListEntry, type CodeTable } from "@kb/contracts";
 import { Search } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { useCodeValidityReport } from "./code-validity";
 import { codeName, codeScope, lookupMode, otherTaxRow, scopedEntries, type CodeScope } from "./code-scope";
 import { FORM_MESSAGES } from "./form.messages";
 import type { FormValues } from "./form-state";
@@ -90,6 +91,15 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
   const scope = useMemo(() => codeScope(id, fieldKey, kind, { TK_CH: office, TK_MTC: transport }, locale, taxKey ? { [taxKey]: taxCode ?? "" } : undefined), [id, fieldKey, kind, office, transport, locale, taxKey, taxCode]);
   const entries = useMemo(() => (list ? scopedEntries(list, scope, { all: false, inactive: false }) : []), [list, scope]);
   const name = list ? codeName(list, value, scope) : undefined;
+  // Mã gõ tay không có trong danh mục (đã tải xong): báo đỏ + báo lên panel để chặn lưu. Xét theo cả danh mục (không theo phạm vi lọc):
+  // mã có thật nhưng khác phạm vi vẫn để Hải quan / luật đối chiếu báo, không chặn nhập.
+  const invalid = Boolean(value.trim() && list && !codeName(list, value, null));
+  const report = useCodeValidityReport();
+  const errorId = useId();
+  useEffect(() => {
+    report?.(fieldKey, invalid);
+    return () => report?.(fieldKey, false);
+  }, [report, fieldKey, invalid]);
 
   if (list && lookupMode(entries, scope) === "dropdown") {
     // Giá trị đang có mà không nằm trong danh mục (vd "C&F" cách viết cũ) vẫn giữ để không mất dữ liệu.
@@ -122,10 +132,12 @@ export function CodeInput({ table, fieldKey, kind, values, value, onChange, labe
         tooltip={name ?? (value ? t.notInList : t.typeOrLookup)}
         onLookup={() => setOpen(true)}
         lookupLabel={fill(t.lookupAria, { label })}
-        aria-describedby={[name ? nameId : undefined, describedBy].filter(Boolean).join(" ") || undefined}
+        aria-invalid={invalid || undefined}
+        aria-describedby={[name ? nameId : undefined, invalid ? errorId : undefined, describedBy].filter(Boolean).join(" ") || undefined}
         {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
       />
       {name && <span id={nameId} className="sr-only">{name}</span>}
+      {invalid && <p id={errorId} className="basis-full text-xs font-medium text-danger-subtle-fg">{t.codeInvalid}</p>}
       <Dialog open={open} onOpenChange={setOpen}>
         {open && (
           <LookupDialog

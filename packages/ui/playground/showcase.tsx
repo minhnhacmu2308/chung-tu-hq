@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Abbreviation, NoticeChip, Alert, Avatar, Barcode, AvatarGroup, Badge, Button, Card, CardContent, CardHeader, CardTitle, Combobox, ConfirmDialog, createDataTableColumnHelper, HtmlPreview, SortableList, DataTable, DataTableFilterSelect,
   DatePicker, DateRangePicker, Disclosure, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-  BrandMark, FeedGroup, FeedItem, SearchInput, Field, FileDropzone, ImagePicker, RecordCard, FileUploadList, Grid, Input, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
+  BrandMark, FeedGroup, FeedItem, SearchInput, Field, FileDropzone, ImagePicker, RecordCard, FileUploadList, Grid, Input, FloatingActionBar, PaperColumns, PaperField, PaperSheet, PaperStack, Popover, PopoverContent, PopoverTrigger, Progress, Stack, StatusBadge, Switch,
   STATUS_META, toast, Tooltip, type IsoDateRange, type Status, type UploadItem,
 } from "../src/index.js";
 
@@ -87,6 +87,8 @@ export function Showcase() {
   const [period, setPeriod] = useState<IsoDateRange>({ from: "2026-10-01", to: "2026-10-31" });
   const [uploads, setUploads] = useState<UploadItem[]>(INITIAL_UPLOADS);
   const [autoSubmit, setAutoSubmit] = useState(false);
+  const [quickText, setQuickText] = useState("D");
+  const [quickBar, setQuickBar] = useState(false);
   const [partner, setPartner] = useState<string | null>("p15432");
   const [confirm, setConfirm] = useState<"delete" | "cancel" | "warning" | null>(null);
   const [blocks, setBlocks] = useState([{ id: "h", name: "Tiêu đề" }, { id: "p", name: "Đoạn văn" }, { id: "b", name: "Nút bấm" }]);
@@ -364,6 +366,8 @@ export function Showcase() {
               <PaperField span={4} label="5. Tổng trị giá hóa đơn" value="886.187.500" ariaLabel="Tổng trị giá hóa đơn" state="estimate" align="end" />
               <PaperField span={4} label="6. Trọng lượng (kg)" value="1.250" ariaLabel="Trọng lượng" state="edited" compareTo="1.200" />
               <PaperField span={4} label="7. Số kiện" value="12" ariaLabel="Số kiện" />
+              <PaperField span={6} label="7b. Ô sửa nhanh chưa lưu (pending)" value="48" ariaLabel="Ô chưa lưu" pending onSelect={() => setQuickBar(true)} />
+              <PaperField span={6} label="7c. Đang nhập tại chỗ (edit)" value="" ariaLabel="Mã xác định thời hạn nộp thuế" edit={{ value: quickText, onChange: setQuickText, hint: quickText.trim().toUpperCase() === "D" ? "Nộp thuế ngay" : "Enter xong · Esc hủy" }} />
               <PaperColumns>
                 <div className="grid grid-cols-12"><PaperField label="8. Số vận đơn" value="HPH240815" ariaLabel="Số vận đơn" /></div>
                 <div className="grid grid-cols-12"><PaperField label="9. Địa điểm dỡ hàng" value="VNHPH" ariaLabel="Địa điểm dỡ hàng" /></div>
@@ -374,6 +378,12 @@ export function Showcase() {
               <PaperField span={6} label="9. Thuế suất" value="0%" ariaLabel="Thuế suất" />
             </PaperSheet>
           </PaperStack>
+          {quickBar && (
+            <FloatingActionBar label="Thay đổi chưa lưu" summary="1 ô chưa lưu">
+              <Button size="sm" variant="secondary" onClick={() => setQuickBar(false)}>Hủy thay đổi</Button>
+              <Button size="sm" onClick={() => setQuickBar(false)}>Lưu 1 thay đổi</Button>
+            </FloatingActionBar>
+          )}
         </CardContent>
       </Card>
     </Stack>

@@ -2,7 +2,7 @@
 // (packages/core/src/modules/catalog/application/*): ghép / quy đổi / chuẩn hóa mã / kiểm dòng Excel dùng chung hàm thuần của @kb/contracts.
 // Lỗi nghiệp vụ là ApiError cùng `code` + `reason` (mã lý do) như client http nhận từ route. Nhập > 500 dòng mô phỏng job nền: ghép dần theo thời gian.
 import {
-  AliasActionInputSchema, CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, CATALOG_IMPORT_SYNC_MAX_ROWS, ChangeCatalogModeInputSchema, ChangeSourceInputSchema, CreateItemInputSchema, DecideQueueBulkInputSchema,
+  AliasActionInputSchema, catalogItemMatches, CATALOG_IMPORT_MAX_ROWS_PER_REQUEST, CATALOG_IMPORT_SYNC_MAX_ROWS, ChangeCatalogModeInputSchema, ChangeSourceInputSchema, CreateItemInputSchema, DecideQueueBulkInputSchema,
   DecideQueueInputSchema, ImportFromDocumentsInputSchema, ImportRowsInputSchema, ListCatalogItemsQuerySchema, ListQueueQuerySchema, ProposeAliasInputSchema, ResolveManyInputSchema, SetConversionInputSchema,
   SetupCatalogInputSchema, SourcePreviewQuerySchema, SplitAliasesInputSchema, UpdateItemInputSchema, UpsertCodeSetInputSchema, convertItemQty, importRowsTooLarge, itemCodeKey, itemHsDigits,
   itemLotFactorDeviates, itemNameKey, itemQuantity2, itemUnitKey, loadCodeList, rebaseQty2Factor, reasonVi, sheetOfLine, validateItemRows,
@@ -615,7 +615,6 @@ export const changeSourceSet = (codeSetId: string) =>
   });
 
 // ---------- mặt hàng ----------
-const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/gi, "d").toLowerCase();
 
 export const listCatalogItems = (input: ListCatalogItemsQueryInput = {}) =>
   read((db): CatalogItemPage => {
@@ -625,15 +624,13 @@ export const listCatalogItems = (input: ListCatalogItemsQueryInput = {}) =>
     const primary = cat.codeSets.find((s) => s.isPrimaryDisplay);
     const customs = defaultSet(cat);
     const q = query.q?.trim() ?? "";
-    const qName = q ? fold(itemNameKey(q)) : "";
-    const qCode = q ? itemCodeKey(q) : "";
     const rows: CatalogItemListRow[] = [];
     // Theo mã nối (như repo backend).
     for (const it of [...cat.items].sort((x, y) => x.itemNo.localeCompare(y.itemNo))) {
       if (it.status !== (query.status ?? "ACTIVE")) continue;
       if (query.kind && it.kind !== query.kind) continue;
       const own = cat.aliases.filter((a) => a.itemId === it.id && a.status === "ACTIVE");
-      if (q && !(it.itemNo.toLowerCase().includes(q.toLowerCase()) || (qName && fold(it.nameKey).includes(qName)) || (qCode && own.some((a) => a.codeKey.includes(qCode))))) continue;
+      if (q && !catalogItemMatches(q, query.searchIn, { itemNo: it.itemNo, nameKey: it.nameKey, codeKeys: own.map((a) => a.codeKey) })) continue;
       const missingCustoms = !customs || !own.some((a) => a.codeSetId === customs.id);
       const base = it.baseUnit ? itemUnitKey(it.baseUnit) : "";
       const missingFactor = !!base && own.some((a) => a.unit && itemUnitKey(a.unit) !== base && factorFor(cat, it, a.unit) === null);

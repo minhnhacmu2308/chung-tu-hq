@@ -2,7 +2,7 @@
 // Tab Mặt hàng (spec §6.1): bảng (thẻ trên mobile) – mã hiển thị chính, tên, HS, ĐVT gốc, loại, số bộ có mã, trạng thái.
 // Tìm phía server theo mọi mã / mã nối / tên (mã ở bộ khác không nằm trong dòng nên ô tìm của bảng không làm được); "Xem theo bộ mã" đổi cột
 // mã/tên/ĐVT; lọc loại / chưa có mã XNK / chưa có quy đổi; Thêm, Xuất Excel, Xuất bảng đối chiếu mã. Bấm dòng → panel chi tiết.
-import type { CatalogItemKind, CatalogItemListRow, CodeSet, ListCatalogItemsQueryInput } from "@kb/contracts";
+import type { CatalogItemKind, CatalogSearchField, CatalogItemListRow, CodeSet, ListCatalogItemsQueryInput } from "@kb/contracts";
 import {
   Button, Checkbox, createDataTableColumnHelper, DataTable, Field, fill, pickMessages, RecordCard, RowActions, Select, StatusBadge, statusLabel, toast, useMessages, useUiLocale, type UiLocale,
 } from "@kb/ui";
@@ -55,6 +55,8 @@ export function ItemsTab() {
   const locale = useUiLocale();
   const [search, setSearch] = useState("");
   const q = useDebouncedValue(search.trim());
+  // "Tìm theo" trong hộp lọc: "" = mọi thông tin (mã nối, tên, mã ở mọi bộ mã).
+  const [searchIn, setSearchIn] = useState<CatalogSearchField | "">("");
   const [setId, setSetId] = useState("");
   const [kind, setKind] = useState<CatalogItemKind | "">("");
   const [missingCustoms, setMissingCustoms] = useState(false);
@@ -72,7 +74,7 @@ export function ItemsTab() {
   const viewSet = sets.find((s) => s.id === setId) ?? null;
 
   const filters: ListCatalogItemsQueryInput = {
-    ...(q ? { q } : {}), ...(viewSet ? { codeSetId: viewSet.id } : {}), ...(kind ? { kind } : {}),
+    ...(q ? { q } : {}), ...(q && searchIn ? { searchIn } : {}), ...(viewSet ? { codeSetId: viewSet.id } : {}), ...(kind ? { kind } : {}),
     ...(missingCustoms ? { missingCustoms: true } : {}), ...(missingFactor ? { missingFactor: true } : {}),
     ...(status !== "ACTIVE" ? { status } : {}),
   };
@@ -131,7 +133,12 @@ export function ItemsTab() {
           pagination={{ mode: "controlled", ...page, rowCount: items.data?.total ?? 0, onChange: setPage, pageSizeOptions: [20, 50, 100, 200] }}
           onRowClick={(r) => setOpenId(r.id)}
           filtered={isFiltered}
-          search={{ value: search, onChange: reset(setSearch), placeholder: t.searchPlaceholder, label: t.searchLabel }}
+          search={{
+            value: search, onChange: reset(setSearch), placeholder: t.searchPlaceholder, label: t.searchLabel,
+            fields: [{ value: "ITEM_NO", label: t.colItemNo }, { value: "NAME", label: t.colName }, { value: "CODE", label: t.searchInCode }],
+            field: searchIn,
+            onFieldChange: (v) => reset(setSearchIn)(v as CatalogSearchField | ""),
+          }}
           // "Xem theo bộ mã" là cách hiển thị, không tính là lọc và không bị "Xóa bộ lọc" đặt lại
           activeFilters={[kind, missingCustoms, missingFactor, status !== "ACTIVE"].filter(Boolean).length}
           filters={

@@ -38,6 +38,7 @@ apps/web/src/
 |---|---|---|
 | Cảnh báo / lưu ý trên dòng bảng (HS, thuế, chính sách…) | `NoticeChip` (nhãn ngắn theo `code`, câu đầy đủ trong thẻ); lưu ý lặp trên nhiều dòng → gom một lần trên đầu bảng kèm "Áp dụng cho dòng …" | Câu cảnh báo dài `line-clamp` trong ô; tooltip `title` chứa cả đoạn văn; mọi cảnh báo cùng một màu vàng |
 | Danh sách mã Hải quan (chi cục A038, loại hình TYPE_CODE, tiền tệ CURRENCY, phương thức thanh toán PAYMENT…) | `useCodeList("<ID>")` từ danh mục `@kb/contracts` code-lists (ô mã trên tờ khai: `CodeInput`) | Mảng `{ value, label }` mã viết cứng trong feature / `*.vi.ts` |
+| Thanh nổi cho việc đang chờ trên cả trang (ô chưa lưu, "Lưu N thay đổi") | `FloatingActionBar` (`label`, `summary`, nút `size="sm"`: Hủy `secondary` + nút chính) | Tự dựng `div fixed bottom-…`; `Alert` dính đầu trang chứa nút lưu |
 | Thẻ chỉ số / KPI đầu trang | `StatCard` (số `number` tự chạy đếm) trong `Grid cols={{ base: 2, xl: 4 }} stagger` | Tự ghép `Card` + `CardTitle` thành KPI |
 | Form từ ~5 trường | Chia nhóm bằng `FormSection`; ô ngắn (ngày, mã, số ĐT) thêm `className="md:max-w-xs"` | Một cột trường dài hoặc lưới 2–3 cột đều nhau |
 | Trạng thái nghiệp vụ (hồ sơ, tờ khai, luồng, đối chiếu) | `StatusBadge` – thêm trạng thái mới vào `STATUS_META` (+ nhãn EN) của `@kb/ui` | Khai báo bảng `{ label, tone }` trong feature rồi dùng `Badge` |

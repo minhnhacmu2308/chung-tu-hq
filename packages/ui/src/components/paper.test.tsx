@@ -245,3 +245,52 @@ describe("PaperField", () => {
     await expectNoA11yViolations(container);
   });
 });
+
+describe("PaperField – sửa nhanh tại ô", () => {
+  it("pending: khung nét đứt + dấu 'Chưa lưu' (chỉ trên màn hình, ẩn khi in); thay dấu 'Đã sửa'", () => {
+    render(<PaperField label="Mã" value="D" ariaLabel="1.58 Mã" pending state="edited" onSelect={() => {}} />);
+    const cell = screen.getByRole("button");
+    expect(cell.className).toContain("border-dashed");
+    expect(cell).toHaveTextContent("Chưa lưu");
+    expect(cell).not.toHaveTextContent("Đã sửa");
+    expect(cell.querySelector('[data-paper-mark="pending"]')).not.toBeNull();
+  });
+
+  it("pending: nhãn đã dịch (en / zh)", () => {
+    const { unmount } = render(<UiLocaleProvider locale="en"><PaperField label="Code" value="D" ariaLabel="Code" pending /></UiLocaleProvider>);
+    expect(screen.getByText("Not saved")).toBeInTheDocument();
+    unmount();
+    render(<UiLocaleProvider locale="zh"><PaperField label="Code" value="D" ariaLabel="Code" pending /></UiLocaleProvider>);
+    expect(screen.getByText("未保存")).toBeInTheDocument();
+  });
+
+  it("edit: ô nhập trong khung ô, tự focus, con trỏ cuối; gõ / phím / mất focus gọi về nơi gọi; gợi ý gắn aria-describedby; không vi phạm a11y", async () => {
+    const onChange = vi.fn();
+    const onKeyDown = vi.fn();
+    const onBlur = vi.fn();
+    const { container } = render(
+      <div>
+        <PaperField label="Mã" value="D" ariaLabel="1.58 Mã xác định thời hạn nộp thuế" edit={{ value: "d", onChange, onKeyDown, onBlur, hint: "Nộp thuế ngay" }} />
+        <button type="button">khác</button>
+      </div>,
+    );
+    const input = screen.getByRole("textbox", { name: "1.58 Mã xác định thời hạn nộp thuế" }) as HTMLInputElement;
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(1);
+    expect(input).toHaveAccessibleDescription("Nộp thuế ngay");
+    expect(screen.queryByRole("button", { name: /1\.58/ })).toBeNull();
+    await userEvent.keyboard("x{Enter}");
+    expect(onChange).toHaveBeenCalledWith("dx");
+    expect(onKeyDown).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "khác" }));
+    expect(onBlur).toHaveBeenCalled();
+    await expectNoA11yViolations(container);
+  });
+
+  it("edit invalid: khung đỏ, aria-invalid", () => {
+    render(<PaperField label="Ngày" value="" ariaLabel="Ngày" edit={{ value: "31/02", onChange: () => {}, invalid: true, hint: "Ngày không hợp lệ" }} />);
+    const input = screen.getByRole("textbox", { name: "Ngày" });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input.closest("[data-paper-editing]")!.className).toContain("border-danger");
+  });
+});

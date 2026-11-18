@@ -1,6 +1,6 @@
 // Mặt hàng chuẩn: danh sách (tìm theo mã nối / tên / mọi mã, xem theo bộ mã), chi tiết, tạo (thẳng hoặc vào hàng chờ), sửa thông tin chung, ngưng dùng.
 import {
-  itemCodeKey, itemNameKey, itemUnitKey, rebaseQty2Factor, type CatalogItemDetail, type CatalogItemHistoryEntry, type CatalogItemListRow, type CatalogItemPage, type CreateItemInput, type ListCatalogItemsQuery, type UpdateItemInput,
+  catalogItemMatches, itemCodeKey, itemNameKey, itemUnitKey, rebaseQty2Factor, type CatalogItemDetail, type CatalogItemHistoryEntry, type CatalogItemListRow, type CatalogItemPage, type CreateItemInput, type ListCatalogItemsQuery, type UpdateItemInput,
 } from "@kb/contracts";
 import type { Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
@@ -40,9 +40,6 @@ export async function getItemHistory(deps: CatalogDeps, ctx: Ctx, id: string): P
   return ok(rows.map((r) => ({ key: r.key, oldValue: r.oldValue, newValue: r.newValue, userId: r.userId, at: r.at.toISOString() })));
 }
 
-/** Bỏ dấu tiếng Việt để tìm theo tên không phân biệt dấu ("chi may" thấy "Chỉ may"). */
-const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/gi, "d").toLowerCase();
-
 const missingFactorOf = (item: CatalogItemRow, aliases: ItemAliasRow[], convs: ItemConversionRow[]) => {
   if (!item.baseUnit) return false;
   const base = itemUnitKey(item.baseUnit);
@@ -66,15 +63,13 @@ export async function listItems(deps: CatalogDeps, ctx: Ctx, query: ListCatalogI
     const customs = sets.find((s) => s.isDefault);
 
     const q = query.q?.trim() ?? "";
-    const qLower = q.toLowerCase();
-    const qName = q ? fold(itemNameKey(q)) : "";
-    const qCode = q ? itemCodeKey(q) : "";
 
     const rows: CatalogItemListRow[] = [];
     for (const it of items) {
       const own = byItem.get(it.id) ?? [];
       if (query.kind && it.kind !== query.kind) continue;
-      if (q && !(it.itemNo.toLowerCase().includes(qLower) || (qName && fold(it.nameKey).includes(qName)) || (qCode && own.some((a) => a.codeKey.includes(qCode))))) continue;
+      // Tìm theo nhóm thông tin (searchIn) – cùng quy tắc với mock (catalogItemMatches).
+      if (q && !catalogItemMatches(q, query.searchIn, { itemNo: it.itemNo, nameKey: it.nameKey, codeKeys: own.map((a) => a.codeKey) })) continue;
       const missingCustoms = !customs || !own.some((a) => a.codeSetId === customs.id);
       const missingFactor = missingFactorOf(it, own, convByItem.get(it.id) ?? []);
       if (query.missingCustoms && !missingCustoms) continue;

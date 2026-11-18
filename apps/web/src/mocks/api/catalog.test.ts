@@ -47,6 +47,11 @@ describe("danh mục hàng hóa dùng chung (mock) – dữ liệu mẫu", () =>
   it("tìm theo mọi mã (viết khác) / tên không dấu; xem theo bộ Kho trả mã + ĐVT kho", async () => {
     expect((await listCatalogItems({ q: "VT0012" })).rows.map((r) => r.id)).toEqual(["prd_seed_1"]);
     expect((await listCatalogItems({ q: "day cap dien" })).total).toBe(2);
+    // Tìm theo: tên không khớp khi chỉ tìm theo mã; mã khớp khi tìm theo mã hàng (cùng quy tắc backend – catalogItemMatches).
+    expect((await listCatalogItems({ q: "day cap dien", searchIn: "CODE" })).total).toBe(0);
+    expect((await listCatalogItems({ q: "day cap dien", searchIn: "NAME" })).total).toBe(2);
+    expect((await listCatalogItems({ q: "VT0012", searchIn: "CODE" })).rows.map((r) => r.id)).toEqual(["prd_seed_1"]);
+    expect((await listCatalogItems({ q: "VT0012", searchIn: "NAME" })).total).toBe(0);
     const wh = await listCatalogItems({ codeSetId: SEED_SETS.WH, q: "DC-0001" });
     expect(wh.rows[0]).toMatchObject({ setCode: "dc 0001", setUnit: "ROL", baseUnit: "MTR" });
     expect((await listCatalogItems({ missingCustoms: true })).rows.every((r) => r.missingCustoms)).toBe(true);

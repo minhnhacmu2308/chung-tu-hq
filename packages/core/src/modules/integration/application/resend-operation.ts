@@ -3,7 +3,7 @@
 // gửi lại nguyên thông điệp đã ghim (kiểm ghim như mọi lần gửi lại) – chuỗi nối tiếp chạy tiếp từ tờ đó (spec §6.2.3).
 // Khai tạm lỗi mà Hải quan chưa trả số tờ khai → gửi lại được ngay.
 // Nội dung tờ khai (IDA/IDA01/EDA/EDA01): request dựng lại từ tờ khai hiện tại (như màn Xem trước), không phát lại body chốt lúc truyền.
-import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, queryOpFor, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
+import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, queryOpFor } from "@kb/contracts";
 import type { CustomsOperation, ResendResult } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
@@ -62,11 +62,9 @@ export async function resendOperation(deps: CustomsDeps, ctx: Ctx, dossierId: st
     return ok({ resent: false, message: `Hải quan đã ghi nhận ${op}, không cần gửi lại – bấm Tra cứu để cập nhật` });
   }
 
-  // Khai lại IDA/EDA chưa được ghi nhận = đăng ký mới: tỷ giá phải thuộc tuần đăng ký (như lúc truyền).
+  // Khai lại IDA/EDA chưa được ghi nhận: tỷ giá chỉ để ước tính thuế tạm – không chặn khi đã sang tuần tỷ giá mới.
   if (b === "IDA") {
     const snap = await deps.declarations.get(ctx.orgId, dossierId);
-    if (snap && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
-      return err(domainError("RATE_WEEK_CHANGED", `Tờ khai dùng tỷ giá tuần ${weekStart(snap.exchangeRateDate)} – đã sang tuần tỷ giá mới. Mở lại tờ khai để dựng lại với tỷ giá tuần này rồi duyệt và truyền lại`));
     // Lượt khai (ADR 0011 §4.2): gửi lại khai tạm một tờ chưa có số = khai tạm lần đầu (chuỗi nối tiếp các tờ sau) → kiểm lượt cho mọi tờ chưa có số.
     if (!result.declarationNo && snap) {
       const results = await deps.uow.asOrg(ctx, (r) => r.results.listForDossier(ctx.orgId, dossierId));

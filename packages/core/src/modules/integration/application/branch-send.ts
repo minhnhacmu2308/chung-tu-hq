@@ -1,6 +1,6 @@
 // Gửi nội dung tờ khai theo từng tờ khai nhánh (spec tách tờ khai §6.1–6.4): khóa outbox, ghim phiên bản + lần duyệt, guard từng tờ,
 // và enqueueBranchPreDeclare (chuỗi nối tiếp của worker, người khai bấm, truyền lại sau mở lại). Dùng chung submit / perform / worker.
-import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, orderedOperation, requiredGapsText, sameRateWeek, sheetCountChanged, sheetOrderWait, vnDateOf, weekStart, type CustomsOperation, type CustomsStage } from "@kb/contracts";
+import { branchCount, declarationRequiredGaps, lockedSheetCount, opFor, orderedOperation, requiredGapsText, sheetCountChanged, sheetOrderWait, type CustomsOperation, type CustomsStage } from "@kb/contracts";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
 import type { OrgId, UserId } from "../../../shared/ids.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -148,7 +148,7 @@ export function buildSheet(s: Sheet): Result<ReturnType<typeof buildFptRequest>>
 /**
  * Gửi nội dung tờ khai cho tờ `branch` theo giai đoạn của tờ (contentOpFor: IDA/EDA lần đầu hoặc sau gọi về, IDA01/EDA01 sau gọi sửa đổi)
  * – dùng cho chuỗi nối tiếp (worker), người khai bấm khai tạm tờ bị dừng, và truyền lại sau mở lại (spec §6.2–6.4).
- * Giữ bất biến 7 (tờ khai đã duyệt, HS đủ, không BLOCKER, đúng tuần tỷ giá) + guard của tờ; tờ 2..N dùng số tờ khai của tờ 1 (TK_FIC).
+ * Giữ bất biến 7 (tờ khai đã duyệt, HS đủ, không BLOCKER; tỷ giá khác tuần KHÔNG chặn – ADR 0019) + guard của tờ; tờ 2..N dùng số tờ khai của tờ 1 (TK_FIC).
  * Idempotent: tờ đã có outbox cùng nghiệp vụ đang chờ hoặc cùng ghim (job chạy lại) → không tạo thêm (chỉ đẩy lại job chưa từng xử lý);
  * hai bên cùng lúc (worker + người khai, hai job) → cùng khóa contentKey, unique chặn bản thứ hai.
  * `user`: lần gửi này là lần truyền của người khai → tờ khai SUBMITTED trước khi đẩy job (worker kiểm ghim trước khi gửi).
@@ -160,8 +160,6 @@ export async function enqueueBranchPreDeclare(deps: CustomsDeps, ctx: { orgId: O
     return err(domainError("INVALID_STATE", `Tờ khai đã mở lại, duyệt lại hoặc đổi phiên bản sau khi truyền (đã truyền v${mode.version}, hiện v${snap.version}) – không khai tạm tự động; duyệt lại rồi truyền lại`));
   if (mode.by === "user" && snap.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_REAPPROVED"));
   if (snap.unconfirmedHs > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs }));
-  if (!sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
-    return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
   const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
   if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
   const { results, outbox } = await deps.uow.asOrg(ctx, async (r) => ({ results: await r.results.listForDossier(ctx.orgId, dossierId), outbox: await r.outbox.listForDossier(ctx.orgId, dossierId) }));

@@ -1,7 +1,7 @@
 // GỠ LỖI TẠM (FPT_DEBUG_TRACE): xem trước body IDA/EDA (IDA01/EDA01 sau gọi sửa đổi) từng tờ sẽ gửi FPT – KHÔNG gọi FPT, không đổi trạng thái.
 // Dựng bằng đúng hàm của lần truyền thật (sheetOf + buildFptRequest như submitDeclaration/enqueueBranchPreDeclare, chỉ thị CTHQ như processOutbox,
-// rồi fptContentBody như FptVnaccsGateway – schema cổng, số tờ khai ở đầu tờ khai IDA01/EDA01). KHÔNG thay guard truyền: BLOCKER luật, HS chưa xác nhận,
-// tuần tỷ giá, thứ tự tờ… vẫn chỉ kiểm khi bấm Truyền. Tờ 2..N khi tờ 1 chưa có số: TK_FIC là số giả (cảnh báo). Còn blocker / sai đặc tả / thiếu ô bắt buộc vẫn trả body, kèm danh sách lỗi.
+// rồi fptContentBody như FptVnaccsGateway – schema cổng, số tờ khai ở đầu tờ khai IDA01/EDA01 và IDA/EDA khai tạm lại, tK_ID của IDA/EDA). KHÔNG thay guard truyền: BLOCKER luật, HS chưa xác nhận,
+// thứ tự tờ… vẫn chỉ kiểm khi bấm Truyền. Tờ 2..N khi tờ 1 chưa có số: TK_FIC là số giả (cảnh báo). Còn blocker / sai đặc tả / thiếu ô bắt buộc vẫn trả body, kèm danh sách lỗi.
 // Tờ chưa thể gửi nội dung (đã khai tạm, đã thông quan…) → không có trong danh sách. Bỏ tính năng: grep FPT_DEBUG_TRACE.
 import { branchCount, declarationRequiredGaps, requiredGapsText, type FptPreview, type FptPreviewSheet } from "@kb/contracts";
 import type { Ctx } from "../../../shared/ctx.js";
@@ -35,7 +35,9 @@ export async function previewFptPayload(deps: CustomsDeps, ctx: Ctx, dossierId: 
     const amend = op === "IDA01" || op === "EDA01";
     const cthq = amend ? result?.raw?.customsInfo?.directivesRaw : undefined;
     const outgoing = cthq ? { ...(built.request as Record<string, unknown>), [`objVN_${kind}_CTHQ`]: cthq } : built.request;
-    const body = fptContentBody(kind, outgoing, amend && result?.declarationNo ? { declarationNo: result.declarationNo } : undefined);
+    // Như lần gửi thật: IDA01/EDA01 và khai tạm lại sau gọi sửa (RECALLED) mang số tờ khai; IDA/EDA gửi kèm tK_ID = mã tờ (gateway.preDeclare).
+    const withNo = (amend || (result && stageOf(result) === "RECALLED")) && result?.declarationNo ? { declarationNo: result.declarationNo } : {};
+    const body = fptContentBody(kind, outgoing, { ...withNo, ...(!amend && result ? { ref: result.id } : {}) });
     // Schema cổng lỗi → không có body gửi được: hiện bản dựng (trước schema) kèm lỗi.
     const request = body.ok ? body.body : outgoing;
     const schemaIssues = body.ok ? [] : body.issues.map((i) => `${i.field}: ${i.message}`);

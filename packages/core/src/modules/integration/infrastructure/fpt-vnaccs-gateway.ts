@@ -38,12 +38,24 @@ export class FptHttpClientStub implements FptHttpClient {
 }
 
 type Obj = Record<string, unknown>;
-const ResultItemSchema = z.looseObject({ objMsgResult: z.looseObject({ decNumber: z.string().nullish(), code: z.string().nullish(), name: z.string().nullish() }).nullish() });
-/** Phần tử đầu của objEDA/objIDA (FPT trả mảng, mỗi lần gửi một tờ khai). */
-const firstResult = (env: Obj): { kind: "IDA" | "EDA"; item: Obj } | null => {
-  for (const kind of ["EDA", "IDA"] as const) {
-    const list = env[`obj${kind}`];
-    if (Array.isArray(list) && list[0] && typeof list[0] === "object") return { kind, item: ResultItemSchema.parse(list[0]) as Obj };
+/**
+ * Cách nhận ra kết quả của chính tờ khai vừa gửi: khai tạm lần đầu (IDA/EDA – chưa có số) theo TK_ID ta gửi kèm; các nghiệp vụ sau theo số tờ khai.
+ * API FPT hút cả hộp thư VNACCS trong mỗi lời gọi nên objIDA/objEDA/objAMA có thể kèm thông điệp của tờ khai khác – không lấy phần tử đầu.
+ */
+type ResultMatch = { tkId: string } | { no: string };
+const textOf = (v: unknown): string => (typeof v === "string" || typeof v === "number" ? String(v).trim() : "");
+/** Phần tử objIDA/objEDA của tờ khai cần tìm (theo `match`); không có → null. Chỉ xét danh sách đúng chiều `kind`. */
+const resultFor = (env: Obj, kind: "IDA" | "EDA", match: ResultMatch): { kind: "IDA" | "EDA"; item: Obj } | null => {
+  const list = env[`obj${kind}`];
+  if (!Array.isArray(list)) return null;
+  for (const x of list) {
+    if (!x || typeof x !== "object") continue;
+    const item = x as Obj;
+    const head = sub(item, `objVN_${kind}`);
+    const hit = "tkId" in match
+      ? textOf(head["tK_ID"]) === match.tkId
+      : repNo(head[numberField(kind)]) === match.no || repNo(msgOf(item)["decNumber"]) === match.no;
+    if (hit) return { kind, item };
   }
   return null;
 };
@@ -68,6 +80,47 @@ const kindOfOp = (op: string): "IDA" | "EDA" => (op.startsWith("E") || op === "I
 /** Số tờ khai VNACCS: tờ khai xuất bắt đầu bằng 3, nhập bằng 1 (quy ước đánh số VNACCS). */
 const directionOfNo = (no: string): "NK" | "XK" => (no.trim().startsWith("3") ? "XK" : "NK");
 const msgOf = (item: Obj | undefined) => (item?.["objMsgResult"] ?? {}) as Obj;
+
+// ---------------------------------------------------------------- VNACCSREP
+/** objMsgResult của một phần tử VNACCSREP (C# MsgResult: Time = giờ máy chủ FPT lúc xử lý, DecNumber = tiêu đề thông điệp). Sai kiểu → coi như trống. */
+const RepMsgSchema = z.looseObject({
+  code: z.string().nullish(), name: z.string().nullish(), type: z.string().nullish(), time: z.string().nullish(),
+  decNumber: z.union([z.string(), z.number()]).nullish(), ediBase64: z.string().nullish(),
+});
+const RepItemSchema = z.looseObject({ objMsgResult: RepMsgSchema.nullish().catch(null) });
+type RepItem = z.infer<typeof RepItemSchema>;
+type RepMsg = z.infer<typeof RepMsgSchema>;
+/** Khối thông báo trong phản hồi VNACCSREP (C# objVnaccsList) → loại + trường số (đặc tả docs/vnaccs-api: số tờ khai tK_ICN/tK_ECN, kiểm tra thực tế tK_K02, HYS số tiếp nhận tK_JNO). */
+const REP_NOTICE_BLOCKS = [
+  { key: "vaF8010", kind: "TAX", noField: "tK_ICN" },
+  { key: "vaF8030", kind: "FEE", noField: "tK_ICN" },
+  { key: "vaD8000", kind: "INSTRUCTION", noField: "tK_ICN", direction: "NK" },
+  { key: "vaE8000", kind: "INSTRUCTION", noField: "tK_ECN", direction: "XK" },
+  { key: "vaD4870", kind: "INSPECTION", noField: "tK_K02", direction: "NK" },
+  { key: "vaE4740", kind: "INSPECTION", noField: "tK_K02", direction: "XK" },
+  { key: "vaL0020", kind: "HYS", noField: "tK_JNO" },
+] as const;
+/** Danh sách phần tử của một khối (mảng; một đối tượng đơn cũng nhận). Phần tử không phải đối tượng bỏ qua (không có gì để giữ). */
+const repItems = (v: unknown): RepItem[] => (Array.isArray(v) ? v : v && typeof v === "object" ? [v] : []).flatMap((x) => {
+  const p = RepItemSchema.safeParse(x);
+  return p.success ? [p.data] : [];
+});
+/** Số tờ khai / số tiếp nhận: FPT trả number (Decimal) hoặc chuỗi; số không nguyên / 0 / rỗng → "". */
+const repNo = (v: unknown): string => {
+  if (typeof v === "number") return Number.isSafeInteger(v) && v > 0 ? String(v) : "";
+  if (typeof v === "string") return /^\d+$/.test(v.trim()) && Number(v.trim()) > 0 ? v.trim() : "";
+  return "";
+};
+const repHead = (kind: GatewayMessage["kind"], m: RepMsg, no: string): GatewayMessage => ({
+  kind, code: m.code ?? "", name: m.name ?? "", declarationNo: no, ...(m.time ? { at: m.time } : {}), ...(m.type ? { msgType: m.type } : {}), ...(m.ediBase64 ? { ediBase64: m.ediBase64 } : {}),
+});
+/** Nội dung thô để lưu hộp thư – bỏ ediBase64 (đã giữ riêng ở thông điệp). */
+const repDetail = (item: RepItem): Record<string, unknown> => {
+  const { objMsgResult, ...rest } = item;
+  if (!objMsgResult) return rest;
+  const { ediBase64: _edi, ...msg } = objMsgResult;
+  return { ...rest, objMsgResult: msg };
+};
 /** Ngày FPT `dd/MM/yyyy` (có thể kèm giờ phía sau) → `YYYY-MM-DD`; dạng khác → không có. */
 const fptDateToIso = (v: unknown): string | undefined => {
   const m = typeof v === "string" ? /^(\d{2})\/(\d{2})\/(\d{4})/.exec(v.trim()) : null;
@@ -93,17 +146,24 @@ export class FptVnaccsGateway implements CustomsGateway {
   }
   private async call(orgId: string, op: FptOperation, body: unknown, dossierId?: string) {
     const env = FptResponseEnvelopeSchema.parse(await this.http.post(op, body, await this.credsFor(orgId), { orgId, ...(dossierId ? { dossierId } : {}) }));
-    return { env: env as Obj, errors: toErrors(env), result: firstResult(env as Obj) };
+    return { env: env as Obj, errors: toErrors(env) };
   }
 
-  async preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId?: string }) {
-    const built = fptContentBody(msg.kind, msg.request);
+  /**
+   * Khai tạm IDA/EDA. Lần đầu: đầu tờ khai không có số, chọn kết quả theo tK_ID (= `ref`). Khai tạm lại sau gọi sửa (IDB/EDB):
+   * `declarationNo` = số đã cấp → gửi ở tK_ICN/tK_ECN (VNACCS hiểu là sửa đúng tờ khai tạm đó, không cấp số mới) và chọn kết quả theo số.
+   */
+  async preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId?: string; ref: string; declarationNo?: string }) {
+    const sentNo = declarationNoOf(msg.declarationNo);
+    const built = fptContentBody(msg.kind, msg.request, { ref: msg.ref, declarationNo: sentNo });
     if (!built.ok) return { externalId: "", errors: built.issues };
-    const { errors, result } = await this.call(orgId, msg.kind, built.body, msg.dossierId);
+    const headKey = `objVN_${msg.kind}`;
+    const { env, errors } = await this.call(orgId, msg.kind, built.body, msg.dossierId);
     if (errors) return { externalId: "", errors };
-    const head = sub(result?.item, `objVN_${msg.kind}`);
-    const no = String(head[numberField(msg.kind)] ?? (result?.item["objMsgResult"] as Obj | undefined)?.["decNumber"] ?? "");
-    if (!no) return { externalId: "", errors: [{ code: "E-FPT-NO-NUMBER", message: "FPT trả thành công nhưng không có số tờ khai", solution: "Tra cứu trạng thái hoặc liên hệ FPT" }] };
+    const result = (sentNo ? resultFor(env, msg.kind, { no: sentNo }) : null) ?? resultFor(env, msg.kind, { tkId: msg.ref });
+    const head = sub(result?.item, headKey);
+    const no = repNo(head[numberField(msg.kind)]) || repNo(msgOf(result?.item)["decNumber"]);
+    if (!no) return { externalId: "", errors: [{ code: "E-FPT-NO-NUMBER", message: `FPT trả thành công nhưng không có số tờ khai cho tờ này (TK_ID ${msg.ref})`, solution: "Tra cứu trạng thái hoặc liên hệ FPT" }] };
     return { externalId: no, declarationNo: no, ...(result ? { info: parseCustomsInfo(result.kind, result.item, new Date()) } : {}) };
   }
 
@@ -111,8 +171,9 @@ export class FptVnaccsGateway implements CustomsGateway {
     const kind = msg.kind === "IDC" ? "IDA" : "EDA";
     const no = declarationNoOf(msg.externalId);
     if (!no) return { accepted: false, errors: [noNumberError(msg.kind)] };
-    const { errors, result } = await this.call(orgId, msg.kind, { [numberField(kind)]: Number(no) }, msg.dossierId);
+    const { env, errors } = await this.call(orgId, msg.kind, { [numberField(kind)]: Number(no) }, msg.dossierId);
     if (errors) return { accepted: false, errors };
+    const result = resultFor(env, kind, { no });
     const channel = channelOf(sub(result?.item, `objVN_${kind}_TRANGTHAI`)["tK_LUONG"]);
     return { accepted: true, ...(channel ? { channel } : {}), ...(result ? { info: parseCustomsInfo(result.kind, result.item, new Date()) } : {}) };
   }
@@ -153,10 +214,16 @@ export class FptVnaccsGateway implements CustomsGateway {
       // Đủ 79 / 120 key theo mẫu request FPT (ô trống vẫn gửi) – shapeAmaBody.
       const { env, errors } = await this.call(orgId, "AMA", shapeAmaBody(parsed.data as Record<string, unknown>), msg.dossierId);
       if (errors) return { errors };
-      const list = env["objAMA"];
-      const head = Array.isArray(list) && list[0] && typeof list[0] === "object" ? sub(list[0] as Obj, "objVN_AMA") : {};
-      const syn = head["tK_SYN"];
-      return { ...(syn ? { receiptNo: String(syn) } : {}), note: "Hải quan tiếp nhận bản khai bổ sung" };
+      // Chọn bản khai bổ sung của chính tờ khai này: khai lại (đã có tK_SYN) theo tK_SYN, lần đầu theo số tờ khai gốc tK_ICN.
+      const req = sub(parsed.data as Obj, "objVN_AMA");
+      const wantSyn = repNo(req["tK_SYN"]);
+      const wantIcn = repNo(req["tK_ICN"]) || declarationNoOf(msg.externalId);
+      const list = Array.isArray(env["objAMA"]) ? (env["objAMA"] as unknown[]) : [];
+      const head = list.map((x) => (x && typeof x === "object" ? sub(x as Obj, "objVN_AMA") : {}))
+        .find((h) => (wantSyn ? repNo(h["tK_SYN"]) === wantSyn : false) || (!!wantIcn && repNo(h["tK_ICN"]) === wantIcn));
+      const syn = repNo(head?.["tK_SYN"]);
+      if (!syn) return { errors: [{ code: "E-AMA-NO-SYN", message: "FPT trả thành công nhưng không có số tờ khai bổ sung (tK_SYN) cho tờ khai này", solution: "Tra cứu thông điệp Hải quan hoặc liên hệ FPT – chưa có số thì không gửi AMB/AMC được" }] };
+      return { receiptNo: syn, note: "Hải quan tiếp nhận bản khai bổ sung" };
     }
     if (op === "AMB" || op === "AMC") {
       const syn = declarationNoOf(String((msg.request as Obj | undefined)?.["tK_SYN"] ?? ""));
@@ -169,8 +236,9 @@ export class FptVnaccsGateway implements CustomsGateway {
       const kind = kindOfOp(op);
       const no = declarationNoOf(msg.externalId);
       if (!no) return { errors: [noNumberError(op)] };
-      const { errors, result } = await this.call(orgId, op, { [numberField(kind)]: Number(no) }, msg.dossierId);
+      const { env, errors } = await this.call(orgId, op, { [numberField(kind)]: Number(no) }, msg.dossierId);
       if (errors) return { errors };
+      const result = resultFor(env, kind, { no });
       const code = msgOf(result?.item)["code"];
       return { note: `${op === "IDB" || op === "EDB" ? "Đã gọi tờ khai tạm về sửa" : "Đã gọi tờ khai về sửa đổi bổ sung"}${code ? ` (${String(code)})` : ""}` };
     }
@@ -189,8 +257,9 @@ export class FptVnaccsGateway implements CustomsGateway {
       const kind = kindOfOp(op);
       const no = declarationNoOf(msg.externalId);
       if (!no) return { errors: [noNumberError(op)] };
-      const { errors, result } = await this.call(orgId, op, { [numberField(kind)]: Number(no) }, msg.dossierId);
+      const { env, errors } = await this.call(orgId, op, { [numberField(kind)]: Number(no) }, msg.dossierId);
       if (errors) return { errors };
+      const result = resultFor(env, kind, { no });
       const channel = channelOf(sub(result?.item, `objVN_${kind}_TRANGTHAI`)["tK_LUONG"]);
       return { ...(channel ? { channel } : {}), note: "Hải quan đăng ký sửa đổi bổ sung" };
     }
@@ -266,34 +335,42 @@ export class FptVnaccsGateway implements CustomsGateway {
     const op = dir === "XK" ? "IEX" : "IID";
     const no = declarationNoOf(externalId);
     if (!no) throw domainError("GATEWAY_ERROR", `Tra cứu: số tờ khai "${externalId}" không hợp lệ`);
-    const { errors, result } = await this.call(orgId, op, { [numberField(dir === "XK" ? "EDA" : "IDA")]: Number(no) }, dossierId);
+    const kind = dir === "XK" ? "EDA" : "IDA";
+    const { env, errors } = await this.call(orgId, op, { [numberField(kind)]: Number(no) }, dossierId);
     if (errors) throw domainError("GATEWAY_ERROR", `Tra cứu tờ khai ${externalId} lỗi: ${errors.map((e) => `${e.code}: ${e.message}`).join("; ")}`);
+    const result = resultFor(env, kind, { no });
     if (!result) throw domainError("GATEWAY_ERROR", `FPT không trả thông tin tờ khai ${externalId}`);
     return statusOf(result.kind, result.item);
   }
 
-  /** VNACCSREP: thông điệp loại P của tài khoản VNACCS (objIDA/objEDA/objAMA, mỗi phần tử có objMsgResult). Lỗi tài khoản → ném (người gọi bỏ qua lượt này). */
+  /**
+   * VNACCSREP: mọi thông điệp của tài khoản VNACCS – tờ khai (objIDA/objEDA/objAMA) và thông báo (vaF8010, vaF8030, vaD8000/vaE8000, vaD4870/vaE4740,
+   * vaL0020). FPT lấy khỏi hộp thư VNACCS rồi mới trả (không trả lại) → KHÔNG bỏ phần tử nào: thiếu số → declarationNo rỗng (người gọi lưu UNMATCHED).
+   * errorList: không kèm dữ liệu → coi là lỗi tài khoản, ném (người gọi bỏ qua lượt); kèm dữ liệu → giữ dữ liệu, lỗi thành một thông điệp ERROR.
+   */
   async pullMessages(orgId: string): Promise<GatewayMessage[]> {
     const env = FptResponseEnvelopeSchema.parse(await this.http.post("VNACCSREP", {}, await this.credsFor(orgId), { orgId })) as Obj;
     const errors = toErrors(env as Parameters<typeof toErrors>[0]);
-    if (errors) throw domainError("GATEWAY_ERROR", `Lấy thông điệp Hải quan lỗi: ${errors.map((e) => `${e.code}: ${e.message}`).join("; ")}`);
     const out: GatewayMessage[] = [];
     for (const kind of ["IDA", "EDA", "AMA"] as const) {
-      const list = env[`obj${kind}`];
-      if (!Array.isArray(list)) continue;
-      for (const raw of list) {
-        if (!raw || typeof raw !== "object") continue;
-        const item = raw as Obj;
-        const m = msgOf(item);
+      for (const item of repItems(env[`obj${kind}`])) {
+        const m = item.objMsgResult ?? {};
         const head = sub(item, `objVN_${kind}`);
-        const no = String(kind === "AMA" ? head["tK_SYN"] ?? m["decNumber"] ?? "" : head[numberField(kind)] ?? m["decNumber"] ?? "");
-        if (!no) continue;
-        const edi = typeof m["ediBase64"] === "string" && m["ediBase64"] ? m["ediBase64"] : undefined;
-        out.push({
-          kind, code: String(m["code"] ?? ""), name: String(m["name"] ?? ""), declarationNo: no, ...(m["time"] ? { at: String(m["time"]) } : {}), ...(kind === "AMA" ? {} : { status: statusOf(kind, item) }),
-          ...(m["type"] ? { msgType: String(m["type"]) } : {}), ...(edi ? { ediBase64: edi } : {}),
-        });
+        const no = repNo(kind === "AMA" ? head["tK_SYN"] : head[numberField(kind)]) || repNo(m.decNumber);
+        out.push({ ...repHead(kind, m, no), ...(kind === "AMA" ? {} : { status: statusOf(kind, item), direction: kind === "EDA" ? "XK" as const : "NK" as const }) });
       }
+    }
+    for (const block of REP_NOTICE_BLOCKS) {
+      for (const item of repItems(env[block.key])) {
+        const m = item.objMsgResult ?? {};
+        const no = repNo(item[block.noField]) || repNo(m.decNumber);
+        const direction = "direction" in block ? block.direction : block.kind === "HYS" || !no ? undefined : directionOfNo(no);
+        out.push({ ...repHead(block.kind, m, no), ...(direction ? { direction } : {}), detail: repDetail(item) });
+      }
+    }
+    if (errors) {
+      if (!out.length) throw domainError("GATEWAY_ERROR", `Lấy thông điệp Hải quan lỗi: ${errors.map((e) => `${e.code}: ${e.message}`).join("; ")}`);
+      out.push({ kind: "ERROR", code: errors[0]!.code, name: "Lỗi Hải quan trả kèm thông điệp", declarationNo: "", errors });
     }
     return out;
   }
@@ -352,7 +429,7 @@ const containerListHead = (r: Omit<ContainerListGatewayRequest, "rows">) => ({
   mA_DAI_LY: r.agent?.taxCode ?? "", teN_DAI_LY: r.agent?.name ?? "", useR_ID: r.userId,
 });
 
-/** Trạng thái tờ khai từ một phần tử objIDA/objEDA (TRANGTHAI: T/A/C/TE/A01/E/R, luồng, thông quan). */
+/** Trạng thái tờ khai từ một phần tử objIDA/objEDA (TRANGTHAI: T/A/C/TE/A01/E/R, luồng, thông quan). R = Hủy (contracts FPT_DECLARATION_STATES) – VNACCS không có trạng thái "từ chối" sau khai chính thức. */
 function statusOf(kind: "IDA" | "EDA", item: Obj): GatewayStatus {
   const tt = sub(item, `objVN_${kind}_TRANGTHAI`);
   const no = sub(item, `objVN_${kind}`)[numberField(kind)];
@@ -360,7 +437,7 @@ function statusOf(kind: "IDA" | "EDA", item: Obj): GatewayStatus {
   const cleared = Number(tt["tK_THONGQUAN"] ?? 0) === 1;
   const channel = channelOf(tt["tK_LUONG"]);
   const label = cleared ? "Đã thông quan" : (FPT_DECLARATION_STATES as Record<string, string>)[code] ?? code;
-  return { status: label, cleared, info: parseCustomsInfo(kind, item, new Date()), ...(code === "R" ? { rejected: true } : {}), ...(no ? { declarationNo: String(no) } : {}), ...(channel ? { channel } : {}) };
+  return { status: label, cleared, info: parseCustomsInfo(kind, item, new Date()), ...(code === "R" ? { cancelled: true } : {}), ...(no ? { declarationNo: String(no) } : {}), ...(channel ? { channel } : {}) };
 }
 
 /** Số tờ khai gửi FPT (FPT nhận kiểu số): thiếu hoặc không phải chữ số → null (báo lỗi tại chỗ, không gửi tK_…: 0). */

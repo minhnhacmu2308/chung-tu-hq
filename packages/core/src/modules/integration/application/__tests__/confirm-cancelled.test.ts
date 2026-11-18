@@ -164,8 +164,8 @@ describe("tờ đang gửi / kết quả về muộn sau khi hủy", () => {
   });
   it("late_poll_result_keeps_cancelled", async () => {
     seed(h, 1, "DECLARED");
-    const query = h.deps.gateway.queryStatus.bind(h.deps.gateway);
-    h.deps.gateway.queryStatus = async (...a) => { cancelSheet(); return { ...(await query(...a)), cleared: true }; };
+    // Người khai xác nhận hủy đúng lúc thông điệp thông quan (VNACCSREP) về muộn.
+    h.deps.gateway.pullMessages = async () => { cancelSheet(); return [{ kind: "IDA", code: "VAD1LF0", name: "Thông quan", declarationNo: "104000000001", status: { status: "Đã thông quan", cleared: true } }]; };
     expect(unwrap(await pollStatus(h.deps, { orgId: ORG, userId: "usr_chau", dossierId: D, attempt: 1 }))).toEqual({ done: true, cleared: false });
     expect(stageOf(sheet())).toBe("CANCELLED");
     expect(sheet().clearanceStatus).toBe("WAITING");

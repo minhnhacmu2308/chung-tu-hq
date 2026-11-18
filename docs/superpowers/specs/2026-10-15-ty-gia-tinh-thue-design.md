@@ -42,7 +42,7 @@ Ngày lễ không cần lịch nghỉ: tối thứ Năm nghỉ lễ, bảng vẫ
 | R5 | Lấy cột `Transfer`; bỏ dòng có giá trị `-`. Số `26,123.45` → chuỗi thập phân `"26123.45"` (Decimal, không `number`) | Bất biến 3 |
 | R6 | Hết khung thử lại mà vẫn lỗi → **thông báo cho nhân viên nền tảng** (quyền `PLATFORM`) + ghi nhật ký; tuần đó tờ khai dùng tỷ giá tuần trước kèm cảnh báo (hành vi "gần nhất ≤ ngày" hiện có) cho tới khi nhập tay | Không chặn khai báo; lỗi hiện rõ |
 | R7 | Ngoại tệ Vietcombank không công bố (tỷ giá chéo NHNN): **nhập tay** ở khu Quản trị. Chưa có → giữ hành vi hiện tại (chỉ tiêu tỷ giá nghi ngờ, log agent cảnh báo) | NHNN chưa có nguồn máy đọc ổn định |
-| R8 | **Chặn truyền** tờ khai nếu ngày truyền thuộc tuần khác tuần của tỷ giá đã dùng: "Tỷ giá đã sang tuần mới – mở lại tờ khai để cập nhật". Cùng kiểu với các luật chặn truyền hiện có | Tờ khai duyệt tuần này, truyền tuần sau sẽ sai thuế |
+| R8 | ~~Chặn truyền tờ khai nếu ngày truyền thuộc tuần khác tuần của tỷ giá đã dùng~~ – **bỏ theo ADR 0019** (19/11/2026): tỷ giá chỉ để ước tính thuế tạm, VNACCS tự tính thuế theo tỷ giá ngày đăng ký; sang tuần mới không chặn truyền | Chủ sản phẩm chốt: chặn vì tỷ giá khác thời điểm là sai nghiệp vụ |
 | R9 | Màn Review hiện: "Tỷ giá USD 26.123 – áp dụng tuần 13/10–19/10, Vietcombank chốt 20:00 09/10" (hoặc "nhập tay bởi …") | Người khai và người duyệt biết nguồn |
 
 ## 5. Thành phần
@@ -64,7 +64,7 @@ Ngày lễ không cần lịch nghỉ: tối thứ Năm nghỉ lễ, bảng vẫ
   - `HttpVcbRateSource` (fetch, timeout 20s).
   - Repo ghi `exchange_rates` qua role nền tảng.
   - Migration thêm cột (R2) + quyền ghi cho role nền tảng.
-- Luật chặn truyền R8 đặt chung chỗ với các guard truyền hiện có.
+- ~~Luật chặn truyền R8~~ – bỏ (ADR 0019).
 
 **worker**: job + lịch `upsertJobScheduler` (`30 16 * * 4` UTC) + thử lại (R3).
 
@@ -93,7 +93,7 @@ Ngày lễ không cần lịch nghỉ: tối thứ Năm nghỉ lễ, bảng vẫ
   - Lỗi → không ghi gì.
   - Hết khung → thông báo nhân viên.
   - `upsertExchangeRate` cần `PLATFORM`.
-  - Luật R8 chặn/không chặn.
+  - (R8 đã bỏ – ADR 0019: tỷ giá khác tuần vẫn truyền được.)
 - Repo integration (Testcontainers): upsert, quyền role.
 - e2e: Quản trị thêm tỷ giá → dựng tờ khai dùng tỷ giá đó và hiện nguồn.
 

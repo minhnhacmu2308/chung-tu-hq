@@ -2,7 +2,7 @@
 // nghiệp vụ gửi nội dung giữ bất biến 7, tạo outbox (idempotency theo số lần gửi) → job customs-send. Tra cứu IID/IEX trả lời ngay.
 // Lô nhiều tờ: `branch` (mặc định 1) – kết quả, giai đoạn, nhật ký, outbox của tờ khai nhánh đó (spec tách tờ khai §6.3).
 import {
-  baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, operationAvailability, orderedOperation, queryOpFor, sameRateWeek, sheetApproved, vnDateOf, weekStart,
+  baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, operationAvailability, orderedOperation, queryOpFor, sheetApproved,
   type CustomsOperation, type OperationResult,
 } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
@@ -11,15 +11,14 @@ import { err, ok, type Result } from "../../../shared/result.js";
 import { meterSafely } from "../../../shared/usage.js";
 import { branchPayload, sheetSnapshot } from "../domain/branches.js";
 import { buildFptRequest } from "../domain/declaration-to-fpt.js";
-import { mergeCustomsInfo } from "../domain/customs-info.js";
 import { buildAmaRequest } from "../domain/post-amendment.js";
-import { coarseState, stageOf, TERMINAL } from "../domain/state-machine.js";
+import { coarseState, stageOf } from "../domain/state-machine.js";
 import { checkFirstSendAllowance, unnumberedSheets } from "./billing-sheets.js";
 import { availabilityInput, hasBlockingPending, kvgsFlowOf, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, DeclarationSnapshot, OutboxRow, ResultRow } from "./customs-ports.js";
 import { auditHysWaiver, hysGuard, recordHysWaiver, type HysWaiver } from "./hys-guard.js";
 import { pullCustomsMessages } from "./customs-messages.js";
-import { syncDossierClearance } from "./poll-status.js";
+import { applyCustomsResponse, emptyTouch, finishDossier, recordApplied } from "./_customs-response.js";
 import { resultsSentError } from "./sent-sheets.js";
 import { beginPostAmendment, openPostAmendment } from "./post-amendment.js";
 import { buildSheet, contentKey, lineIdsOf, declareBlockError, enqueueBranchPreDeclare, gapsError, pinOf, pinOfOutbox, sheetCountError, sheetOf, sheetOrderError } from "./branch-send.js";
@@ -124,8 +123,6 @@ export async function performOperationChecked(deps: CustomsDeps, ctx: ActorCtx, 
       if (!hys.ok) return hys;
       waiver = hys.value;
     }
-    if (baseOp(op) === "IDA" && !sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
-      return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REBUILD", { week: weekStart(snap.exchangeRateDate) }));
     if (of > 1) {
       // Lô nhiều tờ: cùng guard của tờ như chuỗi nối tiếp (ô bắt buộc trên dòng của tờ, blocker tách tờ, đặc tả FPT); tờ 2..N dùng số tờ khai của tờ 1 (TK_FIC).
       // Ghim phiên bản + lần duyệt (worker chỉ gửi khi còn khớp, rồi nối tiếp tờ sau cùng ghim).
@@ -222,23 +219,15 @@ async function queryNow(deps: CustomsDeps, ctx: ActorCtx, dossierId: string, dir
   await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: result.branch, operation: op, direction: "OUT", result: "OK", summary: `Tra cứu trạng thái tờ khai (${op})`, payloadMasked: { nghiepVu: op, soToKhai: result.declarationNo }, externalRef: result.externalId, at: now() }));
   const st = await deps.gateway.queryStatus(ctx.orgId, result.externalId, dossierId, direction);
   await meterSafely(deps.usage, { orgId: ctx.orgId, dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: op, quantity: 1 });
-  const stage = stageOf(result);
-  const cleared = st.cleared && (stage === "DECLARED" || stage === "AMEND_PRE_DECLARED" || stage === "AMEND_RECALLED");
-  const nextStage = st.rejected ? "REJECTED" : cleared ? "CLEARED" : stage;
-  const terminal = await deps.uow.asOrg(ctx, async (r) => {
+  const applied = await deps.uow.asOrg(ctx, async (r) => {
     await r.messages.insert({ id: deps.idGen.next("msg"), orgId: ctx.orgId, dossierId, branch: result.branch, operation: op, direction: "IN", result: "OK", summary: `Trạng thái tờ khai: ${st.status}`, payloadMasked: { nghiepVu: op, soToKhai: st.declarationNo ?? result.declarationNo, trangThai: st.status, phanLuong: st.channel }, externalRef: result.externalId, at: now() });
-    // Đọc lại khóa dòng: tờ đã sang giai đoạn cuối (xác nhận hủy / từ chối) → không đổi giai đoạn.
-    const current = await r.results.getForUpdate(ctx.orgId, dossierId, result.branch);
-    if (current && TERMINAL.has(stageOf(current))) return true;
-    await r.results.upsert({
-      ...result, state: coarseState(nextStage, result.state === "SEND_FAILED" && nextStage === stage),
-      ...(stage !== "NOT_SENT" && stage !== "PRE_DECLARED" && stage !== "RECALLED" ? { clearanceStatus: st.rejected ? "REJECTED" as const : st.cleared ? "CLEARED" as const : "INSPECTING" as const } : {}),
-      raw: { ...(result.raw ?? {}), stage: nextStage, lastStatus: st.status, ...(st.info ? { customsInfo: mergeCustomsInfo(result.raw?.customsInfo, { ...st.info, receivedAt: now().toISOString() }) } : {}) }, updatedAt: now(),
-    });
-    return false;
+    // Đọc lại khóa dòng rồi áp bằng cùng hàm với thông điệp VNACCSREP (giai đoạn cuối → không đổi; chỉ tờ chờ thông quan mới đổi giai đoạn).
+    const current = (await r.results.getForUpdate(ctx.orgId, dossierId, result.branch)) ?? result;
+    return applyCustomsResponse(r, current, { kind: "STATUS", status: st }, now());
   });
-  if (cleared && !terminal) await syncDossierClearance(deps, ctx, dossierId);
-  await deps.dossiers.publish(ctx.orgId, dossierId, { type: "customs.message" });
+  const touch = emptyTouch();
+  recordApplied(touch, result.branch, applied);
+  await finishDossier(deps, ctx, dossierId, touch);
   return ok({ sent: false, message: `Trạng thái tờ khai: ${st.status}` });
 }
 

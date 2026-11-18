@@ -37,6 +37,8 @@ export type ResultRaw = {
   /** C6: thời điểm (ISO, UTC) hệ thống nhận / lưu số tờ khai hiện tại của tờ – ngày ghi danh mục khi Hải quan không trả ngày đăng ký. */
   numberAt?: string;
   /** Người khai xác nhận Hải quan đã hủy tờ khai (stage CANCELLED): mã lý do danh mục CANCEL_REASON, ngày, số văn bản, ghi chú, người ghi + lúc ghi (ISO UTC). */
+  /** Lúc (ISO, UTC) Hải quan báo tờ khai đã hủy (TK_TRANGTHAI "R" qua VNACCSREP / IID / IEX) – chờ người duyệt xác nhận; ngừng hỏi trạng thái. */
+  cancelReportedAt?: string;
   cancellation?: { reason: string; date: string; docNo?: string; note?: string; by: string; at: string };
 };
 

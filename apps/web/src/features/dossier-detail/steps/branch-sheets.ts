@@ -87,7 +87,7 @@ export const anySending = (s: SubmissionView) =>
 
 /**
  * Nhịp làm mới trạng thái truyền: đang gửi → 3 giây (phản hồi có thông báo – từ chối, phân luồng, thông quan… – đến ngay qua luồng realtime,
- * use-notification-stream làm mới submission của hồ sơ; nhịp này lo phần không có thông báo như IDA được nhận số, thử lại); chỉ còn chờ Hải quan phân luồng / thông quan (worker hỏi 5 phút/lần, người khai bấm
+ * use-notification-stream làm mới submission của hồ sơ; nhịp này lo phần không có thông báo như IDA được nhận số, thử lại); chỉ còn chờ Hải quan phân luồng / thông quan (worker lấy VNACCSREP 30 phút/lần, người khai bấm
  * Tra cứu khi cần – thống nhất với đội nghiệp vụ 01/11/2026) → 30 giây; không chờ gì → không hỏi.
  */
 export const submissionRefetchMs = (s: SubmissionView): number | false => (anySending(s) ? 3000 : anyInProgress(s) ? 30_000 : false);

@@ -4,7 +4,7 @@
 // (outbox có ghim phiên bản) → tự gửi nội dung tờ kế tiếp cần gửi (NOT_SENT/RECALLED → IDA, AMEND_RECALLED → IDA01; TK_FIC = số tờ khai nhánh 1)
 // cùng ghim; tờ đã có outbox cùng lần truyền → không tạo thêm; khóa theo nhánh + unique chặn tạo trùng (chainNextBranch).
 // Cùng cơ chế: chuỗi người khai bấm một lần cho cả lô – khai chính thức cả lô (chain "declare"), gọi về tất cả (chain "recall", lệnh cuối xong → tự mở lại tờ khai).
-import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, isRecallOperation, queryOpFor, stageAfter, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
+import { baseOp, branchCount, CUSTOMS_OPERATIONS, isContentOperation, isRecallOperation, queryOpFor, type CustomsInfo, type CustomsOperation } from "@kb/contracts";
 import { z } from "zod";
 import { countCustomsMessage, countDeclarationAccepted } from "../../../observability/index.js";
 import { domainError, reasonError, type DomainError } from "../../../shared/errors.js";
@@ -14,13 +14,11 @@ import { meterSafely } from "../../../shared/usage.js";
 import { chargeSafely } from "../../../shared/billing.js";
 import { maskPayload } from "../domain/mask.js";
 import { mergeCustomsInfo } from "../domain/customs-info.js";
-import { coarseState, stageOf, TERMINAL, type ResultRaw } from "../domain/state-machine.js";
+import { coarseState, stageOf, type ResultRaw } from "../domain/state-machine.js";
 import { CHANNEL_NOTES, OPERATION_LABELS } from "./_customs-view.js";
 import type { CustomsDeps, CustomsRepos, DeclarationSnapshot, GatewayError, MessageRow, OutboxRow, ResultRow } from "./customs-ports.js";
-import { parseLineIds, reconcileCatalogDeclarationNo } from "./_catalog-numbers.js";
-import { applyPostAmendmentResult } from "./post-amendment.js";
-import { syncDossierClearance } from "./poll-status.js";
-import { parseSent } from "./sent-sheets.js";
+import { reconcileCatalogDeclarationNo } from "./_catalog-numbers.js";
+import { applyCustomsResponse, emptyTouch, finishDossier, recordApplied } from "./_customs-response.js";
 import { contentOpFor, declareOpFor, enqueueBranchPreDeclare, outboxVersion, stalePinReason } from "./branch-send.js";
 import { performOperationChecked } from "./perform-operation.js";
 import { MAX_ATTEMPTS } from "./_outbox.js";
@@ -142,7 +140,7 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
         const qop = queryOpFor(dossier.direction);
         await meterSafely(deps.usage, { orgId: input.orgId, dossierId: ob.dossierId, provider: "CUSTOMS_HUB", kind: "CUSTOMS_QUERY", operation: qop, quantity: 1, meta: { outboxId: ob.id } });
       }
-      const res = already?.declarationNo ? { externalId: result.externalId!, declarationNo: already.declarationNo, ...(already.info ? { info: already.info } : {}) } : await deps.gateway.preDeclare(input.orgId, { kind: op === "EDA" ? "EDA" : "IDA", request: payload.request, dossierId: ob.dossierId }, ob.idempotencyKey);
+      const res = already?.declarationNo ? { externalId: result.externalId!, declarationNo: already.declarationNo, ...(already.info ? { info: already.info } : {}) } : await deps.gateway.preDeclare(input.orgId, { kind: op === "EDA" ? "EDA" : "IDA", request: payload.request, dossierId: ob.dossierId, ref: result.id, ...(stage === "RECALLED" && result.declarationNo ? { declarationNo: result.declarationNo } : {}) }, ob.idempotencyKey);
       if (!already?.declarationNo) await meterSent();
       const no = res.declarationNo ?? result.declarationNo;
       outcome = res.errors?.length
@@ -191,38 +189,12 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   const failed = !!outcome.errors?.length;
   countCustomsMessage(op, failed ? "rejected" : "ok");
   if (!failed && b === "IDC") countDeclarationAccepted(op === "EDC" ? "EDC" : "IDC");
-  const nextStage = failed ? stage : stageAfter(stage, op) ?? stage;
-  const { rejection: prevRejection, sent: prevSent, sentLineIds: prevLineIds, ...prevRaw } = result.raw ?? {};
-  // Lô nhiều tờ: nội dung tờ Hải quan vừa nhận (IDA/IDA01/EDA/EDA01 thành công) = ảnh chụp ghi lúc dựng outbox (spec §2.5). Outbox không mang ảnh chụp
-  // (lô một tờ, outbox cũ) → bỏ ảnh chụp cũ (không còn đúng nội dung Hải quan giữ). Gửi khác / bị từ chối → giữ nguyên.
-  // Cùng quy tắc cho id dòng đã gửi (payload.lineIds – mọi lô; C6 lấy mặt hàng theo đúng dòng đã gửi).
-  const contentSent = !failed && isContentOperation(op) && op !== "AMA";
-  const sent = contentSent ? parseSent((ob.payload as { sent?: unknown } | null)?.sent) : prevSent ?? null;
-  const sentLineIds = contentSent ? parseLineIds((ob.payload as { lineIds?: unknown } | null)?.lineIds) : prevLineIds ?? null;
-  // Lỗi có nội dung từ Hải quan → lưu để màn Review gắn vào ô chỉ tiêu; gửi lại thành công cùng nghiệp vụ → xóa.
-  const rejection = failed
-    ? { operation: op, at: now().toISOString(), errors: outcome.errors!.map((e) => ({ code: e.code, message: e.message, ...(e.solution ? { solution: e.solution } : {}), ...(e.field ? { field: e.field } : {}), ...(e.line ? { line: e.line } : {}) })) }
-    : prevRejection && prevRejection.operation !== op ? prevRejection : undefined;
-  const raw: ResultRaw = {
-    ...prevRaw, ...(outcome.patch.raw ?? {}), stage: nextStage, ...(rejection ? { rejection } : {}), ...(sent ? { sent } : {}), ...(sentLineIds ? { sentLineIds } : {}),
-    ...(failed ? {} : { done: [...new Set([...(result.raw?.done ?? []), op])] }),
-    ...(outcome.side ? { side: { ...(result.raw?.side ?? {}), [op]: outcome.side } } : {}),
-    ...(!failed && (b === "IDE") ? { amendments: (result.raw?.amendments ?? 0) + 1 } : {}),
-    ...(!failed && op === "AMC" ? { postAmendments: (result.raw?.postAmendments ?? 0) + 1 } : {}),
-    // C6: lúc nhận số (mới / đổi) – ngày ghi danh mục khi Hải quan không trả ngày đăng ký (kể cả khi ghi bù sau crash).
-    ...(!failed && outcome.patch.declarationNo && outcome.patch.declarationNo !== result.declarationNo ? { numberAt: now().toISOString() } : {}),
-  };
   const { raw: _r, ...patch } = outcome.patch;
-  const saved: ResultRow = {
-    ...result, ...patch, raw, state: coarseState(nextStage, failed),
-    ...(!failed && op === "AMC" ? { clearanceStatus: "CLEARED" as const } : {}),
-    updatedAt: now(),
-  };
-  // Đọc lại khóa dòng trong giao dịch ghi: tờ đã chuyển giai đoạn cuối (người khai xác nhận hủy / bị từ chối) trong lúc gửi → giữ nguyên giai đoạn,
-  // chỉ ghi nhật ký + trạng thái outbox (kết quả về muộn không "hồi sinh" tờ đã hủy).
-  const terminal = await deps.uow.asOrg(ctx, async (r) => {
+  // Đọc lại khóa dòng trong giao dịch ghi rồi áp phản hồi bằng hàm chung (applyCustomsResponse – cùng hàm với VNACCSREP, IID/IEX):
+  // tờ đã chuyển giai đoạn cuối (người khai xác nhận hủy / bị từ chối) trong lúc gửi → giữ nguyên, chỉ ghi nhật ký + trạng thái outbox
+  // (kết quả về muộn không "hồi sinh" tờ đã hủy).
+  const applied = await deps.uow.asOrg(ctx, async (r) => {
     const current = await r.results.getForUpdate(input.orgId, ob.dossierId, ob.branch);
-    const locked = !!current && TERMINAL.has(stageOf(current));
     if (failed) {
       await msg(r, { operation: op, direction: "IN", result: "ERROR", summary: `${OPERATION_LABELS[op]} bị từ chối: ${fmtErrors(outcome.errors!)}`, payloadMasked: { errorList: outcome.errors }, externalRef: result.externalId });
       await r.outbox.update(ob.orgId, ob.id, { status: "FAILED", lastError: fmtErrors(outcome.errors!), updatedAt: now() });
@@ -230,16 +202,18 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       await msg(r, { operation: op, direction: "IN", result: "OK", summary: outcome.summary, payloadMasked: maskPayload(outcome.payload), externalRef: patch.externalId ?? result.externalId });
       await r.outbox.update(ob.orgId, ob.id, { status: "SENT", lastError: null, updatedAt: now() });
     }
-    // Sau thông quan: AMA/AMB/AMC đổi trạng thái bản khai bổ sung (tờ khai gốc giữ nguyên).
-    if (locked) return true;
-    if (!failed && (op === "AMA" || op === "AMB" || op === "AMC")) await applyPostAmendmentResult(r, input.orgId, ob.dossierId, op, now(), { receiptNo: outcome.receiptNo }, ob.branch);
-    await r.results.upsert(saved);
-    return false;
+    return applyCustomsResponse(r, current ?? result, {
+      kind: "OPERATION", op, outbox: ob, patch: outcome.patch,
+      ...(failed ? { errors: outcome.errors! } : {}), ...(outcome.side ? { side: outcome.side } : {}), ...(outcome.receiptNo ? { receiptNo: outcome.receiptNo } : {}),
+    }, now());
   });
-  if (terminal) {
-    await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
+  const touch = emptyTouch();
+  recordApplied(touch, ob.branch, applied);
+  if (applied.locked || !applied.saved) {
+    await finishDossier(deps, ctx, ob.dossierId, touch);
     return ok({ status: failed ? "FAILED" : "SENT", next: null });
   }
+  const saved = applied.saved;
 
   // Lượt khai (ADR 0011 – D2): tờ khai nhánh được Hải quan chấp nhận khai chính thức (IDC/EDC thành công, có phân luồng) → ghi sổ lượt.
   // Khóa theo số tờ khai: IDC01 / khai lại cùng số không trừ lần 2. "Cố gắng hết sức": lỗi chỉ log [billing], job billing-reconcile ghi bù.
@@ -251,12 +225,6 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
   // của tờ (sau commit; lỗi chỉ log; đã ghi → không gọi).
   if (!failed) await reconcileCatalogDeclarationNo(deps, ctx, saved, result.updatedAt);
   if (!failed) {
-    // Số tờ khai và phân luồng của hồ sơ lấy từ nhánh 1 (tờ 2..N có số, luồng riêng trên kết quả nhánh).
-    const declarationNo = ob.branch === 1 ? patch.declarationNo : undefined;
-    const channel = ob.branch === 1 ? patch.channel : undefined;
-    if (declarationNo || channel) await deps.dossiers.update(input.orgId, ob.dossierId, { ...(declarationNo ? { declarationNo } : {}), ...(channel ? { channel } : {}) });
-    // AMC: tờ khai nhánh về CLEARED → hồ sơ CLEARED khi mọi tờ thông quan.
-    if (op === "AMC") await syncDossierClearance(deps, ctx, ob.dossierId);
     // Khai chính thức / khai chính thức sửa đổi → hỏi trạng thái tới khi thông quan.
     if (b === "IDC" || b === "IDE") await deps.queue.enqueue("customs-poll", { orgId: input.orgId, userId: input.userId, dossierId: ob.dossierId, ...(ob.branch > 1 ? { branch: ob.branch } : {}), attempt: 1 }, { jobId: `customs-poll:${ob.dossierId}:${ob.id}:1`, delayMs: deps.pollDelayMs });
   }
@@ -277,15 +245,15 @@ export async function processOutbox(deps: CustomsDeps, input: ProcessOutboxInput
       }
     }
     if (chained) {
-      // Không khai tạm / khai chính thức / gọi về được tờ kế tiếp (tờ khai bị mở lại, HS/BLOCKER, đổi tuần tỷ giá, đang chờ phản hồi…): ghi lỗi trên nhánh đó, báo chủ hồ sơ.
+      // Không khai tạm / khai chính thức / gọi về được tờ kế tiếp (tờ khai bị mở lại, HS/BLOCKER, đang chờ phản hồi…): ghi lỗi trên nhánh đó, báo chủ hồ sơ.
       const what = CHAIN_WHAT[chained.kind];
       const summary = `Tờ ${chained.branch}/${chained.of}: chưa ${what} tự động – ${chained.error.message ?? chained.error.code}`;
       await deps.uow.asOrg(ctx, (r) => r.messages.insert({ id: deps.idGen.next("msg"), orgId: input.orgId, dossierId: ob.dossierId, branch: chained.branch, operation: ob.operation, direction: "IN", result: "ERROR", summary, payloadMasked: { error: chained.error.message ?? chained.error.code }, externalRef: null, at: now() }));
       await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, { title: `${dossier.code}: chưa ${what} tờ ${chained.branch}/${chained.of}`, body: summary.slice(0, 300), href: `/dossiers/${ob.dossierId}?step=submit` });
     }
   }
-  await deps.dossiers.publish(input.orgId, ob.dossierId, { type: "customs.message" });
-  if (!failed && patch.channel) await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId, roles: ["APPROVER"] }, { title: `${dossier.code}: ${CHANNEL_NOTES[patch.channel].split(" – ")[0]}`, body: `Số tờ khai ${patch.declarationNo ?? result.declarationNo ?? ""}. ${CHANNEL_NOTES[patch.channel]}.`, href: `/dossiers/${ob.dossierId}?step=submit` });
+  // Số tờ khai / luồng tờ 1 → hồ sơ, AMC → gộp thông quan hồ sơ, phát sự kiện, báo luồng: cùng finishDossier với VNACCSREP và IID/IEX.
+  await finishDossier(deps, ctx, ob.dossierId, touch);
   if (!failed && isRecallOperation(op) && !recallContinues) {
     const amb = op === "AMB";
     await deps.notify?.notify(input.orgId, { dossierOwnerOf: ob.dossierId }, recalledAll !== null

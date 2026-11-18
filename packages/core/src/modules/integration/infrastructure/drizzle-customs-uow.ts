@@ -120,6 +120,10 @@ function repos(tx: Tx): CustomsRepos {
         const r = (await tx.select().from(hysSubmissions).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.id, id))).limit(1))[0];
         return r ? toHys(r) : null;
       },
+      findByReceipt: async (orgId, receiptNo) => {
+        const r = (await tx.select().from(hysSubmissions).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.receiptNo, receiptNo))).orderBy(desc(hysSubmissions.updatedAt)).limit(1))[0];
+        return r ? toHys(r) : null;
+      },
       insert: async (row) => void (await tx.insert(hysSubmissions).values(row)),
       update: async (orgId, id, patch) => void (await tx.update(hysSubmissions).set(patch).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.id, id)))),
       delete: async (orgId, id) => void (await tx.delete(hysSubmissions).where(and(eq(hysSubmissions.orgId, orgId), eq(hysSubmissions.id, id)))),

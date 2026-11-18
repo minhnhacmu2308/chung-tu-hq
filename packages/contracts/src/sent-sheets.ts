@@ -21,7 +21,7 @@ export function stableJson(v: unknown): string {
 const PER_SHEET = new Set(["TK_FIC", "TK_BNO"]);
 /**
  * Chỉ tiêu hệ thống tự tính theo đồng hồ mỗi lần dựng tờ khai (không từ chứng từ / mặc định / người khai) – không so: dựng lại hôm sau tự đổi,
- * Hải quan tự ghi ngày đăng ký của mình. Đã rà mapping IDA/EDA: chỉ NGAY_DK (1.11/2.10, vnDate(now)). Tỷ giá KHÔNG thuộc đây (đổi tuần → RATE_WEEK_CHANGED).
+ * Hải quan tự ghi ngày đăng ký của mình. Đã rà mapping IDA/EDA: chỉ NGAY_DK (1.11/2.10, vnDate(now)). Tỷ giá KHÔNG thuộc đây (chỉ để ước tính thuế tạm; đổi tuần không chặn truyền – ADR 0019).
  */
 export const SNAPSHOT_VOLATILE_FIELDS: readonly string[] = ["NGAY_DK"];
 const VOLATILE = new Set(SNAPSHOT_VOLATILE_FIELDS);

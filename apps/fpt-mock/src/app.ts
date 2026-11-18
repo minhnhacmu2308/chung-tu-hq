@@ -379,11 +379,11 @@ export function createFptMock(opts: MockOptions = {}) {
       if (ctl && req.method === "POST") {
         const d = byNo.get(ctl[1]!);
         if (!d) return json(res, 404, { error: "not found" });
-        const p = z.object({ channel: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), cleared: z.boolean().optional(), rejected: z.boolean().optional() }).safeParse(JSON.parse((await readBody(req)) || "{}"));
+        const p = z.object({ channel: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), cleared: z.boolean().optional(), cancelled: z.boolean().optional() }).safeParse(JSON.parse((await readBody(req)) || "{}"));
         if (!p.success) return zodProblem(res, p.error);
         if (p.data.channel) d.channel = p.data.channel;
         if (p.data.cleared !== undefined) d.cleared = p.data.cleared;
-        if (p.data.rejected) d.state = "R";
+        if (p.data.cancelled) d.state = "R"; // R = Hủy (FPT_DECLARATION_STATES)
         const { result: _r, ...view } = d;
         return json(res, 200, view);
       }

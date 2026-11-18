@@ -1,7 +1,7 @@
 // Ký số & khai tạm lần đầu (ADR 0005 outbox): guard từng tờ khai nhánh → kết quả NOT_SENT mọi nhánh + outbox IDA/EDA nhánh 1 (idempotency_key)
 // → declaration SUBMITTED → dossier SUBMITTED → job customs-send. Nhánh 2..N do worker khai tạm nối tiếp (enqueueBranchPreDeclare, spec §6.2).
 // Chỉ gửi khai tạm; khai chính thức (IDC/EDC) và các nghiệp vụ sau do người khai bấm (performOperation).
-import { branchCount, sameRateWeek, vnDateOf, weekStart } from "@kb/contracts";
+import { branchCount } from "@kb/contracts";
 import { requireRole, type Ctx } from "../../../shared/ctx.js";
 import { domainError, reasonError } from "../../../shared/errors.js";
 import { err, ok, type Result } from "../../../shared/result.js";
@@ -47,9 +47,7 @@ export async function submitDeclaration(deps: CustomsDeps, ctx: Ctx, dossierId: 
   }
   if (snap.status !== "APPROVED") return err(reasonError("NOT_APPROVED", "DECLARATION_NOT_APPROVED"));
   if (snap.unconfirmedHs > 0) return err(reasonError("HS_UNCONFIRMED", "HS_UNCONFIRMED", { n: snap.unconfirmedHs }));
-  // Tỷ giá tính thuế áp theo tuần đăng ký tờ khai (thứ Hai → Chủ nhật, giờ VN): dựng tuần trước mà truyền tuần này → sai thuế.
-  if (!sameRateWeek(snap.exchangeRateDate, vnDateOf(deps.clock.now())))
-    return err(reasonError("RATE_WEEK_CHANGED", "RATE_WEEK_CHANGED_REOPEN", { week: weekStart(snap.exchangeRateDate) }));
+  // Tỷ giá trong tờ khai chỉ để ước tính thuế tạm lúc dựng nháp – VNACCS tự tính thuế theo tỷ giá ngày đăng ký, nên sang tuần tỷ giá mới KHÔNG chặn truyền (ADR 0019).
   const blockers = await deps.validation.blockerFails(ctx.orgId, dossierId);
   if (blockers > 0) return err(reasonError("BLOCKER_FAILED", "BLOCKER_RULES_FAILED", { n: blockers }));
   const of = branchCount(snap.payload.items.length);

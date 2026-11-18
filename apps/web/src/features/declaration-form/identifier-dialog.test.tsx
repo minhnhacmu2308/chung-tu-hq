@@ -70,6 +70,9 @@ describe("Panel Khai báo định danh – hồ sơ thật (mock dos_029)", () =
     expect(within(result).getByText(no)).toBeTruthy();
     expect(within(result).getByText("Hải quan chấp nhận")).toBeTruthy();
     expect(within(result).getByRole("img", { name: /^Mã QR định danh/ })).toBe(qr);
+    // Không lặp câu "Kết quả trả về" của Hải quan (đã có số + ngày định danh ở trên).
+    expect(within(result).queryByText(/Kết quả trả về/)).toBeNull();
+    expect(within(result).queryByText(/^Số định danh là \[/)).toBeNull();
     // Đã cấp số: không gửi lại / hỏi lại, thay bằng Xác nhận.
     expect(within(dialog).queryByRole("button", { name: "Gửi khai báo" })).toBeNull();
     expect(within(dialog).queryByRole("button", { name: "Hỏi kết quả" })).toBeNull();

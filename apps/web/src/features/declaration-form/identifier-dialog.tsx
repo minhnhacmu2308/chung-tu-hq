@@ -61,12 +61,13 @@ const labelOf = (blocks: LayoutBlock[], key: string): string => {
 };
 
 /** Ô phụ của khung kết quả (theo thứ tự hiện); ngày ISO → định dạng theo ngôn ngữ. */
-const DETAIL_KEYS = ["SO_TN", "NGAY_TN", "REF_ID", "KET_QUA"] as const;
+// Câu "Kết quả trả về" của Hải quan không hiện trong khung (lặp lại số + ngày định danh); bị từ chối / chưa xong thì đã có Alert / toast.
+const DETAIL_KEYS = ["SO_TN", "NGAY_TN", "REF_ID"] as const;
 const DATE_KEYS = new Set<string>(["NGAY_TN", "NGAY_DD"]);
 
 /**
  * Khung kết quả gọn ở đầu panel: trạng thái + lần gửi; số định danh nổi bật (màu chính) cạnh mã QR; dưới là số tiếp nhận, ngày tiếp nhận,
- * số tham chiếu, câu Hải quan trả về (chỉ ô có giá trị).
+ * số tham chiếu (chỉ ô có giá trị).
  */
 function IdentifierResult({ record, blocks }: { record: IdentifierRecord; blocks: LayoutBlock[] }) {
   const m = useMessages(IDENTIFIER_MESSAGES);
@@ -100,7 +101,7 @@ function IdentifierResult({ record, blocks }: { record: IdentifierRecord; blocks
         {details.length > 0 && (
           <dl className="grid grid-cols-1 gap-x-4 gap-y-1 border-t border-border pt-2 text-sm cq-sm:grid-cols-2">
             {details.map((k) => (
-              <div key={k} className={k === "KET_QUA" || k === "REF_ID" ? "min-w-0 cq-sm:col-span-2" : "min-w-0"}>
+              <div key={k} className={k === "REF_ID" ? "min-w-0 cq-sm:col-span-2" : "min-w-0"}>
                 <dt className="inline text-fg-muted">{labelOf(blocks, k)}: </dt>
                 <dd className="inline break-all">{show(k)}</dd>
               </div>

@@ -12,14 +12,14 @@ import { branch, pipelineFor, submissionOf } from "@/test/branch-submission";
 import { expectNoA11yViolations, renderWithProviders } from "@/test/dom";
 import { SubmitStep } from "./submit-step";
 
-const api = vi.hoisted(() => ({ current: null as SubmissionView | null, submit: vi.fn() }));
+const api = vi.hoisted(() => ({ current: null as SubmissionView | null, submit: vi.fn(), noCerts: false }));
 vi.mock("@/api/customs", async (orig) => {
   const real = await orig<typeof import("@/api/customs")>();
   return {
     ...real,
     getSubmission: async () => api.current!,
     submitDeclaration: (...a: unknown[]) => api.submit(...a),
-    listCertificates: async () => [{ id: "cert_1", subject: "CÔNG TY MẪU", issuer: "VNPT-CA", serial: "540100000000000001", validTo: "2099-12-31", isDefault: true }],
+    listCertificates: async () => (api.noCerts ? [] : [{ id: "cert_1", subject: "CÔNG TY MẪU", issuer: "VNPT-CA", serial: "540100000000000001", validTo: "2099-12-31", isDefault: true }]),
   };
 });
 // Tờ khai mẫu không có ô bắt buộc trống – bước này chỉ kiểm phần gói.
@@ -63,6 +63,19 @@ function setContract(endsInDays: number) {
 beforeEach(() => {
   resetDb();
   api.submit.mockReset().mockResolvedValue({ sent: true, message: "ok" });
+  api.noCerts = false;
+});
+
+describe("Bước Truyền tờ khai – chứng thư số", () => {
+  it("chưa có chứng thư số: cảnh báo rõ, khóa Ký số, không gửi (trước đây gửi certificateId rỗng → 400 VALIDATION)", async () => {
+    setBalance(20);
+    api.noCerts = true;
+    api.current = firstSend();
+    renderWithProviders(<SubmitStep dossier={dossier()} goTo={vi.fn()} />);
+    expect(await screen.findByText(/Chưa có chứng thư số để ký/, undefined, T)).toBeTruthy();
+    expect(((await signButton()) as HTMLButtonElement).disabled).toBe(true);
+    expect(api.submit).not.toHaveBeenCalled();
+  }, 20_000);
 });
 
 describe("Bước Truyền tờ khai – lượt khai (Theo lượt)", () => {

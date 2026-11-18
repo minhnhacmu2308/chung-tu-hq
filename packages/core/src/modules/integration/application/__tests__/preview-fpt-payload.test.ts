@@ -53,6 +53,15 @@ describe("previewFptPayload", () => {
     expect((s.request as { objVN_IDA: Record<string, unknown> }).objVN_IDA["tK_ICN"]).toBe(104000000001);
   });
 
+  it("gọi sửa tờ khai tạm (RECALLED) → IDA khai tạm lại mang số tờ khai đã cấp + tK_ID = mã tờ, như lần gửi thật", async () => {
+    const h = on();
+    seed(h, 1, "RECALLED");
+    const r = h.uow.data.results[0]!;
+    const s = unwrap(await previewFptPayload(h.deps, declarant, D)).sheets[0]!;
+    expect(s.operation).toBe("IDA");
+    expect((s.request as { objVN_IDA: Record<string, unknown> }).objVN_IDA).toMatchObject({ tK_ICN: Number(r.declarationNo), tK_ID: r.id });
+  });
+
   it("thiếu ô bắt buộc → vẫn trả body, kèm danh sách thiếu", async () => {
     const h = on();
     h.decls.fields = { NNK_TEN: { value: "" } };

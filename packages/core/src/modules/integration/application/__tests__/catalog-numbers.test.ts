@@ -60,17 +60,15 @@ describe("số tờ khai cuối của mặt hàng (C6)", () => {
     expect(h.uow.data.results.map((r) => !!r.declarationNo)).toEqual([true, true, true]);
   });
 
-  it("hỏi trạng thái lặp lại: cùng số đã ghi danh mục (raw.catalogNo) → không gọi lại; Hải quan trả số khác → ghi số mới cho dòng của tờ đó (ngày đăng ký Hải quan)", async () => {
+  it("lượt customs-poll lặp lại: cùng số đã ghi danh mục (raw.catalogNo) → không gọi lại; số trên kết quả đổi (vd Tra cứu trả số khác) → lượt sau ghi số mới cho dòng của tờ đó (ngày đăng ký Hải quan)", async () => {
     seed(h, 1, "DECLARED");
     seed(h, 2, "DECLARED");
     for (const r of h.uow.data.results) r.raw = { ...r.raw, catalogNo: r.declarationNo! };
-    const gw = h.deps.gateway;
-    let no = "104000000002";
-    gw.queryStatus = async () => ({ status: "Chờ thông quan", cleared: false, declarationNo: no, info: { receivedAt: "2026-10-14T03:00:00.000Z", exchangeRates: [], taxes: [], items: [], directives: [], registeredDate: "2026-10-13" } });
+    statusNo("104000000002");
     unwrap(await pollStatus(h.deps, { orgId: ORG, userId: "usr_chau", dossierId: D, attempt: 1, branch: 2 }));
     unwrap(await pollStatus(h.deps, { orgId: ORG, userId: "usr_chau", dossierId: D, attempt: 2, branch: 2 }));
     expect(calls).toEqual([]);
-    no = "104000000099";
+    statusNo("104000000099");
     unwrap(await pollStatus(h.deps, { orgId: ORG, userId: "usr_chau", dossierId: D, attempt: 3, branch: 2 }));
     expect(calls).toEqual([{ orgId: ORG, rows: [{ itemId: "cat_b", declarationNo: "104000000099", date: "2026-10-13" }, { itemId: "cat_a", declarationNo: "104000000099", date: "2026-10-13" }] }]);
     unwrap(await pollStatus(h.deps, { orgId: ORG, userId: "usr_chau", dossierId: D, attempt: 4, branch: 2 }));
@@ -85,8 +83,11 @@ const currentLines = (rows: { id: string; lineNo: number }[], links: Record<stri
   h.decls.lineCatalogItems = async (orgId, dossierId) =>
     orgId === ORG && dossierId === D ? { declarationId: "dec_1", lines: rows.map((r) => ({ ...r, catalogItemId: links[r.id] ?? null })) } : null;
 };
-const statusNo = (no: string) => {
-  h.deps.gateway.queryStatus = async () => ({ status: "Chờ thông quan", cleared: false, declarationNo: no, info: { receivedAt: "2026-10-14T03:00:00.000Z", exchangeRates: [], taxes: [], items: [], directives: [], registeredDate: "2026-10-13" } });
+/** Kết quả tờ `branch` đang mang số `no`, Hải quan đã trả ngày đăng ký 13/10 (customs-poll không hỏi IID – số/ngày có từ trước trên kết quả). */
+const statusNo = (no: string, branch = 2) => {
+  const r = result(branch);
+  r.declarationNo = no;
+  r.raw = { ...r.raw, customsInfo: { receivedAt: "2026-10-14T03:00:00.000Z", exchangeRates: [], taxes: [], items: [], directives: [], registeredDate: "2026-10-13" } };
 };
 const poll = (branch: number, attempt = 1) => pollStatus(h.deps, { orgId: ORG, userId: "usr_chau", dossierId: D, attempt, branch });
 const result = (branch: number) => h.uow.data.results.find((r) => r.orgId === ORG && r.dossierId === D && r.branch === branch)!;
@@ -148,7 +149,6 @@ describe("C6 tự bù: số đã ghi danh mục (raw.catalogNo)", () => {
     statusNo("104000000002");
     failing = true;
     unwrap(await poll(2, 1));
-    expect(result(2).pollCount).toBe(1);
     expect(result(2).raw?.catalogNo).toBeUndefined();
     failing = false;
     unwrap(await poll(2, 2));
@@ -195,8 +195,7 @@ describe("C6: ngày ghi danh mục khi Hải quan không trả ngày đăng ký"
       }
       return { updated };
     } };
-    // Hải quan trả số nhưng không có ngày đăng ký.
-    h.deps.gateway.queryStatus = async () => ({ status: "Chờ thông quan", cleared: false, declarationNo: "104000000002" });
+    // Kết quả tờ 2 (seed) có số 104000000002 nhưng không có ngày đăng ký Hải quan.
   });
   const inIda = (at: string, soToKhai: string) =>
     h.uow.data.messages.push({ id: `msg_${at}`, orgId: ORG, dossierId: D, branch: 2, operation: "IDA", direction: "IN", result: "OK", summary: "Hải quan cấp số", payloadMasked: { soToKhai }, externalRef: null, at: new Date(at) });
@@ -317,7 +316,7 @@ describe("C6: mặt hàng theo dòng ĐÃ GỬI của tờ", () => {
     seed(h, 3, "DECLARED", { sent: false }); // gửi trước khi có ảnh chụp
     statusNo("104000000002");
     unwrap(await poll(2));
-    statusNo("104000000003");
+    statusNo("104000000003", 3);
     unwrap(await poll(3));
     expect(calls.map((c) => c.rows.map((r) => r.itemId))).toEqual([["cat_b", "cat_a"], ["cat_c"]]);
   });

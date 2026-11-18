@@ -103,7 +103,7 @@ test.describe("qua FPT.VNACCS (fpt-mock)", () => {
 
     await page.goto(`/dossiers/${id}?step=submit`);
     await fileIdaThenIdc(page);
-    // Cổng FPT: hệ thống chỉ tự hỏi 5 phút/lần (lưới an toàn) – người khai bấm "Tra cứu trạng thái (IID)"; mock thông quan sau 2 lượt hỏi.
+    // Cổng FPT: hệ thống chỉ tự lấy VNACCSREP 30 phút/lần (lưới an toàn) – người khai bấm "Tra cứu trạng thái (IID)"; mock thông quan sau 2 lượt hỏi.
     // Kiểm qua API (chữ "Đã thông quan" còn là tên bước trên trang, không chứng minh đã thông quan).
     type View = { result: { clearanceStatus: string } };
     const clearance = async () => ((await (await page.request.get(`/api/dossiers/${id}/submission`)).json()) as View).result.clearanceStatus;

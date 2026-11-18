@@ -169,6 +169,8 @@ export function route(handler: Handler) {
     } catch (e) {
       if (e instanceof HttpError) return finish(NextResponse.json(errorBody(e), { status: e.status }));
       if (e instanceof ZodError) {
+        // Ghi chỗ sai (đường dẫn + thông báo Zod, không ghi giá trị) – toast chỉ hiện câu chung, thiếu dòng này không biết lỗi ở đâu.
+        log().warn("dữ liệu không hợp lệ (400 VALIDATION)", { requestId, method: req.method, path: req.nextUrl.pathname, issues: e.issues.map((i) => ({ path: i.path.join("."), code: i.code, message: i.message })), stack: e.stack?.split("\n").slice(1, 6).join(" | ") });
         return finish(NextResponse.json({ code: "VALIDATION", message: "Dữ liệu không hợp lệ", issues: e.issues.map((i) => ({ path: i.path.join("."), message: i.message })) }, { status: 400 }));
       }
       log().error("lỗi không xử lý được trong route", { requestId, method: req.method, path: req.nextUrl.pathname, durationMs: Date.now() - startedAt, err: e });

@@ -237,6 +237,14 @@ describe("DrizzleCustomsUow – bộ HYS", () => {
     await expect(uow.asOrg(B, (r) => r.hys.insert(sub("hys_b", 6)))).rejects.toThrow();
     await expect(uow.asOrg(B, (r) => r.hys.insertFile(file("hf_b2", "hys_x", 1)))).rejects.toThrow();
   });
+
+  it("findByReceipt: bộ mang số tiếp nhận (khớp VAL0020 VNACCSREP); org khác / truyền nhầm orgId không thấy", async () => {
+    await uow.asOrg(A, (r) => r.hys.insert(sub("hys_rcpt", 7, { status: "ACCEPTED", receiptNo: "900000000777" })));
+    expect((await uow.asOrg(A, (r) => r.hys.findByReceipt("org_anphat", "900000000777")))?.id).toBe("hys_rcpt");
+    expect(await uow.asOrg(A, (r) => r.hys.findByReceipt("org_anphat", "900000000000"))).toBeNull();
+    expect(await uow.asOrg(A, (r) => r.hys.findByReceipt("org_khac", "900000000777"))).toBeNull();
+    expect(await uow.asOrg(B, (r) => r.hys.findByReceipt("org_anphat", "900000000777"))).toBeNull();
+  });
 });
 
 describe("DrizzleCustomsUow – hộp thư VNACCSREP", () => {

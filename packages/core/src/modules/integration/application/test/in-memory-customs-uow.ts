@@ -101,6 +101,8 @@ export class InMemoryCustomsUow implements CustomsUow {
       hys: {
         list: async (orgId, dossierId) => clone(d.hys.filter((h) => h.orgId === org && h.orgId === orgId && h.dossierId === dossierId).sort((a, b) => a.seq - b.seq)),
         get: async (orgId, id) => clone(d.hys.find((h) => h.id === id && h.orgId === org && h.orgId === orgId) ?? null),
+        findByReceipt: async (orgId, receiptNo) =>
+          clone(d.hys.filter((h) => h.orgId === org && h.orgId === orgId && h.receiptNo === receiptNo).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null),
         insert: async (row) => {
           if (row.orgId !== org) deny("hys_submissions");
           if (d.hys.some((h) => h.dossierId === row.dossierId && h.seq === row.seq)) throw new Error("duplicate key value violates unique constraint hys_submissions_dossier_seq_uq");

@@ -90,7 +90,7 @@ Có thêm curl thật của FPT thì thêm fixture rồi sửa mock cho test kh�
 | | |
 |---|---|
 | `GET /__mock/declarations` | Danh sách tờ khai mock đang giữ (trong bộ nhớ, mất khi tắt) |
-| `POST /__mock/declarations/:so` `{channel: 1\|2\|3, cleared, rejected}` | Ép phân luồng / thông quan / từ chối (IEX trả `tK_TRANGTHAI: "R"`) |
+| `POST /__mock/declarations/:so` `{channel: 1\|2\|3, cleared, cancelled}` | Ép phân luồng / thông quan / Hải quan hủy tờ khai (IID/IEX trả `tK_TRANGTHAI: "R"` = Hủy) |
 | `GET /__mock/messages` | Thông điệp loại P đang chờ VNACCSREP, theo user |
 | `POST /__mock/reset` | Xóa hết |
 | Header `X-Mock-Fail: 500\|502\|503\|429\|timeout` | Giả lập sự cố để thử retry |

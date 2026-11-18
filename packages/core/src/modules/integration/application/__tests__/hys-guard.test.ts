@@ -105,14 +105,13 @@ describe("gửi lại IDA qua performOperation", () => {
     expect(notes()).toHaveLength(1);
   });
 
-  it("hysWaived nhưng guard sau trượt (tỷ giá khác tuần) → không NOTE, không outbox", async () => {
+  it("hysWaived + tỷ giá tuần trước → vẫn khai tạm (tỷ giá không chặn), có NOTE", async () => {
     recalled();
     h.decls.rateDate = "2026-10-11";
     const r = await performOperation(h.deps, declarant, D, "IDA", 1, { hysWaived: true });
-    expect(!r.ok && r.error.reason).toBe("RATE_WEEK_CHANGED_REBUILD");
-    expect(h.uow.data.outbox).toEqual([]);
-    expect(notes()).toEqual([]);
-    expect(audit.entries).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(h.uow.data.outbox).toHaveLength(1);
+    expect(notes()).toHaveLength(1);
   });
 
   it("chuỗi worker (chainFrom) không bị hỏi, không NOTE", async () => {

@@ -89,14 +89,40 @@ describe("FptVnaccsGateway (phản hồi thật của FPT)", () => {
 
   it("EDA thành công → externalId = số tờ khai trong objEDA[0]", async () => {
     const { g } = gateway({ "/api/EDA": () => ok(SUCCESS) });
-    const res = await g.preDeclare("org1", { kind: "EDA", request });
+    const res = await g.preDeclare("org1", { kind: "EDA", request, ref: "111" });
     expect(res).toMatchObject({ externalId: "309062686130", declarationNo: "309062686130" });
     // Thông tin Hải quan trả về đọc từ cùng phản hồi: HS đại diện, tên Chi cục, tỷ giá, trị giá từng dòng.
     expect("info" in res ? res.info : undefined).toMatchObject({ declarationNo: "309062686130", representativeHs: "5512", customsOfficeName: "CCHQTN", exchangeRates: [{ currency: "USD", rate: "25720" }], items: [{ lineNo: 1, hsCode: "55121900" }] });
   });
+  it("EDA: gửi tK_ID = mã tờ; phản hồi kèm tờ khai khác → chọn đúng tờ theo tK_ID", async () => {
+    const mine = (SUCCESS["objEDA"] as Record<string, unknown>[])[0]!;
+    const other = structuredClone(mine) as { objVN_EDA: Record<string, unknown>; objMsgResult: Record<string, unknown> };
+    other.objVN_EDA["tK_ID"] = "khac"; other.objVN_EDA["tK_ECN"] = 309000000001; other.objMsgResult["decNumber"] = "309000000001";
+    const { g, calls } = gateway({ "/api/EDA": () => ok({ ...SUCCESS, objIDA: [{ objVN_IDA: { tK_ID: "111", tK_ICN: 104000000001 } }], objEDA: [other, mine] }) });
+    expect(await g.preDeclare("org1", { kind: "EDA", request, ref: "111" })).toMatchObject({ declarationNo: "309062686130" });
+    expect((calls.at(-1)!.body["objVN_EDA"] as Record<string, unknown>)["tK_ID"]).toBe("111");
+  });
+  it("EDA lần đầu: đầu tờ khai tK_ECN = null (chưa có số), có tK_ID", async () => {
+    const { g, calls } = gateway({ "/api/EDA": () => ok(SUCCESS) });
+    await g.preDeclare("org1", { kind: "EDA", request, ref: "111" });
+    expect(calls.at(-1)!.body["objVN_EDA"]).toMatchObject({ tK_ECN: null, tK_ID: "111" });
+  });
+  it("EDA khai tạm lại sau EDB: gửi số tờ khai đã cấp ở tK_ECN; chọn kết quả theo số dù tK_ID khác", async () => {
+    const mine = structuredClone((SUCCESS["objEDA"] as Record<string, unknown>[])[0]!) as { objVN_EDA: Record<string, unknown> };
+    mine.objVN_EDA["tK_ID"] = null; // FPT không trả lại tK_ID
+    const other = structuredClone(mine) as { objVN_EDA: Record<string, unknown>; objMsgResult: Record<string, unknown> };
+    other.objVN_EDA["tK_ECN"] = 309000000001; other.objMsgResult = { decNumber: "309000000001" };
+    const { g, calls } = gateway({ "/api/EDA": () => ok({ ...SUCCESS, objEDA: [other, mine] }) });
+    expect(await g.preDeclare("org1", { kind: "EDA", request, ref: "111", declarationNo: "309062686130" })).toMatchObject({ declarationNo: "309062686130" });
+    expect(calls.at(-1)!.body["objVN_EDA"]).toMatchObject({ tK_ECN: 309062686130, tK_ID: "111" });
+  });
+  it("EDA: phản hồi không có tờ nào mang tK_ID của tờ này → E-FPT-NO-NUMBER (không lấy số của tờ khác)", async () => {
+    const { g } = gateway({ "/api/EDA": () => ok(SUCCESS) });
+    expect((await g.preDeclare("org1", { kind: "EDA", request, ref: "khac" })).errors?.[0]?.code).toBe("E-FPT-NO-NUMBER");
+  });
   it("EDA lỗi S1139 → errors kèm chỉ tiêu và cách khắc phục, bỏ \\r\\n", async () => {
     const { g } = gateway({ "/api/EDA": () => ok(PAST_DEPARTURE) });
-    expect((await g.preDeclare("org1", { kind: "EDA", request })).errors).toEqual([
+    expect((await g.preDeclare("org1", { kind: "EDA", request, ref: "111" })).errors).toEqual([
       { code: "S1139", field: "SYM", message: "Ngày hàng đi dự kiến là ngày trong quá khứ khi so với Ngày khai báo (Dự kiến)", solution: "Kiểm tra nội dung đã nhập." },
     ]);
   });
@@ -132,7 +158,7 @@ describe("FptVnaccsGateway (phản hồi thật của FPT)", () => {
   it("chưa có tài khoản VNACCS → INTEGRATION_NOT_CONFIGURED, không gọi mạng", async () => {
     const f = fakeFetch({});
     const g = new FptVnaccsGateway(client(f.fn), { get: async () => null });
-    await expect(g.preDeclare("org1", { kind: "EDA", request })).rejects.toMatchObject({ code: "INTEGRATION_NOT_CONFIGURED" });
+    await expect(g.preDeclare("org1", { kind: "EDA", request, ref: "111" })).rejects.toMatchObject({ code: "INTEGRATION_NOT_CONFIGURED" });
     expect(f.calls).toHaveLength(0);
   });
 });
@@ -152,7 +178,7 @@ describe("FptVnaccsGateway.send – gọi lại, sửa đổi, AMB/AMC (Postman 
     expect(res.errors).toBeUndefined();
   });
   it("IDE trả phân luồng từ objVN_IDA_TRANGTHAI.tK_LUONG", async () => {
-    const r = rec(() => ({ errorList: null, objIDA: [{ objMsgResult: { code: "VAD2LE0" }, objVN_IDA_TRANGTHAI: { tK_LUONG: "2", tK_TRANGTHAI: "E" } }] }));
+    const r = rec(() => ({ errorList: null, objIDA: [{ objMsgResult: { code: "VAD2LE0" }, objVN_IDA: { tK_ICN: 104265243240 }, objVN_IDA_TRANGTHAI: { tK_LUONG: "2", tK_TRANGTHAI: "E" } }] }));
     expect((await r.g.send("org", { op: "IDE", externalId: "104265243240" })).channel).toBe("YELLOW");
   });
   it("IDA01: kiểm đặc tả IDA, đầu tờ khai mang số tờ khai đã đăng ký", async () => {
@@ -197,10 +223,17 @@ describe("FptVnaccsGateway.send – gọi lại, sửa đổi, AMB/AMC (Postman 
     await expect(g.send("org", { op })).rejects.toMatchObject({ code: "NOT_SUPPORTED" });
   });
   it("queryStatus: nhập → IID {tK_ICN}, xuất → IEX {tK_ECN}; không truyền chiều thì suy từ số (3… = xuất)", async () => {
-    const r = rec((op) => ({ errorList: null, [op === "IEX" ? "objEDA" : "objIDA"]: [{ [op === "IEX" ? "objVN_EDA_TRANGTHAI" : "objVN_IDA_TRANGTHAI"]: { tK_LUONG: "1", tK_TRANGTHAI: "C", tK_THONGQUAN: "1" } }] }));
+    const r = rec((op) => ({ errorList: null, [op === "IEX" ? "objEDA" : "objIDA"]: [{ objMsgResult: { decNumber: op === "IEX" ? "309062686130" : "104265243240" }, [op === "IEX" ? "objVN_EDA_TRANGTHAI" : "objVN_IDA_TRANGTHAI"]: { tK_LUONG: "1", tK_TRANGTHAI: "C", tK_THONGQUAN: "1" } }] }));
     expect((await r.g.queryStatus("org", "104265243240", "d", "NK")).cleared).toBe(true);
     await r.g.queryStatus("org", "309062686130", "d");
     expect(r.calls).toEqual([{ op: "IID", body: { tK_ICN: 104265243240 } }, { op: "IEX", body: { tK_ECN: 309062686130 } }]);
+  });
+
+  it("queryStatus: tK_TRANGTHAI R = Hủy → cancelled (không phải từ chối)", async () => {
+    const r = rec(() => ({ errorList: null, objIDA: [{ objVN_IDA: { tK_ICN: 104265243240 }, objVN_IDA_TRANGTHAI: { tK_LUONG: "2", tK_TRANGTHAI: "R", tK_THONGQUAN: "0" } }] }));
+    const st = await r.g.queryStatus("org", "104265243240", "d", "NK");
+    expect(st).toMatchObject({ status: "Hủy", cleared: false, cancelled: true });
+    expect(st).not.toHaveProperty("rejected");
   });
   it("pullMessages: VNACCSREP → thông điệp theo số tờ khai (+ trạng thái), AMA theo tK_SYN", async () => {
     const r = rec(() => ({
@@ -212,13 +245,71 @@ describe("FptVnaccsGateway.send – gọi lại, sửa đổi, AMB/AMC (Postman 
     expect(r.calls[0]!.op).toBe("VNACCSREP");
     expect(msgs.map((m) => [m.kind, m.code, m.declarationNo, m.status?.channel])).toEqual([["IDA", "VAD1LD0", "104265243240", "GREEN"], ["AMA", "VAL8050", "308173826831", undefined]]);
   });
+  it("pullMessages: giữ cả 7 khối thông báo (thuế, lệ phí, chỉ thị, kiểm tra thực tế, HYS) – số theo trường đặc tả, chiều, nội dung thô bỏ ediBase64", async () => {
+    const msg = (code: string, extra: Record<string, unknown> = {}) => ({ objMsgResult: { code, name: code, type: "P", time: "14/10/2026 10:00:00", decNumber: "X", ...extra } });
+    const r = rec(() => ({
+      errorList: [],
+      vaF8010: [{ ...msg("VAF8010", { ediBase64: "RURJ" }), tK_ICN: "307000000001", tK_TAM: "1000" }],
+      vaF8030: [{ ...msg("VAF8030"), tK_ICN: "107000000001" }],
+      vaD8000: [{ ...msg("VAD8000"), tK_ICN: 107000000001, cthQ_T01: "Bổ sung C/O" }],
+      vaE8000: [{ ...msg("VAE8000"), tK_ECN: 307000000001 }],
+      vaD4870: [{ ...msg("VAD4910"), tK_K02: 107000000001 }],
+      vaE4740: [{ ...msg("VAE4740"), tK_K02: 307000000001 }],
+      vaL0020: [{ ...msg("VAL0020"), tK_JNO: 900000000001 }],
+    }));
+    const msgs = await r.g.pullMessages("org");
+    expect(msgs.map((m) => [m.kind, m.code, m.declarationNo, m.direction])).toEqual([
+      ["TAX", "VAF8010", "307000000001", "XK"], ["FEE", "VAF8030", "107000000001", "NK"], ["INSTRUCTION", "VAD8000", "107000000001", "NK"], ["INSTRUCTION", "VAE8000", "307000000001", "XK"],
+      ["INSPECTION", "VAD4910", "107000000001", "NK"], ["INSPECTION", "VAE4740", "307000000001", "XK"], ["HYS", "VAL0020", "900000000001", undefined],
+    ]);
+    expect(msgs[0]).toMatchObject({ ediBase64: "RURJ", at: "14/10/2026 10:00:00", msgType: "P", detail: { tK_ICN: "307000000001", tK_TAM: "1000", objMsgResult: { code: "VAF8010" } } });
+    expect((msgs[0]!.detail!["objMsgResult"] as Record<string, unknown>)["ediBase64"]).toBeUndefined();
+    expect(msgs[2]!.detail).toMatchObject({ cthQ_T01: "Bổ sung C/O" });
+  });
+
+  it("pullMessages: thiếu số tờ khai → lấy decNumber; không có cả hai → declarationNo rỗng (vẫn giữ, không bỏ)", async () => {
+    const r = rec(() => ({
+      errorList: null,
+      objIDA: [{ objMsgResult: { code: "VAD1LD0", decNumber: "104265243240" } }, { objMsgResult: { code: "VAD1AG0" }, objVN_IDA: { tK_ICN: 0 } }],
+      vaD8000: [{ objMsgResult: { code: "VAD8000" } }, null, "rác"],
+    }));
+    expect((await r.g.pullMessages("org")).map((m) => [m.kind, m.code, m.declarationNo])).toEqual([["IDA", "VAD1LD0", "104265243240"], ["IDA", "VAD1AG0", ""], ["INSTRUCTION", "VAD8000", ""]]);
+  });
+
+  it("pullMessages: errorList kèm dữ liệu → giữ dữ liệu + thông điệp ERROR; errorList không kèm dữ liệu → ném (lỗi tài khoản)", async () => {
+    const err = { errorCode: "E0001", indexCode: "ICN", errorContent: "Lỗi thông điệp", proposedSolution: "", rowPosition: "0000" };
+    const withData = rec(() => ({ errorList: [err], objEDA: [{ objMsgResult: { code: "VAE1LF0" }, objVN_EDA: { tK_ECN: 309062686130 } }] }));
+    const msgs = await withData.g.pullMessages("org");
+    expect(msgs.map((m) => [m.kind, m.code, m.declarationNo])).toEqual([["EDA", "VAE1LF0", "309062686130"], ["ERROR", msgs[1]!.code, ""]]);
+    expect(msgs[1]!.errors).toEqual([expect.objectContaining({ message: "Lỗi thông điệp", field: "ICN" })]);
+    const only = rec(() => ({ errorList: [err], objEDA: null, vaF8010: [] }));
+    await expect(only.g.pullMessages("org")).rejects.toMatchObject({ code: "GATEWAY_ERROR" });
+  });
+
+  it("FPT trả kèm thông điệp tờ khai khác: IDE/IID chọn theo số tờ khai, không lấy phần tử đầu", async () => {
+    const other = { objMsgResult: { code: "VAD1AC0", decNumber: "104000000001" }, objVN_IDA: { tK_ICN: 104000000001 }, objVN_IDA_TRANGTHAI: { tK_LUONG: "3", tK_TRANGTHAI: "C", tK_THONGQUAN: "1" } };
+    const mine = { objMsgResult: { code: "VAD2LE0" }, objVN_IDA: { tK_ICN: 104265243240 }, objVN_IDA_TRANGTHAI: { tK_LUONG: "1", tK_TRANGTHAI: "E", tK_THONGQUAN: "0" } };
+    const exp = { objMsgResult: { code: "VAE1LF0", decNumber: "309000000001" }, objVN_EDA: { tK_ECN: 309000000001 }, objVN_EDA_TRANGTHAI: { tK_LUONG: "2" } };
+    const r = rec(() => ({ errorList: null, objEDA: [exp], objIDA: [other, mine] }));
+    expect((await r.g.send("org", { op: "IDE", externalId: "104265243240" })).channel).toBe("GREEN");
+    expect(await r.g.queryStatus("org", "104265243240", "d", "NK")).toMatchObject({ channel: "GREEN", cleared: false });
+  });
+  it("queryStatus: phản hồi không có tờ khai cần tra → lỗi, không đọc nhầm tờ khác", async () => {
+    const r = rec(() => ({ errorList: null, objIDA: [{ objVN_IDA: { tK_ICN: 104000000001 }, objVN_IDA_TRANGTHAI: { tK_LUONG: "3", tK_THONGQUAN: "1" } }] }));
+    await expect(r.g.queryStatus("org", "104265243240", "d", "NK")).rejects.toMatchObject({ code: "GATEWAY_ERROR" });
+  });
+  it("AMA: không có bản khai của tờ khai này (thiếu tK_SYN) → lỗi E-AMA-NO-SYN", async () => {
+    const r = rec(() => ({ errorList: null, objAMA: [{ objVN_AMA: { tK_SYN: 308000000001, tK_ICN: 107000000001 } }] }));
+    const res = await r.g.send("org", { op: "AMA", externalId: "108173826831", request: { objVN_AMA: { tK_ICN: 108173826831, tK_ICB: "A12", tK_CHS: "10BB", tK_CHB: "00", tK_IDD: "23/04/2026", tK_IPD: "28/04/2026", tK_REC: "6", tK_TTC: "VND" }, objVN_AMA_HANG: [{ haG_RAN: "01" }] } });
+    expect(res.errors?.[0]?.code).toBe("E-AMA-NO-SYN");
+  });
   it("AMA sai đặc tả (thiếu objVN_AMA) → lỗi theo chỉ tiêu, không gọi HTTP", async () => {
     expect((await g.send("org", { op: "AMA", request: {} })).errors?.length).toBeGreaterThan(0);
   });
-  it("AMA đúng đặc tả → POST AMA, số tờ khai bổ sung từ objAMA[0].objVN_AMA.tK_SYN", async () => {
+  it("AMA đúng đặc tả → POST AMA, số tờ khai bổ sung tK_SYN của đúng tờ khai gốc (tK_ICN), bỏ bản khai của tờ khai khác", async () => {
     const calls: string[] = [];
     const ok = new FptVnaccsGateway(
-      { post: async (op) => (calls.push(op), { errorList: null, objAMA: [{ objVN_AMA: { tK_SYN: "308173826831" } }] }) },
+      { post: async (op) => (calls.push(op), { errorList: null, objAMA: [{ objVN_AMA: { tK_SYN: 308173826999, tK_ICN: 107000000001 } }, { objVN_AMA: { tK_SYN: "308173826831", tK_ICN: 108173826831 } }] }) },
       { get: async () => ({ useR_ID: "u", password: "p", terminaL_ID: "t", terminaL_ACCESS_KEY: "k" }) },
     );
     const res = await ok.send("org", { op: "AMA", request: { objVN_AMA: { tK_ICN: 108173826831, tK_ICB: "A12", tK_CHS: "10BB", tK_CHB: "00", tK_IDD: "23/04/2026", tK_IPD: "28/04/2026", tK_REC: "6", tK_TTC: "VND" }, objVN_AMA_HANG: [{ haG_RAN: "01" }] } });

@@ -1,9 +1,9 @@
 // Cổng Hải quan GIẢ (dev/test/demo) – deterministic theo id hồ sơ: số tờ khai 12 số, phân luồng 60/30/10,
-// HYS lỗi lần đầu khi hash%7==0 (thử "Gửi lại"), trạng thái tiến dần qua các lần hỏi. Không mạng. Dùng được trong test use case
+// HYS lỗi lần đầu khi hash%7==0 (thử "Gửi lại"), trạng thái tiến dần qua các lần hỏi IID/IEX và các lượt lấy VNACCSREP (pullMessages). Không mạng. Dùng được trong test use case
 // (đặt ở application/test) và tái xuất qua infrastructure cho container.
 import type { CustomsInfo, CustomsOperation, KvgsSheet } from "@kb/contracts";
 import { systemClock, type Clock } from "../../../../shared/clock.js";
-import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewaySendResult, HysGatewayRequest, HysGatewayResult, IdentifierGatewayRequest, IdentifierGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../customs-ports.js";
+import type { ContainerListGatewayRequest, CustomsGateway, GatewayError, GatewayMessage, GatewaySendResult, HysGatewayRequest, HysGatewayResult, IdentifierGatewayRequest, IdentifierGatewayResult, KvgsFetchResult, KvgsGatewayRequest, RefResult } from "../customs-ports.js";
 
 /** Ảnh mã vạch mô phỏng: PNG 1×1 Base64 thuần (mẫu của đặc tả API-KVGS). */
 export const FAKE_BARCODE_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAIAAAUAAYRcDQAAAAAASUVORK5CYII=";
@@ -137,8 +137,10 @@ export class FakeCustomsGateway implements CustomsGateway {
       info: info({ declarationNo: no, customsOfficeName: "CCHQ mô phỏng", exchangeRates: [{ currency: "USD", rate: "26150" }], taxes: [{ code: "N", name: "Thuế NK", amountVnd: "0" }], totalTaxVnd: "0" }),
     };
   }
-  async declare(_orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }) {
+  async declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }) {
     const channel = this.channelFor(msg.dossierId);
+    const kind = msg.kind === "IDC" ? "IDA" : "EDA";
+    this.registered.set(`${orgId}|${this.declarationNoFor(msg.dossierId, kind)}`, { orgId, dossierId: msg.dossierId, kind, pulls: 0 });
     return {
       accepted: true, channel,
       info: info({ registeredDate: "2026-10-14", registeredTime: "10:00:00", inspectionCode: INSPECTION[channel], ...(channel === "GREEN" ? {} : { directives: [{ title: "Nộp chứng từ", content: "Nộp bộ chứng từ qua HYS" }] }) }),
@@ -156,7 +158,7 @@ export class FakeCustomsGateway implements CustomsGateway {
     return { receiptNo: `3${String(hashId(`${req.dossierId}:${idempotencyKey}`) % 100_000_000_000).padStart(11, "0")}`, registeredOn: vn.toISOString().slice(0, 10) };
   }
   /** Nghiệp vụ còn lại của luồng (mô phỏng): gọi sửa, khai tạm/chính thức sửa đổi, container qua KVGS, lệ phí cảng biển (số tiền KHÔNG phải biểu phí thật). */
-  async send(_orgId: string, msg: { op: CustomsOperation; externalId: string; dossierId: string; request?: unknown }): Promise<GatewaySendResult> {
+  async send(orgId: string, msg: { op: CustomsOperation; externalId: string; dossierId: string; request?: unknown }): Promise<GatewaySendResult> {
     const ref = (prefix: string) => `${prefix}${String(hashId(msg.dossierId + msg.op + (this.sends.get(msg.dossierId) ?? 0)) % 100_000_000).padStart(8, "0")}`;
     this.sends.set(msg.dossierId, (this.sends.get(msg.dossierId) ?? 0) + 1);
     switch (msg.op) {
@@ -164,7 +166,11 @@ export class FakeCustomsGateway implements CustomsGateway {
         return { note: "Hải quan cho phép gọi tờ khai về để sửa" };
       case "IDA01": case "EDA01": case "AMA":
         return { receiptNo: ref("SD"), note: "Hải quan tiếp nhận bản khai tạm sửa đổi" };
-      case "IDE": case "EDE":
+      case "IDE": case "EDE": {
+        // Khai chính thức sửa đổi → lại chờ thông quan (job customs-poll) → VNACCSREP mô phỏng báo lại.
+        const kind = msg.op === "IDE" ? "IDA" : "EDA";
+        this.registered.set(`${orgId}|${this.declarationNoFor(msg.dossierId, kind)}`, { orgId, dossierId: msg.dossierId, kind, pulls: 0 });
+      }
         return { channel: this.channelFor(msg.dossierId), note: "Hải quan chấp nhận khai sửa đổi bổ sung" };
       case "AMC":
         return { receiptNo: ref("AMC"), note: "Hải quan chấp nhận khai sửa đổi sau thông quan" };
@@ -180,6 +186,32 @@ export class FakeCustomsGateway implements CustomsGateway {
     }
   }
   private sends = new Map<string, number>();
+
+  /** Tờ khai đã khai chính thức (IDC/EDC), chờ thông điệp VNACCSREP – khóa `orgId|số tờ khai`. */
+  private registered = new Map<string, { orgId: string; dossierId: string; kind: "IDA" | "EDA"; pulls: number }>();
+  /**
+   * VNACCSREP mô phỏng: lượt lấy đầu sau khai chính thức → thông điệp phân luồng; luồng xanh thông quan ngay, vàng/đỏ thông quan
+   * ở lượt lấy thứ `clearAfterPolls` (mặc định 3). Đã báo thông quan thì thôi trả (FPT không trả lại thông điệp đã lấy).
+   * Giới hạn: lô nhiều tờ dùng chung số tờ khai mô phỏng → thông điệp chỉ khớp một tờ (bấm "Tra cứu trạng thái" cho các tờ còn lại).
+   */
+  async pullMessages(orgId: string): Promise<GatewayMessage[]> {
+    const out: GatewayMessage[] = [];
+    for (const [key, d] of this.registered) {
+      if (d.orgId !== orgId) continue;
+      d.pulls += 1;
+      const channel = this.channelFor(d.dossierId);
+      const cleared = channel === "GREEN" || d.pulls >= (this.opts.clearAfterPolls ?? 3);
+      const declarationNo = key.slice(orgId.length + 1);
+      const prefix = d.kind === "IDA" ? "VAD1" : "VAE1";
+      if (cleared) {
+        this.registered.delete(key);
+        out.push({ kind: d.kind, code: `${prefix}LF0`, name: "Thông quan", declarationNo, status: { status: "Đã thông quan", cleared: true, channel, info: info({ permitDate: "2026-10-14", permitTime: "11:00:00" }) } });
+      } else if (d.pulls === 1) {
+        out.push({ kind: d.kind, code: `${prefix}LD0`, name: "Phân luồng", declarationNo, status: { status: channel === "YELLOW" ? "Chờ kiểm tra chi tiết hồ sơ" : "Chờ kiểm tra thực tế hàng hóa", cleared: false, channel } });
+      }
+    }
+    return out;
+  }
 
   async queryStatus(_orgId: string, externalId: string, dossierId: string) {
     const n = (this.polls.get(externalId) ?? 0) + 1;

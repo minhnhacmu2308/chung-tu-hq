@@ -18,6 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
+    "db:seed-test": "tsx scripts/seed-test-org.ts",
     "admin:create-staff": "tsx scripts/create-staff.ts",
     "db:reset": "tsx scripts/reset.ts",
     "secrets:rotate": "tsx scripts/rotate-secrets.ts",

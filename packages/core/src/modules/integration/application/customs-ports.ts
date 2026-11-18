@@ -111,6 +111,8 @@ export interface CustomsRepos {
   hys: {
     list(orgId: string, dossierId: string): Promise<HysSubmissionRow[]>;
     get(orgId: string, id: string): Promise<HysSubmissionRow | null>;
+    /** Bộ HYS mang số tiếp nhận (TK_JNO) này – khớp thông điệp VAL0020 từ VNACCSREP. */
+    findByReceipt(orgId: string, receiptNo: string): Promise<HysSubmissionRow | null>;
     insert(row: HysSubmissionRow): Promise<void>;
     update(orgId: string, id: string, patch: Partial<Omit<HysSubmissionRow, "id" | "orgId" | "dossierId" | "seq" | "createdAt">>): Promise<void>;
     delete(orgId: string, id: string): Promise<void>;
@@ -156,12 +158,16 @@ export interface CustomsUow {
 }
 
 export type GatewayError = { code: string; field?: string; message: string; solution?: string; /** Dòng hàng lỗi (rowPosition). */ line?: number };
-export type GatewayStatus = { declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED"; status: string; cleared: boolean; rejected?: boolean; customsTaxVnd?: string; directives?: string[]; info?: CustomsInfo };
+export type GatewayStatus = { declarationNo?: string; channel?: "GREEN" | "YELLOW" | "RED"; status: string; cleared: boolean; /** TK_TRANGTHAI "R" (Hủy): Hải quan báo đã hủy tờ khai – chỉ báo người duyệt xác nhận hủy (confirmDeclarationCancelled), không tự đổi giai đoạn. */ cancelled?: boolean; customsTaxVnd?: string; directives?: string[]; info?: CustomsInfo };
 
 /** Cổng Hải quan (spec §4.7). Lỗi tạm (mạng/5xx) → throw; lỗi nghiệp vụ FPT → `errors`. */
 export interface CustomsGateway {
   readonly name: string;
-  preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId: string }, idempotencyKey: string): Promise<{ externalId: string; declarationNo?: string; info?: CustomsInfo; errors?: GatewayError[] }>;
+  /**
+   * Khai tạm IDA/EDA. `ref` = mã tờ khai phía ta (TK_ID) – cố định cho một tờ; gửi kèm để chọn đúng kết quả của tờ này trong phản hồi
+   * (FPT trả cả thông điệp tờ khai khác của tài khoản). Lần đầu khớp theo TK_ID, các nghiệp vụ sau khớp theo số tờ khai.
+   */
+  preDeclare(orgId: string, msg: { kind: "IDA" | "EDA"; request: unknown; dossierId: string; ref: string; /** Khai tạm lại sau gọi sửa (IDB/EDB): số tờ khai đã cấp – gửi ở đầu tờ khai. Lần đầu: không có. */ declarationNo?: string }, idempotencyKey: string): Promise<{ externalId: string; declarationNo?: string; info?: CustomsInfo; errors?: GatewayError[] }>;
   declare(orgId: string, msg: { kind: "IDC" | "EDC"; externalId: string; dossierId: string }, idempotencyKey: string): Promise<{ accepted: boolean; channel?: "GREEN" | "YELLOW" | "RED"; customsTaxVnd?: string; info?: CustomsInfo; errors?: GatewayError[] }>;
   /** HYS (bộ tập tin đính kèm): số tiếp nhận (TK_JNO) + ngày tiếp nhận `YYYY-MM-DD` (TK_YMD), hoặc lỗi Hải quan. */
   attachDocuments(orgId: string, req: HysGatewayRequest, idempotencyKey: string): Promise<HysGatewayResult>;
@@ -215,9 +221,25 @@ export type KvgsGatewayRequest = { dossierId?: string; declarationNo: string; re
 /** Thông điệp HYS gửi cổng (spec §2.2): thông tin chung của bộ + file (bytes đọc từ kho). */
 export type HysGatewayRequest = { dossierId: string; customsOffice: string; processingUnit: string; procedureCode: string; phone: string | null; internalRef: string | null; note: string | null; files: { name: string; bytes: Buffer }[]; certificateId?: string };
 export type HysGatewayResult = { receiptNo?: string; registeredOn?: string; errors?: GatewayError[] };
-/** Một thông điệp Hải quan trả về (VNACCSREP): `declarationNo` = số tờ khai (hoặc số tờ khai bổ sung với AMA). */
+/**
+ * Loại thông điệp VNACCSREP (theo khối trong phản hồi FPT):
+ * IDA/EDA/AMA – tờ khai (mang trạng thái); TAX (vaF8010 chứng từ thuế), FEE (vaF8030 lệ phí), INSTRUCTION (vaD8000/vaE8000 chỉ thị Hải quan),
+ * INSPECTION (vaD4870/vaE4740 yêu cầu/hủy kiểm tra thực tế) – thông báo theo số tờ khai; HYS (vaL0020) – theo số tiếp nhận HYS;
+ * ERROR – errorList đi kèm dữ liệu (không gắn được tờ khai, lưu để tra).
+ */
+export type GatewayMessageKind = "IDA" | "EDA" | "AMA" | "TAX" | "FEE" | "INSTRUCTION" | "INSPECTION" | "HYS" | "ERROR";
+/**
+ * Một thông điệp Hải quan trả về (VNACCSREP): `declarationNo` = số tờ khai (số tờ khai bổ sung với AMA, số tiếp nhận với HYS; rỗng = không rõ).
+ * Mọi thông điệp FPT trả đều được giữ (FPT không trả lại) – kể cả loại chưa áp vào tờ khai.
+ */
 export type GatewayMessage = {
-  kind: "IDA" | "EDA" | "AMA"; code: string; name: string; declarationNo: string; at?: string; status?: GatewayStatus;
+  kind: GatewayMessageKind; code: string; name: string; declarationNo: string; at?: string; status?: GatewayStatus;
+  /** Chiều tờ khai khi biết (VAD… nhập, VAE… xuất, số tờ khai 3… xuất) – chọn nghiệp vụ ghi nhật ký (IID/IEX). */
+  direction?: "NK" | "XK";
+  /** Nội dung thô của phần tử FPT (đã bỏ ediBase64) với loại thông báo (TAX/FEE/INSTRUCTION/INSPECTION/HYS) – lưu trong hộp thư để tra. */
+  detail?: Record<string, unknown>;
+  /** Kind ERROR: lỗi FPT trả kèm dữ liệu. */
+  errors?: GatewayError[];
   /** Loại thông điệp FPT (objMsgResult.type): B = kèm EDI bản in, C = thông báo. */
   msgType?: string;
   /** Thông điệp loại B: EDI chuẩn Hải quan (base64) – lưu trong hộp thư để lưu trữ / in tờ khai (PrintEdiRef). */

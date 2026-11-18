@@ -173,6 +173,8 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope
   // Panel khi sửa nhanh chỉ mở bằng Enter / nhấp đúp (bấm ô chỉ chọn ô); tắt sửa nhanh → panel theo ô đang chọn như cũ.
   const [panelTarget, setPanelTarget] = useState<PrintTarget | null>(null);
   const [confirm, setConfirm] = useState<{ sheet?: number; href?: string } | null>(null);
+  /** Hộp hỏi đóng vì "Ở lại" → trả focus về ô đang chọn (lưu / bỏ thì trang tự chuyển tiếp). */
+  const stayed = useRef(false);
   const latest = useRef({ model, decl, items, mode, lineMode, original, locale });
   latest.current = { model, decl, items, mode, lineMode, original, locale };
 
@@ -385,8 +387,11 @@ export function PrintDeclaration({ dossierId, decl, items: allItems, mode, scope
         saving={save.isPending}
         onSave={() => confirm && saveDrafts(() => proceed(confirm))}
         onDiscard={() => { store.clear(); if (confirm) proceed(confirm); }}
-        onStay={() => setConfirm(null)}
-        onClosed={() => {}}
+        onStay={() => { stayed.current = true; setConfirm(null); }}
+        onClosed={() => {
+          if (stayed.current && selected) focusCell(selected.key, selected.line);
+          stayed.current = false;
+        }}
       />
     </Stack>
   );

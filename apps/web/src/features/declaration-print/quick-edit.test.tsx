@@ -60,7 +60,7 @@ describe("Sửa nhanh tại ô", () => {
     expect(screen.queryByRole("textbox", { name: /1\.58/ })).toBeNull();
     expect(cell(":TK_ENC").textContent).toContain("D");
     expect(cell(":TK_ENC").textContent).toContain("Chưa lưu");
-    const bar = screen.getByRole("toolbar", { name: "Thay đổi chưa lưu trên bản in" });
+    const bar = screen.getByRole("group", { name: "Thay đổi chưa lưu trên bản in" });
     expect(within(bar).getByText("1 ô chưa lưu")).toBeTruthy();
     // Còn ô chưa lưu → chưa tắt được sửa nhanh.
     expect((screen.getByRole("switch", { name: "Sửa nhanh tại ô" }) as HTMLButtonElement).disabled).toBe(true);
@@ -70,7 +70,7 @@ describe("Sửa nhanh tại ô", () => {
       const view = await getDeclarationView("dos_023");
       expect(view.declaration!.fields.find((x) => x.code === "TK_ENC")?.value).toBe("D");
     }, T);
-    await waitFor(() => expect(screen.queryByRole("toolbar", { name: "Thay đổi chưa lưu trên bản in" })).toBeNull(), T);
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Thay đổi chưa lưu trên bản in" })).toBeNull(), T);
   }, 120_000);
 
   it("Esc hủy phần đang gõ; Delete xóa ô; Hủy thay đổi bỏ hết", async () => {
@@ -125,13 +125,13 @@ describe("Sửa nhanh tại ô", () => {
     expect(screen.queryByRole("textbox", { name: /1.58/ })).toBeNull();
     expect(cell(":TK_ENC").textContent).toContain('Mã "Z" không có trong danh mục');
     expect(within(cell(":TK_ENC")).getByRole("img", { name: "Có lỗi" })).toBeTruthy();
-    expect(screen.queryByRole("toolbar", { name: "Thay đổi chưa lưu trên bản in" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Thay đổi chưa lưu trên bản in" })).toBeNull();
 
     // Nhập lại mã đúng → hết đỏ, vào danh sách chờ lưu.
     await user.click(cell(":TK_ENC"));
     await user.keyboard("C{Enter}");
     expect(cell(":TK_ENC").textContent).not.toContain("không có trong danh mục");
-    expect(screen.getByRole("toolbar", { name: "Thay đổi chưa lưu trên bản in" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Thay đổi chưa lưu trên bản in" })).toBeTruthy();
   }, 120_000);
 
   it("ô có danh mục: tooltip nhắc nhấp đúp mở danh mục; nhấp đúp mở panel", async () => {

@@ -33,7 +33,6 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, Filter, FilterX, LayoutGrid, Rows3, Search, X } from "lucide-react";
-import { createPortal } from "react-dom";
 import {
   useEffect,
   useMemo,
@@ -49,6 +48,7 @@ import { useMessages, type Messages } from "../lib/i18n.js";
 import { Button } from "./button.js";
 import { SegmentedControl } from "./choice.js";
 import { EmptyState, Skeleton } from "./feedback.js";
+import { FloatingActionBar } from "./floating-action-bar.js";
 import { Input, Select, type SelectOption } from "./inputs.js";
 import {
   DropdownMenu,
@@ -1303,24 +1303,14 @@ export function DataTable<TData extends RowData>({
           {...(pagination.pageSizeOptions ? { pageSizeOptions: pagination.pageSizeOptions } : {})}
         />
       )}
-      {selectable && selectionActions && selectedRows.length > 0 && typeof document !== "undefined" &&
-        createPortal(
-          // Nổi ở giữa đáy màn hình, trên mọi thứ của trang (z-50; popup mở sau nằm đè lên vì đứng sau trong DOM).
-          <div
-            role="toolbar"
-            aria-label={t.selectionToolbar}
-            data-slot="selection-bar"
-            className="fixed bottom-6 left-1/2 z-50 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border border-border bg-surface py-2 pl-4 pr-2 text-fg shadow-lg motion-safe:animate-slide-up"
-          >
-            <span className="text-sm font-medium tabular-nums">{fill(t.selectedCount, { n: selectedRows.length })}</span>
-            <span aria-hidden="true" className="h-5 w-px bg-border" />
-            {selectionActions(selectedRows, () => table.resetRowSelection(true))}
-            <Button variant="ghost" size="icon-sm" aria-label={t.clearSelection} title={t.clearSelection} onClick={() => table.resetRowSelection(true)} className="h-8 w-8">
-              <X aria-hidden="true" className="h-4 w-4" />
-            </Button>
-          </div>,
-          document.body,
-        )}
+      {selectable && selectionActions && selectedRows.length > 0 && (
+        <FloatingActionBar label={t.selectionToolbar} summary={fill(t.selectedCount, { n: selectedRows.length })}>
+          {selectionActions(selectedRows, () => table.resetRowSelection(true))}
+          <Button variant="ghost" size="icon-sm" aria-label={t.clearSelection} title={t.clearSelection} onClick={() => table.resetRowSelection(true)} className="h-8 w-8">
+            <X aria-hidden="true" className="h-4 w-4" />
+          </Button>
+        </FloatingActionBar>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@
 // mã/tên/ĐVT; lọc loại / chưa có mã XNK / chưa có quy đổi; Thêm, Xuất Excel, Xuất bảng đối chiếu mã. Bấm dòng → panel chi tiết.
 import type { CatalogItemKind, CatalogSearchField, CatalogItemListRow, CodeSet, ListCatalogItemsQueryInput } from "@kb/contracts";
 import {
-  Button, Checkbox, createDataTableColumnHelper, DataTable, Field, fill, pickMessages, RecordCard, RowActions, Select, StatusBadge, statusLabel, toast, useMessages, useUiLocale, type UiLocale,
+  Button, Checkbox, createDataTableColumnHelper, DataTable, DataTableFilterSelect, fill, pickMessages, RecordCard, RowActions, StatusBadge, statusLabel, toast, useMessages, useUiLocale, type UiLocale,
 } from "@kb/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download, Eye, Plus, TableProperties } from "lucide-react";
@@ -49,6 +49,9 @@ function buildColumns(t: Messages, set: CodeSet | null, locale: UiLocale) {
     col.accessor("status", { header: t.colStatus, size: 130, cell: (c) => <StatusBadge status={ITEM_STATUS[c.getValue()]} /> }),
   ]);
 }
+
+/** "Xem theo bộ mã" là cách hiển thị, không phải bộ lọc → tên truy cập giữ đúng nhãn (không thêm "Lọc theo"). */
+const VIEW_AS_IS = { filterBy: "{label}" };
 
 export function ItemsTab() {
   const t = useMessages(CATALOG_MESSAGES);
@@ -143,15 +146,9 @@ export function ItemsTab() {
           activeFilters={[kind, missingCustoms, missingFactor, status !== "ACTIVE"].filter(Boolean).length}
           filters={
             <>
-              <Field label={t.viewBy}>
-                <Select options={setOptions} value={setId} onChange={(e) => reset(setSetId)(e.target.value)} />
-              </Field>
-              <Field label={t.kindFilter}>
-                <Select options={kindOptions} value={kind} onChange={(e) => reset(setKind)(e.target.value as CatalogItemKind | "")} />
-              </Field>
-              <Field label={t.statusFilter}>
-                <Select options={statusOptions} value={status} onChange={(e) => reset(setStatus)(e.target.value as "ACTIVE" | "ARCHIVED")} />
-              </Field>
+              <DataTableFilterSelect label={t.viewBy} labels={VIEW_AS_IS} options={setOptions} value={setId} onChange={reset(setSetId)} />
+              <DataTableFilterSelect label={t.kindFilter} options={kindOptions} value={kind} onChange={(v) => reset(setKind)(v as CatalogItemKind | "")} />
+              <DataTableFilterSelect label={t.statusFilter} options={statusOptions} value={status} onChange={(v) => reset(setStatus)(v as "ACTIVE" | "ARCHIVED")} />
               <div className="col-span-full flex flex-wrap gap-x-6 gap-y-2">
                 <Checkbox label={t.missingCustoms} checked={missingCustoms} onChange={(e) => reset(setMissingCustoms)(e.target.checked)} />
                 <Checkbox label={t.missingFactor} checked={missingFactor} onChange={(e) => reset(setMissingFactor)(e.target.checked)} />

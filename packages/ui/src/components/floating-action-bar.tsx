@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { cn } from "../lib/cn.js";
 
 export type FloatingActionBarProps = {
-  /** Tên vùng cho trình đọc màn hình (role="toolbar"). */
+  /** Tên vùng cho trình đọc màn hình (role="group"). */
   label: string;
   /** Chữ tóm tắt bên trái (vd "3 ô chưa lưu"); đọc như trạng thái khi đổi. */
   summary?: ReactNode;
@@ -27,7 +27,7 @@ export function FloatingActionBar({ label, summary, children, placement = "botto
   if (!mounted) return null;
   return createPortal(
     <div
-      role="toolbar"
+      role="group"
       aria-label={label}
       data-slot="floating-action-bar"
       data-placement={placement}

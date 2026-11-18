@@ -172,7 +172,7 @@ describe("Danh mục hàng hóa – tab Mặt hàng", () => {
     await waitFor(async () => expect(within(await table()).queryByText(name)).toBeNull(), T);
 
     await userEvent.click(screen.getByRole("button", { name: "Bộ lọc" }));
-    await userEvent.click(screen.getByRole("combobox", { name: "Trạng thái" }));
+    await userEvent.click(screen.getByRole("combobox", { name: "Lọc theo Trạng thái" }));
     await userEvent.click(await screen.findByRole("option", { name: "Ngưng dùng" }, T));
     await userEvent.keyboard("{Escape}");
     const row = await rowWith(name);

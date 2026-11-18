@@ -84,7 +84,7 @@ describe("AgentStep – mã HS từ danh mục hàng hóa", () => {
     await waitFor(() => expect(lines.map((l) => getDb().lineItems.find((i) => i.id === l.id)!.hsConfirmed ?? null)).toEqual([null, null]), T);
     // Bảng đã tải lại (dòng 1 về chưa xác nhận) và thanh chọn đã đóng.
     await waitFor(() => expect(within(table).queryByRole("button", { name: "Đổi mã HS dòng 1" })).toBeNull(), T);
-    await waitFor(() => expect(document.querySelector("[data-slot=selection-bar]")).toBeNull(), T);
+    await waitFor(() => expect(document.querySelector("[data-slot=floating-action-bar]")).toBeNull(), T);
     await pickLines();
     await userEvent.click(await screen.findByRole("button", { name: "Xác nhận 2 mã gợi ý" }, T));
     await waitFor(() => expect(lines.map((l) => getDb().lineItems.find((i) => i.id === l.id)!.hsConfirmed)).toEqual(lines.map((l) => l.hsSuggested)), T);

@@ -16,7 +16,7 @@ describe("FloatingActionBar", () => {
         </FloatingActionBar>
       </main>,
     );
-    const bar = screen.getByRole("toolbar", { name: "Thay đổi chưa lưu" });
+    const bar = screen.getByRole("group", { name: "Thay đổi chưa lưu" });
     expect(bar.parentElement).toBe(document.body);
     expect(container.contains(bar)).toBe(false);
     expect(bar.className).toContain("print:hidden");
@@ -28,7 +28,7 @@ describe("FloatingActionBar", () => {
 
   it("placement top: dưới thanh menu (--kb-shell-top), không chồng thanh dính đáy trang", () => {
     render(<FloatingActionBar label="Thanh" placement="top"><Button size="sm">Lưu</Button></FloatingActionBar>);
-    const bar = screen.getByRole("toolbar", { name: "Thanh" });
+    const bar = screen.getByRole("group", { name: "Thanh" });
     expect(bar).toHaveAttribute("data-placement", "top");
     expect(bar.className).toContain("--kb-shell-top");
     expect(bar.className).not.toContain("bottom-6");
